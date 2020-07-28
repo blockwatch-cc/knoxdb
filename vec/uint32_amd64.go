@@ -43,16 +43,16 @@ func matchUint64NotEqual(src []uint64, val uint64, bits []byte) int64 {
 		return matchUint64NotEqualGeneric(src, val, bits)
 	}
 }
-
-func matchUint64LessThan(src []uint64, val uint64, bits []byte) int64 {
-	switch {
-	case useAVX2:
-		return matchUint64LessThanAVX2(src, val, bits)
-	default:
-		return matchUint64LessThanGeneric(src, val, bits)
-	}
+*/
+func matchUint32LessThan(src []uint32, val uint32, bits []byte) int64 {
+	//switch {
+	//case useAVX2:
+	//	return matchUint64LessThanAVX2(src, val, bits)
+	//default:
+		return matchUint32LessThanGeneric(src, val, bits)
+	//}
 }
-
+/*
 func matchUint64LessThanEqual(src []uint64, val uint64, bits []byte) int64 {
 	switch {
 	case useAVX2:

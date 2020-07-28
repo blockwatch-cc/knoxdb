@@ -18,13 +18,13 @@ func MatchUint64NotEqual(src []uint64, val uint64, bits *BitSet) *BitSet {
 	bits.cnt = matchUint64NotEqual(src, val, bits.Bytes())
 	return bits
 }
-
-func MatchUint64LessThan(src []uint64, val uint64, bits *BitSet) *BitSet {
+*/
+func MatchUint32LessThan(src []uint32, val uint32, bits *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint64LessThan(src, val, bits.Bytes())
+	bits.cnt = matchUint32LessThan(src, val, bits.Bytes())
 	return bits
 }
-
+/*
 func MatchUint64LessThanEqual(src []uint64, val uint64, bits *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint64LessThanEqual(src, val, bits.Bytes())

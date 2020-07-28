@@ -36,10 +36,10 @@ var (
 	uint32EqualTestMatch_1  uint32 = 5
 	uint32EqualTestCount_1  int64  = 10
 
-/*	uint64LessTestResult_1        = []byte{0x70, 0x00, 0x00, 0x00}
-	uint64LessTestMatch_1  uint64 = 5
-	uint64LessTestCount_1  int64  = 3
-
+	uint32LessTestResult_1        = []byte{0x70, 0x00, 0x00, 0x00}
+	uint32LessTestMatch_1  uint32 = 5
+	uint32LessTestCount_1  int64  = 3
+/*
 	uint64LessEqualTestResult_1        = []byte{0xf2, 0x42, 0x23, 0x70}
 	uint64LessEqualTestMatch_1  uint64 = 5
 	uint64LessEqualTestCount_1  int64  = 13
@@ -293,14 +293,14 @@ func BenchmarkMatchUint64EqualAVX2Scalar(B *testing.B) {
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Less Testcases
 //
-var uint64LessCases = []Uint64MatchTest{
-	Uint64MatchTest{
+var uint32LessCases = []Uint32MatchTest{
+	Uint32MatchTest{
 		name: "vec1",
-		slice: []uint64{
+		slice: []uint32{
 			0, 5, 3, 5, // Y1
 			7, 5, 5, 9, // Y2
 			3, 5, 5, 5, // Y3
@@ -316,53 +316,53 @@ var uint64LessCases = []Uint64MatchTest{
 		count:  9,
 	}, {
 		name:   "l32",
-		slice:  uint64TestSlice_1,
-		match:  uint64LessTestMatch_1,
-		result: uint64LessTestResult_1,
-		count:  uint64LessTestCount_1,
+		slice:  uint32TestSlice_1,
+		match:  uint32LessTestMatch_1,
+		result: uint32LessTestResult_1,
+		count:  uint32LessTestCount_1,
 	}, {
 		name:   "l64",
-		slice:  append(uint64TestSlice_1, uint64TestSlice_1...),
-		match:  uint64LessTestMatch_1,
-		result: append(uint64LessTestResult_1, uint64LessTestResult_1...),
-		count:  uint64LessTestCount_1 * 2,
+		slice:  append(uint32TestSlice_1, uint32TestSlice_1...),
+		match:  uint32LessTestMatch_1,
+		result: append(uint32LessTestResult_1, uint32LessTestResult_1...),
+		count:  uint32LessTestCount_1 * 2,
 	}, {
 		name:   "l31",
-		slice:  uint64TestSlice_1[:31],
-		match:  uint64LessTestMatch_1,
-		result: uint64LessTestResult_1,
-		count:  uint64LessTestCount_1,
+		slice:  uint32TestSlice_1[:31],
+		match:  uint32LessTestMatch_1,
+		result: uint32LessTestResult_1,
+		count:  uint32LessTestCount_1,
 	}, {
 		name:   "l23",
-		slice:  uint64TestSlice_1[:23],
-		match:  uint64LessTestMatch_1,
-		result: uint64LessTestResult_1[:3],
-		count:  uint64LessTestCount_1,
+		slice:  uint32TestSlice_1[:23],
+		match:  uint32LessTestMatch_1,
+		result: uint32LessTestResult_1[:3],
+		count:  uint32LessTestCount_1,
 	}, {
 		name:   "l15",
-		slice:  uint64TestSlice_1[:15],
-		match:  uint64LessTestMatch_1,
-		result: uint64LessTestResult_1[:2],
-		count:  uint64LessTestCount_1,
+		slice:  uint32TestSlice_1[:15],
+		match:  uint32LessTestMatch_1,
+		result: uint32LessTestResult_1[:2],
+		count:  uint32LessTestCount_1,
 	}, {
 		name:   "l7",
-		slice:  uint64TestSlice_1[:7],
-		match:  uint64LessTestMatch_1,
-		result: uint64LessTestResult_1[:1],
-		count:  uint64LessTestCount_1,
+		slice:  uint32TestSlice_1[:7],
+		match:  uint32LessTestMatch_1,
+		result: uint32LessTestResult_1[:1],
+		count:  uint32LessTestCount_1,
 	}, {
 		name:   "l0",
-		slice:  make([]uint64, 0),
-		match:  uint64LessTestMatch_1,
+		slice:  make([]uint32, 0),
+		match:  uint32LessTestMatch_1,
 		result: []byte{},
 		count:  0,
 	}, {
 		name:   "nil",
 		slice:  nil,
-		match:  uint64LessTestMatch_1,
+		match:  uint32LessTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
+	}, /*{
 		// with extreme values
 		name:   "ext32",
 		slice:  uint64TestSlice_2,
@@ -376,14 +376,14 @@ var uint64LessCases = []Uint64MatchTest{
 		match:  uint64LessTestMatch_2,
 		result: uint64LessTestResult_2,
 		count:  uint64LessTestCount_2,
-	},
+	},*/
 }
 
-func TestMatchUint64LessGeneric(T *testing.T) {
-	for _, c := range uint64LessCases {
+func TestMatchUint32LessGeneric(T *testing.T) {
+	for _, c := range uint32LessCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchUint64LessThanGeneric(c.slice, c.match, bits)
+		cnt := matchUint32LessThanGeneric(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -395,7 +395,7 @@ func TestMatchUint64LessGeneric(T *testing.T) {
 		}
 	}
 }
-
+/*
 func TestMatchUint64LessAVX2(T *testing.T) {
 	for _, c := range uint64LessCases {
 		// pre-allocate the result slice and fill with poison
@@ -420,24 +420,24 @@ func TestMatchUint64LessAVX2(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Less benchmarks
 //
-func BenchmarkMatchUint64LessGeneric(B *testing.B) {
+func BenchmarkMatchUint32LessGeneric(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randUint64Slice(n, 1)
+			a := randUint32Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n * 8))
 			for i := 0; i < B.N; i++ {
-				matchUint64LessThanGeneric(a, 5, bits)
+				matchUint32LessThanGeneric(a, 5, bits)
 			}
 		})
 	}
 }
-
+/*
 func BenchmarkMatchUint64LessAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {

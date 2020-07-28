@@ -24,8 +24,8 @@ func matchUint64NotEqualGeneric(src []uint64, val uint64, bits []byte) int64 {
 	}
 	return cnt
 }
-
-func matchUint64LessThanGeneric(src []uint64, val uint64, bits []byte) int64 {
+*/
+func matchUint32LessThanGeneric(src []uint32, val uint32, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v < val {
@@ -35,7 +35,7 @@ func matchUint64LessThanGeneric(src []uint64, val uint64, bits []byte) int64 {
 	}
 	return cnt
 }
-
+/*
 func matchUint64LessThanEqualGeneric(src []uint64, val uint64, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
