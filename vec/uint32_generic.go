@@ -13,8 +13,8 @@ func matchUint32EqualGeneric(src []uint32, val uint32, bits []byte) int64 {
 	}
 	return cnt
 }
-/*
-func matchUint64NotEqualGeneric(src []uint64, val uint64, bits []byte) int64 {
+
+func matchUint32NotEqualGeneric(src []uint32, val uint32, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v != val {
@@ -24,7 +24,7 @@ func matchUint64NotEqualGeneric(src []uint64, val uint64, bits []byte) int64 {
 	}
 	return cnt
 }
-*/
+
 func matchUint32LessThanGeneric(src []uint32, val uint32, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
@@ -35,8 +35,8 @@ func matchUint32LessThanGeneric(src []uint32, val uint32, bits []byte) int64 {
 	}
 	return cnt
 }
-/*
-func matchUint64LessThanEqualGeneric(src []uint64, val uint64, bits []byte) int64 {
+
+func matchUint32LessThanEqualGeneric(src []uint32, val uint32, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v <= val {
@@ -47,7 +47,7 @@ func matchUint64LessThanEqualGeneric(src []uint64, val uint64, bits []byte) int6
 	return cnt
 }
 
-func matchUint64GreaterThanGeneric(src []uint64, val uint64, bits []byte) int64 {
+func matchUint32GreaterThanGeneric(src []uint32, val uint32, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v > val {
@@ -58,7 +58,7 @@ func matchUint64GreaterThanGeneric(src []uint64, val uint64, bits []byte) int64 
 	return cnt
 }
 
-func matchUint64GreaterThanEqualGeneric(src []uint64, val uint64, bits []byte) int64 {
+func matchUint32GreaterThanEqualGeneric(src []uint32, val uint32, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v >= val {
@@ -69,7 +69,7 @@ func matchUint64GreaterThanEqualGeneric(src []uint64, val uint64, bits []byte) i
 	return cnt
 }
 
-func matchUint64BetweenGeneric(src []uint64, a, b uint64, bits []byte) int64 {
+func matchUint32BetweenGeneric(src []uint32, a, b uint32, bits []byte) int64 {
 	diff := b - a + 1
 	var cnt int64
 	for i, v := range src {
@@ -80,4 +80,4 @@ func matchUint64BetweenGeneric(src []uint64, a, b uint64, bits []byte) int64 {
 	}
 	return cnt
 }
-*/
+
