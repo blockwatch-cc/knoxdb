@@ -12,6 +12,8 @@ import (
 	"testing"
 )
 
+const Int16Size = 2
+
 func randInt16Slice(n, u int) []int16 {
 	s := make([]int16, n*u)
 	for i := 0; i < n; i++ {
@@ -316,7 +318,7 @@ func BenchmarkMatchInt16EqualGeneric(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16EqualGeneric(a, 5, bits)
 			}
@@ -330,7 +332,7 @@ func BenchmarkMatchInt16EqualAVX2(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16EqualAVX2(a, 5, bits)
 			}
@@ -345,7 +347,7 @@ func BenchmarkMatchInt16EqualAVX2Scalar(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16EqualAVX2(a, 5, bits)
 			}
@@ -503,7 +505,7 @@ func BenchmarkMatchInt16LessGeneric(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16LessThanGeneric(a, 5, bits)
 			}
@@ -517,7 +519,7 @@ func BenchmarkMatchInt16LessAVX2(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16LessThanAVX2(a, 5, bits)
 			}
@@ -532,7 +534,7 @@ func BenchmarkMatchInt16LessAVX2Scalar(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16LessThanAVX2(a, 5, bits)
 			}
@@ -690,7 +692,7 @@ func BenchmarkMatchInt16LessEqualGeneric(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16LessThanEqualGeneric(a, 5, bits)
 			}
@@ -704,7 +706,7 @@ func BenchmarkMatchInt16LessEqualAVX2(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16LessThanEqualAVX2(a, 5, bits)
 			}
@@ -719,7 +721,7 @@ func BenchmarkMatchInt16LessEqualAVX2Scalar(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16LessThanEqualAVX2(a, 5, bits)
 			}
@@ -877,7 +879,7 @@ func BenchmarkMatchInt16GreaterGeneric(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16GreaterThanGeneric(a, 5, bits)
 			}
@@ -891,7 +893,7 @@ func BenchmarkMatchInt16GreaterAVX2(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16GreaterThanAVX2(a, 5, bits)
 			}
@@ -906,7 +908,7 @@ func BenchmarkMatchInt16GreaterAVX2Scalar(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16GreaterThanAVX2(a, 5, bits)
 			}
@@ -1064,7 +1066,7 @@ func BenchmarkMatchInt16GreaterEqualGeneric(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16GreaterThanEqualGeneric(a, 5, bits)
 			}
@@ -1078,7 +1080,7 @@ func BenchmarkMatchInt16GreaterEqualAVX2(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16GreaterThanEqualAVX2(a, 5, bits)
 			}
@@ -1093,7 +1095,7 @@ func BenchmarkMatchInt16GreaterEqualAVX2Scalar(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16GreaterThanEqualAVX2(a, 5, bits)
 			}
@@ -1270,7 +1272,7 @@ func BenchmarkMatchInt16BetweenGeneric(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16BetweenGeneric(a, 5, 10, bits)
 			}
@@ -1290,7 +1292,7 @@ func BenchmarkMatchInt16BetweenGeneric(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16BetweenAVX2(a, 5, 10, bits)
 			}
@@ -1311,7 +1313,7 @@ func BenchmarkMatchInt16BetweenAVX2Scalar(B *testing.B) {
 			a := randInt16Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n * Int16Size))
 			for i := 0; i < B.N; i++ {
 				matchInt16BetweenAVX2(a, 5, 10, bits)
 			}
