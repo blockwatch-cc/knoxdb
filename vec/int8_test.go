@@ -47,28 +47,28 @@ var (
 		39, 40, 41, 42,
 	}
 	int8EqualTestResult_1       = []byte{0x82, 0x42, 0x23, 0x70}
-	int8EqualTestMatch_1  int8 = 5
+	int8EqualTestMatch_1  int8  = 5
 	int8EqualTestCount_1  int64 = 10
 
 	int8LessTestResult_1       = []byte{0x70, 0x00, 0x00, 0x00}
-	int8LessTestMatch_1  int8 = 5
+	int8LessTestMatch_1  int8  = 5
 	int8LessTestCount_1  int64 = 3
 
 	int8LessEqualTestResult_1       = []byte{0xf2, 0x42, 0x23, 0x70}
-	int8LessEqualTestMatch_1  int8 = 5
+	int8LessEqualTestMatch_1  int8  = 5
 	int8LessEqualTestCount_1  int64 = 13
 
 	int8GreaterTestResult_1       = []byte{0x0d, 0xbd, 0xdc, 0x8f}
-	int8GreaterTestMatch_1  int8 = 5
+	int8GreaterTestMatch_1  int8  = 5
 	int8GreaterTestCount_1  int64 = 19
 
 	int8GreaterEqualTestResult_1       = []byte{0x8f, 0xff, 0xff, 0xff}
-	int8GreaterEqualTestMatch_1  int8 = 5
+	int8GreaterEqualTestMatch_1  int8  = 5
 	int8GreaterEqualTestCount_1  int64 = 29
 
 	int8BetweenTestResult_1       = []byte{0x8f, 0x42, 0x23, 0x70}
-	int8BetweenTestMatch_1  int8 = 5
-	int8BetweenTestMatch_1b int8 = 10
+	int8BetweenTestMatch_1  int8  = 5
+	int8BetweenTestMatch_1b int8  = 10
 	int8BetweenTestCount_1  int64 = 13
 
 	// negative and positive values mixed
@@ -83,72 +83,72 @@ var (
 		43, 44, 45, -46,
 	}
 	int8EqualTestResult_2       = []byte{0x80, 0x0, 0x0, 0x0}
-	int8EqualTestMatch_2  int8 = -5
+	int8EqualTestMatch_2  int8  = -5
 	int8EqualTestCount_2  int64 = 1
 
 	int8LessTestResult_2       = []byte{0xe1, 0x04, 0x04, 0x21}
-	int8LessTestMatch_2  int8 = 5
+	int8LessTestMatch_2  int8  = 5
 	int8LessTestCount_2  int64 = 8
 
 	int8LessEqualTestResult_2       = []byte{0xf1, 0x04, 0x04, 0x21}
-	int8LessEqualTestMatch_2  int8 = 5
+	int8LessEqualTestMatch_2  int8  = 5
 	int8LessEqualTestCount_2  int64 = 9
 
 	int8GreaterTestResult_2       = []byte{0x0e, 0xfb, 0xfb, 0xde}
-	int8GreaterTestMatch_2  int8 = 5
+	int8GreaterTestMatch_2  int8  = 5
 	int8GreaterTestCount_2  int64 = 23
 
 	int8GreaterEqualTestResult_2       = []byte{0x1e, 0xfb, 0xfb, 0xde}
-	int8GreaterEqualTestMatch_2  int8 = 5
+	int8GreaterEqualTestMatch_2  int8  = 5
 	int8GreaterEqualTestCount_2  int64 = 24
 
 	int8BetweenTestResult_2       = []byte{0x1e, 0x00, 0x00, 0x00}
-	int8BetweenTestMatch_2  int8 = 5
-	int8BetweenTestMatch_2b int8 = 10
+	int8BetweenTestMatch_2  int8  = 5
+	int8BetweenTestMatch_2b int8  = 10
 	int8BetweenTestCount_2  int64 = 4
 
 	// extreme values
 	int8TestSlice_3 = []int8{
-        0,0,
-		math.MaxInt8/4, math.MinInt8/4,
-		math.MaxInt8/2, math.MinInt8/2,
+		0, 0,
+		math.MaxInt8 / 4, math.MinInt8 / 4,
+		math.MaxInt8 / 2, math.MinInt8 / 2,
 		math.MaxInt8, math.MinInt8,
-        0,0,
-		math.MaxInt8/4, math.MinInt8/4,
-		math.MaxInt8/2, math.MinInt8/2,
+		0, 0,
+		math.MaxInt8 / 4, math.MinInt8 / 4,
+		math.MaxInt8 / 2, math.MinInt8 / 2,
 		math.MaxInt8, math.MinInt8,
-        0,0,
-		math.MaxInt8/4, math.MinInt8/4,
-		math.MaxInt8/2, math.MinInt8/2,
+		0, 0,
+		math.MaxInt8 / 4, math.MinInt8 / 4,
+		math.MaxInt8 / 2, math.MinInt8 / 2,
 		math.MaxInt8, math.MinInt8,
-        0,0,
-		math.MaxInt8/4, math.MinInt8/4,
-		math.MaxInt8/2, math.MinInt8/2,
+		0, 0,
+		math.MaxInt8 / 4, math.MinInt8 / 4,
+		math.MaxInt8 / 2, math.MinInt8 / 2,
 		math.MaxInt8, math.MinInt8,
 	}
 	int8EqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
-	int8EqualTestMatch_3  int8 = math.MinInt8
+	int8EqualTestMatch_3  int8  = math.MinInt8
 	int8EqualTestCount_3  int64 = 4
 
 	int8LessTestResult_3       = []byte{0x0, 0x0, 0x0, 0x00}
-	int8LessTestMatch_3  int8 = math.MinInt8
+	int8LessTestMatch_3  int8  = math.MinInt8
 	int8LessTestCount_3  int64 = 0
 
 	int8LessEqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
-	int8LessEqualTestMatch_3  int8 = math.MinInt8
+	int8LessEqualTestMatch_3  int8  = math.MinInt8
 	int8LessEqualTestCount_3  int64 = 4
 
 	int8GreaterTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
-	int8GreaterTestMatch_3  int8 = math.MinInt8
+	int8GreaterTestMatch_3  int8  = math.MinInt8
 	int8GreaterTestCount_3  int64 = 28
 
 	int8GreaterEqualTestResult_3       = []byte{0xff, 0xff, 0xff, 0xff}
-	int8GreaterEqualTestMatch_3  int8 = math.MinInt8
+	int8GreaterEqualTestMatch_3  int8  = math.MinInt8
 	int8GreaterEqualTestCount_3  int64 = 32
 
 	int8BetweenTestResult_3       = []byte{0x0a, 0x0a, 0x0a, 0x0a}
-	int8BetweenTestMatch_3  int8 = math.MaxInt8/2
-	int8BetweenTestMatch_3b int8 = math.MaxInt8
+	int8BetweenTestMatch_3  int8  = math.MaxInt8 / 2
+	int8BetweenTestMatch_3b int8  = math.MaxInt8
 	int8BetweenTestCount_3  int64 = 8
 )
 
@@ -283,6 +283,7 @@ func TestMatchInt8EqualGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt8EqualAVX2(T *testing.T) {
 	for _, c := range int8EqualCases {
@@ -320,11 +321,12 @@ func BenchmarkMatchInt8EqualGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8EqualGeneric(a, 5, bits)
+				matchInt8EqualGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchInt8EqualAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
@@ -334,7 +336,7 @@ func BenchmarkMatchInt8EqualAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8EqualAVX2(a, 5, bits)
+				matchInt8EqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -349,7 +351,7 @@ func BenchmarkMatchInt8EqualAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8EqualAVX2(a, 5, bits)
+				matchInt8EqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -470,6 +472,7 @@ func TestMatchInt8LessGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt8LessAVX2(T *testing.T) {
 	for _, c := range int8LessCases {
@@ -507,11 +510,12 @@ func BenchmarkMatchInt8LessGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanGeneric(a, 5, bits)
+				matchInt8LessThanGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchInt8LessAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
@@ -521,7 +525,7 @@ func BenchmarkMatchInt8LessAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanAVX2(a, 5, bits)
+				matchInt8LessThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -536,7 +540,7 @@ func BenchmarkMatchInt8LessAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanAVX2(a, 5, bits)
+				matchInt8LessThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -657,6 +661,7 @@ func TestMatchInt8LessEqualGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt8LessEqualAVX2(T *testing.T) {
 	for _, c := range int8LessEqualCases {
@@ -694,11 +699,12 @@ func BenchmarkMatchInt8LessEqualGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanEqualGeneric(a, 5, bits)
+				matchInt8LessThanEqualGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchInt8LessEqualAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
@@ -708,7 +714,7 @@ func BenchmarkMatchInt8LessEqualAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanEqualAVX2(a, 5, bits)
+				matchInt8LessThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -723,7 +729,7 @@ func BenchmarkMatchInt8LessEqualAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanEqualAVX2(a, 5, bits)
+				matchInt8LessThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -844,6 +850,7 @@ func TestMatchInt8GreaterGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt8GreaterAVX2(T *testing.T) {
 	for _, c := range int8GreaterCases {
@@ -881,11 +888,12 @@ func BenchmarkMatchInt8GreaterGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanGeneric(a, 5, bits)
+				matchInt8GreaterThanGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchInt8GreaterAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
@@ -895,7 +903,7 @@ func BenchmarkMatchInt8GreaterAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanAVX2(a, 5, bits)
+				matchInt8GreaterThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -910,7 +918,7 @@ func BenchmarkMatchInt8GreaterAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanAVX2(a, 5, bits)
+				matchInt8GreaterThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -1031,6 +1039,7 @@ func TestMatchInt8GreaterEqualGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt8GreaterEqualAVX2(T *testing.T) {
 	for _, c := range int8GreaterEqualCases {
@@ -1068,11 +1077,12 @@ func BenchmarkMatchInt8GreaterEqualGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanEqualGeneric(a, 5, bits)
+				matchInt8GreaterThanEqualGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchInt8GreaterEqualAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
@@ -1082,7 +1092,7 @@ func BenchmarkMatchInt8GreaterEqualAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanEqualAVX2(a, 5, bits)
+				matchInt8GreaterThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -1097,7 +1107,7 @@ func BenchmarkMatchInt8GreaterEqualAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanEqualAVX2(a, 5, bits)
+				matchInt8GreaterThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -1231,6 +1241,7 @@ func TestMatchInt8BetweenGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt8BetweenAVX2(T *testing.T) {
 	for _, c := range int8BetweenCases {
@@ -1532,7 +1543,7 @@ func BenchmarkInt8SliceContainsRange(B *testing.B) {
 			a := Int8Slice(randInt8Slice(n, 1)).Sort()
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				min, max := int8(rand.Intn(math.MaxInt8 + 1)), int8(rand.Intn(math.MaxInt8 + 1))
+				min, max := int8(rand.Intn(math.MaxInt8+1)), int8(rand.Intn(math.MaxInt8+1))
 				if min > max {
 					min, max = max, min
 				}

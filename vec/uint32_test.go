@@ -224,6 +224,7 @@ func TestMatchUint32EqualGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchUint32EqualAVX2(T *testing.T) {
 	for _, c := range uint32EqualCases {
@@ -261,11 +262,12 @@ func BenchmarkMatchUint32EqualGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32EqualGeneric(a, 5, bits)
+				matchUint32EqualGeneric(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchUint32EqualAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
@@ -275,7 +277,7 @@ func BenchmarkMatchUint32EqualAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32EqualAVX2(a, 5, bits)
+				matchUint32EqualAVX2(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
@@ -290,7 +292,7 @@ func BenchmarkMatchUint32EqualAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32EqualAVX2(a, 5, bits)
+				matchUint32EqualAVX2(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
@@ -397,6 +399,7 @@ func TestMatchUint32LessGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchUint32LessAVX2(T *testing.T) {
 	for _, c := range uint32LessCases {
@@ -434,11 +437,12 @@ func BenchmarkMatchUint32LessGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32LessThanGeneric(a, 5, bits)
+				matchUint32LessThanGeneric(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchUint32LessAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
@@ -448,7 +452,7 @@ func BenchmarkMatchUint32LessAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32LessThanAVX2(a, 5, bits)
+				matchUint32LessThanAVX2(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
@@ -463,7 +467,7 @@ func BenchmarkMatchUint32LessAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32LessThanAVX2(a, 5, bits)
+				matchUint32LessThanAVX2(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
@@ -570,6 +574,7 @@ func TestMatchUint32LessEqualGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchUint32LessEqualAVX2(T *testing.T) {
 	for _, c := range uint32LessEqualCases {
@@ -607,11 +612,12 @@ func BenchmarkMatchUint32LessEqualGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32LessThanEqualGeneric(a, 5, bits)
+				matchUint32LessThanEqualGeneric(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchUint32LessEqualAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
@@ -621,7 +627,7 @@ func BenchmarkMatchUint32LessEqualAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32LessThanEqualAVX2(a, 5, bits)
+				matchUint32LessThanEqualAVX2(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
@@ -636,7 +642,7 @@ func BenchmarkMatchUint32LessEqualAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32LessThanEqualAVX2(a, 5, bits)
+				matchUint32LessThanEqualAVX2(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
@@ -743,6 +749,7 @@ func TestMatchUint32GreaterGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchUint32GreaterAVX2(T *testing.T) {
 	for _, c := range uint32GreaterCases {
@@ -780,11 +787,12 @@ func BenchmarkMatchUint32GreaterGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32GreaterThanGeneric(a, 5, bits)
+				matchUint32GreaterThanGeneric(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchUint32GreaterAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
@@ -794,7 +802,7 @@ func BenchmarkMatchUint32GreaterAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32GreaterThanAVX2(a, 5, bits)
+				matchUint32GreaterThanAVX2(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
@@ -809,7 +817,7 @@ func BenchmarkMatchUint32GreaterAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32GreaterThanAVX2(a, 5, bits)
+				matchUint32GreaterThanAVX2(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
@@ -916,6 +924,7 @@ func TestMatchUint32GreaterEqualGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchUint32GreaterEqualAVX2(T *testing.T) {
 	for _, c := range uint32GreaterEqualCases {
@@ -953,11 +962,12 @@ func BenchmarkMatchUint32GreaterEqualGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32GreaterThanEqualGeneric(a, 5, bits)
+				matchUint32GreaterThanEqualGeneric(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchUint32GreaterEqualAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
@@ -967,7 +977,7 @@ func BenchmarkMatchUint32GreaterEqualAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32GreaterThanEqualAVX2(a, 5, bits)
+				matchUint32GreaterThanEqualAVX2(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
@@ -982,7 +992,7 @@ func BenchmarkMatchUint32GreaterEqualAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n * Uint32Size))
 			for i := 0; i < B.N; i++ {
-				matchUint32GreaterThanEqualAVX2(a, 5, bits)
+				matchUint32GreaterThanEqualAVX2(a, math.MaxUint32/2, bits)
 			}
 		})
 	}
@@ -1100,6 +1110,7 @@ func TestMatchUint32BetweenGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchUint32BetweenAVX2(T *testing.T) {
 	for _, c := range uint32BetweenCases {
@@ -1410,4 +1421,3 @@ func BenchmarkUint32SliceContainsRange(B *testing.B) {
 		})
 	}
 }
-
