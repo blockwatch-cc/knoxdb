@@ -7,64 +7,60 @@ import (
 	"sort"
 )
 
-func MatchUint32Equal(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchInt8Equal(src []int8, val int8, bits *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32Equal(src, val, bits.Bytes())
+	bits.cnt = matchInt8Equal(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint32NotEqual(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchInt8NotEqual(src []int8, val int8, bits *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32NotEqual(src, val, bits.Bytes())
+	bits.cnt = matchInt8NotEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint32LessThan(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchInt8LessThan(src []int8, val int8, bits *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32LessThan(src, val, bits.Bytes())
+	bits.cnt = matchInt8LessThan(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint32LessThanEqual(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchInt8LessThanEqual(src []int8, val int8, bits *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32LessThanEqual(src, val, bits.Bytes())
+	bits.cnt = matchInt8LessThanEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint32GreaterThan(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchInt8GreaterThan(src []int8, val int8, bits *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32GreaterThan(src, val, bits.Bytes())
+	bits.cnt = matchInt8GreaterThan(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint32GreaterThanEqual(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchInt8GreaterThanEqual(src []int8, val int8, bits *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32GreaterThanEqual(src, val, bits.Bytes())
+	bits.cnt = matchInt8GreaterThanEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint32Between(src []uint32, a, b uint32, bits *BitSet) *BitSet {
+func MatchInt8Between(src []int8, a, b int8, bits *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32Between(src, a, b, bits.Bytes())
+	bits.cnt = matchInt8Between(src, a, b, bits.Bytes())
 	return bits
 }
 
-type Uint32Slice []uint32
+type Int8Slice []int8
 
-func (s Uint32Slice) Sort() Uint32Slice {
-	Uint32Sorter(s).Sort()
+func (s Int8Slice) Sort() Int8Slice {
+	Int8Sorter(s).Sort()
 	return s
 }
 
-func (s Uint32Slice) Less(i, j int) bool { return s[i] < s[j] }
-func (s Uint32Slice) Len() int           { return len(s) }
-func (s Uint32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s Int8Slice) Less(i, j int) bool { return s[i] < s[j] }
+func (s Int8Slice) Len() int           { return len(s) }
+func (s Int8Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
-func (s Uint32Slice) Unique() Uint32Slice {
-	return UniqueUint32Slice(s)
-}
-
-func (s Uint32Slice) Contains(val uint32) bool {
+func (s Int8Slice) Contains(val int8) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -89,7 +85,7 @@ func (s Uint32Slice) Contains(val uint32) bool {
 	return false
 }
 
-func (s Uint32Slice) Index(val uint32, last int) int {
+func (s Int8Slice) Index(val int8, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -115,8 +111,8 @@ func (s Uint32Slice) Index(val uint32, last int) int {
 	return -1
 }
 
-func (s Uint32Slice) MinMax() (uint32, uint32) {
-	var min, max uint32
+func (s Int8Slice) MinMax() (int8, int8) {
+	var min, max int8
 
 	switch l := len(s); l {
 	case 0:
@@ -149,7 +145,7 @@ func (s Uint32Slice) MinMax() (uint32, uint32) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s Uint32Slice) ContainsRange(from, to uint32) bool {
+func (s Int8Slice) ContainsRange(from, to int8) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -190,10 +186,11 @@ func (s Uint32Slice) ContainsRange(from, to uint32) bool {
 		return true
 	}
 
-	// otherwise range is contained iff min < max
+	// range is contained iff min < max; note that from/to do not necessarily
+	// have to be members, but some intermediate values are
 	return min < max
 }
 
-func (s Uint32Slice) MatchEqual(val uint32, bits *BitSet) *BitSet {
-	return MatchUint32Equal(s, val, bits)
+func (s Int8Slice) MatchEqual(val int8, bits *BitSet) *BitSet {
+	return MatchInt8Equal(s, val, bits)
 }

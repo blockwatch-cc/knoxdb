@@ -3,7 +3,7 @@
 
 package vec
 
-func matchUint32EqualGeneric(src []uint32, val uint32, bits []byte) int64 {
+func matchUint16EqualGeneric(src []uint16, val uint16, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v == val {
@@ -14,7 +14,7 @@ func matchUint32EqualGeneric(src []uint32, val uint32, bits []byte) int64 {
 	return cnt
 }
 
-func matchUint32NotEqualGeneric(src []uint32, val uint32, bits []byte) int64 {
+func matchUint16NotEqualGeneric(src []uint16, val uint16, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v != val {
@@ -25,7 +25,7 @@ func matchUint32NotEqualGeneric(src []uint32, val uint32, bits []byte) int64 {
 	return cnt
 }
 
-func matchUint32LessThanGeneric(src []uint32, val uint32, bits []byte) int64 {
+func matchUint16LessThanGeneric(src []uint16, val uint16, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v < val {
@@ -36,7 +36,7 @@ func matchUint32LessThanGeneric(src []uint32, val uint32, bits []byte) int64 {
 	return cnt
 }
 
-func matchUint32LessThanEqualGeneric(src []uint32, val uint32, bits []byte) int64 {
+func matchUint16LessThanEqualGeneric(src []uint16, val uint16, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v <= val {
@@ -47,7 +47,7 @@ func matchUint32LessThanEqualGeneric(src []uint32, val uint32, bits []byte) int6
 	return cnt
 }
 
-func matchUint32GreaterThanGeneric(src []uint32, val uint32, bits []byte) int64 {
+func matchUint16GreaterThanGeneric(src []uint16, val uint16, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v > val {
@@ -58,7 +58,7 @@ func matchUint32GreaterThanGeneric(src []uint32, val uint32, bits []byte) int64 
 	return cnt
 }
 
-func matchUint32GreaterThanEqualGeneric(src []uint32, val uint32, bits []byte) int64 {
+func matchUint16GreaterThanEqualGeneric(src []uint16, val uint16, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v >= val {
@@ -69,7 +69,7 @@ func matchUint32GreaterThanEqualGeneric(src []uint32, val uint32, bits []byte) i
 	return cnt
 }
 
-func matchUint32BetweenGeneric(src []uint32, a, b uint32, bits []byte) int64 {
+func matchUint16BetweenGeneric(src []uint16, a, b uint16, bits []byte) int64 {
 	diff := b - a + 1
 	var cnt int64
 	for i, v := range src {

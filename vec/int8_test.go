@@ -1,5 +1,5 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
-// Author: alex@blockwatch.cc
+// Author: stefan@blockwatch.cc
 //
 
 package vec
@@ -12,12 +12,12 @@ import (
 	"testing"
 )
 
-const Int64Size = 8
+const Int8Size = 1
 
-func randInt64Slice(n, u int) []int64 {
-	s := make([]int64, n*u)
+func randInt8Slice(n, u int) []int8 {
+	s := make([]int8, n*u)
 	for i := 0; i < n; i++ {
-		s[i] = rand.Int63()
+		s[i] = int8(rand.Intn(math.MaxInt8 + 1))
 	}
 	for i := 0; i < u; i++ {
 		s = append(s, s[:n]...)
@@ -25,141 +25,141 @@ func randInt64Slice(n, u int) []int64 {
 	return s
 }
 
-type Int64MatchTest struct {
+type Int8MatchTest struct {
 	name   string
-	slice  []int64
-	match  int64 // used for every test
-	match2 int64 // used for between tests
+	slice  []int8
+	match  int8 // used for every test
+	match2 int8 // used for between tests
 	result []byte
 	count  int64
 }
 
 var (
 	// positive values only
-	int64TestSlice_1 = []int64{
+	int8TestSlice_1 = []int8{
 		5, 2, 3, 4,
 		7, 8, 5, 10,
-		15, 5, 55, 500,
-		1000, 500000, 5, 113,
+		15, 5, 55, 50,
+		100, 50, 5, 113,
 		31, 32, 5, 34,
 		35, 36, 5, 5,
 		43, 5, 5, 5,
 		39, 40, 41, 42,
 	}
-	int64EqualTestResult_1       = []byte{0x82, 0x42, 0x23, 0x70}
-	int64EqualTestMatch_1  int64 = 5
-	int64EqualTestCount_1  int64 = 10
+	int8EqualTestResult_1       = []byte{0x82, 0x42, 0x23, 0x70}
+	int8EqualTestMatch_1  int8  = 5
+	int8EqualTestCount_1  int64 = 10
 
-	int64LessTestResult_1       = []byte{0x70, 0x00, 0x00, 0x00}
-	int64LessTestMatch_1  int64 = 5
-	int64LessTestCount_1  int64 = 3
+	int8LessTestResult_1       = []byte{0x70, 0x00, 0x00, 0x00}
+	int8LessTestMatch_1  int8  = 5
+	int8LessTestCount_1  int64 = 3
 
-	int64LessEqualTestResult_1       = []byte{0xf2, 0x42, 0x23, 0x70}
-	int64LessEqualTestMatch_1  int64 = 5
-	int64LessEqualTestCount_1  int64 = 13
+	int8LessEqualTestResult_1       = []byte{0xf2, 0x42, 0x23, 0x70}
+	int8LessEqualTestMatch_1  int8  = 5
+	int8LessEqualTestCount_1  int64 = 13
 
-	int64GreaterTestResult_1       = []byte{0x0d, 0xbd, 0xdc, 0x8f}
-	int64GreaterTestMatch_1  int64 = 5
-	int64GreaterTestCount_1  int64 = 19
+	int8GreaterTestResult_1       = []byte{0x0d, 0xbd, 0xdc, 0x8f}
+	int8GreaterTestMatch_1  int8  = 5
+	int8GreaterTestCount_1  int64 = 19
 
-	int64GreaterEqualTestResult_1       = []byte{0x8f, 0xff, 0xff, 0xff}
-	int64GreaterEqualTestMatch_1  int64 = 5
-	int64GreaterEqualTestCount_1  int64 = 29
+	int8GreaterEqualTestResult_1       = []byte{0x8f, 0xff, 0xff, 0xff}
+	int8GreaterEqualTestMatch_1  int8  = 5
+	int8GreaterEqualTestCount_1  int64 = 29
 
-	int64BetweenTestResult_1       = []byte{0x8f, 0x42, 0x23, 0x70}
-	int64BetweenTestMatch_1  int64 = 5
-	int64BetweenTestMatch_1b int64 = 10
-	int64BetweenTestCount_1  int64 = 13
+	int8BetweenTestResult_1       = []byte{0x8f, 0x42, 0x23, 0x70}
+	int8BetweenTestMatch_1  int8  = 5
+	int8BetweenTestMatch_1b int8  = 10
+	int8BetweenTestCount_1  int64 = 13
 
 	// negative and positive values mixed
-	int64TestSlice_2 = []int64{
+	int8TestSlice_2 = []int8{
 		-5, 2, -3, 5,
 		7, 8, 9, -10,
-		15, 50, 55, 500,
-		1000, -500000, 113, 12,
+		15, 50, 55, 50,
+		100, -50, 113, 12,
 		31, 32, 33, 34,
 		35, -36, 37, 38,
 		39, 40, -41, 42,
 		43, 44, 45, -46,
 	}
-	int64EqualTestResult_2       = []byte{0x80, 0x0, 0x0, 0x0}
-	int64EqualTestMatch_2  int64 = -5
-	int64EqualTestCount_2  int64 = 1
+	int8EqualTestResult_2       = []byte{0x80, 0x0, 0x0, 0x0}
+	int8EqualTestMatch_2  int8  = -5
+	int8EqualTestCount_2  int64 = 1
 
-	int64LessTestResult_2       = []byte{0xe1, 0x04, 0x04, 0x21}
-	int64LessTestMatch_2  int64 = 5
-	int64LessTestCount_2  int64 = 8
+	int8LessTestResult_2       = []byte{0xe1, 0x04, 0x04, 0x21}
+	int8LessTestMatch_2  int8  = 5
+	int8LessTestCount_2  int64 = 8
 
-	int64LessEqualTestResult_2       = []byte{0xf1, 0x04, 0x04, 0x21}
-	int64LessEqualTestMatch_2  int64 = 5
-	int64LessEqualTestCount_2  int64 = 9
+	int8LessEqualTestResult_2       = []byte{0xf1, 0x04, 0x04, 0x21}
+	int8LessEqualTestMatch_2  int8  = 5
+	int8LessEqualTestCount_2  int64 = 9
 
-	int64GreaterTestResult_2       = []byte{0x0e, 0xfb, 0xfb, 0xde}
-	int64GreaterTestMatch_2  int64 = 5
-	int64GreaterTestCount_2  int64 = 23
+	int8GreaterTestResult_2       = []byte{0x0e, 0xfb, 0xfb, 0xde}
+	int8GreaterTestMatch_2  int8  = 5
+	int8GreaterTestCount_2  int64 = 23
 
-	int64GreaterEqualTestResult_2       = []byte{0x1e, 0xfb, 0xfb, 0xde}
-	int64GreaterEqualTestMatch_2  int64 = 5
-	int64GreaterEqualTestCount_2  int64 = 24
+	int8GreaterEqualTestResult_2       = []byte{0x1e, 0xfb, 0xfb, 0xde}
+	int8GreaterEqualTestMatch_2  int8  = 5
+	int8GreaterEqualTestCount_2  int64 = 24
 
-	int64BetweenTestResult_2       = []byte{0x1e, 0x00, 0x00, 0x00}
-	int64BetweenTestMatch_2  int64 = 5
-	int64BetweenTestMatch_2b int64 = 10
-	int64BetweenTestCount_2  int64 = 4
+	int8BetweenTestResult_2       = []byte{0x1e, 0x00, 0x00, 0x00}
+	int8BetweenTestMatch_2  int8  = 5
+	int8BetweenTestMatch_2b int8  = 10
+	int8BetweenTestCount_2  int64 = 4
 
 	// extreme values
-	int64TestSlice_3 = []int64{
+	int8TestSlice_3 = []int8{
+		0, 0,
+		math.MaxInt8 / 4, math.MinInt8 / 4,
+		math.MaxInt8 / 2, math.MinInt8 / 2,
 		math.MaxInt8, math.MinInt8,
-		math.MaxInt16, math.MinInt16,
-		math.MaxInt32, math.MinInt32,
-		math.MaxInt64, math.MinInt64,
+		0, 0,
+		math.MaxInt8 / 4, math.MinInt8 / 4,
+		math.MaxInt8 / 2, math.MinInt8 / 2,
 		math.MaxInt8, math.MinInt8,
-		math.MaxInt16, math.MinInt16,
-		math.MaxInt32, math.MinInt32,
-		math.MaxInt64, math.MinInt64,
+		0, 0,
+		math.MaxInt8 / 4, math.MinInt8 / 4,
+		math.MaxInt8 / 2, math.MinInt8 / 2,
 		math.MaxInt8, math.MinInt8,
-		math.MaxInt16, math.MinInt16,
-		math.MaxInt32, math.MinInt32,
-		math.MaxInt64, math.MinInt64,
+		0, 0,
+		math.MaxInt8 / 4, math.MinInt8 / 4,
+		math.MaxInt8 / 2, math.MinInt8 / 2,
 		math.MaxInt8, math.MinInt8,
-		math.MaxInt16, math.MinInt16,
-		math.MaxInt32, math.MinInt32,
-		math.MaxInt64, math.MinInt64,
 	}
-	int64EqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
-	int64EqualTestMatch_3  int64 = math.MinInt64
-	int64EqualTestCount_3  int64 = 4
+	int8EqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
+	int8EqualTestMatch_3  int8  = math.MinInt8
+	int8EqualTestCount_3  int64 = 4
 
-	int64LessTestResult_3       = []byte{0x0, 0x0, 0x0, 0x00}
-	int64LessTestMatch_3  int64 = math.MinInt64
-	int64LessTestCount_3  int64 = 0
+	int8LessTestResult_3       = []byte{0x0, 0x0, 0x0, 0x00}
+	int8LessTestMatch_3  int8  = math.MinInt8
+	int8LessTestCount_3  int64 = 0
 
-	int64LessEqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
-	int64LessEqualTestMatch_3  int64 = math.MinInt64
-	int64LessEqualTestCount_3  int64 = 4
+	int8LessEqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
+	int8LessEqualTestMatch_3  int8  = math.MinInt8
+	int8LessEqualTestCount_3  int64 = 4
 
-	int64GreaterTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
-	int64GreaterTestMatch_3  int64 = math.MinInt64
-	int64GreaterTestCount_3  int64 = 28
+	int8GreaterTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
+	int8GreaterTestMatch_3  int8  = math.MinInt8
+	int8GreaterTestCount_3  int64 = 28
 
-	int64GreaterEqualTestResult_3       = []byte{0xff, 0xff, 0xff, 0xff}
-	int64GreaterEqualTestMatch_3  int64 = math.MinInt64
-	int64GreaterEqualTestCount_3  int64 = 32
+	int8GreaterEqualTestResult_3       = []byte{0xff, 0xff, 0xff, 0xff}
+	int8GreaterEqualTestMatch_3  int8  = math.MinInt8
+	int8GreaterEqualTestCount_3  int64 = 32
 
-	int64BetweenTestResult_3       = []byte{0x0a, 0x0a, 0x0a, 0x0a}
-	int64BetweenTestMatch_3  int64 = math.MaxInt32
-	int64BetweenTestMatch_3b int64 = math.MaxInt64
-	int64BetweenTestCount_3  int64 = 8
+	int8BetweenTestResult_3       = []byte{0x0a, 0x0a, 0x0a, 0x0a}
+	int8BetweenTestMatch_3  int8  = math.MaxInt8 / 2
+	int8BetweenTestMatch_3b int8  = math.MaxInt8
+	int8BetweenTestCount_3  int64 = 8
 )
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
 //
-var int64EqualCases = []Int64MatchTest{
-	Int64MatchTest{
+var int8EqualCases = []Int8MatchTest{
+	Int8MatchTest{
 		name: "vec1",
 		// 	// test vector to find shuffle/perm positions
-		// 	slice: []int64{
+		// 	slice: []int8{
 		// 		// 0x1, 0x2, 0x3, 0x4, // Y1
 		// 		// 0x5, 0x6, 0x7, 0x8, // Y2
 		// 		// 0x9, 0xa, 0xb, 0xc, // Y3
@@ -174,7 +174,7 @@ var int64EqualCases = []Int64MatchTest{
 		// 	result: []byte{0x01, 0x0, 0x0, 0x0},
 		// 	count:  1,
 		// },{
-		slice: []int64{
+		slice: []int8{
 			0, 5, 3, 5, // Y1
 			7, 5, 5, 9, // Y2
 			3, 5, 5, 5, // Y3
@@ -190,88 +190,88 @@ var int64EqualCases = []Int64MatchTest{
 		count:  13,
 	}, {
 		name:   "l32",
-		slice:  int64TestSlice_1,
-		match:  int64EqualTestMatch_1,
-		result: int64EqualTestResult_1,
-		count:  int64EqualTestCount_1,
+		slice:  int8TestSlice_1,
+		match:  int8EqualTestMatch_1,
+		result: int8EqualTestResult_1,
+		count:  int8EqualTestCount_1,
 	}, {
 		name:   "l64",
-		slice:  append(int64TestSlice_1, int64TestSlice_1...),
-		match:  int64EqualTestMatch_1,
-		result: append(int64EqualTestResult_1, int64EqualTestResult_1...),
-		count:  int64EqualTestCount_1 * 2,
+		slice:  append(int8TestSlice_1, int8TestSlice_1...),
+		match:  int8EqualTestMatch_1,
+		result: append(int8EqualTestResult_1, int8EqualTestResult_1...),
+		count:  int8EqualTestCount_1 * 2,
 	}, {
 		name:   "l31",
-		slice:  int64TestSlice_1[:31],
-		match:  int64EqualTestMatch_1,
-		result: int64EqualTestResult_1,
-		count:  int64EqualTestCount_1,
+		slice:  int8TestSlice_1[:31],
+		match:  int8EqualTestMatch_1,
+		result: int8EqualTestResult_1,
+		count:  int8EqualTestCount_1,
 	}, {
 		name:   "l23",
-		slice:  int64TestSlice_1[:23],
-		match:  int64EqualTestMatch_1,
+		slice:  int8TestSlice_1[:23],
+		match:  int8EqualTestMatch_1,
 		result: []byte{0x82, 0x42, 0x22}, // last bit off!
-		count:  int64EqualTestCount_1 - 4,
+		count:  int8EqualTestCount_1 - 4,
 	}, {
 		name:   "l15",
-		slice:  int64TestSlice_1[:15],
-		match:  int64EqualTestMatch_1,
-		result: int64EqualTestResult_1[:2],
-		count:  int64EqualTestCount_1 - 6,
+		slice:  int8TestSlice_1[:15],
+		match:  int8EqualTestMatch_1,
+		result: int8EqualTestResult_1[:2],
+		count:  int8EqualTestCount_1 - 6,
 	}, {
 		name:   "l7",
-		slice:  int64TestSlice_1[:7],
-		match:  int64EqualTestMatch_1,
-		result: int64EqualTestResult_1[:1],
-		count:  int64EqualTestCount_1 - 8,
+		slice:  int8TestSlice_1[:7],
+		match:  int8EqualTestMatch_1,
+		result: int8EqualTestResult_1[:1],
+		count:  int8EqualTestCount_1 - 8,
 	}, {
 		name:   "l0",
-		slice:  make([]int64, 0),
-		match:  int64EqualTestMatch_1,
+		slice:  make([]int8, 0),
+		match:  int8EqualTestMatch_1,
 		result: []byte{},
 		count:  0,
 	}, {
 		name:   "nil",
 		slice:  nil,
-		match:  int64EqualTestMatch_1,
+		match:  int8EqualTestMatch_1,
 		result: []byte{},
 		count:  0,
 	}, {
 		// with negative values
 		name:   "neg32",
-		slice:  int64TestSlice_2,
-		match:  int64EqualTestMatch_2,
-		result: int64EqualTestResult_2,
-		count:  int64EqualTestCount_2,
+		slice:  int8TestSlice_2,
+		match:  int8EqualTestMatch_2,
+		result: int8EqualTestResult_2,
+		count:  int8EqualTestCount_2,
 	}, {
 		// with negative values, test scalar algorithm
 		name:   "neg31",
-		slice:  int64TestSlice_2[:31],
-		match:  int64EqualTestMatch_2,
-		result: int64EqualTestResult_2,
-		count:  int64EqualTestCount_2,
+		slice:  int8TestSlice_2[:31],
+		match:  int8EqualTestMatch_2,
+		result: int8EqualTestResult_2,
+		count:  int8EqualTestCount_2,
 	}, {
 		// with extreme values
 		name:   "ext32",
-		slice:  int64TestSlice_3,
-		match:  int64EqualTestMatch_3,
-		result: int64EqualTestResult_3,
-		count:  int64EqualTestCount_3,
+		slice:  int8TestSlice_3,
+		match:  int8EqualTestMatch_3,
+		result: int8EqualTestResult_3,
+		count:  int8EqualTestCount_3,
 	}, {
 		// with extreme values, test scalar algorithm
 		name:   "ext31",
-		slice:  int64TestSlice_3[:31],
-		match:  int64EqualTestMatch_3,
+		slice:  int8TestSlice_3[:31],
+		match:  int8EqualTestMatch_3,
 		result: []byte{0x01, 0x01, 0x01, 0x00},
 		count:  3,
 	},
 }
 
-func TestMatchInt64EqualGeneric(T *testing.T) {
-	for _, c := range int64EqualCases {
+func TestMatchInt8EqualGeneric(T *testing.T) {
+	for _, c := range int8EqualCases {
 		// pre-allocate the result slice and fill with poison
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt64EqualGeneric(c.slice, c.match, bits)
+		cnt := matchInt8EqualGeneric(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -284,8 +284,9 @@ func TestMatchInt64EqualGeneric(T *testing.T) {
 	}
 }
 
-func TestMatchInt64EqualAVX2(T *testing.T) {
-	for _, c := range int64EqualCases {
+/*
+func TestMatchInt8EqualAVX2(T *testing.T) {
+	for _, c := range int8EqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
@@ -293,7 +294,7 @@ func TestMatchInt64EqualAVX2(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt64EqualAVX2(c.slice, c.match, bits)
+		cnt := matchInt8EqualAVX2(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -308,60 +309,61 @@ func TestMatchInt64EqualAVX2(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Equal benchmarks
 //
-func BenchmarkMatchInt64EqualGeneric(B *testing.B) {
+func BenchmarkMatchInt8EqualGeneric(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64EqualGeneric(a, math.MaxInt64/2, bits)
+				matchInt8EqualGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
-func BenchmarkMatchInt64EqualAVX2(B *testing.B) {
+/*
+func BenchmarkMatchInt8EqualAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64EqualAVX2(a, math.MaxInt64/2, bits)
+				matchInt8EqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
 // force scalar codepath by making last block <32 entries
-func BenchmarkMatchInt64EqualAVX2Scalar(B *testing.B) {
+func BenchmarkMatchInt8EqualAVX2Scalar(B *testing.B) {
 	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64EqualAVX2(a, math.MaxInt64/2, bits)
+				matchInt8EqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Less Testcases
 //
-var int64LessCases = []Int64MatchTest{
-	Int64MatchTest{
+var int8LessCases = []Int8MatchTest{
+	Int8MatchTest{
 		name: "vec1",
-		slice: []int64{
+		slice: []int8{
 			0, 5, 3, 5, // Y1
 			7, 5, 5, 9, // Y2
 			3, 5, 5, 5, // Y3
@@ -377,88 +379,88 @@ var int64LessCases = []Int64MatchTest{
 		count:  9,
 	}, {
 		name:   "l32",
-		slice:  int64TestSlice_1,
-		match:  int64LessTestMatch_1,
-		result: int64LessTestResult_1,
-		count:  int64LessTestCount_1,
+		slice:  int8TestSlice_1,
+		match:  int8LessTestMatch_1,
+		result: int8LessTestResult_1,
+		count:  int8LessTestCount_1,
 	}, {
 		name:   "l64",
-		slice:  append(int64TestSlice_1, int64TestSlice_1...),
-		match:  int64LessTestMatch_1,
-		result: append(int64LessTestResult_1, int64LessTestResult_1...),
-		count:  int64LessTestCount_1 * 2,
+		slice:  append(int8TestSlice_1, int8TestSlice_1...),
+		match:  int8LessTestMatch_1,
+		result: append(int8LessTestResult_1, int8LessTestResult_1...),
+		count:  int8LessTestCount_1 * 2,
 	}, {
 		name:   "l31",
-		slice:  int64TestSlice_1[:31],
-		match:  int64LessTestMatch_1,
-		result: int64LessTestResult_1,
-		count:  int64LessTestCount_1,
+		slice:  int8TestSlice_1[:31],
+		match:  int8LessTestMatch_1,
+		result: int8LessTestResult_1,
+		count:  int8LessTestCount_1,
 	}, {
 		name:   "l23",
-		slice:  int64TestSlice_1[:23],
-		match:  int64LessTestMatch_1,
-		result: int64LessTestResult_1[:3],
-		count:  int64LessTestCount_1,
+		slice:  int8TestSlice_1[:23],
+		match:  int8LessTestMatch_1,
+		result: int8LessTestResult_1[:3],
+		count:  int8LessTestCount_1,
 	}, {
 		name:   "l15",
-		slice:  int64TestSlice_1[:15],
-		match:  int64LessTestMatch_1,
-		result: int64LessTestResult_1[:2],
-		count:  int64LessTestCount_1,
+		slice:  int8TestSlice_1[:15],
+		match:  int8LessTestMatch_1,
+		result: int8LessTestResult_1[:2],
+		count:  int8LessTestCount_1,
 	}, {
 		name:   "l7",
-		slice:  int64TestSlice_1[:7],
-		match:  int64LessTestMatch_1,
-		result: int64LessTestResult_1[:1],
-		count:  int64LessTestCount_1,
+		slice:  int8TestSlice_1[:7],
+		match:  int8LessTestMatch_1,
+		result: int8LessTestResult_1[:1],
+		count:  int8LessTestCount_1,
 	}, {
 		name:   "l0",
-		slice:  make([]int64, 0),
-		match:  int64LessTestMatch_1,
+		slice:  make([]int8, 0),
+		match:  int8LessTestMatch_1,
 		result: []byte{},
 		count:  0,
 	}, {
 		name:   "nil",
 		slice:  nil,
-		match:  int64LessTestMatch_1,
+		match:  int8LessTestMatch_1,
 		result: []byte{},
 		count:  0,
 	}, {
 		// with negative values
 		name:   "neg32",
-		slice:  int64TestSlice_2,
-		match:  int64LessTestMatch_2,
-		result: int64LessTestResult_2,
-		count:  int64LessTestCount_2,
+		slice:  int8TestSlice_2,
+		match:  int8LessTestMatch_2,
+		result: int8LessTestResult_2,
+		count:  int8LessTestCount_2,
 	}, {
 		// with negative values, test scalar algorithm
 		name:   "neg31",
-		slice:  int64TestSlice_2[:31],
-		match:  int64LessTestMatch_2,
+		slice:  int8TestSlice_2[:31],
+		match:  int8LessTestMatch_2,
 		result: []byte{0xe1, 0x04, 0x04, 0x20}, // last bit off
-		count:  int64LessTestCount_2 - 1,
+		count:  int8LessTestCount_2 - 1,
 	}, {
 		// with extreme values
 		name:   "ext32",
-		slice:  int64TestSlice_3,
-		match:  int64LessTestMatch_3,
-		result: int64LessTestResult_3,
-		count:  int64LessTestCount_3,
+		slice:  int8TestSlice_3,
+		match:  int8LessTestMatch_3,
+		result: int8LessTestResult_3,
+		count:  int8LessTestCount_3,
 	}, {
 		// with extreme values, test scalar algorithm
 		name:   "ext31",
-		slice:  int64TestSlice_3[:31],
-		match:  int64LessTestMatch_3,
-		result: int64LessTestResult_3, // still zeros
-		count:  int64LessTestCount_3,
+		slice:  int8TestSlice_3[:31],
+		match:  int8LessTestMatch_3,
+		result: int8LessTestResult_3, // still zeros
+		count:  int8LessTestCount_3,
 	},
 }
 
-func TestMatchInt64LessGeneric(T *testing.T) {
-	for _, c := range int64LessCases {
+func TestMatchInt8LessGeneric(T *testing.T) {
+	for _, c := range int8LessCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt64LessThanGeneric(c.slice, c.match, bits)
+		cnt := matchInt8LessThanGeneric(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -471,8 +473,9 @@ func TestMatchInt64LessGeneric(T *testing.T) {
 	}
 }
 
-func TestMatchInt64LessAVX2(T *testing.T) {
-	for _, c := range int64LessCases {
+/*
+func TestMatchInt8LessAVX2(T *testing.T) {
+	for _, c := range int8LessCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
@@ -480,7 +483,7 @@ func TestMatchInt64LessAVX2(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt64LessThanAVX2(c.slice, c.match, bits)
+		cnt := matchInt8LessThanAVX2(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -495,60 +498,61 @@ func TestMatchInt64LessAVX2(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Less benchmarks
 //
-func BenchmarkMatchInt64LessGeneric(B *testing.B) {
+func BenchmarkMatchInt8LessGeneric(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64LessThanGeneric(a, math.MaxInt64/2, bits)
+				matchInt8LessThanGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
-func BenchmarkMatchInt64LessAVX2(B *testing.B) {
+/*
+func BenchmarkMatchInt8LessAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64LessThanAVX2(a, math.MaxInt64/2, bits)
+				matchInt8LessThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
 // force scalar codepath by making last block <32 entries
-func BenchmarkMatchInt64LessAVX2Scalar(B *testing.B) {
+func BenchmarkMatchInt8LessAVX2Scalar(B *testing.B) {
 	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64LessThanAVX2(a, math.MaxInt64/2, bits)
+				matchInt8LessThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
 //
-var int64LessEqualCases = []Int64MatchTest{
-	Int64MatchTest{
+var int8LessEqualCases = []Int8MatchTest{
+	Int8MatchTest{
 		name: "vec1",
-		slice: []int64{
+		slice: []int8{
 			0, 5, 3, 5, // Y1
 			7, 5, 5, 9, // Y2
 			3, 5, 5, 5, // Y3
@@ -564,88 +568,88 @@ var int64LessEqualCases = []Int64MatchTest{
 		count:  22,
 	}, {
 		name:   "l32",
-		slice:  int64TestSlice_1,
-		match:  int64LessEqualTestMatch_1,
-		result: int64LessEqualTestResult_1,
-		count:  int64LessEqualTestCount_1,
+		slice:  int8TestSlice_1,
+		match:  int8LessEqualTestMatch_1,
+		result: int8LessEqualTestResult_1,
+		count:  int8LessEqualTestCount_1,
 	}, {
 		name:   "l64",
-		slice:  append(int64TestSlice_1, int64TestSlice_1...),
-		match:  int64LessEqualTestMatch_1,
-		result: append(int64LessEqualTestResult_1, int64LessEqualTestResult_1...),
-		count:  int64LessEqualTestCount_1 * 2,
+		slice:  append(int8TestSlice_1, int8TestSlice_1...),
+		match:  int8LessEqualTestMatch_1,
+		result: append(int8LessEqualTestResult_1, int8LessEqualTestResult_1...),
+		count:  int8LessEqualTestCount_1 * 2,
 	}, {
 		name:   "l31",
-		slice:  int64TestSlice_1[:31],
-		match:  int64LessEqualTestMatch_1,
-		result: int64LessEqualTestResult_1,
-		count:  int64LessEqualTestCount_1,
+		slice:  int8TestSlice_1[:31],
+		match:  int8LessEqualTestMatch_1,
+		result: int8LessEqualTestResult_1,
+		count:  int8LessEqualTestCount_1,
 	}, {
 		name:   "l23",
-		slice:  int64TestSlice_1[:23],
-		match:  int64LessEqualTestMatch_1,
+		slice:  int8TestSlice_1[:23],
+		match:  int8LessEqualTestMatch_1,
 		result: []byte{0xf2, 0x42, 0x22},
-		count:  int64LessEqualTestCount_1 - 4,
+		count:  int8LessEqualTestCount_1 - 4,
 	}, {
 		name:   "l15",
-		slice:  int64TestSlice_1[:15],
-		match:  int64LessEqualTestMatch_1,
-		result: int64LessEqualTestResult_1[:2],
-		count:  int64LessEqualTestCount_1 - 6,
+		slice:  int8TestSlice_1[:15],
+		match:  int8LessEqualTestMatch_1,
+		result: int8LessEqualTestResult_1[:2],
+		count:  int8LessEqualTestCount_1 - 6,
 	}, {
 		name:   "l7",
-		slice:  int64TestSlice_1[:7],
-		match:  int64LessEqualTestMatch_1,
-		result: int64LessEqualTestResult_1[:1],
-		count:  int64LessEqualTestCount_1 - 8,
+		slice:  int8TestSlice_1[:7],
+		match:  int8LessEqualTestMatch_1,
+		result: int8LessEqualTestResult_1[:1],
+		count:  int8LessEqualTestCount_1 - 8,
 	}, {
 		name:   "l0",
-		slice:  make([]int64, 0),
-		match:  int64LessEqualTestMatch_1,
+		slice:  make([]int8, 0),
+		match:  int8LessEqualTestMatch_1,
 		result: []byte{},
 		count:  0,
 	}, {
 		name:   "nil",
 		slice:  nil,
-		match:  int64LessEqualTestMatch_1,
+		match:  int8LessEqualTestMatch_1,
 		result: []byte{},
 		count:  0,
 	}, {
 		// with negative values
 		name:   "neg32",
-		slice:  int64TestSlice_2,
-		match:  int64LessEqualTestMatch_2,
-		result: int64LessEqualTestResult_2,
-		count:  int64LessEqualTestCount_2,
+		slice:  int8TestSlice_2,
+		match:  int8LessEqualTestMatch_2,
+		result: int8LessEqualTestResult_2,
+		count:  int8LessEqualTestCount_2,
 	}, {
 		// with negative values, test scalar algorithm
 		name:   "neg31",
-		slice:  int64TestSlice_2[:31],
-		match:  int64LessEqualTestMatch_2,
+		slice:  int8TestSlice_2[:31],
+		match:  int8LessEqualTestMatch_2,
 		result: []byte{0xf1, 0x04, 0x04, 0x20}, // last bit off
-		count:  int64LessEqualTestCount_2 - 1,
+		count:  int8LessEqualTestCount_2 - 1,
 	}, {
 		// with extreme values
 		name:   "ext32",
-		slice:  int64TestSlice_3,
-		match:  int64LessEqualTestMatch_3,
-		result: int64LessEqualTestResult_3,
-		count:  int64LessEqualTestCount_3,
+		slice:  int8TestSlice_3,
+		match:  int8LessEqualTestMatch_3,
+		result: int8LessEqualTestResult_3,
+		count:  int8LessEqualTestCount_3,
 	}, {
 		// with extreme values, test scalar algorithm
 		name:   "ext31",
-		slice:  int64TestSlice_3[:31],
-		match:  int64LessEqualTestMatch_3,
+		slice:  int8TestSlice_3[:31],
+		match:  int8LessEqualTestMatch_3,
 		result: []byte{0x1, 0x1, 0x1, 0x0}, // last off
-		count:  int64LessEqualTestCount_3 - 1,
+		count:  int8LessEqualTestCount_3 - 1,
 	},
 }
 
-func TestMatchInt64LessEqualGeneric(T *testing.T) {
-	for _, c := range int64LessEqualCases {
+func TestMatchInt8LessEqualGeneric(T *testing.T) {
+	for _, c := range int8LessEqualCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt64LessThanEqualGeneric(c.slice, c.match, bits)
+		cnt := matchInt8LessThanEqualGeneric(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -658,8 +662,9 @@ func TestMatchInt64LessEqualGeneric(T *testing.T) {
 	}
 }
 
-func TestMatchInt64LessEqualAVX2(T *testing.T) {
-	for _, c := range int64LessEqualCases {
+/*
+func TestMatchInt8LessEqualAVX2(T *testing.T) {
+	for _, c := range int8LessEqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
@@ -667,7 +672,7 @@ func TestMatchInt64LessEqualAVX2(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt64LessThanEqualAVX2(c.slice, c.match, bits)
+		cnt := matchInt8LessThanEqualAVX2(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -682,60 +687,61 @@ func TestMatchInt64LessEqualAVX2(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
 //
-func BenchmarkMatchInt64LessEqualGeneric(B *testing.B) {
+func BenchmarkMatchInt8LessEqualGeneric(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64LessThanEqualGeneric(a, math.MaxInt64/2, bits)
+				matchInt8LessThanEqualGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
-func BenchmarkMatchInt64LessEqualAVX2(B *testing.B) {
+/*
+func BenchmarkMatchInt8LessEqualAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64LessThanEqualAVX2(a, math.MaxInt64/2, bits)
+				matchInt8LessThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
 // force scalar codepath by making last block <32 entries
-func BenchmarkMatchInt64LessEqualAVX2Scalar(B *testing.B) {
+func BenchmarkMatchInt8LessEqualAVX2Scalar(B *testing.B) {
 	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64LessThanEqualAVX2(a, math.MaxInt64/2, bits)
+				matchInt8LessThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Greater Testcases
 //
-var int64GreaterCases = []Int64MatchTest{
-	Int64MatchTest{
+var int8GreaterCases = []Int8MatchTest{
+	Int8MatchTest{
 		name: "vec1",
-		slice: []int64{
+		slice: []int8{
 			0, 5, 3, 5, // Y1
 			7, 5, 5, 9, // Y2
 			3, 5, 5, 5, // Y3
@@ -751,88 +757,88 @@ var int64GreaterCases = []Int64MatchTest{
 		count:  10,
 	}, {
 		name:   "l32",
-		slice:  int64TestSlice_1,
-		match:  int64GreaterTestMatch_1,
-		result: int64GreaterTestResult_1,
-		count:  int64GreaterTestCount_1,
+		slice:  int8TestSlice_1,
+		match:  int8GreaterTestMatch_1,
+		result: int8GreaterTestResult_1,
+		count:  int8GreaterTestCount_1,
 	}, {
 		name:   "l64",
-		slice:  append(int64TestSlice_1, int64TestSlice_1...),
-		match:  int64GreaterTestMatch_1,
-		result: append(int64GreaterTestResult_1, int64GreaterTestResult_1...),
-		count:  int64GreaterTestCount_1 * 2,
+		slice:  append(int8TestSlice_1, int8TestSlice_1...),
+		match:  int8GreaterTestMatch_1,
+		result: append(int8GreaterTestResult_1, int8GreaterTestResult_1...),
+		count:  int8GreaterTestCount_1 * 2,
 	}, {
 		name:   "l31",
-		slice:  int64TestSlice_1[:31],
-		match:  int64GreaterTestMatch_1,
+		slice:  int8TestSlice_1[:31],
+		match:  int8GreaterTestMatch_1,
 		result: []byte{0x0d, 0xbd, 0xdc, 0x8e},
-		count:  int64GreaterTestCount_1 - 1,
+		count:  int8GreaterTestCount_1 - 1,
 	}, {
 		name:   "l23",
-		slice:  int64TestSlice_1[:23],
-		match:  int64GreaterTestMatch_1,
-		result: int64GreaterTestResult_1[:3],
-		count:  int64GreaterTestCount_1 - 5,
+		slice:  int8TestSlice_1[:23],
+		match:  int8GreaterTestMatch_1,
+		result: int8GreaterTestResult_1[:3],
+		count:  int8GreaterTestCount_1 - 5,
 	}, {
 		name:   "l15",
-		slice:  int64TestSlice_1[:15],
-		match:  int64GreaterTestMatch_1,
+		slice:  int8TestSlice_1[:15],
+		match:  int8GreaterTestMatch_1,
 		result: []byte{0x0d, 0xbc},
-		count:  int64GreaterTestCount_1 - 11,
+		count:  int8GreaterTestCount_1 - 11,
 	}, {
 		name:   "l7",
-		slice:  int64TestSlice_1[:7],
-		match:  int64GreaterTestMatch_1,
+		slice:  int8TestSlice_1[:7],
+		match:  int8GreaterTestMatch_1,
 		result: []byte{0x0c},
 		count:  2,
 	}, {
 		name:   "l0",
-		slice:  make([]int64, 0),
-		match:  int64GreaterTestMatch_1,
+		slice:  make([]int8, 0),
+		match:  int8GreaterTestMatch_1,
 		result: []byte{},
 		count:  0,
 	}, {
 		name:   "nil",
 		slice:  nil,
-		match:  int64GreaterTestMatch_1,
+		match:  int8GreaterTestMatch_1,
 		result: []byte{},
 		count:  0,
 	}, {
 		// with negative values
 		name:   "neg32",
-		slice:  int64TestSlice_2,
-		match:  int64GreaterTestMatch_2,
-		result: int64GreaterTestResult_2,
-		count:  int64GreaterTestCount_2,
+		slice:  int8TestSlice_2,
+		match:  int8GreaterTestMatch_2,
+		result: int8GreaterTestResult_2,
+		count:  int8GreaterTestCount_2,
 	}, {
 		// with negative values, test scalar algorithm
 		name:   "neg31",
-		slice:  int64TestSlice_2[:31],
-		match:  int64GreaterTestMatch_2,
+		slice:  int8TestSlice_2[:31],
+		match:  int8GreaterTestMatch_2,
 		result: []byte{0x0e, 0xfb, 0xfb, 0xde},
-		count:  int64GreaterTestCount_2,
+		count:  int8GreaterTestCount_2,
 	}, {
 		// with extreme values
 		name:   "ext32",
-		slice:  int64TestSlice_3,
-		match:  int64GreaterTestMatch_3,
-		result: int64GreaterTestResult_3,
-		count:  int64GreaterTestCount_3,
+		slice:  int8TestSlice_3,
+		match:  int8GreaterTestMatch_3,
+		result: int8GreaterTestResult_3,
+		count:  int8GreaterTestCount_3,
 	}, {
 		// with extreme values, test scalar algorithm
 		name:   "ext31",
-		slice:  int64TestSlice_3[:31],
-		match:  int64GreaterTestMatch_3,
-		result: int64GreaterTestResult_3, // still zeros
-		count:  int64GreaterTestCount_3,
+		slice:  int8TestSlice_3[:31],
+		match:  int8GreaterTestMatch_3,
+		result: int8GreaterTestResult_3, // still zeros
+		count:  int8GreaterTestCount_3,
 	},
 }
 
-func TestMatchInt64GreaterGeneric(T *testing.T) {
-	for _, c := range int64GreaterCases {
+func TestMatchInt8GreaterGeneric(T *testing.T) {
+	for _, c := range int8GreaterCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt64GreaterThanGeneric(c.slice, c.match, bits)
+		cnt := matchInt8GreaterThanGeneric(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -845,8 +851,9 @@ func TestMatchInt64GreaterGeneric(T *testing.T) {
 	}
 }
 
-func TestMatchInt64GreaterAVX2(T *testing.T) {
-	for _, c := range int64GreaterCases {
+/*
+func TestMatchInt8GreaterAVX2(T *testing.T) {
+	for _, c := range int8GreaterCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
@@ -854,7 +861,7 @@ func TestMatchInt64GreaterAVX2(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt64GreaterThanAVX2(c.slice, c.match, bits)
+		cnt := matchInt8GreaterThanAVX2(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -869,60 +876,61 @@ func TestMatchInt64GreaterAVX2(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Greater benchmarks
 //
-func BenchmarkMatchInt64GreaterGeneric(B *testing.B) {
+func BenchmarkMatchInt8GreaterGeneric(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64GreaterThanGeneric(a, math.MaxInt64/2, bits)
+				matchInt8GreaterThanGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
-func BenchmarkMatchInt64GreaterAVX2(B *testing.B) {
+/*
+func BenchmarkMatchInt8GreaterAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64GreaterThanAVX2(a, math.MaxInt64/2, bits)
+				matchInt8GreaterThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
 // force scalar codepath by making last block <32 entries
-func BenchmarkMatchInt64GreaterAVX2Scalar(B *testing.B) {
+func BenchmarkMatchInt8GreaterAVX2Scalar(B *testing.B) {
 	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64GreaterThanAVX2(a, math.MaxInt64/2, bits)
+				matchInt8GreaterThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
 //
-var int64GreaterEqualCases = []Int64MatchTest{
-	Int64MatchTest{
+var int8GreaterEqualCases = []Int8MatchTest{
+	Int8MatchTest{
 		name: "vec1",
-		slice: []int64{
+		slice: []int8{
 			0, 5, 3, 5, // Y1
 			7, 5, 5, 9, // Y2
 			3, 5, 5, 5, // Y3
@@ -938,88 +946,88 @@ var int64GreaterEqualCases = []Int64MatchTest{
 		count:  23,
 	}, {
 		name:   "l32",
-		slice:  int64TestSlice_1,
-		match:  int64GreaterEqualTestMatch_1,
-		result: int64GreaterEqualTestResult_1,
-		count:  int64GreaterEqualTestCount_1,
+		slice:  int8TestSlice_1,
+		match:  int8GreaterEqualTestMatch_1,
+		result: int8GreaterEqualTestResult_1,
+		count:  int8GreaterEqualTestCount_1,
 	}, {
 		name:   "l64",
-		slice:  append(int64TestSlice_1, int64TestSlice_1...),
-		match:  int64GreaterEqualTestMatch_1,
-		result: append(int64GreaterEqualTestResult_1, int64GreaterEqualTestResult_1...),
-		count:  int64GreaterEqualTestCount_1 * 2,
+		slice:  append(int8TestSlice_1, int8TestSlice_1...),
+		match:  int8GreaterEqualTestMatch_1,
+		result: append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_1...),
+		count:  int8GreaterEqualTestCount_1 * 2,
 	}, {
 		name:   "l31",
-		slice:  int64TestSlice_1[:31],
-		match:  int64GreaterEqualTestMatch_1,
+		slice:  int8TestSlice_1[:31],
+		match:  int8GreaterEqualTestMatch_1,
 		result: []byte{0x8f, 0xff, 0xff, 0xfe},
-		count:  int64GreaterEqualTestCount_1 - 1,
+		count:  int8GreaterEqualTestCount_1 - 1,
 	}, {
 		name:   "l23",
-		slice:  int64TestSlice_1[:23],
-		match:  int64GreaterEqualTestMatch_1,
+		slice:  int8TestSlice_1[:23],
+		match:  int8GreaterEqualTestMatch_1,
 		result: []byte{0x8f, 0xff, 0xfe},
-		count:  int64GreaterEqualTestCount_1 - 9,
+		count:  int8GreaterEqualTestCount_1 - 9,
 	}, {
 		name:   "l15",
-		slice:  int64TestSlice_1[:15],
-		match:  int64GreaterEqualTestMatch_1,
+		slice:  int8TestSlice_1[:15],
+		match:  int8GreaterEqualTestMatch_1,
 		result: []byte{0x8f, 0xfe},
-		count:  int64GreaterEqualTestCount_1 - 17,
+		count:  int8GreaterEqualTestCount_1 - 17,
 	}, {
 		name:   "l7",
-		slice:  int64TestSlice_1[:7],
-		match:  int64GreaterEqualTestMatch_1,
+		slice:  int8TestSlice_1[:7],
+		match:  int8GreaterEqualTestMatch_1,
 		result: []byte{0x8e},
 		count:  4,
 	}, {
 		name:   "l0",
-		slice:  make([]int64, 0),
-		match:  int64GreaterEqualTestMatch_1,
+		slice:  make([]int8, 0),
+		match:  int8GreaterEqualTestMatch_1,
 		result: []byte{},
 		count:  0,
 	}, {
 		name:   "nil",
 		slice:  nil,
-		match:  int64GreaterEqualTestMatch_1,
+		match:  int8GreaterEqualTestMatch_1,
 		result: []byte{},
 		count:  0,
 	}, {
 		// with negative values
 		name:   "neg32",
-		slice:  int64TestSlice_2,
-		match:  int64GreaterEqualTestMatch_2,
-		result: int64GreaterEqualTestResult_2,
-		count:  int64GreaterEqualTestCount_2,
+		slice:  int8TestSlice_2,
+		match:  int8GreaterEqualTestMatch_2,
+		result: int8GreaterEqualTestResult_2,
+		count:  int8GreaterEqualTestCount_2,
 	}, {
 		// with negative values, test scalar algorithm
 		name:   "neg31",
-		slice:  int64TestSlice_2[:31],
-		match:  int64GreaterEqualTestMatch_2,
-		result: int64GreaterEqualTestResult_2,
-		count:  int64GreaterEqualTestCount_2,
+		slice:  int8TestSlice_2[:31],
+		match:  int8GreaterEqualTestMatch_2,
+		result: int8GreaterEqualTestResult_2,
+		count:  int8GreaterEqualTestCount_2,
 	}, {
 		// with extreme values
 		name:   "ext32",
-		slice:  int64TestSlice_3,
-		match:  int64GreaterEqualTestMatch_3,
-		result: int64GreaterEqualTestResult_3,
-		count:  int64GreaterEqualTestCount_3,
+		slice:  int8TestSlice_3,
+		match:  int8GreaterEqualTestMatch_3,
+		result: int8GreaterEqualTestResult_3,
+		count:  int8GreaterEqualTestCount_3,
 	}, {
 		// with extreme values, test scalar algorithm
 		name:   "ext31",
-		slice:  int64TestSlice_3[:31],
-		match:  int64GreaterEqualTestMatch_3,
+		slice:  int8TestSlice_3[:31],
+		match:  int8GreaterEqualTestMatch_3,
 		result: []byte{0xff, 0xff, 0xff, 0xfe}, // last off
-		count:  int64GreaterEqualTestCount_3 - 1,
+		count:  int8GreaterEqualTestCount_3 - 1,
 	},
 }
 
-func TestMatchInt64GreaterEqualGeneric(T *testing.T) {
-	for _, c := range int64GreaterEqualCases {
+func TestMatchInt8GreaterEqualGeneric(T *testing.T) {
+	for _, c := range int8GreaterEqualCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt64GreaterThanEqualGeneric(c.slice, c.match, bits)
+		cnt := matchInt8GreaterThanEqualGeneric(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -1032,8 +1040,9 @@ func TestMatchInt64GreaterEqualGeneric(T *testing.T) {
 	}
 }
 
-func TestMatchInt64GreaterEqualAVX2(T *testing.T) {
-	for _, c := range int64GreaterEqualCases {
+/*
+func TestMatchInt8GreaterEqualAVX2(T *testing.T) {
+	for _, c := range int8GreaterEqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
@@ -1041,7 +1050,7 @@ func TestMatchInt64GreaterEqualAVX2(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt64GreaterThanEqualAVX2(c.slice, c.match, bits)
+		cnt := matchInt8GreaterThanEqualAVX2(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -1056,60 +1065,61 @@ func TestMatchInt64GreaterEqualAVX2(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
 //
-func BenchmarkMatchInt64GreaterEqualGeneric(B *testing.B) {
+func BenchmarkMatchInt8GreaterEqualGeneric(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64GreaterThanEqualGeneric(a, math.MaxInt64/2, bits)
+				matchInt8GreaterThanEqualGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
-func BenchmarkMatchInt64GreaterEqualAVX2(B *testing.B) {
+/*
+func BenchmarkMatchInt8GreaterEqualAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64GreaterThanEqualAVX2(a, math.MaxInt64/2, bits)
+				matchInt8GreaterThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
 // force scalar codepath by making last block <32 entries
-func BenchmarkMatchInt64GreaterEqualAVX2Scalar(B *testing.B) {
+func BenchmarkMatchInt8GreaterEqualAVX2Scalar(B *testing.B) {
 	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64GreaterThanEqualAVX2(a, math.MaxInt64/2, bits)
+				matchInt8GreaterThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Between Testcases
 //
-var int64BetweenCases = []Int64MatchTest{
-	Int64MatchTest{
+var int8BetweenCases = []Int8MatchTest{
+	Int8MatchTest{
 		name: "vec1",
-		slice: []int64{
+		slice: []int8{
 			0, 5, 3, 5, // Y1
 			7, 5, 5, 9, // Y2
 			3, 5, 5, 5, // Y3
@@ -1126,100 +1136,100 @@ var int64BetweenCases = []Int64MatchTest{
 		count:  17,
 	}, {
 		name:   "l32",
-		slice:  int64TestSlice_1,
-		match:  int64BetweenTestMatch_1,
-		match2: int64BetweenTestMatch_1b,
-		result: int64BetweenTestResult_1,
-		count:  int64BetweenTestCount_1,
+		slice:  int8TestSlice_1,
+		match:  int8BetweenTestMatch_1,
+		match2: int8BetweenTestMatch_1b,
+		result: int8BetweenTestResult_1,
+		count:  int8BetweenTestCount_1,
 	}, {
 		name:   "l64",
-		slice:  append(int64TestSlice_1, int64TestSlice_1...),
-		match:  int64BetweenTestMatch_1,
-		match2: int64BetweenTestMatch_1b,
-		result: append(int64BetweenTestResult_1, int64BetweenTestResult_1...),
-		count:  int64BetweenTestCount_1 * 2,
+		slice:  append(int8TestSlice_1, int8TestSlice_1...),
+		match:  int8BetweenTestMatch_1,
+		match2: int8BetweenTestMatch_1b,
+		result: append(int8BetweenTestResult_1, int8BetweenTestResult_1...),
+		count:  int8BetweenTestCount_1 * 2,
 	}, {
 		name:   "l31",
-		slice:  int64TestSlice_1[:31],
-		match:  int64BetweenTestMatch_1,
-		match2: int64BetweenTestMatch_1b,
-		result: int64BetweenTestResult_1,
-		count:  int64BetweenTestCount_1,
+		slice:  int8TestSlice_1[:31],
+		match:  int8BetweenTestMatch_1,
+		match2: int8BetweenTestMatch_1b,
+		result: int8BetweenTestResult_1,
+		count:  int8BetweenTestCount_1,
 	}, {
 		name:   "l23",
-		slice:  int64TestSlice_1[:23],
-		match:  int64BetweenTestMatch_1,
-		match2: int64BetweenTestMatch_1b,
+		slice:  int8TestSlice_1[:23],
+		match:  int8BetweenTestMatch_1,
+		match2: int8BetweenTestMatch_1b,
 		result: []byte{0x8f, 0x42, 0x22}, // last bit off!
-		count:  int64BetweenTestCount_1 - 4,
+		count:  int8BetweenTestCount_1 - 4,
 	}, {
 		name:   "l15",
-		slice:  int64TestSlice_1[:15],
-		match:  int64BetweenTestMatch_1,
-		match2: int64BetweenTestMatch_1b,
-		result: int64BetweenTestResult_1[:2],
-		count:  int64BetweenTestCount_1 - 6,
+		slice:  int8TestSlice_1[:15],
+		match:  int8BetweenTestMatch_1,
+		match2: int8BetweenTestMatch_1b,
+		result: int8BetweenTestResult_1[:2],
+		count:  int8BetweenTestCount_1 - 6,
 	}, {
 		name:   "l7",
-		slice:  int64TestSlice_1[:7],
-		match:  int64BetweenTestMatch_1,
-		match2: int64BetweenTestMatch_1b,
+		slice:  int8TestSlice_1[:7],
+		match:  int8BetweenTestMatch_1,
+		match2: int8BetweenTestMatch_1b,
 		result: []byte{0x8e},
-		count:  int64BetweenTestCount_1 - 9,
+		count:  int8BetweenTestCount_1 - 9,
 	}, {
 		name:   "l0",
-		slice:  make([]int64, 0),
-		match:  int64BetweenTestMatch_1,
-		match2: int64BetweenTestMatch_1b,
+		slice:  make([]int8, 0),
+		match:  int8BetweenTestMatch_1,
+		match2: int8BetweenTestMatch_1b,
 		result: []byte{},
 		count:  0,
 	}, {
 		name:   "nil",
 		slice:  nil,
-		match:  int64BetweenTestMatch_1,
-		match2: int64BetweenTestMatch_1b,
+		match:  int8BetweenTestMatch_1,
+		match2: int8BetweenTestMatch_1b,
 		result: []byte{},
 		count:  0,
 	}, {
 		// with negative values
 		name:   "neg32",
-		slice:  int64TestSlice_2,
-		match:  int64BetweenTestMatch_2,
-		match2: int64BetweenTestMatch_2b,
-		result: int64BetweenTestResult_2,
-		count:  int64BetweenTestCount_2,
+		slice:  int8TestSlice_2,
+		match:  int8BetweenTestMatch_2,
+		match2: int8BetweenTestMatch_2b,
+		result: int8BetweenTestResult_2,
+		count:  int8BetweenTestCount_2,
 	}, {
 		// with negative values, test scalar algorithm
 		name:   "neg31",
-		slice:  int64TestSlice_2[:31],
-		match:  int64BetweenTestMatch_2,
-		match2: int64BetweenTestMatch_2b,
-		result: int64BetweenTestResult_2,
-		count:  int64BetweenTestCount_2,
+		slice:  int8TestSlice_2[:31],
+		match:  int8BetweenTestMatch_2,
+		match2: int8BetweenTestMatch_2b,
+		result: int8BetweenTestResult_2,
+		count:  int8BetweenTestCount_2,
 	}, {
 		// with extreme values
 		name:   "ext32",
-		slice:  int64TestSlice_3,
-		match:  int64BetweenTestMatch_3,
-		match2: int64BetweenTestMatch_3b,
-		result: int64BetweenTestResult_3,
-		count:  int64BetweenTestCount_3,
+		slice:  int8TestSlice_3,
+		match:  int8BetweenTestMatch_3,
+		match2: int8BetweenTestMatch_3b,
+		result: int8BetweenTestResult_3,
+		count:  int8BetweenTestCount_3,
 	}, {
 		// with extreme values, test scalar algorithm
 		name:   "ext31",
-		slice:  int64TestSlice_3[:31],
-		match:  int64BetweenTestMatch_3,
-		match2: int64BetweenTestMatch_3b,
+		slice:  int8TestSlice_3[:31],
+		match:  int8BetweenTestMatch_3,
+		match2: int8BetweenTestMatch_3b,
 		result: []byte{0x0a, 0x0a, 0x0a, 0x0a},
 		count:  8,
 	},
 }
 
-func TestMatchInt64BetweenGeneric(T *testing.T) {
-	for _, c := range int64BetweenCases {
+func TestMatchInt8BetweenGeneric(T *testing.T) {
+	for _, c := range int8BetweenCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt64BetweenGeneric(c.slice, c.match, c.match2, bits)
+		cnt := matchInt8BetweenGeneric(c.slice, c.match, c.match2, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -1232,8 +1242,9 @@ func TestMatchInt64BetweenGeneric(T *testing.T) {
 	}
 }
 
-func TestMatchInt64BetweenAVX2(T *testing.T) {
-	for _, c := range int64BetweenCases {
+/*
+func TestMatchInt8BetweenAVX2(T *testing.T) {
+	for _, c := range int8BetweenCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
@@ -1241,7 +1252,7 @@ func TestMatchInt64BetweenAVX2(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt64BetweenAVX2(c.slice, c.match, c.match2, bits)
+		cnt := matchInt8BetweenAVX2(c.slice, c.match, c.match2, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -1256,77 +1267,77 @@ func TestMatchInt64BetweenAVX2(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Between benchmarks
 //
-// BenchmarkMatchInt64BetweenGeneric/32-8  30000000      54.7 ns/op	4683.30 MB/s
-// BenchmarkMatchInt64BetweenGeneric/128-8 10000000     163 ns/op	6261.85 MB/s
-// BenchmarkMatchInt64BetweenGeneric/1024-8 1000000    1211 ns/op	6762.88 MB/s
-// BenchmarkMatchInt64BetweenGeneric/4096-8  300000    4985 ns/op	6572.26 MB/s
-// BenchmarkMatchInt64BetweenGeneric/65536-8  20000   80903 ns/op	6480.44 MB/s
-// BenchmarkMatchInt64BetweenGeneric/131072-8 10000  158714 ns/op	6606.70 MB/s
-func BenchmarkMatchInt64BetweenGeneric(B *testing.B) {
+// BenchmarkMatchInt8BetweenGeneric/32-8  30000000      54.7 ns/op	4683.30 MB/s
+// BenchmarkMatchInt8BetweenGeneric/128-8 10000000     163 ns/op	6261.85 MB/s
+// BenchmarkMatchInt8BetweenGeneric/1024-8 1000000    1211 ns/op	6762.88 MB/s
+// BenchmarkMatchInt8BetweenGeneric/4096-8  300000    4985 ns/op	6572.26 MB/s
+// BenchmarkMatchInt8BetweenGeneric/65536-8  20000   80903 ns/op	6480.44 MB/s
+// BenchmarkMatchInt8BetweenGeneric/131072-8 10000  158714 ns/op	6606.70 MB/s
+func BenchmarkMatchInt8BetweenGeneric(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64BetweenGeneric(a, 5, math.MaxInt64/2, bits)
+				matchInt8BetweenGeneric(a, 5, 10, bits)
 			}
 		})
 	}
 }
 
-// BenchmarkMatchInt64BetweenAVX2/32-8     100000000     15.1 ns/op	16959.99 MB/s
-// BenchmarkMatchInt64BetweenAVX2/128-8    	30000000     48.5 ns/op	21117.50 MB/s
-// BenchmarkMatchInt64BetweenAVX2/1024-8   	 5000000    362 ns/op	22578.41 MB/s
-// BenchmarkMatchInt64BetweenAVX2/4096-8   	 1000000   1610 ns/op	20345.03 MB/s
-// BenchmarkMatchInt64BetweenAVX2/65536-8  	   50000  28742 ns/op	18240.79 MB/s
-// BenchmarkMatchInt64BetweenAVX2/131072-8 	   20000  60508 ns/op	17329.33 MB/s
-func BenchmarkMatchInt64BetweenAVX2(B *testing.B) {
+// BenchmarkMatchInt8BetweenAVX2/32-8     100000000     15.1 ns/op	16959.99 MB/s
+// BenchmarkMatchInt8BetweenAVX2/128-8    	30000000     48.5 ns/op	21117.50 MB/s
+// BenchmarkMatchInt8BetweenAVX2/1024-8   	 5000000    362 ns/op	22578.41 MB/s
+// BenchmarkMatchInt8BetweenAVX2/4096-8   	 1000000   1610 ns/op	20345.03 MB/s
+// BenchmarkMatchInt8BetweenAVX2/65536-8  	   50000  28742 ns/op	18240.79 MB/s
+// BenchmarkMatchInt8BetweenAVX2/131072-8 	   20000  60508 ns/op	17329.33 MB/s
+/*func BenchmarkMatchInt8BetweenAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64BetweenAVX2(a, 5, math.MaxInt64/2, bits)
+				matchInt8BetweenAVX2(a, 5, 10, bits)
 			}
 		})
 	}
 }
 
 // force scalar codepath by making last block <32 entries
-// BenchmarkMatchInt64BetweenAVX2Scalar/31-8      30000000     38.2 ns/op	6494.10 MB/s
-// BenchmarkMatchInt64BetweenAVX2Scalar/127-8     20000000     70.3 ns/op	14452.14 MB/s
-// BenchmarkMatchInt64BetweenAVX2Scalar/1023-8     3000000    384 ns/op	21292.42 MB/s
-// BenchmarkMatchInt64BetweenAVX2Scalar/4095-8     1000000   1652 ns/op	19828.53 MB/s
-// BenchmarkMatchInt64BetweenAVX2Scalar/65535-8      50000  28695 ns/op	18270.74 MB/s
-// BenchmarkMatchInt64BetweenAVX2Scalar/131071-8     30000  59239 ns/op	17700.62 MB/s
-func BenchmarkMatchInt64BetweenAVX2Scalar(B *testing.B) {
+// BenchmarkMatchInt8BetweenAVX2Scalar/31-8      30000000     38.2 ns/op	6494.10 MB/s
+// BenchmarkMatchInt8BetweenAVX2Scalar/127-8     20000000     70.3 ns/op	14452.14 MB/s
+// BenchmarkMatchInt8BetweenAVX2Scalar/1023-8     3000000    384 ns/op	21292.42 MB/s
+// BenchmarkMatchInt8BetweenAVX2Scalar/4095-8     1000000   1652 ns/op	19828.53 MB/s
+// BenchmarkMatchInt8BetweenAVX2Scalar/65535-8      50000  28695 ns/op	18270.74 MB/s
+// BenchmarkMatchInt8BetweenAVX2Scalar/131071-8     30000  59239 ns/op	17700.62 MB/s
+func BenchmarkMatchInt8BetweenAVX2Scalar(B *testing.B) {
 	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 1)
+			a := randInt8Slice(n, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int64Size))
+			B.SetBytes(int64(n * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt64BetweenAVX2(a, 5, math.MaxInt64/2, bits)
+				matchInt8BetweenAVX2(a, 5, 10, bits)
 			}
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------
-// Int64 Slice
+// Int8 Slice
 //
-func TestUniqueInt64(T *testing.T) {
-	a := randInt64Slice(1000, 5)
-	b := UniqueInt64Slice(a)
+func TestUniqueInt8(T *testing.T) {
+	a := randInt8Slice(1000, 5)
+	b := UniqueInt8Slice(a)
 	for i, _ := range b {
 		// slice must be sorted and unique
 		if i > 0 && b[i-1] > b[i] {
@@ -1338,84 +1349,84 @@ func TestUniqueInt64(T *testing.T) {
 	}
 }
 
-func BenchmarkUniqueInt64(B *testing.B) {
+func BenchmarkUniqueInt8(B *testing.B) {
 	for _, n := range []int{10, 100, 1000, 10000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt64Slice(n, 5)
+			a := randInt8Slice(n, 5)
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				UniqueInt64Slice(a)
+				UniqueInt8Slice(a)
 			}
 		})
 	}
 }
 
-func TestInt64SliceContains(T *testing.T) {
+func TestInt8SliceContains(T *testing.T) {
 	// nil slice
-	if Int64Slice(nil).Contains(1) {
+	if Int8Slice(nil).Contains(1) {
 		T.Errorf("nil slice cannot contain value")
 	}
 
 	// empty slice
-	if Int64Slice([]int64{}).Contains(1) {
+	if Int8Slice([]int8{}).Contains(1) {
 		T.Errorf("empty slice cannot contain value")
 	}
 
 	// 1-element slice positive
-	if !Int64Slice([]int64{1}).Contains(1) {
+	if !Int8Slice([]int8{1}).Contains(1) {
 		T.Errorf("1-element slice value not found")
 	}
 
 	// 1-element slice negative
-	if Int64Slice([]int64{1}).Contains(2) {
+	if Int8Slice([]int8{1}).Contains(2) {
 		T.Errorf("1-element slice found wrong match")
 	}
 
 	// n-element slice positive first element
-	if !Int64Slice([]int64{-1, 3, 5, 7, 11, 13}).Contains(-1) {
+	if !Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(-1) {
 		T.Errorf("N-element first slice value not found")
 	}
 
 	// n-element slice positive middle element
-	if !Int64Slice([]int64{-1, 3, 5, 7, 11, 13}).Contains(5) {
+	if !Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(5) {
 		T.Errorf("N-element middle slice value not found")
 	}
 
 	// n-element slice positive last element
-	if !Int64Slice([]int64{-1, 3, 5, 7, 11, 13}).Contains(13) {
+	if !Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(13) {
 		T.Errorf("N-element last slice value not found")
 	}
 
 	// n-element slice negative before
-	if Int64Slice([]int64{-1, 3, 5, 7, 11, 13}).Contains(0) {
+	if Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(0) {
 		T.Errorf("N-element before slice value wrong match")
 	}
 
 	// n-element slice negative middle
-	if Int64Slice([]int64{-1, 3, 5, 7, 11, 13}).Contains(2) {
+	if Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(2) {
 		T.Errorf("N-element middle slice value wrong match")
 	}
 
 	// n-element slice negative after
-	if Int64Slice([]int64{-1, 3, 5, 7, 11, 13}).Contains(14) {
+	if Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(14) {
 		T.Errorf("N-element after slice value wrong match")
 	}
 }
 
-func BenchmarkInt64SliceContains(B *testing.B) {
+func BenchmarkInt8SliceContains(B *testing.B) {
 	cases := []int{10, 1000, 1000000}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-neg", n), func(B *testing.B) {
-			a := Int64Slice(randInt64Slice(n, 1)).Sort()
+			a := Int8Slice(randInt8Slice(n, 1)).Sort()
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				a.Contains(rand.Int63())
+				a.Contains(int8(rand.Intn(math.MaxInt8 + 1)))
 			}
 		})
 	}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-pos", n), func(B *testing.B) {
-			a := Int64Slice(randInt64Slice(n, 1)).Sort()
+			a := Int8Slice(randInt8Slice(n, 1)).Sort()
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
 				a.Contains(a[rand.Intn(len(a))])
@@ -1424,16 +1435,16 @@ func BenchmarkInt64SliceContains(B *testing.B) {
 	}
 }
 
-func TestInt64SliceContainsRange(T *testing.T) {
+func TestInt8SliceContainsRange(T *testing.T) {
 	type VecTestRange struct {
 		Name  string
-		From  int64
-		To    int64
+		From  int8
+		To    int8
 		Match bool
 	}
 
 	type VecTestcase struct {
-		Slice  []int64
+		Slice  []int8
 		Ranges []VecTestRange
 	}
 
@@ -1447,14 +1458,14 @@ func TestInt64SliceContainsRange(T *testing.T) {
 		},
 		// empty slice
 		VecTestcase{
-			Slice: []int64{},
+			Slice: []int8{},
 			Ranges: []VecTestRange{
 				VecTestRange{Name: "X", From: 0, To: 2, Match: false},
 			},
 		},
 		// 1-element slice
 		VecTestcase{
-			Slice: []int64{3},
+			Slice: []int8{3},
 			Ranges: []VecTestRange{
 				VecTestRange{Name: "A", From: 0, To: 2, Match: false},   // Case A
 				VecTestRange{Name: "B1", From: 1, To: 3, Match: true},   // Case B.1, D1
@@ -1465,14 +1476,14 @@ func TestInt64SliceContainsRange(T *testing.T) {
 		},
 		// 1-element slice, from == to
 		VecTestcase{
-			Slice: []int64{3},
+			Slice: []int8{3},
 			Ranges: []VecTestRange{
 				VecTestRange{Name: "BCD", From: 3, To: 3, Match: true}, // Case B.3, C.1, D.1
 			},
 		},
 		// N-element slice
 		VecTestcase{
-			Slice: []int64{3, 5, 7, 11, 13},
+			Slice: []int8{3, 5, 7, 11, 13},
 			Ranges: []VecTestRange{
 				VecTestRange{Name: "A", From: 0, To: 2, Match: false},    // Case A
 				VecTestRange{Name: "B1a", From: 1, To: 3, Match: true},   // Case B.1
@@ -1500,39 +1511,39 @@ func TestInt64SliceContainsRange(T *testing.T) {
 		},
 		// real-word testcase
 		VecTestcase{
-			Slice: []int64{
-				699421, 1374016, 1692360, 1797909, 1809339,
-				2552208, 2649552, 2740915, 2769610, 3043393,
+			Slice: []int8{
+				6, 13, 16, 17, 18,
+				25, 26, 27, 27, 30,
 			},
 			Ranges: []VecTestRange{
-				VecTestRange{Name: "1", From: 2785281, To: 2818048, Match: false},
-				VecTestRange{Name: "2", From: 2818049, To: 2850816, Match: false},
-				VecTestRange{Name: "3", From: 2850817, To: 2883584, Match: false},
-				VecTestRange{Name: "4", From: 2883585, To: 2916352, Match: false},
-				VecTestRange{Name: "5", From: 2916353, To: 2949120, Match: false},
-				VecTestRange{Name: "6", From: 2949121, To: 2981888, Match: false},
-				VecTestRange{Name: "7", From: 2981889, To: 3014656, Match: false},
-				VecTestRange{Name: "8", From: 3014657, To: 3047424, Match: true},
+				VecTestRange{Name: "1", From: 27, To: 28, Match: true},
+				VecTestRange{Name: "2", From: 28, To: 28, Match: false},
+				//VecTestRange{Name: "3", From: 28, To: 28, Match: false},
+				VecTestRange{Name: "4", From: 28, To: 29, Match: false},
+				VecTestRange{Name: "5", From: 29, To: 29, Match: false},
+				//VecTestRange{Name: "6", From: 29, To: 29, Match: false},
+				VecTestRange{Name: "7", From: 29, To: 30, Match: true},
+				VecTestRange{Name: "8", From: 30, To: 30, Match: true},
 			},
 		},
 	}
 
 	for i, v := range tests {
 		for _, r := range v.Ranges {
-			if want, got := r.Match, Int64Slice(v.Slice).ContainsRange(r.From, r.To); want != got {
+			if want, got := r.Match, Int8Slice(v.Slice).ContainsRange(r.From, r.To); want != got {
 				T.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
 			}
 		}
 	}
 }
 
-func BenchmarkInt64SliceContainsRange(B *testing.B) {
+func BenchmarkInt8SliceContainsRange(B *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := Int64Slice(randInt64Slice(n, 1)).Sort()
+			a := Int8Slice(randInt8Slice(n, 1)).Sort()
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				min, max := rand.Int63(), rand.Int63()
+				min, max := int8(rand.Intn(math.MaxInt8+1)), int8(rand.Intn(math.MaxInt8+1))
 				if min > max {
 					min, max = max, min
 				}
