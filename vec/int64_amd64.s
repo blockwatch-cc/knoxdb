@@ -753,7 +753,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt64BetweenAVX2(SB), NOSPLIT, $0-64
+TEXT ·matchInt64BetweenAVX2(SB), NOSPLIT, $0-72
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+40(FP), DI
@@ -775,8 +775,8 @@ prep_avx2:
 	VPSLLQ			$63, Y11, Y11                    // create 0x8000.. mask
 	VPCMPEQQ		Y13, Y13, Y13                    // create 1 for adding
 	VPSRLQ			$63, Y13, Y13
-	VBROADCASTSD 	val+24(FP), Y12                  // load val a into AVX2 reg
-	VBROADCASTSD 	val+32(FP), Y0                   // load val b into AVX2 reg
+	VBROADCASTSD 	a+24(FP), Y12                  // load val a into AVX2 reg
+	VBROADCASTSD 	b+32(FP), Y0                   // load val b into AVX2 reg
 	VPSUBQ			Y12, Y0, Y0                      // compute diff
 	VPADDQ			Y13, Y0, Y0
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
@@ -846,8 +846,8 @@ exit_avx2:
 	JLE		done
 
 prep_scalar:
-	MOVQ	val+24(FP), R13   // load val a
-	MOVQ	val+32(FP), DX    // load val b
+	MOVQ	a+24(FP), R13   // load val a
+	MOVQ	b+32(FP), DX    // load val b
 	SUBQ	R13, DX
 	INCQ	DX
 	MOVQ    $1, R12          // create 0x80... mask

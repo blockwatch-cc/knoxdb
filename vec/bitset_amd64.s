@@ -351,11 +351,11 @@ loop_i8:
 done:
 	RET
 
-// func bitsetNegAVX2(src []byte) uint64
+// func bitsetNegAVX2(src []byte)
 //
 TEXT ·bitsetNegAVX2(SB), NOSPLIT, $0-24
-	MOVQ	dst_base+0(FP), SI
-	MOVQ	dst_len+8(FP), BX
+	MOVQ	src_base+0(FP), SI
+	MOVQ	src_len+8(FP), BX
 
 	TESTQ		BX, BX
 	JLE			done

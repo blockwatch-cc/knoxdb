@@ -757,8 +757,8 @@ TEXT ·matchFloat64BetweenAVX2(SB), NOSPLIT, $0-72
 	JB		prep_scalar
 
 prep_avx2:
-	VBROADCASTSD val+24(FP), Y0            // load val a into AVX2 reg
-	VBROADCASTSD val+32(FP), Y11           // load val b into AVX2 reg
+	VBROADCASTSD a+24(FP), Y0            // load val a into AVX2 reg
+	VBROADCASTSD b+32(FP), Y11           // load val b into AVX2 reg
 	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
 	VMOVDQA		shuffle<>+0x00(SB), Y10    // load shuffle control mask
 
@@ -830,8 +830,8 @@ exit_avx2:
 	JLE		done
 
 prep_scalar:
-	VMOVSD	val+24(FP), X0   // load val a for comparison
-	VMOVSD	val+32(FP), X1   // load val b for comparison
+	VMOVSD	a+24(FP), X0   // load val a for comparison
+	VMOVSD	b+32(FP), X1   // load val b for comparison
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
