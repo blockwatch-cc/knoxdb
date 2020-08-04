@@ -4,10 +4,10 @@
 // +build go1.7,amd64,!gccgo,!appengine
 
 package vec
-/*
+
 //go:noescape
 func matchUint32EqualAVX2(src []uint32, val uint32, bits []byte) int64
-
+/*
 //go:noescape
 func matchUint32NotEqualAVX2(src []uint32, val uint32, bits []byte) int64
 
@@ -27,12 +27,12 @@ func matchUint32GreaterThanEqualAVX2(src []uint32, val uint32, bits []byte) int6
 func matchUint32BetweenAVX2(src []uint32, a, b uint32, bits []byte) int64
 */
 func matchUint32Equal(src []uint32, val uint32, bits []byte) int64 {
-	//switch {
-	//case useAVX2:
-	//	return matchUint32EqualAVX2(src, val, bits)
-	//default:
+	switch {
+	case useAVX2:
+		return matchUint32EqualAVX2(src, val, bits)
+	default:
 		return matchUint32EqualGeneric(src, val, bits)
-	//}
+	}
 }
 
 func matchUint32NotEqual(src []uint32, val uint32, bits []byte) int64 {
