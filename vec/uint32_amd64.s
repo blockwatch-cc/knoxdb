@@ -55,7 +55,7 @@ loop_avx2:
 	MOVL		AX, (DI)    // write the lower 32 bits to the output slice
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
-	LEAQ		256(SI), SI
+	LEAQ		64(SI), SI
 	LEAQ		4(DI), DI
 	SUBQ		$32, BX
 	CMPQ		BX, $32
