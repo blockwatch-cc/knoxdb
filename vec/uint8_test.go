@@ -234,7 +234,7 @@ func TestMatchUint8EqualGeneric(T *testing.T) {
 		}
 	}
 }
-/*
+
 func TestMatchUint8EqualAVX2(T *testing.T) {
 	for _, c := range uint8EqualCases {
 		// pre-allocate the result slice and fill with poison
@@ -259,7 +259,7 @@ func TestMatchUint8EqualAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
 // -----------------------------------------------------------------------------
 // Equal benchmarks
 //
@@ -276,7 +276,7 @@ func BenchmarkMatchUint8EqualGeneric(B *testing.B) {
 		})
 	}
 }
-/*
+
 func BenchmarkMatchUint8EqualAVX2(B *testing.B) {
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
@@ -305,7 +305,7 @@ func BenchmarkMatchUint8EqualAVX2Scalar(B *testing.B) {
 		})
 	}
 }
-*/
+
 // -----------------------------------------------------------------------------
 // Less Testcases
 //

@@ -6,7 +6,7 @@
 #include "textflag.h"
 #include "constants.h"
 
-// func matchUint16EqualAVX2(src []uint16, val uint16, bits []byte) int64
+// func matchUint8EqualAVX2(src []uint8, val uint8, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -20,7 +20,7 @@
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16EqualAVX2(SB), NOSPLIT, $0-58
+TEXT ·matchUint8EqualAVX2(SB), NOSPLIT, $0-57
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -32,24 +32,22 @@ TEXT ·matchUint16EqualAVX2(SB), NOSPLIT, $0-58
 	JBE		prep_scalar
 
 prep_avx2:
-	VPBROADCASTW val+24(FP), Y0            // load val into AVX2 reg
+	VPBROADCASTB val+24(FP), Y0            // load val into AVX2 reg
 	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQA		shuffle16<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQA		shuffle8<>+0x00(SB), Y10    // load shuffle control mask
 
-// works for >= 32 int16 (i.e. 64 bytes of data)
+// works for >= 32 int8 (i.e. 32 bytes of data)
 loop_avx2:
-	VPCMPEQW	0(SI), Y0, Y1
-	VPCMPEQW	32(SI), Y0, Y2
+	VPCMPEQB	0(SI), Y0, Y1
 
-	VPACKSSWB	Y1, Y2, Y1
-  	VPERMD		Y1, Y9, Y1
+
 	VPSHUFB		Y10, Y1, Y1
 
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
 	MOVL		AX, (DI)    // write the lower 32 bits to the output slice
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
-	LEAQ		64(SI), SI
+	LEAQ		32(SI), SI
 	LEAQ		4(DI), DI
 	SUBQ		$32, BX
 	CMPQ		BX, $32
@@ -62,7 +60,7 @@ exit_avx2:
 	JLE		done
 
 prep_scalar:
-	MOVW	val+24(FP), DX   // load val for comparison
+	MOVB	val+24(FP), DX   // load val for comparison
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
@@ -71,13 +69,13 @@ prep_scalar:
 
 // for remainders of <32 int16
 scalar:
-	MOVW	(SI), R8
-	CMPW	R8, DX
+	MOVB	(SI), R8
+	CMPB	R8, DX
 	SETEQ	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
 	SHLL	$1, AX
-	LEAQ	2(SI), SI
+	LEAQ	1(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
@@ -111,7 +109,7 @@ done:
 	RET
 
 
-// func matchUint16NotEqualAVX2(src []uint64, val uint64, bits []byte) int64
+// func matchUint8NotEqualAVX2(src []uint64, val uint64, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -125,7 +123,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16NotEqualAVX2(SB), NOSPLIT, $0-64
+TEXT ·matchUint8NotEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -232,7 +230,7 @@ done:
 	RET
 
 
-// func matchUint16LessThanAVX2(src []uint64, val uint64, bits []byte) int64
+// func matchUint8LessThanAVX2(src []uint64, val uint64, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -247,7 +245,7 @@ done:
 //   Y10 = shuffle control mask
 //   Y11 = sign bit flip mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16LessThanAVX2(SB), NOSPLIT, $0-64
+TEXT ·matchUint8LessThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -377,7 +375,7 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
 
-// func matchUint16LessThanEqualAVX2(src []uint64, val uint64, bits []byte) int64
+// func matchUint8LessThanEqualAVX2(src []uint64, val uint64, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -391,7 +389,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16LessThanEqualAVX2(SB), NOSPLIT, $0-64
+TEXT ·matchUint8LessThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -520,7 +518,7 @@ done:
 	RET
 
 
-// func matchUint16GreaterThanAVX2(src []uint64, val uint64, bits []byte) int64
+// func matchUint8GreaterThanAVX2(src []uint64, val uint64, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -534,7 +532,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16GreaterThanAVX2(SB), NOSPLIT, $0-64
+TEXT ·matchUint8GreaterThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -661,7 +659,7 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
 
-// func matchUint16GreaterThanEqualAVX2(src []uint64, val uint64, bits []byte) int64
+// func matchUint8GreaterThanEqualAVX2(src []uint64, val uint64, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -675,7 +673,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16GreaterThanEqualAVX2(SB), NOSPLIT, $0-64
+TEXT ·matchUint8GreaterThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -803,7 +801,7 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
 
-// func matchUint16BetweenAVX2(src []uint64, a, b uint64, bits []byte) int64
+// func matchUint8BetweenAVX2(src []uint64, a, b uint64, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -819,7 +817,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16BetweenAVX2(SB), NOSPLIT, $0-72
+TEXT ·matchUint8BetweenAVX2(SB), NOSPLIT, $0-72
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+40(FP), DI
