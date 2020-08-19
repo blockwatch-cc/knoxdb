@@ -108,6 +108,134 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
 
+// func matchUint8EqualAVX2Opt(src []uint8, val uint8, bits []byte) int64
+//
+// input:
+//   SI = src_base
+//   DI = bits_base
+//   BX = src_len
+//   DX = comparison value for scalar
+//   Y0 = comparison value for AVX2
+// internal:
+//   AX = intermediate
+//   R9 = population count
+//   Y9 = permute control mask
+//   Y10 = shuffle control mask
+//   Y1-Y8 = vector data
+TEXT ·matchUint8EqualAVX2Opt(SB), NOSPLIT, $0-57
+	MOVQ	src_base+0(FP), SI
+	MOVQ	src_len+8(FP), BX
+	MOVQ	bits_base+32(FP), DI
+	XORQ	R9, R9
+
+	TESTQ	BX, BX
+	JLE		done
+	CMPQ	BX, $128      // slices smaller than 32 byte are handled separately
+	JBE		prep_scalar
+
+prep_avx2:
+	VPBROADCASTB val+24(FP), Y0            // load val into AVX2 reg
+//	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQA		shuffle8<>+0x00(SB), Y10    // load shuffle control mask
+
+// works for >= 32 int8 (i.e. 32 bytes of data)
+loop_avx2:
+	VPCMPEQB	32(SI), Y0, Y2
+	VPSHUFB		Y10, Y2, Y2
+	VPMOVMSKB	Y2, DX      // move per byte MSBs into packed bitmask to r32 or r64
+    SHLQ        $32,DX
+
+	VPCMPEQB	0(SI), Y0, Y1
+	VPSHUFB		Y10, Y1, Y1
+	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
+	//MOVL		AX, (DI)    // write the lower 32 bits to the output slice
+	//POPCNTQ		AX, AX      // count 1 bits
+	//ADDQ		AX, R9
+    ORQ         DX, AX
+	MOVQ		AX, 0(DI)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+
+	VPCMPEQB	96(SI), Y0, Y4
+	VPSHUFB		Y10, Y4, Y4
+	VPMOVMSKB	Y4, DX      // move per byte MSBs into packed bitmask to r32 or r64
+    SHLQ        $32,DX
+//	MOVL		DX, 12(DI)    // write the lower 32 bits to the output slice
+//	POPCNTQ		DX, DX      // count 1 bits
+//	ADDQ		DX, R9
+
+	VPCMPEQB	64(SI), Y0, Y3
+	VPSHUFB		Y10, Y3, Y3
+	VPMOVMSKB	Y3, AX      // move per byte MSBs into packed bitmask to r32 or r64
+//	MOVL		AX, 8(DI)    // write the lower 32 bits to the output slice
+//	POPCNTQ		AX, AX      // count 1 bits
+//	ADDQ		AX, R9
+    ORQ         DX, AX
+	MOVQ		AX, 8(DI)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+
+
+	LEAQ		128(SI), SI
+	LEAQ		16(DI), DI
+	SUBQ		$128, BX
+	CMPQ		BX, $128
+	JB		 	exit_avx2
+	JMP		 	loop_avx2
+
+exit_avx2:
+	VZEROUPPER           // clear upper part of Y regs, prevents AVX-SSE penalty
+	TESTQ	BX, BX
+	JLE		done
+
+prep_scalar:
+	MOVB	val+24(FP), DX   // load val for comparison
+	XORQ	AX, AX
+	XORQ	R10, R10
+	MOVQ	BX, R11
+	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	SUBQ	BX, CX
+
+// for remainders of <32 int16
+scalar:
+	MOVB	(SI), R8
+	CMPB	R8, DX
+	SETEQ	R10
+	ADDL	R10, R9
+	ORL	 	R10, AX
+	SHLL	$1, AX
+	LEAQ	1(SI), SI
+	DECL	BX
+	JZ	 	scalar_done
+	JMP	 	scalar
+
+scalar_done:
+	SHLL	CX, AX        // fill 32bits by shifting
+	BSWAPL	AX            // swap bytes into place for big endian output
+	CMPQ	R11, $24
+	JBE		write_3
+	MOVL	AX, (DI)
+	JMP		done
+
+write_3:
+	CMPQ	R11, $16
+	JBE		write_2
+	MOVB	AX, (DI)
+	SHRL	$8, AX
+	INCQ	DI
+
+write_2:
+	CMPQ	R11, $8
+	JBE		write_1
+	MOVW	AX, (DI)
+	JMP		done
+
+write_1:
+	MOVB	AX, (DI)
+
+done:
+	MOVQ	R9, ret+56(FP)
+	RET
 
 // func matchUint8NotEqualAVX2(src []uint64, val uint64, bits []byte) int64
 //
