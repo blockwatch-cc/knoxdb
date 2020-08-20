@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+    "math/bits"
 	"testing"
 )
 
@@ -131,6 +132,50 @@ func randUint8Slice(n, u int) []uint8 {
 		s = append(s, s[:n]...)
 	}
 	return s
+}
+
+// creates an uint8 test case from the given slice
+// Parameters:
+//  - name: desired name of the test case
+//  - slice: the slice for constructing the test case
+//  - match, match2: are only copied to the resulting test case
+//  - result: result for the given slice
+//  - len: desired length of the test case
+func CreateUint8TestCase(name string, slice []uint8, match, match2 uint8, result []byte, length int) Uint8MatchTest {
+    if len(slice)%8 != 0 {
+        panic("CreateUint8TestCase: length of slice has to be a multiple of 8")
+    }
+    if len(result) != bitFieldLen(len(slice)) {
+        panic("CreateUint8TestCase: length of slice and length of result does not match")
+    }
+    
+    // create new slice by concat of given slice
+    new_slice := make([]uint8, length)
+    for i,_ := range new_slice {
+        new_slice[i] = slice[i%len(slice)]
+    }
+    // create new result by concat of given result
+    new_result := make([]byte, bitFieldLen(length))
+    for i,_ := range new_result {
+        new_result[i] = result[i%len(result)]
+    }
+    // clear the last unused bits
+    if length%8 != 0 {
+        new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+    }
+    // count number of ones
+    var cnt int
+    for _,v := range new_result  {
+        cnt += bits.OnesCount8(v)
+    }
+    return Uint8MatchTest{
+        name: name,
+        slice: new_slice,
+    	match: match,
+        match2: match2,
+        result: new_result,
+        count: int64(cnt),
+    }  
 }
 
 // -----------------------------------------------------------------------------
@@ -277,34 +322,10 @@ func TestMatchUint8EqualAVX2(T *testing.T) {
 }
 
 func TestMatchUint8EqualAVX2Opt(T *testing.T) {
-	//for _, c := range uint8EqualCases {
     
-    var c = Uint8MatchTest {
-        name: "l128",
-        //slice: make([]uint8, 128),
-        match:  uint8EqualTestMatch_1,
-		//result: make([]byte, 16),
-		count:  4*(uint8EqualTestCount_0 + uint8EqualTestCount_1),
-    }
-    c.slice = append(c.slice, uint8TestSlice_0...)
-    c.slice = append(c.slice, uint8TestSlice_1...)
-    c.slice = append(c.slice, uint8TestSlice_0...)
-    c.slice = append(c.slice, uint8TestSlice_1...)
-    c.slice = append(c.slice, uint8TestSlice_0...)
-    c.slice = append(c.slice, uint8TestSlice_1...)
-    c.slice = append(c.slice, uint8TestSlice_0...)
-    c.slice = append(c.slice, uint8TestSlice_1...)
-
-    c.result = append(c.result, uint8EqualTestResult_0...)
-    c.result = append(c.result, uint8EqualTestResult_1...)
-    c.result = append(c.result, uint8EqualTestResult_0...)
-    c.result = append(c.result, uint8EqualTestResult_1...)
-    c.result = append(c.result, uint8EqualTestResult_0...)
-    c.result = append(c.result, uint8EqualTestResult_1...)
-    c.result = append(c.result, uint8EqualTestResult_0...)
-    c.result = append(c.result, uint8EqualTestResult_1...)
-
-    
+        c := CreateUint8TestCase("l128", append(uint8TestSlice_0, uint8TestSlice_1...), uint8EqualTestMatch_1, 0, 
+                            append(uint8EqualTestResult_0, uint8EqualTestResult_1...), 128)
+                                
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)

@@ -130,7 +130,7 @@ TEXT ·matchUint8EqualAVX2Opt(SB), NOSPLIT, $0-57
 
 	TESTQ	BX, BX
 	JLE		done
-	CMPQ	BX, $128      // slices smaller than 32 byte are handled separately
+	CMPQ	BX, $127      // slices smaller than 32 byte are handled separately
 	JBE		prep_scalar
 
 prep_avx2:
