@@ -30,7 +30,14 @@ TEXT ·matchUint8EqualAVX2(SB), NOSPLIT, $0-57
 	JLE		done
 	CMPQ	BX, $31      // slices smaller than 32 byte are handled separately
 	JBE		prep_scalar
-
+    MOVQ    BX, CX
+    ANDQ    $0x1f, BX
+    ANDQ    $0xffffffffffffffe0, CX
+    ADDQ    CX, SI
+    SHRQ    $3, CX
+    ADDQ    CX, DI
+    NEGQ    CX
+    
 prep_avx2:
 	VPBROADCASTB val+24(FP), Y0            // load val into AVX2 reg
 	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
@@ -38,20 +45,21 @@ prep_avx2:
 
 // works for >= 32 int8 (i.e. 32 bytes of data)
 loop_avx2:
-	VPCMPEQB	0(SI), Y0, Y1
+	VPCMPEQB	(SI)(CX*8), Y0, Y1
 
 
 	VPSHUFB		Y10, Y1, Y1
 
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
-	MOVL		AX, (DI)    // write the lower 32 bits to the output slice
+	MOVL		AX, (DI)(CX*1)    // write the lower 32 bits to the output slice
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
-	LEAQ		32(SI), SI
-	LEAQ		4(DI), DI
-	SUBQ		$32, BX
-	CMPQ		BX, $32
-	JB		 	exit_avx2
+	//LEAQ		32(SI), SI
+//	LEAQ		4(DI), DI
+//	SUBQ		$32, BX
+	ADDQ		$4, CX
+//	CMPQ		BX, $32
+	JZ		 	exit_avx2
 	JMP		 	loop_avx2
 
 exit_avx2:
