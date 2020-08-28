@@ -7,6 +7,10 @@ package vec
 
 //go:noescape
 func matchUint8EqualAVX2(src []uint8, val uint8, bits []byte) int64
+
+//go:noescape
+func matchUint8EqualAVX512(src []uint8, val uint8, bits []byte) int64
+
 /*
 //go:noescape
 func matchUint8NotEqualAVX2(src []uint8, val uint8, bits []byte) int64

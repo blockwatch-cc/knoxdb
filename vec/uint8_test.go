@@ -239,8 +239,8 @@ func TestMatchUint8EqualAVX2(T *testing.T) {
 
 func TestMatchUint8EqualAVX2Opt(T *testing.T) {
     
-        c := CreateUint8TestCase("l128", append(uint8TestSlice_0, uint8TestSlice_1...), uint8EqualTestMatch_1, 0, 
-                            append(uint8EqualTestResult_0, uint8EqualTestResult_1...), 128)
+        c := CreateUint8TestCase("l256", append(uint8TestSlice_0, uint8TestSlice_1...), uint8EqualTestMatch_1, 0, 
+                            append(uint8EqualTestResult_0, uint8EqualTestResult_1...), 256)
                                 
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -250,6 +250,33 @@ func TestMatchUint8EqualAVX2Opt(T *testing.T) {
 		}
 		bits = bits[:l]
 		cnt := matchUint8EqualAVX2Opt(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+}
+
+func TestMatchUint8EqualAVX512(T *testing.T) {
+    
+        c := CreateUint8TestCase("l256", append(uint8TestSlice_0, uint8TestSlice_1...), uint8EqualTestMatch_1, 0, 
+                            append(uint8EqualTestResult_0, uint8EqualTestResult_1...), 256)
+                                
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint8EqualAVX512(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -290,6 +317,20 @@ func BenchmarkMatchUint8EqualAVX2(B *testing.B) {
 			B.SetBytes(int64(n * Uint8Size))
 			for i := 0; i < B.N; i++ {
 				matchUint8EqualAVX2(a, 5, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchUint8EqualAVX512(B *testing.B) {
+	for _, n := range []int{128, 1024, 4096, 64 * 1024, 128 * 1024} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randUint8Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * Uint8Size))
+			for i := 0; i < B.N; i++ {
+				matchUint8EqualAVX512(a, 5, bits)
 			}
 		})
 	}
