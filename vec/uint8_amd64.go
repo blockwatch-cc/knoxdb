@@ -32,10 +32,10 @@ func matchUint8BetweenAVX2(src []uint8, a, b uint8, bits []byte) int64
 */
 func matchUint8Equal(src []uint8, val uint8, bits []byte) int64 {
 	switch {
-	case useAVX2:
-		return matchUint8EqualAVX2(src, val, bits)
 	case useAVX512_BW:
 		return matchUint8EqualAVX512(src, val, bits)
+	case useAVX2:
+		return matchUint8EqualAVX2(src, val, bits)
 	default:
 		return matchUint8EqualGeneric(src, val, bits)
 	}
