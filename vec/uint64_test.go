@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+    "math/bits"
 	"testing"
 )
 
@@ -24,6 +25,36 @@ type Uint64MatchTest struct {
 }
 
 var (
+    uint64TestSlice_0 = []uint64{
+			0, 5, 3, 5, // Y1
+			7, 5, 5, 9, // Y2
+			3, 5, 5, 5, // Y3
+			5, 0, 113, 12, // Y4
+
+			4, 2, 3, 5, // Y5
+			7, 3, 5, 9, // Y6
+			3, 13, 5, 5, // Y7
+			42, 5, 113, 12, // Y8
+		}
+    uint64EqualTestMatch_0 uint64 = 5
+	uint64EqualTestResult_0 =  []byte{0x56, 0x78, 0x12, 0x34}
+
+    uint64LessTestMatch_0 uint64 = 5
+	uint64LessTestResult_0 = []byte{0xa0, 0x84, 0xe4, 0x80}
+
+	uint64LessEqualTestMatch_0 uint64 = 5
+	uint64LessEqualTestResult_0 = []byte{0xf6, 0xfc, 0xf6, 0xb4}
+
+	uint64GreaterTestMatch_0 uint64 = 5
+	uint64GreaterTestResult_0 = []byte{0x09, 0x03, 0x09, 0x4b}
+
+	uint64GreaterEqualTestMatch_0 uint64 = 5
+	uint64GreaterEqualTestResult_0 = []byte{0x5f, 0x7b, 0x1b, 0x7f}
+
+	uint64BetweenTestMatch_0 uint64 = 5
+	uint64BetweenTestMatch_0b uint64 = 10
+	uint64BetweenTestResult_0 = []byte{0x5f, 0x78, 0x1b, 0x34}
+
 	uint64TestSlice_1 = []uint64{
 		5, 2, 3, 4,
 		7, 8, 5, 10,
@@ -36,28 +67,22 @@ var (
 	}
 	uint64EqualTestResult_1        = []byte{0x82, 0x42, 0x23, 0x70}
 	uint64EqualTestMatch_1  uint64 = 5
-	uint64EqualTestCount_1  int64  = 10
 
 	uint64LessTestResult_1        = []byte{0x70, 0x00, 0x00, 0x00}
 	uint64LessTestMatch_1  uint64 = 5
-	uint64LessTestCount_1  int64  = 3
 
 	uint64LessEqualTestResult_1        = []byte{0xf2, 0x42, 0x23, 0x70}
 	uint64LessEqualTestMatch_1  uint64 = 5
-	uint64LessEqualTestCount_1  int64  = 13
 
 	uint64GreaterTestResult_1        = []byte{0x0d, 0xbd, 0xdc, 0x8f}
 	uint64GreaterTestMatch_1  uint64 = 5
-	uint64GreaterTestCount_1  int64  = 19
 
 	uint64GreaterEqualTestResult_1        = []byte{0x8f, 0xff, 0xff, 0xff}
 	uint64GreaterEqualTestMatch_1  uint64 = 5
-	uint64GreaterEqualTestCount_1  int64  = 29
 
 	uint64BetweenTestResult_1        = []byte{0x8f, 0x42, 0x23, 0x70}
 	uint64BetweenTestMatch_1  uint64 = 5
 	uint64BetweenTestMatch_1b uint64 = 10
-	uint64BetweenTestCount_1  int64  = 13
 
 	// extreme values
 	uint64TestSlice_2 = []uint64{
@@ -72,28 +97,22 @@ var (
 	}
 	uint64EqualTestResult_2        = []byte{0x11, 0x11, 0x11, 0x11}
 	uint64EqualTestMatch_2  uint64 = math.MaxUint64
-	uint64EqualTestCount_2  int64  = 8
 
 	uint64LessTestResult_2        = []byte{0xee, 0xee, 0xee, 0xee}
 	uint64LessTestMatch_2  uint64 = math.MaxUint64
-	uint64LessTestCount_2  int64  = 24
 
 	uint64LessEqualTestResult_2        = []byte{0xff, 0xff, 0xff, 0xff}
 	uint64LessEqualTestMatch_2  uint64 = math.MaxUint64
-	uint64LessEqualTestCount_2  int64  = 32
 
 	uint64GreaterTestResult_2        = []byte{0x00, 0x00, 0x00, 0x00}
 	uint64GreaterTestMatch_2  uint64 = math.MaxUint64
-	uint64GreaterTestCount_2  int64  = 0
 
 	uint64GreaterEqualTestResult_2        = []byte{0x11, 0x11, 0x11, 0x11}
 	uint64GreaterEqualTestMatch_2  uint64 = math.MaxUint64
-	uint64GreaterEqualTestCount_2  int64  = 8
 
 	uint64BetweenTestResult_2        = []byte{0x33, 0x33, 0x33, 0x33}
 	uint64BetweenTestMatch_2  uint64 = math.MaxUint32
 	uint64BetweenTestMatch_2b uint64 = math.MaxUint64
-	uint64BetweenTestCount_2  int64  = 16
 )
 
 func randUint64Slice(n, u int) []uint64 {
@@ -107,79 +126,56 @@ func randUint64Slice(n, u int) []uint64 {
 	return s
 }
 
+// creates an uint64 test case from the given slice
+// Parameters:
+//  - name: desired name of the test case
+//  - slice: the slice for constructing the test case
+//  - match, match2: are only copied to the resulting test case
+//  - result: result for the given slice
+//  - len: desired length of the test case
+func CreateUint64TestCase(name string, slice []uint64, match, match2 uint64, result []byte, length int) Uint64MatchTest {
+	if len(slice)%8 != 0 {
+		panic("CreateUint64TestCase: length of slice has to be a multiple of 8")
+	}
+	if len(result) != bitFieldLen(len(slice)) {
+		panic("CreateUint64TestCase: length of slice and length of result does not match")
+	}
+
+	// create new slice by concat of given slice
+	new_slice := make([]uint64, length)
+	for i, _ := range new_slice {
+		new_slice[i] = slice[i%len(slice)]
+	}
+	// create new result by concat of given result
+	new_result := make([]byte, bitFieldLen(length))
+	for i, _ := range new_result {
+		new_result[i] = result[i%len(result)]
+	}
+	// clear the last unused bits
+	if length%8 != 0 {
+		new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+	}
+	// count number of ones
+	var cnt int
+	for _, v := range new_result {
+		cnt += bits.OnesCount8(v)
+	}
+    return Uint64MatchTest{
+		name:   name,
+		slice:  new_slice,
+		match:  match,
+		match2: match2,
+		result: new_result,
+		count:  int64(cnt),
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Equal Testcases
 //
+
 var uint64EqualCases = []Uint64MatchTest{
-	Uint64MatchTest{
-		name: "vec1",
-		// 	// test vector to find shuffle/perm positions
-		// 	slice: []int64{
-		// 		// 0x1, 0x2, 0x3, 0x4, // Y1
-		// 		// 0x5, 0x6, 0x7, 0x8, // Y2
-		// 		// 0x9, 0xa, 0xb, 0xc, // Y3
-		// 		// 0xd, 0xe, 0xf, 0x0, // Y4
-
-		// 		// 0x11, 0x12, 0x13, 0x14, // Y5
-		// 		// 0x15, 0x16, 0x17, 0x18, // Y6
-		// 		// 0x19, 0x1a, 0x1b, 0x1c, // Y7
-		// 		// 0x1d, 0x1e, 0x1f, 0x10, // Y8
-		// 	},
-		// 	match:  5,
-		// 	result: []byte{0x01, 0x0, 0x0, 0x0},
-		// 	count:  1,
-		// },{
-		slice: []uint64{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
-
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0x56, 0x78, 0x12, 0x34},
-		count:  13,
-	}, {
-		name:   "l32",
-		slice:  uint64TestSlice_1,
-		match:  uint64EqualTestMatch_1,
-		result: uint64EqualTestResult_1,
-		count:  uint64EqualTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint64TestSlice_1, uint64TestSlice_1...),
-		match:  uint64EqualTestMatch_1,
-		result: append(uint64EqualTestResult_1, uint64EqualTestResult_1...),
-		count:  uint64EqualTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint64TestSlice_1[:31],
-		match:  uint64EqualTestMatch_1,
-		result: uint64EqualTestResult_1,
-		count:  uint64EqualTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  uint64TestSlice_1[:23],
-		match:  uint64EqualTestMatch_1,
-		result: []byte{0x82, 0x42, 0x22}, // last bit off!
-		count:  uint64EqualTestCount_1 - 4,
-	}, {
-		name:   "l15",
-		slice:  uint64TestSlice_1[:15],
-		match:  uint64EqualTestMatch_1,
-		result: uint64EqualTestResult_1[:2],
-		count:  uint64EqualTestCount_1 - 6,
-	}, {
-		name:   "l7",
-		slice:  uint64TestSlice_1[:7],
-		match:  uint64EqualTestMatch_1,
-		result: uint64EqualTestResult_1[:1],
-		count:  uint64EqualTestCount_1 - 8,
-	}, {
+	{
 		name:   "l0",
 		slice:  make([]uint64, 0),
 		match:  uint64EqualTestMatch_1,
@@ -191,21 +187,18 @@ var uint64EqualCases = []Uint64MatchTest{
 		match:  uint64EqualTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint64TestSlice_2,
-		match:  uint64EqualTestMatch_2,
-		result: uint64EqualTestResult_2,
-		count:  uint64EqualTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint64TestSlice_2[:31],
-		match:  uint64EqualTestMatch_2,
-		result: []byte{0x11, 0x11, 0x11, 0x10},
-		count:  7,
 	},
+	CreateUint64TestCase("vec1", uint64TestSlice_0, uint64EqualTestMatch_0, 0, uint64EqualTestResult_0, 32),
+	CreateUint64TestCase("l32", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 32),
+	CreateUint64TestCase("l64", append(uint64TestSlice_1, uint64TestSlice_0...), uint64EqualTestMatch_1, 0,
+		append(uint64EqualTestResult_1, uint64EqualTestResult_0...), 64),
+	CreateUint64TestCase("l31", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 31),
+	CreateUint64TestCase("l23", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 23),
+	CreateUint64TestCase("l15", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 15),
+	CreateUint64TestCase("l7", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 7),
+	// with extreme values
+	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64EqualTestMatch_2, 0, uint64EqualTestResult_2, 32),
+	CreateUint64TestCase("ext31", uint64TestSlice_2, uint64EqualTestMatch_2, 0, uint64EqualTestResult_2, 31),
 }
 
 func TestMatchUint64EqualGeneric(T *testing.T) {
@@ -299,60 +292,9 @@ func BenchmarkMatchUint64EqualAVX2Scalar(B *testing.B) {
 // -----------------------------------------------------------------------------
 // Less Testcases
 //
-var uint64LessCases = []Uint64MatchTest{
-	Uint64MatchTest{
-		name: "vec1",
-		slice: []uint64{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
 
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0xa0, 0x84, 0xe4, 0x80},
-		count:  9,
-	}, {
-		name:   "l32",
-		slice:  uint64TestSlice_1,
-		match:  uint64LessTestMatch_1,
-		result: uint64LessTestResult_1,
-		count:  uint64LessTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint64TestSlice_1, uint64TestSlice_1...),
-		match:  uint64LessTestMatch_1,
-		result: append(uint64LessTestResult_1, uint64LessTestResult_1...),
-		count:  uint64LessTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint64TestSlice_1[:31],
-		match:  uint64LessTestMatch_1,
-		result: uint64LessTestResult_1,
-		count:  uint64LessTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  uint64TestSlice_1[:23],
-		match:  uint64LessTestMatch_1,
-		result: uint64LessTestResult_1[:3],
-		count:  uint64LessTestCount_1,
-	}, {
-		name:   "l15",
-		slice:  uint64TestSlice_1[:15],
-		match:  uint64LessTestMatch_1,
-		result: uint64LessTestResult_1[:2],
-		count:  uint64LessTestCount_1,
-	}, {
-		name:   "l7",
-		slice:  uint64TestSlice_1[:7],
-		match:  uint64LessTestMatch_1,
-		result: uint64LessTestResult_1[:1],
-		count:  uint64LessTestCount_1,
-	}, {
+var uint64LessCases = []Uint64MatchTest{
+	{
 		name:   "l0",
 		slice:  make([]uint64, 0),
 		match:  uint64LessTestMatch_1,
@@ -364,21 +306,18 @@ var uint64LessCases = []Uint64MatchTest{
 		match:  uint64LessTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint64TestSlice_2,
-		match:  uint64LessTestMatch_2,
-		result: uint64LessTestResult_2,
-		count:  uint64LessTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint64TestSlice_2[:31],
-		match:  uint64LessTestMatch_2,
-		result: uint64LessTestResult_2,
-		count:  uint64LessTestCount_2,
 	},
+	CreateUint64TestCase("vec1", uint64TestSlice_0, uint64LessTestMatch_0, 0, uint64LessTestResult_0, 32),
+	CreateUint64TestCase("l32", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 32),
+	CreateUint64TestCase("l64", append(uint64TestSlice_1, uint64TestSlice_0...), uint64LessTestMatch_1, 0,
+		append(uint64LessTestResult_1, uint64LessTestResult_0...), 64),
+	CreateUint64TestCase("l31", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 31),
+	CreateUint64TestCase("l23", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 23),
+	CreateUint64TestCase("l15", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 15),
+	CreateUint64TestCase("l7", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 7),
+	// with extreme values
+	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64LessTestMatch_2, 0, uint64LessTestResult_2, 32),
+	CreateUint64TestCase("ext31", uint64TestSlice_2, uint64LessTestMatch_2, 0, uint64LessTestResult_2, 31),
 }
 
 func TestMatchUint64LessGeneric(T *testing.T) {
@@ -472,60 +411,9 @@ func BenchmarkMatchUint64LessAVX2Scalar(B *testing.B) {
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
 //
-var uint64LessEqualCases = []Uint64MatchTest{
-	Uint64MatchTest{
-		name: "vec1",
-		slice: []uint64{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
 
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0xf6, 0xfc, 0xf6, 0xb4},
-		count:  22,
-	}, {
-		name:   "l32",
-		slice:  uint64TestSlice_1,
-		match:  uint64LessEqualTestMatch_1,
-		result: uint64LessEqualTestResult_1,
-		count:  uint64LessEqualTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint64TestSlice_1, uint64TestSlice_1...),
-		match:  uint64LessEqualTestMatch_1,
-		result: append(uint64LessEqualTestResult_1, uint64LessEqualTestResult_1...),
-		count:  uint64LessEqualTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint64TestSlice_1[:31],
-		match:  uint64LessEqualTestMatch_1,
-		result: uint64LessEqualTestResult_1,
-		count:  uint64LessEqualTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  uint64TestSlice_1[:23],
-		match:  uint64LessEqualTestMatch_1,
-		result: []byte{0xf2, 0x42, 0x22},
-		count:  uint64LessEqualTestCount_1 - 4,
-	}, {
-		name:   "l15",
-		slice:  uint64TestSlice_1[:15],
-		match:  uint64LessEqualTestMatch_1,
-		result: uint64LessEqualTestResult_1[:2],
-		count:  uint64LessEqualTestCount_1 - 6,
-	}, {
-		name:   "l7",
-		slice:  uint64TestSlice_1[:7],
-		match:  uint64LessEqualTestMatch_1,
-		result: uint64LessEqualTestResult_1[:1],
-		count:  uint64LessEqualTestCount_1 - 8,
-	}, {
+var uint64LessEqualCases = []Uint64MatchTest{
+	{
 		name:   "l0",
 		slice:  make([]uint64, 0),
 		match:  uint64LessEqualTestMatch_1,
@@ -537,21 +425,18 @@ var uint64LessEqualCases = []Uint64MatchTest{
 		match:  uint64LessEqualTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint64TestSlice_2,
-		match:  uint64LessEqualTestMatch_2,
-		result: uint64LessEqualTestResult_2,
-		count:  uint64LessEqualTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint64TestSlice_2[:31],
-		match:  uint64LessEqualTestMatch_2,
-		result: []byte{0xff, 0xff, 0xff, 0xfe}, // last off
-		count:  uint64LessEqualTestCount_2 - 1,
 	},
+	CreateUint64TestCase("vec1", uint64TestSlice_0, uint64LessEqualTestMatch_0, 0, uint64LessEqualTestResult_0, 32),
+	CreateUint64TestCase("l32", uint64TestSlice_1, uint64LessEqualTestMatch_1, 0, uint64LessEqualTestResult_1, 32),
+	CreateUint64TestCase("l64", append(uint64TestSlice_1, uint64TestSlice_0...), uint64LessEqualTestMatch_1, 0,
+		append(uint64LessEqualTestResult_1, uint64LessEqualTestResult_0...), 64),
+	CreateUint64TestCase("l31", uint64TestSlice_1, uint64LessEqualTestMatch_1, 0, uint64LessEqualTestResult_1, 31),
+	CreateUint64TestCase("l23", uint64TestSlice_1, uint64LessEqualTestMatch_1, 0, uint64LessEqualTestResult_1, 23),
+	CreateUint64TestCase("l15", uint64TestSlice_1, uint64LessEqualTestMatch_1, 0, uint64LessEqualTestResult_1, 15),
+	CreateUint64TestCase("l7", uint64TestSlice_1, uint64LessEqualTestMatch_1, 0, uint64LessEqualTestResult_1, 7),
+	// with extreme values
+	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64LessEqualTestMatch_2, 0, uint64LessEqualTestResult_2, 32),
+	CreateUint64TestCase("ext31", uint64TestSlice_2, uint64LessEqualTestMatch_2, 0, uint64LessEqualTestResult_2, 31),
 }
 
 func TestMatchUint64LessEqualGeneric(T *testing.T) {
@@ -645,60 +530,9 @@ func BenchmarkMatchUint64LessEqualAVX2Scalar(B *testing.B) {
 // -----------------------------------------------------------------------------
 // Greater Testcases
 //
-var uint64GreaterCases = []Uint64MatchTest{
-	Uint64MatchTest{
-		name: "vec1",
-		slice: []uint64{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
 
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0x09, 0x03, 0x09, 0x4b},
-		count:  10,
-	}, {
-		name:   "l32",
-		slice:  uint64TestSlice_1,
-		match:  uint64GreaterTestMatch_1,
-		result: uint64GreaterTestResult_1,
-		count:  uint64GreaterTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint64TestSlice_1, uint64TestSlice_1...),
-		match:  uint64GreaterTestMatch_1,
-		result: append(uint64GreaterTestResult_1, uint64GreaterTestResult_1...),
-		count:  uint64GreaterTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint64TestSlice_1[:31],
-		match:  uint64GreaterTestMatch_1,
-		result: []byte{0x0d, 0xbd, 0xdc, 0x8e},
-		count:  uint64GreaterTestCount_1 - 1,
-	}, {
-		name:   "l23",
-		slice:  uint64TestSlice_1[:23],
-		match:  uint64GreaterTestMatch_1,
-		result: uint64GreaterTestResult_1[:3],
-		count:  uint64GreaterTestCount_1 - 5,
-	}, {
-		name:   "l15",
-		slice:  uint64TestSlice_1[:15],
-		match:  uint64GreaterTestMatch_1,
-		result: []byte{0x0d, 0xbc},
-		count:  uint64GreaterTestCount_1 - 11,
-	}, {
-		name:   "l7",
-		slice:  uint64TestSlice_1[:7],
-		match:  uint64GreaterTestMatch_1,
-		result: []byte{0x0c},
-		count:  2,
-	}, {
+var uint64GreaterCases = []Uint64MatchTest{
+	{
 		name:   "l0",
 		slice:  make([]uint64, 0),
 		match:  uint64GreaterTestMatch_1,
@@ -710,21 +544,18 @@ var uint64GreaterCases = []Uint64MatchTest{
 		match:  uint64GreaterTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint64TestSlice_2,
-		match:  uint64GreaterTestMatch_2,
-		result: uint64GreaterTestResult_2,
-		count:  uint64GreaterTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint64TestSlice_2[:31],
-		match:  uint64GreaterTestMatch_2,
-		result: uint64GreaterTestResult_2, // still zeros
-		count:  uint64GreaterTestCount_2,
 	},
+	CreateUint64TestCase("vec1", uint64TestSlice_0, uint64GreaterTestMatch_0, 0, uint64GreaterTestResult_0, 32),
+	CreateUint64TestCase("l32", uint64TestSlice_1, uint64GreaterTestMatch_1, 0, uint64GreaterTestResult_1, 32),
+	CreateUint64TestCase("l64", append(uint64TestSlice_1, uint64TestSlice_0...), uint64GreaterTestMatch_1, 0,
+		append(uint64GreaterTestResult_1, uint64GreaterTestResult_0...), 64),
+	CreateUint64TestCase("l31", uint64TestSlice_1, uint64GreaterTestMatch_1, 0, uint64GreaterTestResult_1, 31),
+	CreateUint64TestCase("l23", uint64TestSlice_1, uint64GreaterTestMatch_1, 0, uint64GreaterTestResult_1, 23),
+	CreateUint64TestCase("l15", uint64TestSlice_1, uint64GreaterTestMatch_1, 0, uint64GreaterTestResult_1, 15),
+	CreateUint64TestCase("l7", uint64TestSlice_1, uint64GreaterTestMatch_1, 0, uint64GreaterTestResult_1, 7),
+	// with extreme values
+	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64GreaterTestMatch_2, 0, uint64GreaterTestResult_2, 32),
+	CreateUint64TestCase("ext31", uint64TestSlice_2, uint64GreaterTestMatch_2, 0, uint64GreaterTestResult_2, 31),
 }
 
 func TestMatchUint64GreaterGeneric(T *testing.T) {
@@ -818,60 +649,9 @@ func BenchmarkMatchUint64GreaterAVX2Scalar(B *testing.B) {
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
 //
-var uint64GreaterEqualCases = []Uint64MatchTest{
-	Uint64MatchTest{
-		name: "vec1",
-		slice: []uint64{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
 
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0x5f, 0x7b, 0x1b, 0x7f},
-		count:  23,
-	}, {
-		name:   "l32",
-		slice:  uint64TestSlice_1,
-		match:  uint64GreaterEqualTestMatch_1,
-		result: uint64GreaterEqualTestResult_1,
-		count:  uint64GreaterEqualTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint64TestSlice_1, uint64TestSlice_1...),
-		match:  uint64GreaterEqualTestMatch_1,
-		result: append(uint64GreaterEqualTestResult_1, uint64GreaterEqualTestResult_1...),
-		count:  uint64GreaterEqualTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint64TestSlice_1[:31],
-		match:  uint64GreaterEqualTestMatch_1,
-		result: []byte{0x8f, 0xff, 0xff, 0xfe},
-		count:  uint64GreaterEqualTestCount_1 - 1,
-	}, {
-		name:   "l23",
-		slice:  uint64TestSlice_1[:23],
-		match:  uint64GreaterEqualTestMatch_1,
-		result: []byte{0x8f, 0xff, 0xfe},
-		count:  uint64GreaterEqualTestCount_1 - 9,
-	}, {
-		name:   "l15",
-		slice:  uint64TestSlice_1[:15],
-		match:  uint64GreaterEqualTestMatch_1,
-		result: []byte{0x8f, 0xfe},
-		count:  uint64GreaterEqualTestCount_1 - 17,
-	}, {
-		name:   "l7",
-		slice:  uint64TestSlice_1[:7],
-		match:  uint64GreaterEqualTestMatch_1,
-		result: []byte{0x8e},
-		count:  4,
-	}, {
+var uint64GreaterEqualCases = []Uint64MatchTest{
+	{
 		name:   "l0",
 		slice:  make([]uint64, 0),
 		match:  uint64GreaterEqualTestMatch_1,
@@ -883,21 +663,18 @@ var uint64GreaterEqualCases = []Uint64MatchTest{
 		match:  uint64GreaterEqualTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint64TestSlice_2,
-		match:  uint64GreaterEqualTestMatch_2,
-		result: uint64GreaterEqualTestResult_2,
-		count:  uint64GreaterEqualTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint64TestSlice_2[:31],
-		match:  uint64GreaterEqualTestMatch_2,
-		result: []byte{0x11, 0x11, 0x11, 0x10}, // last off
-		count:  uint64GreaterEqualTestCount_2 - 1,
 	},
+	CreateUint64TestCase("vec1", uint64TestSlice_0, uint64GreaterEqualTestMatch_0, 0, uint64GreaterEqualTestResult_0, 32),
+	CreateUint64TestCase("l32", uint64TestSlice_1, uint64GreaterEqualTestMatch_1, 0, uint64GreaterEqualTestResult_1, 32),
+	CreateUint64TestCase("l64", append(uint64TestSlice_1, uint64TestSlice_0...), uint64GreaterEqualTestMatch_1, 0,
+		append(uint64GreaterEqualTestResult_1, uint64GreaterEqualTestResult_0...), 64),
+	CreateUint64TestCase("l31", uint64TestSlice_1, uint64GreaterEqualTestMatch_1, 0, uint64GreaterEqualTestResult_1, 31),
+	CreateUint64TestCase("l23", uint64TestSlice_1, uint64GreaterEqualTestMatch_1, 0, uint64GreaterEqualTestResult_1, 23),
+	CreateUint64TestCase("l15", uint64TestSlice_1, uint64GreaterEqualTestMatch_1, 0, uint64GreaterEqualTestResult_1, 15),
+	CreateUint64TestCase("l7", uint64TestSlice_1, uint64GreaterEqualTestMatch_1, 0, uint64GreaterEqualTestResult_1, 7),
+	// with extreme values
+	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64GreaterEqualTestMatch_2, 0, uint64GreaterEqualTestResult_2, 32),
+	CreateUint64TestCase("ext31", uint64TestSlice_2, uint64GreaterEqualTestMatch_2, 0, uint64GreaterEqualTestResult_2, 31),
 }
 
 func TestMatchUint64GreaterEqualGeneric(T *testing.T) {
@@ -991,97 +768,34 @@ func BenchmarkMatchUint64GreaterEqualAVX2Scalar(B *testing.B) {
 // -----------------------------------------------------------------------------
 // Between Testcases
 //
-var uint64BetweenCases = []Uint64MatchTest{
-	Uint64MatchTest{
-		name: "vec1",
-		slice: []uint64{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
 
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		match2: 10,
-		result: []byte{0x5f, 0x78, 0x1b, 0x34},
-		count:  17,
-	}, {
-		name:   "l32",
-		slice:  uint64TestSlice_1,
-		match:  uint64BetweenTestMatch_1,
-		match2: uint64BetweenTestMatch_1b,
-		result: uint64BetweenTestResult_1,
-		count:  uint64BetweenTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint64TestSlice_1, uint64TestSlice_1...),
-		match:  uint64BetweenTestMatch_1,
-		match2: uint64BetweenTestMatch_1b,
-		result: append(uint64BetweenTestResult_1, uint64BetweenTestResult_1...),
-		count:  uint64BetweenTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint64TestSlice_1[:31],
-		match:  uint64BetweenTestMatch_1,
-		match2: uint64BetweenTestMatch_1b,
-		result: uint64BetweenTestResult_1,
-		count:  uint64BetweenTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  uint64TestSlice_1[:23],
-		match:  uint64BetweenTestMatch_1,
-		match2: uint64BetweenTestMatch_1b,
-		result: []byte{0x8f, 0x42, 0x22}, // last bit off!
-		count:  uint64BetweenTestCount_1 - 4,
-	}, {
-		name:   "l15",
-		slice:  uint64TestSlice_1[:15],
-		match:  uint64BetweenTestMatch_1,
-		match2: uint64BetweenTestMatch_1b,
-		result: uint64BetweenTestResult_1[:2],
-		count:  uint64BetweenTestCount_1 - 6,
-	}, {
-		name:   "l7",
-		slice:  uint64TestSlice_1[:7],
-		match:  uint64BetweenTestMatch_1,
-		match2: uint64BetweenTestMatch_1b,
-		result: []byte{0x8e},
-		count:  uint64BetweenTestCount_1 - 9,
-	}, {
+var uint64BetweenCases = []Uint64MatchTest{
+	{
 		name:   "l0",
 		slice:  make([]uint64, 0),
 		match:  uint64BetweenTestMatch_1,
-		match2: uint64BetweenTestMatch_1b,
+		match2:  uint64BetweenTestMatch_1b,
 		result: []byte{},
 		count:  0,
 	}, {
 		name:   "nil",
 		slice:  nil,
 		match:  uint64BetweenTestMatch_1,
-		match2: uint64BetweenTestMatch_1b,
+		match2:  uint64BetweenTestMatch_1b,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint64TestSlice_2,
-		match:  uint64BetweenTestMatch_2,
-		match2: uint64BetweenTestMatch_2b,
-		result: uint64BetweenTestResult_2,
-		count:  uint64BetweenTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint64TestSlice_2[:31],
-		match:  uint64BetweenTestMatch_2,
-		match2: uint64BetweenTestMatch_2b,
-		result: []byte{0x33, 0x33, 0x33, 0x32},
-		count:  15,
 	},
+	CreateUint64TestCase("vec1", uint64TestSlice_0, uint64BetweenTestMatch_0, uint64BetweenTestMatch_0b, uint64BetweenTestResult_0, 32),
+	CreateUint64TestCase("l32", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 32),
+	CreateUint64TestCase("l64", append(uint64TestSlice_1, uint64TestSlice_0...), uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b,
+		append(uint64BetweenTestResult_1, uint64BetweenTestResult_0...), 64),
+	CreateUint64TestCase("l31", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 31),
+	CreateUint64TestCase("l23", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 23),
+	CreateUint64TestCase("l15", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 15),
+	CreateUint64TestCase("l7", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 7),
+	// with extreme values
+	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64BetweenTestMatch_2, uint64BetweenTestMatch_1b, uint64BetweenTestResult_2, 32),
+	CreateUint64TestCase("ext31", uint64TestSlice_2, uint64BetweenTestMatch_2, uint64BetweenTestMatch_1b, uint64BetweenTestResult_2, 31),
 }
 
 func TestMatchUint64BetweenGeneric(T *testing.T) {
