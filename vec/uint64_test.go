@@ -243,6 +243,31 @@ func TestMatchUint64EqualAVX2(T *testing.T) {
 	}
 }
 
+func TestMatchUint64EqualAVX512(T *testing.T) {
+	for _, c := range uint64EqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint64EqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Equal benchmarks
 //
@@ -284,6 +309,35 @@ func BenchmarkMatchUint64EqualAVX2Scalar(B *testing.B) {
 			B.SetBytes(int64(n * Uint64Size))
 			for i := 0; i < B.N; i++ {
 				matchUint64EqualAVX2(a, math.MaxUint64/2, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchUint64EqualAVX512(B *testing.B) {
+	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randUint64Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * Uint64Size))
+			for i := 0; i < B.N; i++ {
+				matchUint64EqualAVX512(a, math.MaxUint64/2, bits)
+			}
+		})
+	}
+}
+
+// force scalar codepath by making last block <32 entries
+func BenchmarkMatchUint64EqualAVX512Scalar(B *testing.B) {
+	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randUint64Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * Uint64Size))
+			for i := 0; i < B.N; i++ {
+				matchUint64EqualAVX512(a, math.MaxUint64/2, bits)
 			}
 		})
 	}

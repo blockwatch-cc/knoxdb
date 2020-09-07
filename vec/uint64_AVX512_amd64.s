@@ -4,7 +4,7 @@
 // +build go1.7,amd64,!gccgo,!appengine
 
 #include "textflag.h"
-#include "constants.h"
+#include "constants_AVX512.h"
 
 // func matchUint64EqualAVX512(src []uint64, val uint64, bits []byte) int64
 //
@@ -32,35 +32,30 @@ TEXT ·matchUint64EqualAVX512(SB), NOSPLIT, $0-64
 	JBE		prep_scalar
 
 prep_avx2:
-	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
-	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQA		shuffle<>+0x00(SB), Y10    // load shuffle control mask
+	VBROADCASTSD val+24(FP), Z0            // load val into AVX2 reg
+	//VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQA64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
-	VPCMPEQQ	0(SI), Y0, Y1
-	VPCMPEQQ	32(SI), Y0, Y2
-	VPCMPEQQ	64(SI), Y0, Y3
-	VPCMPEQQ	96(SI), Y0, Y4
-	VPCMPEQQ	128(SI), Y0, Y5
-	VPACKSSDW	Y1, Y5, Y1
-	VPERMD		Y1, Y9, Y1
-	VPCMPEQQ	160(SI), Y0, Y6
-	VPACKSSDW	Y2, Y6, Y2
-	VPERMD		Y2, Y9, Y2
-	VPACKSSDW	Y2, Y1, Y1
-	VPCMPEQQ	192(SI), Y0, Y7
-	VPACKSSDW	Y3, Y7, Y3
-	VPERMD		Y3, Y9, Y3
-	VPCMPEQQ	224(SI), Y0, Y8
-	VPACKSSDW	Y4, Y8, Y4
-	VPERMD		Y4, Y9, Y4
-	VPACKSSDW	Y4, Y3, Y3
-	VPACKSSWB	Y1, Y3, Y1
-	VPSHUFB		Y10, Y1, Y1
+	VPERMQ   	0(SI), Z10, Z1
+	VPCMPEQQ	Z1, Z0, K1
+	VPERMQ   	64(SI), Z10, Z2
+	VPCMPEQQ	Z2, Z0, K2
+	VPERMQ   	128(SI), Z10, Z3
+	VPCMPEQQ	Z3, Z0, K3
+	VPERMQ   	192(SI), Z10, Z4
+	VPCMPEQQ	Z4, Z0, K4
+	
+    KSHIFTLQ    $8, K2, K2
+    KORD        K1, K2, K1
+    KSHIFTLD    $16, K3, K3
+    KSHIFTLQ    $24, K4, K4
+    KORD        K3, K4, K3
+    KORD        K1, K3, K1
 
-	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
-	MOVL		AX, (DI)    // write the lower 32 bits to the output slice
+	KMOVD		K1, (DI)    // write the lower 32 bits to the output slice
+	KMOVD		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 	LEAQ		256(SI), SI
