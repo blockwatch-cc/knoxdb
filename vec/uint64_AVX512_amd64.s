@@ -32,13 +32,12 @@ TEXT ·matchUint64EqualAVX512(SB), NOSPLIT, $0-64
 	JBE		prep_scalar
 
 prep_avx2:
-	VBROADCASTSD val+24(FP), Z0            // load val into AVX2 reg
-	//VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQA64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
+	VBROADCASTSD    val+24(FP), Z0            // load val into AVX2 reg
+	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
-	VPERMQ   	0(SI), Z10, Z1
+	VPERMQ   	0(SI), Z10, Z1 
 	VPCMPEQQ	Z1, Z0, K1
 	VPERMQ   	64(SI), Z10, Z2
 	VPCMPEQQ	Z2, Z0, K2
@@ -71,49 +70,35 @@ exit_avx2:
 	JLE		done
 
 prep_scalar:
-	MOVQ	val+24(FP), DX   // load val for comparison
-	XORQ	AX, AX
-	XORQ	R10, R10
-	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
-	SUBQ	BX, CX
+	VBROADCASTSD    val+24(FP), Z0            // load val into AVX2 reg
+	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
+	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
+    //MOVQ            $-1, CX   //fill with all ones
 
-// for remainders of <32 int64
-scalar:
-	MOVQ	(SI), R8
-	CMPQ	R8, DX
-	SETEQ	R10
-	ADDL	R10, R9
-	ORL	 	R10, AX
-	SHLL	$1, AX
-	LEAQ	8(SI), SI
-	DECL	BX
-	JZ	 	scalar_done
-	JMP	 	scalar
+loop_scalar:
+    //MOVQ            $-1, CX   //fill with all ones
+    //BZHIL       BX, CX, CX // zero bit positions > BX
+    //KMOVB       CX, K1    // copy 8 bits to mask register
+    // calculate mask
+    VPBROADCASTQ    BX, Z11         // broadcast BX
+    VPCMPGTQ        Z11, Z9, K1     // mask greater than BX
+    KNOTB           K1, K1          // use lower equal than BX
 
-scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
-	CMPQ	R11, $24
-	JBE		write_3
-	MOVL	AX, (DI)
-	JMP		done
-
-write_3:
-	CMPQ	R11, $16
-	JBE		write_2
-	MOVB	AX, (DI)
-	SHRL	$8, AX
-	INCQ	DI
-
-write_2:
-	CMPQ	R11, $8
-	JBE		write_1
-	MOVW	AX, (DI)
-	JMP		done
-
-write_1:
-	MOVB	AX, (DI)
+	VPERMQ.Z   	0(SI), Z10, K1, Z1 
+	VPCMPEQQ	Z1, Z0, K1
+	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
+    KMOVB		K1, AX
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+	LEAQ		64(SI), SI
+	LEAQ		1(DI), DI
+	SUBQ		$8, BX 
+	// CMPQ		BX, $8 
+	JB		 	exit_scalar
+	JMP		 	loop_scalar    
+    
+exit_scalar:
+	VZEROUPPER           // clear upper part of Y regs, prevents AVX-SSE penalty
 
 done:
 	MOVQ	R9, ret+56(FP)

@@ -65,6 +65,7 @@ var (
 		43, 5, 5, 5,
 		39, 40, 41, 42,
 	}
+
 	uint64EqualTestResult_1        = []byte{0x82, 0x42, 0x23, 0x70}
 	uint64EqualTestMatch_1  uint64 = 5
 
@@ -142,10 +143,20 @@ func CreateUint64TestCase(name string, slice []uint64, match, match2 uint64, res
 	}
 
 	// create new slice by concat of given slice
-	new_slice := make([]uint64, length)
+	/*new_slice := make([]uint64, length)
 	for i, _ := range new_slice {
 		new_slice[i] = slice[i%len(slice)]
+	}*/
+    
+    // create new slice by concat of given slice
+    // we make it a little bit longer check buffer overruns
+	var new_slice []uint64
+    var l int = length
+	for l > 0 {
+		new_slice = append(new_slice, slice...)
+        l -= len(slice)
 	}
+
 	// create new result by concat of given result
 	new_result := make([]byte, bitFieldLen(length))
 	for i, _ := range new_result {
@@ -162,7 +173,7 @@ func CreateUint64TestCase(name string, slice []uint64, match, match2 uint64, res
 	}
     return Uint64MatchTest{
 		name:   name,
-		slice:  new_slice,
+		slice:  new_slice[:length],
 		match:  match,
 		match2: match2,
 		result: new_result,
@@ -194,7 +205,7 @@ var uint64EqualCases = []Uint64MatchTest{
 		append(uint64EqualTestResult_1, uint64EqualTestResult_0...), 64),
 	CreateUint64TestCase("l31", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 31),
 	CreateUint64TestCase("l23", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 23),
-	CreateUint64TestCase("l15", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 15),
+	CreateUint64TestCase("l15", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 14),
 	CreateUint64TestCase("l7", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 7),
 	// with extreme values
 	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64EqualTestMatch_2, 0, uint64EqualTestResult_2, 32),
