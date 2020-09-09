@@ -8,8 +8,8 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/bits"
 	"math/rand"
-    "math/bits"
 	"testing"
 )
 
@@ -25,35 +25,35 @@ type Uint64MatchTest struct {
 }
 
 var (
-    uint64TestSlice_0 = []uint64{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
+	uint64TestSlice_0 = []uint64{
+		0, 5, 3, 5, // Y1
+		7, 5, 5, 9, // Y2
+		3, 5, 5, 5, // Y3
+		5, 0, 113, 12, // Y4
 
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		}
-    uint64EqualTestMatch_0 uint64 = 5
-	uint64EqualTestResult_0 =  []byte{0x56, 0x78, 0x12, 0x34}
+		4, 2, 3, 5, // Y5
+		7, 3, 5, 9, // Y6
+		3, 13, 5, 5, // Y7
+		42, 5, 113, 12, // Y8
+	}
+	uint64EqualTestMatch_0  uint64 = 5
+	uint64EqualTestResult_0        = []byte{0x56, 0x78, 0x12, 0x34}
 
-    uint64LessTestMatch_0 uint64 = 5
-	uint64LessTestResult_0 = []byte{0xa0, 0x84, 0xe4, 0x80}
+	uint64LessTestMatch_0  uint64 = 5
+	uint64LessTestResult_0        = []byte{0xa0, 0x84, 0xe4, 0x80}
 
-	uint64LessEqualTestMatch_0 uint64 = 5
-	uint64LessEqualTestResult_0 = []byte{0xf6, 0xfc, 0xf6, 0xb4}
+	uint64LessEqualTestMatch_0  uint64 = 5
+	uint64LessEqualTestResult_0        = []byte{0xf6, 0xfc, 0xf6, 0xb4}
 
-	uint64GreaterTestMatch_0 uint64 = 5
-	uint64GreaterTestResult_0 = []byte{0x09, 0x03, 0x09, 0x4b}
+	uint64GreaterTestMatch_0  uint64 = 5
+	uint64GreaterTestResult_0        = []byte{0x09, 0x03, 0x09, 0x4b}
 
-	uint64GreaterEqualTestMatch_0 uint64 = 5
-	uint64GreaterEqualTestResult_0 = []byte{0x5f, 0x7b, 0x1b, 0x7f}
+	uint64GreaterEqualTestMatch_0  uint64 = 5
+	uint64GreaterEqualTestResult_0        = []byte{0x5f, 0x7b, 0x1b, 0x7f}
 
-	uint64BetweenTestMatch_0 uint64 = 5
+	uint64BetweenTestMatch_0  uint64 = 5
 	uint64BetweenTestMatch_0b uint64 = 10
-	uint64BetweenTestResult_0 = []byte{0x5f, 0x78, 0x1b, 0x34}
+	uint64BetweenTestResult_0        = []byte{0x5f, 0x78, 0x1b, 0x34}
 
 	uint64TestSlice_1 = []uint64{
 		5, 2, 3, 4,
@@ -147,14 +147,14 @@ func CreateUint64TestCase(name string, slice []uint64, match, match2 uint64, res
 	for i, _ := range new_slice {
 		new_slice[i] = slice[i%len(slice)]
 	}*/
-    
-    // create new slice by concat of given slice
-    // we make it a little bit longer check buffer overruns
+
+	// create new slice by concat of given slice
+	// we make it a little bit longer check buffer overruns
 	var new_slice []uint64
-    var l int = length
+	var l int = length
 	for l > 0 {
 		new_slice = append(new_slice, slice...)
-        l -= len(slice)
+		l -= len(slice)
 	}
 
 	// create new result by concat of given result
@@ -171,7 +171,7 @@ func CreateUint64TestCase(name string, slice []uint64, match, match2 uint64, res
 	for _, v := range new_result {
 		cnt += bits.OnesCount8(v)
 	}
-    return Uint64MatchTest{
+	return Uint64MatchTest{
 		name:   name,
 		slice:  new_slice[:length],
 		match:  match,
@@ -255,6 +255,9 @@ func TestMatchUint64EqualAVX2(T *testing.T) {
 }
 
 func TestMatchUint64EqualAVX512(T *testing.T) {
+	if !useAVX512_BW {
+		return
+	}
 	for _, c := range uint64EqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -326,6 +329,9 @@ func BenchmarkMatchUint64EqualAVX2Scalar(B *testing.B) {
 }
 
 func BenchmarkMatchUint64EqualAVX512(B *testing.B) {
+	if !useAVX512_BW {
+		return
+	}
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
 			a := randUint64Slice(n, 1)
@@ -341,6 +347,9 @@ func BenchmarkMatchUint64EqualAVX512(B *testing.B) {
 
 // force scalar codepath by making last block <32 entries
 func BenchmarkMatchUint64EqualAVX512Scalar(B *testing.B) {
+	if !useAVX512_BW {
+		return
+	}
 	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
 			a := randUint64Slice(n, 1)
@@ -839,14 +848,14 @@ var uint64BetweenCases = []Uint64MatchTest{
 		name:   "l0",
 		slice:  make([]uint64, 0),
 		match:  uint64BetweenTestMatch_1,
-		match2:  uint64BetweenTestMatch_1b,
+		match2: uint64BetweenTestMatch_1b,
 		result: []byte{},
 		count:  0,
 	}, {
 		name:   "nil",
 		slice:  nil,
 		match:  uint64BetweenTestMatch_1,
-		match2:  uint64BetweenTestMatch_1b,
+		match2: uint64BetweenTestMatch_1b,
 		result: []byte{},
 		count:  0,
 	},
