@@ -358,12 +358,12 @@ func TestMatchFloat64EqualAVX2(T *testing.T) {
 // BenchmarkMatchFloat64EqualGeneric/65536-8   20000   78689 ns/op	6662.73 MB/s
 // BenchmarkMatchFloat64EqualGeneric/131072-8  10000  165887 ns/op	6321.02 MB/s
 func BenchmarkMatchFloat64EqualGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64EqualGeneric(a, 5, bits)
 			}
@@ -378,12 +378,12 @@ func BenchmarkMatchFloat64EqualGeneric(B *testing.B) {
 // BenchmarkMatchFloat64EqualAVX2/65536-8 	   50000  31474 ns/op	16657.80 MB/s
 // BenchmarkMatchFloat64EqualAVX2/131072-8     20000  61115 ns/op	17157.18 MB/s
 func BenchmarkMatchFloat64EqualAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64EqualAVX2(a, 5, bits)
 			}
@@ -399,12 +399,12 @@ func BenchmarkMatchFloat64EqualAVX2(B *testing.B) {
 // BenchmarkMatchFloat64EqualAVX2Scalar/65535-8 	   50000  29679 ns/op	17664.76 MB/s
 // BenchmarkMatchFloat64EqualAVX2Scalar/131071-8       20000  59205 ns/op	17710.78 MB/s
 func BenchmarkMatchFloat64EqualAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64EqualAVX2(a, 5, bits)
 			}
@@ -576,12 +576,12 @@ func TestMatchFloat64LessAVX2(T *testing.T) {
 // BenchmarkMatchFloat64LessGeneric/65536-8	    5000  267706 ns/op	1958.45 MB/s
 // BenchmarkMatchFloat64LessGeneric/131072-8    3000  540058 ns/op	1941.60 MB/s
 func BenchmarkMatchFloat64LessGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64LessThanGeneric(a, 5, bits)
 			}
@@ -596,12 +596,12 @@ func BenchmarkMatchFloat64LessGeneric(B *testing.B) {
 // BenchmarkMatchFloat64LessAVX2/65536-8	   50000  27816 ns/op	18847.90 MB/s
 // BenchmarkMatchFloat64LessAVX2/131072-8      30000  55877 ns/op	18765.57 MB/s
 func BenchmarkMatchFloat64LessAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64LessThanAVX2(a, 5, bits)
 			}
@@ -617,12 +617,12 @@ func BenchmarkMatchFloat64LessAVX2(B *testing.B) {
 // BenchmarkMatchFloat64LessAVX2Scalar/65535-8     50000 27817 ns/op	18846.92 MB/s
 // BenchmarkMatchFloat64LessAVX2Scalar/131071-8    30000 56416 ns/op	18586.28 MB/s
 func BenchmarkMatchFloat64LessAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64LessThanAVX2(a, 5, bits)
 			}
@@ -794,12 +794,12 @@ func TestMatchFloat64LessEqualAVX2(T *testing.T) {
 // BenchmarkMatchFloat64LessEqualGeneric/65536-8    5000  269674 ns/op	1944.15 MB/s
 // BenchmarkMatchFloat64LessEqualGeneric/131072-8   3000  543906 ns/op	1927.86 MB/s
 func BenchmarkMatchFloat64LessEqualGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64LessThanEqualGeneric(a, 5, bits)
 			}
@@ -814,12 +814,12 @@ func BenchmarkMatchFloat64LessEqualGeneric(B *testing.B) {
 // BenchmarkMatchFloat64LessEqualAVX2/65536-8  	   50000  28210 ns/op	18585.09 MB/s
 // BenchmarkMatchFloat64LessEqualAVX2/131072-8 	   30000  57076 ns/op	18371.31 MB/s
 func BenchmarkMatchFloat64LessEqualAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64LessThanEqualAVX2(a, 5, bits)
 			}
@@ -835,12 +835,12 @@ func BenchmarkMatchFloat64LessEqualAVX2(B *testing.B) {
 // BenchmarkMatchFloat64LessEqualAVX2Scalar/65535-8    50000 28001 ns/op	18723.50 MB/s
 // BenchmarkMatchFloat64LessEqualAVX2Scalar/131071-8   30000 57441 ns/op	18254.40 MB/s
 func BenchmarkMatchFloat64LessEqualAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64LessThanEqualAVX2(a, 5, bits)
 			}
@@ -1012,12 +1012,12 @@ func TestMatchFloat64GreaterAVX2(T *testing.T) {
 // BenchmarkMatchFloat64GreaterGeneric/65536-8	   20000   78623 ns/op	6668.33 MB/s
 // BenchmarkMatchFloat64GreaterGeneric/131072-8    10000  176833 ns/op	5929.75 MB/s
 func BenchmarkMatchFloat64GreaterGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64GreaterThanGeneric(a, 5, bits)
 			}
@@ -1032,12 +1032,12 @@ func BenchmarkMatchFloat64GreaterGeneric(B *testing.B) {
 // BenchmarkMatchFloat64GreaterAVX2/65536-8      50000  29792 ns/op	17598.11 MB/s
 // BenchmarkMatchFloat64GreaterAVX2/131072-8     30000  60542 ns/op	17319.64 MB/s
 func BenchmarkMatchFloat64GreaterAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64GreaterThanAVX2(a, 5, bits)
 			}
@@ -1053,12 +1053,12 @@ func BenchmarkMatchFloat64GreaterAVX2(B *testing.B) {
 // BenchmarkMatchFloat64GreaterAVX2Scalar/65535-8  	  50000 28420 ns/op	18447.55 MB/s
 // BenchmarkMatchFloat64GreaterAVX2Scalar/131071-8 	  30000 66203 ns/op	15838.59 MB/s
 func BenchmarkMatchFloat64GreaterAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64GreaterThanAVX2(a, 5, bits)
 			}
@@ -1230,12 +1230,12 @@ func TestMatchFloat64GreaterEqualAVX2(T *testing.T) {
 // BenchmarkMatchFloat64GreaterEqualGeneric/65536-8    20000  86678 ns/op	6048.67 MB/s
 // BenchmarkMatchFloat64GreaterEqualGeneric/131072-8   10000 176572 ns/op	5938.52 MB/s
 func BenchmarkMatchFloat64GreaterEqualGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64GreaterThanEqualGeneric(a, 5, bits)
 			}
@@ -1250,12 +1250,12 @@ func BenchmarkMatchFloat64GreaterEqualGeneric(B *testing.B) {
 // BenchmarkMatchFloat64GreaterEqualAVX2/65536-8   	   50000  30125 ns/op	17403.22 MB/s
 // BenchmarkMatchFloat64GreaterEqualAVX2/131072-8  	   20000  60686 ns/op	17278.49 MB/s
 func BenchmarkMatchFloat64GreaterEqualAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64GreaterThanEqualAVX2(a, 5, bits)
 			}
@@ -1271,12 +1271,12 @@ func BenchmarkMatchFloat64GreaterEqualAVX2(B *testing.B) {
 // BenchmarkMatchFloat64GreaterEqualAVX2Scalar/65535-8 	   50000 28860 ns/op	18166.11 MB/s
 // BenchmarkMatchFloat64GreaterEqualAVX2Scalar/131071-8    30000 74479 ns/op	14078.70 MB/s
 func BenchmarkMatchFloat64GreaterEqualAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64GreaterThanEqualAVX2(a, 5, bits)
 			}
@@ -1464,12 +1464,12 @@ func TestMatchFloat64BetweenAVX2(T *testing.T) {
 // BenchmarkMatchFloat64BetweenGeneric/65536-8     20000   77084 ns/op	6801.51 MB/s
 // BenchmarkMatchFloat64BetweenGeneric/131072-8    10000  155968 ns/op	6722.99 MB/s
 func BenchmarkMatchFloat64BetweenGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64BetweenGeneric(a, 5, 10, bits)
 			}
@@ -1484,12 +1484,12 @@ func BenchmarkMatchFloat64BetweenGeneric(B *testing.B) {
 // BenchmarkMatchFloat64BetweenAVX2/65536-8  	   50000 33769 ns/op	15525.48 MB/s
 // BenchmarkMatchFloat64BetweenAVX2/131072-8 	   20000 67585 ns/op	15514.80 MB/s
 func BenchmarkMatchFloat64BetweenAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64BetweenAVX2(a, 5, 10, bits)
 			}
@@ -1505,12 +1505,12 @@ func BenchmarkMatchFloat64BetweenAVX2(B *testing.B) {
 // BenchmarkMatchFloat64BetweenAVX2Scalar/65535-8 	   50000 34510 ns/op	15191.90 MB/s
 // BenchmarkMatchFloat64BetweenAVX2Scalar/131071-8	   20000 68741 ns/op	15253.86 MB/s
 func BenchmarkMatchFloat64BetweenAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randFloat64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randFloat64Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * 8))
+			B.SetBytes(int64(n.l * 8))
 			for i := 0; i < B.N; i++ {
 				matchFloat64BetweenAVX2(a, 5, 10, bits)
 			}
