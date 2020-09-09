@@ -109,19 +109,19 @@ var (
 
 	// extreme values
 	int32TestSlice_3 = []int32{
-        0,0,
+		0, 0,
 		math.MaxInt8, math.MinInt8,
 		math.MaxInt16, math.MinInt16,
 		math.MaxInt32, math.MinInt32,
-        0,0,
+		0, 0,
 		math.MaxInt8, math.MinInt8,
 		math.MaxInt16, math.MinInt16,
 		math.MaxInt32, math.MinInt32,
-        0,0,
+		0, 0,
 		math.MaxInt8, math.MinInt8,
 		math.MaxInt16, math.MinInt16,
 		math.MaxInt32, math.MinInt32,
-        0,0,
+		0, 0,
 		math.MaxInt8, math.MinInt8,
 		math.MaxInt16, math.MinInt16,
 		math.MaxInt32, math.MinInt32,
@@ -283,6 +283,7 @@ func TestMatchInt32EqualGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt32EqualAVX2(T *testing.T) {
 	for _, c := range int32EqualCases {
@@ -313,26 +314,27 @@ func TestMatchInt32EqualAVX2(T *testing.T) {
 // Equal benchmarks
 //
 func BenchmarkMatchInt32EqualGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32EqualGeneric(a, 5, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchInt32EqualAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32EqualAVX2(a, 5, bits)
 			}
@@ -342,12 +344,12 @@ func BenchmarkMatchInt32EqualAVX2(B *testing.B) {
 
 // force scalar codepath by making last block <32 entries
 func BenchmarkMatchInt32EqualAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32EqualAVX2(a, 5, bits)
 			}
@@ -470,6 +472,7 @@ func TestMatchInt32LessGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt32LessAVX2(T *testing.T) {
 	for _, c := range int32LessCases {
@@ -500,26 +503,27 @@ func TestMatchInt32LessAVX2(T *testing.T) {
 // Less benchmarks
 //
 func BenchmarkMatchInt32LessGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32LessThanGeneric(a, 5, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchInt32LessAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32LessThanAVX2(a, 5, bits)
 			}
@@ -529,12 +533,12 @@ func BenchmarkMatchInt32LessAVX2(B *testing.B) {
 
 // force scalar codepath by making last block <32 entries
 func BenchmarkMatchInt32LessAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32LessThanAVX2(a, 5, bits)
 			}
@@ -657,6 +661,7 @@ func TestMatchInt32LessEqualGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt32LessEqualAVX2(T *testing.T) {
 	for _, c := range int32LessEqualCases {
@@ -687,26 +692,27 @@ func TestMatchInt32LessEqualAVX2(T *testing.T) {
 // Less equal benchmarks
 //
 func BenchmarkMatchInt32LessEqualGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32LessThanEqualGeneric(a, 5, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchInt32LessEqualAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32LessThanEqualAVX2(a, 5, bits)
 			}
@@ -716,12 +722,12 @@ func BenchmarkMatchInt32LessEqualAVX2(B *testing.B) {
 
 // force scalar codepath by making last block <32 entries
 func BenchmarkMatchInt32LessEqualAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32LessThanEqualAVX2(a, 5, bits)
 			}
@@ -844,6 +850,7 @@ func TestMatchInt32GreaterGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt32GreaterAVX2(T *testing.T) {
 	for _, c := range int32GreaterCases {
@@ -874,26 +881,27 @@ func TestMatchInt32GreaterAVX2(T *testing.T) {
 // Greater benchmarks
 //
 func BenchmarkMatchInt32GreaterGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32GreaterThanGeneric(a, 5, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchInt32GreaterAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32GreaterThanAVX2(a, 5, bits)
 			}
@@ -903,12 +911,12 @@ func BenchmarkMatchInt32GreaterAVX2(B *testing.B) {
 
 // force scalar codepath by making last block <32 entries
 func BenchmarkMatchInt32GreaterAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32GreaterThanAVX2(a, 5, bits)
 			}
@@ -1031,6 +1039,7 @@ func TestMatchInt32GreaterEqualGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt32GreaterEqualAVX2(T *testing.T) {
 	for _, c := range int32GreaterEqualCases {
@@ -1061,26 +1070,27 @@ func TestMatchInt32GreaterEqualAVX2(T *testing.T) {
 // Greater equal benchmarks
 //
 func BenchmarkMatchInt32GreaterEqualGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32GreaterThanEqualGeneric(a, 5, bits)
 			}
 		})
 	}
 }
+
 /*
 func BenchmarkMatchInt32GreaterEqualAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32GreaterThanEqualAVX2(a, 5, bits)
 			}
@@ -1090,12 +1100,12 @@ func BenchmarkMatchInt32GreaterEqualAVX2(B *testing.B) {
 
 // force scalar codepath by making last block <32 entries
 func BenchmarkMatchInt32GreaterEqualAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32GreaterThanEqualAVX2(a, 5, bits)
 			}
@@ -1231,6 +1241,7 @@ func TestMatchInt32BetweenGeneric(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt32BetweenAVX2(T *testing.T) {
 	for _, c := range int32BetweenCases {
@@ -1267,12 +1278,12 @@ func TestMatchInt32BetweenAVX2(T *testing.T) {
 // BenchmarkMatchInt32BetweenGeneric/65536-8  20000   80903 ns/op	6480.44 MB/s
 // BenchmarkMatchInt32BetweenGeneric/131072-8 10000  158714 ns/op	6606.70 MB/s
 func BenchmarkMatchInt32BetweenGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32BetweenGeneric(a, 5, 10, bits)
 			}
@@ -1287,12 +1298,12 @@ func BenchmarkMatchInt32BetweenGeneric(B *testing.B) {
 // BenchmarkMatchInt32BetweenAVX2/65536-8  	   50000  28742 ns/op	18240.79 MB/s
 // BenchmarkMatchInt32BetweenAVX2/131072-8 	   20000  60508 ns/op	17329.33 MB/s
 /*func BenchmarkMatchInt32BetweenAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32BetweenAVX2(a, 5, 10, bits)
 			}
@@ -1308,12 +1319,12 @@ func BenchmarkMatchInt32BetweenGeneric(B *testing.B) {
 // BenchmarkMatchInt32BetweenAVX2Scalar/65535-8      50000  28695 ns/op	18270.74 MB/s
 // BenchmarkMatchInt32BetweenAVX2Scalar/131071-8     30000  59239 ns/op	17700.62 MB/s
 func BenchmarkMatchInt32BetweenAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randInt32Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt32Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Int32Size))
+			B.SetBytes(int64(n.l * Int32Size))
 			for i := 0; i < B.N; i++ {
 				matchInt32BetweenAVX2(a, 5, 10, bits)
 			}
