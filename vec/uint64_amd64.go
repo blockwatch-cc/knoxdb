@@ -47,10 +47,9 @@ func matchUint64GreaterThanEqualAVX512(src []uint64, val uint64, bits []byte) in
 //go:noescape
 func matchUint64BetweenAVX512(src []uint64, a, b uint64, bits []byte) int64
 
-
 func matchUint64Equal(src []uint64, val uint64, bits []byte) int64 {
-    switch {
-	case useAVX512_BW:
+	switch {
+	case useAVX512_F:
 		return matchUint64EqualAVX512(src, val, bits)
 	case useAVX2:
 		return matchUint64EqualAVX2(src, val, bits)

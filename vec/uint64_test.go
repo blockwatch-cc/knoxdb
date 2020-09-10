@@ -1,6 +1,5 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//
 
 package vec
 
@@ -203,11 +202,15 @@ var uint64EqualCases = []Uint64MatchTest{
 	CreateUint64TestCase("l32", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 32),
 	CreateUint64TestCase("l64", append(uint64TestSlice_1, uint64TestSlice_0...), uint64EqualTestMatch_1, 0,
 		append(uint64EqualTestResult_1, uint64EqualTestResult_0...), 64),
+	CreateUint64TestCase("l128", append(uint64TestSlice_1, uint64TestSlice_0...), uint64EqualTestMatch_1, 0,
+		append(uint64EqualTestResult_1, uint64EqualTestResult_0...), 128),
+	CreateUint64TestCase("l63", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 63),
 	CreateUint64TestCase("l31", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 31),
 	CreateUint64TestCase("l23", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 23),
-	CreateUint64TestCase("l15", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 14),
+	CreateUint64TestCase("l15", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 15),
 	CreateUint64TestCase("l7", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 7),
 	// with extreme values
+	CreateUint64TestCase("ext64", uint64TestSlice_2, uint64EqualTestMatch_2, 0, uint64EqualTestResult_2, 64),
 	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64EqualTestMatch_2, 0, uint64EqualTestResult_2, 32),
 	CreateUint64TestCase("ext31", uint64TestSlice_2, uint64EqualTestMatch_2, 0, uint64EqualTestResult_2, 31),
 }
@@ -255,8 +258,8 @@ func TestMatchUint64EqualAVX2(T *testing.T) {
 }
 
 func TestMatchUint64EqualAVX512(T *testing.T) {
-	if !useAVX512_BW {
-		return
+	if !useAVX512_F {
+		T.Skip("AVX512F not available. Skipping TestMatchUint64EqualAVX512.")
 	}
 	for _, c := range uint64EqualCases {
 		// pre-allocate the result slice and fill with poison
@@ -329,8 +332,8 @@ func BenchmarkMatchUint64EqualAVX2Scalar(B *testing.B) {
 }
 
 func BenchmarkMatchUint64EqualAVX512(B *testing.B) {
-	if !useAVX512_BW {
-		return
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchUint64EqualAVX512.")
 	}
 	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
@@ -347,8 +350,8 @@ func BenchmarkMatchUint64EqualAVX512(B *testing.B) {
 
 // force scalar codepath by making last block <32 entries
 func BenchmarkMatchUint64EqualAVX512Scalar(B *testing.B) {
-	if !useAVX512_BW {
-		return
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchUint64EqualAVX512Scalar.")
 	}
 	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {

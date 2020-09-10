@@ -28,39 +28,61 @@ TEXT ·matchUint64EqualAVX512(SB), NOSPLIT, $0-64
 
 	TESTQ	BX, BX
 	JLE		done
-	CMPQ	BX, $31      // slices smaller than 32 byte are handled separately
+	CMPQ	BX, $63      // slices smaller than 64 values are handled separately
 	JBE		prep_scalar
 
 prep_avx2:
 	VBROADCASTSD    val+24(FP), Z0            // load val into AVX2 reg
 	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
 
-// works for >= 32 int64 (i.e. 256 bytes of data)
+// works for >= 64 uint64 (i.e. 512 bytes of data)
 loop_avx2:
 	VPERMQ   	0(SI), Z10, Z1 
 	VPCMPEQQ	Z1, Z0, K1
+    
 	VPERMQ   	64(SI), Z10, Z2
 	VPCMPEQQ	Z2, Z0, K2
+    KSHIFTLQ    $8, K2, K2
+    KORQ        K1, K2, K1
+
 	VPERMQ   	128(SI), Z10, Z3
 	VPCMPEQQ	Z3, Z0, K3
+    KSHIFTLD    $16, K3, K3
+    KORQ        K1, K3, K1
+
 	VPERMQ   	192(SI), Z10, Z4
 	VPCMPEQQ	Z4, Z0, K4
-	
-    KSHIFTLQ    $8, K2, K2
-    KORD        K1, K2, K1
-    KSHIFTLD    $16, K3, K3
     KSHIFTLQ    $24, K4, K4
-    KORD        K3, K4, K3
-    KORD        K1, K3, K1
+    KORQ        K1, K4, K1
 
-	KMOVD		K1, (DI)    // write the lower 32 bits to the output slice
-	KMOVD		K1, AX
+	VPERMQ   	256(SI), Z10, Z5 
+	VPCMPEQQ	Z5, Z0, K5
+    KSHIFTLQ    $32, K5, K5
+    KORQ        K1, K5, K1
+
+	VPERMQ   	320(SI), Z10, Z6
+	VPCMPEQQ	Z6, Z0, K6
+    KSHIFTLQ    $40, K6, K6
+    KORQ        K1, K6, K1
+
+	VPERMQ   	384(SI), Z10, Z7
+	VPCMPEQQ	Z7, Z0, K7
+    KSHIFTLQ    $48, K7, K7
+    KORQ        K1, K7, K1
+
+	VPERMQ   	448(SI), Z10, Z8
+	VPCMPEQQ	Z8, Z0, K2
+    KSHIFTLQ    $56, K2, K2
+    KORQ        K1, K2, K1
+
+	KMOVQ		K1, (DI)    // write the lower 32 bits to the output slice
+	KMOVQ		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
-	LEAQ		256(SI), SI
-	LEAQ		4(DI), DI
-	SUBQ		$32, BX
-	CMPQ		BX, $32
+	LEAQ		512(SI), SI
+	LEAQ		8(DI), DI
+	SUBQ		$64, BX
+	CMPQ		BX, $64
 	JB		 	exit_avx2
 	JMP		 	loop_avx2
 
@@ -94,7 +116,7 @@ loop_scalar:
 	LEAQ		1(DI), DI
 	SUBQ		$8, BX 
 	// CMPQ		BX, $8 
-	JB		 	exit_scalar
+	JBE		 	exit_scalar
 	JMP		 	loop_scalar    
     
 exit_scalar:
