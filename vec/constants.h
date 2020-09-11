@@ -1,5 +1,5 @@
-// Copyright (c) 2019 KIDTSUNAMI
-// Author: alex@kidtsunami.com
+// Copyright (c) 2020 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
 
 // const_0x55 is the static input for POPCOUNT(VAL) sub-algorithm
 DATA const_0x55<>+0x00(SB)/1, $(0x55)

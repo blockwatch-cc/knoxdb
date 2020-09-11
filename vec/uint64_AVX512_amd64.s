@@ -12,14 +12,14 @@
 //   SI = src_base
 //   DI = bits_base
 //   BX = src_len
-//   DX = comparison value for scalar
-//   Y0 = comparison value for AVX2
+//   Z0 = comparison value
 // internal:
 //   AX = intermediate
 //   R9 = population count
-//   Y9 = permute control mask
-//   Y10 = shuffle control mask
-//   Y1-Y8 = vector data
+//   Z10 = permute control mask
+//   Z1-Z8 = vector data
+//   K1-K7 = comparision results
+//   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
 TEXT ·matchUint64EqualAVX512(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
@@ -29,14 +29,21 @@ TEXT ·matchUint64EqualAVX512(SB), NOSPLIT, $0-64
 	TESTQ	BX, BX
 	JLE		done
 	CMPQ	BX, $63      // slices smaller than 64 values are handled separately
-	JBE		prep_scalar
+	JBE		prep_small
 
-prep_avx2:
+prep_big:
+    MOVQ    BX, CX
+    ANDQ    $0xffffffffffffffc0, CX     // number of values processed in big blocks
+    ANDQ    $0x3f, BX                   // number of values processed in small blocks
+    SHRQ    $3, CX                      // number of bytes to write to output slice (div by 8)
+    ADDQ    CX, DI                      // move DI to the end of the array
+    NEGQ    CX
+    
 	VBROADCASTSD    val+24(FP), Z0            // load val into AVX2 reg
 	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
 
 // works for >= 64 uint64 (i.e. 512 bytes of data)
-loop_avx2:
+loop_big:
 	VPERMQ   	0(SI), Z10, Z1 
 	VPCMPEQQ	Z1, Z0, K1
     
@@ -75,32 +82,25 @@ loop_avx2:
     KSHIFTLQ    $56, K2, K2
     KORQ        K1, K2, K1
 
-	KMOVQ		K1, (DI)    // write the lower 32 bits to the output slice
+	KMOVQ		K1, (DI)(CX*1)    // write 64 bits to the output slice
 	KMOVQ		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
-	LEAQ		512(SI), SI
-	LEAQ		8(DI), DI
-	SUBQ		$64, BX
-	CMPQ		BX, $64
-	JB		 	exit_avx2
-	JMP		 	loop_avx2
+	ADDQ		$512, SI
+	ADDQ		$8, CX
+	JZ		 	exit_big
+	JMP		 	loop_big
 
-exit_avx2:
-	VZEROUPPER           // clear upper part of Y regs, prevents AVX-SSE penalty
+exit_big:
 	TESTQ	BX, BX
 	JLE		done
 
-prep_scalar:
-	VBROADCASTSD    val+24(FP), Z0            // load val into AVX2 reg
+prep_small:
+	VBROADCASTSD    val+24(FP), Z0            // load val into AVX512 reg
 	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
 	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
-    //MOVQ            $-1, CX   //fill with all ones
 
-loop_scalar:
-    //MOVQ            $-1, CX   //fill with all ones
-    //BZHIL       BX, CX, CX // zero bit positions > BX
-    //KMOVB       CX, K1    // copy 8 bits to mask register
+loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
     VPCMPGTQ        Z11, Z9, K1     // mask greater than BX
@@ -112,17 +112,17 @@ loop_scalar:
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
-	LEAQ		64(SI), SI
-	LEAQ		1(DI), DI
+	ADDQ		$64, SI
+	ADDQ		$1, DI
 	SUBQ		$8, BX 
-	// CMPQ		BX, $8 
-	JBE		 	exit_scalar
-	JMP		 	loop_scalar    
+	JBE		 	exit_small
+	JMP		 	loop_small    
     
-exit_scalar:
-	VZEROUPPER           // clear upper part of Y regs, prevents AVX-SSE penalty
-
+exit_small:
+    // nothings to do
+    
 done:
+	VZEROUPPER           // clear upper part of Z regs, prevents AVX-SSE penalty
 	MOVQ	R9, ret+56(FP)
 	RET
 
