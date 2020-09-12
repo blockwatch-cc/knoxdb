@@ -158,21 +158,21 @@ prep_avx2:
 
 // works for >= 32 float64 (i.e. 256 bytes of data)
 loop_avx2:
-	VCMPPD		$0x0c, 0(SI), Y0, Y1          // imm8 = $0x0c (not equal, nosignal)
-	VCMPPD		$0x0c, 32(SI), Y0, Y2
-	VCMPPD		$0x0c, 64(SI), Y0, Y3
-	VCMPPD		$0x0c, 96(SI), Y0, Y4
-	VCMPPD		$0x0c, 128(SI), Y0, Y5
+	VCMPPD		$0x04, 0(SI), Y0, Y1          // imm8 = $0x0c (not equal, nosignal)
+	VCMPPD		$0x04, 32(SI), Y0, Y2
+	VCMPPD		$0x04, 64(SI), Y0, Y3
+	VCMPPD		$0x04, 96(SI), Y0, Y4
+	VCMPPD		$0x04, 128(SI), Y0, Y5
 	VPACKSSDW	Y1, Y5, Y1
 	VPERMD		Y1, Y9, Y1
-	VCMPPD		$0x0c, 160(SI), Y0, Y6
+	VCMPPD		$0x04, 160(SI), Y0, Y6
 	VPACKSSDW	Y2, Y6, Y2
 	VPERMD		Y2, Y9, Y2
 	VPACKSSDW	Y2, Y1, Y1
-	VCMPPD		$0x0c, 192(SI), Y0, Y7
+	VCMPPD		$0x04, 192(SI), Y0, Y7
 	VPACKSSDW	Y3, Y7, Y3
 	VPERMD		Y3, Y9, Y3
-	VCMPPD		$0x0c, 224(SI), Y0, Y8
+	VCMPPD		$0x04, 224(SI), Y0, Y8
 	VPACKSSDW	Y4, Y8, Y4
 	VPERMD		Y4, Y9, Y4
 	VPACKSSDW	Y4, Y3, Y3
@@ -205,12 +205,13 @@ prep_scalar:
 
 // for remainders of <32 float64
 scalar:
-	VCOMISD	(SI), X0
-	JPS	    scalar_shift    // sets partity flag when either value is NaN
+	VUCOMISD	(SI), X0    // sets partity flag when either value is NaN
 	SETNE	R10
+	JNP	    scalar_shift    
+    MOVQ    $1, R10         // NaN is always not equal
+scalar_shift:
 	ADDL	R10, R9
 	ORL	 	R10, AX
-scalar_shift:
 	SHLL	$1, AX
 	LEAQ	8(SI), SI
 	DECL	BX

@@ -196,7 +196,7 @@ var (
 	float64EqualTestMatch_4  float64 = math.NaN()
 	float64EqualTestCount_4  int64   = 0
 
-	float64NotEqualTestResult_4         = []byte{0x0, 0x0, 0x0, 0x0}
+	float64NotEqualTestResult_4         = []byte{0xff, 0xff, 0xff, 0xff}
 	float64NotEqualTestMatch_4  float64 = math.NaN()
 
 	float64LessTestResult_4         = []byte{0x0, 0x0, 0x0, 0x0}
