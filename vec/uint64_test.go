@@ -151,12 +151,6 @@ func CreateUint64TestCase(name string, slice []uint64, match, match2 uint64, res
 	}
 
 	// create new slice by concat of given slice
-	/*new_slice := make([]uint64, length)
-	for i, _ := range new_slice {
-		new_slice[i] = slice[i%len(slice)]
-	}*/
-
-	// create new slice by concat of given slice
 	// we make it a little bit longer check buffer overruns
 	var new_slice []uint64
 	var l int = length
@@ -345,12 +339,12 @@ func BenchmarkMatchUint64EqualAVX512(B *testing.B) {
 	if !useAVX512_F {
 		B.Skip("AVX512F not available. Skipping BenchmarkMatchUint64EqualAVX512.")
 	}
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randUint64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randUint64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Uint64Size))
+			B.SetBytes(int64(n.l * Uint64Size))
 			for i := 0; i < B.N; i++ {
 				matchUint64EqualAVX512(a, math.MaxUint64/2, bits)
 			}
@@ -363,12 +357,12 @@ func BenchmarkMatchUint64EqualAVX512Scalar(B *testing.B) {
 	if !useAVX512_F {
 		B.Skip("AVX512F not available. Skipping BenchmarkMatchUint64EqualAVX512Scalar.")
 	}
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randUint64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randUint64Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Uint64Size))
+			B.SetBytes(int64(n.l * Uint64Size))
 			for i := 0; i < B.N; i++ {
 				matchUint64EqualAVX512(a, math.MaxUint64/2, bits)
 			}
@@ -486,12 +480,12 @@ func TestMatchUint64NotEqualAVX512(T *testing.T) {
 // NotEqual benchmarks
 //
 func BenchmarkMatchUint64NotEqualGeneric(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randUint64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randUint64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Uint64Size))
+			B.SetBytes(int64(n.l * Uint64Size))
 			for i := 0; i < B.N; i++ {
 				matchUint64NotEqualGeneric(a, math.MaxUint64/2, bits)
 			}
@@ -500,12 +494,12 @@ func BenchmarkMatchUint64NotEqualGeneric(B *testing.B) {
 }
 
 func BenchmarkMatchUint64NotEqualAVX2(B *testing.B) {
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randUint64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randUint64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Uint64Size))
+			B.SetBytes(int64(n.l * Uint64Size))
 			for i := 0; i < B.N; i++ {
 				matchUint64NotEqualAVX2(a, math.MaxUint64/2, bits)
 			}
@@ -515,12 +509,12 @@ func BenchmarkMatchUint64NotEqualAVX2(B *testing.B) {
 
 // force scalar codepath by making last block <32 entries
 func BenchmarkMatchUint64NotEqualAVX2Scalar(B *testing.B) {
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randUint64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randUint64Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Uint64Size))
+			B.SetBytes(int64(n.l * Uint64Size))
 			for i := 0; i < B.N; i++ {
 				matchUint64NotEqualAVX2(a, math.MaxUint64/2, bits)
 			}
@@ -532,12 +526,12 @@ func BenchmarkMatchUint64NotEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
 		B.Skip("AVX512F not available. Skipping BenchmarkMatchUint64NotEqualAVX512.")
 	}
-	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randUint64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randUint64Slice(n.l, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Uint64Size))
+			B.SetBytes(int64(n.l * Uint64Size))
 			for i := 0; i < B.N; i++ {
 				matchUint64NotEqualAVX512(a, math.MaxUint64/2, bits)
 			}
@@ -548,14 +542,14 @@ func BenchmarkMatchUint64NotEqualAVX512(B *testing.B) {
 // force scalar codepath by making last block <32 entries
 func BenchmarkMatchUint64NotEqualAVX512Scalar(B *testing.B) {
 	if !useAVX512_F {
-		B.Skip("AVX512F not available. Skipping BenchmarkMatchUint64EqualAVX512Scalar.")
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchUint64NotEqualAVX512Scalar.")
 	}
-	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := randUint64Slice(n, 1)
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randUint64Slice(n.l-1, 1)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
-			B.SetBytes(int64(n * Uint64Size))
+			B.SetBytes(int64(n.l * Uint64Size))
 			for i := 0; i < B.N; i++ {
 				matchUint64NotEqualAVX512(a, math.MaxUint64/2, bits)
 			}
@@ -710,6 +704,41 @@ func BenchmarkMatchUint64LessAVX2Scalar(B *testing.B) {
 			B.SetBytes(int64(n.l * Uint64Size))
 			for i := 0; i < B.N; i++ {
 				matchUint64LessThanAVX2(a, math.MaxUint64/2, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchUint64LessAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchUint64LessAVX512.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randUint64Slice(n.l, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Uint64Size))
+			for i := 0; i < B.N; i++ {
+				matchUint64LessThanAVX512(a, math.MaxUint64/2, bits)
+			}
+		})
+	}
+}
+
+// force scalar codepath by making last block <32 entries
+func BenchmarkMatchUint64LessAVX512Scalar(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchUint64LessAVX512Scalar.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randUint64Slice(n.l-1, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Uint64Size))
+			for i := 0; i < B.N; i++ {
+				matchUint64LessThanAVX512(a, math.MaxUint64/2, bits)
 			}
 		})
 	}
