@@ -567,6 +567,52 @@ func TestMatchFloat64NotEqualAVX2(T *testing.T) {
 	}
 }
 
+
+// -----------------------------------------------------------------------------
+// Not Equal benchmarks
+
+func BenchmarkMatchFloat64NotEqualGeneric(B *testing.B) {
+	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randFloat64Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * 8))
+			for i := 0; i < B.N; i++ {
+				matchFloat64NotEqualGeneric(a, 5, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchFloat64NotEqualAVX2(B *testing.B) {
+	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randFloat64Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * 8))
+			for i := 0; i < B.N; i++ {
+				matchFloat64NotEqualAVX2(a, 5, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchFloat64NotEqualAVX2Scalar(B *testing.B) {
+	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randFloat64Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * 8))
+			for i := 0; i < B.N; i++ {
+				matchFloat64NotEqualAVX2(a, 5, bits)
+			}
+		})
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Less Testcases
 //
