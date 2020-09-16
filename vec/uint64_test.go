@@ -208,6 +208,7 @@ var uint64EqualCases = []Uint64MatchTest{
 		count:  0,
 	},
 	CreateUint64TestCase("vec1", uint64TestSlice_0, uint64EqualTestMatch_0, 0, uint64EqualTestResult_0, 32),
+	CreateUint64TestCase("vec2", uint64TestSlice_0, uint64EqualTestMatch_0, 0, uint64EqualTestResult_0, 64),
 	CreateUint64TestCase("l32", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 32),
 	CreateUint64TestCase("l64", append(uint64TestSlice_1, uint64TestSlice_0...), uint64EqualTestMatch_1, 0,
 		append(uint64EqualTestResult_1, uint64EqualTestResult_0...), 64),
@@ -394,6 +395,7 @@ var uint64NotEqualCases = []Uint64MatchTest{
 		count:  0,
 	},
 	CreateUint64TestCase("vec1", uint64TestSlice_0, uint64NotEqualTestMatch_0, 0, uint64NotEqualTestResult_0, 32),
+	CreateUint64TestCase("vec2", uint64TestSlice_0, uint64NotEqualTestMatch_0, 0, uint64NotEqualTestResult_0, 64),
 	CreateUint64TestCase("l32", uint64TestSlice_1, uint64NotEqualTestMatch_1, 0, uint64NotEqualTestResult_1, 32),
 	CreateUint64TestCase("l64", append(uint64TestSlice_1, uint64TestSlice_0...), uint64NotEqualTestMatch_1, 0,
 		append(uint64NotEqualTestResult_1, uint64NotEqualTestResult_0...), 64),
@@ -580,14 +582,19 @@ var uint64LessCases = []Uint64MatchTest{
 		count:  0,
 	},
 	CreateUint64TestCase("vec1", uint64TestSlice_0, uint64LessTestMatch_0, 0, uint64LessTestResult_0, 32),
+	CreateUint64TestCase("vec2", uint64TestSlice_0, uint64LessTestMatch_0, 0, uint64LessTestResult_0, 64),
 	CreateUint64TestCase("l32", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 32),
 	CreateUint64TestCase("l64", append(uint64TestSlice_1, uint64TestSlice_0...), uint64LessTestMatch_1, 0,
 		append(uint64LessTestResult_1, uint64LessTestResult_0...), 64),
+	CreateUint64TestCase("l128", append(uint64TestSlice_1, uint64TestSlice_0...), uint64LessTestMatch_1, 0,
+		append(uint64LessTestResult_1, uint64LessTestResult_0...), 128),
+	CreateUint64TestCase("l63", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 63),
 	CreateUint64TestCase("l31", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 31),
 	CreateUint64TestCase("l23", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 23),
 	CreateUint64TestCase("l15", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 15),
 	CreateUint64TestCase("l7", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 7),
 	// with extreme values
+	CreateUint64TestCase("ext64", uint64TestSlice_2, uint64LessTestMatch_2, 0, uint64LessTestResult_2, 64),
 	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64LessTestMatch_2, 0, uint64LessTestResult_2, 32),
 	CreateUint64TestCase("ext31", uint64TestSlice_2, uint64LessTestMatch_2, 0, uint64LessTestResult_2, 31),
 }
@@ -619,6 +626,34 @@ func TestMatchUint64LessAVX2(T *testing.T) {
 		}
 		bits = bits[:l]
 		cnt := matchUint64LessThanAVX2(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
+func TestMatchUint64LessAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.Skip("AVX512F not available. Skipping TestMatchUint64LessAVX512.")
+	}
+	for _, c := range uint64LessCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint64LessThanAVX512(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
