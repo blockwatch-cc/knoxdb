@@ -185,10 +185,10 @@ var (
 //  - len: desired length of the test case
 func CreateInt64TestCase(name string, slice []int64, match, match2 int64, result []byte, length int) Int64MatchTest {
 	if len(slice)%8 != 0 {
-		panic("CreateUint64TestCase: length of slice has to be a multiple of 8")
+		panic("CreateInt64TestCase: length of slice has to be a multiple of 8")
 	}
 	if len(result) != bitFieldLen(len(slice)) {
-		panic("CreateUint64TestCase: length of slice and length of result does not match")
+		panic("CreateInt64TestCase: length of slice and length of result does not match")
 	}
 
 	// create new slice by concat of given slice
@@ -288,6 +288,34 @@ func TestMatchInt64EqualAVX2(T *testing.T) {
 		}
 		bits = bits[:l]
 		cnt := matchInt64EqualAVX2(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
+func TestMatchInt64EqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.Skip("AVX512F not available. Skipping TestMatchInt64EqualAVX512.")
+	}
+	for _, c := range int64EqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt64EqualAVX512(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -428,6 +456,34 @@ func TestMatchInt64NotEqualAVX2(T *testing.T) {
 	}
 }
 
+func TestMatchInt64NotEqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.Skip("AVX512F not available. Skipping TestMatchInt64NotEqualAVX512.")
+	}
+	for _, c := range int64NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt64NotEqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Not Equal benchmarks
 //
@@ -538,6 +594,34 @@ func TestMatchInt64LessAVX2(T *testing.T) {
 		}
 		bits = bits[:l]
 		cnt := matchInt64LessThanAVX2(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
+func TestMatchInt64LessAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.Skip("AVX512F not available. Skipping TestMatchInt64LessAVX512.")
+	}
+	for _, c := range int64LessCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt64LessThanAVX512(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -678,6 +762,34 @@ func TestMatchInt64LessEqualAVX2(T *testing.T) {
 	}
 }
 
+func TestMatchInt64LessEqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.Skip("AVX512F not available. Skipping TestMatchInt64LessEqualAVX512.")
+	}
+	for _, c := range int64LessEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt64LessThanEqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
 //
@@ -788,6 +900,34 @@ func TestMatchInt64GreaterAVX2(T *testing.T) {
 		}
 		bits = bits[:l]
 		cnt := matchInt64GreaterThanAVX2(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
+func TestMatchInt64GreaterAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.Skip("AVX512F not available. Skipping TestMatchInt64GreaterAVX512.")
+	}
+	for _, c := range int64GreaterCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt64GreaterThanAVX512(c.slice, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -928,6 +1068,34 @@ func TestMatchInt64GreaterEqualAVX2(T *testing.T) {
 	}
 }
 
+func TestMatchInt64GreaterEqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.Skip("AVX512F not available. Skipping TestMatchInt64GreaterEqualAVX512.")
+	}
+	for _, c := range int64GreaterEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt64GreaterThanEqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
 //
@@ -1038,6 +1206,34 @@ func TestMatchInt64BetweenAVX2(T *testing.T) {
 		}
 		bits = bits[:l]
 		cnt := matchInt64BetweenAVX2(c.slice, c.match, c.match2, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
+func TestMatchInt64BetweenAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.Skip("AVX512F not available. Skipping TestMatchInt64BetweenAVX512.")
+	}
+	for _, c := range int64BetweenCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt64BetweenAVX512(c.slice, c.match, c.match2, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
