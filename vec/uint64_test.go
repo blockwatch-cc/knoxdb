@@ -1326,14 +1326,19 @@ var uint64BetweenCases = []Uint64MatchTest{
 		count:  0,
 	},
 	CreateUint64TestCase("vec1", uint64TestSlice_0, uint64BetweenTestMatch_0, uint64BetweenTestMatch_0b, uint64BetweenTestResult_0, 32),
+	CreateUint64TestCase("vec2", uint64TestSlice_0, uint64BetweenTestMatch_0, uint64BetweenTestMatch_0b, uint64BetweenTestResult_0, 64),
 	CreateUint64TestCase("l32", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 32),
 	CreateUint64TestCase("l64", append(uint64TestSlice_1, uint64TestSlice_0...), uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b,
 		append(uint64BetweenTestResult_1, uint64BetweenTestResult_0...), 64),
+	CreateUint64TestCase("l128", append(uint64TestSlice_1, uint64TestSlice_0...), uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b,
+		append(uint64BetweenTestResult_1, uint64BetweenTestResult_0...), 128),
+	CreateUint64TestCase("l63", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 63),
 	CreateUint64TestCase("l31", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 31),
 	CreateUint64TestCase("l23", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 23),
 	CreateUint64TestCase("l15", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 15),
 	CreateUint64TestCase("l7", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 7),
 	// with extreme values
+	CreateUint64TestCase("ext64", uint64TestSlice_2, uint64BetweenTestMatch_2, uint64BetweenTestMatch_1b, uint64BetweenTestResult_2, 64),
 	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64BetweenTestMatch_2, uint64BetweenTestMatch_1b, uint64BetweenTestResult_2, 32),
 	CreateUint64TestCase("ext31", uint64TestSlice_2, uint64BetweenTestMatch_2, uint64BetweenTestMatch_1b, uint64BetweenTestResult_2, 31),
 }
@@ -1365,6 +1370,34 @@ func TestMatchUint64BetweenAVX2(T *testing.T) {
 		}
 		bits = bits[:l]
 		cnt := matchUint64BetweenAVX2(c.slice, c.match, c.match2, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
+func TestMatchUint64BetweenAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.Skip("AVX512F not available. Skipping TestMatchUint64BetweenAVX512.")
+	}
+	for _, c := range uint64BetweenCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint64BetweenAVX512(c.slice, c.match, c.match2, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -1439,6 +1472,40 @@ func BenchmarkMatchUint64BetweenAVX2Scalar(B *testing.B) {
 			B.SetBytes(int64(n.l * Uint64Size))
 			for i := 0; i < B.N; i++ {
 				matchUint64BetweenAVX2(a, 5, 10, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchUint64BetweenAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchUint64BetweenAVX512.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randUint64Slice(n.l, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Uint64Size))
+			for i := 0; i < B.N; i++ {
+				matchUint64BetweenAVX512(a, 5, 10, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchUint64BetweenAVX512Scalar(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchUint64BetweenAVX512Scalar.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randUint64Slice(n.l-1, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Uint64Size))
+			for i := 0; i < B.N; i++ {
+				matchUint64BetweenAVX512(a, 5, 10, bits)
 			}
 		})
 	}

@@ -567,7 +567,6 @@ func TestMatchFloat64NotEqualAVX2(T *testing.T) {
 	}
 }
 
-
 // -----------------------------------------------------------------------------
 // Not Equal benchmarks
 
