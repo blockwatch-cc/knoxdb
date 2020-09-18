@@ -377,6 +377,41 @@ func BenchmarkMatchInt64EqualAVX2Scalar(B *testing.B) {
 	}
 }
 
+func BenchmarkMatchInt64EqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64EqualAVX512.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64EqualAVX512(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+// force scalar codepath by making last block <32 entries
+func BenchmarkMatchInt64EqualAVX512Scalar(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64EqualAVX512Scalar.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l-1, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64EqualAVX512(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Not Equal Testcases
 //
@@ -525,6 +560,41 @@ func BenchmarkMatchInt64NotEqualAVX2Scalar(B *testing.B) {
 			B.SetBytes(int64(n.l * Int64Size))
 			for i := 0; i < B.N; i++ {
 				matchInt64NotEqualAVX2(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchInt64NotEqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64NotEqualAVX512.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64NotEqualAVX512(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+// force scalar codepath by making last block <32 entries
+func BenchmarkMatchInt64NotEqualAVX512Scalar(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64NotEqualAVX512Scalar.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l-1, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64NotEqualAVX512(a, math.MaxInt64/2, bits)
 			}
 		})
 	}
@@ -683,6 +753,41 @@ func BenchmarkMatchInt64LessAVX2Scalar(B *testing.B) {
 	}
 }
 
+func BenchmarkMatchInt64LessAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64LessAVX512.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64LessThanAVX512(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+// force scalar codepath by making last block <32 entries
+func BenchmarkMatchInt64LessAVX512Scalar(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64LessAVX512Scalar.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l-1, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64LessThanAVX512(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
 //
@@ -831,6 +936,41 @@ func BenchmarkMatchInt64LessEqualAVX2Scalar(B *testing.B) {
 			B.SetBytes(int64(n.l * Int64Size))
 			for i := 0; i < B.N; i++ {
 				matchInt64LessThanEqualAVX2(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchInt64LessEqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64LessEqualAVX512.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64LessThanEqualAVX512(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+// force scalar codepath by making last block <32 entries
+func BenchmarkMatchInt64LessEqualAVX512Scalar(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64LessEqualAVX512Scalar.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l-1, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64LessThanEqualAVX512(a, math.MaxInt64/2, bits)
 			}
 		})
 	}
@@ -989,6 +1129,41 @@ func BenchmarkMatchInt64GreaterAVX2Scalar(B *testing.B) {
 	}
 }
 
+func BenchmarkMatchInt64GreaterAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64GreaterAVX512.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64GreaterThanAVX512(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+// force scalar codepath by making last block <32 entries
+func BenchmarkMatchInt64GreaterAVX512Scalar(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64GreaterAVX512Scalar.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l-1, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64GreaterThanAVX512(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
 //
@@ -1137,6 +1312,41 @@ func BenchmarkMatchInt64GreaterEqualAVX2Scalar(B *testing.B) {
 			B.SetBytes(int64(n.l * Int64Size))
 			for i := 0; i < B.N; i++ {
 				matchInt64GreaterThanEqualAVX2(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchInt64GreaterEqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64GreaterEqualAVX512.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64GreaterThanEqualAVX512(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+// force scalar codepath by making last block <32 entries
+func BenchmarkMatchInt64GreaterEqualAVX512Scalar(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64GreaterEqualAVX512Scalar.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l-1, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64GreaterThanEqualAVX512(a, math.MaxInt64/2, bits)
 			}
 		})
 	}
@@ -1308,6 +1518,40 @@ func BenchmarkMatchInt64BetweenAVX2Scalar(B *testing.B) {
 			B.SetBytes(int64(n.l * Int64Size))
 			for i := 0; i < B.N; i++ {
 				matchInt64BetweenAVX2(a, 5, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchInt64BetweenAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64BetweenAVX512.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64BetweenAVX512(a, 5, 10, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchInt64BetweenAVX512Scalar(B *testing.B) {
+	if !useAVX512_F {
+		B.Skip("AVX512F not available. Skipping BenchmarkMatchInt64BetweenAVX512Scalar.")
+	}
+	for _, n := range vecBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			a := randInt64Slice(n.l-1, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64BetweenAVX512(a, 5, 10, bits)
 			}
 		})
 	}
