@@ -158,7 +158,7 @@ prep_avx2:
 
 // works for >= 32 float64 (i.e. 256 bytes of data)
 loop_avx2:
-	VCMPPD		$0x04, 0(SI), Y0, Y1          // imm8 = $0x0c (not equal, nosignal)
+	VCMPPD		$0x04, 0(SI), Y0, Y1          // imm8 = $0x04 (not equal, nosignal)
 	VCMPPD		$0x04, 32(SI), Y0, Y2
 	VCMPPD		$0x04, 64(SI), Y0, Y3
 	VCMPPD		$0x04, 96(SI), Y0, Y4
