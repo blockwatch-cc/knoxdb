@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/bits"
 	"math/rand"
 	"testing"
 )
@@ -35,6 +36,20 @@ type Int64MatchTest struct {
 }
 
 var (
+	int64TestSlice_0 = []int64{
+		0, 5, 3, 5, // Y1
+		7, 5, 5, 9, // Y2
+		3, 5, 5, 5, // Y3
+		5, 0, 113, 12, // Y4
+
+		4, 2, 3, 5, // Y5
+		7, 3, 5, 9, // Y6
+		3, 13, 5, 5, // Y7
+		42, 5, 113, 12, // Y8
+	}
+	int64NotEqualTestMatch_0  int64 = 5
+	int64NotEqualTestResult_0       = []byte{0xa9, 0x87, 0xed, 0xcb}
+
 	// positive values only
 	int64TestSlice_1 = []int64{
 		5, 2, 3, 4,
@@ -49,6 +64,9 @@ var (
 	int64EqualTestResult_1       = []byte{0x82, 0x42, 0x23, 0x70}
 	int64EqualTestMatch_1  int64 = 5
 	int64EqualTestCount_1  int64 = 10
+
+	int64NotEqualTestResult_1       = []byte{0x7d, 0xbd, 0xdc, 0x8f}
+	int64NotEqualTestMatch_1  int64 = 5
 
 	int64LessTestResult_1       = []byte{0x70, 0x00, 0x00, 0x00}
 	int64LessTestMatch_1  int64 = 5
@@ -85,6 +103,9 @@ var (
 	int64EqualTestResult_2       = []byte{0x80, 0x0, 0x0, 0x0}
 	int64EqualTestMatch_2  int64 = -5
 	int64EqualTestCount_2  int64 = 1
+
+	int64NotEqualTestResult_2       = []byte{0x7f, 0xff, 0xff, 0xff}
+	int64NotEqualTestMatch_2  int64 = -5
 
 	int64LessTestResult_2       = []byte{0xe1, 0x04, 0x04, 0x21}
 	int64LessTestMatch_2  int64 = 5
@@ -130,6 +151,9 @@ var (
 	int64EqualTestMatch_3  int64 = math.MinInt64
 	int64EqualTestCount_3  int64 = 4
 
+	int64NotEqualTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
+	int64NotEqualTestMatch_3  int64 = math.MinInt64
+
 	int64LessTestResult_3       = []byte{0x0, 0x0, 0x0, 0x00}
 	int64LessTestMatch_3  int64 = math.MinInt64
 	int64LessTestCount_3  int64 = 0
@@ -151,6 +175,60 @@ var (
 	int64BetweenTestMatch_3b int64 = math.MaxInt64
 	int64BetweenTestCount_3  int64 = 8
 )
+
+// creates an uint64 test case from the given slice
+// Parameters:
+//  - name: desired name of the test case
+//  - slice: the slice for constructing the test case
+//  - match, match2: are only copied to the resulting test case
+//  - result: result for the given slice
+//  - len: desired length of the test case
+func CreateInt64TestCase(name string, slice []int64, match, match2 int64, result []byte, length int) Int64MatchTest {
+	if len(slice)%8 != 0 {
+		panic("CreateUint64TestCase: length of slice has to be a multiple of 8")
+	}
+	if len(result) != bitFieldLen(len(slice)) {
+		panic("CreateUint64TestCase: length of slice and length of result does not match")
+	}
+
+	// create new slice by concat of given slice
+	/*new_slice := make([]uint64, length)
+	for i, _ := range new_slice {
+		new_slice[i] = slice[i%len(slice)]
+	}*/
+
+	// create new slice by concat of given slice
+	// we make it a little bit longer check buffer overruns
+	var new_slice []int64
+	var l int = length
+	for l > 0 {
+		new_slice = append(new_slice, slice...)
+		l -= len(slice)
+	}
+
+	// create new result by concat of given result
+	new_result := make([]byte, bitFieldLen(length))
+	for i, _ := range new_result {
+		new_result[i] = result[i%len(result)]
+	}
+	// clear the last unused bits
+	if length%8 != 0 {
+		new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+	}
+	// count number of ones
+	var cnt int
+	for _, v := range new_result {
+		cnt += bits.OnesCount8(v)
+	}
+	return Int64MatchTest{
+		name:   name,
+		slice:  new_slice[:length],
+		match:  match,
+		match2: match2,
+		result: new_result,
+		count:  int64(cnt),
+	}
+}
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
@@ -350,6 +428,124 @@ func BenchmarkMatchInt64EqualAVX2Scalar(B *testing.B) {
 			B.SetBytes(int64(n * Int64Size))
 			for i := 0; i < B.N; i++ {
 				matchInt64EqualAVX2(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Not Equal Testcases
+//
+var int64NotEqualCases = []Int64MatchTest{
+	{
+		name:   "l0",
+		slice:  make([]int64, 0),
+		match:  int64NotEqualTestMatch_1,
+		result: []byte{},
+		count:  0,
+	}, {
+		name:   "nil",
+		slice:  nil,
+		match:  int64NotEqualTestMatch_1,
+		result: []byte{},
+		count:  0,
+	},
+	CreateInt64TestCase("vec1", int64TestSlice_0, int64NotEqualTestMatch_0, 0, int64NotEqualTestResult_0, 32),
+	CreateInt64TestCase("l32", int64TestSlice_1, int64NotEqualTestMatch_1, 0, int64NotEqualTestResult_1, 32),
+	CreateInt64TestCase("l64", int64TestSlice_1, int64NotEqualTestMatch_1, 0, int64NotEqualTestResult_1, 64),
+	CreateInt64TestCase("l31", int64TestSlice_1, int64NotEqualTestMatch_1, 0, int64NotEqualTestResult_1, 31),
+	CreateInt64TestCase("l23", int64TestSlice_1, int64NotEqualTestMatch_1, 0, int64NotEqualTestResult_1, 23),
+	CreateInt64TestCase("l15", int64TestSlice_1, int64NotEqualTestMatch_1, 0, int64NotEqualTestResult_1, 15),
+	CreateInt64TestCase("l7", int64TestSlice_1, int64NotEqualTestMatch_1, 0, int64NotEqualTestResult_1, 7),
+	CreateInt64TestCase("neg32", int64TestSlice_2, int64NotEqualTestMatch_2, 0, int64NotEqualTestResult_2, 32),
+	CreateInt64TestCase("neg31", int64TestSlice_2, int64NotEqualTestMatch_2, 0, int64NotEqualTestResult_2, 31),
+	CreateInt64TestCase("ext32", int64TestSlice_3, int64NotEqualTestMatch_3, 0, int64NotEqualTestResult_3, 32),
+	CreateInt64TestCase("ext31", int64TestSlice_3, int64NotEqualTestMatch_3, 0, int64NotEqualTestResult_3, 31),
+}
+
+func TestMatchInt64NotEqualGeneric(T *testing.T) {
+	for _, c := range int64NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		bits := make([]byte, bitFieldLen(len(c.slice)))
+		cnt := matchInt64NotEqualGeneric(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+	}
+}
+
+func TestMatchInt64NotEqualAVX2(T *testing.T) {
+	for _, c := range int64NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt64NotEqualAVX2(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Not Equal benchmarks
+//
+func BenchmarkMatchInt64NotEqualGeneric(B *testing.B) {
+	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randInt64Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64NotEqualGeneric(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchInt64NotEqualAVX2(B *testing.B) {
+	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randInt64Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64NotEqualAVX2(a, math.MaxInt64/2, bits)
+			}
+		})
+	}
+}
+
+// force scalar codepath by making last block <32 entries
+func BenchmarkMatchInt64NotEqualAVX2Scalar(B *testing.B) {
+	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randInt64Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * Int64Size))
+			for i := 0; i < B.N; i++ {
+				matchInt64NotEqualAVX2(a, math.MaxInt64/2, bits)
 			}
 		})
 	}

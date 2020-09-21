@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/bits"
 	"math/rand"
 	"testing"
 )
@@ -23,7 +24,7 @@ func randFloat64Slice(n, u int) []float64 {
 	return s
 }
 
-type Float64Test struct {
+type Float64MatchTest struct {
 	name   string
 	slice  []float64
 	match  float64
@@ -33,6 +34,20 @@ type Float64Test struct {
 }
 
 var (
+	float64TestSlice_0 = []float64{
+		0, 5, 3, 5, // Y1
+		7, 5, 5, 9, // Y2
+		3, 5, 5, 5, // Y3
+		5, 0, 113, 12, // Y4
+
+		4, 2, 3, 5, // Y5
+		7, 3, 5, 9, // Y6
+		3, 13, 5, 5, // Y7
+		42, 5, 113, 12, // Y8
+	}
+	float64NotEqualTestMatch_0  float64 = 5
+	float64NotEqualTestResult_0         = []byte{0xa9, 0x87, 0xed, 0xcb}
+
 	// positive int values only
 	float64TestSlice_1 = []float64{
 		5, 2, 3, 4,
@@ -47,6 +62,9 @@ var (
 	float64EqualTestResult_1         = []byte{0x82, 0x42, 0x23, 0x70}
 	float64EqualTestMatch_1  float64 = 5
 	float64EqualTestCount_1  int64   = 10
+
+	float64NotEqualTestResult_1         = []byte{0x7d, 0xbd, 0xdc, 0x8f}
+	float64NotEqualTestMatch_1  float64 = 5
 
 	float64LessTestResult_1         = []byte{0x70, 0x00, 0x00, 0x00}
 	float64LessTestMatch_1  float64 = 5
@@ -83,6 +101,9 @@ var (
 	float64EqualTestResult_2         = []byte{0x80, 0x0, 0x0, 0x0}
 	float64EqualTestMatch_2  float64 = -5.12
 	float64EqualTestCount_2  int64   = 1
+
+	float64NotEqualTestResult_2         = []byte{0x7f, 0xff, 0xff, 0xff}
+	float64NotEqualTestMatch_2  float64 = -5.12
 
 	float64LessTestResult_2         = []byte{0x01, 0x04, 0x04, 0x21}
 	float64LessTestMatch_2  float64 = -5.12
@@ -128,6 +149,9 @@ var (
 	float64EqualTestMatch_3  float64 = math.MaxFloat64
 	float64EqualTestCount_3  int64   = 8
 
+	float64NotEqualTestResult_3         = []byte{0xdd, 0xdd, 0xdd, 0xdd}
+	float64NotEqualTestMatch_3  float64 = math.MaxFloat64
+
 	float64LessTestResult_3         = []byte{0xdd, 0xdd, 0xdd, 0xdd}
 	float64LessTestMatch_3  float64 = math.MaxFloat64
 	float64LessTestCount_3  int64   = 24
@@ -172,6 +196,9 @@ var (
 	float64EqualTestMatch_4  float64 = math.NaN()
 	float64EqualTestCount_4  int64   = 0
 
+	float64NotEqualTestResult_4         = []byte{0xff, 0xff, 0xff, 0xff}
+	float64NotEqualTestMatch_4  float64 = math.NaN()
+
 	float64LessTestResult_4         = []byte{0x0, 0x0, 0x0, 0x0}
 	float64LessTestMatch_4  float64 = math.NaN()
 	float64LessTestCount_4  int64   = 0
@@ -194,11 +221,65 @@ var (
 	float64BetweenTestCount_4  int64   = 0
 )
 
+// creates an uint64 test case from the given slice
+// Parameters:
+//  - name: desired name of the test case
+//  - slice: the slice for constructing the test case
+//  - match, match2: are only copied to the resulting test case
+//  - result: result for the given slice
+//  - len: desired length of the test case
+func CreateFloat64TestCase(name string, slice []float64, match, match2 float64, result []byte, length int) Float64MatchTest {
+	if len(slice)%8 != 0 {
+		panic("CreateUint64TestCase: length of slice has to be a multiple of 8")
+	}
+	if len(result) != bitFieldLen(len(slice)) {
+		panic("CreateUint64TestCase: length of slice and length of result does not match")
+	}
+
+	// create new slice by concat of given slice
+	/*new_slice := make([]uint64, length)
+	for i, _ := range new_slice {
+		new_slice[i] = slice[i%len(slice)]
+	}*/
+
+	// create new slice by concat of given slice
+	// we make it a little bit longer check buffer overruns
+	var new_slice []float64
+	var l int = length
+	for l > 0 {
+		new_slice = append(new_slice, slice...)
+		l -= len(slice)
+	}
+
+	// create new result by concat of given result
+	new_result := make([]byte, bitFieldLen(length))
+	for i, _ := range new_result {
+		new_result[i] = result[i%len(result)]
+	}
+	// clear the last unused bits
+	if length%8 != 0 {
+		new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+	}
+	// count number of ones
+	var cnt int
+	for _, v := range new_result {
+		cnt += bits.OnesCount8(v)
+	}
+	return Float64MatchTest{
+		name:   name,
+		slice:  new_slice[:length],
+		match:  match,
+		match2: match2,
+		result: new_result,
+		count:  int64(cnt),
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Equal Testcases
 //
-var float64EqualCases = []Float64Test{
-	Float64Test{
+var float64EqualCases = []Float64MatchTest{
+	Float64MatchTest{
 		name: "vec1",
 		slice: []float64{
 			0, 5, 3, 5, // Y1
@@ -413,10 +494,130 @@ func BenchmarkMatchFloat64EqualAVX2Scalar(B *testing.B) {
 }
 
 // -----------------------------------------------------------------------------
+// Not Equal Testcases
+//
+var float64NotEqualCases = []Float64MatchTest{
+	{
+		name:   "l0",
+		slice:  make([]float64, 0),
+		match:  float64NotEqualTestMatch_1,
+		result: []byte{},
+		count:  0,
+	}, {
+		name:   "nil",
+		slice:  nil,
+		match:  float64NotEqualTestMatch_1,
+		result: []byte{},
+		count:  0,
+	},
+	CreateFloat64TestCase("vec1", float64TestSlice_0, float64NotEqualTestMatch_0, 0, float64NotEqualTestResult_0, 32),
+	CreateFloat64TestCase("l32", float64TestSlice_1, float64NotEqualTestMatch_1, 0, float64NotEqualTestResult_1, 32),
+	CreateFloat64TestCase("l64", float64TestSlice_1, float64NotEqualTestMatch_1, 0, float64NotEqualTestResult_1, 64),
+	CreateFloat64TestCase("l31", float64TestSlice_1, float64NotEqualTestMatch_1, 0, float64NotEqualTestResult_1, 31),
+	CreateFloat64TestCase("l23", float64TestSlice_1, float64NotEqualTestMatch_1, 0, float64NotEqualTestResult_1, 23),
+	CreateFloat64TestCase("l15", float64TestSlice_1, float64NotEqualTestMatch_1, 0, float64NotEqualTestResult_1, 15),
+	CreateFloat64TestCase("l7", float64TestSlice_1, float64NotEqualTestMatch_1, 0, float64NotEqualTestResult_1, 7),
+	CreateFloat64TestCase("neg32", float64TestSlice_2, float64NotEqualTestMatch_2, 0, float64NotEqualTestResult_2, 32),
+	CreateFloat64TestCase("neg31", float64TestSlice_2, float64NotEqualTestMatch_2, 0, float64NotEqualTestResult_2, 31),
+	CreateFloat64TestCase("ext32", float64TestSlice_3, float64NotEqualTestMatch_3, 0, float64NotEqualTestResult_3, 32),
+	CreateFloat64TestCase("ext31", float64TestSlice_3, float64NotEqualTestMatch_3, 0, float64NotEqualTestResult_3, 31),
+	CreateFloat64TestCase("nan32", float64TestSlice_4, float64NotEqualTestMatch_4, 0, float64NotEqualTestResult_4, 32),
+	CreateFloat64TestCase("nan31", float64TestSlice_4, float64NotEqualTestMatch_4, 0, float64NotEqualTestResult_4, 31),
+}
+
+func TestMatchFloat64NotEqualGeneric(T *testing.T) {
+	for _, c := range float64NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		bits := make([]byte, bitFieldLen(len(c.slice)))
+		cnt := matchFloat64NotEqualGeneric(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+	}
+}
+
+func TestMatchFloat64NotEqualAVX2(T *testing.T) {
+	for _, c := range float64NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchFloat64NotEqualAVX2(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
+
+// -----------------------------------------------------------------------------
+// Not Equal benchmarks
+
+func BenchmarkMatchFloat64NotEqualGeneric(B *testing.B) {
+	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randFloat64Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * 8))
+			for i := 0; i < B.N; i++ {
+				matchFloat64NotEqualGeneric(a, 5, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchFloat64NotEqualAVX2(B *testing.B) {
+	for _, n := range []int{32, 128, 1024, 4096, 64 * 1024, 128 * 1024} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randFloat64Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * 8))
+			for i := 0; i < B.N; i++ {
+				matchFloat64NotEqualAVX2(a, 5, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchFloat64NotEqualAVX2Scalar(B *testing.B) {
+	for _, n := range []int{32 - 1, 128 - 1, 1024 - 1, 4096 - 1, 64*1024 - 1, 128*1024 - 1} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			a := randFloat64Slice(n, 1)
+			bits := make([]byte, bitFieldLen(len(a)))
+			B.ResetTimer()
+			B.SetBytes(int64(n * 8))
+			for i := 0; i < B.N; i++ {
+				matchFloat64NotEqualAVX2(a, 5, bits)
+			}
+		})
+	}
+}
+
+// -----------------------------------------------------------------------------
 // Less Testcases
 //
-var float64LessCases = []Float64Test{
-	Float64Test{
+var float64LessCases = []Float64MatchTest{
+	Float64MatchTest{
 		name: "vec1",
 		slice: []float64{
 			0, 5, 3, 5, // Y1
@@ -633,8 +834,8 @@ func BenchmarkMatchFloat64LessAVX2Scalar(B *testing.B) {
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
 //
-var float64LessEqualCases = []Float64Test{
-	Float64Test{
+var float64LessEqualCases = []Float64MatchTest{
+	Float64MatchTest{
 		name: "vec1",
 		slice: []float64{
 			0, 5, 3, 5, // Y1
@@ -851,8 +1052,8 @@ func BenchmarkMatchFloat64LessEqualAVX2Scalar(B *testing.B) {
 // -----------------------------------------------------------------------------
 // Greater Testcases
 //
-var float64GreaterCases = []Float64Test{
-	Float64Test{
+var float64GreaterCases = []Float64MatchTest{
+	Float64MatchTest{
 		name: "vec1",
 		slice: []float64{
 			0, 5, 3, 5, // Y1
@@ -1069,8 +1270,8 @@ func BenchmarkMatchFloat64GreaterAVX2Scalar(B *testing.B) {
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
 //
-var float64GreaterEqualCases = []Float64Test{
-	Float64Test{
+var float64GreaterEqualCases = []Float64MatchTest{
+	Float64MatchTest{
 		name: "vec1",
 		slice: []float64{
 			0, 5, 3, 5, // Y1
@@ -1287,8 +1488,8 @@ func BenchmarkMatchFloat64GreaterEqualAVX2Scalar(B *testing.B) {
 // -----------------------------------------------------------------------------
 // Between Testcases
 //
-var float64BetweenCases = []Float64Test{
-	Float64Test{
+var float64BetweenCases = []Float64MatchTest{
+	Float64MatchTest{
 		name: "vec1",
 		slice: []float64{
 			0, 5, 3, 5, // Y1

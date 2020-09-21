@@ -80,4 +80,3 @@ func matchUint32BetweenGeneric(src []uint32, a, b uint32, bits []byte) int64 {
 	}
 	return cnt
 }
-
