@@ -101,8 +101,8 @@ func randUint32Slice(n, u int) []uint32 {
 	for i := 0; i < n; i++ {
 		s[i] = rand.Uint32()
 	}
-	for i := 0; i < u; i++ {
-		s = append(s, s[:n]...)
+	for i := 1; i < u; i++ {
+		copy(s[i*n:], s[:n])
 	}
 	return s
 }

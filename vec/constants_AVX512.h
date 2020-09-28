@@ -1,18 +1,6 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
-// const_0x55 is the static input for POPCOUNT(VAL) sub-algorithm
-DATA const_0x55<>+0x00(SB)/1, $(0x55)
-GLOBL const_0x55<>(SB), (RODATA+NOPTR), $1
-
-// const_0x33 is the static input for POPCOUNT(VAL) sub-algorithm
-DATA const_0x33<>+0x00(SB)/1, $(0x33)
-GLOBL const_0x33<>(SB), (RODATA+NOPTR), $1
-
-// const_0x0f is the static input for POPCOUNT(VAL) sub-algorithm
-DATA const_0x0f<>+0x00(SB)/1, $(0x0f)
-GLOBL const_0x0f<>(SB), (RODATA+NOPTR), $1
-
 // shuffle64 is the VPERMQ input required to permute bytes in each input word
 // used by all 64 bit compare algorithms
 DATA shuffle64<>+0x00(SB)/8, $(7)
