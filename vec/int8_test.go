@@ -19,8 +19,8 @@ func randInt8Slice(n, u int) []int8 {
 	for i := 0; i < n; i++ {
 		s[i] = int8(rand.Intn(math.MaxInt8 + 1))
 	}
-	for i := 0; i < u; i++ {
-		s = append(s, s[:n]...)
+	for i := 1; i < u; i++ {
+		copy(s[i*n:], s[:n])
 	}
 	return s
 }

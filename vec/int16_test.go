@@ -19,8 +19,8 @@ func randInt16Slice(n, u int) []int16 {
 	for i := 0; i < n; i++ {
 		s[i] = int16(rand.Intn(math.MaxInt16 + 1))
 	}
-	for i := 0; i < u; i++ {
-		s = append(s, s[:n]...)
+	for i := 1; i < u; i++ {
+		copy(s[i*n:], s[:n])
 	}
 	return s
 }

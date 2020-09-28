@@ -129,8 +129,8 @@ func randUint64Slice(n, u int) []uint64 {
 	for i := 0; i < n; i++ {
 		s[i] = rand.Uint64()
 	}
-	for i := 0; i < u; i++ {
-		s = append(s, s[:n]...)
+	for i := 1; i < u; i++ {
+		copy(s[i*n:], s[:n])
 	}
 	return s
 }
