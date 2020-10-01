@@ -207,7 +207,7 @@ prep_scalar:
 scalar:
 	VUCOMISD	(SI), X0    // sets partity flag when either value is NaN
 	SETNE	R10
-	JNP	    scalar_shift    
+	JNP	    scalar_shift
     MOVQ    $1, R10         // NaN is always not equal
 scalar_shift:
 	ADDL	R10, R9

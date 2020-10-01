@@ -1,4 +1,4 @@
-// Copyright (c) 2019 - 2020 Blockwatch Data Inc.
+// Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 // const_0x55 is the static input for POPCOUNT(VAL) sub-algorithm

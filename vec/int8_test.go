@@ -19,8 +19,8 @@ func randInt8Slice(n, u int) []int8 {
 	for i := 0; i < n; i++ {
 		s[i] = int8(rand.Intn(math.MaxInt8 + 1))
 	}
-	for i := 0; i < u; i++ {
-		s = append(s, s[:n]...)
+	for i := 1; i < u; i++ {
+		copy(s[i*n:], s[:n])
 	}
 	return s
 }
@@ -321,7 +321,7 @@ func BenchmarkMatchInt8EqualGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8EqualGeneric(a, 5, bits)
+				matchInt8EqualGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -336,7 +336,7 @@ func BenchmarkMatchInt8EqualAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8EqualAVX2(a, 5, bits)
+				matchInt8EqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -351,7 +351,7 @@ func BenchmarkMatchInt8EqualAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8EqualAVX2(a, 5, bits)
+				matchInt8EqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -510,7 +510,7 @@ func BenchmarkMatchInt8LessGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanGeneric(a, 5, bits)
+				matchInt8LessThanGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -525,7 +525,7 @@ func BenchmarkMatchInt8LessAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanAVX2(a, 5, bits)
+				matchInt8LessThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -540,7 +540,7 @@ func BenchmarkMatchInt8LessAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanAVX2(a, 5, bits)
+				matchInt8LessThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -699,7 +699,7 @@ func BenchmarkMatchInt8LessEqualGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanEqualGeneric(a, 5, bits)
+				matchInt8LessThanEqualGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -714,7 +714,7 @@ func BenchmarkMatchInt8LessEqualAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanEqualAVX2(a, 5, bits)
+				matchInt8LessThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -729,7 +729,7 @@ func BenchmarkMatchInt8LessEqualAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanEqualAVX2(a, 5, bits)
+				matchInt8LessThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -888,7 +888,7 @@ func BenchmarkMatchInt8GreaterGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanGeneric(a, 5, bits)
+				matchInt8GreaterThanGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -903,7 +903,7 @@ func BenchmarkMatchInt8GreaterAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanAVX2(a, 5, bits)
+				matchInt8GreaterThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -918,7 +918,7 @@ func BenchmarkMatchInt8GreaterAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanAVX2(a, 5, bits)
+				matchInt8GreaterThanAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -1077,7 +1077,7 @@ func BenchmarkMatchInt8GreaterEqualGeneric(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanEqualGeneric(a, 5, bits)
+				matchInt8GreaterThanEqualGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -1092,7 +1092,7 @@ func BenchmarkMatchInt8GreaterEqualAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanEqualAVX2(a, 5, bits)
+				matchInt8GreaterThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
@@ -1107,7 +1107,7 @@ func BenchmarkMatchInt8GreaterEqualAVX2Scalar(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanEqualAVX2(a, 5, bits)
+				matchInt8GreaterThanEqualAVX2(a, math.MaxInt8/2, bits)
 			}
 		})
 	}

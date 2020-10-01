@@ -18,7 +18,10 @@ Blockwatch PackDB columnar database for fast blockchain analytics.
 * **util** utility helpers for ints, strings, times, durations
 * **vec** vector library
 
-## Links
+## Links / Competitors / Inspirations
+
+OmniSciDB (MapD Core)
+https://github.com/omnisci/omniscidb
 
 TiDB
 - https://www.crunchbase.com/organization/pingcap
@@ -28,6 +31,7 @@ TiDB
 Clickhouse
 - https://clickhouse.yandex/docs/en/data_types/decimal/
 - https://www.altinity.com/blog/2020/1/1/clickhouse-cost-efficiency-in-action-analyzing-500-billion-rows-on-an-intel-nuc
+- https://presentations.clickhouse.tech/original_website/benchmark.html
 
 Brytlyt (GPU database, closed source)
 - https://www.brytlyt.com/blog/gpu-databases-today-big-challenge-joins/#
@@ -45,6 +49,10 @@ M3DB (Uber)
 
 QuestDB (raised 2.1M in 2019/20, London)
 - https://github.com/questdb/questdb // embedded, Postgres protocol, zero-GC, low latency
+
+Apache Arrow (Columnar in-memory data processing library)
+- https://github.com/apache/arrow
+- https://arrow.apache.org/docs/index.html
 
 Benchmarks
 - https://tech.marksblogg.com/benchmarks.html

@@ -178,7 +178,7 @@ loop_avx2:
 	VPSHUFB		Y10, Y1, Y1
 
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
-	XORQ	    $0xffffffff, AX // convert EQ to NE
+	NOTL	    AX // convert EQ to NE
 	MOVL		AX, (DI)    // write the lower 32 bits to the output slice
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
@@ -206,7 +206,7 @@ prep_scalar:
 scalar:
 	MOVQ	(SI), R8
 	CMPQ	R8, DX
-	SETEQ	R10
+	SETNE	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
 	SHLL	$1, AX
@@ -218,7 +218,6 @@ scalar:
 scalar_done:
 	SHLL	CX, AX        // fill 32bits by shifting
 	BSWAPL	AX            // swap bytes into place for big endian output
-	XORQ	$0xffffffff, AX // convert EQ to NE
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
