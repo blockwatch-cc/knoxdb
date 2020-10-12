@@ -26,7 +26,7 @@ TEXT ·matchInt64EqualAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VBROADCASTSD    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
+	VMOVDQU64		perm64<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -143,7 +143,7 @@ TEXT ·matchInt64NotEqualAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VBROADCASTSD    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
+	VMOVDQU64		perm64<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -263,7 +263,7 @@ TEXT ·matchInt64LessThanAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VBROADCASTSD    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
+	VMOVDQU64		perm64<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -380,7 +380,7 @@ TEXT ·matchInt64LessThanEqualAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VBROADCASTSD    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
+	VMOVDQU64		perm64<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -497,7 +497,7 @@ TEXT ·matchInt64GreaterThanAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VBROADCASTSD    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
+	VMOVDQU64		perm64<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -614,7 +614,7 @@ TEXT ·matchInt64GreaterThanEqualAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VBROADCASTSD    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
+	VMOVDQU64		perm64<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -737,7 +737,7 @@ TEXT ·matchInt64BetweenAVX512(SB), NOSPLIT, $0-72
 	VBROADCASTSD 	b+32(FP), Z0             // load val b into AVX512 reg
 	VPSUBQ			Z12, Z0, Z0              // compute diff
 	VPADDQ			Z13, Z0, Z0
-	VMOVDQU64		shuffle64<>+0x00(SB), Z10    // load shuffle control mask
+	VMOVDQU64		perm64<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done

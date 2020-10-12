@@ -33,8 +33,8 @@ TEXT ·matchUint16EqualAVX2(SB), NOSPLIT, $0-58
 
 prep_avx2:
 	VPBROADCASTW val+24(FP), Y0            // load val into AVX2 reg
-	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQA		shuffle16<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQU		shuffle16<>+0x00(SB), Y10    // load shuffle control mask
 
 // works for >= 32 int16 (i.e. 64 bytes of data)
 loop_avx2:
@@ -138,8 +138,8 @@ TEXT ·matchUint16NotEqualAVX2(SB), NOSPLIT, $0-64
 
 prep_avx2:
 	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
-	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQA		shuffle<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQU		shuffle<>+0x00(SB), Y10    // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
@@ -267,15 +267,15 @@ prep_avx2:
 	VPSLLQ			$63, Y11, Y11                    // create 0x8000.. mask
 	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
-	VMOVDQA			crosslane<>+0x00(SB), Y9         // load permute control mask
-	VMOVDQA			shuffle<>+0x00(SB), Y10          // load shuffle control mask
+	VMOVDQU			crosslane<>+0x00(SB), Y9         // load permute control mask
+	VMOVDQU			shuffle<>+0x00(SB), Y10          // load shuffle control mask
 
 loop_avx2:
-	VMOVDQA		0(SI), Y1      // load values (necessary to flip sign bit)
-	VMOVDQA		32(SI), Y2
-	VMOVDQA		64(SI), Y3
-	VMOVDQA		96(SI), Y4
-	VMOVDQA		128(SI), Y5
+	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
+	VMOVDQU		32(SI), Y2
+	VMOVDQU		64(SI), Y3
+	VMOVDQU		96(SI), Y4
+	VMOVDQU		128(SI), Y5
 	VPXOR		Y11, Y1, Y1    // flip sign bits
 	VPXOR		Y11, Y2, Y2
 	VPXOR		Y11, Y3, Y3
@@ -288,18 +288,18 @@ loop_avx2:
 	VPCMPGTQ	Y5, Y0, Y5
 	VPACKSSDW	Y1, Y5, Y1
 	VPERMD		Y1, Y9, Y1
-	VMOVDQA		160(SI), Y6
+	VMOVDQU		160(SI), Y6
 	VPXOR		Y11, Y6, Y6
 	VPCMPGTQ	Y6, Y0, Y6
 	VPACKSSDW	Y2, Y6, Y2
 	VPERMD		Y2, Y9, Y2
 	VPACKSSDW	Y2, Y1, Y1
-	VMOVDQA		192(SI), Y7
+	VMOVDQU		192(SI), Y7
 	VPXOR		Y11, Y7, Y7
 	VPCMPGTQ	Y7, Y0, Y7
 	VPACKSSDW	Y3, Y7, Y3
 	VPERMD		Y3, Y9, Y3
-	VMOVDQA		224(SI), Y8
+	VMOVDQU		224(SI), Y8
 	VPXOR		Y11, Y8, Y8
 	VPCMPGTQ	Y8, Y0, Y8
 	VPACKSSDW	Y4, Y8, Y4
@@ -407,16 +407,16 @@ prep_avx2:
 	VPSLLQ			$63, Y11, Y11                // create 0x8000.. mask
 	VBROADCASTSD 	val+24(FP), Y0               // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                  // flip sign bit
-	VMOVDQA		 	crosslane<>+0x00(SB), Y9     // load permute control mask
-	VMOVDQA		 	shuffle<>+0x00(SB), Y10      // load shuffle control mask
+	VMOVDQU		 	crosslane<>+0x00(SB), Y9     // load permute control mask
+	VMOVDQU		 	shuffle<>+0x00(SB), Y10      // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
-	VMOVDQA		0(SI), Y1      // load values (necessary to switch operands & flip sign)
-	VMOVDQA		32(SI), Y2
-	VMOVDQA		64(SI), Y3
-	VMOVDQA		96(SI), Y4
-	VMOVDQA		128(SI), Y5
+	VMOVDQU		0(SI), Y1      // load values (necessary to switch operands & flip sign)
+	VMOVDQU		32(SI), Y2
+	VMOVDQU		64(SI), Y3
+	VMOVDQU		96(SI), Y4
+	VMOVDQU		128(SI), Y5
 	VPXOR		Y11, Y1, Y1    // flip sign bits
 	VPXOR		Y11, Y2, Y2
 	VPXOR		Y11, Y3, Y3
@@ -429,18 +429,18 @@ loop_avx2:
 	VPCMPGTQ	Y0, Y5, Y5
 	VPACKSSDW	Y1, Y5, Y1
 	VPERMD		Y1, Y9, Y1
-	VMOVDQA		160(SI), Y6
+	VMOVDQU		160(SI), Y6
 	VPXOR		Y11, Y6, Y6
 	VPCMPGTQ	Y0, Y6, Y6
 	VPACKSSDW	Y2, Y6, Y2
 	VPERMD		Y2, Y9, Y2
 	VPACKSSDW	Y2, Y1, Y1
-	VMOVDQA		192(SI), Y7
+	VMOVDQU		192(SI), Y7
 	VPXOR		Y11, Y7, Y7
 	VPCMPGTQ	Y0, Y7, Y7
 	VPACKSSDW	Y3, Y7, Y3
 	VPERMD		Y3, Y9, Y3
-	VMOVDQA		224(SI), Y8
+	VMOVDQU		224(SI), Y8
 	VPXOR		Y11, Y8, Y8
 	VPCMPGTQ	Y0, Y8, Y8
 	VPACKSSDW	Y4, Y8, Y4
@@ -550,16 +550,16 @@ prep_avx2:
 	VPSLLQ			$63, Y11, Y11                // create 0x8000.. mask
 	VBROADCASTSD 	val+24(FP), Y0               // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                  // flip sign bit
-	VMOVDQA			crosslane<>+0x00(SB), Y9     // load permute control mask
-	VMOVDQA			shuffle<>+0x00(SB), Y10      // load shuffle control mask
+	VMOVDQU			crosslane<>+0x00(SB), Y9     // load permute control mask
+	VMOVDQU			shuffle<>+0x00(SB), Y10      // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
-	VMOVDQA		0(SI), Y1      // load values to flip sign bits & compare switch order
-	VMOVDQA		32(SI), Y2
-	VMOVDQA		64(SI), Y3
-	VMOVDQA		96(SI), Y4
-	VMOVDQA		128(SI), Y5
+	VMOVDQU		0(SI), Y1      // load values to flip sign bits & compare switch order
+	VMOVDQU		32(SI), Y2
+	VMOVDQU		64(SI), Y3
+	VMOVDQU		96(SI), Y4
+	VMOVDQU		128(SI), Y5
 	VPXOR		Y11, Y1, Y1    // flip sign bits
 	VPXOR		Y11, Y2, Y2
 	VPXOR		Y11, Y3, Y3
@@ -572,18 +572,18 @@ loop_avx2:
 	VPCMPGTQ	Y0, Y5, Y5
 	VPACKSSDW	Y1, Y5, Y1
 	VPERMD		Y1, Y9, Y1
-	VMOVDQA		160(SI), Y6
+	VMOVDQU		160(SI), Y6
 	VPXOR		Y11, Y6, Y6
 	VPCMPGTQ	Y0, Y6, Y6
 	VPACKSSDW	Y2, Y6, Y2
 	VPERMD		Y2, Y9, Y2
 	VPACKSSDW	Y2, Y1, Y1
-	VMOVDQA		192(SI), Y7
+	VMOVDQU		192(SI), Y7
 	VPXOR		Y11, Y7, Y7
 	VPCMPGTQ	Y0, Y7, Y7
 	VPACKSSDW	Y3, Y7, Y3
 	VPERMD		Y3, Y9, Y3
-	VMOVDQA		224(SI), Y8
+	VMOVDQU		224(SI), Y8
 	VPXOR		Y11, Y8, Y8
 	VPCMPGTQ	Y0, Y8, Y8
 	VPACKSSDW	Y4, Y8, Y4
@@ -691,16 +691,16 @@ prep_avx2:
 	VPSLLQ			$63, Y11, Y11                // create 0x8000.. mask
 	VBROADCASTSD 	val+24(FP), Y0               // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                  // flip sign bit
-	VMOVDQA			crosslane<>+0x00(SB), Y9     // load permute control mask
-	VMOVDQA			shuffle<>+0x00(SB), Y10      // load shuffle control mask
+	VMOVDQU			crosslane<>+0x00(SB), Y9     // load permute control mask
+	VMOVDQU			shuffle<>+0x00(SB), Y10      // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
-	VMOVDQA		0(SI), Y1      // load values (necessary to flip sign bit)
-	VMOVDQA		32(SI), Y2
-	VMOVDQA		64(SI), Y3
-	VMOVDQA		96(SI), Y4
-	VMOVDQA		128(SI), Y5
+	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
+	VMOVDQU		32(SI), Y2
+	VMOVDQU		64(SI), Y3
+	VMOVDQU		96(SI), Y4
+	VMOVDQU		128(SI), Y5
 	VPXOR		Y11, Y1, Y1    // flip sign bits
 	VPXOR		Y11, Y2, Y2
 	VPXOR		Y11, Y3, Y3
@@ -713,18 +713,18 @@ loop_avx2:
 	VPCMPGTQ	Y5, Y0, Y5
 	VPACKSSDW	Y1, Y5, Y1
 	VPERMD		Y1, Y9, Y1
-	VMOVDQA		160(SI), Y6
+	VMOVDQU		160(SI), Y6
 	VPXOR		Y11, Y6, Y6
 	VPCMPGTQ	Y6, Y0, Y6
 	VPACKSSDW	Y2, Y6, Y2
 	VPERMD		Y2, Y9, Y2
 	VPACKSSDW	Y2, Y1, Y1
-	VMOVDQA		192(SI), Y7
+	VMOVDQU		192(SI), Y7
 	VPXOR		Y11, Y7, Y7
 	VPCMPGTQ	Y7, Y0, Y7
 	VPACKSSDW	Y3, Y7, Y3
 	VPERMD		Y3, Y9, Y3
-	VMOVDQA		224(SI), Y8
+	VMOVDQU		224(SI), Y8
 	VPXOR		Y11, Y8, Y8
 	VPCMPGTQ	Y8, Y0, Y8
 	VPACKSSDW	Y4, Y8, Y4
@@ -845,15 +845,15 @@ prep_avx2:
 	VPSUBQ			Y12, Y0, Y0                      // compute diff
 	VPADDQ			Y13, Y0, Y0
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
-	VMOVDQA			crosslane<>+0x00(SB), Y9         // load permute control mask
-	VMOVDQA			shuffle<>+0x00(SB), Y10          // load shuffle control mask
+	VMOVDQU			crosslane<>+0x00(SB), Y9         // load permute control mask
+	VMOVDQU			shuffle<>+0x00(SB), Y10          // load shuffle control mask
 
 loop_avx2:
-	VMOVDQA		0(SI), Y1      // load values (necessary to flip sign bit)
-	VMOVDQA		32(SI), Y2
-	VMOVDQA		64(SI), Y3
-	VMOVDQA		96(SI), Y4
-	VMOVDQA		128(SI), Y5
+	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
+	VMOVDQU		32(SI), Y2
+	VMOVDQU		64(SI), Y3
+	VMOVDQU		96(SI), Y4
+	VMOVDQU		128(SI), Y5
 	VPSUBQ		Y12, Y1, Y1
 	VPSUBQ		Y12, Y2, Y2
 	VPSUBQ		Y12, Y3, Y3
@@ -871,20 +871,20 @@ loop_avx2:
 	VPCMPGTQ	Y5, Y0, Y5
 	VPACKSSDW	Y1, Y5, Y1
 	VPERMD		Y1, Y9, Y1
-	VMOVDQA		160(SI), Y6
+	VMOVDQU		160(SI), Y6
 	VPSUBQ		Y12, Y6, Y6
 	VPXOR		Y11, Y6, Y6
 	VPCMPGTQ	Y6, Y0, Y6
 	VPACKSSDW	Y2, Y6, Y2
 	VPERMD		Y2, Y9, Y2
 	VPACKSSDW	Y2, Y1, Y1
-	VMOVDQA		192(SI), Y7
+	VMOVDQU		192(SI), Y7
 	VPSUBQ		Y12, Y7, Y7
 	VPXOR		Y11, Y7, Y7
 	VPCMPGTQ	Y7, Y0, Y7
 	VPACKSSDW	Y3, Y7, Y3
 	VPERMD		Y3, Y9, Y3
-	VMOVDQA		224(SI), Y8
+	VMOVDQU		224(SI), Y8
 	VPSUBQ		Y12, Y8, Y8
 	VPXOR		Y11, Y8, Y8
 	VPCMPGTQ	Y8, Y0, Y8
