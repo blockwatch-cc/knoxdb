@@ -242,7 +242,7 @@ type Op struct {
 	IsImplicit   bool      `pack:"m,snappy"      json:"is_implicit"`                    // bc: implicit operation not published on chain
 	Entrypoint   int       `pack:"E,snappy"      json:"entrypoint_id"`                  // entrypoint sequence id
 	IsOrphan     bool      `pack:"O,snappy"      json:"is_orphan"`
-	IsBatch      bool      `pack:"y,snappy"      json:"is_batch"`
+	// IsBatch      bool      `pack:"y,snappy"      json:"is_batch"`
 }
 
 const (
@@ -454,7 +454,7 @@ func run() error {
 	for _, o := range ops {
 		totalVolume += o.Volume
 	}
-	fmt.Printf("Total Volume is %f", totalVolume/1000000)
+	fmt.Printf("Total Volume is %f", float64(totalVolume)/1000000)
 
 	return nil
 }
