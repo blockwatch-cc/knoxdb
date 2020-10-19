@@ -490,6 +490,310 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
 
+// func matchUint64EqualAVX2Newer(src []uint64, val uint64, bits []byte) int64
+//
+// input:
+//   SI = src_base
+//   DI = bits_base
+//   BX = src_len
+//   DX = comparison value for scalar
+//   Y0 = comparison value for AVX2
+// internal:
+//   AX = intermediate
+//   R9 = population count
+//   Y9 = permute control mask
+//   Y10 = shuffle control mask
+//   Y1-Y8 = vector data
+TEXT ·matchUint64EqualAVX2Newer(SB), NOSPLIT, $0-64
+	MOVQ	src_base+0(FP), SI
+	MOVQ	src_len+8(FP), BX
+	MOVQ	bits_base+32(FP), DI
+	XORQ	R9, R9
+
+	TESTQ	BX, BX
+	JLE		done
+	CMPQ	BX, $31      // slices smaller than 32 byte are handled separately
+	JBE		prep_scalar
+
+prep_avx2:
+    MOVQ    BX, CX
+    ANDQ    $0x1f, BX
+    ANDQ    $0xffffffffffffffe0, CX
+    SHRQ    $3, CX
+    ADDQ    CX, DI
+    NEGQ    CX
+	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
+	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+
+// works for >= 32 int64 (i.e. 256 bytes of data)
+loop_avx2:
+	VPCMPEQQ	0(SI), Y0, Y1
+	VPCMPEQQ	32(SI), Y0, Y2
+	VPCMPEQQ	64(SI), Y0, Y3
+	VPCMPEQQ	96(SI), Y0, Y4
+	VPCMPEQQ	128(SI), Y0, Y5
+	VPACKSSDW	Y1, Y2, Y1
+
+	VPCMPEQQ	160(SI), Y0, Y6
+	VPACKSSDW	Y3, Y4, Y3
+
+	VPACKSSDW	Y1, Y3, Y1
+    
+	VPCMPEQQ	192(SI), Y0, Y7
+
+	VPACKSSDW	Y5, Y6, Y5
+	VPCMPEQQ	224(SI), Y0, Y8
+	VPACKSSDW	Y7, Y8, Y7
+	VPACKSSDW	Y5, Y7, Y5
+	VPACKSSWB	Y1, Y5, Y1
+
+	VPERMD		Y1, Y9, Y1
+
+	VPSHUFB		Y10, Y1, Y1
+
+	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
+	MOVL		AX, (DI)(CX*1)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+	ADDQ		$256, SI
+	ADDQ		$4, CX
+	JZ		 	exit_avx2
+	JMP		 	loop_avx2
+
+exit_avx2:
+	VZEROUPPER           // clear upper part of Y regs, prevents AVX-SSE penalty
+	TESTQ	BX, BX
+	JLE		done
+
+prep_scalar:
+	MOVQ	val+24(FP), DX   // load val for comparison
+	XORQ	AX, AX
+	XORQ	R10, R10
+	MOVQ	BX, R11
+	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	SUBQ	BX, CX
+
+// for remainders of <32 int64
+scalar:
+	MOVQ	(SI), R8
+	CMPQ	R8, DX
+	SETEQ	R10
+	ADDL	R10, R9
+	ORL	 	R10, AX
+	SHLL	$1, AX
+	LEAQ	8(SI), SI
+	DECL	BX
+	JZ	 	scalar_done
+	JMP	 	scalar
+
+scalar_done:
+	SHLL	CX, AX        // fill 32bits by shifting
+	BSWAPL	AX            // swap bytes into place for big endian output
+	CMPQ	R11, $24
+	JBE		write_3
+	MOVL	AX, (DI)
+	JMP		done
+
+write_3:
+	CMPQ	R11, $16
+	JBE		write_2
+	MOVB	AX, (DI)
+	SHRL	$8, AX
+	INCQ	DI
+
+write_2:
+	CMPQ	R11, $8
+	JBE		write_1
+	MOVW	AX, (DI)
+	JMP		done
+
+write_1:
+	MOVB	AX, (DI)
+
+done:
+	MOVQ	R9, ret+56(FP)
+	RET
+
+// func matchUint64EqualAVX2Unroll(src []uint64, val uint64, bits []byte) int64
+//
+// input:
+//   SI = src_base
+//   DI = bits_base
+//   BX = src_len
+//   DX = comparison value for scalar
+//   Y0 = comparison value for AVX2
+// internal:
+//   AX = intermediate
+//   R9 = population count
+//   Y9 = permute control mask
+//   Y10 = shuffle control mask
+//   Y1-Y8 = vector data
+TEXT ·matchUint64EqualAVX2Unroll(SB), NOSPLIT, $0-64
+	MOVQ	src_base+0(FP), SI
+	MOVQ	src_len+8(FP), BX
+	MOVQ	bits_base+32(FP), DI
+	XORQ	R9, R9
+
+	TESTQ	BX, BX
+	JLE		done
+	CMPQ	BX, $31      // slices smaller than 32 byte are handled in scalar loop
+	JBE		prep_scalar
+
+prep_avx:
+	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
+	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
+	JBE		prep_small
+
+prep_big:
+    MOVQ    BX, CX
+    ANDQ    $0x3f, BX
+    ANDQ    $0xffffffffffffffc0, CX
+    SHRQ    $3, CX
+    ADDQ    CX, DI
+    NEGQ    CX
+
+// works for >= 32 int64 (i.e. 256 bytes of data)
+loop_big:
+	VPCMPEQQ	0(SI), Y0, Y1
+	VPCMPEQQ	32(SI), Y0, Y2
+	VPCMPEQQ	64(SI), Y0, Y3
+	VPCMPEQQ	96(SI), Y0, Y4
+	VPCMPEQQ	128(SI), Y0, Y5
+	VPACKSSDW	Y1, Y2, Y1
+	VPCMPEQQ	160(SI), Y0, Y6
+	VPACKSSDW	Y3, Y4, Y3
+	VPACKSSDW	Y1, Y3, Y1
+	VPCMPEQQ	192(SI), Y0, Y7
+	VPACKSSDW	Y5, Y6, Y5
+	VPCMPEQQ	224(SI), Y0, Y8
+	VPACKSSDW	Y7, Y8, Y7
+	VPACKSSDW	Y5, Y7, Y5
+	VPACKSSWB	Y1, Y5, Y1
+	VPERMD		Y1, Y9, Y1
+	VPSHUFB		Y10, Y1, Y1
+	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
+
+	VPCMPEQQ	256(SI), Y0, Y1
+	VPCMPEQQ	288(SI), Y0, Y2
+	VPCMPEQQ	320(SI), Y0, Y3
+	VPCMPEQQ	352(SI), Y0, Y4
+	VPCMPEQQ	384(SI), Y0, Y5
+	VPACKSSDW	Y1, Y2, Y1
+	VPCMPEQQ	416(SI), Y0, Y6
+	VPACKSSDW	Y3, Y4, Y3
+	VPACKSSDW	Y1, Y3, Y1
+	VPCMPEQQ	448(SI), Y0, Y7
+	VPACKSSDW	Y5, Y6, Y5
+	VPCMPEQQ	480(SI), Y0, Y8
+	VPACKSSDW	Y7, Y8, Y7
+	VPACKSSDW	Y5, Y7, Y5
+	VPACKSSWB	Y1, Y5, Y1
+	VPERMD		Y1, Y9, Y1
+	VPSHUFB		Y10, Y1, Y1
+	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
+
+    SHLQ        $32,DX
+    ORQ         DX, AX
+	MOVQ		AX, (DI)(CX*1)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+
+	ADDQ		$512, SI
+	ADDQ		$8, CX
+	JZ		 	exit_big
+	JMP		 	loop_big
+
+exit_big:
+	CMPQ	BX, $31      // slices smaller than 32 byte are handled in scalar loop
+	JBE		exit_small
+
+prep_small:
+
+loop_small:
+	VPCMPEQQ	0(SI), Y0, Y1
+	VPCMPEQQ	32(SI), Y0, Y2
+	VPCMPEQQ	64(SI), Y0, Y3
+	VPCMPEQQ	96(SI), Y0, Y4
+	VPCMPEQQ	128(SI), Y0, Y5
+	VPACKSSDW	Y1, Y2, Y1
+	VPCMPEQQ	160(SI), Y0, Y6
+	VPACKSSDW	Y3, Y4, Y3
+	VPACKSSDW	Y1, Y3, Y1
+	VPCMPEQQ	192(SI), Y0, Y7
+	VPACKSSDW	Y5, Y6, Y5
+	VPCMPEQQ	224(SI), Y0, Y8
+	VPACKSSDW	Y7, Y8, Y7
+	VPACKSSDW	Y5, Y7, Y5
+	VPACKSSWB	Y1, Y5, Y1
+	VPERMD		Y1, Y9, Y1
+	VPSHUFB		Y10, Y1, Y1
+	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
+
+	MOVL		AX, (DI)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+
+	ADDQ		$256, SI
+	ADDQ		$4, DI
+    SUBQ        $32, BX
+
+exit_small:
+	VZEROUPPER           // clear upper part of Y regs, prevents AVX-SSE penalty
+	TESTQ	BX, BX
+	JLE		done
+
+prep_scalar:
+	MOVQ	val+24(FP), DX   // load val for comparison
+	XORQ	AX, AX
+	XORQ	R10, R10
+	MOVQ	BX, R11
+	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	SUBQ	BX, CX
+
+// for remainders of <32 int64
+scalar:
+	MOVQ	(SI), R8
+	CMPQ	R8, DX
+	SETEQ	R10
+	ADDL	R10, R9
+	ORL	 	R10, AX
+	SHLL	$1, AX
+	LEAQ	8(SI), SI
+	DECL	BX
+	JZ	 	scalar_done
+	JMP	 	scalar
+
+scalar_done:
+	SHLL	CX, AX        // fill 32bits by shifting
+	BSWAPL	AX            // swap bytes into place for big endian output
+	CMPQ	R11, $24
+	JBE		write_3
+	MOVL	AX, (DI)
+	JMP		done
+
+write_3:
+	CMPQ	R11, $16
+	JBE		write_2
+	MOVB	AX, (DI)
+	SHRL	$8, AX
+	INCQ	DI
+
+write_2:
+	CMPQ	R11, $8
+	JBE		write_1
+	MOVW	AX, (DI)
+	JMP		done
+
+write_1:
+	MOVB	AX, (DI)
+
+done:
+	MOVQ	R9, ret+56(FP)
+	RET
+
 // func matchUint64NotEqualAVX2(src []uint64, val uint64, bits []byte) int64
 //
 // input:
