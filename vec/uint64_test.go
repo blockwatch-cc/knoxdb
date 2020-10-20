@@ -23,11 +23,6 @@ type Uint64MatchTest struct {
 	count  int64
 }
 
-func matchUint64EqualAVX2Unopt(src []uint64, val uint64, bits []byte) int64
-func matchUint64EqualAVX2New(src []uint64, val uint64, bits []byte) int64
-func matchUint64EqualAVX2Newer(src []uint64, val uint64, bits []byte) int64
-func matchUint64EqualAVX2Unroll(src []uint64, val uint64, bits []byte) int64
-
 var (
 	uint64TestSlice_0 = []uint64{
 		0, 5, 3, 5, // Y1
@@ -213,6 +208,7 @@ var uint64EqualCases = []Uint64MatchTest{
 		append(uint64EqualTestResult_1, uint64EqualTestResult_0...), 64),
 	CreateUint64TestCase("l128", append(uint64TestSlice_1, uint64TestSlice_0...), uint64EqualTestMatch_1, 0,
 		append(uint64EqualTestResult_1, uint64EqualTestResult_0...), 128),
+	CreateUint64TestCase("l127", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 127),
 	CreateUint64TestCase("l63", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 63),
 	CreateUint64TestCase("l31", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 31),
 	CreateUint64TestCase("l23", uint64TestSlice_1, uint64EqualTestMatch_1, 0, uint64EqualTestResult_1, 23),
@@ -269,119 +265,6 @@ func TestMatchUint64EqualAVX2(T *testing.T) {
 	}
 }
 
-func TestMatchUint64EqualAVX2Unopt(T *testing.T) {
-	if !useAVX2 {
-		T.SkipNow()
-	}
-	for _, c := range uint64EqualCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		cnt := matchUint64EqualAVX2Unopt(c.slice, c.match, bits)
-		if got, want := len(bits), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-		}
-		if got, want := cnt, c.count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-		}
-		if bytes.Compare(bits, c.result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-		}
-	}
-}
-
-func TestMatchUint64EqualAVX2New(T *testing.T) {
-	if !useAVX2 {
-		T.SkipNow()
-	}
-	for _, c := range uint64EqualCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		cnt := matchUint64EqualAVX2New(c.slice, c.match, bits)
-		if got, want := len(bits), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-		}
-		if got, want := cnt, c.count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-		}
-		if bytes.Compare(bits, c.result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-		}
-	}
-}
-
-func TestMatchUint64EqualAVX2Newer(T *testing.T) {
-	if !useAVX2 {
-		T.SkipNow()
-	}
-	for _, c := range uint64EqualCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		cnt := matchUint64EqualAVX2Newer(c.slice, c.match, bits)
-		if got, want := len(bits), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-		}
-		if got, want := cnt, c.count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-		}
-		if bytes.Compare(bits, c.result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-		}
-	}
-}
-
-func TestMatchUint64EqualAVX2Unroll(T *testing.T) {
-	if !useAVX2 {
-		T.SkipNow()
-	}
-	for _, c := range uint64EqualCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		cnt := matchUint64EqualAVX2Unroll(c.slice, c.match, bits)
-		if got, want := len(bits), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-		}
-		if got, want := cnt, c.count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-		}
-		if bytes.Compare(bits, c.result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-		}
-	}
-}
-
-
 func TestMatchUint64EqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -437,70 +320,6 @@ func BenchmarkMatchUint64EqualAVX2(B *testing.B) {
 			B.SetBytes(int64(n.l * Uint64Size))
 			for i := 0; i < B.N; i++ {
 				matchUint64EqualAVX2(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
-}
-
-func BenchmarkMatchUint64EqualAVX2Unopt(B *testing.B) {
-	if !useAVX2 {
-		B.SkipNow()
-	}
-	for _, n := range vecBenchmarkSizes {
-		a := randUint64Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				matchUint64EqualAVX2Unopt(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
-}
-
-func BenchmarkMatchUint64EqualAVX2New(B *testing.B) {
-	if !useAVX2 {
-		B.SkipNow()
-	}
-	for _, n := range vecBenchmarkSizes {
-		a := randUint64Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				matchUint64EqualAVX2New(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
-}
-
-func BenchmarkMatchUint64EqualAVX2Newer(B *testing.B) {
-	if !useAVX2 {
-		B.SkipNow()
-	}
-	for _, n := range vecBenchmarkSizes {
-		a := randUint64Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				matchUint64EqualAVX2Newer(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
-}
-
-func BenchmarkMatchUint64EqualAVX2Unroll(B *testing.B) {
-	if !useAVX2 {
-		B.SkipNow()
-	}
-	for _, n := range vecBenchmarkSizes {
-		a := randUint64Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				matchUint64EqualAVX2Unroll(a, math.MaxUint64/2, bits)
 			}
 		})
 	}
@@ -581,6 +400,7 @@ var uint64NotEqualCases = []Uint64MatchTest{
 		append(uint64NotEqualTestResult_1, uint64NotEqualTestResult_0...), 64),
 	CreateUint64TestCase("l128", append(uint64TestSlice_1, uint64TestSlice_0...), uint64NotEqualTestMatch_1, 0,
 		append(uint64NotEqualTestResult_1, uint64NotEqualTestResult_0...), 128),
+	CreateUint64TestCase("l127", uint64TestSlice_1, uint64NotEqualTestMatch_1, 0, uint64NotEqualTestResult_1, 127),
 	CreateUint64TestCase("l63", uint64TestSlice_1, uint64NotEqualTestMatch_1, 0, uint64NotEqualTestResult_1, 63),
 	CreateUint64TestCase("l31", uint64TestSlice_1, uint64NotEqualTestMatch_1, 0, uint64NotEqualTestResult_1, 31),
 	CreateUint64TestCase("l23", uint64TestSlice_1, uint64NotEqualTestMatch_1, 0, uint64NotEqualTestResult_1, 23),
@@ -772,6 +592,7 @@ var uint64LessCases = []Uint64MatchTest{
 		append(uint64LessTestResult_1, uint64LessTestResult_0...), 64),
 	CreateUint64TestCase("l128", append(uint64TestSlice_1, uint64TestSlice_0...), uint64LessTestMatch_1, 0,
 		append(uint64LessTestResult_1, uint64LessTestResult_0...), 128),
+	CreateUint64TestCase("l127", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 127),
 	CreateUint64TestCase("l63", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 63),
 	CreateUint64TestCase("l31", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 31),
 	CreateUint64TestCase("l23", uint64TestSlice_1, uint64LessTestMatch_1, 0, uint64LessTestResult_1, 23),
@@ -963,6 +784,7 @@ var uint64LessEqualCases = []Uint64MatchTest{
 		append(uint64LessEqualTestResult_1, uint64LessEqualTestResult_0...), 64),
 	CreateUint64TestCase("l128", append(uint64TestSlice_1, uint64TestSlice_0...), uint64LessEqualTestMatch_1, 0,
 		append(uint64LessEqualTestResult_1, uint64LessEqualTestResult_0...), 128),
+	CreateUint64TestCase("l127", uint64TestSlice_1, uint64LessEqualTestMatch_1, 0, uint64LessEqualTestResult_1, 127),
 	CreateUint64TestCase("l63", uint64TestSlice_1, uint64LessEqualTestMatch_1, 0, uint64LessEqualTestResult_1, 63),
 	CreateUint64TestCase("l31", uint64TestSlice_1, uint64LessEqualTestMatch_1, 0, uint64LessEqualTestResult_1, 31),
 	CreateUint64TestCase("l23", uint64TestSlice_1, uint64LessEqualTestMatch_1, 0, uint64LessEqualTestResult_1, 23),
@@ -1154,6 +976,7 @@ var uint64GreaterCases = []Uint64MatchTest{
 		append(uint64GreaterTestResult_1, uint64GreaterTestResult_0...), 64),
 	CreateUint64TestCase("l128", append(uint64TestSlice_1, uint64TestSlice_0...), uint64GreaterTestMatch_1, 0,
 		append(uint64GreaterTestResult_1, uint64GreaterTestResult_0...), 128),
+	CreateUint64TestCase("l127", uint64TestSlice_1, uint64GreaterTestMatch_1, 0, uint64GreaterTestResult_1, 127),
 	CreateUint64TestCase("l63", uint64TestSlice_1, uint64GreaterTestMatch_1, 0, uint64GreaterTestResult_1, 63),
 	CreateUint64TestCase("l31", uint64TestSlice_1, uint64GreaterTestMatch_1, 0, uint64GreaterTestResult_1, 31),
 	CreateUint64TestCase("l23", uint64TestSlice_1, uint64GreaterTestMatch_1, 0, uint64GreaterTestResult_1, 23),
@@ -1345,6 +1168,7 @@ var uint64GreaterEqualCases = []Uint64MatchTest{
 		append(uint64GreaterEqualTestResult_1, uint64GreaterEqualTestResult_0...), 64),
 	CreateUint64TestCase("l128", append(uint64TestSlice_1, uint64TestSlice_0...), uint64GreaterEqualTestMatch_1, 0,
 		append(uint64GreaterEqualTestResult_1, uint64GreaterEqualTestResult_0...), 128),
+	CreateUint64TestCase("l127", uint64TestSlice_1, uint64GreaterEqualTestMatch_1, 0, uint64GreaterEqualTestResult_1, 127),
 	CreateUint64TestCase("l63", uint64TestSlice_1, uint64GreaterEqualTestMatch_1, 0, uint64GreaterEqualTestResult_1, 63),
 	CreateUint64TestCase("l31", uint64TestSlice_1, uint64GreaterEqualTestMatch_1, 0, uint64GreaterEqualTestResult_1, 31),
 	CreateUint64TestCase("l23", uint64TestSlice_1, uint64GreaterEqualTestMatch_1, 0, uint64GreaterEqualTestResult_1, 23),
@@ -1537,6 +1361,7 @@ var uint64BetweenCases = []Uint64MatchTest{
 		append(uint64BetweenTestResult_1, uint64BetweenTestResult_0...), 64),
 	CreateUint64TestCase("l128", append(uint64TestSlice_1, uint64TestSlice_0...), uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b,
 		append(uint64BetweenTestResult_1, uint64BetweenTestResult_0...), 128),
+	CreateUint64TestCase("l127", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 127),
 	CreateUint64TestCase("l63", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 63),
 	CreateUint64TestCase("l31", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 31),
 	CreateUint64TestCase("l23", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 23),
