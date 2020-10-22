@@ -178,7 +178,7 @@ func NewBlock(typ BlockType, sz int, comp Compression, prec int, flags BlockFlag
 	return b, nil
 }
 
-func (b *Block) Clone(sz int, copydata bool) *Block {
+func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 	cp := &Block{
 		Type:        b.Type,
 		Compression: b.Compression,
@@ -333,8 +333,10 @@ func (b *Block) Clone(sz int, copydata bool) *Block {
 			cp.MinValue = []byte{}
 			cp.MaxValue = []byte{}
 		}
+	default:
+		return nil, fmt.Errorf("pack: invalid data type %d", b.Type)
 	}
-	return cp
+	return cp, nil
 }
 
 func (b *Block) Len() int {

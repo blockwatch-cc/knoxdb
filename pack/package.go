@@ -330,7 +330,11 @@ func (p *Package) Clone(copydata bool, sz int) (*Package, error) {
 
 	// create new empty block slices
 	for i, b := range p.blocks {
-		np.blocks[i] = b.Clone(sz, copydata)
+		var err error
+		np.blocks[i], err = b.Clone(sz, copydata)
+		if err != nil {
+			return nil, err
+		}
 		np.namemap[np.names[i]] = i
 	}
 
