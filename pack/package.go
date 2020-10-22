@@ -145,7 +145,8 @@ func (p *Package) initType(v interface{}) error {
 }
 
 func (p *Package) Init(v interface{}, sz int) error {
-	if err := p.initType(v); err != nil {
+    var err error
+	if err = p.initType(v); err != nil {
 		return err
 	}
 
@@ -167,10 +168,10 @@ func (p *Package) Init(v interface{}, sz int) error {
 		p.namemap[finfo.alias] = i
 		switch f.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			p.blocks[i] = block.NewBlock(block.BlockInteger, sz, finfo.flags.Compression(), 0, 0)
+			p.blocks[i], err = block.NewBlock(block.BlockInteger, sz, finfo.flags.Compression(), 0, 0)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			if finfo.flags&FlagConvert > 0 {
-				p.blocks[i] = block.NewBlock(
+				p.blocks[i], err = block.NewBlock(
 					block.BlockUnsigned,
 					sz,
 					finfo.flags.Compression(),
@@ -178,11 +179,11 @@ func (p *Package) Init(v interface{}, sz int) error {
 					block.BlockFlagCompress,
 				)
 			} else {
-				p.blocks[i] = block.NewBlock(block.BlockUnsigned, sz, finfo.flags.Compression(), 0, 0)
+				p.blocks[i], err = block.NewBlock(block.BlockUnsigned, sz, finfo.flags.Compression(), 0, 0)
 			}
 		case reflect.Float32, reflect.Float64:
 			if finfo.flags&FlagConvert > 0 {
-				p.blocks[i] = block.NewBlock(
+				p.blocks[i], err = block.NewBlock(
 					block.BlockUnsigned,
 					sz,
 					finfo.flags.Compression(),
@@ -190,7 +191,7 @@ func (p *Package) Init(v interface{}, sz int) error {
 					block.BlockFlagConvert|block.BlockFlagCompress,
 				)
 			} else {
-				p.blocks[i] = block.NewBlock(
+				p.blocks[i], err = block.NewBlock(
 					block.BlockFloat,
 					sz,
 					finfo.flags.Compression(),
@@ -199,33 +200,33 @@ func (p *Package) Init(v interface{}, sz int) error {
 				)
 			}
 		case reflect.String:
-			p.blocks[i] = block.NewBlock(block.BlockString, sz, finfo.flags.Compression(), 0, 0)
+			p.blocks[i], err = block.NewBlock(block.BlockString, sz, finfo.flags.Compression(), 0, 0)
 		case reflect.Slice:
 			// check if type implements BinaryMarshaler -> BlockBytes
 			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[i] = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
+				p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
 				break
 			}
 			// otherwise require byte slice
 			if f.Type() != byteSliceType {
 				return fmt.Errorf("pack: unsupported slice type %s", f.Type().String())
 			}
-			p.blocks[i] = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
+			p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
 		case reflect.Bool:
-			p.blocks[i] = block.NewBlock(block.BlockBool, sz, finfo.flags.Compression(), 0, 0)
+			p.blocks[i], err = block.NewBlock(block.BlockBool, sz, finfo.flags.Compression(), 0, 0)
 		case reflect.Struct:
 			// check string is much quicker
 			if f.Type().String() == "time.Time" {
-				p.blocks[i] = block.NewBlock(block.BlockTime, sz, finfo.flags.Compression(), 0, 0)
+				p.blocks[i], err = block.NewBlock(block.BlockTime, sz, finfo.flags.Compression(), 0, 0)
 			} else if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[i] = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
+				p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
 			} else {
 				return fmt.Errorf("pack: unsupported embedded struct type %s", f.Type().String())
 			}
 		case reflect.Array:
 			// check if type implements BinaryMarshaler -> BlockBytes
 			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[i] = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
+				p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
 				break
 			}
 			return fmt.Errorf("pack: unsupported array type %s", f.Type().String())
@@ -233,11 +234,12 @@ func (p *Package) Init(v interface{}, sz int) error {
 			return fmt.Errorf("pack: unsupported type %s (%v)", f.Type().String(), f.Kind())
 		}
 	}
-	return nil
+	return err
 }
 
 // init from field list when type is unavailable
 func (p *Package) InitFields(fields FieldList, sz int) error {
+    var err error
 	if len(fields) > 256 {
 		return fmt.Errorf("pack: cannot handle more than 256 fields")
 	}
@@ -264,10 +266,10 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 		p.namemap[field.Alias] = i
 		switch field.Type {
 		case FieldTypeInt64:
-			p.blocks[i] = block.NewBlock(block.BlockInteger, sz, field.Flags.Compression(), 0, 0)
+			p.blocks[i], err = block.NewBlock(block.BlockInteger, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeUint64:
 			if field.Flags&FlagConvert > 0 {
-				p.blocks[i] = block.NewBlock(
+				p.blocks[i], err = block.NewBlock(
 					block.BlockUnsigned,
 					sz,
 					field.Flags.Compression(),
@@ -275,7 +277,7 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 					block.BlockFlagConvert|block.BlockFlagCompress,
 				)
 			} else {
-				p.blocks[i] = block.NewBlock(
+				p.blocks[i], err = block.NewBlock(
 					block.BlockUnsigned,
 					sz,
 					field.Flags.Compression(),
@@ -285,7 +287,7 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 			}
 		case FieldTypeFloat64:
 			if field.Flags&FlagConvert > 0 {
-				p.blocks[i] = block.NewBlock(
+				p.blocks[i], err = block.NewBlock(
 					block.BlockUnsigned,
 					sz,
 					field.Flags.Compression(),
@@ -293,21 +295,21 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 					block.BlockFlagConvert|block.BlockFlagCompress,
 				)
 			} else {
-				p.blocks[i] = block.NewBlock(block.BlockFloat, sz, field.Flags.Compression(), 0, 0)
+				p.blocks[i], err = block.NewBlock(block.BlockFloat, sz, field.Flags.Compression(), 0, 0)
 			}
 		case FieldTypeString:
-			p.blocks[i] = block.NewBlock(block.BlockString, sz, field.Flags.Compression(), 0, 0)
+			p.blocks[i], err = block.NewBlock(block.BlockString, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeBytes:
-			p.blocks[i] = block.NewBlock(block.BlockBytes, sz, field.Flags.Compression(), 0, 0)
+			p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeBoolean:
-			p.blocks[i] = block.NewBlock(block.BlockBool, sz, field.Flags.Compression(), 0, 0)
+			p.blocks[i], err = block.NewBlock(block.BlockBool, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeDatetime:
-			p.blocks[i] = block.NewBlock(block.BlockTime, sz, field.Flags.Compression(), 0, 0)
+			p.blocks[i], err = block.NewBlock(block.BlockTime, sz, field.Flags.Compression(), 0, 0)
 		default:
 			return fmt.Errorf("pack: unsupported field type %s", field.Type)
 		}
 	}
-	return nil
+	return err
 }
 
 func (p *Package) Clone(copydata bool, sz int) *Package {

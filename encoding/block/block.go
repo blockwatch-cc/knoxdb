@@ -108,7 +108,7 @@ type Block struct {
 	Floats     []float64
 }
 
-func NewBlock(typ BlockType, sz int, comp Compression, prec int, flags BlockFlags) *Block {
+func NewBlock(typ BlockType, sz int, comp Compression, prec int, flags BlockFlags) (*Block, error) {
 	b := &Block{
 		Type:        typ,
 		Compression: comp,
@@ -172,8 +172,10 @@ func NewBlock(typ BlockType, sz int, comp Compression, prec int, flags BlockFlag
 		}
 		b.MinValue = []byte{}
 		b.MaxValue = []byte{}
+    default:
+		return nil, fmt.Errorf("pack: invalid data type %d", b.Type)
 	}
-	return b
+	return b, nil
 }
 
 func (b *Block) Clone(sz int, copydata bool) *Block {
