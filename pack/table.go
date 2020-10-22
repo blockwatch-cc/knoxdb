@@ -450,7 +450,10 @@ func (t *Table) loadPackHeaders(dbTx store.Tx) error {
 	}
 	log.Warnf("pack: scanning headers for table %s...", t.name)
 	c := dbTx.Bucket(t.key).Cursor()
-	pkg := t.journal.Clone(false, 0)
+	pkg, err := t.journal.Clone(false, 0)
+	if err != nil {
+		return err
+	}
 	for ok := c.First(); ok; ok = c.Next() {
 		ph, err := pkg.UnmarshalHeader(c.Value())
 		if err != nil {
@@ -3124,7 +3127,7 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 
 func (t *Table) makePackage() interface{} {
 	atomic.AddInt64(&t.stats.PacksAlloc, 1)
-	pkg := t.journal.Clone(false, 1<<uint(t.opts.PackSizeLog2))
+	pkg, _ := t.journal.Clone(false, 1<<uint(t.opts.PackSizeLog2))
 	return pkg
 }
 

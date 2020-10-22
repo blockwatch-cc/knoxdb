@@ -145,7 +145,7 @@ func (p *Package) initType(v interface{}) error {
 }
 
 func (p *Package) Init(v interface{}, sz int) error {
-    var err error
+	var err error
 	if err = p.initType(v); err != nil {
 		return err
 	}
@@ -239,7 +239,7 @@ func (p *Package) Init(v interface{}, sz int) error {
 
 // init from field list when type is unavailable
 func (p *Package) InitFields(fields FieldList, sz int) error {
-    var err error
+	var err error
 	if len(fields) > 256 {
 		return fmt.Errorf("pack: cannot handle more than 256 fields")
 	}
@@ -312,7 +312,7 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 	return err
 }
 
-func (p *Package) Clone(copydata bool, sz int) *Package {
+func (p *Package) Clone(copydata bool, sz int) (*Package, error) {
 	np := &Package{
 		version:  p.version,
 		nFields:  p.nFields,
@@ -337,7 +337,7 @@ func (p *Package) Clone(copydata bool, sz int) *Package {
 	if copydata {
 		np.nValues = p.nValues
 	}
-	return np
+	return np, nil
 }
 
 func (p *Package) KeepFields(fields FieldList) *Package {

@@ -397,7 +397,10 @@ func (idx *Index) loadPackHeaders(dbTx store.Tx) error {
 	// on error, scan packs
 	log.Warnf("pack: scanning headers for index %s...", idx.cachekey(nil))
 	c := dbTx.Bucket(idx.key).Cursor()
-	pkg := idx.journal.Clone(false, 0)
+	pkg, err := idx.journal.Clone(false, 0)
+	if err != nil {
+		return err
+	}
 	for ok := c.First(); ok; ok = c.Next() {
 		ph, err := pkg.UnmarshalHeader(c.Value())
 		if err != nil {
@@ -1336,7 +1339,8 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 
 func (idx *Index) makePackage() interface{} {
 	atomic.AddInt64(&idx.table.stats.IndexPacksAlloc, 1)
-	return idx.journal.Clone(false, 1<<uint(idx.opts.PackSizeLog2))
+	pkg, _ := idx.journal.Clone(false, 1<<uint(idx.opts.PackSizeLog2))
+	return pkg
 }
 
 func (idx *Index) onEvictedPackage(key, val interface{}) {

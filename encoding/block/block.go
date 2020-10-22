@@ -172,7 +172,7 @@ func NewBlock(typ BlockType, sz int, comp Compression, prec int, flags BlockFlag
 		}
 		b.MinValue = []byte{}
 		b.MaxValue = []byte{}
-    default:
+	default:
 		return nil, fmt.Errorf("pack: invalid data type %d", b.Type)
 	}
 	return b, nil
