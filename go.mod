@@ -11,4 +11,5 @@ require (
 	github.com/pierrec/lz4 v2.5.2+incompatible
 	go.etcd.io/bbolt v1.3.5
 	golang.org/x/sys v0.0.0-20201020230747-6e5568b54d1a
+	golang.org/x/tools v0.0.0-20201021171030-d105bfabbdbe // indirect
 )
