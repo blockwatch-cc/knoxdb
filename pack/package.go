@@ -233,6 +233,9 @@ func (p *Package) Init(v interface{}, sz int) error {
 		default:
 			return fmt.Errorf("pack: unsupported type %s (%v)", f.Type().String(), f.Kind())
 		}
+		if err != nil {
+			return err
+		}
 	}
 	return err
 }
@@ -307,6 +310,9 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 			p.blocks[i], err = block.NewBlock(block.BlockTime, sz, field.Flags.Compression(), 0, 0)
 		default:
 			return fmt.Errorf("pack: unsupported field type %s", field.Type)
+		}
+		if err != nil {
+			return err
 		}
 	}
 	return err
