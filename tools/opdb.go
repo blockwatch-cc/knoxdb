@@ -473,7 +473,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Created Table 2: %#v\n", table2)
+	fmt.Printf("Created Table 2\n")
 
 	var row_op = Op2{
 		Volume: 100,
