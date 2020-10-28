@@ -1185,8 +1185,13 @@ func openDB(dbPath string, opts *bolt.Options, create bool) (store.DB, error) {
 	dbExists := fileExists(dbPath)
 
 	if !create && !dbExists {
-		str := fmt.Sprintf("database %q does not exist", dbPath)
+		str := fmt.Sprintf("database file %q does not exist", dbPath)
 		return nil, makeDbErr(store.ErrDbDoesNotExist, str, nil)
+	}
+
+	if create && dbExists {
+		str := fmt.Sprintf("database file %q exists", dbPath)
+		return nil, makeDbErr(store.ErrDbExists, str, nil)
 	}
 
 	// Ensure the full path to the database exists.
