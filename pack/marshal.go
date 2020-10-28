@@ -89,27 +89,45 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 		return io.ErrShortBuffer
 	}
 	p.version, _ = buf.ReadByte()
-	if p.version > packageStorageFormatVersionV1 {
+	if p.version > packageStorageFormatVersionV3 {
 		return fmt.Errorf("pack: invalid storage format version %d", p.version)
 	}
 	p.packedsize = blen
 
+	// v1 (OSS) does not write compression byte
+	// v2 (PRO) did write compression byte
+	// v3 (PRO) compression and precision are obsolete, moved to block
+	var precision int
+	if p.version >= packageStorageFormatVersionV2 {
+		b, _ := buf.ReadByte()
+		precision = int(b >> 4)
+		if precision == 0 {
+			precision = maxPrecision
+		}
+	}
+
 	// grid size (nFields is stored as uint32)
 	p.nFields = int(binary.BigEndian.Uint32(buf.Next(4)))
 	p.nValues = int(binary.BigEndian.Uint32(buf.Next(4)))
+	log.Debugf("PACK HEAD %d fields %d vals", p.nFields, p.nValues)
 
-	// read names
-	p.names = make([]string, p.nFields)
-	for i := 0; i < p.nFields; i++ {
-		// ReadString returns string including the delimiter
-		str, err := buf.ReadString(0)
-		if err != nil {
-			return err
+	// read names, check for existence of names (optional in v2)
+	b, _ := buf.ReadByte()
+	if b != 0 {
+		buf.UnreadByte()
+		p.names = make([]string, p.nFields)
+		for i := 0; i < p.nFields; i++ {
+			// ReadString returns string including the delimiter
+			str, err := buf.ReadString(0)
+			if err != nil {
+				return err
+			}
+			strcopy := str[:len(str)-1]
+			p.names[i] = strcopy
+			p.namemap[strcopy] = i
 		}
-		strcopy := str[:len(str)-1]
-		p.names[i] = strcopy
-		p.namemap[strcopy] = i
 	}
+	log.Debugf("PACK HEAD NAMES %#v", p.names)
 
 	// read offsets
 	p.offsets = make([]int, p.nFields)
@@ -117,11 +135,13 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 	for i := 0; i < p.nFields; i++ {
 		p.offsets[i] = int(binary.BigEndian.Uint32(offs[i*4:]))
 	}
+	log.Debugf("PACK HEAD offs %#v", p.offsets)
 
 	// read block headers
 	// Note: we don't store headers in V1 format, so we only create empty blocks here
 	// Note: re-use existing blocks
 	if len(p.blocks) != p.nFields {
+		log.Debugf("PACK creating empty blocks")
 		p.blocks = make([]*block.Block, p.nFields)
 	}
 	for i := 0; i < p.nFields; i++ {
@@ -130,10 +150,23 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 			p.blocks[i] = &block.Block{}
 		}
 		// read and decode block headers
-		if err := p.blocks[i].DecodeHeader(buf); err != nil {
-			return err
+
+		// V1 and V3+: read and decode block headers
+		if p.version != packageStorageFormatVersionV2 {
+			if err := p.blocks[i].DecodeHeader(buf); err != nil {
+				return err
+			}
+			// v2 only: set uint64/float converted block precision from pack header
+			if p.version == packageStorageFormatVersionV2 {
+				if p.blocks[i].Type == block.BlockUnsigned || p.blocks[i].Type == block.BlockFloat {
+					p.blocks[i].Precision = precision
+				}
+			}
 		}
 	}
+
+	// upgrade to v4 so subsequent writes will flush the correct version
+	p.version = packageStorageFormatVersionV4
 
 	// treat remaining bytes as pack body
 	p.rawsize = buf.Len()

@@ -17,7 +17,10 @@ import (
 )
 
 const (
-	packageStorageFormatVersionV1 = 1
+	packageStorageFormatVersionV1 = 1 // OSS: same as V3
+	packageStorageFormatVersionV2 = 2 // PRO: compress & precision stored in pack header
+	packageStorageFormatVersionV3 = 3 // PRO: current, per-block compression & precision
+	packageStorageFormatVersionV4 = 4 // PRO: extended data types
 	maxPrecision                  = 12
 )
 
@@ -67,7 +70,7 @@ func (p *Package) PkMap() map[uint64]int {
 
 func NewPackage() *Package {
 	return &Package{
-		version: packageStorageFormatVersionV1,
+		version: packageStorageFormatVersionV4,
 		pkindex: -1,
 		namemap: make(map[string]int),
 	}
