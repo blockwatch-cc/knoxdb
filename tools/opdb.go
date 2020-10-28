@@ -245,6 +245,29 @@ type Op struct {
 	// IsBatch      bool      `pack:"y,snappy"      json:"is_batch"`
 }
 
+func (o Op) ID() uint64 {
+	return o.RowId
+}
+
+func (o *Op) SetID(i uint64) {
+	o.RowId = i
+}
+
+type Op2 struct {
+	RowId  uint64 `pack:"I,pk,snappy"   json:"row_id"` // internal: unique row id
+	Volume int64  `pack:"v,snappy"      json:"volume"` // stats: sum of transacted tezos volume
+}
+
+func (o Op2) ID() uint64 {
+	return o.RowId
+}
+
+func (o *Op2) SetID(i uint64) {
+	o.RowId = i
+}
+
+var _ pack.Item = (*Op)(nil)
+
 const (
 	OpPackSizeLog2         = 15  // 32k packs ~4M
 	OpJournalSizeLog2      = 16  // 64k - search for spending op, so keep small
@@ -255,6 +278,7 @@ const (
 	OpIndexCacheSize       = 1024 // ~256M
 	OpIndexFillLevel       = 90
 	OpTableKey             = "op"
+	OpTable2Key            = "op2"
 	DbLabel                = "XTZ"
 )
 
@@ -267,24 +291,24 @@ var (
 	boltopts = &bolt.Options{
 		Timeout:      time.Second, // open timeout when file is locked
 		NoGrowSync:   true,        // assuming Docker + XFS
-		ReadOnly:     true,
+		ReadOnly:     false,
 		NoSync:       true, // skip fsync (DANGEROUS on crashes)
 		FreelistType: bolt.FreelistMapType,
 	}
 )
 
 func Create(path string, dbOpts interface{}) (*pack.Table, error) {
-	fields, err := pack.Fields(Op{})
+	fields, err := pack.Fields(Op2{})
 	if err != nil {
 		return nil, err
 	}
-	db, err := pack.CreateDatabase(filepath.Dir(path), OpTableKey, "*", boltopts)
+	db, err := pack.CreateDatabaseIfNotExists(filepath.Dir(path), OpTable2Key, "*", boltopts)
 	if err != nil {
-		return nil, fmt.Errorf("creating %s database: %v", OpTableKey, err)
+		return nil, fmt.Errorf("creating %s database: %v", OpTable2Key, err)
 	}
 
 	table, err := db.CreateTableIfNotExists(
-		OpTableKey,
+		OpTable2Key,
 		fields,
 		pack.Options{
 			PackSizeLog2:    OpPackSizeLog2,
@@ -297,21 +321,22 @@ func Create(path string, dbOpts interface{}) (*pack.Table, error) {
 		return nil, err
 	}
 
-	_, err = table.CreateIndexIfNotExists(
-		"hash",
-		fields.Find("H"),   // op hash field (32 byte op hashes)
-		pack.IndexTypeHash, // hash table, index stores hash(field) -> pk value
-		pack.Options{
-			PackSizeLog2:    OpIndexPackSizeLog2,
-			JournalSizeLog2: OpIndexJournalSizeLog2,
-			CacheSize:       OpIndexCacheSize,
-			FillLevel:       OpIndexFillLevel,
-		})
-	if err != nil {
-		table.Close()
-		db.Close()
-		return nil, err
-	}
+	/*
+		_, err = table.CreateIndexIfNotExists(
+			"hash",
+			fields.Find("H"),   // op hash field (32 byte op hashes)
+			pack.IndexTypeHash, // hash table, index stores hash(field) -> pk value
+			pack.Options{
+				PackSizeLog2:    OpIndexPackSizeLog2,
+				JournalSizeLog2: OpIndexJournalSizeLog2,
+				CacheSize:       OpIndexCacheSize,
+				FillLevel:       OpIndexFillLevel,
+			})
+		if err != nil {
+			table.Close()
+			db.Close()
+			return nil, err
+		}*/
 
 	return table, nil
 }
@@ -439,22 +464,41 @@ func run() error {
 	pack.UseLogger(log.Log)
 
 	// open existing table
-	table, err := Open(dbname)
+	// table, err := Open(".")
+	// if err != nil {
+	// 	return err
+	// }
+
+	table2, err := Create(".", nil)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Created Table 2: %#v\n", table2)
+
+	var row_op = Op2{
+		Volume: 100,
+	}
+	err = table2.Insert(context.Background(), &row_op)
 	if err != nil {
 		return err
 	}
 
-	ops, err := ListOpTypes(context.Background(), table, OpTypeTransaction, 100)
-	if err != nil {
+	// ops, err := ListOpTypes(context.Background(), table, OpTypeTransaction, 100)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// // do smth with the ops
+	// var totalVolume int64
+	// for _, o := range ops {
+	// 	totalVolume += o.Volume
+	// }
+	// fmt.Printf("Total Volume is %f\n", float64(totalVolume)/1000000)
+
+	if err := Close(table2); err != nil {
 		return err
 	}
-
-	// do smth with the ops
-	var totalVolume int64
-	for _, o := range ops {
-		totalVolume += o.Volume
-	}
-	fmt.Printf("Total Volume is %f", float64(totalVolume)/1000000)
+	fmt.Print("Closed Table 2\n")
 
 	return nil
 }
