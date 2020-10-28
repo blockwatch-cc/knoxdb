@@ -89,7 +89,7 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 		return io.ErrShortBuffer
 	}
 	p.version, _ = buf.ReadByte()
-	if p.version > packageStorageFormatVersionV3 {
+	if p.version > packageStorageFormatVersionV4 {
 		return fmt.Errorf("pack: invalid storage format version %d", p.version)
 	}
 	p.packedsize = blen
@@ -109,7 +109,6 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 	// grid size (nFields is stored as uint32)
 	p.nFields = int(binary.BigEndian.Uint32(buf.Next(4)))
 	p.nValues = int(binary.BigEndian.Uint32(buf.Next(4)))
-	log.Debugf("PACK HEAD %d fields %d vals", p.nFields, p.nValues)
 
 	// read names, check for existence of names (optional in v2)
 	b, _ := buf.ReadByte()
@@ -127,7 +126,6 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 			p.namemap[strcopy] = i
 		}
 	}
-	log.Debugf("PACK HEAD NAMES %#v", p.names)
 
 	// read offsets
 	p.offsets = make([]int, p.nFields)
@@ -135,13 +133,11 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 	for i := 0; i < p.nFields; i++ {
 		p.offsets[i] = int(binary.BigEndian.Uint32(offs[i*4:]))
 	}
-	log.Debugf("PACK HEAD offs %#v", p.offsets)
 
 	// read block headers
 	// Note: we don't store headers in V1 format, so we only create empty blocks here
 	// Note: re-use existing blocks
 	if len(p.blocks) != p.nFields {
-		log.Debugf("PACK creating empty blocks")
 		p.blocks = make([]*block.Block, p.nFields)
 	}
 	for i := 0; i < p.nFields; i++ {
