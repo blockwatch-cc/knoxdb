@@ -592,14 +592,12 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
-	for i, finfo := range tinfo.fields {
-		blockId := i
-		if p.HasNames() {
-			if v, ok := p.namemap[finfo.name]; ok {
-				blockId = v
-			} else {
-				continue
-			}
+	for _, finfo := range tinfo.fields {
+		// Note: field to block mapping is required to be iniialized in tinfo!
+		// this happens once for every new type used in Result.DecodeAt(),
+		// and assumes all packs have the same internal structure!
+		if finfo.blockid < 0 {
+			continue
 		}
 		dst := finfo.value(val)
 		if !dst.IsValid() {
@@ -612,7 +610,7 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			}
 			dst = dst.Elem()
 		}
-		b := p.blocks[blockId]
+		b := p.blocks[finfo.blockid]
 		switch b.Type {
 		case block.BlockInteger:
 			dst.SetInt(b.Integers[pos])
