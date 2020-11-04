@@ -475,12 +475,14 @@ func run() error {
 	}
 	fmt.Printf("Created Table 2\n")
 
-	var row_op = Op2{
-		Volume: 100,
-	}
-	err = table2.Insert(context.Background(), &row_op)
-	if err != nil {
-		return err
+	for i := 0; i < 65536; i++ {
+		var row_op = Op2{
+			Volume: 100,
+		}
+		err = table2.Insert(context.Background(), &row_op)
+		if err != nil {
+			return err
+		}
 	}
 
 	// ops, err := ListOpTypes(context.Background(), table, OpTypeTransaction, 100)
