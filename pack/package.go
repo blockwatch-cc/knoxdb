@@ -271,6 +271,8 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 		p.namemap[field.Name] = i
 		p.namemap[field.Alias] = i
 		switch field.Type {
+		case FieldTypeInt32:
+			p.blocks[i], err = block.NewBlock(block.BlockInt32, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeInt64:
 			p.blocks[i], err = block.NewBlock(block.BlockInteger, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeUint64:
@@ -418,6 +420,8 @@ func (p *Package) Push(v interface{}) error {
 		}
 		f := finfo.value(val)
 		switch p.blocks[blockId].Type {
+		case block.BlockInt32:
+			p.blocks[blockId].Integers = append(p.blocks[blockId].Integers, f.Int())
 		case block.BlockInteger:
 			p.blocks[blockId].Integers = append(p.blocks[blockId].Integers, f.Int())
 
@@ -694,6 +698,9 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 	}
 	switch p.blocks[index].Type {
 	case block.BlockInteger:
+		val := p.blocks[index].Integers[pos]
+		return val, nil
+	case block.BlockInt32:
 		val := p.blocks[index].Integers[pos]
 		return val, nil
 	case block.BlockUnsigned:
@@ -1065,6 +1072,8 @@ func (p *Package) AppendFrom(src *Package, srcPos, srcLen int, safecopy bool) er
 	for i, _ := range p.blocks {
 		switch src.blocks[i].Type {
 		case block.BlockInteger:
+			p.blocks[i].Integers = append(p.blocks[i].Integers, src.blocks[i].Integers[srcPos:srcPos+srcLen]...)
+		case block.BlockInt32:
 			p.blocks[i].Integers = append(p.blocks[i].Integers, src.blocks[i].Integers[srcPos:srcPos+srcLen]...)
 		case block.BlockUnsigned:
 			p.blocks[i].Unsigneds = append(p.blocks[i].Unsigneds, src.blocks[i].Unsigneds[srcPos:srcPos+srcLen]...)

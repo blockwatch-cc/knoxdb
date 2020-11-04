@@ -49,6 +49,7 @@ const (
 	FieldTypeBoolean   FieldType = "boolean"  // BlockBool
 	FieldTypeFloat64   FieldType = "float64"  // BlockFloat
 	FieldTypeInt64     FieldType = "int64"    // BlockInt
+	FieldTypeInt32     FieldType = "int32"    // BlockInt
 	FieldTypeUint64    FieldType = "uint64"   // BlockUnsigned
 
 	// TODO: extend pack encoders and block types
@@ -219,7 +220,9 @@ func Fields(proto interface{}) (FieldList, error) {
 		fields[i].Flags = finfo.flags
 		fields[i].Precision = finfo.precision
 		switch f.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		case reflect.Int32:
+			fields[i].Type = FieldTypeInt32
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int64:
 			fields[i].Type = FieldTypeInt64
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			fields[i].Type = FieldTypeUint64
@@ -281,6 +284,8 @@ func ParseFieldType(s string) FieldType {
 		return FieldTypeBoolean
 	case "integer", "int", "int64":
 		return FieldTypeInt64
+	case "int32":
+		return FieldTypeInt32
 	case "unsigned", "uint", "uint64":
 		return FieldTypeUint64
 	case "float", "float64":

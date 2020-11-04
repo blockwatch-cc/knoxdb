@@ -64,6 +64,7 @@ const (
 	BlockBool     = BlockType(4)
 	BlockString   = BlockType(5)
 	BlockBytes    = BlockType(6)
+	BlockInt32    = BlockType(7)
 	BlockIgnore   = BlockType(255)
 )
 
@@ -133,6 +134,14 @@ func NewBlock(typ BlockType, sz int, comp Compression, prec int, flags BlockFlag
 		b.MinValue = float64(0.0)
 		b.MaxValue = float64(0.0)
 	case BlockInteger:
+		if sz <= DefaultMaxPointsPerBlock {
+			b.Integers = integerPool.Get().([]int64)
+		} else {
+			b.Integers = make([]int64, 0, sz)
+		}
+		b.MinValue = int64(0)
+		b.MaxValue = int64(0)
+	case BlockInt32:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Integers = integerPool.Get().([]int64)
 		} else {
@@ -227,6 +236,26 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 			cp.MaxValue = float64(0.0)
 		}
 	case BlockInteger:
+		if copydata {
+			if sz <= DefaultMaxPointsPerBlock {
+				cp.Integers = integerPool.Get().([]int64)[:sz]
+			} else {
+				cp.Integers = make([]int64, sz)
+			}
+			copy(cp.Integers, b.Integers)
+			min, max := b.MinValue.(int64), b.MaxValue.(int64)
+			cp.MinValue = min
+			cp.MaxValue = max
+		} else {
+			if sz <= DefaultMaxPointsPerBlock {
+				cp.Integers = integerPool.Get().([]int64)[:0]
+			} else {
+				cp.Integers = make([]int64, 0, sz)
+			}
+			cp.MinValue = int64(0)
+			cp.MaxValue = int64(0)
+		}
+	case BlockInt32:
 		if copydata {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Integers = integerPool.Get().([]int64)[:sz]
@@ -374,6 +403,8 @@ func (b *Block) MaxStoredSize() int {
 	case BlockFloat:
 		sz = compress.FloatArrayEncodedSize(b.Floats)
 	case BlockInteger:
+		sz = compress.IntegerArrayEncodedSize(b.Integers)
+	case BlockInt32:
 		sz = compress.IntegerArrayEncodedSize(b.Integers)
 	case BlockUnsigned:
 		sz = compress.UnsignedArrayEncodedSize(b.Unsigneds)
@@ -572,6 +603,17 @@ func (b *Block) EncodeBody() ([]byte, error) {
 			b.Dirty = false
 		}
 
+	case BlockInt32:
+		min, max, err := encodeInt32Block(buf, b.Integers, b.Compression)
+		if err != nil {
+			return nil, err
+		}
+		if b.Dirty {
+			b.MinValue = min
+			b.MaxValue = max
+			b.Dirty = false
+		}
+
 	case BlockUnsigned:
 		min, max, err := encodeUnsignedBlock(buf, b.Unsigneds, b.Compression)
 		if err != nil {
@@ -656,6 +698,13 @@ func (b *Block) EncodeHeader() ([]byte, error) {
 		_, _ = buf.Write(v[:])
 
 	case BlockInteger:
+		var v [16]byte
+		min, max := b.MinValue.(int64), b.MaxValue.(int64)
+		bigEndian.PutUint64(v[0:], uint64(min))
+		bigEndian.PutUint64(v[8:], uint64(max))
+		_, _ = buf.Write(v[:])
+
+	case BlockInt32:
 		var v [16]byte
 		min, max := b.MinValue.(int64), b.MaxValue.(int64)
 		bigEndian.PutUint64(v[0:], uint64(min))
@@ -755,6 +804,15 @@ func (b *Block) DecodeHeader(buf *bytes.Buffer) error {
 		}
 
 	case BlockInteger:
+		v := buf.Next(16)
+		if b.Type != BlockIgnore {
+			b.Type = typ
+			b.Compression = comp
+			b.MinValue = int64(bigEndian.Uint64(v[0:]))
+			b.MaxValue = int64(bigEndian.Uint64(v[8:]))
+		}
+
+	case BlockInt32:
 		v := buf.Next(16)
 		if b.Type != BlockIgnore {
 			b.Type = typ
@@ -873,6 +931,14 @@ func (b *Block) DecodeBody(buf []byte, sz int) error {
 			b.Integers = b.Integers[:0]
 		}
 		b.Integers, err = decodeIntegerBlock(buf, b.Integers)
+
+	case BlockInt32:
+		if b.Integers == nil || cap(b.Integers) < sz {
+			b.Integers = make([]int64, 0, sz)
+		} else {
+			b.Integers = b.Integers[:0]
+		}
+		b.Integers, err = decodeInt32Block(buf, b.Integers)
 
 	case BlockUnsigned:
 		if b.Unsigneds == nil || cap(b.Unsigneds) < sz {

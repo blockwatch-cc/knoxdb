@@ -255,7 +255,7 @@ func (o *Op) SetID(i uint64) {
 
 type Op2 struct {
 	RowId  uint64 `pack:"I,pk,snappy"   json:"row_id"` // internal: unique row id
-	Volume int64  `pack:"v,snappy"      json:"volume"` // stats: sum of transacted tezos volume
+	Volume int32  `pack:"v,snappy"      json:"volume"` // stats: sum of transacted tezos volume
 }
 
 func (o Op2) ID() uint64 {
@@ -475,16 +475,16 @@ func run() error {
 	}
 	fmt.Printf("Created Table 2\n")
 
-	for i := 0; i < 65536; i++ {
+	for i := 0; i < 1; i++ {
 		var row_op = Op2{
-			Volume: 100,
+			Volume: int32(i),
 		}
+
 		err = table2.Insert(context.Background(), &row_op)
 		if err != nil {
 			return err
 		}
 	}
-
 	// ops, err := ListOpTypes(context.Background(), table, OpTypeTransaction, 100)
 	// if err != nil {
 	// 	return err

@@ -105,6 +105,40 @@ func decodeFloatBlock(block []byte, dst []float64) ([]float64, error) {
 	return b, err
 }
 
+func encodeInt32Block(buf *bytes.Buffer, val []int64, comp Compression) (int64, int64, error) {
+	if len(val) == 0 {
+		return 0, 0, writeEmptyBlock(buf, BlockInt32)
+	}
+
+	buf.WriteByte(byte(comp<<5) | byte(BlockInt32))
+	w := getWriter(buf, comp)
+	var (
+		cp []int64
+		v  interface{}
+	)
+	if len(val) <= DefaultMaxPointsPerBlock {
+		v = integerPool.Get()
+		cp = v.([]int64)[:len(val)]
+	} else {
+		cp = make([]int64, len(val))
+	}
+	copy(cp, val)
+
+	min, max, err := compress.IntegerArrayEncodeAll(cp, w)
+	if v != nil {
+		integerPool.Put(v)
+	}
+	if err != nil {
+		_ = w.Close()
+		putWriter(w, comp)
+		return 0, 0, err
+	}
+
+	err = w.Close()
+	putWriter(w, comp)
+	return min, max, err
+}
+
 func encodeIntegerBlock(buf *bytes.Buffer, val []int64, comp Compression) (int64, int64, error) {
 	if len(val) == 0 {
 		return 0, 0, writeEmptyBlock(buf, BlockInteger)
@@ -141,6 +175,18 @@ func encodeIntegerBlock(buf *bytes.Buffer, val []int64, comp Compression) (int64
 
 func decodeIntegerBlock(block []byte, dst []int64) ([]int64, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockInteger)
+	if err != nil {
+		return nil, err
+	}
+	b, err := compress.IntegerArrayDecodeAll(buf, dst)
+	if canRecycle && cap(buf) == BlockSizeHint {
+		BlockEncoderPool.Put(buf[:0])
+	}
+	return b, err
+}
+
+func decodeInt32Block(block []byte, dst []int64) ([]int64, error) {
+	buf, canRecycle, err := unpackBlock(block, BlockInt32)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +426,7 @@ func unpackBlock(block []byte, typ BlockType) ([]byte, bool, error) {
 func readBlockType(block []byte) (BlockType, error) {
 	blockType := BlockType(block[0] & 0x1f)
 	switch blockType {
-	case BlockTime, BlockFloat, BlockInteger, BlockUnsigned, BlockBool, BlockString, BlockBytes:
+	case BlockTime, BlockFloat, BlockInteger, BlockInt32, BlockUnsigned, BlockBool, BlockString, BlockBytes:
 		return blockType, nil
 	default:
 		return 0, fmt.Errorf("pack: unknown block type: %d", blockType)

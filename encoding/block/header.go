@@ -92,6 +92,10 @@ func (b *Block) CloneHeader() BlockHeader {
 		min, max := b.MinValue.(int64), b.MaxValue.(int64)
 		bh.MinValue = min
 		bh.MaxValue = max
+	case BlockInt32:
+		min, max := b.MinValue.(int64), b.MaxValue.(int64)
+		bh.MinValue = min
+		bh.MaxValue = max
 	case BlockUnsigned:
 		min, max := b.MinValue.(uint64), b.MaxValue.(uint64)
 		if b.Flags&BlockFlagConvert > 0 {
@@ -156,6 +160,13 @@ func (h BlockHeader) Encode(buf *bytes.Buffer) error {
 		_, _ = buf.Write(v[:])
 
 	case BlockInteger:
+		var v [16]byte
+		min, max := h.MinValue.(int64), h.MaxValue.(int64)
+		bigEndian.PutUint64(v[0:], uint64(min))
+		bigEndian.PutUint64(v[8:], uint64(max))
+		_, _ = buf.Write(v[:])
+
+	case BlockInt32:
 		var v [16]byte
 		min, max := h.MinValue.(int64), h.MaxValue.(int64)
 		bigEndian.PutUint64(v[0:], uint64(min))
@@ -250,6 +261,11 @@ func (h *BlockHeader) Decode(buf *bytes.Buffer) error {
 		h.MaxValue = math.Float64frombits(bigEndian.Uint64(v[8:]))
 
 	case BlockInteger:
+		v := buf.Next(16)
+		h.MinValue = int64(bigEndian.Uint64(v[0:]))
+		h.MaxValue = int64(bigEndian.Uint64(v[8:]))
+
+	case BlockInt32:
 		v := buf.Next(16)
 		h.MinValue = int64(bigEndian.Uint64(v[0:]))
 		h.MaxValue = int64(bigEndian.Uint64(v[8:]))
