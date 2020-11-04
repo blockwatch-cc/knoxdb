@@ -1211,7 +1211,7 @@ func (p *Package) Clear() {
 	}
 	// we keep all type-related data like names, type info and blocks
 	// keep pack name to avoid clearing journal/tombstone names
-	p.version = packageStorageFormatVersionV1
+	p.version = packageStorageFormatVersionV4
 	p.nValues = 0
 	p.pkmap = nil
 	p.offsets = nil
