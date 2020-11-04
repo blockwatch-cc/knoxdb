@@ -33,6 +33,16 @@ func (t *typeInfo) PkColumn() int {
 	return -1
 }
 
+func (t *typeInfo) Clone() *typeInfo {
+	clone := &typeInfo{
+		name:   t.name,
+		fields: make([]fieldInfo, len(t.fields)),
+		gotype: t.gotype,
+	}
+	copy(clone.fields, t.fields)
+	return clone
+}
+
 // fieldInfo holds details for the representation of a single field.
 type fieldInfo struct {
 	idx       []int
@@ -41,6 +51,7 @@ type fieldInfo struct {
 	flags     FieldFlags
 	precision int
 	typname   string
+	blockid   int
 }
 
 func (f fieldInfo) String() string {
@@ -221,6 +232,9 @@ func addFieldInfo(typ reflect.Type, tinfo *typeInfo, newf *fieldInfo) error {
 		return fmt.Errorf("%s: %s field %q with tag %q conflicts with field %q with tag %q",
 			tagName, typ, f1.Name, f1.Tag.Get(tagName), f2.Name, f2.Tag.Get(tagName))
 	}
+
+	// default block order is struct order
+	newf.blockid = len(tinfo.fields)
 
 	// Without conflicts, add the new field and return.
 	tinfo.fields = append(tinfo.fields, *newf)

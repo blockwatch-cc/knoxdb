@@ -98,10 +98,13 @@ func (r *Result) DecodeAt(n int, val interface{}) error {
 		return ErrResultClosed
 	}
 	if r.tinfo == nil {
-		var err error
-		r.tinfo, err = getTypeInfo(val)
+		sharedTypeInfo, err := getTypeInfo(val)
 		if err != nil {
 			return err
+		}
+		r.tinfo = sharedTypeInfo.Clone()
+		for i, v := range r.tinfo.fields {
+			r.tinfo.fields[i].blockid = r.pkg.FieldIndex(v.name)
 		}
 	}
 	return r.pkg.ReadAtWithInfo(n, val, r.tinfo)

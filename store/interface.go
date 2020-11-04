@@ -259,9 +259,9 @@ type Manifest struct {
 	Name      string    `json:"name"`
 	Version   int       `json:"version"`
 	Label     string    `json:"label"`
+	Schema    string    `json:"schema"`
 	CreatedAt time.Time `json:"createdAt"`
-	OpenedAt  time.Time `json:"openedAt"`
-	ClosedAt  time.Time `json:"closedAt"`
+	IsLocked  bool      `json:"isLocked"`
 }
 
 func (m Manifest) IsValid() bool {
