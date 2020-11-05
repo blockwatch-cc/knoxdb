@@ -164,17 +164,17 @@ func (p *Package) Init(v interface{}, sz int) error {
 	p.namemap = make(map[string]int)
 	p.dirty = true
 	val := reflect.Indirect(reflect.ValueOf(v))
-	for i, fi := range p.tinfo.fields {
+	for _, fi := range p.tinfo.fields {
 		f := fi.value(val)
-		p.names[i] = fi.name
-		p.namemap[fi.name] = i
-		p.namemap[fi.alias] = i
+		p.names[fi.blockid] = fi.name
+		p.namemap[fi.name] = fi.blockid
+		p.namemap[fi.alias] = fi.blockid
 		switch f.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			p.blocks[i], err = block.NewBlock(block.BlockInteger, sz, fi.flags.Compression(), 0, 0)
+			p.blocks[fi.blockid], err = block.NewBlock(block.BlockInteger, sz, fi.flags.Compression(), 0, 0)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			if fi.flags&FlagConvert > 0 {
-				p.blocks[i], err = block.NewBlock(
+				p.blocks[fi.blockid], err = block.NewBlock(
 					block.BlockUnsigned,
 					sz,
 					fi.flags.Compression(),
@@ -182,11 +182,11 @@ func (p *Package) Init(v interface{}, sz int) error {
 					block.BlockFlagCompress,
 				)
 			} else {
-				p.blocks[i], err = block.NewBlock(block.BlockUnsigned, sz, fi.flags.Compression(), 0, 0)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUnsigned, sz, fi.flags.Compression(), 0, 0)
 			}
 		case reflect.Float32, reflect.Float64:
 			if fi.flags&FlagConvert > 0 {
-				p.blocks[i], err = block.NewBlock(
+				p.blocks[fi.blockid], err = block.NewBlock(
 					block.BlockUnsigned,
 					sz,
 					fi.flags.Compression(),
@@ -194,7 +194,7 @@ func (p *Package) Init(v interface{}, sz int) error {
 					block.BlockFlagConvert|block.BlockFlagCompress,
 				)
 			} else {
-				p.blocks[i], err = block.NewBlock(
+				p.blocks[fi.blockid], err = block.NewBlock(
 					block.BlockFloat,
 					sz,
 					fi.flags.Compression(),
@@ -203,33 +203,33 @@ func (p *Package) Init(v interface{}, sz int) error {
 				)
 			}
 		case reflect.String:
-			p.blocks[i], err = block.NewBlock(block.BlockString, sz, fi.flags.Compression(), 0, 0)
+			p.blocks[fi.blockid], err = block.NewBlock(block.BlockString, sz, fi.flags.Compression(), 0, 0)
 		case reflect.Slice:
 			// check if type implements BinaryMarshaler -> BlockBytes
 			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
 				break
 			}
 			// otherwise require byte slice
 			if f.Type() != byteSliceType {
 				return fmt.Errorf("pack: unsupported slice type %s", f.Type().String())
 			}
-			p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
+			p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
 		case reflect.Bool:
-			p.blocks[i], err = block.NewBlock(block.BlockBool, sz, fi.flags.Compression(), 0, 0)
+			p.blocks[fi.blockid], err = block.NewBlock(block.BlockBool, sz, fi.flags.Compression(), 0, 0)
 		case reflect.Struct:
 			// check string is much quicker
 			if f.Type().String() == "time.Time" {
-				p.blocks[i], err = block.NewBlock(block.BlockTime, sz, fi.flags.Compression(), 0, 0)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockTime, sz, fi.flags.Compression(), 0, 0)
 			} else if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
 			} else {
 				return fmt.Errorf("pack: unsupported embedded struct type %s", f.Type().String())
 			}
 		case reflect.Array:
 			// check if type implements BinaryMarshaler -> BlockBytes
 			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
 				break
 			}
 			return fmt.Errorf("pack: unsupported array type %s", f.Type().String())
@@ -267,6 +267,7 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 		p.tinfo.fields[i].name = field.Name
 		p.tinfo.fields[i].alias = field.Alias
 		p.tinfo.fields[i].flags = field.Flags
+		p.tinfo.fields[i].blockid = i
 		p.names[i] = field.Name
 		p.namemap[field.Name] = i
 		p.namemap[field.Alias] = i
