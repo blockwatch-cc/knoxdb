@@ -164,72 +164,72 @@ func (p *Package) Init(v interface{}, sz int) error {
 	p.namemap = make(map[string]int)
 	p.dirty = true
 	val := reflect.Indirect(reflect.ValueOf(v))
-	for i, finfo := range p.tinfo.fields {
-		f := finfo.value(val)
-		p.names[i] = finfo.name
-		p.namemap[finfo.name] = i
-		p.namemap[finfo.alias] = i
+	for _, fi := range p.tinfo.fields {
+		f := fi.value(val)
+		p.names[fi.blockid] = fi.name
+		p.namemap[fi.name] = fi.blockid
+		p.namemap[fi.alias] = fi.blockid
 		switch f.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			p.blocks[i], err = block.NewBlock(block.BlockInteger, sz, finfo.flags.Compression(), 0, 0)
+			p.blocks[fi.blockid], err = block.NewBlock(block.BlockInteger, sz, fi.flags.Compression(), 0, 0)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			if finfo.flags&FlagConvert > 0 {
-				p.blocks[i], err = block.NewBlock(
+			if fi.flags&FlagConvert > 0 {
+				p.blocks[fi.blockid], err = block.NewBlock(
 					block.BlockUnsigned,
 					sz,
-					finfo.flags.Compression(),
-					finfo.precision,
+					fi.flags.Compression(),
+					fi.precision,
 					block.BlockFlagCompress,
 				)
 			} else {
-				p.blocks[i], err = block.NewBlock(block.BlockUnsigned, sz, finfo.flags.Compression(), 0, 0)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUnsigned, sz, fi.flags.Compression(), 0, 0)
 			}
 		case reflect.Float32, reflect.Float64:
-			if finfo.flags&FlagConvert > 0 {
-				p.blocks[i], err = block.NewBlock(
+			if fi.flags&FlagConvert > 0 {
+				p.blocks[fi.blockid], err = block.NewBlock(
 					block.BlockUnsigned,
 					sz,
-					finfo.flags.Compression(),
-					finfo.precision,
+					fi.flags.Compression(),
+					fi.precision,
 					block.BlockFlagConvert|block.BlockFlagCompress,
 				)
 			} else {
-				p.blocks[i], err = block.NewBlock(
+				p.blocks[fi.blockid], err = block.NewBlock(
 					block.BlockFloat,
 					sz,
-					finfo.flags.Compression(),
-					finfo.precision,
+					fi.flags.Compression(),
+					fi.precision,
 					0,
 				)
 			}
 		case reflect.String:
-			p.blocks[i], err = block.NewBlock(block.BlockString, sz, finfo.flags.Compression(), 0, 0)
+			p.blocks[fi.blockid], err = block.NewBlock(block.BlockString, sz, fi.flags.Compression(), 0, 0)
 		case reflect.Slice:
 			// check if type implements BinaryMarshaler -> BlockBytes
 			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
 				break
 			}
 			// otherwise require byte slice
 			if f.Type() != byteSliceType {
 				return fmt.Errorf("pack: unsupported slice type %s", f.Type().String())
 			}
-			p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
+			p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
 		case reflect.Bool:
-			p.blocks[i], err = block.NewBlock(block.BlockBool, sz, finfo.flags.Compression(), 0, 0)
+			p.blocks[fi.blockid], err = block.NewBlock(block.BlockBool, sz, fi.flags.Compression(), 0, 0)
 		case reflect.Struct:
 			// check string is much quicker
 			if f.Type().String() == "time.Time" {
-				p.blocks[i], err = block.NewBlock(block.BlockTime, sz, finfo.flags.Compression(), 0, 0)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockTime, sz, fi.flags.Compression(), 0, 0)
 			} else if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
 			} else {
 				return fmt.Errorf("pack: unsupported embedded struct type %s", f.Type().String())
 			}
 		case reflect.Array:
 			// check if type implements BinaryMarshaler -> BlockBytes
 			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, finfo.flags.Compression(), 0, 0)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
 				break
 			}
 			return fmt.Errorf("pack: unsupported array type %s", f.Type().String())
@@ -267,6 +267,7 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 		p.tinfo.fields[i].name = field.Name
 		p.tinfo.fields[i].alias = field.Alias
 		p.tinfo.fields[i].flags = field.Flags
+		p.tinfo.fields[i].blockid = i
 		p.names[i] = field.Name
 		p.namemap[field.Name] = i
 		p.namemap[field.Alias] = i
@@ -409,41 +410,37 @@ func (p *Package) Push(v interface{}) error {
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
-	for i, finfo := range p.tinfo.fields {
-		blockId := i
-		if p.HasNames() {
-			if v, ok := p.namemap[finfo.name]; ok {
-				blockId = v
-			} else {
-				continue
-			}
+	for _, fi := range p.tinfo.fields {
+		if fi.blockid < 0 {
+			continue
 		}
-		f := finfo.value(val)
-		switch p.blocks[blockId].Type {
-		case block.BlockInt32:
-			p.blocks[blockId].Int32 = append(p.blocks[blockId].Int32, int32(f.Int()))
+		f := fi.value(val)
+		switch p.blocks[fi.blockid].Type {
 		case block.BlockInteger:
-			p.blocks[blockId].Integers = append(p.blocks[blockId].Integers, f.Int())
+			p.blocks[fi.blockid].Integers = append(p.blocks[fi.blockid].Integers, f.Int())
+
+		case block.BlockInt32:
+			p.blocks[fi.blockid].Int32 = append(p.blocks[fi.blockid].Int32, int32(f.Int()))
 
 		case block.BlockUnsigned:
 			var amount uint64
-			if p.blocks[blockId].Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 || finfo.flags&FlagConvert > 0 {
+			if p.blocks[fi.blockid].Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 || fi.flags&FlagConvert > 0 {
 				if f.Type().String() == "float64" {
 					// floats are converted to uints, then compressed
-					amount = block.CompressAmount(block.ConvertAmount(f.Float(), p.blocks[blockId].Precision))
+					amount = block.CompressAmount(block.ConvertAmount(f.Float(), p.blocks[fi.blockid].Precision))
 				} else {
 					amount = block.CompressAmount(f.Uint())
 				}
 			} else {
 				amount = f.Uint()
 			}
-			p.blocks[blockId].Unsigneds = append(p.blocks[blockId].Unsigneds, amount)
+			p.blocks[fi.blockid].Unsigneds = append(p.blocks[fi.blockid].Unsigneds, amount)
 
 		case block.BlockFloat:
-			p.blocks[blockId].Floats = append(p.blocks[blockId].Floats, f.Float())
+			p.blocks[fi.blockid].Floats = append(p.blocks[fi.blockid].Floats, f.Float())
 
 		case block.BlockString:
-			p.blocks[blockId].Strings = append(p.blocks[blockId].Strings, f.String())
+			p.blocks[fi.blockid].Strings = append(p.blocks[fi.blockid].Strings, f.String())
 
 		case block.BlockBytes:
 			var amount []byte
@@ -459,20 +456,20 @@ func (p *Package) Push(v interface{}) error {
 				amount = make([]byte, len(buf))
 				copy(amount, buf)
 			}
-			p.blocks[blockId].Bytes = append(p.blocks[blockId].Bytes, amount)
+			p.blocks[fi.blockid].Bytes = append(p.blocks[fi.blockid].Bytes, amount)
 
 		case block.BlockBool:
-			p.blocks[blockId].Bools = append(p.blocks[blockId].Bools, f.Bool())
+			p.blocks[fi.blockid].Bools = append(p.blocks[fi.blockid].Bools, f.Bool())
 
 		case block.BlockTime:
-			p.blocks[blockId].Timestamps = append(p.blocks[blockId].Timestamps, f.Interface().(time.Time).UnixNano())
+			p.blocks[fi.blockid].Timestamps = append(p.blocks[fi.blockid].Timestamps, f.Interface().(time.Time).UnixNano())
 
 		case block.BlockIgnore:
 
 		default:
 			return fmt.Errorf("pack: unsupported type %s (%v)", f.Type().String(), f.Kind())
 		}
-		p.blocks[blockId].Dirty = true
+		p.blocks[fi.blockid].Dirty = true
 	}
 	p.nValues++
 	p.dirty = true
@@ -494,43 +491,38 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
-	for i, finfo := range p.tinfo.fields {
-		blockId := i
-		if p.HasNames() {
-			if v, ok := p.namemap[finfo.name]; ok {
-				blockId = v
-			} else {
-				continue
-			}
+	for _, fi := range p.tinfo.fields {
+		if fi.blockid < 0 {
+			continue
 		}
-		f := finfo.value(val)
-		switch p.blocks[blockId].Type {
+		f := fi.value(val)
+		switch p.blocks[fi.blockid].Type {
 		case block.BlockInteger:
 			amount := f.Int()
-			p.blocks[blockId].Integers[pos] = amount
+			p.blocks[fi.blockid].Integers[pos] = amount
 
 		case block.BlockUnsigned:
 			var amount uint64
-			if p.blocks[blockId].Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 ||
-				finfo.flags&FlagConvert > 0 {
+			if p.blocks[fi.blockid].Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 ||
+				fi.flags&FlagConvert > 0 {
 				if f.Type().String() == "float64" {
 					// floats are converted to uints, then compressed
-					amount = block.CompressAmount(block.ConvertAmount(f.Float(), p.blocks[blockId].Precision))
+					amount = block.CompressAmount(block.ConvertAmount(f.Float(), p.blocks[fi.blockid].Precision))
 				} else {
 					amount = block.CompressAmount(f.Uint())
 				}
 			} else {
 				amount = f.Uint()
 			}
-			p.blocks[blockId].Unsigneds[pos] = amount
+			p.blocks[fi.blockid].Unsigneds[pos] = amount
 
 		case block.BlockFloat:
 			amount := f.Float()
-			p.blocks[blockId].Floats[pos] = amount
+			p.blocks[fi.blockid].Floats[pos] = amount
 
 		case block.BlockString:
 			amount := f.String()
-			p.blocks[blockId].Strings[pos] = amount
+			p.blocks[fi.blockid].Strings[pos] = amount
 
 		case block.BlockBytes:
 			// check if type implements BinaryMarshaler
@@ -546,15 +538,15 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 				amount = make([]byte, len(buf))
 				copy(amount, buf)
 			}
-			p.blocks[blockId].Bytes[pos] = amount
+			p.blocks[fi.blockid].Bytes[pos] = amount
 
 		case block.BlockBool:
 			amount := f.Bool()
-			p.blocks[blockId].Bools[pos] = amount
+			p.blocks[fi.blockid].Bools[pos] = amount
 
 		case block.BlockTime:
 			amount := f.Interface().(time.Time)
-			p.blocks[blockId].Timestamps[pos] = amount.UnixNano()
+			p.blocks[fi.blockid].Timestamps[pos] = amount.UnixNano()
 
 		case block.BlockIgnore:
 
@@ -562,7 +554,7 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			return fmt.Errorf("pack: unsupported type %s (%v)", f.Type().String(), f.Kind())
 		}
 		// set flag to indicate we must reparse min/max values when storing the pack
-		p.blocks[blockId].Dirty = true
+		p.blocks[fi.blockid].Dirty = true
 	}
 	p.dirty = true
 	p.pkmap = nil
@@ -596,14 +588,14 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
-	for _, finfo := range tinfo.fields {
-		// Note: field to block mapping is required to be iniialized in tinfo!
+	for _, fi := range tinfo.fields {
+		// Note: field to block mapping is required to be initialized in tinfo!
 		// this happens once for every new type used in Result.DecodeAt(),
 		// and assumes all packs have the same internal structure!
-		if finfo.blockid < 0 {
+		if fi.blockid < 0 {
 			continue
 		}
-		dst := finfo.value(val)
+		dst := fi.value(val)
 		if !dst.IsValid() {
 			continue
 		}
@@ -614,14 +606,14 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			}
 			dst = dst.Elem()
 		}
-		b := p.blocks[finfo.blockid]
+		b := p.blocks[fi.blockid]
 		switch b.Type {
 		case block.BlockInteger:
 			dst.SetInt(b.Integers[pos])
 
 		case block.BlockUnsigned:
 			value := b.Unsigneds[pos]
-			if b.Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 || finfo.flags&FlagConvert > 0 {
+			if b.Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 || fi.flags&FlagConvert > 0 {
 				if dst.Type().String() == "float64" {
 					dst.SetFloat(block.ConvertValue(block.DecompressAmount(value), b.Precision))
 				} else {
