@@ -101,7 +101,9 @@ Benchmarks
     - slow lookup: sparse numbers and binary search on lookup
     - 16 byte per entry
   - try b-tree index, inserts and lookups are O(log n) (hash index is O(1+c) with large c)
-
+- [ ] faster binary search https://github.com/scandum/binary_search
+- [ ] POPCOUNT false dependency bug https://github.com/tmthrgd/go-popcount/blob/master/popcount_amd64.s
+- [ ] ARM64 assembly in Go https://barakmich.dev/posts/popcnt-arm64-go-asm/
 
 ### Pack DB features
 - [x] Count/CountTx
@@ -142,6 +144,10 @@ Benchmarks
     - protect: individual packs when flushing
 - [ ] persist journal after insert/update/delete
 - [ ] background flush of journal/index entries to avoid extremely long flush times
+
+### Backup
+- difficult with mmap thorugh boltdb on a hot database
+- LVM can do snapshots, see https://github.com/benschweizer/dsnapshot
 
 ### Pack low-level features
 - [ ] SIMD aggregate functions (int64, uint64, float64)
@@ -201,6 +207,10 @@ type Aggregator struct {
   out Package
 }
 ```
+
+### DSL
+
+Eventually we need a DSL (domain specific language) for users. SQL might now be the right choice for the domain. kdb+ uses Q which is a version of K and similar to J https://en.wikipedia.org/wiki/J_(programming_language)
 
 
 ### Hash functions
