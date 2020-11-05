@@ -167,10 +167,10 @@ func (h BlockHeader) Encode(buf *bytes.Buffer) error {
 		_, _ = buf.Write(v[:])
 
 	case BlockInt32:
-		var v [16]byte
+		var v [8]byte
 		min, max := h.MinValue.(int32), h.MaxValue.(int32)
-		bigEndian.PutUint64(v[0:], uint64(min))
-		bigEndian.PutUint64(v[8:], uint64(max))
+		bigEndian.PutUint32(v[0:], uint32(min))
+		bigEndian.PutUint32(v[4:], uint32(max))
 		_, _ = buf.Write(v[:])
 
 	case BlockUnsigned:
@@ -266,9 +266,9 @@ func (h *BlockHeader) Decode(buf *bytes.Buffer) error {
 		h.MaxValue = int64(bigEndian.Uint64(v[8:]))
 
 	case BlockInt32:
-		v := buf.Next(16)
-		h.MinValue = int32(bigEndian.Uint64(v[0:]))
-		h.MaxValue = int32(bigEndian.Uint64(v[8:]))
+		v := buf.Next(8)
+		h.MinValue = int32(bigEndian.Uint32(v[0:]))
+		h.MaxValue = int32(bigEndian.Uint32(v[4:]))
 
 	case BlockUnsigned:
 		v := buf.Next(16)

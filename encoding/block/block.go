@@ -712,10 +712,10 @@ func (b *Block) EncodeHeader() ([]byte, error) {
 		_, _ = buf.Write(v[:])
 
 	case BlockInt32:
-		var v [16]byte
+		var v [8]byte
 		min, max := b.MinValue.(int32), b.MaxValue.(int32)
 		bigEndian.PutUint32(v[0:], uint32(min))
-		bigEndian.PutUint32(v[8:], uint32(max))
+		bigEndian.PutUint32(v[4:], uint32(max))
 		_, _ = buf.Write(v[:])
 
 	case BlockUnsigned:
@@ -820,12 +820,12 @@ func (b *Block) DecodeHeader(buf *bytes.Buffer) error {
 		}
 
 	case BlockInt32:
-		v := buf.Next(16)
+		v := buf.Next(8)
 		if b.Type != BlockIgnore {
 			b.Type = typ
 			b.Compression = comp
 			b.MinValue = int32(bigEndian.Uint32(v[0:]))
-			b.MaxValue = int32(bigEndian.Uint32(v[8:]))
+			b.MaxValue = int32(bigEndian.Uint32(v[4:]))
 		}
 
 	case BlockUnsigned:
