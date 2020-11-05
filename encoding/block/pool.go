@@ -31,6 +31,9 @@ var (
 	integerPool = &sync.Pool{
 		New: func() interface{} { return make([]int64, 0, DefaultMaxPointsPerBlock) },
 	}
+	int32Pool = &sync.Pool{
+		New: func() interface{} { return make([]int32, 0, DefaultMaxPointsPerBlock) },
+	}
 	unsignedPool = &sync.Pool{
 		New: func() interface{} { return make([]uint64, 0, DefaultMaxPointsPerBlock) },
 	}

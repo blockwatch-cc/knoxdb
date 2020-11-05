@@ -49,6 +49,11 @@ func IntegerArrayEncodedSize(src []int64) int {
 }
 
 // upper bound
+func Int32ArrayEncodedSize(src []int32) int {
+	return len(src)*4 + 1
+}
+
+// upper bound
 func UnsignedArrayEncodedSize(src []uint64) int {
 	return len(src)*8 + 1
 }

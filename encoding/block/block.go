@@ -104,6 +104,7 @@ type Block struct {
 	Bytes      [][]byte
 	Bools      []bool
 	Integers   []int64
+	Int32      []int32
 	Unsigneds  []uint64
 	Timestamps []int64
 	Floats     []float64
@@ -143,12 +144,12 @@ func NewBlock(typ BlockType, sz int, comp Compression, prec int, flags BlockFlag
 		b.MaxValue = int64(0)
 	case BlockInt32:
 		if sz <= DefaultMaxPointsPerBlock {
-			b.Integers = integerPool.Get().([]int64)
+			b.Int32 = int32Pool.Get().([]int32)
 		} else {
-			b.Integers = make([]int64, 0, sz)
+			b.Int32 = make([]int32, 0, sz)
 		}
-		b.MinValue = int64(0)
-		b.MaxValue = int64(0)
+		b.MinValue = int32(0)
+		b.MaxValue = int32(0)
 	case BlockUnsigned:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Unsigneds = unsignedPool.Get().([]uint64)
@@ -258,22 +259,22 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 	case BlockInt32:
 		if copydata {
 			if sz <= DefaultMaxPointsPerBlock {
-				cp.Integers = integerPool.Get().([]int64)[:sz]
+				cp.Int32 = int32Pool.Get().([]int32)[:sz]
 			} else {
-				cp.Integers = make([]int64, sz)
+				cp.Int32 = make([]int32, sz)
 			}
-			copy(cp.Integers, b.Integers)
-			min, max := b.MinValue.(int64), b.MaxValue.(int64)
+			copy(cp.Int32, b.Int32)
+			min, max := b.MinValue.(int32), b.MaxValue.(int32)
 			cp.MinValue = min
 			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
-				cp.Integers = integerPool.Get().([]int64)[:0]
+				cp.Int32 = int32Pool.Get().([]int32)[:0]
 			} else {
-				cp.Integers = make([]int64, 0, sz)
+				cp.Int32 = make([]int32, 0, sz)
 			}
-			cp.MinValue = int64(0)
-			cp.MaxValue = int64(0)
+			cp.MinValue = int32(0)
+			cp.MaxValue = int32(0)
 		}
 	case BlockUnsigned:
 		if copydata {
@@ -376,6 +377,8 @@ func (b *Block) Len() int {
 		return len(b.Floats)
 	case BlockInteger:
 		return len(b.Integers)
+	case BlockInt32:
+		return len(b.Int32)
 	case BlockUnsigned:
 		return len(b.Unsigneds)
 	case BlockBool:
@@ -405,7 +408,7 @@ func (b *Block) MaxStoredSize() int {
 	case BlockInteger:
 		sz = compress.IntegerArrayEncodedSize(b.Integers)
 	case BlockInt32:
-		sz = compress.IntegerArrayEncodedSize(b.Integers)
+		sz = compress.Int32ArrayEncodedSize(b.Int32)
 	case BlockUnsigned:
 		sz = compress.UnsignedArrayEncodedSize(b.Unsigneds)
 	case BlockBool:
@@ -459,6 +462,10 @@ func (b *Block) Clear() {
 		b.Integers = b.Integers[:0]
 		b.MinValue = int64(0)
 		b.MaxValue = int64(0)
+	case BlockInt32:
+		b.Int32 = b.Int32[:0]
+		b.MinValue = int32(0)
+		b.MaxValue = int32(0)
 	case BlockUnsigned:
 		b.Unsigneds = b.Unsigneds[:0]
 		b.MinValue = uint64(0)
@@ -604,7 +611,7 @@ func (b *Block) EncodeBody() ([]byte, error) {
 		}
 
 	case BlockInt32:
-		min, max, err := encodeInt32Block(buf, b.Integers, b.Compression)
+		min, max, err := encodeInt32Block(buf, b.Int32, b.Compression)
 		if err != nil {
 			return nil, err
 		}
@@ -706,9 +713,9 @@ func (b *Block) EncodeHeader() ([]byte, error) {
 
 	case BlockInt32:
 		var v [16]byte
-		min, max := b.MinValue.(int64), b.MaxValue.(int64)
-		bigEndian.PutUint64(v[0:], uint64(min))
-		bigEndian.PutUint64(v[8:], uint64(max))
+		min, max := b.MinValue.(int32), b.MaxValue.(int32)
+		bigEndian.PutUint32(v[0:], uint32(min))
+		bigEndian.PutUint32(v[8:], uint32(max))
 		_, _ = buf.Write(v[:])
 
 	case BlockUnsigned:
@@ -817,8 +824,8 @@ func (b *Block) DecodeHeader(buf *bytes.Buffer) error {
 		if b.Type != BlockIgnore {
 			b.Type = typ
 			b.Compression = comp
-			b.MinValue = int64(bigEndian.Uint64(v[0:]))
-			b.MaxValue = int64(bigEndian.Uint64(v[8:]))
+			b.MinValue = int32(bigEndian.Uint32(v[0:]))
+			b.MaxValue = int32(bigEndian.Uint32(v[8:]))
 		}
 
 	case BlockUnsigned:
@@ -933,12 +940,12 @@ func (b *Block) DecodeBody(buf []byte, sz int) error {
 		b.Integers, err = decodeIntegerBlock(buf, b.Integers)
 
 	case BlockInt32:
-		if b.Integers == nil || cap(b.Integers) < sz {
-			b.Integers = make([]int64, 0, sz)
+		if b.Int32 == nil || cap(b.Int32) < sz {
+			b.Int32 = make([]int32, 0, sz)
 		} else {
-			b.Integers = b.Integers[:0]
+			b.Int32 = b.Int32[:0]
 		}
-		b.Integers, err = decodeInt32Block(buf, b.Integers)
+		b.Int32, err = decodeInt32Block(buf, b.Int32)
 
 	case BlockUnsigned:
 		if b.Unsigneds == nil || cap(b.Unsigneds) < sz {

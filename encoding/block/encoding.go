@@ -105,7 +105,7 @@ func decodeFloatBlock(block []byte, dst []float64) ([]float64, error) {
 	return b, err
 }
 
-func encodeInt32Block(buf *bytes.Buffer, val []int64, comp Compression) (int64, int64, error) {
+func encodeInt32Block(buf *bytes.Buffer, val []int32, comp Compression) (int32, int32, error) {
 	if len(val) == 0 {
 		return 0, 0, writeEmptyBlock(buf, BlockInt32)
 	}
@@ -122,7 +122,10 @@ func encodeInt32Block(buf *bytes.Buffer, val []int64, comp Compression) (int64, 
 	} else {
 		cp = make([]int64, len(val))
 	}
-	copy(cp, val)
+	//copy(cp, val)
+	for i, _ := range val {
+		cp[i] = int64(val[i])
+	}
 
 	min, max, err := compress.IntegerArrayEncodeAll(cp, w)
 	if v != nil {
@@ -136,7 +139,7 @@ func encodeInt32Block(buf *bytes.Buffer, val []int64, comp Compression) (int64, 
 
 	err = w.Close()
 	putWriter(w, comp)
-	return min, max, err
+	return int32(min), int32(max), err
 }
 
 func encodeIntegerBlock(buf *bytes.Buffer, val []int64, comp Compression) (int64, int64, error) {
@@ -185,16 +188,42 @@ func decodeIntegerBlock(block []byte, dst []int64) ([]int64, error) {
 	return b, err
 }
 
-func decodeInt32Block(block []byte, dst []int64) ([]int64, error) {
+func decodeInt32Block(block []byte, dst []int32) ([]int32, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockInt32)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compress.IntegerArrayDecodeAll(buf, dst)
+	var (
+		cp []int64
+		v  interface{}
+	)
+	if len(dst) <= DefaultMaxPointsPerBlock {
+		v = integerPool.Get()
+		cp = v.([]int64)[:len(dst)]
+	} else {
+		cp = make([]int64, len(dst))
+	}
+
+	b, err := compress.IntegerArrayDecodeAll(buf, cp)
+
+	if cap(dst) >= len(b) {
+		dst = dst[:len(b)]
+	} else {
+		dst = make([]int32, len(b))
+	}
+
+	for i, _ := range b {
+		dst[i] = int32(b[i])
+	}
+
+	if v != nil {
+		integerPool.Put(v)
+	}
+
 	if canRecycle && cap(buf) == BlockSizeHint {
 		BlockEncoderPool.Put(buf[:0])
 	}
-	return b, err
+	return dst, err
 }
 
 func encodeUnsignedBlock(buf *bytes.Buffer, val []uint64, comp Compression) (uint64, uint64, error) {

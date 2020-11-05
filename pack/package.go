@@ -421,7 +421,7 @@ func (p *Package) Push(v interface{}) error {
 		f := finfo.value(val)
 		switch p.blocks[blockId].Type {
 		case block.BlockInt32:
-			p.blocks[blockId].Integers = append(p.blocks[blockId].Integers, f.Int())
+			p.blocks[blockId].Int32 = append(p.blocks[blockId].Int32, int32(f.Int()))
 		case block.BlockInteger:
 			p.blocks[blockId].Integers = append(p.blocks[blockId].Integers, f.Int())
 
@@ -701,7 +701,7 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 		val := p.blocks[index].Integers[pos]
 		return val, nil
 	case block.BlockInt32:
-		val := p.blocks[index].Integers[pos]
+		val := p.blocks[index].Int32[pos]
 		return val, nil
 	case block.BlockUnsigned:
 		// this is either an uint or float target since floats may have been converted to uints
@@ -1074,7 +1074,7 @@ func (p *Package) AppendFrom(src *Package, srcPos, srcLen int, safecopy bool) er
 		case block.BlockInteger:
 			p.blocks[i].Integers = append(p.blocks[i].Integers, src.blocks[i].Integers[srcPos:srcPos+srcLen]...)
 		case block.BlockInt32:
-			p.blocks[i].Integers = append(p.blocks[i].Integers, src.blocks[i].Integers[srcPos:srcPos+srcLen]...)
+			p.blocks[i].Int32 = append(p.blocks[i].Int32, src.blocks[i].Int32[srcPos:srcPos+srcLen]...)
 		case block.BlockUnsigned:
 			p.blocks[i].Unsigneds = append(p.blocks[i].Unsigneds, src.blocks[i].Unsigneds[srcPos:srcPos+srcLen]...)
 		case block.BlockFloat:

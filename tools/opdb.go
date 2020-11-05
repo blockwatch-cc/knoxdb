@@ -475,7 +475,7 @@ func run() error {
 	}
 	fmt.Printf("Created Table 2\n")
 
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 1000000; i++ {
 		var row_op = Op2{
 			Volume: int32(i),
 		}
