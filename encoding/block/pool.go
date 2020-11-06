@@ -28,20 +28,38 @@ var (
 		func() interface{} { return lz4.NewReader(nil) },
 	)
 
-	integerPool = &sync.Pool{
+	int64Pool = &sync.Pool{
 		New: func() interface{} { return make([]int64, 0, DefaultMaxPointsPerBlock) },
 	}
 	int32Pool = &sync.Pool{
 		New: func() interface{} { return make([]int32, 0, DefaultMaxPointsPerBlock) },
 	}
-	unsignedPool = &sync.Pool{
+	int16Pool = &sync.Pool{
+		New: func() interface{} { return make([]int16, 0, DefaultMaxPointsPerBlock) },
+	}
+	int8Pool = &sync.Pool{
+		New: func() interface{} { return make([]int8, 0, DefaultMaxPointsPerBlock) },
+	}
+	uint64Pool = &sync.Pool{
 		New: func() interface{} { return make([]uint64, 0, DefaultMaxPointsPerBlock) },
+	}
+	uint32Pool = &sync.Pool{
+		New: func() interface{} { return make([]uint32, 0, DefaultMaxPointsPerBlock) },
+	}
+	uint16Pool = &sync.Pool{
+		New: func() interface{} { return make([]uint16, 0, DefaultMaxPointsPerBlock) },
+	}
+	uint8Pool = &sync.Pool{
+		New: func() interface{} { return make([]uint8, 0, DefaultMaxPointsPerBlock) },
 	}
 	boolPool = &sync.Pool{
 		New: func() interface{} { return make([]bool, 0, DefaultMaxPointsPerBlock) },
 	}
-	floatPool = &sync.Pool{
+	float64Pool = &sync.Pool{
 		New: func() interface{} { return make([]float64, 0, DefaultMaxPointsPerBlock) },
+	}
+	float32Pool = &sync.Pool{
+		New: func() interface{} { return make([]float32, 0, DefaultMaxPointsPerBlock) },
 	}
 	stringPool = &sync.Pool{
 		New: func() interface{} { return make([]string, 0, DefaultMaxPointsPerBlock) },

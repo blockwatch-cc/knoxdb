@@ -44,7 +44,7 @@ const (
 )
 
 // upper bound
-func IntegerArrayEncodedSize(src []int64) int {
+func Int64ArrayEncodedSize(src []int64) int {
 	return len(src)*8 + 1
 }
 
@@ -54,8 +54,33 @@ func Int32ArrayEncodedSize(src []int32) int {
 }
 
 // upper bound
-func UnsignedArrayEncodedSize(src []uint64) int {
+func Int16ArrayEncodedSize(src []int16) int {
+	return len(src)*2 + 1
+}
+
+// upper bound
+func Int8ArrayEncodedSize(src []int8) int {
+	return len(src) + 1
+}
+
+// upper bound
+func Uint64ArrayEncodedSize(src []uint64) int {
 	return len(src)*8 + 1
+}
+
+// upper bound
+func Uint32ArrayEncodedSize(src []uint32) int {
+	return len(src)*4 + 1
+}
+
+// upper bound
+func Uint16ArrayEncodedSize(src []uint16) int {
+	return len(src)*2 + 1
+}
+
+// upper bound
+func Uint8ArrayEncodedSize(src []uint8) int {
+	return len(src) + 1
 }
 
 func IntegerArrayEncodeAll(src []int64, w io.Writer) (int64, int64, error) {
