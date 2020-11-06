@@ -305,11 +305,11 @@ func FieldTypeFromBlock(b block.BlockType) FieldType {
 		return FieldTypeDatetime
 	case block.BlockBool:
 		return FieldTypeBoolean
-	case block.BlockFloat:
+	case block.BlockFloat64:
 		return FieldTypeFloat64
-	case block.BlockInteger:
+	case block.BlockInt64:
 		return FieldTypeInt64
-	case block.BlockUnsigned:
+	case block.BlockUint64:
 		return FieldTypeUint64
 	default:
 		return FieldTypeUndefined
@@ -327,11 +327,11 @@ func (t FieldType) BlockType() block.BlockType {
 	case FieldTypeBoolean:
 		return block.BlockBool
 	case FieldTypeFloat64:
-		return block.BlockFloat
+		return block.BlockFloat64
 	case FieldTypeInt64:
-		return block.BlockInteger
+		return block.BlockInt64
 	case FieldTypeUint64:
-		return block.BlockUnsigned
+		return block.BlockUint64
 	default:
 		return block.BlockBytes
 	}

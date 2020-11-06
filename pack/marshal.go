@@ -154,7 +154,7 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 			}
 			// v2 only: set uint64/float converted block precision from pack header
 			if p.version == packageStorageFormatVersionV2 {
-				if p.blocks[i].Type == block.BlockUnsigned || p.blocks[i].Type == block.BlockFloat {
+				if p.blocks[i].Type == block.BlockUint64 || p.blocks[i].Type == block.BlockFloat64 {
 					p.blocks[i].Precision = precision
 				}
 			}

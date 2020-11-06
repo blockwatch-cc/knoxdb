@@ -62,7 +62,7 @@ func (p *Package) PkMap() map[uint64]int {
 		return nil
 	}
 	p.pkmap = make(map[uint64]int, p.nValues)
-	for i, v := range p.blocks[p.pkindex].Unsigneds {
+	for i, v := range p.blocks[p.pkindex].Uint64 {
 		p.pkmap[v] = i
 	}
 	return p.pkmap
@@ -92,7 +92,7 @@ func (p *Package) Cap() int {
 	if p.pkindex < 0 {
 		return -1
 	}
-	return cap(p.blocks[p.pkindex].Unsigneds)
+	return cap(p.blocks[p.pkindex].Uint64)
 }
 
 func (p *Package) FieldIndex(name string) int {
@@ -171,23 +171,23 @@ func (p *Package) Init(v interface{}, sz int) error {
 		p.namemap[fi.alias] = fi.blockid
 		switch f.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockInteger, sz, fi.flags.Compression(), 0, 0)
+			p.blocks[fi.blockid], err = block.NewBlock(block.BlockInt64, sz, fi.flags.Compression(), 0, 0)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			if fi.flags&FlagConvert > 0 {
 				p.blocks[fi.blockid], err = block.NewBlock(
-					block.BlockUnsigned,
+					block.BlockUint64,
 					sz,
 					fi.flags.Compression(),
 					fi.precision,
 					block.BlockFlagCompress,
 				)
 			} else {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUnsigned, sz, fi.flags.Compression(), 0, 0)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint64, sz, fi.flags.Compression(), 0, 0)
 			}
 		case reflect.Float32, reflect.Float64:
 			if fi.flags&FlagConvert > 0 {
 				p.blocks[fi.blockid], err = block.NewBlock(
-					block.BlockUnsigned,
+					block.BlockUint64,
 					sz,
 					fi.flags.Compression(),
 					fi.precision,
@@ -195,7 +195,7 @@ func (p *Package) Init(v interface{}, sz int) error {
 				)
 			} else {
 				p.blocks[fi.blockid], err = block.NewBlock(
-					block.BlockFloat,
+					block.BlockFloat64,
 					sz,
 					fi.flags.Compression(),
 					fi.precision,
@@ -275,11 +275,11 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 		case FieldTypeInt32:
 			p.blocks[i], err = block.NewBlock(block.BlockInt32, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeInt64:
-			p.blocks[i], err = block.NewBlock(block.BlockInteger, sz, field.Flags.Compression(), 0, 0)
+			p.blocks[i], err = block.NewBlock(block.BlockInt64, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeUint64:
 			if field.Flags&FlagConvert > 0 {
 				p.blocks[i], err = block.NewBlock(
-					block.BlockUnsigned,
+					block.BlockUint64,
 					sz,
 					field.Flags.Compression(),
 					field.Precision,
@@ -287,7 +287,7 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 				)
 			} else {
 				p.blocks[i], err = block.NewBlock(
-					block.BlockUnsigned,
+					block.BlockUint64,
 					sz,
 					field.Flags.Compression(),
 					0,
@@ -297,14 +297,14 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 		case FieldTypeFloat64:
 			if field.Flags&FlagConvert > 0 {
 				p.blocks[i], err = block.NewBlock(
-					block.BlockUnsigned,
+					block.BlockUint64,
 					sz,
 					field.Flags.Compression(),
 					field.Precision,
 					block.BlockFlagConvert|block.BlockFlagCompress,
 				)
 			} else {
-				p.blocks[i], err = block.NewBlock(block.BlockFloat, sz, field.Flags.Compression(), 0, 0)
+				p.blocks[i], err = block.NewBlock(block.BlockFloat64, sz, field.Flags.Compression(), 0, 0)
 			}
 		case FieldTypeString:
 			p.blocks[i], err = block.NewBlock(block.BlockString, sz, field.Flags.Compression(), 0, 0)
@@ -416,13 +416,13 @@ func (p *Package) Push(v interface{}) error {
 		}
 		f := fi.value(val)
 		switch p.blocks[fi.blockid].Type {
-		case block.BlockInteger:
-			p.blocks[fi.blockid].Integers = append(p.blocks[fi.blockid].Integers, f.Int())
+		case block.BlockInt64:
+			p.blocks[fi.blockid].Int64 = append(p.blocks[fi.blockid].Int64, f.Int())
 
 		case block.BlockInt32:
 			p.blocks[fi.blockid].Int32 = append(p.blocks[fi.blockid].Int32, int32(f.Int()))
 
-		case block.BlockUnsigned:
+		case block.BlockUint64:
 			var amount uint64
 			if p.blocks[fi.blockid].Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 || fi.flags&FlagConvert > 0 {
 				if f.Type().String() == "float64" {
@@ -434,10 +434,10 @@ func (p *Package) Push(v interface{}) error {
 			} else {
 				amount = f.Uint()
 			}
-			p.blocks[fi.blockid].Unsigneds = append(p.blocks[fi.blockid].Unsigneds, amount)
+			p.blocks[fi.blockid].Uint64 = append(p.blocks[fi.blockid].Uint64, amount)
 
-		case block.BlockFloat:
-			p.blocks[fi.blockid].Floats = append(p.blocks[fi.blockid].Floats, f.Float())
+		case block.BlockFloat64:
+			p.blocks[fi.blockid].Float64 = append(p.blocks[fi.blockid].Float64, f.Float())
 
 		case block.BlockString:
 			p.blocks[fi.blockid].Strings = append(p.blocks[fi.blockid].Strings, f.String())
@@ -497,11 +497,11 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 		}
 		f := fi.value(val)
 		switch p.blocks[fi.blockid].Type {
-		case block.BlockInteger:
+		case block.BlockInt64:
 			amount := f.Int()
-			p.blocks[fi.blockid].Integers[pos] = amount
+			p.blocks[fi.blockid].Int64[pos] = amount
 
-		case block.BlockUnsigned:
+		case block.BlockUint64:
 			var amount uint64
 			if p.blocks[fi.blockid].Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 ||
 				fi.flags&FlagConvert > 0 {
@@ -514,11 +514,11 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			} else {
 				amount = f.Uint()
 			}
-			p.blocks[fi.blockid].Unsigneds[pos] = amount
+			p.blocks[fi.blockid].Uint64[pos] = amount
 
-		case block.BlockFloat:
+		case block.BlockFloat64:
 			amount := f.Float()
-			p.blocks[fi.blockid].Floats[pos] = amount
+			p.blocks[fi.blockid].Float64[pos] = amount
 
 		case block.BlockString:
 			amount := f.String()
@@ -608,11 +608,11 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 		}
 		b := p.blocks[fi.blockid]
 		switch b.Type {
-		case block.BlockInteger:
-			dst.SetInt(b.Integers[pos])
+		case block.BlockInt64:
+			dst.SetInt(b.Int64[pos])
 
-		case block.BlockUnsigned:
-			value := b.Unsigneds[pos]
+		case block.BlockUint64:
+			value := b.Uint64[pos]
 			if b.Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 || fi.flags&FlagConvert > 0 {
 				if dst.Type().String() == "float64" {
 					dst.SetFloat(block.ConvertValue(block.DecompressAmount(value), b.Precision))
@@ -623,8 +623,8 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 				dst.SetUint(value)
 			}
 
-		case block.BlockFloat:
-			dst.SetFloat(b.Floats[pos])
+		case block.BlockFloat64:
+			dst.SetFloat(b.Float64[pos])
 
 		case block.BlockString:
 			dst.SetString(b.Strings[pos])
@@ -689,15 +689,15 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 		return nil, fmt.Errorf("pack: invalid pos index %d (max=%d)", pos, p.nValues)
 	}
 	switch p.blocks[index].Type {
-	case block.BlockInteger:
-		val := p.blocks[index].Integers[pos]
+	case block.BlockInt64:
+		val := p.blocks[index].Int64[pos]
 		return val, nil
 	case block.BlockInt32:
 		val := p.blocks[index].Int32[pos]
 		return val, nil
-	case block.BlockUnsigned:
+	case block.BlockUint64:
 		// this is either an uint or float target since floats may have been converted to uints
-		val := p.blocks[index].Unsigneds[pos]
+		val := p.blocks[index].Uint64[pos]
 		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
 			return block.ConvertValue(block.DecompressAmount(val), p.blocks[index].Precision), nil
 		}
@@ -705,8 +705,8 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 			return block.DecompressAmount(val), nil
 		}
 		return val, nil
-	case block.BlockFloat:
-		val := p.blocks[index].Floats[pos]
+	case block.BlockFloat64:
+		val := p.blocks[index].Float64[pos]
 		return val, nil
 	case block.BlockString:
 		val := p.blocks[index].Strings[pos]
@@ -737,19 +737,19 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
 	switch p.blocks[index].Type {
-	case block.BlockInteger:
-		p.blocks[index].Integers[pos] = val.Int()
-	case block.BlockUnsigned:
+	case block.BlockInt64:
+		p.blocks[index].Int64[pos] = val.Int()
+	case block.BlockUint64:
 		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
-			p.blocks[index].Unsigneds[pos] = block.CompressAmount(block.ConvertAmount(val.Float(), p.blocks[index].Precision))
+			p.blocks[index].Uint64[pos] = block.CompressAmount(block.ConvertAmount(val.Float(), p.blocks[index].Precision))
 		} else if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
-			p.blocks[index].Unsigneds[pos] = block.CompressAmount(val.Uint())
+			p.blocks[index].Uint64[pos] = block.CompressAmount(val.Uint())
 		} else {
-			p.blocks[index].Unsigneds[pos] = val.Uint()
+			p.blocks[index].Uint64[pos] = val.Uint()
 		}
-	case block.BlockFloat:
+	case block.BlockFloat64:
 		amount := val.Float()
-		p.blocks[index].Floats[pos] = amount
+		p.blocks[index].Float64[pos] = amount
 	case block.BlockString:
 		amount := val.String()
 		p.blocks[index].Strings[pos] = amount
@@ -798,34 +798,34 @@ func (p *Package) isValidAt(index, pos int, typ block.BlockType) error {
 }
 
 func (p *Package) Uint64At(index, pos int) (uint64, error) {
-	if err := p.isValidAt(index, pos, block.BlockUnsigned); err != nil {
+	if err := p.isValidAt(index, pos, block.BlockUint64); err != nil {
 		return 0, err
 	}
 	if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
-		return block.DecompressAmount(p.blocks[index].Unsigneds[pos]), nil
+		return block.DecompressAmount(p.blocks[index].Uint64[pos]), nil
 	}
-	return p.blocks[index].Unsigneds[pos], nil
+	return p.blocks[index].Uint64[pos], nil
 }
 
 func (p *Package) Int64At(index, pos int) (int64, error) {
-	if err := p.isValidAt(index, pos, block.BlockInteger); err != nil {
+	if err := p.isValidAt(index, pos, block.BlockInt64); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Integers[pos], nil
+	return p.blocks[index].Int64[pos], nil
 }
 
 func (p *Package) Float64At(index, pos int) (float64, error) {
 	if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
-		if err := p.isValidAt(index, pos, block.BlockUnsigned); err != nil {
+		if err := p.isValidAt(index, pos, block.BlockUint64); err != nil {
 			return 0.0, err
 		}
-		val := block.DecompressAmount(p.blocks[index].Unsigneds[pos])
+		val := block.DecompressAmount(p.blocks[index].Uint64[pos])
 		return block.ConvertValue(val, p.blocks[index].Precision), nil
 	}
-	if err := p.isValidAt(index, pos, block.BlockFloat); err != nil {
+	if err := p.isValidAt(index, pos, block.BlockFloat64); err != nil {
 		return 0.0, err
 	}
-	return p.blocks[index].Floats[pos], nil
+	return p.blocks[index].Float64[pos], nil
 }
 
 func (p *Package) StringAt(index, pos int) (string, error) {
@@ -861,11 +861,11 @@ func (p *Package) IsZeroAt(index, pos int) bool {
 		return false
 	}
 	switch p.blocks[index].Type {
-	case block.BlockInteger, block.BlockUnsigned, block.BlockBool:
+	case block.BlockInt64, block.BlockUint64, block.BlockBool:
 		// cannot be zero because 0 value has a meaning
 		return false
-	case block.BlockFloat:
-		v := p.blocks[index].Floats[pos]
+	case block.BlockFloat64:
+		v := p.blocks[index].Float64[pos]
 		return math.IsNaN(v) || math.IsInf(v, 0)
 	case block.BlockString:
 		return len(p.blocks[index].Strings[pos]) == 0
@@ -883,11 +883,11 @@ func (p *Package) Column(index int) (interface{}, error) {
 		return nil, ErrNoField
 	}
 	switch p.blocks[index].Type {
-	case block.BlockInteger:
-		return p.blocks[index].Integers, nil
-	case block.BlockUnsigned:
+	case block.BlockInt64:
+		return p.blocks[index].Int64, nil
+	case block.BlockUint64:
 		// floats may have been converted to uints
-		val := p.blocks[index].Unsigneds
+		val := p.blocks[index].Uint64
 		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
 			resp := make([]float64, len(val))
 			for i, v := range val {
@@ -904,8 +904,8 @@ func (p *Package) Column(index int) (interface{}, error) {
 			return resp, nil
 		}
 		return val, nil
-	case block.BlockFloat:
-		return p.blocks[index].Floats, nil
+	case block.BlockFloat64:
+		return p.blocks[index].Float64, nil
 	case block.BlockString:
 		return p.blocks[index].Strings, nil
 	case block.BlockBytes:
@@ -927,12 +927,12 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 	out := make([]interface{}, p.nFields)
 	for i, b := range p.blocks {
 		switch b.Type {
-		case block.BlockInteger:
-			out[i] = b.Integers[pos]
-		case block.BlockUnsigned:
-			out[i] = b.Unsigneds[pos]
-		case block.BlockFloat:
-			out[i] = b.Floats[pos]
+		case block.BlockInt64:
+			out[i] = b.Int64[pos]
+		case block.BlockUint64:
+			out[i] = b.Uint64[pos]
+		case block.BlockFloat64:
+			out[i] = b.Float64[pos]
 		case block.BlockString:
 			str := b.Strings[pos]
 			out[i] = str
@@ -960,11 +960,11 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		return nil, fmt.Errorf("pack: invalid range %d:%d (max=%d)", start, end, p.nValues)
 	}
 	switch p.blocks[index].Type {
-	case block.BlockInteger:
-		return p.blocks[index].Integers[start:end], nil
-	case block.BlockUnsigned:
+	case block.BlockInt64:
+		return p.blocks[index].Int64[start:end], nil
+	case block.BlockUint64:
 		// floats may have been converted to uints
-		val := p.blocks[index].Unsigneds[start:end]
+		val := p.blocks[index].Uint64[start:end]
 		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
 			resp := make([]float64, len(val))
 			for i, v := range val {
@@ -980,8 +980,8 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 			return resp, nil
 		}
 		return val, nil
-	case block.BlockFloat:
-		return p.blocks[index].Floats[start:end], nil
+	case block.BlockFloat64:
+		return p.blocks[index].Float64[start:end], nil
 	case block.BlockString:
 		return p.blocks[index].Strings[start:end], nil
 	case block.BlockBytes:
@@ -1015,12 +1015,12 @@ func (p *Package) CopyFrom(src *Package, dstPos, srcPos, srcLen int) error {
 	n := util.Min(p.Len()-dstPos, srcLen)
 	for i, _ := range p.blocks {
 		switch src.blocks[i].Type {
-		case block.BlockInteger:
-			copy(p.blocks[i].Integers[dstPos:], src.blocks[i].Integers[srcPos:srcPos+n])
-		case block.BlockUnsigned:
-			copy(p.blocks[i].Unsigneds[dstPos:], src.blocks[i].Unsigneds[srcPos:srcPos+n])
-		case block.BlockFloat:
-			copy(p.blocks[i].Floats[dstPos:], src.blocks[i].Floats[srcPos:srcPos+n])
+		case block.BlockInt64:
+			copy(p.blocks[i].Int64[dstPos:], src.blocks[i].Int64[srcPos:srcPos+n])
+		case block.BlockUint64:
+			copy(p.blocks[i].Uint64[dstPos:], src.blocks[i].Uint64[srcPos:srcPos+n])
+		case block.BlockFloat64:
+			copy(p.blocks[i].Float64[dstPos:], src.blocks[i].Float64[srcPos:srcPos+n])
 		case block.BlockString:
 			copy(p.blocks[i].Strings[dstPos:], src.blocks[i].Strings[srcPos:srcPos+n])
 		case block.BlockBytes:
@@ -1063,14 +1063,14 @@ func (p *Package) AppendFrom(src *Package, srcPos, srcLen int, safecopy bool) er
 	}
 	for i, _ := range p.blocks {
 		switch src.blocks[i].Type {
-		case block.BlockInteger:
-			p.blocks[i].Integers = append(p.blocks[i].Integers, src.blocks[i].Integers[srcPos:srcPos+srcLen]...)
+		case block.BlockInt64:
+			p.blocks[i].Int64 = append(p.blocks[i].Int64, src.blocks[i].Int64[srcPos:srcPos+srcLen]...)
 		case block.BlockInt32:
 			p.blocks[i].Int32 = append(p.blocks[i].Int32, src.blocks[i].Int32[srcPos:srcPos+srcLen]...)
-		case block.BlockUnsigned:
-			p.blocks[i].Unsigneds = append(p.blocks[i].Unsigneds, src.blocks[i].Unsigneds[srcPos:srcPos+srcLen]...)
-		case block.BlockFloat:
-			p.blocks[i].Floats = append(p.blocks[i].Floats, src.blocks[i].Floats[srcPos:srcPos+srcLen]...)
+		case block.BlockUint64:
+			p.blocks[i].Uint64 = append(p.blocks[i].Uint64, src.blocks[i].Uint64[srcPos:srcPos+srcLen]...)
+		case block.BlockFloat64:
+			p.blocks[i].Float64 = append(p.blocks[i].Float64, src.blocks[i].Float64[srcPos:srcPos+srcLen]...)
 		case block.BlockString:
 			p.blocks[i].Strings = append(p.blocks[i].Strings, src.blocks[i].Strings[srcPos:srcPos+srcLen]...)
 		case block.BlockBytes:
@@ -1103,12 +1103,12 @@ func (p *Package) AppendFrom(src *Package, srcPos, srcLen int, safecopy bool) er
 func (p *Package) Append() error {
 	for i, _ := range p.blocks {
 		switch p.blocks[i].Type {
-		case block.BlockInteger:
-			p.blocks[i].Integers = append(p.blocks[i].Integers, 0)
-		case block.BlockUnsigned:
-			p.blocks[i].Unsigneds = append(p.blocks[i].Unsigneds, 0)
-		case block.BlockFloat:
-			p.blocks[i].Floats = append(p.blocks[i].Floats, 0)
+		case block.BlockInt64:
+			p.blocks[i].Int64 = append(p.blocks[i].Int64, 0)
+		case block.BlockUint64:
+			p.blocks[i].Uint64 = append(p.blocks[i].Uint64, 0)
+		case block.BlockFloat64:
+			p.blocks[i].Float64 = append(p.blocks[i].Float64, 0)
 		case block.BlockString:
 			p.blocks[i].Strings = append(p.blocks[i].Strings, "")
 		case block.BlockBytes:
@@ -1136,12 +1136,12 @@ func (p *Package) Grow(n int) error {
 	}
 	for i, _ := range p.blocks {
 		switch p.blocks[i].Type {
-		case block.BlockInteger:
-			p.blocks[i].Integers = append(p.blocks[i].Integers, make([]int64, n)...)
-		case block.BlockUnsigned:
-			p.blocks[i].Unsigneds = append(p.blocks[i].Unsigneds, make([]uint64, n)...)
-		case block.BlockFloat:
-			p.blocks[i].Floats = append(p.blocks[i].Floats, make([]float64, n)...)
+		case block.BlockInt64:
+			p.blocks[i].Int64 = append(p.blocks[i].Int64, make([]int64, n)...)
+		case block.BlockUint64:
+			p.blocks[i].Uint64 = append(p.blocks[i].Uint64, make([]uint64, n)...)
+		case block.BlockFloat64:
+			p.blocks[i].Float64 = append(p.blocks[i].Float64, make([]float64, n)...)
 		case block.BlockString:
 			p.blocks[i].Strings = append(p.blocks[i].Strings, make([]string, n)...)
 		case block.BlockBytes:
@@ -1172,12 +1172,12 @@ func (p *Package) Delete(pos, n int) error {
 	n = util.Min(p.Len()-pos, n)
 	for i, _ := range p.blocks {
 		switch p.blocks[i].Type {
-		case block.BlockInteger:
-			p.blocks[i].Integers = append(p.blocks[i].Integers[:pos], p.blocks[i].Integers[pos+n:]...)
-		case block.BlockUnsigned:
-			p.blocks[i].Unsigneds = append(p.blocks[i].Unsigneds[:pos], p.blocks[i].Unsigneds[pos+n:]...)
-		case block.BlockFloat:
-			p.blocks[i].Floats = append(p.blocks[i].Floats[:pos], p.blocks[i].Floats[pos+n:]...)
+		case block.BlockInt64:
+			p.blocks[i].Int64 = append(p.blocks[i].Int64[:pos], p.blocks[i].Int64[pos+n:]...)
+		case block.BlockUint64:
+			p.blocks[i].Uint64 = append(p.blocks[i].Uint64[:pos], p.blocks[i].Uint64[pos+n:]...)
+		case block.BlockFloat64:
+			p.blocks[i].Float64 = append(p.blocks[i].Float64[:pos], p.blocks[i].Float64[pos+n:]...)
 		case block.BlockString:
 			// avoid mem leaks
 			for j, l := pos, pos+n; j < l; j++ {
@@ -1262,7 +1262,7 @@ func (p *Package) PkIndex(id uint64, last int) int {
 
 	// search for id value in pk block (always an uint64) starting at last index
 	// this helps limiting search space when ids are pre-sorted
-	slice := p.blocks[p.pkindex].Unsigneds[last:]
+	slice := p.blocks[p.pkindex].Uint64[last:]
 	l := len(slice)
 	min, max := slice[0], slice[l-1]
 	if id < min || id > max {
@@ -1310,7 +1310,7 @@ func (p *Package) PkIndexUnsorted(id uint64, last int) int {
 
 	// search for id value in pk block (always an uint64) starting at last index
 	// this helps limiting search space when ids are pre-sorted
-	slice := p.blocks[p.pkindex].Unsigneds[last:]
+	slice := p.blocks[p.pkindex].Uint64[last:]
 
 	// run full scan on unsorted slices
 	for i, v := range slice {
@@ -1331,12 +1331,12 @@ func (p *PackageSorter) Len() int { return p.Package.Len() }
 
 func (p *PackageSorter) Less(i, j int) bool {
 	switch p.Package.blocks[p.col].Type {
-	case block.BlockInteger:
-		return p.Package.blocks[p.col].Integers[i] < p.Package.blocks[p.col].Integers[j]
-	case block.BlockUnsigned:
-		return p.Package.blocks[p.col].Unsigneds[i] < p.Package.blocks[p.col].Unsigneds[j]
-	case block.BlockFloat:
-		return p.Package.blocks[p.col].Floats[i] < p.Package.blocks[p.col].Floats[j]
+	case block.BlockInt64:
+		return p.Package.blocks[p.col].Int64[i] < p.Package.blocks[p.col].Int64[j]
+	case block.BlockUint64:
+		return p.Package.blocks[p.col].Uint64[i] < p.Package.blocks[p.col].Uint64[j]
+	case block.BlockFloat64:
+		return p.Package.blocks[p.col].Float64[i] < p.Package.blocks[p.col].Float64[j]
 	case block.BlockString:
 		return p.Package.blocks[p.col].Strings[i] < p.Package.blocks[p.col].Strings[j]
 	case block.BlockBytes:
@@ -1355,15 +1355,15 @@ func (p *PackageSorter) Less(i, j int) bool {
 func (p *PackageSorter) Swap(i, j int) {
 	for n := 0; n < p.Package.nFields; n++ {
 		switch p.Package.blocks[n].Type {
-		case block.BlockInteger:
-			p.Package.blocks[n].Integers[i], p.Package.blocks[n].Integers[j] =
-				p.Package.blocks[n].Integers[j], p.Package.blocks[n].Integers[i]
-		case block.BlockUnsigned:
-			p.Package.blocks[n].Unsigneds[i], p.Package.blocks[n].Unsigneds[j] =
-				p.Package.blocks[n].Unsigneds[j], p.Package.blocks[n].Unsigneds[i]
-		case block.BlockFloat:
-			p.Package.blocks[n].Floats[i], p.Package.blocks[n].Floats[j] =
-				p.Package.blocks[n].Floats[j], p.Package.blocks[n].Floats[i]
+		case block.BlockInt64:
+			p.Package.blocks[n].Int64[i], p.Package.blocks[n].Int64[j] =
+				p.Package.blocks[n].Int64[j], p.Package.blocks[n].Int64[i]
+		case block.BlockUint64:
+			p.Package.blocks[n].Uint64[i], p.Package.blocks[n].Uint64[j] =
+				p.Package.blocks[n].Uint64[j], p.Package.blocks[n].Uint64[i]
+		case block.BlockFloat64:
+			p.Package.blocks[n].Float64[i], p.Package.blocks[n].Float64[j] =
+				p.Package.blocks[n].Float64[j], p.Package.blocks[n].Float64[i]
 		case block.BlockString:
 			p.Package.blocks[n].Strings[i], p.Package.blocks[n].Strings[j] =
 				p.Package.blocks[n].Strings[j], p.Package.blocks[n].Strings[i]
