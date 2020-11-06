@@ -11,7 +11,7 @@ import (
 	"io"
 	"path/filepath"
 
-	"blockwatch.cc/packdb-pro/store"
+	"blockwatch.cc/knoxdb/store"
 )
 
 var (

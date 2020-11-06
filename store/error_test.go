@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"blockwatch.cc/packdb-pro/store"
+	"blockwatch.cc/knoxdb/store"
 )
 
 // TestErrorCodeStringer tests the stringized output for the ErrorCode type.

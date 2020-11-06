@@ -13,8 +13,8 @@ import (
 	"testing"
 	"testing/quick"
 
-	"blockwatch.cc/packdb-pro/encoding/block"
-	"blockwatch.cc/packdb-pro/vec"
+	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 func randUint64Slice(n, u int) []uint64 {

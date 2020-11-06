@@ -4,7 +4,7 @@
 package vec
 
 import (
-	"blockwatch.cc/packdb-pro/util"
+	"blockwatch.cc/knoxdb/util"
 	"math"
 )
 

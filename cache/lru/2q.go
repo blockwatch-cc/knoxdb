@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"blockwatch.cc/packdb-pro/cache/lru/internal"
+	"blockwatch.cc/knoxdb/cache/lru/internal"
 )
 
 const (

@@ -11,7 +11,7 @@ import (
 	"io"
 	"math"
 
-	"blockwatch.cc/packdb-pro/encoding/simple8b"
+	"blockwatch.cc/knoxdb/encoding/simple8b"
 )
 
 const (

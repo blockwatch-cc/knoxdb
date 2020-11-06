@@ -17,8 +17,8 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
-	"blockwatch.cc/packdb-pro/store"
-	"blockwatch.cc/packdb-pro/util"
+	"blockwatch.cc/knoxdb/store"
+	"blockwatch.cc/knoxdb/util"
 )
 
 // Bolt Limits

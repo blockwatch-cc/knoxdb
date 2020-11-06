@@ -9,9 +9,9 @@ import (
 	"io"
 	"strings"
 
-	"blockwatch.cc/packdb-pro/encoding/block"
-	"blockwatch.cc/packdb-pro/encoding/csv"
-	"blockwatch.cc/packdb-pro/util"
+	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/csv"
+	"blockwatch.cc/knoxdb/util"
 )
 
 type DumpMode int

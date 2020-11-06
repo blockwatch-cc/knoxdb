@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"blockwatch.cc/packdb-pro/vec"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 var QueryLogMinDuration time.Duration = 500 * time.Millisecond

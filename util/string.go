@@ -15,7 +15,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"blockwatch.cc/packdb-pro/hash"
+	"blockwatch.cc/knoxdb/hash"
 )
 
 var stringerType = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()

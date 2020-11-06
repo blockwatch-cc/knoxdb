@@ -3,8 +3,8 @@ package lru
 import (
 	"sync"
 
-	"blockwatch.cc/packdb-pro/cache"
-	"blockwatch.cc/packdb-pro/cache/lru/internal"
+	"blockwatch.cc/knoxdb/cache"
+	"blockwatch.cc/knoxdb/cache/lru/internal"
 )
 
 // Cache is a thread-safe fixed size LRU cache.

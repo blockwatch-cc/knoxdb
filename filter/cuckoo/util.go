@@ -1,7 +1,7 @@
 package cuckoo
 
 import (
-	"blockwatch.cc/packdb-pro/hash/metro"
+	"blockwatch.cc/knoxdb/hash/metro"
 )
 
 func getAltIndex(fp byte, i uint, numBuckets uint) uint {

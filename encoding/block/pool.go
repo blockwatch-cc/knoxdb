@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"sync"
 
-	"blockwatch.cc/packdb-pro/util"
+	"blockwatch.cc/knoxdb/util"
 	"github.com/pierrec/lz4"
 )
 

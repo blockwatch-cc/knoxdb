@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"blockwatch.cc/packdb-pro/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/block"
 )
 
 func (p *Package) MarshalBinary() ([]byte, error) {
