@@ -1,4 +1,4 @@
-module blockwatch.cc/packdb-pro
+module blockwatch.cc/knoxdb
 
 go 1.14
 
