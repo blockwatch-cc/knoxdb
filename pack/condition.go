@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"blockwatch.cc/packdb-pro/hash/xxhash"
-	"blockwatch.cc/packdb-pro/util"
-	"blockwatch.cc/packdb-pro/vec"
+	"blockwatch.cc/knoxdb/hash/xxhash"
+	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 const (

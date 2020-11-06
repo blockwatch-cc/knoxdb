@@ -16,8 +16,8 @@ import (
 	"testing/quick"
 	"time"
 
-	"blockwatch.cc/packdb-pro/encoding/simple8b"
-	"blockwatch.cc/packdb-pro/vec"
+	"blockwatch.cc/knoxdb/encoding/simple8b"
+	"blockwatch.cc/knoxdb/vec"
 	"github.com/google/go-cmp/cmp"
 )
 

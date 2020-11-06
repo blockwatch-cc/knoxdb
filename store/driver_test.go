@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
-	"blockwatch.cc/packdb-pro/store"
-	_ "blockwatch.cc/packdb-pro/store/bolt"
+	"blockwatch.cc/knoxdb/store"
+	_ "blockwatch.cc/knoxdb/store/bolt"
 )
 
 var (

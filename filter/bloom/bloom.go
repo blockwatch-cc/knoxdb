@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"math"
 
-	"blockwatch.cc/packdb-pro/hash/xxhash"
+	"blockwatch.cc/knoxdb/hash/xxhash"
 )
 
 // Filter represents a bloom filter.

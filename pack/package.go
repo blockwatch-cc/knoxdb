@@ -12,8 +12,8 @@ import (
 	"sort"
 	"time"
 
-	"blockwatch.cc/packdb-pro/encoding/block"
-	"blockwatch.cc/packdb-pro/util"
+	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/util"
 )
 
 const (

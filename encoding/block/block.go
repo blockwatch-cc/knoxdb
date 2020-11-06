@@ -10,7 +10,7 @@ import (
 	"math"
 	"time"
 
-	"blockwatch.cc/packdb-pro/encoding/compress"
+	"blockwatch.cc/knoxdb/encoding/compress"
 )
 
 var bigEndian = binary.BigEndian

@@ -11,10 +11,10 @@ import (
 	"testing"
 	// "time"
 
-	"blockwatch.cc/packdb-pro/filter/bloom"
-	"blockwatch.cc/packdb-pro/filter/cuckoo"
-	"blockwatch.cc/packdb-pro/hash"
-	"blockwatch.cc/packdb-pro/vec"
+	"blockwatch.cc/knoxdb/filter/bloom"
+	"blockwatch.cc/knoxdb/filter/cuckoo"
+	"blockwatch.cc/knoxdb/hash"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 func randUint64Slice(n, u int) []uint64 {

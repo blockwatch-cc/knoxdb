@@ -8,10 +8,10 @@ import (
 	"math/rand"
 	"testing"
 
-	"blockwatch.cc/packdb-pro/hash"
-	"blockwatch.cc/packdb-pro/hash/xxhash"
-	"blockwatch.cc/packdb-pro/util"
-	"blockwatch.cc/packdb-pro/vec"
+	"blockwatch.cc/knoxdb/hash"
+	"blockwatch.cc/knoxdb/hash/xxhash"
+	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 type packBenchmarkSize struct {

@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"io"
 
-	"blockwatch.cc/packdb-pro/encoding/simple8b"
-	"blockwatch.cc/packdb-pro/util"
+	"blockwatch.cc/knoxdb/encoding/simple8b"
+	"blockwatch.cc/knoxdb/util"
 )
 
 // Integer encoding uses two different strategies depending on the range of values in

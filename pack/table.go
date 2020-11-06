@@ -45,11 +45,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"blockwatch.cc/packdb-pro/cache"
-	"blockwatch.cc/packdb-pro/cache/lru"
-	"blockwatch.cc/packdb-pro/store"
-	"blockwatch.cc/packdb-pro/util"
-	"blockwatch.cc/packdb-pro/vec"
+	"blockwatch.cc/knoxdb/cache"
+	"blockwatch.cc/knoxdb/cache/lru"
+	"blockwatch.cc/knoxdb/store"
+	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 const (

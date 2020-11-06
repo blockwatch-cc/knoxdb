@@ -22,7 +22,7 @@ Examples
 This example assumes your CSV file contains a header who's values match the struct tags defined on the Go type FrameInfo. CSV fields that are undefined in the type are ignored.
 
 ```
-import "blockwatch.cc/packdb-pro/encoding/csv"
+import "blockwatch.cc/knoxdb/encoding/csv"
 
 type FrameInfo struct {
 	ActiveImageHeight  int      `csv:"Active Image Height"`
