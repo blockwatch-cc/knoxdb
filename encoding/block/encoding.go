@@ -422,8 +422,10 @@ func encodeUint64Block(buf *bytes.Buffer, val []uint64, comp Compression) (uint6
 		v  interface{}
 	)
 	if len(val) <= DefaultMaxPointsPerBlock {
-		v = int64Pool.Get()
-		cp = compress.ReintepretInt64ToUint64Slice(v.([]int64)[:len(val)])
+		//		v = int64Pool.Get()
+		//		cp = compress.ReintepretInt64ToUint64Slice(v.([]int64)[:len(val)])
+		v = uint64Pool.Get()
+		cp = v.([]uint64)[:len(val)]
 	} else {
 		cp = make([]uint64, len(val))
 	}
@@ -431,7 +433,7 @@ func encodeUint64Block(buf *bytes.Buffer, val []uint64, comp Compression) (uint6
 
 	min, max, err := compress.UnsignedArrayEncodeAll(cp, w)
 	if v != nil {
-		int64Pool.Put(v)
+		uint64Pool.Put(v)
 	}
 	if err != nil {
 		_ = w.Close()
@@ -445,28 +447,30 @@ func encodeUint64Block(buf *bytes.Buffer, val []uint64, comp Compression) (uint6
 }
 
 func encodeUint32Block(buf *bytes.Buffer, val []uint32, comp Compression) (uint32, uint32, error) {
-	return 0, 0, errors.New("encodeUint32Block not yet implemented")
-	/*if len(val) == 0 {
-		return 0, 0, writeEmptyBlock(buf, BlockUint64)
+	if len(val) == 0 {
+		return 0, 0, writeEmptyBlock(buf, BlockUint32)
 	}
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockUint64))
+	buf.WriteByte(byte(comp<<5) | byte(BlockUint32))
 	w := getWriter(buf, comp)
 	var (
 		cp []uint64
 		v  interface{}
 	)
 	if len(val) <= DefaultMaxPointsPerBlock {
-		v = int64Pool.Get()
-		cp = compress.ReintepretInt64ToUint64Slice(v.([]int64)[:len(val)])
+		v = uint64Pool.Get()
+		cp = v.([]uint64)[:len(val)]
 	} else {
 		cp = make([]uint64, len(val))
 	}
-	copy(cp, val)
+	//copy(cp, val)
+	for i, _ := range val {
+		cp[i] = uint64(val[i])
+	}
 
 	min, max, err := compress.UnsignedArrayEncodeAll(cp, w)
 	if v != nil {
-		int64Pool.Put(v)
+		uint64Pool.Put(v)
 	}
 	if err != nil {
 		_ = w.Close()
@@ -476,32 +480,34 @@ func encodeUint32Block(buf *bytes.Buffer, val []uint32, comp Compression) (uint3
 
 	err = w.Close()
 	putWriter(w, comp)
-	return min, max, err*/
+	return uint32(min), uint32(max), err
 }
 
 func encodeUint16Block(buf *bytes.Buffer, val []uint16, comp Compression) (uint16, uint16, error) {
-	return 0, 0, errors.New("encodeUint16Block not yet implemented")
-	/*if len(val) == 0 {
-		return 0, 0, writeEmptyBlock(buf, BlockUint64)
+	if len(val) == 0 {
+		return 0, 0, writeEmptyBlock(buf, BlockUint16)
 	}
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockUint64))
+	buf.WriteByte(byte(comp<<5) | byte(BlockUint16))
 	w := getWriter(buf, comp)
 	var (
 		cp []uint64
 		v  interface{}
 	)
 	if len(val) <= DefaultMaxPointsPerBlock {
-		v = int64Pool.Get()
-		cp = compress.ReintepretInt64ToUint64Slice(v.([]int64)[:len(val)])
+		v = uint64Pool.Get()
+		cp = v.([]uint64)[:len(val)]
 	} else {
 		cp = make([]uint64, len(val))
 	}
-	copy(cp, val)
+	//copy(cp, val)
+	for i, _ := range val {
+		cp[i] = uint64(val[i])
+	}
 
 	min, max, err := compress.UnsignedArrayEncodeAll(cp, w)
 	if v != nil {
-		int64Pool.Put(v)
+		uint64Pool.Put(v)
 	}
 	if err != nil {
 		_ = w.Close()
@@ -511,32 +517,34 @@ func encodeUint16Block(buf *bytes.Buffer, val []uint16, comp Compression) (uint1
 
 	err = w.Close()
 	putWriter(w, comp)
-	return min, max, err*/
+	return uint16(min), uint16(max), err
 }
 
 func encodeUint8Block(buf *bytes.Buffer, val []uint8, comp Compression) (uint8, uint8, error) {
-	return 0, 0, errors.New("encodeUint8Block not yet implemented")
-	/*if len(val) == 0 {
-		return 0, 0, writeEmptyBlock(buf, BlockUint64)
+	if len(val) == 0 {
+		return 0, 0, writeEmptyBlock(buf, BlockUint8)
 	}
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockUint64))
+	buf.WriteByte(byte(comp<<5) | byte(BlockUint8))
 	w := getWriter(buf, comp)
 	var (
 		cp []uint64
 		v  interface{}
 	)
 	if len(val) <= DefaultMaxPointsPerBlock {
-		v = int64Pool.Get()
-		cp = compress.ReintepretInt64ToUint64Slice(v.([]int64)[:len(val)])
+		v = uint64Pool.Get()
+		cp = v.([]uint64)[:len(val)]
 	} else {
 		cp = make([]uint64, len(val))
 	}
-	copy(cp, val)
+	//copy(cp, val)
+	for i, _ := range val {
+		cp[i] = uint64(val[i])
+	}
 
 	min, max, err := compress.UnsignedArrayEncodeAll(cp, w)
 	if v != nil {
-		int64Pool.Put(v)
+		uint64Pool.Put(v)
 	}
 	if err != nil {
 		_ = w.Close()
@@ -546,7 +554,7 @@ func encodeUint8Block(buf *bytes.Buffer, val []uint8, comp Compression) (uint8, 
 
 	err = w.Close()
 	putWriter(w, comp)
-	return min, max, err*/
+	return uint8(min), uint8(max), err
 }
 
 func decodeUint64Block(block []byte, dst []uint64) ([]uint64, error) {
@@ -562,42 +570,120 @@ func decodeUint64Block(block []byte, dst []uint64) ([]uint64, error) {
 }
 
 func decodeUint32Block(block []byte, dst []uint32) ([]uint32, error) {
-	return nil, errors.New("decodeUint32Block not yet implemented")
-	/* buf, canRecycle, err := unpackBlock(block, BlockUint64)
+	buf, canRecycle, err := unpackBlock(block, BlockUint32)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compress.UnsignedArrayDecodeAll(buf, dst)
+
+	var (
+		cp []uint64
+		v  interface{}
+	)
+	if len(dst) <= DefaultMaxPointsPerBlock {
+		v = uint64Pool.Get()
+		cp = v.([]uint64)[:len(dst)]
+	} else {
+		cp = make([]uint64, len(dst))
+	}
+
+	b, err := compress.UnsignedArrayDecodeAll(buf, cp)
+
+	if cap(dst) >= len(b) {
+		dst = dst[:len(b)]
+	} else {
+		dst = make([]uint32, len(b))
+	}
+
+	for i, _ := range b {
+		dst[i] = uint32(b[i])
+	}
+
+	if v != nil {
+		uint64Pool.Put(v)
+	}
+
 	if canRecycle && cap(buf) == BlockSizeHint {
 		BlockEncoderPool.Put(buf[:0])
 	}
-	return b, err */
+	return dst, err
 }
 
 func decodeUint16Block(block []byte, dst []uint16) ([]uint16, error) {
-	return nil, errors.New("decodeUint16Block not yet implemented")
-	/* buf, canRecycle, err := unpackBlock(block, BlockUint64)
+	buf, canRecycle, err := unpackBlock(block, BlockUint16)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compress.UnsignedArrayDecodeAll(buf, dst)
+
+	var (
+		cp []uint64
+		v  interface{}
+	)
+	if len(dst) <= DefaultMaxPointsPerBlock {
+		v = uint64Pool.Get()
+		cp = v.([]uint64)[:len(dst)]
+	} else {
+		cp = make([]uint64, len(dst))
+	}
+
+	b, err := compress.UnsignedArrayDecodeAll(buf, cp)
+
+	if cap(dst) >= len(b) {
+		dst = dst[:len(b)]
+	} else {
+		dst = make([]uint16, len(b))
+	}
+
+	for i, _ := range b {
+		dst[i] = uint16(b[i])
+	}
+
+	if v != nil {
+		uint64Pool.Put(v)
+	}
+
 	if canRecycle && cap(buf) == BlockSizeHint {
 		BlockEncoderPool.Put(buf[:0])
 	}
-	return b, err */
+	return dst, err
 }
 
 func decodeUint8Block(block []byte, dst []uint8) ([]uint8, error) {
-	return nil, errors.New("decodeUint8Block not yet implemented")
-	/* buf, canRecycle, err := unpackBlock(block, BlockUint64)
+	buf, canRecycle, err := unpackBlock(block, BlockUint8)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compress.UnsignedArrayDecodeAll(buf, dst)
+
+	var (
+		cp []uint64
+		v  interface{}
+	)
+	if len(dst) <= DefaultMaxPointsPerBlock {
+		v = uint64Pool.Get()
+		cp = v.([]uint64)[:len(dst)]
+	} else {
+		cp = make([]uint64, len(dst))
+	}
+
+	b, err := compress.UnsignedArrayDecodeAll(buf, cp)
+
+	if cap(dst) >= len(b) {
+		dst = dst[:len(b)]
+	} else {
+		dst = make([]uint8, len(b))
+	}
+
+	for i, _ := range b {
+		dst[i] = uint8(b[i])
+	}
+
+	if v != nil {
+		uint64Pool.Put(v)
+	}
+
 	if canRecycle && cap(buf) == BlockSizeHint {
 		BlockEncoderPool.Put(buf[:0])
 	}
-	return b, err */
+	return dst, err
 }
 
 func encodeBoolBlock(buf *bytes.Buffer, val []bool, comp Compression) (bool, bool, error) {

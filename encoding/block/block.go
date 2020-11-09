@@ -1252,8 +1252,8 @@ func (b *Block) DecodeHeader(buf *bytes.Buffer) error {
 		if b.Type != BlockIgnore {
 			b.Type = typ
 			b.Compression = comp
-			b.MinValue = v[0]
-			b.MaxValue = v[1]
+			b.MinValue = int8(v[0])
+			b.MaxValue = int8(v[1])
 		}
 
 	case BlockUint64:
@@ -1290,8 +1290,8 @@ func (b *Block) DecodeHeader(buf *bytes.Buffer) error {
 		if b.Type != BlockIgnore {
 			b.Type = typ
 			b.Compression = comp
-			b.MinValue = v[0]
-			b.MaxValue = v[1]
+			b.MinValue = uint8(v[0])
+			b.MaxValue = uint8(v[1])
 		}
 
 	case BlockBool:

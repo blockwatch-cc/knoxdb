@@ -272,10 +272,14 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 		p.namemap[field.Name] = i
 		p.namemap[field.Alias] = i
 		switch field.Type {
-		case FieldTypeInt32:
-			p.blocks[i], err = block.NewBlock(block.BlockInt32, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeInt64:
 			p.blocks[i], err = block.NewBlock(block.BlockInt64, sz, field.Flags.Compression(), 0, 0)
+		case FieldTypeInt32:
+			p.blocks[i], err = block.NewBlock(block.BlockInt32, sz, field.Flags.Compression(), 0, 0)
+		case FieldTypeInt16:
+			p.blocks[i], err = block.NewBlock(block.BlockInt16, sz, field.Flags.Compression(), 0, 0)
+		case FieldTypeInt8:
+			p.blocks[i], err = block.NewBlock(block.BlockInt8, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeUint64:
 			if field.Flags&FlagConvert > 0 {
 				p.blocks[i], err = block.NewBlock(
@@ -294,8 +298,14 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 					0,
 				)
 			}
+		case FieldTypeUint32:
+			p.blocks[i], err = block.NewBlock(block.BlockUint32, sz, field.Flags.Compression(), 0, 0)
+		case FieldTypeUint16:
+			p.blocks[i], err = block.NewBlock(block.BlockUint16, sz, field.Flags.Compression(), 0, 0)
+		case FieldTypeUint8:
+			p.blocks[i], err = block.NewBlock(block.BlockUint8, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeFloat64:
-			if field.Flags&FlagConvert > 0 {
+			/* if field.Flags&FlagConvert > 0 {
 				p.blocks[i], err = block.NewBlock(
 					block.BlockUint64,
 					sz,
@@ -303,9 +313,11 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 					field.Precision,
 					block.BlockFlagConvert|block.BlockFlagCompress,
 				)
-			} else {
-				p.blocks[i], err = block.NewBlock(block.BlockFloat64, sz, field.Flags.Compression(), 0, 0)
-			}
+			} else {*/
+			p.blocks[i], err = block.NewBlock(block.BlockFloat64, sz, field.Flags.Compression(), 0, 0)
+			//}
+		case FieldTypeFloat32:
+			p.blocks[i], err = block.NewBlock(block.BlockFloat32, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeString:
 			p.blocks[i], err = block.NewBlock(block.BlockString, sz, field.Flags.Compression(), 0, 0)
 		case FieldTypeBytes:
@@ -422,6 +434,12 @@ func (p *Package) Push(v interface{}) error {
 		case block.BlockInt32:
 			p.blocks[fi.blockid].Int32 = append(p.blocks[fi.blockid].Int32, int32(f.Int()))
 
+		case block.BlockInt16:
+			p.blocks[fi.blockid].Int16 = append(p.blocks[fi.blockid].Int16, int16(f.Int()))
+
+		case block.BlockInt8:
+			p.blocks[fi.blockid].Int8 = append(p.blocks[fi.blockid].Int8, int8(f.Int()))
+
 		case block.BlockUint64:
 			var amount uint64
 			if p.blocks[fi.blockid].Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 || fi.flags&FlagConvert > 0 {
@@ -436,8 +454,20 @@ func (p *Package) Push(v interface{}) error {
 			}
 			p.blocks[fi.blockid].Uint64 = append(p.blocks[fi.blockid].Uint64, amount)
 
+		case block.BlockUint32:
+			p.blocks[fi.blockid].Uint32 = append(p.blocks[fi.blockid].Uint32, uint32(f.Uint()))
+
+		case block.BlockUint16:
+			p.blocks[fi.blockid].Uint16 = append(p.blocks[fi.blockid].Uint16, uint16(f.Uint()))
+
+		case block.BlockUint8:
+			p.blocks[fi.blockid].Uint8 = append(p.blocks[fi.blockid].Uint8, uint8(f.Uint()))
+
 		case block.BlockFloat64:
 			p.blocks[fi.blockid].Float64 = append(p.blocks[fi.blockid].Float64, f.Float())
+
+		case block.BlockFloat32:
+			p.blocks[fi.blockid].Float32 = append(p.blocks[fi.blockid].Float32, float32(f.Float()))
 
 		case block.BlockString:
 			p.blocks[fi.blockid].Strings = append(p.blocks[fi.blockid].Strings, f.String())
@@ -1067,10 +1097,22 @@ func (p *Package) AppendFrom(src *Package, srcPos, srcLen int, safecopy bool) er
 			p.blocks[i].Int64 = append(p.blocks[i].Int64, src.blocks[i].Int64[srcPos:srcPos+srcLen]...)
 		case block.BlockInt32:
 			p.blocks[i].Int32 = append(p.blocks[i].Int32, src.blocks[i].Int32[srcPos:srcPos+srcLen]...)
+		case block.BlockInt16:
+			p.blocks[i].Int16 = append(p.blocks[i].Int16, src.blocks[i].Int16[srcPos:srcPos+srcLen]...)
+		case block.BlockInt8:
+			p.blocks[i].Int8 = append(p.blocks[i].Int8, src.blocks[i].Int8[srcPos:srcPos+srcLen]...)
 		case block.BlockUint64:
 			p.blocks[i].Uint64 = append(p.blocks[i].Uint64, src.blocks[i].Uint64[srcPos:srcPos+srcLen]...)
+		case block.BlockUint32:
+			p.blocks[i].Uint32 = append(p.blocks[i].Uint32, src.blocks[i].Uint32[srcPos:srcPos+srcLen]...)
+		case block.BlockUint16:
+			p.blocks[i].Uint16 = append(p.blocks[i].Uint16, src.blocks[i].Uint16[srcPos:srcPos+srcLen]...)
+		case block.BlockUint8:
+			p.blocks[i].Uint8 = append(p.blocks[i].Uint8, src.blocks[i].Uint8[srcPos:srcPos+srcLen]...)
 		case block.BlockFloat64:
 			p.blocks[i].Float64 = append(p.blocks[i].Float64, src.blocks[i].Float64[srcPos:srcPos+srcLen]...)
+		case block.BlockFloat32:
+			p.blocks[i].Float32 = append(p.blocks[i].Float32, src.blocks[i].Float32[srcPos:srcPos+srcLen]...)
 		case block.BlockString:
 			p.blocks[i].Strings = append(p.blocks[i].Strings, src.blocks[i].Strings[srcPos:srcPos+srcLen]...)
 		case block.BlockBytes:

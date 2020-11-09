@@ -47,18 +47,18 @@ const (
 	FieldTypeString    FieldType = "string"   // BlockString
 	FieldTypeDatetime  FieldType = "datetime" // BlockTime
 	FieldTypeBoolean   FieldType = "boolean"  // BlockBool
-	FieldTypeFloat64   FieldType = "float64"  // BlockFloat
-	FieldTypeInt64     FieldType = "int64"    // BlockInt
-	FieldTypeInt32     FieldType = "int32"    // BlockInt
-	FieldTypeUint64    FieldType = "uint64"   // BlockUnsigned
+	FieldTypeFloat64   FieldType = "float64"  // BlockFloat64
+	FieldTypeFloat32   FieldType = "float32"  // BlockFloat32
+	FieldTypeInt64     FieldType = "int64"    // BlockInt64
+	FieldTypeInt32     FieldType = "int32"    // BlockInt32
+	FieldTypeInt16     FieldType = "int16"    // BlockInt16
+	FieldTypeInt8      FieldType = "int8"     // BlockInt8
+	FieldTypeUint64    FieldType = "uint64"   // BlockUint64
+	FieldTypeUint32    FieldType = "uint32"   // BlockUint32
+	FieldTypeUint16    FieldType = "uint16"   // BlockUint16
+	FieldTypeUint8     FieldType = "uint8"    // BlockUint8
 
 	// TODO: extend pack encoders and block types
-	// FieldTypeInt8
-	// FieldTypeUint8
-	// FieldTypeInt16
-	// FieldTypeUint16
-	// FieldTypeInt32
-	// FieldTypeUint32
 	// FieldTypeDate                   = "date" // BlockDate (unix second / 24*3600)
 	// FieldTypeDecimal36_8            = "decimal_36_8" // bigint
 	// FieldTypeDecimal36_10           = "decimal_36_10"// bigint
@@ -220,18 +220,30 @@ func Fields(proto interface{}) (FieldList, error) {
 		fields[i].Flags = finfo.flags
 		fields[i].Precision = finfo.precision
 		switch f.Kind() {
+		case reflect.Int, reflect.Int64:
+			fields[i].Type = FieldTypeInt64
 		case reflect.Int32:
 			fields[i].Type = FieldTypeInt32
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int64:
-			fields[i].Type = FieldTypeInt64
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		case reflect.Int16:
+			fields[i].Type = FieldTypeInt16
+		case reflect.Int8:
+			fields[i].Type = FieldTypeInt8
+		case reflect.Uint, reflect.Uint64:
 			fields[i].Type = FieldTypeUint64
-		case reflect.Float32, reflect.Float64:
+		case reflect.Uint32:
+			fields[i].Type = FieldTypeUint32
+		case reflect.Uint16:
+			fields[i].Type = FieldTypeUint16
+		case reflect.Uint8:
+			fields[i].Type = FieldTypeUint8
+		case reflect.Float64, reflect.Float32:
 			if finfo.flags&FlagConvert > 0 {
 				fields[i].Type = FieldTypeUint64
 			} else {
 				fields[i].Type = FieldTypeFloat64
 			}
+		/*case reflect.Float32:
+		fields[i].Type = FieldTypeFloat32*/
 		case reflect.String:
 			fields[i].Type = FieldTypeString
 		case reflect.Slice:
@@ -286,10 +298,22 @@ func ParseFieldType(s string) FieldType {
 		return FieldTypeInt64
 	case "int32":
 		return FieldTypeInt32
+	case "int16":
+		return FieldTypeInt16
+	case "int8":
+		return FieldTypeInt8
 	case "unsigned", "uint", "uint64":
 		return FieldTypeUint64
+	case "uint32":
+		return FieldTypeUint32
+	case "uint16":
+		return FieldTypeUint16
+	case "uint8":
+		return FieldTypeUint8
 	case "float", "float64":
 		return FieldTypeFloat64
+	case "float32":
+		return FieldTypeFloat32
 	default:
 		return FieldTypeUndefined
 	}
@@ -307,10 +331,24 @@ func FieldTypeFromBlock(b block.BlockType) FieldType {
 		return FieldTypeBoolean
 	case block.BlockFloat64:
 		return FieldTypeFloat64
+	case block.BlockFloat32:
+		return FieldTypeFloat32
 	case block.BlockInt64:
 		return FieldTypeInt64
+	case block.BlockInt32:
+		return FieldTypeInt32
+	case block.BlockInt16:
+		return FieldTypeInt16
+	case block.BlockInt8:
+		return FieldTypeInt8
 	case block.BlockUint64:
 		return FieldTypeUint64
+	case block.BlockUint32:
+		return FieldTypeUint32
+	case block.BlockUint16:
+		return FieldTypeUint16
+	case block.BlockUint8:
+		return FieldTypeUint8
 	default:
 		return FieldTypeUndefined
 	}
@@ -328,10 +366,24 @@ func (t FieldType) BlockType() block.BlockType {
 		return block.BlockBool
 	case FieldTypeFloat64:
 		return block.BlockFloat64
+	case FieldTypeFloat32:
+		return block.BlockFloat32
 	case FieldTypeInt64:
 		return block.BlockInt64
+	case FieldTypeInt32:
+		return block.BlockInt32
+	case FieldTypeInt16:
+		return block.BlockInt16
+	case FieldTypeInt8:
+		return block.BlockInt8
 	case FieldTypeUint64:
 		return block.BlockUint64
+	case FieldTypeUint32:
+		return block.BlockUint32
+	case FieldTypeUint16:
+		return block.BlockUint16
+	case FieldTypeUint8:
+		return block.BlockUint8
 	default:
 		return block.BlockBytes
 	}
