@@ -218,7 +218,6 @@ func Fields(proto interface{}) (FieldList, error) {
 		fields[i].Alias = finfo.alias
 		fields[i].Index = i
 		fields[i].Flags = finfo.flags
-		fields[i].Precision = finfo.precision
 		switch f.Kind() {
 		case reflect.Int, reflect.Int64:
 			fields[i].Type = FieldTypeInt64
@@ -238,12 +237,18 @@ func Fields(proto interface{}) (FieldList, error) {
 			fields[i].Type = FieldTypeUint8
 		case reflect.Float64:
 			if finfo.flags&FlagConvert > 0 {
+				fields[i].Precision = finfo.precision
 				fields[i].Type = FieldTypeUint64
 			} else {
 				fields[i].Type = FieldTypeFloat64
 			}
 		case reflect.Float32:
-			fields[i].Type = FieldTypeFloat32
+			if finfo.flags&FlagConvert > 0 {
+				fields[i].Precision = finfo.precision
+				fields[i].Type = FieldTypeUint32
+			} else {
+				fields[i].Type = FieldTypeFloat32
+			}
 		case reflect.String:
 			fields[i].Type = FieldTypeString
 		case reflect.Slice:

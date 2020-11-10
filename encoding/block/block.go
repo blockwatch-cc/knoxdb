@@ -1272,6 +1272,8 @@ func (b *Block) DecodeHeader(buf *bytes.Buffer) error {
 		if b.Type != BlockIgnore {
 			b.Type = typ
 			b.Compression = comp
+			b.Precision = prec
+			b.Flags = flags
 			b.MinValue = bigEndian.Uint32(v[0:])
 			b.MaxValue = bigEndian.Uint32(v[4:])
 		}
