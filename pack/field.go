@@ -793,6 +793,433 @@ func (t FieldType) CheckSliceType(val interface{}) error {
 	return nil
 }
 
+func (t FieldType) EnsureType(val interface{}) (interface{}, error) {
+	var ok bool
+	res := val
+	switch t {
+	case FieldTypeBytes:
+		_, ok = val.([]byte)
+	case FieldTypeString:
+		_, ok = val.(string)
+	case FieldTypeDatetime:
+		_, ok = val.(time.Time)
+	case FieldTypeBoolean:
+		_, ok = val.(bool)
+	case FieldTypeInt64:
+		switch v := val.(type) {
+		case int:
+			res, ok = int64(v), true
+		case int64:
+			res, ok = int64(v), true
+		case int32:
+			res, ok = int64(v), true
+		case int16:
+			res, ok = int64(v), true
+		case int8:
+			res, ok = int64(v), true
+		default:
+			ok = false
+		}
+	case FieldTypeInt32:
+		switch v := val.(type) {
+		case int:
+			res, ok = int32(v), true
+		case int64:
+			res, ok = int32(v), true
+		case int32:
+			res, ok = int32(v), true
+		case int16:
+			res, ok = int64(v), true
+		case int8:
+			res, ok = int64(v), true
+		default:
+			ok = false
+		}
+	case FieldTypeInt16:
+		switch v := val.(type) {
+		case int:
+			res, ok = int16(v), true
+		case int64:
+			res, ok = int16(v), true
+		case int32:
+			res, ok = int16(v), true
+		case int16:
+			res, ok = int16(v), true
+		case int8:
+			res, ok = int16(v), true
+		default:
+			ok = false
+		}
+	case FieldTypeInt8:
+		switch v := val.(type) {
+		case int:
+			res, ok = int8(v), true
+		case int64:
+			res, ok = int8(v), true
+		case int32:
+			res, ok = int8(v), true
+		case int16:
+			res, ok = int8(v), true
+		case int8:
+			res, ok = int8(v), true
+		default:
+			ok = false
+		}
+	case FieldTypeUint64:
+		switch v := val.(type) {
+		case uint:
+			res, ok = uint64(v), true
+		case uint64:
+			res, ok = uint64(v), true
+		case uint32:
+			res, ok = uint64(v), true
+		case uint16:
+			res, ok = uint64(v), true
+		case uint8:
+			res, ok = uint64(v), true
+		default:
+			ok = false
+		}
+	case FieldTypeUint32:
+		switch v := val.(type) {
+		case uint:
+			res, ok = uint32(v), true
+		case uint64:
+			res, ok = uint32(v), true
+		case uint32:
+			res, ok = uint32(v), true
+		case uint16:
+			res, ok = uint32(v), true
+		case uint8:
+			res, ok = uint32(v), true
+		default:
+			ok = false
+		}
+	case FieldTypeUint16:
+		switch v := val.(type) {
+		case uint:
+			res, ok = uint16(v), true
+		case uint64:
+			res, ok = uint16(v), true
+		case uint32:
+			res, ok = uint16(v), true
+		case uint16:
+			res, ok = uint16(v), true
+		case uint8:
+			res, ok = uint16(v), true
+		default:
+			ok = false
+		}
+	case FieldTypeUint8:
+		switch v := val.(type) {
+		case uint:
+			res, ok = uint8(v), true
+		case uint64:
+			res, ok = uint8(v), true
+		case uint32:
+			res, ok = uint8(v), true
+		case uint16:
+			res, ok = uint8(v), true
+		case uint8:
+			res, ok = uint8(v), true
+		default:
+			ok = false
+		}
+	case FieldTypeFloat64:
+		switch v := val.(type) {
+		case float64:
+			res, ok = float64(v), true
+		case float32:
+			res, ok = float64(v), true
+		default:
+			ok = false
+		}
+	case FieldTypeFloat32:
+		switch v := val.(type) {
+		case float64:
+			res, ok = float32(v), true
+		case float32:
+			res, ok = float32(v), true
+		default:
+			ok = false
+		}
+	}
+	if !ok {
+		return res, fmt.Errorf("pack: unexpected value type %T for %s condition", val, t)
+	}
+	return res, nil
+}
+
+func (t FieldType) EnsureSliceType(val interface{}) (interface{}, error) {
+	var ok bool
+	res := val
+	switch t {
+	case FieldTypeBytes:
+		_, ok = val.([][]byte)
+	case FieldTypeString:
+		_, ok = val.([]string)
+	case FieldTypeDatetime:
+		_, ok = val.([]time.Time)
+	case FieldTypeBoolean:
+		_, ok = val.([]bool)
+	case FieldTypeInt64:
+		switch v := val.(type) {
+		case []int:
+			cp := make([]int64, len(v))
+			for i := range v {
+				cp[i] = int64(v[i])
+			}
+			res, ok = cp, true
+		case []int64:
+			res, ok = val, true
+		case []int32:
+			cp := make([]int64, len(v))
+			for i := range v {
+				cp[i] = int64(v[i])
+			}
+			res, ok = cp, true
+		case []int16:
+			cp := make([]int64, len(v))
+			for i := range v {
+				cp[i] = int64(v[i])
+			}
+			res, ok = cp, true
+		case []int8:
+			cp := make([]int64, len(v))
+			for i := range v {
+				cp[i] = int64(v[i])
+			}
+			res, ok = cp, true
+		default:
+			ok = false
+		}
+	case FieldTypeInt32:
+		switch v := val.(type) {
+		case []int:
+			cp := make([]int32, len(v))
+			for i := range v {
+				cp[i] = int32(v[i])
+			}
+			res, ok = cp, true
+		case []int64:
+			cp := make([]int32, len(v))
+			for i := range v {
+				cp[i] = int32(v[i])
+			}
+			res, ok = cp, true
+		case []int32:
+			res, ok = val, true
+		case []int16:
+			cp := make([]int32, len(v))
+			for i := range v {
+				cp[i] = int32(v[i])
+			}
+			res, ok = cp, true
+		case []int8:
+			cp := make([]int32, len(v))
+			for i := range v {
+				cp[i] = int32(v[i])
+			}
+			res, ok = cp, true
+		default:
+			ok = false
+		}
+	case FieldTypeInt16:
+		switch v := val.(type) {
+		case []int:
+			cp := make([]int16, len(v))
+			for i := range v {
+				cp[i] = int16(v[i])
+			}
+			res, ok = cp, true
+		case []int64:
+			cp := make([]int16, len(v))
+			for i := range v {
+				cp[i] = int16(v[i])
+			}
+			res, ok = cp, true
+		case []int32:
+			cp := make([]int16, len(v))
+			for i := range v {
+				cp[i] = int16(v[i])
+			}
+			res, ok = cp, true
+		case []int16:
+			res, ok = val, true
+		case []int8:
+			cp := make([]int16, len(v))
+			for i := range v {
+				cp[i] = int16(v[i])
+			}
+			res, ok = cp, true
+		default:
+			ok = false
+		}
+	case FieldTypeInt8:
+		switch v := val.(type) {
+		case []int:
+			cp := make([]int8, len(v))
+			for i := range v {
+				cp[i] = int8(v[i])
+			}
+			res, ok = cp, true
+		case []int64:
+			cp := make([]int8, len(v))
+			for i := range v {
+				cp[i] = int8(v[i])
+			}
+			res, ok = cp, true
+		case []int32:
+			cp := make([]int8, len(v))
+			for i := range v {
+				cp[i] = int8(v[i])
+			}
+			res, ok = cp, true
+		case []int16:
+			cp := make([]int8, len(v))
+			for i := range v {
+				cp[i] = int8(v[i])
+			}
+			res, ok = cp, true
+		case []int8:
+			res, ok = val, true
+		default:
+			ok = false
+		}
+	case FieldTypeUint64:
+		switch v := val.(type) {
+		case []uint:
+			cp := make([]uint64, len(v))
+			for i := range v {
+				cp[i] = uint64(v[i])
+			}
+			res, ok = cp, true
+		case []uint64:
+			res, ok = val, true
+		case []uint32:
+			cp := make([]uint64, len(v))
+			for i := range v {
+				cp[i] = uint64(v[i])
+			}
+			res, ok = cp, true
+		case []uint16:
+			cp := make([]uint64, len(v))
+			for i := range v {
+				cp[i] = uint64(v[i])
+			}
+			res, ok = cp, true
+		case []uint8:
+			cp := make([]uint64, len(v))
+			for i := range v {
+				cp[i] = uint64(v[i])
+			}
+			res, ok = cp, true
+		default:
+			ok = false
+		}
+	case FieldTypeUint32:
+		switch v := val.(type) {
+		case []uint:
+			cp := make([]uint32, len(v))
+			for i := range v {
+				cp[i] = uint32(v[i])
+			}
+			res, ok = cp, true
+		case []uint64:
+			cp := make([]uint32, len(v))
+			for i := range v {
+				cp[i] = uint32(v[i])
+			}
+			res, ok = cp, true
+		case []uint32:
+			res, ok = val, true
+		case []uint16:
+			cp := make([]uint32, len(v))
+			for i := range v {
+				cp[i] = uint32(v[i])
+			}
+			res, ok = cp, true
+		case []uint8:
+			cp := make([]uint32, len(v))
+			for i := range v {
+				cp[i] = uint32(v[i])
+			}
+			res, ok = cp, true
+		default:
+			ok = false
+		}
+	case FieldTypeUint16:
+		switch v := val.(type) {
+		case []uint:
+			cp := make([]uint16, len(v))
+			for i := range v {
+				cp[i] = uint16(v[i])
+			}
+			res, ok = cp, true
+		case []uint64:
+			cp := make([]uint16, len(v))
+			for i := range v {
+				cp[i] = uint16(v[i])
+			}
+			res, ok = cp, true
+		case []uint32:
+			cp := make([]uint16, len(v))
+			for i := range v {
+				cp[i] = uint16(v[i])
+			}
+			res, ok = cp, true
+		case []uint16:
+			res, ok = val, true
+		case []uint8:
+			cp := make([]uint16, len(v))
+			for i := range v {
+				cp[i] = uint16(v[i])
+			}
+			res, ok = cp, true
+		default:
+			ok = false
+		}
+	case FieldTypeUint8:
+		switch v := val.(type) {
+		case []uint:
+			cp := make([]uint8, len(v))
+			for i := range v {
+				cp[i] = uint8(v[i])
+			}
+			res, ok = cp, true
+		case []uint64:
+			cp := make([]uint8, len(v))
+			for i := range v {
+				cp[i] = uint8(v[i])
+			}
+			res, ok = cp, true
+		case []uint32:
+			cp := make([]uint8, len(v))
+			for i := range v {
+				cp[i] = uint8(v[i])
+			}
+			res, ok = cp, true
+		case []uint16:
+			cp := make([]uint8, len(v))
+			for i := range v {
+				cp[i] = uint8(v[i])
+			}
+			res, ok = cp, true
+		case []uint8:
+			res, ok = val, true
+		default:
+			ok = false
+		}
+	case FieldTypeFloat64:
+		_, ok = val.([]float64)
+	case FieldTypeFloat32:
+		_, ok = val.([]float32)
+	}
+	if !ok {
+		return res, fmt.Errorf("pack: unexpected value type %T for %s slice condition", val, t)
+	}
+	return res, nil
+}
 func (t FieldType) CopySliceType(val interface{}) (interface{}, error) {
 	switch t {
 	case FieldTypeBytes:
