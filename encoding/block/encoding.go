@@ -5,7 +5,6 @@ package block
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 
@@ -95,23 +94,40 @@ func encodeFloat64Block(buf *bytes.Buffer, val []float64, comp Compression) (flo
 }
 
 func encodeFloat32Block(buf *bytes.Buffer, val []float32, comp Compression) (float32, float32, error) {
-	return 0, 0, errors.New("encodeFloat32Block not yet implemented")
-	/*if len(val) == 0 {
-		return 0, 0, writeEmptyBlock(buf, BlockFloat64)
+	if len(val) == 0 {
+		return 0, 0, writeEmptyBlock(buf, BlockFloat32)
 	}
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockFloat64))
+	buf.WriteByte(byte(comp<<5) | byte(BlockFloat32))
 	w := getWriter(buf, comp)
-	min, max, err := compress.FloatArrayEncodeAll(val, w)
+	var (
+		cp []float64
+		v  interface{}
+	)
+	if len(val) <= DefaultMaxPointsPerBlock {
+		v = float64Pool.Get()
+		cp = v.([]float64)[:len(val)]
+	} else {
+		cp = make([]float64, len(val))
+	}
+	//copy(cp, val)
+	for i, _ := range val {
+		cp[i] = float64(val[i])
+	}
+
+	min, max, err := compress.FloatArrayEncodeAll(cp, w)
+
+	if v != nil {
+		float64Pool.Put(v)
+	}
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
 		return 0, 0, err
 	}
-
 	err = w.Close()
 	putWriter(w, comp)
-	return min, max, err*/
+	return float32(min), float32(max), err
 }
 
 func decodeFloat64Block(block []byte, dst []float64) ([]float64, error) {
@@ -127,16 +143,39 @@ func decodeFloat64Block(block []byte, dst []float64) ([]float64, error) {
 }
 
 func decodeFloat32Block(block []byte, dst []float32) ([]float32, error) {
-	return nil, errors.New("decodeFloat32Block not yet implemented")
-	/* buf, canRecycle, err := unpackBlock(block, BlockFloat32)
+	buf, canRecycle, err := unpackBlock(block, BlockFloat32)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compress.FloatArrayDecodeAll(buf, dst)
+	var (
+		cp []float64
+		v  interface{}
+	)
+	if len(dst) <= DefaultMaxPointsPerBlock {
+		v = float64Pool.Get()
+		cp = v.([]float64)[:len(dst)]
+	} else {
+		cp = make([]float64, len(dst))
+	}
+	b, err := compress.FloatArrayDecodeAll(buf, cp)
+	if cap(dst) >= len(b) {
+		dst = dst[:len(b)]
+	} else {
+		dst = make([]float32, len(b))
+	}
+
+	for i, _ := range b {
+		dst[i] = float32(b[i])
+	}
+
+	if v != nil {
+		float64Pool.Put(v)
+	}
+
 	if canRecycle && cap(buf) == BlockSizeHint {
 		BlockEncoderPool.Put(buf[:0])
 	}
-	return b, err */
+	return dst, err
 }
 
 func encodeInt64Block(buf *bytes.Buffer, val []int64, comp Compression) (int64, int64, error) {
@@ -422,8 +461,6 @@ func encodeUint64Block(buf *bytes.Buffer, val []uint64, comp Compression) (uint6
 		v  interface{}
 	)
 	if len(val) <= DefaultMaxPointsPerBlock {
-		//		v = int64Pool.Get()
-		//		cp = compress.ReintepretInt64ToUint64Slice(v.([]int64)[:len(val)])
 		v = uint64Pool.Get()
 		cp = v.([]uint64)[:len(val)]
 	} else {

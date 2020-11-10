@@ -728,8 +728,8 @@ func (b *Block) Clear() {
 		b.MaxValue = float64(0.0)
 	case BlockFloat32:
 		b.Float32 = b.Float32[:0]
-		b.MinValue = float64(0.0)
-		b.MaxValue = float64(0.0)
+		b.MinValue = float32(0.0)
+		b.MaxValue = float32(0.0)
 	case BlockString:
 		for j, _ := range b.Strings {
 			b.Strings[j] = ""

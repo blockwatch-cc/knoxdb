@@ -42,11 +42,10 @@ func Float64ArrayEncodedSize(src []float64) int {
 // upper bound
 func Float32ArrayEncodedSize(src []float32) int {
 	// empty slice still writes 19 bytes
-	panic("Float32ArrayEncodedSize not yet implemented")
-	/*if len(src) == 0 {
+	if len(src) == 0 {
 		return 19
 	}
-	return len(src)*9 + 1*/
+	return len(src)*9 + 1
 }
 
 // FloatArrayEncodeAll encodes src into b, returning b and any error encountered.

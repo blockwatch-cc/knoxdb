@@ -236,14 +236,14 @@ func Fields(proto interface{}) (FieldList, error) {
 			fields[i].Type = FieldTypeUint16
 		case reflect.Uint8:
 			fields[i].Type = FieldTypeUint8
-		case reflect.Float64, reflect.Float32:
+		case reflect.Float64:
 			if finfo.flags&FlagConvert > 0 {
 				fields[i].Type = FieldTypeUint64
 			} else {
 				fields[i].Type = FieldTypeFloat64
 			}
-		/*case reflect.Float32:
-		fields[i].Type = FieldTypeFloat32*/
+		case reflect.Float32:
+			fields[i].Type = FieldTypeFloat32
 		case reflect.String:
 			fields[i].Type = FieldTypeString
 		case reflect.Slice:
