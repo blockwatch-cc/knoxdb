@@ -1041,11 +1041,17 @@ func (p *Package) IsZeroAt(index, pos int) bool {
 		return false
 	}
 	switch p.blocks[index].Type {
-	case block.BlockInt64, block.BlockUint64, block.BlockBool:
+	case block.BlockInt64, block.BlockInt32, block.BlockInt16, block.BlockInt8:
+		// cannot be zero because 0 value has a meaning
+		return false
+	case block.BlockUint64, block.BlockUint32, block.BlockUint16, block.BlockUint8, block.BlockBool:
 		// cannot be zero because 0 value has a meaning
 		return false
 	case block.BlockFloat64:
 		v := p.blocks[index].Float64[pos]
+		return math.IsNaN(v) || math.IsInf(v, 0)
+	case block.BlockFloat32:
+		v := float64(p.blocks[index].Float32[pos])
 		return math.IsNaN(v) || math.IsInf(v, 0)
 	case block.BlockString:
 		return len(p.blocks[index].Strings[pos]) == 0
@@ -1065,6 +1071,12 @@ func (p *Package) Column(index int) (interface{}, error) {
 	switch p.blocks[index].Type {
 	case block.BlockInt64:
 		return p.blocks[index].Int64, nil
+	case block.BlockInt32:
+		return p.blocks[index].Int32, nil
+	case block.BlockInt16:
+		return p.blocks[index].Int16, nil
+	case block.BlockInt8:
+		return p.blocks[index].Int8, nil
 	case block.BlockUint64:
 		// floats may have been converted to uints
 		val := p.blocks[index].Uint64
@@ -1084,8 +1096,16 @@ func (p *Package) Column(index int) (interface{}, error) {
 			return resp, nil
 		}
 		return val, nil
+	case block.BlockUint32:
+		return p.blocks[index].Uint32, nil
+	case block.BlockUint16:
+		return p.blocks[index].Uint16, nil
+	case block.BlockUint8:
+		return p.blocks[index].Uint8, nil
 	case block.BlockFloat64:
 		return p.blocks[index].Float64, nil
+	case block.BlockFloat32:
+		return p.blocks[index].Float32, nil
 	case block.BlockString:
 		return p.blocks[index].Strings, nil
 	case block.BlockBytes:
@@ -1109,10 +1129,24 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 		switch b.Type {
 		case block.BlockInt64:
 			out[i] = b.Int64[pos]
+		case block.BlockInt32:
+			out[i] = b.Int32[pos]
+		case block.BlockInt16:
+			out[i] = b.Int16[pos]
+		case block.BlockInt8:
+			out[i] = b.Int8[pos]
 		case block.BlockUint64:
 			out[i] = b.Uint64[pos]
+		case block.BlockUint32:
+			out[i] = b.Uint32[pos]
+		case block.BlockUint16:
+			out[i] = b.Uint16[pos]
+		case block.BlockUint8:
+			out[i] = b.Uint8[pos]
 		case block.BlockFloat64:
 			out[i] = b.Float64[pos]
+		case block.BlockFloat32:
+			out[i] = b.Float32[pos]
 		case block.BlockString:
 			str := b.Strings[pos]
 			out[i] = str
@@ -1142,6 +1176,12 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 	switch p.blocks[index].Type {
 	case block.BlockInt64:
 		return p.blocks[index].Int64[start:end], nil
+	case block.BlockInt32:
+		return p.blocks[index].Int32[start:end], nil
+	case block.BlockInt16:
+		return p.blocks[index].Int16[start:end], nil
+	case block.BlockInt8:
+		return p.blocks[index].Int8[start:end], nil
 	case block.BlockUint64:
 		// floats may have been converted to uints
 		val := p.blocks[index].Uint64[start:end]
@@ -1160,8 +1200,16 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 			return resp, nil
 		}
 		return val, nil
+	case block.BlockUint32:
+		return p.blocks[index].Uint32[start:end], nil
+	case block.BlockUint16:
+		return p.blocks[index].Uint16[start:end], nil
+	case block.BlockUint8:
+		return p.blocks[index].Uint8[start:end], nil
 	case block.BlockFloat64:
 		return p.blocks[index].Float64[start:end], nil
+	case block.BlockFloat32:
+		return p.blocks[index].Float32[start:end], nil
 	case block.BlockString:
 		return p.blocks[index].Strings[start:end], nil
 	case block.BlockBytes:
@@ -1197,10 +1245,24 @@ func (p *Package) CopyFrom(src *Package, dstPos, srcPos, srcLen int) error {
 		switch src.blocks[i].Type {
 		case block.BlockInt64:
 			copy(p.blocks[i].Int64[dstPos:], src.blocks[i].Int64[srcPos:srcPos+n])
+		case block.BlockInt32:
+			copy(p.blocks[i].Int32[dstPos:], src.blocks[i].Int32[srcPos:srcPos+n])
+		case block.BlockInt16:
+			copy(p.blocks[i].Int16[dstPos:], src.blocks[i].Int16[srcPos:srcPos+n])
+		case block.BlockInt8:
+			copy(p.blocks[i].Int8[dstPos:], src.blocks[i].Int8[srcPos:srcPos+n])
 		case block.BlockUint64:
 			copy(p.blocks[i].Uint64[dstPos:], src.blocks[i].Uint64[srcPos:srcPos+n])
+		case block.BlockUint32:
+			copy(p.blocks[i].Uint32[dstPos:], src.blocks[i].Uint32[srcPos:srcPos+n])
+		case block.BlockUint16:
+			copy(p.blocks[i].Uint16[dstPos:], src.blocks[i].Uint16[srcPos:srcPos+n])
+		case block.BlockUint8:
+			copy(p.blocks[i].Uint8[dstPos:], src.blocks[i].Uint8[srcPos:srcPos+n])
 		case block.BlockFloat64:
 			copy(p.blocks[i].Float64[dstPos:], src.blocks[i].Float64[srcPos:srcPos+n])
+		case block.BlockFloat32:
+			copy(p.blocks[i].Float32[dstPos:], src.blocks[i].Float32[srcPos:srcPos+n])
 		case block.BlockString:
 			copy(p.blocks[i].Strings[dstPos:], src.blocks[i].Strings[srcPos:srcPos+n])
 		case block.BlockBytes:
@@ -1297,10 +1359,24 @@ func (p *Package) Append() error {
 		switch p.blocks[i].Type {
 		case block.BlockInt64:
 			p.blocks[i].Int64 = append(p.blocks[i].Int64, 0)
+		case block.BlockInt32:
+			p.blocks[i].Int32 = append(p.blocks[i].Int32, 0)
+		case block.BlockInt16:
+			p.blocks[i].Int16 = append(p.blocks[i].Int16, 0)
+		case block.BlockInt8:
+			p.blocks[i].Int8 = append(p.blocks[i].Int8, 0)
 		case block.BlockUint64:
 			p.blocks[i].Uint64 = append(p.blocks[i].Uint64, 0)
+		case block.BlockUint32:
+			p.blocks[i].Uint32 = append(p.blocks[i].Uint32, 0)
+		case block.BlockUint16:
+			p.blocks[i].Uint16 = append(p.blocks[i].Uint16, 0)
+		case block.BlockUint8:
+			p.blocks[i].Uint8 = append(p.blocks[i].Uint8, 0)
 		case block.BlockFloat64:
 			p.blocks[i].Float64 = append(p.blocks[i].Float64, 0)
+		case block.BlockFloat32:
+			p.blocks[i].Float32 = append(p.blocks[i].Float32, 0)
 		case block.BlockString:
 			p.blocks[i].Strings = append(p.blocks[i].Strings, "")
 		case block.BlockBytes:
@@ -1330,10 +1406,24 @@ func (p *Package) Grow(n int) error {
 		switch p.blocks[i].Type {
 		case block.BlockInt64:
 			p.blocks[i].Int64 = append(p.blocks[i].Int64, make([]int64, n)...)
+		case block.BlockInt32:
+			p.blocks[i].Int32 = append(p.blocks[i].Int32, make([]int32, n)...)
+		case block.BlockInt16:
+			p.blocks[i].Int16 = append(p.blocks[i].Int16, make([]int16, n)...)
+		case block.BlockInt8:
+			p.blocks[i].Int8 = append(p.blocks[i].Int8, make([]int8, n)...)
 		case block.BlockUint64:
 			p.blocks[i].Uint64 = append(p.blocks[i].Uint64, make([]uint64, n)...)
+		case block.BlockUint32:
+			p.blocks[i].Uint32 = append(p.blocks[i].Uint32, make([]uint32, n)...)
+		case block.BlockUint16:
+			p.blocks[i].Uint16 = append(p.blocks[i].Uint16, make([]uint16, n)...)
+		case block.BlockUint8:
+			p.blocks[i].Uint8 = append(p.blocks[i].Uint8, make([]uint8, n)...)
 		case block.BlockFloat64:
 			p.blocks[i].Float64 = append(p.blocks[i].Float64, make([]float64, n)...)
+		case block.BlockFloat32:
+			p.blocks[i].Float32 = append(p.blocks[i].Float32, make([]float32, n)...)
 		case block.BlockString:
 			p.blocks[i].Strings = append(p.blocks[i].Strings, make([]string, n)...)
 		case block.BlockBytes:
@@ -1366,10 +1456,24 @@ func (p *Package) Delete(pos, n int) error {
 		switch p.blocks[i].Type {
 		case block.BlockInt64:
 			p.blocks[i].Int64 = append(p.blocks[i].Int64[:pos], p.blocks[i].Int64[pos+n:]...)
+		case block.BlockInt32:
+			p.blocks[i].Int32 = append(p.blocks[i].Int32[:pos], p.blocks[i].Int32[pos+n:]...)
+		case block.BlockInt16:
+			p.blocks[i].Int16 = append(p.blocks[i].Int16[:pos], p.blocks[i].Int16[pos+n:]...)
+		case block.BlockInt8:
+			p.blocks[i].Int8 = append(p.blocks[i].Int8[:pos], p.blocks[i].Int8[pos+n:]...)
 		case block.BlockUint64:
 			p.blocks[i].Uint64 = append(p.blocks[i].Uint64[:pos], p.blocks[i].Uint64[pos+n:]...)
+		case block.BlockUint32:
+			p.blocks[i].Uint32 = append(p.blocks[i].Uint32[:pos], p.blocks[i].Uint32[pos+n:]...)
+		case block.BlockUint16:
+			p.blocks[i].Uint16 = append(p.blocks[i].Uint16[:pos], p.blocks[i].Uint16[pos+n:]...)
+		case block.BlockUint8:
+			p.blocks[i].Uint8 = append(p.blocks[i].Uint8[:pos], p.blocks[i].Uint8[pos+n:]...)
 		case block.BlockFloat64:
 			p.blocks[i].Float64 = append(p.blocks[i].Float64[:pos], p.blocks[i].Float64[pos+n:]...)
+		case block.BlockFloat32:
+			p.blocks[i].Float32 = append(p.blocks[i].Float32[:pos], p.blocks[i].Float32[pos+n:]...)
 		case block.BlockString:
 			// avoid mem leaks
 			for j, l := pos, pos+n; j < l; j++ {
@@ -1525,10 +1629,24 @@ func (p *PackageSorter) Less(i, j int) bool {
 	switch p.Package.blocks[p.col].Type {
 	case block.BlockInt64:
 		return p.Package.blocks[p.col].Int64[i] < p.Package.blocks[p.col].Int64[j]
+	case block.BlockInt32:
+		return p.Package.blocks[p.col].Int32[i] < p.Package.blocks[p.col].Int32[j]
+	case block.BlockInt16:
+		return p.Package.blocks[p.col].Int16[i] < p.Package.blocks[p.col].Int16[j]
+	case block.BlockInt8:
+		return p.Package.blocks[p.col].Int8[i] < p.Package.blocks[p.col].Int8[j]
 	case block.BlockUint64:
 		return p.Package.blocks[p.col].Uint64[i] < p.Package.blocks[p.col].Uint64[j]
+	case block.BlockUint32:
+		return p.Package.blocks[p.col].Uint32[i] < p.Package.blocks[p.col].Uint32[j]
+	case block.BlockUint16:
+		return p.Package.blocks[p.col].Uint16[i] < p.Package.blocks[p.col].Uint16[j]
+	case block.BlockUint8:
+		return p.Package.blocks[p.col].Uint8[i] < p.Package.blocks[p.col].Uint8[j]
 	case block.BlockFloat64:
 		return p.Package.blocks[p.col].Float64[i] < p.Package.blocks[p.col].Float64[j]
+	case block.BlockFloat32:
+		return p.Package.blocks[p.col].Float32[i] < p.Package.blocks[p.col].Float32[j]
 	case block.BlockString:
 		return p.Package.blocks[p.col].Strings[i] < p.Package.blocks[p.col].Strings[j]
 	case block.BlockBytes:
@@ -1550,12 +1668,33 @@ func (p *PackageSorter) Swap(i, j int) {
 		case block.BlockInt64:
 			p.Package.blocks[n].Int64[i], p.Package.blocks[n].Int64[j] =
 				p.Package.blocks[n].Int64[j], p.Package.blocks[n].Int64[i]
+		case block.BlockInt32:
+			p.Package.blocks[n].Int32[i], p.Package.blocks[n].Int32[j] =
+				p.Package.blocks[n].Int32[j], p.Package.blocks[n].Int32[i]
+		case block.BlockInt16:
+			p.Package.blocks[n].Int16[i], p.Package.blocks[n].Int16[j] =
+				p.Package.blocks[n].Int16[j], p.Package.blocks[n].Int16[i]
+		case block.BlockInt8:
+			p.Package.blocks[n].Int8[i], p.Package.blocks[n].Int8[j] =
+				p.Package.blocks[n].Int8[j], p.Package.blocks[n].Int8[i]
 		case block.BlockUint64:
 			p.Package.blocks[n].Uint64[i], p.Package.blocks[n].Uint64[j] =
 				p.Package.blocks[n].Uint64[j], p.Package.blocks[n].Uint64[i]
+		case block.BlockUint32:
+			p.Package.blocks[n].Uint32[i], p.Package.blocks[n].Uint32[j] =
+				p.Package.blocks[n].Uint32[j], p.Package.blocks[n].Uint32[i]
+		case block.BlockUint16:
+			p.Package.blocks[n].Uint16[i], p.Package.blocks[n].Uint16[j] =
+				p.Package.blocks[n].Uint16[j], p.Package.blocks[n].Uint16[i]
+		case block.BlockUint8:
+			p.Package.blocks[n].Uint8[i], p.Package.blocks[n].Uint8[j] =
+				p.Package.blocks[n].Uint8[j], p.Package.blocks[n].Uint8[i]
 		case block.BlockFloat64:
 			p.Package.blocks[n].Float64[i], p.Package.blocks[n].Float64[j] =
 				p.Package.blocks[n].Float64[j], p.Package.blocks[n].Float64[i]
+		case block.BlockFloat32:
+			p.Package.blocks[n].Float32[i], p.Package.blocks[n].Float32[j] =
+				p.Package.blocks[n].Float32[j], p.Package.blocks[n].Float32[i]
 		case block.BlockString:
 			p.Package.blocks[n].Strings[i], p.Package.blocks[n].Strings[j] =
 				p.Package.blocks[n].Strings[j], p.Package.blocks[n].Strings[i]
