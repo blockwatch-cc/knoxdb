@@ -1396,11 +1396,32 @@ func hashValue(typ FieldType, val interface{}) uint64 {
 	case FieldTypeInt64:
 		bigEndian.PutUint64(buf[:], uint64(val.(int64)))
 		h.Write(buf[:])
+	case FieldTypeInt32:
+		bigEndian.PutUint64(buf[:], uint64(val.(int32)))
+		h.Write(buf[:])
+	case FieldTypeInt16:
+		bigEndian.PutUint64(buf[:], uint64(val.(int16)))
+		h.Write(buf[:])
+	case FieldTypeInt8:
+		bigEndian.PutUint64(buf[:], uint64(val.(int8)))
+		h.Write(buf[:])
 	case FieldTypeUint64:
 		bigEndian.PutUint64(buf[:], val.(uint64))
 		h.Write(buf[:])
+	case FieldTypeUint32:
+		bigEndian.PutUint64(buf[:], uint64(val.(uint32)))
+		h.Write(buf[:])
+	case FieldTypeUint16:
+		bigEndian.PutUint64(buf[:], uint64(val.(uint16)))
+		h.Write(buf[:])
+	case FieldTypeUint8:
+		bigEndian.PutUint64(buf[:], uint64(val.(uint8)))
+		h.Write(buf[:])
 	case FieldTypeFloat64:
 		bigEndian.PutUint64(buf[:], math.Float64bits(val.(float64)))
+		h.Write(buf[:])
+	case FieldTypeFloat32:
+		bigEndian.PutUint64(buf[:], math.Float64bits(float64(val.(float32))))
 		h.Write(buf[:])
 	case FieldTypeString:
 		h.Write([]byte(val.(string)))
@@ -1430,13 +1451,41 @@ func hashValueAt(typ FieldType, pkg *Package, index, pos int) uint64 {
 		val, _ := pkg.Int64At(index, pos)
 		bigEndian.PutUint64(buf[:], uint64(val))
 		h.Write(buf[:])
+	case FieldTypeInt32:
+		val, _ := pkg.Int32At(index, pos)
+		bigEndian.PutUint64(buf[:], uint64(val))
+		h.Write(buf[:])
+	case FieldTypeInt16:
+		val, _ := pkg.Int16At(index, pos)
+		bigEndian.PutUint64(buf[:], uint64(val))
+		h.Write(buf[:])
+	case FieldTypeInt8:
+		val, _ := pkg.Int8At(index, pos)
+		bigEndian.PutUint64(buf[:], uint64(val))
+		h.Write(buf[:])
 	case FieldTypeUint64:
 		val, _ := pkg.Uint64At(index, pos)
 		bigEndian.PutUint64(buf[:], val)
 		h.Write(buf[:])
+	case FieldTypeUint32:
+		val, _ := pkg.Uint32At(index, pos)
+		bigEndian.PutUint64(buf[:], uint64(val))
+		h.Write(buf[:])
+	case FieldTypeUint16:
+		val, _ := pkg.Uint16At(index, pos)
+		bigEndian.PutUint64(buf[:], uint64(val))
+		h.Write(buf[:])
+	case FieldTypeUint8:
+		val, _ := pkg.Uint8At(index, pos)
+		bigEndian.PutUint64(buf[:], uint64(val))
+		h.Write(buf[:])
 	case FieldTypeFloat64:
 		val, _ := pkg.Float64At(index, pos)
 		bigEndian.PutUint64(buf[:], math.Float64bits(val))
+		h.Write(buf[:])
+	case FieldTypeFloat32:
+		val, _ := pkg.Float32At(index, pos)
+		bigEndian.PutUint64(buf[:], math.Float64bits(float64(val)))
 		h.Write(buf[:])
 	case FieldTypeString:
 		val, _ := pkg.StringAt(index, pos)
@@ -1456,12 +1505,24 @@ func intValue(typ FieldType, val interface{}) uint64 {
 	switch typ {
 	case FieldTypeInt64:
 		return uint64(val.(int64))
+	case FieldTypeInt32:
+		return uint64(val.(int32))
+	case FieldTypeInt16:
+		return uint64(val.(int16))
+	case FieldTypeInt8:
+		return uint64(val.(int8))
 	case FieldTypeUint64:
 		return val.(uint64)
+	case FieldTypeUint32:
+		return uint64(val.(uint32))
+	case FieldTypeUint16:
+		return uint64(val.(uint16))
+	case FieldTypeUint8:
+		return uint64(val.(uint8))
 	case FieldTypeDatetime:
 		return uint64(val.(time.Time).UnixNano())
 	default:
-		// FieldTypeBytes, FieldTypeBoolean, FieldTypeString, FieldTypeFloat64
+		// FieldTypeBytes, FieldTypeBoolean, FieldTypeString, FieldTypeFloat64, FieldTypeFloat32
 		return 0
 	}
 }
@@ -1471,11 +1532,29 @@ func intValueAt(typ FieldType, pkg *Package, index, pos int) uint64 {
 	case FieldTypeInt64, FieldTypeDatetime:
 		val, _ := pkg.Int64At(index, pos)
 		return uint64(val)
+	case FieldTypeInt32:
+		val, _ := pkg.Int32At(index, pos)
+		return uint64(val)
+	case FieldTypeInt16:
+		val, _ := pkg.Int16At(index, pos)
+		return uint64(val)
+	case FieldTypeInt8:
+		val, _ := pkg.Int8At(index, pos)
+		return uint64(val)
 	case FieldTypeUint64:
 		val, _ := pkg.Uint64At(index, pos)
 		return val
+	case FieldTypeUint32:
+		val, _ := pkg.Uint32At(index, pos)
+		return uint64(val)
+	case FieldTypeUint16:
+		val, _ := pkg.Uint16At(index, pos)
+		return uint64(val)
+	case FieldTypeUint8:
+		val, _ := pkg.Uint8At(index, pos)
+		return uint64(val)
 	default:
-		// FieldTypeBytes, FieldTypeBoolean, FieldTypeString, FieldTypeFloat64
+		// FieldTypeBytes, FieldTypeBoolean, FieldTypeString, FieldTypeFloat64, FieldTypeFloat32
 		return 0
 	}
 }
