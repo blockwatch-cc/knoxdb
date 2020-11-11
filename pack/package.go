@@ -170,6 +170,8 @@ func (p *Package) Init(v interface{}, sz int) error {
 		p.namemap[fi.name] = fi.blockid
 		p.namemap[fi.alias] = fi.blockid
 		comp := fi.flags.Compression()
+		flags := fi.flags.BlockFlags()
+		prec := fi.precision
 		switch f.Kind() {
 		case reflect.Int, reflect.Int64:
 			p.blocks[fi.blockid], err = block.NewBlock(block.BlockInt64, sz, comp, 0, 0)
@@ -180,56 +182,24 @@ func (p *Package) Init(v interface{}, sz int) error {
 		case reflect.Int8:
 			p.blocks[fi.blockid], err = block.NewBlock(block.BlockInt8, sz, comp, 0, 0)
 		case reflect.Uint, reflect.Uint64:
-			if fi.flags&FlagConvert > 0 {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint64, sz, comp, 0, block.BlockFlagCompress)
-			} else {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint64, sz, comp, 0, 0)
-			}
+			p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint64, sz, comp, 0, flags)
 		case reflect.Uint32:
-			if fi.flags&FlagConvert > 0 {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint32, sz, comp, 0, block.BlockFlagCompress)
-			} else {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint32, sz, comp, 0, 0)
-			}
+			p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint32, sz, comp, 0, flags)
 		case reflect.Uint16:
 			p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint16, sz, comp, 0, 0)
 		case reflect.Uint8:
 			p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint8, sz, comp, 0, 0)
 		case reflect.Float64:
-			if fi.flags&FlagConvert > 0 {
-				p.blocks[fi.blockid], err = block.NewBlock(
-					block.BlockUint64,
-					sz,
-					comp,
-					fi.precision,
-					block.BlockFlagConvert|block.BlockFlagCompress,
-				)
+			if fi.flags&FlagFixed > 0 {
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint64, sz, comp, prec, flags)
 			} else {
-				p.blocks[fi.blockid], err = block.NewBlock(
-					block.BlockFloat64,
-					sz,
-					comp,
-					fi.precision,
-					0,
-				)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockFloat64, sz, comp, 0, 0)
 			}
 		case reflect.Float32:
-			if fi.flags&FlagConvert > 0 {
-				p.blocks[fi.blockid], err = block.NewBlock(
-					block.BlockUint32,
-					sz,
-					comp,
-					fi.precision,
-					block.BlockFlagConvert|block.BlockFlagCompress,
-				)
+			if fi.flags&FlagFixed > 0 {
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint32, sz, comp, prec, flags)
 			} else {
-				p.blocks[fi.blockid], err = block.NewBlock(
-					block.BlockFloat32,
-					sz,
-					comp,
-					fi.precision,
-					0,
-				)
+				p.blocks[fi.blockid], err = block.NewBlock(block.BlockFloat32, sz, comp, 0, 0)
 			}
 		case reflect.String:
 			p.blocks[fi.blockid], err = block.NewBlock(block.BlockString, sz, fi.flags.Compression(), 0, 0)
@@ -301,6 +271,8 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 		p.namemap[field.Name] = i
 		p.namemap[field.Alias] = i
 		comp := field.Flags.Compression()
+		flags := field.Flags.BlockFlags()
+		prec := field.Precision
 		switch field.Type {
 		case FieldTypeInt64:
 			p.blocks[i], err = block.NewBlock(block.BlockInt64, sz, comp, 0, 0)
@@ -311,42 +283,22 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 		case FieldTypeInt8:
 			p.blocks[i], err = block.NewBlock(block.BlockInt8, sz, comp, 0, 0)
 		case FieldTypeUint64:
-			if field.Flags&FlagConvert > 0 {
-				p.blocks[i], err = block.NewBlock(block.BlockUint64, sz, comp, field.Precision, block.BlockFlagCompress)
-			} else {
-				p.blocks[i], err = block.NewBlock(block.BlockUint64, sz, comp, 0, 0)
-			}
+			p.blocks[i], err = block.NewBlock(block.BlockUint64, sz, comp, prec, flags)
 		case FieldTypeUint32:
-			if field.Flags&FlagConvert > 0 {
-				p.blocks[i], err = block.NewBlock(block.BlockUint32, sz, comp, field.Precision, block.BlockFlagCompress)
-			} else {
-				p.blocks[i], err = block.NewBlock(block.BlockUint32, sz, comp, 0, 0)
-			}
+			p.blocks[i], err = block.NewBlock(block.BlockUint32, sz, comp, prec, flags)
 		case FieldTypeUint16:
 			p.blocks[i], err = block.NewBlock(block.BlockUint16, sz, comp, 0, 0)
 		case FieldTypeUint8:
 			p.blocks[i], err = block.NewBlock(block.BlockUint8, sz, comp, 0, 0)
 		case FieldTypeFloat64:
-			if field.Flags&FlagConvert > 0 {
-				p.blocks[i], err = block.NewBlock(
-					block.BlockUint64,
-					sz,
-					comp,
-					field.Precision,
-					block.BlockFlagConvert|block.BlockFlagCompress,
-				)
+			if field.Flags&FlagFixed > 0 {
+				p.blocks[i], err = block.NewBlock(block.BlockUint64, sz, comp, prec, flags)
 			} else {
 				p.blocks[i], err = block.NewBlock(block.BlockFloat64, sz, comp, 0, 0)
 			}
 		case FieldTypeFloat32:
-			if field.Flags&FlagConvert > 0 {
-				p.blocks[i], err = block.NewBlock(
-					block.BlockUint32,
-					sz,
-					comp,
-					field.Precision,
-					block.BlockFlagConvert|block.BlockFlagCompress,
-				)
+			if field.Flags&FlagFixed > 0 {
+				p.blocks[i], err = block.NewBlock(block.BlockUint32, sz, comp, prec, flags)
 			} else {
 				p.blocks[i], err = block.NewBlock(block.BlockFloat32, sz, comp, 0, 0)
 			}
@@ -474,31 +426,27 @@ func (p *Package) Push(v interface{}) error {
 
 		case block.BlockUint64:
 			var amount uint64
-			if p.blocks[fi.blockid].Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 || fi.flags&FlagConvert > 0 {
-				if f.Type().String() == "float64" {
-					// floats are converted to uints, then compressed
-					amount = block.CompressAmount(block.ConvertAmount(f.Float(), p.blocks[fi.blockid].Precision))
-				} else {
-					amount = block.CompressAmount(f.Uint())
-				}
+			if p.blocks[fi.blockid].Flags&block.BlockFlagFixed > 0 && f.Type().String() == "float64" {
+				amount = block.ToFixed64(f.Float(), p.blocks[fi.blockid].Precision)
 			} else {
 				amount = f.Uint()
+			}
+			if p.blocks[fi.blockid].Flags&block.BlockFlagCompact > 0 {
+				amount = block.Compact64(amount)
 			}
 			p.blocks[fi.blockid].Uint64 = append(p.blocks[fi.blockid].Uint64, amount)
 
 		case block.BlockUint32:
-			var amount uint32
-			if p.blocks[fi.blockid].Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 || fi.flags&FlagConvert > 0 {
-				if f.Type().String() == "float32" {
-					// floats are converted to uints, then compressed
-					amount = uint32(block.CompressAmount(block.ConvertAmount(f.Float(), p.blocks[fi.blockid].Precision)))
-				} else {
-					amount = uint32(block.CompressAmount(f.Uint()))
-				}
+			var amount uint64
+			if p.blocks[fi.blockid].Flags&block.BlockFlagFixed > 0 && f.Type().String() == "float32" {
+				amount = block.ToFixed64(f.Float(), p.blocks[fi.blockid].Precision)
 			} else {
-				amount = uint32(f.Uint())
+				amount = f.Uint()
 			}
-			p.blocks[fi.blockid].Uint32 = append(p.blocks[fi.blockid].Uint32, amount)
+			if p.blocks[fi.blockid].Flags&block.BlockFlagCompact > 0 {
+				amount = block.Compact64(amount)
+			}
+			p.blocks[fi.blockid].Uint32 = append(p.blocks[fi.blockid].Uint32, uint32(amount))
 
 		case block.BlockUint16:
 			p.blocks[fi.blockid].Uint16 = append(p.blocks[fi.blockid].Uint16, uint16(f.Uint()))
@@ -585,33 +533,27 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 
 		case block.BlockUint64:
 			var amount uint64
-			if p.blocks[fi.blockid].Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 ||
-				fi.flags&FlagConvert > 0 {
-				if f.Type().String() == "float64" {
-					// floats are converted to uints, then compressed
-					amount = block.CompressAmount(block.ConvertAmount(f.Float(), p.blocks[fi.blockid].Precision))
-				} else {
-					amount = block.CompressAmount(f.Uint())
-				}
+			if p.blocks[fi.blockid].Flags&block.BlockFlagFixed > 0 && f.Type().String() == "float64" {
+				amount = block.ToFixed64(f.Float(), p.blocks[fi.blockid].Precision)
 			} else {
 				amount = f.Uint()
+			}
+			if p.blocks[fi.blockid].Flags&block.BlockFlagCompact > 0 {
+				amount = block.Compact64(amount)
 			}
 			p.blocks[fi.blockid].Uint64[pos] = amount
 
 		case block.BlockUint32:
-			var amount uint32
-			if p.blocks[fi.blockid].Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 ||
-				fi.flags&FlagConvert > 0 {
-				if f.Type().String() == "float32" {
-					// floats are converted to uints, then compressed
-					amount = uint32(block.CompressAmount(block.ConvertAmount(f.Float(), p.blocks[fi.blockid].Precision)))
-				} else {
-					amount = uint32(block.CompressAmount(f.Uint()))
-				}
+			var amount uint64
+			if p.blocks[fi.blockid].Flags&block.BlockFlagFixed > 0 && f.Type().String() == "float32" {
+				amount = block.ToFixed64(f.Float(), p.blocks[fi.blockid].Precision)
 			} else {
-				amount = uint32(f.Uint())
+				amount = f.Uint()
 			}
-			p.blocks[fi.blockid].Uint32[pos] = amount
+			if p.blocks[fi.blockid].Flags&block.BlockFlagCompact > 0 {
+				amount = block.Compact64(amount)
+			}
+			p.blocks[fi.blockid].Uint32[pos] = uint32(amount)
 
 		case block.BlockUint16:
 			amount := uint16(f.Uint())
@@ -719,43 +661,47 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 		switch b.Type {
 		case block.BlockInt64:
 			dst.SetInt(b.Int64[pos])
+
 		case block.BlockInt32:
 			dst.SetInt(int64(b.Int32[pos]))
+
 		case block.BlockInt16:
 			dst.SetInt(int64(b.Int16[pos]))
+
 		case block.BlockInt8:
 			dst.SetInt(int64(b.Int8[pos]))
 
 		case block.BlockUint64:
 			value := b.Uint64[pos]
-			if b.Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 || fi.flags&FlagConvert > 0 {
-				if dst.Type().String() == "float64" {
-					dst.SetFloat(block.ConvertValue(block.DecompressAmount(value), b.Precision))
-				} else {
-					dst.SetUint(block.DecompressAmount(value))
-				}
+			if b.Flags&block.BlockFlagCompact > 0 {
+				value = block.Decompact64(value)
+			}
+			if b.Flags&block.BlockFlagFixed > 0 && dst.Type().String() == "float64" {
+				dst.SetFloat(block.FromFixed64(value, b.Precision))
 			} else {
 				dst.SetUint(value)
 			}
+
 		case block.BlockUint32:
-			value := b.Uint32[pos]
-			if b.Flags&(block.BlockFlagConvert|block.BlockFlagCompress) > 0 || fi.flags&FlagConvert > 0 {
-				if dst.Type().String() == "float32" {
-					dst.SetFloat(block.ConvertValue(block.DecompressAmount(uint64(value)), b.Precision))
-				} else {
-					dst.SetUint(block.DecompressAmount(uint64(value)))
-				}
+			value := uint64(b.Uint32[pos])
+			if b.Flags&block.BlockFlagCompact > 0 {
+				value = block.Decompact64(value)
+			}
+			if b.Flags&block.BlockFlagFixed > 0 && dst.Type().String() == "float32" {
+				dst.SetFloat(block.FromFixed64(value, b.Precision))
 			} else {
-				dst.SetUint(uint64(value))
+				dst.SetUint(value)
 			}
 
 		case block.BlockUint16:
 			dst.SetUint(uint64(b.Uint16[pos]))
+
 		case block.BlockUint8:
 			dst.SetUint(uint64(b.Uint8[pos]))
 
 		case block.BlockFloat64:
 			dst.SetFloat(b.Float64[pos])
+
 		case block.BlockFloat32:
 			dst.SetFloat(float64(b.Float32[pos]))
 
@@ -837,28 +783,24 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 	case block.BlockUint64:
 		// this is either an uint or float target since floats may have been converted to uints
 		val := p.blocks[index].Uint64[pos]
-		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
-			val := block.ConvertValue(block.DecompressAmount(val), p.blocks[index].Precision)
-			return val, nil
+		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+			val = block.Decompact64(val)
 		}
-		if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
-			val := block.DecompressAmount(val)
-			return val, nil
+		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
+			return block.FromFixed64(val, p.blocks[index].Precision), nil
 		}
 		return val, nil
 
 	case block.BlockUint32:
 		// this is either an uint or float target since floats may have been converted to uints
 		val := uint64(p.blocks[index].Uint32[pos])
-		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
-			val := block.ConvertValue(block.DecompressAmount(val), p.blocks[index].Precision)
-			return float32(val), nil
+		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+			val = block.Decompact64(val)
 		}
-		if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
-			val := block.DecompressAmount(val)
-			return float32(val), nil
+		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
+			return float32(block.FromFixed64(val, p.blocks[index].Precision)), nil
 		}
-		return val, nil
+		return uint32(val), nil
 
 	case block.BlockUint16:
 		val := p.blocks[index].Uint16[pos]
@@ -866,7 +808,6 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 	case block.BlockUint8:
 		val := p.blocks[index].Uint8[pos]
 		return val, nil
-
 	case block.BlockFloat64:
 		val := p.blocks[index].Float64[pos]
 		return val, nil
@@ -911,21 +852,27 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 	case block.BlockInt8:
 		p.blocks[index].Int8[pos] = int8(val.Int())
 	case block.BlockUint64:
-		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
-			p.blocks[index].Uint64[pos] = block.CompressAmount(block.ConvertAmount(val.Float(), p.blocks[index].Precision))
-		} else if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
-			p.blocks[index].Uint64[pos] = block.CompressAmount(val.Uint())
+		var amount uint64
+		if p.blocks[index].Flags&block.BlockFlagFixed > 0 && val.Type().String() == "float64" {
+			amount = block.ToFixed64(val.Float(), p.blocks[index].Precision)
 		} else {
-			p.blocks[index].Uint64[pos] = val.Uint()
+			amount = val.Uint()
 		}
+		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+			amount = block.Compact64(amount)
+		}
+		p.blocks[index].Uint64[pos] = amount
 	case block.BlockUint32:
-		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
-			p.blocks[index].Uint32[pos] = uint32(block.CompressAmount(block.ConvertAmount(val.Float(), p.blocks[index].Precision)))
-		} else if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
-			p.blocks[index].Uint32[pos] = uint32(block.CompressAmount(val.Uint()))
+		var amount uint64
+		if p.blocks[index].Flags&block.BlockFlagFixed > 0 && val.Type().String() == "float32" {
+			amount = block.ToFixed64(val.Float(), p.blocks[index].Precision)
 		} else {
-			p.blocks[index].Uint32[pos] = uint32(val.Uint())
+			amount = val.Uint()
 		}
+		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+			amount = block.Compact64(amount)
+		}
+		p.blocks[index].Uint32[pos] = uint32(amount)
 	case block.BlockUint16:
 		p.blocks[index].Uint16[pos] = uint16(val.Uint())
 	case block.BlockUint8:
@@ -987,8 +934,8 @@ func (p *Package) Uint64At(index, pos int) (uint64, error) {
 	if err := p.isValidAt(index, pos, block.BlockUint64); err != nil {
 		return 0, err
 	}
-	if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
-		return block.DecompressAmount(p.blocks[index].Uint64[pos]), nil
+	if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+		return block.Decompact64(p.blocks[index].Uint64[pos]), nil
 	}
 	return p.blocks[index].Uint64[pos], nil
 }
@@ -997,8 +944,8 @@ func (p *Package) Uint32At(index, pos int) (uint32, error) {
 	if err := p.isValidAt(index, pos, block.BlockUint32); err != nil {
 		return 0, err
 	}
-	if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
-		return uint32(block.DecompressAmount(uint64(p.blocks[index].Uint32[pos]))), nil
+	if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+		return uint32(block.Decompact64(uint64(p.blocks[index].Uint32[pos]))), nil
 	}
 	return p.blocks[index].Uint32[pos], nil
 }
@@ -1046,12 +993,15 @@ func (p *Package) Int8At(index, pos int) (int8, error) {
 }
 
 func (p *Package) Float64At(index, pos int) (float64, error) {
-	if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
+	if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
 		if err := p.isValidAt(index, pos, block.BlockUint64); err != nil {
 			return 0.0, err
 		}
-		val := block.DecompressAmount(p.blocks[index].Uint64[pos])
-		return block.ConvertValue(val, p.blocks[index].Precision), nil
+		val := p.blocks[index].Uint64[pos]
+		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+			val = block.Decompact64(val)
+		}
+		return block.FromFixed64(val, p.blocks[index].Precision), nil
 	}
 	if err := p.isValidAt(index, pos, block.BlockFloat64); err != nil {
 		return 0.0, err
@@ -1060,12 +1010,15 @@ func (p *Package) Float64At(index, pos int) (float64, error) {
 }
 
 func (p *Package) Float32At(index, pos int) (float32, error) {
-	if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
+	if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
 		if err := p.isValidAt(index, pos, block.BlockUint32); err != nil {
 			return 0.0, err
 		}
-		val := block.DecompressAmount(uint64(p.blocks[index].Uint32[pos]))
-		return float32(block.ConvertValue(val, p.blocks[index].Precision)), nil
+		val := p.blocks[index].Uint32[pos]
+		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+			val = uint32(block.Decompact64(uint64(val)))
+		}
+		return float32(block.FromFixed64(uint64(val), p.blocks[index].Precision)), nil
 	}
 	if err := p.isValidAt(index, pos, block.BlockFloat32); err != nil {
 		return 0.0, err
@@ -1145,18 +1098,24 @@ func (p *Package) Column(index int) (interface{}, error) {
 	case block.BlockUint64:
 		// floats may have been converted to uints
 		val := p.blocks[index].Uint64
-		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
+		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
 			resp := make([]float64, len(val))
-			for i, v := range val {
-				resp[i] = block.ConvertValue(block.DecompressAmount(v), p.blocks[index].Precision)
+			if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+				for i, v := range val {
+					resp[i] = block.FromFixed64(block.Decompact64(v), p.blocks[index].Precision)
+				}
+			} else {
+				for i, v := range val {
+					resp[i] = block.FromFixed64(v, p.blocks[index].Precision)
+				}
 			}
 			return resp, nil
 		}
-		// uints may be compressed
-		if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
+		// uints may be compacted
+		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
 			resp := make([]uint64, len(val))
 			for i, v := range val {
-				resp[i] = block.DecompressAmount(v)
+				resp[i] = block.Decompact64(v)
 			}
 			return resp, nil
 		}
@@ -1164,18 +1123,24 @@ func (p *Package) Column(index int) (interface{}, error) {
 	case block.BlockUint32:
 		// floats may have been converted to uints
 		val := p.blocks[index].Uint32
-		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
+		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
 			resp := make([]float32, len(val))
-			for i, v := range val {
-				resp[i] = float32(block.ConvertValue(block.DecompressAmount(uint64(v)), p.blocks[index].Precision))
+			if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+				for i, v := range val {
+					resp[i] = float32(block.FromFixed64(block.Decompact64(uint64(v)), p.blocks[index].Precision))
+				}
+			} else {
+				for i, v := range val {
+					resp[i] = float32(block.FromFixed64(uint64(v), p.blocks[index].Precision))
+				}
 			}
 			return resp, nil
 		}
-		// uints may be compressed
-		if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
+		// uints may be compacted
+		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
 			resp := make([]uint32, len(val))
 			for i, v := range val {
-				resp[i] = uint32(block.DecompressAmount(uint64(v)))
+				resp[i] = uint32(block.Decompact64(uint64(v)))
 			}
 			return resp, nil
 		}
@@ -1267,17 +1232,24 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 	case block.BlockUint64:
 		// floats may have been converted to uints
 		val := p.blocks[index].Uint64[start:end]
-		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
+		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
 			resp := make([]float64, len(val))
-			for i, v := range val {
-				resp[i] = block.ConvertValue(block.DecompressAmount(v), p.blocks[index].Precision)
+			if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+				for i, v := range val {
+					resp[i] = block.FromFixed64(block.Decompact64(v), p.blocks[index].Precision)
+				}
+			} else {
+				for i, v := range val {
+					resp[i] = block.FromFixed64(v, p.blocks[index].Precision)
+				}
 			}
 			return resp, nil
 		}
-		if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
+		// uints may be compacted
+		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
 			resp := make([]uint64, len(val))
 			for i, v := range val {
-				resp[i] = block.DecompressAmount(v)
+				resp[i] = block.Decompact64(v)
 			}
 			return resp, nil
 		}
@@ -1285,17 +1257,24 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 	case block.BlockUint32:
 		// floats may have been converted to uints
 		val := p.blocks[index].Uint32[start:end]
-		if p.blocks[index].Flags&block.BlockFlagConvert > 0 {
+		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
 			resp := make([]float32, len(val))
-			for i, v := range val {
-				resp[i] = float32(block.ConvertValue(block.DecompressAmount(uint64(v)), p.blocks[index].Precision))
+			if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
+				for i, v := range val {
+					resp[i] = float32(block.FromFixed64(block.Decompact64(uint64(v)), p.blocks[index].Precision))
+				}
+			} else {
+				for i, v := range val {
+					resp[i] = float32(block.FromFixed64(uint64(v), p.blocks[index].Precision))
+				}
 			}
 			return resp, nil
 		}
-		if p.blocks[index].Flags&block.BlockFlagCompress > 0 {
+		// uints may be compacted
+		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
 			resp := make([]uint32, len(val))
 			for i, v := range val {
-				resp[i] = uint32(block.DecompressAmount(uint64(v)))
+				resp[i] = uint32(block.Decompact64(uint64(v)))
 			}
 			return resp, nil
 		}

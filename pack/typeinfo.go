@@ -63,8 +63,11 @@ func (f fieldInfo) String() string {
 	if f.flags&FlagIndexed > 0 {
 		s += " Indexed"
 	}
-	if f.flags&FlagConvert > 0 {
-		s += " Convert"
+	if f.flags&FlagCompact > 0 {
+		s += " Compact"
+	}
+	if f.flags&FlagFixed > 0 {
+		s += fmt.Sprintf(" Fixed(%d)", f.precision)
 	}
 	if f.flags&FlagCompressLZ4 > 0 {
 		s += " LZ4"
@@ -144,12 +147,40 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 			return nil, err
 		}
 
-		// pk field must be of type int64 or uint64
+		// pk field must be of type uint64
 		if finfo.flags&FlagPrimary > 0 {
 			switch f.Type.Kind() {
 			case reflect.Uint64:
 			default:
-				return nil, fmt.Errorf("pack: invalid primary key type %T", f.Type)
+				return nil, fmt.Errorf("pack: invalid primary key type %s", f.Type)
+			}
+		}
+
+		// fixed point conversion only applies to float32/64
+		if finfo.flags&FlagFixed > 0 {
+			switch f.Type.Kind() {
+			case reflect.Float32:
+			case reflect.Float64:
+			default:
+				return nil, fmt.Errorf("pack: invalid type %s for fixed-point flag", f.Type)
+			}
+		}
+
+		// compact numbers must be uint64 or fixed-point float32/64
+		if finfo.flags&FlagCompact > 0 {
+			fail := false
+			switch f.Type.Kind() {
+			case reflect.Uint64:
+			case reflect.Uint32:
+			case reflect.Float32:
+				fail = finfo.flags&FlagFixed == 0
+			case reflect.Float64:
+				fail = finfo.flags&FlagFixed == 0
+			default:
+				fail = true
+			}
+			if fail {
+				return nil, fmt.Errorf("pack: invalid type %s for compact flag", f.Type)
 			}
 		}
 
@@ -183,8 +214,10 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				finfo.flags |= FlagPrimary
 			case "index":
 				finfo.flags |= FlagIndexed
-			case "convert":
-				finfo.flags |= FlagConvert
+			case "compact":
+				finfo.flags |= FlagCompact
+			case "fixed":
+				finfo.flags |= FlagFixed
 				finfo.precision = maxPrecision
 			case "lz4":
 				finfo.flags |= FlagCompressLZ4
@@ -201,6 +234,8 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 					}
 					finfo.precision = prec
 				}
+			default:
+				return nil, fmt.Errorf("pack: unsupported struct tag field '%s'", ff[0])
 			}
 		}
 	}

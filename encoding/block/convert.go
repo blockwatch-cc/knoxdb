@@ -46,9 +46,9 @@ import (
 //   1000000000 (5) -> 10       (1)           * 10.00000000 BTC
 // -----------------------------------------------------------------------------
 
-// CompressAmount compresses the passed amount according to the domain
+// Compact64 compresses the passed amount according to the domain
 // specific compression algorithm described above.
-func CompressAmount(amount uint64) uint64 {
+func Compact64(amount uint64) uint64 {
 	// No need to do any work if it's zero.
 	if amount == 0 {
 		return 0
@@ -75,10 +75,10 @@ func CompressAmount(amount uint64) uint64 {
 	return 10 + 10*(amount-1)
 }
 
-// DecompressAmount returns the original amount the passed compressed
+// Decompact64 returns the original amount the passed compressed
 // amount represents according to the domain specific compression algorithm
 // described above.
-func DecompressAmount(amount uint64) uint64 {
+func Decompact64(amount uint64) uint64 {
 	// No need to do any work if it's zero.
 	if amount == 0 {
 		return 0
@@ -115,18 +115,18 @@ func DecompressAmount(amount uint64) uint64 {
 	return n
 }
 
-// convertAmount converts a floating point number, which may or may not be representable
+// ToFixed64 converts a floating point number, which may or may not be representable
 // as an integer, to an integer type by rounding to the nearest integer.
 // This is performed consistent with the General Decimal Arithmetic spec as
 // implemented by github.com/ericlagergren/decimal instead of simply by adding or
 // subtracting 0.5 depending on the sign, and relying on integer truncation to round
 // the value to the nearest Amount.
-func ConvertAmount(f float64, dec int) uint64 {
+func ToFixed64(f float64, dec int) uint64 {
 	var big = decimal.New(0, dec)
 	i, _ := big.SetFloat64(f * math.Pow10(dec)).RoundToInt().Int64()
 	return uint64(i)
 }
 
-func ConvertValue(amount uint64, dec int) float64 {
+func FromFixed64(amount uint64, dec int) float64 {
 	return float64(int64(amount)) / math.Pow10(dec)
 }

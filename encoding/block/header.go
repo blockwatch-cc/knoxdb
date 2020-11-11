@@ -110,28 +110,28 @@ func (b *Block) CloneHeader() BlockHeader {
 		bh.MaxValue = max
 	case BlockUint64:
 		min, max := b.MinValue.(uint64), b.MaxValue.(uint64)
-		if b.Flags&BlockFlagConvert > 0 {
-			// uint64 -> float64 incl compression
-			bh.MinValue = ConvertValue(DecompressAmount(min), b.Precision)
-			bh.MaxValue = ConvertValue(DecompressAmount(max), b.Precision)
-		} else if b.Flags&BlockFlagCompress > 0 {
+		if b.Flags&BlockFlagFixed > 0 {
+			// uint64 -> float64 incl decompact
+			bh.MinValue = FromFixed64(Decompact64(min), b.Precision)
+			bh.MaxValue = FromFixed64(Decompact64(max), b.Precision)
+		} else if b.Flags&BlockFlagCompact > 0 {
 			// uint64 compression only
-			bh.MinValue = DecompressAmount(min)
-			bh.MaxValue = DecompressAmount(max)
+			bh.MinValue = Decompact64(min)
+			bh.MaxValue = Decompact64(max)
 		} else {
 			bh.MinValue = min
 			bh.MaxValue = max
 		}
 	case BlockUint32:
 		min, max := b.MinValue.(uint32), b.MaxValue.(uint32)
-		if b.Flags&BlockFlagConvert > 0 {
-			// uint32 -> float32 incl compression
-			bh.MinValue = uint32(ConvertValue(DecompressAmount(uint64(min)), b.Precision))
-			bh.MaxValue = uint32(ConvertValue(DecompressAmount(uint64(max)), b.Precision))
-		} else if b.Flags&BlockFlagCompress > 0 {
+		if b.Flags&BlockFlagFixed > 0 {
+			// uint32 -> float32 incl decompact
+			bh.MinValue = float32(FromFixed64(Decompact64(uint64(min)), b.Precision))
+			bh.MaxValue = float32(FromFixed64(Decompact64(uint64(max)), b.Precision))
+		} else if b.Flags&BlockFlagCompact > 0 {
 			// uint32 compression only
-			bh.MinValue = uint32(DecompressAmount(uint64(min)))
-			bh.MaxValue = uint32(DecompressAmount(uint64(max)))
+			bh.MinValue = uint32(Decompact64(uint64(min)))
+			bh.MaxValue = uint32(Decompact64(uint64(max)))
 		} else {
 			bh.MinValue = min
 			bh.MaxValue = max
@@ -230,7 +230,7 @@ func (h BlockHeader) Encode(buf *bytes.Buffer) error {
 
 	case BlockUint64:
 		var v [16]byte
-		if h.Flags&BlockFlagConvert > 0 {
+		if h.Flags&BlockFlagFixed > 0 {
 			// Note: data is float64
 			min, max := h.MinValue.(float64), h.MaxValue.(float64)
 			bigEndian.PutUint64(v[0:], math.Float64bits(min))
@@ -245,7 +245,7 @@ func (h BlockHeader) Encode(buf *bytes.Buffer) error {
 
 	case BlockUint32:
 		var v [8]byte
-		if h.Flags&BlockFlagConvert > 0 {
+		if h.Flags&BlockFlagFixed > 0 {
 			// Note: data is float32
 			min, max := h.MinValue.(float32), h.MaxValue.(float32)
 			bigEndian.PutUint32(v[0:], math.Float32bits(min))
@@ -371,7 +371,7 @@ func (h *BlockHeader) Decode(buf *bytes.Buffer) error {
 
 	case BlockUint64:
 		v := buf.Next(16)
-		if h.Flags&BlockFlagConvert > 0 {
+		if h.Flags&BlockFlagFixed > 0 {
 			// data is float64
 			h.MinValue = math.Float64frombits(bigEndian.Uint64(v[0:]))
 			h.MaxValue = math.Float64frombits(bigEndian.Uint64(v[8:]))
@@ -382,7 +382,7 @@ func (h *BlockHeader) Decode(buf *bytes.Buffer) error {
 		}
 	case BlockUint32:
 		v := buf.Next(8)
-		if h.Flags&BlockFlagConvert > 0 {
+		if h.Flags&BlockFlagFixed > 0 {
 			// data is float32
 			h.MinValue = math.Float32frombits(bigEndian.Uint32(v[0:]))
 			h.MaxValue = math.Float32frombits(bigEndian.Uint32(v[4:]))

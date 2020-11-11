@@ -152,10 +152,16 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 			if err := p.blocks[i].DecodeHeader(buf); err != nil {
 				return err
 			}
-			// v2 only: set uint64/float converted block precision from pack header
+			// v2 only: set uint64/float64 converted block precision from pack header
 			if p.version == packageStorageFormatVersionV2 {
 				if p.blocks[i].Type == block.BlockUint64 || p.blocks[i].Type == block.BlockFloat64 {
 					p.blocks[i].Precision = precision
+				}
+			}
+			// v1..v3 only: set fixed when compact is set on float64 field
+			if p.version <= packageStorageFormatVersionV3 {
+				if p.blocks[i].Type == block.BlockUint64 && p.blocks[i].Flags&block.BlockFlagCompact > 0 {
+					p.blocks[i].Flags |= block.BlockFlagFixed
 				}
 			}
 		}

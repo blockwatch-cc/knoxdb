@@ -78,25 +78,26 @@ func (t Enum) String() string {
 }
 
 type Types struct {
-	RowId          uint64    `pack:"I,pk,snappy"   json:"row_id"`
-	Timestamp      time.Time `pack:"T,snappy"      json:"time"`
-	Hash           []byte    `pack:"H"             json:"hash"`
-	String         string    `pack:"s,snappy"      json:"string"`
-	Bool           bool      `pack:"b,snappy"      json:"bool"`
-	Enum           Enum      `pack:"e,snappy"      json:"enum"`
-	Int64          int64     `pack:"i,snappy"      json:"int64"`
-	Int32          int32     `pack:"j,snappy"      json:"int32"`
-	Int16          int16     `pack:"k,snappy"      json:"int16"`
-	Int8           int8      `pack:"l,snappy"      json:"int8"`
-	Uint64         uint64    `pack:"m,snappy"      json:"uint64"`
-	Uint32         uint32    `pack:"n,snappy"      json:"uint32"`
-	Uint16         uint16    `pack:"o,snappy"      json:"uint16"`
-	Uint8          uint8     `pack:"p,snappy"      json:"uint8"`
-	ConvertUint64  uint64    `pack:"u,convert,snappy"               json:"convert_uint"`
-	ConvertFloat64 float64   `pack:"c,convert,precision=5,snappy"   json:"convert_float64"`
-	ConvertFloat32 float32   `pack:"d,convert,precision=5,snappy"   json:"convert_float32"`
-	Float32        float32   `pack:"f"             json:"float32"`
-	Float64        float64   `pack:"g"             json:"float64"`
+	RowId         uint64    `pack:"I,pk,snappy"   json:"row_id"`
+	Timestamp     time.Time `pack:"T,snappy"      json:"time"`
+	Hash          []byte    `pack:"H"             json:"hash"`
+	String        string    `pack:"s,snappy"      json:"string"`
+	Bool          bool      `pack:"b,snappy"      json:"bool"`
+	Enum          Enum      `pack:"e,snappy"      json:"enum"`
+	Int64         int64     `pack:"i,snappy"      json:"int64"`
+	Int32         int32     `pack:"j,snappy"      json:"int32"`
+	Int16         int16     `pack:"k,snappy"      json:"int16"`
+	Int8          int8      `pack:"l,snappy"      json:"int8"`
+	Uint64        uint64    `pack:"m,snappy"      json:"uint64"`
+	Uint32        uint32    `pack:"n,snappy"      json:"uint32"`
+	Uint16        uint16    `pack:"o,snappy"      json:"uint16"`
+	Uint8         uint8     `pack:"p,snappy"      json:"uint8"`
+	CompactUint64 uint64    `pack:"u,compact,snappy"  json:"compact_uint64"`
+	CompactUint32 uint32    `pack:"v,compact,snappy"  json:"compact_uint32"`
+	FixedFloat64  float64   `pack:"c,fixed,compact,precision=5,snappy"   json:"fixed_float64"`
+	FixedFloat32  float32   `pack:"d,fixed,compact,precision=5,snappy"   json:"fixed_float32"`
+	Float64       float64   `pack:"g,snappy"      json:"float64"`
+	Float32       float32   `pack:"f,snappy"      json:"float32"`
 }
 
 func (t Types) ID() uint64 {
@@ -222,25 +223,25 @@ func GenerateRandomKey(length int) []byte {
 
 func NewRandomTypes(i int) *Types {
 	return &Types{
-		RowId:          0, // empty, will be set by insert
-		Timestamp:      time.Now().UTC(),
-		Hash:           GenerateRandomKey(20),
-		String:         hex.EncodeToString(GenerateRandomKey(4)),
-		Bool:           true,
-		Enum:           Enum(i%4 + 1),
-		Int64:          int64(i),
-		Int32:          int32(i),
-		Int16:          int16(i),
-		Int8:           int8(i),
-		Uint64:         uint64(i),
-		Uint32:         uint32(i),
-		Uint16:         uint16(i),
-		Uint8:          uint8(i),
-		ConvertUint64:  uint64(i),
-		ConvertFloat64: float64(i),
-		ConvertFloat32: float32(i),
-		Float32:        float32(i),
-		Float64:        float64(i),
+		RowId:         0, // empty, will be set by insert
+		Timestamp:     time.Now().UTC(),
+		Hash:          GenerateRandomKey(20),
+		String:        hex.EncodeToString(GenerateRandomKey(4)),
+		Bool:          true,
+		Enum:          Enum(i%4 + 1),
+		Int64:         int64(i),
+		Int32:         int32(i),
+		Int16:         int16(i),
+		Int8:          int8(i),
+		Uint64:        uint64(i * 1000000),
+		Uint32:        uint32(i * 1000000),
+		Uint16:        uint16(i),
+		Uint8:         uint8(i),
+		CompactUint64: uint64(i * 1000000),
+		FixedFloat64:  float64(i * 1000000),
+		FixedFloat32:  float32(i * 1000000),
+		Float32:       float32(i * 1000000),
+		Float64:       float64(i * 1000000),
 	}
 }
 

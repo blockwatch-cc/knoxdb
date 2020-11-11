@@ -23,10 +23,11 @@ type FieldFlags int
 const (
 	FlagPrimary FieldFlags = 1 << iota
 	FlagIndexed
-	FlagConvert
+	FlagCompact
 	FlagCompressSnappy
 	FlagCompressLZ4
-	FlagMode = FlagPrimary | FlagIndexed | FlagConvert | FlagCompressSnappy | FlagCompressLZ4
+	FlagFixed
+	FlagMode = FlagPrimary | FlagIndexed | FlagCompact | FlagFixed | FlagCompressSnappy | FlagCompressLZ4
 )
 
 func (f FieldFlags) Compression() block.Compression {
@@ -37,6 +38,17 @@ func (f FieldFlags) Compression() block.Compression {
 		return block.LZ4Compression
 	}
 	return 0
+}
+
+func (f FieldFlags) BlockFlags() block.BlockFlags {
+	ff := block.BlockFlags(0)
+	if f&FlagCompact > 0 {
+		ff |= block.BlockFlagCompact
+	}
+	if f&FlagFixed > 0 {
+		ff |= block.BlockFlagFixed
+	}
+	return ff
 }
 
 type FieldType string
@@ -236,14 +248,14 @@ func Fields(proto interface{}) (FieldList, error) {
 		case reflect.Uint8:
 			fields[i].Type = FieldTypeUint8
 		case reflect.Float64:
-			if finfo.flags&FlagConvert > 0 {
+			if finfo.flags&FlagFixed > 0 {
 				fields[i].Precision = finfo.precision
 				fields[i].Type = FieldTypeUint64
 			} else {
 				fields[i].Type = FieldTypeFloat64
 			}
 		case reflect.Float32:
-			if finfo.flags&FlagConvert > 0 {
+			if finfo.flags&FlagFixed > 0 {
 				fields[i].Precision = finfo.precision
 				fields[i].Type = FieldTypeUint32
 			} else {

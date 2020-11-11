@@ -18,8 +18,8 @@ var bigEndian = binary.BigEndian
 type BlockFlags byte
 
 const (
-	BlockFlagConvert BlockFlags = 1 << iota
-	BlockFlagCompress
+	BlockFlagFixed   BlockFlags = 1 << iota // fixed point float32/64 as uint32/64
+	BlockFlagCompact                        // compact uint64 numbers
 )
 
 type Compression byte
