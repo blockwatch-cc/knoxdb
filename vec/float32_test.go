@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-const Float32Size = 8
+const Float32Size = 4
 
 func randFloat32Slice(n, u int) []float32 {
 	s := make([]float32, n*u)
