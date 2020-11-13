@@ -1164,9 +1164,9 @@ var uint64BetweenCases = []Uint64MatchTest{
 	CreateUint64TestCase("l15", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 15),
 	CreateUint64TestCase("l7", uint64TestSlice_1, uint64BetweenTestMatch_1, uint64BetweenTestMatch_1b, uint64BetweenTestResult_1, 7),
 	// with extreme values
-	CreateUint64TestCase("ext64", uint64TestSlice_2, uint64BetweenTestMatch_2, uint64BetweenTestMatch_1b, uint64BetweenTestResult_2, 64),
-	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64BetweenTestMatch_2, uint64BetweenTestMatch_1b, uint64BetweenTestResult_2, 32),
-	CreateUint64TestCase("ext31", uint64TestSlice_2, uint64BetweenTestMatch_2, uint64BetweenTestMatch_1b, uint64BetweenTestResult_2, 31),
+	CreateUint64TestCase("ext64", uint64TestSlice_2, uint64BetweenTestMatch_2, uint64BetweenTestMatch_2b, uint64BetweenTestResult_2, 64),
+	CreateUint64TestCase("ext32", uint64TestSlice_2, uint64BetweenTestMatch_2, uint64BetweenTestMatch_2b, uint64BetweenTestResult_2, 32),
+	CreateUint64TestCase("ext31", uint64TestSlice_2, uint64BetweenTestMatch_2, uint64BetweenTestMatch_2b, uint64BetweenTestResult_2, 31),
 }
 
 func TestMatchUint64BetweenGeneric(T *testing.T) {

@@ -1,6 +1,5 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
-//
 
 package vec
 
@@ -8,11 +7,12 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/bits"
 	"math/rand"
 	"testing"
 )
 
-const Uint16Size = 2
+const Uint16Size = 8
 
 type Uint16MatchTest struct {
 	name   string
@@ -24,6 +24,39 @@ type Uint16MatchTest struct {
 }
 
 var (
+	uint16TestSlice_0 = []uint16{
+		0, 5, 3, 5, // Y1
+		7, 5, 5, 9, // Y2
+		3, 5, 5, 5, // Y3
+		5, 0, 113, 12, // Y4
+
+		4, 2, 3, 5, // Y5
+		7, 3, 5, 9, // Y6
+		3, 13, 5, 5, // Y7
+		42, 5, 113, 12, // Y8
+	}
+	uint16EqualTestMatch_0  uint16 = 5
+	uint16EqualTestResult_0        = []byte{0x56, 0x78, 0x12, 0x34}
+
+	uint16NotEqualTestMatch_0  uint16 = 5
+	uint16NotEqualTestResult_0        = []byte{0xa9, 0x87, 0xed, 0xcb}
+
+	uint16LessTestMatch_0  uint16 = 5
+	uint16LessTestResult_0        = []byte{0xa0, 0x84, 0xe4, 0x80}
+
+	uint16LessEqualTestMatch_0  uint16 = 5
+	uint16LessEqualTestResult_0        = []byte{0xf6, 0xfc, 0xf6, 0xb4}
+
+	uint16GreaterTestMatch_0  uint16 = 5
+	uint16GreaterTestResult_0        = []byte{0x09, 0x03, 0x09, 0x4b}
+
+	uint16GreaterEqualTestMatch_0  uint16 = 5
+	uint16GreaterEqualTestResult_0        = []byte{0x5f, 0x7b, 0x1b, 0x7f}
+
+	uint16BetweenTestMatch_0  uint16 = 5
+	uint16BetweenTestMatch_0b uint16 = 10
+	uint16BetweenTestResult_0        = []byte{0x5f, 0x78, 0x1b, 0x34}
+
 	uint16TestSlice_1 = []uint16{
 		5, 2, 3, 4,
 		7, 8, 5, 10,
@@ -34,33 +67,31 @@ var (
 		43, 5, 5, 5,
 		39, 40, 41, 42,
 	}
+
 	uint16EqualTestResult_1        = []byte{0x82, 0x42, 0x23, 0x70}
 	uint16EqualTestMatch_1  uint16 = 5
-	uint16EqualTestCount_1  int64  = 10
+
+	uint16NotEqualTestResult_1        = []byte{0x7d, 0xbd, 0xdc, 0x8f}
+	uint16NotEqualTestMatch_1  uint16 = 5
 
 	uint16LessTestResult_1        = []byte{0x70, 0x00, 0x00, 0x00}
 	uint16LessTestMatch_1  uint16 = 5
-	uint16LessTestCount_1  int64  = 3
 
 	uint16LessEqualTestResult_1        = []byte{0xf2, 0x42, 0x23, 0x70}
 	uint16LessEqualTestMatch_1  uint16 = 5
-	uint16LessEqualTestCount_1  int64  = 13
 
 	uint16GreaterTestResult_1        = []byte{0x0d, 0xbd, 0xdc, 0x8f}
 	uint16GreaterTestMatch_1  uint16 = 5
-	uint16GreaterTestCount_1  int64  = 19
 
 	uint16GreaterEqualTestResult_1        = []byte{0x8f, 0xff, 0xff, 0xff}
 	uint16GreaterEqualTestMatch_1  uint16 = 5
-	uint16GreaterEqualTestCount_1  int64  = 29
 
 	uint16BetweenTestResult_1        = []byte{0x8f, 0x42, 0x23, 0x70}
 	uint16BetweenTestMatch_1  uint16 = 5
 	uint16BetweenTestMatch_1b uint16 = 10
-	uint16BetweenTestCount_1  int64  = 13
 
 	// extreme values
-	uint16TestSlice_2 = []uint16{
+    uint16TestSlice_2 = []uint16{
 		0, math.MaxInt8, math.MaxUint8, math.MaxUint16,
 		0, math.MaxInt8, math.MaxUint8, math.MaxUint16,
 		0, math.MaxInt8, math.MaxUint8, math.MaxUint16,
@@ -72,28 +103,25 @@ var (
 	}
 	uint16EqualTestResult_2        = []byte{0x11, 0x11, 0x11, 0x11}
 	uint16EqualTestMatch_2  uint16 = math.MaxUint16
-	uint16EqualTestCount_2  int64  = 8
+
+	uint16NotEqualTestResult_2        = []byte{0xee, 0xee, 0xee, 0xee}
+	uint16NotEqualTestMatch_2  uint16 = math.MaxUint16
 
 	uint16LessTestResult_2        = []byte{0xee, 0xee, 0xee, 0xee}
 	uint16LessTestMatch_2  uint16 = math.MaxUint16
-	uint16LessTestCount_2  int64  = 24
 
 	uint16LessEqualTestResult_2        = []byte{0xff, 0xff, 0xff, 0xff}
 	uint16LessEqualTestMatch_2  uint16 = math.MaxUint16
-	uint16LessEqualTestCount_2  int64  = 32
 
 	uint16GreaterTestResult_2        = []byte{0x00, 0x00, 0x00, 0x00}
 	uint16GreaterTestMatch_2  uint16 = math.MaxUint16
-	uint16GreaterTestCount_2  int64  = 0
 
 	uint16GreaterEqualTestResult_2        = []byte{0x11, 0x11, 0x11, 0x11}
 	uint16GreaterEqualTestMatch_2  uint16 = math.MaxUint16
-	uint16GreaterEqualTestCount_2  int64  = 8
 
 	uint16BetweenTestResult_2        = []byte{0x33, 0x33, 0x33, 0x33}
 	uint16BetweenTestMatch_2  uint16 = math.MaxUint8
 	uint16BetweenTestMatch_2b uint16 = math.MaxUint16
-	uint16BetweenTestCount_2  int64  = 16
 )
 
 func randUint16Slice(n, u int) []uint16 {
@@ -107,79 +135,60 @@ func randUint16Slice(n, u int) []uint16 {
 	return s
 }
 
+// creates an uint16 test case from the given slice
+// Parameters:
+//  - name: desired name of the test case
+//  - slice: the slice for constructing the test case
+//  - match, match2: are only copied to the resulting test case
+//  - result: result for the given slice
+//  - len: desired length of the test case
+func CreateUint16TestCase(name string, slice []uint16, match, match2 uint16, result []byte, length int) Uint16MatchTest {
+	if len(slice)%8 != 0 {
+		panic("CreateUint16TestCase: length of slice has to be a multiple of 8")
+	}
+	if len(result) != bitFieldLen(len(slice)) {
+		panic("CreateUint16TestCase: length of slice and length of result does not match")
+	}
+
+	// create new slice by concat of given slice
+	// we make it a little bit longer check buffer overruns
+	var new_slice []uint16
+	var l int = length
+	for l > 0 {
+		new_slice = append(new_slice, slice...)
+		l -= len(slice)
+	}
+
+	// create new result by concat of given result
+	new_result := make([]byte, bitFieldLen(length))
+	for i, _ := range new_result {
+		new_result[i] = result[i%len(result)]
+	}
+	// clear the last unused bits
+	if length%8 != 0 {
+		new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+	}
+	// count number of ones
+	var cnt int
+	for _, v := range new_result {
+		cnt += bits.OnesCount8(v)
+	}
+	return Uint16MatchTest{
+		name:   name,
+		slice:  new_slice[:length],
+		match:  match,
+		match2: match2,
+		result: new_result,
+		count:  int64(cnt),
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Equal Testcases
 //
+
 var uint16EqualCases = []Uint16MatchTest{
-	Uint16MatchTest{
-		name: "vec1",
-		// 	// test vector to find shuffle/perm positions
-		// 	slice: []int64{
-		// 		// 0x1, 0x2, 0x3, 0x4, // Y1
-		// 		// 0x5, 0x6, 0x7, 0x8, // Y2
-		// 		// 0x9, 0xa, 0xb, 0xc, // Y3
-		// 		// 0xd, 0xe, 0xf, 0x0, // Y4
-
-		// 		// 0x11, 0x12, 0x13, 0x14, // Y5
-		// 		// 0x15, 0x16, 0x17, 0x18, // Y6
-		// 		// 0x19, 0x1a, 0x1b, 0x1c, // Y7
-		// 		// 0x1d, 0x1e, 0x1f, 0x10, // Y8
-		// 	},
-		// 	match:  5,
-		// 	result: []byte{0x01, 0x0, 0x0, 0x0},
-		// 	count:  1,
-		// },{
-		slice: []uint16{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
-
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0x56, 0x78, 0x12, 0x34},
-		count:  13,
-	}, {
-		name:   "l32",
-		slice:  uint16TestSlice_1,
-		match:  uint16EqualTestMatch_1,
-		result: uint16EqualTestResult_1,
-		count:  uint16EqualTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint16TestSlice_1, uint16TestSlice_1...),
-		match:  uint16EqualTestMatch_1,
-		result: append(uint16EqualTestResult_1, uint16EqualTestResult_1...),
-		count:  uint16EqualTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint16TestSlice_1[:31],
-		match:  uint16EqualTestMatch_1,
-		result: uint16EqualTestResult_1,
-		count:  uint16EqualTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  uint16TestSlice_1[:23],
-		match:  uint16EqualTestMatch_1,
-		result: []byte{0x82, 0x42, 0x22}, // last bit off!
-		count:  uint16EqualTestCount_1 - 4,
-	}, {
-		name:   "l15",
-		slice:  uint16TestSlice_1[:15],
-		match:  uint16EqualTestMatch_1,
-		result: uint16EqualTestResult_1[:2],
-		count:  uint16EqualTestCount_1 - 6,
-	}, {
-		name:   "l7",
-		slice:  uint16TestSlice_1[:7],
-		match:  uint16EqualTestMatch_1,
-		result: uint16EqualTestResult_1[:1],
-		count:  uint16EqualTestCount_1 - 8,
-	}, {
+	{
 		name:   "l0",
 		slice:  make([]uint16, 0),
 		match:  uint16EqualTestMatch_1,
@@ -191,21 +200,24 @@ var uint16EqualCases = []Uint16MatchTest{
 		match:  uint16EqualTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint16TestSlice_2,
-		match:  uint16EqualTestMatch_2,
-		result: uint16EqualTestResult_2,
-		count:  uint16EqualTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint16TestSlice_2[:31],
-		match:  uint16EqualTestMatch_2,
-		result: []byte{0x11, 0x11, 0x11, 0x10},
-		count:  7,
 	},
+	CreateUint16TestCase("vec1", uint16TestSlice_0, uint16EqualTestMatch_0, 0, uint16EqualTestResult_0, 32),
+	CreateUint16TestCase("vec2", uint16TestSlice_0, uint16EqualTestMatch_0, 0, uint16EqualTestResult_0, 64),
+	CreateUint16TestCase("l32", uint16TestSlice_1, uint16EqualTestMatch_1, 0, uint16EqualTestResult_1, 32),
+	CreateUint16TestCase("l64", append(uint16TestSlice_1, uint16TestSlice_0...), uint16EqualTestMatch_1, 0,
+		append(uint16EqualTestResult_1, uint16EqualTestResult_0...), 64),
+	CreateUint16TestCase("l128", append(uint16TestSlice_1, uint16TestSlice_0...), uint16EqualTestMatch_1, 0,
+		append(uint16EqualTestResult_1, uint16EqualTestResult_0...), 128),
+	CreateUint16TestCase("l127", uint16TestSlice_1, uint16EqualTestMatch_1, 0, uint16EqualTestResult_1, 127),
+	CreateUint16TestCase("l63", uint16TestSlice_1, uint16EqualTestMatch_1, 0, uint16EqualTestResult_1, 63),
+	CreateUint16TestCase("l31", uint16TestSlice_1, uint16EqualTestMatch_1, 0, uint16EqualTestResult_1, 31),
+	CreateUint16TestCase("l23", uint16TestSlice_1, uint16EqualTestMatch_1, 0, uint16EqualTestResult_1, 23),
+	CreateUint16TestCase("l15", uint16TestSlice_1, uint16EqualTestMatch_1, 0, uint16EqualTestResult_1, 15),
+	CreateUint16TestCase("l7", uint16TestSlice_1, uint16EqualTestMatch_1, 0, uint16EqualTestResult_1, 7),
+	// with extreme values
+	CreateUint16TestCase("ext64", uint16TestSlice_2, uint16EqualTestMatch_2, 0, uint16EqualTestResult_2, 64),
+	CreateUint16TestCase("ext32", uint16TestSlice_2, uint16EqualTestMatch_2, 0, uint16EqualTestResult_2, 32),
+	CreateUint16TestCase("ext31", uint16TestSlice_2, uint16EqualTestMatch_2, 0, uint16EqualTestResult_2, 31),
 }
 
 func TestMatchUint16EqualGeneric(T *testing.T) {
@@ -225,7 +237,10 @@ func TestMatchUint16EqualGeneric(T *testing.T) {
 	}
 }
 
-func TestMatchUint16EqualAVX2(T *testing.T) {
+/*func TestMatchUint16EqualAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range uint16EqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -250,15 +265,42 @@ func TestMatchUint16EqualAVX2(T *testing.T) {
 	}
 }
 
+func TestMatchUint16EqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range uint16EqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint16EqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Equal benchmarks
 //
 func BenchmarkMatchUint16EqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
 				matchUint16EqualGeneric(a, math.MaxUint16/2, bits)
@@ -267,12 +309,14 @@ func BenchmarkMatchUint16EqualGeneric(B *testing.B) {
 	}
 }
 
-func BenchmarkMatchUint16EqualAVX2(B *testing.B) {
+/*func BenchmarkMatchUint16EqualAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
 				matchUint16EqualAVX2(a, math.MaxUint16/2, bits)
@@ -281,78 +325,186 @@ func BenchmarkMatchUint16EqualAVX2(B *testing.B) {
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-func BenchmarkMatchUint16EqualAVX2Scalar(B *testing.B) {
+func BenchmarkMatchUint16EqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
-				matchUint16EqualAVX2(a, math.MaxUint16/2, bits)
+				matchUint16EqualAVX512(a, math.MaxUint16/2, bits)
+			}
+		})
+	}
+}*/
+
+// -----------------------------------------------------------------------------
+// NotEqual Testcases
+//
+
+var uint16NotEqualCases = []Uint16MatchTest{
+	{
+		name:   "l0",
+		slice:  make([]uint16, 0),
+		match:  uint16NotEqualTestMatch_1,
+		result: []byte{},
+		count:  0,
+	}, {
+		name:   "nil",
+		slice:  nil,
+		match:  uint16NotEqualTestMatch_1,
+		result: []byte{},
+		count:  0,
+	},
+	CreateUint16TestCase("vec1", uint16TestSlice_0, uint16NotEqualTestMatch_0, 0, uint16NotEqualTestResult_0, 32),
+	CreateUint16TestCase("vec2", uint16TestSlice_0, uint16NotEqualTestMatch_0, 0, uint16NotEqualTestResult_0, 64),
+	CreateUint16TestCase("l32", uint16TestSlice_1, uint16NotEqualTestMatch_1, 0, uint16NotEqualTestResult_1, 32),
+	CreateUint16TestCase("l64", append(uint16TestSlice_1, uint16TestSlice_0...), uint16NotEqualTestMatch_1, 0,
+		append(uint16NotEqualTestResult_1, uint16NotEqualTestResult_0...), 64),
+	CreateUint16TestCase("l128", append(uint16TestSlice_1, uint16TestSlice_0...), uint16NotEqualTestMatch_1, 0,
+		append(uint16NotEqualTestResult_1, uint16NotEqualTestResult_0...), 128),
+	CreateUint16TestCase("l127", uint16TestSlice_1, uint16NotEqualTestMatch_1, 0, uint16NotEqualTestResult_1, 127),
+	CreateUint16TestCase("l63", uint16TestSlice_1, uint16NotEqualTestMatch_1, 0, uint16NotEqualTestResult_1, 63),
+	CreateUint16TestCase("l31", uint16TestSlice_1, uint16NotEqualTestMatch_1, 0, uint16NotEqualTestResult_1, 31),
+	CreateUint16TestCase("l23", uint16TestSlice_1, uint16NotEqualTestMatch_1, 0, uint16NotEqualTestResult_1, 23),
+	CreateUint16TestCase("l15", uint16TestSlice_1, uint16NotEqualTestMatch_1, 0, uint16NotEqualTestResult_1, 15),
+	CreateUint16TestCase("l7", uint16TestSlice_1, uint16NotEqualTestMatch_1, 0, uint16NotEqualTestResult_1, 7),
+	// with extreme values
+	CreateUint16TestCase("ext64", uint16TestSlice_2, uint16NotEqualTestMatch_2, 0, uint16NotEqualTestResult_2, 64),
+	CreateUint16TestCase("ext32", uint16TestSlice_2, uint16NotEqualTestMatch_2, 0, uint16NotEqualTestResult_2, 32),
+	CreateUint16TestCase("ext31", uint16TestSlice_2, uint16NotEqualTestMatch_2, 0, uint16NotEqualTestResult_2, 31),
+}
+
+func TestMatchUint16NotEqualGeneric(T *testing.T) {
+	for _, c := range uint16NotEqualCases {
+		// pre-allocate the result slice
+		bits := make([]byte, bitFieldLen(len(c.slice)))
+		cnt := matchUint16NotEqualGeneric(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+	}
+}
+
+/*func TestMatchUint16NotEqualAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range uint16NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint16NotEqualAVX2(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
+func TestMatchUint16NotEqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range uint16NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint16NotEqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
+// -----------------------------------------------------------------------------
+// NotEqual benchmarks
+//
+func BenchmarkMatchUint16NotEqualGeneric(B *testing.B) {
+	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Uint16Size))
+			for i := 0; i < B.N; i++ {
+				matchUint16NotEqualGeneric(a, math.MaxUint16/2, bits)
 			}
 		})
 	}
 }
+
+/*func BenchmarkMatchUint16NotEqualAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Uint16Size))
+			for i := 0; i < B.N; i++ {
+				matchUint16NotEqualAVX2(a, math.MaxUint16/2, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchUint16NotEqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
+	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Uint16Size))
+			for i := 0; i < B.N; i++ {
+				matchUint16NotEqualAVX512(a, math.MaxUint16/2, bits)
+			}
+		})
+	}
+}*/
 
 // -----------------------------------------------------------------------------
 // Less Testcases
 //
-var uint16LessCases = []Uint16MatchTest{
-	Uint16MatchTest{
-		name: "vec1",
-		slice: []uint16{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
 
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0xa0, 0x84, 0xe4, 0x80},
-		count:  9,
-	}, {
-		name:   "l32",
-		slice:  uint16TestSlice_1,
-		match:  uint16LessTestMatch_1,
-		result: uint16LessTestResult_1,
-		count:  uint16LessTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint16TestSlice_1, uint16TestSlice_1...),
-		match:  uint16LessTestMatch_1,
-		result: append(uint16LessTestResult_1, uint16LessTestResult_1...),
-		count:  uint16LessTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint16TestSlice_1[:31],
-		match:  uint16LessTestMatch_1,
-		result: uint16LessTestResult_1,
-		count:  uint16LessTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  uint16TestSlice_1[:23],
-		match:  uint16LessTestMatch_1,
-		result: uint16LessTestResult_1[:3],
-		count:  uint16LessTestCount_1,
-	}, {
-		name:   "l15",
-		slice:  uint16TestSlice_1[:15],
-		match:  uint16LessTestMatch_1,
-		result: uint16LessTestResult_1[:2],
-		count:  uint16LessTestCount_1,
-	}, {
-		name:   "l7",
-		slice:  uint16TestSlice_1[:7],
-		match:  uint16LessTestMatch_1,
-		result: uint16LessTestResult_1[:1],
-		count:  uint16LessTestCount_1,
-	}, {
+var uint16LessCases = []Uint16MatchTest{
+	{
 		name:   "l0",
 		slice:  make([]uint16, 0),
 		match:  uint16LessTestMatch_1,
@@ -364,21 +516,24 @@ var uint16LessCases = []Uint16MatchTest{
 		match:  uint16LessTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint16TestSlice_2,
-		match:  uint16LessTestMatch_2,
-		result: uint16LessTestResult_2,
-		count:  uint16LessTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint16TestSlice_2[:31],
-		match:  uint16LessTestMatch_2,
-		result: uint16LessTestResult_2,
-		count:  uint16LessTestCount_2,
 	},
+	CreateUint16TestCase("vec1", uint16TestSlice_0, uint16LessTestMatch_0, 0, uint16LessTestResult_0, 32),
+	CreateUint16TestCase("vec2", uint16TestSlice_0, uint16LessTestMatch_0, 0, uint16LessTestResult_0, 64),
+	CreateUint16TestCase("l32", uint16TestSlice_1, uint16LessTestMatch_1, 0, uint16LessTestResult_1, 32),
+	CreateUint16TestCase("l64", append(uint16TestSlice_1, uint16TestSlice_0...), uint16LessTestMatch_1, 0,
+		append(uint16LessTestResult_1, uint16LessTestResult_0...), 64),
+	CreateUint16TestCase("l128", append(uint16TestSlice_1, uint16TestSlice_0...), uint16LessTestMatch_1, 0,
+		append(uint16LessTestResult_1, uint16LessTestResult_0...), 128),
+	CreateUint16TestCase("l127", uint16TestSlice_1, uint16LessTestMatch_1, 0, uint16LessTestResult_1, 127),
+	CreateUint16TestCase("l63", uint16TestSlice_1, uint16LessTestMatch_1, 0, uint16LessTestResult_1, 63),
+	CreateUint16TestCase("l31", uint16TestSlice_1, uint16LessTestMatch_1, 0, uint16LessTestResult_1, 31),
+	CreateUint16TestCase("l23", uint16TestSlice_1, uint16LessTestMatch_1, 0, uint16LessTestResult_1, 23),
+	CreateUint16TestCase("l15", uint16TestSlice_1, uint16LessTestMatch_1, 0, uint16LessTestResult_1, 15),
+	CreateUint16TestCase("l7", uint16TestSlice_1, uint16LessTestMatch_1, 0, uint16LessTestResult_1, 7),
+	// with extreme values
+	CreateUint16TestCase("ext64", uint16TestSlice_2, uint16LessTestMatch_2, 0, uint16LessTestResult_2, 64),
+	CreateUint16TestCase("ext32", uint16TestSlice_2, uint16LessTestMatch_2, 0, uint16LessTestResult_2, 32),
+	CreateUint16TestCase("ext31", uint16TestSlice_2, uint16LessTestMatch_2, 0, uint16LessTestResult_2, 31),
 }
 
 func TestMatchUint16LessGeneric(T *testing.T) {
@@ -398,8 +553,10 @@ func TestMatchUint16LessGeneric(T *testing.T) {
 	}
 }
 
-/*
-func TestMatchUint16LessAVX2(T *testing.T) {
+/*func TestMatchUint16LessAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range uint16LessCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -423,16 +580,43 @@ func TestMatchUint16LessAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
+func TestMatchUint16LessAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range uint16LessCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint16LessThanAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Less benchmarks
 //
 func BenchmarkMatchUint16LessGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
 				matchUint16LessThanGeneric(a, math.MaxUint16/2, bits)
@@ -441,13 +625,14 @@ func BenchmarkMatchUint16LessGeneric(B *testing.B) {
 	}
 }
 
-/*
-func BenchmarkMatchUint16LessAVX2(B *testing.B) {
+/*func BenchmarkMatchUint16LessAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
 				matchUint16LessThanAVX2(a, math.MaxUint16/2, bits)
@@ -456,78 +641,28 @@ func BenchmarkMatchUint16LessAVX2(B *testing.B) {
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-func BenchmarkMatchUint16LessAVX2Scalar(B *testing.B) {
+func BenchmarkMatchUint16LessAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
-				matchUint16LessThanAVX2(a, math.MaxUint16/2, bits)
+				matchUint16LessThanAVX512(a, math.MaxUint16/2, bits)
 			}
 		})
 	}
-}
-*/
+}*/
+
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
 //
-var uint16LessEqualCases = []Uint16MatchTest{
-	Uint16MatchTest{
-		name: "vec1",
-		slice: []uint16{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
 
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0xf6, 0xfc, 0xf6, 0xb4},
-		count:  22,
-	}, {
-		name:   "l32",
-		slice:  uint16TestSlice_1,
-		match:  uint16LessEqualTestMatch_1,
-		result: uint16LessEqualTestResult_1,
-		count:  uint16LessEqualTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint16TestSlice_1, uint16TestSlice_1...),
-		match:  uint16LessEqualTestMatch_1,
-		result: append(uint16LessEqualTestResult_1, uint16LessEqualTestResult_1...),
-		count:  uint16LessEqualTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint16TestSlice_1[:31],
-		match:  uint16LessEqualTestMatch_1,
-		result: uint16LessEqualTestResult_1,
-		count:  uint16LessEqualTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  uint16TestSlice_1[:23],
-		match:  uint16LessEqualTestMatch_1,
-		result: []byte{0xf2, 0x42, 0x22},
-		count:  uint16LessEqualTestCount_1 - 4,
-	}, {
-		name:   "l15",
-		slice:  uint16TestSlice_1[:15],
-		match:  uint16LessEqualTestMatch_1,
-		result: uint16LessEqualTestResult_1[:2],
-		count:  uint16LessEqualTestCount_1 - 6,
-	}, {
-		name:   "l7",
-		slice:  uint16TestSlice_1[:7],
-		match:  uint16LessEqualTestMatch_1,
-		result: uint16LessEqualTestResult_1[:1],
-		count:  uint16LessEqualTestCount_1 - 8,
-	}, {
+var uint16LessEqualCases = []Uint16MatchTest{
+	{
 		name:   "l0",
 		slice:  make([]uint16, 0),
 		match:  uint16LessEqualTestMatch_1,
@@ -539,21 +674,24 @@ var uint16LessEqualCases = []Uint16MatchTest{
 		match:  uint16LessEqualTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint16TestSlice_2,
-		match:  uint16LessEqualTestMatch_2,
-		result: uint16LessEqualTestResult_2,
-		count:  uint16LessEqualTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint16TestSlice_2[:31],
-		match:  uint16LessEqualTestMatch_2,
-		result: []byte{0xff, 0xff, 0xff, 0xfe}, // last off
-		count:  uint16LessEqualTestCount_2 - 1,
 	},
+	CreateUint16TestCase("vec1", uint16TestSlice_0, uint16LessEqualTestMatch_0, 0, uint16LessEqualTestResult_0, 32),
+	CreateUint16TestCase("vec2", uint16TestSlice_0, uint16LessEqualTestMatch_0, 0, uint16LessEqualTestResult_0, 64),
+	CreateUint16TestCase("l32", uint16TestSlice_1, uint16LessEqualTestMatch_1, 0, uint16LessEqualTestResult_1, 32),
+	CreateUint16TestCase("l64", append(uint16TestSlice_1, uint16TestSlice_0...), uint16LessEqualTestMatch_1, 0,
+		append(uint16LessEqualTestResult_1, uint16LessEqualTestResult_0...), 64),
+	CreateUint16TestCase("l128", append(uint16TestSlice_1, uint16TestSlice_0...), uint16LessEqualTestMatch_1, 0,
+		append(uint16LessEqualTestResult_1, uint16LessEqualTestResult_0...), 128),
+	CreateUint16TestCase("l127", uint16TestSlice_1, uint16LessEqualTestMatch_1, 0, uint16LessEqualTestResult_1, 127),
+	CreateUint16TestCase("l63", uint16TestSlice_1, uint16LessEqualTestMatch_1, 0, uint16LessEqualTestResult_1, 63),
+	CreateUint16TestCase("l31", uint16TestSlice_1, uint16LessEqualTestMatch_1, 0, uint16LessEqualTestResult_1, 31),
+	CreateUint16TestCase("l23", uint16TestSlice_1, uint16LessEqualTestMatch_1, 0, uint16LessEqualTestResult_1, 23),
+	CreateUint16TestCase("l15", uint16TestSlice_1, uint16LessEqualTestMatch_1, 0, uint16LessEqualTestResult_1, 15),
+	CreateUint16TestCase("l7", uint16TestSlice_1, uint16LessEqualTestMatch_1, 0, uint16LessEqualTestResult_1, 7),
+	// with extreme values
+	CreateUint16TestCase("ext64", uint16TestSlice_2, uint16LessEqualTestMatch_2, 0, uint16LessEqualTestResult_2, 64),
+	CreateUint16TestCase("ext32", uint16TestSlice_2, uint16LessEqualTestMatch_2, 0, uint16LessEqualTestResult_2, 32),
+	CreateUint16TestCase("ext31", uint16TestSlice_2, uint16LessEqualTestMatch_2, 0, uint16LessEqualTestResult_2, 31),
 }
 
 func TestMatchUint16LessEqualGeneric(T *testing.T) {
@@ -573,8 +711,10 @@ func TestMatchUint16LessEqualGeneric(T *testing.T) {
 	}
 }
 
-/*
-func TestMatchUint16LessEqualAVX2(T *testing.T) {
+/*func TestMatchUint16LessEqualAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range uint16LessEqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -598,16 +738,43 @@ func TestMatchUint16LessEqualAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
+func TestMatchUint16LessEqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range uint16LessEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint16LessThanEqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
 //
 func BenchmarkMatchUint16LessEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
 				matchUint16LessThanEqualGeneric(a, math.MaxUint16/2, bits)
@@ -616,13 +783,14 @@ func BenchmarkMatchUint16LessEqualGeneric(B *testing.B) {
 	}
 }
 
-/*
-func BenchmarkMatchUint16LessEqualAVX2(B *testing.B) {
+/*func BenchmarkMatchUint16LessEqualAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
 				matchUint16LessThanEqualAVX2(a, math.MaxUint16/2, bits)
@@ -631,78 +799,28 @@ func BenchmarkMatchUint16LessEqualAVX2(B *testing.B) {
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-func BenchmarkMatchUint16LessEqualAVX2Scalar(B *testing.B) {
+func BenchmarkMatchUint16LessEqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
-				matchUint16LessThanEqualAVX2(a, math.MaxUint16/2, bits)
+				matchUint16LessThanEqualAVX512(a, math.MaxUint16/2, bits)
 			}
 		})
 	}
-}
-*/
+}*/
+
 // -----------------------------------------------------------------------------
 // Greater Testcases
 //
-var uint16GreaterCases = []Uint16MatchTest{
-	Uint16MatchTest{
-		name: "vec1",
-		slice: []uint16{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
 
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0x09, 0x03, 0x09, 0x4b},
-		count:  10,
-	}, {
-		name:   "l32",
-		slice:  uint16TestSlice_1,
-		match:  uint16GreaterTestMatch_1,
-		result: uint16GreaterTestResult_1,
-		count:  uint16GreaterTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint16TestSlice_1, uint16TestSlice_1...),
-		match:  uint16GreaterTestMatch_1,
-		result: append(uint16GreaterTestResult_1, uint16GreaterTestResult_1...),
-		count:  uint16GreaterTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint16TestSlice_1[:31],
-		match:  uint16GreaterTestMatch_1,
-		result: []byte{0x0d, 0xbd, 0xdc, 0x8e},
-		count:  uint16GreaterTestCount_1 - 1,
-	}, {
-		name:   "l23",
-		slice:  uint16TestSlice_1[:23],
-		match:  uint16GreaterTestMatch_1,
-		result: uint16GreaterTestResult_1[:3],
-		count:  uint16GreaterTestCount_1 - 5,
-	}, {
-		name:   "l15",
-		slice:  uint16TestSlice_1[:15],
-		match:  uint16GreaterTestMatch_1,
-		result: []byte{0x0d, 0xbc},
-		count:  uint16GreaterTestCount_1 - 11,
-	}, {
-		name:   "l7",
-		slice:  uint16TestSlice_1[:7],
-		match:  uint16GreaterTestMatch_1,
-		result: []byte{0x0c},
-		count:  2,
-	}, {
+var uint16GreaterCases = []Uint16MatchTest{
+	{
 		name:   "l0",
 		slice:  make([]uint16, 0),
 		match:  uint16GreaterTestMatch_1,
@@ -714,21 +832,24 @@ var uint16GreaterCases = []Uint16MatchTest{
 		match:  uint16GreaterTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint16TestSlice_2,
-		match:  uint16GreaterTestMatch_2,
-		result: uint16GreaterTestResult_2,
-		count:  uint16GreaterTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint16TestSlice_2[:31],
-		match:  uint16GreaterTestMatch_2,
-		result: uint16GreaterTestResult_2, // still zeros
-		count:  uint16GreaterTestCount_2,
 	},
+	CreateUint16TestCase("vec1", uint16TestSlice_0, uint16GreaterTestMatch_0, 0, uint16GreaterTestResult_0, 32),
+	CreateUint16TestCase("vec2", uint16TestSlice_0, uint16GreaterTestMatch_0, 0, uint16GreaterTestResult_0, 64),
+	CreateUint16TestCase("l32", uint16TestSlice_1, uint16GreaterTestMatch_1, 0, uint16GreaterTestResult_1, 32),
+	CreateUint16TestCase("l64", append(uint16TestSlice_1, uint16TestSlice_0...), uint16GreaterTestMatch_1, 0,
+		append(uint16GreaterTestResult_1, uint16GreaterTestResult_0...), 64),
+	CreateUint16TestCase("l128", append(uint16TestSlice_1, uint16TestSlice_0...), uint16GreaterTestMatch_1, 0,
+		append(uint16GreaterTestResult_1, uint16GreaterTestResult_0...), 128),
+	CreateUint16TestCase("l127", uint16TestSlice_1, uint16GreaterTestMatch_1, 0, uint16GreaterTestResult_1, 127),
+	CreateUint16TestCase("l63", uint16TestSlice_1, uint16GreaterTestMatch_1, 0, uint16GreaterTestResult_1, 63),
+	CreateUint16TestCase("l31", uint16TestSlice_1, uint16GreaterTestMatch_1, 0, uint16GreaterTestResult_1, 31),
+	CreateUint16TestCase("l23", uint16TestSlice_1, uint16GreaterTestMatch_1, 0, uint16GreaterTestResult_1, 23),
+	CreateUint16TestCase("l15", uint16TestSlice_1, uint16GreaterTestMatch_1, 0, uint16GreaterTestResult_1, 15),
+	CreateUint16TestCase("l7", uint16TestSlice_1, uint16GreaterTestMatch_1, 0, uint16GreaterTestResult_1, 7),
+	// with extreme values
+	CreateUint16TestCase("ext64", uint16TestSlice_2, uint16GreaterTestMatch_2, 0, uint16GreaterTestResult_2, 64),
+	CreateUint16TestCase("ext32", uint16TestSlice_2, uint16GreaterTestMatch_2, 0, uint16GreaterTestResult_2, 32),
+	CreateUint16TestCase("ext31", uint16TestSlice_2, uint16GreaterTestMatch_2, 0, uint16GreaterTestResult_2, 31),
 }
 
 func TestMatchUint16GreaterGeneric(T *testing.T) {
@@ -748,8 +869,10 @@ func TestMatchUint16GreaterGeneric(T *testing.T) {
 	}
 }
 
-/*
-func TestMatchUint16GreaterAVX2(T *testing.T) {
+/*func TestMatchUint16GreaterAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range uint16GreaterCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -773,16 +896,43 @@ func TestMatchUint16GreaterAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
+func TestMatchUint16GreaterAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range uint16GreaterCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint16GreaterThanAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Greater benchmarks
 //
 func BenchmarkMatchUint16GreaterGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
 				matchUint16GreaterThanGeneric(a, math.MaxUint16/2, bits)
@@ -791,13 +941,14 @@ func BenchmarkMatchUint16GreaterGeneric(B *testing.B) {
 	}
 }
 
-/*
-func BenchmarkMatchUint16GreaterAVX2(B *testing.B) {
+/*func BenchmarkMatchUint16GreaterAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
 				matchUint16GreaterThanAVX2(a, math.MaxUint16/2, bits)
@@ -806,78 +957,28 @@ func BenchmarkMatchUint16GreaterAVX2(B *testing.B) {
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-func BenchmarkMatchUint16GreaterAVX2Scalar(B *testing.B) {
+func BenchmarkMatchUint16GreaterAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
-				matchUint16GreaterThanAVX2(a, math.MaxUint16/2, bits)
+				matchUint16GreaterThanAVX512(a, math.MaxUint16/2, bits)
 			}
 		})
 	}
-}
-*/
+}*/
+
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
 //
-var uint16GreaterEqualCases = []Uint16MatchTest{
-	Uint16MatchTest{
-		name: "vec1",
-		slice: []uint16{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
 
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0x5f, 0x7b, 0x1b, 0x7f},
-		count:  23,
-	}, {
-		name:   "l32",
-		slice:  uint16TestSlice_1,
-		match:  uint16GreaterEqualTestMatch_1,
-		result: uint16GreaterEqualTestResult_1,
-		count:  uint16GreaterEqualTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint16TestSlice_1, uint16TestSlice_1...),
-		match:  uint16GreaterEqualTestMatch_1,
-		result: append(uint16GreaterEqualTestResult_1, uint16GreaterEqualTestResult_1...),
-		count:  uint16GreaterEqualTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint16TestSlice_1[:31],
-		match:  uint16GreaterEqualTestMatch_1,
-		result: []byte{0x8f, 0xff, 0xff, 0xfe},
-		count:  uint16GreaterEqualTestCount_1 - 1,
-	}, {
-		name:   "l23",
-		slice:  uint16TestSlice_1[:23],
-		match:  uint16GreaterEqualTestMatch_1,
-		result: []byte{0x8f, 0xff, 0xfe},
-		count:  uint16GreaterEqualTestCount_1 - 9,
-	}, {
-		name:   "l15",
-		slice:  uint16TestSlice_1[:15],
-		match:  uint16GreaterEqualTestMatch_1,
-		result: []byte{0x8f, 0xfe},
-		count:  uint16GreaterEqualTestCount_1 - 17,
-	}, {
-		name:   "l7",
-		slice:  uint16TestSlice_1[:7],
-		match:  uint16GreaterEqualTestMatch_1,
-		result: []byte{0x8e},
-		count:  4,
-	}, {
+var uint16GreaterEqualCases = []Uint16MatchTest{
+	{
 		name:   "l0",
 		slice:  make([]uint16, 0),
 		match:  uint16GreaterEqualTestMatch_1,
@@ -889,21 +990,24 @@ var uint16GreaterEqualCases = []Uint16MatchTest{
 		match:  uint16GreaterEqualTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint16TestSlice_2,
-		match:  uint16GreaterEqualTestMatch_2,
-		result: uint16GreaterEqualTestResult_2,
-		count:  uint16GreaterEqualTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint16TestSlice_2[:31],
-		match:  uint16GreaterEqualTestMatch_2,
-		result: []byte{0x11, 0x11, 0x11, 0x10}, // last off
-		count:  uint16GreaterEqualTestCount_2 - 1,
 	},
+	CreateUint16TestCase("vec1", uint16TestSlice_0, uint16GreaterEqualTestMatch_0, 0, uint16GreaterEqualTestResult_0, 32),
+	CreateUint16TestCase("vec2", uint16TestSlice_0, uint16GreaterEqualTestMatch_0, 0, uint16GreaterEqualTestResult_0, 64),
+	CreateUint16TestCase("l32", uint16TestSlice_1, uint16GreaterEqualTestMatch_1, 0, uint16GreaterEqualTestResult_1, 32),
+	CreateUint16TestCase("l64", append(uint16TestSlice_1, uint16TestSlice_0...), uint16GreaterEqualTestMatch_1, 0,
+		append(uint16GreaterEqualTestResult_1, uint16GreaterEqualTestResult_0...), 64),
+	CreateUint16TestCase("l128", append(uint16TestSlice_1, uint16TestSlice_0...), uint16GreaterEqualTestMatch_1, 0,
+		append(uint16GreaterEqualTestResult_1, uint16GreaterEqualTestResult_0...), 128),
+	CreateUint16TestCase("l127", uint16TestSlice_1, uint16GreaterEqualTestMatch_1, 0, uint16GreaterEqualTestResult_1, 127),
+	CreateUint16TestCase("l63", uint16TestSlice_1, uint16GreaterEqualTestMatch_1, 0, uint16GreaterEqualTestResult_1, 63),
+	CreateUint16TestCase("l31", uint16TestSlice_1, uint16GreaterEqualTestMatch_1, 0, uint16GreaterEqualTestResult_1, 31),
+	CreateUint16TestCase("l23", uint16TestSlice_1, uint16GreaterEqualTestMatch_1, 0, uint16GreaterEqualTestResult_1, 23),
+	CreateUint16TestCase("l15", uint16TestSlice_1, uint16GreaterEqualTestMatch_1, 0, uint16GreaterEqualTestResult_1, 15),
+	CreateUint16TestCase("l7", uint16TestSlice_1, uint16GreaterEqualTestMatch_1, 0, uint16GreaterEqualTestResult_1, 7),
+	// with extreme values
+	CreateUint16TestCase("ext64", uint16TestSlice_2, uint16GreaterEqualTestMatch_2, 0, uint16GreaterEqualTestResult_2, 64),
+	CreateUint16TestCase("ext32", uint16TestSlice_2, uint16GreaterEqualTestMatch_2, 0, uint16GreaterEqualTestResult_2, 32),
+	CreateUint16TestCase("ext31", uint16TestSlice_2, uint16GreaterEqualTestMatch_2, 0, uint16GreaterEqualTestResult_2, 31),
 }
 
 func TestMatchUint16GreaterEqualGeneric(T *testing.T) {
@@ -923,8 +1027,10 @@ func TestMatchUint16GreaterEqualGeneric(T *testing.T) {
 	}
 }
 
-/*
-func TestMatchUint16GreaterEqualAVX2(T *testing.T) {
+/*func TestMatchUint16GreaterEqualAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range uint16GreaterEqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -948,16 +1054,43 @@ func TestMatchUint16GreaterEqualAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
+func TestMatchUint16GreaterEqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range uint16GreaterEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint16GreaterThanEqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
 //
 func BenchmarkMatchUint16GreaterEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
 				matchUint16GreaterThanEqualGeneric(a, math.MaxUint16/2, bits)
@@ -966,13 +1099,14 @@ func BenchmarkMatchUint16GreaterEqualGeneric(B *testing.B) {
 	}
 }
 
-/*
-func BenchmarkMatchUint16GreaterEqualAVX2(B *testing.B) {
+/*func BenchmarkMatchUint16GreaterEqualAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
 				matchUint16GreaterThanEqualAVX2(a, math.MaxUint16/2, bits)
@@ -981,85 +1115,27 @@ func BenchmarkMatchUint16GreaterEqualAVX2(B *testing.B) {
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-func BenchmarkMatchUint16GreaterEqualAVX2Scalar(B *testing.B) {
+func BenchmarkMatchUint16GreaterEqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
-				matchUint16GreaterThanEqualAVX2(a, math.MaxUint16/2, bits)
+				matchUint16GreaterThanEqualAVX512(a, math.MaxUint16/2, bits)
 			}
 		})
 	}
-}
-*/
+}*/
+
 // -----------------------------------------------------------------------------
 // Between Testcases
 //
 var uint16BetweenCases = []Uint16MatchTest{
-	Uint16MatchTest{
-		name: "vec1",
-		slice: []uint16{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
-
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		match2: 10,
-		result: []byte{0x5f, 0x78, 0x1b, 0x34},
-		count:  17,
-	}, {
-		name:   "l32",
-		slice:  uint16TestSlice_1,
-		match:  uint16BetweenTestMatch_1,
-		match2: uint16BetweenTestMatch_1b,
-		result: uint16BetweenTestResult_1,
-		count:  uint16BetweenTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(uint16TestSlice_1, uint16TestSlice_1...),
-		match:  uint16BetweenTestMatch_1,
-		match2: uint16BetweenTestMatch_1b,
-		result: append(uint16BetweenTestResult_1, uint16BetweenTestResult_1...),
-		count:  uint16BetweenTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  uint16TestSlice_1[:31],
-		match:  uint16BetweenTestMatch_1,
-		match2: uint16BetweenTestMatch_1b,
-		result: uint16BetweenTestResult_1,
-		count:  uint16BetweenTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  uint16TestSlice_1[:23],
-		match:  uint16BetweenTestMatch_1,
-		match2: uint16BetweenTestMatch_1b,
-		result: []byte{0x8f, 0x42, 0x22}, // last bit off!
-		count:  uint16BetweenTestCount_1 - 4,
-	}, {
-		name:   "l15",
-		slice:  uint16TestSlice_1[:15],
-		match:  uint16BetweenTestMatch_1,
-		match2: uint16BetweenTestMatch_1b,
-		result: uint16BetweenTestResult_1[:2],
-		count:  uint16BetweenTestCount_1 - 6,
-	}, {
-		name:   "l7",
-		slice:  uint16TestSlice_1[:7],
-		match:  uint16BetweenTestMatch_1,
-		match2: uint16BetweenTestMatch_1b,
-		result: []byte{0x8e},
-		count:  uint16BetweenTestCount_1 - 9,
-	}, {
+	{
 		name:   "l0",
 		slice:  make([]uint16, 0),
 		match:  uint16BetweenTestMatch_1,
@@ -1073,23 +1149,24 @@ var uint16BetweenCases = []Uint16MatchTest{
 		match2: uint16BetweenTestMatch_1b,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  uint16TestSlice_2,
-		match:  uint16BetweenTestMatch_2,
-		match2: uint16BetweenTestMatch_2b,
-		result: uint16BetweenTestResult_2,
-		count:  uint16BetweenTestCount_2,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  uint16TestSlice_2[:31],
-		match:  uint16BetweenTestMatch_2,
-		match2: uint16BetweenTestMatch_2b,
-		result: []byte{0x33, 0x33, 0x33, 0x32},
-		count:  15,
 	},
+	CreateUint16TestCase("vec1", uint16TestSlice_0, uint16BetweenTestMatch_0, uint16BetweenTestMatch_0b, uint16BetweenTestResult_0, 32),
+	CreateUint16TestCase("vec2", uint16TestSlice_0, uint16BetweenTestMatch_0, uint16BetweenTestMatch_0b, uint16BetweenTestResult_0, 64),
+	CreateUint16TestCase("l32", uint16TestSlice_1, uint16BetweenTestMatch_1, uint16BetweenTestMatch_1b, uint16BetweenTestResult_1, 32),
+	CreateUint16TestCase("l64", append(uint16TestSlice_1, uint16TestSlice_0...), uint16BetweenTestMatch_1, uint16BetweenTestMatch_1b,
+		append(uint16BetweenTestResult_1, uint16BetweenTestResult_0...), 64),
+	CreateUint16TestCase("l128", append(uint16TestSlice_1, uint16TestSlice_0...), uint16BetweenTestMatch_1, uint16BetweenTestMatch_1b,
+		append(uint16BetweenTestResult_1, uint16BetweenTestResult_0...), 128),
+	CreateUint16TestCase("l127", uint16TestSlice_1, uint16BetweenTestMatch_1, uint16BetweenTestMatch_1b, uint16BetweenTestResult_1, 127),
+	CreateUint16TestCase("l63", uint16TestSlice_1, uint16BetweenTestMatch_1, uint16BetweenTestMatch_1b, uint16BetweenTestResult_1, 63),
+	CreateUint16TestCase("l31", uint16TestSlice_1, uint16BetweenTestMatch_1, uint16BetweenTestMatch_1b, uint16BetweenTestResult_1, 31),
+	CreateUint16TestCase("l23", uint16TestSlice_1, uint16BetweenTestMatch_1, uint16BetweenTestMatch_1b, uint16BetweenTestResult_1, 23),
+	CreateUint16TestCase("l15", uint16TestSlice_1, uint16BetweenTestMatch_1, uint16BetweenTestMatch_1b, uint16BetweenTestResult_1, 15),
+	CreateUint16TestCase("l7", uint16TestSlice_1, uint16BetweenTestMatch_1, uint16BetweenTestMatch_1b, uint16BetweenTestResult_1, 7),
+	// with extreme values
+	CreateUint16TestCase("ext64", uint16TestSlice_2, uint16BetweenTestMatch_2, uint16BetweenTestMatch_2b, uint16BetweenTestResult_2, 64),
+	CreateUint16TestCase("ext32", uint16TestSlice_2, uint16BetweenTestMatch_2, uint16BetweenTestMatch_2b, uint16BetweenTestResult_2, 32),
+	CreateUint16TestCase("ext31", uint16TestSlice_2, uint16BetweenTestMatch_2, uint16BetweenTestMatch_2b, uint16BetweenTestResult_2, 31),
 }
 
 func TestMatchUint16BetweenGeneric(T *testing.T) {
@@ -1109,8 +1186,10 @@ func TestMatchUint16BetweenGeneric(T *testing.T) {
 	}
 }
 
-/*
-func TestMatchUint16BetweenAVX2(T *testing.T) {
+/*func TestMatchUint16BetweenAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range uint16BetweenCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -1134,71 +1213,83 @@ func TestMatchUint16BetweenAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
+func TestMatchUint16BetweenAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range uint16BetweenCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint16BetweenAVX512(c.slice, c.match, c.match2, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Between benchmarks
 //
-// BenchmarkMatchUint16BetweenGeneric/32-8     	30000000      47.3 ns/op	5417.18 MB/s
-// BenchmarkMatchUint16BetweenGeneric/128-8    	10000000     159 ns/op	6436.91 MB/s
-// BenchmarkMatchUint16BetweenGeneric/1024-8   	 1000000    1201 ns/op	6820.23 MB/s
-// BenchmarkMatchUint16BetweenGeneric/4096-8   	  300000    4937 ns/op	6636.40 MB/s
-// BenchmarkMatchUint16BetweenGeneric/65536-8  	   20000   79233 ns/op	6616.96 MB/s
-// BenchmarkMatchUint16BetweenGeneric/131072-8 	   10000  161598 ns/op	6488.79 MB/s
 func BenchmarkMatchUint16BetweenGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
-				matchUint16BetweenGeneric(a, 5, 10, bits)
+				matchUint16BetweenGeneric(a, math.MaxUint16/4, math.MaxUint16/2, bits)
 			}
 		})
 	}
 }
 
-// BenchmarkMatchUint16BetweenAVX2/32-8      100000000     14.8 ns/op	17284.10 MB/s
-// BenchmarkMatchUint16BetweenAVX2/128-8      30000000     48.9 ns/op	20953.59 MB/s
-// BenchmarkMatchUint16BetweenAVX2/1024-8      5000000    370 ns/op	22089.64 MB/s
-// BenchmarkMatchUint16BetweenAVX2/4096-8      1000000   1629 ns/op	20114.61 MB/s
-// BenchmarkMatchUint16BetweenAVX2/65536-8       50000  29559 ns/op	17736.52 MB/s
-// BenchmarkMatchUint16BetweenAVX2/131072-8      20000  58059 ns/op	18060.42 MB/s
 /*func BenchmarkMatchUint16BetweenAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
-				matchUint16BetweenAVX2(a, 5, 10, bits)
+				matchUint16BetweenAVX2(a, math.MaxUint16/4, math.MaxUint16/2, bits)
 			}
 		})
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-// BenchmarkMatchUint16BetweenAVX2Scalar/31-8     	50000000     38.2 ns/op	6492.97 MB/s
-// BenchmarkMatchUint16BetweenAVX2Scalar/127-8    	20000000     70.6 ns/op	14397.10 MB/s
-// BenchmarkMatchUint16BetweenAVX2Scalar/1023-8   	 5000000    389 ns/op	21000.09 MB/s
-// BenchmarkMatchUint16BetweenAVX2Scalar/4095-8   	 1000000   1624 ns/op	20161.18 MB/s
-// BenchmarkMatchUint16BetweenAVX2Scalar/65535-8  	   50000  28713 ns/op	18258.82 MB/s
-// BenchmarkMatchUint16BetweenAVX2Scalar/131071-8 	   20000  58733 ns/op	17853.05 MB/s
-func BenchmarkMatchUint16BetweenAVX2Scalar(B *testing.B) {
+func BenchmarkMatchUint16BetweenAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randUint16Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randUint16Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Uint16Size))
 			for i := 0; i < B.N; i++ {
-				matchUint16BetweenAVX2(a, 5, 10, bits)
+				matchUint16BetweenAVX512(a, math.MaxUint16/4, math.MaxUint16/2, bits)
 			}
 		})
 	}
-}
-*/
+}*/
+
 // -----------------------------------------------------------------------
 // Uint16 Slice
 //
