@@ -1,6 +1,5 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
-//
 
 package vec
 
@@ -8,6 +7,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/bits"
 	"math/rand"
 	"testing"
 )
@@ -35,6 +35,39 @@ type Int8MatchTest struct {
 }
 
 var (
+	int8TestSlice_0 = []int8{
+		0, 5, 3, 5, // Y1
+		7, 5, 5, 9, // Y2
+		3, 5, 5, 5, // Y3
+		5, 0, 113, 12, // Y4
+
+		4, 2, 3, 5, // Y5
+		7, 3, 5, 9, // Y6
+		3, 13, 5, 5, // Y7
+		42, 5, 113, 12, // Y8
+	}
+	int8EqualTestMatch_0  int8 = 5
+	int8EqualTestResult_0       = []byte{0x56, 0x78, 0x12, 0x34}
+
+	int8NotEqualTestMatch_0  int8 = 5
+	int8NotEqualTestResult_0       = []byte{0xa9, 0x87, 0xed, 0xcb}
+
+	int8LessTestMatch_0  int8 = 5
+	int8LessTestResult_0       = []byte{0xa0, 0x84, 0xe4, 0x80}
+
+	int8LessEqualTestMatch_0  int8 = 5
+	int8LessEqualTestResult_0       = []byte{0xf6, 0xfc, 0xf6, 0xb4}
+
+	int8GreaterTestMatch_0  int8 = 5
+	int8GreaterTestResult_0       = []byte{0x09, 0x03, 0x09, 0x4b}
+
+	int8GreaterEqualTestMatch_0  int8 = 5
+	int8GreaterEqualTestResult_0       = []byte{0x5f, 0x7b, 0x1b, 0x7f}
+
+	int8BetweenTestMatch_0  int8 = 5
+	int8BetweenTestMatch_0b int8 = 10
+	int8BetweenTestResult_0       = []byte{0x5f, 0x78, 0x1b, 0x34}
+
 	// positive values only
 	int8TestSlice_1 = []int8{
 		5, 2, 3, 4,
@@ -47,29 +80,26 @@ var (
 		39, 40, 41, 42,
 	}
 	int8EqualTestResult_1       = []byte{0x82, 0x42, 0x23, 0x70}
-	int8EqualTestMatch_1  int8  = 5
-	int8EqualTestCount_1  int64 = 10
+	int8EqualTestMatch_1  int8 = 5
+
+	int8NotEqualTestResult_1       = []byte{0x7d, 0xbd, 0xdc, 0x8f}
+	int8NotEqualTestMatch_1  int8 = 5
 
 	int8LessTestResult_1       = []byte{0x70, 0x00, 0x00, 0x00}
-	int8LessTestMatch_1  int8  = 5
-	int8LessTestCount_1  int64 = 3
+	int8LessTestMatch_1  int8 = 5
 
 	int8LessEqualTestResult_1       = []byte{0xf2, 0x42, 0x23, 0x70}
-	int8LessEqualTestMatch_1  int8  = 5
-	int8LessEqualTestCount_1  int64 = 13
+	int8LessEqualTestMatch_1  int8 = 5
 
 	int8GreaterTestResult_1       = []byte{0x0d, 0xbd, 0xdc, 0x8f}
-	int8GreaterTestMatch_1  int8  = 5
-	int8GreaterTestCount_1  int64 = 19
+	int8GreaterTestMatch_1  int8 = 5
 
 	int8GreaterEqualTestResult_1       = []byte{0x8f, 0xff, 0xff, 0xff}
-	int8GreaterEqualTestMatch_1  int8  = 5
-	int8GreaterEqualTestCount_1  int64 = 29
+	int8GreaterEqualTestMatch_1  int8 = 5
 
 	int8BetweenTestResult_1       = []byte{0x8f, 0x42, 0x23, 0x70}
-	int8BetweenTestMatch_1  int8  = 5
-	int8BetweenTestMatch_1b int8  = 10
-	int8BetweenTestCount_1  int64 = 13
+	int8BetweenTestMatch_1  int8 = 5
+	int8BetweenTestMatch_1b int8 = 10
 
 	// negative and positive values mixed
 	int8TestSlice_2 = []int8{
@@ -83,29 +113,26 @@ var (
 		43, 44, 45, -46,
 	}
 	int8EqualTestResult_2       = []byte{0x80, 0x0, 0x0, 0x0}
-	int8EqualTestMatch_2  int8  = -5
-	int8EqualTestCount_2  int64 = 1
+	int8EqualTestMatch_2  int8 = -5
+
+	int8NotEqualTestResult_2       = []byte{0x7f, 0xff, 0xff, 0xff}
+	int8NotEqualTestMatch_2  int8 = -5
 
 	int8LessTestResult_2       = []byte{0xe1, 0x04, 0x04, 0x21}
-	int8LessTestMatch_2  int8  = 5
-	int8LessTestCount_2  int64 = 8
+	int8LessTestMatch_2  int8 = 5
 
 	int8LessEqualTestResult_2       = []byte{0xf1, 0x04, 0x04, 0x21}
-	int8LessEqualTestMatch_2  int8  = 5
-	int8LessEqualTestCount_2  int64 = 9
+	int8LessEqualTestMatch_2  int8 = 5
 
 	int8GreaterTestResult_2       = []byte{0x0e, 0xfb, 0xfb, 0xde}
-	int8GreaterTestMatch_2  int8  = 5
-	int8GreaterTestCount_2  int64 = 23
+	int8GreaterTestMatch_2  int8 = 5
 
 	int8GreaterEqualTestResult_2       = []byte{0x1e, 0xfb, 0xfb, 0xde}
-	int8GreaterEqualTestMatch_2  int8  = 5
-	int8GreaterEqualTestCount_2  int64 = 24
+	int8GreaterEqualTestMatch_2  int8 = 5
 
 	int8BetweenTestResult_2       = []byte{0x1e, 0x00, 0x00, 0x00}
-	int8BetweenTestMatch_2  int8  = 5
-	int8BetweenTestMatch_2b int8  = 10
-	int8BetweenTestCount_2  int64 = 4
+	int8BetweenTestMatch_2  int8 = 5
+	int8BetweenTestMatch_2b int8 = 10
 
 	// extreme values
 	int8TestSlice_3 = []int8{
@@ -127,104 +154,81 @@ var (
 		math.MaxInt8, math.MinInt8,
 	}
 	int8EqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
-	int8EqualTestMatch_3  int8  = math.MinInt8
-	int8EqualTestCount_3  int64 = 4
+	int8EqualTestMatch_3  int8 = math.MinInt8
+
+	int8NotEqualTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
+	int8NotEqualTestMatch_3  int8 = math.MinInt8
 
 	int8LessTestResult_3       = []byte{0x0, 0x0, 0x0, 0x00}
-	int8LessTestMatch_3  int8  = math.MinInt8
-	int8LessTestCount_3  int64 = 0
+	int8LessTestMatch_3  int8 = math.MinInt8
 
 	int8LessEqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
-	int8LessEqualTestMatch_3  int8  = math.MinInt8
-	int8LessEqualTestCount_3  int64 = 4
+	int8LessEqualTestMatch_3  int8 = math.MinInt8
 
 	int8GreaterTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
-	int8GreaterTestMatch_3  int8  = math.MinInt8
-	int8GreaterTestCount_3  int64 = 28
+	int8GreaterTestMatch_3  int8 = math.MinInt8
 
 	int8GreaterEqualTestResult_3       = []byte{0xff, 0xff, 0xff, 0xff}
-	int8GreaterEqualTestMatch_3  int8  = math.MinInt8
-	int8GreaterEqualTestCount_3  int64 = 32
+	int8GreaterEqualTestMatch_3  int8 = math.MinInt8
 
 	int8BetweenTestResult_3       = []byte{0x0a, 0x0a, 0x0a, 0x0a}
-	int8BetweenTestMatch_3  int8  = math.MaxInt8 / 2
-	int8BetweenTestMatch_3b int8  = math.MaxInt8
-	int8BetweenTestCount_3  int64 = 8
+	int8BetweenTestMatch_3  int8 = math.MaxInt8 / 2
+	int8BetweenTestMatch_3b int8 = math.MaxInt8
 )
+
+// creates an uint8 test case from the given slice
+// Parameters:
+//  - name: desired name of the test case
+//  - slice: the slice for constructing the test case
+//  - match, match2: are only copied to the resulting test case
+//  - result: result for the given slice
+//  - len: desired length of the test case
+func CreateInt8TestCase(name string, slice []int8, match, match2 int8, result []byte, length int) Int8MatchTest {
+	if len(slice)%8 != 0 {
+		panic("CreateInt8TestCase: length of slice has to be a multiple of 8")
+	}
+	if len(result) != bitFieldLen(len(slice)) {
+		panic("CreateInt8TestCase: length of slice and length of result does not match")
+	}
+
+	// create new slice by concat of given slice
+	// we make it a little bit longer check buffer overruns
+	var new_slice []int8
+	var l int = length
+	for l > 0 {
+		new_slice = append(new_slice, slice...)
+		l -= len(slice)
+	}
+
+	// create new result by concat of given result
+	new_result := make([]byte, bitFieldLen(length))
+	for i, _ := range new_result {
+		new_result[i] = result[i%len(result)]
+	}
+	// clear the last unused bits
+	if length%8 != 0 {
+		new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+	}
+	// count number of ones
+	var cnt int
+	for _, v := range new_result {
+		cnt += bits.OnesCount8(v)
+	}
+	return Int8MatchTest{
+		name:   name,
+		slice:  new_slice[:length],
+		match:  match,
+		match2: match2,
+		result: new_result,
+		count:  int64(cnt),
+	}
+}
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
 //
 var int8EqualCases = []Int8MatchTest{
-	Int8MatchTest{
-		name: "vec1",
-		// 	// test vector to find shuffle/perm positions
-		// 	slice: []int8{
-		// 		// 0x1, 0x2, 0x3, 0x4, // Y1
-		// 		// 0x5, 0x6, 0x7, 0x8, // Y2
-		// 		// 0x9, 0xa, 0xb, 0xc, // Y3
-		// 		// 0xd, 0xe, 0xf, 0x0, // Y4
-
-		// 		// 0x11, 0x12, 0x13, 0x14, // Y5
-		// 		// 0x15, 0x16, 0x17, 0x18, // Y6
-		// 		// 0x19, 0x1a, 0x1b, 0x1c, // Y7
-		// 		// 0x1d, 0x1e, 0x1f, 0x10, // Y8
-		// 	},
-		// 	match:  5,
-		// 	result: []byte{0x01, 0x0, 0x0, 0x0},
-		// 	count:  1,
-		// },{
-		slice: []int8{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
-
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0x56, 0x78, 0x12, 0x34},
-		count:  13,
-	}, {
-		name:   "l32",
-		slice:  int8TestSlice_1,
-		match:  int8EqualTestMatch_1,
-		result: int8EqualTestResult_1,
-		count:  int8EqualTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(int8TestSlice_1, int8TestSlice_1...),
-		match:  int8EqualTestMatch_1,
-		result: append(int8EqualTestResult_1, int8EqualTestResult_1...),
-		count:  int8EqualTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  int8TestSlice_1[:31],
-		match:  int8EqualTestMatch_1,
-		result: int8EqualTestResult_1,
-		count:  int8EqualTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  int8TestSlice_1[:23],
-		match:  int8EqualTestMatch_1,
-		result: []byte{0x82, 0x42, 0x22}, // last bit off!
-		count:  int8EqualTestCount_1 - 4,
-	}, {
-		name:   "l15",
-		slice:  int8TestSlice_1[:15],
-		match:  int8EqualTestMatch_1,
-		result: int8EqualTestResult_1[:2],
-		count:  int8EqualTestCount_1 - 6,
-	}, {
-		name:   "l7",
-		slice:  int8TestSlice_1[:7],
-		match:  int8EqualTestMatch_1,
-		result: int8EqualTestResult_1[:1],
-		count:  int8EqualTestCount_1 - 8,
-	}, {
+	{
 		name:   "l0",
 		slice:  make([]int8, 0),
 		match:  int8EqualTestMatch_1,
@@ -236,35 +240,26 @@ var int8EqualCases = []Int8MatchTest{
 		match:  int8EqualTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with negative values
-		name:   "neg32",
-		slice:  int8TestSlice_2,
-		match:  int8EqualTestMatch_2,
-		result: int8EqualTestResult_2,
-		count:  int8EqualTestCount_2,
-	}, {
-		// with negative values, test scalar algorithm
-		name:   "neg31",
-		slice:  int8TestSlice_2[:31],
-		match:  int8EqualTestMatch_2,
-		result: int8EqualTestResult_2,
-		count:  int8EqualTestCount_2,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  int8TestSlice_3,
-		match:  int8EqualTestMatch_3,
-		result: int8EqualTestResult_3,
-		count:  int8EqualTestCount_3,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  int8TestSlice_3[:31],
-		match:  int8EqualTestMatch_3,
-		result: []byte{0x01, 0x01, 0x01, 0x00},
-		count:  3,
 	},
+	CreateInt8TestCase("vec1", int8TestSlice_0, int8EqualTestMatch_0, 0, int8EqualTestResult_0, 32),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8EqualTestMatch_0, 0, int8EqualTestResult_0, 64),
+	CreateInt8TestCase("l32", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 32),
+	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8EqualTestMatch_1, 0,
+		append(int8EqualTestResult_1, int8EqualTestResult_0...), 64),
+	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8EqualTestMatch_1, 0,
+		append(int8EqualTestResult_1, int8EqualTestResult_0...), 128),
+	CreateInt8TestCase("l127", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 127),
+	CreateInt8TestCase("l63", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 63),
+	CreateInt8TestCase("l31", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 31),
+	CreateInt8TestCase("l23", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 23),
+	CreateInt8TestCase("l15", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 15),
+	CreateInt8TestCase("l7", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 7),
+	CreateInt8TestCase("neg64", int8TestSlice_2, int8EqualTestMatch_2, 0, int8EqualTestResult_2, 64),
+	CreateInt8TestCase("neg32", int8TestSlice_2, int8EqualTestMatch_2, 0, int8EqualTestResult_2, 32),
+	CreateInt8TestCase("neg31", int8TestSlice_2, int8EqualTestMatch_2, 0, int8EqualTestResult_2, 31),
+	CreateInt8TestCase("ext64", int8TestSlice_3, int8EqualTestMatch_3, 0, int8EqualTestResult_3, 64),
+	CreateInt8TestCase("ext32", int8TestSlice_3, int8EqualTestMatch_3, 0, int8EqualTestResult_3, 32),
+	CreateInt8TestCase("ext31", int8TestSlice_3, int8EqualTestMatch_3, 0, int8EqualTestResult_3, 31),
 }
 
 func TestMatchInt8EqualGeneric(T *testing.T) {
@@ -284,8 +279,10 @@ func TestMatchInt8EqualGeneric(T *testing.T) {
 	}
 }
 
-/*
-func TestMatchInt8EqualAVX2(T *testing.T) {
+/*func TestMatchInt8EqualAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range int8EqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -309,16 +306,43 @@ func TestMatchInt8EqualAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
+func TestMatchInt8EqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range int8EqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt8EqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Equal benchmarks
 //
 func BenchmarkMatchInt8EqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
 				matchInt8EqualGeneric(a, math.MaxInt8/2, bits)
@@ -327,13 +351,14 @@ func BenchmarkMatchInt8EqualGeneric(B *testing.B) {
 	}
 }
 
-/*
-func BenchmarkMatchInt8EqualAVX2(B *testing.B) {
+/*func BenchmarkMatchInt8EqualAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
 				matchInt8EqualAVX2(a, math.MaxInt8/2, bits)
@@ -342,78 +367,186 @@ func BenchmarkMatchInt8EqualAVX2(B *testing.B) {
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-func BenchmarkMatchInt8EqualAVX2Scalar(B *testing.B) {
+func BenchmarkMatchInt8EqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8EqualAVX2(a, math.MaxInt8/2, bits)
+				matchInt8EqualAVX512(a, math.MaxInt8/2, bits)
+			}
+		})
+	}
+}*/
+
+// -----------------------------------------------------------------------------
+// Not Equal Testcases
+//
+var int8NotEqualCases = []Int8MatchTest{
+	{
+		name:   "l0",
+		slice:  make([]int8, 0),
+		match:  int8NotEqualTestMatch_1,
+		result: []byte{},
+		count:  0,
+	}, {
+		name:   "nil",
+		slice:  nil,
+		match:  int8NotEqualTestMatch_1,
+		result: []byte{},
+		count:  0,
+	},
+	CreateInt8TestCase("vec1", int8TestSlice_0, int8NotEqualTestMatch_0, 0, int8NotEqualTestResult_0, 32),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8NotEqualTestMatch_0, 0, int8NotEqualTestResult_0, 64),
+	CreateInt8TestCase("l32", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 32),
+	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8NotEqualTestMatch_1, 0,
+		append(int8NotEqualTestResult_1, int8NotEqualTestResult_0...), 64),
+	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8NotEqualTestMatch_1, 0,
+		append(int8NotEqualTestResult_1, int8NotEqualTestResult_0...), 128),
+	CreateInt8TestCase("l127", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 127),
+	CreateInt8TestCase("l63", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 63),
+	CreateInt8TestCase("l31", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 31),
+	CreateInt8TestCase("l23", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 23),
+	CreateInt8TestCase("l15", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 15),
+	CreateInt8TestCase("l7", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 7),
+	CreateInt8TestCase("neg64", int8TestSlice_2, int8NotEqualTestMatch_2, 0, int8NotEqualTestResult_2, 64),
+	CreateInt8TestCase("neg32", int8TestSlice_2, int8NotEqualTestMatch_2, 0, int8NotEqualTestResult_2, 32),
+	CreateInt8TestCase("neg31", int8TestSlice_2, int8NotEqualTestMatch_2, 0, int8NotEqualTestResult_2, 31),
+	CreateInt8TestCase("ext64", int8TestSlice_3, int8NotEqualTestMatch_3, 0, int8NotEqualTestResult_3, 64),
+	CreateInt8TestCase("ext32", int8TestSlice_3, int8NotEqualTestMatch_3, 0, int8NotEqualTestResult_3, 32),
+	CreateInt8TestCase("ext31", int8TestSlice_3, int8NotEqualTestMatch_3, 0, int8NotEqualTestResult_3, 31),
+}
+
+func TestMatchInt8NotEqualGeneric(T *testing.T) {
+	for _, c := range int8NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		bits := make([]byte, bitFieldLen(len(c.slice)))
+		cnt := matchInt8NotEqualGeneric(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+	}
+}
+
+/*func TestMatchInt8NotEqualAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range int8NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt8NotEqualAVX2(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
+
+func TestMatchInt8NotEqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range int8NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt8NotEqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
+// -----------------------------------------------------------------------------
+// Not Equal benchmarks
+//
+func BenchmarkMatchInt8NotEqualGeneric(B *testing.B) {
+	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Int8Size))
+			for i := 0; i < B.N; i++ {
+				matchInt8NotEqualGeneric(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
-*/
+
+/*func BenchmarkMatchInt8NotEqualAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Int8Size))
+			for i := 0; i < B.N; i++ {
+				matchInt8NotEqualAVX2(a, math.MaxInt8/2, bits)
+			}
+		})
+	}
+}
+
+func BenchmarkMatchInt8NotEqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
+	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Int8Size))
+			for i := 0; i < B.N; i++ {
+				matchInt8NotEqualAVX512(a, math.MaxInt8/2, bits)
+			}
+		})
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Less Testcases
 //
 var int8LessCases = []Int8MatchTest{
-	Int8MatchTest{
-		name: "vec1",
-		slice: []int8{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
-
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0xa0, 0x84, 0xe4, 0x80},
-		count:  9,
-	}, {
-		name:   "l32",
-		slice:  int8TestSlice_1,
-		match:  int8LessTestMatch_1,
-		result: int8LessTestResult_1,
-		count:  int8LessTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(int8TestSlice_1, int8TestSlice_1...),
-		match:  int8LessTestMatch_1,
-		result: append(int8LessTestResult_1, int8LessTestResult_1...),
-		count:  int8LessTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  int8TestSlice_1[:31],
-		match:  int8LessTestMatch_1,
-		result: int8LessTestResult_1,
-		count:  int8LessTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  int8TestSlice_1[:23],
-		match:  int8LessTestMatch_1,
-		result: int8LessTestResult_1[:3],
-		count:  int8LessTestCount_1,
-	}, {
-		name:   "l15",
-		slice:  int8TestSlice_1[:15],
-		match:  int8LessTestMatch_1,
-		result: int8LessTestResult_1[:2],
-		count:  int8LessTestCount_1,
-	}, {
-		name:   "l7",
-		slice:  int8TestSlice_1[:7],
-		match:  int8LessTestMatch_1,
-		result: int8LessTestResult_1[:1],
-		count:  int8LessTestCount_1,
-	}, {
+	{
 		name:   "l0",
 		slice:  make([]int8, 0),
 		match:  int8LessTestMatch_1,
@@ -425,35 +558,26 @@ var int8LessCases = []Int8MatchTest{
 		match:  int8LessTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with negative values
-		name:   "neg32",
-		slice:  int8TestSlice_2,
-		match:  int8LessTestMatch_2,
-		result: int8LessTestResult_2,
-		count:  int8LessTestCount_2,
-	}, {
-		// with negative values, test scalar algorithm
-		name:   "neg31",
-		slice:  int8TestSlice_2[:31],
-		match:  int8LessTestMatch_2,
-		result: []byte{0xe1, 0x04, 0x04, 0x20}, // last bit off
-		count:  int8LessTestCount_2 - 1,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  int8TestSlice_3,
-		match:  int8LessTestMatch_3,
-		result: int8LessTestResult_3,
-		count:  int8LessTestCount_3,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  int8TestSlice_3[:31],
-		match:  int8LessTestMatch_3,
-		result: int8LessTestResult_3, // still zeros
-		count:  int8LessTestCount_3,
 	},
+	CreateInt8TestCase("vec1", int8TestSlice_0, int8LessTestMatch_0, 0, int8LessTestResult_0, 32),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8LessTestMatch_0, 0, int8LessTestResult_0, 64),
+	CreateInt8TestCase("l32", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 32),
+	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8LessTestMatch_1, 0,
+		append(int8LessTestResult_1, int8LessTestResult_0...), 64),
+	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8LessTestMatch_1, 0,
+		append(int8LessTestResult_1, int8LessTestResult_0...), 128),
+	CreateInt8TestCase("l127", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 127),
+	CreateInt8TestCase("l63", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 63),
+	CreateInt8TestCase("l31", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 31),
+	CreateInt8TestCase("l23", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 23),
+	CreateInt8TestCase("l15", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 15),
+	CreateInt8TestCase("l7", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 7),
+	CreateInt8TestCase("neg64", int8TestSlice_2, int8LessTestMatch_2, 0, int8LessTestResult_2, 64),
+	CreateInt8TestCase("neg32", int8TestSlice_2, int8LessTestMatch_2, 0, int8LessTestResult_2, 32),
+	CreateInt8TestCase("neg31", int8TestSlice_2, int8LessTestMatch_2, 0, int8LessTestResult_2, 31),
+	CreateInt8TestCase("ext64", int8TestSlice_3, int8LessTestMatch_3, 0, int8LessTestResult_3, 64),
+	CreateInt8TestCase("ext32", int8TestSlice_3, int8LessTestMatch_3, 0, int8LessTestResult_3, 32),
+	CreateInt8TestCase("ext31", int8TestSlice_3, int8LessTestMatch_3, 0, int8LessTestResult_3, 31),
 }
 
 func TestMatchInt8LessGeneric(T *testing.T) {
@@ -473,8 +597,10 @@ func TestMatchInt8LessGeneric(T *testing.T) {
 	}
 }
 
-/*
-func TestMatchInt8LessAVX2(T *testing.T) {
+/*func TestMatchInt8LessAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range int8LessCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -498,16 +624,43 @@ func TestMatchInt8LessAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
+func TestMatchInt8LessAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range int8LessCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt8LessThanAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Less benchmarks
 //
 func BenchmarkMatchInt8LessGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
 				matchInt8LessThanGeneric(a, math.MaxInt8/2, bits)
@@ -516,13 +669,14 @@ func BenchmarkMatchInt8LessGeneric(B *testing.B) {
 	}
 }
 
-/*
-func BenchmarkMatchInt8LessAVX2(B *testing.B) {
+/*func BenchmarkMatchInt8LessAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
 				matchInt8LessThanAVX2(a, math.MaxInt8/2, bits)
@@ -531,78 +685,27 @@ func BenchmarkMatchInt8LessAVX2(B *testing.B) {
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-func BenchmarkMatchInt8LessAVX2Scalar(B *testing.B) {
+func BenchmarkMatchInt8LessAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanAVX2(a, math.MaxInt8/2, bits)
+				matchInt8LessThanAVX512(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
-}
-*/
+}*/
+
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
 //
 var int8LessEqualCases = []Int8MatchTest{
-	Int8MatchTest{
-		name: "vec1",
-		slice: []int8{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
-
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0xf6, 0xfc, 0xf6, 0xb4},
-		count:  22,
-	}, {
-		name:   "l32",
-		slice:  int8TestSlice_1,
-		match:  int8LessEqualTestMatch_1,
-		result: int8LessEqualTestResult_1,
-		count:  int8LessEqualTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(int8TestSlice_1, int8TestSlice_1...),
-		match:  int8LessEqualTestMatch_1,
-		result: append(int8LessEqualTestResult_1, int8LessEqualTestResult_1...),
-		count:  int8LessEqualTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  int8TestSlice_1[:31],
-		match:  int8LessEqualTestMatch_1,
-		result: int8LessEqualTestResult_1,
-		count:  int8LessEqualTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  int8TestSlice_1[:23],
-		match:  int8LessEqualTestMatch_1,
-		result: []byte{0xf2, 0x42, 0x22},
-		count:  int8LessEqualTestCount_1 - 4,
-	}, {
-		name:   "l15",
-		slice:  int8TestSlice_1[:15],
-		match:  int8LessEqualTestMatch_1,
-		result: int8LessEqualTestResult_1[:2],
-		count:  int8LessEqualTestCount_1 - 6,
-	}, {
-		name:   "l7",
-		slice:  int8TestSlice_1[:7],
-		match:  int8LessEqualTestMatch_1,
-		result: int8LessEqualTestResult_1[:1],
-		count:  int8LessEqualTestCount_1 - 8,
-	}, {
+	{
 		name:   "l0",
 		slice:  make([]int8, 0),
 		match:  int8LessEqualTestMatch_1,
@@ -614,35 +717,26 @@ var int8LessEqualCases = []Int8MatchTest{
 		match:  int8LessEqualTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with negative values
-		name:   "neg32",
-		slice:  int8TestSlice_2,
-		match:  int8LessEqualTestMatch_2,
-		result: int8LessEqualTestResult_2,
-		count:  int8LessEqualTestCount_2,
-	}, {
-		// with negative values, test scalar algorithm
-		name:   "neg31",
-		slice:  int8TestSlice_2[:31],
-		match:  int8LessEqualTestMatch_2,
-		result: []byte{0xf1, 0x04, 0x04, 0x20}, // last bit off
-		count:  int8LessEqualTestCount_2 - 1,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  int8TestSlice_3,
-		match:  int8LessEqualTestMatch_3,
-		result: int8LessEqualTestResult_3,
-		count:  int8LessEqualTestCount_3,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  int8TestSlice_3[:31],
-		match:  int8LessEqualTestMatch_3,
-		result: []byte{0x1, 0x1, 0x1, 0x0}, // last off
-		count:  int8LessEqualTestCount_3 - 1,
 	},
+	CreateInt8TestCase("vec1", int8TestSlice_0, int8LessEqualTestMatch_0, 0, int8LessEqualTestResult_0, 32),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8LessEqualTestMatch_0, 0, int8LessEqualTestResult_0, 64),
+	CreateInt8TestCase("l32", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 32),
+	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8LessEqualTestMatch_1, 0,
+		append(int8LessEqualTestResult_1, int8LessEqualTestResult_0...), 64),
+	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8LessEqualTestMatch_1, 0,
+		append(int8LessEqualTestResult_1, int8LessEqualTestResult_0...), 128),
+	CreateInt8TestCase("l127", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 127),
+	CreateInt8TestCase("l63", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 63),
+	CreateInt8TestCase("l31", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 31),
+	CreateInt8TestCase("l23", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 23),
+	CreateInt8TestCase("l15", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 15),
+	CreateInt8TestCase("l7", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 7),
+	CreateInt8TestCase("neg64", int8TestSlice_2, int8LessEqualTestMatch_2, 0, int8LessEqualTestResult_2, 64),
+	CreateInt8TestCase("neg32", int8TestSlice_2, int8LessEqualTestMatch_2, 0, int8LessEqualTestResult_2, 32),
+	CreateInt8TestCase("neg31", int8TestSlice_2, int8LessEqualTestMatch_2, 0, int8LessEqualTestResult_2, 31),
+	CreateInt8TestCase("ext64", int8TestSlice_3, int8LessEqualTestMatch_3, 0, int8LessEqualTestResult_3, 64),
+	CreateInt8TestCase("ext32", int8TestSlice_3, int8LessEqualTestMatch_3, 0, int8LessEqualTestResult_3, 32),
+	CreateInt8TestCase("ext31", int8TestSlice_3, int8LessEqualTestMatch_3, 0, int8LessEqualTestResult_3, 31),
 }
 
 func TestMatchInt8LessEqualGeneric(T *testing.T) {
@@ -662,8 +756,10 @@ func TestMatchInt8LessEqualGeneric(T *testing.T) {
 	}
 }
 
-/*
-func TestMatchInt8LessEqualAVX2(T *testing.T) {
+/*func TestMatchInt8LessEqualAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range int8LessEqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -687,16 +783,43 @@ func TestMatchInt8LessEqualAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
+func TestMatchInt8LessEqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range int8LessEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt8LessThanEqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
 //
 func BenchmarkMatchInt8LessEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
 				matchInt8LessThanEqualGeneric(a, math.MaxInt8/2, bits)
@@ -705,13 +828,14 @@ func BenchmarkMatchInt8LessEqualGeneric(B *testing.B) {
 	}
 }
 
-/*
-func BenchmarkMatchInt8LessEqualAVX2(B *testing.B) {
+/*func BenchmarkMatchInt8LessEqualAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
 				matchInt8LessThanEqualAVX2(a, math.MaxInt8/2, bits)
@@ -720,78 +844,27 @@ func BenchmarkMatchInt8LessEqualAVX2(B *testing.B) {
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-func BenchmarkMatchInt8LessEqualAVX2Scalar(B *testing.B) {
+func BenchmarkMatchInt8LessEqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8LessThanEqualAVX2(a, math.MaxInt8/2, bits)
+				matchInt8LessThanEqualAVX512(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
-}
-*/
+}*/
+
 // -----------------------------------------------------------------------------
 // Greater Testcases
 //
 var int8GreaterCases = []Int8MatchTest{
-	Int8MatchTest{
-		name: "vec1",
-		slice: []int8{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
-
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0x09, 0x03, 0x09, 0x4b},
-		count:  10,
-	}, {
-		name:   "l32",
-		slice:  int8TestSlice_1,
-		match:  int8GreaterTestMatch_1,
-		result: int8GreaterTestResult_1,
-		count:  int8GreaterTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(int8TestSlice_1, int8TestSlice_1...),
-		match:  int8GreaterTestMatch_1,
-		result: append(int8GreaterTestResult_1, int8GreaterTestResult_1...),
-		count:  int8GreaterTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  int8TestSlice_1[:31],
-		match:  int8GreaterTestMatch_1,
-		result: []byte{0x0d, 0xbd, 0xdc, 0x8e},
-		count:  int8GreaterTestCount_1 - 1,
-	}, {
-		name:   "l23",
-		slice:  int8TestSlice_1[:23],
-		match:  int8GreaterTestMatch_1,
-		result: int8GreaterTestResult_1[:3],
-		count:  int8GreaterTestCount_1 - 5,
-	}, {
-		name:   "l15",
-		slice:  int8TestSlice_1[:15],
-		match:  int8GreaterTestMatch_1,
-		result: []byte{0x0d, 0xbc},
-		count:  int8GreaterTestCount_1 - 11,
-	}, {
-		name:   "l7",
-		slice:  int8TestSlice_1[:7],
-		match:  int8GreaterTestMatch_1,
-		result: []byte{0x0c},
-		count:  2,
-	}, {
+	{
 		name:   "l0",
 		slice:  make([]int8, 0),
 		match:  int8GreaterTestMatch_1,
@@ -803,35 +876,26 @@ var int8GreaterCases = []Int8MatchTest{
 		match:  int8GreaterTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with negative values
-		name:   "neg32",
-		slice:  int8TestSlice_2,
-		match:  int8GreaterTestMatch_2,
-		result: int8GreaterTestResult_2,
-		count:  int8GreaterTestCount_2,
-	}, {
-		// with negative values, test scalar algorithm
-		name:   "neg31",
-		slice:  int8TestSlice_2[:31],
-		match:  int8GreaterTestMatch_2,
-		result: []byte{0x0e, 0xfb, 0xfb, 0xde},
-		count:  int8GreaterTestCount_2,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  int8TestSlice_3,
-		match:  int8GreaterTestMatch_3,
-		result: int8GreaterTestResult_3,
-		count:  int8GreaterTestCount_3,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  int8TestSlice_3[:31],
-		match:  int8GreaterTestMatch_3,
-		result: int8GreaterTestResult_3, // still zeros
-		count:  int8GreaterTestCount_3,
 	},
+	CreateInt8TestCase("vec1", int8TestSlice_0, int8GreaterTestMatch_0, 0, int8GreaterTestResult_0, 32),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8GreaterTestMatch_0, 0, int8GreaterTestResult_0, 64),
+	CreateInt8TestCase("l32", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 32),
+	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterTestMatch_1, 0,
+		append(int8GreaterTestResult_1, int8GreaterTestResult_0...), 64),
+	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterTestMatch_1, 0,
+		append(int8GreaterTestResult_1, int8GreaterTestResult_0...), 128),
+	CreateInt8TestCase("l127", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 127),
+	CreateInt8TestCase("l63", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 63),
+	CreateInt8TestCase("l31", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 31),
+	CreateInt8TestCase("l23", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 23),
+	CreateInt8TestCase("l15", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 15),
+	CreateInt8TestCase("l7", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 7),
+	CreateInt8TestCase("neg64", int8TestSlice_2, int8GreaterTestMatch_2, 0, int8GreaterTestResult_2, 64),
+	CreateInt8TestCase("neg32", int8TestSlice_2, int8GreaterTestMatch_2, 0, int8GreaterTestResult_2, 32),
+	CreateInt8TestCase("neg31", int8TestSlice_2, int8GreaterTestMatch_2, 0, int8GreaterTestResult_2, 31),
+	CreateInt8TestCase("ext64", int8TestSlice_3, int8GreaterTestMatch_3, 0, int8GreaterTestResult_3, 64),
+	CreateInt8TestCase("ext32", int8TestSlice_3, int8GreaterTestMatch_3, 0, int8GreaterTestResult_3, 32),
+	CreateInt8TestCase("ext31", int8TestSlice_3, int8GreaterTestMatch_3, 0, int8GreaterTestResult_3, 31),
 }
 
 func TestMatchInt8GreaterGeneric(T *testing.T) {
@@ -851,8 +915,10 @@ func TestMatchInt8GreaterGeneric(T *testing.T) {
 	}
 }
 
-/*
-func TestMatchInt8GreaterAVX2(T *testing.T) {
+/*func TestMatchInt8GreaterAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range int8GreaterCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -876,16 +942,43 @@ func TestMatchInt8GreaterAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
+func TestMatchInt8GreaterAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range int8GreaterCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt8GreaterThanAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Greater benchmarks
 //
 func BenchmarkMatchInt8GreaterGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
 				matchInt8GreaterThanGeneric(a, math.MaxInt8/2, bits)
@@ -894,13 +987,14 @@ func BenchmarkMatchInt8GreaterGeneric(B *testing.B) {
 	}
 }
 
-/*
-func BenchmarkMatchInt8GreaterAVX2(B *testing.B) {
+/*func BenchmarkMatchInt8GreaterAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
 				matchInt8GreaterThanAVX2(a, math.MaxInt8/2, bits)
@@ -909,78 +1003,27 @@ func BenchmarkMatchInt8GreaterAVX2(B *testing.B) {
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-func BenchmarkMatchInt8GreaterAVX2Scalar(B *testing.B) {
+func BenchmarkMatchInt8GreaterAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanAVX2(a, math.MaxInt8/2, bits)
+				matchInt8GreaterThanAVX512(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
-}
-*/
+}*/
+
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
 //
 var int8GreaterEqualCases = []Int8MatchTest{
-	Int8MatchTest{
-		name: "vec1",
-		slice: []int8{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
-
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		result: []byte{0x5f, 0x7b, 0x1b, 0x7f},
-		count:  23,
-	}, {
-		name:   "l32",
-		slice:  int8TestSlice_1,
-		match:  int8GreaterEqualTestMatch_1,
-		result: int8GreaterEqualTestResult_1,
-		count:  int8GreaterEqualTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(int8TestSlice_1, int8TestSlice_1...),
-		match:  int8GreaterEqualTestMatch_1,
-		result: append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_1...),
-		count:  int8GreaterEqualTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  int8TestSlice_1[:31],
-		match:  int8GreaterEqualTestMatch_1,
-		result: []byte{0x8f, 0xff, 0xff, 0xfe},
-		count:  int8GreaterEqualTestCount_1 - 1,
-	}, {
-		name:   "l23",
-		slice:  int8TestSlice_1[:23],
-		match:  int8GreaterEqualTestMatch_1,
-		result: []byte{0x8f, 0xff, 0xfe},
-		count:  int8GreaterEqualTestCount_1 - 9,
-	}, {
-		name:   "l15",
-		slice:  int8TestSlice_1[:15],
-		match:  int8GreaterEqualTestMatch_1,
-		result: []byte{0x8f, 0xfe},
-		count:  int8GreaterEqualTestCount_1 - 17,
-	}, {
-		name:   "l7",
-		slice:  int8TestSlice_1[:7],
-		match:  int8GreaterEqualTestMatch_1,
-		result: []byte{0x8e},
-		count:  4,
-	}, {
+	{
 		name:   "l0",
 		slice:  make([]int8, 0),
 		match:  int8GreaterEqualTestMatch_1,
@@ -992,35 +1035,26 @@ var int8GreaterEqualCases = []Int8MatchTest{
 		match:  int8GreaterEqualTestMatch_1,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with negative values
-		name:   "neg32",
-		slice:  int8TestSlice_2,
-		match:  int8GreaterEqualTestMatch_2,
-		result: int8GreaterEqualTestResult_2,
-		count:  int8GreaterEqualTestCount_2,
-	}, {
-		// with negative values, test scalar algorithm
-		name:   "neg31",
-		slice:  int8TestSlice_2[:31],
-		match:  int8GreaterEqualTestMatch_2,
-		result: int8GreaterEqualTestResult_2,
-		count:  int8GreaterEqualTestCount_2,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  int8TestSlice_3,
-		match:  int8GreaterEqualTestMatch_3,
-		result: int8GreaterEqualTestResult_3,
-		count:  int8GreaterEqualTestCount_3,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  int8TestSlice_3[:31],
-		match:  int8GreaterEqualTestMatch_3,
-		result: []byte{0xff, 0xff, 0xff, 0xfe}, // last off
-		count:  int8GreaterEqualTestCount_3 - 1,
 	},
+	CreateInt8TestCase("vec1", int8TestSlice_0, int8GreaterEqualTestMatch_0, 0, int8GreaterEqualTestResult_0, 32),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8GreaterEqualTestMatch_0, 0, int8GreaterEqualTestResult_0, 64),
+	CreateInt8TestCase("l32", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 32),
+	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterEqualTestMatch_1, 0,
+		append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_0...), 64),
+	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterEqualTestMatch_1, 0,
+		append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_0...), 128),
+	CreateInt8TestCase("l127", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 127),
+	CreateInt8TestCase("l63", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 63),
+	CreateInt8TestCase("l31", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 31),
+	CreateInt8TestCase("l23", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 23),
+	CreateInt8TestCase("l15", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 15),
+	CreateInt8TestCase("l7", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 7),
+	CreateInt8TestCase("neg64", int8TestSlice_2, int8GreaterEqualTestMatch_2, 0, int8GreaterEqualTestResult_2, 64),
+	CreateInt8TestCase("neg32", int8TestSlice_2, int8GreaterEqualTestMatch_2, 0, int8GreaterEqualTestResult_2, 32),
+	CreateInt8TestCase("neg31", int8TestSlice_2, int8GreaterEqualTestMatch_2, 0, int8GreaterEqualTestResult_2, 31),
+	CreateInt8TestCase("ext64", int8TestSlice_3, int8GreaterEqualTestMatch_3, 0, int8GreaterEqualTestResult_3, 64),
+	CreateInt8TestCase("ext32", int8TestSlice_3, int8GreaterEqualTestMatch_3, 0, int8GreaterEqualTestResult_3, 32),
+	CreateInt8TestCase("ext31", int8TestSlice_3, int8GreaterEqualTestMatch_3, 0, int8GreaterEqualTestResult_3, 31),
 }
 
 func TestMatchInt8GreaterEqualGeneric(T *testing.T) {
@@ -1040,8 +1074,10 @@ func TestMatchInt8GreaterEqualGeneric(T *testing.T) {
 	}
 }
 
-/*
-func TestMatchInt8GreaterEqualAVX2(T *testing.T) {
+/*func TestMatchInt8GreaterEqualAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range int8GreaterEqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -1065,16 +1101,43 @@ func TestMatchInt8GreaterEqualAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
+func TestMatchInt8GreaterEqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range int8GreaterEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt8GreaterThanEqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
 //
 func BenchmarkMatchInt8GreaterEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
 				matchInt8GreaterThanEqualGeneric(a, math.MaxInt8/2, bits)
@@ -1083,13 +1146,14 @@ func BenchmarkMatchInt8GreaterEqualGeneric(B *testing.B) {
 	}
 }
 
-/*
-func BenchmarkMatchInt8GreaterEqualAVX2(B *testing.B) {
+/*func BenchmarkMatchInt8GreaterEqualAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
 				matchInt8GreaterThanEqualAVX2(a, math.MaxInt8/2, bits)
@@ -1098,85 +1162,27 @@ func BenchmarkMatchInt8GreaterEqualAVX2(B *testing.B) {
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-func BenchmarkMatchInt8GreaterEqualAVX2Scalar(B *testing.B) {
+func BenchmarkMatchInt8GreaterEqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8GreaterThanEqualAVX2(a, math.MaxInt8/2, bits)
+				matchInt8GreaterThanEqualAVX512(a, math.MaxInt8/2, bits)
 			}
 		})
 	}
-}
-*/
+}*/
+
 // -----------------------------------------------------------------------------
 // Between Testcases
 //
 var int8BetweenCases = []Int8MatchTest{
-	Int8MatchTest{
-		name: "vec1",
-		slice: []int8{
-			0, 5, 3, 5, // Y1
-			7, 5, 5, 9, // Y2
-			3, 5, 5, 5, // Y3
-			5, 0, 113, 12, // Y4
-
-			4, 2, 3, 5, // Y5
-			7, 3, 5, 9, // Y6
-			3, 13, 5, 5, // Y7
-			42, 5, 113, 12, // Y8
-		},
-		match:  5,
-		match2: 10,
-		result: []byte{0x5f, 0x78, 0x1b, 0x34},
-		count:  17,
-	}, {
-		name:   "l32",
-		slice:  int8TestSlice_1,
-		match:  int8BetweenTestMatch_1,
-		match2: int8BetweenTestMatch_1b,
-		result: int8BetweenTestResult_1,
-		count:  int8BetweenTestCount_1,
-	}, {
-		name:   "l64",
-		slice:  append(int8TestSlice_1, int8TestSlice_1...),
-		match:  int8BetweenTestMatch_1,
-		match2: int8BetweenTestMatch_1b,
-		result: append(int8BetweenTestResult_1, int8BetweenTestResult_1...),
-		count:  int8BetweenTestCount_1 * 2,
-	}, {
-		name:   "l31",
-		slice:  int8TestSlice_1[:31],
-		match:  int8BetweenTestMatch_1,
-		match2: int8BetweenTestMatch_1b,
-		result: int8BetweenTestResult_1,
-		count:  int8BetweenTestCount_1,
-	}, {
-		name:   "l23",
-		slice:  int8TestSlice_1[:23],
-		match:  int8BetweenTestMatch_1,
-		match2: int8BetweenTestMatch_1b,
-		result: []byte{0x8f, 0x42, 0x22}, // last bit off!
-		count:  int8BetweenTestCount_1 - 4,
-	}, {
-		name:   "l15",
-		slice:  int8TestSlice_1[:15],
-		match:  int8BetweenTestMatch_1,
-		match2: int8BetweenTestMatch_1b,
-		result: int8BetweenTestResult_1[:2],
-		count:  int8BetweenTestCount_1 - 6,
-	}, {
-		name:   "l7",
-		slice:  int8TestSlice_1[:7],
-		match:  int8BetweenTestMatch_1,
-		match2: int8BetweenTestMatch_1b,
-		result: []byte{0x8e},
-		count:  int8BetweenTestCount_1 - 9,
-	}, {
+	{
 		name:   "l0",
 		slice:  make([]int8, 0),
 		match:  int8BetweenTestMatch_1,
@@ -1190,39 +1196,26 @@ var int8BetweenCases = []Int8MatchTest{
 		match2: int8BetweenTestMatch_1b,
 		result: []byte{},
 		count:  0,
-	}, {
-		// with negative values
-		name:   "neg32",
-		slice:  int8TestSlice_2,
-		match:  int8BetweenTestMatch_2,
-		match2: int8BetweenTestMatch_2b,
-		result: int8BetweenTestResult_2,
-		count:  int8BetweenTestCount_2,
-	}, {
-		// with negative values, test scalar algorithm
-		name:   "neg31",
-		slice:  int8TestSlice_2[:31],
-		match:  int8BetweenTestMatch_2,
-		match2: int8BetweenTestMatch_2b,
-		result: int8BetweenTestResult_2,
-		count:  int8BetweenTestCount_2,
-	}, {
-		// with extreme values
-		name:   "ext32",
-		slice:  int8TestSlice_3,
-		match:  int8BetweenTestMatch_3,
-		match2: int8BetweenTestMatch_3b,
-		result: int8BetweenTestResult_3,
-		count:  int8BetweenTestCount_3,
-	}, {
-		// with extreme values, test scalar algorithm
-		name:   "ext31",
-		slice:  int8TestSlice_3[:31],
-		match:  int8BetweenTestMatch_3,
-		match2: int8BetweenTestMatch_3b,
-		result: []byte{0x0a, 0x0a, 0x0a, 0x0a},
-		count:  8,
 	},
+	CreateInt8TestCase("vec1", int8TestSlice_0, int8BetweenTestMatch_0, int8BetweenTestMatch_0b, int8BetweenTestResult_0, 32),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8BetweenTestMatch_0, int8BetweenTestMatch_0b, int8BetweenTestResult_0, 64),
+	CreateInt8TestCase("l32", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 32),
+	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8BetweenTestMatch_1, int8BetweenTestMatch_1b,
+		append(int8BetweenTestResult_1, int8BetweenTestResult_0...), 64),
+	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8BetweenTestMatch_1, int8BetweenTestMatch_1b,
+		append(int8BetweenTestResult_1, int8BetweenTestResult_0...), 128),
+	CreateInt8TestCase("l127", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 127),
+	CreateInt8TestCase("l63", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 63),
+	CreateInt8TestCase("l31", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 31),
+	CreateInt8TestCase("l23", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 23),
+	CreateInt8TestCase("l15", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 15),
+	CreateInt8TestCase("l7", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 7),
+	CreateInt8TestCase("neg64", int8TestSlice_2, int8BetweenTestMatch_2, int8BetweenTestMatch_2b, int8BetweenTestResult_2, 64),
+	CreateInt8TestCase("neg32", int8TestSlice_2, int8BetweenTestMatch_2, int8BetweenTestMatch_2b, int8BetweenTestResult_2, 32),
+	CreateInt8TestCase("neg31", int8TestSlice_2, int8BetweenTestMatch_2, int8BetweenTestMatch_2b, int8BetweenTestResult_2, 31),
+	CreateInt8TestCase("ext64", int8TestSlice_3, int8BetweenTestMatch_3, int8BetweenTestMatch_3b, int8BetweenTestResult_3, 64),
+	CreateInt8TestCase("ext32", int8TestSlice_3, int8BetweenTestMatch_3, int8BetweenTestMatch_3b, int8BetweenTestResult_3, 32),
+	CreateInt8TestCase("ext31", int8TestSlice_3, int8BetweenTestMatch_3, int8BetweenTestMatch_3b, int8BetweenTestResult_3, 31),
 }
 
 func TestMatchInt8BetweenGeneric(T *testing.T) {
@@ -1242,8 +1235,10 @@ func TestMatchInt8BetweenGeneric(T *testing.T) {
 	}
 }
 
-/*
-func TestMatchInt8BetweenAVX2(T *testing.T) {
+/*func TestMatchInt8BetweenAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range int8BetweenCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -1267,71 +1262,83 @@ func TestMatchInt8BetweenAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
+func TestMatchInt8BetweenAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range int8BetweenCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchInt8BetweenAVX512(c.slice, c.match, c.match2, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}*/
+
 // -----------------------------------------------------------------------------
 // Between benchmarks
 //
-// BenchmarkMatchInt8BetweenGeneric/32-8  30000000      54.7 ns/op	4683.30 MB/s
-// BenchmarkMatchInt8BetweenGeneric/128-8 10000000     163 ns/op	6261.85 MB/s
-// BenchmarkMatchInt8BetweenGeneric/1024-8 1000000    1211 ns/op	6762.88 MB/s
-// BenchmarkMatchInt8BetweenGeneric/4096-8  300000    4985 ns/op	6572.26 MB/s
-// BenchmarkMatchInt8BetweenGeneric/65536-8  20000   80903 ns/op	6480.44 MB/s
-// BenchmarkMatchInt8BetweenGeneric/131072-8 10000  158714 ns/op	6606.70 MB/s
 func BenchmarkMatchInt8BetweenGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8BetweenGeneric(a, 5, 10, bits)
+				matchInt8BetweenGeneric(a, math.MaxInt8/4, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
-// BenchmarkMatchInt8BetweenAVX2/32-8     100000000     15.1 ns/op	16959.99 MB/s
-// BenchmarkMatchInt8BetweenAVX2/128-8    	30000000     48.5 ns/op	21117.50 MB/s
-// BenchmarkMatchInt8BetweenAVX2/1024-8   	 5000000    362 ns/op	22578.41 MB/s
-// BenchmarkMatchInt8BetweenAVX2/4096-8   	 1000000   1610 ns/op	20345.03 MB/s
-// BenchmarkMatchInt8BetweenAVX2/65536-8  	   50000  28742 ns/op	18240.79 MB/s
-// BenchmarkMatchInt8BetweenAVX2/131072-8 	   20000  60508 ns/op	17329.33 MB/s
 /*func BenchmarkMatchInt8BetweenAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8BetweenAVX2(a, 5, 10, bits)
+				matchInt8BetweenAVX2(a, math.MaxInt8/4, math.MaxInt8/2, bits)
 			}
 		})
 	}
 }
 
-// force scalar codepath by making last block <32 entries
-// BenchmarkMatchInt8BetweenAVX2Scalar/31-8      30000000     38.2 ns/op	6494.10 MB/s
-// BenchmarkMatchInt8BetweenAVX2Scalar/127-8     20000000     70.3 ns/op	14452.14 MB/s
-// BenchmarkMatchInt8BetweenAVX2Scalar/1023-8     3000000    384 ns/op	21292.42 MB/s
-// BenchmarkMatchInt8BetweenAVX2Scalar/4095-8     1000000   1652 ns/op	19828.53 MB/s
-// BenchmarkMatchInt8BetweenAVX2Scalar/65535-8      50000  28695 ns/op	18270.74 MB/s
-// BenchmarkMatchInt8BetweenAVX2Scalar/131071-8     30000  59239 ns/op	17700.62 MB/s
-func BenchmarkMatchInt8BetweenAVX2Scalar(B *testing.B) {
+func BenchmarkMatchInt8BetweenAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
 	for _, n := range vecBenchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			a := randInt8Slice(n.l-1, 1)
-			bits := make([]byte, bitFieldLen(len(a)))
-			B.ResetTimer()
 			B.SetBytes(int64(n.l * Int8Size))
 			for i := 0; i < B.N; i++ {
-				matchInt8BetweenAVX2(a, 5, 10, bits)
+				matchInt8BetweenAVX512(a, math.MaxInt8/4, math.MaxInt8/2, bits)
 			}
 		})
 	}
-}
-*/
+}*/
+
 // -----------------------------------------------------------------------
 // Int8 Slice
 //

@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-const Uint8Size = 8
+const Uint8Size = 1
 
 type Uint8MatchTest struct {
 	name   string
