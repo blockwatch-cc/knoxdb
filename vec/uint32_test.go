@@ -102,17 +102,6 @@ var (
 		0, math.MaxUint8, math.MaxUint16, math.MaxUint32,
 	}
     
-/*	// extreme values
-	uint32TestSlice_2 = []uint32{
-		math.MaxUint8, math.MaxUint16, math.MaxUint32, math.MaxUint32,
-		math.MaxUint8, math.MaxUint16, math.MaxUint32, math.MaxUint32,
-		math.MaxUint8, math.MaxUint16, math.MaxUint32, math.MaxUint32,
-		math.MaxUint8, math.MaxUint16, math.MaxUint32, math.MaxUint32,
-		math.MaxUint8, math.MaxUint16, math.MaxUint32, math.MaxUint32,
-		math.MaxUint8, math.MaxUint16, math.MaxUint32, math.MaxUint32,
-		math.MaxUint8, math.MaxUint16, math.MaxUint32, math.MaxUint32,
-		math.MaxUint8, math.MaxUint16, math.MaxUint32, math.MaxUint32,
-	}*/
 	uint32EqualTestResult_2        = []byte{0x11, 0x11, 0x11, 0x11}
 	uint32EqualTestMatch_2  uint32 = math.MaxUint32
 
@@ -277,33 +266,33 @@ func TestMatchUint32EqualGeneric(T *testing.T) {
 	//}
 //}
 
-//func TestMatchUint32EqualAVX512(T *testing.T) {
-	//if !useAVX512_F {
-		//T.SkipNow()
-	//}
-	//for _, c := range uint32EqualCases {
-		//// pre-allocate the result slice and fill with poison
-		//l := bitFieldLen(len(c.slice))
-		//bits := make([]byte, l+32)
-		//for i, _ := range bits {
-			//bits[i] = 0xfa
-		//}
-		//bits = bits[:l]
-		//cnt := matchUint32EqualAVX512(c.slice, c.match, bits)
-		//if got, want := len(bits), len(c.result); got != want {
-			//T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-		//}
-		//if got, want := cnt, c.count; got != want {
-			//T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-		//}
-		//if bytes.Compare(bits, c.result) != 0 {
-			//T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-		//}
-		//if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			//T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-		//}
-	//}
-//}
+func TestMatchUint32EqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range uint32EqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint32EqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
 
 // -----------------------------------------------------------------------------
 // Equal benchmarks
@@ -337,21 +326,21 @@ func BenchmarkMatchUint32EqualGeneric(B *testing.B) {
 	//}
 //}
 
-//func BenchmarkMatchUint32EqualAVX512(B *testing.B) {
-	//if !useAVX512_F {
-		//B.SkipNow()
-	//}
-	//for _, n := range vecBenchmarkSizes {
-		//a := randUint32Slice(n.l, 1)
-		//bits := make([]byte, bitFieldLen(len(a)))
-		//B.Run(n.name, func(B *testing.B) {
-			//B.SetBytes(int64(n.l * Uint32Size))
-			//for i := 0; i < B.N; i++ {
-				//matchUint32EqualAVX512(a, math.MaxUint32/2, bits)
-			//}
-		//})
-	//}
-//}
+func BenchmarkMatchUint32EqualAVX512(B *testing.B) {
+	if !useAVX512_F {
+		B.SkipNow()
+	}
+	for _, n := range vecBenchmarkSizes {
+		a := randUint32Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Uint32Size))
+			for i := 0; i < B.N; i++ {
+				matchUint32EqualAVX512(a, math.MaxUint32/2, bits)
+			}
+		})
+	}
+}
 
 // -----------------------------------------------------------------------------
 // NotEqual Testcases
@@ -435,33 +424,33 @@ func TestMatchUint32NotEqualGeneric(T *testing.T) {
 	//}
 //}
 
-//func TestMatchUint32NotEqualAVX512(T *testing.T) {
-	//if !useAVX512_F {
-		//T.SkipNow()
-	//}
-	//for _, c := range uint32NotEqualCases {
-		//// pre-allocate the result slice and fill with poison
-		//l := bitFieldLen(len(c.slice))
-		//bits := make([]byte, l+32)
-		//for i, _ := range bits {
-			//bits[i] = 0xfa
-		//}
-		//bits = bits[:l]
-		//cnt := matchUint32NotEqualAVX512(c.slice, c.match, bits)
-		//if got, want := len(bits), len(c.result); got != want {
-			//T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-		//}
-		//if got, want := cnt, c.count; got != want {
-			//T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-		//}
-		//if bytes.Compare(bits, c.result) != 0 {
-			//T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-		//}
-		//if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			//T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-		//}
-	//}
-//}
+func TestMatchUint32NotEqualAVX512(T *testing.T) {
+	if !useAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range uint32NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint32NotEqualAVX512(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
 
 // -----------------------------------------------------------------------------
 // NotEqual benchmarks
@@ -494,7 +483,7 @@ func BenchmarkMatchUint32NotEqualGeneric(B *testing.B) {
 		})
 	}
 }
-
+*/
 func BenchmarkMatchUint32NotEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
 		B.SkipNow()
@@ -509,7 +498,7 @@ func BenchmarkMatchUint32NotEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less Testcases
@@ -592,7 +581,7 @@ func TestMatchUint32LessGeneric(T *testing.T) {
 		}
 	}
 }
-
+*/
 func TestMatchUint32LessAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -619,7 +608,7 @@ func TestMatchUint32LessAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less benchmarks
@@ -651,7 +640,7 @@ func BenchmarkMatchUint32LessGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchUint32LessAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -667,7 +656,7 @@ func BenchmarkMatchUint32LessAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
@@ -750,7 +739,7 @@ func TestMatchUint32LessEqualGeneric(T *testing.T) {
 		}
 	}
 }
-
+*/
 func TestMatchUint32LessEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -777,7 +766,7 @@ func TestMatchUint32LessEqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
@@ -809,7 +798,7 @@ func BenchmarkMatchUint32LessEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchUint32LessEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -825,7 +814,7 @@ func BenchmarkMatchUint32LessEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
@@ -907,7 +896,7 @@ func TestMatchUint32GreaterGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchUint32GreaterAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -935,7 +924,7 @@ func TestMatchUint32GreaterAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater benchmarks
@@ -967,7 +956,7 @@ func BenchmarkMatchUint32GreaterGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchUint32GreaterAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -983,7 +972,7 @@ func BenchmarkMatchUint32GreaterAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
@@ -1066,7 +1055,7 @@ func TestMatchUint32GreaterEqualGeneric(T *testing.T) {
 		}
 	}
 }
-
+*/
 func TestMatchUint32GreaterEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -1093,7 +1082,7 @@ func TestMatchUint32GreaterEqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
@@ -1125,7 +1114,7 @@ func BenchmarkMatchUint32GreaterEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchUint32GreaterEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -1141,7 +1130,7 @@ func BenchmarkMatchUint32GreaterEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Between Testcases
@@ -1225,7 +1214,7 @@ func TestMatchUint32BetweenGeneric(T *testing.T) {
 		}
 	}
 }
-
+*/
 func TestMatchUint32BetweenAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -1252,7 +1241,7 @@ func TestMatchUint32BetweenAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Between benchmarks
@@ -1285,7 +1274,7 @@ func BenchmarkMatchUint32BetweenGeneric(B *testing.B) {
 		})
 	}
 }
-
+*/
 func BenchmarkMatchUint32BetweenAVX512(B *testing.B) {
 	if !useAVX512_F {
 		B.SkipNow()
@@ -1300,7 +1289,7 @@ func BenchmarkMatchUint32BetweenAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------
 // Uint32 Slice
