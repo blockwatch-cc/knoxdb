@@ -17,8 +17,8 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
-	"blockwatch.cc/packdb-pro/store"
-	"blockwatch.cc/packdb-pro/util"
+	"blockwatch.cc/knoxdb/store"
+	"blockwatch.cc/knoxdb/util"
 )
 
 // Bolt Limits
@@ -776,6 +776,7 @@ func (tx *transaction) SetManifest(manifest store.Manifest) error {
 	mft.Name = manifest.Name
 	mft.Version = manifest.Version
 	mft.Label = manifest.Label
+	mft.Schema = manifest.Schema
 	buf, err := json.Marshal(mft)
 	if err != nil {
 		return err
@@ -920,6 +921,7 @@ func (db *db) SetManifest(manifest store.Manifest) error {
 	mft.Name = manifest.Name
 	mft.Version = manifest.Version
 	mft.Label = manifest.Label
+	mft.Schema = manifest.Schema
 	return putManifest(db.store, mft)
 }
 
@@ -1118,7 +1120,7 @@ func (db *db) close() error {
 	}
 	if !db.store.IsReadOnly() {
 		// write manifest
-		mft.ClosedAt = time.Now().UTC()
+		mft.IsLocked = false
 		if err := putManifest(db.store, mft); err != nil {
 			return err
 		}
@@ -1158,7 +1160,7 @@ func initDB(db *bolt.DB) error {
 	now := time.Now().UTC()
 	mft := store.Manifest{
 		CreatedAt: now,
-		OpenedAt:  now,
+		IsLocked:  true,
 	}
 	buf, err := json.Marshal(mft)
 	if err != nil {
@@ -1185,8 +1187,13 @@ func openDB(dbPath string, opts *bolt.Options, create bool) (store.DB, error) {
 	dbExists := fileExists(dbPath)
 
 	if !create && !dbExists {
-		str := fmt.Sprintf("database %q does not exist", dbPath)
+		str := fmt.Sprintf("database file %q does not exist", dbPath)
 		return nil, makeDbErr(store.ErrDbDoesNotExist, str, nil)
+	}
+
+	if create && dbExists {
+		str := fmt.Sprintf("database file %q exists", dbPath)
+		return nil, makeDbErr(store.ErrDbExists, str, nil)
 	}
 
 	// Ensure the full path to the database exists.
@@ -1216,7 +1223,7 @@ func openDB(dbPath string, opts *bolt.Options, create bool) (store.DB, error) {
 			return nil, err
 		}
 		if !bdb.IsReadOnly() {
-			mft.OpenedAt = time.Now().UTC()
+			mft.IsLocked = true
 			if err := putManifest(bdb, mft); err != nil {
 				bdb.Close()
 				return nil, err
@@ -1370,7 +1377,7 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 			db.store.Close()
 			return convertErr("get manifest after compact", err)
 		}
-		mft.OpenedAt = time.Now().UTC()
+		mft.IsLocked = true
 		if err := putManifest(db.store, mft); err != nil {
 			db.store.Close()
 			return convertErr("store manifest after compact", err)

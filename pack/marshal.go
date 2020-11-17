@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"blockwatch.cc/packdb-pro/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/block"
 )
 
 func (p *Package) MarshalBinary() ([]byte, error) {
@@ -89,26 +89,42 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 		return io.ErrShortBuffer
 	}
 	p.version, _ = buf.ReadByte()
-	if p.version > packageStorageFormatVersionV1 {
+	if p.version > packageStorageFormatVersionV4 {
 		return fmt.Errorf("pack: invalid storage format version %d", p.version)
 	}
 	p.packedsize = blen
+
+	// v1 (OSS) does not write compression byte
+	// v2 (PRO) did write compression byte
+	// v3 (PRO) compression and precision are obsolete, moved to block
+	var precision int
+	if p.version >= packageStorageFormatVersionV2 {
+		b, _ := buf.ReadByte()
+		precision = int(b >> 4)
+		if precision == 0 {
+			precision = maxPrecision
+		}
+	}
 
 	// grid size (nFields is stored as uint32)
 	p.nFields = int(binary.BigEndian.Uint32(buf.Next(4)))
 	p.nValues = int(binary.BigEndian.Uint32(buf.Next(4)))
 
-	// read names
-	p.names = make([]string, p.nFields)
-	for i := 0; i < p.nFields; i++ {
-		// ReadString returns string including the delimiter
-		str, err := buf.ReadString(0)
-		if err != nil {
-			return err
+	// read names, check for existence of names (optional in v2)
+	b, _ := buf.ReadByte()
+	if b != 0 {
+		buf.UnreadByte()
+		p.names = make([]string, p.nFields)
+		for i := 0; i < p.nFields; i++ {
+			// ReadString returns string including the delimiter
+			str, err := buf.ReadString(0)
+			if err != nil {
+				return err
+			}
+			strcopy := str[:len(str)-1]
+			p.names[i] = strcopy
+			p.namemap[strcopy] = i
 		}
-		strcopy := str[:len(str)-1]
-		p.names[i] = strcopy
-		p.namemap[strcopy] = i
 	}
 
 	// read offsets
@@ -130,10 +146,29 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 			p.blocks[i] = &block.Block{}
 		}
 		// read and decode block headers
-		if err := p.blocks[i].DecodeHeader(buf); err != nil {
-			return err
+
+		// V1 and V3+: read and decode block headers
+		if p.version != packageStorageFormatVersionV2 {
+			if err := p.blocks[i].DecodeHeader(buf); err != nil {
+				return err
+			}
+			// v2 only: set uint64/float64 converted block precision from pack header
+			if p.version == packageStorageFormatVersionV2 {
+				if p.blocks[i].Type == block.BlockUint64 || p.blocks[i].Type == block.BlockFloat64 {
+					p.blocks[i].Precision = precision
+				}
+			}
+			// v1..v3 only: set fixed when compact is set on float64 field
+			if p.version <= packageStorageFormatVersionV3 {
+				if p.blocks[i].Type == block.BlockUint64 && p.blocks[i].Flags&block.BlockFlagCompact > 0 {
+					p.blocks[i].Flags |= block.BlockFlagFixed
+				}
+			}
 		}
 	}
+
+	// upgrade to v4 so subsequent writes will flush the correct version
+	p.version = packageStorageFormatVersionV4
 
 	// treat remaining bytes as pack body
 	p.rawsize = buf.Len()

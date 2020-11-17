@@ -9,9 +9,9 @@ import (
 	"io"
 	"strings"
 
-	"blockwatch.cc/packdb-pro/encoding/block"
-	"blockwatch.cc/packdb-pro/encoding/csv"
-	"blockwatch.cc/packdb-pro/util"
+	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/csv"
+	"blockwatch.cc/knoxdb/util"
 )
 
 type DumpMode int
@@ -315,7 +315,7 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 				sz = p.rawsize - p.offsets[i]
 			}
 			head := v.CloneHeader()
-			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-33s %-33s %-4d %-5d %-6s %-10s %-12s %-10s %-10s\n",
+			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-33s %-33s %-4d %-5x %-6s %-10s %-12s %-10s %-10s\n",
 				lineNo,
 				key,       // pack key
 				i,         // block id

@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"blockwatch.cc/packdb-pro/filter/bloom"
+	"blockwatch.cc/knoxdb/filter/bloom"
 )
 
 // Ensure filter can insert values and verify they exist.

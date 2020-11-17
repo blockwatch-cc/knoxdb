@@ -45,11 +45,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"blockwatch.cc/packdb-pro/cache"
-	"blockwatch.cc/packdb-pro/cache/lru"
-	"blockwatch.cc/packdb-pro/store"
-	"blockwatch.cc/packdb-pro/util"
-	"blockwatch.cc/packdb-pro/vec"
+	"blockwatch.cc/knoxdb/cache"
+	"blockwatch.cc/knoxdb/cache/lru"
+	"blockwatch.cc/knoxdb/store"
+	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -450,7 +450,10 @@ func (t *Table) loadPackHeaders(dbTx store.Tx) error {
 	}
 	log.Warnf("pack: scanning headers for table %s...", t.name)
 	c := dbTx.Bucket(t.key).Cursor()
-	pkg := t.journal.Clone(false, 0)
+	pkg, err := t.journal.Clone(false, 0)
+	if err != nil {
+		return err
+	}
 	for ok := c.First(); ok; ok = c.Next() {
 		ph, err := pkg.UnmarshalHeader(c.Value())
 		if err != nil {
@@ -1659,7 +1662,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 	}
 
 	defer func() {
-		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.rowsMatched))
+		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
 		q.Close()
 	}()
 
@@ -1699,21 +1702,21 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 				res.Close()
 				return nil, err
 			}
-			q.rowsMatched++
+			q.stats.RowsMatched++
 
 			// mark id as processed (set 0)
 			ids[i] = 0
 			last = j
 		}
 	}
-	q.journalTime = time.Since(q.lap)
+	q.stats.JournalTime = time.Since(q.lap)
 
 	// everything found in journal?, return early
-	if maxRows == q.rowsMatched {
+	if maxRows == q.stats.RowsMatched {
 		return res, nil
 	}
 
-	if q.rowsMatched > 0 || t.tombstone.Len() > 0 {
+	if q.stats.RowsMatched > 0 || t.tombstone.Len() > 0 {
 		clean := make([]uint64, 0, len(ids))
 		for _, v := range ids {
 			if v != 0 {
@@ -1733,7 +1736,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 	var nextid int
 	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
 		// stop when all inputs are matched
-		if maxRows == q.rowsMatched {
+		if maxRows == q.stats.RowsMatched {
 			break
 		}
 
@@ -1756,7 +1759,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 			res.Close()
 			return nil, err
 		}
-		q.packsScanned++
+		q.stats.PacksScanned++
 
 		col, _ := pkg.Column(pkidx)
 		pk, _ := col.([]uint64)
@@ -1781,11 +1784,11 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 				return nil, err
 			}
 			nextid = i
-			q.rowsMatched++
+			q.stats.RowsMatched++
 			last = j
 		}
 	}
-	q.scanTime = time.Since(q.lap)
+	q.stats.ScanTime = time.Since(q.lap)
 	return res, nil
 }
 
@@ -1832,7 +1835,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	// prepare journal match
 	var jbits *vec.BitSet
 	defer func() {
-		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.rowsMatched))
+		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
 		q.Close()
 		if jbits != nil {
 			jbits.Close()
@@ -1843,7 +1846,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
 	jbits = q.Conditions.MatchPack(t.journal)
-	q.journalTime = time.Since(q.lap)
+	q.stats.JournalTime = time.Since(q.lap)
 
 	// maybe run index query
 	if err := q.QueryIndexes(ctx, tx); err != nil {
@@ -1883,7 +1886,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 				res.Close()
 				return nil, err
 			}
-			q.packsScanned++
+			q.stats.PacksScanned++
 
 			// identify and copy matches
 			bits := q.Conditions.MatchPack(pkg)
@@ -1923,9 +1926,9 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 						res.Close()
 						return nil, err
 					}
-					q.rowsMatched++
+					q.stats.RowsMatched++
 
-					if q.Limit > 0 && q.rowsMatched == q.Limit {
+					if q.Limit > 0 && q.stats.RowsMatched == q.Limit {
 						bits.Close()
 						break packloop
 					}
@@ -1933,12 +1936,12 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 			}
 			bits.Close()
 		}
-		q.scanTime = time.Since(q.lap)
+		q.stats.ScanTime = time.Since(q.lap)
 		q.lap = time.Now()
 	}
 
 	// finalize on limit
-	if q.Limit > 0 && q.rowsMatched >= q.Limit {
+	if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 		return res, nil
 	}
 
@@ -1960,14 +1963,14 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 				res.Close()
 				return nil, err
 			}
-			q.rowsMatched++
+			q.stats.RowsMatched++
 
-			if q.Limit > 0 && q.rowsMatched == q.Limit {
+			if q.Limit > 0 && q.stats.RowsMatched == q.Limit {
 				break
 			}
 		}
 	}
-	q.journalTime = time.Since(q.lap)
+	q.stats.JournalTime = time.Since(q.lap)
 
 	return res, nil
 }
@@ -1984,7 +1987,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	// prepare journal query
 	var jbits *vec.BitSet
 	defer func() {
-		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.rowsMatched))
+		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
 		q.Close()
 		if jbits != nil {
 			jbits.Close()
@@ -1996,7 +1999,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	// but not new pks that are only in journal)
 	// reverse the bitfield order for descending walk
 	jbits = q.Conditions.MatchPack(t.journal).Reverse()
-	q.journalTime = time.Since(q.lap)
+	q.stats.JournalTime = time.Since(q.lap)
 
 	// maybe run index query
 	if err := q.QueryIndexes(ctx, tx); err != nil {
@@ -2048,15 +2051,15 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 				res.Close()
 				return nil, err
 			}
-			q.rowsMatched++
+			q.stats.RowsMatched++
 			jbits.Clear(i)
 
-			if q.Limit > 0 && q.rowsMatched == q.Limit {
+			if q.Limit > 0 && q.stats.RowsMatched == q.Limit {
 				break
 			}
 		}
 	}
-	q.journalTime = time.Since(q.lap)
+	q.stats.JournalTime = time.Since(q.lap)
 
 	// REVERSE PACK SCAN (either using found pk ids or non-indexed conditions)
 	// reverse-scan packs only if (a) index match returned any results or (b) no index exists
@@ -2075,7 +2078,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 				res.Close()
 				return nil, err
 			}
-			q.packsScanned++
+			q.stats.PacksScanned++
 
 			// identify and copy matches
 			bits := q.Conditions.MatchPack(pkg).Reverse()
@@ -2113,9 +2116,9 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 						res.Close()
 						return nil, err
 					}
-					q.rowsMatched++
+					q.stats.RowsMatched++
 
-					if q.Limit > 0 && q.rowsMatched == q.Limit {
+					if q.Limit > 0 && q.stats.RowsMatched == q.Limit {
 						bits.Close()
 						break packloop
 					}
@@ -2123,7 +2126,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 			}
 			bits.Close()
 		}
-		q.scanTime = time.Since(q.lap)
+		q.stats.ScanTime = time.Since(q.lap)
 		q.lap = time.Now()
 	}
 
@@ -2157,7 +2160,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	var jbits *vec.BitSet
 
 	defer func() {
-		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.rowsMatched))
+		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
 		jbits.Close()
 		q.Close()
 	}()
@@ -2166,7 +2169,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
 	jbits = q.Conditions.MatchPack(t.journal)
-	q.journalTime = time.Since(q.lap)
+	q.stats.JournalTime = time.Since(q.lap)
 
 	// maybe run index query
 	if err := q.QueryIndexes(ctx, tx); err != nil {
@@ -2186,7 +2189,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 		q.lap = time.Now()
 		for _, p := range q.MakePackSchedule(false) {
 			if util.InterruptRequested(ctx) {
-				return int64(q.rowsMatched), ctx.Err()
+				return int64(q.stats.RowsMatched), ctx.Err()
 			}
 
 			// load pack from cache or storage, will be recycled on cache eviction
@@ -2194,7 +2197,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 			if err != nil {
 				return 0, err
 			}
-			q.packsScanned++
+			q.stats.PacksScanned++
 
 			// identify and count matches
 			bits := q.Conditions.MatchPack(pkg)
@@ -2222,18 +2225,18 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 						}
 					}
 
-					q.rowsMatched++
+					q.stats.RowsMatched++
 				}
 			}
 			bits.Close()
 		}
-		q.scanTime = time.Since(q.lap)
+		q.stats.ScanTime = time.Since(q.lap)
 	}
 
 	// after all packs have been scanned, add remaining rows from journal, if any
-	q.rowsMatched += int(jbits.Count())
+	q.stats.RowsMatched += int(jbits.Count())
 
-	return int64(q.rowsMatched), nil
+	return int64(q.stats.RowsMatched), nil
 }
 
 func (t *Table) Stream(ctx context.Context, q Query, fn func(r Row) error) error {
@@ -2269,7 +2272,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// prepare journal query
 	var jbits *vec.BitSet
 	defer func() {
-		atomic.AddInt64(&t.stats.StreamedTuples, int64(q.rowsMatched))
+		atomic.AddInt64(&t.stats.StreamedTuples, int64(q.stats.RowsMatched))
 		if jbits != nil {
 			jbits.Close()
 		}
@@ -2280,7 +2283,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
 	jbits = q.Conditions.MatchPack(t.journal)
-	q.journalTime = time.Since(q.lap)
+	q.stats.JournalTime = time.Since(q.lap)
 
 	// maybe run index query
 	if err := q.QueryIndexes(ctx, tx); err != nil {
@@ -2310,7 +2313,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 			if err != nil {
 				return err
 			}
-			q.packsScanned++
+			q.stats.PacksScanned++
 
 			// identify and forward matches
 			bits := q.Conditions.MatchPack(pkg)
@@ -2350,9 +2353,9 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 						return err
 					}
 					res.pkg = nil
-					q.rowsMatched++
+					q.stats.RowsMatched++
 
-					if q.Limit > 0 && q.rowsMatched >= q.Limit {
+					if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 						bits.Close()
 						break packloop
 					}
@@ -2360,11 +2363,11 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 			}
 			bits.Close()
 		}
-		q.scanTime = time.Since(q.lap)
+		q.stats.ScanTime = time.Since(q.lap)
 		q.lap = time.Now()
 	}
 
-	if q.Limit > 0 && q.rowsMatched >= q.Limit {
+	if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 		return nil
 	}
 
@@ -2401,14 +2404,14 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 			if err := fn(Row{res: &res, n: i}); err != nil {
 				return err
 			}
-			q.rowsMatched++
+			q.stats.RowsMatched++
 
-			if q.Limit > 0 && q.rowsMatched >= q.Limit {
+			if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 				return nil
 			}
 		}
 	}
-	q.journalTime += time.Since(q.lap)
+	q.stats.JournalTime += time.Since(q.lap)
 
 	return nil
 }
@@ -2424,7 +2427,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	// prepare journal query
 	var jbits *vec.BitSet
 	defer func() {
-		atomic.AddInt64(&t.stats.StreamedTuples, int64(q.rowsMatched))
+		atomic.AddInt64(&t.stats.StreamedTuples, int64(q.stats.RowsMatched))
 		if jbits != nil {
 			jbits.Close()
 		}
@@ -2436,7 +2439,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	// but not new pks that are only in journal)
 	// reverse the bitfield order for descending walk
 	jbits = q.Conditions.MatchPack(t.journal).Reverse()
-	q.journalTime = time.Since(q.lap)
+	q.stats.JournalTime = time.Since(q.lap)
 
 	// maybe run index query
 	if err := q.QueryIndexes(ctx, tx); err != nil {
@@ -2482,17 +2485,17 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 			if err := fn(Row{res: &res, n: i}); err != nil {
 				return err
 			}
-			q.rowsMatched++
+			q.stats.RowsMatched++
 
 			// clear matching bit
 			jbits.Clear(i)
 
-			if q.Limit > 0 && q.rowsMatched >= q.Limit {
+			if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 				return nil
 			}
 		}
 	}
-	q.journalTime += time.Since(q.lap)
+	q.stats.JournalTime += time.Since(q.lap)
 
 	// reverse-scan packs only when (a) index match returned any results or (b) when no index exists
 	if !q.IsEmptyMatch() {
@@ -2508,7 +2511,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 			if err != nil {
 				return err
 			}
-			q.packsScanned++
+			q.stats.PacksScanned++
 
 			// identify and forward matches
 			bits := q.Conditions.MatchPack(pkg).Reverse()
@@ -2546,9 +2549,9 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 						return err
 					}
 					res.pkg = nil
-					q.rowsMatched++
+					q.stats.RowsMatched++
 
-					if q.Limit > 0 && q.rowsMatched >= q.Limit {
+					if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 						bits.Close()
 						break packloop
 					}
@@ -2556,7 +2559,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 			}
 			bits.Close()
 		}
-		q.scanTime = time.Since(q.lap)
+		q.stats.ScanTime = time.Since(q.lap)
 		q.lap = time.Now()
 	}
 
@@ -2600,7 +2603,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 	}
 
 	defer func() {
-		atomic.AddInt64(&t.stats.StreamedTuples, int64(q.rowsMatched))
+		atomic.AddInt64(&t.stats.StreamedTuples, int64(q.stats.RowsMatched))
 		q.Close()
 	}()
 
@@ -2644,22 +2647,22 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			if err := fn(Row{res: &res, n: j}); err != nil {
 				return err
 			}
-			q.rowsMatched++
+			q.stats.RowsMatched++
 
 			// mark id as processed (set 0)
 			ids[i] = 0
 			last = j
 		}
-		q.journalTime = time.Since(q.lap)
+		q.stats.JournalTime = time.Since(q.lap)
 	}
 
 	// everything found in journal?, return early
-	if maxRows == q.rowsMatched {
+	if maxRows == q.stats.RowsMatched {
 		return nil
 	}
 
 	// remove zero values from id list
-	if q.rowsMatched > 0 || t.tombstone.Len() > 0 {
+	if q.stats.RowsMatched > 0 || t.tombstone.Len() > 0 {
 		clean := make([]uint64, 0, len(ids))
 		for _, v := range ids {
 			if v != 0 {
@@ -2679,7 +2682,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 	q.lap = time.Now()
 	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
 		// stop when all inputs are matched
-		if maxRows == q.rowsMatched {
+		if maxRows == q.stats.RowsMatched {
 			break
 		}
 
@@ -2692,7 +2695,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			return err
 		}
 		res.pkg = pkg
-		q.packsScanned++
+		q.stats.PacksScanned++
 		col, _ := pkg.Column(pkidx)
 		pk, _ := col.([]uint64)
 
@@ -2721,11 +2724,11 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			}
 
 			nextid++
-			q.rowsMatched++
+			q.stats.RowsMatched++
 			last = j
 		}
 	}
-	q.scanTime = time.Since(q.lap)
+	q.stats.ScanTime = time.Since(q.lap)
 	return nil
 }
 
@@ -3124,7 +3127,7 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 
 func (t *Table) makePackage() interface{} {
 	atomic.AddInt64(&t.stats.PacksAlloc, 1)
-	pkg := t.journal.Clone(false, 1<<uint(t.opts.PackSizeLog2))
+	pkg, _ := t.journal.Clone(false, 1<<uint(t.opts.PackSizeLog2))
 	return pkg
 }
 

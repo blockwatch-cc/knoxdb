@@ -19,10 +19,10 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
-	"blockwatch.cc/packdb-pro/pack"
-	"blockwatch.cc/packdb-pro/store"
-	_ "blockwatch.cc/packdb-pro/store/bolt"
-	"blockwatch.cc/packdb-pro/util"
+	"blockwatch.cc/knoxdb/pack"
+	"blockwatch.cc/knoxdb/store"
+	_ "blockwatch.cc/knoxdb/store/bolt"
+	"blockwatch.cc/knoxdb/util"
 	"github.com/echa/log"
 )
 

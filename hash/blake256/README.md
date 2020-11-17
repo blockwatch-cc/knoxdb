@@ -1,7 +1,7 @@
 Package blake256
 =====================
 
-	import "github.com/packdb-pro/hash/blake256"
+	import "blockwatch.cc/knoxdb/hash/blake256"
 
 Package blake256 implements BLAKE-256 and BLAKE-224 hash functions (SHA-3
 candidate).

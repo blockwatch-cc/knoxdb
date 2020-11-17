@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"blockwatch.cc/packdb-pro/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/block"
 )
 
 var packBenchmarkReadWriteSizes = []packBenchmarkSize{

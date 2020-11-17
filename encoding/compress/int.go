@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"io"
 
-	"blockwatch.cc/packdb-pro/encoding/simple8b"
-	"blockwatch.cc/packdb-pro/util"
+	"blockwatch.cc/knoxdb/encoding/simple8b"
+	"blockwatch.cc/knoxdb/util"
 )
 
 // Integer encoding uses two different strategies depending on the range of values in
@@ -44,12 +44,42 @@ const (
 )
 
 // upper bound
-func IntegerArrayEncodedSize(src []int64) int {
+func Int64ArrayEncodedSize(src []int64) int {
 	return len(src)*8 + 1
 }
 
 // upper bound
-func UnsignedArrayEncodedSize(src []uint64) int {
+func Int32ArrayEncodedSize(src []int32) int {
+	return len(src)*8 + 1
+}
+
+// upper bound
+func Int16ArrayEncodedSize(src []int16) int {
+	return len(src)*8 + 1
+}
+
+// upper bound
+func Int8ArrayEncodedSize(src []int8) int {
+	return len(src)*8 + 1
+}
+
+// upper bound
+func Uint64ArrayEncodedSize(src []uint64) int {
+	return len(src)*8 + 1
+}
+
+// upper bound
+func Uint32ArrayEncodedSize(src []uint32) int {
+	return len(src)*8 + 1
+}
+
+// upper bound
+func Uint16ArrayEncodedSize(src []uint16) int {
+	return len(src)*8 + 1
+}
+
+// upper bound
+func Uint8ArrayEncodedSize(src []uint8) int {
 	return len(src)*8 + 1
 }
 

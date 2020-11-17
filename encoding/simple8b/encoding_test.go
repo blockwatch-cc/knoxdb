@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"blockwatch.cc/packdb-pro/encoding/simple8b"
+	"blockwatch.cc/knoxdb/encoding/simple8b"
 )
 
 func Test_Encode_NoValues(t *testing.T) {

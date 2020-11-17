@@ -98,10 +98,13 @@ func (r *Result) DecodeAt(n int, val interface{}) error {
 		return ErrResultClosed
 	}
 	if r.tinfo == nil {
-		var err error
-		r.tinfo, err = getTypeInfo(val)
+		sharedTypeInfo, err := getTypeInfo(val)
 		if err != nil {
 			return err
+		}
+		r.tinfo = sharedTypeInfo.Clone()
+		for i, v := range r.tinfo.fields {
+			r.tinfo.fields[i].blockid = r.pkg.FieldIndex(v.name)
 		}
 	}
 	return r.pkg.ReadAtWithInfo(n, val, r.tinfo)
@@ -173,6 +176,27 @@ func (r *Result) Uint64At(index, pos int) (uint64, error) {
 	return r.pkg.Uint64At(index, pos)
 }
 
+func (r *Result) Uint32At(index, pos int) (uint32, error) {
+	if r.pkg == nil {
+		return 0, ErrResultClosed
+	}
+	return r.pkg.Uint32At(index, pos)
+}
+
+func (r *Result) Uint16At(index, pos int) (uint16, error) {
+	if r.pkg == nil {
+		return 0, ErrResultClosed
+	}
+	return r.pkg.Uint16At(index, pos)
+}
+
+func (r *Result) Uint8At(index, pos int) (uint8, error) {
+	if r.pkg == nil {
+		return 0, ErrResultClosed
+	}
+	return r.pkg.Uint8At(index, pos)
+}
+
 func (r *Result) Int64At(index, pos int) (int64, error) {
 	if r.pkg == nil {
 		return 0, ErrResultClosed
@@ -180,11 +204,39 @@ func (r *Result) Int64At(index, pos int) (int64, error) {
 	return r.pkg.Int64At(index, pos)
 }
 
+func (r *Result) Int32At(index, pos int) (int32, error) {
+	if r.pkg == nil {
+		return 0, ErrResultClosed
+	}
+	return r.pkg.Int32At(index, pos)
+}
+
+func (r *Result) Int16At(index, pos int) (int16, error) {
+	if r.pkg == nil {
+		return 0, ErrResultClosed
+	}
+	return r.pkg.Int16At(index, pos)
+}
+
+func (r *Result) Int8At(index, pos int) (int8, error) {
+	if r.pkg == nil {
+		return 0, ErrResultClosed
+	}
+	return r.pkg.Int8At(index, pos)
+}
+
 func (r *Result) Float64At(index, pos int) (float64, error) {
 	if r.pkg == nil {
 		return 0, ErrResultClosed
 	}
 	return r.pkg.Float64At(index, pos)
+}
+
+func (r *Result) Float32At(index, pos int) (float32, error) {
+	if r.pkg == nil {
+		return 0, ErrResultClosed
+	}
+	return r.pkg.Float32At(index, pos)
 }
 
 func (r *Result) StringAt(index, pos int) (string, error) {
@@ -227,6 +279,42 @@ func (r *Result) Uint64Column(colname string) ([]uint64, error) {
 	return tcol, nil
 }
 
+func (r *Result) Uint32Column(colname string) ([]uint32, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return nil, err
+	}
+	tcol, ok := col.([]uint32)
+	if !ok {
+		return nil, ErrTypeMismatch
+	}
+	return tcol, nil
+}
+
+func (r *Result) Uint16Column(colname string) ([]uint16, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return nil, err
+	}
+	tcol, ok := col.([]uint16)
+	if !ok {
+		return nil, ErrTypeMismatch
+	}
+	return tcol, nil
+}
+
+func (r *Result) Uint8Column(colname string) ([]uint8, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return nil, err
+	}
+	tcol, ok := col.([]uint8)
+	if !ok {
+		return nil, ErrTypeMismatch
+	}
+	return tcol, nil
+}
+
 func (r *Result) Int64Column(colname string) ([]int64, error) {
 	col, err := r.Column(colname)
 	if err != nil {
@@ -239,12 +327,60 @@ func (r *Result) Int64Column(colname string) ([]int64, error) {
 	return tcol, nil
 }
 
+func (r *Result) Int32Column(colname string) ([]int32, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return nil, err
+	}
+	tcol, ok := col.([]int32)
+	if !ok {
+		return nil, ErrTypeMismatch
+	}
+	return tcol, nil
+}
+
+func (r *Result) Int16Column(colname string) ([]int16, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return nil, err
+	}
+	tcol, ok := col.([]int16)
+	if !ok {
+		return nil, ErrTypeMismatch
+	}
+	return tcol, nil
+}
+
+func (r *Result) Int8Column(colname string) ([]int8, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return nil, err
+	}
+	tcol, ok := col.([]int8)
+	if !ok {
+		return nil, ErrTypeMismatch
+	}
+	return tcol, nil
+}
+
 func (r *Result) Float64Column(colname string) ([]float64, error) {
 	col, err := r.Column(colname)
 	if err != nil {
 		return nil, err
 	}
 	tcol, ok := col.([]float64)
+	if !ok {
+		return nil, ErrTypeMismatch
+	}
+	return tcol, nil
+}
+
+func (r *Result) Float32Column(colname string) ([]float32, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return nil, err
+	}
+	tcol, ok := col.([]float32)
 	if !ok {
 		return nil, ErrTypeMismatch
 	}
