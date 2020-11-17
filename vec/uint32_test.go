@@ -225,7 +225,6 @@ func TestMatchUint32EqualGeneric(T *testing.T) {
 	}
 }
 
-/*
 func TestMatchUint32EqualAVX2(T *testing.T) {
 	for _, c := range uint32EqualCases {
 		// pre-allocate the result slice and fill with poison
@@ -250,7 +249,7 @@ func TestMatchUint32EqualAVX2(T *testing.T) {
 		}
 	}
 }
-*/
+
 // -----------------------------------------------------------------------------
 // Equal benchmarks
 //
@@ -268,7 +267,6 @@ func BenchmarkMatchUint32EqualGeneric(B *testing.B) {
 	}
 }
 
-/*
 func BenchmarkMatchUint32EqualAVX2(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
@@ -297,7 +295,7 @@ func BenchmarkMatchUint32EqualAVX2Scalar(B *testing.B) {
 		})
 	}
 }
-*/
+
 // -----------------------------------------------------------------------------
 // Less Testcases
 //

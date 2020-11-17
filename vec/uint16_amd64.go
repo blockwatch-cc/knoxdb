@@ -5,10 +5,10 @@
 
 package vec
 
-/*
 //go:noescape
 func matchUint16EqualAVX2(src []uint16, val uint16, bits []byte) int64
 
+/*
 //go:noescape
 func matchUint16NotEqualAVX2(src []uint16, val uint16, bits []byte) int64
 
@@ -28,12 +28,12 @@ func matchUint16GreaterThanEqualAVX2(src []uint16, val uint16, bits []byte) int6
 func matchUint16BetweenAVX2(src []uint16, a, b uint16, bits []byte) int64
 */
 func matchUint16Equal(src []uint16, val uint16, bits []byte) int64 {
-	//switch {
-	//case useAVX2:
-	//	return matchUint16EqualAVX2(src, val, bits)
-	//default:
-	return matchUint16EqualGeneric(src, val, bits)
-	//}
+	switch {
+	case useAVX2:
+		return matchUint16EqualAVX2(src, val, bits)
+	default:
+		return matchUint16EqualGeneric(src, val, bits)
+	}
 }
 
 func matchUint16NotEqual(src []uint16, val uint16, bits []byte) int64 {

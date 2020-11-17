@@ -8,7 +8,7 @@
 
 
 #define BITSET_AVX2(_FUNC) \
-	VMOVDQA		0(DI), Y0; \
+	VMOVDQU		0(DI), Y0; \
 	_FUNC		0(SI), Y0, Y0; \
 	VMOVDQU		32(DI), Y1; \
 	_FUNC		32(SI), Y1, Y1; \
@@ -20,13 +20,13 @@
 	VMOVDQU		Y1, 32(SI); \
 	VMOVDQU		Y2, 64(SI); \
 	VMOVDQU		Y3, 96(SI); \
-	VMOVDQA		128(DI), Y4; \
+	VMOVDQU		128(DI), Y4; \
 	_FUNC		128(SI), Y4, Y4; \
-	VMOVDQA		160(DI), Y5; \
+	VMOVDQU		160(DI), Y5; \
 	_FUNC		160(SI), Y5, Y5; \
-	VMOVDQA		192(DI), Y6; \
+	VMOVDQU		192(DI), Y6; \
 	_FUNC		192(SI), Y6, Y6; \
-	VMOVDQA		224(DI), Y7; \
+	VMOVDQU		224(DI), Y7; \
 	_FUNC		224(SI), Y7, Y7; \
 	VMOVDQU		Y4, 128(SI); \
 	VMOVDQU		Y5, 160(SI); \
@@ -351,11 +351,11 @@ loop_i8:
 done:
 	RET
 
-// func bitsetNegAVX2(src []byte) uint64
+// func bitsetNegAVX2(src []byte)
 //
 TEXT ·bitsetNegAVX2(SB), NOSPLIT, $0-24
-	MOVQ	dst_base+0(FP), SI
-	MOVQ	dst_len+8(FP), BX
+	MOVQ	src_base+0(FP), SI
+	MOVQ	src_len+8(FP), BX
 
 	TESTQ		BX, BX
 	JLE			done
@@ -599,8 +599,8 @@ prep_avx:
 	JBE		prep_i64
 
 loop_avx:
-	VMOVDQA  	0(SI), X0
-	VMOVDQA  	16(SI), X1
+	VMOVDQU  	0(SI), X0
+	VMOVDQU  	16(SI), X1
 	VMOVHLPS 	X0, X2, X2
 	VMOVHLPS 	X1, X3, X3
 	VMOVQ    	X0, R8

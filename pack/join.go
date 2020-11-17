@@ -357,8 +357,13 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 	if havePostFilter {
 		agg = &Result{
 			fields: j.fields,
-			pkg:    out.pkg.Clone(false, util.NonZero(j.limit, maxPackSize)),
 		}
+		pkg, err := out.pkg.Clone(false, util.NonZero(j.limit, maxPackSize))
+		if err != nil {
+			return nil, err
+		}
+		agg.pkg = pkg
+
 		defer agg.Close()
 	} else {
 		// without post filter we can directly collect result rows into out

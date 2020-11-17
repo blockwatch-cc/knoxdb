@@ -8,6 +8,10 @@ package vec
 import "golang.org/x/sys/cpu"
 
 func init() {
+	detectAVX()
+}
+
+func detectAVX() {
 	useAVX2 = cpu.X86.HasAVX2
 
 	maxID, _, _, _ := cpuid(0, 0)
@@ -46,4 +50,30 @@ func cpuid(eaxArg, ecxArg uint32) (eax, ebx, ecx, edx uint32)
 
 func isSet(bitpos uint, value uint32) bool {
 	return value&(1<<bitpos) != 0
+}
+
+func DisableAVX2() {
+	useAVX2 = false
+}
+
+func DisableAVX512() {
+	useAVX512_F = false
+	useAVX512_DQ = false
+	useAVX512_IFMA = false
+	useAVX512_PF = false
+	useAVX512_ER = false
+	useAVX512_CD = false
+	useAVX512_BW = false
+	useAVX512_VL = false
+	useAVX512_VBMI = false
+	useAVX512_BITALG = false
+	useAVX512_VPOPCNTDQ = false
+	useAVX512_4VNNIW = false
+	useAVX512_4FMAPS = false
+	useAVX512_VP2INTERSECT = false
+	useAVX512_BF16 = false
+}
+
+func EnableAVX() {
+	detectAVX()
 }

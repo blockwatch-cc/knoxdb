@@ -33,8 +33,8 @@ TEXT ·matchInt64EqualAVX2(SB), NOSPLIT, $0-64
 
 prep_avx2:
 	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
-	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQA		shuffle<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
@@ -151,8 +151,8 @@ TEXT ·matchInt64NotEqualAVX2(SB), NOSPLIT, $0-64
 
 prep_avx2:
 	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
-	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQA		shuffle<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
@@ -270,8 +270,8 @@ TEXT ·matchInt64LessThanAVX2(SB), NOSPLIT, $0-64
 
 prep_avx2:
 	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
-	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQA		shuffle<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
@@ -388,16 +388,16 @@ TEXT ·matchInt64LessThanEqualAVX2(SB), NOSPLIT, $0-64
 
 prep_avx2:
 	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
-	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQA		shuffle<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
-	VMOVDQA		0(SI), Y1      // load values (necessary to switch operands)
-	VMOVDQA		32(SI), Y2
-	VMOVDQA		64(SI), Y3
-	VMOVDQA		96(SI), Y4
-	VMOVDQA		128(SI), Y5
+	VMOVDQU		0(SI), Y1      // load values (necessary to switch operands)
+	VMOVDQU		32(SI), Y2
+	VMOVDQU		64(SI), Y3
+	VMOVDQU		96(SI), Y4
+	VMOVDQU		128(SI), Y5
 	VPCMPGTQ	Y0, Y1, Y1
 	VPCMPGTQ	Y0, Y2, Y2
 	VPCMPGTQ	Y0, Y3, Y3
@@ -405,16 +405,16 @@ loop_avx2:
 	VPCMPGTQ	Y0, Y5, Y5
 	VPACKSSDW	Y1, Y5, Y1
 	VPERMD		Y1, Y9, Y1
-	VMOVDQA		160(SI), Y6
+	VMOVDQU		160(SI), Y6
 	VPCMPGTQ	Y0, Y6, Y6
 	VPACKSSDW	Y2, Y6, Y2
 	VPERMD		Y2, Y9, Y2
 	VPACKSSDW	Y2, Y1, Y1
-	VMOVDQA		192(SI), Y7
+	VMOVDQU		192(SI), Y7
 	VPCMPGTQ	Y0, Y7, Y7
 	VPACKSSDW	Y3, Y7, Y3
 	VPERMD		Y3, Y9, Y3
-	VMOVDQA		224(SI), Y8
+	VMOVDQU		224(SI), Y8
 	VPCMPGTQ	Y0, Y8, Y8
 	VPACKSSDW	Y4, Y8, Y4
 	VPERMD		Y4, Y9, Y4
@@ -516,16 +516,16 @@ TEXT ·matchInt64GreaterThanAVX2(SB), NOSPLIT, $0-64
 
 prep_avx2:
 	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
-	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQA		shuffle<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
-	VMOVDQA		0(SI), Y1
-	VMOVDQA		32(SI), Y2
-	VMOVDQA		64(SI), Y3
-	VMOVDQA		96(SI), Y4
-	VMOVDQA		128(SI), Y5
+	VMOVDQU		0(SI), Y1
+	VMOVDQU		32(SI), Y2
+	VMOVDQU		64(SI), Y3
+	VMOVDQU		96(SI), Y4
+	VMOVDQU		128(SI), Y5
 	VPCMPGTQ	Y0, Y1, Y1
 	VPCMPGTQ	Y0, Y2, Y2
 	VPCMPGTQ	Y0, Y3, Y3
@@ -533,16 +533,16 @@ loop_avx2:
 	VPCMPGTQ	Y0, Y5, Y5
 	VPACKSSDW	Y1, Y5, Y1
 	VPERMD		Y1, Y9, Y1
-	VMOVDQA		160(SI), Y6
+	VMOVDQU		160(SI), Y6
 	VPCMPGTQ	Y0, Y6, Y6
 	VPACKSSDW	Y2, Y6, Y2
 	VPERMD		Y2, Y9, Y2
 	VPACKSSDW	Y2, Y1, Y1
-	VMOVDQA		192(SI), Y7
+	VMOVDQU		192(SI), Y7
 	VPCMPGTQ	Y0, Y7, Y7
 	VPACKSSDW	Y3, Y7, Y3
 	VPERMD		Y3, Y9, Y3
-	VMOVDQA		224(SI), Y8
+	VMOVDQU		224(SI), Y8
 	VPCMPGTQ	Y0, Y8, Y8
 	VPACKSSDW	Y4, Y8, Y4
 	VPERMD		Y4, Y9, Y4
@@ -643,8 +643,8 @@ TEXT ·matchInt64GreaterThanEqualAVX2(SB), NOSPLIT, $0-64
 
 prep_avx2:
 	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
-	VMOVDQA		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQA		shuffle<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 
 // works for >= 32 int64 (i.e. 256 bytes of data)
 loop_avx2:
@@ -752,7 +752,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt64BetweenAVX2(SB), NOSPLIT, $0-64
+TEXT ·matchInt64BetweenAVX2(SB), NOSPLIT, $0-72
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+40(FP), DI
@@ -774,20 +774,20 @@ prep_avx2:
 	VPSLLQ			$63, Y11, Y11                    // create 0x8000.. mask
 	VPCMPEQQ		Y13, Y13, Y13                    // create 1 for adding
 	VPSRLQ			$63, Y13, Y13
-	VBROADCASTSD 	val+24(FP), Y12                  // load val a into AVX2 reg
-	VBROADCASTSD 	val+32(FP), Y0                   // load val b into AVX2 reg
+	VBROADCASTSD 	a+24(FP), Y12                  // load val a into AVX2 reg
+	VBROADCASTSD 	b+32(FP), Y0                   // load val b into AVX2 reg
 	VPSUBQ			Y12, Y0, Y0                      // compute diff
 	VPADDQ			Y13, Y0, Y0
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
-	VMOVDQA			crosslane<>+0x00(SB), Y9         // load permute control mask
-	VMOVDQA			shuffle<>+0x00(SB), Y10          // load shuffle control mask
+	VMOVDQU			crosslane<>+0x00(SB), Y9         // load permute control mask
+	VMOVDQU			shuffle64<>+0x00(SB), Y10          // load shuffle control mask
 
 loop_avx2:
-	VMOVDQA		0(SI), Y1      // load values (necessary to flip sign bit)
-	VMOVDQA		32(SI), Y2
-	VMOVDQA		64(SI), Y3
-	VMOVDQA		96(SI), Y4
-	VMOVDQA		128(SI), Y5
+	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
+	VMOVDQU		32(SI), Y2
+	VMOVDQU		64(SI), Y3
+	VMOVDQU		96(SI), Y4
+	VMOVDQU		128(SI), Y5
 	VPSUBQ		Y12, Y1, Y1
 	VPSUBQ		Y12, Y2, Y2
 	VPSUBQ		Y12, Y3, Y3
@@ -805,20 +805,20 @@ loop_avx2:
 	VPCMPGTQ	Y5, Y0, Y5
 	VPACKSSDW	Y1, Y5, Y1
 	VPERMD		Y1, Y9, Y1
-	VMOVDQA		160(SI), Y6
+	VMOVDQU		160(SI), Y6
 	VPSUBQ		Y12, Y6, Y6
 	VPXOR		Y11, Y6, Y6
 	VPCMPGTQ	Y6, Y0, Y6
 	VPACKSSDW	Y2, Y6, Y2
 	VPERMD		Y2, Y9, Y2
 	VPACKSSDW	Y2, Y1, Y1
-	VMOVDQA		192(SI), Y7
+	VMOVDQU		192(SI), Y7
 	VPSUBQ		Y12, Y7, Y7
 	VPXOR		Y11, Y7, Y7
 	VPCMPGTQ	Y7, Y0, Y7
 	VPACKSSDW	Y3, Y7, Y3
 	VPERMD		Y3, Y9, Y3
-	VMOVDQA		224(SI), Y8
+	VMOVDQU		224(SI), Y8
 	VPSUBQ		Y12, Y8, Y8
 	VPXOR		Y11, Y8, Y8
 	VPCMPGTQ	Y8, Y0, Y8
@@ -845,8 +845,8 @@ exit_avx2:
 	JLE		done
 
 prep_scalar:
-	MOVQ	val+24(FP), R13   // load val a
-	MOVQ	val+32(FP), DX    // load val b
+	MOVQ	a+24(FP), R13   // load val a
+	MOVQ	b+32(FP), DX    // load val b
 	SUBQ	R13, DX
 	INCQ	DX
 	MOVQ    $1, R12          // create 0x80... mask

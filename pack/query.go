@@ -36,17 +36,21 @@ type Query struct {
 	reqfields FieldList // all fields required by this query
 
 	// metrics
-	start          time.Time
-	lap            time.Time
-	compileTime    time.Duration
-	journalTime    time.Duration
-	indexTime      time.Duration
-	scanTime       time.Duration
-	totalTime      time.Duration
-	packsScheduled int
-	packsScanned   int
-	rowsMatched    int
-	indexLookups   int
+	start time.Time
+	lap   time.Time
+	stats QueryStats
+}
+
+type QueryStats struct {
+	CompileTime    time.Duration `json:"compile_time"`
+	JournalTime    time.Duration `json:"journal_time"`
+	IndexTime      time.Duration `json:"index_time"`
+	ScanTime       time.Duration `json:"scan_time"`
+	TotalTime      time.Duration `json:"total_time"`
+	PacksScheduled int           `json:"packs_scheduled"`
+	PacksScanned   int           `json:"packs_scanned"`
+	RowsMatched    int           `json:"rows_matched"`
+	IndexLookups   int           `json:"index_lookups"`
 }
 
 // type AggregateList []Aggregate
@@ -80,8 +84,8 @@ func (q *Query) Close() {
 		q.pkids = nil
 	}
 	if q.table != nil {
-		q.totalTime = time.Since(q.start)
-		if q.totalTime > QueryLogMinDuration {
+		q.stats.TotalTime = time.Since(q.start)
+		if q.stats.TotalTime > QueryLogMinDuration {
 			log.Warnf("%s", newLogClosure(func() string {
 				return q.PrintTiming()
 			}))
@@ -92,6 +96,10 @@ func (q *Query) Close() {
 	q.reqfields = nil
 }
 
+func (q *Query) Table() *Table {
+	return q.table
+}
+
 func (q *Query) Runtime() time.Duration {
 	return time.Since(q.start)
 }
@@ -99,15 +107,16 @@ func (q *Query) Runtime() time.Duration {
 func (q *Query) PrintTiming() string {
 	return fmt.Sprintf("query: %s compile=%s journal=%s index=%s scan=%s total=%s matched=%d rows, scheduled=%d packs, scanned=%d packs, searched=%d index rows",
 		q.Name,
-		q.compileTime,
-		q.journalTime,
-		q.indexTime,
-		q.scanTime,
-		q.totalTime,
-		q.rowsMatched,
-		q.packsScheduled,
-		q.packsScanned,
-		q.indexLookups)
+		q.stats.CompileTime,
+		q.stats.JournalTime,
+		q.stats.IndexTime,
+		q.stats.ScanTime,
+		q.stats.TotalTime,
+		q.stats.RowsMatched,
+		q.stats.PacksScheduled,
+		q.stats.PacksScanned,
+		q.stats.IndexLookups,
+	)
 }
 
 func (q *Query) Compile(t *Table) error {
@@ -136,10 +145,10 @@ func (q *Query) Compile(t *Table) error {
 
 	// check query can be processed
 	if err := q.Check(); err != nil {
-		q.totalTime = time.Since(q.lap)
+		q.stats.TotalTime = time.Since(q.lap)
 		return err
 	}
-	q.compileTime = time.Since(q.lap)
+	q.stats.CompileTime = time.Since(q.lap)
 	return nil
 }
 
@@ -211,7 +220,7 @@ func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 			q.Conditions[i].processed = true
 		}
 	}
-	q.indexLookups = len(q.pkids)
+	q.stats.IndexLookups = len(q.pkids)
 
 	// add new condition (pk match) and remove processed conditions
 	if len(q.pkids) > 0 {
@@ -233,7 +242,7 @@ func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 		q.Conditions = conds
 		q.Conditions[0].Compile()
 	}
-	q.indexTime = time.Since(q.lap)
+	q.stats.IndexTime = time.Since(q.lap)
 	return nil
 }
 
@@ -246,7 +255,7 @@ func (q *Query) MakePackSchedule(reverse bool) []int {
 			schedule = append(schedule, p.pos)
 		}
 	}
-	q.packsScheduled = len(schedule)
+	q.stats.PacksScheduled = len(schedule)
 	// reverse for descending walk
 	if reverse {
 		for l, r := 0, len(schedule)-1; l < r; l, r = l+1, r-1 {
@@ -282,6 +291,6 @@ func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
 			schedule[l], schedule[r] = schedule[r], schedule[l]
 		}
 	}
-	q.packsScheduled = len(schedule)
+	q.stats.PacksScheduled = len(schedule)
 	return schedule
 }
