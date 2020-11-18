@@ -306,7 +306,7 @@ func TestMatchInt32EqualGeneric(T *testing.T) {
 		}
 	}
 }
-
+*/
 func TestMatchInt32EqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -333,7 +333,7 @@ func TestMatchInt32EqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Equal benchmarks
@@ -365,7 +365,7 @@ func BenchmarkMatchInt32EqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt32EqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -381,7 +381,7 @@ func BenchmarkMatchInt32EqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Not Equal Testcases
@@ -465,7 +465,7 @@ func TestMatchInt32NotEqualGeneric(T *testing.T) {
 		}
 	}
 }
-
+*/
 func TestMatchInt32NotEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -492,7 +492,7 @@ func TestMatchInt32NotEqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Not Equal benchmarks
@@ -524,7 +524,7 @@ func BenchmarkMatchInt32NotEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt32NotEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -540,7 +540,7 @@ func BenchmarkMatchInt32NotEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less Testcases
@@ -623,7 +623,7 @@ func TestMatchInt32LessGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchInt32LessAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -651,7 +651,7 @@ func TestMatchInt32LessAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less benchmarks
@@ -683,7 +683,7 @@ func BenchmarkMatchInt32LessGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt32LessAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -699,7 +699,7 @@ func BenchmarkMatchInt32LessAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
@@ -783,7 +783,7 @@ func TestMatchInt32LessEqualGeneric(T *testing.T) {
 		}
 	}
 }
-
+*/
 func TestMatchInt32LessEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -810,7 +810,7 @@ func TestMatchInt32LessEqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
@@ -842,7 +842,7 @@ func BenchmarkMatchInt32LessEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt32LessEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -858,7 +858,7 @@ func BenchmarkMatchInt32LessEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
@@ -941,7 +941,7 @@ func TestMatchInt32GreaterGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchInt32GreaterAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -969,7 +969,7 @@ func TestMatchInt32GreaterAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater benchmarks
@@ -1001,7 +1001,7 @@ func BenchmarkMatchInt32GreaterGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt32GreaterAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -1017,7 +1017,7 @@ func BenchmarkMatchInt32GreaterAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
@@ -1100,7 +1100,7 @@ func TestMatchInt32GreaterEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchInt32GreaterEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -1128,7 +1128,7 @@ func TestMatchInt32GreaterEqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
@@ -1160,7 +1160,7 @@ func BenchmarkMatchInt32GreaterEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt32GreaterEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -1176,7 +1176,7 @@ func BenchmarkMatchInt32GreaterEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Between Testcases
@@ -1261,7 +1261,7 @@ func TestMatchInt32BetweenGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchInt32BetweenAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -1289,7 +1289,7 @@ func TestMatchInt32BetweenAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Between benchmarks
@@ -1322,7 +1322,7 @@ func BenchmarkMatchInt32BetweenGeneric(B *testing.B) {
 		})
 	}
 }
-
+*/
 func BenchmarkMatchInt32BetweenAVX512(B *testing.B) {
 	if !useAVX512_F {
 		B.SkipNow()
@@ -1337,7 +1337,7 @@ func BenchmarkMatchInt32BetweenAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------
 // Int32 Slice

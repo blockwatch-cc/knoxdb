@@ -91,7 +91,7 @@ var (
 	uint16BetweenTestMatch_1b uint16 = 10
 
 	// extreme values
-    uint16TestSlice_2 = []uint16{
+	uint16TestSlice_2 = []uint16{
 		0, math.MaxInt8, math.MaxUint8, math.MaxUint16,
 		0, math.MaxInt8, math.MaxUint8, math.MaxUint16,
 		0, math.MaxInt8, math.MaxUint8, math.MaxUint16,

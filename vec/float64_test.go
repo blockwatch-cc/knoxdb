@@ -893,7 +893,6 @@ func BenchmarkMatchFloat64LessEqualAVX2(B *testing.B) {
 	}
 }
 
-
 func BenchmarkMatchFloat64LessEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
 		B.SkipNow()
