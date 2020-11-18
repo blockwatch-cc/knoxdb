@@ -75,13 +75,13 @@ exit_big:
 	JLE		done
 
 prep_small:
-	VMOVDQU64		countup32<>+0x00(SB), Y9   // load counter mask
+	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
 // here we process 8 values (256 bit) in one step
 loop_small:
     // calculate mask
-    VPBROADCASTD    BX, Y11         // broadcast BX
-    VPCMPGTD        Y11, Y9, K2     // mask greater than BX
+    VPBROADCASTQ    BX, Z11         // broadcast BX
+    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
 	VPERMD.Z   	0(SI), Y10, K2, Y1 
@@ -174,13 +174,13 @@ exit_big:
 	JLE		done
 
 prep_small:
-	VMOVDQU64		countup32<>+0x00(SB), Y9   // load counter mask
+	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
 // here we process 8 values (256 bit) in one step
 loop_small:
     // calculate mask
-    VPBROADCASTD    BX, Y11         // broadcast BX
-    VPCMPGTD        Y11, Y9, K2     // mask greater than BX
+    VPBROADCASTQ    BX, Z11         // broadcast BX
+    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
 	VPERMD.Z   	0(SI), Y10, K2, Y1 
@@ -274,13 +274,13 @@ exit_big:
 	JLE		done
 
 prep_small:
-	VMOVDQU64		countup32<>+0x00(SB), Y9   // load counter mask
+	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
 // here we process 8 values (256 bit) in one step
 loop_small:
     // calculate mask
-    VPBROADCASTD    BX, Y11         // broadcast BX
-    VPCMPGTD        Y11, Y9, K2     // mask greater than BX
+    VPBROADCASTQ    BX, Z11         // broadcast BX
+    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
 	VPERMD.Z   	0(SI), Y10, K2, Y1 
@@ -372,13 +372,13 @@ exit_big:
 	JLE		done
 
 prep_small:
-	VMOVDQU64		countup32<>+0x00(SB), Y9   // load counter mask
+	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
 // here we process 8 values (256 bit) in one step
 loop_small:
     // calculate mask
-    VPBROADCASTD    BX, Y11         // broadcast BX
-    VPCMPGTD        Y11, Y9, K2     // mask greater than BX
+    VPBROADCASTQ    BX, Z11         // broadcast BX
+    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
 	VPERMD.Z   	0(SI), Y10, K2, Y1 
@@ -470,13 +470,13 @@ exit_big:
 	JLE		done
 
 prep_small:
-	VMOVDQU64		countup32<>+0x00(SB), Y9   // load counter mask
+	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
 // here we process 8 values (256 bit) in one step
 loop_small:
     // calculate mask
-    VPBROADCASTD    BX, Y11         // broadcast BX
-    VPCMPGTD        Y11, Y9, K2     // mask greater than BX
+    VPBROADCASTQ    BX, Z11         // broadcast BX
+    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
 	VPERMD.Z   	0(SI), Y10, K2, Y1 
@@ -568,13 +568,13 @@ exit_big:
 	JLE		done
 
 prep_small:
-	VMOVDQU64		countup32<>+0x00(SB), Y9   // load counter mask
+	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
 // here we process 8 values (256 bit) in one step
 loop_small:
     // calculate mask
-    VPBROADCASTD    BX, Y11         // broadcast BX
-    VPCMPGTD        Y11, Y9, K2     // mask greater than BX
+    VPBROADCASTQ    BX, Z11         // broadcast BX
+    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
 	VPERMD.Z   	0(SI), Y10, K2, Y1 
@@ -676,12 +676,13 @@ exit_big:
 	JLE		done
 
 prep_small:
-	VMOVDQU64		countup32<>+0x00(SB), Y9   // load counter mask
+	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
+// here we process 8 values (256 bit) in one step
 loop_small:
     // calculate mask
-    VPBROADCASTD    BX, Y11         // broadcast BX
-    VPCMPGTD        Y11, Y9, K2     // mask greater than BX
+    VPBROADCASTQ    BX, Z11         // broadcast BX
+    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
 	VPERMD.Z   	0(SI), Y10, K2, Y1 

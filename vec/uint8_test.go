@@ -36,26 +36,26 @@ var (
 		42, 5, 113, 12, // Y8
 	}
 	uint8EqualTestMatch_0  uint8 = 5
-	uint8EqualTestResult_0        = []byte{0x56, 0x78, 0x12, 0x34}
+	uint8EqualTestResult_0       = []byte{0x56, 0x78, 0x12, 0x34}
 
 	uint8NotEqualTestMatch_0  uint8 = 5
-	uint8NotEqualTestResult_0        = []byte{0xa9, 0x87, 0xed, 0xcb}
+	uint8NotEqualTestResult_0       = []byte{0xa9, 0x87, 0xed, 0xcb}
 
 	uint8LessTestMatch_0  uint8 = 5
-	uint8LessTestResult_0        = []byte{0xa0, 0x84, 0xe4, 0x80}
+	uint8LessTestResult_0       = []byte{0xa0, 0x84, 0xe4, 0x80}
 
 	uint8LessEqualTestMatch_0  uint8 = 5
-	uint8LessEqualTestResult_0        = []byte{0xf6, 0xfc, 0xf6, 0xb4}
+	uint8LessEqualTestResult_0       = []byte{0xf6, 0xfc, 0xf6, 0xb4}
 
 	uint8GreaterTestMatch_0  uint8 = 5
-	uint8GreaterTestResult_0        = []byte{0x09, 0x03, 0x09, 0x4b}
+	uint8GreaterTestResult_0       = []byte{0x09, 0x03, 0x09, 0x4b}
 
 	uint8GreaterEqualTestMatch_0  uint8 = 5
-	uint8GreaterEqualTestResult_0        = []byte{0x5f, 0x7b, 0x1b, 0x7f}
+	uint8GreaterEqualTestResult_0       = []byte{0x5f, 0x7b, 0x1b, 0x7f}
 
 	uint8BetweenTestMatch_0  uint8 = 5
 	uint8BetweenTestMatch_0b uint8 = 10
-	uint8BetweenTestResult_0        = []byte{0x5f, 0x78, 0x1b, 0x34}
+	uint8BetweenTestResult_0       = []byte{0x5f, 0x78, 0x1b, 0x34}
 
 	uint8TestSlice_1 = []uint8{
 		5, 2, 3, 4,
@@ -68,30 +68,30 @@ var (
 		39, 40, 41, 42,
 	}
 
-	uint8EqualTestResult_1        = []byte{0x82, 0x42, 0x23, 0x70}
+	uint8EqualTestResult_1       = []byte{0x82, 0x42, 0x23, 0x70}
 	uint8EqualTestMatch_1  uint8 = 5
 
-	uint8NotEqualTestResult_1        = []byte{0x7d, 0xbd, 0xdc, 0x8f}
+	uint8NotEqualTestResult_1       = []byte{0x7d, 0xbd, 0xdc, 0x8f}
 	uint8NotEqualTestMatch_1  uint8 = 5
 
-	uint8LessTestResult_1        = []byte{0x70, 0x00, 0x00, 0x00}
+	uint8LessTestResult_1       = []byte{0x70, 0x00, 0x00, 0x00}
 	uint8LessTestMatch_1  uint8 = 5
 
-	uint8LessEqualTestResult_1        = []byte{0xf2, 0x42, 0x23, 0x70}
+	uint8LessEqualTestResult_1       = []byte{0xf2, 0x42, 0x23, 0x70}
 	uint8LessEqualTestMatch_1  uint8 = 5
 
-	uint8GreaterTestResult_1        = []byte{0x0d, 0xbd, 0xdc, 0x8f}
+	uint8GreaterTestResult_1       = []byte{0x0d, 0xbd, 0xdc, 0x8f}
 	uint8GreaterTestMatch_1  uint8 = 5
 
-	uint8GreaterEqualTestResult_1        = []byte{0x8f, 0xff, 0xff, 0xff}
+	uint8GreaterEqualTestResult_1       = []byte{0x8f, 0xff, 0xff, 0xff}
 	uint8GreaterEqualTestMatch_1  uint8 = 5
 
-	uint8BetweenTestResult_1        = []byte{0x8f, 0x42, 0x23, 0x70}
+	uint8BetweenTestResult_1       = []byte{0x8f, 0x42, 0x23, 0x70}
 	uint8BetweenTestMatch_1  uint8 = 5
 	uint8BetweenTestMatch_1b uint8 = 10
 
 	// extreme values
-    uint8TestSlice_2 = []uint8{
+	uint8TestSlice_2 = []uint8{
 		0, math.MaxInt8 / 2, math.MaxInt8, math.MaxUint8,
 		0, math.MaxInt8 / 2, math.MaxInt8, math.MaxUint8,
 		0, math.MaxInt8 / 2, math.MaxInt8, math.MaxUint8,
@@ -101,25 +101,25 @@ var (
 		0, math.MaxInt8 / 2, math.MaxInt8, math.MaxUint8,
 		0, math.MaxInt8 / 2, math.MaxInt8, math.MaxUint8,
 	}
-	uint8EqualTestResult_2        = []byte{0x11, 0x11, 0x11, 0x11}
+	uint8EqualTestResult_2       = []byte{0x11, 0x11, 0x11, 0x11}
 	uint8EqualTestMatch_2  uint8 = math.MaxUint8
 
-	uint8NotEqualTestResult_2        = []byte{0xee, 0xee, 0xee, 0xee}
+	uint8NotEqualTestResult_2       = []byte{0xee, 0xee, 0xee, 0xee}
 	uint8NotEqualTestMatch_2  uint8 = math.MaxUint8
 
-	uint8LessTestResult_2        = []byte{0xee, 0xee, 0xee, 0xee}
+	uint8LessTestResult_2       = []byte{0xee, 0xee, 0xee, 0xee}
 	uint8LessTestMatch_2  uint8 = math.MaxUint8
 
-	uint8LessEqualTestResult_2        = []byte{0xff, 0xff, 0xff, 0xff}
+	uint8LessEqualTestResult_2       = []byte{0xff, 0xff, 0xff, 0xff}
 	uint8LessEqualTestMatch_2  uint8 = math.MaxUint8
 
-	uint8GreaterTestResult_2        = []byte{0x00, 0x00, 0x00, 0x00}
+	uint8GreaterTestResult_2       = []byte{0x00, 0x00, 0x00, 0x00}
 	uint8GreaterTestMatch_2  uint8 = math.MaxUint8
 
-	uint8GreaterEqualTestResult_2        = []byte{0x11, 0x11, 0x11, 0x11}
+	uint8GreaterEqualTestResult_2       = []byte{0x11, 0x11, 0x11, 0x11}
 	uint8GreaterEqualTestMatch_2  uint8 = math.MaxUint8
 
-	uint8BetweenTestResult_2        = []byte{0x33, 0x33, 0x33, 0x33}
+	uint8BetweenTestResult_2       = []byte{0x33, 0x33, 0x33, 0x33}
 	uint8BetweenTestMatch_2  uint8 = math.MaxInt8
 	uint8BetweenTestMatch_2b uint8 = math.MaxUint8
 )

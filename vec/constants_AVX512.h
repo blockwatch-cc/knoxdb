@@ -47,7 +47,7 @@ GLOBL countup64<>(SB), (RODATA+NOPTR), $64
 
 // counter vector for calculating the bitmask for non fullfilled registers
 // used by all compare algorithms
-DATA countup32<>+0x00(SB)/4, $(8)
+/*DATA countup32<>+0x00(SB)/4, $(8)
 DATA countup32<>+0x04(SB)/4,  $(7)
 DATA countup32<>+0x08(SB)/4, $(6)
 DATA countup32<>+0x0C(SB)/4, $(5)
@@ -56,3 +56,4 @@ DATA countup32<>+0x14(SB)/4, $(3)
 DATA countup32<>+0x18(SB)/4, $(2)
 DATA countup32<>+0x1C(SB)/4, $(1)
 GLOBL countup32<>(SB), (RODATA+NOPTR), $32
+*/
