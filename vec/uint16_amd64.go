@@ -27,6 +27,27 @@ func matchUint16GreaterThanEqualAVX2(src []uint16, val uint16, bits []byte) int6
 //go:noescape
 func matchUint16BetweenAVX2(src []uint16, a, b uint16, bits []byte) int64
 */
+//go:noescape
+func matchUint16EqualAVX512(src []uint16, val uint16, bits []byte) int64
+
+//go:noescape
+func matchUint16NotEqualAVX512(src []uint16, val uint16, bits []byte) int64
+
+//go:noescape
+func matchUint16LessThanAVX512(src []uint16, val uint16, bits []byte) int64
+
+//go:noescape
+func matchUint16LessThanEqualAVX512(src []uint16, val uint16, bits []byte) int64
+
+//go:noescape
+func matchUint16GreaterThanAVX512(src []uint16, val uint16, bits []byte) int64
+
+//go:noescape
+func matchUint16GreaterThanEqualAVX512(src []uint16, val uint16, bits []byte) int64
+
+//go:noescape
+func matchUint16BetweenAVX512(src []uint16, a, b uint16, bits []byte) int64
+
 func matchUint16Equal(src []uint16, val uint16, bits []byte) int64 {
 	switch {
 	case useAVX2:
