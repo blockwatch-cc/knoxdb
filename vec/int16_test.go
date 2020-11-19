@@ -305,7 +305,7 @@ func TestMatchInt16EqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchInt16EqualAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -333,7 +333,7 @@ func TestMatchInt16EqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Equal benchmarks
@@ -365,7 +365,7 @@ func BenchmarkMatchInt16EqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt16EqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -381,7 +381,7 @@ func BenchmarkMatchInt16EqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Not Equal Testcases
@@ -464,7 +464,7 @@ func TestMatchInt16NotEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchInt16NotEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -492,7 +492,7 @@ func TestMatchInt16NotEqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Not Equal benchmarks
@@ -524,7 +524,7 @@ func BenchmarkMatchInt16NotEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt16NotEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -540,7 +540,7 @@ func BenchmarkMatchInt16NotEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less Testcases
@@ -623,7 +623,7 @@ func TestMatchInt16LessGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchInt16LessAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -651,7 +651,7 @@ func TestMatchInt16LessAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less benchmarks
@@ -683,7 +683,7 @@ func BenchmarkMatchInt16LessGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt16LessAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -699,7 +699,7 @@ func BenchmarkMatchInt16LessAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
@@ -782,7 +782,7 @@ func TestMatchInt16LessEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchInt16LessEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -810,7 +810,7 @@ func TestMatchInt16LessEqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
@@ -842,7 +842,7 @@ func BenchmarkMatchInt16LessEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt16LessEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -858,7 +858,7 @@ func BenchmarkMatchInt16LessEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
@@ -941,7 +941,7 @@ func TestMatchInt16GreaterGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchInt16GreaterAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -969,7 +969,7 @@ func TestMatchInt16GreaterAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater benchmarks
@@ -1001,7 +1001,7 @@ func BenchmarkMatchInt16GreaterGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt16GreaterAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -1017,7 +1017,7 @@ func BenchmarkMatchInt16GreaterAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
@@ -1100,7 +1100,7 @@ func TestMatchInt16GreaterEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchInt16GreaterEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -1128,7 +1128,7 @@ func TestMatchInt16GreaterEqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
@@ -1160,7 +1160,7 @@ func BenchmarkMatchInt16GreaterEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt16GreaterEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -1176,7 +1176,7 @@ func BenchmarkMatchInt16GreaterEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Between Testcases
@@ -1261,7 +1261,7 @@ func TestMatchInt16BetweenGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchInt16BetweenAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -1289,7 +1289,7 @@ func TestMatchInt16BetweenAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Between benchmarks
@@ -1321,7 +1321,7 @@ func BenchmarkMatchInt16BetweenGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchInt16BetweenAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -1337,7 +1337,7 @@ func BenchmarkMatchInt16BetweenAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------
 // Int16 Slice
