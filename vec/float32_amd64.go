@@ -26,7 +26,7 @@ func matchFloat32GreaterThanEqualAVX2(src []float32, val float32, bits []byte) i
 
 //go:noescape
 func matchFloat32BetweenAVX2(src []float32, a, b float32, bits []byte) int64
-
+*/
 //go:noescape
 func matchFloat32EqualAVX512(src []float32, val float32, bits []byte) int64
 
@@ -47,7 +47,7 @@ func matchFloat32GreaterThanEqualAVX512(src []float32, val float32, bits []byte)
 
 //go:noescape
 func matchFloat32BetweenAVX512(src []float32, a, b float32, bits []byte) int64
-*/
+
 func matchFloat32Equal(src []float32, val float32, bits []byte) int64 {
 	/*	switch {
 		case useAVX512_F:
