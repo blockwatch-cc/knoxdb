@@ -5,10 +5,10 @@
 
 package vec
 
+/*
 //go:noescape
 func matchUint8EqualAVX2(src []uint8, val uint8, bits []byte) int64
 
-/*
 //go:noescape
 func matchUint8NotEqualAVX2(src []uint8, val uint8, bits []byte) int64
 
@@ -52,63 +52,75 @@ func matchUint8Equal(src []uint8, val uint8, bits []byte) int64 {
 	switch {
 	case useAVX512_BW:
 		return matchUint8EqualAVX512(src, val, bits)
-	case useAVX2:
-		return matchUint8EqualAVX2(src, val, bits)
+		//	case useAVX2:
+		//		return matchUint8EqualAVX2(src, val, bits)
 	default:
 		return matchUint8EqualGeneric(src, val, bits)
 	}
 }
 
 func matchUint8NotEqual(src []uint8, val uint8, bits []byte) int64 {
-	//switch {
+	switch {
+	case useAVX512_BW:
+		return matchUint8NotEqualAVX512(src, val, bits)
 	//case useAVX2:
 	//	return matchUint8NotEqualAVX2(src, val, bits)
-	//default:
-	return matchUint8NotEqualGeneric(src, val, bits)
-	//}
+	default:
+		return matchUint8NotEqualGeneric(src, val, bits)
+	}
 }
 
 func matchUint8LessThan(src []uint8, val uint8, bits []byte) int64 {
-	//switch {
+	switch {
+	case useAVX512_BW:
+		return matchUint8LessThanAVX512(src, val, bits)
 	//case useAVX2:
 	//	return matchUint8LessThanAVX2(src, val, bits)
-	//default:
-	return matchUint8LessThanGeneric(src, val, bits)
-	//}
+	default:
+		return matchUint8LessThanGeneric(src, val, bits)
+	}
 }
 
 func matchUint8LessThanEqual(src []uint8, val uint8, bits []byte) int64 {
-	//switch {
+	switch {
+	case useAVX512_BW:
+		return matchUint8LessThanEqualAVX512(src, val, bits)
 	//case useAVX2:
 	//	return matchUint8LessThanEqualAVX2(src, val, bits)
-	//default:
-	return matchUint8LessThanEqualGeneric(src, val, bits)
-	//}
+	default:
+		return matchUint8LessThanEqualGeneric(src, val, bits)
+	}
 }
 
 func matchUint8GreaterThan(src []uint8, val uint8, bits []byte) int64 {
-	//switch {
+	switch {
+	case useAVX512_BW:
+		return matchUint8GreaterThanAVX512(src, val, bits)
 	//case useAVX2:
 	//	return matchUint8GreaterThanAVX2(src, val, bits)
-	//default:
-	return matchUint8GreaterThanGeneric(src, val, bits)
-	//}
+	default:
+		return matchUint8GreaterThanGeneric(src, val, bits)
+	}
 }
 
 func matchUint8GreaterThanEqual(src []uint8, val uint8, bits []byte) int64 {
-	//switch {
+	switch {
+	case useAVX512_BW:
+		return matchUint8GreaterThanEqualAVX512(src, val, bits)
 	//case useAVX2:
 	//	return matchUint8GreaterThanEqualAVX2(src, val, bits)
-	//default:
-	return matchUint8GreaterThanEqualGeneric(src, val, bits)
-	//}
+	default:
+		return matchUint8GreaterThanEqualGeneric(src, val, bits)
+	}
 }
 
 func matchUint8Between(src []uint8, a, b uint8, bits []byte) int64 {
-	//switch {
+	switch {
+	case useAVX512_BW:
+		return matchUint8BetweenAVX512(src, a, b, bits)
 	//case useAVX2:
 	//	return matchUint8BetweenAVX2(src, a, b, bits)
-	//default:
-	return matchUint8BetweenGeneric(src, a, b, bits)
-	//}
+	default:
+		return matchUint8BetweenGeneric(src, a, b, bits)
+	}
 }
