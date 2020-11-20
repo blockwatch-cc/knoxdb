@@ -264,9 +264,9 @@ func TestMatchUint8EqualGeneric(T *testing.T) {
 		}
 	}
 }
-
+*/
 func TestMatchUint8EqualAVX512(T *testing.T) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		T.SkipNow()
 	}
 	for _, c := range uint8EqualCases {
@@ -291,7 +291,7 @@ func TestMatchUint8EqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Equal benchmarks
@@ -323,10 +323,10 @@ func BenchmarkMatchUint8EqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchUint8EqualAVX512(B *testing.B) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
@@ -339,7 +339,7 @@ func BenchmarkMatchUint8EqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // NotEqual Testcases
@@ -421,10 +421,10 @@ func TestMatchUint8NotEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchUint8NotEqualAVX512(T *testing.T) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		T.SkipNow()
 	}
 	for _, c := range uint8NotEqualCases {
@@ -449,7 +449,7 @@ func TestMatchUint8NotEqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // NotEqual benchmarks
@@ -481,10 +481,10 @@ func BenchmarkMatchUint8NotEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchUint8NotEqualAVX512(B *testing.B) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
@@ -497,7 +497,7 @@ func BenchmarkMatchUint8NotEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less Testcases
@@ -579,10 +579,10 @@ func TestMatchUint8LessGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchUint8LessAVX512(T *testing.T) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		T.SkipNow()
 	}
 	for _, c := range uint8LessCases {
@@ -607,7 +607,7 @@ func TestMatchUint8LessAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less benchmarks
@@ -639,10 +639,10 @@ func BenchmarkMatchUint8LessGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchUint8LessAVX512(B *testing.B) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
@@ -655,7 +655,7 @@ func BenchmarkMatchUint8LessAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
@@ -737,10 +737,10 @@ func TestMatchUint8LessEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchUint8LessEqualAVX512(T *testing.T) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		T.SkipNow()
 	}
 	for _, c := range uint8LessEqualCases {
@@ -765,7 +765,7 @@ func TestMatchUint8LessEqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
@@ -797,10 +797,10 @@ func BenchmarkMatchUint8LessEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchUint8LessEqualAVX512(B *testing.B) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
@@ -813,7 +813,7 @@ func BenchmarkMatchUint8LessEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
@@ -895,10 +895,10 @@ func TestMatchUint8GreaterGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchUint8GreaterAVX512(T *testing.T) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		T.SkipNow()
 	}
 	for _, c := range uint8GreaterCases {
@@ -923,7 +923,7 @@ func TestMatchUint8GreaterAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater benchmarks
@@ -955,10 +955,10 @@ func BenchmarkMatchUint8GreaterGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchUint8GreaterAVX512(B *testing.B) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
@@ -971,7 +971,7 @@ func BenchmarkMatchUint8GreaterAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
@@ -1053,10 +1053,10 @@ func TestMatchUint8GreaterEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchUint8GreaterEqualAVX512(T *testing.T) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		T.SkipNow()
 	}
 	for _, c := range uint8GreaterEqualCases {
@@ -1081,7 +1081,7 @@ func TestMatchUint8GreaterEqualAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
@@ -1113,10 +1113,10 @@ func BenchmarkMatchUint8GreaterEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchUint8GreaterEqualAVX512(B *testing.B) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
@@ -1129,7 +1129,7 @@ func BenchmarkMatchUint8GreaterEqualAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Between Testcases
@@ -1212,10 +1212,10 @@ func TestMatchUint8BetweenGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}
+}*/
 
 func TestMatchUint8BetweenAVX512(T *testing.T) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		T.SkipNow()
 	}
 	for _, c := range uint8BetweenCases {
@@ -1240,7 +1240,7 @@ func TestMatchUint8BetweenAVX512(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Between benchmarks
@@ -1272,10 +1272,10 @@ func BenchmarkMatchUint8BetweenGeneric(B *testing.B) {
 			}
 		})
 	}
-}
+}*/
 
 func BenchmarkMatchUint8BetweenAVX512(B *testing.B) {
-	if !useAVX512_F {
+	if !useAVX512_BW {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
@@ -1288,7 +1288,7 @@ func BenchmarkMatchUint8BetweenAVX512(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------
 // Uint8 Slice

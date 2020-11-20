@@ -5,7 +5,7 @@
 
 #include "textflag.h"
 #include "constants.h"
-
+/*
 // func matchUint8EqualAVX2(src []uint8, val uint8, bits []byte) int64
 //
 // input:
@@ -30,6 +30,7 @@ TEXT ·matchUint8EqualAVX2(SB), NOSPLIT, $0-57
 	JLE		done
 	CMPQ	BX, $31      // slices smaller than 32 byte are handled separately
 	JBE		prep_scalar
+
     MOVQ    BX, CX
     ANDQ    $0x1f, BX
     ANDQ    $0xffffffffffffffe0, CX
@@ -1213,3 +1214,4 @@ done:
 	MOVQ	R9, ret+64(FP)
 	RET
 
+*/

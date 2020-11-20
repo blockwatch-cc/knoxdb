@@ -8,9 +8,6 @@ package vec
 //go:noescape
 func matchUint8EqualAVX2(src []uint8, val uint8, bits []byte) int64
 
-//go:noescape
-func matchUint8EqualAVX512(src []uint8, val uint8, bits []byte) int64
-
 /*
 //go:noescape
 func matchUint8NotEqualAVX2(src []uint8, val uint8, bits []byte) int64
@@ -30,6 +27,27 @@ func matchUint8GreaterThanEqualAVX2(src []uint8, val uint8, bits []byte) int64
 //go:noescape
 func matchUint8BetweenAVX2(src []uint8, a, b uint8, bits []byte) int64
 */
+//go:noescape
+func matchUint8EqualAVX512(src []uint8, val uint8, bits []byte) int64
+
+//go:noescape
+func matchUint8NotEqualAVX512(src []uint8, val uint8, bits []byte) int64
+
+//go:noescape
+func matchUint8LessThanAVX512(src []uint8, val uint8, bits []byte) int64
+
+//go:noescape
+func matchUint8LessThanEqualAVX512(src []uint8, val uint8, bits []byte) int64
+
+//go:noescape
+func matchUint8GreaterThanAVX512(src []uint8, val uint8, bits []byte) int64
+
+//go:noescape
+func matchUint8GreaterThanEqualAVX512(src []uint8, val uint8, bits []byte) int64
+
+//go:noescape
+func matchUint8BetweenAVX512(src []uint8, a, b uint8, bits []byte) int64
+
 func matchUint8Equal(src []uint8, val uint8, bits []byte) int64 {
 	switch {
 	case useAVX512_BW:
