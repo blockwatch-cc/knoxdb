@@ -63,16 +63,16 @@ exit_big:
 prep_small:
 	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
-// here we process 8 values (256 bit) in one step
+// here we process 8 values (8 byte) in one step
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
     VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
     
-    VMOVDQU8    0(SI), X1
-	VPSHUFB.Z   X10, X1, K2, X1 
-	VPCMPEQB	X1, X0, K2, K1
+    VMOVDQU8    0(SI), Z1
+	VPSHUFB.Z   Z10, Z1, K2, Z1 
+	VPCMPEQB	Z1, Z0, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
@@ -149,16 +149,16 @@ exit_big:
 prep_small:
 	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
-// here we process 8 values (256 bit) in one step
+// here we process 8 values (8 byte) in one step
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
     VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
-    VMOVDQU8    0(SI), X1
-	VPSHUFB.Z   X10, X1, K2, X1 
-	VPCMPEQB	X1, X0, K2, K1
+    VMOVDQU8    0(SI), Z1
+	VPSHUFB.Z   Z10, Z1, K2, Z1 
+	VPCMPEQB	Z1, Z0, K2, K1
     KNOTB       K1, K1      // make EQ to NE
     KANDB       K1, K2, K1  // delete the unused bits
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
@@ -236,16 +236,16 @@ exit_big:
 prep_small:
 	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
-// here we process 8 values (256 bit) in one step
+// here we process 8 values (8 byte) in one step
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
     VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
-    VMOVDQU8    0(SI), X1
-	VPSHUFB.Z   X10, X1, K2, X1 
-	VPCMPUB	    $1, Y0, Y1, K2, K1
+    VMOVDQU8    0(SI), Z1
+	VPSHUFB.Z   Z10, Z1, K2, Z1 
+	VPCMPUB	    $1, Z0, Z1, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
@@ -321,16 +321,16 @@ exit_big:
 prep_small:
 	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
-// here we process 8 values (256 bit) in one step
+// here we process 8 values (8 byte) in one step
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
     VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
-    VMOVDQU8    0(SI), X1
-	VPSHUFB.Z   X10, X1, K2, X1 
-	VPCMPUB	    $2, Y0, Y1, K2, K1
+    VMOVDQU8    0(SI), Z1
+	VPSHUFB.Z   Z10, Z1, K2, Z1 
+	VPCMPUB	    $2, Z0, Z1, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
@@ -406,16 +406,16 @@ exit_big:
 prep_small:
 	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
-// here we process 8 values (256 bit) in one step
+// here we process 8 values (8 byte) in one step
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
     VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
-    VMOVDQU8    0(SI), X1
-	VPSHUFB.Z   X10, X1, K2, X1 
-	VPCMPUB	    $6, Y0, Y1, K2, K1
+    VMOVDQU8    0(SI), Z1
+	VPSHUFB.Z   Z10, Z1, K2, Z1 
+	VPCMPUB	    $6, Z0, Z1, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
@@ -491,16 +491,16 @@ exit_big:
 prep_small:
 	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
-// here we process 8 values (256 bit) in one step
+// here we process 8 values (8 byte) in one step
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
     VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
-    VMOVDQU8    0(SI), X1
-	VPSHUFB.Z   X10, X1, K2, X1 
-	VPCMPUB	    $5, Y0, Y1, K2, K1
+    VMOVDQU8    0(SI), Z1
+	VPSHUFB.Z   Z10, Z1, K2, Z1 
+	VPCMPUB	    $5, Z0, Z1, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
@@ -583,17 +583,17 @@ exit_big:
 prep_small:
 	VMOVDQU64		countup64<>+0x00(SB), Z9   // load counter mask
 
-// here we process 8 values (256 bit) in one step
+// here we process 8 values (8 byte) in one step
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
     VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
     KNOTB           K2, K2          // use lower equal than BX
 
-    VMOVDQU8    0(SI), X1
-	VPSHUFB.Z   X10, X1, K2, X1 
-	VPSUBB		Y12, Y1, K2, Y1
-	VPCMPUB	    $1, Y0, Y1, K2, K1
+    VMOVDQU8    0(SI), Z1
+	VPSHUFB.Z   Z10, Z1, K2, Z1 
+	VPSUBB		Z12, Z1, K2, Z1
+	VPCMPUB	    $1, Z0, Z1, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
