@@ -53,7 +53,7 @@ loop_big:
 
 	VPERMQ   	128(SI), Z10, Z3
 	VPCMPEQQ	Z3, Z0, K3
-    KSHIFTLD    $16, K3, K3
+    KSHIFTLQ    $16, K3, K3
     KORQ        K1, K3, K1
 
 	VPERMQ   	192(SI), Z10, Z4
@@ -170,7 +170,7 @@ loop_big:
 
 	VPERMQ   	128(SI), Z10, Z3
 	VPCMPEQQ	Z3, Z0, K3
-    KSHIFTLD    $16, K3, K3
+    KSHIFTLQ    $16, K3, K3
     KORQ        K1, K3, K1
 
 	VPERMQ   	192(SI), Z10, Z4
@@ -290,7 +290,7 @@ loop_big:
 
 	VPERMQ   	128(SI), Z10, Z3
 	VPCMPQ	    $1, Z0, Z3, K3
-    KSHIFTLD    $16, K3, K3
+    KSHIFTLQ    $16, K3, K3
     KORQ        K1, K3, K1
 
 	VPERMQ   	192(SI), Z10, Z4
@@ -407,7 +407,7 @@ loop_big:
 
 	VPERMQ   	128(SI), Z10, Z3
 	VPCMPQ	    $2, Z0, Z3, K3
-    KSHIFTLD    $16, K3, K3
+    KSHIFTLQ    $16, K3, K3
     KORQ        K1, K3, K1
 
 	VPERMQ   	192(SI), Z10, Z4
@@ -524,7 +524,7 @@ loop_big:
 
 	VPERMQ   	128(SI), Z10, Z3
 	VPCMPQ	    $6, Z0, Z3, K3
-    KSHIFTLD    $16, K3, K3
+    KSHIFTLQ    $16, K3, K3
     KORQ        K1, K3, K1
 
 	VPERMQ   	192(SI), Z10, Z4
@@ -641,7 +641,7 @@ loop_big:
 
 	VPERMQ   	128(SI), Z10, Z3
 	VPCMPQ	    $5, Z0, Z3, K3
-    KSHIFTLD    $16, K3, K3
+    KSHIFTLQ    $16, K3, K3
     KORQ        K1, K3, K1
 
 	VPERMQ   	192(SI), Z10, Z4
@@ -767,7 +767,7 @@ loop_big:
 	VPERMQ   	128(SI), Z10, Z3
 	VPSUBQ		Z12, Z3, Z3
 	VPCMPUQ	    $1, Z0, Z3, K3
-    KSHIFTLD    $16, K3, K3
+    KSHIFTLQ    $16, K3, K3
     KORQ        K1, K3, K1
 
 	VPERMQ   	192(SI), Z10, Z4
