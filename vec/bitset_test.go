@@ -34,7 +34,7 @@ type bitSetBenchmarkSize struct {
 
 var bitSetSizes = []int{
 	7, 8, 9, 15, 16, 17, 23, 24, 25, 31, 32, 33,
-	63, 64, 65, 127, 128, 129, 255, 256, 257,
+	63, 64, 65, 127, 128, 129, 255, 256, 257, 512, 1024,
 }
 
 var bitSetBenchmarkSizes = []bitSetBenchmarkSize{
@@ -106,6 +106,22 @@ func fillBitset(buf []byte, size int, val byte) []byte {
 	}
 	buf[0] = val
 	for bp := 1; bp < len(buf); bp *= 2 {
+		copy(buf[bp:], buf[:bp])
+	}
+	buf[len(buf)-1] &= bitmask(size)
+	return buf
+}
+
+func fillBitsetSaw(buf []byte, size int) []byte {
+	if len(buf) == 0 {
+		buf = make([]byte, bitFieldLen(size))
+	}
+    // generate the first sawtooth
+	for i := 0; i < 256 && i < len(buf); i++ {
+        buf[i] = byte(i)
+    }
+    // concat again and again, we make it one shorter to avoid a symetric vector
+	for bp := 256; bp < len(buf); bp = 2*bp-1 {
 		copy(buf[bp:], buf[:bp])
 	}
 	buf[len(buf)-1] &= bitmask(size)
@@ -977,6 +993,26 @@ func TestBitSetReverse(T *testing.T) {
 			if bytes.Compare(bits.Bytes(), cmp) != 0 {
 				T.Errorf("%d_%d: unexpected result %x, expected %x", sz, pt, bits.Bytes(), cmp)
 			}
+		}
+	}
+}
+
+func TestBitSetReverseAVX2(T *testing.T) {
+	for _, sz := range bitSetSizes {
+        bits := fillBitsetSaw(nil, sz)
+        cmp := make([]byte, len(bits))
+        copy(cmp, bits)
+        bitsetReverseGeneric(cmp)
+        bitsetReverseAVX2(bits)
+
+        if got, want := len(bits), len(cmp); got != want {
+			T.Errorf("%d: unexpected buf length %d, expected %d", sz, got, want)
+		}
+		if got, want := popcount(bits), popcount(cmp); got != want {
+			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
+		}
+        if bytes.Compare(bits, cmp) != 0 {
+			T.Errorf("%d: unexpected result %x, expected %x", sz, bits, cmp)
 		}
 	}
 }
@@ -2188,14 +2224,27 @@ func BenchmarkBitSetNotAVX2(B *testing.B) {
 // BenchmarkBitSetReverse/16M-8        	    1216	    979544 ns/op	2140.95 MB/s
 // BenchmarkBitSetReverse/128M-8       	     147	   7965933 ns/op	2106.12 MB/s
 // BenchmarkBitSetReverse/512M-8       	      33	  33553682 ns/op	2000.04 MB/s
-func BenchmarkBitSetReverse(B *testing.B) {
+func BenchmarkBitSetReverseGeneric(B *testing.B) {
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			B.ResetTimer()
 			B.SetBytes(int64(bitFieldLen(n.l)))
 			for i := 0; i < B.N; i++ {
-				bitsetReverse(bits)
+				bitsetReverseGeneric(bits)
+			}
+		})
+	}
+}
+
+func BenchmarkBitSetReverseAVX2(B *testing.B) {
+	for _, n := range bitSetBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			bits := fillBitset(nil, n.l, 0xfa)
+			B.ResetTimer()
+			B.SetBytes(int64(bitFieldLen(n.l)))
+			for i := 0; i < B.N; i++ {
+				bitsetReverseAVX2(bits)
 			}
 		})
 	}

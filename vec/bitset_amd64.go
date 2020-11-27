@@ -25,6 +25,9 @@ func bitsetXorAVX2(dst, src []byte)
 func bitsetNegAVX2(src []byte)
 
 //go:noescape
+func bitsetReverseAVX2(src []byte)
+
+//go:noescape
 func bitsetPopCountAVX2(src []byte) int64
 
 //go:noescape
