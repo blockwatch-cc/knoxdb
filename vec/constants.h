@@ -335,8 +335,8 @@ DATA shuffle64_new<>+0x1e(SB)/1, $(11)
 DATA shuffle64_new<>+0x1f(SB)/1, $(10)
 GLOBL shuffle64_new<>(SB), (RODATA+NOPTR), $32
 
-// LUT_reverse is the VPSHUFB input required to spread bytes in each word
-// used by all compare algorithms
+// LUT_reverse is look up table for reverting nibbles
+// used by bitset revert algorithm
 DATA LUT_reverse<>+0x00(SB)/1, $(0)
 DATA LUT_reverse<>+0x01(SB)/1, $(8)
 DATA LUT_reverse<>+0x02(SB)/1, $(4)
@@ -372,10 +372,6 @@ DATA LUT_reverse<>+0x1f(SB)/1, $(15)
 GLOBL LUT_reverse<>(SB), (RODATA+NOPTR), $32
 
 // perm_reverse is the VPERMQ input required to revert qwords within YMM-register
-/*DATA perm_reverse<>+0x00(SB)/1, $(0xe4)
-GLOBL perm_reverse<>(SB), (RODATA+NOPTR), $1
-*/
-
 DATA perm_reverse<>+0x00(SB)/4, $(6)
 DATA perm_reverse<>+0x04(SB)/4, $(7)
 DATA perm_reverse<>+0x08(SB)/4, $(4)

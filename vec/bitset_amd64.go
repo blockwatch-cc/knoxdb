@@ -90,7 +90,7 @@ func bitsetNeg(src []byte, size int) {
 func bitsetReverse(src []byte) {
 	switch {
 	case useAVX2:
-		bitsetReverseGeneric(src)
+		bitsetReverseAVX2(src)
 	default:
 		bitsetReverseGeneric(src)
 	}

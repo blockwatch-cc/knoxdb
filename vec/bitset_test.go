@@ -116,12 +116,12 @@ func fillBitsetSaw(buf []byte, size int) []byte {
 	if len(buf) == 0 {
 		buf = make([]byte, bitFieldLen(size))
 	}
-    // generate the first sawtooth
+	// generate the first sawtooth
 	for i := 0; i < 256 && i < len(buf); i++ {
-        buf[i] = byte(i)
-    }
-    // concat again and again, we make it one shorter to avoid a symetric vector
-	for bp := 256; bp < len(buf); bp = 2*bp-1 {
+		buf[i] = byte(i)
+	}
+	// concat again and again, we make it one shorter to avoid a symetric vector
+	for bp := 256; bp < len(buf); bp = 2*bp - 1 {
 		copy(buf[bp:], buf[:bp])
 	}
 	buf[len(buf)-1] &= bitmask(size)
@@ -968,30 +968,30 @@ func TestBitSetReverse(T *testing.T) {
 
 			bits.Reverse()
 			if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
-				T.Errorf("%d_%x: unexpected buf length %d, expected %d", sz, pt, got, want)
+				T.Errorf("%d_%02x: unexpected buf length %d, expected %d", sz, pt, got, want)
 			}
 			if got, want := bits.Size(), sz; got != want {
-				T.Errorf("%d_%x: unexpected size %d, expected %d", sz, pt, got, want)
+				T.Errorf("%d_%02x: unexpected size %d, expected %d", sz, pt, got, want)
 			}
 			if got, want := bits.Count(), popcount(cmp); got != want {
-				T.Errorf("%d_%d: unexpected count %d, expected %d", sz, pt, got, want)
+				T.Errorf("%d_%02x: unexpected count %d, expected %d", sz, pt, got, want)
 			}
 			if bytes.Compare(bits.Bytes(), cmp) == 0 && bytes.Compare(bits.Bytes(), bytes.Repeat([]byte{0}, len(bits.Bytes()))) != 0 {
-				T.Errorf("%d_%d: unexpected result %x, expected %x", sz, pt, bits.Bytes(), cmp)
+				T.Errorf("%d_%02x: unexpected result %x, expected %x", sz, pt, bits.Bytes(), cmp)
 			}
 
 			bits.Reverse()
 			if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
-				T.Errorf("%d_%x: unexpected buf length %d, expected %d", sz, pt, got, want)
+				T.Errorf("%d_%02x: unexpected buf length %d, expected %d", sz, pt, got, want)
 			}
 			if got, want := bits.Size(), sz; got != want {
-				T.Errorf("%d_%x: unexpected size %d, expected %d", sz, pt, got, want)
+				T.Errorf("%d_%02x: unexpected size %d, expected %d", sz, pt, got, want)
 			}
 			if got, want := bits.Count(), popcount(cmp); got != want {
-				T.Errorf("%d_%d: unexpected count %d, expected %d", sz, pt, got, want)
+				T.Errorf("%d_%02x: unexpected count %d, expected %d", sz, pt, got, want)
 			}
 			if bytes.Compare(bits.Bytes(), cmp) != 0 {
-				T.Errorf("%d_%d: unexpected result %x, expected %x", sz, pt, bits.Bytes(), cmp)
+				T.Errorf("%d_%02x: unexpected result %x, expected %x", sz, pt, bits.Bytes(), cmp)
 			}
 		}
 	}
@@ -999,19 +999,19 @@ func TestBitSetReverse(T *testing.T) {
 
 func TestBitSetReverseAVX2(T *testing.T) {
 	for _, sz := range bitSetSizes {
-        bits := fillBitsetSaw(nil, sz)
-        cmp := make([]byte, len(bits))
-        copy(cmp, bits)
-        bitsetReverseGeneric(cmp)
-        bitsetReverseAVX2(bits)
+		bits := fillBitsetSaw(nil, sz)
+		cmp := make([]byte, len(bits))
+		copy(cmp, bits)
+		bitsetReverseGeneric(cmp)
+		bitsetReverseAVX2(bits)
 
-        if got, want := len(bits), len(cmp); got != want {
+		if got, want := len(bits), len(cmp); got != want {
 			T.Errorf("%d: unexpected buf length %d, expected %d", sz, got, want)
 		}
 		if got, want := popcount(bits), popcount(cmp); got != want {
 			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
 		}
-        if bytes.Compare(bits, cmp) != 0 {
+		if bytes.Compare(bits, cmp) != 0 {
 			T.Errorf("%d: unexpected result %x, expected %x", sz, bits, cmp)
 		}
 	}
