@@ -48,7 +48,7 @@
 	_FUNC	0(SI), AX; \
 	MOVB	AX, 0(SI);
 
-// func bitsetAndAVX2(dst, src []byte)
+// func bitsetAndAVX2(dst, src []byte) int
 //
 TEXT ·bitsetAndAVX2(SB), NOSPLIT, $0-48
 	MOVQ	dst_base+0(FP), SI
@@ -120,6 +120,7 @@ loop_i8:
 	JMP		loop_i8
 
 done:
+	MOVQ	$1, src_base+48(FP)
 	RET
 
 

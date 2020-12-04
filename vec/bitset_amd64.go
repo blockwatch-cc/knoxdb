@@ -10,7 +10,7 @@ import (
 )
 
 //go:noescape
-func bitsetAndAVX2(dst, src []byte)
+func bitsetAndAVX2(dst, src []byte) int
 
 //go:noescape
 func bitsetAndNotAVX2(dst, src []byte)
@@ -36,13 +36,14 @@ func bitsetNextOneBitAVX2(src []byte, index uint64) uint64
 //go:noescape
 func bitsetNextZeroBitAVX2(src []byte, index uint64) uint64
 
-func bitsetAnd(dst, src []byte, size int) {
+func bitsetAnd(dst, src []byte, size int) int {
 	switch {
 	case useAVX2:
-		bitsetAndAVX2(dst, src)
+		ret := bitsetAndAVX2(dst, src)
 		dst[len(dst)-1] &= bitmask(size)
+		return ret
 	default:
-		bitsetAndGeneric(dst, src, size)
+		return bitsetAndGeneric(dst, src, size)
 	}
 }
 
