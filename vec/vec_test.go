@@ -18,3 +18,16 @@ var vecBenchmarkSizes = []vecBenchmarkSize{
 	{"1M", 1024 * 1024},
 	{"128M", 128 * 1024 * 1024},
 }
+
+/*
+// for optimizing small data blocks
+var vecBenchmarkSizes = []vecBenchmarkSize{
+	// {"32", 32}, // exclude for AVX512
+	{"128", 128},
+	{"256", 256},
+	{"384", 384},
+	{"512", 512},
+	{"640", 640},
+	{"768", 768},
+}
+*/

@@ -35,7 +35,7 @@ prep_avx:
 	VPBROADCASTD val+24(FP), Y0                 // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9        // load permute control mask
 	VMOVDQU		shuffle32<>+0x00(SB), Y10       // load shuffle control mask
-	CMPQ	BX, $128                            // slices smaller than 128 values are handled in small loop
+	CMPQ	BX, $255                            // slices smaller than 256 values are handled in small loop
 	JBE		prep_small
 
 prep_big:
@@ -234,7 +234,7 @@ prep_avx:
 	VPBROADCASTD val+24(FP), Y0                 // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9        // load permute control mask
 	VMOVDQU		shuffle32<>+0x00(SB), Y10       // load shuffle control mask
-	CMPQ	BX, $128                            // slices smaller than 128 values are handled in small loop
+	CMPQ	BX, $255                            // slices smaller than 256 values are handled in small loop
 	JBE		prep_small
 
 prep_big:
@@ -439,7 +439,7 @@ prep_avx:
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9        // load permute control mask
 	VMOVDQU		shuffle32<>+0x00(SB), Y10       // load shuffle control mask
-	CMPQ	BX, $128                            // slices smaller than 128 values are handled in small loop
+	CMPQ	BX, $255                            // slices smaller than 256 values are handled in small loop
 	JBE		prep_small
 
 prep_big:
@@ -684,7 +684,7 @@ prep_avx:
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9        // load permute control mask
 	VMOVDQU		shuffle32<>+0x00(SB), Y10       // load shuffle control mask
-	CMPQ	BX, $128                            // slices smaller than 128 values are handled in small loop
+	CMPQ	BX, $255                            // slices smaller than 256 values are handled in small loop
 	JBE		prep_small
 
 prep_big:
@@ -932,7 +932,7 @@ prep_avx:
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9        // load permute control mask
 	VMOVDQU		shuffle32<>+0x00(SB), Y10       // load shuffle control mask
-	CMPQ	BX, $128                            // slices smaller than 128 values are handled in small loop
+	CMPQ	BX, $255                            // slices smaller than 256 values are handled in small loop
 	JBE		prep_small
 
 prep_big:
@@ -1176,7 +1176,7 @@ prep_avx:
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9        // load permute control mask
 	VMOVDQU		shuffle32<>+0x00(SB), Y10       // load shuffle control mask
-	CMPQ	BX, $128                            // slices smaller than 128 values are handled in small loop
+	CMPQ	BX, $255                            // slices smaller than 256 values are handled in small loop
 	JBE		prep_small
 
 prep_big:
@@ -1436,7 +1436,7 @@ prep_avx:
 	VPXOR			Y11, Y0, Y0                     // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9        // load permute control mask
 	VMOVDQU		shuffle32<>+0x00(SB), Y10       // load shuffle control mask
-	CMPQ	BX, $128                            // slices smaller than 128 values are handled in small loop
+	CMPQ	BX, $255                            // slices smaller than 256 values are handled in small loop
 	JBE		prep_small
 
 prep_big:
