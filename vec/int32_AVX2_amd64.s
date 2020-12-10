@@ -6,7 +6,7 @@
 #include "textflag.h"
 #include "constants.h"
 
-// func matchUint32EqualAVX2(src []uint32, val uint32, bits []byte) int64
+// func matchInt32EqualAVX2(src []int32, val int32, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -20,7 +20,7 @@
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32EqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32EqualAVX2(SB), NOSPLIT, $0-60
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -47,7 +47,7 @@ prep_big:
     NEGQ    CX
 
 
-// works for >= 128 uint32 (i.e. 512 bytes of data)
+// works for >= 128 int32 (i.e. 512 bytes of data)
 loop_big:
 	VPCMPEQD	0(SI), Y0, Y1
 	VPCMPEQD	32(SI), Y0, Y2
@@ -164,7 +164,7 @@ prep_scalar:
 	MOVQ	$31, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
-// for remainders of <32 uint32
+// for remainders of <32 int32
 scalar:
 	MOVL	(SI), R8
 	CMPL	R8, DX
@@ -205,7 +205,7 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
 
-// func matchUint32NotEqualAVX2(src []uint32, val uint32, bits []byte) int64
+// func matchInt32NotEqualAVX2(src []int32, val int32, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -219,7 +219,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32NotEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32NotEqualAVX2(SB), NOSPLIT, $0-60
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -246,7 +246,7 @@ prep_big:
     NEGQ    CX
 
 
-// works for >= 128 uint32 (i.e. 512 bytes of data)
+// works for >= 128 int32 (i.e. 512 bytes of data)
 loop_big:
 	VPCMPEQD	0(SI), Y0, Y1
 	VPCMPEQD	32(SI), Y0, Y2
@@ -366,7 +366,7 @@ prep_scalar:
 	MOVQ	$31, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
-// for remainders of <32 uint32
+// for remainders of <32 int32
 scalar:
 	MOVL	(SI), R8
 	CMPL	R8, DX
@@ -407,7 +407,7 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
 
-// func matchUint32LessThanAVX2(src []uint32, val uint32, bits []byte) int64
+// func matchInt32LessThanAVX2(src []int32, val int32, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -421,7 +421,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32LessThanAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32LessThanAVX2(SB), NOSPLIT, $0-60
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -433,10 +433,7 @@ TEXT ·matchUint32LessThanAVX2(SB), NOSPLIT, $0-60
 	JBE		prep_scalar
 
 prep_avx:
-	VPCMPEQD		Y11, Y11, Y11                    // create 0x8000.. mask
-	VPSLLD			$31, Y11, Y11                    // create 0x8000.. mask
 	VPBROADCASTD 	val+24(FP), Y0                   // load val into AVX2 reg
-	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9        // load permute control mask
 	VMOVDQU		shuffle32<>+0x00(SB), Y10       // load shuffle control mask
 	CMPQ	BX, $128                            // slices smaller than 128 values are handled in small loop
@@ -451,20 +448,12 @@ prep_big:
     NEGQ    CX
 
 
-// works for >= 128 uint32 (i.e. 512 bytes of data)
+// works for >= 128 int32 (i.e. 512 bytes of data)
 loop_big:
-	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
-	VMOVDQU		32(SI), Y2
-	VMOVDQU		64(SI), Y3
-	VMOVDQU		96(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
-	VPCMPGTD	Y1, Y0, Y1     // signed compare
-	VPCMPGTD	Y2, Y0, Y2
-	VPCMPGTD	Y3, Y0, Y3
-	VPCMPGTD	Y4, Y0, Y4
+	VPCMPGTD		0(SI), Y0, Y1     
+	VPCMPGTD		32(SI), Y0, Y2
+	VPCMPGTD		64(SI), Y0, Y3
+	VPCMPGTD		96(SI), Y0, Y4
 
 	VPACKSSDW	Y1, Y2, Y1
 	VPACKSSDW	Y3, Y4, Y3
@@ -475,18 +464,10 @@ loop_big:
 
 	VPMOVMSKB	Y1, DX              // move per byte MSBs into packed bitmask to r32 or r64
 
-	VMOVDQU		128(SI), Y5      // load values (necessary to flip sign bit)
-	VMOVDQU		160(SI), Y6
-	VMOVDQU		192(SI), Y7
-	VMOVDQU		224(SI), Y8
-	VPXOR		Y11, Y5, Y5    // flip sign bits
-	VPXOR		Y11, Y6, Y6
-	VPXOR		Y11, Y7, Y7
-	VPXOR		Y11, Y8, Y8
-	VPCMPGTD	Y5, Y0, Y5     // signed compare
-	VPCMPGTD	Y6, Y0, Y6
-	VPCMPGTD	Y7, Y0, Y7
-	VPCMPGTD	Y8, Y0, Y8
+	VPCMPGTD		128(SI), Y0, Y5      
+	VPCMPGTD		160(SI), Y0, Y6
+	VPCMPGTD		192(SI), Y0, Y7
+	VPCMPGTD		224(SI), Y0, Y8
 
 	VPACKSSDW	Y5, Y6, Y5
 	VPACKSSDW	Y7, Y8, Y7
@@ -502,18 +483,11 @@ loop_big:
 	POPCNTQ		AX, AX              // count 1 bits
 	ADDQ		AX, R9
 
-	VMOVDQU		256(SI), Y1      // load values (necessary to flip sign bit)
-	VMOVDQU		288(SI), Y2
-	VMOVDQU		320(SI), Y3
-	VMOVDQU		352(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
-	VPCMPGTD	Y1, Y0, Y1     // signed compare
-	VPCMPGTD	Y2, Y0, Y2
-	VPCMPGTD	Y3, Y0, Y3
-	VPCMPGTD	Y4, Y0, Y4
+	VPCMPGTD		256(SI), Y0, Y1     
+	VPCMPGTD		288(SI), Y0, Y2
+	VPCMPGTD		320(SI), Y0, Y3
+	VPCMPGTD		352(SI), Y0, Y4
+
 	VPACKSSDW	Y1, Y2, Y1
 	VPACKSSDW	Y3, Y4, Y3
 
@@ -523,18 +497,10 @@ loop_big:
 
 	VPMOVMSKB	Y1, DX              // move per byte MSBs into packed bitmask to r32 or r64
 
-	VMOVDQU		384(SI), Y5      // load values (necessary to flip sign bit)
-	VMOVDQU		416(SI), Y6
-	VMOVDQU		448(SI), Y7
-	VMOVDQU		480(SI), Y8
-	VPXOR		Y11, Y5, Y5    // flip sign bits
-	VPXOR		Y11, Y6, Y6
-	VPXOR		Y11, Y7, Y7
-	VPXOR		Y11, Y8, Y8
-	VPCMPGTD	Y5, Y0, Y5     // signed compare
-	VPCMPGTD	Y6, Y0, Y6
-	VPCMPGTD	Y7, Y0, Y7
-	VPCMPGTD	Y8, Y0, Y8
+	VPCMPGTD		384(SI), Y0, Y5      
+	VPCMPGTD		416(SI), Y0, Y6
+	VPCMPGTD		448(SI), Y0, Y7
+	VPCMPGTD		480(SI), Y0, Y8
 
 	VPACKSSDW	Y5, Y6, Y5
 	VPACKSSDW	Y7, Y8, Y7
@@ -562,18 +528,10 @@ exit_big:
 prep_small:
 
 loop_small:
-	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
-	VMOVDQU		32(SI), Y2
-	VMOVDQU		64(SI), Y3
-	VMOVDQU		96(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
-	VPCMPGTD	Y1, Y0, Y1     // signed compare
-	VPCMPGTD	Y2, Y0, Y2
-	VPCMPGTD	Y3, Y0, Y3
-	VPCMPGTD	Y4, Y0, Y4
+	VPCMPGTD		0(SI), Y0, Y1     
+	VPCMPGTD		32(SI), Y0, Y2
+	VPCMPGTD		64(SI), Y0, Y3
+	VPCMPGTD		96(SI), Y0, Y4
     
 	VPACKSSDW	Y1, Y2, Y1
 	VPACKSSDW	Y3, Y4, Y3
@@ -601,19 +559,15 @@ exit_small:
 
 prep_scalar:
 	MOVQ	val+24(FP), DX   // load val for comparison
-	MOVQ    $1, R12          // create 0x80... mask
-	SHLL    $31, R12
-	XORL    R12, DX          // flip sign bit
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
 	MOVQ	$31, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
-// for remainders of <32 uint32
+// for remainders of <32 int32
 scalar:
 	MOVL	(SI), R8
-	XORL    R12, R8          // flip sign bit
 	CMPL	R8, DX
 	SETLT	R10
 	ADDL	R10, R9
@@ -652,7 +606,7 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
 
-// func matchUint32LessThanEqualAVX2(src []uint32, val uint32, bits []byte) int64
+// func matchInt32LessThanEqualAVX2(src []int32, val int32, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -666,7 +620,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32LessThanEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32LessThanEqualAVX2(SB), NOSPLIT, $0-60
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -678,10 +632,7 @@ TEXT ·matchUint32LessThanEqualAVX2(SB), NOSPLIT, $0-60
 	JBE		prep_scalar
 
 prep_avx:
-	VPCMPEQD		Y11, Y11, Y11                    // create 0x8000.. mask
-	VPSLLD			$31, Y11, Y11                    // create 0x8000.. mask
 	VPBROADCASTD 	val+24(FP), Y0                   // load val into AVX2 reg
-	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9        // load permute control mask
 	VMOVDQU		shuffle32<>+0x00(SB), Y10       // load shuffle control mask
 	CMPQ	BX, $128                            // slices smaller than 128 values are handled in small loop
@@ -696,16 +647,12 @@ prep_big:
     NEGQ    CX
 
 
-// works for >= 128 uint32 (i.e. 512 bytes of data)
+// works for >= 128 int32 (i.e. 512 bytes of data)
 loop_big:
-	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
+	VMOVDQU		0(SI), Y1      
 	VMOVDQU		32(SI), Y2
 	VMOVDQU		64(SI), Y3
 	VMOVDQU		96(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
 	VPCMPGTD	Y0, Y1, Y1     // signed compare
 	VPCMPGTD	Y0, Y2, Y2
 	VPCMPGTD	Y0, Y3, Y3
@@ -720,14 +667,10 @@ loop_big:
 
 	VPMOVMSKB	Y1, DX              // move per byte MSBs into packed bitmask to r32 or r64
 
-	VMOVDQU		128(SI), Y5      // load values (necessary to flip sign bit)
+	VMOVDQU		128(SI), Y5      
 	VMOVDQU		160(SI), Y6
 	VMOVDQU		192(SI), Y7
 	VMOVDQU		224(SI), Y8
-	VPXOR		Y11, Y5, Y5    // flip sign bits
-	VPXOR		Y11, Y6, Y6
-	VPXOR		Y11, Y7, Y7
-	VPXOR		Y11, Y8, Y8
 	VPCMPGTD	Y0, Y5, Y5     // signed compare
 	VPCMPGTD	Y0, Y6, Y6
 	VPCMPGTD	Y0, Y7, Y7
@@ -748,14 +691,10 @@ loop_big:
 	POPCNTQ		AX, AX              // count 1 bits
 	ADDQ		AX, R9
 
-	VMOVDQU		256(SI), Y1      // load values (necessary to flip sign bit)
+	VMOVDQU		256(SI), Y1      
 	VMOVDQU		288(SI), Y2
 	VMOVDQU		320(SI), Y3
 	VMOVDQU		352(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
 	VPCMPGTD	Y0, Y1, Y1     // signed compare
 	VPCMPGTD	Y0, Y2, Y2
 	VPCMPGTD	Y0, Y3, Y3
@@ -773,10 +712,6 @@ loop_big:
 	VMOVDQU		416(SI), Y6
 	VMOVDQU		448(SI), Y7
 	VMOVDQU		480(SI), Y8
-	VPXOR		Y11, Y5, Y5    // flip sign bits
-	VPXOR		Y11, Y6, Y6
-	VPXOR		Y11, Y7, Y7
-	VPXOR		Y11, Y8, Y8
 	VPCMPGTD	Y0, Y5, Y5     // signed compare
 	VPCMPGTD	Y0, Y6, Y6
 	VPCMPGTD	Y0, Y7, Y7
@@ -813,10 +748,6 @@ loop_small:
 	VMOVDQU		32(SI), Y2
 	VMOVDQU		64(SI), Y3
 	VMOVDQU		96(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
 	VPCMPGTD	Y0, Y1, Y1     // signed compare
 	VPCMPGTD	Y0, Y2, Y2
 	VPCMPGTD	Y0, Y3, Y3
@@ -849,19 +780,15 @@ exit_small:
 
 prep_scalar:
 	MOVQ	val+24(FP), DX   // load val for comparison
-	MOVQ    $1, R12          // create 0x80... mask
-	SHLL    $31, R12
-	XORL    R12, DX          // flip sign bit
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
 	MOVQ	$31, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
-// for remainders of <32 uint32
+// for remainders of <32 int32
 scalar:
 	MOVL	(SI), R8
-	XORL    R12, R8          // flip sign bit
 	CMPL	R8, DX
 	SETLE	R10
 	ADDL	R10, R9
@@ -900,7 +827,7 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
 
-// func matchUint32GreaterThanAVX2(src []uint32, val uint32, bits []byte) int64
+// func matchInt32GreaterThanAVX2(src []int32, val int32, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -914,7 +841,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32GreaterThanAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32GreaterThanAVX2(SB), NOSPLIT, $0-60
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -926,10 +853,7 @@ TEXT ·matchUint32GreaterThanAVX2(SB), NOSPLIT, $0-60
 	JBE		prep_scalar
 
 prep_avx:
-	VPCMPEQD		Y11, Y11, Y11                    // create 0x8000.. mask
-	VPSLLD			$31, Y11, Y11                    // create 0x8000.. mask
 	VPBROADCASTD 	val+24(FP), Y0                   // load val into AVX2 reg
-	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9        // load permute control mask
 	VMOVDQU		shuffle32<>+0x00(SB), Y10       // load shuffle control mask
 	CMPQ	BX, $128                            // slices smaller than 128 values are handled in small loop
@@ -943,16 +867,12 @@ prep_big:
     ADDQ    CX, DI                      // move DI to the end of the array
     NEGQ    CX
 
-// works for >= 128 uint32 (i.e. 512 bytes of data)
+// works for >= 128 int32 (i.e. 512 bytes of data)
 loop_big:
-	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
+	VMOVDQU		0(SI), Y1      
 	VMOVDQU		32(SI), Y2
 	VMOVDQU		64(SI), Y3
 	VMOVDQU		96(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
 	VPCMPGTD	Y0, Y1, Y1     // signed compare
 	VPCMPGTD	Y0, Y2, Y2
 	VPCMPGTD	Y0, Y3, Y3
@@ -967,14 +887,10 @@ loop_big:
 
 	VPMOVMSKB	Y1, DX              // move per byte MSBs into packed bitmask to r32 or r64
 
-	VMOVDQU		128(SI), Y5      // load values (necessary to flip sign bit)
+	VMOVDQU		128(SI), Y5      
 	VMOVDQU		160(SI), Y6
 	VMOVDQU		192(SI), Y7
 	VMOVDQU		224(SI), Y8
-	VPXOR		Y11, Y5, Y5    // flip sign bits
-	VPXOR		Y11, Y6, Y6
-	VPXOR		Y11, Y7, Y7
-	VPXOR		Y11, Y8, Y8
 	VPCMPGTD	Y0, Y5, Y5     // signed compare
 	VPCMPGTD	Y0, Y6, Y6
 	VPCMPGTD	Y0, Y7, Y7
@@ -994,14 +910,10 @@ loop_big:
 	POPCNTQ		AX, AX              // count 1 bits
 	ADDQ		AX, R9
 
-	VMOVDQU		256(SI), Y1      // load values (necessary to flip sign bit)
+	VMOVDQU		256(SI), Y1      
 	VMOVDQU		288(SI), Y2
 	VMOVDQU		320(SI), Y3
 	VMOVDQU		352(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
 	VPCMPGTD	Y0, Y1, Y1     // signed compare
 	VPCMPGTD	Y0, Y2, Y2
 	VPCMPGTD	Y0, Y3, Y3
@@ -1015,14 +927,10 @@ loop_big:
 
 	VPMOVMSKB	Y1, DX              // move per byte MSBs into packed bitmask to r32 or r64
 
-	VMOVDQU		384(SI), Y5      // load values (necessary to flip sign bit)
+	VMOVDQU		384(SI), Y5      
 	VMOVDQU		416(SI), Y6
 	VMOVDQU		448(SI), Y7
 	VMOVDQU		480(SI), Y8
-	VPXOR		Y11, Y5, Y5    // flip sign bits
-	VPXOR		Y11, Y6, Y6
-	VPXOR		Y11, Y7, Y7
-	VPXOR		Y11, Y8, Y8
 	VPCMPGTD	Y0, Y5, Y5     // signed compare
 	VPCMPGTD	Y0, Y6, Y6
 	VPCMPGTD	Y0, Y7, Y7
@@ -1054,14 +962,10 @@ exit_big:
 prep_small:
 
 loop_small:
-	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
+	VMOVDQU		0(SI), Y1     
 	VMOVDQU		32(SI), Y2
 	VMOVDQU		64(SI), Y3
 	VMOVDQU		96(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
 	VPCMPGTD	Y0, Y1, Y1     // signed compare
 	VPCMPGTD	Y0, Y2, Y2
 	VPCMPGTD	Y0, Y3, Y3
@@ -1093,19 +997,15 @@ exit_small:
 
 prep_scalar:
 	MOVQ	val+24(FP), DX   // load val for comparison
-	MOVQ    $1, R12          // create 0x80... mask
-	SHLL    $31, R12
-	XORL    R12, DX          // flip sign bit
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
 	MOVQ	$31, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
-// for remainders of <32 uint32
+// for remainders of <32 int32
 scalar:
 	MOVL	(SI), R8
-	XORL    R12, R8          // flip sign bit
 	CMPL	R8, DX
 	SETGT	R10
 	ADDL	R10, R9
@@ -1144,7 +1044,7 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
     
-// func matchUint32GreaterThanEqualAVX2(src []uint32, val uint32, bits []byte) int64
+// func matchInt32GreaterThanEqualAVX2(src []int32, val int32, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -1158,7 +1058,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32GreaterThanEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32GreaterThanEqualAVX2(SB), NOSPLIT, $0-60
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -1170,10 +1070,7 @@ TEXT ·matchUint32GreaterThanEqualAVX2(SB), NOSPLIT, $0-60
 	JBE		prep_scalar
 
 prep_avx:
-	VPCMPEQD		Y11, Y11, Y11                    // create 0x8000.. mask
-	VPSLLD			$31, Y11, Y11                    // create 0x8000.. mask
 	VPBROADCASTD 	val+24(FP), Y0                   // load val into AVX2 reg
-	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9        // load permute control mask
 	VMOVDQU		shuffle32<>+0x00(SB), Y10       // load shuffle control mask
 	CMPQ	BX, $128                            // slices smaller than 128 values are handled in small loop
@@ -1188,20 +1085,12 @@ prep_big:
     NEGQ    CX
 
 
-// works for >= 128 uint32 (i.e. 512 bytes of data)
+// works for >= 128 int32 (i.e. 512 bytes of data)
 loop_big:
-	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
-	VMOVDQU		32(SI), Y2
-	VMOVDQU		64(SI), Y3
-	VMOVDQU		96(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
-	VPCMPGTD	Y1, Y0, Y1     // signed compare
-	VPCMPGTD	Y2, Y0, Y2
-	VPCMPGTD	Y3, Y0, Y3
-	VPCMPGTD	Y4, Y0, Y4
+	VPCMPGTD		0(SI), Y0, Y1      
+	VPCMPGTD		32(SI), Y0, Y2
+	VPCMPGTD		64(SI), Y0, Y3
+	VPCMPGTD		96(SI), Y0, Y4
 
 	VPACKSSDW	Y1, Y2, Y1
 	VPACKSSDW	Y3, Y4, Y3
@@ -1212,18 +1101,10 @@ loop_big:
 
 	VPMOVMSKB	Y1, DX              // move per byte MSBs into packed bitmask to r32 or r64
 
-	VMOVDQU		128(SI), Y5      // load values (necessary to flip sign bit)
-	VMOVDQU		160(SI), Y6
-	VMOVDQU		192(SI), Y7
-	VMOVDQU		224(SI), Y8
-	VPXOR		Y11, Y5, Y5    // flip sign bits
-	VPXOR		Y11, Y6, Y6
-	VPXOR		Y11, Y7, Y7
-	VPXOR		Y11, Y8, Y8
-	VPCMPGTD	Y5, Y0, Y5     // signed compare
-	VPCMPGTD	Y6, Y0, Y6
-	VPCMPGTD	Y7, Y0, Y7
-	VPCMPGTD	Y8, Y0, Y8
+	VPCMPGTD		128(SI), Y0, Y5    
+	VPCMPGTD		160(SI), Y0, Y6
+	VPCMPGTD		192(SI), Y0, Y7
+	VPCMPGTD		224(SI), Y0, Y8
 
 	VPACKSSDW	Y5, Y6, Y5
 	VPACKSSDW	Y7, Y8, Y7
@@ -1240,18 +1121,11 @@ loop_big:
 	POPCNTQ		AX, AX              // count 1 bits
 	ADDQ		AX, R9
 
-	VMOVDQU		256(SI), Y1      // load values (necessary to flip sign bit)
-	VMOVDQU		288(SI), Y2
-	VMOVDQU		320(SI), Y3
-	VMOVDQU		352(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
-	VPCMPGTD	Y1, Y0, Y1     // signed compare
-	VPCMPGTD	Y2, Y0, Y2
-	VPCMPGTD	Y3, Y0, Y3
-	VPCMPGTD	Y4, Y0, Y4
+	VPCMPGTD		256(SI), Y0, Y1      
+	VPCMPGTD		288(SI), Y0, Y2
+	VPCMPGTD		320(SI), Y0, Y3
+	VPCMPGTD		352(SI), Y0, Y4
+
 	VPACKSSDW	Y1, Y2, Y1
 	VPACKSSDW	Y3, Y4, Y3
 
@@ -1261,18 +1135,10 @@ loop_big:
 
 	VPMOVMSKB	Y1, DX              // move per byte MSBs into packed bitmask to r32 or r64
 
-	VMOVDQU		384(SI), Y5      // load values (necessary to flip sign bit)
-	VMOVDQU		416(SI), Y6
-	VMOVDQU		448(SI), Y7
-	VMOVDQU		480(SI), Y8
-	VPXOR		Y11, Y5, Y5    // flip sign bits
-	VPXOR		Y11, Y6, Y6
-	VPXOR		Y11, Y7, Y7
-	VPXOR		Y11, Y8, Y8
-	VPCMPGTD	Y5, Y0, Y5     // signed compare
-	VPCMPGTD	Y6, Y0, Y6
-	VPCMPGTD	Y7, Y0, Y7
-	VPCMPGTD	Y8, Y0, Y8
+	VPCMPGTD		384(SI), Y0, Y5    
+	VPCMPGTD		416(SI), Y0, Y6
+	VPCMPGTD		448(SI), Y0, Y7
+	VPCMPGTD		480(SI), Y0, Y8
 
 	VPACKSSDW	Y5, Y6, Y5
 	VPACKSSDW	Y7, Y8, Y7
@@ -1301,18 +1167,10 @@ exit_big:
 prep_small:
 
 loop_small:
-	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
-	VMOVDQU		32(SI), Y2
-	VMOVDQU		64(SI), Y3
-	VMOVDQU		96(SI), Y4
-	VPXOR		Y11, Y1, Y1    // flip sign bits
-	VPXOR		Y11, Y2, Y2
-	VPXOR		Y11, Y3, Y3
-	VPXOR		Y11, Y4, Y4
-	VPCMPGTD	Y1, Y0, Y1     // signed compare
-	VPCMPGTD	Y2, Y0, Y2
-	VPCMPGTD	Y3, Y0, Y3
-	VPCMPGTD	Y4, Y0, Y4
+	VPCMPGTD		0(SI), Y0, Y1      
+	VPCMPGTD		32(SI), Y0, Y2
+	VPCMPGTD		64(SI), Y0, Y3
+	VPCMPGTD		96(SI), Y0, Y4
     
 	VPACKSSDW	Y1, Y2, Y1
 	VPACKSSDW	Y3, Y4, Y3
@@ -1341,19 +1199,15 @@ exit_small:
 
 prep_scalar:
 	MOVQ	val+24(FP), DX   // load val for comparison
-	MOVQ    $1, R12          // create 0x80... mask
-	SHLL    $31, R12
-	XORL    R12, DX          // flip sign bit
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
 	MOVQ	$31, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
-// for remainders of <32 uint32
+// for remainders of <32 int32
 scalar:
 	MOVL	(SI), R8
-	XORL    R12, R8          // flip sign bit
 	CMPL	R8, DX
 	SETGE	R10
 	ADDL	R10, R9
@@ -1392,7 +1246,7 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
 
-// func matchUint32BetweenAVX2(src []uint32, a, b uint32, bits []byte) int64
+// func matchInt32BetweenAVX2(src []int32, a, b int32, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -1409,7 +1263,7 @@ done:
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
-TEXT ·matchUint32BetweenAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32BetweenAVX2(SB), NOSPLIT, $0-60
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -1448,7 +1302,7 @@ prep_big:
     NEGQ    CX
 
 
-// works for >= 128 uint32 (i.e. 512 bytes of data)
+// works for >= 128 int32 (i.e. 512 bytes of data)
 loop_big:
 	VMOVDQU		0(SI), Y1      // load values (necessary to flip sign bit)
 	VMOVDQU		32(SI), Y2
@@ -1630,7 +1484,7 @@ prep_scalar:
 	MOVQ	$31, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
-// for remainders of <32 uint32
+// for remainders of <32 int32
 scalar:
 	MOVL	(SI), R8
 	SUBL	R13, R8          // v - a < diff

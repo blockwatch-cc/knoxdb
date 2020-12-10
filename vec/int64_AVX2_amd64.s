@@ -430,7 +430,7 @@ loop_big:
 	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
-	VPCMPGTQ	256(SI), Y0, Y1      // load values (necessary to flip sign bit)
+	VPCMPGTQ	256(SI), Y0, Y1     
 	VPCMPGTQ	288(SI), Y0, Y2
 	VPCMPGTQ	320(SI), Y0, Y3
 	VPCMPGTQ	352(SI), Y0, Y4
