@@ -29,7 +29,7 @@ TEXT ·matchUint64EqualAVX2(SB), NOSPLIT, $0-64
 
 	TESTQ	BX, BX
 	JLE		done
-	CMPQ	BX, $31      // slices smaller than 32 byte are handled in scalar loop
+	CMPQ	BX, $31      // slices smaller than 32 values are handled in scalar loop
 	JBE		prep_scalar
 
 prep_avx:
