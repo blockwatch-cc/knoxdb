@@ -5,7 +5,7 @@
 
 #include "textflag.h"
 #include "constants.h"
-/*
+
 // func matchUint8EqualAVX2(src []uint8, val uint8, bits []byte) int64
 //
 // input:
@@ -31,35 +31,140 @@ TEXT ·matchUint8EqualAVX2(SB), NOSPLIT, $0-57
 	CMPQ	BX, $31      // slices smaller than 32 byte are handled separately
 	JBE		prep_scalar
 
-    MOVQ    BX, CX
-    ANDQ    $0x1f, BX
-    ANDQ    $0xffffffffffffffe0, CX
-    ADDQ    CX, SI
-    SHRQ    $3, CX
-    ADDQ    CX, DI
-    NEGQ    CX
-    
 prep_avx2:
 	VPBROADCASTB val+24(FP), Y0            // load val into AVX2 reg
-	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
 	VMOVDQU		shuffle8<>+0x00(SB), Y10    // load shuffle control mask
-
+ 
+ prep_big:
+    MOVQ    BX, CX
+    ANDQ    $0xfffffffffffffe00, CX     // number of values processed in big blocks
+    ANDQ    $0x1ff, BX                   // number of values processed in small blocks/scalar
+    ADDQ    CX, SI                       // move SI to the end of the array
+    SHRQ    $3, CX                      // number of bytes to write to output slice (div by 8)
+    ADDQ    CX, DI                      // move DI to the end of the array
+    NEGQ    CX
+    
 // works for >= 32 int8 (i.e. 32 bytes of data)
 loop_avx2:
-	VPCMPEQB	(SI)(CX*8), Y0, Y1
-
+    VPCMPEQB	(SI)(CX*8), Y0, Y1
+    VPCMPEQB	32(SI)(CX*8), Y0, Y2
+    VPCMPEQB	64(SI)(CX*8), Y0, Y3
+    VPCMPEQB	96(SI)(CX*8), Y0, Y4
 
 	VPSHUFB		Y10, Y1, Y1
+	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
+	VPSHUFB		Y10, Y2, Y2
+	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
-	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
-	MOVL		AX, (DI)(CX*1)    // write the lower 32 bits to the output slice
+    SHLQ        $32, AX
+    ORQ         DX, AX
+
+	MOVQ		AX, (DI)(CX*1)    // write the lower 32 bits to the output slice
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
-	//LEAQ		32(SI), SI
-//	LEAQ		4(DI), DI
-//	SUBQ		$32, BX
-	ADDQ		$4, CX
-//	CMPQ		BX, $32
+
+	VPSHUFB		Y10, Y3, Y3
+	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
+	VPSHUFB		Y10, Y4, Y4
+	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
+
+    SHLQ        $32, AX
+    ORQ         DX, AX
+
+	MOVQ		AX, 8(DI)(CX*1)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+
+    VPCMPEQB	128(SI)(CX*8), Y0, Y1
+    VPCMPEQB	160(SI)(CX*8), Y0, Y2
+    VPCMPEQB	192(SI)(CX*8), Y0, Y3
+    VPCMPEQB	224(SI)(CX*8), Y0, Y4
+
+	VPSHUFB		Y10, Y1, Y1
+	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
+	VPSHUFB		Y10, Y2, Y2
+	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
+
+    SHLQ        $32, AX
+    ORQ         DX, AX
+
+	MOVQ		AX, 16(DI)(CX*1)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+
+	VPSHUFB		Y10, Y3, Y3
+	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
+	VPSHUFB		Y10, Y4, Y4
+	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
+
+    SHLQ        $32, AX
+    ORQ         DX, AX
+
+	MOVQ		AX, 24(DI)(CX*1)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+
+	
+    VPCMPEQB	256(SI)(CX*8), Y0, Y1
+    VPCMPEQB	288(SI)(CX*8), Y0, Y2
+    VPCMPEQB	320(SI)(CX*8), Y0, Y3
+    VPCMPEQB	352(SI)(CX*8), Y0, Y4
+
+	VPSHUFB		Y10, Y1, Y1
+	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
+	VPSHUFB		Y10, Y2, Y2
+	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
+
+    SHLQ        $32, AX
+    ORQ         DX, AX
+
+	MOVQ		AX, 32(DI)(CX*1)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+
+	VPSHUFB		Y10, Y3, Y3
+	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
+	VPSHUFB		Y10, Y4, Y4
+	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
+
+    SHLQ        $32, AX
+    ORQ         DX, AX
+
+	MOVQ		AX, 40(DI)(CX*1)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+
+    VPCMPEQB	384(SI)(CX*8), Y0, Y1
+    VPCMPEQB	416(SI)(CX*8), Y0, Y2
+    VPCMPEQB	448(SI)(CX*8), Y0, Y3
+    VPCMPEQB	480(SI)(CX*8), Y0, Y4
+
+	VPSHUFB		Y10, Y1, Y1
+	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
+	VPSHUFB		Y10, Y2, Y2
+	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
+
+    SHLQ        $32, AX
+    ORQ         DX, AX
+
+	MOVQ		AX, 48(DI)(CX*1)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+
+	VPSHUFB		Y10, Y3, Y3
+	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
+	VPSHUFB		Y10, Y4, Y4
+	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
+
+    SHLQ        $32, AX
+    ORQ         DX, AX
+
+	MOVQ		AX, 56(DI)(CX*1)    // write the lower 32 bits to the output slice
+	POPCNTQ		AX, AX      // count 1 bits
+	ADDQ		AX, R9
+
+    
+	ADDQ		$64, CX
 	JZ		 	exit_avx2
 	JMP		 	loop_avx2
 
@@ -117,6 +222,7 @@ done:
 	MOVQ	R9, ret+56(FP)
 	RET
 
+/*
 // func matchUint8EqualAVX512(src []uint8, val uint8, bits []byte) int64
 //
 // input:
