@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/bits"
 	"sort"
+	"strconv"
 )
 
 type Accuracy int8
@@ -103,8 +104,21 @@ func (x Int128) Int256() Int256 {
 }
 
 func (x Int128) Float64() float64 {
-	// TODO
-	return 0
+	sign := x[0] & 0x8000000000000000
+	if sign > 0 {
+		x = x.Neg()
+	}
+	bl := uint(x.BitLen())
+	exp := 1023 + uint64(bl) - 1
+	var frac uint64
+
+	if bl <= 53 {
+		frac = x[1] << (53 - bl)
+	} else {
+		frac = x.Rsh(bl - 53)[1] // TODO: optimize
+	}
+
+	return math.Float64frombits(sign | exp<<52 | (frac & 0x000fffffffffffff))
 }
 
 func (x *Int128) SetInt64(y int64) {
@@ -201,8 +215,48 @@ func (x Int128) String() string {
 }
 
 func ParseInt128(s string) (Int128, error) {
-	// TODO
-	return Int128Zero, nil
+	if len(s) == 0 {
+		return Int128Zero, nil
+	}
+	sign := int64(0)
+	switch s[0] {
+	case '+':
+		s = s[1:]
+	case '-':
+		sign = -1
+		s = s[1:]
+	}
+
+	l := len(s)
+	switch {
+	case l == 0:
+		return Int128Zero, nil
+	case l < 19:
+		i, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return Int128Zero, err
+		}
+		return Int128{uint64(sign >> 63), i ^ uint64(sign) - uint64(sign)}, nil
+	default:
+		var i Int128
+		for start, step := 0, (l+17)/18-1; step >= 0; step-- {
+			end := l - step*18
+			n, err := strconv.ParseUint(s[start:end], 10, 64)
+			if err != nil {
+				return Int128Zero, err
+			}
+			if start == 0 {
+				i = Int128FromInt64(int64(n))
+			} else {
+				i = i.Mul64(1e18).Add64(n)
+			}
+			start = end
+		}
+		if sign < 0 {
+			i = i.Neg()
+		}
+		return i, nil
+	}
 }
 
 func (x Int128) MarshalText() ([]byte, error) {
@@ -216,6 +270,16 @@ func (x *Int128) UnmarshalText(buf []byte) error {
 	}
 	*x = z
 	return nil
+}
+
+// BitLen returns the number of bits required to represent z
+func (x Int128) BitLen() int {
+	switch {
+	case x[0] != 0:
+		return 64 + bits.Len64(x[0])
+	default:
+		return bits.Len64(x[1])
+	}
 }
 
 // Abs interprets x as a two's complement signed number,

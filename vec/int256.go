@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/bits"
 	"sort"
+	"strconv"
 )
 
 var (
@@ -87,8 +88,21 @@ func (x Int256) Int128() Int128 {
 }
 
 func (x Int256) Float64() float64 {
-	// TODO
-	return 0
+	sign := x[0] & 0x8000000000000000
+	if sign > 0 {
+		x = x.Neg()
+	}
+	bl := uint(x.BitLen())
+	exp := 1023 + uint64(bl) - 1
+	var frac uint64
+
+	if bl <= 53 {
+		frac = x[3] << (53 - bl)
+	} else {
+		frac = x.Rsh(bl - 53)[3] // TODO: optimize
+	}
+
+	return math.Float64frombits(sign | exp<<52 | (frac & 0x000fffffffffffff))
 }
 
 func (x *Int256) SetInt64(y int64) {
@@ -186,8 +200,53 @@ func (x Int256) String() string {
 }
 
 func ParseInt256(s string) (Int256, error) {
-	// TODO
-	return Int256Zero, nil
+	if len(s) == 0 {
+		return Int256Zero, nil
+	}
+	sign := int64(0)
+	switch s[0] {
+	case '+':
+		s = s[1:]
+	case '-':
+		sign = -1
+		s = s[1:]
+	}
+
+	l := len(s)
+	switch {
+	case l == 0:
+		return Int256Zero, nil
+	case l < 19:
+		i, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return Int256Zero, err
+		}
+		return Int256{
+			uint64(sign >> 63),
+			uint64(sign >> 63),
+			uint64(sign >> 63),
+			i ^ uint64(sign) - uint64(sign),
+		}, nil
+	default:
+		var i Int256
+		for start, step := 0, (l+17)/18-1; step >= 0; step-- {
+			end := l - step*18
+			n, err := strconv.ParseUint(s[start:end], 10, 64)
+			if err != nil {
+				return Int256Zero, err
+			}
+			if start == 0 {
+				i = Int256FromInt64(int64(n))
+			} else {
+				i = i.Mul(Int256{0, 0, 0, 1e18}).Add64(n)
+			}
+			start = end
+		}
+		if sign < 0 {
+			i = i.Neg()
+		}
+		return i, nil
+	}
 }
 
 func (x Int256) MarshalText() ([]byte, error) {
@@ -201,6 +260,20 @@ func (x *Int256) UnmarshalText(buf []byte) error {
 	}
 	*x = z
 	return nil
+}
+
+// BitLen returns the number of bits required to represent z
+func (x Int256) BitLen() int {
+	switch {
+	case x[0] != 0:
+		return 192 + bits.Len64(x[0])
+	case x[1] != 0:
+		return 128 + bits.Len64(x[1])
+	case x[2] != 0:
+		return 64 + bits.Len64(x[2])
+	default:
+		return bits.Len64(x[3])
+	}
 }
 
 // Abs interprets x as a two's complement signed number,
