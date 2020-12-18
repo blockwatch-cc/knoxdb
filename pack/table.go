@@ -3148,7 +3148,7 @@ func (t *Table) recyclePackage(pkg *Package) {
 		return
 	}
 	// don't recycle oversized packs
-	if c := pkg.Cap(); c < 0 || c > 1<<uint(t.opts.PackSizeLog2) {
+	if c := pkg.Cap(); c <= 0 || c > 1<<uint(t.opts.PackSizeLog2) {
 		pkg.Release()
 		return
 	}

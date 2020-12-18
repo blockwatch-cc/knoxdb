@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	. "blockwatch.cc/knoxdb/encoding/decimal"
 )
 
 const (
@@ -45,29 +47,23 @@ func (t *typeInfo) Clone() *typeInfo {
 
 // fieldInfo holds details for the representation of a single field.
 type fieldInfo struct {
-	idx       []int
-	name      string
-	alias     string
-	flags     FieldFlags
-	precision int
-	typname   string
-	blockid   int
+	idx     []int
+	name    string
+	alias   string
+	flags   FieldFlags
+	scale   int
+	typname string
+	blockid int
 }
 
 func (f fieldInfo) String() string {
-	s := fmt.Sprintf("FieldInfo: %s typ=%s idx=%v prec=%d",
-		f.name, f.typname, f.idx, f.precision)
+	s := fmt.Sprintf("FieldInfo: %s typ=%s idx=%v scale=%d",
+		f.name, f.typname, f.idx, f.scale)
 	if f.flags&FlagPrimary > 0 {
 		s += " Primary"
 	}
 	if f.flags&FlagIndexed > 0 {
 		s += " Indexed"
-	}
-	if f.flags&FlagCompact > 0 {
-		s += " Compact"
-	}
-	if f.flags&FlagFixed > 0 {
-		s += fmt.Sprintf(" Fixed(%d)", f.precision)
 	}
 	if f.flags&FlagCompressLZ4 > 0 {
 		s += " LZ4"
@@ -156,34 +152,6 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 			}
 		}
 
-		// fixed point conversion only applies to float32/64
-		if finfo.flags&FlagFixed > 0 {
-			switch f.Type.Kind() {
-			case reflect.Float32:
-			case reflect.Float64:
-			default:
-				return nil, fmt.Errorf("pack: invalid type %s for fixed-point flag", f.Type)
-			}
-		}
-
-		// compact numbers must be uint64 or fixed-point float32/64
-		if finfo.flags&FlagCompact > 0 {
-			fail := false
-			switch f.Type.Kind() {
-			case reflect.Uint64:
-			case reflect.Uint32:
-			case reflect.Float32:
-				fail = finfo.flags&FlagFixed == 0
-			case reflect.Float64:
-				fail = finfo.flags&FlagFixed == 0
-			default:
-				fail = true
-			}
-			if fail {
-				return nil, fmt.Errorf("pack: invalid type %s for compact flag", f.Type)
-			}
-		}
-
 		// extract long name
 		if a := f.Tag.Get(tagAlias); a != "-" {
 			finfo.alias = strings.Split(a, ",")[0]
@@ -214,28 +182,43 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				finfo.flags |= FlagPrimary
 			case "index":
 				finfo.flags |= FlagIndexed
-			case "compact":
-				finfo.flags |= FlagCompact
-			case "fixed":
-				finfo.flags |= FlagFixed
-				finfo.precision = maxPrecision
 			case "lz4":
 				finfo.flags |= FlagCompressLZ4
 			case "snappy":
 				finfo.flags |= FlagCompressSnappy
-			case "precision":
+			case "scale":
+				// only compatible with Decimal interface type
+				prec := 0
+				// if !f.Type.Implements(decimalType) {
+				// 	return nil, fmt.Errorf("pack: invalid scale tag on non-decimal field '%s' %s", tag, f.Type.String())
+				// } else {
+				typname := f.Type.String()
+				switch finfo.typname {
+				case "decimal.Decimal32":
+					prec = MaxDecimal32Precision
+				case "decimal.Decimal64":
+					prec = MaxDecimal64Precision
+				case "decimal.Decimal128":
+					prec = MaxDecimal128Precision
+				case "decimal.Decimal256":
+					prec = MaxDecimal256Precision
+				default:
+					return nil, fmt.Errorf("pack: invalid scale tag on non-decimal field '%s' %s", tag, typname)
+				}
+				finfo.typname = typname
+				// }
 				if len(ff) > 1 {
-					prec, err := strconv.Atoi(ff[1])
+					scale, err := strconv.Atoi(ff[1])
 					if err != nil {
-						return nil, fmt.Errorf("pack: invalid field precision '%s'", ff[1])
+						return nil, fmt.Errorf("pack: invalid scale value %s on field '%s': %v", ff[1], tag, err)
 					}
-					if prec < 0 || prec > 15 {
-						return nil, fmt.Errorf("pack: field precision '%d' out of bounds [0,15]", prec)
+					if scale < 0 || scale > prec {
+						return nil, fmt.Errorf("pack: out of bound scale %d on field '%s' [0,%d]", scale, tag, prec)
 					}
-					finfo.precision = prec
+					finfo.scale = scale
 				}
 			default:
-				return nil, fmt.Errorf("pack: unsupported struct tag field '%s'", ff[0])
+				return nil, fmt.Errorf("pack: unsupported struct tag '%s' on field '%s'", ff[0], tag)
 			}
 		}
 	}

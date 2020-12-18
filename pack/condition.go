@@ -16,7 +16,9 @@ import (
 
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/util"
-	"blockwatch.cc/knoxdb/vec"
+
+	. "blockwatch.cc/knoxdb/encoding/decimal"
+	. "blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -78,6 +80,8 @@ type Condition struct {
 	processed    bool                // condition has been processed already
 	hashmap      map[uint64]int      // compiled hashmap for byte/string set queries
 	hashoverflow []hashvalue         // hash collision overflow list (one for all)
+	int256map    map[Int256]struct{} // compiled int64 map for set membership
+	int128map    map[Int128]struct{} // compiled int64 map for set membership
 	int64map     map[int64]struct{}  // compiled int64 map for set membership
 	int32map     map[int32]struct{}  // compiled int32 map for set membership
 	int16map     map[int16]struct{}  // compiled int16 map for set membership
@@ -144,10 +148,81 @@ func (c *Condition) Compile() {
 		c.numValues++
 	}
 
-	// only supported for set membership
 	switch c.Mode {
 	case FilterModeIn, FilterModeNotIn:
+		// handled below
 	default:
+		// scale decimal values to field scale
+		switch c.Field.Type {
+		case FieldTypeDecimal32:
+			if val, ok := c.Value.([]Decimal32); ok {
+				conv := make([]int32, len(val))
+				for i := range val {
+					conv[i] = val[i].Quantize(c.Field.Scale).Int32()
+				}
+				c.Value = conv
+			}
+			if val, ok := c.Value.(Decimal32); ok {
+				c.Value = val.Quantize(c.Field.Scale)
+			}
+			if from, ok := c.From.(Decimal32); ok {
+				c.From = from.Quantize(c.Field.Scale)
+			}
+			if to, ok := c.To.(Decimal32); ok {
+				c.To = to.Quantize(c.Field.Scale)
+			}
+		case FieldTypeDecimal64:
+			if val, ok := c.Value.([]Decimal64); ok {
+				conv := make([]int64, len(val))
+				for i := range val {
+					conv[i] = val[i].Quantize(c.Field.Scale).Int64()
+				}
+				c.Value = conv
+			}
+			if val, ok := c.Value.(Decimal64); ok {
+				c.Value = val.Quantize(c.Field.Scale)
+			}
+			if from, ok := c.From.(Decimal64); ok {
+				c.From = from.Quantize(c.Field.Scale)
+			}
+			if to, ok := c.To.(Decimal64); ok {
+				c.To = to.Quantize(c.Field.Scale)
+			}
+		case FieldTypeDecimal128:
+			if val, ok := c.Value.([]Decimal128); ok {
+				conv := make([]Int128, len(val))
+				for i := range val {
+					conv[i] = val[i].Quantize(c.Field.Scale).Int128()
+				}
+				c.Value = conv
+			}
+			if val, ok := c.Value.(Decimal128); ok {
+				c.Value = val.Quantize(c.Field.Scale)
+			}
+			if from, ok := c.From.(Decimal128); ok {
+				c.From = from.Quantize(c.Field.Scale)
+			}
+			if to, ok := c.To.(Decimal128); ok {
+				c.To = to.Quantize(c.Field.Scale)
+			}
+		case FieldTypeDecimal256:
+			if val, ok := c.Value.([]Decimal256); ok {
+				conv := make([]Int256, len(val))
+				for i := range val {
+					conv[i] = val[i].Quantize(c.Field.Scale).Int256()
+				}
+				c.Value = conv
+			}
+			if val, ok := c.Value.(Decimal256); ok {
+				c.Value = val.Quantize(c.Field.Scale)
+			}
+			if from, ok := c.From.(Decimal256); ok {
+				c.From = from.Quantize(c.Field.Scale)
+			}
+			if to, ok := c.To.(Decimal256); ok {
+				c.To = to.Quantize(c.Field.Scale)
+			}
+		}
 		return
 	}
 
@@ -193,7 +268,27 @@ func (c *Condition) Compile() {
 				c.IsSorted = true
 			}
 		}
-	case FieldTypeInt64:
+	case FieldTypeInt256, FieldTypeDecimal256:
+		if slice := c.Value.([]Int256); slice != nil {
+			c.numValues = len(slice)
+			if !c.IsSorted {
+				sort.Slice(slice, func(i, j int) bool {
+					return slice[i].Lt(slice[j])
+				})
+				c.IsSorted = true
+			}
+		}
+	case FieldTypeInt128, FieldTypeDecimal128:
+		if slice := c.Value.([]Int256); slice != nil {
+			c.numValues = len(slice)
+			if !c.IsSorted {
+				sort.Slice(slice, func(i, j int) bool {
+					return slice[i].Lt(slice[j])
+				})
+				c.IsSorted = true
+			}
+		}
+	case FieldTypeInt64, FieldTypeDecimal64:
 		if slice := c.Value.([]int64); slice != nil {
 			c.numValues = len(slice)
 			if !c.IsSorted {
@@ -203,7 +298,7 @@ func (c *Condition) Compile() {
 				c.IsSorted = true
 			}
 		}
-	case FieldTypeInt32:
+	case FieldTypeInt32, FieldTypeDecimal32:
 		if slice := c.Value.([]int32); slice != nil {
 			c.numValues = len(slice)
 			if !c.IsSorted {
@@ -297,10 +392,26 @@ func (c *Condition) Compile() {
 
 	var vals [][]byte
 
-	// hash maps are only supported for expensive types, other types
+	// hash maps are only used for expensive types, other types
 	// will use a standard go map (which uses hashing internally)
 	switch c.Field.Type {
-	case FieldTypeInt64:
+	case FieldTypeInt256, FieldTypeDecimal256:
+		// use a map for integer lookups
+		slice := c.Value.([]Int256)
+		c.int256map = make(map[Int256]struct{}, len(slice))
+		for _, v := range slice {
+			c.int256map[v] = struct{}{}
+		}
+		return
+	case FieldTypeInt128, FieldTypeDecimal128:
+		// use a map for integer lookups
+		slice := c.Value.([]Int128)
+		c.int128map = make(map[Int128]struct{}, len(slice))
+		for _, v := range slice {
+			c.int128map[v] = struct{}{}
+		}
+		return
+	case FieldTypeInt64, FieldTypeDecimal64:
 		// use a map for integer lookups
 		slice := c.Value.([]int64)
 		c.int64map = make(map[int64]struct{}, len(slice))
@@ -308,7 +419,7 @@ func (c *Condition) Compile() {
 			c.int64map[v] = struct{}{}
 		}
 		return
-	case FieldTypeInt32:
+	case FieldTypeInt32, FieldTypeDecimal32:
 		// use a map for integer lookups
 		slice := c.Value.([]int32)
 		c.int32map = make(map[int32]struct{}, len(slice))
@@ -471,7 +582,7 @@ func (c Condition) String() string {
 		if size > 16 {
 			return fmt.Sprintf("%s %s [%d values]", c.Field.Name, c.Mode.Op(), size)
 		} else {
-			return fmt.Sprintf("%s %s [%v]", c.Field.Name, c.Mode.Op(), c.Field.Type.ToString(c.Value))
+			return fmt.Sprintf("%s %s [%v]", c.Field.Name, c.Mode.Op(), c.Field.Type.ToString(c.Value, c.Field))
 		}
 	default:
 		return fmt.Sprintf("%s %s %s [%s]", c.Field.Name, c.Mode.Op(), util.ToString(c.Value), c.Raw)
@@ -507,21 +618,21 @@ func ParseCondition(key, val string, fields FieldList) (Condition, error) {
 		if len(vv) != 2 {
 			return c, fmt.Errorf("range conditions require exactly two arguments")
 		}
-		c.From, err = c.Field.Type.ParseAs(vv[0])
+		c.From, err = c.Field.Type.ParseAs(vv[0], c.Field)
 		if err != nil {
 			return c, fmt.Errorf("error parsing condition value '%s': %v", val, err)
 		}
-		c.To, err = c.Field.Type.ParseAs(vv[1])
+		c.To, err = c.Field.Type.ParseAs(vv[1], c.Field)
 		if err != nil {
 			return c, fmt.Errorf("error parsing condition value '%s': %v", val, err)
 		}
 	case FilterModeIn, FilterModeNotIn:
-		c.Value, err = c.Field.Type.ParseSliceAs(val)
+		c.Value, err = c.Field.Type.ParseSliceAs(val, c.Field)
 		if err != nil {
 			return c, fmt.Errorf("error parsing condition value '%s': %v", val, err)
 		}
 	default:
-		c.Value, err = c.Field.Type.ParseAs(val)
+		c.Value, err = c.Field.Type.ParseAs(val, c.Field)
 		if err != nil {
 			return c, fmt.Errorf("error parsing condition value '%s': %v", val, err)
 		}
@@ -577,17 +688,17 @@ func (l ConditionList) MaybeMatchPack(head PackageHeader) bool {
 
 // return a bit vector containing matching positions in the pack
 // TODO: consider parallel matches to check multiple conditions, then merge bitsets
-func (l ConditionList) MatchPack(pkg *Package) *vec.BitSet {
+func (l ConditionList) MatchPack(pkg *Package) *BitSet {
 	// always match empty condition list
 	if len(l) == 0 || pkg.Len() == 0 {
-		allOnes := vec.NewBitSet(pkg.Len())
+		allOnes := NewBitSet(pkg.Len())
 		allOnes.One()
 		return allOnes
 	}
 	// match conditions and merge bit vectors
 	// stop early when result contains all zeros (assuming AND
 	// relation between all conditions)
-	var bits *vec.BitSet
+	var bits *BitSet
 	for _, c := range l {
 		b := c.MatchPack(pkg)
 		if bits == nil {
@@ -602,14 +713,22 @@ func (l ConditionList) MatchPack(pkg *Package) *vec.BitSet {
 			bits.Close()
 			return b
 		}
+
+		// merge
+		// cnt := bits.And(b)
 		bits.And(b)
 		b.Close()
+
+		// early stop on empty aggregate match
+		// if cnt == 0 {
+		// 	break
+		// }
 	}
 	return bits
 }
 
-func (c Condition) MatchPack(pkg *Package) *vec.BitSet {
-	bits := vec.NewBitSet(pkg.Len())
+func (c Condition) MatchPack(pkg *Package) *BitSet {
+	bits := NewBitSet(pkg.Len())
 	slice, _ := pkg.Column(c.Field.Index)
 	switch c.Mode {
 	case FilterModeEqual:
@@ -633,13 +752,25 @@ func (c Condition) MatchPack(pkg *Package) *vec.BitSet {
 		// rather than using vectorized type functions
 		// type check was already performed in compile stage
 		switch c.Field.Type {
-		case FieldTypeInt64:
+		case FieldTypeInt256, FieldTypeDecimal256:
+			for i, v := range slice.([]Int256) {
+				if _, ok := c.int256map[v]; ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeInt128, FieldTypeDecimal128:
+			for i, v := range slice.([]Int128) {
+				if _, ok := c.int128map[v]; ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeInt64, FieldTypeDecimal64:
 			for i, v := range slice.([]int64) {
 				if _, ok := c.int64map[v]; ok {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt32:
+		case FieldTypeInt32, FieldTypeDecimal32:
 			for i, v := range slice.([]int32) {
 				if _, ok := c.int32map[v]; ok {
 					bits.Set(i)
@@ -798,13 +929,25 @@ func (c Condition) MatchPack(pkg *Package) *vec.BitSet {
 		//
 		// type check was already performed in compile stage
 		switch c.Field.Type {
-		case FieldTypeInt64:
+		case FieldTypeInt256, FieldTypeDecimal256:
+			for i, v := range slice.([]Int256) {
+				if _, ok := c.int256map[v]; !ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeInt128, FieldTypeDecimal128:
+			for i, v := range slice.([]Int128) {
+				if _, ok := c.int128map[v]; !ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeInt64, FieldTypeDecimal64:
 			for i, v := range slice.([]int64) {
 				if _, ok := c.int64map[v]; !ok {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt32:
+		case FieldTypeInt32, FieldTypeDecimal32:
 			for i, v := range slice.([]int32) {
 				if _, ok := c.int32map[v]; !ok {
 					bits.Set(i)
@@ -977,90 +1120,6 @@ func (c Condition) MatchPack(pkg *Package) *vec.BitSet {
 	}
 }
 
-// DEPRECATED, only used for testcases and benchmarks
-
-// // match a single value usually from a pack vector against the condition
-// func (c Condition) Match(val interface{}) bool {
-// 	switch c.Mode {
-// 	case FilterModeEqual:
-// 		return c.Field.Type.Equal(val, c.Value)
-// 	case FilterModeNotEqual:
-// 		return !c.Field.Type.Equal(val, c.Value)
-// 	case FilterModeRange:
-// 		return c.Field.Type.Between(val, c.From, c.To)
-// 	case FilterModeIn:
-// 		// type check on val was already performed in compile stage
-// 		switch c.Field.Type {
-// 		case FieldTypeInt64:
-// 			_, ok := c.int64map[val.(int64)]
-// 			return ok
-// 		case FieldTypeUint64:
-// 			_, ok := c.uint64map[val.(uint64)]
-// 			return ok
-// 		}
-
-// 		// strings and bytes use bloom filter or hash map
-// 		// any negative response means val is NOT part of the set and can
-// 		// be rejected, any positive response may be a false positive with
-// 		// low probability
-// 		var buf []byte
-// 		if c.Field.Type == FieldTypeBytes {
-// 			buf = val.([]byte)
-// 		} else if c.Field.Type == FieldTypeString {
-// 			buf = []byte(val.(string))
-// 		}
-// 		if buf != nil && c.hashmap != nil {
-// 			if _, ok := c.hashmap[xxhash.Sum64(buf)]; !ok {
-// 				return false
-// 			}
-// 		}
-// 		// any other value is delegated (Note: due to false positives also
-// 		// byte and string conditions are checked again)
-// 		return c.Field.Type.In(val, c.Value) // c.Value is a slice
-// 	case FilterModeNotIn:
-// 		// type check on val was already performed in compile stage
-// 		switch c.Field.Type {
-// 		case FieldTypeInt64:
-// 			_, ok := c.int64map[val.(int64)]
-// 			return !ok
-// 		case FieldTypeUint64:
-// 			_, ok := c.uint64map[val.(uint64)]
-// 			return !ok
-// 		}
-
-// 		// strings and bytes use bloom filter or hash map
-// 		// any negative response means val is NOT part of the set and can
-// 		// be rejected right away, any positive response may be a false
-// 		// positive with low probability
-// 		var buf []byte
-// 		if c.Field.Type == FieldTypeBytes {
-// 			buf = val.([]byte)
-// 		} else if c.Field.Type == FieldTypeString {
-// 			buf = []byte(val.(string))
-// 		}
-// 		if buf != nil && c.hashmap != nil {
-// 			if _, ok := c.hashmap[xxhash.Sum64(buf)]; !ok {
-// 				return true
-// 			}
-// 		}
-// 		// any other value is delegated (Note: due to false positives also
-// 		// byte and string conditions are checked again)
-// 		return !c.Field.Type.In(val, c.Value) // c.Value is a slice
-// 	case FilterModeRegexp:
-// 		return c.Field.Type.Regexp(val, c.Value.(string)) // c.Value is regexp string
-// 	case FilterModeGt:
-// 		return c.Field.Type.Gt(val, c.Value)
-// 	case FilterModeGte:
-// 		return c.Field.Type.Gte(val, c.Value)
-// 	case FilterModeLt:
-// 		return c.Field.Type.Lt(val, c.Value)
-// 	case FilterModeLte:
-// 		return c.Field.Type.Lte(val, c.Value)
-// 	default:
-// 		return false
-// 	}
-// }
-
 // TODO: support more than a simple AND between conditions
 func (l ConditionList) MatchAt(pkg *Package, pos int) bool {
 	if len(l) == 0 {
@@ -1089,11 +1148,19 @@ func (c Condition) MatchAt(pkg *Package, pos int) bool {
 	case FilterModeIn:
 		// type check was already performed in compile stage
 		switch c.Field.Type {
-		case FieldTypeInt64:
+		case FieldTypeInt256, FieldTypeDecimal256:
+			val, _ := pkg.Int256At(index, pos)
+			_, ok := c.int256map[val]
+			return ok
+		case FieldTypeInt128, FieldTypeDecimal128:
+			val, _ := pkg.Int128At(index, pos)
+			_, ok := c.int128map[val]
+			return ok
+		case FieldTypeInt64, FieldTypeDecimal64:
 			val, _ := pkg.Int64At(index, pos)
 			_, ok := c.int64map[val]
 			return ok
-		case FieldTypeInt32:
+		case FieldTypeInt32, FieldTypeDecimal32:
 			val, _ := pkg.Int32At(index, pos)
 			_, ok := c.int32map[val]
 			return ok
@@ -1145,11 +1212,19 @@ func (c Condition) MatchAt(pkg *Package, pos int) bool {
 	case FilterModeNotIn:
 		// type check was already performed in compile stage
 		switch c.Field.Type {
-		case FieldTypeInt64:
+		case FieldTypeInt256, FieldTypeDecimal256:
+			val, _ := pkg.Int256At(index, pos)
+			_, ok := c.int256map[val]
+			return !ok
+		case FieldTypeInt128, FieldTypeDecimal128:
+			val, _ := pkg.Int128At(index, pos)
+			_, ok := c.int128map[val]
+			return !ok
+		case FieldTypeInt64, FieldTypeDecimal64:
 			val, _ := pkg.Int64At(index, pos)
 			_, ok := c.int64map[val]
 			return !ok
-		case FieldTypeInt32:
+		case FieldTypeInt32, FieldTypeDecimal32:
 			val, _ := pkg.Int32At(index, pos)
 			_, ok := c.int32map[val]
 			return !ok

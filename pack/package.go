@@ -14,6 +14,9 @@ import (
 
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/util"
+
+	. "blockwatch.cc/knoxdb/encoding/decimal"
+	. "blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -21,7 +24,6 @@ const (
 	packageStorageFormatVersionV2 = 2 // PRO: compress & precision stored in pack header
 	packageStorageFormatVersionV3 = 3 // PRO: current, per-block compression & precision
 	packageStorageFormatVersionV4 = 4 // PRO: extended data types
-	maxPrecision                  = 12
 )
 
 type Package struct {
@@ -34,6 +36,7 @@ type Package struct {
 	blocks  []*block.Block // compressed blocks, one per field
 
 	// not stored
+	types      []FieldType // field types
 	namemap    map[string]int
 	key        []byte
 	tinfo      *typeInfo
@@ -89,10 +92,13 @@ func (p *Package) Len() int {
 }
 
 func (p *Package) Cap() int {
-	if p.pkindex < 0 {
-		return -1
+	if p.pkindex > 0 {
+		return p.blocks[p.pkindex].Cap()
 	}
-	return cap(p.blocks[p.pkindex].Uint64)
+	if p.nFields > 0 {
+		return p.blocks[0].Cap()
+	}
+	return 0
 }
 
 func (p *Package) FieldIndex(name string) int {
@@ -102,24 +108,21 @@ func (p *Package) FieldIndex(name string) int {
 	return -1
 }
 
-func (p *Package) Field(name string) Field {
-	idx := p.FieldIndex(name)
+func (p *Package) FieldByName(name string) Field {
+	return p.FieldById(p.FieldIndex(name))
+}
+
+func (p *Package) FieldById(idx int) Field {
 	if idx < 0 {
 		return Field{Index: -1}
 	}
-	var flags FieldFlags
-	switch p.blocks[idx].Compression {
-	case block.SnappyCompression:
-		flags = FlagCompressSnappy
-	case block.LZ4Compression:
-		flags = FlagCompressLZ4
-	}
 	return Field{
-		Index:     idx,
-		Name:      name,
-		Type:      FieldTypeFromBlock(p.blocks[idx].Type),
-		Flags:     flags,
-		Precision: p.blocks[idx].Precision,
+		Index: idx,
+		Name:  p.names[idx],
+		Type:  p.types[idx],
+		Alias: p.tinfo.fields[idx].alias,
+		Flags: p.tinfo.fields[idx].flags,
+		Scale: p.blocks[idx].Scale(),
 	}
 }
 
@@ -147,94 +150,46 @@ func (p *Package) initType(v interface{}) error {
 	return nil
 }
 
+// Init from Go type
 func (p *Package) Init(v interface{}, sz int) error {
-	var err error
-	if err = p.initType(v); err != nil {
+	// detect and map Go type
+	err := p.initType(v)
+	if err != nil {
 		return err
 	}
 
-	if len(p.tinfo.fields) > 256 {
+	// extract fields from Go type
+	fields, err := Fields(v)
+	if err != nil {
+		return err
+	}
+
+	if len(fields) > 256 {
 		return fmt.Errorf("pack: cannot handle more than 256 fields")
 	}
 
-	p.nFields = len(p.tinfo.fields)
+	// create pack
+	p.nFields = len(fields)
 	p.blocks = make([]*block.Block, p.nFields)
 	p.offsets = make([]int, p.nFields)
 	p.names = make([]string, p.nFields)
+	p.types = make([]FieldType, p.nFields)
 	p.namemap = make(map[string]int)
 	p.dirty = true
-	val := reflect.Indirect(reflect.ValueOf(v))
-	for _, fi := range p.tinfo.fields {
-		f := fi.value(val)
-		p.names[fi.blockid] = fi.name
-		p.namemap[fi.name] = fi.blockid
-		p.namemap[fi.alias] = fi.blockid
-		comp := fi.flags.Compression()
-		flags := fi.flags.BlockFlags()
-		prec := fi.precision
-		switch f.Kind() {
-		case reflect.Int, reflect.Int64:
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockInt64, sz, comp, 0, 0)
-		case reflect.Int32:
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockInt32, sz, comp, 0, 0)
-		case reflect.Int16:
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockInt16, sz, comp, 0, 0)
-		case reflect.Int8:
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockInt8, sz, comp, 0, 0)
-		case reflect.Uint, reflect.Uint64:
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint64, sz, comp, 0, flags)
-		case reflect.Uint32:
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint32, sz, comp, 0, flags)
-		case reflect.Uint16:
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint16, sz, comp, 0, 0)
-		case reflect.Uint8:
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint8, sz, comp, 0, 0)
-		case reflect.Float64:
-			if fi.flags&FlagFixed > 0 {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint64, sz, comp, prec, flags)
-			} else {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockFloat64, sz, comp, 0, 0)
-			}
-		case reflect.Float32:
-			if fi.flags&FlagFixed > 0 {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockUint32, sz, comp, prec, flags)
-			} else {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockFloat32, sz, comp, 0, 0)
-			}
-		case reflect.String:
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockString, sz, fi.flags.Compression(), 0, 0)
-		case reflect.Slice:
-			// check if type implements BinaryMarshaler -> BlockBytes
-			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
-				break
-			}
-			// otherwise require byte slice
-			if f.Type() != byteSliceType {
-				return fmt.Errorf("pack: unsupported slice type %s", f.Type().String())
-			}
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
-		case reflect.Bool:
-			p.blocks[fi.blockid], err = block.NewBlock(block.BlockBool, sz, fi.flags.Compression(), 0, 0)
-		case reflect.Struct:
-			// check string is much quicker
-			if f.Type().String() == "time.Time" {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockTime, sz, fi.flags.Compression(), 0, 0)
-			} else if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
-			} else {
-				return fmt.Errorf("pack: unsupported embedded struct type %s", f.Type().String())
-			}
-		case reflect.Array:
-			// check if type implements BinaryMarshaler -> BlockBytes
-			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				p.blocks[fi.blockid], err = block.NewBlock(block.BlockBytes, sz, fi.flags.Compression(), 0, 0)
-				break
-			}
-			return fmt.Errorf("pack: unsupported array type %s", f.Type().String())
-		default:
-			return fmt.Errorf("pack: unsupported type %s (%v)", f.Type().String(), f.Kind())
-		}
+
+	// create blocks
+	for i, field := range fields {
+		p.names[i] = field.Name
+		p.types[i] = field.Type
+		p.namemap[field.Name] = i
+		p.namemap[field.Alias] = i
+		p.blocks[i], err = block.NewBlock(
+			field.Type.BlockType(),
+			sz,
+			field.Flags.Compression(),
+			field.Scale,
+			field.Flags.BlockFlags(),
+		)
 		if err != nil {
 			return err
 		}
@@ -242,24 +197,29 @@ func (p *Package) Init(v interface{}, sz int) error {
 	return err
 }
 
-// init from field list when type is unavailable
+// init from field list when Go type is unavailable
 func (p *Package) InitFields(fields FieldList, sz int) error {
 	var err error
 	if len(fields) > 256 {
 		return fmt.Errorf("pack: cannot handle more than 256 fields")
 	}
 
+	// create pack
 	p.nFields = len(fields)
 	p.blocks = make([]*block.Block, p.nFields)
 	p.offsets = make([]int, p.nFields)
 	p.names = make([]string, p.nFields)
+	p.types = make([]FieldType, p.nFields)
 	p.namemap = make(map[string]int)
 	p.dirty = true
+
+	// fill type info from fields
 	p.tinfo = &typeInfo{
 		fields: make([]fieldInfo, p.nFields),
 		gotype: false,
 	}
 	for i, field := range fields {
+		// fill type info from fields
 		if field.Flags&FlagPrimary > 0 {
 			p.pkindex = i
 		}
@@ -267,52 +227,21 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 		p.tinfo.fields[i].alias = field.Alias
 		p.tinfo.fields[i].flags = field.Flags
 		p.tinfo.fields[i].blockid = i
+
+		// register field
 		p.names[i] = field.Name
+		p.types[i] = field.Type
 		p.namemap[field.Name] = i
 		p.namemap[field.Alias] = i
-		comp := field.Flags.Compression()
-		flags := field.Flags.BlockFlags()
-		prec := field.Precision
-		switch field.Type {
-		case FieldTypeInt64:
-			p.blocks[i], err = block.NewBlock(block.BlockInt64, sz, comp, 0, 0)
-		case FieldTypeInt32:
-			p.blocks[i], err = block.NewBlock(block.BlockInt32, sz, comp, 0, 0)
-		case FieldTypeInt16:
-			p.blocks[i], err = block.NewBlock(block.BlockInt16, sz, comp, 0, 0)
-		case FieldTypeInt8:
-			p.blocks[i], err = block.NewBlock(block.BlockInt8, sz, comp, 0, 0)
-		case FieldTypeUint64:
-			p.blocks[i], err = block.NewBlock(block.BlockUint64, sz, comp, prec, flags)
-		case FieldTypeUint32:
-			p.blocks[i], err = block.NewBlock(block.BlockUint32, sz, comp, prec, flags)
-		case FieldTypeUint16:
-			p.blocks[i], err = block.NewBlock(block.BlockUint16, sz, comp, 0, 0)
-		case FieldTypeUint8:
-			p.blocks[i], err = block.NewBlock(block.BlockUint8, sz, comp, 0, 0)
-		case FieldTypeFloat64:
-			if field.Flags&FlagFixed > 0 {
-				p.blocks[i], err = block.NewBlock(block.BlockUint64, sz, comp, prec, flags)
-			} else {
-				p.blocks[i], err = block.NewBlock(block.BlockFloat64, sz, comp, 0, 0)
-			}
-		case FieldTypeFloat32:
-			if field.Flags&FlagFixed > 0 {
-				p.blocks[i], err = block.NewBlock(block.BlockUint32, sz, comp, prec, flags)
-			} else {
-				p.blocks[i], err = block.NewBlock(block.BlockFloat32, sz, comp, 0, 0)
-			}
-		case FieldTypeString:
-			p.blocks[i], err = block.NewBlock(block.BlockString, sz, field.Flags.Compression(), 0, 0)
-		case FieldTypeBytes:
-			p.blocks[i], err = block.NewBlock(block.BlockBytes, sz, field.Flags.Compression(), 0, 0)
-		case FieldTypeBoolean:
-			p.blocks[i], err = block.NewBlock(block.BlockBool, sz, field.Flags.Compression(), 0, 0)
-		case FieldTypeDatetime:
-			p.blocks[i], err = block.NewBlock(block.BlockTime, sz, field.Flags.Compression(), 0, 0)
-		default:
-			return fmt.Errorf("pack: unsupported field type %s", field.Type)
-		}
+
+		// alloc block
+		p.blocks[i], err = block.NewBlock(
+			field.Type.BlockType(),
+			sz,
+			field.Flags.Compression(),
+			field.Scale,
+			field.Flags.BlockFlags(),
+		)
 		if err != nil {
 			return err
 		}
@@ -327,6 +256,7 @@ func (p *Package) Clone(copydata bool, sz int) (*Package, error) {
 		nValues:  0,
 		offsets:  make([]int, p.nFields),
 		names:    p.names, // share static field names
+		types:    p.types, // share static field types
 		namemap:  make(map[string]int),
 		blocks:   make([]*block.Block, p.nFields),
 		key:      nil, // cloned pack has no identity yet
@@ -359,7 +289,7 @@ func (p *Package) KeepFields(fields FieldList) *Package {
 	for i, v := range p.names {
 		if !fields.Contains(v) {
 			p.blocks[i].Release()
-			p.blocks[i].Type = block.BlockIgnore
+			p.blocks[i].SetIgnore()
 			p.stripped = true
 		}
 	}
@@ -411,7 +341,21 @@ func (p *Package) Push(v interface{}) error {
 			continue
 		}
 		f := fi.value(val)
-		switch p.blocks[fi.blockid].Type {
+		// TODO: migrate to p.types[fi.blockid] FieldType
+		//
+		// Think about new interface to let blocks manage their own contents
+		// -> block.AppendInt64(f) // for all int types
+		// -> block.AppendUint64(f)  // for all uint types
+		// -> block.AppendBool(f)
+		// -> block.AppendFloat64(f) // for all float types
+		// -> block.AppendString(f)
+		// -> block.AppendBytes(f) // also for i128/1256, then scatter
+		// - or -
+		// -> block.Append(interface{})
+		switch p.blocks[fi.blockid].Type() {
+		case block.BlockTime:
+			p.blocks[fi.blockid].Int64 = append(p.blocks[fi.blockid].Int64, f.Interface().(time.Time).UnixNano())
+
 		case block.BlockInt64:
 			p.blocks[fi.blockid].Int64 = append(p.blocks[fi.blockid].Int64, f.Int())
 
@@ -425,28 +369,10 @@ func (p *Package) Push(v interface{}) error {
 			p.blocks[fi.blockid].Int8 = append(p.blocks[fi.blockid].Int8, int8(f.Int()))
 
 		case block.BlockUint64:
-			var amount uint64
-			if p.blocks[fi.blockid].Flags&block.BlockFlagFixed > 0 && f.Type().String() == "float64" {
-				amount = block.ToFixed64(f.Float(), p.blocks[fi.blockid].Precision)
-			} else {
-				amount = f.Uint()
-			}
-			if p.blocks[fi.blockid].Flags&block.BlockFlagCompact > 0 {
-				amount = block.Compact64(amount)
-			}
-			p.blocks[fi.blockid].Uint64 = append(p.blocks[fi.blockid].Uint64, amount)
+			p.blocks[fi.blockid].Uint64 = append(p.blocks[fi.blockid].Uint64, f.Uint())
 
 		case block.BlockUint32:
-			var amount uint64
-			if p.blocks[fi.blockid].Flags&block.BlockFlagFixed > 0 && f.Type().String() == "float32" {
-				amount = block.ToFixed64(f.Float(), p.blocks[fi.blockid].Precision)
-			} else {
-				amount = f.Uint()
-			}
-			if p.blocks[fi.blockid].Flags&block.BlockFlagCompact > 0 {
-				amount = block.Compact64(amount)
-			}
-			p.blocks[fi.blockid].Uint32 = append(p.blocks[fi.blockid].Uint32, uint32(amount))
+			p.blocks[fi.blockid].Uint32 = append(p.blocks[fi.blockid].Uint32, uint32(f.Uint()))
 
 		case block.BlockUint16:
 			p.blocks[fi.blockid].Uint16 = append(p.blocks[fi.blockid].Uint16, uint16(f.Uint()))
@@ -482,15 +408,24 @@ func (p *Package) Push(v interface{}) error {
 		case block.BlockBool:
 			p.blocks[fi.blockid].Bools = append(p.blocks[fi.blockid].Bools, f.Bool())
 
-		case block.BlockTime:
-			p.blocks[fi.blockid].Timestamps = append(p.blocks[fi.blockid].Timestamps, f.Interface().(time.Time).UnixNano())
+		// case block.BlockDecimal32:
+		// 	p.blocks[fi.blockid].Int32 = append(p.blocks[fi.blockid].Int32, int32(f.Interface().(Decimal32).Int64()))
+
+		// case block.BlockDecimal64:
+		// 	p.blocks[fi.blockid].Int64 = append(p.blocks[fi.blockid].Int64, f.Interface().(Decimal64).Int64())
+
+		// case block.BlockDecimal128:
+		// 	p.blocks[fi.blockid].Int128 = append(p.blocks[fi.blockid].Int128, f.Interface().(Decimal128).Int128())
+
+		// case block.BlockDecimal256:
+		// 	p.blocks[fi.blockid].Int256 = append(p.blocks[fi.blockid].Int256, f.Interface().(Decimal256).Int256())
 
 		case block.BlockIgnore:
 
 		default:
 			return fmt.Errorf("pack: unsupported type %s (%v)", f.Type().String(), f.Kind())
 		}
-		p.blocks[fi.blockid].Dirty = true
+		p.blocks[fi.blockid].SetDirty()
 	}
 	p.nValues++
 	p.dirty = true
@@ -517,43 +452,31 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			continue
 		}
 		f := fi.value(val)
-		switch p.blocks[fi.blockid].Type {
+		// TODO: migrate to p.types[fi.blockid] FieldType
+		switch p.blocks[fi.blockid].Type() {
 		case block.BlockInt64:
 			amount := f.Int()
 			p.blocks[fi.blockid].Int64[pos] = amount
+
 		case block.BlockInt32:
 			amount := int32(f.Int())
 			p.blocks[fi.blockid].Int32[pos] = amount
+
 		case block.BlockInt16:
 			amount := int16(f.Int())
 			p.blocks[fi.blockid].Int16[pos] = amount
+
 		case block.BlockInt8:
 			amount := int8(f.Int())
 			p.blocks[fi.blockid].Int8[pos] = amount
 
 		case block.BlockUint64:
-			var amount uint64
-			if p.blocks[fi.blockid].Flags&block.BlockFlagFixed > 0 && f.Type().String() == "float64" {
-				amount = block.ToFixed64(f.Float(), p.blocks[fi.blockid].Precision)
-			} else {
-				amount = f.Uint()
-			}
-			if p.blocks[fi.blockid].Flags&block.BlockFlagCompact > 0 {
-				amount = block.Compact64(amount)
-			}
+			amount := f.Uint()
 			p.blocks[fi.blockid].Uint64[pos] = amount
 
 		case block.BlockUint32:
-			var amount uint64
-			if p.blocks[fi.blockid].Flags&block.BlockFlagFixed > 0 && f.Type().String() == "float32" {
-				amount = block.ToFixed64(f.Float(), p.blocks[fi.blockid].Precision)
-			} else {
-				amount = f.Uint()
-			}
-			if p.blocks[fi.blockid].Flags&block.BlockFlagCompact > 0 {
-				amount = block.Compact64(amount)
-			}
-			p.blocks[fi.blockid].Uint32[pos] = uint32(amount)
+			amount := uint32(f.Uint())
+			p.blocks[fi.blockid].Uint32[pos] = amount
 
 		case block.BlockUint16:
 			amount := uint16(f.Uint())
@@ -597,7 +520,23 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 
 		case block.BlockTime:
 			amount := f.Interface().(time.Time)
-			p.blocks[fi.blockid].Timestamps[pos] = amount.UnixNano()
+			p.blocks[fi.blockid].Int64[pos] = amount.UnixNano()
+
+		// case block.BlockDecimal32:
+		// 	amount := f.Interface().(Decimal32)
+		// 	p.blocks[fi.blockid].Int32[pos] = int32(amount.Int64())
+
+		// case block.BlockDecimal64:
+		// 	amount := f.Interface().(Decimal64)
+		// 	p.blocks[fi.blockid].Int64[pos] = amount.Int64()
+
+		// case block.BlockDecimal128:
+		// 	amount := f.Interface().(Decimal128)
+		// 	p.blocks[fi.blockid].Int128[pos] = amount.Int128()
+
+		// case block.BlockDecimal256:
+		// 	amount := f.Interface().(Decimal256)
+		// 	p.blocks[fi.blockid].Int256[pos] = amount.Int256()
 
 		case block.BlockIgnore:
 
@@ -605,7 +544,7 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			return fmt.Errorf("pack: unsupported type %s (%v)", f.Type().String(), f.Kind())
 		}
 		// set flag to indicate we must reparse min/max values when storing the pack
-		p.blocks[fi.blockid].Dirty = true
+		p.blocks[fi.blockid].SetDirty()
 	}
 	p.dirty = true
 	p.pkmap = nil
@@ -658,7 +597,8 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst = dst.Elem()
 		}
 		b := p.blocks[fi.blockid]
-		switch b.Type {
+		// TODO: migrate to p.types[fi.blockid] FieldType
+		switch b.Type() {
 		case block.BlockInt64:
 			dst.SetInt(b.Int64[pos])
 
@@ -672,26 +612,10 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst.SetInt(int64(b.Int8[pos]))
 
 		case block.BlockUint64:
-			value := b.Uint64[pos]
-			if b.Flags&block.BlockFlagCompact > 0 {
-				value = block.Decompact64(value)
-			}
-			if b.Flags&block.BlockFlagFixed > 0 && dst.Type().String() == "float64" {
-				dst.SetFloat(block.FromFixed64(value, b.Precision))
-			} else {
-				dst.SetUint(value)
-			}
+			dst.SetUint(b.Uint64[pos])
 
 		case block.BlockUint32:
-			value := uint64(b.Uint32[pos])
-			if b.Flags&block.BlockFlagCompact > 0 {
-				value = block.Decompact64(value)
-			}
-			if b.Flags&block.BlockFlagFixed > 0 && dst.Type().String() == "float32" {
-				dst.SetFloat(block.FromFixed64(value, b.Precision))
-			} else {
-				dst.SetUint(value)
-			}
+			dst.SetUint(uint64(b.Uint32[pos]))
 
 		case block.BlockUint16:
 			dst.SetUint(uint64(b.Uint16[pos]))
@@ -727,7 +651,54 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst.SetBool(b.Bools[pos])
 
 		case block.BlockTime:
-			dst.Set(reflect.ValueOf(time.Unix(0, b.Timestamps[pos]).UTC()))
+			dst.Set(reflect.ValueOf(time.Unix(0, b.Int64[pos]).UTC()))
+
+		// TODO
+		// case block.BlockDecimal32:
+		// 	// if dst.CanAddr() {
+		// 	// 	pv := dst.Addr()
+		// 	// 	if pv.CanInterface() && pv.Type().Implements(decimalType) {
+		// 	// 		if err := pv.Interface().(Decimal).SetInt64(int64(b.Int32[pos]), fi.scale); err != nil {
+		// 	// 			return err
+		// 	// 		}
+		// 	// 		break
+		// 	// 	}
+		// 	// }
+		// 	dec, err := NewDecimal32(b.Int32[pos], fi.scale)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// 	dst.Set(reflect.ValueOf(dec))
+
+		// case block.BlockDecimal64:
+		// 	// if dst.CanAddr() {
+		// 	// 	pv := dst.Addr()
+		// 	// 	if pv.CanInterface() && pv.Type().Implements(decimalType) {
+		// 	// 		if err := pv.Interface().(Decimal).SetInt64(b.Int64[pos], fi.scale); err != nil {
+		// 	// 			return err
+		// 	// 		}
+		// 	// 		break
+		// 	// 	}
+		// 	// }
+		// 	dec, err := NewDecimal64(b.Int64[pos], fi.scale)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// 	dst.Set(reflect.ValueOf(dec))
+
+		// case block.BlockDecimal128:
+		// 	dec, err := NewDecimal128(b.Int128[pos], fi.scale)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// 	dst.Set(reflect.ValueOf(dec))
+
+		// case block.BlockDecimal256:
+		// 	dec, err := NewDecimal256(b.Int256[pos], fi.scale)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// 	dst.Set(reflect.ValueOf(dec))
 
 		case block.BlockIgnore:
 
@@ -767,7 +738,8 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 	if p.nValues <= pos {
 		return nil, fmt.Errorf("pack: invalid pos index %d (max=%d)", pos, p.nValues)
 	}
-	switch p.blocks[index].Type {
+	// TODO: migrate to p.types[fi.blockid] FieldType
+	switch p.blocks[index].Type() {
 	case block.BlockInt64:
 		val := p.blocks[index].Int64[pos]
 		return val, nil
@@ -781,27 +753,11 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 		val := p.blocks[index].Int8[pos]
 		return val, nil
 	case block.BlockUint64:
-		// this is either an uint or float target since floats may have been converted to uints
 		val := p.blocks[index].Uint64[pos]
-		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-			val = block.Decompact64(val)
-		}
-		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
-			return block.FromFixed64(val, p.blocks[index].Precision), nil
-		}
 		return val, nil
-
 	case block.BlockUint32:
-		// this is either an uint or float target since floats may have been converted to uints
-		val := uint64(p.blocks[index].Uint32[pos])
-		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-			val = block.Decompact64(val)
-		}
-		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
-			return float32(block.FromFixed64(val, p.blocks[index].Precision)), nil
-		}
-		return uint32(val), nil
-
+		val := p.blocks[index].Uint32[pos]
+		return val, nil
 	case block.BlockUint16:
 		val := p.blocks[index].Uint16[pos]
 		return val, nil
@@ -824,8 +780,16 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 		val := p.blocks[index].Bools[pos]
 		return val, nil
 	case block.BlockTime:
-		val := time.Unix(0, p.blocks[index].Timestamps[pos]).UTC()
+		val := time.Unix(0, p.blocks[index].Int64[pos]).UTC()
 		return val, nil
+	// case block.BlockDecimal32:
+	// 	return NewDecimal32(p.blocks[index].Int32[pos], p.blocks[index].Scale)
+	// case block.BlockDecimal64:
+	// 	return NewDecimal64(p.blocks[index].Int64[pos], p.blocks[index].Scale)
+	// case block.BlockDecimal128:
+	// 	return NewDecimal128(p.blocks[index].Int128[pos], p.blocks[index].Scale)
+	// case block.BlockDecimal256:
+	// 	return NewDecimal256(p.blocks[index].Int256[pos], p.blocks[index].Scale)
 	default:
 		return nil, fmt.Errorf("pack: invalid data type %d", p.blocks[index].Type)
 	}
@@ -842,7 +806,8 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
-	switch p.blocks[index].Type {
+	// TODO: migrate to p.types[fi.blockid] FieldType
+	switch p.blocks[index].Type() {
 	case block.BlockInt64:
 		p.blocks[index].Int64[pos] = val.Int()
 	case block.BlockInt32:
@@ -852,27 +817,9 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 	case block.BlockInt8:
 		p.blocks[index].Int8[pos] = int8(val.Int())
 	case block.BlockUint64:
-		var amount uint64
-		if p.blocks[index].Flags&block.BlockFlagFixed > 0 && val.Type().String() == "float64" {
-			amount = block.ToFixed64(val.Float(), p.blocks[index].Precision)
-		} else {
-			amount = val.Uint()
-		}
-		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-			amount = block.Compact64(amount)
-		}
-		p.blocks[index].Uint64[pos] = amount
+		p.blocks[index].Uint64[pos] = val.Uint()
 	case block.BlockUint32:
-		var amount uint64
-		if p.blocks[index].Flags&block.BlockFlagFixed > 0 && val.Type().String() == "float32" {
-			amount = block.ToFixed64(val.Float(), p.blocks[index].Precision)
-		} else {
-			amount = val.Uint()
-		}
-		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-			amount = block.Compact64(amount)
-		}
-		p.blocks[index].Uint32[pos] = uint32(amount)
+		p.blocks[index].Uint32[pos] = uint32(val.Uint())
 	case block.BlockUint16:
 		p.blocks[index].Uint16[pos] = uint16(val.Uint())
 	case block.BlockUint8:
@@ -905,11 +852,24 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 		p.blocks[index].Bools[pos] = amount
 	case block.BlockTime:
 		amount := val.Interface().(time.Time)
-		p.blocks[index].Timestamps[pos] = amount.UnixNano()
+		p.blocks[index].Int64[pos] = amount.UnixNano()
+	// case block.BlockDecimal32:
+	// 	amount := val.Interface().(Decimal32)
+	// 	p.blocks[index].Int32[pos] = int32(amount.Int64())
+	// case block.BlockDecimal64:
+	// 	amount := val.Interface().(Decimal64)
+	// 	p.blocks[index].Int64[pos] = amount.Int64()
+	// case block.BlockDecimal128:
+	// 	amount := val.Interface().(Decimal128)
+	// 	p.blocks[index].Int128[pos] = amount.Int128()
+	// case block.BlockDecimal256:
+	// 	amount := val.Interface().(Decimal256)
+	// 	p.blocks[index].Int256[pos] = amount.Int256()
+
 	default:
 		return fmt.Errorf("pack: invalid data type %d", p.blocks[index].Type)
 	}
-	p.blocks[index].Dirty = true
+	p.blocks[index].SetDirty()
 	p.dirty = true
 	if p.pkindex == index {
 		p.pkmap = nil
@@ -917,6 +877,7 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 	return nil
 }
 
+// TODO: migrate to  FieldType
 func (p *Package) isValidAt(index, pos int, typ block.BlockType) error {
 	if index < 0 || p.nFields <= index {
 		return ErrNoField
@@ -924,18 +885,16 @@ func (p *Package) isValidAt(index, pos int, typ block.BlockType) error {
 	if p.nValues <= pos {
 		return ErrNoColumn
 	}
-	if p.blocks[index].Type != typ {
+	if p.blocks[index].Type() != typ { // check FieldType.BlockType too
 		return ErrInvalidType
 	}
 	return nil
 }
 
+// TODO: migrate to  FieldType
 func (p *Package) Uint64At(index, pos int) (uint64, error) {
 	if err := p.isValidAt(index, pos, block.BlockUint64); err != nil {
 		return 0, err
-	}
-	if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-		return block.Decompact64(p.blocks[index].Uint64[pos]), nil
 	}
 	return p.blocks[index].Uint64[pos], nil
 }
@@ -943,9 +902,6 @@ func (p *Package) Uint64At(index, pos int) (uint64, error) {
 func (p *Package) Uint32At(index, pos int) (uint32, error) {
 	if err := p.isValidAt(index, pos, block.BlockUint32); err != nil {
 		return 0, err
-	}
-	if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-		return uint32(block.Decompact64(uint64(p.blocks[index].Uint32[pos]))), nil
 	}
 	return p.blocks[index].Uint32[pos], nil
 }
@@ -993,16 +949,6 @@ func (p *Package) Int8At(index, pos int) (int8, error) {
 }
 
 func (p *Package) Float64At(index, pos int) (float64, error) {
-	if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
-		if err := p.isValidAt(index, pos, block.BlockUint64); err != nil {
-			return 0.0, err
-		}
-		val := p.blocks[index].Uint64[pos]
-		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-			val = block.Decompact64(val)
-		}
-		return block.FromFixed64(val, p.blocks[index].Precision), nil
-	}
 	if err := p.isValidAt(index, pos, block.BlockFloat64); err != nil {
 		return 0.0, err
 	}
@@ -1010,16 +956,6 @@ func (p *Package) Float64At(index, pos int) (float64, error) {
 }
 
 func (p *Package) Float32At(index, pos int) (float32, error) {
-	if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
-		if err := p.isValidAt(index, pos, block.BlockUint32); err != nil {
-			return 0.0, err
-		}
-		val := p.blocks[index].Uint32[pos]
-		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-			val = uint32(block.Decompact64(uint64(val)))
-		}
-		return float32(block.FromFixed64(uint64(val), p.blocks[index].Precision)), nil
-	}
 	if err := p.isValidAt(index, pos, block.BlockFloat32); err != nil {
 		return 0.0, err
 	}
@@ -1051,14 +987,57 @@ func (p *Package) TimeAt(index, pos int) (time.Time, error) {
 	if err := p.isValidAt(index, pos, block.BlockTime); err != nil {
 		return zeroTime, err
 	}
-	return time.Unix(0, p.blocks[index].Timestamps[pos]).UTC(), nil
+	return time.Unix(0, p.blocks[index].Int64[pos]).UTC(), nil
+}
+
+func (p *Package) Decimal32At(index, pos int) (Decimal32, error) {
+	if err := p.isValidAt(index, pos, block.BlockInt32); err != nil {
+		return Decimal32{}, err
+	}
+	return NewDecimal32(p.blocks[index].Int32[pos], p.blocks[index].Scale()), nil
+}
+
+func (p *Package) Decimal64At(index, pos int) (Decimal64, error) {
+	if err := p.isValidAt(index, pos, block.BlockInt64); err != nil {
+		return Decimal64{}, err
+	}
+	return NewDecimal64(p.blocks[index].Int64[pos], p.blocks[index].Scale()), nil
+}
+
+func (p *Package) Decimal128At(index, pos int) (Decimal128, error) {
+	if err := p.isValidAt(index, pos, block.BlockInt128); err != nil {
+		return Decimal128{}, err
+	}
+	return NewDecimal128(p.blocks[index].Int128[pos], p.blocks[index].Scale()), nil
+}
+
+func (p *Package) Decimal256At(index, pos int) (Decimal256, error) {
+	if err := p.isValidAt(index, pos, block.BlockInt256); err != nil {
+		return Decimal256{}, err
+	}
+	return NewDecimal256(p.blocks[index].Int256[pos], p.blocks[index].Scale()), nil
+}
+
+func (p *Package) Int128At(index, pos int) (Int128, error) {
+	if err := p.isValidAt(index, pos, block.BlockInt128); err != nil {
+		return Int128{}, err
+	}
+	return p.blocks[index].Int128[pos], nil
+}
+
+func (p *Package) Int256At(index, pos int) (Int256, error) {
+	if err := p.isValidAt(index, pos, block.BlockInt256); err != nil {
+		return Int256{}, err
+	}
+	return p.blocks[index].Int256[pos], nil
 }
 
 func (p *Package) IsZeroAt(index, pos int) bool {
 	if p.nFields <= index || p.nValues <= pos {
 		return false
 	}
-	switch p.blocks[index].Type {
+	// TODO: migrate to  FieldType
+	switch p.blocks[index].Type() {
 	case block.BlockInt64, block.BlockInt32, block.BlockInt16, block.BlockInt8:
 		// cannot be zero because 0 value has a meaning
 		return false
@@ -1076,7 +1055,7 @@ func (p *Package) IsZeroAt(index, pos int) bool {
 	case block.BlockBytes:
 		return len(p.blocks[index].Bytes[pos]) == 0
 	case block.BlockTime:
-		val := p.blocks[index].Timestamps[pos]
+		val := p.blocks[index].Int64[pos]
 		return val == 0 || time.Unix(0, val).IsZero()
 	}
 	return true
@@ -1086,8 +1065,9 @@ func (p *Package) Column(index int) (interface{}, error) {
 	if index < 0 || p.nFields <= index {
 		return nil, ErrNoField
 	}
-	switch p.blocks[index].Type {
-	case block.BlockInt64:
+	// TODO: migrate to  FieldType?
+	switch p.blocks[index].Type() {
+	case block.BlockInt64, block.BlockTime:
 		return p.blocks[index].Int64, nil
 	case block.BlockInt32:
 		return p.blocks[index].Int32, nil
@@ -1096,55 +1076,9 @@ func (p *Package) Column(index int) (interface{}, error) {
 	case block.BlockInt8:
 		return p.blocks[index].Int8, nil
 	case block.BlockUint64:
-		// floats may have been converted to uints
-		val := p.blocks[index].Uint64
-		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
-			resp := make([]float64, len(val))
-			if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-				for i, v := range val {
-					resp[i] = block.FromFixed64(block.Decompact64(v), p.blocks[index].Precision)
-				}
-			} else {
-				for i, v := range val {
-					resp[i] = block.FromFixed64(v, p.blocks[index].Precision)
-				}
-			}
-			return resp, nil
-		}
-		// uints may be compacted
-		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-			resp := make([]uint64, len(val))
-			for i, v := range val {
-				resp[i] = block.Decompact64(v)
-			}
-			return resp, nil
-		}
-		return val, nil
+		return p.blocks[index].Uint64, nil
 	case block.BlockUint32:
-		// floats may have been converted to uints
-		val := p.blocks[index].Uint32
-		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
-			resp := make([]float32, len(val))
-			if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-				for i, v := range val {
-					resp[i] = float32(block.FromFixed64(block.Decompact64(uint64(v)), p.blocks[index].Precision))
-				}
-			} else {
-				for i, v := range val {
-					resp[i] = float32(block.FromFixed64(uint64(v), p.blocks[index].Precision))
-				}
-			}
-			return resp, nil
-		}
-		// uints may be compacted
-		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-			resp := make([]uint32, len(val))
-			for i, v := range val {
-				resp[i] = uint32(block.Decompact64(uint64(v)))
-			}
-			return resp, nil
-		}
-		return val, nil
+		return p.blocks[index].Uint32, nil
 	case block.BlockUint16:
 		return p.blocks[index].Uint16, nil
 	case block.BlockUint8:
@@ -1159,8 +1093,10 @@ func (p *Package) Column(index int) (interface{}, error) {
 		return p.blocks[index].Bytes, nil
 	case block.BlockBool:
 		return p.blocks[index].Bools, nil
-	case block.BlockTime:
-		return p.blocks[index].Timestamps, nil
+	case block.BlockInt128:
+		return p.blocks[index].Int128, nil
+	case block.BlockInt256:
+		return p.blocks[index].Int256, nil
 	default:
 		return nil, fmt.Errorf("pack: invalid data type %d", p.blocks[index].Type)
 	}
@@ -1173,8 +1109,13 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 	// copy one full row of values
 	out := make([]interface{}, p.nFields)
 	for i, b := range p.blocks {
-		switch b.Type {
-		case block.BlockInt64:
+		// TODO: migrate to  FieldType
+		switch b.Type() {
+		case block.BlockInt256:
+			out[i] = b.Int256[pos]
+		case block.BlockInt128:
+			out[i] = b.Int128[pos]
+		case block.BlockInt64, block.BlockTime:
 			out[i] = b.Int64[pos]
 		case block.BlockInt32:
 			out[i] = b.Int32[pos]
@@ -1203,8 +1144,6 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 			out[i] = buf
 		case block.BlockBool:
 			out[i] = b.Bools[pos]
-		case block.BlockTime:
-			out[i] = b.Timestamps[pos]
 		case block.BlockIgnore:
 		default:
 			return nil, fmt.Errorf("pack: invalid data type %d", b.Type)
@@ -1220,8 +1159,13 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 	if p.nValues <= start || p.nValues <= end {
 		return nil, fmt.Errorf("pack: invalid range %d:%d (max=%d)", start, end, p.nValues)
 	}
-	switch p.blocks[index].Type {
-	case block.BlockInt64:
+	// TODO: migrate to  FieldType
+	switch p.blocks[index].Type() {
+	case block.BlockInt256:
+		return p.blocks[index].Int256[start:end], nil
+	case block.BlockInt128:
+		return p.blocks[index].Int128[start:end], nil
+	case block.BlockInt64, block.BlockTime:
 		return p.blocks[index].Int64[start:end], nil
 	case block.BlockInt32:
 		return p.blocks[index].Int32[start:end], nil
@@ -1230,55 +1174,9 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 	case block.BlockInt8:
 		return p.blocks[index].Int8[start:end], nil
 	case block.BlockUint64:
-		// floats may have been converted to uints
-		val := p.blocks[index].Uint64[start:end]
-		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
-			resp := make([]float64, len(val))
-			if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-				for i, v := range val {
-					resp[i] = block.FromFixed64(block.Decompact64(v), p.blocks[index].Precision)
-				}
-			} else {
-				for i, v := range val {
-					resp[i] = block.FromFixed64(v, p.blocks[index].Precision)
-				}
-			}
-			return resp, nil
-		}
-		// uints may be compacted
-		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-			resp := make([]uint64, len(val))
-			for i, v := range val {
-				resp[i] = block.Decompact64(v)
-			}
-			return resp, nil
-		}
-		return val, nil
+		return p.blocks[index].Uint64[start:end], nil
 	case block.BlockUint32:
-		// floats may have been converted to uints
-		val := p.blocks[index].Uint32[start:end]
-		if p.blocks[index].Flags&block.BlockFlagFixed > 0 {
-			resp := make([]float32, len(val))
-			if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-				for i, v := range val {
-					resp[i] = float32(block.FromFixed64(block.Decompact64(uint64(v)), p.blocks[index].Precision))
-				}
-			} else {
-				for i, v := range val {
-					resp[i] = float32(block.FromFixed64(uint64(v), p.blocks[index].Precision))
-				}
-			}
-			return resp, nil
-		}
-		// uints may be compacted
-		if p.blocks[index].Flags&block.BlockFlagCompact > 0 {
-			resp := make([]uint32, len(val))
-			for i, v := range val {
-				resp[i] = uint32(block.Decompact64(uint64(v)))
-			}
-			return resp, nil
-		}
-		return val, nil
+		return p.blocks[index].Uint32[start:end], nil
 	case block.BlockUint16:
 		return p.blocks[index].Uint16[start:end], nil
 	case block.BlockUint8:
@@ -1293,8 +1191,6 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		return p.blocks[index].Bytes[start:end], nil
 	case block.BlockBool:
 		return p.blocks[index].Bools[start:end], nil
-	case block.BlockTime:
-		return p.blocks[index].Timestamps[start:end], nil
 	default:
 		return nil, fmt.Errorf("pack: invalid data type %d", p.blocks[index].Type)
 	}
@@ -1319,8 +1215,15 @@ func (p *Package) CopyFrom(src *Package, dstPos, srcPos, srcLen int) error {
 	// copy at most N rows without overflowing dst
 	n := util.Min(p.Len()-dstPos, srcLen)
 	for i, _ := range p.blocks {
-		switch src.blocks[i].Type {
-		case block.BlockInt64:
+		// TODO: migrate to  FieldType
+		switch src.blocks[i].Type() {
+		case block.BlockIgnore:
+			// skip
+		case block.BlockInt256:
+			copy(p.blocks[i].Int256[dstPos:], src.blocks[i].Int256[srcPos:srcPos+n])
+		case block.BlockInt128:
+			copy(p.blocks[i].Int128[dstPos:], src.blocks[i].Int128[srcPos:srcPos+n])
+		case block.BlockInt64, block.BlockTime:
 			copy(p.blocks[i].Int64[dstPos:], src.blocks[i].Int64[srcPos:srcPos+n])
 		case block.BlockInt32:
 			copy(p.blocks[i].Int32[dstPos:], src.blocks[i].Int32[srcPos:srcPos+n])
@@ -1356,13 +1259,10 @@ func (p *Package) CopyFrom(src *Package, dstPos, srcPos, srcLen int) error {
 			}
 		case block.BlockBool:
 			copy(p.blocks[i].Bools[dstPos:], src.blocks[i].Bools[srcPos:srcPos+n])
-		case block.BlockTime:
-			copy(p.blocks[i].Timestamps[dstPos:], src.blocks[i].Timestamps[srcPos:srcPos+n])
-		case block.BlockIgnore:
 		default:
 			return fmt.Errorf("pack: invalid data type %d", p.blocks[i].Type)
 		}
-		p.blocks[i].Dirty = true
+		p.blocks[i].SetDirty()
 	}
 	p.dirty = true
 	p.pkmap = nil
@@ -1381,8 +1281,15 @@ func (p *Package) AppendFrom(src *Package, srcPos, srcLen int, safecopy bool) er
 		return fmt.Errorf("pack: invalid source pack offset %d len %d (max %d)", srcPos, srcLen, src.nValues)
 	}
 	for i, _ := range p.blocks {
-		switch src.blocks[i].Type {
-		case block.BlockInt64:
+		// TODO: migrate to  FieldType (match decimal scale)
+		switch src.blocks[i].Type() {
+		case block.BlockIgnore:
+			// skip
+		case block.BlockInt256:
+			p.blocks[i].Int256 = append(p.blocks[i].Int256, src.blocks[i].Int256[srcPos:srcPos+srcLen]...)
+		case block.BlockInt128:
+			p.blocks[i].Int128 = append(p.blocks[i].Int128, src.blocks[i].Int128[srcPos:srcPos+srcLen]...)
+		case block.BlockInt64, block.BlockTime:
 			p.blocks[i].Int64 = append(p.blocks[i].Int64, src.blocks[i].Int64[srcPos:srcPos+srcLen]...)
 		case block.BlockInt32:
 			p.blocks[i].Int32 = append(p.blocks[i].Int32, src.blocks[i].Int32[srcPos:srcPos+srcLen]...)
@@ -1416,13 +1323,10 @@ func (p *Package) AppendFrom(src *Package, srcPos, srcLen int, safecopy bool) er
 			}
 		case block.BlockBool:
 			p.blocks[i].Bools = append(p.blocks[i].Bools, src.blocks[i].Bools[srcPos:srcPos+srcLen]...)
-		case block.BlockTime:
-			p.blocks[i].Timestamps = append(p.blocks[i].Timestamps, src.blocks[i].Timestamps[srcPos:srcPos+srcLen]...)
-		case block.BlockIgnore:
 		default:
 			return fmt.Errorf("pack: invalid data type %d", p.blocks[i].Type)
 		}
-		p.blocks[i].Dirty = true
+		p.blocks[i].SetDirty()
 	}
 	p.nValues += srcLen
 	p.dirty = true
@@ -1433,8 +1337,14 @@ func (p *Package) AppendFrom(src *Package, srcPos, srcLen int, safecopy bool) er
 // appends an empty row with default/zero values
 func (p *Package) Append() error {
 	for i, _ := range p.blocks {
-		switch p.blocks[i].Type {
-		case block.BlockInt64:
+		switch p.blocks[i].Type() {
+		case block.BlockIgnore:
+			// skip
+		case block.BlockInt256:
+			p.blocks[i].Int256 = append(p.blocks[i].Int256, Int256Zero)
+		case block.BlockInt128:
+			p.blocks[i].Int128 = append(p.blocks[i].Int128, Int128Zero)
+		case block.BlockInt64, block.BlockTime:
 			p.blocks[i].Int64 = append(p.blocks[i].Int64, 0)
 		case block.BlockInt32:
 			p.blocks[i].Int32 = append(p.blocks[i].Int32, 0)
@@ -1460,13 +1370,10 @@ func (p *Package) Append() error {
 			p.blocks[i].Bytes = append(p.blocks[i].Bytes, []byte{})
 		case block.BlockBool:
 			p.blocks[i].Bools = append(p.blocks[i].Bools, false)
-		case block.BlockTime:
-			p.blocks[i].Timestamps = append(p.blocks[i].Timestamps, 0)
-		case block.BlockIgnore:
 		default:
 			return fmt.Errorf("pack: invalid data type %d", p.blocks[i].Type)
 		}
-		p.blocks[i].Dirty = true
+		p.blocks[i].SetDirty()
 	}
 	p.nValues++
 	p.dirty = true
@@ -1480,8 +1387,14 @@ func (p *Package) Grow(n int) error {
 		return fmt.Errorf("pack: grow requires positive value")
 	}
 	for i, _ := range p.blocks {
-		switch p.blocks[i].Type {
-		case block.BlockInt64:
+		switch p.blocks[i].Type() {
+		case block.BlockIgnore:
+			// skip
+		case block.BlockInt256:
+			p.blocks[i].Int256 = append(p.blocks[i].Int256, make([]Int256, n)...)
+		case block.BlockInt128:
+			p.blocks[i].Int128 = append(p.blocks[i].Int128, make([]Int128, n)...)
+		case block.BlockInt64, block.BlockTime:
 			p.blocks[i].Int64 = append(p.blocks[i].Int64, make([]int64, n)...)
 		case block.BlockInt32:
 			p.blocks[i].Int32 = append(p.blocks[i].Int32, make([]int32, n)...)
@@ -1507,13 +1420,10 @@ func (p *Package) Grow(n int) error {
 			p.blocks[i].Bytes = append(p.blocks[i].Bytes, make([][]byte, n)...)
 		case block.BlockBool:
 			p.blocks[i].Bools = append(p.blocks[i].Bools, make([]bool, n)...)
-		case block.BlockTime:
-			p.blocks[i].Timestamps = append(p.blocks[i].Timestamps, make([]int64, n)...)
-		case block.BlockIgnore:
 		default:
 			return fmt.Errorf("pack: invalid data type %d", p.blocks[i].Type)
 		}
-		p.blocks[i].Dirty = true
+		p.blocks[i].SetDirty()
 	}
 	p.nValues += n
 	p.dirty = true
@@ -1530,8 +1440,14 @@ func (p *Package) Delete(pos, n int) error {
 	}
 	n = util.Min(p.Len()-pos, n)
 	for i, _ := range p.blocks {
-		switch p.blocks[i].Type {
-		case block.BlockInt64:
+		switch p.blocks[i].Type() {
+		case block.BlockIgnore:
+			// skip
+		case block.BlockInt256:
+			p.blocks[i].Int256 = append(p.blocks[i].Int256[:pos], p.blocks[i].Int256[pos+n:]...)
+		case block.BlockInt128:
+			p.blocks[i].Int128 = append(p.blocks[i].Int128[:pos], p.blocks[i].Int128[pos+n:]...)
+		case block.BlockInt64, block.BlockTime:
 			p.blocks[i].Int64 = append(p.blocks[i].Int64[:pos], p.blocks[i].Int64[pos+n:]...)
 		case block.BlockInt32:
 			p.blocks[i].Int32 = append(p.blocks[i].Int32[:pos], p.blocks[i].Int32[pos+n:]...)
@@ -1565,13 +1481,10 @@ func (p *Package) Delete(pos, n int) error {
 			p.blocks[i].Bytes = append(p.blocks[i].Bytes[:pos], p.blocks[i].Bytes[pos+n:]...)
 		case block.BlockBool:
 			p.blocks[i].Bools = append(p.blocks[i].Bools[:pos], p.blocks[i].Bools[pos+n:]...)
-		case block.BlockTime:
-			p.blocks[i].Timestamps = append(p.blocks[i].Timestamps[:pos], p.blocks[i].Timestamps[pos+n:]...)
-		case block.BlockIgnore:
 		default:
 			return fmt.Errorf("pack: invalid data type %d", p.blocks[i].Type)
 		}
-		p.blocks[i].Dirty = true
+		p.blocks[i].SetDirty()
 	}
 	p.nValues -= n
 	p.dirty = true
@@ -1604,6 +1517,7 @@ func (p *Package) Release() {
 	p.nValues = 0
 	p.offsets = nil
 	p.names = nil
+	p.types = nil
 	p.blocks = nil
 	p.namemap = nil
 	p.key = nil
@@ -1620,7 +1534,7 @@ func (p *Package) Release() {
 func (p *Package) Size() int {
 	var sz int
 	for _, v := range p.blocks {
-		sz += v.Size()
+		sz += v.HeapSize()
 	}
 	return sz
 }
@@ -1703,8 +1617,14 @@ type PackageSorter struct {
 func (p *PackageSorter) Len() int { return p.Package.Len() }
 
 func (p *PackageSorter) Less(i, j int) bool {
-	switch p.Package.blocks[p.col].Type {
-	case block.BlockInt64:
+	switch p.Package.blocks[p.col].Type() {
+	case block.BlockIgnore:
+		return true
+	case block.BlockInt256:
+		return p.Package.blocks[p.col].Int256[i].Lt(p.Package.blocks[p.col].Int256[j])
+	case block.BlockInt128:
+		return p.Package.blocks[p.col].Int128[i].Lt(p.Package.blocks[p.col].Int128[j])
+	case block.BlockInt64, block.BlockTime:
 		return p.Package.blocks[p.col].Int64[i] < p.Package.blocks[p.col].Int64[j]
 	case block.BlockInt32:
 		return p.Package.blocks[p.col].Int32[i] < p.Package.blocks[p.col].Int32[j]
@@ -1730,10 +1650,6 @@ func (p *PackageSorter) Less(i, j int) bool {
 		return bytes.Compare(p.Package.blocks[p.col].Bytes[i], p.Package.blocks[p.col].Bytes[j]) < 0
 	case block.BlockBool:
 		return !p.Package.blocks[p.col].Bools[i] && p.Package.blocks[p.col].Bools[j]
-	case block.BlockTime:
-		return p.Package.blocks[p.col].Timestamps[i] < p.Package.blocks[p.col].Timestamps[j]
-	case block.BlockIgnore:
-		return true
 	default:
 		return false
 	}
@@ -1741,8 +1657,14 @@ func (p *PackageSorter) Less(i, j int) bool {
 
 func (p *PackageSorter) Swap(i, j int) {
 	for n := 0; n < p.Package.nFields; n++ {
-		switch p.Package.blocks[n].Type {
-		case block.BlockInt64:
+		switch p.Package.blocks[n].Type() {
+		case block.BlockInt256:
+			p.Package.blocks[n].Int256[i], p.Package.blocks[n].Int256[j] =
+				p.Package.blocks[n].Int256[j], p.Package.blocks[n].Int256[i]
+		case block.BlockInt128:
+			p.Package.blocks[n].Int128[i], p.Package.blocks[n].Int128[j] =
+				p.Package.blocks[n].Int128[j], p.Package.blocks[n].Int128[i]
+		case block.BlockInt64, block.BlockTime:
 			p.Package.blocks[n].Int64[i], p.Package.blocks[n].Int64[j] =
 				p.Package.blocks[n].Int64[j], p.Package.blocks[n].Int64[i]
 		case block.BlockInt32:
@@ -1781,9 +1703,6 @@ func (p *PackageSorter) Swap(i, j int) {
 		case block.BlockBool:
 			p.Package.blocks[n].Bools[i], p.Package.blocks[n].Bools[j] =
 				p.Package.blocks[n].Bools[j], p.Package.blocks[n].Bools[i]
-		case block.BlockTime:
-			p.Package.blocks[n].Timestamps[i], p.Package.blocks[n].Timestamps[j] =
-				p.Package.blocks[n].Timestamps[j], p.Package.blocks[n].Timestamps[i]
 		}
 	}
 }

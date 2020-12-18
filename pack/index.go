@@ -1355,7 +1355,7 @@ func (idx *Index) recyclePackage(pkg *Package) {
 		return
 	}
 	// don't recycle oversized packs to free memory
-	if c := pkg.Cap(); c < 0 || c > 1<<uint(idx.opts.PackSizeLog2) {
+	if c := pkg.Cap(); c <= 0 || c > 1<<uint(idx.opts.PackSizeLog2) {
 		pkg.Release()
 		return
 	}

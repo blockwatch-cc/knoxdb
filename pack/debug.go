@@ -261,7 +261,7 @@ func (p *Package) DumpType(w io.Writer) error {
 	)
 	for i, v := range p.blocks {
 		d, fi := "", ""
-		if v.Dirty {
+		if v.Dirty() {
 			d = "*"
 		}
 		if p.tinfo != nil {
@@ -273,14 +273,14 @@ func (p *Package) DumpType(w io.Writer) error {
 		} else {
 			sz = p.rawsize - p.offsets[i]
 		}
-		head := v.CloneHeader()
-		fmt.Fprintf(w, "Block %-02d:   %s typ=%d comp=%s flags=%d prec=%d len=%d min=%s max=%s sz=%s %s %s\n",
+		head := v.Header()
+		fmt.Fprintf(w, "Block %-02d:   %s typ=%d comp=%s flags=%d scale=%d len=%d min=%s max=%s sz=%s %s %s\n",
 			i,
 			p.names[i],
 			head.Type,
 			head.Compression,
 			head.Flags,
-			head.Precision,
+			head.Scale,
 			v.Len(),
 			util.ToString(head.MinValue),
 			util.ToString(head.MaxValue),
@@ -314,7 +314,7 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 			} else {
 				sz = p.rawsize - p.offsets[i]
 			}
-			head := v.CloneHeader()
+			head := v.Header()
 			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-33s %-33s %-4d %-5x %-6s %-10s %-12s %-10s %-10s\n",
 				lineNo,
 				key,       // pack key
@@ -323,12 +323,12 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 				v.Len(),   // block values
 				util.LimitStringEllipsis(util.ToString(head.MinValue), 33), // min val in block
 				util.LimitStringEllipsis(util.ToString(head.MaxValue), 33), // max val in block
-				head.Precision,
+				head.Scale,
 				head.Flags,
 				head.Compression,
 				util.PrettyInt(sz),                // compressed block size
 				util.PrettyInt(v.MaxStoredSize()), // uncompressed storage size
-				util.PrettyInt(v.Size()),          // in-memory block size
+				util.PrettyInt(v.HeapSize()),      // in-memory block size
 				fi,                                // type info type
 			)
 			lineNo++
@@ -353,7 +353,7 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 			} else {
 				sz = p.rawsize - p.offsets[i]
 			}
-			head := v.CloneHeader()
+			head := v.Header()
 			cols[0] = key
 			cols[1] = i
 			cols[2] = p.names[i]
@@ -361,11 +361,11 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 			cols[4] = v.Len()
 			cols[5] = head.MinValue
 			cols[6] = head.MaxValue
-			cols[7] = head.Precision
+			cols[7] = head.Scale
 			cols[8] = head.Flags
 			cols[9] = head.Compression.String()
 			cols[10] = sz
-			cols[11] = v.Size()
+			cols[11] = v.HeapSize()
 			cols[12] = v.MaxStoredSize()
 			cols[13] = fi
 			if !enc.HeaderWritten() {
@@ -377,7 +377,7 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 					"Columns",
 					"Min",
 					"Max",
-					"Precision",
+					"Scale",
 					"Flags",
 					"Compression",
 					"Compressed",
@@ -413,7 +413,7 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 		for i, l := 0, util.Min(500, p.nValues); i < l; i++ {
 			for j := 0; j < p.nFields; j++ {
 				var str string
-				if p.blocks[j].Type == block.BlockIgnore {
+				if p.blocks[j].Type() == block.BlockIgnore {
 					str = "[strip]"
 				} else {
 					val, _ := p.FieldAt(j, i)
@@ -440,7 +440,7 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 		for i := 0; i < p.nValues; i++ {
 			for j := 0; j < p.nFields; j++ {
 				var str string
-				if p.blocks[j].Type == block.BlockIgnore {
+				if p.blocks[j].Type() == block.BlockIgnore {
 					str = "[strip]"
 				} else {
 					val, _ := p.FieldAt(j, i)

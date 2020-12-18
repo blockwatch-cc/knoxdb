@@ -14,11 +14,11 @@ import (
 )
 
 type PackageHeader struct {
-	Key          []byte                `json:"k"`
-	NFields      int                   `json:"f"`
-	NValues      int                   `json:"v"`
-	PackSize     int                   `json:"s"`
-	BlockHeaders block.BlockHeaderList `json:"b"`
+	Key          []byte           `json:"k"`
+	NFields      int              `json:"f"`
+	NValues      int              `json:"v"`
+	PackSize     int              `json:"s"`
+	BlockHeaders block.HeaderList `json:"b"`
 
 	dirty bool
 }
@@ -29,10 +29,10 @@ func (p *Package) Header() PackageHeader {
 		NFields:      p.nFields,
 		NValues:      p.nValues,
 		PackSize:     p.packedsize,
-		BlockHeaders: make(block.BlockHeaderList, 0, p.nFields),
+		BlockHeaders: make(block.HeaderList, 0, p.nFields),
 	}
 	for _, v := range p.blocks {
-		h.BlockHeaders = append(h.BlockHeaders, v.CloneHeader())
+		h.BlockHeaders = append(h.BlockHeaders, v.Header())
 	}
 	return h
 }

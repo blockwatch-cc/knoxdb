@@ -33,6 +33,10 @@ func (p *Package) MarshalBinary() ([]byte, error) {
 		buf.WriteByte(0)
 	}
 
+	// TODO: encode into a single buffer, avoid memcopy
+	// // keep the current position to later write the offset table
+	// offsetPos := buf.Len()
+
 	// encode all blocks to know their sizes
 	headers := make([][]byte, p.nFields)
 	encoded := make([][]byte, p.nFields)
@@ -96,14 +100,11 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 
 	// v1 (OSS) does not write compression byte
 	// v2 (PRO) did write compression byte
-	// v3 (PRO) compression and precision are obsolete, moved to block
-	var precision int
+	// v3 (PRO) compression and scale are obsolete, moved to block
+	var scale int
 	if p.version >= packageStorageFormatVersionV2 {
 		b, _ := buf.ReadByte()
-		precision = int(b >> 4)
-		if precision == 0 {
-			precision = maxPrecision
-		}
+		scale = int(b >> 4)
 	}
 
 	// grid size (nFields is stored as uint32)
@@ -126,6 +127,9 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 			p.namemap[strcopy] = i
 		}
 	}
+
+	// TODO: do we need to initialize field types here?
+	p.types = make([]FieldType, p.nFields)
 
 	// read offsets
 	p.offsets = make([]int, p.nFields)
@@ -152,16 +156,12 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 			if err := p.blocks[i].DecodeHeader(buf); err != nil {
 				return err
 			}
-			// v2 only: set uint64/float64 converted block precision from pack header
+			// v2 only: detect fixed point uint64 from pack header
 			if p.version == packageStorageFormatVersionV2 {
-				if p.blocks[i].Type == block.BlockUint64 || p.blocks[i].Type == block.BlockFloat64 {
-					p.blocks[i].Precision = precision
-				}
-			}
-			// v1..v3 only: set fixed when compact is set on float64 field
-			if p.version <= packageStorageFormatVersionV3 {
-				if p.blocks[i].Type == block.BlockUint64 && p.blocks[i].Flags&block.BlockFlagCompact > 0 {
-					p.blocks[i].Flags |= block.BlockFlagFixed
+				if p.blocks[i].Type() == block.BlockUint64 && scale > 0 {
+					// FIXME: decimal64 expects block type int64!
+					p.types[i] = FieldTypeDecimal64
+					p.blocks[i].SetScale(scale)
 				}
 			}
 		}
