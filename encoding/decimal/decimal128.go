@@ -8,7 +8,7 @@ package decimal
 import (
 	"fmt"
 	// "strconv"
-	// "strings"
+	"strings"
 
 	. "blockwatch.cc/knoxdb/vec"
 )
@@ -147,83 +147,57 @@ func (d *Decimal128) SetFloat64(value float64, scale int) error {
 	return nil
 }
 
-// TODO, extend to 128bit
 func (d Decimal128) String() string {
-	// switch d.scale {
-	// case 0:
-	// 	return strconv.FormatInt(d.val[1], 10)
-	// default:
-	// 	i := strconv.FormatInt(d.val[1]/pow10[d.scale], 10)
-	// 	f := strconv.FormatInt(abs(d.val[1])%pow10[d.scale], 10)
-	// 	if diff := d.scale - len(f); diff > 0 {
-	// 		f = strings.Repeat("0", diff) + f
-	// 	}
-	// 	return i + "." + f
-	// }
-	return "Decimal128.String()_todo"
+	s := d.val.String()
+	if d.scale == 0 {
+		return s
+	}
+	return s[:len(s)-d.scale] + "." + s[len(s)-d.scale:]
 }
 
 func (d Decimal128) MarshalText() ([]byte, error) {
 	return []byte(d.String()), nil
 }
 
-// TODO, extend to 128bit
 func (d *Decimal128) UnmarshalText(buf []byte) error {
-	// s := string(buf)
-	// if !decimalRegexp.Match(buf) {
-	// 	return fmt.Errorf("decimal128: invalid decimal string %s", s)
-	// }
-	// sign := int64(1)
-	// switch s[0] {
-	// case '+':
-	// 	s = s[1:]
-	// case '-':
-	// 	sign = -1
-	// 	s = s[1:]
-	// }
-	// dot := strings.Index(s, ".")
-	// switch dot {
-	// case -1:
-	// 	// parse number
-	// 	i, err := strconv.ParseUint(s, 10, 64)
-	// 	if err != nil {
-	// 		return fmt.Errorf("decimal128: %v", err)
-	// 	}
-	// 	if len(s) > MaxDecimal128Precision {
-	// 		return fmt.Errorf("decimal128: number %s overflows precision", s)
-	// 	}
-	// 	d.val = NewInt128(sign, i)
-	// 	d.scale = 0
+	if len(buf) == 0 {
+		d.scale = 0
+		d.val = Int128Zero
+		return nil
+	}
 
-	// default:
-	// 	if len(s)-1 > MaxDecimal128Precision {
-	// 		return fmt.Errorf("decimal128: number %s overflows precision", s)
-	// 	}
+	s := string(buf)
 
-	// 	// parse integral part
-	// 	i, err := strconv.ParseUint(s[:dot], 10, 64)
-	// 	if err != nil {
-	// 		return fmt.Errorf("decimal128: integral %v", err)
-	// 	}
+	// handle sign
+	var sign string
+	switch s[0] {
+	case '+', '-':
+		sign = string(s[0])
+		s = s[1:]
+	}
 
-	// 	// parse fractional digits
-	// 	f, err := strconv.ParseUint(s[dot+1:], 10, 64)
-	// 	if err != nil {
-	// 		return fmt.Errorf("decimal128: fraction %v", err)
-	// 	}
+	// find the decimal dot
+	dot := strings.IndexByte(s, '.')
 
-	// 	// count leading zeros in fractional part
-	// 	lead := 0
-	// 	for i := dot + 1; i < len(s); i++ {
-	// 		if s[i] != '0' {
-	// 			break
-	// 		}
-	// 		lead++
-	// 	}
+	// remove the dot
+	scale := len(s) - dot - 1
+	if dot < 0 {
+		scale = 0
+	} else {
+		if scale > MaxDecimal128Precision {
+			return fmt.Errorf("decimal128: number %s overflows precision", s)
+		}
+		s = s[:dot] + s[dot+1:]
+	}
 
-	// 	d.scale = len(s) - dot - 1
-	// 	d.val = NewInt128(sign, i*pow10[d.scale]+f*pow10[lead])
-	// }
+	// parse number
+	i, err := ParseInt128(sign + s)
+	if err != nil {
+		return fmt.Errorf("decimal128: %v", err)
+	}
+
+	d.scale = scale
+	d.val = i
 	return nil
 }
 

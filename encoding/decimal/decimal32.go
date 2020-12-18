@@ -173,10 +173,9 @@ func (d Decimal32) MarshalText() ([]byte, error) {
 
 func (d *Decimal32) UnmarshalText(buf []byte) error {
 	s := string(buf)
-	if !decimalRegexp.Match(buf) {
-		return fmt.Errorf("decimal32: invalid decimal string %s", s)
-	}
-	sign := int64(1)
+
+	// handle sign
+	sign := int32(1)
 	switch s[0] {
 	case '+':
 		s = s[1:]
@@ -184,49 +183,30 @@ func (d *Decimal32) UnmarshalText(buf []byte) error {
 		sign = -1
 		s = s[1:]
 	}
-	dot := strings.Index(s, ".")
-	switch dot {
-	case -1:
-		// parse number
-		i, err := strconv.ParseInt(s, 10, 32)
-		if err != nil {
-			return fmt.Errorf("decimal32: %v", err)
-		}
-		if len(s) > MaxDecimal32Precision {
+
+	// find the decimal dot
+	dot := strings.IndexByte(s, '.')
+
+	// remove the dot
+	scale := len(s) - dot - 1
+	if dot < 0 {
+		scale = 0
+	} else {
+		if scale > MaxDecimal32Precision {
 			return fmt.Errorf("decimal32: number %s overflows precision", s)
 		}
-		d.val = int32(i * sign)
-		d.scale = 0
-
-	default:
-		if len(s)-1 > MaxDecimal32Precision {
-			return fmt.Errorf("decimal32: number %s overflows precision", s)
-		}
-
-		// parse integral part
-		i, err := strconv.ParseInt(s[:dot], 10, 32)
-		if err != nil {
-			return fmt.Errorf("decimal32: integral %v", err)
-		}
-
-		// parse fractional digits
-		f, err := strconv.ParseInt(s[dot+1:], 10, 32)
-		if err != nil {
-			return fmt.Errorf("decimal32: fraction %v", err)
-		}
-
-		// count leading zeros in fractional part
-		lead := 0
-		for i := dot + 1; i < len(s); i++ {
-			if s[i] != '0' {
-				break
-			}
-			lead++
-		}
-
-		d.scale = len(s) - dot - 1
-		d.val = int32((i*int64(pow10[d.scale]) + f*int64(pow10[lead])) * sign)
+		s = s[:dot] + s[dot+1:]
 	}
+
+	// parse number
+	i, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		return fmt.Errorf("decimal32: %v", err)
+	}
+
+	d.scale = scale
+	d.val = int32(i) * sign
+
 	return nil
 }
 
