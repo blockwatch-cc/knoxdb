@@ -9,27 +9,33 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"blockwatch.cc/knoxdb/vec"
 )
 
-const BlockHeaderVersion = byte(1)
+const (
+	headerBaseSize = 2
+)
 
-type BlockHeader struct {
+const HeaderVersion = byte(1)
+
+type Header struct {
 	Type        BlockType
 	Compression Compression
-	Precision   int
 	Flags       BlockFlags
+	Scale       int
 	MinValue    interface{}
 	MaxValue    interface{}
 }
 
-func (h BlockHeader) IsValid() bool {
+func (h Header) IsValid() bool {
 	return h.Type != BlockIgnore && h.MinValue != nil && h.MaxValue != nil
 }
 
-type BlockHeaderList []BlockHeader
+type HeaderList []Header
 
-func (h BlockHeaderList) Encode(buf *bytes.Buffer) error {
-	buf.WriteByte(BlockHeaderVersion)
+func (h HeaderList) Encode(buf *bytes.Buffer) error {
+	buf.WriteByte(HeaderVersion)
 	var b [4]byte
 	binary.BigEndian.PutUint32(b[:], uint32(len(h)))
 	buf.Write(b[:])
@@ -41,14 +47,14 @@ func (h BlockHeaderList) Encode(buf *bytes.Buffer) error {
 	return nil
 }
 
-func (h *BlockHeaderList) Decode(buf *bytes.Buffer) error {
+func (h *HeaderList) Decode(buf *bytes.Buffer) error {
 	if buf.Len() < 5 {
 		return fmt.Errorf("pack: short block header list, length %d", buf.Len())
 	}
 
 	// read and check version byte
 	b, _ := buf.ReadByte()
-	if b != BlockHeaderVersion {
+	if b != HeaderVersion {
 		return fmt.Errorf("pack: invalid block header list version %d", b)
 	}
 
@@ -56,7 +62,7 @@ func (h *BlockHeaderList) Decode(buf *bytes.Buffer) error {
 	l := int(binary.BigEndian.Uint32(buf.Next(4)))
 
 	// alloc slice
-	*h = make(BlockHeaderList, l)
+	*h = make(HeaderList, l)
 
 	// decode header parts
 	for i := range *h {
@@ -67,115 +73,203 @@ func (h *BlockHeaderList) Decode(buf *bytes.Buffer) error {
 	return nil
 }
 
-// copies header data and converts min/max values when flagged
-func (b *Block) CloneHeader() BlockHeader {
-	// block header data must be valid (only applies to v2 blocks!)
-	if b.MinValue == nil || b.MaxValue == nil {
-		return BlockHeader{}
+func NewHeader(typ BlockType, comp Compression, scale int, flags BlockFlags) Header {
+	h := Header{
+		Type:        typ,
+		Compression: comp,
+		Scale:       scale,
+		Flags:       flags,
 	}
-	bh := BlockHeader{
-		Type:        b.Type,
-		Compression: b.Compression,
-		Precision:   b.Precision,
-		Flags:       b.Flags,
-	}
-	switch b.Type {
+	switch typ {
 	case BlockTime:
-		min, max := b.MinValue.(time.Time), b.MaxValue.(time.Time)
-		bh.MinValue = min
-		bh.MaxValue = max
+		h.MinValue = time.Time{}
+		h.MaxValue = time.Time{}
 	case BlockFloat64:
-		min, max := b.MinValue.(float64), b.MaxValue.(float64)
-		bh.MinValue = min
-		bh.MaxValue = max
+		h.MinValue = float64(0.0)
+		h.MaxValue = float64(0.0)
 	case BlockFloat32:
-		min, max := b.MinValue.(float32), b.MaxValue.(float32)
-		bh.MinValue = min
-		bh.MaxValue = max
+		h.MinValue = float32(0.0)
+		h.MaxValue = float32(0.0)
 	case BlockInt64:
-		min, max := b.MinValue.(int64), b.MaxValue.(int64)
-		bh.MinValue = min
-		bh.MaxValue = max
+		h.MinValue = int64(0)
+		h.MaxValue = int64(0)
 	case BlockInt32:
-		min, max := b.MinValue.(int32), b.MaxValue.(int32)
-		bh.MinValue = min
-		bh.MaxValue = max
+		h.MinValue = int32(0)
+		h.MaxValue = int32(0)
 	case BlockInt16:
-		min, max := b.MinValue.(int16), b.MaxValue.(int16)
-		bh.MinValue = min
-		bh.MaxValue = max
+		h.MinValue = int16(0)
+		h.MaxValue = int16(0)
 	case BlockInt8:
-		min, max := b.MinValue.(int8), b.MaxValue.(int8)
-		bh.MinValue = min
-		bh.MaxValue = max
+		h.MinValue = int8(0)
+		h.MaxValue = int8(0)
 	case BlockUint64:
-		min, max := b.MinValue.(uint64), b.MaxValue.(uint64)
-		if b.Flags&BlockFlagFixed > 0 {
-			// uint64 -> float64 incl decompact
-			bh.MinValue = FromFixed64(Decompact64(min), b.Precision)
-			bh.MaxValue = FromFixed64(Decompact64(max), b.Precision)
-		} else if b.Flags&BlockFlagCompact > 0 {
-			// uint64 compression only
-			bh.MinValue = Decompact64(min)
-			bh.MaxValue = Decompact64(max)
-		} else {
-			bh.MinValue = min
-			bh.MaxValue = max
-		}
+		h.MinValue = uint64(0)
+		h.MaxValue = uint64(0)
 	case BlockUint32:
-		min, max := b.MinValue.(uint32), b.MaxValue.(uint32)
-		if b.Flags&BlockFlagFixed > 0 {
-			// uint32 -> float32 incl decompact
-			bh.MinValue = float32(FromFixed64(Decompact64(uint64(min)), b.Precision))
-			bh.MaxValue = float32(FromFixed64(Decompact64(uint64(max)), b.Precision))
-		} else if b.Flags&BlockFlagCompact > 0 {
-			// uint32 compression only
-			bh.MinValue = uint32(Decompact64(uint64(min)))
-			bh.MaxValue = uint32(Decompact64(uint64(max)))
-		} else {
-			bh.MinValue = min
-			bh.MaxValue = max
-		}
+		h.MinValue = uint32(0)
+		h.MaxValue = uint32(0)
 	case BlockUint16:
-		min, max := b.MinValue.(uint16), b.MaxValue.(uint16)
-		bh.MinValue = min
-		bh.MaxValue = max
+		h.MinValue = uint16(0)
+		h.MaxValue = uint16(0)
 	case BlockUint8:
-		min, max := b.MinValue.(uint8), b.MaxValue.(uint8)
-		bh.MinValue = min
-		bh.MaxValue = max
+		h.MinValue = uint8(0)
+		h.MaxValue = uint8(0)
 	case BlockBool:
-		min, max := b.MinValue.(bool), b.MaxValue.(bool)
-		bh.MinValue = min
-		bh.MaxValue = max
+		h.MinValue = false
+		h.MaxValue = false
+	case BlockString:
+		h.MinValue = ""
+		h.MaxValue = ""
+	case BlockBytes:
+		h.MinValue = []byte{}
+		h.MaxValue = []byte{}
+	case BlockInt128:
+		h.MinValue = vec.Int128Zero
+		h.MaxValue = vec.Int128Zero
+	case BlockInt256:
+		h.MinValue = vec.Int256Zero
+		h.MaxValue = vec.Int256Zero
+	}
+	return h
+}
+func (h Header) Clone() Header {
+	// block header data must be valid (only applies to v2 blocks!)
+	if h.MinValue == nil || h.MaxValue == nil {
+		return Header{}
+	}
+	cp := Header{
+		Type:        h.Type,
+		Compression: h.Compression,
+		Scale:       h.Scale,
+		Flags:       h.Flags,
+	}
+	switch h.Type {
+	case BlockTime:
+		min, max := h.MinValue.(time.Time), h.MaxValue.(time.Time)
+		cp.MinValue = min
+		cp.MaxValue = max
+	case BlockFloat64:
+		min, max := h.MinValue.(float64), h.MaxValue.(float64)
+		cp.MinValue = min
+		cp.MaxValue = max
+	case BlockFloat32:
+		min, max := h.MinValue.(float32), h.MaxValue.(float32)
+		cp.MinValue = min
+		cp.MaxValue = max
+	case BlockInt64:
+		min, max := h.MinValue.(int64), h.MaxValue.(int64)
+		cp.MinValue = min
+		cp.MaxValue = max
+	case BlockInt32:
+		min, max := h.MinValue.(int32), h.MaxValue.(int32)
+		cp.MinValue = min
+		cp.MaxValue = max
+	case BlockInt16:
+		min, max := h.MinValue.(int16), h.MaxValue.(int16)
+		cp.MinValue = min
+		cp.MaxValue = max
+	case BlockInt8:
+		min, max := h.MinValue.(int8), h.MaxValue.(int8)
+		cp.MinValue = min
+		cp.MaxValue = max
+	case BlockUint64:
+		min, max := h.MinValue.(uint64), h.MaxValue.(uint64)
+		cp.MinValue = min
+		cp.MaxValue = max
+	case BlockUint32:
+		min, max := h.MinValue.(uint32), h.MaxValue.(uint32)
+		cp.MinValue = min
+		cp.MaxValue = max
+	case BlockUint16:
+		min, max := h.MinValue.(uint16), h.MaxValue.(uint16)
+		cp.MinValue = min
+		cp.MaxValue = max
+	case BlockUint8:
+		min, max := h.MinValue.(uint8), h.MaxValue.(uint8)
+		cp.MinValue = min
+		cp.MaxValue = max
+	case BlockBool:
+		min, max := h.MinValue.(bool), h.MaxValue.(bool)
+		cp.MinValue = min
+		cp.MaxValue = max
 	case BlockString:
 		// copy contents to avoid memleak
-		min, max := b.MinValue.(string), b.MaxValue.(string)
-		bh.MinValue = min
-		bh.MaxValue = max
+		min, max := h.MinValue.(string), h.MaxValue.(string)
+		cp.MinValue = min
+		cp.MaxValue = max
 	case BlockBytes:
 		// copy contents to avoid memleak
-		min, max := b.MinValue.([]byte), b.MaxValue.([]byte)
+		min, max := h.MinValue.([]byte), h.MaxValue.([]byte)
 		mincopy := make([]byte, len(min))
 		copy(mincopy, min)
 		maxcopy := make([]byte, len(max))
 		copy(maxcopy, max)
-		bh.MinValue = mincopy
-		bh.MaxValue = maxcopy
+		cp.MinValue = mincopy
+		cp.MaxValue = maxcopy
+	case BlockInt128:
+		cp.MinValue = h.MinValue.(vec.Int128)
+		cp.MaxValue = h.MaxValue.(vec.Int128)
+	case BlockInt256:
+		cp.MinValue = h.MinValue.(vec.Int256)
+		cp.MaxValue = h.MaxValue.(vec.Int256)
 	}
-	return bh
+	return cp
+}
+
+func (h Header) EncodedSize() int {
+	switch h.Type {
+	case BlockTime:
+		return headerBaseSize + 16
+	case BlockInt64:
+		return headerBaseSize + 16
+	case BlockUint64:
+		return headerBaseSize + 16
+	case BlockFloat64:
+		return headerBaseSize + 16
+	case BlockBool:
+		return headerBaseSize + 1
+	case BlockString:
+		return headerBaseSize + len(h.MinValue.(string)) + len(h.MaxValue.(string)) + 2
+	case BlockBytes:
+		min, max := h.MinValue.([]byte), h.MaxValue.([]byte)
+		l1, l2 := len(min), len(max)
+		var v [8]byte
+		i1 := binary.PutUvarint(v[:], uint64(l1))
+		i2 := binary.PutUvarint(v[:], uint64(l2))
+		return headerBaseSize + l1 + l2 + i1 + i2
+	case BlockInt32:
+		return headerBaseSize + 8
+	case BlockInt16:
+		return headerBaseSize + 4
+	case BlockInt8:
+		return headerBaseSize + 2
+	case BlockUint32:
+		return headerBaseSize + 8
+	case BlockUint16:
+		return headerBaseSize + 4
+	case BlockUint8:
+		return headerBaseSize + 2
+	case BlockFloat32:
+		return headerBaseSize + 8
+	case BlockInt128:
+		return headerBaseSize + 32
+	case BlockInt256:
+		return headerBaseSize + 128
+	default:
+		return 0
+	}
 }
 
 // same encoding as low level block header, except takes care of conversion flags
-func (h BlockHeader) Encode(buf *bytes.Buffer) error {
+func (h Header) Encode(buf *bytes.Buffer) error {
 	// 8                 7 6          5 4 3 2 1
 	// ext header flag   compression  block type
 	buf.WriteByte(byte(h.Type&0x1f) | byte(h.Compression&0x3)<<5 | 0x80)
 
 	// extension header
-	// - 4 lower bits are used for storing precision
-	// - 4 upper bits are flags
-	buf.WriteByte((byte(h.Flags)&0xf)<<4 | byte(h.Precision)&0xf)
+	// - 6 lower bits are used for storing precision
+	// - 2 upper bits are flags
+	buf.WriteByte((byte(h.Flags)&0x3)<<6 | byte(h.Scale)&0x3f)
 
 	switch h.Type {
 	case BlockTime:
@@ -230,32 +324,16 @@ func (h BlockHeader) Encode(buf *bytes.Buffer) error {
 
 	case BlockUint64:
 		var v [16]byte
-		if h.Flags&BlockFlagFixed > 0 {
-			// Note: data is float64
-			min, max := h.MinValue.(float64), h.MaxValue.(float64)
-			bigEndian.PutUint64(v[0:], math.Float64bits(min))
-			bigEndian.PutUint64(v[8:], math.Float64bits(max))
-		} else {
-			// Note: data is uint64
-			min, max := h.MinValue.(uint64), h.MaxValue.(uint64)
-			bigEndian.PutUint64(v[0:], min)
-			bigEndian.PutUint64(v[8:], max)
-		}
+		min, max := h.MinValue.(uint64), h.MaxValue.(uint64)
+		bigEndian.PutUint64(v[0:], min)
+		bigEndian.PutUint64(v[8:], max)
 		_, _ = buf.Write(v[:])
 
 	case BlockUint32:
 		var v [8]byte
-		if h.Flags&BlockFlagFixed > 0 {
-			// Note: data is float32
-			min, max := h.MinValue.(float32), h.MaxValue.(float32)
-			bigEndian.PutUint32(v[0:], math.Float32bits(min))
-			bigEndian.PutUint32(v[4:], math.Float32bits(max))
-		} else {
-			// Note: data is uint32
-			min, max := h.MinValue.(uint32), h.MaxValue.(uint32)
-			bigEndian.PutUint32(v[0:], min)
-			bigEndian.PutUint32(v[4:], max)
-		}
+		min, max := h.MinValue.(uint32), h.MaxValue.(uint32)
+		bigEndian.PutUint32(v[0:], min)
+		bigEndian.PutUint32(v[4:], max)
 		_, _ = buf.Write(v[:])
 
 	case BlockUint16:
@@ -303,6 +381,28 @@ func (h BlockHeader) Encode(buf *bytes.Buffer) error {
 		_, _ = buf.Write(v[:i])
 		_, _ = buf.Write(max)
 
+	case BlockInt128:
+		var v [32]byte
+		min, max := h.MinValue.(vec.Int128), h.MaxValue.(vec.Int128)
+		bigEndian.PutUint64(v[0:], uint64(min[0]))
+		bigEndian.PutUint64(v[8:], uint64(min[1]))
+		bigEndian.PutUint64(v[16:], uint64(max[0]))
+		bigEndian.PutUint64(v[24:], uint64(max[1]))
+		_, _ = buf.Write(v[:])
+
+	case BlockInt256:
+		var v [64]byte
+		min, max := h.MinValue.(vec.Int256), h.MaxValue.(vec.Int256)
+		bigEndian.PutUint64(v[0:], uint64(min[0]))
+		bigEndian.PutUint64(v[8:], uint64(min[1]))
+		bigEndian.PutUint64(v[16:], uint64(min[2]))
+		bigEndian.PutUint64(v[24:], uint64(min[3]))
+		bigEndian.PutUint64(v[32:], uint64(max[0]))
+		bigEndian.PutUint64(v[40:], uint64(max[1]))
+		bigEndian.PutUint64(v[48:], uint64(max[2]))
+		bigEndian.PutUint64(v[56:], uint64(max[3]))
+		_, _ = buf.Write(v[:])
+
 	case BlockIgnore:
 		return nil
 
@@ -312,8 +412,7 @@ func (h BlockHeader) Encode(buf *bytes.Buffer) error {
 	return nil
 }
 
-// same encoding as low level block header, except takes care of conversion flags
-func (h *BlockHeader) Decode(buf *bytes.Buffer) error {
+func (h *Header) Decode(buf *bytes.Buffer) error {
 	val := buf.Next(1)
 	var err error
 	h.Type, err = readBlockType(val)
@@ -327,7 +426,7 @@ func (h *BlockHeader) Decode(buf *bytes.Buffer) error {
 
 	if val[0]&0x80 > 0 {
 		val = buf.Next(1)
-		h.Precision = readBlockPrecision(val)
+		h.Scale = readBlockScale(val)
 		h.Flags = readBlockFlags(val)
 	}
 
@@ -371,26 +470,13 @@ func (h *BlockHeader) Decode(buf *bytes.Buffer) error {
 
 	case BlockUint64:
 		v := buf.Next(16)
-		if h.Flags&BlockFlagFixed > 0 {
-			// data is float64
-			h.MinValue = math.Float64frombits(bigEndian.Uint64(v[0:]))
-			h.MaxValue = math.Float64frombits(bigEndian.Uint64(v[8:]))
-		} else {
-			// data is uint64
-			h.MinValue = bigEndian.Uint64(v[0:])
-			h.MaxValue = bigEndian.Uint64(v[8:])
-		}
+		h.MinValue = bigEndian.Uint64(v[0:])
+		h.MaxValue = bigEndian.Uint64(v[8:])
+
 	case BlockUint32:
 		v := buf.Next(8)
-		if h.Flags&BlockFlagFixed > 0 {
-			// data is float32
-			h.MinValue = math.Float32frombits(bigEndian.Uint32(v[0:]))
-			h.MaxValue = math.Float32frombits(bigEndian.Uint32(v[4:]))
-		} else {
-			// data is uint32
-			h.MinValue = bigEndian.Uint32(v[0:])
-			h.MaxValue = bigEndian.Uint32(v[4:])
-		}
+		h.MinValue = bigEndian.Uint32(v[0:])
+		h.MaxValue = bigEndian.Uint32(v[4:])
 
 	case BlockUint16:
 		v := buf.Next(4)
@@ -442,9 +528,72 @@ func (h *BlockHeader) Decode(buf *bytes.Buffer) error {
 		h.MinValue = mincopy
 		h.MaxValue = maxcopy
 
+	case BlockInt128:
+		v := buf.Next(32)
+		h.MinValue = vec.Int128FromBytes(v[0:16])
+		h.MaxValue = vec.Int128FromBytes(v[16:32])
+
+	case BlockInt256:
+		v := buf.Next(64)
+		h.MinValue = vec.Int256FromBytes(v[0:32])
+		h.MaxValue = vec.Int256FromBytes(v[32:64])
+
 	default:
 		return fmt.Errorf("pack: invalid data type %d", h.Type)
 	}
 
 	return nil
+}
+
+func (h *Header) Clear() {
+	switch h.Type {
+	case BlockTime:
+		h.MinValue = time.Time{}
+		h.MaxValue = time.Time{}
+	case BlockInt64:
+		h.MinValue = int64(0)
+		h.MaxValue = int64(0)
+	case BlockInt32:
+		h.MinValue = int32(0)
+		h.MaxValue = int32(0)
+	case BlockInt16:
+		h.MinValue = int16(0)
+		h.MaxValue = int16(0)
+	case BlockInt8:
+		h.MinValue = int8(0)
+		h.MaxValue = int8(0)
+	case BlockUint64:
+		h.MinValue = uint64(0)
+		h.MaxValue = uint64(0)
+	case BlockUint32:
+		h.MinValue = uint32(0)
+		h.MaxValue = uint32(0)
+	case BlockUint16:
+		h.MinValue = uint16(0)
+		h.MaxValue = uint16(0)
+	case BlockUint8:
+		h.MinValue = uint8(0)
+		h.MaxValue = uint8(0)
+	case BlockFloat64:
+		h.MinValue = float64(0.0)
+		h.MaxValue = float64(0.0)
+	case BlockFloat32:
+		h.MinValue = float32(0.0)
+		h.MaxValue = float32(0.0)
+	case BlockString:
+		h.MinValue = ""
+		h.MaxValue = ""
+	case BlockBytes:
+		h.MinValue = []byte{}
+		h.MaxValue = []byte{}
+	case BlockBool:
+		h.MinValue = false
+		h.MaxValue = false
+	case BlockInt128:
+		h.MinValue = vec.Int128Zero
+		h.MaxValue = vec.Int128Zero
+	case BlockInt256:
+		h.MinValue = vec.Int256Zero
+		h.MaxValue = vec.Int256Zero
+	}
 }

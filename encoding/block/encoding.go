@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
+	"blockwatch.cc/knoxdb/vec"
 	"github.com/golang/snappy"
 	"github.com/pierrec/lz4"
 )
@@ -178,6 +179,115 @@ func decodeFloat32Block(block []byte, dst []float32) ([]float32, error) {
 	return dst, err
 }
 
+func encodeInt256Block(buf *bytes.Buffer, val []vec.Int256, comp Compression) (vec.Int256, vec.Int256, error) {
+	if len(val) == 0 {
+		return vec.Int256Zero, vec.Int256Zero, writeEmptyBlock(buf, BlockInt256)
+	}
+
+	buf.WriteByte(byte(comp<<5) | byte(BlockInt256))
+	w := getWriter(buf, comp)
+
+	// prepare scratch space
+	var (
+		cp []int64
+		v  interface{}
+	)
+	if len(val) <= DefaultMaxPointsPerBlock {
+		v = int64Pool.Get()
+		cp = v.([]int64)[:len(val)]
+	} else {
+		cp = make([]int64, len(val))
+	}
+
+	// find min/max values (and load data into cache)
+	min, max := val[0], val[0]
+	for i := range val[0] {
+		min = vec.Min256(min, val[i])
+		max = vec.Max256(max, val[i])
+	}
+
+	// repack int256 into 4 int64 strides
+	var err error
+	for i := 0; i < 4; i++ {
+		for j, v := range val {
+			cp[j] = int64(v[i])
+		}
+		_, _, err = compress.IntegerArrayEncodeAll(cp, w)
+		if err != nil {
+			break
+		}
+	}
+
+	// cleanup
+	if v != nil {
+		int64Pool.Put(v)
+	}
+	if err != nil {
+		_ = w.Close()
+		putWriter(w, comp)
+		return vec.Int256Zero, vec.Int256Zero, err
+	}
+
+	err = w.Close()
+	putWriter(w, comp)
+	return min, max, err
+}
+
+func encodeInt128Block(buf *bytes.Buffer, val []vec.Int128, comp Compression) (vec.Int128, vec.Int128, error) {
+	if len(val) == 0 {
+		return vec.Int128Zero, vec.Int128Zero, writeEmptyBlock(buf, BlockInt128)
+	}
+
+	buf.WriteByte(byte(comp<<5) | byte(BlockInt128))
+	w := getWriter(buf, comp)
+
+	// prepare scratch space
+	var (
+		cp []int64
+		v  interface{}
+	)
+	if len(val) <= DefaultMaxPointsPerBlock {
+		v = int64Pool.Get()
+		cp = v.([]int64)[:len(val)]
+	} else {
+		cp = make([]int64, len(val))
+	}
+
+	// find min/max values (and load data into cache)
+	min, max := val[0], val[0]
+	for i := range val {
+		min = vec.Min128(min, val[i])
+		max = vec.Max128(max, val[i])
+	}
+
+	// repack int128 into 2 int64 strides
+	var err error
+	for i := 0; i < 2; i++ {
+		for j, v := range val {
+			cp[j] = int64(v[i])
+		}
+		_, _, err = compress.IntegerArrayEncodeAll(cp, w)
+		if err != nil {
+			break
+		}
+
+	}
+
+	// cleanup
+	if v != nil {
+		int64Pool.Put(v)
+	}
+	if err != nil {
+		_ = w.Close()
+		putWriter(w, comp)
+		return vec.Int128Zero, vec.Int128Zero, err
+	}
+
+	err = w.Close()
+	putWriter(w, comp)
+	return min, max, err
+}
+
 func encodeInt64Block(buf *bytes.Buffer, val []int64, comp Compression) (int64, int64, error) {
 	if len(val) == 0 {
 		return 0, 0, writeEmptyBlock(buf, BlockInt64)
@@ -321,6 +431,92 @@ func encodeInt8Block(buf *bytes.Buffer, val []int8, comp Compression) (int8, int
 	err = w.Close()
 	putWriter(w, comp)
 	return int8(min), int8(max), err
+}
+
+func decodeInt256Block(block []byte, dst []vec.Int256) ([]vec.Int256, error) {
+	buf, canRecycle, err := unpackBlock(block, BlockInt256)
+	if err != nil {
+		return nil, err
+	}
+
+	// use a temp int64 slice for decoding
+	v := int64Pool.Get()
+	tmp := v.([]int64)[:0]
+
+	defer func() {
+		if canRecycle && cap(buf) == BlockSizeHint {
+			BlockEncoderPool.Put(buf[:0])
+		}
+		int64Pool.Put(v)
+	}()
+
+	// unpack 4 int64 strides
+	for i := 0; i < 4; i++ {
+		tmp, err := compress.IntegerArrayDecodeAll(buf, tmp)
+		if err != nil {
+			return dst, err
+		}
+		// only happens in first loop iteration
+		if cap(dst) < len(tmp) {
+			if len(tmp) <= DefaultMaxPointsPerBlock {
+				dst = int256Pool.Get().([]vec.Int256)[:len(tmp)]
+			} else {
+				dst = make([]vec.Int256, len(tmp))
+			}
+		} else {
+			dst = dst[:len(tmp)]
+		}
+
+		// copy stride
+		for j := range tmp {
+			dst[j][i] = uint64(tmp[j])
+		}
+	}
+
+	return dst, nil
+}
+
+func decodeInt128Block(block []byte, dst []vec.Int128) ([]vec.Int128, error) {
+	buf, canRecycle, err := unpackBlock(block, BlockInt128)
+	if err != nil {
+		return nil, err
+	}
+
+	// use a temp int64 slice for decoding
+	v := int64Pool.Get()
+	tmp := v.([]int64)[:0]
+
+	defer func() {
+		if canRecycle && cap(buf) == BlockSizeHint {
+			BlockEncoderPool.Put(buf[:0])
+		}
+		int64Pool.Put(v)
+	}()
+
+	// unpack 2 int64 strides
+	for i := 0; i < 2; i++ {
+		tmp, err := compress.IntegerArrayDecodeAll(buf, tmp)
+		if err != nil {
+			return dst, err
+		}
+		// only happens in first loop iteration
+		if cap(dst) < len(tmp) {
+			if len(tmp) <= DefaultMaxPointsPerBlock {
+				dst = int128Pool.Get().([]vec.Int128)[:len(tmp)]
+			} else {
+				dst = make([]vec.Int128, len(tmp))
+			}
+		} else {
+			dst = dst[:len(tmp)]
+		}
+
+		// copy stride
+		for j := range tmp {
+			dst[j][i] = uint64(tmp[j])
+		}
+	}
+
+	return dst, nil
 }
 
 func decodeInt64Block(block []byte, dst []int64) ([]int64, error) {
@@ -906,9 +1102,22 @@ func unpackBlock(block []byte, typ BlockType) ([]byte, bool, error) {
 func readBlockType(block []byte) (BlockType, error) {
 	blockType := BlockType(block[0] & 0x1f)
 	switch blockType {
-	case BlockTime, BlockFloat64, BlockFloat32, BlockBool, BlockString, BlockBytes:
-		return blockType, nil
-	case BlockInt64, BlockInt32, BlockInt16, BlockInt8, BlockUint64, BlockUint32, BlockUint16, BlockUint8:
+	case BlockTime,
+		BlockInt64,
+		BlockUint64,
+		BlockFloat64,
+		BlockBool,
+		BlockString,
+		BlockBytes,
+		BlockInt32,
+		BlockInt16,
+		BlockInt8,
+		BlockUint32,
+		BlockUint16,
+		BlockUint8,
+		BlockFloat32,
+		BlockInt128,
+		BlockInt256:
 		return blockType, nil
 	default:
 		return 0, fmt.Errorf("pack: unknown block type: %d", blockType)
@@ -940,12 +1149,12 @@ func readBlockCompression(block []byte) (Compression, error) {
 	}
 }
 
-// readBlockPrecision returns the float precision used for unpacking uint64 to float64.
-func readBlockPrecision(block []byte) int {
-	return int(block[0]) & 0xf
+// readBlockScale returns the scale for fixed decimal types
+func readBlockScale(block []byte) int {
+	return int(block[0]) & 0x3f
 }
 
 // readBlockFlags returns the flags used for signalling type conversions, etc
 func readBlockFlags(block []byte) BlockFlags {
-	return BlockFlags((block[0] >> 4) & 0xf)
+	return BlockFlags((block[0] >> 6) & 0x3)
 }

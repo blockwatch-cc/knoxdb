@@ -7,20 +7,17 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"math"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
+	"blockwatch.cc/knoxdb/util"
+	. "blockwatch.cc/knoxdb/vec"
 )
 
 var bigEndian = binary.BigEndian
 
+// unused, 2 bit reserved
 type BlockFlags byte
-
-const (
-	BlockFlagFixed   BlockFlags = 1 << iota // fixed point float32/64 as uint32/64
-	BlockFlagCompact                        // compact uint64 numbers
-)
 
 type Compression byte
 
@@ -54,6 +51,7 @@ func (c Compression) HeaderSize(n int) int {
 	}
 }
 
+// Note: uses 5 bit encoding (max 32 values)
 type BlockType byte
 
 const (
@@ -71,6 +69,8 @@ const (
 	BlockUint16  = BlockType(11)
 	BlockUint8   = BlockType(12)
 	BlockFloat32 = BlockType(13)
+	BlockInt128  = BlockType(14)
+	BlockInt256  = BlockType(15)
 	BlockIgnore  = BlockType(255)
 )
 
@@ -104,6 +104,10 @@ func (t BlockType) String() string {
 		return "string"
 	case BlockBytes:
 		return "bytes"
+	case BlockInt128:
+		return "int128"
+	case BlockInt256:
+		return "int256"
 	case BlockIgnore:
 		return "ignore"
 	default:
@@ -112,183 +116,191 @@ func (t BlockType) String() string {
 }
 
 type Block struct {
-	Type        BlockType
-	Compression Compression
-	Precision   int
-	Flags       BlockFlags
-	MinValue    interface{}
-	MaxValue    interface{}
-	Dirty       bool
+	head  Header
+	dirty bool
 
-	Strings    []string
-	Bytes      [][]byte
-	Bools      []bool
-	Int64      []int64
-	Int32      []int32
-	Int16      []int16
-	Int8       []int8
-	Uint64     []uint64
-	Uint32     []uint32
-	Uint16     []uint16
-	Uint8      []uint8
-	Timestamps []int64
-	Float64    []float64
-	Float32    []float32
+	// TODO: measure performance impact of using an interface instead of direct slices
+	//       this can save up to 15x storage for slice headers / pointers
+	//       but adds another level of indirection on each data access
+	// data interface{}
+	Strings []string
+	Bytes   [][]byte
+	Bools   []bool  // -> BitSet
+	Int64   []int64 // re-used by Decimal64, Timestamps
+	Int32   []int32 // re-used by Decimal32
+	Int16   []int16
+	Int8    []int8
+	Uint64  []uint64
+	Uint32  []uint32
+	Uint16  []uint16
+	Uint8   []uint8
+	Float64 []float64
+	Float32 []float32
+	Int128  []Int128 // re-used by Decimal128, Int128
+	Int256  []Int256 // re-used by Decimal256, Int256
 }
 
-func NewBlock(typ BlockType, sz int, comp Compression, prec int, flags BlockFlags) (*Block, error) {
+func (b Block) Header() Header {
+	return b.head.Clone()
+}
+
+func (b Block) Type() BlockType {
+	return b.head.Type
+}
+
+func (b Block) Compression() Compression {
+	return b.head.Compression
+}
+
+func (b Block) Scale() int {
+	return b.head.Scale
+}
+
+func (b *Block) SetScale(s int) {
+	b.head.Scale = s
+}
+
+func (b *Block) SetIgnore() {
+	b.head.Type = BlockIgnore
+}
+
+func (b *Block) SetDirty() {
+	b.dirty = true
+}
+
+func (b Block) Dirty() bool {
+	return b.dirty
+}
+
+func NewBlock(typ BlockType, sz int, comp Compression, scale int, flags BlockFlags) (*Block, error) {
 	b := &Block{
-		Type:        typ,
-		Compression: comp,
-		Precision:   prec,
-		Flags:       flags,
+		head: NewHeader(typ, comp, scale, flags),
 	}
 	switch typ {
 	case BlockTime:
 		if sz <= DefaultMaxPointsPerBlock {
-			b.Timestamps = int64Pool.Get().([]int64)
+			b.Int64 = int64Pool.Get().([]int64)
 		} else {
-			b.Timestamps = make([]int64, 0, sz)
+			b.Int64 = make([]int64, 0, sz)
 		}
-		b.MinValue = time.Time{}
-		b.MaxValue = time.Time{}
 	case BlockFloat64:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Float64 = float64Pool.Get().([]float64)
 		} else {
 			b.Float64 = make([]float64, 0, sz)
 		}
-		b.MinValue = float64(0.0)
-		b.MaxValue = float64(0.0)
 	case BlockFloat32:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Float32 = float32Pool.Get().([]float32)
 		} else {
 			b.Float32 = make([]float32, 0, sz)
 		}
-		b.MinValue = float32(0.0)
-		b.MaxValue = float32(0.0)
 	case BlockInt64:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Int64 = int64Pool.Get().([]int64)
 		} else {
 			b.Int64 = make([]int64, 0, sz)
 		}
-		b.MinValue = int64(0)
-		b.MaxValue = int64(0)
 	case BlockInt32:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Int32 = int32Pool.Get().([]int32)
 		} else {
 			b.Int32 = make([]int32, 0, sz)
 		}
-		b.MinValue = int32(0)
-		b.MaxValue = int32(0)
 	case BlockInt16:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Int16 = int16Pool.Get().([]int16)
 		} else {
 			b.Int16 = make([]int16, 0, sz)
 		}
-		b.MinValue = int16(0)
-		b.MaxValue = int16(0)
 	case BlockInt8:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Int8 = int8Pool.Get().([]int8)
 		} else {
 			b.Int8 = make([]int8, 0, sz)
 		}
-		b.MinValue = int8(0)
-		b.MaxValue = int8(0)
 	case BlockUint64:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Uint64 = uint64Pool.Get().([]uint64)
 		} else {
 			b.Uint64 = make([]uint64, 0, sz)
 		}
-		b.MinValue = uint64(0)
-		b.MaxValue = uint64(0)
 	case BlockUint32:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Uint32 = uint32Pool.Get().([]uint32)
 		} else {
 			b.Uint32 = make([]uint32, 0, sz)
 		}
-		b.MinValue = uint32(0)
-		b.MaxValue = uint32(0)
 	case BlockUint16:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Uint16 = uint16Pool.Get().([]uint16)
 		} else {
 			b.Uint16 = make([]uint16, 0, sz)
 		}
-		b.MinValue = uint16(0)
-		b.MaxValue = uint16(0)
 	case BlockUint8:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Uint8 = uint8Pool.Get().([]uint8)
 		} else {
 			b.Uint8 = make([]uint8, 0, sz)
 		}
-		b.MinValue = uint8(0)
-		b.MaxValue = uint8(0)
 	case BlockBool:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Bools = boolPool.Get().([]bool)
 		} else {
 			b.Bools = make([]bool, 0, sz)
 		}
-		b.MinValue = false
-		b.MaxValue = false
 	case BlockString:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Strings = stringPool.Get().([]string)
 		} else {
 			b.Strings = make([]string, 0, sz)
 		}
-		b.MinValue = ""
-		b.MaxValue = ""
 	case BlockBytes:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Bytes = bytesPool.Get().([][]byte)
 		} else {
 			b.Bytes = make([][]byte, 0, sz)
 		}
-		b.MinValue = []byte{}
-		b.MaxValue = []byte{}
+	case BlockInt128:
+		if sz <= DefaultMaxPointsPerBlock {
+			b.Int128 = int128Pool.Get().([]Int128)
+		} else {
+			b.Int128 = make([]Int128, 0, sz)
+		}
+	case BlockInt256:
+		if sz <= DefaultMaxPointsPerBlock {
+			b.Int256 = int256Pool.Get().([]Int256)
+		} else {
+			b.Int256 = make([]Int256, 0, sz)
+		}
 	default:
-		return nil, fmt.Errorf("pack: invalid data type %d", b.Type)
+		return nil, fmt.Errorf("pack: invalid data type %d", typ)
 	}
 	return b, nil
 }
 
 func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 	cp := &Block{
-		Type:        b.Type,
-		Compression: b.Compression,
-		Precision:   b.Precision,
-		Flags:       b.Flags,
+		head: b.head.Clone(),
 	}
-	switch cp.Type {
+	if !copydata {
+		cp.head.Clear()
+	}
+	switch b.Type() {
 	case BlockTime:
 		if copydata {
 			if sz <= DefaultMaxPointsPerBlock {
-				cp.Timestamps = int64Pool.Get().([]int64)[:sz]
+				cp.Int64 = int64Pool.Get().([]int64)[:sz]
 			} else {
-				cp.Timestamps = make([]int64, sz)
+				cp.Int64 = make([]int64, sz)
 			}
-			copy(cp.Timestamps, b.Timestamps)
-			min, max := b.MinValue.(time.Time), b.MaxValue.(time.Time)
-			cp.MinValue = min
-			cp.MaxValue = max
+			copy(cp.Int64, b.Int64)
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
-				cp.Timestamps = int64Pool.Get().([]int64)[:0]
+				cp.Int64 = int64Pool.Get().([]int64)[:0]
 			} else {
-				cp.Timestamps = make([]int64, 0, sz)
+				cp.Int64 = make([]int64, 0, sz)
 			}
-			cp.MinValue = time.Time{}
-			cp.MaxValue = time.Time{}
 		}
 	case BlockFloat64:
 		if copydata {
@@ -298,17 +310,12 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Float64 = make([]float64, sz)
 			}
 			copy(cp.Float64, b.Float64)
-			min, max := b.MinValue.(float64), b.MaxValue.(float64)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Float64 = float64Pool.Get().([]float64)[:0]
 			} else {
 				cp.Float64 = make([]float64, 0, sz)
 			}
-			cp.MinValue = float64(0.0)
-			cp.MaxValue = float64(0.0)
 		}
 	case BlockFloat32:
 		if copydata {
@@ -318,17 +325,12 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Float32 = make([]float32, sz)
 			}
 			copy(cp.Float32, b.Float32)
-			min, max := b.MinValue.(float32), b.MaxValue.(float32)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Float32 = float32Pool.Get().([]float32)[:0]
 			} else {
 				cp.Float32 = make([]float32, 0, sz)
 			}
-			cp.MinValue = float32(0.0)
-			cp.MaxValue = float32(0.0)
 		}
 	case BlockInt64:
 		if copydata {
@@ -338,17 +340,12 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Int64 = make([]int64, sz)
 			}
 			copy(cp.Int64, b.Int64)
-			min, max := b.MinValue.(int64), b.MaxValue.(int64)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Int64 = int64Pool.Get().([]int64)[:0]
 			} else {
 				cp.Int64 = make([]int64, 0, sz)
 			}
-			cp.MinValue = int64(0)
-			cp.MaxValue = int64(0)
 		}
 	case BlockInt32:
 		if copydata {
@@ -358,17 +355,12 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Int32 = make([]int32, sz)
 			}
 			copy(cp.Int32, b.Int32)
-			min, max := b.MinValue.(int32), b.MaxValue.(int32)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Int32 = int32Pool.Get().([]int32)[:0]
 			} else {
 				cp.Int32 = make([]int32, 0, sz)
 			}
-			cp.MinValue = int32(0)
-			cp.MaxValue = int32(0)
 		}
 	case BlockInt16:
 		if copydata {
@@ -378,17 +370,12 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Int16 = make([]int16, sz)
 			}
 			copy(cp.Int16, b.Int16)
-			min, max := b.MinValue.(int16), b.MaxValue.(int16)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Int16 = int16Pool.Get().([]int16)[:0]
 			} else {
 				cp.Int16 = make([]int16, 0, sz)
 			}
-			cp.MinValue = int16(0)
-			cp.MaxValue = int16(0)
 		}
 	case BlockInt8:
 		if copydata {
@@ -398,17 +385,12 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Int8 = make([]int8, sz)
 			}
 			copy(cp.Int8, b.Int8)
-			min, max := b.MinValue.(int8), b.MaxValue.(int8)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Int8 = int8Pool.Get().([]int8)[:0]
 			} else {
 				cp.Int8 = make([]int8, 0, sz)
 			}
-			cp.MinValue = int8(0)
-			cp.MaxValue = int8(0)
 		}
 	case BlockUint64:
 		if copydata {
@@ -418,17 +400,12 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Uint64 = make([]uint64, sz)
 			}
 			copy(cp.Uint64, b.Uint64)
-			min, max := b.MinValue.(uint64), b.MaxValue.(uint64)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Uint64 = uint64Pool.Get().([]uint64)[:0]
 			} else {
 				cp.Uint64 = make([]uint64, 0, sz)
 			}
-			cp.MinValue = uint64(0)
-			cp.MaxValue = uint64(0)
 		}
 	case BlockUint32:
 		if copydata {
@@ -438,17 +415,12 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Uint32 = make([]uint32, sz)
 			}
 			copy(cp.Uint32, b.Uint32)
-			min, max := b.MinValue.(uint32), b.MaxValue.(uint32)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Uint32 = uint32Pool.Get().([]uint32)[:0]
 			} else {
 				cp.Uint32 = make([]uint32, 0, sz)
 			}
-			cp.MinValue = uint32(0)
-			cp.MaxValue = uint32(0)
 		}
 	case BlockUint16:
 		if copydata {
@@ -458,17 +430,12 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Uint16 = make([]uint16, sz)
 			}
 			copy(cp.Uint16, b.Uint16)
-			min, max := b.MinValue.(uint16), b.MaxValue.(uint16)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Uint16 = uint16Pool.Get().([]uint16)[:0]
 			} else {
 				cp.Uint16 = make([]uint16, 0, sz)
 			}
-			cp.MinValue = uint16(0)
-			cp.MaxValue = uint16(0)
 		}
 	case BlockUint8:
 		if copydata {
@@ -478,17 +445,12 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Uint8 = make([]uint8, sz)
 			}
 			copy(cp.Uint8, b.Uint8)
-			min, max := b.MinValue.(uint8), b.MaxValue.(uint8)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Uint8 = uint8Pool.Get().([]uint8)[:0]
 			} else {
 				cp.Uint8 = make([]uint8, 0, sz)
 			}
-			cp.MinValue = uint8(0)
-			cp.MaxValue = uint8(0)
 		}
 	case BlockBool:
 		if copydata {
@@ -498,19 +460,13 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Bools = make([]bool, sz)
 			}
 			copy(cp.Bools, b.Bools)
-			min, max := b.MinValue.(bool), b.MaxValue.(bool)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Bools = boolPool.Get().([]bool)[:0]
 			} else {
 				cp.Bools = make([]bool, 0, sz)
 			}
-			cp.MinValue = false
-			cp.MaxValue = false
 		}
-
 	case BlockString:
 		if copydata {
 			if sz <= DefaultMaxPointsPerBlock {
@@ -519,17 +475,12 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Strings = make([]string, sz)
 			}
 			copy(cp.Strings, b.Strings)
-			min, max := b.MinValue.(string), b.MaxValue.(string)
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Strings = stringPool.Get().([]string)[:0]
 			} else {
 				cp.Strings = make([]string, 0, sz)
 			}
-			cp.MinValue = ""
-			cp.MaxValue = ""
 		}
 	case BlockBytes:
 		if copydata {
@@ -542,36 +493,56 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 				cp.Bytes[i] = make([]byte, len(v))
 				copy(cp.Bytes[i], v)
 			}
-			min := make([]byte, len(b.MinValue.([]byte)))
-			max := make([]byte, len(b.MaxValue.([]byte)))
-			copy(min, b.MinValue.([]byte))
-			copy(max, b.MaxValue.([]byte))
-			cp.MinValue = min
-			cp.MaxValue = max
 		} else {
 			if sz <= DefaultMaxPointsPerBlock {
 				cp.Bytes = bytesPool.Get().([][]byte)[:0]
 			} else {
 				cp.Bytes = make([][]byte, 0, sz)
 			}
-			cp.MinValue = []byte{}
-			cp.MaxValue = []byte{}
 		}
+	case BlockInt128:
+		if copydata {
+			if sz <= DefaultMaxPointsPerBlock {
+				cp.Int128 = int128Pool.Get().([]Int128)[:sz]
+			} else {
+				cp.Int128 = make([]Int128, sz)
+			}
+			copy(cp.Int128, b.Int128)
+		} else {
+			if sz <= DefaultMaxPointsPerBlock {
+				cp.Int128 = int128Pool.Get().([]Int128)[:0]
+			} else {
+				cp.Int128 = make([]Int128, 0, sz)
+			}
+		}
+	case BlockInt256:
+		if copydata {
+			if sz <= DefaultMaxPointsPerBlock {
+				cp.Int256 = int256Pool.Get().([]Int256)[:sz]
+			} else {
+				cp.Int256 = make([]Int256, sz)
+			}
+		} else {
+			if sz <= DefaultMaxPointsPerBlock {
+				cp.Int256 = int256Pool.Get().([]Int256)[:0]
+			} else {
+				cp.Int256 = make([]Int256, 0, sz)
+			}
+		}
+
 	default:
-		return nil, fmt.Errorf("pack: invalid data type %d", b.Type)
+		return nil, fmt.Errorf("pack: invalid data type %s (%[1]d)", b.Type())
 	}
 	return cp, nil
 }
 
 func (b *Block) Len() int {
-	switch b.Type {
-	case BlockTime:
-		return len(b.Timestamps)
+	switch b.Type() {
 	case BlockFloat64:
 		return len(b.Float64)
 	case BlockFloat32:
 		return len(b.Float32)
-	case BlockInt64:
+	case BlockInt64, BlockTime:
 		return len(b.Int64)
 	case BlockInt32:
 		return len(b.Int32)
@@ -593,6 +564,47 @@ func (b *Block) Len() int {
 		return len(b.Strings)
 	case BlockBytes:
 		return len(b.Bytes)
+	case BlockInt128:
+		return len(b.Int128)
+	case BlockInt256:
+		return len(b.Int256)
+	default:
+		return 0
+	}
+}
+
+func (b *Block) Cap() int {
+	switch b.Type() {
+	case BlockFloat64:
+		return cap(b.Float64)
+	case BlockFloat32:
+		return cap(b.Float32)
+	case BlockInt64, BlockTime:
+		return cap(b.Int64)
+	case BlockInt32:
+		return cap(b.Int32)
+	case BlockInt16:
+		return cap(b.Int16)
+	case BlockInt8:
+		return cap(b.Int8)
+	case BlockUint64:
+		return cap(b.Uint64)
+	case BlockUint32:
+		return cap(b.Uint32)
+	case BlockUint16:
+		return cap(b.Uint16)
+	case BlockUint8:
+		return cap(b.Uint8)
+	case BlockBool:
+		return cap(b.Bools)
+	case BlockString:
+		return cap(b.Strings)
+	case BlockBytes:
+		return cap(b.Bytes)
+	case BlockInt128:
+		return cap(b.Int128)
+	case BlockInt256:
+		return cap(b.Int256)
 	default:
 		return 0
 	}
@@ -606,14 +618,12 @@ func (b *Block) Len() int {
 // decoding as is required by LZ4.
 func (b *Block) MaxStoredSize() int {
 	var sz int
-	switch b.Type {
-	case BlockTime:
-		sz = compress.TimeArrayEncodedSize(b.Timestamps)
+	switch b.Type() {
 	case BlockFloat64:
 		sz = compress.Float64ArrayEncodedSize(b.Float64)
 	case BlockFloat32:
 		sz = compress.Float32ArrayEncodedSize(b.Float32)
-	case BlockInt64:
+	case BlockInt64, BlockTime:
 		sz = compress.Int64ArrayEncodedSize(b.Int64)
 	case BlockInt32:
 		sz = compress.Int32ArrayEncodedSize(b.Int32)
@@ -635,137 +645,120 @@ func (b *Block) MaxStoredSize() int {
 		sz = compress.StringArrayEncodedSize(b.Strings)
 	case BlockBytes:
 		sz = compress.BytesArrayEncodedSize(b.Bytes)
-	default:
-		return 0
+	case BlockInt128:
+		sz = compress.Int128ArrayEncodedSize(b.Int128)
+	case BlockInt256:
+		sz = compress.Int256ArrayEncodedSize(b.Int256)
 	}
-	return sz + encodedBlockHeaderSize + b.Compression.HeaderSize(sz)
+	return sz + encodedBlockHeaderSize + b.head.Compression.HeaderSize(sz)
 }
 
-func (b *Block) Size() int {
+func (b *Block) HeapSize() int {
 	const (
 		sliceSize  = 24 // reflect.SliceHeader incl. padding
 		stringSize = 16 // reflect.StringHeader incl. padding
+		headerSize = 28 // base header with interface pointers (?)
 	)
-	switch b.Type {
-	case BlockTime:
-		return len(b.Timestamps)*8 + sliceSize
+	sz := headerSize + 15*sliceSize
+	switch b.Type() {
 	case BlockFloat64:
-		return len(b.Float64)*8 + sliceSize
+		sz += len(b.Float64)*8 + 2*8
 	case BlockFloat32:
-		return len(b.Float32)*4 + sliceSize
-	case BlockInt64:
-		return len(b.Int64)*8 + sliceSize
+		sz += len(b.Float32)*4 + 2*4
+	case BlockInt64, BlockTime:
+		sz += len(b.Int64)*8 + 2*8
 	case BlockInt32:
-		return len(b.Int32)*4 + sliceSize
+		sz += len(b.Int32)*4 + 2*4
 	case BlockInt16:
-		return len(b.Int16)*2 + sliceSize
+		sz += len(b.Int16)*2 + 2*2
 	case BlockInt8:
-		return len(b.Int8) + sliceSize
+		sz += len(b.Int8) + 2
 	case BlockUint64:
-		return len(b.Uint64)*8 + sliceSize
+		sz += len(b.Uint64)*8 + 2*8
 	case BlockUint32:
-		return len(b.Uint32)*4 + sliceSize
+		sz += len(b.Uint32)*4 + 2*4
 	case BlockUint16:
-		return len(b.Uint16)*2 + sliceSize
+		sz += len(b.Uint16)*2 + 2*2
 	case BlockUint8:
-		return len(b.Uint8) + sliceSize
+		sz += len(b.Uint8) + 2
 	case BlockBool:
-		return len(b.Bools)*1 + sliceSize
+		sz += len(b.Bools)*1 + 2
 	case BlockString:
-		var sz int
+		min, max := 0, 0
 		for _, v := range b.Strings {
-			sz += len(v) + stringSize
+			l := len(v)
+			min = util.Min(min, l)
+			max = util.Max(max, l)
+			sz += l + stringSize
 		}
-		return sz + sliceSize
+		sz += min + max + 2*stringSize
 	case BlockBytes:
-		var sz int
+		min, max := 0, 0
 		for _, v := range b.Bytes {
-			sz += len(v) + sliceSize
+			l := len(v)
+			min = util.Min(min, l)
+			max = util.Max(max, l)
+			sz += l + sliceSize
 		}
-		return sz + sliceSize
-	default:
-		return 0
+		sz += min + max + 2*sliceSize
+	case BlockInt128:
+		sz += len(b.Int128)*16 + 2*16
+	case BlockInt256:
+		sz += len(b.Int256)*32 + 2*32
 	}
+	return sz
 }
 
 func (b *Block) Clear() {
-	switch b.Type {
+	b.head.Clear()
+	switch b.Type() {
+	case BlockTime:
+		b.Int64 = b.Int64[:0]
 	case BlockInt64:
 		b.Int64 = b.Int64[:0]
-		b.MinValue = int64(0)
-		b.MaxValue = int64(0)
 	case BlockInt32:
 		b.Int32 = b.Int32[:0]
-		b.MinValue = int32(0)
-		b.MaxValue = int32(0)
 	case BlockInt16:
 		b.Int16 = b.Int16[:0]
-		b.MinValue = int16(0)
-		b.MaxValue = int16(0)
 	case BlockInt8:
 		b.Int8 = b.Int8[:0]
-		b.MinValue = int8(0)
-		b.MaxValue = int8(0)
 	case BlockUint64:
 		b.Uint64 = b.Uint64[:0]
-		b.MinValue = uint64(0)
-		b.MaxValue = uint64(0)
 	case BlockUint32:
 		b.Uint32 = b.Uint32[:0]
-		b.MinValue = uint32(0)
-		b.MaxValue = uint32(0)
 	case BlockUint16:
 		b.Uint16 = b.Uint16[:0]
-		b.MinValue = uint16(0)
-		b.MaxValue = uint16(0)
 	case BlockUint8:
 		b.Uint8 = b.Uint8[:0]
-		b.MinValue = uint8(0)
-		b.MaxValue = uint8(0)
 	case BlockFloat64:
 		b.Float64 = b.Float64[:0]
-		b.MinValue = float64(0.0)
-		b.MaxValue = float64(0.0)
 	case BlockFloat32:
 		b.Float32 = b.Float32[:0]
-		b.MinValue = float32(0.0)
-		b.MaxValue = float32(0.0)
 	case BlockString:
 		for j, _ := range b.Strings {
 			b.Strings[j] = ""
 		}
 		b.Strings = b.Strings[:0]
-		b.MinValue = ""
-		b.MaxValue = ""
 	case BlockBytes:
 		for j, _ := range b.Bytes {
 			b.Bytes[j] = nil
 		}
 		b.Bytes = b.Bytes[:0]
-		b.MinValue = []byte{}
-		b.MaxValue = []byte{}
 	case BlockBool:
 		b.Bools = b.Bools[:0]
-		b.MinValue = false
-		b.MaxValue = false
-	case BlockTime:
-		b.Timestamps = b.Timestamps[:0]
-		b.MinValue = time.Time{}
-		b.MaxValue = time.Time{}
+	case BlockInt128:
+		b.Int128 = b.Int128[:0]
+	case BlockInt256:
+		b.Int256 = b.Int256[:0]
 	}
-	b.Dirty = false
+	b.dirty = false
 }
 
 func (b *Block) Release() {
-	b.MinValue = nil
-	b.MaxValue = nil
-	b.Dirty = false
-	switch b.Type {
-	case BlockTime:
-		if cap(b.Timestamps) == DefaultMaxPointsPerBlock {
-			int64Pool.Put(b.Timestamps[:0])
-		}
-		b.Timestamps = nil
+	b.head.MinValue = nil
+	b.head.MaxValue = nil
+	b.dirty = false
+	switch b.Type() {
 	case BlockFloat64:
 		if cap(b.Float64) == DefaultMaxPointsPerBlock {
 			float64Pool.Put(b.Float64[:0])
@@ -776,7 +769,7 @@ func (b *Block) Release() {
 			float32Pool.Put(b.Float32[:0])
 		}
 		b.Float32 = nil
-	case BlockInt64:
+	case BlockInt64, BlockTime:
 		if cap(b.Int64) == DefaultMaxPointsPerBlock {
 			int64Pool.Put(b.Int64[:0])
 		}
@@ -837,23 +830,36 @@ func (b *Block) Release() {
 			bytesPool.Put(b.Bytes[:0])
 		}
 		b.Bytes = nil
+	case BlockInt128:
+		if cap(b.Int128) == DefaultMaxPointsPerBlock {
+			int128Pool.Put(b.Int128[:0])
+		}
+		b.Int128 = nil
+	case BlockInt256:
+		if cap(b.Int256) == DefaultMaxPointsPerBlock {
+			int256Pool.Put(b.Int256[:0])
+		}
+		b.Int256 = nil
 	case BlockIgnore:
 	}
 }
 
+// FIXME: pass a buffer to avoid alloc+memcopy
 func (b *Block) Encode() ([]byte, []byte, error) {
 	body, err := b.EncodeBody()
 	if err != nil {
 		return nil, nil, err
 	}
 	// encode header second, to allow for reparsing min/max values during encode
-	head, err := b.EncodeHeader()
+	buf := bytes.NewBuffer(make([]byte, 0, b.head.EncodedSize()))
+	err = b.head.Encode(buf)
 	if err != nil {
 		return nil, nil, err
 	}
-	return head, body, nil
+	return buf.Bytes(), body, nil
 }
 
+// FIXME: pass a buffer to avoid alloc+memcopy
 // values -> raw
 // - analyzes values to determine best compression
 // - uses buffer pool to allocate output slice once and avoid memcopy
@@ -867,162 +873,184 @@ func (b *Block) EncodeBody() ([]byte, error) {
 		buf = bytes.NewBuffer(make([]byte, 0, sz))
 	}
 
-	switch b.Type {
+	switch b.Type() {
 	case BlockTime:
-		min, max, err := encodeTimeBlock(buf, b.Timestamps, b.Compression)
+		min, max, err := encodeTimeBlock(buf, b.Int64, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = time.Unix(0, min).UTC()
-			b.MaxValue = time.Unix(0, max).UTC()
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = time.Unix(0, min).UTC()
+			b.head.MaxValue = time.Unix(0, max).UTC()
+			b.dirty = false
 		}
 
 	case BlockFloat64:
-		min, max, err := encodeFloat64Block(buf, b.Float64, b.Compression)
+		min, max, err := encodeFloat64Block(buf, b.Float64, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockFloat32:
-		min, max, err := encodeFloat32Block(buf, b.Float32, b.Compression)
+		min, max, err := encodeFloat32Block(buf, b.Float32, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockInt64:
-		min, max, err := encodeInt64Block(buf, b.Int64, b.Compression)
+		min, max, err := encodeInt64Block(buf, b.Int64, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockInt32:
-		min, max, err := encodeInt32Block(buf, b.Int32, b.Compression)
+		min, max, err := encodeInt32Block(buf, b.Int32, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockInt16:
-		min, max, err := encodeInt16Block(buf, b.Int16, b.Compression)
+		min, max, err := encodeInt16Block(buf, b.Int16, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 	case BlockInt8:
-		min, max, err := encodeInt8Block(buf, b.Int8, b.Compression)
+		min, max, err := encodeInt8Block(buf, b.Int8, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockUint64:
-		min, max, err := encodeUint64Block(buf, b.Uint64, b.Compression)
+		min, max, err := encodeUint64Block(buf, b.Uint64, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockUint32:
-		min, max, err := encodeUint32Block(buf, b.Uint32, b.Compression)
+		min, max, err := encodeUint32Block(buf, b.Uint32, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockUint16:
-		min, max, err := encodeUint16Block(buf, b.Uint16, b.Compression)
+		min, max, err := encodeUint16Block(buf, b.Uint16, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockUint8:
-		min, max, err := encodeUint8Block(buf, b.Uint8, b.Compression)
+		min, max, err := encodeUint8Block(buf, b.Uint8, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockBool:
-		min, max, err := encodeBoolBlock(buf, b.Bools, b.Compression)
+		min, max, err := encodeBoolBlock(buf, b.Bools, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockString:
-		min, max, err := encodeStringBlock(buf, b.Strings, b.Compression)
+		min, max, err := encodeStringBlock(buf, b.Strings, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockBytes:
-		min, max, err := encodeBytesBlock(buf, b.Bytes, b.Compression)
+		min, max, err := encodeBytesBlock(buf, b.Bytes, b.Compression())
 		if err != nil {
 			return nil, err
 		}
-		if b.Dirty {
-			b.MinValue = min
-			b.MaxValue = max
-			b.Dirty = false
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
+		}
+
+	case BlockInt128:
+		min, max, err := encodeInt128Block(buf, b.Int128, b.Compression())
+		if err != nil {
+			return nil, err
+		}
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
+		}
+
+	case BlockInt256:
+		min, max, err := encodeInt256Block(buf, b.Int256, b.Compression())
+		if err != nil {
+			return nil, err
+		}
+		if b.dirty {
+			b.head.MinValue = min
+			b.head.MaxValue = max
+			b.dirty = false
 		}
 
 	case BlockIgnore:
-		b.Dirty = false
+		b.dirty = false
 		return nil, nil
 
 	default:
@@ -1031,354 +1059,535 @@ func (b *Block) EncodeBody() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (b *Block) EncodeHeader() ([]byte, error) {
-	// re-use large enough buffer
-	buf := bytes.NewBuffer(BlockEncoderPool.Get().([]byte)[:0])
+// func (b *Block) EncodeHeader() ([]byte, error) {
+// 	// re-use large enough buffer
+// 	buf := bytes.NewBuffer(BlockEncoderPool.Get().([]byte)[:0])
 
-	// 8                 7 6          5 4 3 2 1
-	// ext header flag   compression  block type
-	buf.WriteByte(byte(b.Type&0x1f) | byte(b.Compression&0x3)<<5 | 0x80)
+// 	// 8                 7 6          5 4 3 2 1
+// 	// ext header flag   compression  block type
+// 	buf.WriteByte(byte(b.Type&0x1f) | byte(b.Compression()&0x3)<<5 | 0x80)
 
-	// extension header
-	// - 4 lower bits are used for storing precision
-	// - 4 upper bits are flags
-	buf.WriteByte((byte(b.Flags)&0xf)<<4 | byte(b.Precision)&0xf)
+// 	// extension header
+// 	// - 6 lower bits are used for storing scale (0..63)
+// 	// - 2 upper bits are flags
+// 	buf.WriteByte((byte(b.Flags)&0x3)<<6 | byte(b.Scale)&0x3f)
 
-	switch b.Type {
-	case BlockTime:
-		var v [16]byte
-		min, max := b.MinValue.(time.Time), b.MaxValue.(time.Time)
-		vmin, vmax := min.UnixNano(), max.UnixNano()
-		bigEndian.PutUint64(v[0:], uint64(vmin))
-		bigEndian.PutUint64(v[8:], uint64(vmax))
-		_, _ = buf.Write(v[:])
+// 	switch b.Type {
+// 	case BlockTime:
+// 		// FIXME: for consistency purposes, time blocks are int64
+// 		//        and headers should be int64 as well. only BlockHeader
+// 		//        contains real values
+// 		var v [16]byte
+// 		min, max := b.head.MinValue.(time.Time), b.head.MaxValue.(time.Time)
+// 		vmin, vmax := min.UnixNano(), max.UnixNano()
+// 		bigEndian.PutUint64(v[0:], uint64(vmin))
+// 		bigEndian.PutUint64(v[8:], uint64(vmax))
+// 		_, _ = buf.Write(v[:])
 
-	case BlockFloat64:
-		var v [16]byte
-		min, max := b.MinValue.(float64), b.MaxValue.(float64)
-		bigEndian.PutUint64(v[0:], math.Float64bits(min))
-		bigEndian.PutUint64(v[8:], math.Float64bits(max))
-		_, _ = buf.Write(v[:])
+// 	case BlockFloat64:
+// 		var v [16]byte
+// 		min, max := b.head.MinValue.(float64), b.head.MaxValue.(float64)
+// 		bigEndian.PutUint64(v[0:], math.Float64bits(min))
+// 		bigEndian.PutUint64(v[8:], math.Float64bits(max))
+// 		_, _ = buf.Write(v[:])
 
-	case BlockFloat32:
-		var v [8]byte
-		min, max := b.MinValue.(float32), b.MaxValue.(float32)
-		bigEndian.PutUint32(v[0:], math.Float32bits(min))
-		bigEndian.PutUint32(v[4:], math.Float32bits(max))
-		_, _ = buf.Write(v[:])
+// 	case BlockFloat32:
+// 		var v [8]byte
+// 		min, max := b.head.MinValue.(float32), b.head.MaxValue.(float32)
+// 		bigEndian.PutUint32(v[0:], math.Float32bits(min))
+// 		bigEndian.PutUint32(v[4:], math.Float32bits(max))
+// 		_, _ = buf.Write(v[:])
 
-	case BlockInt64:
-		var v [16]byte
-		min, max := b.MinValue.(int64), b.MaxValue.(int64)
-		bigEndian.PutUint64(v[0:], uint64(min))
-		bigEndian.PutUint64(v[8:], uint64(max))
-		_, _ = buf.Write(v[:])
+// 	case BlockInt64:
+// 		var v [16]byte
+// 		min, max := b.head.MinValue.(int64), b.head.MaxValue.(int64)
+// 		bigEndian.PutUint64(v[0:], uint64(min))
+// 		bigEndian.PutUint64(v[8:], uint64(max))
+// 		_, _ = buf.Write(v[:])
 
-	case BlockInt32:
-		var v [8]byte
-		min, max := b.MinValue.(int32), b.MaxValue.(int32)
-		bigEndian.PutUint32(v[0:], uint32(min))
-		bigEndian.PutUint32(v[4:], uint32(max))
-		_, _ = buf.Write(v[:])
+// 	case BlockInt32:
+// 		var v [8]byte
+// 		min, max := b.head.MinValue.(int32), b.head.MaxValue.(int32)
+// 		bigEndian.PutUint32(v[0:], uint32(min))
+// 		bigEndian.PutUint32(v[4:], uint32(max))
+// 		_, _ = buf.Write(v[:])
 
-	case BlockInt16:
-		var v [4]byte
-		min, max := b.MinValue.(int16), b.MaxValue.(int16)
-		bigEndian.PutUint16(v[0:], uint16(min))
-		bigEndian.PutUint16(v[2:], uint16(max))
-		_, _ = buf.Write(v[:])
+// 	case BlockInt16:
+// 		var v [4]byte
+// 		min, max := b.head.MinValue.(int16), b.head.MaxValue.(int16)
+// 		bigEndian.PutUint16(v[0:], uint16(min))
+// 		bigEndian.PutUint16(v[2:], uint16(max))
+// 		_, _ = buf.Write(v[:])
 
-	case BlockInt8:
-		var v [2]byte
-		min, max := b.MinValue.(int8), b.MaxValue.(int8)
-		v[0] = uint8(min)
-		v[1] = uint8(max)
-		_, _ = buf.Write(v[:])
+// 	case BlockInt8:
+// 		var v [2]byte
+// 		min, max := b.head.MinValue.(int8), b.head.MaxValue.(int8)
+// 		v[0] = uint8(min)
+// 		v[1] = uint8(max)
+// 		_, _ = buf.Write(v[:])
 
-	case BlockUint64:
-		// always stored as uint, conversion happens only for BlockHeader
-		var v [16]byte
-		min, max := b.MinValue.(uint64), b.MaxValue.(uint64)
-		bigEndian.PutUint64(v[0:], min)
-		bigEndian.PutUint64(v[8:], max)
-		_, _ = buf.Write(v[:])
+// 	case BlockUint64:
+// 		// always stored as uint, conversion happens only for BlockHeader
+// 		var v [16]byte
+// 		min, max := b.head.MinValue.(uint64), b.head.MaxValue.(uint64)
+// 		bigEndian.PutUint64(v[0:], min)
+// 		bigEndian.PutUint64(v[8:], max)
+// 		_, _ = buf.Write(v[:])
 
-	case BlockUint32:
-		// always stored as uint, conversion happens only for BlockHeader
-		var v [8]byte
-		min, max := b.MinValue.(uint32), b.MaxValue.(uint32)
-		bigEndian.PutUint32(v[0:], min)
-		bigEndian.PutUint32(v[4:], max)
-		_, _ = buf.Write(v[:])
+// 	case BlockUint32:
+// 		// always stored as uint, conversion happens only for BlockHeader
+// 		var v [8]byte
+// 		min, max := b.head.MinValue.(uint32), b.head.MaxValue.(uint32)
+// 		bigEndian.PutUint32(v[0:], min)
+// 		bigEndian.PutUint32(v[4:], max)
+// 		_, _ = buf.Write(v[:])
 
-	case BlockUint16:
-		// always stored as uint, conversion happens only for BlockHeader
-		var v [4]byte
-		min, max := b.MinValue.(uint16), b.MaxValue.(uint16)
-		bigEndian.PutUint16(v[0:], min)
-		bigEndian.PutUint16(v[2:], max)
-		_, _ = buf.Write(v[:])
+// 	case BlockUint16:
+// 		// always stored as uint, conversion happens only for BlockHeader
+// 		var v [4]byte
+// 		min, max := b.head.MinValue.(uint16), b.head.MaxValue.(uint16)
+// 		bigEndian.PutUint16(v[0:], min)
+// 		bigEndian.PutUint16(v[2:], max)
+// 		_, _ = buf.Write(v[:])
 
-	case BlockUint8:
-		// always stored as uint, conversion happens only for BlockHeader
-		var v [2]byte
-		min, max := b.MinValue.(uint8), b.MaxValue.(uint8)
-		v[0] = min
-		v[1] = max
-		_, _ = buf.Write(v[:])
+// 	case BlockUint8:
+// 		// always stored as uint, conversion happens only for BlockHeader
+// 		var v [2]byte
+// 		min, max := b.head.MinValue.(uint8), b.head.MaxValue.(uint8)
+// 		v[0] = min
+// 		v[1] = max
+// 		_, _ = buf.Write(v[:])
 
-	case BlockBool:
-		var v byte
-		min, max := b.MinValue.(bool), b.MaxValue.(bool)
-		if min {
-			v = 1
-		}
-		if max {
-			v += 2
-		}
-		buf.WriteByte(v)
+// 	case BlockBool:
+// 		var v byte
+// 		min, max := b.head.MinValue.(bool), b.head.MaxValue.(bool)
+// 		if min {
+// 			v = 1
+// 		}
+// 		if max {
+// 			v += 2
+// 		}
+// 		buf.WriteByte(v)
 
-	case BlockString:
-		// null terminated string
-		min, max := b.MinValue.(string), b.MaxValue.(string)
-		_, _ = buf.WriteString(min)
-		buf.WriteByte(0)
-		_, _ = buf.WriteString(max)
-		buf.WriteByte(0)
+// 	case BlockString:
+// 		// null terminated string
+// 		min, max := b.head.MinValue.(string), b.head.MaxValue.(string)
+// 		_, _ = buf.WriteString(min)
+// 		buf.WriteByte(0)
+// 		_, _ = buf.WriteString(max)
+// 		buf.WriteByte(0)
 
-	case BlockBytes:
-		// len prefixed byte slice
-		min, max := b.MinValue.([]byte), b.MaxValue.([]byte)
-		var v [8]byte
-		i := binary.PutUvarint(v[:], uint64(len(min)))
-		_, _ = buf.Write(v[:i])
-		_, _ = buf.Write(min)
+// 	case BlockBytes:
+// 		// len prefixed byte slice
+// 		min, max := b.head.MinValue.([]byte), b.head.MaxValue.([]byte)
+// 		var v [8]byte
+// 		i := binary.PutUvarint(v[:], uint64(len(min)))
+// 		_, _ = buf.Write(v[:i])
+// 		_, _ = buf.Write(min)
 
-		i = binary.PutUvarint(v[:], uint64(len(max)))
-		_, _ = buf.Write(v[:i])
-		_, _ = buf.Write(max)
+// 		i = binary.PutUvarint(v[:], uint64(len(max)))
+// 		_, _ = buf.Write(v[:i])
+// 		_, _ = buf.Write(max)
 
-	case BlockIgnore:
-		return nil, nil
+// 	case BlockDecimal32:
+// 		var v [8]byte
+// 		min, max := b.head.MinValue.(Decimal32).Int64(), b.head.MaxValue.(Decimal32).Int64()
+// 		bigEndian.PutUint32(v[0:], uint32(min))
+// 		bigEndian.PutUint32(v[4:], uint32(max))
+// 		_, _ = buf.Write(v[:])
 
-	default:
-		return nil, fmt.Errorf("pack: invalid data type %d", b.Type)
-	}
+// 	case BlockDecimal64:
+// 		var v [16]byte
+// 		min, max := b.head.MinValue.(Decimal64).Int64(), b.head.MaxValue.(Decimal64).Int64()
+// 		bigEndian.PutUint64(v[0:], uint64(min))
+// 		bigEndian.PutUint64(v[8:], uint64(max))
+// 		_, _ = buf.Write(v[:])
 
-	return buf.Bytes(), nil
-}
+// 	case BlockDecimal128:
+// 		var v [32]byte
+// 		min, max := b.head.MinValue.(Decimal128).Int128(), b.head.MaxValue.(Decimal128).Int128()
+// 		bigEndian.PutUint64(v[0:], uint64(min[0]))
+// 		bigEndian.PutUint64(v[8:], uint64(min[1]))
+// 		bigEndian.PutUint64(v[16:], uint64(max[0]))
+// 		bigEndian.PutUint64(v[24:], uint64(max[1]))
+// 		_, _ = buf.Write(v[:])
+
+// 	case BlockDecimal256:
+// 		var v [64]byte
+// 		min, max := b.head.MinValue.(Decimal256).Int256(), b.head.MaxValue.(Decimal256).Int256()
+// 		bigEndian.PutUint64(v[0:], uint64(min[0]))
+// 		bigEndian.PutUint64(v[8:], uint64(min[1]))
+// 		bigEndian.PutUint64(v[16:], uint64(min[2]))
+// 		bigEndian.PutUint64(v[24:], uint64(min[3]))
+// 		bigEndian.PutUint64(v[32:], uint64(max[0]))
+// 		bigEndian.PutUint64(v[40:], uint64(max[1]))
+// 		bigEndian.PutUint64(v[48:], uint64(max[2]))
+// 		bigEndian.PutUint64(v[56:], uint64(max[3]))
+// 		_, _ = buf.Write(v[:])
+
+// 	case BlockInt128:
+// 		var v [32]byte
+// 		min, max := b.head.MinValue.(Int128), b.head.MaxValue.(Int128)
+// 		bigEndian.PutUint64(v[0:], uint64(min[0]))
+// 		bigEndian.PutUint64(v[8:], uint64(min[1]))
+// 		bigEndian.PutUint64(v[16:], uint64(max[0]))
+// 		bigEndian.PutUint64(v[24:], uint64(max[1]))
+// 		_, _ = buf.Write(v[:])
+
+// 	case BlockInt256:
+// 		var v [64]byte
+// 		min, max := b.head.MinValue.(Int256), b.head.MaxValue.(Int256)
+// 		bigEndian.PutUint64(v[0:], uint64(min[0]))
+// 		bigEndian.PutUint64(v[8:], uint64(min[1]))
+// 		bigEndian.PutUint64(v[16:], uint64(min[2]))
+// 		bigEndian.PutUint64(v[24:], uint64(min[3]))
+// 		bigEndian.PutUint64(v[32:], uint64(max[0]))
+// 		bigEndian.PutUint64(v[40:], uint64(max[1]))
+// 		bigEndian.PutUint64(v[48:], uint64(max[2]))
+// 		bigEndian.PutUint64(v[56:], uint64(max[3]))
+// 		_, _ = buf.Write(v[:])
+
+// 	case BlockIgnore:
+// 		return nil, nil
+
+// 	default:
+// 		return nil, fmt.Errorf("pack: invalid data type %d", b.Type)
+// 	}
+
+// 	return buf.Bytes(), nil
+// }
 
 func (b *Block) DecodeHeader(buf *bytes.Buffer) error {
-	val := buf.Next(1)
-	typ, err := readBlockType(val)
-	if err != nil {
-		return err
-	}
-	comp, err := readBlockCompression(val)
-	if err != nil {
-		return err
-	}
-
-	var (
-		prec  int
-		flags BlockFlags
-	)
-
-	if val[0]&0x80 > 0 {
-		val = buf.Next(1)
-		prec = readBlockPrecision(val)
-		flags = readBlockFlags(val)
-	}
-
-	switch typ {
-	case BlockTime:
-		v := buf.Next(16)
-		vmin := bigEndian.Uint64(v[0:])
-		vmax := bigEndian.Uint64(v[8:])
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.MinValue = time.Unix(0, int64(vmin)).UTC()
-			b.MaxValue = time.Unix(0, int64(vmax)).UTC()
-		}
-
-	case BlockFloat64:
-		v := buf.Next(16)
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.MinValue = math.Float64frombits(bigEndian.Uint64(v[0:]))
-			b.MaxValue = math.Float64frombits(bigEndian.Uint64(v[8:]))
-		}
-
-	case BlockFloat32:
-		v := buf.Next(8)
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.MinValue = math.Float32frombits(bigEndian.Uint32(v[0:]))
-			b.MaxValue = math.Float32frombits(bigEndian.Uint32(v[4:]))
-		}
-
-	case BlockInt64:
-		v := buf.Next(16)
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.MinValue = int64(bigEndian.Uint64(v[0:]))
-			b.MaxValue = int64(bigEndian.Uint64(v[8:]))
-		}
-
-	case BlockInt32:
-		v := buf.Next(8)
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.MinValue = int32(bigEndian.Uint32(v[0:]))
-			b.MaxValue = int32(bigEndian.Uint32(v[4:]))
-		}
-
-	case BlockInt16:
-		v := buf.Next(4)
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.MinValue = int16(bigEndian.Uint16(v[0:]))
-			b.MaxValue = int16(bigEndian.Uint16(v[2:]))
-		}
-
-	case BlockInt8:
-		v := buf.Next(2)
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.MinValue = int8(v[0])
-			b.MaxValue = int8(v[1])
-		}
-
-	case BlockUint64:
-		v := buf.Next(16)
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.Precision = prec
-			b.Flags = flags
-			b.MinValue = bigEndian.Uint64(v[0:])
-			b.MaxValue = bigEndian.Uint64(v[8:])
-		}
-
-	case BlockUint32:
-		v := buf.Next(8)
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.Precision = prec
-			b.Flags = flags
-			b.MinValue = bigEndian.Uint32(v[0:])
-			b.MaxValue = bigEndian.Uint32(v[4:])
-		}
-
-	case BlockUint16:
-		v := buf.Next(4)
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.MinValue = bigEndian.Uint16(v[0:])
-			b.MaxValue = bigEndian.Uint16(v[2:])
-		}
-
-	case BlockUint8:
-		v := buf.Next(2)
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.MinValue = uint8(v[0])
-			b.MaxValue = uint8(v[1])
-		}
-
-	case BlockBool:
-		v := buf.Next(1)
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			b.MinValue = v[0]&1 > 0
-			b.MaxValue = v[0]&2 > 0
-		}
-
-	case BlockString:
-		min, err := buf.ReadString(0)
-		if err != nil {
-			return fmt.Errorf("pack: reading min string block header: %v", err)
-		}
-		max, err := buf.ReadString(0)
-		if err != nil {
-			return fmt.Errorf("pack: reading max string block header: %v", err)
-		}
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			// don't reference buffer data!
-			mincopy := min[:len(min)-1]
-			maxcopy := max[:len(max)-1]
-			b.MinValue = mincopy
-			b.MaxValue = maxcopy
-		}
-
-	case BlockBytes:
-		length, err := binary.ReadUvarint(buf)
-		if err != nil {
-			return fmt.Errorf("pack: reading min []byte block header: %v", err)
-		}
-		min := buf.Next(int(length))
-		length, err = binary.ReadUvarint(buf)
-		if err != nil {
-			return fmt.Errorf("pack: reading max []byte block header: %v", err)
-		}
-		max := buf.Next(int(length))
-
-		if b.Type != BlockIgnore {
-			b.Type = typ
-			b.Compression = comp
-			// don't reference buffer data!
-			mincopy := make([]byte, len(min))
-			maxcopy := make([]byte, len(max))
-			copy(mincopy, min)
-			copy(maxcopy, max)
-			b.MinValue = mincopy
-			b.MaxValue = maxcopy
-		}
-
-	case BlockIgnore:
-
-	default:
-		return fmt.Errorf("pack: invalid data type %d", b.Type)
-	}
-
-	return nil
+	return b.head.Decode(buf)
 }
+
+// func (b *Block) DecodeHeader(buf *bytes.Buffer) error {
+// 	val := buf.Next(1)
+// 	typ, err := readBlockType(val)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	comp, err := readBlockCompression(val)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	var (
+// 		scale int
+// 		flags BlockFlags
+// 	)
+
+// 	if val[0]&0x80 > 0 {
+// 		val = buf.Next(1)
+// 		scale = readBlockScale(val)
+// 		flags = readBlockFlags(val)
+// 	}
+
+// 	switch typ {
+// 	case BlockTime:
+// 		v := buf.Next(16)
+// 		vmin := bigEndian.Uint64(v[0:])
+// 		vmax := bigEndian.Uint64(v[8:])
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = time.Unix(0, int64(vmin)).UTC()
+// 			b.head.MaxValue = time.Unix(0, int64(vmax)).UTC()
+// 		}
+
+// 	case BlockFloat64:
+// 		v := buf.Next(16)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = math.Float64frombits(bigEndian.Uint64(v[0:]))
+// 			b.head.MaxValue = math.Float64frombits(bigEndian.Uint64(v[8:]))
+// 		}
+
+// 	case BlockFloat32:
+// 		v := buf.Next(8)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = math.Float32frombits(bigEndian.Uint32(v[0:]))
+// 			b.head.MaxValue = math.Float32frombits(bigEndian.Uint32(v[4:]))
+// 		}
+
+// 	case BlockInt64:
+// 		v := buf.Next(16)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = int64(bigEndian.Uint64(v[0:]))
+// 			b.head.MaxValue = int64(bigEndian.Uint64(v[8:]))
+// 		}
+
+// 	case BlockInt32:
+// 		v := buf.Next(8)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = int32(bigEndian.Uint32(v[0:]))
+// 			b.head.MaxValue = int32(bigEndian.Uint32(v[4:]))
+// 		}
+
+// 	case BlockInt16:
+// 		v := buf.Next(4)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = int16(bigEndian.Uint16(v[0:]))
+// 			b.head.MaxValue = int16(bigEndian.Uint16(v[2:]))
+// 		}
+
+// 	case BlockInt8:
+// 		v := buf.Next(2)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = int8(v[0])
+// 			b.head.MaxValue = int8(v[1])
+// 		}
+
+// 	case BlockUint64:
+// 		v := buf.Next(16)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.Flags = flags
+// 			b.head.MinValue = bigEndian.Uint64(v[0:])
+// 			b.head.MaxValue = bigEndian.Uint64(v[8:])
+// 		}
+
+// 	case BlockUint32:
+// 		v := buf.Next(8)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.Flags = flags
+// 			b.head.MinValue = bigEndian.Uint32(v[0:])
+// 			b.head.MaxValue = bigEndian.Uint32(v[4:])
+// 		}
+
+// 	case BlockUint16:
+// 		v := buf.Next(4)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = bigEndian.Uint16(v[0:])
+// 			b.head.MaxValue = bigEndian.Uint16(v[2:])
+// 		}
+
+// 	case BlockUint8:
+// 		v := buf.Next(2)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = uint8(v[0])
+// 			b.head.MaxValue = uint8(v[1])
+// 		}
+
+// 	case BlockBool:
+// 		v := buf.Next(1)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = v[0]&1 > 0
+// 			b.head.MaxValue = v[0]&2 > 0
+// 		}
+
+// 	case BlockString:
+// 		min, err := buf.ReadString(0)
+// 		if err != nil {
+// 			return fmt.Errorf("pack: reading min string block header: %v", err)
+// 		}
+// 		max, err := buf.ReadString(0)
+// 		if err != nil {
+// 			return fmt.Errorf("pack: reading max string block header: %v", err)
+// 		}
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			// don't reference buffer data!
+// 			mincopy := min[:len(min)-1]
+// 			maxcopy := max[:len(max)-1]
+// 			b.head.MinValue = mincopy
+// 			b.head.MaxValue = maxcopy
+// 		}
+
+// 	case BlockBytes:
+// 		length, err := binary.ReadUvarint(buf)
+// 		if err != nil {
+// 			return fmt.Errorf("pack: reading min []byte block header: %v", err)
+// 		}
+// 		min := buf.Next(int(length))
+// 		length, err = binary.ReadUvarint(buf)
+// 		if err != nil {
+// 			return fmt.Errorf("pack: reading max []byte block header: %v", err)
+// 		}
+// 		max := buf.Next(int(length))
+
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			// don't reference buffer data!
+// 			mincopy := make([]byte, len(min))
+// 			maxcopy := make([]byte, len(max))
+// 			copy(mincopy, min)
+// 			copy(maxcopy, max)
+// 			b.head.MinValue = mincopy
+// 			b.head.MaxValue = maxcopy
+// 		}
+
+// 	case BlockDecimal32:
+// 		v := buf.Next(8)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.Scale = scale
+// 			b.head.MinValue, err = NewDecimal32(int32(bigEndian.Uint32(v[0:])), scale)
+// 			if err != nil {
+// 				return fmt.Errorf("pack: min block header: %v", err)
+// 			}
+// 			b.head.MaxValue, err = NewDecimal32(int32(bigEndian.Uint32(v[4:])), scale)
+// 			if err != nil {
+// 				return fmt.Errorf("pack: min block header: %v", err)
+// 			}
+// 		}
+
+// 	case BlockDecimal64:
+// 		v := buf.Next(16)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.Scale = scale
+// 			b.head.MinValue, err = NewDecimal64(int64(bigEndian.Uint64(v[0:])), scale)
+// 			if err != nil {
+// 				return fmt.Errorf("pack: min block header: %v", err)
+// 			}
+// 			b.head.MaxValue, err = NewDecimal64(int64(bigEndian.Uint64(v[8:])), scale)
+// 			if err != nil {
+// 				return fmt.Errorf("pack: min block header: %v", err)
+// 			}
+// 		}
+
+// 	case BlockDecimal128:
+// 		v := buf.Next(32)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.Scale = scale
+// 			min128 := NewInt128(
+// 				int64(bigEndian.Uint64(v[0:])),
+// 				bigEndian.Uint64(v[8:]),
+// 			)
+// 			b.head.MinValue, err = NewDecimal128(min128, scale)
+// 			if err != nil {
+// 				return fmt.Errorf("pack: min block header: %v", err)
+// 			}
+// 			max128 := NewInt128(
+// 				int64(bigEndian.Uint64(v[16:])),
+// 				bigEndian.Uint64(v[24:]),
+// 			)
+// 			b.head.MaxValue, err = NewDecimal128(max128, scale)
+// 			if err != nil {
+// 				return fmt.Errorf("pack: min block header: %v", err)
+// 			}
+// 		}
+
+// 	case BlockDecimal256:
+// 		v := buf.Next(64)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.Scale = scale
+// 			min256 := NewInt256(
+// 				int64(bigEndian.Uint64(v[0:])),
+// 				bigEndian.Uint64(v[8:]),
+// 				bigEndian.Uint64(v[16:]),
+// 				bigEndian.Uint64(v[24:]),
+// 			)
+// 			b.head.MinValue, err = NewDecimal256(min256, scale)
+// 			if err != nil {
+// 				return fmt.Errorf("pack: min block header: %v", err)
+// 			}
+// 			max256 := NewInt256(
+// 				int64(bigEndian.Uint64(v[32:])),
+// 				bigEndian.Uint64(v[40:]),
+// 				bigEndian.Uint64(v[48:]),
+// 				bigEndian.Uint64(v[56:]),
+// 			)
+// 			b.head.MaxValue, err = NewDecimal256(max256, scale)
+// 			if err != nil {
+// 				return fmt.Errorf("pack: min block header: %v", err)
+// 			}
+// 		}
+
+// 	case BlockInt128:
+// 		v := buf.Next(32)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = NewInt128(
+// 				int64(bigEndian.Uint64(v[0:])),
+// 				bigEndian.Uint64(v[8:]),
+// 			)
+// 			b.head.MaxValue = NewInt128(
+// 				int64(bigEndian.Uint64(v[16:])),
+// 				bigEndian.Uint64(v[24:]),
+// 			)
+// 		}
+
+// 	case BlockInt256:
+// 		v := buf.Next(64)
+// 		if b.Type != BlockIgnore {
+// 			b.Type = typ
+// 			b.Compression() = comp
+// 			b.head.MinValue = NewInt256(
+// 				int64(bigEndian.Uint64(v[0:])),
+// 				bigEndian.Uint64(v[8:]),
+// 				bigEndian.Uint64(v[16:]),
+// 				bigEndian.Uint64(v[24:]),
+// 			)
+// 			b.head.MaxValue = NewInt256(
+// 				int64(bigEndian.Uint64(v[32:])),
+// 				bigEndian.Uint64(v[40:]),
+// 				bigEndian.Uint64(v[48:]),
+// 				bigEndian.Uint64(v[56:]),
+// 			)
+// 		}
+
+// 	case BlockIgnore:
+
+// 	default:
+// 		return fmt.Errorf("pack: invalid data type %d", b.Type)
+// 	}
+
+// 	return nil
+// }
 
 // raw -> values
 func (b *Block) DecodeBody(buf []byte, sz int) error {
 	// skip blocks that are set to type ignore before decoding
 	// this is the core magic of skipping blocks on load
-	if b.Type == BlockIgnore {
+	if b.Type() == BlockIgnore {
 		return nil
 	}
 
 	var err error
-	b.Type, err = readBlockType(buf)
+	b.head.Type, err = readBlockType(buf)
 	if err != nil {
 		return err
 	}
 
-	switch b.Type {
+	switch b.Type() {
 	case BlockTime:
-		if b.Timestamps == nil || cap(b.Timestamps) < sz {
-			b.Timestamps = make([]int64, 0, sz)
+		if b.Int64 == nil || cap(b.Int64) < sz {
+			b.Int64 = make([]int64, 0, sz)
 		} else {
-			b.Timestamps = b.Timestamps[:0]
+			b.Int64 = b.Int64[:0]
 		}
-		b.Timestamps, err = decodeTimeBlock(buf, b.Timestamps)
+		b.Int64, err = decodeTimeBlock(buf, b.Int64)
 
 	case BlockFloat64:
 		if b.Float64 == nil || cap(b.Float64) < sz {
@@ -1483,6 +1692,22 @@ func (b *Block) DecodeBody(buf []byte, sz int) error {
 			b.Bytes = b.Bytes[:0]
 		}
 		b.Bytes, err = decodeBytesBlock(buf, b.Bytes)
+
+	case BlockInt128:
+		if b.Int128 == nil || cap(b.Int128) < sz {
+			b.Int128 = make([]Int128, 0, sz)
+		} else {
+			b.Int128 = b.Int128[:0]
+		}
+		b.Int128, err = decodeInt128Block(buf, b.Int128)
+
+	case BlockInt256:
+		if b.Int256 == nil || cap(b.Int256) < sz {
+			b.Int256 = make([]Int256, 0, sz)
+		} else {
+			b.Int256 = b.Int256[:0]
+		}
+		b.Int256, err = decodeInt256Block(buf, b.Int256)
 
 	case BlockIgnore:
 

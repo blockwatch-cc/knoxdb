@@ -12,6 +12,7 @@ import (
 
 	"blockwatch.cc/knoxdb/encoding/simple8b"
 	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 // Integer encoding uses two different strategies depending on the range of values in
@@ -42,6 +43,16 @@ const (
 	// intCompressedRLE is a run-length encoding format
 	intCompressedRLE = 2
 )
+
+// upper bound
+func Int256ArrayEncodedSize(src []vec.Int256) int {
+	return len(src)*32 + 1
+}
+
+// upper bound
+func Int128ArrayEncodedSize(src []vec.Int128) int {
+	return len(src)*16 + 1
+}
 
 // upper bound
 func Int64ArrayEncodedSize(src []int64) int {
