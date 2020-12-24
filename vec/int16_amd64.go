@@ -5,7 +5,6 @@
 
 package vec
 
-/*
 //go:noescape
 func matchInt16EqualAVX2(src []int16, val int16, bits []byte) int64
 
@@ -26,7 +25,7 @@ func matchInt16GreaterThanEqualAVX2(src []int16, val int16, bits []byte) int64
 
 //go:noescape
 func matchInt16BetweenAVX2(src []int16, a, b int16, bits []byte) int64
-*/
+
 //go:noescape
 func matchInt16EqualAVX512(src []int16, val int16, bits []byte) int64
 
