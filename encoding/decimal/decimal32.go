@@ -1,15 +1,6 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-// half-even rounding mode (IEEE 754-2008 roundTiesToEven)
-
-// Inspiration
-//
-// https://en.wikipedia.org/wiki/Rounding#Round_half_to_even
-// Decimal32-256 https://clickhouse.tech/docs/en/sql-reference/data-types/decimal/
-// IEEE 754R Golang https://github.com/anz-bank/decimal
-// DEC64 https://www.crockford.com/dec64.html
-
 package decimal
 
 import (
@@ -20,13 +11,18 @@ import (
 	. "blockwatch.cc/knoxdb/vec"
 )
 
+var Decimal32Zero = Decimal32{0, 0}
+
 // 9 digits
 type Decimal32 struct {
 	val   int32
 	scale int
 }
 
-// var _ Decimal = (*Decimal32)(nil)
+type Decimal32Slice struct {
+	Vec   []int32
+	Scale int
+}
 
 func NewDecimal32(val int32, scale int) Decimal32 {
 	return Decimal32{val: val, scale: scale}
@@ -37,6 +33,10 @@ func (d Decimal32) IsValid() bool {
 	return ok
 }
 
+func (d Decimal32) IsZero() bool {
+	return d.val == 0
+}
+
 func (d Decimal32) Check() (bool, error) {
 	if d.scale < 0 {
 		return false, fmt.Errorf("decimal32: invalid negative scale %d", d.scale)
@@ -44,11 +44,12 @@ func (d Decimal32) Check() (bool, error) {
 	if d.scale > MaxDecimal32Precision {
 		return false, fmt.Errorf("decimal32: scale %d overflow", d.scale)
 	}
+	if d.scale > 0 && d.val > 0 {
+		if p := digits64(int64(d.val)); p < d.scale {
+			return false, fmt.Errorf("decimal32: scale %d larger than value digits %d", d.scale, p)
+		}
+	}
 	return true, nil
-}
-
-func (d Decimal32) Bitsize() int {
-	return 32
 }
 
 func (d Decimal32) Scale() int {
@@ -56,13 +57,7 @@ func (d Decimal32) Scale() int {
 }
 
 func (d Decimal32) Precision() int {
-	for i := range pow10 {
-		if abs(int64(d.val)) > pow10[i] {
-			continue
-		}
-		return i
-	}
-	return 0
+	return digits64(int64(d.val))
 }
 
 func (d Decimal32) Clone() Decimal32 {
@@ -78,6 +73,9 @@ func (d Decimal32) Quantize(scale int) Decimal32 {
 	}
 	if scale > MaxDecimal32Precision {
 		scale = MaxDecimal32Precision
+	}
+	if d.IsZero() {
+		return Decimal32{0, scale}
 	}
 	diff := d.scale - scale
 	if diff < 0 {
@@ -117,6 +115,9 @@ func (d Decimal32) Int256() Int256 {
 }
 
 func (d *Decimal32) SetInt64(value int64, scale int) error {
+	if scale < 0 {
+		return fmt.Errorf("decimal32: scale %d underflow", scale)
+	}
 	if scale > MaxDecimal32Precision {
 		return fmt.Errorf("decimal32: scale %d overflow", scale)
 	}
@@ -134,6 +135,9 @@ func (d Decimal32) Float64() float64 {
 }
 
 func (d *Decimal32) SetFloat64(value float64, scale int) error {
+	if scale < 0 {
+		return fmt.Errorf("decimal32: scale %d underflow", scale)
+	}
 	if scale > MaxDecimal32Precision {
 		return fmt.Errorf("decimal32: scale %d overflow", scale)
 	}
@@ -210,8 +214,8 @@ func (d *Decimal32) UnmarshalText(buf []byte) error {
 	return nil
 }
 
-func ParseDecimal32(s string, scale int) (Decimal32, error) {
-	dec := NewDecimal32(0, scale)
+func ParseDecimal32(s string) (Decimal32, error) {
+	dec := NewDecimal32(0, 0)
 	if _, err := dec.Check(); err != nil {
 		return dec, err
 	}

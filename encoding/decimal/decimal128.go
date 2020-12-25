@@ -1,17 +1,16 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-// half-even rounding mode (IEEE 754-2008 roundTiesToEven)
-
 package decimal
 
 import (
 	"fmt"
-	// "strconv"
 	"strings"
 
 	. "blockwatch.cc/knoxdb/vec"
 )
+
+var Decimal128Zero = Decimal128{Int128Zero, 0}
 
 // 38 digits
 type Decimal128 struct {
@@ -19,7 +18,10 @@ type Decimal128 struct {
 	scale int
 }
 
-// var _ Decimal = (*Decimal128)(nil)
+type Decimal128Slice struct {
+	Vec   []Int128
+	Scale int
+}
 
 func NewDecimal128(val Int128, scale int) Decimal128 {
 	return Decimal128{val: val, scale: scale}
@@ -30,6 +32,10 @@ func (d Decimal128) IsValid() bool {
 	return ok
 }
 
+func (d Decimal128) IsZero() bool {
+	return d.val.IsZero()
+}
+
 func (d Decimal128) Check() (bool, error) {
 	if d.scale < 0 {
 		return false, fmt.Errorf("decimal128: invalid negative scale %d", d.scale)
@@ -37,25 +43,39 @@ func (d Decimal128) Check() (bool, error) {
 	if d.scale > MaxDecimal128Precision {
 		return false, fmt.Errorf("decimal128: scale %d overflow", d.scale)
 	}
+	if d.scale > 0 && !d.val.IsZero() {
+		if p := d.val.Precision(); p < d.scale {
+			return false, fmt.Errorf("decimal128: scale %d larger than value digits %d", d.scale, p)
+		}
+	}
 	return true, nil
-}
-
-func (d Decimal128) Bitsize() int {
-	return 128
 }
 
 func (d Decimal128) Scale() int {
 	return d.scale
 }
 
-// TODO, extend to 128bit
 func (d Decimal128) Precision() int {
-	// for i := range pow10 {
-	// 	if abs(d.val[1]) > pow10[i] {
-	// 		continue
-	// 	}
-	// 	return i
-	// }
+	if d.val.IsInt64() {
+		val := d.val.Int64()
+		for i := range pow10 {
+			if abs(val) > pow10[i] {
+				continue
+			}
+			return i
+		}
+	}
+	pow := Int128FromInt64(1e18)
+	q, r := d.val.Abs().QuoRem(pow)
+	for p := 0; ; p += 18 {
+		if q.IsZero() {
+			for i := r.Int64(); i != 0; i /= 10 {
+				p++
+			}
+			return p
+		}
+		q, r = q.QuoRem(pow)
+	}
 	return 0
 }
 
@@ -66,7 +86,6 @@ func (d Decimal128) Clone() Decimal128 {
 	}
 }
 
-// TODO, extend to 128bit
 func (d Decimal128) Quantize(scale int) Decimal128 {
 	if scale == d.scale {
 		return d
@@ -74,23 +93,36 @@ func (d Decimal128) Quantize(scale int) Decimal128 {
 	if scale > MaxDecimal128Precision {
 		scale = MaxDecimal128Precision
 	}
+	if d.IsZero() {
+		return Decimal128{Int128Zero, scale}
+	}
 	diff := d.scale - scale
+	l := len(pow10)
 	if diff < 0 {
-		// d.val[1] *= pow10[-diff]
-		// d.scale = scale
+		for i := -diff / l; i > 0; i-- {
+			d.val = d.val.Mul64(int64(pow10[l-1]))
+			diff += l
+		}
+		d.val = d.val.Mul64(int64(pow10[-diff]))
+		d.scale = scale
 	} else {
-		// sign := int64(1)
-		// if d.val[1] < 0 {
-		// 	sign = -1
-		// }
-		// // IEEE 754-2008 roundTiesToEven
-		// rem := d.val[1] % pow10[diff] * sign
-		// mid := 5 * pow10[diff-1]
-		// d.val[1] /= pow10[diff]
-		// if rem > mid || rem == mid && d.val[1]*sign%2 == 1 {
-		// 	d.val[1] += sign
-		// }
-		// d.scale = scale
+		sign := d.val.Sign()
+		y := Int128FromInt64(int64(pow10[diff%l]))
+		for i := diff / l; i > 0; i-- {
+			y = y.Mul64(int64(pow10[l-1]))
+		}
+		// IEEE 754-2008 roundTiesToEven
+		quo, rem := d.val.QuoRem(y)
+		mid := y.Div64(2)
+		if rem.Gt(mid) || rem.Eq(mid) && quo[1]%2 == 1 {
+			if sign > 0 {
+				quo = quo.Add64(1)
+			} else {
+				quo = quo.Sub64(1)
+			}
+		}
+		d.val = quo
+		d.scale = scale
 	}
 	return d
 }
@@ -108,6 +140,9 @@ func (d Decimal128) Int256() Int256 {
 }
 
 func (d *Decimal128) SetInt64(value int64, scale int) error {
+	if scale < 0 {
+		return fmt.Errorf("decimal128: scale %d underflow", scale)
+	}
 	if scale > MaxDecimal128Precision {
 		return fmt.Errorf("decimal128: scale %d overflow", scale)
 	}
@@ -117,6 +152,9 @@ func (d *Decimal128) SetInt64(value int64, scale int) error {
 }
 
 func (d *Decimal128) SetInt128(value Int128, scale int) error {
+	if scale < 0 {
+		return fmt.Errorf("decimal128: scale %d underflow", scale)
+	}
 	if scale > MaxDecimal128Precision {
 		return fmt.Errorf("decimal128: scale %d overflow", scale)
 	}
@@ -129,27 +167,39 @@ func (d Decimal128) RoundToInt64() int64 {
 	return d.Quantize(0).Int64()
 }
 
-// TODO, extend to 128bit
 func (d Decimal128) Float64() float64 {
-	return float64(d.val[1]) / float64(pow10[d.scale])
+	f := d.val.Float64()
+	scale := d.scale
+	l := len(pow10)
+	for i := scale / l; i > 0; i-- {
+		f /= float64(pow10[l-1])
+		scale -= l
+	}
+	return f / float64(pow10[scale])
 }
 
-// TODO, extend to 128bit
 func (d *Decimal128) SetFloat64(value float64, scale int) error {
+	if scale < 0 {
+		return fmt.Errorf("decimal128: scale %d underflow", scale)
+	}
 	if scale > MaxDecimal128Precision {
 		return fmt.Errorf("decimal128: scale %d overflow", scale)
 	}
-
-	// ignore overflow/underflow
+	if scale > 0 {
+		l := len(pow10)
+		for i := scale / l; i > 0; i-- {
+			value *= float64(pow10[l-1])
+		}
+		value *= float64(pow10[scale%l+1])
+	}
 	d.val.SetFloat64(value)
-	d.scale = 0
-	*d = d.Quantize(scale)
+	d.scale = scale
 	return nil
 }
 
 func (d Decimal128) String() string {
 	s := d.val.String()
-	if d.scale == 0 {
+	if d.scale == 0 || d.val.IsZero() {
 		return s
 	}
 	return s[:len(s)-d.scale] + "." + s[len(s)-d.scale:]
@@ -201,8 +251,8 @@ func (d *Decimal128) UnmarshalText(buf []byte) error {
 	return nil
 }
 
-func ParseDecimal128(s string, scale int) (Decimal128, error) {
-	dec := NewDecimal128(Int128{}, scale)
+func ParseDecimal128(s string) (Decimal128, error) {
+	dec := NewDecimal128(Int128{}, 0)
 	if _, err := dec.Check(); err != nil {
 		return dec, err
 	}

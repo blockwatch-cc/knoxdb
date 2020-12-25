@@ -27,13 +27,19 @@ func (x Int128) Mul(y Int128) (z Int128) {
 
 // Mul64 returns x*y.
 func (x Int128) Mul64(y int64) (z Int128) {
+	if y == 0 {
+		return Int128Zero
+	}
 	xSign := x.Sign()
+	if xSign < 0 {
+		x = x.Neg()
+	}
 	var ySign int
 	if y > 0 {
 		ySign = 1
 	} else {
 		y = -y
-		ySign = xSign
+		ySign = -1
 	}
 	z = x.uMul64(uint64(y))
 	if xSign != ySign {
@@ -73,9 +79,47 @@ func (n Int128) Div(d Int128) Int128 {
 }
 
 // Div64 returns u/v.
-func (n Int128) Div64(d uint64) Int128 {
-	q, _ := n.uQuoRem64(d)
+func (n Int128) Div64(d int64) Int128 {
+	if d == 0 {
+		return Int128Zero
+	}
+	nSign := n.Sign()
+	if nSign < 0 {
+		n = n.Neg()
+	}
+	var dSign int
+	if d > 0 {
+		dSign = 1
+	} else {
+		d = -d
+		dSign = -1
+	}
+	q, _ := n.uQuoRem64(uint64(d))
+	if nSign != dSign {
+		q = q.Neg()
+	}
 	return q
+}
+
+func (n Int128) QuoRem(d Int128) (Int128, Int128) {
+	if n.Sign() > 0 {
+		if d.Sign() > 0 {
+			// pos / pos
+			return n.uQuoRem(d)
+		} else {
+			// pos / neg
+			q, r := n.uQuoRem(d.Neg())
+			return q.Neg(), r.Neg()
+		}
+	}
+
+	if d.Sign() < 0 {
+		// neg / neg
+		return n.Neg().uQuoRem(d.Neg())
+	}
+	// neg / pos
+	q, r := n.Neg().uQuoRem(d)
+	return q.Neg(), r.Neg()
 }
 
 // QuoRem returns q = u/v and r = u%y.

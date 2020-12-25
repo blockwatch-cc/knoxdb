@@ -1,8 +1,6 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-// half-even rounding mode (IEEE 754-2008 roundTiesToEven)
-
 package decimal
 
 import (
@@ -13,13 +11,18 @@ import (
 	. "blockwatch.cc/knoxdb/vec"
 )
 
+var Decimal64Zero = Decimal64{0, 0}
+
 // 18 digits
 type Decimal64 struct {
 	val   int64
 	scale int
 }
 
-// var _ Decimal = (*Decimal64)(nil)
+type Decimal64Slice struct {
+	Vec   []int64
+	Scale int
+}
 
 func NewDecimal64(val int64, scale int) Decimal64 {
 	return Decimal64{val: val, scale: scale}
@@ -30,6 +33,10 @@ func (d Decimal64) IsValid() bool {
 	return ok
 }
 
+func (d Decimal64) IsZero() bool {
+	return d.val == 0
+}
+
 func (d Decimal64) Check() (bool, error) {
 	if d.scale < 0 {
 		return false, fmt.Errorf("decimal64: invalid negative scale %d", d.scale)
@@ -37,11 +44,12 @@ func (d Decimal64) Check() (bool, error) {
 	if d.scale > MaxDecimal64Precision {
 		return false, fmt.Errorf("decimal64: scale %d overflow", d.scale)
 	}
+	if d.scale > 0 && d.val > 0 {
+		if p := digits64(d.val); p < d.scale {
+			return false, fmt.Errorf("decimal64: scale %d larger than value digits %d", d.scale, p)
+		}
+	}
 	return true, nil
-}
-
-func (d Decimal64) Bitsize() int {
-	return 64
 }
 
 func (d Decimal64) Scale() int {
@@ -49,13 +57,7 @@ func (d Decimal64) Scale() int {
 }
 
 func (d Decimal64) Precision() int {
-	for i := range pow10 {
-		if abs(d.val) > pow10[i] {
-			continue
-		}
-		return i
-	}
-	return 0
+	return digits64(d.val)
 }
 
 func (d Decimal64) Clone() Decimal64 {
@@ -71,6 +73,9 @@ func (d Decimal64) Quantize(scale int) Decimal64 {
 	}
 	if scale > MaxDecimal64Precision {
 		scale = MaxDecimal64Precision
+	}
+	if d.IsZero() {
+		return Decimal64{0, scale}
 	}
 	diff := d.scale - scale
 	if diff < 0 {
@@ -106,6 +111,9 @@ func (d Decimal64) Int256() Int256 {
 }
 
 func (d *Decimal64) SetInt64(value int64, scale int) error {
+	if scale < 0 {
+		return fmt.Errorf("decimal64: scale %d underflow", scale)
+	}
 	if scale > MaxDecimal64Precision {
 		return fmt.Errorf("decimal64: scale %d overflow", scale)
 	}
@@ -123,6 +131,9 @@ func (d Decimal64) Float64() float64 {
 }
 
 func (d *Decimal64) SetFloat64(value float64, scale int) error {
+	if scale < 0 {
+		return fmt.Errorf("decimal64: scale %d underflow", scale)
+	}
 	if scale > MaxDecimal64Precision {
 		return fmt.Errorf("decimal64: scale %d overflow", scale)
 	}
@@ -199,8 +210,8 @@ func (d *Decimal64) UnmarshalText(buf []byte) error {
 	return nil
 }
 
-func ParseDecimal64(s string, scale int) (Decimal64, error) {
-	dec := NewDecimal64(0, scale)
+func ParseDecimal64(s string) (Decimal64, error) {
+	dec := NewDecimal64(0, 0)
 	if _, err := dec.Check(); err != nil {
 		return dec, err
 	}

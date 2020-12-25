@@ -13,27 +13,8 @@
 package decimal
 
 import (
-	// "encoding"
-	// "fmt"
 	"regexp"
 )
-
-// type Decimal interface {
-// 	Bitsize() int
-// 	Scale() int
-// 	Precision() int
-// 	Int64() int64
-// 	Int128() Int128
-// 	Int256() Int256
-// 	Float64() float64
-// 	encoding.TextMarshaler
-
-// 	// pointer-receiver methods
-// 	Quantize(scale int) Decimal
-// 	SetInt64(value int64, scale int) error
-// 	SetFloat64(value float64, scale int) error
-// 	encoding.TextUnmarshaler
-// }
 
 var decimalRegexp = regexp.MustCompile("^[+-]?([0-9]*[.])?[0-9]+$")
 
@@ -71,36 +52,17 @@ var pow10 = []uint64{
 	10000000000000000000, // 19
 }
 
-// func NewDecimal(prec, scale int) (Decimal, error) {
-// 	if prec < 1 {
-// 		return nil, fmt.Errorf("decimal: invalid negative precision %d", prec)
-// 	}
-// 	if scale < 0 {
-// 		return nil, fmt.Errorf("decimal: invalid negative scale %d", scale)
-// 	}
-// 	switch true {
-// 	case prec <= MaxDecimal32Precision:
-// 		d := NewDecimal32(0, scale)
-// 		_, err := d.Check()
-// 		return &d, err
-// 	case prec <= MaxDecimal64Precision:
-// 		d := NewDecimal64(0, scale)
-// 		_, err := d.Check()
-// 		return &d, err
-// 	case prec <= MaxDecimal128Precision:
-// 		d := NewDecimal128(Int128{}, scale)
-// 		_, err := d.Check()
-// 		return &d, err
-// 	case prec <= MaxDecimal256Precision:
-// 		d := NewDecimal256(Int256{}, scale)
-// 		_, err := d.Check()
-// 		return &d, err
-// 	default:
-// 		return nil, fmt.Errorf("decimal: precision %d out of range", prec)
-// 	}
-// }
-
 func abs(n int64) uint64 {
 	y := n >> 63
 	return uint64((n ^ y) - y)
+}
+
+func digits64(val int64) int {
+	for i := range pow10 {
+		if abs(val) > pow10[i] {
+			continue
+		}
+		return i
+	}
+	return 0
 }

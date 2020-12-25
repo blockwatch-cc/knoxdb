@@ -149,7 +149,7 @@ func (x *Int256) SetFloat64(y float64) Accuracy {
 	shift := exp - 1023                            // -1023 to normalize
 
 	// since we have no fractional numbers, shift is always >= 0
-	// check if we can express the number in 255 bits
+	// check if we can express the number in 256 bits
 	if shift > 255 {
 		*x = Int256Max
 		return Above
@@ -170,6 +170,28 @@ func (x *Int256) SetFloat64(y float64) Accuracy {
 	}
 
 	return Exact
+}
+
+func (x Int256) Precision() int {
+	if x.IsInt64() {
+		var p int
+		for i := x.Int64(); i != 0; i /= 10 {
+			p++
+		}
+		return p
+	}
+	pow := Int256FromInt64(1e18)
+	q, r := x.Abs().QuoRem(pow)
+	for p := 0; ; p += 18 {
+		if q.IsZero() {
+			for i := r.Int64(); i != 0; i /= 10 {
+				p++
+			}
+			return p
+		}
+		q, r = q.QuoRem(pow)
+	}
+	return 0
 }
 
 // log10(2^128) < 78
@@ -528,8 +550,8 @@ func (x Int256) SubOverflow(y Int256) (Int256, bool) {
 	return z, carry != 0
 }
 
-// SubUint64 returns the difference x - y, where y is a uint64
-func (x Int256) SubUint64(y uint64) Int256 {
+// Sub64 returns the difference x - y, where y is a uint64
+func (x Int256) Sub64(y uint64) Int256 {
 	var carry uint64
 	z := x
 

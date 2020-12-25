@@ -70,9 +70,14 @@ func (x Int256) udiv(y Int256) Int256 {
 	// At this point, we know
 	// x/y ; x > y > 0
 
+	// flip order for embedded algorithm
+	x[3], x[2], x[1], x[0] = x[0], x[1], x[2], x[3]
+	y[3], y[2], y[1], y[0] = y[0], y[1], y[2], y[3]
+
 	var quot Int256
 	udivrem(quot[:], x[:], y)
 
+	// flip result order
 	quot[3], quot[2], quot[1], quot[0] = quot[0], quot[1], quot[2], quot[3]
 	return quot
 }
@@ -102,10 +107,14 @@ func (x Int256) Mod(y Int256) Int256 {
 		return Int256FromInt64(x.Int64() % y.Int64())
 	}
 
+	// flip order for embedded algorithm
+	x[3], x[2], x[1], x[0] = x[0], x[1], x[2], x[3]
+	y[3], y[2], y[1], y[0] = y[0], y[1], y[2], y[3]
+
 	var quot Int256
 	rem := udivrem(quot[:], x[:], y)
 
-	rem[3], rem[2], rem[1], rem[0] = rem[0], rem[1], rem[2], rem[3]
+	// rem[3], rem[2], rem[1], rem[0] = rem[0], rem[1], rem[2], rem[3]
 	return rem
 }
 
@@ -132,11 +141,15 @@ func (x Int256) QuoRem(y Int256) (Int256, Int256) {
 		return Int256FromInt64(x.Int64() / y.Int64()), Int256FromInt64(x.Int64() % y.Int64())
 	}
 
+	// flip order for embedded algorithm
+	x[3], x[2], x[1], x[0] = x[0], x[1], x[2], x[3]
+	y[3], y[2], y[1], y[0] = y[0], y[1], y[2], y[3]
+
 	var quot Int256
 	rem := udivrem(quot[:], x[:], y)
 
+	// flip result order
 	quot[3], quot[2], quot[1], quot[0] = quot[0], quot[1], quot[2], quot[3]
-	rem[3], rem[2], rem[1], rem[0] = rem[0], rem[1], rem[2], rem[3]
 	return quot, rem
 }
 

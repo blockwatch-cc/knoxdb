@@ -187,6 +187,28 @@ func (x *Int128) SetFloat64(y float64) Accuracy {
 	return Exact
 }
 
+func (x Int128) Precision() int {
+	if x.IsInt64() {
+		var p int
+		for i := x.Int64(); i != 0; i /= 10 {
+			p++
+		}
+		return p
+	}
+	pow := Int128FromInt64(1e18)
+	q, r := x.Abs().QuoRem(pow)
+	for p := 0; ; p += 18 {
+		if q.IsZero() {
+			for i := r.Int64(); i != 0; i /= 10 {
+				p++
+			}
+			return p
+		}
+		q, r = q.QuoRem(pow)
+	}
+	return 0
+}
+
 // log10(2^64) < 40
 const i128str = "0000000000000000000000000000000000000000"
 
@@ -272,7 +294,7 @@ func (x *Int128) UnmarshalText(buf []byte) error {
 	return nil
 }
 
-// BitLen returns the number of bits required to represent z
+// BitLen returns the number of bits required to represent x
 func (x Int128) BitLen() int {
 	switch {
 	case x[0] != 0:
@@ -399,8 +421,8 @@ func (x Int128) SubOverflow(y Int128) (Int128, bool) {
 	return z, carry != 0
 }
 
-// SubUint64 returns the difference x - y, where y is a uint64
-func (x Int128) SubUint64(y uint64) Int128 {
+// Sub64 returns the difference x - y, where y is a uint64
+func (x Int128) Sub64(y uint64) Int128 {
 	var carry uint64
 	z := x
 
@@ -477,19 +499,6 @@ func Max128(x, y Int128) Int128 {
 	}
 	return y
 }
-
-// func (z *Int) BitLen() int {
-// 	switch {
-// 	case z[3] != 0:
-// 		return 192 + bits.Len64(z[3])
-// 	case z[2] != 0:
-// 		return 128 + bits.Len64(z[2])
-// 	case z[1] != 0:
-// 		return 64 + bits.Len64(z[1])
-// 	default:
-// 		return bits.Len64(z[0])
-// 	}
-// }
 
 // Match helpers
 func MatchInt128Equal(src []Int128, val Int128, bits *BitSet) *BitSet {
