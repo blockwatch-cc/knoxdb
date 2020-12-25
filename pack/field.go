@@ -557,29 +557,29 @@ func (t FieldType) ParseAs(s string, f Field) (interface{}, error) {
 		}
 		return uint8(i), nil
 	case FieldTypeDecimal32:
-		d, err := ParseDecimal32(s, f.Scale)
+		d, err := ParseDecimal32(s)
 		if err != nil {
 			return nil, err
 		}
-		return d, nil
+		return d.Quantize(f.Scale), nil
 	case FieldTypeDecimal64:
-		d, err := ParseDecimal64(s, f.Scale)
+		d, err := ParseDecimal64(s)
 		if err != nil {
 			return nil, err
 		}
-		return d, nil
+		return d.Quantize(f.Scale), nil
 	case FieldTypeDecimal128:
-		d, err := ParseDecimal128(s, f.Scale)
+		d, err := ParseDecimal128(s)
 		if err != nil {
 			return nil, err
 		}
-		return d, nil
+		return d.Quantize(f.Scale), nil
 	case FieldTypeDecimal256:
-		d, err := ParseDecimal256(s, f.Scale)
+		d, err := ParseDecimal256(s)
 		if err != nil {
 			return nil, err
 		}
-		return d, nil
+		return d.Quantize(f.Scale), nil
 	default:
 		return nil, fmt.Errorf("unsupported field type '%s'", t)
 	}
@@ -739,41 +739,41 @@ func (t FieldType) ParseSliceAs(s string, f Field) (interface{}, error) {
 	case FieldTypeDecimal32:
 		slice := make([]int32, len(vv))
 		for i, v := range vv {
-			d, err := ParseDecimal32(v, f.Scale)
+			d, err := ParseDecimal32(v)
 			if err != nil {
 				return nil, err
 			}
-			slice[i] = d.Int32()
+			slice[i] = d.Quantize(f.Scale).Int32()
 		}
 		return slice, nil
 	case FieldTypeDecimal64:
 		slice := make([]int64, len(vv))
 		for i, v := range vv {
-			d, err := ParseDecimal64(v, f.Scale)
+			d, err := ParseDecimal64(v)
 			if err != nil {
 				return nil, err
 			}
-			slice[i] = d.Int64()
+			slice[i] = d.Quantize(f.Scale).Int64()
 		}
 		return slice, nil
 	case FieldTypeDecimal128:
 		slice := make([]Int128, len(vv))
 		for i, v := range vv {
-			d, err := ParseDecimal128(v, f.Scale)
+			d, err := ParseDecimal128(v)
 			if err != nil {
 				return nil, err
 			}
-			slice[i] = d.Int128()
+			slice[i] = d.Quantize(f.Scale).Int128()
 		}
 		return slice, nil
 	case FieldTypeDecimal256:
 		slice := make([]Int256, len(vv))
 		for i, v := range vv {
-			d, err := ParseDecimal256(v, f.Scale)
+			d, err := ParseDecimal256(v)
 			if err != nil {
 				return nil, err
 			}
-			slice[i] = d.Int256()
+			slice[i] = d.Quantize(f.Scale).Int256()
 		}
 		return slice, nil
 	default:
@@ -1309,15 +1309,15 @@ func (t FieldType) EnsureType(val interface{}, f Field) (interface{}, error) {
 			res, ok = dec, err == nil
 		case Decimal64:
 			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec, err == nil
+			res, ok = dec.Quantize(f.Scale), err == nil
 		case Decimal32:
 			res, ok = v, true
 		case Decimal128:
 			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec, err == nil
+			res, ok = dec.Quantize(f.Scale), err == nil
 		case Decimal256:
 			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec, err == nil
+			res, ok = dec.Quantize(f.Scale), err == nil
 		case Int128:
 			err := dec.SetInt64(v.Int64(), f.Scale)
 			res, ok = dec, err == nil
@@ -1353,15 +1353,15 @@ func (t FieldType) EnsureType(val interface{}, f Field) (interface{}, error) {
 			res, ok = dec, err == nil
 		case Decimal32:
 			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec, err == nil
+			res, ok = dec.Quantize(f.Scale), err == nil
 		case Decimal64:
 			res, ok = v, true
 		case Decimal128:
 			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec, err == nil
+			res, ok = dec.Quantize(f.Scale), err == nil
 		case Decimal256:
 			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec, err == nil
+			res, ok = dec.Quantize(f.Scale), err == nil
 		case Int128:
 			err := dec.SetInt64(v.Int64(), f.Scale)
 			res, ok = dec, err == nil
@@ -1397,15 +1397,15 @@ func (t FieldType) EnsureType(val interface{}, f Field) (interface{}, error) {
 			res, ok = dec, err == nil
 		case Decimal32:
 			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec, err == nil
+			res, ok = dec.Quantize(f.Scale), err == nil
 		case Decimal64:
 			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec, err == nil
+			res, ok = dec.Quantize(f.Scale), err == nil
 		case Decimal128:
 			res, ok = v, true
 		case Decimal256:
 			err := dec.SetInt128(v.Int128(), v.Scale())
-			res, ok = v, err == nil
+			res, ok = v.Quantize(f.Scale), err == nil
 		case Int128:
 			res, ok = dec.SetInt128(v, f.Scale), true
 		case Int256:
@@ -1440,13 +1440,13 @@ func (t FieldType) EnsureType(val interface{}, f Field) (interface{}, error) {
 			res, ok = dec, err == nil
 		case Decimal32:
 			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec, err == nil
+			res, ok = dec.Quantize(f.Scale), err == nil
 		case Decimal64:
 			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec, err == nil
+			res, ok = dec.Quantize(f.Scale), err == nil
 		case Decimal128:
 			err := dec.SetInt128(v.Int128(), v.Scale())
-			res, ok = v, err == nil
+			res, ok = v.Quantize(f.Scale), err == nil
 		case Decimal256:
 			res, ok = v, true
 		case Int128:

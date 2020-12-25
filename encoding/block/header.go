@@ -218,13 +218,10 @@ func (h Header) Clone() Header {
 
 func (h Header) EncodedSize() int {
 	switch h.Type {
-	case BlockTime:
-		return headerBaseSize + 16
-	case BlockInt64:
-		return headerBaseSize + 16
-	case BlockUint64:
-		return headerBaseSize + 16
-	case BlockFloat64:
+	case BlockInt64,
+		BlockTime,
+		BlockUint64,
+		BlockFloat64:
 		return headerBaseSize + 16
 	case BlockBool:
 		return headerBaseSize + 1
@@ -382,26 +379,14 @@ func (h Header) Encode(buf *bytes.Buffer) error {
 		_, _ = buf.Write(max)
 
 	case BlockInt128:
-		var v [32]byte
-		min, max := h.MinValue.(vec.Int128), h.MaxValue.(vec.Int128)
-		bigEndian.PutUint64(v[0:], uint64(min[0]))
-		bigEndian.PutUint64(v[8:], uint64(min[1]))
-		bigEndian.PutUint64(v[16:], uint64(max[0]))
-		bigEndian.PutUint64(v[24:], uint64(max[1]))
-		_, _ = buf.Write(v[:])
+		min, max := h.MinValue.(vec.Int128).Bytes16(), h.MaxValue.(vec.Int128).Bytes16()
+		_, _ = buf.Write(min[:])
+		_, _ = buf.Write(max[:])
 
 	case BlockInt256:
-		var v [64]byte
-		min, max := h.MinValue.(vec.Int256), h.MaxValue.(vec.Int256)
-		bigEndian.PutUint64(v[0:], uint64(min[0]))
-		bigEndian.PutUint64(v[8:], uint64(min[1]))
-		bigEndian.PutUint64(v[16:], uint64(min[2]))
-		bigEndian.PutUint64(v[24:], uint64(min[3]))
-		bigEndian.PutUint64(v[32:], uint64(max[0]))
-		bigEndian.PutUint64(v[40:], uint64(max[1]))
-		bigEndian.PutUint64(v[48:], uint64(max[2]))
-		bigEndian.PutUint64(v[56:], uint64(max[3]))
-		_, _ = buf.Write(v[:])
+		min, max := h.MinValue.(vec.Int256).Bytes32(), h.MaxValue.(vec.Int256).Bytes32()
+		_, _ = buf.Write(min[:])
+		_, _ = buf.Write(max[:])
 
 	case BlockIgnore:
 		return nil

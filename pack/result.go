@@ -7,6 +7,9 @@ import (
 	"reflect"
 	"sort"
 	"time"
+
+	. "blockwatch.cc/knoxdb/encoding/decimal"
+	. "blockwatch.cc/knoxdb/vec"
 )
 
 type Result struct {
@@ -197,6 +200,20 @@ func (r *Result) Uint8At(index, pos int) (uint8, error) {
 	return r.pkg.Uint8At(index, pos)
 }
 
+func (r *Result) Int256At(index, pos int) (Int256, error) {
+	if r.pkg == nil {
+		return Int256Zero, ErrResultClosed
+	}
+	return r.pkg.Int256At(index, pos)
+}
+
+func (r *Result) Int128At(index, pos int) (Int128, error) {
+	if r.pkg == nil {
+		return Int128Zero, ErrResultClosed
+	}
+	return r.pkg.Int128At(index, pos)
+}
+
 func (r *Result) Int64At(index, pos int) (int64, error) {
 	if r.pkg == nil {
 		return 0, ErrResultClosed
@@ -223,6 +240,34 @@ func (r *Result) Int8At(index, pos int) (int8, error) {
 		return 0, ErrResultClosed
 	}
 	return r.pkg.Int8At(index, pos)
+}
+
+func (r *Result) Decimal256At(index, pos int) (Decimal256, error) {
+	if r.pkg == nil {
+		return Decimal256Zero, ErrResultClosed
+	}
+	return r.pkg.Decimal256At(index, pos)
+}
+
+func (r *Result) Decimal128At(index, pos int) (Decimal128, error) {
+	if r.pkg == nil {
+		return Decimal128Zero, ErrResultClosed
+	}
+	return r.pkg.Decimal128At(index, pos)
+}
+
+func (r *Result) Decimal64At(index, pos int) (Decimal64, error) {
+	if r.pkg == nil {
+		return Decimal64Zero, ErrResultClosed
+	}
+	return r.pkg.Decimal64At(index, pos)
+}
+
+func (r *Result) Decimal32At(index, pos int) (Decimal32, error) {
+	if r.pkg == nil {
+		return Decimal32Zero, ErrResultClosed
+	}
+	return r.pkg.Decimal32At(index, pos)
 }
 
 func (r *Result) Float64At(index, pos int) (float64, error) {
@@ -267,6 +312,22 @@ func (r *Result) TimeAt(index, pos int) (time.Time, error) {
 	return r.pkg.TimeAt(index, pos)
 }
 
+func (r *Result) TimeColumn(colname string) ([]time.Time, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return nil, err
+	}
+	tcol, ok := col.([]int64)
+	if !ok {
+		return nil, ErrTypeMismatch
+	}
+	res := make([]time.Time, len(tcol))
+	for i := range tcol {
+		res[i] = time.Unix(0, tcol[i]).UTC()
+	}
+	return res, nil
+}
+
 func (r *Result) Uint64Column(colname string) ([]uint64, error) {
 	col, err := r.Column(colname)
 	if err != nil {
@@ -309,6 +370,30 @@ func (r *Result) Uint8Column(colname string) ([]uint8, error) {
 		return nil, err
 	}
 	tcol, ok := col.([]uint8)
+	if !ok {
+		return nil, ErrTypeMismatch
+	}
+	return tcol, nil
+}
+
+func (r *Result) Int256Column(colname string) ([]Int256, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return nil, err
+	}
+	tcol, ok := col.([]Int256)
+	if !ok {
+		return nil, ErrTypeMismatch
+	}
+	return tcol, nil
+}
+
+func (r *Result) Int128Column(colname string) ([]Int128, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return nil, err
+	}
+	tcol, ok := col.([]Int128)
 	if !ok {
 		return nil, ErrTypeMismatch
 	}
@@ -361,6 +446,54 @@ func (r *Result) Int8Column(colname string) ([]int8, error) {
 		return nil, ErrTypeMismatch
 	}
 	return tcol, nil
+}
+
+func (r *Result) Decimal256Column(colname string) (Decimal256Slice, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return Decimal256Slice{}, err
+	}
+	tcol, ok := col.([]Int256)
+	if !ok {
+		return Decimal256Slice{}, ErrTypeMismatch
+	}
+	return Decimal256Slice{tcol, r.pkg.blocks[r.pkg.FieldIndex(colname)].Scale()}, nil
+}
+
+func (r *Result) Decimal128Column(colname string) (Decimal128Slice, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return Decimal128Slice{}, err
+	}
+	tcol, ok := col.([]Int128)
+	if !ok {
+		return Decimal128Slice{}, ErrTypeMismatch
+	}
+	return Decimal128Slice{tcol, r.pkg.blocks[r.pkg.FieldIndex(colname)].Scale()}, nil
+}
+
+func (r *Result) Decimal64Column(colname string) (Decimal64Slice, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return Decimal64Slice{}, err
+	}
+	tcol, ok := col.([]int64)
+	if !ok {
+		return Decimal64Slice{}, ErrTypeMismatch
+	}
+	return Decimal64Slice{tcol, r.pkg.blocks[r.pkg.FieldIndex(colname)].Scale()}, nil
+}
+
+func (r *Result) Decimal32Column(colname string) (Decimal32Slice, error) {
+	col, err := r.Column(colname)
+	if err != nil {
+		return Decimal32Slice{}, err
+	}
+	tcol, ok := col.([]int32)
+	if !ok {
+		return Decimal32Slice{}, ErrTypeMismatch
+	}
+	return Decimal32Slice{tcol, r.pkg.blocks[r.pkg.FieldIndex(colname)].Scale()}, nil
 }
 
 func (r *Result) Float64Column(colname string) ([]float64, error) {
