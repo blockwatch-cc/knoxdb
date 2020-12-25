@@ -13,6 +13,13 @@ GLOBL const_0x33<>(SB), (RODATA+NOPTR), $1
 DATA const_0x0f<>+0x00(SB)/1, $(0x0f)
 GLOBL const_0x0f<>(SB), (RODATA+NOPTR), $1
 
+DATA const_0x80<>+0x00(SB)/1, $(0x80)
+GLOBL const_0x80<>(SB), (RODATA+NOPTR), $1
+
+DATA const_0x01<>+0x00(SB)/1, $(0x01)
+GLOBL const_0x01<>(SB), (RODATA+NOPTR), $1
+
+
 /*
 // shuffle is the VPSHUFB input required to spread bytes in each word
 // used by all compare algorithms
