@@ -9,8 +9,6 @@ type vecBenchmarkSize struct {
 }
 
 var vecBenchmarkSizes = []vecBenchmarkSize{
-	// {"32", 32}, // exclude for AVX512
-	// {"128", 128}, // exclude for loop unrolling > 4
 	{"1K", 1 * 1024},
 	{"16K", 16 * 1024},
 	{"64K", 64 * 1024},

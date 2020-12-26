@@ -33,7 +33,7 @@ TEXT ·matchUint8EqualAVX2(SB), NOSPLIT, $0-57
 prep_avx:
 	VPBROADCASTB    val+24(FP), Y0              // load val into AVX2 reg
 	VMOVDQU		    shuffle8<>+0x00(SB), Y10    // load shuffle control mask
- 	CMPQ	        BX, $511                    // slices smaller than 511 values are handled in small loop
+ 	CMPQ	        BX, $511                    // slices smaller than 512 values are handled in small loop
 	JBE		        prep_small
 
 prep_big:
