@@ -117,6 +117,9 @@ func (c Condition) Check() error {
 		if err := c.Field.Type.CheckType(c.To); err != nil {
 			return err
 		}
+		if c.Field.Type.Gt(c.From, c.To) {
+			return fmt.Errorf("range condition mismatch: from > to")
+		}
 	case FilterModeIn, FilterModeNotIn:
 		// expects a slice of values
 		if err := c.Field.Type.CheckSliceType(c.Value); err != nil {
@@ -148,81 +151,89 @@ func (c *Condition) Compile() {
 		c.numValues++
 	}
 
+	// SCALE decimal values to field scale and CONVERT slice types to underlying
+	// storage for comparison, this works for parsed values and programmatic
+	// conditions
+	switch c.Field.Type {
+	case FieldTypeDecimal32:
+		if val, ok := c.Value.([]Decimal32); ok {
+			// internal comparators use always the decimal's base type
+			conv := make([]int32, len(val))
+			for i := range val {
+				conv[i] = val[i].Quantize(c.Field.Scale).Int32()
+			}
+			c.Value = conv
+		}
+		if val, ok := c.Value.(Decimal32); ok {
+			c.Value = val.Quantize(c.Field.Scale)
+		}
+		if from, ok := c.From.(Decimal32); ok {
+			c.From = from.Quantize(c.Field.Scale)
+		}
+		if to, ok := c.To.(Decimal32); ok {
+			c.To = to.Quantize(c.Field.Scale)
+		}
+	case FieldTypeDecimal64:
+		if val, ok := c.Value.([]Decimal64); ok {
+			// internal comparators use always the decimal's base type
+			conv := make([]int64, len(val))
+			for i := range val {
+				conv[i] = val[i].Quantize(c.Field.Scale).Int64()
+			}
+			c.Value = conv
+		}
+		if val, ok := c.Value.(Decimal64); ok {
+			c.Value = val.Quantize(c.Field.Scale)
+		}
+		if from, ok := c.From.(Decimal64); ok {
+			c.From = from.Quantize(c.Field.Scale)
+		}
+		if to, ok := c.To.(Decimal64); ok {
+			c.To = to.Quantize(c.Field.Scale)
+		}
+	case FieldTypeDecimal128:
+		if val, ok := c.Value.([]Decimal128); ok {
+			// internal comparators use always the decimal's base type
+			conv := make([]Int128, len(val))
+			for i := range val {
+				conv[i] = val[i].Quantize(c.Field.Scale).Int128()
+			}
+			c.Value = conv
+		}
+		if val, ok := c.Value.(Decimal128); ok {
+			c.Value = val.Quantize(c.Field.Scale)
+		}
+		if from, ok := c.From.(Decimal128); ok {
+			c.From = from.Quantize(c.Field.Scale)
+		}
+		if to, ok := c.To.(Decimal128); ok {
+			c.To = to.Quantize(c.Field.Scale)
+		}
+	case FieldTypeDecimal256:
+		if val, ok := c.Value.([]Decimal256); ok {
+			// internal comparators use always the decimal's base type
+			conv := make([]Int256, len(val))
+			for i := range val {
+				conv[i] = val[i].Quantize(c.Field.Scale).Int256()
+			}
+			c.Value = conv
+		}
+		if val, ok := c.Value.(Decimal256); ok {
+			c.Value = val.Quantize(c.Field.Scale)
+		}
+		if from, ok := c.From.(Decimal256); ok {
+			c.From = from.Quantize(c.Field.Scale)
+		}
+		if to, ok := c.To.(Decimal256); ok {
+			c.To = to.Quantize(c.Field.Scale)
+		}
+	}
+
+	// anything but IN, NIN is good here
 	switch c.Mode {
 	case FilterModeIn, FilterModeNotIn:
 		// handled below
 	default:
-		// scale decimal values to field scale
-		switch c.Field.Type {
-		case FieldTypeDecimal32:
-			if val, ok := c.Value.([]Decimal32); ok {
-				conv := make([]int32, len(val))
-				for i := range val {
-					conv[i] = val[i].Quantize(c.Field.Scale).Int32()
-				}
-				c.Value = conv
-			}
-			if val, ok := c.Value.(Decimal32); ok {
-				c.Value = val.Quantize(c.Field.Scale)
-			}
-			if from, ok := c.From.(Decimal32); ok {
-				c.From = from.Quantize(c.Field.Scale)
-			}
-			if to, ok := c.To.(Decimal32); ok {
-				c.To = to.Quantize(c.Field.Scale)
-			}
-		case FieldTypeDecimal64:
-			if val, ok := c.Value.([]Decimal64); ok {
-				conv := make([]int64, len(val))
-				for i := range val {
-					conv[i] = val[i].Quantize(c.Field.Scale).Int64()
-				}
-				c.Value = conv
-			}
-			if val, ok := c.Value.(Decimal64); ok {
-				c.Value = val.Quantize(c.Field.Scale)
-			}
-			if from, ok := c.From.(Decimal64); ok {
-				c.From = from.Quantize(c.Field.Scale)
-			}
-			if to, ok := c.To.(Decimal64); ok {
-				c.To = to.Quantize(c.Field.Scale)
-			}
-		case FieldTypeDecimal128:
-			if val, ok := c.Value.([]Decimal128); ok {
-				conv := make([]Int128, len(val))
-				for i := range val {
-					conv[i] = val[i].Quantize(c.Field.Scale).Int128()
-				}
-				c.Value = conv
-			}
-			if val, ok := c.Value.(Decimal128); ok {
-				c.Value = val.Quantize(c.Field.Scale)
-			}
-			if from, ok := c.From.(Decimal128); ok {
-				c.From = from.Quantize(c.Field.Scale)
-			}
-			if to, ok := c.To.(Decimal128); ok {
-				c.To = to.Quantize(c.Field.Scale)
-			}
-		case FieldTypeDecimal256:
-			if val, ok := c.Value.([]Decimal256); ok {
-				conv := make([]Int256, len(val))
-				for i := range val {
-					conv[i] = val[i].Quantize(c.Field.Scale).Int256()
-				}
-				c.Value = conv
-			}
-			if val, ok := c.Value.(Decimal256); ok {
-				c.Value = val.Quantize(c.Field.Scale)
-			}
-			if from, ok := c.From.(Decimal256); ok {
-				c.From = from.Quantize(c.Field.Scale)
-			}
-			if to, ok := c.To.(Decimal256); ok {
-				c.To = to.Quantize(c.Field.Scale)
-			}
-		}
 		return
 	}
 
@@ -533,15 +544,33 @@ func (c *Condition) Compile() {
 }
 
 // match package min/max values against the condition
+// Note: min/max are raw storage values (i.e. for decimals, they are scaled integers)
 func (c Condition) MaybeMatchPack(head PackageHeader) bool {
 	min, max := head.BlockHeaders[c.Field.Index].MinValue, head.BlockHeaders[c.Field.Index].MaxValue
+	scale := head.BlockHeaders[c.Field.Index].Scale
+	// decimals only: convert storage type used in block headers to field type
+	switch c.Field.Type {
+	case FieldTypeDecimal32:
+		min = NewDecimal32(min.(int32), scale)
+		max = NewDecimal32(max.(int32), scale)
+	case FieldTypeDecimal64:
+		min = NewDecimal64(min.(int64), scale)
+		max = NewDecimal64(max.(int64), scale)
+	case FieldTypeDecimal128:
+		min = NewDecimal128(min.(Int128), scale)
+		max = NewDecimal128(max.(Int128), scale)
+	case FieldTypeDecimal256:
+		min = NewDecimal256(min.(Int256), scale)
+		max = NewDecimal256(max.(Int256), scale)
+	}
+	// compare pack header
 	switch c.Mode {
 	case FilterModeEqual:
 		// condition value is within range
-		return c.Field.Type.Lte(min, c.Value) && c.Field.Type.Gte(max, c.Value)
+		return c.Field.Type.Between(c.Value, min, max)
 	case FilterModeNotEqual:
 		// condition is either strictly smaller or strictly larger
-		return c.Field.Type.Lt(min, c.Value) || c.Field.Type.Gt(max, c.Value)
+		return !c.Field.Type.Between(c.Value, min, max)
 	case FilterModeRange:
 		// check if pack min-max range overlaps c.From-c.To range
 		return !(c.Field.Type.Lt(max, c.From) || c.Field.Type.Gt(min, c.To))
@@ -553,16 +582,16 @@ func (c Condition) MaybeMatchPack(head PackageHeader) bool {
 	case FilterModeRegexp:
 		return true // we don't know, so full scan is required
 	case FilterModeGt:
-		// block min OR max is > condition value
+		// min OR max is > condition value
 		return c.Field.Type.Gt(min, c.Value) || c.Field.Type.Gt(max, c.Value)
 	case FilterModeGte:
-		// block min OR max is >= condition value
+		// min OR max is >= condition value
 		return c.Field.Type.Gte(min, c.Value) || c.Field.Type.Gte(max, c.Value)
 	case FilterModeLt:
-		// block min OR max is < condition value
+		// min OR max is < condition value
 		return c.Field.Type.Lt(min, c.Value) || c.Field.Type.Lt(max, c.Value)
 	case FilterModeLte:
-		// block min OR max is <= condition value
+		// min OR max is <= condition value
 		return c.Field.Type.Lte(min, c.Value) || c.Field.Type.Lte(max, c.Value)
 	default:
 		return false
@@ -676,7 +705,7 @@ func (l ConditionList) MaybeMatchPack(head PackageHeader) bool {
 	if len(l) == 0 {
 		return true
 	}
-	for i, _ := range l {
+	for i := range l {
 		// this is equivalent to an AND between all conditions in list
 		if l[i].MaybeMatchPack(head) {
 			continue
@@ -715,12 +744,12 @@ func (l ConditionList) MatchPack(pkg *Package) *BitSet {
 		}
 
 		// merge
-		// cnt := bits.And(b)
+		// any := bits.And(b)
 		bits.And(b)
 		b.Close()
 
 		// early stop on empty aggregate match
-		// if cnt == 0 {
+		// if any == 0 {
 		// 	break
 		// }
 	}
@@ -752,25 +781,25 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 		// rather than using vectorized type functions
 		// type check was already performed in compile stage
 		switch c.Field.Type {
-		case FieldTypeInt256, FieldTypeDecimal256:
+		case FieldTypeInt256:
 			for i, v := range slice.([]Int256) {
 				if _, ok := c.int256map[v]; ok {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt128, FieldTypeDecimal128:
+		case FieldTypeInt128:
 			for i, v := range slice.([]Int128) {
 				if _, ok := c.int128map[v]; ok {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt64, FieldTypeDecimal64:
+		case FieldTypeInt64:
 			for i, v := range slice.([]int64) {
 				if _, ok := c.int64map[v]; ok {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt32, FieldTypeDecimal32:
+		case FieldTypeInt32:
 			for i, v := range slice.([]int32) {
 				if _, ok := c.int32map[v]; ok {
 					bits.Set(i)
@@ -785,6 +814,30 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 		case FieldTypeInt8:
 			for i, v := range slice.([]int8) {
 				if _, ok := c.int8map[v]; ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeDecimal256:
+			for i, v := range slice.(Decimal256Slice).Int256 {
+				if _, ok := c.int256map[v]; ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeDecimal128:
+			for i, v := range slice.(Decimal128Slice).Int128 {
+				if _, ok := c.int128map[v]; ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeDecimal64:
+			for i, v := range slice.(Decimal64Slice).Int64 {
+				if _, ok := c.int64map[v]; ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeDecimal32:
+			for i, v := range slice.(Decimal32Slice).Int32 {
+				if _, ok := c.int32map[v]; ok {
 					bits.Set(i)
 				}
 			}
@@ -929,25 +982,25 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 		//
 		// type check was already performed in compile stage
 		switch c.Field.Type {
-		case FieldTypeInt256, FieldTypeDecimal256:
+		case FieldTypeInt256:
 			for i, v := range slice.([]Int256) {
 				if _, ok := c.int256map[v]; !ok {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt128, FieldTypeDecimal128:
+		case FieldTypeInt128:
 			for i, v := range slice.([]Int128) {
 				if _, ok := c.int128map[v]; !ok {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt64, FieldTypeDecimal64:
+		case FieldTypeInt64:
 			for i, v := range slice.([]int64) {
 				if _, ok := c.int64map[v]; !ok {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt32, FieldTypeDecimal32:
+		case FieldTypeInt32:
 			for i, v := range slice.([]int32) {
 				if _, ok := c.int32map[v]; !ok {
 					bits.Set(i)
@@ -962,6 +1015,30 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 		case FieldTypeInt8:
 			for i, v := range slice.([]int8) {
 				if _, ok := c.int8map[v]; !ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeDecimal256:
+			for i, v := range slice.(Decimal256Slice).Int256 {
+				if _, ok := c.int256map[v]; !ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeDecimal128:
+			for i, v := range slice.(Decimal128Slice).Int128 {
+				if _, ok := c.int128map[v]; !ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeDecimal64:
+			for i, v := range slice.(Decimal64Slice).Int64 {
+				if _, ok := c.int64map[v]; !ok {
+					bits.Set(i)
+				}
+			}
+		case FieldTypeDecimal32:
+			for i, v := range slice.(Decimal32Slice).Int32 {
+				if _, ok := c.int32map[v]; !ok {
 					bits.Set(i)
 				}
 			}

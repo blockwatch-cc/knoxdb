@@ -20,7 +20,7 @@ type Decimal64 struct {
 }
 
 type Decimal64Slice struct {
-	Vec   []int64
+	Int64 []int64
 	Scale int
 }
 

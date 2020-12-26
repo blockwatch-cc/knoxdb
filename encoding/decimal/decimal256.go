@@ -19,8 +19,8 @@ type Decimal256 struct {
 }
 
 type Decimal256Slice struct {
-	Vec   []Int256
-	Scale int
+	Int256 []Int256
+	Scale  int
 }
 
 func NewDecimal256(val Int256, scale int) Decimal256 {

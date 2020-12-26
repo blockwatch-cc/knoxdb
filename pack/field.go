@@ -308,10 +308,10 @@ func Fields(proto interface{}) (FieldList, error) {
 				if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
 					log.Debugf("Array type field %s type %s implements binary marshaler", finfo.name, f.Type().String())
 					fields[i].Type = FieldTypeBytes
-					break
+				} else {
+					return nil, fmt.Errorf("pack: unsupported array type %s", f.Type().String())
 				}
 			}
-			return nil, fmt.Errorf("pack: unsupported array type %s", f.Type().String())
 		default:
 			return nil, fmt.Errorf("pack: unsupported type %s (%v) for field %s",
 				f.Type().String(), f.Kind(), finfo.name)
@@ -366,49 +366,6 @@ func ParseFieldType(s string) FieldType {
 		return FieldTypeUndefined
 	}
 }
-
-// func FieldTypeFromBlock(b block.BlockType) FieldType {
-// 	switch b {
-// 	case block.BlockBytes:
-// 		return FieldTypeBytes
-// 	case block.BlockString:
-// 		return FieldTypeString
-// 	case block.BlockTime:
-// 		return FieldTypeDatetime
-// 	case block.BlockBool:
-// 		return FieldTypeBoolean
-// 	case block.BlockFloat64:
-// 		return FieldTypeFloat64
-// 	case block.BlockFloat32:
-// 		return FieldTypeFloat32
-// 	case block.BlockInt64:
-// 		return FieldTypeInt64
-// 	case block.BlockInt32:
-// 		return FieldTypeInt32
-// 	case block.BlockInt16:
-// 		return FieldTypeInt16
-// 	case block.BlockInt8:
-// 		return FieldTypeInt8
-// 	case block.BlockUint64:
-// 		return FieldTypeUint64
-// 	case block.BlockUint32:
-// 		return FieldTypeUint32
-// 	case block.BlockUint16:
-// 		return FieldTypeUint16
-// 	case block.BlockUint8:
-// 		return FieldTypeUint8
-// 	case block.BlockDecimal32:
-// 		return FieldTypeDecimal32
-// 	case block.BlockDecimal64:
-// 		return FieldTypeDecimal64
-// 	case block.BlockDecimal128:
-// 		return FieldTypeDecimal128
-// 	case block.BlockDecimal256:
-// 		return FieldTypeDecimal256
-// 	default:
-// 		return FieldTypeUndefined
-// 	}
-// }
 
 func (t FieldType) BlockType() block.BlockType {
 	switch t {
@@ -737,43 +694,43 @@ func (t FieldType) ParseSliceAs(s string, f Field) (interface{}, error) {
 		}
 		return slice, nil
 	case FieldTypeDecimal32:
-		slice := make([]int32, len(vv))
+		slice := make([]Decimal32, len(vv))
 		for i, v := range vv {
 			d, err := ParseDecimal32(v)
 			if err != nil {
 				return nil, err
 			}
-			slice[i] = d.Quantize(f.Scale).Int32()
+			slice[i] = d.Quantize(f.Scale)
 		}
 		return slice, nil
 	case FieldTypeDecimal64:
-		slice := make([]int64, len(vv))
+		slice := make([]Decimal64, len(vv))
 		for i, v := range vv {
 			d, err := ParseDecimal64(v)
 			if err != nil {
 				return nil, err
 			}
-			slice[i] = d.Quantize(f.Scale).Int64()
+			slice[i] = d.Quantize(f.Scale)
 		}
 		return slice, nil
 	case FieldTypeDecimal128:
-		slice := make([]Int128, len(vv))
+		slice := make([]Decimal128, len(vv))
 		for i, v := range vv {
 			d, err := ParseDecimal128(v)
 			if err != nil {
 				return nil, err
 			}
-			slice[i] = d.Quantize(f.Scale).Int128()
+			slice[i] = d.Quantize(f.Scale)
 		}
 		return slice, nil
 	case FieldTypeDecimal256:
-		slice := make([]Int256, len(vv))
+		slice := make([]Decimal256, len(vv))
 		for i, v := range vv {
 			d, err := ParseDecimal256(v)
 			if err != nil {
 				return nil, err
 			}
-			slice[i] = d.Quantize(f.Scale).Int256()
+			slice[i] = d.Quantize(f.Scale)
 		}
 		return slice, nil
 	default:
@@ -867,35 +824,51 @@ func (t FieldType) ToString(val interface{}, f Field) string {
 			}
 		}
 	case FieldTypeDecimal32:
-		d := NewDecimal32(0, f.Scale)
 		if v, ok := val.([]int32); ok {
+			var d Decimal32
 			for _, vv := range v {
 				_ = d.SetInt64(int64(vv), f.Scale)
 				ss = append(ss, d.String())
 			}
+		} else if v, ok := val.([]Decimal32); ok {
+			for _, vv := range v {
+				ss = append(ss, vv.String())
+			}
 		}
 	case FieldTypeDecimal64:
-		d := NewDecimal64(0, f.Scale)
 		if v, ok := val.([]int64); ok {
+			var d Decimal64
 			for _, vv := range v {
 				_ = d.SetInt64(vv, f.Scale)
 				ss = append(ss, d.String())
 			}
+		} else if v, ok := val.([]Decimal64); ok {
+			for _, vv := range v {
+				ss = append(ss, vv.String())
+			}
 		}
 	case FieldTypeDecimal128:
-		d := NewDecimal128(Int128Zero, f.Scale)
 		if v, ok := val.([]Int128); ok {
+			var d Decimal128
 			for _, vv := range v {
 				_ = d.SetInt128(vv, f.Scale)
 				ss = append(ss, d.String())
 			}
+		} else if v, ok := val.([]Decimal128); ok {
+			for _, vv := range v {
+				ss = append(ss, vv.String())
+			}
 		}
 	case FieldTypeDecimal256:
-		d := NewDecimal256(Int256Zero, f.Scale)
 		if v, ok := val.([]Int256); ok {
+			var d Decimal256
 			for _, vv := range v {
 				_ = d.SetInt256(vv, f.Scale)
 				ss = append(ss, d.String())
+			}
+		} else if v, ok := val.([]Decimal256); ok {
+			for _, vv := range v {
+				ss = append(ss, vv.String())
 			}
 		}
 	}
@@ -905,982 +878,7 @@ func (t FieldType) ToString(val interface{}, f Field) string {
 	return util.ToString(val)
 }
 
-func (t FieldType) CheckType(val interface{}) error {
-	var ok bool
-	switch t {
-	case FieldTypeBytes:
-		_, ok = val.([]byte)
-	case FieldTypeString:
-		_, ok = val.(string)
-	case FieldTypeDatetime:
-		_, ok = val.(time.Time)
-	case FieldTypeBoolean:
-		_, ok = val.(bool)
-	case FieldTypeInt64, FieldTypeDecimal64:
-		_, ok = val.(int64)
-	case FieldTypeInt32, FieldTypeDecimal32:
-		_, ok = val.(int32)
-	case FieldTypeInt16:
-		_, ok = val.(int16)
-	case FieldTypeInt8:
-		_, ok = val.(int8)
-	case FieldTypeUint64:
-		_, ok = val.(uint64)
-	case FieldTypeUint32:
-		_, ok = val.(uint32)
-	case FieldTypeUint16:
-		_, ok = val.(uint16)
-	case FieldTypeUint8:
-		_, ok = val.(uint8)
-	case FieldTypeFloat64:
-		_, ok = val.(float64)
-	case FieldTypeFloat32:
-		_, ok = val.(float32)
-	case FieldTypeInt128, FieldTypeDecimal128:
-		_, ok = val.(Int128)
-	case FieldTypeInt256, FieldTypeDecimal256:
-		_, ok = val.(Int256)
-	}
-	if !ok {
-		return fmt.Errorf("pack: unexpected value type %T for %s condition", val, t)
-	}
-	return nil
-}
-
-func (t FieldType) CheckSliceType(val interface{}) error {
-	var ok bool
-	switch t {
-	case FieldTypeBytes:
-		_, ok = val.([][]byte)
-	case FieldTypeString:
-		_, ok = val.([]string)
-	case FieldTypeDatetime:
-		_, ok = val.([]time.Time)
-	case FieldTypeBoolean:
-		_, ok = val.([]bool)
-	case FieldTypeInt64, FieldTypeDecimal64:
-		_, ok = val.([]int64)
-	case FieldTypeInt32, FieldTypeDecimal32:
-		_, ok = val.([]int32)
-	case FieldTypeInt16:
-		_, ok = val.([]int16)
-	case FieldTypeInt8:
-		_, ok = val.([]int8)
-	case FieldTypeUint64:
-		_, ok = val.([]uint64)
-	case FieldTypeUint32:
-		_, ok = val.([]uint32)
-	case FieldTypeUint16:
-		_, ok = val.([]uint16)
-	case FieldTypeUint8:
-		_, ok = val.([]uint8)
-	case FieldTypeFloat64:
-		_, ok = val.([]float64)
-	case FieldTypeFloat32:
-		_, ok = val.([]float32)
-	case FieldTypeInt128, FieldTypeDecimal128:
-		_, ok = val.([]Int128)
-	case FieldTypeInt256, FieldTypeDecimal256:
-		_, ok = val.([]Int256)
-	}
-	if !ok {
-		return fmt.Errorf("pack: unexpected value type %T for %s slice condition", val, t)
-	}
-	return nil
-}
-
-// Note: may evolve into a CAST function
-func (t FieldType) EnsureType(val interface{}, f Field) (interface{}, error) {
-	var ok bool
-	res := val
-	switch t {
-	case FieldTypeBytes:
-		_, ok = val.([]byte)
-	case FieldTypeString:
-		_, ok = val.(string)
-	case FieldTypeDatetime:
-		_, ok = val.(time.Time)
-	case FieldTypeBoolean:
-		_, ok = val.(bool)
-	case FieldTypeInt128:
-		switch v := val.(type) {
-		case int:
-			res, ok = int64(v), true
-		case int64:
-			res, ok = int64(v), true
-		case int32:
-			res, ok = int64(v), true
-		case int16:
-			res, ok = int64(v), true
-		case int8:
-			res, ok = int64(v), true
-		case *Decimal32:
-			res, ok = v.RoundToInt64(), true
-		case *Decimal64:
-			res, ok = v.RoundToInt64(), true
-		case *Decimal128:
-			res, ok = v.RoundToInt64(), true
-		case *Decimal256:
-			res, ok = v.RoundToInt64(), true
-		default:
-			ok = false
-		}
-	case FieldTypeInt64:
-		switch v := val.(type) {
-		case int:
-			res, ok = int64(v), true
-		case int64:
-			res, ok = int64(v), true
-		case int32:
-			res, ok = int64(v), true
-		case int16:
-			res, ok = int64(v), true
-		case int8:
-			res, ok = int64(v), true
-		case Decimal32:
-			res, ok = v.RoundToInt64(), true
-		case Decimal64:
-			res, ok = v.RoundToInt64(), true
-		case Decimal128:
-			res, ok = v.RoundToInt64(), true
-		case Decimal256:
-			res, ok = v.RoundToInt64(), true
-		case Int128:
-			res, ok = v.Int64(), true
-		case Int256:
-			res, ok = v.Int64(), true
-		default:
-			ok = false
-		}
-	case FieldTypeInt32:
-		switch v := val.(type) {
-		case int:
-			res, ok = int32(v), true
-		case int64:
-			res, ok = int32(v), true
-		case int32:
-			res, ok = int32(v), true
-		case int16:
-			res, ok = int64(v), true
-		case int8:
-			res, ok = int64(v), true
-		case Decimal32:
-			res, ok = int32(v.RoundToInt64()), true
-		case Decimal64:
-			res, ok = int32(v.RoundToInt64()), true
-		case Decimal128:
-			res, ok = int32(v.RoundToInt64()), true
-		case Decimal256:
-			res, ok = int32(v.RoundToInt64()), true
-		case Int128:
-			res, ok = int32(v.Int64()), true
-		case Int256:
-			res, ok = int32(v.Int64()), true
-		default:
-			ok = false
-		}
-	case FieldTypeInt16:
-		switch v := val.(type) {
-		case int:
-			res, ok = int16(v), true
-		case int64:
-			res, ok = int16(v), true
-		case int32:
-			res, ok = int16(v), true
-		case int16:
-			res, ok = int16(v), true
-		case int8:
-			res, ok = int16(v), true
-		case Decimal32:
-			res, ok = int16(v.RoundToInt64()), true
-		case Decimal64:
-			res, ok = int16(v.RoundToInt64()), true
-		case Decimal128:
-			res, ok = int16(v.RoundToInt64()), true
-		case Decimal256:
-			res, ok = int16(v.RoundToInt64()), true
-		case Int128:
-			res, ok = int16(v.Int64()), true
-		case Int256:
-			res, ok = int16(v.Int64()), true
-		default:
-			ok = false
-		}
-	case FieldTypeInt8:
-		switch v := val.(type) {
-		case int:
-			res, ok = int8(v), true
-		case int64:
-			res, ok = int8(v), true
-		case int32:
-			res, ok = int8(v), true
-		case int16:
-			res, ok = int8(v), true
-		case int8:
-			res, ok = int8(v), true
-		case Decimal32:
-			res, ok = int8(v.RoundToInt64()), true
-		case Decimal64:
-			res, ok = int8(v.RoundToInt64()), true
-		case Decimal128:
-			res, ok = int8(v.RoundToInt64()), true
-		case Decimal256:
-			res, ok = int8(v.RoundToInt64()), true
-		case Int128:
-			res, ok = int8(v.Int64()), true
-		case Int256:
-			res, ok = int8(v.Int64()), true
-		default:
-			ok = false
-		}
-	case FieldTypeUint64:
-		switch v := val.(type) {
-		case uint:
-			res, ok = uint64(v), true
-		case uint64:
-			res, ok = uint64(v), true
-		case uint32:
-			res, ok = uint64(v), true
-		case uint16:
-			res, ok = uint64(v), true
-		case uint8:
-			res, ok = uint64(v), true
-		case Decimal32:
-			res, ok = uint64(v.RoundToInt64()), true
-		case Decimal64:
-			res, ok = uint64(v.RoundToInt64()), true
-		case Decimal128:
-			res, ok = uint64(v.RoundToInt64()), true
-		case Decimal256:
-			res, ok = uint64(v.RoundToInt64()), true
-		case Int128:
-			res, ok = uint64(v.Int64()), true
-		case Int256:
-			res, ok = uint64(v.Int64()), true
-		default:
-			ok = false
-		}
-	case FieldTypeUint32:
-		switch v := val.(type) {
-		case uint:
-			res, ok = uint32(v), true
-		case uint64:
-			res, ok = uint32(v), true
-		case uint32:
-			res, ok = uint32(v), true
-		case uint16:
-			res, ok = uint32(v), true
-		case uint8:
-			res, ok = uint32(v), true
-		case Decimal32:
-			res, ok = uint32(v.RoundToInt64()), true
-		case Decimal64:
-			res, ok = uint32(v.RoundToInt64()), true
-		case Decimal128:
-			res, ok = uint32(v.RoundToInt64()), true
-		case Decimal256:
-			res, ok = uint32(v.RoundToInt64()), true
-		case Int128:
-			res, ok = uint32(v.Int64()), true
-		case Int256:
-			res, ok = uint32(v.Int64()), true
-		default:
-			ok = false
-		}
-	case FieldTypeUint16:
-		switch v := val.(type) {
-		case uint:
-			res, ok = uint16(v), true
-		case uint64:
-			res, ok = uint16(v), true
-		case uint32:
-			res, ok = uint16(v), true
-		case uint16:
-			res, ok = uint16(v), true
-		case uint8:
-			res, ok = uint16(v), true
-		case Decimal32:
-			res, ok = uint16(v.RoundToInt64()), true
-		case Decimal64:
-			res, ok = uint16(v.RoundToInt64()), true
-		case Decimal128:
-			res, ok = uint16(v.RoundToInt64()), true
-		case Decimal256:
-			res, ok = uint16(v.RoundToInt64()), true
-		case Int128:
-			res, ok = uint16(v.Int64()), true
-		case Int256:
-			res, ok = uint16(v.Int64()), true
-		default:
-			ok = false
-		}
-	case FieldTypeUint8:
-		switch v := val.(type) {
-		case uint:
-			res, ok = uint8(v), true
-		case uint64:
-			res, ok = uint8(v), true
-		case uint32:
-			res, ok = uint8(v), true
-		case uint16:
-			res, ok = uint8(v), true
-		case uint8:
-			res, ok = uint8(v), true
-		case Decimal32:
-			res, ok = uint8(v.RoundToInt64()), true
-		case Decimal64:
-			res, ok = uint8(v.RoundToInt64()), true
-		case Decimal128:
-			res, ok = uint8(v.RoundToInt64()), true
-		case Decimal256:
-			res, ok = uint8(v.RoundToInt64()), true
-		case Int128:
-			res, ok = uint8(v.Int64()), true
-		case Int256:
-			res, ok = uint8(v.Int64()), true
-		default:
-			ok = false
-		}
-	case FieldTypeFloat64:
-		switch v := val.(type) {
-		case float64:
-			res, ok = float64(v), true
-		case float32:
-			res, ok = float64(v), true
-		case Decimal32:
-			res, ok = v.Float64(), true
-		case Decimal64:
-			res, ok = v.Float64(), true
-		case Decimal128:
-			res, ok = v.Float64(), true
-		case Decimal256:
-			res, ok = v.Float64(), true
-		case Int128:
-			res, ok = v.Float64(), true
-		case Int256:
-			res, ok = v.Float64(), true
-		default:
-			ok = false
-		}
-	case FieldTypeFloat32:
-		switch v := val.(type) {
-		case float64:
-			res, ok = float32(v), true
-		case float32:
-			res, ok = float32(v), true
-		case Decimal32:
-			res, ok = float32(v.Float64()), true
-		case Decimal64:
-			res, ok = float32(v.Float64()), true
-		case Decimal128:
-			res, ok = float32(v.Float64()), true
-		case Decimal256:
-			res, ok = float32(v.Float64()), true
-		case Int128:
-			res, ok = float32(v.Float64()), true
-		case Int256:
-			res, ok = float32(v.Float64()), true
-		default:
-			ok = false
-		}
-	case FieldTypeDecimal32:
-		dec := NewDecimal32(0, 0)
-		switch v := val.(type) {
-		case int:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int64:
-			err := dec.SetInt64(v, 0)
-			res, ok = dec, err == nil
-		case int32:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int16:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int8:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case float64:
-			err := dec.SetFloat64(v, f.Scale)
-			res, ok = dec, err == nil
-		case float32:
-			err := dec.SetFloat64(float64(v), f.Scale)
-			res, ok = dec, err == nil
-		case Decimal64:
-			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec.Quantize(f.Scale), err == nil
-		case Decimal32:
-			res, ok = v, true
-		case Decimal128:
-			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec.Quantize(f.Scale), err == nil
-		case Decimal256:
-			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec.Quantize(f.Scale), err == nil
-		case Int128:
-			err := dec.SetInt64(v.Int64(), f.Scale)
-			res, ok = dec, err == nil
-		case Int256:
-			err := dec.SetInt64(v.Int64(), f.Scale)
-			res, ok = dec, err == nil
-		default:
-			ok = false
-		}
-	case FieldTypeDecimal64:
-		dec := NewDecimal64(0, 0)
-		switch v := val.(type) {
-		case int:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int64:
-			err := dec.SetInt64(v, 0)
-			res, ok = dec, err == nil
-		case int32:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int16:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int8:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case float64:
-			err := dec.SetFloat64(v, f.Scale)
-			res, ok = dec, err == nil
-		case float32:
-			err := dec.SetFloat64(float64(v), f.Scale)
-			res, ok = dec, err == nil
-		case Decimal32:
-			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec.Quantize(f.Scale), err == nil
-		case Decimal64:
-			res, ok = v, true
-		case Decimal128:
-			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec.Quantize(f.Scale), err == nil
-		case Decimal256:
-			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec.Quantize(f.Scale), err == nil
-		case Int128:
-			err := dec.SetInt64(v.Int64(), f.Scale)
-			res, ok = dec, err == nil
-		case Int256:
-			err := dec.SetInt64(v.Int64(), f.Scale)
-			res, ok = dec, err == nil
-		default:
-			ok = false
-		}
-	case FieldTypeDecimal128:
-		dec := NewDecimal128(Int128Zero, 0)
-		switch v := val.(type) {
-		case int:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int64:
-			err := dec.SetInt64(v, 0)
-			res, ok = dec, err == nil
-		case int32:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int16:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int8:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case float64:
-			err := dec.SetFloat64(v, f.Scale)
-			res, ok = dec, err == nil
-		case float32:
-			err := dec.SetFloat64(float64(v), f.Scale)
-			res, ok = dec, err == nil
-		case Decimal32:
-			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec.Quantize(f.Scale), err == nil
-		case Decimal64:
-			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec.Quantize(f.Scale), err == nil
-		case Decimal128:
-			res, ok = v, true
-		case Decimal256:
-			err := dec.SetInt128(v.Int128(), v.Scale())
-			res, ok = v.Quantize(f.Scale), err == nil
-		case Int128:
-			res, ok = dec.SetInt128(v, f.Scale), true
-		case Int256:
-			err := dec.SetInt128(v.Int128(), f.Scale)
-			res, ok = v, err == nil
-		default:
-			ok = false
-		}
-	case FieldTypeDecimal256:
-		dec := NewDecimal256(Int256Zero, 0)
-		switch v := val.(type) {
-		case int:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int64:
-			err := dec.SetInt64(v, 0)
-			res, ok = dec, err == nil
-		case int32:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int16:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case int8:
-			err := dec.SetInt64(int64(v), 0)
-			res, ok = dec, err == nil
-		case float64:
-			err := dec.SetFloat64(v, f.Scale)
-			res, ok = dec, err == nil
-		case float32:
-			err := dec.SetFloat64(float64(v), f.Scale)
-			res, ok = dec, err == nil
-		case Decimal32:
-			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec.Quantize(f.Scale), err == nil
-		case Decimal64:
-			err := dec.SetInt64(v.Int64(), v.Scale())
-			res, ok = dec.Quantize(f.Scale), err == nil
-		case Decimal128:
-			err := dec.SetInt128(v.Int128(), v.Scale())
-			res, ok = v.Quantize(f.Scale), err == nil
-		case Decimal256:
-			res, ok = v, true
-		case Int128:
-			err := dec.SetInt128(v, f.Scale)
-			res, ok = v, err == nil
-		case Int256:
-			err := dec.SetInt256(v, f.Scale)
-			res, ok = v, err == nil
-		default:
-			ok = false
-		}
-	}
-	if !ok {
-		return res, fmt.Errorf("pack: unexpected value type %T for %s condition", val, t)
-	}
-	return res, nil
-}
-
-// Note: can evolve into a CAST function
-func (t FieldType) EnsureSliceType(val interface{}, f Field) (interface{}, error) {
-	var ok bool
-	res := val
-	switch t {
-	case FieldTypeBytes:
-		_, ok = val.([][]byte)
-	case FieldTypeString:
-		_, ok = val.([]string)
-	case FieldTypeDatetime:
-		_, ok = val.([]time.Time)
-	case FieldTypeBoolean:
-		_, ok = val.([]bool)
-	case FieldTypeInt64:
-		switch v := val.(type) {
-		case []int:
-			cp := make([]int64, len(v))
-			for i := range v {
-				cp[i] = int64(v[i])
-			}
-			res, ok = cp, true
-		case []int64:
-			res, ok = val, true
-		case []int32:
-			cp := make([]int64, len(v))
-			for i := range v {
-				cp[i] = int64(v[i])
-			}
-			res, ok = cp, true
-		case []int16:
-			cp := make([]int64, len(v))
-			for i := range v {
-				cp[i] = int64(v[i])
-			}
-			res, ok = cp, true
-		case []int8:
-			cp := make([]int64, len(v))
-			for i := range v {
-				cp[i] = int64(v[i])
-			}
-			res, ok = cp, true
-		// TODO: float types
-		// TODO: decimal types
-		// TODO: int128/256 types
-		default:
-			ok = false
-		}
-	case FieldTypeInt32:
-		switch v := val.(type) {
-		case []int:
-			cp := make([]int32, len(v))
-			for i := range v {
-				cp[i] = int32(v[i])
-			}
-			res, ok = cp, true
-		case []int64:
-			cp := make([]int32, len(v))
-			for i := range v {
-				cp[i] = int32(v[i])
-			}
-			res, ok = cp, true
-		case []int32:
-			res, ok = val, true
-		case []int16:
-			cp := make([]int32, len(v))
-			for i := range v {
-				cp[i] = int32(v[i])
-			}
-			res, ok = cp, true
-		case []int8:
-			cp := make([]int32, len(v))
-			for i := range v {
-				cp[i] = int32(v[i])
-			}
-			res, ok = cp, true
-		// TODO: float types
-		// TODO: decimal types
-		// TODO: int128/256 types
-		default:
-			ok = false
-		}
-	case FieldTypeInt16:
-		switch v := val.(type) {
-		case []int:
-			cp := make([]int16, len(v))
-			for i := range v {
-				cp[i] = int16(v[i])
-			}
-			res, ok = cp, true
-		case []int64:
-			cp := make([]int16, len(v))
-			for i := range v {
-				cp[i] = int16(v[i])
-			}
-			res, ok = cp, true
-		case []int32:
-			cp := make([]int16, len(v))
-			for i := range v {
-				cp[i] = int16(v[i])
-			}
-			res, ok = cp, true
-		case []int16:
-			res, ok = val, true
-		case []int8:
-			cp := make([]int16, len(v))
-			for i := range v {
-				cp[i] = int16(v[i])
-			}
-			res, ok = cp, true
-		// TODO: float types
-		// TODO: decimal types
-		// TODO: int128/256 types
-		default:
-			ok = false
-		}
-	case FieldTypeInt8:
-		switch v := val.(type) {
-		case []int:
-			cp := make([]int8, len(v))
-			for i := range v {
-				cp[i] = int8(v[i])
-			}
-			res, ok = cp, true
-		case []int64:
-			cp := make([]int8, len(v))
-			for i := range v {
-				cp[i] = int8(v[i])
-			}
-			res, ok = cp, true
-		case []int32:
-			cp := make([]int8, len(v))
-			for i := range v {
-				cp[i] = int8(v[i])
-			}
-			res, ok = cp, true
-		case []int16:
-			cp := make([]int8, len(v))
-			for i := range v {
-				cp[i] = int8(v[i])
-			}
-			res, ok = cp, true
-		case []int8:
-			res, ok = val, true
-		// TODO: float types
-		// TODO: decimal types
-		// TODO: int128/256 types
-		default:
-			ok = false
-		}
-	case FieldTypeUint64:
-		switch v := val.(type) {
-		case []uint:
-			cp := make([]uint64, len(v))
-			for i := range v {
-				cp[i] = uint64(v[i])
-			}
-			res, ok = cp, true
-		case []uint64:
-			res, ok = val, true
-		case []uint32:
-			cp := make([]uint64, len(v))
-			for i := range v {
-				cp[i] = uint64(v[i])
-			}
-			res, ok = cp, true
-		case []uint16:
-			cp := make([]uint64, len(v))
-			for i := range v {
-				cp[i] = uint64(v[i])
-			}
-			res, ok = cp, true
-		case []uint8:
-			cp := make([]uint64, len(v))
-			for i := range v {
-				cp[i] = uint64(v[i])
-			}
-			res, ok = cp, true
-		// TODO: float types
-		// TODO: decimal types
-		// TODO: int128/256 types
-		default:
-			ok = false
-		}
-	case FieldTypeUint32:
-		switch v := val.(type) {
-		case []uint:
-			cp := make([]uint32, len(v))
-			for i := range v {
-				cp[i] = uint32(v[i])
-			}
-			res, ok = cp, true
-		case []uint64:
-			cp := make([]uint32, len(v))
-			for i := range v {
-				cp[i] = uint32(v[i])
-			}
-			res, ok = cp, true
-		case []uint32:
-			res, ok = val, true
-		case []uint16:
-			cp := make([]uint32, len(v))
-			for i := range v {
-				cp[i] = uint32(v[i])
-			}
-			res, ok = cp, true
-		case []uint8:
-			cp := make([]uint32, len(v))
-			for i := range v {
-				cp[i] = uint32(v[i])
-			}
-			res, ok = cp, true
-		// TODO: float types
-		// TODO: decimal types
-		// TODO: int128/256 types
-		default:
-			ok = false
-		}
-	case FieldTypeUint16:
-		switch v := val.(type) {
-		case []uint:
-			cp := make([]uint16, len(v))
-			for i := range v {
-				cp[i] = uint16(v[i])
-			}
-			res, ok = cp, true
-		case []uint64:
-			cp := make([]uint16, len(v))
-			for i := range v {
-				cp[i] = uint16(v[i])
-			}
-			res, ok = cp, true
-		case []uint32:
-			cp := make([]uint16, len(v))
-			for i := range v {
-				cp[i] = uint16(v[i])
-			}
-			res, ok = cp, true
-		case []uint16:
-			res, ok = val, true
-		case []uint8:
-			cp := make([]uint16, len(v))
-			for i := range v {
-				cp[i] = uint16(v[i])
-			}
-			res, ok = cp, true
-		// TODO: float types
-		// TODO: decimal types
-		// TODO: int128/256 types
-		default:
-			ok = false
-		}
-	case FieldTypeUint8:
-		switch v := val.(type) {
-		case []uint:
-			cp := make([]uint8, len(v))
-			for i := range v {
-				cp[i] = uint8(v[i])
-			}
-			res, ok = cp, true
-		case []uint64:
-			cp := make([]uint8, len(v))
-			for i := range v {
-				cp[i] = uint8(v[i])
-			}
-			res, ok = cp, true
-		case []uint32:
-			cp := make([]uint8, len(v))
-			for i := range v {
-				cp[i] = uint8(v[i])
-			}
-			res, ok = cp, true
-		case []uint16:
-			cp := make([]uint8, len(v))
-			for i := range v {
-				cp[i] = uint8(v[i])
-			}
-			res, ok = cp, true
-		case []uint8:
-			res, ok = val, true
-		// TODO: float types
-		// TODO: decimal types
-		// TODO: int128/256 types
-		default:
-			ok = false
-		}
-	// TODO: casts
-	case FieldTypeFloat64:
-		_, ok = val.([]float64)
-	case FieldTypeFloat32:
-		_, ok = val.([]float32)
-	case FieldTypeDecimal32:
-		_, ok = val.([]int32)
-	case FieldTypeDecimal64:
-		_, ok = val.([]int64)
-	case FieldTypeDecimal128:
-		_, ok = val.([]Int128)
-	case FieldTypeDecimal256:
-		_, ok = val.([]Int256)
-	case FieldTypeInt128:
-		_, ok = val.([]Int128)
-	case FieldTypeInt256:
-		_, ok = val.([]Int256)
-	}
-	if !ok {
-		return res, fmt.Errorf("pack: unexpected value type %T for %s slice condition", val, t)
-	}
-	return res, nil
-}
-func (t FieldType) CopySliceType(val interface{}) (interface{}, error) {
-	switch t {
-	case FieldTypeBytes:
-		if slice, ok := val.([][]byte); ok {
-			cp := make([][]byte, len(slice))
-			for i, v := range slice {
-				buf := make([]byte, len(v))
-				copy(buf, v)
-				cp[i] = buf
-			}
-			return cp, nil
-		}
-	case FieldTypeString:
-		if slice, ok := val.([]string); ok {
-			cp := make([]string, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeDatetime:
-		if slice, ok := val.([]time.Time); ok {
-			cp := make([]time.Time, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeBoolean:
-		if slice, ok := val.([]time.Time); ok {
-			cp := make([]time.Time, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeInt256, FieldTypeDecimal256:
-		if slice, ok := val.([]Int256); ok {
-			cp := make([]Int256, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeInt128, FieldTypeDecimal128:
-		if slice, ok := val.([]Int128); ok {
-			cp := make([]Int128, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeInt64, FieldTypeDecimal64:
-		if slice, ok := val.([]int64); ok {
-			cp := make([]int64, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeInt32, FieldTypeDecimal32:
-		if slice, ok := val.([]int32); ok {
-			cp := make([]int32, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeInt16:
-		if slice, ok := val.([]int16); ok {
-			cp := make([]int16, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeInt8:
-		if slice, ok := val.([]int8); ok {
-			cp := make([]int8, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeUint64:
-		if slice, ok := val.([]uint64); ok {
-			cp := make([]uint64, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeUint32:
-		if slice, ok := val.([]uint32); ok {
-			cp := make([]uint32, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeUint16:
-		if slice, ok := val.([]uint16); ok {
-			cp := make([]uint16, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeUint8:
-		if slice, ok := val.([]uint8); ok {
-			cp := make([]uint8, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeFloat64:
-		if slice, ok := val.([]float64); ok {
-			cp := make([]float64, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	case FieldTypeFloat32:
-		if slice, ok := val.([]float32); ok {
-			cp := make([]float32, len(slice))
-			copy(cp, slice)
-			return cp, nil
-		}
-	default:
-		return nil, fmt.Errorf("pack: slice copy on unsupported field type %s", t)
-	}
-	return nil, fmt.Errorf("pack: slice copy mismatched value type %T for %s field", val, t)
-}
-
+// always called with concrete types, used in BinaryCondition only
 func (t FieldType) Equal(xa, xb interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
@@ -1891,6 +889,10 @@ func (t FieldType) Equal(xa, xb interface{}) bool {
 		return xa.(time.Time).Equal(xb.(time.Time))
 	case FieldTypeBoolean:
 		return xa.(bool) == xb.(bool)
+	case FieldTypeInt256:
+		return xa.(Int256).Eq(xb.(Int256))
+	case FieldTypeInt128:
+		return xa.(Int128).Eq(xb.(Int128))
 	case FieldTypeInt64:
 		return xa.(int64) == xb.(int64)
 	case FieldTypeInt32:
@@ -1919,10 +921,6 @@ func (t FieldType) Equal(xa, xb interface{}) bool {
 		return xa.(Decimal128).Eq(xb.(Decimal128))
 	case FieldTypeDecimal256:
 		return xa.(Decimal256).Eq(xb.(Decimal256))
-	case FieldTypeInt128:
-		return xa.(Int128).Eq(xb.(Int128))
-	case FieldTypeInt256:
-		return xa.(Int256).Eq(xb.(Int256))
 	default:
 		return false
 	}
@@ -2005,13 +1003,13 @@ func (t FieldType) EqualSlice(slice, val interface{}, bits *BitSet) *BitSet {
 		return MatchInt64Equal(slice.([]int64), val.(time.Time).UnixNano(), bits)
 	case FieldTypeBoolean:
 		return MatchBoolEqual(slice.([]bool), val.(bool), bits)
-	case FieldTypeInt256, FieldTypeDecimal256:
+	case FieldTypeInt256:
 		return MatchInt256Equal(slice.([]Int256), val.(Int256), bits)
-	case FieldTypeInt128, FieldTypeDecimal128:
+	case FieldTypeInt128:
 		return MatchInt128Equal(slice.([]Int128), val.(Int128), bits)
-	case FieldTypeInt64, FieldTypeDecimal64:
+	case FieldTypeInt64:
 		return MatchInt64Equal(slice.([]int64), val.(int64), bits)
-	case FieldTypeInt32, FieldTypeDecimal32:
+	case FieldTypeInt32:
 		return MatchInt32Equal(slice.([]int32), val.(int32), bits)
 	case FieldTypeInt16:
 		return MatchInt16Equal(slice.([]int16), val.(int16), bits)
@@ -2029,6 +1027,14 @@ func (t FieldType) EqualSlice(slice, val interface{}, bits *BitSet) *BitSet {
 		return MatchFloat64Equal(slice.([]float64), val.(float64), bits)
 	case FieldTypeFloat32:
 		return MatchFloat32Equal(slice.([]float32), val.(float32), bits)
+	case FieldTypeDecimal256:
+		return MatchInt256Equal(slice.(Decimal256Slice).Int256, val.(Decimal256).Int256(), bits)
+	case FieldTypeDecimal128:
+		return MatchInt128Equal(slice.(Decimal128Slice).Int128, val.(Decimal128).Int128(), bits)
+	case FieldTypeDecimal64:
+		return MatchInt64Equal(slice.(Decimal64Slice).Int64, val.(Decimal64).Int64(), bits)
+	case FieldTypeDecimal32:
+		return MatchInt32Equal(slice.(Decimal32Slice).Int32, val.(Decimal32).Int32(), bits)
 	default:
 		return bits
 	}
@@ -2135,13 +1141,13 @@ func (t FieldType) NotEqualSlice(slice, val interface{}, bits *BitSet) *BitSet {
 		return MatchInt64NotEqual(slice.([]int64), val.(time.Time).UnixNano(), bits)
 	case FieldTypeBoolean:
 		return MatchBoolNotEqual(slice.([]bool), val.(bool), bits)
-	case FieldTypeInt256, FieldTypeDecimal256:
+	case FieldTypeInt256:
 		return MatchInt256NotEqual(slice.([]Int256), val.(Int256), bits)
-	case FieldTypeInt128, FieldTypeDecimal128:
+	case FieldTypeInt128:
 		return MatchInt128NotEqual(slice.([]Int128), val.(Int128), bits)
-	case FieldTypeInt64, FieldTypeDecimal64:
+	case FieldTypeInt64:
 		return MatchInt64NotEqual(slice.([]int64), val.(int64), bits)
-	case FieldTypeInt32, FieldTypeDecimal32:
+	case FieldTypeInt32:
 		return MatchInt32NotEqual(slice.([]int32), val.(int32), bits)
 	case FieldTypeInt16:
 		return MatchInt16NotEqual(slice.([]int16), val.(int16), bits)
@@ -2159,6 +1165,14 @@ func (t FieldType) NotEqualSlice(slice, val interface{}, bits *BitSet) *BitSet {
 		return MatchFloat64NotEqual(slice.([]float64), val.(float64), bits)
 	case FieldTypeFloat32:
 		return MatchFloat32NotEqual(slice.([]float32), val.(float32), bits)
+	case FieldTypeDecimal256:
+		return MatchInt256NotEqual(slice.(Decimal256Slice).Int256, val.(Decimal256).Int256(), bits)
+	case FieldTypeDecimal128:
+		return MatchInt128NotEqual(slice.(Decimal128Slice).Int128, val.(Decimal128).Int128(), bits)
+	case FieldTypeDecimal64:
+		return MatchInt64NotEqual(slice.(Decimal64Slice).Int64, val.(Decimal64).Int64(), bits)
+	case FieldTypeDecimal32:
+		return MatchInt32NotEqual(slice.(Decimal32Slice).Int32, val.(Decimal32).Int32(), bits)
 	default:
 		return bits
 	}
@@ -2427,13 +1441,13 @@ func (t FieldType) GtSlice(slice, val interface{}, bits *BitSet) *BitSet {
 	case FieldTypeFloat32:
 		return MatchFloat32GreaterThan(slice.([]float32), val.(float32), bits)
 	case FieldTypeDecimal32:
-		return MatchInt32GreaterThan(slice.([]int32), val.(Decimal32).Int32(), bits)
+		return MatchInt32GreaterThan(slice.(Decimal32Slice).Int32, val.(Decimal32).Int32(), bits)
 	case FieldTypeDecimal64:
-		return MatchInt64GreaterThan(slice.([]int64), val.(Decimal64).Int64(), bits)
+		return MatchInt64GreaterThan(slice.(Decimal64Slice).Int64, val.(Decimal64).Int64(), bits)
 	case FieldTypeDecimal128:
-		return MatchInt128GreaterThan(slice.([]Int128), val.(Decimal128).Int128(), bits)
+		return MatchInt128GreaterThan(slice.(Decimal128Slice).Int128, val.(Decimal128).Int128(), bits)
 	case FieldTypeDecimal256:
-		return MatchInt256GreaterThan(slice.([]Int256), val.(Decimal256).Int256(), bits)
+		return MatchInt256GreaterThan(slice.(Decimal256Slice).Int256, val.(Decimal256).Int256(), bits)
 	default:
 		return bits
 	}
@@ -2587,13 +1601,13 @@ func (t FieldType) GteSlice(slice, val interface{}, bits *BitSet) *BitSet {
 	case FieldTypeFloat32:
 		return MatchFloat32GreaterThanEqual(slice.([]float32), val.(float32), bits)
 	case FieldTypeDecimal32:
-		return MatchInt32GreaterThanEqual(slice.([]int32), val.(Decimal32).Int32(), bits)
+		return MatchInt32GreaterThanEqual(slice.(Decimal32Slice).Int32, val.(Decimal32).Int32(), bits)
 	case FieldTypeDecimal64:
-		return MatchInt64GreaterThanEqual(slice.([]int64), val.(Decimal64).Int64(), bits)
+		return MatchInt64GreaterThanEqual(slice.(Decimal64Slice).Int64, val.(Decimal64).Int64(), bits)
 	case FieldTypeDecimal128:
-		return MatchInt128GreaterThanEqual(slice.([]Int128), val.(Decimal128).Int128(), bits)
+		return MatchInt128GreaterThanEqual(slice.(Decimal128Slice).Int128, val.(Decimal128).Int128(), bits)
 	case FieldTypeDecimal256:
-		return MatchInt256GreaterThanEqual(slice.([]Int256), val.(Decimal256).Int256(), bits)
+		return MatchInt256GreaterThanEqual(slice.(Decimal256Slice).Int256, val.(Decimal256).Int256(), bits)
 	default:
 		return bits
 	}
@@ -2748,13 +1762,13 @@ func (t FieldType) LtSlice(slice, val interface{}, bits *BitSet) *BitSet {
 	case FieldTypeFloat32:
 		return MatchFloat32LessThan(slice.([]float32), val.(float32), bits)
 	case FieldTypeDecimal32:
-		return MatchInt32LessThan(slice.([]int32), val.(Decimal32).Int32(), bits)
+		return MatchInt32LessThan(slice.(Decimal32Slice).Int32, val.(Decimal32).Int32(), bits)
 	case FieldTypeDecimal64:
-		return MatchInt64LessThan(slice.([]int64), val.(Decimal64).Int64(), bits)
+		return MatchInt64LessThan(slice.(Decimal64Slice).Int64, val.(Decimal64).Int64(), bits)
 	case FieldTypeDecimal128:
-		return MatchInt128LessThan(slice.([]Int128), val.(Decimal128).Int128(), bits)
+		return MatchInt128LessThan(slice.(Decimal128Slice).Int128, val.(Decimal128).Int128(), bits)
 	case FieldTypeDecimal256:
-		return MatchInt256LessThan(slice.([]Int256), val.(Decimal256).Int256(), bits)
+		return MatchInt256LessThan(slice.(Decimal256Slice).Int256, val.(Decimal256).Int256(), bits)
 	default:
 		return bits
 	}
@@ -2909,13 +1923,13 @@ func (t FieldType) LteSlice(slice, val interface{}, bits *BitSet) *BitSet {
 	case FieldTypeFloat32:
 		return MatchFloat32LessThanEqual(slice.([]float32), val.(float32), bits)
 	case FieldTypeDecimal32:
-		return MatchInt32LessThanEqual(slice.([]int32), val.(Decimal32).Int32(), bits)
+		return MatchInt32LessThanEqual(slice.(Decimal32Slice).Int32, val.(Decimal32).Int32(), bits)
 	case FieldTypeDecimal64:
-		return MatchInt64LessThanEqual(slice.([]int64), val.(Decimal64).Int64(), bits)
+		return MatchInt64LessThanEqual(slice.(Decimal64Slice).Int64, val.(Decimal64).Int64(), bits)
 	case FieldTypeDecimal128:
-		return MatchInt128LessThanEqual(slice.([]Int128), val.(Decimal128).Int128(), bits)
+		return MatchInt128LessThanEqual(slice.(Decimal128Slice).Int128, val.(Decimal128).Int128(), bits)
 	case FieldTypeDecimal256:
-		return MatchInt256LessThanEqual(slice.([]Int256), val.(Decimal256).Int256(), bits)
+		return MatchInt256LessThanEqual(slice.(Decimal256Slice).Int256, val.(Decimal256).Int256(), bits)
 	default:
 		return bits
 	}
@@ -3075,6 +2089,7 @@ func (t FieldType) InAt(pkg *Package, index, pos int, in interface{}) bool {
 	return false
 }
 
+// assumes from <= to
 func (t FieldType) Between(val, from, to interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
@@ -3194,6 +2209,7 @@ func (t FieldType) Between(val, from, to interface{}) bool {
 	return false
 }
 
+// assumes from <= to
 func (t FieldType) BetweenAt(pkg *Package, index, pos int, from, to interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
@@ -3315,6 +2331,7 @@ func (t FieldType) BetweenAt(pkg *Package, index, pos int, from, to interface{})
 	return false
 }
 
+// assumes from <= to
 func (t FieldType) BetweenSlice(slice, from, to interface{}, bits *BitSet) *BitSet {
 	switch t {
 	case FieldTypeBytes:
@@ -3415,25 +2432,25 @@ func (t FieldType) BetweenSlice(slice, from, to interface{}, bits *BitSet) *BitS
 			bits)
 	case FieldTypeDecimal32:
 		return MatchInt32Between(
-			slice.([]int32),
+			slice.(Decimal32Slice).Int32,
 			from.(Decimal32).Int32(),
 			to.(Decimal32).Int32(),
 			bits)
 	case FieldTypeDecimal64:
 		return MatchInt64Between(
-			slice.([]int64),
+			slice.(Decimal64Slice).Int64,
 			from.(Decimal64).Int64(),
 			to.(Decimal64).Int64(),
 			bits)
 	case FieldTypeDecimal128:
 		return MatchInt128Between(
-			slice.([]Int128),
+			slice.(Decimal128Slice).Int128,
 			from.(Decimal128).Int128(),
 			to.(Decimal128).Int128(),
 			bits)
 	case FieldTypeDecimal256:
 		return MatchInt256Between(
-			slice.([]Int256),
+			slice.(Decimal256Slice).Int256,
 			from.(Decimal256).Int256(),
 			to.(Decimal256).Int256(),
 			bits)
@@ -3443,7 +2460,8 @@ func (t FieldType) BetweenSlice(slice, from, to interface{}, bits *BitSet) *BitS
 }
 
 // using binary search to find if slice contains values in interval [from, to]
-// Note: there's no *At func because this function already works on slices
+// Note: there's no *At func because this function already on slices only
+// assumes from <= to
 func (t FieldType) InBetween(slice, from, to interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
@@ -3458,16 +2476,16 @@ func (t FieldType) InBetween(slice, from, to interface{}) bool {
 	case FieldTypeBoolean:
 		return BoolSlice(slice.([]bool)).ContainsRange(from.(bool), to.(bool))
 
-	case FieldTypeInt256, FieldTypeDecimal256:
+	case FieldTypeInt256:
 		return Int256Slice(slice.([]Int256)).ContainsRange(from.(Int256), to.(Int256))
 
-	case FieldTypeInt128, FieldTypeDecimal128:
+	case FieldTypeInt128:
 		return Int128Slice(slice.([]Int128)).ContainsRange(from.(Int128), to.(Int128))
 
-	case FieldTypeInt64, FieldTypeDecimal64:
+	case FieldTypeInt64:
 		return Int64Slice(slice.([]int64)).ContainsRange(from.(int64), to.(int64))
 
-	case FieldTypeInt32, FieldTypeDecimal32:
+	case FieldTypeInt32:
 		return Int32Slice(slice.([]int32)).ContainsRange(from.(int32), to.(int32))
 
 	case FieldTypeInt16:
@@ -3493,6 +2511,18 @@ func (t FieldType) InBetween(slice, from, to interface{}) bool {
 
 	case FieldTypeFloat32:
 		return Float32Slice(slice.([]float32)).ContainsRange(from.(float32), to.(float32))
+
+	case FieldTypeDecimal256:
+		return Int256Slice(slice.(Decimal256Slice).Int256).ContainsRange(from.(Decimal256).Int256(), to.(Decimal256).Int256())
+
+	case FieldTypeDecimal128:
+		return Int128Slice(slice.(Decimal128Slice).Int128).ContainsRange(from.(Decimal128).Int128(), to.(Decimal128).Int128())
+
+	case FieldTypeDecimal64:
+		return Int64Slice(slice.(Decimal64Slice).Int64).ContainsRange(from.(Decimal64).Int64(), to.(Decimal64).Int64())
+
+	case FieldTypeDecimal32:
+		return Int32Slice(slice.(Decimal32Slice).Int32).ContainsRange(from.(Decimal32).Int32(), to.(Decimal32).Int32())
 
 	}
 	return false
@@ -3607,6 +2637,10 @@ func (t FieldType) Compare(xa, xb interface{}) int {
 		default:
 			return 1
 		}
+	case FieldTypeInt256:
+		return xa.(Int256).Cmp(xb.(Int256))
+	case FieldTypeInt128:
+		return xa.(Int128).Cmp(xb.(Int128))
 	case FieldTypeInt64:
 		ia, ib := xa.(int64), xb.(int64)
 		switch true {
@@ -3707,7 +2741,6 @@ func (t FieldType) Compare(xa, xb interface{}) int {
 		default:
 			return 1
 		}
-
 	case FieldTypeDecimal32:
 		return xa.(Decimal32).Cmp(xb.(Decimal32))
 
@@ -3719,12 +2752,6 @@ func (t FieldType) Compare(xa, xb interface{}) int {
 
 	case FieldTypeDecimal256:
 		return xa.(Decimal256).Cmp(xb.(Decimal256))
-
-	case FieldTypeInt128:
-		return xa.(Int128).Cmp(xb.(Int128))
-
-	case FieldTypeInt256:
-		return xa.(Int256).Cmp(xb.(Int256))
 
 	default:
 		return -1

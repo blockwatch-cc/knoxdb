@@ -20,7 +20,7 @@ type Decimal32 struct {
 }
 
 type Decimal32Slice struct {
-	Vec   []int32
+	Int32 []int32
 	Scale int
 }
 
