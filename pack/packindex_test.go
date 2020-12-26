@@ -46,8 +46,8 @@ func makeSortedPackageHeaderList(n int) PackageHeaderList {
 			Key:     make([]byte, 4),
 			NFields: 1,
 			NValues: 1,
-			BlockHeaders: block.BlockHeaderList{
-				block.BlockHeader{
+			BlockHeaders: block.HeaderList{
+				block.Header{
 					MinValue: uint64(v),
 					MaxValue: max,
 				},
@@ -85,8 +85,8 @@ func makeUnsortedPackageHeaderList(n int) PackageHeaderList {
 			Key:     make([]byte, 4),
 			NFields: 1,
 			NValues: 1,
-			BlockHeaders: block.BlockHeaderList{
-				block.BlockHeader{
+			BlockHeaders: block.HeaderList{
+				block.Header{
 					MinValue: v,
 					MaxValue: maxvalues[i],
 				},
@@ -325,8 +325,8 @@ func buildPackHeader(key []byte, min, max uint64) PackageHeader {
 		Key:     key,
 		NFields: 1,
 		NValues: 1,
-		BlockHeaders: block.BlockHeaderList{
-			block.BlockHeader{
+		BlockHeaders: block.HeaderList{
+			block.Header{
 				MinValue: min,
 				MaxValue: max,
 			},

@@ -16,9 +16,6 @@ import (
 
 var bigEndian = binary.BigEndian
 
-// unused, 2 bit reserved
-type BlockFlags byte
-
 type Compression byte
 
 const (
@@ -166,6 +163,7 @@ func (b *Block) IsIgnore() bool {
 
 func (b *Block) SetIgnore() {
 	b.head.Type = BlockIgnore
+	b.Release()
 }
 
 func (b *Block) SetDirty() {
@@ -250,10 +248,13 @@ func (b Block) RangeSlice(start, end int) interface{} {
 	}
 }
 
-func NewBlock(typ BlockType, sz int, comp Compression, scale int, flags BlockFlags) (*Block, error) {
-	b := &Block{
-		head: NewHeader(typ, comp, scale, flags),
-	}
+func AllocBlock() *Block {
+	return BlockPool.Get().(*Block)
+}
+
+func NewBlock(typ BlockType, sz int, comp Compression, scale int) (*Block, error) {
+	b := BlockPool.Get().(*Block)
+	b.head = NewHeader(typ, comp, scale)
 	switch typ {
 	case BlockInt64, BlockTime:
 		if sz <= DefaultMaxPointsPerBlock {
@@ -346,16 +347,16 @@ func NewBlock(typ BlockType, sz int, comp Compression, scale int, flags BlockFla
 			b.Int256 = make([]Int256, 0, sz)
 		}
 	default:
-		return nil, fmt.Errorf("pack: invalid data type %d", typ)
+		return nil, fmt.Errorf("block: invalid data type %s (%[1]d)", typ)
 	}
 	return b, nil
 }
 
 func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
-	cp := &Block{
-		head: b.head.Clone(),
-	}
-	if !copydata {
+	cp := BlockPool.Get().(*Block)
+	if copydata {
+		cp.head = b.head.Clone()
+	} else {
 		cp.head.Clear()
 	}
 	switch b.Type() {
@@ -588,7 +589,7 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 		}
 
 	default:
-		return nil, fmt.Errorf("pack: invalid data type %s (%[1]d)", b.Type())
+		return nil, fmt.Errorf("block: invalid data type %s (%[1]d)", b.Type())
 	}
 	return cp, nil
 }
@@ -707,14 +708,14 @@ func (b *Block) MaxStoredSize() int {
 	case BlockInt256:
 		sz = compress.Int256ArrayEncodedSize(b.Int256)
 	}
-	return sz + encodedBlockHeaderSize + b.head.Compression.HeaderSize(sz)
+	return sz + storedBlockHeaderSize + b.head.Compression.HeaderSize(sz)
 }
 
 func (b *Block) HeapSize() int {
 	const (
 		sliceSize  = 24 // reflect.SliceHeader incl. padding
 		stringSize = 16 // reflect.StringHeader incl. padding
-		headerSize = 28 // base header with interface pointers (?)
+		headerSize = 26 // base header with interface pointers (?)
 	)
 	sz := headerSize + 15*sliceSize
 	switch b.Type() {
@@ -896,16 +897,18 @@ func (b *Block) Release() {
 		}
 		b.Int256 = nil
 	case BlockIgnore:
+		return
 	}
+	BlockPool.Put(b)
 }
 
-// FIXME: pass a buffer to avoid alloc+memcopy
 func (b *Block) Encode() ([]byte, []byte, error) {
+	// Pass 1: serialize + compress data, update statistics
 	body, err := b.EncodeBody()
 	if err != nil {
 		return nil, nil, err
 	}
-	// encode header second, to allow for reparsing min/max values during encode
+	// Pass 2: encode header with updated stats (min/max)
 	buf := bytes.NewBuffer(make([]byte, 0, b.head.EncodedSize()))
 	err = b.head.Encode(buf)
 	if err != nil {
@@ -914,8 +917,6 @@ func (b *Block) Encode() ([]byte, []byte, error) {
 	return buf.Bytes(), body, nil
 }
 
-// FIXME: pass a buffer to avoid alloc+memcopy
-// values -> raw
 // - analyzes values to determine best compression
 // - uses buffer pool to allocate output slice once and avoid memcopy
 // - compression is used as hint, data may be stored uncompressed
@@ -1109,7 +1110,7 @@ func (b *Block) EncodeBody() ([]byte, error) {
 		return nil, nil
 
 	default:
-		return nil, fmt.Errorf("pack: invalid data type %d", b.Type)
+		return nil, fmt.Errorf("block: invalid data type %d (%[1]d)", b.Type())
 	}
 	return buf.Bytes(), nil
 }
@@ -1264,7 +1265,7 @@ func (b *Block) DecodeBody(buf []byte, sz int) error {
 	case BlockIgnore:
 
 	default:
-		err = fmt.Errorf("pack: invalid data type %d", b.Type)
+		err = fmt.Errorf("block: invalid data type %s (%[1]d)", b.Type())
 	}
 	return err
 }

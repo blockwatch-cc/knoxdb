@@ -15,15 +15,15 @@ import (
 )
 
 const (
-	// default encoder/decoder buffer size in elements (32k)
-	DefaultMaxPointsPerBlock = 1 << 15
+	// default encoder/decoder buffer size in elements (64k)
+	DefaultMaxPointsPerBlock = 1 << 16
 
-	// 256k - size of a single block that fits 32k 8byte values
-	BlockSizeHint = 1 << 18
+	// 512k - size of a single block that fits 64k 8byte values + 1 page extra headers
+	BlockSizeHint = 1<<19 + 4096
 
-	// encodedBlockHeaderSize is the size of the header for an encoded block.
+	// storedBlockHeaderSize is the size of the header for an encoded block.
 	// There is one byte encoding the type of the block.
-	encodedBlockHeaderSize = 1
+	storedBlockHeaderSize = 1
 )
 
 func encodeTimeBlock(buf *bytes.Buffer, val []int64, comp Compression) (int64, int64, error) {
@@ -212,10 +212,21 @@ func encodeInt256Block(buf *bytes.Buffer, val []vec.Int256, comp Compression) (v
 		for j, v := range val {
 			cp[j] = int64(v[i])
 		}
-		_, _, err = compress.IntegerArrayEncodeAll(cp, w)
+		ebuf := BlockEncoderPool.Get().([]byte)[:0]
+		stride := bytes.NewBuffer(ebuf)
+		_, _, err = compress.IntegerArrayEncodeAll(cp, stride)
 		if err != nil {
 			break
 		}
+		var strideLen [4]byte
+		bigEndian.PutUint32(strideLen[:], uint32(stride.Len()))
+		if _, err = w.Write(strideLen[:]); err != nil {
+			break
+		}
+		if _, err = w.Write(stride.Bytes()); err != nil {
+			break
+		}
+		BlockEncoderPool.Put(ebuf)
 	}
 
 	// cleanup
@@ -266,11 +277,21 @@ func encodeInt128Block(buf *bytes.Buffer, val []vec.Int128, comp Compression) (v
 		for j, v := range val {
 			cp[j] = int64(v[i])
 		}
-		_, _, err = compress.IntegerArrayEncodeAll(cp, w)
+		ebuf := BlockEncoderPool.Get().([]byte)[:0]
+		stride := bytes.NewBuffer(ebuf)
+		_, _, err = compress.IntegerArrayEncodeAll(cp, stride)
 		if err != nil {
 			break
 		}
-
+		var strideLen [4]byte
+		bigEndian.PutUint32(strideLen[:], uint32(stride.Len()))
+		if _, err = w.Write(strideLen[:]); err != nil {
+			break
+		}
+		if _, err = w.Write(stride.Bytes()); err != nil {
+			break
+		}
+		BlockEncoderPool.Put(ebuf)
 	}
 
 	// cleanup
@@ -451,8 +472,10 @@ func decodeInt256Block(block []byte, dst []vec.Int256) ([]vec.Int256, error) {
 	}()
 
 	// unpack 4 int64 strides
+	strideBuf := bytes.NewBuffer(buf)
 	for i := 0; i < 4; i++ {
-		tmp, err := compress.IntegerArrayDecodeAll(buf, tmp)
+		strideLen := int(bigEndian.Uint32(strideBuf.Next(4)[:]))
+		tmp, err := compress.IntegerArrayDecodeAll(strideBuf.Next(strideLen), tmp)
 		if err != nil {
 			return dst, err
 		}
@@ -494,8 +517,10 @@ func decodeInt128Block(block []byte, dst []vec.Int128) ([]vec.Int128, error) {
 	}()
 
 	// unpack 2 int64 strides
+	strideBuf := bytes.NewBuffer(buf)
 	for i := 0; i < 2; i++ {
-		tmp, err := compress.IntegerArrayDecodeAll(buf, tmp)
+		strideLen := int(bigEndian.Uint32(strideBuf.Next(4)[:]))
+		tmp, err := compress.IntegerArrayDecodeAll(strideBuf.Next(strideLen), tmp)
 		if err != nil {
 			return dst, err
 		}
@@ -1081,7 +1106,7 @@ func unpackBlock(block []byte, typ BlockType) ([]byte, bool, error) {
 			// subsequent header to detect it
 			if len(block) > 1 && block[1] == 0 {
 				// copy the block to a new slice because memory will be
-				// referenced, but the input data may come from an mmaped file
+				// referenced, but the input data may come from an mmapped file
 				buf := make([]byte, len(block)-1)
 				copy(buf, block[1:])
 				return buf, false, nil
@@ -1100,7 +1125,7 @@ func unpackBlock(block []byte, typ BlockType) ([]byte, bool, error) {
 // readBlockType returns the type of value encoded in a block or an error
 // if the block type is unknown.
 func readBlockType(block []byte) (BlockType, error) {
-	blockType := BlockType(block[0] & 0x1f)
+	blockType := BlockType(block[0] & blockTypeMask)
 	switch blockType {
 	case BlockTime,
 		BlockInt64,
@@ -1140,7 +1165,7 @@ func ensureBlockType(block []byte, typ BlockType) error {
 // readBlockCompression returns the compression type of encoded block or an error
 // if the block compression is unknown.
 func readBlockCompression(block []byte) (Compression, error) {
-	blockCompression := Compression((block[0] >> 5) & 0x3)
+	blockCompression := Compression((block[0] >> 5) & blockCompressionMask)
 	switch blockCompression {
 	case NoCompression, LZ4Compression, SnappyCompression:
 		return blockCompression, nil
@@ -1151,10 +1176,5 @@ func readBlockCompression(block []byte) (Compression, error) {
 
 // readBlockScale returns the scale for fixed decimal types
 func readBlockScale(block []byte) int {
-	return int(block[0]) & 0x3f
-}
-
-// readBlockFlags returns the flags used for signalling type conversions, etc
-func readBlockFlags(block []byte) BlockFlags {
-	return BlockFlags((block[0] >> 6) & 0x3)
+	return int(block[0]) & int(blockScaleMask)
 }

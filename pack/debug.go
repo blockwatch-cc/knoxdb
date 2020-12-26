@@ -257,7 +257,7 @@ func (p *Package) DumpType(w io.Writer) error {
 	fmt.Fprintf(w, "Type:       %s\n", typname)
 	fmt.Fprintf(w, "Size:       %s (%d) zipped, %s (%d) unzipped\n",
 		util.ByteSize(p.packedsize), p.packedsize,
-		util.ByteSize(p.rawsize), p.rawsize,
+		util.ByteSize(p.bodysize), p.bodysize,
 	)
 	for i, v := range p.blocks {
 		d, fi := "", ""
@@ -271,15 +271,14 @@ func (p *Package) DumpType(w io.Writer) error {
 		if i+1 < len(p.blocks) {
 			sz = p.offsets[i+1] - p.offsets[i]
 		} else {
-			sz = p.rawsize - p.offsets[i]
+			sz = p.bodysize - p.offsets[i]
 		}
 		head := v.Header()
-		fmt.Fprintf(w, "Block %-02d:   %s typ=%d comp=%s flags=%d scale=%d len=%d min=%s max=%s sz=%s %s %s\n",
+		fmt.Fprintf(w, "Block %-02d:   %s typ=%d comp=%s scale=%d len=%d min=%s max=%s sz=%s %s %s\n",
 			i,
 			p.names[i],
 			head.Type,
 			head.Compression,
-			head.Flags,
 			head.Scale,
 			v.Len(),
 			util.ToString(head.MinValue),
@@ -312,10 +311,10 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 			if i+1 < len(p.blocks) {
 				sz = p.offsets[i+1] - p.offsets[i]
 			} else {
-				sz = p.rawsize - p.offsets[i]
+				sz = p.bodysize - p.offsets[i]
 			}
 			head := v.Header()
-			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-33s %-33s %-4d %-5x %-6s %-10s %-12s %-10s %-10s\n",
+			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-33s %-33s %-4d %-6s %-10s %-12s %-10s %-10s\n",
 				lineNo,
 				key,       // pack key
 				i,         // block id
@@ -324,7 +323,6 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 				util.LimitStringEllipsis(util.ToString(head.MinValue), 33), // min val in block
 				util.LimitStringEllipsis(util.ToString(head.MaxValue), 33), // max val in block
 				head.Scale,
-				head.Flags,
 				head.Compression,
 				util.PrettyInt(sz),                // compressed block size
 				util.PrettyInt(v.MaxStoredSize()), // uncompressed storage size
@@ -341,7 +339,7 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 		if !ok {
 			enc = csv.NewEncoder(w)
 		}
-		cols := make([]interface{}, 14)
+		cols := make([]interface{}, 13)
 		for i, v := range p.blocks {
 			fi := ""
 			if p.tinfo != nil {
@@ -351,7 +349,7 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 			if i+1 < len(p.blocks) {
 				sz = p.offsets[i+1] - p.offsets[i]
 			} else {
-				sz = p.rawsize - p.offsets[i]
+				sz = p.bodysize - p.offsets[i]
 			}
 			head := v.Header()
 			cols[0] = key
@@ -362,12 +360,11 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 			cols[5] = head.MinValue
 			cols[6] = head.MaxValue
 			cols[7] = head.Scale
-			cols[8] = head.Flags
-			cols[9] = head.Compression.String()
-			cols[10] = sz
-			cols[11] = v.HeapSize()
-			cols[12] = v.MaxStoredSize()
-			cols[13] = fi
+			cols[8] = head.Compression.String()
+			cols[9] = sz
+			cols[10] = v.HeapSize()
+			cols[11] = v.MaxStoredSize()
+			cols[12] = fi
 			if !enc.HeaderWritten() {
 				if err := enc.EncodeHeader([]string{
 					"Pack",
@@ -377,7 +374,6 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 					"Columns",
 					"Min",
 					"Max",
-					"Scale",
 					"Flags",
 					"Compression",
 					"Compressed",

@@ -20,22 +20,18 @@ func (p *Package) MarshalBinary() ([]byte, error) {
 
 	buf := bytes.NewBuffer(make([]byte, 0, p.nFields*block.BlockSizeHint))
 	buf.WriteByte(byte(p.version))
-	buf.WriteByte(0) // empty compression byte to stay compatible with v1/v2
 
 	var b [8]byte
 	binary.BigEndian.PutUint32(b[0:], uint32(p.nFields))
 	binary.BigEndian.PutUint32(b[4:], uint32(p.nValues))
 	buf.Write(b[:])
 
+	// FIXME: should be available through table
 	// write field names
-	for _, v := range p.names {
-		_, _ = buf.WriteString(v)
-		buf.WriteByte(0)
-	}
-
-	// TODO: encode into a single buffer, avoid memcopy
-	// // keep the current position to later write the offset table
-	// offsetPos := buf.Len()
+	// for _, v := range p.names {
+	// 	_, _ = buf.WriteString(v)
+	// 	buf.WriteByte(0)
+	// }
 
 	// encode all blocks to know their sizes
 	headers := make([][]byte, p.nFields)
@@ -44,6 +40,7 @@ func (p *Package) MarshalBinary() ([]byte, error) {
 		p.offsets = make([]int, p.nFields)
 	}
 	for i, b := range p.blocks {
+		// fmt.Printf("Pack: encode block %d %s\n", i, b.Type())
 		headers[i], encoded[i], err = b.Encode()
 		p.offsets[i] = bodySize
 		bodySize += len(encoded[i])
@@ -59,22 +56,18 @@ func (p *Package) MarshalBinary() ([]byte, error) {
 		buf.Write(offs[:])
 	}
 
-	// write block headers table (min/max values)
+	// write block headers table
 	for _, v := range headers {
 		buf.Write(v)
-		block.BlockEncoderPool.Put(v[:0])
 	}
 
 	// write body
 	for _, v := range encoded {
 		buf.Write(v)
-		// recycle block buffers
-		if cap(v) == block.BlockSizeHint {
-			block.BlockEncoderPool.Put(v[:0])
-		}
+		block.RecycleBuffer(v)
 	}
 
-	p.rawsize = bodySize
+	p.bodysize = bodySize
 	p.packedsize = buf.Len()
 	return buf.Bytes(), nil
 }
@@ -93,43 +86,35 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 		return io.ErrShortBuffer
 	}
 	p.version, _ = buf.ReadByte()
-	if p.version > packageStorageFormatVersionV4 {
+	if p.version > currentStorageFormat {
 		return fmt.Errorf("pack: invalid storage format version %d", p.version)
 	}
 	p.packedsize = blen
-
-	// v1 (OSS) does not write compression byte
-	// v2 (PRO) did write compression byte
-	// v3 (PRO) compression and scale are obsolete, moved to block
-	var scale int
-	if p.version >= packageStorageFormatVersionV2 {
-		b, _ := buf.ReadByte()
-		scale = int(b >> 4)
-	}
 
 	// grid size (nFields is stored as uint32)
 	p.nFields = int(binary.BigEndian.Uint32(buf.Next(4)))
 	p.nValues = int(binary.BigEndian.Uint32(buf.Next(4)))
 
-	// read names, check for existence of names (optional in v2)
-	b, _ := buf.ReadByte()
-	if b != 0 {
-		buf.UnreadByte()
-		p.names = make([]string, p.nFields)
-		for i := 0; i < p.nFields; i++ {
-			// ReadString returns string including the delimiter
-			str, err := buf.ReadString(0)
-			if err != nil {
-				return err
-			}
-			strcopy := str[:len(str)-1]
-			p.names[i] = strcopy
-			p.namemap[strcopy] = i
-		}
-	}
+	// // read names, check for existence of names (optional in v2)
+	// b, _ := buf.ReadByte()
+	// if b != 0 {
+	// 	buf.UnreadByte()
+	// 	p.names = make([]string, p.nFields)
+	// 	for i := 0; i < p.nFields; i++ {
+	// 		// ReadString returns string including the delimiter
+	// 		str, err := buf.ReadString(0)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+	// 		strcopy := str[:len(str)-1]
+	// 		p.names[i] = strcopy
+	// 		p.namemap[strcopy] = i
+	// 	}
+	// }
 
 	// TODO: do we need to initialize field types here?
-	p.types = make([]FieldType, p.nFields)
+	// p.names = make([]string, p.nFields)
+	// p.types = make([]FieldType, p.nFields)
 
 	// read offsets
 	p.offsets = make([]int, p.nFields)
@@ -138,40 +123,26 @@ func (p *Package) unmarshalHeader(buf *bytes.Buffer) error {
 		p.offsets[i] = int(binary.BigEndian.Uint32(offs[i*4:]))
 	}
 
-	// read block headers
-	// Note: we don't store headers in V1 format, so we only create empty blocks here
-	// Note: re-use existing blocks
+	// read block headers, re-use when exist
 	if len(p.blocks) != p.nFields {
+		for _, b := range p.blocks {
+			b.Release()
+		}
 		p.blocks = make([]*block.Block, p.nFields)
 	}
 	for i := 0; i < p.nFields; i++ {
 		// when packs are reused, their blocks are already allocated
 		if p.blocks[i] == nil {
-			p.blocks[i] = &block.Block{}
+			p.blocks[i] = block.AllocBlock()
 		}
 		// read and decode block headers
-
-		// V1 and V3+: read and decode block headers
-		if p.version != packageStorageFormatVersionV2 {
-			if err := p.blocks[i].DecodeHeader(buf); err != nil {
-				return err
-			}
-			// v2 only: detect fixed point uint64 from pack header
-			if p.version == packageStorageFormatVersionV2 {
-				if p.blocks[i].Type() == block.BlockUint64 && scale > 0 {
-					// FIXME: decimal64 expects block type int64!
-					p.types[i] = FieldTypeDecimal64
-					p.blocks[i].SetScale(scale)
-				}
-			}
+		if err := p.blocks[i].DecodeHeader(buf); err != nil {
+			return err
 		}
 	}
 
-	// upgrade to v4 so subsequent writes will flush the correct version
-	p.version = packageStorageFormatVersionV4
-
 	// treat remaining bytes as pack body
-	p.rawsize = buf.Len()
+	p.bodysize = buf.Len()
 	return nil
 }
 
@@ -181,12 +152,13 @@ func (p *Package) UnmarshalBinary(data []byte) error {
 	if err != nil {
 		return err
 	}
-	// decode block contents (Note: blocks were already created when reading header)
+	// decode block contents (Note: blocks are allocated when reading the header)
 	for i := 0; i < p.nFields; i++ {
 		sz := buf.Len()
 		if i+1 < p.nFields {
 			sz = p.offsets[i+1] - p.offsets[i]
 		}
+		// fmt.Printf("Pack: decode block %d %s\n", i, p.blocks[i].Type())
 		if err := p.blocks[i].DecodeBody(buf.Next(sz), p.nValues); err != nil {
 			return err
 		}

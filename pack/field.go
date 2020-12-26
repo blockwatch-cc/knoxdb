@@ -40,10 +40,6 @@ func (f FieldFlags) Compression() block.Compression {
 	return 0
 }
 
-func (f FieldFlags) BlockFlags() block.BlockFlags {
-	return block.BlockFlags(0)
-}
-
 type FieldType string
 
 const (
@@ -92,7 +88,6 @@ func (f Field) NewBlock(sz int) (*block.Block, error) {
 		sz,
 		f.Flags.Compression(),
 		f.Scale,
-		f.Flags.BlockFlags(),
 	)
 }
 

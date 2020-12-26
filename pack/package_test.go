@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
+	// "blockwatch.cc/knoxdb/encoding/decimal"
+	// "blockwatch.cc/knoxdb/vec"
 )
 
 var packBenchmarkReadWriteSizes = []packBenchmarkSize{
@@ -35,7 +37,14 @@ var readWriteTestFields = FieldList{
 	Field{Index: 12, Name: "D", Alias: "has_data", Type: FieldTypeBoolean, Flags: 0},
 	Field{Index: 13, Name: "v", Alias: "volume", Type: FieldTypeUint64, Flags: 0},
 	Field{Index: 14, Name: "f", Alias: "fee", Type: FieldTypeUint64, Flags: 0},
-	Field{Index: 15, Name: "d", Alias: "days", Type: FieldTypeFloat64, Flags: FlagConvert, Precision: 5},
+	Field{Index: 15, Name: "d", Alias: "days", Type: FieldTypeFloat64, Flags: 0},
+
+	// Field{Index: 16, Name: "1", Alias: "i128", Type: FieldTypeInt128, Flags: 0},
+	// Field{Index: 17, Name: "2", Alias: "i256", Type: FieldTypeInt256, Flags: 0},
+	// Field{Index: 18, Name: "3", Alias: "d32", Type: FieldTypeDecimal32, Flags: 0, Scale: 5},
+	// Field{Index: 19, Name: "4", Alias: "d64", Type: FieldTypeDecimal64, Flags: 0, Scale: 12},
+	// Field{Index: 20, Name: "5", Alias: "d128", Type: FieldTypeDecimal128, Flags: 0, Scale: 18},
+	// Field{Index: 21, Name: "6", Alias: "d256", Type: FieldTypeDecimal256, Flags: 0, Scale: 24},
 }
 
 // Data size is compressed size
@@ -132,6 +141,14 @@ func makeReadWriteTestPackage(fields FieldList, c block.Compression, sz int) *Pa
 		pkg.SetFieldAt(13, i, uint64(rand.Int63n(2100000000000000))) // volume
 		pkg.SetFieldAt(14, i, uint64(rand.Intn(100000000)))          // fee
 		pkg.SetFieldAt(15, i, float64(rand.Intn(100000))/1000.0)     // days
+
+		// pkg.SetFieldAt(16, i, vec.Int128FromInt64(rand.Int63n(2100000000000000)))
+		// pkg.SetFieldAt(17, i, vec.Int256FromInt64(rand.Int63n(2100000000000000)))
+		// pkg.SetFieldAt(18, i, decimal.NewDecimal32(int32(rand.Intn(100000000)), 2))
+		// pkg.SetFieldAt(19, i, decimal.NewDecimal64(int64(rand.Intn(100000000)), 4))
+		// pkg.SetFieldAt(20, i, decimal.NewDecimal128(vec.Int128FromInt64(rand.Int63n(2100000000000000)).Mul64(1000000000), 10))
+		// pkg.SetFieldAt(21, i, decimal.NewDecimal256(vec.Int256FromInt64(rand.Int63n(2100000000000000)).Mul(vec.Int256FromInt64(1000000000)), 20))
+
 	}
 	return pkg
 }
@@ -213,6 +230,7 @@ func BenchmarkPackReadLZ4(B *testing.B) {
 				if err != nil {
 					B.Fatalf("read error: %v", err)
 				}
+				pkg2.Release()
 			}
 		})
 	}
@@ -235,6 +253,7 @@ func BenchmarkPackReadSnappy(B *testing.B) {
 				if err != nil {
 					B.Fatalf("read error: %v", err)
 				}
+				pkg2.Release()
 			}
 		})
 	}
@@ -257,6 +276,7 @@ func BenchmarkPackReadNoCompression(B *testing.B) {
 				if err != nil {
 					B.Fatalf("read error: %v", err)
 				}
+				pkg2.Release()
 			}
 		})
 	}

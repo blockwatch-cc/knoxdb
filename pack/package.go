@@ -20,10 +20,8 @@ import (
 )
 
 const (
-	packageStorageFormatVersionV1 = 1 // OSS: same as V3
-	packageStorageFormatVersionV2 = 2 // PRO: compress & precision stored in pack header
-	packageStorageFormatVersionV3 = 3 // PRO: current, per-block compression & precision
-	packageStorageFormatVersionV4 = 4 // PRO: extended data types
+	packageStorageFormatVersionV1 = 0xa1 // KnoxDB v1
+	currentStorageFormat          = packageStorageFormatVersionV1
 )
 
 type Package struct {
@@ -42,8 +40,8 @@ type Package struct {
 	tinfo      *typeInfo
 	pkindex    int
 	pkmap      map[uint64]int // lazy-generated map
-	packedsize int            // zipped total size including header
-	rawsize    int            // unzipped size after snappy decompression
+	packedsize int            // total storage size including header
+	bodysize   int            // storage size for block data only
 	dirty      bool
 	cached     bool
 	stripped   bool // some blocks are ignored, don't store!
@@ -73,7 +71,7 @@ func (p *Package) PkMap() map[uint64]int {
 
 func NewPackage() *Package {
 	return &Package{
-		version: packageStorageFormatVersionV4,
+		version: currentStorageFormat,
 		pkindex: -1,
 		namemap: make(map[string]int),
 	}
@@ -188,7 +186,6 @@ func (p *Package) Init(v interface{}, sz int) error {
 			sz,
 			field.Flags.Compression(),
 			field.Scale,
-			field.Flags.BlockFlags(),
 		)
 		if err != nil {
 			return err
@@ -240,7 +237,6 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 			sz,
 			field.Flags.Compression(),
 			field.Scale,
-			field.Flags.BlockFlags(),
 		)
 		if err != nil {
 			return err
@@ -288,7 +284,6 @@ func (p *Package) KeepFields(fields FieldList) *Package {
 	}
 	for i, v := range p.names {
 		if !fields.Contains(v) {
-			p.blocks[i].Release()
 			p.blocks[i].SetIgnore()
 			p.stripped = true
 		}
@@ -1381,7 +1376,7 @@ func (p *Package) CopyFrom(srcPack *Package, dstPos, srcPos, srcLen int) error {
 			}
 
 		default:
-			return fmt.Errorf("pack: invalid data type %d", p.types[i])
+			return fmt.Errorf("pack: invalid data type %s", p.types[i])
 		}
 		dst.SetDirty()
 	}
@@ -1502,7 +1497,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 			}
 
 		default:
-			return fmt.Errorf("pack: invalid data type %d", p.types[i])
+			return fmt.Errorf("pack: invalid data type %s", p.types[i])
 		}
 		dst.SetDirty()
 	}
@@ -1566,7 +1561,7 @@ func (p *Package) Append() error {
 			b.Uint8 = append(b.Uint8, 0)
 
 		default:
-			return fmt.Errorf("pack: invalid data type %d", p.types[i])
+			return fmt.Errorf("pack: invalid data type %s", p.types[i])
 		}
 		b.SetDirty()
 	}
@@ -1633,7 +1628,7 @@ func (p *Package) Grow(n int) error {
 			b.Uint8 = append(b.Uint8, make([]uint8, n)...)
 
 		default:
-			return fmt.Errorf("pack: invalid data type %d", p.types[i])
+			return fmt.Errorf("pack: invalid data type %s", p.types[i])
 		}
 		b.SetDirty()
 	}
@@ -1711,7 +1706,7 @@ func (p *Package) Delete(pos, n int) error {
 			b.Uint8 = append(b.Uint8[:pos], b.Uint8[pos+n:]...)
 
 		default:
-			return fmt.Errorf("pack: invalid data type %d", p.types[i])
+			return fmt.Errorf("pack: invalid data type %s", p.types[i])
 		}
 		b.SetDirty()
 	}
@@ -1727,14 +1722,14 @@ func (p *Package) Clear() {
 	}
 	// we keep all type-related data like names, type info and blocks
 	// keep pack name to avoid clearing journal/tombstone names
-	p.version = packageStorageFormatVersionV4
+	p.version = currentStorageFormat
 	p.nValues = 0
 	p.pkmap = nil
 	p.offsets = nil
 	p.dirty = true
 	p.cached = false
 	p.packedsize = 0
-	p.rawsize = 0
+	p.bodysize = 0
 }
 
 func (p *Package) Release() {
@@ -1754,7 +1749,7 @@ func (p *Package) Release() {
 	p.pkindex = -1
 	p.pkmap = nil
 	p.packedsize = 0
-	p.rawsize = 0
+	p.bodysize = 0
 	p.dirty = false
 	p.cached = false
 	p.stripped = false

@@ -16,6 +16,9 @@ var (
 	BlockEncoderPool = &sync.Pool{
 		New: func() interface{} { return make([]byte, 0, BlockSizeHint) },
 	}
+	BlockPool = &sync.Pool{
+		New: func() interface{} { return &Block{} },
+	}
 	snappyWriterPool = util.NewGenericPool(
 		runtime.NumCPU(),
 		func() interface{} { return NewSnappyWriter(nil) },
@@ -75,3 +78,9 @@ var (
 		New: func() interface{} { return make([][]byte, 0, DefaultMaxPointsPerBlock) },
 	}
 )
+
+func RecycleBuffer(buf []byte) {
+	if cap(buf) == BlockSizeHint {
+		BlockEncoderPool.Put(buf[:0])
+	}
+}

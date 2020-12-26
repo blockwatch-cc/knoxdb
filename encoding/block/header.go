@@ -14,15 +14,16 @@ import (
 )
 
 const (
-	headerBaseSize = 2
+	headerBaseSize            = 2
+	headerListVersion    byte = 1
+	blockTypeMask        byte = 0x1f
+	blockScaleMask       byte = 0x7f
+	blockCompressionMask byte = 0x03
 )
-
-const HeaderVersion = byte(1)
 
 type Header struct {
 	Type        BlockType
 	Compression Compression
-	Flags       BlockFlags
 	Scale       int
 	MinValue    interface{}
 	MaxValue    interface{}
@@ -35,7 +36,7 @@ func (h Header) IsValid() bool {
 type HeaderList []Header
 
 func (h HeaderList) Encode(buf *bytes.Buffer) error {
-	buf.WriteByte(HeaderVersion)
+	buf.WriteByte(headerListVersion)
 	var b [4]byte
 	binary.BigEndian.PutUint32(b[:], uint32(len(h)))
 	buf.Write(b[:])
@@ -49,13 +50,13 @@ func (h HeaderList) Encode(buf *bytes.Buffer) error {
 
 func (h *HeaderList) Decode(buf *bytes.Buffer) error {
 	if buf.Len() < 5 {
-		return fmt.Errorf("pack: short block header list, length %d", buf.Len())
+		return fmt.Errorf("block: short block header list, length %d", buf.Len())
 	}
 
 	// read and check version byte
 	b, _ := buf.ReadByte()
-	if b != HeaderVersion {
-		return fmt.Errorf("pack: invalid block header list version %d", b)
+	if b != headerListVersion {
+		return fmt.Errorf("block: invalid block header list version %d", b)
 	}
 
 	// read slice length
@@ -73,12 +74,11 @@ func (h *HeaderList) Decode(buf *bytes.Buffer) error {
 	return nil
 }
 
-func NewHeader(typ BlockType, comp Compression, scale int, flags BlockFlags) Header {
+func NewHeader(typ BlockType, comp Compression, scale int) Header {
 	h := Header{
 		Type:        typ,
 		Compression: comp,
 		Scale:       scale,
-		Flags:       flags,
 	}
 	switch typ {
 	case BlockTime:
@@ -133,15 +133,13 @@ func NewHeader(typ BlockType, comp Compression, scale int, flags BlockFlags) Hea
 	return h
 }
 func (h Header) Clone() Header {
-	// block header data must be valid (only applies to v2 blocks!)
-	if h.MinValue == nil || h.MaxValue == nil {
-		return Header{}
-	}
 	cp := Header{
 		Type:        h.Type,
 		Compression: h.Compression,
 		Scale:       h.Scale,
-		Flags:       h.Flags,
+	}
+	if h.MinValue == nil || h.MaxValue == nil {
+		return cp
 	}
 	switch h.Type {
 	case BlockTime:
@@ -261,12 +259,12 @@ func (h Header) EncodedSize() int {
 func (h Header) Encode(buf *bytes.Buffer) error {
 	// 8                 7 6          5 4 3 2 1
 	// ext header flag   compression  block type
-	buf.WriteByte(byte(h.Type&0x1f) | byte(h.Compression&0x3)<<5 | 0x80)
+	buf.WriteByte(byte(h.Type)&blockTypeMask | (byte(h.Compression)&blockCompressionMask)<<5 | 0x80)
 
 	// extension header
-	// - 6 lower bits are used for storing precision
-	// - 2 upper bits are flags
-	buf.WriteByte((byte(h.Flags)&0x3)<<6 | byte(h.Scale)&0x3f)
+	// - 7 lower bits are used for storing scale (0..127)
+	// - 1 upper bits is extension flag (currently unused)
+	buf.WriteByte(byte(h.Scale) & blockScaleMask)
 
 	switch h.Type {
 	case BlockTime:
@@ -392,7 +390,7 @@ func (h Header) Encode(buf *bytes.Buffer) error {
 		return nil
 
 	default:
-		return fmt.Errorf("pack: invalid data type %d", h.Type)
+		return fmt.Errorf("block: invalid data type %d", h.Type)
 	}
 	return nil
 }
@@ -412,7 +410,6 @@ func (h *Header) Decode(buf *bytes.Buffer) error {
 	if val[0]&0x80 > 0 {
 		val = buf.Next(1)
 		h.Scale = readBlockScale(val)
-		h.Flags = readBlockFlags(val)
 	}
 
 	switch h.Type {
@@ -481,11 +478,11 @@ func (h *Header) Decode(buf *bytes.Buffer) error {
 	case BlockString:
 		min, err := buf.ReadString(0)
 		if err != nil {
-			return fmt.Errorf("pack: reading min string block header: %v", err)
+			return fmt.Errorf("block: reading min string block header: %v", err)
 		}
 		max, err := buf.ReadString(0)
 		if err != nil {
-			return fmt.Errorf("pack: reading max string block header: %v", err)
+			return fmt.Errorf("block: reading max string block header: %v", err)
 		}
 		// don't reference buffer data!
 		mincopy := min[:len(min)-1]
@@ -496,12 +493,12 @@ func (h *Header) Decode(buf *bytes.Buffer) error {
 	case BlockBytes:
 		length, err := binary.ReadUvarint(buf)
 		if err != nil {
-			return fmt.Errorf("pack: reading min []byte block header: %v", err)
+			return fmt.Errorf("block: reading min []byte block header: %v", err)
 		}
 		min := buf.Next(int(length))
 		length, err = binary.ReadUvarint(buf)
 		if err != nil {
-			return fmt.Errorf("pack: reading max []byte block header: %v", err)
+			return fmt.Errorf("block: reading max []byte block header: %v", err)
 		}
 		max := buf.Next(int(length))
 
@@ -524,7 +521,7 @@ func (h *Header) Decode(buf *bytes.Buffer) error {
 		h.MaxValue = vec.Int256FromBytes(v[32:64])
 
 	default:
-		return fmt.Errorf("pack: invalid data type %d", h.Type)
+		return fmt.Errorf("block: invalid data type %d", h.Type)
 	}
 
 	return nil
