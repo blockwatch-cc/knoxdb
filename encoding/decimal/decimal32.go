@@ -5,6 +5,7 @@ package decimal
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -39,15 +40,10 @@ func (d Decimal32) IsZero() bool {
 
 func (d Decimal32) Check() (bool, error) {
 	if d.scale < 0 {
-		return false, fmt.Errorf("decimal32: invalid negative scale %d", d.scale)
+		return false, ErrScaleUnderflow
 	}
 	if d.scale > MaxDecimal32Precision {
-		return false, fmt.Errorf("decimal32: scale %d overflow", d.scale)
-	}
-	if d.scale > 0 && d.val > 0 {
-		if p := digits64(int64(d.val)); p < d.scale {
-			return false, fmt.Errorf("decimal32: scale %d larger than value digits %d", d.scale, p)
-		}
+		return false, ErrScaleOverflow
 	}
 	return true, nil
 }
@@ -73,6 +69,9 @@ func (d Decimal32) Quantize(scale int) Decimal32 {
 	}
 	if scale > MaxDecimal32Precision {
 		scale = MaxDecimal32Precision
+	}
+	if scale < 0 {
+		scale = 0
 	}
 	if d.IsZero() {
 		return Decimal32{0, scale}
@@ -116,10 +115,10 @@ func (d Decimal32) Int256() Int256 {
 
 func (d *Decimal32) SetInt64(value int64, scale int) error {
 	if scale < 0 {
-		return fmt.Errorf("decimal32: scale %d underflow", scale)
+		return ErrScaleUnderflow
 	}
 	if scale > MaxDecimal32Precision {
-		return fmt.Errorf("decimal32: scale %d overflow", scale)
+		return ErrScaleOverflow
 	}
 	d.scale = scale
 	d.val = int32(value)
@@ -136,10 +135,19 @@ func (d Decimal32) Float64() float64 {
 
 func (d *Decimal32) SetFloat64(value float64, scale int) error {
 	if scale < 0 {
-		return fmt.Errorf("decimal32: scale %d underflow", scale)
+		return ErrScaleUnderflow
 	}
 	if scale > MaxDecimal32Precision {
-		return fmt.Errorf("decimal32: scale %d overflow", scale)
+		return ErrScaleOverflow
+	}
+	// handle special cases
+	switch {
+	case math.IsNaN(value):
+		return ErrInvalidFloat64
+	case math.IsInf(value, 1):
+		return ErrPrecisionOverflow
+	case math.IsInf(value, -1):
+		return ErrPrecisionUnderflow
 	}
 	sign := int64(1)
 	if value < 0 {
@@ -152,6 +160,18 @@ func (d *Decimal32) SetFloat64(value float64, scale int) error {
 	if rem > 0.5 || rem == 0.5 && i*sign%2 == 1 {
 		i += sign
 	}
+
+	// check against min/max
+	if sign > 0 {
+		if i > 1<<31-1 {
+			return ErrPrecisionOverflow
+		}
+	} else {
+		if i < -1<<31 {
+			return ErrPrecisionUnderflow
+		}
+	}
+
 	d.val = int32(i)
 	d.scale = scale
 	return nil
@@ -162,12 +182,25 @@ func (d Decimal32) String() string {
 	case 0:
 		return strconv.FormatInt(int64(d.val), 10)
 	default:
-		i := strconv.FormatInt(int64(d.val)/int64(pow10[d.scale]), 10)
-		f := strconv.FormatUint(abs(int64(d.val))%pow10[d.scale], 10)
-		if diff := d.scale - len(f); diff > 0 {
-			f = strings.Repeat("0", diff) + f
+		var b strings.Builder
+		if d.val>>31 != 0 {
+			b.WriteRune('-')
 		}
-		return i + "." + f
+		i := strconv.FormatUint(abs(int64(d.val)), 10)
+		diff := d.scale - len(i)
+		if diff >= 0 {
+			// 0.00001 (scale=5)
+			// add leading zeros
+			b.WriteString("0.")
+			b.WriteString(strings.Repeat("0", diff))
+			b.WriteString(i)
+		} else {
+			// 1234.56789 (scale=5)
+			b.WriteString(i[:len(i)-d.scale])
+			b.WriteRune('.')
+			b.WriteString(i[len(i)-d.scale:])
+		}
+		return b.String()
 	}
 }
 
@@ -176,68 +209,91 @@ func (d Decimal32) MarshalText() ([]byte, error) {
 }
 
 func (d *Decimal32) UnmarshalText(buf []byte) error {
+	if len(buf) == 0 {
+		return fmt.Errorf("decimal: empty string")
+	}
 	s := string(buf)
+	scale := len(s)
+	var (
+		i, dpos, ncount   int
+		sawdot, sawdigits bool
+		val               uint64
+	)
 
 	// handle sign
 	sign := int32(1)
-	switch s[0] {
+	switch s[i] {
 	case '+':
-		s = s[1:]
+		i++
+		scale--
 	case '-':
 		sign = -1
-		s = s[1:]
+		i++
+		scale--
 	}
 
-	// find the decimal dot
-	dot := strings.IndexByte(s, '.')
-
-	// remove the dot
-	scale := len(s) - dot - 1
-	if dot < 0 {
-		scale = 0
-	} else {
-		if scale > MaxDecimal32Precision {
-			return fmt.Errorf("decimal32: number %s overflows precision", s)
+loop:
+	for ; i < len(s); i++ {
+		switch c := s[i]; true {
+		case c == '.':
+			if sawdot {
+				break loop
+			}
+			if !sawdigits {
+				return ErrInvalidDecimal
+			}
+			sawdot = true
+			dpos = ncount
+			scale--
+			continue
+		case '0' <= c && c <= '9':
+			sawdigits = true
+			if c == '0' && ncount == 0 { // ignore leading zeros
+				dpos--
+				scale--
+				continue
+			}
+			ncount++
+			val *= 10
+			val += uint64(c - '0')
+			continue
 		}
-		s = s[:dot] + s[dot+1:]
+		break
+	}
+	if !sawdigits || i < len(s) || dpos == ncount {
+		return ErrInvalidDecimal
 	}
 
-	// parse number
-	i, err := strconv.ParseInt(s, 10, 32)
-	if err != nil {
-		return fmt.Errorf("decimal32: %v", err)
+	// adjust scale by dot position
+	if sawdot {
+		scale -= dpos
+	} else {
+		scale = 0
+	}
+
+	// check limits
+	if scale > MaxDecimal32Precision {
+		return ErrScaleOverflow
+	}
+	if sign > 0 {
+		if val > 1<<31-1 {
+			return ErrPrecisionOverflow
+		}
+	} else {
+		if val > 1<<31 {
+			return ErrPrecisionUnderflow
+		}
 	}
 
 	d.scale = scale
-	d.val = int32(i) * sign
-
+	d.val = int32(val) * sign
 	return nil
 }
 
 func ParseDecimal32(s string) (Decimal32, error) {
-	dec := NewDecimal32(0, 0)
-	if _, err := dec.Check(); err != nil {
-		return dec, err
-	}
-	if err := dec.UnmarshalText([]byte(s)); err != nil {
-		return dec, err
-	}
-	return dec, nil
-}
-
-func (d Decimal32) Eq(b Decimal32) bool {
-	return d.scale == b.scale && d.val == b.val
-}
-
-func (a Decimal32) Cmp(b Decimal32) int {
-	switch true {
-	case a.Lt(b):
-		return -1
-	case a.Eq(b):
-		return 0
-	default:
-		return 1
-	}
+	var dec Decimal32
+	err := dec.UnmarshalText([]byte(s))
+	return dec, err
 }
 
 func EqualScaleDecimal32(a, b Decimal32) (Decimal32, Decimal32) {
@@ -249,6 +305,11 @@ func EqualScaleDecimal32(a, b Decimal32) (Decimal32, Decimal32) {
 	default:
 		return a.Quantize(b.scale), b
 	}
+}
+
+func (a Decimal32) Eq(b Decimal32) bool {
+	x, y := EqualScaleDecimal32(a, b)
+	return x.val == y.val
 }
 
 func (a Decimal32) Gt(b Decimal32) bool {
@@ -269,4 +330,15 @@ func (a Decimal32) Lt(b Decimal32) bool {
 func (a Decimal32) Lte(b Decimal32) bool {
 	x, y := EqualScaleDecimal32(a, b)
 	return x.val <= y.val
+}
+
+func (a Decimal32) Cmp(b Decimal32) int {
+	switch true {
+	case a.Lt(b):
+		return -1
+	case a.Eq(b):
+		return 0
+	default:
+		return 1
+	}
 }

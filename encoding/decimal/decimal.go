@@ -13,10 +13,20 @@
 package decimal
 
 import (
+	"errors"
 	"regexp"
 )
 
 var decimalRegexp = regexp.MustCompile("^[+-]?([0-9]*[.])?[0-9]+$")
+
+var (
+	ErrScaleOverflow      = errors.New("decimal: scale overflow")
+	ErrScaleUnderflow     = errors.New("decimal: scale underflow")
+	ErrPrecisionOverflow  = errors.New("decimal: precision overflow")
+	ErrPrecisionUnderflow = errors.New("decimal: precision underflow")
+	ErrInvalidFloat64     = errors.New("decimal: invalid float64 number")
+	ErrInvalidDecimal     = errors.New("decimal: invalid decimal number")
+)
 
 const (
 	MinDecimal32Precision  = 1
@@ -59,7 +69,7 @@ func abs(n int64) uint64 {
 
 func digits64(val int64) int {
 	for i := range pow10 {
-		if abs(val) > pow10[i] {
+		if abs(val) >= pow10[i] {
 			continue
 		}
 		return i

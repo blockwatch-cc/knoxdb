@@ -4,7 +4,6 @@
 package decimal
 
 import (
-	"fmt"
 	"strings"
 
 	. "blockwatch.cc/knoxdb/vec"
@@ -38,15 +37,10 @@ func (d Decimal128) IsZero() bool {
 
 func (d Decimal128) Check() (bool, error) {
 	if d.scale < 0 {
-		return false, fmt.Errorf("decimal128: invalid negative scale %d", d.scale)
+		return false, ErrScaleUnderflow
 	}
 	if d.scale > MaxDecimal128Precision {
-		return false, fmt.Errorf("decimal128: scale %d overflow", d.scale)
-	}
-	if d.scale > 0 && !d.val.IsZero() {
-		if p := d.val.Precision(); p < d.scale {
-			return false, fmt.Errorf("decimal128: scale %d larger than value digits %d", d.scale, p)
-		}
+		return false, ErrScaleOverflow
 	}
 	return true, nil
 }
@@ -92,6 +86,9 @@ func (d Decimal128) Quantize(scale int) Decimal128 {
 	}
 	if scale > MaxDecimal128Precision {
 		scale = MaxDecimal128Precision
+	}
+	if scale < 0 {
+		scale = 0
 	}
 	if d.IsZero() {
 		return Decimal128{Int128Zero, scale}
@@ -141,10 +138,10 @@ func (d Decimal128) Int256() Int256 {
 
 func (d *Decimal128) SetInt64(value int64, scale int) error {
 	if scale < 0 {
-		return fmt.Errorf("decimal128: scale %d underflow", scale)
+		return ErrScaleUnderflow
 	}
 	if scale > MaxDecimal128Precision {
-		return fmt.Errorf("decimal128: scale %d overflow", scale)
+		return ErrScaleOverflow
 	}
 	d.scale = scale
 	d.val.SetInt64(value)
@@ -153,10 +150,10 @@ func (d *Decimal128) SetInt64(value int64, scale int) error {
 
 func (d *Decimal128) SetInt128(value Int128, scale int) error {
 	if scale < 0 {
-		return fmt.Errorf("decimal128: scale %d underflow", scale)
+		return ErrScaleUnderflow
 	}
 	if scale > MaxDecimal128Precision {
-		return fmt.Errorf("decimal128: scale %d overflow", scale)
+		return ErrScaleOverflow
 	}
 	d.scale = scale
 	d.val = value
@@ -180,10 +177,10 @@ func (d Decimal128) Float64() float64 {
 
 func (d *Decimal128) SetFloat64(value float64, scale int) error {
 	if scale < 0 {
-		return fmt.Errorf("decimal128: scale %d underflow", scale)
+		return ErrScaleUnderflow
 	}
 	if scale > MaxDecimal128Precision {
-		return fmt.Errorf("decimal128: scale %d overflow", scale)
+		return ErrScaleOverflow
 	}
 	if scale > 0 {
 		l := len(pow10)
@@ -192,17 +189,46 @@ func (d *Decimal128) SetFloat64(value float64, scale int) error {
 		}
 		value *= float64(pow10[scale%l+1])
 	}
-	d.val.SetFloat64(value)
+	var i128 Int128
+	acc := i128.SetFloat64(value)
+	switch acc {
+	case Below:
+		return ErrPrecisionUnderflow
+	case Above:
+		return ErrPrecisionOverflow
+	}
+	d.val = i128
 	d.scale = scale
 	return nil
 }
 
 func (d Decimal128) String() string {
-	s := d.val.String()
-	if d.scale == 0 || d.val.IsZero() {
-		return s
+	i := d.val.String()
+	switch d.scale {
+	case 0:
+		return i
+	default:
+		var b strings.Builder
+		sign := 0
+		if i[0] == '-' {
+			b.WriteRune('-')
+			sign = 1
+		}
+		diff := d.scale - len(i) - sign
+		if diff >= 0 {
+			// 0.00001 (scale=5)
+			// add leading zeros
+			b.WriteString("0.")
+			b.WriteString(strings.Repeat("0", diff))
+			b.WriteString(i[sign:])
+		} else {
+			// 1234.56789 (scale=5)
+			b.WriteString(i[sign : len(i)-d.scale+sign])
+			b.WriteRune('.')
+			b.WriteString(i[len(i)+sign-d.scale:])
+		}
+		return b.String()
 	}
-	return s[:len(s)-d.scale] + "." + s[len(s)-d.scale:]
 }
 
 func (d Decimal128) MarshalText() ([]byte, error) {
@@ -235,7 +261,7 @@ func (d *Decimal128) UnmarshalText(buf []byte) error {
 		scale = 0
 	} else {
 		if scale > MaxDecimal128Precision {
-			return fmt.Errorf("decimal128: number %s overflows precision", s)
+			return ErrPrecisionOverflow
 		}
 		s = s[:dot] + s[dot+1:]
 	}
@@ -243,7 +269,7 @@ func (d *Decimal128) UnmarshalText(buf []byte) error {
 	// parse number
 	i, err := ParseInt128(sign + s)
 	if err != nil {
-		return fmt.Errorf("decimal128: %v", err)
+		return err
 	}
 
 	d.scale = scale
@@ -252,22 +278,9 @@ func (d *Decimal128) UnmarshalText(buf []byte) error {
 }
 
 func ParseDecimal128(s string) (Decimal128, error) {
-	dec := NewDecimal128(Int128{}, 0)
-	if _, err := dec.Check(); err != nil {
-		return dec, err
-	}
-	if err := dec.UnmarshalText([]byte(s)); err != nil {
-		return dec, err
-	}
-	return dec, nil
-}
-
-func (d Decimal128) Eq(b Decimal128) bool {
-	return d.scale == b.scale && d.val == b.val
-}
-
-func (a Decimal128) Cmp(b Decimal128) int {
-	return a.val.Cmp(b.val)
+	var dec Decimal128
+	err := dec.UnmarshalText([]byte(s))
+	return dec, err
 }
 
 func EqualScaleDecimal128(a, b Decimal128) (Decimal128, Decimal128) {
@@ -279,6 +292,11 @@ func EqualScaleDecimal128(a, b Decimal128) (Decimal128, Decimal128) {
 	default:
 		return a.Quantize(b.scale), b
 	}
+}
+
+func (a Decimal128) Eq(b Decimal128) bool {
+	x, y := EqualScaleDecimal128(a, b)
+	return x.val.Eq(y.val)
 }
 
 func (a Decimal128) Gt(b Decimal128) bool {
@@ -299,4 +317,9 @@ func (a Decimal128) Lt(b Decimal128) bool {
 func (a Decimal128) Lte(b Decimal128) bool {
 	x, y := EqualScaleDecimal128(a, b)
 	return x.val.Lte(y.val)
+}
+
+func (a Decimal128) Cmp(b Decimal128) int {
+	x, y := EqualScaleDecimal128(a, b)
+	return x.val.Cmp(y.val)
 }
