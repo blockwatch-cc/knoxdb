@@ -4,7 +4,7 @@
 // +build go1.7,amd64,!gccgo,!appengine
 
 #include "textflag.h"
-#include "constants.h"
+#include "constants_AVX2.h"
 
 // func matchInt16EqualAVX2(src []int16, val int16, bits []byte) int64
 //

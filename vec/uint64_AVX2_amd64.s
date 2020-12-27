@@ -4,7 +4,7 @@
 // +build go1.7,amd64,!gccgo,!appengine
 
 #include "textflag.h"
-#include "constants.h"
+#include "constants_AVX2.h"
 
 // func matchUint64EqualAVX2(src []uint64, val uint64, bits []byte) int64
 //
@@ -35,7 +35,7 @@ TEXT ·matchUint64EqualAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -215,7 +215,7 @@ TEXT ·matchUint64NotEqualAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -400,7 +400,7 @@ prep_avx:
 	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -635,7 +635,7 @@ prep_avx:
 	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -872,7 +872,7 @@ prep_avx:
 	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -1107,7 +1107,7 @@ prep_avx:
 	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -1356,7 +1356,7 @@ prep_avx:
 	VPADDQ			Y13, Y0, Y0
 	VPXOR			Y11, Y0, Y0                     // flip sign bit
 	VMOVDQU			crosslane<>+0x00(SB), Y9        // load permute control mask
-	VMOVDQU			shuffle64_new<>+0x00(SB), Y10       // load shuffle control mask
+	VMOVDQU			shuffle64<>+0x00(SB), Y10       // load shuffle control mask
 
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small

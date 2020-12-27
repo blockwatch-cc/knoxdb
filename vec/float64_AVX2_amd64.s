@@ -4,7 +4,7 @@
 // +build go1.7,amd64,!gccgo,!appengine
 
 #include "textflag.h"
-#include "constants.h"
+#include "constants_AVX2.h"
 
 // func matchFloat64EqualAVX2(src []float64, val float64, bits []byte) int64
 //
@@ -35,7 +35,7 @@ TEXT ·matchFloat64EqualAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -47,7 +47,7 @@ prep_big:
     ADDQ    CX, DI                      // move DI to the end of the array
     NEGQ    CX
 
-// works for >= 32 float64 (i.e. 256 bytes of data)
+// works for >= 64 float64 (i.e. 512 bytes of data)
 loop_big:
 	VCMPPD		$0, 0(SI), Y0, Y1          // imm8 = $0 (equal, nosignal)
 	VCMPPD		$0, 32(SI), Y0, Y2
@@ -216,7 +216,7 @@ TEXT ·matchFloat64NotEqualAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -228,7 +228,7 @@ prep_big:
     ADDQ    CX, DI                      // move DI to the end of the array
     NEGQ    CX
 
-// works for >= 32 float64 (i.e. 256 bytes of data)
+// works for >= 64 float64 (i.e. 512 bytes of data)
 loop_big:
 	VCMPPD		$0x04, 0(SI), Y0, Y1          // imm8 = $0x04 (not equal, nosignal)
 	VCMPPD		$0x04, 32(SI), Y0, Y2
@@ -398,7 +398,7 @@ TEXT ·matchFloat64LessThanAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -410,7 +410,7 @@ prep_big:
     ADDQ    CX, DI                      // move DI to the end of the array
     NEGQ    CX
 
-// works for >= 32 float64 (i.e. 256 bytes of data)
+// works for >= 64 float64 (i.e. 512 bytes of data)
 // Note: we switch operand order and use the opposite
 // test (GT instead of LT) to save one op per vector
 loop_big:
@@ -580,7 +580,7 @@ TEXT ·matchFloat64LessThanEqualAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -592,7 +592,7 @@ prep_big:
     ADDQ    CX, DI                      // move DI to the end of the array
     NEGQ    CX
 
-// works for >= 32 float64 (i.e. 256 bytes of data)
+// works for >= 64 float64 (i.e. 512 bytes of data)
 // Note: we switch operand order and use the opposite
 // test (GTE instead of LTE) to save one op per vector
 loop_big:
@@ -762,7 +762,7 @@ TEXT ·matchFloat64GreaterThanAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -774,7 +774,7 @@ prep_big:
     ADDQ    CX, DI                      // move DI to the end of the array
     NEGQ    CX
 
-// works for >= 32 float64 (i.e. 256 bytes of data)
+// works for >= 64 float64 (i.e. 512 bytes of data)
 // Note: we switch operand order and use the opposite
 // test (LT instead of GT) to save one op per vector
 loop_big:
@@ -944,7 +944,7 @@ TEXT ·matchFloat64GreaterThanEqualAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle64_new<>+0x00(SB), Y10    // load shuffle control mask
+	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
 
@@ -956,7 +956,7 @@ prep_big:
     ADDQ    CX, DI                      // move DI to the end of the array
     NEGQ    CX
 
-// works for >= 32 float64 (i.e. 256 bytes of data)
+// works for >= 64 float64 (i.e. 512 bytes of data)
 // Note: we switch operand order and use the opposite
 // test (LTE instead of GTE) to save one op per vector
 loop_big:
@@ -1130,7 +1130,7 @@ prep_avx:
 	VBROADCASTSD a+24(FP), Y0            // load val a into AVX2 reg
 	VBROADCASTSD b+32(FP), Y11           // load val b into AVX2 reg
 	VMOVDQU			crosslane<>+0x00(SB), Y9        // load permute control mask
-	VMOVDQU			shuffle64_new<>+0x00(SB), Y10       // load shuffle control mask
+	VMOVDQU			shuffle64<>+0x00(SB), Y10       // load shuffle control mask
 
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
 	JBE		prep_small
@@ -1143,7 +1143,7 @@ prep_big:
     ADDQ    CX, DI                      // move DI to the end of the array
     NEGQ    CX
 
-// works for >= 32 float64 (i.e. 256 bytes of data)
+// works for >= 64 float64 (i.e. 512 bytes of data)
 // Note: we load values into vector registers because we need
 // to perform two comparisons and merge their results with AND
 // because there is no simple range check formula or instruction
