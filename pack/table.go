@@ -2029,7 +2029,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 
 	// before scanning packs, add 'new' rows from journal (i.e. pk > maxPackedPk),
 	// walk in descending order
-	for idx, length := jbits.Run(jbits.Size() - 1); idx >= 0; idx, length = jbits.Run(idx - length) {
+	for idx, length := jbits.Run(jbits.Len() - 1); idx >= 0; idx, length = jbits.Run(idx - length) {
 		for i := idx; i > idx-length; i-- {
 			// skip broken entries
 			pkid, err := t.journal.Uint64At(t.journal.pkindex, i)
@@ -2082,7 +2082,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 
 			// identify and copy matches
 			bits := q.Conditions.MatchPack(pkg).Reverse()
-			for idx, length := bits.Run(bits.Size() - 1); idx >= 0; idx, length = bits.Run(idx - length) {
+			for idx, length := bits.Run(bits.Len() - 1); idx >= 0; idx, length = bits.Run(idx - length) {
 				for i := idx; i > idx-length; i-- {
 					// skip broken entries
 					pkid, err := pkg.Uint64At(pkg.pkindex, i)
@@ -2463,7 +2463,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	// walk in descending order
 	res.pkg = t.journal
 
-	for idx, length := jbits.Run(jbits.Size() - 1); idx >= 0; idx, length = jbits.Run(idx - length) {
+	for idx, length := jbits.Run(jbits.Len() - 1); idx >= 0; idx, length = jbits.Run(idx - length) {
 		for i := idx; i > idx-length; i-- {
 			// skip broken entries
 			pkid, err := t.journal.Uint64At(t.journal.pkindex, i)
@@ -2515,7 +2515,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 
 			// identify and forward matches
 			bits := q.Conditions.MatchPack(pkg).Reverse()
-			for idx, length := bits.Run(bits.Size() - 1); idx >= 0; idx, length = bits.Run(idx - length) {
+			for idx, length := bits.Run(bits.Len() - 1); idx >= 0; idx, length = bits.Run(idx - length) {
 				for i := idx; i > idx-length; i-- {
 					// skip broken entries
 					pkid, err := pkg.Uint64At(pkg.pkindex, i)

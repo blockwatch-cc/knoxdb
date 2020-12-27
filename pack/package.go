@@ -362,7 +362,10 @@ func (p *Package) Push(v interface{}) error {
 		case FieldTypeDatetime:
 			b.Int64 = append(b.Int64, f.Interface().(time.Time).UnixNano())
 		case FieldTypeBoolean:
-			b.Bools = append(b.Bools, f.Bool())
+			b.Bits.Grow(b.Bits.Len() + 1)
+			if f.Bool() {
+				b.Bits.Set(b.Bits.Len())
+			}
 		case FieldTypeFloat64:
 			b.Float64 = append(b.Float64, f.Float())
 		case FieldTypeFloat32:
@@ -454,7 +457,11 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			b.Int64[pos] = f.Interface().(time.Time).UnixNano()
 
 		case FieldTypeBoolean:
-			b.Bools[pos] = f.Bool()
+			if f.Bool() {
+				b.Bits.Set(pos)
+			} else {
+				b.Bits.Clear(pos)
+			}
 
 		case FieldTypeFloat64:
 			b.Float64[pos] = f.Float()
@@ -590,7 +597,7 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst.Set(reflect.ValueOf(time.Unix(0, b.Int64[pos]).UTC()))
 
 		case FieldTypeBoolean:
-			dst.SetBool(b.Bools[pos])
+			dst.SetBool(b.Bits.IsSet(pos))
 
 		case FieldTypeFloat64:
 			dst.SetFloat(b.Float64[pos])
@@ -698,7 +705,7 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 		return val, nil
 
 	case FieldTypeBoolean:
-		return b.Bools[pos], nil
+		return b.Bits.IsSet(pos), nil
 
 	case FieldTypeFloat64:
 		return b.Float64[pos], nil
@@ -796,7 +803,11 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 		b.Int64[pos] = val.Interface().(time.Time).UnixNano()
 
 	case FieldTypeBoolean:
-		b.Bools[pos] = val.Bool()
+		if val.Bool() {
+			b.Bits.Set(pos)
+		} else {
+			b.Bits.Clear(pos)
+		}
 
 	case FieldTypeFloat64:
 		b.Float64[pos] = val.Float()
@@ -978,7 +989,7 @@ func (p *Package) BoolAt(index, pos int) (bool, error) {
 	if err := p.isValidAt(index, pos, FieldTypeBoolean); err != nil {
 		return false, err
 	}
-	return p.blocks[index].Bools[pos], nil
+	return p.blocks[index].Bits.IsSet(pos), nil
 }
 
 func (p *Package) TimeAt(index, pos int) (time.Time, error) {
@@ -1143,7 +1154,7 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 			// materialize
 			out[i] = time.Unix(0, b.Int64[pos]).UTC()
 		case FieldTypeBoolean:
-			out[i] = b.Bools[pos]
+			out[i] = b.Bits.IsSet(pos)
 		case FieldTypeFloat64:
 			out[i] = b.Float64[pos]
 		case FieldTypeFloat32:
@@ -1213,7 +1224,7 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		}
 		return res, nil
 	case FieldTypeBoolean:
-		return b.Bools[start:end], nil
+		return b.Bits.ToSlice()[start:end], nil
 	case FieldTypeFloat64:
 		return b.Float64[start:end], nil
 	case FieldTypeFloat32:
@@ -1297,7 +1308,7 @@ func (p *Package) CopyFrom(srcPack *Package, dstPos, srcPos, srcLen int) error {
 			copy(dst.Strings[dstPos:], src.Strings[srcPos:srcPos+n])
 
 		case FieldTypeBoolean:
-			copy(dst.Bools[dstPos:], src.Bools[srcPos:srcPos+n])
+			dst.Bits.CopyFrom(src.Bits, srcPos, srcLen, dstPos)
 
 		case FieldTypeFloat64:
 			copy(dst.Float64[dstPos:], src.Float64[srcPos:srcPos+n])
@@ -1418,7 +1429,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 			dst.Strings = append(dst.Strings, src.Strings[srcPos:srcPos+srcLen]...)
 
 		case FieldTypeBoolean:
-			dst.Bools = append(dst.Bools, src.Bools[srcPos:srcPos+srcLen]...)
+			dst.Bits.AppendFrom(src.Bits, srcPos, srcLen)
 
 		case FieldTypeFloat64:
 			dst.Float64 = append(dst.Float64, src.Float64[srcPos:srcPos+srcLen]...)
@@ -1522,7 +1533,7 @@ func (p *Package) Append() error {
 			b.Strings = append(b.Strings, "")
 
 		case FieldTypeBoolean:
-			b.Bools = append(b.Bools, false)
+			b.Bits.Grow(b.Bits.Len() + 1)
 
 		case FieldTypeFloat64:
 			b.Float64 = append(b.Float64, 0)
@@ -1589,7 +1600,7 @@ func (p *Package) Grow(n int) error {
 			b.Strings = append(b.Strings, make([]string, n)...)
 
 		case FieldTypeBoolean:
-			b.Bools = append(b.Bools, make([]bool, n)...)
+			b.Bits.Grow(b.Bits.Len() + n)
 
 		case FieldTypeFloat64:
 			b.Float64 = append(b.Float64, make([]float64, n)...)
@@ -1667,7 +1678,7 @@ func (p *Package) Delete(pos, n int) error {
 			b.Strings = append(b.Strings[:pos], b.Strings[pos+n:]...)
 
 		case FieldTypeBoolean:
-			b.Bools = append(b.Bools[:pos], b.Bools[pos+n:]...)
+			b.Bits.Delete(pos, n)
 
 		case FieldTypeFloat64:
 			b.Float64 = append(b.Float64[:pos], b.Float64[pos+n:]...)
@@ -1857,7 +1868,7 @@ func (p *PackageSorter) Less(i, j int) bool {
 		return b.Strings[i] < b.Strings[j]
 
 	case FieldTypeBoolean:
-		return !b.Bools[i] && b.Bools[j]
+		return !b.Bits.IsSet(i) && b.Bits.IsSet(j)
 
 	case FieldTypeFloat64:
 		return b.Float64[i] < b.Float64[j]
@@ -1915,7 +1926,7 @@ func (p *PackageSorter) Swap(i, j int) {
 			b.Strings[i], b.Strings[j] = b.Strings[j], b.Strings[i]
 
 		case FieldTypeBoolean:
-			b.Bools[i], b.Bools[j] = b.Bools[j], b.Bools[i]
+			b.Bits.Swap(i, j)
 
 		case FieldTypeFloat64:
 			b.Float64[i], b.Float64[j] = b.Float64[j], b.Float64[i]

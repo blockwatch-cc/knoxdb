@@ -48,12 +48,42 @@ func NewBitSetFromBytes(buf []byte, size int) *BitSet {
 	return s
 }
 
+func (s *BitSet) SetFromBytes(buf []byte, size int) *BitSet {
+	if s.size > size {
+		s.Zero()
+	}
+	if cap(s.buf) < len(buf) {
+		s.buf = make([]byte, len(buf))
+	}
+	s.size = size
+	s.buf = s.buf[:len(buf)]
+	copy(s.buf, buf)
+	s.cnt = -1
+	s.isReverse = false
+	return s
+}
+
 func makeBitSet(size int) *BitSet {
 	return &BitSet{
 		buf:  make([]byte, bitFieldLen(size)),
 		cnt:  0,
 		size: size,
 	}
+}
+
+func (s *BitSet) Grow(size int) *BitSet {
+	if size < 0 {
+		return s
+	}
+	sz := bitFieldLen(size)
+	if s.buf == nil || cap(s.buf) < sz {
+		buf := make([]byte, sz)
+		copy(buf, s.buf)
+		s.buf = buf
+	} else {
+		s.buf = s.buf[:sz]
+	}
+	return s
 }
 
 func (s *BitSet) Resize(size int) *BitSet {
@@ -195,6 +225,35 @@ func (s *BitSet) IsSet(i int) bool {
 	return (s.buf[i>>3] & mask) > 0
 }
 
+func (s *BitSet) CopyFrom(src *BitSet, srcPos, srcLen, dstPos int) *BitSet {
+	if dstPos+srcLen > s.size {
+		s.Grow(dstPos + srcLen)
+	}
+	// TODO
+	// if srcPos &0x7 > 0 {
+	// 	// copy with mask
+	// 	if srcLen < 8 {
+
+	// 	}
+	// }
+	return s
+}
+
+func (s *BitSet) AppendFrom(src *BitSet, srcPos, srcLen int) *BitSet {
+	// TODO
+	return s
+}
+
+func (s *BitSet) Delete(pos, n int) *BitSet {
+	// TODO
+	return s
+}
+
+func (s *BitSet) Swap(i, j int) *BitSet {
+	// TODO
+	return s
+}
+
 func (s *BitSet) Reverse() *BitSet {
 	bitsetReverse(s.buf)
 	s.isReverse = !s.isReverse
@@ -217,8 +276,24 @@ func (s *BitSet) Count() int64 {
 	return s.cnt
 }
 
-func (s BitSet) Size() int {
+func (s BitSet) Len() int {
 	return s.size
+}
+
+func (s BitSet) Cap() int {
+	return cap(s.buf) * 8
+}
+
+func (s BitSet) HeapSize() int {
+	return cap(s.buf) + 24 + 16 + 1
+}
+
+func (s BitSet) EncodedSize() int {
+	sz := s.size / 8
+	if s.size&7 > 0 {
+		sz++
+	}
+	return sz
 }
 
 // Run returns the index and length of the next consecutive
@@ -239,4 +314,24 @@ func (b BitSet) Run(index int) (int, int) {
 		return start, length
 	}
 	return bitsetRun(b.buf, index, b.size)
+}
+
+func (s BitSet) ToSlice() []bool {
+	res := make([]bool, s.size)
+	for i, l := 0, s.size-s.size%8; i < l; i += 8 {
+		b := s.buf[i>>3]
+		res[i] = b&0x80 > 0
+		res[i+1] = b&0x40 > 0
+		res[i+2] = b&0x20 > 0
+		res[i+3] = b&0x10 > 0
+		res[i+4] = b&0x08 > 0
+		res[i+5] = b&0x04 > 0
+		res[i+6] = b&0x02 > 0
+		res[i+7] = b&0x01 > 0
+	}
+	// tail
+	for i := s.size & ^0x7; i < s.size; i++ {
+		res[i] = s.buf[i>>3]&byte(1<<uint(7-i&0x7)) > 0
+	}
+	return res
 }

@@ -9,6 +9,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+
+	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -18,7 +20,58 @@ const (
 
 	// booleanCompressedBitPacked is an bit packed format using 1 bit per boolean
 	booleanCompressedBitPacked = 1
+
+	// TODO
+	// integer compressions simple8, ?
 )
+
+func BitsetEncodedSize(b *vec.BitSet) int {
+	return b.EncodedSize() + 1 + binary.MaxVarintLen64
+}
+
+func BitsetEncodeAll(src *vec.BitSet, w io.Writer) (bool, bool, error) {
+	// Store the encoding type in the 4 high bits of the first byte
+	w.Write([]byte{booleanCompressedBitPacked << 4})
+
+	// Encode the number of bits written.
+	var b [binary.MaxVarintLen64]byte
+	i := binary.PutUvarint(b[:], uint64(src.Len()))
+	w.Write(b[:i])
+
+	// write raw bitset data
+	w.Write(src.Bytes())
+
+	if src.Count() > 0 {
+		return false, true, nil
+	}
+	return false, false, nil
+}
+
+func BitsetDecodeAll(b []byte, dst *vec.BitSet) (*vec.BitSet, error) {
+	if len(b) == 0 {
+		return dst, nil
+	}
+
+	// First byte stores the encoding type, only have 1 bit-packet format
+	// currently ignore for now.
+	b = b[1:]
+	val, n := binary.Uvarint(b)
+	if n <= 0 {
+		return nil, fmt.Errorf("pack: BitsetDecoder invalid count")
+	}
+
+	if dst.Cap() < int(val) {
+		dst.Close()
+		dst = nil
+	}
+
+	if dst == nil {
+		dst = vec.NewBitSetFromBytes(b[n:], int(val))
+	} else {
+		dst.SetFromBytes(b[n:], int(val))
+	}
+	return dst, nil
+}
 
 func BooleanArrayEncodedSize(src []bool) int {
 	n := len(src)
@@ -26,7 +79,7 @@ func BooleanArrayEncodedSize(src []bool) int {
 	if n&7 > 0 {
 		sz++
 	}
-	return sz + 1
+	return sz + 1 + binary.MaxVarintLen64
 }
 
 // BooleanArrayEncodeAll encodes src into b, returning b and any error encountered.

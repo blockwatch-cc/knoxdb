@@ -122,7 +122,7 @@ type Block struct {
 	// data interface{}
 	Strings []string
 	Bytes   [][]byte
-	Bools   []bool  // -> BitSet
+	Bits    *BitSet // -> BitSet
 	Int64   []int64 // re-used by Decimal64, Timestamps
 	Int32   []int32 // re-used by Decimal32
 	Int16   []int16
@@ -197,7 +197,7 @@ func (b Block) RawSlice() interface{} {
 	case BlockUint8:
 		return b.Uint8
 	case BlockBool:
-		return b.Bools
+		return b.Bits.ToSlice()
 	case BlockString:
 		return b.Strings
 	case BlockBytes:
@@ -234,7 +234,7 @@ func (b Block) RangeSlice(start, end int) interface{} {
 	case BlockUint8:
 		return b.Uint8[start:end]
 	case BlockBool:
-		return b.Bools[start:end]
+		return b.Bits.ToSlice()[start:end]
 	case BlockString:
 		return b.Strings[start:end]
 	case BlockBytes:
@@ -317,11 +317,7 @@ func NewBlock(typ BlockType, sz int, comp Compression, scale int) (*Block, error
 			b.Uint8 = make([]uint8, 0, sz)
 		}
 	case BlockBool:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Bools = boolPool.Get().([]bool)
-		} else {
-			b.Bools = make([]bool, 0, sz)
-		}
+		b.Bits = NewBitSet(sz)
 	case BlockString:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Strings = stringPool.Get().([]string)
@@ -512,18 +508,9 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 		}
 	case BlockBool:
 		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Bools = boolPool.Get().([]bool)[:sz]
-			} else {
-				cp.Bools = make([]bool, sz)
-			}
-			copy(cp.Bools, b.Bools)
+			cp.Bits = NewBitSetFromBytes(b.Bits.Bytes(), b.Bits.Len())
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Bools = boolPool.Get().([]bool)[:0]
-			} else {
-				cp.Bools = make([]bool, 0, sz)
-			}
+			cp.Bits = NewBitSet(sz)
 		}
 	case BlockString:
 		if copydata {
@@ -617,7 +604,7 @@ func (b *Block) Len() int {
 	case BlockUint8:
 		return len(b.Uint8)
 	case BlockBool:
-		return len(b.Bools)
+		return b.Bits.Len()
 	case BlockString:
 		return len(b.Strings)
 	case BlockBytes:
@@ -654,7 +641,7 @@ func (b *Block) Cap() int {
 	case BlockUint8:
 		return cap(b.Uint8)
 	case BlockBool:
-		return cap(b.Bools)
+		return b.Bits.Cap()
 	case BlockString:
 		return cap(b.Strings)
 	case BlockBytes:
@@ -698,7 +685,7 @@ func (b *Block) MaxStoredSize() int {
 	case BlockUint8:
 		sz = compress.Uint8ArrayEncodedSize(b.Uint8)
 	case BlockBool:
-		sz = compress.BooleanArrayEncodedSize(b.Bools)
+		sz = compress.BitsetEncodedSize(b.Bits)
 	case BlockString:
 		sz = compress.StringArrayEncodedSize(b.Strings)
 	case BlockBytes:
@@ -740,7 +727,7 @@ func (b *Block) HeapSize() int {
 	case BlockUint8:
 		sz += len(b.Uint8) + 2
 	case BlockBool:
-		sz += len(b.Bools)*1 + 2
+		sz += b.Bits.HeapSize() + 2
 	case BlockString:
 		min, max := 0, 0
 		for _, v := range b.Strings {
@@ -801,7 +788,7 @@ func (b *Block) Clear() {
 		}
 		b.Bytes = b.Bytes[:0]
 	case BlockBool:
-		b.Bools = b.Bools[:0]
+		b.Bits.Zero()
 	case BlockInt128:
 		b.Int128 = b.Int128[:0]
 	case BlockInt256:
@@ -866,10 +853,8 @@ func (b *Block) Release() {
 		}
 		b.Uint8 = nil
 	case BlockBool:
-		if cap(b.Bools) == DefaultMaxPointsPerBlock {
-			boolPool.Put(b.Bools[:0])
-		}
-		b.Bools = nil
+		b.Bits.Close()
+		b.Bits = nil
 	case BlockString:
 		for j, _ := range b.Strings {
 			b.Strings[j] = ""
@@ -1051,7 +1036,7 @@ func (b *Block) EncodeBody() ([]byte, error) {
 		}
 
 	case BlockBool:
-		min, max, err := encodeBoolBlock(buf, b.Bools, b.Compression())
+		min, max, err := encodeBoolBlock(buf, b.Bits, b.Compression())
 		if err != nil {
 			return nil, err
 		}
@@ -1223,12 +1208,12 @@ func (b *Block) DecodeBody(buf []byte, sz int) error {
 		b.Uint8, err = decodeUint8Block(buf, b.Uint8)
 
 	case BlockBool:
-		if b.Bools == nil || cap(b.Bools) < sz {
-			b.Bools = make([]bool, 0, sz)
+		if b.Bits == nil || b.Bits.Cap() < sz {
+			b.Bits = NewBitSet(sz)
 		} else {
-			b.Bools = b.Bools[:0]
+			b.Bits.Resize(sz)
 		}
-		b.Bools, err = decodeBoolBlock(buf, b.Bools)
+		b.Bits, err = decodeBoolBlock(buf, b.Bits)
 
 	case BlockString:
 		if b.Strings == nil || cap(b.Strings) < sz {

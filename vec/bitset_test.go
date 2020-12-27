@@ -716,7 +716,7 @@ func TestBitSetNew(T *testing.T) {
 		if got, want := len(bits.Bytes()), len(c.source); got != want {
 			T.Errorf("%s: unexpected buf length %d, expected %d", c.name, got, want)
 		}
-		if got, want := bits.Size(), c.size; got != want {
+		if got, want := bits.Len(), c.size; got != want {
 			T.Errorf("%s: unexpected size %d, expected %d", c.name, got, want)
 		}
 		if got, want := bits.Count(), int64(0); got != want {
@@ -731,7 +731,7 @@ func TestBitSetFromBytes(T *testing.T) {
 		if got, want := len(bits.Bytes()), len(c.source); got != want {
 			T.Errorf("%s: unexpected buf length %d, expected %d", c.name, got, want)
 		}
-		if got, want := bits.Size(), c.size; got != want {
+		if got, want := bits.Len(), c.size; got != want {
 			T.Errorf("%s: unexpected size %d, expected %d", c.name, got, want)
 		}
 		if got, want := bits.Count(), c.count; got != want {
@@ -750,7 +750,7 @@ func TestBitSetOne(T *testing.T) {
 		if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
 			T.Errorf("%d: unexpected buf length %d, expected %d", sz, got, want)
 		}
-		if got, want := bits.Size(), sz; got != want {
+		if got, want := bits.Len(), sz; got != want {
 			T.Errorf("%d: unexpected size %d, expected %d", sz, got, want)
 		}
 		if got, want := bits.Count(), int64(sz); got != want {
@@ -771,7 +771,7 @@ func TestBitSetZero(T *testing.T) {
 		if got, want := len(bits.Bytes()), len(c.source); got != want {
 			T.Errorf("%s: unexpected buf length %d, expected %d", c.name, got, want)
 		}
-		if got, want := bits.Size(), c.size; got != want {
+		if got, want := bits.Len(), c.size; got != want {
 			T.Errorf("%s: unexpected size %d, expected %d", c.name, got, want)
 		}
 		if got, want := bits.Count(), int64(0); got != want {
@@ -793,7 +793,7 @@ func TestBitSetResize(T *testing.T) {
 			if got, want := len(bits.Bytes()), bitFieldLen(sznew); got != want {
 				T.Errorf("%d_%d: unexpected buf length %d, expected %d", sz, sznew, got, want)
 			}
-			if got, want := bits.Size(), sznew; got != want {
+			if got, want := bits.Len(), sznew; got != want {
 				T.Errorf("%d_%d: unexpected size %d, expected %d", sz, sznew, got, want)
 			}
 			if got, want := bits.Count(), int64(0); got != want {
@@ -817,7 +817,7 @@ func TestBitSetFill(T *testing.T) {
 			if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
 				T.Errorf("%d_%x: unexpected buf length %d, expected %d", sz, pt, got, want)
 			}
-			if got, want := bits.Size(), sz; got != want {
+			if got, want := bits.Len(), sz; got != want {
 				T.Errorf("%d_%x: unexpected size %d, expected %d", sz, pt, got, want)
 			}
 			if got, want := bits.Count(), popcount(cmp); got != want {
@@ -954,7 +954,7 @@ func TestBitSetReverse(T *testing.T) {
 			if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
 				T.Errorf("%d_%x: unexpected buf length %d, expected %d", sz, pt, got, want)
 			}
-			if got, want := bits.Size(), sz; got != want {
+			if got, want := bits.Len(), sz; got != want {
 				T.Errorf("%d_%x: unexpected size %d, expected %d", sz, pt, got, want)
 			}
 			if got, want := bits.Count(), popcount(cmp); got != want {
@@ -968,7 +968,7 @@ func TestBitSetReverse(T *testing.T) {
 			if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
 				T.Errorf("%d_%x: unexpected buf length %d, expected %d", sz, pt, got, want)
 			}
-			if got, want := bits.Size(), sz; got != want {
+			if got, want := bits.Len(), sz; got != want {
 				T.Errorf("%d_%x: unexpected size %d, expected %d", sz, pt, got, want)
 			}
 			if got, want := bits.Count(), popcount(cmp); got != want {
@@ -1508,7 +1508,7 @@ func TestBitSetRunGeneric(T *testing.T) {
 		bits := NewBitSetFromBytes(c.buf, c.size)
 		var idx, length int
 		for i, r := range c.runs {
-			idx, length = bitsetRunGeneric(bits.Bytes(), idx+length, bits.Size())
+			idx, length = bitsetRunGeneric(bits.Bytes(), idx+length, bits.Len())
 			if got, want := idx, r[0]; got != want {
 				T.Errorf("%s_%d: unexpected index %d, expected %d", c.name, i, got, want)
 			}
@@ -1527,7 +1527,7 @@ func TestBitSetRunReverse(T *testing.T) {
 		bits := NewBitSetFromBytes(c.buf, c.size)
 		bits.Reverse()
 		var length int
-		idx := bits.Size() - 1
+		idx := bits.Len() - 1
 		for i, r := range c.rruns {
 			idx, length = bits.Run(idx - length)
 			if got, want := idx, r[0]; got != want {
@@ -1549,7 +1549,7 @@ func TestBitSetRunAVX2(T *testing.T) {
 		bits := NewBitSetFromBytes(c.buf, c.size)
 		var idx, length int
 		for i, r := range c.runs {
-			idx, length = bitsetRunAVX2Wrapper(bits.Bytes(), idx+length, bits.Size())
+			idx, length = bitsetRunAVX2Wrapper(bits.Bytes(), idx+length, bits.Len())
 			if got, want := idx, r[0]; got != want {
 				T.Errorf("%s_%d: unexpected index %d, expected %d", c.name, i, got, want)
 			}

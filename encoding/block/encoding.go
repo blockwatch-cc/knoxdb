@@ -944,14 +944,14 @@ func decodeUint8Block(block []byte, dst []uint8) ([]uint8, error) {
 	return dst, err
 }
 
-func encodeBoolBlock(buf *bytes.Buffer, val []bool, comp Compression) (bool, bool, error) {
-	if len(val) == 0 {
+func encodeBoolBlock(buf *bytes.Buffer, val *vec.BitSet, comp Compression) (bool, bool, error) {
+	if val.Len() == 0 {
 		return false, false, writeEmptyBlock(buf, BlockBool)
 	}
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockBool))
 	w := getWriter(buf, comp)
-	min, max, err := compress.BooleanArrayEncodeAll(val, w)
+	min, max, err := compress.BitsetEncodeAll(val, w)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -963,12 +963,12 @@ func encodeBoolBlock(buf *bytes.Buffer, val []bool, comp Compression) (bool, boo
 	return min, max, err
 }
 
-func decodeBoolBlock(block []byte, dst []bool) ([]bool, error) {
+func decodeBoolBlock(block []byte, dst *vec.BitSet) (*vec.BitSet, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockBool)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compress.BooleanArrayDecodeAll(buf, dst)
+	b, err := compress.BitsetDecodeAll(buf, dst)
 	if canRecycle && cap(buf) == BlockSizeHint {
 		BlockEncoderPool.Put(buf[:0])
 	}
