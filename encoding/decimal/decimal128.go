@@ -4,12 +4,14 @@
 package decimal
 
 import (
+	"fmt"
+	"math"
 	"strings"
 
 	. "blockwatch.cc/knoxdb/vec"
 )
 
-var Decimal128Zero = Decimal128{Int128Zero, 0}
+var Decimal128Zero = Decimal128{ZeroInt128, 0}
 
 // 38 digits
 type Decimal128 struct {
@@ -50,25 +52,32 @@ func (d Decimal128) Scale() int {
 }
 
 func (d Decimal128) Precision() int {
-	if d.val.IsInt64() {
-		val := d.val.Int64()
+	switch {
+	case d.val.IsInt64():
+		v := abs(d.val.Int64())
 		for i := range pow10 {
-			if abs(val) > pow10[i] {
+			if v >= pow10[i] {
 				continue
 			}
 			return i
 		}
-	}
-	pow := Int128FromInt64(1e18)
-	q, r := d.val.Abs().QuoRem(pow)
-	for p := 0; ; p += 18 {
-		if q.IsZero() {
-			for i := r.Int64(); i != 0; i /= 10 {
-				p++
+	case d.val == MinInt128:
+		return 39
+	default:
+		pow := Int128{0, 1e18}
+		q, r := d.val.Abs().QuoRem(pow)
+		for p := 0; ; p += 18 {
+			if q.IsZero() {
+				v := abs(r.Int64())
+				for i := range pow10 {
+					if v >= pow10[i] {
+						continue
+					}
+					return p + i
+				}
 			}
-			return p
+			q, r = q.QuoRem(pow)
 		}
-		q, r = q.QuoRem(pow)
 	}
 	return 0
 }
@@ -91,26 +100,29 @@ func (d Decimal128) Quantize(scale int) Decimal128 {
 		scale = 0
 	}
 	if d.IsZero() {
-		return Decimal128{Int128Zero, scale}
+		return Decimal128{ZeroInt128, scale}
 	}
 	diff := d.scale - scale
-	l := len(pow10)
+	l := len(pow10) - 2
 	if diff < 0 {
+		val := d.val
 		for i := -diff / l; i > 0; i-- {
-			d.val = d.val.Mul64(int64(pow10[l-1]))
+			val = val.Mul64(int64(pow10[l]))
 			diff += l
 		}
-		d.val = d.val.Mul64(int64(pow10[-diff]))
+		val = val.Mul64(int64(pow10[-diff]))
+		d.val = val
 		d.scale = scale
 	} else {
 		sign := d.val.Sign()
-		y := Int128FromInt64(int64(pow10[diff%l]))
+		y := Int128{0, pow10[diff%l]}
 		for i := diff / l; i > 0; i-- {
-			y = y.Mul64(int64(pow10[l-1]))
+			y = y.Mul64(int64(pow10[l]))
 		}
 		// IEEE 754-2008 roundTiesToEven
 		quo, rem := d.val.QuoRem(y)
-		mid := y.Div64(2)
+		mid := y.Div64(2).Abs()
+		rem = rem.Abs()
 		if rem.Gt(mid) || rem.Eq(mid) && quo[1]%2 == 1 {
 			if sign > 0 {
 				quo = quo.Add64(1)
@@ -182,12 +194,21 @@ func (d *Decimal128) SetFloat64(value float64, scale int) error {
 	if scale > MaxDecimal128Precision {
 		return ErrScaleOverflow
 	}
+	// handle special cases
+	switch {
+	case math.IsNaN(value):
+		return ErrInvalidFloat64
+	case math.IsInf(value, 1):
+		return ErrPrecisionOverflow
+	case math.IsInf(value, -1):
+		return ErrPrecisionUnderflow
+	}
 	if scale > 0 {
-		l := len(pow10)
+		l := len(pow10) - 1
 		for i := scale / l; i > 0; i-- {
-			value *= float64(pow10[l-1])
+			value *= float64(pow10[l])
 		}
-		value *= float64(pow10[scale%l+1])
+		value *= float64(pow10[scale%l])
 	}
 	var i128 Int128
 	acc := i128.SetFloat64(value)
@@ -209,23 +230,24 @@ func (d Decimal128) String() string {
 		return i
 	default:
 		var b strings.Builder
+		b.Grow(MaxDecimal128Precision + 2)
 		sign := 0
 		if i[0] == '-' {
 			b.WriteRune('-')
 			sign = 1
 		}
-		diff := d.scale - len(i) - sign
+		diff := d.scale - len(i) + sign
 		if diff >= 0 {
 			// 0.00001 (scale=5)
 			// add leading zeros
 			b.WriteString("0.")
-			b.WriteString(strings.Repeat("0", diff))
+			b.WriteString(zeros[:diff])
 			b.WriteString(i[sign:])
 		} else {
 			// 1234.56789 (scale=5)
-			b.WriteString(i[sign : len(i)-d.scale+sign])
+			b.WriteString(i[sign : len(i)-d.scale])
 			b.WriteRune('.')
-			b.WriteString(i[len(i)+sign-d.scale:])
+			b.WriteString(i[len(i)-d.scale:])
 		}
 		return b.String()
 	}
@@ -236,44 +258,91 @@ func (d Decimal128) MarshalText() ([]byte, error) {
 }
 
 func (d *Decimal128) UnmarshalText(buf []byte) error {
-	if len(buf) == 0 {
-		d.scale = 0
-		d.val = Int128Zero
-		return nil
+	l := len(buf)
+	if l == 0 {
+		return fmt.Errorf("decimal: empty string")
 	}
 
-	s := string(buf)
+	var (
+		scale             = l
+		i, dpos, ncount   int
+		sawdot, sawdigits bool
+		val               Int128
+	)
 
 	// handle sign
-	var sign string
-	switch s[0] {
-	case '+', '-':
-		sign = string(s[0])
-		s = s[1:]
+	var sign int
+	switch buf[i] {
+	case '+':
+		i++
+		scale--
+	case '-':
+		sign = -1
+		i++
+		scale--
 	}
 
-	// find the decimal dot
-	dot := strings.IndexByte(s, '.')
-
-	// remove the dot
-	scale := len(s) - dot - 1
-	if dot < 0 {
-		scale = 0
-	} else {
-		if scale > MaxDecimal128Precision {
-			return ErrPrecisionOverflow
+loop:
+	for ; i < l; i++ {
+		switch c := buf[i]; true {
+		case c == '.':
+			if sawdot {
+				break loop
+			}
+			if !sawdigits {
+				return ErrInvalidDecimal
+			}
+			sawdot = true
+			dpos = ncount
+			scale--
+			continue
+		case '0' <= c && c <= '9':
+			sawdigits = true
+			if c == '0' && ncount == 0 { // ignore leading zeros
+				dpos--
+				scale--
+				continue
+			}
+			ncount++
+			// value is accumulated as positive int256
+			val = val.Mul64(10)
+			val = val.Add64(uint64(c - '0'))
+			if sign < 0 {
+				// Note: since val is +int256, MinInt256 woul overflow
+				if val[0] > 1<<63 || (val[0] == 1<<63 && val[1] > 0) {
+					return ErrPrecisionUnderflow
+				}
+			} else {
+				if val[0] > 1<<63-1 {
+					return ErrPrecisionOverflow
+				}
+			}
+			continue
 		}
-		s = s[:dot] + s[dot+1:]
+		break
+	}
+	if !sawdigits || i < l || dpos == ncount {
+		return ErrInvalidDecimal
 	}
 
-	// parse number
-	i, err := ParseInt128(sign + s)
-	if err != nil {
-		return err
+	// adjust scale by dot position
+	if sawdot {
+		scale -= dpos
+	} else {
+		scale = 0
+	}
+
+	// check limits
+	if scale > MaxDecimal128Precision {
+		return ErrScaleOverflow
+	}
+
+	if sign < 0 {
+		val = val.Neg()
 	}
 
 	d.scale = scale
-	d.val = i
+	d.val = val
 	return nil
 }
 

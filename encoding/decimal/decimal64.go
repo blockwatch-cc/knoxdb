@@ -172,6 +172,7 @@ func (d Decimal64) String() string {
 		return strconv.FormatInt(d.val, 10)
 	default:
 		var b strings.Builder
+		b.Grow(MaxDecimal64Precision + 2)
 		if d.val>>63 != 0 {
 			b.WriteRune('-')
 		}
@@ -181,7 +182,7 @@ func (d Decimal64) String() string {
 			// 0.00001 (scale=5)
 			// add leading zeros
 			b.WriteString("0.")
-			b.WriteString(strings.Repeat("0", diff))
+			b.WriteString(zeros[:diff])
 			b.WriteString(i)
 		} else {
 			// 1234.56789 (scale=5)
@@ -201,9 +202,8 @@ func (d *Decimal64) UnmarshalText(buf []byte) error {
 	if len(buf) == 0 {
 		return fmt.Errorf("decimal: empty string")
 	}
-	s := string(buf)
 
-	scale := len(s)
+	scale := len(buf)
 	var (
 		i, dpos, ncount   int
 		sawdot, sawdigits bool
@@ -212,7 +212,7 @@ func (d *Decimal64) UnmarshalText(buf []byte) error {
 
 	// handle sign
 	sign := int64(1)
-	switch s[i] {
+	switch buf[i] {
 	case '+':
 		i++
 		scale--
@@ -223,8 +223,8 @@ func (d *Decimal64) UnmarshalText(buf []byte) error {
 	}
 
 loop:
-	for ; i < len(s); i++ {
-		switch c := s[i]; true {
+	for ; i < len(buf); i++ {
+		switch c := buf[i]; true {
 		case c == '.':
 			if sawdot {
 				break loop
@@ -250,7 +250,7 @@ loop:
 		}
 		break
 	}
-	if !sawdigits || i < len(s) || dpos == ncount {
+	if !sawdigits || i < len(buf) || dpos == ncount {
 		return ErrInvalidDecimal
 	}
 
