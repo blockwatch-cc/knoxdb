@@ -1224,7 +1224,7 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		}
 		return res, nil
 	case FieldTypeBoolean:
-		return b.Bits.ToSlice()[start:end], nil
+		return b.Bits.SubSlice(start, end-start), nil
 	case FieldTypeFloat64:
 		return b.Float64[start:end], nil
 	case FieldTypeFloat32:
@@ -1266,10 +1266,10 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 	}
 }
 
-// CopyFrom replaces at most srcLen rows from the current package starting at
+// ReplaceFrom replaces at most srcLen rows from the current package starting at
 // offset dstPos with rows from package src starting at pos srcPos.
 // Both packages must have same block order.
-func (p *Package) CopyFrom(srcPack *Package, dstPos, srcPos, srcLen int) error {
+func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) error {
 	if srcPack.nFields != p.nFields {
 		return fmt.Errorf("pack: invalid src/dst field count %d/%d", srcPack.nFields, p.nFields)
 	}
@@ -1308,7 +1308,7 @@ func (p *Package) CopyFrom(srcPack *Package, dstPos, srcPos, srcLen int) error {
 			copy(dst.Strings[dstPos:], src.Strings[srcPos:srcPos+n])
 
 		case FieldTypeBoolean:
-			dst.Bits.CopyFrom(src.Bits, srcPos, srcLen, dstPos)
+			dst.Bits.Replace(src.Bits, srcPos, srcLen, dstPos)
 
 		case FieldTypeFloat64:
 			copy(dst.Float64[dstPos:], src.Float64[srcPos:srcPos+n])
@@ -1429,7 +1429,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 			dst.Strings = append(dst.Strings, src.Strings[srcPos:srcPos+srcLen]...)
 
 		case FieldTypeBoolean:
-			dst.Bits.AppendFrom(src.Bits, srcPos, srcLen)
+			dst.Bits.Append(src.Bits, srcPos, srcLen)
 
 		case FieldTypeFloat64:
 			dst.Float64 = append(dst.Float64, src.Float64[srcPos:srcPos+srcLen]...)

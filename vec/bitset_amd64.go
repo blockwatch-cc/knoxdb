@@ -37,7 +37,7 @@ func bitsetAnd(dst, src []byte, size int) {
 	switch {
 	case useAVX2:
 		bitsetAndAVX2(dst, src)
-		dst[len(dst)-1] &= bitmask(size)
+		dst[len(dst)-1] &= bytemask(size)
 	default:
 		bitsetAndGeneric(dst, src, size)
 	}
@@ -47,7 +47,7 @@ func bitsetAndNot(dst, src []byte, size int) {
 	switch {
 	case useAVX2:
 		bitsetAndNotAVX2(dst, src)
-		dst[len(dst)-1] &= bitmask(size)
+		dst[len(dst)-1] &= bytemask(size)
 	default:
 		bitsetAndNotGeneric(dst, src, size)
 	}
@@ -57,7 +57,7 @@ func bitsetOr(dst, src []byte, size int) {
 	switch {
 	case useAVX2:
 		bitsetOrAVX2(dst, src)
-		dst[len(dst)-1] &= bitmask(size)
+		dst[len(dst)-1] &= bytemask(size)
 	default:
 		bitsetOrGeneric(dst, src, size)
 	}
@@ -67,7 +67,7 @@ func bitsetXor(dst, src []byte, size int) {
 	switch {
 	case useAVX2:
 		bitsetXorAVX2(dst, src)
-		dst[len(dst)-1] &= bitmask(size)
+		dst[len(dst)-1] &= bytemask(size)
 	default:
 		bitsetXorGeneric(dst, src, size)
 	}
@@ -77,7 +77,7 @@ func bitsetNeg(src []byte, size int) {
 	switch {
 	case useAVX2:
 		bitsetNegAVX2(src)
-		src[len(src)-1] &= bitmask(size)
+		src[len(src)-1] &= bytemask(size)
 	default:
 		bitsetNegGeneric(src, size)
 	}
@@ -100,12 +100,12 @@ func bitsetPopCount(src []byte, size int) int64 {
 		case size == 0:
 			return 0
 		case size <= 8:
-			return int64(bitsetLookup[src[0]&bitmask(size)])
+			return int64(bitsetLookup[src[0]&bytemask(size)])
 		case size&0x7 == 0:
 			return bitsetPopCountAVX2(src)
 		default:
 			cnt := bitsetPopCountAVX2(src[:len(src)-1])
-			return cnt + int64(bitsetLookup[src[len(src)-1]&bitmask(size)])
+			return cnt + int64(bitsetLookup[src[len(src)-1]&bytemask(size)])
 		}
 	default:
 		return bitsetPopCountGeneric(src, size)

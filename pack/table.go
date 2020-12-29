@@ -1421,7 +1421,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				}
 
 				// overwrite original
-				if err := pkg.CopyFrom(t.journal, offs, jpos, 1); err != nil {
+				if err := pkg.ReplaceFrom(t.journal, offs, jpos, 1); err != nil {
 					return err
 				}
 				nUpd++

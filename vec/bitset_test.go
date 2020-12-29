@@ -11,6 +11,7 @@ package vec
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"math/bits"
 	"math/rand"
@@ -108,7 +109,7 @@ func fillBitset(buf []byte, size int, val byte) []byte {
 	for bp := 1; bp < len(buf); bp *= 2 {
 		copy(buf[bp:], buf[:bp])
 	}
-	buf[len(buf)-1] &= bitmask(size)
+	buf[len(buf)-1] &= bytemask(size)
 	return buf
 }
 
@@ -126,6 +127,7 @@ func TestBitSetPopCountGeneric(T *testing.T) {
 		cnt := bitsetPopCountGeneric(c.source, c.size)
 		if got, want := cnt, c.count; got != want {
 			T.Errorf("%s: unexpected count %d, expected %d", c.name, got, want)
+			return
 		}
 	}
 	for _, sz := range bitSetSizes {
@@ -133,6 +135,7 @@ func TestBitSetPopCountGeneric(T *testing.T) {
 			buf := fillBitset(nil, sz, pt)
 			if got, want := bitsetPopCountGeneric(buf, sz), popcount(buf); got != want {
 				T.Errorf("%d_%x: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -140,13 +143,14 @@ func TestBitSetPopCountGeneric(T *testing.T) {
 
 func TestBitSetPopCountAVX2(T *testing.T) {
 	if !useAVX2 {
-		return
+		T.SkipNow()
 	}
 	for _, c := range bitSetCases {
 		// call the function selector to do proper last byte masking!
 		cnt := bitsetPopCount(c.source, c.size)
 		if got, want := cnt, c.count; got != want {
 			T.Errorf("%s: unexpected count %d, expected %d", c.name, got, want)
+			return
 		}
 	}
 	for _, sz := range bitSetSizes {
@@ -155,6 +159,7 @@ func TestBitSetPopCountAVX2(T *testing.T) {
 			// call the function selector to do proper last byte masking!
 			if got, want := bitsetPopCount(buf, sz), popcount(buf); got != want {
 				T.Errorf("%d_%x: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -172,9 +177,11 @@ func TestBitAndGeneric(T *testing.T) {
 			bitsetAndGeneric(dst, dst, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_dst===src: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_dst===src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// same value, other slice
@@ -182,9 +189,11 @@ func TestBitAndGeneric(T *testing.T) {
 			bitsetAndGeneric(dst, src, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_dst==src: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_dst==src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// all zeros
@@ -192,9 +201,11 @@ func TestBitAndGeneric(T *testing.T) {
 			bitsetAndGeneric(dst, zeros, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_zeros: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_zeros: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// all ones
@@ -202,9 +213,11 @@ func TestBitAndGeneric(T *testing.T) {
 			bitsetAndGeneric(dst, ones, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_ones: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_ones: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -219,9 +232,11 @@ func TestBitAndGeneric(T *testing.T) {
 		bitsetAndGeneric(dst, dst, sz)
 		if bytes.Compare(dst, src) != 0 {
 			T.Errorf("%d_%s_dst===src: unexpected result %x, expected %x", sz, c.name, dst, src)
+			return
 		}
 		if got, want := popcount(dst), popcount(src); got != want {
 			T.Errorf("%d_%s_dst===src: unexpected count %d, expected %d", sz, c.name, got, want)
+			return
 		}
 
 		// same value, other slice
@@ -229,9 +244,11 @@ func TestBitAndGeneric(T *testing.T) {
 		bitsetAndGeneric(dst, src, sz)
 		if bytes.Compare(dst, src) != 0 {
 			T.Errorf("%d_%s_dst==src: unexpected result %x, expected %x", sz, c.name, dst, src)
+			return
 		}
 		if got, want := popcount(dst), popcount(src); got != want {
 			T.Errorf("%d_%s_dst==src: unexpected count %d, expected %d", sz, c.name, got, want)
+			return
 		}
 
 		// all zeros
@@ -239,9 +256,11 @@ func TestBitAndGeneric(T *testing.T) {
 		bitsetAndGeneric(dst, zeros, sz)
 		if bytes.Compare(dst, zeros) != 0 {
 			T.Errorf("%d_%s_zeros: unexpected result %x, expected %x", sz, c.name, dst, zeros)
+			return
 		}
 		if got, want := popcount(dst), int64(0); got != want {
 			T.Errorf("%d_%s_zeros: unexpected count %d, expected %d", sz, c.name, got, want)
+			return
 		}
 
 		// all ones
@@ -249,16 +268,18 @@ func TestBitAndGeneric(T *testing.T) {
 		bitsetAndGeneric(dst, ones, sz)
 		if bytes.Compare(dst, src) != 0 {
 			T.Errorf("%d_%s_ones: unexpected result %x, expected %x", sz, c.name, dst, src)
+			return
 		}
 		if got, want := popcount(dst), popcount(src); got != want {
 			T.Errorf("%d_%s_ones: unexpected count %d, expected %d", sz, c.name, got, want)
+			return
 		}
 	}
 }
 
 func TestBitAndAVX2(T *testing.T) {
 	if !useAVX2 {
-		return
+		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitSetSizes {
@@ -272,9 +293,11 @@ func TestBitAndAVX2(T *testing.T) {
 			bitsetAnd(dst, dst, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_dst===src: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_dst===src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// same value, other slice
@@ -282,9 +305,11 @@ func TestBitAndAVX2(T *testing.T) {
 			bitsetAnd(dst, src, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_dst==src: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_dst==src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// all zeros
@@ -292,9 +317,11 @@ func TestBitAndAVX2(T *testing.T) {
 			bitsetAnd(dst, zeros, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_zeros: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_zeros: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// all ones
@@ -302,9 +329,11 @@ func TestBitAndAVX2(T *testing.T) {
 			bitsetAnd(dst, ones, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_ones: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_ones: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -319,9 +348,11 @@ func TestBitAndAVX2(T *testing.T) {
 		bitsetAnd(dst, dst, sz)
 		if bytes.Compare(dst, src) != 0 {
 			T.Errorf("%d_%s_dst===src: unexpected result %x, expected %x", sz, c.name, dst, src)
+			return
 		}
 		if got, want := popcount(dst), popcount(src); got != want {
 			T.Errorf("%d_%s_dst===src: unexpected count %d, expected %d", sz, c.name, got, want)
+			return
 		}
 
 		// same value, other slice
@@ -329,9 +360,11 @@ func TestBitAndAVX2(T *testing.T) {
 		bitsetAnd(dst, src, sz)
 		if bytes.Compare(dst, src) != 0 {
 			T.Errorf("%d_%s_dst==src: unexpected result %x, expected %x", sz, c.name, dst, src)
+			return
 		}
 		if got, want := popcount(dst), popcount(src); got != want {
 			T.Errorf("%d_%s_dst==src: unexpected count %d, expected %d", sz, c.name, got, want)
+			return
 		}
 
 		// all zeros
@@ -339,9 +372,11 @@ func TestBitAndAVX2(T *testing.T) {
 		bitsetAnd(dst, zeros, sz)
 		if bytes.Compare(dst, zeros) != 0 {
 			T.Errorf("%d_%s_zeros: unexpected result %x, expected %x", sz, c.name, dst, zeros)
+			return
 		}
 		if got, want := popcount(dst), int64(0); got != want {
 			T.Errorf("%d_%s_zeros: unexpected count %d, expected %d", sz, c.name, got, want)
+			return
 		}
 
 		// all ones
@@ -349,9 +384,11 @@ func TestBitAndAVX2(T *testing.T) {
 		bitsetAnd(dst, ones, sz)
 		if bytes.Compare(dst, src) != 0 {
 			T.Errorf("%d_%s_ones: unexpected result %x, expected %x", sz, c.name, dst, src)
+			return
 		}
 		if got, want := popcount(dst), popcount(src); got != want {
 			T.Errorf("%d_%s_ones: unexpected count %d, expected %d", sz, c.name, got, want)
+			return
 		}
 	}
 }
@@ -368,9 +405,11 @@ func TestBitAndNotGeneric(T *testing.T) {
 			bitsetAndNotGeneric(dst, dst, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_dst===src: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_dst===src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// same value, other slice
@@ -378,9 +417,11 @@ func TestBitAndNotGeneric(T *testing.T) {
 			bitsetAndNotGeneric(dst, src, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_dst==src: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_dst==src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// val AND NOT zeros == val
@@ -388,9 +429,11 @@ func TestBitAndNotGeneric(T *testing.T) {
 			bitsetAndNotGeneric(dst, zeros, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_zeros: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_zeros: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// all AND NOT ones == zero
@@ -398,9 +441,11 @@ func TestBitAndNotGeneric(T *testing.T) {
 			bitsetAndNotGeneric(dst, ones, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_ones: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_ones: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -408,7 +453,7 @@ func TestBitAndNotGeneric(T *testing.T) {
 
 func TestBitAndNotAVX2(T *testing.T) {
 	if !useAVX2 {
-		return
+		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitSetSizes {
@@ -422,9 +467,11 @@ func TestBitAndNotAVX2(T *testing.T) {
 			bitsetAndNot(dst, dst, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_dst===src: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_dst===src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// same value, other slice
@@ -432,9 +479,11 @@ func TestBitAndNotAVX2(T *testing.T) {
 			bitsetAndNot(dst, src, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_dst==src: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_dst==src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// val AND NOT zeros == val
@@ -442,9 +491,11 @@ func TestBitAndNotAVX2(T *testing.T) {
 			bitsetAndNot(dst, zeros, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_zeros: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_zeros: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// all AND NOT ones == zero
@@ -452,9 +503,11 @@ func TestBitAndNotAVX2(T *testing.T) {
 			bitsetAndNot(dst, ones, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_ones: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_ones: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -472,9 +525,11 @@ func TestBitOrGeneric(T *testing.T) {
 			bitsetOrGeneric(dst, dst, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_dst===src: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_dst===src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// same value, other slice
@@ -482,9 +537,11 @@ func TestBitOrGeneric(T *testing.T) {
 			bitsetOrGeneric(dst, src, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_dst==src: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_dst==src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// val OR zeros == val
@@ -492,9 +549,11 @@ func TestBitOrGeneric(T *testing.T) {
 			bitsetOrGeneric(dst, zeros, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_zeros: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_zeros: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// all OR ones == ones
@@ -502,9 +561,11 @@ func TestBitOrGeneric(T *testing.T) {
 			bitsetOrGeneric(dst, ones, sz)
 			if bytes.Compare(dst, ones) != 0 {
 				T.Errorf("%d_%x_ones: unexpected result %x, expected %x", sz, pt, dst, ones)
+				return
 			}
 			if got, want := popcount(dst), popcount(ones); got != want {
 				T.Errorf("%d_%x_ones: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -512,7 +573,7 @@ func TestBitOrGeneric(T *testing.T) {
 
 func TestBitOrAVX2(T *testing.T) {
 	if !useAVX2 {
-		return
+		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitSetSizes {
@@ -526,9 +587,11 @@ func TestBitOrAVX2(T *testing.T) {
 			bitsetOr(dst, dst, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_dst===src: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_dst===src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// same value, other slice
@@ -536,9 +599,11 @@ func TestBitOrAVX2(T *testing.T) {
 			bitsetOr(dst, src, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_dst==src: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_dst==src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// val OR zeros == val
@@ -546,9 +611,11 @@ func TestBitOrAVX2(T *testing.T) {
 			bitsetOr(dst, zeros, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_zeros: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_zeros: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// all OR ones == ones
@@ -556,9 +623,11 @@ func TestBitOrAVX2(T *testing.T) {
 			bitsetOr(dst, ones, sz)
 			if bytes.Compare(dst, ones) != 0 {
 				T.Errorf("%d_%x_ones: unexpected result %x, expected %x", sz, pt, dst, ones)
+				return
 			}
 			if got, want := popcount(dst), popcount(ones); got != want {
 				T.Errorf("%d_%x_ones: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -576,9 +645,11 @@ func TestBitXorGeneric(T *testing.T) {
 			bitsetXorGeneric(dst, dst, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_dst===src: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_dst===src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// same value, other slice
@@ -586,9 +657,11 @@ func TestBitXorGeneric(T *testing.T) {
 			bitsetXorGeneric(dst, src, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_dst==src: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_dst==src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// val XOR zeros == val
@@ -596,9 +669,11 @@ func TestBitXorGeneric(T *testing.T) {
 			bitsetXorGeneric(dst, zeros, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_zeros: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_zeros: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// val XOR ones == neg(val)
@@ -607,9 +682,11 @@ func TestBitXorGeneric(T *testing.T) {
 			cmp := fillBitset(nil, sz, ^pt)
 			if bytes.Compare(dst, cmp) != 0 {
 				T.Errorf("%d_%x_ones: unexpected result %x, expected %x", sz, pt, dst, cmp)
+				return
 			}
 			if got, want := popcount(dst), popcount(cmp); got != want {
 				T.Errorf("%d_%x_ones: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -617,7 +694,7 @@ func TestBitXorGeneric(T *testing.T) {
 
 func TestBitXorAVX2(T *testing.T) {
 	if !useAVX2 {
-		return
+		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitSetSizes {
@@ -631,9 +708,11 @@ func TestBitXorAVX2(T *testing.T) {
 			bitsetXor(dst, dst, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_dst===src: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_dst===src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// same value, other slice
@@ -641,9 +720,11 @@ func TestBitXorAVX2(T *testing.T) {
 			bitsetXor(dst, src, sz)
 			if bytes.Compare(dst, zeros) != 0 {
 				T.Errorf("%d_%x_dst==src: unexpected result %x, expected %x", sz, pt, dst, zeros)
+				return
 			}
 			if got, want := popcount(dst), int64(0); got != want {
 				T.Errorf("%d_%x_dst==src: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// val XOR zeros == val
@@ -651,9 +732,11 @@ func TestBitXorAVX2(T *testing.T) {
 			bitsetXor(dst, zeros, sz)
 			if bytes.Compare(dst, src) != 0 {
 				T.Errorf("%d_%x_zeros: unexpected result %x, expected %x", sz, pt, dst, src)
+				return
 			}
 			if got, want := popcount(dst), popcount(src); got != want {
 				T.Errorf("%d_%x_zeros: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 
 			// val XOR ones == neg(val)
@@ -662,9 +745,11 @@ func TestBitXorAVX2(T *testing.T) {
 			cmp := fillBitset(nil, sz, ^pt)
 			if bytes.Compare(dst, cmp) != 0 {
 				T.Errorf("%d_%x_ones: unexpected result %x, expected %x", sz, pt, dst, cmp)
+				return
 			}
 			if got, want := popcount(dst), popcount(cmp); got != want {
 				T.Errorf("%d_%x_ones: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -679,9 +764,11 @@ func TestBitNegGeneric(T *testing.T) {
 			bitsetNegGeneric(src, sz)
 			if bytes.Compare(src, cmp) != 0 {
 				T.Errorf("%d_%x: unexpected result %x, expected %x", sz, pt, src, cmp)
+				return
 			}
 			if got, want := popcount(src), popcount(cmp); got != want {
 				T.Errorf("%d_%x: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -689,7 +776,7 @@ func TestBitNegGeneric(T *testing.T) {
 
 func TestBitNegAVX2(T *testing.T) {
 	if !useAVX2 {
-		return
+		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitSetSizes {
@@ -700,9 +787,11 @@ func TestBitNegAVX2(T *testing.T) {
 			bitsetNeg(src, sz)
 			if bytes.Compare(src, cmp) != 0 {
 				T.Errorf("%d_%x: unexpected result %x, expected %x", sz, pt, src, cmp)
+				return
 			}
 			if got, want := popcount(src), popcount(cmp); got != want {
 				T.Errorf("%d_%x: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 		}
 	}
@@ -715,12 +804,15 @@ func TestBitSetNew(T *testing.T) {
 		bits := NewBitSet(c.size)
 		if got, want := len(bits.Bytes()), len(c.source); got != want {
 			T.Errorf("%s: unexpected buf length %d, expected %d", c.name, got, want)
+			return
 		}
 		if got, want := bits.Len(), c.size; got != want {
 			T.Errorf("%s: unexpected size %d, expected %d", c.name, got, want)
+			return
 		}
 		if got, want := bits.Count(), int64(0); got != want {
 			T.Errorf("%s: unexpected count %d, expected %d", c.name, got, want)
+			return
 		}
 	}
 }
@@ -730,15 +822,19 @@ func TestBitSetFromBytes(T *testing.T) {
 		bits := NewBitSetFromBytes(c.source, c.size)
 		if got, want := len(bits.Bytes()), len(c.source); got != want {
 			T.Errorf("%s: unexpected buf length %d, expected %d", c.name, got, want)
+			return
 		}
 		if got, want := bits.Len(), c.size; got != want {
 			T.Errorf("%s: unexpected size %d, expected %d", c.name, got, want)
+			return
 		}
 		if got, want := bits.Count(), c.count; got != want {
 			T.Errorf("%s: unexpected count %d, expected %d", c.name, got, want)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), c.result) != 0 {
 			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits.Bytes(), c.source)
+			return
 		}
 	}
 }
@@ -749,17 +845,21 @@ func TestBitSetOne(T *testing.T) {
 		bits.One()
 		if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
 			T.Errorf("%d: unexpected buf length %d, expected %d", sz, got, want)
+			return
 		}
 		if got, want := bits.Len(), sz; got != want {
 			T.Errorf("%d: unexpected size %d, expected %d", sz, got, want)
+			return
 		}
 		if got, want := bits.Count(), int64(sz); got != want {
 			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		buf := bytes.Repeat([]byte{0xff}, bitFieldLen(sz)-1)
 		buf = append(buf, byte(0xff<<((8-uint(sz)&0x7)&0x7)&0xff))
 		if bytes.Compare(bits.Bytes(), buf) != 0 {
 			T.Errorf("%d: unexpected result %x, expected %x", sz, bits.Bytes(), buf)
+			return
 		}
 	}
 }
@@ -770,38 +870,53 @@ func TestBitSetZero(T *testing.T) {
 		bits.Zero()
 		if got, want := len(bits.Bytes()), len(c.source); got != want {
 			T.Errorf("%s: unexpected buf length %d, expected %d", c.name, got, want)
+			return
 		}
 		if got, want := bits.Len(), c.size; got != want {
 			T.Errorf("%s: unexpected size %d, expected %d", c.name, got, want)
+			return
 		}
 		if got, want := bits.Count(), int64(0); got != want {
 			T.Errorf("%s: unexpected count %d, expected %d", c.name, got, want)
+			return
 		}
 		buf := bytes.Repeat([]byte{0}, bitFieldLen(c.size))
 		if bytes.Compare(bits.Bytes(), buf) != 0 {
 			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits.Bytes(), buf)
+			return
 		}
 	}
 }
 
-func TestBitSetResize(T *testing.T) {
+func TestBitSetGrow(T *testing.T) {
 	for _, sz := range bitSetSizes {
-		bits := NewBitSet(sz)
-		bits.One()
 		for _, sznew := range bitSetSizes {
-			bits.Resize(sznew)
+			bits := NewBitSet(sz)
+			bits.One()
+			bits.Grow(sznew)
 			if got, want := len(bits.Bytes()), bitFieldLen(sznew); got != want {
 				T.Errorf("%d_%d: unexpected buf length %d, expected %d", sz, sznew, got, want)
+				return
 			}
 			if got, want := bits.Len(), sznew; got != want {
 				T.Errorf("%d_%d: unexpected size %d, expected %d", sz, sznew, got, want)
+				return
 			}
-			if got, want := bits.Count(), int64(0); got != want {
+			if got, want := bits.Count(), int64(min(sz, sznew)); got != want {
 				T.Errorf("%d_%d: unexpected count %d, expected %d", sz, sznew, got, want)
+				return
 			}
-			buf := bytes.Repeat([]byte{0}, bitFieldLen(sznew))
+			lena := bitFieldLen(sz)
+			lenb := bitFieldLen(sznew)
+			diff := lena - lenb
+			buf := bytes.Repeat([]byte{0xff}, min(lena, lenb))
+			buf[len(buf)-1] &= byte(0xff << (7 - uint(min(sz, sznew)-1)&0x7))
+			if diff < 0 {
+				buf = append(buf, bytes.Repeat([]byte{0x0}, -diff)...)
+			}
 			if bytes.Compare(bits.Bytes(), buf) != 0 {
-				T.Errorf("%d_%d: unexpected result %x, expected %x", sz, sznew, bits.Bytes(), buf)
+				T.Fatalf("%d_%d: unexpected result %x, expected %x", sz, sznew, bits.Bytes(), buf)
+				return
 			}
 		}
 	}
@@ -816,15 +931,19 @@ func TestBitSetFill(T *testing.T) {
 
 			if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
 				T.Errorf("%d_%x: unexpected buf length %d, expected %d", sz, pt, got, want)
+				return
 			}
 			if got, want := bits.Len(), sz; got != want {
 				T.Errorf("%d_%x: unexpected size %d, expected %d", sz, pt, got, want)
+				return
 			}
 			if got, want := bits.Count(), popcount(cmp); got != want {
 				T.Errorf("%d_%d: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 			if bytes.Compare(bits.Bytes(), cmp) != 0 {
 				T.Errorf("%d_%d: unexpected result %x, expected %x", sz, pt, bits.Bytes(), cmp)
+				return
 			}
 		}
 	}
@@ -840,12 +959,15 @@ func TestBitSetSet(T *testing.T) {
 		cmp[0] |= 0x80
 		if got, want := bits.Count(), int64(1); got != want {
 			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if !bits.IsSet(0) {
 			T.Errorf("%d: unexpected IsSet=false", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		// set last bit
@@ -853,35 +975,44 @@ func TestBitSetSet(T *testing.T) {
 		cmp[(sz-1)>>3] |= 1 << uint(7-(sz-1)&0x7)
 		if got, want := bits.Count(), int64(2); got != want {
 			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if !bits.IsSet(sz - 1) {
 			T.Errorf("%d: unexpected IsSet=false", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		// set invalid bit
 		bits.Set(-1)
 		if got, want := bits.Count(), int64(2); got != want {
 			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(-1) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		bits.Set(sz)
 		if got, want := bits.Count(), int64(2); got != want {
 			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(sz) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 	}
 }
@@ -897,12 +1028,15 @@ func TestBitSetClear(T *testing.T) {
 		cmp[0] &= 0x7f
 		if got, want := bits.Count(), popcount(cmp); got != want {
 			T.Errorf("%d_first: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(0) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d_first: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		// clear last bit
@@ -910,35 +1044,44 @@ func TestBitSetClear(T *testing.T) {
 		cmp[(sz-1)>>3] &^= 1 << uint(7-(sz-1)&0x7)
 		if got, want := bits.Count(), popcount(cmp); got != want {
 			T.Errorf("%d_last: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(sz - 1) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d_last: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		// clear invalid bit
 		bits.Clear(-1)
 		if got, want := bits.Count(), popcount(cmp); got != want {
 			T.Errorf("%d_invalid-: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(-1) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d_invalid-: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		bits.Clear(sz)
 		if got, want := bits.Count(), popcount(cmp); got != want {
 			T.Errorf("%d_invalid+: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(sz) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d_invalid+: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 	}
 }
@@ -953,29 +1096,37 @@ func TestBitSetReverse(T *testing.T) {
 			bits.Reverse()
 			if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
 				T.Errorf("%d_%x: unexpected buf length %d, expected %d", sz, pt, got, want)
+				return
 			}
 			if got, want := bits.Len(), sz; got != want {
 				T.Errorf("%d_%x: unexpected size %d, expected %d", sz, pt, got, want)
+				return
 			}
 			if got, want := bits.Count(), popcount(cmp); got != want {
 				T.Errorf("%d_%d: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 			if bytes.Compare(bits.Bytes(), cmp) == 0 && bytes.Compare(bits.Bytes(), bytes.Repeat([]byte{0}, len(bits.Bytes()))) != 0 {
 				T.Errorf("%d_%d: unexpected result %x, expected %x", sz, pt, bits.Bytes(), cmp)
+				return
 			}
 
 			bits.Reverse()
 			if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
 				T.Errorf("%d_%x: unexpected buf length %d, expected %d", sz, pt, got, want)
+				return
 			}
 			if got, want := bits.Len(), sz; got != want {
 				T.Errorf("%d_%x: unexpected size %d, expected %d", sz, pt, got, want)
+				return
 			}
 			if got, want := bits.Count(), popcount(cmp); got != want {
 				T.Errorf("%d_%d: unexpected count %d, expected %d", sz, pt, got, want)
+				return
 			}
 			if bytes.Compare(bits.Bytes(), cmp) != 0 {
 				T.Errorf("%d_%d: unexpected result %x, expected %x", sz, pt, bits.Bytes(), cmp)
+				return
 			}
 		}
 	}
@@ -1005,12 +1156,15 @@ func TestBitSetSetReverse(T *testing.T) {
 		setReverseBit(cmp, sz, 0)
 		if got, want := bits.Count(), int64(1); got != want {
 			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if !bits.IsSet(0) {
 			T.Errorf("%d: unexpected IsSet=false", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		// set last bit
@@ -1018,35 +1172,44 @@ func TestBitSetSetReverse(T *testing.T) {
 		setReverseBit(cmp, sz, sz-1)
 		if got, want := bits.Count(), int64(2); got != want {
 			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if !bits.IsSet(sz - 1) {
 			T.Errorf("%d: unexpected IsSet=false", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		// set invalid bit
 		bits.Set(-1)
 		if got, want := bits.Count(), int64(2); got != want {
 			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(-1) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		bits.Set(sz)
 		if got, want := bits.Count(), int64(2); got != want {
 			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(sz) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 	}
 }
@@ -1064,12 +1227,15 @@ func TestBitSetClearReverse(T *testing.T) {
 		clearReverseBit(cmp, sz, 0)
 		if got, want := bits.Count(), popcount(cmp); got != want {
 			T.Errorf("%d_first: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(0) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d_first: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		// clear last bit
@@ -1077,35 +1243,44 @@ func TestBitSetClearReverse(T *testing.T) {
 		clearReverseBit(cmp, sz, sz-1)
 		if got, want := bits.Count(), popcount(cmp); got != want {
 			T.Errorf("%d_last: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(sz - 1) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d_last: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		// clear invalid bit
 		bits.Clear(-1)
 		if got, want := bits.Count(), popcount(cmp); got != want {
 			T.Errorf("%d_invalid-: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(sz) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d_invalid-: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 
 		bits.Clear(sz)
 		if got, want := bits.Count(), popcount(cmp); got != want {
 			T.Errorf("%d_invalid+: unexpected count %d, expected %d", sz, got, want)
+			return
 		}
 		if bits.IsSet(sz) {
 			T.Errorf("%d: unexpected IsSet=true", sz)
+			return
 		}
 		if bytes.Compare(bits.Bytes(), cmp) != 0 {
 			T.Errorf("%d_invalid+: unexpected result %x, expected %x", sz, bits.Bytes(), cmp)
+			return
 		}
 	}
 }
@@ -1511,9 +1686,11 @@ func TestBitSetRunGeneric(T *testing.T) {
 			idx, length = bitsetRunGeneric(bits.Bytes(), idx+length, bits.Len())
 			if got, want := idx, r[0]; got != want {
 				T.Errorf("%s_%d: unexpected index %d, expected %d", c.name, i, got, want)
+				return
 			}
 			if got, want := length, r[1]; got != want {
 				T.Errorf("%s_%d: unexpected length %d, expected %d", c.name, i, got, want)
+				return
 			}
 		}
 	}
@@ -1534,17 +1711,22 @@ func TestBitSetRunReverse(T *testing.T) {
 				// fmt.Printf("%d - %s: Reverse Bitfield %08b\n", x, c.name, bits.Bytes())
 				// fmt.Printf("%d - %s: Runs %#v\n", x, c.name, c.rruns)
 				T.Errorf("%s_%d: unexpected index %d, expected %d", c.name, i, got, want)
+				return
 			}
 			if got, want := length, r[1]; got != want {
 				// fmt.Printf("%d - %s: Reverse Bitfield %08b\n", x, c.name, bits.Bytes())
 				// fmt.Printf("%d - %s: Runs %#v\n", x, c.name, c.rruns)
 				T.Errorf("%s_%d: unexpected length %d, expected %d", c.name, i, got, want)
+				return
 			}
 		}
 	}
 }
 
 func TestBitSetRunAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range runTestcases {
 		bits := NewBitSetFromBytes(c.buf, c.size)
 		var idx, length int
@@ -1552,11 +1734,326 @@ func TestBitSetRunAVX2(T *testing.T) {
 			idx, length = bitsetRunAVX2Wrapper(bits.Bytes(), idx+length, bits.Len())
 			if got, want := idx, r[0]; got != want {
 				T.Errorf("%s_%d: unexpected index %d, expected %d", c.name, i, got, want)
+				return
 			}
 			if got, want := length, r[1]; got != want {
 				T.Errorf("%s_%d: unexpected length %d, expected %d", c.name, i, got, want)
+				return
 			}
 		}
+	}
+}
+
+// bits generates sequence of n numbers with max bits,
+// ensuring max bit is set for 50% of the values.
+func randBits(n int) []byte {
+	c := (n + 7) / 8
+	out := make([]byte, c+3)
+	for i := 0; i < (c+3)/4; i++ {
+		binary.BigEndian.PutUint32(out[4*i:4*i+4], uint32(rand.Int31()))
+	}
+	return out[:c]
+}
+
+func randBitsets(n, sz int) []*BitSet {
+	res := make([]*BitSet, n)
+	for i := range res {
+		res[i] = NewBitSetFromBytes(randBits(sz), sz)
+	}
+	return res
+}
+
+func TestBitSetSlice(T *testing.T) {
+	rand.Seed(0)
+	for _, sz := range bitSetSizes {
+		for i, b := range randBitsets(100, sz) {
+			slice := b.Slice()
+			if got, want := len(slice), sz; got != want {
+				T.Errorf("%d_%d: unexpected length %d, expected %d", i, sz, got, want)
+				return
+			}
+			for k, v := range slice {
+				if got, want := v, b.IsSet(k); got != want {
+					T.Errorf("%d_%d: unexpected bit %d: got %t, expected %t", i, sz, k, got, want)
+					return
+				}
+			}
+		}
+	}
+}
+
+func TestBitSetSubSlice(T *testing.T) {
+	rand.Seed(0)
+	for _, sz := range bitSetSizes {
+		for i, b := range randBitsets(100, sz) {
+			start := int(rand.Int31n(int32(b.Len())))
+			n := int(rand.Int31n(int32(b.Len() - start)))
+			slice := b.SubSlice(start, n)
+			if got, want := len(slice), n; got != want {
+				T.Errorf("%d_%d: unexpected length %d, expected %d", i, sz, got, want)
+				return
+			}
+			for k, v := range slice {
+				if got, want := v, b.IsSet(start+k); got != want {
+					T.Errorf("%d_%d: unexpected bit %d: got %t, expected %t", i, sz, k, got, want)
+					return
+				}
+			}
+		}
+	}
+}
+
+func TestBitSetFromSlice(T *testing.T) {
+	rand.Seed(0)
+	for _, sz := range bitSetSizes {
+		for i, b := range randBitsets(100, sz) {
+			slice := b.Slice()
+			bits := NewBitSetFromSlice(slice)
+			if got, want := len(bits.Bytes()), len(b.Bytes()); got != want {
+				T.Errorf("%d_%d: unexpected buf length %d, expected %d", i, sz, got, want)
+				return
+			}
+			if got, want := bits.Len(), b.Len(); got != want {
+				T.Errorf("%d_%d: unexpected size %d, expected %d", i, sz, got, want)
+				return
+			}
+			if got, want := bits.Count(), b.Count(); got != want {
+				T.Errorf("%d_%d: unexpected count %d, expected %d", i, sz, got, want)
+				return
+			}
+			if bytes.Compare(bits.Bytes(), b.Bytes()) != 0 {
+				T.Fatalf("%d_%d: unexpected result %x, expected %x", i, sz, bits.Bytes(), b.Bytes())
+				return
+			}
+		}
+	}
+}
+
+// TODO: edge cases
+// - dstPos < 0
+// - srcPos + srcLen > size
+func TestBitSetInsert(T *testing.T) {
+	var fast, fasthead, slow int
+	rand.Seed(0)
+	for _, sz := range bitSetSizes {
+		for i, src := range randBitsets(100, sz) {
+			dst := NewBitSet(1024)
+			for _, pat := range bitSetPatterns {
+				dst.Fill(pat)
+				srcPos := int(rand.Int31n(int32(src.Len())))
+				srcLen := int(rand.Int31n(int32(src.Len() - srcPos)))
+				dstPos := int(rand.Int31n(int32(dst.Len())))
+
+				if dstPos&0x7+srcLen&0x7 == 0 {
+					fasthead++
+				}
+
+				if srcPos&0x7+dstPos&0x7+srcLen&0x7 == 0 {
+					fast++
+				} else {
+					slow++
+				}
+
+				lbefore := dst.Len()
+				cbefore := dst.Count()
+				dst.Insert(src, srcPos, srcLen, dstPos)
+
+				dstSlice := dst.SubSlice(dstPos, srcLen)
+				srcSlice := src.SubSlice(srcPos, srcLen)
+				var srcSet int64
+				for i := range srcSlice {
+					if srcSlice[i] {
+						srcSet++
+					}
+				}
+
+				T.Logf("SRC=%x DST=%x srcPos=%d dstPos=%d n=%d srcBits=%d\n",
+					src.Bytes(), dst.Bytes(), srcPos, dstPos, srcLen, srcSet)
+				if got, want := lbefore+srcLen, dst.Len(); got != want {
+					T.Errorf("%d_%d_%x: unexpected dst bitset len %d, expected %d", sz, i, pat, got, want)
+					return
+				}
+				if got, want := dst.Count(), cbefore+srcSet; got != want {
+					T.Errorf("%d_%d_%x: unexpected count %d, expected %d", sz, i, pat, got, want)
+					return
+				}
+				if got, want := dst.Count(), popcount(dst.Bytes()); got != want {
+					T.Errorf("%d_%d_%x: unexpected real count %d, expected %d", sz, i, pat, got, want)
+					return
+				}
+				if got, want := len(dstSlice), len(srcSlice); got != want {
+					T.Errorf("%d_%d_%x: unexpected []bool size %d, expected %d", sz, i, pat, got, want)
+					return
+				}
+				for j := range dstSlice {
+					if got, want := dstSlice[j], srcSlice[j]; got != want {
+						T.Errorf("%d_%d_%x: unexpected bit %d: %t, expected %t", i, sz, pat, j, got, want)
+						return
+					}
+				}
+			}
+		}
+	}
+	if fast == 0 || fasthead == 0 {
+		T.Errorf("%d slow, %d fast, %d fast head/tail path hits – try increasing random sample size\n", slow, fast, fasthead)
+	}
+}
+
+// TODO: edge cases
+func TestBitSetReplace(T *testing.T) {
+	var fast, slow int
+	rand.Seed(0)
+	for _, sz := range bitSetSizes {
+		for i, src := range randBitsets(100, sz) {
+			dst := NewBitSet(1024)
+			for _, pat := range bitSetPatterns {
+				dst.Fill(pat)
+				srcPos := int(rand.Int31n(int32(src.Len())))
+				srcLen := int(rand.Int31n(int32(src.Len() - srcPos)))
+				dstPos := int(rand.Int31n(int32(dst.Len() - srcLen)))
+
+				if srcPos&0x7+dstPos&0x7+srcLen&0x7 == 0 {
+					fast++
+				} else {
+					slow++
+				}
+
+				lbefore := dst.Len()
+				dst.Replace(src, srcPos, srcLen, dstPos)
+
+				dstSlice := dst.SubSlice(dstPos, srcLen)
+				srcSlice := src.SubSlice(srcPos, srcLen)
+				T.Logf("SRC=%x DST=%x srcPos=%d dstPos=%d n=%d\n",
+					src.Bytes(), dst.Bytes(), srcPos, dstPos, srcLen)
+				if got, want := dst.Len(), lbefore; got != want {
+					T.Errorf("%d_%d_%x: unexpected bitset len %d, expected %d", sz, i, pat, got, want)
+					return
+				}
+				if got, want := len(dstSlice), len(srcSlice); got != want {
+					T.Errorf("%d_%d_%x: unexpected []bool size %d, expected %d", sz, i, pat, got, want)
+					return
+				}
+				for j := range dstSlice {
+					if got, want := dstSlice[j], srcSlice[j]; got != want {
+						T.Errorf("%d_%d_%x: unexpected bit %d: %t, expected %t", i, sz, pat, j, got, want)
+						return
+					}
+				}
+			}
+		}
+	}
+	if fast == 0 {
+		T.Errorf("%d slow, %d fast path hits – try increasing random sample size\n", slow, fast)
+	}
+}
+
+func TestBitSetAppend(T *testing.T) {
+	var fast, slow int
+	rand.Seed(0)
+	for _, sz := range bitSetSizes {
+		for i, src := range randBitsets(100, sz) {
+			dst := NewBitSet(1024)
+			for _, pat := range bitSetPatterns {
+				dst.Fill(pat)
+				srcPos := int(rand.Int31n(int32(src.Len())))
+				srcLen := int(rand.Int31n(int32(src.Len() - srcPos)))
+
+				if dst.size&0x7+srcPos&0x7+srcLen&0x7 == 0 {
+					fast++
+				} else {
+					slow++
+				}
+
+				lbefore := dst.Len()
+				cbefore := dst.Count()
+				dst.Append(src, srcPos, srcLen)
+
+				dstSlice := dst.SubSlice(lbefore, srcLen)
+				srcSlice := src.SubSlice(srcPos, srcLen)
+				var srcSet int64
+				for i := range srcSlice {
+					if srcSlice[i] {
+						srcSet++
+					}
+				}
+
+				T.Logf("SRC=%x DST=%x srcPos=%d dstPos=%d n=%d\n",
+					src.Bytes(), dst.Bytes(), srcPos, lbefore, srcLen)
+				if got, want := lbefore+srcLen, dst.Len(); got != want {
+					T.Errorf("%d_%d_%x: unexpected dst bitset len %d, expected %d", sz, i, pat, got, want)
+					return
+				}
+				if got, want := dst.Count(), cbefore+srcSet; got != want {
+					T.Errorf("%d_%d_%x: unexpected count %d, expected %d", sz, i, pat, got, want)
+					return
+				}
+				if got, want := dst.Count(), popcount(dst.Bytes()); got != want {
+					T.Errorf("%d_%d_%x: unexpected real count %d, expected %d", sz, i, pat, got, want)
+					return
+				}
+				if got, want := len(dstSlice), len(srcSlice); got != want {
+					T.Errorf("%d_%d_%x: unexpected []bool size %d, expected %d", sz, i, pat, got, want)
+					return
+				}
+				for j := range dstSlice {
+					if got, want := dstSlice[j], srcSlice[j]; got != want {
+						T.Errorf("%d_%d_%x: unexpected bit %d: %t, expected %t", i, sz, pat, j, got, want)
+						return
+					}
+				}
+			}
+		}
+	}
+	if fast == 0 {
+		T.Errorf("%d slow, %d fast path hits – try increasing random sample size\n", slow, fast)
+	}
+}
+
+func TestBitSetDelete(T *testing.T) {
+	// TODO
+}
+
+func TestBitSetSwap(T *testing.T) {
+	// TODO
+}
+
+func BenchmarkBitSetIndexHighDensity(B *testing.B) {
+	for _, n := range bitSetBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			bits := fillBitset(nil, n.l, 0)
+			l := uint64(bitFieldLen(n.l))
+			var rnd = rand.NewSource(0).(rand.Source64)
+			for i := 0; i < n.l/3; i++ {
+				bits[rnd.Uint64()%l] |= 1 << byte(rnd.Uint64()%8)
+			}
+			bs := NewBitSetFromBytes(bits, n.l)
+			slice := make([]int, int(bs.Count()))
+			B.ResetTimer()
+			B.SetBytes(int64(bitFieldLen(n.l)))
+			for i := 0; i < B.N; i++ {
+				_ = bs.Indexes(slice)
+			}
+		})
+	}
+}
+
+func BenchmarkBitSetIndexLowDensity(B *testing.B) {
+	for _, n := range bitSetBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			bits := fillBitset(nil, n.l, 0)
+			l := uint64(bitFieldLen(n.l))
+			var rnd = rand.NewSource(0).(rand.Source64)
+			for i := 0; i < n.l/1280; i++ {
+				bits[rnd.Uint64()%l] = 1
+			}
+			bs := NewBitSetFromBytes(bits, n.l)
+			slice := make([]int, int(bs.Count()))
+			B.ResetTimer()
+			B.SetBytes(int64(bitFieldLen(n.l)))
+			for i := 0; i < B.N; i++ {
+				_ = bs.Indexes(slice)
+			}
+		})
 	}
 }
 
@@ -1577,6 +2074,9 @@ func BenchmarkBitSetRunGeneric(B *testing.B) {
 }
 
 func BenchmarkBitSetRunAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
@@ -1605,6 +2105,9 @@ func BenchmarkBitSetRunGenericMean(B *testing.B) {
 }
 
 func BenchmarkBitSetRunAVX2Mean(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
@@ -1722,6 +2225,9 @@ func BenchmarkBitSetRunGenericHighDensity(B *testing.B) {
 // BenchmarkBitSetRunAVX2LowDensity/128M-8 	     244	   4634930 ns/op	3619.73 MB/s
 // BenchmarkBitSetRunAVX2LowDensity/512M-8 	      62	  18705419 ns/op	3587.67 MB/s
 func BenchmarkBitSetRunAVX2LowDensity(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
@@ -1753,6 +2259,9 @@ func BenchmarkBitSetRunAVX2LowDensity(B *testing.B) {
 // BenchmarkBitSetRunAVX2MedDensity/128M-8	       7	 152491717 ns/op	 110.02 MB/s
 // BenchmarkBitSetRunAVX2MedDensity/512M-8	       2	 617679541 ns/op	 108.65 MB/s
 func BenchmarkBitSetRunAVX2MedDensity(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
@@ -1784,6 +2293,9 @@ func BenchmarkBitSetRunAVX2MedDensity(B *testing.B) {
 // BenchmarkBitSetRunAVX2HighDensity/128M-8	       2	 542901150 ns/op	  30.90 MB/s
 // BenchmarkBitSetRunAVX2HighDensity/512M-8	       1	2212268406 ns/op	  30.33 MB/s
 func BenchmarkBitSetRunAVX2HighDensity(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
@@ -1841,6 +2353,9 @@ func BenchmarkBitSetRunGenericCC(B *testing.B) {
 // BenchmarkBitSetRunAVX2CC/128M-8       	       3	 453276596 ns/op	  37.01 MB/s
 // BenchmarkBitSetRunAVX2CC/512M-8       	       1	1790669109 ns/op	  37.48 MB/s
 func BenchmarkBitSetRunAVX2CC(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xcc)
@@ -1892,6 +2407,9 @@ func BenchmarkBitSetRunGenericAA(B *testing.B) {
 // BenchmarkBitSetRunAVX2AA/128M-8       	       2	 829955647 ns/op	  20.21 MB/s
 // BenchmarkBitSetRunAVX2AA/512M-8       	       1	3276270639 ns/op	  20.48 MB/s
 func BenchmarkBitSetRunAVX2AA(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xaa)
@@ -1939,6 +2457,9 @@ func BenchmarkBitSetPopCountGeneric(B *testing.B) {
 // BenchmarkBitSetPopCountAVX2/128M-8          	    2000	    894400 ns/op	18758.06 MB/s
 // BenchmarkBitSetPopCountAVX2/512M-8          	     500	   3709751 ns/op	18089.85 MB/s
 func BenchmarkBitSetPopCountAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
@@ -1984,6 +2505,9 @@ func BenchmarkBitSetAndGeneric(B *testing.B) {
 // BenchmarkBitSetAndAVX2/128M-8       	    1000	   1845298 ns/op	9091.87 MB/s
 // BenchmarkBitSetAndAVX2/512M-8       	     200	  12771249 ns/op	5254.68 MB/s
 func BenchmarkBitSetAndAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
@@ -2030,6 +2554,9 @@ func BenchmarkBitSetAndNotGeneric(B *testing.B) {
 // BenchmarkBitSetAndNotAVX2/128M-8       	    1000	   1844008 ns/op	9098.23 MB/s
 // BenchmarkBitSetAndNotAVX2/512M-8       	     100	  10232017 ns/op	6558.71 MB/s
 func BenchmarkBitSetAndNotAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
@@ -2076,6 +2603,9 @@ func BenchmarkBitSetOrGeneric(B *testing.B) {
 // BenchmarkBitSetOrAVX2/128M-8          	    1000	   1886645 ns/op	8892.62 MB/s
 // BenchmarkBitSetOrAVX2/512M-8          	     200	  10585586 ns/op	6339.65 MB/s
 func BenchmarkBitSetOrAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
@@ -2122,6 +2652,9 @@ func BenchmarkBitSetXorGeneric(B *testing.B) {
 // BenchmarkBitSetXorAVX2/128M-8          	    1000	   2075723 ns/op	8082.59 MB/s
 // BenchmarkBitSetXorAVX2/512M-8          	     100	  12700923 ns/op	5283.78 MB/s
 func BenchmarkBitSetXorAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
@@ -2167,6 +2700,9 @@ func BenchmarkBitSetNotGeneric(B *testing.B) {
 // BenchmarkBitSetNotAVX2/128M-8          	    1000	   1072039 ns/op	15649.81 MB/s
 // BenchmarkBitSetNotAVX2/512M-8          	     300	   4580533 ns/op	14650.88 MB/s
 func BenchmarkBitSetNotAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)

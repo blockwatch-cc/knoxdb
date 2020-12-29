@@ -197,7 +197,7 @@ func (b Block) RawSlice() interface{} {
 	case BlockUint8:
 		return b.Uint8
 	case BlockBool:
-		return b.Bits.ToSlice()
+		return b.Bits.Slice()
 	case BlockString:
 		return b.Strings
 	case BlockBytes:
@@ -234,7 +234,7 @@ func (b Block) RangeSlice(start, end int) interface{} {
 	case BlockUint8:
 		return b.Uint8[start:end]
 	case BlockBool:
-		return b.Bits.ToSlice()[start:end]
+		return b.Bits.SubSlice(start, end-start)
 	case BlockString:
 		return b.Strings[start:end]
 	case BlockBytes:
@@ -1211,7 +1211,7 @@ func (b *Block) DecodeBody(buf []byte, sz int) error {
 		if b.Bits == nil || b.Bits.Cap() < sz {
 			b.Bits = NewBitSet(sz)
 		} else {
-			b.Bits.Resize(sz)
+			b.Bits.Grow(sz).Reset()
 		}
 		b.Bits, err = decodeBoolBlock(buf, b.Bits)
 
