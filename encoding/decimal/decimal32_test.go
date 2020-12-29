@@ -284,22 +284,22 @@ func TestDecimal32Quantize(t *testing.T) {
 		{name: "no-change_24.51", in: 2451, scale: 2, quant: 2, out: 2451},
 		{name: "no+change_24.51", in: -2451, scale: 2, quant: 2, out: -2451},
 		// regular down
-		{name: "down1_24.51", in: 2451, scale: 2, quant: 1, out: 245},
-		{name: "down1_24.51", in: -2451, scale: 2, quant: 1, out: -245},
-		{name: "down2_24.51", in: 2451, scale: 2, quant: 0, out: 25},
-		{name: "down2_24.51", in: -2451, scale: 2, quant: 0, out: -25},
+		{name: "down1+24.51", in: 2451, scale: 2, quant: 1, out: 245},
+		{name: "down1-24.51", in: -2451, scale: 2, quant: 1, out: -245},
+		{name: "down2+24.51", in: 2451, scale: 2, quant: 0, out: 25},
+		{name: "down2-24.51", in: -2451, scale: 2, quant: 0, out: -25},
 		{name: "down1_24.5", in: 245, scale: 1, quant: 0, out: 24},
-		{name: "down1_24.5", in: -245, scale: 1, quant: 0, out: -24},
-		{name: "down2_23.51", in: 2351, scale: 2, quant: 0, out: 24},
-		{name: "down2_23.51", in: -2351, scale: 2, quant: 0, out: -24},
-		{name: "down1_23.5", in: 235, scale: 1, quant: 0, out: 24},
-		{name: "down1_23.5", in: -235, scale: 1, quant: 0, out: -24},
+		{name: "down1-24.5", in: -245, scale: 1, quant: 0, out: -24},
+		{name: "down2+23.51", in: 2351, scale: 2, quant: 0, out: 24},
+		{name: "down2-23.51", in: -2351, scale: 2, quant: 0, out: -24},
+		{name: "down1+23.5", in: 235, scale: 1, quant: 0, out: 24},
+		{name: "down1-23.5", in: -235, scale: 1, quant: 0, out: -24},
 		// regular up
-		{name: "up1_24.51", in: 2451, scale: 2, quant: 3, out: 24510},
-		{name: "up1_24.51", in: -2451, scale: 2, quant: 3, out: -24510},
+		{name: "up1+24.51", in: 2451, scale: 2, quant: 3, out: 24510},
+		{name: "up1-24.51", in: -2451, scale: 2, quant: 3, out: -24510},
 		// invalid scales are clipped
-		{name: "neg-scale", in: 15, scale: 1, quant: -1, out: 2, isunder: true},
-		{name: "big-scale", in: 15, scale: 1, quant: 11, out: 1500000000, isover: true},
+		{name: "neg_scale", in: 15, scale: 1, quant: -1, out: 2, isunder: true},
+		{name: "big_scale", in: 15, scale: 1, quant: 11, out: 1500000000, isover: true},
 	}
 
 	for _, test := range tests {

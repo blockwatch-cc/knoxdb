@@ -1542,10 +1542,10 @@ func (p *Package) Append() error {
 			b.Float32 = append(b.Float32, 0)
 
 		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256 = append(b.Int256, Int256Zero)
+			b.Int256 = append(b.Int256, ZeroInt256)
 
 		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128 = append(b.Int128, Int128Zero)
+			b.Int128 = append(b.Int128, ZeroInt128)
 
 		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
 			b.Int64 = append(b.Int64, 0)
