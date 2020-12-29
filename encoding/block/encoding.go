@@ -181,7 +181,7 @@ func decodeFloat32Block(block []byte, dst []float32) ([]float32, error) {
 
 func encodeInt256Block(buf *bytes.Buffer, val []vec.Int256, comp Compression) (vec.Int256, vec.Int256, error) {
 	if len(val) == 0 {
-		return vec.Int256Zero, vec.Int256Zero, writeEmptyBlock(buf, BlockInt256)
+		return vec.ZeroInt256, vec.ZeroInt256, writeEmptyBlock(buf, BlockInt256)
 	}
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockInt256))
@@ -236,7 +236,7 @@ func encodeInt256Block(buf *bytes.Buffer, val []vec.Int256, comp Compression) (v
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
-		return vec.Int256Zero, vec.Int256Zero, err
+		return vec.ZeroInt256, vec.ZeroInt256, err
 	}
 
 	err = w.Close()
@@ -246,7 +246,7 @@ func encodeInt256Block(buf *bytes.Buffer, val []vec.Int256, comp Compression) (v
 
 func encodeInt128Block(buf *bytes.Buffer, val []vec.Int128, comp Compression) (vec.Int128, vec.Int128, error) {
 	if len(val) == 0 {
-		return vec.Int128Zero, vec.Int128Zero, writeEmptyBlock(buf, BlockInt128)
+		return vec.ZeroInt128, vec.ZeroInt128, writeEmptyBlock(buf, BlockInt128)
 	}
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockInt128))
@@ -301,7 +301,7 @@ func encodeInt128Block(buf *bytes.Buffer, val []vec.Int128, comp Compression) (v
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
-		return vec.Int128Zero, vec.Int128Zero, err
+		return vec.ZeroInt128, vec.ZeroInt128, err
 	}
 
 	err = w.Close()

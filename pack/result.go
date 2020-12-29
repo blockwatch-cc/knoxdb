@@ -202,14 +202,14 @@ func (r *Result) Uint8At(index, pos int) (uint8, error) {
 
 func (r *Result) Int256At(index, pos int) (Int256, error) {
 	if r.pkg == nil {
-		return Int256Zero, ErrResultClosed
+		return ZeroInt256, ErrResultClosed
 	}
 	return r.pkg.Int256At(index, pos)
 }
 
 func (r *Result) Int128At(index, pos int) (Int128, error) {
 	if r.pkg == nil {
-		return Int128Zero, ErrResultClosed
+		return ZeroInt128, ErrResultClosed
 	}
 	return r.pkg.Int128At(index, pos)
 }

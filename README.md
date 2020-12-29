@@ -80,6 +80,7 @@ Benchmarks
 - [ ] faster int64->int64 maps
   https://github.com/brentp/intintmap/blob/master/intintmap.go
 - [ ] Integer Compression / SIMD integer packing
+  - https://michael.stapelberg.ch/posts/2019-02-05-turbopfor-analysis/
   - https://github.com/powturbo/TurboPFor  !!!
   - https://github.com/lemire/FastPFor
   - https://github.com/lemire/SIMDCompressionAndIntersection
@@ -104,6 +105,7 @@ Benchmarks
 - [ ] faster binary search https://github.com/scandum/binary_search
 - [ ] POPCOUNT false dependency bug https://github.com/tmthrgd/go-popcount/blob/master/popcount_amd64.s
 - [ ] ARM64 assembly in Go https://barakmich.dev/posts/popcnt-arm64-go-asm/
+- [ ] Min/max in AVX2 https://stackoverflow.com/questions/31623383/calculating-min-of-8-long-ints-using-avx2
 
 ### Pack DB features
 - [x] Count/CountTx
