@@ -309,6 +309,14 @@ func ParseInt128(s string) (Int128, error) {
 	}
 }
 
+func MustParseInt128(s string) Int128 {
+	i, err := ParseInt128(s)
+	if err != nil {
+		panic(err)
+	}
+	return i
+}
+
 func (x Int128) MarshalText() ([]byte, error) {
 	return []byte(x.String()), nil
 }

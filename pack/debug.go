@@ -121,8 +121,8 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	defer tx.Rollback()
 	switch mode {
 	case DumpModeDec, DumpModeHex:
-		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-33s %-33s %-4s %-5s %-6s %-10s %-12s %-10s %-10s\n",
-			"#", "Key", "Block", "Type", "Rows", "Min", "Max", "Prec", "Flags", "Comp", "Compressed", "Uncompressed", "Memory", "GoType")
+		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-33s %-33s %-4s %-6s %-10s %-10s %-10s\n",
+			"#", "Key", "Block", "Type", "Rows", "Min", "Max", "Prec", "Comp", "Stored", "Heap", "GoType")
 	}
 	lineNo := 1
 	for i := 0; i < t.packs.Len(); i++ {
@@ -303,9 +303,9 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 	switch mode {
 	case DumpModeDec, DumpModeHex:
 		for i, v := range p.blocks {
-			fi := ""
-			if p.tinfo != nil {
-				fi = p.tinfo.fields[i].String()
+			gotype := "-"
+			if p.tinfo != nil && p.tinfo.gotype {
+				gotype = p.tinfo.fields[i].typname
 			}
 			var sz int
 			if i+1 < len(p.blocks) {
@@ -314,7 +314,7 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 				sz = p.bodysize - p.offsets[i]
 			}
 			head := v.Header()
-			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-33s %-33s %-4d %-6s %-10s %-12s %-10s %-10s\n",
+			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-33s %-33s %-4d %-6s %-10s %-10s %-10s\n",
 				lineNo,
 				key,       // pack key
 				i,         // block id
@@ -324,10 +324,9 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 				util.LimitStringEllipsis(util.ToString(head.MaxValue), 33), // max val in block
 				head.Scale,
 				head.Compression,
-				util.PrettyInt(sz),                // compressed block size
-				util.PrettyInt(v.MaxStoredSize()), // uncompressed storage size
-				util.PrettyInt(v.HeapSize()),      // in-memory block size
-				fi,                                // type info type
+				util.PrettyInt(sz),           // compressed block size
+				util.PrettyInt(v.HeapSize()), // in-memory block size
+				gotype,                       // type info type
 			)
 			lineNo++
 			if err != nil {

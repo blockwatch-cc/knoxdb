@@ -304,6 +304,14 @@ func ParseInt256(s string) (Int256, error) {
 	}
 }
 
+func MustParseInt256(s string) Int256 {
+	i, err := ParseInt256(s)
+	if err != nil {
+		panic(err)
+	}
+	return i
+}
+
 func (x Int256) MarshalText() ([]byte, error) {
 	return []byte(x.String()), nil
 }

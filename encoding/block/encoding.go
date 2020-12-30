@@ -201,7 +201,7 @@ func encodeInt256Block(buf *bytes.Buffer, val []vec.Int256, comp Compression) (v
 
 	// find min/max values (and load data into cache)
 	min, max := val[0], val[0]
-	for i := range val[0] {
+	for i := range val {
 		min = vec.Min256(min, val[i])
 		max = vec.Max256(max, val[i])
 	}
@@ -460,6 +460,11 @@ func decodeInt256Block(block []byte, dst []vec.Int256) ([]vec.Int256, error) {
 		return nil, err
 	}
 
+	// empty blocks are empty
+	if len(buf) == 0 {
+		return dst, nil
+	}
+
 	// use a temp int64 slice for decoding
 	v := int64Pool.Get()
 	tmp := v.([]int64)[:0]
@@ -503,6 +508,11 @@ func decodeInt128Block(block []byte, dst []vec.Int128) ([]vec.Int128, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockInt128)
 	if err != nil {
 		return nil, err
+	}
+
+	// empty blocks are empty
+	if len(buf) == 0 {
+		return dst, nil
 	}
 
 	// use a temp int64 slice for decoding
