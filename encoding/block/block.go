@@ -350,161 +350,110 @@ func NewBlock(typ BlockType, sz int, comp Compression, scale int) (*Block, error
 
 func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 	cp := BlockPool.Get().(*Block)
-	if copydata {
-		cp.head = b.head.Clone()
-	} else {
+	cp.head = b.head.Clone()
+	if !copydata {
 		cp.head.Clear()
 	}
 	switch b.Type() {
 	case BlockInt64, BlockTime:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int64 = int64Pool.Get().([]int64)[:sz]
-			} else {
-				cp.Int64 = make([]int64, sz)
-			}
-			copy(cp.Int64, b.Int64)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Int64 = int64Pool.Get().([]int64)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int64 = int64Pool.Get().([]int64)[:0]
-			} else {
-				cp.Int64 = make([]int64, 0, sz)
-			}
+			cp.Int64 = make([]int64, 0, sz)
+		}
+		if copydata {
+			cp.Int64 = cp.Int64[:sz]
+			copy(cp.Int64, b.Int64)
 		}
 	case BlockFloat64:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Float64 = float64Pool.Get().([]float64)[:sz]
-			} else {
-				cp.Float64 = make([]float64, sz)
-			}
-			copy(cp.Float64, b.Float64)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Float64 = float64Pool.Get().([]float64)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Float64 = float64Pool.Get().([]float64)[:0]
-			} else {
-				cp.Float64 = make([]float64, 0, sz)
-			}
+			cp.Float64 = make([]float64, 0, sz)
+		}
+		if copydata {
+			cp.Float64 = cp.Float64[:sz]
+			copy(cp.Float64, b.Float64)
 		}
 	case BlockFloat32:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Float32 = float32Pool.Get().([]float32)[:sz]
-			} else {
-				cp.Float32 = make([]float32, sz)
-			}
-			copy(cp.Float32, b.Float32)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Float32 = float32Pool.Get().([]float32)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Float32 = float32Pool.Get().([]float32)[:0]
-			} else {
-				cp.Float32 = make([]float32, 0, sz)
-			}
+			cp.Float32 = make([]float32, 0, sz)
+		}
+		if copydata {
+			cp.Float32 = cp.Float32[:sz]
+			copy(cp.Float32, b.Float32)
 		}
 	case BlockInt32:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int32 = int32Pool.Get().([]int32)[:sz]
-			} else {
-				cp.Int32 = make([]int32, sz)
-			}
-			copy(cp.Int32, b.Int32)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Int32 = int32Pool.Get().([]int32)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int32 = int32Pool.Get().([]int32)[:0]
-			} else {
-				cp.Int32 = make([]int32, 0, sz)
-			}
+			cp.Int32 = make([]int32, 0, sz)
+		}
+		if copydata {
+			cp.Int32 = cp.Int32[:sz]
+			copy(cp.Int32, b.Int32)
 		}
 	case BlockInt16:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int16 = int16Pool.Get().([]int16)[:sz]
-			} else {
-				cp.Int16 = make([]int16, sz)
-			}
-			copy(cp.Int16, b.Int16)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Int16 = int16Pool.Get().([]int16)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int16 = int16Pool.Get().([]int16)[:0]
-			} else {
-				cp.Int16 = make([]int16, 0, sz)
-			}
+			cp.Int16 = make([]int16, 0, sz)
+		}
+		if copydata {
+			cp.Int16 = cp.Int16[:sz]
+			copy(cp.Int16, b.Int16)
 		}
 	case BlockInt8:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int8 = int8Pool.Get().([]int8)[:sz]
-			} else {
-				cp.Int8 = make([]int8, sz)
-			}
-			copy(cp.Int8, b.Int8)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Int8 = int8Pool.Get().([]int8)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int8 = int8Pool.Get().([]int8)[:0]
-			} else {
-				cp.Int8 = make([]int8, 0, sz)
-			}
+			cp.Int8 = make([]int8, 0, sz)
+		}
+		if copydata {
+			cp.Int8 = cp.Int8[:sz]
+			copy(cp.Int8, b.Int8)
 		}
 	case BlockUint64:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Uint64 = uint64Pool.Get().([]uint64)[:sz]
-			} else {
-				cp.Uint64 = make([]uint64, sz)
-			}
-			copy(cp.Uint64, b.Uint64)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Uint64 = uint64Pool.Get().([]uint64)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Uint64 = uint64Pool.Get().([]uint64)[:0]
-			} else {
-				cp.Uint64 = make([]uint64, 0, sz)
-			}
+			cp.Uint64 = make([]uint64, 0, sz)
+		}
+		if copydata {
+			cp.Uint64 = cp.Uint64[:sz]
+			copy(cp.Uint64, b.Uint64)
 		}
 	case BlockUint32:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Uint32 = uint32Pool.Get().([]uint32)[:sz]
-			} else {
-				cp.Uint32 = make([]uint32, sz)
-			}
-			copy(cp.Uint32, b.Uint32)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Uint32 = uint32Pool.Get().([]uint32)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Uint32 = uint32Pool.Get().([]uint32)[:0]
-			} else {
-				cp.Uint32 = make([]uint32, 0, sz)
-			}
+			cp.Uint32 = make([]uint32, 0, sz)
+		}
+		if copydata {
+			cp.Uint32 = cp.Uint32[:sz]
+			copy(cp.Uint32, b.Uint32)
 		}
 	case BlockUint16:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Uint16 = uint16Pool.Get().([]uint16)[:sz]
-			} else {
-				cp.Uint16 = make([]uint16, sz)
-			}
-			copy(cp.Uint16, b.Uint16)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Uint16 = uint16Pool.Get().([]uint16)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Uint16 = uint16Pool.Get().([]uint16)[:0]
-			} else {
-				cp.Uint16 = make([]uint16, 0, sz)
-			}
+			cp.Uint16 = make([]uint16, 0, sz)
+		}
+		if copydata {
+			cp.Uint16 = cp.Uint16[:sz]
+			copy(cp.Uint16, b.Uint16)
 		}
 	case BlockUint8:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Uint8 = uint8Pool.Get().([]uint8)[:sz]
-			} else {
-				cp.Uint8 = make([]uint8, sz)
-			}
-			copy(cp.Uint8, b.Uint8)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Uint8 = uint8Pool.Get().([]uint8)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Uint8 = uint8Pool.Get().([]uint8)[:0]
-			} else {
-				cp.Uint8 = make([]uint8, 0, sz)
-			}
+			cp.Uint8 = make([]uint8, 0, sz)
+		}
+		if copydata {
+			cp.Uint8 = cp.Uint8[:sz]
+			copy(cp.Uint8, b.Uint8)
 		}
 	case BlockBool:
 		if copydata {
@@ -513,68 +462,48 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 			cp.Bits = NewBitSet(sz)
 		}
 	case BlockString:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Strings = stringPool.Get().([]string)[:sz]
-			} else {
-				cp.Strings = make([]string, sz)
-			}
-			copy(cp.Strings, b.Strings)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Strings = stringPool.Get().([]string)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Strings = stringPool.Get().([]string)[:0]
-			} else {
-				cp.Strings = make([]string, 0, sz)
-			}
+			cp.Strings = make([]string, 0, sz)
+		}
+		if copydata {
+			cp.Strings = cp.Strings[:sz]
+			copy(cp.Strings, b.Strings)
 		}
 	case BlockBytes:
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Bytes = bytesPool.Get().([][]byte)[:0]
+		} else {
+			cp.Bytes = make([][]byte, 0, sz)
+		}
 		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Bytes = bytesPool.Get().([][]byte)[:sz]
-			} else {
-				cp.Bytes = make([][]byte, sz)
-			}
+			cp.Bytes = cp.Bytes[:sz]
 			for i, v := range b.Bytes {
 				cp.Bytes[i] = make([]byte, len(v))
 				copy(cp.Bytes[i], v)
 			}
-		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Bytes = bytesPool.Get().([][]byte)[:0]
-			} else {
-				cp.Bytes = make([][]byte, 0, sz)
-			}
 		}
 	case BlockInt128:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int128 = int128Pool.Get().([]Int128)[:sz]
-			} else {
-				cp.Int128 = make([]Int128, sz)
-			}
-			copy(cp.Int128, b.Int128)
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Int128 = int128Pool.Get().([]Int128)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int128 = int128Pool.Get().([]Int128)[:0]
-			} else {
-				cp.Int128 = make([]Int128, 0, sz)
-			}
+			cp.Int128 = make([]Int128, 0, sz)
+		}
+		if copydata {
+			cp.Int128 = cp.Int128[:sz]
+			copy(cp.Int128, b.Int128)
 		}
 	case BlockInt256:
-		if copydata {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int256 = int256Pool.Get().([]Int256)[:sz]
-			} else {
-				cp.Int256 = make([]Int256, sz)
-			}
+		if sz <= DefaultMaxPointsPerBlock {
+			cp.Int256 = int256Pool.Get().([]Int256)[:0]
 		} else {
-			if sz <= DefaultMaxPointsPerBlock {
-				cp.Int256 = int256Pool.Get().([]Int256)[:0]
-			} else {
-				cp.Int256 = make([]Int256, 0, sz)
-			}
+			cp.Int256 = make([]Int256, 0, sz)
 		}
-
+		if copydata {
+			cp.Int256 = cp.Int256[:sz]
+			copy(cp.Int256, b.Int256)
+		}
 	default:
 		return nil, fmt.Errorf("block: invalid data type %s (%[1]d)", b.Type())
 	}

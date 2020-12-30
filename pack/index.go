@@ -1291,6 +1291,9 @@ func (idx *Index) loadPack(tx *Tx, key []byte, touch bool) (*Package, error) {
 	// add dynamic data
 	pkg.key = key
 	pkg.tinfo = idx.journal.tinfo
+	pkg.names = idx.journal.names
+	pkg.types = idx.journal.types
+	pkg.namemap = idx.journal.namemap
 	pkg.pkindex = 0 // make sure first column is always PK in index data types
 	pkg.cached = touch
 

@@ -213,6 +213,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		if err := t.journal.InitFields(fields, 1<<uint(t.opts.JournalSizeLog2)); err != nil {
 			return err
 		}
+		t.journal.key = journalKey
 		_, err = storePackTx(dbTx, t.metakey, journalKey, t.journal, defaultJournalFillLevel)
 		if err != nil {
 			return err
@@ -221,6 +222,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		if err := t.tombstone.Init(Tombstone{}, 1<<uint(t.opts.JournalSizeLog2)); err != nil {
 			return err
 		}
+		t.tombstone.key = tombstoneKey
 		_, err = storePackTx(dbTx, t.metakey, tombstoneKey, t.tombstone, defaultJournalFillLevel)
 		if err != nil {
 			return err
@@ -351,13 +353,15 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		if err != nil {
 			return fmt.Errorf("pack: cannot open journal for table %s: %v", name, err)
 		}
-		t.journal.pkindex = t.fields.PkIndex()
+		t.journal.InitMetadata(t.fields)
+		t.journal.key = journalKey
 		log.Debugf("pack: %s table loaded journal with %d entries", name, t.journal.Len())
 		t.tombstone, err = loadPackTx(dbTx, t.metakey, tombstoneKey, nil)
 		if err != nil {
 			return fmt.Errorf("pack: cannot open tombstone for table %s: %v", name, err)
 		}
-		t.tombstone.pkindex = 0
+		t.tombstone.initType(Tombstone{})
+		t.tombstone.key = tombstoneKey
 		log.Debugf("pack: %s table loaded tombstone with %d entries", name, t.tombstone.Len())
 
 		return t.loadPackHeaders(dbTx)
@@ -3025,7 +3029,7 @@ func (t *Table) loadPack(tx *Tx, key []byte, touch bool, fields FieldList) (*Pac
 	// add dynamic data
 	pkg.SetKey(key)
 	pkg.tinfo = t.journal.tinfo
-	pkg.pkindex = t.fields.PkIndex()
+	pkg.InitMetadata(t.fields)
 	pkg.cached = touch
 	// store in cache
 	if touch {

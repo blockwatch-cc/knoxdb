@@ -121,7 +121,7 @@ func (s *BitSet) Grow(size int) *BitSet {
 		copy(buf, s.buf)
 		s.buf = buf
 	} else {
-		if size < s.size {
+		if size > 0 && size < s.size {
 			// clear trailing bytes
 			if len(s.buf) > sz {
 				s.buf[sz] = 0
