@@ -4,7 +4,6 @@
 package vec
 
 import (
-	// "fmt"
 	"sync"
 )
 
@@ -98,6 +97,14 @@ func makeBitSet(size int) *BitSet {
 		cnt:  0,
 		size: size,
 	}
+}
+
+func (s *BitSet) Clone() *BitSet {
+	clone := NewBitSet(s.size)
+	copy(clone.buf, s.buf)
+	clone.cnt = s.cnt
+	clone.isReverse = s.isReverse
+	return clone
 }
 
 // Grow resizes the bitset to a new size, either growing or shrinking it.
@@ -456,11 +463,11 @@ func (s *BitSet) Delete(pos, n int) *BitSet {
 	}
 
 	if pos&0x7+n&0x7 == 0 {
-		// fast path, grow resets counter
+		// fast path
 		copy(s.buf[pos>>3:], s.buf[(pos+n)>>3:])
 	} else {
 		// slow path
-		for i, v := range s.SubSlice(pos+n, n) {
+		for i, v := range s.SubSlice(pos+n, -1) {
 			if v {
 				s.setbit(pos + i)
 			} else {
@@ -474,7 +481,10 @@ func (s *BitSet) Delete(pos, n int) *BitSet {
 	return s
 }
 
-func (s *BitSet) Swap(i, j int) *BitSet {
+func (s *BitSet) Swap(i, j int) {
+	if uint(i) >= uint(s.size) || uint(j) >= uint(s.size) {
+		return
+	}
 	bi, bj := s.IsSet(i), s.IsSet(j)
 	if bi {
 		s.setbit(j)
@@ -486,7 +496,6 @@ func (s *BitSet) Swap(i, j int) *BitSet {
 	} else {
 		s.clearbit(i)
 	}
-	return s
 }
 
 func (s *BitSet) Reverse() *BitSet {
