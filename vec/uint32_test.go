@@ -203,12 +203,15 @@ var uint32EqualCases = []Uint32MatchTest{
 		count:  0,
 	},
 	CreateUint32TestCase("vec1", uint32TestSlice_0, uint32EqualTestMatch_0, 0, uint32EqualTestResult_0, 32),
-	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32EqualTestMatch_0, 0, uint32EqualTestResult_0, 64),
+	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32EqualTestMatch_0, 0, uint32EqualTestResult_0, 128),
 	CreateUint32TestCase("l32", uint32TestSlice_1, uint32EqualTestMatch_1, 0, uint32EqualTestResult_1, 32),
 	CreateUint32TestCase("l64", append(uint32TestSlice_1, uint32TestSlice_0...), uint32EqualTestMatch_1, 0,
 		append(uint32EqualTestResult_1, uint32EqualTestResult_0...), 64),
 	CreateUint32TestCase("l128", append(uint32TestSlice_1, uint32TestSlice_0...), uint32EqualTestMatch_1, 0,
 		append(uint32EqualTestResult_1, uint32EqualTestResult_0...), 128),
+	CreateUint32TestCase("l256", append(uint32TestSlice_1, uint32TestSlice_0...), uint32EqualTestMatch_1, 0,
+		append(uint32EqualTestResult_1, uint32EqualTestResult_0...), 256),
+	CreateUint32TestCase("l255", uint32TestSlice_1, uint32EqualTestMatch_1, 0, uint32EqualTestResult_1, 127),
 	CreateUint32TestCase("l127", uint32TestSlice_1, uint32EqualTestMatch_1, 0, uint32EqualTestResult_1, 127),
 	CreateUint32TestCase("l63", uint32TestSlice_1, uint32EqualTestMatch_1, 0, uint32EqualTestResult_1, 63),
 	CreateUint32TestCase("l31", uint32TestSlice_1, uint32EqualTestMatch_1, 0, uint32EqualTestResult_1, 31),
@@ -216,7 +219,7 @@ var uint32EqualCases = []Uint32MatchTest{
 	CreateUint32TestCase("l15", uint32TestSlice_1, uint32EqualTestMatch_1, 0, uint32EqualTestResult_1, 15),
 	CreateUint32TestCase("l7", uint32TestSlice_1, uint32EqualTestMatch_1, 0, uint32EqualTestResult_1, 7),
 	// with extreme values
-	CreateUint32TestCase("ext64", uint32TestSlice_2, uint32EqualTestMatch_2, 0, uint32EqualTestResult_2, 64),
+	CreateUint32TestCase("ext128", uint32TestSlice_2, uint32EqualTestMatch_2, 0, uint32EqualTestResult_2, 128),
 	CreateUint32TestCase("ext32", uint32TestSlice_2, uint32EqualTestMatch_2, 0, uint32EqualTestResult_2, 32),
 	CreateUint32TestCase("ext31", uint32TestSlice_2, uint32EqualTestMatch_2, 0, uint32EqualTestResult_2, 31),
 }
@@ -238,33 +241,33 @@ func TestMatchUint32EqualGeneric(T *testing.T) {
 	}
 }
 
-//func TestMatchUint32EqualAVX2(T *testing.T) {
-//if !useAVX2 {
-//T.SkipNow()
-//}
-//for _, c := range uint32EqualCases {
-//// pre-allocate the result slice and fill with poison
-//l := bitFieldLen(len(c.slice))
-//bits := make([]byte, l+32)
-//for i, _ := range bits {
-//bits[i] = 0xfa
-//}
-//bits = bits[:l]
-//cnt := matchUint32EqualAVX2(c.slice, c.match, bits)
-//if got, want := len(bits), len(c.result); got != want {
-//T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-//}
-//if got, want := cnt, c.count; got != want {
-//T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-//}
-//if bytes.Compare(bits, c.result) != 0 {
-//T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-//}
-//if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-//T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-//}
-//}
-//}
+func TestMatchUint32EqualAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range uint32EqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint32EqualAVX2(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
 
 func TestMatchUint32EqualAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -310,21 +313,21 @@ func BenchmarkMatchUint32EqualGeneric(B *testing.B) {
 	}
 }
 
-//func BenchmarkMatchUint32EqualAVX2(B *testing.B) {
-//if !useAVX2 {
-//B.SkipNow()
-//}
-//for _, n := range vecBenchmarkSizes {
-//a := randUint32Slice(n.l, 1)
-//bits := make([]byte, bitFieldLen(len(a)))
-//B.Run(n.name, func(B *testing.B) {
-//B.SetBytes(int64(n.l * Uint32Size))
-//for i := 0; i < B.N; i++ {
-//matchUint32EqualAVX2(a, math.MaxUint32/2, bits)
-//}
-//})
-//}
-//}
+func BenchmarkMatchUint32EqualAVX2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range vecBenchmarkSizes {
+		a := randUint32Slice(n.l, 1)
+		bits := make([]byte, bitFieldLen(len(a)))
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Uint32Size))
+			for i := 0; i < B.N; i++ {
+				matchUint32EqualAVX2(a, math.MaxUint32/2, bits)
+			}
+		})
+	}
+}
 
 func BenchmarkMatchUint32EqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -361,12 +364,15 @@ var uint32NotEqualCases = []Uint32MatchTest{
 		count:  0,
 	},
 	CreateUint32TestCase("vec1", uint32TestSlice_0, uint32NotEqualTestMatch_0, 0, uint32NotEqualTestResult_0, 32),
-	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32NotEqualTestMatch_0, 0, uint32NotEqualTestResult_0, 64),
+	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32NotEqualTestMatch_0, 0, uint32NotEqualTestResult_0, 128),
 	CreateUint32TestCase("l32", uint32TestSlice_1, uint32NotEqualTestMatch_1, 0, uint32NotEqualTestResult_1, 32),
 	CreateUint32TestCase("l64", append(uint32TestSlice_1, uint32TestSlice_0...), uint32NotEqualTestMatch_1, 0,
 		append(uint32NotEqualTestResult_1, uint32NotEqualTestResult_0...), 64),
 	CreateUint32TestCase("l128", append(uint32TestSlice_1, uint32TestSlice_0...), uint32NotEqualTestMatch_1, 0,
 		append(uint32NotEqualTestResult_1, uint32NotEqualTestResult_0...), 128),
+	CreateUint32TestCase("l256", append(uint32TestSlice_1, uint32TestSlice_0...), uint32NotEqualTestMatch_1, 0,
+		append(uint32NotEqualTestResult_1, uint32NotEqualTestResult_0...), 256),
+	CreateUint32TestCase("l255", uint32TestSlice_1, uint32NotEqualTestMatch_1, 0, uint32NotEqualTestResult_1, 127),
 	CreateUint32TestCase("l127", uint32TestSlice_1, uint32NotEqualTestMatch_1, 0, uint32NotEqualTestResult_1, 127),
 	CreateUint32TestCase("l63", uint32TestSlice_1, uint32NotEqualTestMatch_1, 0, uint32NotEqualTestResult_1, 63),
 	CreateUint32TestCase("l31", uint32TestSlice_1, uint32NotEqualTestMatch_1, 0, uint32NotEqualTestResult_1, 31),
@@ -374,7 +380,7 @@ var uint32NotEqualCases = []Uint32MatchTest{
 	CreateUint32TestCase("l15", uint32TestSlice_1, uint32NotEqualTestMatch_1, 0, uint32NotEqualTestResult_1, 15),
 	CreateUint32TestCase("l7", uint32TestSlice_1, uint32NotEqualTestMatch_1, 0, uint32NotEqualTestResult_1, 7),
 	// with extreme values
-	CreateUint32TestCase("ext64", uint32TestSlice_2, uint32NotEqualTestMatch_2, 0, uint32NotEqualTestResult_2, 64),
+	CreateUint32TestCase("ext128", uint32TestSlice_2, uint32NotEqualTestMatch_2, 0, uint32NotEqualTestResult_2, 128),
 	CreateUint32TestCase("ext32", uint32TestSlice_2, uint32NotEqualTestMatch_2, 0, uint32NotEqualTestResult_2, 32),
 	CreateUint32TestCase("ext31", uint32TestSlice_2, uint32NotEqualTestMatch_2, 0, uint32NotEqualTestResult_2, 31),
 }
@@ -396,33 +402,33 @@ func TestMatchUint32NotEqualGeneric(T *testing.T) {
 	}
 }
 
-//func TestMatchUint32NotEqualAVX2(T *testing.T) {
-//if !useAVX2 {
-//T.SkipNow()
-//}
-//for _, c := range uint32NotEqualCases {
-//// pre-allocate the result slice and fill with poison
-//l := bitFieldLen(len(c.slice))
-//bits := make([]byte, l+32)
-//for i, _ := range bits {
-//bits[i] = 0xfa
-//}
-//bits = bits[:l]
-//cnt := matchUint32NotEqualAVX2(c.slice, c.match, bits)
-//if got, want := len(bits), len(c.result); got != want {
-//T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-//}
-//if got, want := cnt, c.count; got != want {
-//T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-//}
-//if bytes.Compare(bits, c.result) != 0 {
-//T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-//}
-//if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-//T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-//}
-//}
-//}
+func TestMatchUint32NotEqualAVX2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range uint32NotEqualCases {
+		// pre-allocate the result slice and fill with poison
+		l := bitFieldLen(len(c.slice))
+		bits := make([]byte, l+32)
+		for i, _ := range bits {
+			bits[i] = 0xfa
+		}
+		bits = bits[:l]
+		cnt := matchUint32NotEqualAVX2(c.slice, c.match, bits)
+		if got, want := len(bits), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if got, want := cnt, c.count; got != want {
+			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
+		}
+		if bytes.Compare(bits, c.result) != 0 {
+			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
+		}
+		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
+			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
+		}
+	}
+}
 
 func TestMatchUint32NotEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -468,7 +474,7 @@ func BenchmarkMatchUint32NotEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint32NotEqualAVX2(B *testing.B) {
+func BenchmarkMatchUint32NotEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -483,7 +489,7 @@ func BenchmarkMatchUint32NotEqualGeneric(B *testing.B) {
 		})
 	}
 }
-*/
+
 func BenchmarkMatchUint32NotEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
 		B.SkipNow()
@@ -519,12 +525,15 @@ var uint32LessCases = []Uint32MatchTest{
 		count:  0,
 	},
 	CreateUint32TestCase("vec1", uint32TestSlice_0, uint32LessTestMatch_0, 0, uint32LessTestResult_0, 32),
-	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32LessTestMatch_0, 0, uint32LessTestResult_0, 64),
+	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32LessTestMatch_0, 0, uint32LessTestResult_0, 128),
 	CreateUint32TestCase("l32", uint32TestSlice_1, uint32LessTestMatch_1, 0, uint32LessTestResult_1, 32),
 	CreateUint32TestCase("l64", append(uint32TestSlice_1, uint32TestSlice_0...), uint32LessTestMatch_1, 0,
 		append(uint32LessTestResult_1, uint32LessTestResult_0...), 64),
 	CreateUint32TestCase("l128", append(uint32TestSlice_1, uint32TestSlice_0...), uint32LessTestMatch_1, 0,
 		append(uint32LessTestResult_1, uint32LessTestResult_0...), 128),
+	CreateUint32TestCase("l256", append(uint32TestSlice_1, uint32TestSlice_0...), uint32LessTestMatch_1, 0,
+		append(uint32LessTestResult_1, uint32LessTestResult_0...), 256),
+	CreateUint32TestCase("l255", uint32TestSlice_1, uint32LessTestMatch_1, 0, uint32LessTestResult_1, 127),
 	CreateUint32TestCase("l127", uint32TestSlice_1, uint32LessTestMatch_1, 0, uint32LessTestResult_1, 127),
 	CreateUint32TestCase("l63", uint32TestSlice_1, uint32LessTestMatch_1, 0, uint32LessTestResult_1, 63),
 	CreateUint32TestCase("l31", uint32TestSlice_1, uint32LessTestMatch_1, 0, uint32LessTestResult_1, 31),
@@ -532,7 +541,7 @@ var uint32LessCases = []Uint32MatchTest{
 	CreateUint32TestCase("l15", uint32TestSlice_1, uint32LessTestMatch_1, 0, uint32LessTestResult_1, 15),
 	CreateUint32TestCase("l7", uint32TestSlice_1, uint32LessTestMatch_1, 0, uint32LessTestResult_1, 7),
 	// with extreme values
-	CreateUint32TestCase("ext64", uint32TestSlice_2, uint32LessTestMatch_2, 0, uint32LessTestResult_2, 64),
+	CreateUint32TestCase("ext128", uint32TestSlice_2, uint32LessTestMatch_2, 0, uint32LessTestResult_2, 128),
 	CreateUint32TestCase("ext32", uint32TestSlice_2, uint32LessTestMatch_2, 0, uint32LessTestResult_2, 32),
 	CreateUint32TestCase("ext31", uint32TestSlice_2, uint32LessTestMatch_2, 0, uint32LessTestResult_2, 31),
 }
@@ -554,7 +563,7 @@ func TestMatchUint32LessGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint32LessAVX2(T *testing.T) {
+func TestMatchUint32LessAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -581,7 +590,7 @@ func TestMatchUint32LessGeneric(T *testing.T) {
 		}
 	}
 }
-*/
+
 func TestMatchUint32LessAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -626,7 +635,7 @@ func BenchmarkMatchUint32LessGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint32LessAVX2(B *testing.B) {
+func BenchmarkMatchUint32LessAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -640,7 +649,7 @@ func BenchmarkMatchUint32LessGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchUint32LessAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -677,12 +686,15 @@ var uint32LessEqualCases = []Uint32MatchTest{
 		count:  0,
 	},
 	CreateUint32TestCase("vec1", uint32TestSlice_0, uint32LessEqualTestMatch_0, 0, uint32LessEqualTestResult_0, 32),
-	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32LessEqualTestMatch_0, 0, uint32LessEqualTestResult_0, 64),
+	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32LessEqualTestMatch_0, 0, uint32LessEqualTestResult_0, 128),
 	CreateUint32TestCase("l32", uint32TestSlice_1, uint32LessEqualTestMatch_1, 0, uint32LessEqualTestResult_1, 32),
 	CreateUint32TestCase("l64", append(uint32TestSlice_1, uint32TestSlice_0...), uint32LessEqualTestMatch_1, 0,
 		append(uint32LessEqualTestResult_1, uint32LessEqualTestResult_0...), 64),
 	CreateUint32TestCase("l128", append(uint32TestSlice_1, uint32TestSlice_0...), uint32LessEqualTestMatch_1, 0,
 		append(uint32LessEqualTestResult_1, uint32LessEqualTestResult_0...), 128),
+	CreateUint32TestCase("l256", append(uint32TestSlice_1, uint32TestSlice_0...), uint32LessEqualTestMatch_1, 0,
+		append(uint32LessEqualTestResult_1, uint32LessEqualTestResult_0...), 256),
+	CreateUint32TestCase("l255", uint32TestSlice_1, uint32LessEqualTestMatch_1, 0, uint32LessEqualTestResult_1, 127),
 	CreateUint32TestCase("l127", uint32TestSlice_1, uint32LessEqualTestMatch_1, 0, uint32LessEqualTestResult_1, 127),
 	CreateUint32TestCase("l63", uint32TestSlice_1, uint32LessEqualTestMatch_1, 0, uint32LessEqualTestResult_1, 63),
 	CreateUint32TestCase("l31", uint32TestSlice_1, uint32LessEqualTestMatch_1, 0, uint32LessEqualTestResult_1, 31),
@@ -690,7 +702,7 @@ var uint32LessEqualCases = []Uint32MatchTest{
 	CreateUint32TestCase("l15", uint32TestSlice_1, uint32LessEqualTestMatch_1, 0, uint32LessEqualTestResult_1, 15),
 	CreateUint32TestCase("l7", uint32TestSlice_1, uint32LessEqualTestMatch_1, 0, uint32LessEqualTestResult_1, 7),
 	// with extreme values
-	CreateUint32TestCase("ext64", uint32TestSlice_2, uint32LessEqualTestMatch_2, 0, uint32LessEqualTestResult_2, 64),
+	CreateUint32TestCase("ext128", uint32TestSlice_2, uint32LessEqualTestMatch_2, 0, uint32LessEqualTestResult_2, 128),
 	CreateUint32TestCase("ext32", uint32TestSlice_2, uint32LessEqualTestMatch_2, 0, uint32LessEqualTestResult_2, 32),
 	CreateUint32TestCase("ext31", uint32TestSlice_2, uint32LessEqualTestMatch_2, 0, uint32LessEqualTestResult_2, 31),
 }
@@ -712,7 +724,7 @@ func TestMatchUint32LessEqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint32LessEqualAVX2(T *testing.T) {
+func TestMatchUint32LessEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -739,7 +751,7 @@ func TestMatchUint32LessEqualGeneric(T *testing.T) {
 		}
 	}
 }
-*/
+
 func TestMatchUint32LessEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -784,7 +796,7 @@ func BenchmarkMatchUint32LessEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint32LessEqualAVX2(B *testing.B) {
+func BenchmarkMatchUint32LessEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -798,7 +810,7 @@ func BenchmarkMatchUint32LessEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchUint32LessEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -835,12 +847,15 @@ var uint32GreaterCases = []Uint32MatchTest{
 		count:  0,
 	},
 	CreateUint32TestCase("vec1", uint32TestSlice_0, uint32GreaterTestMatch_0, 0, uint32GreaterTestResult_0, 32),
-	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32GreaterTestMatch_0, 0, uint32GreaterTestResult_0, 64),
+	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32GreaterTestMatch_0, 0, uint32GreaterTestResult_0, 128),
 	CreateUint32TestCase("l32", uint32TestSlice_1, uint32GreaterTestMatch_1, 0, uint32GreaterTestResult_1, 32),
 	CreateUint32TestCase("l64", append(uint32TestSlice_1, uint32TestSlice_0...), uint32GreaterTestMatch_1, 0,
 		append(uint32GreaterTestResult_1, uint32GreaterTestResult_0...), 64),
 	CreateUint32TestCase("l128", append(uint32TestSlice_1, uint32TestSlice_0...), uint32GreaterTestMatch_1, 0,
 		append(uint32GreaterTestResult_1, uint32GreaterTestResult_0...), 128),
+	CreateUint32TestCase("l256", append(uint32TestSlice_1, uint32TestSlice_0...), uint32GreaterTestMatch_1, 0,
+		append(uint32GreaterTestResult_1, uint32GreaterTestResult_0...), 256),
+	CreateUint32TestCase("l255", uint32TestSlice_1, uint32GreaterTestMatch_1, 0, uint32GreaterTestResult_1, 127),
 	CreateUint32TestCase("l127", uint32TestSlice_1, uint32GreaterTestMatch_1, 0, uint32GreaterTestResult_1, 127),
 	CreateUint32TestCase("l63", uint32TestSlice_1, uint32GreaterTestMatch_1, 0, uint32GreaterTestResult_1, 63),
 	CreateUint32TestCase("l31", uint32TestSlice_1, uint32GreaterTestMatch_1, 0, uint32GreaterTestResult_1, 31),
@@ -848,7 +863,7 @@ var uint32GreaterCases = []Uint32MatchTest{
 	CreateUint32TestCase("l15", uint32TestSlice_1, uint32GreaterTestMatch_1, 0, uint32GreaterTestResult_1, 15),
 	CreateUint32TestCase("l7", uint32TestSlice_1, uint32GreaterTestMatch_1, 0, uint32GreaterTestResult_1, 7),
 	// with extreme values
-	CreateUint32TestCase("ext64", uint32TestSlice_2, uint32GreaterTestMatch_2, 0, uint32GreaterTestResult_2, 64),
+	CreateUint32TestCase("ext128", uint32TestSlice_2, uint32GreaterTestMatch_2, 0, uint32GreaterTestResult_2, 128),
 	CreateUint32TestCase("ext32", uint32TestSlice_2, uint32GreaterTestMatch_2, 0, uint32GreaterTestResult_2, 32),
 	CreateUint32TestCase("ext31", uint32TestSlice_2, uint32GreaterTestMatch_2, 0, uint32GreaterTestResult_2, 31),
 }
@@ -870,7 +885,7 @@ func TestMatchUint32GreaterGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint32GreaterAVX2(T *testing.T) {
+func TestMatchUint32GreaterAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -896,7 +911,7 @@ func TestMatchUint32GreaterGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchUint32GreaterAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -942,7 +957,7 @@ func BenchmarkMatchUint32GreaterGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint32GreaterAVX2(B *testing.B) {
+func BenchmarkMatchUint32GreaterAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -956,7 +971,7 @@ func BenchmarkMatchUint32GreaterGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchUint32GreaterAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -993,12 +1008,15 @@ var uint32GreaterEqualCases = []Uint32MatchTest{
 		count:  0,
 	},
 	CreateUint32TestCase("vec1", uint32TestSlice_0, uint32GreaterEqualTestMatch_0, 0, uint32GreaterEqualTestResult_0, 32),
-	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32GreaterEqualTestMatch_0, 0, uint32GreaterEqualTestResult_0, 64),
+	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32GreaterEqualTestMatch_0, 0, uint32GreaterEqualTestResult_0, 128),
 	CreateUint32TestCase("l32", uint32TestSlice_1, uint32GreaterEqualTestMatch_1, 0, uint32GreaterEqualTestResult_1, 32),
 	CreateUint32TestCase("l64", append(uint32TestSlice_1, uint32TestSlice_0...), uint32GreaterEqualTestMatch_1, 0,
 		append(uint32GreaterEqualTestResult_1, uint32GreaterEqualTestResult_0...), 64),
 	CreateUint32TestCase("l128", append(uint32TestSlice_1, uint32TestSlice_0...), uint32GreaterEqualTestMatch_1, 0,
 		append(uint32GreaterEqualTestResult_1, uint32GreaterEqualTestResult_0...), 128),
+	CreateUint32TestCase("l256", append(uint32TestSlice_1, uint32TestSlice_0...), uint32GreaterEqualTestMatch_1, 0,
+		append(uint32GreaterEqualTestResult_1, uint32GreaterEqualTestResult_0...), 256),
+	CreateUint32TestCase("l255", uint32TestSlice_1, uint32GreaterEqualTestMatch_1, 0, uint32GreaterEqualTestResult_1, 127),
 	CreateUint32TestCase("l127", uint32TestSlice_1, uint32GreaterEqualTestMatch_1, 0, uint32GreaterEqualTestResult_1, 127),
 	CreateUint32TestCase("l63", uint32TestSlice_1, uint32GreaterEqualTestMatch_1, 0, uint32GreaterEqualTestResult_1, 63),
 	CreateUint32TestCase("l31", uint32TestSlice_1, uint32GreaterEqualTestMatch_1, 0, uint32GreaterEqualTestResult_1, 31),
@@ -1006,7 +1024,7 @@ var uint32GreaterEqualCases = []Uint32MatchTest{
 	CreateUint32TestCase("l15", uint32TestSlice_1, uint32GreaterEqualTestMatch_1, 0, uint32GreaterEqualTestResult_1, 15),
 	CreateUint32TestCase("l7", uint32TestSlice_1, uint32GreaterEqualTestMatch_1, 0, uint32GreaterEqualTestResult_1, 7),
 	// with extreme values
-	CreateUint32TestCase("ext64", uint32TestSlice_2, uint32GreaterEqualTestMatch_2, 0, uint32GreaterEqualTestResult_2, 64),
+	CreateUint32TestCase("ext128", uint32TestSlice_2, uint32GreaterEqualTestMatch_2, 0, uint32GreaterEqualTestResult_2, 128),
 	CreateUint32TestCase("ext32", uint32TestSlice_2, uint32GreaterEqualTestMatch_2, 0, uint32GreaterEqualTestResult_2, 32),
 	CreateUint32TestCase("ext31", uint32TestSlice_2, uint32GreaterEqualTestMatch_2, 0, uint32GreaterEqualTestResult_2, 31),
 }
@@ -1028,7 +1046,7 @@ func TestMatchUint32GreaterEqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint32GreaterEqualAVX2(T *testing.T) {
+func TestMatchUint32GreaterEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -1055,7 +1073,7 @@ func TestMatchUint32GreaterEqualGeneric(T *testing.T) {
 		}
 	}
 }
-*/
+
 func TestMatchUint32GreaterEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -1100,7 +1118,7 @@ func BenchmarkMatchUint32GreaterEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint32GreaterEqualAVX2(B *testing.B) {
+func BenchmarkMatchUint32GreaterEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -1114,7 +1132,7 @@ func BenchmarkMatchUint32GreaterEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchUint32GreaterEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -1152,12 +1170,16 @@ var uint32BetweenCases = []Uint32MatchTest{
 		count:  0,
 	},
 	CreateUint32TestCase("vec1", uint32TestSlice_0, uint32BetweenTestMatch_0, uint32BetweenTestMatch_0b, uint32BetweenTestResult_0, 32),
-	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32BetweenTestMatch_0, uint32BetweenTestMatch_0b, uint32BetweenTestResult_0, 64),
+	CreateUint32TestCase("vec2", uint32TestSlice_0, uint32BetweenTestMatch_0, uint32BetweenTestMatch_0b, uint32BetweenTestResult_0, 128),
 	CreateUint32TestCase("l32", uint32TestSlice_1, uint32BetweenTestMatch_1, uint32BetweenTestMatch_1b, uint32BetweenTestResult_1, 32),
 	CreateUint32TestCase("l64", append(uint32TestSlice_1, uint32TestSlice_0...), uint32BetweenTestMatch_1, uint32BetweenTestMatch_1b,
 		append(uint32BetweenTestResult_1, uint32BetweenTestResult_0...), 64),
 	CreateUint32TestCase("l128", append(uint32TestSlice_1, uint32TestSlice_0...), uint32BetweenTestMatch_1, uint32BetweenTestMatch_1b,
 		append(uint32BetweenTestResult_1, uint32BetweenTestResult_0...), 128),
+	CreateUint32TestCase("l256", append(uint32TestSlice_1, uint32TestSlice_0...), uint32BetweenTestMatch_1, uint32BetweenTestMatch_1b,
+		append(uint32BetweenTestResult_1, uint32BetweenTestResult_0...), 256),
+	CreateUint32TestCase("l255", append(uint32TestSlice_1, uint32TestSlice_0...), uint32BetweenTestMatch_1, uint32BetweenTestMatch_1b,
+		append(uint32BetweenTestResult_1, uint32BetweenTestResult_0...), 255),
 	CreateUint32TestCase("l127", uint32TestSlice_1, uint32BetweenTestMatch_1, uint32BetweenTestMatch_1b, uint32BetweenTestResult_1, 127),
 	CreateUint32TestCase("l63", uint32TestSlice_1, uint32BetweenTestMatch_1, uint32BetweenTestMatch_1b, uint32BetweenTestResult_1, 63),
 	CreateUint32TestCase("l31", uint32TestSlice_1, uint32BetweenTestMatch_1, uint32BetweenTestMatch_1b, uint32BetweenTestResult_1, 31),
@@ -1165,7 +1187,7 @@ var uint32BetweenCases = []Uint32MatchTest{
 	CreateUint32TestCase("l15", uint32TestSlice_1, uint32BetweenTestMatch_1, uint32BetweenTestMatch_1b, uint32BetweenTestResult_1, 15),
 	CreateUint32TestCase("l7", uint32TestSlice_1, uint32BetweenTestMatch_1, uint32BetweenTestMatch_1b, uint32BetweenTestResult_1, 7),
 	// with extreme values
-	CreateUint32TestCase("ext64", uint32TestSlice_2, uint32BetweenTestMatch_2, uint32BetweenTestMatch_2b, uint32BetweenTestResult_2, 64),
+	CreateUint32TestCase("ext64", uint32TestSlice_2, uint32BetweenTestMatch_2, uint32BetweenTestMatch_2b, uint32BetweenTestResult_2, 128),
 	CreateUint32TestCase("ext32", uint32TestSlice_2, uint32BetweenTestMatch_2, uint32BetweenTestMatch_2b, uint32BetweenTestResult_2, 32),
 	CreateUint32TestCase("ext31", uint32TestSlice_2, uint32BetweenTestMatch_2, uint32BetweenTestMatch_2b, uint32BetweenTestResult_2, 31),
 }
@@ -1187,7 +1209,7 @@ func TestMatchUint32BetweenGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint32BetweenAVX2(T *testing.T) {
+func TestMatchUint32BetweenAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -1214,7 +1236,7 @@ func TestMatchUint32BetweenGeneric(T *testing.T) {
 		}
 	}
 }
-*/
+
 func TestMatchUint32BetweenAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -1259,7 +1281,7 @@ func BenchmarkMatchUint32BetweenGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint32BetweenAVX2(B *testing.B) {
+func BenchmarkMatchUint32BetweenAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -1274,7 +1296,7 @@ func BenchmarkMatchUint32BetweenGeneric(B *testing.B) {
 		})
 	}
 }
-*/
+
 func BenchmarkMatchUint32BetweenAVX512(B *testing.B) {
 	if !useAVX512_F {
 		B.SkipNow()

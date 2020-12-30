@@ -202,12 +202,24 @@ var uint8EqualCases = []Uint8MatchTest{
 		count:  0,
 	},
 	CreateUint8TestCase("vec1", uint8TestSlice_0, uint8EqualTestMatch_0, 0, uint8EqualTestResult_0, 32),
-	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8EqualTestMatch_0, 0, uint8EqualTestResult_0, 64),
+	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8EqualTestMatch_0, 0, uint8EqualTestResult_0, 512),
 	CreateUint8TestCase("l32", uint8TestSlice_1, uint8EqualTestMatch_1, 0, uint8EqualTestResult_1, 32),
 	CreateUint8TestCase("l64", append(uint8TestSlice_1, uint8TestSlice_0...), uint8EqualTestMatch_1, 0,
 		append(uint8EqualTestResult_1, uint8EqualTestResult_0...), 64),
 	CreateUint8TestCase("l128", append(uint8TestSlice_1, uint8TestSlice_0...), uint8EqualTestMatch_1, 0,
 		append(uint8EqualTestResult_1, uint8EqualTestResult_0...), 128),
+	CreateUint8TestCase("l256", append(uint8TestSlice_1, uint8TestSlice_0...), uint8EqualTestMatch_1, 0,
+		append(uint8EqualTestResult_1, uint8EqualTestResult_0...), 256),
+	CreateUint8TestCase("l512", append(uint8TestSlice_1, uint8TestSlice_0...), uint8EqualTestMatch_1, 0,
+		append(uint8EqualTestResult_1, uint8EqualTestResult_0...), 512),
+	CreateUint8TestCase("l1024", append(uint8TestSlice_1, uint8TestSlice_0...), uint8EqualTestMatch_1, 0,
+		append(uint8EqualTestResult_1, uint8EqualTestResult_0...), 1024),
+	CreateUint8TestCase("l1023", append(uint8TestSlice_1, uint8TestSlice_0...), uint8EqualTestMatch_1, 0,
+		append(uint8EqualTestResult_1, uint8EqualTestResult_0...), 1023),
+	CreateUint8TestCase("l511", append(uint8TestSlice_1, uint8TestSlice_0...), uint8EqualTestMatch_1, 0,
+		append(uint8EqualTestResult_1, uint8EqualTestResult_0...), 511),
+	CreateUint8TestCase("l255", append(uint8TestSlice_1, uint8TestSlice_0...), uint8EqualTestMatch_1, 0,
+		append(uint8EqualTestResult_1, uint8EqualTestResult_0...), 255),
 	CreateUint8TestCase("l127", uint8TestSlice_1, uint8EqualTestMatch_1, 0, uint8EqualTestResult_1, 127),
 	CreateUint8TestCase("l63", uint8TestSlice_1, uint8EqualTestMatch_1, 0, uint8EqualTestResult_1, 63),
 	CreateUint8TestCase("l31", uint8TestSlice_1, uint8EqualTestMatch_1, 0, uint8EqualTestResult_1, 31),
@@ -215,7 +227,7 @@ var uint8EqualCases = []Uint8MatchTest{
 	CreateUint8TestCase("l15", uint8TestSlice_1, uint8EqualTestMatch_1, 0, uint8EqualTestResult_1, 15),
 	CreateUint8TestCase("l7", uint8TestSlice_1, uint8EqualTestMatch_1, 0, uint8EqualTestResult_1, 7),
 	// with extreme values
-	CreateUint8TestCase("ext64", uint8TestSlice_2, uint8EqualTestMatch_2, 0, uint8EqualTestResult_2, 64),
+	CreateUint8TestCase("ext512", uint8TestSlice_2, uint8EqualTestMatch_2, 0, uint8EqualTestResult_2, 512),
 	CreateUint8TestCase("ext32", uint8TestSlice_2, uint8EqualTestMatch_2, 0, uint8EqualTestResult_2, 32),
 	CreateUint8TestCase("ext31", uint8TestSlice_2, uint8EqualTestMatch_2, 0, uint8EqualTestResult_2, 31),
 }
@@ -237,7 +249,7 @@ func TestMatchUint8EqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint8EqualAVX2(T *testing.T) {
+func TestMatchUint8EqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -264,7 +276,7 @@ func TestMatchUint8EqualGeneric(T *testing.T) {
 		}
 	}
 }
-*/
+
 func TestMatchUint8EqualAVX512(T *testing.T) {
 	if !useAVX512_BW {
 		T.SkipNow()
@@ -309,7 +321,7 @@ func BenchmarkMatchUint8EqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint8EqualAVX2(B *testing.B) {
+func BenchmarkMatchUint8EqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -323,7 +335,7 @@ func BenchmarkMatchUint8EqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchUint8EqualAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -360,12 +372,24 @@ var uint8NotEqualCases = []Uint8MatchTest{
 		count:  0,
 	},
 	CreateUint8TestCase("vec1", uint8TestSlice_0, uint8NotEqualTestMatch_0, 0, uint8NotEqualTestResult_0, 32),
-	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8NotEqualTestMatch_0, 0, uint8NotEqualTestResult_0, 64),
+	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8NotEqualTestMatch_0, 0, uint8NotEqualTestResult_0, 512),
 	CreateUint8TestCase("l32", uint8TestSlice_1, uint8NotEqualTestMatch_1, 0, uint8NotEqualTestResult_1, 32),
 	CreateUint8TestCase("l64", append(uint8TestSlice_1, uint8TestSlice_0...), uint8NotEqualTestMatch_1, 0,
 		append(uint8NotEqualTestResult_1, uint8NotEqualTestResult_0...), 64),
 	CreateUint8TestCase("l128", append(uint8TestSlice_1, uint8TestSlice_0...), uint8NotEqualTestMatch_1, 0,
 		append(uint8NotEqualTestResult_1, uint8NotEqualTestResult_0...), 128),
+	CreateUint8TestCase("l256", append(uint8TestSlice_1, uint8TestSlice_0...), uint8NotEqualTestMatch_1, 0,
+		append(uint8NotEqualTestResult_1, uint8NotEqualTestResult_0...), 256),
+	CreateUint8TestCase("l512", append(uint8TestSlice_1, uint8TestSlice_0...), uint8NotEqualTestMatch_1, 0,
+		append(uint8NotEqualTestResult_1, uint8NotEqualTestResult_0...), 512),
+	CreateUint8TestCase("l1024", append(uint8TestSlice_1, uint8TestSlice_0...), uint8NotEqualTestMatch_1, 0,
+		append(uint8NotEqualTestResult_1, uint8NotEqualTestResult_0...), 1024),
+	CreateUint8TestCase("l1023", append(uint8TestSlice_1, uint8TestSlice_0...), uint8NotEqualTestMatch_1, 0,
+		append(uint8NotEqualTestResult_1, uint8NotEqualTestResult_0...), 1023),
+	CreateUint8TestCase("l511", append(uint8TestSlice_1, uint8TestSlice_0...), uint8NotEqualTestMatch_1, 0,
+		append(uint8NotEqualTestResult_1, uint8NotEqualTestResult_0...), 511),
+	CreateUint8TestCase("l255", append(uint8TestSlice_1, uint8TestSlice_0...), uint8NotEqualTestMatch_1, 0,
+		append(uint8NotEqualTestResult_1, uint8NotEqualTestResult_0...), 255),
 	CreateUint8TestCase("l127", uint8TestSlice_1, uint8NotEqualTestMatch_1, 0, uint8NotEqualTestResult_1, 127),
 	CreateUint8TestCase("l63", uint8TestSlice_1, uint8NotEqualTestMatch_1, 0, uint8NotEqualTestResult_1, 63),
 	CreateUint8TestCase("l31", uint8TestSlice_1, uint8NotEqualTestMatch_1, 0, uint8NotEqualTestResult_1, 31),
@@ -373,7 +397,7 @@ var uint8NotEqualCases = []Uint8MatchTest{
 	CreateUint8TestCase("l15", uint8TestSlice_1, uint8NotEqualTestMatch_1, 0, uint8NotEqualTestResult_1, 15),
 	CreateUint8TestCase("l7", uint8TestSlice_1, uint8NotEqualTestMatch_1, 0, uint8NotEqualTestResult_1, 7),
 	// with extreme values
-	CreateUint8TestCase("ext64", uint8TestSlice_2, uint8NotEqualTestMatch_2, 0, uint8NotEqualTestResult_2, 64),
+	CreateUint8TestCase("ext512", uint8TestSlice_2, uint8NotEqualTestMatch_2, 0, uint8NotEqualTestResult_2, 512),
 	CreateUint8TestCase("ext32", uint8TestSlice_2, uint8NotEqualTestMatch_2, 0, uint8NotEqualTestResult_2, 32),
 	CreateUint8TestCase("ext31", uint8TestSlice_2, uint8NotEqualTestMatch_2, 0, uint8NotEqualTestResult_2, 31),
 }
@@ -395,7 +419,7 @@ func TestMatchUint8NotEqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint8NotEqualAVX2(T *testing.T) {
+func TestMatchUint8NotEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -421,7 +445,7 @@ func TestMatchUint8NotEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchUint8NotEqualAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -467,7 +491,7 @@ func BenchmarkMatchUint8NotEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint8NotEqualAVX2(B *testing.B) {
+func BenchmarkMatchUint8NotEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -481,7 +505,7 @@ func BenchmarkMatchUint8NotEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchUint8NotEqualAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -518,12 +542,24 @@ var uint8LessCases = []Uint8MatchTest{
 		count:  0,
 	},
 	CreateUint8TestCase("vec1", uint8TestSlice_0, uint8LessTestMatch_0, 0, uint8LessTestResult_0, 32),
-	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8LessTestMatch_0, 0, uint8LessTestResult_0, 64),
+	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8LessTestMatch_0, 0, uint8LessTestResult_0, 512),
 	CreateUint8TestCase("l32", uint8TestSlice_1, uint8LessTestMatch_1, 0, uint8LessTestResult_1, 32),
 	CreateUint8TestCase("l64", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessTestMatch_1, 0,
 		append(uint8LessTestResult_1, uint8LessTestResult_0...), 64),
 	CreateUint8TestCase("l128", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessTestMatch_1, 0,
 		append(uint8LessTestResult_1, uint8LessTestResult_0...), 128),
+	CreateUint8TestCase("l256", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessTestMatch_1, 0,
+		append(uint8LessTestResult_1, uint8LessTestResult_0...), 256),
+	CreateUint8TestCase("l512", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessTestMatch_1, 0,
+		append(uint8LessTestResult_1, uint8LessTestResult_0...), 512),
+	CreateUint8TestCase("l1024", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessTestMatch_1, 0,
+		append(uint8LessTestResult_1, uint8LessTestResult_0...), 1024),
+	CreateUint8TestCase("l1023", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessTestMatch_1, 0,
+		append(uint8LessTestResult_1, uint8LessTestResult_0...), 1023),
+	CreateUint8TestCase("l511", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessTestMatch_1, 0,
+		append(uint8LessTestResult_1, uint8LessTestResult_0...), 511),
+	CreateUint8TestCase("l255", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessTestMatch_1, 0,
+		append(uint8LessTestResult_1, uint8LessTestResult_0...), 255),
 	CreateUint8TestCase("l127", uint8TestSlice_1, uint8LessTestMatch_1, 0, uint8LessTestResult_1, 127),
 	CreateUint8TestCase("l63", uint8TestSlice_1, uint8LessTestMatch_1, 0, uint8LessTestResult_1, 63),
 	CreateUint8TestCase("l31", uint8TestSlice_1, uint8LessTestMatch_1, 0, uint8LessTestResult_1, 31),
@@ -531,7 +567,7 @@ var uint8LessCases = []Uint8MatchTest{
 	CreateUint8TestCase("l15", uint8TestSlice_1, uint8LessTestMatch_1, 0, uint8LessTestResult_1, 15),
 	CreateUint8TestCase("l7", uint8TestSlice_1, uint8LessTestMatch_1, 0, uint8LessTestResult_1, 7),
 	// with extreme values
-	CreateUint8TestCase("ext64", uint8TestSlice_2, uint8LessTestMatch_2, 0, uint8LessTestResult_2, 64),
+	CreateUint8TestCase("ext512", uint8TestSlice_2, uint8LessTestMatch_2, 0, uint8LessTestResult_2, 512),
 	CreateUint8TestCase("ext32", uint8TestSlice_2, uint8LessTestMatch_2, 0, uint8LessTestResult_2, 32),
 	CreateUint8TestCase("ext31", uint8TestSlice_2, uint8LessTestMatch_2, 0, uint8LessTestResult_2, 31),
 }
@@ -553,7 +589,7 @@ func TestMatchUint8LessGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint8LessAVX2(T *testing.T) {
+func TestMatchUint8LessAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -579,7 +615,7 @@ func TestMatchUint8LessGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchUint8LessAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -625,7 +661,7 @@ func BenchmarkMatchUint8LessGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint8LessAVX2(B *testing.B) {
+func BenchmarkMatchUint8LessAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -639,7 +675,7 @@ func BenchmarkMatchUint8LessGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchUint8LessAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -676,12 +712,24 @@ var uint8LessEqualCases = []Uint8MatchTest{
 		count:  0,
 	},
 	CreateUint8TestCase("vec1", uint8TestSlice_0, uint8LessEqualTestMatch_0, 0, uint8LessEqualTestResult_0, 32),
-	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8LessEqualTestMatch_0, 0, uint8LessEqualTestResult_0, 64),
+	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8LessEqualTestMatch_0, 0, uint8LessEqualTestResult_0, 512),
 	CreateUint8TestCase("l32", uint8TestSlice_1, uint8LessEqualTestMatch_1, 0, uint8LessEqualTestResult_1, 32),
 	CreateUint8TestCase("l64", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessEqualTestMatch_1, 0,
 		append(uint8LessEqualTestResult_1, uint8LessEqualTestResult_0...), 64),
 	CreateUint8TestCase("l128", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessEqualTestMatch_1, 0,
 		append(uint8LessEqualTestResult_1, uint8LessEqualTestResult_0...), 128),
+	CreateUint8TestCase("l256", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessEqualTestMatch_1, 0,
+		append(uint8LessEqualTestResult_1, uint8LessEqualTestResult_0...), 256),
+	CreateUint8TestCase("l512", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessEqualTestMatch_1, 0,
+		append(uint8LessEqualTestResult_1, uint8LessEqualTestResult_0...), 512),
+	CreateUint8TestCase("l1024", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessEqualTestMatch_1, 0,
+		append(uint8LessEqualTestResult_1, uint8LessEqualTestResult_0...), 1024),
+	CreateUint8TestCase("l1023", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessEqualTestMatch_1, 0,
+		append(uint8LessEqualTestResult_1, uint8LessEqualTestResult_0...), 1023),
+	CreateUint8TestCase("l511", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessEqualTestMatch_1, 0,
+		append(uint8LessEqualTestResult_1, uint8LessEqualTestResult_0...), 511),
+	CreateUint8TestCase("l255", append(uint8TestSlice_1, uint8TestSlice_0...), uint8LessEqualTestMatch_1, 0,
+		append(uint8LessEqualTestResult_1, uint8LessEqualTestResult_0...), 255),
 	CreateUint8TestCase("l127", uint8TestSlice_1, uint8LessEqualTestMatch_1, 0, uint8LessEqualTestResult_1, 127),
 	CreateUint8TestCase("l63", uint8TestSlice_1, uint8LessEqualTestMatch_1, 0, uint8LessEqualTestResult_1, 63),
 	CreateUint8TestCase("l31", uint8TestSlice_1, uint8LessEqualTestMatch_1, 0, uint8LessEqualTestResult_1, 31),
@@ -689,7 +737,7 @@ var uint8LessEqualCases = []Uint8MatchTest{
 	CreateUint8TestCase("l15", uint8TestSlice_1, uint8LessEqualTestMatch_1, 0, uint8LessEqualTestResult_1, 15),
 	CreateUint8TestCase("l7", uint8TestSlice_1, uint8LessEqualTestMatch_1, 0, uint8LessEqualTestResult_1, 7),
 	// with extreme values
-	CreateUint8TestCase("ext64", uint8TestSlice_2, uint8LessEqualTestMatch_2, 0, uint8LessEqualTestResult_2, 64),
+	CreateUint8TestCase("ext512", uint8TestSlice_2, uint8LessEqualTestMatch_2, 0, uint8LessEqualTestResult_2, 512),
 	CreateUint8TestCase("ext32", uint8TestSlice_2, uint8LessEqualTestMatch_2, 0, uint8LessEqualTestResult_2, 32),
 	CreateUint8TestCase("ext31", uint8TestSlice_2, uint8LessEqualTestMatch_2, 0, uint8LessEqualTestResult_2, 31),
 }
@@ -711,7 +759,7 @@ func TestMatchUint8LessEqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint8LessEqualAVX2(T *testing.T) {
+func TestMatchUint8LessEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -737,7 +785,7 @@ func TestMatchUint8LessEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchUint8LessEqualAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -783,7 +831,7 @@ func BenchmarkMatchUint8LessEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint8LessEqualAVX2(B *testing.B) {
+func BenchmarkMatchUint8LessEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -797,7 +845,7 @@ func BenchmarkMatchUint8LessEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchUint8LessEqualAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -834,12 +882,24 @@ var uint8GreaterCases = []Uint8MatchTest{
 		count:  0,
 	},
 	CreateUint8TestCase("vec1", uint8TestSlice_0, uint8GreaterTestMatch_0, 0, uint8GreaterTestResult_0, 32),
-	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8GreaterTestMatch_0, 0, uint8GreaterTestResult_0, 64),
+	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8GreaterTestMatch_0, 0, uint8GreaterTestResult_0, 512),
 	CreateUint8TestCase("l32", uint8TestSlice_1, uint8GreaterTestMatch_1, 0, uint8GreaterTestResult_1, 32),
 	CreateUint8TestCase("l64", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterTestMatch_1, 0,
 		append(uint8GreaterTestResult_1, uint8GreaterTestResult_0...), 64),
 	CreateUint8TestCase("l128", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterTestMatch_1, 0,
 		append(uint8GreaterTestResult_1, uint8GreaterTestResult_0...), 128),
+	CreateUint8TestCase("l256", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterTestMatch_1, 0,
+		append(uint8GreaterTestResult_1, uint8GreaterTestResult_0...), 256),
+	CreateUint8TestCase("l512", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterTestMatch_1, 0,
+		append(uint8GreaterTestResult_1, uint8GreaterTestResult_0...), 512),
+	CreateUint8TestCase("l1024", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterTestMatch_1, 0,
+		append(uint8GreaterTestResult_1, uint8GreaterTestResult_0...), 1024),
+	CreateUint8TestCase("l1023", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterTestMatch_1, 0,
+		append(uint8GreaterTestResult_1, uint8GreaterTestResult_0...), 1023),
+	CreateUint8TestCase("l511", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterTestMatch_1, 0,
+		append(uint8GreaterTestResult_1, uint8GreaterTestResult_0...), 511),
+	CreateUint8TestCase("l255", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterTestMatch_1, 0,
+		append(uint8GreaterTestResult_1, uint8GreaterTestResult_0...), 255),
 	CreateUint8TestCase("l127", uint8TestSlice_1, uint8GreaterTestMatch_1, 0, uint8GreaterTestResult_1, 127),
 	CreateUint8TestCase("l63", uint8TestSlice_1, uint8GreaterTestMatch_1, 0, uint8GreaterTestResult_1, 63),
 	CreateUint8TestCase("l31", uint8TestSlice_1, uint8GreaterTestMatch_1, 0, uint8GreaterTestResult_1, 31),
@@ -847,7 +907,7 @@ var uint8GreaterCases = []Uint8MatchTest{
 	CreateUint8TestCase("l15", uint8TestSlice_1, uint8GreaterTestMatch_1, 0, uint8GreaterTestResult_1, 15),
 	CreateUint8TestCase("l7", uint8TestSlice_1, uint8GreaterTestMatch_1, 0, uint8GreaterTestResult_1, 7),
 	// with extreme values
-	CreateUint8TestCase("ext64", uint8TestSlice_2, uint8GreaterTestMatch_2, 0, uint8GreaterTestResult_2, 64),
+	CreateUint8TestCase("ext512", uint8TestSlice_2, uint8GreaterTestMatch_2, 0, uint8GreaterTestResult_2, 512),
 	CreateUint8TestCase("ext32", uint8TestSlice_2, uint8GreaterTestMatch_2, 0, uint8GreaterTestResult_2, 32),
 	CreateUint8TestCase("ext31", uint8TestSlice_2, uint8GreaterTestMatch_2, 0, uint8GreaterTestResult_2, 31),
 }
@@ -869,7 +929,7 @@ func TestMatchUint8GreaterGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint8GreaterAVX2(T *testing.T) {
+func TestMatchUint8GreaterAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -895,7 +955,7 @@ func TestMatchUint8GreaterGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchUint8GreaterAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -941,7 +1001,7 @@ func BenchmarkMatchUint8GreaterGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint8GreaterAVX2(B *testing.B) {
+func BenchmarkMatchUint8GreaterAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -955,7 +1015,7 @@ func BenchmarkMatchUint8GreaterGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchUint8GreaterAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -992,12 +1052,24 @@ var uint8GreaterEqualCases = []Uint8MatchTest{
 		count:  0,
 	},
 	CreateUint8TestCase("vec1", uint8TestSlice_0, uint8GreaterEqualTestMatch_0, 0, uint8GreaterEqualTestResult_0, 32),
-	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8GreaterEqualTestMatch_0, 0, uint8GreaterEqualTestResult_0, 64),
+	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8GreaterEqualTestMatch_0, 0, uint8GreaterEqualTestResult_0, 512),
 	CreateUint8TestCase("l32", uint8TestSlice_1, uint8GreaterEqualTestMatch_1, 0, uint8GreaterEqualTestResult_1, 32),
 	CreateUint8TestCase("l64", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterEqualTestMatch_1, 0,
 		append(uint8GreaterEqualTestResult_1, uint8GreaterEqualTestResult_0...), 64),
 	CreateUint8TestCase("l128", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterEqualTestMatch_1, 0,
 		append(uint8GreaterEqualTestResult_1, uint8GreaterEqualTestResult_0...), 128),
+	CreateUint8TestCase("l256", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterEqualTestMatch_1, 0,
+		append(uint8GreaterEqualTestResult_1, uint8GreaterEqualTestResult_0...), 256),
+	CreateUint8TestCase("l512", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterEqualTestMatch_1, 0,
+		append(uint8GreaterEqualTestResult_1, uint8GreaterEqualTestResult_0...), 512),
+	CreateUint8TestCase("l1024", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterEqualTestMatch_1, 0,
+		append(uint8GreaterEqualTestResult_1, uint8GreaterEqualTestResult_0...), 1024),
+	CreateUint8TestCase("l1023", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterEqualTestMatch_1, 0,
+		append(uint8GreaterEqualTestResult_1, uint8GreaterEqualTestResult_0...), 1023),
+	CreateUint8TestCase("l511", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterEqualTestMatch_1, 0,
+		append(uint8GreaterEqualTestResult_1, uint8GreaterEqualTestResult_0...), 511),
+	CreateUint8TestCase("l255", append(uint8TestSlice_1, uint8TestSlice_0...), uint8GreaterEqualTestMatch_1, 0,
+		append(uint8GreaterEqualTestResult_1, uint8GreaterEqualTestResult_0...), 255),
 	CreateUint8TestCase("l127", uint8TestSlice_1, uint8GreaterEqualTestMatch_1, 0, uint8GreaterEqualTestResult_1, 127),
 	CreateUint8TestCase("l63", uint8TestSlice_1, uint8GreaterEqualTestMatch_1, 0, uint8GreaterEqualTestResult_1, 63),
 	CreateUint8TestCase("l31", uint8TestSlice_1, uint8GreaterEqualTestMatch_1, 0, uint8GreaterEqualTestResult_1, 31),
@@ -1005,7 +1077,7 @@ var uint8GreaterEqualCases = []Uint8MatchTest{
 	CreateUint8TestCase("l15", uint8TestSlice_1, uint8GreaterEqualTestMatch_1, 0, uint8GreaterEqualTestResult_1, 15),
 	CreateUint8TestCase("l7", uint8TestSlice_1, uint8GreaterEqualTestMatch_1, 0, uint8GreaterEqualTestResult_1, 7),
 	// with extreme values
-	CreateUint8TestCase("ext64", uint8TestSlice_2, uint8GreaterEqualTestMatch_2, 0, uint8GreaterEqualTestResult_2, 64),
+	CreateUint8TestCase("ext512", uint8TestSlice_2, uint8GreaterEqualTestMatch_2, 0, uint8GreaterEqualTestResult_2, 512),
 	CreateUint8TestCase("ext32", uint8TestSlice_2, uint8GreaterEqualTestMatch_2, 0, uint8GreaterEqualTestResult_2, 32),
 	CreateUint8TestCase("ext31", uint8TestSlice_2, uint8GreaterEqualTestMatch_2, 0, uint8GreaterEqualTestResult_2, 31),
 }
@@ -1027,7 +1099,7 @@ func TestMatchUint8GreaterEqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint8GreaterEqualAVX2(T *testing.T) {
+func TestMatchUint8GreaterEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -1053,7 +1125,7 @@ func TestMatchUint8GreaterEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchUint8GreaterEqualAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -1099,7 +1171,7 @@ func BenchmarkMatchUint8GreaterEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint8GreaterEqualAVX2(B *testing.B) {
+func BenchmarkMatchUint8GreaterEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -1113,7 +1185,7 @@ func BenchmarkMatchUint8GreaterEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchUint8GreaterEqualAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -1151,12 +1223,24 @@ var uint8BetweenCases = []Uint8MatchTest{
 		count:  0,
 	},
 	CreateUint8TestCase("vec1", uint8TestSlice_0, uint8BetweenTestMatch_0, uint8BetweenTestMatch_0b, uint8BetweenTestResult_0, 32),
-	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8BetweenTestMatch_0, uint8BetweenTestMatch_0b, uint8BetweenTestResult_0, 64),
+	CreateUint8TestCase("vec2", uint8TestSlice_0, uint8BetweenTestMatch_0, uint8BetweenTestMatch_0b, uint8BetweenTestResult_0, 512),
 	CreateUint8TestCase("l32", uint8TestSlice_1, uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b, uint8BetweenTestResult_1, 32),
 	CreateUint8TestCase("l64", append(uint8TestSlice_1, uint8TestSlice_0...), uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b,
 		append(uint8BetweenTestResult_1, uint8BetweenTestResult_0...), 64),
 	CreateUint8TestCase("l128", append(uint8TestSlice_1, uint8TestSlice_0...), uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b,
 		append(uint8BetweenTestResult_1, uint8BetweenTestResult_0...), 128),
+	CreateUint8TestCase("l256", append(uint8TestSlice_1, uint8TestSlice_0...), uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b,
+		append(uint8BetweenTestResult_1, uint8BetweenTestResult_0...), 256),
+	CreateUint8TestCase("l512", append(uint8TestSlice_1, uint8TestSlice_0...), uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b,
+		append(uint8BetweenTestResult_1, uint8BetweenTestResult_0...), 512),
+	CreateUint8TestCase("l1024", append(uint8TestSlice_1, uint8TestSlice_0...), uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b,
+		append(uint8BetweenTestResult_1, uint8BetweenTestResult_0...), 1024),
+	CreateUint8TestCase("l1023", append(uint8TestSlice_1, uint8TestSlice_0...), uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b,
+		append(uint8BetweenTestResult_1, uint8BetweenTestResult_0...), 1023),
+	CreateUint8TestCase("l511", append(uint8TestSlice_1, uint8TestSlice_0...), uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b,
+		append(uint8BetweenTestResult_1, uint8BetweenTestResult_0...), 511),
+	CreateUint8TestCase("l255", append(uint8TestSlice_1, uint8TestSlice_0...), uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b,
+		append(uint8BetweenTestResult_1, uint8BetweenTestResult_0...), 255),
 	CreateUint8TestCase("l127", uint8TestSlice_1, uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b, uint8BetweenTestResult_1, 127),
 	CreateUint8TestCase("l63", uint8TestSlice_1, uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b, uint8BetweenTestResult_1, 63),
 	CreateUint8TestCase("l31", uint8TestSlice_1, uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b, uint8BetweenTestResult_1, 31),
@@ -1164,7 +1248,7 @@ var uint8BetweenCases = []Uint8MatchTest{
 	CreateUint8TestCase("l15", uint8TestSlice_1, uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b, uint8BetweenTestResult_1, 15),
 	CreateUint8TestCase("l7", uint8TestSlice_1, uint8BetweenTestMatch_1, uint8BetweenTestMatch_1b, uint8BetweenTestResult_1, 7),
 	// with extreme values
-	CreateUint8TestCase("ext64", uint8TestSlice_2, uint8BetweenTestMatch_2, uint8BetweenTestMatch_2b, uint8BetweenTestResult_2, 64),
+	CreateUint8TestCase("ext512", uint8TestSlice_2, uint8BetweenTestMatch_2, uint8BetweenTestMatch_2b, uint8BetweenTestResult_2, 512),
 	CreateUint8TestCase("ext32", uint8TestSlice_2, uint8BetweenTestMatch_2, uint8BetweenTestMatch_2b, uint8BetweenTestResult_2, 32),
 	CreateUint8TestCase("ext31", uint8TestSlice_2, uint8BetweenTestMatch_2, uint8BetweenTestMatch_2b, uint8BetweenTestResult_2, 31),
 }
@@ -1186,7 +1270,7 @@ func TestMatchUint8BetweenGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchUint8BetweenAVX2(T *testing.T) {
+func TestMatchUint8BetweenAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -1212,7 +1296,7 @@ func TestMatchUint8BetweenGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchUint8BetweenAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -1258,7 +1342,7 @@ func BenchmarkMatchUint8BetweenGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchUint8BetweenAVX2(B *testing.B) {
+func BenchmarkMatchUint8BetweenAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -1272,7 +1356,7 @@ func BenchmarkMatchUint8BetweenGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchUint8BetweenAVX512(B *testing.B) {
 	if !useAVX512_BW {

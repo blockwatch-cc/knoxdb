@@ -9,8 +9,6 @@ type vecBenchmarkSize struct {
 }
 
 var vecBenchmarkSizes = []vecBenchmarkSize{
-	// {"32", 32}, // exclude for AVX512
-	{"128", 128},
 	{"1K", 1 * 1024},
 	{"16K", 16 * 1024},
 	{"64K", 64 * 1024},
@@ -18,3 +16,13 @@ var vecBenchmarkSizes = []vecBenchmarkSize{
 	{"1M", 1024 * 1024},
 	{"128M", 128 * 1024 * 1024},
 }
+
+/*
+// for optimizing small data blocks
+var vecBenchmarkSizes = []vecBenchmarkSize{
+	{"256", 256},
+	{"512", 512},
+	{"768", 768},
+	{"1024", 1024},
+}
+*/

@@ -242,22 +242,26 @@ var int32EqualCases = []Int32MatchTest{
 		count:  0,
 	},
 	CreateInt32TestCase("vec1", int32TestSlice_0, int32EqualTestMatch_0, 0, int32EqualTestResult_0, 32),
-	CreateInt32TestCase("vec2", int32TestSlice_0, int32EqualTestMatch_0, 0, int32EqualTestResult_0, 64),
+	CreateInt32TestCase("vec2", int32TestSlice_0, int32EqualTestMatch_0, 0, int32EqualTestResult_0, 128),
 	CreateInt32TestCase("l32", int32TestSlice_1, int32EqualTestMatch_1, 0, int32EqualTestResult_1, 32),
 	CreateInt32TestCase("l64", append(int32TestSlice_1, int32TestSlice_0...), int32EqualTestMatch_1, 0,
 		append(int32EqualTestResult_1, int32EqualTestResult_0...), 64),
 	CreateInt32TestCase("l128", append(int32TestSlice_1, int32TestSlice_0...), int32EqualTestMatch_1, 0,
 		append(int32EqualTestResult_1, int32EqualTestResult_0...), 128),
+	CreateInt32TestCase("l256", append(int32TestSlice_1, int32TestSlice_0...), int32EqualTestMatch_1, 0,
+		append(int32EqualTestResult_1, int32EqualTestResult_0...), 256),
+	CreateInt32TestCase("l255", append(int32TestSlice_1, int32TestSlice_0...), int32EqualTestMatch_1, 0,
+		append(int32EqualTestResult_1, int32EqualTestResult_0...), 255),
 	CreateInt32TestCase("l127", int32TestSlice_1, int32EqualTestMatch_1, 0, int32EqualTestResult_1, 127),
 	CreateInt32TestCase("l63", int32TestSlice_1, int32EqualTestMatch_1, 0, int32EqualTestResult_1, 63),
 	CreateInt32TestCase("l31", int32TestSlice_1, int32EqualTestMatch_1, 0, int32EqualTestResult_1, 31),
 	CreateInt32TestCase("l23", int32TestSlice_1, int32EqualTestMatch_1, 0, int32EqualTestResult_1, 23),
 	CreateInt32TestCase("l15", int32TestSlice_1, int32EqualTestMatch_1, 0, int32EqualTestResult_1, 15),
 	CreateInt32TestCase("l7", int32TestSlice_1, int32EqualTestMatch_1, 0, int32EqualTestResult_1, 7),
-	CreateInt32TestCase("neg64", int32TestSlice_2, int32EqualTestMatch_2, 0, int32EqualTestResult_2, 64),
+	CreateInt32TestCase("neg128", int32TestSlice_2, int32EqualTestMatch_2, 0, int32EqualTestResult_2, 128),
 	CreateInt32TestCase("neg32", int32TestSlice_2, int32EqualTestMatch_2, 0, int32EqualTestResult_2, 32),
 	CreateInt32TestCase("neg31", int32TestSlice_2, int32EqualTestMatch_2, 0, int32EqualTestResult_2, 31),
-	CreateInt32TestCase("ext64", int32TestSlice_3, int32EqualTestMatch_3, 0, int32EqualTestResult_3, 64),
+	CreateInt32TestCase("ext128", int32TestSlice_3, int32EqualTestMatch_3, 0, int32EqualTestResult_3, 128),
 	CreateInt32TestCase("ext32", int32TestSlice_3, int32EqualTestMatch_3, 0, int32EqualTestResult_3, 32),
 	CreateInt32TestCase("ext31", int32TestSlice_3, int32EqualTestMatch_3, 0, int32EqualTestResult_3, 31),
 }
@@ -279,7 +283,7 @@ func TestMatchInt32EqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt32EqualAVX2(T *testing.T) {
+func TestMatchInt32EqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -306,7 +310,7 @@ func TestMatchInt32EqualGeneric(T *testing.T) {
 		}
 	}
 }
-*/
+
 func TestMatchInt32EqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -351,7 +355,7 @@ func BenchmarkMatchInt32EqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt32EqualAVX2(B *testing.B) {
+func BenchmarkMatchInt32EqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -365,7 +369,7 @@ func BenchmarkMatchInt32EqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt32EqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -401,22 +405,26 @@ var int32NotEqualCases = []Int32MatchTest{
 		count:  0,
 	},
 	CreateInt32TestCase("vec1", int32TestSlice_0, int32NotEqualTestMatch_0, 0, int32NotEqualTestResult_0, 32),
-	CreateInt32TestCase("vec2", int32TestSlice_0, int32NotEqualTestMatch_0, 0, int32NotEqualTestResult_0, 64),
+	CreateInt32TestCase("vec2", int32TestSlice_0, int32NotEqualTestMatch_0, 0, int32NotEqualTestResult_0, 128),
 	CreateInt32TestCase("l32", int32TestSlice_1, int32NotEqualTestMatch_1, 0, int32NotEqualTestResult_1, 32),
 	CreateInt32TestCase("l64", append(int32TestSlice_1, int32TestSlice_0...), int32NotEqualTestMatch_1, 0,
 		append(int32NotEqualTestResult_1, int32NotEqualTestResult_0...), 64),
 	CreateInt32TestCase("l128", append(int32TestSlice_1, int32TestSlice_0...), int32NotEqualTestMatch_1, 0,
 		append(int32NotEqualTestResult_1, int32NotEqualTestResult_0...), 128),
+	CreateInt32TestCase("l256", append(int32TestSlice_1, int32TestSlice_0...), int32NotEqualTestMatch_1, 0,
+		append(int32NotEqualTestResult_1, int32NotEqualTestResult_0...), 256),
+	CreateInt32TestCase("l255", append(int32TestSlice_1, int32TestSlice_0...), int32NotEqualTestMatch_1, 0,
+		append(int32NotEqualTestResult_1, int32NotEqualTestResult_0...), 255),
 	CreateInt32TestCase("l127", int32TestSlice_1, int32NotEqualTestMatch_1, 0, int32NotEqualTestResult_1, 127),
 	CreateInt32TestCase("l63", int32TestSlice_1, int32NotEqualTestMatch_1, 0, int32NotEqualTestResult_1, 63),
 	CreateInt32TestCase("l31", int32TestSlice_1, int32NotEqualTestMatch_1, 0, int32NotEqualTestResult_1, 31),
 	CreateInt32TestCase("l23", int32TestSlice_1, int32NotEqualTestMatch_1, 0, int32NotEqualTestResult_1, 23),
 	CreateInt32TestCase("l15", int32TestSlice_1, int32NotEqualTestMatch_1, 0, int32NotEqualTestResult_1, 15),
 	CreateInt32TestCase("l7", int32TestSlice_1, int32NotEqualTestMatch_1, 0, int32NotEqualTestResult_1, 7),
-	CreateInt32TestCase("neg64", int32TestSlice_2, int32NotEqualTestMatch_2, 0, int32NotEqualTestResult_2, 64),
+	CreateInt32TestCase("neg128", int32TestSlice_2, int32NotEqualTestMatch_2, 0, int32NotEqualTestResult_2, 128),
 	CreateInt32TestCase("neg32", int32TestSlice_2, int32NotEqualTestMatch_2, 0, int32NotEqualTestResult_2, 32),
 	CreateInt32TestCase("neg31", int32TestSlice_2, int32NotEqualTestMatch_2, 0, int32NotEqualTestResult_2, 31),
-	CreateInt32TestCase("ext64", int32TestSlice_3, int32NotEqualTestMatch_3, 0, int32NotEqualTestResult_3, 64),
+	CreateInt32TestCase("ext128", int32TestSlice_3, int32NotEqualTestMatch_3, 0, int32NotEqualTestResult_3, 128),
 	CreateInt32TestCase("ext32", int32TestSlice_3, int32NotEqualTestMatch_3, 0, int32NotEqualTestResult_3, 32),
 	CreateInt32TestCase("ext31", int32TestSlice_3, int32NotEqualTestMatch_3, 0, int32NotEqualTestResult_3, 31),
 }
@@ -438,7 +446,7 @@ func TestMatchInt32NotEqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt32NotEqualAVX2(T *testing.T) {
+func TestMatchInt32NotEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -465,7 +473,7 @@ func TestMatchInt32NotEqualGeneric(T *testing.T) {
 		}
 	}
 }
-*/
+
 func TestMatchInt32NotEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -510,7 +518,7 @@ func BenchmarkMatchInt32NotEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt32NotEqualAVX2(B *testing.B) {
+func BenchmarkMatchInt32NotEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -524,7 +532,7 @@ func BenchmarkMatchInt32NotEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt32NotEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -560,22 +568,26 @@ var int32LessCases = []Int32MatchTest{
 		count:  0,
 	},
 	CreateInt32TestCase("vec1", int32TestSlice_0, int32LessTestMatch_0, 0, int32LessTestResult_0, 32),
-	CreateInt32TestCase("vec2", int32TestSlice_0, int32LessTestMatch_0, 0, int32LessTestResult_0, 64),
+	CreateInt32TestCase("vec2", int32TestSlice_0, int32LessTestMatch_0, 0, int32LessTestResult_0, 128),
 	CreateInt32TestCase("l32", int32TestSlice_1, int32LessTestMatch_1, 0, int32LessTestResult_1, 32),
 	CreateInt32TestCase("l64", append(int32TestSlice_1, int32TestSlice_0...), int32LessTestMatch_1, 0,
 		append(int32LessTestResult_1, int32LessTestResult_0...), 64),
 	CreateInt32TestCase("l128", append(int32TestSlice_1, int32TestSlice_0...), int32LessTestMatch_1, 0,
 		append(int32LessTestResult_1, int32LessTestResult_0...), 128),
+	CreateInt32TestCase("l256", append(int32TestSlice_1, int32TestSlice_0...), int32LessTestMatch_1, 0,
+		append(int32LessTestResult_1, int32LessTestResult_0...), 256),
+	CreateInt32TestCase("l255", append(int32TestSlice_1, int32TestSlice_0...), int32LessTestMatch_1, 0,
+		append(int32LessTestResult_1, int32LessTestResult_0...), 255),
 	CreateInt32TestCase("l127", int32TestSlice_1, int32LessTestMatch_1, 0, int32LessTestResult_1, 127),
 	CreateInt32TestCase("l63", int32TestSlice_1, int32LessTestMatch_1, 0, int32LessTestResult_1, 63),
 	CreateInt32TestCase("l31", int32TestSlice_1, int32LessTestMatch_1, 0, int32LessTestResult_1, 31),
 	CreateInt32TestCase("l23", int32TestSlice_1, int32LessTestMatch_1, 0, int32LessTestResult_1, 23),
 	CreateInt32TestCase("l15", int32TestSlice_1, int32LessTestMatch_1, 0, int32LessTestResult_1, 15),
 	CreateInt32TestCase("l7", int32TestSlice_1, int32LessTestMatch_1, 0, int32LessTestResult_1, 7),
-	CreateInt32TestCase("neg64", int32TestSlice_2, int32LessTestMatch_2, 0, int32LessTestResult_2, 64),
+	CreateInt32TestCase("neg128", int32TestSlice_2, int32LessTestMatch_2, 0, int32LessTestResult_2, 128),
 	CreateInt32TestCase("neg32", int32TestSlice_2, int32LessTestMatch_2, 0, int32LessTestResult_2, 32),
 	CreateInt32TestCase("neg31", int32TestSlice_2, int32LessTestMatch_2, 0, int32LessTestResult_2, 31),
-	CreateInt32TestCase("ext64", int32TestSlice_3, int32LessTestMatch_3, 0, int32LessTestResult_3, 64),
+	CreateInt32TestCase("ext128", int32TestSlice_3, int32LessTestMatch_3, 0, int32LessTestResult_3, 128),
 	CreateInt32TestCase("ext32", int32TestSlice_3, int32LessTestMatch_3, 0, int32LessTestResult_3, 32),
 	CreateInt32TestCase("ext31", int32TestSlice_3, int32LessTestMatch_3, 0, int32LessTestResult_3, 31),
 }
@@ -597,7 +609,7 @@ func TestMatchInt32LessGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt32LessAVX2(T *testing.T) {
+func TestMatchInt32LessAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -623,7 +635,7 @@ func TestMatchInt32LessGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchInt32LessAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -669,7 +681,7 @@ func BenchmarkMatchInt32LessGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt32LessAVX2(B *testing.B) {
+func BenchmarkMatchInt32LessAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -683,7 +695,7 @@ func BenchmarkMatchInt32LessGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt32LessAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -719,22 +731,26 @@ var int32LessEqualCases = []Int32MatchTest{
 		count:  0,
 	},
 	CreateInt32TestCase("vec1", int32TestSlice_0, int32LessEqualTestMatch_0, 0, int32LessEqualTestResult_0, 32),
-	CreateInt32TestCase("vec2", int32TestSlice_0, int32LessEqualTestMatch_0, 0, int32LessEqualTestResult_0, 64),
+	CreateInt32TestCase("vec2", int32TestSlice_0, int32LessEqualTestMatch_0, 0, int32LessEqualTestResult_0, 128),
 	CreateInt32TestCase("l32", int32TestSlice_1, int32LessEqualTestMatch_1, 0, int32LessEqualTestResult_1, 32),
 	CreateInt32TestCase("l64", append(int32TestSlice_1, int32TestSlice_0...), int32LessEqualTestMatch_1, 0,
 		append(int32LessEqualTestResult_1, int32LessEqualTestResult_0...), 64),
 	CreateInt32TestCase("l128", append(int32TestSlice_1, int32TestSlice_0...), int32LessEqualTestMatch_1, 0,
 		append(int32LessEqualTestResult_1, int32LessEqualTestResult_0...), 128),
+	CreateInt32TestCase("l256", append(int32TestSlice_1, int32TestSlice_0...), int32LessEqualTestMatch_1, 0,
+		append(int32LessEqualTestResult_1, int32LessEqualTestResult_0...), 256),
+	CreateInt32TestCase("l255", append(int32TestSlice_1, int32TestSlice_0...), int32LessEqualTestMatch_1, 0,
+		append(int32LessEqualTestResult_1, int32LessEqualTestResult_0...), 255),
 	CreateInt32TestCase("l127", int32TestSlice_1, int32LessEqualTestMatch_1, 0, int32LessEqualTestResult_1, 127),
 	CreateInt32TestCase("l63", int32TestSlice_1, int32LessEqualTestMatch_1, 0, int32LessEqualTestResult_1, 63),
 	CreateInt32TestCase("l31", int32TestSlice_1, int32LessEqualTestMatch_1, 0, int32LessEqualTestResult_1, 31),
 	CreateInt32TestCase("l23", int32TestSlice_1, int32LessEqualTestMatch_1, 0, int32LessEqualTestResult_1, 23),
 	CreateInt32TestCase("l15", int32TestSlice_1, int32LessEqualTestMatch_1, 0, int32LessEqualTestResult_1, 15),
 	CreateInt32TestCase("l7", int32TestSlice_1, int32LessEqualTestMatch_1, 0, int32LessEqualTestResult_1, 7),
-	CreateInt32TestCase("neg64", int32TestSlice_2, int32LessEqualTestMatch_2, 0, int32LessEqualTestResult_2, 64),
+	CreateInt32TestCase("neg128", int32TestSlice_2, int32LessEqualTestMatch_2, 0, int32LessEqualTestResult_2, 128),
 	CreateInt32TestCase("neg32", int32TestSlice_2, int32LessEqualTestMatch_2, 0, int32LessEqualTestResult_2, 32),
 	CreateInt32TestCase("neg31", int32TestSlice_2, int32LessEqualTestMatch_2, 0, int32LessEqualTestResult_2, 31),
-	CreateInt32TestCase("ext64", int32TestSlice_3, int32LessEqualTestMatch_3, 0, int32LessEqualTestResult_3, 64),
+	CreateInt32TestCase("ext128", int32TestSlice_3, int32LessEqualTestMatch_3, 0, int32LessEqualTestResult_3, 128),
 	CreateInt32TestCase("ext32", int32TestSlice_3, int32LessEqualTestMatch_3, 0, int32LessEqualTestResult_3, 32),
 	CreateInt32TestCase("ext31", int32TestSlice_3, int32LessEqualTestMatch_3, 0, int32LessEqualTestResult_3, 31),
 }
@@ -756,7 +772,7 @@ func TestMatchInt32LessEqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt32LessEqualAVX2(T *testing.T) {
+func TestMatchInt32LessEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -783,7 +799,7 @@ func TestMatchInt32LessEqualGeneric(T *testing.T) {
 		}
 	}
 }
-*/
+
 func TestMatchInt32LessEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -828,7 +844,7 @@ func BenchmarkMatchInt32LessEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt32LessEqualAVX2(B *testing.B) {
+func BenchmarkMatchInt32LessEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -842,7 +858,7 @@ func BenchmarkMatchInt32LessEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt32LessEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -878,22 +894,26 @@ var int32GreaterCases = []Int32MatchTest{
 		count:  0,
 	},
 	CreateInt32TestCase("vec1", int32TestSlice_0, int32GreaterTestMatch_0, 0, int32GreaterTestResult_0, 32),
-	CreateInt32TestCase("vec2", int32TestSlice_0, int32GreaterTestMatch_0, 0, int32GreaterTestResult_0, 64),
+	CreateInt32TestCase("vec2", int32TestSlice_0, int32GreaterTestMatch_0, 0, int32GreaterTestResult_0, 128),
 	CreateInt32TestCase("l32", int32TestSlice_1, int32GreaterTestMatch_1, 0, int32GreaterTestResult_1, 32),
 	CreateInt32TestCase("l64", append(int32TestSlice_1, int32TestSlice_0...), int32GreaterTestMatch_1, 0,
 		append(int32GreaterTestResult_1, int32GreaterTestResult_0...), 64),
 	CreateInt32TestCase("l128", append(int32TestSlice_1, int32TestSlice_0...), int32GreaterTestMatch_1, 0,
 		append(int32GreaterTestResult_1, int32GreaterTestResult_0...), 128),
+	CreateInt32TestCase("l256", append(int32TestSlice_1, int32TestSlice_0...), int32GreaterTestMatch_1, 0,
+		append(int32GreaterTestResult_1, int32GreaterTestResult_0...), 256),
+	CreateInt32TestCase("l255", append(int32TestSlice_1, int32TestSlice_0...), int32GreaterTestMatch_1, 0,
+		append(int32GreaterTestResult_1, int32GreaterTestResult_0...), 255),
 	CreateInt32TestCase("l127", int32TestSlice_1, int32GreaterTestMatch_1, 0, int32GreaterTestResult_1, 127),
 	CreateInt32TestCase("l63", int32TestSlice_1, int32GreaterTestMatch_1, 0, int32GreaterTestResult_1, 63),
 	CreateInt32TestCase("l31", int32TestSlice_1, int32GreaterTestMatch_1, 0, int32GreaterTestResult_1, 31),
 	CreateInt32TestCase("l23", int32TestSlice_1, int32GreaterTestMatch_1, 0, int32GreaterTestResult_1, 23),
 	CreateInt32TestCase("l15", int32TestSlice_1, int32GreaterTestMatch_1, 0, int32GreaterTestResult_1, 15),
 	CreateInt32TestCase("l7", int32TestSlice_1, int32GreaterTestMatch_1, 0, int32GreaterTestResult_1, 7),
-	CreateInt32TestCase("neg64", int32TestSlice_2, int32GreaterTestMatch_2, 0, int32GreaterTestResult_2, 64),
+	CreateInt32TestCase("neg128", int32TestSlice_2, int32GreaterTestMatch_2, 0, int32GreaterTestResult_2, 128),
 	CreateInt32TestCase("neg32", int32TestSlice_2, int32GreaterTestMatch_2, 0, int32GreaterTestResult_2, 32),
 	CreateInt32TestCase("neg31", int32TestSlice_2, int32GreaterTestMatch_2, 0, int32GreaterTestResult_2, 31),
-	CreateInt32TestCase("ext64", int32TestSlice_3, int32GreaterTestMatch_3, 0, int32GreaterTestResult_3, 64),
+	CreateInt32TestCase("ext128", int32TestSlice_3, int32GreaterTestMatch_3, 0, int32GreaterTestResult_3, 128),
 	CreateInt32TestCase("ext32", int32TestSlice_3, int32GreaterTestMatch_3, 0, int32GreaterTestResult_3, 32),
 	CreateInt32TestCase("ext31", int32TestSlice_3, int32GreaterTestMatch_3, 0, int32GreaterTestResult_3, 31),
 }
@@ -915,7 +935,7 @@ func TestMatchInt32GreaterGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt32GreaterAVX2(T *testing.T) {
+func TestMatchInt32GreaterAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -941,7 +961,7 @@ func TestMatchInt32GreaterGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchInt32GreaterAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -987,7 +1007,7 @@ func BenchmarkMatchInt32GreaterGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt32GreaterAVX2(B *testing.B) {
+func BenchmarkMatchInt32GreaterAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -1001,7 +1021,7 @@ func BenchmarkMatchInt32GreaterGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt32GreaterAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -1037,22 +1057,26 @@ var int32GreaterEqualCases = []Int32MatchTest{
 		count:  0,
 	},
 	CreateInt32TestCase("vec1", int32TestSlice_0, int32GreaterEqualTestMatch_0, 0, int32GreaterEqualTestResult_0, 32),
-	CreateInt32TestCase("vec2", int32TestSlice_0, int32GreaterEqualTestMatch_0, 0, int32GreaterEqualTestResult_0, 64),
+	CreateInt32TestCase("vec2", int32TestSlice_0, int32GreaterEqualTestMatch_0, 0, int32GreaterEqualTestResult_0, 128),
 	CreateInt32TestCase("l32", int32TestSlice_1, int32GreaterEqualTestMatch_1, 0, int32GreaterEqualTestResult_1, 32),
 	CreateInt32TestCase("l64", append(int32TestSlice_1, int32TestSlice_0...), int32GreaterEqualTestMatch_1, 0,
 		append(int32GreaterEqualTestResult_1, int32GreaterEqualTestResult_0...), 64),
 	CreateInt32TestCase("l128", append(int32TestSlice_1, int32TestSlice_0...), int32GreaterEqualTestMatch_1, 0,
 		append(int32GreaterEqualTestResult_1, int32GreaterEqualTestResult_0...), 128),
+	CreateInt32TestCase("l256", append(int32TestSlice_1, int32TestSlice_0...), int32GreaterEqualTestMatch_1, 0,
+		append(int32GreaterEqualTestResult_1, int32GreaterEqualTestResult_0...), 256),
+	CreateInt32TestCase("l255", append(int32TestSlice_1, int32TestSlice_0...), int32GreaterEqualTestMatch_1, 0,
+		append(int32GreaterEqualTestResult_1, int32GreaterEqualTestResult_0...), 255),
 	CreateInt32TestCase("l127", int32TestSlice_1, int32GreaterEqualTestMatch_1, 0, int32GreaterEqualTestResult_1, 127),
 	CreateInt32TestCase("l63", int32TestSlice_1, int32GreaterEqualTestMatch_1, 0, int32GreaterEqualTestResult_1, 63),
 	CreateInt32TestCase("l31", int32TestSlice_1, int32GreaterEqualTestMatch_1, 0, int32GreaterEqualTestResult_1, 31),
 	CreateInt32TestCase("l23", int32TestSlice_1, int32GreaterEqualTestMatch_1, 0, int32GreaterEqualTestResult_1, 23),
 	CreateInt32TestCase("l15", int32TestSlice_1, int32GreaterEqualTestMatch_1, 0, int32GreaterEqualTestResult_1, 15),
 	CreateInt32TestCase("l7", int32TestSlice_1, int32GreaterEqualTestMatch_1, 0, int32GreaterEqualTestResult_1, 7),
-	CreateInt32TestCase("neg64", int32TestSlice_2, int32GreaterEqualTestMatch_2, 0, int32GreaterEqualTestResult_2, 64),
+	CreateInt32TestCase("neg128", int32TestSlice_2, int32GreaterEqualTestMatch_2, 0, int32GreaterEqualTestResult_2, 128),
 	CreateInt32TestCase("neg32", int32TestSlice_2, int32GreaterEqualTestMatch_2, 0, int32GreaterEqualTestResult_2, 32),
 	CreateInt32TestCase("neg31", int32TestSlice_2, int32GreaterEqualTestMatch_2, 0, int32GreaterEqualTestResult_2, 31),
-	CreateInt32TestCase("ext64", int32TestSlice_3, int32GreaterEqualTestMatch_3, 0, int32GreaterEqualTestResult_3, 64),
+	CreateInt32TestCase("ext128", int32TestSlice_3, int32GreaterEqualTestMatch_3, 0, int32GreaterEqualTestResult_3, 128),
 	CreateInt32TestCase("ext32", int32TestSlice_3, int32GreaterEqualTestMatch_3, 0, int32GreaterEqualTestResult_3, 32),
 	CreateInt32TestCase("ext31", int32TestSlice_3, int32GreaterEqualTestMatch_3, 0, int32GreaterEqualTestResult_3, 31),
 }
@@ -1074,7 +1098,7 @@ func TestMatchInt32GreaterEqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt32GreaterEqualAVX2(T *testing.T) {
+func TestMatchInt32GreaterEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -1100,7 +1124,7 @@ func TestMatchInt32GreaterEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchInt32GreaterEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -1146,7 +1170,7 @@ func BenchmarkMatchInt32GreaterEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt32GreaterEqualAVX2(B *testing.B) {
+func BenchmarkMatchInt32GreaterEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -1160,7 +1184,7 @@ func BenchmarkMatchInt32GreaterEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt32GreaterEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
@@ -1198,22 +1222,26 @@ var int32BetweenCases = []Int32MatchTest{
 		count:  0,
 	},
 	CreateInt32TestCase("vec1", int32TestSlice_0, int32BetweenTestMatch_0, int32BetweenTestMatch_0b, int32BetweenTestResult_0, 32),
-	CreateInt32TestCase("vec2", int32TestSlice_0, int32BetweenTestMatch_0, int32BetweenTestMatch_0b, int32BetweenTestResult_0, 64),
+	CreateInt32TestCase("vec2", int32TestSlice_0, int32BetweenTestMatch_0, int32BetweenTestMatch_0b, int32BetweenTestResult_0, 128),
 	CreateInt32TestCase("l32", int32TestSlice_1, int32BetweenTestMatch_1, int32BetweenTestMatch_1b, int32BetweenTestResult_1, 32),
 	CreateInt32TestCase("l64", append(int32TestSlice_1, int32TestSlice_0...), int32BetweenTestMatch_1, int32BetweenTestMatch_1b,
 		append(int32BetweenTestResult_1, int32BetweenTestResult_0...), 64),
 	CreateInt32TestCase("l128", append(int32TestSlice_1, int32TestSlice_0...), int32BetweenTestMatch_1, int32BetweenTestMatch_1b,
 		append(int32BetweenTestResult_1, int32BetweenTestResult_0...), 128),
+	CreateInt32TestCase("l256", append(int32TestSlice_1, int32TestSlice_0...), int32BetweenTestMatch_1, int32BetweenTestMatch_1b,
+		append(int32BetweenTestResult_1, int32BetweenTestResult_0...), 256),
+	CreateInt32TestCase("l255", append(int32TestSlice_1, int32TestSlice_0...), int32BetweenTestMatch_1, int32BetweenTestMatch_1b,
+		append(int32BetweenTestResult_1, int32BetweenTestResult_0...), 255),
 	CreateInt32TestCase("l127", int32TestSlice_1, int32BetweenTestMatch_1, int32BetweenTestMatch_1b, int32BetweenTestResult_1, 127),
 	CreateInt32TestCase("l63", int32TestSlice_1, int32BetweenTestMatch_1, int32BetweenTestMatch_1b, int32BetweenTestResult_1, 63),
 	CreateInt32TestCase("l31", int32TestSlice_1, int32BetweenTestMatch_1, int32BetweenTestMatch_1b, int32BetweenTestResult_1, 31),
 	CreateInt32TestCase("l23", int32TestSlice_1, int32BetweenTestMatch_1, int32BetweenTestMatch_1b, int32BetweenTestResult_1, 23),
 	CreateInt32TestCase("l15", int32TestSlice_1, int32BetweenTestMatch_1, int32BetweenTestMatch_1b, int32BetweenTestResult_1, 15),
 	CreateInt32TestCase("l7", int32TestSlice_1, int32BetweenTestMatch_1, int32BetweenTestMatch_1b, int32BetweenTestResult_1, 7),
-	CreateInt32TestCase("neg64", int32TestSlice_2, int32BetweenTestMatch_2, int32BetweenTestMatch_2b, int32BetweenTestResult_2, 64),
+	CreateInt32TestCase("neg128", int32TestSlice_2, int32BetweenTestMatch_2, int32BetweenTestMatch_2b, int32BetweenTestResult_2, 128),
 	CreateInt32TestCase("neg32", int32TestSlice_2, int32BetweenTestMatch_2, int32BetweenTestMatch_2b, int32BetweenTestResult_2, 32),
 	CreateInt32TestCase("neg31", int32TestSlice_2, int32BetweenTestMatch_2, int32BetweenTestMatch_2b, int32BetweenTestResult_2, 31),
-	CreateInt32TestCase("ext64", int32TestSlice_3, int32BetweenTestMatch_3, int32BetweenTestMatch_3b, int32BetweenTestResult_3, 64),
+	CreateInt32TestCase("ext128", int32TestSlice_3, int32BetweenTestMatch_3, int32BetweenTestMatch_3b, int32BetweenTestResult_3, 128),
 	CreateInt32TestCase("ext32", int32TestSlice_3, int32BetweenTestMatch_3, int32BetweenTestMatch_3b, int32BetweenTestResult_3, 32),
 	CreateInt32TestCase("ext31", int32TestSlice_3, int32BetweenTestMatch_3, int32BetweenTestMatch_3b, int32BetweenTestResult_3, 31),
 }
@@ -1235,7 +1263,7 @@ func TestMatchInt32BetweenGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt32BetweenAVX2(T *testing.T) {
+func TestMatchInt32BetweenAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -1261,7 +1289,7 @@ func TestMatchInt32BetweenGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchInt32BetweenAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -1307,7 +1335,7 @@ func BenchmarkMatchInt32BetweenGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt32BetweenAVX2(B *testing.B) {
+func BenchmarkMatchInt32BetweenAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -1322,7 +1350,7 @@ func BenchmarkMatchInt32BetweenGeneric(B *testing.B) {
 		})
 	}
 }
-*/
+
 func BenchmarkMatchInt32BetweenAVX512(B *testing.B) {
 	if !useAVX512_F {
 		B.SkipNow()

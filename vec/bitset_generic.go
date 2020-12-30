@@ -22,11 +22,14 @@ func init() {
 	}
 }
 
-func bitsetAndGeneric(dst, src []byte, size int) {
+func bitsetAndGeneric(dst, src []byte, size int) int {
+	var res byte
 	for i, _ := range src {
 		dst[i] &= src[i]
+		res |= dst[i]
 	}
 	dst[len(dst)-1] &= bitmask(size)
+	return int(res)
 }
 
 func bitsetAndNotGeneric(dst, src []byte, size int) {
