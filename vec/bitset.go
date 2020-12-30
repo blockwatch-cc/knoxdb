@@ -20,16 +20,30 @@ type BitSet struct {
 	isReverse bool
 }
 
+// NewBitSet allocates a new BitSet with a custom size and default capacity or
+// 2<<16 bits (8kB). Call Close() to return the bitset after use. For efficiency
+// an internal pool guarantees that bitsets of default capacity are reused. Changing
+// the capacity with Grow() may make the Bitset uneligible for recycling.
 func NewBitSet(size int) *BitSet {
-	s := bitSetPool.Get().(*BitSet)
-	s.Resize(size)
+	var s *BitSet
+	if size <= 1<<defaultBitSetSize {
+		s = bitSetPool.Get().(*BitSet)
+		s.Grow(size)
+	} else {
+		s = makeBitSet(size)
+	}
 	return s
 }
 
+// NewSmallBitSet allocates a new bitset of arbitrary small size and capacity
+// without using a buffer pool. Use this function when your bitsets are always
+// much smaller than the default capacity.
 func NewSmallBitSet(size int) *BitSet {
 	return makeBitSet(size)
 }
 
+// NewBitSetFromBytes allocates a new bitset of size bits and copies the contents
+// of `buf`. Buf may be nil and size must be >= zero.
 func NewBitSetFromBytes(buf []byte, size int) *BitSet {
 	s := &BitSet{
 		buf:  make([]byte, bitFieldLen(size)),
@@ -37,13 +51,27 @@ func NewBitSetFromBytes(buf []byte, size int) *BitSet {
 		size: size,
 	}
 	copy(s.buf, buf)
-	if l := bitFieldLen(size); cap(buf) < l {
-		s.buf = make([]byte, l)
-		copy(s.buf, buf)
-	}
 	// ensure the last byte is masked
 	if size%8 > 0 {
-		s.buf[len(s.buf)-1] &= bitmask(size)
+		s.buf[len(s.buf)-1] &= bytemask(size)
+	}
+	return s
+}
+
+// NewBitSetFromSlice allocates a new bitset and initializes it from boolean values
+// in bools. If bools is nil, the bitset is initially empty.
+func NewBitSetFromSlice(bools []bool) *BitSet {
+	s := &BitSet{
+		buf:  make([]byte, bitFieldLen(len(bools))),
+		cnt:  0,
+		size: len(bools),
+	}
+	for i := range bools {
+		if !bools[i] {
+			continue
+		}
+		s.buf[i>>3] |= bitmask(i)
+		s.cnt++
 	}
 	return s
 }
@@ -71,6 +99,18 @@ func makeBitSet(size int) *BitSet {
 	}
 }
 
+func (s *BitSet) Clone() *BitSet {
+	clone := NewBitSet(s.size)
+	copy(clone.buf, s.buf)
+	clone.cnt = s.cnt
+	clone.isReverse = s.isReverse
+	return clone
+}
+
+// Grow resizes the bitset to a new size, either growing or shrinking it.
+// Content remains unchanged on grow, when shrinking trailing bits are clipped.
+//
+// FIXME: does not work with reversed bitset
 func (s *BitSet) Grow(size int) *BitSet {
 	if size < 0 {
 		return s
@@ -81,30 +121,46 @@ func (s *BitSet) Grow(size int) *BitSet {
 		copy(buf, s.buf)
 		s.buf = buf
 	} else {
-		s.buf = s.buf[:sz]
-	}
-	return s
-}
-
-func (s *BitSet) Resize(size int) *BitSet {
-	if size < 0 {
-		return s
-	}
-	sz := bitFieldLen(size)
-	if s.buf == nil || cap(s.buf) < sz {
-		s.buf = make([]byte, sz)
-	} else {
+		if size > 0 && size < s.size {
+			// clear trailing bytes
+			if len(s.buf) > sz {
+				s.buf[sz] = 0
+				for bp := 1; sz+bp < len(s.buf); bp *= 2 {
+					copy(s.buf[sz+bp:], s.buf[sz:sz+bp])
+				}
+			}
+			// clear trailing bits
+			s.buf[sz-1] &= bytemask(size)
+			s.cnt = -1
+		}
 		s.buf = s.buf[:sz]
 	}
 	s.size = size
-	s.cnt = -1
-	s.Zero()
 	return s
 }
 
+// Reset clears the bitset contents and sets its size to zero.
+func (s *BitSet) Reset() {
+	if len(s.buf) > 0 {
+		s.buf[0] = 0
+		for bp := 1; bp < len(s.buf); bp *= 2 {
+			copy(s.buf[bp:], s.buf[:bp])
+		}
+	}
+	s.size = 0
+	s.cnt = 0
+	s.buf = s.buf[:0]
+	s.isReverse = false
+}
+
+// Close clears the bitset contents, sets its size to zero and returns it
+// to the internal buffer pool. Using the bitset after calling Close is
+// illegal.
 func (s *BitSet) Close() {
-	s.Zero()
-	bitSetPool.Put(s)
+	s.Reset()
+	if cap(s.buf) == 1<<defaultBitSetSize {
+		bitSetPool.Put(s)
+	}
 }
 
 func (s *BitSet) And(r *BitSet) *BitSet {
@@ -150,7 +206,7 @@ func (s *BitSet) One() *BitSet {
 	for bp := 1; bp < len(s.buf); bp *= 2 {
 		copy(s.buf[bp:], s.buf[:bp])
 	}
-	s.buf[len(s.buf)-1] = 0xff << (7 - uint(s.size-1)&0x7)
+	s.buf[len(s.buf)-1] = bytemask(s.size)
 	return s
 }
 
@@ -173,9 +229,9 @@ func (s *BitSet) Fill(b byte) *BitSet {
 		copy(s.buf[bp:], s.buf[:bp])
 	}
 	if s.isReverse {
-		s.buf[0] &= bitsetReverseLut256[bitmask(s.size)]
+		s.buf[0] &= bitsetReverseLut256[bytemask(s.size)]
 	} else {
-		s.buf[len(s.buf)-1] &= bitmask(s.size)
+		s.buf[len(s.buf)-1] &= bytemask(s.size)
 	}
 	s.cnt = -1
 	return s
@@ -189,12 +245,21 @@ func (s *BitSet) Set(i int) *BitSet {
 		pad := int(7 - uint(s.size-1)&0x7)
 		i = s.size - i + pad - 1
 	}
-	mask := byte(1 << uint(7-i&0x7))
+	mask := bitmask(i)
 	if s.cnt >= 0 && s.buf[i>>3]&mask == 0 {
 		s.cnt++
 	}
 	s.buf[i>>3] |= mask
 	return s
+}
+
+func (s *BitSet) setbit(i int) {
+	if s.isReverse {
+		pad := int(7 - uint(s.size-1)&0x7)
+		i = s.size - i + pad - 1
+	}
+	mask := bitmask(i)
+	s.buf[i>>3] |= mask
 }
 
 func (s *BitSet) Clear(i int) *BitSet {
@@ -205,12 +270,21 @@ func (s *BitSet) Clear(i int) *BitSet {
 		pad := int(7 - uint(s.size-1)&0x7)
 		i = s.size - i + pad - 1
 	}
-	mask := byte(1 << uint(7-i&0x7))
+	mask := bitmask(i)
 	if s.cnt > 0 && s.buf[i>>3]&mask > 0 {
 		s.cnt--
 	}
 	s.buf[i>>3] &^= mask
 	return s
+}
+
+func (s *BitSet) clearbit(i int) {
+	if s.isReverse {
+		pad := int(7 - uint(s.size-1)&0x7)
+		i = s.size - i + pad - 1
+	}
+	mask := bitmask(i)
+	s.buf[i>>3] &^= mask
 }
 
 func (s *BitSet) IsSet(i int) bool {
@@ -221,37 +295,207 @@ func (s *BitSet) IsSet(i int) bool {
 		pad := int(7 - uint(s.size-1)&0x7)
 		i = s.size - i + pad - 1
 	}
-	mask := byte(1 << uint(7-i&0x7))
+	mask := bitmask(i)
 	return (s.buf[i>>3] & mask) > 0
 }
 
-func (s *BitSet) CopyFrom(src *BitSet, srcPos, srcLen, dstPos int) *BitSet {
-	if dstPos+srcLen > s.size {
-		s.Grow(dstPos + srcLen)
+// Insert inserts srcLen values from position srcPos in bitset src into the
+// bitset at position dstPos and moves all values following dstPos behind the
+// newly inserted bits
+//
+// FIXME: fast path incompatible with reversed
+func (s *BitSet) Insert(src *BitSet, srcPos, srcLen, dstPos int) *BitSet {
+	if srcLen <= 0 {
+		return s
 	}
-	// TODO
-	// if srcPos &0x7 > 0 {
-	// 	// copy with mask
-	// 	if srcLen < 8 {
 
-	// 	}
-	// }
+	// append when dst is < 0
+	if dstPos < 0 {
+		dstPos = s.size
+	}
+	// clamp srcLen
+	if srcPos+srcLen > src.size {
+		srcLen = src.size - srcPos
+	}
+
+	// keep a copy of trailing bits to move
+	var (
+		cp  []byte
+		cpb []bool
+	)
+	if dstPos&0x7+srcLen&0x7 == 0 {
+		// fast path
+		cp = make([]byte, len(s.buf)-dstPos>>3)
+		copy(cp, s.buf[dstPos>>3:])
+	} else {
+		// slow path
+		cpb = s.SubSlice(dstPos, -1)
+	}
+
+	// grow bitset, restore counter for fast-path
+	cnt := s.cnt
+	s.Grow(s.size + srcLen)
+	s.cnt = cnt
+
+	// insert
+	if srcPos&0x7+dstPos&0x7+srcLen&0x7 == 0 {
+		// fast path
+		copy(s.buf[dstPos>>3:], src.buf[srcPos>>3:(srcPos+srcLen)>>3])
+		s.cnt = -1
+	} else {
+		// slow path
+		for i, v := range src.SubSlice(srcPos, srcLen) {
+			if !v {
+				s.clearbit(i + dstPos)
+			} else {
+				s.setbit(i + dstPos)
+				if s.cnt >= 0 {
+					s.cnt++
+				}
+			}
+		}
+	}
+
+	// patch trailing bits
+	if dstPos&0x7+srcLen&0x7 == 0 {
+		// fast path
+		copy(s.buf[(dstPos+srcLen)>>3:], cp)
+	} else {
+		// slow path
+		for i, v := range cpb {
+			if !v {
+				s.clearbit(i + dstPos + srcLen)
+			} else {
+				s.setbit(i + dstPos + srcLen)
+			}
+		}
+	}
+
 	return s
 }
 
-func (s *BitSet) AppendFrom(src *BitSet, srcPos, srcLen int) *BitSet {
-	// TODO
+// Replace replaces srcLen values at position dstPos with values from src
+// bewteen position srcPos and srcPos + srcLen.
+//
+// FIXME: fast path incompatible with reversed
+func (s *BitSet) Replace(src *BitSet, srcPos, srcLen, dstPos int) *BitSet {
+	// skip when arguments are out of range
+	if srcLen <= 0 || srcPos < 0 || dstPos < 0 || dstPos > s.size {
+		return s
+	}
+
+	// clamp srcLen
+	if srcLen > src.size-srcPos {
+		srcLen = src.size - srcPos
+	}
+	if srcLen > s.size-dstPos {
+		srcLen = s.size - dstPos
+	}
+
+	// replace
+	if srcPos&0x7+dstPos&0x7+srcLen&0x7 == 0 {
+		// fast path
+		copy(s.buf[dstPos>>3:], src.buf[srcPos>>3:(srcPos+srcLen)>>3])
+		s.cnt = -1
+	} else {
+		// slow path
+		for i, v := range src.SubSlice(srcPos, srcLen) {
+			if !v {
+				s.clearbit(i + dstPos)
+			} else {
+				s.setbit(i + dstPos)
+				if s.cnt >= 0 {
+					s.cnt++
+				}
+			}
+		}
+	}
+
+	return s
+}
+
+// Append grows the bitset by srcLen and appends srcLen values from
+// src starting at position srcPos.
+//
+// FIXME: fast path incompatible with reversed
+func (s *BitSet) Append(src *BitSet, srcPos, srcLen int) *BitSet {
+	if srcLen <= 0 {
+		return s
+	}
+	// clamp srcLen
+	if srcPos+srcLen > src.size {
+		srcLen = src.size - srcPos
+	}
+
+	end := s.size
+	cnt := s.cnt
+	s.Grow(s.size + srcLen)
+	s.cnt = cnt
+
+	if end&0x7+srcPos&0x7+srcLen&0x7 == 0 {
+		// fast path
+		copy(s.buf[end>>3:], src.buf[srcPos>>3:(srcPos+srcLen)>>3])
+		s.cnt = -1
+	} else {
+		// slow path
+		for i := 0; i < srcLen; i++ {
+			if !src.IsSet(srcPos + i) {
+				continue
+			}
+			s.setbit(end + i)
+			if s.cnt >= 0 {
+				s.cnt++
+			}
+		}
+	}
 	return s
 }
 
 func (s *BitSet) Delete(pos, n int) *BitSet {
-	// TODO
+	if pos >= s.size {
+		return s
+	}
+	if pos < 0 {
+		pos = 0
+	}
+	if n < 0 || pos+n > s.size {
+		n = s.size - pos
+	}
+
+	if pos&0x7+n&0x7 == 0 {
+		// fast path
+		copy(s.buf[pos>>3:], s.buf[(pos+n)>>3:])
+	} else {
+		// slow path
+		for i, v := range s.SubSlice(pos+n, -1) {
+			if v {
+				s.setbit(pos + i)
+			} else {
+				s.clearbit(pos + i)
+			}
+		}
+	}
+
+	// shrink and reset counter
+	s.Grow(s.size - n)
 	return s
 }
 
-func (s *BitSet) Swap(i, j int) *BitSet {
-	// TODO
-	return s
+func (s *BitSet) Swap(i, j int) {
+	if uint(i) >= uint(s.size) || uint(j) >= uint(s.size) {
+		return
+	}
+	bi, bj := s.IsSet(i), s.IsSet(j)
+	if bi {
+		s.setbit(j)
+	} else {
+		s.clearbit(j)
+	}
+	if bj {
+		s.setbit(i)
+	} else {
+		s.clearbit(i)
+	}
 }
 
 func (s *BitSet) Reverse() *BitSet {
@@ -316,7 +560,37 @@ func (b BitSet) Run(index int) (int, int) {
 	return bitsetRun(b.buf, index, b.size)
 }
 
-func (s BitSet) ToSlice() []bool {
+// Indexes returns a slice of indexes for one bits in the bitset.
+func (s BitSet) Indexes(slice []int) []int {
+	cnt := int(s.Count())
+	if slice == nil || cap(slice) < cnt {
+		slice = make([]int, cnt)
+	} else {
+		slice = slice[:cnt]
+	}
+	var j int
+	for i, l := 0, s.size-s.size%8; i < l; i += 8 {
+		b := s.buf[i>>3]
+		for l := 0; b > 0; b, l = b<<1, l+1 {
+			if b&0x80 == 0 {
+				continue
+			}
+			slice[j] = i + l
+			j++
+		}
+	}
+	for i := s.size & ^0x7; i < s.size; i++ {
+		if s.buf[i>>3]&bitmask(i) == 0 {
+			continue
+		}
+		slice[j] = i
+		j++
+	}
+	return slice
+}
+
+// Slice returns a boolean slice containing all values
+func (s BitSet) Slice() []bool {
 	res := make([]bool, s.size)
 	for i, l := 0, s.size-s.size%8; i < l; i += 8 {
 		b := s.buf[i>>3]
@@ -331,7 +605,42 @@ func (s BitSet) ToSlice() []bool {
 	}
 	// tail
 	for i := s.size & ^0x7; i < s.size; i++ {
-		res[i] = s.buf[i>>3]&byte(1<<uint(7-i&0x7)) > 0
+		res[i] = s.buf[i>>3]&bitmask(i) > 0
+	}
+	return res
+}
+
+func (s BitSet) SubSlice(start, n int) []bool {
+	if start >= s.size {
+		return nil
+	}
+	if start < 0 {
+		start = 0
+	}
+	if n < 0 {
+		n = s.size - start
+	}
+	res := make([]bool, n)
+	var j int
+	// head
+	for i := start; i < start+n && i%8 > 0; i, j = i+1, j+1 {
+		res[j] = s.buf[i>>3]&bitmask(i) > 0
+	}
+	// fast inner loop
+	for i := start + j; i < (start+n) & ^0x7; i, j = i+8, j+8 {
+		b := s.buf[i>>3]
+		res[j] = b&0x80 > 0
+		res[j+1] = b&0x40 > 0
+		res[j+2] = b&0x20 > 0
+		res[j+3] = b&0x10 > 0
+		res[j+4] = b&0x08 > 0
+		res[j+5] = b&0x04 > 0
+		res[j+6] = b&0x02 > 0
+		res[j+7] = b&0x01 > 0
+	}
+	// tail
+	for i := start + j; i < start+n; i, j = i+1, j+1 {
+		res[j] = s.buf[i>>3]&bitmask(i) > 0
 	}
 	return res
 }

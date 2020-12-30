@@ -394,7 +394,7 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			ok = false
 		}
 	case FieldTypeDecimal128:
-		dec := NewDecimal128(Int128Zero, 0)
+		dec := NewDecimal128(ZeroInt128, 0)
 		switch v := val.(type) {
 		case int:
 			err := dec.SetInt64(int64(v), 0)
@@ -437,7 +437,7 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			ok = false
 		}
 	case FieldTypeDecimal256:
-		dec := NewDecimal256(Int256Zero, 0)
+		dec := NewDecimal256(ZeroInt256, 0)
 		switch v := val.(type) {
 		case int:
 			err := dec.SetInt64(int64(v), 0)

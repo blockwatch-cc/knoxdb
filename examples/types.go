@@ -11,13 +11,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/echa/log"
 	bolt "go.etcd.io/bbolt"
 
+	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 type Enum int
@@ -78,26 +81,28 @@ func (t Enum) String() string {
 }
 
 type Types struct {
-	RowId         uint64    `pack:"I,pk,snappy"   json:"row_id"`
-	Timestamp     time.Time `pack:"T,snappy"      json:"time"`
-	Hash          []byte    `pack:"H"             json:"hash"`
-	String        string    `pack:"s,snappy"      json:"string"`
-	Bool          bool      `pack:"b,snappy"      json:"bool"`
-	Enum          Enum      `pack:"e,snappy"      json:"enum"`
-	Int64         int64     `pack:"i,snappy"      json:"int64"`
-	Int32         int32     `pack:"j,snappy"      json:"int32"`
-	Int16         int16     `pack:"k,snappy"      json:"int16"`
-	Int8          int8      `pack:"l,snappy"      json:"int8"`
-	Uint64        uint64    `pack:"m,snappy"      json:"uint64"`
-	Uint32        uint32    `pack:"n,snappy"      json:"uint32"`
-	Uint16        uint16    `pack:"o,snappy"      json:"uint16"`
-	Uint8         uint8     `pack:"p,snappy"      json:"uint8"`
-	CompactUint64 uint64    `pack:"u,compact,snappy"  json:"compact_uint64"`
-	CompactUint32 uint32    `pack:"v,compact,snappy"  json:"compact_uint32"`
-	FixedFloat64  float64   `pack:"c,fixed,compact,precision=5,snappy"   json:"fixed_float64"`
-	FixedFloat32  float32   `pack:"d,fixed,compact,precision=5,snappy"   json:"fixed_float32"`
-	Float64       float64   `pack:"g,snappy"      json:"float64"`
-	Float32       float32   `pack:"f,snappy"      json:"float32"`
+	RowId     uint64             `pack:"I,pk,snappy"          json:"row_id"`
+	Timestamp time.Time          `pack:"T,snappy"             json:"time"`
+	Hash      []byte             `pack:"H"                    json:"hash"`
+	String    string             `pack:"s,snappy"             json:"string"`
+	Bool      bool               `pack:"b,snappy"             json:"bool"`
+	Enum      Enum               `pack:"e,snappy"             json:"enum"`
+	Int64     int64              `pack:"i,snappy"             json:"int64"`
+	Int32     int32              `pack:"j,snappy"             json:"int32"`
+	Int16     int16              `pack:"k,snappy"             json:"int16"`
+	Int8      int8               `pack:"l,snappy"             json:"int8"`
+	Uint64    uint64             `pack:"m,snappy"             json:"uint64"`
+	Uint32    uint32             `pack:"n,snappy"             json:"uint32"`
+	Uint16    uint16             `pack:"o,snappy"             json:"uint16"`
+	Uint8     uint8              `pack:"p,snappy"             json:"uint8"`
+	Float64   float64            `pack:"g,snappy"             json:"float64"`
+	Float32   float32            `pack:"f,snappy"             json:"float32"`
+	D32       decimal.Decimal32  `pack:"d32,scale=5,snappy"   json:"decimal32"`
+	D64       decimal.Decimal64  `pack:"d64,scale=15,snappy"  json:"decimal64"`
+	D128      decimal.Decimal128 `pack:"d128,scale=18,snappy" json:"decimal128"`
+	D256      decimal.Decimal256 `pack:"d256,scale=24,snappy" json:"decimal256"`
+	I128      vec.Int128         `pack:"i128,snappy"          json:"int128"`
+	I256      vec.Int256         `pack:"i256,snappy"          json:"int256"`
 }
 
 func (t Types) ID() uint64 {
@@ -223,25 +228,28 @@ func GenerateRandomKey(length int) []byte {
 
 func NewRandomTypes(i int) *Types {
 	return &Types{
-		RowId:         0, // empty, will be set by insert
-		Timestamp:     time.Now().UTC(),
-		Hash:          GenerateRandomKey(20),
-		String:        hex.EncodeToString(GenerateRandomKey(4)),
-		Bool:          true,
-		Enum:          Enum(i%4 + 1),
-		Int64:         int64(i),
-		Int32:         int32(i),
-		Int16:         int16(i),
-		Int8:          int8(i),
-		Uint64:        uint64(i * 1000000),
-		Uint32:        uint32(i * 1000000),
-		Uint16:        uint16(i),
-		Uint8:         uint8(i),
-		CompactUint64: uint64(i * 1000000),
-		FixedFloat64:  float64(i * 1000000),
-		FixedFloat32:  float32(i * 1000000),
-		Float32:       float32(i * 1000000),
-		Float64:       float64(i * 1000000),
+		RowId:     0, // empty, will be set by insert
+		Timestamp: time.Now().UTC(),
+		Hash:      GenerateRandomKey(20),
+		String:    hex.EncodeToString(GenerateRandomKey(4)),
+		Bool:      true,
+		Enum:      Enum(i%4 + 1),
+		Int64:     int64(i),
+		Int32:     int32(i),
+		Int16:     int16(i),
+		Int8:      int8(i),
+		Uint64:    uint64(i * 1000000),
+		Uint32:    uint32(i * 1000000),
+		Uint16:    uint16(i),
+		Uint8:     uint8(i),
+		Float32:   float32(i * 1000000),
+		Float64:   float64(i * 1000000),
+		D32:       decimal.NewDecimal32(int32(100123456789-i), 5),
+		D64:       decimal.NewDecimal64(1123456789123456789-int64(i), 15),
+		D128:      decimal.NewDecimal128(vec.MustParseInt128(strconv.Itoa(i)+"00000000000000000000"), 18),
+		D256:      decimal.NewDecimal256(vec.MustParseInt256(strconv.Itoa(i)+"0000000000000000000000000000000000000000"), 24),
+		I128:      vec.MustParseInt128(strconv.Itoa(i) + "000000000000000000000000000000"),
+		I256:      vec.MustParseInt256(strconv.Itoa(i) + "000000000000000000000000000000000000000000000000000000000000"),
 	}
 }
 

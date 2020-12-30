@@ -8,11 +8,16 @@ package vec
 
 import (
 	"encoding/binary"
+	"errors"
 	"math"
 	"math/bits"
 	"sort"
 	"strconv"
+	"strings"
+	// "fmt"
 )
+
+var ErrInvalidNumber = errors.New("vec: invalid number")
 
 type Accuracy int8
 
@@ -34,17 +39,17 @@ func (a Accuracy) String() string {
 }
 
 var (
-	Int128Zero = Int128{0, 0}
-	Int128One  = Int256{0, 1}
-	Int128Max  = Int128{0x7FFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF}
-	Int128Min  = Int128{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF}
+	ZeroInt128 = Int128{0, 0}
+	OneInt128  = Int128{0, 1}
+	MaxInt128  = Int128{0x7FFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF}
+	MinInt128  = Int128{0x8000000000000000, 0x0}
 )
 
 // Big-Endian format [0] = Hi, [1] = Lo
 type Int128 [2]uint64
 
 func NewInt128() Int128 {
-	return Int128Zero
+	return ZeroInt128
 }
 
 func Int128FromInt64(in int64) Int128 {
@@ -95,11 +100,11 @@ func (x Int128) Sign() int {
 }
 
 func (x Int128) Int64() int64 {
-	return int64(x[1]) * int64(x.Sign())
+	return int64(x[1])
 }
 
 func (x Int128) Int256() Int256 {
-	sign := x[0] >> 63
+	sign := uint64(int64(x[0]) >> 63)
 	return Int256{sign, sign, x[0], x[1]}
 }
 
@@ -126,24 +131,27 @@ func (x *Int128) SetInt64(y int64) {
 }
 
 func (x *Int128) SetFloat64(y float64) Accuracy {
-	// we're only interested in the integer part, rounded to nearest even
-	y = math.RoundToEven(y)
-
 	// handle special cases
 	switch {
+	case y == 0:
+		*x = ZeroInt128
+		return Exact
 	case math.IsNaN(y):
-		*x = Int128Zero
+		*x = ZeroInt128
 		return Exact
 	case math.IsInf(y, 1):
-		*x = Int128Max
+		*x = MaxInt128
 		return Above
 	case math.IsInf(y, -1):
-		*x = Int128Min
+		*x = MinInt128
 		return Below
-	case math.Abs(y) <= 0:
-		*x = Int128Zero
+	case math.Abs(y) < 0:
+		*x = ZeroInt128
 		return Below
 	}
+
+	// we're only interested in the integer part, rounded to nearest even
+	y = math.RoundToEven(y)
 
 	// at this point we have
 	// - no non-integer numbers
@@ -166,7 +174,7 @@ func (x *Int128) SetFloat64(y float64) Accuracy {
 	// since we have no fractional numbers, shift is always >= 0
 	// check if we can express the number in 128 bits
 	if shift > 127 {
-		*x = Int128Max
+		*x = MaxInt128
 		return Above
 	}
 
@@ -179,8 +187,21 @@ func (x *Int128) SetFloat64(y float64) Accuracy {
 	}
 
 	if sign < 0 {
+		if z[0] > 1<<63 || (z[0] == 1<<63 && z[1] > 0) {
+			*x = MinInt128
+			return Below
+		}
 		*x = z.Neg()
 	} else {
+		if z[0] > 1<<63 || (z[0] == 1<<63 && z[1] > 0) {
+			*x = MaxInt128
+			return Above
+		}
+		// correct saturated MaxInt128
+		if z[0] > 1<<63-1 {
+			z[0]--
+			z[1]--
+		}
 		*x = z
 	}
 
@@ -188,25 +209,29 @@ func (x *Int128) SetFloat64(y float64) Accuracy {
 }
 
 func (x Int128) Precision() int {
-	if x.IsInt64() {
+	switch {
+	case x.IsInt64():
 		var p int
 		for i := x.Int64(); i != 0; i /= 10 {
 			p++
 		}
 		return p
-	}
-	pow := Int128FromInt64(1e18)
-	q, r := x.Abs().QuoRem(pow)
-	for p := 0; ; p += 18 {
-		if q.IsZero() {
-			for i := r.Int64(); i != 0; i /= 10 {
-				p++
+	case x == MinInt128:
+		return 39
+	default:
+		pow := Int128{0, 1e18}
+		q, r := x.Abs().QuoRem(pow)
+		for p := 0; ; p += 18 {
+			if q.IsZero() {
+				for i := r.Int64(); i != 0; i /= 10 {
+					p++
+				}
+				return p
 			}
-			return p
+			q, r = q.QuoRem(pow)
 		}
-		q, r = q.QuoRem(pow)
+		return 0
 	}
-	return 0
 }
 
 // log10(2^64) < 40
@@ -217,9 +242,10 @@ func (x Int128) String() string {
 		return "0"
 	}
 	buf := []byte(i128str)
-	var sign string
+	var b strings.Builder
+	b.Grow(40)
 	if x.Sign() < 0 {
-		sign = "-"
+		b.WriteRune('-')
 		x = x.Neg()
 	}
 	for i := len(buf); ; i -= 19 {
@@ -230,7 +256,8 @@ func (x Int128) String() string {
 			buf[i-n] += byte(r % 10)
 		}
 		if q.IsZero() {
-			return sign + string(buf[i-n:])
+			b.Write(buf[i-n:])
+			return b.String()
 		}
 		x = q
 	}
@@ -238,47 +265,56 @@ func (x Int128) String() string {
 
 func ParseInt128(s string) (Int128, error) {
 	if len(s) == 0 {
-		return Int128Zero, nil
+		return ZeroInt128, ErrInvalidNumber
 	}
 	sign := int64(0)
+	var i int
 	switch s[0] {
 	case '+':
-		s = s[1:]
+		i++
 	case '-':
 		sign = -1
-		s = s[1:]
+		i++
 	}
 
-	l := len(s)
+	l := len(s) - i
 	switch {
 	case l == 0:
-		return Int128Zero, nil
+		return ZeroInt128, ErrInvalidNumber
 	case l < 19:
-		i, err := strconv.ParseUint(s, 10, 64)
+		n, err := strconv.ParseUint(s[i:], 10, 64)
 		if err != nil {
-			return Int128Zero, err
+			return ZeroInt128, err
 		}
-		return Int128{uint64(sign >> 63), i ^ uint64(sign) - uint64(sign)}, nil
+		return Int128{uint64(sign >> 63), n ^ uint64(sign) - uint64(sign)}, nil
 	default:
-		var i Int128
-		for start, step := 0, (l+17)/18-1; step >= 0; step-- {
+		var r Int128
+		for start, step := i, (l+17)/18-1; step >= 0; step-- {
 			end := l - step*18
 			n, err := strconv.ParseUint(s[start:end], 10, 64)
 			if err != nil {
-				return Int128Zero, err
+				return ZeroInt128, err
 			}
 			if start == 0 {
-				i = Int128FromInt64(int64(n))
+				r[1] = n
 			} else {
-				i = i.Mul64(1e18).Add64(n)
+				r = r.Mul64(1e18).Add64(n)
 			}
 			start = end
 		}
 		if sign < 0 {
-			i = i.Neg()
+			r = r.Neg()
 		}
-		return i, nil
+		return r, nil
 	}
+}
+
+func MustParseInt128(s string) Int128 {
+	i, err := ParseInt128(s)
+	if err != nil {
+		panic(err)
+	}
+	return i
 }
 
 func (x Int128) MarshalText() ([]byte, error) {
@@ -314,12 +350,12 @@ func (x Int128) Abs() Int128 {
 	if x[0] < 0x8000000000000000 {
 		return x
 	}
-	return Int128Zero.Sub(x)
+	return ZeroInt128.Sub(x)
 }
 
 // Neg returns -x mod 2**128.
 func (x Int128) Neg() Int128 {
-	return Int128Zero.Sub(x)
+	return ZeroInt128.Sub(x)
 }
 
 // Not sets z = ^x and returns z.
@@ -387,9 +423,16 @@ func (x Int128) AddOverflow(y Int128) (Int128, bool) {
 		carry uint64
 		z     Int128
 	)
+	sign := x.Sign()
 	z[1], carry = bits.Add64(x[1], y[1], 0)
 	z[0], carry = bits.Add64(x[0], y[0], carry)
-	return z, carry != 0
+	overflow := carry != 0
+	if sign < 0 {
+		overflow = overflow || z[0] > 1<<63 || (z[0] == 1<<63 && z[1] > 0)
+	} else {
+		overflow = overflow || z[0] > 1<<63-1
+	}
+	return z, overflow
 }
 
 func (x Int128) Add64(y uint64) (z Int128) {
@@ -397,6 +440,22 @@ func (x Int128) Add64(y uint64) (z Int128) {
 	z[1], carry = bits.Add64(x[1], y, 0)
 	z[0] = x[0] + carry
 	return
+}
+
+func (x Int128) Add64Overflow(y uint64) (Int128, bool) {
+	var (
+		carry uint64
+		z     Int128
+	)
+	z[1], carry = bits.Add64(x[1], y, 0)
+	z[0], carry = bits.Add64(x[0], 0, carry)
+	overflow := carry != 0
+	if x.Sign() < 0 {
+		overflow = overflow || z[0] > 1<<63 || (z[0] == 1<<63 && z[1] > 0)
+	} else {
+		overflow = overflow || z[0] > 1<<63-1
+	}
+	return z, overflow
 }
 
 // Sub returns the difference x-y
@@ -418,7 +477,13 @@ func (x Int128) SubOverflow(y Int128) (Int128, bool) {
 	)
 	z[1], carry = bits.Sub64(x[1], y[1], 0)
 	z[0], carry = bits.Sub64(x[0], y[0], carry)
-	return z, carry != 0
+	overflow := carry != 0
+	if x.Sign() < 0 {
+		overflow = overflow || z[0] > 1<<63 || (z[0] == 1<<63 && z[1] > 0)
+	} else {
+		overflow = overflow || z[0] > 1<<63-1
+	}
+	return z, overflow
 }
 
 // Sub64 returns the difference x - y, where y is a uint64

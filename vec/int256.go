@@ -12,25 +12,32 @@ import (
 	"math/bits"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 var (
-	Int256Zero = Int256{0, 0, 0, 0}
-	Int256One  = Int256{0, 0, 0, 1}
-	Int256Max  = Int256{0x7FFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF}
-	Int256Min  = Int256{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF}
+	ZeroInt256 = Int256{0, 0, 0, 0}
+	OneInt256  = Int256{0, 0, 0, 1}
+	MaxInt256  = Int256{0x7FFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF}
+	MinInt256  = Int256{0x8000000000000000, 0x0, 0x0, 0x0}
 )
 
 // Big-Endian format [0] = Hi .. [3] = Lo
 type Int256 [4]uint64
 
 func NewInt256() Int256 {
-	return Int256Zero
+	return ZeroInt256
 }
 
 func Int256FromInt64(in int64) Int256 {
 	var z Int256
 	z.SetInt64(in)
+	return z
+}
+
+func Int256FromInt128(in Int128) Int256 {
+	var z Int256
+	z.SetInt128(in)
 	return z
 }
 
@@ -80,7 +87,7 @@ func (x Int256) Sign() int {
 }
 
 func (x Int256) Int64() int64 {
-	return int64(x[3]) * int64(x.Sign())
+	return int64(x[3])
 }
 
 func (x Int256) Int128() Int128 {
@@ -110,25 +117,33 @@ func (x *Int256) SetInt64(y int64) {
 	x[0], x[1], x[2], x[3] = sign, sign, sign, uint64(y)
 }
 
-func (x *Int256) SetFloat64(y float64) Accuracy {
-	// we're only interested in the integer part, rounded to nearest even
-	y = math.RoundToEven(y)
+func (x *Int256) SetInt128(y Int128) {
+	sign := uint64(int64(y[0]) >> 63)
+	x[0], x[1], x[2], x[3] = sign, sign, y[0], y[1]
+}
 
+func (x *Int256) SetFloat64(y float64) Accuracy {
 	// handle special cases
 	switch {
+	case y == 0:
+		*x = ZeroInt256
+		return Exact
 	case math.IsNaN(y):
-		*x = Int256Zero
+		*x = ZeroInt256
 		return Exact
 	case math.IsInf(y, 1):
-		*x = Int256Max
+		*x = MaxInt256
 		return Above
 	case math.IsInf(y, -1):
-		*x = Int256Min
+		*x = MinInt256
 		return Below
-	case math.Abs(y) <= 0:
-		*x = Int256Zero
+	case math.Abs(y) < 0:
+		*x = ZeroInt256
 		return Below
 	}
+
+	// we're only interested in the integer part, rounded to nearest even
+	y = math.RoundToEven(y)
 
 	// at this point we have
 	// - no non-integer numbers
@@ -151,7 +166,7 @@ func (x *Int256) SetFloat64(y float64) Accuracy {
 	// since we have no fractional numbers, shift is always >= 0
 	// check if we can express the number in 256 bits
 	if shift > 255 {
-		*x = Int256Max
+		*x = MaxInt256
 		return Above
 	}
 
@@ -164,8 +179,20 @@ func (x *Int256) SetFloat64(y float64) Accuracy {
 	}
 
 	if sign < 0 {
+		if z[0] > 1<<63 || (z[0] == 1<<63 && (z[1]|z[2]|z[3]) > 0) {
+			*x = MinInt256
+			return Below
+		}
 		*x = z.Neg()
 	} else {
+		if z[0] > 1<<63 || (z[0] == 1<<63 && (z[1]|z[2]|z[3]) > 0) {
+			*x = MaxInt256
+			return Above
+		}
+		// correct saturated MaxInt256
+		if z[0] > 1<<63-1 {
+			z = z.Sub64(1)
+		}
 		*x = z
 	}
 
@@ -173,25 +200,29 @@ func (x *Int256) SetFloat64(y float64) Accuracy {
 }
 
 func (x Int256) Precision() int {
-	if x.IsInt64() {
+	switch {
+	case x.IsInt64():
 		var p int
 		for i := x.Int64(); i != 0; i /= 10 {
 			p++
 		}
 		return p
-	}
-	pow := Int256FromInt64(1e18)
-	q, r := x.Abs().QuoRem(pow)
-	for p := 0; ; p += 18 {
-		if q.IsZero() {
-			for i := r.Int64(); i != 0; i /= 10 {
-				p++
+	case x == MinInt256:
+		return 77
+	default:
+		pow := Int256FromInt64(1e18)
+		q, r := x.Abs().QuoRem(pow)
+		for p := 0; ; p += 18 {
+			if q.IsZero() {
+				for i := r.Int64(); i != 0; i /= 10 {
+					p++
+				}
+				return p
 			}
-			return p
+			q, r = q.QuoRem(pow)
 		}
-		q, r = q.QuoRem(pow)
+		return 0
 	}
-	return 0
 }
 
 // log10(2^128) < 78
@@ -202,9 +233,10 @@ func (x Int256) String() string {
 		return "0"
 	}
 	buf := []byte(i256str)
-	var sign string
+	var b strings.Builder
+	b.Grow(80)
 	if x.Sign() < 0 {
-		sign = "-"
+		b.WriteRune('-')
 		x = x.Neg()
 	}
 	for i := len(buf); ; i -= 19 {
@@ -215,7 +247,8 @@ func (x Int256) String() string {
 			buf[i-n] += byte(r % 10)
 		}
 		if q.IsZero() {
-			return sign + string(buf[i-n:])
+			b.Write(buf[i-n:])
+			return b.String()
 		}
 		x = q
 	}
@@ -223,7 +256,7 @@ func (x Int256) String() string {
 
 func ParseInt256(s string) (Int256, error) {
 	if len(s) == 0 {
-		return Int256Zero, nil
+		return ZeroInt256, nil
 	}
 	sign := int64(0)
 	switch s[0] {
@@ -237,11 +270,11 @@ func ParseInt256(s string) (Int256, error) {
 	l := len(s)
 	switch {
 	case l == 0:
-		return Int256Zero, nil
+		return ZeroInt256, nil
 	case l < 19:
 		i, err := strconv.ParseUint(s, 10, 64)
 		if err != nil {
-			return Int256Zero, err
+			return ZeroInt256, err
 		}
 		return Int256{
 			uint64(sign >> 63),
@@ -255,7 +288,7 @@ func ParseInt256(s string) (Int256, error) {
 			end := l - step*18
 			n, err := strconv.ParseUint(s[start:end], 10, 64)
 			if err != nil {
-				return Int256Zero, err
+				return ZeroInt256, err
 			}
 			if start == 0 {
 				i = Int256FromInt64(int64(n))
@@ -269,6 +302,14 @@ func ParseInt256(s string) (Int256, error) {
 		}
 		return i, nil
 	}
+}
+
+func MustParseInt256(s string) Int256 {
+	i, err := ParseInt256(s)
+	if err != nil {
+		panic(err)
+	}
+	return i
 }
 
 func (x Int256) MarshalText() ([]byte, error) {
@@ -308,12 +349,12 @@ func (x Int256) Abs() Int256 {
 	if x[0] < 0x8000000000000000 {
 		return x
 	}
-	return Int256Zero.Sub(x)
+	return ZeroInt256.Sub(x)
 }
 
 // Neg returns -x mod 2**256.
 func (x Int256) Neg() Int256 {
-	return Int256Zero.Sub(x)
+	return ZeroInt256.Sub(x)
 }
 
 // Not returns ^x.
@@ -360,7 +401,7 @@ func (x Int256) Lsh(n uint) Int256 {
 		case 192:
 			return x.lsh192()
 		default:
-			return Int256Zero
+			return ZeroInt256
 		}
 	}
 	var (
@@ -370,7 +411,7 @@ func (x Int256) Lsh(n uint) Int256 {
 	switch {
 	case n > 192:
 		if n > 256 {
-			return Int256Zero
+			return ZeroInt256
 		}
 		x = x.lsh192()
 		n -= 192
@@ -419,9 +460,9 @@ func (x Int256) Rsh(n uint) Int256 {
 			return x.rsh192()
 		default:
 			if x[0]>>63 == 0 {
-				return Int256Zero
+				return ZeroInt256
 			}
-			return Int256Min
+			return MinInt256
 		}
 	}
 	var (
@@ -432,9 +473,9 @@ func (x Int256) Rsh(n uint) Int256 {
 	case n > 192:
 		if n > 256 {
 			if x[0]>>63 == 0 {
-				return Int256Zero
+				return ZeroInt256
 			}
-			return Int256Min
+			return MinInt256
 		}
 		x = x.rsh192()
 		n -= 192
@@ -521,7 +562,13 @@ func (x Int256) AddOverflow(y Int256) (Int256, bool) {
 	z[2], carry = bits.Add64(x[2], y[2], carry)
 	z[1], carry = bits.Add64(x[1], y[1], carry)
 	z[0], carry = bits.Add64(x[0], y[0], carry)
-	return z, carry != 0
+	overflow := carry != 0
+	if x.Sign() < 0 {
+		overflow = overflow || z[0] > 1<<63 || (z[0] == 1<<63 && (z[1]|z[2]|z[3] > 0))
+	} else {
+		overflow = overflow || z[0] > 1<<63-1
+	}
+	return z, overflow
 }
 
 // Sub returns the difference x-y
@@ -547,7 +594,13 @@ func (x Int256) SubOverflow(y Int256) (Int256, bool) {
 	z[2], carry = bits.Sub64(x[2], y[2], carry)
 	z[1], carry = bits.Sub64(x[1], y[1], carry)
 	z[0], carry = bits.Sub64(x[0], y[0], carry)
-	return z, carry != 0
+	overflow := carry != 0
+	if x.Sign() < 0 {
+		overflow = overflow || z[0] > 1<<63 || (z[0] == 1<<63 && (z[1]|z[2]|z[3] > 0))
+	} else {
+		overflow = overflow || z[0] > 1<<63-1
+	}
+	return z, overflow
 }
 
 // Sub64 returns the difference x - y, where y is a uint64

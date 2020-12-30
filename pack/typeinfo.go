@@ -57,21 +57,8 @@ type fieldInfo struct {
 }
 
 func (f fieldInfo) String() string {
-	s := fmt.Sprintf("FieldInfo: %s typ=%s idx=%v scale=%d",
-		f.name, f.typname, f.idx, f.scale)
-	if f.flags&FlagPrimary > 0 {
-		s += " Primary"
-	}
-	if f.flags&FlagIndexed > 0 {
-		s += " Indexed"
-	}
-	if f.flags&FlagCompressLZ4 > 0 {
-		s += " LZ4"
-	}
-	if f.flags&FlagCompressSnappy > 0 {
-		s += " Snappy"
-	}
-	return s
+	return fmt.Sprintf("name=%s typ=%s idx=%v scale=%d flags=%s",
+		f.name, f.typname, f.idx, f.scale, f.flags)
 }
 
 var tinfoMap = make(map[reflect.Type]*typeInfo)

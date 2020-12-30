@@ -56,11 +56,14 @@ func (n Int256) Div(d Int256) Int256 {
 
 // Div returns the quotient x/y.
 func (x Int256) udiv(y Int256) Int256 {
-	if y.IsZero() || y.Gt(x) {
-		return Int256Zero
+	if y.IsZero() || y.Abs().Gt(x.Abs()) {
+		return ZeroInt256
 	}
-	if x.Eq(y) {
-		return Int256One
+	if x.Abs().Eq(y.Abs()) {
+		if x.Sign() != y.Sign() {
+			return OneInt256.Neg()
+		}
+		return OneInt256
 	}
 	// Shortcut some cases
 	if x.IsInt64() {
@@ -86,15 +89,15 @@ func (x Int256) udiv(y Int256) Int256 {
 // If y == 0, returns 0. OBS: differs from other math libraries
 func (x Int256) Mod(y Int256) Int256 {
 	if x.IsZero() || y.IsZero() {
-		return Int256Zero
+		return ZeroInt256
 	}
-	switch x.Cmp(y) {
+	switch x.Abs().Cmp(y.Abs()) {
 	case -1:
 		// x < y
 		return x
 	case 0:
 		// x == y
-		return Int256Zero // They are equal
+		return ZeroInt256 // They are equal
 	}
 
 	// At this point:
@@ -120,15 +123,18 @@ func (x Int256) Mod(y Int256) Int256 {
 
 func (x Int256) QuoRem(y Int256) (Int256, Int256) {
 	if x.IsZero() || y.IsZero() {
-		return Int256Zero, Int256Zero
+		return ZeroInt256, ZeroInt256
 	}
-	switch x.Cmp(y) {
+	switch x.Abs().Cmp(y.Abs()) {
 	case -1:
 		// x < y
-		return Int256Zero, x
+		return ZeroInt256, x
 	case 0:
 		// x == y
-		return Int256One, Int256Zero // They are equal
+		if x.Sign() != y.Sign() {
+			return OneInt256.Neg(), ZeroInt256
+		}
+		return OneInt256, ZeroInt256 // They are equal
 	}
 
 	// At this point:
@@ -317,7 +323,7 @@ func udivrem(quot, u []uint64, d Int256) (rem Int256) {
 
 	if dLen == 1 {
 		r := udivremBy1(quot, un, dn[0])
-		rem = Int256Zero
+		rem = ZeroInt256
 		rem[3] = r >> shift
 		return rem
 	}

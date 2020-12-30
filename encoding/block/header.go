@@ -124,11 +124,11 @@ func NewHeader(typ BlockType, comp Compression, scale int) Header {
 		h.MinValue = []byte{}
 		h.MaxValue = []byte{}
 	case BlockInt128:
-		h.MinValue = vec.Int128Zero
-		h.MaxValue = vec.Int128Zero
+		h.MinValue = vec.ZeroInt128
+		h.MaxValue = vec.ZeroInt128
 	case BlockInt256:
-		h.MinValue = vec.Int256Zero
-		h.MaxValue = vec.Int256Zero
+		h.MinValue = vec.ZeroInt256
+		h.MaxValue = vec.ZeroInt256
 	}
 	return h
 }
@@ -572,10 +572,10 @@ func (h *Header) Clear() {
 		h.MinValue = false
 		h.MaxValue = false
 	case BlockInt128:
-		h.MinValue = vec.Int128Zero
-		h.MaxValue = vec.Int128Zero
+		h.MinValue = vec.ZeroInt128
+		h.MaxValue = vec.ZeroInt128
 	case BlockInt256:
-		h.MinValue = vec.Int256Zero
-		h.MaxValue = vec.Int256Zero
+		h.MinValue = vec.ZeroInt256
+		h.MaxValue = vec.ZeroInt256
 	}
 }

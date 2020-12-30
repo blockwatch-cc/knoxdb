@@ -40,6 +40,25 @@ func (f FieldFlags) Compression() block.Compression {
 	return 0
 }
 
+func (f FieldFlags) String() string {
+	s := make([]string, 0)
+	for i := FlagPrimary; i <= FlagCompressLZ4; i <<= 1 {
+		if f&i > 0 {
+			switch i {
+			case FlagPrimary:
+				s = append(s, "primary")
+			case FlagIndexed:
+				s = append(s, "indexed")
+			case FlagCompressSnappy:
+				s = append(s, "snappy")
+			case FlagCompressLZ4:
+				s = append(s, "lz4")
+			}
+		}
+	}
+	return strings.Join(s, ",")
+}
+
 type FieldType string
 
 const (
@@ -216,6 +235,14 @@ func (l FieldList) NameMap() map[string]string {
 		m[v.Name] = v.Alias
 	}
 	return m
+}
+
+func mustParseFields(proto interface{}) FieldList {
+	fields, err := Fields(proto)
+	if err != nil {
+		panic(err)
+	}
+	return fields
 }
 
 func Fields(proto interface{}) (FieldList, error) {

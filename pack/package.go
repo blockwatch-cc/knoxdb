@@ -134,6 +134,7 @@ func (p *Package) Contains(fields FieldList) bool {
 }
 
 func (p *Package) initType(v interface{}) error {
+	// need Go type to unpack using reflect
 	if p.tinfo != nil && p.tinfo.gotype {
 		return nil
 	}
@@ -144,6 +145,23 @@ func (p *Package) initType(v interface{}) error {
 	p.tinfo = tinfo
 	if p.pkindex < 0 {
 		p.pkindex = tinfo.PkColumn()
+	}
+	// extract fields from Go type
+	fields, err := Fields(v)
+	if err != nil {
+		return err
+	}
+	// update metadata
+	p.names = make([]string, len(fields))
+	p.types = make([]FieldType, len(fields))
+	p.namemap = make(map[string]int)
+	for i, field := range fields {
+		p.names[i] = field.Name
+		p.types[i] = field.Type
+		p.namemap[field.Name] = i
+		p.namemap[field.Alias] = i
+		// log.Infof("Initialized field type name=%s alias=%s type=%s flags=%s",
+		// 	field.Name, field.Alias, field.Type, field.Flags)
 	}
 	return nil
 }
@@ -173,7 +191,6 @@ func (p *Package) Init(v interface{}, sz int) error {
 	p.names = make([]string, p.nFields)
 	p.types = make([]FieldType, p.nFields)
 	p.namemap = make(map[string]int)
-	p.dirty = true
 
 	// create blocks
 	for i, field := range fields {
@@ -208,7 +225,6 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 	p.names = make([]string, p.nFields)
 	p.types = make([]FieldType, p.nFields)
 	p.namemap = make(map[string]int)
-	p.dirty = true
 
 	// fill type info from fields
 	p.tinfo = &typeInfo{
@@ -243,6 +259,41 @@ func (p *Package) InitFields(fields FieldList, sz int) error {
 		}
 	}
 	return err
+}
+
+func (p *Package) InitMetadata(fields FieldList) error {
+	if len(fields) > 256 {
+		return fmt.Errorf("pack: cannot handle more than 256 fields")
+	}
+
+	p.names = make([]string, p.nFields)
+	p.types = make([]FieldType, p.nFields)
+	p.namemap = make(map[string]int)
+
+	// fill type info from fields
+	p.tinfo = &typeInfo{
+		fields: make([]fieldInfo, p.nFields),
+		gotype: false,
+	}
+	for i, field := range fields {
+		// fill type info from fields
+		if field.Flags&FlagPrimary > 0 {
+			p.pkindex = i
+		}
+		p.tinfo.fields[i].name = field.Name
+		p.tinfo.fields[i].alias = field.Alias
+		p.tinfo.fields[i].flags = field.Flags
+		p.tinfo.fields[i].blockid = i
+
+		// register field
+		p.names[i] = field.Name
+		p.types[i] = field.Type
+		p.namemap[field.Name] = i
+		p.namemap[field.Alias] = i
+		// log.Infof("Initialized field metadata name=%s alias=%s type=%s scale=%d",
+		// 	field.Name, field.Alias, field.Type, field.Scale)
+	}
+	return nil
 }
 
 func (p *Package) Clone(copydata bool, sz int) (*Package, error) {
@@ -329,7 +380,7 @@ func (p *Package) Push(v interface{}) error {
 	}
 	val := reflect.Indirect(reflect.ValueOf(v))
 	if !val.IsValid() {
-		return fmt.Errorf("pack: invalid value of type %T", v)
+		return fmt.Errorf("pack: push: invalid value of type %T", v)
 	}
 	for _, fi := range p.tinfo.fields {
 		if fi.blockid < 0 {
@@ -341,6 +392,10 @@ func (p *Package) Push(v interface{}) error {
 			continue
 		}
 		f := fi.value(val)
+
+		// log.Infof("Push to field %d %s type=%s block=%s struct val %s (%s) finfo=%s",
+		// 	fi.blockid, p.names[fi.blockid], p.types[fi.blockid], b.Type(),
+		// 	f.Type().String(), f.Kind(), fi)
 
 		switch p.types[fi.blockid] {
 		case FieldTypeBytes:
@@ -399,7 +454,8 @@ func (p *Package) Push(v interface{}) error {
 		case FieldTypeDecimal32:
 			b.Int32 = append(b.Int32, f.Interface().(Decimal32).Quantize(b.Scale()).Int32())
 		default:
-			return fmt.Errorf("pack: unsupported type %s (%v)", f.Type().String(), f.Kind())
+			return fmt.Errorf("pack: push: unsupported type %s for field %d %s (%v)",
+				p.types[fi.blockid], fi.blockid, f.Type().String(), f.Kind())
 		}
 		b.SetDirty()
 	}
@@ -1106,7 +1162,7 @@ func (p *Package) Column(index int) (interface{}, error) {
 		return res, nil
 
 	case FieldTypeBoolean:
-		// TODO: materialize when using bitset
+		// materialized from bitset
 		return slice, nil
 
 	case FieldTypeDecimal256:
@@ -1224,7 +1280,7 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		}
 		return res, nil
 	case FieldTypeBoolean:
-		return b.Bits.ToSlice()[start:end], nil
+		return b.Bits.SubSlice(start, end-start), nil
 	case FieldTypeFloat64:
 		return b.Float64[start:end], nil
 	case FieldTypeFloat32:
@@ -1266,10 +1322,10 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 	}
 }
 
-// CopyFrom replaces at most srcLen rows from the current package starting at
+// ReplaceFrom replaces at most srcLen rows from the current package starting at
 // offset dstPos with rows from package src starting at pos srcPos.
 // Both packages must have same block order.
-func (p *Package) CopyFrom(srcPack *Package, dstPos, srcPos, srcLen int) error {
+func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) error {
 	if srcPack.nFields != p.nFields {
 		return fmt.Errorf("pack: invalid src/dst field count %d/%d", srcPack.nFields, p.nFields)
 	}
@@ -1308,7 +1364,7 @@ func (p *Package) CopyFrom(srcPack *Package, dstPos, srcPos, srcLen int) error {
 			copy(dst.Strings[dstPos:], src.Strings[srcPos:srcPos+n])
 
 		case FieldTypeBoolean:
-			dst.Bits.CopyFrom(src.Bits, srcPos, srcLen, dstPos)
+			dst.Bits.Replace(src.Bits, srcPos, srcLen, dstPos)
 
 		case FieldTypeFloat64:
 			copy(dst.Float64[dstPos:], src.Float64[srcPos:srcPos+n])
@@ -1429,7 +1485,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 			dst.Strings = append(dst.Strings, src.Strings[srcPos:srcPos+srcLen]...)
 
 		case FieldTypeBoolean:
-			dst.Bits.AppendFrom(src.Bits, srcPos, srcLen)
+			dst.Bits.Append(src.Bits, srcPos, srcLen)
 
 		case FieldTypeFloat64:
 			dst.Float64 = append(dst.Float64, src.Float64[srcPos:srcPos+srcLen]...)
@@ -1542,10 +1598,10 @@ func (p *Package) Append() error {
 			b.Float32 = append(b.Float32, 0)
 
 		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256 = append(b.Int256, Int256Zero)
+			b.Int256 = append(b.Int256, ZeroInt256)
 
 		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128 = append(b.Int128, Int128Zero)
+			b.Int128 = append(b.Int128, ZeroInt128)
 
 		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
 			b.Int64 = append(b.Int64, 0)
