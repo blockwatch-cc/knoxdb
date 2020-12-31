@@ -37,6 +37,7 @@ type bitSetBenchmarkSize struct {
 var bitSetSizes = []int{
 	7, 8, 9, 15, 16, 17, 23, 24, 25, 31, 32, 33,
 	63, 64, 65, 127, 128, 129, 255, 256, 257, 512, 1024,
+	//    2048, 4096, 8192, 16384,
 }
 
 var bitSetBenchmarkSizes = []bitSetBenchmarkSize{
@@ -390,7 +391,7 @@ func TestBitAndAVX2(T *testing.T) {
 						T.Errorf("dst===src: unexpected return value %x, expected !=0", ret)
 					}
 				}
-                if bytes.Compare(dst, src) != 0 {
+				if bytes.Compare(dst, src) != 0 {
 					T.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -531,6 +532,92 @@ func TestBitAndAVX2(T *testing.T) {
 	// 		}
 	// 	})
 	// }
+}
+
+func TestBitAndAVX2Flag1(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
+	// calls use the function selector to do proper last byte masking!
+	for _, sz := range bitSetSizes {
+		zeros := fillBitset(nil, sz, 0)
+		ones := fillBitset(nil, sz, 0xff)
+		for _, pt := range bitSetPatterns {
+			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+				src := fillBitset(nil, sz, pt)
+				dst := fillBitset(nil, sz, pt)
+
+				// same value, same slice
+				ret := bitsetAndAVX2Flag1(dst, dst)
+				if pt == 0x01 && sz == 7 {
+					if ret != 0 {
+						T.Errorf("dst===src: unexpected return value %x, expected 0", ret)
+					}
+				} else {
+					if ret == 0 {
+						T.Errorf("%d_%x_dst===src: unexpected return value %x, expected !=0", sz, pt, ret)
+					}
+				}
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("dst===src: unexpected count %d, expected %d", got, want)
+				}
+
+				// same value, other slice
+				copy(dst, src)
+				ret = bitsetAnd(dst, src, sz)
+				if pt == 0x01 && sz == 7 {
+					if ret != 0 {
+						//T.Errorf("dst==src: unexpected return value %x, expected 0", ret)
+					}
+				} else {
+					if ret == 0 {
+						T.Errorf("dst==src: unexpected return value %x, expected !=0", ret)
+					}
+				}
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("dst==src: unexpected count %d, expected %d", got, want)
+				}
+
+				// all zeros
+				copy(dst, src)
+				ret = bitsetAnd(dst, zeros, sz)
+				if ret != 0 {
+					//T.Errorf("zeros: unexpected return value %x, expected %x", ret, 0)
+				}
+				if bytes.Compare(dst, zeros) != 0 {
+					T.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
+				}
+				if got, want := popcount(dst), int64(0); got != want {
+					T.Errorf("zeros: unexpected count %d, expected %d", got, want)
+				}
+
+				// all ones
+				copy(dst, src)
+				ret = bitsetAnd(dst, ones, sz)
+				if pt == 0x01 && sz == 7 {
+					if ret != 0 {
+						//T.Errorf("ones: unexpected return value %x, expected 0", ret)
+					}
+				} else {
+					if ret == 0 {
+						T.Errorf("ones: unexpected return value %x, expected !=0", ret)
+					}
+				}
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("ones: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("ones: unexpected count %d, expected %d", got, want)
+				}
+			})
+		}
+	}
 }
 
 func TestBitAndNotGeneric(T *testing.T) {
@@ -2708,6 +2795,46 @@ func BenchmarkBitSetAndAVX2(B *testing.B) {
 			B.SetBytes(int64(bitFieldLen(n.l)))
 			for i := 0; i < B.N; i++ {
 				bitsetAndAVX2(bits, cmp)
+			}
+		})
+	}
+}
+
+//go:noescape
+func bitsetAndAVX2Flag1(dst, src []byte) int
+
+func BenchmarkBitSetAndAVX2Flag1(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range bitSetBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			bits := fillBitset(nil, n.l, 0xfa)
+			cmp := fillBitset(nil, n.l, 0xae)
+			B.ResetTimer()
+			B.SetBytes(int64(bitFieldLen(n.l)))
+			for i := 0; i < B.N; i++ {
+				bitsetAndAVX2Flag1(bits, cmp)
+			}
+		})
+	}
+}
+
+//go:noescape
+func bitsetAndAVX2Flag2(dst, src []byte) int
+
+func BenchmarkBitSetAndAVX2Flag2(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range bitSetBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			bits := fillBitset(nil, n.l, 0xfa)
+			cmp := fillBitset(nil, n.l, 0xae)
+			B.ResetTimer()
+			B.SetBytes(int64(bitFieldLen(n.l)))
+			for i := 0; i < B.N; i++ {
+				bitsetAndAVX2Flag2(bits, cmp)
 			}
 		})
 	}
