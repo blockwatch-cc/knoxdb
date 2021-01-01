@@ -221,7 +221,7 @@ loop_avx:
 prep_i32:
     // move collected ones from AVX2 to x86 register
     VPXOR       Y11, Y11, Y11       // Y11 = 0
-    VPCMPEQB	Y11, Y10, Y10       // for each byte of Y10: zero -> 0xff, not zero -> 0x00 
+    VPCMPEQB	Y11, Y10, Y10       // for each byte of Y10: zero -> 0xff, not zero -> 0x00
 	VPMOVMSKB	Y10, R10            // move per byte MSBs into packed bitmask to r32
     NOTL        R10
 
@@ -368,12 +368,12 @@ loop_avx:
 prep_i32:
     // move collected ones from Y10 to R10
     VPXOR       Y11, Y11, Y11       // Y11 = 0
-    VPCMPEQB	Y11, Y10, Y10       // for each byte of Y10: zero -> 0xff, not zero -> 0x00 
+    VPCMPEQB	Y11, Y10, Y10       // for each byte of Y10: zero -> 0xff, not zero -> 0x00
 	VPMOVMSKB	Y10, R10            // move per byte MSBs into packed bitmask to r32
     NOTL        R10
     // move collected zeros from Y12 to R12
     VPCMPEQB    Y11, Y11, Y11       // Y11 = 0xff.....
-    VPCMPEQB	Y11, Y12, Y12       // for each byte of Y10: 0xff -> 0xff, not 0xff -> 0x00 
+    VPCMPEQB	Y11, Y12, Y12       // for each byte of Y10: 0xff -> 0xff, not 0xff -> 0x00
 	VPMOVMSKB	Y12, R12            // move per byte MSBs into packed bitmask to r32
 
 	TESTQ	BX, BX
@@ -759,13 +759,13 @@ TEXT ·bitsetReverseAVX2(SB), NOSPLIT, $0-24
     VPBROADCASTB    const_0x0f<>+0x00(SB), Y11      // low mask, 0x0f
     VMOVDQU         shuffle8<>+0x00(SB), Y12        // load byte shuffle mask
     VMOVDQU         perm_reverse<>+0x00(SB), Y13    // load byte shuffle mask
-    
+
 	// works for data size 64 byte
 loop_avx2:
-    SUBQ        $32, DI                 
+    SUBQ        $32, DI
 	VMOVDQU		0(SI), Y0               // load first 256 bit
 	VMOVDQU		0(DI), Y2               // load last 256 bit
-    
+
     // revert Y0
     // first revert bits within bytes
     VPAND       Y0, Y11, Y1             // mask low nibble
@@ -811,10 +811,10 @@ exit_avx2:
 
 	// works for data size 16 byte
 loop_avx:
-    SUBQ        $16, DI                 
+    SUBQ        $16, DI
 	VMOVDQU		0(SI), X0               // load first 256 bit
 	VMOVDQU		0(DI), X2               // load last 256 bit
-    
+
     // revert Y0
     // first revert bits within bytes
     VPAND       X0, X11, X1             // mask low nibble
@@ -873,9 +873,9 @@ loop_i8:
     SHLB    $4, R10             // move low nibble to high nibble
     SHRB    $4, R8              // shift high nibble
     MOVB    (BP)(R8*1),R11      // look up
-    ORB     R10, R11            
+    ORB     R10, R11
     MOVB    R11, 0(DI)
-    
+
     // revert R9
     MOVB    R9, AX
     ANDB    $15, AX             // mask low nibble
@@ -915,15 +915,21 @@ done:
 
 // Helpers for PopCountAVX2
 //
+// void CSA(__m256i& h, __m256i& l, __m256i a, __m256i b, __m256i c)
+// {
+//   const __m256i u = a ^ b;
+//   h = (a & b) | (u & c);
+//   l = u ^ c;
+// }
 #define CSA(x, y, a, b, c) \
-	VPXOR	a, b, c; \
 	VPAND	a, b, x; \
-	VPXOR	c, b, y; \
-	VPAND	c, b, c; \
-	VPOR 	x, c, x;
+	VPXOR	a, b, b; \
+	VPXOR	b, c, y; \
+	VPAND	b, c, b; \
+	VPOR 	x, b, x;
 
 // Input == Output register
-// Static: Y7, Y8, Y9
+// Static: Y7(55), Y8(33), Y9(0F)
 // Scratch: Y6
 #define POPCOUNT(VAL) \
 	VMOVDQU		VAL, Y6; \
@@ -932,13 +938,13 @@ done:
 	VPSUBB		VAL, Y6, VAL; \
 	VMOVDQU		VAL, Y6; \
 	VPSRLW		$2, Y6, Y6; \
-	VPAND		Y6, Y9, Y6; \
+	VPAND		Y6, Y8, Y6; \
 	VPAND		VAL, Y8, VAL; \
 	VPADDB		VAL, Y6, VAL; \
 	VMOVDQU		VAL, Y6; \
 	VPSRLW		$4, Y6, Y6; \
-	VPAND		Y6, Y9, Y6; \
 	VPADDB		VAL, Y6, VAL; \
+	VPAND		VAL, Y9, VAL; \
 	VPXOR		Y6, Y6, Y6; \
 	VPSADBW		VAL, Y6, VAL;
 
@@ -981,7 +987,8 @@ TEXT ·bitsetPopCountAVX2(SB), NOSPLIT, $0-32
 	NEGQ	CX
 	ADDQ	BX, CX
 	CMPQ	CX, $512      // for(; i < limit; i += 16) // addresses 16 x 32 bytes of data
-	JBE		prep_avx
+	//JBE		prep_avx  // FIXME: disable AVX2 harley-seal due to errors
+	JMP		prep_avx
 
 	// works for blocks of 512 byte
 prep_avx2:
@@ -993,7 +1000,6 @@ prep_avx2:
 	VPXOR			Y12, Y12, Y12
 	VPXOR			Y13, Y13, Y13
 	VPXOR			Y14, Y14, Y14
-	VPXOR			Y15, Y15, Y15
 
 loop_avx2:
 	VMOVDQU		0(SI), Y0 		// CSA(twosA, ones, ones, data[i+0], data[i+1]);
@@ -1027,9 +1033,8 @@ loop_avx2:
 	CSA(Y5, Y12, Y12, Y2, Y3)	// CSA(foursB, twos, twos, twosA, twosB);
 	CSA(Y0, Y13, Y13, Y4, Y5)	// CSA(eightsB, fours, fours, foursA, foursB);
 	CSA(Y15, Y14, Y14, Y6, Y0)	// CSA(sixteens, eights, eights, eightsA, eightsB);
-	VMOVDQU		Y15, Y0 		// total = _mm256_add_epi64(total, popcount(sixteens));
-	POPCOUNT(Y0)
-	VPADDQ		Y0, Y10, Y10
+	POPCOUNT(Y15)               // total = _mm256_add_epi64(total, popcount(sixteens));
+	VPADDQ		Y15, Y10, Y10
 
 	LEAQ		512(SI), SI
 	SUBQ		$512, BX
@@ -1094,6 +1099,7 @@ loop_avx:
 
 	// works for data size 31 down to single byte
 prep_i64:
+    VZEROUPPER
 	TESTQ	BX, BX
 	JLE		done
 	CMPL	BX, $8
