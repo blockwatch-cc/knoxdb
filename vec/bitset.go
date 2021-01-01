@@ -619,6 +619,8 @@ func (s BitSet) SubSlice(start, n int) []bool {
 	}
 	if n < 0 {
 		n = s.size - start
+	} else if start+n > s.size {
+		n = s.size - start
 	}
 	res := make([]bool, n)
 	var j int

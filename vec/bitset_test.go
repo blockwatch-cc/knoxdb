@@ -2081,7 +2081,8 @@ func TestBitSetReplace(T *testing.T) {
 					dst.Fill(pat)
 					srcPos := int(rand.Int31n(int32(src.Len())))
 					srcLen := int(rand.Int31n(int32(src.Len() - srcPos)))
-					dstPos := int(rand.Int31n(int32(dst.Len() - srcLen)))
+					// dstPos := int(rand.Int31n(int32(dst.Len() - srcLen)))
+					dstPos := int(rand.Int31n(int32(dst.Len())))
 
 					if srcPos&0x7+dstPos&0x7+srcLen&0x7 == 0 {
 						fast++
@@ -2093,7 +2094,7 @@ func TestBitSetReplace(T *testing.T) {
 					dst.Replace(src, srcPos, srcLen, dstPos)
 
 					dstSlice := dst.SubSlice(dstPos, srcLen)
-					srcSlice := src.SubSlice(srcPos, srcLen)
+					srcSlice := src.SubSlice(srcPos, min(srcLen, dst.Len()-dstPos))
 					// T.Logf("SRC=%x DST=%x srcPos=%d dstPos=%d n=%d\n",
 					// 	src.Bytes(), dst.Bytes(), srcPos, dstPos, srcLen)
 					if got, want := dst.Len(), lbefore; got != want {
