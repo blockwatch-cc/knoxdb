@@ -36,8 +36,8 @@ type bitSetBenchmarkSize struct {
 
 var bitSetSizes = []int{
 	7, 8, 9, 15, 16, 17, 23, 24, 25, 31, 32, 33,
-	63, 64, 65, 127, 128, 129, 255, 256, 257, 512, 1024,
-	//    2048, 4096, 8192, 16384,
+	63, 64, 65, 127, 128, 129, 255, 256, 257,
+	512, 1024, 2048, 4096, 8192, 16384,
 }
 
 var bitSetBenchmarkSizes = []bitSetBenchmarkSize{
@@ -161,7 +161,6 @@ func TestBitSetPopCountGeneric(T *testing.T) {
 			cnt := bitsetPopCountGeneric(c.source, c.size)
 			if got, want := cnt, c.count; got != want {
 				T.Errorf("unexpected count %d, expected %d", got, want)
-				return
 			}
 		})
 	}
@@ -171,7 +170,6 @@ func TestBitSetPopCountGeneric(T *testing.T) {
 				buf := fillBitset(nil, sz, pt)
 				if got, want := bitsetPopCountGeneric(buf, sz), popcount(buf); got != want {
 					T.Errorf("unexpected count %d, expected %d", got, want)
-					return
 				}
 			})
 		}
@@ -188,7 +186,6 @@ func TestBitSetPopCountAVX2(T *testing.T) {
 			cnt := bitsetPopCount(c.source, c.size)
 			if got, want := cnt, c.count; got != want {
 				T.Errorf("unexpected count %d, expected %d", got, want)
-				return
 			}
 		})
 	}
@@ -199,7 +196,6 @@ func TestBitSetPopCountAVX2(T *testing.T) {
 				// call the function selector to do proper last byte masking!
 				if got, want := bitsetPopCount(buf, sz), popcount(buf); got != want {
 					T.Errorf("unexpected count %d, expected %d", got, want)
-					return
 				}
 			})
 		}
@@ -2079,7 +2075,7 @@ func TestBitSetReplace(T *testing.T) {
 	rand.Seed(0)
 	for _, sz := range bitSetSizes {
 		for i, src := range randBitsets(100, sz) {
-			dst := NewBitSet(1024)
+			dst := NewBitSet(sz)
 			for _, pat := range bitSetPatterns {
 				T.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
 					dst.Fill(pat)
@@ -2098,8 +2094,8 @@ func TestBitSetReplace(T *testing.T) {
 
 					dstSlice := dst.SubSlice(dstPos, srcLen)
 					srcSlice := src.SubSlice(srcPos, srcLen)
-					T.Logf("SRC=%x DST=%x srcPos=%d dstPos=%d n=%d\n",
-						src.Bytes(), dst.Bytes(), srcPos, dstPos, srcLen)
+					// T.Logf("SRC=%x DST=%x srcPos=%d dstPos=%d n=%d\n",
+					// 	src.Bytes(), dst.Bytes(), srcPos, dstPos, srcLen)
 					if got, want := dst.Len(), lbefore; got != want {
 						T.Errorf("unexpected bitset len %d, expected %d", got, want)
 						T.FailNow()
@@ -2128,7 +2124,7 @@ func TestBitSetAppend(T *testing.T) {
 	rand.Seed(0)
 	for _, sz := range bitSetSizes {
 		for i, src := range randBitsets(100, sz) {
-			dst := NewBitSet(1024)
+			dst := NewBitSet(sz)
 			for _, pat := range bitSetPatterns {
 				T.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
 					dst.Fill(pat)
@@ -2192,7 +2188,7 @@ func TestBitSetDelete(T *testing.T) {
 	rand.Seed(0)
 	for _, sz := range bitSetSizes {
 		for i, src := range randBitsets(100, sz) {
-			dst := NewBitSet(1024)
+			dst := NewBitSet(sz)
 			for _, pat := range bitSetPatterns {
 				T.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
 					// strategy:
