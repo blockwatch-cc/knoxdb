@@ -5,8 +5,8 @@
 
 package vec
 
-func bitsetAnd(dst, src []byte, size int) {
-	bitsetAndGeneric(dst, src, size)
+func bitsetAnd(dst, src []byte, size int) int {
+	return bitsetAndGeneric(dst, src, size)
 }
 
 func bitsetAndNot(dst, src []byte, size int) {

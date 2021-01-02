@@ -25,7 +25,7 @@ const (
 )
 
 type Package struct {
-	used    int64          // atomic reference counter, can be recycled when 0
+	// used    int64          // atomic reference counter, can be recycled when 0
 	version byte           // 8bit
 	nFields int            // 8bit
 	nValues int            // 32bit

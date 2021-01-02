@@ -163,13 +163,13 @@ func (s *BitSet) Close() {
 	}
 }
 
-func (s *BitSet) And(r *BitSet) *BitSet {
+func (s *BitSet) And(r *BitSet) (*BitSet, int) {
 	if r.Count() == 0 {
 		s.Zero()
-		return s
+		return s, 0
 	}
-	bitsetAnd(s.Bytes(), r.Bytes(), min(s.size, r.size))
-	return s
+	any := bitsetAnd(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	return s, any
 }
 
 func (s *BitSet) AndNot(r *BitSet) *BitSet {

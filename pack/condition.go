@@ -729,7 +729,59 @@ func (l ConditionList) MatchPack(pkg *Package) *BitSet {
 	// relation between all conditions)
 	var bits *BitSet
 	for _, c := range l {
-		b := c.MatchPack(pkg)
+		var b *BitSet
+		// FIXME: reconsider when we introduce OR and nested conditions!
+		//
+		// Quick inclusion check to skip matching when the current condition
+		// would return an all-true vector. Note that we do not have to check
+		// for an all-false vector because MaybeMatchPack() has already deselected
+		// packs of that kind (except the journal, but here we cannot rely on
+		// min/max values anyways).
+		if !pkg.dirty {
+			head := pkg.blocks[c.Field.Index].Header()
+			min, max := head.MinValue, head.MaxValue
+			switch c.Mode {
+			case FilterModeEqual:
+				// condition is always true iff min == max == c.Value
+				if c.Field.Type.Equal(min, c.Value) && c.Field.Type.Equal(max, c.Value) {
+					b = NewBitSet(pkg.Len()).One()
+				}
+			case FilterModeNotEqual:
+				// condition is always true iff c.Value < min || c.Value > max
+				if c.Field.Type.Lt(c.Value, min) || c.Field.Type.Gt(c.Value, max) {
+					b = NewBitSet(pkg.Len()).One()
+				}
+			case FilterModeRange:
+				// condition is always true iff pack range <= condition range
+				if c.Field.Type.Lte(min, c.From) && c.Field.Type.Gte(max, c.To) {
+					b = NewBitSet(pkg.Len()).One()
+				}
+			case FilterModeGt:
+				// condition is always true iff min > c.Value
+				if c.Field.Type.Gt(min, c.Value) {
+					b = NewBitSet(pkg.Len()).One()
+				}
+			case FilterModeGte:
+				// condition is always true iff min >= c.Value
+				if c.Field.Type.Gte(min, c.Value) {
+					b = NewBitSet(pkg.Len()).One()
+				}
+			case FilterModeLt:
+				// condition is always true iff max < c.Value
+				if c.Field.Type.Lt(max, c.Value) {
+					b = NewBitSet(pkg.Len()).One()
+				}
+			case FilterModeLte:
+				// condition is always true iff max <= c.Value
+				if c.Field.Type.Lte(max, c.Value) {
+					b = NewBitSet(pkg.Len()).One()
+				}
+			}
+		}
+		// match vector against condition
+		if b == nil {
+			b = c.MatchPack(pkg)
+		}
 		if bits == nil {
 			if b.Count() == 0 {
 				return b
@@ -737,21 +789,15 @@ func (l ConditionList) MatchPack(pkg *Package) *BitSet {
 			bits = b
 			continue
 		}
-		// early stop on empty match
-		if b.Count() == 0 {
-			bits.Close()
-			return b
-		}
 
 		// merge
-		// any := bits.And(b)
-		bits.And(b)
+		_, any := bits.And(b)
 		b.Close()
 
 		// early stop on empty aggregate match
-		// if any == 0 {
-		// 	break
-		// }
+		if any == 0 {
+			break
+		}
 	}
 	return bits
 }

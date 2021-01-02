@@ -12,7 +12,7 @@ package vec
 import (
 	"bytes"
 	"encoding/binary"
-	// "encoding/hex"
+	"encoding/hex"
 	"fmt"
 	"math/bits"
 	"math/rand"
@@ -36,8 +36,28 @@ type bitSetBenchmarkSize struct {
 
 var bitSetSizes = []int{
 	7, 8, 9, 15, 16, 17, 23, 24, 25, 31, 32, 33,
-	63, 64, 65, 127, 128, 129, 255, 256, 257,
-	512, 1024, 2048, 4096, 8192, 16384,
+	63, 64, 65, 127,
+	128,   // min AVX size
+	129,   // AVX + 1bit
+	160,   // AVX + i32
+	161,   // AVX + i32 + 1
+	255,   // AVX + i32 + 7
+	256,   // 2x AVX
+	257,   // 2x AVX + 1
+	512,   // 4x AVX
+	1024,  // 8x AVX
+	2048,  // min AVX2 size
+	2176,  // AVX2 + AVX size
+	2208,  // AVX2 + AVX + i32 size
+	2216,  // AVX2 + AVX + i32 + i8 size
+	2217,  // AVX2 + AVX + i32 + i8 size + 1 bit
+	4096,  // 2x AVX2
+	4224,  // 2x AVX2 + AVX
+	4256,  // 2x AVX2 + AVX + i32
+	4264,  // 2x AVX2 + AVX + i32 +i8
+	4265,  // 2x AVX2 + AVX + i32 +i8 + 1 bit
+	8192,  // 4x AVX2
+	16384, // 16x AVX2
 }
 
 var bitSetBenchmarkSizes = []bitSetBenchmarkSize{
@@ -91,9 +111,9 @@ var bitSetCases = []BitSetTest{
 	},
 }
 
-//const b3 = "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000800000000010000000000000000000000000000000000000000000000000000000"
+const b3 = "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000800000000010000000000000000000000000000000000000000000000000000000"
 
-/*var bitSetAndCases = []BitSetTest{
+var bitSetAndCases = []BitSetTest{
 	BitSetTest{
 		name:      "3bits",
 		sourceStr: b3,
@@ -101,7 +121,7 @@ var bitSetCases = []BitSetTest{
 		size:      15730,
 		count:     3,
 	},
-}*/
+}
 
 func fillBitset(buf []byte, size int, val byte) []byte {
 	if len(buf) == 0 {
@@ -282,91 +302,76 @@ func TestBitAndGeneric(T *testing.T) {
 			})
 		}
 	}
-	// for _, c := range bitSetAndCases {
-	// 	T.Run(c.name, func(t *testing.T) {
-	// 		src, _ := hex.DecodeString(c.sourceStr)
-	// 		dst, _ := hex.DecodeString(c.resultStr)
-	// 		sz := c.size
-	// 		zeros := fillBitset(nil, sz, 0)
-	// 		ones := fillBitset(nil, sz, 0xff)
+	for _, c := range bitSetAndCases {
+		T.Run(c.name, func(t *testing.T) {
+			src, _ := hex.DecodeString(c.sourceStr)
+			dst, _ := hex.DecodeString(c.resultStr)
+			sz := c.size
+			zeros := fillBitset(nil, sz, 0)
+			ones := fillBitset(nil, sz, 0xff)
 
-	// 		// same value, same slice
-	// 		ret := bitsetAndGeneric(dst, dst, sz)
-	// 		if pt == 0x01 && sz == 7 {
-	// 			if ret != 0 {
-	// 				T.Errorf("dst===src: unexpected return value %x, expected 0", ret)
-	// 			}
-	// 		} else {
-	// 			if ret == 0 {
-	// 				T.Errorf("dst===src: unexpected return value %x, expected !=0", ret)
-	// 			}
-	// 		}
-	// 		if bytes.Compare(dst, src) != 0 {
-	// 			T.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
-	// 		}
-	// 		if got, want := popcount(dst), popcount(src); got != want {
-	// 			T.Errorf("dst===src: unexpected count %d, expected %d", got, want)
-	// 		}
+			// same value, same slice
+			ret := bitsetAndGeneric(dst, dst, sz)
+			if ret == 0 {
+				T.Errorf("dst===src: unexpected return value %x, expected !=0", ret)
+			}
+			if bytes.Compare(dst, src) != 0 {
+				T.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
+			}
+			if got, want := popcount(dst), popcount(src); got != want {
+				T.Errorf("dst===src: unexpected count %d, expected %d", got, want)
+			}
 
-	// 		// same value, other slice
-	// 		copy(dst, src)
-	// 		ret = bitsetAndGeneric(dst, src, sz)
-	// 		if pt == 0x01 && sz == 7 {
-	// 			if ret != 0 {
-	// 				T.Errorf("dst==src: unexpected return value %x, expected 0", ret)
-	// 			}
-	// 		} else {
-	// 			if ret == 0 {
-	// 				T.Errorf("dst==src: unexpected return value %x, expected !=0", ret)
-	// 			}
-	// 		}
-	// 		if bytes.Compare(dst, src) != 0 {
-	// 			T.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
-	// 		}
-	// 		if got, want := popcount(dst), popcount(src); got != want {
-	// 			T.Errorf("dst==src: unexpected count %d, expected %d", got, want)
-	// 		}
+			// same value, other slice
+			copy(dst, src)
+			ret = bitsetAndGeneric(dst, src, sz)
+			if ret == 0 {
+				T.Errorf("dst==src: unexpected return value %x, expected !=0", ret)
+			}
+			if bytes.Compare(dst, src) != 0 {
+				T.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
+			}
+			if got, want := popcount(dst), popcount(src); got != want {
+				T.Errorf("dst==src: unexpected count %d, expected %d", got, want)
+			}
 
-	// 		// all zeros
-	// 		copy(dst, src)
-	// 		ret = bitsetAndGeneric(dst, zeros, sz)
-	// 		if ret != 0 {
-	// 			T.Errorf("zeros: unexpected return value %x, expected %x", ret, 0)
-	// 		}
-	// 		if bytes.Compare(dst, zeros) != 0 {
-	// 			T.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
-	// 		}
-	// 		if got, want := popcount(dst), int64(0); got != want {
-	// 			T.Errorf("zeros: unexpected count %d, expected %d", got, want)
-	// 		}
+			// all zeros
+			copy(dst, src)
+			ret = bitsetAndGeneric(dst, zeros, sz)
+			if ret != 0 {
+				T.Errorf("zeros: unexpected return value %x, expected %x", ret, 0)
+			}
+			if bytes.Compare(dst, zeros) != 0 {
+				T.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
+			}
+			if got, want := popcount(dst), int64(0); got != want {
+				T.Errorf("zeros: unexpected count %d, expected %d", got, want)
+			}
 
-	// 		// all ones
-	// 		copy(dst, src)
-	// 		ret = bitsetAndGeneric(dst, ones, sz)
-	// 		if pt == 0x01 && sz == 7 {
-	// 			if ret != 0 {
-	// 				T.Errorf("ones: unexpected return value %x, expected 0", ret)
-	// 			}
-	// 		} else {
-	// 			if ret == 0 {
-	// 				T.Errorf("ones: unexpected return value %x, expected !=0", ret)
-	// 			}
-	// 		}
-	// 		if bytes.Compare(dst, src) != 0 {
-	// 			T.Errorf("ones: unexpected result %x, expected %x", dst, src)
-	// 		}
-	// 		if got, want := popcount(dst), popcount(src); got != want {
-	// 			T.Errorf("ones: unexpected count %d, expected %d", got, want)
-	// 		}
+			// all ones
+			copy(dst, src)
+			ret = bitsetAndGeneric(dst, ones, sz)
+			if ret == 0 {
+				T.Errorf("ones: unexpected return value %x, expected !=0", ret)
+			}
+			if bytes.Compare(dst, src) != 0 {
+				T.Errorf("ones: unexpected result %x, expected %x", dst, src)
+			}
+			if got, want := popcount(dst), popcount(src); got != want {
+				T.Errorf("ones: unexpected count %d, expected %d", got, want)
+			}
 
-	// 	})
-	// }
+		})
+	}
 }
 
 func TestBitAndAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
+	// fn := bitsetAndAVX2
+	fn := bitsetAndAVX2Flag1
+
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitSetSizes {
 		zeros := fillBitset(nil, sz, 0)
@@ -377,10 +382,10 @@ func TestBitAndAVX2(T *testing.T) {
 				dst := fillBitset(nil, sz, pt)
 
 				// same value, same slice
-				ret := bitsetAnd(dst, dst, sz)
+				ret := fn(dst, dst)
 				if pt == 0x01 && sz == 7 {
 					if ret != 0 {
-						//T.Errorf("dst===src: unexpected return value %x, expected 0", ret)
+						T.Errorf("dst===src: unexpected return value %x, expected 0", ret)
 					}
 				} else {
 					if ret == 0 {
@@ -396,10 +401,10 @@ func TestBitAndAVX2(T *testing.T) {
 
 				// same value, other slice
 				copy(dst, src)
-				ret = bitsetAnd(dst, src, sz)
+				ret = fn(dst, src)
 				if pt == 0x01 && sz == 7 {
 					if ret != 0 {
-						//T.Errorf("dst==src: unexpected return value %x, expected 0", ret)
+						T.Errorf("dst==src: unexpected return value %x, expected 0", ret)
 					}
 				} else {
 					if ret == 0 {
@@ -415,9 +420,9 @@ func TestBitAndAVX2(T *testing.T) {
 
 				// all zeros
 				copy(dst, src)
-				ret = bitsetAnd(dst, zeros, sz)
+				ret = fn(dst, zeros)
 				if ret != 0 {
-					//T.Errorf("zeros: unexpected return value %x, expected %x", ret, 0)
+					T.Errorf("zeros: unexpected return value %x, expected %x", ret, 0)
 				}
 				if bytes.Compare(dst, zeros) != 0 {
 					T.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
@@ -428,10 +433,10 @@ func TestBitAndAVX2(T *testing.T) {
 
 				// all ones
 				copy(dst, src)
-				ret = bitsetAnd(dst, ones, sz)
+				ret = fn(dst, ones)
 				if pt == 0x01 && sz == 7 {
 					if ret != 0 {
-						//T.Errorf("ones: unexpected return value %x, expected 0", ret)
+						T.Errorf("ones: unexpected return value %x, expected 0", ret)
 					}
 				} else {
 					if ret == 0 {
@@ -447,87 +452,66 @@ func TestBitAndAVX2(T *testing.T) {
 			})
 		}
 	}
-	// for _, c := range bitSetAndCases {
-	// 	T.Run(c.name, func(t *testing.T) {
-	// 		src, _ := hex.DecodeString(c.sourceStr)
-	// 		dst, _ := hex.DecodeString(c.resultStr)
-	// 		sz := c.size
-	// 		zeros := fillBitset(nil, sz, 0)
-	// 		ones := fillBitset(nil, sz, 0xff)
+	for _, c := range bitSetAndCases {
+		T.Run(c.name, func(t *testing.T) {
+			src, _ := hex.DecodeString(c.sourceStr)
+			dst, _ := hex.DecodeString(c.resultStr)
+			sz := c.size
+			zeros := fillBitset(nil, sz, 0)
+			ones := fillBitset(nil, sz, 0xff)
 
-	// 		// same value, same slice
-	// 		ret := bitsetAndAVX2(dst, dst)
-	// 		if pt == 0x01 && sz == 7 {
-	// 			/*                if ret != 0 {
-	// 			                      T.Errorf("%d_%x_dst===src: unexpected return value %x, expected 0", sz, pt, ret)
-	// 			                  }
-	// 			*/
-	// 		} else {
-	// 			if ret == 0 {
-	// 				T.Errorf("%d_%x_dst===src: unexpected return value %x, expected !=0", sz, pt, ret)
-	// 			}
-	// 		}
-	// 		if bytes.Compare(dst, src) != 0 {
-	// 			T.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
-	// 		}
-	// 		if got, want := popcount(dst), popcount(src); got != want {
-	// 			T.Errorf("dst===src: unexpected count %d, expected %d", got, want)
-	// 		}
+			// same value, same slice
+			ret := fn(dst, dst)
+			if ret == 0 {
+				T.Errorf("dst===src: unexpected return value %x, expected !=0", ret)
+			}
+			if bytes.Compare(dst, src) != 0 {
+				T.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
+			}
+			if got, want := popcount(dst), popcount(src); got != want {
+				T.Errorf("dst===src: unexpected count %d, expected %d", got, want)
+			}
 
-	// 		// same value, other slice
-	// 		copy(dst, src)
-	// 		ret = bitsetAndAVX2(dst, src)
-	// 		if pt == 0x01 && sz == 7 {
-	// 			/*                if ret != 0 {
-	// 			                      T.Errorf("%d_%x_dst==src: unexpected return value %x, expected 0", sz, pt, ret)
-	// 			                  }
-	// 			*/
-	// 		} else {
-	// 			if ret == 0 {
-	// 				T.Errorf("%d_%x_dst==src: unexpected return value %x, expected !=0", sz, pt, ret)
-	// 			}
-	// 		}
-	// 		if bytes.Compare(dst, src) != 0 {
-	// 			T.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
-	// 		}
-	// 		if got, want := popcount(dst), popcount(src); got != want {
-	// 			T.Errorf("dst==src: unexpected count %d, expected %d", got, want)
-	// 		}
+			// same value, other slice
+			copy(dst, src)
+			ret = fn(dst, src)
+			if ret == 0 {
+				T.Errorf("dst==src: unexpected return value %x, expected !=0", ret)
+			}
+			if bytes.Compare(dst, src) != 0 {
+				T.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
+			}
+			if got, want := popcount(dst), popcount(src); got != want {
+				T.Errorf("dst==src: unexpected count %d, expected %d", got, want)
+			}
 
-	// 		// all zeros
-	// 		copy(dst, src)
-	// 		ret = bitsetAndAVX2(dst, zeros)
-	// 		/*			if ret != 0 {
-	// 						T.Errorf("%d_%x_zeros: unexpected return value %x, expected %x", sz, pt, ret, 0)
-	// 					}
-	// 		*/if bytes.Compare(dst, zeros) != 0 {
-	// 			T.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
-	// 		}
-	// 		if got, want := popcount(dst), int64(0); got != want {
-	// 			T.Errorf("zeros: unexpected count %d, expected %d", got, want)
-	// 		}
+			// all zeros
+			copy(dst, src)
+			ret = fn(dst, zeros)
+			if ret != 0 {
+				T.Errorf("zeros: unexpected return value %x, expected %x", ret, 0)
+			}
+			if bytes.Compare(dst, zeros) != 0 {
+				T.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
+			}
+			if got, want := popcount(dst), int64(0); got != want {
+				T.Errorf("zeros: unexpected count %d, expected %d", got, want)
+			}
 
-	// 		// all ones
-	// 		copy(dst, src)
-	// 		ret = bitsetAndAVX2(dst, ones)
-	// 		if pt == 0x01 && sz == 7 {
-	// 			/*               if ret != 0 {
-	// 			    T.Errorf("%d_%x_ones: unexpected return value %x, expected 0", sz, pt, ret)
-	// 			}
-	// 			*/
-	// 		} else {
-	// 			if ret == 0 {
-	// 				T.Errorf("%d_%x_ones: unexpected return value %x, expected !=0", sz, pt, ret)
-	// 			}
-	// 		}
-	// 		if bytes.Compare(dst, src) != 0 {
-	// 			T.Errorf("ones: unexpected result %x, expected %x", dst, src)
-	// 		}
-	// 		if got, want := popcount(dst), popcount(src); got != want {
-	// 			T.Errorf("ones: unexpected count %d, expected %d", got, want)
-	// 		}
-	// 	})
-	// }
+			// all ones
+			copy(dst, src)
+			ret = fn(dst, ones)
+			if ret == 0 {
+				T.Errorf("ones: unexpected return value %x, expected !=0", ret)
+			}
+			if bytes.Compare(dst, src) != 0 {
+				T.Errorf("ones: unexpected result %x, expected %x", dst, src)
+			}
+			if got, want := popcount(dst), popcount(src); got != want {
+				T.Errorf("ones: unexpected count %d, expected %d", got, want)
+			}
+		})
+	}
 }
 
 func TestBitAndAVX2Flag1(T *testing.T) {
@@ -551,7 +535,7 @@ func TestBitAndAVX2Flag1(T *testing.T) {
 					}
 				} else {
 					if ret == 0 {
-						T.Errorf("%d_%x_dst===src: unexpected return value %x, expected !=0", sz, pt, ret)
+						T.Errorf("dst===src: unexpected return value %x, expected !=0", ret)
 					}
 				}
 				if bytes.Compare(dst, src) != 0 {
@@ -563,10 +547,10 @@ func TestBitAndAVX2Flag1(T *testing.T) {
 
 				// same value, other slice
 				copy(dst, src)
-				ret = bitsetAnd(dst, src, sz)
+				ret = bitsetAndAVX2Flag1(dst, src)
 				if pt == 0x01 && sz == 7 {
 					if ret != 0 {
-						//T.Errorf("dst==src: unexpected return value %x, expected 0", ret)
+						T.Errorf("dst==src: unexpected return value %x, expected 0", ret)
 					}
 				} else {
 					if ret == 0 {
@@ -582,9 +566,9 @@ func TestBitAndAVX2Flag1(T *testing.T) {
 
 				// all zeros
 				copy(dst, src)
-				ret = bitsetAnd(dst, zeros, sz)
+				ret = bitsetAndAVX2Flag1(dst, zeros)
 				if ret != 0 {
-					//T.Errorf("zeros: unexpected return value %x, expected %x", ret, 0)
+					T.Errorf("zeros: unexpected return value %x, expected %x", ret, 0)
 				}
 				if bytes.Compare(dst, zeros) != 0 {
 					T.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
@@ -595,10 +579,10 @@ func TestBitAndAVX2Flag1(T *testing.T) {
 
 				// all ones
 				copy(dst, src)
-				ret = bitsetAnd(dst, ones, sz)
+				ret = bitsetAndAVX2Flag1(dst, ones)
 				if pt == 0x01 && sz == 7 {
 					if ret != 0 {
-						//T.Errorf("ones: unexpected return value %x, expected 0", ret)
+						T.Errorf("ones: unexpected return value %x, expected 0", ret)
 					}
 				} else {
 					if ret == 0 {
