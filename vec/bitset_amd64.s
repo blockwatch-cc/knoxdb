@@ -182,6 +182,7 @@ TEXT ·bitsetAndAVX2Flag1(SB), NOSPLIT, $0-48
 	MOVQ	dst_len+8(FP), BX
 	MOVQ	src_base+24(FP), DI
     VPXOR   Y10, Y10, Y10       // vector register for collecting ones
+	XORQ    R10, R10            // general register for collecting ones
 
 	TESTQ	BX, BX
 	JLE		done
@@ -199,13 +200,19 @@ loop_avx2:
 	JMP			loop_avx2
 
 exit_avx2:
+    // move collected ones from AVX2 to x86 register
+    VPXOR       Y11, Y11, Y11       // Y11 = 0
+    VPCMPEQB	Y11, Y10, Y10       // for each byte of Y10: zero -> 0xff, not zero -> 0x00
+	VPMOVMSKB	Y10, R10            // move per byte MSBs into packed bitmask to r32
 	VZEROUPPER
-	TESTQ	BX, BX
-	JLE		done
+    NOTL        R10
+	TESTQ	    BX, BX
+	JLE		    done
 
 prep_avx:
 	CMPQ	BX, $16
 	JBE		prep_i32
+	VPXOR   X10, X10, X10
 
 	// works for data size 16 byte
 loop_avx:
@@ -214,17 +221,19 @@ loop_avx:
 	LEAQ		16(DI), DI
 	SUBL		$16, BX
 	CMPL		BX, $16
-	JB			prep_i32
+	JB			exit_avx
 	JMP			loop_avx
+
+exit_avx:
+    // move collected ones from AVX to x86 register
+    VPXOR       X11, X11, X11       // X11 = 0
+    VPCMPEQB	X11, X10, X10       // for each byte of X10: zero -> 0xff, not zero -> 0x00
+	VPMOVMSKB	X10, R11            // move per byte MSBs into packed bitmask to r16
+    NOTW        R11
+    ORW         R11, R10
 
 	// works for data size 15 down to single byte
 prep_i32:
-    // move collected ones from AVX2 to x86 register
-    VPXOR       Y11, Y11, Y11       // Y11 = 0
-    VPCMPEQB	Y11, Y10, Y10       // for each byte of Y10: zero -> 0xff, not zero -> 0x00
-	VPMOVMSKB	Y10, R10            // move per byte MSBs into packed bitmask to r32
-    NOTL        R10
-
 	TESTQ	BX, BX
 	JLE		done
 	XORQ	AX, AX
