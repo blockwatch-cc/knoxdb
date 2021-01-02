@@ -720,9 +720,7 @@ func (l ConditionList) MaybeMatchPack(head PackageHeader) bool {
 func (l ConditionList) MatchPack(pkg *Package) *BitSet {
 	// always match empty condition list
 	if len(l) == 0 || pkg.Len() == 0 {
-		allOnes := NewBitSet(pkg.Len())
-		allOnes.One()
-		return allOnes
+		return NewBitSet(pkg.Len()).One()
 	}
 	// match conditions and merge bit vectors
 	// stop early when result contains all zeros (assuming AND
@@ -780,7 +778,7 @@ func (l ConditionList) MatchPack(pkg *Package) *BitSet {
 		}
 		// match vector against condition
 		if b == nil {
-			b = c.MatchPack(pkg)
+			b = c.MatchPack(pkg, bits)
 		}
 		if bits == nil {
 			if b.Count() == 0 {
@@ -802,26 +800,26 @@ func (l ConditionList) MatchPack(pkg *Package) *BitSet {
 	return bits
 }
 
-func (c Condition) MatchPack(pkg *Package) *BitSet {
+func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 	bits := NewBitSet(pkg.Len())
 	slice, _ := pkg.Column(c.Field.Index)
 	switch c.Mode {
 	case FilterModeEqual:
-		return c.Field.Type.EqualSlice(slice, c.Value, bits)
+		return c.Field.Type.EqualSlice(slice, c.Value, bits, mask)
 	case FilterModeNotEqual:
-		return c.Field.Type.NotEqualSlice(slice, c.Value, bits)
+		return c.Field.Type.NotEqualSlice(slice, c.Value, bits, mask)
 	case FilterModeGt:
-		return c.Field.Type.GtSlice(slice, c.Value, bits)
+		return c.Field.Type.GtSlice(slice, c.Value, bits, mask)
 	case FilterModeGte:
-		return c.Field.Type.GteSlice(slice, c.Value, bits)
+		return c.Field.Type.GteSlice(slice, c.Value, bits, mask)
 	case FilterModeLt:
-		return c.Field.Type.LtSlice(slice, c.Value, bits)
+		return c.Field.Type.LtSlice(slice, c.Value, bits, mask)
 	case FilterModeLte:
-		return c.Field.Type.LteSlice(slice, c.Value, bits)
+		return c.Field.Type.LteSlice(slice, c.Value, bits, mask)
 	case FilterModeRange:
-		return c.Field.Type.BetweenSlice(slice, c.From, c.To, bits)
+		return c.Field.Type.BetweenSlice(slice, c.From, c.To, bits, mask)
 	case FilterModeRegexp:
-		return c.Field.Type.RegexpSlice(slice, c.Value.(string), bits)
+		return c.Field.Type.RegexpSlice(slice, c.Value.(string), bits, mask)
 	case FilterModeIn:
 		// unlike on other conditions we run matches against a standard map
 		// rather than using vectorized type functions
@@ -829,60 +827,100 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 		switch c.Field.Type {
 		case FieldTypeInt256:
 			for i, v := range slice.([]Int256) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int256map[v]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt128:
 			for i, v := range slice.([]Int128) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int128map[v]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt64:
 			for i, v := range slice.([]int64) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int64map[v]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt32:
 			for i, v := range slice.([]int32) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int32map[v]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt16:
 			for i, v := range slice.([]int16) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int16map[v]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt8:
 			for i, v := range slice.([]int8) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int8map[v]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeDecimal256:
 			for i, v := range slice.(Decimal256Slice).Int256 {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int256map[v]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeDecimal128:
 			for i, v := range slice.(Decimal128Slice).Int128 {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int128map[v]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeDecimal64:
 			for i, v := range slice.(Decimal64Slice).Int64 {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int64map[v]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeDecimal32:
 			for i, v := range slice.(Decimal32Slice).Int32 {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int32map[v]; ok {
 					bits.Set(i)
 				}
@@ -921,6 +959,10 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 				}
 			} else {
 				for i, v := range pk {
+					// skip masked values
+					if mask != nil && !mask.IsSet(i) {
+						continue
+					}
 					if _, ok := c.uint64map[v]; ok {
 						bits.Set(i)
 					}
@@ -929,18 +971,30 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 
 		case FieldTypeUint32:
 			for i, v := range slice.([]uint32) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.uint32map[v]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeUint16:
 			for i, v := range slice.([]uint16) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.uint16map[v]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeUint8:
 			for i, v := range slice.([]uint8) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.uint8map[v]; ok {
 					bits.Set(i)
 				}
@@ -954,6 +1008,10 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
 			for i, v := range slice.([][]byte) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if c.hashmap != nil {
 					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; ok {
@@ -988,6 +1046,10 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 		case FieldTypeString:
 			strs := c.Value.([]string)
 			for i, v := range slice.([]string) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if c.hashmap != nil {
 					sum := xxhash.Sum64([]byte(v))
 					if pos, ok := c.hashmap[sum]; ok {
@@ -1030,60 +1092,100 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 		switch c.Field.Type {
 		case FieldTypeInt256:
 			for i, v := range slice.([]Int256) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int256map[v]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt128:
 			for i, v := range slice.([]Int128) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int128map[v]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt64:
 			for i, v := range slice.([]int64) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int64map[v]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt32:
 			for i, v := range slice.([]int32) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int32map[v]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt16:
 			for i, v := range slice.([]int16) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int16map[v]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt8:
 			for i, v := range slice.([]int8) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int8map[v]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeDecimal256:
 			for i, v := range slice.(Decimal256Slice).Int256 {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int256map[v]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeDecimal128:
 			for i, v := range slice.(Decimal128Slice).Int128 {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int128map[v]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeDecimal64:
 			for i, v := range slice.(Decimal64Slice).Int64 {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int64map[v]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeDecimal32:
 			for i, v := range slice.(Decimal32Slice).Int32 {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.int32map[v]; !ok {
 					bits.Set(i)
 				}
@@ -1126,6 +1228,10 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 			} else {
 				// check each slice element against the map
 				for i, v := range pk {
+					// skip masked values
+					if mask != nil && !mask.IsSet(i) {
+						continue
+					}
 					if _, ok := c.uint64map[v]; !ok {
 						bits.Set(i)
 					}
@@ -1133,18 +1239,30 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 			}
 		case FieldTypeUint32:
 			for i, v := range slice.([]uint32) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.uint32map[v]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeUint16:
 			for i, v := range slice.([]uint16) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.uint16map[v]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeUint8:
 			for i, v := range slice.([]uint8) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if _, ok := c.uint8map[v]; !ok {
 					bits.Set(i)
 				}
@@ -1158,6 +1276,10 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
 			for i, v := range slice.([][]byte) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if c.hashmap != nil {
 					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; !ok {
@@ -1199,6 +1321,10 @@ func (c Condition) MatchPack(pkg *Package) *BitSet {
 		case FieldTypeString:
 			strs := c.Value.([]string)
 			for i, v := range slice.([]string) {
+				// skip masked values
+				if mask != nil && !mask.IsSet(i) {
+					continue
+				}
 				if c.hashmap != nil {
 					sum := xxhash.Sum64([]byte(v))
 					if pos, ok := c.hashmap[sum]; !ok {

@@ -7,43 +7,43 @@ import (
 	"sort"
 )
 
-func MatchUint16Equal(src []uint16, val uint16, bits *BitSet) *BitSet {
+func MatchUint16Equal(src []uint16, val uint16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint16Equal(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint16NotEqual(src []uint16, val uint16, bits *BitSet) *BitSet {
+func MatchUint16NotEqual(src []uint16, val uint16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint16NotEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint16LessThan(src []uint16, val uint16, bits *BitSet) *BitSet {
+func MatchUint16LessThan(src []uint16, val uint16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint16LessThan(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint16LessThanEqual(src []uint16, val uint16, bits *BitSet) *BitSet {
+func MatchUint16LessThanEqual(src []uint16, val uint16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint16LessThanEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint16GreaterThan(src []uint16, val uint16, bits *BitSet) *BitSet {
+func MatchUint16GreaterThan(src []uint16, val uint16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint16GreaterThan(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint16GreaterThanEqual(src []uint16, val uint16, bits *BitSet) *BitSet {
+func MatchUint16GreaterThanEqual(src []uint16, val uint16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint16GreaterThanEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint16Between(src []uint16, a, b uint16, bits *BitSet) *BitSet {
+func MatchUint16Between(src []uint16, a, b uint16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint16Between(src, a, b, bits.Bytes())
 	return bits
@@ -194,6 +194,6 @@ func (s Uint16Slice) ContainsRange(from, to uint16) bool {
 	return min < max
 }
 
-func (s Uint16Slice) MatchEqual(val uint16, bits *BitSet) *BitSet {
-	return MatchUint16Equal(s, val, bits)
+func (s Uint16Slice) MatchEqual(val uint16, bits, mask *BitSet) *BitSet {
+	return MatchUint16Equal(s, val, bits, mask)
 }

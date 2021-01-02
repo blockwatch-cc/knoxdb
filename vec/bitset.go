@@ -504,7 +504,10 @@ func (s *BitSet) Reverse() *BitSet {
 	return s
 }
 
-func (s BitSet) Bytes() []byte {
+func (s *BitSet) Bytes() []byte {
+	if s == nil {
+		return nil
+	}
 	return s.buf
 }
 

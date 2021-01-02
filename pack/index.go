@@ -676,7 +676,9 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 	}
 
 	// sort result before return
-	vec.Uint64Sorter(out).Sort()
+	if len(out) > 1 && !neg {
+		vec.Uint64Sorter(out).Sort()
+	}
 	atomic.AddInt64(&idx.table.stats.IndexQueriedTuples, int64(len(out)))
 	return out, nil
 }

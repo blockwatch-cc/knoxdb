@@ -25,6 +25,7 @@ type Query struct {
 	Order      OrderType     // ASC|DESC
 	Limit      int           // LIMIT ...
 	NoCache    bool          // explicitly disable pack caching for this query
+	NoIndex    bool          // explicitly disable index query (use for many known duplicates)
 
 	// GroupBy   FieldList   // GROUP BY ... - COLLATE/COLLAPSE
 	// OrderBy   FieldList    // ORDER BY ...
@@ -178,6 +179,10 @@ func (q Query) Check() error {
 // - return pkid slice for later pool recycling
 func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 	q.lap = time.Now()
+	if q.NoIndex {
+		q.stats.IndexTime = time.Since(q.lap)
+		return nil
+	}
 	idxFields := q.table.fields.Indexed()
 	for i, cond := range q.Conditions {
 		if !idxFields.Contains(cond.Field.Name) {

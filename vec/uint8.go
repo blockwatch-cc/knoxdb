@@ -7,43 +7,43 @@ import (
 	"sort"
 )
 
-func MatchUint8Equal(src []uint8, val uint8, bits *BitSet) *BitSet {
+func MatchUint8Equal(src []uint8, val uint8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint8Equal(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint8NotEqual(src []uint8, val uint8, bits *BitSet) *BitSet {
+func MatchUint8NotEqual(src []uint8, val uint8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint8NotEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint8LessThan(src []uint8, val uint8, bits *BitSet) *BitSet {
+func MatchUint8LessThan(src []uint8, val uint8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint8LessThan(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint8LessThanEqual(src []uint8, val uint8, bits *BitSet) *BitSet {
+func MatchUint8LessThanEqual(src []uint8, val uint8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint8LessThanEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint8GreaterThan(src []uint8, val uint8, bits *BitSet) *BitSet {
+func MatchUint8GreaterThan(src []uint8, val uint8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint8GreaterThan(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint8GreaterThanEqual(src []uint8, val uint8, bits *BitSet) *BitSet {
+func MatchUint8GreaterThanEqual(src []uint8, val uint8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint8GreaterThanEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchUint8Between(src []uint8, a, b uint8, bits *BitSet) *BitSet {
+func MatchUint8Between(src []uint8, a, b uint8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchUint8Between(src, a, b, bits.Bytes())
 	return bits
@@ -194,6 +194,6 @@ func (s Uint8Slice) ContainsRange(from, to uint8) bool {
 	return min < max
 }
 
-func (s Uint8Slice) MatchEqual(val uint8, bits *BitSet) *BitSet {
-	return MatchUint8Equal(s, val, bits)
+func (s Uint8Slice) MatchEqual(val uint8, bits, mask *BitSet) *BitSet {
+	return MatchUint8Equal(s, val, bits, mask)
 }

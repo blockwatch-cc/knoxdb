@@ -7,43 +7,43 @@ import (
 	"sort"
 )
 
-func MatchInt8Equal(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8Equal(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchInt8Equal(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchInt8NotEqual(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8NotEqual(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchInt8NotEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchInt8LessThan(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8LessThan(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchInt8LessThan(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchInt8LessThanEqual(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8LessThanEqual(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchInt8LessThanEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchInt8GreaterThan(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8GreaterThan(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchInt8GreaterThan(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchInt8GreaterThanEqual(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8GreaterThanEqual(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchInt8GreaterThanEqual(src, val, bits.Bytes())
 	return bits
 }
 
-func MatchInt8Between(src []int8, a, b int8, bits *BitSet) *BitSet {
+func MatchInt8Between(src []int8, a, b int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = matchInt8Between(src, a, b, bits.Bytes())
 	return bits
@@ -191,6 +191,6 @@ func (s Int8Slice) ContainsRange(from, to int8) bool {
 	return min < max
 }
 
-func (s Int8Slice) MatchEqual(val int8, bits *BitSet) *BitSet {
-	return MatchInt8Equal(s, val, bits)
+func (s Int8Slice) MatchEqual(val int8, bits, mask *BitSet) *BitSet {
+	return MatchInt8Equal(s, val, bits, mask)
 }
