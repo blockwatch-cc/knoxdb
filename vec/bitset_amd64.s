@@ -928,6 +928,20 @@ done:
 	VPAND	b, c, b; \
 	VPOR 	x, b, x;
 
+// func csaAVX2(h, l, a, b, c [4]uint64) [8]uint64
+//TEXT ·csaAVX2(SB), NOSPLIT, $0-160
+//	VMOVDQU	h+0(FP), Y0
+//	VMOVDQU	l+32(FP), Y1
+//	VMOVDQU	a+64(FP), Y2
+//	VMOVDQU	b+96(FP), Y3
+//	VMOVDQU	c+128(FP), Y4
+//	CSA(Y0, Y1, Y2, Y3, Y4)
+//	VMOVDQU	Y0, ret+160(FP)
+//	VMOVDQU	Y1, ret+192(FP)
+//	VZEROUPPER
+//	RET
+
+
 // Input == Output register
 // Static: Y7(55), Y8(33), Y9(0F)
 // Scratch: Y6
@@ -935,7 +949,7 @@ done:
 	VMOVDQU		VAL, Y6; \
 	VPSRLW		$1, Y6, Y6; \
 	VPAND		Y6, Y7, Y6; \
-	VPSUBB		VAL, Y6, VAL; \
+	VPSUBB		Y6, VAL, VAL; \
 	VMOVDQU		VAL, Y6; \
 	VPSRLW		$2, Y6, Y6; \
 	VPAND		Y6, Y8, Y6; \
@@ -947,6 +961,18 @@ done:
 	VPAND		VAL, Y9, VAL; \
 	VPXOR		Y6, Y6, Y6; \
 	VPSADBW		VAL, Y6, VAL;
+
+// func pop(v [4]uint64) [4]uint64
+//TEXT ·popAVX2(SB), NOSPLIT, $0-32
+//	VPBROADCASTB 	const_0x55<>+0x00(SB), Y7
+//	VPBROADCASTB 	const_0x33<>+0x00(SB), Y8
+//	VPBROADCASTB 	const_0x0f<>+0x00(SB), Y9
+//	VMOVDQU	v+0(FP), Y0
+//	POPCOUNT(Y0)
+//	VMOVDQU	Y0, ret+32(FP)
+//	VZEROUPPER
+//	RET
+
 
 // func bitsetPopCountAVX2(src []byte, size int) int64
 //
@@ -987,8 +1013,7 @@ TEXT ·bitsetPopCountAVX2(SB), NOSPLIT, $0-32
 	NEGQ	CX
 	ADDQ	BX, CX
 	CMPQ	CX, $512      // for(; i < limit; i += 16) // addresses 16 x 32 bytes of data
-	//JBE		prep_avx  // FIXME: disable AVX2 harley-seal due to errors
-	JMP		prep_avx
+	JBE		prep_avx
 
 	// works for blocks of 512 byte
 prep_avx2:
