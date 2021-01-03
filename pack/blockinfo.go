@@ -1,7 +1,7 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package block
+package pack
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"math"
 	"time"
 
+	. "blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -17,25 +18,36 @@ const (
 	headerBaseSize            = 2
 	headerListVersion    byte = 1
 	blockTypeMask        byte = 0x1f
-	blockScaleMask       byte = 0x7f
 	blockCompressionMask byte = 0x03
+	blockScaleMask       byte = 0x7f
 )
 
-type Header struct {
+type BlockInfo struct {
 	Type        BlockType
 	Compression Compression
 	Scale       int
-	MinValue    interface{}
-	MaxValue    interface{}
+
+	// statistics
+	dirty    bool // update required
+	MinValue interface{}
+	MaxValue interface{}
 }
 
-func (h Header) IsValid() bool {
+func (h BlockInfo) IsValid() bool {
 	return h.Type != BlockIgnore && h.MinValue != nil && h.MaxValue != nil
 }
 
-type HeaderList []Header
+func (h BlockInfo) IsDirty() bool {
+	return h.dirty
+}
 
-func (h HeaderList) Encode(buf *bytes.Buffer) error {
+func (h BlockInfo) SetDirty() {
+	h.dirty = true
+}
+
+type BlockInfoList []BlockInfo
+
+func (h BlockInfoList) Encode(buf *bytes.Buffer) error {
 	buf.WriteByte(headerListVersion)
 	var b [4]byte
 	binary.BigEndian.PutUint32(b[:], uint32(len(h)))
@@ -48,22 +60,22 @@ func (h HeaderList) Encode(buf *bytes.Buffer) error {
 	return nil
 }
 
-func (h *HeaderList) Decode(buf *bytes.Buffer) error {
+func (h *BlockInfoList) Decode(buf *bytes.Buffer) error {
 	if buf.Len() < 5 {
-		return fmt.Errorf("block: short block header list, length %d", buf.Len())
+		return fmt.Errorf("pack: short block info list, length %d", buf.Len())
 	}
 
 	// read and check version byte
 	b, _ := buf.ReadByte()
 	if b != headerListVersion {
-		return fmt.Errorf("block: invalid block header list version %d", b)
+		return fmt.Errorf("pack: invalid block info list version %d", b)
 	}
 
 	// read slice length
 	l := int(binary.BigEndian.Uint32(buf.Next(4)))
 
 	// alloc slice
-	*h = make(HeaderList, l)
+	*h = make(BlockInfoList, l)
 
 	// decode header parts
 	for i := range *h {
@@ -74,13 +86,14 @@ func (h *HeaderList) Decode(buf *bytes.Buffer) error {
 	return nil
 }
 
-func NewHeader(typ BlockType, comp Compression, scale int) Header {
-	h := Header{
-		Type:        typ,
-		Compression: comp,
-		Scale:       scale,
+func NewBlockInfo(b *Block, field Field) BlockInfo {
+	h := BlockInfo{
+		Type:        b.Type(),
+		Compression: b.Compression(),
+		Scale:       field.Scale,
+		dirty:       b.Len() > 0,
 	}
-	switch typ {
+	switch b.Type() {
 	case BlockTime:
 		h.MinValue = time.Time{}
 		h.MaxValue = time.Time{}
@@ -132,13 +145,15 @@ func NewHeader(typ BlockType, comp Compression, scale int) Header {
 	}
 	return h
 }
-func (h Header) Clone() Header {
-	cp := Header{
+func (h BlockInfo) Clone() BlockInfo {
+	cp := BlockInfo{
 		Type:        h.Type,
 		Compression: h.Compression,
 		Scale:       h.Scale,
+		dirty:       h.dirty,
 	}
 	if h.MinValue == nil || h.MaxValue == nil {
+		cp.dirty = true
 		return cp
 	}
 	switch h.Type {
@@ -214,7 +229,7 @@ func (h Header) Clone() Header {
 	return cp
 }
 
-func (h Header) EncodedSize() int {
+func (h BlockInfo) EncodedSize() int {
 	switch h.Type {
 	case BlockInt64,
 		BlockTime,
@@ -255,8 +270,8 @@ func (h Header) EncodedSize() int {
 	}
 }
 
-// same encoding as low level block header, except takes care of conversion flags
-func (h Header) Encode(buf *bytes.Buffer) error {
+func (h BlockInfo) Encode(buf *bytes.Buffer) error {
+	// same encoding as lower level block header,
 	// 8                 7 6          5 4 3 2 1
 	// ext header flag   compression  block type
 	buf.WriteByte(byte(h.Type)&blockTypeMask | (byte(h.Compression)&blockCompressionMask)<<5 | 0x80)
@@ -386,31 +401,22 @@ func (h Header) Encode(buf *bytes.Buffer) error {
 		_, _ = buf.Write(min[:])
 		_, _ = buf.Write(max[:])
 
-	case BlockIgnore:
-		return nil
-
 	default:
-		return fmt.Errorf("block: invalid data type %d", h.Type)
+		return fmt.Errorf("pack: invalid block type %d", h.Type)
 	}
+	h.dirty = false
 	return nil
 }
 
-func (h *Header) Decode(buf *bytes.Buffer) error {
+func (h *BlockInfo) Decode(buf *bytes.Buffer) error {
 	val := buf.Next(1)
-	var err error
-	h.Type, err = readBlockType(val)
-	if err != nil {
-		return err
-	}
-	h.Compression, err = readBlockCompression(val)
-	if err != nil {
-		return err
-	}
-
+	h.Type = BlockType(val[0] & blockTypeMask)
+	h.Compression = Compression((val[0] >> 5) & blockCompressionMask)
 	if val[0]&0x80 > 0 {
 		val = buf.Next(1)
-		h.Scale = readBlockScale(val)
+		h.Scale = int(val[0] & blockScaleMask)
 	}
+	h.dirty = false
 
 	switch h.Type {
 	case BlockTime:
@@ -478,11 +484,11 @@ func (h *Header) Decode(buf *bytes.Buffer) error {
 	case BlockString:
 		min, err := buf.ReadString(0)
 		if err != nil {
-			return fmt.Errorf("block: reading min string block header: %v", err)
+			return fmt.Errorf("pack: reading min string block info: %v", err)
 		}
 		max, err := buf.ReadString(0)
 		if err != nil {
-			return fmt.Errorf("block: reading max string block header: %v", err)
+			return fmt.Errorf("pack: reading max string block info: %v", err)
 		}
 		// don't reference buffer data!
 		mincopy := min[:len(min)-1]
@@ -493,12 +499,12 @@ func (h *Header) Decode(buf *bytes.Buffer) error {
 	case BlockBytes:
 		length, err := binary.ReadUvarint(buf)
 		if err != nil {
-			return fmt.Errorf("block: reading min []byte block header: %v", err)
+			return fmt.Errorf("pack: reading min []byte block info: %v", err)
 		}
 		min := buf.Next(int(length))
 		length, err = binary.ReadUvarint(buf)
 		if err != nil {
-			return fmt.Errorf("block: reading max []byte block header: %v", err)
+			return fmt.Errorf("pack: reading max []byte block info: %v", err)
 		}
 		max := buf.Next(int(length))
 
@@ -521,13 +527,13 @@ func (h *Header) Decode(buf *bytes.Buffer) error {
 		h.MaxValue = vec.Int256FromBytes(v[32:64])
 
 	default:
-		return fmt.Errorf("block: invalid data type %d", h.Type)
+		return fmt.Errorf("pack: invalid block type %d", h.Type)
 	}
 
 	return nil
 }
 
-func (h *Header) Clear() {
+func (h *BlockInfo) Clear() {
 	switch h.Type {
 	case BlockTime:
 		h.MinValue = time.Time{}
@@ -578,4 +584,5 @@ func (h *Header) Clear() {
 		h.MinValue = vec.ZeroInt256
 		h.MaxValue = vec.ZeroInt256
 	}
+	h.dirty = true
 }

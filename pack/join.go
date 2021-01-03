@@ -348,9 +348,9 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 	// Note: result is not owned by any table, so pkg will not be recycled
 	out = &Result{
 		fields: j.fields,
-		pkg:    NewPackage(),
+		pkg:    NewPackage(util.NonZero(q.Limit, maxPackSize)),
 	}
-	if err := out.pkg.InitFields(j.fields, util.NonZero(q.Limit, maxPackSize)); err != nil {
+	if err := out.pkg.InitFields(j.fields, nil); err != nil {
 		return nil, err
 	}
 
@@ -629,7 +629,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			// log.Debugf("join: filtering result with %d rows against %d conds", agg.Rows(), len(q.Conditions))
 
 			// filter result by query
-			bits := q.Conditions.MatchPack(agg.pkg)
+			bits := q.Conditions.MatchPack(agg.pkg, PackInfo{})
 			for idx, length := bits.Run(0); idx >= 0; idx, length = bits.Run(idx + length) {
 				n := length
 				if q.Limit > 0 {

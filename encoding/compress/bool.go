@@ -29,7 +29,7 @@ func BitsetEncodedSize(b *vec.BitSet) int {
 	return b.EncodedSize() + 1 + binary.MaxVarintLen64
 }
 
-func BitsetEncodeAll(src *vec.BitSet, w io.Writer) (bool, bool, error) {
+func BitsetEncodeAll(src *vec.BitSet, w io.Writer) error {
 	// Store the encoding type in the 4 high bits of the first byte
 	w.Write([]byte{booleanCompressedBitPacked << 4})
 
@@ -42,9 +42,9 @@ func BitsetEncodeAll(src *vec.BitSet, w io.Writer) (bool, bool, error) {
 	w.Write(src.Bytes())
 
 	if src.Count() > 0 {
-		return false, true, nil
+		return nil
 	}
-	return false, false, nil
+	return nil
 }
 
 func BitsetDecodeAll(b []byte, dst *vec.BitSet) (*vec.BitSet, error) {
@@ -57,7 +57,7 @@ func BitsetDecodeAll(b []byte, dst *vec.BitSet) (*vec.BitSet, error) {
 	b = b[1:]
 	val, n := binary.Uvarint(b)
 	if n <= 0 {
-		return nil, fmt.Errorf("pack: BitsetDecoder invalid count")
+		return nil, fmt.Errorf("compress: BitsetDecoder invalid count")
 	}
 
 	if dst.Cap() < int(val) {
@@ -84,7 +84,7 @@ func BooleanArrayEncodedSize(src []bool) int {
 
 // BooleanArrayEncodeAll encodes src into b, returning b and any error encountered.
 // The returned slice may be of a different length and capactity to b.
-func BooleanArrayEncodeAll(src []bool, w io.Writer) (bool, bool, error) {
+func BooleanArrayEncodeAll(src []bool, w io.Writer) error {
 	// Store the encoding type in the 4 high bits of the first byte
 	w.Write([]byte{booleanCompressedBitPacked << 4})
 
@@ -96,14 +96,7 @@ func BooleanArrayEncodeAll(src []bool, w io.Writer) (bool, bool, error) {
 
 	// Current bit in current byte.
 	n := uint64(0)
-	var min, max bool
-	if len(src) > 0 {
-		min = src[0]
-		max = src[0]
-	}
 	for _, v := range src {
-		min = min && v
-		max = max || v
 		if v {
 			b[0] |= 128 >> (n & 7)
 		} else {
@@ -120,7 +113,7 @@ func BooleanArrayEncodeAll(src []bool, w io.Writer) (bool, bool, error) {
 	if n&7 > 0 {
 		w.Write(b[0:1])
 	}
-	return min, max, nil
+	return nil
 }
 
 func BooleanArrayDecodeAll(b []byte, dst []bool) ([]bool, error) {
@@ -133,7 +126,7 @@ func BooleanArrayDecodeAll(b []byte, dst []bool) ([]bool, error) {
 	b = b[1:]
 	val, n := binary.Uvarint(b)
 	if n <= 0 {
-		return nil, fmt.Errorf("pack: BooleanBatchDecoder invalid count")
+		return nil, fmt.Errorf("compress: BooleanBatchDecoder invalid count")
 	}
 
 	count := int(val)

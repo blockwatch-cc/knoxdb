@@ -545,9 +545,9 @@ func (c *Condition) Compile() {
 
 // match package min/max values against the condition
 // Note: min/max are raw storage values (i.e. for decimals, they are scaled integers)
-func (c Condition) MaybeMatchPack(head PackageHeader) bool {
-	min, max := head.BlockHeaders[c.Field.Index].MinValue, head.BlockHeaders[c.Field.Index].MaxValue
-	scale := head.BlockHeaders[c.Field.Index].Scale
+func (c Condition) MaybeMatchPack(info PackInfo) bool {
+	min, max := info.Blocks[c.Field.Index].MinValue, info.Blocks[c.Field.Index].MaxValue
+	scale := c.Field.Scale
 	// decimals only: convert storage type used in block headers to field type
 	switch c.Field.Type {
 	case FieldTypeDecimal32:
@@ -697,8 +697,8 @@ func (l ConditionList) Fields() FieldList {
 	return fl
 }
 
-func (l ConditionList) MaybeMatchPack(head PackageHeader) bool {
-	if head.NValues == 0 {
+func (l ConditionList) MaybeMatchPack(info PackInfo) bool {
+	if info.NValues == 0 {
 		return false
 	}
 	// always match empty condition list
@@ -707,7 +707,7 @@ func (l ConditionList) MaybeMatchPack(head PackageHeader) bool {
 	}
 	for i := range l {
 		// this is equivalent to an AND between all conditions in list
-		if l[i].MaybeMatchPack(head) {
+		if l[i].MaybeMatchPack(info) {
 			continue
 		}
 		return false
@@ -717,7 +717,7 @@ func (l ConditionList) MaybeMatchPack(head PackageHeader) bool {
 
 // return a bit vector containing matching positions in the pack
 // TODO: consider parallel matches to check multiple conditions, then merge bitsets
-func (l ConditionList) MatchPack(pkg *Package) *BitSet {
+func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *BitSet {
 	// always match empty condition list
 	if len(l) == 0 || pkg.Len() == 0 {
 		return NewBitSet(pkg.Len()).One()
@@ -736,8 +736,8 @@ func (l ConditionList) MatchPack(pkg *Package) *BitSet {
 		// packs of that kind (except the journal, but here we cannot rely on
 		// min/max values anyways).
 		if !pkg.dirty {
-			head := pkg.blocks[c.Field.Index].Header()
-			min, max := head.MinValue, head.MaxValue
+			blockInfo := info.Blocks[c.Field.Index]
+			min, max := blockInfo.MinValue, blockInfo.MaxValue
 			switch c.Mode {
 			case FilterModeEqual:
 				// condition is always true iff min == max == c.Value

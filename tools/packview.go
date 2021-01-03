@@ -149,46 +149,6 @@ func run() error {
 		return fmt.Errorf("invalid database locator")
 	}
 
-	// switch flags.NArg() {
-	// case 0:
-	// 	if dbname == "" {
-	// 		return fmt.Errorf("Missing database.")
-	// 	}
-	// case 1:
-	// 	if dbname == "" {
-	// 		dbname = flags.Arg(0)
-	// 	} else {
-	// 		cmd = flags.Arg(0)
-	// 	}
-	// default:
-	// 	var i int
-	// 	if dbname == "" {
-	// 		dbname = flags.Arg(i)
-	// 		i++
-	// 	}
-	// 	if cmd == "" {
-	// 		cmd = flags.Arg(i)
-	// 		i++
-	// 	}
-	// 	if packid == 0 {
-	// 		id := flags.Arg(i)
-	// 		var (
-	// 			p   int64
-	// 			err error
-	// 		)
-	// 		if strings.HasPrefix(id, "0x") {
-	// 			p, err = strconv.ParseInt(strings.TrimPrefix(id, "0x"), 16, 64)
-	// 		} else {
-	// 			p, err = strconv.ParseInt(id, 10, 64)
-	// 		}
-	// 		if err == nil {
-	// 			packid = int(p)
-	// 		} else {
-	// 			return fmt.Errorf("invalid pack id '%s': %v", id, err)
-	// 		}
-	// 	}
-	// }
-
 	if debug {
 		fmt.Printf("db=%s\n", dbname)
 		fmt.Printf("cmd=%s\n", cmd)

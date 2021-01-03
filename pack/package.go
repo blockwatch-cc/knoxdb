@@ -19,70 +19,44 @@ import (
 	. "blockwatch.cc/knoxdb/vec"
 )
 
-const (
-	packageStorageFormatVersionV1 = 0xa1 // KnoxDB v1
-	currentStorageFormat          = packageStorageFormatVersionV1
-)
-
 type Package struct {
-	// used    int64          // atomic reference counter, can be recycled when 0
-	version byte           // 8bit
-	nFields int            // 8bit
-	nValues int            // 32bit
-	offsets []int          // nFields * 32bit block offsets (starting after header)
-	names   []string       // field names (optional) null-terminated strings
-	blocks  []*block.Block // compressed blocks, one per field
-
-	// not stored
-	types      []FieldType // field types
-	namemap    map[string]int
-	key        []byte
-	tinfo      *typeInfo
-	pkindex    int
-	pkmap      map[uint64]int // lazy-generated map
-	packedsize int            // total storage size including header
-	bodysize   int            // storage size for block data only
-	dirty      bool
-	cached     bool
-	stripped   bool // some blocks are ignored, don't store!
+	key      uint32 // identity
+	nFields  int
+	nValues  int
+	blocks   []*block.Block // embedded blocks
+	fields   FieldList      // shared with table
+	tinfo    *typeInfo      // Go typeinfo
+	pkindex  int            // field index of primary key (optional)
+	dirty    bool           // pack is updated, needs to be written
+	cached   bool           // pack is cached
+	stripped bool           // some blocks are ignored, don't store this pack
+	sizeHint int            // block size hint
+	size     int            // storage size
 }
 
 func (p *Package) Key() []byte {
-	return p.key
+	var b [4]byte
+	bigEndian.PutUint32(b[:], p.key)
+	return b[:]
 }
 
 func (p *Package) SetKey(key []byte) {
-	p.key = key
+	p.key = bigEndian.Uint32(key)
 }
 
-func (p *Package) PkMap() map[uint64]int {
-	if p.pkmap != nil {
-		return p.pkmap
-	}
-	if p.pkindex < 0 {
-		return nil
-	}
-	p.pkmap = make(map[uint64]int, p.nValues)
-	for i, v := range p.blocks[p.pkindex].Uint64 {
-		p.pkmap[v] = i
-	}
-	return p.pkmap
-}
-
-func NewPackage() *Package {
+func NewPackage(sz int) *Package {
 	return &Package{
-		version: currentStorageFormat,
-		pkindex: -1,
-		namemap: make(map[string]int),
+		pkindex:  -1,
+		sizeHint: sz,
 	}
-}
-
-func (p *Package) HasNames() bool {
-	return len(p.names) > 0
 }
 
 func (p *Package) IsDirty() bool {
 	return p.dirty
+}
+
+func (p *Package) Cols() int {
+	return p.nFields
 }
 
 func (p *Package) Len() int {
@@ -100,41 +74,43 @@ func (p *Package) Cap() int {
 }
 
 func (p *Package) FieldIndex(name string) int {
-	if i, ok := p.namemap[name]; ok {
-		return int(i)
+	for i, v := range p.fields {
+		if v.Name == name || v.Alias == name {
+			return i
+		}
 	}
 	return -1
 }
 
 func (p *Package) FieldByName(name string) Field {
-	return p.FieldById(p.FieldIndex(name))
+	for _, v := range p.fields {
+		if v.Name == name || v.Alias == name {
+			return v
+		}
+	}
+	return Field{Index: -1}
 }
 
 func (p *Package) FieldById(idx int) Field {
 	if idx < 0 {
 		return Field{Index: -1}
 	}
-	return Field{
-		Index: idx,
-		Name:  p.names[idx],
-		Type:  p.types[idx],
-		Alias: p.tinfo.fields[idx].alias,
-		Flags: p.tinfo.fields[idx].flags,
-		Scale: p.blocks[idx].Scale(),
-	}
+	return p.fields[idx]
 }
 
 func (p *Package) Contains(fields FieldList) bool {
 	for _, v := range fields {
-		if _, ok := p.namemap[v.Name]; !ok {
-			return false
+		for _, vv := range p.fields {
+			if vv.Name != v.Name {
+				return false
+			}
 		}
 	}
 	return true
 }
 
-func (p *Package) initType(v interface{}) error {
-	// need Go type to unpack using reflect
+// Go type is required to write using reflect inside Push(),
+func (p *Package) InitType(v interface{}) error {
 	if p.tinfo != nil && p.tinfo.gotype {
 		return nil
 	}
@@ -142,199 +118,135 @@ func (p *Package) initType(v interface{}) error {
 	if err != nil {
 		return err
 	}
+	if len(tinfo.fields) > 256 {
+		return fmt.Errorf("pack: cannot handle more than 256 fields")
+	}
 	p.tinfo = tinfo
 	if p.pkindex < 0 {
 		p.pkindex = tinfo.PkColumn()
 	}
-	// extract fields from Go type
-	fields, err := Fields(v)
-	if err != nil {
-		return err
+	if len(p.fields) == 0 {
+		// extract fields from Go type
+		fields, err := Fields(v)
+		if err != nil {
+			return err
+		}
+		// if pack has been loaded, check if field types match block types
+		if p.nFields > 0 && len(p.blocks) > 0 {
+			if len(fields) > len(p.blocks) {
+				return fmt.Errorf("pack: inconsistent Go type for loaded pack: %d fields, %d blocks", len(fields), len(p.blocks))
+			}
+			for i, f := range fields {
+				b := p.blocks[i]
+				if b.Type() != f.Type.BlockType() {
+					return fmt.Errorf("pack: invalid block type %s for %s field %d", b.Type(), f.Type, i)
+				}
+			}
+		}
+		p.fields = fields
+		p.nFields = len(p.fields)
+	} else {
+		if p.nFields != len(tinfo.fields) {
+			return fmt.Errorf("pack: invalid Go type %s with %d fields for pack with %d fields",
+				tinfo.name, len(tinfo.fields), p.nFields)
+		}
 	}
-	// update metadata
-	p.names = make([]string, len(fields))
-	p.types = make([]FieldType, len(fields))
-	p.namemap = make(map[string]int)
-	for i, field := range fields {
-		p.names[i] = field.Name
-		p.types[i] = field.Type
-		p.namemap[field.Name] = i
-		p.namemap[field.Alias] = i
-		// log.Infof("Initialized field type name=%s alias=%s type=%s flags=%s",
-		// 	field.Name, field.Alias, field.Type, field.Flags)
+	if len(p.blocks) == 0 {
+		p.blocks = make([]*block.Block, p.nFields)
+		for i, f := range p.fields {
+			p.blocks[i] = f.NewBlock(p.sizeHint)
+		}
+	} else {
+		// make sure we use the correct compression (empty blocks are stored without)
+		for i := range p.blocks {
+			p.blocks[i].SetCompression(p.fields[i].Flags.Compression())
+		}
 	}
 	return nil
 }
 
-// Init from Go type
-func (p *Package) Init(v interface{}, sz int) error {
-	// detect and map Go type
-	err := p.initType(v)
-	if err != nil {
-		return err
-	}
-
-	// extract fields from Go type
-	fields, err := Fields(v)
-	if err != nil {
-		return err
-	}
-
-	if len(fields) > 256 {
-		return fmt.Errorf("pack: cannot handle more than 256 fields")
-	}
-
-	// create pack
-	p.nFields = len(fields)
-	p.blocks = make([]*block.Block, p.nFields)
-	p.offsets = make([]int, p.nFields)
-	p.names = make([]string, p.nFields)
-	p.types = make([]FieldType, p.nFields)
-	p.namemap = make(map[string]int)
-
-	// create blocks
-	for i, field := range fields {
-		p.names[i] = field.Name
-		p.types[i] = field.Type
-		p.namemap[field.Name] = i
-		p.namemap[field.Alias] = i
-		p.blocks[i], err = block.NewBlock(
-			field.Type.BlockType(),
-			sz,
-			field.Flags.Compression(),
-			field.Scale,
-		)
-		if err != nil {
-			return err
-		}
-	}
-	return err
+func (p *Package) ResetType() {
+	p.tinfo = nil
 }
 
-// init from field list when Go type is unavailable
-func (p *Package) InitFields(fields FieldList, sz int) error {
-	var err error
+// Init from field list when Go type is unavailable
+func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	if len(fields) > 256 {
 		return fmt.Errorf("pack: cannot handle more than 256 fields")
 	}
+	if len(p.fields) > 0 {
+		return fmt.Errorf("pack: already initialized")
+	}
+	// if pack has been loaded, check if field types match block types
+	if p.nFields > 0 && len(p.blocks) > 0 {
+		if len(fields) > len(p.blocks) {
+			return fmt.Errorf("pack: inconsistent Go type for loaded pack: %d fields, %d blocks", len(fields), len(p.blocks))
+		}
+		for i, f := range fields {
+			b := p.blocks[i]
+			if b.Type() != f.Type.BlockType() {
+				return fmt.Errorf("pack: mismatch block type %s for %s field %d", b.Type(), f.Type, i)
+			}
+		}
+	}
 
-	// create pack
+	p.fields = fields
 	p.nFields = len(fields)
-	p.blocks = make([]*block.Block, p.nFields)
-	p.offsets = make([]int, p.nFields)
-	p.names = make([]string, p.nFields)
-	p.types = make([]FieldType, p.nFields)
-	p.namemap = make(map[string]int)
+	p.pkindex = fields.PkIndex()
+	p.tinfo = tinfo
 
-	// fill type info from fields
-	p.tinfo = &typeInfo{
-		fields: make([]fieldInfo, p.nFields),
-		gotype: false,
-	}
-	for i, field := range fields {
-		// fill type info from fields
-		if field.Flags&FlagPrimary > 0 {
-			p.pkindex = i
+	if len(p.blocks) == 0 {
+		p.blocks = make([]*block.Block, p.nFields)
+		for i, f := range fields {
+			p.blocks[i] = f.NewBlock(p.sizeHint)
 		}
-		p.tinfo.fields[i].name = field.Name
-		p.tinfo.fields[i].alias = field.Alias
-		p.tinfo.fields[i].flags = field.Flags
-		p.tinfo.fields[i].blockid = i
-
-		// register field
-		p.names[i] = field.Name
-		p.types[i] = field.Type
-		p.namemap[field.Name] = i
-		p.namemap[field.Alias] = i
-
-		// alloc block
-		p.blocks[i], err = block.NewBlock(
-			field.Type.BlockType(),
-			sz,
-			field.Flags.Compression(),
-			field.Scale,
-		)
-		if err != nil {
-			return err
+	} else {
+		// make sure we use the correct compression (empty blocks are stored without)
+		for i := range p.blocks {
+			p.blocks[i].SetCompression(fields[i].Flags.Compression())
 		}
-	}
-	return err
-}
-
-func (p *Package) InitMetadata(fields FieldList) error {
-	if len(fields) > 256 {
-		return fmt.Errorf("pack: cannot handle more than 256 fields")
-	}
-
-	p.names = make([]string, p.nFields)
-	p.types = make([]FieldType, p.nFields)
-	p.namemap = make(map[string]int)
-
-	// fill type info from fields
-	p.tinfo = &typeInfo{
-		fields: make([]fieldInfo, p.nFields),
-		gotype: false,
-	}
-	for i, field := range fields {
-		// fill type info from fields
-		if field.Flags&FlagPrimary > 0 {
-			p.pkindex = i
-		}
-		p.tinfo.fields[i].name = field.Name
-		p.tinfo.fields[i].alias = field.Alias
-		p.tinfo.fields[i].flags = field.Flags
-		p.tinfo.fields[i].blockid = i
-
-		// register field
-		p.names[i] = field.Name
-		p.types[i] = field.Type
-		p.namemap[field.Name] = i
-		p.namemap[field.Alias] = i
-		// log.Infof("Initialized field metadata name=%s alias=%s type=%s scale=%d",
-		// 	field.Name, field.Alias, field.Type, field.Scale)
 	}
 	return nil
 }
 
 func (p *Package) Clone(copydata bool, sz int) (*Package, error) {
-	np := &Package{
-		version:  p.version,
+	clone := &Package{
 		nFields:  p.nFields,
 		nValues:  0,
-		offsets:  make([]int, p.nFields),
-		names:    p.names, // share static field names
-		types:    p.types, // share static field types
-		namemap:  make(map[string]int),
-		blocks:   make([]*block.Block, p.nFields),
-		key:      nil, // cloned pack has no identity yet
+		fields:   p.fields,
+		key:      0, // cloned pack has no identity yet
 		dirty:    true,
 		stripped: p.stripped, // cloning a stripped pack is allowed
 		tinfo:    p.tinfo,    // share static type info
 		pkindex:  p.pkindex,
+		sizeHint: p.sizeHint,
 	}
 
-	// create new empty block slices
-	for i, b := range p.blocks {
-		var err error
-		np.blocks[i], err = b.Clone(sz, copydata)
-		if err != nil {
-			return nil, err
+	if len(p.blocks) > 0 {
+		clone.blocks = make([]*block.Block, p.nFields)
+		// create new empty blocks
+		for i, b := range p.blocks {
+			var err error
+			clone.blocks[i], err = b.Clone(sz, copydata)
+			if err != nil {
+				return nil, err
+			}
+			// overwrite compression (empty journal blocks get saved without)
+			clone.blocks[i].SetCompression(p.fields[i].Flags.Compression())
 		}
-		np.namemap[np.names[i]] = i
+		if copydata {
+			clone.nValues = p.nValues
+		}
 	}
-
-	if copydata {
-		np.nValues = p.nValues
-	}
-	return np, nil
+	return clone, nil
 }
 
 func (p *Package) KeepFields(fields FieldList) *Package {
 	if len(fields) == 0 {
 		return p
 	}
-	for i, v := range p.names {
-		if !fields.Contains(v) {
+	for i, v := range p.fields {
+		if !fields.Contains(v.Name) {
 			p.blocks[i].SetIgnore()
 			p.stripped = true
 		}
@@ -342,31 +254,21 @@ func (p *Package) KeepFields(fields FieldList) *Package {
 	return p
 }
 
-// removes old aliases and sets new alias names
+// clones field list and sets new aliase names
 func (p *Package) UpdateAliasesFrom(fields FieldList) *Package {
 	if len(fields) == 0 {
 		return p
 	}
-	for _, v := range fields {
-		if v.Index < 0 || v.Index-1 > p.nFields {
-			continue
+	// clone our field list (since it may be shared with table)
+	prevfields := p.fields
+	p.fields = make([]Field, len(prevfields))
+	for i := range p.fields {
+		field := prevfields[i]
+		updated := fields.Find(field.Name)
+		if updated.IsValid() {
+			field.Alias = updated.Alias
 		}
-		delete(p.namemap, v.Alias)
-		p.namemap[v.Alias] = v.Index
-	}
-	return p
-}
-
-// adds new alias names
-func (p *Package) UpdateAliases(aliases []string) *Package {
-	if len(aliases) == 0 {
-		return p
-	}
-	for i, v := range aliases {
-		if i >= p.nFields {
-			continue
-		}
-		p.namemap[v] = i
+		p.fields[i] = field
 	}
 	return p
 }
@@ -375,7 +277,7 @@ func (p *Package) UpdateAliases(aliases []string) *Package {
 // all columns in this pack! Column mapping uses the default struct tag `pack`,
 // hence the fields name only (not the fields alias).
 func (p *Package) Push(v interface{}) error {
-	if err := p.initType(v); err != nil {
+	if err := p.InitType(v); err != nil {
 		return err
 	}
 	val := reflect.Indirect(reflect.ValueOf(v))
@@ -387,6 +289,7 @@ func (p *Package) Push(v interface{}) error {
 			continue
 		}
 		b := p.blocks[fi.blockid]
+		field := p.fields[fi.blockid]
 		// skip early
 		if b.IsIgnore() {
 			continue
@@ -394,10 +297,10 @@ func (p *Package) Push(v interface{}) error {
 		f := fi.value(val)
 
 		// log.Infof("Push to field %d %s type=%s block=%s struct val %s (%s) finfo=%s",
-		// 	fi.blockid, p.names[fi.blockid], p.types[fi.blockid], b.Type(),
+		// 	fi.blockid, field.Name, field.Type, b.Type(),
 		// 	f.Type().String(), f.Kind(), fi)
 
-		switch p.types[fi.blockid] {
+		switch field.Type {
 		case FieldTypeBytes:
 			var buf []byte
 			// check if type implements BinaryMarshaler
@@ -446,22 +349,21 @@ func (p *Package) Push(v interface{}) error {
 		case FieldTypeUint8:
 			b.Uint8 = append(b.Uint8, uint8(f.Uint()))
 		case FieldTypeDecimal256:
-			b.Int256 = append(b.Int256, f.Interface().(Decimal256).Quantize(b.Scale()).Int256())
+			b.Int256 = append(b.Int256, f.Interface().(Decimal256).Quantize(field.Scale).Int256())
 		case FieldTypeDecimal128:
-			b.Int128 = append(b.Int128, f.Interface().(Decimal128).Quantize(b.Scale()).Int128())
+			b.Int128 = append(b.Int128, f.Interface().(Decimal128).Quantize(field.Scale).Int128())
 		case FieldTypeDecimal64:
-			b.Int64 = append(b.Int64, f.Interface().(Decimal64).Quantize(b.Scale()).Int64())
+			b.Int64 = append(b.Int64, f.Interface().(Decimal64).Quantize(field.Scale).Int64())
 		case FieldTypeDecimal32:
-			b.Int32 = append(b.Int32, f.Interface().(Decimal32).Quantize(b.Scale()).Int32())
+			b.Int32 = append(b.Int32, f.Interface().(Decimal32).Quantize(field.Scale).Int32())
 		default:
-			return fmt.Errorf("pack: push: unsupported type %s for field %d %s (%v)",
-				p.types[fi.blockid], fi.blockid, f.Type().String(), f.Kind())
+			return fmt.Errorf("pack: pushed unsupported value type %s (%v) for %s field %d",
+				f.Type().String(), f.Kind(), field.Type, fi.blockid)
 		}
 		b.SetDirty()
 	}
 	p.nValues++
 	p.dirty = true
-	p.pkmap = nil
 	return nil
 }
 
@@ -469,7 +371,7 @@ func (p *Package) Push(v interface{}) error {
 // that strictly defines all columns in this pack! Column mapping uses the
 // default struct tag `pack`,  hence the fields name only (not the fields alias).
 func (p *Package) ReplaceAt(pos int, v interface{}) error {
-	if err := p.initType(v); err != nil {
+	if err := p.InitType(v); err != nil {
 		return err
 	}
 	if p.nValues <= pos {
@@ -484,13 +386,15 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			continue
 		}
 		b := p.blocks[fi.blockid]
+		field := p.fields[fi.blockid]
+
 		// skip early
 		if b.IsIgnore() {
 			continue
 		}
 		f := fi.value(val)
 
-		switch p.types[fi.blockid] {
+		switch field.Type {
 		case FieldTypeBytes:
 			var buf []byte
 			// check if type implements BinaryMarshaler
@@ -556,41 +460,41 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			b.Uint8[pos] = uint8(f.Uint())
 
 		case FieldTypeDecimal256:
-			b.Int256[pos] = f.Interface().(Decimal256).Quantize(b.Scale()).Int256()
+			b.Int256[pos] = f.Interface().(Decimal256).Quantize(field.Scale).Int256()
 
 		case FieldTypeDecimal128:
-			b.Int128[pos] = f.Interface().(Decimal128).Quantize(b.Scale()).Int128()
+			b.Int128[pos] = f.Interface().(Decimal128).Quantize(field.Scale).Int128()
 
 		case FieldTypeDecimal64:
-			b.Int64[pos] = f.Interface().(Decimal64).Quantize(b.Scale()).Int64()
+			b.Int64[pos] = f.Interface().(Decimal64).Quantize(field.Scale).Int64()
 
 		case FieldTypeDecimal32:
-			b.Int32[pos] = f.Interface().(Decimal32).Quantize(b.Scale()).Int32()
+			b.Int32[pos] = f.Interface().(Decimal32).Quantize(field.Scale).Int32()
 
 		default:
-			return fmt.Errorf("pack: unsupported type %s (%v)", f.Type().String(), f.Kind())
+			return fmt.Errorf("pack: replace unsupported value type %s (%v) for %s field %d",
+				f.Type().String(), f.Kind(), field.Type, fi.blockid)
 		}
-		// set flag to indicate we must reparse min/max values when storing the pack
 		b.SetDirty()
 	}
 	p.dirty = true
-	p.pkmap = nil
 	return nil
 }
 
 // ReadAt reads a row at offset pos and unmarshals values into an arbitrary type.
 // Will set struct fields based on name and alias as defined by struct tags `pack`
 // and `json`.
-func (p *Package) ReadAt(pos int, v interface{}) error {
-	if p.tinfo == nil || !p.tinfo.gotype {
-		tinfo, err := getTypeInfo(v)
-		if err != nil {
-			return err
-		}
-		p.tinfo = tinfo
-	}
-	return p.ReadAtWithInfo(pos, v, p.tinfo)
-}
+// func (p *Package) ReadAt(pos int, v interface{}) error {
+// 	if p.tinfo == nil || !p.tinfo.gotype {
+// 		tinfo, err := getTypeInfo(v)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		// cache type info for future calls
+// 		p.tinfo = tinfo
+// 	}
+// 	return p.ReadAtWithInfo(pos, v, p.tinfo)
+// }
 
 // ReadAtWithInfo reads a row at offset pos and unmarshals values into an arbitrary
 // type described by tinfo. This method has better performance than ReadAt when
@@ -614,6 +518,7 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 		}
 		// skip early
 		b := p.blocks[fi.blockid]
+		field := p.fields[fi.blockid]
 		if b.IsIgnore() {
 			continue
 		}
@@ -622,7 +527,6 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 		if !dst.IsValid() {
 			continue
 		}
-		dst0 := dst
 		if dst.Kind() == reflect.Ptr {
 			if dst.IsNil() && dst.CanSet() {
 				dst.Set(reflect.New(dst.Type().Elem()))
@@ -630,7 +534,7 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst = dst.Elem()
 		}
 
-		switch p.types[fi.blockid] {
+		switch field.Type {
 		case FieldTypeBytes:
 			if dst.CanAddr() {
 				pv := dst.Addr()
@@ -692,49 +596,49 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst.SetUint(uint64(b.Uint8[pos]))
 
 		case FieldTypeDecimal256:
-			val := NewDecimal256(b.Int256[pos], b.Scale())
+			val := NewDecimal256(b.Int256[pos], field.Scale)
 			dst.Set(reflect.ValueOf(val))
 
 		case FieldTypeDecimal128:
-			val := NewDecimal128(b.Int128[pos], b.Scale())
+			val := NewDecimal128(b.Int128[pos], field.Scale)
 			dst.Set(reflect.ValueOf(val))
 
 		case FieldTypeDecimal64:
-			val := NewDecimal64(b.Int64[pos], b.Scale())
+			val := NewDecimal64(b.Int64[pos], field.Scale)
 			dst.Set(reflect.ValueOf(val))
 
 		case FieldTypeDecimal32:
-			val := NewDecimal32(b.Int32[pos], b.Scale())
+			val := NewDecimal32(b.Int32[pos], field.Scale)
 			dst.Set(reflect.ValueOf(val))
 
 		default:
-			return fmt.Errorf("pack: unsupported type %s (%v)", dst0.Type().String(), dst0.Kind())
+			return fmt.Errorf("pack: unsupported field type %s", field.Type)
 		}
 	}
 	return nil
 }
 
-func (p *Package) ForEach(proto interface{}, fn func(i int, val interface{}) error) error {
-	if p.tinfo == nil || !p.tinfo.gotype {
-		tinfo, err := getTypeInfo(proto)
-		if err != nil {
-			return err
-		}
-		p.tinfo = tinfo
-	}
-	typ := derefIndirect(proto).Type()
-	for i := 0; i < p.nValues; i++ {
-		// create new empty value for interface prototype
-		val := reflect.New(typ)
-		if err := p.ReadAtWithInfo(i, val.Interface(), p.tinfo); err != nil {
-			return err
-		}
-		if err := fn(i, val.Interface()); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+// func (p *Package) ForEach(proto interface{}, fn func(i int, val interface{}) error) error {
+// 	if p.tinfo == nil || !p.tinfo.gotype {
+// 		tinfo, err := getTypeInfo(proto)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		p.tinfo = tinfo
+// 	}
+// 	typ := derefIndirect(proto).Type()
+// 	for i := 0; i < p.nValues; i++ {
+// 		// create new empty value for interface prototype
+// 		val := reflect.New(typ)
+// 		if err := p.ReadAtWithInfo(i, val.Interface(), p.tinfo); err != nil {
+// 			return err
+// 		}
+// 		if err := fn(i, val.Interface()); err != nil {
+// 			return err
+// 		}
+// 	}
+// 	return nil
+// }
 
 func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 	if p.nFields <= index {
@@ -745,11 +649,12 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 	}
 
 	b := p.blocks[index]
+	field := p.fields[index]
 	if b.IsIgnore() {
-		return nil, fmt.Errorf("pack: skipped block %d (%s)", index, p.types[index])
+		return nil, fmt.Errorf("pack: skipped block %d (%s)", index, field.Type)
 	}
 
-	switch p.types[index] {
+	switch field.Type {
 	case FieldTypeBytes:
 		return b.Bytes[pos], nil
 
@@ -800,23 +705,23 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 		return b.Uint8[pos], nil
 
 	case FieldTypeDecimal256:
-		val := NewDecimal256(b.Int256[pos], b.Scale())
+		val := NewDecimal256(b.Int256[pos], field.Scale)
 		return val, nil
 
 	case FieldTypeDecimal128:
-		val := NewDecimal128(b.Int128[pos], b.Scale())
+		val := NewDecimal128(b.Int128[pos], field.Scale)
 		return val, nil
 
 	case FieldTypeDecimal64:
-		val := NewDecimal64(b.Int64[pos], b.Scale())
+		val := NewDecimal64(b.Int64[pos], field.Scale)
 		return val, nil
 
 	case FieldTypeDecimal32:
-		val := NewDecimal32(b.Int32[pos], b.Scale())
+		val := NewDecimal32(b.Int32[pos], field.Scale)
 		return val, nil
 
 	default:
-		return nil, fmt.Errorf("pack: unsupported type %s", p.types[index])
+		return nil, fmt.Errorf("pack: unsupported field type %s", field.Type)
 	}
 }
 
@@ -828,15 +733,16 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 		return fmt.Errorf("pack: invalid pos index %d (max=%d)", pos, p.nValues)
 	}
 	b := p.blocks[index]
+	field := p.fields[index]
 	if b.IsIgnore() {
-		return fmt.Errorf("pack: skipped block %d (%s)", index, p.types[index])
+		return fmt.Errorf("pack: skipped block %d (%s)", index, field.Type)
 	}
 	val := reflect.Indirect(reflect.ValueOf(v))
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
 
-	switch p.types[index] {
+	switch field.Type {
 	case FieldTypeBytes:
 		var buf []byte
 		// check if type implements BinaryMarshaler
@@ -902,25 +808,22 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 		b.Uint8[pos] = uint8(val.Uint())
 
 	case FieldTypeDecimal256:
-		b.Int256[pos] = val.Interface().(Decimal256).Quantize(b.Scale()).Int256()
+		b.Int256[pos] = val.Interface().(Decimal256).Quantize(field.Scale).Int256()
 
 	case FieldTypeDecimal128:
-		b.Int128[pos] = val.Interface().(Decimal128).Quantize(b.Scale()).Int128()
+		b.Int128[pos] = val.Interface().(Decimal128).Quantize(field.Scale).Int128()
 
 	case FieldTypeDecimal64:
-		b.Int64[pos] = val.Interface().(Decimal64).Quantize(b.Scale()).Int64()
+		b.Int64[pos] = val.Interface().(Decimal64).Quantize(field.Scale).Int64()
 
 	case FieldTypeDecimal32:
-		b.Int32[pos] = val.Interface().(Decimal32).Quantize(b.Scale()).Int32()
+		b.Int32[pos] = val.Interface().(Decimal32).Quantize(field.Scale).Int32()
 
 	default:
-		return fmt.Errorf("pack: unsupported type %s", p.types[index])
+		return fmt.Errorf("pack: unsupported field type %s", field.Type)
 	}
 	b.SetDirty()
 	p.dirty = true
-	if p.pkindex == index {
-		p.pkmap = nil
-	}
 	return nil
 }
 
@@ -931,14 +834,14 @@ func (p *Package) isValidAt(index, pos int, typ FieldType) error {
 	if p.nValues <= pos {
 		return ErrNoColumn
 	}
-	if p.types[index] != typ {
+	if p.fields[index].Type != typ {
 		return ErrInvalidType
 	}
 	if p.blocks[index].Type() != typ.BlockType() {
 		return ErrInvalidType
 	}
 	if p.blocks[index].IsIgnore() {
-		return fmt.Errorf("pack: skipped block %d (%s)", index, p.types[index])
+		return fmt.Errorf("pack: skipped block %d (%s)", index, p.fields[index].Type)
 	}
 	return nil
 }
@@ -1059,28 +962,28 @@ func (p *Package) Decimal32At(index, pos int) (Decimal32, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal32); err != nil {
 		return Decimal32{}, err
 	}
-	return NewDecimal32(p.blocks[index].Int32[pos], p.blocks[index].Scale()), nil
+	return NewDecimal32(p.blocks[index].Int32[pos], p.fields[index].Scale), nil
 }
 
 func (p *Package) Decimal64At(index, pos int) (Decimal64, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal64); err != nil {
 		return Decimal64{}, err
 	}
-	return NewDecimal64(p.blocks[index].Int64[pos], p.blocks[index].Scale()), nil
+	return NewDecimal64(p.blocks[index].Int64[pos], p.fields[index].Scale), nil
 }
 
 func (p *Package) Decimal128At(index, pos int) (Decimal128, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal128); err != nil {
 		return Decimal128{}, err
 	}
-	return NewDecimal128(p.blocks[index].Int128[pos], p.blocks[index].Scale()), nil
+	return NewDecimal128(p.blocks[index].Int128[pos], p.fields[index].Scale), nil
 }
 
 func (p *Package) Decimal256At(index, pos int) (Decimal256, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal256); err != nil {
 		return Decimal256{}, err
 	}
-	return NewDecimal256(p.blocks[index].Int256[pos], p.blocks[index].Scale()), nil
+	return NewDecimal256(p.blocks[index].Int256[pos], p.fields[index].Scale), nil
 }
 
 func (p *Package) IsZeroAt(index, pos int) bool {
@@ -1090,7 +993,8 @@ func (p *Package) IsZeroAt(index, pos int) bool {
 	if p.blocks[index].IsIgnore() {
 		return false
 	}
-	switch p.types[index] {
+	field := p.fields[index]
+	switch field.Type {
 	case FieldTypeInt256,
 		FieldTypeInt128,
 		FieldTypeInt64,
@@ -1130,12 +1034,13 @@ func (p *Package) Column(index int) (interface{}, error) {
 		return nil, ErrNoField
 	}
 	b := p.blocks[index]
+	field := p.fields[index]
 	if b.IsIgnore() {
-		return nil, fmt.Errorf("pack: skipped block %d (%s)", index, p.types[index])
+		return nil, fmt.Errorf("pack: skipped block %d (%s)", index, field.Type)
 	}
 	slice := b.RawSlice()
 
-	switch p.types[index] {
+	switch field.Type {
 	case FieldTypeBytes,
 		FieldTypeString,
 		FieldTypeFloat64,
@@ -1167,22 +1072,22 @@ func (p *Package) Column(index int) (interface{}, error) {
 
 	case FieldTypeDecimal256:
 		// materialize
-		return Decimal256Slice{b.Int256, b.Scale()}, nil
+		return Decimal256Slice{b.Int256, field.Scale}, nil
 
 	case FieldTypeDecimal128:
 		// materialize
-		return Decimal128Slice{b.Int128, b.Scale()}, nil
+		return Decimal128Slice{b.Int128, field.Scale}, nil
 
 	case FieldTypeDecimal64:
 		// materialize
-		return Decimal64Slice{b.Int64, b.Scale()}, nil
+		return Decimal64Slice{b.Int64, field.Scale}, nil
 
 	case FieldTypeDecimal32:
 		// materialize
-		return Decimal32Slice{b.Int32, b.Scale()}, nil
+		return Decimal32Slice{b.Int32, field.Scale}, nil
 
 	default:
-		return nil, fmt.Errorf("pack: unsupported type %s", p.types[index])
+		return nil, fmt.Errorf("pack: unsupported type %s", field.Type)
 	}
 }
 
@@ -1197,8 +1102,9 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 		if b.IsIgnore() {
 			continue
 		}
+		field := p.fields[i]
 
-		switch p.types[i] {
+		switch field.Type {
 		case FieldTypeBytes:
 			buf := make([]byte, len(b.Bytes[pos]))
 			copy(buf, b.Bytes[pos])
@@ -1237,18 +1143,18 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 			out[i] = b.Uint8[pos]
 		case FieldTypeDecimal256:
 			// materialize
-			out[i] = NewDecimal256(b.Int256[pos], b.Scale())
+			out[i] = NewDecimal256(b.Int256[pos], field.Scale)
 		case FieldTypeDecimal128:
 			// materialize
-			out[i] = NewDecimal128(b.Int128[pos], b.Scale())
+			out[i] = NewDecimal128(b.Int128[pos], field.Scale)
 		case FieldTypeDecimal64:
 			// materialize
-			out[i] = NewDecimal64(b.Int64[pos], b.Scale())
+			out[i] = NewDecimal64(b.Int64[pos], field.Scale)
 		case FieldTypeDecimal32:
 			// materialize
-			out[i] = NewDecimal32(b.Int32[pos], b.Scale())
+			out[i] = NewDecimal32(b.Int32[pos], field.Scale)
 		default:
-			return nil, fmt.Errorf("pack: unsupported type %s", p.types[i])
+			return nil, fmt.Errorf("pack: unsupported type %s", field.Type)
 		}
 	}
 	return out, nil
@@ -1262,11 +1168,12 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		return nil, fmt.Errorf("pack: invalid range %d:%d (max=%d)", start, end, p.nValues)
 	}
 	b := p.blocks[index]
+	field := p.fields[index]
 	if b.IsIgnore() {
-		return nil, fmt.Errorf("pack: skipped block %d (%s)", index, p.types[index])
+		return nil, fmt.Errorf("pack: skipped block %d (%s)", index, field.Type)
 	}
 
-	switch p.types[index] {
+	switch field.Type {
 	case FieldTypeBytes:
 		// Note: does not copy data; don't reference!
 		return b.Bytes[start:end], nil
@@ -1307,18 +1214,18 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		return b.Uint8[start:end], nil
 	case FieldTypeDecimal256:
 		// materialize
-		return Decimal256Slice{b.Int256[start:end], b.Scale()}, nil
+		return Decimal256Slice{b.Int256[start:end], field.Scale}, nil
 	case FieldTypeDecimal128:
 		// materialize
-		return Decimal128Slice{b.Int128[start:end], b.Scale()}, nil
+		return Decimal128Slice{b.Int128[start:end], field.Scale}, nil
 	case FieldTypeDecimal64:
 		// materialize
-		return Decimal64Slice{b.Int64[start:end], b.Scale()}, nil
+		return Decimal64Slice{b.Int64[start:end], field.Scale}, nil
 	case FieldTypeDecimal32:
 		// materialize
-		return Decimal32Slice{b.Int32[start:end], b.Scale()}, nil
+		return Decimal32Slice{b.Int32[start:end], field.Scale}, nil
 	default:
-		return nil, fmt.Errorf("pack: unsupported type %s", p.types[index])
+		return nil, fmt.Errorf("pack: unsupported type %s", field.Type)
 	}
 }
 
@@ -1346,8 +1253,14 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 		if dst.IsIgnore() || src.IsIgnore() {
 			continue
 		}
+		srcField := srcPack.fields[i]
+		dstField := p.fields[i]
+		if srcField.Index != dstField.Index || srcField.Type != dstField.Type {
+			return fmt.Errorf("pack: replace from: field mismatch %d (%s) != %d (%s)",
+				srcField.Index, srcField.Type, dstField.Index, dstField.Type)
+		}
 
-		switch p.types[i] {
+		switch dstField.Type {
 		case FieldTypeBytes:
 			for j, v := range src.Bytes[srcPos : srcPos+n] {
 				if cap(dst.Bytes[dstPos+j]) < len(v) {
@@ -1403,7 +1316,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 			copy(dst.Uint8[dstPos:], src.Uint8[srcPos:srcPos+n])
 
 		case FieldTypeDecimal256:
-			sc, dc := src.Scale(), dst.Scale()
+			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
 				copy(dst.Int256[dstPos:], src.Int256[srcPos:srcPos+n])
 			} else {
@@ -1413,7 +1326,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 			}
 
 		case FieldTypeDecimal128:
-			sc, dc := src.Scale(), dst.Scale()
+			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
 				copy(dst.Int128[dstPos:], src.Int128[srcPos:srcPos+n])
 			} else {
@@ -1423,7 +1336,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 			}
 
 		case FieldTypeDecimal64:
-			sc, dc := src.Scale(), dst.Scale()
+			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
 				copy(dst.Int64[dstPos:], src.Int64[srcPos:srcPos+n])
 			} else {
@@ -1433,7 +1346,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 			}
 
 		case FieldTypeDecimal32:
-			sc, dc := src.Scale(), dst.Scale()
+			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
 				copy(dst.Int32[dstPos:], src.Int32[srcPos:srcPos+n])
 			} else {
@@ -1443,12 +1356,11 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 			}
 
 		default:
-			return fmt.Errorf("pack: invalid data type %s", p.types[i])
+			return fmt.Errorf("pack: invalid data type %s", dstField.Type)
 		}
 		dst.SetDirty()
 	}
 	p.dirty = true
-	p.pkmap = nil
 	return nil
 }
 
@@ -1468,8 +1380,14 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 		if dst.IsIgnore() || src.IsIgnore() {
 			continue
 		}
+		srcField := srcPack.fields[i]
+		dstField := p.fields[i]
+		if srcField.Index != dstField.Index || srcField.Type != dstField.Type {
+			return fmt.Errorf("pack: replace from: field mismatch %d (%s) != %d (%s)",
+				srcField.Index, srcField.Type, dstField.Index, dstField.Type)
+		}
 
-		switch p.types[i] {
+		switch dstField.Type {
 		case FieldTypeBytes:
 			if safecopy {
 				for _, v := range src.Bytes[srcPos : srcPos+srcLen] {
@@ -1524,7 +1442,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 			dst.Uint8 = append(dst.Uint8, src.Uint8[srcPos:srcPos+srcLen]...)
 
 		case FieldTypeDecimal256:
-			sc, dc := src.Scale(), dst.Scale()
+			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
 				dst.Int256 = append(dst.Int256, src.Int256[srcPos:srcPos+srcLen]...)
 			} else {
@@ -1534,7 +1452,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 			}
 
 		case FieldTypeDecimal128:
-			sc, dc := src.Scale(), dst.Scale()
+			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
 				dst.Int128 = append(dst.Int128, src.Int128[srcPos:srcPos+srcLen]...)
 			} else {
@@ -1544,7 +1462,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 			}
 
 		case FieldTypeDecimal64:
-			sc, dc := src.Scale(), dst.Scale()
+			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
 				dst.Int64 = append(dst.Int64, src.Int64[srcPos:srcPos+srcLen]...)
 			} else {
@@ -1554,7 +1472,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 			}
 
 		case FieldTypeDecimal32:
-			sc, dc := src.Scale(), dst.Scale()
+			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
 				dst.Int32 = append(dst.Int32, src.Int32[srcPos:srcPos+srcLen]...)
 			} else {
@@ -1564,13 +1482,12 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 			}
 
 		default:
-			return fmt.Errorf("pack: invalid data type %s", p.types[i])
+			return fmt.Errorf("pack: invalid data type %s", dstField.Type)
 		}
 		dst.SetDirty()
 	}
 	p.nValues += srcLen
 	p.dirty = true
-	p.pkmap = nil
 	return nil
 }
 
@@ -1580,8 +1497,9 @@ func (p *Package) Append() error {
 		if b.IsIgnore() {
 			continue
 		}
+		field := p.fields[i]
 
-		switch p.types[i] {
+		switch field.Type {
 		case FieldTypeBytes:
 			b.Bytes = append(b.Bytes, []byte{})
 
@@ -1628,13 +1546,12 @@ func (p *Package) Append() error {
 			b.Uint8 = append(b.Uint8, 0)
 
 		default:
-			return fmt.Errorf("pack: invalid data type %s", p.types[i])
+			return fmt.Errorf("pack: invalid data type %s", field.Type)
 		}
 		b.SetDirty()
 	}
 	p.nValues++
 	p.dirty = true
-	p.pkmap = nil
 	return nil
 }
 
@@ -1647,8 +1564,9 @@ func (p *Package) Grow(n int) error {
 		if b.IsIgnore() {
 			continue
 		}
+		field := p.fields[i]
 
-		switch p.types[i] {
+		switch field.Type {
 		case FieldTypeBytes:
 			b.Bytes = append(b.Bytes, make([][]byte, n)...)
 
@@ -1695,13 +1613,12 @@ func (p *Package) Grow(n int) error {
 			b.Uint8 = append(b.Uint8, make([]uint8, n)...)
 
 		default:
-			return fmt.Errorf("pack: invalid data type %s", p.types[i])
+			return fmt.Errorf("pack: invalid data type %s", field.Type)
 		}
 		b.SetDirty()
 	}
 	p.nValues += n
 	p.dirty = true
-	p.pkmap = nil
 	return nil
 }
 
@@ -1717,8 +1634,9 @@ func (p *Package) Delete(pos, n int) error {
 		if b.IsIgnore() {
 			continue
 		}
+		field := p.fields[i]
 
-		switch p.types[i] {
+		switch field.Type {
 		case FieldTypeBytes:
 			// avoid mem leaks
 			for j, l := pos, pos+n; j < l; j++ {
@@ -1773,13 +1691,12 @@ func (p *Package) Delete(pos, n int) error {
 			b.Uint8 = append(b.Uint8[:pos], b.Uint8[pos+n:]...)
 
 		default:
-			return fmt.Errorf("pack: invalid data type %s", p.types[i])
+			return fmt.Errorf("pack: invalid data type %s", field.Type)
 		}
 		b.SetDirty()
 	}
 	p.nValues -= n
 	p.dirty = true
-	p.pkmap = nil
 	return nil
 }
 
@@ -1787,42 +1704,31 @@ func (p *Package) Clear() {
 	for _, v := range p.blocks {
 		v.Clear()
 	}
-	// we keep all type-related data like names, type info and blocks
-	// keep pack name to avoid clearing journal/tombstone names
-	p.version = currentStorageFormat
+	// Note: we keep all type-related data and blocks
+	// also keep pack key to avoid clearing journal/tombstone identity
 	p.nValues = 0
-	p.pkmap = nil
-	p.offsets = nil
 	p.dirty = true
 	p.cached = false
-	p.packedsize = 0
-	p.bodysize = 0
+	p.size = 0
 }
 
 func (p *Package) Release() {
 	for _, v := range p.blocks {
 		v.Release()
 	}
-	p.version = 0
 	p.nFields = 0
 	p.nValues = 0
-	p.offsets = nil
-	p.names = nil
-	p.types = nil
 	p.blocks = nil
-	p.namemap = nil
-	p.key = nil
+	p.key = 0
 	p.tinfo = nil
 	p.pkindex = -1
-	p.pkmap = nil
-	p.packedsize = 0
-	p.bodysize = 0
 	p.dirty = false
 	p.cached = false
 	p.stripped = false
+	p.size = 0
 }
 
-func (p *Package) Size() int {
+func (p *Package) HeapSize() int {
 	var sz int
 	for _, v := range p.blocks {
 		sz += v.HeapSize()
@@ -1852,15 +1758,6 @@ func (p *Package) PkIndex(id uint64, last int) int {
 		return int(id-min) + last
 	}
 
-	// if pk map exists, use it
-	if p.pkmap != nil {
-		idx, ok := p.pkmap[id]
-		if ok {
-			return idx
-		}
-		return -1
-	}
-
 	// for sparse pk spaces, use binary search on sorted slices
 	idx := sort.Search(l, func(i int) bool { return slice[i] >= id })
 	if idx < l && slice[idx] == id {
@@ -1874,15 +1771,6 @@ func (p *Package) PkIndex(id uint64, last int) int {
 func (p *Package) PkIndexUnsorted(id uint64, last int) int {
 	// primary key field required
 	if p.pkindex < 0 || p.Len() <= last {
-		return -1
-	}
-
-	// if pk map exists, use it
-	if p.pkmap != nil {
-		idx, ok := p.pkmap[id]
-		if ok {
-			return idx
-		}
 		return -1
 	}
 
@@ -1916,7 +1804,7 @@ func (p *PackageSorter) Less(i, j int) bool {
 		return true
 	}
 
-	switch p.Package.types[p.col] {
+	switch p.Package.fields[p.col].Type {
 	case FieldTypeBytes:
 		return bytes.Compare(b.Bytes[i], b.Bytes[j]) < 0
 
@@ -1974,7 +1862,7 @@ func (p *PackageSorter) Swap(i, j int) {
 			continue
 		}
 
-		switch p.Package.types[p.col] {
+		switch p.Package.fields[p.col].Type {
 		case FieldTypeBytes:
 			b.Bytes[i], b.Bytes[j] = b.Bytes[j], b.Bytes[i]
 
@@ -2037,7 +1925,6 @@ func (p *Package) PkSort() error {
 	if !sort.IsSorted(spkg) {
 		sort.Sort(spkg)
 		p.dirty = true
-		p.pkmap = nil
 	}
 	return nil
 }

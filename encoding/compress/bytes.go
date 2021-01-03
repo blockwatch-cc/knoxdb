@@ -9,8 +9,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-
-	"blockwatch.cc/knoxdb/util"
 )
 
 const (
@@ -20,9 +18,9 @@ const (
 )
 
 var (
-	errBytesBatchDecodeInvalidLength  = fmt.Errorf("pack: BytesArrayDecodeAll invalid encoded length")
-	errBytesBatchDecodeLengthOverflow = fmt.Errorf("pack: BytesArrayDecodeAll length overflow")
-	errBytesBatchDecodeShortBuffer    = fmt.Errorf("pack: BytesArrayDecodeAll short buffer")
+	errBytesBatchDecodeInvalidLength  = fmt.Errorf("compress: BytesArrayDecodeAll invalid encoded length")
+	errBytesBatchDecodeLengthOverflow = fmt.Errorf("compress: BytesArrayDecodeAll length overflow")
+	errBytesBatchDecodeShortBuffer    = fmt.Errorf("compress: BytesArrayDecodeAll short buffer")
 )
 
 func BytesArrayEncodedSize(src [][]byte) int {
@@ -38,24 +36,20 @@ func BytesArrayEncodedSize(src [][]byte) int {
 // The returned slice may be of a different length and capactity to b.
 //
 // Currently only the string compression scheme used snappy.
-func BytesArrayEncodeAll(src [][]byte, w io.Writer) ([]byte, []byte, error) {
+func BytesArrayEncodeAll(src [][]byte, w io.Writer) error {
 	w.Write([]byte{bytesUncompressed << 4})
 	if len(src) == 0 {
-		return nil, nil, nil
+		return nil
 	}
 
 	var buf [binary.MaxVarintLen64]byte
-	min := src[0]
-	max := src[0]
 	for i := range src {
 		l := binary.PutUvarint(buf[:], uint64(len(src[i])))
 		w.Write(buf[:l])
 		w.Write(src[i])
-		min = util.MinBytes(min, src[i])
-		max = util.MaxBytes(max, src[i])
 	}
 
-	return min, max, nil
+	return nil
 }
 
 func BytesArrayDecodeAll(b []byte, dst [][]byte) ([][]byte, error) {

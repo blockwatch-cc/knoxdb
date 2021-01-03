@@ -253,10 +253,10 @@ func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 
 // TODO: support more complex cond matches, right now this is a simple AND
 func (q *Query) MakePackSchedule(reverse bool) []int {
-	schedule := make([]int, 0, q.table.packs.Len())
+	schedule := make([]int, 0, q.table.packidx.Len())
 	// walk list in pk order (pairs are always sorted by min pk)
-	for _, p := range q.table.packs.pairs {
-		if q.Conditions.MaybeMatchPack(q.table.packs.heads[p.pos]) {
+	for _, p := range q.table.packidx.pairs {
+		if q.Conditions.MaybeMatchPack(q.table.packidx.packs[p.pos]) {
 			schedule = append(schedule, p.pos)
 		}
 	}
@@ -272,11 +272,11 @@ func (q *Query) MakePackSchedule(reverse bool) []int {
 
 // ordered list of packs that may contain matching ids (list can be reversed)
 func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
-	schedule := make([]int, 0, q.table.packs.Len())
+	schedule := make([]int, 0, q.table.packidx.Len())
 	slice := vec.Uint64Slice(ids)
 
 	// extract min/max values from pack header's pk column
-	mins, maxs := q.table.packs.MinMaxSlices()
+	mins, maxs := q.table.packidx.MinMaxSlices()
 
 	// create schedule, note that this schedule may contain too many packs
 	// because we only test the global max/min of requested lookup id's

@@ -10,8 +10,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
-	"blockwatch.cc/knoxdb/util"
-	. "blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 var bigEndian = binary.BigEndian
@@ -113,8 +112,11 @@ func (t BlockType) String() string {
 }
 
 type Block struct {
-	head  Header
-	dirty bool
+	typ    BlockType
+	comp   Compression
+	ignore bool
+	dirty  bool
+	size   int // stored size, debug data
 
 	// TODO: measure performance impact of using an interface instead of direct slices
 	//       this can save up to 15x storage for slice headers / pointers
@@ -122,9 +124,9 @@ type Block struct {
 	// data interface{}
 	Strings []string
 	Bytes   [][]byte
-	Bits    *BitSet // -> BitSet
-	Int64   []int64 // re-used by Decimal64, Timestamps
-	Int32   []int32 // re-used by Decimal32
+	Bits    *vec.BitSet // -> BitSet
+	Int64   []int64     // re-used by Decimal64, Timestamps
+	Int32   []int32     // re-used by Decimal32
 	Int16   []int16
 	Int8    []int8
 	Uint64  []uint64
@@ -133,49 +135,45 @@ type Block struct {
 	Uint8   []uint8
 	Float64 []float64
 	Float32 []float32
-	Int128  []Int128 // re-used by Decimal128, Int128
-	Int256  []Int256 // re-used by Decimal256, Int256
-}
-
-func (b Block) Header() Header {
-	return b.head.Clone()
+	Int128  []vec.Int128 // re-used by Decimal128, Int128
+	Int256  []vec.Int256 // re-used by Decimal256, Int256
 }
 
 func (b Block) Type() BlockType {
-	return b.head.Type
+	return b.typ
 }
 
 func (b Block) Compression() Compression {
-	return b.head.Compression
+	return b.comp
 }
 
-func (b Block) Scale() int {
-	return b.head.Scale
-}
-
-func (b *Block) SetScale(s int) {
-	b.head.Scale = s
+func (b Block) CompressedSize() int {
+	return b.size
 }
 
 func (b *Block) IsIgnore() bool {
-	return b.head.Type == BlockIgnore
+	return b.ignore
 }
 
-func (b *Block) SetIgnore() {
-	b.head.Type = BlockIgnore
-	b.Release()
+func (b *Block) IsDirty() bool {
+	return b.dirty
 }
 
 func (b *Block) SetDirty() {
 	b.dirty = true
 }
 
-func (b Block) Dirty() bool {
-	return b.dirty
+func (b *Block) SetIgnore() {
+	b.ignore = true
+	b.Release()
+}
+
+func (b *Block) SetCompression(c Compression) {
+	b.comp = c
 }
 
 func (b Block) RawSlice() interface{} {
-	switch b.Type() {
+	switch b.typ {
 	case BlockInt64, BlockTime:
 		return b.Int64
 	case BlockFloat64:
@@ -212,7 +210,7 @@ func (b Block) RawSlice() interface{} {
 }
 
 func (b Block) RangeSlice(start, end int) interface{} {
-	switch b.Type() {
+	switch b.typ {
 	case BlockInt64, BlockTime:
 		return b.Int64[start:end]
 	case BlockFloat64:
@@ -252,9 +250,11 @@ func AllocBlock() *Block {
 	return BlockPool.Get().(*Block)
 }
 
-func NewBlock(typ BlockType, sz int, comp Compression, scale int) (*Block, error) {
+func NewBlock(typ BlockType, comp Compression, sz int) *Block {
 	b := BlockPool.Get().(*Block)
-	b.head = NewHeader(typ, comp, scale)
+	b.typ = typ
+	b.comp = comp
+	b.dirty = true
 	switch typ {
 	case BlockInt64, BlockTime:
 		if sz <= DefaultMaxPointsPerBlock {
@@ -317,7 +317,7 @@ func NewBlock(typ BlockType, sz int, comp Compression, scale int) (*Block, error
 			b.Uint8 = make([]uint8, 0, sz)
 		}
 	case BlockBool:
-		b.Bits = NewBitSet(sz)
+		b.Bits = vec.NewBitSet(sz)
 	case BlockString:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Strings = stringPool.Get().([]string)
@@ -332,29 +332,29 @@ func NewBlock(typ BlockType, sz int, comp Compression, scale int) (*Block, error
 		}
 	case BlockInt128:
 		if sz <= DefaultMaxPointsPerBlock {
-			b.Int128 = int128Pool.Get().([]Int128)
+			b.Int128 = int128Pool.Get().([]vec.Int128)
 		} else {
-			b.Int128 = make([]Int128, 0, sz)
+			b.Int128 = make([]vec.Int128, 0, sz)
 		}
 	case BlockInt256:
 		if sz <= DefaultMaxPointsPerBlock {
-			b.Int256 = int256Pool.Get().([]Int256)
+			b.Int256 = int256Pool.Get().([]vec.Int256)
 		} else {
-			b.Int256 = make([]Int256, 0, sz)
+			b.Int256 = make([]vec.Int256, 0, sz)
 		}
-	default:
-		return nil, fmt.Errorf("block: invalid data type %s (%[1]d)", typ)
 	}
-	return b, nil
+	return b
 }
 
 func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 	cp := BlockPool.Get().(*Block)
-	cp.head = b.head.Clone()
-	if !copydata {
-		cp.head.Clear()
+	cp.typ = b.typ
+	cp.comp = b.comp
+	cp.dirty = b.dirty
+	if copydata {
+		cp.size = b.size
 	}
-	switch b.Type() {
+	switch b.typ {
 	case BlockInt64, BlockTime:
 		if sz <= DefaultMaxPointsPerBlock {
 			cp.Int64 = int64Pool.Get().([]int64)[:0]
@@ -457,9 +457,9 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 		}
 	case BlockBool:
 		if copydata {
-			cp.Bits = NewBitSetFromBytes(b.Bits.Bytes(), b.Bits.Len())
+			cp.Bits = vec.NewBitSetFromBytes(b.Bits.Bytes(), b.Bits.Len())
 		} else {
-			cp.Bits = NewBitSet(sz)
+			cp.Bits = vec.NewBitSet(sz)
 		}
 	case BlockString:
 		if sz <= DefaultMaxPointsPerBlock {
@@ -486,9 +486,9 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 		}
 	case BlockInt128:
 		if sz <= DefaultMaxPointsPerBlock {
-			cp.Int128 = int128Pool.Get().([]Int128)[:0]
+			cp.Int128 = int128Pool.Get().([]vec.Int128)[:0]
 		} else {
-			cp.Int128 = make([]Int128, 0, sz)
+			cp.Int128 = make([]vec.Int128, 0, sz)
 		}
 		if copydata {
 			cp.Int128 = cp.Int128[:sz]
@@ -496,22 +496,22 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 		}
 	case BlockInt256:
 		if sz <= DefaultMaxPointsPerBlock {
-			cp.Int256 = int256Pool.Get().([]Int256)[:0]
+			cp.Int256 = int256Pool.Get().([]vec.Int256)[:0]
 		} else {
-			cp.Int256 = make([]Int256, 0, sz)
+			cp.Int256 = make([]vec.Int256, 0, sz)
 		}
 		if copydata {
 			cp.Int256 = cp.Int256[:sz]
 			copy(cp.Int256, b.Int256)
 		}
 	default:
-		return nil, fmt.Errorf("block: invalid data type %s (%[1]d)", b.Type())
+		return nil, fmt.Errorf("block: invalid data type %s (%[1]d)", b.typ)
 	}
 	return cp, nil
 }
 
 func (b *Block) Len() int {
-	switch b.Type() {
+	switch b.typ {
 	case BlockFloat64:
 		return len(b.Float64)
 	case BlockFloat32:
@@ -548,7 +548,7 @@ func (b *Block) Len() int {
 }
 
 func (b *Block) Cap() int {
-	switch b.Type() {
+	switch b.typ {
 	case BlockFloat64:
 		return cap(b.Float64)
 	case BlockFloat32:
@@ -588,11 +588,11 @@ func (b *Block) Cap() int {
 // of this block. The true size may be smaller due to efficient type-based
 // compression and generic subsequent block compression.
 //
-// This size hint is used to properly dimension the decoder buffer before
-// decoding as is required by LZ4.
+// This size hint is used to properly dimension the encoer/decoder buffers
+// as is required by LZ4 and to avoid memcopy during write.
 func (b *Block) MaxStoredSize() int {
 	var sz int
-	switch b.Type() {
+	switch b.typ {
 	case BlockFloat64:
 		sz = compress.Float64ArrayEncodedSize(b.Float64)
 	case BlockFloat32:
@@ -624,68 +624,56 @@ func (b *Block) MaxStoredSize() int {
 	case BlockInt256:
 		sz = compress.Int256ArrayEncodedSize(b.Int256)
 	}
-	return sz + storedBlockHeaderSize + b.head.Compression.HeaderSize(sz)
+	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
 }
 
 func (b *Block) HeapSize() int {
 	const (
 		sliceSize  = 24 // reflect.SliceHeader incl. padding
 		stringSize = 16 // reflect.StringHeader incl. padding
-		headerSize = 26 // base header with interface pointers (?)
 	)
-	sz := headerSize + 15*sliceSize
-	switch b.Type() {
+	sz := 3 + 15*sliceSize
+	switch b.typ {
 	case BlockFloat64:
-		sz += len(b.Float64)*8 + 2*8
+		sz += len(b.Float64) * 8
 	case BlockFloat32:
-		sz += len(b.Float32)*4 + 2*4
+		sz += len(b.Float32) * 4
 	case BlockInt64, BlockTime:
-		sz += len(b.Int64)*8 + 2*8
+		sz += len(b.Int64) * 8
 	case BlockInt32:
-		sz += len(b.Int32)*4 + 2*4
+		sz += len(b.Int32) * 4
 	case BlockInt16:
-		sz += len(b.Int16)*2 + 2*2
+		sz += len(b.Int16) * 2
 	case BlockInt8:
-		sz += len(b.Int8) + 2
+		sz += len(b.Int8)
 	case BlockUint64:
-		sz += len(b.Uint64)*8 + 2*8
+		sz += len(b.Uint64) * 8
 	case BlockUint32:
-		sz += len(b.Uint32)*4 + 2*4
+		sz += len(b.Uint32) * 4
 	case BlockUint16:
-		sz += len(b.Uint16)*2 + 2*2
+		sz += len(b.Uint16) * 2
 	case BlockUint8:
-		sz += len(b.Uint8) + 2
+		sz += len(b.Uint8)
 	case BlockBool:
-		sz += b.Bits.HeapSize() + 2
+		sz += b.Bits.HeapSize()
 	case BlockString:
-		min, max := 0, 0
 		for _, v := range b.Strings {
-			l := len(v)
-			min = util.Min(min, l)
-			max = util.Max(max, l)
-			sz += l + stringSize
+			sz += len(v) + stringSize
 		}
-		sz += min + max + 2*stringSize
 	case BlockBytes:
-		min, max := 0, 0
 		for _, v := range b.Bytes {
-			l := len(v)
-			min = util.Min(min, l)
-			max = util.Max(max, l)
-			sz += l + sliceSize
+			sz += len(v) + sliceSize
 		}
-		sz += min + max + 2*sliceSize
 	case BlockInt128:
-		sz += len(b.Int128)*16 + 2*16
+		sz += len(b.Int128) * 16
 	case BlockInt256:
-		sz += len(b.Int256)*32 + 2*32
+		sz += len(b.Int256) * 32
 	}
 	return sz
 }
 
 func (b *Block) Clear() {
-	b.head.Clear()
-	switch b.Type() {
+	switch b.typ {
 	case BlockInt64, BlockTime:
 		b.Int64 = b.Int64[:0]
 	case BlockInt32:
@@ -717,20 +705,22 @@ func (b *Block) Clear() {
 		}
 		b.Bytes = b.Bytes[:0]
 	case BlockBool:
-		b.Bits.Zero()
+		b.Bits.Grow(0)
 	case BlockInt128:
 		b.Int128 = b.Int128[:0]
 	case BlockInt256:
 		b.Int256 = b.Int256[:0]
 	}
-	b.dirty = false
+	b.dirty = true
+	b.size = 0
 }
 
 func (b *Block) Release() {
-	b.head.MinValue = nil
-	b.head.MaxValue = nil
+	b.ignore = false
 	b.dirty = false
-	switch b.Type() {
+	b.size = 0
+
+	switch b.typ {
 	case BlockFloat64:
 		if cap(b.Float64) == DefaultMaxPointsPerBlock {
 			float64Pool.Put(b.Float64[:0])
@@ -816,238 +806,69 @@ func (b *Block) Release() {
 	BlockPool.Put(b)
 }
 
-func (b *Block) Encode() ([]byte, []byte, error) {
-	// Pass 1: serialize + compress data, update statistics
-	body, err := b.EncodeBody()
-	if err != nil {
-		return nil, nil, err
+func (b *Block) Encode(buf *bytes.Buffer) (int, error) {
+	if buf == nil {
+		return 0, fmt.Errorf("block: nil buffer while encoding")
 	}
-	// Pass 2: encode header with updated stats (min/max)
-	buf := bytes.NewBuffer(make([]byte, 0, b.head.EncodedSize()))
-	err = b.head.Encode(buf)
-	if err != nil {
-		return nil, nil, err
-	}
-	return buf.Bytes(), body, nil
-}
+	var (
+		err error
+		n   int
+	)
 
-// - analyzes values to determine best compression
-// - uses buffer pool to allocate output slice once and avoid memcopy
-// - compression is used as hint, data may be stored uncompressed
-func (b *Block) EncodeBody() ([]byte, error) {
-	var buf *bytes.Buffer
-	sz := b.MaxStoredSize()
-	if sz <= BlockSizeHint {
-		buf = bytes.NewBuffer(BlockEncoderPool.Get().([]byte)[:0])
-	} else {
-		buf = bytes.NewBuffer(make([]byte, 0, sz))
-	}
-
-	switch b.Type() {
+	switch b.typ {
 	case BlockTime:
-		min, max, err := encodeTimeBlock(buf, b.Int64, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = time.Unix(0, min).UTC()
-			b.head.MaxValue = time.Unix(0, max).UTC()
-			b.dirty = false
-		}
-
+		n, err = encodeTimeBlock(buf, b.Int64, b.Compression())
 	case BlockFloat64:
-		min, max, err := encodeFloat64Block(buf, b.Float64, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeFloat64Block(buf, b.Float64, b.Compression())
 	case BlockFloat32:
-		min, max, err := encodeFloat32Block(buf, b.Float32, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeFloat32Block(buf, b.Float32, b.Compression())
 	case BlockInt64:
-		min, max, err := encodeInt64Block(buf, b.Int64, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeInt64Block(buf, b.Int64, b.Compression())
 	case BlockInt32:
-		min, max, err := encodeInt32Block(buf, b.Int32, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeInt32Block(buf, b.Int32, b.Compression())
 	case BlockInt16:
-		min, max, err := encodeInt16Block(buf, b.Int16, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
+		n, err = encodeInt16Block(buf, b.Int16, b.Compression())
 	case BlockInt8:
-		min, max, err := encodeInt8Block(buf, b.Int8, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeInt8Block(buf, b.Int8, b.Compression())
 	case BlockUint64:
-		min, max, err := encodeUint64Block(buf, b.Uint64, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeUint64Block(buf, b.Uint64, b.Compression())
 	case BlockUint32:
-		min, max, err := encodeUint32Block(buf, b.Uint32, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeUint32Block(buf, b.Uint32, b.Compression())
 	case BlockUint16:
-		min, max, err := encodeUint16Block(buf, b.Uint16, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeUint16Block(buf, b.Uint16, b.Compression())
 	case BlockUint8:
-		min, max, err := encodeUint8Block(buf, b.Uint8, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeUint8Block(buf, b.Uint8, b.Compression())
 	case BlockBool:
-		min, max, err := encodeBoolBlock(buf, b.Bits, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeBoolBlock(buf, b.Bits, b.Compression())
 	case BlockString:
-		min, max, err := encodeStringBlock(buf, b.Strings, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeStringBlock(buf, b.Strings, b.Compression())
 	case BlockBytes:
-		min, max, err := encodeBytesBlock(buf, b.Bytes, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeBytesBlock(buf, b.Bytes, b.Compression())
 	case BlockInt128:
-		min, max, err := encodeInt128Block(buf, b.Int128, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
+		n, err = encodeInt128Block(buf, b.Int128, b.Compression())
 	case BlockInt256:
-		min, max, err := encodeInt256Block(buf, b.Int256, b.Compression())
-		if err != nil {
-			return nil, err
-		}
-		if b.dirty {
-			b.head.MinValue = min
-			b.head.MaxValue = max
-			b.dirty = false
-		}
-
-	case BlockIgnore:
-		b.dirty = false
-		return nil, nil
-
+		n, err = encodeInt256Block(buf, b.Int256, b.Compression())
 	default:
-		return nil, fmt.Errorf("block: invalid data type %d (%[1]d)", b.Type())
+		n, err = 0, fmt.Errorf("block: invalid data type %d (%[1]d)", b.typ)
 	}
-	return buf.Bytes(), nil
+	if err != nil {
+		return n, err
+	}
+	b.dirty = false
+	b.size = n
+	return n, nil
 }
 
-func (b *Block) DecodeHeader(buf *bytes.Buffer) error {
-	return b.head.Decode(buf)
-}
-
-// raw -> values
-func (b *Block) DecodeBody(buf []byte, sz int) error {
-	// skip blocks that are set to type ignore before decoding
-	// this is the core magic of skipping blocks on load
-	if b.Type() == BlockIgnore {
-		return nil
-	}
-
+func (b *Block) Decode(buf []byte, sz, stored int) error {
 	var err error
-	b.head.Type, err = readBlockType(buf)
+	b.typ, err = readBlockType(buf)
 	if err != nil {
 		return err
 	}
+	b.dirty = false
+	b.size = stored
 
-	switch b.Type() {
+	switch b.typ {
 	case BlockTime:
 		if b.Int64 == nil || cap(b.Int64) < sz {
 			b.Int64 = make([]int64, 0, sz)
@@ -1138,7 +959,7 @@ func (b *Block) DecodeBody(buf []byte, sz int) error {
 
 	case BlockBool:
 		if b.Bits == nil || b.Bits.Cap() < sz {
-			b.Bits = NewBitSet(sz)
+			b.Bits = vec.NewBitSet(sz)
 		} else {
 			b.Bits.Grow(sz).Reset()
 		}
@@ -1162,7 +983,7 @@ func (b *Block) DecodeBody(buf []byte, sz int) error {
 
 	case BlockInt128:
 		if b.Int128 == nil || cap(b.Int128) < sz {
-			b.Int128 = make([]Int128, 0, sz)
+			b.Int128 = make([]vec.Int128, 0, sz)
 		} else {
 			b.Int128 = b.Int128[:0]
 		}
@@ -1170,16 +991,57 @@ func (b *Block) DecodeBody(buf []byte, sz int) error {
 
 	case BlockInt256:
 		if b.Int256 == nil || cap(b.Int256) < sz {
-			b.Int256 = make([]Int256, 0, sz)
+			b.Int256 = make([]vec.Int256, 0, sz)
 		} else {
 			b.Int256 = b.Int256[:0]
 		}
 		b.Int256, err = decodeInt256Block(buf, b.Int256)
 
-	case BlockIgnore:
-
 	default:
-		err = fmt.Errorf("block: invalid data type %s (%[1]d)", b.Type())
+		err = fmt.Errorf("block: invalid data type %s (%[1]d)", b.typ)
 	}
 	return err
+}
+
+func (b *Block) MinMax() (interface{}, interface{}) {
+	switch b.typ {
+	case BlockTime:
+		min, max := vec.Int64Slice(b.Int64).MinMax()
+		return time.Unix(0, min).UTC(), time.Unix(0, max).UTC()
+	case BlockFloat64:
+		return vec.Float64Slice(b.Float64).MinMax()
+	case BlockFloat32:
+		return vec.Float32Slice(b.Float32).MinMax()
+	case BlockInt64:
+		return vec.Int64Slice(b.Int64).MinMax()
+	case BlockInt32:
+		return vec.Int32Slice(b.Int32).MinMax()
+	case BlockInt16:
+		return vec.Int16Slice(b.Int16).MinMax()
+	case BlockInt8:
+		return vec.Int8Slice(b.Int8).MinMax()
+	case BlockUint64:
+		return vec.Uint64Slice(b.Uint64).MinMax()
+	case BlockUint32:
+		return vec.Uint32Slice(b.Uint32).MinMax()
+	case BlockUint16:
+		return vec.Uint16Slice(b.Uint16).MinMax()
+	case BlockUint8:
+		return vec.Uint8Slice(b.Uint8).MinMax()
+	case BlockBool:
+		if b.Bits.Len() > 0 && b.Bits.Count() > 0 {
+			return true, false
+		}
+		return false, false
+	case BlockString:
+		return vec.StringSlice(b.Strings).MinMax()
+	case BlockBytes:
+		return vec.ByteSlice(b.Bytes).MinMax()
+	case BlockInt128:
+		return vec.Int128Slice(b.Int128).MinMax()
+	case BlockInt256:
+		return vec.Int256Slice(b.Int256).MinMax()
+	default:
+		return nil, nil
+	}
 }

@@ -120,8 +120,8 @@ func makeReadWriteTestPackage(fields FieldList, c block.Compression, sz int) *Pa
 			fields[i].Flags &^= FlagCompressLZ4 | FlagCompressSnappy
 		}
 	}
-	pkg := NewPackage()
-	pkg.InitFields(fields, sz)
+	pkg := NewPackage(sz)
+	pkg.InitFields(fields, nil)
 	now := time.Now().UTC()
 	for i := 0; i < sz; i++ {
 		pkg.Append()
@@ -225,7 +225,7 @@ func BenchmarkPackReadLZ4(B *testing.B) {
 			B.ReportAllocs()
 			B.SetBytes(int64(len(buf)))
 			for b := 0; b < B.N; b++ {
-				pkg2 := NewPackage()
+				pkg2 := NewPackage(0)
 				err := pkg2.UnmarshalBinary(buf)
 				if err != nil {
 					B.Fatalf("read error: %v", err)
@@ -248,7 +248,7 @@ func BenchmarkPackReadSnappy(B *testing.B) {
 			B.ReportAllocs()
 			B.SetBytes(int64(len(buf)))
 			for b := 0; b < B.N; b++ {
-				pkg2 := NewPackage()
+				pkg2 := NewPackage(0)
 				err := pkg2.UnmarshalBinary(buf)
 				if err != nil {
 					B.Fatalf("read error: %v", err)
@@ -271,7 +271,7 @@ func BenchmarkPackReadNoCompression(B *testing.B) {
 			B.ReportAllocs()
 			B.SetBytes(int64(len(buf)))
 			for b := 0; b < B.N; b++ {
-				pkg2 := NewPackage()
+				pkg2 := NewPackage(0)
 				err := pkg2.UnmarshalBinary(buf)
 				if err != nil {
 					B.Fatalf("read error: %v", err)

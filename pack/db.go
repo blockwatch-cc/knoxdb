@@ -11,6 +11,7 @@ import (
 	"io"
 	"path/filepath"
 
+	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/store"
 )
 
@@ -240,7 +241,7 @@ func (tx *Tx) loadPack(name, key []byte, unpack *Package) (*Package, error) {
 
 func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package) (*Package, error) {
 	if unpack == nil {
-		unpack = NewPackage()
+		unpack = NewPackage(block.DefaultMaxPointsPerBlock)
 	}
 	b := dbTx.Bucket(name)
 	if b == nil {
@@ -253,7 +254,7 @@ func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package) (*Package, err
 	if err := unpack.UnmarshalBinary(buf); err != nil {
 		return nil, err
 	}
-	unpack.key = key
+	unpack.SetKey(key)
 	unpack.dirty = false
 	return unpack, nil
 }
@@ -275,7 +276,6 @@ func storePackTx(dbTx store.Tx, name, key []byte, p *Package, fill int) (int, er
 	if err != nil {
 		return 0, err
 	}
-	p.key = key
 	p.dirty = false
 	return len(buf), nil
 }

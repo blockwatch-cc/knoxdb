@@ -58,7 +58,7 @@ func TimeArrayEncodedSize(src []int64) int {
 // Important: TimeArrayEncodeAll modifies the contents of src by using it as
 // scratch space for delta encoded values. It is NOT SAFE to use src after
 // passing it into TimeArrayEncodeAll.
-func TimeArrayEncodeAll(src []int64, w io.Writer) (int64, int64, error) {
+func TimeArrayEncodeAll(src []int64, w io.Writer) error {
 	var (
 		maxdelta, div uint64 = 0, 1e12
 		ordered       bool   = true
@@ -66,9 +66,8 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int64, int64, error) {
 	)
 
 	if l == 0 {
-		return 0, 0, nil // Nothing to do
+		return nil // Nothing to do
 	}
-	min, max := src[l-1], src[l-1]
 
 	// To prevent an allocation of the entire block we reuse the
 	// src slice to store the encoded deltas.
@@ -94,12 +93,6 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int64, int64, error) {
 
 			deltas[l-1] /= div
 			for i := l - 1; i > 1; i-- {
-				// store min/max at full scale
-				if min > src[i-1] {
-					min = src[i-1]
-				} else if max < src[i-1] {
-					max = src[i-1]
-				}
 				// apply scaling factor
 				deltas[i-1] /= div
 				// detect ordering
@@ -109,13 +102,6 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int64, int64, error) {
 				if deltas[i] > maxdelta {
 					maxdelta = deltas[i]
 				}
-			}
-			// process the first pair last
-			if min > src[0] {
-				min = src[0]
-			}
-			if max < src[0] {
-				max = src[0]
 			}
 			// remember to apply scaling to the first value, but without saving
 			// the scaled value just yet because RLE encoding relies on unaltered
@@ -128,12 +114,6 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int64, int64, error) {
 
 		} else {
 			for i := l - 1; i > 0; i-- {
-				// store min/max
-				if min > src[i-1] {
-					min = src[i-1]
-				} else if max < src[i-1] {
-					max = src[i-1]
-				}
 				// detect ordering
 				ordered = ordered && deltas[i-1] <= deltas[i]
 				// delta-encode
@@ -195,7 +175,7 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int64, int64, error) {
 			n = binary.PutUvarint(b[:], uint64(len(deltas)))
 			w.Write(b[:n])
 
-			return min, max, nil
+			return nil
 		}
 	}
 
@@ -227,13 +207,13 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int64, int64, error) {
 			binary.BigEndian.PutUint64(b[:], v)
 			w.Write(b[:])
 		}
-		return min, max, nil
+		return nil
 	}
 
 	// Encode with simple8b - fist value is written unencoded using 8 bytes.
 	encoded, err := simple8b.EncodeAll(deltas[1:])
 	if err != nil {
-		return 0, 0, err
+		return err
 	}
 
 	// 4 high bits of first byte store the encoding type for the block
@@ -256,7 +236,7 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int64, int64, error) {
 		binary.BigEndian.PutUint64(b[:], v)
 		w.Write(b[:])
 	}
-	return min, max, nil
+	return nil
 }
 
 var (

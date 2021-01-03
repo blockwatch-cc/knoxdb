@@ -101,13 +101,8 @@ func (f Field) IsValid() bool {
 	return f.Index >= 0 && f.Type.IsValid()
 }
 
-func (f Field) NewBlock(sz int) (*block.Block, error) {
-	return block.NewBlock(
-		f.Type.BlockType(),
-		sz,
-		f.Flags.Compression(),
-		f.Scale,
-	)
+func (f Field) NewBlock(sz int) *block.Block {
+	return block.NewBlock(f.Type.BlockType(), f.Flags.Compression(), sz)
 }
 
 type FieldList []Field

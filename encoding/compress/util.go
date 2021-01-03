@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	DefaultMaxPointsPerBlock = 1 << 15
+	// same as in block
+	DefaultMaxPointsPerBlock = 1 << 16
 )
 
 // ZigZagEncode converts a int64 to a uint64 by zig zagging negative and positive values

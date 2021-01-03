@@ -101,37 +101,38 @@ func (r *Result) DecodeAt(n int, val interface{}) error {
 		return ErrResultClosed
 	}
 	if r.tinfo == nil {
-		sharedTypeInfo, err := getTypeInfo(val)
-		if err != nil {
+		if err := r.buildTypeInfo(val); err != nil {
 			return err
-		}
-		r.tinfo = sharedTypeInfo.Clone()
-		for i, v := range r.tinfo.fields {
-			r.tinfo.fields[i].blockid = r.pkg.FieldIndex(v.name)
 		}
 	}
 	return r.pkg.ReadAtWithInfo(n, val, r.tinfo)
 }
 
-func (r *Result) DecodeId(id uint64, val interface{}) error {
-	if r.pkg == nil {
-		return ErrResultClosed
+func (r *Result) buildTypeInfo(val interface{}) error {
+	sharedTypeInfo, err := getTypeInfo(val)
+	if err != nil {
+		return err
 	}
-	n := r.pkg.PkIndex(id, 0)
-	if n < 0 {
-		return ErrIdNotFound
+	r.tinfo = sharedTypeInfo.Clone()
+	for i, v := range r.tinfo.fields {
+		r.tinfo.fields[i].blockid = r.pkg.FieldIndex(v.name)
 	}
-	return r.pkg.ReadAt(n, val)
+	return nil
 }
 
 func (r *Result) DecodeRange(start, end int, proto interface{}) (interface{}, error) {
 	if r.pkg == nil {
 		return nil, ErrResultClosed
 	}
+	if r.tinfo == nil {
+		if err := r.buildTypeInfo(proto); err != nil {
+			return nil, err
+		}
+	}
 	typ := reflect.Indirect(reflect.ValueOf(proto)).Type()
 	slice := reflect.MakeSlice(reflect.SliceOf(typ), end-start, end-start)
 	for i := start; i < end; i++ {
-		if err := r.pkg.ReadAt(i, slice.Index(i-start).Interface()); err != nil {
+		if err := r.pkg.ReadAtWithInfo(i, slice.Index(i-start).Interface(), r.tinfo); err != nil {
 			return nil, err
 		}
 	}
@@ -144,6 +145,31 @@ func (r *Result) Walk(fn func(r Row) error) error {
 	}
 	for i, l := 0, r.pkg.Len(); i < l; i++ {
 		if err := fn(Row{res: r, n: i}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Result) ForEach(proto interface{}, fn func(i int, val interface{}) error) error {
+	if r.pkg == nil {
+		return ErrResultClosed
+	}
+	if r.tinfo == nil {
+		if err := r.buildTypeInfo(proto); err != nil {
+			return err
+		}
+	}
+	typ := derefIndirect(proto).Type()
+	for i := 0; i < r.pkg.nValues; i++ {
+		// create new empty value for interface prototype
+		val := reflect.New(typ)
+		// unmarshal and map
+		if err := r.pkg.ReadAtWithInfo(i, val.Interface(), r.tinfo); err != nil {
+			return err
+		}
+		// forward to callback
+		if err := fn(i, val.Interface()); err != nil {
 			return err
 		}
 	}
@@ -457,7 +483,7 @@ func (r *Result) Decimal256Column(colname string) (Decimal256Slice, error) {
 	if !ok {
 		return Decimal256Slice{}, ErrTypeMismatch
 	}
-	return Decimal256Slice{tcol, r.pkg.blocks[r.pkg.FieldIndex(colname)].Scale()}, nil
+	return Decimal256Slice{tcol, r.pkg.fields[r.pkg.FieldIndex(colname)].Scale}, nil
 }
 
 func (r *Result) Decimal128Column(colname string) (Decimal128Slice, error) {
@@ -469,7 +495,7 @@ func (r *Result) Decimal128Column(colname string) (Decimal128Slice, error) {
 	if !ok {
 		return Decimal128Slice{}, ErrTypeMismatch
 	}
-	return Decimal128Slice{tcol, r.pkg.blocks[r.pkg.FieldIndex(colname)].Scale()}, nil
+	return Decimal128Slice{tcol, r.pkg.fields[r.pkg.FieldIndex(colname)].Scale}, nil
 }
 
 func (r *Result) Decimal64Column(colname string) (Decimal64Slice, error) {
@@ -481,7 +507,7 @@ func (r *Result) Decimal64Column(colname string) (Decimal64Slice, error) {
 	if !ok {
 		return Decimal64Slice{}, ErrTypeMismatch
 	}
-	return Decimal64Slice{tcol, r.pkg.blocks[r.pkg.FieldIndex(colname)].Scale()}, nil
+	return Decimal64Slice{tcol, r.pkg.fields[r.pkg.FieldIndex(colname)].Scale}, nil
 }
 
 func (r *Result) Decimal32Column(colname string) (Decimal32Slice, error) {
@@ -493,7 +519,7 @@ func (r *Result) Decimal32Column(colname string) (Decimal32Slice, error) {
 	if !ok {
 		return Decimal32Slice{}, ErrTypeMismatch
 	}
-	return Decimal32Slice{tcol, r.pkg.blocks[r.pkg.FieldIndex(colname)].Scale()}, nil
+	return Decimal32Slice{tcol, r.pkg.fields[r.pkg.FieldIndex(colname)].Scale}, nil
 }
 
 func (r *Result) Float64Column(colname string) ([]float64, error) {

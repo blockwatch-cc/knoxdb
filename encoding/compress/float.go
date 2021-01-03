@@ -24,7 +24,7 @@ const (
 )
 
 var (
-	errFloatBatchDecodeShortBuffer = fmt.Errorf("pack: FloatArrayDecodeAll short buffer")
+	errFloatBatchDecodeShortBuffer = fmt.Errorf("compress: FloatArrayDecodeAll short buffer")
 )
 
 // uvnan is the constant returned from math.NaN().
@@ -53,7 +53,7 @@ func Float32ArrayEncodedSize(src []float32) int {
 //
 // Currently only the float compression scheme used in Facebook's Gorilla is
 // supported, so this method implements a batch oriented version of that.
-func FloatArrayEncodeAll(src []float64, w io.Writer) (float64, float64, error) {
+func FloatArrayEncodeAll(src []float64, w io.Writer) error {
 	// the original algorithm writes directly to a target []byte slice
 	// and we don't want to change this, so we allocate a slice and
 	// write it to the io.Writer at the very end
@@ -64,17 +64,14 @@ func FloatArrayEncodeAll(src []float64, w io.Writer) (float64, float64, error) {
 
 	var first float64
 	var finished bool
-	var min, max float64
 	if len(src) > 0 && math.IsNaN(src[0]) {
-		return 0, 0, fmt.Errorf("pack: unsupported float value: NaN")
+		return fmt.Errorf("compress: unsupported float value: NaN")
 	} else if len(src) == 0 {
 		first = math.NaN() // Write sentinal value to terminate batch.
 		finished = true
 	} else {
 		first = src[0]
 		src = src[1:]
-		min = first
-		max = first
 	}
 
 	b = b[:9]
@@ -94,8 +91,6 @@ func FloatArrayEncodeAll(src []float64, w io.Writer) (float64, float64, error) {
 		var x float64
 		if i < len(src) {
 			x = src[i]
-			min = math.Min(min, x)
-			max = math.Max(max, x)
 			sum += x
 		} else {
 			// Encode sentinal value to terminate batch
@@ -288,7 +283,7 @@ func FloatArrayEncodeAll(src []float64, w io.Writer) (float64, float64, error) {
 	}
 
 	if math.IsNaN(sum) {
-		return 0, 0, fmt.Errorf("pack: unsupported float value: NaN")
+		return fmt.Errorf("compress: unsupported float value: NaN")
 	}
 
 	length := n >> 3
@@ -298,7 +293,7 @@ func FloatArrayEncodeAll(src []float64, w io.Writer) (float64, float64, error) {
 
 	// write out to writer
 	_, err := w.Write(b[:length])
-	return min, max, err
+	return err
 }
 
 // bitMask contains a lookup table where the index is the number of bits
