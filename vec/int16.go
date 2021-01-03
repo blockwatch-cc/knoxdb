@@ -60,6 +60,25 @@ func (s Int16Slice) Less(i, j int) bool { return s[i] < s[j] }
 func (s Int16Slice) Len() int           { return len(s) }
 func (s Int16Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
+func (s *Int16Slice) AddUnique(val int16) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *Int16Slice) Remove(val int16) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
+}
+
 func (s Int16Slice) Contains(val int16) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {

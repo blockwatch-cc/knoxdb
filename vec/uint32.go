@@ -64,6 +64,25 @@ func (s Uint32Slice) Unique() Uint32Slice {
 	return UniqueUint32Slice(s)
 }
 
+func (s *Uint32Slice) AddUnique(val uint32) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *Uint32Slice) Remove(val uint32) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
+}
+
 func (s Uint32Slice) Contains(val uint32) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {

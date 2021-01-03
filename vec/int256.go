@@ -740,6 +740,25 @@ func MatchInt256Between(src []Int256, a, b Int256, bits, mask *BitSet) *BitSet {
 
 type Int256Slice []Int256
 
+func (s *Int256Slice) AddUnique(val Int256) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *Int256Slice) Remove(val Int256) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
+}
+
 func (s Int256Slice) Contains(val Int256) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {

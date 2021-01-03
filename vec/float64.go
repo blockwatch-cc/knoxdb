@@ -60,6 +60,25 @@ func (s Float64Slice) Less(i, j int) bool { return s[i] < s[j] }
 func (s Float64Slice) Len() int           { return len(s) }
 func (s Float64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
+func (s *Float64Slice) AddUnique(val float64) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *Float64Slice) Remove(val float64) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
+}
+
 func (s Float64Slice) Contains(val float64) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {

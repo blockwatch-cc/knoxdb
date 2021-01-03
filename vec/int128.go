@@ -610,6 +610,25 @@ func MatchInt128Between(src []Int128, a, b Int128, bits, mask *BitSet) *BitSet {
 
 type Int128Slice []Int128
 
+func (s *Int128Slice) AddUnique(val Int128) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *Int128Slice) Remove(val Int128) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
+}
+
 func (s Int128Slice) Contains(val Int128) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {

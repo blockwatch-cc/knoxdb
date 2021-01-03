@@ -61,6 +61,25 @@ func (s StringSlice) Less(i, j int) bool { return strings.Compare(s[i], s[j]) < 
 func (s StringSlice) Len() int           { return len(s) }
 func (s StringSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
+func (s *StringSlice) AddUnique(val string) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *StringSlice) Remove(val string) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
+}
+
 func (s StringSlice) Contains(val string) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
