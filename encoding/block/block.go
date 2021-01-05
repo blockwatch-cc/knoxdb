@@ -318,6 +318,7 @@ func NewBlock(typ BlockType, comp Compression, sz int) *Block {
 		}
 	case BlockBool:
 		b.Bits = vec.NewBitSet(sz)
+		b.Bits..Reset()
 	case BlockString:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Strings = stringPool.Get().([]string)
@@ -460,6 +461,7 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 			cp.Bits = vec.NewBitSetFromBytes(b.Bits.Bytes(), b.Bits.Len())
 		} else {
 			cp.Bits = vec.NewBitSet(sz)
+			cp.Bits.Reset()
 		}
 	case BlockString:
 		if sz <= DefaultMaxPointsPerBlock {
@@ -705,7 +707,7 @@ func (b *Block) Clear() {
 		}
 		b.Bytes = b.Bytes[:0]
 	case BlockBool:
-		b.Bits.Grow(0)
+		b.Bits.Reset()
 	case BlockInt128:
 		b.Int128 = b.Int128[:0]
 	case BlockInt256:
@@ -960,6 +962,7 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 	case BlockBool:
 		if b.Bits == nil || b.Bits.Cap() < sz {
 			b.Bits = vec.NewBitSet(sz)
+			b.Bits.Reset()
 		} else {
 			b.Bits.Grow(sz).Reset()
 		}

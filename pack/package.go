@@ -320,9 +320,10 @@ func (p *Package) Push(v interface{}) error {
 		case FieldTypeDatetime:
 			b.Int64 = append(b.Int64, f.Interface().(time.Time).UnixNano())
 		case FieldTypeBoolean:
-			b.Bits.Grow(b.Bits.Len() + 1)
+			l := b.Bits.Len()
+			b.Bits.Grow(l + 1)
 			if f.Bool() {
-				b.Bits.Set(b.Bits.Len())
+				b.Bits.Set(l)
 			}
 		case FieldTypeFloat64:
 			b.Float64 = append(b.Float64, f.Float())
@@ -481,21 +482,6 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 	return nil
 }
 
-// ReadAt reads a row at offset pos and unmarshals values into an arbitrary type.
-// Will set struct fields based on name and alias as defined by struct tags `pack`
-// and `json`.
-// func (p *Package) ReadAt(pos int, v interface{}) error {
-// 	if p.tinfo == nil || !p.tinfo.gotype {
-// 		tinfo, err := getTypeInfo(v)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		// cache type info for future calls
-// 		p.tinfo = tinfo
-// 	}
-// 	return p.ReadAtWithInfo(pos, v, p.tinfo)
-// }
-
 // ReadAtWithInfo reads a row at offset pos and unmarshals values into an arbitrary
 // type described by tinfo. This method has better performance than ReadAt when
 // calls are very frequent, e.g. walking all rows in a pack.
@@ -617,28 +603,6 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 	}
 	return nil
 }
-
-// func (p *Package) ForEach(proto interface{}, fn func(i int, val interface{}) error) error {
-// 	if p.tinfo == nil || !p.tinfo.gotype {
-// 		tinfo, err := getTypeInfo(proto)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		p.tinfo = tinfo
-// 	}
-// 	typ := derefIndirect(proto).Type()
-// 	for i := 0; i < p.nValues; i++ {
-// 		// create new empty value for interface prototype
-// 		val := reflect.New(typ)
-// 		if err := p.ReadAtWithInfo(i, val.Interface(), p.tinfo); err != nil {
-// 			return err
-// 		}
-// 		if err := fn(i, val.Interface()); err != nil {
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
 
 func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 	if p.nFields <= index {
@@ -1277,7 +1241,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 			copy(dst.Strings[dstPos:], src.Strings[srcPos:srcPos+n])
 
 		case FieldTypeBoolean:
-			dst.Bits.Replace(src.Bits, srcPos, srcLen, dstPos)
+			dst.Bits.Replace(src.Bits, srcPos, n, dstPos)
 
 		case FieldTypeFloat64:
 			copy(dst.Float64[dstPos:], src.Float64[srcPos:srcPos+n])

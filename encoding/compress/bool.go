@@ -40,10 +40,6 @@ func BitsetEncodeAll(src *vec.BitSet, w io.Writer) error {
 
 	// write raw bitset data
 	w.Write(src.Bytes())
-
-	if src.Count() > 0 {
-		return nil
-	}
 	return nil
 }
 
