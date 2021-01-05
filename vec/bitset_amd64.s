@@ -182,6 +182,93 @@ TEXT ·bitsetAndAVX2Flag1(SB), NOSPLIT, $0-48
 	MOVQ	dst_len+8(FP), BX
 	MOVQ	src_base+24(FP), DI
     VPXOR   Y10, Y10, Y10       // vector register for collecting ones
+
+	TESTQ	BX, BX
+	JLE		done
+	CMPQ	BX, $256     // slices smaller than 256 byte are handled separately
+	JB		prep_avx
+
+	// works for data size 256 byte
+loop_avx2:
+	BITSET_AVX2_FLAG1(VPAND)
+	LEAQ		256(DI), DI
+	LEAQ		256(SI), SI
+	SUBQ		$256, BX
+	CMPQ		BX, $256
+	JB			exit_avx2
+	JMP			loop_avx2
+
+exit_avx2:
+
+prep_avx:
+	CMPQ	BX, $16
+	JB		prep_i32
+
+	// works for data size 16 byte
+loop_avx:
+	BITSET_AVX_FLAG1(VPAND)
+	LEAQ		16(SI), SI
+	LEAQ		16(DI), DI
+	SUBL		$16, BX
+	CMPL		BX, $16
+	JB			prep_i32
+	JMP			loop_avx
+
+exit_avx:
+	VZEROUPPER
+//	TESTQ	BX, BX
+//	JLE		done
+
+	// works for data size 15 down to single byte
+prep_i32:
+    // move collected ones from AVX2 to x86 register
+    VPXOR       Y11, Y11, Y11       // Y11 = 0
+    VPCMPEQB	Y11, Y10, Y10       // for each byte of Y10: zero -> 0xff, not zero -> 0x00
+	VPMOVMSKB	Y10, R10            // move per byte MSBs into packed bitmask to r32
+    NOTL        R10
+
+//	TESTQ	BX, BX
+//	JLE		done
+//	XORQ	AX, AX
+	CMPL	BX, $4
+	JB		prep_i8
+
+loop_i32:
+	BITSET_I32_FLAG1(ANDL)
+	LEAQ	4(SI), SI
+	LEAQ	4(DI), DI
+	SUBL	$4, BX
+	CMPL	BX, $4
+	JBE		prep_i8
+	JMP		loop_i32
+
+prep_i8:
+	TESTQ	BX, BX
+	JLE		done
+	XORQ	AX, AX
+
+loop_i8:
+	BITSET_I8_FLAG1(ANDB)
+	INCQ	DI
+	INCQ	SI
+	DECL	BX
+	JZ		done
+	JMP		loop_i8
+
+done:
+    // collected ones are in R10
+	MOVQ	R10, src_base+48(FP)
+	RET
+
+
+/*
+// func bitsetAndAVX2Flag1(dst, src []byte) int
+//
+TEXT ·bitsetAndAVX2Flag1(SB), NOSPLIT, $0-48
+	MOVQ	dst_base+0(FP), SI
+	MOVQ	dst_len+8(FP), BX
+	MOVQ	src_base+24(FP), DI
+    VPXOR   Y10, Y10, Y10       // vector register for collecting ones
 	XORQ    R10, R10            // general register for collecting ones
 
 	TESTQ	BX, BX
@@ -266,7 +353,7 @@ done:
     // collected ones are in R10
 	MOVQ	R10, src_base+48(FP)
 	RET
-
+*/
 #define BITSET_AVX2_FLAG2(_FUNC) \
 	VMOVDQU		0(DI), Y0; \
 	_FUNC		0(SI), Y0, Y0; \
