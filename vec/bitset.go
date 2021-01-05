@@ -117,11 +117,11 @@ func (s *BitSet) Grow(size int) *BitSet {
 	}
 	sz := bitFieldLen(size)
 	if s.buf == nil || cap(s.buf) < sz {
-		buf := make([]byte, sz)
+		buf := make([]byte, sz, (sz>>defaultBitSetSize+1)<<defaultBitSetSize)
 		copy(buf, s.buf)
 		s.buf = buf
 	} else {
-		if size > 0 && size < s.size {
+		if size < s.size {
 			// clear trailing bytes
 			if len(s.buf) > sz {
 				s.buf[sz] = 0
@@ -130,7 +130,9 @@ func (s *BitSet) Grow(size int) *BitSet {
 				}
 			}
 			// clear trailing bits
-			s.buf[sz-1] &= bytemask(size)
+			if sz > 0 {
+				s.buf[sz-1] &= bytemask(size)
+			}
 			s.cnt = -1
 		}
 		s.buf = s.buf[:sz]
@@ -344,15 +346,17 @@ func (s *BitSet) Insert(src *BitSet, srcPos, srcLen, dstPos int) *BitSet {
 		s.cnt = -1
 	} else {
 		// slow path
+		var cnt int64
 		for i, v := range src.SubSlice(srcPos, srcLen) {
 			if !v {
 				s.clearbit(i + dstPos)
 			} else {
 				s.setbit(i + dstPos)
-				if s.cnt >= 0 {
-					s.cnt++
-				}
+				cnt++
 			}
+		}
+		if s.cnt >= 0 {
+			s.cnt += cnt
 		}
 	}
 
@@ -485,16 +489,21 @@ func (s *BitSet) Swap(i, j int) {
 	if uint(i) >= uint(s.size) || uint(j) >= uint(s.size) {
 		return
 	}
-	bi, bj := s.IsSet(i), s.IsSet(j)
-	if bi {
-		s.setbit(j)
-	} else {
-		s.clearbit(j)
-	}
-	if bj {
-		s.setbit(i)
-	} else {
-		s.clearbit(i)
+	m_i := bitmask(i)
+	m_j := bitmask(j)
+	n_i := i >> 3
+	n_j := j >> 3
+	b_i := (s.buf[n_i] & m_i) > 0
+	b_j := (s.buf[n_j] & m_j) > 0
+	switch true {
+	case b_i == b_j:
+		return
+	case b_i:
+		s.buf[n_i] &^= m_i
+		s.buf[n_j] |= m_j
+	case b_j:
+		s.buf[n_i] |= m_i
+		s.buf[n_j] &^= m_j
 	}
 }
 

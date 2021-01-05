@@ -1092,6 +1092,53 @@ func TestBitSetGrow(T *testing.T) {
 			})
 		}
 	}
+	// clear/reset bitset to zero
+	for _, sz := range bitSetSizes {
+		T.Run(f("%d_grow_0", sz), func(t *testing.T) {
+			bits := NewBitSet(sz)
+			bits.One()
+			bits.Grow(0)
+			if got, want := len(bits.Bytes()), 0; got != want {
+				T.Errorf("unexpected buf length %d, expected %d", got, want)
+				T.FailNow()
+			}
+			if got, want := bits.Len(), 0; got != want {
+				T.Errorf("unexpected size %d, expected %d", got, want)
+				T.FailNow()
+			}
+			if got, want := bits.Count(), int64(0); got != want {
+				T.Errorf("unexpected count %d, expected %d", got, want)
+				T.FailNow()
+			}
+			checkCleanTail(T, bits.Bytes())
+		})
+	}
+	// grow + 1
+	for _, sz := range bitSetSizes {
+		T.Run(f("%d_grow+1", sz), func(t *testing.T) {
+			bits := NewBitSet(sz)
+			bits.One()
+			bits.Grow(bits.Len() + 1)
+			bits.Set(bits.Len() - 1)
+			if got, want := len(bits.Bytes()), bitFieldLen(sz+1); got != want {
+				T.Errorf("unexpected buf length %d, expected %d", got, want)
+				T.FailNow()
+			}
+			if got, want := bits.Len(), sz+1; got != want {
+				T.Errorf("unexpected size %d, expected %d", got, want)
+				T.FailNow()
+			}
+			if got, want := bits.Count(), int64(sz+1); got != want {
+				T.Errorf("unexpected count %d, expected %d", got, want)
+				T.FailNow()
+			}
+			if got, want := bits.Count(), popcount(bits.Bytes()); got != want {
+				T.Errorf("unexpected real count %d, expected %d", got, want)
+				T.FailNow()
+			}
+			checkCleanTail(T, bits.Bytes())
+		})
+	}
 }
 
 func TestBitSetFill(T *testing.T) {
@@ -2279,6 +2326,35 @@ func TestBitSetSwap(T *testing.T) {
 
 // Bitset low-level benchmarks
 //
+func BenchmarkBitSetSwap(B *testing.B) {
+	for _, n := range bitSetBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			bits := fillBitset(nil, n.l, 0xfa)
+			bs := NewBitSetFromBytes(bits, n.l)
+			B.ResetTimer()
+			B.SetBytes(int64(bitFieldLen(n.l)))
+			for i := 0; i < B.N; i++ {
+				bs.Swap(0, n.l/2)
+			}
+		})
+	}
+}
+
+func BenchmarkBitSetSwapBool(B *testing.B) {
+	for _, n := range bitSetBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			bits := fillBitset(nil, n.l, 0xfa)
+			bs := NewBitSetFromBytes(bits, n.l)
+			slice := bs.Slice()
+			B.ResetTimer()
+			B.SetBytes(int64(bitFieldLen(n.l)))
+			for i := 0; i < B.N; i++ {
+				slice[0], slice[n.l/2] = slice[n.l/2], slice[0]
+			}
+		})
+	}
+}
+
 func BenchmarkBitSetIndexHighDensity(B *testing.B) {
 	for _, n := range bitSetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
