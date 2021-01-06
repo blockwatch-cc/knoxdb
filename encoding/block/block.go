@@ -318,7 +318,7 @@ func NewBlock(typ BlockType, comp Compression, sz int) *Block {
 		}
 	case BlockBool:
 		b.Bits = vec.NewBitSet(sz)
-		b.Bits..Reset()
+		b.Bits.Reset()
 	case BlockString:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Strings = stringPool.Get().([]string)
