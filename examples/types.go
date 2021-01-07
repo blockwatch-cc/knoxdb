@@ -23,7 +23,7 @@ import (
 	"blockwatch.cc/knoxdb/vec"
 )
 
-type Enum int
+type Enum uint
 
 const (
 	EnumInvalid Enum = iota // 0
@@ -86,7 +86,7 @@ type Types struct {
 	Hash      []byte             `knox:"H"                        json:"hash"`
 	String    string             `knox:"str,snappy"               json:"string"`
 	Bool      bool               `knox:"bool,snappy"              json:"bool"`
-	Enum      Enum               `knox:"enum,snappy"              json:"enum"`
+	Enum      Enum               `knox:"enum,u8,snappy"           json:"enum"`
 	Int64     int64              `knox:"i64,snappy"               json:"int64"`
 	Int32     int32              `knox:"i32,snappy"               json:"int32"`
 	Int16     int16              `knox:"i16,snappy"               json:"int16"`

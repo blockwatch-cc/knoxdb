@@ -160,6 +160,8 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, error) {
 	finfo := &fieldInfo{idx: f.Index, typname: f.Type.String()}
 	tag := f.Tag.Get(tagName)
+	kind := f.Type.Kind()
+	typname := f.Type.String()
 
 	tokens := strings.Split(tag, ",")
 	if len(tokens) > 1 {
@@ -206,7 +208,6 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 			case "scale":
 				// only compatible with Decimal data types
 				prec := 0
-				typname := f.Type.String()
 				switch finfo.typname {
 				case "decimal.Decimal32":
 					prec = MaxDecimal32Precision
@@ -227,7 +228,7 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 					case FieldTypeDecimal256:
 						prec = MaxDecimal256Precision
 					default:
-						return nil, fmt.Errorf("pack: invalid scale tag on non-decimal field '%s' %s", tag, typname)
+						return nil, fmt.Errorf("pack: invalid scale tag on non-decimal field '%s' (%s/%s)", tag, typname, kind)
 					}
 				}
 				finfo.typname = typname
@@ -247,21 +248,21 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 			// check type override matches the Go type
 			switch finfo.override {
 			case FieldTypeUint8, FieldTypeUint16, FieldTypeUint32, FieldTypeUint64:
-				switch f.Type.Kind() {
+				switch kind {
 				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 					// OK
 				default:
-					return nil, fmt.Errorf("pack: unsupported type tag '%s' on field '%s' (%s)", ff[0], tag, f.Type.String())
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on unsigned field '%s' (%s/%s)", ff[0], tag, typname, kind)
 				}
 			case FieldTypeInt8, FieldTypeInt16, FieldTypeInt32, FieldTypeInt64, FieldTypeInt128, FieldTypeInt256:
-				switch f.Type.Kind() {
+				switch kind {
 				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 					// OK
 				default:
-					return nil, fmt.Errorf("pack: unsupported type tag '%s' on field '%s' (%s)", ff[0], tag, f.Type.String())
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on integer field '%s' (%s/%s)", ff[0], tag, typname, kind)
 				}
 			case FieldTypeDecimal32, FieldTypeDecimal64, FieldTypeDecimal128, FieldTypeDecimal256:
-				switch f.Type.Kind() {
+				switch kind {
 				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 					finfo.flags |= flagUintType
 				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -269,7 +270,7 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				case reflect.Float32, reflect.Float64:
 					finfo.flags |= flagFloatType
 				default:
-					return nil, fmt.Errorf("pack: unsupported type tag '%s' on field '%s' (%s)", ff[0], tag, f.Type.String())
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on decimal field '%s' (%s/%s)", ff[0], tag, typname, kind)
 				}
 			}
 		}
