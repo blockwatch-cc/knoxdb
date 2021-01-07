@@ -5,6 +5,7 @@ package pack
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	. "blockwatch.cc/knoxdb/encoding/decimal"
@@ -44,8 +45,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = v.RoundToInt64(), true
 		case *Decimal256:
 			res, ok = v.RoundToInt64(), true
-		default:
-			ok = false
 		}
 	case FieldTypeInt64:
 		switch v := val.(type) {
@@ -71,8 +70,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = v.Int64(), true
 		case Int256:
 			res, ok = v.Int64(), true
-		default:
-			ok = false
 		}
 	case FieldTypeInt32:
 		switch v := val.(type) {
@@ -98,8 +95,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = int32(v.Int64()), true
 		case Int256:
 			res, ok = int32(v.Int64()), true
-		default:
-			ok = false
 		}
 	case FieldTypeInt16:
 		switch v := val.(type) {
@@ -125,8 +120,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = int16(v.Int64()), true
 		case Int256:
 			res, ok = int16(v.Int64()), true
-		default:
-			ok = false
 		}
 	case FieldTypeInt8:
 		switch v := val.(type) {
@@ -153,7 +146,18 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		case Int256:
 			res, ok = int8(v.Int64()), true
 		default:
-			ok = false
+			// enum types
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			switch vv.Kind() {
+			case reflect.Int:
+				res, ok = int8(vv.Int()), true
+			case reflect.Uint:
+				res, ok = int8(vv.Uint()), true
+			case reflect.Int8:
+				res, ok = int8(vv.Int()), true
+			case reflect.Uint8:
+				res, ok = int8(vv.Uint()), true
+			}
 		}
 	case FieldTypeUint64:
 		switch v := val.(type) {
@@ -181,8 +185,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = uint64(v.Int64()), true
 		case Int256:
 			res, ok = uint64(v.Int64()), true
-		default:
-			ok = false
 		}
 	case FieldTypeUint32:
 		switch v := val.(type) {
@@ -210,8 +212,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = uint32(v.Int64()), true
 		case Int256:
 			res, ok = uint32(v.Int64()), true
-		default:
-			ok = false
 		}
 	case FieldTypeUint16:
 		switch v := val.(type) {
@@ -239,8 +239,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = uint16(v.Int64()), true
 		case Int256:
 			res, ok = uint16(v.Int64()), true
-		default:
-			ok = false
 		}
 	case FieldTypeUint8:
 		switch v := val.(type) {
@@ -269,7 +267,18 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		case Int256:
 			res, ok = uint8(v.Int64()), true
 		default:
-			ok = false
+			// enum types
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			switch vv.Kind() {
+			case reflect.Int:
+				res, ok = uint8(vv.Int()), true
+			case reflect.Uint:
+				res, ok = uint8(vv.Uint()), true
+			case reflect.Int8:
+				res, ok = uint8(vv.Int()), true
+			case reflect.Uint8:
+				res, ok = uint8(vv.Uint()), true
+			}
 		}
 	case FieldTypeFloat64:
 		switch v := val.(type) {
@@ -291,8 +300,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = v.Float64(), true
 		case Int256:
 			res, ok = v.Float64(), true
-		default:
-			ok = false
 		}
 	case FieldTypeFloat32:
 		switch v := val.(type) {
@@ -314,8 +321,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = float32(v.Float64()), true
 		case Int256:
 			res, ok = float32(v.Float64()), true
-		default:
-			ok = false
 		}
 	case FieldTypeDecimal32:
 		dec := NewDecimal32(0, 0)
@@ -358,8 +363,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		case Int256:
 			err := dec.SetInt64(v.Int64(), f.Scale)
 			res, ok = dec, err == nil
-		default:
-			ok = false
 		}
 	case FieldTypeDecimal64:
 		dec := NewDecimal64(0, 0)
@@ -402,8 +405,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		case Int256:
 			err := dec.SetInt64(v.Int64(), f.Scale)
 			res, ok = dec, err == nil
-		default:
-			ok = false
 		}
 	case FieldTypeDecimal128:
 		dec := NewDecimal128(ZeroInt128, 0)
@@ -445,8 +446,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		case Int256:
 			err := dec.SetInt128(v.Int128(), f.Scale)
 			res, ok = v, err == nil
-		default:
-			ok = false
 		}
 	case FieldTypeDecimal256:
 		dec := NewDecimal256(ZeroInt256, 0)
@@ -489,8 +488,6 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		case Int256:
 			err := dec.SetInt256(v, f.Scale)
 			res, ok = v, err == nil
-		default:
-			ok = false
 		}
 	}
 	if !ok {

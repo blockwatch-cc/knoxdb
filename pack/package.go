@@ -640,10 +640,10 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst.SetFloat(float64(b.Float32[pos]))
 
 		case FieldTypeInt256:
-			dst.Set(reflect.ValueOf(b.Int256))
+			dst.Set(reflect.ValueOf(b.Int256[pos]))
 
 		case FieldTypeInt128:
-			dst.Set(reflect.ValueOf(b.Int128))
+			dst.Set(reflect.ValueOf(b.Int128[pos]))
 
 		case FieldTypeInt64:
 			dst.SetInt(b.Int64[pos])

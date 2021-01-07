@@ -349,6 +349,21 @@ func run() error {
 
 	log.Infof("Written %d entries", table.Stats().TupleCount)
 
+	// read entries back
+	var (
+		res   Types
+		count int
+	)
+	err = table.Stream(context.Background(), pack.Query{}, func(r pack.Row) error {
+		count++
+		return r.Decode(&res)
+	})
+	if err != nil {
+		log.Errorf("Decode: %v", err)
+	} else {
+		log.Infof("Decoded %d entries", count)
+	}
+
 	if err := Close(table); err != nil {
 		return err
 	}
