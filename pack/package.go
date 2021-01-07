@@ -350,13 +350,57 @@ func (p *Package) Push(v interface{}) error {
 		case FieldTypeUint8:
 			b.Uint8 = append(b.Uint8, uint8(f.Uint()))
 		case FieldTypeDecimal256:
-			b.Int256 = append(b.Int256, f.Interface().(Decimal256).Quantize(field.Scale).Int256())
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int256 = append(b.Int256, Int256{0, 0, 0, f.Uint()})
+			case field.Flags.Contains(flagIntType):
+				b.Int256 = append(b.Int256, Int256{0, 0, 0, uint64(f.Int())})
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal256{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int256 = append(b.Int256, dec.Int256())
+			default:
+				b.Int256 = append(b.Int256, f.Interface().(Decimal256).Quantize(field.Scale).Int256())
+			}
 		case FieldTypeDecimal128:
-			b.Int128 = append(b.Int128, f.Interface().(Decimal128).Quantize(field.Scale).Int128())
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int128 = append(b.Int128, Int128{0, f.Uint()})
+			case field.Flags.Contains(flagIntType):
+				b.Int128 = append(b.Int128, Int128{0, uint64(f.Int())})
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal128{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int128 = append(b.Int128, dec.Int128())
+			default:
+				b.Int128 = append(b.Int128, f.Interface().(Decimal128).Quantize(field.Scale).Int128())
+			}
 		case FieldTypeDecimal64:
-			b.Int64 = append(b.Int64, f.Interface().(Decimal64).Quantize(field.Scale).Int64())
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int64 = append(b.Int64, int64(f.Uint()))
+			case field.Flags.Contains(flagIntType):
+				b.Int64 = append(b.Int64, f.Int())
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal64{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int64 = append(b.Int64, dec.Int64())
+			default:
+				b.Int64 = append(b.Int64, f.Interface().(Decimal64).Quantize(field.Scale).Int64())
+			}
 		case FieldTypeDecimal32:
-			b.Int32 = append(b.Int32, f.Interface().(Decimal32).Quantize(field.Scale).Int32())
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int32 = append(b.Int32, int32(f.Uint()))
+			case field.Flags.Contains(flagIntType):
+				b.Int32 = append(b.Int32, int32(f.Int()))
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal32{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int32 = append(b.Int32, dec.Int32())
+			default:
+				b.Int32 = append(b.Int32, f.Interface().(Decimal32).Quantize(field.Scale).Int32())
+			}
 		default:
 			return fmt.Errorf("pack: pushed unsupported value type %s (%v) for %s field %d",
 				f.Type().String(), f.Kind(), field.Type, fi.blockid)
@@ -461,16 +505,60 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			b.Uint8[pos] = uint8(f.Uint())
 
 		case FieldTypeDecimal256:
-			b.Int256[pos] = f.Interface().(Decimal256).Quantize(field.Scale).Int256()
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int256[pos] = Int256{0, 0, 0, f.Uint()}
+			case field.Flags.Contains(flagIntType):
+				b.Int256[pos] = Int256{0, 0, 0, uint64(f.Int())}
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal256{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int256[pos] = dec.Int256()
+			default:
+				b.Int256[pos] = f.Interface().(Decimal256).Quantize(field.Scale).Int256()
+			}
 
 		case FieldTypeDecimal128:
-			b.Int128[pos] = f.Interface().(Decimal128).Quantize(field.Scale).Int128()
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int128[pos] = Int128{0, f.Uint()}
+			case field.Flags.Contains(flagIntType):
+				b.Int128[pos] = Int128{0, uint64(f.Int())}
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal128{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int128[pos] = dec.Int128()
+			default:
+				b.Int128[pos] = f.Interface().(Decimal128).Quantize(field.Scale).Int128()
+			}
 
 		case FieldTypeDecimal64:
-			b.Int64[pos] = f.Interface().(Decimal64).Quantize(field.Scale).Int64()
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int64[pos] = int64(f.Uint())
+			case field.Flags.Contains(flagIntType):
+				b.Int64[pos] = f.Int()
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal64{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int64[pos] = dec.Int64()
+			default:
+				b.Int64[pos] = f.Interface().(Decimal64).Quantize(field.Scale).Int64()
+			}
 
 		case FieldTypeDecimal32:
-			b.Int32[pos] = f.Interface().(Decimal32).Quantize(field.Scale).Int32()
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int32[pos] = int32(f.Uint())
+			case field.Flags.Contains(flagIntType):
+				b.Int32[pos] = int32(f.Int())
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal32{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int32[pos] = dec.Int32()
+			default:
+				b.Int32[pos] = f.Interface().(Decimal32).Quantize(field.Scale).Int32()
+			}
 
 		default:
 			return fmt.Errorf("pack: replace unsupported value type %s (%v) for %s field %d",
@@ -582,20 +670,56 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst.SetUint(uint64(b.Uint8[pos]))
 
 		case FieldTypeDecimal256:
-			val := NewDecimal256(b.Int256[pos], field.Scale)
-			dst.Set(reflect.ValueOf(val))
+			switch {
+			case field.Flags.Contains(flagUintType):
+				dst.SetUint(uint64(b.Int256[pos].Int64()))
+			case field.Flags.Contains(flagIntType):
+				dst.SetInt(b.Int256[pos].Int64())
+			case field.Flags.Contains(flagFloatType):
+				dst.SetFloat(NewDecimal256(b.Int256[pos], field.Scale).Float64())
+			default:
+				val := NewDecimal256(b.Int256[pos], field.Scale)
+				dst.Set(reflect.ValueOf(val))
+			}
 
 		case FieldTypeDecimal128:
-			val := NewDecimal128(b.Int128[pos], field.Scale)
-			dst.Set(reflect.ValueOf(val))
+			switch {
+			case field.Flags.Contains(flagUintType):
+				dst.SetUint(uint64(b.Int128[pos].Int64()))
+			case field.Flags.Contains(flagIntType):
+				dst.SetInt(b.Int128[pos].Int64())
+			case field.Flags.Contains(flagFloatType):
+				dst.SetFloat(NewDecimal128(b.Int128[pos], field.Scale).Float64())
+			default:
+				val := NewDecimal128(b.Int128[pos], field.Scale)
+				dst.Set(reflect.ValueOf(val))
+			}
 
 		case FieldTypeDecimal64:
-			val := NewDecimal64(b.Int64[pos], field.Scale)
-			dst.Set(reflect.ValueOf(val))
+			switch {
+			case field.Flags.Contains(flagUintType):
+				dst.SetUint(uint64(b.Int64[pos]))
+			case field.Flags.Contains(flagIntType):
+				dst.SetInt(b.Int64[pos])
+			case field.Flags.Contains(flagFloatType):
+				dst.SetFloat(NewDecimal64(b.Int64[pos], field.Scale).Float64())
+			default:
+				val := NewDecimal64(b.Int64[pos], field.Scale)
+				dst.Set(reflect.ValueOf(val))
+			}
 
 		case FieldTypeDecimal32:
-			val := NewDecimal32(b.Int32[pos], field.Scale)
-			dst.Set(reflect.ValueOf(val))
+			switch {
+			case field.Flags.Contains(flagUintType):
+				dst.SetUint(uint64(b.Int32[pos]))
+			case field.Flags.Contains(flagIntType):
+				dst.SetInt(int64(b.Int32[pos]))
+			case field.Flags.Contains(flagFloatType):
+				dst.SetFloat(NewDecimal32(b.Int32[pos], field.Scale).Float64())
+			default:
+				val := NewDecimal32(b.Int32[pos], field.Scale)
+				dst.Set(reflect.ValueOf(val))
+			}
 
 		default:
 			return fmt.Errorf("pack: unsupported field type %s", field.Type)

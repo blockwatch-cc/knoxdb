@@ -27,7 +27,12 @@ const (
 	FlagIndexed
 	FlagCompressSnappy
 	FlagCompressLZ4
-	FlagMode = FlagPrimary | FlagIndexed | FlagCompressSnappy | FlagCompressLZ4
+
+	// internal type conversion flags used when a struct field's Go type
+	// does not directly match the requested field type
+	flagFloatType
+	flagIntType
+	flagUintType
 )
 
 func (f FieldFlags) Compression() block.Compression {
@@ -40,9 +45,13 @@ func (f FieldFlags) Compression() block.Compression {
 	return 0
 }
 
+func (f FieldFlags) Contains(i FieldFlags) bool {
+	return f&i > 0
+}
+
 func (f FieldFlags) String() string {
 	s := make([]string, 0)
-	for i := FlagPrimary; i <= FlagCompressLZ4; i <<= 1 {
+	for i := FlagPrimary; i <= flagUintType; i <<= 1 {
 		if f&i > 0 {
 			switch i {
 			case FlagPrimary:
@@ -53,6 +62,12 @@ func (f FieldFlags) String() string {
 				s = append(s, "snappy")
 			case FlagCompressLZ4:
 				s = append(s, "lz4")
+			case flagFloatType:
+				s = append(s, "as_float")
+			case flagIntType:
+				s = append(s, "as_int")
+			case flagUintType:
+				s = append(s, "as_uint")
 			}
 		}
 	}
@@ -332,6 +347,11 @@ func Fields(proto interface{}) (FieldList, error) {
 		default:
 			return nil, fmt.Errorf("pack: unsupported type %s (%v) for field %s",
 				f.Type().String(), f.Kind(), finfo.name)
+		}
+		// allow the user to specify a different type in struct tags
+		if finfo.override.IsValid() {
+			fields[i].Type = finfo.override
+			fields[i].Scale = finfo.scale
 		}
 	}
 	return fields, nil

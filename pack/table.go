@@ -77,7 +77,7 @@ var (
 )
 
 type Tombstone struct {
-	Id uint64 `pack:"I,pk,snappy"`
+	Id uint64 `knox:"I,pk,snappy"`
 }
 
 type Options struct {
