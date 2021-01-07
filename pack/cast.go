@@ -157,6 +157,8 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		}
 	case FieldTypeUint64:
 		switch v := val.(type) {
+		case int:
+			res, ok = uint64(v), true
 		case uint:
 			res, ok = uint64(v), true
 		case uint64:
@@ -184,6 +186,8 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		}
 	case FieldTypeUint32:
 		switch v := val.(type) {
+		case int:
+			res, ok = uint32(v), true
 		case uint:
 			res, ok = uint32(v), true
 		case uint64:
@@ -211,6 +215,8 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		}
 	case FieldTypeUint16:
 		switch v := val.(type) {
+		case int:
+			res, ok = uint16(v), true
 		case uint:
 			res, ok = uint16(v), true
 		case uint64:
@@ -238,6 +244,8 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		}
 	case FieldTypeUint8:
 		switch v := val.(type) {
+		case int:
+			res, ok = uint8(v), true
 		case uint:
 			res, ok = uint8(v), true
 		case uint64:
@@ -265,6 +273,8 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		}
 	case FieldTypeFloat64:
 		switch v := val.(type) {
+		case int:
+			res, ok = float64(v), true
 		case float64:
 			res, ok = float64(v), true
 		case float32:
@@ -286,6 +296,8 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		}
 	case FieldTypeFloat32:
 		switch v := val.(type) {
+		case int:
+			res, ok = float32(v), true
 		case float64:
 			res, ok = float32(v), true
 		case float32:
