@@ -736,7 +736,7 @@ func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *BitSet {
 		// for an all-false vector because MaybeMatchPack() has already deselected
 		// packs of that kind (except the journal, but here we cannot rely on
 		// min/max values anyways).
-		if !pkg.dirty {
+		if !pkg.dirty && len(info.Blocks) > c.Field.Index {
 			blockInfo := info.Blocks[c.Field.Index]
 			min, max := blockInfo.MinValue, blockInfo.MaxValue
 			switch c.Mode {

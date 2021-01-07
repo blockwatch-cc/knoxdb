@@ -1879,64 +1879,58 @@ func (p *Package) PkIndexUnsorted(id uint64, last int) int {
 type PackageSorter struct {
 	*Package
 	col int
+	typ FieldType
+	b   *block.Block
 }
 
 func (p *PackageSorter) Len() int { return p.Package.Len() }
 
 func (p *PackageSorter) Less(i, j int) bool {
-	// we assume the block exists, check must happen outside this hot path
-	b := p.Package.blocks[p.col]
-
-	// early abort if we ignore this block
-	if b.IsIgnore() {
-		return true
-	}
-
-	switch p.Package.fields[p.col].Type {
+	switch p.typ {
 	case FieldTypeBytes:
-		return bytes.Compare(b.Bytes[i], b.Bytes[j]) < 0
+		return bytes.Compare(p.b.Bytes[i], p.b.Bytes[j]) < 0
 
 	case FieldTypeString:
-		return b.Strings[i] < b.Strings[j]
+		return p.b.Strings[i] < p.b.Strings[j]
 
 	case FieldTypeBoolean:
-		return !b.Bits.IsSet(i) && b.Bits.IsSet(j)
+		return !p.b.Bits.IsSet(i) && p.b.Bits.IsSet(j)
 
 	case FieldTypeFloat64:
-		return b.Float64[i] < b.Float64[j]
+		return p.b.Float64[i] < p.b.Float64[j]
 
 	case FieldTypeFloat32:
-		return b.Float32[i] < b.Float32[j]
+		return p.b.Float32[i] < p.b.Float32[j]
 
 	case FieldTypeInt256, FieldTypeDecimal256:
-		return b.Int256[i].Lt(b.Int256[j])
+		return p.b.Int256[i].Lt(p.b.Int256[j])
 
 	case FieldTypeInt128, FieldTypeDecimal128:
-		return b.Int128[i].Lt(b.Int128[j])
+		return p.b.Int128[i].Lt(p.b.Int128[j])
 
 	case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
-		return b.Int64[i] < b.Int64[j]
+		return p.b.Int64[i] < p.b.Int64[j]
 
 	case FieldTypeInt32, FieldTypeDecimal32:
-		return b.Int32[i] < b.Int32[j]
+		return p.b.Int32[i] < p.b.Int32[j]
 
 	case FieldTypeInt16:
-		return b.Int16[i] < b.Int16[j]
+		return p.b.Int16[i] < p.b.Int16[j]
 
 	case FieldTypeInt8:
-		return b.Int8[i] < b.Int8[j]
+		return p.b.Int8[i] < p.b.Int8[j]
 
 	case FieldTypeUint64:
-		return b.Uint64[i] < b.Uint64[j]
+		return p.b.Uint64[i] < p.b.Uint64[j]
 
 	case FieldTypeUint32:
-		return b.Uint32[i] < b.Uint32[j]
+		return p.b.Uint32[i] < p.b.Uint32[j]
 
 	case FieldTypeUint16:
-		return b.Uint16[i] < b.Uint16[j]
+		return p.b.Uint16[i] < p.b.Uint16[j]
 
 	case FieldTypeUint8:
-		return b.Uint8[i] < b.Uint8[j]
+		return p.b.Uint8[i] < p.b.Uint8[j]
 
 	default:
 		return false
@@ -1950,7 +1944,7 @@ func (p *PackageSorter) Swap(i, j int) {
 			continue
 		}
 
-		switch p.Package.fields[p.col].Type {
+		switch p.Package.fields[n].Type {
 		case FieldTypeBytes:
 			b.Bytes[i], b.Bytes[j] = b.Bytes[j], b.Bytes[i]
 
@@ -2009,7 +2003,12 @@ func (p *Package) PkSort() error {
 		return nil
 	}
 
-	spkg := &PackageSorter{Package: p, col: p.pkindex}
+	spkg := &PackageSorter{
+		Package: p,
+		col:     p.pkindex,
+		typ:     p.fields[p.pkindex].Type,
+		b:       p.blocks[p.pkindex],
+	}
 	if !sort.IsSorted(spkg) {
 		sort.Sort(spkg)
 		p.dirty = true
