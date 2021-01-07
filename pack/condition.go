@@ -103,18 +103,19 @@ func (c Condition) NValues() int {
 	return c.numValues
 }
 
-func (c Condition) Check() error {
+func (c *Condition) EnsureTypes() error {
 	// check condition values are of correct type for field
+	var err error
 	switch c.Mode {
 	case FilterModeRange:
 		// expects From and To to be set
 		if c.From == nil || c.To == nil {
 			return fmt.Errorf("range condition expects From and To values")
 		}
-		if err := c.Field.Type.CheckType(c.From); err != nil {
+		if c.From, err = c.Field.Type.CastType(c.From, c.Field); err != nil {
 			return err
 		}
-		if err := c.Field.Type.CheckType(c.To); err != nil {
+		if c.To, err = c.Field.Type.CastType(c.To, c.Field); err != nil {
 			return err
 		}
 		if c.Field.Type.Gt(c.From, c.To) {
@@ -122,7 +123,7 @@ func (c Condition) Check() error {
 		}
 	case FilterModeIn, FilterModeNotIn:
 		// expects a slice of values
-		if err := c.Field.Type.CheckSliceType(c.Value); err != nil {
+		if c.Value, err = c.Field.Type.CastSliceType(c.Value, c.Field); err != nil {
 			return err
 		}
 	case FilterModeRegexp:
@@ -132,7 +133,7 @@ func (c Condition) Check() error {
 		}
 	default:
 		// c.Value is a simple value type
-		if err := c.Field.Type.CheckType(c.Value); err != nil {
+		if c.Value, err = c.Field.Type.CastType(c.Value, c.Field); err != nil {
 			return err
 		}
 	}
@@ -674,7 +675,7 @@ type ConditionList []Condition
 // may otimize (reduce/merge/replace) conditions in the future
 func (l *ConditionList) Compile(t *Table) error {
 	for i, _ := range *l {
-		if err := (*l)[i].Check(); err != nil {
+		if err := (*l)[i].EnsureTypes(); err != nil {
 			return fmt.Errorf("cond %d on table field '%s.%s': %v", i, t.name, (*l)[i].Field.Name, err)
 		}
 		(*l)[i].Compile()
