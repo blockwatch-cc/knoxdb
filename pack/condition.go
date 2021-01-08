@@ -229,7 +229,7 @@ func (c *Condition) Compile() {
 			c.To = to.Quantize(c.Field.Scale)
 		}
 	case FieldTypeDatetime:
-		// convert to int64 slice
+		// only convert slice values used in in/nin conditions to int64 slice
 		if val, ok := c.Value.([]time.Time); ok {
 			conv := make([]int64, len(val))
 			for i := range val {
@@ -237,16 +237,6 @@ func (c *Condition) Compile() {
 			}
 			c.Value = conv
 		}
-		if val, ok := c.Value.(time.Time); ok {
-			c.Value = val.UTC().UnixNano()
-		}
-		if from, ok := c.From.(time.Time); ok {
-			c.From = from.UTC().UnixNano()
-		}
-		if to, ok := c.To.(time.Time); ok {
-			c.To = to.UTC().UnixNano()
-		}
-
 		return
 	}
 
@@ -622,7 +612,7 @@ func (c Condition) String() string {
 		if size > 16 {
 			return fmt.Sprintf("%s %s [%d values]", c.Field.Name, c.Mode.Op(), size)
 		} else {
-			return fmt.Sprintf("%s %s [%v]", c.Field.Name, c.Mode.Op(), c.Field.Type.ToString(c.Value, c.Field))
+			return fmt.Sprintf("%s %s [%v]", c.Field.Name, c.Mode.Op(), c.Field.Type.SliceToString(c.Value, c.Field))
 		}
 	default:
 		return fmt.Sprintf("%s %s %s [%s]", c.Field.Name, c.Mode.Op(), util.ToString(c.Value), c.Raw)
