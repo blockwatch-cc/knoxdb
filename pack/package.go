@@ -1116,6 +1116,20 @@ func (p *Package) IsZeroAt(index, pos int) bool {
 	return true
 }
 
+// Block allows raw access to the underlying block for a field. Use this for
+// implementing efficient matching algorithms that can work with optimized data
+// vectors used at the block layer.
+func (p *Package) Block(index int) (*block.Block, error) {
+	if index < 0 || p.nFields <= index {
+		return nil, ErrNoField
+	}
+	return p.blocks[index], nil
+}
+
+// Column returns a typed slice containing materialized values for the requested
+// field index. This function has higher cost than direct block access because
+// optimized representation of data vectors like timestamps, bitsets and decimals
+// are unpacked into a temporary slice and type-cast.
 func (p *Package) Column(index int) (interface{}, error) {
 	if index < 0 || p.nFields <= index {
 		return nil, ErrNoField

@@ -107,6 +107,21 @@ func (s *BitSet) Clone() *BitSet {
 	return clone
 }
 
+func (s *BitSet) Copy(b *BitSet) *BitSet {
+	if s.size > b.size {
+		s.Zero()
+	}
+	if cap(s.buf) < len(b.buf) {
+		s.buf = make([]byte, len(b.buf))
+	}
+	s.size = b.size
+	s.buf = s.buf[:len(b.buf)]
+	copy(s.buf, b.buf)
+	s.cnt = b.cnt
+	s.isReverse = b.isReverse
+	return s
+}
+
 // Grow resizes the bitset to a new size, either growing or shrinking it.
 // Content remains unchanged on grow, when shrinking trailing bits are clipped.
 //
