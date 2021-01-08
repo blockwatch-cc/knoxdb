@@ -10,7 +10,7 @@ import (
 )
 
 //go:noescape
-func bitsetAndAVX2(dst, src []byte) int
+func bitsetAndAVX2Flag1(dst, src []byte) int
 
 //go:noescape
 func bitsetAndNotAVX2(dst, src []byte)
@@ -39,7 +39,7 @@ func bitsetNextZeroBitAVX2(src []byte, index uint64) uint64
 func bitsetAnd(dst, src []byte, size int) int {
 	switch {
 	case useAVX2:
-		ret := bitsetAndAVX2(dst, src)
+		ret := bitsetAndAVX2Flag1(dst, src)
 		dst[len(dst)-1] &= bytemask(size)
 		return ret
 	default:

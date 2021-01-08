@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-const defaultBitSetSize = 16 // defaultPackSizeLog2 (64k)
+const defaultBitSetSize = 16 // 8kB
 
 var bitSetPool = &sync.Pool{
 	New: func() interface{} { return makeBitSet(1 << defaultBitSetSize) },
@@ -15,7 +15,7 @@ var bitSetPool = &sync.Pool{
 
 type BitSet struct {
 	buf       []byte
-	cnt       int64
+	cnt       int
 	size      int
 	isReverse bool
 }
@@ -186,11 +186,22 @@ func (s *BitSet) And(r *BitSet) (*BitSet, int) {
 		return s, 0
 	}
 	any := bitsetAnd(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	if any == 0 {
+		s.cnt = 0
+	} else {
+		s.cnt = -1
+	}
 	return s, any
 }
 
 func (s *BitSet) AndNot(r *BitSet) *BitSet {
 	bitsetAndNot(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	// if any == 0 {
+	// 	s.cnt = 0
+	// } else {
+	// 	s.cnt = -1
+	// }
+	s.cnt = -1
 	return s
 }
 
@@ -201,16 +212,21 @@ func (s *BitSet) Or(r *BitSet) *BitSet {
 		return s
 	}
 	bitsetOr(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	s.cnt = -1
 	return s
 }
 
 func (s *BitSet) Xor(r *BitSet) *BitSet {
 	bitsetXor(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	s.cnt = -1
 	return s
 }
 
 func (s *BitSet) Neg() *BitSet {
 	bitsetNeg(s.Bytes(), s.size)
+	if s.cnt >= 0 {
+		s.cnt = s.size - s.cnt
+	}
 	return s
 }
 
@@ -218,7 +234,7 @@ func (s *BitSet) One() *BitSet {
 	if s.size == 0 {
 		return s
 	}
-	s.cnt = int64(s.size)
+	s.cnt = s.size
 	s.buf[0] = 0xff
 	for bp := 1; bp < len(s.buf); bp *= 2 {
 		copy(s.buf[bp:], s.buf[:bp])
@@ -361,7 +377,7 @@ func (s *BitSet) Insert(src *BitSet, srcPos, srcLen, dstPos int) *BitSet {
 		s.cnt = -1
 	} else {
 		// slow path
-		var cnt int64
+		var cnt int
 		for i, v := range src.SubSlice(srcPos, srcLen) {
 			if !v {
 				s.clearbit(i + dstPos)
@@ -535,13 +551,13 @@ func (s *BitSet) Bytes() []byte {
 	return s.buf
 }
 
-func (s *BitSet) Count() int64 {
+func (s *BitSet) Count() int {
 	if s.cnt < 0 {
 		if s.isReverse {
 			// leading padding is filled with zero bits
-			s.cnt = bitsetPopCount(s.buf, len(s.buf)*8)
+			s.cnt = int(bitsetPopCount(s.buf, len(s.buf)*8))
 		} else {
-			s.cnt = bitsetPopCount(s.buf, s.size)
+			s.cnt = int(bitsetPopCount(s.buf, s.size))
 		}
 	}
 	return s.cnt
@@ -589,7 +605,7 @@ func (b BitSet) Run(index int) (int, int) {
 
 // Indexes returns a slice of indexes for one bits in the bitset.
 func (s BitSet) Indexes(slice []int) []int {
-	cnt := int(s.Count())
+	cnt := s.Count()
 	if slice == nil || cap(slice) < cnt {
 		slice = make([]int, cnt)
 	} else {

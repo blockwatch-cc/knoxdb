@@ -568,43 +568,43 @@ func Max128(x, y Int128) Int128 {
 // Match helpers
 func MatchInt128Equal(src []Int128, val Int128, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt128Equal(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchInt128Equal(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchInt128NotEqual(src []Int128, val Int128, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt128NotEqual(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchInt128NotEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchInt128LessThan(src []Int128, val Int128, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt128LessThan(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchInt128LessThan(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchInt128LessThanEqual(src []Int128, val Int128, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt128LessThanEqual(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchInt128LessThanEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchInt128GreaterThan(src []Int128, val Int128, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt128GreaterThan(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchInt128GreaterThan(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchInt128GreaterThanEqual(src []Int128, val Int128, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt128GreaterThanEqual(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchInt128GreaterThanEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchInt128Between(src []Int128, a, b Int128, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt128Between(src, a, b, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchInt128Between(src, a, b, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 

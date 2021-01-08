@@ -9,43 +9,43 @@ import (
 
 func MatchInt16Equal(src []int16, val int16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt16Equal(src, val, bits.Bytes())
+	bits.cnt = int(matchInt16Equal(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchInt16NotEqual(src []int16, val int16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt16NotEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchInt16NotEqual(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchInt16LessThan(src []int16, val int16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt16LessThan(src, val, bits.Bytes())
+	bits.cnt = int(matchInt16LessThan(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchInt16LessThanEqual(src []int16, val int16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt16LessThanEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchInt16LessThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchInt16GreaterThan(src []int16, val int16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt16GreaterThan(src, val, bits.Bytes())
+	bits.cnt = int(matchInt16GreaterThan(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchInt16GreaterThanEqual(src []int16, val int16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt16GreaterThanEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchInt16GreaterThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchInt16Between(src []int16, a, b int16, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt16Between(src, a, b, bits.Bytes())
+	bits.cnt = int(matchInt16Between(src, a, b, bits.Bytes()))
 	return bits
 }
 
