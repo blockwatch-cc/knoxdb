@@ -81,7 +81,7 @@ func (t Enum) String() string {
 }
 
 type Types struct {
-	RowId     uint64             `knox:"I,pk,snappy"              json:"row_id"`
+	RowId     uint64             `knox:"I,pk"                     json:"row_id"`
 	Timestamp time.Time          `knox:"T,snappy"                 json:"time"`
 	Hash      []byte             `knox:"H"                        json:"hash"`
 	String    string             `knox:"str,snappy"               json:"string"`
@@ -270,8 +270,8 @@ func NewRandomTypes(i int) *Types {
 		Uint_16: uint(i),
 		Uint_32: uint(i),
 		Uint_64: uint(i),
-		Float32: float32(i * 1000000),
-		Float64: float64(i * 1000000),
+		Float32: float32(i / 1000000),
+		Float64: float64(i / 1000000),
 		// number to decimal
 		FD32: float32(i) / 100,
 		FD64: float64(i) / 100,

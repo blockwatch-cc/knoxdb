@@ -1878,73 +1878,94 @@ func (p *Package) PkIndexUnsorted(id uint64, last int) int {
 
 type PackageSorter struct {
 	*Package
-	col int
-	typ FieldType
-	b   *block.Block
+	typ   FieldType
+	block *block.Block
 }
 
-func (p *PackageSorter) Len() int { return p.Package.Len() }
+func NewPackageSorter(p *Package, col int) (*PackageSorter, error) {
+	if col < 0 || col > p.nFields {
+		return nil, fmt.Errorf("pack: invalid sort field %d", col)
+	}
+	return &PackageSorter{
+		Package: p,
+		typ:     p.fields[col].Type,
+		block:   p.blocks[col],
+	}, nil
+}
 
-func (p *PackageSorter) Less(i, j int) bool {
-	switch p.typ {
+// Sorts the package by defined column and returns if the package was changed,
+// i.e. returns false if the package was sorted before
+func (s *PackageSorter) Sort() bool {
+	if sort.IsSorted(s) {
+		return false
+	}
+	sort.Sort(s)
+	return true
+}
+
+func (s *PackageSorter) Len() int { return s.Package.Len() }
+
+func (s *PackageSorter) Less(i, j int) bool {
+	b := s.block
+	switch s.typ {
 	case FieldTypeBytes:
-		return bytes.Compare(p.b.Bytes[i], p.b.Bytes[j]) < 0
+		return bytes.Compare(b.Bytes[i], b.Bytes[j]) < 0
 
 	case FieldTypeString:
-		return p.b.Strings[i] < p.b.Strings[j]
+		return b.Strings[i] < b.Strings[j]
 
 	case FieldTypeBoolean:
-		return !p.b.Bits.IsSet(i) && p.b.Bits.IsSet(j)
+		return !b.Bits.IsSet(i) && b.Bits.IsSet(j)
 
 	case FieldTypeFloat64:
-		return p.b.Float64[i] < p.b.Float64[j]
+		return b.Float64[i] < b.Float64[j]
 
 	case FieldTypeFloat32:
-		return p.b.Float32[i] < p.b.Float32[j]
+		return b.Float32[i] < b.Float32[j]
 
 	case FieldTypeInt256, FieldTypeDecimal256:
-		return p.b.Int256[i].Lt(p.b.Int256[j])
+		return b.Int256[i].Lt(b.Int256[j])
 
 	case FieldTypeInt128, FieldTypeDecimal128:
-		return p.b.Int128[i].Lt(p.b.Int128[j])
+		return b.Int128[i].Lt(b.Int128[j])
 
 	case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
-		return p.b.Int64[i] < p.b.Int64[j]
+		return b.Int64[i] < b.Int64[j]
 
 	case FieldTypeInt32, FieldTypeDecimal32:
-		return p.b.Int32[i] < p.b.Int32[j]
+		return b.Int32[i] < b.Int32[j]
 
 	case FieldTypeInt16:
-		return p.b.Int16[i] < p.b.Int16[j]
+		return b.Int16[i] < b.Int16[j]
 
 	case FieldTypeInt8:
-		return p.b.Int8[i] < p.b.Int8[j]
+		return b.Int8[i] < b.Int8[j]
 
 	case FieldTypeUint64:
-		return p.b.Uint64[i] < p.b.Uint64[j]
+		return b.Uint64[i] < b.Uint64[j]
 
 	case FieldTypeUint32:
-		return p.b.Uint32[i] < p.b.Uint32[j]
+		return b.Uint32[i] < b.Uint32[j]
 
 	case FieldTypeUint16:
-		return p.b.Uint16[i] < p.b.Uint16[j]
+		return b.Uint16[i] < b.Uint16[j]
 
 	case FieldTypeUint8:
-		return p.b.Uint8[i] < p.b.Uint8[j]
+		return b.Uint8[i] < b.Uint8[j]
 
 	default:
 		return false
 	}
 }
 
-func (p *PackageSorter) Swap(i, j int) {
-	for n := 0; n < p.Package.nFields; n++ {
-		b := p.Package.blocks[n]
+func (s *PackageSorter) Swap(i, j int) {
+	for n, f := range s.Package.fields {
+		b := s.Package.blocks[n]
 		if b.IsIgnore() {
 			continue
 		}
 
-		switch p.Package.fields[n].Type {
+		switch f.Type {
 		case FieldTypeBytes:
 			b.Bytes[i], b.Bytes[j] = b.Bytes[j], b.Bytes[i]
 
@@ -1995,23 +2016,19 @@ func (p *PackageSorter) Swap(i, j int) {
 }
 
 func (p *Package) PkSort() error {
-	if p.pkindex < 0 {
-		return fmt.Errorf("pack: missing primary key field")
-	}
-
 	if p.Len() == 0 {
 		return nil
 	}
 
-	spkg := &PackageSorter{
-		Package: p,
-		col:     p.pkindex,
-		typ:     p.fields[p.pkindex].Type,
-		b:       p.blocks[p.pkindex],
+	// sort by primary key index
+	sorter, err := NewPackageSorter(p, p.pkindex)
+	if err != nil {
+		return err
 	}
-	if !sort.IsSorted(spkg) {
-		sort.Sort(spkg)
-		p.dirty = true
-	}
+
+	// update dirty state when package has changed
+	updated := sorter.Sort()
+	p.dirty = p.dirty || updated
+
 	return nil
 }
