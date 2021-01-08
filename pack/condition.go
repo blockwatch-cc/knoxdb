@@ -549,7 +549,7 @@ func (c *Condition) Compile() {
 func (c Condition) MaybeMatchPack(info PackInfo) bool {
 	min, max := info.Blocks[c.Field.Index].MinValue, info.Blocks[c.Field.Index].MaxValue
 	scale := c.Field.Scale
-	// decimals only: convert storage type used in block headers to field type
+	// decimals only: convert storage type used in block info to field type
 	switch c.Field.Type {
 	case FieldTypeDecimal32:
 		min = NewDecimal32(min.(int32), scale)
@@ -735,8 +735,8 @@ func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *BitSet {
 		// would return an all-true vector. Note that we do not have to check
 		// for an all-false vector because MaybeMatchPack() has already deselected
 		// packs of that kind (except the journal, but here we cannot rely on
-		// min/max values anyways).
-		if !pkg.dirty && len(info.Blocks) > c.Field.Index {
+		// min/max values anyways and must exclude the journal explicitly).
+		if pkg.key != journalKey && len(info.Blocks) > c.Field.Index {
 			blockInfo := info.Blocks[c.Field.Index]
 			min, max := blockInfo.MinValue, blockInfo.MaxValue
 			switch c.Mode {
