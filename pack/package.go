@@ -4,7 +4,6 @@
 package pack
 
 import (
-	"bytes"
 	"encoding"
 	"fmt"
 	"math"
@@ -1878,7 +1877,6 @@ func (p *Package) PkIndexUnsorted(id uint64, last int) int {
 
 type PackageSorter struct {
 	*Package
-	typ   FieldType
 	block *block.Block
 }
 
@@ -1888,7 +1886,6 @@ func NewPackageSorter(p *Package, col int) (*PackageSorter, error) {
 	}
 	return &PackageSorter{
 		Package: p,
-		typ:     p.fields[col].Type,
 		block:   p.blocks[col],
 	}, nil
 }
@@ -1905,113 +1902,14 @@ func (s *PackageSorter) Sort() bool {
 
 func (s *PackageSorter) Len() int { return s.Package.Len() }
 
-func (s *PackageSorter) Less(i, j int) bool {
-	b := s.block
-	switch s.typ {
-	case FieldTypeBytes:
-		return bytes.Compare(b.Bytes[i], b.Bytes[j]) < 0
-
-	case FieldTypeString:
-		return b.Strings[i] < b.Strings[j]
-
-	case FieldTypeBoolean:
-		return !b.Bits.IsSet(i) && b.Bits.IsSet(j)
-
-	case FieldTypeFloat64:
-		return b.Float64[i] < b.Float64[j]
-
-	case FieldTypeFloat32:
-		return b.Float32[i] < b.Float32[j]
-
-	case FieldTypeInt256, FieldTypeDecimal256:
-		return b.Int256[i].Lt(b.Int256[j])
-
-	case FieldTypeInt128, FieldTypeDecimal128:
-		return b.Int128[i].Lt(b.Int128[j])
-
-	case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
-		return b.Int64[i] < b.Int64[j]
-
-	case FieldTypeInt32, FieldTypeDecimal32:
-		return b.Int32[i] < b.Int32[j]
-
-	case FieldTypeInt16:
-		return b.Int16[i] < b.Int16[j]
-
-	case FieldTypeInt8:
-		return b.Int8[i] < b.Int8[j]
-
-	case FieldTypeUint64:
-		return b.Uint64[i] < b.Uint64[j]
-
-	case FieldTypeUint32:
-		return b.Uint32[i] < b.Uint32[j]
-
-	case FieldTypeUint16:
-		return b.Uint16[i] < b.Uint16[j]
-
-	case FieldTypeUint8:
-		return b.Uint8[i] < b.Uint8[j]
-
-	default:
-		return false
-	}
-}
+func (s *PackageSorter) Less(i, j int) bool { return s.block.Less(i, j) }
 
 func (s *PackageSorter) Swap(i, j int) {
-	for n, f := range s.Package.fields {
-		b := s.Package.blocks[n]
+	for _, b := range s.Package.blocks {
 		if b.IsIgnore() {
 			continue
 		}
-
-		switch f.Type {
-		case FieldTypeBytes:
-			b.Bytes[i], b.Bytes[j] = b.Bytes[j], b.Bytes[i]
-
-		case FieldTypeString:
-			b.Strings[i], b.Strings[j] = b.Strings[j], b.Strings[i]
-
-		case FieldTypeBoolean:
-			b.Bits.Swap(i, j)
-
-		case FieldTypeFloat64:
-			b.Float64[i], b.Float64[j] = b.Float64[j], b.Float64[i]
-
-		case FieldTypeFloat32:
-			b.Float32[i], b.Float32[j] = b.Float32[j], b.Float32[i]
-
-		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256[i], b.Int256[j] = b.Int256[j], b.Int256[i]
-
-		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128[i], b.Int128[j] = b.Int128[j], b.Int128[i]
-
-		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
-			b.Int64[i], b.Int64[j] = b.Int64[j], b.Int64[i]
-
-		case FieldTypeInt32, FieldTypeDecimal32:
-			b.Int32[i], b.Int32[j] = b.Int32[j], b.Int32[i]
-
-		case FieldTypeInt16:
-			b.Int16[i], b.Int16[j] = b.Int16[j], b.Int16[i]
-
-		case FieldTypeInt8:
-			b.Int8[i], b.Int8[j] = b.Int8[j], b.Int8[i]
-
-		case FieldTypeUint64:
-			b.Uint64[i], b.Uint64[j] = b.Uint64[j], b.Uint64[i]
-
-		case FieldTypeUint32:
-			b.Uint32[i], b.Uint32[j] = b.Uint32[j], b.Uint32[i]
-
-		case FieldTypeUint16:
-			b.Uint16[i], b.Uint16[j] = b.Uint16[j], b.Uint16[i]
-
-		case FieldTypeUint8:
-			b.Uint8[i], b.Uint8[j] = b.Uint8[j], b.Uint8[i]
-
-		}
+		b.Swap(i, j)
 	}
 }
 

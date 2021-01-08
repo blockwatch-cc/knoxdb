@@ -1048,3 +1048,89 @@ func (b *Block) MinMax() (interface{}, interface{}) {
 		return nil, nil
 	}
 }
+
+func (b *Block) Less(i, j int) bool {
+	switch b.typ {
+	case BlockInt256:
+		return b.Int256[i].Lt(b.Int256[j])
+	case BlockInt128:
+		return b.Int128[i].Lt(b.Int128[j])
+	case BlockTime, BlockInt64:
+		return b.Int64[i] < b.Int64[j]
+	case BlockInt32:
+		return b.Int32[i] < b.Int32[j]
+	case BlockInt16:
+		return b.Int16[i] < b.Int16[j]
+	case BlockInt8:
+		return b.Int8[i] < b.Int8[j]
+	case BlockUint64:
+		return b.Uint64[i] < b.Uint64[j]
+	case BlockUint32:
+		return b.Uint32[i] < b.Uint32[j]
+	case BlockUint16:
+		return b.Uint16[i] < b.Uint16[j]
+	case BlockUint8:
+		return b.Uint8[i] < b.Uint8[j]
+	case BlockFloat64:
+		return b.Float64[i] < b.Float64[j]
+	case BlockFloat32:
+		return b.Float32[i] < b.Float32[j]
+	case BlockBool:
+		return !b.Bits.IsSet(i) && b.Bits.IsSet(j)
+	case BlockString:
+		return b.Strings[i] < b.Strings[j]
+	case BlockBytes:
+		return bytes.Compare(b.Bytes[i], b.Bytes[j]) < 0
+	default:
+		return false
+	}
+}
+
+func (b *Block) Swap(i, j int) {
+	switch b.typ {
+	case BlockBytes:
+		b.Bytes[i], b.Bytes[j] = b.Bytes[j], b.Bytes[i]
+
+	case BlockString:
+		b.Strings[i], b.Strings[j] = b.Strings[j], b.Strings[i]
+
+	case BlockBool:
+		b.Bits.Swap(i, j)
+
+	case BlockFloat64:
+		b.Float64[i], b.Float64[j] = b.Float64[j], b.Float64[i]
+
+	case BlockFloat32:
+		b.Float32[i], b.Float32[j] = b.Float32[j], b.Float32[i]
+
+	case BlockInt256:
+		b.Int256[i], b.Int256[j] = b.Int256[j], b.Int256[i]
+
+	case BlockInt128:
+		b.Int128[i], b.Int128[j] = b.Int128[j], b.Int128[i]
+
+	case BlockInt64, BlockTime:
+		b.Int64[i], b.Int64[j] = b.Int64[j], b.Int64[i]
+
+	case BlockInt32:
+		b.Int32[i], b.Int32[j] = b.Int32[j], b.Int32[i]
+
+	case BlockInt16:
+		b.Int16[i], b.Int16[j] = b.Int16[j], b.Int16[i]
+
+	case BlockInt8:
+		b.Int8[i], b.Int8[j] = b.Int8[j], b.Int8[i]
+
+	case BlockUint64:
+		b.Uint64[i], b.Uint64[j] = b.Uint64[j], b.Uint64[i]
+
+	case BlockUint32:
+		b.Uint32[i], b.Uint32[j] = b.Uint32[j], b.Uint32[i]
+
+	case BlockUint16:
+		b.Uint16[i], b.Uint16[j] = b.Uint16[j], b.Uint16[i]
+
+	case BlockUint8:
+		b.Uint8[i], b.Uint8[j] = b.Uint8[j], b.Uint8[i]
+	}
+}
