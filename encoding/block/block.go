@@ -718,6 +718,10 @@ func (b *Block) Clear() {
 }
 
 func (b *Block) Release() {
+	if b.ignore {
+		b.ignore = false
+		return
+	}
 	b.ignore = false
 	b.dirty = false
 	b.size = 0
