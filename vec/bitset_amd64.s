@@ -124,56 +124,56 @@ done:
 	RET
 
 #define BITSET_AVX2_FLAG1(_FUNC) \
-	VMOVDQU		0(DI)(CX*1), Y0; \
-	_FUNC		0(SI)(CX*1), Y0, Y0; \
+	VMOVDQU		0(DI), Y0; \
+	_FUNC		0(SI), Y0, Y0; \
     VPOR        Y0, Y10, Y10 \
-	VMOVDQU		32(DI)(CX*1), Y1; \
-	_FUNC		32(SI)(CX*1), Y1, Y1; \
+	VMOVDQU		32(DI), Y1; \
+	_FUNC		32(SI), Y1, Y1; \
     VPOR        Y1, Y10, Y10 \
-	VMOVDQU		64(DI)(CX*1), Y2; \
-	_FUNC		64(SI)(CX*1), Y2, Y2; \
+	VMOVDQU		64(DI), Y2; \
+	_FUNC		64(SI), Y2, Y2; \
     VPOR        Y2, Y10, Y10 \
-	VMOVDQU		96(DI)(CX*1), Y3; \
-	_FUNC		96(SI)(CX*1), Y3, Y3; \
+	VMOVDQU		96(DI), Y3; \
+	_FUNC		96(SI), Y3, Y3; \
     VPOR        Y3, Y10, Y10 \
-	VMOVDQU		Y0, 0(SI)(CX*1); \
-	VMOVDQU		Y1, 32(SI)(CX*1); \
-	VMOVDQU		Y2, 64(SI)(CX*1); \
-	VMOVDQU		Y3, 96(SI)(CX*1); \
-	VMOVDQU		128(DI)(CX*1), Y4; \
-	_FUNC		128(SI)(CX*1), Y4, Y4; \
+	VMOVDQU		Y0, 0(SI); \
+	VMOVDQU		Y1, 32(SI); \
+	VMOVDQU		Y2, 64(SI); \
+	VMOVDQU		Y3, 96(SI); \
+	VMOVDQU		128(DI), Y4; \
+	_FUNC		128(SI), Y4, Y4; \
     VPOR        Y4, Y10, Y10 \
-	VMOVDQU		160(DI)(CX*1), Y5; \
-	_FUNC		160(SI)(CX*1), Y5, Y5; \
+	VMOVDQU		160(DI), Y5; \
+	_FUNC		160(SI), Y5, Y5; \
     VPOR        Y5, Y10, Y10 \
-	VMOVDQU		192(DI)(CX*1), Y6; \
-	_FUNC		192(SI)(CX*1), Y6, Y6; \
+	VMOVDQU		192(DI), Y6; \
+	_FUNC		192(SI), Y6, Y6; \
     VPOR        Y6, Y10, Y10 \
-	VMOVDQU		224(DI)(CX*1), Y7; \
-	_FUNC		224(SI)(CX*1), Y7, Y7; \
+	VMOVDQU		224(DI), Y7; \
+	_FUNC		224(SI), Y7, Y7; \
     VPOR        Y7, Y10, Y10 \
-	VMOVDQU		Y4, 128(SI)(CX*1); \
-	VMOVDQU		Y5, 160(SI)(CX*1); \
-	VMOVDQU		Y6, 192(SI)(CX*1); \
-	VMOVDQU		Y7, 224(SI)(CX*1);
+	VMOVDQU		Y4, 128(SI); \
+	VMOVDQU		Y5, 160(SI); \
+	VMOVDQU		Y6, 192(SI); \
+	VMOVDQU		Y7, 224(SI);
 
 #define BITSET_AVX_FLAG1(_FUNC) \
-	VMOVDQU		0(DI)(CX*1), X0; \
-	_FUNC		0(SI)(CX*1), X0, X0; \
+	VMOVDQU		0(DI), X0; \
+	_FUNC		0(SI), X0, X0; \
     VPOR        X0, X10, X10 \
-	VMOVDQU		X0, 0(SI)(CX*1);
+	VMOVDQU		X0, 0(SI);
 
 #define BITSET_I32_FLAG1(_FUNC) \
-	MOVL	0(DI)(CX*1), AX; \
-	_FUNC	0(SI)(CX*1), AX; \
+	MOVL	0(DI), AX; \
+	_FUNC	0(SI), AX; \
     ORL     AX, R10 \
-	MOVL	AX, 0(SI)(CX*1);
+	MOVL	AX, 0(SI);
 
 #define BITSET_I8_FLAG1(_FUNC) \
-	MOVB	0(DI)(CX*1), AX; \
-	_FUNC	0(SI)(CX*1), AX; \
+	MOVB	0(DI), AX; \
+	_FUNC	0(SI), AX; \
     ORB     AX, R10 \
-	MOVB	AX, 0(SI)(CX*1);
+	MOVB	AX, 0(SI);
 
 // func bitsetAndAVX2Flag1(dst, src []byte) int
 //
@@ -182,42 +182,36 @@ TEXT ·bitsetAndAVX2Flag1(SB), NOSPLIT, $0-48
 	MOVQ	dst_len+8(FP), BX
 	MOVQ	src_base+24(FP), DI
     VPXOR   Y10, Y10, Y10       // vector register for collecting ones
-    ADDQ    BX, SI
-    ADDQ    BX, DI
-    MOVQ    BX, CX              // loop variable (counts bytes)
-    NEGQ    CX
 
-//	TESTQ	BX, BX
-//	JLE		done
-	CMPQ	CX, $-256     // slices smaller than 256 byte are handled separately
-	JG		prep_avx
+	TESTQ	BX, BX
+	JLE		done
+	CMPQ	BX, $256     // slices smaller than 256 byte are handled separately
+	JB		prep_avx
 
 	// works for data size 256 byte
 loop_avx2:
 	BITSET_AVX2_FLAG1(VPAND)
-    ADDQ        $256, CX
-	//LEAQ		256(DI), DI
-	//LEAQ		256(SI), SI
-//	SUBQ		$256, BX
-	CMPQ		CX, $-256
-	JG			exit_avx2
+	LEAQ		256(DI), DI
+	LEAQ		256(SI), SI
+	SUBQ		$256, BX
+	CMPQ		BX, $256
+	JB			exit_avx2
 	JMP			loop_avx2
 
 exit_avx2:
 
 prep_avx:
-	CMPQ	CX, $-16
-	JG		prep_i32
+	CMPQ	BX, $16
+	JB		prep_i32
 
 	// works for data size 16 byte
 loop_avx:
 	BITSET_AVX_FLAG1(VPAND)
-    ADDQ        $16, CX
-	//LEAQ		16(SI), SI
-	//LEAQ		16(DI), DI
-//	SUBL		$16, BX
-	CMPL		CX, $-16
-	JG			prep_i32
+	LEAQ		16(SI), SI
+	LEAQ		16(DI), DI
+	SUBL		$16, BX
+	CMPL		BX, $16
+	JB			prep_i32
 	JMP			loop_avx
 
 exit_avx:
@@ -236,30 +230,28 @@ prep_i32:
 //	TESTQ	BX, BX
 //	JLE		done
 //	XORQ	AX, AX
-	CMPL	CX, $-4
-	JG		prep_i8
+	CMPL	BX, $4
+	JB		prep_i8
 
 loop_i32:
 	BITSET_I32_FLAG1(ANDL)
-    ADDQ    $4, CX
-//	LEAQ	4(SI), SI
-//	LEAQ	4(DI), DI
-//	SUBL	$4, BX
-	CMPL	CX, $-4
-	JG		prep_i8
+	LEAQ	4(SI), SI
+	LEAQ	4(DI), DI
+	SUBL	$4, BX
+	CMPL	BX, $4
+	JBE		prep_i8
 	JMP		loop_i32
 
 prep_i8:
-	TESTQ	CX, CX
-	JZ		done
+	TESTQ	BX, BX
+	JLE		done
 	XORQ	AX, AX
 
 loop_i8:
 	BITSET_I8_FLAG1(ANDB)
-//	INCQ	DI
-//	INCQ	SI
-//	DECL	BX
-    ADDQ    $1, CX
+	INCQ	DI
+	INCQ	SI
+	DECL	BX
 	JZ		done
 	JMP		loop_i8
 
