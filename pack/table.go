@@ -1086,28 +1086,28 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 	// mark deleted entries in journal by setting id to zero
 	// Note: both tombstone and journal id columns are sorted already
-	log.Debugf("flush: %s table %d journal and %d tombstone records", t.name, len(pk), len(dead))
-	for j, d, jl, dl := 0, 0, len(pk), len(dead); j < jl && d < dl; {
-		for d < dl && dead[d] < pk[j] {
-			d++
-		}
-		if d == dl {
-			break
-		}
-		for j < jl && dead[d] > pk[j] {
-			j++
-		}
-		if j == jl {
-			break
-		}
-		if dead[d] == pk[j] {
-			pk[j] = 0   // mark as processed (0 is safe to use here
-			dead[d] = 0 // because its an invalid pk value)
-			d++
-			j++
-			nDel++
-		}
-	}
+	// log.Debugf("flush: %s table %d journal and %d tombstone records", t.name, len(pk), len(dead))
+	// for j, d, jl, dl := 0, 0, len(pk), len(dead); j < jl && d < dl; {
+	// 	for d < dl && dead[d] < pk[j] {
+	// 		d++
+	// 	}
+	// 	if d == dl {
+	// 		break
+	// 	}
+	// 	for j < jl && dead[d] > pk[j] {
+	// 		j++
+	// 	}
+	// 	if j == jl {
+	// 		break
+	// 	}
+	// 	if dead[d] == pk[j] {
+	// 		pk[j] = 0   // mark as processed (0 is safe to use here
+	// 		dead[d] = 0 // because its an invalid pk value)
+	// 		d++
+	// 		j++
+	// 		nDel++
+	// 	}
+	// }
 
 	// walk journal/tombstone updates and group updates by pack
 	var (

@@ -337,6 +337,7 @@ func (j *Journal) UpdateBatch(batch []Item) (int, error) {
 	last = 0
 
 	var count int
+	newKeys := make(journalEntryList, 0, len(batch)-toUpdate.Count())
 	for i, item := range batch {
 		if toUpdate.IsSet(i) {
 			idx, last = j.PkIndex(item.ID(), last)
@@ -346,23 +347,68 @@ func (j *Journal) UpdateBatch(batch []Item) (int, error) {
 			}
 			count++
 		} else {
-			id := item.ID()
+			pk := item.ID()
 			// append to data pack if not exists
 			if err := j.data.Push(item); err != nil {
 				return count, err
 			}
 			count++
 
-			// update keys
-			j.keys = append(j.keys, journalEntry{id, j.data.Len() - 1})
+			// create mapped keys
+			newKeys = append(newKeys, journalEntry{pk, j.data.Len() - 1})
 
 			// set sortData and sortKeys flags
-			j.sortData = j.sortData || id < j.lastid
-			j.sortKeys = j.sortKeys || id < j.lastid
-			j.lastid = util.MaxU64(j.lastid, id)
+			j.sortData = j.sortData || pk < j.lastid
+			// j.sortKeys = j.sortKeys || pk < j.lastid
+			j.lastid = util.MaxU64(j.lastid, pk)
 		}
 	}
 	toUpdate.Close()
+
+	// merge newKeys into key list (both lists are sorted), Note deleted entries
+	// have pk == 0
+	if cap(j.keys) < len(j.keys)+len(newKeys) {
+		cp := make(journalEntryList, len(j.keys), len(j.keys)+len(newKeys))
+		copy(cp, j.keys)
+		j.keys = cp
+	}
+
+	// j.keys = append(j.keys, journalEntry{id, j.data.Len() - 1})
+	for i := 0; i < len(j.keys) && len(newKeys) > 0; {
+		for i < len(j.keys) && j.keys[i].pk < newKeys[0].pk {
+			i++
+		}
+		if i == len(j.keys) {
+			// done
+			break
+		}
+
+		// sanity check for duplicate pks (should have been repalced)
+		if j.keys[i].pk == newKeys[0].pk {
+			log.Errorf("pack: pk %d inserted, but already exists in journal at pos %d", newKeys[0].pk, newKeys[0].idx)
+			newKeys = newKeys[1:]
+			continue
+		}
+
+		// take all elements in ids that are smaller than the next value in tomb
+		var k int
+		for k < len(newKeys) && newKeys[k].pk < j.keys[i].pk {
+			k++
+		}
+
+		// make room for k elements at position i in tomb
+		j.keys = j.keys[:len(j.keys)+k]
+		copy(j.keys[i+k:], j.keys[i:])
+
+		// insert k elements from ids into tomb at position i
+		copy(j.keys[i:], newKeys[:k])
+
+		// shorten ids by k processed elements
+		newKeys = newKeys[k:]
+
+		// update tomb insert index
+		i += k
+	}
 
 	// update maxid (Note: since we just check if primary key exists in
 	// the journal, but not in the entire table, an update be a hidden insert)
