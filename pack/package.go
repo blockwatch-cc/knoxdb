@@ -34,9 +34,7 @@ type Package struct {
 }
 
 func (p *Package) Key() []byte {
-	var b [4]byte
-	bigEndian.PutUint32(b[:], p.key)
-	return b[:]
+	return encodePackKey(p.key)
 }
 
 func (p *Package) SetKey(key []byte) {

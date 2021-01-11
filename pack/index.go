@@ -326,7 +326,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 		if err != nil {
 			return err
 		}
-		idx.journal, err = loadPackTx(dbTx, idx.metakey, bytekey(journalKey), nil)
+		idx.journal, err = loadPackTx(dbTx, idx.metakey, encodePackKey(journalKey), nil)
 		if err != nil {
 			return fmt.Errorf("pack: cannot open journal for index %s: %v", idx.cachekey(nil), err)
 		}
@@ -334,7 +334,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 			return err
 		}
 		log.Debugf("pack: loaded %s index journal with %d entries", idx.cachekey(nil), idx.journal.Len())
-		idx.tombstone, err = loadPackTx(dbTx, idx.metakey, bytekey(tombstoneKey), nil)
+		idx.tombstone, err = loadPackTx(dbTx, idx.metakey, encodePackKey(tombstoneKey), nil)
 		if err != nil {
 			return fmt.Errorf("pack: %s index cannot open tombstone: %v", idx.cachekey(nil), err)
 		}
@@ -1275,7 +1275,7 @@ func (idx Index) cachekey(key []byte) string {
 
 func (idx *Index) loadPack(tx *Tx, id uint32, touch bool) (*Package, error) {
 	// try cache first
-	key := bytekey(id)
+	key := encodePackKey(id)
 	cachekey := idx.cachekey(key)
 	cachefn := idx.cache.Peek
 	if touch {

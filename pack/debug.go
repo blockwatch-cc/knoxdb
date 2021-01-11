@@ -31,7 +31,7 @@ type CSVHeader struct {
 }
 
 func (t *Table) DumpType(w io.Writer) error {
-	return t.journal.DumpType(w)
+	return t.journal.DataPack().DumpType(w)
 }
 
 func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode) error {
@@ -60,25 +60,16 @@ func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode) error {
 		fmt.Fprintf(w, "%-3d ", i)
 		i++
 	}
-	info := t.journal.Info()
-	info.UpdateStats(t.journal)
-	if err := info.Dump(w, mode, t.journal.Cols()); err != nil {
-		return err
-	}
-	switch mode {
-	case DumpModeDec, DumpModeHex:
-		fmt.Fprintf(w, "%-3d ", i)
-	}
-	info = t.tombstone.Info()
-	info.UpdateStats(t.journal)
-	if err := info.Dump(w, mode, t.tombstone.Cols()); err != nil {
+	info := t.journal.DataPack().Info()
+	info.UpdateStats(t.journal.DataPack())
+	if err := info.Dump(w, mode, t.journal.DataPack().Cols()); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (t *Table) DumpJournal(w io.Writer, mode DumpMode) error {
-	return t.journal.DumpData(w, mode, t.fields.Aliases())
+	return t.journal.DataPack().DumpData(w, mode, t.fields.Aliases())
 }
 
 func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
