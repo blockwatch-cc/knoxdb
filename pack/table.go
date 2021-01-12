@@ -208,7 +208,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 			return err
 		}
 		t.journal = NewJournal(0, 1<<uint(t.opts.JournalSizeLog2))
-		if err := t.journal.Init(fields, nil); err != nil {
+		if err := t.journal.InitFields(fields); err != nil {
 			return err
 		}
 		_, err = t.journal.StoreLegacy(dbTx, t.metakey)
@@ -338,7 +338,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 			return fmt.Errorf("pack: cannot read metadata for table %s: %v", name, err)
 		}
 		t.journal = NewJournal(t.meta.Sequence, 1<<uint(t.opts.JournalSizeLog2))
-		t.journal.Init(t.fields, nil)
+		t.journal.InitFields(t.fields)
 		err = t.journal.LoadLegacy(dbTx, t.metakey)
 		if err != nil {
 			return fmt.Errorf("pack: cannot open journal for table %s: %v", name, err)
@@ -2945,7 +2945,7 @@ func (t Table) cachekey(key []byte) string {
 }
 
 func (t *Table) loadPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
-	// determine of we need to load a full pack or a stripped version with less fields
+	// determine if we need to load a full pack or a stripped version with less fields
 	stripped := len(fields) > 0 && len(fields) < len(t.Fields())
 	key := encodePackKey(id)
 

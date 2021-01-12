@@ -9,22 +9,23 @@ import (
 
 	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
-
 	"blockwatch.cc/knoxdb/vec"
 )
 
 // Append-only journal and in-memory tombstone
 // - keeps mapping from primary keys to journal positions as cache
 // - journal data is never sorted
-// - primary keys are sorted on demand (insert with id, update, delete, query, flush)
+// - primary keys are always sorted (insert with id, update, delete, query, flush)
+// - tombstone is always sorted
 //
 // TODO
 // - write all incoming inserts/updates/deletes to a WAL
 // - load and reconstructed journal + tomb from WAL
 //
 // Re-inserting deleted entries is safe because on deletion the pk column is
-// overwritten with zero value and sich rows are never flushed. Update after delete
-// will just append a new row.
+// overwritten with zero value. Such rows are never flushed. Insert after delete
+// is also safe and explicitly handled by the journal by removing the pk from its
+// tombstone list.
 //
 type Journal struct {
 	lastid   uint64 // the highest primary key in the journal, used for sorting
@@ -56,20 +57,22 @@ func NewJournal(maxid uint64, size int) *Journal {
 		data:    NewPackage(size),
 		keys:    make(journalEntryList, 0, size),
 		tomb:    make([]uint64, 0, size),
-		deleted: vec.NewBitSet(0),
+		deleted: vec.NewCustomBitSet(size).Grow(0),
 	}
 }
 
-func (j *Journal) Init(fields []Field, typ interface{}) error {
-	var (
-		tinfo *typeInfo
-		err   error
-	)
-	if typ != nil {
-		tinfo, err = getTypeInfo(typ)
-		if err != nil {
-			return err
-		}
+func (j *Journal) InitFields(fields []Field) error {
+	return j.data.InitFields(fields, nil)
+}
+
+func (j *Journal) InitType(typ interface{}) error {
+	tinfo, err := getTypeInfo(typ)
+	if err != nil {
+		return err
+	}
+	fields, err := Fields(typ)
+	if err != nil {
+		return err
 	}
 	return j.data.InitFields(fields, tinfo)
 }
@@ -516,7 +519,7 @@ func (j *Journal) DeleteBatch(ids []uint64) (int, error) {
 		if idx, last = j.PkIndex(id, last); idx >= 0 {
 			// overwrite journal pk col with zero (this signals to not query and
 			// flush operations that this item is deleted and should be skipped)
-			j.data.SetFieldAt(j.data.pkindex, idx, 0)
+			j.data.SetFieldAt(j.data.pkindex, idx, uint64(0))
 
 			// remember the journal position was deleted, so that a subsequent
 			// insert/upsert call can properly undelete
@@ -629,12 +632,14 @@ func (j *Journal) undelete(pks []uint64, isSorted bool) {
 	}
 }
 
-// Lookup (non-order-preserving) matches pk values only (better performance
+// How the journal is used right now:
+//
+// Lookup: (non-order-preserving) matches pk values only (better performance
 // when sorted, but we can use the keys list and map to positions)
 
-// Query, Stream, Count (run full pack match on journal, then walk packs and
+// Query, Stream, Count: run full pack match on journal, then walk packs and
 // cross-check with tomb + journal to decide if/which rows to return; tick off
-// journal matches as visted, skip journal checks when bitset is empty)
+// journal matches as visted, skip journal checks when bitset is empty
 //
 // Forward order
 // - match can work on Journal.DataPack(), bit set is in storage order
@@ -648,7 +653,7 @@ func (j *Journal) undelete(pks []uint64, isSorted bool) {
 // - other than that forward order considerations apply
 //
 func (j *Journal) IsDeleted(pk uint64, last int) (bool, int) {
-	// find pk in tomb
+	// find pk in tomb, always sorted
 	idx := sort.Search(len(j.tomb)-last, func(i int) bool { return j.tomb[last+i] >= pk })
 	return last+idx < len(j.tomb), last + idx
 }
@@ -677,19 +682,19 @@ func (j *Journal) PkIndex(pk uint64, last int) (int, int) {
 }
 
 // Checks invariants
-func (j *Journal) check(when string) error {
+func (j *Journal) checkInvariants(when string) error {
 	// check invariants
 	if a, b := j.data.Len(), len(j.keys); a != b {
-		return fmt.Errorf("journal %s: INVARIANT VOLATION: data-pack-len=%d key-len=%d", when, a, b)
+		return fmt.Errorf("journal %s: INVARIANT VIOLATION: data-pack-len=%d key-len=%d", when, a, b)
 	}
 	if a, b := j.data.Len(), j.deleted.Len(); a != b {
-		return fmt.Errorf("journal %s: INVARIANT VOLATION: data-pack-len=%d deleted-bitset-len=%d", when, a, b)
+		return fmt.Errorf("journal %s: INVARIANT VIOLATION: data-pack-len=%d deleted-bitset-len=%d", when, a, b)
 	}
 	if !sort.IsSorted(j.keys) {
-		return fmt.Errorf("journal %s: INVARIANT VOLATION: keys are unsorted", when)
+		return fmt.Errorf("journal %s: INVARIANT VIOLATION: keys are unsorted", when)
 	}
 	if !sort.IsSorted(vec.Uint64Slice(j.tomb)) {
-		return fmt.Errorf("journal: %s: INVARIANT VOLATION: tomb is unsorted", when)
+		return fmt.Errorf("journal: %s: INVARIANT VIOLATION: tomb is unsorted", when)
 	}
 	return nil
 }

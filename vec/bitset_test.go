@@ -2851,31 +2851,31 @@ func BenchmarkBitSetAndAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(bitFieldLen(n.l)))
 			for i := 0; i < B.N; i++ {
-				bitsetAndAVX2(bits, cmp)
+				bitsetAndAVX2Flag1(bits, cmp)
 			}
 		})
 	}
 }
 
 //go:noescape
-func bitsetAndAVX2Flag1(dst, src []byte) int
+// func bitsetAndAVX2Flag1(dst, src []byte) int
 
-func BenchmarkBitSetAndAVX2Flag1(B *testing.B) {
-	if !useAVX2 {
-		B.SkipNow()
-	}
-	for _, n := range bitSetBenchmarkSizes {
-		B.Run(n.name, func(B *testing.B) {
-			bits := fillBitset(nil, n.l, 0xfa)
-			cmp := fillBitset(nil, n.l, 0xae)
-			B.ResetTimer()
-			B.SetBytes(int64(bitFieldLen(n.l)))
-			for i := 0; i < B.N; i++ {
-				bitsetAndAVX2Flag1(bits, cmp)
-			}
-		})
-	}
-}
+// func BenchmarkBitSetAndAVX2Flag1(B *testing.B) {
+// 	if !useAVX2 {
+// 		B.SkipNow()
+// 	}
+// 	for _, n := range bitSetBenchmarkSizes {
+// 		B.Run(n.name, func(B *testing.B) {
+// 			bits := fillBitset(nil, n.l, 0xfa)
+// 			cmp := fillBitset(nil, n.l, 0xae)
+// 			B.ResetTimer()
+// 			B.SetBytes(int64(bitFieldLen(n.l)))
+// 			for i := 0; i < B.N; i++ {
+// 				bitsetAndAVX2Flag1(bits, cmp)
+// 			}
+// 		})
+// 	}
+// }
 
 //go:noescape
 func bitsetAndAVX2Flag2(dst, src []byte) int

@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	// default encoder/decoder buffer size in elements (64k)
-	DefaultMaxPointsPerBlock = 1 << 16
+	// default encoder/decoder buffer size in elements (32k)
+	DefaultMaxPointsPerBlock = 1 << 15
 
-	// 512k - size of a single block that fits 64k 8byte values + 1 page extra headers
-	BlockSizeHint = 1<<19 + 4096
+	// 512k - size of a single block that fits 32k 8byte values + 1 page extra headers
+	BlockSizeHint = 1<<18 + 4096
 
 	// storedBlockHeaderSize is the size of the header for an encoded block.
 	// There is one byte encoding the type of the block.

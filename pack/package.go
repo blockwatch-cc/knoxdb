@@ -107,16 +107,19 @@ func (p *Package) Contains(fields FieldList) bool {
 }
 
 // Go type is required to write using reflect inside Push(),
-func (p *Package) InitType(v interface{}) error {
+func (p *Package) InitType(proto interface{}) error {
 	if p.tinfo != nil && p.tinfo.gotype {
 		return nil
 	}
-	tinfo, err := getTypeInfo(v)
+	tinfo, err := getTypeInfo(proto)
 	if err != nil {
 		return err
 	}
 	if len(tinfo.fields) > 256 {
 		return fmt.Errorf("pack: cannot handle more than 256 fields")
+	}
+	if len(tinfo.fields) == 0 {
+		return fmt.Errorf("pack: empty type (there are no exported fields)")
 	}
 	p.tinfo = tinfo
 	if p.pkindex < 0 {
@@ -124,9 +127,13 @@ func (p *Package) InitType(v interface{}) error {
 	}
 	if len(p.fields) == 0 {
 		// extract fields from Go type
-		fields, err := Fields(v)
+		fields, err := Fields(proto)
 		if err != nil {
 			return err
+		}
+		// require pk field
+		if fields.PkIndex() < 0 {
+			return fmt.Errorf("pack: missing primary key field in type %T", proto)
 		}
 		// if pack has been loaded, check if field types match block types
 		if p.nFields > 0 && len(p.blocks) > 0 {
@@ -171,8 +178,15 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	if len(fields) > 256 {
 		return fmt.Errorf("pack: cannot handle more than 256 fields")
 	}
+	if len(fields) == 0 {
+		return fmt.Errorf("pack: empty fields")
+	}
 	if len(p.fields) > 0 {
 		return fmt.Errorf("pack: already initialized")
+	}
+	// require pk field
+	if fields.PkIndex() < 0 {
+		return fmt.Errorf("pack: missing primary key field")
 	}
 	// if pack has been loaded, check if field types match block types
 	if p.nFields > 0 && len(p.blocks) > 0 {
