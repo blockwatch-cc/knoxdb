@@ -452,6 +452,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 		}
 		packs = append(packs, info)
 		atomic.AddInt64(&t.stats.MetaBytesRead, int64(len(c.Value())))
+		pkg.Clear()
 	}
 	t.packidx = NewPackIndex(packs, t.fields.PkIndex())
 	log.Debugf("pack: %s table scanned %d packages", t.name, t.packidx.Len())
@@ -813,9 +814,6 @@ func (t *Table) updateJournal(val interface{}) error {
 
 	atomic.AddInt64(&t.stats.UpdateCalls, 1)
 
-	// sort for improved update performance
-	SortItems(batch)
-
 	count, err := t.journal.UpdateBatch(batch)
 	if err != nil {
 		return err
@@ -1071,6 +1069,10 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		pUpd, pAdd, pDel                 int                    // per-pack stats counters
 		start                            time.Time = time.Now() // logging
 	)
+
+	// journal must be sorted for the legacy algorithm below
+	// TODO: find an algo that uses the already sorted journal key-to-pos slice
+	t.journal.Sort()
 
 	// use id slices for faster lookups
 	pk, dead := t.journal.KeyColumns()
@@ -1832,13 +1834,14 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	}
 
 	// after all packs have been scanned, add remaining rows from journal, if any
-	idxs, pks := t.journal.SortedIndexes(jbits)
+	idxs, _ := t.journal.SortedIndexes(jbits)
 	jpack := t.journal.DataPack()
-	for i, idx := range idxs {
+	for _, idx := range idxs {
+		// Note: deleted entries are already removed from index list!
 		// skip deleted entries
-		if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
-			continue
-		}
+		// if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
+		// 	continue
+		// }
 
 		if err := res.pkg.AppendFrom(jpack, idx, 1, true); err != nil {
 			res.Close()
@@ -1934,13 +1937,14 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 
 	// before scanning packs, add 'new' rows from journal (i.e. pk > maxPackedPk),
 	// walk in descending order
-	idxs, pks := t.journal.SortedIndexesReversed(jbits, maxPackedPk)
+	idxs, _ := t.journal.SortedIndexesReversed(jbits, maxPackedPk)
 	jpack := t.journal.DataPack()
-	for i, idx := range idxs {
+	for _, idx := range idxs {
+		// Note: deleted indexes are already removed from list
 		// skip deleted entries
-		if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
-			continue
-		}
+		// if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
+		// 	continue
+		// }
 
 		if err := res.pkg.AppendFrom(jpack, idx, 1, true); err != nil {
 			res.Close()
@@ -2296,12 +2300,13 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 
 	// after all packs have been scanned, add remaining rows from journal, if any
 	res.pkg = t.journal.DataPack()
-	idxs, pks := t.journal.SortedIndexes(jbits)
-	for i, idx := range idxs {
+	idxs, _ := t.journal.SortedIndexes(jbits)
+	for _, idx := range idxs {
+		// Note: deleted indexes are already removed from list
 		// skip deleted entries
-		if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
-			continue
-		}
+		// if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
+		// 	continue
+		// }
 
 		// forward match
 		if err := fn(Row{res: &res, n: idx}); err != nil {
@@ -2404,12 +2409,13 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	// before scanning packs, add 'new' rows from journal (i.e. pk > maxPackedPk),
 	// walk in descending order
 	res.pkg = t.journal.DataPack()
-	idxs, pks := t.journal.SortedIndexesReversed(jbits, maxPackedPk)
-	for i, idx := range idxs {
+	idxs, _ := t.journal.SortedIndexesReversed(jbits, maxPackedPk)
+	for _, idx := range idxs {
+		// Note: deleted indexes are already removed from list
 		// skip deleted entries
-		if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
-			continue
-		}
+		// if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
+		// 	continue
+		// }
 
 		// forward match
 		if err := fn(Row{res: &res, n: idx}); err != nil {
