@@ -1072,11 +1072,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 	// journal must be sorted for the legacy algorithm below
 	// TODO: find an algo that uses the already sorted journal key-to-pos slice
-	t.journal.Sort()
-
-	// use id slices for faster lookups
-	pk, dead := t.journal.KeyColumns()
-	jpack := t.journal.DataPack()
+	// t.journal.Sort()
 
 	// col, _ := t.tombstone.Column(0)
 	// dead, _ := col.([]uint64)
@@ -1111,15 +1107,22 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 	// 	}
 	// }
 
+	// use internal journal data slices for faster lookups
+	live := t.journal.keys
+	dead := t.journal.tomb
+	jpack := t.journal.data
+	dbits := t.journal.deleted
+
 	// walk journal/tombstone updates and group updates by pack
 	var (
 		pkg                            *Package // current target pack
 		pkgsz                          int      = 1 << uint(t.opts.PackSizeLog2)
 		jpos, tpos, nextpack, lastpack int      // slice or pack offset
-		jlen, tlen                     int      = len(pk), len(dead)
-		needSort                       bool
-		nextmax, lastmax               uint64
-		err                            error
+		jlen, tlen                     int      = len(live), len(dead)
+		// jlen, tlen       int = t.journal.Len(), t.journal.TombLen()
+		needSort         bool
+		nextmax, packmax uint64
+		err              error
 	)
 
 	// This algorithm works like a merge-sort over a sequence of sorted packs.
@@ -1130,7 +1133,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		}
 
 		// skip deleted journal entries
-		for ; jpos < jlen && pk[jpos] == 0; jpos++ {
+		for ; jpos < jlen && dbits.IsSet(jpos); jpos++ {
 		}
 
 		// skip deleted tomstone entries
@@ -1141,9 +1144,9 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		var nextid uint64
 		switch true {
 		case jpos < jlen && tpos < tlen:
-			nextid = util.MinU64(pk[jpos], dead[tpos])
+			nextid = util.MinU64(live[jpos].pk, dead[tpos])
 		case jpos < jlen && tpos >= tlen:
-			nextid = pk[jpos]
+			nextid = live[jpos].pk
 		case jpos >= jlen && tpos < tlen:
 			nextid = dead[tpos]
 		default:
@@ -1195,7 +1198,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 			// prepare for next pack
 			lastpack = nextpack
 			needSort = false
-			lastmax = 0
+			packmax = 0
 			pkg = nil
 			pAdd = 0
 			pDel = 0
@@ -1210,12 +1213,12 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					return err
 				}
 				// keep largest id value to check if pack needs sort before storing it
-				lastmax = nextmax
+				packmax = nextmax
 			}
 			// start new pack
 			if pkg == nil {
 				lastpack = t.packidx.Len()
-				lastmax = 0
+				packmax = 0
 				pkg = t.packPool.Get().(*Package)
 				pkg.key = t.packidx.NextKey()
 				pkg.cached = false
@@ -1223,7 +1226,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		}
 
 		// process tombstone entries for this pack
-		if tpos < tlen && lastmax > 0 {
+		if tpos < tlen && packmax > 0 {
 			// keep package position pointer outside the for loops
 			var ppos int
 			for ; tpos < tlen; tpos++ {
@@ -1236,7 +1239,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				}
 
 				// stop on pack boundary
-				if pkid > lastmax {
+				if pkid > packmax {
 					break
 				}
 
@@ -1270,42 +1273,42 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 		// process journal entries for this pack
 		for lastoffset := 0; jpos < jlen; jpos++ {
-			// next pk to insert or update
-			pkid := pk[jpos]
+			// next journal key entry for insert/update
+			key := live[jpos]
 
 			// skip deleted journal entries
-			if pkid == 0 {
+			if dbits.IsSet(key.idx) {
 				continue
 			}
 
 			// stop on pack boundary
-			if best, _, _ := t.findBestPack(pkid); best != lastpack {
+			if best, _, _ := t.findBestPack(key.pk); best != lastpack {
 				break
 			}
 
 			// packs are sorted by pk, so we can safely skip ahead
-			if offs := pkg.PkIndex(pkid, lastoffset); offs > -1 {
+			if offs := pkg.PkIndex(key.pk, lastoffset); offs > -1 {
 				// update existing row
 				lastoffset = offs
 				// replace index entries when data has changed
 				for _, idx := range t.indexes {
 					if !idx.Field.Type.EqualPacksAt(
 						pkg, idx.Field.Index, offs,
-						jpack, idx.Field.Index, jpos,
+						jpack, idx.Field.Index, key.idx,
 					) {
 						// remove index for original data
 						if err := idx.RemoveTx(tx, pkg, offs, 1); err != nil {
 							return err
 						}
 						// add new index entry
-						if err := idx.AddTx(tx, jpack, jpos, 1); err != nil {
+						if err := idx.AddTx(tx, jpack, key.idx, 1); err != nil {
 							return err
 						}
 					}
 				}
 
 				// overwrite original
-				if err := pkg.ReplaceFrom(jpack, offs, jpos, 1); err != nil {
+				if err := pkg.ReplaceFrom(jpack, offs, key.idx, 1); err != nil {
 					return err
 				}
 				nUpd++
@@ -1318,10 +1321,10 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				if pkg.Len() >= pkgsz {
 					bmin, bmax := t.packidx.MinMax(lastpack)
 					// allow ooo-inserts by splitting full packs
-					if lastpack < t.packidx.Len() && pkid > bmin && pkid < bmax {
+					if lastpack < t.packidx.Len() && key.pk > bmin && key.pk < bmax {
 						// warn, but continue appending below
 						log.Warnf("flush: %s table splitting full pack %x (%d/%d) with min=%d max=%d on out-of-order insert pk %d",
-							t.name, pkg.Key(), lastpack, t.packidx.Len(), bmin, bmax, pkid)
+							t.name, pkg.Key(), lastpack, t.packidx.Len(), bmin, bmax, key.pk)
 						if needSort {
 							pkg.PkSort()
 							needSort = false
@@ -1388,11 +1391,11 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					}
 				}
 				// append new row
-				if err := pkg.AppendFrom(jpack, jpos, 1, false); err != nil {
+				if err := pkg.AppendFrom(jpack, key.idx, 1, false); err != nil {
 					return err
 				}
-				needSort = needSort || pkid < lastmax
-				lastmax = util.MaxU64(lastmax, pkid)
+				needSort = needSort || key.pk < packmax
+				packmax = util.MaxU64(packmax, key.pk)
 				lastoffset = pkg.Len() - 1
 				nAdd++
 				pAdd++
@@ -1527,67 +1530,62 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		table:  t,
 	}
 
-	atomic.AddInt64(&t.stats.QueryCalls, 1)
-
 	q := NewQuery(t.name+".lookup", t)
-
-	// make sorted and unique copy of ids and strip any zero (i.e. illegal) ids
-	ids = vec.UniqueUint64Slice(ids)
-	if len(ids) > 0 && ids[0] == 0 {
-		ids = ids[1:]
-	}
-	maxRows := len(ids)
-
-	// keep max lookup id
-	var maxNonZeroId uint64
-	if maxRows > 0 {
-		maxNonZeroId = ids[maxRows-1]
-	} else {
-		return res, nil
-	}
-
 	defer func() {
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
 		q.Close()
 	}()
+	atomic.AddInt64(&t.stats.QueryCalls, 1)
 
-	// since journal can contain deleted entries, mark them (i.e. overwrite
-	// pkid with 0 == illegal value)
+	// make sorted and unique copy of ids and strip any zero (i.e. illegal) ids
+	ids = vec.Uint64.RemoveZeros(ids)
+	ids = vec.Uint64.Unique(ids)
+
+	// since journal can contain deleted entries, remove them from lookup
 	if t.journal.TombLen() > 0 {
+		var (
+			ok   bool
+			last int
+		)
 		for i, v := range ids {
-			if v == 0 {
+			ok, last = t.journal.IsDeleted(v, last)
+			if ok {
 				ids[i] = 0
-			} else if ok, _ := t.journal.IsDeleted(v, 0); ok {
-				ids[i] = 0
-			} else {
-				maxNonZeroId = v
 			}
-		}
-	}
-
-	// lookup journal first (Note: its sorted by pk)
-	pkidx := t.fields.PkIndex()
-	pk, _ := t.journal.KeyColumns()
-	jpack := t.journal.DataPack()
-	// col, _ := t.journal.Column(pkidx)
-	// pk, _ := col.([]uint64)
-
-	if t.journal.Len() > 0 {
-		var idx, last int
-		for i, v := range ids {
-			// no more matches in journal?
-			if pk[len(pk)-1] < v || pk[last] > maxNonZeroId {
+			if last == t.journal.TombLen() {
 				break
 			}
+		}
+		// remove zeros again
+		ids = vec.Uint64.RemoveZeros(ids)
+	}
 
-			// not in journal
+	// early return if all lookup ids are deleted or out of range
+	if len(ids) == 0 || ids[0] > t.meta.Sequence {
+		return res, nil
+	}
+
+	// keep max lookup id
+	maxRows := len(ids)
+	maxNonZeroId := ids[maxRows-1]
+
+	// lookup journal first (Note: its sorted by pk)
+	if t.journal.Len()-t.journal.TombLen() > 0 {
+		var idx, last int
+		for i, v := range ids {
+			// not in journal?
 			idx, last = t.journal.PkIndex(v, last)
 			if idx < 0 {
 				continue
 			}
 
+			// no more matches in journal?
+			if last == t.journal.Len() {
+				break
+			}
+
 			// on match, copy result from journal
-			if err := res.pkg.AppendFrom(jpack, idx, 1, true); err != nil {
+			if err := res.pkg.AppendFrom(t.journal.DataPack(), idx, 1, true); err != nil {
 				res.Close()
 				return nil, err
 			}
@@ -1596,25 +1594,12 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 			// mark id as processed (set 0)
 			ids[i] = 0
 		}
+		// remove processed ids
+		ids = vec.Uint64.RemoveZeros(ids)
 	}
 	q.stats.JournalTime = time.Since(q.lap)
 
 	// everything found in journal?, return early
-	if maxRows == q.stats.RowsMatched {
-		return res, nil
-	}
-
-	if q.stats.RowsMatched > 0 || t.journal.TombLen() > 0 {
-		clean := make([]uint64, 0, len(ids))
-		for _, v := range ids {
-			if v != 0 {
-				clean = append(clean, v)
-				maxNonZeroId = v
-			}
-		}
-		ids = clean
-	}
-
 	if len(ids) == 0 {
 		return res, nil
 	}
@@ -1640,8 +1625,6 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		// from the id lookup slice, so we may know better if the pack
 		// matches or not
 
-		// extract min/max values from pack header's pk column
-		_, max := t.packidx.MinMax(nextpack)
 		pkg, err := t.loadPack(tx, t.packidx.packs[nextpack].Key, true, q.reqfields)
 		if err != nil {
 			res.Close()
@@ -1649,8 +1632,11 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		}
 		q.stats.PacksScanned++
 
-		col, _ := pkg.Column(pkidx)
+		col, _ := pkg.Column(pkg.pkindex)
 		pk, _ := col.([]uint64)
+
+		// we use pack max value to break early
+		_, max := t.packidx.MinMax(nextpack)
 
 		// packs are sorted by pk, ids does not contain zero values
 		last := 0
@@ -1659,9 +1645,9 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 			if max < v || pk[last] > maxNonZeroId {
 				break
 			}
-			j := pkg.PkIndex(v, last)
 
 			// not in pack
+			j := pkg.PkIndex(v, last)
 			if j < 0 {
 				continue
 			}
@@ -1937,14 +1923,18 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 
 	// before scanning packs, add 'new' rows from journal (i.e. pk > maxPackedPk),
 	// walk in descending order
-	idxs, _ := t.journal.SortedIndexesReversed(jbits, maxPackedPk)
+	idxs, pks := t.journal.SortedIndexesReversed(jbits)
 	jpack := t.journal.DataPack()
-	for _, idx := range idxs {
+	for i, idx := range idxs {
 		// Note: deleted indexes are already removed from list
 		// skip deleted entries
 		// if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
 		// 	continue
 		// }
+		// skip previously stored entries (will be processed later)
+		if pks[i] <= maxPackedPk {
+			continue
+		}
 
 		if err := res.pkg.AppendFrom(jpack, idx, 1, true); err != nil {
 			res.Close()
@@ -2409,13 +2399,18 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	// before scanning packs, add 'new' rows from journal (i.e. pk > maxPackedPk),
 	// walk in descending order
 	res.pkg = t.journal.DataPack()
-	idxs, _ := t.journal.SortedIndexesReversed(jbits, maxPackedPk)
-	for _, idx := range idxs {
+	idxs, pks := t.journal.SortedIndexesReversed(jbits)
+	for i, idx := range idxs {
 		// Note: deleted indexes are already removed from list
 		// skip deleted entries
 		// if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
 		// 	continue
 		// }
+
+		// skip previously stored entries (will be processed later)
+		if pks[i] <= maxPackedPk {
+			continue
+		}
 
 		// forward match
 		if err := fn(Row{res: &res, n: idx}); err != nil {
@@ -2554,39 +2549,42 @@ func (t *Table) StreamLookup(ctx context.Context, ids []uint64, fn func(r Row) e
 func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn func(r Row) error) error {
 	atomic.AddInt64(&t.stats.StreamCalls, 1)
 	q := NewQuery(t.name+".stream-lookup", t)
-
-	// make sorted and unique copy of ids and strip any zero (i.e. illegal) ids
-	ids = vec.UniqueUint64Slice(ids)
-	if len(ids) > 0 && ids[0] == 0 {
-		ids = ids[1:]
-	}
-	maxRows := len(ids)
-
-	// keep max lookup id
-	var maxNonZeroId uint64
-	if maxRows > 0 {
-		maxNonZeroId = ids[maxRows-1]
-	} else {
-		return nil
-	}
-
 	defer func() {
 		atomic.AddInt64(&t.stats.StreamedTuples, int64(q.stats.RowsMatched))
 		q.Close()
 	}()
 
-	// mark all deleted entries (overwrite with 0 == illegal value)
+	// make sorted and unique copy of ids and strip any zero (i.e. illegal) ids
+	ids = vec.Uint64.RemoveZeros(ids)
+	ids = vec.Uint64.Unique(ids)
+
+	// since journal can contain deleted entries, remove them from lookup
 	if t.journal.TombLen() > 0 {
+		var (
+			ok   bool
+			last int
+		)
 		for i, v := range ids {
-			if v == 0 {
+			ok, last = t.journal.IsDeleted(v, last)
+			if ok {
 				ids[i] = 0
-			} else if ok, _ := t.journal.IsDeleted(v, 0); ok {
-				ids[i] = 0
-			} else {
-				maxNonZeroId = v
+			}
+			if last == t.journal.TombLen() {
+				break
 			}
 		}
+		// sort and remove zeros again
+		ids = vec.Uint64.RemoveZeros(ids)
 	}
+
+	// early return if all lookup ids are deleted or out of range
+	if len(ids) == 0 || ids[0] > t.meta.Sequence {
+		return nil
+	}
+
+	// keep max lookup id
+	maxRows := len(ids)
+	maxNonZeroId := ids[maxRows-1]
 
 	res := Result{
 		fields: t.Fields(),
@@ -2594,27 +2592,22 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 	}
 
 	// lookup journal first (Note: its sorted by pk)
-	pk, _ := t.journal.KeyColumns()
-	jpack := t.journal.DataPack()
-	pkidx := t.fields.PkIndex()
-	// col, _ := t.journal.Column(pkidx)
-	// pk, _ := col.([]uint64)
-
-	if t.journal.Len() > 0 {
+	if t.journal.Len()-t.journal.TombLen() > 0 {
 		var idx, last int
 		for i, v := range ids {
-			// no more matches in journal?
-			if pk[len(pk)-1] < v || pk[last] > maxNonZeroId {
-				break
-			}
 			// not in journal
 			idx, last = t.journal.PkIndex(v, last)
 			if idx < 0 {
 				continue
 			}
 
+			// no more matches in journal?
+			if last == t.journal.Len() {
+				break
+			}
+
 			// on match, copy result from journal
-			if err := res.pkg.AppendFrom(jpack, idx, 1, true); err != nil {
+			if err := res.pkg.AppendFrom(t.journal.DataPack(), idx, 1, true); err != nil {
 				res.Close()
 				return err
 			}
@@ -2623,33 +2616,19 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			// mark id as processed (set 0)
 			ids[i] = 0
 		}
-		q.stats.JournalTime = time.Since(q.lap)
+		// remove processed ids
+		ids = vec.Uint64.RemoveZeros(ids)
 	}
+	q.stats.JournalTime = time.Since(q.lap)
 
 	// everything found in journal?, return early
-	if maxRows == q.stats.RowsMatched {
-		return nil
-	}
-
-	// remove zero values from id list
-	if q.stats.RowsMatched > 0 || t.journal.TombLen() > 0 {
-		clean := make([]uint64, 0, len(ids))
-		for _, v := range ids {
-			if v != 0 {
-				clean = append(clean, v)
-				maxNonZeroId = v
-			}
-		}
-		ids = clean
-	}
-
 	if len(ids) == 0 {
 		return nil
 	}
 
 	// PACK SCAN, schedule uses fast range checks and schould be perfect
-	var nextid int
 	q.lap = time.Now()
+	var nextid int
 	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
 		// stop when all inputs are matched
 		if maxRows == q.stats.RowsMatched {
@@ -2666,16 +2645,14 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 		}
 		res.pkg = pkg
 		q.stats.PacksScanned++
-		col, _ := pkg.Column(pkidx)
+		col, _ := pkg.Column(pkg.pkindex)
 		pk, _ := col.([]uint64)
-
-		// packs are sorted by pk
-		last := 0
 
 		// we use pack max value to break early
 		_, max := t.packidx.MinMax(nextpack)
 
 		// loop over the remaining (unresolved) list of pks
+		last := 0
 		for _, v := range ids[nextid:] {
 			// no more matches in this pack?
 			if max < v || pk[last] > maxNonZeroId {

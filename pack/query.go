@@ -273,7 +273,6 @@ func (q *Query) MakePackSchedule(reverse bool) []int {
 // ordered list of packs that may contain matching ids (list can be reversed)
 func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
 	schedule := make([]int, 0, q.table.packidx.Len())
-	slice := vec.Uint64Slice(ids)
 
 	// extract min/max values from pack header's pk column
 	mins, maxs := q.table.packidx.MinMaxSlices()
@@ -282,7 +281,7 @@ func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
 	// because we only test the global max/min of requested lookup id's
 	for i := range mins {
 		// skip packs that don't contain pks in range
-		if !slice.ContainsRange(mins[i], maxs[i]) {
+		if !vec.Uint64.ContainsRange(ids, mins[i], maxs[i]) {
 			continue
 		}
 		schedule = append(schedule, i)

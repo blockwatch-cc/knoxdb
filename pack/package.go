@@ -1853,7 +1853,7 @@ func (p *Package) HeapSize() int {
 // This function is only safe to use when packs are sorted!
 func (p *Package) PkIndex(id uint64, last int) int {
 	// primary key field required
-	if p.pkindex < 0 || p.Len() <= last {
+	if p.pkindex < 0 || last >= p.nValues {
 		return -1
 	}
 

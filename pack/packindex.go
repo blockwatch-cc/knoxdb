@@ -30,7 +30,7 @@ type PackIndex struct {
 	packs   PackInfoList
 	minpks  []uint64
 	maxpks  []uint64
-	removed vec.Uint32Slice
+	removed []uint32
 	pairs   []pair
 	pkidx   int
 }
@@ -49,7 +49,7 @@ func NewPackIndex(packs PackInfoList, pkidx int) *PackIndex {
 		packs:   packs,
 		minpks:  make([]uint64, len(packs), cap(packs)),
 		maxpks:  make([]uint64, len(packs), cap(packs)),
-		removed: make(vec.Uint32Slice, 0),
+		removed: make([]uint32, 0),
 		pkidx:   pkidx,
 		pairs:   make([]pair, len(packs), cap(packs)),
 	}
@@ -108,7 +108,7 @@ func (l *PackIndex) Get(i int) PackInfo {
 // called by storePack
 func (l *PackIndex) AddOrUpdate(head PackInfo) {
 	head.dirty = true
-	l.removed.Remove(head.Key)
+	l.removed = vec.Uint32.Remove(l.removed, head.Key)
 	old, pos, isAdd := l.packs.Add(head)
 
 	// keep positions of packs in l.packs in sync with positions stored in l.pairs
@@ -197,7 +197,7 @@ func (l *PackIndex) Remove(key uint32) {
 		return
 	}
 	// store as dead key
-	l.removed.AddUnique(key)
+	l.removed = vec.Uint32.AddUnique(l.removed, key)
 
 	// remove pos from min/max slices
 	l.minpks = append(l.minpks[:pos], l.minpks[pos+1:]...)

@@ -12,11 +12,21 @@ import (
 	"blockwatch.cc/knoxdb/vec"
 )
 
+const sizeStep int = 1 << 12 // 4096
+
+// RoundSize rounds size up to a multiple of sizeStep
+func roundSize(sz int) int {
+	return (sz + (sizeStep - 1)) & ^(sizeStep - 1)
+}
+
 // Append-only journal and in-memory tombstone
 // - keeps mapping from primary keys to journal positions as cache
 // - journal data is never sorted
 // - primary keys are always sorted (insert with id, update, delete, query, flush)
 // - tombstone is always sorted
+//
+// To avoid sorting the journal after insert, but still process journal entries
+// in pk sort order, we generate a sorted list of indexes to visit in `keys`.
 //
 // TODO
 // - write all incoming inserts/updates/deletes to a WAL
@@ -55,9 +65,9 @@ func NewJournal(maxid uint64, size int) *Journal {
 		maxid:   maxid,
 		maxsize: size,
 		data:    NewPackage(size),
-		keys:    make(journalEntryList, 0, size),
-		tomb:    make([]uint64, 0, size),
-		deleted: vec.NewCustomBitSet(size).Grow(0),
+		keys:    make(journalEntryList, 0, roundSize(size)),
+		tomb:    make([]uint64, 0, roundSize(size)),
+		deleted: vec.NewCustomBitSet(roundSize(size)).Grow(0),
 	}
 }
 
@@ -100,7 +110,7 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 	col, _ = tomb.Column(0)
 	pk := col.([]uint64)
 	if cap(j.tomb) < len(pk) {
-		j.tomb = make([]uint64, len(pk))
+		j.tomb = make([]uint64, len(pk), roundSize(len(pk)))
 	}
 	j.tomb = j.tomb[:len(pk)]
 	copy(j.tomb, pk)
@@ -160,6 +170,10 @@ func (j *Journal) MaxId() uint64 {
 	return j.maxid
 }
 
+func (j *Journal) LastId() uint64 {
+	return j.lastid
+}
+
 func (j *Journal) next() uint64 {
 	j.maxid++
 	return j.maxid
@@ -168,28 +182,40 @@ func (j *Journal) next() uint64 {
 func (j *Journal) Insert(item Item) error {
 	// check ID and generate next sequence if missing
 	pk := item.ID()
+	updateIdx := -1
 	if pk == 0 {
 		pk = j.next()
 		item.SetID(pk)
+	} else {
+		updateIdx, _ = j.PkIndex(pk, 0)
 	}
 
 	// write insert record to WAL
 	// TODO
 
-	// append to data pack
-	if err := j.data.Push(item); err != nil {
-		return err
+	if updateIdx < 0 {
+		// append to data pack
+		if err := j.data.Push(item); err != nil {
+			return err
+		}
+
+		// undelete if deleted (must do before mergeKeys call!)
+		j.undelete([]uint64{pk}, true)
+
+		// update keys
+		j.mergeKeys(journalEntryList{journalEntry{pk, j.data.Len() - 1}}, pk > j.lastid)
+		j.deleted.Grow(len(j.keys))
+
+		// set sortData flag
+		j.sortData = j.sortData || pk < j.lastid
+	} else {
+		// replace in data pack, this also resets a zero pk after deletion
+		if err := j.data.ReplaceAt(updateIdx, item); err != nil {
+			return err
+		}
+		// undelete if deleted
+		j.undelete([]uint64{pk}, true)
 	}
-
-	// undelete if deleted
-	j.undelete([]uint64{pk}, true)
-
-	// update keys
-	j.mergeKeys(journalEntryList{journalEntry{pk, j.data.Len() - 1}}, pk > j.lastid)
-	j.deleted.Grow(len(j.keys))
-
-	// set sortData flag
-	j.sortData = j.sortData || pk < j.lastid
 
 	// update lastid and maxid
 	j.lastid = util.MaxU64(j.lastid, pk)
@@ -204,7 +230,12 @@ func (j *Journal) Insert(item Item) error {
 // maximum pk seen.
 func (j *Journal) InsertBatch(batch []Item) (int, error) {
 	// when inserting with external pk, make sure batch is sorted
-	SortItems(batch)
+	if len(batch) == 0 {
+		return 0, nil
+	}
+	if batch[0].ID() != 0 {
+		SortItems(batch)
+	}
 
 	var count, last int
 	newKeys := make(journalEntryList, 0, len(batch))
@@ -240,7 +271,7 @@ func (j *Journal) InsertBatch(batch []Item) (int, error) {
 			j.lastid = util.MaxU64(j.lastid, pk)
 			j.maxid = util.MaxU64(j.maxid, pk)
 		} else {
-			// replace in data pack
+			// replace in data pack, this also resets a zero pk after deletion
 			if err := j.data.ReplaceAt(updateIdx, item); err != nil {
 				return count, err
 			}
@@ -271,7 +302,7 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 	col, _ := pkg.Column(pkg.pkindex)
 	pkcol := col.([]uint64)
 	pks := pkcol[pos : pos+n]
-	minid, maxid := vec.Uint64Slice(pks).MinMax()
+	minid, maxid := vec.Uint64.MinMax(pks)
 	isSorted := minid == 0 && maxid == 0
 	isSorted = isSorted || sort.SliceIsSorted(pks, func(i, j int) bool { return pks[i] < pks[j] })
 
@@ -315,7 +346,7 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 				// write update record to WAL
 				// TODO
 
-				// replace in journal
+				// replace in data pack, this also resets a zero pk after deletion
 				if err := j.data.ReplaceFrom(pkg, updateIdx, pos+i, 1); err != nil {
 					return count, err
 				}
@@ -325,7 +356,7 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 		}
 	}
 
-	// undelete if deleted
+	// undelete if deleted, must call before mergeKeys!
 	j.undelete(pks, true)
 
 	// update keys and flags
@@ -347,15 +378,15 @@ func (j *Journal) Update(item Item) error {
 	// write update record to WAL
 	// TODO
 
-	// undelete if deleted
-	j.undelete([]uint64{pk}, true)
-
 	// find existing key and position in journal
 	if idx, _ := j.PkIndex(pk, 0); idx < 0 {
 		// append to data pack if not exists
 		if err := j.data.Push(item); err != nil {
 			return err
 		}
+
+		// undelete if deleted
+		j.undelete([]uint64{pk}, true)
 
 		// update keys
 		j.mergeKeys(journalEntryList{journalEntry{pk, j.data.Len() - 1}}, pk > j.lastid)
@@ -369,10 +400,13 @@ func (j *Journal) Update(item Item) error {
 		j.lastid = util.MaxU64(j.lastid, pk)
 		j.maxid = util.MaxU64(j.maxid, pk)
 	} else {
-		// replace in data pack if exists
+		// replace in data pack if exists, this also resets a zero pk after deletion
 		if err := j.data.ReplaceAt(idx, item); err != nil {
 			return err
 		}
+
+		// undelete if deleted
+		j.undelete([]uint64{pk}, true)
 	}
 
 	return nil
@@ -422,7 +456,7 @@ func (j *Journal) UpdateBatch(batch []Item) (int, error) {
 		newPks = append(newPks, pk)
 	}
 
-	// undelete if deleted
+	// undelete if deleted, must call before mergeKeys
 	j.undelete(newPks, true)
 
 	// merge new journal keys (they are known to be sorted because batch was sorted)
@@ -448,7 +482,7 @@ func (j *Journal) mergeKeys(newKeys journalEntryList, isSorted bool) {
 	// merge newKeys into key list (both lists are sorted)
 	// Note: deleted entries have pk == 0
 	if cap(j.keys) < len(j.keys)+len(newKeys) {
-		cp := make(journalEntryList, len(j.keys), len(j.keys)+len(newKeys))
+		cp := make(journalEntryList, len(j.keys), roundSize(len(j.keys)+len(newKeys)))
 		copy(cp, j.keys)
 		j.keys = cp
 	}
@@ -488,35 +522,78 @@ func (j *Journal) mergeKeys(newKeys journalEntryList, isSorted bool) {
 		// update tomb insert index
 		i += k
 	}
-	// append remainder (when all keys have been processed before, this is a noop)
+	// append remainder (this is a noop if all keys have been processed before)
 	j.keys = append(j.keys, newKeys...)
 }
 
-func (j *Journal) DeleteBatch(ids []uint64) (int, error) {
-	if len(ids) == 0 {
+func (j *Journal) Delete(pk uint64) (int, error) {
+	// pk must exist
+	if pk <= 0 || pk > j.maxid {
+		return 0, fmt.Errorf("pack: delete pk out-of-bounds")
+	}
+
+	// write delete record to WAL
+	// TODO
+
+	// find if key exists in journal and mark entry as deleted
+	idx, _ := j.PkIndex(pk, 0)
+	if idx >= 0 {
+		// overwrite journal pk col with zero (this signals to not query and
+		// flush operations that this item is deleted and should be skipped)
+		j.data.SetFieldAt(j.data.pkindex, idx, uint64(0))
+
+		// remember the journal position was deleted, so that a subsequent
+		// insert/upsert call can properly undelete
+		j.deleted.Set(idx)
+	}
+
+	// grow tomb capacity if too small
+	if cap(j.tomb) < len(j.tomb)+1 {
+		cp := make([]uint64, len(j.tomb), roundSize(len(j.tomb)+1))
+		copy(cp, j.tomb)
+		j.tomb = cp
+	}
+
+	// find insert position
+	idx = sort.Search(len(j.tomb), func(i int) bool { return j.tomb[i] >= pk })
+	if idx < len(j.tomb) && j.tomb[idx] == pk {
+		// ignore duplicate
+		return 0, nil
+	}
+
+	// insert new pk
+	j.tomb = j.tomb[:len(j.tomb)+1]
+	copy(j.tomb[idx+1:], j.tomb[idx:])
+	j.tomb[idx] = pk
+
+	return 1, nil
+}
+
+func (j *Journal) DeleteBatch(pks []uint64) (int, error) {
+	if len(pks) == 0 {
 		return 0, nil
 	}
 
 	// the algorithm below requires ids to be sorted and unique
-	ids = vec.UniqueUint64Slice(ids)
-	for ids[0] == 0 {
-		ids = ids[1:]
+	pks = vec.UniqueUint64Slice(pks)
+	for pks[0] == 0 {
+		pks = pks[1:]
 	}
 
-	// ids must exist
-	if ids[len(ids)-1] > j.maxid {
-		return 0, fmt.Errorf("pack: delete ids out-of-bounds")
+	// pks must exist
+	if pks[len(pks)-1] > j.maxid {
+		return 0, fmt.Errorf("pack: delete pk out-of-bounds")
 	}
 
 	// write delete records to WAL
 	// TODO
-	// for _, id := range ids {
+	// for _, pk := range ids {
 	// }
 
 	var last, idx int
-	for _, id := range ids {
+	for _, pk := range pks {
 		// find existing key and position in journal
-		if idx, last = j.PkIndex(id, last); idx >= 0 {
+		if idx, last = j.PkIndex(pk, last); idx >= 0 {
 			// overwrite journal pk col with zero (this signals to not query and
 			// flush operations that this item is deleted and should be skipped)
 			j.data.SetFieldAt(j.data.pkindex, idx, uint64(0))
@@ -535,18 +612,18 @@ func (j *Journal) DeleteBatch(ids []uint64) (int, error) {
 	// Merge-sort ids into tomb, this keeps tomb always sorted and is
 	// the most efficient sort strategy. The algo below finds the next
 	// insert position in tomb, then inserts all eligible elements from ids
-	// in each step. Duplicate id values that already exist in tomb are skipped.
+	// in each step. Duplicate pk values that already exist in tomb are skipped.
 
 	// grow tomb capacity first so we're sure we can hold the final result
-	if cap(j.tomb) < len(j.tomb)+len(ids) {
-		cp := make([]uint64, len(j.tomb), len(j.tomb)+len(ids))
+	if cap(j.tomb) < len(j.tomb)+len(pks) {
+		cp := make([]uint64, len(j.tomb), roundSize(len(j.tomb)+len(pks)))
 		copy(cp, j.tomb)
 		j.tomb = cp
 	}
 
-	count := len(ids)
-	for i := 0; i < len(j.tomb) && len(ids) > 0; {
-		for i < len(j.tomb) && j.tomb[i] < ids[0] {
+	count := len(pks)
+	for i := 0; i < len(j.tomb) && len(pks) > 0; {
+		for i < len(j.tomb) && j.tomb[i] < pks[0] {
 			i++
 		}
 		if i == len(j.tomb) {
@@ -555,14 +632,15 @@ func (j *Journal) DeleteBatch(ids []uint64) (int, error) {
 		}
 
 		// skip duplicate ids (that already exist in tomb)
-		if j.tomb[i] == ids[0] {
-			ids = ids[1:]
+		if j.tomb[i] == pks[0] {
+			count--
+			pks = pks[1:]
 			continue
 		}
 
 		// take all elements in ids that are smaller than the next value in tomb
 		var k int
-		for k < len(ids) && ids[k] < j.tomb[i] {
+		for k < len(pks) && pks[k] < j.tomb[i] {
 			k++
 		}
 
@@ -571,23 +649,23 @@ func (j *Journal) DeleteBatch(ids []uint64) (int, error) {
 		copy(j.tomb[i+k:], j.tomb[i:])
 
 		// insert k elements from ids into tomb at position i
-		copy(j.tomb[i:], ids[:k])
+		copy(j.tomb[i:], pks[:k])
 
 		// shorten ids by k processed elements
-		ids = ids[k:]
+		pks = pks[k:]
 
 		// update tomb insert index
 		i += k
 	}
 
 	// append remainder (when all ids have been processed before, this is a noop)
-	j.tomb = append(j.tomb, ids...)
+	j.tomb = append(j.tomb, pks...)
 	return count, nil
 }
 
 func (j *Journal) undelete(pks []uint64, isSorted bool) {
 	if !isSorted {
-		vec.Uint64Slice(pks).Sort()
+		vec.Uint64.Sort(pks)
 	}
 	var idx, last, lastTomb int
 	for len(pks) > 0 {
@@ -675,6 +753,8 @@ func (j *Journal) PkIndex(pk uint64, last int) (int, int) {
 	idx := sort.Search(len(j.keys)-last, func(i int) bool { return j.keys[last+i].pk >= pk })
 
 	// return index	if found or -1 otherwise
+	// Note: when entry is deleted, we still return its position since other
+	// parts of this algorithm rely on this behaviour
 	if last+idx < len(j.keys) && j.keys[last+idx].pk == pk {
 		return j.keys[last+idx].idx, last + idx
 	}
@@ -690,11 +770,37 @@ func (j *Journal) checkInvariants(when string) error {
 	if a, b := j.data.Len(), j.deleted.Len(); a != b {
 		return fmt.Errorf("journal %s: INVARIANT VIOLATION: data-pack-len=%d deleted-bitset-len=%d", when, a, b)
 	}
-	if !sort.IsSorted(j.keys) {
-		return fmt.Errorf("journal %s: INVARIANT VIOLATION: keys are unsorted", when)
+	for i, v := range j.keys {
+		if i == 0 {
+			continue
+		}
+		if j.keys[i-1].pk > v.pk {
+			return fmt.Errorf("journal %s: INVARIANT VIOLATION: unsorted keys", when)
+		}
+		if j.keys[i-1].pk == v.pk {
+			return fmt.Errorf("journal %s: INVARIANT VIOLATION: duplicate key", when)
+		}
 	}
-	if !sort.IsSorted(vec.Uint64Slice(j.tomb)) {
-		return fmt.Errorf("journal: %s: INVARIANT VIOLATION: tomb is unsorted", when)
+	for i, v := range j.tomb {
+		if i == 0 {
+			continue
+		}
+		if j.tomb[i-1] > v {
+			return fmt.Errorf("journal %s: INVARIANT VIOLATION: unsorted tomb", when)
+		}
+		if j.tomb[i-1] == v {
+			return fmt.Errorf("journal %s: INVARIANT VIOLATION: duplicate tomb pk", when)
+		}
+	}
+	// no duplicate pks in pack (consider deleted keys == 0)
+	col, _ := j.data.Column(j.data.pkindex)
+	pks, _ := col.([]uint64)
+	uniquePks := vec.UniqueUint64Slice(pks)
+	if len(uniquePks) > 0 && uniquePks[0] == 0 {
+		uniquePks = uniquePks[1:]
+	}
+	if have, want := len(uniquePks), j.data.Len()-len(j.tomb); have != want {
+		return fmt.Errorf("journal %s: INVARIANT VIOLATION: duplicate pks in data pack", when)
 	}
 	return nil
 }
@@ -711,10 +817,6 @@ func (s dualSorter) Swap(i, j int) {
 	s.id[i], s.id[j] = s.id[j], s.id[i]
 }
 
-// To avoid sorting the journal after insert, but still process journal entries
-// in pk sort order, we generate a sorted list of indexes to visit.
-//
-// Generating that list happens indirectly and makes use of a key-to-position map.
 // On lookup/query we run matching algos on the journal pack which produce a bitset
 // of all matches. The algo below takes this bitset and translates it into a pk
 // sorted index list.
@@ -743,46 +845,17 @@ func (j *Journal) SortedIndexes(b *vec.BitSet) ([]int, []uint64) {
 	ds.id = ds.id[firstNonZero:]
 	ds.pk = ds.pk[firstNonZero:]
 
-	// ?? maybe return the pks as well since they are useful
+	// return data pack positions and corresponding pks
 	return ds.id, ds.pk
 }
 
-func (j *Journal) SortedIndexesReversed(b *vec.BitSet, maxPackedPk uint64) ([]int, []uint64) {
+func (j *Journal) SortedIndexesReversed(b *vec.BitSet) ([]int, []uint64) {
 	id, pk := j.SortedIndexes(b)
-	end := len(id)
 	for i, j := 0, len(id)-1; i < j; i, j = i+1, j-1 {
 		id[i], id[j] = id[j], id[i]
 		pk[i], pk[j] = pk[j], pk[i]
-		if pk[i] > maxPackedPk {
-			end = i
-		}
 	}
-	return id[:end], pk[:end]
-}
-
-// The old packdb flush mechanism
-// - requires sorted tomb and data packs
-//   - data must be sorted if sortData is true
-//   - tomb is always sorted
-// - locks the entire table, so journal access is automatically running under lock
-func (j *Journal) Sort() {
-	if j.sortData {
-		_ = j.data.PkSort()
-		j.sortData = false
-		// rebuild keys
-		for i := range j.keys {
-			j.keys[i].idx = i
-		}
-	}
-}
-
-// cols must be storted
-func (j *Journal) KeyColumns() (pk []uint64, tomb []uint64) {
-	j.Sort()
-	col, _ := j.data.Column(j.data.pkindex)
-	pk, _ = col.([]uint64)
-	tomb = j.tomb
-	return
+	return id, pk
 }
 
 func (j *Journal) DataPack() *Package {
@@ -792,8 +865,22 @@ func (j *Journal) DataPack() *Package {
 func (j *Journal) Reset() {
 	// Note: don't alter j.maxid
 	j.data.Clear()
+	if len(j.keys) > 0 {
+		j.keys[0].idx = 0
+		j.keys[0].pk = 0
+		for bp := 1; bp < len(j.keys); bp *= 2 {
+			copy(j.keys[bp:], j.keys[:bp])
+		}
+		j.keys = j.keys[:0]
+	}
 	j.keys = j.keys[:0]
-	j.tomb = j.tomb[:0]
+	if len(j.tomb) > 0 {
+		j.tomb[0] = 0
+		for bp := 1; bp < len(j.tomb); bp *= 2 {
+			copy(j.tomb[bp:], j.tomb[:bp])
+		}
+		j.tomb = j.tomb[:0]
+	}
 	j.lastid = 0
 	j.sortData = false
 	j.deleted.Reset()
