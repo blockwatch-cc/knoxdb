@@ -49,41 +49,92 @@ func MatchUint16Between(src []uint16, a, b uint16, bits, mask *BitSet) *BitSet {
 	return bits
 }
 
-type Uint16Slice []uint16
-
-func (s Uint16Slice) Sort() Uint16Slice {
-	Uint16Sorter(s).Sort()
-	return s
+var Uint16 = struct {
+	Sort          func([]uint16) []uint16
+	Unique        func([]uint16) []uint16
+	RemoveZeros   func([]uint16) []uint16
+	AddUnique     func([]uint16, uint16) []uint16
+	Remove        func([]uint16, uint16) []uint16
+	Contains      func([]uint16, uint16) bool
+	Index         func([]uint16, uint16, int) int
+	MinMax        func([]uint16) (uint16, uint16)
+	ContainsRange func([]uint16, uint16, uint16) bool
+	Intersect     func([]uint16, []uint16, []uint16) []uint16
+	MatchEqual    func([]uint16, uint16, *BitSet, *BitSet) *BitSet
+}{
+	Sort: func(s []uint16) []uint16 {
+		Uint16Sorter(s).Sort()
+		return s
+	},
+	Unique: func(s []uint16) []uint16 {
+		UniqueUint16Slice(s)
+		return s
+	},
+	RemoveZeros: func(s []uint16) []uint16 {
+		s, _ = uint16RemoveZeros(s)
+		return s
+	},
+	AddUnique: func(s []uint16, v uint16) []uint16 {
+		s, _ = uint16AddUnique(s, v)
+		return s
+	},
+	Remove: func(s []uint16, v uint16) []uint16 {
+		s, _ = uint16Remove(s, v)
+		return s
+	},
+	Contains: func(s []uint16, v uint16) bool {
+		return uint16Contains(s, v)
+	},
+	Index: func(s []uint16, v uint16, last int) int {
+		return uint16Index(s, v, last)
+	},
+	MinMax: func(s []uint16) (uint16, uint16) {
+		return uint16MinMax(s)
+	},
+	ContainsRange: func(s []uint16, from, to uint16) bool {
+		return uint16ContainsRange(s, from, to)
+	},
+	Intersect: func(x, y, out []uint16) []uint16 {
+		return IntersectSortedUint16(x, y, out)
+	},
+	MatchEqual: func(s []uint16, val uint16, bits, mask *BitSet) *BitSet {
+		return MatchUint16Equal(s, val, bits, mask)
+	},
 }
 
-func (s Uint16Slice) Less(i, j int) bool { return s[i] < s[j] }
-func (s Uint16Slice) Len() int           { return len(s) }
-func (s Uint16Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s *Uint16Slice) AddUnique(val uint16) bool {
-	idx := s.Index(val, 0)
+func uint16AddUnique(s []uint16, val uint16) ([]uint16, bool) {
+	idx := uint16Index(s, val, 0)
 	if idx > -1 {
-		return false
+		return s, false
 	}
-	*s = append(*s, val)
-	s.Sort()
-	return true
+	s = append(s, val)
+	Uint16Sorter(s).Sort()
+	return s, true
 }
 
-func (s *Uint16Slice) Remove(val uint16) bool {
-	idx := s.Index(val, 0)
+func uint16Remove(s []uint16, val uint16) ([]uint16, bool) {
+	idx := uint16Index(s, val, 0)
 	if idx < 0 {
-		return false
+		return s, false
 	}
-	*s = append((*s)[:idx], (*s)[idx+1:]...)
-	return true
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
 }
 
-func (s Uint16Slice) Unique() Uint16Slice {
-	return UniqueUint16Slice(s)
+func uint16RemoveZeros(s []uint16) ([]uint16, int) {
+	var n int
+	for i, v := range s {
+		if v == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
 }
 
-func (s Uint16Slice) Contains(val uint16) bool {
+func uint16Contains(s []uint16, val uint16) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -108,7 +159,7 @@ func (s Uint16Slice) Contains(val uint16) bool {
 	return false
 }
 
-func (s Uint16Slice) Index(val uint16, last int) int {
+func uint16Index(s []uint16, val uint16, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -134,7 +185,7 @@ func (s Uint16Slice) Index(val uint16, last int) int {
 	return -1
 }
 
-func (s Uint16Slice) MinMax() (uint16, uint16) {
+func uint16MinMax(s []uint16) (uint16, uint16) {
 	var min, max uint16
 
 	switch l := len(s); l {
@@ -168,7 +219,7 @@ func (s Uint16Slice) MinMax() (uint16, uint16) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s Uint16Slice) ContainsRange(from, to uint16) bool {
+func uint16ContainsRange(s []uint16, from, to uint16) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -211,8 +262,4 @@ func (s Uint16Slice) ContainsRange(from, to uint16) bool {
 
 	// otherwise range is contained iff min < max
 	return min < max
-}
-
-func (s Uint16Slice) MatchEqual(val uint16, bits, mask *BitSet) *BitSet {
-	return MatchUint16Equal(s, val, bits, mask)
 }

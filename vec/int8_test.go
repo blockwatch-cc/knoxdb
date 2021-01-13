@@ -1454,52 +1454,52 @@ func BenchmarkUniqueInt8(B *testing.B) {
 
 func TestInt8SliceContains(T *testing.T) {
 	// nil slice
-	if Int8Slice(nil).Contains(1) {
+	if Int8.Contains(nil, 1) {
 		T.Errorf("nil slice cannot contain value")
 	}
 
 	// empty slice
-	if Int8Slice([]int8{}).Contains(1) {
+	if Int8.Contains([]int8{}, 1) {
 		T.Errorf("empty slice cannot contain value")
 	}
 
 	// 1-element slice positive
-	if !Int8Slice([]int8{1}).Contains(1) {
+	if !Int8.Contains([]int8{1}, 1) {
 		T.Errorf("1-element slice value not found")
 	}
 
 	// 1-element slice negative
-	if Int8Slice([]int8{1}).Contains(2) {
+	if Int8.Contains([]int8{1}, 2) {
 		T.Errorf("1-element slice found wrong match")
 	}
 
 	// n-element slice positive first element
-	if !Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(-1) {
+	if !Int8.Contains([]int8{-1, 3, 5, 7, 11, 13}, -1) {
 		T.Errorf("N-element first slice value not found")
 	}
 
 	// n-element slice positive middle element
-	if !Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(5) {
+	if !Int8.Contains([]int8{-1, 3, 5, 7, 11, 13}, 5) {
 		T.Errorf("N-element middle slice value not found")
 	}
 
 	// n-element slice positive last element
-	if !Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(13) {
+	if !Int8.Contains([]int8{-1, 3, 5, 7, 11, 13}, 13) {
 		T.Errorf("N-element last slice value not found")
 	}
 
 	// n-element slice negative before
-	if Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(0) {
+	if Int8.Contains([]int8{-1, 3, 5, 7, 11, 13}, 0) {
 		T.Errorf("N-element before slice value wrong match")
 	}
 
 	// n-element slice negative middle
-	if Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(2) {
+	if Int8.Contains([]int8{-1, 3, 5, 7, 11, 13}, 2) {
 		T.Errorf("N-element middle slice value wrong match")
 	}
 
 	// n-element slice negative after
-	if Int8Slice([]int8{-1, 3, 5, 7, 11, 13}).Contains(14) {
+	if Int8.Contains([]int8{-1, 3, 5, 7, 11, 13}, 14) {
 		T.Errorf("N-element after slice value wrong match")
 	}
 }
@@ -1508,19 +1508,19 @@ func BenchmarkInt8SliceContains(B *testing.B) {
 	cases := []int{10, 1000, 1000000}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-neg", n), func(B *testing.B) {
-			a := Int8Slice(randInt8Slice(n, 1)).Sort()
+			a := Int8.Sort(randInt8Slice(n, 1))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				a.Contains(int8(rand.Intn(math.MaxInt8 + 1)))
+				Int8.Contains(a, int8(rand.Intn(math.MaxInt8+1)))
 			}
 		})
 	}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-pos", n), func(B *testing.B) {
-			a := Int8Slice(randInt8Slice(n, 1)).Sort()
+			a := Int8.Sort(randInt8Slice(n, 1))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				a.Contains(a[rand.Intn(len(a))])
+				Int8.Contains(a, a[rand.Intn(len(a))])
 			}
 		})
 	}
@@ -1621,7 +1621,7 @@ func TestInt8SliceContainsRange(T *testing.T) {
 
 	for i, v := range tests {
 		for _, r := range v.Ranges {
-			if want, got := r.Match, Int8Slice(v.Slice).ContainsRange(r.From, r.To); want != got {
+			if want, got := r.Match, Int8.ContainsRange(v.Slice, r.From, r.To); want != got {
 				T.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
 			}
 		}
@@ -1631,14 +1631,14 @@ func TestInt8SliceContainsRange(T *testing.T) {
 func BenchmarkInt8SliceContainsRange(B *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := Int8Slice(randInt8Slice(n, 1)).Sort()
+			a := Int8.Sort(randInt8Slice(n, 1))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
 				min, max := int8(rand.Intn(math.MaxInt8+1)), int8(rand.Intn(math.MaxInt8+1))
 				if min > max {
 					min, max = max, min
 				}
-				a.ContainsRange(min, max)
+				Int8.ContainsRange(a, min, max)
 			}
 		})
 	}

@@ -49,41 +49,95 @@ func MatchUint64Between(src []uint64, a, b uint64, bits, mask *BitSet) *BitSet {
 	return bits
 }
 
-type Uint64Slice []uint64
-
-func (s Uint64Slice) Sort() Uint64Slice {
-	Uint64Sorter(s).Sort()
-	return s
+var Uint64 = struct {
+	Sort          func([]uint64) []uint64
+	Unique        func([]uint64) []uint64
+	RemoveZeros   func([]uint64) []uint64
+	AddUnique     func([]uint64, uint64) []uint64
+	Remove        func([]uint64, uint64) []uint64
+	Contains      func([]uint64, uint64) bool
+	Index         func([]uint64, uint64, int) int
+	MinMax        func([]uint64) (uint64, uint64)
+	ContainsRange func([]uint64, uint64, uint64) bool
+	Intersect     func([]uint64, []uint64, []uint64) []uint64
+	MatchEqual    func([]uint64, uint64, *BitSet, *BitSet) *BitSet
+}{
+	Sort: func(s []uint64) []uint64 {
+		Uint64Sorter(s).Sort()
+		return s
+	},
+	Unique: func(s []uint64) []uint64 {
+		UniqueUint64Slice(s)
+		return s
+	},
+	RemoveZeros: func(s []uint64) []uint64 {
+		s, _ = uint64RemoveZeros(s)
+		return s
+	},
+	AddUnique: func(s []uint64, v uint64) []uint64 {
+		s, _ = uint64AddUnique(s, v)
+		return s
+	},
+	Remove: func(s []uint64, v uint64) []uint64 {
+		s, _ = uint64Remove(s, v)
+		return s
+	},
+	Contains: func(s []uint64, v uint64) bool {
+		return uint64Contains(s, v)
+	},
+	Index: func(s []uint64, v uint64, last int) int {
+		return uint64Index(s, v, last)
+	},
+	MinMax: func(s []uint64) (uint64, uint64) {
+		return uint64MinMax(s)
+	},
+	ContainsRange: func(s []uint64, from, to uint64) bool {
+		return uint64ContainsRange(s, from, to)
+	},
+	Intersect: func(x, y, out []uint64) []uint64 {
+		if out == nil {
+			out = make([]uint64, 0, max(len(x), len(y)))
+		}
+		return IntersectSortedUint64(x, y, out)
+	},
+	MatchEqual: func(s []uint64, val uint64, bits, mask *BitSet) *BitSet {
+		return MatchUint64Equal(s, val, bits, mask)
+	},
 }
 
-func (s Uint64Slice) Less(i, j int) bool { return s[i] < s[j] }
-func (s Uint64Slice) Len() int           { return len(s) }
-func (s Uint64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s Uint64Slice) Unique() Uint64Slice {
-	return UniqueUint64Slice(s)
-}
-
-func (s *Uint64Slice) AddUnique(val uint64) bool {
-	idx := s.Index(val, 0)
+func uint64AddUnique(s []uint64, val uint64) ([]uint64, bool) {
+	idx := uint64Index(s, val, 0)
 	if idx > -1 {
-		return false
+		return s, false
 	}
-	*s = append(*s, val)
-	s.Sort()
-	return true
+	s = append(s, val)
+	Uint64Sorter(s).Sort()
+	return s, true
 }
 
-func (s *Uint64Slice) Remove(val uint64) bool {
-	idx := s.Index(val, 0)
+func uint64Remove(s []uint64, val uint64) ([]uint64, bool) {
+	idx := uint64Index(s, val, 0)
 	if idx < 0 {
-		return false
+		return s, false
 	}
-	*s = append((*s)[:idx], (*s)[idx+1:]...)
-	return true
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
 }
 
-func (s Uint64Slice) Contains(val uint64) bool {
+func uint64RemoveZeros(s []uint64) ([]uint64, int) {
+	var n int
+	for i, v := range s {
+		if v == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
+}
+
+func uint64Contains(s []uint64, val uint64) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -108,7 +162,7 @@ func (s Uint64Slice) Contains(val uint64) bool {
 	return false
 }
 
-func (s Uint64Slice) Index(val uint64, last int) int {
+func uint64Index(s []uint64, val uint64, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -134,7 +188,7 @@ func (s Uint64Slice) Index(val uint64, last int) int {
 	return -1
 }
 
-func (s Uint64Slice) MinMax() (uint64, uint64) {
+func uint64MinMax(s []uint64) (uint64, uint64) {
 	var min, max uint64
 
 	switch l := len(s); l {
@@ -168,7 +222,7 @@ func (s Uint64Slice) MinMax() (uint64, uint64) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s Uint64Slice) ContainsRange(from, to uint64) bool {
+func uint64ContainsRange(s []uint64, from, to uint64) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -211,8 +265,4 @@ func (s Uint64Slice) ContainsRange(from, to uint64) bool {
 
 	// otherwise range is contained iff min < max
 	return min < max
-}
-
-func (s Uint64Slice) MatchEqual(val uint64, bits, mask *BitSet) *BitSet {
-	return MatchUint64Equal(s, val, bits, mask)
 }

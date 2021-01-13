@@ -50,37 +50,92 @@ func MatchStringsBetween(src []string, a, b string, bits, mask *BitSet) *BitSet 
 	return bits
 }
 
-type StringSlice []string
-
-func (s StringSlice) Sort() StringSlice {
-	sort.Slice(s, func(i, j int) bool { return strings.Compare(s[i], s[j]) < 0 })
-	return s
+var Strings = struct {
+	Sort          func([]string) []string
+	Unique        func([]string) []string
+	RemoveZeros   func([]string) []string
+	AddUnique     func([]string, string) []string
+	Remove        func([]string, string) []string
+	Contains      func([]string, string) bool
+	Index         func([]string, string, int) int
+	MinMax        func([]string) (string, string)
+	ContainsRange func([]string, string, string) bool
+	Intersect     func([]string, []string, []string) []string
+	MatchEqual    func([]string, string, *BitSet, *BitSet) *BitSet
+}{
+	Sort: func(s []string) []string {
+		StringsSorter(s).Sort()
+		return s
+	},
+	Unique: func(s []string) []string {
+		UniqueStringSlice(s)
+		return s
+	},
+	RemoveZeros: func(s []string) []string {
+		s, _ = stringRemoveZeros(s)
+		return s
+	},
+	AddUnique: func(s []string, v string) []string {
+		s, _ = stringAddUnique(s, v)
+		return s
+	},
+	Remove: func(s []string, v string) []string {
+		s, _ = stringRemove(s, v)
+		return s
+	},
+	Contains: func(s []string, v string) bool {
+		return stringContains(s, v)
+	},
+	Index: func(s []string, v string, last int) int {
+		return stringIndex(s, v, last)
+	},
+	MinMax: func(s []string) (string, string) {
+		return stringMinMax(s)
+	},
+	ContainsRange: func(s []string, from, to string) bool {
+		return stringContainsRange(s, from, to)
+	},
+	Intersect: func(x, y, out []string) []string {
+		return IntersectSortedStrings(x, y, out)
+	},
+	MatchEqual: func(s []string, val string, bits, mask *BitSet) *BitSet {
+		return MatchStringsEqual(s, val, bits, mask)
+	},
 }
 
-func (s StringSlice) Less(i, j int) bool { return strings.Compare(s[i], s[j]) < 0 }
-func (s StringSlice) Len() int           { return len(s) }
-func (s StringSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s *StringSlice) AddUnique(val string) bool {
-	idx := s.Index(val, 0)
+func stringAddUnique(s []string, val string) ([]string, bool) {
+	idx := stringIndex(s, val, 0)
 	if idx > -1 {
-		return false
+		return s, false
 	}
-	*s = append(*s, val)
-	s.Sort()
-	return true
+	s = append(s, val)
+	StringsSorter(s).Sort()
+	return s, true
 }
 
-func (s *StringSlice) Remove(val string) bool {
-	idx := s.Index(val, 0)
+func stringRemove(s []string, val string) ([]string, bool) {
+	idx := stringIndex(s, val, 0)
 	if idx < 0 {
-		return false
+		return s, false
 	}
-	*s = append((*s)[:idx], (*s)[idx+1:]...)
-	return true
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
 }
 
-func (s StringSlice) Contains(val string) bool {
+func stringRemoveZeros(s []string) ([]string, int) {
+	var n int
+	for i, v := range s {
+		if len(v) == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
+}
+
+func stringContains(s []string, val string) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -102,7 +157,7 @@ func (s StringSlice) Contains(val string) bool {
 	return false
 }
 
-func (s StringSlice) Index(val string, last int) int {
+func stringIndex(s []string, val string, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -126,7 +181,7 @@ func (s StringSlice) Index(val string, last int) int {
 	return -1
 }
 
-func (s StringSlice) MinMax() (string, string) {
+func stringMinMax(s []string) (string, string) {
 	var min, max string
 
 	switch l := len(s); l {
@@ -160,7 +215,7 @@ func (s StringSlice) MinMax() (string, string) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s StringSlice) ContainsRange(from, to string) bool {
+func stringContainsRange(s []string, from, to string) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -202,4 +257,76 @@ func (s StringSlice) ContainsRange(from, to string) bool {
 	// range is contained iff min < max; note that from/to do not necessarily
 	// have to be members, but some intermediate values are
 	return min < max
+}
+
+type StringsSorter []string
+
+func (s StringsSorter) Sort() {
+	if !sort.IsSorted(s) {
+		sort.Sort(s)
+	}
+}
+
+func (s StringsSorter) Len() int           { return len(s) }
+func (s StringsSorter) Less(i, j int) bool { return s[i] < s[j] }
+func (s StringsSorter) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
+func UniqueStringSlice(a []string) []string {
+	if len(a) == 0 {
+		return a
+	}
+	b := make([]string, len(a))
+	copy(b, a)
+	StringsSorter(b).Sort()
+	j := 0
+	for i := 1; i < len(b); i++ {
+		if b[j] == b[i] {
+			continue
+		}
+		j++
+		// preserve the original data
+		// in[i], in[j] = in[j], in[i]
+		// only set what is required
+		b[j] = b[i]
+	}
+	return b[:j+1]
+}
+
+func IntersectSortedStrings(x, y, out []string) []string {
+	if out == nil {
+		out = make([]string, 0, min(len(x), len(y)))
+	}
+	count := 0
+	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {
+		if strings.Compare(x[i], y[j]) < 0 {
+			i++
+			continue
+		}
+		if strings.Compare(x[i], y[j]) > 0 {
+			j++
+			continue
+		}
+		if count > 0 {
+			// skip duplicates
+			last := out[count-1]
+			if last == x[i] {
+				i++
+				continue
+			}
+			if last == y[j] {
+				j++
+				continue
+			}
+		}
+		if i == il || j == jl {
+			break
+		}
+		if x[i] == y[j] {
+			out = append(out, x[i])
+			count++
+			i++
+			j++
+		}
+	}
+	return out
 }

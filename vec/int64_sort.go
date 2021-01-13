@@ -42,8 +42,10 @@ func UniqueInt64Slice(a []int64) []int64 {
 	return b[:j+1]
 }
 
-func IntersectSortedInt64(x, y []int64) []int64 {
-	res := make([]int64, 0, min(len(x), len(y)))
+func IntersectSortedInt64(x, y, out []int64) []int64 {
+	if out == nil {
+		out = make([]int64, 0, min(len(x), len(y)))
+	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {
 		if x[i] < y[j] {
@@ -56,7 +58,7 @@ func IntersectSortedInt64(x, y []int64) []int64 {
 		}
 		if count > 0 {
 			// skip duplicates
-			last := res[count-1]
+			last := out[count-1]
 			if last == x[i] {
 				i++
 				continue
@@ -70,11 +72,11 @@ func IntersectSortedInt64(x, y []int64) []int64 {
 			break
 		}
 		if x[i] == y[j] {
-			res = append(res, x[i])
+			out = append(out, x[i])
 			count++
 			i++
 			j++
 		}
 	}
-	return res
+	return out
 }

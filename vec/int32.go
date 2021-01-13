@@ -49,37 +49,92 @@ func MatchInt32Between(src []int32, a, b int32, bits, mask *BitSet) *BitSet {
 	return bits
 }
 
-type Int32Slice []int32
-
-func (s Int32Slice) Sort() Int32Slice {
-	Int32Sorter(s).Sort()
-	return s
+var Int32 = struct {
+	Sort          func([]int32) []int32
+	Unique        func([]int32) []int32
+	RemoveZeros   func([]int32) []int32
+	AddUnique     func([]int32, int32) []int32
+	Remove        func([]int32, int32) []int32
+	Contains      func([]int32, int32) bool
+	Index         func([]int32, int32, int) int
+	MinMax        func([]int32) (int32, int32)
+	ContainsRange func([]int32, int32, int32) bool
+	Intersect     func([]int32, []int32, []int32) []int32
+	MatchEqual    func([]int32, int32, *BitSet, *BitSet) *BitSet
+}{
+	Sort: func(s []int32) []int32 {
+		Int32Sorter(s).Sort()
+		return s
+	},
+	Unique: func(s []int32) []int32 {
+		UniqueInt32Slice(s)
+		return s
+	},
+	RemoveZeros: func(s []int32) []int32 {
+		s, _ = int32RemoveZeros(s)
+		return s
+	},
+	AddUnique: func(s []int32, v int32) []int32 {
+		s, _ = int32AddUnique(s, v)
+		return s
+	},
+	Remove: func(s []int32, v int32) []int32 {
+		s, _ = int32Remove(s, v)
+		return s
+	},
+	Contains: func(s []int32, v int32) bool {
+		return int32Contains(s, v)
+	},
+	Index: func(s []int32, v int32, last int) int {
+		return int32Index(s, v, last)
+	},
+	MinMax: func(s []int32) (int32, int32) {
+		return int32MinMax(s)
+	},
+	ContainsRange: func(s []int32, from, to int32) bool {
+		return int32ContainsRange(s, from, to)
+	},
+	Intersect: func(x, y, out []int32) []int32 {
+		return IntersectSortedInt32(x, y, out)
+	},
+	MatchEqual: func(s []int32, val int32, bits, mask *BitSet) *BitSet {
+		return MatchInt32Equal(s, val, bits, mask)
+	},
 }
 
-func (s Int32Slice) Less(i, j int) bool { return s[i] < s[j] }
-func (s Int32Slice) Len() int           { return len(s) }
-func (s Int32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s *Int32Slice) AddUnique(val int32) bool {
-	idx := s.Index(val, 0)
+func int32AddUnique(s []int32, val int32) ([]int32, bool) {
+	idx := int32Index(s, val, 0)
 	if idx > -1 {
-		return false
+		return s, false
 	}
-	*s = append(*s, val)
-	s.Sort()
-	return true
+	s = append(s, val)
+	Int32Sorter(s).Sort()
+	return s, true
 }
 
-func (s *Int32Slice) Remove(val int32) bool {
-	idx := s.Index(val, 0)
+func int32Remove(s []int32, val int32) ([]int32, bool) {
+	idx := int32Index(s, val, 0)
 	if idx < 0 {
-		return false
+		return s, false
 	}
-	*s = append((*s)[:idx], (*s)[idx+1:]...)
-	return true
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
 }
 
-func (s Int32Slice) Contains(val int32) bool {
+func int32RemoveZeros(s []int32) ([]int32, int) {
+	var n int
+	for i, v := range s {
+		if v == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
+}
+
+func int32Contains(s []int32, val int32) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -104,7 +159,7 @@ func (s Int32Slice) Contains(val int32) bool {
 	return false
 }
 
-func (s Int32Slice) Index(val int32, last int) int {
+func int32Index(s []int32, val int32, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -130,7 +185,7 @@ func (s Int32Slice) Index(val int32, last int) int {
 	return -1
 }
 
-func (s Int32Slice) MinMax() (int32, int32) {
+func int32MinMax(s []int32) (int32, int32) {
 	var min, max int32
 
 	switch l := len(s); l {
@@ -164,7 +219,7 @@ func (s Int32Slice) MinMax() (int32, int32) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s Int32Slice) ContainsRange(from, to int32) bool {
+func int32ContainsRange(s []int32, from, to int32) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -208,8 +263,4 @@ func (s Int32Slice) ContainsRange(from, to int32) bool {
 	// range is contained iff min < max; note that from/to do not necessarily
 	// have to be members, but some intermediate values are
 	return min < max
-}
-
-func (s Int32Slice) MatchEqual(val int32, bits, mask *BitSet) *BitSet {
-	return MatchInt32Equal(s, val, bits, mask)
 }

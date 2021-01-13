@@ -1321,52 +1321,52 @@ func BenchmarkUniqueUint64(B *testing.B) {
 
 func TestUint64SliceContains(T *testing.T) {
 	// nil slice
-	if Uint64Slice(nil).Contains(1) {
+	if Uint64.Contains(nil, 1) {
 		T.Errorf("nil slice cannot contain value")
 	}
 
 	// empty slice
-	if Uint64Slice([]uint64{}).Contains(1) {
+	if Uint64.Contains([]uint64{}, 1) {
 		T.Errorf("empty slice cannot contain value")
 	}
 
 	// 1-element slice positive
-	if !Uint64Slice([]uint64{1}).Contains(1) {
+	if !Uint64.Contains([]uint64{1}, 1) {
 		T.Errorf("1-element slice value not found")
 	}
 
 	// 1-element slice negative
-	if Uint64Slice([]uint64{1}).Contains(2) {
+	if Uint64.Contains([]uint64{1}, 2) {
 		T.Errorf("1-element slice found wrong match")
 	}
 
 	// n-element slice positive first element
-	if !Uint64Slice([]uint64{1, 3, 5, 7, 11, 13}).Contains(1) {
+	if !Uint64.Contains([]uint64{1, 3, 5, 7, 11, 13}, 1) {
 		T.Errorf("N-element first slice value not found")
 	}
 
 	// n-element slice positive middle element
-	if !Uint64Slice([]uint64{1, 3, 5, 7, 11, 13}).Contains(5) {
+	if !Uint64.Contains([]uint64{1, 3, 5, 7, 11, 13}, 5) {
 		T.Errorf("N-element middle slice value not found")
 	}
 
 	// n-element slice positive last element
-	if !Uint64Slice([]uint64{1, 3, 5, 7, 11, 13}).Contains(13) {
+	if !Uint64.Contains([]uint64{1, 3, 5, 7, 11, 13}, 13) {
 		T.Errorf("N-element last slice value not found")
 	}
 
 	// n-element slice negative before
-	if Uint64Slice([]uint64{1, 3, 5, 7, 11, 13}).Contains(0) {
+	if Uint64.Contains([]uint64{1, 3, 5, 7, 11, 13}, 0) {
 		T.Errorf("N-element before slice value wrong match")
 	}
 
 	// n-element slice negative middle
-	if Uint64Slice([]uint64{1, 3, 5, 7, 11, 13}).Contains(2) {
+	if Uint64.Contains([]uint64{1, 3, 5, 7, 11, 13}, 2) {
 		T.Errorf("N-element middle slice value wrong match")
 	}
 
 	// n-element slice negative after
-	if Uint64Slice([]uint64{1, 3, 5, 7, 11, 13}).Contains(14) {
+	if Uint64.Contains([]uint64{1, 3, 5, 7, 11, 13}, 14) {
 		T.Errorf("N-element after slice value wrong match")
 	}
 }
@@ -1375,19 +1375,19 @@ func BenchmarkUint64SliceContains(B *testing.B) {
 	cases := []int{10, 1000, 1000000}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-neg", n), func(B *testing.B) {
-			a := Uint64Slice(randUint64Slice(n, 1)).Sort()
+			a := Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				a.Contains(rand.Uint64())
+				Uint64.Contains(a, rand.Uint64())
 			}
 		})
 	}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-pos", n), func(B *testing.B) {
-			a := Uint64Slice(randUint64Slice(n, 1)).Sort()
+			a := Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				a.Contains(a[rand.Intn(len(a))])
+				Uint64.Contains(a, a[rand.Intn(len(a))])
 			}
 		})
 	}
@@ -1488,7 +1488,7 @@ func TestUint64SliceContainsRange(T *testing.T) {
 
 	for i, v := range tests {
 		for _, r := range v.Ranges {
-			if want, got := r.Match, Uint64Slice(v.Slice).ContainsRange(r.From, r.To); want != got {
+			if want, got := r.Match, Uint64.ContainsRange(v.Slice, r.From, r.To); want != got {
 				T.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
 			}
 		}
@@ -1498,14 +1498,14 @@ func TestUint64SliceContainsRange(T *testing.T) {
 func BenchmarkUint64SliceContainsRange(B *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := Uint64Slice(randUint64Slice(n, 1)).Sort()
+			a := Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
 				min, max := rand.Uint64(), rand.Uint64()
 				if min > max {
 					min, max = max, min
 				}
-				a.ContainsRange(min, max)
+				Uint64.ContainsRange(a, min, max)
 			}
 		})
 	}

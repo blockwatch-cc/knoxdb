@@ -49,18 +49,32 @@ func MatchBoolBetween(src []bool, a, b bool, bits, mask *BitSet) *BitSet {
 	return bits
 }
 
-type BoolSlice []bool
-
-func (s BoolSlice) Sort() BoolSlice {
-	sort.Slice(s, func(i, j int) bool { return !s[i] && s[j] })
-	return s
+var Booleans = struct {
+	Contains      func([]bool, bool) bool
+	Index         func([]bool, bool, int) int
+	MinMax        func([]bool) (bool, bool)
+	ContainsRange func([]bool, bool, bool) bool
+	Intersect     func([]bool, []bool, []bool) []bool
+	MatchEqual    func([]bool, bool, *BitSet, *BitSet) *BitSet
+}{
+	Contains: func(s []bool, v bool) bool {
+		return boolContains(s, v)
+	},
+	Index: func(s []bool, v bool, last int) int {
+		return boolIndex(s, v, last)
+	},
+	MinMax: func(s []bool) (bool, bool) {
+		return boolMinMax(s)
+	},
+	ContainsRange: func(s []bool, from, to bool) bool {
+		return boolContainsRange(s, from, to)
+	},
+	MatchEqual: func(s []bool, val bool, bits, mask *BitSet) *BitSet {
+		return MatchBoolEqual(s, val, bits, mask)
+	},
 }
 
-func (s BoolSlice) Less(i, j int) bool { return !s[i] && s[j] }
-func (s BoolSlice) Len() int           { return len(s) }
-func (s BoolSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s BoolSlice) Contains(val bool) bool {
+func boolContains(s []bool, val bool) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -73,7 +87,7 @@ func (s BoolSlice) Contains(val bool) bool {
 	return false
 }
 
-func (s BoolSlice) Index(val bool, last int) int {
+func boolIndex(s []bool, val bool, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -97,7 +111,7 @@ func (s BoolSlice) Index(val bool, last int) int {
 	return -1
 }
 
-func (s BoolSlice) MinMax() (bool, bool) {
+func boolMinMax(s []bool) (bool, bool) {
 	var min, max bool
 
 	switch l := len(s); l {
@@ -125,7 +139,7 @@ func (s BoolSlice) MinMax() (bool, bool) {
 // from or to are contained.  Slice s is expected to be sorted
 // by condition false < true, and from must also be less than or equal
 // to under the same condition.
-func (s BoolSlice) ContainsRange(from, to bool) bool {
+func boolContainsRange(s []bool, from, to bool) bool {
 	n := len(s)
 	if n == 0 {
 		return false

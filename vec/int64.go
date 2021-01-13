@@ -49,37 +49,92 @@ func MatchInt64Between(src []int64, a, b int64, bits, mask *BitSet) *BitSet {
 	return bits
 }
 
-type Int64Slice []int64
-
-func (s Int64Slice) Sort() Int64Slice {
-	Int64Sorter(s).Sort()
-	return s
+var Int64 = struct {
+	Sort          func([]int64) []int64
+	Unique        func([]int64) []int64
+	RemoveZeros   func([]int64) []int64
+	AddUnique     func([]int64, int64) []int64
+	Remove        func([]int64, int64) []int64
+	Contains      func([]int64, int64) bool
+	Index         func([]int64, int64, int) int
+	MinMax        func([]int64) (int64, int64)
+	ContainsRange func([]int64, int64, int64) bool
+	Intersect     func([]int64, []int64, []int64) []int64
+	MatchEqual    func([]int64, int64, *BitSet, *BitSet) *BitSet
+}{
+	Sort: func(s []int64) []int64 {
+		Int64Sorter(s).Sort()
+		return s
+	},
+	Unique: func(s []int64) []int64 {
+		UniqueInt64Slice(s)
+		return s
+	},
+	RemoveZeros: func(s []int64) []int64 {
+		s, _ = int64RemoveZeros(s)
+		return s
+	},
+	AddUnique: func(s []int64, v int64) []int64 {
+		s, _ = int64AddUnique(s, v)
+		return s
+	},
+	Remove: func(s []int64, v int64) []int64 {
+		s, _ = int64Remove(s, v)
+		return s
+	},
+	Contains: func(s []int64, v int64) bool {
+		return int64Contains(s, v)
+	},
+	Index: func(s []int64, v int64, last int) int {
+		return int64Index(s, v, last)
+	},
+	MinMax: func(s []int64) (int64, int64) {
+		return int64MinMax(s)
+	},
+	ContainsRange: func(s []int64, from, to int64) bool {
+		return int64ContainsRange(s, from, to)
+	},
+	Intersect: func(x, y, out []int64) []int64 {
+		return IntersectSortedInt64(x, y, out)
+	},
+	MatchEqual: func(s []int64, val int64, bits, mask *BitSet) *BitSet {
+		return MatchInt64Equal(s, val, bits, mask)
+	},
 }
 
-func (s Int64Slice) Less(i, j int) bool { return s[i] < s[j] }
-func (s Int64Slice) Len() int           { return len(s) }
-func (s Int64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s *Int64Slice) AddUnique(val int64) bool {
-	idx := s.Index(val, 0)
+func int64AddUnique(s []int64, val int64) ([]int64, bool) {
+	idx := int64Index(s, val, 0)
 	if idx > -1 {
-		return false
+		return s, false
 	}
-	*s = append(*s, val)
-	s.Sort()
-	return true
+	s = append(s, val)
+	Int64Sorter(s).Sort()
+	return s, true
 }
 
-func (s *Int64Slice) Remove(val int64) bool {
-	idx := s.Index(val, 0)
+func int64Remove(s []int64, val int64) ([]int64, bool) {
+	idx := int64Index(s, val, 0)
 	if idx < 0 {
-		return false
+		return s, false
 	}
-	*s = append((*s)[:idx], (*s)[idx+1:]...)
-	return true
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
 }
 
-func (s Int64Slice) Contains(val int64) bool {
+func int64RemoveZeros(s []int64) ([]int64, int) {
+	var n int
+	for i, v := range s {
+		if v == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
+}
+
+func int64Contains(s []int64, val int64) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -104,7 +159,7 @@ func (s Int64Slice) Contains(val int64) bool {
 	return false
 }
 
-func (s Int64Slice) Index(val int64, last int) int {
+func int64Index(s []int64, val int64, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -130,7 +185,7 @@ func (s Int64Slice) Index(val int64, last int) int {
 	return -1
 }
 
-func (s Int64Slice) MinMax() (int64, int64) {
+func int64MinMax(s []int64) (int64, int64) {
 	var min, max int64
 
 	switch l := len(s); l {
@@ -164,7 +219,7 @@ func (s Int64Slice) MinMax() (int64, int64) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s Int64Slice) ContainsRange(from, to int64) bool {
+func int64ContainsRange(s []int64, from, to int64) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -208,8 +263,4 @@ func (s Int64Slice) ContainsRange(from, to int64) bool {
 	// range is contained iff min < max; note that from/to do not necessarily
 	// have to be members, but some intermediate values are
 	return min < max
-}
-
-func (s Int64Slice) MatchEqual(val int64, bits, mask *BitSet) *BitSet {
-	return MatchInt64Equal(s, val, bits, mask)
 }

@@ -42,8 +42,10 @@ func UniqueInt32Slice(a []int32) []int32 {
 	return b[:j+1]
 }
 
-func IntersectSortedInt32(x, y []int32) []int32 {
-	res := make([]int32, 0, min(len(x), len(y)))
+func IntersectSortedInt32(x, y, out []int32) []int32 {
+	if out == nil {
+		out = make([]int32, 0, min(len(x), len(y)))
+	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {
 		if x[i] < y[j] {
@@ -56,7 +58,7 @@ func IntersectSortedInt32(x, y []int32) []int32 {
 		}
 		if count > 0 {
 			// skip duplicates
-			last := res[count-1]
+			last := out[count-1]
 			if last == x[i] {
 				i++
 				continue
@@ -70,11 +72,11 @@ func IntersectSortedInt32(x, y []int32) []int32 {
 			break
 		}
 		if x[i] == y[j] {
-			res = append(res, x[i])
+			out = append(out, x[i])
 			count++
 			i++
 			j++
 		}
 	}
-	return res
+	return out
 }

@@ -49,37 +49,92 @@ func MatchInt8Between(src []int8, a, b int8, bits, mask *BitSet) *BitSet {
 	return bits
 }
 
-type Int8Slice []int8
-
-func (s Int8Slice) Sort() Int8Slice {
-	Int8Sorter(s).Sort()
-	return s
+var Int8 = struct {
+	Sort          func([]int8) []int8
+	Unique        func([]int8) []int8
+	RemoveZeros   func([]int8) []int8
+	AddUnique     func([]int8, int8) []int8
+	Remove        func([]int8, int8) []int8
+	Contains      func([]int8, int8) bool
+	Index         func([]int8, int8, int) int
+	MinMax        func([]int8) (int8, int8)
+	ContainsRange func([]int8, int8, int8) bool
+	Intersect     func([]int8, []int8, []int8) []int8
+	MatchEqual    func([]int8, int8, *BitSet, *BitSet) *BitSet
+}{
+	Sort: func(s []int8) []int8 {
+		Int8Sorter(s).Sort()
+		return s
+	},
+	Unique: func(s []int8) []int8 {
+		UniqueInt8Slice(s)
+		return s
+	},
+	RemoveZeros: func(s []int8) []int8 {
+		s, _ = int8RemoveZeros(s)
+		return s
+	},
+	AddUnique: func(s []int8, v int8) []int8 {
+		s, _ = int8AddUnique(s, v)
+		return s
+	},
+	Remove: func(s []int8, v int8) []int8 {
+		s, _ = int8Remove(s, v)
+		return s
+	},
+	Contains: func(s []int8, v int8) bool {
+		return int8Contains(s, v)
+	},
+	Index: func(s []int8, v int8, last int) int {
+		return int8Index(s, v, last)
+	},
+	MinMax: func(s []int8) (int8, int8) {
+		return int8MinMax(s)
+	},
+	ContainsRange: func(s []int8, from, to int8) bool {
+		return int8ContainsRange(s, from, to)
+	},
+	Intersect: func(x, y, out []int8) []int8 {
+		return IntersectSortedInt8(x, y, out)
+	},
+	MatchEqual: func(s []int8, val int8, bits, mask *BitSet) *BitSet {
+		return MatchInt8Equal(s, val, bits, mask)
+	},
 }
 
-func (s Int8Slice) Less(i, j int) bool { return s[i] < s[j] }
-func (s Int8Slice) Len() int           { return len(s) }
-func (s Int8Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s *Int8Slice) AddUnique(val int8) bool {
-	idx := s.Index(val, 0)
+func int8AddUnique(s []int8, val int8) ([]int8, bool) {
+	idx := int8Index(s, val, 0)
 	if idx > -1 {
-		return false
+		return s, false
 	}
-	*s = append(*s, val)
-	s.Sort()
-	return true
+	s = append(s, val)
+	Int8Sorter(s).Sort()
+	return s, true
 }
 
-func (s *Int8Slice) Remove(val int8) bool {
-	idx := s.Index(val, 0)
+func int8Remove(s []int8, val int8) ([]int8, bool) {
+	idx := int8Index(s, val, 0)
 	if idx < 0 {
-		return false
+		return s, false
 	}
-	*s = append((*s)[:idx], (*s)[idx+1:]...)
-	return true
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
 }
 
-func (s Int8Slice) Contains(val int8) bool {
+func int8RemoveZeros(s []int8) ([]int8, int) {
+	var n int
+	for i, v := range s {
+		if v == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
+}
+
+func int8Contains(s []int8, val int8) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -104,7 +159,7 @@ func (s Int8Slice) Contains(val int8) bool {
 	return false
 }
 
-func (s Int8Slice) Index(val int8, last int) int {
+func int8Index(s []int8, val int8, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -130,7 +185,7 @@ func (s Int8Slice) Index(val int8, last int) int {
 	return -1
 }
 
-func (s Int8Slice) MinMax() (int8, int8) {
+func int8MinMax(s []int8) (int8, int8) {
 	var min, max int8
 
 	switch l := len(s); l {
@@ -164,7 +219,7 @@ func (s Int8Slice) MinMax() (int8, int8) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s Int8Slice) ContainsRange(from, to int8) bool {
+func int8ContainsRange(s []int8, from, to int8) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -208,8 +263,4 @@ func (s Int8Slice) ContainsRange(from, to int8) bool {
 	// range is contained iff min < max; note that from/to do not necessarily
 	// have to be members, but some intermediate values are
 	return min < max
-}
-
-func (s Int8Slice) MatchEqual(val int8, bits, mask *BitSet) *BitSet {
-	return MatchInt8Equal(s, val, bits, mask)
 }

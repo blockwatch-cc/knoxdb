@@ -42,8 +42,10 @@ func UniqueInt8Slice(a []int8) []int8 {
 	return b[:j+1]
 }
 
-func IntersectSortedInt8(x, y []int8) []int8 {
-	res := make([]int8, 0, min(len(x), len(y)))
+func IntersectSortedInt8(x, y, out []int8) []int8 {
+	if out == nil {
+		out = make([]int8, 0, min(len(x), len(y)))
+	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {
 		if x[i] < y[j] {
@@ -56,7 +58,7 @@ func IntersectSortedInt8(x, y []int8) []int8 {
 		}
 		if count > 0 {
 			// skip duplicates
-			last := res[count-1]
+			last := out[count-1]
 			if last == x[i] {
 				i++
 				continue
@@ -70,11 +72,11 @@ func IntersectSortedInt8(x, y []int8) []int8 {
 			break
 		}
 		if x[i] == y[j] {
-			res = append(res, x[i])
+			out = append(out, x[i])
 			count++
 			i++
 			j++
 		}
 	}
-	return res
+	return out
 }

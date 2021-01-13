@@ -49,37 +49,92 @@ func MatchInt16Between(src []int16, a, b int16, bits, mask *BitSet) *BitSet {
 	return bits
 }
 
-type Int16Slice []int16
-
-func (s Int16Slice) Sort() Int16Slice {
-	Int16Sorter(s).Sort()
-	return s
+var Int16 = struct {
+	Sort          func([]int16) []int16
+	Unique        func([]int16) []int16
+	RemoveZeros   func([]int16) []int16
+	AddUnique     func([]int16, int16) []int16
+	Remove        func([]int16, int16) []int16
+	Contains      func([]int16, int16) bool
+	Index         func([]int16, int16, int) int
+	MinMax        func([]int16) (int16, int16)
+	ContainsRange func([]int16, int16, int16) bool
+	Intersect     func([]int16, []int16, []int16) []int16
+	MatchEqual    func([]int16, int16, *BitSet, *BitSet) *BitSet
+}{
+	Sort: func(s []int16) []int16 {
+		Int16Sorter(s).Sort()
+		return s
+	},
+	Unique: func(s []int16) []int16 {
+		UniqueInt16Slice(s)
+		return s
+	},
+	RemoveZeros: func(s []int16) []int16 {
+		s, _ = int16RemoveZeros(s)
+		return s
+	},
+	AddUnique: func(s []int16, v int16) []int16 {
+		s, _ = int16AddUnique(s, v)
+		return s
+	},
+	Remove: func(s []int16, v int16) []int16 {
+		s, _ = int16Remove(s, v)
+		return s
+	},
+	Contains: func(s []int16, v int16) bool {
+		return int16Contains(s, v)
+	},
+	Index: func(s []int16, v int16, last int) int {
+		return int16Index(s, v, last)
+	},
+	MinMax: func(s []int16) (int16, int16) {
+		return int16MinMax(s)
+	},
+	ContainsRange: func(s []int16, from, to int16) bool {
+		return int16ContainsRange(s, from, to)
+	},
+	Intersect: func(x, y, out []int16) []int16 {
+		return IntersectSortedInt16(x, y, out)
+	},
+	MatchEqual: func(s []int16, val int16, bits, mask *BitSet) *BitSet {
+		return MatchInt16Equal(s, val, bits, mask)
+	},
 }
 
-func (s Int16Slice) Less(i, j int) bool { return s[i] < s[j] }
-func (s Int16Slice) Len() int           { return len(s) }
-func (s Int16Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s *Int16Slice) AddUnique(val int16) bool {
-	idx := s.Index(val, 0)
+func int16AddUnique(s []int16, val int16) ([]int16, bool) {
+	idx := int16Index(s, val, 0)
 	if idx > -1 {
-		return false
+		return s, false
 	}
-	*s = append(*s, val)
-	s.Sort()
-	return true
+	s = append(s, val)
+	Int16Sorter(s).Sort()
+	return s, true
 }
 
-func (s *Int16Slice) Remove(val int16) bool {
-	idx := s.Index(val, 0)
+func int16Remove(s []int16, val int16) ([]int16, bool) {
+	idx := int16Index(s, val, 0)
 	if idx < 0 {
-		return false
+		return s, false
 	}
-	*s = append((*s)[:idx], (*s)[idx+1:]...)
-	return true
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
 }
 
-func (s Int16Slice) Contains(val int16) bool {
+func int16RemoveZeros(s []int16) ([]int16, int) {
+	var n int
+	for i, v := range s {
+		if v == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
+}
+
+func int16Contains(s []int16, val int16) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -104,7 +159,7 @@ func (s Int16Slice) Contains(val int16) bool {
 	return false
 }
 
-func (s Int16Slice) Index(val int16, last int) int {
+func int16Index(s []int16, val int16, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -130,7 +185,7 @@ func (s Int16Slice) Index(val int16, last int) int {
 	return -1
 }
 
-func (s Int16Slice) MinMax() (int16, int16) {
+func int16MinMax(s []int16) (int16, int16) {
 	var min, max int16
 
 	switch l := len(s); l {
@@ -164,7 +219,7 @@ func (s Int16Slice) MinMax() (int16, int16) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s Int16Slice) ContainsRange(from, to int16) bool {
+func int16ContainsRange(s []int16, from, to int16) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -208,8 +263,4 @@ func (s Int16Slice) ContainsRange(from, to int16) bool {
 	// range is contained iff min < max; note that from/to do not necessarily
 	// have to be members, but some intermediate values are
 	return min < max
-}
-
-func (s Int16Slice) MatchEqual(val int16, bits, mask *BitSet) *BitSet {
-	return MatchInt16Equal(s, val, bits, mask)
 }
