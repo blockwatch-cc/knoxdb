@@ -4,7 +4,6 @@
 package pack
 
 import (
-	"bytes"
 	"encoding"
 	"fmt"
 	"math"
@@ -320,9 +319,10 @@ func (p *Package) Push(v interface{}) error {
 		case FieldTypeDatetime:
 			b.Int64 = append(b.Int64, f.Interface().(time.Time).UnixNano())
 		case FieldTypeBoolean:
-			b.Bits.Grow(b.Bits.Len() + 1)
+			l := b.Bits.Len()
+			b.Bits.Grow(l + 1)
 			if f.Bool() {
-				b.Bits.Set(b.Bits.Len())
+				b.Bits.Set(l)
 			}
 		case FieldTypeFloat64:
 			b.Float64 = append(b.Float64, f.Float())
@@ -349,13 +349,57 @@ func (p *Package) Push(v interface{}) error {
 		case FieldTypeUint8:
 			b.Uint8 = append(b.Uint8, uint8(f.Uint()))
 		case FieldTypeDecimal256:
-			b.Int256 = append(b.Int256, f.Interface().(Decimal256).Quantize(field.Scale).Int256())
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int256 = append(b.Int256, Int256{0, 0, 0, f.Uint()})
+			case field.Flags.Contains(flagIntType):
+				b.Int256 = append(b.Int256, Int256{0, 0, 0, uint64(f.Int())})
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal256{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int256 = append(b.Int256, dec.Int256())
+			default:
+				b.Int256 = append(b.Int256, f.Interface().(Decimal256).Quantize(field.Scale).Int256())
+			}
 		case FieldTypeDecimal128:
-			b.Int128 = append(b.Int128, f.Interface().(Decimal128).Quantize(field.Scale).Int128())
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int128 = append(b.Int128, Int128{0, f.Uint()})
+			case field.Flags.Contains(flagIntType):
+				b.Int128 = append(b.Int128, Int128{0, uint64(f.Int())})
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal128{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int128 = append(b.Int128, dec.Int128())
+			default:
+				b.Int128 = append(b.Int128, f.Interface().(Decimal128).Quantize(field.Scale).Int128())
+			}
 		case FieldTypeDecimal64:
-			b.Int64 = append(b.Int64, f.Interface().(Decimal64).Quantize(field.Scale).Int64())
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int64 = append(b.Int64, int64(f.Uint()))
+			case field.Flags.Contains(flagIntType):
+				b.Int64 = append(b.Int64, f.Int())
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal64{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int64 = append(b.Int64, dec.Int64())
+			default:
+				b.Int64 = append(b.Int64, f.Interface().(Decimal64).Quantize(field.Scale).Int64())
+			}
 		case FieldTypeDecimal32:
-			b.Int32 = append(b.Int32, f.Interface().(Decimal32).Quantize(field.Scale).Int32())
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int32 = append(b.Int32, int32(f.Uint()))
+			case field.Flags.Contains(flagIntType):
+				b.Int32 = append(b.Int32, int32(f.Int()))
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal32{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int32 = append(b.Int32, dec.Int32())
+			default:
+				b.Int32 = append(b.Int32, f.Interface().(Decimal32).Quantize(field.Scale).Int32())
+			}
 		default:
 			return fmt.Errorf("pack: pushed unsupported value type %s (%v) for %s field %d",
 				f.Type().String(), f.Kind(), field.Type, fi.blockid)
@@ -460,16 +504,60 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			b.Uint8[pos] = uint8(f.Uint())
 
 		case FieldTypeDecimal256:
-			b.Int256[pos] = f.Interface().(Decimal256).Quantize(field.Scale).Int256()
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int256[pos] = Int256{0, 0, 0, f.Uint()}
+			case field.Flags.Contains(flagIntType):
+				b.Int256[pos] = Int256{0, 0, 0, uint64(f.Int())}
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal256{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int256[pos] = dec.Int256()
+			default:
+				b.Int256[pos] = f.Interface().(Decimal256).Quantize(field.Scale).Int256()
+			}
 
 		case FieldTypeDecimal128:
-			b.Int128[pos] = f.Interface().(Decimal128).Quantize(field.Scale).Int128()
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int128[pos] = Int128{0, f.Uint()}
+			case field.Flags.Contains(flagIntType):
+				b.Int128[pos] = Int128{0, uint64(f.Int())}
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal128{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int128[pos] = dec.Int128()
+			default:
+				b.Int128[pos] = f.Interface().(Decimal128).Quantize(field.Scale).Int128()
+			}
 
 		case FieldTypeDecimal64:
-			b.Int64[pos] = f.Interface().(Decimal64).Quantize(field.Scale).Int64()
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int64[pos] = int64(f.Uint())
+			case field.Flags.Contains(flagIntType):
+				b.Int64[pos] = f.Int()
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal64{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int64[pos] = dec.Int64()
+			default:
+				b.Int64[pos] = f.Interface().(Decimal64).Quantize(field.Scale).Int64()
+			}
 
 		case FieldTypeDecimal32:
-			b.Int32[pos] = f.Interface().(Decimal32).Quantize(field.Scale).Int32()
+			switch {
+			case field.Flags.Contains(flagUintType):
+				b.Int32[pos] = int32(f.Uint())
+			case field.Flags.Contains(flagIntType):
+				b.Int32[pos] = int32(f.Int())
+			case field.Flags.Contains(flagFloatType):
+				dec := Decimal32{}
+				dec.SetFloat64(f.Float(), field.Scale)
+				b.Int32[pos] = dec.Int32()
+			default:
+				b.Int32[pos] = f.Interface().(Decimal32).Quantize(field.Scale).Int32()
+			}
 
 		default:
 			return fmt.Errorf("pack: replace unsupported value type %s (%v) for %s field %d",
@@ -480,21 +568,6 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 	p.dirty = true
 	return nil
 }
-
-// ReadAt reads a row at offset pos and unmarshals values into an arbitrary type.
-// Will set struct fields based on name and alias as defined by struct tags `pack`
-// and `json`.
-// func (p *Package) ReadAt(pos int, v interface{}) error {
-// 	if p.tinfo == nil || !p.tinfo.gotype {
-// 		tinfo, err := getTypeInfo(v)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		// cache type info for future calls
-// 		p.tinfo = tinfo
-// 	}
-// 	return p.ReadAtWithInfo(pos, v, p.tinfo)
-// }
 
 // ReadAtWithInfo reads a row at offset pos and unmarshals values into an arbitrary
 // type described by tinfo. This method has better performance than ReadAt when
@@ -566,10 +639,10 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst.SetFloat(float64(b.Float32[pos]))
 
 		case FieldTypeInt256:
-			dst.Set(reflect.ValueOf(b.Int256))
+			dst.Set(reflect.ValueOf(b.Int256[pos]))
 
 		case FieldTypeInt128:
-			dst.Set(reflect.ValueOf(b.Int128))
+			dst.Set(reflect.ValueOf(b.Int128[pos]))
 
 		case FieldTypeInt64:
 			dst.SetInt(b.Int64[pos])
@@ -596,20 +669,56 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst.SetUint(uint64(b.Uint8[pos]))
 
 		case FieldTypeDecimal256:
-			val := NewDecimal256(b.Int256[pos], field.Scale)
-			dst.Set(reflect.ValueOf(val))
+			switch {
+			case field.Flags.Contains(flagUintType):
+				dst.SetUint(uint64(b.Int256[pos].Int64()))
+			case field.Flags.Contains(flagIntType):
+				dst.SetInt(b.Int256[pos].Int64())
+			case field.Flags.Contains(flagFloatType):
+				dst.SetFloat(NewDecimal256(b.Int256[pos], field.Scale).Float64())
+			default:
+				val := NewDecimal256(b.Int256[pos], field.Scale)
+				dst.Set(reflect.ValueOf(val))
+			}
 
 		case FieldTypeDecimal128:
-			val := NewDecimal128(b.Int128[pos], field.Scale)
-			dst.Set(reflect.ValueOf(val))
+			switch {
+			case field.Flags.Contains(flagUintType):
+				dst.SetUint(uint64(b.Int128[pos].Int64()))
+			case field.Flags.Contains(flagIntType):
+				dst.SetInt(b.Int128[pos].Int64())
+			case field.Flags.Contains(flagFloatType):
+				dst.SetFloat(NewDecimal128(b.Int128[pos], field.Scale).Float64())
+			default:
+				val := NewDecimal128(b.Int128[pos], field.Scale)
+				dst.Set(reflect.ValueOf(val))
+			}
 
 		case FieldTypeDecimal64:
-			val := NewDecimal64(b.Int64[pos], field.Scale)
-			dst.Set(reflect.ValueOf(val))
+			switch {
+			case field.Flags.Contains(flagUintType):
+				dst.SetUint(uint64(b.Int64[pos]))
+			case field.Flags.Contains(flagIntType):
+				dst.SetInt(b.Int64[pos])
+			case field.Flags.Contains(flagFloatType):
+				dst.SetFloat(NewDecimal64(b.Int64[pos], field.Scale).Float64())
+			default:
+				val := NewDecimal64(b.Int64[pos], field.Scale)
+				dst.Set(reflect.ValueOf(val))
+			}
 
 		case FieldTypeDecimal32:
-			val := NewDecimal32(b.Int32[pos], field.Scale)
-			dst.Set(reflect.ValueOf(val))
+			switch {
+			case field.Flags.Contains(flagUintType):
+				dst.SetUint(uint64(b.Int32[pos]))
+			case field.Flags.Contains(flagIntType):
+				dst.SetInt(int64(b.Int32[pos]))
+			case field.Flags.Contains(flagFloatType):
+				dst.SetFloat(NewDecimal32(b.Int32[pos], field.Scale).Float64())
+			default:
+				val := NewDecimal32(b.Int32[pos], field.Scale)
+				dst.Set(reflect.ValueOf(val))
+			}
 
 		default:
 			return fmt.Errorf("pack: unsupported field type %s", field.Type)
@@ -617,28 +726,6 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 	}
 	return nil
 }
-
-// func (p *Package) ForEach(proto interface{}, fn func(i int, val interface{}) error) error {
-// 	if p.tinfo == nil || !p.tinfo.gotype {
-// 		tinfo, err := getTypeInfo(proto)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		p.tinfo = tinfo
-// 	}
-// 	typ := derefIndirect(proto).Type()
-// 	for i := 0; i < p.nValues; i++ {
-// 		// create new empty value for interface prototype
-// 		val := reflect.New(typ)
-// 		if err := p.ReadAtWithInfo(i, val.Interface(), p.tinfo); err != nil {
-// 			return err
-// 		}
-// 		if err := fn(i, val.Interface()); err != nil {
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
 
 func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 	if p.nFields <= index {
@@ -1029,6 +1116,20 @@ func (p *Package) IsZeroAt(index, pos int) bool {
 	return true
 }
 
+// Block allows raw access to the underlying block for a field. Use this for
+// implementing efficient matching algorithms that can work with optimized data
+// vectors used at the block layer.
+func (p *Package) Block(index int) (*block.Block, error) {
+	if index < 0 || p.nFields <= index {
+		return nil, ErrNoField
+	}
+	return p.blocks[index], nil
+}
+
+// Column returns a typed slice containing materialized values for the requested
+// field index. This function has higher cost than direct block access because
+// optimized representation of data vectors like timestamps, bitsets and decimals
+// are unpacked into a temporary slice and type-cast.
 func (p *Package) Column(index int) (interface{}, error) {
 	if index < 0 || p.nFields <= index {
 		return nil, ErrNoField
@@ -1277,7 +1378,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 			copy(dst.Strings[dstPos:], src.Strings[srcPos:srcPos+n])
 
 		case FieldTypeBoolean:
-			dst.Bits.Replace(src.Bits, srcPos, srcLen, dstPos)
+			dst.Bits.Replace(src.Bits, srcPos, n, dstPos)
 
 		case FieldTypeFloat64:
 			copy(dst.Float64[dstPos:], src.Float64[srcPos:srcPos+n])
@@ -1790,141 +1891,56 @@ func (p *Package) PkIndexUnsorted(id uint64, last int) int {
 
 type PackageSorter struct {
 	*Package
-	col int
+	block *block.Block
 }
 
-func (p *PackageSorter) Len() int { return p.Package.Len() }
-
-func (p *PackageSorter) Less(i, j int) bool {
-	// we assume the block exists, check must happen outside this hot path
-	b := p.Package.blocks[p.col]
-
-	// early abort if we ignore this block
-	if b.IsIgnore() {
-		return true
+func NewPackageSorter(p *Package, col int) (*PackageSorter, error) {
+	if col < 0 || col > p.nFields {
+		return nil, fmt.Errorf("pack: invalid sort field %d", col)
 	}
+	return &PackageSorter{
+		Package: p,
+		block:   p.blocks[col],
+	}, nil
+}
 
-	switch p.Package.fields[p.col].Type {
-	case FieldTypeBytes:
-		return bytes.Compare(b.Bytes[i], b.Bytes[j]) < 0
-
-	case FieldTypeString:
-		return b.Strings[i] < b.Strings[j]
-
-	case FieldTypeBoolean:
-		return !b.Bits.IsSet(i) && b.Bits.IsSet(j)
-
-	case FieldTypeFloat64:
-		return b.Float64[i] < b.Float64[j]
-
-	case FieldTypeFloat32:
-		return b.Float32[i] < b.Float32[j]
-
-	case FieldTypeInt256, FieldTypeDecimal256:
-		return b.Int256[i].Lt(b.Int256[j])
-
-	case FieldTypeInt128, FieldTypeDecimal128:
-		return b.Int128[i].Lt(b.Int128[j])
-
-	case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
-		return b.Int64[i] < b.Int64[j]
-
-	case FieldTypeInt32, FieldTypeDecimal32:
-		return b.Int32[i] < b.Int32[j]
-
-	case FieldTypeInt16:
-		return b.Int16[i] < b.Int16[j]
-
-	case FieldTypeInt8:
-		return b.Int8[i] < b.Int8[j]
-
-	case FieldTypeUint64:
-		return b.Uint64[i] < b.Uint64[j]
-
-	case FieldTypeUint32:
-		return b.Uint32[i] < b.Uint32[j]
-
-	case FieldTypeUint16:
-		return b.Uint16[i] < b.Uint16[j]
-
-	case FieldTypeUint8:
-		return b.Uint8[i] < b.Uint8[j]
-
-	default:
+// Sorts the package by defined column and returns if the package was changed,
+// i.e. returns false if the package was sorted before
+func (s *PackageSorter) Sort() bool {
+	if sort.IsSorted(s) {
 		return false
 	}
+	sort.Sort(s)
+	return true
 }
 
-func (p *PackageSorter) Swap(i, j int) {
-	for n := 0; n < p.Package.nFields; n++ {
-		b := p.Package.blocks[n]
+func (s *PackageSorter) Len() int { return s.Package.Len() }
+
+func (s *PackageSorter) Less(i, j int) bool { return s.block.Less(i, j) }
+
+func (s *PackageSorter) Swap(i, j int) {
+	for _, b := range s.Package.blocks {
 		if b.IsIgnore() {
 			continue
 		}
-
-		switch p.Package.fields[p.col].Type {
-		case FieldTypeBytes:
-			b.Bytes[i], b.Bytes[j] = b.Bytes[j], b.Bytes[i]
-
-		case FieldTypeString:
-			b.Strings[i], b.Strings[j] = b.Strings[j], b.Strings[i]
-
-		case FieldTypeBoolean:
-			b.Bits.Swap(i, j)
-
-		case FieldTypeFloat64:
-			b.Float64[i], b.Float64[j] = b.Float64[j], b.Float64[i]
-
-		case FieldTypeFloat32:
-			b.Float32[i], b.Float32[j] = b.Float32[j], b.Float32[i]
-
-		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256[i], b.Int256[j] = b.Int256[j], b.Int256[i]
-
-		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128[i], b.Int128[j] = b.Int128[j], b.Int128[i]
-
-		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
-			b.Int64[i], b.Int64[j] = b.Int64[j], b.Int64[i]
-
-		case FieldTypeInt32, FieldTypeDecimal32:
-			b.Int32[i], b.Int32[j] = b.Int32[j], b.Int32[i]
-
-		case FieldTypeInt16:
-			b.Int16[i], b.Int16[j] = b.Int16[j], b.Int16[i]
-
-		case FieldTypeInt8:
-			b.Int8[i], b.Int8[j] = b.Int8[j], b.Int8[i]
-
-		case FieldTypeUint64:
-			b.Uint64[i], b.Uint64[j] = b.Uint64[j], b.Uint64[i]
-
-		case FieldTypeUint32:
-			b.Uint32[i], b.Uint32[j] = b.Uint32[j], b.Uint32[i]
-
-		case FieldTypeUint16:
-			b.Uint16[i], b.Uint16[j] = b.Uint16[j], b.Uint16[i]
-
-		case FieldTypeUint8:
-			b.Uint8[i], b.Uint8[j] = b.Uint8[j], b.Uint8[i]
-
-		}
+		b.Swap(i, j)
 	}
 }
 
 func (p *Package) PkSort() error {
-	if p.pkindex < 0 {
-		return fmt.Errorf("pack: missing primary key field")
-	}
-
 	if p.Len() == 0 {
 		return nil
 	}
 
-	spkg := &PackageSorter{Package: p, col: p.pkindex}
-	if !sort.IsSorted(spkg) {
-		sort.Sort(spkg)
-		p.dirty = true
+	// sort by primary key index
+	sorter, err := NewPackageSorter(p, p.pkindex)
+	if err != nil {
+		return err
 	}
+
+	// update dirty state when package has changed
+	updated := sorter.Sort()
+	p.dirty = p.dirty || updated
+
 	return nil
 }

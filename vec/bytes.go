@@ -10,43 +10,43 @@ import (
 
 func MatchBytesEqual(src [][]byte, val []byte, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBytesEqualGeneric(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchBytesEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchBytesNotEqual(src [][]byte, val []byte, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBytesNotEqualGeneric(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchBytesNotEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchBytesLessThan(src [][]byte, val []byte, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBytesLessThanGeneric(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchBytesLessThanGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchBytesLessThanEqual(src [][]byte, val []byte, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBytesLessThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchBytesLessThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchBytesGreaterThan(src [][]byte, val []byte, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBytesGreaterThanGeneric(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchBytesGreaterThanGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchBytesGreaterThanEqual(src [][]byte, val []byte, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBytesGreaterThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchBytesGreaterThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
 func MatchBytesBetween(src [][]byte, a, b []byte, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBytesBetweenGeneric(src, a, b, bits.Bytes(), mask.Bytes())
+	bits.cnt = int(matchBytesBetweenGeneric(src, a, b, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 

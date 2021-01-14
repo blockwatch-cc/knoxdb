@@ -161,7 +161,7 @@ func (j Join) Check() error {
 
 	// where conditions are valid if set
 	for i, c := range j.Left.Where {
-		if err := j.Left.Where[i].Check(); err != nil {
+		if err := j.Left.Where[i].EnsureTypes(); err != nil {
 			return fmt.Errorf("pack: invalid cond %d in join field '%s.%s': %v",
 				i, lname, c.Field.Name, err)
 		}
@@ -183,7 +183,7 @@ func (j Join) Check() error {
 	}
 
 	for i, c := range j.Right.Where {
-		if err := j.Right.Where[i].Check(); err != nil {
+		if err := j.Right.Where[i].EnsureTypes(); err != nil {
 			return fmt.Errorf("pack: invalid cond %d in join field '%s.%s': %v",
 				i, rname, c.Field.Name, err)
 		}

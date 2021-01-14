@@ -130,7 +130,7 @@ func ClampInt64(val, min, max int64) int64 {
 	return Min64(Max64(val, min), max)
 }
 
-func Max64N(nums ...int64) int64 {
+func Max64n(nums ...int64) int64 {
 	switch len(nums) {
 	case 0:
 		return 0
@@ -147,7 +147,7 @@ func Max64N(nums ...int64) int64 {
 	}
 }
 
-func Min64N(nums ...int64) int64 {
+func Min64n(nums ...int64) int64 {
 	switch len(nums) {
 	case 0:
 		return 0
@@ -205,7 +205,7 @@ func ClampUint64(val, min, max uint64) uint64 {
 	return MinU64(MaxU64(val, min), max)
 }
 
-func MaxU64N(nums ...uint64) uint64 {
+func MaxU64n(nums ...uint64) uint64 {
 	switch len(nums) {
 	case 0:
 		return 0
@@ -222,7 +222,7 @@ func MaxU64N(nums ...uint64) uint64 {
 	}
 }
 
-func MinU64N(nums ...uint64) uint64 {
+func MinU64n(nums ...uint64) uint64 {
 	switch len(nums) {
 	case 0:
 		return 0
@@ -274,7 +274,7 @@ func ClampFloat64(val, min, max float64) float64 {
 	return math.Min(math.Max(val, min), max)
 }
 
-func MinFloat64N(nums ...float64) float64 {
+func MinFloat64n(nums ...float64) float64 {
 	switch len(nums) {
 	case 0:
 		return 0
@@ -291,7 +291,7 @@ func MinFloat64N(nums ...float64) float64 {
 	}
 }
 
-func MaxFloat64N(nums ...float64) float64 {
+func MaxFloat64n(nums ...float64) float64 {
 	switch len(nums) {
 	case 0:
 		return 0
@@ -429,4 +429,430 @@ func MinMaxSliceFloat64(x []float64) (float64, float64) {
 		min = math.Min(min, v)
 	}
 	return min, max
+}
+
+func MaxU32(x, y uint32) uint32 {
+	if x < y {
+		return y
+	}
+	return x
+}
+
+func MinU32(x, y uint32) uint32 {
+	if x > y {
+		return y
+	}
+	return x
+}
+
+func NonZeroU32(x ...uint32) uint32 {
+	for _, v := range x {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+func NonZeroMinU32(x ...uint32) uint32 {
+	var min uint32
+	for _, v := range x {
+		if v != 0 {
+			if min == 0 {
+				min = v
+			} else {
+				min = MinU32(min, v)
+			}
+		}
+	}
+	return min
+}
+
+func MaxU32n(nums ...uint32) uint32 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v > n {
+				n = v
+			}
+		}
+		return n
+	}
+}
+
+func MinU32n(nums ...uint32) uint32 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v < n {
+				n = v
+			}
+		}
+		return n
+	}
+}
+
+func Max32(x, y int32) int32 {
+	if x < y {
+		return y
+	}
+	return x
+}
+
+func Min32(x, y int32) int32 {
+	if x > y {
+		return y
+	}
+	return x
+}
+
+func NonZero32(x ...int32) int32 {
+	for _, v := range x {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+func NonZeroMin32(x ...int32) int32 {
+	var min int32
+	for _, v := range x {
+		if v != 0 {
+			if min == 0 {
+				min = v
+			} else {
+				min = Min32(min, v)
+			}
+		}
+	}
+	return min
+}
+
+func Max32n(nums ...int32) int32 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v > n {
+				n = v
+			}
+		}
+		return n
+	}
+}
+
+func Min32n(nums ...int32) int32 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v < n {
+				n = v
+			}
+		}
+		return n
+	}
+}
+
+func MaxU16(x, y uint16) uint16 {
+	if x < y {
+		return y
+	}
+	return x
+}
+
+func MinU16(x, y uint16) uint16 {
+	if x > y {
+		return y
+	}
+	return x
+}
+
+func NonZeroU16(x ...uint16) uint16 {
+	for _, v := range x {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+func NonZeroMinU16(x ...uint16) uint16 {
+	var min uint16
+	for _, v := range x {
+		if v != 0 {
+			if min == 0 {
+				min = v
+			} else {
+				min = MinU16(min, v)
+			}
+		}
+	}
+	return min
+}
+
+func MaxU16n(nums ...uint16) uint16 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v > n {
+				n = v
+			}
+		}
+		return n
+	}
+}
+
+func MinU16n(nums ...uint16) uint16 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v < n {
+				n = v
+			}
+		}
+		return n
+	}
+}
+
+func Max16(x, y int16) int16 {
+	if x < y {
+		return y
+	}
+	return x
+}
+
+func Min16(x, y int16) int16 {
+	if x > y {
+		return y
+	}
+	return x
+}
+
+func NonZero16(x ...int16) int16 {
+	for _, v := range x {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+func NonZeroMin16(x ...int16) int16 {
+	var min int16
+	for _, v := range x {
+		if v != 0 {
+			if min == 0 {
+				min = v
+			} else {
+				min = Min16(min, v)
+			}
+		}
+	}
+	return min
+}
+
+func Max16n(nums ...int16) int16 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v > n {
+				n = v
+			}
+		}
+		return n
+	}
+}
+
+func Min16n(nums ...int16) int16 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v < n {
+				n = v
+			}
+		}
+		return n
+	}
+}
+
+func MaxU8(x, y uint8) uint8 {
+	if x < y {
+		return y
+	}
+	return x
+}
+
+func MinU8(x, y uint8) uint8 {
+	if x > y {
+		return y
+	}
+	return x
+}
+
+func NonZeroU8(x ...uint8) uint8 {
+	for _, v := range x {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+func NonZeroMinU8(x ...uint8) uint8 {
+	var min uint8
+	for _, v := range x {
+		if v != 0 {
+			if min == 0 {
+				min = v
+			} else {
+				min = MinU8(min, v)
+			}
+		}
+	}
+	return min
+}
+
+func MaxU8n(nums ...uint8) uint8 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v > n {
+				n = v
+			}
+		}
+		return n
+	}
+}
+
+func MinU8n(nums ...uint8) uint8 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v < n {
+				n = v
+			}
+		}
+		return n
+	}
+}
+
+func Max8(x, y int8) int8 {
+	if x < y {
+		return y
+	}
+	return x
+}
+
+func Min8(x, y int8) int8 {
+	if x > y {
+		return y
+	}
+	return x
+}
+
+func NonZero8(x ...int8) int8 {
+	for _, v := range x {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+func NonZeroMin8(x ...int8) int8 {
+	var min int8
+	for _, v := range x {
+		if v != 0 {
+			if min == 0 {
+				min = v
+			} else {
+				min = Min8(min, v)
+			}
+		}
+	}
+	return min
+}
+
+func Max8n(nums ...int8) int8 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v > n {
+				n = v
+			}
+		}
+		return n
+	}
+}
+
+func Min8n(nums ...int8) int8 {
+	switch len(nums) {
+	case 0:
+		return 0
+	case 1:
+		return nums[0]
+	default:
+		n := nums[0]
+		for _, v := range nums[1:] {
+			if v < n {
+				n = v
+			}
+		}
+		return n
+	}
 }

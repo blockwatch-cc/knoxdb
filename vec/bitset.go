@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-const defaultBitSetSize = 16 // defaultPackSizeLog2 (64k)
+const defaultBitSetSize = 16 // 8kB
 
 var bitSetPool = &sync.Pool{
 	New: func() interface{} { return makeBitSet(1 << defaultBitSetSize) },
@@ -15,7 +15,7 @@ var bitSetPool = &sync.Pool{
 
 type BitSet struct {
 	buf       []byte
-	cnt       int64
+	cnt       int
 	size      int
 	isReverse bool
 }
@@ -107,6 +107,21 @@ func (s *BitSet) Clone() *BitSet {
 	return clone
 }
 
+func (s *BitSet) Copy(b *BitSet) *BitSet {
+	if s.size > b.size {
+		s.Zero()
+	}
+	if cap(s.buf) < len(b.buf) {
+		s.buf = make([]byte, len(b.buf))
+	}
+	s.size = b.size
+	s.buf = s.buf[:len(b.buf)]
+	copy(s.buf, b.buf)
+	s.cnt = b.cnt
+	s.isReverse = b.isReverse
+	return s
+}
+
 // Grow resizes the bitset to a new size, either growing or shrinking it.
 // Content remains unchanged on grow, when shrinking trailing bits are clipped.
 //
@@ -117,11 +132,11 @@ func (s *BitSet) Grow(size int) *BitSet {
 	}
 	sz := bitFieldLen(size)
 	if s.buf == nil || cap(s.buf) < sz {
-		buf := make([]byte, sz)
+		buf := make([]byte, sz, (sz>>defaultBitSetSize+1)<<defaultBitSetSize)
 		copy(buf, s.buf)
 		s.buf = buf
 	} else {
-		if size > 0 && size < s.size {
+		if size < s.size {
 			// clear trailing bytes
 			if len(s.buf) > sz {
 				s.buf[sz] = 0
@@ -130,7 +145,9 @@ func (s *BitSet) Grow(size int) *BitSet {
 				}
 			}
 			// clear trailing bits
-			s.buf[sz-1] &= bytemask(size)
+			if sz > 0 {
+				s.buf[sz-1] &= bytemask(size)
+			}
 			s.cnt = -1
 		}
 		s.buf = s.buf[:sz]
@@ -169,11 +186,22 @@ func (s *BitSet) And(r *BitSet) (*BitSet, int) {
 		return s, 0
 	}
 	any := bitsetAnd(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	if any == 0 {
+		s.cnt = 0
+	} else {
+		s.cnt = -1
+	}
 	return s, any
 }
 
 func (s *BitSet) AndNot(r *BitSet) *BitSet {
 	bitsetAndNot(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	// if any == 0 {
+	// 	s.cnt = 0
+	// } else {
+	// 	s.cnt = -1
+	// }
+	s.cnt = -1
 	return s
 }
 
@@ -184,16 +212,21 @@ func (s *BitSet) Or(r *BitSet) *BitSet {
 		return s
 	}
 	bitsetOr(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	s.cnt = -1
 	return s
 }
 
 func (s *BitSet) Xor(r *BitSet) *BitSet {
 	bitsetXor(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	s.cnt = -1
 	return s
 }
 
 func (s *BitSet) Neg() *BitSet {
 	bitsetNeg(s.Bytes(), s.size)
+	if s.cnt >= 0 {
+		s.cnt = s.size - s.cnt
+	}
 	return s
 }
 
@@ -201,7 +234,7 @@ func (s *BitSet) One() *BitSet {
 	if s.size == 0 {
 		return s
 	}
-	s.cnt = int64(s.size)
+	s.cnt = s.size
 	s.buf[0] = 0xff
 	for bp := 1; bp < len(s.buf); bp *= 2 {
 		copy(s.buf[bp:], s.buf[:bp])
@@ -344,15 +377,17 @@ func (s *BitSet) Insert(src *BitSet, srcPos, srcLen, dstPos int) *BitSet {
 		s.cnt = -1
 	} else {
 		// slow path
+		var cnt int
 		for i, v := range src.SubSlice(srcPos, srcLen) {
 			if !v {
 				s.clearbit(i + dstPos)
 			} else {
 				s.setbit(i + dstPos)
-				if s.cnt >= 0 {
-					s.cnt++
-				}
+				cnt++
 			}
+		}
+		if s.cnt >= 0 {
+			s.cnt += cnt
 		}
 	}
 
@@ -485,16 +520,21 @@ func (s *BitSet) Swap(i, j int) {
 	if uint(i) >= uint(s.size) || uint(j) >= uint(s.size) {
 		return
 	}
-	bi, bj := s.IsSet(i), s.IsSet(j)
-	if bi {
-		s.setbit(j)
-	} else {
-		s.clearbit(j)
-	}
-	if bj {
-		s.setbit(i)
-	} else {
-		s.clearbit(i)
+	m_i := bitmask(i)
+	m_j := bitmask(j)
+	n_i := i >> 3
+	n_j := j >> 3
+	b_i := (s.buf[n_i] & m_i) > 0
+	b_j := (s.buf[n_j] & m_j) > 0
+	switch true {
+	case b_i == b_j:
+		return
+	case b_i:
+		s.buf[n_i] &^= m_i
+		s.buf[n_j] |= m_j
+	case b_j:
+		s.buf[n_i] |= m_i
+		s.buf[n_j] &^= m_j
 	}
 }
 
@@ -511,13 +551,13 @@ func (s *BitSet) Bytes() []byte {
 	return s.buf
 }
 
-func (s *BitSet) Count() int64 {
+func (s *BitSet) Count() int {
 	if s.cnt < 0 {
 		if s.isReverse {
 			// leading padding is filled with zero bits
-			s.cnt = bitsetPopCount(s.buf, len(s.buf)*8)
+			s.cnt = int(bitsetPopCount(s.buf, len(s.buf)*8))
 		} else {
-			s.cnt = bitsetPopCount(s.buf, s.size)
+			s.cnt = int(bitsetPopCount(s.buf, s.size))
 		}
 	}
 	return s.cnt
@@ -565,7 +605,7 @@ func (b BitSet) Run(index int) (int, int) {
 
 // Indexes returns a slice of indexes for one bits in the bitset.
 func (s BitSet) Indexes(slice []int) []int {
-	cnt := int(s.Count())
+	cnt := s.Count()
 	if slice == nil || cap(slice) < cnt {
 		slice = make([]int, cnt)
 	} else {

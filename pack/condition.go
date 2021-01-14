@@ -103,18 +103,19 @@ func (c Condition) NValues() int {
 	return c.numValues
 }
 
-func (c Condition) Check() error {
+func (c *Condition) EnsureTypes() error {
 	// check condition values are of correct type for field
+	var err error
 	switch c.Mode {
 	case FilterModeRange:
 		// expects From and To to be set
 		if c.From == nil || c.To == nil {
 			return fmt.Errorf("range condition expects From and To values")
 		}
-		if err := c.Field.Type.CheckType(c.From); err != nil {
+		if c.From, err = c.Field.Type.CastType(c.From, c.Field); err != nil {
 			return err
 		}
-		if err := c.Field.Type.CheckType(c.To); err != nil {
+		if c.To, err = c.Field.Type.CastType(c.To, c.Field); err != nil {
 			return err
 		}
 		if c.Field.Type.Gt(c.From, c.To) {
@@ -122,7 +123,7 @@ func (c Condition) Check() error {
 		}
 	case FilterModeIn, FilterModeNotIn:
 		// expects a slice of values
-		if err := c.Field.Type.CheckSliceType(c.Value); err != nil {
+		if c.Value, err = c.Field.Type.CastSliceType(c.Value, c.Field); err != nil {
 			return err
 		}
 	case FilterModeRegexp:
@@ -132,7 +133,7 @@ func (c Condition) Check() error {
 		}
 	default:
 		// c.Value is a simple value type
-		if err := c.Field.Type.CheckType(c.Value); err != nil {
+		if c.Value, err = c.Field.Type.CastType(c.Value, c.Field); err != nil {
 			return err
 		}
 	}
@@ -227,9 +228,19 @@ func (c *Condition) Compile() {
 		if to, ok := c.To.(Decimal256); ok {
 			c.To = to.Quantize(c.Field.Scale)
 		}
+	case FieldTypeDatetime:
+		// only convert slice values used in in/nin conditions to int64 slice
+		if val, ok := c.Value.([]time.Time); ok {
+			conv := make([]int64, len(val))
+			for i := range val {
+				conv[i] = val[i].UTC().UnixNano()
+			}
+			c.Value = conv
+		}
+		return
 	}
 
-	// anything but IN, NIN is good here
+	// anything but IN, NIN is done here
 	switch c.Mode {
 	case FilterModeIn, FilterModeNotIn:
 		// handled below
@@ -255,16 +266,6 @@ func (c *Condition) Compile() {
 			if !c.IsSorted {
 				sort.Slice(slice, func(i, j int) bool {
 					return slice[i] < slice[j]
-				})
-				c.IsSorted = true
-			}
-		}
-	case FieldTypeDatetime:
-		if slice := c.Value.([]time.Time); slice != nil {
-			c.numValues = len(slice)
-			if !c.IsSorted {
-				sort.Slice(slice, func(i, j int) bool {
-					return slice[i].Before(slice[j])
 				})
 				c.IsSorted = true
 			}
@@ -299,7 +300,7 @@ func (c *Condition) Compile() {
 				c.IsSorted = true
 			}
 		}
-	case FieldTypeInt64, FieldTypeDecimal64:
+	case FieldTypeInt64, FieldTypeDecimal64, FieldTypeDatetime:
 		if slice := c.Value.([]int64); slice != nil {
 			c.numValues = len(slice)
 			if !c.IsSorted {
@@ -422,7 +423,7 @@ func (c *Condition) Compile() {
 			c.int128map[v] = struct{}{}
 		}
 		return
-	case FieldTypeInt64, FieldTypeDecimal64:
+	case FieldTypeInt64, FieldTypeDecimal64, FieldTypeDatetime:
 		// use a map for integer lookups
 		slice := c.Value.([]int64)
 		c.int64map = make(map[int64]struct{}, len(slice))
@@ -548,7 +549,7 @@ func (c *Condition) Compile() {
 func (c Condition) MaybeMatchPack(info PackInfo) bool {
 	min, max := info.Blocks[c.Field.Index].MinValue, info.Blocks[c.Field.Index].MaxValue
 	scale := c.Field.Scale
-	// decimals only: convert storage type used in block headers to field type
+	// decimals only: convert storage type used in block info to field type
 	switch c.Field.Type {
 	case FieldTypeDecimal32:
 		min = NewDecimal32(min.(int32), scale)
@@ -611,7 +612,7 @@ func (c Condition) String() string {
 		if size > 16 {
 			return fmt.Sprintf("%s %s [%d values]", c.Field.Name, c.Mode.Op(), size)
 		} else {
-			return fmt.Sprintf("%s %s [%v]", c.Field.Name, c.Mode.Op(), c.Field.Type.ToString(c.Value, c.Field))
+			return fmt.Sprintf("%s %s [%v]", c.Field.Name, c.Mode.Op(), c.Field.Type.SliceToString(c.Value, c.Field))
 		}
 	default:
 		return fmt.Sprintf("%s %s %s [%s]", c.Field.Name, c.Mode.Op(), util.ToString(c.Value), c.Raw)
@@ -674,7 +675,7 @@ type ConditionList []Condition
 // may otimize (reduce/merge/replace) conditions in the future
 func (l *ConditionList) Compile(t *Table) error {
 	for i, _ := range *l {
-		if err := (*l)[i].Check(); err != nil {
+		if err := (*l)[i].EnsureTypes(); err != nil {
 			return fmt.Errorf("cond %d on table field '%s.%s': %v", i, t.name, (*l)[i].Field.Name, err)
 		}
 		(*l)[i].Compile()
@@ -734,8 +735,8 @@ func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *BitSet {
 		// would return an all-true vector. Note that we do not have to check
 		// for an all-false vector because MaybeMatchPack() has already deselected
 		// packs of that kind (except the journal, but here we cannot rely on
-		// min/max values anyways).
-		if !pkg.dirty {
+		// min/max values anyways and must exclude the journal explicitly).
+		if pkg.key != journalKey && len(info.Blocks) > c.Field.Index {
 			blockInfo := info.Blocks[c.Field.Index]
 			min, max := blockInfo.MinValue, blockInfo.MaxValue
 			switch c.Mode {
@@ -800,33 +801,39 @@ func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *BitSet {
 	return bits
 }
 
+// MatchPack matches all elements in package pkg against the defined condition
+// and returns a bitset of the same length as the package with bits set to true
+// where the match is successful.
+//
+// This implementation uses low level block vectors to efficiently execute
+// vectorized checks with custom assembly-optimized routines.
 func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 	bits := NewBitSet(pkg.Len())
-	slice, _ := pkg.Column(c.Field.Index)
+	block, _ := pkg.Block(c.Field.Index)
 	switch c.Mode {
 	case FilterModeEqual:
-		return c.Field.Type.EqualSlice(slice, c.Value, bits, mask)
+		return c.Field.Type.EqualBlock(block, c.Value, bits, mask)
 	case FilterModeNotEqual:
-		return c.Field.Type.NotEqualSlice(slice, c.Value, bits, mask)
+		return c.Field.Type.NotEqualBlock(block, c.Value, bits, mask)
 	case FilterModeGt:
-		return c.Field.Type.GtSlice(slice, c.Value, bits, mask)
+		return c.Field.Type.GtBlock(block, c.Value, bits, mask)
 	case FilterModeGte:
-		return c.Field.Type.GteSlice(slice, c.Value, bits, mask)
+		return c.Field.Type.GteBlock(block, c.Value, bits, mask)
 	case FilterModeLt:
-		return c.Field.Type.LtSlice(slice, c.Value, bits, mask)
+		return c.Field.Type.LtBlock(block, c.Value, bits, mask)
 	case FilterModeLte:
-		return c.Field.Type.LteSlice(slice, c.Value, bits, mask)
+		return c.Field.Type.LteBlock(block, c.Value, bits, mask)
 	case FilterModeRange:
-		return c.Field.Type.BetweenSlice(slice, c.From, c.To, bits, mask)
+		return c.Field.Type.BetweenBlock(block, c.From, c.To, bits, mask)
 	case FilterModeRegexp:
-		return c.Field.Type.RegexpSlice(slice, c.Value.(string), bits, mask)
+		return c.Field.Type.RegexpBlock(block, c.Value.(string), bits, mask)
 	case FilterModeIn:
 		// unlike on other conditions we run matches against a standard map
 		// rather than using vectorized type functions
 		// type check was already performed in compile stage
 		switch c.Field.Type {
-		case FieldTypeInt256:
-			for i, v := range slice.([]Int256) {
+		case FieldTypeInt256, FieldTypeDecimal256:
+			for i, v := range block.Int256 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -835,8 +842,8 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt128:
-			for i, v := range slice.([]Int128) {
+		case FieldTypeInt128, FieldTypeDecimal128:
+			for i, v := range block.Int128 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -845,8 +852,8 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt64:
-			for i, v := range slice.([]int64) {
+		case FieldTypeInt64, FieldTypeDecimal64, FieldTypeDatetime:
+			for i, v := range block.Int64 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -856,7 +863,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 				}
 			}
 		case FieldTypeInt32:
-			for i, v := range slice.([]int32) {
+			for i, v := range block.Int32 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -866,7 +873,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 				}
 			}
 		case FieldTypeInt16:
-			for i, v := range slice.([]int16) {
+			for i, v := range block.Int16 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -876,7 +883,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 				}
 			}
 		case FieldTypeInt8:
-			for i, v := range slice.([]int8) {
+			for i, v := range block.Int8 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -885,52 +892,11 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeDecimal256:
-			for i, v := range slice.(Decimal256Slice).Int256 {
-				// skip masked values
-				if mask != nil && !mask.IsSet(i) {
-					continue
-				}
-				if _, ok := c.int256map[v]; ok {
-					bits.Set(i)
-				}
-			}
-		case FieldTypeDecimal128:
-			for i, v := range slice.(Decimal128Slice).Int128 {
-				// skip masked values
-				if mask != nil && !mask.IsSet(i) {
-					continue
-				}
-				if _, ok := c.int128map[v]; ok {
-					bits.Set(i)
-				}
-			}
-		case FieldTypeDecimal64:
-			for i, v := range slice.(Decimal64Slice).Int64 {
-				// skip masked values
-				if mask != nil && !mask.IsSet(i) {
-					continue
-				}
-				if _, ok := c.int64map[v]; ok {
-					bits.Set(i)
-				}
-			}
-		case FieldTypeDecimal32:
-			for i, v := range slice.(Decimal32Slice).Int32 {
-				// skip masked values
-				if mask != nil && !mask.IsSet(i) {
-					continue
-				}
-				if _, ok := c.int32map[v]; ok {
-					bits.Set(i)
-				}
-			}
-
 		case FieldTypeUint64:
 			// optimization for primary key fields: where pk columns
 			// are sorted, so we can employ a more space/time efficient
 			// matching algorithm here
-			pk := slice.([]uint64)
+			pk := block.Uint64
 			in := c.Value.([]uint64)
 			if c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
 				maxin := in[len(in)-1]
@@ -970,7 +936,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 			}
 
 		case FieldTypeUint32:
-			for i, v := range slice.([]uint32) {
+			for i, v := range block.Uint32 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -980,7 +946,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 				}
 			}
 		case FieldTypeUint16:
-			for i, v := range slice.([]uint16) {
+			for i, v := range block.Uint16 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -990,7 +956,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 				}
 			}
 		case FieldTypeUint8:
-			for i, v := range slice.([]uint8) {
+			for i, v := range block.Uint8 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1007,7 +973,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 		// this case (i.e. the list contains all colliding values)
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
-			for i, v := range slice.([][]byte) {
+			for i, v := range block.Bytes {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1045,7 +1011,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 
 		case FieldTypeString:
 			strs := c.Value.([]string)
-			for i, v := range slice.([]string) {
+			for i, v := range block.Strings {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1090,8 +1056,8 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 		//
 		// type check was already performed in compile stage
 		switch c.Field.Type {
-		case FieldTypeInt256:
-			for i, v := range slice.([]Int256) {
+		case FieldTypeInt256, FieldTypeDecimal256:
+			for i, v := range block.Int256 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1100,8 +1066,8 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt128:
-			for i, v := range slice.([]Int128) {
+		case FieldTypeInt128, FieldTypeDecimal128:
+			for i, v := range block.Int128 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1110,8 +1076,8 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt64:
-			for i, v := range slice.([]int64) {
+		case FieldTypeInt64, FieldTypeDecimal64, FieldTypeDatetime:
+			for i, v := range block.Int64 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1120,8 +1086,8 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeInt32:
-			for i, v := range slice.([]int32) {
+		case FieldTypeInt32, FieldTypeDecimal32:
+			for i, v := range block.Int32 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1131,7 +1097,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 				}
 			}
 		case FieldTypeInt16:
-			for i, v := range slice.([]int16) {
+			for i, v := range block.Int16 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1141,7 +1107,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 				}
 			}
 		case FieldTypeInt8:
-			for i, v := range slice.([]int8) {
+			for i, v := range block.Int8 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1150,53 +1116,12 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 					bits.Set(i)
 				}
 			}
-		case FieldTypeDecimal256:
-			for i, v := range slice.(Decimal256Slice).Int256 {
-				// skip masked values
-				if mask != nil && !mask.IsSet(i) {
-					continue
-				}
-				if _, ok := c.int256map[v]; !ok {
-					bits.Set(i)
-				}
-			}
-		case FieldTypeDecimal128:
-			for i, v := range slice.(Decimal128Slice).Int128 {
-				// skip masked values
-				if mask != nil && !mask.IsSet(i) {
-					continue
-				}
-				if _, ok := c.int128map[v]; !ok {
-					bits.Set(i)
-				}
-			}
-		case FieldTypeDecimal64:
-			for i, v := range slice.(Decimal64Slice).Int64 {
-				// skip masked values
-				if mask != nil && !mask.IsSet(i) {
-					continue
-				}
-				if _, ok := c.int64map[v]; !ok {
-					bits.Set(i)
-				}
-			}
-		case FieldTypeDecimal32:
-			for i, v := range slice.(Decimal32Slice).Int32 {
-				// skip masked values
-				if mask != nil && !mask.IsSet(i) {
-					continue
-				}
-				if _, ok := c.int32map[v]; !ok {
-					bits.Set(i)
-				}
-			}
-
 		case FieldTypeUint64:
 			// optimization for primary key fields: where pk columns
 			// are sorted, so we can employ a more space/time efficient
 			// matching algorithm here; Note that in contrast to IN
 			// conditions we negate the bitset in the end
-			pk := slice.([]uint64)
+			pk := block.Uint64
 			in := c.Value.([]uint64)
 			if c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
 				maxin := in[len(in)-1]
@@ -1238,7 +1163,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 				}
 			}
 		case FieldTypeUint32:
-			for i, v := range slice.([]uint32) {
+			for i, v := range block.Uint32 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1248,7 +1173,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 				}
 			}
 		case FieldTypeUint16:
-			for i, v := range slice.([]uint16) {
+			for i, v := range block.Uint16 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1258,7 +1183,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 				}
 			}
 		case FieldTypeUint8:
-			for i, v := range slice.([]uint8) {
+			for i, v := range block.Uint8 {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1275,7 +1200,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 		// this case (i.e. the list contains all colliding values)
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
-			for i, v := range slice.([][]byte) {
+			for i, v := range block.Bytes {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1320,7 +1245,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 
 		case FieldTypeString:
 			strs := c.Value.([]string)
-			for i, v := range slice.([]string) {
+			for i, v := range block.Strings {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1368,6 +1293,576 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 		return bits
 	}
 }
+
+// DEPRECATED slow implementation that works on materialized vectors.
+// func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
+// 	bits := NewBitSet(pkg.Len())
+// 	slice, _ := pkg.Column(c.Field.Index)
+// 	switch c.Mode {
+// 	case FilterModeEqual:
+// 		return c.Field.Type.EqualSlice(slice, c.Value, bits, mask)
+// 	case FilterModeNotEqual:
+// 		return c.Field.Type.NotEqualSlice(slice, c.Value, bits, mask)
+// 	case FilterModeGt:
+// 		return c.Field.Type.GtSlice(slice, c.Value, bits, mask)
+// 	case FilterModeGte:
+// 		return c.Field.Type.GteSlice(slice, c.Value, bits, mask)
+// 	case FilterModeLt:
+// 		return c.Field.Type.LtSlice(slice, c.Value, bits, mask)
+// 	case FilterModeLte:
+// 		return c.Field.Type.LteSlice(slice, c.Value, bits, mask)
+// 	case FilterModeRange:
+// 		return c.Field.Type.BetweenSlice(slice, c.From, c.To, bits, mask)
+// 	case FilterModeRegexp:
+// 		return c.Field.Type.RegexpSlice(slice, c.Value.(string), bits, mask)
+// 	case FilterModeIn:
+// 		// unlike on other conditions we run matches against a standard map
+// 		// rather than using vectorized type functions
+// 		// type check was already performed in compile stage
+// 		switch c.Field.Type {
+// 		case FieldTypeInt256:
+// 			for i, v := range slice.([]Int256) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int256map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeInt128:
+// 			for i, v := range slice.([]Int128) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int128map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeInt64:
+// 			for i, v := range slice.([]int64) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int64map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeInt32:
+// 			for i, v := range slice.([]int32) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int32map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeInt16:
+// 			for i, v := range slice.([]int16) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int16map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeInt8:
+// 			for i, v := range slice.([]int8) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int8map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeDecimal256:
+// 			for i, v := range slice.(Decimal256Slice).Int256 {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int256map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeDecimal128:
+// 			for i, v := range slice.(Decimal128Slice).Int128 {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int128map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeDecimal64:
+// 			for i, v := range slice.(Decimal64Slice).Int64 {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int64map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeDecimal32:
+// 			for i, v := range slice.(Decimal32Slice).Int32 {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int32map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+
+// 		case FieldTypeUint64:
+// 			// optimization for primary key fields: where pk columns
+// 			// are sorted, so we can employ a more space/time efficient
+// 			// matching algorithm here
+// 			pk := slice.([]uint64)
+// 			in := c.Value.([]uint64)
+// 			if c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
+// 				maxin := in[len(in)-1]
+// 				maxpk := pk[len(pk)-1]
+// 				for i, p, il, pl := 0, 0, len(in), len(pk); i < il && p < pl; {
+// 					if pk[p] > maxin || maxpk < in[i] {
+// 						// no more matches in this pack
+// 						break
+// 					}
+// 					for p < pl && pk[p] < in[i] {
+// 						p++
+// 					}
+// 					if p == pl {
+// 						break
+// 					}
+// 					for i < il && pk[p] > in[i] {
+// 						i++
+// 					}
+// 					if i == il {
+// 						break
+// 					}
+// 					if pk[p] == in[i] {
+// 						bits.Set(p)
+// 						i++
+// 					}
+// 				}
+// 			} else {
+// 				for i, v := range pk {
+// 					// skip masked values
+// 					if mask != nil && !mask.IsSet(i) {
+// 						continue
+// 					}
+// 					if _, ok := c.uint64map[v]; ok {
+// 						bits.Set(i)
+// 					}
+// 				}
+// 			}
+
+// 		case FieldTypeUint32:
+// 			for i, v := range slice.([]uint32) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.uint32map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeUint16:
+// 			for i, v := range slice.([]uint16) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.uint16map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeUint8:
+// 			for i, v := range slice.([]uint8) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.uint8map[v]; ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+
+// 		// strings and bytes use a hash map; any negative response means
+// 		// val is NOT part of the set and can be rejected; any positive
+// 		// response may be a false positive with very low probability
+// 		// due to hash collision; we use a global overflow list to catch
+// 		// this case (i.e. the list contains all colliding values)
+// 		case FieldTypeBytes:
+// 			vals := c.Value.([][]byte)
+// 			for i, v := range slice.([][]byte) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if c.hashmap != nil {
+// 					sum := xxhash.Sum64(v)
+// 					if pos, ok := c.hashmap[sum]; ok {
+// 						if pos != 0xFFFFFFFF {
+// 							// compare IN slice value at pos against value
+// 							// to ensure we're collision free
+// 							if bytes.Compare(v, vals[pos]) == 0 {
+// 								bits.Set(i)
+// 							}
+// 						} else {
+// 							// scan overflow list
+// 							for _, oflow := range c.hashoverflow {
+// 								if oflow.hash != sum {
+// 									continue
+// 								}
+// 								if bytes.Compare(v, vals[oflow.pos]) != 0 {
+// 									continue
+// 								}
+// 								bits.Set(i)
+// 								break
+// 							}
+// 						}
+// 					}
+// 				} else {
+// 					// without hash map, resort to type-based comparison
+// 					if c.Field.Type.In(v, c.Value) {
+// 						bits.Set(i)
+// 					}
+// 				}
+// 			}
+
+// 		case FieldTypeString:
+// 			strs := c.Value.([]string)
+// 			for i, v := range slice.([]string) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if c.hashmap != nil {
+// 					sum := xxhash.Sum64([]byte(v))
+// 					if pos, ok := c.hashmap[sum]; ok {
+// 						if pos != 0xFFFFFFFF {
+// 							// compare IN slice value at pos against buf
+// 							// to ensure we're collision free
+// 							if strings.Compare(v, strs[pos]) == 0 {
+// 								bits.Set(i)
+// 							}
+// 						} else {
+// 							// scan overflow list
+// 							for _, oflow := range c.hashoverflow {
+// 								if oflow.hash != sum {
+// 									continue
+// 								}
+// 								if strings.Compare(v, strs[oflow.pos]) != 0 {
+// 									continue
+// 								}
+// 								bits.Set(i)
+// 								break
+// 							}
+// 						}
+// 					}
+// 				} else {
+// 					// without hash map, resort to type-based comparison
+// 					if c.Field.Type.In(v, c.Value) {
+// 						bits.Set(i)
+// 					}
+// 				}
+// 			}
+// 		}
+
+// 		return bits
+
+// 	case FilterModeNotIn:
+// 		// unlike with the other types we use the compiled maps and run
+// 		// the matching loop here rather than using vectorized functions
+// 		//
+// 		// type check was already performed in compile stage
+// 		switch c.Field.Type {
+// 		case FieldTypeInt256:
+// 			for i, v := range slice.([]Int256) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int256map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeInt128:
+// 			for i, v := range slice.([]Int128) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int128map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeInt64:
+// 			for i, v := range slice.([]int64) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int64map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeInt32:
+// 			for i, v := range slice.([]int32) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int32map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeInt16:
+// 			for i, v := range slice.([]int16) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int16map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeInt8:
+// 			for i, v := range slice.([]int8) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int8map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeDecimal256:
+// 			for i, v := range slice.(Decimal256Slice).Int256 {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int256map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeDecimal128:
+// 			for i, v := range slice.(Decimal128Slice).Int128 {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int128map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeDecimal64:
+// 			for i, v := range slice.(Decimal64Slice).Int64 {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int64map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeDecimal32:
+// 			for i, v := range slice.(Decimal32Slice).Int32 {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.int32map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+
+// 		case FieldTypeUint64:
+// 			// optimization for primary key fields: where pk columns
+// 			// are sorted, so we can employ a more space/time efficient
+// 			// matching algorithm here; Note that in contrast to IN
+// 			// conditions we negate the bitset in the end
+// 			pk := slice.([]uint64)
+// 			in := c.Value.([]uint64)
+// 			if c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
+// 				maxin := in[len(in)-1]
+// 				maxpk := pk[len(pk)-1]
+// 				for i, p, il, pl := 0, 0, len(in), len(pk); i < il && p < pl; {
+// 					if pk[p] > maxin || maxpk < in[i] {
+// 						// no more matches in this pack
+// 						break
+// 					}
+// 					for p < pl && pk[p] < in[i] {
+// 						p++
+// 					}
+// 					if p == pl {
+// 						break
+// 					}
+// 					for i < il && pk[p] > in[i] {
+// 						i++
+// 					}
+// 					if i == il {
+// 						break
+// 					}
+// 					if pk[p] == in[i] {
+// 						bits.Set(p)
+// 						i++
+// 					}
+// 				}
+// 				// negate the positive match result from above
+// 				bits.Neg()
+// 			} else {
+// 				// check each slice element against the map
+// 				for i, v := range pk {
+// 					// skip masked values
+// 					if mask != nil && !mask.IsSet(i) {
+// 						continue
+// 					}
+// 					if _, ok := c.uint64map[v]; !ok {
+// 						bits.Set(i)
+// 					}
+// 				}
+// 			}
+// 		case FieldTypeUint32:
+// 			for i, v := range slice.([]uint32) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.uint32map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeUint16:
+// 			for i, v := range slice.([]uint16) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.uint16map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+// 		case FieldTypeUint8:
+// 			for i, v := range slice.([]uint8) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if _, ok := c.uint8map[v]; !ok {
+// 					bits.Set(i)
+// 				}
+// 			}
+
+// 		// strings and bytes use a hash map; any negative response means
+// 		// val is NOT part of the set and can be rejected; any positive
+// 		// response may be a false positive with very low probability
+// 		// due to hash collision; we use a global overflow list to catch
+// 		// this case (i.e. the list contains all colliding values)
+// 		case FieldTypeBytes:
+// 			vals := c.Value.([][]byte)
+// 			for i, v := range slice.([][]byte) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if c.hashmap != nil {
+// 					sum := xxhash.Sum64(v)
+// 					if pos, ok := c.hashmap[sum]; !ok {
+// 						bits.Set(i)
+// 					} else {
+// 						// may still be a false positive due to hash collision
+// 						if pos != 0xFFFFFFFF {
+// 							// compare IN slice value at pos against buf
+// 							// to ensure we're collision free
+// 							if bytes.Compare(v, vals[pos]) != 0 {
+// 								bits.Set(i)
+// 							}
+// 						} else {
+// 							// scan overflow list, must use exhaustive search
+// 							var found bool
+// 							for _, oflow := range c.hashoverflow {
+// 								if oflow.hash != sum {
+// 									continue
+// 								}
+// 								if bytes.Compare(v, vals[oflow.pos]) == 0 {
+// 									// may break early when found
+// 									found = true
+// 									break
+// 								}
+// 							}
+// 							if !found {
+// 								bits.Set(i)
+// 							}
+// 						}
+// 					}
+// 				} else {
+// 					// without hash map, resort to type-based comparison
+// 					if !c.Field.Type.In(v, c.Value) {
+// 						bits.Set(i)
+// 					}
+// 				}
+// 			}
+
+// 		case FieldTypeString:
+// 			strs := c.Value.([]string)
+// 			for i, v := range slice.([]string) {
+// 				// skip masked values
+// 				if mask != nil && !mask.IsSet(i) {
+// 					continue
+// 				}
+// 				if c.hashmap != nil {
+// 					sum := xxhash.Sum64([]byte(v))
+// 					if pos, ok := c.hashmap[sum]; !ok {
+// 						bits.Set(i)
+// 					} else {
+// 						// may still be a false positive due to hash collision
+// 						if pos != 0xFFFFFFFF {
+// 							// compare IN slice value at pos against buf
+// 							// to ensure we're collision free
+// 							if strings.Compare(v, strs[pos]) != 0 {
+// 								bits.Set(i)
+// 							}
+// 						} else {
+// 							// scan overflow list, must use exhaustive search
+// 							var found bool
+// 							for _, oflow := range c.hashoverflow {
+// 								if oflow.hash != sum {
+// 									continue
+// 								}
+// 								if strings.Compare(v, strs[oflow.pos]) == 0 {
+// 									// may break early when found
+// 									found = true
+// 									break
+// 								}
+// 							}
+// 							if !found {
+// 								bits.Set(i)
+// 							}
+// 						}
+// 					}
+// 				} else {
+// 					// without hash map, resort to type-based comparison
+// 					if c.Field.Type.In(v, c.Value) {
+// 						bits.Set(i)
+// 					}
+// 				}
+// 			}
+// 		}
+// 		return bits
+// 	default:
+// 		return bits
+// 	}
+// }
 
 // TODO: support more than a simple AND between conditions
 func (l ConditionList) MatchAt(pkg *Package, pos int) bool {

@@ -82,8 +82,8 @@ func (t IndexType) MayHaveCollisions() bool {
 }
 
 type IndexEntry struct {
-	Key uint64 `pack:"K,pk,snappy"` // hash key, i.e. FNV(value)
-	Id  uint64 `pack:"I,snappy"`    // OID of table entry
+	Key uint64 `knox:"K,pk,snappy"` // hash key, i.e. FNV(value)
+	Id  uint64 `knox:"I,snappy"`    // OID of table entry
 }
 
 type Index struct {

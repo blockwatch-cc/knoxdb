@@ -5,7 +5,6 @@ package pack
 
 import (
 	"reflect"
-	"sort"
 	"time"
 
 	. "blockwatch.cc/knoxdb/encoding/decimal"
@@ -74,11 +73,14 @@ func (r *Result) SortByField(name string) error {
 	if r.pkg.Len() == 0 {
 		return nil
 	}
-	spkg := &PackageSorter{Package: r.pkg, col: i}
-	if !sort.IsSorted(spkg) {
-		sort.Sort(spkg)
-		r.pkg.dirty = true
+	sorter, err := NewPackageSorter(r.pkg, i)
+	if err != nil {
+		return err
 	}
+
+	// update dirty state when package has changed
+	updated := sorter.Sort()
+	r.pkg.dirty = r.pkg.dirty || updated
 	return nil
 }
 
