@@ -1004,3 +1004,93 @@ func TestJournalIndexes(t *testing.T) {
 		v.Run(t)
 	}
 }
+
+// size means number of items in journal, 1 new item with pk = 0 is added
+func BenchmarkJournalInsertSingle(B *testing.B) {
+	for _, n := range packBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			batch := makeJournalTestData(n.l)
+			j := NewJournal(0, n.l, "")
+			j.InitType(JournalTestType{})
+			j.InsertBatch(batch)
+			B.ResetTimer()
+			B.ReportAllocs()
+			B.SetBytes(16) // JournalTestItem = pk + val
+			for b := 0; b < B.N; b++ {
+				j.Insert(&JournalTestType{0, 0xffff})
+			}
+		})
+	}
+}
+
+// size means batch size, all pk = 0
+func BenchmarkJournalInsertBatch(B *testing.B) {
+	for _, n := range packBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			batch := makeJournalTestData(n.l)
+			j := NewJournal(0, n.l, "")
+			j.InitType(JournalTestType{})
+			B.ResetTimer()
+			B.ReportAllocs()
+			B.SetBytes(int64(len(batch) * 16))
+			for b := 0; b < B.N; b++ {
+				j.InsertBatch(batch)
+			}
+		})
+	}
+}
+
+func BenchmarkJournalInsertBatchPk(B *testing.B) {
+	for _, n := range packBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			batch := makeJournalTestDataWithRandomPk(n.l)
+			j := NewJournal(0, n.l, "")
+			j.InitType(JournalTestType{})
+			B.ResetTimer()
+			B.ReportAllocs()
+			B.SetBytes(int64(len(batch) * 16))
+			for b := 0; b < B.N; b++ {
+				j.InsertBatch(batch)
+			}
+		})
+	}
+}
+
+func BenchmarkJournalUpdateSingle(B *testing.B) {
+	for _, n := range packBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			batch := makeJournalTestData(n.l)
+			j := NewJournal(0, n.l, "")
+			j.InitType(JournalTestType{})
+			j.InsertBatch(batch)
+			B.ResetTimer()
+			B.ReportAllocs()
+			B.SetBytes(16) // JournalTestItem = pk + val
+			for b := 0; b < B.N; b++ {
+				j.Update(&JournalTestType{batch[len(batch)/2].ID(), 0xffff})
+			}
+		})
+	}
+}
+
+func BenchmarkJournalUpdateBatch(B *testing.B) {
+	for _, n := range packBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			batch := makeJournalTestDataWithRandomPk(n.l)
+			j := NewJournal(0, n.l, "")
+			j.InitType(JournalTestType{})
+			j.InsertBatch(batch)
+			B.ResetTimer()
+			B.ReportAllocs()
+			B.SetBytes(int64(len(batch) * 16))
+			for b := 0; b < B.N; b++ {
+				j.UpdateBatch(batch)
+			}
+		})
+	}
+
+}
+
+func BenchmarkJournalDelete(B *testing.B) {
+
+}
