@@ -64,12 +64,10 @@ var Bytes = struct {
 	MatchEqual    func([][]byte, []byte, *BitSet, *BitSet) *BitSet
 }{
 	Sort: func(s [][]byte) [][]byte {
-		BytesSorter(s).Sort()
-		return s
+		return BytesSorter(s).Sort()
 	},
 	Unique: func(s [][]byte) [][]byte {
-		UniqueBytesSlice(s)
-		return s
+		return UniqueBytesSlice(s)
 	},
 	RemoveZeros: func(s [][]byte) [][]byte {
 		s, _ = bytesRemoveZeros(s)
@@ -262,10 +260,11 @@ func bytesContainsRange(s [][]byte, from, to []byte) bool {
 
 type BytesSorter [][]byte
 
-func (s BytesSorter) Sort() {
+func (s BytesSorter) Sort() [][]byte {
 	if !sort.IsSorted(s) {
 		sort.Sort(s)
 	}
+	return s
 }
 
 func (s BytesSorter) Len() int           { return len(s) }

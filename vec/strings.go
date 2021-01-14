@@ -64,12 +64,10 @@ var Strings = struct {
 	MatchEqual    func([]string, string, *BitSet, *BitSet) *BitSet
 }{
 	Sort: func(s []string) []string {
-		StringsSorter(s).Sort()
-		return s
+		return StringsSorter(s).Sort()
 	},
 	Unique: func(s []string) []string {
-		UniqueStringSlice(s)
-		return s
+		return UniqueStringSlice(s)
 	},
 	RemoveZeros: func(s []string) []string {
 		s, _ = stringRemoveZeros(s)
@@ -261,10 +259,11 @@ func stringContainsRange(s []string, from, to string) bool {
 
 type StringsSorter []string
 
-func (s StringsSorter) Sort() {
+func (s StringsSorter) Sort() []string {
 	if !sort.IsSorted(s) {
 		sort.Sort(s)
 	}
+	return s
 }
 
 func (s StringsSorter) Len() int           { return len(s) }

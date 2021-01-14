@@ -63,12 +63,10 @@ var Uint16 = struct {
 	MatchEqual    func([]uint16, uint16, *BitSet, *BitSet) *BitSet
 }{
 	Sort: func(s []uint16) []uint16 {
-		Uint16Sorter(s).Sort()
-		return s
+		return Uint16Sorter(s).Sort()
 	},
 	Unique: func(s []uint16) []uint16 {
-		UniqueUint16Slice(s)
-		return s
+		return UniqueUint16Slice(s)
 	},
 	RemoveZeros: func(s []uint16) []uint16 {
 		s, _ = uint16RemoveZeros(s)

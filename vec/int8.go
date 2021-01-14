@@ -63,12 +63,10 @@ var Int8 = struct {
 	MatchEqual    func([]int8, int8, *BitSet, *BitSet) *BitSet
 }{
 	Sort: func(s []int8) []int8 {
-		Int8Sorter(s).Sort()
-		return s
+		return Int8Sorter(s).Sort()
 	},
 	Unique: func(s []int8) []int8 {
-		UniqueInt8Slice(s)
-		return s
+		return UniqueInt8Slice(s)
 	},
 	RemoveZeros: func(s []int8) []int8 {
 		s, _ = int8RemoveZeros(s)

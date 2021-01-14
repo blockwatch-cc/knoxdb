@@ -9,10 +9,11 @@ import (
 
 type Uint64Sorter []uint64
 
-func (s Uint64Sorter) Sort() {
+func (s Uint64Sorter) Sort() []uint64 {
 	if !sort.IsSorted(s) {
 		sort.Sort(s)
 	}
+	return s
 }
 
 func (s Uint64Sorter) Len() int           { return len(s) }

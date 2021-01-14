@@ -9,10 +9,11 @@ import (
 
 type Int32Sorter []int32
 
-func (s Int32Sorter) Sort() {
+func (s Int32Sorter) Sort() []int32 {
 	if !sort.IsSorted(s) {
 		sort.Sort(s)
 	}
+	return s
 }
 
 func (s Int32Sorter) Len() int           { return len(s) }

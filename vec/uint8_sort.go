@@ -9,10 +9,11 @@ import (
 
 type Uint8Sorter []uint8
 
-func (s Uint8Sorter) Sort() {
+func (s Uint8Sorter) Sort() []uint8 {
 	if !sort.IsSorted(s) {
 		sort.Sort(s)
 	}
+	return s
 }
 
 func (s Uint8Sorter) Len() int           { return len(s) }

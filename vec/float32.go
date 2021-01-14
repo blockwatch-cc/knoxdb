@@ -63,12 +63,10 @@ var Float32 = struct {
 	MatchEqual    func([]float32, float32, *BitSet, *BitSet) *BitSet
 }{
 	Sort: func(s []float32) []float32 {
-		Float32Sorter(s).Sort()
-		return s
+		return Float32Sorter(s).Sort()
 	},
 	Unique: func(s []float32) []float32 {
-		UniqueFloat32Slice(s)
-		return s
+		return UniqueFloat32Slice(s)
 	},
 	RemoveZeros: func(s []float32) []float32 {
 		s, _ = float32RemoveZeros(s)

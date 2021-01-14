@@ -67,12 +67,10 @@ var Times = struct {
 	MatchEqual    func([]time.Time, time.Time, *BitSet, *BitSet) *BitSet
 }{
 	Sort: func(s []time.Time) []time.Time {
-		TimeSorter(s).Sort()
-		return s
+		return TimeSorter(s).Sort()
 	},
 	Unique: func(s []time.Time) []time.Time {
-		UniqueTimeSlice(s)
-		return s
+		return UniqueTimeSlice(s)
 	},
 	RemoveZeros: func(s []time.Time) []time.Time {
 		s, _ = timeRemoveZeros(s)
@@ -261,10 +259,11 @@ func timeContainsRange(s []time.Time, from, to time.Time) bool {
 
 type TimeSorter []time.Time
 
-func (s TimeSorter) Sort() {
+func (s TimeSorter) Sort() []time.Time {
 	if !sort.IsSorted(s) {
 		sort.Sort(s)
 	}
+	return s
 }
 
 func (s TimeSorter) Len() int           { return len(s) }
