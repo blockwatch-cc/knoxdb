@@ -47,6 +47,8 @@ type Journal struct {
 	keys    journalEntryList // 0: pk, 1: index in journal; sorted by pk, may be unsorted
 	tomb    []uint64         // list of deleted primary keys, always sorted
 	deleted *vec.BitSet      // tracks which journal positions are in tomb
+	wal     *Wal
+	prefix  string
 }
 
 type journalEntry struct {
@@ -60,7 +62,7 @@ func (l journalEntryList) Len() int           { return len(l) }
 func (l journalEntryList) Less(i, j int) bool { return l[i].pk < l[j].pk }
 func (l journalEntryList) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 
-func NewJournal(maxid uint64, size int) *Journal {
+func NewJournal(maxid uint64, size int, name string) *Journal {
 	return &Journal{
 		maxid:   maxid,
 		maxsize: size,
@@ -68,6 +70,7 @@ func NewJournal(maxid uint64, size int) *Journal {
 		keys:    make(journalEntryList, 0, roundSize(size)),
 		tomb:    make([]uint64, 0, roundSize(size)),
 		deleted: vec.NewCustomBitSet(roundSize(size)).Grow(0),
+		prefix:  name,
 	}
 }
 
@@ -84,7 +87,26 @@ func (j *Journal) InitType(typ interface{}) error {
 	if err != nil {
 		return err
 	}
+	if j.prefix == "" {
+		j.prefix = tinfo.name
+	}
 	return j.data.InitFields(fields, tinfo)
+}
+
+func (j *Journal) Open(path string) error {
+	w, err := OpenWal(path, j.prefix)
+	if err != nil {
+		return fmt.Errorf("pack: opening WAL for %s journal failed: %v", j.prefix, err)
+	}
+	j.wal = w
+	return nil
+}
+
+func (j *Journal) Close() {
+	if j.wal != nil {
+		j.wal.Close()
+		j.wal = nil
+	}
 }
 
 func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
@@ -196,7 +218,7 @@ func (j *Journal) Insert(item Item) error {
 	}
 
 	// write insert record to WAL
-	// TODO
+	j.wal.Write(WalRecordTypeInsert, pk, item)
 
 	if updateIdx < 0 {
 		// append to data pack
@@ -257,10 +279,10 @@ func (j *Journal) InsertBatch(batch []Item) (int, error) {
 			updateIdx, last = j.PkIndex(pk, last)
 		}
 
-		// write insert record to WAL
-		// TODO
-
 		if updateIdx < 0 {
+			// write insert record to WAL
+			j.wal.Write(WalRecordTypeInsert, pk, item)
+
 			// append to data pack
 			if err := j.data.Push(item); err != nil {
 				return count, err
@@ -276,6 +298,9 @@ func (j *Journal) InsertBatch(batch []Item) (int, error) {
 			j.lastid = util.MaxU64(j.lastid, pk)
 			j.maxid = util.MaxU64(j.maxid, pk)
 		} else {
+			// write update record to WAL
+			j.wal.Write(WalRecordTypeUpdate, pk, item)
+
 			// replace in data pack, this also resets a zero pk after deletion
 			if err := j.data.ReplaceAt(updateIdx, item); err != nil {
 				return count, err
@@ -315,6 +340,9 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 	newKeys := make(journalEntryList, 0, n)
 
 	if minid > j.lastid {
+		// write insert records to WAL
+		j.wal.WritePack(WalRecordTypeInsert, pkg, pos, n)
+
 		// fast path (all ids are > last)
 		jLen := j.data.Len()
 		if err := j.data.AppendFrom(pkg, pos, n, true); err != nil {
@@ -334,13 +362,14 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 			if pk == 0 {
 				pk = j.next()
 				pkcol[pos+i] = pk
+				j.sortData = true
 			} else {
 				updateIdx, last = j.PkIndex(pk, last)
 			}
 
 			if updateIdx < 0 {
 				// write insert record to WAL
-				// TODO
+				j.wal.WritePack(WalRecordTypeInsert, pkg, pos+i, 1)
 
 				// append to journal
 				if err := j.data.AppendFrom(pkg, pos+i, 1, true); err != nil {
@@ -349,7 +378,7 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 				newKeys = append(newKeys, journalEntry{pk, j.data.Len() - 1})
 			} else {
 				// write update record to WAL
-				// TODO
+				j.wal.WritePack(WalRecordTypeUpdate, pkg, pos+i, 1)
 
 				// replace in data pack, this also resets a zero pk after deletion
 				if err := j.data.ReplaceFrom(pkg, updateIdx, pos+i, 1); err != nil {
@@ -381,7 +410,7 @@ func (j *Journal) Update(item Item) error {
 	}
 
 	// write update record to WAL
-	// TODO
+	j.wal.Write(WalRecordTypeUpdate, pk, item)
 
 	// find existing key and position in journal
 	if idx, _ := j.PkIndex(pk, 0); idx < 0 {
@@ -390,7 +419,7 @@ func (j *Journal) Update(item Item) error {
 			return err
 		}
 
-		// undelete if deleted
+		// undelete if deleted, must call before mergeKeys
 		j.undelete([]uint64{pk}, true)
 
 		// update keys
@@ -421,21 +450,28 @@ func (j *Journal) Update(item Item) error {
 // returns the number of successsfully processed items. Batch is expected
 // to be sorted.
 func (j *Journal) UpdateBatch(batch []Item) (int, error) {
-	// require primary keys for all items
-	for _, item := range batch {
-		if item.ID() == 0 {
-			return 0, fmt.Errorf("pack: missing primary key on %T item", item)
-		}
-	}
-
 	// sort for improved update performance
 	SortItems(batch)
-	var last, idx, count int
-	newPks := make([]uint64, 0, len(batch))
+	newPks := make([]uint64, len(batch))
 
+	// require primary keys for all items
+	for i, item := range batch {
+		pk := item.ID()
+		if pk == 0 {
+			return 0, fmt.Errorf("pack: missing primary key on %T item", item)
+		}
+		newPks[i] = pk
+	}
+
+	// write update record to WAL
+	j.wal.WriteMulti(WalRecordTypeUpdate, newPks, batch)
+
+	var last, idx, count int
+	newPks = newPks[:0]
 	newKeys := make(journalEntryList, 0, len(batch))
 	for _, item := range batch {
 		pk := item.ID()
+
 		idx, last = j.PkIndex(pk, last)
 		if idx < 0 {
 			// append to data pack if not exists
@@ -543,7 +579,7 @@ func (j *Journal) Delete(pk uint64) (int, error) {
 	}
 
 	// write delete record to WAL
-	// TODO
+	j.wal.Write(WalRecordTypeDelete, pk, nil)
 
 	// find if key exists in journal and mark entry as deleted
 	idx, _ := j.PkIndex(pk, 0)
@@ -596,9 +632,7 @@ func (j *Journal) DeleteBatch(pks []uint64) (int, error) {
 	}
 
 	// write delete records to WAL
-	// TODO
-	// for _, pk := range ids {
-	// }
+	j.wal.WriteMulti(WalRecordTypeDelete, pks, nil)
 
 	var last, idx int
 	for _, pk := range pks {

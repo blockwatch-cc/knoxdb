@@ -61,7 +61,7 @@ func makeJournalTestDataWithRandomPk(n int) ItemList {
 }
 
 func makeJournalFromPks(pks, del []uint64) *Journal {
-	j := NewJournal(0, len(pks))
+	j := NewJournal(0, len(pks), "")
 	j.InitType(JournalTestType{})
 	for i := range pks {
 		item := &JournalTestType{
@@ -199,7 +199,7 @@ func comparePackWithBatch(t *testing.T, name string, j *Journal, batch ItemList)
 func TestJournalNew(t *testing.T) {
 	for i, sz := range journalTestSizes {
 		t.Run(fmt.Sprintf("%d_new", sz), func(t *testing.T) {
-			j := NewJournal(uint64(i), sz)
+			j := NewJournal(uint64(i), sz, "")
 			// sizes & caps (note, pack storage is allocated on Init)
 			checkJournalSizes(t, j, 0, 0, 0)
 			checkJournalCaps(t, j, 0, sz, sz)
@@ -225,7 +225,7 @@ func TestJournalInit(t *testing.T) {
 			expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
 
 			// create journal
-			j := NewJournal(uint64(i), sz)
+			j := NewJournal(uint64(i), sz, "")
 			fields, err := Fields(JournalTestType{})
 			if err != nil {
 				t.Errorf("unexpected fields init error: %v", err)
@@ -242,7 +242,7 @@ func TestJournalInit(t *testing.T) {
 				t.Errorf("no error on 2nd init")
 			}
 
-			j = NewJournal(uint64(i), sz)
+			j = NewJournal(uint64(i), sz, "")
 			if err := j.InitType(JournalTestType{}); err != nil {
 				t.Errorf("unexpected init error: %v", err)
 			}
@@ -255,25 +255,25 @@ func TestJournalInit(t *testing.T) {
 			}
 
 			// empty type is not ok
-			j = NewJournal(uint64(i), sz)
+			j = NewJournal(uint64(i), sz, "")
 			if err := j.InitType(nil); err == nil {
 				t.Errorf("no error when type is nil: %v", err)
 			}
 
 			// empty fields are not ok
-			j = NewJournal(uint64(i), sz)
+			j = NewJournal(uint64(i), sz, "")
 			if err := j.InitFields([]Field{}); err == nil {
 				t.Errorf("no error when fields are empty")
 			}
 
 			// nil fields are not OK
-			j = NewJournal(uint64(i), sz)
+			j = NewJournal(uint64(i), sz, "")
 			if err := j.InitFields(nil); err == nil {
 				t.Errorf("no error when fields are nil")
 			}
 
 			// non-pk type
-			j = NewJournal(uint64(i), sz)
+			j = NewJournal(uint64(i), sz, "")
 			type noPkType struct {
 				X uint64 `pack:"x"`
 				A []byte `pack:"a"`
@@ -283,7 +283,7 @@ func TestJournalInit(t *testing.T) {
 			}
 
 			// empty type
-			j = NewJournal(uint64(i), sz)
+			j = NewJournal(uint64(i), sz, "")
 			type emptyType struct {
 				X uint64 `pack:"-"`
 				A []byte `pack:"-"`
@@ -293,7 +293,7 @@ func TestJournalInit(t *testing.T) {
 			}
 
 			// empty type
-			j = NewJournal(uint64(i), sz)
+			j = NewJournal(uint64(i), sz, "")
 			type privateType struct {
 				x uint64 `pack:"x,pk"`
 				y []byte `pack:"y"`
@@ -310,7 +310,7 @@ func TestJournalInsert(t *testing.T) {
 	for i, sz := range journalTestSizes {
 		t.Run(fmt.Sprintf("%d_insert", sz), func(t *testing.T) {
 			expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
-			j := NewJournal(uint64(i), sz)
+			j := NewJournal(uint64(i), sz, "")
 			j.InitType(JournalTestType{})
 			items := makeJournalTestData(4)
 
@@ -437,7 +437,7 @@ func TestJournalInsertBatch(t *testing.T) {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
 				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
-				j := NewJournal(0, sz)
+				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				max := batch[len(batch)-1].ID()
 
@@ -475,7 +475,7 @@ func TestJournalInsertBatch(t *testing.T) {
 
 				// retry with unsorted data (batch will be sorted by Insert!)
 				batch = shuffleItems(batch)
-				j = NewJournal(0, sz)
+				j = NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				n, err = j.InsertBatch(batch)
 				if err != nil {
@@ -510,7 +510,7 @@ func TestJournalInsertBatch(t *testing.T) {
 
 				// 2 inserts half/half (journal will become unsorted)
 				batch = shuffleItems(batch)
-				j = NewJournal(0, sz)
+				j = NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				_, err = j.InsertBatch(batch[:sz/2])
 				if err != nil {
@@ -563,7 +563,7 @@ func TestJournalUpsertBatch(t *testing.T) {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
 				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
-				j := NewJournal(0, sz)
+				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				max := batch[sz/2-1].ID()
 
@@ -643,7 +643,7 @@ func TestJournalUpdate(t *testing.T) {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
 				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
-				j := NewJournal(0, sz)
+				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				max := batch[len(batch)-1].ID()
 
@@ -699,7 +699,7 @@ func TestJournalUpdateBatch(t *testing.T) {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
 				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
-				j := NewJournal(0, sz)
+				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				max := batch[len(batch)-1].ID()
 
@@ -763,7 +763,7 @@ func TestJournalDelete(t *testing.T) {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(T *testing.T) {
 				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
-				j := NewJournal(0, sz)
+				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				max := batch[len(batch)-1].ID()
 
@@ -857,7 +857,7 @@ func TestJournalDeleteBatch(t *testing.T) {
 							batch[i] = &c
 						}
 						// and a fresh journal
-						j := NewJournal(0, sz)
+						j := NewJournal(0, sz, "")
 						j.InitType(JournalTestType{})
 						max := batch[len(batch)-1].ID()
 						_, err := j.InsertBatch(batch)

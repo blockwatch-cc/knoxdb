@@ -207,11 +207,15 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		if err != nil {
 			return err
 		}
-		t.journal = NewJournal(0, 1<<uint(t.opts.JournalSizeLog2))
+		t.journal = NewJournal(0, 1<<uint(t.opts.JournalSizeLog2), t.name)
 		if err := t.journal.InitFields(fields); err != nil {
 			return err
 		}
 		_, err = t.journal.StoreLegacy(dbTx, t.metakey)
+		if err != nil {
+			return err
+		}
+		err = t.journal.Open(d.Dir())
 		if err != nil {
 			return err
 		}
@@ -337,13 +341,17 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		if err != nil {
 			return fmt.Errorf("pack: cannot read metadata for table %s: %v", name, err)
 		}
-		t.journal = NewJournal(t.meta.Sequence, 1<<uint(t.opts.JournalSizeLog2))
+		t.journal = NewJournal(t.meta.Sequence, 1<<uint(t.opts.JournalSizeLog2), t.name)
 		t.journal.InitFields(t.fields)
 		err = t.journal.LoadLegacy(dbTx, t.metakey)
 		if err != nil {
 			return fmt.Errorf("pack: cannot open journal for table %s: %v", name, err)
 		}
-		log.Debugf("pack: %s table loaded journal with %d entries", name, t.journal.Len())
+		err = t.journal.Open(d.Dir())
+		if err != nil {
+			return err
+		}
+		log.Debugf("pack: %s table opened WAL with %d entries", name, t.journal.Len())
 		return t.loadPackInfo(dbTx)
 	})
 	if err != nil {
@@ -985,7 +993,11 @@ func (t *Table) Close() error {
 	}
 
 	// commit storage transaction
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	t.journal.Close()
+	return nil
 }
 
 func (t *Table) FlushJournal(ctx context.Context) error {

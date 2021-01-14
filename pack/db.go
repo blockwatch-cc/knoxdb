@@ -126,6 +126,10 @@ func (d *DB) Path() string {
 	return d.db.Path()
 }
 
+func (d *DB) Dir() string {
+	return filepath.Dir(d.Path())
+}
+
 func (d *DB) GC(ctx context.Context, ratio float64) error {
 	return d.db.GC(ctx, ratio)
 }
