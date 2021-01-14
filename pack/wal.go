@@ -5,7 +5,6 @@ package pack
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,7 +19,7 @@ var (
 )
 
 type Wal struct {
-	w io.ReadWriteCloser
+	w *os.File
 }
 
 func OpenWal(path, name string) (*Wal, error) {
@@ -35,31 +34,50 @@ func OpenWal(path, name string) (*Wal, error) {
 }
 
 func (w *Wal) IsOpen() bool {
-	return w.w != nil
+	return w != nil && w.w != nil
 }
 
 func (w *Wal) Close() {
-	if w.w != nil {
-		w.w.Close()
-		w.w = nil
+	if w == nil || w.w == nil {
+		return
 	}
+	w.w.Close()
+	w.w = nil
 }
 
-func (w *Wal) Write(rec WalRecordType, pk uint64, val Item) {
-	if w == nil {
-		return
+func (w *Wal) Reset() error {
+	if w == nil || w.w == nil {
+		return nil
+	}
+	err := w.w.Truncate(0)
+	if err != nil {
+		return err
+	}
+	_, err = w.w.Seek(0, 0)
+	return err
+}
+
+func (w *Wal) Write(rec WalRecordType, pk uint64, val Item) error {
+	if w == nil || w.w == nil {
+		return nil
 	}
 	var b [256]byte
 	buf := bytes.NewBuffer(b[:0])
 	buf.WriteString(string(rec))
 	buf.WriteString(strconv.FormatUint(pk, 10))
 	buf.WriteByte('\n')
-	w.w.Write(buf.Bytes())
+	if _, err := w.w.Write(buf.Bytes()); err != nil {
+		return err
+	}
+	if err := w.w.Sync(); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (w *Wal) WriteMulti(rec WalRecordType, pks []uint64, vals []Item) {
-	if w == nil {
-		return
+func (w *Wal) WriteMulti(rec WalRecordType, pks []uint64, vals []Item) error {
+	if w == nil || w.w == nil {
+		return nil
 	}
 	for i := range pks {
 		var b [256]byte
@@ -67,13 +85,22 @@ func (w *Wal) WriteMulti(rec WalRecordType, pks []uint64, vals []Item) {
 		buf.WriteString(string(rec))
 		buf.WriteString(strconv.FormatUint(pks[i], 10))
 		buf.WriteByte('\n')
-		w.w.Write(buf.Bytes())
+		if _, err := w.w.Write(buf.Bytes()); err != nil {
+			return err
+		}
 		// TODO
 		// serialize value (if exists)
 	}
+	if err := w.w.Sync(); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (w *Wal) WritePack(rec WalRecordType, pkg *Package, pos, n int) {
+func (w *Wal) WritePack(rec WalRecordType, pkg *Package, pos, n int) error {
+	if w == nil || w.w == nil {
+		return nil
+	}
 	col, _ := pkg.Column(pkg.pkindex)
 	pks, _ := col.([]uint64)
 	for _, pk := range pks[pos : pos+n] {
@@ -82,6 +109,12 @@ func (w *Wal) WritePack(rec WalRecordType, pkg *Package, pos, n int) {
 		buf.WriteString(string(rec))
 		buf.WriteString(strconv.FormatUint(pk, 10))
 		buf.WriteByte('\n')
-		w.w.Write(buf.Bytes())
+		if _, err := w.w.Write(buf.Bytes()); err != nil {
+			return err
+		}
 	}
+	if err := w.w.Sync(); err != nil {
+		return err
+	}
+	return nil
 }
