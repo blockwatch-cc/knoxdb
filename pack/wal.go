@@ -57,6 +57,13 @@ func (w *Wal) Reset() error {
 	return err
 }
 
+func (w *Wal) Sync() error {
+	if w == nil || w.w == nil {
+		return nil
+	}
+	return w.w.Sync()
+}
+
 func (w *Wal) Write(rec WalRecordType, pk uint64, val Item) error {
 	if w == nil || w.w == nil {
 		return nil
@@ -67,9 +74,6 @@ func (w *Wal) Write(rec WalRecordType, pk uint64, val Item) error {
 	buf.WriteString(strconv.FormatUint(pk, 10))
 	buf.WriteByte('\n')
 	if _, err := w.w.Write(buf.Bytes()); err != nil {
-		return err
-	}
-	if err := w.w.Sync(); err != nil {
 		return err
 	}
 	return nil
@@ -91,9 +95,6 @@ func (w *Wal) WriteMulti(rec WalRecordType, pks []uint64, vals []Item) error {
 		// TODO
 		// serialize value (if exists)
 	}
-	if err := w.w.Sync(); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -112,9 +113,6 @@ func (w *Wal) WritePack(rec WalRecordType, pkg *Package, pos, n int) error {
 		if _, err := w.w.Write(buf.Bytes()); err != nil {
 			return err
 		}
-	}
-	if err := w.w.Sync(); err != nil {
-		return err
 	}
 	return nil
 }
