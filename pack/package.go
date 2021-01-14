@@ -4,6 +4,7 @@
 package pack
 
 import (
+	"bytes"
 	"encoding"
 	"fmt"
 	"math"
@@ -38,7 +39,27 @@ func (p *Package) Key() []byte {
 }
 
 func (p *Package) SetKey(key []byte) {
-	p.key = bigEndian.Uint32(key)
+	switch {
+	case bytes.Compare(key, []byte("_journal")) == 0:
+		p.key = journalKey
+	case bytes.Compare(key, []byte("_tombstone")) == 0:
+		p.key = tombstoneKey
+	default:
+		p.key = bigEndian.Uint32(key)
+	}
+}
+
+func encodePackKey(key uint32) []byte {
+	switch key {
+	case journalKey:
+		return []byte("_journal")
+	case tombstoneKey:
+		return []byte("_tombstone")
+	default:
+		var buf [4]byte
+		bigEndian.PutUint32(buf[:], key)
+		return buf[:]
+	}
 }
 
 func NewPackage(sz int) *Package {

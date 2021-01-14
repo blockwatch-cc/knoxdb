@@ -212,7 +212,7 @@ func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 		if q.pkids == nil {
 			q.pkids = pkmatch
 		} else {
-			q.pkids = vec.IntersectSortedUint64(q.pkids, pkmatch, q.table.pkPool.Get().([]uint64))
+			q.pkids = vec.Uint64.Intersect(q.pkids, pkmatch, q.table.pkPool.Get().([]uint64))
 			pkmatch = pkmatch[:0]
 			q.table.pkPool.Put(pkmatch)
 		}

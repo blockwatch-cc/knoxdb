@@ -1070,42 +1070,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		start                            time.Time = time.Now() // logging
 	)
 
-	// journal must be sorted for the legacy algorithm below
-	// TODO: find an algo that uses the already sorted journal key-to-pos slice
-	// t.journal.Sort()
-
-	// col, _ := t.tombstone.Column(0)
-	// dead, _ := col.([]uint64)
-	// col, _ = t.journal.Column(t.journal.pkindex)
-	// pk, _ := col.([]uint64)
-
 	atomic.AddInt64(&t.stats.FlushCalls, 1)
 	atomic.AddInt64(&t.stats.FlushedTuples, int64(t.journal.Len()+t.journal.TombLen()))
-
-	// mark deleted entries in journal by setting id to zero
-	// Note: both tombstone and journal id columns are sorted already
-	// log.Debugf("flush: %s table %d journal and %d tombstone records", t.name, len(pk), len(dead))
-	// for j, d, jl, dl := 0, 0, len(pk), len(dead); j < jl && d < dl; {
-	// 	for d < dl && dead[d] < pk[j] {
-	// 		d++
-	// 	}
-	// 	if d == dl {
-	// 		break
-	// 	}
-	// 	for j < jl && dead[d] > pk[j] {
-	// 		j++
-	// 	}
-	// 	if j == jl {
-	// 		break
-	// 	}
-	// 	if dead[d] == pk[j] {
-	// 		pk[j] = 0   // mark as processed (0 is safe to use here
-	// 		dead[d] = 0 // because its an invalid pk value)
-	// 		d++
-	// 		j++
-	// 		nDel++
-	// 	}
-	// }
 
 	// use internal journal data slices for faster lookups
 	live := t.journal.keys
@@ -1119,10 +1085,9 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		pkgsz                          int      = 1 << uint(t.opts.PackSizeLog2)
 		jpos, tpos, nextpack, lastpack int      // slice or pack offset
 		jlen, tlen                     int      = len(live), len(dead)
-		// jlen, tlen       int = t.journal.Len(), t.journal.TombLen()
-		needSort         bool
-		nextmax, packmax uint64
-		err              error
+		needSort                       bool
+		nextmax, packmax               uint64
+		err                            error
 	)
 
 	// This algorithm works like a merge-sort over a sequence of sorted packs.
@@ -1244,6 +1209,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				}
 
 				// find the next matching pkid to clear
+				// TODO: use binary search
 				for plen := pkg.Len(); ppos < plen; ppos++ {
 					rowid, _ := pkg.Uint64At(pkg.pkindex, ppos)
 					if rowid > pkid {
@@ -1276,14 +1242,14 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 			// next journal key entry for insert/update
 			key := live[jpos]
 
-			// skip deleted journal entries
-			if dbits.IsSet(key.idx) {
-				continue
-			}
-
 			// stop on pack boundary
 			if best, _, _ := t.findBestPack(key.pk); best != lastpack {
 				break
+			}
+
+			// skip deleted journal entries
+			if dbits.IsSet(key.idx) {
+				continue
 			}
 
 			// packs are sorted by pk, so we can safely skip ahead
@@ -1458,8 +1424,6 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 	// clear journal and tombstone
 	t.journal.Reset()
-	// t.journal.Clear()
-	// t.tombstone.Clear()
 
 	// save (now empty) journal and tombstone
 	return t.flushJournalTx(ctx, tx)
@@ -1824,11 +1788,6 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	jpack := t.journal.DataPack()
 	for _, idx := range idxs {
 		// Note: deleted entries are already removed from index list!
-		// skip deleted entries
-		// if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
-		// 	continue
-		// }
-
 		if err := res.pkg.AppendFrom(jpack, idx, 1, true); err != nil {
 			res.Close()
 			return nil, err
@@ -1839,30 +1798,6 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 			break
 		}
 	}
-	// for idx, length := jbits.Run(0); idx >= 0; idx, length = jbits.Run(idx + length) {
-	// 	for i := idx; i < idx+length; i++ {
-	// 		// skip broken entries
-	// 		pkid, err := t.journal.Uint64At(t.journal.pkindex, i)
-	// 		if err != nil {
-	// 			continue
-	// 		}
-
-	// 		// skip deleted entries
-	// 		if t.tombstone.PkIndex(pkid, 0) >= 0 {
-	// 			continue
-	// 		}
-
-	// 		if err := res.pkg.AppendFrom(t.journal, i, 1, true); err != nil {
-	// 			res.Close()
-	// 			return nil, err
-	// 		}
-	// 		q.stats.RowsMatched++
-
-	// 		if q.Limit > 0 && q.stats.RowsMatched == q.Limit {
-	// 			break
-	// 		}
-	// 	}
-	// }
 	q.stats.JournalTime = time.Since(q.lap)
 
 	return res, nil
@@ -1927,11 +1862,8 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	jpack := t.journal.DataPack()
 	for i, idx := range idxs {
 		// Note: deleted indexes are already removed from list
-		// skip deleted entries
-		// if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
-		// 	continue
-		// }
-		// skip previously stored entries (will be processed later)
+
+		// skip entries that are already inside packs (will be processed later)
 		if pks[i] <= maxPackedPk {
 			continue
 		}
@@ -1947,37 +1879,6 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 			break
 		}
 	}
-
-	// for idx, length := jbits.Run(jbits.Len() - 1); idx >= 0; idx, length = jbits.Run(idx - length) {
-	// 	for i := idx; i > idx-length; i-- {
-	// 		// skip broken entries
-	// 		pkid, err := t.journal.Uint64At(t.journal.pkindex, i)
-	// 		if err != nil {
-	// 			continue
-	// 		}
-
-	// 		// skip previously stored entries (will be processed later)
-	// 		if pkid <= maxPackedPk {
-	// 			continue
-	// 		}
-
-	// 		// skip deleted entries
-	// 		if t.tombstone.PkIndex(pkid, 0) >= 0 {
-	// 			continue
-	// 		}
-
-	// 		if err := res.pkg.AppendFrom(t.journal, i, 1, true); err != nil {
-	// 			res.Close()
-	// 			return nil, err
-	// 		}
-	// 		q.stats.RowsMatched++
-	// 		jbits.Clear(i)
-
-	// 		if q.Limit > 0 && q.stats.RowsMatched == q.Limit {
-	// 			break
-	// 		}
-	// 	}
-	// }
 	q.stats.JournalTime = time.Since(q.lap)
 
 	// REVERSE PACK SCAN (either using found pk ids or non-indexed conditions)
@@ -2293,10 +2194,6 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	idxs, _ := t.journal.SortedIndexes(jbits)
 	for _, idx := range idxs {
 		// Note: deleted indexes are already removed from list
-		// skip deleted entries
-		// if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
-		// 	continue
-		// }
 
 		// forward match
 		if err := fn(Row{res: &res, n: idx}); err != nil {
@@ -2308,45 +2205,6 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 			return nil
 		}
 	}
-
-	// for idx, length := jbits.Run(0); idx >= 0; idx, length = jbits.Run(idx + length) {
-	// 	for i := idx; i < idx+length; i++ {
-	// 		// skip broken entries
-	// 		pkid, err := t.journal.Uint64At(t.journal.pkindex, i)
-	// 		if err != nil {
-	// 			continue
-	// 		}
-
-	// 		// skip deleted entries
-	// 		if t.tombstone.PkIndex(pkid, 0) >= 0 {
-	// 			continue
-	// 		}
-
-	// 		// safety check
-	// 		// if !q.Conditions.MatchAt(t.journal, i) {
-	// 		// 	log.Errorf("MISMATCH in journal at pos %d with bitmap len=%d cnt=%d %x", i, jbits.Size(), jbits.Count(), jbits.Bytes())
-	// 		// 	dumper := t.journal.Clone(false, 1)
-	// 		// 	if err := dumper.AppendFrom(t.journal, i, 1, true); err != nil {
-	// 		// 		log.Error(err)
-	// 		// 	}
-	// 		// 	dumper.DumpData(os.Stdout, DumpModeHex, t.fields.Aliases())
-	// 		// 	log.Errorf("STREAM: %s table query %s with %d conditions", t.name, q.Name, len(q.Conditions))
-	// 		// 	for ic, c := range q.Conditions {
-	// 		// 		log.Errorf("STREAM: cond %d proc=%t match=%t: %v", ic, c.processed, q.Conditions[ic].MatchAt(t.journal, i), c.String())
-	// 		// 	}
-	// 		// }
-
-	// 		// forward match
-	// 		if err := fn(Row{res: &res, n: i}); err != nil {
-	// 			return err
-	// 		}
-	// 		q.stats.RowsMatched++
-
-	// 		if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
-	// 			return nil
-	// 		}
-	// 	}
-	// }
 	q.stats.JournalTime += time.Since(q.lap)
 
 	return nil
@@ -2402,10 +2260,6 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	idxs, pks := t.journal.SortedIndexesReversed(jbits)
 	for i, idx := range idxs {
 		// Note: deleted indexes are already removed from list
-		// skip deleted entries
-		// if ok, _ := t.journal.IsDeleted(pks[i], 0); ok {
-		// 	continue
-		// }
 
 		// skip previously stored entries (will be processed later)
 		if pks[i] <= maxPackedPk {
@@ -2425,39 +2279,6 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 			return nil
 		}
 	}
-
-	// for idx, length := jbits.Run(jbits.Len() - 1); idx >= 0; idx, length = jbits.Run(idx - length) {
-	// 	for i := idx; i > idx-length; i-- {
-	// 		// skip broken entries
-	// 		pkid, err := t.journal.Uint64At(t.journal.pkindex, i)
-	// 		if err != nil {
-	// 			continue
-	// 		}
-
-	// 		// skip previously stored entries (will be processed later)
-	// 		if pkid <= maxPackedPk {
-	// 			continue
-	// 		}
-
-	// 		// skip deleted entries
-	// 		if t.tombstone.PkIndex(pkid, 0) >= 0 {
-	// 			continue
-	// 		}
-
-	// 		// forward match
-	// 		if err := fn(Row{res: &res, n: i}); err != nil {
-	// 			return err
-	// 		}
-	// 		q.stats.RowsMatched++
-
-	// 		// clear matching bit
-	// 		jbits.Clear(i)
-
-	// 		if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
-	// 			return nil
-	// 		}
-	// 	}
-	// }
 	q.stats.JournalTime += time.Since(q.lap)
 
 	// reverse-scan packs only when (a) index match returned any results or (b) when no index exists
@@ -2904,19 +2725,6 @@ func (t *Table) Compact(ctx context.Context) error {
 	return tx.Commit()
 }
 
-func encodePackKey(key uint32) []byte {
-	switch key {
-	case journalKey:
-		return []byte("_journal")
-	case tombstoneKey:
-		return []byte("_tombstone")
-	default:
-		var buf [4]byte
-		bigEndian.PutUint32(buf[:], key)
-		return buf[:]
-	}
-}
-
 func (t Table) cachekey(key []byte) string {
 	return t.name + "/" + hex.EncodeToString(key)
 }
@@ -2966,14 +2774,6 @@ func (t *Table) loadPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Pack
 	}
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
 	atomic.AddInt64(&t.stats.PackBytesRead, int64(pkg.size))
-
-	// FIXME: add dynamic data
-	// pkg.key = id
-	// pkg.tinfo = t.journal.tinfo
-	// pkg.InitMetadata(t.fields)
-	// ?? does this work?
-	// ?? is this even necessary given the t.packPool.Get() above?
-	// pkg.InitFields(t.fields, t.journal.tinfo)
 
 	pkg.cached = touch
 	// store in cache

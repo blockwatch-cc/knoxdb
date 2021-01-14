@@ -569,7 +569,7 @@ func (idx *Index) LookupTx(ctx context.Context, tx *Tx, cond Condition) ([]uint6
 				keys = append(keys, idx.indexValue(idx.Field.Type, v))
 			}
 		}
-		vec.Uint64Sorter(keys).Sort()
+		keys = vec.Uint64.Sort(keys)
 	}
 
 	res, err := idx.lookupKeys(ctx, tx, keys, cond.Mode == FilterModeNotIn)
@@ -595,6 +595,8 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 	var nPacks int
 
 	// optimize for rollback and lookup of most recently added index values
+	// Note: this only works for integer indexes, hash index is randomized and
+	// here order does not matter
 	for nextpack := idx.packidx.Len() - 1; nextpack >= 0; nextpack-- {
 		// stop when all inputs are matched
 		if len(in) == 0 {
@@ -687,7 +689,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 
 	// sort result before return
 	if len(out) > 1 && !neg {
-		vec.Uint64Sorter(out).Sort()
+		out = vec.Uint64.Sort(out)
 	}
 	atomic.AddInt64(&idx.table.stats.IndexQueriedTuples, int64(len(out)))
 	return out, nil

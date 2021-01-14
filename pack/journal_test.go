@@ -894,16 +894,21 @@ func TestJournalDeleteBatch(t *testing.T) {
 							ok   bool
 							last int
 						)
-						for _, pk := range pks {
+						for i, pk := range pks {
+							ok, _ = j.IsDeleted(pk, 0)
+							if got, want := ok, true; got != want {
+								t.Errorf("invalid IsDeleted last=0 %d: got=%t want=%t", pk, got, want)
+								T.FailNow()
+							}
 							// use `last` to skip, checks if we got the offsets right
 							ok, last = j.IsDeleted(pk, last)
 							if got, want := ok, true; got != want {
-								t.Errorf("invalid IsDeleted %d: got=%t want=%t", pk, got, want)
+								t.Errorf("invalid IsDeleted last>=0 %d: got=%t want=%t", pk, got, want)
 								T.FailNow()
 							}
 							idx, jlast := j.PkIndex(pk, 0)
-							if got, dontwant := idx, -1; got == dontwant {
-								t.Errorf("invalid PkIndex: got=%d dontwant=%d", got, dontwant)
+							if got, want := idx, idxs[i]; got != want {
+								t.Errorf("invalid PkIndex: got=%d want=%d", got, want)
 								T.FailNow()
 							}
 							if got, dontwant := jlast, j.Len(); got == dontwant {
@@ -999,6 +1004,3 @@ func TestJournalIndexes(t *testing.T) {
 		v.Run(t)
 	}
 }
-
-func TestJournalSort(t *testing.T)       {}
-func TestJournalKeyColumns(t *testing.T) {}
