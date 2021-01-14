@@ -693,7 +693,7 @@ func TestJournalUpdate(t *testing.T) {
 	}
 }
 
-func TestJournalUpdateBatch(t *testing.T) {
+func TestJournalInsertUpdateBatch(t *testing.T) {
 	rand.Seed(0)
 	for _, sz := range journalTestSizes {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
@@ -757,6 +757,69 @@ func TestJournalUpdateBatch(t *testing.T) {
 	}
 }
 
+func TestJournalUpdateBatch(t *testing.T) {
+	rand.Seed(0)
+	for _, sz := range journalTestSizes {
+		for k, batch := range randJournalData(journalRndRuns, sz) {
+			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
+				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
+				j := NewJournal(0, sz, "")
+				j.InitType(JournalTestType{})
+
+				// pick a random number of items from batch, change their values,
+				// update and check
+				var max uint64
+				unique := make(map[uint64]struct{})
+				for l, idxs := range randNN(100, 100, sz) {
+					t.Run(fmt.Sprintf("rand_%03d", l), func(t *testing.T) {
+						// this changes the batch because ItemList contains
+						// pointers to structs
+						newBatch := make([]Item, len(idxs))
+						for i := range newBatch {
+							val := batch[idxs[i]].(*JournalTestType)
+							val.N += sz
+							newBatch[i] = val
+							max = util.MaxU64(max, val.Pk)
+							unique[val.Pk] = struct{}{}
+						}
+
+						_, err := j.UpdateBatch(newBatch)
+						if err != nil {
+							t.Errorf("unexpected error: %v", err)
+						}
+
+						// sizes
+						if l == 0 {
+							checkJournalCaps(t, j, expDataCap, sz, sz)
+							checkJournalSizes(t, j, len(unique), 0, 0)
+						}
+
+						// invariants
+						if err := j.checkInvariants("post-update"); err != nil {
+							t.Error(err)
+						}
+
+						// counters and state
+						// if got, want := n, len(batch); got != want {
+						// 	t.Errorf("invalid update count: got=%d want=%d", got, want)
+						// }
+						if got, want := j.maxid, max; got != want {
+							t.Errorf("invalid max id: got=%d want=%d", got, want)
+						}
+						if got, want := j.lastid, max; got != want {
+							t.Errorf("invalid last id: got=%d want=%d", got, want)
+						}
+						if got, want := j.sortData, l > 0; got != want {
+							t.Errorf("invalid sortData: got=%t want=%t", got, want)
+						}
+						// cannot compare randomized contents
+						// comparePackWithBatch(t, "post-update", j, batch)
+					})
+				}
+			})
+		}
+	}
+}
 func TestJournalDelete(t *testing.T) {
 	rand.Seed(0)
 	for _, sz := range journalTestSizes {

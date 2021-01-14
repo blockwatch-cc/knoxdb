@@ -517,9 +517,9 @@ func (j *Journal) mergeKeys(newKeys journalEntryList, isSorted bool) {
 	}
 
 	// sanity-check for unsorted keys
-	if isSorted && !sort.IsSorted(newKeys) {
-		panic("pack: mergeKeys input is unsorted, but sorted flag is set")
-	}
+	// if isSorted && !sort.IsSorted(newKeys) {
+	// 	panic("pack: mergeKeys input is unsorted, but sorted flag is set")
+	// }
 
 	if !isSorted {
 		sort.Sort(newKeys)
@@ -541,13 +541,10 @@ func (j *Journal) mergeKeys(newKeys journalEntryList, isSorted bool) {
 			break
 		}
 
-		// sanity check for duplicate pks (should have been replaced)
-		if j.keys[i].pk == newKeys[0].pk {
-			panic(fmt.Errorf("pack: pk %d inserted, but already exists in journal at pos %d", newKeys[0].pk, newKeys[0].idx))
-			// 	log.Errorf("pack: pk %d inserted, but already exists in journal at pos %d", newKeys[0].pk, newKeys[0].idx)
-			// 	newKeys = newKeys[1:]
-			// 	continue
-		}
+		// // sanity check for duplicate pks (should have been replaced)
+		// if j.keys[i].pk == newKeys[0].pk {
+		// 	panic(fmt.Errorf("pack: pk %d inserted, but already exists in journal at pos %d", newKeys[0].pk, newKeys[0].idx))
+		// }
 
 		// take all elements in ids that are smaller than the next value in keys
 		var k int
@@ -804,7 +801,10 @@ func (j *Journal) PkIndex(pk uint64, last int) (int, int) {
 	if last+idx < len(j.keys) && j.keys[last+idx].pk == pk {
 		return j.keys[last+idx].idx, last + idx
 	}
-	return -1, len(j.keys)
+	if last+idx == len(j.keys) {
+		return -1, len(j.keys)
+	}
+	return -1, last
 }
 
 // Checks invariants
@@ -923,7 +923,6 @@ func (j *Journal) Reset() {
 		}
 		j.keys = j.keys[:0]
 	}
-	j.keys = j.keys[:0]
 	if len(j.tomb) > 0 {
 		j.tomb[0] = 0
 		for bp := 1; bp < len(j.tomb); bp *= 2 {
@@ -934,4 +933,5 @@ func (j *Journal) Reset() {
 	j.lastid = 0
 	j.sortData = false
 	j.deleted.Reset()
+	j.wal.Reset()
 }
