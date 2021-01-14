@@ -260,28 +260,35 @@ func (c *Condition) Compile() {
 			return
 		}
 		c.numValues = len(slice)
-		// sorted slice is only required when not using a hash map
-		if !c.IsSorted && c.numValues < filterThreshold {
-			slice = Bytes.Sort(slice)
-			c.IsSorted = true
+		// below min size a hash map is more expensive than memcmp
+		if c.numValues < filterThreshold {
+			// sorted slice is only required when not using a hash map
+			if !c.IsSorted {
+				c.Value = Bytes.Sort(slice)
+				c.IsSorted = true
+			}
+			return
 		}
+		vals = slice
 	case FieldTypeString:
 		slice := c.Value.([]string)
 		if slice == nil {
 			return
 		}
 		c.numValues = len(slice)
-		// sorted slice is only required when not using a hash map
-		if !c.IsSorted && c.numValues >= filterThreshold {
-			slice = Strings.Sort(slice)
-			c.IsSorted = true
-		}
-		if c.numValues >= filterThreshold {
-			// convert to []byte for feeding the hash map below
-			vals = make([][]byte, len(slice))
-			for i, v := range slice {
-				vals[i] = []byte(v)
+		// below min size a hash map is more expensive than memcmp
+		if c.numValues < filterThreshold {
+			// sorted slice is only required when not using a hash map
+			if !c.IsSorted {
+				c.Value = Strings.Sort(slice)
+				c.IsSorted = true
 			}
+			return
+		}
+		// convert to []byte for feeding the hash map below
+		vals = make([][]byte, len(slice))
+		for i, v := range slice {
+			vals[i] = []byte(v)
 		}
 	case FieldTypeBoolean:
 		slice := c.Value.([]bool)
@@ -418,7 +425,7 @@ func (c *Condition) Compile() {
 		if slice != nil {
 			c.numValues = len(slice)
 			if !c.IsSorted {
-				slice = Float64.Sort(slice)
+				c.Value = Float64.Sort(slice)
 				c.IsSorted = true
 			}
 		}
@@ -428,15 +435,10 @@ func (c *Condition) Compile() {
 		if slice != nil {
 			c.numValues = len(slice)
 			if !c.IsSorted {
-				slice = Float32.Sort(slice)
+				c.Value = Float32.Sort(slice)
 				c.IsSorted = true
 			}
 		}
-		return
-	}
-
-	// below min size a hash map is more expensive than memcmp
-	if len(vals) < filterThreshold {
 		return
 	}
 
