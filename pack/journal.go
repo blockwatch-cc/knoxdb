@@ -774,9 +774,26 @@ func (j *Journal) undelete(pks []uint64, isSorted bool) {
 // - other than that forward order considerations apply
 //
 func (j *Journal) IsDeleted(pk uint64, last int) (bool, int) {
+	// early return when out of bounds
+	if last >= len(j.tomb) {
+		return false, len(j.tomb)
+	}
+
 	// find pk in tomb, always sorted
 	idx := sort.Search(len(j.tomb)-last, func(i int) bool { return j.tomb[last+i] >= pk })
-	return last+idx < len(j.tomb), last + idx
+
+	// return true + new index for direct match
+	if last+idx < len(j.tomb) && j.tomb[last+idx] == pk {
+		return true, last + idx
+	}
+
+	// reached end of tomb, no more matches
+	if last+idx == len(j.tomb) {
+		return false, len(j.tomb)
+	}
+
+	// pk is not in tomb, but more search results are available
+	return false, last
 }
 
 // Returns the journal index at which pk is stored or -1 when pk is not found and the last
@@ -789,8 +806,12 @@ func (j *Journal) IsDeleted(pk uint64, last int) (bool, int) {
 //    index, last = journal.PkIndex(pk, last)
 // }
 //
+// Invariant: keys list is always sorted
 func (j *Journal) PkIndex(pk uint64, last int) (int, int) {
-	// Invariant: keys list is always sorted
+	// early stop when key or last are out of range
+	if pk > j.lastid || last >= len(j.keys) {
+		return -1, len(j.keys)
+	}
 
 	// find pk in keys list, use last as hint to limit search space
 	idx := sort.Search(len(j.keys)-last, func(i int) bool { return j.keys[last+i].pk >= pk })

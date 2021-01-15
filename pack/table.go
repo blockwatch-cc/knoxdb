@@ -2439,9 +2439,8 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 				break
 			}
 
-			// on match, copy result from journal
-			if err := res.pkg.AppendFrom(t.journal.DataPack(), idx, 1, true); err != nil {
-				res.Close()
+			// on match, forward result from journal
+			if err := fn(Row{res: &res, n: idx}); err != nil {
 				return err
 			}
 			q.stats.RowsMatched++

@@ -953,20 +953,10 @@ func TestJournalDeleteBatch(t *testing.T) {
 						}
 
 						// counters and state
-						var (
-							ok   bool
-							last int
-						)
 						for i, pk := range pks {
-							ok, _ = j.IsDeleted(pk, 0)
+							ok, _ := j.IsDeleted(pk, 0)
 							if got, want := ok, true; got != want {
 								t.Errorf("invalid IsDeleted last=0 %d: got=%t want=%t", pk, got, want)
-								T.FailNow()
-							}
-							// use `last` to skip, checks if we got the offsets right
-							ok, last = j.IsDeleted(pk, last)
-							if got, want := ok, true; got != want {
-								t.Errorf("invalid IsDeleted last>=0 %d: got=%t want=%t", pk, got, want)
 								T.FailNow()
 							}
 							idx, jlast := j.PkIndex(pk, 0)
@@ -993,6 +983,54 @@ func TestJournalDeleteBatch(t *testing.T) {
 						}
 						if got, want := j.sortData, false; got != want {
 							t.Errorf("invalid sortData: got=%t want=%t", got, want)
+							T.FailNow()
+						}
+
+						// check `last` works
+						var (
+							ok   bool
+							last int
+						)
+						pks = vec.Uint64.Sort(pks)
+						for _, pk := range pks {
+							// use `last` to skip, checks if we got the offsets right
+							ok, last = j.IsDeleted(pk, last)
+							if got, want := ok, true; got != want {
+								t.Errorf("invalid IsDeleted last>=0 %d: got=%t want=%t", pk, got, want)
+								T.FailNow()
+							}
+							if got, dontwant := last, j.TombLen(); got == dontwant {
+								t.Errorf("invalid IsDeleted last for pk %d: got=%d dontwant=%d", pk, got, dontwant)
+								T.FailNow()
+							}
+						}
+
+						// behind end
+						ok, last = j.IsDeleted(pks[len(pks)-1], len(pks))
+						if got, want := last, j.TombLen(); got != want {
+							t.Errorf("invalid IsDeleted last-end: got=%d want=%d", got, want)
+							T.FailNow()
+						}
+
+						// non-match middle (+1 is just a guess because data is random,
+						// but worked for the number of random tests selected)
+						ok, last = j.IsDeleted(batch[0].ID()+1, 0)
+						if ok {
+							t.Errorf("invalid IsDeleted for not deleted item")
+						}
+						if last != 0 {
+							t.Errorf("invalid IsDeleted last-first: got=%d want=%d", last, 0)
+							T.FailNow()
+						}
+
+						// non-match before end (-1 is just a guess because data
+						// is random, but worked for the number of random tests selected)
+						ok, last = j.IsDeleted(pks[len(pks)-1]-1, 0)
+						if ok {
+							t.Errorf("invalid IsDeleted for not deleted item")
+						}
+						if last != 0 {
+							t.Errorf("invalid IsDeleted last-last: got=%d want=%d", last, 0)
 							T.FailNow()
 						}
 

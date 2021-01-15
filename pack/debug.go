@@ -6,6 +6,7 @@ package pack
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"blockwatch.cc/knoxdb/encoding/block"
@@ -69,7 +70,25 @@ func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode) error {
 }
 
 func (t *Table) DumpJournal(w io.Writer, mode DumpMode) error {
-	return t.journal.DataPack().DumpData(w, mode, t.fields.Aliases())
+	err := t.journal.DataPack().DumpData(w, mode, t.fields.Aliases())
+	if err != nil {
+		return err
+	}
+	w.Write([]byte("keys:"))
+	for _, v := range t.journal.keys {
+		w.Write([]byte(strconv.FormatUint(v.pk, 10)))
+		w.Write([]byte(">"))
+		w.Write([]byte(strconv.Itoa(v.idx)))
+		w.Write([]byte(","))
+	}
+	w.Write([]byte("\n"))
+	w.Write([]byte("tomb:"))
+	for _, v := range t.journal.tomb {
+		w.Write([]byte(strconv.FormatUint(v, 10)))
+		w.Write([]byte(","))
+	}
+	w.Write([]byte("\n"))
+	return nil
 }
 
 func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
