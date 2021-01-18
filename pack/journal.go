@@ -20,22 +20,35 @@ func roundSize(sz int) int {
 }
 
 // Append-only journal and in-memory tombstone
-// - keeps mapping from primary keys to journal positions as cache
-// - journal data is never sorted
-// - primary keys are always sorted (insert with id, update, delete, query, flush)
+//
+// - supports INSERT, UPSERT, UPDATE, DELETE
+// - supports walking the journal by pk order (required for queries and flush)
+// - journal pack data is only sorted by insert order, not necessarily pk order
+// - primary key to position mapping is always sorted in pk order
 // - tombstone is always sorted
+// - re-inserting deleted entries is safe
 //
 // To avoid sorting the journal after insert, but still process journal entries
-// in pk sort order, we generate a sorted list of indexes to visit in `keys`.
+// in pk sort order (in queries or flush and in both directions), we keep a
+// mapping from pk to journal position in `keys` which is always sorted by pk.
+//
+// How the journal is used
+//
+// Lookup: (non-order-preserving) matches against pk values only. For best performance
+// we pre-sort the pk's we want to look up.
+//
+// Query, Stream, Count: runs a full pack match on the journal's data pack. Note
+// the resulting bitset is in storage order, not pk order!. Then a query walks
+// all table packs and cross-check with tomb + journal to decide if/which rows
+// to return to the caller. Ticks off journal matches from the match bitset as
+// they are visted along the way. Finally, walks all tail entries that only exist
+// in the journal but were never flushed to a table pack. Since the bitset is
+// in storage order we must translate it into pk order for this step to work. This is
+// what SortedIndexes() and SortedIndexesReversed() are for.
 //
 // TODO
 // - write all incoming inserts/updates/deletes to a WAL
 // - load and reconstructed journal + tomb from WAL
-//
-// Re-inserting deleted entries is safe because on deletion the pk column is
-// overwritten with zero value. Such rows are never flushed. Insert after delete
-// is also safe and explicitly handled by the journal by removing the pk from its
-// tombstone list.
 //
 type Journal struct {
 	lastid   uint64 // the highest primary key in the journal, used for sorting
@@ -44,11 +57,11 @@ type Journal struct {
 	sortData bool   // true = data pack is unsorted
 
 	data    *Package         // journal pack storing live data
-	keys    journalEntryList // 0: pk, 1: index in journal; sorted by pk, may be unsorted
+	keys    journalEntryList // 0: pk, 1: index in journal; sorted by pk, always sorted
 	tomb    []uint64         // list of deleted primary keys, always sorted
 	deleted *vec.BitSet      // tracks which journal positions are in tomb
-	wal     *Wal
-	prefix  string
+	wal     *Wal             // write-ahead log (unused for now, will ensure the D in ACID)
+	prefix  string           // table name, used for debugging, maybe WAL file name
 }
 
 type journalEntry struct {
@@ -121,7 +134,7 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 		j.sortData = j.sortData || n < j.lastid
 		j.lastid = util.MaxU64(j.lastid, n)
 	}
-	// ensure invariant that keys are always sorted
+	// ensure invariant, keep keys always sorted
 	if j.sortData {
 		sort.Sort(j.keys)
 	}
@@ -252,8 +265,8 @@ func (j *Journal) Insert(item Item) error {
 }
 
 // Inserts multiple items, returns number of successfully processed items.
-// Insert with pk == 0 will generate a new pk in sequential order.
-// insert with external pk set (pk > 0) will insert or upsert and track the
+// Inserts with pk == 0 will generate a new pk > maxpk in sequential order.
+// Inserts with an external pk (pk > 0) will insert or upsert and track the
 // maximum pk seen.
 func (j *Journal) InsertBatch(batch []Item) (int, error) {
 	// when inserting with external pk, make sure batch is sorted
@@ -320,8 +333,10 @@ func (j *Journal) InsertBatch(batch []Item) (int, error) {
 	return count, nil
 }
 
-// Assumes no duplicates, packs may be sorted (unless coming from desc result or
-// a different field sort was applied before) and pks exist.
+// Assumes no duplicates. pkg is not trusted to be sorted. It may come from a
+// desc-ordered query result or from a result that has been sorted by a different
+// field than the primary key. Primary key may exist (>0), but is generated when
+// missing.
 func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 	l := pkg.Len()
 	if l == 0 || n == 0 || n+pos > l {
@@ -652,8 +667,8 @@ func (j *Journal) DeleteBatch(pks []uint64) (int, error) {
 
 	// Merge-sort ids into tomb, this keeps tomb always sorted and is
 	// the most efficient sort strategy. The algo below finds the next
-	// insert position in tomb, then inserts all eligible elements from ids
-	// in each step. Duplicate pk values that already exist in tomb are skipped.
+	// insert position in tomb, then inserts all pks from ids that are
+	// smaller than the next value in the tomb. Duplicate pks are skipped.
 
 	// grow tomb capacity first so we're sure we can hold the final result
 	if cap(j.tomb) < len(j.tomb)+len(pks) {
@@ -699,11 +714,15 @@ func (j *Journal) DeleteBatch(pks []uint64) (int, error) {
 		i += k
 	}
 
-	// append remainder (when all ids have been processed before, this is a noop)
+	// append remainder (this is a noop if all ids have been processed before)
 	j.tomb = append(j.tomb, pks...)
 	return count, nil
 }
 
+// To support insert/update-after-delete we remove entries from the
+// tomb and we reconstruct the previous state of the undeleted entry
+// in our data pack (i.e. we restore its primary key) and reset the
+// deleted flag.
 func (j *Journal) undelete(pks []uint64, isSorted bool) {
 	if !isSorted {
 		vec.Uint64.Sort(pks)
@@ -753,26 +772,8 @@ func (j *Journal) undelete(pks []uint64, isSorted bool) {
 	}
 }
 
-// How the journal is used right now:
-//
-// Lookup: (non-order-preserving) matches pk values only (better performance
-// when sorted, but we can use the keys list and map to positions)
-
-// Query, Stream, Count: run full pack match on journal, then walk packs and
-// cross-check with tomb + journal to decide if/which rows to return; tick off
-// journal matches as visted, skip journal checks when bitset is empty
-//
-// Forward order
-// - match can work on Journal.DataPack(), bit set is in storage order
-// - pack walk is in pk order and checks are via Journal.PkIndex() == storgae index
-// - bitset tick-off happens with storage index (OK)
-// - finally, last journal matches are processed (NEED SortedIndexes func)
-//
-// Reverse order considerations
-// - journal match in reverse sorted indexes order as first step
-// - skipping primary keys of all previously stored rows (i.e. process new inserts only)
-// - other than that forward order considerations apply
-//
+// Efficient check if a pk is in the tomb or not. Use `last` to skip already
+// processed entries when walking through a sorted list of pks.
 func (j *Journal) IsDeleted(pk uint64, last int) (bool, int) {
 	// early return when out of bounds
 	if last >= len(j.tomb) {
