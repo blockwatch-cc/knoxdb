@@ -1,35 +1,31 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-// TODO
-// - materialized views for storing expensive query results
-// - complex conditions using AND/OR and brackets
-// - ASC/DESC query ORDER with LIMIT
-// - complex conditions using AND/OR and brackets
-// - arithmetic expressions and selectors (sum, mean, median, std, min, max, topN, bottomN)
-//
+// Design concepts
+// - columnar design with type-specific multi-level compression
+// - column groups (i.e. packs with equal size vectors across all columns)
+// - statistics (zonemaps) with min/max values per column per pack
+// - buffer pools for packs and slices
+// - pack caches and cache-sensitive pack query scheduler
 
-// Query features
+// TODO Query features
+// - complex conditions using AND/OR and brackets
 // - GROUP BY and HAVING (special condition to filter groups after aggregation)
 // - aggregate functions sum, mean, median, std,
 // - selectors (first, last, min, max, topN, bottomN)
 // - arithmetic expressions (simple math)
 // - PARTITION BY analytics (keep rows unlike GROUP BY which aggregates)
 
-// Performance and safety
-// - thread safety
-// - concurrent/background pack compaction/storage using shadow journal
+// TODO Performance and Safety
+// - WAL for durable journal insert/update/delete
+// - concurrent reads
+// - concurrent/background pack compaction/storage
 // - concurrent index build
-// - flush journal after each insert/update/delete for data persistence is sloooow
-// - auto-create indexes when index keyword is used in struct tag for CreateTable
-// - more indexes (b-tree?)
 
-// Design concepts
-// - columnar design with type-specific multi-level compression
-// - column groups (i.e. matrix to keep relation within a row)
-// - zonemaps keeping min/max for each column in a partition
-// - buffer pools for packs and slices
-// - pack caches and cache-sensitive pack query scheduler
+// TODO Other
+// - materialized views for storing expensive query results
+// - auto-create indexes when index keyword is used in struct tag for CreateTable
+// - other indexes (b-tree?)
 
 package pack
 
@@ -117,21 +113,21 @@ type TableMeta struct {
 }
 
 type Table struct {
-	name     string
-	opts     Options
-	fields   FieldList
-	indexes  IndexList
-	meta     TableMeta
-	db       *DB
-	cache    cache.Cache // keep decoded packs for query/updates
-	journal  *Journal
-	packidx  *PackIndex // in-memory list of pack and block info
-	key      []byte
-	metakey  []byte
-	packPool *sync.Pool // buffer pool for new packages
-	pkPool   *sync.Pool
-	stats    TableStats
-	mu       sync.RWMutex
+	name     string       // printable table name
+	opts     Options      // runtime configuration options
+	fields   FieldList    // ordered list of table fields as central type info
+	indexes  IndexList    // list of indexes (similar structure as the table)
+	meta     TableMeta    // authoritative metadata
+	db       *DB          // lower-level storage (e.g. boltdb wrapper)
+	cache    cache.Cache  // keep decoded packs for query/updates
+	journal  *Journal     // in-memory data not yet written to packs
+	packidx  *PackIndex   // in-memory list of pack and block info
+	key      []byte       // name of table data bucket
+	metakey  []byte       // name of table metadata bucket
+	packPool *sync.Pool   // buffer pool for new packages
+	pkPool   *sync.Pool   // buffer pool for uint64 slices (used by indexes)
+	stats    TableStats   // usage statistics
+	mu       sync.RWMutex // global table lock
 }
 
 func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, error) {
@@ -215,10 +211,11 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		if err != nil {
 			return err
 		}
-		err = t.journal.Open(d.Dir())
-		if err != nil {
-			return err
-		}
+		// TODO: switch to WAL for durability
+		// err = t.journal.Open(d.Dir())
+		// if err != nil {
+		// 	return err
+		// }
 		return nil
 	})
 	if err != nil {
@@ -347,11 +344,13 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		if err != nil {
 			return fmt.Errorf("pack: cannot open journal for table %s: %v", name, err)
 		}
-		err = t.journal.Open(d.Dir())
-		if err != nil {
-			return err
-		}
-		log.Debugf("pack: %s table opened WAL with %d entries", name, t.journal.Len())
+		// TODO: switch to WAL
+		// err = t.journal.Open(d.Dir())
+		// if err != nil {
+		// 	return err
+		// }
+		// log.Debugf("pack: %s table opened WAL with %d entries", name, t.journal.Len())
+		log.Debugf("pack: %s table opened journal with %d entries", name, t.journal.Len())
 		return t.loadPackInfo(dbTx)
 	})
 	if err != nil {
