@@ -1159,7 +1159,7 @@ func TestJournalIndexes(t *testing.T) {
 	}
 }
 
-func BenchmarkJournalMergeRandomBackward(B *testing.B) {
+func BenchmarkJournalMergeRandom(B *testing.B) {
 	for _, n := range packBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			j := NewJournal(0, n.l+1024, "")
@@ -1178,30 +1178,6 @@ func BenchmarkJournalMergeRandomBackward(B *testing.B) {
 				j.mergeKeys(keys[:n.l])
 				B.StartTimer()
 				j.mergeKeys(keys[n.l:])
-			}
-		})
-	}
-}
-
-func BenchmarkJournalMergeRandomForward(B *testing.B) {
-	for _, n := range packBenchmarkSizes {
-		B.Run(n.name, func(B *testing.B) {
-			j := NewJournal(0, n.l+1024, "")
-			j.InitType(JournalTestType{})
-			items := makeJournalTestDataWithRandomPk(n.l + 1024)
-			keys := itemsToJournalEntryList(items)
-			rand.Shuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] })
-			sort.Sort(keys[:n.l]) // sort the keys we will add first
-			sort.Sort(keys[n.l:]) // sort the keys we will add second
-			B.SetBytes(int64(1024 * 16))
-			B.ReportAllocs()
-			B.ResetTimer()
-			for b := 0; b < B.N; b++ {
-				B.StopTimer()
-				j.keys = j.keys[:0]
-				j.mergeKeysForward(keys[:n.l])
-				B.StartTimer()
-				j.mergeKeysForward(keys[n.l:])
 			}
 		})
 	}

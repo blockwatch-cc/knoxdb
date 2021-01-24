@@ -580,61 +580,6 @@ func (j *Journal) mergeKeys(newKeys journalEntryList) {
 	}
 }
 
-func (j *Journal) mergeKeysForward(newKeys journalEntryList) {
-	if len(newKeys) == 0 {
-		return
-	}
-
-	// sanity-check for unsorted keys
-	// if isSorted && !sort.IsSorted(newKeys) {
-	// 	panic("pack: mergeKeys input is unsorted, but sorted flag is set")
-	// }
-
-	// merge newKeys into key list (both lists are sorted)
-	if cap(j.keys) < len(j.keys)+len(newKeys) {
-		cp := make(journalEntryList, len(j.keys), roundSize(len(j.keys)+len(newKeys)))
-		copy(cp, j.keys)
-		j.keys = cp
-	}
-
-	// Merge forward
-	for i := 0; i < len(j.keys) && len(newKeys) > 0; {
-		// find the next insert position, binary search is ok because keys
-		// is sorted at each round of this algorithm
-		i += sort.Search(len(j.keys)-i, func(k int) bool { return j.keys[k+i].pk > newKeys[0].pk })
-		if i >= len(j.keys) {
-			// done
-			break
-		}
-
-		// // sanity check for duplicate pks (should have been replaced)
-		// if j.keys[i].pk == newKeys[0].pk {
-		// 	panic(fmt.Errorf("pack: pk %d inserted, but already exists in journal at pos %d", newKeys[0].pk, newKeys[0].idx))
-		// }
-
-		// take all elements in ids that are smaller than the next value in keys
-		var k int
-		for k < len(newKeys) && newKeys[k].pk < j.keys[i].pk {
-			k++
-		}
-
-		// make room for k elements at position i in keys
-		j.keys = j.keys[:len(j.keys)+k]
-		copy(j.keys[i+k:], j.keys[i:])
-
-		// insert k elements from ids into keys at position i
-		copy(j.keys[i:], newKeys[:k])
-
-		// shorten ids by k processed elements
-		newKeys = newKeys[k:]
-
-		// update keys insert index
-		i += k
-	}
-	// append remainder (this is a noop if all keys have been processed before)
-	j.keys = append(j.keys, newKeys...)
-}
-
 func (j *Journal) Delete(pk uint64) (int, error) {
 	// pk must exist
 	if pk <= 0 || pk > j.maxid {
@@ -772,46 +717,6 @@ func (j *Journal) DeleteBatch(pks []uint64) (int, error) {
 		j.tomb = j.tomb[:len(j.tomb)-move]
 	}
 
-	// Forward merge
-	// count := len(pks)
-	// for i := 0; i < len(j.tomb) && len(pks) > 0; {
-	// 	for i < len(j.tomb) && j.tomb[i] < pks[0] {
-	// 		i++
-	// 	}
-	// 	if i == len(j.tomb) {
-	// 		// done
-	// 		break
-	// 	}
-
-	// 	// skip duplicate ids (that already exist in tomb)
-	// 	if j.tomb[i] == pks[0] {
-	// 		count--
-	// 		pks = pks[1:]
-	// 		continue
-	// 	}
-
-	// 	// take all elements in ids that are smaller than the next value in tomb
-	// 	var k int
-	// 	for k < len(pks) && pks[k] < j.tomb[i] {
-	// 		k++
-	// 	}
-
-	// 	// make room for k elements at position i in tomb
-	// 	j.tomb = j.tomb[:len(j.tomb)+k]
-	// 	copy(j.tomb[i+k:], j.tomb[i:])
-
-	// 	// insert k elements from ids into tomb at position i
-	// 	copy(j.tomb[i:], pks[:k])
-
-	// 	// shorten ids by k processed elements
-	// 	pks = pks[k:]
-
-	// 	// update tomb insert index
-	// 	i += k
-	// }
-
-	// append remainder (this is a noop if all ids have been processed before)
-	// j.tomb = append(j.tomb, pks...)
 	return count, nil
 }
 
