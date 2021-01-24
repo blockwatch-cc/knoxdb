@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"sort"
 	"testing"
 
 	"blockwatch.cc/knoxdb/encoding/block"
@@ -17,7 +18,7 @@ import (
 
 var journalTestSizes = []int{1 << 8, 1 << 10, 1 << 12}
 
-const journalRndRuns = 20
+const journalRndRuns = 5
 
 type JournalTestType struct {
 	Pk uint64 `knox:"I,pk"`
@@ -41,6 +42,14 @@ func makeJournalTestData(n int) ItemList {
 		}
 	}
 	return items
+}
+
+func itemsToJournalEntryList(items ItemList) journalEntryList {
+	l := make(journalEntryList, len(items))
+	for i := range items {
+		l[i] = journalEntry{items[i].ID(), i}
+	}
+	return l
 }
 
 func makeJournalTestDataWithRandomPk(n int) ItemList {
@@ -300,6 +309,50 @@ func TestJournalInit(t *testing.T) {
 			}
 			if err := j.InitType(privateType{}); err == nil {
 				t.Errorf("no error when all type fields are private")
+			}
+		})
+	}
+}
+
+func TestJournalMerge(t *testing.T) {
+	rand.Seed(0)
+	for i, sz := range journalTestSizes {
+		t.Run(fmt.Sprintf("%d_merge", sz), func(t *testing.T) {
+			j := NewJournal(uint64(i), sz, "")
+			j.InitType(JournalTestType{})
+			items := makeJournalTestDataWithRandomPk(sz)
+			keys := itemsToJournalEntryList(items)
+			rand.Shuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] })
+
+			// 4-step insert
+			step := len(keys) / 4
+
+			// merge keys
+			for k := 0; k < len(keys); k += step {
+				// sort just within the inserted slice
+				sort.Sort(keys[k : k+step])
+				j.mergeKeys(keys[k : k+step])
+			}
+
+			// check all keys are available
+			if got, want := len(j.keys), len(keys); got != want {
+				t.Errorf("invalid keys len: got=%d want=%d", got, want)
+			}
+
+			// check keys are sorted
+			if !sort.IsSorted(j.keys) {
+				t.Errorf("unexpected non-sorted keys: %v", j.keys)
+			}
+			for i, v := range j.keys {
+				if i == 0 {
+					continue
+				}
+				if j.keys[i-1].pk > v.pk {
+					t.Errorf("INVARIANT VIOLATION: unsorted keys %d [%d] !< %d [%d]", j.keys[i-1].pk, i-1, v.pk, i)
+				}
+				if j.keys[i-1].pk == v.pk {
+					t.Errorf("INVARIANT VIOLATION: duplicate key %d [%d:%d]", v.pk, i-1, i)
+				}
 			}
 		})
 	}
@@ -1103,6 +1156,54 @@ func (x journalE2ETest) Run(t *testing.T) {
 func TestJournalIndexes(t *testing.T) {
 	for _, v := range journalE2Etests {
 		v.Run(t)
+	}
+}
+
+func BenchmarkJournalMergeRandomBackward(B *testing.B) {
+	for _, n := range packBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			j := NewJournal(0, n.l+1024, "")
+			j.InitType(JournalTestType{})
+			items := makeJournalTestDataWithRandomPk(n.l + 1024)
+			keys := itemsToJournalEntryList(items)
+			rand.Shuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] })
+			sort.Sort(keys[:n.l]) // sort the keys we will add first
+			sort.Sort(keys[n.l:]) // sort the keys we will add second
+			B.SetBytes(int64(1024 * 16))
+			B.ReportAllocs()
+			B.ResetTimer()
+			for b := 0; b < B.N; b++ {
+				B.StopTimer()
+				j.keys = j.keys[:0]
+				j.mergeKeys(keys[:n.l])
+				B.StartTimer()
+				j.mergeKeys(keys[n.l:])
+			}
+		})
+	}
+}
+
+func BenchmarkJournalMergeRandomForward(B *testing.B) {
+	for _, n := range packBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			j := NewJournal(0, n.l+1024, "")
+			j.InitType(JournalTestType{})
+			items := makeJournalTestDataWithRandomPk(n.l + 1024)
+			keys := itemsToJournalEntryList(items)
+			rand.Shuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] })
+			sort.Sort(keys[:n.l]) // sort the keys we will add first
+			sort.Sort(keys[n.l:]) // sort the keys we will add second
+			B.SetBytes(int64(1024 * 16))
+			B.ReportAllocs()
+			B.ResetTimer()
+			for b := 0; b < B.N; b++ {
+				B.StopTimer()
+				j.keys = j.keys[:0]
+				j.mergeKeysForward(keys[:n.l])
+				B.StartTimer()
+				j.mergeKeysForward(keys[n.l:])
+			}
+		})
 	}
 }
 

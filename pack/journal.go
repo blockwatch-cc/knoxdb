@@ -240,10 +240,10 @@ func (j *Journal) Insert(item Item) error {
 		}
 
 		// undelete if deleted (must do before mergeKeys call!)
-		j.undelete([]uint64{pk}, true)
+		j.undelete([]uint64{pk})
 
 		// update keys
-		j.mergeKeys(journalEntryList{journalEntry{pk, j.data.Len() - 1}}, pk > j.lastid)
+		j.mergeKeys(journalEntryList{journalEntry{pk, j.data.Len() - 1}})
 		j.deleted.Grow(len(j.keys))
 
 		// set sortData flag
@@ -254,7 +254,7 @@ func (j *Journal) Insert(item Item) error {
 			return err
 		}
 		// undelete if deleted
-		j.undelete([]uint64{pk}, true)
+		j.undelete([]uint64{pk})
 	}
 
 	// update lastid and maxid
@@ -324,10 +324,10 @@ func (j *Journal) InsertBatch(batch []Item) (int, error) {
 	}
 
 	// undelete if deleted
-	j.undelete(newPks, true)
+	j.undelete(newPks)
 
 	// merge new keys (sorted) into sorted key list
-	j.mergeKeys(newKeys, true)
+	j.mergeKeys(newKeys)
 	j.deleted.Grow(len(j.keys))
 
 	return count, nil
@@ -406,10 +406,13 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 	}
 
 	// undelete if deleted, must call before mergeKeys!
-	j.undelete(pks, true)
+	j.undelete(pks)
 
 	// update keys and flags
-	j.mergeKeys(newKeys, isSorted)
+	if !isSorted {
+		sort.Sort(newKeys)
+	}
+	j.mergeKeys(newKeys)
 	j.deleted.Grow(len(j.keys))
 	j.sortData = j.sortData || !isSorted
 	j.maxid = util.MaxU64(j.maxid, j.lastid)
@@ -435,10 +438,10 @@ func (j *Journal) Update(item Item) error {
 		}
 
 		// undelete if deleted, must call before mergeKeys
-		j.undelete([]uint64{pk}, true)
+		j.undelete([]uint64{pk})
 
 		// update keys
-		j.mergeKeys(journalEntryList{journalEntry{pk, j.data.Len() - 1}}, pk > j.lastid)
+		j.mergeKeys(journalEntryList{journalEntry{pk, j.data.Len() - 1}})
 		j.deleted.Grow(len(j.keys))
 
 		// set sortData flag
@@ -455,7 +458,7 @@ func (j *Journal) Update(item Item) error {
 		}
 
 		// undelete if deleted
-		j.undelete([]uint64{pk}, true)
+		j.undelete([]uint64{pk})
 	}
 
 	return nil
@@ -513,10 +516,10 @@ func (j *Journal) UpdateBatch(batch []Item) (int, error) {
 	}
 
 	// undelete if deleted, must call before mergeKeys
-	j.undelete(newPks, true)
+	j.undelete(newPks)
 
 	// merge new journal keys (they are known to be sorted because batch was sorted)
-	j.mergeKeys(newKeys, true)
+	j.mergeKeys(newKeys)
 	j.deleted.Grow(len(j.keys))
 
 	// update maxid (Note: since we just check if primary key exists in
@@ -526,7 +529,7 @@ func (j *Journal) UpdateBatch(batch []Item) (int, error) {
 	return count, nil
 }
 
-func (j *Journal) mergeKeys(newKeys journalEntryList, isSorted bool) {
+func (j *Journal) mergeKeys(newKeys journalEntryList) {
 	if len(newKeys) == 0 {
 		return
 	}
@@ -536,9 +539,56 @@ func (j *Journal) mergeKeys(newKeys journalEntryList, isSorted bool) {
 	// 	panic("pack: mergeKeys input is unsorted, but sorted flag is set")
 	// }
 
-	if !isSorted {
-		sort.Sort(newKeys)
+	// merge newKeys into key list (both lists are sorted)
+	if cap(j.keys) < len(j.keys)+len(newKeys) {
+		cp := make(journalEntryList, len(j.keys), roundSize(len(j.keys)+len(newKeys)))
+		copy(cp, j.keys)
+		j.keys = cp
 	}
+
+	// fast path for append-only
+	if len(j.keys) == 0 || newKeys[0].pk > j.keys[len(j.keys)-1].pk {
+		j.keys = append(j.keys, newKeys...)
+		return
+	}
+
+	// merge backward
+
+	// keep position of the last value in keys
+	last := len(j.keys) - 1
+
+	// extend keys len
+	j.keys = j.keys[:len(j.keys)+len(newKeys)]
+
+	// ignore equal keys, they cannot exist here (as safety measure, we still copy them)
+	for in1, in2, out := last, len(newKeys)-1, len(j.keys)-1; in2 >= 0; {
+		// insert new keys as long as they are larger or all old keys have been
+		// copied (i.e. any new key is smaller than the first old key)
+		for in2 >= 0 && (in1 < 0 || j.keys[in1].pk < newKeys[in2].pk) {
+			j.keys[out] = newKeys[in2]
+			in2--
+			out--
+		}
+
+		// insert old keys as long as they are larger (safety: although no
+		// duplicate keys are allowed, we simply copy them using >= instead of >)
+		for in1 >= 0 && (in2 < 0 || j.keys[in1].pk >= newKeys[in2].pk) {
+			j.keys[out] = j.keys[in1]
+			in1--
+			out--
+		}
+	}
+}
+
+func (j *Journal) mergeKeysForward(newKeys journalEntryList) {
+	if len(newKeys) == 0 {
+		return
+	}
+
+	// sanity-check for unsorted keys
+	// if isSorted && !sort.IsSorted(newKeys) {
+	// 	panic("pack: mergeKeys input is unsorted, but sorted flag is set")
+	// }
 
 	// merge newKeys into key list (both lists are sorted)
 	if cap(j.keys) < len(j.keys)+len(newKeys) {
@@ -547,6 +597,7 @@ func (j *Journal) mergeKeys(newKeys journalEntryList, isSorted bool) {
 		j.keys = cp
 	}
 
+	// Merge forward
 	for i := 0; i < len(j.keys) && len(newKeys) > 0; {
 		// find the next insert position, binary search is ok because keys
 		// is sorted at each round of this algorithm
@@ -677,56 +728,98 @@ func (j *Journal) DeleteBatch(pks []uint64) (int, error) {
 		j.tomb = cp
 	}
 
-	count := len(pks)
-	for i := 0; i < len(j.tomb) && len(pks) > 0; {
-		for i < len(j.tomb) && j.tomb[i] < pks[0] {
-			i++
-		}
-		if i == len(j.tomb) {
-			// done
-			break
-		}
-
-		// skip duplicate ids (that already exist in tomb)
-		if j.tomb[i] == pks[0] {
-			count--
-			pks = pks[1:]
-			continue
-		}
-
-		// take all elements in ids that are smaller than the next value in tomb
-		var k int
-		for k < len(pks) && pks[k] < j.tomb[i] {
-			k++
-		}
-
-		// make room for k elements at position i in tomb
-		j.tomb = j.tomb[:len(j.tomb)+k]
-		copy(j.tomb[i+k:], j.tomb[i:])
-
-		// insert k elements from ids into tomb at position i
-		copy(j.tomb[i:], pks[:k])
-
-		// shorten ids by k processed elements
-		pks = pks[k:]
-
-		// update tomb insert index
-		i += k
+	// fast path for append-only
+	if len(j.tomb) == 0 || pks[0] > j.tomb[len(j.tomb)-1] {
+		j.tomb = append(j.tomb, pks...)
+		return len(pks), nil
 	}
 
+	// merge backwards
+	// keep position of the last value in tomb
+	last, count, move := len(j.tomb)-1, len(pks), 0
+
+	// extend tomb len
+	j.tomb = j.tomb[:len(j.tomb)+len(pks)]
+
+	// fill from back
+	for in1, in2, out := last, len(pks)-1, len(j.tomb)-1; in2 >= 0; {
+		// skip duplicate ids (that already exist in tomb)
+		for in2 >= 0 && in1 >= 0 && j.tomb[in1] == pks[in2] {
+			move++
+			count--
+			in2--
+		}
+
+		// insert new keys as long as they are larger or all keys are
+		// copied (i.e. all remaining new keys are smaller than the first old key)
+		for in2 >= 0 && (in1 < 0 || j.tomb[in1] < pks[in2]) {
+			j.tomb[out] = pks[in2]
+			in2--
+			out--
+		}
+
+		// insert old keys as long as they are larger
+		for in1 >= 0 && (in2 < 0 || j.tomb[in1] > pks[in2]) {
+			j.tomb[out] = j.tomb[in1]
+			in1--
+			out--
+		}
+	}
+
+	// correct for duplicates
+	if move > 0 {
+		copy(j.tomb[:len(j.tomb)-move], j.tomb[move:])
+		j.tomb = j.tomb[:len(j.tomb)-move]
+	}
+
+	// Forward merge
+	// count := len(pks)
+	// for i := 0; i < len(j.tomb) && len(pks) > 0; {
+	// 	for i < len(j.tomb) && j.tomb[i] < pks[0] {
+	// 		i++
+	// 	}
+	// 	if i == len(j.tomb) {
+	// 		// done
+	// 		break
+	// 	}
+
+	// 	// skip duplicate ids (that already exist in tomb)
+	// 	if j.tomb[i] == pks[0] {
+	// 		count--
+	// 		pks = pks[1:]
+	// 		continue
+	// 	}
+
+	// 	// take all elements in ids that are smaller than the next value in tomb
+	// 	var k int
+	// 	for k < len(pks) && pks[k] < j.tomb[i] {
+	// 		k++
+	// 	}
+
+	// 	// make room for k elements at position i in tomb
+	// 	j.tomb = j.tomb[:len(j.tomb)+k]
+	// 	copy(j.tomb[i+k:], j.tomb[i:])
+
+	// 	// insert k elements from ids into tomb at position i
+	// 	copy(j.tomb[i:], pks[:k])
+
+	// 	// shorten ids by k processed elements
+	// 	pks = pks[k:]
+
+	// 	// update tomb insert index
+	// 	i += k
+	// }
+
 	// append remainder (this is a noop if all ids have been processed before)
-	j.tomb = append(j.tomb, pks...)
+	// j.tomb = append(j.tomb, pks...)
 	return count, nil
 }
 
 // To support insert/update-after-delete we remove entries from the
 // tomb and we reconstruct the previous state of the undeleted entry
 // in our data pack (i.e. we restore its primary key) and reset the
-// deleted flag.
-func (j *Journal) undelete(pks []uint64, isSorted bool) {
-	if !isSorted {
-		vec.Uint64.Sort(pks)
-	}
+// deleted flag. pks must be storted.
+func (j *Journal) undelete(pks []uint64) {
 	var idx, last, lastTomb int
 	for len(pks) > 0 {
 		// reset the deleted bit and restore pk
