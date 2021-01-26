@@ -682,7 +682,7 @@ func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *BitSet {
 				}
 			case FilterModeRange:
 				// condition is always true iff pack range <= condition range
-				if c.Field.Type.Lte(min, c.From) && c.Field.Type.Gte(max, c.To) {
+				if c.Field.Type.Lte(c.From, min) && c.Field.Type.Gte(c.To, max) {
 					b = NewBitSet(pkg.Len()).One()
 				}
 			case FilterModeGt:
