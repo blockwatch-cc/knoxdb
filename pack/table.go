@@ -1109,7 +1109,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		}
 
 		// skip deleted journal entries
-		for ; jpos < jlen && dbits.IsSet(jpos); jpos++ {
+		for ; jpos < jlen && dbits.IsSet(live[jpos].idx); jpos++ {
 		}
 
 		// skip deleted tomstone entries
