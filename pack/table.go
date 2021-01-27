@@ -1545,33 +1545,38 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 	maxNonZeroId := ids[maxRows-1]
 
 	// lookup journal first (Note: its sorted by pk)
-	if t.journal.Len()-t.journal.TombLen() > 0 {
-		var idx, last int
-		for i, v := range ids {
-			// not in journal?
-			idx, last = t.journal.PkIndex(v, last)
-			if idx < 0 {
-				continue
-			}
-
-			// no more matches in journal?
-			if last == t.journal.Len() {
-				break
-			}
-
-			// on match, copy result from journal
-			if err := res.pkg.AppendFrom(t.journal.DataPack(), idx, 1, true); err != nil {
-				res.Close()
-				return nil, err
-			}
-			q.stats.RowsMatched++
-
-			// mark id as processed (set 0)
-			ids[i] = 0
+	var (
+		idx, last  int
+		needUpdate bool
+	)
+	for i, v := range ids {
+		// not in journal?
+		idx, last = t.journal.PkIndex(v, last)
+		if idx < 0 {
+			continue
 		}
+
+		// no more matches in journal?
+		if last == t.journal.Len() {
+			break
+		}
+
+		// on match, copy result from journal
+		if err := res.pkg.AppendFrom(t.journal.DataPack(), idx, 1, true); err != nil {
+			res.Close()
+			return nil, err
+		}
+		q.stats.RowsMatched++
+
+		// mark id as processed (set 0)
+		ids[i] = 0
+		needUpdate = true
+	}
+	if needUpdate {
 		// remove processed ids
 		ids = vec.Uint64.RemoveZeros(ids)
 	}
+
 	q.stats.JournalTime = time.Since(q.lap)
 
 	// everything found in journal?, return early
@@ -1615,7 +1620,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 
 		// packs are sorted by pk, ids does not contain zero values
 		last := 0
-		for i, v := range ids[nextid:] {
+		for _, v := range ids[nextid:] {
 			// no more matches in this pack?
 			if max < v || pk[last] > maxNonZeroId {
 				break
@@ -1624,6 +1629,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 			// not in pack
 			j := pkg.PkIndex(v, last)
 			if j < 0 {
+				nextid++
 				continue
 			}
 
@@ -1632,7 +1638,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 				res.Close()
 				return nil, err
 			}
-			nextid = i
+			nextid++
 			q.stats.RowsMatched++
 			last = j
 		}
@@ -2424,29 +2430,33 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 	}
 
 	// lookup journal first (Note: its sorted by pk)
-	if t.journal.Len()-t.journal.TombLen() > 0 {
-		var idx, last int
-		for i, v := range ids {
-			// not in journal
-			idx, last = t.journal.PkIndex(v, last)
-			if idx < 0 {
-				continue
-			}
-
-			// no more matches in journal?
-			if last == t.journal.Len() {
-				break
-			}
-
-			// on match, forward result from journal
-			if err := fn(Row{res: &res, n: idx}); err != nil {
-				return err
-			}
-			q.stats.RowsMatched++
-
-			// mark id as processed (set 0)
-			ids[i] = 0
+	var (
+		idx, last  int
+		needUpdate bool
+	)
+	for i, v := range ids {
+		// not in journal
+		idx, last = t.journal.PkIndex(v, last)
+		if idx < 0 {
+			continue
 		}
+
+		// no more matches in journal?
+		if last == t.journal.Len() {
+			break
+		}
+
+		// on match, forward result from journal
+		if err := fn(Row{res: &res, n: idx}); err != nil {
+			return err
+		}
+		q.stats.RowsMatched++
+
+		// mark id as processed (set 0)
+		ids[i] = 0
+		needUpdate = true
+	}
+	if needUpdate {
 		// remove processed ids
 		ids = vec.Uint64.RemoveZeros(ids)
 	}
@@ -2490,9 +2500,10 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 				break
 			}
 
-			// not in pack
+			// not in pack == not in table, skip this id
 			j := pkg.PkIndex(v, last)
 			if j < 0 {
+				nextid++
 				continue
 			}
 
