@@ -1034,14 +1034,15 @@ func (t *Table) FlushJournal(ctx context.Context) error {
 }
 
 func (t *Table) flushJournalTx(ctx context.Context, tx *Tx) error {
-	n, err := t.journal.StoreLegacy(tx.tx, t.metakey)
+	nTuples, nTomb := t.journal.Len(), t.journal.TombLen()
+	nBytes, err := t.journal.StoreLegacy(tx.tx, t.metakey)
 	if err != nil {
 		return err
 	}
-	atomic.AddInt64(&t.stats.JournalFlushedTuples, int64(t.journal.Len()))
+	atomic.AddInt64(&t.stats.JournalFlushedTuples, int64(nTuples))
 	atomic.AddInt64(&t.stats.JournalPacksStored, 1)
-	atomic.AddInt64(&t.stats.JournalBytesWritten, int64(n))
-	atomic.AddInt64(&t.stats.TombstoneFlushedTuples, int64(t.journal.TombLen()))
+	atomic.AddInt64(&t.stats.JournalBytesWritten, int64(nBytes))
+	atomic.AddInt64(&t.stats.TombstoneFlushedTuples, int64(nTomb))
 	atomic.AddInt64(&t.stats.TombstonePacksStored, 1)
 	// atomic.AddInt64(&t.stats.TombstoneBytesWritten, int64(n))
 	return nil
@@ -1762,18 +1763,16 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 					index := i
 
 					// when exists, use row version found in journal
-					if jbits.Count() > 0 {
-						if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
-							// cross-check the journal row actually matches the cond
-							if !jbits.IsSet(j) {
-								continue
-							}
-
-							// remove match bit
-							jbits.Clear(j)
-							src = t.journal.DataPack()
-							index = j
+					if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
+						// cross-check the journal row actually matches the cond
+						if !jbits.IsSet(j) {
+							continue
 						}
+
+						// remove match bit
+						jbits.Clear(j)
+						src = t.journal.DataPack()
+						index = j
 					}
 
 					if err := res.pkg.AppendFrom(src, index, 1); err != nil {
@@ -1936,16 +1935,14 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 					index := i
 
 					// when exists, use row from journal
-					if jbits.Count() > 0 {
-						if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
-							// cross-check if the journal row actually matches the cond
-							if !jbits.IsSet(j) {
-								continue
-							}
-							jbits.Clear(j)
-							src = t.journal.DataPack()
-							index = j
+					if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
+						// cross-check if the journal row actually matches the cond
+						if !jbits.IsSet(j) {
+							continue
 						}
+						jbits.Clear(j)
+						src = t.journal.DataPack()
+						index = j
 					}
 
 					if err := res.pkg.AppendFrom(src, index, 1); err != nil {
@@ -2050,14 +2047,12 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 					}
 
 					// when exists, clear from journal bitmask
-					if jbits.Count() > 0 {
-						if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
-							// cross-check if journal row actually matches the cond
-							if !jbits.IsSet(j) {
-								continue
-							}
-							jbits.Clear(j)
+					if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
+						// cross-check if journal row actually matches the cond
+						if !jbits.IsSet(j) {
+							continue
 						}
+						jbits.Clear(j)
 					}
 
 					q.stats.RowsMatched++
@@ -2170,16 +2165,14 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 					index := i
 
 					// when exist, use journal row
-					if jbits.Count() > 0 {
-						if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
-							// cross-check if journal row actually matches the cond
-							if !jbits.IsSet(j) {
-								continue
-							}
-							res.pkg = t.journal.DataPack()
-							index = j
-							jbits.Clear(j)
+					if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
+						// cross-check if journal row actually matches the cond
+						if !jbits.IsSet(j) {
+							continue
 						}
+						res.pkg = t.journal.DataPack()
+						index = j
+						jbits.Clear(j)
 					}
 
 					// forward match
@@ -2333,15 +2326,13 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 					index := i
 
 					// when exist, use journal row
-					if jbits.Count() > 0 {
-						if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
-							if !jbits.IsSet(j) {
-								continue
-							}
-							res.pkg = t.journal.DataPack()
-							index = j
-							jbits.Clear(j)
+					if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
+						if !jbits.IsSet(j) {
+							continue
 						}
+						res.pkg = t.journal.DataPack()
+						index = j
+						jbits.Clear(j)
 					}
 
 					// forward match

@@ -124,7 +124,7 @@ func makeReadWriteTestPackage(fields FieldList, c block.Compression, sz int) *Pa
 	pkg.InitFields(fields, nil)
 	now := time.Now().UTC()
 	for i := 0; i < sz; i++ {
-		pkg.Append()
+		pkg.Grow(1)
 		pkg.SetFieldAt(0, i, uint64(i+1))
 		pkg.SetFieldAt(1, i, now.Add(time.Duration(i+rand.Intn(10))*time.Minute))
 		pkg.SetFieldAt(2, i, uint64(i+1))                            // height
