@@ -360,7 +360,7 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 
 		// fast path (all ids are > last)
 		jLen := j.data.Len()
-		if err := j.data.AppendFrom(pkg, pos, n, true); err != nil {
+		if err := j.data.AppendFrom(pkg, pos, n); err != nil {
 			return 0, err
 		}
 		count += n
@@ -387,7 +387,7 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 				j.wal.WritePack(WalRecordTypeInsert, pkg, pos+i, 1)
 
 				// append to journal
-				if err := j.data.AppendFrom(pkg, pos+i, 1, true); err != nil {
+				if err := j.data.AppendFrom(pkg, pos+i, 1); err != nil {
 					return count, err
 				}
 				newKeys = append(newKeys, journalEntry{pk, j.data.Len() - 1})

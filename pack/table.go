@@ -1368,7 +1368,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					}
 				}
 				// append new row
-				if err := pkg.AppendFrom(jpack, key.idx, 1, false); err != nil {
+				if err := pkg.AppendFrom(jpack, key.idx, 1); err != nil {
 					return err
 				}
 				needSort = needSort || key.pk < packmax
@@ -1562,7 +1562,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		}
 
 		// on match, copy result from journal
-		if err := res.pkg.AppendFrom(t.journal.DataPack(), idx, 1, true); err != nil {
+		if err := res.pkg.AppendFrom(t.journal.DataPack(), idx, 1); err != nil {
 			res.Close()
 			return nil, err
 		}
@@ -1634,7 +1634,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 			}
 
 			// on match, copy result from journal
-			if err := res.pkg.AppendFrom(pkg, j, 1, true); err != nil {
+			if err := res.pkg.AppendFrom(pkg, j, 1); err != nil {
 				res.Close()
 				return nil, err
 			}
@@ -1776,7 +1776,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 						}
 					}
 
-					if err := res.pkg.AppendFrom(src, index, 1, true); err != nil {
+					if err := res.pkg.AppendFrom(src, index, 1); err != nil {
 						bits.Close()
 						res.Close()
 						return nil, err
@@ -1805,7 +1805,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	jpack := t.journal.DataPack()
 	for _, idx := range idxs {
 		// Note: deleted entries are already removed from index list!
-		if err := res.pkg.AppendFrom(jpack, idx, 1, true); err != nil {
+		if err := res.pkg.AppendFrom(jpack, idx, 1); err != nil {
 			res.Close()
 			return nil, err
 		}
@@ -1885,7 +1885,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 			continue
 		}
 
-		if err := res.pkg.AppendFrom(jpack, idx, 1, true); err != nil {
+		if err := res.pkg.AppendFrom(jpack, idx, 1); err != nil {
 			res.Close()
 			return nil, err
 		}
@@ -1948,7 +1948,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 						}
 					}
 
-					if err := res.pkg.AppendFrom(src, index, 1, true); err != nil {
+					if err := res.pkg.AppendFrom(src, index, 1); err != nil {
 						bits.Close()
 						res.Close()
 						return nil, err
@@ -2670,7 +2670,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		// move data from src to dst
 		log.Debugf("pack: moving %d/%d rows from pack %x to %x", cp, srcPack.Len(),
 			srcPack.key, dstPack.key)
-		if err := dstPack.AppendFrom(srcPack, 0, cp, true); err != nil {
+		if err := dstPack.AppendFrom(srcPack, 0, cp); err != nil {
 			return err
 		}
 		if err := srcPack.Delete(0, cp); err != nil {
@@ -2881,7 +2881,7 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	newpkg := t.packPool.Get().(*Package)
 	newpkg.cached = false
 	half := pkg.Len() / 2
-	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half, true); err != nil {
+	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half); err != nil {
 		return 0, err
 	}
 	if err := pkg.Delete(half, pkg.Len()-half); err != nil {

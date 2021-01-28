@@ -1499,7 +1499,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 }
 
 // note: will panic on package schema mismatch
-func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool) error {
+func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 	if srcPack.nFields != p.nFields {
 		return fmt.Errorf("pack: invalid src/dst field count %d/%d", srcPack.nFields, p.nFields)
 	}
@@ -1523,14 +1523,10 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 
 		switch dstField.Type {
 		case FieldTypeBytes:
-			if safecopy {
-				for _, v := range src.Bytes[srcPos : srcPos+srcLen] {
-					buf := make([]byte, len(v))
-					copy(buf, v)
-					dst.Bytes = append(dst.Bytes, buf)
-				}
-			} else {
-				dst.Bytes = append(dst.Bytes, src.Bytes[srcPos:srcPos+srcLen]...)
+			for _, v := range src.Bytes[srcPos : srcPos+srcLen] {
+				buf := make([]byte, len(v))
+				copy(buf, v)
+				dst.Bytes = append(dst.Bytes, buf)
 			}
 
 		case FieldTypeString:
@@ -1621,70 +1617,6 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 		dst.SetDirty()
 	}
 	p.nValues += srcLen
-	p.dirty = true
-	return nil
-}
-
-// appends an empty row with default/zero values
-func (p *Package) Append() error {
-	for i, b := range p.blocks {
-		if b.IsIgnore() {
-			continue
-		}
-		field := p.fields[i]
-
-		switch field.Type {
-		case FieldTypeBytes:
-			b.Bytes = append(b.Bytes, []byte{})
-
-		case FieldTypeString:
-			b.Strings = append(b.Strings, "")
-
-		case FieldTypeBoolean:
-			b.Bits.Grow(b.Bits.Len() + 1)
-
-		case FieldTypeFloat64:
-			b.Float64 = append(b.Float64, 0)
-
-		case FieldTypeFloat32:
-			b.Float32 = append(b.Float32, 0)
-
-		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256 = append(b.Int256, ZeroInt256)
-
-		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128 = append(b.Int128, ZeroInt128)
-
-		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
-			b.Int64 = append(b.Int64, 0)
-
-		case FieldTypeInt32, FieldTypeDecimal32:
-			b.Int32 = append(b.Int32, 0)
-
-		case FieldTypeInt16:
-			b.Int16 = append(b.Int16, 0)
-
-		case FieldTypeInt8:
-			b.Int8 = append(b.Int8, 0)
-
-		case FieldTypeUint64:
-			b.Uint64 = append(b.Uint64, 0)
-
-		case FieldTypeUint32:
-			b.Uint32 = append(b.Uint32, 0)
-
-		case FieldTypeUint16:
-			b.Uint16 = append(b.Uint16, 0)
-
-		case FieldTypeUint8:
-			b.Uint8 = append(b.Uint8, 0)
-
-		default:
-			return fmt.Errorf("pack: invalid data type %s", field.Type)
-		}
-		b.SetDirty()
-	}
-	p.nValues++
 	p.dirty = true
 	return nil
 }

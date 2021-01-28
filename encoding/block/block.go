@@ -697,12 +697,12 @@ func (b *Block) Clear() {
 	case BlockFloat32:
 		b.Float32 = b.Float32[:0]
 	case BlockString:
-		for j, _ := range b.Strings {
+		for j := range b.Strings {
 			b.Strings[j] = ""
 		}
 		b.Strings = b.Strings[:0]
 	case BlockBytes:
-		for j, _ := range b.Bytes {
+		for j := range b.Bytes {
 			b.Bytes[j] = nil
 		}
 		b.Bytes = b.Bytes[:0]
@@ -781,7 +781,7 @@ func (b *Block) Release() {
 		b.Bits.Close()
 		b.Bits = nil
 	case BlockString:
-		for j, _ := range b.Strings {
+		for j := range b.Strings {
 			b.Strings[j] = ""
 		}
 		if cap(b.Strings) == DefaultMaxPointsPerBlock {
@@ -789,7 +789,7 @@ func (b *Block) Release() {
 		}
 		b.Strings = nil
 	case BlockBytes:
-		for j, _ := range b.Bytes {
+		for j := range b.Bytes {
 			b.Bytes[j] = nil
 		}
 		if cap(b.Bytes) == DefaultMaxPointsPerBlock {

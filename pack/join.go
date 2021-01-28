@@ -638,7 +638,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 				}
 
 				// append match to new output
-				if err := out.pkg.AppendFrom(agg.pkg, idx, n, true); err != nil {
+				if err := out.pkg.AppendFrom(agg.pkg, idx, n); err != nil {
 					return nil, err
 				}
 

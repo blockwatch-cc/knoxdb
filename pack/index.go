@@ -1150,7 +1150,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 			}
 
 			// append journal entry
-			err := pkg.AppendFrom(idx.journal, i, 1, false)
+			err := pkg.AppendFrom(idx.journal, i, 1)
 			if err != nil {
 				return err
 			}
@@ -1247,7 +1247,7 @@ func (idx *Index) splitPack(tx *Tx, pkg *Package) (int, error) {
 	newpkg := idx.packPool.Get().(*Package)
 	newpkg.cached = false
 	half := pkg.Len() / 2
-	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half, true); err != nil {
+	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half); err != nil {
 		return 0, err
 	}
 	if err := pkg.Delete(half, pkg.Len()-half); err != nil {
