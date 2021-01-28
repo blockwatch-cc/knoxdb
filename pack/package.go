@@ -1397,14 +1397,10 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 		switch dstField.Type {
 		case FieldTypeBytes:
 			for j, v := range src.Bytes[srcPos : srcPos+n] {
-				if cap(dst.Bytes[dstPos+j]) < len(v) {
-					buf := make([]byte, len(v))
-					copy(buf, v)
-					dst.Bytes[dstPos+j] = buf
-				} else {
-					dst.Bytes[dstPos+j] = dst.Bytes[dstPos+j][:len(v)]
-					copy(dst.Bytes[dstPos+j], v)
-				}
+				// always allocate new slice because underlying block slice is shared
+				buf := make([]byte, len(v))
+				copy(buf, v)
+				dst.Bytes[dstPos+j] = buf
 			}
 
 		case FieldTypeString:
