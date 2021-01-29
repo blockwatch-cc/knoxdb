@@ -1551,15 +1551,15 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		needUpdate bool
 	)
 	for i, v := range ids {
-		// not in journal?
-		idx, last = t.journal.PkIndex(v, last)
-		if idx < 0 {
-			continue
-		}
-
 		// no more matches in journal?
 		if last == t.journal.Len() {
 			break
+		}
+
+		idx, last = t.journal.PkIndex(v, last)
+		// not in journal?
+		if idx < 0 {
+			continue
 		}
 
 		// on match, copy result from journal
@@ -2429,15 +2429,15 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 		needUpdate bool
 	)
 	for i, v := range ids {
+		// no more matches in journal?
+		if last == t.journal.Len() {
+			break
+		}
+
 		// not in journal
 		idx, last = t.journal.PkIndex(v, last)
 		if idx < 0 {
 			continue
-		}
-
-		// no more matches in journal?
-		if last == t.journal.Len() {
-			break
 		}
 
 		// on match, forward result from journal

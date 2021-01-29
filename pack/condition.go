@@ -163,6 +163,7 @@ func (c *Condition) Compile() {
 				conv[i] = val[i].Quantize(c.Field.Scale).Int32()
 			}
 			c.Value = conv
+			c.numValues = len(val)
 		}
 		if val, ok := c.Value.(Decimal32); ok {
 			c.Value = val.Quantize(c.Field.Scale)
@@ -181,6 +182,7 @@ func (c *Condition) Compile() {
 				conv[i] = val[i].Quantize(c.Field.Scale).Int64()
 			}
 			c.Value = conv
+			c.numValues = len(val)
 		}
 		if val, ok := c.Value.(Decimal64); ok {
 			c.Value = val.Quantize(c.Field.Scale)
@@ -199,6 +201,7 @@ func (c *Condition) Compile() {
 				conv[i] = val[i].Quantize(c.Field.Scale).Int128()
 			}
 			c.Value = conv
+			c.numValues = len(val)
 		}
 		if val, ok := c.Value.(Decimal128); ok {
 			c.Value = val.Quantize(c.Field.Scale)
@@ -217,6 +220,7 @@ func (c *Condition) Compile() {
 				conv[i] = val[i].Quantize(c.Field.Scale).Int256()
 			}
 			c.Value = conv
+			c.numValues = len(val)
 		}
 		if val, ok := c.Value.(Decimal256); ok {
 			c.Value = val.Quantize(c.Field.Scale)
@@ -235,6 +239,7 @@ func (c *Condition) Compile() {
 				conv[i] = val[i].UTC().UnixNano()
 			}
 			c.Value = conv
+			c.numValues = len(val)
 		}
 		return
 	}
@@ -256,33 +261,33 @@ func (c *Condition) Compile() {
 	case FieldTypeBytes:
 		// require [][]byte slice as value type
 		slice := c.Value.([][]byte)
-		if slice == nil {
+		c.numValues = len(slice)
+		if c.numValues == 0 {
 			return
 		}
-		c.numValues = len(slice)
+		// sorted slice is always required for InBetween pack matches
+		if !c.IsSorted {
+			c.Value = Bytes.Sort(slice)
+			c.IsSorted = true
+		}
 		// below min size a hash map is more expensive than memcmp
 		if c.numValues < filterThreshold {
-			// sorted slice is only required when not using a hash map
-			if !c.IsSorted {
-				c.Value = Bytes.Sort(slice)
-				c.IsSorted = true
-			}
 			return
 		}
 		vals = slice
 	case FieldTypeString:
 		slice := c.Value.([]string)
-		if slice == nil {
+		c.numValues = len(slice)
+		if c.numValues == 0 {
 			return
 		}
-		c.numValues = len(slice)
+		// sorted slice is always required for InBetween pack matches
+		if !c.IsSorted {
+			c.Value = Strings.Sort(slice)
+			c.IsSorted = true
+		}
 		// below min size a hash map is more expensive than memcmp
 		if c.numValues < filterThreshold {
-			// sorted slice is only required when not using a hash map
-			if !c.IsSorted {
-				c.Value = Strings.Sort(slice)
-				c.IsSorted = true
-			}
 			return
 		}
 		// convert to []byte for feeding the hash map below
@@ -372,7 +377,7 @@ func (c *Condition) Compile() {
 		return
 	case FieldTypeUint64:
 		slice := c.Value.([]uint64)
-		if slice == nil {
+		if len(slice) == 0 {
 			return
 		}
 		c.numValues = len(slice)
@@ -380,7 +385,7 @@ func (c *Condition) Compile() {
 		// slices are guaranteed to be sorted (such as primary keys)
 		if c.Field.Flags&FlagPrimary > 0 {
 			if !c.IsSorted {
-				slice = Uint64.Sort(slice)
+				c.Value = Uint64.Sort(slice)
 				c.IsSorted = true
 			}
 		} else {
@@ -453,7 +458,6 @@ func (c *Condition) Compile() {
 			// move current value and new value into overflow list
 			if mapval != 0xFFFFFFFF {
 				log.Warnf("pack: condition hash collision %0x / %0x == %0x", v, vals[mapval], sum)
-				// there's already an overflow value
 				c.hashoverflow = append(c.hashoverflow, hashvalue{
 					hash: sum,
 					pos:  mapval,
@@ -856,7 +860,10 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 						break
 					}
 					if pk[p] == in[i] {
-						bits.Set(p)
+						// blend masked values
+						if mask == nil || mask.IsSet(i) {
+							bits.Set(p)
+						}
 						i++
 					}
 				}
@@ -910,12 +917,12 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 		// this case (i.e. the list contains all colliding values)
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
-			for i, v := range block.Bytes {
-				// skip masked values
-				if mask != nil && !mask.IsSet(i) {
-					continue
-				}
-				if c.hashmap != nil {
+			if c.hashmap != nil {
+				for i, v := range block.Bytes {
+					// skip masked values
+					if mask != nil && !mask.IsSet(i) {
+						continue
+					}
 					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; ok {
 						if pos != 0xFFFFFFFF {
@@ -938,7 +945,13 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 							}
 						}
 					}
-				} else {
+				}
+			} else {
+				for i, v := range block.Bytes {
+					// skip masked values
+					if mask != nil && !mask.IsSet(i) {
+						continue
+					}
 					// without hash map, resort to type-based comparison
 					if c.Field.Type.In(v, c.Value) {
 						bits.Set(i)
@@ -948,12 +961,12 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 
 		case FieldTypeString:
 			strs := c.Value.([]string)
-			for i, v := range block.Strings {
-				// skip masked values
-				if mask != nil && !mask.IsSet(i) {
-					continue
-				}
-				if c.hashmap != nil {
+			if c.hashmap != nil {
+				for i, v := range block.Strings {
+					// skip masked values
+					if mask != nil && !mask.IsSet(i) {
+						continue
+					}
 					sum := xxhash.Sum64([]byte(v))
 					if pos, ok := c.hashmap[sum]; ok {
 						if pos != 0xFFFFFFFF {
@@ -976,7 +989,13 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 							}
 						}
 					}
-				} else {
+				}
+			} else {
+				for i, v := range block.Strings {
+					// skip masked values
+					if mask != nil && !mask.IsSet(i) {
+						continue
+					}
 					// without hash map, resort to type-based comparison
 					if c.Field.Type.In(v, c.Value) {
 						bits.Set(i)
@@ -1088,6 +1107,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 						break
 					}
 					if pk[p] == in[i] {
+						// ignore mask
 						bits.Set(p)
 						i++
 					}
