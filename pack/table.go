@@ -2114,6 +2114,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// but not new pks that are only in journal)
 	jbits = q.Conditions.MatchPack(t.journal.DataPack(), PackInfo{})
 	q.stats.JournalTime = time.Since(q.lap)
+	// log.Infof("Table %s: %d journal results", t.name, jbits.Count())
 
 	// maybe run index query
 	if err := q.QueryIndexes(ctx, tx); err != nil {
@@ -2147,6 +2148,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 
 			// identify and forward matches
 			bits := q.Conditions.MatchPack(pkg, t.packidx.packs[p])
+			// log.Infof("Table %s: %d results in pack %d", t.name, bits.Count(), pkg.key)
 			for idx, length := bits.Run(0); idx >= 0; idx, length = bits.Run(idx + length) {
 				for i := idx; i < idx+length; i++ {
 					// skip broken entries
@@ -2202,6 +2204,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// after all packs have been scanned, add remaining rows from journal, if any
 	res.pkg = t.journal.DataPack()
 	idxs, _ := t.journal.SortedIndexes(jbits)
+	// log.Infof("Table %s: %d remaining journal rows", t.name, len(idxs))
 	for _, idx := range idxs {
 		// Note: deleted indexes are already removed from list
 

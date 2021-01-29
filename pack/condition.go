@@ -828,7 +828,14 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 			// matching algorithm here
 			pk := block.Uint64
 			in := c.Value.([]uint64)
-			if c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
+			// journal pack is unsorted, so we fall back to using a map
+			if pkg.key == journalKey && c.uint64map == nil {
+				c.uint64map = make(map[uint64]struct{}, len(in))
+				for _, v := range in {
+					c.uint64map[v] = struct{}{}
+				}
+			}
+			if pkg.key != journalKey && c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
 				maxin := in[len(in)-1]
 				maxpk := pk[len(pk)-1]
 				for i, p, il, pl := 0, 0, len(in), len(pk); i < il && p < pl; {
@@ -1053,7 +1060,14 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 			// conditions we negate the bitset in the end
 			pk := block.Uint64
 			in := c.Value.([]uint64)
-			if c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
+			// journal pack is unsorted, so we fall back to using a map
+			if pkg.key == journalKey && c.uint64map == nil {
+				c.uint64map = make(map[uint64]struct{}, len(in))
+				for _, v := range in {
+					c.uint64map[v] = struct{}{}
+				}
+			}
+			if pkg.key != journalKey && c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
 				maxin := in[len(in)-1]
 				maxpk := pk[len(pk)-1]
 				for i, p, il, pl := 0, 0, len(in), len(pk); i < il && p < pl; {
