@@ -22,7 +22,15 @@ func init() {
 	}
 }
 
-func bitsetAndGeneric(dst, src []byte, size int) int {
+func bitsetAndGeneric(dst, src []byte, size int) {
+	l := (size + 7) >> 3
+	for i := 0; i < l; i++ {
+		dst[i] &= src[i]
+	}
+	dst[l-1] &= bytemask(size)
+}
+
+func bitsetAndGenericFlag1(dst, src []byte, size int) int {
 	l := (size + 7) >> 3
 	var res byte
 	for i := 0; i < l; i++ {
@@ -47,6 +55,17 @@ func bitsetOrGeneric(dst, src []byte, size int) {
 		dst[i] |= src[i]
 	}
 	dst[l-1] &= bytemask(size)
+}
+
+func bitsetOrGenericFlag1(dst, src []byte, size int) int {
+	l := (size + 7) >> 3
+	var res byte
+	for i := 0; i < l; i++ {
+		dst[i] |= src[i]
+		res |= dst[i]
+	}
+	dst[l-1] &= bytemask(size)
+	return int(res)
 }
 
 func bitsetXorGeneric(dst, src []byte, size int) {

@@ -10,6 +10,9 @@ import (
 )
 
 //go:noescape
+func bitsetAndAVX2(dst, src []byte)
+
+//go:noescape
 func bitsetAndAVX2Flag1(dst, src []byte) int
 
 //go:noescape
@@ -17,6 +20,9 @@ func bitsetAndNotAVX2(dst, src []byte)
 
 //go:noescape
 func bitsetOrAVX2(dst, src []byte)
+
+//go:noescape
+func bitsetOrAVX2Flag1(dst, src []byte) int
 
 //go:noescape
 func bitsetXorAVX2(dst, src []byte)
@@ -43,7 +49,7 @@ func bitsetAnd(dst, src []byte, size int) int {
 		dst[len(dst)-1] &= bytemask(size)
 		return ret
 	default:
-		return bitsetAndGeneric(dst, src, size)
+		return bitsetAndGenericFlag1(dst, src, size)
 	}
 }
 
@@ -57,13 +63,14 @@ func bitsetAndNot(dst, src []byte, size int) {
 	}
 }
 
-func bitsetOr(dst, src []byte, size int) {
+func bitsetOr(dst, src []byte, size int) int {
 	switch {
 	case useAVX2:
-		bitsetOrAVX2(dst, src)
+		ret := bitsetOrAVX2Flag1(dst, src)
 		dst[len(dst)-1] &= bytemask(size)
+		return ret
 	default:
-		bitsetOrGeneric(dst, src, size)
+		return bitsetOrGenericFlag1(dst, src, size)
 	}
 }
 
