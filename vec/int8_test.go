@@ -242,22 +242,34 @@ var int8EqualCases = []Int8MatchTest{
 		count:  0,
 	},
 	CreateInt8TestCase("vec1", int8TestSlice_0, int8EqualTestMatch_0, 0, int8EqualTestResult_0, 32),
-	CreateInt8TestCase("vec2", int8TestSlice_0, int8EqualTestMatch_0, 0, int8EqualTestResult_0, 64),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8EqualTestMatch_0, 0, int8EqualTestResult_0, 512),
 	CreateInt8TestCase("l32", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 32),
 	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8EqualTestMatch_1, 0,
 		append(int8EqualTestResult_1, int8EqualTestResult_0...), 64),
 	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8EqualTestMatch_1, 0,
 		append(int8EqualTestResult_1, int8EqualTestResult_0...), 128),
+	CreateInt8TestCase("l256", append(int8TestSlice_1, int8TestSlice_0...), int8EqualTestMatch_1, 0,
+		append(int8EqualTestResult_1, int8EqualTestResult_0...), 256),
+	CreateInt8TestCase("l512", append(int8TestSlice_1, int8TestSlice_0...), int8EqualTestMatch_1, 0,
+		append(int8EqualTestResult_1, int8EqualTestResult_0...), 512),
+	CreateInt8TestCase("l1024", append(int8TestSlice_1, int8TestSlice_0...), int8EqualTestMatch_1, 0,
+		append(int8EqualTestResult_1, int8EqualTestResult_0...), 1024),
+	CreateInt8TestCase("l1023", append(int8TestSlice_1, int8TestSlice_0...), int8EqualTestMatch_1, 0,
+		append(int8EqualTestResult_1, int8EqualTestResult_0...), 1023),
+	CreateInt8TestCase("l511", append(int8TestSlice_1, int8TestSlice_0...), int8EqualTestMatch_1, 0,
+		append(int8EqualTestResult_1, int8EqualTestResult_0...), 511),
+	CreateInt8TestCase("l255", append(int8TestSlice_1, int8TestSlice_0...), int8EqualTestMatch_1, 0,
+		append(int8EqualTestResult_1, int8EqualTestResult_0...), 255),
 	CreateInt8TestCase("l127", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 127),
 	CreateInt8TestCase("l63", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 63),
 	CreateInt8TestCase("l31", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 31),
 	CreateInt8TestCase("l23", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 23),
 	CreateInt8TestCase("l15", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 15),
 	CreateInt8TestCase("l7", int8TestSlice_1, int8EqualTestMatch_1, 0, int8EqualTestResult_1, 7),
-	CreateInt8TestCase("neg64", int8TestSlice_2, int8EqualTestMatch_2, 0, int8EqualTestResult_2, 64),
+	CreateInt8TestCase("neg512", int8TestSlice_2, int8EqualTestMatch_2, 0, int8EqualTestResult_2, 512),
 	CreateInt8TestCase("neg32", int8TestSlice_2, int8EqualTestMatch_2, 0, int8EqualTestResult_2, 32),
 	CreateInt8TestCase("neg31", int8TestSlice_2, int8EqualTestMatch_2, 0, int8EqualTestResult_2, 31),
-	CreateInt8TestCase("ext64", int8TestSlice_3, int8EqualTestMatch_3, 0, int8EqualTestResult_3, 64),
+	CreateInt8TestCase("ext512", int8TestSlice_3, int8EqualTestMatch_3, 0, int8EqualTestResult_3, 512),
 	CreateInt8TestCase("ext32", int8TestSlice_3, int8EqualTestMatch_3, 0, int8EqualTestResult_3, 32),
 	CreateInt8TestCase("ext31", int8TestSlice_3, int8EqualTestMatch_3, 0, int8EqualTestResult_3, 31),
 }
@@ -279,7 +291,7 @@ func TestMatchInt8EqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt8EqualAVX2(T *testing.T) {
+func TestMatchInt8EqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -305,7 +317,7 @@ func TestMatchInt8EqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchInt8EqualAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -351,7 +363,7 @@ func BenchmarkMatchInt8EqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt8EqualAVX2(B *testing.B) {
+func BenchmarkMatchInt8EqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -365,7 +377,7 @@ func BenchmarkMatchInt8EqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt8EqualAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -401,22 +413,34 @@ var int8NotEqualCases = []Int8MatchTest{
 		count:  0,
 	},
 	CreateInt8TestCase("vec1", int8TestSlice_0, int8NotEqualTestMatch_0, 0, int8NotEqualTestResult_0, 32),
-	CreateInt8TestCase("vec2", int8TestSlice_0, int8NotEqualTestMatch_0, 0, int8NotEqualTestResult_0, 64),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8NotEqualTestMatch_0, 0, int8NotEqualTestResult_0, 512),
 	CreateInt8TestCase("l32", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 32),
 	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8NotEqualTestMatch_1, 0,
 		append(int8NotEqualTestResult_1, int8NotEqualTestResult_0...), 64),
 	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8NotEqualTestMatch_1, 0,
 		append(int8NotEqualTestResult_1, int8NotEqualTestResult_0...), 128),
+	CreateInt8TestCase("l256", append(int8TestSlice_1, int8TestSlice_0...), int8NotEqualTestMatch_1, 0,
+		append(int8NotEqualTestResult_1, int8NotEqualTestResult_0...), 256),
+	CreateInt8TestCase("l512", append(int8TestSlice_1, int8TestSlice_0...), int8NotEqualTestMatch_1, 0,
+		append(int8NotEqualTestResult_1, int8NotEqualTestResult_0...), 512),
+	CreateInt8TestCase("l1024", append(int8TestSlice_1, int8TestSlice_0...), int8NotEqualTestMatch_1, 0,
+		append(int8NotEqualTestResult_1, int8NotEqualTestResult_0...), 1024),
+	CreateInt8TestCase("l1023", append(int8TestSlice_1, int8TestSlice_0...), int8NotEqualTestMatch_1, 0,
+		append(int8NotEqualTestResult_1, int8NotEqualTestResult_0...), 1023),
+	CreateInt8TestCase("l511", append(int8TestSlice_1, int8TestSlice_0...), int8NotEqualTestMatch_1, 0,
+		append(int8NotEqualTestResult_1, int8NotEqualTestResult_0...), 511),
+	CreateInt8TestCase("l255", append(int8TestSlice_1, int8TestSlice_0...), int8NotEqualTestMatch_1, 0,
+		append(int8NotEqualTestResult_1, int8NotEqualTestResult_0...), 255),
 	CreateInt8TestCase("l127", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 127),
 	CreateInt8TestCase("l63", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 63),
 	CreateInt8TestCase("l31", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 31),
 	CreateInt8TestCase("l23", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 23),
 	CreateInt8TestCase("l15", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 15),
 	CreateInt8TestCase("l7", int8TestSlice_1, int8NotEqualTestMatch_1, 0, int8NotEqualTestResult_1, 7),
-	CreateInt8TestCase("neg64", int8TestSlice_2, int8NotEqualTestMatch_2, 0, int8NotEqualTestResult_2, 64),
+	CreateInt8TestCase("neg512", int8TestSlice_2, int8NotEqualTestMatch_2, 0, int8NotEqualTestResult_2, 512),
 	CreateInt8TestCase("neg32", int8TestSlice_2, int8NotEqualTestMatch_2, 0, int8NotEqualTestResult_2, 32),
 	CreateInt8TestCase("neg31", int8TestSlice_2, int8NotEqualTestMatch_2, 0, int8NotEqualTestResult_2, 31),
-	CreateInt8TestCase("ext64", int8TestSlice_3, int8NotEqualTestMatch_3, 0, int8NotEqualTestResult_3, 64),
+	CreateInt8TestCase("ext512", int8TestSlice_3, int8NotEqualTestMatch_3, 0, int8NotEqualTestResult_3, 512),
 	CreateInt8TestCase("ext32", int8TestSlice_3, int8NotEqualTestMatch_3, 0, int8NotEqualTestResult_3, 32),
 	CreateInt8TestCase("ext31", int8TestSlice_3, int8NotEqualTestMatch_3, 0, int8NotEqualTestResult_3, 31),
 }
@@ -438,7 +462,7 @@ func TestMatchInt8NotEqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt8NotEqualAVX2(T *testing.T) {
+func TestMatchInt8NotEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -464,7 +488,7 @@ func TestMatchInt8NotEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchInt8NotEqualAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -510,7 +534,7 @@ func BenchmarkMatchInt8NotEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt8NotEqualAVX2(B *testing.B) {
+func BenchmarkMatchInt8NotEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -524,7 +548,7 @@ func BenchmarkMatchInt8NotEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt8NotEqualAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -560,22 +584,34 @@ var int8LessCases = []Int8MatchTest{
 		count:  0,
 	},
 	CreateInt8TestCase("vec1", int8TestSlice_0, int8LessTestMatch_0, 0, int8LessTestResult_0, 32),
-	CreateInt8TestCase("vec2", int8TestSlice_0, int8LessTestMatch_0, 0, int8LessTestResult_0, 64),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8LessTestMatch_0, 0, int8LessTestResult_0, 512),
 	CreateInt8TestCase("l32", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 32),
 	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8LessTestMatch_1, 0,
 		append(int8LessTestResult_1, int8LessTestResult_0...), 64),
 	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8LessTestMatch_1, 0,
 		append(int8LessTestResult_1, int8LessTestResult_0...), 128),
+	CreateInt8TestCase("l256", append(int8TestSlice_1, int8TestSlice_0...), int8LessTestMatch_1, 0,
+		append(int8LessTestResult_1, int8LessTestResult_0...), 256),
+	CreateInt8TestCase("l512", append(int8TestSlice_1, int8TestSlice_0...), int8LessTestMatch_1, 0,
+		append(int8LessTestResult_1, int8LessTestResult_0...), 512),
+	CreateInt8TestCase("l1024", append(int8TestSlice_1, int8TestSlice_0...), int8LessTestMatch_1, 0,
+		append(int8LessTestResult_1, int8LessTestResult_0...), 1024),
+	CreateInt8TestCase("l1023", append(int8TestSlice_1, int8TestSlice_0...), int8LessTestMatch_1, 0,
+		append(int8LessTestResult_1, int8LessTestResult_0...), 1023),
+	CreateInt8TestCase("l511", append(int8TestSlice_1, int8TestSlice_0...), int8LessTestMatch_1, 0,
+		append(int8LessTestResult_1, int8LessTestResult_0...), 511),
+	CreateInt8TestCase("l255", append(int8TestSlice_1, int8TestSlice_0...), int8LessTestMatch_1, 0,
+		append(int8LessTestResult_1, int8LessTestResult_0...), 255),
 	CreateInt8TestCase("l127", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 127),
 	CreateInt8TestCase("l63", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 63),
 	CreateInt8TestCase("l31", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 31),
 	CreateInt8TestCase("l23", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 23),
 	CreateInt8TestCase("l15", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 15),
 	CreateInt8TestCase("l7", int8TestSlice_1, int8LessTestMatch_1, 0, int8LessTestResult_1, 7),
-	CreateInt8TestCase("neg64", int8TestSlice_2, int8LessTestMatch_2, 0, int8LessTestResult_2, 64),
+	CreateInt8TestCase("neg512", int8TestSlice_2, int8LessTestMatch_2, 0, int8LessTestResult_2, 512),
 	CreateInt8TestCase("neg32", int8TestSlice_2, int8LessTestMatch_2, 0, int8LessTestResult_2, 32),
 	CreateInt8TestCase("neg31", int8TestSlice_2, int8LessTestMatch_2, 0, int8LessTestResult_2, 31),
-	CreateInt8TestCase("ext64", int8TestSlice_3, int8LessTestMatch_3, 0, int8LessTestResult_3, 64),
+	CreateInt8TestCase("ext512", int8TestSlice_3, int8LessTestMatch_3, 0, int8LessTestResult_3, 512),
 	CreateInt8TestCase("ext32", int8TestSlice_3, int8LessTestMatch_3, 0, int8LessTestResult_3, 32),
 	CreateInt8TestCase("ext31", int8TestSlice_3, int8LessTestMatch_3, 0, int8LessTestResult_3, 31),
 }
@@ -597,7 +633,7 @@ func TestMatchInt8LessGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt8LessAVX2(T *testing.T) {
+func TestMatchInt8LessAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -623,7 +659,7 @@ func TestMatchInt8LessGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchInt8LessAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -669,7 +705,7 @@ func BenchmarkMatchInt8LessGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt8LessAVX2(B *testing.B) {
+func BenchmarkMatchInt8LessAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -683,7 +719,7 @@ func BenchmarkMatchInt8LessGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt8LessAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -719,22 +755,34 @@ var int8LessEqualCases = []Int8MatchTest{
 		count:  0,
 	},
 	CreateInt8TestCase("vec1", int8TestSlice_0, int8LessEqualTestMatch_0, 0, int8LessEqualTestResult_0, 32),
-	CreateInt8TestCase("vec2", int8TestSlice_0, int8LessEqualTestMatch_0, 0, int8LessEqualTestResult_0, 64),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8LessEqualTestMatch_0, 0, int8LessEqualTestResult_0, 512),
 	CreateInt8TestCase("l32", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 32),
 	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8LessEqualTestMatch_1, 0,
 		append(int8LessEqualTestResult_1, int8LessEqualTestResult_0...), 64),
 	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8LessEqualTestMatch_1, 0,
 		append(int8LessEqualTestResult_1, int8LessEqualTestResult_0...), 128),
+	CreateInt8TestCase("l256", append(int8TestSlice_1, int8TestSlice_0...), int8LessEqualTestMatch_1, 0,
+		append(int8LessEqualTestResult_1, int8LessEqualTestResult_0...), 256),
+	CreateInt8TestCase("l512", append(int8TestSlice_1, int8TestSlice_0...), int8LessEqualTestMatch_1, 0,
+		append(int8LessEqualTestResult_1, int8LessEqualTestResult_0...), 512),
+	CreateInt8TestCase("l1024", append(int8TestSlice_1, int8TestSlice_0...), int8LessEqualTestMatch_1, 0,
+		append(int8LessEqualTestResult_1, int8LessEqualTestResult_0...), 1024),
+	CreateInt8TestCase("l1023", append(int8TestSlice_1, int8TestSlice_0...), int8LessEqualTestMatch_1, 0,
+		append(int8LessEqualTestResult_1, int8LessEqualTestResult_0...), 1023),
+	CreateInt8TestCase("l511", append(int8TestSlice_1, int8TestSlice_0...), int8LessEqualTestMatch_1, 0,
+		append(int8LessEqualTestResult_1, int8LessEqualTestResult_0...), 511),
+	CreateInt8TestCase("l255", append(int8TestSlice_1, int8TestSlice_0...), int8LessEqualTestMatch_1, 0,
+		append(int8LessEqualTestResult_1, int8LessEqualTestResult_0...), 255),
 	CreateInt8TestCase("l127", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 127),
 	CreateInt8TestCase("l63", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 63),
 	CreateInt8TestCase("l31", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 31),
 	CreateInt8TestCase("l23", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 23),
 	CreateInt8TestCase("l15", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 15),
 	CreateInt8TestCase("l7", int8TestSlice_1, int8LessEqualTestMatch_1, 0, int8LessEqualTestResult_1, 7),
-	CreateInt8TestCase("neg64", int8TestSlice_2, int8LessEqualTestMatch_2, 0, int8LessEqualTestResult_2, 64),
+	CreateInt8TestCase("neg512", int8TestSlice_2, int8LessEqualTestMatch_2, 0, int8LessEqualTestResult_2, 512),
 	CreateInt8TestCase("neg32", int8TestSlice_2, int8LessEqualTestMatch_2, 0, int8LessEqualTestResult_2, 32),
 	CreateInt8TestCase("neg31", int8TestSlice_2, int8LessEqualTestMatch_2, 0, int8LessEqualTestResult_2, 31),
-	CreateInt8TestCase("ext64", int8TestSlice_3, int8LessEqualTestMatch_3, 0, int8LessEqualTestResult_3, 64),
+	CreateInt8TestCase("ext512", int8TestSlice_3, int8LessEqualTestMatch_3, 0, int8LessEqualTestResult_3, 512),
 	CreateInt8TestCase("ext32", int8TestSlice_3, int8LessEqualTestMatch_3, 0, int8LessEqualTestResult_3, 32),
 	CreateInt8TestCase("ext31", int8TestSlice_3, int8LessEqualTestMatch_3, 0, int8LessEqualTestResult_3, 31),
 }
@@ -756,7 +804,7 @@ func TestMatchInt8LessEqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt8LessEqualAVX2(T *testing.T) {
+func TestMatchInt8LessEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -782,7 +830,7 @@ func TestMatchInt8LessEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchInt8LessEqualAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -828,7 +876,7 @@ func BenchmarkMatchInt8LessEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt8LessEqualAVX2(B *testing.B) {
+func BenchmarkMatchInt8LessEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -842,7 +890,7 @@ func BenchmarkMatchInt8LessEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt8LessEqualAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -878,22 +926,34 @@ var int8GreaterCases = []Int8MatchTest{
 		count:  0,
 	},
 	CreateInt8TestCase("vec1", int8TestSlice_0, int8GreaterTestMatch_0, 0, int8GreaterTestResult_0, 32),
-	CreateInt8TestCase("vec2", int8TestSlice_0, int8GreaterTestMatch_0, 0, int8GreaterTestResult_0, 64),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8GreaterTestMatch_0, 0, int8GreaterTestResult_0, 512),
 	CreateInt8TestCase("l32", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 32),
 	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterTestMatch_1, 0,
 		append(int8GreaterTestResult_1, int8GreaterTestResult_0...), 64),
 	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterTestMatch_1, 0,
 		append(int8GreaterTestResult_1, int8GreaterTestResult_0...), 128),
+	CreateInt8TestCase("l256", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterTestMatch_1, 0,
+		append(int8GreaterTestResult_1, int8GreaterTestResult_0...), 256),
+	CreateInt8TestCase("l512", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterTestMatch_1, 0,
+		append(int8GreaterTestResult_1, int8GreaterTestResult_0...), 512),
+	CreateInt8TestCase("l1024", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterTestMatch_1, 0,
+		append(int8GreaterTestResult_1, int8GreaterTestResult_0...), 1024),
+	CreateInt8TestCase("l1023", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterTestMatch_1, 0,
+		append(int8GreaterTestResult_1, int8GreaterTestResult_0...), 1023),
+	CreateInt8TestCase("l511", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterTestMatch_1, 0,
+		append(int8GreaterTestResult_1, int8GreaterTestResult_0...), 511),
+	CreateInt8TestCase("l255", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterTestMatch_1, 0,
+		append(int8GreaterTestResult_1, int8GreaterTestResult_0...), 255),
 	CreateInt8TestCase("l127", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 127),
 	CreateInt8TestCase("l63", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 63),
 	CreateInt8TestCase("l31", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 31),
 	CreateInt8TestCase("l23", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 23),
 	CreateInt8TestCase("l15", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 15),
 	CreateInt8TestCase("l7", int8TestSlice_1, int8GreaterTestMatch_1, 0, int8GreaterTestResult_1, 7),
-	CreateInt8TestCase("neg64", int8TestSlice_2, int8GreaterTestMatch_2, 0, int8GreaterTestResult_2, 64),
+	CreateInt8TestCase("neg512", int8TestSlice_2, int8GreaterTestMatch_2, 0, int8GreaterTestResult_2, 512),
 	CreateInt8TestCase("neg32", int8TestSlice_2, int8GreaterTestMatch_2, 0, int8GreaterTestResult_2, 32),
 	CreateInt8TestCase("neg31", int8TestSlice_2, int8GreaterTestMatch_2, 0, int8GreaterTestResult_2, 31),
-	CreateInt8TestCase("ext64", int8TestSlice_3, int8GreaterTestMatch_3, 0, int8GreaterTestResult_3, 64),
+	CreateInt8TestCase("ext512", int8TestSlice_3, int8GreaterTestMatch_3, 0, int8GreaterTestResult_3, 512),
 	CreateInt8TestCase("ext32", int8TestSlice_3, int8GreaterTestMatch_3, 0, int8GreaterTestResult_3, 32),
 	CreateInt8TestCase("ext31", int8TestSlice_3, int8GreaterTestMatch_3, 0, int8GreaterTestResult_3, 31),
 }
@@ -915,7 +975,7 @@ func TestMatchInt8GreaterGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt8GreaterAVX2(T *testing.T) {
+func TestMatchInt8GreaterAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -941,7 +1001,7 @@ func TestMatchInt8GreaterGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchInt8GreaterAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -987,7 +1047,7 @@ func BenchmarkMatchInt8GreaterGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt8GreaterAVX2(B *testing.B) {
+func BenchmarkMatchInt8GreaterAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -1001,7 +1061,7 @@ func BenchmarkMatchInt8GreaterGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt8GreaterAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -1037,22 +1097,34 @@ var int8GreaterEqualCases = []Int8MatchTest{
 		count:  0,
 	},
 	CreateInt8TestCase("vec1", int8TestSlice_0, int8GreaterEqualTestMatch_0, 0, int8GreaterEqualTestResult_0, 32),
-	CreateInt8TestCase("vec2", int8TestSlice_0, int8GreaterEqualTestMatch_0, 0, int8GreaterEqualTestResult_0, 64),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8GreaterEqualTestMatch_0, 0, int8GreaterEqualTestResult_0, 512),
 	CreateInt8TestCase("l32", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 32),
 	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterEqualTestMatch_1, 0,
 		append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_0...), 64),
 	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterEqualTestMatch_1, 0,
 		append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_0...), 128),
+	CreateInt8TestCase("l256", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterEqualTestMatch_1, 0,
+		append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_0...), 256),
+	CreateInt8TestCase("l512", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterEqualTestMatch_1, 0,
+		append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_0...), 512),
+	CreateInt8TestCase("l1024", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterEqualTestMatch_1, 0,
+		append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_0...), 1024),
+	CreateInt8TestCase("l1023", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterEqualTestMatch_1, 0,
+		append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_0...), 1023),
+	CreateInt8TestCase("l511", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterEqualTestMatch_1, 0,
+		append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_0...), 511),
+	CreateInt8TestCase("l255", append(int8TestSlice_1, int8TestSlice_0...), int8GreaterEqualTestMatch_1, 0,
+		append(int8GreaterEqualTestResult_1, int8GreaterEqualTestResult_0...), 255),
 	CreateInt8TestCase("l127", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 127),
 	CreateInt8TestCase("l63", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 63),
 	CreateInt8TestCase("l31", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 31),
 	CreateInt8TestCase("l23", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 23),
 	CreateInt8TestCase("l15", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 15),
 	CreateInt8TestCase("l7", int8TestSlice_1, int8GreaterEqualTestMatch_1, 0, int8GreaterEqualTestResult_1, 7),
-	CreateInt8TestCase("neg64", int8TestSlice_2, int8GreaterEqualTestMatch_2, 0, int8GreaterEqualTestResult_2, 64),
+	CreateInt8TestCase("neg512", int8TestSlice_2, int8GreaterEqualTestMatch_2, 0, int8GreaterEqualTestResult_2, 512),
 	CreateInt8TestCase("neg32", int8TestSlice_2, int8GreaterEqualTestMatch_2, 0, int8GreaterEqualTestResult_2, 32),
 	CreateInt8TestCase("neg31", int8TestSlice_2, int8GreaterEqualTestMatch_2, 0, int8GreaterEqualTestResult_2, 31),
-	CreateInt8TestCase("ext64", int8TestSlice_3, int8GreaterEqualTestMatch_3, 0, int8GreaterEqualTestResult_3, 64),
+	CreateInt8TestCase("ext512", int8TestSlice_3, int8GreaterEqualTestMatch_3, 0, int8GreaterEqualTestResult_3, 512),
 	CreateInt8TestCase("ext32", int8TestSlice_3, int8GreaterEqualTestMatch_3, 0, int8GreaterEqualTestResult_3, 32),
 	CreateInt8TestCase("ext31", int8TestSlice_3, int8GreaterEqualTestMatch_3, 0, int8GreaterEqualTestResult_3, 31),
 }
@@ -1074,7 +1146,7 @@ func TestMatchInt8GreaterEqualGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt8GreaterEqualAVX2(T *testing.T) {
+func TestMatchInt8GreaterEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -1100,7 +1172,7 @@ func TestMatchInt8GreaterEqualGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchInt8GreaterEqualAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -1146,7 +1218,7 @@ func BenchmarkMatchInt8GreaterEqualGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt8GreaterEqualAVX2(B *testing.B) {
+func BenchmarkMatchInt8GreaterEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -1160,7 +1232,7 @@ func BenchmarkMatchInt8GreaterEqualGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt8GreaterEqualAVX512(B *testing.B) {
 	if !useAVX512_BW {
@@ -1198,22 +1270,34 @@ var int8BetweenCases = []Int8MatchTest{
 		count:  0,
 	},
 	CreateInt8TestCase("vec1", int8TestSlice_0, int8BetweenTestMatch_0, int8BetweenTestMatch_0b, int8BetweenTestResult_0, 32),
-	CreateInt8TestCase("vec2", int8TestSlice_0, int8BetweenTestMatch_0, int8BetweenTestMatch_0b, int8BetweenTestResult_0, 64),
+	CreateInt8TestCase("vec2", int8TestSlice_0, int8BetweenTestMatch_0, int8BetweenTestMatch_0b, int8BetweenTestResult_0, 512),
 	CreateInt8TestCase("l32", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 32),
 	CreateInt8TestCase("l64", append(int8TestSlice_1, int8TestSlice_0...), int8BetweenTestMatch_1, int8BetweenTestMatch_1b,
 		append(int8BetweenTestResult_1, int8BetweenTestResult_0...), 64),
 	CreateInt8TestCase("l128", append(int8TestSlice_1, int8TestSlice_0...), int8BetweenTestMatch_1, int8BetweenTestMatch_1b,
 		append(int8BetweenTestResult_1, int8BetweenTestResult_0...), 128),
+	CreateInt8TestCase("l256", append(int8TestSlice_1, int8TestSlice_0...), int8BetweenTestMatch_1, int8BetweenTestMatch_1b,
+		append(int8BetweenTestResult_1, int8BetweenTestResult_0...), 256),
+	CreateInt8TestCase("l512", append(int8TestSlice_1, int8TestSlice_0...), int8BetweenTestMatch_1, int8BetweenTestMatch_1b,
+		append(int8BetweenTestResult_1, int8BetweenTestResult_0...), 512),
+	CreateInt8TestCase("l1024", append(int8TestSlice_1, int8TestSlice_0...), int8BetweenTestMatch_1, int8BetweenTestMatch_1b,
+		append(int8BetweenTestResult_1, int8BetweenTestResult_0...), 1024),
+	CreateInt8TestCase("l1023", append(int8TestSlice_1, int8TestSlice_0...), int8BetweenTestMatch_1, int8BetweenTestMatch_1b,
+		append(int8BetweenTestResult_1, int8BetweenTestResult_0...), 1023),
+	CreateInt8TestCase("l511", append(int8TestSlice_1, int8TestSlice_0...), int8BetweenTestMatch_1, int8BetweenTestMatch_1b,
+		append(int8BetweenTestResult_1, int8BetweenTestResult_0...), 511),
+	CreateInt8TestCase("l255", append(int8TestSlice_1, int8TestSlice_0...), int8BetweenTestMatch_1, int8BetweenTestMatch_1b,
+		append(int8BetweenTestResult_1, int8BetweenTestResult_0...), 255),
 	CreateInt8TestCase("l127", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 127),
 	CreateInt8TestCase("l63", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 63),
 	CreateInt8TestCase("l31", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 31),
 	CreateInt8TestCase("l23", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 23),
 	CreateInt8TestCase("l15", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 15),
 	CreateInt8TestCase("l7", int8TestSlice_1, int8BetweenTestMatch_1, int8BetweenTestMatch_1b, int8BetweenTestResult_1, 7),
-	CreateInt8TestCase("neg64", int8TestSlice_2, int8BetweenTestMatch_2, int8BetweenTestMatch_2b, int8BetweenTestResult_2, 64),
+	CreateInt8TestCase("neg512", int8TestSlice_2, int8BetweenTestMatch_2, int8BetweenTestMatch_2b, int8BetweenTestResult_2, 512),
 	CreateInt8TestCase("neg32", int8TestSlice_2, int8BetweenTestMatch_2, int8BetweenTestMatch_2b, int8BetweenTestResult_2, 32),
 	CreateInt8TestCase("neg31", int8TestSlice_2, int8BetweenTestMatch_2, int8BetweenTestMatch_2b, int8BetweenTestResult_2, 31),
-	CreateInt8TestCase("ext64", int8TestSlice_3, int8BetweenTestMatch_3, int8BetweenTestMatch_3b, int8BetweenTestResult_3, 64),
+	CreateInt8TestCase("ext512", int8TestSlice_3, int8BetweenTestMatch_3, int8BetweenTestMatch_3b, int8BetweenTestResult_3, 512),
 	CreateInt8TestCase("ext32", int8TestSlice_3, int8BetweenTestMatch_3, int8BetweenTestMatch_3b, int8BetweenTestResult_3, 32),
 	CreateInt8TestCase("ext31", int8TestSlice_3, int8BetweenTestMatch_3, int8BetweenTestMatch_3b, int8BetweenTestResult_3, 31),
 }
@@ -1235,7 +1319,7 @@ func TestMatchInt8BetweenGeneric(T *testing.T) {
 	}
 }
 
-/*func TestMatchInt8BetweenAVX2(T *testing.T) {
+func TestMatchInt8BetweenAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -1261,7 +1345,7 @@ func TestMatchInt8BetweenGeneric(T *testing.T) {
 			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
 		}
 	}
-}*/
+}
 
 func TestMatchInt8BetweenAVX512(T *testing.T) {
 	if !useAVX512_BW {
@@ -1307,7 +1391,7 @@ func BenchmarkMatchInt8BetweenGeneric(B *testing.B) {
 	}
 }
 
-/*func BenchmarkMatchInt8BetweenAVX2(B *testing.B) {
+func BenchmarkMatchInt8BetweenAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -1321,7 +1405,7 @@ func BenchmarkMatchInt8BetweenGeneric(B *testing.B) {
 			}
 		})
 	}
-}*/
+}
 
 func BenchmarkMatchInt8BetweenAVX512(B *testing.B) {
 	if !useAVX512_BW {

@@ -85,7 +85,7 @@ func main() {
 }
 
 func printhelp() {
-	fmt.Println("Usage:\n  packview [flags] [command]")
+	fmt.Println("Usage:\n  packview [command] [database][/table][/pack] [flags]")
 	fmt.Println(cmdinfo)
 	fmt.Println("Flags:")
 	flags.PrintDefaults()
@@ -93,7 +93,8 @@ func printhelp() {
 }
 
 func run() error {
-	if err := flags.Parse(os.Args[1:]); err != nil {
+	err := flags.Parse(os.Args[1:])
+	if err != nil {
 		if err == flag.ErrHelp {
 			printhelp()
 			return nil
@@ -112,44 +113,40 @@ func run() error {
 	log.SetLevel(lvl)
 	pack.UseLogger(log.Log)
 
-	switch flags.NArg() {
+	cmd = flags.Arg(0)
+	dbname = strings.Split(flags.Arg(1), ".db")[0] + ".db"
+	switch dbx := strings.Split(strings.TrimPrefix(flags.Arg(1), dbname), "/"); len(dbx) {
 	case 0:
-		if dbname == "" {
-			return fmt.Errorf("Missing database.")
-		}
+		// none
 	case 1:
-		if dbname == "" {
-			dbname = flags.Arg(0)
+		// table or pack
+		var p int64
+		if strings.HasPrefix(dbx[0], "0x") {
+			p, err = strconv.ParseInt(strings.TrimPrefix(dbx[0], "0x"), 16, 64)
 		} else {
-			cmd = flags.Arg(0)
+			p, err = strconv.ParseInt(dbx[0], 10, 64)
+		}
+		if err == nil {
+			packid = int(p)
+		} else {
+			tablename = dbx[0]
+		}
+	case 2:
+		// table and pack
+		var p int64
+		tablename = dbx[0]
+		if strings.HasPrefix(dbx[0], "0x") {
+			p, err = strconv.ParseInt(strings.TrimPrefix(dbx[1], "0x"), 16, 64)
+		} else {
+			p, err = strconv.ParseInt(dbx[1], 10, 64)
+		}
+		if err == nil {
+			packid = int(p)
+		} else {
+			return fmt.Errorf("invalid pack id '%s': %v", dbx[1], err)
 		}
 	default:
-		var i int
-		if dbname == "" {
-			dbname = flags.Arg(i)
-			i++
-		}
-		if cmd == "" {
-			cmd = flags.Arg(i)
-			i++
-		}
-		if packid == 0 {
-			id := flags.Arg(i)
-			var (
-				p   int64
-				err error
-			)
-			if strings.HasPrefix(id, "0x") {
-				p, err = strconv.ParseInt(strings.TrimPrefix(id, "0x"), 16, 64)
-			} else {
-				p, err = strconv.ParseInt(id, 10, 64)
-			}
-			if err == nil {
-				packid = int(p)
-			} else {
-				return fmt.Errorf("invalid pack id '%s': %v", id, err)
-			}
-		}
+		return fmt.Errorf("invalid database locator")
 	}
 
 	if debug {

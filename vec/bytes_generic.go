@@ -7,88 +7,195 @@ import (
 	"bytes"
 )
 
-func matchBytesEqualGeneric(src [][]byte, val []byte, bits []byte) int64 {
+func matchBytesEqualGeneric(src [][]byte, val []byte, bits, mask []byte) int64 {
 	var cnt int64
-	for i, v := range src {
-		if bytes.Compare(v, val) == 0 {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+	if mask != nil {
+		for i, v := range src {
+			bit := byte(0x1) << uint(7-i&0x7)
+			if (mask[i>>3] & bit) == 0 {
+				continue
+			}
+			if bytes.Compare(v, val) != 0 {
+				continue
+			}
+			bits[i>>3] |= bit
+			cnt++
+		}
+	} else {
+		for i, v := range src {
+			if bytes.Compare(v, val) != 0 {
+				continue
+			}
+			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
 			cnt++
 		}
 	}
 	return cnt
 }
 
-func matchBytesNotEqualGeneric(src [][]byte, val []byte, bits []byte) int64 {
+func matchBytesNotEqualGeneric(src [][]byte, val []byte, bits, mask []byte) int64 {
 	var cnt int64
-	for i, v := range src {
-		if bytes.Compare(v, val) != 0 {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+	if mask != nil {
+		for i, v := range src {
+			bit := byte(0x1) << uint(7-i&0x7)
+			if mask != nil && (mask[i>>3]&bit) == 0 {
+				continue
+			}
+			if bytes.Compare(v, val) == 0 {
+				continue
+			}
+			bits[i>>3] |= bit
+			cnt++
+		}
+	} else {
+		for i, v := range src {
+			if bytes.Compare(v, val) == 0 {
+				continue
+			}
+			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
 			cnt++
 		}
 	}
 	return cnt
 }
 
-func matchBytesLessThanGeneric(src [][]byte, val []byte, bits []byte) int64 {
+func matchBytesLessThanGeneric(src [][]byte, val []byte, bits, mask []byte) int64 {
 	var cnt int64
-	for i, v := range src {
-		if bytes.Compare(v, val) < 0 {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+	if mask != nil {
+		for i, v := range src {
+			bit := byte(0x1) << uint(7-i&0x7)
+			if mask != nil && (mask[i>>3]&bit) == 0 {
+				continue
+			}
+			if bytes.Compare(v, val) >= 0 {
+				continue
+			}
+			bits[i>>3] |= bit
+			cnt++
+		}
+	} else {
+		for i, v := range src {
+			if bytes.Compare(v, val) >= 0 {
+				continue
+			}
+			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
 			cnt++
 		}
 	}
 	return cnt
 }
 
-func matchBytesLessThanEqualGeneric(src [][]byte, val []byte, bits []byte) int64 {
+func matchBytesLessThanEqualGeneric(src [][]byte, val []byte, bits, mask []byte) int64 {
 	var cnt int64
-	for i, v := range src {
-		if bytes.Compare(v, val) <= 0 {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+	if mask != nil {
+		for i, v := range src {
+			bit := byte(0x1) << uint(7-i&0x7)
+			if mask != nil && (mask[i>>3]&bit) == 0 {
+				continue
+			}
+			if bytes.Compare(v, val) > 0 {
+				continue
+			}
+			bits[i>>3] |= bit
+			cnt++
+		}
+	} else {
+		for i, v := range src {
+			if bytes.Compare(v, val) > 0 {
+				continue
+			}
+			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
 			cnt++
 		}
 	}
 	return cnt
 }
 
-func matchBytesGreaterThanGeneric(src [][]byte, val []byte, bits []byte) int64 {
+func matchBytesGreaterThanGeneric(src [][]byte, val []byte, bits, mask []byte) int64 {
 	var cnt int64
-	for i, v := range src {
-		if bytes.Compare(v, val) > 0 {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+	if mask != nil {
+		for i, v := range src {
+			bit := byte(0x1) << uint(7-i&0x7)
+			if mask != nil && (mask[i>>3]&bit) == 0 {
+				continue
+			}
+			if bytes.Compare(v, val) <= 0 {
+				continue
+			}
+			bits[i>>3] |= bit
+			cnt++
+		}
+	} else {
+		for i, v := range src {
+			if bytes.Compare(v, val) <= 0 {
+				continue
+			}
+			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
 			cnt++
 		}
 	}
 	return cnt
 }
 
-func matchBytesGreaterThanEqualGeneric(src [][]byte, val []byte, bits []byte) int64 {
+func matchBytesGreaterThanEqualGeneric(src [][]byte, val []byte, bits, mask []byte) int64 {
 	var cnt int64
-	for i, v := range src {
-		if bytes.Compare(v, val) >= 0 {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+	if mask != nil {
+		for i, v := range src {
+			bit := byte(0x1) << uint(7-i&0x7)
+			if mask != nil && (mask[i>>3]&bit) == 0 {
+				continue
+			}
+			if bytes.Compare(v, val) < 0 {
+				continue
+			}
+			bits[i>>3] |= bit
+			cnt++
+		}
+	} else {
+		for i, v := range src {
+			if bytes.Compare(v, val) < 0 {
+				continue
+			}
+			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
 			cnt++
 		}
 	}
 	return cnt
 }
 
-func matchBytesBetweenGeneric(src [][]byte, a, b, bits []byte) int64 {
+func matchBytesBetweenGeneric(src [][]byte, a, b, bits, mask []byte) int64 {
 	if d := bytes.Compare(a, b); d < 0 {
 		b, a = a, b
 	} else if d == 0 {
-		return matchBytesEqualGeneric(src, a, bits)
+		return matchBytesEqualGeneric(src, a, bits, mask)
 	}
 	var cnt int64
-	for i, v := range src {
-		if bytes.Compare(v, a) < 0 {
-			continue
+	if mask != nil {
+		for i, v := range src {
+			bit := byte(0x1) << uint(7-i&0x7)
+			if mask != nil && (mask[i>>3]&bit) == 0 {
+				continue
+			}
+			if bytes.Compare(v, a) < 0 {
+				continue
+			}
+			if bytes.Compare(v, b) > 0 {
+				continue
+			}
+			bits[i>>3] |= bit
+			cnt++
 		}
-		if bytes.Compare(v, b) > 0 {
-			continue
+	} else {
+		for i, v := range src {
+			if bytes.Compare(v, a) < 0 {
+				continue
+			}
+			if bytes.Compare(v, b) > 0 {
+				continue
+			}
+			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
+			cnt++
 		}
-		bits[i>>3] = bits[i>>3] | 0x1<<uint(7-i&0x7)
-		cnt++
 	}
 	return cnt
 }

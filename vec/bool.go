@@ -7,45 +7,45 @@ import (
 	"sort"
 )
 
-func MatchBoolEqual(src []bool, val bool, bits *BitSet) *BitSet {
+func MatchBoolEqual(src []bool, val bool, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBoolEqualGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchBoolEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolNotEqual(src []bool, val bool, bits *BitSet) *BitSet {
+func MatchBoolNotEqual(src []bool, val bool, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBoolNotEqualGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchBoolNotEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolLessThan(src []bool, val bool, bits *BitSet) *BitSet {
+func MatchBoolLessThan(src []bool, val bool, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBoolLessThanGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchBoolLessThanGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolLessThanEqual(src []bool, val bool, bits *BitSet) *BitSet {
+func MatchBoolLessThanEqual(src []bool, val bool, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBoolLessThanEqualGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchBoolLessThanEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolGreaterThan(src []bool, val bool, bits *BitSet) *BitSet {
+func MatchBoolGreaterThan(src []bool, val bool, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBoolGreaterThanGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchBoolGreaterThanGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolGreaterThanEqual(src []bool, val bool, bits *BitSet) *BitSet {
+func MatchBoolGreaterThanEqual(src []bool, val bool, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBoolGreaterThanEqualGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchBoolGreaterThanEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolBetween(src []bool, a, b bool, bits *BitSet) *BitSet {
+func MatchBoolBetween(src []bool, a, b bool, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchBoolBetweenGeneric(src, a, b, bits.Bytes())
+	bits.cnt = int(matchBoolBetweenGeneric(src, a, b, bits.Bytes()))
 	return bits
 }
 

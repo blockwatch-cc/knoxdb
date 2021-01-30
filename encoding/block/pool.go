@@ -8,12 +8,16 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/vec"
 	"github.com/pierrec/lz4"
 )
 
 var (
 	BlockEncoderPool = &sync.Pool{
 		New: func() interface{} { return make([]byte, 0, BlockSizeHint) },
+	}
+	BlockPool = &sync.Pool{
+		New: func() interface{} { return &Block{} },
 	}
 	snappyWriterPool = util.NewGenericPool(
 		runtime.NumCPU(),
@@ -28,6 +32,12 @@ var (
 		func() interface{} { return lz4.NewReader(nil) },
 	)
 
+	int256Pool = &sync.Pool{
+		New: func() interface{} { return make([]vec.Int256, 0, DefaultMaxPointsPerBlock) },
+	}
+	int128Pool = &sync.Pool{
+		New: func() interface{} { return make([]vec.Int128, 0, DefaultMaxPointsPerBlock) },
+	}
 	int64Pool = &sync.Pool{
 		New: func() interface{} { return make([]int64, 0, DefaultMaxPointsPerBlock) },
 	}
@@ -68,3 +78,9 @@ var (
 		New: func() interface{} { return make([][]byte, 0, DefaultMaxPointsPerBlock) },
 	}
 )
+
+func RecycleBuffer(buf []byte) {
+	if cap(buf) == BlockSizeHint {
+		BlockEncoderPool.Put(buf[:0])
+	}
+}

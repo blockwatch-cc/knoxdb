@@ -10,10 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	. "blockwatch.cc/knoxdb/encoding/decimal"
 )
 
 const (
-	tagName  = "pack"
+	tagName  = "knox"
 	tagAlias = "json"
 )
 
@@ -45,37 +47,19 @@ func (t *typeInfo) Clone() *typeInfo {
 
 // fieldInfo holds details for the representation of a single field.
 type fieldInfo struct {
-	idx       []int
-	name      string
-	alias     string
-	flags     FieldFlags
-	precision int
-	typname   string
-	blockid   int
+	idx      []int
+	name     string
+	alias    string
+	flags    FieldFlags
+	scale    int
+	typname  string
+	blockid  int
+	override FieldType
 }
 
 func (f fieldInfo) String() string {
-	s := fmt.Sprintf("FieldInfo: %s typ=%s idx=%v prec=%d",
-		f.name, f.typname, f.idx, f.precision)
-	if f.flags&FlagPrimary > 0 {
-		s += " Primary"
-	}
-	if f.flags&FlagIndexed > 0 {
-		s += " Indexed"
-	}
-	if f.flags&FlagCompact > 0 {
-		s += " Compact"
-	}
-	if f.flags&FlagFixed > 0 {
-		s += fmt.Sprintf(" Fixed(%d)", f.precision)
-	}
-	if f.flags&FlagCompressLZ4 > 0 {
-		s += " LZ4"
-	}
-	if f.flags&FlagCompressSnappy > 0 {
-		s += " Snappy"
-	}
-	return s
+	return fmt.Sprintf("name=%s typ=%s idx=%v scale=%d flags=%s override=%s",
+		f.name, f.typname, f.idx, f.scale, f.flags, f.override)
 }
 
 var tinfoMap = make(map[reflect.Type]*typeInfo)
@@ -156,34 +140,6 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 			}
 		}
 
-		// fixed point conversion only applies to float32/64
-		if finfo.flags&FlagFixed > 0 {
-			switch f.Type.Kind() {
-			case reflect.Float32:
-			case reflect.Float64:
-			default:
-				return nil, fmt.Errorf("pack: invalid type %s for fixed-point flag", f.Type)
-			}
-		}
-
-		// compact numbers must be uint64 or fixed-point float32/64
-		if finfo.flags&FlagCompact > 0 {
-			fail := false
-			switch f.Type.Kind() {
-			case reflect.Uint64:
-			case reflect.Uint32:
-			case reflect.Float32:
-				fail = finfo.flags&FlagFixed == 0
-			case reflect.Float64:
-				fail = finfo.flags&FlagFixed == 0
-			default:
-				fail = true
-			}
-			if fail {
-				return nil, fmt.Errorf("pack: invalid type %s for compact flag", f.Type)
-			}
-		}
-
 		// extract long name
 		if a := f.Tag.Get(tagAlias); a != "-" {
 			finfo.alias = strings.Split(a, ",")[0]
@@ -204,38 +160,118 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, error) {
 	finfo := &fieldInfo{idx: f.Index, typname: f.Type.String()}
 	tag := f.Tag.Get(tagName)
+	kind := f.Type.Kind()
+	typname := f.Type.String()
 
 	tokens := strings.Split(tag, ",")
 	if len(tokens) > 1 {
 		tag = tokens[0]
 		for _, flag := range tokens[1:] {
-			switch ff := strings.Split(flag, "="); ff[0] {
+			ff := strings.Split(flag, "=")
+			switch ff[0] {
+			case "u8":
+				finfo.override = FieldTypeUint8
+			case "u16":
+				finfo.override = FieldTypeUint16
+			case "u32":
+				finfo.override = FieldTypeUint32
+			case "u64":
+				finfo.override = FieldTypeUint16
+			case "i8":
+				finfo.override = FieldTypeInt8
+			case "i16":
+				finfo.override = FieldTypeInt16
+			case "i32":
+				finfo.override = FieldTypeInt32
+			case "i64":
+				finfo.override = FieldTypeInt64
+			case "i128":
+				finfo.override = FieldTypeInt128
+			case "i256":
+				finfo.override = FieldTypeInt256
+			case "d32":
+				finfo.override = FieldTypeDecimal32
+			case "d64":
+				finfo.override = FieldTypeDecimal64
+			case "d128":
+				finfo.override = FieldTypeDecimal128
+			case "d256":
+				finfo.override = FieldTypeDecimal256
 			case "pk":
 				finfo.flags |= FlagPrimary
 			case "index":
 				finfo.flags |= FlagIndexed
-			case "compact":
-				finfo.flags |= FlagCompact
-			case "fixed":
-				finfo.flags |= FlagFixed
-				finfo.precision = maxPrecision
 			case "lz4":
 				finfo.flags |= FlagCompressLZ4
 			case "snappy":
 				finfo.flags |= FlagCompressSnappy
-			case "precision":
+			case "scale":
+				// only compatible with Decimal data types
+				prec := 0
+				switch finfo.typname {
+				case "decimal.Decimal32":
+					prec = MaxDecimal32Precision
+				case "decimal.Decimal64":
+					prec = MaxDecimal64Precision
+				case "decimal.Decimal128":
+					prec = MaxDecimal128Precision
+				case "decimal.Decimal256":
+					prec = MaxDecimal256Precision
+				default:
+					switch finfo.override {
+					case FieldTypeDecimal32:
+						prec = MaxDecimal32Precision
+					case FieldTypeDecimal64:
+						prec = MaxDecimal64Precision
+					case FieldTypeDecimal128:
+						prec = MaxDecimal128Precision
+					case FieldTypeDecimal256:
+						prec = MaxDecimal256Precision
+					default:
+						return nil, fmt.Errorf("pack: invalid scale tag on non-decimal field '%s' (%s/%s)", tag, typname, kind)
+					}
+				}
+				finfo.typname = typname
 				if len(ff) > 1 {
-					prec, err := strconv.Atoi(ff[1])
+					scale, err := strconv.Atoi(ff[1])
 					if err != nil {
-						return nil, fmt.Errorf("pack: invalid field precision '%s'", ff[1])
+						return nil, fmt.Errorf("pack: invalid scale value %s on field '%s': %v", ff[1], tag, err)
 					}
-					if prec < 0 || prec > 15 {
-						return nil, fmt.Errorf("pack: field precision '%d' out of bounds [0,15]", prec)
+					if scale < 0 || scale > prec {
+						return nil, fmt.Errorf("pack: out of bound scale %d on field '%s' [0,%d]", scale, tag, prec)
 					}
-					finfo.precision = prec
+					finfo.scale = scale
 				}
 			default:
-				return nil, fmt.Errorf("pack: unsupported struct tag field '%s'", ff[0])
+				return nil, fmt.Errorf("pack: unsupported struct tag '%s' on field '%s'", ff[0], tag)
+			}
+			// check type override matches the Go type
+			switch finfo.override {
+			case FieldTypeUint8, FieldTypeUint16, FieldTypeUint32, FieldTypeUint64:
+				switch kind {
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					// OK
+				default:
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on unsigned field '%s' (%s/%s)", ff[0], tag, typname, kind)
+				}
+			case FieldTypeInt8, FieldTypeInt16, FieldTypeInt32, FieldTypeInt64, FieldTypeInt128, FieldTypeInt256:
+				switch kind {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					// OK
+				default:
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on integer field '%s' (%s/%s)", ff[0], tag, typname, kind)
+				}
+			case FieldTypeDecimal32, FieldTypeDecimal64, FieldTypeDecimal128, FieldTypeDecimal256:
+				switch kind {
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					finfo.flags |= flagUintType
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					finfo.flags |= flagIntType
+				case reflect.Float32, reflect.Float64:
+					finfo.flags |= flagFloatType
+				default:
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on decimal field '%s' (%s/%s)", ff[0], tag, typname, kind)
+				}
 			}
 		}
 	}

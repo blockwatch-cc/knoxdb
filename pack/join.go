@@ -161,7 +161,7 @@ func (j Join) Check() error {
 
 	// where conditions are valid if set
 	for i, c := range j.Left.Where {
-		if err := j.Left.Where[i].Check(); err != nil {
+		if err := j.Left.Where[i].EnsureTypes(); err != nil {
 			return fmt.Errorf("pack: invalid cond %d in join field '%s.%s': %v",
 				i, lname, c.Field.Name, err)
 		}
@@ -183,7 +183,7 @@ func (j Join) Check() error {
 	}
 
 	for i, c := range j.Right.Where {
-		if err := j.Right.Where[i].Check(); err != nil {
+		if err := j.Right.Where[i].EnsureTypes(); err != nil {
 			return fmt.Errorf("pack: invalid cond %d in join field '%s.%s': %v",
 				i, rname, c.Field.Name, err)
 		}
@@ -348,9 +348,9 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 	// Note: result is not owned by any table, so pkg will not be recycled
 	out = &Result{
 		fields: j.fields,
-		pkg:    NewPackage(),
+		pkg:    NewPackage(util.NonZero(q.Limit, maxPackSize)),
 	}
-	if err := out.pkg.InitFields(j.fields, util.NonZero(q.Limit, maxPackSize)); err != nil {
+	if err := out.pkg.InitFields(j.fields, nil); err != nil {
 		return nil, err
 	}
 
@@ -629,7 +629,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			// log.Debugf("join: filtering result with %d rows against %d conds", agg.Rows(), len(q.Conditions))
 
 			// filter result by query
-			bits := q.Conditions.MatchPack(agg.pkg)
+			bits := q.Conditions.MatchPack(agg.pkg, PackInfo{})
 			for idx, length := bits.Run(0); idx >= 0; idx, length = bits.Run(idx + length) {
 				n := length
 				if q.Limit > 0 {

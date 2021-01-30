@@ -11,7 +11,7 @@ import (
 	"io"
 
 	"blockwatch.cc/knoxdb/encoding/simple8b"
-	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 // Integer encoding uses two different strategies depending on the range of values in
@@ -42,6 +42,16 @@ const (
 	// intCompressedRLE is a run-length encoding format
 	intCompressedRLE = 2
 )
+
+// upper bound
+func Int256ArrayEncodedSize(src []vec.Int256) int {
+	return len(src)*32 + 1
+}
+
+// upper bound
+func Int128ArrayEncodedSize(src []vec.Int128) int {
+	return len(src)*16 + 1
+}
 
 // upper bound
 func Int64ArrayEncodedSize(src []int64) int {
@@ -83,7 +93,7 @@ func Uint8ArrayEncodedSize(src []uint8) int {
 	return len(src)*8 + 1
 }
 
-func IntegerArrayEncodeAll(src []int64, w io.Writer) (int64, int64, error) {
+func IntegerArrayEncodeAll(src []int64, w io.Writer) error {
 	return integerArrayEncodeAll(src, w, false)
 }
 
@@ -96,26 +106,18 @@ func IntegerArrayEncodeAll(src []int64, w io.Writer) (int64, int64, error) {
 // Important: IntegerArrayEncodeAll modifies the contents of src by using it as
 // scratch space for delta encoded values. It is NOT SAFE to use src after
 // passing it into IntegerArrayEncodeAll.
-func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) (int64, int64, error) {
+func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) error {
 	if len(src) == 0 {
-		return 0, 0, nil
+		return nil
 	}
 
 	var maxdelta = uint64(0)
-	min, max := src[0], src[0]
 
 	// To prevent an allocation of the entire block we're encoding reuse the
 	// src slice to store the encoded deltas.
 	deltas := ReintepretInt64ToUint64Slice(src)
 
 	for i := len(deltas) - 1; i > 0; i-- {
-		if isUint {
-			min = int64(util.MinU64(uint64(min), deltas[i]))
-			max = int64(util.MaxU64(uint64(max), deltas[i]))
-		} else {
-			min = util.Min64(min, src[i])
-			max = util.Max64(max, src[i])
-		}
 		deltas[i] = deltas[i] - deltas[i-1]
 		deltas[i] = ZigZagEncode(int64(deltas[i]))
 		if deltas[i] > maxdelta {
@@ -147,7 +149,7 @@ func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) (int64, int64,
 			// The number of times the delta is repeated
 			n = binary.PutUvarint(b[:], uint64(len(deltas)-1))
 			w.Write(b[:n])
-			return min, max, nil
+			return nil
 		}
 	}
 
@@ -162,13 +164,13 @@ func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) (int64, int64,
 			binary.BigEndian.PutUint64(b[:], uint64(v))
 			w.Write(b[:])
 		}
-		return min, max, nil
+		return nil
 	}
 
 	// Encode with simple8b - fist value is written unencoded using 8 bytes.
 	encoded, err := simple8b.EncodeAll(deltas[1:])
 	if err != nil {
-		return 0, 0, err
+		return err
 	}
 
 	// 4 high bits of first byte store the encoding type for the block
@@ -184,7 +186,7 @@ func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) (int64, int64,
 		binary.BigEndian.PutUint64(b[:], v)
 		w.Write(b[:])
 	}
-	return min, max, nil
+	return nil
 }
 
 // UnsignedArrayEncodeAll encodes src into b, returning b and any error encountered.
@@ -196,10 +198,9 @@ func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) (int64, int64,
 // Important: IntegerArrayEncodeAll modifies the contents of src by using it as
 // scratch space for delta encoded values. It is NOT SAFE to use src after
 // passing it into IntegerArrayEncodeAll.
-func UnsignedArrayEncodeAll(src []uint64, w io.Writer) (uint64, uint64, error) {
+func UnsignedArrayEncodeAll(src []uint64, w io.Writer) error {
 	srcint := ReintepretUint64ToInt64Slice(src)
-	min, max, err := integerArrayEncodeAll(srcint, w, true)
-	return uint64(min), uint64(max), err
+	return integerArrayEncodeAll(srcint, w, true)
 }
 
 var (
@@ -241,7 +242,7 @@ func UnsignedArrayDecodeAll(b []byte, dst []uint64) ([]uint64, error) {
 func integerBatchDecodeAllUncompressed(b []byte, dst []int64) ([]int64, error) {
 	b = b[1:]
 	if len(b)&0x7 != 0 {
-		return []int64{}, fmt.Errorf("pack: IntegerArrayDecodeAll expected multiple of 8 bytes")
+		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll expected multiple of 8 bytes")
 	}
 
 	count := len(b) / 8
@@ -263,7 +264,7 @@ func integerBatchDecodeAllUncompressed(b []byte, dst []int64) ([]int64, error) {
 func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 	b = b[1:]
 	if len(b) < 8 {
-		return []int64{}, fmt.Errorf("pack: IntegerArrayDecodeAll not enough data to decode packed value")
+		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode packed value")
 	}
 
 	count, err := simple8b.CountBytes(b[8:])
@@ -288,7 +289,7 @@ func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 		return []int64{}, err
 	}
 	if n != count-1 {
-		return []int64{}, fmt.Errorf("pack: IntegerArrayDecodeAll unexpected number of values decoded; got=%d, exp=%d", n, count-1)
+		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll unexpected number of values decoded; got=%d, exp=%d", n, count-1)
 	}
 
 	// calculate prefix sum
@@ -304,7 +305,7 @@ func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 func integerBatchDecodeAllRLE(b []byte, dst []int64) ([]int64, error) {
 	b = b[1:]
 	if len(b) < 8 {
-		return []int64{}, fmt.Errorf("pack: IntegerArrayDecodeAll not enough data to decode RLE starting value")
+		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode RLE starting value")
 	}
 
 	var k, n int
@@ -316,7 +317,7 @@ func integerBatchDecodeAllRLE(b []byte, dst []int64) ([]int64, error) {
 	// Next 1-10 bytes is the delta value
 	value, n := binary.Uvarint(b[k:])
 	if n <= 0 {
-		return []int64{}, fmt.Errorf("pack: IntegerArrayDecodeAll invalid RLE delta value")
+		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll invalid RLE delta value")
 	}
 	k += n
 	delta := ZigZagDecode(value)
@@ -324,7 +325,7 @@ func integerBatchDecodeAllRLE(b []byte, dst []int64) ([]int64, error) {
 	// Last 1-10 bytes is how many times the value repeats
 	count, n := binary.Uvarint(b[k:])
 	if n <= 0 {
-		return []int64{}, fmt.Errorf("pack: IntegerArrayDecodeAll invalid RLE repeat value")
+		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll invalid RLE repeat value")
 	}
 	count += 1
 
@@ -350,5 +351,5 @@ func integerBatchDecodeAllRLE(b []byte, dst []int64) ([]int64, error) {
 }
 
 func integerBatchDecodeAllInvalid(b []byte, _ []int64) ([]int64, error) {
-	return []int64{}, fmt.Errorf("pack: unknown integer encoding %v", b[0]>>4)
+	return []int64{}, fmt.Errorf("compress: unknown integer encoding %v", b[0]>>4)
 }

@@ -80,8 +80,8 @@ var f4 = Field{
 }
 
 func makeTestPackage(sz int) *Package {
-	pkg := NewPackage()
-	pkg.InitFields(FieldList{f1, f2, f3, f4}, sz)
+	pkg := NewPackage(sz)
+	pkg.InitFields(FieldList{f1, f2, f3, f4}, nil)
 	for i := 0; i < sz; i++ {
 		pkg.Append()
 		pkg.SetFieldAt(0, i, uint64(i+1))
@@ -302,7 +302,7 @@ func BenchmarkConditionVector1(B *testing.B) {
 			B.SetBytes(int64(n.l) * 8)
 			for b := 0; b < B.N; b++ {
 				// this is the core of a new matching loop design
-				bits := conds.MatchPack(pkg)
+				bits := conds.MatchPack(pkg, PackInfo{})
 				for idx, length := bits.Run(0); idx >= 0; idx, length = bits.Run(idx + length) {
 					// handle rows
 				}
@@ -334,7 +334,7 @@ func BenchmarkConditionVector2(B *testing.B) {
 			B.SetBytes(int64(n.l) * 8)
 			for b := 0; b < B.N; b++ {
 				// this is the core of a new matching loop design
-				bits := conds.MatchPack(pkg)
+				bits := conds.MatchPack(pkg, PackInfo{})
 				for idx, length := bits.Run(0); idx >= 0; idx, length = bits.Run(idx + length) {
 					// handle rows
 				}
@@ -376,7 +376,7 @@ func BenchmarkConditionVector4(B *testing.B) {
 			B.SetBytes(int64(n.l) * 8)
 			for b := 0; b < B.N; b++ {
 				// this is the core of a new matching loop design
-				bits := conds.MatchPack(pkg)
+				bits := conds.MatchPack(pkg, PackInfo{})
 				for idx, length := bits.Run(0); idx >= 0; idx, length = bits.Run(idx + length) {
 					// handle rows
 				}
@@ -428,7 +428,7 @@ func BenchmarkConditionVector6(B *testing.B) {
 			B.SetBytes(int64(n.l) * 8)
 			for b := 0; b < B.N; b++ {
 				// this is the core of a new matching loop design
-				bits := conds.MatchPack(pkg)
+				bits := conds.MatchPack(pkg, PackInfo{})
 				for idx, length := bits.Run(0); idx >= 0; idx, length = bits.Run(idx + length) {
 					// handle rows
 				}
@@ -543,7 +543,7 @@ func BenchmarkInConditionVector(B *testing.B) {
 			B.SetBytes(int64(n.l) * 32)
 			for b := 0; b < B.N; b++ {
 				// this is the core of a new matching loop design
-				bits := conds.MatchPack(pkg)
+				bits := conds.MatchPack(pkg, PackInfo{})
 				for idx, length := bits.Run(0); idx >= 0; idx, length = bits.Run(idx + length) {
 					// handle rows
 				}

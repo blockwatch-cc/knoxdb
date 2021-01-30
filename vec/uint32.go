@@ -7,45 +7,45 @@ import (
 	"sort"
 )
 
-func MatchUint32Equal(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchUint32Equal(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32Equal(src, val, bits.Bytes())
+	bits.cnt = int(matchUint32Equal(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32NotEqual(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchUint32NotEqual(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32NotEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchUint32NotEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32LessThan(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchUint32LessThan(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32LessThan(src, val, bits.Bytes())
+	bits.cnt = int(matchUint32LessThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32LessThanEqual(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchUint32LessThanEqual(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32LessThanEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchUint32LessThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32GreaterThan(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchUint32GreaterThan(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32GreaterThan(src, val, bits.Bytes())
+	bits.cnt = int(matchUint32GreaterThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32GreaterThanEqual(src []uint32, val uint32, bits *BitSet) *BitSet {
+func MatchUint32GreaterThanEqual(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32GreaterThanEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchUint32GreaterThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32Between(src []uint32, a, b uint32, bits *BitSet) *BitSet {
+func MatchUint32Between(src []uint32, a, b uint32, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint32Between(src, a, b, bits.Bytes())
+	bits.cnt = int(matchUint32Between(src, a, b, bits.Bytes()))
 	return bits
 }
 
@@ -62,6 +62,25 @@ func (s Uint32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 func (s Uint32Slice) Unique() Uint32Slice {
 	return UniqueUint32Slice(s)
+}
+
+func (s *Uint32Slice) AddUnique(val uint32) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *Uint32Slice) Remove(val uint32) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
 }
 
 func (s Uint32Slice) Contains(val uint32) bool {
@@ -194,6 +213,6 @@ func (s Uint32Slice) ContainsRange(from, to uint32) bool {
 	return min < max
 }
 
-func (s Uint32Slice) MatchEqual(val uint32, bits *BitSet) *BitSet {
-	return MatchUint32Equal(s, val, bits)
+func (s Uint32Slice) MatchEqual(val uint32, bits, mask *BitSet) *BitSet {
+	return MatchUint32Equal(s, val, bits, mask)
 }

@@ -22,6 +22,25 @@ func (s TimeSlice) Less(i, j int) bool { return s[i].Before(s[j]) }
 func (s TimeSlice) Len() int           { return len(s) }
 func (s TimeSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
+func (s *TimeSlice) AddUnique(val time.Time) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *TimeSlice) Remove(val time.Time) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
+}
+
 func (s TimeSlice) Contains(val time.Time) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {

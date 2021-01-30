@@ -7,45 +7,45 @@ import (
 	"sort"
 )
 
-func MatchFloat64Equal(src []float64, val float64, bits *BitSet) *BitSet {
+func MatchFloat64Equal(src []float64, val float64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchFloat64Equal(src, val, bits.Bytes())
+	bits.cnt = int(matchFloat64Equal(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchFloat64NotEqual(src []float64, val float64, bits *BitSet) *BitSet {
+func MatchFloat64NotEqual(src []float64, val float64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchFloat64NotEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchFloat64NotEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchFloat64LessThan(src []float64, val float64, bits *BitSet) *BitSet {
+func MatchFloat64LessThan(src []float64, val float64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchFloat64LessThan(src, val, bits.Bytes())
+	bits.cnt = int(matchFloat64LessThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchFloat64LessThanEqual(src []float64, val float64, bits *BitSet) *BitSet {
+func MatchFloat64LessThanEqual(src []float64, val float64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchFloat64LessThanEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchFloat64LessThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchFloat64GreaterThan(src []float64, val float64, bits *BitSet) *BitSet {
+func MatchFloat64GreaterThan(src []float64, val float64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchFloat64GreaterThan(src, val, bits.Bytes())
+	bits.cnt = int(matchFloat64GreaterThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchFloat64GreaterThanEqual(src []float64, val float64, bits *BitSet) *BitSet {
+func MatchFloat64GreaterThanEqual(src []float64, val float64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchFloat64GreaterThanEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchFloat64GreaterThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchFloat64Between(src []float64, a, b float64, bits *BitSet) *BitSet {
+func MatchFloat64Between(src []float64, a, b float64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchFloat64Between(src, a, b, bits.Bytes())
+	bits.cnt = int(matchFloat64Between(src, a, b, bits.Bytes()))
 	return bits
 }
 
@@ -59,6 +59,25 @@ func (s Float64Slice) Sort() Float64Slice {
 func (s Float64Slice) Less(i, j int) bool { return s[i] < s[j] }
 func (s Float64Slice) Len() int           { return len(s) }
 func (s Float64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
+func (s *Float64Slice) AddUnique(val float64) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *Float64Slice) Remove(val float64) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
+}
 
 func (s Float64Slice) Contains(val float64) bool {
 	// empty s cannot contain values
@@ -186,6 +205,6 @@ func (s Float64Slice) ContainsRange(from, to float64) bool {
 	return min < max
 }
 
-func (s Float64Slice) MatchEqual(val float64, bits *BitSet) *BitSet {
-	return MatchFloat64Equal(s, val, bits)
+func (s Float64Slice) MatchEqual(val float64, bits, mask *BitSet) *BitSet {
+	return MatchFloat64Equal(s, val, bits, mask)
 }

@@ -4,7 +4,6 @@
 package pack
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -47,12 +46,12 @@ func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode) error {
 			"#", "Key", "Fields", "Values", "Min", "Max", "Size")
 	}
 	var i int
-	for i = 0; i < t.packs.Len(); i++ {
+	for i = 0; i < t.packidx.Len(); i++ {
 		switch mode {
 		case DumpModeDec, DumpModeHex:
 			fmt.Fprintf(w, "%-3d ", i)
 		}
-		if err := t.packs.heads[i].Dump(w, mode); err != nil {
+		if err := t.packidx.packs[i].Dump(w, mode, len(t.fields)); err != nil {
 			return err
 		}
 	}
@@ -61,14 +60,18 @@ func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode) error {
 		fmt.Fprintf(w, "%-3d ", i)
 		i++
 	}
-	if err := t.journal.Header().Dump(w, mode); err != nil {
+	info := t.journal.Info()
+	info.UpdateStats(t.journal)
+	if err := info.Dump(w, mode, t.journal.Cols()); err != nil {
 		return err
 	}
 	switch mode {
 	case DumpModeDec, DumpModeHex:
 		fmt.Fprintf(w, "%-3d ", i)
 	}
-	if err := t.tombstone.Header().Dump(w, mode); err != nil {
+	info = t.tombstone.Info()
+	info.UpdateStats(t.journal)
+	if err := info.Dump(w, mode, t.tombstone.Cols()); err != nil {
 		return err
 	}
 	return nil
@@ -79,7 +82,7 @@ func (t *Table) DumpJournal(w io.Writer, mode DumpMode) error {
 }
 
 func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
-	if i >= t.packs.Len() || i < 0 {
+	if i >= t.packidx.Len() || i < 0 {
 		return ErrPackNotFound
 	}
 	tx, err := t.db.Tx(false)
@@ -87,7 +90,7 @@ func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
 		return err
 	}
 	defer tx.Rollback()
-	pkg, err := t.loadPack(tx, t.packs.heads[i].Key, false, nil)
+	pkg, err := t.loadPack(tx, t.packidx.packs[i].Key, false, nil)
 	if err != nil {
 		return err
 	}
@@ -98,7 +101,7 @@ func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
 	if i >= len(t.indexes) || i < 0 {
 		return ErrIndexNotFound
 	}
-	if p >= t.indexes[i].packs.Len() || p < 0 {
+	if p >= t.indexes[i].packidx.Len() || p < 0 {
 		return ErrPackNotFound
 	}
 	tx, err := t.db.Tx(false)
@@ -106,7 +109,7 @@ func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
 		return err
 	}
 	defer tx.Rollback()
-	pkg, err := t.indexes[i].loadPack(tx, t.indexes[i].packs.heads[p].Key, false)
+	pkg, err := t.indexes[i].loadPack(tx, t.indexes[i].packidx.packs[p].Key, false)
 	if err != nil {
 		return err
 	}
@@ -121,12 +124,12 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	defer tx.Rollback()
 	switch mode {
 	case DumpModeDec, DumpModeHex:
-		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-33s %-33s %-4s %-5s %-6s %-10s %-12s %-10s %-10s\n",
-			"#", "Key", "Block", "Type", "Rows", "Min", "Max", "Prec", "Flags", "Comp", "Compressed", "Uncompressed", "Memory", "GoType")
+		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-33s %-33s %-4s %-6s %-10s %-10s %7s %-10s\n",
+			"#", "Key", "Block", "Type", "Rows", "Min", "Max", "Prec", "Comp", "Stored", "Heap", "Ratio", "GoType")
 	}
 	lineNo := 1
-	for i := 0; i < t.packs.Len(); i++ {
-		pkg, err := t.loadPack(tx, t.packs.heads[i].Key, false, nil)
+	for i := 0; i < t.packidx.Len(); i++ {
+		pkg, err := t.loadPack(tx, t.packidx.packs[i].Key, false, nil)
 		if err != nil {
 			return err
 		}
@@ -160,12 +163,12 @@ func (idx *Index) dumpPackHeaders(tx *Tx, w io.Writer, mode DumpMode) error {
 			"#", "Key", "Fields", "Values", "Min", "Max", "Size")
 	}
 	var i int
-	for i = 0; i < idx.packs.Len(); i++ {
+	for i = 0; i < idx.packidx.Len(); i++ {
 		switch mode {
 		case DumpModeDec, DumpModeHex:
 			fmt.Fprintf(w, "%-3d ", i)
 		}
-		if err := idx.packs.heads[i].Dump(w, mode); err != nil {
+		if err := idx.packidx.packs[i].Dump(w, mode, 2); err != nil {
 			return err
 		}
 	}
@@ -174,7 +177,9 @@ func (idx *Index) dumpPackHeaders(tx *Tx, w io.Writer, mode DumpMode) error {
 		fmt.Fprintf(w, "%-3d ", i)
 		i++
 	}
-	if err := idx.journal.Header().Dump(w, mode); err != nil {
+	info := idx.journal.Info()
+	info.UpdateStats(idx.journal)
+	if err := info.Dump(w, mode, 2); err != nil {
 		return err
 	}
 	switch mode {
@@ -182,39 +187,41 @@ func (idx *Index) dumpPackHeaders(tx *Tx, w io.Writer, mode DumpMode) error {
 		fmt.Fprintf(w, "%-3d ", i)
 		i++
 	}
-	return idx.tombstone.Header().Dump(w, mode)
+	info = idx.tombstone.Info()
+	info.UpdateStats(idx.tombstone)
+	return info.Dump(w, mode, 2)
 }
 
-func (h PackageHeader) Dump(w io.Writer, mode DumpMode) error {
+func (h PackInfo) Dump(w io.Writer, mode DumpMode, nfields int) error {
 	var key string
 	switch true {
-	case bytes.Compare(h.Key, journalKey) == 0:
-		key = string(h.Key)
-	case bytes.Compare(h.Key, tombstoneKey) == 0:
-		key = string(h.Key)
+	case h.Key == journalKey:
+		key = "journal"
+	case h.Key == tombstoneKey:
+		key = "tombstone"
 	default:
-		key = util.ToString(h.Key)
+		key = util.ToString(h.KeyBytes())
 	}
-	head := h.BlockHeaders[0]
+	head := h.Blocks[0]
 	min, max := head.MinValue.(uint64), head.MaxValue.(uint64)
 	switch mode {
 	case DumpModeDec:
 		_, err := fmt.Fprintf(w, "%-10s %-7d %-7d %-21d %-21d %-10s\n",
 			key,
-			h.NFields,
+			nfields,
 			h.NValues,
 			min,
 			max,
-			util.ByteSize(h.PackSize))
+			util.ByteSize(h.Size))
 		return err
 	case DumpModeHex:
 		_, err := fmt.Fprintf(w, "%-10s %-7d %-7d %21x %21x %-10s\n",
 			key,
-			h.NFields,
+			nfields,
 			h.NValues,
 			min,
 			max,
-			util.ByteSize(h.PackSize))
+			util.ByteSize(h.Size))
 		return err
 	case DumpModeCSV:
 		enc, ok := w.(*csv.Encoder)
@@ -223,11 +230,11 @@ func (h PackageHeader) Dump(w io.Writer, mode DumpMode) error {
 		}
 		ch := CSVHeader{
 			Key:   key,
-			Cols:  h.NFields,
+			Cols:  nfields,
 			Rows:  h.NValues,
 			MinPk: min,
 			MaxPk: max,
-			Size:  h.PackSize,
+			Size:  h.Size,
 		}
 		return enc.EncodeRecord(ch)
 	}
@@ -241,50 +248,46 @@ func (p *Package) DumpType(w io.Writer) error {
 	}
 	var key string
 	switch true {
-	case bytes.Compare(p.key, journalKey) == 0:
-		key = string(p.key)
-	case bytes.Compare(p.key, tombstoneKey) == 0:
-		key = string(p.key)
+	case p.key == journalKey:
+		key = "journal"
+	case p.key == tombstoneKey:
+		key = "tombstone"
 	default:
 		key = util.ToString(p.key)
 	}
 	fmt.Fprintf(w, "Package ------------------------------------ \n")
 	fmt.Fprintf(w, "Key:        %s\n", key)
-	fmt.Fprintf(w, "Version:    %d\n", p.version)
+	// fmt.Fprintf(w, "Version:    %d\n", p.version)
 	fmt.Fprintf(w, "Fields:     %d\n", p.nFields)
 	fmt.Fprintf(w, "Values:     %d\n", p.nValues)
 	fmt.Fprintf(w, "Pk index:   %d\n", p.pkindex)
 	fmt.Fprintf(w, "Type:       %s\n", typname)
-	fmt.Fprintf(w, "Size:       %s (%d) zipped, %s (%d) unzipped\n",
-		util.ByteSize(p.packedsize), p.packedsize,
-		util.ByteSize(p.rawsize), p.rawsize,
+	fmt.Fprintf(w, "Size:       %s (%d) stored, %s (%d) heap\n",
+		util.ByteSize(p.size), p.size,
+		util.ByteSize(p.HeapSize()), p.HeapSize(),
 	)
+	pinfo := p.Info()
+	pinfo.UpdateStats(p)
 	for i, v := range p.blocks {
 		d, fi := "", ""
-		if v.Dirty {
+		if v.IsDirty() {
 			d = "*"
 		}
 		if p.tinfo != nil {
 			fi = p.tinfo.fields[i].String()
 		}
-		var sz int
-		if i+1 < len(p.blocks) {
-			sz = p.offsets[i+1] - p.offsets[i]
-		} else {
-			sz = p.rawsize - p.offsets[i]
-		}
-		head := v.CloneHeader()
-		fmt.Fprintf(w, "Block %-02d:   %s typ=%d comp=%s flags=%d prec=%d len=%d min=%s max=%s sz=%s %s %s\n",
+		field := p.fields[i]
+		blockinfo := pinfo.Blocks[i]
+		fmt.Fprintf(w, "Block %-02d:   %s typ=%s comp=%s scale=%d len=%d min=%s max=%s sz=%s %s %s\n",
 			i,
-			p.names[i],
-			head.Type,
-			head.Compression,
-			head.Flags,
-			head.Precision,
+			field.Name,
+			field.Type,
+			v.Compression(),
+			field.Scale,
 			v.Len(),
-			util.ToString(head.MinValue),
-			util.ToString(head.MaxValue),
-			util.PrettyInt(sz),
+			util.ToString(blockinfo.MinValue),
+			util.ToString(blockinfo.MaxValue),
+			util.PrettyInt(v.CompressedSize()),
 			fi,
 			d)
 	}
@@ -294,42 +297,37 @@ func (p *Package) DumpType(w io.Writer) error {
 func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error) {
 	var key string
 	switch true {
-	case bytes.Compare(p.key, journalKey) == 0:
-		key = string(p.key)
-	case bytes.Compare(p.key, tombstoneKey) == 0:
-		key = string(p.key)
+	case p.key == journalKey:
+		key = "journal"
+	case p.key == tombstoneKey:
+		key = "tombstone"
 	default:
-		key = util.ToString(p.key)
+		key = util.ToString(p.Key())
 	}
+	info := p.Info()
+	info.UpdateStats(p)
 	switch mode {
 	case DumpModeDec, DumpModeHex:
 		for i, v := range p.blocks {
-			fi := ""
-			if p.tinfo != nil {
-				fi = p.tinfo.fields[i].String()
+			gotype := "-"
+			if p.tinfo != nil && p.tinfo.gotype {
+				gotype = p.tinfo.fields[i].typname
 			}
-			var sz int
-			if i+1 < len(p.blocks) {
-				sz = p.offsets[i+1] - p.offsets[i]
-			} else {
-				sz = p.rawsize - p.offsets[i]
-			}
-			head := v.CloneHeader()
-			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-33s %-33s %-4d %-5x %-6s %-10s %-12s %-10s %-10s\n",
+			blockinfo := info.Blocks[i]
+			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-33s %-33s %-4d %-6s %-10s %-10s %7s %-10s\n",
 				lineNo,
-				key,       // pack key
-				i,         // block id
-				head.Type, // block type
-				v.Len(),   // block values
-				util.LimitStringEllipsis(util.ToString(head.MinValue), 33), // min val in block
-				util.LimitStringEllipsis(util.ToString(head.MaxValue), 33), // max val in block
-				head.Precision,
-				head.Flags,
-				head.Compression,
-				util.PrettyInt(sz),                // compressed block size
-				util.PrettyInt(v.MaxStoredSize()), // uncompressed storage size
-				util.PrettyInt(v.Size()),          // in-memory block size
-				fi,                                // type info type
+				key,      // pack key
+				i,        // block id
+				v.Type(), // block type
+				v.Len(),  // block values
+				util.LimitStringEllipsis(util.ToString(blockinfo.MinValue), 33), // min val in block
+				util.LimitStringEllipsis(util.ToString(blockinfo.MaxValue), 33), // max val in block
+				blockinfo.Scale,
+				v.Compression(),
+				util.PrettyInt(v.CompressedSize()), // compressed block size
+				util.PrettyInt(v.HeapSize()),       // in-memory block size
+				util.PrettyFloat64N(100-float64(v.CompressedSize())/float64(v.HeapSize())*100, 2)+"%",
+				gotype, // type info type
 			)
 			lineNo++
 			if err != nil {
@@ -341,33 +339,27 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 		if !ok {
 			enc = csv.NewEncoder(w)
 		}
-		cols := make([]interface{}, 14)
+		cols := make([]interface{}, 13)
 		for i, v := range p.blocks {
 			fi := ""
 			if p.tinfo != nil {
 				fi = p.tinfo.fields[i].String()
 			}
-			var sz int
-			if i+1 < len(p.blocks) {
-				sz = p.offsets[i+1] - p.offsets[i]
-			} else {
-				sz = p.rawsize - p.offsets[i]
-			}
-			head := v.CloneHeader()
+			field := p.fields[i]
+			blockinfo := info.Blocks[i]
 			cols[0] = key
 			cols[1] = i
-			cols[2] = p.names[i]
-			cols[3] = head.Type.String()
+			cols[2] = field.Name
+			cols[3] = v.Type().String()
 			cols[4] = v.Len()
-			cols[5] = head.MinValue
-			cols[6] = head.MaxValue
-			cols[7] = head.Precision
-			cols[8] = head.Flags
-			cols[9] = head.Compression.String()
-			cols[10] = sz
-			cols[11] = v.Size()
-			cols[12] = v.MaxStoredSize()
-			cols[13] = fi
+			cols[5] = blockinfo.MinValue
+			cols[6] = blockinfo.MaxValue
+			cols[7] = blockinfo.Scale
+			cols[8] = v.Compression().String()
+			cols[9] = v.CompressedSize()
+			cols[10] = v.HeapSize()
+			cols[11] = v.MaxStoredSize()
+			cols[12] = fi
 			if !enc.HeaderWritten() {
 				if err := enc.EncodeHeader([]string{
 					"Pack",
@@ -377,12 +369,11 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 					"Columns",
 					"Min",
 					"Max",
-					"Precision",
 					"Flags",
 					"Compression",
 					"Compressed",
-					"Uncompressed",
-					"Memory",
+					"Heap",
+					"Max",
 					"GoType",
 				}, nil); err != nil {
 					return lineNo, err
@@ -397,12 +388,12 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 	return lineNo, nil
 }
 func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
-	names := p.names
+	names := p.fields.Names()
 	if len(aliases) == p.nFields && len(aliases[0]) > 0 {
 		names = aliases
 	}
 
-	// estimate sizees from the first 500 values
+	// estimate sizes from the first 500 values
 	switch mode {
 	case DumpModeDec, DumpModeHex:
 		sz := make([]int, p.nFields)
@@ -413,7 +404,7 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 		for i, l := 0, util.Min(500, p.nValues); i < l; i++ {
 			for j := 0; j < p.nFields; j++ {
 				var str string
-				if p.blocks[j].Type == block.BlockIgnore {
+				if p.blocks[j].Type() == block.BlockIgnore {
 					str = "[strip]"
 				} else {
 					val, _ := p.FieldAt(j, i)
@@ -440,7 +431,7 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 		for i := 0; i < p.nValues; i++ {
 			for j := 0; j < p.nFields; j++ {
 				var str string
-				if p.blocks[j].Type == block.BlockIgnore {
+				if p.blocks[j].Type() == block.BlockIgnore {
 					str = "[strip]"
 				} else {
 					val, _ := p.FieldAt(j, i)
@@ -470,6 +461,132 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 			if err := enc.EncodeRecord(row); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func (p *Package) Validate() error {
+	if a, b := len(p.fields), p.nFields; a != b {
+		return fmt.Errorf("pack: mismatch len %d/%d", a, b)
+	}
+	if a, b := len(p.fields), len(p.blocks); a != b {
+		return fmt.Errorf("pack: mismatch block len %d/%d", a, b)
+	}
+
+	for i, f := range p.fields {
+		b := p.blocks[i]
+		if a, b := b.Type(), f.Type.BlockType(); a != b {
+			return fmt.Errorf("pack: mismatch block type %s/%s", a, b)
+		}
+		if a, b := p.nValues, b.Len(); a != b {
+			return fmt.Errorf("pack: mismatch block len %d/%d", a, b)
+		}
+		switch f.Type {
+		case FieldTypeBytes:
+			if b.Bytes == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Bytes), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeString:
+			if b.Strings == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Strings), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeBoolean:
+			if b.Bits == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := b.Bits.Len(), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeFloat64:
+			if b.Float64 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Float64), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeFloat32:
+			if b.Float32 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Float32), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeInt256, FieldTypeDecimal256:
+			if b.Int256 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Int256), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeInt128, FieldTypeDecimal128:
+			if b.Int128 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Int128), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
+			if b.Int64 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Int64), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeInt32, FieldTypeDecimal32:
+			if b.Int32 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Int32), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeInt16:
+			if b.Int16 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Int16), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeInt8:
+			if b.Int8 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Int8), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeUint64:
+			if b.Uint64 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Uint64), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeUint32:
+			if b.Uint32 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Uint32), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+		case FieldTypeUint16:
+			if b.Uint16 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Uint16), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
+		case FieldTypeUint8:
+			if b.Uint8 == nil {
+				return fmt.Errorf("pack: nil %s block", f.Type)
+			} else if a, b := len(b.Uint8), p.nValues; a != b {
+				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
+			}
+
 		}
 	}
 	return nil

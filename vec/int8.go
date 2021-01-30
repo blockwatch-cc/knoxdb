@@ -7,45 +7,45 @@ import (
 	"sort"
 )
 
-func MatchInt8Equal(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8Equal(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt8Equal(src, val, bits.Bytes())
+	bits.cnt = int(matchInt8Equal(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8NotEqual(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8NotEqual(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt8NotEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchInt8NotEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8LessThan(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8LessThan(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt8LessThan(src, val, bits.Bytes())
+	bits.cnt = int(matchInt8LessThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8LessThanEqual(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8LessThanEqual(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt8LessThanEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchInt8LessThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8GreaterThan(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8GreaterThan(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt8GreaterThan(src, val, bits.Bytes())
+	bits.cnt = int(matchInt8GreaterThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8GreaterThanEqual(src []int8, val int8, bits *BitSet) *BitSet {
+func MatchInt8GreaterThanEqual(src []int8, val int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt8GreaterThanEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchInt8GreaterThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8Between(src []int8, a, b int8, bits *BitSet) *BitSet {
+func MatchInt8Between(src []int8, a, b int8, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchInt8Between(src, a, b, bits.Bytes())
+	bits.cnt = int(matchInt8Between(src, a, b, bits.Bytes()))
 	return bits
 }
 
@@ -59,6 +59,25 @@ func (s Int8Slice) Sort() Int8Slice {
 func (s Int8Slice) Less(i, j int) bool { return s[i] < s[j] }
 func (s Int8Slice) Len() int           { return len(s) }
 func (s Int8Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
+func (s *Int8Slice) AddUnique(val int8) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *Int8Slice) Remove(val int8) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
+}
 
 func (s Int8Slice) Contains(val int8) bool {
 	// empty s cannot contain values
@@ -191,6 +210,6 @@ func (s Int8Slice) ContainsRange(from, to int8) bool {
 	return min < max
 }
 
-func (s Int8Slice) MatchEqual(val int8, bits *BitSet) *BitSet {
-	return MatchInt8Equal(s, val, bits)
+func (s Int8Slice) MatchEqual(val int8, bits, mask *BitSet) *BitSet {
+	return MatchInt8Equal(s, val, bits, mask)
 }

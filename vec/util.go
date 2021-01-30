@@ -7,7 +7,7 @@ func ensureBitfieldSize(bits *BitSet, srcsize int) *BitSet {
 	if bits == nil {
 		bits = NewBitSet(srcsize)
 	} else {
-		bits.Resize(srcsize)
+		bits.Grow(srcsize)
 	}
 	return bits
 }
@@ -16,8 +16,12 @@ func bitFieldLen(n int) int {
 	return roundUpPow2(n, 8) >> 3
 }
 
-func bitmask(size int) byte {
+func bytemask(size int) byte {
 	return byte(0xff << (7 - uint(size-1)&0x7) & 0xff)
+}
+
+func bitmask(i int) byte {
+	return byte(1 << uint(7-i&0x7))
 }
 
 func roundUpPow2(n int, pow2 int) int {

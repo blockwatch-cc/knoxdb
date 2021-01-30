@@ -7,45 +7,45 @@ import (
 	"sort"
 )
 
-func MatchUint64Equal(src []uint64, val uint64, bits *BitSet) *BitSet {
+func MatchUint64Equal(src []uint64, val uint64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint64Equal(src, val, bits.Bytes())
+	bits.cnt = int(matchUint64Equal(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint64NotEqual(src []uint64, val uint64, bits *BitSet) *BitSet {
+func MatchUint64NotEqual(src []uint64, val uint64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint64NotEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchUint64NotEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint64LessThan(src []uint64, val uint64, bits *BitSet) *BitSet {
+func MatchUint64LessThan(src []uint64, val uint64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint64LessThan(src, val, bits.Bytes())
+	bits.cnt = int(matchUint64LessThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint64LessThanEqual(src []uint64, val uint64, bits *BitSet) *BitSet {
+func MatchUint64LessThanEqual(src []uint64, val uint64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint64LessThanEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchUint64LessThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint64GreaterThan(src []uint64, val uint64, bits *BitSet) *BitSet {
+func MatchUint64GreaterThan(src []uint64, val uint64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint64GreaterThan(src, val, bits.Bytes())
+	bits.cnt = int(matchUint64GreaterThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint64GreaterThanEqual(src []uint64, val uint64, bits *BitSet) *BitSet {
+func MatchUint64GreaterThanEqual(src []uint64, val uint64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint64GreaterThanEqual(src, val, bits.Bytes())
+	bits.cnt = int(matchUint64GreaterThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint64Between(src []uint64, a, b uint64, bits *BitSet) *BitSet {
+func MatchUint64Between(src []uint64, a, b uint64, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchUint64Between(src, a, b, bits.Bytes())
+	bits.cnt = int(matchUint64Between(src, a, b, bits.Bytes()))
 	return bits
 }
 
@@ -62,6 +62,25 @@ func (s Uint64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 func (s Uint64Slice) Unique() Uint64Slice {
 	return UniqueUint64Slice(s)
+}
+
+func (s *Uint64Slice) AddUnique(val uint64) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *Uint64Slice) Remove(val uint64) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
 }
 
 func (s Uint64Slice) Contains(val uint64) bool {
@@ -194,6 +213,6 @@ func (s Uint64Slice) ContainsRange(from, to uint64) bool {
 	return min < max
 }
 
-func (s Uint64Slice) MatchEqual(val uint64, bits *BitSet) *BitSet {
-	return MatchUint64Equal(s, val, bits)
+func (s Uint64Slice) MatchEqual(val uint64, bits, mask *BitSet) *BitSet {
+	return MatchUint64Equal(s, val, bits, mask)
 }

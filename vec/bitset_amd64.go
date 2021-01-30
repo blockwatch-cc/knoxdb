@@ -13,16 +13,25 @@ import (
 func bitsetAndAVX2(dst, src []byte)
 
 //go:noescape
+func bitsetAndAVX2Flag1(dst, src []byte) int
+
+//go:noescape
 func bitsetAndNotAVX2(dst, src []byte)
 
 //go:noescape
 func bitsetOrAVX2(dst, src []byte)
 
 //go:noescape
+func bitsetOrAVX2Flag1(dst, src []byte) int
+
+//go:noescape
 func bitsetXorAVX2(dst, src []byte)
 
 //go:noescape
 func bitsetNegAVX2(src []byte)
+
+//go:noescape
+func bitsetReverseAVX2(src []byte)
 
 //go:noescape
 func bitsetPopCountAVX2(src []byte) int64
@@ -33,13 +42,14 @@ func bitsetNextOneBitAVX2(src []byte, index uint64) uint64
 //go:noescape
 func bitsetNextZeroBitAVX2(src []byte, index uint64) uint64
 
-func bitsetAnd(dst, src []byte, size int) {
+func bitsetAnd(dst, src []byte, size int) int {
 	switch {
 	case useAVX2:
-		bitsetAndAVX2(dst, src)
-		dst[len(dst)-1] &= bitmask(size)
+		ret := bitsetAndAVX2Flag1(dst, src)
+		dst[len(dst)-1] &= bytemask(size)
+		return ret
 	default:
-		bitsetAndGeneric(dst, src, size)
+		return bitsetAndGenericFlag1(dst, src, size)
 	}
 }
 
@@ -47,19 +57,20 @@ func bitsetAndNot(dst, src []byte, size int) {
 	switch {
 	case useAVX2:
 		bitsetAndNotAVX2(dst, src)
-		dst[len(dst)-1] &= bitmask(size)
+		dst[len(dst)-1] &= bytemask(size)
 	default:
 		bitsetAndNotGeneric(dst, src, size)
 	}
 }
 
-func bitsetOr(dst, src []byte, size int) {
+func bitsetOr(dst, src []byte, size int) int {
 	switch {
 	case useAVX2:
-		bitsetOrAVX2(dst, src)
-		dst[len(dst)-1] &= bitmask(size)
+		ret := bitsetOrAVX2Flag1(dst, src)
+		dst[len(dst)-1] &= bytemask(size)
+		return ret
 	default:
-		bitsetOrGeneric(dst, src, size)
+		return bitsetOrGenericFlag1(dst, src, size)
 	}
 }
 
@@ -67,7 +78,7 @@ func bitsetXor(dst, src []byte, size int) {
 	switch {
 	case useAVX2:
 		bitsetXorAVX2(dst, src)
-		dst[len(dst)-1] &= bitmask(size)
+		dst[len(dst)-1] &= bytemask(size)
 	default:
 		bitsetXorGeneric(dst, src, size)
 	}
@@ -77,7 +88,7 @@ func bitsetNeg(src []byte, size int) {
 	switch {
 	case useAVX2:
 		bitsetNegAVX2(src)
-		src[len(src)-1] &= bitmask(size)
+		src[len(src)-1] &= bytemask(size)
 	default:
 		bitsetNegGeneric(src, size)
 	}
@@ -87,7 +98,7 @@ func bitsetNeg(src []byte, size int) {
 func bitsetReverse(src []byte) {
 	switch {
 	case useAVX2:
-		bitsetReverseGeneric(src)
+		bitsetReverseAVX2(src)
 	default:
 		bitsetReverseGeneric(src)
 	}
@@ -100,12 +111,12 @@ func bitsetPopCount(src []byte, size int) int64 {
 		case size == 0:
 			return 0
 		case size <= 8:
-			return int64(bitsetLookup[src[0]&bitmask(size)])
+			return int64(bitsetLookup[src[0]&bytemask(size)])
 		case size&0x7 == 0:
 			return bitsetPopCountAVX2(src)
 		default:
 			cnt := bitsetPopCountAVX2(src[:len(src)-1])
-			return cnt + int64(bitsetLookup[src[len(src)-1]&bitmask(size)])
+			return cnt + int64(bitsetLookup[src[len(src)-1]&bytemask(size)])
 		}
 	default:
 		return bitsetPopCountGeneric(src, size)

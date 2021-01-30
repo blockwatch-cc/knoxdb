@@ -8,45 +8,45 @@ import (
 	"strings"
 )
 
-func MatchStringsEqual(src []string, val string, bits *BitSet) *BitSet {
+func MatchStringsEqual(src []string, val string, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchStringsEqualGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchStringsEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchStringsNotEqual(src []string, val string, bits *BitSet) *BitSet {
+func MatchStringsNotEqual(src []string, val string, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchStringsNotEqualGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchStringsNotEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchStringsLessThan(src []string, val string, bits *BitSet) *BitSet {
+func MatchStringsLessThan(src []string, val string, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchStringsLessThanGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchStringsLessThanGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchStringsLessThanEqual(src []string, val string, bits *BitSet) *BitSet {
+func MatchStringsLessThanEqual(src []string, val string, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchStringsLessThanEqualGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchStringsLessThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchStringsGreaterThan(src []string, val string, bits *BitSet) *BitSet {
+func MatchStringsGreaterThan(src []string, val string, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchStringsGreaterThanGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchStringsGreaterThanGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchStringsGreaterThanEqual(src []string, val string, bits *BitSet) *BitSet {
+func MatchStringsGreaterThanEqual(src []string, val string, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchStringsGreaterThanEqualGeneric(src, val, bits.Bytes())
+	bits.cnt = int(matchStringsGreaterThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchStringsBetween(src []string, a, b string, bits *BitSet) *BitSet {
+func MatchStringsBetween(src []string, a, b string, bits, mask *BitSet) *BitSet {
 	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = matchStringsBetweenGeneric(src, a, b, bits.Bytes())
+	bits.cnt = int(matchStringsBetweenGeneric(src, a, b, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
@@ -60,6 +60,25 @@ func (s StringSlice) Sort() StringSlice {
 func (s StringSlice) Less(i, j int) bool { return strings.Compare(s[i], s[j]) < 0 }
 func (s StringSlice) Len() int           { return len(s) }
 func (s StringSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
+func (s *StringSlice) AddUnique(val string) bool {
+	idx := s.Index(val, 0)
+	if idx > -1 {
+		return false
+	}
+	*s = append(*s, val)
+	s.Sort()
+	return true
+}
+
+func (s *StringSlice) Remove(val string) bool {
+	idx := s.Index(val, 0)
+	if idx < 0 {
+		return false
+	}
+	*s = append((*s)[:idx], (*s)[idx+1:]...)
+	return true
+}
 
 func (s StringSlice) Contains(val string) bool {
 	// empty s cannot contain values
