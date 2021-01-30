@@ -9,10 +9,11 @@ import (
 
 type Int16Sorter []int16
 
-func (s Int16Sorter) Sort() {
+func (s Int16Sorter) Sort() []int16 {
 	if !sort.IsSorted(s) {
 		sort.Sort(s)
 	}
+	return s
 }
 
 func (s Int16Sorter) Len() int           { return len(s) }
@@ -42,8 +43,10 @@ func UniqueInt16Slice(a []int16) []int16 {
 	return b[:j+1]
 }
 
-func IntersectSortedInt16(x, y []int16) []int16 {
-	res := make([]int16, 0, min(len(x), len(y)))
+func IntersectSortedInt16(x, y, out []int16) []int16 {
+	if out == nil {
+		out = make([]int16, 0, min(len(x), len(y)))
+	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {
 		if x[i] < y[j] {
@@ -56,7 +59,7 @@ func IntersectSortedInt16(x, y []int16) []int16 {
 		}
 		if count > 0 {
 			// skip duplicates
-			last := res[count-1]
+			last := out[count-1]
 			if last == x[i] {
 				i++
 				continue
@@ -70,11 +73,11 @@ func IntersectSortedInt16(x, y []int16) []int16 {
 			break
 		}
 		if x[i] == y[j] {
-			res = append(res, x[i])
+			out = append(out, x[i])
 			count++
 			i++
 			j++
 		}
 	}
-	return res
+	return out
 }

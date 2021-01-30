@@ -697,12 +697,12 @@ func (b *Block) Clear() {
 	case BlockFloat32:
 		b.Float32 = b.Float32[:0]
 	case BlockString:
-		for j, _ := range b.Strings {
+		for j := range b.Strings {
 			b.Strings[j] = ""
 		}
 		b.Strings = b.Strings[:0]
 	case BlockBytes:
-		for j, _ := range b.Bytes {
+		for j := range b.Bytes {
 			b.Bytes[j] = nil
 		}
 		b.Bytes = b.Bytes[:0]
@@ -781,7 +781,7 @@ func (b *Block) Release() {
 		b.Bits.Close()
 		b.Bits = nil
 	case BlockString:
-		for j, _ := range b.Strings {
+		for j := range b.Strings {
 			b.Strings[j] = ""
 		}
 		if cap(b.Strings) == DefaultMaxPointsPerBlock {
@@ -789,7 +789,7 @@ func (b *Block) Release() {
 		}
 		b.Strings = nil
 	case BlockBytes:
-		for j, _ := range b.Bytes {
+		for j := range b.Bytes {
 			b.Bytes[j] = nil
 		}
 		if cap(b.Bytes) == DefaultMaxPointsPerBlock {
@@ -1013,37 +1013,37 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 func (b *Block) MinMax() (interface{}, interface{}) {
 	switch b.typ {
 	case BlockTime:
-		min, max := vec.Int64Slice(b.Int64).MinMax()
+		min, max := vec.Int64.MinMax(b.Int64)
 		return time.Unix(0, min).UTC(), time.Unix(0, max).UTC()
 	case BlockFloat64:
-		return vec.Float64Slice(b.Float64).MinMax()
+		return vec.Float64.MinMax(b.Float64)
 	case BlockFloat32:
-		return vec.Float32Slice(b.Float32).MinMax()
+		return vec.Float32.MinMax(b.Float32)
 	case BlockInt64:
-		return vec.Int64Slice(b.Int64).MinMax()
+		return vec.Int64.MinMax(b.Int64)
 	case BlockInt32:
-		return vec.Int32Slice(b.Int32).MinMax()
+		return vec.Int32.MinMax(b.Int32)
 	case BlockInt16:
-		return vec.Int16Slice(b.Int16).MinMax()
+		return vec.Int16.MinMax(b.Int16)
 	case BlockInt8:
-		return vec.Int8Slice(b.Int8).MinMax()
+		return vec.Int8.MinMax(b.Int8)
 	case BlockUint64:
-		return vec.Uint64Slice(b.Uint64).MinMax()
+		return vec.Uint64.MinMax(b.Uint64)
 	case BlockUint32:
-		return vec.Uint32Slice(b.Uint32).MinMax()
+		return vec.Uint32.MinMax(b.Uint32)
 	case BlockUint16:
-		return vec.Uint16Slice(b.Uint16).MinMax()
+		return vec.Uint16.MinMax(b.Uint16)
 	case BlockUint8:
-		return vec.Uint8Slice(b.Uint8).MinMax()
+		return vec.Uint8.MinMax(b.Uint8)
 	case BlockBool:
 		if b.Bits.Len() > 0 && b.Bits.Count() > 0 {
 			return true, false
 		}
 		return false, false
 	case BlockString:
-		return vec.StringSlice(b.Strings).MinMax()
+		return vec.Strings.MinMax(b.Strings)
 	case BlockBytes:
-		return vec.ByteSlice(b.Bytes).MinMax()
+		return vec.Bytes.MinMax(b.Bytes)
 	case BlockInt128:
 		return vec.Int128Slice(b.Int128).MinMax()
 	case BlockInt256:

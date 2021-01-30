@@ -83,7 +83,7 @@ func makeTestPackage(sz int) *Package {
 	pkg := NewPackage(sz)
 	pkg.InitFields(FieldList{f1, f2, f3, f4}, nil)
 	for i := 0; i < sz; i++ {
-		pkg.Append()
+		pkg.Grow(1)
 		pkg.SetFieldAt(0, i, uint64(i+1))
 		pkg.SetFieldAt(1, i, rand.Intn(10))
 		pkg.SetFieldAt(2, i, rand.Float64())

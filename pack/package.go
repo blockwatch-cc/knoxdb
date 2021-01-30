@@ -4,6 +4,7 @@
 package pack
 
 import (
+	"bytes"
 	"encoding"
 	"fmt"
 	"math"
@@ -34,13 +35,31 @@ type Package struct {
 }
 
 func (p *Package) Key() []byte {
-	var b [4]byte
-	bigEndian.PutUint32(b[:], p.key)
-	return b[:]
+	return encodePackKey(p.key)
 }
 
 func (p *Package) SetKey(key []byte) {
-	p.key = bigEndian.Uint32(key)
+	switch {
+	case bytes.Compare(key, []byte("_journal")) == 0:
+		p.key = journalKey
+	case bytes.Compare(key, []byte("_tombstone")) == 0:
+		p.key = tombstoneKey
+	default:
+		p.key = bigEndian.Uint32(key)
+	}
+}
+
+func encodePackKey(key uint32) []byte {
+	switch key {
+	case journalKey:
+		return []byte("_journal")
+	case tombstoneKey:
+		return []byte("_tombstone")
+	default:
+		var buf [4]byte
+		bigEndian.PutUint32(buf[:], key)
+		return buf[:]
+	}
 }
 
 func NewPackage(sz int) *Package {
@@ -109,16 +128,19 @@ func (p *Package) Contains(fields FieldList) bool {
 }
 
 // Go type is required to write using reflect inside Push(),
-func (p *Package) InitType(v interface{}) error {
+func (p *Package) InitType(proto interface{}) error {
 	if p.tinfo != nil && p.tinfo.gotype {
 		return nil
 	}
-	tinfo, err := getTypeInfo(v)
+	tinfo, err := getTypeInfo(proto)
 	if err != nil {
 		return err
 	}
 	if len(tinfo.fields) > 256 {
 		return fmt.Errorf("pack: cannot handle more than 256 fields")
+	}
+	if len(tinfo.fields) == 0 {
+		return fmt.Errorf("pack: empty type (there are no exported fields)")
 	}
 	p.tinfo = tinfo
 	if p.pkindex < 0 {
@@ -126,9 +148,13 @@ func (p *Package) InitType(v interface{}) error {
 	}
 	if len(p.fields) == 0 {
 		// extract fields from Go type
-		fields, err := Fields(v)
+		fields, err := Fields(proto)
 		if err != nil {
 			return err
+		}
+		// require pk field
+		if fields.PkIndex() < 0 {
+			return fmt.Errorf("pack: missing primary key field in type %T", proto)
 		}
 		// if pack has been loaded, check if field types match block types
 		if p.nFields > 0 && len(p.blocks) > 0 {
@@ -173,8 +199,15 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	if len(fields) > 256 {
 		return fmt.Errorf("pack: cannot handle more than 256 fields")
 	}
+	if len(fields) == 0 {
+		return fmt.Errorf("pack: empty fields")
+	}
 	if len(p.fields) > 0 {
 		return fmt.Errorf("pack: already initialized")
+	}
+	// require pk field
+	if fields.PkIndex() < 0 {
+		return fmt.Errorf("pack: missing primary key field")
 	}
 	// if pack has been loaded, check if field types match block types
 	if p.nFields > 0 && len(p.blocks) > 0 {
@@ -1364,14 +1397,10 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 		switch dstField.Type {
 		case FieldTypeBytes:
 			for j, v := range src.Bytes[srcPos : srcPos+n] {
-				if cap(dst.Bytes[dstPos+j]) < len(v) {
-					buf := make([]byte, len(v))
-					copy(buf, v)
-					dst.Bytes[dstPos+j] = buf
-				} else {
-					dst.Bytes[dstPos+j] = dst.Bytes[dstPos+j][:len(v)]
-					copy(dst.Bytes[dstPos+j], v)
-				}
+				// always allocate new slice because underlying block slice is shared
+				buf := make([]byte, len(v))
+				copy(buf, v)
+				dst.Bytes[dstPos+j] = buf
 			}
 
 		case FieldTypeString:
@@ -1466,7 +1495,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 }
 
 // note: will panic on package schema mismatch
-func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool) error {
+func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 	if srcPack.nFields != p.nFields {
 		return fmt.Errorf("pack: invalid src/dst field count %d/%d", srcPack.nFields, p.nFields)
 	}
@@ -1490,14 +1519,10 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 
 		switch dstField.Type {
 		case FieldTypeBytes:
-			if safecopy {
-				for _, v := range src.Bytes[srcPos : srcPos+srcLen] {
-					buf := make([]byte, len(v))
-					copy(buf, v)
-					dst.Bytes = append(dst.Bytes, buf)
-				}
-			} else {
-				dst.Bytes = append(dst.Bytes, src.Bytes[srcPos:srcPos+srcLen]...)
+			for _, v := range src.Bytes[srcPos : srcPos+srcLen] {
+				buf := make([]byte, len(v))
+				copy(buf, v)
+				dst.Bytes = append(dst.Bytes, buf)
 			}
 
 		case FieldTypeString:
@@ -1588,70 +1613,6 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int, safecopy bool
 		dst.SetDirty()
 	}
 	p.nValues += srcLen
-	p.dirty = true
-	return nil
-}
-
-// appends an empty row with default/zero values
-func (p *Package) Append() error {
-	for i, b := range p.blocks {
-		if b.IsIgnore() {
-			continue
-		}
-		field := p.fields[i]
-
-		switch field.Type {
-		case FieldTypeBytes:
-			b.Bytes = append(b.Bytes, []byte{})
-
-		case FieldTypeString:
-			b.Strings = append(b.Strings, "")
-
-		case FieldTypeBoolean:
-			b.Bits.Grow(b.Bits.Len() + 1)
-
-		case FieldTypeFloat64:
-			b.Float64 = append(b.Float64, 0)
-
-		case FieldTypeFloat32:
-			b.Float32 = append(b.Float32, 0)
-
-		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256 = append(b.Int256, ZeroInt256)
-
-		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128 = append(b.Int128, ZeroInt128)
-
-		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
-			b.Int64 = append(b.Int64, 0)
-
-		case FieldTypeInt32, FieldTypeDecimal32:
-			b.Int32 = append(b.Int32, 0)
-
-		case FieldTypeInt16:
-			b.Int16 = append(b.Int16, 0)
-
-		case FieldTypeInt8:
-			b.Int8 = append(b.Int8, 0)
-
-		case FieldTypeUint64:
-			b.Uint64 = append(b.Uint64, 0)
-
-		case FieldTypeUint32:
-			b.Uint32 = append(b.Uint32, 0)
-
-		case FieldTypeUint16:
-			b.Uint16 = append(b.Uint16, 0)
-
-		case FieldTypeUint8:
-			b.Uint8 = append(b.Uint8, 0)
-
-		default:
-			return fmt.Errorf("pack: invalid data type %s", field.Type)
-		}
-		b.SetDirty()
-	}
-	p.nValues++
 	p.dirty = true
 	return nil
 }
@@ -1841,7 +1802,7 @@ func (p *Package) HeapSize() int {
 // This function is only safe to use when packs are sorted!
 func (p *Package) PkIndex(id uint64, last int) int {
 	// primary key field required
-	if p.pkindex < 0 || p.Len() <= last {
+	if p.pkindex < 0 || last >= p.nValues {
 		return -1
 	}
 

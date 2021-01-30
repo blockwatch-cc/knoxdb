@@ -50,38 +50,91 @@ func MatchBytesBetween(src [][]byte, a, b []byte, bits, mask *BitSet) *BitSet {
 	return bits
 }
 
-type ByteSlice [][]byte
-
-func (s ByteSlice) Sort() ByteSlice {
-	sort.Slice(s, func(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 })
-	return s
+var Bytes = struct {
+	Sort          func([][]byte) [][]byte
+	Unique        func([][]byte) [][]byte
+	RemoveZeros   func([][]byte) [][]byte
+	AddUnique     func([][]byte, []byte) [][]byte
+	Remove        func([][]byte, []byte) [][]byte
+	Contains      func([][]byte, []byte) bool
+	Index         func([][]byte, []byte, int) int
+	MinMax        func([][]byte) ([]byte, []byte)
+	ContainsRange func([][]byte, []byte, []byte) bool
+	Intersect     func([][]byte, [][]byte, [][]byte) [][]byte
+	MatchEqual    func([][]byte, []byte, *BitSet, *BitSet) *BitSet
+}{
+	Sort: func(s [][]byte) [][]byte {
+		return BytesSorter(s).Sort()
+	},
+	Unique: func(s [][]byte) [][]byte {
+		return UniqueBytesSlice(s)
+	},
+	RemoveZeros: func(s [][]byte) [][]byte {
+		s, _ = bytesRemoveZeros(s)
+		return s
+	},
+	AddUnique: func(s [][]byte, v []byte) [][]byte {
+		s, _ = bytesAddUnique(s, v)
+		return s
+	},
+	Remove: func(s [][]byte, v []byte) [][]byte {
+		s, _ = bytesRemove(s, v)
+		return s
+	},
+	Contains: func(s [][]byte, v []byte) bool {
+		return bytesContains(s, v)
+	},
+	Index: func(s [][]byte, v []byte, last int) int {
+		return bytesIndex(s, v, last)
+	},
+	MinMax: func(s [][]byte) ([]byte, []byte) {
+		return bytesMinMax(s)
+	},
+	ContainsRange: func(s [][]byte, from, to []byte) bool {
+		return bytesContainsRange(s, from, to)
+	},
+	Intersect: func(x, y, out [][]byte) [][]byte {
+		return IntersectSortedBytes(x, y, out)
+	},
+	MatchEqual: func(s [][]byte, val []byte, bits, mask *BitSet) *BitSet {
+		return MatchBytesEqual(s, val, bits, mask)
+	},
 }
 
-func (s ByteSlice) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
-func (s ByteSlice) Len() int           { return len(s) }
-func (s ByteSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s *ByteSlice) AddUnique(val []byte) bool {
-	idx := s.Index(val, 0)
+func bytesAddUnique(s [][]byte, val []byte) ([][]byte, bool) {
+	idx := bytesIndex(s, val, 0)
 	if idx > -1 {
-		return false
+		return s, false
 	}
-	*s = append(*s, val)
-	s.Sort()
-	return true
+	s = append(s, val)
+	BytesSorter(s).Sort()
+	return s, true
 }
 
-func (s *ByteSlice) Remove(val []byte) bool {
-	idx := s.Index(val, 0)
+func bytesRemove(s [][]byte, val []byte) ([][]byte, bool) {
+	idx := bytesIndex(s, val, 0)
 	if idx < 0 {
-		return false
+		return s, false
 	}
-	*s = append((*s)[:idx], (*s)[idx+1:]...)
-	return true
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
+}
+
+func bytesRemoveZeros(s [][]byte) ([][]byte, int) {
+	var n int
+	for i, v := range s {
+		if len(v) == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
 }
 
 // Contains cgekcs if a sparse sorted slice contains a value val.
-func (s ByteSlice) Contains(val []byte) bool {
+func bytesContains(s [][]byte, val []byte) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -103,7 +156,7 @@ func (s ByteSlice) Contains(val []byte) bool {
 	return false
 }
 
-func (s ByteSlice) Index(val []byte, last int) int {
+func bytesIndex(s [][]byte, val []byte, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -127,7 +180,7 @@ func (s ByteSlice) Index(val []byte, last int) int {
 	return -1
 }
 
-func (s ByteSlice) MinMax() ([]byte, []byte) {
+func bytesMinMax(s [][]byte) ([]byte, []byte) {
 	var min, max []byte
 
 	switch l := len(s); l {
@@ -161,7 +214,7 @@ func (s ByteSlice) MinMax() ([]byte, []byte) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s ByteSlice) ContainsRange(from, to []byte) bool {
+func bytesContainsRange(s [][]byte, from, to []byte) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -203,4 +256,77 @@ func (s ByteSlice) ContainsRange(from, to []byte) bool {
 	// range is contained iff min < max; note that from/to do not necessarily
 	// have to be members, but some intermediate values are
 	return min < max
+}
+
+type BytesSorter [][]byte
+
+func (s BytesSorter) Sort() [][]byte {
+	if !sort.IsSorted(s) {
+		sort.Sort(s)
+	}
+	return s
+}
+
+func (s BytesSorter) Len() int           { return len(s) }
+func (s BytesSorter) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
+func (s BytesSorter) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
+func UniqueBytesSlice(a [][]byte) [][]byte {
+	if len(a) == 0 {
+		return a
+	}
+	b := make([][]byte, len(a))
+	copy(b, a)
+	BytesSorter(b).Sort()
+	j := 0
+	for i := 1; i < len(b); i++ {
+		if bytes.Equal(b[j], b[i]) {
+			continue
+		}
+		j++
+		// preserve the original data
+		// in[i], in[j] = in[j], in[i]
+		// only set what is required
+		b[j] = b[i]
+	}
+	return b[:j+1]
+}
+
+func IntersectSortedBytes(x, y, out [][]byte) [][]byte {
+	if out == nil {
+		out = make([][]byte, 0, min(len(x), len(y)))
+	}
+	count := 0
+	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {
+		if bytes.Compare(x[i], y[j]) < 0 {
+			i++
+			continue
+		}
+		if bytes.Compare(x[i], y[j]) > 0 {
+			j++
+			continue
+		}
+		if count > 0 {
+			// skip duplicates
+			last := out[count-1]
+			if bytes.Equal(last, x[i]) {
+				i++
+				continue
+			}
+			if bytes.Equal(last, y[j]) {
+				j++
+				continue
+			}
+		}
+		if i == il || j == jl {
+			break
+		}
+		if bytes.Equal(x[i], y[j]) {
+			out = append(out, x[i])
+			count++
+			i++
+			j++
+		}
+	}
+	return out
 }

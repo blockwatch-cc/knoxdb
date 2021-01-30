@@ -75,6 +75,16 @@ Benchmarks
   - [x] compress columns separately (not full pack) to allow mmap skip
   - [x] zigzag encode timestamp cols (see go-play/zigzag.go) - as new enc type
 
+- [ ] LZ4 1.9 is pretty fast https://github.com/lz4/lz4
+
+```
+Using LZ4 can easily improve performance even if all data reside in memory.
+
+This is the case in ClickHouse: if data is compressed, we decompress it in blocks that fit in CPU cache and then perform data processing inside cache; if data is uncompressed, larger amount of data is read from memory.
+
+Strictly speaking, LZ4 data decompression (typically 3 GB/sec) is slower than memcpy (typically 12 GB/sec). But when using e.g. 128 CPU cores, LZ4 decompression will scale up to memory bandwidth (typically 150 GB/sec) as well as memcpy. And memcpy is wasting more memory bandwidth by reading uncompressed data while LZ4 decompression reads compressed data.
+```
+
 - [ ] Filter Discussions: https://news.ycombinator.com/item?id=21840821
   https://lemire.me/blog/2019/12/19/xor-filters-faster-and-smaller-than-bloom-filters/
 - [ ] faster int64->int64 maps

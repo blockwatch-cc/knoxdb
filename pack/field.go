@@ -1862,16 +1862,16 @@ func (t FieldType) In(v, in interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
 		val, list := v.([]byte), in.([][]byte)
-		return ByteSlice(list).Contains(val)
+		return Bytes.Contains(list, val)
 	case FieldTypeString:
 		val, list := v.(string), in.([]string)
-		return StringSlice(list).Contains(val)
+		return Strings.Contains(list, val)
 	case FieldTypeDatetime:
 		val, list := v.(time.Time), in.([]time.Time)
-		return TimeSlice(list).Contains(val)
+		return Times.Contains(list, val)
 	case FieldTypeBoolean:
 		val, list := v.(bool), in.([]bool)
-		return BoolSlice(list).Contains(val)
+		return Booleans.Contains(list, val)
 	case FieldTypeInt256:
 		val, list := v.(Int256), in.([]Int256)
 		return Int256Slice(list).Contains(val)
@@ -1880,40 +1880,40 @@ func (t FieldType) In(v, in interface{}) bool {
 		return Int128Slice(list).Contains(val)
 	case FieldTypeInt64:
 		val, list := v.(int64), in.([]int64)
-		return Int64Slice(list).Contains(val)
+		return Int64.Contains(list, val)
 	case FieldTypeInt32:
 		val, list := v.(int32), in.([]int32)
-		return Int32Slice(list).Contains(val)
+		return Int32.Contains(list, val)
 	case FieldTypeInt16:
 		val, list := v.(int16), in.([]int16)
-		return Int16Slice(list).Contains(val)
+		return Int16.Contains(list, val)
 	case FieldTypeInt8:
 		val, list := v.(int8), in.([]int8)
-		return Int8Slice(list).Contains(val)
+		return Int8.Contains(list, val)
 	case FieldTypeUint64:
 		val, list := v.(uint64), in.([]uint64)
-		return Uint64Slice(list).Contains(val)
+		return Uint64.Contains(list, val)
 	case FieldTypeUint32:
 		val, list := v.(uint32), in.([]uint32)
-		return Uint32Slice(list).Contains(val)
+		return Uint32.Contains(list, val)
 	case FieldTypeUint16:
 		val, list := v.(uint16), in.([]uint16)
-		return Uint16Slice(list).Contains(val)
+		return Uint16.Contains(list, val)
 	case FieldTypeUint8:
 		val, list := v.(uint8), in.([]uint8)
-		return Uint8Slice(list).Contains(val)
+		return Uint8.Contains(list, val)
 	case FieldTypeFloat64:
 		val, list := v.(float64), in.([]float64)
-		return Float64Slice(list).Contains(val)
+		return Float64.Contains(list, val)
 	case FieldTypeFloat32:
 		val, list := v.(float32), in.([]float32)
-		return Float32Slice(list).Contains(val)
+		return Float32.Contains(list, val)
 	case FieldTypeDecimal32:
 		val, list := v.(Decimal32).Int32(), in.([]int32)
-		return Int32Slice(list).Contains(val)
+		return Int32.Contains(list, val)
 	case FieldTypeDecimal64:
 		val, list := v.(Decimal64).Int64(), in.([]int64)
-		return Int64Slice(list).Contains(val)
+		return Int64.Contains(list, val)
 	case FieldTypeDecimal128:
 		val, list := v.(Decimal128).Int128(), in.([]Int128)
 		return Int128Slice(list).Contains(val)
@@ -1930,19 +1930,19 @@ func (t FieldType) InAt(pkg *Package, index, pos int, in interface{}) bool {
 	case FieldTypeBytes:
 		val, _ := pkg.BytesAt(index, pos)
 		list := in.([][]byte)
-		return ByteSlice(list).Contains(val)
+		return Bytes.Contains(list, val)
 	case FieldTypeString:
 		val, _ := pkg.StringAt(index, pos)
 		list := in.([]string)
-		return StringSlice(list).Contains(val)
+		return Strings.Contains(list, val)
 	case FieldTypeDatetime:
 		val, _ := pkg.TimeAt(index, pos)
 		list := in.([]time.Time)
-		return TimeSlice(list).Contains(val)
+		return Times.Contains(list, val)
 	case FieldTypeBoolean:
 		val, _ := pkg.BoolAt(index, pos)
 		list := in.([]bool)
-		return BoolSlice(list).Contains(val)
+		return Booleans.Contains(list, val)
 	case FieldTypeInt256:
 		val, _ := pkg.Int256At(index, pos)
 		list := in.([]Int256)
@@ -1954,51 +1954,51 @@ func (t FieldType) InAt(pkg *Package, index, pos int, in interface{}) bool {
 	case FieldTypeInt64:
 		val, _ := pkg.Int64At(index, pos)
 		list := in.([]int64)
-		return Int64Slice(list).Contains(val)
+		return Int64.Contains(list, val)
 	case FieldTypeInt32:
 		val, _ := pkg.Int32At(index, pos)
 		list := in.([]int32)
-		return Int32Slice(list).Contains(val)
+		return Int32.Contains(list, val)
 	case FieldTypeInt16:
 		val, _ := pkg.Int16At(index, pos)
 		list := in.([]int16)
-		return Int16Slice(list).Contains(val)
+		return Int16.Contains(list, val)
 	case FieldTypeInt8:
 		val, _ := pkg.Int8At(index, pos)
 		list := in.([]int8)
-		return Int8Slice(list).Contains(val)
+		return Int8.Contains(list, val)
 	case FieldTypeUint64:
 		val, _ := pkg.Uint64At(index, pos)
 		list := in.([]uint64)
-		return Uint64Slice(list).Contains(val)
+		return Uint64.Contains(list, val)
 	case FieldTypeUint32:
 		val, _ := pkg.Uint32At(index, pos)
 		list := in.([]uint32)
-		return Uint32Slice(list).Contains(val)
+		return Uint32.Contains(list, val)
 	case FieldTypeUint16:
 		val, _ := pkg.Uint16At(index, pos)
 		list := in.([]uint16)
-		return Uint16Slice(list).Contains(val)
+		return Uint16.Contains(list, val)
 	case FieldTypeUint8:
 		val, _ := pkg.Uint8At(index, pos)
 		list := in.([]uint8)
-		return Uint8Slice(list).Contains(val)
+		return Uint8.Contains(list, val)
 	case FieldTypeFloat64:
 		val, _ := pkg.Float64At(index, pos)
 		list := in.([]float64)
-		return Float64Slice(list).Contains(val)
+		return Float64.Contains(list, val)
 	case FieldTypeFloat32:
 		val, _ := pkg.Float32At(index, pos)
 		list := in.([]float32)
-		return Float32Slice(list).Contains(val)
+		return Float32.Contains(list, val)
 	case FieldTypeDecimal32:
 		val, _ := pkg.Decimal32At(index, pos)
 		list := in.([]int32)
-		return Int32Slice(list).Contains(val.Int32())
+		return Int32.Contains(list, val.Int32())
 	case FieldTypeDecimal64:
 		val, _ := pkg.Decimal64At(index, pos)
 		list := in.([]int64)
-		return Int64Slice(list).Contains(val.Int64())
+		return Int64.Contains(list, val.Int64())
 	case FieldTypeDecimal128:
 		val, _ := pkg.Decimal128At(index, pos)
 		list := in.([]Int128)
@@ -2306,16 +2306,16 @@ func (t FieldType) BetweenBlock(b *block.Block, from, to interface{}, bits, mask
 func (t FieldType) InBetween(slice, from, to interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
-		return ByteSlice(slice.([][]byte)).ContainsRange(from.([]byte), to.([]byte))
+		return Bytes.ContainsRange(slice.([][]byte), from.([]byte), to.([]byte))
 
 	case FieldTypeString:
-		return StringSlice(slice.([]string)).ContainsRange(from.(string), to.(string))
+		return Strings.ContainsRange(slice.([]string), from.(string), to.(string))
 
 	case FieldTypeDatetime:
-		return TimeSlice(slice.([]time.Time)).ContainsRange(from.(time.Time), to.(time.Time))
+		return Times.ContainsRange(slice.([]time.Time), from.(time.Time), to.(time.Time))
 
 	case FieldTypeBoolean:
-		return BoolSlice(slice.([]bool)).ContainsRange(from.(bool), to.(bool))
+		return Booleans.ContainsRange(slice.([]bool), from.(bool), to.(bool))
 
 	case FieldTypeInt256:
 		return Int256Slice(slice.([]Int256)).ContainsRange(from.(Int256), to.(Int256))
@@ -2324,34 +2324,34 @@ func (t FieldType) InBetween(slice, from, to interface{}) bool {
 		return Int128Slice(slice.([]Int128)).ContainsRange(from.(Int128), to.(Int128))
 
 	case FieldTypeInt64:
-		return Int64Slice(slice.([]int64)).ContainsRange(from.(int64), to.(int64))
+		return Int64.ContainsRange(slice.([]int64), from.(int64), to.(int64))
 
 	case FieldTypeInt32:
-		return Int32Slice(slice.([]int32)).ContainsRange(from.(int32), to.(int32))
+		return Int32.ContainsRange(slice.([]int32), from.(int32), to.(int32))
 
 	case FieldTypeInt16:
-		return Int16Slice(slice.([]int16)).ContainsRange(from.(int16), to.(int16))
+		return Int16.ContainsRange(slice.([]int16), from.(int16), to.(int16))
 
 	case FieldTypeInt8:
-		return Int8Slice(slice.([]int8)).ContainsRange(from.(int8), to.(int8))
+		return Int8.ContainsRange(slice.([]int8), from.(int8), to.(int8))
 
 	case FieldTypeUint64:
-		return Uint64Slice(slice.([]uint64)).ContainsRange(from.(uint64), to.(uint64))
+		return Uint64.ContainsRange(slice.([]uint64), from.(uint64), to.(uint64))
 
 	case FieldTypeUint32:
-		return Uint32Slice(slice.([]uint32)).ContainsRange(from.(uint32), to.(uint32))
+		return Uint32.ContainsRange(slice.([]uint32), from.(uint32), to.(uint32))
 
 	case FieldTypeUint16:
-		return Uint16Slice(slice.([]uint16)).ContainsRange(from.(uint16), to.(uint16))
+		return Uint16.ContainsRange(slice.([]uint16), from.(uint16), to.(uint16))
 
 	case FieldTypeUint8:
-		return Uint8Slice(slice.([]uint8)).ContainsRange(from.(uint8), to.(uint8))
+		return Uint8.ContainsRange(slice.([]uint8), from.(uint8), to.(uint8))
 
 	case FieldTypeFloat64:
-		return Float64Slice(slice.([]float64)).ContainsRange(from.(float64), to.(float64))
+		return Float64.ContainsRange(slice.([]float64), from.(float64), to.(float64))
 
 	case FieldTypeFloat32:
-		return Float32Slice(slice.([]float32)).ContainsRange(from.(float32), to.(float32))
+		return Float32.ContainsRange(slice.([]float32), from.(float32), to.(float32))
 
 	case FieldTypeDecimal256:
 		return Int256Slice(slice.(Decimal256Slice).Int256).ContainsRange(from.(Decimal256).Int256(), to.(Decimal256).Int256())
@@ -2360,10 +2360,10 @@ func (t FieldType) InBetween(slice, from, to interface{}) bool {
 		return Int128Slice(slice.(Decimal128Slice).Int128).ContainsRange(from.(Decimal128).Int128(), to.(Decimal128).Int128())
 
 	case FieldTypeDecimal64:
-		return Int64Slice(slice.(Decimal64Slice).Int64).ContainsRange(from.(Decimal64).Int64(), to.(Decimal64).Int64())
+		return Int64.ContainsRange(slice.(Decimal64Slice).Int64, from.(Decimal64).Int64(), to.(Decimal64).Int64())
 
 	case FieldTypeDecimal32:
-		return Int32Slice(slice.(Decimal32Slice).Int32).ContainsRange(from.(Decimal32).Int32(), to.(Decimal32).Int32())
+		return Int32.ContainsRange(slice.(Decimal32Slice).Int32, from.(Decimal32).Int32(), to.(Decimal32).Int32())
 
 	}
 	return false

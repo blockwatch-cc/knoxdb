@@ -1426,52 +1426,52 @@ func BenchmarkUniqueInt16(B *testing.B) {
 
 func TestInt16SliceContains(T *testing.T) {
 	// nil slice
-	if Int16Slice(nil).Contains(1) {
+	if Int16.Contains(nil, 1) {
 		T.Errorf("nil slice cannot contain value")
 	}
 
 	// empty slice
-	if Int16Slice([]int16{}).Contains(1) {
+	if Int16.Contains([]int16{}, 1) {
 		T.Errorf("empty slice cannot contain value")
 	}
 
 	// 1-element slice positive
-	if !Int16Slice([]int16{1}).Contains(1) {
+	if !Int16.Contains([]int16{1}, 1) {
 		T.Errorf("1-element slice value not found")
 	}
 
 	// 1-element slice negative
-	if Int16Slice([]int16{1}).Contains(2) {
+	if Int16.Contains([]int16{1}, 2) {
 		T.Errorf("1-element slice found wrong match")
 	}
 
 	// n-element slice positive first element
-	if !Int16Slice([]int16{-1, 3, 5, 7, 11, 13}).Contains(-1) {
+	if !Int16.Contains([]int16{-1, 3, 5, 7, 11, 13}, -1) {
 		T.Errorf("N-element first slice value not found")
 	}
 
 	// n-element slice positive middle element
-	if !Int16Slice([]int16{-1, 3, 5, 7, 11, 13}).Contains(5) {
+	if !Int16.Contains([]int16{-1, 3, 5, 7, 11, 13}, 5) {
 		T.Errorf("N-element middle slice value not found")
 	}
 
 	// n-element slice positive last element
-	if !Int16Slice([]int16{-1, 3, 5, 7, 11, 13}).Contains(13) {
+	if !Int16.Contains([]int16{-1, 3, 5, 7, 11, 13}, 13) {
 		T.Errorf("N-element last slice value not found")
 	}
 
 	// n-element slice negative before
-	if Int16Slice([]int16{-1, 3, 5, 7, 11, 13}).Contains(0) {
+	if Int16.Contains([]int16{-1, 3, 5, 7, 11, 13}, 0) {
 		T.Errorf("N-element before slice value wrong match")
 	}
 
 	// n-element slice negative middle
-	if Int16Slice([]int16{-1, 3, 5, 7, 11, 13}).Contains(2) {
+	if Int16.Contains([]int16{-1, 3, 5, 7, 11, 13}, 2) {
 		T.Errorf("N-element middle slice value wrong match")
 	}
 
 	// n-element slice negative after
-	if Int16Slice([]int16{-1, 3, 5, 7, 11, 13}).Contains(14) {
+	if Int16.Contains([]int16{-1, 3, 5, 7, 11, 13}, 14) {
 		T.Errorf("N-element after slice value wrong match")
 	}
 }
@@ -1480,19 +1480,19 @@ func BenchmarkInt16SliceContains(B *testing.B) {
 	cases := []int{10, 1000, 1000000}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-neg", n), func(B *testing.B) {
-			a := Int16Slice(randInt16Slice(n, 1)).Sort()
+			a := Int16.Sort(randInt16Slice(n, 1))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				a.Contains(int16(rand.Intn(math.MaxInt16 + 1)))
+				Int16.Contains(a, int16(rand.Intn(math.MaxInt16+1)))
 			}
 		})
 	}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-pos", n), func(B *testing.B) {
-			a := Int16Slice(randInt16Slice(n, 1)).Sort()
+			a := Int16.Sort(randInt16Slice(n, 1))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				a.Contains(a[rand.Intn(len(a))])
+				Int16.Contains(a, a[rand.Intn(len(a))])
 			}
 		})
 	}
@@ -1593,7 +1593,7 @@ func TestInt16SliceContainsRange(T *testing.T) {
 
 	for i, v := range tests {
 		for _, r := range v.Ranges {
-			if want, got := r.Match, Int16Slice(v.Slice).ContainsRange(r.From, r.To); want != got {
+			if want, got := r.Match, Int16.ContainsRange(v.Slice, r.From, r.To); want != got {
 				T.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
 			}
 		}
@@ -1603,14 +1603,14 @@ func TestInt16SliceContainsRange(T *testing.T) {
 func BenchmarkInt16SliceContainsRange(B *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := Int16Slice(randInt16Slice(n, 1)).Sort()
+			a := Int16.Sort(randInt16Slice(n, 1))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
 				min, max := int16(rand.Intn(math.MaxInt16+1)), int16(rand.Intn(math.MaxInt16+1))
 				if min > max {
 					min, max = max, min
 				}
-				a.ContainsRange(min, max)
+				Int16.ContainsRange(a, min, max)
 			}
 		})
 	}

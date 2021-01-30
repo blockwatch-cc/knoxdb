@@ -35,10 +35,10 @@ func NewBitSet(size int) *BitSet {
 	return s
 }
 
-// NewSmallBitSet allocates a new bitset of arbitrary small size and capacity
+// NewCustomBitSet allocates a new bitset of arbitrary small size and capacity
 // without using a buffer pool. Use this function when your bitsets are always
 // much smaller than the default capacity.
-func NewSmallBitSet(size int) *BitSet {
+func NewCustomBitSet(size int) *BitSet {
 	return makeBitSet(size)
 }
 

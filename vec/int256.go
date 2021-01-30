@@ -740,6 +740,10 @@ func MatchInt256Between(src []Int256, a, b Int256, bits, mask *BitSet) *BitSet {
 
 type Int256Slice []Int256
 
+func (s *Int256Slice) Unique() {
+	*s = UniqueInt256Slice(*s)
+}
+
 func (s *Int256Slice) AddUnique(val Int256) bool {
 	idx := s.Index(val, 0)
 	if idx > -1 {
@@ -888,6 +892,45 @@ func (s Int256Slice) ContainsRange(from, to Int256) bool {
 	// range is contained iff min < max; note that from/to do not necessarily
 	// have to be members, but some intermediate values are
 	return min < max
+}
+
+func (s Int256Slice) Intersect(x, out Int256Slice) Int256Slice {
+	if out == nil {
+		out = make(Int256Slice, 0, min(len(x), len(s)))
+	}
+	count := 0
+	for i, j, il, jl := 0, 0, len(x), len(s); i < il && j < jl; {
+		if x[i].Lt(s[j]) {
+			i++
+			continue
+		}
+		if x[i].Gt(s[j]) {
+			j++
+			continue
+		}
+		if count > 0 {
+			// skip duplicates
+			last := out[count-1]
+			if last == x[i] {
+				i++
+				continue
+			}
+			if last == s[j] {
+				j++
+				continue
+			}
+		}
+		if i == il || j == jl {
+			break
+		}
+		if x[i] == s[j] {
+			out = append(out, x[i])
+			count++
+			i++
+			j++
+		}
+	}
+	return out
 }
 
 func (s Int256Slice) MatchEqual(val Int256, bits, mask *BitSet) *BitSet {

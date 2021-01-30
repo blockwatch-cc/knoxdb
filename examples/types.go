@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"strconv"
 	"time"
 
@@ -148,6 +149,7 @@ var (
 	verbose  bool
 	debug    bool
 	trace    bool
+	profile  bool
 	dbname   string
 	flags    = flag.NewFlagSet("types", flag.ContinueOnError)
 	boltopts = &bolt.Options{
@@ -297,6 +299,7 @@ func init() {
 	flags.BoolVar(&verbose, "v", false, "be verbose")
 	flags.BoolVar(&debug, "vv", false, "enable debug mode")
 	flags.BoolVar(&trace, "vvv", false, "enable trace mode")
+	flags.BoolVar(&profile, "profile", false, "enable CPU profiling")
 	flags.StringVar(&dbname, "db", "", "database")
 }
 
@@ -332,6 +335,16 @@ func run() error {
 	}
 	log.SetLevel(lvl)
 	pack.UseLogger(log.Log)
+
+	if profile {
+		f, err := os.Create("types.prof")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	table, err := Create(".", nil)
 	if err != nil {

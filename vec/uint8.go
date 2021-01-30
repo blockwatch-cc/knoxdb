@@ -49,41 +49,90 @@ func MatchUint8Between(src []uint8, a, b uint8, bits, mask *BitSet) *BitSet {
 	return bits
 }
 
-type Uint8Slice []uint8
-
-func (s Uint8Slice) Sort() Uint8Slice {
-	Uint8Sorter(s).Sort()
-	return s
+var Uint8 = struct {
+	Sort          func([]uint8) []uint8
+	Unique        func([]uint8) []uint8
+	RemoveZeros   func([]uint8) []uint8
+	AddUnique     func([]uint8, uint8) []uint8
+	Remove        func([]uint8, uint8) []uint8
+	Contains      func([]uint8, uint8) bool
+	Index         func([]uint8, uint8, int) int
+	MinMax        func([]uint8) (uint8, uint8)
+	ContainsRange func([]uint8, uint8, uint8) bool
+	Intersect     func([]uint8, []uint8, []uint8) []uint8
+	MatchEqual    func([]uint8, uint8, *BitSet, *BitSet) *BitSet
+}{
+	Sort: func(s []uint8) []uint8 {
+		return Uint8Sorter(s).Sort()
+	},
+	Unique: func(s []uint8) []uint8 {
+		return UniqueUint8Slice(s)
+	},
+	RemoveZeros: func(s []uint8) []uint8 {
+		s, _ = uint8RemoveZeros(s)
+		return s
+	},
+	AddUnique: func(s []uint8, v uint8) []uint8 {
+		s, _ = uint8AddUnique(s, v)
+		return s
+	},
+	Remove: func(s []uint8, v uint8) []uint8 {
+		s, _ = uint8Remove(s, v)
+		return s
+	},
+	Contains: func(s []uint8, v uint8) bool {
+		return uint8Contains(s, v)
+	},
+	Index: func(s []uint8, v uint8, last int) int {
+		return uint8Index(s, v, last)
+	},
+	MinMax: func(s []uint8) (uint8, uint8) {
+		return uint8MinMax(s)
+	},
+	ContainsRange: func(s []uint8, from, to uint8) bool {
+		return uint8ContainsRange(s, from, to)
+	},
+	Intersect: func(x, y, out []uint8) []uint8 {
+		return IntersectSortedUint8(x, y, out)
+	},
+	MatchEqual: func(s []uint8, val uint8, bits, mask *BitSet) *BitSet {
+		return MatchUint8Equal(s, val, bits, mask)
+	},
 }
 
-func (s Uint8Slice) Less(i, j int) bool { return s[i] < s[j] }
-func (s Uint8Slice) Len() int           { return len(s) }
-func (s Uint8Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s *Uint8Slice) AddUnique(val uint8) bool {
-	idx := s.Index(val, 0)
+func uint8AddUnique(s []uint8, val uint8) ([]uint8, bool) {
+	idx := uint8Index(s, val, 0)
 	if idx > -1 {
-		return false
+		return s, false
 	}
-	*s = append(*s, val)
-	s.Sort()
-	return true
+	s = append(s, val)
+	Uint8Sorter(s).Sort()
+	return s, true
 }
 
-func (s *Uint8Slice) Remove(val uint8) bool {
-	idx := s.Index(val, 0)
+func uint8Remove(s []uint8, val uint8) ([]uint8, bool) {
+	idx := uint8Index(s, val, 0)
 	if idx < 0 {
-		return false
+		return s, false
 	}
-	*s = append((*s)[:idx], (*s)[idx+1:]...)
-	return true
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
 }
 
-func (s Uint8Slice) Unique() Uint8Slice {
-	return UniqueUint8Slice(s)
+func uint8RemoveZeros(s []uint8) ([]uint8, int) {
+	var n int
+	for i, v := range s {
+		if v == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
 }
 
-func (s Uint8Slice) Contains(val uint8) bool {
+func uint8Contains(s []uint8, val uint8) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -108,7 +157,7 @@ func (s Uint8Slice) Contains(val uint8) bool {
 	return false
 }
 
-func (s Uint8Slice) Index(val uint8, last int) int {
+func uint8Index(s []uint8, val uint8, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -134,7 +183,7 @@ func (s Uint8Slice) Index(val uint8, last int) int {
 	return -1
 }
 
-func (s Uint8Slice) MinMax() (uint8, uint8) {
+func uint8MinMax(s []uint8) (uint8, uint8) {
 	var min, max uint8
 
 	switch l := len(s); l {
@@ -168,7 +217,7 @@ func (s Uint8Slice) MinMax() (uint8, uint8) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s Uint8Slice) ContainsRange(from, to uint8) bool {
+func uint8ContainsRange(s []uint8, from, to uint8) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -211,8 +260,4 @@ func (s Uint8Slice) ContainsRange(from, to uint8) bool {
 
 	// otherwise range is contained iff min < max
 	return min < max
-}
-
-func (s Uint8Slice) MatchEqual(val uint8, bits, mask *BitSet) *BitSet {
-	return MatchUint8Equal(s, val, bits, mask)
 }

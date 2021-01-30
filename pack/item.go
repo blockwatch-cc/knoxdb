@@ -15,7 +15,7 @@ type Item interface {
 type ItemList []Item
 
 func (l ItemList) Len() int           { return len(l) }
-func (l ItemList) Less(i, j int) bool { return l[i].ID() < l[j].ID() }
+func (l ItemList) Less(i, j int) bool { return l[i].ID() <= l[j].ID() }
 func (l ItemList) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 
 func SortItems(l []Item) {

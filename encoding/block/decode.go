@@ -527,16 +527,11 @@ func unpackBlock(block []byte, typ BlockType) ([]byte, bool, error) {
 	case NoCompression:
 		switch typ {
 		case BlockBytes, BlockString:
-			// legacy format uses snappy for bytes and strings, we peek the
-			// subsequent header to detect it
-			if len(block) > 1 && block[1] == 0 {
-				// copy the block to a new slice because memory will be
-				// referenced, but the input data may come from an mmapped file
-				buf := make([]byte, len(block)-1)
-				copy(buf, block[1:])
-				return buf, false, nil
-			}
-			fallthrough
+			// copy the block to a new slice because memory will be
+			// referenced, but the input data may come from an mmapped file
+			buf := make([]byte, len(block)-1)
+			copy(buf, block[1:])
+			return buf, false, nil
 		default:
 			// just strip the header byte
 			return block[1:], false, nil

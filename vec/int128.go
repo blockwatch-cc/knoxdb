@@ -610,6 +610,10 @@ func MatchInt128Between(src []Int128, a, b Int128, bits, mask *BitSet) *BitSet {
 
 type Int128Slice []Int128
 
+func (s *Int128Slice) Unique() {
+	*s = UniqueInt128Slice(*s)
+}
+
 func (s *Int128Slice) AddUnique(val Int128) bool {
 	idx := s.Index(val, 0)
 	if idx > -1 {
@@ -627,6 +631,19 @@ func (s *Int128Slice) Remove(val Int128) bool {
 	}
 	*s = append((*s)[:idx], (*s)[idx+1:]...)
 	return true
+}
+
+func (s *Int128Slice) RemoveZeros() int {
+	var n int
+	for i, v := range *s {
+		if v.IsZero() {
+			continue
+		}
+		(*s)[n] = (*s)[i]
+		n++
+	}
+	(*s) = (*s)[:n]
+	return n
 }
 
 func (s Int128Slice) Contains(val Int128) bool {
@@ -760,6 +777,45 @@ func (s Int128Slice) ContainsRange(from, to Int128) bool {
 	return min < max
 }
 
+func (s Int128Slice) Intersect(x, out Int128Slice) Int128Slice {
+	if out == nil {
+		out = make(Int128Slice, 0, min(len(x), len(s)))
+	}
+	count := 0
+	for i, j, il, jl := 0, 0, len(x), len(s); i < il && j < jl; {
+		if x[i].Lt(s[j]) {
+			i++
+			continue
+		}
+		if x[i].Gt(s[j]) {
+			j++
+			continue
+		}
+		if count > 0 {
+			// skip duplicates
+			last := out[count-1]
+			if last == x[i] {
+				i++
+				continue
+			}
+			if last == s[j] {
+				j++
+				continue
+			}
+		}
+		if i == il || j == jl {
+			break
+		}
+		if x[i] == s[j] {
+			out = append(out, x[i])
+			count++
+			i++
+			j++
+		}
+	}
+	return out
+
+}
 func (s Int128Slice) MatchEqual(val Int128, bits, mask *BitSet) *BitSet {
 	return MatchInt128Equal(s, val, bits, nil)
 }

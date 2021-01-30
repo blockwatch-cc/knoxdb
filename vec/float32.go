@@ -49,37 +49,90 @@ func MatchFloat32Between(src []float32, a, b float32, bits, mask *BitSet) *BitSe
 	return bits
 }
 
-type Float32Slice []float32
-
-func (s Float32Slice) Sort() Float32Slice {
-	Float32Sorter(s).Sort()
-	return s
+var Float32 = struct {
+	Sort          func([]float32) []float32
+	Unique        func([]float32) []float32
+	RemoveZeros   func([]float32) []float32
+	AddUnique     func([]float32, float32) []float32
+	Remove        func([]float32, float32) []float32
+	Contains      func([]float32, float32) bool
+	Index         func([]float32, float32, int) int
+	MinMax        func([]float32) (float32, float32)
+	ContainsRange func([]float32, float32, float32) bool
+	Intersect     func([]float32, []float32, []float32) []float32
+	MatchEqual    func([]float32, float32, *BitSet, *BitSet) *BitSet
+}{
+	Sort: func(s []float32) []float32 {
+		return Float32Sorter(s).Sort()
+	},
+	Unique: func(s []float32) []float32 {
+		return UniqueFloat32Slice(s)
+	},
+	RemoveZeros: func(s []float32) []float32 {
+		s, _ = float32RemoveZeros(s)
+		return s
+	},
+	AddUnique: func(s []float32, v float32) []float32 {
+		s, _ = float32AddUnique(s, v)
+		return s
+	},
+	Remove: func(s []float32, v float32) []float32 {
+		s, _ = float32Remove(s, v)
+		return s
+	},
+	Contains: func(s []float32, v float32) bool {
+		return float32Contains(s, v)
+	},
+	Index: func(s []float32, v float32, last int) int {
+		return float32Index(s, v, last)
+	},
+	MinMax: func(s []float32) (float32, float32) {
+		return float32MinMax(s)
+	},
+	ContainsRange: func(s []float32, from, to float32) bool {
+		return float32ContainsRange(s, from, to)
+	},
+	Intersect: func(x, y, out []float32) []float32 {
+		return IntersectSortedFloat32(x, y, out)
+	},
+	MatchEqual: func(s []float32, val float32, bits, mask *BitSet) *BitSet {
+		return MatchFloat32Equal(s, val, bits, mask)
+	},
 }
 
-func (s Float32Slice) Less(i, j int) bool { return s[i] < s[j] }
-func (s Float32Slice) Len() int           { return len(s) }
-func (s Float32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s *Float32Slice) AddUnique(val float32) bool {
-	idx := s.Index(val, 0)
+func float32AddUnique(s []float32, val float32) ([]float32, bool) {
+	idx := float32Index(s, val, 0)
 	if idx > -1 {
-		return false
+		return s, false
 	}
-	*s = append(*s, val)
-	s.Sort()
-	return true
+	s = append(s, val)
+	Float32Sorter(s).Sort()
+	return s, true
 }
 
-func (s *Float32Slice) Remove(val float32) bool {
-	idx := s.Index(val, 0)
+func float32Remove(s []float32, val float32) ([]float32, bool) {
+	idx := float32Index(s, val, 0)
 	if idx < 0 {
-		return false
+		return s, false
 	}
-	*s = append((*s)[:idx], (*s)[idx+1:]...)
-	return true
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
 }
 
-func (s Float32Slice) Contains(val float32) bool {
+func float32RemoveZeros(s []float32) ([]float32, int) {
+	var n int
+	for i, v := range s {
+		if v == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
+}
+
+func float32Contains(s []float32, val float32) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -99,7 +152,7 @@ func (s Float32Slice) Contains(val float32) bool {
 	return false
 }
 
-func (s Float32Slice) Index(val float32, last int) int {
+func float32Index(s []float32, val float32, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -125,7 +178,7 @@ func (s Float32Slice) Index(val float32, last int) int {
 	return -1
 }
 
-func (s Float32Slice) MinMax() (float32, float32) {
+func float32MinMax(s []float32) (float32, float32) {
 	var min, max float32
 
 	switch l := len(s); l {
@@ -159,7 +212,7 @@ func (s Float32Slice) MinMax() (float32, float32) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s Float32Slice) ContainsRange(from, to float32) bool {
+func float32ContainsRange(s []float32, from, to float32) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -203,8 +256,4 @@ func (s Float32Slice) ContainsRange(from, to float32) bool {
 	// range is contained iff min < max; note that from/to do not necessarily
 	// have to be members, but some intermediate values are
 	return min < max
-}
-
-func (s Float32Slice) MatchEqual(val float32, bits, mask *BitSet) *BitSet {
-	return MatchFloat32Equal(s, val, bits, mask)
 }

@@ -49,41 +49,90 @@ func MatchUint32Between(src []uint32, a, b uint32, bits, mask *BitSet) *BitSet {
 	return bits
 }
 
-type Uint32Slice []uint32
-
-func (s Uint32Slice) Sort() Uint32Slice {
-	Uint32Sorter(s).Sort()
-	return s
+var Uint32 = struct {
+	Sort          func([]uint32) []uint32
+	Unique        func([]uint32) []uint32
+	RemoveZeros   func([]uint32) []uint32
+	AddUnique     func([]uint32, uint32) []uint32
+	Remove        func([]uint32, uint32) []uint32
+	Contains      func([]uint32, uint32) bool
+	Index         func([]uint32, uint32, int) int
+	MinMax        func([]uint32) (uint32, uint32)
+	ContainsRange func([]uint32, uint32, uint32) bool
+	Intersect     func([]uint32, []uint32, []uint32) []uint32
+	MatchEqual    func([]uint32, uint32, *BitSet, *BitSet) *BitSet
+}{
+	Sort: func(s []uint32) []uint32 {
+		return Uint32Sorter(s).Sort()
+	},
+	Unique: func(s []uint32) []uint32 {
+		return UniqueUint32Slice(s)
+	},
+	RemoveZeros: func(s []uint32) []uint32 {
+		s, _ = uint32RemoveZeros(s)
+		return s
+	},
+	AddUnique: func(s []uint32, v uint32) []uint32 {
+		s, _ = uint32AddUnique(s, v)
+		return s
+	},
+	Remove: func(s []uint32, v uint32) []uint32 {
+		s, _ = uint32Remove(s, v)
+		return s
+	},
+	Contains: func(s []uint32, v uint32) bool {
+		return uint32Contains(s, v)
+	},
+	Index: func(s []uint32, v uint32, last int) int {
+		return uint32Index(s, v, last)
+	},
+	MinMax: func(s []uint32) (uint32, uint32) {
+		return uint32MinMax(s)
+	},
+	ContainsRange: func(s []uint32, from, to uint32) bool {
+		return uint32ContainsRange(s, from, to)
+	},
+	Intersect: func(x, y, out []uint32) []uint32 {
+		return IntersectSortedUint32(x, y, out)
+	},
+	MatchEqual: func(s []uint32, val uint32, bits, mask *BitSet) *BitSet {
+		return MatchUint32Equal(s, val, bits, mask)
+	},
 }
 
-func (s Uint32Slice) Less(i, j int) bool { return s[i] < s[j] }
-func (s Uint32Slice) Len() int           { return len(s) }
-func (s Uint32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-func (s Uint32Slice) Unique() Uint32Slice {
-	return UniqueUint32Slice(s)
-}
-
-func (s *Uint32Slice) AddUnique(val uint32) bool {
-	idx := s.Index(val, 0)
+func uint32AddUnique(s []uint32, val uint32) ([]uint32, bool) {
+	idx := uint32Index(s, val, 0)
 	if idx > -1 {
-		return false
+		return s, false
 	}
-	*s = append(*s, val)
-	s.Sort()
-	return true
+	s = append(s, val)
+	Uint32Sorter(s).Sort()
+	return s, true
 }
 
-func (s *Uint32Slice) Remove(val uint32) bool {
-	idx := s.Index(val, 0)
+func uint32Remove(s []uint32, val uint32) ([]uint32, bool) {
+	idx := uint32Index(s, val, 0)
 	if idx < 0 {
-		return false
+		return s, false
 	}
-	*s = append((*s)[:idx], (*s)[idx+1:]...)
-	return true
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
 }
 
-func (s Uint32Slice) Contains(val uint32) bool {
+func uint32RemoveZeros(s []uint32) ([]uint32, int) {
+	var n int
+	for i, v := range s {
+		if v == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
+}
+
+func uint32Contains(s []uint32, val uint32) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
 		return false
@@ -108,7 +157,7 @@ func (s Uint32Slice) Contains(val uint32) bool {
 	return false
 }
 
-func (s Uint32Slice) Index(val uint32, last int) int {
+func uint32Index(s []uint32, val uint32, last int) int {
 	if len(s) <= last {
 		return -1
 	}
@@ -134,7 +183,7 @@ func (s Uint32Slice) Index(val uint32, last int) int {
 	return -1
 }
 
-func (s Uint32Slice) MinMax() (uint32, uint32) {
+func uint32MinMax(s []uint32) (uint32, uint32) {
 	var min, max uint32
 
 	switch l := len(s); l {
@@ -168,7 +217,7 @@ func (s Uint32Slice) MinMax() (uint32, uint32) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func (s Uint32Slice) ContainsRange(from, to uint32) bool {
+func uint32ContainsRange(s []uint32, from, to uint32) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -211,8 +260,4 @@ func (s Uint32Slice) ContainsRange(from, to uint32) bool {
 
 	// otherwise range is contained iff min < max
 	return min < max
-}
-
-func (s Uint32Slice) MatchEqual(val uint32, bits, mask *BitSet) *BitSet {
-	return MatchUint32Equal(s, val, bits, mask)
 }

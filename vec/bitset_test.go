@@ -2935,7 +2935,7 @@ func BenchmarkBitSetAndAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(bitFieldLen(n.l)))
 			for i := 0; i < B.N; i++ {
-				bitsetAndAVX2(bits, cmp)
+				bitsetAndAVX2Flag1(bits, cmp)
 			}
 		})
 	}

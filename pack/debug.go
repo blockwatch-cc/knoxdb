@@ -6,6 +6,7 @@ package pack
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"blockwatch.cc/knoxdb/encoding/block"
@@ -31,7 +32,7 @@ type CSVHeader struct {
 }
 
 func (t *Table) DumpType(w io.Writer) error {
-	return t.journal.DumpType(w)
+	return t.journal.DataPack().DumpType(w)
 }
 
 func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode) error {
@@ -60,25 +61,34 @@ func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode) error {
 		fmt.Fprintf(w, "%-3d ", i)
 		i++
 	}
-	info := t.journal.Info()
-	info.UpdateStats(t.journal)
-	if err := info.Dump(w, mode, t.journal.Cols()); err != nil {
-		return err
-	}
-	switch mode {
-	case DumpModeDec, DumpModeHex:
-		fmt.Fprintf(w, "%-3d ", i)
-	}
-	info = t.tombstone.Info()
-	info.UpdateStats(t.journal)
-	if err := info.Dump(w, mode, t.tombstone.Cols()); err != nil {
+	info := t.journal.DataPack().Info()
+	info.UpdateStats(t.journal.DataPack())
+	if err := info.Dump(w, mode, t.journal.DataPack().Cols()); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (t *Table) DumpJournal(w io.Writer, mode DumpMode) error {
-	return t.journal.DumpData(w, mode, t.fields.Aliases())
+	err := t.journal.DataPack().DumpData(w, mode, t.fields.Aliases())
+	if err != nil {
+		return err
+	}
+	w.Write([]byte("keys:"))
+	for _, v := range t.journal.keys {
+		w.Write([]byte(strconv.FormatUint(v.pk, 10)))
+		w.Write([]byte(">"))
+		w.Write([]byte(strconv.Itoa(v.idx)))
+		w.Write([]byte(","))
+	}
+	w.Write([]byte("\n"))
+	w.Write([]byte("tomb:"))
+	for _, v := range t.journal.tomb {
+		w.Write([]byte(strconv.FormatUint(v, 10)))
+		w.Write([]byte(","))
+	}
+	w.Write([]byte("\n"))
+	return nil
 }
 
 func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
