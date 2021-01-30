@@ -260,21 +260,20 @@ func (c *Condition) Compile() {
 	switch c.Field.Type {
 	case FieldTypeBytes:
 		// require [][]byte slice as value type
-		slice := c.Value.([][]byte)
-		c.numValues = len(slice)
+		vals = c.Value.([][]byte)
+		c.numValues = len(vals)
 		if c.numValues == 0 {
 			return
 		}
 		// sorted slice is always required for InBetween pack matches
 		if !c.IsSorted {
-			c.Value = Bytes.Sort(slice)
+			Bytes.Sort(vals) // sorts in-place
 			c.IsSorted = true
 		}
 		// below min size a hash map is more expensive than memcmp
 		if c.numValues < filterThreshold {
 			return
 		}
-		vals = slice
 	case FieldTypeString:
 		slice := c.Value.([]string)
 		c.numValues = len(slice)
@@ -283,7 +282,7 @@ func (c *Condition) Compile() {
 		}
 		// sorted slice is always required for InBetween pack matches
 		if !c.IsSorted {
-			c.Value = Strings.Sort(slice)
+			Strings.Sort(slice) // sorts in-place
 			c.IsSorted = true
 		}
 		// below min size a hash map is more expensive than memcmp
@@ -313,7 +312,6 @@ func (c *Condition) Compile() {
 		slice := c.Value.([]Int256)
 		if slice != nil {
 			c.numValues = len(slice)
-			// use a map for integer lookups
 			c.int256map = make(map[Int256]struct{}, len(slice))
 			for _, v := range slice {
 				c.int256map[v] = struct{}{}
@@ -324,7 +322,6 @@ func (c *Condition) Compile() {
 		slice := c.Value.([]Int128)
 		if slice != nil {
 			c.numValues = len(slice)
-			// use a map for integer lookups
 			c.int128map = make(map[Int128]struct{}, len(slice))
 			for _, v := range slice {
 				c.int128map[v] = struct{}{}
@@ -335,7 +332,6 @@ func (c *Condition) Compile() {
 		slice := c.Value.([]int64)
 		if slice != nil {
 			c.numValues = len(slice)
-			// use a map for integer lookups
 			c.int64map = make(map[int64]struct{}, len(slice))
 			for _, v := range slice {
 				c.int64map[v] = struct{}{}
@@ -346,7 +342,6 @@ func (c *Condition) Compile() {
 		slice := c.Value.([]int32)
 		if slice != nil {
 			c.numValues = len(slice)
-			// use a map for integer lookups
 			c.int32map = make(map[int32]struct{}, len(slice))
 			for _, v := range slice {
 				c.int32map[v] = struct{}{}
@@ -357,7 +352,6 @@ func (c *Condition) Compile() {
 		slice := c.Value.([]int16)
 		if slice != nil {
 			c.numValues = len(slice)
-			// use a map for integer lookups
 			c.int16map = make(map[int16]struct{}, len(slice))
 			for _, v := range slice {
 				c.int16map[v] = struct{}{}
@@ -368,7 +362,6 @@ func (c *Condition) Compile() {
 		slice := c.Value.([]int8)
 		if slice != nil {
 			c.numValues = len(slice)
-			// use a map for integer lookups
 			c.int8map = make(map[int8]struct{}, len(slice))
 			for _, v := range slice {
 				c.int8map[v] = struct{}{}
@@ -377,12 +370,11 @@ func (c *Condition) Compile() {
 		return
 	case FieldTypeUint64:
 		slice := c.Value.([]uint64)
-		if len(slice) == 0 {
+		c.numValues = len(slice)
+		if c.numValues == 0 {
 			return
 		}
-		c.numValues = len(slice)
-		// use a map for unsigned integer lookups unless the checked
-		// slices are guaranteed to be sorted (such as primary keys)
+		// use a map for lookups unless we check sorted pk slices
 		if c.Field.Flags&FlagPrimary > 0 {
 			if !c.IsSorted {
 				c.Value = Uint64.Sort(slice)
@@ -861,7 +853,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 					}
 					if pk[p] == in[i] {
 						// blend masked values
-						if mask == nil || mask.IsSet(i) {
+						if mask == nil || mask.IsSet(p) {
 							bits.Set(p)
 						}
 						i++
