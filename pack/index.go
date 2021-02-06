@@ -463,12 +463,7 @@ func (idx *Index) AddTx(tx *Tx, pkg *Package, srcPos, srcLen int) error {
 	// exist since packidx once stored are not touched again unless entries are
 	// removed. Also, we do not check for duplicates, in fact duplicates
 	// are stored as is and lookup will find and return all duplicates.
-	var pk []uint64
-	if col, err := pkg.Column(pkg.pkindex); err != nil {
-		return err
-	} else {
-		pk, _ = col.([]uint64)
-	}
+	pk := pkg.PkColumn()
 	atomic.AddInt64(&idx.table.stats.IndexInsertCalls, 1)
 
 	var count int64
@@ -498,8 +493,7 @@ func (idx *Index) AddTx(tx *Tx, pkg *Package, srcPos, srcLen int) error {
 func (idx *Index) RemoveTx(tx *Tx, pkg *Package, srcPos, srcLen int) error {
 	// Appends (hash) keys to tombstone until full, then flushes/packidx the journal
 	// and tombstone into stored packidx.
-	col, _ := pkg.Column(pkg.pkindex)
-	pk, _ := col.([]uint64)
+	pk := pkg.PkColumn()
 	atomic.AddInt64(&idx.table.stats.IndexDeleteCalls, 1)
 
 	var count int64
@@ -629,9 +623,8 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 		nPacks++
 
 		// we use index and value slices
-		col, _ := ipkg.Column(0)
-		keys, _ := col.([]uint64)
-		col, _ = ipkg.Column(1)
+		keys := ipkg.PkColumn()
+		col, _ := ipkg.Column(1)
 		values, _ := col.([]uint64)
 
 		// packidx are sorted by indexed key, we use this to improve search performance
@@ -836,13 +829,11 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 	}
 
 	// work on hash and value slices
-	col, _ := idx.tombstone.Column(0) // idx.tombstone.pkindex
-	dead, _ := col.([]uint64)
-	col, _ = idx.tombstone.Column(1)
+	dead := idx.tombstone.PkColumn() // idx.tombstone.pkindex
+	col, _ := idx.tombstone.Column(1)
 	deadval, _ := col.([]uint64)
 
-	col, _ = idx.journal.Column(0) // idx.journal.pkindex
-	pk, _ := col.([]uint64)
+	pk := idx.journal.PkColumn() // idx.journal.pkindex
 	col, _ = idx.journal.Column(1)
 	pkval, _ := col.([]uint64)
 
@@ -886,8 +877,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 					nDel++
 
 					// re-init slices
-					col, _ = idx.journal.Column(idx.journal.pkindex)
-					pk, _ = col.([]uint64)
+					pk = idx.journal.PkColumn()
 					col, _ = idx.journal.Column(1)
 					pkval, _ = col.([]uint64)
 				} else {
@@ -900,8 +890,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 			dl--
 
 			// re-init slices
-			col, _ = idx.tombstone.Column(idx.tombstone.pkindex)
-			dead, _ = col.([]uint64)
+			dead = idx.tombstone.PkColumn()
 			col, _ = idx.tombstone.Column(1)
 			deadval, _ = col.([]uint64)
 		}
@@ -950,8 +939,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 				idx.Type, idx.cachekey(pkg.Key()))
 
 			// get pk and value columns
-			col, _ = pkg.Column(0)
-			pk, _ = col.([]uint64)
+			pk = pkg.PkColumn()
 			col, _ = pkg.Column(1)
 			pkval, _ = col.([]uint64)
 
@@ -997,8 +985,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 							nDel++
 
 							// re-init slices
-							col, _ = pkg.Column(0)
-							pk, _ = col.([]uint64)
+							pk = pkg.PkColumn()
 							col, _ = pkg.Column(1)
 							pkval, _ = col.([]uint64)
 						} else {
@@ -1021,8 +1008,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 					dl--
 
 					// re-init slices
-					col, _ = idx.tombstone.Column(0)
-					dead, _ = col.([]uint64)
+					dead = idx.tombstone.PkColumn()
 					col, _ = idx.tombstone.Column(1)
 					deadval, _ = col.([]uint64)
 				}
@@ -1084,8 +1070,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 	}
 
 	// move journal data into buckets (packidx), splitting them when full
-	col, _ = idx.journal.Column(idx.journal.pkindex)
-	pk, _ = col.([]uint64)
+	pk = idx.journal.PkColumn()
 
 	if idx.journal.Len() > 0 {
 		var (

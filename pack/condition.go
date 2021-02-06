@@ -1238,7 +1238,7 @@ func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
 					}
 				} else {
 					// without hash map, resort to type-based comparison
-					if c.Field.Type.In(v, c.Value) {
+					if !c.Field.Type.In(v, c.Value) {
 						bits.Set(i)
 					}
 				}

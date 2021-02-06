@@ -178,6 +178,10 @@ func (r *Result) ForEach(proto interface{}, fn func(i int, val interface{}) erro
 	return nil
 }
 
+func (r *Result) PkColumn() []uint64 {
+	return r.pkg.PkColumn()
+}
+
 func (r *Result) Column(colname string) (interface{}, error) {
 	if r.pkg == nil {
 		return nil, ErrResultClosed

@@ -377,6 +377,20 @@ func run() error {
 		log.Infof("Decoded %d entries", count)
 	}
 
+	// delete some entries
+	n, err := table.Delete(context.Background(), pack.Query{
+		Conditions: pack.ConditionList{
+			pack.Condition{
+				Field: table.Fields().Find("i64"),
+				Mode:  pack.FilterModeLt,
+				Value: 1024,
+			},
+		}})
+	if err != nil {
+		log.Errorf("Decode: %v", err)
+	} else {
+		log.Infof("Deleted %d entries", n)
+	}
 	if err := Close(table); err != nil {
 		return err
 	}

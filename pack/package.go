@@ -1798,6 +1798,13 @@ func (p *Package) HeapSize() int {
 	return sz
 }
 
+func (p *Package) PkColumn() []uint64 {
+	if p.pkindex < 0 {
+		return []uint64{}
+	}
+	return p.blocks[p.pkindex].Uint64
+}
+
 // Searches id in primary key column and return index or -1 when not found
 // This function is only safe to use when packs are sorted!
 func (p *Package) PkIndex(id uint64, last int) int {

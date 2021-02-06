@@ -35,6 +35,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -852,19 +853,15 @@ func (t *Table) Delete(ctx context.Context, q Query) (int64, error) {
 	}
 	defer res.Close()
 
-	col, err := res.Uint64Column(t.Fields().Pk().Name)
-	if err != nil {
-		return 0, err
-	}
-
-	if err := t.DeleteIdsTx(ctx, tx, col); err != nil {
+	n := res.Rows()
+	if err := t.DeleteIdsTx(ctx, tx, res.PkColumn()); err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 
-	return int64(len(col)), nil
+	return int64(n), nil
 }
 
 func (t *Table) DeleteIds(ctx context.Context, val []uint64) error {
@@ -1221,31 +1218,36 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				}
 
 				// find the next matching pkid to clear
-				// TODO: use binary search
-				for plen := pkg.Len(); ppos < plen; ppos++ {
-					rowid, _ := pkg.Uint64At(pkg.pkindex, ppos)
-					if rowid > pkid {
-						// pkid should have been found by now, if not found,
-						// it does not exist in this pack, so we clear the
-						// tombstone entry to avoid an infinite loop
-						dead[tpos] = 0
-						break
-					}
-					if rowid == pkid {
-						// update indexes
-						for _, idx := range t.indexes {
-							if err := idx.RemoveTx(tx, pkg, ppos, 1); err != nil {
-								return err
-							}
-						}
-						// remove entry from pack
-						pkg.Delete(ppos, 1)
-						dead[tpos] = 0
-						nDel++
-						pDel++
-						break
+				pkcol := pkg.PkColumn()
+				ppos += sort.Search(len(pkcol)-ppos, func(i int) bool { return pkcol[i] >= pkid })
+				if ppos == len(pkcol) || pkcol[ppos] != pkid {
+					// if not found, pkid does not exist (anymore)
+					// clear from tombstone, the next iteration may break
+					// the outer loop and go to the next pack
+					dead[tpos] = 0
+					continue
+				}
+
+				// count consecutive matches
+				n := 1
+				for ; tpos+n < tlen && ppos+n < len(pkcol) && pkcol[ppos+n] == dead[tpos+n]; n++ {
+				}
+
+				// remove n matches from indexes
+				for _, idx := range t.indexes {
+					if err := idx.RemoveTx(tx, pkg, ppos, n); err != nil {
+						return err
 					}
 				}
+
+				// remove n entries from pack
+				pkg.Delete(ppos, n)
+				dead[tpos] = 0
+				nDel += n
+				pDel += n
+
+				// advance tomb pointer by one less (for-loop adds +1)
+				tpos += n - 1
 			}
 		}
 
@@ -1613,8 +1615,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		}
 		q.stats.PacksScanned++
 
-		col, _ := pkg.Column(pkg.pkindex)
-		pk, _ := col.([]uint64)
+		pk := pkg.PkColumn()
 
 		// we use pack max value to break early
 		_, max := t.packidx.MinMax(nextpack)
@@ -2480,8 +2481,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 		}
 		res.pkg = pkg
 		q.stats.PacksScanned++
-		col, _ := pkg.Column(pkg.pkindex)
-		pk, _ := col.([]uint64)
+		pk := pkg.PkColumn()
 
 		// we use pack max value to break early
 		_, max := t.packidx.MinMax(nextpack)

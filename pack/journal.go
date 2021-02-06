@@ -128,8 +128,7 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 		return err
 	}
 	j.sortData = false
-	col, _ := j.data.Column(j.data.pkindex)
-	for i, n := range col.([]uint64) {
+	for i, n := range j.data.PkColumn() {
 		j.keys = append(j.keys, journalEntry{n, i})
 		j.sortData = j.sortData || n < j.lastid
 		j.lastid = util.MaxU64(j.lastid, n)
@@ -143,8 +142,7 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 		return fmt.Errorf("pack: cannot open tombstone for table %s: %v", string(bucketName), err)
 	}
 	tomb.InitType(Tombstone{})
-	col, _ = tomb.Column(0)
-	pk := col.([]uint64)
+	pk := tomb.PkColumn()
 	if cap(j.tomb) < len(pk) {
 		j.tomb = make([]uint64, len(pk), roundSize(len(pk)))
 	}
@@ -344,8 +342,7 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 	}
 
 	// analyze primary keys of the data we insert
-	col, _ := pkg.Column(pkg.pkindex)
-	pkcol := col.([]uint64)
+	pkcol := pkg.PkColumn()
 	pks := pkcol[pos : pos+n]
 	minid, maxid := vec.Uint64.MinMax(pks)
 	isSorted := minid == 0 && maxid == 0
@@ -859,8 +856,7 @@ func (j *Journal) checkInvariants(when string) error {
 		}
 	}
 	// no duplicate pks in pack (consider deleted keys == 0)
-	col, _ := j.data.Column(j.data.pkindex)
-	pks, _ := col.([]uint64)
+	pks := j.data.PkColumn()
 	sorted := make([]uint64, len(pks))
 	copy(sorted, pks)
 	sorted = vec.Uint64.Sort(sorted)
@@ -903,8 +899,7 @@ func (j *Journal) SortedIndexes(b *vec.BitSet) ([]int, []uint64) {
 		id: b.Indexes(nil),
 	}
 	// fill pks
-	col, _ := j.data.Column(j.data.pkindex)
-	pk, _ := col.([]uint64)
+	pk := j.data.PkColumn()
 	for i, n := range ds.id {
 		ds.pk[i] = pk[n]
 	}
