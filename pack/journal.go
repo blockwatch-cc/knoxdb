@@ -653,7 +653,7 @@ func (j *Journal) DeleteBatch(pks []uint64) (int, error) {
 		}
 		// stop journal scan if deleted ids are larger than whats stored in the
 		// journal right now
-		if last > j.data.Len() {
+		if last == j.data.Len() {
 			break
 		}
 	}

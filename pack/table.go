@@ -1219,7 +1219,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 				// find the next matching pkid to clear
 				pkcol := pkg.PkColumn()
-				ppos += sort.Search(len(pkcol)-ppos, func(i int) bool { return pkcol[i] >= pkid })
+				ppos += sort.Search(len(pkcol)-ppos, func(i int) bool { return pkcol[i+ppos] >= pkid })
 				if ppos == len(pkcol) || pkcol[ppos] != pkid {
 					// if not found, pkid does not exist (anymore)
 					// clear from tombstone, the next iteration may break
