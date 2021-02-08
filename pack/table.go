@@ -2583,6 +2583,11 @@ func (t *Table) Compact(ctx context.Context) error {
 	// from KV storage and header list, but may be re-added subsequently.
 	//
 	for {
+		// stop when no more dst packs are found
+		if dstIndex == t.packidx.Len() {
+			break
+		}
+
 		// load next dst pack
 		if dstPack == nil {
 			dstKey := uint32(dstIndex)
