@@ -181,6 +181,9 @@ func (s *BitSet) Close() {
 }
 
 func (s *BitSet) And(r *BitSet) (*BitSet, int) {
+	if s.size == 0 || s.cnt == 0 {
+		return s, 0
+	}
 	if r.Count() == 0 {
 		s.Zero()
 		return s, 0
@@ -195,6 +198,9 @@ func (s *BitSet) And(r *BitSet) (*BitSet, int) {
 }
 
 func (s *BitSet) AndNot(r *BitSet) *BitSet {
+	if s.size == 0 || s.cnt == 0 {
+		return s
+	}
 	bitsetAndNot(s.Bytes(), r.Bytes(), min(s.size, r.size))
 	// if any == 0 {
 	// 	s.cnt = 0
@@ -217,12 +223,18 @@ func (s *BitSet) Or(r *BitSet) *BitSet {
 }
 
 func (s *BitSet) Xor(r *BitSet) *BitSet {
+	if s.size == 0 {
+		return s
+	}
 	bitsetXor(s.Bytes(), r.Bytes(), min(s.size, r.size))
 	s.cnt = -1
 	return s
 }
 
 func (s *BitSet) Neg() *BitSet {
+	if s.size == 0 {
+		return s
+	}
 	bitsetNeg(s.Bytes(), s.size)
 	if s.cnt >= 0 {
 		s.cnt = s.size - s.cnt
