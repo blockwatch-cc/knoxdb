@@ -2520,6 +2520,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 func (t *Table) Compact(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	start := time.Now()
 
 	if util.InterruptRequested(ctx) {
 		return ctx.Err()
@@ -2537,17 +2538,18 @@ func (t *Table) Compact(ctx context.Context) error {
 		srcSize               int64
 		nextpack              uint32
 		needCompact           bool
+		srcPacks              int = t.packidx.Len()
 		total, moved, written int64
 	)
 	for i, v := range t.packidx.packs {
-		needCompact = needCompact || v.Key > nextpack                             // sequence gap
-		needCompact = needCompact || (i < t.packidx.Len()-1 && v.NValues < maxsz) // non-full pack (except the last)
+		needCompact = needCompact || v.Key > nextpack                      // sequence gap
+		needCompact = needCompact || (i < srcPacks-1 && v.NValues < maxsz) // non-full pack (except the last)
 		nextpack++
 		total += int64(v.NValues)
 		srcSize += int64(v.Size)
 	}
 	if !needCompact {
-		log.Infof("pack: %s table %d packs / %d rows already compact", t.name, t.packidx.Len(), total)
+		log.Debugf("pack: %s table %d packs / %d rows already compact", t.name, srcPacks, total)
 		return nil
 	}
 
@@ -2568,7 +2570,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		isNewPack        bool
 	)
 
-	log.Infof("pack: compacting %s table %d packs / %d rows", t.name, t.packidx.Len(), total)
+	log.Debugf("pack: %s table compacting %d packs / %d rows", t.name, srcPacks, total)
 
 	// This algorithm walks the table's pack list in pack key order and
 	// collects/compacts contents in row id (pk) order. Note that pk order may
@@ -2589,19 +2591,19 @@ func (t *Table) Compact(ctx context.Context) error {
 			if dstKey == t.packidx.packs[dstIndex].Key {
 				// skip full packs
 				if t.packidx.packs[dstIndex].NValues == maxsz {
-					log.Debugf("pack: skipping full dst pack %x", dstKey)
+					// log.Tracef("pack: skipping full dst pack %x", dstKey)
 					dstIndex++
 					continue
 				}
 				// skip out of order packs
 				pmin, pmax := t.packidx.MinMax(dstIndex)
 				if pmin < lastMaxPk {
-					log.Debugf("pack: skipping out-of-order dst pack %x", dstKey)
+					// log.Tracef("pack: skipping out-of-order dst pack %x", dstKey)
 					dstIndex++
 					continue
 				}
 
-				log.Debugf("pack: loading dst pack %d:%x", dstIndex, dstKey)
+				// log.Tracef("pack: loading dst pack %d:%x", dstIndex, dstKey)
 				dstPack, err = t.loadPack(tx, dstKey, false, nil)
 				if err != nil {
 					return err
@@ -2611,7 +2613,7 @@ func (t *Table) Compact(ctx context.Context) error {
 			} else {
 				// handle gaps in key sequence
 				// clone new pack from journal
-				log.Debugf("pack: creating new dst pack %d:%x", dstIndex, dstKey)
+				// log.Tracef("pack: creating new dst pack %d:%x", dstIndex, dstKey)
 				dstPack = t.packPool.Get().(*Package)
 				dstPack.key = dstKey
 				isNewPack = true
@@ -2645,7 +2647,7 @@ func (t *Table) Compact(ctx context.Context) error {
 			}
 
 			ph := t.packidx.packs[srcIndex]
-			log.Debugf("pack: loading src pack %d:%x", srcIndex, ph.Key)
+			// log.Tracef("pack: loading src pack %d:%x", srcIndex, ph.Key)
 			srcPack, err = t.loadPack(tx, ph.Key, false, nil)
 			if err != nil {
 				return err
@@ -2662,8 +2664,8 @@ func (t *Table) Compact(ctx context.Context) error {
 		moved += int64(cp)
 
 		// move data from src to dst
-		log.Debugf("pack: moving %d/%d rows from pack %x to %x", cp, srcPack.Len(),
-			srcPack.key, dstPack.key)
+		// log.Tracef("pack: moving %d/%d rows from pack %x to %x", cp, srcPack.Len(),
+		// 	srcPack.key, dstPack.key)
 		if err := dstPack.AppendFrom(srcPack, 0, cp); err != nil {
 			return err
 		}
@@ -2679,7 +2681,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		// write dst when full
 		if dstPack.Len() == maxsz {
 			// this may extend the pack header list when dstPack is new
-			log.Debugf("pack: storing full dst pack %x", dstPack.key)
+			// log.Tracef("pack: storing full dst pack %x", dstPack.key)
 			n, err := t.storePack(tx, dstPack)
 			if err != nil {
 				return err
@@ -2692,9 +2694,9 @@ func (t *Table) Compact(ctx context.Context) error {
 			dstPack = nil
 		}
 
-		if srcPack.Len() == 0 {
-			log.Debugf("pack: deleting empty src pack %x", srcPack.key)
-		}
+		// if srcPack.Len() == 0 {
+		// 	log.Tracef("pack: deleting empty src pack %x", srcPack.key)
+		// }
 
 		// store or delete source pack
 		if _, err := t.storePack(tx, srcPack); err != nil {
@@ -2720,7 +2722,7 @@ func (t *Table) Compact(ctx context.Context) error {
 
 	// store the last dstPack
 	if dstPack != nil {
-		log.Debugf("pack: storing last dst pack %x", dstPack.key)
+		// log.Tracef("pack: storing last dst pack %x", dstPack.key)
 		n, err := t.storePack(tx, dstPack)
 		if err != nil {
 			return err
@@ -2729,8 +2731,12 @@ func (t *Table) Compact(ctx context.Context) error {
 		written += int64(dstPack.Len())
 	}
 
-	log.Infof("pack: compacted %d/%d rows from %s table into %d packs (%s ->> %s)",
-		moved, written, t.name, t.packidx.Len(), util.ByteSize(srcSize), util.ByteSize(dstSize))
+	log.Debugf("pack: %s table compacted %d(+%d) rows into %d(%d) packs (%s ->> %s) in %s",
+		t.name, moved, written-moved,
+		t.packidx.Len(), srcPacks-t.packidx.Len(),
+		util.ByteSize(srcSize), util.ByteSize(dstSize),
+		time.Since(start),
+	)
 
 	// store pack headers
 	if err := t.storePackInfo(tx.tx); err != nil {
