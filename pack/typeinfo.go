@@ -70,6 +70,7 @@ var (
 	textMarshalerType     = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
 	binaryUnmarshalerType = reflect.TypeOf((*encoding.BinaryUnmarshaler)(nil)).Elem()
 	binaryMarshalerType   = reflect.TypeOf((*encoding.BinaryMarshaler)(nil)).Elem()
+	stringerType          = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
 	byteSliceType         = reflect.TypeOf([]byte(nil))
 )
 

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime/pprof"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/echa/log"
@@ -81,11 +82,23 @@ func (t Enum) String() string {
 	}
 }
 
+type Stringer []string
+
+func (s Stringer) MarshalText() ([]byte, error) {
+	return []byte(strings.Join(s, ",")), nil
+}
+
+func (s *Stringer) UnmarshalText(b []byte) error {
+	*s = strings.Split(string(b), ",")
+	return nil
+}
+
 type Types struct {
 	RowId     uint64             `knox:"I,pk"                     json:"row_id"`
 	Timestamp time.Time          `knox:"T,snappy"                 json:"time"`
 	Hash      []byte             `knox:"H"                        json:"hash"`
 	String    string             `knox:"str,snappy"               json:"string"`
+	Stringer  Stringer           `knox:"strlist,snappy"               json:"string_list"`
 	Bool      bool               `knox:"bool,snappy"              json:"bool"`
 	Enum      Enum               `knox:"enum,u8,snappy"           json:"enum"`
 	Int64     int64              `knox:"i64,snappy"               json:"int64"`
@@ -250,6 +263,7 @@ func NewRandomTypes(i int) *Types {
 		Timestamp: time.Now().UTC(),
 		Hash:      GenerateRandomKey(20),
 		String:    hex.EncodeToString(GenerateRandomKey(4)),
+		Stringer:  strings.SplitAfter(hex.EncodeToString(GenerateRandomKey(4)), "a"),
 		Bool:      true,
 		Enum:      Enum(i%4 + 1),
 		// typed ints

@@ -645,16 +645,14 @@ func (l ConditionList) MaybeMatchPack(info PackInfo) bool {
 // return a bit vector containing matching positions in the pack
 // TODO: consider parallel matches to check multiple conditions, then merge bitsets
 func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *BitSet {
-	// always match empty condition list
-	if len(l) == 0 || pkg.Len() == 0 {
-		return NewBitSet(pkg.Len()).One()
-	}
+	// start with a full bitset
+	bits := NewBitSet(pkg.Len()).One()
+
 	// match conditions and merge bit vectors
-	// stop early when result contains all zeros (assuming AND
-	// relation between all conditions)
-	var bits *BitSet
+	// stop early when result contains all zeros (assuming AND relation)
+	// always match empty condition list
 	for _, c := range l {
-		var b *BitSet
+		// var b *BitSet
 		// FIXME: reconsider when we introduce OR and nested conditions!
 		//
 		// Quick inclusion check to skip matching when the current condition
@@ -669,48 +667,47 @@ func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *BitSet {
 			case FilterModeEqual:
 				// condition is always true iff min == max == c.Value
 				if c.Field.Type.Equal(min, c.Value) && c.Field.Type.Equal(max, c.Value) {
-					b = NewBitSet(pkg.Len()).One()
+					continue
 				}
 			case FilterModeNotEqual:
 				// condition is always true iff c.Value < min || c.Value > max
 				if c.Field.Type.Lt(c.Value, min) || c.Field.Type.Gt(c.Value, max) {
-					b = NewBitSet(pkg.Len()).One()
+					continue
 				}
 			case FilterModeRange:
 				// condition is always true iff pack range <= condition range
 				if c.Field.Type.Lte(c.From, min) && c.Field.Type.Gte(c.To, max) {
-					b = NewBitSet(pkg.Len()).One()
+					continue
 				}
 			case FilterModeGt:
 				// condition is always true iff min > c.Value
 				if c.Field.Type.Gt(min, c.Value) {
-					b = NewBitSet(pkg.Len()).One()
+					continue
 				}
 			case FilterModeGte:
 				// condition is always true iff min >= c.Value
 				if c.Field.Type.Gte(min, c.Value) {
-					b = NewBitSet(pkg.Len()).One()
+					continue
 				}
 			case FilterModeLt:
 				// condition is always true iff max < c.Value
 				if c.Field.Type.Lt(max, c.Value) {
-					b = NewBitSet(pkg.Len()).One()
+					continue
 				}
 			case FilterModeLte:
 				// condition is always true iff max <= c.Value
 				if c.Field.Type.Lte(max, c.Value) {
-					b = NewBitSet(pkg.Len()).One()
+					continue
 				}
 			}
 		}
-		// match vector against condition
-		if b == nil {
-			b = c.MatchPack(pkg, bits)
-		}
-		if bits == nil {
-			if b.Count() == 0 {
-				return b
-			}
+
+		// match vector against condition using last match as mask
+		b := c.MatchPack(pkg, bits)
+
+		// shortcut
+		if bits.Count() == bits.Len() {
+			bits.Close()
 			bits = b
 			continue
 		}

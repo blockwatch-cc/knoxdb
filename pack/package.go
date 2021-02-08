@@ -348,7 +348,17 @@ func (p *Package) Push(v interface{}) error {
 			}
 			b.Bytes = append(b.Bytes, buf)
 		case FieldTypeString:
-			b.Strings = append(b.Strings, f.String())
+			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
+				txt, err := f.Interface().(encoding.TextMarshaler).MarshalText()
+				if err != nil {
+					return err
+				}
+				b.Strings = append(b.Strings, string(txt))
+			} else if f.CanInterface() && f.Type().Implements(stringerType) {
+				b.Strings = append(b.Strings, f.Interface().(fmt.Stringer).String())
+			} else {
+				b.Strings = append(b.Strings, f.String())
+			}
 		case FieldTypeDatetime:
 			b.Int64 = append(b.Int64, f.Interface().(time.Time).UnixNano())
 		case FieldTypeBoolean:
@@ -488,7 +498,17 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			b.Bytes[pos] = buf
 
 		case FieldTypeString:
-			b.Strings[pos] = f.String()
+			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
+				txt, err := f.Interface().(encoding.TextMarshaler).MarshalText()
+				if err != nil {
+					return err
+				}
+				b.Strings[pos] = string(txt)
+			} else if f.CanInterface() && f.Type().Implements(stringerType) {
+				b.Strings[pos] = f.Interface().(fmt.Stringer).String()
+			} else {
+				b.Strings[pos] = f.String()
+			}
 
 		case FieldTypeDatetime:
 			b.Int64[pos] = f.Interface().(time.Time).UnixNano()
@@ -657,6 +677,15 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst.SetBytes(buf)
 
 		case FieldTypeString:
+			if dst.CanAddr() {
+				pv := dst.Addr()
+				if pv.CanInterface() && pv.Type().Implements(textUnmarshalerType) {
+					if err := pv.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(b.Strings[pos])); err != nil {
+						return err
+					}
+					break
+				}
+			}
 			dst.SetString(b.Strings[pos])
 
 		case FieldTypeDatetime:
@@ -879,7 +908,17 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 		b.Bytes[pos] = buf
 
 	case FieldTypeString:
-		b.Strings[pos] = val.String()
+		if val.CanInterface() && val.Type().Implements(textMarshalerType) {
+			txt, err := val.Interface().(encoding.TextMarshaler).MarshalText()
+			if err != nil {
+				return err
+			}
+			b.Strings[pos] = string(txt)
+		} else if val.CanInterface() && val.Type().Implements(stringerType) {
+			b.Strings[pos] = val.Interface().(fmt.Stringer).String()
+		} else {
+			b.Strings[pos] = val.String()
+		}
 
 	case FieldTypeDatetime:
 		b.Int64[pos] = val.Interface().(time.Time).UnixNano()

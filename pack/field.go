@@ -298,6 +298,16 @@ func Fields(proto interface{}) (FieldList, error) {
 				fields[i].Type = FieldTypeBytes
 				break
 			}
+			// check if type implements TextMarshaler -> BlockString
+			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
+				fields[i].Type = FieldTypeString
+				break
+			}
+			// check if type implements fmt.Stringer -> BlockString
+			if f.CanInterface() && f.Type().Implements(stringerType) {
+				fields[i].Type = FieldTypeString
+				break
+			}
 			if f.Type() != byteSliceType {
 				return nil, fmt.Errorf("pack: unsupported slice type %s", f.Type().String())
 			}
