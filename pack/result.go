@@ -485,11 +485,11 @@ func (r *Result) Decimal256Column(colname string) (Decimal256Slice, error) {
 	if err != nil {
 		return Decimal256Slice{}, err
 	}
-	tcol, ok := col.([]Int256)
+	tcol, ok := col.(Decimal256Slice)
 	if !ok {
 		return Decimal256Slice{}, ErrTypeMismatch
 	}
-	return Decimal256Slice{tcol, r.pkg.fields[r.pkg.FieldIndex(colname)].Scale}, nil
+	return tcol, nil
 }
 
 func (r *Result) Decimal128Column(colname string) (Decimal128Slice, error) {
@@ -497,11 +497,11 @@ func (r *Result) Decimal128Column(colname string) (Decimal128Slice, error) {
 	if err != nil {
 		return Decimal128Slice{}, err
 	}
-	tcol, ok := col.([]Int128)
+	tcol, ok := col.(Decimal128Slice)
 	if !ok {
 		return Decimal128Slice{}, ErrTypeMismatch
 	}
-	return Decimal128Slice{tcol, r.pkg.fields[r.pkg.FieldIndex(colname)].Scale}, nil
+	return tcol, nil
 }
 
 func (r *Result) Decimal64Column(colname string) (Decimal64Slice, error) {
@@ -509,11 +509,11 @@ func (r *Result) Decimal64Column(colname string) (Decimal64Slice, error) {
 	if err != nil {
 		return Decimal64Slice{}, err
 	}
-	tcol, ok := col.([]int64)
+	tcol, ok := col.(Decimal64Slice)
 	if !ok {
 		return Decimal64Slice{}, ErrTypeMismatch
 	}
-	return Decimal64Slice{tcol, r.pkg.fields[r.pkg.FieldIndex(colname)].Scale}, nil
+	return tcol, nil
 }
 
 func (r *Result) Decimal32Column(colname string) (Decimal32Slice, error) {
@@ -521,11 +521,11 @@ func (r *Result) Decimal32Column(colname string) (Decimal32Slice, error) {
 	if err != nil {
 		return Decimal32Slice{}, err
 	}
-	tcol, ok := col.([]int32)
+	tcol, ok := col.(Decimal32Slice)
 	if !ok {
 		return Decimal32Slice{}, ErrTypeMismatch
 	}
-	return Decimal32Slice{tcol, r.pkg.fields[r.pkg.FieldIndex(colname)].Scale}, nil
+	return tcol, nil
 }
 
 func (r *Result) Float64Column(colname string) ([]float64, error) {
