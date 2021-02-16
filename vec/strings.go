@@ -218,6 +218,9 @@ func stringContainsRange(s []string, from, to string) bool {
 	if n == 0 {
 		return false
 	}
+	if len(from) == 0 {
+		return true
+	}
 	// Case A
 	if v := strings.Compare(to, s[0]); v < 0 {
 		return false

@@ -2027,7 +2027,7 @@ func (t FieldType) Between(val, from, to interface{}) bool {
 	case FieldTypeBytes:
 		v := val.([]byte)
 		fromMatch := bytes.Compare(v, from.([]byte))
-		if fromMatch == 0 {
+		if fromMatch == 0 || len(from.([]byte)) == 0 {
 			return true
 		}
 		if fromMatch < 0 {
@@ -2042,7 +2042,7 @@ func (t FieldType) Between(val, from, to interface{}) bool {
 	case FieldTypeString:
 		v := val.(string)
 		fromMatch := strings.Compare(v, from.(string))
-		if fromMatch == 0 {
+		if fromMatch == 0 || len(from.(string)) == 0 {
 			return true
 		}
 		if fromMatch < 0 {
@@ -2147,7 +2147,7 @@ func (t FieldType) BetweenAt(pkg *Package, index, pos int, from, to interface{})
 	case FieldTypeBytes:
 		val, _ := pkg.BytesAt(index, pos)
 		fromMatch := bytes.Compare(val, from.([]byte))
-		if fromMatch == 0 {
+		if fromMatch == 0 || len(from.([]byte)) == 0 {
 			return true
 		}
 		if fromMatch < 0 {
@@ -2162,7 +2162,7 @@ func (t FieldType) BetweenAt(pkg *Package, index, pos int, from, to interface{})
 	case FieldTypeString:
 		val, _ := pkg.StringAt(index, pos)
 		fromMatch := strings.Compare(val, from.(string))
-		if fromMatch == 0 {
+		if fromMatch == 0 || len(from.(string)) == 0 {
 			return true
 		}
 		if fromMatch < 0 {
