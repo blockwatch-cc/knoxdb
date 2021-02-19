@@ -51,8 +51,8 @@ func matchInt32Equal(src []int32, val int32, bits []byte) int64 {
 	switch {
 	case useAVX512_F:
 		return matchInt32EqualAVX512(src, val, bits)
-	//case useAVX2:
-	//	return matchInt32EqualAVX2(src, val, bits)
+	case useAVX2:
+		return matchInt32EqualAVX2(src, val, bits)
 	default:
 		return matchInt32EqualGeneric(src, val, bits)
 	}
