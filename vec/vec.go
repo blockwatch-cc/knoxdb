@@ -4,7 +4,7 @@
 package vec
 
 import (
-	"fmt"
+	"log"
 )
 
 var (
@@ -27,21 +27,21 @@ var (
 	useAVX512_BF16         bool // AVX512 BFloat16 Instructions
 )
 
-func printFlags() {
-	fmt.Printf("AVX2 %t\n", useAVX2)
-	fmt.Printf("AVX512-F %t\n", useAVX512_F)
-	fmt.Printf("AVX512-DQ %t\n", useAVX512_DQ)
-	fmt.Printf("AVX512-IFMA %t\n", useAVX512_IFMA)
-	fmt.Printf("AVX512-PF %t\n", useAVX512_PF)
-	fmt.Printf("AVX512-ER %t\n", useAVX512_ER)
-	fmt.Printf("AVX512-CD %t\n", useAVX512_CD)
-	fmt.Printf("AVX512-BW %t\n", useAVX512_BW)
-	fmt.Printf("AVX512-VL %t\n", useAVX512_VL)
-	fmt.Printf("AVX512-VBMI %t\n", useAVX512_VBMI)
-	fmt.Printf("AVX512-BITALG %t\n", useAVX512_BITALG)
-	fmt.Printf("AVX512-VPOPCNTDQ %t\n", useAVX512_VPOPCNTDQ)
-	fmt.Printf("AVX512-4VNNIW %t\n", useAVX512_4VNNIW)
-	fmt.Printf("AVX512-4FMAPS %t\n", useAVX512_4FMAPS)
-	fmt.Printf("AVX512-VP2INTERSECT %t\n", useAVX512_VP2INTERSECT)
-	fmt.Printf("AVX512-BF16 %t\n", useAVX512_BF16)
+func LogAVXFeatures(l *log.Logger) {
+	l.Printf("AVX2 %t", useAVX2)
+	l.Printf("AVX512-F %t", useAVX512_F)
+	l.Printf("AVX512-DQ %t", useAVX512_DQ)
+	l.Printf("AVX512-IFMA %t", useAVX512_IFMA)
+	l.Printf("AVX512-PF %t", useAVX512_PF)
+	l.Printf("AVX512-ER %t", useAVX512_ER)
+	l.Printf("AVX512-CD %t", useAVX512_CD)
+	l.Printf("AVX512-BW %t", useAVX512_BW)
+	l.Printf("AVX512-VL %t", useAVX512_VL)
+	l.Printf("AVX512-VBMI %t", useAVX512_VBMI)
+	l.Printf("AVX512-BITALG %t", useAVX512_BITALG)
+	l.Printf("AVX512-VPOPCNTDQ %t", useAVX512_VPOPCNTDQ)
+	l.Printf("AVX512-4VNNIW %t", useAVX512_4VNNIW)
+	l.Printf("AVX512-4FMAPS %t", useAVX512_4FMAPS)
+	l.Printf("AVX512-VP2INTERSECT %t", useAVX512_VP2INTERSECT)
+	l.Printf("AVX512-BF16 %t", useAVX512_BF16)
 }

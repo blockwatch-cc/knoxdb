@@ -22,6 +22,7 @@ import (
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
 	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 var (
@@ -112,6 +113,10 @@ func run() error {
 	}
 	log.SetLevel(lvl)
 	pack.UseLogger(log.Log)
+
+	if debug {
+		vec.LogAVXFeatures(log.Log.Logger())
+	}
 
 	cmd = flags.Arg(0)
 	dbname = strings.Split(flags.Arg(1), ".db")[0] + ".db"
