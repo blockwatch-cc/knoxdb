@@ -496,8 +496,7 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 		// condition value is within range
 		return c.Field.Type.Between(c.Value, min, max)
 	case FilterModeNotEqual:
-		// condition is either strictly smaller or strictly larger
-		return !c.Field.Type.Between(c.Value, min, max)
+		return true // we don't know, so full scan is required
 	case FilterModeRange:
 		// check if pack min-max range overlaps c.From-c.To range
 		return !(c.Field.Type.Lt(max, c.From) || c.Field.Type.Gt(min, c.To))
