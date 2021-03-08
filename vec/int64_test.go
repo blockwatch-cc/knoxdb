@@ -47,26 +47,26 @@ var (
 		42, 5, 113, 12, // Y8
 	}
 	int64EqualTestMatch_0  int64 = 5
-	int64EqualTestResult_0       = []byte{0x56, 0x78, 0x12, 0x34}
+	int64EqualTestResult_0       = []byte{0x6a, 0x1e, 0x48, 0x2c}
 
 	int64NotEqualTestMatch_0  int64 = 5
-	int64NotEqualTestResult_0       = []byte{0xa9, 0x87, 0xed, 0xcb}
+	int64NotEqualTestResult_0       = []byte{0x95, 0xe1, 0xb7, 0xd3}
 
 	int64LessTestMatch_0  int64 = 5
-	int64LessTestResult_0       = []byte{0xa0, 0x84, 0xe4, 0x80}
+	int64LessTestResult_0       = []byte{0x05, 0x21, 0x27, 0x01}
 
 	int64LessEqualTestMatch_0  int64 = 5
-	int64LessEqualTestResult_0       = []byte{0xf6, 0xfc, 0xf6, 0xb4}
+	int64LessEqualTestResult_0       = []byte{0x6f, 0x3f, 0x6f, 0x2d}
 
 	int64GreaterTestMatch_0  int64 = 5
-	int64GreaterTestResult_0       = []byte{0x09, 0x03, 0x09, 0x4b}
+	int64GreaterTestResult_0       = []byte{0x90, 0xc0, 0x90, 0xd2}
 
 	int64GreaterEqualTestMatch_0  int64 = 5
-	int64GreaterEqualTestResult_0       = []byte{0x5f, 0x7b, 0x1b, 0x7f}
+	int64GreaterEqualTestResult_0       = []byte{0xfa, 0xde, 0xd8, 0xfe}
 
 	int64BetweenTestMatch_0  int64 = 5
 	int64BetweenTestMatch_0b int64 = 10
-	int64BetweenTestResult_0       = []byte{0x5f, 0x78, 0x1b, 0x34}
+	int64BetweenTestResult_0       = []byte{0xfa, 0x1e, 0xd8, 0x2c}
 
 	// positive values only
 	int64TestSlice_1 = []int64{
@@ -79,25 +79,25 @@ var (
 		43, 5, 5, 5,
 		39, 40, 41, 42,
 	}
-	int64EqualTestResult_1       = []byte{0x82, 0x42, 0x23, 0x70}
+	int64EqualTestResult_1       = []byte{0x41, 0x42, 0xc4, 0x0e}
 	int64EqualTestMatch_1  int64 = 5
 
-	int64NotEqualTestResult_1       = []byte{0x7d, 0xbd, 0xdc, 0x8f}
+	int64NotEqualTestResult_1       = []byte{0xbe, 0xbd, 0x3b, 0xf1}
 	int64NotEqualTestMatch_1  int64 = 5
 
-	int64LessTestResult_1       = []byte{0x70, 0x00, 0x00, 0x00}
+	int64LessTestResult_1       = []byte{0x0e, 0x00, 0x00, 0x00}
 	int64LessTestMatch_1  int64 = 5
 
-	int64LessEqualTestResult_1       = []byte{0xf2, 0x42, 0x23, 0x70}
+	int64LessEqualTestResult_1       = []byte{0x4f, 0x42, 0xc4, 0x0e}
 	int64LessEqualTestMatch_1  int64 = 5
 
-	int64GreaterTestResult_1       = []byte{0x0d, 0xbd, 0xdc, 0x8f}
+	int64GreaterTestResult_1       = []byte{0xb0, 0xbd, 0x3b, 0xf1}
 	int64GreaterTestMatch_1  int64 = 5
 
-	int64GreaterEqualTestResult_1       = []byte{0x8f, 0xff, 0xff, 0xff}
+	int64GreaterEqualTestResult_1       = []byte{0xf1, 0xff, 0xff, 0xff}
 	int64GreaterEqualTestMatch_1  int64 = 5
 
-	int64BetweenTestResult_1       = []byte{0x8f, 0x42, 0x23, 0x70}
+	int64BetweenTestResult_1       = []byte{0xf1, 0x42, 0xc4, 0x0e}
 	int64BetweenTestMatch_1  int64 = 5
 	int64BetweenTestMatch_1b int64 = 10
 
@@ -112,25 +112,25 @@ var (
 		39, 40, -41, 42,
 		43, 44, 45, -46,
 	}
-	int64EqualTestResult_2       = []byte{0x80, 0x0, 0x0, 0x0}
+	int64EqualTestResult_2       = []byte{0x01, 0x0, 0x0, 0x0}
 	int64EqualTestMatch_2  int64 = -5
 
-	int64NotEqualTestResult_2       = []byte{0x7f, 0xff, 0xff, 0xff}
+	int64NotEqualTestResult_2       = []byte{0xfe, 0xff, 0xff, 0xff}
 	int64NotEqualTestMatch_2  int64 = -5
 
-	int64LessTestResult_2       = []byte{0xe1, 0x04, 0x04, 0x21}
+	int64LessTestResult_2       = []byte{0x87, 0x20, 0x20, 0x84}
 	int64LessTestMatch_2  int64 = 5
 
-	int64LessEqualTestResult_2       = []byte{0xf1, 0x04, 0x04, 0x21}
+	int64LessEqualTestResult_2       = []byte{0x8f, 0x20, 0x20, 0x84}
 	int64LessEqualTestMatch_2  int64 = 5
 
-	int64GreaterTestResult_2       = []byte{0x0e, 0xfb, 0xfb, 0xde}
+	int64GreaterTestResult_2       = []byte{0x70, 0xdf, 0xdf, 0x7b}
 	int64GreaterTestMatch_2  int64 = 5
 
-	int64GreaterEqualTestResult_2       = []byte{0x1e, 0xfb, 0xfb, 0xde}
+	int64GreaterEqualTestResult_2       = []byte{0x78, 0xdf, 0xdf, 0x7b}
 	int64GreaterEqualTestMatch_2  int64 = 5
 
-	int64BetweenTestResult_2       = []byte{0x1e, 0x00, 0x00, 0x00}
+	int64BetweenTestResult_2       = []byte{0x78, 0x00, 0x00, 0x00}
 	int64BetweenTestMatch_2  int64 = 5
 	int64BetweenTestMatch_2b int64 = 10
 
@@ -153,25 +153,25 @@ var (
 		math.MaxInt32, math.MinInt32,
 		math.MaxInt64, math.MinInt64,
 	}
-	int64EqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
+	int64EqualTestResult_3       = []byte{0x80, 0x80, 0x80, 0x80}
 	int64EqualTestMatch_3  int64 = math.MinInt64
 
-	int64NotEqualTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
+	int64NotEqualTestResult_3       = []byte{0x7f, 0x7f, 0x7f, 0x7f}
 	int64NotEqualTestMatch_3  int64 = math.MinInt64
 
-	int64LessTestResult_3       = []byte{0x0, 0x0, 0x0, 0x00}
+	int64LessTestResult_3       = []byte{0x0, 0x0, 0x0, 0x0}
 	int64LessTestMatch_3  int64 = math.MinInt64
 
-	int64LessEqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
+	int64LessEqualTestResult_3       = []byte{0x80, 0x80, 0x80, 0x80}
 	int64LessEqualTestMatch_3  int64 = math.MinInt64
 
-	int64GreaterTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
+	int64GreaterTestResult_3       = []byte{0x7f, 0x7f, 0x7f, 0x7f}
 	int64GreaterTestMatch_3  int64 = math.MinInt64
 
 	int64GreaterEqualTestResult_3       = []byte{0xff, 0xff, 0xff, 0xff}
 	int64GreaterEqualTestMatch_3  int64 = math.MinInt64
 
-	int64BetweenTestResult_3       = []byte{0x0a, 0x0a, 0x0a, 0x0a}
+	int64BetweenTestResult_3       = []byte{0x50, 0x50, 0x50, 0x50}
 	int64BetweenTestMatch_3  int64 = math.MaxInt32
 	int64BetweenTestMatch_3b int64 = math.MaxInt64
 )
@@ -207,7 +207,7 @@ func CreateInt64TestCase(name string, slice []int64, match, match2 int64, result
 	}
 	// clear the last unused bits
 	if length%8 != 0 {
-		new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+		new_result[len(new_result)-1] &= 0xff >> (8 - length%8)
 	}
 	// count number of ones
 	var cnt int

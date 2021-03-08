@@ -47,26 +47,26 @@ var (
 		42, 5, 113, 12, // Y8
 	}
 	int32EqualTestMatch_0  int32 = 5
-	int32EqualTestResult_0       = []byte{0x56, 0x78, 0x12, 0x34}
+	int32EqualTestResult_0       = []byte{0x6a, 0x1e, 0x48, 0x2c}
 
 	int32NotEqualTestMatch_0  int32 = 5
-	int32NotEqualTestResult_0       = []byte{0xa9, 0x87, 0xed, 0xcb}
+	int32NotEqualTestResult_0       = []byte{0x95, 0xe1, 0xb7, 0xd3}
 
 	int32LessTestMatch_0  int32 = 5
-	int32LessTestResult_0       = []byte{0xa0, 0x84, 0xe4, 0x80}
+	int32LessTestResult_0       = []byte{0x05, 0x21, 0x27, 0x01}
 
 	int32LessEqualTestMatch_0  int32 = 5
-	int32LessEqualTestResult_0       = []byte{0xf6, 0xfc, 0xf6, 0xb4}
+	int32LessEqualTestResult_0       = []byte{0x6f, 0x3f, 0x6f, 0x2d}
 
 	int32GreaterTestMatch_0  int32 = 5
-	int32GreaterTestResult_0       = []byte{0x09, 0x03, 0x09, 0x4b}
+	int32GreaterTestResult_0       = []byte{0x90, 0xc0, 0x90, 0xd2}
 
 	int32GreaterEqualTestMatch_0  int32 = 5
-	int32GreaterEqualTestResult_0       = []byte{0x5f, 0x7b, 0x1b, 0x7f}
+	int32GreaterEqualTestResult_0       = []byte{0xfa, 0xde, 0xd8, 0xfe}
 
 	int32BetweenTestMatch_0  int32 = 5
 	int32BetweenTestMatch_0b int32 = 10
-	int32BetweenTestResult_0       = []byte{0x5f, 0x78, 0x1b, 0x34}
+	int32BetweenTestResult_0       = []byte{0xfa, 0x1e, 0xd8, 0x2c}
 
 	// positive values only
 	int32TestSlice_1 = []int32{
@@ -79,25 +79,25 @@ var (
 		43, 5, 5, 5,
 		39, 40, 41, 42,
 	}
-	int32EqualTestResult_1       = []byte{0x82, 0x42, 0x23, 0x70}
+	int32EqualTestResult_1       = []byte{0x41, 0x42, 0xc4, 0x0e}
 	int32EqualTestMatch_1  int32 = 5
 
-	int32NotEqualTestResult_1       = []byte{0x7d, 0xbd, 0xdc, 0x8f}
+	int32NotEqualTestResult_1       = []byte{0xbe, 0xbd, 0x3b, 0xf1}
 	int32NotEqualTestMatch_1  int32 = 5
 
-	int32LessTestResult_1       = []byte{0x70, 0x00, 0x00, 0x00}
+	int32LessTestResult_1       = []byte{0x0e, 0x00, 0x00, 0x00}
 	int32LessTestMatch_1  int32 = 5
 
-	int32LessEqualTestResult_1       = []byte{0xf2, 0x42, 0x23, 0x70}
+	int32LessEqualTestResult_1       = []byte{0x4f, 0x42, 0xc4, 0x0e}
 	int32LessEqualTestMatch_1  int32 = 5
 
-	int32GreaterTestResult_1       = []byte{0x0d, 0xbd, 0xdc, 0x8f}
+	int32GreaterTestResult_1       = []byte{0xb0, 0xbd, 0x3b, 0xf1}
 	int32GreaterTestMatch_1  int32 = 5
 
-	int32GreaterEqualTestResult_1       = []byte{0x8f, 0xff, 0xff, 0xff}
+	int32GreaterEqualTestResult_1       = []byte{0xf1, 0xff, 0xff, 0xff}
 	int32GreaterEqualTestMatch_1  int32 = 5
 
-	int32BetweenTestResult_1       = []byte{0x8f, 0x42, 0x23, 0x70}
+	int32BetweenTestResult_1       = []byte{0xf1, 0x42, 0xc4, 0x0e}
 	int32BetweenTestMatch_1  int32 = 5
 	int32BetweenTestMatch_1b int32 = 10
 
@@ -112,25 +112,25 @@ var (
 		39, 40, -41, 42,
 		43, 44, 45, -46,
 	}
-	int32EqualTestResult_2       = []byte{0x80, 0x0, 0x0, 0x0}
+	int32EqualTestResult_2       = []byte{0x01, 0x0, 0x0, 0x0}
 	int32EqualTestMatch_2  int32 = -5
 
-	int32NotEqualTestResult_2       = []byte{0x7f, 0xff, 0xff, 0xff}
+	int32NotEqualTestResult_2       = []byte{0xfe, 0xff, 0xff, 0xff}
 	int32NotEqualTestMatch_2  int32 = -5
 
-	int32LessTestResult_2       = []byte{0xe1, 0x04, 0x04, 0x21}
+	int32LessTestResult_2       = []byte{0x87, 0x20, 0x20, 0x84}
 	int32LessTestMatch_2  int32 = 5
 
-	int32LessEqualTestResult_2       = []byte{0xf1, 0x04, 0x04, 0x21}
+	int32LessEqualTestResult_2       = []byte{0x8f, 0x20, 0x20, 0x84}
 	int32LessEqualTestMatch_2  int32 = 5
 
-	int32GreaterTestResult_2       = []byte{0x0e, 0xfb, 0xfb, 0xde}
+	int32GreaterTestResult_2       = []byte{0x70, 0xdf, 0xdf, 0x7b}
 	int32GreaterTestMatch_2  int32 = 5
 
-	int32GreaterEqualTestResult_2       = []byte{0x1e, 0xfb, 0xfb, 0xde}
+	int32GreaterEqualTestResult_2       = []byte{0x78, 0xdf, 0xdf, 0x7b}
 	int32GreaterEqualTestMatch_2  int32 = 5
 
-	int32BetweenTestResult_2       = []byte{0x1e, 0x00, 0x00, 0x00}
+	int32BetweenTestResult_2       = []byte{0x78, 0x00, 0x00, 0x00}
 	int32BetweenTestMatch_2  int32 = 5
 	int32BetweenTestMatch_2b int32 = 10
 
@@ -153,25 +153,25 @@ var (
 		math.MaxInt16, math.MinInt16,
 		math.MaxInt32, math.MinInt32,
 	}
-	int32EqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
+	int32EqualTestResult_3       = []byte{0x80, 0x80, 0x80, 0x80}
 	int32EqualTestMatch_3  int32 = math.MinInt32
 
-	int32NotEqualTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
+	int32NotEqualTestResult_3       = []byte{0x7f, 0x7f, 0x7f, 0x7f}
 	int32NotEqualTestMatch_3  int32 = math.MinInt32
 
 	int32LessTestResult_3       = []byte{0x0, 0x0, 0x0, 0x00}
 	int32LessTestMatch_3  int32 = math.MinInt32
 
-	int32LessEqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
+	int32LessEqualTestResult_3       = []byte{0x80, 0x80, 0x80, 0x80}
 	int32LessEqualTestMatch_3  int32 = math.MinInt32
 
-	int32GreaterTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
+	int32GreaterTestResult_3       = []byte{0x7f, 0x7f, 0x7f, 0x7f}
 	int32GreaterTestMatch_3  int32 = math.MinInt32
 
 	int32GreaterEqualTestResult_3       = []byte{0xff, 0xff, 0xff, 0xff}
 	int32GreaterEqualTestMatch_3  int32 = math.MinInt32
 
-	int32BetweenTestResult_3       = []byte{0x0a, 0x0a, 0x0a, 0x0a}
+	int32BetweenTestResult_3       = []byte{0x50, 0x50, 0x50, 0x50}
 	int32BetweenTestMatch_3  int32 = math.MaxInt16
 	int32BetweenTestMatch_3b int32 = math.MaxInt32
 )
@@ -207,7 +207,7 @@ func CreateInt32TestCase(name string, slice []int32, match, match2 int32, result
 	}
 	// clear the last unused bits
 	if length%8 != 0 {
-		new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+		new_result[len(new_result)-1] &= 0xff >> (8 - length%8)
 	}
 	// count number of ones
 	var cnt int

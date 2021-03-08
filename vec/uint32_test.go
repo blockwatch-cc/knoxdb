@@ -36,26 +36,26 @@ var (
 		42, 5, 113, 12, // Y8
 	}
 	uint32EqualTestMatch_0  uint32 = 5
-	uint32EqualTestResult_0        = []byte{0x56, 0x78, 0x12, 0x34}
+	uint32EqualTestResult_0        = []byte{0x6a, 0x1e, 0x48, 0x2c}
 
 	uint32NotEqualTestMatch_0  uint32 = 5
-	uint32NotEqualTestResult_0        = []byte{0xa9, 0x87, 0xed, 0xcb}
+	uint32NotEqualTestResult_0        = []byte{0x95, 0xe1, 0xb7, 0xd3}
 
 	uint32LessTestMatch_0  uint32 = 5
-	uint32LessTestResult_0        = []byte{0xa0, 0x84, 0xe4, 0x80}
+	uint32LessTestResult_0        = []byte{0x05, 0x21, 0x27, 0x01}
 
 	uint32LessEqualTestMatch_0  uint32 = 5
-	uint32LessEqualTestResult_0        = []byte{0xf6, 0xfc, 0xf6, 0xb4}
+	uint32LessEqualTestResult_0        = []byte{0x6f, 0x3f, 0x6f, 0x2d}
 
 	uint32GreaterTestMatch_0  uint32 = 5
-	uint32GreaterTestResult_0        = []byte{0x09, 0x03, 0x09, 0x4b}
+	uint32GreaterTestResult_0        = []byte{0x90, 0xc0, 0x90, 0xd2}
 
 	uint32GreaterEqualTestMatch_0  uint32 = 5
-	uint32GreaterEqualTestResult_0        = []byte{0x5f, 0x7b, 0x1b, 0x7f}
+	uint32GreaterEqualTestResult_0        = []byte{0xfa, 0xde, 0xd8, 0xfe}
 
 	uint32BetweenTestMatch_0  uint32 = 5
 	uint32BetweenTestMatch_0b uint32 = 10
-	uint32BetweenTestResult_0        = []byte{0x5f, 0x78, 0x1b, 0x34}
+	uint32BetweenTestResult_0        = []byte{0xfa, 0x1e, 0xd8, 0x2c}
 
 	uint32TestSlice_1 = []uint32{
 		5, 2, 3, 4,
@@ -68,25 +68,25 @@ var (
 		39, 40, 41, 42,
 	}
 
-	uint32EqualTestResult_1        = []byte{0x82, 0x42, 0x23, 0x70}
+	uint32EqualTestResult_1        = []byte{0x41, 0x42, 0xc4, 0x0e}
 	uint32EqualTestMatch_1  uint32 = 5
 
-	uint32NotEqualTestResult_1        = []byte{0x7d, 0xbd, 0xdc, 0x8f}
+	uint32NotEqualTestResult_1        = []byte{0xbe, 0xbd, 0x3b, 0xf1}
 	uint32NotEqualTestMatch_1  uint32 = 5
 
-	uint32LessTestResult_1        = []byte{0x70, 0x00, 0x00, 0x00}
+	uint32LessTestResult_1        = []byte{0x0e, 0x00, 0x00, 0x00}
 	uint32LessTestMatch_1  uint32 = 5
 
-	uint32LessEqualTestResult_1        = []byte{0xf2, 0x42, 0x23, 0x70}
+	uint32LessEqualTestResult_1        = []byte{0x4f, 0x42, 0xc4, 0x0e}
 	uint32LessEqualTestMatch_1  uint32 = 5
 
-	uint32GreaterTestResult_1        = []byte{0x0d, 0xbd, 0xdc, 0x8f}
+	uint32GreaterTestResult_1        = []byte{0xb0, 0xbd, 0x3b, 0xf1}
 	uint32GreaterTestMatch_1  uint32 = 5
 
-	uint32GreaterEqualTestResult_1        = []byte{0x8f, 0xff, 0xff, 0xff}
+	uint32GreaterEqualTestResult_1        = []byte{0xf1, 0xff, 0xff, 0xff}
 	uint32GreaterEqualTestMatch_1  uint32 = 5
 
-	uint32BetweenTestResult_1        = []byte{0x8f, 0x42, 0x23, 0x70}
+	uint32BetweenTestResult_1        = []byte{0xf1, 0x42, 0xc4, 0x0e}
 	uint32BetweenTestMatch_1  uint32 = 5
 	uint32BetweenTestMatch_1b uint32 = 10
 
@@ -102,13 +102,13 @@ var (
 		0, math.MaxUint8, math.MaxUint16, math.MaxUint32,
 	}
 
-	uint32EqualTestResult_2        = []byte{0x11, 0x11, 0x11, 0x11}
+	uint32EqualTestResult_2        = []byte{0x88, 0x88, 0x88, 0x88}
 	uint32EqualTestMatch_2  uint32 = math.MaxUint32
 
-	uint32NotEqualTestResult_2        = []byte{0xee, 0xee, 0xee, 0xee}
+	uint32NotEqualTestResult_2        = []byte{0x77, 0x77, 0x77, 0x77}
 	uint32NotEqualTestMatch_2  uint32 = math.MaxUint32
 
-	uint32LessTestResult_2        = []byte{0xee, 0xee, 0xee, 0xee}
+	uint32LessTestResult_2        = []byte{0x77, 0x77, 0x77, 0x77}
 	uint32LessTestMatch_2  uint32 = math.MaxUint32
 
 	uint32LessEqualTestResult_2        = []byte{0xff, 0xff, 0xff, 0xff}
@@ -117,10 +117,10 @@ var (
 	uint32GreaterTestResult_2        = []byte{0x00, 0x00, 0x00, 0x00}
 	uint32GreaterTestMatch_2  uint32 = math.MaxUint32
 
-	uint32GreaterEqualTestResult_2        = []byte{0x11, 0x11, 0x11, 0x11}
+	uint32GreaterEqualTestResult_2        = []byte{0x88, 0x88, 0x88, 0x88}
 	uint32GreaterEqualTestMatch_2  uint32 = math.MaxUint32
 
-	uint32BetweenTestResult_2        = []byte{0x33, 0x33, 0x33, 0x33}
+	uint32BetweenTestResult_2        = []byte{0xcc, 0xcc, 0xcc, 0xcc}
 	uint32BetweenTestMatch_2  uint32 = math.MaxUint16
 	uint32BetweenTestMatch_2b uint32 = math.MaxUint32
 )
@@ -167,7 +167,7 @@ func CreateUint32TestCase(name string, slice []uint32, match, match2 uint32, res
 	}
 	// clear the last unused bits
 	if length%8 != 0 {
-		new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+		new_result[len(new_result)-1] &= 0xff >> (8 - length%8)
 	}
 	// count number of ones
 	var cnt int

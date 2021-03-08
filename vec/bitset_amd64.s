@@ -680,7 +680,7 @@ TEXT ·bitsetReverseAVX2(SB), NOSPLIT, $0-24
     VMOVDQU         LUT_reverse<>+0x00(SB), Y9      // LUT for high nibble
     VPSLLW          $4, Y9, Y10                     // LUT for low low nibble
     VPBROADCASTB    const_0x0f<>+0x00(SB), Y11      // low mask, 0x0f
-    VMOVDQU         shuffle8<>+0x00(SB), Y12        // load byte shuffle mask
+    VMOVDQU         shuf_reverse<>+0x00(SB), Y12        // load byte shuffle mask
     VMOVDQU         perm_reverse<>+0x00(SB), Y13    // load byte shuffle mask
 
 	// works for data size 64 byte

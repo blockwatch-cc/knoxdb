@@ -161,7 +161,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int32
@@ -171,15 +171,14 @@ scalar:
 	SETEQ	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	4(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -363,7 +362,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int32
@@ -373,15 +372,14 @@ scalar:
 	SETNE	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	4(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -562,7 +560,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int32
@@ -572,15 +570,14 @@ scalar:
 	SETLT	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	4(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -783,7 +780,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int32
@@ -793,15 +790,14 @@ scalar:
 	SETLE	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	4(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -1000,7 +996,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int32
@@ -1010,15 +1006,14 @@ scalar:
 	SETGT	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	4(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -1202,7 +1197,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int32
@@ -1212,15 +1207,14 @@ scalar:
 	SETGE	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	4(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -1481,7 +1475,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int32
@@ -1493,15 +1487,14 @@ scalar:
 	SETLT	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	4(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)

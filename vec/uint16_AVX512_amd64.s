@@ -16,7 +16,6 @@
 // internal:
 //   AX = intermediate
 //   R9 = population count
-//   Z10 = permute control mask
 //   Z1-Z8 = vector data
 //   K1-K7 = comparision results
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
@@ -26,7 +25,6 @@ TEXT ·matchUint16EqualAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VPBROADCASTW    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		perm16<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -43,11 +41,9 @@ prep_big:
     
 // works for >= 64 uint16 (i.e. 128 bytes of data)
 loop_big:
-	VPERMW   	0(SI), Z10, Z1 
-	VPCMPEQW	Z1, Z0, K1
-    
-	VPERMW   	64(SI), Z10, Z2
-	VPCMPEQW	Z2, Z0, K2
+	VPCMPEQW	(SI), Z0, K1
+
+    VPCMPEQW	64(SI), Z0, K2
     KSHIFTLQ    $32, K2, K2
     KORQ        K1, K2, K1
 
@@ -71,11 +67,9 @@ prep_small:
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
-    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
-    KNOTB           K2, K2          // use lower equal than BX
+	VPCMPUQ	    $2, Z11, Z9, K2     // mask lower equal than BX
 
-	VPERMW.Z   	0(SI), Z10, K2, Z1 
-	VPCMPEQW	Z1, Z0, K2, K1
+	VPCMPEQW	(SI), Z0, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
@@ -104,7 +98,6 @@ done:
 // internal:
 //   AX = intermediate
 //   R9 = population count
-//   Z10 = permute control mask
 //   Z1-Z8 = vector data
 //   K1-K7 = comparision results
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
@@ -114,7 +107,6 @@ TEXT ·matchUint16NotEqualAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VPBROADCASTW    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		perm16<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -131,11 +123,9 @@ prep_big:
     
 // works for >= 64 uint16 (i.e. 128 bytes of data)
 loop_big:
-	VPERMW   	0(SI), Z10, Z1 
-	VPCMPEQW	Z1, Z0, K1
+	VPCMPEQW	(SI), Z0, K1
     
-	VPERMW   	64(SI), Z10, Z2
-	VPCMPEQW	Z2, Z0, K2
+	VPCMPEQW	64(SI), Z0, K2
     KSHIFTLQ    $32, K2, K2
     KORQ        K1, K2, K1
 
@@ -160,11 +150,9 @@ prep_small:
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
-    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
-    KNOTB           K2, K2          // use lower equal than BX
+	VPCMPUQ	    $2, Z11, Z9, K2     // mask lower equal than BX
 
-	VPERMW.Z   	0(SI), Z10, K2, Z1 
-	VPCMPEQW	Z1, Z0, K2, K1
+	VPCMPEQW	(SI), Z0, K2, K1
     KNOTB       K1, K1      // make EQ to NE
     KANDB       K1, K2, K1  // delete the unused bits
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
@@ -195,7 +183,6 @@ done:
 // internal:
 //   AX = intermediate
 //   R9 = population count
-//   Z10 = permute control mask
 //   Z1-Z8 = vector data
 //   K1-K7 = comparision results
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
@@ -205,7 +192,6 @@ TEXT ·matchUint16LessThanAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VPBROADCASTW    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		perm16<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -222,11 +208,9 @@ prep_big:
     
 // works for >= 64 uint16 (i.e. 128 bytes of data)
 loop_big:
-	VPERMW   	0(SI), Z10, Z1 
-	VPCMPUW	    $1, Z0, Z1, K1    // $1 means compare less than
+	VPCMPUW	    $6, (SI), Z0, K1    // $6 means not less equal, but operands are switched
     
-	VPERMW   	64(SI), Z10, Z2
-	VPCMPUW	    $1, Z0, Z2, K2 
+	VPCMPUW	    $6, 64(SI), Z0, K2 
     KSHIFTLQ    $32, K2, K2
     KORQ        K1, K2, K1
 
@@ -250,11 +234,9 @@ prep_small:
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
-    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
-    KNOTB           K2, K2          // use lower equal than BX
+	VPCMPUQ	    $2, Z11, Z9, K2     // mask lower equal than BX
 
-	VPERMW.Z   	0(SI), Z10, K2, Z1 
-	VPCMPUW	    $1, Z0, Z1, K2, K1
+	VPCMPUW	    $6, (SI), Z0, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
@@ -283,7 +265,6 @@ done:
 // internal:
 //   AX = intermediate
 //   R9 = population count
-//   Z10 = permute control mask
 //   Z1-Z8 = vector data
 //   K1-K7 = comparision results
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
@@ -293,7 +274,6 @@ TEXT ·matchUint16LessThanEqualAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VPBROADCASTW    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		perm16<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -310,11 +290,9 @@ prep_big:
     
 // works for >= 64 uint16 (i.e. 128 bytes of data)
 loop_big:
-	VPERMW   	0(SI), Z10, Z1 
-	VPCMPUW	    $2, Z0, Z1, K1      // $2 means compare less equal
+	VPCMPUW	    $5, (SI), Z0, K1      // $5 means not less than, but operands are switched
     
-	VPERMW   	64(SI), Z10, Z2
-	VPCMPUW	    $2, Z0, Z2, K2 
+	VPCMPUW	    $5, 64(SI), Z0, K2 
     KSHIFTLQ    $32, K2, K2
     KORQ        K1, K2, K1
 
@@ -338,11 +316,9 @@ prep_small:
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
-    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
-    KNOTB           K2, K2          // use lower equal than BX
+	VPCMPUQ	    $2, Z11, Z9, K2     // mask lower equal than BX
 
-	VPERMW.Z   	0(SI), Z10, K2, Z1 
-	VPCMPUW	    $2, Z0, Z1, K2, K1
+	VPCMPUW	    $5, (SI), Z0, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
@@ -371,7 +347,6 @@ done:
 // internal:
 //   AX = intermediate
 //   R9 = population count
-//   Z10 = permute control mask
 //   Z1-Z8 = vector data
 //   K1-K7 = comparision results
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
@@ -381,7 +356,6 @@ TEXT ·matchUint16GreaterThanAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VPBROADCASTW    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		perm16<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -398,11 +372,9 @@ prep_big:
     
 // works for >= 64 uint16 (i.e. 128 bytes of data)
 loop_big:
-	VPERMW   	0(SI), Z10, Z1 
-	VPCMPUW	    $6, Z0, Z1, K1    // $6 means compare not less equal (or greater than)
+	VPCMPUW	    $1, (SI), Z0, K1    // $1 means less than, but operands are switched
     
-	VPERMW   	64(SI), Z10, Z2
-	VPCMPUW	    $6, Z0, Z2, K2 
+	VPCMPUW	    $1, 64(SI), Z0, K2 
     KSHIFTLQ    $32, K2, K2
     KORQ        K1, K2, K1
 
@@ -426,11 +398,9 @@ prep_small:
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
-    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
-    KNOTB           K2, K2          // use lower equal than BX
+	VPCMPUQ	    $2, Z11, Z9, K2     // mask lower equal than BX
 
-	VPERMW.Z   	0(SI), Z10, K2, Z1 
-	VPCMPUW	    $6, Z0, Z1, K2, K1
+	VPCMPUW	    $1, (SI), Z0, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
@@ -459,7 +429,6 @@ done:
 // internal:
 //   AX = intermediate
 //   R9 = population count
-//   Z10 = permute control mask
 //   Z1-Z8 = vector data
 //   K1-K7 = comparision results
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
@@ -469,7 +438,6 @@ TEXT ·matchUint16GreaterThanEqualAVX512(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 	VPBROADCASTW    val+24(FP), Z0            // load val into AVX512 reg
-	VMOVDQU64		perm16<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -486,11 +454,9 @@ prep_big:
     
 // works for >= 64 uint16 (i.e. 128 bytes of data)
 loop_big:
-	VPERMW   	0(SI), Z10, Z1 
-	VPCMPUW	    $5, Z0, Z1, K1    // $5 means compare not less (or greater equal)
+	VPCMPUW	    $2, (SI), Z0, K1    // $2 means less equal, but operands are switched
     
-	VPERMW   	64(SI), Z10, Z2
-	VPCMPUW	    $5, Z0, Z2, K2 
+	VPCMPUW	    $2, 64(SI), Z0, K2 
     KSHIFTLQ    $32, K2, K2
     KORQ        K1, K2, K1
 
@@ -514,11 +480,9 @@ prep_small:
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
-    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
-    KNOTB           K2, K2          // use lower equal than BX
+	VPCMPUQ	    $2, Z11, Z9, K2     // mask lower equal than BX
 
-	VPERMW.Z   	0(SI), Z10, K2, Z1 
-	VPCMPUW	    $5, Z0, Z1, K2, K1
+	VPCMPUW	    $2, (SI), Z0, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
@@ -547,7 +511,6 @@ done:
 //   Z0 = comparison value
 //   AX = intermediate
 //   R9 = population count
-//   Z10 = permute control mask
 //   Z1-Z8 = vector data
 //   K1-K7 = comparision results
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
@@ -563,7 +526,6 @@ TEXT ·matchUint16BetweenAVX512(SB), NOSPLIT, $0-72
 	VPBROADCASTW 	b+26(FP), Z0             // load val b into AVX512 reg
 	VPSUBW			Z12, Z0, Z0              // compute diff
 	VPADDW			Z13, Z0, Z0
-	VMOVDQU64		perm16<>+0x00(SB), Z10    // load shuffle control mask
 
 	TESTQ	BX, BX
 	JLE		done
@@ -580,11 +542,11 @@ prep_big:
     
 // works for >= 64 uint64 (i.e. 512 bytes of data)
 loop_big:
-	VPERMW   	0(SI), Z10, Z1 
+	VMOVDQU16  	(SI), Z1 
 	VPSUBW		Z12, Z1, Z1
 	VPCMPUW	    $1, Z0, Z1, K1    // $1 means compare less than
     
-	VPERMW   	64(SI), Z10, Z2
+	VMOVDQU16  	64(SI), Z2
 	VPSUBW		Z12, Z2, Z2
 	VPCMPUW	    $1, Z0, Z2, K2
     KSHIFTLQ    $32, K2, K2
@@ -610,10 +572,9 @@ prep_small:
 loop_small:
     // calculate mask
     VPBROADCASTQ    BX, Z11         // broadcast BX
-    VPCMPGTQ        Z11, Z9, K2     // mask greater than BX
-    KNOTB           K2, K2          // use lower equal than BX
+	VPCMPUQ	    $2, Z11, Z9, K2     // mask lower equal than BX
 
-	VPERMW.Z   	0(SI), Z10, K2, Z1 
+	VMOVDQU16  	(SI), K2, Z1 
 	VPSUBW		Z12, Z1, K2, Z1
 	VPCMPUW	    $1, Z0, Z1, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice

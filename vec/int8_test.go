@@ -47,26 +47,26 @@ var (
 		42, 5, 113, 12, // Y8
 	}
 	int8EqualTestMatch_0  int8 = 5
-	int8EqualTestResult_0      = []byte{0x56, 0x78, 0x12, 0x34}
+	int8EqualTestResult_0      = []byte{0x6a, 0x1e, 0x48, 0x2c}
 
 	int8NotEqualTestMatch_0  int8 = 5
-	int8NotEqualTestResult_0      = []byte{0xa9, 0x87, 0xed, 0xcb}
+	int8NotEqualTestResult_0      = []byte{0x95, 0xe1, 0xb7, 0xd3}
 
 	int8LessTestMatch_0  int8 = 5
-	int8LessTestResult_0      = []byte{0xa0, 0x84, 0xe4, 0x80}
+	int8LessTestResult_0      = []byte{0x05, 0x21, 0x27, 0x01}
 
 	int8LessEqualTestMatch_0  int8 = 5
-	int8LessEqualTestResult_0      = []byte{0xf6, 0xfc, 0xf6, 0xb4}
+	int8LessEqualTestResult_0      = []byte{0x6f, 0x3f, 0x6f, 0x2d}
 
 	int8GreaterTestMatch_0  int8 = 5
-	int8GreaterTestResult_0      = []byte{0x09, 0x03, 0x09, 0x4b}
+	int8GreaterTestResult_0      = []byte{0x90, 0xc0, 0x90, 0xd2}
 
 	int8GreaterEqualTestMatch_0  int8 = 5
-	int8GreaterEqualTestResult_0      = []byte{0x5f, 0x7b, 0x1b, 0x7f}
+	int8GreaterEqualTestResult_0      = []byte{0xfa, 0xde, 0xd8, 0xfe}
 
 	int8BetweenTestMatch_0  int8 = 5
 	int8BetweenTestMatch_0b int8 = 10
-	int8BetweenTestResult_0      = []byte{0x5f, 0x78, 0x1b, 0x34}
+	int8BetweenTestResult_0      = []byte{0xfa, 0x1e, 0xd8, 0x2c}
 
 	// positive values only
 	int8TestSlice_1 = []int8{
@@ -79,25 +79,25 @@ var (
 		43, 5, 5, 5,
 		39, 40, 41, 42,
 	}
-	int8EqualTestResult_1      = []byte{0x82, 0x42, 0x23, 0x70}
+	int8EqualTestResult_1      = []byte{0x41, 0x42, 0xc4, 0x0e}
 	int8EqualTestMatch_1  int8 = 5
 
-	int8NotEqualTestResult_1      = []byte{0x7d, 0xbd, 0xdc, 0x8f}
+	int8NotEqualTestResult_1      = []byte{0xbe, 0xbd, 0x3b, 0xf1}
 	int8NotEqualTestMatch_1  int8 = 5
 
-	int8LessTestResult_1      = []byte{0x70, 0x00, 0x00, 0x00}
+	int8LessTestResult_1      = []byte{0x0e, 0x00, 0x00, 0x00}
 	int8LessTestMatch_1  int8 = 5
 
-	int8LessEqualTestResult_1      = []byte{0xf2, 0x42, 0x23, 0x70}
+	int8LessEqualTestResult_1      = []byte{0x4f, 0x42, 0xc4, 0x0e}
 	int8LessEqualTestMatch_1  int8 = 5
 
-	int8GreaterTestResult_1      = []byte{0x0d, 0xbd, 0xdc, 0x8f}
+	int8GreaterTestResult_1      = []byte{0xb0, 0xbd, 0x3b, 0xf1}
 	int8GreaterTestMatch_1  int8 = 5
 
-	int8GreaterEqualTestResult_1      = []byte{0x8f, 0xff, 0xff, 0xff}
+	int8GreaterEqualTestResult_1      = []byte{0xf1, 0xff, 0xff, 0xff}
 	int8GreaterEqualTestMatch_1  int8 = 5
 
-	int8BetweenTestResult_1      = []byte{0x8f, 0x42, 0x23, 0x70}
+	int8BetweenTestResult_1      = []byte{0xf1, 0x42, 0xc4, 0x0e}
 	int8BetweenTestMatch_1  int8 = 5
 	int8BetweenTestMatch_1b int8 = 10
 
@@ -112,25 +112,25 @@ var (
 		39, 40, -41, 42,
 		43, 44, 45, -46,
 	}
-	int8EqualTestResult_2      = []byte{0x80, 0x0, 0x0, 0x0}
+	int8EqualTestResult_2      = []byte{0x01, 0x0, 0x0, 0x0}
 	int8EqualTestMatch_2  int8 = -5
 
-	int8NotEqualTestResult_2      = []byte{0x7f, 0xff, 0xff, 0xff}
+	int8NotEqualTestResult_2      = []byte{0xfe, 0xff, 0xff, 0xff}
 	int8NotEqualTestMatch_2  int8 = -5
 
-	int8LessTestResult_2      = []byte{0xe1, 0x04, 0x04, 0x21}
+	int8LessTestResult_2      = []byte{0x87, 0x20, 0x20, 0x84}
 	int8LessTestMatch_2  int8 = 5
 
-	int8LessEqualTestResult_2      = []byte{0xf1, 0x04, 0x04, 0x21}
+	int8LessEqualTestResult_2      = []byte{0x8f, 0x20, 0x20, 0x84}
 	int8LessEqualTestMatch_2  int8 = 5
 
-	int8GreaterTestResult_2      = []byte{0x0e, 0xfb, 0xfb, 0xde}
+	int8GreaterTestResult_2      = []byte{0x70, 0xdf, 0xdf, 0x7b}
 	int8GreaterTestMatch_2  int8 = 5
 
-	int8GreaterEqualTestResult_2      = []byte{0x1e, 0xfb, 0xfb, 0xde}
+	int8GreaterEqualTestResult_2      = []byte{0x78, 0xdf, 0xdf, 0x7b}
 	int8GreaterEqualTestMatch_2  int8 = 5
 
-	int8BetweenTestResult_2      = []byte{0x1e, 0x00, 0x00, 0x00}
+	int8BetweenTestResult_2      = []byte{0x78, 0x00, 0x00, 0x00}
 	int8BetweenTestMatch_2  int8 = 5
 	int8BetweenTestMatch_2b int8 = 10
 
@@ -153,25 +153,25 @@ var (
 		math.MaxInt8 / 2, math.MinInt8 / 2,
 		math.MaxInt8, math.MinInt8,
 	}
-	int8EqualTestResult_3      = []byte{0x01, 0x01, 0x01, 0x01}
+	int8EqualTestResult_3      = []byte{0x80, 0x80, 0x80, 0x80}
 	int8EqualTestMatch_3  int8 = math.MinInt8
 
-	int8NotEqualTestResult_3      = []byte{0xfe, 0xfe, 0xfe, 0xfe}
+	int8NotEqualTestResult_3      = []byte{0x7f, 0x7f, 0x7f, 0x7f}
 	int8NotEqualTestMatch_3  int8 = math.MinInt8
 
-	int8LessTestResult_3      = []byte{0x0, 0x0, 0x0, 0x00}
+	int8LessTestResult_3      = []byte{0x0, 0x0, 0x0, 0x0}
 	int8LessTestMatch_3  int8 = math.MinInt8
 
-	int8LessEqualTestResult_3      = []byte{0x01, 0x01, 0x01, 0x01}
+	int8LessEqualTestResult_3      = []byte{0x80, 0x80, 0x80, 0x80}
 	int8LessEqualTestMatch_3  int8 = math.MinInt8
 
-	int8GreaterTestResult_3      = []byte{0xfe, 0xfe, 0xfe, 0xfe}
+	int8GreaterTestResult_3      = []byte{0x7f, 0x7f, 0x7f, 0x7f}
 	int8GreaterTestMatch_3  int8 = math.MinInt8
 
 	int8GreaterEqualTestResult_3      = []byte{0xff, 0xff, 0xff, 0xff}
 	int8GreaterEqualTestMatch_3  int8 = math.MinInt8
 
-	int8BetweenTestResult_3      = []byte{0x0a, 0x0a, 0x0a, 0x0a}
+	int8BetweenTestResult_3      = []byte{0x50, 0x50, 0x50, 0x50}
 	int8BetweenTestMatch_3  int8 = math.MaxInt8 / 2
 	int8BetweenTestMatch_3b int8 = math.MaxInt8
 )
@@ -207,7 +207,7 @@ func CreateInt8TestCase(name string, slice []int8, match, match2 int8, result []
 	}
 	// clear the last unused bits
 	if length%8 != 0 {
-		new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+		new_result[len(new_result)-1] &= 0xff >> (8 - length%8)
 	}
 	// count number of ones
 	var cnt int

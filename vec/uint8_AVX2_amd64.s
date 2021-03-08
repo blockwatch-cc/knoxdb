@@ -32,7 +32,6 @@ TEXT ·matchUint8EqualAVX2(SB), NOSPLIT, $0-57
 
 prep_avx:
 	VPBROADCASTB    val+24(FP), Y0              // load val into AVX2 reg
-	VMOVDQU		    shuffle8<>+0x00(SB), Y10    // load shuffle control mask
  	CMPQ	        BX, $511                    // slices smaller than 512 values are handled in small loop
 	JBE		        prep_small
 
@@ -51,9 +50,7 @@ loop_big:
     VPCMPEQB	64(SI)(CX*8), Y0, Y3
     VPCMPEQB	96(SI)(CX*8), Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -63,9 +60,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -80,9 +75,7 @@ loop_big:
     VPCMPEQB	192(SI)(CX*8), Y0, Y3
     VPCMPEQB	224(SI)(CX*8), Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -92,9 +85,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -110,9 +101,7 @@ loop_big:
     VPCMPEQB	320(SI)(CX*8), Y0, Y3
     VPCMPEQB	352(SI)(CX*8), Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -122,9 +111,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -139,9 +126,7 @@ loop_big:
     VPCMPEQB	448(SI)(CX*8), Y0, Y3
     VPCMPEQB	480(SI)(CX*8), Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -151,9 +136,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -176,8 +159,6 @@ prep_small:
 
 loop_small:
 	VPCMPEQB	0(SI), Y0, Y1
-
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
 	MOVL		AX, (DI)            // write the lower 32 bits to the output slice
@@ -201,7 +182,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int8
@@ -211,15 +192,15 @@ scalar:
 	SETEQ	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	1(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
+	//BSWAPL	AX            // swap bytes into place for big endian output
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -271,7 +252,6 @@ TEXT ·matchUint8NotEqualAVX2(SB), NOSPLIT, $0-57
 
 prep_avx:
 	VPBROADCASTB    val+24(FP), Y0              // load val into AVX2 reg
-	VMOVDQU		    shuffle8<>+0x00(SB), Y10    // load shuffle control mask
  	CMPQ	        BX, $511                    // slices smaller than 511 values are handled in small loop
 	JBE		        prep_small
 
@@ -290,9 +270,7 @@ loop_big:
     VPCMPEQB	64(SI)(CX*8), Y0, Y3
     VPCMPEQB	96(SI)(CX*8), Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -303,9 +281,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -321,9 +297,7 @@ loop_big:
     VPCMPEQB	192(SI)(CX*8), Y0, Y3
     VPCMPEQB	224(SI)(CX*8), Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -334,9 +308,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -353,9 +325,7 @@ loop_big:
     VPCMPEQB	320(SI)(CX*8), Y0, Y3
     VPCMPEQB	352(SI)(CX*8), Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -366,9 +336,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -384,9 +352,7 @@ loop_big:
     VPCMPEQB	448(SI)(CX*8), Y0, Y3
     VPCMPEQB	480(SI)(CX*8), Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -397,9 +363,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -423,8 +387,6 @@ prep_small:
 
 loop_small:
 	VPCMPEQB	0(SI), Y0, Y1
-
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     NOTL        AX
@@ -449,7 +411,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int8
@@ -459,15 +421,14 @@ scalar:
 	SETNE	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL    $1, AX
 	LEAQ	1(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL    CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -521,7 +482,6 @@ prep_avx:
 	VPBROADCASTB    val+24(FP), Y0                  // load val into AVX2 reg
 	VPBROADCASTB    const_0x80<>+0x00(SB), Y11      // create 0x8000.. mask
 	VPXOR			Y11, Y0, Y0                     // flip sign bit
-	VMOVDQU		    shuffle8<>+0x00(SB), Y10        // load shuffle control mask
  	CMPQ	        BX, $511                        // slices smaller than 511 values are handled in small loop
 	JBE		        prep_small
 
@@ -548,9 +508,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -560,9 +518,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -585,9 +541,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -597,9 +551,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -623,9 +575,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -635,9 +585,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -660,9 +608,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -672,9 +618,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -700,7 +644,6 @@ loop_small:
 	VPXOR		Y11, Y1, Y1    // flip sign bits
 	VPCMPGTB	Y1, Y0, Y1     // signed compare
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
 	MOVL		AX, (DI)            // write the lower 32 bits to the output slice
@@ -727,7 +670,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int8
@@ -738,15 +681,14 @@ scalar:
 	SETLT	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	1(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -800,7 +742,6 @@ prep_avx:
 	VPBROADCASTB    val+24(FP), Y0                  // load val into AVX2 reg
 	VPBROADCASTB    const_0x80<>+0x00(SB), Y11      // create 0x8000.. mask
 	VPXOR			Y11, Y0, Y0                     // flip sign bit
-	VMOVDQU		    shuffle8<>+0x00(SB), Y10        // load shuffle control mask
  	CMPQ	        BX, $511                        // slices smaller than 511 values are handled in small loop
 	JBE		        prep_small
 
@@ -827,9 +768,7 @@ loop_big:
 	VPCMPGTB	Y0, Y3, Y3
 	VPCMPGTB	Y0, Y4, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -840,9 +779,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -866,9 +803,7 @@ loop_big:
 	VPCMPGTB	Y0, Y3, Y3
 	VPCMPGTB	Y0, Y4, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -879,9 +814,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -906,9 +839,7 @@ loop_big:
 	VPCMPGTB	Y0, Y3, Y3
 	VPCMPGTB	Y0, Y4, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -919,9 +850,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -945,9 +874,7 @@ loop_big:
 	VPCMPGTB	Y0, Y3, Y3
 	VPCMPGTB	Y0, Y4, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -958,9 +885,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -987,7 +912,6 @@ loop_small:
 	VPXOR		Y11, Y1, Y1    // flip sign bits
 	VPCMPGTB	Y0, Y1, Y1     // signed compare
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     NOTL        AX
@@ -1015,7 +939,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int8
@@ -1026,15 +950,14 @@ scalar:
 	SETLE	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	1(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -1088,7 +1011,6 @@ prep_avx:
 	VPBROADCASTB    val+24(FP), Y0                  // load val into AVX2 reg
 	VPBROADCASTB    const_0x80<>+0x00(SB), Y11      // create 0x8000.. mask
 	VPXOR			Y11, Y0, Y0                     // flip sign bit
-	VMOVDQU		    shuffle8<>+0x00(SB), Y10        // load shuffle control mask
  	CMPQ	        BX, $511                        // slices smaller than 511 values are handled in small loop
 	JBE		        prep_small
 
@@ -1115,9 +1037,7 @@ loop_big:
 	VPCMPGTB	Y0, Y3, Y3
 	VPCMPGTB	Y0, Y4, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1127,9 +1047,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1152,9 +1070,7 @@ loop_big:
 	VPCMPGTB	Y0, Y3, Y3
 	VPCMPGTB	Y0, Y4, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1164,9 +1080,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1190,9 +1104,7 @@ loop_big:
 	VPCMPGTB	Y0, Y3, Y3
 	VPCMPGTB	Y0, Y4, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1202,9 +1114,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1227,9 +1137,7 @@ loop_big:
 	VPCMPGTB	Y0, Y3, Y3
 	VPCMPGTB	Y0, Y4, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1239,9 +1147,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1267,7 +1173,6 @@ loop_small:
 	VPXOR		Y11, Y1, Y1    // flip sign bits
 	VPCMPGTB	Y0, Y1, Y1     // signed compare
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
 	MOVL		AX, (DI)            // write the lower 32 bits to the output slice
@@ -1294,7 +1199,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int8
@@ -1305,15 +1210,14 @@ scalar:
 	SETGT	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	1(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -1367,7 +1271,6 @@ prep_avx:
 	VPBROADCASTB    val+24(FP), Y0                  // load val into AVX2 reg
 	VPBROADCASTB    const_0x80<>+0x00(SB), Y11      // create 0x8000.. mask
 	VPXOR			Y11, Y0, Y0                     // flip sign bit
-	VMOVDQU		    shuffle8<>+0x00(SB), Y10        // load shuffle control mask
  	CMPQ	        BX, $511                        // slices smaller than 511 values are handled in small loop
 	JBE		        prep_small
 
@@ -1394,9 +1297,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1407,9 +1308,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1433,9 +1332,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1446,9 +1343,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1473,9 +1368,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1486,9 +1379,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1512,9 +1403,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1525,9 +1414,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1554,7 +1441,6 @@ loop_small:
 	VPXOR		Y11, Y1, Y1    // flip sign bits
 	VPCMPGTB	Y1, Y0, Y1     // signed compare
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     NOTL        AX
@@ -1582,7 +1468,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int8
@@ -1593,15 +1479,14 @@ scalar:
 	SETGE	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	1(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
@@ -1667,7 +1552,6 @@ prep_avx:
 	VPSUBB			Y12, Y0, Y0                     // compute diff
 	VPADDB			Y13, Y0, Y0
 	VPXOR			Y11, Y0, Y0                     // flip sign bit
-	VMOVDQU		    shuffle8<>+0x00(SB), Y10        // load shuffle control mask
  	CMPQ	        BX, $511                        // slices smaller than 511 values are handled in small loop
 	JBE		        prep_small
 
@@ -1698,9 +1582,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1710,9 +1592,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1739,9 +1619,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1751,9 +1629,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1781,9 +1657,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1793,9 +1667,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1822,9 +1694,7 @@ loop_big:
 	VPCMPGTB	Y3, Y0, Y3
 	VPCMPGTB	Y4, Y0, Y4
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y2, Y2
 	VPMOVMSKB	Y2, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1834,9 +1704,7 @@ loop_big:
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
-	VPSHUFB		Y10, Y3, Y3
 	VPMOVMSKB	Y3, DX      // move per byte MSBs into packed bitmask to r32 or r64
-	VPSHUFB		Y10, Y4, Y4
 	VPMOVMSKB	Y4, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
     SHLQ        $32, AX
@@ -1863,7 +1731,6 @@ loop_small:
 	VPXOR		Y11, Y1, Y1    // flip sign bits
 	VPCMPGTB	Y1, Y0, Y1     // signed compare
 
-	VPSHUFB		Y10, Y1, Y1
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
 	MOVL		AX, (DI)            // write the lower 32 bits to the output slice
@@ -1893,7 +1760,7 @@ prep_scalar:
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
-	MOVQ	$31, CX          // remember how many extra shifts we need at the end
+	MOVQ	$32, CX          // remember how many extra shifts we need at the end
 	SUBQ	BX, CX
 
 // for remainders of <32 int8
@@ -1905,15 +1772,14 @@ scalar:
 	SETLT	R10
 	ADDL	R10, R9
 	ORL	 	R10, AX
-	SHLL	$1, AX
+	RORL	$1, AX
 	LEAQ	1(SI), SI
 	DECL	BX
 	JZ	 	scalar_done
 	JMP	 	scalar
 
 scalar_done:
-	SHLL	CX, AX        // fill 32bits by shifting
-	BSWAPL	AX            // swap bytes into place for big endian output
+	RORL	CX, AX        // fill 32bits by shifting
 	CMPQ	R11, $24
 	JBE		write_3
 	MOVL	AX, (DI)
