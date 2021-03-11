@@ -626,8 +626,8 @@ func (s BitSet) Indexes(slice []int) []int {
 	var j int
 	for i, l := 0, s.size-s.size%8; i < l; i += 8 {
 		b := s.buf[i>>3]
-		for l := 0; b > 0; b, l = b<<1, l+1 {
-			if b&0x80 == 0 {
+		for l := 0; b > 0; b, l = b>>1, l+1 {
+			if b&0x01 == 0 {
 				continue
 			}
 			slice[j] = i + l
@@ -649,14 +649,14 @@ func (s BitSet) Slice() []bool {
 	res := make([]bool, s.size)
 	for i, l := 0, s.size-s.size%8; i < l; i += 8 {
 		b := s.buf[i>>3]
-		res[i] = b&0x80 > 0
-		res[i+1] = b&0x40 > 0
-		res[i+2] = b&0x20 > 0
-		res[i+3] = b&0x10 > 0
-		res[i+4] = b&0x08 > 0
-		res[i+5] = b&0x04 > 0
-		res[i+6] = b&0x02 > 0
-		res[i+7] = b&0x01 > 0
+		res[i] = b&0x01 > 0
+		res[i+1] = b&0x02 > 0
+		res[i+2] = b&0x04 > 0
+		res[i+3] = b&0x08 > 0
+		res[i+4] = b&0x10 > 0
+		res[i+5] = b&0x20 > 0
+		res[i+6] = b&0x40 > 0
+		res[i+7] = b&0x80 > 0
 	}
 	// tail
 	for i := s.size & ^0x7; i < s.size; i++ {
@@ -686,14 +686,14 @@ func (s BitSet) SubSlice(start, n int) []bool {
 	// fast inner loop
 	for i := start + j; i < (start+n) & ^0x7; i, j = i+8, j+8 {
 		b := s.buf[i>>3]
-		res[j] = b&0x80 > 0
-		res[j+1] = b&0x40 > 0
-		res[j+2] = b&0x20 > 0
-		res[j+3] = b&0x10 > 0
-		res[j+4] = b&0x08 > 0
-		res[j+5] = b&0x04 > 0
-		res[j+6] = b&0x02 > 0
-		res[j+7] = b&0x01 > 0
+		res[j] = b&0x01 > 0
+		res[j+1] = b&0x02 > 0
+		res[j+2] = b&0x04 > 0
+		res[j+3] = b&0x08 > 0
+		res[j+4] = b&0x10 > 0
+		res[j+5] = b&0x20 > 0
+		res[j+6] = b&0x40 > 0
+		res[j+7] = b&0x80 > 0
 	}
 	// tail
 	for i := start + j; i < start+n; i, j = i+1, j+1 {

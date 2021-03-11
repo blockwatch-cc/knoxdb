@@ -97,22 +97,22 @@ var bitSetCases = []BitSetTest{
 	},
 	BitSetTest{
 		name:   "ones_7",
-		source: []byte{0xfe},
-		result: []byte{0xfe},
+		source: []byte{0x7f},
+		result: []byte{0x7f},
 		size:   7,
 		count:  7,
 	},
 	BitSetTest{
 		name:   "fa_7",
 		source: []byte{0xfa},
-		result: []byte{0xfa},
+		result: []byte{0x7a},
 		size:   7,
-		count:  6,
+		count:  5,
 	},
 	BitSetTest{
 		name:   "f9_7",
 		source: []byte{0xf9},
-		result: []byte{0xf8},
+		result: []byte{0x79},
 		size:   7,
 		count:  5,
 	},
@@ -156,7 +156,7 @@ func fillBitsetSaw(buf []byte, size int) []byte {
 	for bp := 256; bp < len(buf); bp = 2*bp - 1 {
 		copy(buf[bp:], buf[:bp])
 	}
-	buf[len(buf)-1] &= bitmask(size)
+	buf[len(buf)-1] &= bytemask(size)
 	return buf
 }
 
@@ -292,7 +292,7 @@ func TestBitAndGenericFlag1(T *testing.T) {
 
 				// same value, same slice
 				ret := bitsetAndGenericFlag1(dst, dst, sz)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("dst===src: unexpected return value %x, expected 0", ret)
 					}
@@ -311,7 +311,7 @@ func TestBitAndGenericFlag1(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				ret = bitsetAndGenericFlag1(dst, src, sz)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("dst==src: unexpected return value %x, expected 0", ret)
 					}
@@ -343,7 +343,7 @@ func TestBitAndGenericFlag1(T *testing.T) {
 				// all ones
 				copy(dst, src)
 				ret = bitsetAndGenericFlag1(dst, ones, sz)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("ones: unexpected return value %x, expected 0", ret)
 					}
@@ -435,7 +435,7 @@ func TestBitAndAVX2Flag1(T *testing.T) {
 
 				// same value, same slice
 				ret := bitsetAndAVX2Flag1(dst, dst)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("dst===src: unexpected return value %x, expected 0", ret)
 					}
@@ -454,7 +454,7 @@ func TestBitAndAVX2Flag1(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				ret = bitsetAndAVX2Flag1(dst, src)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("dst==src: unexpected return value %x, expected 0", ret)
 					}
@@ -486,7 +486,7 @@ func TestBitAndAVX2Flag1(T *testing.T) {
 				// all ones
 				copy(dst, src)
 				ret = bitsetAndAVX2Flag1(dst, ones)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("ones: unexpected return value %x, expected 0", ret)
 					}
@@ -677,7 +677,7 @@ func TestBitOrGenericFlag1(T *testing.T) {
 
 				// same value, same slice
 				ret := bitsetOrGenericFlag1(dst, dst, sz)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("dst===src: unexpected return value %x, expected 0", ret)
 					}
@@ -696,7 +696,7 @@ func TestBitOrGenericFlag1(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				ret = bitsetOrGenericFlag1(dst, src, sz)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("dst==src: unexpected return value %x, expected 0", ret)
 					}
@@ -715,7 +715,7 @@ func TestBitOrGenericFlag1(T *testing.T) {
 				// val OR zeros == val
 				copy(dst, src)
 				ret = bitsetOrGenericFlag1(dst, zeros, sz)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("zeros: unexpected return value %x, expected 0", ret)
 					}
@@ -815,7 +815,7 @@ func TestBitOrAVX2Flag1(T *testing.T) {
 
 				// same value, same slice
 				ret := bitsetOrAVX2Flag1(dst, dst)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("dst===src: unexpected return value %x, expected 0", ret)
 					}
@@ -834,7 +834,7 @@ func TestBitOrAVX2Flag1(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				ret = bitsetOrAVX2Flag1(dst, src)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("dst==src: unexpected return value %x, expected 0", ret)
 					}
@@ -853,7 +853,7 @@ func TestBitOrAVX2Flag1(T *testing.T) {
 				// val OR zeros == val
 				copy(dst, src)
 				ret = bitsetOrAVX2Flag1(dst, zeros)
-				if pt == 0x01 && sz == 7 {
+				if pt == 0x80 && sz == 7 {
 					if ret != 0 {
 						T.Errorf("zeros: unexpected return value %x, expected 0", ret)
 					}
@@ -1093,7 +1093,7 @@ func TestBitSetOne(T *testing.T) {
 				T.Errorf("unexpected count %d, expected %d", got, want)
 			}
 			buf := bytes.Repeat([]byte{0xff}, bitFieldLen(sz)-1)
-			buf = append(buf, byte(0xff<<((8-uint(sz)&0x7)&0x7)&0xff))
+			buf = append(buf, byte(0xff>>((8-uint(sz)&0x7)&0x7)&0xff))
 			if bytes.Compare(bits.Bytes(), buf) != 0 {
 				T.Errorf("unexpected result %x, expected %x", bits.Bytes(), buf)
 			}
@@ -1150,7 +1150,7 @@ func TestBitSetGrow(T *testing.T) {
 				lenb := bitFieldLen(sznew)
 				diff := lena - lenb
 				buf := bytes.Repeat([]byte{0xff}, min(lena, lenb))
-				buf[len(buf)-1] &= byte(0xff << (7 - uint(min(sz, sznew)-1)&0x7))
+				buf[len(buf)-1] &= byte(0xff >> (7 - uint(min(sz, sznew)-1)&0x7))
 				if diff < 0 {
 					buf = append(buf, bytes.Repeat([]byte{0x0}, -diff)...)
 				}
@@ -1244,7 +1244,7 @@ func TestBitSetSet(T *testing.T) {
 
 			// set first bit
 			bits.Set(0)
-			cmp[0] |= 0x80
+			cmp[0] |= 0x01
 			if got, want := bits.Count(), 1; got != want {
 				T.Errorf("unexpected count %d, expected %d", got, want)
 			}
@@ -1257,7 +1257,7 @@ func TestBitSetSet(T *testing.T) {
 
 			// set last bit
 			bits.Set(sz - 1)
-			cmp[(sz-1)>>3] |= 1 << uint(7-(sz-1)&0x7)
+			cmp[(sz-1)>>3] |= 1 << uint((sz-1)&0x7)
 			if got, want := bits.Count(), 2; got != want {
 				T.Errorf("unexpected count %d, expected %d", got, want)
 			}
@@ -1304,7 +1304,7 @@ func TestBitSetClear(T *testing.T) {
 
 			// clear first bit
 			bits.Clear(0)
-			cmp[0] &= 0x7f
+			cmp[0] &= 0xfe
 			if got, want := bits.Count(), popcount(cmp); got != want {
 				T.Errorf("first: unexpected count %d, expected %d", got, want)
 			}
@@ -1317,7 +1317,7 @@ func TestBitSetClear(T *testing.T) {
 
 			// clear last bit
 			bits.Clear(sz - 1)
-			cmp[(sz-1)>>3] &^= 1 << uint(7-(sz-1)&0x7)
+			cmp[(sz-1)>>3] &^= 1 << uint((sz-1)&0x7)
 			if got, want := bits.Count(), popcount(cmp); got != want {
 				T.Errorf("last: unexpected count %d, expected %d", got, want)
 			}
@@ -1421,12 +1421,12 @@ func reverseIndex(sz, i int) int {
 
 func setReverseBit(bits []byte, sz, i int) {
 	idx := reverseIndex(sz, i)
-	bits[idx>>3] |= byte(1 << uint(7-idx&0x7))
+	bits[idx>>3] |= byte(1 << uint(idx&0x7))
 }
 
 func clearReverseBit(bits []byte, sz, i int) {
 	idx := reverseIndex(sz, i)
-	bits[idx>>3] &^= byte(1 << uint(7-idx&0x7))
+	bits[idx>>3] &^= byte(1 << uint(idx&0x7))
 }
 
 func TestBitSetSetReverse(T *testing.T) {
@@ -1603,7 +1603,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "first_7_srl_1",
-		buf:  []byte{0x7f},
+		buf:  []byte{0xfe},
 		size: 7,
 		runs: [][2]int{
 			[2]int{1, 6},
@@ -1614,7 +1614,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "first_15_srl_1",
-		buf:  []byte{0x7f, 0xff},
+		buf:  []byte{0xfe, 0xff},
 		size: 15,
 		runs: [][2]int{
 			[2]int{1, 14},
@@ -1625,7 +1625,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "first_ff_srl_4",
-		buf:  []byte{0x0f, 0xf0},
+		buf:  []byte{0xf0, 0x0f},
 		size: 16,
 		runs: [][2]int{
 			[2]int{4, 8},
@@ -1636,7 +1636,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "first_33_srl_3",
-		buf:  []byte{0x1f, 0xff, 0xff, 0xff, 0x80},
+		buf:  []byte{0xf8, 0xff, 0xff, 0xff, 0x01},
 		size: 33,
 		runs: [][2]int{
 			[2]int{3, 30},
@@ -1658,7 +1658,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "second_33_srl_3",
-		buf:  []byte{0x0, 0x1f, 0xff, 0xff, 0x80},
+		buf:  []byte{0x0, 0xf8, 0xff, 0xff, 0x01},
 		size: 33,
 		runs: [][2]int{
 			[2]int{11, 22},
@@ -1669,7 +1669,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "two_fe_33",
-		buf:  []byte{0xfe, 0x00, 0xfe, 0x00, 0x00},
+		buf:  []byte{0x7f, 0x00, 0x7f, 0x00, 0x00},
 		size: 33,
 		runs: [][2]int{
 			[2]int{0, 7},
@@ -1682,7 +1682,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "four_0e_31",
-		buf:  []byte{0x0e, 0x0e, 0x0e, 0x0e},
+		buf:  []byte{0x70, 0x70, 0x70, 0x70},
 		size: 31,
 		runs: [][2]int{
 			[2]int{4, 3},
@@ -1699,7 +1699,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "every_aa_15",
-		buf:  []byte{0xaa, 0xaa},
+		buf:  []byte{0x55, 0x55},
 		size: 15,
 		runs: [][2]int{
 			[2]int{0, 1},
@@ -1724,7 +1724,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "every_cc_15",
-		buf:  []byte{0xcc, 0xcc},
+		buf:  []byte{0x33, 0x33},
 		size: 15,
 		runs: [][2]int{
 			[2]int{0, 2},
@@ -1741,7 +1741,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "every_55_15",
-		buf:  []byte{0x55, 0x55},
+		buf:  []byte{0xaa, 0xaa},
 		size: 15,
 		runs: [][2]int{
 			[2]int{1, 1},
@@ -1764,7 +1764,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "every_88_17",
-		buf:  []byte{0x88, 0x88, 0x88},
+		buf:  []byte{0x11, 0x11, 0x11},
 		size: 17,
 		runs: [][2]int{
 			[2]int{0, 1},
@@ -1783,7 +1783,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "last_0e_32",
-		buf:  []byte{0x0, 0x0, 0x0, 0x0e},
+		buf:  []byte{0x0, 0x0, 0x0, 0x70},
 		size: 32,
 		runs: [][2]int{
 			[2]int{28, 3},
@@ -1794,7 +1794,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "last_16",
-		buf:  []byte{0, 1},
+		buf:  []byte{0x0, 0x80},
 		size: 16,
 		runs: [][2]int{
 			[2]int{15, 1},
@@ -1805,7 +1805,7 @@ var runTestcases = []bitSetRunTestcase{
 	},
 	bitSetRunTestcase{
 		name: "last_16k",
-		buf:  append(fillBitset(nil, 16*1024-8, 0), byte(1)),
+		buf:  append(fillBitset(nil, 16*1024-8, 0), byte(0x80)),
 		size: 16 * 1024,
 		runs: [][2]int{
 			[2]int{16*1024 - 1, 1},
@@ -1910,8 +1910,8 @@ var runTestcases = []bitSetRunTestcase{
 		},
 	},
 	bitSetRunTestcase{
-		name: "64k_and_b3",
-		buf:  append(bytes.Repeat([]byte{0x0}, 8*1024-1), byte(0xb3)),
+		name: "64k_and_cd",
+		buf:  append(bytes.Repeat([]byte{0x0}, 8*1024-1), byte(0xcd)),
 		size: 64 * 1024,
 		runs: [][2]int{
 			[2]int{64*1024 - 8, 1},
@@ -1925,8 +1925,8 @@ var runTestcases = []bitSetRunTestcase{
 		},
 	},
 	bitSetRunTestcase{
-		name: "64k_and_b1",
-		buf:  append(bytes.Repeat([]byte{0x0}, 8*1024-1), byte(0xb1)),
+		name: "64k_and_8d",
+		buf:  append(bytes.Repeat([]byte{0x0}, 8*1024-1), byte(0x8d)),
 		size: 64 * 1024,
 		runs: [][2]int{
 			[2]int{64*1024 - 8, 1},
@@ -1996,6 +1996,7 @@ func TestBitSetRunAVX2(T *testing.T) {
 		for i, r := range c.runs {
 			T.Run(f("%s_%d", c.name, i), func(t *testing.T) {
 				idx, length = bitsetRunAVX2Wrapper(bits.Bytes(), idx+length, bits.Len())
+				// idx, length = bitsetRunAVX2Wrapper(c.buf, idx+length, c.size)
 				if got, want := idx, r[0]; got != want {
 					T.Errorf("unexpected index %d, expected %d", got, want)
 				}
