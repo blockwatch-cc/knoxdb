@@ -643,15 +643,15 @@ func (l ConditionList) MaybeMatchPack(info PackInfo) bool {
 
 // return a bit vector containing matching positions in the pack
 // TODO: consider parallel matches to check multiple conditions, then merge bitsets
-func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *BitSet {
+func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *Bitset {
 	// start with a full bitset
-	bits := NewBitSet(pkg.Len()).One()
+	bits := NewBitset(pkg.Len()).One()
 
 	// match conditions and merge bit vectors
 	// stop early when result contains all zeros (assuming AND relation)
 	// always match empty condition list
 	for _, c := range l {
-		// var b *BitSet
+		// var b *Bitset
 		// FIXME: reconsider when we introduce OR and nested conditions!
 		//
 		// Quick inclusion check to skip matching when the current condition
@@ -729,8 +729,8 @@ func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *BitSet {
 //
 // This implementation uses low level block vectors to efficiently execute
 // vectorized checks with custom assembly-optimized routines.
-func (c Condition) MatchPack(pkg *Package, mask *BitSet) *BitSet {
-	bits := NewBitSet(pkg.Len())
+func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
+	bits := NewBitset(pkg.Len())
 	block, _ := pkg.Block(c.Field.Index)
 	switch c.Mode {
 	case FilterModeEqual:

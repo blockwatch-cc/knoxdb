@@ -7,43 +7,43 @@ import (
 	"sort"
 )
 
-func MatchBoolEqual(src []bool, val bool, bits, mask *BitSet) *BitSet {
+func MatchBoolEqual(src []bool, val bool, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchBoolEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolNotEqual(src []bool, val bool, bits, mask *BitSet) *BitSet {
+func MatchBoolNotEqual(src []bool, val bool, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchBoolNotEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolLessThan(src []bool, val bool, bits, mask *BitSet) *BitSet {
+func MatchBoolLessThan(src []bool, val bool, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchBoolLessThanGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolLessThanEqual(src []bool, val bool, bits, mask *BitSet) *BitSet {
+func MatchBoolLessThanEqual(src []bool, val bool, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchBoolLessThanEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolGreaterThan(src []bool, val bool, bits, mask *BitSet) *BitSet {
+func MatchBoolGreaterThan(src []bool, val bool, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchBoolGreaterThanGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolGreaterThanEqual(src []bool, val bool, bits, mask *BitSet) *BitSet {
+func MatchBoolGreaterThanEqual(src []bool, val bool, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchBoolGreaterThanEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchBoolBetween(src []bool, a, b bool, bits, mask *BitSet) *BitSet {
+func MatchBoolBetween(src []bool, a, b bool, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchBoolBetweenGeneric(src, a, b, bits.Bytes()))
 	return bits
@@ -55,7 +55,7 @@ var Booleans = struct {
 	MinMax        func([]bool) (bool, bool)
 	ContainsRange func([]bool, bool, bool) bool
 	Intersect     func([]bool, []bool, []bool) []bool
-	MatchEqual    func([]bool, bool, *BitSet, *BitSet) *BitSet
+	MatchEqual    func([]bool, bool, *Bitset, *Bitset) *Bitset
 }{
 	Contains: func(s []bool, v bool) bool {
 		return boolContains(s, v)
@@ -69,7 +69,7 @@ var Booleans = struct {
 	ContainsRange: func(s []bool, from, to bool) bool {
 		return boolContainsRange(s, from, to)
 	},
-	MatchEqual: func(s []bool, val bool, bits, mask *BitSet) *BitSet {
+	MatchEqual: func(s []bool, val bool, bits, mask *Bitset) *Bitset {
 		return MatchBoolEqual(s, val, bits, mask)
 	},
 }

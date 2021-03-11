@@ -3,9 +3,9 @@
 
 package vec
 
-func ensureBitfieldSize(bits *BitSet, srcsize int) *BitSet {
+func ensureBitfieldSize(bits *Bitset, srcsize int) *Bitset {
 	if bits == nil {
-		bits = NewBitSet(srcsize)
+		bits = NewBitset(srcsize)
 	} else {
 		bits.Grow(srcsize)
 	}

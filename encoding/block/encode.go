@@ -531,7 +531,7 @@ func encodeUint8Block(buf *bytes.Buffer, val []uint8, comp Compression) (int, er
 	return buf.Len() - l, err
 }
 
-func encodeBoolBlock(buf *bytes.Buffer, val *vec.BitSet, comp Compression) (int, error) {
+func encodeBoolBlock(buf *bytes.Buffer, val *vec.Bitset, comp Compression) (int, error) {
 	if val.Len() == 0 {
 		return writeEmptyBlock(buf, BlockBool)
 	}

@@ -7,43 +7,43 @@ import (
 	"sort"
 )
 
-func MatchInt16Equal(src []int16, val int16, bits, mask *BitSet) *BitSet {
+func MatchInt16Equal(src []int16, val int16, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt16Equal(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt16NotEqual(src []int16, val int16, bits, mask *BitSet) *BitSet {
+func MatchInt16NotEqual(src []int16, val int16, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt16NotEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt16LessThan(src []int16, val int16, bits, mask *BitSet) *BitSet {
+func MatchInt16LessThan(src []int16, val int16, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt16LessThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt16LessThanEqual(src []int16, val int16, bits, mask *BitSet) *BitSet {
+func MatchInt16LessThanEqual(src []int16, val int16, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt16LessThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt16GreaterThan(src []int16, val int16, bits, mask *BitSet) *BitSet {
+func MatchInt16GreaterThan(src []int16, val int16, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt16GreaterThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt16GreaterThanEqual(src []int16, val int16, bits, mask *BitSet) *BitSet {
+func MatchInt16GreaterThanEqual(src []int16, val int16, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt16GreaterThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt16Between(src []int16, a, b int16, bits, mask *BitSet) *BitSet {
+func MatchInt16Between(src []int16, a, b int16, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt16Between(src, a, b, bits.Bytes()))
 	return bits
@@ -60,7 +60,7 @@ var Int16 = struct {
 	MinMax        func([]int16) (int16, int16)
 	ContainsRange func([]int16, int16, int16) bool
 	Intersect     func([]int16, []int16, []int16) []int16
-	MatchEqual    func([]int16, int16, *BitSet, *BitSet) *BitSet
+	MatchEqual    func([]int16, int16, *Bitset, *Bitset) *Bitset
 }{
 	Sort: func(s []int16) []int16 {
 		return Int16Sorter(s).Sort()
@@ -95,7 +95,7 @@ var Int16 = struct {
 	Intersect: func(x, y, out []int16) []int16 {
 		return IntersectSortedInt16(x, y, out)
 	},
-	MatchEqual: func(s []int16, val int16, bits, mask *BitSet) *BitSet {
+	MatchEqual: func(s []int16, val int16, bits, mask *Bitset) *Bitset {
 		return MatchInt16Equal(s, val, bits, mask)
 	},
 }

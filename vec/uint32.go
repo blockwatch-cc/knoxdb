@@ -7,43 +7,43 @@ import (
 	"sort"
 )
 
-func MatchUint32Equal(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
+func MatchUint32Equal(src []uint32, val uint32, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchUint32Equal(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32NotEqual(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
+func MatchUint32NotEqual(src []uint32, val uint32, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchUint32NotEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32LessThan(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
+func MatchUint32LessThan(src []uint32, val uint32, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchUint32LessThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32LessThanEqual(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
+func MatchUint32LessThanEqual(src []uint32, val uint32, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchUint32LessThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32GreaterThan(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
+func MatchUint32GreaterThan(src []uint32, val uint32, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchUint32GreaterThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32GreaterThanEqual(src []uint32, val uint32, bits, mask *BitSet) *BitSet {
+func MatchUint32GreaterThanEqual(src []uint32, val uint32, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchUint32GreaterThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchUint32Between(src []uint32, a, b uint32, bits, mask *BitSet) *BitSet {
+func MatchUint32Between(src []uint32, a, b uint32, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchUint32Between(src, a, b, bits.Bytes()))
 	return bits
@@ -60,7 +60,7 @@ var Uint32 = struct {
 	MinMax        func([]uint32) (uint32, uint32)
 	ContainsRange func([]uint32, uint32, uint32) bool
 	Intersect     func([]uint32, []uint32, []uint32) []uint32
-	MatchEqual    func([]uint32, uint32, *BitSet, *BitSet) *BitSet
+	MatchEqual    func([]uint32, uint32, *Bitset, *Bitset) *Bitset
 }{
 	Sort: func(s []uint32) []uint32 {
 		return Uint32Sorter(s).Sort()
@@ -95,7 +95,7 @@ var Uint32 = struct {
 	Intersect: func(x, y, out []uint32) []uint32 {
 		return IntersectSortedUint32(x, y, out)
 	},
-	MatchEqual: func(s []uint32, val uint32, bits, mask *BitSet) *BitSet {
+	MatchEqual: func(s []uint32, val uint32, bits, mask *Bitset) *Bitset {
 		return MatchUint32Equal(s, val, bits, mask)
 	},
 }

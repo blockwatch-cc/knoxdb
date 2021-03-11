@@ -7,45 +7,45 @@ import (
 	"sync"
 )
 
-const defaultBitSetSize = 16 // 8kB
+const defaultBitsetSize = 16 // 8kB
 
 var bitSetPool = &sync.Pool{
-	New: func() interface{} { return makeBitSet(1 << defaultBitSetSize) },
+	New: func() interface{} { return makeBitset(1 << defaultBitsetSize) },
 }
 
-type BitSet struct {
+type Bitset struct {
 	buf       []byte
 	cnt       int
 	size      int
 	isReverse bool
 }
 
-// NewBitSet allocates a new BitSet with a custom size and default capacity or
+// NewBitset allocates a new Bitset with a custom size and default capacity or
 // 2<<16 bits (8kB). Call Close() to return the bitset after use. For efficiency
 // an internal pool guarantees that bitsets of default capacity are reused. Changing
 // the capacity with Grow() may make the Bitset uneligible for recycling.
-func NewBitSet(size int) *BitSet {
-	var s *BitSet
-	if size <= 1<<defaultBitSetSize {
-		s = bitSetPool.Get().(*BitSet)
+func NewBitset(size int) *Bitset {
+	var s *Bitset
+	if size <= 1<<defaultBitsetSize {
+		s = bitSetPool.Get().(*Bitset)
 		s.Grow(size)
 	} else {
-		s = makeBitSet(size)
+		s = makeBitset(size)
 	}
 	return s
 }
 
-// NewCustomBitSet allocates a new bitset of arbitrary small size and capacity
+// NewCustomBitset allocates a new bitset of arbitrary small size and capacity
 // without using a buffer pool. Use this function when your bitsets are always
 // much smaller than the default capacity.
-func NewCustomBitSet(size int) *BitSet {
-	return makeBitSet(size)
+func NewCustomBitset(size int) *Bitset {
+	return makeBitset(size)
 }
 
-// NewBitSetFromBytes allocates a new bitset of size bits and copies the contents
+// NewBitsetFromBytes allocates a new bitset of size bits and copies the contents
 // of `buf`. Buf may be nil and size must be >= zero.
-func NewBitSetFromBytes(buf []byte, size int) *BitSet {
-	s := &BitSet{
+func NewBitsetFromBytes(buf []byte, size int) *Bitset {
+	s := &Bitset{
 		buf:  make([]byte, bitFieldLen(size)),
 		cnt:  -1,
 		size: size,
@@ -58,10 +58,10 @@ func NewBitSetFromBytes(buf []byte, size int) *BitSet {
 	return s
 }
 
-// NewBitSetFromSlice allocates a new bitset and initializes it from boolean values
+// NewBitsetFromSlice allocates a new bitset and initializes it from boolean values
 // in bools. If bools is nil, the bitset is initially empty.
-func NewBitSetFromSlice(bools []bool) *BitSet {
-	s := &BitSet{
+func NewBitsetFromSlice(bools []bool) *Bitset {
+	s := &Bitset{
 		buf:  make([]byte, bitFieldLen(len(bools))),
 		cnt:  0,
 		size: len(bools),
@@ -76,7 +76,7 @@ func NewBitSetFromSlice(bools []bool) *BitSet {
 	return s
 }
 
-func (s *BitSet) SetFromBytes(buf []byte, size int) *BitSet {
+func (s *Bitset) SetFromBytes(buf []byte, size int) *Bitset {
 	if s.size > size {
 		s.Zero()
 	}
@@ -91,23 +91,23 @@ func (s *BitSet) SetFromBytes(buf []byte, size int) *BitSet {
 	return s
 }
 
-func makeBitSet(size int) *BitSet {
-	return &BitSet{
+func makeBitset(size int) *Bitset {
+	return &Bitset{
 		buf:  make([]byte, bitFieldLen(size)),
 		cnt:  0,
 		size: size,
 	}
 }
 
-func (s *BitSet) Clone() *BitSet {
-	clone := NewBitSet(s.size)
+func (s *Bitset) Clone() *Bitset {
+	clone := NewBitset(s.size)
 	copy(clone.buf, s.buf)
 	clone.cnt = s.cnt
 	clone.isReverse = s.isReverse
 	return clone
 }
 
-func (s *BitSet) Copy(b *BitSet) *BitSet {
+func (s *Bitset) Copy(b *Bitset) *Bitset {
 	if s.size > b.size {
 		s.Zero()
 	}
@@ -126,13 +126,13 @@ func (s *BitSet) Copy(b *BitSet) *BitSet {
 // Content remains unchanged on grow, when shrinking trailing bits are clipped.
 //
 // FIXME: does not work with reversed bitset
-func (s *BitSet) Grow(size int) *BitSet {
+func (s *Bitset) Grow(size int) *Bitset {
 	if size < 0 {
 		return s
 	}
 	sz := bitFieldLen(size)
 	if s.buf == nil || cap(s.buf) < sz {
-		buf := make([]byte, sz, (sz>>defaultBitSetSize+1)<<defaultBitSetSize)
+		buf := make([]byte, sz, (sz>>defaultBitsetSize+1)<<defaultBitsetSize)
 		copy(buf, s.buf)
 		s.buf = buf
 	} else {
@@ -157,7 +157,7 @@ func (s *BitSet) Grow(size int) *BitSet {
 }
 
 // Reset clears the bitset contents and sets its size to zero.
-func (s *BitSet) Reset() {
+func (s *Bitset) Reset() {
 	if len(s.buf) > 0 {
 		s.buf[0] = 0
 		for bp := 1; bp < len(s.buf); bp *= 2 {
@@ -173,14 +173,14 @@ func (s *BitSet) Reset() {
 // Close clears the bitset contents, sets its size to zero and returns it
 // to the internal buffer pool. Using the bitset after calling Close is
 // illegal.
-func (s *BitSet) Close() {
+func (s *Bitset) Close() {
 	s.Reset()
-	if cap(s.buf) == 1<<defaultBitSetSize {
+	if cap(s.buf) == 1<<defaultBitsetSize {
 		bitSetPool.Put(s)
 	}
 }
 
-func (s *BitSet) And(r *BitSet) (*BitSet, int) {
+func (s *Bitset) And(r *Bitset) (*Bitset, int) {
 	if s.size == 0 || s.cnt == 0 {
 		return s, 0
 	}
@@ -197,7 +197,7 @@ func (s *BitSet) And(r *BitSet) (*BitSet, int) {
 	return s, any
 }
 
-func (s *BitSet) AndNot(r *BitSet) *BitSet {
+func (s *Bitset) AndNot(r *Bitset) *Bitset {
 	if s.size == 0 || s.cnt == 0 {
 		return s
 	}
@@ -211,7 +211,7 @@ func (s *BitSet) AndNot(r *BitSet) *BitSet {
 	return s
 }
 
-func (s *BitSet) Or(r *BitSet) *BitSet {
+func (s *Bitset) Or(r *Bitset) *Bitset {
 	if s.cnt == 0 {
 		copy(s.buf, r.buf)
 		s.cnt = r.cnt
@@ -222,7 +222,7 @@ func (s *BitSet) Or(r *BitSet) *BitSet {
 	return s
 }
 
-func (s *BitSet) Xor(r *BitSet) *BitSet {
+func (s *Bitset) Xor(r *Bitset) *Bitset {
 	if s.size == 0 {
 		return s
 	}
@@ -231,7 +231,7 @@ func (s *BitSet) Xor(r *BitSet) *BitSet {
 	return s
 }
 
-func (s *BitSet) Neg() *BitSet {
+func (s *Bitset) Neg() *Bitset {
 	if s.size == 0 {
 		return s
 	}
@@ -242,7 +242,7 @@ func (s *BitSet) Neg() *BitSet {
 	return s
 }
 
-func (s *BitSet) One() *BitSet {
+func (s *Bitset) One() *Bitset {
 	if s.size == 0 {
 		return s
 	}
@@ -255,7 +255,7 @@ func (s *BitSet) One() *BitSet {
 	return s
 }
 
-func (s *BitSet) Zero() *BitSet {
+func (s *Bitset) Zero() *Bitset {
 	s.isReverse = false
 	if s.size == 0 || s.cnt == 0 {
 		return s
@@ -268,7 +268,7 @@ func (s *BitSet) Zero() *BitSet {
 	return s
 }
 
-func (s *BitSet) Fill(b byte) *BitSet {
+func (s *Bitset) Fill(b byte) *Bitset {
 	s.buf[0] = b
 	for bp := 1; bp < len(s.buf); bp *= 2 {
 		copy(s.buf[bp:], s.buf[:bp])
@@ -282,7 +282,7 @@ func (s *BitSet) Fill(b byte) *BitSet {
 	return s
 }
 
-func (s *BitSet) Set(i int) *BitSet {
+func (s *Bitset) Set(i int) *Bitset {
 	if i < 0 || i >= s.size {
 		return s
 	}
@@ -298,7 +298,7 @@ func (s *BitSet) Set(i int) *BitSet {
 	return s
 }
 
-func (s *BitSet) setbit(i int) {
+func (s *Bitset) setbit(i int) {
 	if s.isReverse {
 		pad := int(7 - uint(s.size-1)&0x7)
 		i = s.size - i + pad - 1
@@ -307,7 +307,7 @@ func (s *BitSet) setbit(i int) {
 	s.buf[i>>3] |= mask
 }
 
-func (s *BitSet) Clear(i int) *BitSet {
+func (s *Bitset) Clear(i int) *Bitset {
 	if i < 0 || i >= s.size {
 		return s
 	}
@@ -323,7 +323,7 @@ func (s *BitSet) Clear(i int) *BitSet {
 	return s
 }
 
-func (s *BitSet) clearbit(i int) {
+func (s *Bitset) clearbit(i int) {
 	if s.isReverse {
 		pad := int(7 - uint(s.size-1)&0x7)
 		i = s.size - i + pad - 1
@@ -332,7 +332,7 @@ func (s *BitSet) clearbit(i int) {
 	s.buf[i>>3] &^= mask
 }
 
-func (s *BitSet) IsSet(i int) bool {
+func (s *Bitset) IsSet(i int) bool {
 	if i < 0 || i >= s.size {
 		return false
 	}
@@ -349,7 +349,7 @@ func (s *BitSet) IsSet(i int) bool {
 // newly inserted bits
 //
 // FIXME: fast path incompatible with reversed
-func (s *BitSet) Insert(src *BitSet, srcPos, srcLen, dstPos int) *BitSet {
+func (s *Bitset) Insert(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
 	if srcLen <= 0 {
 		return s
 	}
@@ -425,7 +425,7 @@ func (s *BitSet) Insert(src *BitSet, srcPos, srcLen, dstPos int) *BitSet {
 // bewteen position srcPos and srcPos + srcLen.
 //
 // FIXME: fast path incompatible with reversed
-func (s *BitSet) Replace(src *BitSet, srcPos, srcLen, dstPos int) *BitSet {
+func (s *Bitset) Replace(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
 	// skip when arguments are out of range
 	if srcLen <= 0 || srcPos < 0 || dstPos < 0 || dstPos > s.size {
 		return s
@@ -465,7 +465,7 @@ func (s *BitSet) Replace(src *BitSet, srcPos, srcLen, dstPos int) *BitSet {
 // src starting at position srcPos.
 //
 // FIXME: fast path incompatible with reversed
-func (s *BitSet) Append(src *BitSet, srcPos, srcLen int) *BitSet {
+func (s *Bitset) Append(src *Bitset, srcPos, srcLen int) *Bitset {
 	if srcLen <= 0 {
 		return s
 	}
@@ -498,7 +498,7 @@ func (s *BitSet) Append(src *BitSet, srcPos, srcLen int) *BitSet {
 	return s
 }
 
-func (s *BitSet) Delete(pos, n int) *BitSet {
+func (s *Bitset) Delete(pos, n int) *Bitset {
 	if pos >= s.size {
 		return s
 	}
@@ -528,7 +528,7 @@ func (s *BitSet) Delete(pos, n int) *BitSet {
 	return s
 }
 
-func (s *BitSet) Swap(i, j int) {
+func (s *Bitset) Swap(i, j int) {
 	if uint(i) >= uint(s.size) || uint(j) >= uint(s.size) {
 		return
 	}
@@ -550,20 +550,20 @@ func (s *BitSet) Swap(i, j int) {
 	}
 }
 
-func (s *BitSet) Reverse() *BitSet {
+func (s *Bitset) Reverse() *Bitset {
 	bitsetReverse(s.buf)
 	s.isReverse = !s.isReverse
 	return s
 }
 
-func (s *BitSet) Bytes() []byte {
+func (s *Bitset) Bytes() []byte {
 	if s == nil {
 		return nil
 	}
 	return s.buf
 }
 
-func (s *BitSet) Count() int {
+func (s *Bitset) Count() int {
 	if s.cnt < 0 {
 		if s.isReverse {
 			// leading padding is filled with zero bits
@@ -575,19 +575,19 @@ func (s *BitSet) Count() int {
 	return s.cnt
 }
 
-func (s BitSet) Len() int {
+func (s Bitset) Len() int {
 	return s.size
 }
 
-func (s BitSet) Cap() int {
+func (s Bitset) Cap() int {
 	return cap(s.buf) * 8
 }
 
-func (s BitSet) HeapSize() int {
+func (s Bitset) HeapSize() int {
 	return cap(s.buf) + 24 + 16 + 1
 }
 
-func (s BitSet) EncodedSize() int {
+func (s Bitset) EncodedSize() int {
 	sz := s.size / 8
 	if s.size&7 > 0 {
 		sz++
@@ -598,7 +598,7 @@ func (s BitSet) EncodedSize() int {
 // Run returns the index and length of the next consecutive
 // run of 1s in the bit vector starting at index. When no more
 // 1s exist after index, -1 and a length of 0 is returned.
-func (b BitSet) Run(index int) (int, int) {
+func (b Bitset) Run(index int) (int, int) {
 	if b.isReverse {
 		if b.size == 0 || index < 0 || index > b.size {
 			return -1, 0
@@ -616,7 +616,7 @@ func (b BitSet) Run(index int) (int, int) {
 }
 
 // Indexes returns a slice of indexes for one bits in the bitset.
-func (s BitSet) Indexes(slice []int) []int {
+func (s Bitset) Indexes(slice []int) []int {
 	cnt := s.Count()
 	if slice == nil || cap(slice) < cnt {
 		slice = make([]int, cnt)
@@ -645,7 +645,7 @@ func (s BitSet) Indexes(slice []int) []int {
 }
 
 // Slice returns a boolean slice containing all values
-func (s BitSet) Slice() []bool {
+func (s Bitset) Slice() []bool {
 	res := make([]bool, s.size)
 	for i, l := 0, s.size-s.size%8; i < l; i += 8 {
 		b := s.buf[i>>3]
@@ -665,7 +665,7 @@ func (s BitSet) Slice() []bool {
 	return res
 }
 
-func (s BitSet) SubSlice(start, n int) []bool {
+func (s Bitset) SubSlice(start, n int) []bool {
 	if start >= s.size {
 		return nil
 	}

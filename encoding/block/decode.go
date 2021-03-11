@@ -430,7 +430,7 @@ func decodeUint8Block(block []byte, dst []uint8) ([]uint8, error) {
 	return dst, err
 }
 
-func decodeBoolBlock(block []byte, dst *vec.BitSet) (*vec.BitSet, error) {
+func decodeBoolBlock(block []byte, dst *vec.Bitset) (*vec.Bitset, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockBool)
 	if err != nil {
 		return nil, err

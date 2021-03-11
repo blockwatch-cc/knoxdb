@@ -696,43 +696,43 @@ func Max256(x, y Int256) Int256 {
 }
 
 // Match helpers
-func MatchInt256Equal(src []Int256, val Int256, bits, mask *BitSet) *BitSet {
+func MatchInt256Equal(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt256Equal(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256NotEqual(src []Int256, val Int256, bits, mask *BitSet) *BitSet {
+func MatchInt256NotEqual(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt256NotEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256LessThan(src []Int256, val Int256, bits, mask *BitSet) *BitSet {
+func MatchInt256LessThan(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt256LessThan(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256LessThanEqual(src []Int256, val Int256, bits, mask *BitSet) *BitSet {
+func MatchInt256LessThanEqual(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt256LessThanEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256GreaterThan(src []Int256, val Int256, bits, mask *BitSet) *BitSet {
+func MatchInt256GreaterThan(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt256GreaterThan(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256GreaterThanEqual(src []Int256, val Int256, bits, mask *BitSet) *BitSet {
+func MatchInt256GreaterThanEqual(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt256GreaterThanEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256Between(src []Int256, a, b Int256, bits, mask *BitSet) *BitSet {
+func MatchInt256Between(src []Int256, a, b Int256, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt256Between(src, a, b, bits.Bytes(), mask.Bytes()))
 	return bits
@@ -933,6 +933,6 @@ func (s Int256Slice) Intersect(x, out Int256Slice) Int256Slice {
 	return out
 }
 
-func (s Int256Slice) MatchEqual(val Int256, bits, mask *BitSet) *BitSet {
+func (s Int256Slice) MatchEqual(val Int256, bits, mask *Bitset) *Bitset {
 	return MatchInt256Equal(s, val, bits, mask)
 }

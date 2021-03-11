@@ -1040,7 +1040,7 @@ func (t FieldType) EqualAt(pkg *Package, index, pos int, val interface{}) bool {
 	}
 }
 
-func (t FieldType) EqualBlock(b *block.Block, val interface{}, bits, mask *BitSet) *BitSet {
+func (t FieldType) EqualBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
 		return MatchBytesEqual(b.Bytes, val.([]byte), bits, mask)
@@ -1083,7 +1083,7 @@ func (t FieldType) EqualBlock(b *block.Block, val interface{}, bits, mask *BitSe
 	}
 }
 
-func (t FieldType) NotEqualBlock(b *block.Block, val interface{}, bits, mask *BitSet) *BitSet {
+func (t FieldType) NotEqualBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
 		return MatchBytesNotEqual(b.Bytes, val.([]byte), bits, mask)
@@ -1197,7 +1197,7 @@ func (t FieldType) RegexpAt(pkg *Package, index, pos int, re string) bool {
 	}
 }
 
-func (t FieldType) RegexpBlock(b *block.Block, re string, bits, mask *BitSet) *BitSet {
+func (t FieldType) RegexpBlock(b *block.Block, re string, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes,
 		FieldTypeBoolean,
@@ -1362,7 +1362,7 @@ func (t FieldType) GtAt(pkg *Package, index, pos int, val interface{}) bool {
 	}
 }
 
-func (t FieldType) GtBlock(b *block.Block, val interface{}, bits, mask *BitSet) *BitSet {
+func (t FieldType) GtBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
 		return MatchBytesGreaterThan(b.Bytes, val.([]byte), bits, mask)
@@ -1518,7 +1518,7 @@ func (t FieldType) GteAt(pkg *Package, index, pos int, val interface{}) bool {
 	}
 }
 
-func (t FieldType) GteBlock(b *block.Block, val interface{}, bits, mask *BitSet) *BitSet {
+func (t FieldType) GteBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
 		return MatchBytesGreaterThanEqual(b.Bytes, val.([]byte), bits, mask)
@@ -1671,7 +1671,7 @@ func (t FieldType) LtAt(pkg *Package, index, pos int, val interface{}) bool {
 	}
 }
 
-func (t FieldType) LtBlock(b *block.Block, val interface{}, bits, mask *BitSet) *BitSet {
+func (t FieldType) LtBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
 		return MatchBytesLessThan(b.Bytes, val.([]byte), bits, mask)
@@ -1828,7 +1828,7 @@ func (t FieldType) LteAt(pkg *Package, index, pos int, val interface{}) bool {
 	}
 }
 
-func (t FieldType) LteBlock(b *block.Block, val interface{}, bits, mask *BitSet) *BitSet {
+func (t FieldType) LteBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
 		return MatchBytesLessThanEqual(b.Bytes, val.([]byte), bits, mask)
@@ -2264,7 +2264,7 @@ func (t FieldType) BetweenAt(pkg *Package, index, pos int, from, to interface{})
 }
 
 // assumes from <= to
-func (t FieldType) BetweenBlock(b *block.Block, from, to interface{}, bits, mask *BitSet) *BitSet {
+func (t FieldType) BetweenBlock(b *block.Block, from, to interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
 		return MatchBytesBetween(b.Bytes, from.([]byte), to.([]byte), bits, mask)
