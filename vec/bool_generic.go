@@ -7,7 +7,7 @@ func matchBoolEqualGeneric(src []bool, val bool, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v == val {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}
@@ -18,7 +18,7 @@ func matchBoolNotEqualGeneric(src []bool, val bool, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v != val {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}
@@ -29,7 +29,7 @@ func matchBoolLessThanGeneric(src []bool, val bool, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v != val {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}
@@ -42,14 +42,14 @@ func matchBoolLessThanEqualGeneric(src []bool, val bool, bits []byte) int64 {
 			bits[i] = 0xff
 		}
 		for i := 0; i < len(src)%8; i++ {
-			bits[len(bits)] |= 0x1 << uint(7-i)
+			bits[len(bits)] |= bitmask(i)
 		}
 		return int64(len(src))
 	}
 	var cnt int64
 	for i, v := range src {
 		if v == val {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}
@@ -60,7 +60,7 @@ func matchBoolGreaterThanGeneric(src []bool, val bool, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v != val {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}
@@ -73,7 +73,7 @@ func matchBoolGreaterThanEqualGeneric(src []bool, val bool, bits []byte) int64 {
 		bits[i] = 0xff
 	}
 	for i := 0; i < len(src)%8; i++ {
-		bits[len(bits)] |= 0x1 << uint(7-i)
+		bits[len(bits)] |= bitmask(i)
 	}
 	return int64(len(src))
 }
@@ -86,7 +86,7 @@ func matchBoolBetweenGeneric(src []bool, a, b bool, bits []byte) int64 {
 			bits[i] = 0xff
 		}
 		for i := 0; i < len(src)%8; i++ {
-			bits[len(bits)] |= 0x1 << uint(7-i)
+			bits[len(bits)] |= bitmask(i)
 		}
 		return int64(len(src))
 	}
@@ -94,7 +94,7 @@ func matchBoolBetweenGeneric(src []bool, a, b bool, bits []byte) int64 {
 		for i, v := range src {
 			if v {
 				// match true values only
-				bits[i>>3] |= 0x1 << uint(7-i&0x7)
+				bits[i>>3] |= bitmask(i)
 				cnt++
 			}
 		}
@@ -102,7 +102,7 @@ func matchBoolBetweenGeneric(src []bool, a, b bool, bits []byte) int64 {
 		for i, v := range src {
 			if !v {
 				// match false values only
-				bits[i>>3] |= 0x1 << uint(7-i&0x7)
+				bits[i>>3] |= bitmask(i)
 				cnt++
 			}
 		}
