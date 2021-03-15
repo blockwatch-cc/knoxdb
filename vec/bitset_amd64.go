@@ -29,7 +29,7 @@ func bitsetXorAVX2(dst, src []byte)
 func bitsetNegAVX2(src []byte)
 
 //go:noescape
-func bitsetReverseAVX2(src []byte)
+func bitsetReverseAVX2(src []byte, bitsetReverseLut256 []uint8)
 
 //go:noescape
 func bitsetPopCountAVX2(src []byte) int64
@@ -96,7 +96,7 @@ func bitsetNeg(src []byte, size int) {
 func bitsetReverse(src []byte) {
 	switch {
 	case useAVX2:
-		bitsetReverseAVX2(src)
+		bitsetReverseAVX2(src, bitsetReverseLut256)
 	default:
 		bitsetReverseGeneric(src)
 	}

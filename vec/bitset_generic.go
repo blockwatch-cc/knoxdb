@@ -11,7 +11,7 @@ import (
 var (
 	bitsetLookup        [256]uint8
 	bitsetLeadingZeros  [256]int
-	bitsetReverseLut256 [256]uint8
+	bitsetReverseLut256 []uint8 = make([]uint8, 256)
 )
 
 func init() {

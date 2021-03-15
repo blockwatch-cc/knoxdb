@@ -1361,7 +1361,7 @@ func TestBitsetReverseAVX2(T *testing.T) {
 		cmp := make([]byte, len(bits))
 		copy(cmp, bits)
 		bitsetReverseGeneric(cmp)
-		bitsetReverseAVX2(bits)
+		bitsetReverseAVX2(bits, bitsetReverseLut256)
 
 		if got, want := len(bits), len(cmp); got != want {
 			T.Errorf("%d: unexpected buf length %d, expected %d", sz, got, want)
@@ -3008,7 +3008,7 @@ func BenchmarkBitsetReverseAVX2(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(bitFieldLen(n.l)))
 			for i := 0; i < B.N; i++ {
-				bitsetReverseAVX2(bits)
+				bitsetReverseAVX2(bits, bitsetReverseLut256)
 			}
 		})
 	}

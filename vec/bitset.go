@@ -14,9 +14,9 @@ var bitsetPool = &sync.Pool{
 }
 
 type Bitset struct {
-	buf       []byte
-	cnt       int
-	size      int
+	buf  []byte
+	cnt  int
+	size int
 }
 
 // NewBitset allocates a new Bitset with a custom size and default capacity or

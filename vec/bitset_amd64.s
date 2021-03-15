@@ -653,11 +653,12 @@ loop_i8:
 done:
 	RET
 
-// func bitsetReverseAVX2(src []byte)
+// func bitsetReverseAVX2(src []byte, bitsetReverseLut256 []uint8)
 //
 // input:
 //   SI = src_base, loop counter from left
 //   BX = src_len
+//   BP = bitsetReverseLut256_base
 // internal:
 //   DI = loop count from right
 //   Y9 = LUT for high nibble
@@ -669,13 +670,12 @@ done:
 TEXT ·bitsetReverseAVX2(SB), NOSPLIT, $0-24
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
+    MOVQ    bitsetReverseLut256_base+24(FP), BP
     MOVQ    SI, DI
     ADDQ    BX, DI                          // now DI points to end of array
 
 	TESTQ		BX, BX
 	JLE			done
-	CMPQ		BX, $63     // slices smaller than 64 byte are handled separately
-	JBE			prep_i8
 
     VMOVDQU         LUT_reverse<>+0x00(SB), Y9      // LUT for high nibble
     VPSLLW          $4, Y9, Y10                     // LUT for low low nibble
@@ -683,11 +683,15 @@ TEXT ·bitsetReverseAVX2(SB), NOSPLIT, $0-24
     VMOVDQU         shuf_reverse<>+0x00(SB), Y12        // load byte shuffle mask
     VMOVDQU         perm_reverse<>+0x00(SB), Y13    // load byte shuffle mask
 
+	CMPQ		BX, $63     // slices smaller than 64 byte are handled separately
+	JBE			prep_avx
+
+
 	// works for data size 64 byte
 loop_avx2:
     SUBQ        $32, DI
-	VMOVDQU		0(SI), Y0               // load first 256 bit
-	VMOVDQU		0(DI), Y2               // load last 256 bit
+	VMOVDQU		(SI), Y0               // load first 256 bit
+	VMOVDQU		(DI), Y2               // load last 256 bit
 
     // revert Y0
     // first revert bits within bytes
@@ -697,11 +701,11 @@ loop_avx2:
     VPAND       Y0, Y11, Y0             // mask low nibble
     VPSHUFB     Y0, Y9, Y0              // lookup for high nibble (now Y0 contains low reversed nibble)
     VPOR        Y0, Y1, Y0              // combine both nibbles
-    // revert bytes within qwords
+    // revert bytes within 128 bit lanes
     VPSHUFB     Y12, Y0, Y0
-    // revert qwords within YMM register
+    // revert 128 bit lanes within YMM register
     VPERMD      Y0, Y13, Y0
-	VMOVDQU		Y0, 0(DI)               // write it to the end
+	VMOVDQU		Y0, (DI)               // write it to the end
 
     // revert Y2
     // first revert bits within bytes
@@ -711,11 +715,11 @@ loop_avx2:
     VPAND       Y2, Y11, Y2             // mask low nibble
     VPSHUFB     Y2, Y9, Y2              // lookup for high nibble (now Y0 contains low reversed nibble)
     VPOR        Y2, Y1, Y2              // combine both nibbles
-    // revert bytes within qwords
+    // revert bytes within 128 bit lanes
     VPSHUFB     Y12, Y2, Y2
-    // revert qwords within YMM register
+    // revert 128 bit lanes within YMM register
     VPERMD      Y2, Y13, Y2
-	VMOVDQU		Y2, 0(SI)               // write it to the begin
+	VMOVDQU		Y2, (SI)               // write it to the begin
 
 	ADDQ		$32, SI
     SUBQ		$64, BX
@@ -726,17 +730,17 @@ loop_avx2:
 exit_avx2:
 	VZEROUPPER
 
-/*prep_avx:
+prep_avx:
 	TESTQ	BX, BX
 	JLE		done
-	CMPQ	BX, $16
+	CMPQ	BX, $31
 	JBE		prep_i8
 
-	// works for data size 16 byte
+	// works for data size 16 byte, no loop because max 63 bytes -> max 2 XMM registers (32 bytes)
 loop_avx:
     SUBQ        $16, DI
-	VMOVDQU		0(SI), X0               // load first 256 bit
-	VMOVDQU		0(DI), X2               // load last 256 bit
+	VMOVDQU		(SI), X0               // load first 128 bit
+	VMOVDQU		(DI), X2               // load last 128 bit
 
     // revert Y0
     // first revert bits within bytes
@@ -746,11 +750,9 @@ loop_avx:
     VPAND       X0, X11, X0             // mask low nibble
     VPSHUFB     X0, X9, X0              // lookup for high nibble (now Y0 contains low reversed nibble)
     VPOR        X0, X1, X0              // combine both nibbles
-    // revert bytes within qwords
+    // revert bytes within XMM register
     VPSHUFB     X12, X0, X0
-    // revert qwords within XMM register
-    VPERMD      X0, X13, X0
-	VMOVDQU		X0, 0(DI)               // write it to the end
+	VMOVDQU		X0, (DI)               // write it to the end
 
     // revert Y2
     // first revert bits within bytes
@@ -760,53 +762,32 @@ loop_avx:
     VPAND       X2, X11, X2             // mask low nibble
     VPSHUFB     X2, X9, X2              // lookup for high nibble (now Y0 contains low reversed nibble)
     VPOR        X2, X1, X2              // combine both nibbles
-    // revert bytes within qwords
+    // revert bytes within XMM register
     VPSHUFB     X12, X2, X2
-    // revert qwords within XMM register
-    VPERMD      X2, X13, X2
-	VMOVDQU		X2, 0(SI)               // write it to the begin
+	VMOVDQU		X2, (SI)               // write it to the begin
 
 	ADDQ		$16, SI
     SUBQ		$32, BX
-	//CMPQ		BX, $32
-	//JB			exit_avx
-	//JMP			loop_avx
-*/
 
 exit_avx:
-    // nothing to do
+	VZEROUPPER
 
 prep_i8:
-    LEAQ    LUT_reverse<>(SB), BP
-	CMPQ	BX, $2
-	JB		last_byte
-    XORQ    AX, AX
     XORQ    R8, R8
     XORQ    R9, R9
 
+	CMPQ	BX, $2
+	JB		last_byte
+
 loop_i8:
     SUBQ    $1, DI
-	MOVB	0(SI), R8
-	MOVB	0(DI), R9
+	MOVB	(SI), R8
+	MOVB	(DI), R9
 
-    // revert R8
-    MOVB    R8, AX
-    ANDB    $15, AX             // mask low nibble
-    MOVB    (BP)(AX*1),R10      // look up
-    SHLB    $4, R10             // move low nibble to high nibble
-    SHRB    $4, R8              // shift high nibble
-    MOVB    (BP)(R8*1),R11      // look up
-    ORB     R10, R11
-    MOVB    R11, 0(DI)
-
-    // revert R9
-    MOVB    R9, AX
-    ANDB    $15, AX             // mask low nibble
-    MOVB    (BP)(AX*1),R10      // look up
-    SHLB    $4, R10             // move low nibble to high nibble
-    SHRB    $4, R9              // shift high nibble
+    // revert R8 and R9
+    MOVB    (BP)(R8*1),R10      // look up
     MOVB    (BP)(R9*1),R11      // look up
-    ORB     R10, R11
+    MOVB    R10, 0(DI)
     MOVB    R11, 0(SI)
 
 	ADDQ	$1, SI
@@ -819,19 +800,10 @@ last_byte:
 	TESTQ	BX, BX
 	JLE		done
 
-    XORQ    AX, AX
-    XORQ    R8, R8
-
-	MOVB	0(SI), R8
+	MOVB	(SI), R8
     // revert R8
-    MOVB    R8, AX
-    ANDB    $15, AX             // mask low nibble
-    MOVB    (BP)(AX*1),R10      // look up
-    SHLB    $4, R10             // move low nibble to high nibble
-    SHRB    $4, R8              // shift high nibble
-    MOVB    (BP)(R8*1),R11      // look up
-    ORB     R10, R11
-    MOVB    R11, 0(SI)
+    MOVB    (BP)(R8*1),R10      // look up
+    MOVB    R10, (SI)
 
 done:
 	RET
