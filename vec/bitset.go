@@ -9,7 +9,7 @@ import (
 
 const defaultBitsetSize = 16 // 8kB
 
-var bitSetPool = &sync.Pool{
+var bitsetPool = &sync.Pool{
 	New: func() interface{} { return makeBitset(1 << defaultBitsetSize) },
 }
 
@@ -27,7 +27,7 @@ type Bitset struct {
 func NewBitset(size int) *Bitset {
 	var s *Bitset
 	if size <= 1<<defaultBitsetSize {
-		s = bitSetPool.Get().(*Bitset)
+		s = bitsetPool.Get().(*Bitset)
 		s.Grow(size)
 	} else {
 		s = makeBitset(size)
@@ -176,7 +176,7 @@ func (s *Bitset) Reset() {
 func (s *Bitset) Close() {
 	s.Reset()
 	if cap(s.buf) == 1<<defaultBitsetSize {
-		bitSetPool.Put(s)
+		bitsetPool.Put(s)
 	}
 }
 

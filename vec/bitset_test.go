@@ -29,12 +29,12 @@ type BitsetTest struct {
 	count     int
 }
 
-type bitSetBenchmarkSize struct {
+type bitsetBenchmarkSize struct {
 	name string
 	l    int
 }
 
-var bitSetSizes = []int{
+var bitsetSizes = []int{
 	7, 8, 9, 15, 16, 17, 23, 24, 25, 31, 32, 33,
 	63, 64, 65, 127,
 	128,   // min AVX size
@@ -60,7 +60,7 @@ var bitSetSizes = []int{
 	16384, // 16x AVX2
 }
 
-var bitSetBenchmarkSizes = []bitSetBenchmarkSize{
+var bitsetBenchmarkSizes = []bitsetBenchmarkSize{
 	//	{"32", 32},
 	//	{"128", 128},
 	{"1K", 1 * 1024},
@@ -79,7 +79,7 @@ var bitSetBenchmarkSizes = []bitSetBenchmarkSize{
 	{"128M-8", 128*1024*1024 - 8},
 }
 
-var bitSetPatterns = []byte{
+var bitsetPatterns = []byte{
 	0xfa,
 	0x08,
 	0x11,
@@ -87,7 +87,7 @@ var bitSetPatterns = []byte{
 	0x80,
 }
 
-var bitSetCases = []BitsetTest{
+var bitsetCases = []BitsetTest{
 	BitsetTest{
 		name:   "zeros_7",
 		source: []byte{0x0},
@@ -121,7 +121,7 @@ var bitSetCases = []BitsetTest{
 /*
 const b3 = "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000800000000010000000000000000000000000000000000000000000000000000000"
 
-var bitSetAndCases = []BitsetTest{
+var bitsetAndCases = []BitsetTest{
 	BitsetTest{
 		name:      "3bits",
 		sourceStr: b3,
@@ -185,7 +185,7 @@ func checkCleanTail(T *testing.T, buf []byte) {
 
 // Test low-level slice handlers
 func TestBitsetPopCountGeneric(T *testing.T) {
-	for _, c := range bitSetCases {
+	for _, c := range bitsetCases {
 		T.Run(c.name, func(t *testing.T) {
 			cnt := bitsetPopCountGeneric(c.source, c.size)
 			if got, want := int(cnt), c.count; got != want {
@@ -193,8 +193,8 @@ func TestBitsetPopCountGeneric(T *testing.T) {
 			}
 		})
 	}
-	for _, sz := range bitSetSizes {
-		for _, pt := range bitSetPatterns {
+	for _, sz := range bitsetSizes {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				buf := fillBitset(nil, sz, pt)
 				if got, want := int(bitsetPopCountGeneric(buf, sz)), popcount(buf); got != want {
@@ -209,7 +209,7 @@ func TestBitsetPopCountAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
-	for _, c := range bitSetCases {
+	for _, c := range bitsetCases {
 		// call the function selector to do proper last byte masking!
 		T.Run(c.name, func(t *testing.T) {
 			cnt := bitsetPopCount(c.source, c.size)
@@ -218,8 +218,8 @@ func TestBitsetPopCountAVX2(T *testing.T) {
 			}
 		})
 	}
-	for _, sz := range bitSetSizes {
-		for _, pt := range bitSetPatterns {
+	for _, sz := range bitsetSizes {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				buf := fillBitset(nil, sz, pt)
 				// call the function selector to do proper last byte masking!
@@ -232,10 +232,10 @@ func TestBitsetPopCountAVX2(T *testing.T) {
 }
 
 func TestBitAndGeneric(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			src := fillBitset(nil, sz, pt)
 			dst := fillBitset(nil, sz, pt)
 
@@ -282,10 +282,10 @@ func TestBitAndGeneric(T *testing.T) {
 }
 
 func TestBitAndGenericFlag1(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
@@ -369,10 +369,10 @@ func TestBitAndAVX2(T *testing.T) {
 	}
 
 	// calls use the function selector to do proper last byte masking!
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
@@ -425,10 +425,10 @@ func TestBitAndAVX2Flag1(T *testing.T) {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
@@ -507,10 +507,10 @@ func TestBitAndAVX2Flag1(T *testing.T) {
 }
 
 func TestBitAndNotGeneric(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := make([]byte, len(src))
@@ -563,10 +563,10 @@ func TestBitAndNotAVX2(T *testing.T) {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := make([]byte, len(src))
@@ -615,10 +615,10 @@ func TestBitAndNotAVX2(T *testing.T) {
 }
 
 func TestBitOrGeneric(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
@@ -667,10 +667,10 @@ func TestBitOrGeneric(T *testing.T) {
 }
 
 func TestBitOrGenericFlag1(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
@@ -753,10 +753,10 @@ func TestBitOrAVX2(T *testing.T) {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
@@ -805,10 +805,10 @@ func TestBitOrAVX2(T *testing.T) {
 }
 
 func TestBitOrAVX2Flag1(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
@@ -887,10 +887,10 @@ func TestBitOrAVX2Flag1(T *testing.T) {
 }
 
 func TestBitXorGeneric(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
@@ -944,10 +944,10 @@ func TestBitXorAVX2(T *testing.T) {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
-		for _, pt := range bitSetPatterns {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
@@ -997,8 +997,8 @@ func TestBitXorAVX2(T *testing.T) {
 }
 
 func TestBitNegGeneric(T *testing.T) {
-	for _, sz := range bitSetSizes {
-		for _, pt := range bitSetPatterns {
+	for _, sz := range bitsetSizes {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				cmp := fillBitset(nil, sz, ^pt)
@@ -1020,8 +1020,8 @@ func TestBitNegAVX2(T *testing.T) {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
-	for _, sz := range bitSetSizes {
-		for _, pt := range bitSetPatterns {
+	for _, sz := range bitsetSizes {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				cmp := fillBitset(nil, sz, ^pt)
@@ -1041,7 +1041,7 @@ func TestBitNegAVX2(T *testing.T) {
 // Test high-level bitset API
 //
 func TestBitsetNew(T *testing.T) {
-	for _, c := range bitSetCases {
+	for _, c := range bitsetCases {
 		T.Run(c.name, func(t *testing.T) {
 			bits := NewBitset(c.size)
 			if got, want := len(bits.Bytes()), len(c.source); got != want {
@@ -1059,7 +1059,7 @@ func TestBitsetNew(T *testing.T) {
 }
 
 func TestBitsetFromBytes(T *testing.T) {
-	for _, c := range bitSetCases {
+	for _, c := range bitsetCases {
 		T.Run(c.name, func(t *testing.T) {
 			bits := NewBitsetFromBytes(c.source, c.size)
 			if got, want := len(bits.Bytes()), len(c.source); got != want {
@@ -1079,7 +1079,7 @@ func TestBitsetFromBytes(T *testing.T) {
 }
 
 func TestBitsetOne(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		T.Run(f("%d", sz), func(t *testing.T) {
 			bits := NewBitset(sz)
 			bits.One()
@@ -1102,7 +1102,7 @@ func TestBitsetOne(T *testing.T) {
 }
 
 func TestBitsetZero(T *testing.T) {
-	for _, c := range bitSetCases {
+	for _, c := range bitsetCases {
 		T.Run(c.name, func(t *testing.T) {
 			bits := NewBitsetFromBytes(c.source, c.size)
 			bits.Zero()
@@ -1124,8 +1124,8 @@ func TestBitsetZero(T *testing.T) {
 }
 
 func TestBitsetGrow(T *testing.T) {
-	for _, sz := range bitSetSizes {
-		for _, sznew := range bitSetSizes {
+	for _, sz := range bitsetSizes {
+		for _, sznew := range bitsetSizes {
 			T.Run(f("%d_%d", sz, sznew), func(t *testing.T) {
 				bits := NewBitset(sz)
 				bits.One()
@@ -1163,7 +1163,7 @@ func TestBitsetGrow(T *testing.T) {
 		}
 	}
 	// clear/reset bitset to zero
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		T.Run(f("%d_grow_0", sz), func(t *testing.T) {
 			bits := NewBitset(sz)
 			bits.One()
@@ -1184,7 +1184,7 @@ func TestBitsetGrow(T *testing.T) {
 		})
 	}
 	// grow + 1
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		T.Run(f("%d_grow+1", sz), func(t *testing.T) {
 			bits := NewBitset(sz)
 			bits.One()
@@ -1212,8 +1212,8 @@ func TestBitsetGrow(T *testing.T) {
 }
 
 func TestBitsetFill(T *testing.T) {
-	for _, sz := range bitSetSizes {
-		for _, pt := range bitSetPatterns {
+	for _, sz := range bitsetSizes {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				cmp := fillBitset(nil, sz, pt)
 				bits := NewBitset(sz)
@@ -1237,7 +1237,7 @@ func TestBitsetFill(T *testing.T) {
 }
 
 func TestBitsetSet(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		T.Run(f("%d", sz), func(t *testing.T) {
 			bits := NewBitset(sz)
 			cmp := fillBitset(nil, sz, 0)
@@ -1296,7 +1296,7 @@ func TestBitsetSet(T *testing.T) {
 }
 
 func TestBitsetClear(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		T.Run(f("%d", sz), func(t *testing.T) {
 			bits := NewBitset(sz)
 			bits.One()
@@ -1355,8 +1355,8 @@ func TestBitsetClear(T *testing.T) {
 }
 
 func TestBitsetReverse(T *testing.T) {
-	for _, sz := range bitSetSizes {
-		for _, pt := range bitSetPatterns {
+	for _, sz := range bitsetSizes {
+		for _, pt := range bitsetPatterns {
 			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				cmp := fillBitset(nil, sz, pt)
 				bits := NewBitset(sz)
@@ -1396,7 +1396,7 @@ func TestBitsetReverse(T *testing.T) {
 }
 
 func TestBitsetReverseAVX2(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		bits := fillBitsetSaw(nil, sz)
 		cmp := make([]byte, len(bits))
 		copy(cmp, bits)
@@ -1430,7 +1430,7 @@ func clearReverseBit(bits []byte, sz, i int) {
 }
 
 func TestBitsetSetReverse(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		T.Run(f("%d", sz), func(t *testing.T) {
 			bits := NewBitset(sz).Reverse()
 			cmp := fillBitset(nil, sz, 0)
@@ -1488,7 +1488,7 @@ func TestBitsetSetReverse(T *testing.T) {
 }
 
 func TestBitsetClearReverse(T *testing.T) {
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		T.Run(f("%d", sz), func(t *testing.T) {
 			bits := NewBitset(sz)
 			bits.One()
@@ -1548,7 +1548,7 @@ func TestBitsetClearReverse(T *testing.T) {
 	}
 }
 
-type bitSetRunTestcase struct {
+type bitsetRunTestcase struct {
 	name  string
 	buf   []byte
 	size  int
@@ -1556,8 +1556,8 @@ type bitSetRunTestcase struct {
 	rruns [][2]int // reverse
 }
 
-var runTestcases = []bitSetRunTestcase{
-	bitSetRunTestcase{
+var runTestcases = []bitsetRunTestcase{
+	bitsetRunTestcase{
 		name: "first_7",
 		buf:  []byte{0xff},
 		size: 7,
@@ -1568,7 +1568,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{6, 7},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "first_9",
 		buf:  []byte{0xff, 0xff},
 		size: 9,
@@ -1579,7 +1579,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{8, 9},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "first_15",
 		buf:  []byte{0xff, 0xff},
 		size: 15,
@@ -1590,7 +1590,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{14, 15},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "first_17",
 		buf:  []byte{0xff, 0xff, 0xff},
 		size: 17,
@@ -1601,7 +1601,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{16, 17},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "first_7_srl_1",
 		buf:  []byte{0xfe},
 		size: 7,
@@ -1612,7 +1612,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{6, 6},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "first_15_srl_1",
 		buf:  []byte{0xfe, 0xff},
 		size: 15,
@@ -1623,7 +1623,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{14, 14},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "first_ff_srl_4",
 		buf:  []byte{0xf0, 0x0f},
 		size: 16,
@@ -1634,7 +1634,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{11, 8},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "first_33_srl_3",
 		buf:  []byte{0xf8, 0xff, 0xff, 0xff, 0x01},
 		size: 33,
@@ -1645,7 +1645,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{32, 30},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "second_15",
 		buf:  []byte{0x0, 0xff},
 		size: 15,
@@ -1656,7 +1656,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{14, 7},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "second_33_srl_3",
 		buf:  []byte{0x0, 0xf8, 0xff, 0xff, 0x01},
 		size: 33,
@@ -1667,7 +1667,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{32, 22},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "two_fe_33",
 		buf:  []byte{0x7f, 0x00, 0x7f, 0x00, 0x00},
 		size: 33,
@@ -1680,7 +1680,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{6, 7},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "four_0e_31",
 		buf:  []byte{0x70, 0x70, 0x70, 0x70},
 		size: 31,
@@ -1697,7 +1697,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{6, 3},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "every_aa_15",
 		buf:  []byte{0x55, 0x55},
 		size: 15,
@@ -1722,7 +1722,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{0, 1},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "every_cc_15",
 		buf:  []byte{0x33, 0x33},
 		size: 15,
@@ -1739,7 +1739,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{1, 2},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "every_55_15",
 		buf:  []byte{0xaa, 0xaa},
 		size: 15,
@@ -1762,7 +1762,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{1, 1},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "every_88_17",
 		buf:  []byte{0x11, 0x11, 0x11},
 		size: 17,
@@ -1781,7 +1781,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{0, 1},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "last_0e_32",
 		buf:  []byte{0x0, 0x0, 0x0, 0x70},
 		size: 32,
@@ -1792,7 +1792,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{30, 3},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "last_16",
 		buf:  []byte{0x0, 0x80},
 		size: 16,
@@ -1803,7 +1803,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{15, 1},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "last_16k",
 		buf:  append(fillBitset(nil, 16*1024-8, 0), byte(0x80)),
 		size: 16 * 1024,
@@ -1814,7 +1814,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{16*1024 - 1, 1},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "empty",
 		buf:  []byte{},
 		size: 0,
@@ -1825,7 +1825,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{-1, 0},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "nil",
 		buf:  nil,
 		size: 0,
@@ -1836,7 +1836,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{-1, 0},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "zeros_8",
 		buf:  fillBitset(nil, 8, 0),
 		size: 8,
@@ -1847,7 +1847,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{-1, 0},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "zeros_32",
 		buf:  fillBitset(nil, 32, 0),
 		size: 32,
@@ -1858,7 +1858,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{-1, 0},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "ones_32",
 		buf:  fillBitset(nil, 32, 0xff),
 		size: 32,
@@ -1869,7 +1869,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{31, 32},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "ones_64",
 		buf:  fillBitset(nil, 64, 0xff),
 		size: 64,
@@ -1880,7 +1880,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{63, 64},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "ones_32_zeros_32",
 		buf:  []byte{0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff},
 		size: 96,
@@ -1893,7 +1893,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{31, 32},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "ones_64_zeros_64",
 		buf: []byte{
 			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
@@ -1909,7 +1909,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{63, 64},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "64k_and_cd",
 		buf:  append(bytes.Repeat([]byte{0x0}, 8*1024-1), byte(0xcd)),
 		size: 64 * 1024,
@@ -1924,7 +1924,7 @@ var runTestcases = []bitSetRunTestcase{
 			[2]int{64*1024 - 8, 1},
 		},
 	},
-	bitSetRunTestcase{
+	bitsetRunTestcase{
 		name: "64k_and_8d",
 		buf:  append(bytes.Repeat([]byte{0x0}, 8*1024-1), byte(0x8d)),
 		size: 64 * 1024,
@@ -2029,7 +2029,7 @@ func randBitsets(n, sz int) []*Bitset {
 
 func TestBitsetSlice(T *testing.T) {
 	rand.Seed(0)
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		for i, b := range randBitsets(100, sz) {
 			T.Run(f("%d_%d", sz, i), func(t *testing.T) {
 				slice := b.Slice()
@@ -2050,7 +2050,7 @@ func TestBitsetSlice(T *testing.T) {
 
 func TestBitsetSubSlice(T *testing.T) {
 	rand.Seed(0)
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		for i, b := range randBitsets(100, sz) {
 			T.Run(f("%d_%d", sz, i), func(t *testing.T) {
 				start := int(rand.Int31n(int32(b.Len())))
@@ -2073,7 +2073,7 @@ func TestBitsetSubSlice(T *testing.T) {
 
 func TestBitsetFromSlice(T *testing.T) {
 	rand.Seed(0)
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		for i, b := range randBitsets(100, sz) {
 			T.Run(f("%d_%d", sz, i), func(t *testing.T) {
 				slice := b.Slice()
@@ -2105,10 +2105,10 @@ func TestBitsetFromSlice(T *testing.T) {
 func TestBitsetInsert(T *testing.T) {
 	var fast, fasthead, slow int
 	rand.Seed(0)
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		for i, src := range randBitsets(100, sz) {
 			dst := NewBitset(1024)
-			for _, pat := range bitSetPatterns {
+			for _, pat := range bitsetPatterns {
 				T.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
 					dst.Fill(pat)
 					srcPos := int(rand.Int31n(int32(src.Len())))
@@ -2175,10 +2175,10 @@ func TestBitsetInsert(T *testing.T) {
 func TestBitsetReplace(T *testing.T) {
 	var fast, slow int
 	rand.Seed(0)
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		for i, src := range randBitsets(100, sz) {
 			dst := NewBitset(sz)
-			for _, pat := range bitSetPatterns {
+			for _, pat := range bitsetPatterns {
 				T.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
 					dst.Fill(pat)
 					srcPos := int(rand.Int31n(int32(src.Len())))
@@ -2225,10 +2225,10 @@ func TestBitsetReplace(T *testing.T) {
 func TestBitsetAppend(T *testing.T) {
 	var fast, slow int
 	rand.Seed(0)
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		for i, src := range randBitsets(100, sz) {
 			dst := NewBitset(sz)
-			for _, pat := range bitSetPatterns {
+			for _, pat := range bitsetPatterns {
 				T.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
 					dst.Fill(pat)
 					srcPos := int(rand.Int31n(int32(src.Len())))
@@ -2289,10 +2289,10 @@ func TestBitsetAppend(T *testing.T) {
 func TestBitsetDelete(T *testing.T) {
 	var fast, slow int
 	rand.Seed(0)
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		for i, src := range randBitsets(100, sz) {
 			dst := NewBitset(sz)
-			for _, pat := range bitSetPatterns {
+			for _, pat := range bitsetPatterns {
 				T.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
 					// strategy:
 					// - create a defined bitset with poison data
@@ -2352,7 +2352,7 @@ func TestBitsetDelete(T *testing.T) {
 
 func TestBitsetSwap(T *testing.T) {
 	rand.Seed(0)
-	for _, sz := range bitSetSizes {
+	for _, sz := range bitsetSizes {
 		for i, src := range randBitsets(100, sz) {
 			T.Run(f("%d_%d", sz, i), func(t *testing.T) {
 				i := int(rand.Int31n(int32(src.Len())))
@@ -2398,7 +2398,7 @@ func TestBitsetSwap(T *testing.T) {
 // Bitset low-level benchmarks
 //
 func BenchmarkBitsetSwap(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			bs := NewBitsetFromBytes(bits, n.l)
@@ -2412,7 +2412,7 @@ func BenchmarkBitsetSwap(B *testing.B) {
 }
 
 func BenchmarkBitsetSwapBool(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			bs := NewBitsetFromBytes(bits, n.l)
@@ -2427,7 +2427,7 @@ func BenchmarkBitsetSwapBool(B *testing.B) {
 }
 
 func BenchmarkBitsetIndexHighDensity(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			l := uint64(bitFieldLen(n.l))
@@ -2447,7 +2447,7 @@ func BenchmarkBitsetIndexHighDensity(B *testing.B) {
 }
 
 func BenchmarkBitsetIndexLowDensity(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			l := uint64(bitFieldLen(n.l))
@@ -2467,7 +2467,7 @@ func BenchmarkBitsetIndexLowDensity(B *testing.B) {
 }
 
 func BenchmarkBitsetRunGeneric(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			bits[len(bits)-1] |= 1
@@ -2484,7 +2484,7 @@ func BenchmarkBitsetRunAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			bits[len(bits)-1] |= 1
@@ -2498,7 +2498,7 @@ func BenchmarkBitsetRunAVX2(B *testing.B) {
 }
 
 func BenchmarkBitsetRunGenericMean(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			bits[len(bits)/2] |= 1
@@ -2515,7 +2515,7 @@ func BenchmarkBitsetRunAVX2Mean(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			bits[len(bits)/2] |= 1
@@ -2539,7 +2539,7 @@ func BenchmarkBitsetRunAVX2Mean(B *testing.B) {
 // BenchmarkBitsetRunGenericLowDensity/128M-8  	     189	   5986233 ns/op	2802.63 MB/s
 // BenchmarkBitsetRunGenericLowDensity/512M-8  	      39	  28992549 ns/op	2314.69 MB/s
 func BenchmarkBitsetRunGenericLowDensity(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			l := uint64(bitFieldLen(n.l))
@@ -2570,7 +2570,7 @@ func BenchmarkBitsetRunGenericLowDensity(B *testing.B) {
 // BenchmarkBitsetRunGenericMedDensity/128M-8 	       8	 139005274 ns/op	 120.69 MB/s
 // BenchmarkBitsetRunGenericMedDensity/512M-8 	       2	 546642168 ns/op	 122.77 MB/s
 func BenchmarkBitsetRunGenericMedDensity(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			l := uint64(bitFieldLen(n.l))
@@ -2601,7 +2601,7 @@ func BenchmarkBitsetRunGenericMedDensity(B *testing.B) {
 // BenchmarkBitsetRunGenericHighDensity/128M-8 	       3	 452572946 ns/op	  37.07 MB/s
 // BenchmarkBitsetRunGenericHighDensity/512M-8 	       1	1787180770 ns/op	  37.55 MB/s
 func BenchmarkBitsetRunGenericHighDensity(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			l := uint64(bitFieldLen(n.l))
@@ -2635,7 +2635,7 @@ func BenchmarkBitsetRunAVX2LowDensity(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			l := uint64(bitFieldLen(n.l))
@@ -2669,7 +2669,7 @@ func BenchmarkBitsetRunAVX2MedDensity(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			l := uint64(bitFieldLen(n.l))
@@ -2703,7 +2703,7 @@ func BenchmarkBitsetRunAVX2HighDensity(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0)
 			l := uint64(bitFieldLen(n.l))
@@ -2734,7 +2734,7 @@ func BenchmarkBitsetRunAVX2HighDensity(B *testing.B) {
 // BenchmarkBitsetRunGenericCC/128M-8       	       3	 402005366 ns/op	  41.73 MB/s
 // BenchmarkBitsetRunGenericCC/512M-8       	       1	1561153801 ns/op	  42.99 MB/s
 func BenchmarkBitsetRunGenericCC(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xcc)
 			B.ResetTimer()
@@ -2763,7 +2763,7 @@ func BenchmarkBitsetRunAVX2CC(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xcc)
 			B.ResetTimer()
@@ -2788,7 +2788,7 @@ func BenchmarkBitsetRunAVX2CC(B *testing.B) {
 // BenchmarkBitsetRunGenericAA/128M-8       	       2	 773090222 ns/op	  21.70 MB/s
 // BenchmarkBitsetRunGenericAA/512M-8       	       1	3162817860 ns/op	  21.22 MB/s
 func BenchmarkBitsetRunGenericAA(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xaa)
 			B.ResetTimer()
@@ -2817,7 +2817,7 @@ func BenchmarkBitsetRunAVX2AA(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xaa)
 			B.ResetTimer()
@@ -2842,7 +2842,7 @@ func BenchmarkBitsetRunAVX2AA(B *testing.B) {
 // BenchmarkBitsetPopCountGeneric/128M-8       	     300	   4358409 ns/op	3849.39 MB/s
 // BenchmarkBitsetPopCountGeneric/512M-8       	     100	  18061159 ns/op	3715.65 MB/s
 func BenchmarkBitsetPopCountGeneric(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			B.ResetTimer()
@@ -2867,7 +2867,7 @@ func BenchmarkBitsetPopCountAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			B.ResetTimer()
@@ -2889,7 +2889,7 @@ func BenchmarkBitsetPopCountAVX2(B *testing.B) {
 // BenchmarkBitsetAndGeneric/128M-8       	     100	  10242328 ns/op	1638.03 MB/s
 // BenchmarkBitsetAndGeneric/512M-8       	      30	  44840644 ns/op	1496.61 MB/s
 func BenchmarkBitsetAndGeneric(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			cmp := fillBitset(nil, n.l, 0xae)
@@ -2903,7 +2903,7 @@ func BenchmarkBitsetAndGeneric(B *testing.B) {
 }
 
 func BenchmarkBitsetAndGenericFlag1(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			cmp := fillBitset(nil, n.l, 0xae)
@@ -2929,7 +2929,7 @@ func BenchmarkBitsetAndAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			cmp := fillBitset(nil, n.l, 0xae)
@@ -2946,7 +2946,7 @@ func BenchmarkBitsetAndAVX2Flag1(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			cmp := fillBitset(nil, n.l, 0xae)
@@ -2969,7 +2969,7 @@ func BenchmarkBitsetAndAVX2Flag1(B *testing.B) {
 // BenchmarkBitsetAndNotGeneric/128M-8       	     100	  11017526 ns/op	1522.78 MB/s
 // BenchmarkBitsetAndNotGeneric/512M-8       	      30	  45853262 ns/op	1463.56 MB/s
 func BenchmarkBitsetAndNotGeneric(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			cmp := fillBitset(nil, n.l, 0xae)
@@ -2995,7 +2995,7 @@ func BenchmarkBitsetAndNotAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			cmp := fillBitset(nil, n.l, 0xae)
@@ -3018,7 +3018,7 @@ func BenchmarkBitsetAndNotAVX2(B *testing.B) {
 // BenchmarkBitsetOrGeneric/128M-8       	     100	  10283848 ns/op	1631.41 MB/s
 // BenchmarkBitsetOrGeneric/512M-8       	      30	  42982470 ns/op	1561.31 MB/s
 func BenchmarkBitsetOrGeneric(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			cmp := fillBitset(nil, n.l, 0xae)
@@ -3044,7 +3044,7 @@ func BenchmarkBitsetOrAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			cmp := fillBitset(nil, n.l, 0xae)
@@ -3067,7 +3067,7 @@ func BenchmarkBitsetOrAVX2(B *testing.B) {
 // BenchmarkBitsetXorGeneric/128M-8       	     100	  10600042 ns/op	1582.75 MB/s
 // BenchmarkBitsetXorGeneric/512M-8       	      30	  44760594 ns/op	1499.28 MB/s
 func BenchmarkBitsetXorGeneric(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			cmp := fillBitset(nil, n.l, 0xae)
@@ -3093,7 +3093,7 @@ func BenchmarkBitsetXorAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			cmp := fillBitset(nil, n.l, 0xae)
@@ -3116,7 +3116,7 @@ func BenchmarkBitsetXorAVX2(B *testing.B) {
 // BenchmarkBitsetNotGeneric/128M-8       	     200	   6627973 ns/op	2531.27 MB/s
 // BenchmarkBitsetNotGeneric/512M-8       	      50	  27560713 ns/op	2434.95 MB/s
 func BenchmarkBitsetNotGeneric(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			B.ResetTimer()
@@ -3141,7 +3141,7 @@ func BenchmarkBitsetNotAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			B.ResetTimer()
@@ -3163,7 +3163,7 @@ func BenchmarkBitsetNotAVX2(B *testing.B) {
 // BenchmarkBitsetReverse/128M-8       	     147	   7965933 ns/op	2106.12 MB/s
 // BenchmarkBitsetReverse/512M-8       	      33	  33553682 ns/op	2000.04 MB/s
 func BenchmarkBitsetReverseGeneric(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			B.ResetTimer()
@@ -3176,7 +3176,7 @@ func BenchmarkBitsetReverseGeneric(B *testing.B) {
 }
 
 func BenchmarkBitsetReverseAVX2(B *testing.B) {
-	for _, n := range bitSetBenchmarkSizes {
+	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
 			B.ResetTimer()
