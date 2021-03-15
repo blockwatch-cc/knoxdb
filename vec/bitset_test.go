@@ -12,6 +12,7 @@ package vec
 import (
 	"bytes"
 	"encoding/binary"
+
 	//	"encoding/hex"
 	"fmt"
 	"math/bits"
@@ -1354,47 +1355,6 @@ func TestBitsetClear(T *testing.T) {
 	}
 }
 
-func TestBitsetReverse(T *testing.T) {
-	for _, sz := range bitsetSizes {
-		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
-				cmp := fillBitset(nil, sz, pt)
-				bits := NewBitset(sz)
-				bits.Fill(pt)
-
-				bits.Reverse()
-				if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
-					T.Errorf("unexpected buf length %d, expected %d", got, want)
-				}
-				if got, want := bits.Len(), sz; got != want {
-					T.Errorf("unexpected size %d, expected %d", got, want)
-				}
-				if got, want := bits.Count(), popcount(cmp); got != want {
-					T.Errorf("unexpected count %d, expected %d", got, want)
-				}
-				if bytes.Compare(bits.Bytes(), cmp) == 0 && bytes.Compare(bits.Bytes(), bytes.Repeat([]byte{0}, len(bits.Bytes()))) != 0 {
-					T.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
-				}
-
-				bits.Reverse()
-				if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
-					T.Errorf("unexpected buf length %d, expected %d", got, want)
-				}
-				if got, want := bits.Len(), sz; got != want {
-					T.Errorf("unexpected size %d, expected %d", got, want)
-				}
-				if got, want := bits.Count(), popcount(cmp); got != want {
-					T.Errorf("unexpected count %d, expected %d", got, want)
-				}
-				if bytes.Compare(bits.Bytes(), cmp) != 0 {
-					T.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
-				}
-				checkCleanTail(T, bits.Bytes())
-			})
-		}
-	}
-}
-
 func TestBitsetReverseAVX2(T *testing.T) {
 	for _, sz := range bitsetSizes {
 		bits := fillBitsetSaw(nil, sz)
@@ -1412,139 +1372,6 @@ func TestBitsetReverseAVX2(T *testing.T) {
 		if bytes.Compare(bits, cmp) != 0 {
 			T.Errorf("%d: unexpected result %x, expected %x", sz, bits, cmp)
 		}
-	}
-}
-
-func reverseIndex(sz, i int) int {
-	return sz - i + int(7-uint(sz-1)&0x7) - 1
-}
-
-func setReverseBit(bits []byte, sz, i int) {
-	idx := reverseIndex(sz, i)
-	bits[idx>>3] |= byte(1 << uint(idx&0x7))
-}
-
-func clearReverseBit(bits []byte, sz, i int) {
-	idx := reverseIndex(sz, i)
-	bits[idx>>3] &^= byte(1 << uint(idx&0x7))
-}
-
-func TestBitsetSetReverse(T *testing.T) {
-	for _, sz := range bitsetSizes {
-		T.Run(f("%d", sz), func(t *testing.T) {
-			bits := NewBitset(sz).Reverse()
-			cmp := fillBitset(nil, sz, 0)
-
-			// set first bit
-			bits.Set(0)
-			setReverseBit(cmp, sz, 0)
-			if got, want := bits.Count(), 1; got != want {
-				T.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			if !bits.IsSet(0) {
-				T.Errorf("unexpected IsSet=false")
-			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
-				T.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
-
-			// set last bit
-			bits.Set(sz - 1)
-			setReverseBit(cmp, sz, sz-1)
-			if got, want := bits.Count(), 2; got != want {
-				T.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			if !bits.IsSet(sz - 1) {
-				T.Errorf("unexpected IsSet=false")
-			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
-				T.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
-
-			// set invalid bit
-			bits.Set(-1)
-			if got, want := bits.Count(), 2; got != want {
-				T.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(-1) {
-				T.Errorf("unexpected IsSet=true")
-			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
-				T.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
-
-			bits.Set(sz)
-			if got, want := bits.Count(), 2; got != want {
-				T.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(sz) {
-				T.Errorf("unexpected IsSet=true")
-			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
-				T.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
-		})
-	}
-}
-
-func TestBitsetClearReverse(T *testing.T) {
-	for _, sz := range bitsetSizes {
-		T.Run(f("%d", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
-			bits.One()
-			bits.Reverse()
-			cmp := fillBitset(nil, sz, 0xff)
-			bitsetReverse(cmp)
-
-			// clear first bit
-			bits.Clear(0)
-			clearReverseBit(cmp, sz, 0)
-			if got, want := bits.Count(), popcount(cmp); got != want {
-				T.Errorf("first: unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(0) {
-				T.Errorf("unexpected IsSet=true")
-			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
-				T.Errorf("first: unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
-
-			// clear last bit
-			bits.Clear(sz - 1)
-			clearReverseBit(cmp, sz, sz-1)
-			if got, want := bits.Count(), popcount(cmp); got != want {
-				T.Errorf("last: unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(sz - 1) {
-				T.Errorf("unexpected IsSet=true")
-			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
-				T.Errorf("last: unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
-
-			// clear invalid bit
-			bits.Clear(-1)
-			if got, want := bits.Count(), popcount(cmp); got != want {
-				T.Errorf("invalid-: unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(sz) {
-				T.Errorf("unexpected IsSet=true")
-			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
-				T.Errorf("invalid-: unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
-
-			bits.Clear(sz)
-			if got, want := bits.Count(), popcount(cmp); got != want {
-				T.Errorf("invalid+: unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(sz) {
-				T.Errorf("unexpected IsSet=true")
-			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
-				T.Errorf("invalid+: unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
-		})
 	}
 }
 
@@ -1970,7 +1797,7 @@ func TestBitsetRunReverse(T *testing.T) {
 		idx := bits.Len() - 1
 		for i, r := range c.rruns {
 			T.Run(f("%s_%d", c.name, i), func(t *testing.T) {
-				idx, length = bits.Run(idx - length)
+				idx, length = bits.RunReverse(idx - length)
 				if got, want := idx, r[0]; got != want {
 					// fmt.Printf("%d - %s: Reverse Bitfield %08b\n", x, c.name, bits.Bytes())
 					// fmt.Printf("%d - %s: Runs %#v\n", x, c.name, c.rruns)
@@ -1996,7 +1823,6 @@ func TestBitsetRunAVX2(T *testing.T) {
 		for i, r := range c.runs {
 			T.Run(f("%s_%d", c.name, i), func(t *testing.T) {
 				idx, length = bitsetRunAVX2Wrapper(bits.Bytes(), idx+length, bits.Len())
-				// idx, length = bitsetRunAVX2Wrapper(c.buf, idx+length, c.size)
 				if got, want := idx, r[0]; got != want {
 					T.Errorf("unexpected index %d, expected %d", got, want)
 				}

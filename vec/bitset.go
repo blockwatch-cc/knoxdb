@@ -17,7 +17,6 @@ type Bitset struct {
 	buf       []byte
 	cnt       int
 	size      int
-	isReverse bool
 }
 
 // NewBitset allocates a new Bitset with a custom size and default capacity or
@@ -87,7 +86,6 @@ func (s *Bitset) SetFromBytes(buf []byte, size int) *Bitset {
 	s.buf = s.buf[:len(buf)]
 	copy(s.buf, buf)
 	s.cnt = -1
-	s.isReverse = false
 	return s
 }
 
@@ -103,7 +101,6 @@ func (s *Bitset) Clone() *Bitset {
 	clone := NewBitset(s.size)
 	copy(clone.buf, s.buf)
 	clone.cnt = s.cnt
-	clone.isReverse = s.isReverse
 	return clone
 }
 
@@ -118,14 +115,11 @@ func (s *Bitset) Copy(b *Bitset) *Bitset {
 	s.buf = s.buf[:len(b.buf)]
 	copy(s.buf, b.buf)
 	s.cnt = b.cnt
-	s.isReverse = b.isReverse
 	return s
 }
 
 // Grow resizes the bitset to a new size, either growing or shrinking it.
 // Content remains unchanged on grow, when shrinking trailing bits are clipped.
-//
-// FIXME: does not work with reversed bitset
 func (s *Bitset) Grow(size int) *Bitset {
 	if size < 0 {
 		return s
@@ -167,7 +161,6 @@ func (s *Bitset) Reset() {
 	s.size = 0
 	s.cnt = 0
 	s.buf = s.buf[:0]
-	s.isReverse = false
 }
 
 // Close clears the bitset contents, sets its size to zero and returns it
@@ -256,7 +249,6 @@ func (s *Bitset) One() *Bitset {
 }
 
 func (s *Bitset) Zero() *Bitset {
-	s.isReverse = false
 	if s.size == 0 || s.cnt == 0 {
 		return s
 	}
@@ -273,11 +265,7 @@ func (s *Bitset) Fill(b byte) *Bitset {
 	for bp := 1; bp < len(s.buf); bp *= 2 {
 		copy(s.buf[bp:], s.buf[:bp])
 	}
-	if s.isReverse {
-		s.buf[0] &= bitsetReverseLut256[bytemask(s.size)]
-	} else {
-		s.buf[len(s.buf)-1] &= bytemask(s.size)
-	}
+	s.buf[len(s.buf)-1] &= bytemask(s.size)
 	s.cnt = -1
 	return s
 }
@@ -285,10 +273,6 @@ func (s *Bitset) Fill(b byte) *Bitset {
 func (s *Bitset) Set(i int) *Bitset {
 	if i < 0 || i >= s.size {
 		return s
-	}
-	if s.isReverse {
-		pad := int(7 - uint(s.size-1)&0x7)
-		i = s.size - i + pad - 1
 	}
 	mask := bitmask(i)
 	if s.cnt >= 0 && s.buf[i>>3]&mask == 0 {
@@ -299,10 +283,6 @@ func (s *Bitset) Set(i int) *Bitset {
 }
 
 func (s *Bitset) setbit(i int) {
-	if s.isReverse {
-		pad := int(7 - uint(s.size-1)&0x7)
-		i = s.size - i + pad - 1
-	}
 	mask := bitmask(i)
 	s.buf[i>>3] |= mask
 }
@@ -310,10 +290,6 @@ func (s *Bitset) setbit(i int) {
 func (s *Bitset) Clear(i int) *Bitset {
 	if i < 0 || i >= s.size {
 		return s
-	}
-	if s.isReverse {
-		pad := int(7 - uint(s.size-1)&0x7)
-		i = s.size - i + pad - 1
 	}
 	mask := bitmask(i)
 	if s.cnt > 0 && s.buf[i>>3]&mask > 0 {
@@ -324,10 +300,6 @@ func (s *Bitset) Clear(i int) *Bitset {
 }
 
 func (s *Bitset) clearbit(i int) {
-	if s.isReverse {
-		pad := int(7 - uint(s.size-1)&0x7)
-		i = s.size - i + pad - 1
-	}
 	mask := bitmask(i)
 	s.buf[i>>3] &^= mask
 }
@@ -336,10 +308,6 @@ func (s *Bitset) IsSet(i int) bool {
 	if i < 0 || i >= s.size {
 		return false
 	}
-	if s.isReverse {
-		pad := int(7 - uint(s.size-1)&0x7)
-		i = s.size - i + pad - 1
-	}
 	mask := bitmask(i)
 	return (s.buf[i>>3] & mask) > 0
 }
@@ -347,8 +315,6 @@ func (s *Bitset) IsSet(i int) bool {
 // Insert inserts srcLen values from position srcPos in bitset src into the
 // bitset at position dstPos and moves all values following dstPos behind the
 // newly inserted bits
-//
-// FIXME: fast path incompatible with reversed
 func (s *Bitset) Insert(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
 	if srcLen <= 0 {
 		return s
@@ -423,8 +389,6 @@ func (s *Bitset) Insert(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
 
 // Replace replaces srcLen values at position dstPos with values from src
 // bewteen position srcPos and srcPos + srcLen.
-//
-// FIXME: fast path incompatible with reversed
 func (s *Bitset) Replace(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
 	// skip when arguments are out of range
 	if srcLen <= 0 || srcPos < 0 || dstPos < 0 || dstPos > s.size {
@@ -463,8 +427,6 @@ func (s *Bitset) Replace(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
 
 // Append grows the bitset by srcLen and appends srcLen values from
 // src starting at position srcPos.
-//
-// FIXME: fast path incompatible with reversed
 func (s *Bitset) Append(src *Bitset, srcPos, srcLen int) *Bitset {
 	if srcLen <= 0 {
 		return s
@@ -552,7 +514,6 @@ func (s *Bitset) Swap(i, j int) {
 
 func (s *Bitset) Reverse() *Bitset {
 	bitsetReverse(s.buf)
-	s.isReverse = !s.isReverse
 	return s
 }
 
@@ -565,12 +526,7 @@ func (s *Bitset) Bytes() []byte {
 
 func (s *Bitset) Count() int {
 	if s.cnt < 0 {
-		if s.isReverse {
-			// leading padding is filled with zero bits
-			s.cnt = int(bitsetPopCount(s.buf, len(s.buf)*8))
-		} else {
-			s.cnt = int(bitsetPopCount(s.buf, s.size))
-		}
+		s.cnt = int(bitsetPopCount(s.buf, s.size))
 	}
 	return s.cnt
 }
@@ -599,20 +555,26 @@ func (s Bitset) EncodedSize() int {
 // run of 1s in the bit vector starting at index. When no more
 // 1s exist after index, -1 and a length of 0 is returned.
 func (b Bitset) Run(index int) (int, int) {
-	if b.isReverse {
-		if b.size == 0 || index < 0 || index > b.size {
-			return -1, 0
-		}
-		pad := int(7 - uint(b.size-1)&0x7)
-		index = b.size - index + pad - 1 // skip padding
-		start, length := bitsetRun(b.buf, index, len(b.buf)*8)
-		if start < 0 {
-			return -1, 0
-		}
-		start = b.size - start + pad - 1 // reverse adjust
-		return start, length
-	}
 	return bitsetRun(b.buf, index, b.size)
+}
+
+// Runs through an reversed bitset. You have to reverse it yourself
+// with Reverse function.
+// returns the index and length of the next consecutive
+// run of 1s in the bit vector starting at index. When no more
+// 1s exist after index, -1 and a length of 0 is returned.
+func (b Bitset) RunReverse(index int) (int, int) {
+	if b.size == 0 || index < 0 || index > b.size {
+		return -1, 0
+	}
+	pad := int(7 - uint(b.size-1)&0x7)
+	index = b.size - index + pad - 1 // skip padding
+	start, length := bitsetRun(b.buf, index, len(b.buf)*8)
+	if start < 0 {
+		return -1, 0
+	}
+	start = b.size - start + pad - 1 // reverse adjust
+	return start, length
 }
 
 // Indexes returns a slice of indexes for one bits in the bitset.
