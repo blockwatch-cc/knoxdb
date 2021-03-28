@@ -658,7 +658,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			return out, nil
 		}
 	}
-	return out, nil
+	// return out, nil
 }
 
 // non-equi joins

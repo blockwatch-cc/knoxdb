@@ -308,7 +308,7 @@ loop:
 			val = val.Mul64(10)
 			val = val.Add64(uint64(c - '0'))
 			if sign < 0 {
-				// Note: since val is +int256, MinInt256 woul overflow
+				// Note: since val is +int128, MinInt128 would overflow
 				if val[0] > 1<<63 || (val[0] == 1<<63 && val[1] > 0) {
 					return ErrPrecisionUnderflow
 				}

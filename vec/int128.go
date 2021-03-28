@@ -230,7 +230,6 @@ func (x Int128) Precision() int {
 			}
 			q, r = q.QuoRem(pow)
 		}
-		return 0
 	}
 }
 
