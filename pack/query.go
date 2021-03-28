@@ -298,3 +298,83 @@ func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
 	q.stats.PacksScheduled = len(schedule)
 	return schedule
 }
+
+func (q Query) WithFields(names ...string) Query {
+	q.Fields = q.table.Fields().Select(names...)
+	return q
+}
+
+func (q Query) WithOrder(o OrderType) Query {
+	q.Order = o
+	return q
+}
+
+func (q Query) WithDesc() Query {
+	q.Order = OrderDesc
+	return q
+}
+
+func (q Query) WithAsc() Query {
+	q.Order = OrderAsc
+	return q
+}
+
+func (q Query) WithLimit(l int) Query {
+	q.Limit = l
+	return q
+}
+
+func (q Query) AndCondition(field string, mode FilterMode, value interface{}) Query {
+	q.Conditions = append(q.Conditions, Condition{
+		Field: q.table.Fields().Find(field),
+		Mode:  mode,
+		Value: value,
+	})
+	return q
+}
+
+func (q Query) AndEqual(field string, value interface{}) Query {
+	return q.AndCondition(field, FilterModeEqual, value)
+}
+
+func (q Query) AndNotEqual(field string, value interface{}) Query {
+	return q.AndCondition(field, FilterModeNotEqual, value)
+}
+
+func (q Query) AndIn(field string, value interface{}) Query {
+	return q.AndCondition(field, FilterModeIn, value)
+}
+
+func (q Query) AndNotIn(field string, value interface{}) Query {
+	return q.AndCondition(field, FilterModeNotIn, value)
+}
+
+func (q Query) AndLt(field string, value interface{}) Query {
+	return q.AndCondition(field, FilterModeLt, value)
+}
+
+func (q Query) AndLte(field string, value interface{}) Query {
+	return q.AndCondition(field, FilterModeLte, value)
+}
+
+func (q Query) AndGt(field string, value interface{}) Query {
+	return q.AndCondition(field, FilterModeGt, value)
+}
+
+func (q Query) AndGte(field string, value interface{}) Query {
+	return q.AndCondition(field, FilterModeGte, value)
+}
+
+func (q Query) AndRegexp(field string, value interface{}) Query {
+	return q.AndCondition(field, FilterModeRegexp, value)
+}
+
+func (q Query) AndRange(field string, from, to interface{}) Query {
+	q.Conditions = append(q.Conditions, Condition{
+		Field: q.table.Fields().Find(field),
+		Mode:  FilterModeRange,
+		From:  from,
+		To:    to,
+	})
+	return q
+}

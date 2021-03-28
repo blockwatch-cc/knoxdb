@@ -37,6 +37,7 @@ Brytlyt (GPU database, closed source)
 - https://www.brytlyt.com/blog/gpu-databases-today-big-challenge-joins/#
 
 Interesting DB design read with loads of refs
+- https://en.wikipedia.org/wiki/Slowly_changing_dimension
 - https://news.ycombinator.com/item?id=19818899
 - https://news.ycombinator.com/item?id=21970952 // clickhouse perf
 - https://tech.marksblogg.com/benchmarks.html // top DB benchmarks
