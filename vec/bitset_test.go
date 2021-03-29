@@ -1792,19 +1792,19 @@ func TestBitsetRunReverse(T *testing.T) {
 			continue
 		}
 		bits := NewBitsetFromBytes(c.buf, c.size)
-		bits.Reverse()
+		rev := bits.Reverse()
 		var length int
 		idx := bits.Len() - 1
 		for i, r := range c.rruns {
 			T.Run(f("%s_%d", c.name, i), func(t *testing.T) {
-				idx, length = bits.RunReverse(idx - length)
+				idx, length = rev.Run(idx - length)
 				if got, want := idx, r[0]; got != want {
-					// fmt.Printf("%d - %s: Reverse Bitfield %08b\n", x, c.name, bits.Bytes())
+					// fmt.Printf("%d - %s: Reverse Bitfield %08b\n", x, c.name, rev.Bytes())
 					// fmt.Printf("%d - %s: Runs %#v\n", x, c.name, c.rruns)
 					T.Errorf("unexpected index %d, expected %d", got, want)
 				}
 				if got, want := length, r[1]; got != want {
-					// fmt.Printf("%d - %s: Reverse Bitfield %08b\n", x, c.name, bits.Bytes())
+					// fmt.Printf("%d - %s: Reverse Bitfield %08b\n", x, c.name, rev.Bytes())
 					// fmt.Printf("%d - %s: Runs %#v\n", x, c.name, c.rruns)
 					T.Errorf("unexpected length %d, expected %d", got, want)
 				}
