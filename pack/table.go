@@ -1256,14 +1256,14 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 			// next journal key entry for insert/update
 			key := live[jpos]
 
-			// stop on pack boundary
-			if best, _, _ := t.findBestPack(key.pk); best != lastpack {
-				break
-			}
-
 			// skip deleted journal entries
 			if dbits.IsSet(key.idx) {
 				continue
+			}
+
+			// stop on pack boundary
+			if best, _, _ := t.findBestPack(key.pk); best != lastpack {
+				break
 			}
 
 			// packs are sorted by pk, so we can safely skip ahead
