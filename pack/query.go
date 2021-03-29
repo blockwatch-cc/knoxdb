@@ -9,6 +9,7 @@ package pack
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -324,6 +325,16 @@ func (q Query) WithLimit(l int) Query {
 	return q
 }
 
+func (q Query) WithoutIndex() Query {
+	q.NoIndex = true
+	return q
+}
+
+func (q Query) WithoutCache() Query {
+	q.NoCache = true
+	return q
+}
+
 func (q Query) AndCondition(field string, mode FilterMode, value interface{}) Query {
 	q.Conditions = append(q.Conditions, Condition{
 		Field: q.table.Fields().Find(field),
@@ -377,4 +388,47 @@ func (q Query) AndRange(field string, from, to interface{}) Query {
 		To:    to,
 	})
 	return q
+}
+
+func (q Query) Execute(ctx context.Context, val interface{}) error {
+	v := reflect.ValueOf(val)
+	if v.Kind() != reflect.Ptr {
+		return fmt.Errorf("pack: non-pointer passed to Execute")
+	}
+	v = reflect.Indirect(v)
+	switch v.Kind() {
+	case reflect.Slice:
+		// get slice element type
+		elem := v.Type().Elem()
+		return q.table.Stream(ctx, q, func(r Row) error {
+			// create new slice element (may be a pointer to struct)
+			e := reflect.New(elem)
+			ev := e
+
+			// if element is ptr to struct, allocate the underlying struct
+			if e.Elem().Kind() == reflect.Ptr {
+				ev.Elem().Set(reflect.New(e.Elem().Type().Elem()))
+				ev = reflect.Indirect(e)
+			}
+
+			// decode the struct element (re-use our interface-based methods)
+			if err := r.Decode(ev.Interface()); err != nil {
+				return err
+			}
+
+			// append slice element
+			v.Set(reflect.Append(v, e.Elem()))
+			return nil
+		})
+	case reflect.Struct:
+		return q.table.Stream(ctx, q.WithLimit(1), func(r Row) error {
+			return r.Decode(val)
+		})
+	default:
+		return fmt.Errorf("pack: non-slice/struct passed to Execute")
+	}
+}
+
+func (q Query) Stream(ctx context.Context, fn func(r Row) error) error {
+	return q.table.Stream(ctx, q, fn)
 }
