@@ -512,11 +512,6 @@ func (s *Bitset) Swap(i, j int) {
 	}
 }
 
-func (s *Bitset) Reverse() *Bitset {
-	bitsetReverse(s.buf)
-	return s
-}
-
 func (s *Bitset) Bytes() []byte {
 	if s == nil {
 		return nil
@@ -556,25 +551,6 @@ func (s Bitset) EncodedSize() int {
 // 1s exist after index, -1 and a length of 0 is returned.
 func (b Bitset) Run(index int) (int, int) {
 	return bitsetRun(b.buf, index, b.size)
-}
-
-// Runs through an reversed bitset. You have to reverse it yourself
-// with Reverse function.
-// returns the index and length of the next consecutive
-// run of 1s in the bit vector starting at index. When no more
-// 1s exist after index, -1 and a length of 0 is returned.
-func (b Bitset) RunReverse(index int) (int, int) {
-	if b.size == 0 || index < 0 || index > b.size {
-		return -1, 0
-	}
-	pad := int(7 - uint(b.size-1)&0x7)
-	index = b.size - index + pad - 1 // skip padding
-	start, length := bitsetRun(b.buf, index, len(b.buf)*8)
-	if start < 0 {
-		return -1, 0
-	}
-	start = b.size - start + pad - 1 // reverse adjust
-	return start, length
 }
 
 // Indexes returns a slice of indexes for one bits in the bitset.
