@@ -1256,14 +1256,14 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 			// next journal key entry for insert/update
 			key := live[jpos]
 
-			// stop on pack boundary
-			if best, _, _ := t.findBestPack(key.pk); best != lastpack {
-				break
-			}
-
 			// skip deleted journal entries
 			if dbits.IsSet(key.idx) {
 				continue
+			}
+
+			// stop on pack boundary
+			if best, _, _ := t.findBestPack(key.pk); best != lastpack {
+				break
 			}
 
 			// packs are sorted by pk, so we can safely skip ahead
@@ -1461,7 +1461,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 // - choose pack with closest max < val
 // - when val < min of first pack, choose first pack
 //
-func (t Table) findBestPack(pkval uint64) (int, uint64, uint64) {
+func (t *Table) findBestPack(pkval uint64) (int, uint64, uint64) {
 	// will return 0 when list is empty, this ensures we initially stick
 	// to the first pack until it's full
 	bestpack, min, max := t.packidx.Best(pkval)
@@ -2751,7 +2751,7 @@ func (t *Table) Compact(ctx context.Context) error {
 	return tx.Commit()
 }
 
-func (t Table) cachekey(key []byte) string {
+func (t *Table) cachekey(key []byte) string {
 	return t.name + "/" + hex.EncodeToString(key)
 }
 

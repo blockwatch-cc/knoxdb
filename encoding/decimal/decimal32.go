@@ -106,11 +106,11 @@ func (d Decimal32) Int64() int64 {
 }
 
 func (d Decimal32) Int128() Int128 {
-	return Int128{uint64(d.val >> 63), uint64(d.val)}
+	return Int128{uint64(d.val >> 31), uint64(d.val)}
 }
 
 func (d Decimal32) Int256() Int256 {
-	return Int256{uint64(d.val >> 63), uint64(d.val >> 63), uint64(d.val >> 63), uint64(d.val)}
+	return Int256{uint64(d.val >> 31), uint64(d.val >> 31), uint64(d.val >> 31), uint64(d.val)}
 }
 
 func (d *Decimal32) SetInt64(value int64, scale int) error {

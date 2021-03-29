@@ -1245,19 +1245,19 @@ func (p *Package) Column(index int) (interface{}, error) {
 
 	case FieldTypeDecimal256:
 		// materialize
-		return Decimal256Slice{b.Int256, field.Scale}, nil
+		return Decimal256Slice{Int256: b.Int256, Scale: field.Scale}, nil
 
 	case FieldTypeDecimal128:
 		// materialize
-		return Decimal128Slice{b.Int128, field.Scale}, nil
+		return Decimal128Slice{Int128: b.Int128, Scale: field.Scale}, nil
 
 	case FieldTypeDecimal64:
 		// materialize
-		return Decimal64Slice{b.Int64, field.Scale}, nil
+		return Decimal64Slice{Int64: b.Int64, Scale: field.Scale}, nil
 
 	case FieldTypeDecimal32:
 		// materialize
-		return Decimal32Slice{b.Int32, field.Scale}, nil
+		return Decimal32Slice{Int32: b.Int32, Scale: field.Scale}, nil
 
 	default:
 		return nil, fmt.Errorf("pack: unsupported type %s", field.Type)
@@ -1387,16 +1387,16 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		return b.Uint8[start:end], nil
 	case FieldTypeDecimal256:
 		// materialize
-		return Decimal256Slice{b.Int256[start:end], field.Scale}, nil
+		return Decimal256Slice{Int256: b.Int256[start:end], Scale: field.Scale}, nil
 	case FieldTypeDecimal128:
 		// materialize
-		return Decimal128Slice{b.Int128[start:end], field.Scale}, nil
+		return Decimal128Slice{Int128: b.Int128[start:end], Scale: field.Scale}, nil
 	case FieldTypeDecimal64:
 		// materialize
-		return Decimal64Slice{b.Int64[start:end], field.Scale}, nil
+		return Decimal64Slice{Int64: b.Int64[start:end], Scale: field.Scale}, nil
 	case FieldTypeDecimal32:
 		// materialize
-		return Decimal32Slice{b.Int32[start:end], field.Scale}, nil
+		return Decimal32Slice{Int32: b.Int32[start:end], Scale: field.Scale}, nil
 	default:
 		return nil, fmt.Errorf("pack: unsupported type %s", field.Type)
 	}

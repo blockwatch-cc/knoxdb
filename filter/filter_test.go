@@ -47,7 +47,7 @@ func randBytes(n int) []byte {
 func BenchmarkUint64MapFromSorted(B *testing.B) {
 	for _, n := range []int{10, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64Slice(randUint64Slice(n, 1)).Sort()
+			a := vec.Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {

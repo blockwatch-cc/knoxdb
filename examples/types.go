@@ -98,7 +98,7 @@ type Types struct {
 	Timestamp time.Time          `knox:"T,snappy"                 json:"time"`
 	Hash      []byte             `knox:"H"                        json:"hash"`
 	String    string             `knox:"str,snappy"               json:"string"`
-	Stringer  Stringer           `knox:"strlist,snappy"               json:"string_list"`
+	Stringer  Stringer           `knox:"strlist,snappy"           json:"string_list"`
 	Bool      bool               `knox:"bool,snappy"              json:"bool"`
 	Enum      Enum               `knox:"enum,u8,snappy"           json:"enum"`
 	Int64     int64              `knox:"i64,snappy"               json:"int64"`
@@ -389,6 +389,26 @@ func run() error {
 		log.Errorf("Decode: %v", err)
 	} else {
 		log.Infof("Decoded %d entries", count)
+	}
+
+	// read a single entry
+	q := pack.NewQuery("my-query", table).AndGte("int64", 42).AndLt("int64", 1024)
+	var single Types
+	err = q.Execute(context.Background(), &single)
+	if err != nil {
+		return err
+	}
+	log.Infof("Single value int64=%d", single.Int64)
+
+	// read up to 10 entries via query interface
+	multi := make([]*Types, 0)
+	err = q.WithLimit(10).Execute(context.Background(), &multi)
+	if err != nil {
+		return err
+	}
+	log.Infof("%d Multi values", len(multi))
+	for i, v := range multi {
+		log.Infof("%d int64=%d", i, v.Int64)
 	}
 
 	// delete some entries

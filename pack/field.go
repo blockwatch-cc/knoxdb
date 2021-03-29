@@ -148,11 +148,11 @@ func (l FieldList) Aliases() []string {
 
 func (l FieldList) Find(name string) Field {
 	for _, v := range l {
-		if v.Name == name {
+		if v.Name == name || v.Alias == name {
 			return v
 		}
 	}
-	return Field{Index: -1}
+	return Field{Index: -1, Name: name, Alias: name}
 }
 
 func (l FieldList) Select(names ...string) FieldList {
@@ -210,7 +210,7 @@ func (l FieldList) PkIndex() int {
 
 func (l FieldList) Contains(name string) bool {
 	for _, v := range l {
-		if v.Name == name {
+		if v.Name == name || v.Alias == name {
 			return true
 		}
 	}
