@@ -553,7 +553,7 @@ func BenchmarkInConditionVector(B *testing.B) {
 	}
 }
 
-func loopCheck(in, pk []uint64, bits *vec.BitSet) *vec.BitSet {
+func loopCheck(in, pk []uint64, bits *vec.Bitset) *vec.Bitset {
 	for i, p, il, pl := 0, 0, len(in), len(pk); i < il && p < pl; {
 		if pk[p] < in[i] {
 			p++
@@ -575,7 +575,7 @@ func loopCheck(in, pk []uint64, bits *vec.BitSet) *vec.BitSet {
 	return bits
 }
 
-func nestedLoopCheck(in, pk []uint64, bits *vec.BitSet) *vec.BitSet {
+func nestedLoopCheck(in, pk []uint64, bits *vec.Bitset) *vec.Bitset {
 	maxin, maxpk := in[len(in)-1], pk[len(pk)-1]
 	for i, p, il, pl := 0, 0, len(in), len(pk); i < il; {
 		if pk[p] > maxin || maxpk < in[i] {
@@ -602,7 +602,7 @@ func nestedLoopCheck(in, pk []uint64, bits *vec.BitSet) *vec.BitSet {
 	return bits
 }
 
-func mapCheck(in map[uint64]struct{}, pk []uint64, bits *vec.BitSet) *vec.BitSet {
+func mapCheck(in map[uint64]struct{}, pk []uint64, bits *vec.Bitset) *vec.Bitset {
 	for i, v := range pk {
 		if _, ok := in[v]; !ok {
 			bits.Set(i)
@@ -634,7 +634,7 @@ func BenchmarkInLoop(B *testing.B) {
 			B.SetBytes(int64(n.l) * 8)
 			for b := 0; b < B.N; b++ {
 				// this is the core of a new matching loop design
-				loopCheck(inSlice, pk, vec.NewBitSet(n.l)).Close()
+				loopCheck(inSlice, pk, vec.NewBitset(n.l)).Close()
 			}
 		})
 	}
@@ -663,7 +663,7 @@ func BenchmarkInNestedLoop(B *testing.B) {
 			B.SetBytes(int64(n.l) * 8)
 			for b := 0; b < B.N; b++ {
 				// this is the core of a new matching loop design
-				nestedLoopCheck(inSlice, pk, vec.NewBitSet(n.l)).Close()
+				nestedLoopCheck(inSlice, pk, vec.NewBitset(n.l)).Close()
 			}
 		})
 	}
@@ -690,7 +690,7 @@ func BenchmarkInMap(B *testing.B) {
 			B.SetBytes(int64(n.l) * 8)
 			for b := 0; b < B.N; b++ {
 				// this is the core of a new matching loop design
-				mapCheck(inmap, pk, vec.NewBitSet(n.l)).Close()
+				mapCheck(inmap, pk, vec.NewBitset(n.l)).Close()
 			}
 		})
 	}

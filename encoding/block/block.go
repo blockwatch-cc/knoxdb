@@ -124,7 +124,7 @@ type Block struct {
 	// data interface{}
 	Strings []string
 	Bytes   [][]byte
-	Bits    *vec.BitSet // -> BitSet
+	Bits    *vec.Bitset // -> Bitset
 	Int64   []int64     // re-used by Decimal64, Timestamps
 	Int32   []int32     // re-used by Decimal32
 	Int16   []int16
@@ -317,7 +317,7 @@ func NewBlock(typ BlockType, comp Compression, sz int) *Block {
 			b.Uint8 = make([]uint8, 0, sz)
 		}
 	case BlockBool:
-		b.Bits = vec.NewBitSet(sz)
+		b.Bits = vec.NewBitset(sz)
 		b.Bits.Reset()
 	case BlockString:
 		if sz <= DefaultMaxPointsPerBlock {
@@ -458,9 +458,9 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 		}
 	case BlockBool:
 		if copydata {
-			cp.Bits = vec.NewBitSetFromBytes(b.Bits.Bytes(), b.Bits.Len())
+			cp.Bits = vec.NewBitsetFromBytes(b.Bits.Bytes(), b.Bits.Len())
 		} else {
-			cp.Bits = vec.NewBitSet(sz)
+			cp.Bits = vec.NewBitset(sz)
 			cp.Bits.Reset()
 		}
 	case BlockString:
@@ -965,7 +965,7 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 
 	case BlockBool:
 		if b.Bits == nil || b.Bits.Cap() < sz {
-			b.Bits = vec.NewBitSet(sz)
+			b.Bits = vec.NewBitset(sz)
 			b.Bits.Reset()
 		} else {
 			b.Bits.Grow(sz).Reset()

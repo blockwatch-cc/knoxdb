@@ -5,9 +5,7 @@
 
 package vec
 
-import (
 // "fmt"
-)
 
 //go:noescape
 func bitsetAndAVX2(dst, src []byte)
@@ -31,7 +29,7 @@ func bitsetXorAVX2(dst, src []byte)
 func bitsetNegAVX2(src []byte)
 
 //go:noescape
-func bitsetReverseAVX2(src []byte)
+func bitsetReverseAVX2(src []byte, bitsetReverseLut256 []uint8)
 
 //go:noescape
 func bitsetPopCountAVX2(src []byte) int64
@@ -98,7 +96,7 @@ func bitsetNeg(src []byte, size int) {
 func bitsetReverse(src []byte) {
 	switch {
 	case useAVX2:
-		bitsetReverseAVX2(src)
+		bitsetReverseAVX2(src, bitsetReverseLut256)
 	default:
 		bitsetReverseGeneric(src)
 	}
@@ -145,7 +143,7 @@ func bitsetRunAVX2Wrapper(src []byte, index, size int) (int, int) {
 
 	// mask leading bits of the first byte
 	offset := index & 0x7
-	mask := byte(0xff) >> uint(offset)
+	mask := byte(0xff) << uint(offset)
 	first := src[i] & mask
 	if first > 0 {
 		// start is in same byte as index
@@ -172,7 +170,7 @@ func bitsetRunAVX2Wrapper(src []byte, index, size int) (int, int) {
 	// finally lookup the number of unmasked leading zeros; if there is any bit
 	// set to one (remember, that's a negated zero bit) the run ends in the same
 	// byte where it started.
-	if pos := bitsetLeadingZeros[(^src[i])&(byte(0xff)>>uint((start&0x7)+1))]; pos < 8 {
+	if pos := bitsetLeadingZeros[(^src[i])&(byte(0xff)<<uint((start&0x7)+1))]; pos < 8 {
 		length += pos
 		return start, length
 	}

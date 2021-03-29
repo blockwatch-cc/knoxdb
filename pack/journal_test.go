@@ -1135,7 +1135,7 @@ var journalE2Etests = []journalE2ETest{
 func (x journalE2ETest) Run(t *testing.T) {
 	t.Run(x.name, func(t *testing.T) {
 		j := makeJournalFromPks(x.pks, x.del)
-		ids, pks := j.SortedIndexes(vec.NewBitSetFromBytes(x.bit, len(x.bit)*8))
+		ids, pks := j.SortedIndexes(vec.NewBitsetFromBytes(x.bit, len(x.bit)*8))
 		if got, want := len(ids), len(x.idx); got != want {
 			t.Errorf("invalid result ids len: got=%d want=%d", got, want)
 		}

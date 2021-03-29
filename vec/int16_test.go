@@ -47,26 +47,26 @@ var (
 		42, 5, 113, 12, // Y8
 	}
 	int16EqualTestMatch_0  int16 = 5
-	int16EqualTestResult_0       = []byte{0x56, 0x78, 0x12, 0x34}
+	int16EqualTestResult_0       = []byte{0x6a, 0x1e, 0x48, 0x2c}
 
 	int16NotEqualTestMatch_0  int16 = 5
-	int16NotEqualTestResult_0       = []byte{0xa9, 0x87, 0xed, 0xcb}
+	int16NotEqualTestResult_0       = []byte{0x95, 0xe1, 0xb7, 0xd3}
 
 	int16LessTestMatch_0  int16 = 5
-	int16LessTestResult_0       = []byte{0xa0, 0x84, 0xe4, 0x80}
+	int16LessTestResult_0       = []byte{0x05, 0x21, 0x27, 0x01}
 
 	int16LessEqualTestMatch_0  int16 = 5
-	int16LessEqualTestResult_0       = []byte{0xf6, 0xfc, 0xf6, 0xb4}
+	int16LessEqualTestResult_0       = []byte{0x6f, 0x3f, 0x6f, 0x2d}
 
 	int16GreaterTestMatch_0  int16 = 5
-	int16GreaterTestResult_0       = []byte{0x09, 0x03, 0x09, 0x4b}
+	int16GreaterTestResult_0       = []byte{0x90, 0xc0, 0x90, 0xd2}
 
 	int16GreaterEqualTestMatch_0  int16 = 5
-	int16GreaterEqualTestResult_0       = []byte{0x5f, 0x7b, 0x1b, 0x7f}
+	int16GreaterEqualTestResult_0       = []byte{0xfa, 0xde, 0xd8, 0xfe}
 
 	int16BetweenTestMatch_0  int16 = 5
 	int16BetweenTestMatch_0b int16 = 10
-	int16BetweenTestResult_0       = []byte{0x5f, 0x78, 0x1b, 0x34}
+	int16BetweenTestResult_0       = []byte{0xfa, 0x1e, 0xd8, 0x2c}
 
 	// positive values only
 	int16TestSlice_1 = []int16{
@@ -79,25 +79,25 @@ var (
 		43, 5, 5, 5,
 		39, 40, 41, 42,
 	}
-	int16EqualTestResult_1       = []byte{0x82, 0x42, 0x23, 0x70}
+	int16EqualTestResult_1       = []byte{0x41, 0x42, 0xc4, 0x0e}
 	int16EqualTestMatch_1  int16 = 5
 
-	int16NotEqualTestResult_1       = []byte{0x7d, 0xbd, 0xdc, 0x8f}
+	int16NotEqualTestResult_1       = []byte{0xbe, 0xbd, 0x3b, 0xf1}
 	int16NotEqualTestMatch_1  int16 = 5
 
-	int16LessTestResult_1       = []byte{0x70, 0x00, 0x00, 0x00}
+	int16LessTestResult_1       = []byte{0x0e, 0x00, 0x00, 0x00}
 	int16LessTestMatch_1  int16 = 5
 
-	int16LessEqualTestResult_1       = []byte{0xf2, 0x42, 0x23, 0x70}
+	int16LessEqualTestResult_1       = []byte{0x4f, 0x42, 0xc4, 0x0e}
 	int16LessEqualTestMatch_1  int16 = 5
 
-	int16GreaterTestResult_1       = []byte{0x0d, 0xbd, 0xdc, 0x8f}
+	int16GreaterTestResult_1       = []byte{0xb0, 0xbd, 0x3b, 0xf1}
 	int16GreaterTestMatch_1  int16 = 5
 
-	int16GreaterEqualTestResult_1       = []byte{0x8f, 0xff, 0xff, 0xff}
+	int16GreaterEqualTestResult_1       = []byte{0xf1, 0xff, 0xff, 0xff}
 	int16GreaterEqualTestMatch_1  int16 = 5
 
-	int16BetweenTestResult_1       = []byte{0x8f, 0x42, 0x23, 0x70}
+	int16BetweenTestResult_1       = []byte{0xf1, 0x42, 0xc4, 0x0e}
 	int16BetweenTestMatch_1  int16 = 5
 	int16BetweenTestMatch_1b int16 = 10
 
@@ -112,25 +112,25 @@ var (
 		39, 40, -41, 42,
 		43, 44, 45, -46,
 	}
-	int16EqualTestResult_2       = []byte{0x80, 0x0, 0x0, 0x0}
+	int16EqualTestResult_2       = []byte{0x01, 0x0, 0x0, 0x0}
 	int16EqualTestMatch_2  int16 = -5
 
-	int16NotEqualTestResult_2       = []byte{0x7f, 0xff, 0xff, 0xff}
+	int16NotEqualTestResult_2       = []byte{0xfe, 0xff, 0xff, 0xff}
 	int16NotEqualTestMatch_2  int16 = -5
 
-	int16LessTestResult_2       = []byte{0xe1, 0x04, 0x04, 0x21}
+	int16LessTestResult_2       = []byte{0x87, 0x20, 0x20, 0x84}
 	int16LessTestMatch_2  int16 = 5
 
-	int16LessEqualTestResult_2       = []byte{0xf1, 0x04, 0x04, 0x21}
+	int16LessEqualTestResult_2       = []byte{0x8f, 0x20, 0x20, 0x84}
 	int16LessEqualTestMatch_2  int16 = 5
 
-	int16GreaterTestResult_2       = []byte{0x0e, 0xfb, 0xfb, 0xde}
+	int16GreaterTestResult_2       = []byte{0x70, 0xdf, 0xdf, 0x7b}
 	int16GreaterTestMatch_2  int16 = 5
 
-	int16GreaterEqualTestResult_2       = []byte{0x1e, 0xfb, 0xfb, 0xde}
+	int16GreaterEqualTestResult_2       = []byte{0x78, 0xdf, 0xdf, 0x7b}
 	int16GreaterEqualTestMatch_2  int16 = 5
 
-	int16BetweenTestResult_2       = []byte{0x1e, 0x00, 0x00, 0x00}
+	int16BetweenTestResult_2       = []byte{0x78, 0x00, 0x00, 0x00}
 	int16BetweenTestMatch_2  int16 = 5
 	int16BetweenTestMatch_2b int16 = 10
 
@@ -153,25 +153,25 @@ var (
 		math.MaxInt8, math.MinInt8,
 		math.MaxInt16, math.MinInt16,
 	}
-	int16EqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
+	int16EqualTestResult_3       = []byte{0x80, 0x80, 0x80, 0x80}
 	int16EqualTestMatch_3  int16 = math.MinInt16
 
-	int16NotEqualTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
+	int16NotEqualTestResult_3       = []byte{0x7f, 0x7f, 0x7f, 0x7f}
 	int16NotEqualTestMatch_3  int16 = math.MinInt16
 
-	int16LessTestResult_3       = []byte{0x0, 0x0, 0x0, 0x00}
+	int16LessTestResult_3       = []byte{0x0, 0x0, 0x0, 0x0}
 	int16LessTestMatch_3  int16 = math.MinInt16
 
-	int16LessEqualTestResult_3       = []byte{0x01, 0x01, 0x01, 0x01}
+	int16LessEqualTestResult_3       = []byte{0x80, 0x80, 0x80, 0x80}
 	int16LessEqualTestMatch_3  int16 = math.MinInt16
 
-	int16GreaterTestResult_3       = []byte{0xfe, 0xfe, 0xfe, 0xfe}
+	int16GreaterTestResult_3       = []byte{0x7f, 0x7f, 0x7f, 0x7f}
 	int16GreaterTestMatch_3  int16 = math.MinInt16
 
 	int16GreaterEqualTestResult_3       = []byte{0xff, 0xff, 0xff, 0xff}
 	int16GreaterEqualTestMatch_3  int16 = math.MinInt16
 
-	int16BetweenTestResult_3       = []byte{0x0a, 0x0a, 0x0a, 0x0a}
+	int16BetweenTestResult_3       = []byte{0x50, 0x50, 0x50, 0x50}
 	int16BetweenTestMatch_3  int16 = math.MaxInt8
 	int16BetweenTestMatch_3b int16 = math.MaxInt16
 )
@@ -207,7 +207,7 @@ func CreateInt16TestCase(name string, slice []int16, match, match2 int16, result
 	}
 	// clear the last unused bits
 	if length%8 != 0 {
-		new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+		new_result[len(new_result)-1] &= 0xff >> (8 - length%8)
 	}
 	// count number of ones
 	var cnt int

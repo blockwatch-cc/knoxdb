@@ -11,13 +11,13 @@ import (
 var (
 	bitsetLookup        [256]uint8
 	bitsetLeadingZeros  [256]int
-	bitsetReverseLut256 [256]uint8
+	bitsetReverseLut256 []uint8 = make([]uint8, 256)
 )
 
 func init() {
 	for i := range bitsetLookup {
 		bitsetLookup[i] = uint8(bits.OnesCount8(uint8(i)))
-		bitsetLeadingZeros[i] = bits.LeadingZeros8(uint8(i))
+		bitsetLeadingZeros[i] = bits.TrailingZeros8(uint8(i))
 		bitsetReverseLut256[i] = uint8(((uint64(i) * 0x80200802) & 0x0884422110) * 0x0101010101 >> 32)
 	}
 }
@@ -118,7 +118,7 @@ func bitsetRunGeneric(src []byte, index, size int) (int, int) {
 
 	// mask leading bits of the first byte
 	offset := index & 0x7
-	mask := byte(0xff) >> uint(offset)
+	mask := byte(0xff) << uint(offset)
 	first := src[i] & mask
 	if first > 0 {
 		// start is in same byte as index
@@ -155,7 +155,7 @@ func bitsetRunGeneric(src []byte, index, size int) (int, int) {
 	// finally lookup the number of unmasked leading zeros; if there is any bit
 	// set to one (remember, that's a negated zero bit) the run ends in the same
 	// byte where it started.
-	if pos := bitsetLeadingZeros[(^src[i])&(byte(0xff)>>uint((start&0x7)+1))]; pos < 8 {
+	if pos := bitsetLeadingZeros[(^src[i])&(byte(0xff)<<uint((start&0x7)+1))]; pos < 8 {
 		length += pos
 		return start, length
 	}

@@ -47,26 +47,26 @@ var (
 		42, 5, 113, 12, // Y8
 	}
 	float32EqualTestMatch_0  float32 = 5
-	float32EqualTestResult_0         = []byte{0x56, 0x78, 0x12, 0x34}
+	float32EqualTestResult_0         = []byte{0x6a, 0x1e, 0x48, 0x2c}
 
 	float32NotEqualTestMatch_0  float32 = 5
-	float32NotEqualTestResult_0         = []byte{0xa9, 0x87, 0xed, 0xcb}
+	float32NotEqualTestResult_0         = []byte{0x95, 0xe1, 0xb7, 0xd3}
 
 	float32LessTestMatch_0  float32 = 5
-	float32LessTestResult_0         = []byte{0xa0, 0x84, 0xe4, 0x80}
+	float32LessTestResult_0         = []byte{0x05, 0x21, 0x27, 0x01}
 
 	float32LessEqualTestMatch_0  float32 = 5
-	float32LessEqualTestResult_0         = []byte{0xf6, 0xfc, 0xf6, 0xb4}
+	float32LessEqualTestResult_0         = []byte{0x6f, 0x3f, 0x6f, 0x2d}
 
 	float32GreaterTestMatch_0  float32 = 5
-	float32GreaterTestResult_0         = []byte{0x09, 0x03, 0x09, 0x4b}
+	float32GreaterTestResult_0         = []byte{0x90, 0xc0, 0x90, 0xd2}
 
 	float32GreaterEqualTestMatch_0  float32 = 5
-	float32GreaterEqualTestResult_0         = []byte{0x5f, 0x7b, 0x1b, 0x7f}
+	float32GreaterEqualTestResult_0         = []byte{0xfa, 0xde, 0xd8, 0xfe}
 
 	float32BetweenTestMatch_0  float32 = 5
 	float32BetweenTestMatch_0b float32 = 10
-	float32BetweenTestResult_0         = []byte{0x5f, 0x78, 0x1b, 0x34}
+	float32BetweenTestResult_0         = []byte{0xfa, 0x1e, 0xd8, 0x2c}
 
 	// positive int values only
 	float32TestSlice_1 = []float32{
@@ -79,25 +79,25 @@ var (
 		43, 5, 5, 5,
 		39, 40, 41, 42,
 	}
-	float32EqualTestResult_1         = []byte{0x82, 0x42, 0x23, 0x70}
+	float32EqualTestResult_1         = []byte{0x41, 0x42, 0xc4, 0x0e}
 	float32EqualTestMatch_1  float32 = 5
 
-	float32NotEqualTestResult_1         = []byte{0x7d, 0xbd, 0xdc, 0x8f}
+	float32NotEqualTestResult_1         = []byte{0xbe, 0xbd, 0x3b, 0xf1}
 	float32NotEqualTestMatch_1  float32 = 5
 
-	float32LessTestResult_1         = []byte{0x70, 0x00, 0x00, 0x00}
+	float32LessTestResult_1         = []byte{0x0e, 0x00, 0x00, 0x00}
 	float32LessTestMatch_1  float32 = 5
 
-	float32LessEqualTestResult_1         = []byte{0xf2, 0x42, 0x23, 0x70}
+	float32LessEqualTestResult_1         = []byte{0x4f, 0x42, 0xc4, 0x0e}
 	float32LessEqualTestMatch_1  float32 = 5
 
-	float32GreaterTestResult_1         = []byte{0x0d, 0xbd, 0xdc, 0x8f}
+	float32GreaterTestResult_1         = []byte{0xb0, 0xbd, 0x3b, 0xf1}
 	float32GreaterTestMatch_1  float32 = 5
 
-	float32GreaterEqualTestResult_1         = []byte{0x8f, 0xff, 0xff, 0xff}
+	float32GreaterEqualTestResult_1         = []byte{0xf1, 0xff, 0xff, 0xff}
 	float32GreaterEqualTestMatch_1  float32 = 5
 
-	float32BetweenTestResult_1         = []byte{0x8f, 0x42, 0x23, 0x70}
+	float32BetweenTestResult_1         = []byte{0xf1, 0x42, 0xc4, 0x0e}
 	float32BetweenTestMatch_1  float32 = 5
 	float32BetweenTestMatch_1b float32 = 10
 
@@ -112,25 +112,25 @@ var (
 		39.25, 40.25, -41.25, 42.25,
 		43.25, 44.25, 45.25, -46.25,
 	}
-	float32EqualTestResult_2         = []byte{0x80, 0x0, 0x0, 0x0}
+	float32EqualTestResult_2         = []byte{0x01, 0x0, 0x0, 0x0}
 	float32EqualTestMatch_2  float32 = -5.12
 
-	float32NotEqualTestResult_2         = []byte{0x7f, 0xff, 0xff, 0xff}
+	float32NotEqualTestResult_2         = []byte{0xfe, 0xff, 0xff, 0xff}
 	float32NotEqualTestMatch_2  float32 = -5.12
 
-	float32LessTestResult_2         = []byte{0x01, 0x04, 0x04, 0x21}
+	float32LessTestResult_2         = []byte{0x80, 0x20, 0x20, 0x84}
 	float32LessTestMatch_2  float32 = -5.12
 
-	float32LessEqualTestResult_2         = []byte{0x81, 0x04, 0x04, 0x21}
+	float32LessEqualTestResult_2         = []byte{0x81, 0x20, 0x20, 0x84}
 	float32LessEqualTestMatch_2  float32 = -5.12
 
-	float32GreaterTestResult_2         = []byte{0x7e, 0xfb, 0xfb, 0xde}
+	float32GreaterTestResult_2         = []byte{0x7e, 0xdf, 0xdf, 0x7b}
 	float32GreaterTestMatch_2  float32 = -5.12
 
-	float32GreaterEqualTestResult_2         = []byte{0xfe, 0xfb, 0xfb, 0xde}
+	float32GreaterEqualTestResult_2         = []byte{0x7f, 0xdf, 0xdf, 0x7b}
 	float32GreaterEqualTestMatch_2  float32 = -5.12
 
-	float32BetweenTestResult_2         = []byte{0xfe, 0x00, 0x00, 0x00}
+	float32BetweenTestResult_2         = []byte{0x7f, 0x00, 0x00, 0x00}
 	float32BetweenTestMatch_2  float32 = -5.12
 	float32BetweenTestMatch_2b float32 = 10
 
@@ -153,13 +153,13 @@ var (
 		math.MaxFloat32 / 2, math.SmallestNonzeroFloat32,
 		math.MaxFloat32, math.SmallestNonzeroFloat32,
 	}
-	float32EqualTestResult_3         = []byte{0x22, 0x22, 0x22, 0x22}
+	float32EqualTestResult_3         = []byte{0x44, 0x44, 0x44, 0x44}
 	float32EqualTestMatch_3  float32 = math.MaxFloat32
 
-	float32NotEqualTestResult_3         = []byte{0xdd, 0xdd, 0xdd, 0xdd}
+	float32NotEqualTestResult_3         = []byte{0xbb, 0xbb, 0xbb, 0xbb}
 	float32NotEqualTestMatch_3  float32 = math.MaxFloat32
 
-	float32LessTestResult_3         = []byte{0xdd, 0xdd, 0xdd, 0xdd}
+	float32LessTestResult_3         = []byte{0xbb, 0xbb, 0xbb, 0xbb}
 	float32LessTestMatch_3  float32 = math.MaxFloat32
 
 	float32LessEqualTestResult_3         = []byte{0xff, 0xff, 0xff, 0xff}
@@ -168,10 +168,10 @@ var (
 	float32GreaterTestResult_3         = []byte{0x0, 0x0, 0x0, 0x0}
 	float32GreaterTestMatch_3  float32 = math.MaxFloat32
 
-	float32GreaterEqualTestResult_3         = []byte{0x22, 0x22, 0x22, 0x22}
+	float32GreaterEqualTestResult_3         = []byte{0x44, 0x44, 0x44, 0x44}
 	float32GreaterEqualTestMatch_3  float32 = math.MaxFloat32
 
-	float32BetweenTestResult_3         = []byte{0xaa, 0xaa, 0xaa, 0xaa}
+	float32BetweenTestResult_3         = []byte{0x55, 0x55, 0x55, 0x55}
 	float32BetweenTestMatch_3  float32 = math.MaxFloat32 / 2
 	float32BetweenTestMatch_3b float32 = math.MaxFloat32
 
@@ -248,7 +248,7 @@ func CreateFloat32TestCase(name string, slice []float32, match, match2 float32, 
 	}
 	// clear the last unused bits
 	if length%8 != 0 {
-		new_result[len(new_result)-1] &= 0xff << (8 - length%8)
+		new_result[len(new_result)-1] &= 0xff >> (8 - length%8)
 	}
 	// count number of ones
 	var cnt int

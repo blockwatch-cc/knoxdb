@@ -7,7 +7,7 @@ func matchFloat32EqualGeneric(src []float32, val float32, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v == val {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= 0x1 << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -18,7 +18,7 @@ func matchFloat32NotEqualGeneric(src []float32, val float32, bits []byte) int64 
 	var cnt int64
 	for i, v := range src {
 		if v != val {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= 0x1 << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -29,7 +29,7 @@ func matchFloat32LessThanGeneric(src []float32, val float32, bits []byte) int64 
 	var cnt int64
 	for i, v := range src {
 		if v < val {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= 0x1 << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -40,7 +40,7 @@ func matchFloat32LessThanEqualGeneric(src []float32, val float32, bits []byte) i
 	var cnt int64
 	for i, v := range src {
 		if v <= val {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= 0x1 << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -51,7 +51,7 @@ func matchFloat32GreaterThanGeneric(src []float32, val float32, bits []byte) int
 	var cnt int64
 	for i, v := range src {
 		if v > val {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= 0x1 << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -62,7 +62,7 @@ func matchFloat32GreaterThanEqualGeneric(src []float32, val float32, bits []byte
 	var cnt int64
 	for i, v := range src {
 		if v >= val {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= 0x1 << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -75,7 +75,7 @@ func matchFloat32BetweenGeneric(src []float32, a, b float32, bits []byte) int64 
 	for i, v := range src {
 		// if v-a < diff {
 		if a <= v && v <= b {
-			bits[i>>3] |= 0x1 << uint(7-i&0x7)
+			bits[i>>3] |= 0x1 << uint(i&0x7)
 			cnt++
 		}
 	}

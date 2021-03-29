@@ -7,43 +7,43 @@ import (
 	"sort"
 )
 
-func MatchInt8Equal(src []int8, val int8, bits, mask *BitSet) *BitSet {
+func MatchInt8Equal(src []int8, val int8, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt8Equal(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8NotEqual(src []int8, val int8, bits, mask *BitSet) *BitSet {
+func MatchInt8NotEqual(src []int8, val int8, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt8NotEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8LessThan(src []int8, val int8, bits, mask *BitSet) *BitSet {
+func MatchInt8LessThan(src []int8, val int8, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt8LessThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8LessThanEqual(src []int8, val int8, bits, mask *BitSet) *BitSet {
+func MatchInt8LessThanEqual(src []int8, val int8, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt8LessThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8GreaterThan(src []int8, val int8, bits, mask *BitSet) *BitSet {
+func MatchInt8GreaterThan(src []int8, val int8, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt8GreaterThan(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8GreaterThanEqual(src []int8, val int8, bits, mask *BitSet) *BitSet {
+func MatchInt8GreaterThanEqual(src []int8, val int8, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt8GreaterThanEqual(src, val, bits.Bytes()))
 	return bits
 }
 
-func MatchInt8Between(src []int8, a, b int8, bits, mask *BitSet) *BitSet {
+func MatchInt8Between(src []int8, a, b int8, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchInt8Between(src, a, b, bits.Bytes()))
 	return bits
@@ -60,7 +60,7 @@ var Int8 = struct {
 	MinMax        func([]int8) (int8, int8)
 	ContainsRange func([]int8, int8, int8) bool
 	Intersect     func([]int8, []int8, []int8) []int8
-	MatchEqual    func([]int8, int8, *BitSet, *BitSet) *BitSet
+	MatchEqual    func([]int8, int8, *Bitset, *Bitset) *Bitset
 }{
 	Sort: func(s []int8) []int8 {
 		return Int8Sorter(s).Sort()
@@ -95,7 +95,7 @@ var Int8 = struct {
 	Intersect: func(x, y, out []int8) []int8 {
 		return IntersectSortedInt8(x, y, out)
 	},
-	MatchEqual: func(s []int8, val int8, bits, mask *BitSet) *BitSet {
+	MatchEqual: func(s []int8, val int8, bits, mask *Bitset) *Bitset {
 		return MatchInt8Equal(s, val, bits, mask)
 	},
 }

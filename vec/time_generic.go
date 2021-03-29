@@ -11,7 +11,7 @@ func matchTimeEqualGeneric(src []time.Time, val time.Time, bits, mask []byte) in
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := byte(0x1) << uint(7-i&0x7)
+			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -26,7 +26,7 @@ func matchTimeEqualGeneric(src []time.Time, val time.Time, bits, mask []byte) in
 			if !v.Equal(val) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}
@@ -37,7 +37,7 @@ func matchTimeNotEqualGeneric(src []time.Time, val time.Time, bits, mask []byte)
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := byte(0x1) << uint(7-i&0x7)
+			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -52,7 +52,7 @@ func matchTimeNotEqualGeneric(src []time.Time, val time.Time, bits, mask []byte)
 			if v.Equal(val) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}
@@ -63,7 +63,7 @@ func matchTimeLessThanGeneric(src []time.Time, val time.Time, bits, mask []byte)
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := byte(0x1) << uint(7-i&0x7)
+			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -78,7 +78,7 @@ func matchTimeLessThanGeneric(src []time.Time, val time.Time, bits, mask []byte)
 			if !v.Before(val) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}
@@ -89,7 +89,7 @@ func matchTimeLessThanEqualGeneric(src []time.Time, val time.Time, bits, mask []
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := byte(0x1) << uint(7-i&0x7)
+			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -104,7 +104,7 @@ func matchTimeLessThanEqualGeneric(src []time.Time, val time.Time, bits, mask []
 			if val.After(v) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}
@@ -115,7 +115,7 @@ func matchTimeGreaterThanGeneric(src []time.Time, val time.Time, bits, mask []by
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := byte(0x1) << uint(7-i&0x7)
+			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -130,7 +130,7 @@ func matchTimeGreaterThanGeneric(src []time.Time, val time.Time, bits, mask []by
 			if !v.After(val) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}
@@ -141,7 +141,7 @@ func matchTimeGreaterThanEqualGeneric(src []time.Time, val time.Time, bits, mask
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := byte(0x1) << uint(7-i&0x7)
+			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -156,7 +156,7 @@ func matchTimeGreaterThanEqualGeneric(src []time.Time, val time.Time, bits, mask
 			if val.Before(v) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}
@@ -172,7 +172,7 @@ func matchTimeBetweenGeneric(src []time.Time, a, b time.Time, bits, mask []byte)
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := byte(0x1) << uint(7-i&0x7)
+			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -193,7 +193,7 @@ func matchTimeBetweenGeneric(src []time.Time, a, b time.Time, bits, mask []byte)
 			if v.After(b) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(7-i&0x7)
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	}

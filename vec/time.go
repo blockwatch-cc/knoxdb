@@ -8,43 +8,43 @@ import (
 	"time"
 )
 
-func MatchTimeEqual(src []time.Time, val time.Time, bits, mask *BitSet) *BitSet {
+func MatchTimeEqual(src []time.Time, val time.Time, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchTimeEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchTimeNotEqual(src []time.Time, val time.Time, bits, mask *BitSet) *BitSet {
+func MatchTimeNotEqual(src []time.Time, val time.Time, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchTimeNotEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchTimeLessThan(src []time.Time, val time.Time, bits, mask *BitSet) *BitSet {
+func MatchTimeLessThan(src []time.Time, val time.Time, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchTimeLessThanGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchTimeLessThanEqual(src []time.Time, val time.Time, bits, mask *BitSet) *BitSet {
+func MatchTimeLessThanEqual(src []time.Time, val time.Time, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchTimeLessThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchTimeGreaterThan(src []time.Time, val time.Time, bits, mask *BitSet) *BitSet {
+func MatchTimeGreaterThan(src []time.Time, val time.Time, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchTimeGreaterThanGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchTimeGreaterThanEqual(src []time.Time, val time.Time, bits, mask *BitSet) *BitSet {
+func MatchTimeGreaterThanEqual(src []time.Time, val time.Time, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchTimeGreaterThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchTimeBetween(src []time.Time, a, b time.Time, bits, mask *BitSet) *BitSet {
+func MatchTimeBetween(src []time.Time, a, b time.Time, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, len(src))
 	bits.cnt = int(matchTimeBetweenGeneric(src, a, b, bits.Bytes(), mask.Bytes()))
 	return bits
@@ -64,7 +64,7 @@ var Times = struct {
 	MinMax        func([]time.Time) (time.Time, time.Time)
 	ContainsRange func([]time.Time, time.Time, time.Time) bool
 	Intersect     func([]time.Time, []time.Time, []time.Time) []time.Time
-	MatchEqual    func([]time.Time, time.Time, *BitSet, *BitSet) *BitSet
+	MatchEqual    func([]time.Time, time.Time, *Bitset, *Bitset) *Bitset
 }{
 	Sort: func(s []time.Time) []time.Time {
 		return TimeSorter(s).Sort()
@@ -99,7 +99,7 @@ var Times = struct {
 	Intersect: func(x, y, out []time.Time) []time.Time {
 		return IntersectSortedTime(x, y, out)
 	},
-	MatchEqual: func(s []time.Time, val time.Time, bits, mask *BitSet) *BitSet {
+	MatchEqual: func(s []time.Time, val time.Time, bits, mask *Bitset) *Bitset {
 		return MatchTimeEqual(s, val, bits, mask)
 	},
 }
