@@ -4,14 +4,20 @@
 package pack
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
+	"time"
+	"unsafe"
 
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/csv"
 	"blockwatch.cc/knoxdb/util"
+	"github.com/golang/snappy"
+	"github.com/pierrec/lz4"
 )
 
 type DumpMode int
@@ -472,6 +478,608 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func ReintepretUint64ToByteSlice(src []uint64) []byte {
+	header := *(*reflect.SliceHeader)(unsafe.Pointer(&src))
+	header.Len *= 8
+	header.Cap *= 8
+	return *(*[]byte)(unsafe.Pointer(&header))
+}
+
+func ReintepretAnySliceToByteSlice(src interface{}) []byte {
+	var header reflect.SliceHeader
+	v := reflect.ValueOf(src)
+	so := int(reflect.TypeOf(src).Elem().Size())
+	header.Data = v.Pointer()
+	header.Len = so * v.Len()
+	header.Cap = so * v.Cap()
+	return *(*[]byte)(unsafe.Pointer(&header))
+}
+
+func convertBlockToByteSlice(b *block.Block) []byte {
+	var buf []byte
+	switch b.Type() {
+	case block.BlockBool:
+		buf = b.Bits.Bytes()
+	case block.BlockUint64:
+		buf = ReintepretAnySliceToByteSlice(b.Uint64)
+	case block.BlockUint32:
+		buf = ReintepretAnySliceToByteSlice(b.Uint32)
+	case block.BlockUint16:
+		buf = ReintepretAnySliceToByteSlice(b.Uint16)
+	case block.BlockUint8:
+		buf = ReintepretAnySliceToByteSlice(b.Uint8)
+	case block.BlockInt64:
+		buf = ReintepretAnySliceToByteSlice(b.Int64)
+	case block.BlockInt32:
+		buf = ReintepretAnySliceToByteSlice(b.Int32)
+	case block.BlockInt16:
+		buf = ReintepretAnySliceToByteSlice(b.Int16)
+	case block.BlockInt8:
+		buf = ReintepretAnySliceToByteSlice(b.Int8)
+	}
+	return buf
+}
+
+func compressSnappy(b *block.Block) ([]byte, int, error) {
+	src := convertBlockToByteSlice(b)
+	if src == nil {
+		return nil, -1, nil
+	}
+	dst := snappy.Encode(nil, src)
+	if dst != nil {
+		return dst, len(dst), nil
+	}
+	return nil, -1, nil
+}
+
+func uncompressSnappy(src []byte) ([]byte, int, error) {
+	if src == nil {
+		return nil, -1, nil
+	}
+	dst, err := snappy.Decode(nil, src)
+	if err != nil {
+		return nil, -1, err
+	}
+	return dst, len(dst), nil
+}
+
+func compressLz4(b *block.Block) ([]byte, int, error) {
+	src := convertBlockToByteSlice(b)
+	if src == nil {
+		return nil, -1, nil
+	}
+
+	dst := make([]byte, len(src))
+	ht := make([]int, 64<<10) // buffer for the compression table
+
+	n, err := lz4.CompressBlock(src, dst, ht)
+	if err != nil {
+		return nil, -1, err
+	}
+
+	return dst[:n], n, nil
+}
+
+func uncompressLz4(src []byte, size int) ([]byte, int, error) {
+	if src == nil {
+		return nil, -1, nil
+	}
+	dst := make([]byte, size)
+	n, err := lz4.UncompressBlock(src, dst)
+	if err != nil {
+		return nil, -1, err
+	}
+	return dst[:n], n, nil
+}
+
+func compressNo(b *block.Block) (int, error) {
+	src := convertBlockToByteSlice(b)
+	if src == nil {
+		return -1, nil
+	}
+	dst := make([]byte, len(src))
+	copy(dst, src)
+	return len(dst), nil
+}
+
+func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, error) {
+	cr := make([]float64, p.nFields)
+	ct := make([]float64, p.nFields)
+	dt := make([]float64, p.nFields)
+
+	for j := 0; j < p.nFields; j++ {
+		if p.blocks[j].Type() == block.BlockIgnore {
+			cr[j] = -1
+			ct[j] = -1
+			dt[j] = -1
+		} else {
+			var csize int = -1
+			var tcomp float64 = -1
+			var tdecomp float64 = -1
+			var err error
+			// start := time.Now()
+			switch cmethod {
+			case "legacy", "legacy-no", "legacy-lz4", "legacy-snappy":
+				buf := bytes.NewBuffer(make([]byte, 0, p.blocks[j].MaxStoredSize()))
+				switch cmethod {
+				case "legacy-no":
+					for _, b := range p.blocks {
+						b.SetCompression(block.NoCompression)
+					}
+				case "legacy-snapp":
+					for _, b := range p.blocks {
+						b.SetCompression(block.SnappyCompression)
+					}
+				case "legacy-lz4":
+					for _, b := range p.blocks {
+						b.SetCompression(block.LZ4Compression)
+					}
+				}
+				start := time.Now()
+				csize, err = p.blocks[j].Encode(buf)
+				tcomp = time.Since(start).Seconds()
+				start = time.Now()
+				err = p.blocks[j].Decode(buf.Bytes(), csize, p.blocks[j].MaxStoredSize())
+				tdecomp = time.Since(start).Seconds()
+			case "snappy":
+				var buf []byte
+				start := time.Now()
+				buf, csize, err = compressSnappy(p.blocks[j])
+				tcomp = time.Since(start).Seconds()
+				start = time.Now()
+				_, _, err = uncompressSnappy(buf)
+				tdecomp = time.Since(start).Seconds()
+			case "lz4":
+				var buf []byte
+				start := time.Now()
+				buf, csize, err = compressLz4(p.blocks[j])
+				tcomp = time.Since(start).Seconds()
+				start = time.Now()
+				_, _, err = uncompressLz4(buf, cap(buf))
+				tdecomp = time.Since(start).Seconds()
+			case "no":
+				start := time.Now()
+				csize, err = compressNo(p.blocks[j])
+				tcomp = time.Since(start).Seconds()
+			default:
+				return nil, nil, nil, fmt.Errorf("unknown compression method %s", cmethod)
+			}
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if csize < 0 {
+				ct[j] = -1
+				dt[j] = -1
+			} else {
+				ct[j] = float64(p.blocks[j].DataSize()) / tcomp / 1000000
+				// dt[j] = -1
+				dt[j] = float64(p.blocks[j].DataSize()) / tdecomp / 1000000
+			}
+			cr[j] = float64(csize) / float64(p.blocks[j].DataSize())
+		}
+	}
+	return cr, ct, dt, nil
+}
+
+func (t *Table) CompressPack(cmethod string, w io.Writer, i int, mode DumpMode) error {
+	if i >= t.packidx.Len() || i < 0 {
+		return ErrPackNotFound
+	}
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	pkg, err := t.loadPack(tx, t.packidx.packs[i].Key, false, nil)
+	if err != nil {
+		return err
+	}
+
+	cratios := make([][]float64, 1)
+	ctimes := make([][]float64, 1)
+	dtimes := make([][]float64, 1)
+	cr, ct, dt, err := pkg.compress(cmethod)
+	if err != nil {
+		return err
+	}
+	cratios[0] = cr
+	ctimes[0] = ct
+	dtimes[0] = dt
+
+	return DumpCompressResults(t.fields, cratios, ctimes, dtimes, w, mode, false)
+}
+
+func (t *Table) CompressIndexPack(cmethod string, w io.Writer, i, p int, mode DumpMode) error {
+	if i >= len(t.indexes) || i < 0 {
+		return ErrIndexNotFound
+	}
+	if p >= t.indexes[i].packidx.Len() || p < 0 {
+		return ErrPackNotFound
+	}
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	pkg, err := t.indexes[i].loadPack(tx, t.indexes[i].packidx.packs[p].Key, false)
+	if err != nil {
+		return err
+	}
+
+	cratios := make([][]float64, 1)
+	ctimes := make([][]float64, 1)
+	dtimes := make([][]float64, 1)
+	cr, ct, dt, err := pkg.compress(cmethod)
+	if err != nil {
+		return err
+	}
+	cratios[0] = cr
+	ctimes[0] = ct
+	dtimes[0] = dt
+	fl := FieldList{{Name: "Hash", Type: "uint64"}, {Name: "PK", Type: "uint64"}}
+
+	return DumpCompressResults(fl, cratios, ctimes, dtimes, w, mode, false)
+}
+
+func (t *Table) CompressIndexAll(cmethod string, i int, w io.Writer, mode DumpMode, verbose bool) error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	cratios := make([][]float64, t.indexes[i].packidx.Len())
+	ctimes := make([][]float64, t.indexes[i].packidx.Len())
+	dtimes := make([][]float64, t.indexes[i].packidx.Len())
+	//cratios := make([][]float64, 10)
+
+	for p := 0; p < t.indexes[i].packidx.Len(); p++ {
+		//for i := 0; i < 10; i++ {
+		pkg, err := t.indexes[i].loadPack(tx, t.indexes[i].packidx.packs[p].Key, false)
+		if err != nil {
+			return err
+		}
+
+		cr, ct, dt, err := pkg.compress(cmethod)
+		if err != nil {
+			return err
+		}
+		cratios[p] = cr
+		ctimes[p] = ct
+		dtimes[p] = dt
+	}
+	fl := FieldList{{Name: "Hash", Type: "uint64"}, {Name: "PK", Type: "uint64"}}
+
+	return DumpCompressResults(fl, cratios, ctimes, dtimes, w, mode, verbose)
+}
+
+func (t *Table) CompressAll(cmethod string, w io.Writer, mode DumpMode, verbose bool) error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	cratios := make([][]float64, t.packidx.Len())
+	ctimes := make([][]float64, t.packidx.Len())
+	dtimes := make([][]float64, t.packidx.Len())
+	//cratios := make([][]float64, 10)
+
+	for i := 0; i < t.packidx.Len(); i++ {
+		//for i := 0; i < 10; i++ {
+		pkg, err := t.loadPack(tx, t.packidx.packs[i].Key, false, nil)
+		if err != nil {
+			return err
+		}
+
+		cr, ct, dt, err := pkg.compress(cmethod)
+		if err != nil {
+			return err
+		}
+		cratios[i] = cr
+		ctimes[i] = ct
+		dtimes[i] = dt
+	}
+
+	return DumpCompressResults(t.fields, cratios, ctimes, dtimes, w, mode, verbose)
+}
+
+func DumpCompressResults(fl FieldList, cratios, ctimes, dtimes [][]float64, w io.Writer, mode DumpMode, verbose bool) error {
+	out := "Compression ratios\n"
+	if _, err := w.Write([]byte(out)); err != nil {
+		return err
+	}
+	if err := DumpRatios(fl, cratios, w, mode, verbose); err != nil {
+		return err
+	}
+
+	out = "\nCompression troughput [MB/s]\n"
+	if _, err := w.Write([]byte(out)); err != nil {
+		return err
+	}
+	if err := DumpTimes(fl, ctimes, w, mode, verbose); err != nil {
+		return err
+	}
+
+	out = "\nUncompression troughput [MB/s]\n"
+	if _, err := w.Write([]byte(out)); err != nil {
+		return err
+	}
+	if err := DumpTimes(fl, dtimes, w, mode, verbose); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func DumpRatios(fl FieldList, cratios [][]float64, w io.Writer, mode DumpMode, verbose bool) error {
+	names := fl.Names()
+	nFields := len(names)
+	if len(fl.Aliases()) == nFields && len(fl.Aliases()[0]) > 0 {
+		names = fl.Aliases()
+	}
+
+	names = append([]string{"Pack"}, names...)
+
+	// estimate sizes from the first 500 values
+	switch mode {
+	case DumpModeDec, DumpModeHex:
+		sz := make([]int, nFields+1)
+		row := make([]string, nFields+1)
+		for j := 0; j < nFields+1; j++ {
+			sz[j] = len(names[j])
+		}
+		for j := 0; j < nFields; j++ {
+			if len(fl[j].Type) > sz[j+1] {
+				sz[j+1] = len(fl[j].Type)
+			}
+			if sz[j+1] < 4 {
+				sz[j+1] = 4
+			}
+		}
+		for j := 0; j < nFields+1; j++ {
+			row[j] = fmt.Sprintf("%[2]*[1]s", names[j], -sz[j])
+		}
+		var out string
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		row[0] = fmt.Sprintf("%[2]*[1]s", "", -sz[0])
+		for j := 0; j < nFields; j++ {
+			row[j+1] = fmt.Sprintf("%[2]*[1]s", fl[j].Type, -sz[j+1])
+		}
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		for j := 0; j < nFields+1; j++ {
+			row[j] = strings.Repeat("-", sz[j])
+		}
+		out = "|-" + strings.Join(row, "-|-") + "-|\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		avg := make([]float64, len(cratios[0]))
+		for i := 0; i < len(cratios); i++ {
+			row[0] = fmt.Sprintf("%[2]*[1]d", i, sz[0])
+			for j := 0; j < len(cratios[0]); j++ {
+				avg[j] += cratios[i][j]
+				if cratios[i][j] < 0 {
+					row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
+				} else {
+					row[j+1] = fmt.Sprintf("%[2]*.[1]f%%", 100*cratios[i][j], sz[j+1]-1)
+				}
+			}
+			if verbose || len(cratios) == 1 {
+				out = "| " + strings.Join(row, " | ") + " |\n"
+				if _, err := w.Write([]byte(out)); err != nil {
+					return err
+				}
+			}
+		}
+		if len(cratios) == 1 {
+			return nil
+		}
+		if verbose {
+			for j := 0; j < nFields+1; j++ {
+				row[j] = strings.Repeat("-", sz[j])
+			}
+			out = "|-" + strings.Join(row, "-|-") + "-|\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			for j := 0; j < nFields+1; j++ {
+				row[j] = fmt.Sprintf("%[2]*[1]s", names[j], -sz[j])
+			}
+			out = "| " + strings.Join(row, " | ") + " |\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			row[0] = fmt.Sprintf("%[2]*[1]s", "", -sz[0])
+			for j := 0; j < nFields; j++ {
+				row[j+1] = fmt.Sprintf("%[2]*[1]s", fl[j].Type, -sz[j+1])
+			}
+			out = "| " + strings.Join(row, " | ") + " |\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			for j := 0; j < nFields+1; j++ {
+				row[j] = strings.Repeat("-", sz[j])
+			}
+			out = "|-" + strings.Join(row, "-|-") + "-|\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+		}
+		row[0] = fmt.Sprintf(" AVG")
+		for j := 0; j < len(avg); j++ {
+			if avg[j] < 0 {
+				row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
+			} else {
+				row[j+1] = fmt.Sprintf("%[2]*.[1]f%%", 100*avg[j]/float64(len(cratios)), sz[j+1]-1)
+			}
+		}
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+
+		/*	case DumpModeCSV:
+			enc, ok := w.(*csv.Encoder)
+			if !ok {
+				enc = csv.NewEncoder(w)
+			}
+			if !enc.HeaderWritten() {
+				if err := enc.EncodeHeader(names, nil); err != nil {
+					return err
+				}
+			}
+			// csv encoder supports []interface{} records
+			for i := 0; i < p.nValues; i++ {
+				row, _ := p.RowAt(i)
+				if err := enc.EncodeRecord(row); err != nil {
+					return err
+				}
+			}*/
+	}
+	return nil
+}
+
+func DumpTimes(fl FieldList, ctimes [][]float64, w io.Writer, mode DumpMode, verbose bool) error {
+	names := fl.Names()
+	nFields := len(names)
+	if len(fl.Aliases()) == nFields && len(fl.Aliases()[0]) > 0 {
+		names = fl.Aliases()
+	}
+
+	names = append([]string{"Pack"}, names...)
+
+	// estimate sizes from the first 500 values
+	switch mode {
+	case DumpModeDec, DumpModeHex:
+		sz := make([]int, nFields+1)
+		row := make([]string, nFields+1)
+		for j := 0; j < nFields+1; j++ {
+			sz[j] = len(names[j])
+		}
+		for j := 0; j < nFields; j++ {
+			if len(fl[j].Type) > sz[j+1] {
+				sz[j+1] = len(fl[j].Type)
+			}
+			if sz[j+1] < 5 {
+				sz[j+1] = 5
+			}
+		}
+		for j := 0; j < nFields+1; j++ {
+			row[j] = fmt.Sprintf("%[2]*[1]s", names[j], -sz[j])
+		}
+		var out string
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		row[0] = fmt.Sprintf("%[2]*[1]s", "", -sz[0])
+		for j := 0; j < nFields; j++ {
+			row[j+1] = fmt.Sprintf("%[2]*[1]s", fl[j].Type, -sz[j+1])
+		}
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		for j := 0; j < nFields+1; j++ {
+			row[j] = strings.Repeat("-", sz[j])
+		}
+		out = "|-" + strings.Join(row, "-|-") + "-|\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		avg := make([]float64, len(ctimes[0]))
+		for i := 0; i < len(ctimes); i++ {
+			row[0] = fmt.Sprintf("%[2]*[1]d", i, sz[0])
+			for j := 0; j < len(ctimes[0]); j++ {
+				avg[j] += ctimes[i][j]
+				if ctimes[i][j] < 0 {
+					row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
+				} else {
+					row[j+1] = fmt.Sprintf("%[2]*.[1]f", ctimes[i][j], sz[j+1])
+				}
+			}
+			if verbose || len(ctimes) == 1 {
+				out = "| " + strings.Join(row, " | ") + " |\n"
+				if _, err := w.Write([]byte(out)); err != nil {
+					return err
+				}
+			}
+		}
+		if len(ctimes) == 1 {
+			return nil
+		}
+		if verbose {
+			for j := 0; j < nFields+1; j++ {
+				row[j] = strings.Repeat("-", sz[j])
+			}
+			out = "|-" + strings.Join(row, "-|-") + "-|\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			for j := 0; j < nFields+1; j++ {
+				row[j] = fmt.Sprintf("%[2]*[1]s", names[j], -sz[j])
+			}
+			out = "| " + strings.Join(row, " | ") + " |\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			row[0] = fmt.Sprintf("%[2]*[1]s", "", -sz[0])
+			for j := 0; j < nFields; j++ {
+				row[j+1] = fmt.Sprintf("%[2]*[1]s", fl[j].Type, -sz[j+1])
+			}
+			out = "| " + strings.Join(row, " | ") + " |\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			for j := 0; j < nFields+1; j++ {
+				row[j] = strings.Repeat("-", sz[j])
+			}
+			out = "|-" + strings.Join(row, "-|-") + "-|\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+		}
+		row[0] = fmt.Sprintf(" AVG")
+		for j := 0; j < len(avg); j++ {
+			if avg[j] < 0 {
+				row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
+			} else {
+				row[j+1] = fmt.Sprintf("%[2]*.[1]f", avg[j]/float64(len(ctimes)), sz[j+1])
+			}
+		}
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+
+		/*	case DumpModeCSV:
+			enc, ok := w.(*csv.Encoder)
+			if !ok {
+				enc = csv.NewEncoder(w)
+			}
+			if !enc.HeaderWritten() {
+				if err := enc.EncodeHeader(names, nil); err != nil {
+					return err
+				}
+			}
+			// csv encoder supports []interface{} records
+			for i := 0; i < p.nValues; i++ {
+				row, _ := p.RowAt(i)
+				if err := enc.EncodeRecord(row); err != nil {
+					return err
+				}
+			}*/
 	}
 	return nil
 }
