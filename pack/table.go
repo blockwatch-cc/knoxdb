@@ -1099,6 +1099,9 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		err                            error
 	)
 
+	// init global max
+	_, globalmax := t.packidx.GlobalMinMax()
+
 	// This algorithm works like a merge-sort over a sequence of sorted packs.
 	for {
 		// stop when all journal and tombstone entries have been processed
@@ -1110,8 +1113,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		for ; jpos < jlen && dbits.IsSet(live[jpos].idx); jpos++ {
 		}
 
-		// skip deleted tomstone entries
-		for ; tpos < tlen && dead[tpos] == 0; tpos++ {
+		// skip deleted and trailing (unwritten) tombstone entries
+		for ; tpos < tlen && (dead[tpos] == 0 || dead[tpos] > globalmax); tpos++ {
 		}
 
 		// init on each iteration, either from journal or tombstone
@@ -1188,6 +1191,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				}
 				// keep largest id value to check if pack needs sort before storing it
 				packmax = nextmax
+				lastpack = nextpack
 			}
 			// start new pack
 			if pkg == nil {
@@ -1240,8 +1244,11 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					}
 				}
 
-				// remove n entries from pack
+				// remove n entries from pack, mark as processed in journal
 				pkg.Delete(ppos, n)
+				for i := 0; i < n; i++ {
+					dead[tpos+i] = 0
+				}
 				dead[tpos] = 0
 				nDel += n
 				pDel += n
@@ -1376,6 +1383,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				}
 				needSort = needSort || key.pk < packmax
 				packmax = util.MaxU64(packmax, key.pk)
+				globalmax = util.MaxU64(globalmax, key.pk)
 				lastoffset = pkg.Len() - 1
 				nAdd++
 				pAdd++
