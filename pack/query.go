@@ -432,3 +432,11 @@ func (q Query) Execute(ctx context.Context, val interface{}) error {
 func (q Query) Stream(ctx context.Context, fn func(r Row) error) error {
 	return q.table.Stream(ctx, q, fn)
 }
+
+func (q Query) Delete(ctx context.Context) (int64, error) {
+	return q.table.Delete(ctx, q)
+}
+
+func (q Query) Count(ctx context.Context) (int64, error) {
+	return q.table.Count(ctx, q)
+}
