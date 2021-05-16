@@ -134,7 +134,7 @@ func (q *Query) Compile(t *Table) error {
 
 	// process conditions first
 	if err := q.Conditions.Compile(q.table); err != nil {
-		return err
+		return fmt.Errorf("pack: %s %v", q.Name, err)
 	}
 
 	// determine required table fields for this query
