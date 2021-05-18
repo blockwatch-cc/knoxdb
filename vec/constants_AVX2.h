@@ -139,6 +139,42 @@ DATA shuffle64<>+0x1e(SB)/1, $(0)
 DATA shuffle64<>+0x1f(SB)/1, $(1)
 GLOBL shuffle64<>(SB), (RODATA+NOPTR), $32
 
+// shuffle128 is the VPSHUFB input required to spread bytes in each word
+// used by all compare algorithms
+DATA shuffle128<>+0x00(SB)/1, $(14)
+DATA shuffle128<>+0x01(SB)/1, $(6)
+DATA shuffle128<>+0x02(SB)/1, $(15)
+DATA shuffle128<>+0x03(SB)/1, $(7)
+DATA shuffle128<>+0x04(SB)/1, $(12)
+DATA shuffle128<>+0x05(SB)/1, $(4)
+DATA shuffle128<>+0x06(SB)/1, $(13)
+DATA shuffle128<>+0x07(SB)/1, $(5)
+DATA shuffle128<>+0x08(SB)/1, $(10)
+DATA shuffle128<>+0x09(SB)/1, $(2)
+DATA shuffle128<>+0x0a(SB)/1, $(11)
+DATA shuffle128<>+0x0b(SB)/1, $(3)
+DATA shuffle128<>+0x0c(SB)/1, $(8)
+DATA shuffle128<>+0x0d(SB)/1, $(0)
+DATA shuffle128<>+0x0e(SB)/1, $(9)
+DATA shuffle128<>+0x0f(SB)/1, $(1)
+DATA shuffle128<>+0x10(SB)/1, $(14)
+DATA shuffle128<>+0x11(SB)/1, $(6)
+DATA shuffle128<>+0x12(SB)/1, $(15)
+DATA shuffle128<>+0x13(SB)/1, $(7)
+DATA shuffle128<>+0x14(SB)/1, $(12)
+DATA shuffle128<>+0x15(SB)/1, $(4)
+DATA shuffle128<>+0x16(SB)/1, $(13)
+DATA shuffle128<>+0x17(SB)/1, $(5)
+DATA shuffle128<>+0x18(SB)/1, $(10)
+DATA shuffle128<>+0x19(SB)/1, $(2)
+DATA shuffle128<>+0x1a(SB)/1, $(11)
+DATA shuffle128<>+0x1b(SB)/1, $(3)
+DATA shuffle128<>+0x1c(SB)/1, $(8)
+DATA shuffle128<>+0x1d(SB)/1, $(0)
+DATA shuffle128<>+0x1e(SB)/1, $(9)
+DATA shuffle128<>+0x1f(SB)/1, $(1)
+GLOBL shuffle128<>(SB), (RODATA+NOPTR), $32
+
 // look up table for reverting nibbles
 // used by bitset revert algorithm
 DATA LUT_reverse<>+0x00(SB)/1, $(0)

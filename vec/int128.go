@@ -58,6 +58,12 @@ func Int128FromInt64(in int64) Int128 {
 	return z
 }
 
+func Int128From2Int64(in0, in1 int64) Int128 {
+	var z Int128
+	z[0], z[1] = uint64(in0), uint64(in1)
+	return z
+}
+
 func Int128FromBytes(in []byte) Int128 {
 	_ = in[15] // bounds check hint to compiler; see golang.org/issue/14808
 	var x Int128
@@ -529,6 +535,11 @@ func (x Int128) Lt(y Int128) bool {
 }
 
 func (x Int128) Gt(y Int128) bool {
+	return int64(x[0]) > int64(y[0]) || (x[0] == y[0] && x[1] > y[1])
+}
+
+/*
+func (x Int128) Gt(y Int128) bool {
 	xSign := x.Sign()
 	ySign := y.Sign()
 
@@ -541,7 +552,7 @@ func (x Int128) Gt(y Int128) bool {
 		return x[0] > y[0] || x[0] == y[0] && x[1] > y[1]
 	}
 }
-
+*/
 func (x Int128) Lte(y Int128) bool {
 	return x == y || x.Lt(y)
 }
