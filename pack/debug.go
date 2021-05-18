@@ -4,6 +4,7 @@
 package pack
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strconv"
@@ -600,4 +601,27 @@ func (p *Package) Validate() error {
 		}
 	}
 	return nil
+}
+
+func (n ConditionTreeNode) Dump(level int, w io.Writer) {
+	if n.Leaf() {
+		fmt.Fprintln(w, strings.Repeat("  ", level), n.Cond.String())
+	}
+	if len(n.Children) > 0 {
+		kind := "AND"
+		if n.OrKind {
+			kind = "OR"
+		}
+		fmt.Fprintln(w, strings.Repeat("  ", level), kind)
+	}
+	for _, v := range n.Children {
+		v.Dump(level+1, w)
+	}
+}
+
+func (q Query) Dump() string {
+	buf := bytes.NewBuffer(nil)
+	fmt.Fprintln(buf, "Query:", q.Name, "=>")
+	q.Conditions.Dump(0, buf)
+	return string(buf.Bytes())
 }

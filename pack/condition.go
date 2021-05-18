@@ -1,8 +1,8 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2021 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 // TODO
-// - support expressions in fields and condition lists
+// - support expressions in fields and condition
 
 package pack
 
@@ -22,61 +22,22 @@ import (
 
 const (
 	filterThreshold = 2 // use hash map for IN conds with at least N entries
+	COND_OR         = true
+	COND_AND        = false
 )
-
-// Design: AND/OR & nested conditions (requires Query API change)
-//
-// type ConditionListMode int
-//
-// const (
-// 	ConditionListModeAnd ConditionListMode = iota
-// 	ConditionListModeOr  ConditionListMode = iota
-// )
-//
-// type ConditionNode struct {
-// 	Cond   *Condition
-// 	Mode   ConditionListMode
-// 	Nodes  ConditionNodeList
-// }
-//
-// type ConditionNodeList []ConditionNode
-//
-// // returns the decision tree size (including sub-conditions)
-// func (c ConditionNode) Weight() int {
-// 	w := 0
-// 	if c.Cond != nil {
-// 		w++
-// 	}
-// 	for i, _ := range c.Nodes {
-// 		w += c.Children[i].Weight()
-// 	}
-// 	return w
-// }
-//
-// // returns the subtree execution cost based on the number of packs
-// // that needs to be visited
-// func (c ConditionNode) Cost() int {
-// 	w := 0
-// 	if c.Cond != nil {
-// 		w++
-// 	}
-// 	for i, _ := range c.Nodes {
-// 		w += c.Children[i].Weight()
-// 	}
-// 	return w
-// }
 
 type Condition struct {
 	Field    Field       // evaluated table field
 	Mode     FilterMode  // eq|ne|gt|gte|lt|lte|in|nin|re
 	Raw      string      // string value when parsed from a query string
 	Value    interface{} // typed value
-	From     interface{} // typed value for between
-	To       interface{} // typed value for between
-	IsSorted bool        // in condition slice is already pre-sorted
+	From     interface{} // typed value for range queries
+	To       interface{} // typed value for range queries
+	IsSorted bool        // IN/NIN condition slice is already pre-sorted
 
 	// internal data and statistics
 	processed    bool                // condition has been processed already
+	nomatch      bool                // condition is empty (used on index matches)
 	hashmap      map[uint64]int      // compiled hashmap for byte/string set queries
 	hashoverflow []hashvalue         // hash collision overflow list (one for all)
 	int256map    map[Int256]struct{} // compiled int64 map for set membership
@@ -90,6 +51,100 @@ type Condition struct {
 	uint16map    map[uint16]struct{} // compiled uint16 map for set membership
 	uint8map     map[uint8]struct{}  // compiled uint8 map for set membership
 	numValues    int                 // number of values when Value is a slice
+}
+
+// condition that is not bound to a table field yet
+type UnboundCondition struct {
+	Name     string
+	Mode     FilterMode  // eq|ne|gt|gte|lt|lte|in|nin|re
+	Raw      string      // string value when parsed from a query string
+	Value    interface{} // typed value
+	From     interface{} // typed value for range queries
+	To       interface{} // typed value for range queries
+	OrKind   bool
+	Children []UnboundCondition
+}
+
+func (u UnboundCondition) Bind(table *Table) ConditionTreeNode {
+	// bind single condition leaf node
+	if u.Name != "" {
+		return ConditionTreeNode{
+			Cond: &Condition{
+				Field: table.Fields().Find(u.Name),
+				Mode:  u.Mode,
+				Raw:   u.Raw,
+				Value: u.Value,
+				From:  u.From,
+				To:    u.To,
+			},
+		}
+	}
+
+	// bind children
+	node := ConditionTreeNode{
+		OrKind:   u.OrKind,
+		Children: make([]ConditionTreeNode, 0),
+	}
+	for _, v := range u.Children {
+		node.Children = append(node.Children, v.Bind(table))
+	}
+	return node
+}
+
+func And(conds ...UnboundCondition) UnboundCondition {
+	return UnboundCondition{
+		Mode:     FilterModeInvalid,
+		OrKind:   COND_AND,
+		Children: conds,
+	}
+}
+
+func Or(conds ...UnboundCondition) UnboundCondition {
+	return UnboundCondition{
+		Mode:     FilterModeInvalid,
+		OrKind:   COND_OR,
+		Children: conds,
+	}
+}
+
+func Equal(field string, val interface{}) UnboundCondition {
+	return UnboundCondition{Name: field, Mode: FilterModeEqual, Value: val}
+}
+
+func NotEqual(field string, val interface{}) UnboundCondition {
+	return UnboundCondition{Name: field, Mode: FilterModeNotEqual, Value: val}
+}
+
+func In(field string, value interface{}) UnboundCondition {
+	return UnboundCondition{Name: field, Mode: FilterModeIn, Value: value}
+}
+
+func NotIn(field string, value interface{}) UnboundCondition {
+	return UnboundCondition{Name: field, Mode: FilterModeNotIn, Value: value}
+}
+
+func Lt(field string, value interface{}) UnboundCondition {
+	return UnboundCondition{Name: field, Mode: FilterModeLt, Value: value}
+}
+
+func Lte(field string, value interface{}) UnboundCondition {
+	return UnboundCondition{Name: field, Mode: FilterModeLte, Value: value}
+}
+
+func Gt(field string, value interface{}) UnboundCondition {
+	return UnboundCondition{Name: field, Mode: FilterModeGt, Value: value}
+}
+
+func Gte(field string, value interface{}) UnboundCondition {
+	return UnboundCondition{Name: field, Mode: FilterModeGte, Value: value}
+}
+
+func Regexp(field string, value interface{}) UnboundCondition {
+	return UnboundCondition{Name: field, Mode: FilterModeRegexp, Value: value}
+}
+
+func Range(field string, from, to interface{}) UnboundCondition {
+	return UnboundCondition{Name: field, Mode: FilterModeRange, From: from, To: to}
 }
 
 type hashvalue struct {
@@ -139,7 +194,12 @@ func (c *Condition) EnsureTypes() error {
 	return nil
 }
 
-func (c *Condition) Compile() {
+func (c *Condition) Compile() (err error) {
+	if err = c.EnsureTypes(); err != nil {
+		err = fmt.Errorf("%s cond %s: %v", c.Field.Name, c.String(), err)
+		return
+	}
+
 	// set number of values
 	if c.Value != nil {
 		c.numValues++
@@ -468,6 +528,7 @@ func (c *Condition) Compile() {
 	}
 	// log.Debugf("query: compiled hash map condition with size %s for %d values",
 	// 	util.ByteSize(len(vals)*12), len(vals))
+	return nil
 }
 
 // match package min/max values against the condition
@@ -537,7 +598,7 @@ func (c Condition) String() string {
 		if size > 16 {
 			return fmt.Sprintf("%s %s [%d values]", c.Field.Name, c.Mode.Op(), size)
 		} else {
-			return fmt.Sprintf("%s %s [%v]", c.Field.Name, c.Mode.Op(), c.Field.Type.SliceToString(c.Value, c.Field))
+			return fmt.Sprintf("%s %s %v", c.Field.Name, c.Mode.Op(), c.Field.Type.SliceToString(c.Value, c.Field))
 		}
 	default:
 		return fmt.Sprintf("%s %s %s [%s]", c.Field.Name, c.Mode.Op(), util.ToString(c.Value), c.Raw)
@@ -593,134 +654,6 @@ func ParseCondition(key, val string, fields FieldList) (Condition, error) {
 		}
 	}
 	return c, nil
-}
-
-type ConditionList []Condition
-
-// may otimize (reduce/merge/replace) conditions in the future
-func (l *ConditionList) Compile(t *Table) error {
-	for i, _ := range *l {
-		if err := (*l)[i].EnsureTypes(); err != nil {
-			return fmt.Errorf("cond %d on table field '%s.%s': %v", i, t.name, (*l)[i].Field.Name, err)
-		}
-		(*l)[i].Compile()
-	}
-	return nil
-}
-
-// returns unique list of fields
-func (l ConditionList) Fields() FieldList {
-	if len(l) == 0 {
-		return nil
-	}
-	fl := make(FieldList, 0, len(l))
-	for i, _ := range l {
-		// add any direct fields
-		fl = fl.AddUnique(l[i].Field)
-		// add child fields recursively
-		// fl.AddUnique(l[i].Children.Fields()...)
-	}
-	return fl
-}
-
-func (l ConditionList) MaybeMatchPack(info PackInfo) bool {
-	if info.NValues == 0 {
-		return false
-	}
-	// always match empty condition list
-	if len(l) == 0 {
-		return true
-	}
-	for i := range l {
-		// this is equivalent to an AND between all conditions in list
-		if l[i].MaybeMatchPack(info) {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-// return a bit vector containing matching positions in the pack
-// TODO: consider parallel matches to check multiple conditions, then merge bitsets
-func (l ConditionList) MatchPack(pkg *Package, info PackInfo) *Bitset {
-	// start with a full bitset
-	bits := NewBitset(pkg.Len()).One()
-
-	// match conditions and merge bit vectors
-	// stop early when result contains all zeros (assuming AND relation)
-	// always match empty condition list
-	for _, c := range l {
-		// var b *Bitset
-		// FIXME: reconsider when we introduce OR and nested conditions!
-		//
-		// Quick inclusion check to skip matching when the current condition
-		// would return an all-true vector. Note that we do not have to check
-		// for an all-false vector because MaybeMatchPack() has already deselected
-		// packs of that kind (except the journal, but here we cannot rely on
-		// min/max values anyways and must exclude the journal explicitly).
-		if pkg.key != journalKey && len(info.Blocks) > c.Field.Index {
-			blockInfo := info.Blocks[c.Field.Index]
-			min, max := blockInfo.MinValue, blockInfo.MaxValue
-			switch c.Mode {
-			case FilterModeEqual:
-				// condition is always true iff min == max == c.Value
-				if c.Field.Type.Equal(min, c.Value) && c.Field.Type.Equal(max, c.Value) {
-					continue
-				}
-			case FilterModeNotEqual:
-				// condition is always true iff c.Value < min || c.Value > max
-				if c.Field.Type.Lt(c.Value, min) || c.Field.Type.Gt(c.Value, max) {
-					continue
-				}
-			case FilterModeRange:
-				// condition is always true iff pack range <= condition range
-				if c.Field.Type.Lte(c.From, min) && c.Field.Type.Gte(c.To, max) {
-					continue
-				}
-			case FilterModeGt:
-				// condition is always true iff min > c.Value
-				if c.Field.Type.Gt(min, c.Value) {
-					continue
-				}
-			case FilterModeGte:
-				// condition is always true iff min >= c.Value
-				if c.Field.Type.Gte(min, c.Value) {
-					continue
-				}
-			case FilterModeLt:
-				// condition is always true iff max < c.Value
-				if c.Field.Type.Lt(max, c.Value) {
-					continue
-				}
-			case FilterModeLte:
-				// condition is always true iff max <= c.Value
-				if c.Field.Type.Lte(max, c.Value) {
-					continue
-				}
-			}
-		}
-
-		// match vector against condition using last match as mask
-		b := c.MatchPack(pkg, bits)
-
-		// shortcut
-		if bits.Count() == bits.Len() {
-			bits.Close()
-			bits = b
-			continue
-		}
-
-		// merge
-		_, any := bits.And(b)
-		b.Close()
-
-		// early stop on empty aggregate match
-		if any == 0 {
-			break
-		}
-	}
-	return bits
 }
 
 // MatchPack matches all elements in package pkg against the defined condition
@@ -1246,22 +1179,6 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 	}
 }
 
-// TODO: support more than a simple AND between conditions
-func (l ConditionList) MatchAt(pkg *Package, pos int) bool {
-	if len(l) == 0 {
-		return true
-	}
-	if pkg.Len() <= pos {
-		return false
-	}
-	for _, c := range l {
-		if !c.MatchAt(pkg, pos) {
-			return false
-		}
-	}
-	return true
-}
-
 func (c Condition) MatchAt(pkg *Package, pos int) bool {
 	index := c.Field.Index
 	switch c.Mode {
@@ -1412,4 +1329,424 @@ func (c Condition) MatchAt(pkg *Package, pos int) bool {
 	default:
 		return false
 	}
+}
+
+type ConditionTreeNode struct {
+	OrKind   bool                // AND|OR
+	Children []ConditionTreeNode // sub conditions
+	Cond     *Condition          // ptr to condition
+}
+
+func (n ConditionTreeNode) Empty() bool {
+	return len(n.Children) == 0 && n.Cond == nil
+}
+
+func (n ConditionTreeNode) Leaf() bool {
+	return n.Cond != nil
+}
+
+func (n ConditionTreeNode) NoMatch() bool {
+	if n.Empty() {
+		return false
+	}
+
+	if n.Leaf() {
+		return n.Cond.nomatch
+	}
+
+	if n.OrKind {
+		for _, v := range n.Children {
+			if !v.NoMatch() {
+				return false
+			}
+		}
+		return true
+	} else {
+		for _, v := range n.Children {
+			if v.NoMatch() {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// may otimize (reduce/merge/replace) conditions in the future
+func (n ConditionTreeNode) Compile() error {
+	if n.Leaf() {
+		if err := n.Cond.Compile(); err != nil {
+			return nil
+		}
+	} else {
+		for _, v := range n.Children {
+			if err := v.Compile(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// returns unique list of fields
+func (n ConditionTreeNode) Fields() FieldList {
+	if n.Empty() {
+		return nil
+	}
+	if n.Leaf() {
+		return FieldList{n.Cond.Field}
+	}
+	fl := make(FieldList, 0)
+	for _, v := range n.Children {
+		fl.AddUnique(v.Fields()...)
+	}
+	return fl
+}
+
+// returns the decision tree size (including sub-conditions)
+func (n ConditionTreeNode) Weight() int {
+	if n.Leaf() {
+		return n.Cond.NValues()
+	}
+	w := 0
+	for _, v := range n.Children {
+		w += v.Weight()
+	}
+	return w
+}
+
+// returns the subtree execution cost based on the number of rows
+// that may be visited in the given pack for a full scan times the
+// number of comparisons
+func (n ConditionTreeNode) Cost(info PackInfo) int {
+	return n.Weight() * info.NValues
+}
+
+func (n ConditionTreeNode) Conditions() []*Condition {
+	if n.Leaf() {
+		return []*Condition{n.Cond}
+	}
+	cond := make([]*Condition, 0)
+	for _, v := range n.Children {
+		cond = append(cond, v.Conditions()...)
+	}
+	return cond
+}
+
+func (n *ConditionTreeNode) AddAndCondition(c *Condition) {
+	// create a new root when operation changes
+	if n.OrKind || n.Leaf() {
+		clone := ConditionTreeNode{
+			OrKind:   n.OrKind,
+			Children: n.Children,
+			Cond:     n.Cond,
+		}
+		n.OrKind = COND_AND
+		n.Children = []ConditionTreeNode{clone}
+	}
+
+	// append new condition to this element
+	n.Children = append(n.Children, ConditionTreeNode{Cond: c})
+}
+
+func (n *ConditionTreeNode) AddOrCondition(c *Condition) {
+	// create a new root when operation changes
+	if !n.OrKind || n.Leaf() {
+		clone := ConditionTreeNode{
+			OrKind:   n.OrKind,
+			Children: n.Children,
+			Cond:     n.Cond,
+		}
+		n.OrKind = COND_OR
+		n.Children = []ConditionTreeNode{clone}
+	}
+
+	// append new condition to this element
+	n.Children = append(n.Children, ConditionTreeNode{Cond: c})
+}
+
+func (n *ConditionTreeNode) ReplaceNode(node ConditionTreeNode) {
+	n.Cond = node.Cond
+	n.OrKind = node.OrKind
+	n.Children = node.Children
+}
+
+func (n *ConditionTreeNode) AddNode(node ConditionTreeNode) {
+	// create a new root when operation changes
+	if n.Leaf() || (!node.Leaf() && n.OrKind != node.OrKind) {
+		clone := ConditionTreeNode{
+			OrKind:   n.OrKind,
+			Children: n.Children,
+			Cond:     n.Cond,
+		}
+		n.OrKind = node.OrKind
+		n.Children = []ConditionTreeNode{clone}
+	}
+
+	// append new condition to this element
+	if node.Leaf() {
+		n.Children = append(n.Children, node)
+	} else {
+		n.Children = append(n.Children, node.Children...)
+	}
+}
+
+func (n ConditionTreeNode) MaybeMatchPack(info PackInfo) bool {
+	// never visit empty packs
+	if info.NValues == 0 {
+		return false
+	}
+	// always match empty condition nodes
+	if n.Empty() {
+		return true
+	}
+	// match single leafs
+	if n.Leaf() {
+		return n.Cond.MaybeMatchPack(info)
+	}
+	// combine leaf decisions along the tree
+	for _, v := range n.Children {
+		if n.OrKind {
+			// for OR nodes, stop at the first successful hint
+			if v.MaybeMatchPack(info) {
+				return true
+			}
+		} else {
+			// for AND nodes stop at the first non-successful hint
+			if !v.MaybeMatchPack(info) {
+				return false
+			}
+		}
+	}
+
+	// when all AND nodes match
+	return true
+}
+
+func (n ConditionTreeNode) MatchPack(pkg *Package, info PackInfo) *Bitset {
+	// if root contains a snigle leaf only, match it
+	if n.Leaf() {
+		return n.Cond.MatchPack(pkg, nil)
+	}
+
+	// if root is empty and no leaf is defined, return a full match
+	if n.Empty() {
+		return NewBitset(pkg.Len()).One()
+	}
+
+	// process all children
+	if n.OrKind {
+		return n.MatchPackOr(pkg, info)
+	} else {
+		return n.MatchPackAnd(pkg, info)
+	}
+}
+
+// Return a bit vector containing matching positions in the pack combining
+// multiple AND conditions with efficient skipping and aggregation.
+// TODO: consider concurrent matches for multiple conditions and cascading bitset merge
+func (n ConditionTreeNode) MatchPackAnd(pkg *Package, info PackInfo) *Bitset {
+	// start with a full bitset
+	bits := NewBitset(pkg.Len()).One()
+
+	// match conditions and merge bit vectors
+	// stop early when result contains all zeros (assuming AND relation)
+	// always match empty condition list
+	for _, cn := range n.Children {
+		var b *Bitset
+		if !cn.Leaf() {
+			// recurse into another AND or OR condition subtree
+			b = cn.MatchPack(pkg, info)
+		} else {
+			c := cn.Cond
+			// Quick inclusion check to skip matching when the current condition
+			// would return an all-true vector. Note that we do not have to check
+			// for an all-false vector because MaybeMatchPack() has already deselected
+			// packs of that kind (except the journal)
+			//
+			// We exclude journal from quick check because we cannot rely on
+			// min/max values.
+			//
+			if pkg.key != journalKey && len(info.Blocks) > c.Field.Index {
+				blockInfo := info.Blocks[c.Field.Index]
+				min, max := blockInfo.MinValue, blockInfo.MaxValue
+				switch c.Mode {
+				case FilterModeEqual:
+					// condition is always true iff min == max == c.Value
+					if c.Field.Type.Equal(min, c.Value) && c.Field.Type.Equal(max, c.Value) {
+						continue
+					}
+				case FilterModeNotEqual:
+					// condition is always true iff c.Value < min || c.Value > max
+					if c.Field.Type.Lt(c.Value, min) || c.Field.Type.Gt(c.Value, max) {
+						continue
+					}
+				case FilterModeRange:
+					// condition is always true iff pack range <= condition range
+					if c.Field.Type.Lte(c.From, min) && c.Field.Type.Gte(c.To, max) {
+						continue
+					}
+				case FilterModeGt:
+					// condition is always true iff min > c.Value
+					if c.Field.Type.Gt(min, c.Value) {
+						continue
+					}
+				case FilterModeGte:
+					// condition is always true iff min >= c.Value
+					if c.Field.Type.Gte(min, c.Value) {
+						continue
+					}
+				case FilterModeLt:
+					// condition is always true iff max < c.Value
+					if c.Field.Type.Lt(max, c.Value) {
+						continue
+					}
+				case FilterModeLte:
+					// condition is always true iff max <= c.Value
+					if c.Field.Type.Lte(max, c.Value) {
+						continue
+					}
+				}
+			}
+
+			// match vector against condition using last match as mask
+			b = c.MatchPack(pkg, bits)
+		}
+
+		// shortcut
+		if bits.Count() == bits.Len() {
+			bits.Close()
+			bits = b
+			continue
+		}
+
+		// merge
+		_, any := bits.And(b)
+		b.Close()
+
+		// early stop on empty aggregate match
+		if any == 0 {
+			break
+		}
+	}
+	return bits
+}
+
+// Return a bit vector containing matching positions in the pack combining
+// multiple OR conditions with efficient skipping and aggregation.
+func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *Bitset {
+	// start with an empty bitset
+	bits := NewBitset(pkg.Len())
+
+	// match conditions and merge bit vectors
+	// stop early when result contains all ones (assuming OR relation)
+	for _, cn := range n.Children {
+		var b *Bitset
+		if !cn.Leaf() {
+			// recurse into another AND or OR condition subtree
+			b = cn.MatchPack(pkg, info)
+		} else {
+			c := cn.Cond
+			// Quick inclusion check to skip matching when the current condition
+			// would return an all-true vector. Note that we do not have to check
+			// for an all-false vector because MaybeMatchPack() has already deselected
+			// packs of that kind (except the journal).
+			//
+			// We exclude journal from quick check because we cannot rely on
+			// min/max values.
+			//
+			if pkg.key != journalKey && len(info.Blocks) > c.Field.Index {
+				blockInfo := info.Blocks[c.Field.Index]
+				min, max := blockInfo.MinValue, blockInfo.MaxValue
+				skipEarly := false
+				switch c.Mode {
+				case FilterModeEqual:
+					// condition is always true iff min == max == c.Value
+					if c.Field.Type.Equal(min, c.Value) && c.Field.Type.Equal(max, c.Value) {
+						skipEarly = true
+					}
+				case FilterModeNotEqual:
+					// condition is always true iff c.Value < min || c.Value > max
+					if c.Field.Type.Lt(c.Value, min) || c.Field.Type.Gt(c.Value, max) {
+						skipEarly = true
+					}
+				case FilterModeRange:
+					// condition is always true iff pack range <= condition range
+					if c.Field.Type.Lte(c.From, min) && c.Field.Type.Gte(c.To, max) {
+						skipEarly = true
+					}
+				case FilterModeGt:
+					// condition is always true iff min > c.Value
+					if c.Field.Type.Gt(min, c.Value) {
+						skipEarly = true
+					}
+				case FilterModeGte:
+					// condition is always true iff min >= c.Value
+					if c.Field.Type.Gte(min, c.Value) {
+						skipEarly = true
+					}
+				case FilterModeLt:
+					// condition is always true iff max < c.Value
+					if c.Field.Type.Lt(max, c.Value) {
+						skipEarly = true
+					}
+				case FilterModeLte:
+					// condition is always true iff max <= c.Value
+					if c.Field.Type.Lte(max, c.Value) {
+						skipEarly = true
+					}
+				}
+				if skipEarly {
+					bits.Close()
+					return NewBitset(pkg.Len()).One()
+				}
+			}
+
+			// match vector against condition using last match as mask
+			b = c.MatchPack(pkg, bits)
+		}
+
+		// shortcut
+		if b.Count() == 0 {
+			b.Close()
+			continue
+		}
+
+		// merge
+		bits.Or(b)
+		b.Close()
+
+		// early stop on full aggregate match
+		if bits.Count() == bits.Len() {
+			break
+		}
+	}
+	return bits
+}
+
+func (n ConditionTreeNode) MatchAt(pkg *Package, pos int) bool {
+	// if root contains a snigle leaf only, match it
+	if n.Leaf() {
+		return n.Cond.MatchAt(pkg, pos)
+	}
+
+	// if root is empty and no leaf is defined, return a full match
+	if n.Empty() {
+		return true
+	}
+
+	// process all children
+	if n.OrKind {
+		for _, c := range n.Children {
+			if c.MatchAt(pkg, pos) {
+				return true
+			}
+		}
+	} else {
+		for _, c := range n.Children {
+			if !c.MatchAt(pkg, pos) {
+				return false
+			}
+		}
+	}
+	return true
 }

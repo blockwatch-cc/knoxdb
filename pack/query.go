@@ -20,13 +20,13 @@ import (
 var QueryLogMinDuration time.Duration = 500 * time.Millisecond
 
 type Query struct {
-	Name       string        // optional, used for query stats
-	Fields     FieldList     // SELECT ...
-	Conditions ConditionList // WHERE ... AND (TODO: OR)
-	Order      OrderType     // ASC|DESC
-	Limit      int           // LIMIT ...
-	NoCache    bool          // explicitly disable pack caching for this query
-	NoIndex    bool          // explicitly disable index query (use for many known duplicates)
+	Name       string            // optional, used for query stats
+	Fields     FieldList         // SELECT ...
+	Conditions ConditionTreeNode // WHERE ... AND / OR tree
+	Order      OrderType         // ASC|DESC
+	Limit      int               // LIMIT ...
+	NoCache    bool              // explicitly disable pack caching for this query
+	NoIndex    bool              // explicitly disable index query (use for many known duplicates)
 
 	// GroupBy   FieldList   // GROUP BY ... - COLLATE/COLLAPSE
 	// OrderBy   FieldList    // ORDER BY ...
@@ -34,8 +34,8 @@ type Query struct {
 
 	// internal
 	table     *Table    // cached table pointer
-	pkids     []uint64  // primary key list from index lookup, return to pool on close
 	reqfields FieldList // all fields required by this query
+	idxFields FieldList
 
 	// metrics
 	start time.Time
@@ -62,7 +62,7 @@ type QueryStats struct {
 // }
 
 func (q Query) IsEmptyMatch() bool {
-	return q.pkids != nil && len(q.pkids) == 0
+	return q.Conditions.NoMatch()
 }
 
 func NewQuery(name string, table *Table) Query {
@@ -76,15 +76,11 @@ func NewQuery(name string, table *Table) Query {
 		Fields:    f,
 		Order:     OrderAsc,
 		reqfields: f,
+		idxFields: table.fields.Indexed(),
 	}
 }
 
 func (q *Query) Close() {
-	if q.pkids != nil {
-		q.pkids = q.pkids[:0]
-		q.table.pkPool.Put(q.pkids)
-		q.pkids = nil
-	}
 	if q.table != nil {
 		q.stats.TotalTime = time.Since(q.start)
 		if q.stats.TotalTime > QueryLogMinDuration {
@@ -133,7 +129,7 @@ func (q *Query) Compile(t *Table) error {
 	q.lap = q.start
 
 	// process conditions first
-	if err := q.Conditions.Compile(q.table); err != nil {
+	if err := q.Conditions.Compile(); err != nil {
 		return fmt.Errorf("pack: %s %v", q.Name, err)
 	}
 
@@ -151,6 +147,11 @@ func (q *Query) Compile(t *Table) error {
 		return err
 	}
 	q.stats.CompileTime = time.Since(q.lap)
+
+	log.Trace(newLogClosure(func() string {
+		return q.Dump()
+	}))
+
 	return nil
 }
 
@@ -170,89 +171,126 @@ func (q Query) Check() error {
 			return fmt.Errorf("illegal index %d for field '%s.%s' in query %s", v.Index, q.table.name, v.Name, q.Name)
 		}
 	}
+	// root condition may be empty but must not be a leaf
+	if q.Conditions.Leaf() {
+		return fmt.Errorf("unexpected simple condition tree in query %s", q.Name)
+	}
+	return nil
+}
+
+func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeNode) error {
+	// - visit all leafs, run index scan when field is indexed and condition allowed
+	// - if collission-free, mark condition as processed (don't execute again)
+	// - add IN cond to front of current tree branch level
+	//   -> leaf-roots do not exist (invariant)
+	ins := make([]ConditionTreeNode, 0)
+	for i, v := range node.Children {
+		if v.Leaf() {
+			if !q.idxFields.Contains(v.Cond.Field.Name) {
+				// log.Tracef("query: %s table non-indexed field %s for cond %s, fallback to table scan",
+				// 	q.Name, v.Cond.Field.Name, v.Cond.String())
+				continue
+			}
+			idx := q.table.indexes.FindField(v.Cond.Field.Name)
+			if idx == nil {
+				// log.Tracef("query: %s table missing index on field %s for cond %d, fallback to table scan",
+				// 	q.Name, v.Cond.Field.Name, v.Cond.String())
+				continue
+			}
+			if !idx.CanMatch(*v.Cond) {
+				// log.Tracef("query: %s index %s cannot match cond %s, fallback to table scan",
+				//  q.Name, idx.Name, v.Cond.String())
+				continue
+			}
+
+			// log.Tracef("query: %s index scan for %s", q.Name, v.Cond.String())
+
+			// lookup matching primary keys from index (result is sorted)
+			pkmatch, err := idx.LookupTx(ctx, tx, *v.Cond)
+			if err != nil {
+				log.Errorf("%s index scan: %v", q.Name, err)
+				return err
+			}
+			q.stats.IndexLookups += len(pkmatch)
+
+			// mark condition as processed (exclude hash indexes because they may
+			// have collisions; to protect against this, we continue matching this
+			// condition against the full result set, which should be much smaller
+			// now)
+			if !idx.Type.MayHaveCollisions() {
+				v.Cond.processed = true
+			}
+			// log.Tracef("query: %s index scan found %d matchs", q.Name, len(pkmatch))
+
+			if len(pkmatch) == 0 {
+				v.Cond.nomatch = true
+				continue
+			}
+
+			// create new leaf node
+			c := &Condition{
+				Field:    q.table.Fields().Pk(), // primary key
+				Mode:     FilterModeIn,          // IN
+				Value:    pkmatch,               // list
+				IsSorted: true,                  // already sorted by index lookup
+				Raw:      v.Cond.Raw + "/index_lookup",
+			}
+
+			// compile to build internal maps
+			if err := c.Compile(); err != nil {
+				return fmt.Errorf("pack: %s %v", q.Name, err)
+			}
+
+			// keep for later append
+			ins = append(ins, ConditionTreeNode{Cond: c})
+		} else {
+			// recurse into child (use ptr to slice element)
+			if err := q.queryIndexNode(ctx, tx, &node.Children[i]); err != nil {
+				return err
+			}
+		}
+	}
+
+	// add new leafs to front of child list; this assumes the new indexed
+	// condition (a list of primary keys) has lower execution cost than
+	// other conditions in the same sub-tree
+	//
+	// FIXME: ideally we would keep processed conditions around and just skip
+	// them in MaybeMatchPack() and MatchPack(); then we could just prepend
+	// node.Children = append(ins, node.Children...)
+	if len(ins) > 0 {
+		for _, v := range node.Children {
+			// skip processed source conditions unless they led to an empty result
+			// because we need them to check for nomatch later
+			if v.Leaf() && v.Cond.processed && !v.Cond.nomatch {
+				// log.Tracef("query: %s replacing condition %s", q.Name, v.Cond.String())
+				continue
+			}
+			ins = append(ins, v)
+		}
+		node.Children = ins
+	}
+
 	return nil
 }
 
 // INDEX QUERY: use index lookup for indexed fields
 // - fetch pk lists for every indexed field
-// - intersect (logical AND) or merge (logical OR, not yet implemented) pk lists
-// - when resolved, replace cond with new FilterModeIn cond
-// - return pkid slice for later pool recycling
+// - when resolved, replace source condition with new FilterModeIn condition
 func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 	q.lap = time.Now()
-	if q.NoIndex {
+	if q.NoIndex || q.Conditions.Empty() {
 		q.stats.IndexTime = time.Since(q.lap)
 		return nil
 	}
-	idxFields := q.table.fields.Indexed()
-	for i, cond := range q.Conditions {
-		if !idxFields.Contains(cond.Field.Name) {
-			// log.Tracef("query: %s table non-indexed field '%s' for cond %d, fallback to table scan",
-			// 	q.table.name, cond.Field.Name, i)
-			continue
-		}
-		idx := q.table.indexes.FindField(cond.Field.Name)
-		if idx == nil {
-			// log.Tracef("query: %s table missing index on field %s for cond %d, fallback to table scan",
-			// 	q.table.name, cond.Field.Name, i)
-			continue
-		}
-		if !idx.CanMatch(cond) {
-			// log.Tracef("query: index %s cannot match cond %d, fallback to table scan", idx.Name, i)
-			continue
-		}
-		// lookup matching primary keys from index (result is sorted)
-		pkmatch, err := idx.LookupTx(ctx, tx, cond)
-		if err != nil {
-			q.Close()
-			return err
-		}
-
-		// intersect with primary keys from a previous index scan, if any
-		// (i.e. logical AND)
-		if q.pkids == nil {
-			q.pkids = pkmatch
-		} else {
-			q.pkids = vec.Uint64.Intersect(q.pkids, pkmatch, q.table.pkPool.Get().([]uint64))
-			pkmatch = pkmatch[:0]
-			q.table.pkPool.Put(pkmatch)
-		}
-
-		// mark condition as processed (exclude hash indexes because they may
-		// have collisions; to protect against this, we continue matching this
-		// condition against the full result set, which should be much smaller
-		// now)
-		if !idx.Type.MayHaveCollisions() {
-			q.Conditions[i].processed = true
-		}
-	}
-	q.stats.IndexLookups = len(q.pkids)
-
-	// add new condition (pk match) and remove processed conditions
-	if len(q.pkids) > 0 {
-		conds := ConditionList{
-			Condition{
-				Field:    q.table.Fields().Pk(), // primary key
-				Mode:     FilterModeIn,          // must be in
-				Value:    q.pkids,               // list
-				IsSorted: true,                  // already sorted by index lookup
-				Raw:      "pkid's from index lookup",
-			},
-		}
-		for _, v := range q.Conditions {
-			if !v.processed {
-				conds = append(conds, v)
-			}
-		}
-		// append and compile the pk lookup condition in-place
-		q.Conditions = conds
-		q.Conditions[0].Compile()
+	if err := q.queryIndexNode(ctx, tx, &q.Conditions); err != nil {
+		return err
 	}
 	q.stats.IndexTime = time.Since(q.lap)
 	return nil
 }
 
-// TODO: support more complex cond matches, right now this is a simple AND
+// collect list of packs to visit in pk order
 func (q *Query) MakePackSchedule(reverse bool) []int {
 	schedule := make([]int, 0, q.table.packidx.Len())
 	// walk list in pk order (pairs are always sorted by min pk)
@@ -335,8 +373,69 @@ func (q Query) WithoutCache() Query {
 	return q
 }
 
+func (q Query) And(conds ...UnboundCondition) Query {
+	if len(conds) == 0 {
+		return q
+	}
+
+	// create a new AND node to bind children
+	node := ConditionTreeNode{
+		OrKind:   COND_AND,
+		Children: make([]ConditionTreeNode, 0),
+	}
+
+	// bind each unbound condition and add the new node element
+	for _, v := range conds {
+		node.AddNode(v.Bind(q.table))
+	}
+
+	// append to tree
+	if q.Conditions.Empty() {
+		q.Conditions.ReplaceNode(node)
+	} else {
+		q.Conditions.AddNode(node)
+	}
+
+	return q
+}
+
+func (q Query) Or(conds ...UnboundCondition) Query {
+	if len(conds) == 0 {
+		return q
+	}
+
+	// create a new OR node to bind children
+	node := ConditionTreeNode{
+		OrKind:   COND_OR,
+		Children: make([]ConditionTreeNode, 0),
+	}
+
+	// bind each unbound condition and add to the new node element
+	for _, v := range conds {
+		node.AddNode(v.Bind(q.table))
+	}
+
+	// append to tree
+	if q.Conditions.Empty() {
+		q.Conditions.ReplaceNode(node)
+	} else {
+		q.Conditions.AddNode(node)
+	}
+
+	return q
+}
+
 func (q Query) AndCondition(field string, mode FilterMode, value interface{}) Query {
-	q.Conditions = append(q.Conditions, Condition{
+	q.Conditions.AddAndCondition(&Condition{
+		Field: q.table.Fields().Find(field),
+		Mode:  mode,
+		Value: value,
+	})
+	return q
+}
+
+func (q Query) OrCondition(field string, mode FilterMode, value interface{}) Query {
+	q.Conditions.AddOrCondition(&Condition{
 		Field: q.table.Fields().Find(field),
 		Mode:  mode,
 		Value: value,
@@ -381,12 +480,21 @@ func (q Query) AndRegexp(field string, value interface{}) Query {
 }
 
 func (q Query) AndRange(field string, from, to interface{}) Query {
-	q.Conditions = append(q.Conditions, Condition{
-		Field: q.table.Fields().Find(field),
-		Mode:  FilterModeRange,
-		From:  from,
-		To:    to,
-	})
+	if q.Conditions.OrKind {
+		q.Conditions = ConditionTreeNode{
+			OrKind:   false,
+			Children: []ConditionTreeNode{q.Conditions},
+		}
+	}
+	q.Conditions.Children = append(q.Conditions.Children,
+		ConditionTreeNode{
+			Cond: &Condition{
+				Field: q.table.Fields().Find(field),
+				Mode:  FilterModeRange,
+				From:  from,
+				To:    to,
+			},
+		})
 	return q
 }
 
