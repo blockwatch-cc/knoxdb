@@ -195,6 +195,10 @@ func (c *Condition) EnsureTypes() error {
 }
 
 func (c *Condition) Compile() (err error) {
+	if !c.Field.IsValid() {
+		err = fmt.Errorf("invalid field in cond %s", c.String())
+		return
+	}
 	if err = c.EnsureTypes(); err != nil {
 		err = fmt.Errorf("%s cond %s: %v", c.Field.Name, c.String(), err)
 		return
@@ -601,7 +605,11 @@ func (c Condition) String() string {
 			return fmt.Sprintf("%s %s %v", c.Field.Name, c.Mode.Op(), c.Field.Type.SliceToString(c.Value, c.Field))
 		}
 	default:
-		return fmt.Sprintf("%s %s %s [%s]", c.Field.Name, c.Mode.Op(), util.ToString(c.Value), c.Raw)
+		s := fmt.Sprintf("%s %s %s", c.Field.Name, c.Mode.Op(), util.ToString(c.Value))
+		if len(c.Raw) > 0 {
+			s += " [" + c.Raw + "]"
+		}
+		return s
 	}
 }
 
