@@ -148,9 +148,9 @@ func (q *Query) Compile(t *Table) error {
 	}
 	q.stats.CompileTime = time.Since(q.lap)
 
-	log.Trace(newLogClosure(func() string {
-		return q.Dump()
-	}))
+	// log.Trace(newLogClosure(func() string {
+	// 	return q.Dump()
+	// }))
 
 	return nil
 }
