@@ -1784,6 +1784,12 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 						index = j
 					}
 
+					// skip offset
+					if q.Offset > 0 {
+						q.Offset--
+						continue
+					}
+
 					if err := res.pkg.AppendFrom(src, index, 1); err != nil {
 						bits.Close()
 						res.Close()
@@ -1812,6 +1818,12 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	idxs, _ := t.journal.SortedIndexes(jbits)
 	jpack := t.journal.DataPack()
 	for _, idx := range idxs {
+		// skip offset
+		if q.Offset > 0 {
+			q.Offset--
+			continue
+		}
+
 		// Note: deleted entries are already removed from index list!
 		if err := res.pkg.AppendFrom(jpack, idx, 1); err != nil {
 			res.Close()
@@ -1892,6 +1904,12 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 			continue
 		}
 
+		// skip offset
+		if q.Offset > 0 {
+			q.Offset--
+			continue
+		}
+
 		if err := res.pkg.AppendFrom(jpack, idx, 1); err != nil {
 			res.Close()
 			return nil, err
@@ -1951,6 +1969,12 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 						jbits.Clear(j)
 						src = t.journal.DataPack()
 						index = j
+					}
+
+					// skip offset
+					if q.Offset > 0 {
+						q.Offset--
+						continue
 					}
 
 					if err := res.pkg.AppendFrom(src, index, 1); err != nil {
@@ -2027,6 +2051,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	// scan packs only when index match returned any results of when no index exists
 	if !q.IsEmptyMatch() {
 		q.lap = time.Now()
+	packloop:
 		for _, p := range q.MakePackSchedule(false) {
 			if util.InterruptRequested(ctx) {
 				return int64(q.stats.RowsMatched), ctx.Err()
@@ -2063,7 +2088,18 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 						jbits.Clear(j)
 					}
 
+					// skip offset
+					if q.Offset > 0 {
+						q.Offset--
+						continue
+					}
+
 					q.stats.RowsMatched++
+
+					if q.Limit > 0 && q.stats.RowsMatched == q.Limit {
+						bits.Close()
+						break packloop
+					}
 				}
 			}
 			bits.Close()
@@ -2072,7 +2108,8 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	}
 
 	// after all packs have been scanned, add remaining rows from journal, if any
-	q.stats.RowsMatched += int(jbits.Count())
+	// subtract offset and clamp to [0, limit]
+	q.stats.RowsMatched += util.NonZero(q.Limit, util.Max(int(jbits.Count())-q.Offset, 0))
 
 	return int64(q.stats.RowsMatched), nil
 }
@@ -2185,6 +2222,12 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 						jbits.Clear(j)
 					}
 
+					// skip offset
+					if q.Offset > 0 {
+						q.Offset--
+						continue
+					}
+
 					// forward match
 					if err := fn(Row{res: &res, n: index}); err != nil {
 						bits.Close()
@@ -2215,6 +2258,12 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// log.Infof("Table %s: %d remaining journal rows", t.name, len(idxs))
 	for _, idx := range idxs {
 		// Note: deleted indexes are already removed from list
+
+		// skip offset
+		if q.Offset > 0 {
+			q.Offset--
+			continue
+		}
 
 		// forward match
 		if err := fn(Row{res: &res, n: idx}); err != nil {
@@ -2287,14 +2336,20 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 			continue
 		}
 
+		// clear matching bit
+		jbits.Clear(idx)
+
+		// skip offset
+		if q.Offset > 0 {
+			q.Offset--
+			continue
+		}
+
 		// forward match
 		if err := fn(Row{res: &res, n: idx}); err != nil {
 			return err
 		}
 		q.stats.RowsMatched++
-
-		// clear matching bit
-		jbits.Clear(idx)
 
 		if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 			return nil
@@ -2344,6 +2399,12 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 						res.pkg = t.journal.DataPack()
 						index = j
 						jbits.Clear(j)
+					}
+
+					// skip offset
+					if q.Offset > 0 {
+						q.Offset--
+						continue
 					}
 
 					// forward match

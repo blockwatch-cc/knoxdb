@@ -25,6 +25,7 @@ type Query struct {
 	Conditions ConditionTreeNode // WHERE ... AND / OR tree
 	Order      OrderType         // ASC|DESC
 	Limit      int               // LIMIT ...
+	Offset     int               // OFFSET ...
 	NoCache    bool              // explicitly disable pack caching for this query
 	NoIndex    bool              // explicitly disable index query (use for many known duplicates)
 
@@ -174,6 +175,12 @@ func (q Query) Check() error {
 	// root condition may be empty but must not be a leaf
 	if q.Conditions.Leaf() {
 		return fmt.Errorf("unexpected simple condition tree in query %s", q.Name)
+	}
+	if q.Limit < 0 {
+		return fmt.Errorf("invalid limit %d", q.Limit)
+	}
+	if q.Offset < 0 {
+		return fmt.Errorf("invalid offset %d", q.Offset)
 	}
 	return nil
 }
@@ -360,6 +367,11 @@ func (q Query) WithAsc() Query {
 
 func (q Query) WithLimit(l int) Query {
 	q.Limit = l
+	return q
+}
+
+func (q Query) WithOffset(o int) Query {
+	q.Offset = o
 	return q
 }
 
