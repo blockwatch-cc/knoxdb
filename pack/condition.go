@@ -1405,7 +1405,7 @@ func (n ConditionTreeNode) Fields() FieldList {
 	}
 	fl := make(FieldList, 0)
 	for _, v := range n.Children {
-		fl.AddUnique(v.Fields()...)
+		fl = fl.AddUnique(v.Fields()...)
 	}
 	return fl
 }
