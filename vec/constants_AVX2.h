@@ -19,6 +19,12 @@ GLOBL const_0x80<>(SB), (RODATA+NOPTR), $1
 DATA const_0x01<>+0x00(SB)/1, $(0x01)
 GLOBL const_0x01<>(SB), (RODATA+NOPTR), $1
 
+DATA const_64<>+0x00(SB)/4, $(64)
+GLOBL const_64<>(SB), (RODATA+NOPTR), $4
+
+DATA const_8<>+0x00(SB)/4, $(8)
+GLOBL const_8<>(SB), (RODATA+NOPTR), $4
+
 // crosslane is the VPERMD input required to move data between AVX2 lanes
 // used by all compare algorithms
 DATA crosslane<>+0x00(SB)/4, $(6)
