@@ -1110,16 +1110,15 @@ TEXT ·bitsetIndexesAVX2NewCore(SB), NOSPLIT, $0-104
 	MOVQ	lengthTable_base+72(FP), DX
 
 	VPCMPEQQ	    Y10, Y10, Y10           // Y10 = -1
-    VPBROADCASTD    const_8<>(SB), Y13      // Y12 = 8
-
+    VPBROADCASTD    const_8<>(SB), Y13      // Y13 = 8
+    VPBROADCASTD    const_128<>(SB), Y15    // Y15 = 128
+    VPBROADCASTD    const_2048<>(SB), Y14   // Y14 = 2048
+	VPXOR		Y8, Y8, Y8   // prepare 0x00.. vector for comparison
 
 start:
 	// no more work?
 	TESTQ		CX, CX
 	JLE			done
-
-    XORQ        BX, BX
-	XORQ		AX, AX
 
 	// super quick pre-check if the current byte qualifies already
     /*XORQ        AX, AX
@@ -1129,20 +1128,17 @@ start:
 	CMPQ		CX, $16		 // slices smaller than 16 byte are handled byte-wise
 	JB			prep_i8
 	CMPQ		CX, $256     // slices smaller than 256 byte are handled using AVX
-	JBE			prep_avx
+	JB			prep_avx
 
-	VPXOR		Y8, Y8, Y8   // prepare 0x00.. vector for comparison
 
 	// works for data size 256 byte
 loop_avx2:
-	VPCMPEQB	0(SI)(BX*1), Y8, Y0    // set to FF on match (we`ll negate below)
-	VPCMPEQB	32(SI)(BX*1), Y8, Y1
-	VPCMPEQB	64(SI)(BX*1), Y8, Y2
-	VPCMPEQB	96(SI)(BX*1), Y8, Y3
-	VPCMPEQB	128(SI)(BX*1), Y8, Y4
-	VPCMPEQB	160(SI)(BX*1), Y8, Y5
-	VPCMPEQB	192(SI)(BX*1), Y8, Y6
-	VPCMPEQB	224(SI)(BX*1), Y8, Y7
+    XORQ        BX, BX
+	XORQ		AX, AX
+	VPCMPEQB	0(SI), Y8, Y0    // set to FF on match (we`ll negate below)
+	VPCMPEQB	32(SI), Y8, Y1
+	VPCMPEQB	64(SI), Y8, Y2
+	VPCMPEQB	96(SI), Y8, Y3
 	VPMOVMSKB	Y1, R8
 	SHLQ		$32, R8
 	VPMOVMSKB	Y3, R9
@@ -1159,6 +1155,10 @@ loop_avx2:
 	TZCNTQ		R9, AX
 	JNC			found
 	LEAQ		64(BX), BX
+	VPCMPEQB	128(SI), Y8, Y4
+	VPCMPEQB	160(SI), Y8, Y5
+	VPCMPEQB	192(SI), Y8, Y6
+	VPCMPEQB	224(SI), Y8, Y7
 	VPMOVMSKB	Y5, R12
 	SHLQ		$32, R12
 	VPMOVMSKB	Y7, R13
@@ -1175,6 +1175,9 @@ loop_avx2:
 	TZCNTQ		R13, AX
 	JNC			found
 	LEAQ		64(BX), BX
+
+    VPADDD      Y10, Y14, Y10       // Y10 = Y10 + 2048
+	ADDQ		$256, SI
 	SUBQ		$256, CX
 	CMPQ		CX, $256
 	JB			exit_avx2
@@ -1188,18 +1191,19 @@ exit_avx2:
 	JBE			prep_i8
 
 prep_avx:
-	VPXOR		X8, X8, X8    // value to compare: 0x00...
-	XORQ		R8, R8
-	XORQ		AX, AX
 
 	// works for data size 16 byte
 loop_avx:
-	VPCMPEQB	0(SI)(BX*1), X8, X0
+    XORQ        BX, BX
+	XORQ		AX, AX
+	VPCMPEQB	(SI), X8, X0
 	VPMOVMSKB	X0, R8
 	NOTW		R8
 	TZCNTW		R8, AX
 	JNC			found        // CF is set to 1 if input was zero and cleared otherwise
-	LEAQ		16(BX), BX
+
+    VPADDD      Y10, Y15, Y10       // Y10 = Y10 + 128
+	ADDQ		$16, SI
 	SUBL		$16, CX
 	CMPL		CX, $16
 	JB			exit_avx
@@ -1213,11 +1217,14 @@ exit_avx:
 	// works for data size 15 down to single byte
 prep_i8:
 	XORQ	AX, AX
+	XORQ	BX, BX
 
 loop_i8:
-	CMPB	(SI)(BX*1), $0
+	CMPB	(SI), $0
 	JNZ		found
-	INCQ	BX
+
+    VPADDD          Y10, Y13, Y10       // Y10 = Y10 + 8
+    INCQ    SI
 	DECL	CX
 	JZ		done
 	JMP		loop_i8
@@ -1231,15 +1238,16 @@ done:
 found:
 	ADDQ	        AX, BX              // AX+BX is number of skipped zero bytes
     ADDQ            BX, SI
+    SUBQ            BX, CX
 
     XORQ            R8, R8
     MOVB            (SI), R8            // R8 = bitmap[BX]  
     LEAQ            (R8*8), R12         // Y9 = decodeTable[8*R8,...]
     VMOVDQU         (BP)(R12*4), Y9
 
-	VMOVD	        BX, X8              // no direct broadcast in AVX2
-    VPSLLD          $3, X8, X8
-    VPBROADCASTD    X8, Y12             // Y12 = 8*BX
+	VMOVD	        BX, X11              // no direct broadcast in AVX2
+    VPSLLD          $3, X11, X11
+    VPBROADCASTD    X11, Y12             // Y12 = 8*BX
     VPADDD          Y10, Y12, Y10       // Y10 = Y10 + 8*BX
     VPADDD          Y9, Y10, Y9         // Y9 = Y9 + Y10
 

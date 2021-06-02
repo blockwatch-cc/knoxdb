@@ -12,7 +12,6 @@ package vec
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"math"
 	"math/bits"
@@ -139,20 +138,6 @@ var bitsetCases = []BitsetTest{
 		count:  5,
 	},
 }
-
-/*
-const b3 = "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000800000000010000000000000000000000000000000000000000000000000000000"
-
-var bitsetAndCases = []BitsetTest{
-	BitsetTest{
-		name:      "3bits",
-		sourceStr: b3,
-		resultStr: b3,
-		size:      15730,
-		count:     3,
-	},
-}
-*/
 
 func fillBitset(buf []byte, size int, val byte) []byte {
 	if len(buf) == 0 {
@@ -1421,71 +1406,8 @@ func TestBitsetReverseAVX2(T *testing.T) {
 	}
 }
 
-func hexToByte(s string) []byte {
-	bs, err := hex.DecodeString(s)
-	if err != nil {
-		bs = nil
-	}
-	return bs
-}
-
-type bitsetIndexTestcase struct {
-	name string
-	buf  []byte
-	size int
-	idx  []uint32
-	ret  int
-}
-
-var indexTestcases = []bitsetIndexTestcase{
-	{
-		name: "l0",
-		buf:  make([]byte, 0),
-		size: 0,
-		idx:  []uint32{},
-		ret:  0,
-	}, {
-		name: "nil",
-		buf:  nil,
-		size: 0,
-		idx:  []uint32{},
-		ret:  0,
-	}, {
-		name: "l8",
-		buf:  hexToByte("11"),
-		size: 8,
-		idx:  []uint32{0, 4},
-		ret:  2,
-	}, {
-		name: "l32",
-		buf:  hexToByte("11000011"),
-		size: 32,
-		idx:  []uint32{0, 4, 24, 28},
-		ret:  4,
-	}, {
-		name: "l64",
-		buf:  hexToByte("1100000000000011"),
-		size: 64,
-		idx:  []uint32{0, 4, 56, 60},
-		ret:  4,
-	}, {
-		name: "l128",
-		buf:  hexToByte("11000000000000000000000000000011"),
-		size: 128,
-		idx:  []uint32{0, 4, 120, 124},
-		ret:  4,
-	}, {
-		name: "l256",
-		buf:  hexToByte("1100000000000000000000000000000000000000000000000000000000000011"),
-		size: 256,
-		idx:  []uint32{0, 4, 248, 252},
-		ret:  4,
-	},
-}
-
 func TestBitsetIndexGeneric(T *testing.T) {
 	for _, c := range runTestcases {
-//	for _, c := range indexTestcases {
 		idx := make([]uint32, len(c.idx))
 		T.Run(c.name, func(t *testing.T) {
 			var ret = bitsetIndexesGeneric(c.buf, c.size, idx)
@@ -1504,10 +1426,10 @@ func TestBitsetIndexAVX2(T *testing.T) {
 		T.SkipNow()
 	}
 	for _, c := range runTestcases {
-//	for _, c := range indexTestcases {
-		idx := make([]uint32, len(c.idx))
+		idx := make([]uint32, len(c.idx)+8)
 		T.Run(c.name, func(t *testing.T) {
 			var ret = bitsetIndexesAVX2(c.buf, c.size, idx)
+			idx = idx[:ret]
 			if got, want := ret, len(c.idx); got != want {
 				T.Errorf("unexpected return value %d, expected %d", got, want)
 			}
@@ -1523,9 +1445,12 @@ func TestBitsetIndexAVX2New(T *testing.T) {
 		T.SkipNow()
 	}
 	for _, c := range runTestcases {
-		idx := make([]uint32, len(c.idx))
+		c.buf = append(c.buf, 0xff)
+		c.buf = c.buf[:len(c.buf)-1]
+		idx := make([]uint32, len(c.idx)+8)
 		T.Run(c.name, func(t *testing.T) {
 			var ret = bitsetIndexesAVX2New(c.buf, c.size, idx)
+			idx = idx[:ret]
 			if got, want := ret, len(c.idx); got != want {
 				T.Errorf("unexpected return value %d, expected %d", got, want)
 			}
@@ -1537,23 +1462,23 @@ func TestBitsetIndexAVX2New(T *testing.T) {
 }
 
 type bitsetRunTestcase struct {
-    // source data
-	name  string
-	buf   []byte
-	size  int
-    // results for run algos
+	// source data
+	name string
+	buf  []byte
+	size int
+	// results for run algos
 	runs  [][2]int
 	rruns [][2]int // reverse
-    // results for index algos
-	idx  []uint32
+	// results for index algos
+	idx []uint32
 }
 
 func fillIndex(start, length int) []uint32 {
-    result := make([]uint32, length)
-    for i := range result {
-        result[i] = uint32(start + i)
-    }
-    return result
+	result := make([]uint32, length)
+	for i := range result {
+		result[i] = uint32(start + i)
+	}
+	return result
 }
 
 var runTestcases = []bitsetRunTestcase{
@@ -1567,7 +1492,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{6, 7},
 		},
-        idx:   fillIndex(0,7),
+		idx: fillIndex(0, 7),
 	},
 	bitsetRunTestcase{
 		name: "first_9",
@@ -1579,7 +1504,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{8, 9},
 		},
-        idx:   fillIndex(0,9),
+		idx: fillIndex(0, 9),
 	},
 	bitsetRunTestcase{
 		name: "first_15",
@@ -1591,7 +1516,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{14, 15},
 		},
-        idx:   fillIndex(0,15),
+		idx: fillIndex(0, 15),
 	},
 	bitsetRunTestcase{
 		name: "first_17",
@@ -1603,7 +1528,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{16, 17},
 		},
-        idx:   fillIndex(0,17),
+		idx: fillIndex(0, 17),
 	},
 	bitsetRunTestcase{
 		name: "first_7_srl_1",
@@ -1615,7 +1540,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{6, 6},
 		},
-        idx:   fillIndex(1,6),
+		idx: fillIndex(1, 6),
 	},
 	bitsetRunTestcase{
 		name: "first_15_srl_1",
@@ -1627,7 +1552,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{14, 14},
 		},
-        idx:   fillIndex(1,14),
+		idx: fillIndex(1, 14),
 	},
 	bitsetRunTestcase{
 		name: "first_ff_srl_4",
@@ -1639,7 +1564,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{11, 8},
 		},
-        idx:   fillIndex(4,8),
+		idx: fillIndex(4, 8),
 	},
 	bitsetRunTestcase{
 		name: "first_33_srl_3",
@@ -1651,7 +1576,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{32, 30},
 		},
-        idx:   fillIndex(3,30),
+		idx: fillIndex(3, 30),
 	},
 	bitsetRunTestcase{
 		name: "second_15",
@@ -1663,7 +1588,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{14, 7},
 		},
-        idx:   fillIndex(8,7),
+		idx: fillIndex(8, 7),
 	},
 	bitsetRunTestcase{
 		name: "second_33_srl_3",
@@ -1675,7 +1600,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{32, 22},
 		},
-        idx:   fillIndex(11,22),
+		idx: fillIndex(11, 22),
 	},
 	bitsetRunTestcase{
 		name: "two_fe_33",
@@ -1689,8 +1614,7 @@ var runTestcases = []bitsetRunTestcase{
 			[2]int{22, 7},
 			[2]int{6, 7},
 		},
-        idx:   append(fillIndex(0,7), fillIndex(16,7)...),
-    
+		idx: append(fillIndex(0, 7), fillIndex(16, 7)...),
 	},
 	bitsetRunTestcase{
 		name: "four_0e_31",
@@ -1708,7 +1632,7 @@ var runTestcases = []bitsetRunTestcase{
 			[2]int{14, 3},
 			[2]int{6, 3},
 		},
-        idx:   []uint32{4,5,6,12,13,14,20,21,22,28,29,30},
+		idx: []uint32{4, 5, 6, 12, 13, 14, 20, 21, 22, 28, 29, 30},
 	},
 	bitsetRunTestcase{
 		name: "every_aa_15",
@@ -1734,7 +1658,7 @@ var runTestcases = []bitsetRunTestcase{
 			[2]int{2, 1},
 			[2]int{0, 1},
 		},
-        idx:   []uint32{0,2,4,6,8,10,12,14},
+		idx: []uint32{0, 2, 4, 6, 8, 10, 12, 14},
 	},
 	bitsetRunTestcase{
 		name: "every_cc_15",
@@ -1752,7 +1676,7 @@ var runTestcases = []bitsetRunTestcase{
 			[2]int{5, 2},
 			[2]int{1, 2},
 		},
-        idx:   []uint32{0,1,4,5,8,9,12,13},
+		idx: []uint32{0, 1, 4, 5, 8, 9, 12, 13},
 	},
 	bitsetRunTestcase{
 		name: "every_55_15",
@@ -1776,7 +1700,7 @@ var runTestcases = []bitsetRunTestcase{
 			[2]int{3, 1},
 			[2]int{1, 1},
 		},
-        idx:   []uint32{1,3,5,7,9,11,13},
+		idx: []uint32{1, 3, 5, 7, 9, 11, 13},
 	},
 	bitsetRunTestcase{
 		name: "every_88_17",
@@ -1796,7 +1720,7 @@ var runTestcases = []bitsetRunTestcase{
 			[2]int{4, 1},
 			[2]int{0, 1},
 		},
-        idx:   []uint32{0,4,8,12,16},
+		idx: []uint32{0, 4, 8, 12, 16},
 	},
 	bitsetRunTestcase{
 		name: "last_0e_32",
@@ -1808,7 +1732,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{30, 3},
 		},
-        idx:   []uint32{28,29,30},
+		idx: []uint32{28, 29, 30},
 	},
 	bitsetRunTestcase{
 		name: "last_16",
@@ -1820,7 +1744,19 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{15, 1},
 		},
-        idx:   []uint32{15},
+		idx: []uint32{15},
+	},
+	bitsetRunTestcase{
+		name: "last_256",
+		buf:  append(fillBitset(nil, 256-8, 0), byte(0x80)),
+		size: 256,
+		runs: [][2]int{
+			[2]int{255, 1},
+		},
+		rruns: [][2]int{
+			[2]int{255, 1},
+		},
+		idx: []uint32{255},
 	},
 	bitsetRunTestcase{
 		name: "last_16k",
@@ -1832,7 +1768,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{16*1024 - 1, 1},
 		},
-        idx:   []uint32{16*1024 - 1},
+		idx: []uint32{16*1024 - 1},
 	},
 	bitsetRunTestcase{
 		name: "empty",
@@ -1844,7 +1780,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{-1, 0},
 		},
-        idx:   []uint32{},
+		idx: []uint32{},
 	},
 	bitsetRunTestcase{
 		name: "nil",
@@ -1856,7 +1792,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{-1, 0},
 		},
-        idx:   []uint32{},
+		idx: []uint32{},
 	},
 	bitsetRunTestcase{
 		name: "zeros_8",
@@ -1868,7 +1804,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{-1, 0},
 		},
-        idx:   []uint32{},
+		idx: []uint32{},
 	},
 	bitsetRunTestcase{
 		name: "zeros_32",
@@ -1880,7 +1816,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{-1, 0},
 		},
-        idx:   []uint32{},
+		idx: []uint32{},
 	},
 	bitsetRunTestcase{
 		name: "ones_32",
@@ -1892,7 +1828,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{31, 32},
 		},
-        idx:   fillIndex(0,32),
+		idx: fillIndex(0, 32),
 	},
 	bitsetRunTestcase{
 		name: "ones_64",
@@ -1904,7 +1840,7 @@ var runTestcases = []bitsetRunTestcase{
 		rruns: [][2]int{
 			[2]int{63, 64},
 		},
-        idx:   fillIndex(0,64),
+		idx: fillIndex(0, 64),
 	},
 	bitsetRunTestcase{
 		name: "ones_32_zeros_32",
@@ -1918,7 +1854,7 @@ var runTestcases = []bitsetRunTestcase{
 			[2]int{95, 32},
 			[2]int{31, 32},
 		},
-        idx:   append(fillIndex(0,32), fillIndex(64,32)...),
+		idx: append(fillIndex(0, 32), fillIndex(64, 32)...),
 	},
 	bitsetRunTestcase{
 		name: "ones_64_zeros_64",
@@ -1935,7 +1871,7 @@ var runTestcases = []bitsetRunTestcase{
 			[2]int{191, 64},
 			[2]int{63, 64},
 		},
-        idx:   append(fillIndex(0,64), fillIndex(128,64)...),
+		idx: append(fillIndex(0, 64), fillIndex(128, 64)...),
 	},
 	bitsetRunTestcase{
 		name: "64k_and_cd",
@@ -1951,7 +1887,7 @@ var runTestcases = []bitsetRunTestcase{
 			[2]int{64*1024 - 5, 2},
 			[2]int{64*1024 - 8, 1},
 		},
-        idx:   []uint32{64*1024 - 8, 64*1024 - 6, 64*1024 - 5, 64*1024 - 2, 64*1024 - 1},
+		idx: []uint32{64*1024 - 8, 64*1024 - 6, 64*1024 - 5, 64*1024 - 2, 64*1024 - 1},
 	},
 	bitsetRunTestcase{
 		name: "64k_and_8d",
@@ -1967,7 +1903,7 @@ var runTestcases = []bitsetRunTestcase{
 			[2]int{64*1024 - 5, 2},
 			[2]int{64*1024 - 8, 1},
 		},
-        idx:   []uint32{64*1024 - 8, 64*1024 - 6, 64*1024 - 5, 64*1024 - 1},
+		idx: []uint32{64*1024 - 8, 64*1024 - 6, 64*1024 - 5, 64*1024 - 1},
 	},
 }
 
@@ -2530,7 +2466,7 @@ func BenchmarkBitsetIndexAVX264K(B *testing.B) {
 			}*/
 			var l int = 64 * 1024
 			bits := fillBitsetRand(nil, l, n.d)
-			slice := make([]uint32, int(bitsetPopCountGeneric(bits, l)))
+			slice := make([]uint32, int(bitsetPopCountGeneric(bits, l))+8)
 			B.ResetTimer()
 			B.SetBytes(int64(bitFieldLen(l)))
 			for i := 0; i < B.N; i++ {
@@ -2552,16 +2488,18 @@ func BenchmarkBitsetIndexAVX2New64K(B *testing.B) {
 			for i := 0; i < n.l/3; i++ {
 				bits[rnd.Uint64()%l] |= 1 << byte(rnd.Uint64()%8)
 			}*/
-			var l int = 64 * 1024
+			var l int = 4 * 1024
 			bits := fillBitsetRand(nil, l, n.d)
-            pc := int(bitsetPopCountGeneric(bits, l))
-			slice := make([]uint32, int(pc))
+			pc := int(bitsetPopCountGeneric(bits, l))
+			slice := make([]uint32, int(pc)+8)
 			B.ResetTimer()
 			B.SetBytes(int64(bitFieldLen(l)))
 			for i := 0; i < B.N; i++ {
-				if pc0 := bitsetIndexesAVX2New(bits, l, slice); pc != pc0 {
-                    B.Errorf("Bad popcount %d != %d", pc0, pc)
-                }
+				if ret := bitsetIndexesAVX2New(bits, l, slice); pc != ret {
+					B.Errorf("Bad popcount %d != %d", ret, pc)
+					fmt.Print(bits)
+					fmt.Print(slice)
+				}
 			}
 		})
 	}
