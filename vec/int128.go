@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	// "fmt"
+	//	"fmt"
 )
 
 var ErrInvalidNumber = errors.New("vec: invalid number")
@@ -47,6 +47,7 @@ var (
 
 // Big-Endian format [0] = Hi, [1] = Lo
 type Int128 [2]uint64
+type Uint128 [2]uint64
 
 func NewInt128() Int128 {
 	return ZeroInt128
@@ -518,47 +519,19 @@ func (x Int128) Eq(y Int128) bool {
 }
 
 func (x Int128) Lt(y Int128) bool {
-	xSign := x.Sign()
-	ySign := y.Sign()
-
-	switch {
-	case xSign >= 0 && ySign < 0:
-		return false
-	case xSign < 0 && ySign >= 0:
-		return true
-	default:
-		return x[0] < y[0] || x[0] == y[0] && x[1] < y[1]
-		// _, carry := bits.Sub64(x[1], y[1], 0)
-		// _, carry = bits.Sub64(x[0], y[0], carry)
-		// return carry != 0
-	}
+	return int64(x[0]) < int64(y[0]) || (x[0] == y[0] && x[1] < y[1])
 }
 
 func (x Int128) Gt(y Int128) bool {
 	return int64(x[0]) > int64(y[0]) || (x[0] == y[0] && x[1] > y[1])
 }
 
-/*
-func (x Int128) Gt(y Int128) bool {
-	xSign := x.Sign()
-	ySign := y.Sign()
-
-	switch {
-	case xSign >= 0 && ySign < 0:
-		return true
-	case xSign < 0 && ySign >= 0:
-		return false
-	default:
-		return x[0] > y[0] || x[0] == y[0] && x[1] > y[1]
-	}
-}
-*/
 func (x Int128) Lte(y Int128) bool {
-	return x == y || x.Lt(y)
+	return int64(x[0]) < int64(y[0]) || (x[0] == y[0] && x[1] <= y[1])
 }
 
 func (x Int128) Gte(y Int128) bool {
-	return x == y || x.Gt(y)
+	return int64(x[0]) > int64(y[0]) || (x[0] == y[0] && x[1] >= y[1])
 }
 
 func Min128(x, y Int128) Int128 {
@@ -573,6 +546,30 @@ func Max128(x, y Int128) Int128 {
 		return x
 	}
 	return y
+}
+
+func (x Int128) Uint128() Uint128 {
+	return Uint128{x[0], x[1]}
+}
+
+func (x Uint128) Int128() Int128 {
+	return Int128{x[0], x[1]}
+}
+
+func (x Uint128) Lt(y Uint128) bool {
+	return x[0] < y[0] || (x[0] == y[0] && x[1] < y[1])
+}
+
+func (x Uint128) Lte(y Uint128) bool {
+	return x[0] < y[0] || (x[0] == y[0] && x[1] <= y[1])
+}
+
+func (x Uint128) Gt(y Uint128) bool {
+	return x[0] > y[0] || (x[0] == y[0] && x[1] > y[1])
+}
+
+func (x Uint128) Gte(y Uint128) bool {
+	return x[0] > y[0] || (x[0] == y[0] && x[1] >= y[1])
 }
 
 // Match helpers
