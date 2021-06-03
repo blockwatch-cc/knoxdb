@@ -17,8 +17,8 @@ const Int128Size = 16
 func randInt128Slice(n, u int) Int128Slice {
 	s := make([]Int128, n*u)
 	for i := 0; i < n; i++ {
-		s[i][0] = uint64(rand.Int63())
 		s[i][0] = rand.Uint64()
+		s[i][1] = rand.Uint64()
 	}
 	for i := 1; i < u; i++ {
 		copy(s[i*n:], s[:n])
