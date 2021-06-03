@@ -160,7 +160,7 @@ func matchInt256GreaterThanEqualGeneric(src []Int256, val Int256, bits, mask []b
 }
 
 func matchInt256BetweenGeneric(src []Int256, a, b Int256, bits, mask []byte) int64 {
-	diff := b.Sub(a).Add64(1)
+	diff := b.Sub(a).Add64(1).Uint256()
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
@@ -168,7 +168,7 @@ func matchInt256BetweenGeneric(src []Int256, a, b Int256, bits, mask []byte) int
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
-			if v.Sub(a).Gte(diff) {
+			if v.Sub(a).Uint256().Gte(diff) {
 				continue
 			}
 			bits[i>>3] |= bit
@@ -176,7 +176,7 @@ func matchInt256BetweenGeneric(src []Int256, a, b Int256, bits, mask []byte) int
 		}
 	} else {
 		for i, v := range src {
-			if v.Sub(a).Gte(diff) {
+			if v.Sub(a).Uint256().Gte(diff) {
 				continue
 			}
 			bits[i>>3] |= bitmask(i)

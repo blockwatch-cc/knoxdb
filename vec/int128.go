@@ -821,8 +821,8 @@ func (s Int128Slice) Intersect(x, out Int128Slice) Int128Slice {
 		}
 	}
 	return out
-
 }
+
 func (s Int128Slice) MatchEqual(val Int128, bits, mask *Bitset) *Bitset {
 	return MatchInt128Equal(s, val, bits, nil)
 }

@@ -24,6 +24,7 @@ var (
 
 // Big-Endian format [0] = Hi .. [3] = Lo
 type Int256 [4]uint64
+type Uint256 [4]uint64
 
 func NewInt256() Int256 {
 	return ZeroInt256
@@ -33,6 +34,12 @@ func Int256FromInt64(in int64) Int256 {
 	var z Int256
 	z.SetInt64(in)
 	return z
+}
+
+func Int256From2Int64(in0, in1 int64) Int256 {
+	var z Int128
+	z[0], z[1] = uint64(in0), uint64(in1)
+	return Int256FromInt128(z)
 }
 
 func Int256FromInt128(in Int128) Int256 {
@@ -692,6 +699,18 @@ func Max256(x, y Int256) Int256 {
 		return x
 	}
 	return y
+}
+
+func (x Int256) Uint256() Uint256 {
+	return Uint256{x[0], x[1], x[2], x[3]}
+}
+
+func (x Uint256) Int256() Int256 {
+	return Int256{x[0], x[1], x[2], x[3]}
+}
+
+func (x Uint256) Gte(y Uint256) bool {
+	return !x.Int256().ult(y.Int256())
 }
 
 // Match helpers

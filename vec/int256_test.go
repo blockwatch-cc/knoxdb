@@ -4,15 +4,15 @@
 package vec
 
 import (
-	//	"bytes"
+	"bytes"
 	"fmt"
-	//	"math"
-	//	"math/bits"
+	"math"
+	"math/bits"
 	"math/rand"
 	"testing"
 )
 
-const Int256Size = 16
+const Int256Size = 32
 
 func randInt256Slice(n, u int) Int256Slice {
 	s := make([]Int256, n*u)
@@ -51,18 +51,20 @@ type Int256MatchTest struct {
 	count  int64
 }
 
-/*
 var (
+	MaxInt256Half  = Int256{math.MaxInt64 / 2, math.MaxUint64, math.MaxUint64, math.MaxUint64}
+	MaxInt256Quart = Int256{math.MaxInt64 / 4, math.MaxUint64, math.MaxUint64, math.MaxUint64}
+
 	// positive values only
 	Int256TestSlice_1 = []Int256{
-		{2, 5}, {2, 2}, {2, 3}, {2, 4},
-		{2, 7}, {2, 8}, {2, 5}, {2, 10},
-		{1, 5}, {1, 2}, {1, 3}, {1, 4},
-		{1, 7}, {1, 8}, {1, 5}, {1, 10},
-		{3, 5}, {3, 2}, {3, 3}, {3, 4},
-		{3, 7}, {3, 8}, {3, 5}, {3, 10},
-		{2, 5}, {0, 2}, {10, 3}, {0, 40},
-		{2, 0}, {2, 10}, {2, 10}, {2, 5},
+		{0, 0, 2, 5}, {0, 0, 2, 2}, {0, 0, 2, 3}, {0, 0, 2, 4},
+		{0, 0, 2, 7}, {0, 0, 2, 8}, {0, 0, 2, 5}, {0, 0, 2, 10},
+		{0, 0, 1, 5}, {0, 0, 1, 2}, {0, 0, 1, 3}, {0, 0, 1, 4},
+		{0, 0, 1, 7}, {0, 0, 1, 8}, {0, 0, 1, 5}, {0, 0, 1, 10},
+		{0, 0, 3, 5}, {0, 0, 3, 2}, {0, 0, 3, 3}, {0, 0, 3, 4},
+		{0, 0, 3, 7}, {0, 0, 3, 8}, {0, 0, 3, 5}, {0, 0, 3, 10},
+		{0, 0, 2, 5}, {0, 0, 0, 2}, {0, 0, 10, 3}, {0, 0, 0, 40},
+		{0, 0, 2, 0}, {0, 0, 2, 10}, {0, 0, 2, 10}, {0, 0, 2, 5},
 	}
 	Int256EqualTestResult_1 = []byte{0x41, 0x00, 0x00, 0x81}
 	Int256EqualTestMatch_1  = Int256From2Int64(2, 5)
@@ -121,21 +123,21 @@ var (
 
 	// extreme values
 	Int256TestSlice_3 = []Int256{
-		Int256FromInt64(math.MaxInt16), Int256FromInt64(math.MinInt16),
 		Int256FromInt64(math.MaxInt32), Int256FromInt64(math.MinInt32),
 		Int256FromInt64(math.MaxInt64), Int256FromInt64(math.MinInt64),
+		Int256FromInt128(MaxInt128), Int256FromInt128(MinInt128),
 		MaxInt256, MinInt256,
-		Int256FromInt64(math.MaxInt16), Int256FromInt64(math.MinInt16),
 		Int256FromInt64(math.MaxInt32), Int256FromInt64(math.MinInt32),
 		Int256FromInt64(math.MaxInt64), Int256FromInt64(math.MinInt64),
+		Int256FromInt128(MaxInt128), Int256FromInt128(MinInt128),
 		MaxInt256, MinInt256,
-		Int256FromInt64(math.MaxInt16), Int256FromInt64(math.MinInt16),
 		Int256FromInt64(math.MaxInt32), Int256FromInt64(math.MinInt32),
 		Int256FromInt64(math.MaxInt64), Int256FromInt64(math.MinInt64),
+		Int256FromInt128(MaxInt128), Int256FromInt128(MinInt128),
 		MaxInt256, MinInt256,
-		Int256FromInt64(math.MaxInt16), Int256FromInt64(math.MinInt16),
 		Int256FromInt64(math.MaxInt32), Int256FromInt64(math.MinInt32),
 		Int256FromInt64(math.MaxInt64), Int256FromInt64(math.MinInt64),
+		Int256FromInt128(MaxInt128), Int256FromInt128(MinInt128),
 		MaxInt256, MinInt256,
 	}
 	Int256EqualTestResult_3 = []byte{0x80, 0x80, 0x80, 0x80}
@@ -157,7 +159,7 @@ var (
 	Int256GreaterEqualTestMatch_3  = MinInt256
 
 	Int256BetweenTestResult_3 = []byte{0x50, 0x50, 0x50, 0x50}
-	Int256BetweenTestMatch_3  = Int256FromInt64(math.MaxInt64)
+	Int256BetweenTestMatch_3  = Int256FromInt128(MaxInt128)
 	Int256BetweenTestMatch_3b = MaxInt256
 )
 
@@ -234,7 +236,7 @@ var Int256EqualCases = []Int256MatchTest{
 		CreateInt256TestCase("l31", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 31),
 		CreateInt256TestCase("l23", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 23),
 		CreateInt256TestCase("l15", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 15),
-		CreateInt256TestCase("l7", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 7),
+		CreateInt256TestCase("l7", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 7),*/
 	CreateInt256TestCase("neg64", Int256TestSlice_2, Int256EqualTestMatch_2, ZeroInt256, Int256EqualTestResult_2, 64),
 	CreateInt256TestCase("neg32", Int256TestSlice_2, Int256EqualTestMatch_2, ZeroInt256, Int256EqualTestResult_2, 32),
 	//	CreateInt256TestCase("neg31", Int256TestSlice_2, Int256EqualTestMatch_2, ZeroInt256, Int256EqualTestResult_2, 31),
@@ -260,6 +262,7 @@ func TestMatchInt256EqualGeneric(T *testing.T) {
 	}
 }
 
+/*
 func TestMatchInt256EqualAVX2Easy(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
@@ -375,7 +378,7 @@ func TestMatchInt256EqualAVX512(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Equal benchmarks
 //
@@ -387,12 +390,13 @@ func BenchmarkMatchInt256EqualGeneric(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256EqualGeneric(a, MaxInt256.Div64(2), bits, mask)
+				matchInt256EqualGeneric(a, MaxInt256Half, bits, mask)
 			}
 		})
 	}
 }
 
+/*
 func BenchmarkMatchInt256EqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
@@ -403,7 +407,7 @@ func BenchmarkMatchInt256EqualAVX2(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256EqualAVX2(a, MaxInt256.Div64(2), bits)
+				matchInt256EqualAVX2(a, MaxInt256Half, bits)
 			}
 		})
 	}
@@ -420,7 +424,7 @@ func BenchmarkMatchInt256EqualAVX2Easy(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256EqualAVX2Easy(src0, src1, MaxInt256.Div64(2), bits)
+				matchInt256EqualAVX2Easy(src0, src1, MaxInt256Half, bits)
 			}
 		})
 	}
@@ -437,7 +441,7 @@ func BenchmarkMatchInt256EqualAVX2New(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256EqualAVX2New(src0, src1, MaxInt256.Div64(2), bits)
+				matchInt256EqualAVX2New(src0, src1, MaxInt256Half, bits)
 			}
 		})
 	}
@@ -459,7 +463,7 @@ func BenchmarkMatchInt256EqualAVX512(B *testing.B) {
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Not Equal Testcases
 //
@@ -568,7 +572,7 @@ func TestMatchInt256NotEqualAVX512(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Not Equal benchmarks
 //
@@ -579,7 +583,7 @@ func BenchmarkMatchInt256NotEqualGeneric(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256NotEqualGeneric(a, MaxInt256.Div64(2), bits, nil)
+				matchInt256NotEqualGeneric(a, MaxInt256Half, bits, nil)
 			}
 		})
 	}
@@ -617,7 +621,7 @@ func BenchmarkMatchInt256NotEqualAVX512(B *testing.B) {
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Less Testcases
 //
@@ -638,7 +642,7 @@ var Int256LessCases = []Int256MatchTest{
 	CreateInt256TestCase("l32", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 32),
 	CreateInt256TestCase("l64", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 64),
 	CreateInt256TestCase("l128", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 128),
-	/*CreateInt256TestCase("l127", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 127),
+	CreateInt256TestCase("l127", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 127),
 	CreateInt256TestCase("l63", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 63),
 	CreateInt256TestCase("l31", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 31),
 	CreateInt256TestCase("l23", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 23),
@@ -646,10 +650,10 @@ var Int256LessCases = []Int256MatchTest{
 	CreateInt256TestCase("l7", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 7),
 	CreateInt256TestCase("neg64", Int256TestSlice_2, Int256LessTestMatch_2, ZeroInt256, Int256LessTestResult_2, 64),
 	CreateInt256TestCase("neg32", Int256TestSlice_2, Int256LessTestMatch_2, ZeroInt256, Int256LessTestResult_2, 32),
-	//CreateInt256TestCase("neg31", Int256TestSlice_2, Int256LessTestMatch_2, ZeroInt256, Int256LessTestResult_2, 31),
+	CreateInt256TestCase("neg31", Int256TestSlice_2, Int256LessTestMatch_2, ZeroInt256, Int256LessTestResult_2, 31),
 	CreateInt256TestCase("ext64", Int256TestSlice_3, Int256LessTestMatch_3, ZeroInt256, Int256LessTestResult_3, 64),
 	CreateInt256TestCase("ext32", Int256TestSlice_3, Int256LessTestMatch_3, ZeroInt256, Int256LessTestResult_3, 32),
-	//CreateInt256TestCase("ext31", Int256TestSlice_3, Int256LessTestMatch_3, ZeroInt256, Int256LessTestResult_3, 31),
+	CreateInt256TestCase("ext31", Int256TestSlice_3, Int256LessTestMatch_3, ZeroInt256, Int256LessTestResult_3, 31),
 }
 
 func TestMatchInt256LessGeneric(T *testing.T) {
@@ -669,6 +673,7 @@ func TestMatchInt256LessGeneric(T *testing.T) {
 	}
 }
 
+/*
 func TestMatchInt256LessAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
@@ -784,7 +789,7 @@ func TestMatchInt256LessAVX512(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Less benchmarks
 //
@@ -795,12 +800,13 @@ func BenchmarkMatchInt256LessGeneric(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256LessThanGeneric(a, MaxInt256.Div64(2), bits, nil)
+				matchInt256LessThanGeneric(a, MaxInt256Half, bits, nil)
 			}
 		})
 	}
 }
 
+/*
 func BenchmarkMatchInt256LessAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
@@ -811,7 +817,7 @@ func BenchmarkMatchInt256LessAVX2(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256LessThanAVX2(a, MaxInt256.Div64(2), bits)
+				matchInt256LessThanAVX2(a, MaxInt256Half, bits)
 			}
 		})
 	}
@@ -828,7 +834,7 @@ func BenchmarkMatchInt256LessAVX2Easy(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256LessThanAVX2Easy(src0, src1, MaxInt256.Div64(2), bits)
+				matchInt256LessThanAVX2Easy(src0, src1, MaxInt256Half, bits)
 			}
 		})
 	}
@@ -845,7 +851,7 @@ func BenchmarkMatchInt256LessAVX2New(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256LessThanAVX2New(src0, src1, MaxInt256.Div64(2), bits)
+				matchInt256LessThanAVX2New(src0, src1, MaxInt256Half, bits)
 			}
 		})
 	}
@@ -867,7 +873,7 @@ func BenchmarkMatchInt256LessAVX512(B *testing.B) {
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
 //
@@ -919,6 +925,7 @@ func TestMatchInt256LessEqualGeneric(T *testing.T) {
 	}
 }
 
+/*
 func TestMatchInt256LessEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
@@ -974,7 +981,7 @@ func TestMatchInt256LessEqualAVX512(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
 //
@@ -985,7 +992,7 @@ func BenchmarkMatchInt256LessEqualGeneric(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256LessThanEqualGeneric(a, MaxInt256.Div64(2), bits, nil)
+				matchInt256LessThanEqualGeneric(a, MaxInt256Half, bits, nil)
 			}
 		})
 	}
@@ -1023,7 +1030,7 @@ func BenchmarkMatchInt256LessEqualAVX512(B *testing.B) {
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Greater Testcases
 //
@@ -1131,7 +1138,7 @@ func TestMatchInt256GreaterAVX512(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Greater benchmarks
 //
@@ -1142,7 +1149,7 @@ func BenchmarkMatchInt256GreaterGeneric(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256GreaterThanGeneric(a, MaxInt256.Div64(2), bits, nil)
+				matchInt256GreaterThanGeneric(a, MaxInt256Half, bits, nil)
 			}
 		})
 	}
@@ -1180,7 +1187,7 @@ func BenchmarkMatchInt256GreaterAVX512(B *testing.B) {
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
 //
@@ -1288,7 +1295,7 @@ func TestMatchInt256GreaterEqualAVX512(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
 //
@@ -1299,7 +1306,7 @@ func BenchmarkMatchInt256GreaterEqualGeneric(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256GreaterThanEqualGeneric(a, MaxInt256.Div64(2), bits, nil)
+				matchInt256GreaterThanEqualGeneric(a, MaxInt256Half, bits, nil)
 			}
 		})
 	}
@@ -1337,7 +1344,7 @@ func BenchmarkMatchInt256GreaterEqualAVX512(B *testing.B) {
 		})
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Between Testcases
 //
@@ -1447,7 +1454,7 @@ func TestMatchInt256BetweenAVX512(T *testing.T) {
 		}
 	}
 }
-
+*/
 // -----------------------------------------------------------------------------
 // Between benchmarks
 //
@@ -1458,7 +1465,7 @@ func BenchmarkMatchInt256BetweenGeneric(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256BetweenGeneric(a, MaxInt256.Div64(4), MaxInt256.Div64(2), bits, nil)
+				matchInt256BetweenGeneric(a, MaxInt256Quart, MaxInt256Half, bits, nil)
 			}
 		})
 	}
