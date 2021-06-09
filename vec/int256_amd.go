@@ -5,14 +5,14 @@
 
 package vec
 
-// //go:noescape
-// func matchInt256EqualAVX2(src []Int256, val Int256, bits []byte) int64
+//go:noescape
+func matchInt256EqualAVX2New(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64
 
 // //go:noescape
 // func matchInt256NotEqualAVX2(src []Int256, val Int256, bits []byte) int64
 
-// //go:noescape
-// func matchInt256LessThanAVX2(src []Int256, val Int256, bits []byte) int64
+//go:noescape
+func matchInt256LessThanAVX2New(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64
 
 // //go:noescape
 // func matchInt256LessThanEqualAVX2(src []Int256, val Int256, bits []byte) int64
@@ -122,4 +122,35 @@ func matchInt256Between(src []Int256, a, b Int256, bits, mask []byte) int64 {
 	default:
 		return matchInt256BetweenGeneric(src, a, b, bits, mask)
 	}
+}
+
+func matchInt256EqualAVX2Easy(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64 {
+	tmp := make([]byte, len(bits))
+	matchInt64EqualAVX2(src0, int64(val[0]), bits)
+	matchUint64EqualAVX2(src1, val[1], tmp)
+	bitsetAndAVX2(bits, tmp)
+	matchUint64EqualAVX2(src2, val[2], tmp)
+	bitsetAndAVX2(bits, tmp)
+	matchUint64EqualAVX2(src3, val[3], tmp)
+	bitsetAndAVX2(bits, tmp)
+	return bitsetPopCountAVX2(bits)
+}
+
+func matchInt256LessThanAVX2Easy(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64 {
+	tmp0 := make([]byte, len(bits))
+	tmp1 := make([]byte, len(bits))
+	matchUint64LessThanAVX2(src3, val[3], bits)
+	matchUint64EqualAVX2(src2, val[2], tmp0)
+	matchUint64LessThanAVX2(src2, val[2], tmp1)
+	bitsetAndAVX2(bits, tmp0)
+	bitsetOrAVX2(bits, tmp1)
+	matchUint64EqualAVX2(src1, val[1], tmp0)
+	matchUint64LessThanAVX2(src1, val[1], tmp1)
+	bitsetAndAVX2(bits, tmp0)
+	bitsetOrAVX2(bits, tmp1)
+	matchInt64EqualAVX2(src0, int64(val[0]), tmp0)
+	matchInt64LessThanAVX2(src0, int64(val[0]), tmp1)
+	bitsetAndAVX2(bits, tmp0)
+	bitsetOrAVX2(bits, tmp1)
+	return bitsetPopCountAVX2(bits)
 }
