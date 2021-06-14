@@ -222,18 +222,18 @@ var Int128EqualCases = []Int128MatchTest{
 	CreateInt128TestCase("l32", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 32),
 	CreateInt128TestCase("l64", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 64),
 	CreateInt128TestCase("l128", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 128),
-	/*	CreateInt128TestCase("l127", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 127),
-		CreateInt128TestCase("l63", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 63),
-		CreateInt128TestCase("l31", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 31),
-		CreateInt128TestCase("l23", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 23),
-		CreateInt128TestCase("l15", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 15),
-		CreateInt128TestCase("l7", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 7),*/
+	CreateInt128TestCase("l127", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 127),
+	CreateInt128TestCase("l63", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 63),
+	CreateInt128TestCase("l31", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 31),
+	CreateInt128TestCase("l23", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 23),
+	CreateInt128TestCase("l15", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 15),
+	CreateInt128TestCase("l7", Int128TestSlice_1, Int128EqualTestMatch_1, ZeroInt128, Int128EqualTestResult_1, 7),
 	CreateInt128TestCase("neg64", Int128TestSlice_2, Int128EqualTestMatch_2, ZeroInt128, Int128EqualTestResult_2, 64),
 	CreateInt128TestCase("neg32", Int128TestSlice_2, Int128EqualTestMatch_2, ZeroInt128, Int128EqualTestResult_2, 32),
-	//	CreateInt128TestCase("neg31", Int128TestSlice_2, Int128EqualTestMatch_2, ZeroInt128, Int128EqualTestResult_2, 31),
+	CreateInt128TestCase("neg31", Int128TestSlice_2, Int128EqualTestMatch_2, ZeroInt128, Int128EqualTestResult_2, 31),
 	CreateInt128TestCase("ext64", Int128TestSlice_3, Int128EqualTestMatch_3, ZeroInt128, Int128EqualTestResult_3, 64),
 	CreateInt128TestCase("ext32", Int128TestSlice_3, Int128EqualTestMatch_3, ZeroInt128, Int128EqualTestResult_3, 32),
-	//	CreateInt128TestCase("ext31", Int128TestSlice_3, Int128EqualTestMatch_3, ZeroInt128, Int128EqualTestResult_3, 31),
+	CreateInt128TestCase("ext31", Int128TestSlice_3, Int128EqualTestMatch_3, ZeroInt128, Int128EqualTestResult_3, 31),
 }
 
 func TestMatchInt128EqualGeneric(T *testing.T) {
@@ -253,64 +253,6 @@ func TestMatchInt128EqualGeneric(T *testing.T) {
 	}
 }
 
-func TestMatchInt128EqualAVX2Easy(T *testing.T) {
-	if !useAVX2 {
-		T.SkipNow()
-	}
-	for _, c := range Int128EqualCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		src0, src1 := splitInt128Slice(c.slice)
-		cnt := matchInt128EqualAVX2Easy(src0, src1, c.match, bits)
-		if got, want := len(bits), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-		}
-		if got, want := cnt, c.count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-		}
-		if bytes.Compare(bits, c.result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-		}
-	}
-}
-
-func TestMatchInt128EqualAVX2New(T *testing.T) {
-	if !useAVX2 {
-		T.SkipNow()
-	}
-	for _, c := range Int128EqualCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		src0, src1 := splitInt128Slice(c.slice)
-		cnt := matchInt128EqualAVX2New(src0, src1, c.match, bits)
-		if got, want := len(bits), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-		}
-		if got, want := cnt, c.count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-		}
-		if bytes.Compare(bits, c.result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-		}
-	}
-}
-
 func TestMatchInt128EqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
@@ -323,8 +265,8 @@ func TestMatchInt128EqualAVX2(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		//src0, src1 := splitInt128Slice(c.slice)
-		cnt := matchInt128EqualAVX2(c.slice, c.match, bits)
+		src0, src1 := splitInt128Slice(c.slice)
+		cnt := matchInt128EqualAVX2(src0, src1, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -392,45 +334,12 @@ func BenchmarkMatchInt128EqualAVX2(B *testing.B) {
 	}
 	for _, n := range vecBenchmarkSizes {
 		a := randInt128Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * Int128Size))
-			for i := 0; i < B.N; i++ {
-				matchInt128EqualAVX2(a, MaxInt128.Div64(2), bits)
-			}
-		})
-	}
-}
-
-func BenchmarkMatchInt128EqualAVX2Easy(B *testing.B) {
-	if !useAVX2 {
-		B.SkipNow()
-	}
-	for _, n := range vecBenchmarkSizes {
-		a := randInt128Slice(n.l, 1)
 		src0, src1 := splitInt128Slice(a)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int128Size))
 			for i := 0; i < B.N; i++ {
-				matchInt128EqualAVX2Easy(src0, src1, MaxInt128.Div64(2), bits)
-			}
-		})
-	}
-}
-
-func BenchmarkMatchInt128EqualAVX2New(B *testing.B) {
-	if !useAVX2 {
-		B.SkipNow()
-	}
-	for _, n := range vecBenchmarkSizes {
-		a := randInt128Slice(n.l, 1)
-		src0, src1 := splitInt128Slice(a)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * Int128Size))
-			for i := 0; i < B.N; i++ {
-				matchInt128EqualAVX2New(src0, src1, MaxInt128.Div64(2), bits)
+				matchInt128EqualAVX2(src0, src1, MaxInt128.Div64(2), bits)
 			}
 		})
 	}
@@ -505,7 +414,6 @@ func TestMatchInt128NotEqualGeneric(T *testing.T) {
 	}
 }
 
-/*
 func TestMatchInt128NotEqualAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
@@ -518,7 +426,8 @@ func TestMatchInt128NotEqualAVX2(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt128NotEqualAVX2(c.slice, c.match, bits)
+		src0, src1 := splitInt128Slice(c.slice)
+		cnt := matchInt128NotEqualAVX2(src0, src1, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -533,7 +442,7 @@ func TestMatchInt128NotEqualAVX2(T *testing.T) {
 		}
 	}
 }
-
+/*
 func TestMatchInt128NotEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -578,23 +487,23 @@ func BenchmarkMatchInt128NotEqualGeneric(B *testing.B) {
 	}
 }
 
-/*
 func BenchmarkMatchInt128NotEqualAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
 		a := randInt128Slice(n.l, 1)
+		src0, src1 := splitInt128Slice(a)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(Int128(n.l * Int128Size))
+			B.SetBytes(int64(n.l * Int128Size))
 			for i := 0; i < B.N; i++ {
-				matchInt128NotEqualAVX2(a, math.MaxInt128/2, bits)
+				matchInt128NotEqualAVX2(src0, src1, MaxInt128.Div64(2), bits)
 			}
 		})
 	}
 }
-
+/*
 func BenchmarkMatchInt128NotEqualAVX512(B *testing.B) {
 	if !useAVX512_F {
 		B.SkipNow()
@@ -674,66 +583,8 @@ func TestMatchInt128LessAVX2(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		//src0, src1 := splitInt128Slice(c.slice)
-		cnt := matchInt128LessThanAVX2(c.slice, c.match, bits)
-		if got, want := len(bits), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-		}
-		if got, want := cnt, c.count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-		}
-		if bytes.Compare(bits, c.result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-		}
-	}
-}
-
-func TestMatchInt128LessAVX2Easy(T *testing.T) {
-	if !useAVX2 {
-		T.SkipNow()
-	}
-	for _, c := range Int128LessCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
 		src0, src1 := splitInt128Slice(c.slice)
-		cnt := matchInt128LessThanAVX2Easy(src0, src1, c.match, bits)
-		if got, want := len(bits), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-		}
-		if got, want := cnt, c.count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.name, got, want)
-		}
-		if bytes.Compare(bits, c.result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.name, bits, c.result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.name, bits[l:l+32])
-		}
-	}
-}
-
-func TestMatchInt128LessAVX2New(T *testing.T) {
-	if !useAVX2 {
-		T.SkipNow()
-	}
-	for _, c := range Int128LessCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		src0, src1 := splitInt128Slice(c.slice)
-		cnt := matchInt128LessThanAVX2New(src0, src1, c.match, bits)
+		cnt := matchInt128LessThanAVX2(src0, src1, c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -800,45 +651,12 @@ func BenchmarkMatchInt128LessAVX2(B *testing.B) {
 	}
 	for _, n := range vecBenchmarkSizes {
 		a := randInt128Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * Int128Size))
-			for i := 0; i < B.N; i++ {
-				matchInt128LessThanAVX2(a, MaxInt128.Div64(2), bits)
-			}
-		})
-	}
-}
-
-func BenchmarkMatchInt128LessAVX2Easy(B *testing.B) {
-	if !useAVX2 {
-		B.SkipNow()
-	}
-	for _, n := range vecBenchmarkSizes {
-		a := randInt128Slice(n.l, 1)
 		src0, src1 := splitInt128Slice(a)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int128Size))
 			for i := 0; i < B.N; i++ {
-				matchInt128LessThanAVX2Easy(src0, src1, MaxInt128.Div64(2), bits)
-			}
-		})
-	}
-}
-
-func BenchmarkMatchInt128LessAVX2New(B *testing.B) {
-	if !useAVX2 {
-		B.SkipNow()
-	}
-	for _, n := range vecBenchmarkSizes {
-		a := randInt128Slice(n.l, 1)
-		src0, src1 := splitInt128Slice(a)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * Int128Size))
-			for i := 0; i < B.N; i++ {
-				matchInt128LessThanAVX2New(src0, src1, MaxInt128.Div64(2), bits)
+				matchInt128LessThanAVX2(src0, src1, MaxInt128.Div64(2), bits)
 			}
 		})
 	}

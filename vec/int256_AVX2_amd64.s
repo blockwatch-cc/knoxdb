@@ -6,7 +6,7 @@
 #include "textflag.h"
 #include "constants_AVX2.h"
 
-// func matchInt256EqualAVX2(src []Int256, val Int256, bits []byte) int64
+// func matchInt256EqualAVX2(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -20,167 +20,7 @@
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt256EqualAVX2(SB), NOSPLIT, $0-72
-	MOVQ	src_base+0(FP), SI
-	MOVQ	src_len+8(FP), BX
-	MOVQ	dest_base+40(FP), DI
-	XORQ	R9, R9
-
-	TESTQ	BX, BX
-	JLE		done
-	CMPQ	BX, $31      // slices smaller than 32 byte are handled in scalar loop
-	JBE		prep_scalar
-
-prep_avx:
-	VBROADCASTSD val+24(FP), Y0            // load lower qword of val into AVX2 reg
-	VBROADCASTSD val+32(FP), Y15            // load upper qword of val into AVX2 reg
-	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
-	VMOVDQU		shuffle128<>+0x00(SB), Y10    // load shuffle control mask
-	CMPQ	BX, $31      // slices smaller than 64 byte are handled in small loop
-	JBE		prep_scalar
-
-prep_big:
-    MOVQ    BX, CX
-    ANDQ    $0xffffffffffffffe0, CX     // number of values processed in big blocks
-    ANDQ    $0x1f, BX                   // number of values processed in small blocks/scalar
-    SHRQ    $3, CX                      // number of bytes to write to output slice (div by 8)
-    ADDQ    CX, DI                      // move DI to the end of the array
-    NEGQ    CX
-
-loop_big:
-    VMOVDQU	     0(SI), Y1
-	VMOVDQU	    32(SI), Y11
-    VPSRLDQ     $8, Y1, Y12
-    VPSLLDQ     $8, Y11, Y13
-    VPBLENDW    $0x0f, Y1, Y13, Y1
-    VPBLENDW    $0xf0, Y11, Y12, Y11
-
-	VPCMPEQQ	Y1, Y0, Y1
-	VPCMPEQQ	Y11, Y15, Y11
-    VPAND       Y1,Y11, Y1
-
-	VMOVDQU	    64(SI), Y2
-	VMOVDQU	    96(SI), Y11
-    VPSRLDQ     $8, Y2, Y12
-    VPSLLDQ     $8, Y11, Y13
-    VPBLENDW    $0x0f, Y2, Y13, Y2
-    VPBLENDW    $0xf0, Y11, Y12, Y11
-
-	VPCMPEQQ	Y2, Y0, Y2
-	VPCMPEQQ	Y11, Y15, Y11
-    VPAND       Y2,Y11, Y2
-
-	VMOVDQU	   128(SI), Y3
-	VMOVDQU	   160(SI), Y11
-    VPSRLDQ     $8, Y3, Y12
-    VPSLLDQ     $8, Y11, Y13
-    VPBLENDW    $0x0f, Y3, Y13, Y3
-    VPBLENDW    $0xf0, Y11, Y12, Y11
-
-	VPCMPEQQ	Y3, Y0, Y3
-	VPCMPEQQ	Y11, Y15, Y11
-    VPAND       Y3,Y11, Y3
-
-	VMOVDQU	   192(SI), Y4
-	VMOVDQU	   224(SI), Y11
-    VPSRLDQ     $8, Y4, Y12
-    VPSLLDQ     $8, Y11, Y13
-    VPBLENDW    $0x0f, Y4, Y13, Y4
-    VPBLENDW    $0xf0, Y11, Y12, Y11
-
-	VPCMPEQQ	Y4, Y0, Y4
-	VPCMPEQQ	Y11, Y15, Y11
-    VPAND       Y4,Y11, Y4
-
-	VMOVDQU	   256(SI), Y5
-	VMOVDQU	   288(SI), Y11
-    VPSRLDQ     $8, Y5, Y12
-    VPSLLDQ     $8, Y11, Y13
-    VPBLENDW    $0x0f, Y5, Y13, Y5
-    VPBLENDW    $0xf0, Y11, Y12, Y11
-
-	VPCMPEQQ	Y5, Y0, Y5
-	VPCMPEQQ	Y11, Y15, Y11
-    VPAND       Y5,Y11, Y5
-
-	VMOVDQU	   320(SI), Y6
-	VMOVDQU	   352(SI), Y11
-    VPSRLDQ     $8, Y6, Y12
-    VPSLLDQ     $8, Y11, Y13
-    VPBLENDW    $0x0f, Y6, Y13, Y6
-    VPBLENDW    $0xf0, Y11, Y12, Y11
-
-	VPCMPEQQ	Y6, Y0, Y6
-	VPCMPEQQ	Y11, Y15, Y11
-    VPAND       Y6,Y11, Y6
-
-	VMOVDQU	   384(SI), Y7
-	VMOVDQU	   416(SI), Y11
-    VPSRLDQ     $8, Y7, Y12
-    VPSLLDQ     $8, Y11, Y13
-    VPBLENDW    $0x0f, Y7, Y13, Y7
-    VPBLENDW    $0xf0, Y11, Y12, Y11
-
-	VPCMPEQQ	Y7, Y0, Y7
-	VPCMPEQQ	Y11, Y15, Y11
-    VPAND       Y7,Y11, Y7
-
-	VMOVDQU	   448(SI), Y8
-	VMOVDQU	   480(SI), Y11
-    VPSRLDQ     $8, Y8, Y12
-    VPSLLDQ     $8, Y11, Y13
-    VPBLENDW    $0x0f, Y8, Y13, Y8
-    VPBLENDW    $0xf0, Y11, Y12, Y11
-
-	VPCMPEQQ	Y8, Y0, Y8
-	VPCMPEQQ	Y11, Y15, Y11
-    VPAND       Y8,Y11, Y8
-
-	VPACKSSDW	Y1, Y2, Y1
-	VPACKSSDW	Y3, Y4, Y3
-	VPACKSSDW	Y1, Y3, Y1
-	VPACKSSDW	Y5, Y6, Y5
-	VPACKSSDW	Y7, Y8, Y7
-	VPACKSSDW	Y5, Y7, Y5
-	VPACKSSWB	Y1, Y5, Y1
-  	VPERMD		Y1, Y9, Y1
-	VPSHUFB		Y10, Y1, Y1
-	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
-
-    // MOVD        $0x1234567812345678, AX
-	MOVL		AX, (DI)(CX*1)    // write the 64 bits to the output slice
-	POPCNTQ		AX, AX      // count 1 bits
-	ADDQ		AX, R9
-
-	ADDQ		$512, SI
-	ADDQ		$4, CX
-	JZ		 	exit_big
-	JMP		 	loop_big
-
-exit_big:
-	VZEROUPPER           // clear upper part of Y regs, prevents AVX-SSE penalty
-
-prep_scalar: 
-
-done:
-	MOVQ	R9, ret+64(FP)
-	RET
-
-// func matchInt256EqualAVX2New(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64
-//
-// input:
-//   SI = src_base
-//   DI = bits_base
-//   BX = src_len
-//   DX = comparison value for scalar
-//   Y0 = comparison value for AVX2
-// internal:
-//   AX = intermediate
-//   R9 = population count
-//   Y9 = permute control mask
-//   Y10 = shuffle control mask
-//   Y1-Y8 = vector data
-TEXT ·matchInt256EqualAVX2New(SB), NOSPLIT, $0-160
+TEXT ·matchInt256EqualAVX2(SB), NOSPLIT, $0-160
 	MOVQ	src0_base+0(FP), SI
     MOVQ    src1_base+24(FP), BP
     MOVQ    src2_base+48(FP), R14
@@ -214,109 +54,69 @@ prep_big:
     NEGQ    CX
 
 loop_big:
-    VMOVDQU	    0(SI), Y1
-	VMOVDQU	    0(BP), Y2
-    VMOVDQU	    0(R14), Y3
-	VMOVDQU	    0(R15), Y4
-
-	VPCMPEQQ	Y1, Y0, Y1
-	VPCMPEQQ	Y2, Y13, Y2
+    VPCMPEQQ	    0(SI), Y0, Y1
+	VPCMPEQQ	    0(BP), Y13, Y2
+    VPCMPEQQ	    0(R14), Y14, Y3
+	VPCMPEQQ	    0(R15), Y15, Y4
     VPAND       Y1, Y2, Y1
-	VPCMPEQQ	Y3, Y14, Y3
-	VPCMPEQQ	Y4, Y15, Y4
     VPAND       Y3, Y4, Y3
     VPAND       Y1, Y3, Y1
 
-    VMOVDQU	    32(SI), Y2
-	VMOVDQU	    32(BP), Y3
-    VMOVDQU	    32(R14), Y4
-	VMOVDQU	    32(R15), Y5
-
-	VPCMPEQQ	Y2, Y0, Y2
-	VPCMPEQQ	Y3, Y13, Y3
+    VPCMPEQQ	    32(SI), Y0, Y2
+	VPCMPEQQ	    32(BP), Y13, Y3
+    VPCMPEQQ	    32(R14), Y14, Y4
+	VPCMPEQQ	    32(R15), Y15, Y5
     VPAND       Y2, Y3, Y2
-	VPCMPEQQ	Y4, Y14, Y4
-	VPCMPEQQ	Y5, Y15, Y5
     VPAND       Y4, Y5, Y4
     VPAND       Y2, Y4, Y2
 
-    VMOVDQU	    64(SI), Y3
-	VMOVDQU	    64(BP), Y4
-    VMOVDQU	    64(R14), Y5
-	VMOVDQU	    64(R15), Y6
-
-	VPCMPEQQ	Y3, Y0, Y3
-	VPCMPEQQ	Y4, Y13, Y4
+    VPCMPEQQ	    64(SI), Y0, Y3
+	VPCMPEQQ	    64(BP), Y13, Y4
+    VPCMPEQQ	    64(R14), Y14, Y5
+	VPCMPEQQ	    64(R15), Y15, Y6
     VPAND       Y3, Y4, Y3
-	VPCMPEQQ	Y5, Y14, Y5
-	VPCMPEQQ	Y6, Y15, Y6
     VPAND       Y5, Y6, Y5
     VPAND       Y3, Y5, Y3
 
-    VMOVDQU	    96(SI), Y4
-	VMOVDQU	    96(BP), Y5
-    VMOVDQU	    96(R14), Y6
-	VMOVDQU	    96(R15), Y7
-
-	VPCMPEQQ	Y4, Y0, Y4
-	VPCMPEQQ	Y5, Y13, Y5
+    VPCMPEQQ	    96(SI), Y0, Y4
+	VPCMPEQQ	    96(BP), Y13, Y5
+    VPCMPEQQ	    96(R14), Y14, Y6
+	VPCMPEQQ	    96(R15), Y15, Y7
     VPAND       Y4, Y5, Y4
-	VPCMPEQQ	Y6, Y14, Y6
-	VPCMPEQQ	Y7, Y15, Y7
     VPAND       Y6, Y7, Y6
     VPAND       Y4, Y6, Y4
 
-    VMOVDQU	    128(SI), Y5
-	VMOVDQU	    128(BP), Y6
-    VMOVDQU	    128(R14), Y7
-	VMOVDQU	    128(R15), Y8
-
-	VPCMPEQQ	Y5, Y0, Y5
-	VPCMPEQQ	Y6, Y13, Y6
+    VPCMPEQQ	    128(SI), Y0, Y5
+	VPCMPEQQ	    128(BP), Y13, Y6
+    VPCMPEQQ	    128(R14), Y14, Y7
+	VPCMPEQQ	    128(R15), Y15, Y8
     VPAND       Y5, Y6, Y5
-	VPCMPEQQ	Y7, Y14, Y7
-	VPCMPEQQ	Y8, Y15, Y8
     VPAND       Y7, Y8, Y7
     VPAND       Y5, Y7, Y5
 
-    VMOVDQU	    160(SI), Y6
-	VMOVDQU	    160(BP), Y7
-    VMOVDQU	    160(R14), Y8
-	VMOVDQU	    160(R15), Y9
-
-	VPCMPEQQ	Y6, Y0, Y6
-	VPCMPEQQ	Y7, Y13, Y7
+    VPCMPEQQ	    160(SI), Y0, Y6
+	VPCMPEQQ	    160(BP), Y13, Y7
+    VPCMPEQQ	    160(R14), Y14, Y8
+	VPCMPEQQ	    160(R15), Y15, Y9
     VPAND       Y6, Y7, Y6
-	VPCMPEQQ	Y8, Y14, Y8
-	VPCMPEQQ	Y9, Y15, Y9
     VPAND       Y8, Y9, Y8
     VPAND       Y6, Y8, Y6
 
-    VMOVDQU	    192(SI), Y7
-	VMOVDQU	    192(BP), Y8
-    VMOVDQU	    192(R14), Y9
-	VMOVDQU	    192(R15), Y10
-
-	VPCMPEQQ	Y7, Y0, Y7
-	VPCMPEQQ	Y8, Y13, Y8
+    VPCMPEQQ	    192(SI), Y0, Y7
+	VPCMPEQQ	    192(BP), Y13, Y8
+    VPCMPEQQ	    192(R14), Y14, Y9
+	VPCMPEQQ	    192(R15), Y15, Y10
     VPAND       Y7, Y8, Y7
-	VPCMPEQQ	Y9, Y14, Y9
-	VPCMPEQQ	Y10, Y15, Y10
     VPAND       Y9, Y10, Y9
     VPAND       Y7, Y9, Y7
 
 	VPACKSSDW	Y1, Y2, Y1
 
-    VMOVDQU	    224(SI), Y8
-	VMOVDQU	    224(BP), Y9
-    VMOVDQU	    224(R14), Y10
-	VMOVDQU	    224(R15), Y2
-
-	VPCMPEQQ	Y8, Y0, Y8
-	VPCMPEQQ	Y9, Y13, Y9
+    VPCMPEQQ	    224(SI), Y0, Y8
+	VPCMPEQQ	    224(BP), Y13, Y9
+    VPCMPEQQ	    224(R14), Y14, Y10
+	VPCMPEQQ	    224(R15), Y15, Y2
     VPAND       Y8, Y9, Y8
-	VPCMPEQQ	Y10, Y14, Y10
-	VPCMPEQQ	Y2, Y15, Y2
     VPAND       Y10, Y2, Y10
     VPAND       Y8, Y10, Y8
 
@@ -351,7 +151,7 @@ done:
 	MOVQ	R9, ret+152(FP)
 	RET
 
-// func matchInt256LessThanAVX2New(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64
+// func matchInt256LessThanAVX2(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -365,7 +165,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt256LessThanAVX2New(SB), NOSPLIT, $0-160
+TEXT ·matchInt256LessThanAVX2(SB), NOSPLIT, $0-160
 	MOVQ	src0_base+0(FP), SI
     MOVQ    src1_base+24(FP), BP
     MOVQ    src2_base+48(FP), R14
