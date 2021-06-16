@@ -1121,9 +1121,10 @@ start:
 	JLE			done
 
 	// super quick pre-check if the current byte qualifies already
-    /*XORQ        AX, AX
+    XORQ        AX, AX
+    XORQ        BX, BX
 	CMPB		0(SI)(BX*1), $0
-	JNZ			found*/
+	JNZ			found
 
 	CMPQ		CX, $16		 // slices smaller than 16 byte are handled byte-wise
 	JB			prep_i8

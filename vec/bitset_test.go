@@ -98,6 +98,8 @@ var bitsetBenchmarkDensities = []bitsetBenchmarkDensity{
 	{"1/1024", 1.0 / 1024},
 	{"1/2048", 1.0 / 2048},
 	{"1/4096", 1.0 / 4096},
+	{"1/8192", 1.0 / 8192},
+	{"1/16384", 1.0 / 16384},
 }
 
 var bitsetPatterns = []byte{
@@ -2488,18 +2490,14 @@ func BenchmarkBitsetIndexAVX2New64K(B *testing.B) {
 			for i := 0; i < n.l/3; i++ {
 				bits[rnd.Uint64()%l] |= 1 << byte(rnd.Uint64()%8)
 			}*/
-			var l int = 4 * 1024
+			var l int = 64 * 1024
 			bits := fillBitsetRand(nil, l, n.d)
 			pc := int(bitsetPopCountGeneric(bits, l))
 			slice := make([]uint32, int(pc)+8)
 			B.ResetTimer()
 			B.SetBytes(int64(bitFieldLen(l)))
 			for i := 0; i < B.N; i++ {
-				if ret := bitsetIndexesAVX2New(bits, l, slice); pc != ret {
-					B.Errorf("Bad popcount %d != %d", ret, pc)
-					fmt.Print(bits)
-					fmt.Print(slice)
-				}
+				bitsetIndexesAVX2New(bits, l, slice)
 			}
 		})
 	}
