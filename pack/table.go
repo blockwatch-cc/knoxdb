@@ -1097,6 +1097,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		needSort                       bool
 		nextmax, packmax               uint64
 		err                            error
+		loop                           int
 	)
 
 	// init global max
@@ -1185,10 +1186,12 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		// load or create the next pack
 		if pkg == nil {
 			if nextpack < t.packidx.Len() {
+				// log.Infof("Loading pack %d/%d %x", nextpack, len(t.packidx.packs), t.packidx.packs[nextpack].Key)
 				pkg, err = t.loadPack(tx, t.packidx.packs[nextpack].Key, true, nil)
 				if err != nil && err != ErrPackNotFound {
 					return err
 				}
+				// log.Infof("Loading pack %d: %v", nextpack, err)
 				// keep largest id value to check if pack needs sort before storing it
 				packmax = nextmax
 				lastpack = nextpack
@@ -1200,7 +1203,16 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				pkg = t.packPool.Get().(*Package)
 				pkg.key = t.packidx.NextKey()
 				pkg.cached = false
+				// log.Infof("Starting new pack %d/%d %x", lastpack, len(t.packidx.packs), pkg.key)
 			}
+		}
+
+		// log.Infof("Loop %d: tomb=%d/%d journal=%d/%d", loop, tpos, tlen, jpos, jlen)
+		loop++
+		if loop > t.packidx.Len()+t.journal.Len()/(1<<uint(t.opts.PackSizeLog2))+1 {
+			log.Errorf("%s: stopping infinite flush loop %d: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d",
+				t.name, loop, tpos, tlen, jpos, jlen, lastpack, t.packidx.Len(), nextid)
+			return fmt.Errorf("%s infinite flush loop detected. Database is likely corrupted.", t.name)
 		}
 
 		// process tombstone entries for this pack
@@ -1270,6 +1282,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 			// stop on pack boundary
 			if best, _, _ := t.findBestPack(key.pk); best != lastpack {
+				// log.Infof("Key %d does not fit into pack %d, suggested %d/%d",
+				// 	key.pk, lastpack, best, len(t.packidx.packs))
 				break
 			}
 
