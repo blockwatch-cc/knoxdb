@@ -92,10 +92,10 @@ func (o *Options) MergeDefaults() {
 }
 
 func (o Options) Check() error {
-	if o.PackSizeLog2 < 10 || o.PackSizeLog2 > 22 {
+	if o.PackSizeLog2 < 2 || o.PackSizeLog2 > 22 {
 		return fmt.Errorf("PackSizeLog2 %d out of range [10, 22]", o.PackSizeLog2)
 	}
-	if o.JournalSizeLog2 < 10 || o.JournalSizeLog2 > 22 {
+	if o.JournalSizeLog2 < 2 || o.JournalSizeLog2 > 22 {
 		return fmt.Errorf("JournalSizeLog2 %d out of range [10, 22]", o.JournalSizeLog2)
 	}
 	if o.CacheSize > 64*1024 {
@@ -136,6 +136,8 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 	if err := opts.Check(); err != nil {
 		return nil, err
 	}
+	maxPackSize := 1 << uint(opts.PackSizeLog2)
+	maxJournalSize := 1 << uint(opts.JournalSizeLog2)
 	t := &Table{
 		name:   name,
 		opts:   opts,
@@ -145,7 +147,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		},
 		db:      d,
 		indexes: make(IndexList, 0),
-		packidx: NewPackIndex(nil, fields.PkIndex()),
+		packidx: NewPackIndex(nil, fields.PkIndex(), maxPackSize),
 		key:     []byte(name),
 		metakey: []byte(name + "_meta"),
 		pkPool: &sync.Pool{
@@ -204,7 +206,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		if err != nil {
 			return err
 		}
-		t.journal = NewJournal(0, 1<<uint(t.opts.JournalSizeLog2), t.name)
+		t.journal = NewJournal(0, maxJournalSize, t.name)
 		if err := t.journal.InitFields(fields); err != nil {
 			return err
 		}
@@ -315,6 +317,12 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		if err != nil {
 			return err
 		}
+		if len(opts) > 0 {
+			if opts[0].JournalSizeLog2 > 0 {
+				t.opts.JournalSizeLog2 = opts[0].JournalSizeLog2
+			}
+		}
+		maxJournalSize := 1 << uint(t.opts.JournalSizeLog2)
 		buf = b.Get(fieldsKey)
 		if buf == nil {
 			return fmt.Errorf("pack: missing fields for table %s", name)
@@ -339,7 +347,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		if err != nil {
 			return fmt.Errorf("pack: cannot read metadata for table %s: %v", name, err)
 		}
-		t.journal = NewJournal(t.meta.Sequence, 1<<uint(t.opts.JournalSizeLog2), t.name)
+		t.journal = NewJournal(t.meta.Sequence, maxJournalSize, t.name)
 		t.journal.InitFields(t.fields)
 		err = t.journal.LoadLegacy(dbTx, t.metakey)
 		if err != nil {
@@ -416,6 +424,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 	if b == nil {
 		return ErrNoTable
 	}
+	maxPackSize := 1 << uint(t.opts.PackSizeLog2)
 	packs := make(PackInfoList, 0)
 	bi := b.Bucket(infoKey)
 	if bi != nil {
@@ -435,7 +444,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 			packs = packs[:0]
 			log.Errorf("pack: info decode for table %s pack %x: %v", t.name, c.Key(), err)
 		} else {
-			t.packidx = NewPackIndex(packs, t.fields.PkIndex())
+			t.packidx = NewPackIndex(packs, t.fields.PkIndex(), maxPackSize)
 			log.Debugf("pack: %s table loaded index data for %d packs", t.name, t.packidx.Len())
 			return nil
 		}
@@ -462,7 +471,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 		atomic.AddInt64(&t.stats.MetaBytesRead, int64(len(c.Value())))
 		pkg.Clear()
 	}
-	t.packidx = NewPackIndex(packs, t.fields.PkIndex())
+	t.packidx = NewPackIndex(packs, t.fields.PkIndex(), maxPackSize)
 	log.Debugf("pack: %s table scanned %d packages", t.name, t.packidx.Len())
 	return nil
 }
@@ -1112,10 +1121,17 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 		// skip deleted journal entries
 		for ; jpos < jlen && dbits.IsSet(live[jpos].idx); jpos++ {
+			// log.Infof("%s: skipping deleted journal entry %d/%d gmax=%d", t.name, jpos, jlen, globalmax)
 		}
 
-		// skip deleted and trailing (unwritten) tombstone entries
-		for ; tpos < tlen && (dead[tpos] == 0 || dead[tpos] > globalmax); tpos++ {
+		// skip processed tombstone entries
+		for ; tpos < tlen && dead[tpos] == 0; tpos++ {
+			// log.Infof("%s: skipping processed tomb entry %d/%d gmax=%d", t.name, tpos, tlen, globalmax)
+		}
+
+		// skip trailing tombstone entries (for unwritten journal entries)
+		for ; tpos < tlen && dead[tpos] > globalmax; tpos++ {
+			// log.Infof("%s: skipping trailing tomb entry %d at %d/%d gmax=%d", t.name, dead[tpos], tpos, tlen, globalmax)
 		}
 
 		// init on each iteration, either from journal or tombstone
@@ -1123,12 +1139,19 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		switch true {
 		case jpos < jlen && tpos < tlen:
 			nextid = util.MinU64(live[jpos].pk, dead[tpos])
+			// if nextid == live[jpos].pk {
+			// 	log.Infof("%s: next id %d from journal %d/%d, gmax=%d", t.name, nextid, jpos, jlen, globalmax)
+			// } else {
+			// 	log.Infof("%s: next id %d from tomb %d/%d, gmax=%d", t.name, nextid, tpos, tlen, globalmax)
+			// }
 		case jpos < jlen && tpos >= tlen:
 			nextid = live[jpos].pk
+			// log.Infof("%s: next id %d from journal %d/%d, gmax=%d", t.name, nextid, jpos, jlen, globalmax)
 		case jpos >= jlen && tpos < tlen:
 			nextid = dead[tpos]
+			// log.Infof("%s: next id %d from tomb %d/%d, gmax=%d", t.name, nextid, tpos, tlen, globalmax)
 		default:
-			// should not happen
+			// stop in case remaining journal/tombstone entries were skipped
 			break
 		}
 
@@ -1136,12 +1159,17 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		// appending to a new pack
 		if lastpack < t.packidx.Len() {
 			nextpack, _, nextmax = t.findBestPack(nextid)
+			// log.Infof("Using next pack %d (last=%d/%d) for id %d with range [%d:%d]",
+			// 	nextpack, lastpack, t.packidx.Len(), nextid, nextmin, nextmax)
+			// } else {
+			// 	log.Infof("Already in NEW pack %d (last=%d/%d) for id %d", nextpack, lastpack, t.packidx.Len(), nextid)
 		}
 
 		// store last pack when nextpack changes
 		if lastpack != nextpack && pkg != nil {
 			// saving a pack also deletes empty packs from storage!
 			if pkg.IsDirty() {
+				// log.Infof("Storing pack %d", pkg.key)
 				if needSort {
 					pkg.PkSort()
 				}
@@ -1172,6 +1200,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				}
 				// update next values after pack index has changed
 				nextpack, _, nextmax = t.findBestPack(nextid)
+				// log.Infof("Using next pack %d after store", nextpack)
 			}
 			// prepare for next pack
 			lastpack = nextpack
@@ -1191,7 +1220,6 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				if err != nil && err != ErrPackNotFound {
 					return err
 				}
-				// log.Infof("Loading pack %d: %v", nextpack, err)
 				// keep largest id value to check if pack needs sort before storing it
 				packmax = nextmax
 				lastpack = nextpack
@@ -1364,6 +1392,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 							pkg.PkSort()
 							needSort = false
 						}
+						// log.Infof("Storing pack %d", pkg.key)
 						n, err := t.storePack(tx, pkg)
 						if err != nil {
 							return err
@@ -1392,6 +1421,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					}
 				}
 				// append new row
+				// log.Infof("Append key %d to pack %d", key.pk, lastpack)
 				if err := pkg.AppendFrom(jpack, key.idx, 1); err != nil {
 					return err
 				}
@@ -1416,6 +1446,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		if needSort {
 			pkg.PkSort()
 		}
+		// log.Infof("Storing final pack %d", pkg.key)
 		n, err := t.storePack(tx, pkg)
 		if err != nil {
 			return err
@@ -1498,8 +1529,15 @@ func (t *Table) findBestPack(pkval uint64) (int, uint64, uint64) {
 	}
 
 	// make sure there's room in the selected pack
-	if t.packidx.packs[bestpack].NValues >= 1<<uint(t.opts.PackSizeLog2) {
-		return t.packidx.Len(), 0, 0 // triggers new pack creation
+	if t.packidx.IsFull(bestpack) {
+		// if not check if there is room in the next pack
+		if bestpack < t.packidx.Len() && !t.packidx.IsFull(bestpack+1) {
+			bestpack++
+			min, max = t.packidx.MinMax(bestpack)
+		} else {
+			// trigger new pack creation
+			return t.packidx.Len(), 0, 0
+		}
 	}
 
 	return bestpack, min, max

@@ -5,6 +5,7 @@ package pack
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"strconv"
@@ -88,6 +89,9 @@ func (t *Table) DumpJournal(w io.Writer, mode DumpMode) error {
 		w.Write([]byte(strconv.FormatUint(v, 10)))
 		w.Write([]byte(","))
 	}
+	w.Write([]byte("\n"))
+	w.Write([]byte("dbits:"))
+	w.Write([]byte(hex.EncodeToString(t.journal.deleted.Bytes())))
 	w.Write([]byte("\n"))
 	return nil
 }

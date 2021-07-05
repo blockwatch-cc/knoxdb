@@ -33,6 +33,7 @@ type PackIndex struct {
 	removed []uint32
 	pairs   []pair
 	pkidx   int
+	maxsize int
 }
 
 type pair struct {
@@ -41,7 +42,7 @@ type pair struct {
 }
 
 // may be used in {Index|Table}.loadPackHeaders
-func NewPackIndex(packs PackInfoList, pkidx int) *PackIndex {
+func NewPackIndex(packs PackInfoList, pkidx, maxsize int) *PackIndex {
 	if packs == nil {
 		packs = make(PackInfoList, 0)
 	}
@@ -103,6 +104,13 @@ func (l *PackIndex) Get(i int) PackInfo {
 		return PackInfo{}
 	}
 	return l.packs[i]
+}
+
+func (l *PackIndex) IsFull(i int) bool {
+	if i < 0 || i >= l.Len() {
+		return false
+	}
+	return l.packs[i].NValues >= l.maxsize
 }
 
 // called by storePack

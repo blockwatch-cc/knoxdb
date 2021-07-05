@@ -123,13 +123,15 @@ func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Option
 		return nil, err
 	}
 	field.Flags |= FlagIndexed
+	maxPackSize := 1 << uint(opts.PackSizeLog2)
+	maxJournalSize := 1 << uint(opts.JournalSizeLog2)
 	idx := &Index{
 		Name:         name,
 		Type:         typ,
 		Field:        field,
 		opts:         opts,
 		table:        t,
-		packidx:      NewPackIndex(nil, 0),
+		packidx:      NewPackIndex(nil, 0, maxPackSize),
 		key:          []byte(t.name + "_" + name + "_index"),
 		metakey:      []byte(t.name + "_" + name + "_index_meta"),
 		indexValue:   typ.ValueFunc(),
@@ -164,7 +166,7 @@ func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Option
 			return err
 		}
 		// create empty journal
-		idx.journal = NewPackage(1 << uint(idx.opts.JournalSizeLog2))
+		idx.journal = NewPackage(maxJournalSize)
 		idx.journal.key = journalKey
 		if err := idx.journal.InitType(IndexEntry{}); err != nil {
 			return err
@@ -174,7 +176,7 @@ func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Option
 			return err
 		}
 		// create empty tombstone
-		idx.tombstone = NewPackage(1 << uint(idx.opts.JournalSizeLog2))
+		idx.tombstone = NewPackage(maxJournalSize)
 		idx.tombstone.key = tombstoneKey
 		if err := idx.tombstone.InitType(IndexEntry{}); err != nil {
 			return err
@@ -302,7 +304,6 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 	} else {
 		log.Debugf("Opening %s_%s index with default opts", t.name, idx.Name)
 	}
-	idx.packidx = NewPackIndex(nil, 0)
 	idx.table = t
 	idx.key = []byte(t.name + "_" + idx.Name + "_index")
 	idx.metakey = []byte(t.name + "_" + idx.Name + "_index_meta")
@@ -326,6 +327,13 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 		if err != nil {
 			return err
 		}
+		if len(opts) > 0 {
+			if opts[0].JournalSizeLog2 > 0 {
+				idx.opts.JournalSizeLog2 = opts[0].JournalSizeLog2
+			}
+		}
+		maxPackSize := 1 << uint(idx.opts.PackSizeLog2)
+		idx.packidx = NewPackIndex(nil, 0, maxPackSize)
 		idx.journal, err = loadPackTx(dbTx, idx.metakey, encodePackKey(journalKey), nil)
 		if err != nil {
 			return fmt.Errorf("pack: cannot open journal for index %s: %v", idx.cachekey(nil), err)
@@ -352,9 +360,6 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 	cacheSize := idx.opts.CacheSize
 	if len(opts) > 0 {
 		cacheSize = opts[0].CacheSize
-		if opts[0].JournalSizeLog2 > 0 {
-			idx.opts.JournalSizeLog2 = opts[0].JournalSizeLog2
-		}
 	}
 	if cacheSize > 0 {
 		idx.cache, err = lru.New2QWithEvict(int(cacheSize), idx.onEvictedPackage)
@@ -378,6 +383,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 		return ErrNoTable
 	}
 	packs := make(PackInfoList, 0)
+	maxPackSize := 1 << uint(idx.opts.PackSizeLog2)
 	bi := b.Bucket(infoKey)
 	if bi != nil {
 		log.Debugf("pack: %s index loading package info from bucket", idx.cachekey(nil))
@@ -396,7 +402,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 			packs = packs[:0]
 			log.Errorf("pack: info decode for index %s pack %x: %v", idx.cachekey(nil), c.Key(), err)
 		} else {
-			idx.packidx = NewPackIndex(packs, 0)
+			idx.packidx = NewPackIndex(packs, 0, maxPackSize)
 			log.Debugf("pack: %s index loaded index data for %d packs", idx.cachekey(nil), idx.packidx.Len())
 			return nil
 		}
@@ -424,7 +430,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 		packs = append(packs, info)
 		atomic.AddInt64(&idx.table.stats.MetaBytesRead, int64(len(c.Value())))
 	}
-	idx.packidx = NewPackIndex(packs, 0)
+	idx.packidx = NewPackIndex(packs, 0, maxPackSize)
 	log.Debugf("pack: %s index scanned %d package headers", idx.cachekey(nil), idx.packidx.Len())
 	return nil
 }
@@ -715,7 +721,8 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 		}
 		idx.cache.Remove(cachekey)
 	}
-	idx.packidx = NewPackIndex(nil, 0)
+	maxPackSize := 1 << uint(idx.opts.PackSizeLog2)
+	idx.packidx = NewPackIndex(nil, 0, maxPackSize)
 
 	// clear and save journal and tombstone
 	idx.journal.Clear()
