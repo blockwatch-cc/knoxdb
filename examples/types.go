@@ -412,14 +412,7 @@ func run() error {
 	}
 
 	// delete some entries
-	n, err := table.Delete(context.Background(), pack.Query{
-		Conditions: pack.ConditionList{
-			pack.Condition{
-				Field: table.Fields().Find("i64"),
-				Mode:  pack.FilterModeLt,
-				Value: 1024,
-			},
-		}})
+	n, err := pack.NewQuery("del", table).AndLt("i64", 1024).Delete(context.Background())
 	if err != nil {
 		log.Errorf("Decode: %v", err)
 	} else {
