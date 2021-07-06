@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -407,7 +408,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 			return nil
 		}
 	}
-	// on error, scan packidx
+	// on error, scan packs
 	log.Warnf("pack: Corrupt or missing pack info for index %s! Scanning table. This may take a long time...", idx.cachekey(nil))
 	c := dbTx.Bucket(idx.key).Cursor()
 	pkg, err := idx.journal.Clone(false, 0)
@@ -461,14 +462,13 @@ func (idx *Index) storePackInfo(dbTx store.Tx) error {
 }
 
 func (idx *Index) AddTx(tx *Tx, pkg *Package, srcPos, srcLen int) error {
-	// Maps a (hash) key of the indexed field's content to the pk field's
-	// content for the package.
+	// Maps a (hash or int) value of the indexed field's content to primary key.
 	//
-	// Appends (key, pk) tuples to journal until full, then flushes/packidx
-	// the journal into packidx. Packs are ordered, but a global order does not
-	// exist since packidx once stored are not touched again unless entries are
-	// removed. Also, we do not check for duplicates, in fact duplicates
-	// are stored as is and lookup will find and return all duplicates.
+	// Appends (key, pk) tuples to journal until full, then flushes the journal.
+	// Index packs are internally sorted, but a global order does not exist.
+	// Once stored, packs are not touched unless entries are removed.
+	// No duplicate check is performed. Duplicate key/value pairs are stored
+	// as is and lookup will find and return all duplicates.
 	pk := pkg.PkColumn()
 	atomic.AddInt64(&idx.table.stats.IndexInsertCalls, 1)
 
@@ -479,13 +479,13 @@ func (idx *Index) AddTx(tx *Tx, pkg *Package, srcPos, srcLen int) error {
 			continue
 		}
 
-		// build index entry directly from pack value
+		// build index entry from pack content
 		entry := IndexEntry{
 			Key: idx.indexValueAt(idx.Field.Type, pkg, idx.Field.Index, i),
 			Id:  pk[i],
 		}
 
-		// append to journal, will sort later
+		// append to journal, will sort on flush
 		if err := idx.journal.Push(entry); err != nil {
 			return err
 		}
@@ -497,8 +497,7 @@ func (idx *Index) AddTx(tx *Tx, pkg *Package, srcPos, srcLen int) error {
 }
 
 func (idx *Index) RemoveTx(tx *Tx, pkg *Package, srcPos, srcLen int) error {
-	// Appends (hash) keys to tombstone until full, then flushes/packidx the journal
-	// and tombstone into stored packidx.
+	// Appends (hash or int) keys to tombstone.
 	pk := pkg.PkColumn()
 	atomic.AddInt64(&idx.table.stats.IndexDeleteCalls, 1)
 
@@ -509,11 +508,14 @@ func (idx *Index) RemoveTx(tx *Tx, pkg *Package, srcPos, srcLen int) error {
 			continue
 		}
 
-		// append hash value to tombstone
-		if err := idx.tombstone.Push(IndexEntry{
+		// build index entry from pack content
+		entry := IndexEntry{
 			Key: idx.indexValueAt(idx.Field.Type, pkg, idx.Field.Index, i),
 			Id:  pk[i],
-		}); err != nil {
+		}
+
+		// append hash value to tombstone
+		if err := idx.tombstone.Push(entry); err != nil {
 			return err
 		}
 		count++
@@ -523,7 +525,7 @@ func (idx *Index) RemoveTx(tx *Tx, pkg *Package, srcPos, srcLen int) error {
 	return nil
 }
 
-// this index only supports
+// This index only supports the following condition types on lookup.
 // - FilterModeEqual
 // - FilterModeIn
 // - FilterModeNotIn
@@ -582,25 +584,38 @@ func (idx *Index) LookupTx(ctx context.Context, tx *Tx, cond Condition) ([]uint6
 	return res, nil
 }
 
-// Note: index journals are always empty on lookup because tables
-//       fill and flush them when they flush their journal.
+// Note: index journals are always empty on lookup because tables flush after add/remove.
 func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool) ([]uint64, error) {
 	atomic.AddInt64(&idx.table.stats.IndexQueryCalls, 1)
 	if len(in) == 0 {
 		return []uint64{}, nil
 	}
 
+	// copy input slice to notfound for later negation
+	var notfound []uint64
+	if neg {
+		notfound = make([]uint64, len(in))
+		copy(notfound, in)
+	}
+
 	// alloc result slice from pool, should be returned by caller
 	out := idx.table.pkPool.Get().([]uint64)
 	var nPacks int
 
-	// optimize for rollback and lookup of most recently added index values
-	// Note: this only works for integer indexes, hash index is randomized and
-	// here order does not matter
+	// Optimize for rollback and lookup of most recently added index values.
+	// Although this only works for integer indexes (hash index are randomized)
+	// this helps improve search performance.
+	//
+	// Both in-slice and index packs are sorted by indexed key which greatly helps
+	// search performance because we can use binary search.
+
 	for nextpack := idx.packidx.Len() - 1; nextpack >= 0; nextpack-- {
-		// stop when all inputs are matched
-		if len(in) == 0 {
-			break
+		// extract min/max values from pack header (this is defined by IndexEntry,
+		// so we're safe to assume the following call will not fail); then
+		// skip packs that don't contain keys in range
+		min, max := idx.packidx.MinMax(nextpack)
+		if !vec.Uint64.ContainsRange(in, min, max) {
+			continue
 		}
 
 		// stop when context is canceled
@@ -608,17 +623,6 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 			out = out[:0]
 			idx.table.pkPool.Put(out)
 			return nil, ctx.Err()
-		}
-
-		// continue with next pack
-
-		// extract min/max values from pack header (this is defined by IndexEntry,
-		// so we're safe to assume the following call will not fail); then
-		// skip packidx that don't contain keys in range (`in` is sorted and gets
-		// updated as matches are found)
-		min, max := idx.packidx.MinMax(nextpack)
-		if max < in[0] || min > in[len(in)-1] {
-			continue
 		}
 
 		// load and cache pack
@@ -633,49 +637,43 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 		col, _ := ipkg.Column(1)
 		values, _ := col.([]uint64)
 
-		// packidx are sorted by indexed key, we use this to improve search performance
-		// FIXME: binary search may be more efficient
-		for h, i, hl, il := 0, 0, len(keys), len(in); h < hl && i < il; {
-			if max < in[i] {
-				// no more matches in this pack
+		// start at the first `in` value contained by this index pack
+		first := sort.Search(len(in), func(x int) bool { return in[x] >= min })
+
+		// run through pack and in-slice until no more values match
+		for k, i, kl, il := 0, first, len(keys), len(in); k < kl && i < il; {
+
+			// find the next matching key or any value > next lookup
+			k += sort.Search(kl-k, func(x int) bool { return keys[x+k] >= in[i] })
+
+			// stop at pack end
+			if k == kl {
 				break
 			}
-			for h < hl && keys[h] < in[i] {
-				h++
-			}
-			if h == hl {
-				break
-			}
-			for i < il && keys[h] > in[i] {
+
+			// if no match was found, advance in-slice
+			for i < il && keys[k] > in[i] {
 				i++
 			}
-			if i == il {
-				break
-			}
-			if keys[h] == in[i] {
+
+			// handle multiple matches
+			if keys[k] == in[i] {
 				// append to result
-				out = append(out, values[h])
+				out = append(out, values[k])
 
-				// peek the next pack entries to handle key collision
-				// h can safely be advanced because a collision in in[i]
-				// will have added all colliding target values already
-				for ; h+1 < hl && keys[h+1] == in[i]; h++ {
-					out = append(out, values[h+1])
+				// remove found key from control slice
+				notfound = vec.Uint64.Remove(notfound, in[i])
+
+				// Peek the next index entries to handle key collisions and
+				// multi-matches for integer indexes. K can safely be advanced
+				// because collisions/multi-matches for in[i] are directly after
+				// the first match.
+				for ; k+1 < kl && keys[k+1] == in[i]; k++ {
+					out = append(out, values[k+1])
 				}
 
-				// edge case: when a key collision spans two packidx we
-				// must not remove in[i] just yet, but instead continue
-				// with the next pack; at this point we can only check if
-				// min_current == in[i], but we don't know if
-				// max_prev == in[i] (giving we traverse packidx in reverse
-				// order). It is still save to break here.
-				if h+1 == hl && min == in[i] {
-					break
-				}
-
-				// delete found key from input slice
-				in = append(in[:i], in[i+1:]...)
-				il--
+				// next lookup key
+				i++
 			}
 		}
 	}
@@ -683,7 +681,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 	// `in` contains only missing keys now
 	if neg {
 		idx.table.pkPool.Put(out[:0])
-		out = in
+		out = notfound
 	}
 
 	// sort result before return
