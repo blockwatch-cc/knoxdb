@@ -47,7 +47,6 @@ var (
 
 // Big-Endian format [0] = Hi, [1] = Lo
 type Int128 [2]uint64
-type Uint128 [2]uint64
 
 func NewInt128() Int128 {
 	return ZeroInt128
@@ -548,69 +547,45 @@ func Max128(x, y Int128) Int128 {
 	return y
 }
 
-func (x Int128) Uint128() Uint128 {
-	return Uint128{x[0], x[1]}
-}
-
-func (x Uint128) Int128() Int128 {
-	return Int128{x[0], x[1]}
-}
-
-func (x Uint128) Lt(y Uint128) bool {
-	return x[0] < y[0] || (x[0] == y[0] && x[1] < y[1])
-}
-
-func (x Uint128) Lte(y Uint128) bool {
-	return x[0] < y[0] || (x[0] == y[0] && x[1] <= y[1])
-}
-
-func (x Uint128) Gt(y Uint128) bool {
-	return x[0] > y[0] || (x[0] == y[0] && x[1] > y[1])
-}
-
-func (x Uint128) Gte(y Uint128) bool {
-	return x[0] > y[0] || (x[0] == y[0] && x[1] >= y[1])
-}
-
 // Match helpers
-func MatchInt128Equal(src []Int128, val Int128, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt128Equal(src Int128LLSlice, val Int128, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt128Equal(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt128NotEqual(src []Int128, val Int128, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt128NotEqual(src Int128LLSlice, val Int128, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt128NotEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt128LessThan(src []Int128, val Int128, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt128LessThan(src Int128LLSlice, val Int128, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt128LessThan(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt128LessThanEqual(src []Int128, val Int128, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt128LessThanEqual(src Int128LLSlice, val Int128, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt128LessThanEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt128GreaterThan(src []Int128, val Int128, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt128GreaterThan(src Int128LLSlice, val Int128, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt128GreaterThan(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt128GreaterThanEqual(src []Int128, val Int128, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt128GreaterThanEqual(src Int128LLSlice, val Int128, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt128GreaterThanEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt128Between(src []Int128, a, b Int128, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt128Between(src Int128LLSlice, a, b Int128, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt128Between(src, a, b, bits.Bytes(), mask.Bytes()))
 	return bits
 }
@@ -823,6 +798,131 @@ func (s Int128Slice) Intersect(x, out Int128Slice) Int128Slice {
 	return out
 }
 
+// represents a Int128 slice in two strides for higher and lower qword
+// used for vector match algorithms
+type Int128LLSlice struct {
+	X0 []int64
+	X1 []uint64
+}
+
+func (s Int128LLSlice) IsNil() bool {
+	return s.X0 == nil || s.X1 == nil
+}
+
+func (s Int128LLSlice) Elem(i int) Int128 {
+	return Int128{uint64(s.X0[i]), s.X1[i]}
+}
+
+func (s Int128LLSlice) Set(i int, val Int128) {
+	s.X0[i], s.X1[i] = int64(val[0]), val[1]
+}
+
+func MakeInt128LLSlice(sz int) Int128LLSlice {
+	return Int128LLSlice{make([]int64, sz), make([]uint64, sz)}
+}
+
+func (s Int128LLSlice) Append(val Int128) Int128LLSlice {
+	s.X0 = append(s.X0, int64(val[0]))
+	s.X1 = append(s.X1, val[1])
+	return s
+}
+
+func (dst Int128LLSlice) AppendFrom(src Int128LLSlice) Int128LLSlice {
+	dst.X0 = append(dst.X0, src.X0...)
+	dst.X1 = append(dst.X1, src.X1...)
+	return dst
+}
+
+func (s Int128LLSlice) Swap(i, j int) {
+	s.X0[i], s.X0[j] = s.X0[j], s.X0[i]
+	s.X1[i], s.X1[j] = s.X1[j], s.X1[i]
+}
+
+func (s Int128LLSlice) Len() int {
+	return len(s.X0)
+}
+
+func (s Int128LLSlice) Cap() int {
+	return cap(s.X0)
+}
+
+func (s Int128LLSlice) MinMax() (Int128, Int128) {
+	var min, max Int128
+
+	switch l := s.Len(); l {
+	case 0:
+		// nothing
+	case 1:
+		min, max = s.Elem(0), s.Elem(0)
+	default:
+		// If there is more than one element, then initialize min and max
+		s0 := s.Elem(0)
+		s1 := s.Elem(1)
+		if s0.Lt(s1) {
+			max = s0
+			min = s1
+		} else {
+			max = s1
+			min = s0
+		}
+
+		for i := 2; i < l; i++ {
+			si := s.Elem(i)
+			if si.Gt(max) {
+				max = si
+			} else if si.Lt(min) {
+				min = si
+			}
+		}
+	}
+
+	return min, max
+}
+
+func splitInt128Slice(src []Int128) ([]int64, []uint64) {
+	res0 := make([]int64, len(src))
+	res1 := make([]uint64, len(src))
+	for i, v := range src {
+		res0[i] = int64(v[0])
+		res1[i] = v[1]
+	}
+	return res0, res1
+}
+
+func (s Int128Slice) Int128LLSlice() Int128LLSlice {
+	var res Int128LLSlice
+	res.X0 = make([]int64, len(s))
+	res.X1 = make([]uint64, len(s))
+	for i, v := range s {
+		res.X0[i] = int64(v[0])
+		res.X1[i] = v[1]
+	}
+	return res
+}
+
+func (s Int128LLSlice) Int128Slice() []Int128 {
+	res := make([]Int128, s.Len())
+	for i, v := range res {
+		v[0] = uint64(s.X0[i])
+		v[1] = s.X1[i]
+	}
+	return res
+}
+
+func (s Int128LLSlice) Subslice(start, end int) Int128LLSlice {
+	return Int128LLSlice{s.X0[start:end], s.X1[start:end]}
+}
+
+func (s Int128LLSlice) Tail(start int) Int128LLSlice {
+	return Int128LLSlice{s.X0[start:], s.X1[start:]}
+}
+
+func (dst Int128LLSlice) Copy(src Int128LLSlice, dstPos, srcPos, n int) {
+	copy(dst.X0[dstPos:], src.X0[srcPos:srcPos+n])
+	copy(dst.X1[dstPos:], src.X1[srcPos:srcPos+n])
+}
+
 func (s Int128Slice) MatchEqual(val Int128, bits, mask *Bitset) *Bitset {
-	return MatchInt128Equal(s, val, bits, nil)
+	src0, src1 := splitInt128Slice(s)
+	return MatchInt128Equal(Int128LLSlice{src0, src1}, val, bits, nil)
 }

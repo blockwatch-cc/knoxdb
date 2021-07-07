@@ -536,9 +536,9 @@ func (p *Package) Validate() error {
 			}
 
 		case FieldTypeInt128, FieldTypeDecimal128:
-			if b.Int128 == nil {
+			if b.Int128.IsNil() {
 				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Int128), p.nValues; a != b {
+			} else if a, b := b.Int128.Len(), p.nValues; a != b {
 				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
 			}
 

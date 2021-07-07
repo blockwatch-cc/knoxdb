@@ -765,12 +765,12 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 				}
 			}
 		case FieldTypeInt128, FieldTypeDecimal128:
-			for i, v := range block.Int128 {
+			for i := 0; i < block.Int128.Len(); i++ {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
-				if _, ok := c.int128map[v]; ok {
+				if _, ok := c.int128map[block.Int128.Elem(i)]; ok {
 					bits.Set(i)
 				}
 			}
@@ -1011,12 +1011,12 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 				}
 			}
 		case FieldTypeInt128, FieldTypeDecimal128:
-			for i, v := range block.Int128 {
+			for i := 0; i < block.Int128.Len(); i++ {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
-				if _, ok := c.int128map[v]; !ok {
+				if _, ok := c.int128map[block.Int128.Elem(i)]; !ok {
 					bits.Set(i)
 				}
 			}

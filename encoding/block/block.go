@@ -135,7 +135,7 @@ type Block struct {
 	Uint8   []uint8
 	Float64 []float64
 	Float32 []float32
-	Int128  []vec.Int128 // re-used by Decimal128, Int128
+	Int128  vec.Int128LLSlice // re-used by Decimal128, Int128
 	Int256  []vec.Int256 // re-used by Decimal256, Int256
 }
 
@@ -201,7 +201,7 @@ func (b Block) RawSlice() interface{} {
 	case BlockBytes:
 		return b.Bytes
 	case BlockInt128:
-		return b.Int128
+		return b.Int128.Int128Slice()
 	case BlockInt256:
 		return b.Int256
 	default:
@@ -238,7 +238,7 @@ func (b Block) RangeSlice(start, end int) interface{} {
 	case BlockBytes:
 		return b.Bytes[start:end]
 	case BlockInt128:
-		return b.Int128[start:end]
+		return vec.Int128LLSlice{b.Int128.X0[start:end], b.Int128.X1[start:end]}
 	case BlockInt256:
 		return b.Int256[start:end]
 	default:
@@ -333,9 +333,11 @@ func NewBlock(typ BlockType, comp Compression, sz int) *Block {
 		}
 	case BlockInt128:
 		if sz <= DefaultMaxPointsPerBlock {
-			b.Int128 = int128Pool.Get().([]vec.Int128)
+			b.Int128.X0 = int64Pool.Get().([]int64)
+			b.Int128.X1 = uint64Pool.Get().([]uint64)
 		} else {
-			b.Int128 = make([]vec.Int128, 0, sz)
+			b.Int128.X0 = make([]int64, 0, sz)
+			b.Int128.X1 = make([]uint64, 0, sz)
 		}
 	case BlockInt256:
 		if sz <= DefaultMaxPointsPerBlock {
@@ -488,13 +490,17 @@ func (b *Block) Clone(sz int, copydata bool) (*Block, error) {
 		}
 	case BlockInt128:
 		if sz <= DefaultMaxPointsPerBlock {
-			cp.Int128 = int128Pool.Get().([]vec.Int128)[:0]
+			cp.Int128.X0 = int64Pool.Get().([]int64)[:0]
+			cp.Int128.X1 = uint64Pool.Get().([]uint64)[:0]
 		} else {
-			cp.Int128 = make([]vec.Int128, 0, sz)
+			cp.Int128.X0 = make([]int64, 0, sz)
+			cp.Int128.X1 = make([]uint64, 0, sz)
 		}
 		if copydata {
-			cp.Int128 = cp.Int128[:sz]
-			copy(cp.Int128, b.Int128)
+			cp.Int128.X0 = cp.Int128.X0[:sz]
+			copy(cp.Int128.X0, b.Int128.X0)
+			cp.Int128.X1 = cp.Int128.X1[:sz]
+			copy(cp.Int128.X1, b.Int128.X1)
 		}
 	case BlockInt256:
 		if sz <= DefaultMaxPointsPerBlock {
@@ -541,7 +547,7 @@ func (b *Block) Len() int {
 	case BlockBytes:
 		return len(b.Bytes)
 	case BlockInt128:
-		return len(b.Int128)
+		return b.Int128.Len()
 	case BlockInt256:
 		return len(b.Int256)
 	default:
@@ -578,7 +584,7 @@ func (b *Block) Cap() int {
 	case BlockBytes:
 		return cap(b.Bytes)
 	case BlockInt128:
-		return cap(b.Int128)
+		return b.Int128.Cap()
 	case BlockInt256:
 		return cap(b.Int256)
 	default:
@@ -667,7 +673,7 @@ func (b *Block) HeapSize() int {
 			sz += len(v) + sliceSize
 		}
 	case BlockInt128:
-		sz += len(b.Int128) * 16
+		sz += b.Int128.Len() * 16
 	case BlockInt256:
 		sz += len(b.Int256) * 32
 	}
@@ -709,7 +715,8 @@ func (b *Block) Clear() {
 	case BlockBool:
 		b.Bits.Reset()
 	case BlockInt128:
-		b.Int128 = b.Int128[:0]
+		b.Int128.X0 = b.Int128.X0[:0]
+		b.Int128.X1 = b.Int128.X1[:0]
 	case BlockInt256:
 		b.Int256 = b.Int256[:0]
 	}
@@ -797,10 +804,12 @@ func (b *Block) Release() {
 		}
 		b.Bytes = nil
 	case BlockInt128:
-		if cap(b.Int128) == DefaultMaxPointsPerBlock {
-			int128Pool.Put(b.Int128[:0])
+		if b.Int128.Cap() == DefaultMaxPointsPerBlock {
+			int64Pool.Put(b.Int128.X0[:0])
+			uint64Pool.Put(b.Int128.X1[:0])
 		}
-		b.Int128 = nil
+		b.Int128.X0 = nil
+		b.Int128.X1 = nil
 	case BlockInt256:
 		if cap(b.Int256) == DefaultMaxPointsPerBlock {
 			int256Pool.Put(b.Int256[:0])
@@ -989,10 +998,15 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 		b.Bytes, err = decodeBytesBlock(buf, b.Bytes)
 
 	case BlockInt128:
-		if b.Int128 == nil || cap(b.Int128) < sz {
-			b.Int128 = make([]vec.Int128, 0, sz)
+		if b.Int128.X0 == nil || cap(b.Int128.X0) < sz {
+			b.Int128.X0 = make([]int64, 0, sz)
 		} else {
-			b.Int128 = b.Int128[:0]
+			b.Int128.X0 = b.Int128.X0[:0]
+		}
+		if b.Int128.X1 == nil || cap(b.Int128.X1) < sz {
+			b.Int128.X1 = make([]uint64, 0, sz)
+		} else {
+			b.Int128.X1 = b.Int128.X1[:0]
 		}
 		b.Int128, err = decodeInt128Block(buf, b.Int128)
 
@@ -1045,7 +1059,7 @@ func (b *Block) MinMax() (interface{}, interface{}) {
 	case BlockBytes:
 		return vec.Bytes.MinMax(b.Bytes)
 	case BlockInt128:
-		return vec.Int128Slice(b.Int128).MinMax()
+		return b.Int128.MinMax()
 	case BlockInt256:
 		return vec.Int256Slice(b.Int256).MinMax()
 	default:
@@ -1058,7 +1072,7 @@ func (b *Block) Less(i, j int) bool {
 	case BlockInt256:
 		return b.Int256[i].Lt(b.Int256[j])
 	case BlockInt128:
-		return b.Int128[i].Lt(b.Int128[j])
+		return b.Int128.Elem(i).Lt(b.Int128.Elem(j))
 	case BlockTime, BlockInt64:
 		return b.Int64[i] < b.Int64[j]
 	case BlockInt32:
@@ -1111,8 +1125,8 @@ func (b *Block) Swap(i, j int) {
 		b.Int256[i], b.Int256[j] = b.Int256[j], b.Int256[i]
 
 	case BlockInt128:
-		b.Int128[i], b.Int128[j] = b.Int128[j], b.Int128[i]
-
+		b.Int128.Swap(i,j)
+        
 	case BlockInt64, BlockTime:
 		b.Int64[i], b.Int64[j] = b.Int64[j], b.Int64[i]
 

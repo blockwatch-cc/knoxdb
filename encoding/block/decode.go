@@ -125,10 +125,10 @@ func decodeInt256Block(block []byte, dst []vec.Int256) ([]vec.Int256, error) {
 	return dst, nil
 }
 
-func decodeInt128Block(block []byte, dst []vec.Int128) ([]vec.Int128, error) {
+func decodeInt128Block(block []byte, dst vec.Int128LLSlice) (vec.Int128LLSlice, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockInt128)
 	if err != nil {
-		return nil, err
+		return dst, err
 	}
 
 	// empty blocks are empty
@@ -155,23 +155,36 @@ func decodeInt128Block(block []byte, dst []vec.Int128) ([]vec.Int128, error) {
 		if err != nil {
 			return dst, err
 		}
-		// only happens in first loop iteration
-		if cap(dst) < len(tmp) {
-			if len(tmp) <= DefaultMaxPointsPerBlock {
-				dst = int128Pool.Get().([]vec.Int128)[:len(tmp)]
-			} else {
-				dst = make([]vec.Int128, len(tmp))
-			}
-		} else {
-			dst = dst[:len(tmp)]
-		}
 
-		// copy stride
-		for j := range tmp {
-			dst[j][i] = uint64(tmp[j])
+		if i == 0 {
+			if cap(dst.X0) < len(tmp) {
+				if len(tmp) <= DefaultMaxPointsPerBlock {
+					dst.X0 = int64Pool.Get().([]int64)[:len(tmp)]
+				} else {
+					dst.X0 = make([]int64, len(tmp))
+				}
+			} else {
+				dst.X0 = dst.X0[:len(tmp)]
+			}
+
+			// copy stride
+			copy(dst.X0, tmp)
+		} else {
+			if cap(dst.X1) < len(tmp) {
+				if len(tmp) <= DefaultMaxPointsPerBlock {
+					dst.X1 = uint64Pool.Get().([]uint64)[:len(tmp)]
+				} else {
+					dst.X1 = make([]uint64, len(tmp))
+				}
+			} else {
+				dst.X1 = dst.X1[:len(tmp)]
+			}
+
+			// copy stride
+			srcint := compress.ReintepretInt64ToUint64Slice(tmp)
+			copy(dst.X1, srcint)
 		}
 	}
-
 	return dst, nil
 }
 

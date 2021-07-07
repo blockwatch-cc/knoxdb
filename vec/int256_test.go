@@ -228,7 +228,7 @@ var Int256EqualCases = []Int256MatchTest{
 		result: []byte{},
 		count:  0,
 	},
-    CreateInt256TestCase("l32", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 32),
+	CreateInt256TestCase("l32", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 32),
 	CreateInt256TestCase("l64", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 64),
 	CreateInt256TestCase("l128", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 128),
 	/*	CreateInt256TestCase("l127", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 127),
@@ -290,6 +290,7 @@ func TestMatchInt256EqualAVX2(T *testing.T) {
 		}
 	}
 }
+
 /*
 func TestMatchInt256EqualAVX512(T *testing.T) {
 	if !useAVX512_F {
@@ -669,6 +670,7 @@ func BenchmarkMatchInt256LessAVX2(B *testing.B) {
 		})
 	}
 }
+
 /*
 func BenchmarkMatchInt256LessAVX512(B *testing.B) {
 	if !useAVX512_F {
