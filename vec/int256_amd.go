@@ -6,48 +6,48 @@
 package vec
 
 //go:noescape
-func matchInt256EqualAVX2(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64
+func matchInt256EqualAVX2Core(src Int256LLSlice, val Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256NotEqualAVX2(src []Int256, val Int256, bits []byte) int64
+// func matchInt256NotEqualAVX2Core(src Int256LLSlice, val Int256, bits []byte) int64
 
 //go:noescape
-func matchInt256LessThanAVX2(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64
+func matchInt256LessThanAVX2Core(src Int256LLSlice, val Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256LessThanEqualAVX2(src []Int256, val Int256, bits []byte) int64
+// func matchInt256LessThanEqualAVX2Core(src Int256LLSlice, val Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256GreaterThanAVX2(src []Int256, val Int256, bits []byte) int64
+// func matchInt256GreaterThanAVX2Core(src Int256LLSlice, val Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256GreaterThanEqualAVX2(src []Int256, val Int256, bits []byte) int64
+// func matchInt256GreaterThanEqualAVX2Core(src Int256LLSlice, val Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256BetweenAVX2(src []Int256, a, b Int256, bits []byte) int64
+// func matchInt256BetweenAVX2Core(src Int256LLSlice, a, b Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256EqualAVX512(src []Int256, val Int256, bits []byte) int64
+// func matchInt256EqualAVX512(src Int256LLSlice, val Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256NotEqualAVX512(src []Int256, val Int256, bits []byte) int64
+// func matchInt256NotEqualAVX512(src Int256LLSlice, val Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256LessThanAVX512(src []Int256, val Int256, bits []byte) int64
+// func matchInt256LessThanAVX512(src Int256LLSlice, val Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256LessThanEqualAVX512(src []Int256, val Int256, bits []byte) int64
+// func matchInt256LessThanEqualAVX512(src Int256LLSlice, val Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256GreaterThanAVX512(src []Int256, val Int256, bits []byte) int64
+// func matchInt256GreaterThanAVX512(src Int256LLSlice, val Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256GreaterThanEqualAVX512(src []Int256, val Int256, bits []byte) int64
+// func matchInt256GreaterThanEqualAVX512(src Int256LLSlice, val Int256, bits []byte) int64
 
 // //go:noescape
-// func matchInt256BetweenAVX512(src []Int256, a, b Int256, bits []byte) int64
+// func matchInt256BetweenAVX512(src Int256LLSlice, a, b Int256, bits []byte) int64
 
-func matchInt256Equal(src []Int256, val Int256, bits, mask []byte) int64 {
+func matchInt256Equal(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
 	// case useAVX512_F:
 	// 	return matchInt256EqualAVX512(src, val, bits)
@@ -58,7 +58,7 @@ func matchInt256Equal(src []Int256, val Int256, bits, mask []byte) int64 {
 	}
 }
 
-func matchInt256NotEqual(src []Int256, val Int256, bits, mask []byte) int64 {
+func matchInt256NotEqual(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
 	// case useAVX512_F:
 	// 	return matchInt256NotEqualAVX512(src, val, bits)
@@ -69,7 +69,7 @@ func matchInt256NotEqual(src []Int256, val Int256, bits, mask []byte) int64 {
 	}
 }
 
-func matchInt256LessThan(src []Int256, val Int256, bits, mask []byte) int64 {
+func matchInt256LessThan(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
 	// case useAVX512_F:
 	// 	return matchInt256LessThanAVX512(src, val, bits)
@@ -80,7 +80,7 @@ func matchInt256LessThan(src []Int256, val Int256, bits, mask []byte) int64 {
 	}
 }
 
-func matchInt256LessThanEqual(src []Int256, val Int256, bits, mask []byte) int64 {
+func matchInt256LessThanEqual(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
 	// case useAVX512_F:
 	// 	return matchInt256LessThanEqualAVX512(src, val, bits)
@@ -91,7 +91,7 @@ func matchInt256LessThanEqual(src []Int256, val Int256, bits, mask []byte) int64
 	}
 }
 
-func matchInt256GreaterThan(src []Int256, val Int256, bits, mask []byte) int64 {
+func matchInt256GreaterThan(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
 	// case useAVX512_F:
 	// 	return matchInt256GreaterThanAVX512(src, val, bits)
@@ -102,7 +102,7 @@ func matchInt256GreaterThan(src []Int256, val Int256, bits, mask []byte) int64 {
 	}
 }
 
-func matchInt256GreaterThanEqual(src []Int256, val Int256, bits, mask []byte) int64 {
+func matchInt256GreaterThanEqual(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
 	// case useAVX512_F:
 	// 	return matchInt256GreaterThanEqualAVX512(src, val, bits)
@@ -113,7 +113,7 @@ func matchInt256GreaterThanEqual(src []Int256, val Int256, bits, mask []byte) in
 	}
 }
 
-func matchInt256Between(src []Int256, a, b Int256, bits, mask []byte) int64 {
+func matchInt256Between(src Int256LLSlice, a, b Int256, bits, mask []byte) int64 {
 	switch {
 	// case useAVX512_F:
 	// 	return matchInt256BetweenAVX512(src, a, b, bits)
@@ -122,4 +122,53 @@ func matchInt256Between(src []Int256, a, b Int256, bits, mask []byte) int64 {
 	default:
 		return matchInt256BetweenGeneric(src, a, b, bits, mask)
 	}
+}
+
+func matchInt256EqualAVX2(src Int256LLSlice, val Int256, bits []byte) int64 {
+	len_head := src.Len() & 0x7fffffffffffffe0
+	res := matchInt256EqualAVX2Core(src, val, bits)
+	res += matchInt256EqualGeneric(src.Tail(len_head), val, bits[bitFieldLen(len_head):], nil)
+	return res
+}
+
+func matchInt256NotEqualAVX2(src Int256LLSlice, val Int256, bits []byte) int64 {
+	len_head := src.Len() & 0x7fffffffffffffe0
+	res := int64(0) //matchInt256NotEqualAVX2Core(src, val, bits)
+	res += matchInt256NotEqualGeneric(src.Tail(len_head), val, bits[bitFieldLen(len_head):], nil)
+	return res
+}
+
+func matchInt256LessThanAVX2(src Int256LLSlice, val Int256, bits []byte) int64 {
+	len_head := src.Len() & 0x7fffffffffffffe0
+	res := matchInt256LessThanAVX2Core(src, val, bits)
+	res += matchInt256LessThanGeneric(src.Tail(len_head), val, bits[bitFieldLen(len_head):], nil)
+	return res
+}
+
+func matchInt256LessThanEqualAVX2(src Int256LLSlice, val Int256, bits []byte) int64 {
+	len_head := src.Len() & 0x7fffffffffffffe0
+	res := int64(0) //matchInt256LessThanEqualAVX2Core(src, val, bits)
+	res += matchInt256LessThanEqualGeneric(src.Tail(len_head), val, bits[bitFieldLen(len_head):], nil)
+	return res
+}
+
+func matchInt256GreaterThanAVX2(src Int256LLSlice, val Int256, bits []byte) int64 {
+	len_head := src.Len() & 0x7fffffffffffffe0
+	res := int64(0) //matchInt256GreaterThanAVX2Core(src, val, bits)
+	res += matchInt256GreaterThanGeneric(src.Tail(len_head), val, bits[bitFieldLen(len_head):], nil)
+	return res
+}
+
+func matchInt256GreaterThanEqualAVX2(src Int256LLSlice, val Int256, bits []byte) int64 {
+	len_head := src.Len() & 0x7fffffffffffffe0
+	res := int64(0) //matchInt256GreaterThanEqualAVX2Core(src, val, bits)
+	res += matchInt256GreaterThanEqualGeneric(src.Tail(len_head), val, bits[bitFieldLen(len_head):], nil)
+	return res
+}
+
+func matchInt256BetweenAVX2(src Int256LLSlice, a, b Int256, bits []byte) int64 {
+	len_head := src.Len() & 0x7fffffffffffffe0
+	res := int64(0) //matchInt256BetweenAVX2Core(src, a, b, bits)
+	res += matchInt256BetweenGeneric(src.Tail(len_head), a, b, bits[bitFieldLen(len_head):], nil)
+	return res
 }

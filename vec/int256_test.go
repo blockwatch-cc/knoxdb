@@ -28,23 +28,9 @@ func randInt256Slice(n, u int) Int256Slice {
 	return s
 }
 
-func splitInt256Slice(src []Int256) ([]int64, []uint64, []uint64, []uint64) {
-	res0 := make([]int64, len(src))
-	res1 := make([]uint64, len(src))
-	res2 := make([]uint64, len(src))
-	res3 := make([]uint64, len(src))
-	for i, v := range src {
-		res0[i] = int64(v[0])
-		res1[i] = v[1]
-		res2[i] = v[2]
-		res3[i] = v[3]
-	}
-	return res0, res1, res2, res3
-}
-
 type Int256MatchTest struct {
 	name   string
-	slice  []Int256
+	slice  Int256Slice
 	match  Int256 // used for every test
 	match2 Int256 // used for between tests
 	result []byte
@@ -231,25 +217,25 @@ var Int256EqualCases = []Int256MatchTest{
 	CreateInt256TestCase("l32", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 32),
 	CreateInt256TestCase("l64", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 64),
 	CreateInt256TestCase("l128", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 128),
-	/*	CreateInt256TestCase("l127", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 127),
+	CreateInt256TestCase("l127", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 127),
 		CreateInt256TestCase("l63", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 63),
 		CreateInt256TestCase("l31", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 31),
 		CreateInt256TestCase("l23", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 23),
 		CreateInt256TestCase("l15", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 15),
-		CreateInt256TestCase("l7", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 7),*/
+		CreateInt256TestCase("l7", Int256TestSlice_1, Int256EqualTestMatch_1, ZeroInt256, Int256EqualTestResult_1, 7),
 	CreateInt256TestCase("neg64", Int256TestSlice_2, Int256EqualTestMatch_2, ZeroInt256, Int256EqualTestResult_2, 64),
 	CreateInt256TestCase("neg32", Int256TestSlice_2, Int256EqualTestMatch_2, ZeroInt256, Int256EqualTestResult_2, 32),
-	//	CreateInt256TestCase("neg31", Int256TestSlice_2, Int256EqualTestMatch_2, ZeroInt256, Int256EqualTestResult_2, 31),
+		CreateInt256TestCase("neg31", Int256TestSlice_2, Int256EqualTestMatch_2, ZeroInt256, Int256EqualTestResult_2, 31),
 	CreateInt256TestCase("ext64", Int256TestSlice_3, Int256EqualTestMatch_3, ZeroInt256, Int256EqualTestResult_3, 64),
 	CreateInt256TestCase("ext32", Int256TestSlice_3, Int256EqualTestMatch_3, ZeroInt256, Int256EqualTestResult_3, 32),
-	//	CreateInt256TestCase("ext31", Int256TestSlice_3, Int256EqualTestMatch_3, ZeroInt256, Int256EqualTestResult_3, 31),
+		CreateInt256TestCase("ext31", Int256TestSlice_3, Int256EqualTestMatch_3, ZeroInt256, Int256EqualTestResult_3, 31),
 }
 
 func TestMatchInt256EqualGeneric(T *testing.T) {
 	for _, c := range Int256EqualCases {
 		// pre-allocate the result slice and fill with poison
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt256EqualGeneric(c.slice, c.match, bits, nil)
+		cnt := matchInt256EqualGeneric(c.slice.Int256LLSlice(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -270,12 +256,11 @@ func TestMatchInt256EqualAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
+		for i := 0; i < 32; i++ {
+			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		src0, src1, src2, src3 := splitInt256Slice(c.slice)
-		cnt := matchInt256EqualAVX2(src0, src1, src2, src3, c.match, bits)
+		cnt := matchInt256EqualAVX2(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -304,7 +289,7 @@ func TestMatchInt256EqualAVX512(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256EqualAVX512(c.slice, c.match, bits)
+		cnt := matchInt256EqualAVX512(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -325,9 +310,9 @@ func TestMatchInt256EqualAVX512(T *testing.T) {
 //
 func BenchmarkMatchInt256EqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		mask := fillBitset(nil, len(a), 0xff)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		mask := fillBitset(nil, a.Len(), 0xff)
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -342,13 +327,12 @@ func BenchmarkMatchInt256EqualAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		src0, src1, src2, src3 := splitInt256Slice(a)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256EqualAVX2(src0, src1, src2, src3, MaxInt256Half, bits)
+				matchInt256EqualAVX2(a, MaxInt256Half, bits)
 			}
 		})
 	}
@@ -360,8 +344,8 @@ func BenchmarkMatchInt256EqualAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -410,7 +394,7 @@ func TestMatchInt256NotEqualGeneric(T *testing.T) {
 	for _, c := range Int256NotEqualCases {
 		// pre-allocate the result slice and fill with poison
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt256NotEqualGeneric(c.slice, c.match, bits, nil)
+		cnt := matchInt256NotEqualGeneric(c.slice.Int256LLSlice(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -422,7 +406,6 @@ func TestMatchInt256NotEqualGeneric(T *testing.T) {
 		}
 	}
 }
-
 /*
 func TestMatchInt256NotEqualAVX2(T *testing.T) {
 	if !useAVX2 {
@@ -432,11 +415,11 @@ func TestMatchInt256NotEqualAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
+		for i := 0; i < 32; i++ {
+			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256NotEqualAVX2(c.slice, c.match, bits)
+		cnt := matchInt256NotEqualAVX2(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -451,7 +434,7 @@ func TestMatchInt256NotEqualAVX2(T *testing.T) {
 		}
 	}
 }
-
+/*
 func TestMatchInt256NotEqualAVX512(T *testing.T) {
 	if !useAVX512_F {
 		T.SkipNow()
@@ -464,7 +447,7 @@ func TestMatchInt256NotEqualAVX512(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256NotEqualAVX512(c.slice, c.match, bits)
+		cnt := matchInt256NotEqualAVX512(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -485,8 +468,8 @@ func TestMatchInt256NotEqualAVX512(T *testing.T) {
 //
 func BenchmarkMatchInt256NotEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -502,8 +485,8 @@ func BenchmarkMatchInt256NotEqualAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -518,8 +501,8 @@ func BenchmarkMatchInt256NotEqualAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -549,25 +532,25 @@ var Int256LessCases = []Int256MatchTest{
 	CreateInt256TestCase("l32", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 32),
 	CreateInt256TestCase("l64", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 64),
 	CreateInt256TestCase("l128", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 128),
-	//CreateInt256TestCase("l127", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 127),
-	//CreateInt256TestCase("l63", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 63),
-	//CreateInt256TestCase("l31", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 31),
-	//CreateInt256TestCase("l23", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 23),
-	//CreateInt256TestCase("l15", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 15),
-	//CreateInt256TestCase("l7", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 7),
+	CreateInt256TestCase("l127", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 127),
+	CreateInt256TestCase("l63", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 63),
+	CreateInt256TestCase("l31", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 31),
+	CreateInt256TestCase("l23", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 23),
+	CreateInt256TestCase("l15", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 15),
+	CreateInt256TestCase("l7", Int256TestSlice_1, Int256LessTestMatch_1, ZeroInt256, Int256LessTestResult_1, 7),
 	CreateInt256TestCase("neg64", Int256TestSlice_2, Int256LessTestMatch_2, ZeroInt256, Int256LessTestResult_2, 64),
 	CreateInt256TestCase("neg32", Int256TestSlice_2, Int256LessTestMatch_2, ZeroInt256, Int256LessTestResult_2, 32),
-	//CreateInt256TestCase("neg31", Int256TestSlice_2, Int256LessTestMatch_2, ZeroInt256, Int256LessTestResult_2, 31),
+	CreateInt256TestCase("neg31", Int256TestSlice_2, Int256LessTestMatch_2, ZeroInt256, Int256LessTestResult_2, 31),
 	CreateInt256TestCase("ext64", Int256TestSlice_3, Int256LessTestMatch_3, ZeroInt256, Int256LessTestResult_3, 64),
 	CreateInt256TestCase("ext32", Int256TestSlice_3, Int256LessTestMatch_3, ZeroInt256, Int256LessTestResult_3, 32),
-	//CreateInt256TestCase("ext31", Int256TestSlice_3, Int256LessTestMatch_3, ZeroInt256, Int256LessTestResult_3, 31),
+	CreateInt256TestCase("ext31", Int256TestSlice_3, Int256LessTestMatch_3, ZeroInt256, Int256LessTestResult_3, 31),
 }
 
 func TestMatchInt256LessGeneric(T *testing.T) {
 	for _, c := range Int256LessCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt256LessThanGeneric(c.slice, c.match, bits, nil)
+		cnt := matchInt256LessThanGeneric(c.slice.Int256LLSlice(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -588,12 +571,11 @@ func TestMatchInt256LessAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
+		for i := 0; i < 32; i++ {
+			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		src0, src1, src2, src3 := splitInt256Slice(c.slice)
-		cnt := matchInt256LessThanAVX2(src0, src1, src2, src3, c.match, bits)
+		cnt := matchInt256LessThanAVX2(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -622,7 +604,7 @@ func TestMatchInt256LessAVX512(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256LessThanAVX512(c.slice, c.match, bits)
+		cnt := matchInt256LessThanAVX512(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -643,8 +625,8 @@ func TestMatchInt256LessAVX512(T *testing.T) {
 //
 func BenchmarkMatchInt256LessGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -659,13 +641,12 @@ func BenchmarkMatchInt256LessAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		src0, src1, src2, src3 := splitInt256Slice(a)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
-				matchInt256LessThanAVX2(src0, src1, src2, src3, MaxInt256Half, bits)
+				matchInt256LessThanAVX2(a, MaxInt256Half, bits)
 			}
 		})
 	}
@@ -677,8 +658,8 @@ func BenchmarkMatchInt256LessAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -726,7 +707,7 @@ func TestMatchInt256LessEqualGeneric(T *testing.T) {
 	for _, c := range Int256LessEqualCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt256LessThanEqualGeneric(c.slice, c.match, bits, nil)
+		cnt := matchInt256LessThanEqualGeneric(c.slice.Int256LLSlice(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -748,11 +729,11 @@ func TestMatchInt256LessEqualAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
+		for i := 0; i < 32; i++ {
+			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256LessThanEqualAVX2(c.slice, c.match, bits)
+		cnt := matchInt256LessThanEqualAVX2(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -780,7 +761,7 @@ func TestMatchInt256LessEqualAVX512(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256LessThanEqualAVX512(c.slice, c.match, bits)
+		cnt := matchInt256LessThanEqualAVX512(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -801,8 +782,8 @@ func TestMatchInt256LessEqualAVX512(T *testing.T) {
 //
 func BenchmarkMatchInt256LessEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -818,8 +799,8 @@ func BenchmarkMatchInt256LessEqualAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -834,8 +815,8 @@ func BenchmarkMatchInt256LessEqualAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -883,7 +864,7 @@ func TestMatchInt256GreaterGeneric(T *testing.T) {
 	for _, c := range Int256GreaterCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt256GreaterThanGeneric(c.slice, c.match, bits, nil)
+		cnt := matchInt256GreaterThanGeneric(c.slice.Int256LLSlice(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -905,11 +886,11 @@ func TestMatchInt256GreaterAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
+		for i := 0; i < 32; i++ {
+			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256GreaterThanAVX2(c.slice, c.match, bits)
+		cnt := matchInt256GreaterThanAVX2(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -937,7 +918,7 @@ func TestMatchInt256GreaterAVX512(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256GreaterThanAVX512(c.slice, c.match, bits)
+		cnt := matchInt256GreaterThanAVX512(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -958,8 +939,8 @@ func TestMatchInt256GreaterAVX512(T *testing.T) {
 //
 func BenchmarkMatchInt256GreaterGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -975,8 +956,8 @@ func BenchmarkMatchInt256GreaterAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -991,8 +972,8 @@ func BenchmarkMatchInt256GreaterAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -1040,7 +1021,7 @@ func TestMatchInt256GreaterEqualGeneric(T *testing.T) {
 	for _, c := range Int256GreaterEqualCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt256GreaterThanEqualGeneric(c.slice, c.match, bits, nil)
+		cnt := matchInt256GreaterThanEqualGeneric(c.slice.Int256LLSlice(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -1062,11 +1043,11 @@ func TestMatchInt256GreaterEqualAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
+		for i := 0; i < 32; i++ {
+			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256GreaterThanEqualAVX2(c.slice, c.match, bits)
+		cnt := matchInt256GreaterThanEqualAVX2(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -1094,7 +1075,7 @@ func TestMatchInt256GreaterEqualAVX512(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256GreaterThanEqualAVX512(c.slice, c.match, bits)
+		cnt := matchInt256GreaterThanEqualAVX512(c.slice.Int256LLSlice(), c.match, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -1115,8 +1096,8 @@ func TestMatchInt256GreaterEqualAVX512(T *testing.T) {
 //
 func BenchmarkMatchInt256GreaterEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -1132,8 +1113,8 @@ func BenchmarkMatchInt256GreaterEqualAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -1148,8 +1129,8 @@ func BenchmarkMatchInt256GreaterEqualAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -1199,7 +1180,7 @@ func TestMatchInt256BetweenGeneric(T *testing.T) {
 	for _, c := range Int256BetweenCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt256BetweenGeneric(c.slice, c.match, c.match2, bits, nil)
+		cnt := matchInt256BetweenGeneric(c.slice.Int256LLSlice(), c.match, c.match2, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -1221,11 +1202,11 @@ func TestMatchInt256BetweenAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
 		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
+		for i := 0; i < 32; i++ {
+			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256BetweenAVX2(c.slice, c.match, c.match2, bits)
+		cnt := matchInt256BetweenAVX2(c.slice.Int256LLSlice(), c.match, c.match2, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -1253,7 +1234,7 @@ func TestMatchInt256BetweenAVX512(T *testing.T) {
 			bits[i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := matchInt256BetweenAVX512(c.slice, c.match, c.match2, bits)
+		cnt := matchInt256BetweenAVX512(c.slice.Int256LLSlice(), c.match, c.match2, bits)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -1274,8 +1255,8 @@ func TestMatchInt256BetweenAVX512(T *testing.T) {
 //
 func BenchmarkMatchInt256BetweenGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -1291,8 +1272,8 @@ func BenchmarkMatchInt256BetweenAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -1307,8 +1288,8 @@ func BenchmarkMatchInt256BetweenAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range vecBenchmarkSizes {
-		a := randInt256Slice(n.l, 1)
-		bits := make([]byte, bitFieldLen(len(a)))
+		a := randInt256Slice(n.l, 1).Int256LLSlice()
+		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(Int256(n.l * Int256Size))
 			for i := 0; i < B.N; i++ {
@@ -1424,7 +1405,7 @@ func BenchmarkInt256SliceContains(B *testing.B) {
 			a := randInt256Slice(n, 1).Sort()
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				a.Contains(a[rand.Intn(len(a))])
+				a.Contains(a[rand.Intn(a.Len())])
 			}
 		})
 	}

@@ -879,16 +879,6 @@ func (s Int128LLSlice) MinMax() (Int128, Int128) {
 	return min, max
 }
 
-func splitInt128Slice(src []Int128) ([]int64, []uint64) {
-	res0 := make([]int64, len(src))
-	res1 := make([]uint64, len(src))
-	for i, v := range src {
-		res0[i] = int64(v[0])
-		res1[i] = v[1]
-	}
-	return res0, res1
-}
-
 func (s Int128Slice) Int128LLSlice() Int128LLSlice {
 	var res Int128LLSlice
 	res.X0 = make([]int64, len(s))
@@ -923,6 +913,5 @@ func (dst Int128LLSlice) Copy(src Int128LLSlice, dstPos, srcPos, n int) {
 }
 
 func (s Int128Slice) MatchEqual(val Int128, bits, mask *Bitset) *Bitset {
-	src0, src1 := splitInt128Slice(s)
-	return MatchInt128Equal(Int128LLSlice{src0, src1}, val, bits, nil)
+	return MatchInt128Equal(s.Int128LLSlice(), val, bits, nil)
 }

@@ -6,7 +6,7 @@
 #include "textflag.h"
 #include "constants_AVX2.h"
 
-// func matchInt256EqualAVX2(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64
+// func matchInt256EqualAVX2Core(src Int256LLSlice, val Int256, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -20,7 +20,7 @@
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt256EqualAVX2(SB), NOSPLIT, $0-160
+TEXT ·matchInt256EqualAVX2Core(SB), NOSPLIT, $0-160
 	MOVQ	src0_base+0(FP), SI
     MOVQ    src1_base+24(FP), BP
     MOVQ    src2_base+48(FP), R14
@@ -151,7 +151,7 @@ done:
 	MOVQ	R9, ret+152(FP)
 	RET
 
-// func matchInt256LessThanAVX2(src0 []int64, src1, src2, src3 []uint64, val Int256, bits []byte) int64
+// func matchInt256LessThanAVX2Core(src Int256LLSlice, val Int256, bits []byte) int64
 //
 // input:
 //   SI = src_base
@@ -165,7 +165,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt256LessThanAVX2(SB), NOSPLIT, $0-160
+TEXT ·matchInt256LessThanAVX2Core(SB), NOSPLIT, $0-160
 	MOVQ	src0_base+0(FP), SI
     MOVQ    src1_base+24(FP), BP
     MOVQ    src2_base+48(FP), R14
