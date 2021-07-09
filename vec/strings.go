@@ -55,6 +55,7 @@ var Strings = struct {
 	Unique        func([]string) []string
 	RemoveZeros   func([]string) []string
 	AddUnique     func([]string, string) []string
+	Insert        func([]string, int, ...string) []string
 	Remove        func([]string, string) []string
 	Contains      func([]string, string) bool
 	Index         func([]string, string, int) int
@@ -76,6 +77,9 @@ var Strings = struct {
 	AddUnique: func(s []string, v string) []string {
 		s, _ = stringAddUnique(s, v)
 		return s
+	},
+	Insert: func(s []string, k int, v ...string) []string {
+		return stringInsert(s, k, v...)
 	},
 	Remove: func(s []string, v string) []string {
 		s, _ = stringRemove(s, v)
@@ -109,6 +113,20 @@ func stringAddUnique(s []string, val string) ([]string, bool) {
 	s = append(s, val)
 	StringsSorter(s).Sort()
 	return s, true
+}
+
+func stringInsert(s []string, k int, vs ...string) []string {
+	if n := len(s) + len(vs); n <= cap(s) {
+		s2 := s[:n]
+		copy(s2[k+len(vs):], s[k:])
+		copy(s2[k:], vs)
+		return s2
+	}
+	s2 := make([]string, len(s)+len(vs))
+	copy(s2, s[:k])
+	copy(s2[k:], vs)
+	copy(s2[k+len(vs):], s[k:])
+	return s2
 }
 
 func stringRemove(s []string, val string) ([]string, bool) {
