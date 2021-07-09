@@ -20,10 +20,12 @@ type PackInfo struct {
 	dirty bool
 }
 
+func (p PackInfo) IsValid() bool {
+	return p.Key > 0
+}
+
 func (p PackInfo) KeyBytes() []byte {
-	var b [4]byte
-	bigEndian.PutUint32(b[:], p.Key)
-	return b[:]
+	return encodePackKey(p.Key)
 }
 
 func (p *Package) Info() PackInfo {
@@ -52,6 +54,10 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 		if !h.Blocks[i].IsDirty() {
 			continue
 		}
+
+		// TODO: optimize for pk slices (always sorted) and indexes (not required
+		// for value slice)
+
 		// EXPENSIVE: collects full min/max statistics
 		h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkg.blocks[i].MinMax()
 		h.Blocks[i].dirty = false

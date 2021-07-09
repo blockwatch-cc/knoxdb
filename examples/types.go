@@ -398,7 +398,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	log.Infof("Single value int64=%d", single.Int64)
+	// log.Infof("Single value int64=%d", single.Int64)
 
 	// read up to 10 entries via query interface
 	multi := make([]*Types, 0)
@@ -406,10 +406,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	log.Infof("%d Multi values", len(multi))
-	for i, v := range multi {
-		log.Infof("%d int64=%d", i, v.Int64)
-	}
+	// log.Infof("%d Multi values", len(multi))
+	// for i, v := range multi {
+	// 	log.Infof("%d int64=%d", i, v.Int64)
+	// }
 
 	// delete some entries
 	n, err := pack.NewQuery("del", table).AndLt("i64", 1024).Delete(context.Background())

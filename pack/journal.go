@@ -834,16 +834,13 @@ func (j *Journal) PkIndex(pk uint64, last int) (int, int) {
 	}
 
 	// find pk in keys list, use last as hint to limit search space
-	idx := sort.Search(len(j.keys)-last, func(i int) bool { return j.keys[last+i].pk >= pk })
+	last += sort.Search(len(j.keys)-last, func(i int) bool { return j.keys[last+i].pk >= pk })
 
 	// return index	if found or -1 otherwise
 	// Note: when entry is deleted, we still return its position since other
 	// parts of this algorithm rely on this behaviour
-	if last+idx < len(j.keys) && j.keys[last+idx].pk == pk {
-		return j.keys[last+idx].idx, last + idx
-	}
-	if last+idx == len(j.keys) {
-		return -1, len(j.keys)
+	if last < len(j.keys) && j.keys[last].pk == pk {
+		return j.keys[last].idx, last
 	}
 	return -1, last
 }
