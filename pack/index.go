@@ -642,6 +642,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 			// log.Debugf("Not in pack %03d [%d:%d]", nextpack, min, max)
 			continue
 		}
+		// log.Debugf("Maybe in pack %03d [%d:%d]", nextpack, min, max)
 
 		// stop when context is canceled
 		if util.InterruptRequested(ctx) {
@@ -693,7 +694,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 			if keys[k] == in[i] {
 				// append to result
 				// log.Debugf("Found key=%d val=%d at pos %d/%d in pack %03d [%d:%d]",
-				// keys[k], values[k], k, len(keys), nextpack, min, max)
+				// 	keys[k], values[k], k, len(keys), nextpack, min, max)
 				out = append(out, values[k])
 
 				// remove found key from control slice
@@ -1147,13 +1148,8 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 			}
 
 			// update state
-			if n > 1 {
-				needsort = needsort || pk[jpos+n-1] < packmax
-				packmax = util.MaxU64(packmax, pk[jpos+n-1])
-			} else {
-				needsort = needsort || pk[jpos] < packmax
-				packmax = util.MaxU64(packmax, pk[jpos])
-			}
+			needsort = needsort || pk[jpos] < packmax
+			packmax = util.MaxU64(packmax, pk[jpos])
 			globalmax = util.MaxU64(globalmax, packmax)
 			nAdd += n
 			jpos += n
