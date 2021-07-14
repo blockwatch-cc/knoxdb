@@ -767,10 +767,8 @@ func (t *Table) CompressAll(cmethod string, w io.Writer, mode DumpMode, verbose 
 	cratios := make([][]float64, t.packidx.Len())
 	ctimes := make([][]float64, t.packidx.Len())
 	dtimes := make([][]float64, t.packidx.Len())
-	//cratios := make([][]float64, 10)
 
 	for i := 0; i < t.packidx.Len(); i++ {
-		//for i := 0; i < 10; i++ {
 		pkg, err := t.loadPack(tx, t.packidx.packs[i].Key, false, nil)
 		if err != nil {
 			return err
@@ -872,7 +870,7 @@ func DumpRatios(fl FieldList, cratios [][]float64, w io.Writer, mode DumpMode, v
 				if cratios[i][j] < 0 {
 					row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
 				} else {
-					row[j+1] = fmt.Sprintf("%[2]*.[1]f%%", 100*cratios[i][j], sz[j+1]-1)
+					row[j+1] = fmt.Sprintf("%[2]*.[1]f%%", 100*(1-cratios[i][j]), sz[j+1]-1)
 				}
 			}
 			if verbose || len(cratios) == 1 {
@@ -921,7 +919,7 @@ func DumpRatios(fl FieldList, cratios [][]float64, w io.Writer, mode DumpMode, v
 			if avg[j] < 0 {
 				row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
 			} else {
-				row[j+1] = fmt.Sprintf("%[2]*.[1]f%%", 100*avg[j]/float64(len(cratios)), sz[j+1]-1)
+				row[j+1] = fmt.Sprintf("%[2]*.[1]f%%", 100*(1-avg[j]/float64(len(cratios))), sz[j+1]-1)
 			}
 		}
 		out = "| " + strings.Join(row, " | ") + " |\n"
