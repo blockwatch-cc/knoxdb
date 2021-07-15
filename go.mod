@@ -3,7 +3,7 @@ module blockwatch.cc/knoxdb
 go 1.14
 
 require (
-	github.com/echa/log v1.0.3
+	github.com/echa/log v1.0.6
 	github.com/frankban/quicktest v1.10.0 // indirect
 	github.com/golang/snappy v0.0.2
 	github.com/google/go-cmp v0.5.1

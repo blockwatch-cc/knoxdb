@@ -1,5 +1,5 @@
-github.com/echa/log v1.0.3 h1:2If0QCt2MF9byXeYHfeCcemfqxTPGZpaKyOvneXo8ho=
-github.com/echa/log v1.0.3/go.mod h1:V8lWE4YGcwDdg0IPBqDQ9eWp2MdsMHfvHpSjaIp4+VQ=
+github.com/echa/log v1.0.6 h1:kUY6lADKWTmmusB9xEwunYe5715k8NkokYgriHhw5rw=
+github.com/echa/log v1.0.6/go.mod h1:V8lWE4YGcwDdg0IPBqDQ9eWp2MdsMHfvHpSjaIp4+VQ=
 github.com/frankban/quicktest v1.10.0 h1:Gfh+GAJZOAoKZsIZeZbdn2JF10kN1XHNvjsvQK8gVkE=
 github.com/frankban/quicktest v1.10.0/go.mod h1:ui7WezCLWMWxVWr1GETZY3smRy0G4KWq9vcPtJmFl7Y=
 github.com/golang/snappy v0.0.2 h1:aeE13tS0IiQgFjYdoL8qN3K1N2bXXtI6Vi51/y7BpMw=
