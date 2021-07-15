@@ -982,11 +982,12 @@ func (db *db) begin(writable bool) (*transaction, error) {
 
 	// db.txLock.Lock()
 	// defer db.txLock.Unlock()
-	db.activeTx.Add(1)
 	dbTx, err := db.store.Begin(writable)
 	if err != nil {
+		db.closeLock.RUnlock()
 		return nil, convertErr("begin tx", err)
 	}
+	db.activeTx.Add(1)
 	tx := &transaction{
 		writable: writable,
 		db:       db,

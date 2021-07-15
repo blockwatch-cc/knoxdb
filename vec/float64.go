@@ -54,6 +54,7 @@ var Float64 = struct {
 	Unique        func([]float64) []float64
 	RemoveZeros   func([]float64) []float64
 	AddUnique     func([]float64, float64) []float64
+	Insert        func([]float64, int, ...float64) []float64
 	Remove        func([]float64, float64) []float64
 	Contains      func([]float64, float64) bool
 	Index         func([]float64, float64, int) int
@@ -75,6 +76,9 @@ var Float64 = struct {
 	AddUnique: func(s []float64, v float64) []float64 {
 		s, _ = float64AddUnique(s, v)
 		return s
+	},
+	Insert: func(s []float64, k int, v ...float64) []float64 {
+		return float64Insert(s, k, v...)
 	},
 	Remove: func(s []float64, v float64) []float64 {
 		s, _ = float64Remove(s, v)
@@ -108,6 +112,20 @@ func float64AddUnique(s []float64, val float64) ([]float64, bool) {
 	s = append(s, val)
 	Float64Sorter(s).Sort()
 	return s, true
+}
+
+func float64Insert(s []float64, k int, vs ...float64) []float64 {
+	if n := len(s) + len(vs); n <= cap(s) {
+		s2 := s[:n]
+		copy(s2[k+len(vs):], s[k:])
+		copy(s2[k:], vs)
+		return s2
+	}
+	s2 := make([]float64, len(s)+len(vs))
+	copy(s2, s[:k])
+	copy(s2[k:], vs)
+	copy(s2[k+len(vs):], s[k:])
+	return s2
 }
 
 func float64Remove(s []float64, val float64) ([]float64, bool) {

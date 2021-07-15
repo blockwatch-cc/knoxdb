@@ -210,7 +210,7 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 				continue
 			}
 
-			// log.Tracef("query: %s index scan for %s", q.Name, v.Cond.String())
+			// log.Debugf("query: %s index scan for %s", q.Name, v.Cond.String())
 
 			// lookup matching primary keys from index (result is sorted)
 			pkmatch, err := idx.LookupTx(ctx, tx, *v.Cond)
@@ -227,7 +227,7 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 			if !idx.Type.MayHaveCollisions() {
 				v.Cond.processed = true
 			}
-			// log.Tracef("query: %s index scan found %d matchs", q.Name, len(pkmatch))
+			// log.Debugf("query: %s index scan found %d matches", q.Name, len(pkmatch))
 
 			if len(pkmatch) == 0 {
 				v.Cond.nomatch = true
@@ -270,7 +270,7 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 			// skip processed source conditions unless they led to an empty result
 			// because we need them to check for nomatch later
 			if v.Leaf() && v.Cond.processed && !v.Cond.nomatch {
-				// log.Tracef("query: %s replacing condition %s", q.Name, v.Cond.String())
+				// log.Debugf("query: %s replacing condition %s", q.Name, v.Cond.String())
 				continue
 			}
 			ins = append(ins, v)
@@ -301,9 +301,9 @@ func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 func (q *Query) MakePackSchedule(reverse bool) []int {
 	schedule := make([]int, 0, q.table.packidx.Len())
 	// walk list in pk order (pairs are always sorted by min pk)
-	for _, p := range q.table.packidx.pairs {
-		if q.Conditions.MaybeMatchPack(q.table.packidx.packs[p.pos]) {
-			schedule = append(schedule, p.pos)
+	for _, p := range q.table.packidx.pos {
+		if q.Conditions.MaybeMatchPack(q.table.packidx.packs[p]) {
+			schedule = append(schedule, int(p))
 		}
 	}
 	q.stats.PacksScheduled = len(schedule)

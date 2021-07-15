@@ -753,6 +753,20 @@ func (s *Int256Slice) AddUnique(val Int256) bool {
 	return true
 }
 
+func (s *Int256Slice) Insert(k int, vs ...Int256) {
+	if n := len(*s) + len(vs); n <= cap(*s) {
+		*s = (*s)[:n]
+		copy((*s)[k+len(vs):], (*s)[k:])
+		copy((*s)[k:], vs)
+		return
+	}
+	s2 := make(Int256Slice, len(*s)+len(vs))
+	copy(s2, (*s)[:k])
+	copy(s2[k:], vs)
+	copy(s2[k+len(vs):], (*s)[k:])
+	*s = s2
+}
+
 func (s *Int256Slice) Remove(val Int256) bool {
 	idx := s.Index(val, 0)
 	if idx < 0 {

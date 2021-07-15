@@ -54,6 +54,7 @@ var Uint64 = struct {
 	Unique        func([]uint64) []uint64
 	RemoveZeros   func([]uint64) []uint64
 	AddUnique     func([]uint64, uint64) []uint64
+	Insert        func([]uint64, int, ...uint64) []uint64
 	Remove        func([]uint64, uint64) []uint64
 	Contains      func([]uint64, uint64) bool
 	Index         func([]uint64, uint64, int) int
@@ -75,6 +76,9 @@ var Uint64 = struct {
 	AddUnique: func(s []uint64, v uint64) []uint64 {
 		s, _ = uint64AddUnique(s, v)
 		return s
+	},
+	Insert: func(s []uint64, k int, v ...uint64) []uint64 {
+		return uint64Insert(s, k, v...)
 	},
 	Remove: func(s []uint64, v uint64) []uint64 {
 		s, _ = uint64Remove(s, v)
@@ -111,6 +115,20 @@ func uint64AddUnique(s []uint64, val uint64) ([]uint64, bool) {
 	s = append(s, val)
 	Uint64Sorter(s).Sort()
 	return s, true
+}
+
+func uint64Insert(s []uint64, k int, vs ...uint64) []uint64 {
+	if n := len(s) + len(vs); n <= cap(s) {
+		s2 := s[:n]
+		copy(s2[k+len(vs):], s[k:])
+		copy(s2[k:], vs)
+		return s2
+	}
+	s2 := make([]uint64, len(s)+len(vs))
+	copy(s2, s[:k])
+	copy(s2[k:], vs)
+	copy(s2[k+len(vs):], s[k:])
+	return s2
 }
 
 func uint64Remove(s []uint64, val uint64) ([]uint64, bool) {

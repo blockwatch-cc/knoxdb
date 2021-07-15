@@ -54,6 +54,7 @@ var Int16 = struct {
 	Unique        func([]int16) []int16
 	RemoveZeros   func([]int16) []int16
 	AddUnique     func([]int16, int16) []int16
+	Insert        func([]int16, int, ...int16) []int16
 	Remove        func([]int16, int16) []int16
 	Contains      func([]int16, int16) bool
 	Index         func([]int16, int16, int) int
@@ -75,6 +76,9 @@ var Int16 = struct {
 	AddUnique: func(s []int16, v int16) []int16 {
 		s, _ = int16AddUnique(s, v)
 		return s
+	},
+	Insert: func(s []int16, k int, v ...int16) []int16 {
+		return int16Insert(s, k, v...)
 	},
 	Remove: func(s []int16, v int16) []int16 {
 		s, _ = int16Remove(s, v)
@@ -108,6 +112,20 @@ func int16AddUnique(s []int16, val int16) ([]int16, bool) {
 	s = append(s, val)
 	Int16Sorter(s).Sort()
 	return s, true
+}
+
+func int16Insert(s []int16, k int, vs ...int16) []int16 {
+	if n := len(s) + len(vs); n <= cap(s) {
+		s2 := s[:n]
+		copy(s2[k+len(vs):], s[k:])
+		copy(s2[k:], vs)
+		return s2
+	}
+	s2 := make([]int16, len(s)+len(vs))
+	copy(s2, s[:k])
+	copy(s2[k:], vs)
+	copy(s2[k+len(vs):], s[k:])
+	return s2
 }
 
 func int16Remove(s []int16, val int16) ([]int16, bool) {

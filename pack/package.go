@@ -16,7 +16,7 @@ import (
 	"blockwatch.cc/knoxdb/util"
 
 	. "blockwatch.cc/knoxdb/encoding/decimal"
-	. "blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 type Package struct {
@@ -372,9 +372,9 @@ func (p *Package) Push(v interface{}) error {
 		case FieldTypeFloat32:
 			b.Float32 = append(b.Float32, float32(f.Float()))
 		case FieldTypeInt256:
-			b.Int256 = append(b.Int256, f.Interface().(Int256))
+			b.Int256 = append(b.Int256, f.Interface().(vec.Int256))
 		case FieldTypeInt128:
-			b.Int128 = append(b.Int128, f.Interface().(Int128))
+			b.Int128 = append(b.Int128, f.Interface().(vec.Int128))
 		case FieldTypeInt64:
 			b.Int64 = append(b.Int64, f.Int())
 		case FieldTypeInt32:
@@ -394,9 +394,9 @@ func (p *Package) Push(v interface{}) error {
 		case FieldTypeDecimal256:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int256 = append(b.Int256, Int256{0, 0, 0, f.Uint()})
+				b.Int256 = append(b.Int256, vec.Int256{0, 0, 0, f.Uint()})
 			case field.Flags.Contains(flagIntType):
-				b.Int256 = append(b.Int256, Int256{0, 0, 0, uint64(f.Int())})
+				b.Int256 = append(b.Int256, vec.Int256{0, 0, 0, uint64(f.Int())})
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal256{}
 				dec.SetFloat64(f.Float(), field.Scale)
@@ -407,9 +407,9 @@ func (p *Package) Push(v interface{}) error {
 		case FieldTypeDecimal128:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int128 = append(b.Int128, Int128{0, f.Uint()})
+				b.Int128 = append(b.Int128, vec.Int128{0, f.Uint()})
 			case field.Flags.Contains(flagIntType):
-				b.Int128 = append(b.Int128, Int128{0, uint64(f.Int())})
+				b.Int128 = append(b.Int128, vec.Int128{0, uint64(f.Int())})
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal128{}
 				dec.SetFloat64(f.Float(), field.Scale)
@@ -527,10 +527,10 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			b.Float32[pos] = float32(f.Float())
 
 		case FieldTypeInt256:
-			b.Int256[pos] = f.Interface().(Int256)
+			b.Int256[pos] = f.Interface().(vec.Int256)
 
 		case FieldTypeInt128:
-			b.Int128[pos] = f.Interface().(Int128)
+			b.Int128[pos] = f.Interface().(vec.Int128)
 
 		case FieldTypeInt64:
 			b.Int64[pos] = f.Int()
@@ -559,9 +559,9 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 		case FieldTypeDecimal256:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int256[pos] = Int256{0, 0, 0, f.Uint()}
+				b.Int256[pos] = vec.Int256{0, 0, 0, f.Uint()}
 			case field.Flags.Contains(flagIntType):
-				b.Int256[pos] = Int256{0, 0, 0, uint64(f.Int())}
+				b.Int256[pos] = vec.Int256{0, 0, 0, uint64(f.Int())}
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal256{}
 				dec.SetFloat64(f.Float(), field.Scale)
@@ -573,9 +573,9 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 		case FieldTypeDecimal128:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int128[pos] = Int128{0, f.Uint()}
+				b.Int128[pos] = vec.Int128{0, f.Uint()}
 			case field.Flags.Contains(flagIntType):
-				b.Int128[pos] = Int128{0, uint64(f.Int())}
+				b.Int128[pos] = vec.Int128{0, uint64(f.Int())}
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal128{}
 				dec.SetFloat64(f.Float(), field.Scale)
@@ -937,10 +937,10 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 		b.Float32[pos] = float32(val.Float())
 
 	case FieldTypeInt256:
-		b.Int256[pos] = val.Interface().(Int256)
+		b.Int256[pos] = val.Interface().(vec.Int256)
 
 	case FieldTypeInt128:
-		b.Int128[pos] = val.Interface().(Int128)
+		b.Int128[pos] = val.Interface().(vec.Int128)
 
 	case FieldTypeInt64:
 		b.Int64[pos] = val.Int()
@@ -1033,16 +1033,16 @@ func (p *Package) Uint8At(index, pos int) (uint8, error) {
 	return p.blocks[index].Uint8[pos], nil
 }
 
-func (p *Package) Int256At(index, pos int) (Int256, error) {
+func (p *Package) Int256At(index, pos int) (vec.Int256, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt256); err != nil {
-		return Int256{}, err
+		return vec.Int256{}, err
 	}
 	return p.blocks[index].Int256[pos], nil
 }
 
-func (p *Package) Int128At(index, pos int) (Int128, error) {
+func (p *Package) Int128At(index, pos int) (vec.Int128, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt128); err != nil {
-		return Int128{}, err
+		return vec.Int128{}, err
 	}
 	return p.blocks[index].Int128[pos], nil
 }
@@ -1145,47 +1145,52 @@ func (p *Package) Decimal256At(index, pos int) (Decimal256, error) {
 	return NewDecimal256(p.blocks[index].Int256[pos], p.fields[index].Scale), nil
 }
 
-func (p *Package) IsZeroAt(index, pos int) bool {
+func (p *Package) IsZeroAt(index, pos int, zeroIsNull bool) bool {
 	if p.nFields <= index || p.nValues <= pos {
-		return false
+		return true
 	}
 	if p.blocks[index].IsIgnore() {
-		return false
+		return true
 	}
 	field := p.fields[index]
 	switch field.Type {
-	case FieldTypeInt256,
-		FieldTypeInt128,
-		FieldTypeInt64,
-		FieldTypeInt32,
-		FieldTypeInt16,
-		FieldTypeInt8,
-		FieldTypeUint64,
-		FieldTypeUint32,
-		FieldTypeUint16,
-		FieldTypeUint8,
-		FieldTypeDecimal256,
-		FieldTypeDecimal128,
-		FieldTypeDecimal64,
-		FieldTypeDecimal32,
-		FieldTypeBoolean:
-		// cannot be zero because 0 value has a meaning
-		return false
+	case FieldTypeInt256, FieldTypeDecimal256:
+		return zeroIsNull && p.blocks[index].Int256[pos].IsZero()
+	case FieldTypeInt128, FieldTypeDecimal128:
+		return zeroIsNull && p.blocks[index].Int128[pos].IsZero()
+	case FieldTypeInt64, FieldTypeDecimal64:
+		return zeroIsNull && p.blocks[index].Int64[pos] == 0
+	case FieldTypeInt32, FieldTypeDecimal32:
+		return zeroIsNull && p.blocks[index].Int32[pos] == 0
+	case FieldTypeInt16:
+		return zeroIsNull && p.blocks[index].Int16[pos] == 0
+	case FieldTypeInt8:
+		return zeroIsNull && p.blocks[index].Int8[pos] == 0
+	case FieldTypeUint64:
+		return zeroIsNull && p.blocks[index].Uint64[pos] == 0
+	case FieldTypeUint32:
+		return zeroIsNull && p.blocks[index].Uint32[pos] == 0
+	case FieldTypeUint16:
+		return zeroIsNull && p.blocks[index].Uint16[pos] == 0
+	case FieldTypeUint8:
+		return zeroIsNull && p.blocks[index].Uint8[pos] == 0
+	case FieldTypeBoolean:
+		return zeroIsNull && !p.blocks[index].Bits.IsSet(pos)
 	case FieldTypeFloat64:
 		v := p.blocks[index].Float64[pos]
-		return math.IsNaN(v) || math.IsInf(v, 0)
+		return math.IsNaN(v) || math.IsInf(v, 0) || (zeroIsNull && v == 0.0)
 	case FieldTypeFloat32:
 		v := float64(p.blocks[index].Float32[pos])
-		return math.IsNaN(v) || math.IsInf(v, 0)
+		return math.IsNaN(v) || math.IsInf(v, 0) || (zeroIsNull && v == 0.0)
 	case FieldTypeString:
 		return len(p.blocks[index].Strings[pos]) == 0
 	case FieldTypeBytes:
 		return len(p.blocks[index].Bytes[pos]) == 0
 	case FieldTypeDatetime:
 		val := p.blocks[index].Int64[pos]
-		return val == 0 || time.Unix(0, val).IsZero()
+		return val == 0 || (zeroIsNull && time.Unix(0, val).IsZero())
 	}
-	return true
+	return false
 }
 
 // Block allows raw access to the underlying block for a field. Use this for
@@ -1533,7 +1538,6 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 	return nil
 }
 
-// note: will panic on package schema mismatch
 func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 	if srcPack.nFields != p.nFields {
 		return fmt.Errorf("pack: invalid src/dst field count %d/%d", srcPack.nFields, p.nFields)
@@ -1656,6 +1660,133 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 	return nil
 }
 
+func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error {
+	if srcPack.nFields != p.nFields {
+		return fmt.Errorf("pack: invalid src/dst field count %d/%d", srcPack.nFields, p.nFields)
+	}
+	if srcPack.nValues <= srcPos {
+		return fmt.Errorf("pack: invalid source pack offset %d (max %d)", srcPos, srcPack.nValues)
+	}
+	if srcPack.nValues < srcPos+srcLen {
+		return fmt.Errorf("pack: invalid source pack offset %d len %d (max %d)", srcPos, srcLen, srcPack.nValues)
+	}
+	n := util.Min(srcPack.Len()-srcPos, srcLen)
+	for i, dst := range p.blocks {
+		src := srcPack.blocks[i]
+		if dst.IsIgnore() || src.IsIgnore() {
+			continue
+		}
+		srcField := srcPack.fields[i]
+		dstField := p.fields[i]
+		if srcField.Index != dstField.Index || srcField.Type != dstField.Type {
+			return fmt.Errorf("pack: insert from: field mismatch %d (%s) != %d (%s)",
+				srcField.Index, srcField.Type, dstField.Index, dstField.Type)
+		}
+
+		switch dstField.Type {
+		case FieldTypeBytes:
+			dst.Bytes = vec.Bytes.Insert(dst.Bytes, dstPos, src.Bytes[srcPos:srcPos+n]...)
+
+		case FieldTypeString:
+			dst.Strings = vec.Strings.Insert(dst.Strings, dstPos, src.Strings[srcPos:srcPos+n]...)
+
+		case FieldTypeBoolean:
+			dst.Bits.Insert(src.Bits, srcPos, srcLen, dstPos)
+
+		case FieldTypeFloat64:
+			dst.Float64 = vec.Float64.Insert(dst.Float64, dstPos, src.Float64[srcPos:srcPos+n]...)
+
+		case FieldTypeFloat32:
+			dst.Float32 = vec.Float32.Insert(dst.Float32, dstPos, src.Float32[srcPos:srcPos+n]...)
+
+		case FieldTypeInt256:
+			dst.Int256.Insert(dstPos, src.Int256[srcPos:srcPos+n]...)
+
+		case FieldTypeInt128:
+			dst.Int128.Insert(dstPos, src.Int128[srcPos:srcPos+n]...)
+
+		case FieldTypeInt64, FieldTypeDatetime:
+			dst.Int64 = vec.Int64.Insert(dst.Int64, dstPos, src.Int64[srcPos:srcPos+n]...)
+
+		case FieldTypeInt32:
+			dst.Int32 = vec.Int32.Insert(dst.Int32, dstPos, src.Int32[srcPos:srcPos+n]...)
+
+		case FieldTypeInt16:
+			dst.Int16 = vec.Int16.Insert(dst.Int16, dstPos, src.Int16[srcPos:srcPos+n]...)
+
+		case FieldTypeInt8:
+			dst.Int8 = vec.Int8.Insert(dst.Int8, dstPos, src.Int8[srcPos:srcPos+n]...)
+
+		case FieldTypeUint64:
+			dst.Uint64 = vec.Uint64.Insert(dst.Uint64, dstPos, src.Uint64[srcPos:srcPos+n]...)
+
+		case FieldTypeUint32:
+			dst.Uint32 = vec.Uint32.Insert(dst.Uint32, dstPos, src.Uint32[srcPos:srcPos+n]...)
+
+		case FieldTypeUint16:
+			dst.Uint16 = vec.Uint16.Insert(dst.Uint16, dstPos, src.Uint16[srcPos:srcPos+n]...)
+
+		case FieldTypeUint8:
+			dst.Uint8 = vec.Uint8.Insert(dst.Uint8, dstPos, src.Uint8[srcPos:srcPos+n]...)
+
+		case FieldTypeDecimal256:
+			sc, dc := srcField.Scale, dstField.Scale
+			if sc == dc {
+				dst.Int256.Insert(dstPos, src.Int256[srcPos:srcPos+n]...)
+			} else {
+				cp := make(vec.Int256Slice, n)
+				for i, v := range src.Int256[srcPos : srcPos+n] {
+					cp[i] = NewDecimal256(v, sc).Quantize(dc).Int256()
+				}
+				dst.Int256.Insert(dstPos, cp...)
+			}
+
+		case FieldTypeDecimal128:
+			sc, dc := srcField.Scale, dstField.Scale
+			if sc == dc {
+				dst.Int128.Insert(dstPos, src.Int128[srcPos:srcPos+n]...)
+			} else {
+				cp := make(vec.Int128Slice, n)
+				for i, v := range src.Int128[srcPos : srcPos+n] {
+					cp[i] = NewDecimal128(v, sc).Quantize(dc).Int128()
+				}
+				dst.Int128.Insert(dstPos, cp...)
+			}
+
+		case FieldTypeDecimal64:
+			sc, dc := srcField.Scale, dstField.Scale
+			if sc == dc {
+				vec.Int64.Insert(dst.Int64, dstPos, src.Int64[srcPos:srcPos+n]...)
+			} else {
+				cp := make([]int64, n)
+				for i, v := range src.Int64[srcPos : srcPos+srcLen] {
+					cp[i] = NewDecimal64(v, sc).Quantize(dc).Int64()
+				}
+				vec.Int64.Insert(dst.Int64, dstPos, cp...)
+			}
+
+		case FieldTypeDecimal32:
+			sc, dc := srcField.Scale, dstField.Scale
+			if sc == dc {
+				vec.Int32.Insert(dst.Int32, dstPos, src.Int32[srcPos:srcPos+n]...)
+			} else {
+				cp := make([]int32, n)
+				for i, v := range src.Int32[srcPos : srcPos+srcLen] {
+					cp[i] = NewDecimal32(v, sc).Quantize(dc).Int32()
+				}
+				vec.Int32.Insert(dst.Int32, dstPos, cp...)
+			}
+
+		default:
+			return fmt.Errorf("pack: invalid data type %s", dstField.Type)
+		}
+		dst.SetDirty()
+	}
+	p.nValues += n
+	p.dirty = true
+	return nil
+}
+
 // append n empty rows with default/zero values
 func (p *Package) Grow(n int) error {
 	if n <= 0 {
@@ -1684,10 +1815,10 @@ func (p *Package) Grow(n int) error {
 			b.Float32 = append(b.Float32, make([]float32, n)...)
 
 		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256 = append(b.Int256, make([]Int256, n)...)
+			b.Int256 = append(b.Int256, make([]vec.Int256, n)...)
 
 		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128 = append(b.Int128, make([]Int128, n)...)
+			b.Int128 = append(b.Int128, make([]vec.Int128, n)...)
 
 		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
 			b.Int64 = append(b.Int64, make([]int64, n)...)
@@ -1846,39 +1977,40 @@ func (p *Package) PkColumn() []uint64 {
 
 // Searches id in primary key column and return index or -1 when not found
 // This function is only safe to use when packs are sorted!
-func (p *Package) PkIndex(id uint64, last int) int {
+func (p *Package) PkIndex(id uint64, last int) (int, int) {
 	// primary key field required
 	if p.pkindex < 0 || last >= p.nValues {
-		return -1
+		return -1, p.nValues
 	}
 
-	// search for id value in pk block (always an uint64) starting at last index
-	// this helps limiting search space when ids are pre-sorted
+	// // search for id value in pk block (always an uint64) starting at last index
+	// // this helps limiting search space when ids are pre-sorted
 	slice := p.blocks[p.pkindex].Uint64[last:]
 	l := len(slice)
-	min, max := slice[0], slice[l-1]
-	if id < min || id > max {
-		return -1
-	}
+	// min, max := slice[0], slice[l-1]
+	// if id < min || id > max {
+	// 	return -1, p.nValues
+	// }
 
-	// for dense packs (pk's are continuous) compute offset directly
-	if l == int(max-min)+1 {
-		return int(id-min) + last
-	}
+	// // for dense packs (pk's are continuous) compute offset directly
+	// if l == int(max-min)+1 {
+	// 	return int(id-min), int(id-min)
+	// }
 
 	// for sparse pk spaces, use binary search on sorted slices
 	idx := sort.Search(l, func(i int) bool { return slice[i] >= id })
+	last += idx
 	if idx < l && slice[idx] == id {
-		return idx + last
+		return last, last
 	}
-	return -1
+	return -1, last
 }
 
 // Searches id in primary key column and return index or -1 when not found,
 // use this function when pack is unsorted as when updates/inserts are out of order.
 func (p *Package) PkIndexUnsorted(id uint64, last int) int {
 	// primary key field required
-	if p.pkindex < 0 || p.Len() <= last {
+	if p.pkindex < 0 || p.nValues <= last {
 		return -1
 	}
 
