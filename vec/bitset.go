@@ -4,6 +4,7 @@
 package vec
 
 import (
+	"encoding/hex"
 	"sync"
 )
 
@@ -57,6 +58,14 @@ func NewBitsetFromBytes(buf []byte, size int) *Bitset {
 	return s
 }
 
+// NewBitsetFromSlice allocates a new bitset and initializes it from decoding
+// a hex string. If s is empty or not a valid hex string, the bitset is initially
+// empty.
+func NewBitsetFromString(s string, size int) *Bitset {
+	buf, _ := hex.DecodeString(s)
+	return NewBitsetFromBytes(buf, size)
+}
+
 // NewBitsetFromSlice allocates a new bitset and initializes it from boolean values
 // in bools. If bools is nil, the bitset is initially empty.
 func NewBitsetFromSlice(bools []bool) *Bitset {
@@ -71,6 +80,17 @@ func NewBitsetFromSlice(bools []bool) *Bitset {
 		}
 		s.buf[i>>3] |= bitmask(i)
 		s.cnt++
+	}
+	return s
+}
+
+// NewBitsetFromIndexes allocates a new bitset and initializes it from
+// integer positions representing one bits. If indeces is nil, the bitset
+// is initially empty.
+func NewBitsetFromIndexes(indexes []int, size int) *Bitset {
+	s := makeBitset(size)
+	for i := range indexes {
+		s.Set(indexes[i])
 	}
 	return s
 }
@@ -517,6 +537,10 @@ func (s *Bitset) Bytes() []byte {
 		return nil
 	}
 	return s.buf
+}
+
+func (s *Bitset) String() string {
+	return hex.EncodeToString(s.Bytes())
 }
 
 func (s *Bitset) Count() int {
