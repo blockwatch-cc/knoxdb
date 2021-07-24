@@ -954,7 +954,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 	packsz = 1 << uint(idx.opts.PackSizeLog2)
 	jlen, tlen = len(pk), len(dead)
 	_, globalmax = idx.packidx.GlobalMinMax()
-	maxloop = 2*idx.packidx.Len() + 2*jlen/packsz // 2x to consider splits
+	maxloop = 2*idx.packidx.Len() + 2*jlen/packsz + 2 // 2x to consider splits
 
 	// create an initial pack on first insert
 	if idx.packidx.Len() == 0 {
