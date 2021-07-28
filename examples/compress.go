@@ -226,6 +226,8 @@ func run() error {
 		return table.CompressIndexPack(cmethod, out, 0, packid, mode)
 	case "compress-index-all":
 		return table.CompressIndexAll(cmethod, 0, out, mode, verbose)
+	case "index-collisions":
+		return table.IndexCollisions(cmethod, 0, out, mode, verbose)
 	default:
 		return fmt.Errorf("unsupported command %s", cmd)
 	}

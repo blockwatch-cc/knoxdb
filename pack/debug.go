@@ -892,6 +892,45 @@ func (t *Table) CompressIndexAll(cmethod string, i int, w io.Writer, mode DumpMo
 	return DumpCompressResults(fl, cratios, ctimes, dtimes, w, mode, verbose)
 }
 
+func (t *Table) IndexCollisions(cmethod string, i int, w io.Writer, mode DumpMode, verbose bool) error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if cmethod[:4] != "hash" {
+		return fmt.Errorf("unknown compression method %s", cmethod)
+	}
+
+	hashlen, err := strconv.Atoi(cmethod[4:])
+
+	if err != nil || hashlen < 1 || hashlen > 64 {
+		return fmt.Errorf("unknown compression method %s", cmethod)
+	}
+
+	var collisions uint64
+
+	for p := 0; p < t.indexes[i].packidx.Len(); p++ {
+		pkg, err := t.indexes[i].loadPack(tx, t.indexes[i].packidx.packs[p].Key, false)
+		if err != nil {
+			return err
+		}
+
+		data := pkg.blocks[0].Uint64
+		shift := 64 - hashlen
+		for i := 1; i < len(data); i++ {
+			if data[i] != data[i-1] && (data[i]>>shift) == (data[i-1]>>shift) {
+				collisions++
+			}
+		}
+	}
+
+	fmt.Printf("Index contains %d additional collisions\n", collisions)
+
+	return nil
+}
+
 func (t *Table) CompressAll(cmethod string, w io.Writer, mode DumpMode, verbose bool) error {
 	tx, err := t.db.Tx(false)
 	if err != nil {
