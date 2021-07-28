@@ -5,8 +5,10 @@ package pack
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"math/bits"
 	"reflect"
 	"strconv"
 	"strings"
@@ -586,6 +588,141 @@ func compressNo(b *block.Block) (int, error) {
 	return len(dst), nil
 }
 
+func compressHash(deltas []uint64) ([]byte, int, int, error) {
+
+	// delta encoding
+	maxdelta := uint64(0)
+	for i := len(deltas) - 1; i > 7; i-- {
+		deltas[i] = deltas[i] - deltas[i-8]
+		maxdelta |= deltas[i]
+	}
+
+	var nbytes int
+	if maxdelta == 0 {
+		nbytes = 1 // all number zero -> use 1 byte
+	} else {
+		lz := bits.LeadingZeros64(maxdelta)
+		nbytes = (71 - lz) >> 3 // = (64 - tz + 8 - 1) / 8 = ceil((64 - tz)/8)
+	}
+
+	buf := make([]byte, nbytes*(len(deltas)-8)+64)
+
+	for i := 0; i < 8; i++ {
+		binary.BigEndian.PutUint64(buf[8*i:], deltas[i])
+	}
+
+	tmp := buf[64:]
+
+	switch nbytes {
+	case 1:
+		for i, v := range deltas[8:] {
+			buf[64+i] = byte(v & 0xff)
+		}
+	case 2:
+		for i, v := range deltas[8:] {
+			buf[64+2*i] = byte((v >> 8) & 0xff)
+			buf[65+2*i] = byte(v & 0xff)
+		}
+	case 3:
+		for i, v := range deltas[8:] {
+			tmp[3*i] = byte((v >> 16) & 0xff)
+			tmp[1+3*i] = byte((v >> 8) & 0xff)
+			tmp[2+3*i] = byte(v & 0xff)
+		}
+	default:
+		return nil, -1, 0, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
+	}
+
+	return buf, len(buf), nbytes, nil
+}
+
+func uncompressHash(buf []byte, nbytes int) ([]uint64, int, error) {
+	len := (len(buf)-64)/nbytes + 8
+	res := make([]uint64, len)
+	for i := 0; i < 8; i++ {
+		res[i] = binary.BigEndian.Uint64(buf[8*i:])
+	}
+	switch nbytes {
+	case 1:
+		for i, j := 8, 64; i < len; i++ {
+			res[i] = uint64(buf[j])
+			res[i] += res[i-8]
+			j++
+		}
+	case 2:
+		for i, j := 8, 64; i < len; i++ {
+			res[i] = uint64(buf[j])<<8 | uint64(buf[1+j])
+			res[i] += res[i-8]
+			j += 2
+		}
+	case 3:
+		for i, j := 8, 64; i < len; i++ {
+			res[i] = uint64(buf[j])<<16 | uint64(buf[1+j])<<8 | uint64(buf[2+j])
+			res[i] += res[i-8]
+			j += 3
+		}
+	}
+	return res, len, nil
+}
+
+func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, error) {
+	if cmethod[:4] != "hash" {
+		return p.compress(cmethod)
+	}
+
+	hashlen, err := strconv.Atoi(cmethod[4:])
+
+	if err != nil || hashlen < 1 || hashlen > 64 {
+		return nil, nil, nil, fmt.Errorf("unknown compression method %s", cmethod)
+	}
+
+	var tcomp float64 = -1
+	var tdecomp float64 = -1
+
+	cr := make([]float64, p.nFields)
+	ct := make([]float64, p.nFields)
+	dt := make([]float64, p.nFields)
+
+	// build smaller Hash
+	data := make([]uint64, p.blocks[0].Len())
+	for i, v := range p.blocks[0].Uint64 {
+		data[i] = v >> (64 - hashlen)
+	}
+	// make a copy because we will destroy it
+	tmp := make([]uint64, p.blocks[0].Len())
+	copy(tmp, data)
+
+	start := time.Now()
+	buf, csize, nbytes, err := compressHash(tmp)
+	tcomp = time.Since(start).Seconds()
+	if err == nil {
+		start = time.Now()
+		var res []uint64
+		res, _, err = uncompressHash(buf, nbytes)
+		tdecomp = time.Since(start).Seconds()
+
+		for i := range res {
+			if res[i] != data[i] {
+				return nil, nil, nil, fmt.Errorf("hash compression: error at position %d", i)
+			}
+		}
+	}
+
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if csize < 0 {
+		ct[0] = -1
+		dt[0] = -1
+	} else {
+		ct[0] = float64(p.blocks[0].DataSize()) / tcomp / 1000000
+		dt[0] = float64(p.blocks[0].DataSize()) / tdecomp / 1000000
+	}
+	cr[0] = float64(csize) / float64(p.blocks[0].DataSize())
+
+	return cr, ct, dt, nil
+}
+
 func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, error) {
 	cr := make([]float64, p.nFields)
 	ct := make([]float64, p.nFields)
@@ -713,7 +850,7 @@ func (t *Table) CompressIndexPack(cmethod string, w io.Writer, i, p int, mode Du
 	cratios := make([][]float64, 1)
 	ctimes := make([][]float64, 1)
 	dtimes := make([][]float64, 1)
-	cr, ct, dt, err := pkg.compress(cmethod)
+	cr, ct, dt, err := pkg.compressIdx(cmethod)
 	if err != nil {
 		return err
 	}
@@ -735,16 +872,14 @@ func (t *Table) CompressIndexAll(cmethod string, i int, w io.Writer, mode DumpMo
 	cratios := make([][]float64, t.indexes[i].packidx.Len())
 	ctimes := make([][]float64, t.indexes[i].packidx.Len())
 	dtimes := make([][]float64, t.indexes[i].packidx.Len())
-	//cratios := make([][]float64, 10)
 
 	for p := 0; p < t.indexes[i].packidx.Len(); p++ {
-		//for i := 0; i < 10; i++ {
 		pkg, err := t.indexes[i].loadPack(tx, t.indexes[i].packidx.packs[p].Key, false)
 		if err != nil {
 			return err
 		}
 
-		cr, ct, dt, err := pkg.compress(cmethod)
+		cr, ct, dt, err := pkg.compressIdx(cmethod)
 		if err != nil {
 			return err
 		}
