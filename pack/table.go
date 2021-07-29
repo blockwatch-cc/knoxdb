@@ -1112,7 +1112,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 	packsz = 1 << uint(t.opts.PackSizeLog2)
 	jlen, tlen = len(live), len(dead)
 	_, globalmax = t.packidx.GlobalMinMax()
-	maxloop = t.packidx.Len() + (tlen+jlen)/packsz + 2
+	maxloop = 2*t.packidx.Len() + 2*(tlen+jlen)/packsz + 2
 
 	// This algorithm works like a merge-sort over a sequence of sorted packs.
 	for {
