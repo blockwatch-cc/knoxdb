@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/csv"
 	"blockwatch.cc/knoxdb/util"
 	"github.com/golang/snappy"
@@ -591,8 +592,15 @@ func compressNo(b *block.Block) (int, error) {
 func compressHash(deltas []uint64) ([]byte, int, int, error) {
 
 	// delta encoding
-	maxdelta := uint64(0)
+
+	/* maxdelta := uint64(0)
 	for i := len(deltas) - 1; i > 7; i-- {
+		deltas[i] = deltas[i] - deltas[i-8]
+		maxdelta |= deltas[i]
+	}*/
+
+	maxdelta := compress.Delta8AVX2(deltas)
+	for i := len(deltas)%8 + 7; i > 7; i-- {
 		deltas[i] = deltas[i] - deltas[i-8]
 		maxdelta |= deltas[i]
 	}
@@ -619,16 +627,46 @@ func compressHash(deltas []uint64) ([]byte, int, int, error) {
 			buf[64+i] = byte(v & 0xff)
 		}
 	case 2:
-		for i, v := range deltas[8:] {
-			buf[64+2*i] = byte((v >> 8) & 0xff)
-			buf[65+2*i] = byte(v & 0xff)
+		/*		for i, v := range deltas[8:] {
+				buf[64+2*i] = byte((v >> 8) & 0xff)
+				buf[65+2*i] = byte(v & 0xff)
+			}*/
+
+		len_head := (len(deltas)-8)&0x7ffffffffffffff0 + 8
+		compress.PackIndex16BitAVX2(deltas[8:], buf[64:])
+
+		tmp = buf[64+(len_head-8)*2:]
+
+		for i, v := range deltas[len_head:] {
+			tmp[2*i] = byte((v >> 8) & 0xff)
+			tmp[1+2*i] = byte(v & 0xff)
 		}
+
 	case 3:
 		for i, v := range deltas[8:] {
 			tmp[3*i] = byte((v >> 16) & 0xff)
 			tmp[1+3*i] = byte((v >> 8) & 0xff)
 			tmp[2+3*i] = byte(v & 0xff)
 		}
+	case 4:
+
+		len_head := len(deltas) & 0x7ffffffffffffff8
+		compress.PackIndex32BitAVX2(deltas[8:], buf[64:])
+
+		tmp = buf[64+(len_head-8)*4:]
+
+		for i, v := range deltas[len_head:] {
+			tmp[4*i] = byte((v >> 24) & 0xff)
+			tmp[1+4*i] = byte((v >> 16) & 0xff)
+			tmp[2+4*i] = byte((v >> 8) & 0xff)
+			tmp[3+4*i] = byte(v & 0xff)
+		}
+		/*for i, v := range deltas[8:] {
+			tmp[4*i] = byte((v >> 24) & 0xff)
+			tmp[1+4*i] = byte((v >> 16) & 0xff)
+			tmp[2+4*i] = byte((v >> 8) & 0xff)
+			tmp[3+4*i] = byte(v & 0xff)
+		}*/
 	default:
 		return nil, -1, 0, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
 	}
@@ -646,71 +684,130 @@ func uncompressHash(buf []byte, nbytes int) ([]uint64, int, error) {
 	case 1:
 		for i, j := 8, 64; i < len; i++ {
 			res[i] = uint64(buf[j])
-			res[i] += res[i-8]
 			j++
 		}
 	case 2:
-		for i, j := 8, 64; i < len; i++ {
-			res[i] = uint64(buf[j])<<8 | uint64(buf[1+j])
-			res[i] += res[i-8]
+		/*		for i, j := 8, 64; i < len; i++ {
+				res[i] = uint64(buf[j])<<8 | uint64(buf[1+j])
+				j += 2
+			}*/
+
+		len_head := (len-8)&0x7ffffffffffffff0 + 8
+		compress.UnpackIndex16BitAVX2(buf[64:], res[8:])
+
+		tmp := buf[64+(len_head-8)*2:]
+
+		//		for _, v := range res[8+len_head:] {
+		for i, j := len_head, 0; i < len; i++ {
+			res[i] = uint64(tmp[j])<<8 | uint64(tmp[1+j])
 			j += 2
 		}
+
 	case 3:
 		for i, j := 8, 64; i < len; i++ {
 			res[i] = uint64(buf[j])<<16 | uint64(buf[1+j])<<8 | uint64(buf[2+j])
-			res[i] += res[i-8]
 			j += 3
 		}
+	case 4:
+		/*for i, j := 8, 64; i < len; i++ {
+			res[i] = uint64(buf[j])<<24 | uint64(buf[1+j])<<16 | uint64(buf[2+j])<<8 | uint64(buf[3+j])
+			j += 4
+		}*/
+
+		len_head := len & 0x7ffffffffffffff8
+		compress.UnpackIndex32BitAVX2(buf[64:], res[8:])
+
+		tmp := buf[64+(len_head-8)*4:]
+
+		//		for _, v := range res[8+len_head:] {
+		for i, j := len_head, 0; i < len; i++ {
+			res[i] = uint64(tmp[j])<<24 | uint64(tmp[1+j])<<16 | uint64(tmp[2+j])<<8 | uint64(tmp[3+j])
+			j += 4
+		}
+
+	default:
+		return nil, 0, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
 	}
+
+	len_head := len & 0x7ffffffffffffff8
+	compress.Undelta8AVX2(res)
+	for i := len_head; i < len; i++ {
+		res[i] += res[i-8]
+	}
+
+	/*for i := 8; i < len; i++ {
+		res[i] += res[i-8]
+	}*/
+
 	return res, len, nil
 }
 
 func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, error) {
-	if cmethod[:4] != "hash" {
+	cr := make([]float64, p.nFields)
+	ct := make([]float64, p.nFields)
+	dt := make([]float64, p.nFields)
+
+	var tcomp float64 = -1
+	var tdecomp float64 = -1
+	var hashlen int
+	var err error
+
+	switch {
+	case len(cmethod) > 10 && cmethod[:10] == "delta-hash":
+		hashlen, err = strconv.Atoi(cmethod[10:])
+	case len(cmethod) > 11 && cmethod[:11] == "linear-hash":
+		hashlen, err = strconv.Atoi(cmethod[11:])
+	default:
 		return p.compress(cmethod)
 	}
-
-	hashlen, err := strconv.Atoi(cmethod[4:])
 
 	if err != nil || hashlen < 1 || hashlen > 64 {
 		return nil, nil, nil, fmt.Errorf("unknown compression method %s", cmethod)
 	}
 
-	var tcomp float64 = -1
-	var tdecomp float64 = -1
-
-	cr := make([]float64, p.nFields)
-	ct := make([]float64, p.nFields)
-	dt := make([]float64, p.nFields)
-
-	// build smaller Hash
+	// build new Hash
 	data := make([]uint64, p.blocks[0].Len())
 	for i, v := range p.blocks[0].Uint64 {
 		data[i] = v >> (64 - hashlen)
 	}
+
 	// make a copy because we will destroy it
 	tmp := make([]uint64, p.blocks[0].Len())
 	copy(tmp, data)
 
-	start := time.Now()
-	buf, csize, nbytes, err := compressHash(tmp)
-	tcomp = time.Since(start).Seconds()
-	if err == nil {
-		start = time.Now()
-		var res []uint64
-		res, _, err = uncompressHash(buf, nbytes)
-		tdecomp = time.Since(start).Seconds()
+	var csize int
+	var res []uint64
 
-		for i := range res {
-			if res[i] != data[i] {
-				return nil, nil, nil, fmt.Errorf("hash compression: error at position %d", i)
-			}
+	switch {
+	case cmethod[:10] == "delta-hash":
+		var nbytes int
+		var buf []byte
+
+		start := time.Now()
+		buf, csize, nbytes, err = compressHash(tmp)
+		tcomp = time.Since(start).Seconds()
+		if err == nil {
+			start = time.Now()
+			res, _, err = uncompressHash(buf, nbytes)
+			tdecomp = time.Since(start).Seconds()
 		}
+
+	default:
+		return nil, nil, nil, fmt.Errorf("not yet implemented %s", cmethod)
+
 	}
 
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	for i := range res {
+		if res[i] != data[i] {
+			fmt.Printf("hash compression: error at position %d\n", i)
+		}
+	}
+
+	//fmt.Println(res)
+
 	if csize < 0 {
 		ct[0] = -1
 		dt[0] = -1
@@ -733,71 +830,77 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 			cr[j] = -1
 			ct[j] = -1
 			dt[j] = -1
-		} else {
-			var csize int = -1
-			var tcomp float64 = -1
-			var tdecomp float64 = -1
-			var err error
-			// start := time.Now()
+			continue
+		}
+		var csize int = -1
+		var tcomp float64 = -1
+		var tdecomp float64 = -1
+		var err error
+		// start := time.Now()
+		switch cmethod {
+		case "legacy", "legacy-no", "legacy-lz4", "legacy-snappy":
+			buf := bytes.NewBuffer(make([]byte, 0, p.blocks[j].MaxStoredSize()))
 			switch cmethod {
-			case "legacy", "legacy-no", "legacy-lz4", "legacy-snappy":
-				buf := bytes.NewBuffer(make([]byte, 0, p.blocks[j].MaxStoredSize()))
-				switch cmethod {
-				case "legacy-no":
-					for _, b := range p.blocks {
-						b.SetCompression(block.NoCompression)
-					}
-				case "legacy-snapp":
-					for _, b := range p.blocks {
-						b.SetCompression(block.SnappyCompression)
-					}
-				case "legacy-lz4":
-					for _, b := range p.blocks {
-						b.SetCompression(block.LZ4Compression)
-					}
+			case "legacy-no":
+				for _, b := range p.blocks {
+					b.SetCompression(block.NoCompression)
 				}
-				start := time.Now()
-				csize, err = p.blocks[j].Encode(buf)
-				tcomp = time.Since(start).Seconds()
+			case "legacy-snappy":
+				for _, b := range p.blocks {
+					b.SetCompression(block.SnappyCompression)
+				}
+			case "legacy-lz4":
+				for _, b := range p.blocks {
+					b.SetCompression(block.LZ4Compression)
+				}
+			}
+			start := time.Now()
+			csize, err = p.blocks[j].Encode(buf)
+			tcomp = time.Since(start).Seconds()
+			if err == nil {
 				start = time.Now()
 				err = p.blocks[j].Decode(buf.Bytes(), csize, p.blocks[j].MaxStoredSize())
 				tdecomp = time.Since(start).Seconds()
-			case "snappy":
-				var buf []byte
-				start := time.Now()
-				buf, csize, err = compressSnappy(p.blocks[j])
-				tcomp = time.Since(start).Seconds()
+			}
+		case "snappy":
+			var buf []byte
+			start := time.Now()
+			buf, csize, err = compressSnappy(p.blocks[j])
+			tcomp = time.Since(start).Seconds()
+			if err == nil {
 				start = time.Now()
 				_, _, err = uncompressSnappy(buf)
 				tdecomp = time.Since(start).Seconds()
-			case "lz4":
-				var buf []byte
-				start := time.Now()
-				buf, csize, err = compressLz4(p.blocks[j])
-				tcomp = time.Since(start).Seconds()
+			}
+		case "lz4":
+			var buf []byte
+			start := time.Now()
+			buf, csize, err = compressLz4(p.blocks[j])
+			tcomp = time.Since(start).Seconds()
+			if err == nil {
 				start = time.Now()
 				_, _, err = uncompressLz4(buf, cap(buf))
 				tdecomp = time.Since(start).Seconds()
-			case "no":
-				start := time.Now()
-				csize, err = compressNo(p.blocks[j])
-				tcomp = time.Since(start).Seconds()
-			default:
-				return nil, nil, nil, fmt.Errorf("unknown compression method %s", cmethod)
 			}
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			if csize < 0 {
-				ct[j] = -1
-				dt[j] = -1
-			} else {
-				ct[j] = float64(p.blocks[j].DataSize()) / tcomp / 1000000
-				// dt[j] = -1
-				dt[j] = float64(p.blocks[j].DataSize()) / tdecomp / 1000000
-			}
-			cr[j] = float64(csize) / float64(p.blocks[j].DataSize())
+		case "no":
+			start := time.Now()
+			csize, err = compressNo(p.blocks[j])
+			tcomp = time.Since(start).Seconds()
+		default:
+			return nil, nil, nil, fmt.Errorf("unknown compression method %s", cmethod)
 		}
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if csize < 0 {
+			ct[j] = -1
+			dt[j] = -1
+		} else {
+			ct[j] = float64(p.blocks[j].DataSize()) / tcomp / 1000000
+			// dt[j] = -1
+			dt[j] = float64(p.blocks[j].DataSize()) / tdecomp / 1000000
+		}
+		cr[j] = float64(csize) / float64(p.blocks[j].DataSize())
 	}
 	return cr, ct, dt, nil
 }
