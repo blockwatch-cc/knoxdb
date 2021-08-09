@@ -63,6 +63,9 @@ func NewBitsetFromBytes(buf []byte, size int) *Bitset {
 // empty.
 func NewBitsetFromString(s string, size int) *Bitset {
 	buf, _ := hex.DecodeString(s)
+	for i := range buf {
+		buf[i] = bitsetReverseLut256[buf[i]]
+	}
 	return NewBitsetFromBytes(buf, size)
 }
 
@@ -540,7 +543,12 @@ func (s *Bitset) Bytes() []byte {
 }
 
 func (s *Bitset) String() string {
-	return hex.EncodeToString(s.Bytes())
+	src := s.Bytes()
+	dst := make([]byte, len(src))
+	for i := range src {
+		dst[i] = bitsetReverseLut256[src[i]]
+	}
+	return hex.EncodeToString(dst)
 }
 
 func (s *Bitset) Count() int {
