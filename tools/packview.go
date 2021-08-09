@@ -122,7 +122,7 @@ func run() error {
 
 	cmd = flags.Arg(0)
 	dbname = strings.Split(flags.Arg(1), ".db")[0] + ".db"
-	switch dbx := strings.Split(strings.TrimPrefix(flags.Arg(1), dbname), "/"); len(dbx) {
+	switch dbx := strings.Split(strings.TrimPrefix(strings.TrimPrefix(flags.Arg(1), dbname), "/"), "/"); len(dbx) {
 	case 0:
 		// none
 	case 1:
