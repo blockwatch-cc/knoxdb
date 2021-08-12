@@ -75,10 +75,10 @@ func decodeFloat32Block(block []byte, dst []float32) ([]float32, error) {
 	return dst, err
 }
 
-func decodeInt256Block(block []byte, dst []vec.Int256) ([]vec.Int256, error) {
+func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockInt256)
 	if err != nil {
-		return nil, err
+		return dst, err
 	}
 
 	// empty blocks are empty
@@ -105,23 +105,65 @@ func decodeInt256Block(block []byte, dst []vec.Int256) ([]vec.Int256, error) {
 		if err != nil {
 			return dst, err
 		}
-		// only happens in first loop iteration
-		if cap(dst) < len(tmp) {
-			if len(tmp) <= DefaultMaxPointsPerBlock {
-				dst = int256Pool.Get().([]vec.Int256)[:len(tmp)]
+
+		switch i {
+        case 0: 
+			if cap(dst.X0) < len(tmp) {
+				if len(tmp) <= DefaultMaxPointsPerBlock {
+					dst.X0 = int64Pool.Get().([]int64)[:len(tmp)]
+				} else {
+					dst.X0 = make([]int64, len(tmp))
+				}
 			} else {
-				dst = make([]vec.Int256, len(tmp))
+				dst.X0 = dst.X0[:len(tmp)]
 			}
-		} else {
-			dst = dst[:len(tmp)]
-		}
 
-		// copy stride
-		for j := range tmp {
-			dst[j][i] = uint64(tmp[j])
-		}
-	}
+			// copy stride
+			copy(dst.X0, tmp)
+        case 1:
+   			if cap(dst.X1) < len(tmp) {
+				if len(tmp) <= DefaultMaxPointsPerBlock {
+					dst.X1 = uint64Pool.Get().([]uint64)[:len(tmp)]
+				} else {
+					dst.X1 = make([]uint64, len(tmp))
+				}
+			} else {
+				dst.X1 = dst.X1[:len(tmp)]
+			}
 
+			// copy stride
+			srcint := compress.ReintepretInt64ToUint64Slice(tmp)
+			copy(dst.X1, srcint)       
+        case 2:
+   			if cap(dst.X2) < len(tmp) {
+				if len(tmp) <= DefaultMaxPointsPerBlock {
+					dst.X2 = uint64Pool.Get().([]uint64)[:len(tmp)]
+				} else {
+					dst.X2 = make([]uint64, len(tmp))
+				}
+			} else {
+				dst.X2 = dst.X2[:len(tmp)]
+			}
+
+			// copy stride
+			srcint := compress.ReintepretInt64ToUint64Slice(tmp)
+			copy(dst.X2, srcint)
+        case 3:
+   			if cap(dst.X3) < len(tmp) {
+				if len(tmp) <= DefaultMaxPointsPerBlock {
+					dst.X3 = uint64Pool.Get().([]uint64)[:len(tmp)]
+				} else {
+					dst.X3 = make([]uint64, len(tmp))
+				}
+			} else {
+				dst.X3 = dst.X3[:len(tmp)]
+			}
+
+			// copy stride
+			srcint := compress.ReintepretInt64ToUint64Slice(tmp)
+			copy(dst.X3, srcint)
+        }
+    }
 	return dst, nil
 }
 

@@ -120,8 +120,8 @@ func encodeFloat32Block(buf *bytes.Buffer, val []float32, comp Compression) (int
 	return buf.Len() - l, err
 }
 
-func encodeInt256Block(buf *bytes.Buffer, val []vec.Int256, comp Compression) (int, error) {
-	if len(val) == 0 {
+func encodeInt256Block(buf *bytes.Buffer, val vec.Int256LLSlice, comp Compression) (int, error) {
+	if val.Len() == 0 {
 		return writeEmptyBlock(buf, BlockInt256)
 	}
 	l := buf.Len()
@@ -134,19 +134,27 @@ func encodeInt256Block(buf *bytes.Buffer, val []vec.Int256, comp Compression) (i
 		cp []int64
 		v  interface{}
 	)
-	if len(val) <= DefaultMaxPointsPerBlock {
+	if val.Len() <= DefaultMaxPointsPerBlock {
 		v = int64Pool.Get()
-		cp = v.([]int64)[:len(val)]
+		cp = v.([]int64)[:val.Len()]
 	} else {
-		cp = make([]int64, len(val))
+		cp = make([]int64, val.Len())
 	}
 
 	// repack int256 into 4 int64 strides
 	var err error
 	for i := 0; i < 4; i++ {
-		for j, v := range val {
+        if i == 0 {
+            copy(cp, val.X0)
+        } else {
+           	srcint := compress.ReintepretUint64ToInt64Slice(val.X1)
+            copy(cp, srcint)
+        }
+
+		/*for j, v := range val {
 			cp[j] = int64(v[i])
-		}
+		}*/
+        
 		ebuf := BlockEncoderPool.Get().([]byte)[:0]
 		stride := bytes.NewBuffer(ebuf)
 		err = compress.IntegerArrayEncodeAll(cp, stride)
