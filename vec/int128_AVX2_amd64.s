@@ -862,9 +862,9 @@ loop_avx:
 	VPXOR		Y12, Y11, Y11       // flip sign bits
 
     // v < a
-	VPCMPGTQ	Y1, Y13, Y5         // Y1 < Y0?  (signed)
-	VPCMPEQQ	Y1, Y13, Y6          // Y1 == Y0?
-	VPCMPGTQ	Y11, Y14, Y7       // Y11 < Y15 (unsigned)
+	VPCMPGTQ	Y1, Y13, Y5         // Y1 < Y13?  (signed)
+	VPCMPEQQ	Y1, Y13, Y6          // Y1 == Y13?
+	VPCMPGTQ	Y11, Y14, Y7       // Y11 < Y14 (unsigned)
     VPAND       Y6, Y7, Y6
     VPOR        Y6, Y5, Y5
 
@@ -1032,3 +1032,4 @@ exit_avx:
 done:
 	MOVQ	R9, ret+104(FP)
 	RET
+    
