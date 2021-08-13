@@ -9,10 +9,10 @@
 // func matchInt128EqualAVX2Core(src Int128LLSlice, val Int128, bits []byte) int64
 //
 // input:
-//   SI = src0_base (upper qwords)
-//   BP = src1_base (lower qwords)
+//   SI = src_X0_base (upper qwords)
+//   BP = src_X1_base (lower qwords)
 //   DI = bits_base
-//   BX = src_len
+//   BX = src_X0_len
 //   (Y0,Y15) = comparison value for AVX2 (upper/lower qword)
 // internal:
 //   AX = intermediate
@@ -21,18 +21,18 @@
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
 TEXT ·matchInt128EqualAVX2Core(SB), NOSPLIT, $0-96
-	MOVQ	src0_base+0(FP), SI
-    MOVQ    src1_base+24(FP), BP
-	MOVQ	src_len+8(FP), BX
-	MOVQ	dest_base+64(FP), DI
+	MOVQ	src_X0_base+0(FP), SI
+    MOVQ    src_X1_base+24(FP), BP
+	MOVQ	src_X0_len+8(FP), BX
+	MOVQ	bits_base+64(FP), DI
 	XORQ	R9, R9
 
 	CMPQ	BX, $31     // function handles only blocks of 32 values
     JBE		done        // smaller slices and tails are not handled
     
 prep_avx:
-	VBROADCASTSD    val+48(FP), Y0              // load upper qword of val into AVX2 reg
-	VBROADCASTSD    val+56(FP), Y15             // load lower qword of val into AVX2 reg
+	VBROADCASTSD    val_0+48(FP), Y0              // load upper qword of val into AVX2 reg
+	VBROADCASTSD    val_1+56(FP), Y15             // load lower qword of val into AVX2 reg
 	VMOVDQU		    crosslane<>+0x00(SB), Y9    // load permute control mask
 	VMOVDQU		    shuffle64<>+0x00(SB), Y10   // load shuffle control mask
 
@@ -107,10 +107,10 @@ done:
 // func matchInt128NotEqualAVX2Core(src Int128LLSlice, val Int128, bits []byte) int64
 //
 // input:
-//   SI = src0_base (upper qwords)
-//   BP = src1_base (lower qwords)
+//   SI = src_X0_base (upper qwords)
+//   BP = src_X1_base (lower qwords)
 //   DI = bits_base
-//   BX = src_len
+//   BX = src_X0_len
 //   (Y0,Y15) = comparison value for AVX2 (upper/lower qword)
 // internal:
 //   AX = intermediate
@@ -119,18 +119,18 @@ done:
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
 TEXT ·matchInt128NotEqualAVX2Core(SB), NOSPLIT, $0-96
-	MOVQ	src0_base+0(FP), SI
-    MOVQ    src1_base+24(FP), BP
-	MOVQ	src_len+8(FP), BX
-	MOVQ	dest_base+64(FP), DI
+	MOVQ	src_X0_base+0(FP), SI
+    MOVQ    src_X1_base+24(FP), BP
+	MOVQ	src_X0_len+8(FP), BX
+	MOVQ	bits_base+64(FP), DI
 	XORQ	R9, R9
 
 	CMPQ	BX, $31     // function handles only blocks of 32 values
     JBE		done        // smaller slices and tails are not handled
 
 prep_avx:
-	VBROADCASTSD    val+48(FP), Y0              // load upper qword of val into AVX2 reg
-	VBROADCASTSD    val+56(FP), Y15             // load lower qword of val into AVX2 reg
+	VBROADCASTSD    val_0+48(FP), Y0              // load upper qword of val into AVX2 reg
+	VBROADCASTSD    val_1+56(FP), Y15             // load lower qword of val into AVX2 reg
 	VMOVDQU		    crosslane<>+0x00(SB), Y9    // load permute control mask
 	VMOVDQU		    shuffle64<>+0x00(SB), Y10   // load shuffle control mask
 
@@ -206,10 +206,10 @@ done:
 // func matchInt128LessThanAVX2Core(src Int128LLSlice, val Int128, bits []byte) int64
 //
 // input:
-//   SI = src0_base (upper qwords)
-//   BP = src1_base (lower qwords)
+//   SI = src_X0_base (upper qwords)
+//   BP = src_X1_base (lower qwords)
 //   DI = bits_base
-//   BX = src_len
+//   BX = src_X0_len
 //   (Y0,Y15) = comparison value for AVX2 (upper/lower qword)
 // internal:
 //   AX = intermediate
@@ -219,10 +219,10 @@ done:
 //   Y14 = bitmask to flip sign bit (to perform unsigned comparision)
 //   Y1-Y8 = vector data
 TEXT ·matchInt128LessThanAVX2Core(SB), NOSPLIT, $0-96
-	MOVQ	src0_base+0(FP), SI
-    MOVQ    src1_base+24(FP), BP
-	MOVQ	src_len+8(FP), BX
-	MOVQ	dest_base+64(FP), DI
+	MOVQ	src_X0_base+0(FP), SI
+    MOVQ    src_X1_base+24(FP), BP
+	MOVQ	src_X0_len+8(FP), BX
+	MOVQ	bits_base+64(FP), DI
 	XORQ	R9, R9
 
 	CMPQ	BX, $31     // function handles only blocks of 32 values
@@ -231,8 +231,8 @@ TEXT ·matchInt128LessThanAVX2Core(SB), NOSPLIT, $0-96
 prep_avx:
    	VPCMPEQQ		Y14, Y14, Y14           // create 0x8000.. mask
 	VPSLLQ			$63, Y14, Y14           // create 0x8000.. mask
-	VBROADCASTSD    val+48(FP), Y0          // load upper qword of val into AVX2 reg
-	VBROADCASTSD    val+56(FP), Y15         // load lower qword of val into AVX2 reg
+	VBROADCASTSD    val_0+48(FP), Y0          // load upper qword of val into AVX2 reg
+	VBROADCASTSD    val_1+56(FP), Y15         // load lower qword of val into AVX2 reg
 	VPXOR			Y14, Y15, Y15           // flip sign bit
     
 	VMOVDQU		crosslane<>+0x00(SB), Y9    // load permute control mask
@@ -357,10 +357,10 @@ done:
 // func matchInt128LessThanEqualAVX2Core(src Int128LLSlice, val Int128, bits []byte) int64
 //
 // input:
-//   SI = src0_base (upper qwords)
-//   BP = src1_base (lower qwords)
+//   SI = src_X0_base (upper qwords)
+//   BP = src_X1_base (lower qwords)
 //   DI = bits_base
-//   BX = src_len
+//   BX = src_X0_len
 //   (Y0,Y15) = comparison value for AVX2 (upper/lower qword)
 // internal:
 //   AX = intermediate
@@ -370,10 +370,10 @@ done:
 //   Y14 = bitmask to flip sign bit (to perform unsigned comparision)
 //   Y1-Y8 = vector data
 TEXT ·matchInt128LessThanEqualAVX2Core(SB), NOSPLIT, $0-96
-	MOVQ	src0_base+0(FP), SI
-    MOVQ    src1_base+24(FP), BP
-	MOVQ	src_len+8(FP), BX
-	MOVQ	dest_base+64(FP), DI
+	MOVQ	src_X0_base+0(FP), SI
+    MOVQ    src_X1_base+24(FP), BP
+	MOVQ	src_X0_len+8(FP), BX
+	MOVQ	bits_base+64(FP), DI
 	XORQ	R9, R9
 
 	CMPQ	BX, $31     // function handles only blocks of 32 values
@@ -382,8 +382,8 @@ TEXT ·matchInt128LessThanEqualAVX2Core(SB), NOSPLIT, $0-96
 prep_avx:
    	VPCMPEQQ		Y14, Y14, Y14           // create 0x8000.. mask
 	VPSLLQ			$63, Y14, Y14           // create 0x8000.. mask
-	VBROADCASTSD    val+48(FP), Y0          // load upper qword of val into AVX2 reg
-	VBROADCASTSD    val+56(FP), Y15         // load lower qword of val into AVX2 reg
+	VBROADCASTSD    val_0+48(FP), Y0          // load upper qword of val into AVX2 reg
+	VBROADCASTSD    val_1+56(FP), Y15         // load lower qword of val into AVX2 reg
 	VPXOR			Y14, Y15, Y15           // flip sign bit
     
 	VMOVDQU		crosslane<>+0x00(SB), Y9    // load permute control mask
@@ -509,10 +509,10 @@ done:
 // func matchInt128GreaterThanAVX2Core(src Int128LLSlice, val Int128, bits []byte) int64
 //
 // input:
-//   SI = src0_base (upper qwords)
-//   BP = src1_base (lower qwords)
+//   SI = src_X0_base (upper qwords)
+//   BP = src_X1_base (lower qwords)
 //   DI = bits_base
-//   BX = src_len
+//   BX = src_X0_len
 //   (Y0,Y15) = comparison value for AVX2 (upper/lower qword)
 // internal:
 //   AX = intermediate
@@ -522,10 +522,10 @@ done:
 //   Y14 = bitmask to flip sign bit (to perform unsigned comparision)
 //   Y1-Y8 = vector data
 TEXT ·matchInt128GreaterThanAVX2Core(SB), NOSPLIT, $0-96
-	MOVQ	src0_base+0(FP), SI
-    MOVQ    src1_base+24(FP), BP
-	MOVQ	src_len+8(FP), BX
-	MOVQ	dest_base+64(FP), DI
+	MOVQ	src_X0_base+0(FP), SI
+    MOVQ    src_X1_base+24(FP), BP
+	MOVQ	src_X0_len+8(FP), BX
+	MOVQ	bits_base+64(FP), DI
 	XORQ	R9, R9
 
 	CMPQ	BX, $31     // function handles only blocks of 32 values
@@ -534,8 +534,8 @@ TEXT ·matchInt128GreaterThanAVX2Core(SB), NOSPLIT, $0-96
 prep_avx:
    	VPCMPEQQ		Y14, Y14, Y14           // create 0x8000.. mask
 	VPSLLQ			$63, Y14, Y14           // create 0x8000.. mask
-	VBROADCASTSD    val+48(FP), Y0          // load upper qword of val into AVX2 reg
-	VBROADCASTSD    val+56(FP), Y15         // load lower qword of val into AVX2 reg
+	VBROADCASTSD    val_0+48(FP), Y0          // load upper qword of val into AVX2 reg
+	VBROADCASTSD    val_1+56(FP), Y15         // load lower qword of val into AVX2 reg
 	VPXOR			Y14, Y15, Y15           // flip sign bit
     
 	VMOVDQU		crosslane<>+0x00(SB), Y9    // load permute control mask
@@ -660,10 +660,10 @@ done:
 // func matchInt128GreaterThanEqualAVX2Core(src Int128LLSlice, val Int128, bits []byte) int64
 //
 // input:
-//   SI = src0_base (upper qwords)
-//   BP = src1_base (lower qwords)
+//   SI = src_X0_base (upper qwords)
+//   BP = src_X1_base (lower qwords)
 //   DI = bits_base
-//   BX = src_len
+//   BX = src_X0_len
 //   (Y0,Y15) = comparison value for AVX2 (upper/lower qword)
 // internal:
 //   AX = intermediate
@@ -673,10 +673,10 @@ done:
 //   Y14 = bitmask to flip sign bit (to perform unsigned comparision)
 //   Y1-Y8 = vector data
 TEXT ·matchInt128GreaterThanEqualAVX2Core(SB), NOSPLIT, $0-96
-	MOVQ	src0_base+0(FP), SI
-    MOVQ    src1_base+24(FP), BP
-	MOVQ	src_len+8(FP), BX
-	MOVQ	dest_base+64(FP), DI
+	MOVQ	src_X0_base+0(FP), SI
+    MOVQ    src_X1_base+24(FP), BP
+	MOVQ	src_X0_len+8(FP), BX
+	MOVQ	bits_base+64(FP), DI
 	XORQ	R9, R9
 
 	CMPQ	BX, $31     // function handles only blocks of 32 values
@@ -685,8 +685,8 @@ TEXT ·matchInt128GreaterThanEqualAVX2Core(SB), NOSPLIT, $0-96
 prep_avx:
    	VPCMPEQQ		Y14, Y14, Y14           // create 0x8000.. mask
 	VPSLLQ			$63, Y14, Y14           // create 0x8000.. mask
-	VBROADCASTSD    val+48(FP), Y0          // load upper qword of val into AVX2 reg
-	VBROADCASTSD    val+56(FP), Y15         // load lower qword of val into AVX2 reg
+	VBROADCASTSD    val_0+48(FP), Y0          // load upper qword of val into AVX2 reg
+	VBROADCASTSD    val_1+56(FP), Y15         // load lower qword of val into AVX2 reg
 	VPXOR			Y14, Y15, Y15           // flip sign bit
     
 	VMOVDQU		crosslane<>+0x00(SB), Y9    // load permute control mask
@@ -812,10 +812,10 @@ done:
 // func matchInt128BetweenAVX2Core(src Int128LLSlice, a, b Int128, bits []byte) int64
 //
 // input:
-//   SI = src0_base (upper qwords)
-//   BP = src1_base (lower qwords)
+//   SI = src_X0_base (upper qwords)
+//   BP = src_X1_base (lower qwords)
 //   DI = bits_base
-//   BX = src_len
+//   BX = src_X0_len
 //   (Y0,Y15) = upper bound: b
 //   (Y13,Y14) = lower bound: a
 // internal:
@@ -826,10 +826,10 @@ done:
 //   Y12 = bit mask for sign bit (used for unsigned comparision)
 //   Y1-Y8 = vector data
 TEXT ·matchInt128BetweenAVX2Core(SB), NOSPLIT, $0-112
-	MOVQ	src0_base+0(FP), SI
-    MOVQ    src1_base+24(FP), BP
-	MOVQ	src_len+8(FP), BX
-	MOVQ	dest_base+80(FP), DI
+	MOVQ	src_X0_base+0(FP), SI
+    MOVQ    src_X1_base+24(FP), BP
+	MOVQ	src_X0_len+8(FP), BX
+	MOVQ	bits_base+80(FP), DI
 	XORQ	R9, R9
 
 	CMPQ	BX, $31     // function handles only blocks of 32 values
@@ -839,11 +839,11 @@ prep_avx:
    	VPCMPEQQ		Y12, Y12, Y12           // create 0x8000.. mask
 	VPSLLQ			$63, Y12, Y12           // create 0x8000.. mask
 
-	VBROADCASTSD    a+48(FP), Y13           // load upper qword of a into AVX2 reg
-	VBROADCASTSD    a+56(FP), Y14           // load lower qword of a into AVX2 reg
+	VBROADCASTSD    a_0+48(FP), Y13           // load upper qword of a into AVX2 reg
+	VBROADCASTSD    a_1+56(FP), Y14           // load lower qword of a into AVX2 reg
 	VPXOR			Y12, Y14, Y14           // flip sign bit of lower qword
-	VBROADCASTSD    b+64(FP), Y0            // load upper qword of b into AVX2 reg
-	VBROADCASTSD    b+72(FP), Y15           // load lower qword of b into AVX2 reg
+	VBROADCASTSD    b_0+64(FP), Y0            // load upper qword of b into AVX2 reg
+	VBROADCASTSD    b_1+72(FP), Y15           // load lower qword of b into AVX2 reg
 	VPXOR			Y12, Y15, Y15           // flip sign bit of lower qword
     
 	VMOVDQU		    crosslane<>+0x00(SB), Y9    // load permute control mask

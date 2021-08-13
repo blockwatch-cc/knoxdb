@@ -38,9 +38,6 @@ type Int256MatchTest struct {
 }
 
 var (
-	//MaxInt256.Rsh(1)  = Int256{math.MaxInt64 / 2, math.MaxUint64, math.MaxUint64, math.MaxUint64}
-	//MaxInt256.Rsh(2) = Int256{math.MaxInt64 / 4, math.MaxUint64, math.MaxUint64, math.MaxUint64}
-
 	// positive values only
 	Int256TestSlice_1 = []Int256{
 		{0, 0, 2, 5}, {0, 0, 2, 2}, {0, 0, 2, 3}, {0, 0, 2, 4},

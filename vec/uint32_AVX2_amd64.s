@@ -20,7 +20,7 @@
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32EqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchUint32EqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -218,7 +218,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32NotEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchUint32NotEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -419,7 +419,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32LessThanAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchUint32LessThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -598,7 +598,7 @@ exit_small:
 	JLE		done
 
 prep_scalar:
-	MOVQ	val+24(FP), DX   // load val for comparison
+	MOVL	val+24(FP), DX   // load val for comparison
 	MOVQ    $1, R12          // create 0x80... mask
 	SHLL    $31, R12
 	XORL    R12, DX          // flip sign bit
@@ -663,7 +663,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32LessThanEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchUint32LessThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -845,7 +845,7 @@ exit_small:
 	JLE		done
 
 prep_scalar:
-	MOVQ	val+24(FP), DX   // load val for comparison
+	MOVL	val+24(FP), DX   // load val for comparison
 	MOVQ    $1, R12          // create 0x80... mask
 	SHLL    $31, R12
 	XORL    R12, DX          // flip sign bit
@@ -910,7 +910,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32GreaterThanAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchUint32GreaterThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -1088,7 +1088,7 @@ exit_small:
 	JLE		done
 
 prep_scalar:
-	MOVQ	val+24(FP), DX   // load val for comparison
+	MOVL	val+24(FP), DX   // load val for comparison
 	MOVQ    $1, R12          // create 0x80... mask
 	SHLL    $31, R12
 	XORL    R12, DX          // flip sign bit
@@ -1153,7 +1153,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint32GreaterThanEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchUint32GreaterThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -1335,7 +1335,7 @@ exit_small:
 	JLE		done
 
 prep_scalar:
-	MOVQ	val+24(FP), DX   // load val for comparison
+	MOVL	val+24(FP), DX   // load val for comparison
 	MOVQ    $1, R12          // create 0x80... mask
 	SHLL    $31, R12
 	XORL    R12, DX          // flip sign bit
@@ -1403,7 +1403,7 @@ done:
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
-TEXT ·matchUint32BetweenAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchUint32BetweenAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
