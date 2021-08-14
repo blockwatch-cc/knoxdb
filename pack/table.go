@@ -1240,7 +1240,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				t.name, loop, tpos, tlen, jpos, jlen, lastpack, t.packidx.Len(), nextid,
 			)
 			return fmt.Errorf("pack: %s infinite flush loop detected. Database is likely corrupted.", t.name)
-		} else if loop > maxloop {
+		} else if loop == maxloop {
 			log.SetLevel(levelDebug)
 			log.Debugf("pack: %s circuit breaker activated at loop %d tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d",
 				t.name, loop, tpos, tlen, jpos, jlen, lastpack, t.packidx.Len(), nextid,
@@ -1336,8 +1336,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				if nextmin > 0 && key.pk >= nextmin {
 					// if best, min, max := t.findBestPack(key.pk); best != lastpack {
 					// best, min, max, _ := t.findBestPack(key.pk)
-					// log.Debugf("Key %d does not fit into pack %d [%d:%d], suggested %d/%d [%d:%d]",
-					// 	key.pk, lastpack, packmin, packmax, best, t.packidx.Len(), min, max)
+					// log.Debugf("Key %d does not fit into pack %d [%d:%d], suggested %d/%d [%d:%d] nextmin=%d",
+					// 	key.pk, lastpack, packmin, packmax, best, t.packidx.Len(), min, max, nextmin)
 					break
 				}
 
@@ -1384,14 +1384,14 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					isOOInsert = key.pk < packmax
 					if isOOInsert {
 						// insert in-place (EXPENSIVE!)
-						// log.Infof("Insert key %d to pack %d", key.pk, lastpack)
+						// log.Debugf("Insert key %d to pack %d", key.pk, lastpack)
 						if err := pkg.InsertFrom(jpack, last, key.idx, 1); err != nil {
 							return err
 						}
 						packmin = util.NonZeroMinU64(packmin, key.pk)
 					} else {
 						// append new records
-						// log.Infof("Append key %d to pack %d", key.pk, lastpack)
+						// log.Debugf("Append key %d to pack %d", key.pk, lastpack)
 						if err := pkg.AppendFrom(jpack, key.idx, 1); err != nil {
 							return err
 						}
@@ -1575,7 +1575,7 @@ func (t *Table) findBestPack(pkval uint64) (int, uint64, uint64, uint64) {
 	}
 
 	// trigger new pack creation
-	// log.Debugf("%s: Should create new pack", t.name)
+	// log.Debugf("%s: Should create new pack for key=%d: isfull=%t min=%d, max=%d nextmin=%d", t.name, pkval, isFull, min, max, nextmin)
 	return t.packidx.Len(), 0, 0, 0
 
 }
