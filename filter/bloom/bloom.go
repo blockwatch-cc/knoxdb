@@ -47,6 +47,14 @@ func (f *Filter) K() uint64 { return f.k }
 // Bytes returns the underlying backing slice.
 func (f *Filter) Bytes() []byte { return f.b }
 
+// Reset all bits in the filter.
+func (f *Filter) Reset() {
+	f.b[0] = 0
+	for bp := 1; bp < len(f.b); bp *= 2 {
+		copy(f.b[bp:], f.b[:bp])
+	}
+}
+
 // Clone returns a copy of f.
 func (f *Filter) Clone() *Filter {
 	other := &Filter{k: f.k, b: make([]byte, len(f.b)), mask: f.mask}

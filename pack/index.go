@@ -785,7 +785,7 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 
 		// load pack (we need pk field and all index fields)
 		fields := idx.table.Fields().Select(idx.Field.Name).Add(idx.table.Fields().Pk())
-		pkg, err := idx.table.loadPack(tx, ph.Key, false, fields)
+		pkg, err := idx.table.loadSharedPack(tx, ph.Key, false, fields)
 		if err != nil {
 			return err
 		}

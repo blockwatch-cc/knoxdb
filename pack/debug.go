@@ -114,7 +114,7 @@ func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
 		return err
 	}
 	defer tx.Rollback()
-	pkg, err := t.loadPack(tx, t.packidx.Get(i).Key, false, nil)
+	pkg, err := t.loadSharedPack(tx, t.packidx.Get(i).Key, false, nil)
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	}
 	lineNo := 1
 	for i := 0; i < t.packidx.Len(); i++ {
-		pkg, err := t.loadPack(tx, t.packidx.Get(i).Key, false, nil)
+		pkg, err := t.loadSharedPack(tx, t.packidx.Get(i).Key, false, nil)
 		if err != nil {
 			return err
 		}

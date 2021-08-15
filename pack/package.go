@@ -109,6 +109,14 @@ func (p *Package) FieldByName(name string) Field {
 	return Field{Index: -1}
 }
 
+func (p *Package) PkField() Field {
+	return p.fields.Pk()
+}
+
+func (p *Package) Fields() FieldList {
+	return p.fields
+}
+
 func (p *Package) FieldById(idx int) Field {
 	if idx < 0 {
 		return Field{Index: -1}

@@ -40,8 +40,8 @@ type Condition struct {
 	nomatch      bool                // condition is empty (used on index matches)
 	hashmap      map[uint64]int      // compiled hashmap for byte/string set queries
 	hashoverflow []hashvalue         // hash collision overflow list (one for all)
-	int256map    map[Int256]struct{} // compiled int64 map for set membership
-	int128map    map[Int128]struct{} // compiled int64 map for set membership
+	int256map    map[Int256]struct{} // compiled int256 map for set membership
+	int128map    map[Int128]struct{} // compiled int128 map for set membership
 	int64map     map[int64]struct{}  // compiled int64 map for set membership
 	int32map     map[int32]struct{}  // compiled int32 map for set membership
 	int16map     map[int16]struct{}  // compiled int16 map for set membership
@@ -538,10 +538,13 @@ func (c *Condition) Compile() (err error) {
 // match package min/max values against the condition
 // Note: min/max are raw storage values (i.e. for decimals, they are scaled integers)
 func (c Condition) MaybeMatchPack(info PackInfo) bool {
-	min, max := info.Blocks[c.Field.Index].MinValue, info.Blocks[c.Field.Index].MaxValue
+	min := info.Blocks[c.Field.Index].MinValue
+	max := info.Blocks[c.Field.Index].MaxValue
+	filter := info.Blocks[c.Field.Index].Bloom
 	scale := c.Field.Scale
+	typ := c.Field.Type
 	// decimals only: convert storage type used in block info to field type
-	switch c.Field.Type {
+	switch typ {
 	case FieldTypeDecimal32:
 		min = NewDecimal32(min.(int32), scale)
 		max = NewDecimal32(max.(int32), scale)
@@ -559,22 +562,22 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 	switch c.Mode {
 	case FilterModeEqual:
 		// condition value is within range
-		return c.Field.Type.Between(c.Value, min, max)
+		return typ.Between(c.Value, min, max) && typ.MatchBloom(filter, c.Value)
 	case FilterModeNotEqual:
 		return true // we don't know, so full scan is required
 	case FilterModeRange:
 		// check if pack min-max range overlaps c.From-c.To range
-		return !(c.Field.Type.Lt(max, c.From) || c.Field.Type.Gt(min, c.To))
+		return !(typ.Lt(max, c.From) || typ.Gt(min, c.To))
 	case FilterModeIn:
 		// check if any of the IN condition values fall into the pack's min and max range
-		return c.Field.Type.InBetween(c.Value, min, max) // c.Value is a slice
+		return typ.InBetween(c.Value, min, max) && typ.InBloom(filter, c.Value) // c.Value is a slice
 	case FilterModeNotIn:
 		return true // we don't know here, so full scan is required
 	case FilterModeRegexp:
 		return true // we don't know, so full scan is required
 	case FilterModeGt:
 		// min OR max is > condition value
-		return c.Field.Type.Gt(min, c.Value) || c.Field.Type.Gt(max, c.Value)
+		return typ.Gt(min, c.Value) || typ.Gt(max, c.Value)
 	case FilterModeGte:
 		// min OR max is >= condition value
 		return c.Field.Type.Gte(min, c.Value) || c.Field.Type.Gte(max, c.Value)

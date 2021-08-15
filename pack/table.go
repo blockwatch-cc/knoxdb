@@ -1211,7 +1211,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 			if nextpack < t.packidx.Len() {
 				// log.Debugf("Loading pack %d/%d with key %d", nextpack, t.packidx.Len(), t.packidx.packs[nextpack].Key)
 				var err error
-				pkg, err = t.loadPack(tx, t.packidx.packs[nextpack].Key, true, nil)
+				pkg, err = t.loadWritablePack(tx, t.packidx.packs[nextpack].Key, nil)
 				if err != nil && err != ErrPackNotFound {
 					return err
 				}
@@ -1705,7 +1705,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		// from the id lookup slice, so we may know better if the pack
 		// matches or not
 
-		pkg, err := t.loadPack(tx, t.packidx.packs[nextpack].Key, true, q.reqfields)
+		pkg, err := t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.reqfields)
 		if err != nil {
 			res.Close()
 			return nil, err
@@ -1836,7 +1836,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 			}
 
 			// load pack from cache or storage, will be recycled on cache eviction
-			pkg, err := t.loadPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
+			pkg, err := t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
 			if err != nil {
 				res.Close()
 				return nil, err
@@ -2027,7 +2027,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 			}
 
 			// load pack from cache or storage, will be recycled on cache eviction
-			pkg, err := t.loadPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
+			pkg, err := t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
 			if err != nil {
 				res.Close()
 				return nil, err
@@ -2150,7 +2150,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 			}
 
 			// load pack from cache or storage, will be recycled on cache eviction
-			pkg, err := t.loadPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
+			pkg, err := t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
 			if err != nil {
 				return 0, err
 			}
@@ -2277,7 +2277,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 			}
 
 			// load pack from cache or storage, will be recycled on cache eviction
-			pkg, err := t.loadPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
+			pkg, err := t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
 			if err != nil {
 				return err
 			}
@@ -2459,7 +2459,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 			}
 
 			// load pack from cache or storage, will be recycled on cache eviction
-			pkg, err := t.loadPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
+			pkg, err := t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
 			if err != nil {
 				return err
 			}
@@ -2635,7 +2635,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			return ctx.Err()
 		}
 
-		pkg, err := t.loadPack(tx, t.packidx.packs[nextpack].Key, true, q.reqfields)
+		pkg, err := t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.reqfields)
 		if err != nil {
 			return err
 		}
@@ -2769,7 +2769,7 @@ func (t *Table) Compact(ctx context.Context) error {
 				}
 
 				// log.Tracef("pack: loading dst pack %d:%x", dstIndex, dstKey)
-				dstPack, err = t.loadPack(tx, dstKey, false, nil)
+				dstPack, err = t.loadWritablePack(tx, dstKey, nil)
 				if err != nil {
 					return err
 				}
@@ -2813,7 +2813,7 @@ func (t *Table) Compact(ctx context.Context) error {
 
 			ph := t.packidx.packs[srcIndex]
 			// log.Tracef("pack: loading src pack %d:%x", srcIndex, ph.Key)
-			srcPack, err = t.loadPack(tx, ph.Key, false, nil)
+			srcPack, err = t.loadWritablePack(tx, ph.Key, nil)
 			if err != nil {
 				return err
 			}
@@ -2915,7 +2915,7 @@ func (t *Table) cachekey(key []byte) string {
 	return t.name + "/" + hex.EncodeToString(key)
 }
 
-func (t *Table) loadPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
+func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
 	// determine if we need to load a full pack or a stripped version with less fields
 	stripped := len(fields) > 0 && len(fields) < len(t.Fields())
 	key := encodePackKey(id)
@@ -2974,9 +2974,47 @@ func (t *Table) loadPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Pack
 	return pkg, nil
 }
 
+// loads a private copy of a pack for writing
+func (t *Table) loadWritablePack(tx *Tx, id uint32, fields FieldList) (*Package, error) {
+	key := encodePackKey(id)
+
+	// when package is cached, create a private clone
+	if cached, ok := t.cache.Get(t.cachekey(key)); ok {
+		atomic.AddInt64(&t.stats.PackCacheHits, 1)
+		pkg := cached.(*Package)
+		clone, err := pkg.Clone(true, pkg.Len())
+		return clone, err
+	}
+
+	// load from storage
+	var err error
+	pkg := t.packPool.Get().(*Package)
+	pkg, err = tx.loadPack(t.key, key, pkg)
+	if err != nil {
+		return nil, err
+	}
+	atomic.AddInt64(&t.stats.PacksLoaded, 1)
+	atomic.AddInt64(&t.stats.PackBytesRead, int64(pkg.size))
+	return pkg, nil
+}
+
 func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 	key := pkg.Key()
-	cachekey := t.cachekey(key)
+
+	defer func() {
+		// remove from cache, returns back to pool
+		cachekey := t.cachekey(key)
+		t.cache.Remove(cachekey)
+
+		// also remove all stripped packs from cache
+		cachekey += "#"
+		for _, v := range t.cache.Keys() {
+			if strings.HasPrefix(v.(string), cachekey) {
+				t.cache.Remove(v)
+			}
+		}
+	}()
+
 	if pkg.Len() > 0 {
 		// build header statistics
 		info := pkg.Info()
@@ -2991,52 +3029,26 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 			return 0, err
 		}
 
-		// update header statistics
+		// update statistics
 		info.Size = n
 		t.packidx.AddOrUpdate(info)
-
-		// handle caching below to avoid the pack beeing free'd early
 		atomic.AddInt64(&t.stats.PacksStored, 1)
 		atomic.AddInt64(&t.stats.PackBytesWritten, int64(n))
-		if pkg.cached {
-			inserted, _ := t.cache.ContainsOrAdd(cachekey, pkg)
-			if inserted {
-				atomic.AddInt64(&t.stats.PackCacheInserts, 1)
-			} else {
-				atomic.AddInt64(&t.stats.PackCacheUpdates, 1)
-			}
-		}
-		// remove all stripped packs from cache
-		prefix := cachekey + "#"
-		for _, v := range t.cache.Keys() {
-			if strings.HasPrefix(v.(string), prefix) {
-				t.cache.Remove(v)
-			}
-		}
 		return n, nil
-	}
 
-	// If pack is empty
+	} else {
+		// If pack is empty
 
-	// drop from index first because cache removal below recycle and clear the pack
-	t.packidx.Remove(pkg.key)
+		// drop from index
+		t.packidx.Remove(pkg.key)
 
-	// remove from storage
-	if err := tx.deletePack(t.key, key); err != nil {
-		return 0, err
-	}
-
-	// remove from cache, returns back to pool
-	t.cache.Remove(cachekey)
-
-	// also remove all stripped packs from cache
-	prefix := cachekey + "#"
-	for _, v := range t.cache.Keys() {
-		if strings.HasPrefix(v.(string), prefix) {
-			t.cache.Remove(v)
+		// remove from storage
+		if err := tx.deletePack(t.key, key); err != nil {
+			return 0, err
 		}
+
+		return 0, nil
 	}
-	return 0, nil
 }
 
 // Note: pack must have been storted before splitting

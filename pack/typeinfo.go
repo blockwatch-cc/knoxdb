@@ -233,15 +233,30 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 					}
 				}
 				finfo.typname = typname
+				finfo.scale = prec
 				if len(ff) > 1 {
 					scale, err := strconv.Atoi(ff[1])
 					if err != nil {
 						return nil, fmt.Errorf("pack: invalid scale value %s on field '%s': %v", ff[1], tag, err)
 					}
 					if scale < 0 || scale > prec {
-						return nil, fmt.Errorf("pack: out of bound scale %d on field '%s' [0,%d]", scale, tag, prec)
+						return nil, fmt.Errorf("pack: out of bound scale %d on field '%s', should be [0..%d]", scale, tag, prec)
 					}
 					finfo.scale = scale
+				}
+			case "bloom":
+				finfo.flags |= FlagBloom
+				finfo.scale = 95
+				if len(ff) > 1 {
+					prob, err := strconv.Atoi(ff[1])
+					if err != nil {
+						return nil, fmt.Errorf("pack: invalid bloom filter error probability %s on field '%s': %v", ff[1], tag, err)
+					}
+					if prob < 10 || prob > 100 {
+						return nil, fmt.Errorf("pack: out of bound bloom error probabilty %d on field '%s', should be 1/[10..100]", prob, tag)
+					}
+					// re-use scale to store bloom filter error probability
+					finfo.scale = prob
 				}
 			default:
 				return nil, fmt.Errorf("pack: unsupported struct tag '%s' on field '%s'", ff[0], tag)

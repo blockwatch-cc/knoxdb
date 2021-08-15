@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sort"
+	"time"
 )
 
 type PackInfo struct {
@@ -46,6 +47,8 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 	if h.Key != pkg.key {
 		return fmt.Errorf("pack: info key mismatch %x/%d ", h.Key, pkg.key)
 	}
+	pk := pkg.PkField()
+	isIndexPack := pkg.Cols() == 2 && pkg.FieldById(0).Name == "K" && pkg.FieldById(1).Name == "I"
 	for i := range h.Blocks {
 		if have, want := h.Blocks[i].Type, pkg.blocks[i].Type(); have != want {
 			return fmt.Errorf("pack: block type mismatch in pack %x/%d: %s != %s ",
@@ -55,15 +58,48 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 			continue
 		}
 
-		// TODO: optimize for pk slices (always sorted) and indexes (not required
-		// for value slice)
+		// optimize for pk slices (always sorted) and index values (not required)
+		if i == pk.Index {
+			pkslice := pkg.blocks[i].Uint64
+			h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkslice[0], pkslice[len(pkslice)-1]
+		} else if !isIndexPack {
+			// EXPENSIVE: collects full min/max statistics
+			h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkg.blocks[i].MinMax()
 
-		// EXPENSIVE: collects full min/max statistics
-		h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkg.blocks[i].MinMax()
+			// EXPENSIVE: build bloom filter from column vector
+			field := pkg.FieldById(i)
+			if field.Flags.Contains(FlagBloom) {
+				start := time.Now()
+				h.Blocks[i].Bloom = field.Type.BuildBloomFilter(pkg.blocks[field.Index], field.Scale)
+				log.Infof("Pack %d field %s: bloom filter for %d values size=%d took %s",
+					pkg.key, field.Alias, pkg.Len(), len(h.Blocks[i].Bloom.Bytes()), time.Since(start))
+			}
+		}
+
 		h.Blocks[i].dirty = false
 
 		// signal that this pack info must be saved
 		h.dirty = true
+	}
+	return nil
+}
+
+func (h *PackInfo) UpdateVolatileStats(pkg *Package) error {
+	if h.Key != pkg.key {
+		return fmt.Errorf("pack: info key mismatch %x/%d ", h.Key, pkg.key)
+	}
+	// only bloom filters currently
+	for _, field := range pkg.Fields() {
+		if !field.Flags.Contains(FlagBloom) {
+			continue
+		}
+		if h.Blocks[field.Index].Bloom != nil {
+			continue
+		}
+		start := time.Now()
+		h.Blocks[field.Index].Bloom = field.Type.BuildBloomFilter(pkg.blocks[field.Index], field.Scale)
+		log.Infof("Pack %d field %s: bloom filter for %d values size=%d took %s",
+			pkg.key, field.Alias, pkg.Len(), len(h.Blocks[field.Index].Bloom.Bytes()), time.Since(start))
 	}
 	return nil
 }

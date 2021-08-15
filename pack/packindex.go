@@ -125,7 +125,7 @@ func (l *PackIndex) IsFull(i int) bool {
 	if i < 0 || i >= l.Len() {
 		return false
 	}
-	return l.packs[i].NValues >= l.maxsize
+	return l.maxsize > 0 && l.packs[i].NValues >= l.maxsize
 }
 
 // called by storePack
