@@ -28,13 +28,13 @@ const (
 	FlagIndexed
 	FlagCompressSnappy
 	FlagCompressLZ4
-	FlagBloom
 
 	// internal type conversion flags used when a struct field's Go type
 	// does not directly match the requested field type
 	flagFloatType
 	flagIntType
 	flagUintType
+	FlagBloom
 )
 
 func (f FieldFlags) Compression() block.Compression {
@@ -272,9 +272,6 @@ func Fields(proto interface{}) (FieldList, error) {
 		fields[i].Alias = finfo.alias
 		fields[i].Index = i
 		fields[i].Flags = finfo.flags
-		if finfo.flags.Contains(FlagBloom) {
-			fields[i].Scale = finfo.scale
-		}
 		switch f.Kind() {
 		case reflect.Int, reflect.Int64:
 			fields[i].Type = FieldTypeInt64
@@ -368,6 +365,9 @@ func Fields(proto interface{}) (FieldList, error) {
 		// allow the user to specify a different type in struct tags
 		if finfo.override.IsValid() {
 			fields[i].Type = finfo.override
+			fields[i].Scale = finfo.scale
+		}
+		if finfo.flags.Contains(FlagBloom) {
 			fields[i].Scale = finfo.scale
 		}
 	}
@@ -2707,10 +2707,9 @@ func (t FieldType) EqualPacksAt(p1 *Package, i1, n1 int, p2 *Package, i2, n2 int
 	}
 }
 
-func (t FieldType) BuildBloomFilter(b *block.Block, prob int) *bloom.Filter {
-	n, k := bloom.Estimate(uint64(b.Cap()), 1.0/float64(prob))
-	log.Infof("Creating bloom filter for block len=%d, prob=%d, n=%d, k=%d", b.Cap(), prob, n, k)
-	flt := bloom.NewFilter(n, k)
+func (t FieldType) BuildBloomFilter(b *block.Block, factor int) *bloom.Filter {
+	m := uint64(b.Cap() * factor * 8)
+	flt := bloom.NewFilter(m, 4)
 	var buf [8]byte
 	switch t {
 	case FieldTypeBytes:
@@ -2798,186 +2797,61 @@ func (t FieldType) BuildBloomFilter(b *block.Block, prob int) *bloom.Filter {
 	return flt
 }
 
-func (t FieldType) MatchBloom(b *bloom.Filter, val interface{}) bool {
-	if b == nil {
-		return true
+// used for bloom filter test value compilation
+func (t FieldType) Bytes(val interface{}) []byte {
+	if val == nil {
+		return nil
 	}
 	var buf [8]byte
 	switch t {
 	case FieldTypeBytes:
-		return b.Contains(val.([]byte))
+		return val.([]byte)
 	case FieldTypeString:
-		return b.Contains([]byte(val.(string)))
+		return []byte(val.(string))
 	case FieldTypeDatetime:
 		bigEndian.PutUint64(buf[:], uint64(val.(int64)))
-		return b.Contains(buf[:])
+		return buf[:]
 	case FieldTypeBoolean:
 		if v := val.(bool); v {
-			return b.Contains([]byte{1})
+			return []byte{1}
 		} else {
-			return b.Contains([]byte{0})
+			return []byte{0}
 		}
 	case FieldTypeInt256, FieldTypeDecimal256:
 		buf := val.(Int256).Bytes32()
-		return b.Contains(buf[:])
+		return buf[:]
 	case FieldTypeInt128, FieldTypeDecimal128:
 		buf := val.(Int128).Bytes16()
-		return b.Contains(buf[:])
+		return buf[:]
 	case FieldTypeInt64, FieldTypeDecimal64:
 		bigEndian.PutUint64(buf[:], uint64(val.(int64)))
-		return b.Contains(buf[:])
+		return buf[:]
 	case FieldTypeInt32, FieldTypeDecimal32:
 		bigEndian.PutUint32(buf[:], val.(uint32))
-		return b.Contains(buf[:4])
+		return buf[:4]
 	case FieldTypeInt16:
 		bigEndian.PutUint16(buf[:], val.(uint16))
-		return b.Contains(buf[:2])
+		return buf[:2]
 	case FieldTypeInt8:
-		return b.Contains([]byte{byte(val.(int8))})
+		return []byte{byte(val.(int8))}
 	case FieldTypeUint64:
 		bigEndian.PutUint64(buf[:], val.(uint64))
-		return b.Contains(buf[:])
+		return buf[:]
 	case FieldTypeUint32:
 		bigEndian.PutUint32(buf[:], val.(uint32))
-		return b.Contains(buf[:4])
+		return buf[:4]
 	case FieldTypeUint16:
 		bigEndian.PutUint16(buf[:], val.(uint16))
-		return b.Contains(buf[:2])
+		return buf[:2]
 	case FieldTypeUint8:
-		return b.Contains([]byte{byte(val.(uint8))})
+		return []byte{byte(val.(uint8))}
 	case FieldTypeFloat64:
 		bigEndian.PutUint64(buf[:], math.Float64bits(val.(float64)))
-		return b.Contains(buf[:])
+		return buf[:]
 	case FieldTypeFloat32:
 		bigEndian.PutUint32(buf[:], math.Float32bits(val.(float32)))
-		return b.Contains(buf[:4])
+		return buf[:4]
 	default:
-		return true
+		return nil
 	}
-}
-
-func (t FieldType) InBloom(b *bloom.Filter, val interface{}) bool {
-	if b == nil {
-		return true
-	}
-	var buf [8]byte
-	switch t {
-	case FieldTypeBytes:
-		for _, v := range val.([][]byte) {
-			if b.Contains(v) {
-				return true
-			}
-		}
-	case FieldTypeString:
-		for _, v := range val.([]string) {
-			if b.Contains([]byte(v)) {
-				return true
-			}
-		}
-	case FieldTypeDatetime:
-		for _, v := range val.([]int64) {
-			bigEndian.PutUint64(buf[:], uint64(v))
-			if b.Contains(buf[:]) {
-				return true
-			}
-		}
-	case FieldTypeBoolean:
-		for _, v := range val.([]string) {
-			if b.Contains([]byte(v)) {
-				return true
-			}
-		}
-		if v := val.(bool); v {
-			return b.Contains([]byte{1})
-		} else {
-			return b.Contains([]byte{0})
-		}
-	case FieldTypeInt256, FieldTypeDecimal256:
-		for _, v := range val.([]string) {
-			if b.Contains([]byte(v)) {
-				return true
-			}
-		}
-		buf := val.(Int256).Bytes32()
-		return b.Contains(buf[:])
-	case FieldTypeInt128, FieldTypeDecimal128:
-		for _, v := range val.([]string) {
-			if b.Contains([]byte(v)) {
-				return true
-			}
-		}
-		buf := val.(Int128).Bytes16()
-		return b.Contains(buf[:])
-	case FieldTypeInt64, FieldTypeDecimal64:
-		for _, v := range val.([]int64) {
-			bigEndian.PutUint64(buf[:], uint64(v))
-			if b.Contains(buf[:]) {
-				return true
-			}
-		}
-	case FieldTypeInt32, FieldTypeDecimal32:
-		for _, v := range val.([]int32) {
-			bigEndian.PutUint32(buf[:], uint32(v))
-			if b.Contains(buf[:4]) {
-				return true
-			}
-		}
-	case FieldTypeInt16:
-		for _, v := range val.([]int16) {
-			bigEndian.PutUint16(buf[:], uint16(v))
-			if b.Contains(buf[:2]) {
-				return true
-			}
-		}
-	case FieldTypeInt8:
-		for _, v := range val.([]int8) {
-			if b.Contains([]byte{byte(v)}) {
-				return true
-			}
-		}
-	case FieldTypeUint64:
-		for _, v := range val.([]uint64) {
-			bigEndian.PutUint64(buf[:], v)
-			if b.Contains(buf[:]) {
-				return true
-			}
-		}
-	case FieldTypeUint32:
-		for _, v := range val.([]uint32) {
-			bigEndian.PutUint32(buf[:], v)
-			if b.Contains(buf[:4]) {
-				return true
-			}
-		}
-	case FieldTypeUint16:
-		for _, v := range val.([]uint16) {
-			bigEndian.PutUint16(buf[:], v)
-			if b.Contains(buf[:2]) {
-				return true
-			}
-		}
-	case FieldTypeUint8:
-		for _, v := range val.([]uint8) {
-			if b.Contains([]byte{v}) {
-				return true
-			}
-		}
-	case FieldTypeFloat64:
-		for _, v := range val.([]float64) {
-			bigEndian.PutUint64(buf[:], math.Float64bits(v))
-			if b.Contains(buf[:]) {
-				return true
-			}
-		}
-	case FieldTypeFloat32:
-		for _, v := range val.([]float32) {
-			bigEndian.PutUint32(buf[:], math.Float32bits(v))
-			if b.Contains(buf[:4]) {
-				return true
-			}
-		}
-	default:
-		return true
-	}
-	return false
 }

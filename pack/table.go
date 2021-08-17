@@ -2706,7 +2706,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		needCompact = needCompact || (i < srcPacks-1 && v.NValues < maxsz) // non-full pack (except the last)
 		nextpack++
 		total += int64(v.NValues)
-		srcSize += int64(v.Size)
+		srcSize += int64(v.Packsize)
 	}
 	if !needCompact {
 		log.Debugf("pack: %s table %d packs / %d rows already compact", t.name, srcPacks, total)
@@ -2961,6 +2961,12 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
 	atomic.AddInt64(&t.stats.PackBytesRead, int64(pkg.size))
 
+	// update stats on full packs only
+	// FIXME: writes to pack index which is supposed to be read-only
+	if !stripped {
+		t.packidx.UpdateStatistics(pkg)
+	}
+
 	pkg.cached = touch
 	// store in cache
 	if touch {
@@ -3030,7 +3036,7 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 		}
 
 		// update statistics
-		info.Size = n
+		info.Packsize = n
 		t.packidx.AddOrUpdate(info)
 		atomic.AddInt64(&t.stats.PacksStored, 1)
 		atomic.AddInt64(&t.stats.PackBytesWritten, int64(n))
@@ -3129,7 +3135,8 @@ func (t *Table) Size() TableSizeStats {
 		pkg := val.(*Package)
 		sz.CacheSize += pkg.HeapSize()
 	}
+	sz.StatsSize = t.packidx.Size()
 	sz.JournalSize = t.journal.HeapSize()
-	sz.TotalSize = sz.JournalSize + sz.IndexSize + sz.CacheSize
+	sz.TotalSize = sz.JournalSize + sz.IndexSize + sz.CacheSize + sz.StatsSize
 	return sz
 }

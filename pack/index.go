@@ -1341,7 +1341,7 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 	atomic.AddInt64(&idx.table.stats.IndexBytesWritten, int64(n))
 
 	// update pack index
-	info.Size = n
+	info.Packsize = n
 	idx.packidx.AddOrUpdate(info)
 
 	// remove empty packidx from cache and return to pool

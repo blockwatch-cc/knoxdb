@@ -67,7 +67,7 @@ func (f *Filter) Clone() *Filter {
 
 // Insert inserts data to the filter.
 func (f *Filter) Insert(v []byte) {
-	h := f.Hash(v)
+	h := Hash(v)
 	for i := uint64(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		f.b[loc>>3] |= 1 << (loc & 7)
@@ -77,7 +77,7 @@ func (f *Filter) Insert(v []byte) {
 // Contains returns true if the filter possibly contains v.
 // Returns false if the filter definitely does not contain v.
 func (f *Filter) Contains(v []byte) bool {
-	h := f.Hash(v)
+	h := Hash(v)
 	for i := uint64(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
@@ -85,20 +85,6 @@ func (f *Filter) Contains(v []byte) bool {
 		}
 	}
 	return true
-}
-
-// Hash returns two 64-bit hashes based on the output of xxhash.
-func (f *Filter) Hash(data []byte) [2]uint64 {
-	v1 := xxhash.Sum64(data)
-	var v2 uint64
-	if l := len(data); l > 0 {
-		l = l - 1
-		b := data[l] // We'll put the original byte back.
-		data[l] = byte(0)
-		v2 = xxhash.Sum64(data)
-		data[l] = b
-	}
-	return [2]uint64{v1, v2}
 }
 
 // ContainsHash returns true if the filter contains hash value h.
@@ -156,11 +142,29 @@ func (f *Filter) location(h [2]uint64, i uint64) uint {
 	return uint((h[0] + h[1]*i) & f.mask)
 }
 
+// hash returns two 64-bit hashes based on the output of xxhash.
+func (f *Filter) hash(data []byte) [2]uint64 {
+	return Hash(data)
+}
+
 // Estimate returns an estimated bit count and hash count given the element count and false positive rate.
 func Estimate(n uint64, p float64) (m uint64, k uint64) {
 	m = uint64(math.Ceil(-1 * float64(n) * math.Log(p) / math.Pow(math.Log(2), 2)))
 	k = uint64(math.Ceil(math.Log(2) * float64(m) / float64(n)))
 	return m, k
+}
+
+func Hash(data []byte) [2]uint64 {
+	v1 := xxhash.Sum64(data)
+	var v2 uint64
+	if l := len(data); l > 0 {
+		l = l - 1
+		b := data[l] // We'll put the original byte back.
+		data[l] = byte(0)
+		v2 = xxhash.Sum64(data)
+		data[l] = b
+	}
+	return [2]uint64{v1, v2}
 }
 
 // pow2 returns the number that is the next highest power of 2.

@@ -8,14 +8,14 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sort"
-	"time"
+	// "time"
 )
 
 type PackInfo struct {
-	Key     uint32
-	NValues int
-	Blocks  BlockInfoList
-	Size    int
+	Key      uint32
+	NValues  int
+	Blocks   BlockInfoList
+	Packsize int
 
 	// not stored
 	dirty bool
@@ -31,16 +31,27 @@ func (p PackInfo) KeyBytes() []byte {
 
 func (p *Package) Info() PackInfo {
 	h := PackInfo{
-		Key:     p.key,
-		NValues: p.nValues,
-		Blocks:  make(BlockInfoList, p.nFields),
-		Size:    p.size,
-		dirty:   true,
+		Key:      p.key,
+		NValues:  p.nValues,
+		Blocks:   make(BlockInfoList, p.nFields),
+		Packsize: p.size,
+		dirty:    true,
 	}
 	for i, v := range p.blocks {
 		h.Blocks[i] = NewBlockInfo(v, p.fields[i])
 	}
 	return h
+}
+
+func (h PackInfo) Size() int {
+	// assume 8 bytes behind each min/max interface
+	sz := szPackInfo + len(h.Blocks)*(szBlockInfo+16)
+	for i := range h.Blocks {
+		if h.Blocks[i].Bloom != nil {
+			sz += szBloomFilter + len(h.Blocks[i].Bloom.Bytes())
+		}
+	}
+	return sz
 }
 
 func (h *PackInfo) UpdateStats(pkg *Package) error {
@@ -69,10 +80,10 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 			// EXPENSIVE: build bloom filter from column vector
 			field := pkg.FieldById(i)
 			if field.Flags.Contains(FlagBloom) {
-				start := time.Now()
+				// start := time.Now()
 				h.Blocks[i].Bloom = field.Type.BuildBloomFilter(pkg.blocks[field.Index], field.Scale)
-				log.Infof("Pack %d field %s: bloom filter for %d values size=%d took %s",
-					pkg.key, field.Alias, pkg.Len(), len(h.Blocks[i].Bloom.Bytes()), time.Since(start))
+				// log.Infof("Pack %d field %s: bloom filter for %d values size=%d took %s",
+				// 	pkg.key, field.Alias, pkg.Len(), len(h.Blocks[i].Bloom.Bytes()), time.Since(start))
 			}
 		}
 
@@ -96,10 +107,10 @@ func (h *PackInfo) UpdateVolatileStats(pkg *Package) error {
 		if h.Blocks[field.Index].Bloom != nil {
 			continue
 		}
-		start := time.Now()
+		// start := time.Now()
 		h.Blocks[field.Index].Bloom = field.Type.BuildBloomFilter(pkg.blocks[field.Index], field.Scale)
-		log.Infof("Pack %d field %s: bloom filter for %d values size=%d took %s",
-			pkg.key, field.Alias, pkg.Len(), len(h.Blocks[field.Index].Bloom.Bytes()), time.Since(start))
+		// log.Infof("Pack %d field %s: bloom filter for %d values size=%d took %s",
+		// 	pkg.key, field.Alias, pkg.Len(), len(h.Blocks[field.Index].Bloom.Bytes()), time.Since(start))
 	}
 	return nil
 }
@@ -122,7 +133,7 @@ func (h PackInfo) Encode(buf *bytes.Buffer) error {
 	buf.Write(b[:])
 	bigEndian.PutUint32(b[0:], uint32(h.NValues))
 	buf.Write(b[:])
-	bigEndian.PutUint32(b[0:], uint32(h.Size))
+	bigEndian.PutUint32(b[0:], uint32(h.Packsize))
 	buf.Write(b[:])
 	return h.Blocks.Encode(buf)
 }
@@ -130,7 +141,7 @@ func (h PackInfo) Encode(buf *bytes.Buffer) error {
 func (h *PackInfo) Decode(buf *bytes.Buffer) error {
 	h.Key = bigEndian.Uint32(buf.Next(4))
 	h.NValues = int(bigEndian.Uint32(buf.Next(4)))
-	h.Size = int(bigEndian.Uint32(buf.Next(4)))
+	h.Packsize = int(bigEndian.Uint32(buf.Next(4)))
 	return h.Blocks.Decode(buf)
 }
 

@@ -79,6 +79,18 @@ func (l *PackIndex) Len() int {
 	return len(l.packs)
 }
 
+func (l *PackIndex) Size() int {
+	sz := szPackIndex
+	sz += len(l.minpks) * 8
+	sz += len(l.maxpks) * 8
+	sz += len(l.removed) * 8
+	sz += len(l.pos) * 4
+	for i := range l.packs {
+		sz += l.packs[i].Size()
+	}
+	return sz
+}
+
 func (l *PackIndex) Sort() {
 	sort.Slice(l.pos, func(i, j int) bool {
 		posi, posj := l.pos[i], l.pos[j]
@@ -126,6 +138,14 @@ func (l *PackIndex) IsFull(i int) bool {
 		return false
 	}
 	return l.maxsize > 0 && l.packs[i].NValues >= l.maxsize
+}
+
+func (l *PackIndex) UpdateStatistics(pkg *Package) {
+	// find the correct pack
+	idx := sort.Search(len(l.packs), func(i int) bool { return l.packs[i].Key >= pkg.key })
+	if idx < len(l.packs) && l.packs[idx].Key == pkg.key {
+		l.packs[idx].UpdateVolatileStats(pkg)
+	}
 }
 
 // called by storePack

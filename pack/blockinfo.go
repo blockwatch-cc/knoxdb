@@ -29,9 +29,9 @@ type BlockInfo struct {
 	Scale       int
 
 	// statistics
-	dirty    bool // update required
-	MinValue interface{}
-	MaxValue interface{}
+	dirty    bool          // update required
+	MinValue interface{}   // vector min
+	MaxValue interface{}   // vector max
 	Bloom    *bloom.Filter // not stored (yet)
 }
 

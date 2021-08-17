@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"blockwatch.cc/knoxdb/filter/bloom"
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/util"
 
@@ -51,6 +52,7 @@ type Condition struct {
 	uint16map    map[uint16]struct{} // compiled uint16 map for set membership
 	uint8map     map[uint8]struct{}  // compiled uint8 map for set membership
 	numValues    int                 // number of values when Value is a slice
+	bloomHashes  [][2]uint64         // opt bloom hash value(s) if field has bllom flag
 }
 
 // condition that is not bound to a table field yet
@@ -214,6 +216,7 @@ func (c *Condition) Compile() (err error) {
 	if c.To != nil {
 		c.numValues++
 	}
+	buildBloom := c.Field.Flags.Contains(FlagBloom)
 
 	// SCALE decimal values to field scale and CONVERT slice types to underlying
 	// storage for comparison, this works for parsed values and programmatic
@@ -305,7 +308,6 @@ func (c *Condition) Compile() (err error) {
 			c.Value = conv
 			c.numValues = len(val)
 		}
-		return
 	}
 
 	// anything but IN, NIN is done here
@@ -313,7 +315,15 @@ func (c *Condition) Compile() (err error) {
 	case FilterModeIn, FilterModeNotIn:
 		// handled below
 	default:
+		if buildBloom {
+			c.bloomHashes = [][2]uint64{bloom.Hash(c.Field.Type.Bytes(c.Value))}
+		}
 		return
+	}
+
+	// prepare bloom filter data
+	if buildBloom {
+		c.bloomHashes = make([][2]uint64, 0)
 	}
 
 	// hash maps are only used for expensive types, other types
@@ -324,20 +334,26 @@ func (c *Condition) Compile() (err error) {
 	switch c.Field.Type {
 	case FieldTypeBytes:
 		// require [][]byte slice as value type
-		vals = c.Value.([][]byte)
-		c.numValues = len(vals)
+		slice := c.Value.([][]byte)
+		c.numValues = len(slice)
 		if c.numValues == 0 {
 			return
 		}
 		// sorted slice is always required for InBetween pack matches
 		if !c.IsSorted {
-			Bytes.Sort(vals) // sorts in-place
+			Bytes.Sort(slice) // sorts in-place
 			c.IsSorted = true
+		}
+		if buildBloom {
+			for _, val := range slice {
+				c.bloomHashes = append(c.bloomHashes, bloom.Hash(val))
+			}
 		}
 		// below min size a hash map is more expensive than memcmp
 		if c.numValues < filterThreshold {
 			return
 		}
+		vals = slice
 	case FieldTypeString:
 		slice := c.Value.([]string)
 		c.numValues = len(slice)
@@ -348,6 +364,11 @@ func (c *Condition) Compile() (err error) {
 		if !c.IsSorted {
 			Strings.Sort(slice) // sorts in-place
 			c.IsSorted = true
+		}
+		if buildBloom {
+			for _, val := range slice {
+				c.bloomHashes = append(c.bloomHashes, bloom.Hash([]byte(val)))
+			}
 		}
 		// below min size a hash map is more expensive than memcmp
 		if c.numValues < filterThreshold {
@@ -366,9 +387,22 @@ func (c *Condition) Compile() (err error) {
 			if hasTrue && hasTrue == hasFalse {
 				c.numValues = 2
 				c.Value = []bool{false, true}
+				if buildBloom {
+					c.bloomHashes = [][2]uint64{
+						bloom.Hash([]byte{0}),
+						bloom.Hash([]byte{1}),
+					}
+				}
 			} else {
 				c.numValues = 1
 				c.Value = []bool{hasTrue}
+				if buildBloom {
+					if hasTrue {
+						c.bloomHashes = [][2]uint64{bloom.Hash([]byte{1})}
+					} else {
+						c.bloomHashes = [][2]uint64{bloom.Hash([]byte{0})}
+					}
+				}
 			}
 		}
 		return
@@ -380,6 +414,11 @@ func (c *Condition) Compile() (err error) {
 			for _, v := range slice {
 				c.int256map[v] = struct{}{}
 			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				}
+			}
 		}
 		return
 	case FieldTypeInt128, FieldTypeDecimal128:
@@ -389,6 +428,11 @@ func (c *Condition) Compile() (err error) {
 			c.int128map = make(map[Int128]struct{}, len(slice))
 			for _, v := range slice {
 				c.int128map[v] = struct{}{}
+			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				}
 			}
 		}
 		return
@@ -400,6 +444,11 @@ func (c *Condition) Compile() (err error) {
 			for _, v := range slice {
 				c.int64map[v] = struct{}{}
 			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				}
+			}
 		}
 		return
 	case FieldTypeInt32, FieldTypeDecimal32:
@@ -409,6 +458,11 @@ func (c *Condition) Compile() (err error) {
 			c.int32map = make(map[int32]struct{}, len(slice))
 			for _, v := range slice {
 				c.int32map[v] = struct{}{}
+			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				}
 			}
 		}
 		return
@@ -420,6 +474,11 @@ func (c *Condition) Compile() (err error) {
 			for _, v := range slice {
 				c.int16map[v] = struct{}{}
 			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				}
+			}
 		}
 		return
 	case FieldTypeInt8:
@@ -429,6 +488,11 @@ func (c *Condition) Compile() (err error) {
 			c.int8map = make(map[int8]struct{}, len(slice))
 			for _, v := range slice {
 				c.int8map[v] = struct{}{}
+			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				}
 			}
 		}
 		return
@@ -450,6 +514,11 @@ func (c *Condition) Compile() (err error) {
 				c.uint64map[v] = struct{}{}
 			}
 		}
+		if buildBloom {
+			for _, val := range slice {
+				c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+			}
+		}
 		return
 	case FieldTypeUint32:
 		slice := c.Value.([]uint32)
@@ -458,6 +527,11 @@ func (c *Condition) Compile() (err error) {
 			c.uint32map = make(map[uint32]struct{}, len(slice))
 			for _, v := range slice {
 				c.uint32map[v] = struct{}{}
+			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				}
 			}
 		}
 		return
@@ -469,6 +543,11 @@ func (c *Condition) Compile() (err error) {
 			for _, v := range slice {
 				c.uint16map[v] = struct{}{}
 			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				}
+			}
 		}
 		return
 	case FieldTypeUint8:
@@ -478,6 +557,11 @@ func (c *Condition) Compile() (err error) {
 			c.uint8map = make(map[uint8]struct{}, len(slice))
 			for _, v := range slice {
 				c.uint8map[v] = struct{}{}
+			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				}
 			}
 		}
 		return
@@ -489,6 +573,11 @@ func (c *Condition) Compile() (err error) {
 				c.Value = Float64.Sort(slice)
 				c.IsSorted = true
 			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				}
+			}
 		}
 		return
 	case FieldTypeFloat32:
@@ -498,6 +587,11 @@ func (c *Condition) Compile() (err error) {
 			if !c.IsSorted {
 				c.Value = Float32.Sort(slice)
 				c.IsSorted = true
+			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				}
 			}
 		}
 		return
@@ -562,7 +656,11 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 	switch c.Mode {
 	case FilterModeEqual:
 		// condition value is within range
-		return typ.Between(c.Value, min, max) && typ.MatchBloom(filter, c.Value)
+		res := typ.Between(c.Value, min, max)
+		if res && filter != nil {
+			return filter.ContainsHash(c.bloomHashes[0])
+		}
+		return res
 	case FilterModeNotEqual:
 		return true // we don't know, so full scan is required
 	case FilterModeRange:
@@ -570,7 +668,11 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 		return !(typ.Lt(max, c.From) || typ.Gt(min, c.To))
 	case FilterModeIn:
 		// check if any of the IN condition values fall into the pack's min and max range
-		return typ.InBetween(c.Value, min, max) && typ.InBloom(filter, c.Value) // c.Value is a slice
+		res := typ.InBetween(c.Value, min, max) // c.Value is a slice
+		if res && filter != nil {
+			return filter.ContainsAnyHash(c.bloomHashes)
+		}
+		return res
 	case FilterModeNotIn:
 		return true // we don't know here, so full scan is required
 	case FilterModeRegexp:

@@ -375,8 +375,18 @@ func (q Query) WithOffset(o int) Query {
 	return q
 }
 
+func (q Query) WithIndex(enable bool) Query {
+	q.NoIndex = !enable
+	return q
+}
+
 func (q Query) WithoutIndex() Query {
 	q.NoIndex = true
+	return q
+}
+
+func (q Query) WithCache(enable bool) Query {
+	q.NoCache = !enable
 	return q
 }
 

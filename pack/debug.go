@@ -244,7 +244,7 @@ func (h PackInfo) Dump(w io.Writer, mode DumpMode, nfields int) error {
 			h.NValues,
 			min,
 			max,
-			util.ByteSize(h.Size))
+			util.ByteSize(h.Packsize))
 		return err
 	case DumpModeHex:
 		_, err := fmt.Fprintf(w, "%-10s %-7d %-7d %21x %21x %-10s\n",
@@ -253,7 +253,7 @@ func (h PackInfo) Dump(w io.Writer, mode DumpMode, nfields int) error {
 			h.NValues,
 			min,
 			max,
-			util.ByteSize(h.Size))
+			util.ByteSize(h.Packsize))
 		return err
 	case DumpModeCSV:
 		enc, ok := w.(*csv.Encoder)
@@ -266,7 +266,7 @@ func (h PackInfo) Dump(w io.Writer, mode DumpMode, nfields int) error {
 			Rows:  h.NValues,
 			MinPk: min,
 			MaxPk: max,
-			Size:  h.Size,
+			Size:  h.Packsize,
 		}
 		return enc.EncodeRecord(ch)
 	}
