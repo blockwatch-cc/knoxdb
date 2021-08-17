@@ -89,19 +89,32 @@ func testShortFilter_InsertContains(t *testing.T) {
 var benchCases = []struct {
 	m, k uint64
 	n    int
+	v    int
 }{
-	{m: 100, k: 4, n: 1000},
-	{m: 1000, k: 4, n: 1000},
-	{m: 10000, k: 4, n: 1000},
-	{m: 100000, k: 4, n: 1000},
-	{m: 100, k: 8, n: 1000},
-	{m: 1000, k: 8, n: 1000},
-	{m: 10000, k: 8, n: 1000},
-	{m: 100000, k: 8, n: 1000},
-	{m: 100, k: 20, n: 1000},
-	{m: 1000, k: 20, n: 1000},
-	{m: 10000, k: 20, n: 1000},
-	{m: 100000, k: 20, n: 1000},
+	// {m: 100, k: 4, n: 1000, v: 1000},
+	// {m: 1000, k: 4, n: 1000, v: 1000},
+	// {m: 10000, k: 4, n: 1000, v: 1000},
+	// {m: 100000, k: 4, n: 1000, v: 1000},
+	// {m: 100, k: 8, n: 1000, v: 1000},
+	// {m: 1000, k: 8, n: 1000, v: 1000},
+	// {m: 10000, k: 8, n: 1000, v: 1000},
+	// {m: 100000, k: 8, n: 1000, v: 1000},
+	// {m: 100, k: 20, n: 1000, v: 1000},
+	// {m: 1000, k: 20, n: 1000, v: 1000},
+	// {m: 10000, k: 20, n: 1000, v: 1000},
+	// {m: 100000, k: 20, n: 1000, v: 1000},
+
+	// 32k packs
+	{m: 524288, k: 11, n: 32768, v: 1}, // 64kB mem, p=0.0005 (optimal)
+	{m: 524288, k: 4, n: 32768, v: 1},  // 64kB mem, p=0.0024
+	{m: 262144, k: 6, n: 32768, v: 1},  // 32kB mem, p=0.022 (optimal)
+	{m: 262144, k: 4, n: 32768, v: 1},  // 32kB mem, p=0.024
+
+	// 64k packs
+	{m: 1048576, k: 11, n: 65536, v: 1}, // 128k mem, p=0.0005 (optimal)
+	{m: 1048576, k: 4, n: 65536, v: 1},  // 128k mem, p=0.0024
+	{m: 524288, k: 6, n: 65536, v: 1},   // 64k mem,p=0.022 (optimal)
+	{m: 524288, k: 4, n: 65536, v: 1},   // 64k mem,p=0.024
 }
 
 func BenchmarkFilter_Insert(b *testing.B) {
@@ -140,19 +153,21 @@ func BenchmarkFilter_Contains(b *testing.B) {
 			filter.Insert(v)
 		}
 
-		b.Run(fmt.Sprintf("m=%d_k=%d_n=%d", c.m, c.k, c.n), func(b *testing.B) {
+		b.Run(fmt.Sprintf("IN m=%d_k=%d_n=%d", c.m, c.k, c.n), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				for _, v := range data {
-					okResult = filter.Contains(v)
-					if !okResult {
-						b.Fatalf("Filter returned negative for value %q in set", v)
-					}
+				for _, v := range data[:c.v] {
+					_ = filter.Contains(v)
 				}
+			}
+		})
 
-				// And now a bunch of values that don't exist.
-				for _, v := range notData {
-					okResult = filter.Contains(v)
+		// not in
+		b.Run(fmt.Sprintf("NI m=%d_k=%d_n=%d", c.m, c.k, c.n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, v := range notData[:c.v] {
+					_ = filter.Contains(v)
 				}
 			}
 		})
