@@ -146,8 +146,8 @@ func (t *Types) SetID(i uint64) {
 var _ pack.Item = (*Types)(nil)
 
 const (
-	TypesPackSizeLog2         = 15  // 32k packs ~4M
-	TypesJournalSizeLog2      = 16  // 64k - search for spending op, so keep small
+	TypesPackSizeLog2         = 16  // 32k packs ~4M
+	TypesJournalSizeLog2      = 17  // 64k - search for spending op, so keep small
 	TypesCacheSize            = 128 // 128=512MB
 	TypesFillLevel            = 100
 	TypesIndexPackSizeLog2    = 15   // 16k packs (32k split size) ~256k

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/echa/log"
@@ -237,8 +238,8 @@ type Op struct {
 	Reward       int64     `knox:"r,snappy"      json:"reward"`                 // stats: baking and endorsement rewards
 	Deposit      int64     `knox:"d,snappy"      json:"deposit"`                // stats: bonded deposits for baking and endorsement
 	Burned       int64     `knox:"b,snappy"      json:"burned"`                 // stats: burned tezos
-	SenderId     uint64    `knox:"S,snappy"      json:"sender_id"`              // internal: op sender
-	ReceiverId   uint64    `knox:"R,snappy"      json:"receiver_id"`            // internal: op receiver
+	SenderId     uint64    `knox:"S,snappy,bloom"      json:"sender_id"`        // internal: op sender
+	ReceiverId   uint64    `knox:"R,snappy,bloom"      json:"receiver_id"`      // internal: op receiver
 	CreatorId    uint64    `knox:"M,snappy"      json:"creator_id"`             // internal: op creator for originations
 	DelegateId   uint64    `knox:"D,snappy"      json:"delegate_id"`            // internal: op delegate for originations and delegations
 	IsInternal   bool      `knox:"N,snappy"      json:"is_internal"`            // bc: internal from contract call
@@ -285,6 +286,7 @@ var (
 	verbose  bool
 	debug    bool
 	trace    bool
+	cache    bool
 	dbname   string
 	flags    = flag.NewFlagSet("opdb", flag.ContinueOnError)
 	boltopts = &bolt.Options{
@@ -403,7 +405,7 @@ func ListOpTypes(ctx context.Context, table *pack.Table, typ OpType, limit int) 
 	q := pack.NewQuery("list_"+typ.String(), table).
 		AndEqual("type", typ).
 		WithLimit(limit).
-		WithoutCache()
+		WithCache(cache)
 
 	// Execute is a shortcut for Stream & Decode which takes a pointer to one of
 	// - a single struct (an implicity limit of 1 is used for this query)
@@ -425,6 +427,7 @@ func init() {
 	flags.BoolVar(&verbose, "v", false, "be verbose")
 	flags.BoolVar(&debug, "vv", false, "enable debug mode")
 	flags.BoolVar(&trace, "vvv", false, "enable trace mode")
+	flags.BoolVar(&cache, "cache", false, "enable db cache")
 	flags.StringVar(&dbname, "db", "", "database")
 }
 
@@ -466,41 +469,70 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	ctx := context.Background()
 
-	// Example 1
-	// Note: loads all data into memory, use low limit
-	ops, err := ListOpTypes(context.Background(), table, OpTypeTransaction, 100000)
+	sender_id, err := strconv.ParseUint(flags.Arg(0), 10, 64)
 	if err != nil {
 		return err
 	}
-	// do smth with ops
+	fmt.Printf("Acc id = %s %d\n", flags.Arg(0), sender_id)
+	// return nil
+
+	// Example 1
+	// Note: loads all data into memory, use low limit
+	// ops, err := ListOpTypes(ctx, table, OpTypeTransaction, 100000)
+	// if err != nil {
+	// 	return err
+	// }
+	// // do smth with ops
 	var vol int64
-	for _, o := range ops {
-		vol += o.Volume
-	}
-	fmt.Printf("Volume in first %d transactions is %f\n", len(ops), float64(vol)/1000000)
-	vol = 0
+	// for _, o := range ops {
+	// 	vol += o.Volume
+	// }
+	// fmt.Printf("Volume in first %d transactions is %f\n", len(ops), float64(vol)/1000000)
+	// vol = 0
 
 	// Example 2
 	// Note: uses streaming and constant memory to visit all table rows
 	var count int
-	q := pack.NewQuery("stream_tx", table).
+	start := time.Now()
+	err = pack.NewQuery("stream_tx", table).
 		AndEqual("type", OpTypeTransaction).
-		WithoutCache()
-	err = q.Stream(context.Background(), func(r pack.Row) error {
-		var o Op
-		if err := r.Decode(&o); err != nil {
-			return err
-		}
-		vol += o.Volume
-		count++
-		return nil
-	})
-	fmt.Printf("Total volume in all %d transactions is %f\n", count, float64(vol)/1000000)
+		WithCache(cache).
+		Stream(ctx, func(r pack.Row) error {
+			var o Op
+			if err := r.Decode(&o); err != nil {
+				return err
+			}
+			vol += o.Volume
+			count++
+			return nil
+		})
+	fmt.Printf("Total volume in all %d transactions is %f, runtime=%s\n", count, float64(vol)/1000000, time.Since(start))
+
+	// Example 3
+	// queries all transactions sent by senderid
+	start = time.Now()
+	count = 0
+	vol = 0
+	err = pack.NewQuery("stream_tx", table).
+		AndEqual("type", OpTypeTransaction).
+		AndEqual("receiver_id", sender_id).
+		WithCache(cache).
+		Stream(ctx, func(r pack.Row) error {
+			var o Op
+			if err := r.Decode(&o); err != nil {
+				return err
+			}
+			vol += o.Volume
+			count++
+			return nil
+		})
 
 	if err := Close(table); err != nil {
 		return err
 	}
+	fmt.Printf("Total volume sent by account %d in %d transactions is %f, runtime=%s\n", sender_id, count, float64(vol)/1000000, time.Since(start))
 
 	return nil
 }
