@@ -1212,7 +1212,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 			if nextpack < t.packidx.Len() {
 				// log.Debugf("Loading pack %d/%d with key %d", nextpack, t.packidx.Len(), t.packidx.packs[nextpack].Key)
 				var err error
-				pkg, err = t.loadWritablePack(tx, t.packidx.packs[nextpack].Key, nil)
+				pkg, err = t.loadWritablePack(tx, t.packidx.packs[nextpack].Key)
 				if err != nil && err != ErrPackNotFound {
 					return err
 				}
@@ -2770,7 +2770,7 @@ func (t *Table) Compact(ctx context.Context) error {
 				}
 
 				// log.Tracef("pack: loading dst pack %d:%x", dstIndex, dstKey)
-				dstPack, err = t.loadWritablePack(tx, dstKey, nil)
+				dstPack, err = t.loadWritablePack(tx, dstKey)
 				if err != nil {
 					return err
 				}
@@ -2814,7 +2814,7 @@ func (t *Table) Compact(ctx context.Context) error {
 
 			ph := t.packidx.packs[srcIndex]
 			// log.Tracef("pack: loading src pack %d:%x", srcIndex, ph.Key)
-			srcPack, err = t.loadWritablePack(tx, ph.Key, nil)
+			srcPack, err = t.loadWritablePack(tx, ph.Key)
 			if err != nil {
 				return err
 			}
@@ -2982,17 +2982,21 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 }
 
 // loads a private copy of a pack for writing
-func (t *Table) loadWritablePack(tx *Tx, id uint32, fields FieldList) (*Package, error) {
+func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	key := encodePackKey(id)
 
 	// when package is cached, create a private clone
+	// FIXME: we cannot do this concurrently when we rework the global lock
 	if cached, ok := t.cache.Get(t.cachekey(key)); ok {
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
 		pkg := cached.(*Package)
 		clone, err := pkg.Clone(1<<uint(t.opts.PackSizeLog2), true)
+		if err != nil {
+			return nil, err
+		}
 		clone.key = pkg.key
 		clone.cached = false
-		return clone, err
+		return clone, nil
 	}
 
 	// load from storage

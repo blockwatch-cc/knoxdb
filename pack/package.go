@@ -259,16 +259,13 @@ func (p *Package) Clone(sz int, copydata bool) (*Package, error) {
 		pkindex:  p.pkindex,
 		dirty:    true,
 		cached:   false,
-		stripped: p.stripped, // cloning a stripped pack is allowed
-		sizeHint: p.sizeHint,
-		size:     p.size,
+		sizeHint: sz,
 	}
 
-	if sz == 0 {
-		sz = p.sizeHint
-	}
 	if copydata {
 		clone.nValues = p.nValues
+		clone.size = p.size
+		clone.stripped = p.stripped // cloning a stripped pack is allowed
 	}
 
 	if len(p.blocks) > 0 {
@@ -1947,8 +1944,8 @@ func (p *Package) Delete(pos, n int) error {
 }
 
 func (p *Package) Clear() {
-	for _, v := range p.blocks {
-		v.Clear()
+	for i := range p.blocks {
+		p.blocks[i].Clear()
 	}
 	// Note: we keep all type-related data and blocks
 	// also keep pack key to avoid clearing journal/tombstone identity
