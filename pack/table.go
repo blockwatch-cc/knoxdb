@@ -1202,6 +1202,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				// log.Debugf("Post-store next pack %d max=%d nextmin=%d", nextpack, packmax, nextmin)
 			}
 			// prepare for next pack
+			t.recyclePackage(pkg)
 			pkg = nil
 			needsort = false
 		}

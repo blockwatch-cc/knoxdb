@@ -267,6 +267,9 @@ func (p *Package) Clone(sz int, copydata bool) (*Package, error) {
 	if sz == 0 {
 		sz = p.sizeHint
 	}
+	if copydata {
+		clone.nValues = p.nValues
+	}
 
 	if len(p.blocks) > 0 {
 		clone.blocks = make([]*block.Block, p.nFields)
@@ -279,9 +282,6 @@ func (p *Package) Clone(sz int, copydata bool) (*Package, error) {
 			}
 			// overwrite compression (empty journal blocks get saved without)
 			clone.blocks[i].SetCompression(p.fields[i].Flags.Compression())
-		}
-		if copydata {
-			clone.nValues = p.nValues
 		}
 	}
 	return clone, nil
