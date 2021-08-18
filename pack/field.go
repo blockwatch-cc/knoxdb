@@ -2827,10 +2827,10 @@ func (t FieldType) Bytes(val interface{}) []byte {
 		bigEndian.PutUint64(buf[:], uint64(val.(int64)))
 		return buf[:]
 	case FieldTypeInt32, FieldTypeDecimal32:
-		bigEndian.PutUint32(buf[:], val.(uint32))
+		bigEndian.PutUint32(buf[:], uint32(val.(int32)))
 		return buf[:4]
 	case FieldTypeInt16:
-		bigEndian.PutUint16(buf[:], val.(uint16))
+		bigEndian.PutUint16(buf[:], uint16(val.(int16)))
 		return buf[:2]
 	case FieldTypeInt8:
 		return []byte{byte(val.(int8))}
