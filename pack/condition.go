@@ -216,7 +216,6 @@ func (c *Condition) Compile() (err error) {
 	if c.To != nil {
 		c.numValues++
 	}
-	buildBloom := c.Field.Flags.Contains(FlagBloom)
 
 	// SCALE decimal values to field scale and CONVERT slice types to underlying
 	// storage for comparison, this works for parsed values and programmatic
@@ -310,20 +309,20 @@ func (c *Condition) Compile() (err error) {
 		}
 	}
 
-	// anything but IN, NIN is done here
+	// prepare bloom filter data
+	buildBloom := c.Field.Flags.Contains(FlagBloom)
 	switch c.Mode {
 	case FilterModeIn, FilterModeNotIn:
+		if buildBloom {
+			c.bloomHashes = make([][2]uint64, 0)
+		}
 		// handled below
 	default:
 		if buildBloom {
 			c.bloomHashes = [][2]uint64{bloom.Hash(c.Field.Type.Bytes(c.Value))}
 		}
+		// anything but IN, NIN is done here
 		return
-	}
-
-	// prepare bloom filter data
-	if buildBloom {
-		c.bloomHashes = make([][2]uint64, 0)
 	}
 
 	// hash maps are only used for expensive types, other types
@@ -397,11 +396,13 @@ func (c *Condition) Compile() (err error) {
 				c.numValues = 1
 				c.Value = []bool{hasTrue}
 				if buildBloom {
+					var val []byte
 					if hasTrue {
-						c.bloomHashes = [][2]uint64{bloom.Hash([]byte{1})}
+						val = []byte{1}
 					} else {
-						c.bloomHashes = [][2]uint64{bloom.Hash([]byte{0})}
+						val = []byte{0}
 					}
+					c.bloomHashes = [][2]uint64{bloom.Hash(val)}
 				}
 			}
 		}
@@ -597,7 +598,7 @@ func (c *Condition) Compile() (err error) {
 		return
 	}
 
-	// create a hash map
+	// create a hash map for bytes and strings
 	c.hashmap = make(map[uint64]int)
 	for i, v := range vals {
 		sum := xxhash.Sum64(v)

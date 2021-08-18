@@ -58,8 +58,6 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 	if h.Key != pkg.key {
 		return fmt.Errorf("pack: info key mismatch %x/%d ", h.Key, pkg.key)
 	}
-	pk := pkg.PkField()
-	isIndexPack := pkg.Cols() == 2 && pkg.FieldById(0).Name == "K" && pkg.FieldById(1).Name == "I"
 	for i := range h.Blocks {
 		if have, want := h.Blocks[i].Type, pkg.blocks[i].Type(); have != want {
 			return fmt.Errorf("pack: block type mismatch in pack %x/%d: %s != %s ",
@@ -70,10 +68,10 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 		}
 
 		// optimize for pk slices (always sorted) and index values (not required)
-		if i == pk.Index {
+		if i == pkg.PkField().Index {
 			pkslice := pkg.blocks[i].Uint64
 			h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkslice[0], pkslice[len(pkslice)-1]
-		} else if !isIndexPack {
+		} else {
 			// EXPENSIVE: collects full min/max statistics
 			h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkg.blocks[i].MinMax()
 

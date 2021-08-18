@@ -72,10 +72,18 @@ func testShortFilter_InsertContains(t *testing.T) {
 		if !f.Contains([]byte("Bess")) {
 			t.Fatal("expected true")
 		}
+		h1 := bloom.Hash([]byte("Bess"))
+		if !f.ContainsHash(h1) {
+			t.Fatal("expected true")
+		}
 
 		// Insert another value and test.
 		f.Insert([]byte("Emma"))
 		if !f.Contains([]byte("Emma")) {
+			t.Fatal("expected true")
+		}
+		h2 := bloom.Hash([]byte("Emma"))
+		if !f.ContainsHash(h2) {
 			t.Fatal("expected true")
 		}
 
@@ -83,6 +91,22 @@ func testShortFilter_InsertContains(t *testing.T) {
 		if f.Contains([]byte("Jane")) {
 			t.Fatal("expected false")
 		}
+		h3 := bloom.Hash([]byte("Jane"))
+		if f.ContainsHash(h2) {
+			t.Fatal("expected false")
+		}
+
+		// Validate multi-hash
+		if !f.ContainsAnyHash([][2]uint64{h1, h3}) {
+			t.Fatal("expected true")
+		}
+		if !f.ContainsAnyHash([][2]uint64{h2, h3}) {
+			t.Fatal("expected true")
+		}
+		if f.ContainsAnyHash([][2]uint64{h3, h3}) {
+			t.Fatal("expected false")
+		}
+
 	})
 }
 
