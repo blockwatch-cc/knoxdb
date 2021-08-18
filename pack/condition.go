@@ -683,13 +683,13 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 		return typ.Gt(min, c.Value) || typ.Gt(max, c.Value)
 	case FilterModeGte:
 		// min OR max is >= condition value
-		return c.Field.Type.Gte(min, c.Value) || c.Field.Type.Gte(max, c.Value)
+		return typ.Gte(min, c.Value) || typ.Gte(max, c.Value)
 	case FilterModeLt:
 		// min OR max is < condition value
-		return c.Field.Type.Lt(min, c.Value) || c.Field.Type.Lt(max, c.Value)
+		return typ.Lt(min, c.Value) || typ.Lt(max, c.Value)
 	case FilterModeLte:
 		// min OR max is <= condition value
-		return c.Field.Type.Lte(min, c.Value) || c.Field.Type.Lte(max, c.Value)
+		return typ.Lte(min, c.Value) || typ.Lte(max, c.Value)
 	default:
 		return false
 	}

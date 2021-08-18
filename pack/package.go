@@ -249,17 +249,23 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	return nil
 }
 
-func (p *Package) Clone(copydata bool, sz int) (*Package, error) {
+func (p *Package) Clone(sz int, copydata bool) (*Package, error) {
 	clone := &Package{
+		key:      0, // cloned pack has no identity yet
 		nFields:  p.nFields,
 		nValues:  0,
 		fields:   p.fields,
-		key:      0, // cloned pack has no identity yet
-		dirty:    true,
-		stripped: p.stripped, // cloning a stripped pack is allowed
-		tinfo:    p.tinfo,    // share static type info
+		tinfo:    p.tinfo, // share static type info
 		pkindex:  p.pkindex,
+		dirty:    true,
+		cached:   false,
+		stripped: p.stripped, // cloning a stripped pack is allowed
 		sizeHint: p.sizeHint,
+		size:     p.size,
+	}
+
+	if sz == 0 {
+		sz = p.sizeHint
 	}
 
 	if len(p.blocks) > 0 {

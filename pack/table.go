@@ -451,7 +451,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 	}
 	log.Warnf("pack: Corrupt or missing pack info for table %s! Scanning table. This may take a long time...", t.name)
 	c := dbTx.Bucket(t.key).Cursor()
-	pkg, err := t.journal.DataPack().Clone(false, 0)
+	pkg, err := t.journal.DataPack().Clone(0, false)
 	if err != nil {
 		return err
 	}
@@ -2988,7 +2988,9 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32, fields FieldList) (*Package,
 	if cached, ok := t.cache.Get(t.cachekey(key)); ok {
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
 		pkg := cached.(*Package)
-		clone, err := pkg.Clone(true, pkg.Len())
+		clone, err := pkg.Clone(1<<uint(t.opts.PackSizeLog2), true)
+		clone.key = pkg.key
+		clone.cached = false
 		return clone, err
 	}
 
@@ -3090,7 +3092,7 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 
 func (t *Table) makePackage() interface{} {
 	atomic.AddInt64(&t.stats.PacksAlloc, 1)
-	pkg, _ := t.journal.DataPack().Clone(false, 1<<uint(t.opts.PackSizeLog2))
+	pkg, _ := t.journal.DataPack().Clone(1<<uint(t.opts.PackSizeLog2), false)
 	return pkg
 }
 

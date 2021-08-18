@@ -358,7 +358,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 		agg = &Result{
 			fields: j.fields,
 		}
-		pkg, err := out.pkg.Clone(false, util.NonZero(j.limit, maxPackSize))
+		pkg, err := out.pkg.Clone(util.NonZero(j.limit, maxPackSize), false)
 		if err != nil {
 			return nil, err
 		}

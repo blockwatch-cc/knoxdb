@@ -428,7 +428,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 	// on error, scan packs
 	log.Warnf("pack: Corrupt or missing pack info for %s! Scanning table. This may take a long time...", idx.name())
 	c := dbTx.Bucket(idx.key).Cursor()
-	pkg, err := idx.journal.Clone(false, 0)
+	pkg, err := idx.journal.Clone(0, false)
 	if err != nil {
 		return err
 	}
@@ -1360,7 +1360,7 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 
 func (idx *Index) makePackage() interface{} {
 	atomic.AddInt64(&idx.table.stats.IndexPacksAlloc, 1)
-	pkg, _ := idx.journal.Clone(false, 1<<uint(idx.opts.PackSizeLog2))
+	pkg, _ := idx.journal.Clone(1<<uint(idx.opts.PackSizeLog2), false)
 	return pkg
 }
 
