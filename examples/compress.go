@@ -52,15 +52,12 @@ var (
 
 var cmdinfo = `
 Available Commands:
-  table       list all table packs
-  index       list all index packs
-  blocks      show pack block headers
-  type        show type info (from journal pack)
-  journal     dump journal contents
-  dump-all    dump full table contents
-  dump-pack   dump pack contents (use -pack <id> to select a pack, default 0)
-  dump-index  dump index pack contents (use -pack <id> to select a pack, default 0)
-`
+  compress-pack         compress pack (use -pack <id> to select a pack, default 0)
+  compress-all          compress full table
+  compress-index-pack   compress index pack (use -pack <id> to select a pack, default 0)
+  compress-index-all    compress full index
+  index-collisions      count hash collisions
+  `
 
 func b(n int) string {
 	return util.ByteSize(n).String()
@@ -86,7 +83,7 @@ func main() {
 }
 
 func printhelp() {
-	fmt.Println("Usage:\n  packview [command] [database][/table][/pack] [flags]")
+	fmt.Println("Usage:\n  compress [command] [database][/table][/pack] [flags]")
 	fmt.Println(cmdinfo)
 	fmt.Println("Flags:")
 	flags.PrintDefaults()
@@ -202,22 +199,6 @@ func run() error {
 	}
 
 	switch cmd {
-	case "journal":
-		return table.DumpJournal(out, mode)
-	case "type":
-		return table.DumpType(out)
-	case "blocks":
-		return table.DumpPackBlocks(out, mode)
-	case "table":
-		return table.DumpPackHeaders(out, mode)
-	case "index":
-		return table.DumpIndexPackHeaders(out, mode)
-	case "dump-all":
-		return viewAllPacks(table, out, mode)
-	case "dump-pack":
-		return table.DumpPack(out, packid, mode)
-	case "dump-index":
-		return table.DumpIndexPack(out, 0, packid, mode)
 	case "compress-pack":
 		return table.CompressPack(cmethod, out, packid, mode)
 	case "compress-all":
@@ -231,17 +212,4 @@ func run() error {
 	default:
 		return fmt.Errorf("unsupported command %s", cmd)
 	}
-}
-
-func viewAllPacks(table *pack.Table, w io.Writer, mode pack.DumpMode) error {
-	for i := 0; ; i++ {
-		err := table.DumpPack(w, i, mode)
-		if err != nil && err != pack.ErrPackNotFound {
-			return err
-		}
-		if err == pack.ErrPackNotFound {
-			break
-		}
-	}
-	return nil
 }
