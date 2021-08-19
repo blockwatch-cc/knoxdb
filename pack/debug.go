@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/bits"
 	"reflect"
 	"strconv"
 	"strings"
@@ -589,91 +588,6 @@ func compressNo(b *block.Block) (int, error) {
 	return len(dst), nil
 }
 
-func compressHash(deltas []uint64) ([]byte, int, int, error) {
-
-	// delta encoding
-
-	/* maxdelta := uint64(0)
-	for i := len(deltas) - 1; i > 7; i-- {
-		deltas[i] = deltas[i] - deltas[i-8]
-		maxdelta |= deltas[i]
-	}*/
-
-	maxdelta := compress.Delta8AVX2(deltas)
-	for i := len(deltas)%8 + 7; i > 7; i-- {
-		deltas[i] = deltas[i] - deltas[i-8]
-		maxdelta |= deltas[i]
-	}
-
-	var nbytes int
-	if maxdelta == 0 {
-		nbytes = 1 // all number zero -> use 1 byte
-	} else {
-		lz := bits.LeadingZeros64(maxdelta)
-		nbytes = (71 - lz) >> 3 // = (64 - tz + 8 - 1) / 8 = ceil((64 - tz)/8)
-	}
-
-	buf := make([]byte, nbytes*(len(deltas)-8)+64)
-
-	for i := 0; i < 8; i++ {
-		binary.BigEndian.PutUint64(buf[8*i:], deltas[i])
-	}
-
-	tmp := buf[64:]
-
-	switch nbytes {
-	case 1:
-		for i, v := range deltas[8:] {
-			buf[64+i] = byte(v & 0xff)
-		}
-	case 2:
-		/*		for i, v := range deltas[8:] {
-				buf[64+2*i] = byte((v >> 8) & 0xff)
-				buf[65+2*i] = byte(v & 0xff)
-			}*/
-
-		len_head := (len(deltas)-8)&0x7ffffffffffffff0 + 8
-		compress.PackIndex16BitAVX2(deltas[8:], buf[64:])
-
-		tmp = buf[64+(len_head-8)*2:]
-
-		for i, v := range deltas[len_head:] {
-			tmp[2*i] = byte((v >> 8) & 0xff)
-			tmp[1+2*i] = byte(v & 0xff)
-		}
-
-	case 3:
-		for i, v := range deltas[8:] {
-			tmp[3*i] = byte((v >> 16) & 0xff)
-			tmp[1+3*i] = byte((v >> 8) & 0xff)
-			tmp[2+3*i] = byte(v & 0xff)
-		}
-	case 4:
-
-		len_head := len(deltas) & 0x7ffffffffffffff8
-		compress.PackIndex32BitAVX2(deltas[8:], buf[64:])
-
-		tmp = buf[64+(len_head-8)*4:]
-
-		for i, v := range deltas[len_head:] {
-			tmp[4*i] = byte((v >> 24) & 0xff)
-			tmp[1+4*i] = byte((v >> 16) & 0xff)
-			tmp[2+4*i] = byte((v >> 8) & 0xff)
-			tmp[3+4*i] = byte(v & 0xff)
-		}
-		/*for i, v := range deltas[8:] {
-			tmp[4*i] = byte((v >> 24) & 0xff)
-			tmp[1+4*i] = byte((v >> 16) & 0xff)
-			tmp[2+4*i] = byte((v >> 8) & 0xff)
-			tmp[3+4*i] = byte(v & 0xff)
-		}*/
-	default:
-		return nil, -1, 0, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
-	}
-
-	return buf, len(buf), nbytes, nil
-}
-
 func uncompressHash(buf []byte, nbytes int) ([]uint64, int, error) {
 	len := (len(buf)-64)/nbytes + 8
 	res := make([]uint64, len)
@@ -784,7 +698,7 @@ func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, 
 		var buf []byte
 
 		start := time.Now()
-		buf, csize, nbytes, err = compressHash(tmp)
+		buf, csize, nbytes, err = compress.CompressHash(tmp)
 		tcomp = time.Since(start).Seconds()
 		if err == nil {
 			start = time.Now()
