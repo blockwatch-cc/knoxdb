@@ -6,6 +6,7 @@ package pack
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"math/bits"
@@ -15,6 +16,8 @@ import (
 	"time"
 	"unsafe"
 
+	logpkg "github.com/echa/log"
+
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/csv"
@@ -22,6 +25,8 @@ import (
 	"github.com/golang/snappy"
 	"github.com/pierrec/lz4"
 )
+
+var levelDebug = logpkg.LevelDebug
 
 type DumpMode int
 
@@ -44,7 +49,7 @@ func (t *Table) DumpType(w io.Writer) error {
 	return t.journal.DataPack().DumpType(w)
 }
 
-func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode) error {
+func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode, sorted bool) error {
 	tx, err := t.db.Tx(false)
 	if err != nil {
 		return err
@@ -61,7 +66,12 @@ func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode) error {
 		case DumpModeDec, DumpModeHex:
 			fmt.Fprintf(w, "%-3d ", i)
 		}
-		if err := t.packidx.packs[i].Dump(w, mode, len(t.fields)); err != nil {
+		if sorted {
+			err = t.packidx.GetSorted(i).Dump(w, mode, len(t.fields))
+		} else {
+			err = t.packidx.Get(i).Dump(w, mode, len(t.fields))
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -97,6 +107,9 @@ func (t *Table) DumpJournal(w io.Writer, mode DumpMode) error {
 		w.Write([]byte(","))
 	}
 	w.Write([]byte("\n"))
+	w.Write([]byte("dbits:"))
+	w.Write([]byte(hex.EncodeToString(t.journal.deleted.Bytes())))
+	w.Write([]byte("\n"))
 	return nil
 }
 
@@ -109,7 +122,7 @@ func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
 		return err
 	}
 	defer tx.Rollback()
-	pkg, err := t.loadPack(tx, t.packidx.packs[i].Key, false, nil)
+	pkg, err := t.loadPack(tx, t.packidx.Get(i).Key, false, nil)
 	if err != nil {
 		return err
 	}
@@ -128,9 +141,9 @@ func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
 		return err
 	}
 	defer tx.Rollback()
-	pkg, err := t.indexes[i].loadPack(tx, t.indexes[i].packidx.packs[p].Key, false)
+	pkg, err := t.indexes[i].loadPack(tx, t.indexes[i].packidx.Get(p).Key, false)
 	if err != nil {
-		return err
+		return fmt.Errorf("pack %d not found: %v", t.indexes[i].packidx.Get(p).Key, err)
 	}
 	return pkg.DumpData(w, mode, []string{"Hash", "Pk"})
 }
@@ -148,7 +161,7 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	}
 	lineNo := 1
 	for i := 0; i < t.packidx.Len(); i++ {
-		pkg, err := t.loadPack(tx, t.packidx.packs[i].Key, false, nil)
+		pkg, err := t.loadPack(tx, t.packidx.Get(i).Key, false, nil)
 		if err != nil {
 			return err
 		}
@@ -161,33 +174,41 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	return nil
 }
 
-func (t *Table) DumpIndexPackHeaders(w io.Writer, mode DumpMode) error {
+func (t *Table) DumpIndexPackHeaders(w io.Writer, mode DumpMode, sorted bool) error {
 	tx, err := t.db.Tx(false)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	for _, v := range t.indexes {
-		if err := v.dumpPackHeaders(tx, w, mode); err != nil {
+		if err := v.dumpPackHeaders(tx, w, mode, sorted); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (idx *Index) dumpPackHeaders(tx *Tx, w io.Writer, mode DumpMode) error {
+func (idx *Index) dumpPackHeaders(tx *Tx, w io.Writer, mode DumpMode, sorted bool) error {
 	switch mode {
 	case DumpModeDec, DumpModeHex:
 		fmt.Fprintf(w, "%-3s %-10s %-7s %-7s %-21s %-21s %-10s\n",
 			"#", "Key", "Fields", "Values", "Min", "Max", "Size")
 	}
-	var i int
+	var (
+		i   int
+		err error
+	)
 	for i = 0; i < idx.packidx.Len(); i++ {
 		switch mode {
 		case DumpModeDec, DumpModeHex:
 			fmt.Fprintf(w, "%-3d ", i)
 		}
-		if err := idx.packidx.packs[i].Dump(w, mode, 2); err != nil {
+		if sorted {
+			err = idx.packidx.GetSorted(i).Dump(w, mode, 2)
+		} else {
+			err = idx.packidx.Get(i).Dump(w, mode, 2)
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -483,6 +504,29 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 		}
 	}
 	return nil
+}
+
+func (n ConditionTreeNode) Dump(level int, w io.Writer) {
+	if n.Leaf() {
+		fmt.Fprintln(w, strings.Repeat("  ", level), n.Cond.String())
+	}
+	if len(n.Children) > 0 {
+		kind := "AND"
+		if n.OrKind {
+			kind = "OR"
+		}
+		fmt.Fprintln(w, strings.Repeat("  ", level), kind)
+	}
+	for _, v := range n.Children {
+		v.Dump(level+1, w)
+	}
+}
+
+func (q Query) Dump() string {
+	buf := bytes.NewBuffer(nil)
+	fmt.Fprintln(buf, "Query:", q.Name, "=>")
+	q.Conditions.Dump(0, buf)
+	return string(buf.Bytes())
 }
 
 func ReintepretUint64ToByteSlice(src []uint64) []byte {
@@ -1576,6 +1620,77 @@ func (p *Package) Validate() error {
 				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
 			}
 
+		}
+	}
+	return nil
+}
+
+func (l PackIndex) Validate() []error {
+	errs := make([]error, 0)
+	for i := range l.packs {
+		head := l.packs[i]
+		if head.NValues == 0 {
+			errs = append(errs, fmt.Errorf("%03d empty pack", head.Key))
+		}
+		// check min <= max
+		min, max := l.minpks[i], l.maxpks[i]
+		if min > max {
+			errs = append(errs, fmt.Errorf("%03d min %d > max %d", head.Key, min, max))
+		}
+		// check invariant
+		// - id's don't overlap between packs
+		// - same key can span many packs, so min_a == max_b
+		// - for long rows of same keys min_a == max_a
+		for j := range l.packs {
+			if i == j {
+				continue
+			}
+			jmin, jmax := l.minpks[j], l.maxpks[j]
+			dist := jmax - jmin + 1
+
+			// single key packs are allowed
+			if min == max {
+				// check the signle key is not between any other pack (exclusing)
+				if jmin < min && jmax > max {
+					errs = append(errs, fmt.Errorf("%03d overlaps %03d - key %d E [%d:%d]",
+						head.Key, l.packs[j].Key, min, jmin, jmax))
+				}
+			} else {
+				// check min val is not contained in any other pack unless continued
+				if min != jmin && min != jmax && min-jmin < dist {
+					errs = append(errs, fmt.Errorf("%03d overlaps %03d - min %d E [%d:%d]",
+						head.Key, l.packs[j].Key, min, jmin, jmax))
+				}
+
+				// check max val is not contained in any other pack unless continued
+				if max != jmin && max-jmin < dist {
+					errs = append(errs, fmt.Errorf("%03d overlaps %03d - max %d E [%d:%d]",
+						head.Key, l.packs[j].Key, max, jmin, jmax))
+				}
+			}
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errs
+}
+
+func (t *Table) ValidatePackHeaders(w io.Writer) error {
+	if errs := t.packidx.Validate(); errs != nil {
+		for _, v := range errs {
+			w.Write([]byte(v.Error() + "\n"))
+		}
+	}
+	return nil
+}
+
+func (t *Table) ValidateIndexPackHeaders(w io.Writer) error {
+	for _, idx := range t.indexes {
+		if errs := idx.packidx.Validate(); errs != nil {
+			for _, v := range errs {
+				w.Write([]byte(fmt.Sprintf("%s: %v\n", idx.Name, v.Error())))
+			}
 		}
 	}
 	return nil

@@ -135,8 +135,8 @@ type Block struct {
 	Uint8   []uint8
 	Float64 []float64
 	Float32 []float32
-	Int128  []vec.Int128 // re-used by Decimal128, Int128
-	Int256  []vec.Int256 // re-used by Decimal256, Int256
+	Int128  vec.Int128Slice // re-used by Decimal128, Int128
+	Int256  vec.Int256Slice // re-used by Decimal256, Int256
 }
 
 func (b Block) Type() BlockType {

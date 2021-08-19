@@ -50,6 +50,7 @@ func MatchBoolBetween(src []bool, a, b bool, bits, mask *Bitset) *Bitset {
 }
 
 var Booleans = struct {
+	Insert        func([]bool, int, ...bool) []bool
 	Contains      func([]bool, bool) bool
 	Index         func([]bool, bool, int) int
 	MinMax        func([]bool) (bool, bool)
@@ -57,6 +58,9 @@ var Booleans = struct {
 	Intersect     func([]bool, []bool, []bool) []bool
 	MatchEqual    func([]bool, bool, *Bitset, *Bitset) *Bitset
 }{
+	Insert: func(s []bool, k int, v ...bool) []bool {
+		return boolInsert(s, k, v...)
+	},
 	Contains: func(s []bool, v bool) bool {
 		return boolContains(s, v)
 	},
@@ -72,6 +76,20 @@ var Booleans = struct {
 	MatchEqual: func(s []bool, val bool, bits, mask *Bitset) *Bitset {
 		return MatchBoolEqual(s, val, bits, mask)
 	},
+}
+
+func boolInsert(s []bool, k int, vs ...bool) []bool {
+	if n := len(s) + len(vs); n <= cap(s) {
+		s2 := s[:n]
+		copy(s2[k+len(vs):], s[k:])
+		copy(s2[k:], vs)
+		return s2
+	}
+	s2 := make([]bool, len(s)+len(vs))
+	copy(s2, s[:k])
+	copy(s2[k:], vs)
+	copy(s2[k+len(vs):], s[k:])
+	return s2
 }
 
 func boolContains(s []bool, val bool) bool {

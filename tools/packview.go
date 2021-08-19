@@ -31,6 +31,7 @@ var (
 	debug     bool
 	trace     bool
 	ashex     bool
+	sorted    bool
 	csvfile   string
 	dbname    string
 	cmd       string
@@ -72,6 +73,7 @@ func init() {
 	flags.BoolVar(&debug, "vv", false, "enable debug mode")
 	flags.BoolVar(&trace, "vvv", false, "enable trace mode")
 	flags.BoolVar(&ashex, "hex", false, "hex output mode")
+	flags.BoolVar(&sorted, "sorted", false, "sort pack headers by min value")
 	flags.StringVar(&csvfile, "csv", "", "csv output `filename`")
 	flags.StringVar(&dbname, "db", "", "database")
 	flags.StringVar(&cmd, "cmd", "", "run `command`")
@@ -120,7 +122,7 @@ func run() error {
 
 	cmd = flags.Arg(0)
 	dbname = strings.Split(flags.Arg(1), ".db")[0] + ".db"
-	switch dbx := strings.Split(strings.TrimPrefix(flags.Arg(1), dbname), "/"); len(dbx) {
+	switch dbx := strings.Split(strings.TrimPrefix(strings.TrimPrefix(flags.Arg(1), dbname), "/"), "/"); len(dbx) {
 	case 0:
 		// none
 	case 1:
@@ -202,15 +204,19 @@ func run() error {
 	case "blocks":
 		return table.DumpPackBlocks(out, mode)
 	case "table":
-		return table.DumpPackHeaders(out, mode)
+		return table.DumpPackHeaders(out, mode, sorted)
 	case "index":
-		return table.DumpIndexPackHeaders(out, mode)
+		return table.DumpIndexPackHeaders(out, mode, sorted)
 	case "dump-all":
 		return viewAllPacks(table, out, mode)
 	case "dump-pack":
 		return table.DumpPack(out, packid, mode)
 	case "dump-index":
 		return table.DumpIndexPack(out, 0, packid, mode)
+	case "validate":
+		table.ValidatePackHeaders(out)
+		table.ValidateIndexPackHeaders(out)
+		return nil
 	default:
 		return fmt.Errorf("unsupported command %s", cmd)
 	}

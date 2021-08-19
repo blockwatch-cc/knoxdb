@@ -183,7 +183,7 @@ func run() error {
 			}
 		}()
 		// flush every 1024 packs (i.e. 32M entries = 512 MB)
-		err = idx.Reindex(ctx, 1024, prog)
+		err = idx.Reindex(ctx, 4, prog)
 		close(prog)
 		if err != nil {
 			return err

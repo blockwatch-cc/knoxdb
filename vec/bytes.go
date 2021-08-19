@@ -55,6 +55,7 @@ var Bytes = struct {
 	Unique        func([][]byte) [][]byte
 	RemoveZeros   func([][]byte) [][]byte
 	AddUnique     func([][]byte, []byte) [][]byte
+	Insert        func([][]byte, int, ...[]byte) [][]byte
 	Remove        func([][]byte, []byte) [][]byte
 	Contains      func([][]byte, []byte) bool
 	Index         func([][]byte, []byte, int) int
@@ -76,6 +77,9 @@ var Bytes = struct {
 	AddUnique: func(s [][]byte, v []byte) [][]byte {
 		s, _ = bytesAddUnique(s, v)
 		return s
+	},
+	Insert: func(s [][]byte, k int, v ...[]byte) [][]byte {
+		return bytesInsert(s, k, v...)
 	},
 	Remove: func(s [][]byte, v []byte) [][]byte {
 		s, _ = bytesRemove(s, v)
@@ -109,6 +113,24 @@ func bytesAddUnique(s [][]byte, val []byte) ([][]byte, bool) {
 	s = append(s, val)
 	BytesSorter(s).Sort()
 	return s, true
+}
+
+func bytesInsert(s [][]byte, k int, vs ...[]byte) [][]byte {
+	if n := len(s) + len(vs); n <= cap(s) {
+		s2 := s[:n]
+		copy(s2[k+len(vs):], s[k:])
+		copy(s2[k:], vs)
+		for i, v := range vs {
+			s2[k+i] = make([]byte, len(v))
+			copy(s2[k+i], v)
+		}
+		return s2
+	}
+	s2 := make([][]byte, len(s)+len(vs))
+	copy(s2, s[:k])
+	copy(s2[k:], vs)
+	copy(s2[k+len(vs):], s[k:])
+	return s2
 }
 
 func bytesRemove(s [][]byte, val []byte) ([][]byte, bool) {

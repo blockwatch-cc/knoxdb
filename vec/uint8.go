@@ -54,6 +54,7 @@ var Uint8 = struct {
 	Unique        func([]uint8) []uint8
 	RemoveZeros   func([]uint8) []uint8
 	AddUnique     func([]uint8, uint8) []uint8
+	Insert        func([]uint8, int, ...uint8) []uint8
 	Remove        func([]uint8, uint8) []uint8
 	Contains      func([]uint8, uint8) bool
 	Index         func([]uint8, uint8, int) int
@@ -75,6 +76,9 @@ var Uint8 = struct {
 	AddUnique: func(s []uint8, v uint8) []uint8 {
 		s, _ = uint8AddUnique(s, v)
 		return s
+	},
+	Insert: func(s []uint8, k int, v ...uint8) []uint8 {
+		return uint8Insert(s, k, v...)
 	},
 	Remove: func(s []uint8, v uint8) []uint8 {
 		s, _ = uint8Remove(s, v)
@@ -108,6 +112,20 @@ func uint8AddUnique(s []uint8, val uint8) ([]uint8, bool) {
 	s = append(s, val)
 	Uint8Sorter(s).Sort()
 	return s, true
+}
+
+func uint8Insert(s []uint8, k int, vs ...uint8) []uint8 {
+	if n := len(s) + len(vs); n <= cap(s) {
+		s2 := s[:n]
+		copy(s2[k+len(vs):], s[k:])
+		copy(s2[k:], vs)
+		return s2
+	}
+	s2 := make([]uint8, len(s)+len(vs))
+	copy(s2, s[:k])
+	copy(s2[k:], vs)
+	copy(s2[k+len(vs):], s[k:])
+	return s2
 }
 
 func uint8Remove(s []uint8, val uint8) ([]uint8, bool) {

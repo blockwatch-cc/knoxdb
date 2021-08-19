@@ -70,6 +70,13 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = v.Int64(), true
 		case Int256:
 			res, ok = v.Int64(), true
+		default:
+			// type aliases
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			switch vv.Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				res, ok = int64(vv.Int()), true
+			}
 		}
 	case FieldTypeInt32:
 		switch v := val.(type) {
@@ -95,6 +102,13 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = int32(v.Int64()), true
 		case Int256:
 			res, ok = int32(v.Int64()), true
+		default:
+			// type aliases
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			switch vv.Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				res, ok = int32(vv.Int()), true
+			}
 		}
 	case FieldTypeInt16:
 		switch v := val.(type) {
@@ -120,6 +134,12 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = int16(v.Int64()), true
 		case Int256:
 			res, ok = int16(v.Int64()), true
+			// type aliases
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			switch vv.Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				res, ok = int16(vv.Int()), true
+			}
 		}
 	case FieldTypeInt8:
 		switch v := val.(type) {
@@ -146,17 +166,11 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		case Int256:
 			res, ok = int8(v.Int64()), true
 		default:
-			// enum types
+			// type aliases
 			vv := reflect.Indirect(reflect.ValueOf(val))
 			switch vv.Kind() {
-			case reflect.Int:
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				res, ok = int8(vv.Int()), true
-			case reflect.Uint:
-				res, ok = int8(vv.Uint()), true
-			case reflect.Int8:
-				res, ok = int8(vv.Int()), true
-			case reflect.Uint8:
-				res, ok = int8(vv.Uint()), true
 			}
 		}
 	case FieldTypeUint64:
@@ -185,6 +199,13 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = uint64(v.Int64()), true
 		case Int256:
 			res, ok = uint64(v.Int64()), true
+		default:
+			// type aliases
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			switch vv.Kind() {
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				res, ok = uint64(vv.Uint()), true
+			}
 		}
 	case FieldTypeUint32:
 		switch v := val.(type) {
@@ -212,6 +233,13 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = uint32(v.Int64()), true
 		case Int256:
 			res, ok = uint32(v.Int64()), true
+		default:
+			// type aliases
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			switch vv.Kind() {
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				res, ok = uint64(vv.Uint()), true
+			}
 		}
 	case FieldTypeUint16:
 		switch v := val.(type) {
@@ -239,6 +267,13 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			res, ok = uint16(v.Int64()), true
 		case Int256:
 			res, ok = uint16(v.Int64()), true
+		default:
+			// type aliases
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			switch vv.Kind() {
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				res, ok = uint64(vv.Uint()), true
+			}
 		}
 	case FieldTypeUint8:
 		switch v := val.(type) {
@@ -267,16 +302,10 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		case Int256:
 			res, ok = uint8(v.Int64()), true
 		default:
-			// enum types
+			// type aliases
 			vv := reflect.Indirect(reflect.ValueOf(val))
 			switch vv.Kind() {
-			case reflect.Int:
-				res, ok = uint8(vv.Int()), true
-			case reflect.Uint:
-				res, ok = uint8(vv.Uint()), true
-			case reflect.Int8:
-				res, ok = uint8(vv.Int()), true
-			case reflect.Uint8:
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				res, ok = uint8(vv.Uint()), true
 			}
 		}
@@ -541,7 +570,24 @@ func (t FieldType) CastSliceType(val interface{}, f Field) (interface{}, error) 
 		// TODO: decimal types
 		// TODO: int128/256 types
 		default:
-			ok = false
+			// convert enum types
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			if vv.Kind() == reflect.Slice {
+				switch vv.Type().Elem().Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					cp := make([]int64, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = int64(vv.Index(i).Int())
+					}
+					res, ok = cp, true
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					cp := make([]int64, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = int64(vv.Index(i).Int())
+					}
+					res, ok = cp, true
+				}
+			}
 		}
 	case FieldTypeInt32:
 		switch v := val.(type) {
@@ -575,7 +621,24 @@ func (t FieldType) CastSliceType(val interface{}, f Field) (interface{}, error) 
 		// TODO: decimal types
 		// TODO: int128/256 types
 		default:
-			ok = false
+			// convert enum types
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			if vv.Kind() == reflect.Slice {
+				switch vv.Type().Elem().Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					cp := make([]int32, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = int32(vv.Index(i).Int())
+					}
+					res, ok = cp, true
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					cp := make([]int32, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = int32(vv.Index(i).Int())
+					}
+					res, ok = cp, true
+				}
+			}
 		}
 	case FieldTypeInt16:
 		switch v := val.(type) {
@@ -609,7 +672,24 @@ func (t FieldType) CastSliceType(val interface{}, f Field) (interface{}, error) 
 		// TODO: decimal types
 		// TODO: int128/256 types
 		default:
-			ok = false
+			// convert enum types
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			if vv.Kind() == reflect.Slice {
+				switch vv.Type().Elem().Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					cp := make([]int16, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = int16(vv.Index(i).Int())
+					}
+					res, ok = cp, true
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					cp := make([]int16, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = int16(vv.Index(i).Int())
+					}
+					res, ok = cp, true
+				}
+			}
 		}
 	case FieldTypeInt8:
 		switch v := val.(type) {
@@ -643,7 +723,24 @@ func (t FieldType) CastSliceType(val interface{}, f Field) (interface{}, error) 
 		// TODO: decimal types
 		// TODO: int128/256 types
 		default:
-			ok = false
+			// convert enum types
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			if vv.Kind() == reflect.Slice {
+				switch vv.Type().Elem().Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					cp := make([]int8, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = int8(vv.Index(i).Int())
+					}
+					res, ok = cp, true
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					cp := make([]int8, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = int8(vv.Index(i).Int())
+					}
+					res, ok = cp, true
+				}
+			}
 		}
 	case FieldTypeUint64:
 		switch v := val.(type) {
@@ -677,7 +774,24 @@ func (t FieldType) CastSliceType(val interface{}, f Field) (interface{}, error) 
 		// TODO: decimal types
 		// TODO: int128/256 types
 		default:
-			ok = false
+			// convert enum types
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			if vv.Kind() == reflect.Slice {
+				switch vv.Type().Elem().Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					cp := make([]uint64, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = uint64(vv.Index(i).Uint())
+					}
+					res, ok = cp, true
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					cp := make([]uint64, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = uint64(vv.Index(i).Uint())
+					}
+					res, ok = cp, true
+				}
+			}
 		}
 	case FieldTypeUint32:
 		switch v := val.(type) {
@@ -711,7 +825,24 @@ func (t FieldType) CastSliceType(val interface{}, f Field) (interface{}, error) 
 		// TODO: decimal types
 		// TODO: int128/256 types
 		default:
-			ok = false
+			// convert enum types
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			if vv.Kind() == reflect.Slice {
+				switch vv.Type().Elem().Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					cp := make([]uint32, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = uint32(vv.Index(i).Uint())
+					}
+					res, ok = cp, true
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					cp := make([]uint32, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = uint32(vv.Index(i).Uint())
+					}
+					res, ok = cp, true
+				}
+			}
 		}
 	case FieldTypeUint16:
 		switch v := val.(type) {
@@ -745,7 +876,24 @@ func (t FieldType) CastSliceType(val interface{}, f Field) (interface{}, error) 
 		// TODO: decimal types
 		// TODO: int128/256 types
 		default:
-			ok = false
+			// convert enum types
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			if vv.Kind() == reflect.Slice {
+				switch vv.Type().Elem().Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					cp := make([]uint16, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = uint16(vv.Index(i).Uint())
+					}
+					res, ok = cp, true
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					cp := make([]uint16, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = uint16(vv.Index(i).Uint())
+					}
+					res, ok = cp, true
+				}
+			}
 		}
 	case FieldTypeUint8:
 		switch v := val.(type) {
@@ -779,7 +927,24 @@ func (t FieldType) CastSliceType(val interface{}, f Field) (interface{}, error) 
 		// TODO: decimal types
 		// TODO: int128/256 types
 		default:
-			ok = false
+			// convert enum types
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			if vv.Kind() == reflect.Slice {
+				switch vv.Type().Elem().Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					cp := make([]uint8, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = uint8(vv.Index(i).Uint())
+					}
+					res, ok = cp, true
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					cp := make([]uint8, vv.Len())
+					for i, l := 0, vv.Len(); i < l; i++ {
+						cp[i] = uint8(vv.Index(i).Uint())
+					}
+					res, ok = cp, true
+				}
+			}
 		}
 	// TODO: casts
 	case FieldTypeFloat64:

@@ -54,10 +54,10 @@ func (t JoinType) String() string {
 
 type JoinTable struct {
 	Table    *Table
-	Where    ConditionList   // optional filters for table rows
-	Fields   FieldList       // list of output fields, in order
-	FieldsAs util.StringList // alias names of output fields, in order
-	Limit    int             // individual table scan limit
+	Where    ConditionTreeNode // optional filters for table rows
+	Fields   FieldList         // list of output fields, in order
+	FieldsAs util.StringList   // alias names of output fields, in order
+	Limit    int               // individual table scan limit
 }
 
 type Join struct {
@@ -160,8 +160,8 @@ func (j Join) Check() error {
 	}
 
 	// where conditions are valid if set
-	for i, c := range j.Left.Where {
-		if err := j.Left.Where[i].EnsureTypes(); err != nil {
+	for i, c := range j.Left.Where.Conditions() {
+		if err := c.EnsureTypes(); err != nil {
 			return fmt.Errorf("pack: invalid cond %d in join field '%s.%s': %v",
 				i, lname, c.Field.Name, err)
 		}
@@ -182,8 +182,8 @@ func (j Join) Check() error {
 		}
 	}
 
-	for i, c := range j.Right.Where {
-		if err := j.Right.Where[i].EnsureTypes(); err != nil {
+	for i, c := range j.Right.Where.Conditions() {
+		if err := c.EnsureTypes(); err != nil {
 			return fmt.Errorf("pack: invalid cond %d in join field '%s.%s': %v",
 				i, rname, c.Field.Name, err)
 		}
@@ -335,7 +335,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 
 	// limit join to q.Limit when q has no extra conditions, otherwise the limit
 	// is used in post-processing the joined table
-	havePostFilter := len(q.Conditions) > 0
+	havePostFilter := q.Conditions.Empty()
 	if !havePostFilter {
 		j.limit = q.Limit
 	}
@@ -424,7 +424,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			if pkcursor > 0 {
 				// FIXME: optimize/merge conditions (there may already exist one
 				// or more conditions for the pk column)
-				lQ.Conditions = append(lQ.Conditions, Condition{
+				lQ.Conditions.AddAndCondition(&Condition{
 					Field: j.Left.Fields.Pk(),
 					Mode:  FilterModeGt,
 					Value: pkcursor,
@@ -468,7 +468,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 					return nil, err
 				}
 				// use left predicate field values as additional IN condition
-				rConds = append(rConds, Condition{
+				rConds.AddAndCondition(&Condition{
 					Field:    j.Predicate.Right,
 					Mode:     FilterModeIn,
 					Value:    lPredColCopy,
@@ -506,7 +506,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			if pkcursor > 0 {
 				// FIXME: optimize/merge conditions (there may already exist one
 				// or more conditions for the pk column)
-				rQ.Conditions = append(rQ.Conditions, Condition{
+				rQ.Conditions.AddAndCondition(&Condition{
 					Field: j.Right.Fields.Pk(),
 					Mode:  FilterModeGt,
 					Value: pkcursor,
@@ -549,7 +549,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 					return nil, err
 				}
 				// use left predicate field values as additional IN condition
-				lConds = append(lConds, Condition{
+				lConds.AddAndCondition(&Condition{
 					Field:    j.Predicate.Left,
 					Mode:     FilterModeIn,
 					Value:    rPredColCopy,
