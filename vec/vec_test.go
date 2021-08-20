@@ -16,13 +16,3 @@ var vecBenchmarkSizes = []vecBenchmarkSize{
 	{"1M", 1024 * 1024},
 	{"128M", 128 * 1024 * 1024},
 }
-
-/*
-// for optimizing small data blocks
-var vecBenchmarkSizes = []vecBenchmarkSize{
-	{"256", 256},
-	{"512", 512},
-	{"768", 768},
-	{"1024", 1024},
-}
-*/

@@ -24,6 +24,7 @@ var (
 
 // Big-Endian format [0] = Hi .. [3] = Lo
 type Int256 [4]uint64
+type Uint256 [4]uint64
 
 func NewInt256() Int256 {
 	return ZeroInt256
@@ -33,6 +34,12 @@ func Int256FromInt64(in int64) Int256 {
 	var z Int256
 	z.SetInt64(in)
 	return z
+}
+
+func Int256From2Int64(in0, in1 int64) Int256 {
+	var z Int128
+	z[0], z[1] = uint64(in0), uint64(in1)
+	return Int256FromInt128(z)
 }
 
 func Int256FromInt128(in Int128) Int256 {
@@ -694,45 +701,57 @@ func Max256(x, y Int256) Int256 {
 	return y
 }
 
+func (x Int256) Uint256() Uint256 {
+	return Uint256{x[0], x[1], x[2], x[3]}
+}
+
+func (x Uint256) Int256() Int256 {
+	return Int256{x[0], x[1], x[2], x[3]}
+}
+
+func (x Uint256) Gte(y Uint256) bool {
+	return !x.Int256().ult(y.Int256())
+}
+
 // Match helpers
-func MatchInt256Equal(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt256Equal(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt256Equal(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256NotEqual(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt256NotEqual(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt256NotEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256LessThan(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt256LessThan(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt256LessThan(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256LessThanEqual(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt256LessThanEqual(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt256LessThanEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256GreaterThan(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt256GreaterThan(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt256GreaterThan(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256GreaterThanEqual(src []Int256, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt256GreaterThanEqual(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt256GreaterThanEqual(src, val, bits.Bytes(), mask.Bytes()))
 	return bits
 }
 
-func MatchInt256Between(src []Int256, a, b Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+func MatchInt256Between(src Int256LLSlice, a, b Int256, bits, mask *Bitset) *Bitset {
+	bits = ensureBitfieldSize(bits, src.Len())
 	bits.cnt = int(matchInt256Between(src, a, b, bits.Bytes(), mask.Bytes()))
 	return bits
 }
@@ -946,6 +965,150 @@ func (s Int256Slice) Intersect(x, out Int256Slice) Int256Slice {
 	return out
 }
 
+// represents a Int256 slice in four strides fom highest to lowest qword
+// used for vector match algorithms
+type Int256LLSlice struct {
+	X0 []int64
+	X1 []uint64
+	X2 []uint64
+	X3 []uint64
+}
+
+func (s Int256LLSlice) IsNil() bool {
+	return s.X0 == nil || s.X1 == nil || s.X2 == nil || s.X3 == nil
+}
+
+func (s Int256LLSlice) Elem(i int) Int256 {
+	return Int256{uint64(s.X0[i]), s.X1[i], s.X2[i], s.X3[i]}
+}
+
+func (s Int256LLSlice) Set(i int, val Int256) {
+	s.X0[i], s.X1[i], s.X2[i], s.X3[i] = int64(val[0]), val[1], val[2], val[3]
+}
+
+func MakeInt256LLSlice(sz int) Int256LLSlice {
+	return Int256LLSlice{make([]int64, sz), make([]uint64, sz), make([]uint64, sz), make([]uint64, sz)}
+}
+
+func (s Int256LLSlice) Append(val Int256) Int256LLSlice {
+	s.X0 = append(s.X0, int64(val[0]))
+	s.X1 = append(s.X1, val[1])
+	s.X2 = append(s.X2, val[2])
+	s.X3 = append(s.X3, val[3])
+	return s
+}
+
+func (dst Int256LLSlice) AppendFrom(src Int256LLSlice) Int256LLSlice {
+	dst.X0 = append(dst.X0, src.X0...)
+	dst.X1 = append(dst.X1, src.X1...)
+	dst.X2 = append(dst.X2, src.X2...)
+	dst.X3 = append(dst.X3, src.X3...)
+	return dst
+}
+
+func (s Int256LLSlice) Swap(i, j int) {
+	s.X0[i], s.X0[j] = s.X0[j], s.X0[i]
+	s.X1[i], s.X1[j] = s.X1[j], s.X1[i]
+	s.X2[i], s.X2[j] = s.X2[j], s.X2[i]
+	s.X3[i], s.X3[j] = s.X3[j], s.X3[i]
+}
+
+func (s Int256LLSlice) Len() int {
+	return len(s.X0)
+}
+
+func (s Int256LLSlice) Cap() int {
+	return cap(s.X0)
+}
+
+func (s Int256LLSlice) MinMax() (Int256, Int256) {
+	var min, max Int256
+
+	switch l := s.Len(); l {
+	case 0:
+		// nothing
+	case 1:
+		min, max = s.Elem(0), s.Elem(0)
+	default:
+		// If there is more than one element, then initialize min and max
+		s0 := s.Elem(0)
+		s1 := s.Elem(1)
+		if s0.Lt(s1) {
+			max = s0
+			min = s1
+		} else {
+			max = s1
+			min = s0
+		}
+
+		for i := 2; i < l; i++ {
+			si := s.Elem(i)
+			if si.Gt(max) {
+				max = si
+			} else if si.Lt(min) {
+				min = si
+			}
+		}
+	}
+
+	return min, max
+}
+
+func (s Int256Slice) Int256LLSlice() Int256LLSlice {
+	var res Int256LLSlice
+	res.X0 = make([]int64, len(s))
+	res.X1 = make([]uint64, len(s))
+	res.X2 = make([]uint64, len(s))
+	res.X3 = make([]uint64, len(s))
+	for i, v := range s {
+		res.X0[i] = int64(v[0])
+		res.X1[i] = v[1]
+		res.X2[i] = v[2]
+		res.X3[i] = v[3]
+	}
+	return res
+}
+
+func (s Int256LLSlice) Int256Slice() []Int256 {
+	res := make([]Int256, s.Len())
+	for i, v := range res {
+		v[0] = uint64(s.X0[i])
+		v[1] = s.X1[i]
+		v[2] = s.X2[i]
+		v[3] = s.X3[i]
+	}
+	return res
+}
+
+func (s Int256LLSlice) Subslice(start, end int) Int256LLSlice {
+	return Int256LLSlice{s.X0[start:end], s.X1[start:end], s.X2[start:end], s.X3[start:end]}
+}
+
+func (s Int256LLSlice) Tail(start int) Int256LLSlice {
+	return Int256LLSlice{s.X0[start:], s.X1[start:], s.X2[start:], s.X3[start:]}
+}
+
+func (dst Int256LLSlice) Copy(src Int256LLSlice, dstPos, srcPos, n int) {
+	copy(dst.X0[dstPos:], src.X0[srcPos:srcPos+n])
+	copy(dst.X1[dstPos:], src.X1[srcPos:srcPos+n])
+	copy(dst.X2[dstPos:], src.X2[srcPos:srcPos+n])
+	copy(dst.X3[dstPos:], src.X3[srcPos:srcPos+n])
+}
+
+func (s *Int256LLSlice) Insert(k int, vs Int256LLSlice) {
+	if n := (*s).Len() + vs.Len(); n <= (*s).Cap() {
+		(*s) = (*s).Subslice(0, n)
+		(*s).Copy(*s, k+vs.Len(), k, vs.Len()-k)
+		(*s).Copy(vs, k, 0, vs.Len())
+		return
+	}
+	s2 := MakeInt256LLSlice((*s).Len() + vs.Len())
+	s2.Copy(*s, 0, 0, k)
+	s2.Copy(vs, k, 0, vs.Len())
+	s2.Copy(*s, k+vs.Len(), k, vs.Len()-k)
+	*s = s2
+}
+
 func (s Int256Slice) MatchEqual(val Int256, bits, mask *Bitset) *Bitset {
-	return MatchInt256Equal(s, val, bits, mask)
+	return MatchInt256Equal(s.Int256LLSlice(), val, bits, mask)
 }

@@ -514,7 +514,7 @@ done:
 //   Z1-Z8 = vector data
 //   K1-K7 = comparision results
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
-TEXT ·matchUint16BetweenAVX512(SB), NOSPLIT, $0-72
+TEXT ·matchUint16BetweenAVX512(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI

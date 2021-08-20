@@ -19,7 +19,7 @@
 //   R9 = population count
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint8EqualAVX2(SB), NOSPLIT, $0-57
+TEXT ·matchUint8EqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -239,7 +239,7 @@ done:
 //   R9 = population count
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint8NotEqualAVX2(SB), NOSPLIT, $0-57
+TEXT ·matchUint8NotEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -467,7 +467,7 @@ done:
 //   R9 = population count
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint8LessThanAVX2(SB), NOSPLIT, $0-57
+TEXT ·matchUint8LessThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -727,7 +727,7 @@ done:
 //   R9 = population count
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint8LessThanEqualAVX2(SB), NOSPLIT, $0-57
+TEXT ·matchUint8LessThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -996,7 +996,7 @@ done:
 //   R9 = population count
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint8GreaterThanAVX2(SB), NOSPLIT, $0-57
+TEXT ·matchUint8GreaterThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -1256,7 +1256,7 @@ done:
 //   R9 = population count
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint8GreaterThanEqualAVX2(SB), NOSPLIT, $0-57
+TEXT ·matchUint8GreaterThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -1529,7 +1529,7 @@ done:
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
-TEXT ·matchUint8BetweenAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchUint8BetweenAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI

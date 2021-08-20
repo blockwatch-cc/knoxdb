@@ -44,13 +44,13 @@ const (
 )
 
 // upper bound
-func Int256ArrayEncodedSize(src []vec.Int256) int {
-	return len(src)*32 + 1
+func Int256ArrayEncodedSize(src vec.Int256LLSlice) int {
+	return src.Len()*32 + 1
 }
 
 // upper bound
-func Int128ArrayEncodedSize(src []vec.Int128) int {
-	return len(src)*16 + 1
+func Int128ArrayEncodedSize(src vec.Int128LLSlice) int {
+	return src.Len()*16 + 1
 }
 
 // upper bound
