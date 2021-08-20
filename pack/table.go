@@ -1242,7 +1242,9 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 			)
 			return fmt.Errorf("pack: %s infinite flush loop detected. Database is likely corrupted.", t.name)
 		} else if loop == maxloop {
+			lvl := log.Level()
 			log.SetLevel(levelDebug)
+			defer log.SetLevel(lvl)
 			log.Debugf("pack: %s circuit breaker activated at loop %d tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d",
 				t.name, loop, tpos, tlen, jpos, jlen, lastpack, t.packidx.Len(), nextid,
 			)
@@ -1335,7 +1337,6 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 				// stop on pack boundary
 				if nextmin > 0 && key.pk >= nextmin {
-					// if best, min, max := t.findBestPack(key.pk); best != lastpack {
 					// best, min, max, _ := t.findBestPack(key.pk)
 					// log.Debugf("Key %d does not fit into pack %d [%d:%d], suggested %d/%d [%d:%d] nextmin=%d",
 					// 	key.pk, lastpack, packmin, packmax, best, t.packidx.Len(), min, max, nextmin)
@@ -2929,7 +2930,9 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	cachekey := t.cachekey(key)
 	if cached, ok := cachefn(cachekey); ok {
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
-		return cached.(*Package), nil
+		pkg := cached.(*Package)
+		// log.Debugf("%s: use cached shared pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
+		return pkg, nil
 	}
 	if stripped {
 		// try cache lookup for stripped packs
@@ -2959,6 +2962,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	if err != nil {
 		return nil, err
 	}
+	// log.Debugf("%s: loaded shared pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
 	atomic.AddInt64(&t.stats.PackBytesRead, int64(pkg.size))
 
@@ -2996,6 +3000,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		}
 		clone.key = pkg.key
 		clone.cached = false
+		// log.Debugf("%s: cloned writeable pack %d col=%d row=%d", t.name, clone.key, clone.nFields, clone.nValues)
 		return clone, nil
 	}
 
@@ -3006,12 +3011,14 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	if err != nil {
 		return nil, err
 	}
+	// log.Debugf("%s: loaded writeable pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
 	atomic.AddInt64(&t.stats.PackBytesRead, int64(pkg.size))
 	return pkg, nil
 }
 
 func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
+	// log.Debugf("%s: store pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	key := pkg.Key()
 
 	defer func() {
@@ -3066,6 +3073,7 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 
 // Note: pack must have been storted before splitting
 func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
+	// log.Debugf("%s: split pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	// move half of the packs contents to a new pack (don't cache the new pack
 	// to avoid possible eviction of the pack we are currently splitting!)
 	newpkg := t.packPool.Get().(*Package)
@@ -3098,12 +3106,14 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 func (t *Table) makePackage() interface{} {
 	atomic.AddInt64(&t.stats.PacksAlloc, 1)
 	pkg, _ := t.journal.DataPack().Clone(1<<uint(t.opts.PackSizeLog2), false)
+	// log.Debugf("%s: alloc new pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	return pkg
 }
 
 func (t *Table) onEvictedPackage(key, val interface{}) {
 	pkg := val.(*Package)
 	pkg.cached = false
+	// log.Debugf("%s: cache evict pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PackCacheEvictions, 1)
 	t.recyclePackage(pkg)
 }
@@ -3122,6 +3132,7 @@ func (t *Table) recyclePackage(pkg *Package) {
 		pkg.Release()
 		return
 	}
+	// log.Debugf("%s: recycle pack %d", t.name, pkg.key)
 	pkg.Clear()
 	atomic.AddInt64(&t.stats.PacksRecycled, 1)
 	t.packPool.Put(pkg)
