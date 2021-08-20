@@ -106,6 +106,84 @@ func bitsetPopCountGeneric(src []byte, size int) int64 {
 	return cnt
 }
 
+func bitsetIndexesGeneric(src []byte, size int, dst []uint32) int {
+	if size > 0 {
+		src[len(src)-1] &= bytemask(size)
+	}
+	var j int
+	var i uint32 = 0xffffffff
+	for _, b := range src {
+		for k := 0; k < int(lengthTable[b]); k++ {
+			dst[j] = decodeTable[int(b)<<3+k] + i
+			j++
+		}
+		i += 8
+	}
+	return j
+}
+
+func bitsetIndexesGenericSkip16(src []byte, size int, dst []uint32) int {
+	if size > 0 {
+		src[len(src)-1] &= bytemask(size)
+	}
+	var j int
+	var big int = (len(src) >> 1) << 1
+	var i uint32 = 0xffffffff
+	var l int
+	for l = 0; l < big; l += 2 {
+		if binary.BigEndian.Uint16(src[l:l+2]) == 0 {
+			i += 16
+			continue
+		}
+		for _, b := range src[l : l+2] {
+			for k := 0; k < int(lengthTable[b]); k++ {
+				dst[j] = decodeTable[int(b)<<3+k] + i
+				j++
+			}
+			i += 8
+		}
+	}
+	for _, b := range src[l:] {
+		for k := 0; k < int(lengthTable[b]); k++ {
+			dst[j] = decodeTable[int(b)<<3+k] + i
+			j++
+		}
+		i += 8
+	}
+	return j
+}
+
+func bitsetIndexesGenericSkip64(src []byte, size int, dst []uint32) int {
+	if size > 0 {
+		src[len(src)-1] &= bytemask(size)
+	}
+	var j int
+	var big int = (len(src) >> 3) << 3
+	var i uint32 = 0xffffffff
+	var l int
+	for l = 0; l < big; l += 8 {
+		if binary.BigEndian.Uint64(src[l:l+8]) == 0 {
+			i += 64
+			continue
+		}
+		for _, b := range src[l : l+8] {
+			for k := 0; k < int(lengthTable[b]); k++ {
+				dst[j] = decodeTable[int(b)<<3+k] + i
+				j++
+			}
+			i += 8
+		}
+	}
+	for _, b := range src[l:] {
+		for k := 0; k < int(lengthTable[b]); k++ {
+			dst[j] = decodeTable[int(b)<<3+k] + i
+			j++
+		}
+		i += 8
+	}
+	return j
+}
+
 func bitsetRunGeneric(src []byte, index, size int) (int, int) {
 	if len(src) == 0 || index < 0 || index >= size {
 		return -1, 0

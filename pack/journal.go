@@ -160,11 +160,24 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 			break
 		}
 		j.deleted.Set(idx)
+		j.data.SetFieldAt(j.data.pkindex, idx, uint64(0))
 	}
 	return nil
 }
 
 func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, error) {
+	// reconstructed deleted pks from key list
+	var idx, last int
+	for _, v := range j.tomb {
+		idx, last = j.PkIndex(v, last)
+		if idx < 0 {
+			continue
+		}
+		if last >= len(j.keys) {
+			break
+		}
+		j.data.SetFieldAt(j.data.pkindex, idx, v)
+	}
 	n, err := storePackTx(dbTx, bucketName, encodePackKey(journalKey), j.data, defaultJournalFillLevel)
 	if err != nil {
 		return 0, err
@@ -181,6 +194,17 @@ func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, error) {
 		return n, err
 	}
 	n += m
+	// reset deleted pks to zero
+	for _, v := range j.tomb {
+		idx, last = j.PkIndex(v, last)
+		if idx < 0 {
+			continue
+		}
+		if last >= len(j.keys) {
+			break
+		}
+		j.data.SetFieldAt(j.data.pkindex, idx, uint64(0))
+	}
 	return n, nil
 }
 
@@ -589,7 +613,7 @@ func (j *Journal) Delete(pk uint64) (int, error) {
 	// find if key exists in journal and mark entry as deleted
 	idx, _ := j.PkIndex(pk, 0)
 	if idx >= 0 {
-		// overwrite journal pk col with zero (this signals to not query and
+		// overwrite journal pk col with zero (this signals to query and
 		// flush operations that this item is deleted and should be skipped)
 		j.data.SetFieldAt(j.data.pkindex, idx, uint64(0))
 
@@ -643,7 +667,7 @@ func (j *Journal) DeleteBatch(pks []uint64) (int, error) {
 	for _, pk := range pks {
 		// find existing key and position in journal
 		if idx, last = j.PkIndex(pk, last); idx >= 0 {
-			// overwrite journal pk col with zero (this signals to not query and
+			// overwrite journal pk col with zero (this signals to query and
 			// flush operations that this item is deleted and should be skipped)
 			j.data.SetFieldAt(j.data.pkindex, idx, uint64(0))
 
@@ -810,16 +834,13 @@ func (j *Journal) PkIndex(pk uint64, last int) (int, int) {
 	}
 
 	// find pk in keys list, use last as hint to limit search space
-	idx := sort.Search(len(j.keys)-last, func(i int) bool { return j.keys[last+i].pk >= pk })
+	last += sort.Search(len(j.keys)-last, func(i int) bool { return j.keys[last+i].pk >= pk })
 
 	// return index	if found or -1 otherwise
 	// Note: when entry is deleted, we still return its position since other
 	// parts of this algorithm rely on this behaviour
-	if last+idx < len(j.keys) && j.keys[last+idx].pk == pk {
-		return j.keys[last+idx].idx, last + idx
-	}
-	if last+idx == len(j.keys) {
-		return -1, len(j.keys)
+	if last < len(j.keys) && j.keys[last].pk == pk {
+		return j.keys[last].idx, last
 	}
 	return -1, last
 }

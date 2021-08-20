@@ -113,7 +113,7 @@ func BenchmarkUint64MapFromSorted(B *testing.B) {
 func BenchmarkBytes32HashMap(B *testing.B) {
 	for _, n := range []int{10, 32, 64, 100, 500, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.ByteSlice(randByteSlice(n, 32))
+			a := randByteSlice(n, 32)
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -161,7 +161,7 @@ const bloomFillFactor = 1
 func BenchmarkUint64BloomFromUnsortedLE(B *testing.B) {
 	for _, n := range []int{10, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64Slice(randUint64Slice(n, 1))
+			a := randUint64Slice(n, 1)
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -180,7 +180,7 @@ func BenchmarkUint64BloomFromUnsortedLE(B *testing.B) {
 func BenchmarkUint64BloomFromSortedLE(B *testing.B) {
 	for _, n := range []int{10, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64Slice(randUint64Slice(n, 1)).Sort()
+			a := vec.Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -199,7 +199,7 @@ func BenchmarkUint64BloomFromSortedLE(B *testing.B) {
 func BenchmarkUint64BloomFromUnsortedBE(B *testing.B) {
 	for _, n := range []int{10, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64Slice(randUint64Slice(n, 1))
+			a := randUint64Slice(n, 1)
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -218,7 +218,7 @@ func BenchmarkUint64BloomFromUnsortedBE(B *testing.B) {
 func BenchmarkUint64BloomFromSortedBE(B *testing.B) {
 	for _, n := range []int{10, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64Slice(randUint64Slice(n, 1)).Sort()
+			a := vec.Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -237,7 +237,7 @@ func BenchmarkUint64BloomFromSortedBE(B *testing.B) {
 func BenchmarkBytes32Bloom(B *testing.B) {
 	for _, n := range []int{10, 32, 64, 100, 500, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.ByteSlice(randByteSlice(n, 32))
+			a := randByteSlice(n, 32)
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -257,7 +257,7 @@ func BenchmarkBytes32Bloom(B *testing.B) {
 func BenchmarkUint64CuckooFromUnsortedLE(B *testing.B) {
 	for _, n := range []int{10, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64Slice(randUint64Slice(n, 1))
+			a := randUint64Slice(n, 1)
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -275,7 +275,7 @@ func BenchmarkUint64CuckooFromUnsortedLE(B *testing.B) {
 func BenchmarkUint64CuckooFromSortedLE(B *testing.B) {
 	for _, n := range []int{10, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64Slice(randUint64Slice(n, 1)).Sort()
+			a := vec.Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -293,7 +293,7 @@ func BenchmarkUint64CuckooFromSortedLE(B *testing.B) {
 func BenchmarkUint64CuckooFromUnsortedBE(B *testing.B) {
 	for _, n := range []int{10, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64Slice(randUint64Slice(n, 1))
+			a := randUint64Slice(n, 1)
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -311,7 +311,7 @@ func BenchmarkUint64CuckooFromUnsortedBE(B *testing.B) {
 func BenchmarkUint64CuckooFromSortedBE(B *testing.B) {
 	for _, n := range []int{10, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64Slice(randUint64Slice(n, 1)).Sort()
+			a := vec.Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -329,7 +329,7 @@ func BenchmarkUint64CuckooFromSortedBE(B *testing.B) {
 func BenchmarkBytes32Cuckoo(B *testing.B) {
 	for _, n := range []int{10, 32, 64, 100, 500, 1000, 10000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.ByteSlice(randByteSlice(n, 32))
+			a := randByteSlice(n, 32)
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {

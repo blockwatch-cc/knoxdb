@@ -606,6 +606,20 @@ func (s *Int128Slice) AddUnique(val Int128) bool {
 	return true
 }
 
+func (s *Int128Slice) Insert(k int, vs ...Int128) {
+	if n := len(*s) + len(vs); n <= cap(*s) {
+		*s = (*s)[:n]
+		copy((*s)[k+len(vs):], (*s)[k:])
+		copy((*s)[k:], vs)
+		return
+	}
+	s2 := make(Int128Slice, len(*s)+len(vs))
+	copy(s2, (*s)[:k])
+	copy(s2[k:], vs)
+	copy(s2[k+len(vs):], (*s)[k:])
+	*s = s2
+}
+
 func (s *Int128Slice) Remove(val Int128) bool {
 	idx := s.Index(val, 0)
 	if idx < 0 {
