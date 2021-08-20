@@ -1095,6 +1095,20 @@ func (dst Int256LLSlice) Copy(src Int256LLSlice, dstPos, srcPos, n int) {
 	copy(dst.X3[dstPos:], src.X3[srcPos:srcPos+n])
 }
 
+func (s *Int256LLSlice) Insert(k int, vs Int256LLSlice) {
+	if n := (*s).Len() + vs.Len(); n <= (*s).Cap() {
+		(*s) = (*s).Subslice(0, n)
+		(*s).Copy(*s, k+vs.Len(), k, vs.Len()-k)
+		(*s).Copy(vs, k, 0, vs.Len())
+		return
+	}
+	s2 := MakeInt256LLSlice((*s).Len() + vs.Len())
+	s2.Copy(*s, 0, 0, k)
+	s2.Copy(vs, k, 0, vs.Len())
+	s2.Copy(*s, k+vs.Len(), k, vs.Len()-k)
+	*s = s2
+}
+
 func (s Int256Slice) MatchEqual(val Int256, bits, mask *Bitset) *Bitset {
 	return MatchInt256Equal(s.Int256LLSlice(), val, bits, mask)
 }

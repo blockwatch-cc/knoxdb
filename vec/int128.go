@@ -926,6 +926,20 @@ func (dst Int128LLSlice) Copy(src Int128LLSlice, dstPos, srcPos, n int) {
 	copy(dst.X1[dstPos:], src.X1[srcPos:srcPos+n])
 }
 
+func (s *Int128LLSlice) Insert(k int, vs Int128LLSlice) {
+	if n := (*s).Len() + vs.Len(); n <= (*s).Cap() {
+		(*s) = (*s).Subslice(0, n)
+		(*s).Copy(*s, k+vs.Len(), k, vs.Len()-k)
+		(*s).Copy(vs, k, 0, vs.Len())
+		return
+	}
+	s2 := MakeInt128LLSlice((*s).Len() + vs.Len())
+	s2.Copy(*s, 0, 0, k)
+	s2.Copy(vs, k, 0, vs.Len())
+	s2.Copy(*s, k+vs.Len(), k, vs.Len()-k)
+	*s = s2
+}
+
 func (s Int128Slice) MatchEqual(val Int128, bits, mask *Bitset) *Bitset {
 	return MatchInt128Equal(s.Int128LLSlice(), val, bits, nil)
 }
