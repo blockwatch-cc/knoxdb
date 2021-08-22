@@ -137,8 +137,8 @@ func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Option
 		return nil, err
 	}
 	field.Flags |= FlagIndexed
-	maxPackSize := 1 << uint(opts.PackSizeLog2)
-	maxJournalSize := 1 << uint(opts.JournalSizeLog2)
+	maxPackSize := opts.Packsize()
+	maxJournalSize := opts.Journalsize()
 	idx := &Index{
 		Name:         name,
 		Type:         typ,
@@ -348,7 +348,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 				idx.opts.JournalSizeLog2 = opts[0].JournalSizeLog2
 			}
 		}
-		maxPackSize := 1 << uint(idx.opts.PackSizeLog2)
+		maxPackSize := idx.opts.Packsize()
 		idx.packidx = NewPackIndex(nil, 0, maxPackSize)
 		idx.journal, err = loadPackTx(dbTx, idx.metakey, encodePackKey(journalKey), nil)
 		if err != nil {
@@ -402,7 +402,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 		return ErrNoTable
 	}
 	packs := make(PackInfoList, 0)
-	maxPackSize := 1 << uint(idx.opts.PackSizeLog2)
+	maxPackSize := idx.opts.Packsize()
 	bi := b.Bucket(infoKey)
 	if bi != nil {
 		c := bi.Cursor()
@@ -428,8 +428,8 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 	// on error, scan packs
 	log.Warnf("pack: Corrupt or missing pack info for %s! Scanning table. This may take a long time...", idx.name())
 	c := dbTx.Bucket(idx.key).Cursor()
-	pkg, err := idx.journal.Clone(0, false)
-	if err != nil {
+	pkg := NewPackage(maxPackSize)
+	if err := pkg.InitFieldsFrom(idx.journal); err != nil {
 		return err
 	}
 	for ok := c.First(); ok; ok = c.Next() {
@@ -447,6 +447,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 		_ = info.UpdateStats(pkg)
 		packs = append(packs, info)
 		atomic.AddInt64(&idx.table.stats.MetaBytesRead, int64(len(c.Value())))
+		pkg.Clear()
 	}
 	idx.packidx = NewPackIndex(packs, 0, maxPackSize)
 	log.Debugf("pack: %s scanned %d package headers", idx.name(), idx.packidx.Len())
@@ -951,7 +952,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 	)
 
 	// init
-	packsz = 1 << uint(idx.opts.PackSizeLog2)
+	packsz = idx.opts.Packsize()
 	jlen, tlen = len(pk), len(dead)
 	_, globalmax = idx.packidx.GlobalMinMax()
 	maxloop = 2*idx.packidx.Len() + 2*jlen/packsz + 2 // 2x to consider splits
@@ -1360,7 +1361,8 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 
 func (idx *Index) makePackage() interface{} {
 	atomic.AddInt64(&idx.table.stats.IndexPacksAlloc, 1)
-	pkg, _ := idx.journal.Clone(1<<uint(idx.opts.PackSizeLog2), false)
+	pkg := NewPackage(idx.opts.Packsize())
+	_ = pkg.InitFieldsFrom(idx.journal)
 	return pkg
 }
 
@@ -1376,7 +1378,7 @@ func (idx *Index) recyclePackage(pkg *Package) {
 		return
 	}
 	// don't recycle oversized packidx to free memory
-	if c := pkg.Cap(); c <= 0 || c > 1<<uint(idx.opts.PackSizeLog2) {
+	if c := pkg.Cap(); c <= 0 || c > idx.opts.Packsize() {
 		pkg.Release()
 		return
 	}

@@ -84,6 +84,14 @@ type Options struct {
 	FillLevel       int `json:"fill_level"`
 }
 
+func (o Options) Packsize() int {
+	return 1 << uint(o.PackSizeLog2)
+}
+
+func (o Options) Journalsize() int {
+	return 1 << uint(o.JournalSizeLog2)
+}
+
 func (o *Options) MergeDefaults() {
 	o.CacheSize = util.NonZero(o.CacheSize, DefaultOptions.CacheSize)
 	o.PackSizeLog2 = util.NonZero(o.PackSizeLog2, DefaultOptions.PackSizeLog2)
@@ -136,8 +144,8 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 	if err := opts.Check(); err != nil {
 		return nil, err
 	}
-	maxPackSize := 1 << uint(opts.PackSizeLog2)
-	maxJournalSize := 1 << uint(opts.JournalSizeLog2)
+	maxPackSize := opts.Packsize()
+	maxJournalSize := opts.Journalsize()
 	t := &Table{
 		name:   name,
 		opts:   opts,
@@ -322,7 +330,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 				t.opts.JournalSizeLog2 = opts[0].JournalSizeLog2
 			}
 		}
-		maxJournalSize := 1 << uint(t.opts.JournalSizeLog2)
+		maxJournalSize := opts[0].Journalsize()
 		buf = b.Get(fieldsKey)
 		if buf == nil {
 			return fmt.Errorf("pack: missing fields for table %s", name)
@@ -424,7 +432,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 	if b == nil {
 		return ErrNoTable
 	}
-	maxPackSize := 1 << uint(t.opts.PackSizeLog2)
+	maxPackSize := t.opts.Packsize()
 	packs := make(PackInfoList, 0)
 	bi := b.Bucket(infoKey)
 	if bi != nil {
@@ -451,8 +459,8 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 	}
 	log.Warnf("pack: Corrupt or missing pack info for table %s! Scanning table. This may take a long time...", t.name)
 	c := dbTx.Bucket(t.key).Cursor()
-	pkg, err := t.journal.DataPack().Clone(0, false)
-	if err != nil {
+	pkg := NewPackage(maxPackSize)
+	if err := pkg.InitFieldsFrom(t.journal.DataPack()); err != nil {
 		return err
 	}
 	for ok := c.First(); ok; ok = c.Next() {
@@ -462,11 +470,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 		}
 		pkg.SetKey(c.Key())
 		info := pkg.Info()
-		err = info.UpdateStats(pkg)
-		if err != nil {
-			log.Errorf("pack: table scan failed: %v", err)
-			return err
-		}
+		_ = info.UpdateStats(pkg)
 		packs = append(packs, info)
 		atomic.AddInt64(&t.stats.MetaBytesRead, int64(len(c.Value())))
 		pkg.Clear()
@@ -1109,7 +1113,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 	)
 
 	// init global max
-	packsz = 1 << uint(t.opts.PackSizeLog2)
+	packsz = t.opts.Packsize()
 	jlen, tlen = len(live), len(dead)
 	_, globalmax = t.packidx.GlobalMinMax()
 	maxloop = 2*t.packidx.Len() + 2*(tlen+jlen)/packsz + 2
@@ -2696,7 +2700,7 @@ func (t *Table) Compact(ctx context.Context) error {
 	// check if compaction is required, either because packs are non-sequential
 	// or not full (except the last)
 	var (
-		maxsz                 int = 1 << uint(t.opts.PackSizeLog2)
+		maxsz                 int = t.opts.Packsize()
 		srcSize               int64
 		nextpack              uint32
 		needCompact           bool
@@ -2994,7 +2998,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	if cached, ok := t.cache.Get(t.cachekey(key)); ok {
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
 		pkg := cached.(*Package)
-		clone, err := pkg.Clone(1<<uint(t.opts.PackSizeLog2), true)
+		clone, err := pkg.Clone(t.opts.Packsize())
 		if err != nil {
 			return nil, err
 		}
@@ -3105,7 +3109,8 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 
 func (t *Table) makePackage() interface{} {
 	atomic.AddInt64(&t.stats.PacksAlloc, 1)
-	pkg, _ := t.journal.DataPack().Clone(1<<uint(t.opts.PackSizeLog2), false)
+	pkg := NewPackage(t.opts.Packsize())
+	_ = pkg.InitFieldsFrom(t.journal.DataPack())
 	// log.Debugf("%s: alloc new pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	return pkg
 }
@@ -3128,7 +3133,7 @@ func (t *Table) recyclePackage(pkg *Package) {
 		return
 	}
 	// don't recycle oversized packs
-	if c := pkg.Cap(); c <= 0 || c > 1<<uint(t.opts.PackSizeLog2) {
+	if c := pkg.Cap(); c <= 0 || c > t.opts.Packsize() {
 		pkg.Release()
 		return
 	}
