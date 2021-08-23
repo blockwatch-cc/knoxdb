@@ -65,12 +65,41 @@ func (f *Filter) Clone() *Filter {
 	return other
 }
 
-// Insert inserts data to the filter.
-func (f *Filter) Insert(v []byte) {
+// Add inserts data to the filter.
+func (f *Filter) Add(v []byte) {
 	h := Hash(v)
 	for i := uint64(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		f.b[loc>>3] |= 1 << (loc & 7)
+	}
+}
+
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddMany(l [][]byte) {
+	for _, v := range l {
+		h := Hash(v)
+		for i := uint64(0); i < f.k; i++ {
+			loc := f.location(h, i)
+			f.b[loc>>3] |= 1 << (loc & 7)
+		}
+	}
+}
+
+// AddHash inserts pre-hased data to the filter.
+func (f *Filter) AddHash(h [2]uint64) {
+	for i := uint64(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		f.b[loc>>3] |= 1 << (loc & 7)
+	}
+}
+
+// AddHashMany inserts multiple pre-hased values to the filter.
+func (f *Filter) AddHashMany(l [][2]uint64) {
+	for _, h := range l {
+		for i := uint64(0); i < f.k; i++ {
+			loc := f.location(h, i)
+			f.b[loc>>3] |= 1 << (loc & 7)
+		}
 	}
 }
 

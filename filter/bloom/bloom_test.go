@@ -31,7 +31,7 @@ func TestFilter_InsertContains(t *testing.T) {
 	v := make([]byte, 4)
 	for i := 0; i < 10000000; i++ {
 		binary.BigEndian.PutUint32(v, uint32(i))
-		filter.Insert(v)
+		filter.Add(v)
 	}
 
 	// None of the values inserted should ever be considered "not possibly in
@@ -68,7 +68,7 @@ func testShortFilter_InsertContains(t *testing.T) {
 		f := bloom.NewFilter(1000, 4)
 
 		// Insert value and validate.
-		f.Insert([]byte("Bess"))
+		f.Add([]byte("Bess"))
 		if !f.Contains([]byte("Bess")) {
 			t.Fatal("expected true")
 		}
@@ -78,7 +78,7 @@ func testShortFilter_InsertContains(t *testing.T) {
 		}
 
 		// Insert another value and test.
-		f.Insert([]byte("Emma"))
+		f.Add([]byte("Emma"))
 		if !f.Contains([]byte("Emma")) {
 			t.Fatal("expected true")
 		}
@@ -92,7 +92,7 @@ func testShortFilter_InsertContains(t *testing.T) {
 			t.Fatal("expected false")
 		}
 		h3 := bloom.Hash([]byte("Jane"))
-		if f.ContainsHash(h2) {
+		if f.ContainsHash(h3) {
 			t.Fatal("expected false")
 		}
 
@@ -153,7 +153,7 @@ func BenchmarkFilter_Insert(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				for _, v := range data {
-					filter.Insert(v)
+					filter.Add(v)
 				}
 			}
 		})
@@ -174,7 +174,7 @@ func BenchmarkFilter_Contains(b *testing.B) {
 
 		filter := bloom.NewFilter(c.m, c.k)
 		for _, v := range data {
-			filter.Insert(v)
+			filter.Add(v)
 		}
 
 		b.Run(fmt.Sprintf("IN m=%d_k=%d_n=%d", c.m, c.k, c.n), func(b *testing.B) {
@@ -210,8 +210,8 @@ func BenchmarkFilter_Merge(b *testing.B) {
 		filter1 := bloom.NewFilter(c.m, c.k)
 		filter2 := bloom.NewFilter(c.m, c.k)
 		for i := 0; i < c.n; i++ {
-			filter1.Insert(data1[i])
-			filter2.Insert(data2[i])
+			filter1.Add(data1[i])
+			filter2.Add(data2[i])
 		}
 
 		b.Run(fmt.Sprintf("m=%d_k=%d_n=%d", c.m, c.k, c.n), func(b *testing.B) {
