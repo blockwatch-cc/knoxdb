@@ -406,21 +406,21 @@ func (b *Block) Copy(src *Block) {
 			copy(b.Bytes[i], v)
 		}
 	case BlockInt128:
-		cp.Int128.X0 = cp.Int128.X0[:sz]
-		copy(cp.Int128.X0, b.Int128.X0)
-		cp.Int128.X1 = cp.Int128.X1[:sz]
-		copy(cp.Int128.X1, b.Int128.X1)
+		sz := len(b.Int128.X0)
+		b.Int128.X0 = b.Int128.X0[:sz]
+		copy(b.Int128.X0, src.Int128.X0)
+		b.Int128.X1 = b.Int128.X1[:sz]
+		copy(b.Int128.X1, src.Int128.X1)
 	case BlockInt256:
-		cp.Int256.X0 = cp.Int256.X0[:sz]
-		copy(cp.Int256.X0, b.Int256.X0)
-		cp.Int256.X1 = cp.Int256.X1[:sz]
-		copy(cp.Int256.X1, b.Int256.X1)
-		cp.Int256.X2 = cp.Int256.X2[:sz]
-		copy(cp.Int256.X2, b.Int256.X2)
-		cp.Int256.X3 = cp.Int256.X3[:sz]
-		copy(cp.Int256.X3, b.Int256.X3)
-	default:
-		return nil, fmt.Errorf("block: invalid data type %s (%[1]d)", b.typ)
+		sz := len(b.Int256.X0)
+		b.Int256.X0 = b.Int256.X0[:sz]
+		copy(b.Int256.X0, src.Int256.X0)
+		b.Int256.X1 = b.Int256.X1[:sz]
+		copy(b.Int256.X1, src.Int256.X1)
+		b.Int256.X2 = b.Int256.X2[:sz]
+		copy(b.Int256.X2, src.Int256.X2)
+		b.Int256.X3 = b.Int256.X3[:sz]
+		copy(b.Int256.X3, src.Int256.X3)
 	}
 }
 
@@ -1166,13 +1166,13 @@ func (b *Block) Hashes(res []uint64) []uint64 {
 			res[i] = xxhash.Sum64(v)
 		}
 	case BlockInt128:
-		for i, v := range b.Int128 {
-			buf := v.Bytes16()
+		for i := 0; i < b.Int128.Len(); i++ {
+			buf := b.Int128.Elem(i).Bytes16()
 			res[i] = xxhash.Sum64(buf[:])
 		}
 	case BlockInt256:
-		for i, v := range b.Int256 {
-			buf := v.Bytes32()
+		for i := 0; i < b.Int256.Len(); i++ {
+			buf := b.Int256.Elem(i).Bytes32()
 			res[i] = xxhash.Sum64(buf[:])
 		}
 	}

@@ -2754,13 +2754,13 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint64, factor i
 			}
 		}
 	case FieldTypeInt256, FieldTypeDecimal256:
-		for _, v := range b.Int256 {
-			buf := v.Bytes32()
+		for i := 0; i < b.Int256.Len(); i++ {
+			buf := b.Int256.Elem(i).Bytes32()
 			flt.Add(buf[:])
 		}
 	case FieldTypeInt128, FieldTypeDecimal128:
-		for _, v := range b.Int128 {
-			buf := v.Bytes16()
+		for i := 0; i < b.Int128.Len(); i++ {
+			buf := b.Int128.Elem(i).Bytes16()
 			flt.Add(buf[:])
 		}
 	case FieldTypeInt64, FieldTypeDecimal64:
@@ -2915,13 +2915,13 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint64 {
 			}
 		}
 	case FieldTypeInt256, FieldTypeDecimal256:
-		for _, v := range b.Int256 {
-			buf := v.Bytes32()
+		for i := 0; i < b.Int256.Len(); i++ {
+			buf := b.Int256.Elem(i).Bytes32()
 			filter.Add(buf[:])
 		}
 	case FieldTypeInt128, FieldTypeDecimal128:
-		for _, v := range b.Int128 {
-			buf := v.Bytes16()
+		for i := 0; i < b.Int128.Len(); i++ {
+			buf := b.Int128.Elem(i).Bytes16()
 			filter.Add(buf[:])
 		}
 	case FieldTypeInt64, FieldTypeDecimal64:
