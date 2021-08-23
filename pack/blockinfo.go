@@ -17,7 +17,7 @@ import (
 
 const (
 	headerBaseSize            = 2
-	headerListVersion    byte = 1
+	headerListVersion    byte = 2 // 2: +cardinality
 	blockTypeMask        byte = 0x1f
 	blockCompressionMask byte = 0x03
 	blockScaleMask       byte = 0x7f
@@ -29,10 +29,11 @@ type BlockInfo struct {
 	Scale       int
 
 	// statistics
-	dirty    bool          // update required
-	MinValue interface{}   // vector min
-	MaxValue interface{}   // vector max
-	Bloom    *bloom.Filter // not stored (yet)
+	dirty       bool          // update required
+	MinValue    interface{}   // vector min
+	MaxValue    interface{}   // vector max
+	Cardinality uint64        // unique items in vector
+	Bloom       *bloom.Filter // not stored (yet)
 }
 
 func (h BlockInfo) IsValid() bool {
@@ -68,9 +69,9 @@ func (h *BlockInfoList) Decode(buf *bytes.Buffer) error {
 	}
 
 	// read and check version byte
-	b, _ := buf.ReadByte()
-	if b != headerListVersion {
-		return fmt.Errorf("pack: invalid block info list version %d", b)
+	ver, _ := buf.ReadByte()
+	if ver > headerListVersion {
+		return fmt.Errorf("pack: invalid block info list version %d", ver)
 	}
 
 	// read slice length
@@ -81,7 +82,7 @@ func (h *BlockInfoList) Decode(buf *bytes.Buffer) error {
 
 	// decode header parts
 	for i := range *h {
-		if err := (*h)[i].Decode(buf); err != nil {
+		if err := (*h)[i].Decode(buf, ver); err != nil {
 			return err
 		}
 	}
@@ -200,6 +201,12 @@ func (h BlockInfo) Encode(buf *bytes.Buffer) error {
 	// - 1 upper bits is extension flag (currently unused)
 	buf.WriteByte(byte(h.Scale) & blockScaleMask)
 
+	// write cardinality, 32bit
+	var b [4]byte
+	bigEndian.PutUint32(b[0:], uint32(h.Cardinality))
+	_, _ = buf.Write(b[:])
+
+	// write type-specific min/max values
 	switch h.Type {
 	case BlockTime:
 		var v [16]byte
@@ -327,7 +334,7 @@ func (h BlockInfo) Encode(buf *bytes.Buffer) error {
 	return nil
 }
 
-func (h *BlockInfo) Decode(buf *bytes.Buffer) error {
+func (h *BlockInfo) Decode(buf *bytes.Buffer, version byte) error {
 	val := buf.Next(1)
 	h.Type = BlockType(val[0] & blockTypeMask)
 	h.Compression = Compression((val[0] >> 5) & blockCompressionMask)
@@ -336,6 +343,11 @@ func (h *BlockInfo) Decode(buf *bytes.Buffer) error {
 		h.Scale = int(val[0] & blockScaleMask)
 	}
 	h.dirty = false
+
+	// be backwards compatible
+	if version > 1 {
+		h.Cardinality = uint64(bigEndian.Uint32(buf.Next(4)))
+	}
 
 	switch h.Type {
 	case BlockTime:
@@ -451,147 +463,3 @@ func (h *BlockInfo) Decode(buf *bytes.Buffer) error {
 
 	return nil
 }
-
-// func (h BlockInfo) Clone() BlockInfo {
-// 	cp := BlockInfo{
-// 		Type:        h.Type,
-// 		Compression: h.Compression,
-// 		Scale:       h.Scale,
-// 		dirty:       h.dirty,
-// 	}
-// 	if h.Bloom != nil {
-// 		cp.Bloom = h.Bloom.Clone()
-// 	}
-// 	if h.MinValue == nil || h.MaxValue == nil {
-// 		cp.dirty = true
-// 		return cp
-// 	}
-// 	switch h.Type {
-// 	case BlockTime:
-// 		min, max := h.MinValue.(time.Time), h.MaxValue.(time.Time)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockFloat64:
-// 		min, max := h.MinValue.(float64), h.MaxValue.(float64)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockFloat32:
-// 		min, max := h.MinValue.(float32), h.MaxValue.(float32)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockInt64:
-// 		min, max := h.MinValue.(int64), h.MaxValue.(int64)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockInt32:
-// 		min, max := h.MinValue.(int32), h.MaxValue.(int32)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockInt16:
-// 		min, max := h.MinValue.(int16), h.MaxValue.(int16)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockInt8:
-// 		min, max := h.MinValue.(int8), h.MaxValue.(int8)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockUint64:
-// 		min, max := h.MinValue.(uint64), h.MaxValue.(uint64)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockUint32:
-// 		min, max := h.MinValue.(uint32), h.MaxValue.(uint32)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockUint16:
-// 		min, max := h.MinValue.(uint16), h.MaxValue.(uint16)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockUint8:
-// 		min, max := h.MinValue.(uint8), h.MaxValue.(uint8)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockBool:
-// 		min, max := h.MinValue.(bool), h.MaxValue.(bool)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockString:
-// 		// copy contents to avoid memleak
-// 		min, max := h.MinValue.(string), h.MaxValue.(string)
-// 		cp.MinValue = min
-// 		cp.MaxValue = max
-// 	case BlockBytes:
-// 		// copy contents to avoid memleak
-// 		min, max := h.MinValue.([]byte), h.MaxValue.([]byte)
-// 		mincopy := make([]byte, len(min))
-// 		copy(mincopy, min)
-// 		maxcopy := make([]byte, len(max))
-// 		copy(maxcopy, max)
-// 		cp.MinValue = mincopy
-// 		cp.MaxValue = maxcopy
-// 	case BlockInt128:
-// 		cp.MinValue = h.MinValue.(vec.Int128)
-// 		cp.MaxValue = h.MaxValue.(vec.Int128)
-// 	case BlockInt256:
-// 		cp.MinValue = h.MinValue.(vec.Int256)
-// 		cp.MaxValue = h.MaxValue.(vec.Int256)
-// 	}
-// 	return cp
-// }
-
-// func (h *BlockInfo) Clear() {
-// 	switch h.Type {
-// 	case BlockTime:
-// 		h.MinValue = time.Time{}
-// 		h.MaxValue = time.Time{}
-// 	case BlockInt64:
-// 		h.MinValue = int64(0)
-// 		h.MaxValue = int64(0)
-// 	case BlockInt32:
-// 		h.MinValue = int32(0)
-// 		h.MaxValue = int32(0)
-// 	case BlockInt16:
-// 		h.MinValue = int16(0)
-// 		h.MaxValue = int16(0)
-// 	case BlockInt8:
-// 		h.MinValue = int8(0)
-// 		h.MaxValue = int8(0)
-// 	case BlockUint64:
-// 		h.MinValue = uint64(0)
-// 		h.MaxValue = uint64(0)
-// 	case BlockUint32:
-// 		h.MinValue = uint32(0)
-// 		h.MaxValue = uint32(0)
-// 	case BlockUint16:
-// 		h.MinValue = uint16(0)
-// 		h.MaxValue = uint16(0)
-// 	case BlockUint8:
-// 		h.MinValue = uint8(0)
-// 		h.MaxValue = uint8(0)
-// 	case BlockFloat64:
-// 		h.MinValue = float64(0.0)
-// 		h.MaxValue = float64(0.0)
-// 	case BlockFloat32:
-// 		h.MinValue = float32(0.0)
-// 		h.MaxValue = float32(0.0)
-// 	case BlockString:
-// 		h.MinValue = ""
-// 		h.MaxValue = ""
-// 	case BlockBytes:
-// 		h.MinValue = []byte{}
-// 		h.MaxValue = []byte{}
-// 	case BlockBool:
-// 		h.MinValue = false
-// 		h.MaxValue = false
-// 	case BlockInt128:
-// 		h.MinValue = vec.ZeroInt128
-// 		h.MaxValue = vec.ZeroInt128
-// 	case BlockInt256:
-// 		h.MinValue = vec.ZeroInt256
-// 		h.MaxValue = vec.ZeroInt256
-// 	}
-// 	if h.Bloom != nil {
-// 		h.Bloom.Reset()
-// 	}
-// 	h.dirty = true
-// }

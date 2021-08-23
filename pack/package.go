@@ -122,6 +122,10 @@ func (p *Package) Fields() FieldList {
 	return p.fields
 }
 
+func (p *Package) Blocks() []*block.Block {
+	return p.blocks
+}
+
 func (p *Package) FieldById(idx int) Field {
 	if idx < 0 {
 		return Field{Index: -1}

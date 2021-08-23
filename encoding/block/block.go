@@ -7,9 +7,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
+	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -1029,4 +1031,100 @@ func (b *Block) Swap(i, j int) {
 	case BlockUint8:
 		b.Uint8[i], b.Uint8[j] = b.Uint8[j], b.Uint8[i]
 	}
+}
+
+func (b *Block) Hashes(res []uint64) []uint64 {
+	sz := b.Len()
+	if res == nil || cap(res) < sz {
+		if sz <= DefaultMaxPointsPerBlock {
+			res = uint64Pool.Get().([]uint64)
+		} else {
+			res = make([]uint64, sz)
+		}
+	}
+	res = res[:sz]
+	var buf [8]byte
+	switch b.typ {
+	case BlockTime:
+		for i, v := range b.Int64 {
+			bigEndian.PutUint64(buf[:], uint64(v))
+			res[i] = xxhash.Sum64(buf[:])
+		}
+	case BlockFloat64:
+		for i, v := range b.Float64 {
+			bigEndian.PutUint64(buf[:], math.Float64bits(v))
+			res[i] = xxhash.Sum64(buf[:])
+		}
+	case BlockFloat32:
+		for i, v := range b.Float32 {
+			bigEndian.PutUint32(buf[:], math.Float32bits(v))
+			res[i] = xxhash.Sum64(buf[:4])
+		}
+	case BlockInt64:
+		for i, v := range b.Int64 {
+			bigEndian.PutUint64(buf[:], uint64(v))
+			res[i] = xxhash.Sum64(buf[:])
+		}
+	case BlockInt32:
+		for i, v := range b.Int32 {
+			bigEndian.PutUint32(buf[:], uint32(v))
+			res[i] = xxhash.Sum64(buf[:4])
+		}
+	case BlockInt16:
+		for i, v := range b.Int16 {
+			bigEndian.PutUint16(buf[:], uint16(v))
+			res[i] = xxhash.Sum64(buf[:2])
+		}
+	case BlockInt8:
+		for i, v := range b.Int8 {
+			res[i] = xxhash.Sum64([]byte{uint8(v)})
+		}
+	case BlockUint64:
+		for i, v := range b.Uint64 {
+			bigEndian.PutUint64(buf[:], v)
+			res[i] = xxhash.Sum64(buf[:])
+		}
+	case BlockUint32:
+		for i, v := range b.Uint32 {
+			bigEndian.PutUint32(buf[:], v)
+			res[i] = xxhash.Sum64(buf[:4])
+		}
+	case BlockUint16:
+		for i, v := range b.Uint16 {
+			bigEndian.PutUint16(buf[:], v)
+			res[i] = xxhash.Sum64(buf[:2])
+		}
+	case BlockUint8:
+		for i, v := range b.Uint8 {
+			res[i] = xxhash.Sum64([]byte{v})
+		}
+	case BlockBool:
+		zero, one := xxhash.Sum64([]byte{0}), xxhash.Sum64([]byte{1})
+		for i := 0; i < b.Bits.Len(); i++ {
+			if b.Bits.IsSet(i) {
+				res[i] = one
+			} else {
+				res[i] = zero
+			}
+		}
+	case BlockString:
+		for i, v := range b.Strings {
+			res[i] = xxhash.Sum64([]byte(v))
+		}
+	case BlockBytes:
+		for i, v := range b.Bytes {
+			res[i] = xxhash.Sum64(v)
+		}
+	case BlockInt128:
+		for i, v := range b.Int128 {
+			buf := v.Bytes16()
+			res[i] = xxhash.Sum64(buf[:])
+		}
+	case BlockInt256:
+		for i, v := range b.Int256 {
+			buf := v.Bytes32()
+			res[i] = xxhash.Sum64(buf[:])
+		}
+	}
+	return res
 }

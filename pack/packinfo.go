@@ -67,19 +67,23 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 			continue
 		}
 
-		// optimize for pk slices (always sorted) and index values (not required)
-		if i == pkg.PkField().Index {
+		if i == pkg.pkindex {
+			// optimization for pk slices (always sorted)
 			pkslice := pkg.blocks[i].Uint64
 			h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkslice[0], pkslice[len(pkslice)-1]
 		} else {
 			// EXPENSIVE: collects full min/max statistics
 			h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkg.blocks[i].MinMax()
 
-			// EXPENSIVE: build bloom filter from column vector
 			field := pkg.FieldById(i)
+
+			// EXPENSIVE: build bloom filter from column vector, dimension by cardinality
 			if field.Flags.Contains(FlagBloom) {
+				// EXPENSIVE: cardinality estimation, use precision 12 which needs 4k memory
+				h.Blocks[i].Cardinality = field.Type.EstimateCardinality(pkg.blocks[field.Index], 12)
+
 				// start := time.Now()
-				h.Blocks[i].Bloom = field.Type.BuildBloomFilter(pkg.blocks[field.Index], field.Scale)
+				h.Blocks[i].Bloom = field.Type.BuildBloomFilter(pkg.blocks[field.Index], h.Blocks[i].Cardinality, field.Scale)
 				// log.Infof("Pack %d field %s: bloom filter for %d values size=%d took %s",
 				// 	pkg.key, field.Alias, pkg.Len(), len(h.Blocks[i].Bloom.Bytes()), time.Since(start))
 			}
@@ -106,7 +110,7 @@ func (h *PackInfo) UpdateVolatileStats(pkg *Package) error {
 			continue
 		}
 		// start := time.Now()
-		h.Blocks[field.Index].Bloom = field.Type.BuildBloomFilter(pkg.blocks[field.Index], field.Scale)
+		h.Blocks[field.Index].Bloom = field.Type.BuildBloomFilter(pkg.blocks[field.Index], h.Blocks[field.Index].Cardinality, field.Scale)
 		// log.Infof("Pack %d field %s: bloom filter for %d values size=%d took %s",
 		// 	pkg.key, field.Alias, pkg.Len(), len(h.Blocks[field.Index].Bloom.Bytes()), time.Since(start))
 	}

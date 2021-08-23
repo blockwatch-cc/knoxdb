@@ -299,6 +299,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		log.Debugf("Opening table %s with opts %#v", name, opts[0])
 	} else {
 		log.Debugf("Opening table %s with default opts", name)
+		opts = []Options{DefaultOptions}
 	}
 	t := &Table{
 		name:    name,

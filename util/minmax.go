@@ -51,6 +51,11 @@ func Min(x, y int) int {
 	return x
 }
 
+func Abs(n int) int {
+	y := n >> 63
+	return (n ^ y) - y
+}
+
 func Clamp(val, min, max int) int {
 	return Min(Max(val, min), max)
 }
@@ -124,6 +129,11 @@ func Min64(x, y int64) int64 {
 		return y
 	}
 	return x
+}
+
+func Abs64(n int64) int64 {
+	y := n >> 63
+	return (n ^ y) - y
 }
 
 func ClampInt64(val, min, max int64) int64 {

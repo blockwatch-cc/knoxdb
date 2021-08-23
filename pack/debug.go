@@ -121,6 +121,24 @@ func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
 	return pkg.DumpData(w, mode, t.fields.Aliases())
 }
 
+func (t *Table) WalkPacks(fn func(*Package) error) error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for i := 0; i < t.packidx.Len(); i++ {
+		pkg, err := t.loadSharedPack(tx, t.packidx.Get(i).Key, false, nil)
+		if err != nil {
+			return err
+		}
+		if err := fn(pkg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
 	if i >= len(t.indexes) || i < 0 {
 		return ErrIndexNotFound
@@ -148,8 +166,8 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	defer tx.Rollback()
 	switch mode {
 	case DumpModeDec, DumpModeHex:
-		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-33s %-33s %-4s %-6s %-10s %-10s %7s %-10s\n",
-			"#", "Key", "Block", "Type", "Rows", "Min", "Max", "Prec", "Comp", "Stored", "Heap", "Ratio", "GoType")
+		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-7s %-33s %-33s %-4s %-6s %-10s %-10s %7s %-10s\n",
+			"#", "Key", "Block", "Type", "Rows", "Card", "Min", "Max", "Prec", "Comp", "Stored", "Heap", "Ratio", "GoType")
 	}
 	lineNo := 1
 	for i := 0; i < t.packidx.Len(); i++ {
@@ -346,12 +364,17 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 				gotype = p.tinfo.fields[i].typname
 			}
 			blockinfo := info.Blocks[i]
-			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-33s %-33s %-4d %-6s %-10s %-10s %7s %-10s\n",
+			// reconstruct cardinality of missing
+			if blockinfo.Cardinality == 0 && v.Len() > 0 {
+				blockinfo.Cardinality = p.fields[i].Type.EstimateCardinality(v, 15)
+			}
+			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-5d %-33s %-33s %-4d %-6s %-10s %-10s %7s %-10s\n",
 				lineNo,
 				key,      // pack key
 				i,        // block id
 				v.Type(), // block type
 				v.Len(),  // block values
+				blockinfo.Cardinality,
 				util.LimitStringEllipsis(util.ToString(blockinfo.MinValue), 33), // min val in block
 				util.LimitStringEllipsis(util.ToString(blockinfo.MaxValue), 33), // max val in block
 				blockinfo.Scale,
