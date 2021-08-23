@@ -20,7 +20,7 @@
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchFloat32EqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchFloat32EqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -218,7 +218,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchFloat32NotEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchFloat32NotEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -417,7 +417,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchFloat32LessThanAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchFloat32LessThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -614,7 +614,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchFloat32LessThanEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchFloat32LessThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -811,7 +811,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchFloat32GreaterThanAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchFloat32GreaterThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -1008,7 +1008,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchFloat32GreaterThanEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchFloat32GreaterThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -1209,7 +1209,7 @@ done:
 //   Y1-Y8 = vector data
 //   Y12-15 = intermediate aggregation
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
-TEXT ·matchFloat32BetweenAVX2(SB), NOSPLIT, $0-72
+TEXT ·matchFloat32BetweenAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
