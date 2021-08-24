@@ -46,6 +46,7 @@ func NewPackIndex(packs PackInfoList, pkidx, maxsize int) *PackIndex {
 		removed: make([]uint32, 0),
 		pkidx:   pkidx,
 		pos:     make([]int32, len(packs), cap(packs)),
+		maxsize: maxsize,
 	}
 	sort.Sort(l.packs)
 	for i := range l.packs {
@@ -259,7 +260,7 @@ func (l *PackIndex) Best(val uint64) (pos int, packmin uint64, packmax uint64, n
 	// return the pack's list position and the corresponding min/max header values
 	pos = int(l.pos[i])
 	packmin, packmax = l.minpks[pos], l.maxpks[pos]
-	isFull = l.packs[i].NValues >= l.maxsize
+	isFull = l.maxsize > 0 && l.packs[i].NValues >= l.maxsize
 	return
 }
 
@@ -275,6 +276,6 @@ func (l *PackIndex) Next(last int) (pos int, packmin uint64, packmax uint64, nex
 	}
 	pos = int(l.pos[next])
 	packmin, packmax = l.minpks[pos], l.maxpks[pos]
-	isFull = l.packs[next].NValues >= l.maxsize
+	isFull = l.maxsize > 0 && l.packs[next].NValues >= l.maxsize
 	return
 }

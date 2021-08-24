@@ -20,7 +20,7 @@
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt32EqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32EqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -218,7 +218,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt32NotEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32NotEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -419,7 +419,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt32LessThanAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32LessThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -556,7 +556,7 @@ exit_small:
 	JLE		done
 
 prep_scalar:
-	MOVQ	val+24(FP), DX   // load val for comparison
+	MOVL	val+24(FP), DX   // load val for comparison
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
@@ -617,7 +617,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt32LessThanEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32LessThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -776,7 +776,7 @@ exit_small:
 	JLE		done
 
 prep_scalar:
-	MOVQ	val+24(FP), DX   // load val for comparison
+	MOVL	val+24(FP), DX   // load val for comparison
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
@@ -837,7 +837,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt32GreaterThanAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32GreaterThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -992,7 +992,7 @@ exit_small:
 	JLE		done
 
 prep_scalar:
-	MOVQ	val+24(FP), DX   // load val for comparison
+	MOVL	val+24(FP), DX   // load val for comparison
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
@@ -1053,7 +1053,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchInt32GreaterThanEqualAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32GreaterThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -1193,7 +1193,7 @@ exit_small:
 	JLE		done
 
 prep_scalar:
-	MOVQ	val+24(FP), DX   // load val for comparison
+	MOVL	val+24(FP), DX   // load val for comparison
 	XORQ	AX, AX
 	XORQ	R10, R10
 	MOVQ	BX, R11
@@ -1257,7 +1257,7 @@ done:
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
-TEXT ·matchInt32BetweenAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchInt32BetweenAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI

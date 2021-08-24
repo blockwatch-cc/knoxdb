@@ -3,23 +3,23 @@
 
 package vec
 
-func matchInt128EqualGeneric(src []Int128, val Int128, bits, mask []byte) int64 {
+func matchInt128EqualGeneric(src Int128LLSlice, val Int128, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i, v := range src {
+		for i, _ := range src.X0 {
 			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
-			if v != val {
+			if uint64(src.X0[i]) != val[0] || src.X1[i] != val[1] {
 				continue
 			}
-			bits[i>>3] |= bit
+			bits[i>>3] |= bitmask(i)
 			cnt++
 		}
 	} else {
-		for i, v := range src {
-			if v != val {
+		for i, _ := range src.X0 {
+			if uint64(src.X0[i]) != val[0] || src.X1[i] != val[1] {
 				continue
 			}
 			bits[i>>3] |= bitmask(i)
@@ -29,158 +29,147 @@ func matchInt128EqualGeneric(src []Int128, val Int128, bits, mask []byte) int64 
 	return cnt
 }
 
-func matchInt128NotEqualGeneric(src []Int128, val Int128, bits, mask []byte) int64 {
+func matchInt128NotEqualGeneric(src Int128LLSlice, val Int128, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i, v := range src {
+		for i, _ := range src.X0 {
 			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
-			if v == val {
-				continue
+			if uint64(src.X0[i]) != val[0] || src.X1[i] != val[1] {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bit
-			cnt++
 		}
 	} else {
-		for i, v := range src {
-			if v == val {
-				continue
+		for i, _ := range src.X0 {
+			if uint64(src.X0[i]) != val[0] || src.X1[i] != val[1] {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bitmask(i)
-			cnt++
 		}
 	}
 	return cnt
 }
 
-func matchInt128LessThanGeneric(src []Int128, val Int128, bits, mask []byte) int64 {
+func matchInt128LessThanGeneric(src Int128LLSlice, val Int128, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i, v := range src {
+		for i, _ := range src.X0 {
 			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
-			if v.Gte(val) {
-				continue
+			if val.Gt(Int128{uint64(src.X0[i]), src.X1[i]}) {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bit
-			cnt++
 		}
 	} else {
-		for i, v := range src {
-			if v.Gte(val) {
-				continue
+		for i, _ := range src.X0 {
+			if val.Gt(Int128{uint64(src.X0[i]), src.X1[i]}) {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bitmask(i)
-			cnt++
 		}
 	}
 	return cnt
 }
 
-func matchInt128LessThanEqualGeneric(src []Int128, val Int128, bits, mask []byte) int64 {
+func matchInt128LessThanEqualGeneric(src Int128LLSlice, val Int128, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i, v := range src {
+		for i, _ := range src.X0 {
 			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
-			if v.Gt(val) {
-				continue
+			if val.Gte(Int128{uint64(src.X0[i]), src.X1[i]}) {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bit
-			cnt++
 		}
 	} else {
-		for i, v := range src {
-			if v.Gt(val) {
-				continue
+		for i, _ := range src.X0 {
+			if val.Gte(Int128{uint64(src.X0[i]), src.X1[i]}) {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bitmask(i)
-			cnt++
 		}
 	}
 	return cnt
 }
 
-func matchInt128GreaterThanGeneric(src []Int128, val Int128, bits, mask []byte) int64 {
+func matchInt128GreaterThanGeneric(src Int128LLSlice, val Int128, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i, v := range src {
+		for i, _ := range src.X0 {
 			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
-			if v.Lte(val) {
-				continue
+			if val.Lt(Int128{uint64(src.X0[i]), src.X1[i]}) {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bit
-			cnt++
 		}
 	} else {
-		for i, v := range src {
-			if v.Lte(val) {
-				continue
+		for i, _ := range src.X0 {
+			if val.Lt(Int128{uint64(src.X0[i]), src.X1[i]}) {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bitmask(i)
-			cnt++
 		}
 	}
 	return cnt
 }
 
-func matchInt128GreaterThanEqualGeneric(src []Int128, val Int128, bits, mask []byte) int64 {
+func matchInt128GreaterThanEqualGeneric(src Int128LLSlice, val Int128, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i, v := range src {
+		for i, _ := range src.X0 {
 			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
-			if v.Lt(val) {
-				continue
+			if val.Lte(Int128{uint64(src.X0[i]), src.X1[i]}) {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bit
-			cnt++
 		}
 	} else {
-		for i, v := range src {
-			if v.Lt(val) {
-				continue
+		for i, _ := range src.X0 {
+			if val.Lte(Int128{uint64(src.X0[i]), src.X1[i]}) {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bitmask(i)
-			cnt++
 		}
 	}
 	return cnt
 }
 
-func matchInt128BetweenGeneric(src []Int128, a, b Int128, bits, mask []byte) int64 {
-	diff := b.Sub(a).Add64(1)
+func matchInt128BetweenGeneric(src Int128LLSlice, a, b Int128, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i, v := range src {
+		for i, _ := range src.X0 {
 			bit := bitmask(i)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
-			if v.Sub(a).Gte(diff) {
-				continue
+			v := Int128{uint64(src.X0[i]), src.X1[i]}
+			if a.Lte(v) && b.Gte(v) {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bit
-			cnt++
 		}
 	} else {
-		for i, v := range src {
-			if v.Sub(a).Gte(diff) {
-				continue
+		for i, _ := range src.X0 {
+			v := Int128{uint64(src.X0[i]), src.X1[i]}
+			if a.Lte(v) && b.Gte(v) {
+				bits[i>>3] |= bitmask(i)
+				cnt++
 			}
-			bits[i>>3] |= bitmask(i)
-			cnt++
 		}
 	}
 	return cnt

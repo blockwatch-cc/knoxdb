@@ -373,6 +373,7 @@ func run() error {
 			return err
 		}
 	}
+	// table.Flush(context.Background())
 
 	log.Infof("Written %d entries", table.Stats().TupleCount)
 

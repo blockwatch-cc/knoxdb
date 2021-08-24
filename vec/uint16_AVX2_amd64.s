@@ -20,7 +20,7 @@
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16EqualAVX2(SB), NOSPLIT, $0-58
+TEXT ·matchUint16EqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -233,7 +233,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16NotEqualAVX2(SB), NOSPLIT, $0-58
+TEXT ·matchUint16NotEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -446,7 +446,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16LessThanAVX2(SB), NOSPLIT, $0-58
+TEXT ·matchUint16LessThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -697,7 +697,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16LessThanEqualAVX2(SB), NOSPLIT, $0-58
+TEXT ·matchUint16LessThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -953,7 +953,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16GreaterThanAVX2(SB), NOSPLIT, $0-58
+TEXT ·matchUint16GreaterThanAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -1204,7 +1204,7 @@ done:
 //   Y9 = permute control mask
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
-TEXT ·matchUint16GreaterThanEqualAVX2(SB), NOSPLIT, $0-58
+TEXT ·matchUint16GreaterThanEqualAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
@@ -1463,7 +1463,7 @@ done:
 //   Y10 = shuffle control mask
 //   Y1-Y8 = vector data
 //   CX = loop counter (counts 1/8 values or bytes writen to output slice, runs from neg. to zero)
-TEXT ·matchUint16BetweenAVX2(SB), NOSPLIT, $0-60
+TEXT ·matchUint16BetweenAVX2(SB), NOSPLIT, $0-64
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	bits_base+32(FP), DI
