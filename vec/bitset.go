@@ -6,6 +6,8 @@ package vec
 import (
 	"encoding/hex"
 	"sync"
+
+	"fmt"
 )
 
 const defaultBitsetSize = 16 // 8kB
@@ -612,6 +614,23 @@ func (s Bitset) Indexes(slice []int) []int {
 		j++
 	}
 	return slice
+}
+
+// IndexesU32 returns a slice positions as uint32 for one bits in the bitset.
+// It automatically picks the most efficient implementation based on the
+// density of bits.
+func (s *Bitset) IndexesU32(slice []uint32) []uint32 {
+	cnt := s.Count()
+	if slice == nil || cap(slice) < cnt {
+		slice = make([]uint32, cnt)
+	} else {
+		slice = slice[:cnt]
+	}
+	n := bitsetIndexes(s.buf, s.size, slice, cnt)
+	if n != len(slice) {
+		fmt.Printf("ERROR: IDX for count=%d len=%d n=%d\n", cnt, len(slice), n)
+	}
+	return slice[:n]
 }
 
 // Slice returns a boolean slice containing all values

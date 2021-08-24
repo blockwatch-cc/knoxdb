@@ -401,12 +401,16 @@ func bitsetIndexesAVX2New(src []byte, size int, dst []uint32) int {
 	return bitsetIndexesAVX2NewCore(src, dst, decodeTable, lengthTable)
 }
 
-func bitsetIndexes(src []byte, size int, dst []uint32) int {
+func bitsetIndexes(src []byte, size int, dst []uint32, hint int) int {
 	switch {
-	case useAVX2:
+	case useAVX2 && hint < 512:
+		return bitsetIndexesAVX2New(src, size, dst)
+	case useAVX2 && hint >= 512:
 		return bitsetIndexesAVX2(src, size, dst)
-	default:
+	case hint < 512:
 		return bitsetIndexesGeneric(src, size, dst)
+	default:
+		return bitsetIndexesGenericSkip64(src, size, dst)
 	}
 }
 
