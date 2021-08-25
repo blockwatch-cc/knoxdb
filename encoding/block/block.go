@@ -732,9 +732,9 @@ func (b *Block) DataSize() int {
 			sz += len(v)
 		}
 	case BlockInt128:
-		sz = len(b.Int128) * 16
+		sz = b.Int128.Len() * 16
 	case BlockInt256:
-		sz = len(b.Int256) * 32
+		sz = b.Int256.Len() * 32
 	}
 	return sz
 }
@@ -1205,11 +1205,11 @@ func (b *Block) Swap(i, j int) {
 		b.Float32[i], b.Float32[j] = b.Float32[j], b.Float32[i]
 
 	case BlockInt256:
-		b.Int256.Swap(i,j)
+		b.Int256.Swap(i, j)
 
 	case BlockInt128:
-		b.Int128.Swap(i,j)
-        
+		b.Int128.Swap(i, j)
+
 	case BlockInt64, BlockTime:
 		b.Int64[i], b.Int64[j] = b.Int64[j], b.Int64[i]
 

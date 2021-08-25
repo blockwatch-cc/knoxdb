@@ -633,98 +633,13 @@ func compressNo(b *block.Block) (int, error) {
 	return len(dst), nil
 }
 
-func CompressHash(deltas []uint64) ([]byte, int, int, error) {
-
-	// delta encoding
-
-	/* maxdelta := uint64(0)
-	for i := len(deltas) - 1; i > 7; i-- {
-		deltas[i] = deltas[i] - deltas[i-8]
-		maxdelta |= deltas[i]
-	}*/
-
-	maxdelta := compress.Delta8AVX2(deltas)
-	for i := len(deltas)%8 + 7; i > 7; i-- {
-		deltas[i] = deltas[i] - deltas[i-8]
-		maxdelta |= deltas[i]
-	}
-
-	var nbytes int
-	if maxdelta == 0 {
-		nbytes = 1 // all number zero -> use 1 byte
-	} else {
-		lz := bits.LeadingZeros64(maxdelta)
-		nbytes = (71 - lz) >> 3 // = (64 - tz + 8 - 1) / 8 = ceil((64 - tz)/8)
-	}
-
-	buf := make([]byte, nbytes*(len(deltas)-8)+64)
-
-	for i := 0; i < 8; i++ {
-		binary.BigEndian.PutUint64(buf[8*i:], deltas[i])
-	}
-
-	tmp := buf[64:]
-
-	switch nbytes {
-	case 1:
-		for i, v := range deltas[8:] {
-			buf[64+i] = byte(v & 0xff)
-		}
-	case 2:
-		/*		for i, v := range deltas[8:] {
-				buf[64+2*i] = byte((v >> 8) & 0xff)
-				buf[65+2*i] = byte(v & 0xff)
-			}*/
-
-		len_head := (len(deltas)-8)&0x7ffffffffffffff0 + 8
-		compress.PackIndex16BitAVX2(deltas[8:], buf[64:])
-
-		tmp = buf[64+(len_head-8)*2:]
-
-		for i, v := range deltas[len_head:] {
-			tmp[2*i] = byte((v >> 8) & 0xff)
-			tmp[1+2*i] = byte(v & 0xff)
-		}
-
-	case 3:
-		for i, v := range deltas[8:] {
-			tmp[3*i] = byte((v >> 16) & 0xff)
-			tmp[1+3*i] = byte((v >> 8) & 0xff)
-			tmp[2+3*i] = byte(v & 0xff)
-		}
-	case 4:
-
-		len_head := len(deltas) & 0x7ffffffffffffff8
-		compress.PackIndex32BitAVX2(deltas[8:], buf[64:])
-
-		tmp = buf[64+(len_head-8)*4:]
-
-		for i, v := range deltas[len_head:] {
-			tmp[4*i] = byte((v >> 24) & 0xff)
-			tmp[1+4*i] = byte((v >> 16) & 0xff)
-			tmp[2+4*i] = byte((v >> 8) & 0xff)
-			tmp[3+4*i] = byte(v & 0xff)
-		}
-		/*for i, v := range deltas[8:] {
-			tmp[4*i] = byte((v >> 24) & 0xff)
-			tmp[1+4*i] = byte((v >> 16) & 0xff)
-			tmp[2+4*i] = byte((v >> 8) & 0xff)
-			tmp[3+4*i] = byte(v & 0xff)
-		}*/
-	default:
-		return nil, -1, 0, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
-	}
-
-	return buf, len(buf), nbytes, nil
-}
-
 type CompressedHashBlock struct {
 	hash_size int
 	nbytes    int
 	data      []byte
 }
 
-func CompressHashBlock(b block.Block, hash_size int) (CompressedHashBlock, error) {
+func compressHashBlock(b block.Block, hash_size int) (CompressedHashBlock, error) {
 	deltas := make([]uint64, len(b.Uint64))
 	shift := 64 - hash_size
 	for i := range b.Uint64 {
@@ -759,114 +674,157 @@ func CompressHashBlock(b block.Block, hash_size int) (CompressedHashBlock, error
 		binary.BigEndian.PutUint64(buf[8*i:], deltas[i])
 	}
 
-	tmp := buf[64:]
+	_, err := compressBytes(deltas[8:], nbytes, buf[64:])
+	if err != nil {
+		return CompressedHashBlock{0, 0, nil}, err
+	}
+
+	return CompressedHashBlock{hash_size, nbytes, buf}, nil
+}
+
+/*
+if nbytes == 0 { // no value give -> determine it
+	var src_max uint64 = 0
+	for _, v := range src {
+		src_max |= v
+	}
+	if src_max == 0 {
+		nbytes = 1 // all number zero -> use 1 byte
+	} else {
+		lz := bits.LeadingZeros64(src_max)
+		nbytes = (71 - lz) >> 3 // = (64 - tz + 8 - 1) / 8 = ceil((64 - tz)/8)
+	}
+}
+*/
+
+func compressBytes(src []uint64, nbytes int, buf []byte) ([]byte, error) {
+	var tmp []byte
+
+	if len(buf) < nbytes*len(src) {
+		return nil, fmt.Errorf("compressBytes: write buffer to small")
+	}
 
 	switch nbytes {
 	case 1:
-		for i, v := range deltas[8:] {
-			buf[64+i] = byte(v & 0xff)
+		for i, v := range src {
+			buf[i] = byte(v & 0xff)
 		}
 	case 2:
-		/*		for i, v := range deltas[8:] {
-				buf[64+2*i] = byte((v >> 8) & 0xff)
-				buf[65+2*i] = byte(v & 0xff)
+		/*		for i, v := range src {
+				buf[2*i] = byte((v >> 8) & 0xff)
+				buf[1+2*i] = byte(v & 0xff)
 			}*/
 
-		len_head := (len(deltas)-8)&0x7ffffffffffffff0 + 8
-		compress.PackIndex16BitAVX2(deltas[8:], buf[64:])
+		len_head := len(src) & 0x7ffffffffffffff0
+		compress.PackIndex16BitAVX2(src, buf)
 
-		tmp = buf[64+(len_head-8)*2:]
+		tmp = buf[len_head*2:]
 
-		for i, v := range deltas[len_head:] {
+		for i, v := range src[len_head:] {
 			tmp[2*i] = byte((v >> 8) & 0xff)
 			tmp[1+2*i] = byte(v & 0xff)
 		}
 
 	case 3:
-		for i, v := range deltas[8:] {
-			tmp[3*i] = byte((v >> 16) & 0xff)
-			tmp[1+3*i] = byte((v >> 8) & 0xff)
-			tmp[2+3*i] = byte(v & 0xff)
+		for i, v := range src {
+			buf[3*i] = byte((v >> 16) & 0xff)
+			buf[1+3*i] = byte((v >> 8) & 0xff)
+			buf[2+3*i] = byte(v & 0xff)
 		}
 	case 4:
 
-		len_head := len(deltas) & 0x7ffffffffffffff8
-		compress.PackIndex32BitAVX2(deltas[8:], buf[64:])
+		len_head := len(src) & 0x7ffffffffffffff8
+		compress.PackIndex32BitAVX2(src, buf)
 
-		tmp = buf[64+(len_head-8)*4:]
+		tmp = buf[len_head*4:]
 
-		for i, v := range deltas[len_head:] {
+		for i, v := range src[len_head:] {
 			tmp[4*i] = byte((v >> 24) & 0xff)
 			tmp[1+4*i] = byte((v >> 16) & 0xff)
 			tmp[2+4*i] = byte((v >> 8) & 0xff)
 			tmp[3+4*i] = byte(v & 0xff)
 		}
 		/*for i, v := range deltas[8:] {
-			tmp[4*i] = byte((v >> 24) & 0xff)
-			tmp[1+4*i] = byte((v >> 16) & 0xff)
-			tmp[2+4*i] = byte((v >> 8) & 0xff)
-			tmp[3+4*i] = byte(v & 0xff)
+			buf[4*i] = byte((v >> 24) & 0xff)
+			buf[1+4*i] = byte((v >> 16) & 0xff)
+			buf[2+4*i] = byte((v >> 8) & 0xff)
+			buf[3+4*i] = byte(v & 0xff)
 		}*/
 	default:
-		return CompressedHashBlock{0, 0, nil}, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
+		return nil, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
 	}
-
-	return CompressedHashBlock{hash_size, nbytes, buf}, nil
+	return buf, nil
 }
 
-func uncompressHash(buf []byte, nbytes int) ([]uint64, int, error) {
-	len := (len(buf)-64)/nbytes + 8
-	res := make([]uint64, len)
-	for i := 0; i < 8; i++ {
-		res[i] = binary.BigEndian.Uint64(buf[8*i:])
+func uncompressBytes(src []byte, nbytes int, res []uint64) ([]uint64, error) {
+	rlen := len(src) / nbytes
+
+	if len(res) < rlen {
+		return nil, fmt.Errorf("uncompressBytes: write buffer to small")
 	}
+
 	switch nbytes {
 	case 1:
-		for i, j := 8, 64; i < len; i++ {
-			res[i] = uint64(buf[j])
+		for i, j := 0, 0; i < rlen; i++ {
+			res[i] = uint64(src[j])
 			j++
 		}
 	case 2:
-		/*		for i, j := 8, 64; i < len; i++ {
-				res[i] = uint64(buf[j])<<8 | uint64(buf[1+j])
+		/*		for i, j := 0, 0; i < len; i++ {
+				res[i] = uint64(src[j])<<8 | uint64(src[1+j])
 				j += 2
 			}*/
 
-		len_head := (len-8)&0x7ffffffffffffff0 + 8
-		compress.UnpackIndex16BitAVX2(buf[64:], res[8:])
+		len_head := rlen & 0x7ffffffffffffff0
+		compress.UnpackIndex16BitAVX2(src, res)
 
-		tmp := buf[64+(len_head-8)*2:]
+		tmp := src[len_head*2:]
 
 		//		for _, v := range res[8+len_head:] {
-		for i, j := len_head, 0; i < len; i++ {
+		for i, j := len_head, 0; i < rlen; i++ {
 			res[i] = uint64(tmp[j])<<8 | uint64(tmp[1+j])
 			j += 2
 		}
 
 	case 3:
-		for i, j := 8, 64; i < len; i++ {
-			res[i] = uint64(buf[j])<<16 | uint64(buf[1+j])<<8 | uint64(buf[2+j])
+		for i, j := 0, 0; i < rlen; i++ {
+			res[i] = uint64(src[j])<<16 | uint64(src[1+j])<<8 | uint64(src[2+j])
 			j += 3
 		}
 	case 4:
-		/*for i, j := 8, 64; i < len; i++ {
-			res[i] = uint64(buf[j])<<24 | uint64(buf[1+j])<<16 | uint64(buf[2+j])<<8 | uint64(buf[3+j])
+		/*for i, j := 0, 0; i < rlen; i++ {
+			res[i] = uint64(src[j])<<24 | uint64(src[1+j])<<16 | uint64(src[2+j])<<8 | uint64(src[3+j])
 			j += 4
 		}*/
 
-		len_head := len & 0x7ffffffffffffff8
-		compress.UnpackIndex32BitAVX2(buf[64:], res[8:])
+		len_head := rlen & 0x7ffffffffffffff8
+		compress.UnpackIndex32BitAVX2(src, res)
 
-		tmp := buf[64+(len_head-8)*4:]
+		tmp := src[len_head*4:]
 
 		//		for _, v := range res[8+len_head:] {
-		for i, j := len_head, 0; i < len; i++ {
+		for i, j := len_head, 0; i < rlen; i++ {
 			res[i] = uint64(tmp[j])<<24 | uint64(tmp[1+j])<<16 | uint64(tmp[2+j])<<8 | uint64(tmp[3+j])
 			j += 4
 		}
 
 	default:
-		return nil, 0, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
+		return nil, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
+	}
+	return res, nil
+}
+
+func uncompressHashBlock(chb CompressedHashBlock) ([]uint64, int, error) {
+	len := (len(chb.data)-64)/chb.nbytes + 8
+	res := make([]uint64, len)
+	for i := 0; i < 8; i++ {
+		res[i] = binary.BigEndian.Uint64(chb.data[8*i:])
+	}
+
+	_, err := uncompressBytes(chb.data[64:], chb.nbytes, res[8:])
+
+	if err != nil {
+		return nil, 0, err
 	}
 
 	len_head := len & 0x7ffffffffffffff8
@@ -920,15 +878,19 @@ func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, 
 
 	switch {
 	case cmethod[:10] == "delta-hash":
-		var nbytes int
-		var buf []byte
+		//var nbytes int
+		//var buf []byte
 
 		start := time.Now()
-		buf, csize, nbytes, err = CompressHash(tmp)
+		chb, err := compressHashBlock(*p.blocks[0], hashlen)
+		csize = len(chb.data)
+
+		// buf, csize, nbytes, err = CompressHash(tmp)
 		tcomp = time.Since(start).Seconds()
 		if err == nil {
 			start = time.Now()
-			res, _, err = uncompressHash(buf, nbytes)
+			res, _, err = uncompressHashBlock(chb)
+			//res, _, err = uncompressHash(buf, nbytes)
 			tdecomp = time.Since(start).Seconds()
 		}
 
@@ -945,8 +907,6 @@ func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, 
 			fmt.Printf("hash compression: error at position %d\n", i)
 		}
 	}
-
-	//fmt.Println(res)
 
 	if csize < 0 {
 		ct[0] = -1
