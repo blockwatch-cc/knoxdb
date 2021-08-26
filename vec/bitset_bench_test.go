@@ -168,7 +168,8 @@ func BenchmarkBitsetIndexGenericOpt(B *testing.B) {
 		for _, d := range bitsetBenchmarkDensities {
 			B.Run(n.name+"-"+d.name, func(B *testing.B) {
 				bits := fillBitsetRand(nil, n.l, d.d)
-				slice := make([]uint32, int(bitsetPopCountGeneric(bits, n.l)))
+				sz := int(bitsetPopCountGeneric(bits, n.l))
+				slice := make([]uint32, sz, sz+8)
 				bs := NewBitsetFromBytes(bits, n.l)
 				B.SetBytes(int64(bitFieldLen(n.l)))
 				B.ResetTimer()

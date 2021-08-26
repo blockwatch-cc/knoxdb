@@ -6,8 +6,6 @@ package vec
 import (
 	"encoding/hex"
 	"sync"
-
-	"fmt"
 )
 
 const defaultBitsetSize = 16 // 8kB
@@ -621,15 +619,12 @@ func (s Bitset) Indexes(slice []int) []int {
 // density of bits.
 func (s *Bitset) IndexesU32(slice []uint32) []uint32 {
 	cnt := s.Count()
-	if slice == nil || cap(slice) < cnt {
-		slice = make([]uint32, cnt)
+	if slice == nil || cap(slice) < cnt+8 {
+		slice = make([]uint32, cnt+8)
 	} else {
-		slice = slice[:cnt]
+		slice = slice[:cnt+8]
 	}
 	n := bitsetIndexes(s.buf, s.size, slice, cnt)
-	if n != len(slice) {
-		fmt.Printf("ERROR: IDX for count=%d len=%d n=%d\n", cnt, len(slice), n)
-	}
 	return slice[:n]
 }
 
