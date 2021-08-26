@@ -117,6 +117,7 @@ func run() error {
 	errors := make([]vec.Uint64Reducer, len(table.Fields()))
 	fields := table.Fields()
 	u64 := make([]uint64, 0, 1<<PackSizeLog2)
+	var totalSize uint64
 	err = table.WalkPacks(func(pkg *pack.Package) error {
 		for i, v := range pkg.Blocks() {
 			// skip for non-bloom fields when requested
@@ -131,9 +132,12 @@ func run() error {
 			u64 = vec.Uint64.Unique(v.Hashes(u64))
 
 			// add to stats and errors
-			stats[i].Add(est)
+			stats[i].Add(uint64(est))
 			errors[i].Add(uint64(util.Abs64(int64(est) - int64(len(u64)))))
 			u64 = u64[:0]
+
+			// track total size of bloom filters
+			totalSize += pow2(uint64(est*8)) / 8
 		}
 		count++
 		fmt.Printf(".")
@@ -148,6 +152,7 @@ func run() error {
 	}
 
 	fmt.Printf("\nProcessed %d packs at loglog precision %d in %s\n", count, prec, time.Since(start))
+	fmt.Printf("Total bloom size %d bytes\n", totalSize)
 	fmt.Printf("%03s  %15s  %10s  %5s  %5s  %5s  %15s  %7s  %7s  %7s  %7s\n", "Col", "Name", "Type", "Min", "Max", "Avg", "Var", "Err-Min", "Err-Max", "Err-Avg", "Err-Var")
 	for i, f := range table.Fields() {
 		s := stats[i]
@@ -197,4 +202,13 @@ func Close(table *pack.Table) error {
 		return err
 	}
 	return table.Database().Close()
+}
+
+func pow2(v uint64) uint64 {
+	for i := uint64(8); i < 1<<62; i *= 2 {
+		if i >= v {
+			return i
+		}
+	}
+	return 0
 }

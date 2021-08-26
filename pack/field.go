@@ -29,13 +29,13 @@ const (
 	FlagIndexed
 	FlagCompressSnappy
 	FlagCompressLZ4
+	FlagBloom
 
 	// internal type conversion flags used when a struct field's Go type
 	// does not directly match the requested field type
 	flagFloatType
 	flagIntType
 	flagUintType
-	FlagBloom
 )
 
 func (f FieldFlags) Compression() block.Compression {
@@ -2708,14 +2708,14 @@ func (t FieldType) EqualPacksAt(p1 *Package, i1, n1 int, p2 *Package, i2, n2 int
 	}
 }
 
-func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint64, factor int) *bloom.Filter {
+func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor int) *bloom.Filter {
 	if cardinality <= 0 {
-		cardinality = uint64(b.Len())
+		cardinality = uint32(b.Len())
 	}
 	if factor <= 0 {
 		factor = 1
 	}
-	m := uint64(cardinality * uint64(factor) * 8) // unit is bits
+	m := uint64(cardinality * uint32(factor) * 8) // unit is bits
 	flt := bloom.NewFilter(m, 4)
 	var buf [8]byte
 	switch t {
@@ -2876,7 +2876,7 @@ func (t FieldType) Bytes(val interface{}) []byte {
 	}
 }
 
-func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint64 {
+func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 	filter := loglogbeta.NewFilterWithPrecision(precision)
 	var buf [8]byte
 	switch t {
@@ -2973,5 +2973,5 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint64 {
 			filter.Add(buf[:4])
 		}
 	}
-	return util.MinU64(uint64(b.Len()), filter.Cardinality())
+	return util.MinU32(uint32(b.Len()), uint32(filter.Cardinality()))
 }

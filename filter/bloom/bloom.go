@@ -36,7 +36,7 @@ func NewFilter(m uint64, k uint64) *Filter {
 func NewFilterBuffer(buf []byte, k uint64) (*Filter, error) {
 	m := pow2(uint64(len(buf)) * 8)
 	if m != uint64(len(buf))*8 {
-		return nil, fmt.Errorf("bloom.Filter: buffer bit count must a power of two: %d/%d", len(buf)*8, m)
+		return nil, fmt.Errorf("bloom.Filter: buffer bit count must be a power of two: %d/%d", len(buf)*8, m)
 	}
 	return &Filter{k: k, b: buf, mask: m - 1}, nil
 }

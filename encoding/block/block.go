@@ -49,6 +49,24 @@ func (c Compression) HeaderSize(n int) int {
 	}
 }
 
+type Filter byte
+
+const (
+	NoFilter Filter = iota
+	BloomFilter
+)
+
+func (f Filter) String() string {
+	switch f {
+	case NoFilter:
+		return "no"
+	case BloomFilter:
+		return "bloom"
+	default:
+		return "invalid filter"
+	}
+}
+
 // Note: uses 5 bit encoding (max 32 values)
 type BlockType byte
 
@@ -492,7 +510,7 @@ func (b *Block) Cap() int {
 	case BlockInt128:
 		return b.Int128.Cap()
 	case BlockInt256:
-		return b.Int256.Len()
+		return b.Int256.Cap()
 	default:
 		return 0
 	}

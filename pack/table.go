@@ -2973,9 +2973,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 
 	// update stats on full packs only
 	// FIXME: writes to pack index which is supposed to be read-only
-	if !stripped {
-		t.packidx.UpdateStatistics(pkg)
-	}
+	t.packidx.UpdateStatistics(pkg)
 
 	pkg.cached = touch
 	// store in cache
