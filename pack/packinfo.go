@@ -11,10 +11,10 @@ import (
 )
 
 type PackInfo struct {
-	Key     uint32
-	NValues int
-	Blocks  BlockInfoList
-	Size    int
+	Key      uint32
+	NValues  int
+	Blocks   BlockInfoList
+	Packsize int
 
 	// not stored
 	dirty bool
@@ -30,11 +30,11 @@ func (p PackInfo) KeyBytes() []byte {
 
 func (p *Package) Info() PackInfo {
 	h := PackInfo{
-		Key:     p.key,
-		NValues: p.nValues,
-		Blocks:  make(BlockInfoList, p.nFields),
-		Size:    p.size,
-		dirty:   true,
+		Key:      p.key,
+		NValues:  p.nValues,
+		Blocks:   make(BlockInfoList, p.nFields),
+		Packsize: p.size,
+		dirty:    true,
 	}
 	for i, v := range p.blocks {
 		h.Blocks[i] = NewBlockInfo(v, p.fields[i])
@@ -42,10 +42,18 @@ func (p *Package) Info() PackInfo {
 	return h
 }
 
-func (h *PackInfo) UpdateStats(pkg *Package) error {
-	if h.Key != pkg.key {
-		return fmt.Errorf("pack: info key mismatch %x/%d ", h.Key, pkg.key)
+func (h PackInfo) Size() int {
+	// assume 8 bytes behind each min/max interface
+	sz := szPackInfo + len(h.Blocks)*(szBlockInfo+16)
+	for i := range h.Blocks {
+		if h.Blocks[i].Bloom != nil {
+			sz += szBloomFilter + len(h.Blocks[i].Bloom.Bytes())
+		}
 	}
+	return sz
+}
+
+func (h *PackInfo) UpdateStats(pkg *Package) error {
 	for i := range h.Blocks {
 		if have, want := h.Blocks[i].Type, pkg.blocks[i].Type(); have != want {
 			return fmt.Errorf("pack: block type mismatch in pack %x/%d: %s != %s ",
@@ -55,15 +63,62 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 			continue
 		}
 
-		// TODO: optimize for pk slices (always sorted) and indexes (not required
-		// for value slice)
+		if i == pkg.pkindex {
+			// optimization for pk slices (always sorted)
+			pkslice := pkg.blocks[i].Uint64
+			h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkslice[0], pkslice[len(pkslice)-1]
+		} else {
+			// EXPENSIVE: collects full min/max statistics
+			h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkg.blocks[i].MinMax()
 
-		// EXPENSIVE: collects full min/max statistics
-		h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkg.blocks[i].MinMax()
+			field := pkg.FieldById(i)
+
+			// EXPENSIVE:
+			// - estimate cardinality, use precision 12 for 4k fixed memory
+			// - build bloom filter from column vector using cardinality as size hint
+			if field.Flags.Contains(FlagBloom) {
+				h.Blocks[i].Cardinality = field.Type.EstimateCardinality(
+					pkg.blocks[field.Index],
+					12,
+				)
+
+				h.Blocks[i].Bloom = field.Type.BuildBloomFilter(
+					pkg.blocks[field.Index],
+					h.Blocks[i].Cardinality,
+					field.Scale,
+				)
+			}
+		}
+
 		h.Blocks[i].dirty = false
 
 		// signal that this pack info must be saved
 		h.dirty = true
+	}
+	return nil
+}
+
+func (h *PackInfo) UpdateVolatileStats(pkg *Package) error {
+	// only bloom filters currently
+	for _, field := range pkg.Fields() {
+		// skip stripped blocks
+		if !h.Blocks[field.Index].IsValid() {
+			continue
+		}
+		// skip non-bloom blocks
+		if !field.Flags.Contains(FlagBloom) {
+			continue
+		}
+		// skip when bloom filter already exists
+		if h.Blocks[field.Index].Bloom != nil {
+			continue
+		}
+
+		h.Blocks[field.Index].Bloom = field.Type.BuildBloomFilter(
+			pkg.blocks[field.Index],
+			h.Blocks[field.Index].Cardinality,
+			field.Scale,
+		)
 	}
 	return nil
 }
@@ -86,7 +141,7 @@ func (h PackInfo) Encode(buf *bytes.Buffer) error {
 	buf.Write(b[:])
 	bigEndian.PutUint32(b[0:], uint32(h.NValues))
 	buf.Write(b[:])
-	bigEndian.PutUint32(b[0:], uint32(h.Size))
+	bigEndian.PutUint32(b[0:], uint32(h.Packsize))
 	buf.Write(b[:])
 	return h.Blocks.Encode(buf)
 }
@@ -94,7 +149,7 @@ func (h PackInfo) Encode(buf *bytes.Buffer) error {
 func (h *PackInfo) Decode(buf *bytes.Buffer) error {
 	h.Key = bigEndian.Uint32(buf.Next(4))
 	h.NValues = int(bigEndian.Uint32(buf.Next(4)))
-	h.Size = int(bigEndian.Uint32(buf.Next(4)))
+	h.Packsize = int(bigEndian.Uint32(buf.Next(4)))
 	return h.Blocks.Decode(buf)
 }
 
