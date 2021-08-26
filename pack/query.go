@@ -279,6 +279,9 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 			ins = append(ins, v)
 		}
 		node.Children = ins
+		log.Debug(newLogClosure(func() string {
+			return "Updated query:\n" + q.Dump()
+		}))
 	}
 
 	return nil
