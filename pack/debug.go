@@ -634,12 +634,16 @@ func compressNo(b *block.Block) (int, error) {
 }
 
 type CompressedHashBlock struct {
-	hash_size int
-	nbytes    int
-	data      []byte
+	hash_size   int
+	hash_nbytes int
+	hash_data   []byte
+	pk_nbytes   int
+	pk_data     []byte
 }
 
-func compressHashBlock(b block.Block, hash_size int) (CompressedHashBlock, error) {
+func compressHashBlock(pkg Package, hash_size int) (CompressedHashBlock, error) {
+	// compress hash block
+	b := pkg.blocks[0]
 	deltas := make([]uint64, len(b.Uint64))
 	shift := 64 - hash_size
 	for i := range b.Uint64 {
@@ -660,7 +664,7 @@ func compressHashBlock(b block.Block, hash_size int) (CompressedHashBlock, error
 		maxdelta |= deltas[i]
 	}
 
-	var nbytes int
+	var nbytes, nbytes2 int
 	if maxdelta == 0 {
 		nbytes = 1 // all number zero -> use 1 byte
 	} else {
@@ -676,26 +680,32 @@ func compressHashBlock(b block.Block, hash_size int) (CompressedHashBlock, error
 
 	_, err := compressBytes(deltas[8:], nbytes, buf[64:])
 	if err != nil {
-		return CompressedHashBlock{0, 0, nil}, err
+		return CompressedHashBlock{0, 0, nil, 0, nil}, err
 	}
 
-	return CompressedHashBlock{hash_size, nbytes, buf}, nil
-}
+	// compress hash block
+	b = pkg.blocks[1]
 
-/*
-if nbytes == 0 { // no value give -> determine it
-	var src_max uint64 = 0
-	for _, v := range src {
+	src_max := uint64(0)
+	for _, v := range b.Uint64 {
 		src_max |= v
 	}
 	if src_max == 0 {
-		nbytes = 1 // all number zero -> use 1 byte
+		nbytes2 = 1 // all number zero -> use 1 byte
 	} else {
 		lz := bits.LeadingZeros64(src_max)
-		nbytes = (71 - lz) >> 3 // = (64 - tz + 8 - 1) / 8 = ceil((64 - tz)/8)
+		nbytes2 = (71 - lz) >> 3 // = (64 - tz + 8 - 1) / 8 = ceil((64 - tz)/8)
 	}
+
+	buf2 := make([]byte, nbytes2*len(b.Uint64))
+
+	_, err = compressBytes(b.Uint64, nbytes2, buf2)
+	if err != nil {
+		return CompressedHashBlock{0, 0, nil, 0, nil}, err
+	}
+
+	return CompressedHashBlock{hash_size, nbytes, buf, nbytes2, buf2}, nil
 }
-*/
 
 func compressBytes(src []uint64, nbytes int, buf []byte) ([]byte, error) {
 	var tmp []byte
@@ -780,7 +790,6 @@ func uncompressBytes(src []byte, nbytes int, res []uint64) ([]uint64, error) {
 
 		tmp := src[len_head*2:]
 
-		//		for _, v := range res[8+len_head:] {
 		for i, j := len_head, 0; i < rlen; i++ {
 			res[i] = uint64(tmp[j])<<8 | uint64(tmp[1+j])
 			j += 2
@@ -802,7 +811,6 @@ func uncompressBytes(src []byte, nbytes int, res []uint64) ([]uint64, error) {
 
 		tmp := src[len_head*4:]
 
-		//		for _, v := range res[8+len_head:] {
 		for i, j := len_head, 0; i < rlen; i++ {
 			res[i] = uint64(tmp[j])<<24 | uint64(tmp[1+j])<<16 | uint64(tmp[2+j])<<8 | uint64(tmp[3+j])
 			j += 4
@@ -814,30 +822,41 @@ func uncompressBytes(src []byte, nbytes int, res []uint64) ([]uint64, error) {
 	return res, nil
 }
 
-func uncompressHashBlock(chb CompressedHashBlock) ([]uint64, int, error) {
-	len := (len(chb.data)-64)/chb.nbytes + 8
-	res := make([]uint64, len)
+func uncompressHashBlock(chb CompressedHashBlock) ([]uint64, []uint64, error) {
+	// uncompress hashes
+	lenr := (len(chb.hash_data)-64)/chb.hash_nbytes + 8
+	res1 := make([]uint64, lenr)
 	for i := 0; i < 8; i++ {
-		res[i] = binary.BigEndian.Uint64(chb.data[8*i:])
+		res1[i] = binary.BigEndian.Uint64(chb.hash_data[8*i:])
 	}
 
-	_, err := uncompressBytes(chb.data[64:], chb.nbytes, res[8:])
+	_, err := uncompressBytes(chb.hash_data[64:], chb.hash_nbytes, res1[8:])
 
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, err
 	}
 
-	len_head := len & 0x7ffffffffffffff8
-	compress.Undelta8AVX2(res)
-	for i := len_head; i < len; i++ {
-		res[i] += res[i-8]
+	len_head := lenr & 0x7ffffffffffffff8
+	compress.Undelta8AVX2(res1)
+	for i := len_head; i < lenr; i++ {
+		res1[i] += res1[i-8]
 	}
 
 	/*for i := 8; i < len; i++ {
 		res[i] += res[i-8]
 	}*/
 
-	return res, len, nil
+	// uncompress pks
+	lenr = len(chb.pk_data) / chb.pk_nbytes
+	res2 := make([]uint64, lenr)
+
+	_, err = uncompressBytes(chb.pk_data, chb.pk_nbytes, res2)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return res1, res2, nil
 }
 
 func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, error) {
@@ -869,28 +888,20 @@ func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, 
 		data[i] = v >> (64 - hashlen)
 	}
 
-	// make a copy because we will destroy it
-	tmp := make([]uint64, p.blocks[0].Len())
-	copy(tmp, data)
-
-	var csize int
-	var res []uint64
+	var csize1, csize2 int
+	var res1, res2 []uint64
 
 	switch {
 	case cmethod[:10] == "delta-hash":
-		//var nbytes int
-		//var buf []byte
-
 		start := time.Now()
-		chb, err := compressHashBlock(*p.blocks[0], hashlen)
-		csize = len(chb.data)
+		chb, err := compressHashBlock(*p, hashlen)
+		csize1 = len(chb.hash_data)
+		csize2 = len(chb.pk_data)
 
-		// buf, csize, nbytes, err = CompressHash(tmp)
 		tcomp = time.Since(start).Seconds()
 		if err == nil {
 			start = time.Now()
-			res, _, err = uncompressHashBlock(chb)
-			//res, _, err = uncompressHash(buf, nbytes)
+			res1, _, err = uncompressHashBlock(chb)
 			tdecomp = time.Since(start).Seconds()
 		}
 
@@ -902,20 +913,26 @@ func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, 
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	for i := range res {
-		if res[i] != data[i] {
+	for i := range res1 {
+		if res1[i] != data[i] {
 			fmt.Printf("hash compression: error at position %d\n", i)
 		}
 	}
+	for i := range res2 {
+		if res2[i] != p.blocks[1].Uint64[i] {
+			fmt.Printf("pk compression: error at position %d\n", i)
+		}
+	}
 
-	if csize < 0 {
+	if csize1 < 0 {
 		ct[0] = -1
 		dt[0] = -1
 	} else {
-		ct[0] = float64(p.blocks[0].DataSize()) / tcomp / 1000000
-		dt[0] = float64(p.blocks[0].DataSize()) / tdecomp / 1000000
+		ct[0] = float64(p.blocks[0].DataSize()+p.blocks[1].DataSize()) / tcomp / 1000000
+		dt[0] = float64(p.blocks[0].DataSize()+p.blocks[1].DataSize()) / tdecomp / 1000000
 	}
-	cr[0] = float64(csize) / float64(p.blocks[0].DataSize())
+	cr[0] = float64(csize1) / float64(p.blocks[0].DataSize())
+	cr[1] = float64(csize2) / float64(p.blocks[0].DataSize())
 
 	return cr, ct, dt, nil
 }
@@ -936,7 +953,6 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 		var tcomp float64 = -1
 		var tdecomp float64 = -1
 		var err error
-		// start := time.Now()
 		switch cmethod {
 		case "legacy", "legacy-no", "legacy-lz4", "legacy-snappy":
 			buf := bytes.NewBuffer(make([]byte, 0, p.blocks[j].MaxStoredSize()))
@@ -997,7 +1013,6 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 			dt[j] = -1
 		} else {
 			ct[j] = float64(p.blocks[j].DataSize()) / tcomp / 1000000
-			// dt[j] = -1
 			dt[j] = float64(p.blocks[j].DataSize()) / tdecomp / 1000000
 		}
 		cr[j] = float64(csize) / float64(p.blocks[j].DataSize())
