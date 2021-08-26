@@ -1906,10 +1906,10 @@ func (p *Package) Delete(pos, n int) error {
 			b.Float32 = append(b.Float32[:pos], b.Float32[pos+n:]...)
 
 		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256 = b.Int256.Subslice(0, pos).AppendFrom(b.Int256.Subslice(pos+n, b.Int256.Len()))
+			b.Int256 = b.Int256.Delete(pos, n)
 
 		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128 = b.Int128.Subslice(0, pos).AppendFrom(b.Int128.Subslice(pos+n, b.Int128.Len()))
+			b.Int128 = b.Int128.Delete(pos, n)
 
 		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
 			b.Int64 = append(b.Int64[:pos], b.Int64[pos+n:]...)
