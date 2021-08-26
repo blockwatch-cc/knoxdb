@@ -1385,14 +1385,14 @@ func TestBitsetIndexGenericSkip64(T *testing.T) {
 	}
 }
 
-func TestBitsetIndexAVX2(T *testing.T) {
+func TestBitsetIndexAVX2Full(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
 	for _, c := range runTestcases {
 		idx := make([]uint32, len(c.idx)+8)
 		T.Run(c.name, func(t *testing.T) {
-			var ret = bitsetIndexesAVX2(c.buf, c.size, idx)
+			var ret = bitsetIndexesAVX2Full(c.buf, c.size, idx)
 			if got, want := ret, popcount(c.buf); got != want {
 				T.Errorf("unexpected index vector length %d, expected %d", got, want)
 			}
@@ -1407,7 +1407,7 @@ func TestBitsetIndexAVX2(T *testing.T) {
 	}
 }
 
-func TestBitsetIndexAVX2New(T *testing.T) {
+func TestBitsetIndexAVX2Skip(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
 	}
@@ -1416,7 +1416,7 @@ func TestBitsetIndexAVX2New(T *testing.T) {
 		c.buf = c.buf[:len(c.buf)-1]
 		idx := make([]uint32, len(c.idx)+8)
 		T.Run(c.name, func(t *testing.T) {
-			var ret = bitsetIndexesAVX2New(c.buf, c.size, idx)
+			var ret = bitsetIndexesAVX2Skip(c.buf, c.size, idx)
 			if got, want := ret, popcount(c.buf); got != want {
 				T.Errorf("unexpected index vector length %d, expected %d", got, want)
 			}

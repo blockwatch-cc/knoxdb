@@ -125,35 +125,39 @@ func BenchmarkBitsetSwapBool(B *testing.B) {
 	}
 }
 
-// BenchmarkBitsetIndexGenericOld/16K-1/2-8         22159      54052 ns/op      37.89 MB/s
-// BenchmarkBitsetIndexGenericOld/16K-1/16-8        89227      12816 ns/op     159.80 MB/s
-// BenchmarkBitsetIndexGenericOld/16K-1/32-8       220540       5193 ns/op     394.40 MB/s
-// BenchmarkBitsetIndexGenericOld/16K-1/64-8       306282       3550 ns/op     576.83 MB/s
-// BenchmarkBitsetIndexGenericOld/16K-1/128-8      395906       2883 ns/op     710.39 MB/s
-// BenchmarkBitsetIndexGenericOld/16K-1/1024-8     589287       2059 ns/op     994.51 MB/s
-// BenchmarkBitsetIndexGenericOld/16K-1/16384-8    622398       2232 ns/op     917.59 MB/s
-// BenchmarkBitsetIndexGenericOld/32K-1/2-8         10000     110852 ns/op      36.95 MB/s
-// BenchmarkBitsetIndexGenericOld/32K-1/16-8        36973      32068 ns/op     127.73 MB/s
-// BenchmarkBitsetIndexGenericOld/32K-1/32-8        73998      17503 ns/op     234.02 MB/s
-// BenchmarkBitsetIndexGenericOld/32K-1/64-8       112444       9410 ns/op     435.29 MB/s
-// BenchmarkBitsetIndexGenericOld/32K-1/128-8      178713       7008 ns/op     584.49 MB/s
-// BenchmarkBitsetIndexGenericOld/32K-1/1024-8     282600       5295 ns/op     773.54 MB/s
-// BenchmarkBitsetIndexGenericOld/32K-1/16384-8    258879       4447 ns/op     921.13 MB/s
-// BenchmarkBitsetIndexGenericOld/64K-1/2-8          5352     226123 ns/op      36.23 MB/s
-// BenchmarkBitsetIndexGenericOld/64K-1/16-8        17584      67646 ns/op     121.10 MB/s
-// BenchmarkBitsetIndexGenericOld/64K-1/32-8        31969      37401 ns/op     219.03 MB/s
-// BenchmarkBitsetIndexGenericOld/64K-1/64-8        52472      22086 ns/op     370.92 MB/s
-// BenchmarkBitsetIndexGenericOld/64K-1/128-8       80486      14919 ns/op     549.10 MB/s
-// BenchmarkBitsetIndexGenericOld/64K-1/1024-8     135673       8385 ns/op     976.98 MB/s
-// BenchmarkBitsetIndexGenericOld/64K-1/16384-8    155040       7285 ns/op    1124.44 MB/s
-func BenchmarkBitsetIndexGenericOld(B *testing.B) {
+// pkg: blockwatch.cc/knoxdb/vec
+// cpu: Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+// BenchmarkBitsetIndexNative/16K-1/2-8         	   22941	     53661 ns/op	 152.66 MB/s
+// BenchmarkBitsetIndexNative/16K-1/16-8        	   84627	     12920 ns/op	  79.26 MB/s
+// BenchmarkBitsetIndexNative/16K-1/32-8        	  242636	      4991 ns/op	 102.58 MB/s
+// BenchmarkBitsetIndexNative/16K-1/64-8        	  355519	      3391 ns/op	  75.49 MB/s
+// BenchmarkBitsetIndexNative/16K-1/128-8       	  418766	      2947 ns/op	  43.43 MB/s
+// BenchmarkBitsetIndexNative/16K-1/1024-8      	  585559	      2016 ns/op	   7.94 MB/s
+// BenchmarkBitsetIndexNative/16K-1/16384-8     	  624786	      1804 ns/op	   0.55 MB/s
+// BenchmarkBitsetIndexNative/32K-1/2-8         	   10000	    107867 ns/op	 151.89 MB/s
+// BenchmarkBitsetIndexNative/32K-1/16-8        	   35779	     30630 ns/op	  66.86 MB/s
+// BenchmarkBitsetIndexNative/32K-1/32-8        	   74311	     15636 ns/op	  65.49 MB/s
+// BenchmarkBitsetIndexNative/32K-1/64-8        	  129874	      8849 ns/op	  57.86 MB/s
+// BenchmarkBitsetIndexNative/32K-1/128-8       	  177238	      6292 ns/op	  40.69 MB/s
+// BenchmarkBitsetIndexNative/32K-1/1024-8      	  299630	      4054 ns/op	   7.89 MB/s
+// BenchmarkBitsetIndexNative/32K-1/16384-8     	  318415	      3553 ns/op	   0.56 MB/s
+// BenchmarkBitsetIndexNative/64K-1/2-8         	    5515	    216143 ns/op	 151.60 MB/s
+// BenchmarkBitsetIndexNative/64K-1/16-8        	   17809	     65765 ns/op	  62.28 MB/s
+// BenchmarkBitsetIndexNative/64K-1/32-8        	   32431	     36286 ns/op	  56.44 MB/s
+// BenchmarkBitsetIndexNative/64K-1/64-8        	   55150	     21153 ns/op	  48.41 MB/s
+// BenchmarkBitsetIndexNative/64K-1/128-8       	   85554	     13804 ns/op	  37.09 MB/s
+// BenchmarkBitsetIndexNative/64K-1/1024-8      	  143848	      7856 ns/op	   8.15 MB/s
+// BenchmarkBitsetIndexNative/64K-1/16384-8     	  164778	      7107 ns/op	   0.56 MB/s
+func BenchmarkBitsetIndexNative(B *testing.B) {
 	for _, n := range bitsetBenchmarkSizes {
 		for _, d := range bitsetBenchmarkDensities {
 			B.Run(n.name+"-"+d.name, func(B *testing.B) {
 				bits := fillBitsetRand(nil, n.l, d.d)
-				slice := make([]int, int(bitsetPopCountGeneric(bits, n.l)))
+				cnt := int(bitsetPopCountGeneric(bits, n.l))
+				slice := make([]int, cnt, n.l)
 				bs := NewBitsetFromBytes(bits, n.l)
-				B.SetBytes(int64(bitFieldLen(n.l)))
+				// we count hits in a bitset instead of raw throughput
+				B.SetBytes(int64(cnt))
 				B.ResetTimer()
 				for i := 0; i < B.N; i++ {
 					_ = bs.Indexes(slice)
@@ -163,15 +167,39 @@ func BenchmarkBitsetIndexGenericOld(B *testing.B) {
 	}
 }
 
-func BenchmarkBitsetIndexGenericOpt(B *testing.B) {
+// pkg: blockwatch.cc/knoxdb/vec
+// cpu: Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+// BenchmarkBitsetIndexOpt/16K-1/2-8         	  260499	      4598 ns/op	1781.74 MB/s
+// BenchmarkBitsetIndexOpt/16K-1/16-8        	  241903	      4709 ns/op	 217.44 MB/s
+// BenchmarkBitsetIndexOpt/16K-1/32-8        	  365690	      4026 ns/op	 127.17 MB/s
+// BenchmarkBitsetIndexOpt/16K-1/64-8        	  706698	      1666 ns/op	 153.68 MB/s
+// BenchmarkBitsetIndexOpt/16K-1/128-8       	 1288018	       921.1 ns/op	 138.96 MB/s
+// BenchmarkBitsetIndexOpt/16K-1/1024-8      	 6835682	       170.8 ns/op	  93.70 MB/s
+// BenchmarkBitsetIndexOpt/16K-1/16384-8     	16140313	        69.30 ns/op	  14.43 MB/s
+// BenchmarkBitsetIndexOpt/32K-1/2-8         	  136348	      8548 ns/op	1916.71 MB/s
+// BenchmarkBitsetIndexOpt/32K-1/16-8        	  111206	     11000 ns/op	 186.17 MB/s
+// BenchmarkBitsetIndexOpt/32K-1/32-8        	  122942	      9127 ns/op	 112.20 MB/s
+// BenchmarkBitsetIndexOpt/32K-1/64-8        	  333958	      3418 ns/op	 149.79 MB/s
+// BenchmarkBitsetIndexOpt/32K-1/128-8       	  633484	      2034 ns/op	 125.84 MB/s
+// BenchmarkBitsetIndexOpt/32K-1/1024-8      	 3702079	       363.3 ns/op	  88.09 MB/s
+// BenchmarkBitsetIndexOpt/32K-1/16384-8     	 9283716	       114.6 ns/op	  17.46 MB/s
+// BenchmarkBitsetIndexOpt/64K-1/2-8         	   68407	     17111 ns/op	1915.06 MB/s
+// BenchmarkBitsetIndexOpt/64K-1/16-8        	   50427	     23687 ns/op	 172.92 MB/s
+// BenchmarkBitsetIndexOpt/64K-1/32-8        	   66420	     17518 ns/op	 116.91 MB/s
+// BenchmarkBitsetIndexOpt/64K-1/64-8        	  157280	      7695 ns/op	 133.08 MB/s
+// BenchmarkBitsetIndexOpt/64K-1/128-8       	  286348	      3836 ns/op	 133.47 MB/s
+// BenchmarkBitsetIndexOpt/64K-1/1024-8      	 1799337	       627.1 ns/op	 102.06 MB/s
+// BenchmarkBitsetIndexOpt/64K-1/16384-8     	 5559492	       210.9 ns/op	  18.96 MB/s
+func BenchmarkBitsetIndexOpt(B *testing.B) {
 	for _, n := range bitsetBenchmarkSizes {
 		for _, d := range bitsetBenchmarkDensities {
 			B.Run(n.name+"-"+d.name, func(B *testing.B) {
 				bits := fillBitsetRand(nil, n.l, d.d)
-				sz := int(bitsetPopCountGeneric(bits, n.l))
-				slice := make([]uint32, sz, sz+8)
+				cnt := int(bitsetPopCountGeneric(bits, n.l))
+				slice := make([]uint32, cnt, n.l)
 				bs := NewBitsetFromBytes(bits, n.l)
-				B.SetBytes(int64(bitFieldLen(n.l)))
+				// we count hits in a bitset instead of raw throughput
+				B.SetBytes(int64(cnt))
 				B.ResetTimer()
 				for i := 0; i < B.N; i++ {
 					_ = bs.IndexesU32(slice)
@@ -317,7 +345,7 @@ func BenchmarkBitsetIndexGenericSkip64(B *testing.B) {
 // BenchmarkBitsetIndexAVX2/64K-1/128-8       110577    10224 ns/op   801.26 MB/s
 // BenchmarkBitsetIndexAVX2/64K-1/1024-8      138932     8270 ns/op   990.61 MB/s
 // BenchmarkBitsetIndexAVX2/64K-1/16384-8     133310     8640 ns/op   948.19 MB/s
-func BenchmarkBitsetIndexAVX2(B *testing.B) {
+func BenchmarkBitsetIndexAVX2Full(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -329,7 +357,7 @@ func BenchmarkBitsetIndexAVX2(B *testing.B) {
 				B.ResetTimer()
 				B.SetBytes(int64(bitFieldLen(n.l)))
 				for i := 0; i < B.N; i++ {
-					_ = bitsetIndexesAVX2(bits, n.l, slice)
+					_ = bitsetIndexesAVX2Full(bits, n.l, slice)
 				}
 			})
 		}
@@ -357,7 +385,7 @@ func BenchmarkBitsetIndexAVX2(B *testing.B) {
 // BenchmarkBitsetIndexAVX2New/64K-1/128-8        309228   3948 ns/op   2074.80 MB/s
 // BenchmarkBitsetIndexAVX2New/64K-1/1024-8      1882911  697.2 ns/op  11749.93 MB/s
 // BenchmarkBitsetIndexAVX2New/64K-1/16384-8     5219270  216.9 ns/op  37773.08 MB/s
-func BenchmarkBitsetIndexAVX2New(B *testing.B) {
+func BenchmarkBitsetIndexAVX2Skip(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -369,7 +397,7 @@ func BenchmarkBitsetIndexAVX2New(B *testing.B) {
 				B.ResetTimer()
 				B.SetBytes(int64(bitFieldLen(n.l)))
 				for i := 0; i < B.N; i++ {
-					_ = bitsetIndexesAVX2New(bits, n.l, slice)
+					_ = bitsetIndexesAVX2Skip(bits, n.l, slice)
 				}
 			})
 		}

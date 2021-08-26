@@ -218,11 +218,6 @@ func (s *Bitset) AndNot(r *Bitset) *Bitset {
 		return s
 	}
 	bitsetAndNot(s.Bytes(), r.Bytes(), min(s.size, r.size))
-	// if any == 0 {
-	// 	s.cnt = 0
-	// } else {
-	// 	s.cnt = -1
-	// }
 	s.cnt = -1
 	return s
 }
@@ -587,7 +582,13 @@ func (b Bitset) Run(index int) (int, int) {
 
 // Indexes returns a slice of indexes for one bits in the bitset.
 func (s Bitset) Indexes(slice []int) []int {
-	cnt := s.Count()
+	cnt := s.cnt
+	switch {
+	case cnt == 0:
+		return slice[:0]
+	case cnt < 0:
+		cnt = s.size
+	}
 	if slice == nil || cap(slice) < cnt {
 		slice = make([]int, cnt)
 	} else {
@@ -611,20 +612,27 @@ func (s Bitset) Indexes(slice []int) []int {
 		slice[j] = i
 		j++
 	}
-	return slice
+	return slice[:j]
 }
 
 // IndexesU32 returns a slice positions as uint32 for one bits in the bitset.
-// It automatically picks the most efficient implementation based on the
-// density of bits.
 func (s *Bitset) IndexesU32(slice []uint32) []uint32 {
-	cnt := s.Count()
-	if slice == nil || cap(slice) < cnt+8 {
-		slice = make([]uint32, cnt+8)
-	} else {
-		slice = slice[:cnt+8]
+	cnt := s.cnt
+	switch {
+	case cnt == 0:
+		return slice[:0]
+	case cnt < 0:
+		cnt = s.size
 	}
-	n := bitsetIndexes(s.buf, s.size, slice, cnt)
+	// ensure slice dimension is multiple of 8, we need this for our
+	// index lookup algo which always writes multiples of 8 entries
+	cnt = roundUpPow2(cnt, 8)
+	if slice == nil || cap(slice) < cnt {
+		slice = make([]uint32, cnt)
+	} else {
+		slice = slice[:cnt]
+	}
+	n := bitsetIndexes(s.buf, s.size, slice)
 	return slice[:n]
 }
 

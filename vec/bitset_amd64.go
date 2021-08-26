@@ -315,10 +315,10 @@ func bitsetReverseAVX2(src []byte, bitsetReverseLut256 []uint8)
 func bitsetPopCountAVX2(src []byte) int64
 
 //go:noescape
-func bitsetIndexesAVX2Core(bitmap []byte, out []uint32, decodeTable []uint32, lengthTable []uint8) int
+func bitsetIndexesAVX2FullCore(bitmap []byte, out []uint32, decodeTable []uint32, lengthTable []uint8) int
 
 //go:noescape
-func bitsetIndexesAVX2NewCore(bitmap []byte, out []uint32, decodeTable []uint32, lengthTable []uint8) int
+func bitsetIndexesAVX2SkipCore(bitmap []byte, out []uint32, decodeTable []uint32, lengthTable []uint8) int
 
 //go:noescape
 func bitsetNextOneBitAVX2(src []byte, index uint64) uint64
@@ -387,28 +387,24 @@ func bitsetReverse(src []byte) {
 	}
 }
 
-func bitsetIndexesAVX2(src []byte, size int, dst []uint32) int {
+func bitsetIndexesAVX2Full(src []byte, size int, dst []uint32) int {
 	if size > 0 {
 		src[len(src)-1] &= bytemask(size)
 	}
-	return bitsetIndexesAVX2Core(src, dst, decodeTable, lengthTable)
+	return bitsetIndexesAVX2FullCore(src, dst, decodeTable, lengthTable)
 }
 
-func bitsetIndexesAVX2New(src []byte, size int, dst []uint32) int {
+func bitsetIndexesAVX2Skip(src []byte, size int, dst []uint32) int {
 	if size > 0 {
 		src[len(src)-1] &= bytemask(size)
 	}
-	return bitsetIndexesAVX2NewCore(src, dst, decodeTable, lengthTable)
+	return bitsetIndexesAVX2SkipCore(src, dst, decodeTable, lengthTable)
 }
 
-func bitsetIndexes(src []byte, size int, dst []uint32, hint int) int {
+func bitsetIndexes(src []byte, size int, dst []uint32) int {
 	switch {
-	case useAVX2 && hint < 512:
-		return bitsetIndexesAVX2New(src, size, dst)
-	case useAVX2 && hint >= 512:
-		return bitsetIndexesAVX2(src, size, dst)
-	case hint < 512:
-		return bitsetIndexesGeneric(src, size, dst)
+	case useAVX2:
+		return bitsetIndexesAVX2Skip(src, size, dst)
 	default:
 		return bitsetIndexesGenericSkip64(src, size, dst)
 	}
