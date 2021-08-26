@@ -1727,11 +1727,11 @@ func (n ConditionTreeNode) MatchPackAnd(pkg *Package, info PackInfo) *Bitset {
 		}
 
 		// shortcut
-		if bits.Count() == bits.Len() {
-			bits.Close()
-			bits = b
-			continue
-		}
+		// if bits.Count() == bits.Len() {
+		// 	bits.Close()
+		// 	bits = b
+		// 	continue
+		// }
 
 		// merge
 		_, any := bits.And(b)
@@ -1753,7 +1753,7 @@ func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *Bitset {
 
 	// match conditions and merge bit vectors
 	// stop early when result contains all ones (assuming OR relation)
-	for _, cn := range n.Children {
+	for i, cn := range n.Children {
 		var b *Bitset
 		if !cn.Leaf() {
 			// recurse into another AND or OR condition subtree
@@ -1820,17 +1820,17 @@ func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *Bitset {
 		}
 
 		// shortcut
-		if b.Count() == 0 {
-			b.Close()
-			continue
-		}
+		// if b.Count() == 0 {
+		// 	b.Close()
+		// 	continue
+		// }
 
 		// merge
 		bits.Or(b)
 		b.Close()
 
 		// early stop on full aggregate match
-		if bits.Count() == bits.Len() {
+		if i < len(n.Children)-1 && bits.Count() == bits.Len() {
 			break
 		}
 	}

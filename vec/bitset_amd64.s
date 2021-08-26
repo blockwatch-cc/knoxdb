@@ -1053,9 +1053,9 @@ done:
 	MOVQ	AX, ret+24(FP)
 	RET
 
-// func bitsetIndexesAVX2Core(bitmap []byte, out []uint32, decodeTable []uint32, lengthTable []uint8) int
+// func bitsetIndexesAVX2FullCore(bitmap []byte, out []uint32, decodeTable []uint32, lengthTable []uint8) int
 //
-TEXT ·bitsetIndexesAVX2Core(SB), NOSPLIT, $0-104
+TEXT ·bitsetIndexesAVX2FullCore(SB), NOSPLIT, $0-104
 	MOVQ	bitmap_base+0(FP), SI
 	MOVQ	bitmap_len+8(FP), BX
 	MOVQ	out_base+24(FP), DI
@@ -1099,9 +1099,9 @@ done:
     MOVQ        DI, ret+96(FP)
     RET
 
-// func bitsetIndexesAVX2NewCore(bitmap []byte, out []uint32, decodeTable []uint32, lengthTable []uint8) int
+// func bitsetIndexesAVX2SkipCore(bitmap []byte, out []uint32, decodeTable []uint32, lengthTable []uint8) int
 //
-TEXT ·bitsetIndexesAVX2NewCore(SB), NOSPLIT, $0-104
+TEXT ·bitsetIndexesAVX2SkipCore(SB), NOSPLIT, $0-104
 	MOVQ	bitmap_base+0(FP), SI
 	MOVQ	bitmap_len+8(FP), CX
 	MOVQ	out_base+24(FP), DI

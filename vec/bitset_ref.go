@@ -36,3 +36,7 @@ func bitsetPopCount(src []byte, size int) int64 {
 func bitsetRun(src []byte, index, size int) (int, int) {
 	return bitsetRunGeneric(src, index, size)
 }
+
+func bitsetIndexes(src []byte, size int, dst []uint32) int {
+	return bitsetIndexesGenericSkip64(src, size, dst)
+}

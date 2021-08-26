@@ -573,7 +573,7 @@ func (idx *Index) LookupTx(ctx context.Context, tx *Tx, cond Condition) ([]uint6
 	}
 
 	// alloc temp slice from pool
-	keys := idx.table.pkPool.Get().([]uint64)
+	keys := idx.table.u64Pool.Get().([]uint64)
 
 	// fill with hash values
 	switch cond.Mode {
@@ -602,7 +602,7 @@ func (idx *Index) LookupTx(ctx context.Context, tx *Tx, cond Condition) ([]uint6
 		return nil, err
 	}
 	if cond.Mode != FilterModeNotIn {
-		idx.table.pkPool.Put(keys[:0])
+		idx.table.u64Pool.Put(keys[:0])
 	}
 	return res, nil
 }
@@ -622,7 +622,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 	}
 
 	// alloc result slice from pool, should be returned by caller
-	out := idx.table.pkPool.Get().([]uint64)
+	out := idx.table.u64Pool.Get().([]uint64)
 	var nPacks int
 
 	// log.Debugf("Searching for keys %#v", in)
@@ -648,7 +648,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 		// stop when context is canceled
 		if util.InterruptRequested(ctx) {
 			out = out[:0]
-			idx.table.pkPool.Put(out)
+			idx.table.u64Pool.Put(out)
 			return nil, ctx.Err()
 		}
 
@@ -718,7 +718,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 
 	// `in` contains only missing keys now
 	if neg {
-		idx.table.pkPool.Put(out[:0])
+		idx.table.u64Pool.Put(out[:0])
 		out = notfound
 	}
 
