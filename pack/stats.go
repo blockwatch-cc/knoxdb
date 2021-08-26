@@ -81,6 +81,7 @@ type TableStats struct {
 }
 
 type TableSizeStats struct {
+	StatsSize     int `json:"stats_size"`
 	IndexSize     int `json:"index_size"`
 	CacheSize     int `json:"cache_size"`
 	JournalSize   int `json:"journal_size"`

@@ -835,16 +835,22 @@ func MakeInt128LLSlice(sz int) Int128LLSlice {
 	return Int128LLSlice{make([]int64, sz), make([]uint64, sz)}
 }
 
-func (s Int128LLSlice) Append(val Int128) Int128LLSlice {
+func (s *Int128LLSlice) Append(val Int128) Int128LLSlice {
 	s.X0 = append(s.X0, int64(val[0]))
 	s.X1 = append(s.X1, val[1])
-	return s
+	return *s
 }
 
-func (dst Int128LLSlice) AppendFrom(src Int128LLSlice) Int128LLSlice {
+func (dst *Int128LLSlice) AppendFrom(src Int128LLSlice) Int128LLSlice {
 	dst.X0 = append(dst.X0, src.X0...)
 	dst.X1 = append(dst.X1, src.X1...)
-	return dst
+	return *dst
+}
+
+func (dst *Int128LLSlice) Delete(pos, n int) Int128LLSlice {
+	dst.X0 = append(dst.X0[:pos], dst.X0[pos+n:]...)
+	dst.X1 = append(dst.X1[:pos], dst.X1[pos+n:]...)
+	return *dst
 }
 
 func (s Int128LLSlice) Swap(i, j int) {

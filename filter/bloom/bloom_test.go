@@ -31,7 +31,7 @@ func TestFilter_InsertContains(t *testing.T) {
 	v := make([]byte, 4)
 	for i := 0; i < 10000000; i++ {
 		binary.BigEndian.PutUint32(v, uint32(i))
-		filter.Insert(v)
+		filter.Add(v)
 	}
 
 	// None of the values inserted should ever be considered "not possibly in
@@ -68,14 +68,22 @@ func testShortFilter_InsertContains(t *testing.T) {
 		f := bloom.NewFilter(1000, 4)
 
 		// Insert value and validate.
-		f.Insert([]byte("Bess"))
+		f.Add([]byte("Bess"))
 		if !f.Contains([]byte("Bess")) {
+			t.Fatal("expected true")
+		}
+		h1 := bloom.Hash([]byte("Bess"))
+		if !f.ContainsHash(h1) {
 			t.Fatal("expected true")
 		}
 
 		// Insert another value and test.
-		f.Insert([]byte("Emma"))
+		f.Add([]byte("Emma"))
 		if !f.Contains([]byte("Emma")) {
+			t.Fatal("expected true")
+		}
+		h2 := bloom.Hash([]byte("Emma"))
+		if !f.ContainsHash(h2) {
 			t.Fatal("expected true")
 		}
 
@@ -83,25 +91,54 @@ func testShortFilter_InsertContains(t *testing.T) {
 		if f.Contains([]byte("Jane")) {
 			t.Fatal("expected false")
 		}
+		h3 := bloom.Hash([]byte("Jane"))
+		if f.ContainsHash(h3) {
+			t.Fatal("expected false")
+		}
+
+		// Validate multi-hash
+		if !f.ContainsAnyHash([][2]uint64{h1, h3}) {
+			t.Fatal("expected true")
+		}
+		if !f.ContainsAnyHash([][2]uint64{h2, h3}) {
+			t.Fatal("expected true")
+		}
+		if f.ContainsAnyHash([][2]uint64{h3, h3}) {
+			t.Fatal("expected false")
+		}
+
 	})
 }
 
 var benchCases = []struct {
 	m, k uint64
 	n    int
+	v    int
 }{
-	{m: 100, k: 4, n: 1000},
-	{m: 1000, k: 4, n: 1000},
-	{m: 10000, k: 4, n: 1000},
-	{m: 100000, k: 4, n: 1000},
-	{m: 100, k: 8, n: 1000},
-	{m: 1000, k: 8, n: 1000},
-	{m: 10000, k: 8, n: 1000},
-	{m: 100000, k: 8, n: 1000},
-	{m: 100, k: 20, n: 1000},
-	{m: 1000, k: 20, n: 1000},
-	{m: 10000, k: 20, n: 1000},
-	{m: 100000, k: 20, n: 1000},
+	// {m: 100, k: 4, n: 1000, v: 1000},
+	// {m: 1000, k: 4, n: 1000, v: 1000},
+	// {m: 10000, k: 4, n: 1000, v: 1000},
+	// {m: 100000, k: 4, n: 1000, v: 1000},
+	// {m: 100, k: 8, n: 1000, v: 1000},
+	// {m: 1000, k: 8, n: 1000, v: 1000},
+	// {m: 10000, k: 8, n: 1000, v: 1000},
+	// {m: 100000, k: 8, n: 1000, v: 1000},
+	// {m: 100, k: 20, n: 1000, v: 1000},
+	// {m: 1000, k: 20, n: 1000, v: 1000},
+	// {m: 10000, k: 20, n: 1000, v: 1000},
+	// {m: 100000, k: 20, n: 1000, v: 1000},
+
+	// 32k packs
+	{m: 524288, k: 11, n: 32768, v: 1}, // 64kB mem, p=0.0005 (optimal)
+	{m: 524288, k: 4, n: 32768, v: 1},  // 64kB mem, p=0.0024
+	{m: 262144, k: 6, n: 32768, v: 1},  // 32kB mem, p=0.022 (optimal)
+	{m: 262144, k: 4, n: 32768, v: 1},  // 32kB mem, p=0.024
+
+	// 64k packs
+	{m: 1048576, k: 11, n: 65536, v: 1}, // 128k mem, p=0.0005 (optimal)
+	{m: 1048576, k: 4, n: 65536, v: 1},  // 128k mem, p=0.0024
+	{m: 524288, k: 6, n: 65536, v: 1},   // 64k mem,p=0.022 (optimal)
+	{m: 524288, k: 4, n: 65536, v: 1},   // 64k mem,p=0.024
 }
 
 func BenchmarkFilter_Insert(b *testing.B) {
@@ -116,7 +153,7 @@ func BenchmarkFilter_Insert(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				for _, v := range data {
-					filter.Insert(v)
+					filter.Add(v)
 				}
 			}
 		})
@@ -137,22 +174,24 @@ func BenchmarkFilter_Contains(b *testing.B) {
 
 		filter := bloom.NewFilter(c.m, c.k)
 		for _, v := range data {
-			filter.Insert(v)
+			filter.Add(v)
 		}
 
-		b.Run(fmt.Sprintf("m=%d_k=%d_n=%d", c.m, c.k, c.n), func(b *testing.B) {
+		b.Run(fmt.Sprintf("IN m=%d_k=%d_n=%d", c.m, c.k, c.n), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				for _, v := range data {
-					okResult = filter.Contains(v)
-					if !okResult {
-						b.Fatalf("Filter returned negative for value %q in set", v)
-					}
+				for _, v := range data[:c.v] {
+					_ = filter.Contains(v)
 				}
+			}
+		})
 
-				// And now a bunch of values that don't exist.
-				for _, v := range notData {
-					okResult = filter.Contains(v)
+		// not in
+		b.Run(fmt.Sprintf("NI m=%d_k=%d_n=%d", c.m, c.k, c.n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, v := range notData[:c.v] {
+					_ = filter.Contains(v)
 				}
 			}
 		})
@@ -171,8 +210,8 @@ func BenchmarkFilter_Merge(b *testing.B) {
 		filter1 := bloom.NewFilter(c.m, c.k)
 		filter2 := bloom.NewFilter(c.m, c.k)
 		for i := 0; i < c.n; i++ {
-			filter1.Insert(data1[i])
-			filter2.Insert(data2[i])
+			filter1.Add(data1[i])
+			filter2.Add(data2[i])
 		}
 
 		b.Run(fmt.Sprintf("m=%d_k=%d_n=%d", c.m, c.k, c.n), func(b *testing.B) {
