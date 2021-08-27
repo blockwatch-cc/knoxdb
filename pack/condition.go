@@ -321,7 +321,7 @@ func (c *Condition) Compile() (err error) {
 		if buildBloom {
 			c.bloomHashes = [][2]uint64{bloom.Hash(c.Field.Type.Bytes(c.Value))}
 		}
-		// anything but IN, NIN is done here
+		// anything but IN, NIN is finished here
 		return
 	}
 
@@ -633,9 +633,10 @@ func (c *Condition) Compile() (err error) {
 // match package min/max values against the condition
 // Note: min/max are raw storage values (i.e. for decimals, they are scaled integers)
 func (c Condition) MaybeMatchPack(info PackInfo) bool {
-	min := info.Blocks[c.Field.Index].MinValue
-	max := info.Blocks[c.Field.Index].MaxValue
-	filter := info.Blocks[c.Field.Index].Bloom
+	idx := c.Field.Index
+	min := info.Blocks[idx].MinValue
+	max := info.Blocks[idx].MaxValue
+	filter := info.Blocks[idx].Bloom
 	scale := c.Field.Scale
 	typ := c.Field.Type
 	// decimals only: convert storage type used in block info to field type
@@ -1644,7 +1645,11 @@ func (n ConditionTreeNode) MaybeMatchPack(info PackInfo) bool {
 		}
 	}
 
-	// when all AND nodes match
+	// no OR nodes match
+	if n.OrKind {
+		return false
+	}
+	// all AND nodes match
 	return true
 }
 
