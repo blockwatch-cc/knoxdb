@@ -544,6 +544,25 @@ func (q Query) Dump() string {
 	return string(buf.Bytes())
 }
 
+func (j Join) Dump() string {
+	buf := bytes.NewBuffer(nil)
+	fmt.Fprintln(buf, "Join:", j.Type.String(), "=>")
+	fmt.Fprintln(buf, "  Predicate:", j.Predicate.Left.Alias, j.Predicate.Mode.String(), j.Predicate.Right.Alias)
+	fmt.Fprintln(buf, "  Left:", j.Left.Table.Name())
+	fmt.Fprintln(buf, "  Where:")
+	j.Left.Where.Dump(0, buf)
+	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Left.Fields.Names(), ","))
+	fmt.Fprintln(buf, "  AS:", strings.Join(j.Left.FieldsAs, ","))
+	fmt.Fprintln(buf, "  Limit:", j.Left.Limit)
+	fmt.Fprintln(buf, "  Right:", j.Right.Table.Name())
+	fmt.Fprintln(buf, "  Where:")
+	j.Right.Where.Dump(0, buf)
+	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Right.Fields.Names(), ","))
+	fmt.Fprintln(buf, "  AS:", strings.Join(j.Right.FieldsAs, ","))
+	fmt.Fprintln(buf, "  Limit:", j.Right.Limit)
+	return string(buf.Bytes())
+}
+
 func (p *Package) Validate() error {
 	if a, b := len(p.fields), p.nFields; a != b {
 		return fmt.Errorf("pack: mismatch len %d/%d", a, b)

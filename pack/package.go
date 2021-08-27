@@ -262,6 +262,32 @@ func (p *Package) InitFieldsFrom(src *Package) error {
 	return p.InitFields(src.fields, src.tinfo)
 }
 
+// may be called from Join, no pk required
+func (p *Package) InitResultFields(fields FieldList, tinfo *typeInfo) error {
+	if len(fields) > 256 {
+		return fmt.Errorf("pack: cannot handle more than 256 fields")
+	}
+	if len(fields) == 0 {
+		return fmt.Errorf("pack: empty fields")
+	}
+	if len(p.fields) > 0 {
+		return fmt.Errorf("pack: already initialized")
+	}
+
+	p.fields = fields
+	p.nFields = len(fields)
+	p.pkindex = fields.PkIndex()
+	p.tinfo = tinfo
+
+	if len(p.blocks) == 0 {
+		p.blocks = make([]*block.Block, p.nFields)
+		for i, f := range fields {
+			p.blocks[i] = f.NewBlock(p.capHint)
+		}
+	}
+	return nil
+}
+
 func (p *Package) Clone(capacity int) (*Package, error) {
 	// cloned pack has no identity yet
 	// cloning a stripped pack is allowed

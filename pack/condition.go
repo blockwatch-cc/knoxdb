@@ -1516,6 +1516,18 @@ func (n ConditionTreeNode) Fields() FieldList {
 	return fl
 }
 
+// Len returns the total number of condition leaf nodes
+func (n ConditionTreeNode) Len() int {
+	if n.Leaf() {
+		return 1
+	}
+	l := 0
+	for _, v := range n.Children {
+		l += v.Len()
+	}
+	return l
+}
+
 // returns the decision tree size (including sub-conditions)
 func (n ConditionTreeNode) Weight() int {
 	if n.Leaf() {

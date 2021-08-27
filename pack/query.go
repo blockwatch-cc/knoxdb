@@ -164,15 +164,15 @@ func (q Query) Check() error {
 	for _, v := range q.reqfields {
 		// field must exist
 		if !tfields.Contains(v.Name) {
-			return fmt.Errorf("undefined field '%s.%s' in query %s", q.table.name, v.Name, q.Name)
+			return fmt.Errorf("undefined field '%s/%s' in query %s", q.table.name, v.Name, q.Name)
 		}
 		// field type must match
 		if tfields.Find(v.Name).Type != v.Type {
-			return fmt.Errorf("mismatched type %s for field '%s.%s' in query %s", v.Type, q.table.name, v.Name, q.Name)
+			return fmt.Errorf("mismatched type %s for field '%s/%s' in query %s", v.Type, q.table.name, v.Name, q.Name)
 		}
 		// field index must be valid
 		if v.Index < 0 || v.Index >= len(tfields) {
-			return fmt.Errorf("illegal index %d for field '%s.%s' in query %s", v.Index, q.table.name, v.Name, q.Name)
+			return fmt.Errorf("illegal index %d for field '%s/%s' in query %s", v.Index, q.table.name, v.Name, q.Name)
 		}
 	}
 	// root condition may be empty but must not be a leaf
