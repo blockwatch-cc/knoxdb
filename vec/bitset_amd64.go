@@ -6,7 +6,7 @@
 package vec
 
 import (
-// "fmt"
+//"fmt"
 )
 
 var lengthTable = []uint8{
@@ -294,6 +294,9 @@ func bitsetAndAVX2(dst, src []byte)
 func bitsetAndAVX2Flag1(dst, src []byte) int
 
 //go:noescape
+func bitsetAndAVX2Flag2Core(dst, src []byte) (int, int)
+
+//go:noescape
 func bitsetAndNotAVX2(dst, src []byte)
 
 //go:noescape
@@ -429,6 +432,29 @@ func bitsetPopCount(src []byte, size int) int64 {
 	}
 
 }
+
+func bitsetAndAVX2Flag2(dst, src []byte, size int) (int, int) {
+	l := size >> 3
+	var any int
+	var all int = 1
+	if l > 0 {
+		any, all = bitsetAndAVX2Flag2Core(dst[:l], src[:l])
+	}
+	//    fmt.Printf("all = %x", uint(all))
+	if size&0x03 != 0 {
+		dst[l] &= src[l]
+		dst[l] &= bytemask(size)
+		any |= int(dst[l])
+		if all != 0 && dst[l] != bytemask(size) {
+			all = 0
+		}
+	}
+	return any, all
+}
+
+/*func bitsetAndAVX2Flag2(dst, src []byte, size int) (int, int) {
+    return bitsetAndAVX2Flag2Core(dst, src)
+}*/
 
 func bitsetRun(src []byte, index, size int) (int, int) {
 	switch {

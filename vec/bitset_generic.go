@@ -41,6 +41,27 @@ func bitsetAndGenericFlag1(dst, src []byte, size int) int {
 	return int(res)
 }
 
+func bitsetAndGenericFlag2(dst, src []byte, size int) (int, int) {
+	l := size >> 3
+	var any byte
+	var all byte = 0xff
+	for i := 0; i < l; i++ {
+		dst[i] &= src[i]
+		any |= dst[i]
+		all &= dst[i]
+	}
+	if size&0x03 != 0 {
+		dst[l] &= src[l]
+		dst[l] &= bytemask(size)
+		any |= dst[l]
+		all &= (dst[l] | ^bytemask(size))
+	}
+	if all != 0xff {
+		all = 0
+	}
+	return int(any), int(all)
+}
+
 func bitsetAndNotGeneric(dst, src []byte, size int) {
 	l := (size + 7) >> 3
 	for i := 0; i < l; i++ {
