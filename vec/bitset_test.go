@@ -480,21 +480,21 @@ func TestBitAndGenericFlag2(T *testing.T) {
 				// same value, same slice
 				any, all := bitsetAndGenericFlag2(dst, dst, sz)
 				if pt == 0x80 && sz == 7 {
-					if any != 0 {
-						T.Errorf("dst===src: unexpected return value %x, expected 0", any)
+					if any {
+						T.Errorf("dst===src: unexpected return value %v, expected false", any)
 					}
 				} else {
-					if any == 0 {
-						T.Errorf("dst===src: unexpected return value %x, expected !=0", any)
+					if !any {
+						T.Errorf("dst===src: unexpected return value %v, expected true", any)
 					}
 				}
 				if pt == 0xff {
-					if all == 0 {
-						T.Errorf("dst===src: unexpected return value %x, expected != 0", uint(all))
+					if !all {
+						T.Errorf("dst===src: unexpected return value %v, expected true", all)
 					}
 				} else {
-					if all != 0 {
-						T.Errorf("dst===src: unexpected return value %x, expected 0", uint(all))
+					if all {
+						T.Errorf("dst===src: unexpected return value %v, expected false", all)
 					}
 				}
 				if bytes.Compare(dst, src) != 0 {
@@ -508,21 +508,21 @@ func TestBitAndGenericFlag2(T *testing.T) {
 				copy(dst, src)
 				any, all = bitsetAndGenericFlag2(dst, src, sz)
 				if pt == 0x80 && sz == 7 {
-					if any != 0 {
-						T.Errorf("dst==src: unexpected return value %x, expected 0", any)
+					if any {
+						T.Errorf("dst==src: unexpected return value %v, expected false", any)
 					}
 				} else {
-					if any == 0 {
-						T.Errorf("dst==src: unexpected return value %x, expected 0", any)
+					if !any {
+						T.Errorf("dst==src: unexpected return value %v, expected true", any)
 					}
 				}
 				if pt == 0xff {
-					if all == 0 {
-						T.Errorf("dst==src: unexpected return value %x, expected != 0", uint(all))
+					if !all {
+						T.Errorf("dst==src: unexpected return value %v, expected true", all)
 					}
 				} else {
-					if all != 0 {
-						T.Errorf("dst==src: unexpected return value %x, expected 0", uint(all))
+					if all {
+						T.Errorf("dst==src: unexpected return value %v, expected false", all)
 					}
 				}
 				if bytes.Compare(dst, src) != 0 {
@@ -535,11 +535,11 @@ func TestBitAndGenericFlag2(T *testing.T) {
 				// all zeros
 				copy(dst, src)
 				any, all = bitsetAndGenericFlag2(dst, zeros, sz)
-				if any != 0 {
-					T.Errorf("zeros: unexpected return value %x, expected %x", any, 0)
+				if any {
+					T.Errorf("zeros: unexpected return value %v, expected false", any)
 				}
-				if all != 0 {
-					T.Errorf("zeros: unexpected return value %x, expected 0", uint(all))
+				if all {
+					T.Errorf("zeros: unexpected return value %v, expected false", all)
 				}
 				if bytes.Compare(dst, zeros) != 0 {
 					T.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
@@ -552,21 +552,21 @@ func TestBitAndGenericFlag2(T *testing.T) {
 				copy(dst, src)
 				any, all = bitsetAndGenericFlag2(dst, ones, sz)
 				if pt == 0x80 && sz == 7 {
-					if any != 0 {
-						T.Errorf("ones: unexpected return value %x, expected 0", any)
+					if any {
+						T.Errorf("ones: unexpected return value %v, expected false", any)
 					}
 				} else {
-					if any == 0 {
-						T.Errorf("ones: unexpected return value %x, expected !=0", any)
+					if !any {
+						T.Errorf("ones: unexpected return value %v, expected true", any)
 					}
 				}
 				if pt == 0xff {
-					if all == 0 {
-						T.Errorf("ones: unexpected return value %x, expected != 0", uint(all))
+					if !all {
+						T.Errorf("ones: unexpected return value %v, expected true", all)
 					}
 				} else {
-					if all != 0 {
-						T.Errorf("ones: unexpected return value %x, expected 0", uint(all))
+					if all {
+						T.Errorf("ones: unexpected return value %v, expected 0", all)
 					}
 				}
 				if bytes.Compare(dst, src) != 0 {
@@ -596,21 +596,21 @@ func TestBitAndAVX2Flag2(T *testing.T) {
 				// same value, same slice
 				any, all := bitsetAndAVX2Flag2(dst, dst, sz)
 				if pt == 0x80 && sz == 7 {
-					if any != 0 {
-						T.Errorf("dst===src: unexpected return value %x, expected 0", any)
+					if any {
+						T.Errorf("dst===src: unexpected return value %v, expected false", any)
 					}
 				} else {
-					if any == 0 {
-						T.Errorf("dst===src: unexpected return value %x, expected !=0", any)
+					if !any {
+						T.Errorf("dst===src: unexpected return value %v, expected true", any)
 					}
 				}
 				if pt == 0xff {
-					if all == 0 {
-						T.Errorf("dst===src: unexpected return value %x, expected != 0", uint(all))
+					if !all {
+						T.Errorf("dst===src: unexpected return value %v, expected true", all)
 					}
 				} else {
-					if all != 0 {
-						T.Errorf("dst===src: unexpected return value %x, expected 0", uint(all))
+					if all {
+						T.Errorf("dst===src: unexpected return value %v, expected false", all)
 					}
 				}
 				if bytes.Compare(dst, src) != 0 {
@@ -624,21 +624,21 @@ func TestBitAndAVX2Flag2(T *testing.T) {
 				copy(dst, src)
 				any, all = bitsetAndAVX2Flag2(dst, src, sz)
 				if pt == 0x80 && sz == 7 {
-					if any != 0 {
-						T.Errorf("dst==src: unexpected return value %x, expected 0", any)
+					if any {
+						T.Errorf("dst==src: unexpected return value %v, expected false", any)
 					}
 				} else {
-					if any == 0 {
-						T.Errorf("dst==src: unexpected return value %x, expected 0", any)
+					if !any {
+						T.Errorf("dst==src: unexpected return value %v, expected true", any)
 					}
 				}
 				if pt == 0xff {
-					if all == 0 {
-						T.Errorf("dst==src: unexpected return value %x, expected != 0", uint(all))
+					if !all {
+						T.Errorf("dst==src: unexpected return value %v, expected true", all)
 					}
 				} else {
-					if all != 0 {
-						T.Errorf("dst==src: unexpected return value %x, expected 0", uint(all))
+					if all {
+						T.Errorf("dst==src: unexpected return value %v, expected false", all)
 					}
 				}
 				if bytes.Compare(dst, src) != 0 {
@@ -651,11 +651,11 @@ func TestBitAndAVX2Flag2(T *testing.T) {
 				// all zeros
 				copy(dst, src)
 				any, all = bitsetAndAVX2Flag2(dst, zeros, sz)
-				if any != 0 {
-					T.Errorf("zeros: unexpected return value %x, expected %x", any, 0)
+				if any {
+					T.Errorf("zeros: unexpected return value %v, expected false", any)
 				}
-				if all != 0 {
-					T.Errorf("zeros: unexpected return value %x, expected 0", uint(all))
+				if all {
+					T.Errorf("zeros: unexpected return value %v, expected false", all)
 				}
 				if bytes.Compare(dst, zeros) != 0 {
 					T.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
@@ -668,21 +668,21 @@ func TestBitAndAVX2Flag2(T *testing.T) {
 				copy(dst, src)
 				any, all = bitsetAndAVX2Flag2(dst, ones, sz)
 				if pt == 0x80 && sz == 7 {
-					if any != 0 {
-						T.Errorf("ones: unexpected return value %x, expected 0", any)
+					if any {
+						T.Errorf("ones: unexpected return value %v, expected false", any)
 					}
 				} else {
-					if any == 0 {
-						T.Errorf("ones: unexpected return value %x, expected !=0", any)
+					if !any {
+						T.Errorf("ones: unexpected return value %v, expected true", any)
 					}
 				}
 				if pt == 0xff {
-					if all == 0 {
-						T.Errorf("ones: unexpected return value %x, expected != 0", uint(all))
+					if !all {
+						T.Errorf("ones: unexpected return value %v, expected true", all)
 					}
 				} else {
-					if all != 0 {
-						T.Errorf("ones: unexpected return value %x, expected 0", uint(all))
+					if all {
+						T.Errorf("ones: unexpected return value %v, expected false", all)
 					}
 				}
 				if bytes.Compare(dst, src) != 0 {

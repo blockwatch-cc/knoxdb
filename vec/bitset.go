@@ -196,21 +196,22 @@ func (s *Bitset) Close() {
 	}
 }
 
-func (s *Bitset) And(r *Bitset) (*Bitset, int) {
+func (s *Bitset) And(r *Bitset) (*Bitset, bool, bool) {
 	if s.size == 0 || s.cnt == 0 {
-		return s, 0
+		return s, false, false
 	}
 	if r.Count() == 0 {
 		s.Zero()
-		return s, 0
+		return s, false, false
 	}
-	any := bitsetAnd(s.Bytes(), r.Bytes(), min(s.size, r.size))
-	if any == 0 {
+	any, all := bitsetAnd(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	s.cnt = -1
+	if !any {
 		s.cnt = 0
-	} else {
-		s.cnt = -1
+	} else if all {
+		s.cnt = s.size
 	}
-	return s, any
+	return s, any, all
 }
 
 func (s *Bitset) AndNot(r *Bitset) *Bitset {

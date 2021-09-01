@@ -294,7 +294,7 @@ func bitsetAndAVX2(dst, src []byte)
 func bitsetAndAVX2Flag1(dst, src []byte) int
 
 //go:noescape
-func bitsetAndAVX2Flag2Core(dst, src []byte) (int, int)
+func bitsetAndAVX2Flag2Core(dst, src []byte) (bool, bool)
 
 //go:noescape
 func bitsetAndNotAVX2(dst, src []byte)
@@ -329,14 +329,15 @@ func bitsetNextOneBitAVX2(src []byte, index uint64) uint64
 //go:noescape
 func bitsetNextZeroBitAVX2(src []byte, index uint64) uint64
 
-func bitsetAnd(dst, src []byte, size int) int {
+func bitsetAnd(dst, src []byte, size int) (bool, bool) {
 	switch {
 	case useAVX2:
-		ret := bitsetAndAVX2Flag1(dst, src)
-		dst[len(dst)-1] &= bytemask(size)
-		return ret
+		return bitsetAndAVX2Flag2(dst, src, size)
+		//ret := bitsetAndAVX2Flag1(dst, src)
+		//dst[len(dst)-1] &= bytemask(size)
+		//return ret
 	default:
-		return bitsetAndGenericFlag1(dst, src, size)
+		return bitsetAndGenericFlag2(dst, src, size)
 	}
 }
 
@@ -433,28 +434,27 @@ func bitsetPopCount(src []byte, size int) int64 {
 
 }
 
-func bitsetAndAVX2Flag2(dst, src []byte, size int) (int, int) {
+func bitsetAndAVX2Flag2(dst, src []byte, size int) (bool, bool) {
+	if size == 0 {
+		return false, false
+	}
 	l := size >> 3
-	var any int
-	var all int = 1
+	var any, all bool
 	if l > 0 {
 		any, all = bitsetAndAVX2Flag2Core(dst[:l], src[:l])
+	} else {
+		any, all = false, true
 	}
-	//    fmt.Printf("all = %x", uint(all))
 	if size&0x03 != 0 {
 		dst[l] &= src[l]
 		dst[l] &= bytemask(size)
-		any |= int(dst[l])
-		if all != 0 && dst[l] != bytemask(size) {
-			all = 0
+		any = any || dst[l] != 0
+		if dst[l] != bytemask(size) {
+			all = false
 		}
 	}
 	return any, all
 }
-
-/*func bitsetAndAVX2Flag2(dst, src []byte, size int) (int, int) {
-    return bitsetAndAVX2Flag2Core(dst, src)
-}*/
 
 func bitsetRun(src []byte, index, size int) (int, int) {
 	switch {

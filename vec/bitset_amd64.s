@@ -625,9 +625,9 @@ done:
     ANDB    AX, R11 \
 	MOVB	AX, 0(SI);
 
-// func bitsetAndAVX2Flag2Core(dst, src []byte) (int, int)
+// func bitsetAndAVX2Flag2Core(dst, src []byte) (bool, bool)
 //
-TEXT ·bitsetAndAVX2Flag2Core(SB), NOSPLIT, $0-64
+TEXT ·bitsetAndAVX2Flag2Core(SB), NOSPLIT, $0-50
 	MOVQ	dst_base+0(FP), SI
 	MOVQ	dst_len+8(FP), BX
 	MOVQ	src_base+24(FP), DI
@@ -707,12 +707,11 @@ loop_i8:
 
 done:
     // collected ones are in R10
-	MOVQ	R10, ret+48(FP)
+    CMPL    R10, $0                     // all zero?
+	SETNE	ret+48(FP)
     // collected zeros are in R11
-    XORQ    R12, R12
-    CMPL    R11, $0xffffffff         // all ones?
-    SETEQ   R12
-	MOVQ	R12, ret1+56(FP)
+    CMPL    R11, $0xffffffff            // all ones?
+	SETEQ   ret1+49(FP)
 	RET
 
 // func bitsetNegAVX2(src []byte)
