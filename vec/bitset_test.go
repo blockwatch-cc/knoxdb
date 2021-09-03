@@ -1844,6 +1844,70 @@ var runTestcases = []bitsetRunTestcase{
 		idx: append(fillIndex(0, 64), fillIndex(128, 64)...),
 	},
 	bitsetRunTestcase{
+		name: "128_and_cd",
+		buf:  append(bytes.Repeat([]byte{0x0}, 15), byte(0xcd)),
+		size: 128,
+		runs: [][2]int{
+			[2]int{128 - 8, 1},
+			[2]int{128 - 6, 2},
+			[2]int{128 - 2, 2},
+		},
+		rruns: [][2]int{
+			[2]int{128 - 1, 2},
+			[2]int{128 - 5, 2},
+			[2]int{128 - 8, 1},
+		},
+		idx: []uint32{128 - 8, 128 - 6, 128 - 5, 128 - 2, 128 - 1},
+	},
+	bitsetRunTestcase{
+		name: "136_and_cd",
+		buf:  append(bytes.Repeat([]byte{0x0}, 16), byte(0xcd)),
+		size: 136,
+		runs: [][2]int{
+			[2]int{136 - 8, 1},
+			[2]int{136 - 6, 2},
+			[2]int{136 - 2, 2},
+		},
+		rruns: [][2]int{
+			[2]int{136 - 1, 2},
+			[2]int{136 - 5, 2},
+			[2]int{136 - 8, 1},
+		},
+		idx: []uint32{136 - 8, 136 - 6, 136 - 5, 136 - 2, 136 - 1},
+	},
+	bitsetRunTestcase{
+		name: "2048_and_cd",
+		buf:  append(bytes.Repeat([]byte{0x0}, 255), byte(0xcd)),
+		size: 2048,
+		runs: [][2]int{
+			[2]int{2048 - 8, 1},
+			[2]int{2048 - 6, 2},
+			[2]int{2048 - 2, 2},
+		},
+		rruns: [][2]int{
+			[2]int{2048 - 1, 2},
+			[2]int{2048 - 5, 2},
+			[2]int{2048 - 8, 1},
+		},
+		idx: []uint32{2048 - 8, 2048 - 6, 2048 - 5, 2048 - 2, 2048 - 1},
+	},
+	bitsetRunTestcase{
+		name: "2056_and_cd",
+		buf:  append(bytes.Repeat([]byte{0x0}, 256), byte(0xcd)),
+		size: 2056,
+		runs: [][2]int{
+			[2]int{2056 - 8, 1},
+			[2]int{2056 - 6, 2},
+			[2]int{2056 - 2, 2},
+		},
+		rruns: [][2]int{
+			[2]int{2056 - 1, 2},
+			[2]int{2056 - 5, 2},
+			[2]int{2056 - 8, 1},
+		},
+		idx: []uint32{2056 - 8, 2056 - 6, 2056 - 5, 2056 - 2, 2056 - 1},
+	},
+	bitsetRunTestcase{
 		name: "64k_and_cd",
 		buf:  append(bytes.Repeat([]byte{0x0}, 8*1024-1), byte(0xcd)),
 		size: 64 * 1024,
