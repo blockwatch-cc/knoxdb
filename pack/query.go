@@ -175,7 +175,7 @@ func (q Query) Check() error {
 			return fmt.Errorf("illegal index %d for field '%s/%s' in query %s", v.Index, q.table.name, v.Name, q.Name)
 		}
 	}
-	// root condition may be empty but must not be a leaf
+	// root condition may be empty but must not be a leaf for index queries to work
 	if q.Conditions.Leaf() {
 		return fmt.Errorf("unexpected simple condition tree in query %s", q.Name)
 	}
@@ -405,25 +405,7 @@ func (q Query) And(conds ...UnboundCondition) Query {
 	if len(conds) == 0 {
 		return q
 	}
-
-	// create a new AND node to bind children
-	node := ConditionTreeNode{
-		OrKind:   COND_AND,
-		Children: make([]ConditionTreeNode, 0),
-	}
-
-	// bind each unbound condition and add the new node element
-	for _, v := range conds {
-		node.AddNode(v.Bind(q.table))
-	}
-
-	// append to tree
-	if q.Conditions.Empty() {
-		q.Conditions.ReplaceNode(node)
-	} else {
-		q.Conditions.AddNode(node)
-	}
-
+	q.Conditions.AddNode(And(conds...).Bind(q.table))
 	return q
 }
 
@@ -431,25 +413,7 @@ func (q Query) Or(conds ...UnboundCondition) Query {
 	if len(conds) == 0 {
 		return q
 	}
-
-	// create a new OR node to bind children
-	node := ConditionTreeNode{
-		OrKind:   COND_OR,
-		Children: make([]ConditionTreeNode, 0),
-	}
-
-	// bind each unbound condition and add to the new node element
-	for _, v := range conds {
-		node.AddNode(v.Bind(q.table))
-	}
-
-	// append to tree
-	if q.Conditions.Empty() {
-		q.Conditions.ReplaceNode(node)
-	} else {
-		q.Conditions.AddNode(node)
-	}
-
+	q.Conditions.AddNode(Or(conds...).Bind(q.table))
 	return q
 }
 

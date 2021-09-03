@@ -433,7 +433,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			}
 			log.Debug(newLogClosure(func() string {
 				return fmt.Sprintf("join: left table query with %d cond, cursor=%d limit=%d: %s",
-					lQ.Conditions.Len(), pkcursor, lQ.Limit, lQ.Dump())
+					lQ.Conditions.Size(), pkcursor, lQ.Limit, lQ.Dump())
 			}))
 
 			lRes, err = j.Left.Table.Query(ctx, lQ)
@@ -485,7 +485,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			}
 			log.Debug(newLogClosure(func() string {
 				return fmt.Sprintf("join: right table query with %d cond and limit %d: %s",
-					rQ.Conditions.Len(), rQ.Limit, rQ.Dump())
+					rQ.Conditions.Size(), rQ.Limit, rQ.Dump())
 			}))
 
 			rRes, err = j.Right.Table.Query(ctx, rQ)
@@ -514,7 +514,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			}
 			log.Debug(newLogClosure(func() string {
 				return fmt.Sprintf("join: right table query with %d cond, cursor=%d limit=%d: %s",
-					rQ.Conditions.Len(), pkcursor, rQ.Limit, q.Dump())
+					rQ.Conditions.Size(), pkcursor, rQ.Limit, q.Dump())
 			}))
 
 			rRes, err = j.Right.Table.Query(ctx, rQ)
@@ -565,7 +565,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			}
 			log.Debug(newLogClosure(func() string {
 				return fmt.Sprintf("join: left table query with %d cond and limit %d: %s",
-					lQ.Conditions.Len(), lQ.Limit, lQ.Dump())
+					lQ.Conditions.Size(), lQ.Limit, lQ.Dump())
 			}))
 
 			lRes, err = j.Left.Table.Query(ctx, lQ)
@@ -625,7 +625,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 		// POST-PROCESS
 		// ------------------------------------------------------------
 		if havePostFilter {
-			log.Debugf("join: filtering result with %d rows against %d conds", agg.Rows(), q.Conditions.Len())
+			log.Debugf("join: filtering result with %d rows against %d conds", agg.Rows(), q.Conditions.Size())
 
 			// filter result by query
 			bits := q.Conditions.MatchPack(agg.pkg, PackInfo{})
