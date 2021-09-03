@@ -403,8 +403,8 @@ func bitsetIndexesAVX2Skip(src []byte, size int, dst []uint32) int {
 
 func bitsetIndexes(src []byte, size int, dst []uint32) int {
 	switch {
-	// case useAVX2:
-	// 	return bitsetIndexesAVX2Skip(src, size, dst)
+	case useAVX2:
+		return bitsetIndexesAVX2Skip(src, size, dst)
 	default:
 		return bitsetIndexesGenericSkip64(src, size, dst)
 	}
