@@ -2242,6 +2242,18 @@ func (t *Table) Stream(ctx context.Context, q Query, fn func(r Row) error) error
 	}
 }
 
+func hasdiff(a, b []uint32) bool {
+	if len(a) != len(b) {
+		return true
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return true
+		}
+	}
+	return false
+}
+
 // Similar to QueryTx but returns each match via callback function to allow stream
 // processing at low memory overheads.
 func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) error) error {
@@ -2286,6 +2298,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// (a) index match returned any results or
 	// (b) when no index exists
 	u32slice := t.u32Pool.Get().([]uint32)
+	u32slice2 := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
 		q.lap = time.Now()
 	packloop:
@@ -2304,7 +2317,11 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 			// identify and forward matches
 			bits := q.Conditions.MatchPack(pkg, t.packidx.packs[p])
 			// log.Debugf("Table %s: %d results in pack %d", t.name, bits.Count(), pkg.key)
-			for _, idx := range bits.IndexesU32(u32slice) {
+			idxs := bits.IndexesU32(u32slice)
+			if hasdiff(idxs, bits.IndexesU32_Generic(u32slice2)) {
+				log.Errorf("Index Diff for bitset len=%d %s", bits.Len(), hex.EncodeToString(bits.Bytes()))
+			}
+			for _, idx := range idxs {
 				i := int(idx)
 
 				// skip broken entries
@@ -2358,6 +2375,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 		q.lap = time.Now()
 	}
 	t.u32Pool.Put(u32slice)
+	t.u32Pool.Put(u32slice2)
 
 	if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 		return nil
