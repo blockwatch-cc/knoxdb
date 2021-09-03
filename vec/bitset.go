@@ -636,26 +636,6 @@ func (s *Bitset) IndexesU32(slice []uint32) []uint32 {
 	return slice[:n]
 }
 
-func (s *Bitset) IndexesU32_Generic(slice []uint32) []uint32 {
-	cnt := s.cnt
-	switch {
-	case cnt == 0:
-		return slice[:0]
-	case cnt < 0:
-		cnt = s.size
-	}
-	// ensure slice dimension is multiple of 8, we need this for our
-	// index lookup algo which always writes multiples of 8 entries
-	cnt = roundUpPow2(cnt, 8)
-	if slice == nil || cap(slice) < cnt {
-		slice = make([]uint32, cnt)
-	} else {
-		slice = slice[:cnt]
-	}
-	n := bitsetIndexesGenericSkip64(s.buf, s.size, slice)
-	return slice[:n]
-}
-
 // Slice returns a boolean slice containing all values
 func (s Bitset) Slice() []bool {
 	res := make([]bool, s.size)
