@@ -1517,16 +1517,35 @@ func (n ConditionTreeNode) Fields() FieldList {
 	return fl
 }
 
-// Len returns the total number of condition leaf nodes
-func (n ConditionTreeNode) Len() int {
+// Size returns the total number of condition leaf nodes
+func (n ConditionTreeNode) Size() int {
 	if n.Leaf() {
 		return 1
 	}
 	l := 0
 	for _, v := range n.Children {
-		l += v.Len()
+		l += v.Size()
 	}
 	return l
+}
+
+// Depth returns the max number of tree levels
+func (n ConditionTreeNode) Depth() int {
+	return n.depth(0)
+}
+
+func (n ConditionTreeNode) depth(level int) int {
+	if n.Empty() {
+		return level
+	}
+	if n.Leaf() {
+		return level + 1
+	}
+	d := level + 1
+	for _, v := range n.Children {
+		d = util.Max(d, v.depth(level+1))
+	}
+	return d
 }
 
 // returns the decision tree size (including sub-conditions)
@@ -1560,60 +1579,41 @@ func (n ConditionTreeNode) Conditions() []*Condition {
 }
 
 func (n *ConditionTreeNode) AddAndCondition(c *Condition) {
-	// create a new root when operation changes
-	if n.OrKind || n.Leaf() {
-		clone := ConditionTreeNode{
-			OrKind:   n.OrKind,
-			Children: n.Children,
-			Cond:     n.Cond,
-		}
-		n.OrKind = COND_AND
-		n.Children = []ConditionTreeNode{clone}
+	node := ConditionTreeNode{
+		OrKind: COND_AND,
+		Cond:   c,
 	}
-
-	// append new condition to this element
-	n.Children = append(n.Children, ConditionTreeNode{Cond: c})
+	n.AddNode(node)
 }
 
 func (n *ConditionTreeNode) AddOrCondition(c *Condition) {
-	// create a new root when operation changes
-	if !n.OrKind || n.Leaf() {
-		clone := ConditionTreeNode{
-			OrKind:   n.OrKind,
-			Children: n.Children,
-			Cond:     n.Cond,
-		}
-		n.OrKind = COND_OR
-		n.Children = []ConditionTreeNode{clone}
+	node := ConditionTreeNode{
+		OrKind: COND_OR,
+		Cond:   c,
 	}
-
-	// append new condition to this element
-	n.Children = append(n.Children, ConditionTreeNode{Cond: c})
+	n.AddNode(node)
 }
 
-func (n *ConditionTreeNode) ReplaceNode(node ConditionTreeNode) {
-	n.Cond = node.Cond
-	n.OrKind = node.OrKind
-	n.Children = node.Children
-}
-
+// Invariants
+// - root is always and AND node
+// - root is never a leaf node
+// - root may be empty
 func (n *ConditionTreeNode) AddNode(node ConditionTreeNode) {
-	// create a new root when operation changes
-	if n.Leaf() || (!node.Leaf() && n.OrKind != node.OrKind) {
+	if n.Leaf() {
 		clone := ConditionTreeNode{
 			OrKind:   n.OrKind,
 			Children: n.Children,
 			Cond:     n.Cond,
 		}
-		n.OrKind = node.OrKind
+		n.Cond = nil
 		n.Children = []ConditionTreeNode{clone}
 	}
 
 	// append new condition to this element
-	if node.Leaf() {
-		n.Children = append(n.Children, node)
-	} else {
+	if n.OrKind == node.OrKind && !node.Leaf() {
 		n.Children = append(n.Children, node.Children...)
+	} else {
+		n.Children = append(n.Children, node)
 	}
 }
 
