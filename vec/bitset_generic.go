@@ -56,9 +56,6 @@ func bitsetAndGenericFlag2(dst, src []byte, size int) (bool, bool) {
 		any |= dst[l]
 		all &= (dst[l] | ^bytemask(size))
 	}
-	/*if all != 0xff {
-		all = 0
-	}*/
 	return any != 0, all == 0xff
 }
 
@@ -87,6 +84,24 @@ func bitsetOrGenericFlag1(dst, src []byte, size int) int {
 	}
 	dst[l-1] &= bytemask(size)
 	return int(res)
+}
+
+func bitsetOrGenericFlag2(dst, src []byte, size int) (bool, bool) {
+	l := size >> 3
+	var any byte
+	var all byte = 0xff
+	for i := 0; i < l; i++ {
+		dst[i] |= src[i]
+		any |= dst[i]
+		all &= dst[i]
+	}
+	if size&0x03 != 0 {
+		dst[l] |= src[l]
+		dst[l] &= bytemask(size)
+		any |= dst[l]
+		all &= (dst[l] | ^bytemask(size))
+	}
+	return any != 0, all == 0xff
 }
 
 func bitsetXorGeneric(dst, src []byte, size int) {

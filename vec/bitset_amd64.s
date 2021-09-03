@@ -714,6 +714,95 @@ done:
 	SETEQ   ret1+49(FP)
 	RET
 
+// func bitsetOrAVX2Flag2Core(dst, src []byte) (bool, bool)
+//
+TEXT ·bitsetOrAVX2Flag2Core(SB), NOSPLIT, $0-50
+	MOVQ	dst_base+0(FP), SI
+	MOVQ	dst_len+8(FP), BX
+	MOVQ	src_base+24(FP), DI
+    VPXOR   Y10, Y10, Y10       // vector register for collecting ones
+    VPCMPEQB	Y11, Y11, Y11   // vector register for collecting zeros
+
+	TESTQ	BX, BX
+	JLE		done
+	CMPQ	BX, $256     // slices smaller than 256 byte are handled separately
+	JB		prep_avx
+
+	// works for data size 256 byte
+loop_avx2:
+	BITSET_AVX2048_FLAG2(VPOR)
+	LEAQ		256(DI), DI
+	LEAQ		256(SI), SI
+	SUBQ		$256, BX
+	CMPQ		BX, $256
+	JB			exit_avx2
+	JMP			loop_avx2
+
+exit_avx2:
+
+prep_avx:
+	CMPQ	BX, $32
+	JB		prep_i32
+
+// works for data size 16 byte
+loop_avx:
+	BITSET_AVX256_FLAG2(VPOR)
+	LEAQ		32(SI), SI
+	LEAQ		32(DI), DI
+	SUBL		$32, BX
+	CMPL		BX, $32
+	JB			prep_i32
+	JMP			loop_avx
+
+exit_avx:
+	VZEROUPPER
+
+// works for data size 15 down to single byte
+prep_i32:
+    // move collected ones from AVX2 to x86 register
+    VPXOR       Y12, Y12, Y12       // Y12 = 0
+    VPCMPEQB	Y12, Y10, Y10       // for each byte of Y10: zero -> 0xff, not zero -> 0x00
+	VPMOVMSKB	Y10, R10            // move per byte MSBs into packed bitmask to r32
+    NOTL        R10
+    // move collected zeros from AVX2 to x86 register
+    VPCMPEQB    Y12, Y12, Y12       // Y12 = 0xff
+    VPCMPEQB	Y12, Y11, Y11       // for each byte of Y10: 0xff -> 0xff, not 0xff -> 0x00
+	VPMOVMSKB	Y11, R11            // move per byte MSBs into packed bitmask to r32
+
+	CMPL	BX, $4
+	JB		prep_i8
+
+loop_i32:
+	BITSET_I32_FLAG2(ORL)
+	LEAQ	4(SI), SI
+	LEAQ	4(DI), DI
+	SUBL	$4, BX
+	CMPL	BX, $4
+	JB		prep_i8
+	JMP		loop_i32
+
+prep_i8:
+	TESTQ	BX, BX
+	JLE		done
+	XORQ	AX, AX
+
+loop_i8:
+	BITSET_I8_FLAG2(ORB)
+	INCQ	DI
+	INCQ	SI
+	DECL	BX
+	JZ		done
+	JMP		loop_i8
+
+done:
+    // collected ones are in R10
+    CMPL    R10, $0                     // all zero?
+	SETNE	ret+48(FP)
+    // collected zeros are in R11
+    CMPL    R11, $0xffffffff            // all ones?
+	SETEQ   ret1+49(FP)
+	RET
+
 // func bitsetNegAVX2(src []byte)
 //
 TEXT ·bitsetNegAVX2(SB), NOSPLIT, $0-24

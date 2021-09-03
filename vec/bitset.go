@@ -223,15 +223,22 @@ func (s *Bitset) AndNot(r *Bitset) *Bitset {
 	return s
 }
 
-func (s *Bitset) Or(r *Bitset) *Bitset {
-	if s.cnt == 0 {
-		copy(s.buf, r.buf)
-		s.cnt = r.cnt
-		return s
+func (s *Bitset) Or(r *Bitset) (*Bitset, bool, bool) {
+	if s.size == 0 {
+		return s, false, false
 	}
-	bitsetOr(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	if s.Count() == s.size {
+		s.One()
+		return s, true, true
+	}
+	any, all := bitsetOr(s.Bytes(), r.Bytes(), min(s.size, r.size))
 	s.cnt = -1
-	return s
+	if !any {
+		s.cnt = 0
+	} else if all {
+		s.cnt = s.size
+	}
+	return s, any, all
 }
 
 func (s *Bitset) Xor(r *Bitset) *Bitset {

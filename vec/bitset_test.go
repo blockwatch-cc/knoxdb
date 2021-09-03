@@ -938,6 +938,122 @@ func TestBitOrGenericFlag1(T *testing.T) {
 	}
 }
 
+func TestBitOrGenericFlag2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
+	// calls use the function selector to do proper last byte masking!
+	for _, sz := range bitsetSizes {
+		zeros := fillBitset(nil, sz, 0)
+		ones := fillBitset(nil, sz, 0xff)
+		for _, pt := range bitsetPatterns {
+			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+				src := fillBitset(nil, sz, pt)
+				dst := fillBitset(nil, sz, pt)
+
+				// same value, same slice
+				any, all := bitsetOrGenericFlag2(dst, dst, sz)
+				if pt == 0x80 && sz == 7 {
+					if any {
+						T.Errorf("dst===src: unexpected return value %v, expected false", any)
+					}
+				} else {
+					if !any {
+						T.Errorf("dst===src: unexpected return value %v, expected true", any)
+					}
+				}
+				if pt == 0xff {
+					if !all {
+						T.Errorf("dst===src: unexpected return value %v, expected true", all)
+					}
+				} else {
+					if all {
+						T.Errorf("dst===src: unexpected return value %v, expected false", all)
+					}
+				}
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("dst===src: unexpected count %d, expected %d", got, want)
+				}
+
+				// same value, other slice
+				copy(dst, src)
+				any, all = bitsetOrGenericFlag2(dst, src, sz)
+				if pt == 0x80 && sz == 7 {
+					if any {
+						T.Errorf("dst==src: unexpected return value %v, expected false", any)
+					}
+				} else {
+					if !any {
+						T.Errorf("dst==src: unexpected return value %v, expected true", any)
+					}
+				}
+				if pt == 0xff {
+					if !all {
+						T.Errorf("dst==src: unexpected return value %v, expected true", all)
+					}
+				} else {
+					if all {
+						T.Errorf("dst==src: unexpected return value %v, expected false", all)
+					}
+				}
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("dst==src: unexpected count %d, expected %d", got, want)
+				}
+
+				// all zeros
+				copy(dst, src)
+				any, all = bitsetOrGenericFlag2(dst, zeros, sz)
+				if pt == 0x80 && sz == 7 {
+					if any {
+						T.Errorf("zeros: unexpected return value %v, expected false", any)
+					}
+				} else {
+					if !any {
+						T.Errorf("zeros: unexpected return value %v, expected true", any)
+					}
+				}
+				if pt == 0xff {
+					if !all {
+						T.Errorf("zeros: unexpected return value %v, expected true", all)
+					}
+				} else {
+					if all {
+						T.Errorf("zeros: unexpected return value %v, expected 0", all)
+					}
+				}
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("zeros: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("zeros: unexpected count %d, expected %d", got, want)
+				}
+
+				// all ones
+				copy(dst, src)
+				any, all = bitsetOrGenericFlag2(dst, ones, sz)
+				if !any {
+					T.Errorf("ones: unexpected return value %v, expected true", any)
+				}
+				if !all {
+					T.Errorf("ones: unexpected return value %v, expected true", all)
+				}
+				if bytes.Compare(dst, ones) != 0 {
+					T.Errorf("ones: unexpected result %x, expected %x", dst, ones)
+				}
+				if got, want := popcount(dst), popcount(ones); got != want {
+					T.Errorf("ones: unexpected count %d, expected %d", got, want)
+				}
+			})
+		}
+	}
+}
+
 func TestBitOrAVX2(T *testing.T) {
 	if !useAVX2 {
 		T.SkipNow()
@@ -1064,6 +1180,122 @@ func TestBitOrAVX2Flag1(T *testing.T) {
 				ret = bitsetOrAVX2Flag1(dst, ones)
 				if ret == 0 {
 					T.Errorf("ones: unexpected return value %x, expected !=0", ret)
+				}
+				if bytes.Compare(dst, ones) != 0 {
+					T.Errorf("ones: unexpected result %x, expected %x", dst, ones)
+				}
+				if got, want := popcount(dst), popcount(ones); got != want {
+					T.Errorf("ones: unexpected count %d, expected %d", got, want)
+				}
+			})
+		}
+	}
+}
+
+func TestBitOrAVX2Flag2(T *testing.T) {
+	if !useAVX2 {
+		T.SkipNow()
+	}
+	// calls use the function selector to do proper last byte masking!
+	for _, sz := range bitsetSizes {
+		zeros := fillBitset(nil, sz, 0)
+		ones := fillBitset(nil, sz, 0xff)
+		for _, pt := range bitsetPatterns {
+			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+				src := fillBitset(nil, sz, pt)
+				dst := fillBitset(nil, sz, pt)
+
+				// same value, same slice
+				any, all := bitsetOrAVX2Flag2(dst, dst, sz)
+				if pt == 0x80 && sz == 7 {
+					if any {
+						T.Errorf("dst===src: unexpected return value %v, expected false", any)
+					}
+				} else {
+					if !any {
+						T.Errorf("dst===src: unexpected return value %v, expected true", any)
+					}
+				}
+				if pt == 0xff {
+					if !all {
+						T.Errorf("dst===src: unexpected return value %v, expected true", all)
+					}
+				} else {
+					if all {
+						T.Errorf("dst===src: unexpected return value %v, expected false", all)
+					}
+				}
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("dst===src: unexpected count %d, expected %d", got, want)
+				}
+
+				// same value, other slice
+				copy(dst, src)
+				any, all = bitsetOrAVX2Flag2(dst, src, sz)
+				if pt == 0x80 && sz == 7 {
+					if any {
+						T.Errorf("dst==src: unexpected return value %v, expected false", any)
+					}
+				} else {
+					if !any {
+						T.Errorf("dst==src: unexpected return value %v, expected true", any)
+					}
+				}
+				if pt == 0xff {
+					if !all {
+						T.Errorf("dst==src: unexpected return value %v, expected true", all)
+					}
+				} else {
+					if all {
+						T.Errorf("dst==src: unexpected return value %v, expected false", all)
+					}
+				}
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("dst==src: unexpected count %d, expected %d", got, want)
+				}
+
+				// all zeros
+				copy(dst, src)
+				any, all = bitsetOrAVX2Flag2(dst, zeros, sz)
+				if pt == 0x80 && sz == 7 {
+					if any {
+						T.Errorf("zeros: unexpected return value %v, expected false", any)
+					}
+				} else {
+					if !any {
+						T.Errorf("zeros: unexpected return value %v, expected true", any)
+					}
+				}
+				if pt == 0xff {
+					if !all {
+						T.Errorf("zeros: unexpected return value %v, expected true", all)
+					}
+				} else {
+					if all {
+						T.Errorf("zeros: unexpected return value %v, expected 0", all)
+					}
+				}
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("zeros: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("zeros: unexpected count %d, expected %d", got, want)
+				}
+
+				// all ones
+				copy(dst, src)
+				any, all = bitsetOrAVX2Flag2(dst, ones, sz)
+				if !any {
+					T.Errorf("ones: unexpected return value %v, expected true", any)
+				}
+				if !all {
+					T.Errorf("ones: unexpected return value %v, expected true", all)
 				}
 				if bytes.Compare(dst, ones) != 0 {
 					T.Errorf("ones: unexpected result %x, expected %x", dst, ones)
