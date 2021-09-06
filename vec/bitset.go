@@ -223,6 +223,9 @@ func (s *Bitset) AndNot(r *Bitset) *Bitset {
 }
 
 func (s *Bitset) Or(r *Bitset) *Bitset {
+	if s.size == 0 {
+		return s
+	}
 	if s.cnt == 0 {
 		copy(s.buf, r.buf)
 		s.cnt = r.cnt
