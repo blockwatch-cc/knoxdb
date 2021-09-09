@@ -190,51 +190,54 @@ func TestBitsetPopCountAVX2(T *testing.T) {
 }
 
 func TestBitAndGeneric(T *testing.T) {
+	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			src := fillBitset(nil, sz, pt)
-			dst := fillBitset(nil, sz, pt)
+			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+				src := fillBitset(nil, sz, pt)
+				dst := fillBitset(nil, sz, pt)
 
-			// same value, same slice
-			bitsetAndGeneric(dst, dst, sz)
-			if bytes.Compare(dst, src) != 0 {
-				T.Errorf("%d_%x_dst===src: unexpected result %x, expected %x", sz, pt, dst, src)
-			}
-			if got, want := popcount(dst), popcount(src); got != want {
-				T.Errorf("%d_%x_dst===src: unexpected count %d, expected %d", sz, pt, got, want)
-			}
+				// same value, same slice
+				bitsetAndGeneric(dst, dst, sz)
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("dst===src: unexpected count %d, expected %d", got, want)
+				}
 
-			// same value, other slice
-			copy(dst, src)
-			bitsetAndGeneric(dst, src, sz)
-			if bytes.Compare(dst, src) != 0 {
-				T.Errorf("%d_%x_dst==src: unexpected result %x, expected %x", sz, pt, dst, src)
-			}
-			if got, want := popcount(dst), popcount(src); got != want {
-				T.Errorf("%d_%x_dst==src: unexpected count %d, expected %d", sz, pt, got, want)
-			}
+				// same value, other slice
+				copy(dst, src)
+				bitsetAndGeneric(dst, src, sz)
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("dst==src: unexpected count %d, expected %d", got, want)
+				}
 
-			// all zeros
-			copy(dst, src)
-			bitsetAndGeneric(dst, zeros, sz)
-			if bytes.Compare(dst, zeros) != 0 {
-				T.Errorf("%d_%x_zeros: unexpected result %x, expected %x", sz, pt, dst, zeros)
-			}
-			if got, want := popcount(dst), 0; got != want {
-				T.Errorf("%d_%x_zeros: unexpected count %d, expected %d", sz, pt, got, want)
-			}
+				// all zeros
+				copy(dst, src)
+				bitsetAndGeneric(dst, zeros, sz)
+				if bytes.Compare(dst, zeros) != 0 {
+					T.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
+				}
+				if got, want := popcount(dst), 0; got != want {
+					T.Errorf("zeros: unexpected count %d, expected %d", got, want)
+				}
 
-			// all ones
-			copy(dst, src)
-			bitsetAndGeneric(dst, ones, sz)
-			if bytes.Compare(dst, src) != 0 {
-				T.Errorf("%d_%x_ones: unexpected result %x, expected %x", sz, pt, dst, src)
-			}
-			if got, want := popcount(dst), popcount(src); got != want {
-				T.Errorf("%d_%x_ones: unexpected count %d, expected %d", sz, pt, got, want)
-			}
+				// all ones
+				copy(dst, src)
+				bitsetAndGeneric(dst, ones, sz)
+				if bytes.Compare(dst, src) != 0 {
+					T.Errorf("ones: unexpected result %x, expected %x", dst, src)
+				}
+				if got, want := popcount(dst), popcount(src); got != want {
+					T.Errorf("ones: unexpected count %d, expected %d", got, want)
+				}
+			})
 		}
 	}
 }
