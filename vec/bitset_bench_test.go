@@ -551,7 +551,7 @@ func BenchmarkBitsetAndGeneric(B *testing.B) {
 	}
 }
 
-func BenchmarkBitsetAndGenericFlag1(B *testing.B) {
+func BenchmarkBitsetAndGenericFlag(B *testing.B) {
 	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
@@ -559,7 +559,7 @@ func BenchmarkBitsetAndGenericFlag1(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(bitFieldLen(n.l)))
 			for i := 0; i < B.N; i++ {
-				bitsetAndGenericFlag1(bits, cmp, n.l)
+				bitsetAndGenericFlag(bits, cmp, n.l)
 			}
 		})
 	}
@@ -591,7 +591,7 @@ func BenchmarkBitsetAndAVX2(B *testing.B) {
 	}
 }
 
-func BenchmarkBitsetAndAVX2Flag1(B *testing.B) {
+func BenchmarkBitsetAndAVX2Flag(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -602,7 +602,7 @@ func BenchmarkBitsetAndAVX2Flag1(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(bitFieldLen(n.l)))
 			for i := 0; i < B.N; i++ {
-				bitsetAndAVX2Flag1(bits, cmp)
+				bitsetAndAVX2Flag(bits, cmp, n.l)
 			}
 		})
 	}

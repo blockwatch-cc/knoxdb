@@ -204,7 +204,7 @@ func (s *Bitset) And(r *Bitset) (*Bitset, bool, bool) {
 		s.Zero()
 		return s, false, false
 	}
-	any, all := bitsetAnd(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	any, all := bitsetAndFlag(s.Bytes(), r.Bytes(), min(s.size, r.size))
 	s.cnt = -1
 	if !any {
 		s.cnt = 0
@@ -231,7 +231,7 @@ func (s *Bitset) Or(r *Bitset) (*Bitset, bool, bool) {
 		s.One()
 		return s, true, true
 	}
-	any, all := bitsetOr(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	any, all := bitsetOrFlag(s.Bytes(), r.Bytes(), min(s.size, r.size))
 	s.cnt = -1
 	if !any {
 		s.cnt = 0
