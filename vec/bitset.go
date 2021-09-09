@@ -196,7 +196,16 @@ func (s *Bitset) Close() {
 	}
 }
 
-func (s *Bitset) And(r *Bitset) (*Bitset, bool, bool) {
+func (s *Bitset) And(r *Bitset) *Bitset {
+	if r.Count() == 0 {
+		s.Zero()
+		return s
+	}
+	bitsetAnd(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	return s
+}
+
+func (s *Bitset) AndFlag(r *Bitset) (*Bitset, bool, bool) {
 	if s.size == 0 || s.cnt == 0 {
 		return s, false, false
 	}
@@ -223,7 +232,17 @@ func (s *Bitset) AndNot(r *Bitset) *Bitset {
 	return s
 }
 
-func (s *Bitset) Or(r *Bitset) (*Bitset, bool, bool) {
+func (s *Bitset) Or(r *Bitset) *Bitset {
+	if s.Count() == 0 {
+		copy(s.buf, r.buf)
+		s.cnt = r.cnt
+		return s
+	}
+	bitsetOr(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	return s
+}
+
+func (s *Bitset) OrFlag(r *Bitset) (*Bitset, bool, bool) {
 	if s.size == 0 {
 		return s, false, false
 	}
