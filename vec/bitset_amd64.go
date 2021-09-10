@@ -6,7 +6,7 @@
 package vec
 
 import (
-// "fmt"
+//"fmt"
 )
 
 var lengthTable = []uint8{
@@ -291,7 +291,7 @@ var decodeTable = []uint32{
 func bitsetAndAVX2(dst, src []byte)
 
 //go:noescape
-func bitsetAndAVX2Flag1(dst, src []byte) int
+func bitsetAndAVX2FlagCore(dst, src []byte) (bool, bool)
 
 //go:noescape
 func bitsetAndNotAVX2(dst, src []byte)
@@ -300,7 +300,7 @@ func bitsetAndNotAVX2(dst, src []byte)
 func bitsetOrAVX2(dst, src []byte)
 
 //go:noescape
-func bitsetOrAVX2Flag1(dst, src []byte) int
+func bitsetOrAVX2FlagCore(dst, src []byte) (bool, bool)
 
 //go:noescape
 func bitsetXorAVX2(dst, src []byte)
@@ -326,14 +326,22 @@ func bitsetNextOneBitAVX2(src []byte, index uint64) uint64
 //go:noescape
 func bitsetNextZeroBitAVX2(src []byte, index uint64) uint64
 
-func bitsetAnd(dst, src []byte, size int) int {
+func bitsetAnd(dst, src []byte, size int) {
 	switch {
 	case useAVX2:
-		ret := bitsetAndAVX2Flag1(dst, src)
+		bitsetAndAVX2(dst, src)
 		dst[len(dst)-1] &= bytemask(size)
-		return ret
 	default:
-		return bitsetAndGenericFlag1(dst, src, size)
+		bitsetAndGeneric(dst, src, size)
+	}
+}
+
+func bitsetAndFlag(dst, src []byte, size int) (bool, bool) {
+	switch {
+	case useAVX2:
+		return bitsetAndAVX2Flag(dst, src, size)
+	default:
+		return bitsetAndGenericFlag(dst, src, size)
 	}
 }
 
@@ -347,14 +355,22 @@ func bitsetAndNot(dst, src []byte, size int) {
 	}
 }
 
-func bitsetOr(dst, src []byte, size int) int {
+func bitsetOr(dst, src []byte, size int) {
 	switch {
 	case useAVX2:
-		ret := bitsetOrAVX2Flag1(dst, src)
+		bitsetOrAVX2(dst, src)
 		dst[len(dst)-1] &= bytemask(size)
-		return ret
 	default:
-		return bitsetOrGenericFlag1(dst, src, size)
+		bitsetOrGeneric(dst, src, size)
+	}
+}
+
+func bitsetOrFlag(dst, src []byte, size int) (bool, bool) {
+	switch {
+	case useAVX2:
+		return bitsetOrAVX2Flag(dst, src, size)
+	default:
+		return bitsetOrGenericFlag(dst, src, size)
 	}
 }
 
@@ -428,6 +444,34 @@ func bitsetPopCount(src []byte, size int) int64 {
 		return bitsetPopCountGeneric(src, size)
 	}
 
+}
+
+func bitsetAndAVX2Flag(dst, src []byte, size int) (bool, bool) {
+	l := size >> 3
+	any, all := bitsetAndAVX2FlagCore(dst[:l], src[:l])
+	if size&0x03 != 0 {
+		dst[l] &= src[l]
+		dst[l] &= bytemask(size)
+		any = any || dst[l] != 0
+		if dst[l] != bytemask(size) {
+			all = false
+		}
+	}
+	return any, all
+}
+
+func bitsetOrAVX2Flag(dst, src []byte, size int) (bool, bool) {
+	l := size >> 3
+	any, all := bitsetOrAVX2FlagCore(dst[:l], src[:l])
+	if size&0x03 != 0 {
+		dst[l] |= src[l]
+		dst[l] &= bytemask(size)
+		any = any || dst[l] != 0
+		if dst[l] != bytemask(size) {
+			all = false
+		}
+	}
+	return any, all
 }
 
 func bitsetRun(src []byte, index, size int) (int, int) {

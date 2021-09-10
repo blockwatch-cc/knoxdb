@@ -528,15 +528,6 @@ func BenchmarkBitsetPopCountAVX2(B *testing.B) {
 	}
 }
 
-// BenchmarkBitsetAndGeneric/32-8           200000000            7.34 ns/op  544.76 MB/s
-// BenchmarkBitsetAndGeneric/128-8          100000000           21.6 ns/op   740.72 MB/s
-// BenchmarkBitsetAndGeneric/1K-8           20000000            87.1 ns/op  1468.98 MB/s
-// BenchmarkBitsetAndGeneric/16K-8           1000000          1225 ns/op    1671.20 MB/s
-// BenchmarkBitsetAndGeneric/128K-8           200000          9985 ns/op    1640.75 MB/s
-// BenchmarkBitsetAndGeneric/1M-8              20000         80136 ns/op    1635.60 MB/s
-// BenchmarkBitsetAndGeneric/16M-8              1000       1265940 ns/op    1656.60 MB/s
-// BenchmarkBitsetAndGeneric/128M-8              100      10242328 ns/op    1638.03 MB/s
-// BenchmarkBitsetAndGeneric/512M-8               30      44840644 ns/op    1496.61 MB/s
 func BenchmarkBitsetAndGeneric(B *testing.B) {
 	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
@@ -551,7 +542,7 @@ func BenchmarkBitsetAndGeneric(B *testing.B) {
 	}
 }
 
-func BenchmarkBitsetAndGenericFlag1(B *testing.B) {
+func BenchmarkBitsetAndGenericFlag(B *testing.B) {
 	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)
@@ -559,21 +550,12 @@ func BenchmarkBitsetAndGenericFlag1(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(bitFieldLen(n.l)))
 			for i := 0; i < B.N; i++ {
-				bitsetAndGenericFlag1(bits, cmp, n.l)
+				bitsetAndGenericFlag(bits, cmp, n.l)
 			}
 		})
 	}
 }
 
-// BenchmarkBitsetAndAVX2/32-8          200000000            6.19 ns/op  646.11 MB/s
-// BenchmarkBitsetAndAVX2/128-8         200000000            8.85 ns/op 1808.15 MB/s
-// BenchmarkBitsetAndAVX2/1K-8          200000000            8.12 ns/op 15767.05 MB/s
-// BenchmarkBitsetAndAVX2/16K-8         50000000            25.2 ns/op  81304.13 MB/s
-// BenchmarkBitsetAndAVX2/128K-8        10000000           195 ns/op    83982.76 MB/s
-// BenchmarkBitsetAndAVX2/1M-8            200000          6065 ns/op    21607.81 MB/s
-// BenchmarkBitsetAndAVX2/16M-8            10000        149202 ns/op    14055.70 MB/s
-// BenchmarkBitsetAndAVX2/128M-8            1000       1845298 ns/op    9091.87 MB/s
-// BenchmarkBitsetAndAVX2/512M-8             200      12771249 ns/op    5254.68 MB/s
 func BenchmarkBitsetAndAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
@@ -591,7 +573,7 @@ func BenchmarkBitsetAndAVX2(B *testing.B) {
 	}
 }
 
-func BenchmarkBitsetAndAVX2Flag1(B *testing.B) {
+func BenchmarkBitsetAndAVX2Flag(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
 	}
@@ -602,7 +584,7 @@ func BenchmarkBitsetAndAVX2Flag1(B *testing.B) {
 			B.ResetTimer()
 			B.SetBytes(int64(bitFieldLen(n.l)))
 			for i := 0; i < B.N; i++ {
-				bitsetAndAVX2Flag1(bits, cmp)
+				bitsetAndAVX2Flag(bits, cmp, n.l)
 			}
 		})
 	}
@@ -657,15 +639,6 @@ func BenchmarkBitsetAndNotAVX2(B *testing.B) {
 	}
 }
 
-// BenchmarkBitsetOrGeneric/32-8            200000000            7.36 ns/op  543.27 MB/s
-// BenchmarkBitsetOrGeneric/128-8           100000000           15.0 ns/op  1063.83 MB/s
-// BenchmarkBitsetOrGeneric/1K-8            20000000            88.0 ns/op  1454.75 MB/s
-// BenchmarkBitsetOrGeneric/16K-8            1000000          1211 ns/op    1689.95 MB/s
-// BenchmarkBitsetOrGeneric/128K-8            200000         10110 ns/op    1620.47 MB/s
-// BenchmarkBitsetOrGeneric/1M-8               20000         83328 ns/op    1572.96 MB/s
-// BenchmarkBitsetOrGeneric/16M-8               1000       1264415 ns/op    1658.59 MB/s
-// BenchmarkBitsetOrGeneric/128M-8               100      10283848 ns/op    1631.41 MB/s
-// BenchmarkBitsetOrGeneric/512M-8                30      42982470 ns/op    1561.31 MB/s
 func BenchmarkBitsetOrGeneric(B *testing.B) {
 	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
@@ -680,15 +653,20 @@ func BenchmarkBitsetOrGeneric(B *testing.B) {
 	}
 }
 
-// BenchmarkBitsetOrAVX2/32-8               200000000            6.31 ns/op  633.87 MB/s
-// BenchmarkBitsetOrAVX2/128-8              200000000            8.61 ns/op 1858.88 MB/s
-// BenchmarkBitsetOrAVX2/1K-8               200000000            9.36 ns/op 13678.46 MB/s
-// BenchmarkBitsetOrAVX2/16K-8              50000000            32.5 ns/op  63010.45 MB/s
-// BenchmarkBitsetOrAVX2/128K-8             10000000           189 ns/op    86453.95 MB/s
-// BenchmarkBitsetOrAVX2/1M-8                 300000          5502 ns/op    23822.10 MB/s
-// BenchmarkBitsetOrAVX2/16M-8                 10000        135032 ns/op    15530.76 MB/s
-// BenchmarkBitsetOrAVX2/128M-8                 1000       1886645 ns/op    8892.62 MB/s
-// BenchmarkBitsetOrAVX2/512M-8                  200      10585586 ns/op    6339.65 MB/s
+func BenchmarkBitsetOrGenericFlag(B *testing.B) {
+	for _, n := range bitsetBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			bits := fillBitset(nil, n.l, 0xfa)
+			cmp := fillBitset(nil, n.l, 0xae)
+			B.ResetTimer()
+			B.SetBytes(int64(bitFieldLen(n.l)))
+			for i := 0; i < B.N; i++ {
+				bitsetOrGenericFlag(bits, cmp, n.l)
+			}
+		})
+	}
+}
+
 func BenchmarkBitsetOrAVX2(B *testing.B) {
 	if !useAVX2 {
 		B.SkipNow()
@@ -701,6 +679,23 @@ func BenchmarkBitsetOrAVX2(B *testing.B) {
 			B.SetBytes(int64(bitFieldLen(n.l)))
 			for i := 0; i < B.N; i++ {
 				bitsetOrAVX2(bits, cmp)
+			}
+		})
+	}
+}
+
+func BenchmarkBitsetOrAVX2Flag(B *testing.B) {
+	if !useAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range bitsetBenchmarkSizes {
+		B.Run(n.name, func(B *testing.B) {
+			bits := fillBitset(nil, n.l, 0xfa)
+			cmp := fillBitset(nil, n.l, 0xae)
+			B.ResetTimer()
+			B.SetBytes(int64(bitFieldLen(n.l)))
+			for i := 0; i < B.N; i++ {
+				bitsetOrAVX2Flag(bits, cmp, n.l)
 			}
 		})
 	}

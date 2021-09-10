@@ -1751,11 +1751,11 @@ func (n ConditionTreeNode) MatchPackAnd(pkg *Package, info PackInfo) *Bitset {
 		// }
 
 		// merge
-		_, any := bits.And(b)
+		_, any, _ := bits.AndFlag(b)
 		b.Close()
 
 		// early stop on empty aggregate match
-		if any == 0 {
+		if !any {
 			break
 		}
 	}
