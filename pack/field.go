@@ -2829,7 +2829,11 @@ func (t FieldType) Bytes(val interface{}) []byte {
 	case FieldTypeString:
 		return []byte(val.(string))
 	case FieldTypeDatetime:
-		bigEndian.PutUint64(buf[:], uint64(val.(int64)))
+		if i, ok := val.(int64); ok {
+			bigEndian.PutUint64(buf[:], uint64(i))
+		} else {
+			bigEndian.PutUint64(buf[:], uint64(val.(time.Time).UnixNano()))
+		}
 		return buf[:]
 	case FieldTypeBoolean:
 		if v := val.(bool); v {
@@ -2837,17 +2841,47 @@ func (t FieldType) Bytes(val interface{}) []byte {
 		} else {
 			return []byte{0}
 		}
-	case FieldTypeInt256, FieldTypeDecimal256:
+	case FieldTypeInt256:
 		buf := val.(Int256).Bytes32()
 		return buf[:]
-	case FieldTypeInt128, FieldTypeDecimal128:
+	case FieldTypeDecimal256:
+		if i, ok := val.(Int256); ok {
+			buf := i.Bytes32()
+			return buf[:]
+		} else {
+			buf := val.(Decimal256).Int256().Bytes32()
+			return buf[:]
+		}
+	case FieldTypeInt128:
 		buf := val.(Int128).Bytes16()
 		return buf[:]
-	case FieldTypeInt64, FieldTypeDecimal64:
+	case FieldTypeDecimal128:
+		if i, ok := val.(Int128); ok {
+			buf := i.Bytes16()
+			return buf[:]
+		} else {
+			buf := val.(Decimal128).Int128().Bytes16()
+			return buf[:]
+		}
+	case FieldTypeInt64:
 		bigEndian.PutUint64(buf[:], uint64(val.(int64)))
 		return buf[:]
-	case FieldTypeInt32, FieldTypeDecimal32:
+	case FieldTypeDecimal64:
+		if i, ok := val.(int64); ok {
+			bigEndian.PutUint64(buf[:], uint64(i))
+		} else {
+			bigEndian.PutUint64(buf[:], uint64(val.(Decimal64).Int64()))
+		}
+		return buf[:]
+	case FieldTypeInt32:
 		bigEndian.PutUint32(buf[:], uint32(val.(int32)))
+		return buf[:4]
+	case FieldTypeDecimal32:
+		if i, ok := val.(int32); ok {
+			bigEndian.PutUint64(buf[:], uint64(i))
+		} else {
+			bigEndian.PutUint32(buf[:], uint32(val.(Decimal32).Int32()))
+		}
 		return buf[:4]
 	case FieldTypeInt16:
 		bigEndian.PutUint16(buf[:], uint16(val.(int16)))
