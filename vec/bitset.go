@@ -213,7 +213,7 @@ func (s *Bitset) And(r *Bitset) *Bitset {
 
 func (s *Bitset) AndFlag(r *Bitset) (*Bitset, bool, bool) {
 	if s.size == 0 {
-		return s, false, false
+		return s, false, true
 	}
 	if s.size != r.size {
 		switch s.cnt {
@@ -270,7 +270,7 @@ func (s *Bitset) Or(r *Bitset) *Bitset {
 
 func (s *Bitset) OrFlag(r *Bitset) (*Bitset, bool, bool) {
 	if s.size == 0 {
-		return s, false, false
+		return s, false, true
 	}
 	if s.size != r.size {
 		switch s.cnt {

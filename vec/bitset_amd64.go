@@ -447,16 +447,8 @@ func bitsetPopCount(src []byte, size int) int64 {
 }
 
 func bitsetAndAVX2Flag(dst, src []byte, size int) (bool, bool) {
-	if size == 0 {
-		return false, false
-	}
 	l := size >> 3
-	var any, all bool
-	if l > 0 {
-		any, all = bitsetAndAVX2FlagCore(dst[:l], src[:l])
-	} else {
-		any, all = false, true
-	}
+	any, all := bitsetAndAVX2FlagCore(dst[:l], src[:l])
 	if size&0x03 != 0 {
 		dst[l] &= src[l]
 		dst[l] &= bytemask(size)
@@ -469,16 +461,8 @@ func bitsetAndAVX2Flag(dst, src []byte, size int) (bool, bool) {
 }
 
 func bitsetOrAVX2Flag(dst, src []byte, size int) (bool, bool) {
-	if size == 0 {
-		return false, false
-	}
 	l := size >> 3
-	var any, all bool
-	if l > 0 {
-		any, all = bitsetOrAVX2FlagCore(dst[:l], src[:l])
-	} else {
-		any, all = false, true
-	}
+	any, all := bitsetOrAVX2FlagCore(dst[:l], src[:l])
 	if size&0x03 != 0 {
 		dst[l] |= src[l]
 		dst[l] &= bytemask(size)

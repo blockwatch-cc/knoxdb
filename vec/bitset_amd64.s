@@ -421,7 +421,9 @@ TEXT ·bitsetAndAVX2FlagCore(SB), NOSPLIT, $0-50
 	MOVQ	src_base+24(FP), DI
     VPXOR   Y10, Y10, Y10       // vector register for collecting ones
     VPCMPEQB	Y11, Y11, Y11   // vector register for collecting zeros
-
+    MOVL    $0, R10             // x86 register for collecting zeros
+    MOVL    $0xffffffff, R11    // x86 register for collecting ones
+        
 	TESTQ	BX, BX
 	JLE		done
 	CMPQ	BX, $256     // slices smaller than 256 byte are handled separately
@@ -510,6 +512,8 @@ TEXT ·bitsetOrAVX2FlagCore(SB), NOSPLIT, $0-50
 	MOVQ	src_base+24(FP), DI
     VPXOR   Y10, Y10, Y10       // vector register for collecting ones
     VPCMPEQB	Y11, Y11, Y11   // vector register for collecting zeros
+    MOVL    $0, R10             // x86 register for collecting zeros
+    MOVL    $0xffffffff, R11    // x86 register for collecting ones
 
 	TESTQ	BX, BX
 	JLE		done
