@@ -197,23 +197,42 @@ func (s *Bitset) Close() {
 }
 
 func (s *Bitset) And(r *Bitset) *Bitset {
-	if r.Count() == 0 {
-		s.Zero()
-		return s
+	if s.size == r.size && s.size > 0 {
+		if s.cnt == 0 {
+			return s
+		}
+		if r.cnt == 0 {
+			s.Zero()
+			return s
+		}
+		bitsetAnd(s.Bytes(), r.Bytes(), s.size)
+		s.cnt = -1
 	}
-	bitsetAnd(s.Bytes(), r.Bytes(), min(s.size, r.size))
 	return s
 }
 
 func (s *Bitset) AndFlag(r *Bitset) (*Bitset, bool, bool) {
-	if s.size == 0 || s.cnt == 0 {
+	if s.size == 0 {
 		return s, false, false
 	}
-	if r.Count() == 0 {
+	if s.size != r.size {
+		switch s.cnt {
+		case 0:
+			return s, false, false
+		case s.size:
+			return s, true, true
+		default:
+			return s, true, false
+		}
+	}
+	if s.cnt == 0 {
+		return s, false, false
+	}
+	if r.cnt == 0 {
 		s.Zero()
 		return s, false, false
 	}
-	any, all := bitsetAndFlag(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	any, all := bitsetAndFlag(s.Bytes(), r.Bytes(), s.size)
 	s.cnt = -1
 	if !any {
 		s.cnt = 0
@@ -224,21 +243,28 @@ func (s *Bitset) AndFlag(r *Bitset) (*Bitset, bool, bool) {
 }
 
 func (s *Bitset) AndNot(r *Bitset) *Bitset {
-	if s.size == 0 || s.cnt == 0 {
-		return s
+	if s.size == r.size && s.size > 0 {
+		if s.size == 0 || s.cnt == 0 {
+			return s
+		}
+		bitsetAndNot(s.Bytes(), r.Bytes(), s.size)
+		s.cnt = -1
 	}
-	bitsetAndNot(s.Bytes(), r.Bytes(), min(s.size, r.size))
-	s.cnt = -1
 	return s
 }
 
 func (s *Bitset) Or(r *Bitset) *Bitset {
-	if s.Count() == 0 {
-		copy(s.buf, r.buf)
-		s.cnt = r.cnt
-		return s
+	if s.size == r.size && s.size > 0 {
+		if s.cnt == s.size {
+			return s
+		}
+		if r.cnt == r.size {
+			s.One()
+			return s
+		}
+		bitsetOr(s.Bytes(), r.Bytes(), s.size)
+		s.cnt = -1
 	}
-	bitsetOr(s.Bytes(), r.Bytes(), min(s.size, r.size))
 	return s
 }
 
@@ -246,11 +272,24 @@ func (s *Bitset) OrFlag(r *Bitset) (*Bitset, bool, bool) {
 	if s.size == 0 {
 		return s, false, false
 	}
-	if s.Count() == s.size {
+	if s.size != r.size {
+		switch s.cnt {
+		case 0:
+			return s, false, false
+		case s.size:
+			return s, true, true
+		default:
+			return s, true, false
+		}
+	}
+	if s.cnt == s.size {
+		return s, true, true
+	}
+	if r.cnt == r.size {
 		s.One()
 		return s, true, true
 	}
-	any, all := bitsetOrFlag(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	any, all := bitsetOrFlag(s.Bytes(), r.Bytes(), s.size)
 	s.cnt = -1
 	if !any {
 		s.cnt = 0
@@ -261,11 +300,10 @@ func (s *Bitset) OrFlag(r *Bitset) (*Bitset, bool, bool) {
 }
 
 func (s *Bitset) Xor(r *Bitset) *Bitset {
-	if s.size == 0 {
-		return s
+	if s.size == r.size && s.size > 0 {
+		bitsetXor(s.Bytes(), r.Bytes(), s.size)
+		s.cnt = -1
 	}
-	bitsetXor(s.Bytes(), r.Bytes(), min(s.size, r.size))
-	s.cnt = -1
 	return s
 }
 
