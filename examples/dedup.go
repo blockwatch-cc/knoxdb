@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime/pprof"
@@ -15,7 +16,6 @@ import (
 
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
-	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -34,12 +34,12 @@ var (
 	verbose   bool
 	debug     bool
 	trace     bool
-	cache     bool
+	startPack int
+	endPack   int
 	dbname    string
-	prec      uint
-	bloomOnly bool
+	fname     string
 	cpuprof   string
-	flags     = flag.NewFlagSet("cardinality", flag.ContinueOnError)
+	flags     = flag.NewFlagSet("dedup", flag.ContinueOnError)
 	boltopts  = &bolt.Options{
 		Timeout:      time.Second, // open timeout when file is locked
 		NoGrowSync:   true,        // assuming Docker + XFS
@@ -54,15 +54,15 @@ func init() {
 	flags.BoolVar(&verbose, "v", false, "be verbose")
 	flags.BoolVar(&debug, "vv", false, "enable debug mode")
 	flags.BoolVar(&trace, "vvv", false, "enable trace mode")
-	flags.BoolVar(&cache, "cache", false, "enable db cache")
-	flags.BoolVar(&bloomOnly, "bloom", false, "estimate only for fields with bloom flag")
-	flags.UintVar(&prec, "precision", 14, "loglog-beta precision 1<<n")
+	flags.IntVar(&startPack, "start", -1, "start pack")
+	flags.IntVar(&endPack, "end", -1, "end pack")
 	flags.StringVar(&dbname, "db", "", "database")
+	flags.StringVar(&fname, "field", "", "field name (required)")
 	flags.StringVar(&cpuprof, "profile", "", "write CPU profile to filename")
 }
 
 func printhelp() {
-	fmt.Println("Usage:\n  cardinality [flags]")
+	fmt.Println("Usage:\n  dedup [flags]")
 	fmt.Println("Flags:")
 	flags.PrintDefaults()
 	fmt.Println()
@@ -94,6 +94,12 @@ func run() error {
 	log.SetLevel(lvl)
 	pack.UseLogger(log.Log)
 
+	// open existing table
+	table, err := Open(dbname, boltopts)
+	if err != nil {
+		return err
+	}
+
 	if cpuprof != "" {
 		f, err := os.Create(cpuprof)
 		if err != nil {
@@ -105,55 +111,32 @@ func run() error {
 		}
 	}
 
-	// open existing table
-	table, err := Open(dbname, boltopts)
-	if err != nil {
-		return err
-	}
-
 	count := 0
 	start := time.Now()
-	stats := make([]vec.Uint64Reducer, len(table.Fields()))
-	errors := make([]vec.Uint64Reducer, len(table.Fields()))
-	bloomSizeErr := make([][2]int, len(table.Fields()))
+	dupRows := make([]vec.Uint64Reducer, len(table.Fields()))
+	dupBytes := make([]vec.Uint64Reducer, len(table.Fields()))
 	fields := table.Fields()
 	u64 := make([]uint64, 0, 1<<PackSizeLog2)
-	var totalSize uint64
-	err = table.WalkPacks(func(pkg *pack.Package) error {
+	err = table.WalkPacksRange(startPack, endPack, func(pkg *pack.Package) error {
 		for i, v := range pkg.Blocks() {
-			// skip for non-bloom fields when requested
-			if bloomOnly && !fields[i].Flags.Contains(pack.FlagBloom) {
-				continue
+			dup := make(map[uint64]struct{})
+			var dr, db uint64
+			for j, h := range v.Hashes(u64) {
+				if _, ok := dup[h]; ok {
+					dr++
+					db += uint64(len(fields[i].Type.Bytes(v.At(j))))
+				} else {
+					dup[h] = struct{}{}
+				}
 			}
-
-			// estimated value
-			est := fields[i].Type.EstimateCardinality(v, prec)
-
-			// true values
-			u64 = vec.Uint64.Unique(v.Hashes(u64))
-
-			// add to stats and errors
-			stats[i].Add(uint64(est))
-			errors[i].Add(uint64(util.Abs64(int64(est) - int64(len(u64)))))
-
-			b1 := pow2(uint64(est*8)) / 8
-			b2 := pow2(uint64(len(u64)*8)) / 8
-			if b1 < b2 {
-				bloomSizeErr[i][0]++
-			} else if b1 > b2 {
-				bloomSizeErr[i][1]++
-			}
-
-			u64 = u64[:0]
-
-			// track total size of bloom filters
-			totalSize += pow2(uint64(est*8)) / 8
+			dupRows[i].Add(dr)
+			dupBytes[i].Add(db)
 		}
 		count++
 		fmt.Printf(".")
 		return nil
 	})
-	if err != nil {
+	if err != nil && err != io.EOF {
 		return err
 	}
 
@@ -161,15 +144,14 @@ func run() error {
 		return err
 	}
 
-	fmt.Printf("\nProcessed %d packs at loglog precision %d in %s\n", count, prec, time.Since(start))
-	fmt.Printf("Total bloom size %d bytes\n", totalSize)
-	fmt.Printf("%03s  %15s  %10s  %5s  %5s  %5s  %10s  %7s  %7s  %7s  %10s %7s %7s\n", "Col", "Name", "Type", "Min", "Max", "Avg", "Std", "Err-Min", "Err-Max", "Err-Avg", "Err-Std", "Under", "Over")
+	fmt.Printf("\nProcessed %d packs in %s\n", count, time.Since(start))
+	fmt.Printf("                                  Rows -------------------------------------------------------    Bytes ----------------------------------------------------\n")
+	fmt.Printf("%03s  %15s  %10s  %9s  %9s  %9s  %9s  %15s  %9s  %9s  %9s  %9s  %15s\n", "Col", "Name", "Type", "Min", "Max", "Avg", "Sum", "Std", "Min", "Max", "Avg", "Sum", "Std")
 	for i, f := range table.Fields() {
-		s := stats[i]
-		e := errors[i]
-		d := bloomSizeErr[i]
-		fmt.Printf("%02d   %15s  %10s  %5d  %5d  %5d  %9.1f  %7d  %7d  %7d  %9.1f %7d %7d\n",
-			i, f.Alias, f.Type, s.Min(), s.Max(), uint64(s.Mean()), s.Stddev(), e.Min(), e.Max(), uint64(e.Mean()), e.Stddev(), d[0], d[1])
+		a := dupRows[i]
+		b := dupBytes[i]
+		fmt.Printf("%02d   %15s  %10s  %9d  %9d  %9d  %9d  %15.4f  %9d  %9d  %9d  %9d  %15.4f\n",
+			i, f.Alias, f.Type, a.Min(), a.Max(), uint64(a.Mean()), a.Sum(), a.Stddev(), b.Min(), b.Max(), uint64(b.Mean()), b.Sum(), b.Stddev())
 	}
 
 	return nil

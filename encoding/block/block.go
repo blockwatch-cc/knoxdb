@@ -266,6 +266,46 @@ func (b Block) RangeSlice(start, end int) interface{} {
 	}
 }
 
+func (b Block) At(idx int) interface{} {
+	if idx >= b.Len() {
+		return nil
+	}
+	switch b.typ {
+	case BlockInt64, BlockTime:
+		return b.Int64[idx]
+	case BlockFloat64:
+		return b.Float64[idx]
+	case BlockFloat32:
+		return b.Float32[idx]
+	case BlockInt32:
+		return b.Int32[idx]
+	case BlockInt16:
+		return b.Int16[idx]
+	case BlockInt8:
+		return b.Int8[idx]
+	case BlockUint64:
+		return b.Uint64[idx]
+	case BlockUint32:
+		return b.Uint32[idx]
+	case BlockUint16:
+		return b.Uint16[idx]
+	case BlockUint8:
+		return b.Uint8[idx]
+	case BlockBool:
+		return b.Bits.IsSet(idx)
+	case BlockString:
+		return b.Strings[idx]
+	case BlockBytes:
+		return b.Bytes[idx]
+	case BlockInt128:
+		return b.Int128.Elem(idx)
+	case BlockInt256:
+		return b.Int256.Elem(idx)
+	default:
+		return nil
+	}
+}
+
 func AllocBlock() *Block {
 	return BlockPool.Get().(*Block)
 }

@@ -139,6 +139,30 @@ func (t *Table) WalkPacks(fn func(*Package) error) error {
 	return nil
 }
 
+func (t *Table) WalkPacksRange(start, end int, fn func(*Package) error) error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	if start < 0 {
+		start = 0
+	}
+	if end < 0 {
+		end = t.packidx.Len() - 1
+	}
+	defer tx.Rollback()
+	for i := start; i <= end && i < t.packidx.Len(); i++ {
+		pkg, err := t.loadSharedPack(tx, t.packidx.Get(i).Key, false, nil)
+		if err != nil {
+			return err
+		}
+		if err := fn(pkg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
 	if i >= len(t.indexes) || i < 0 {
 		return ErrIndexNotFound
