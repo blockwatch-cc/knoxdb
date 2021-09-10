@@ -200,6 +200,19 @@ func (d *Decimal256) SetInt256(value Int256, scale int) error {
 	return nil
 }
 
+func (d Decimal256) Add64(value int64) Decimal256 {
+	d.val = d.val.Add64(uint64(value))
+	return d
+}
+
+func (d Decimal256) Add(value Decimal256) Decimal256 {
+	if d.scale != value.scale {
+		value = value.Quantize(d.scale)
+	}
+	d.val = d.val.Add(value.val)
+	return d
+}
+
 func (d Decimal256) RoundToInt64() int64 {
 	return d.Quantize(0).Int64()
 }

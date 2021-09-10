@@ -30,7 +30,7 @@ type Package struct {
 	dirty    bool           // pack is updated, needs to be written
 	cached   bool           // pack is cached
 	stripped bool           // some blocks are ignored, don't store this pack
-	sizeHint int            // block size hint
+	capHint  int            // block size hint
 	size     int            // storage size
 }
 
@@ -64,9 +64,14 @@ func encodePackKey(key uint32) []byte {
 
 func NewPackage(sz int) *Package {
 	return &Package{
-		pkindex:  -1,
-		sizeHint: sz,
+		pkindex: -1,
+		capHint: sz,
+		dirty:   true,
 	}
+}
+
+func (p *Package) CopyType(pkg *Package) error {
+	return p.InitFields(pkg.fields, pkg.tinfo)
 }
 
 func (p *Package) IsDirty() bool {
@@ -107,6 +112,18 @@ func (p *Package) FieldByName(name string) Field {
 		}
 	}
 	return Field{Index: -1}
+}
+
+func (p *Package) PkField() Field {
+	return p.fields.Pk()
+}
+
+func (p *Package) Fields() FieldList {
+	return p.fields
+}
+
+func (p *Package) Blocks() []*block.Block {
+	return p.blocks
 }
 
 func (p *Package) FieldById(idx int) Field {
@@ -179,7 +196,7 @@ func (p *Package) InitType(proto interface{}) error {
 	if len(p.blocks) == 0 {
 		p.blocks = make([]*block.Block, p.nFields)
 		for i, f := range p.fields {
-			p.blocks[i] = f.NewBlock(p.sizeHint)
+			p.blocks[i] = f.NewBlock(p.capHint)
 		}
 	} else {
 		// make sure we use the correct compression (empty blocks are stored without)
@@ -230,7 +247,7 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	if len(p.blocks) == 0 {
 		p.blocks = make([]*block.Block, p.nFields)
 		for i, f := range fields {
-			p.blocks[i] = f.NewBlock(p.sizeHint)
+			p.blocks[i] = f.NewBlock(p.capHint)
 		}
 	} else {
 		// make sure we use the correct compression (empty blocks are stored without)
@@ -241,35 +258,54 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	return nil
 }
 
-func (p *Package) Clone(copydata bool, sz int) (*Package, error) {
-	clone := &Package{
-		nFields:  p.nFields,
-		nValues:  0,
-		fields:   p.fields,
-		key:      0, // cloned pack has no identity yet
-		dirty:    true,
-		stripped: p.stripped, // cloning a stripped pack is allowed
-		tinfo:    p.tinfo,    // share static type info
-		pkindex:  p.pkindex,
-		sizeHint: p.sizeHint,
+func (p *Package) InitFieldsFrom(src *Package) error {
+	return p.InitFields(src.fields, src.tinfo)
+}
+
+// may be called from Join, no pk required
+func (p *Package) InitResultFields(fields FieldList, tinfo *typeInfo) error {
+	if len(fields) > 256 {
+		return fmt.Errorf("pack: cannot handle more than 256 fields")
+	}
+	if len(fields) == 0 {
+		return fmt.Errorf("pack: empty fields")
+	}
+	if len(p.fields) > 0 {
+		return fmt.Errorf("pack: already initialized")
 	}
 
-	if len(p.blocks) > 0 {
-		clone.blocks = make([]*block.Block, p.nFields)
-		// create new empty blocks
-		for i, b := range p.blocks {
-			var err error
-			clone.blocks[i], err = b.Clone(sz, copydata)
-			if err != nil {
-				return nil, err
-			}
-			// overwrite compression (empty journal blocks get saved without)
-			clone.blocks[i].SetCompression(p.fields[i].Flags.Compression())
-		}
-		if copydata {
-			clone.nValues = p.nValues
+	p.fields = fields
+	p.nFields = len(fields)
+	p.pkindex = fields.PkIndex()
+	p.tinfo = tinfo
+
+	if len(p.blocks) == 0 {
+		p.blocks = make([]*block.Block, p.nFields)
+		for i, f := range fields {
+			p.blocks[i] = f.NewBlock(p.capHint)
 		}
 	}
+	return nil
+}
+
+func (p *Package) Clone(capacity int) (*Package, error) {
+	// cloned pack has no identity yet
+	// cloning a stripped pack is allowed
+	clone := NewPackage(capacity)
+	if err := clone.CopyType(p); err != nil {
+		return nil, err
+	}
+	clone.nValues = p.nValues
+	clone.size = p.size
+	clone.stripped = p.stripped
+
+	for i, src := range p.blocks {
+		if src.IsIgnore() {
+			continue
+		}
+		clone.blocks[i].Copy(src)
+	}
+
 	return clone, nil
 }
 
@@ -1896,10 +1932,10 @@ func (p *Package) Delete(pos, n int) error {
 			b.Float32 = append(b.Float32[:pos], b.Float32[pos+n:]...)
 
 		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256 = b.Int256.Subslice(0, pos).AppendFrom(b.Int256.Subslice(pos+n, b.Int256.Len()))
+			b.Int256 = b.Int256.Delete(pos, n)
 
 		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128 = b.Int128.Subslice(0, pos).AppendFrom(b.Int128.Subslice(pos+n, b.Int128.Len()))
+			b.Int128 = b.Int128.Delete(pos, n)
 
 		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
 			b.Int64 = append(b.Int64[:pos], b.Int64[pos+n:]...)
@@ -1936,8 +1972,8 @@ func (p *Package) Delete(pos, n int) error {
 }
 
 func (p *Package) Clear() {
-	for _, v := range p.blocks {
-		v.Clear()
+	for i := range p.blocks {
+		p.blocks[i].Clear()
 	}
 	// Note: we keep all type-related data and blocks
 	// also keep pack key to avoid clearing journal/tombstone identity
@@ -1986,19 +2022,10 @@ func (p *Package) PkIndex(id uint64, last int) (int, int) {
 		return -1, p.nValues
 	}
 
-	// // search for id value in pk block (always an uint64) starting at last index
-	// // this helps limiting search space when ids are pre-sorted
+	// search for id value in pk block (always an uint64) starting at last index
+	// this helps limiting search space when ids are pre-sorted
 	slice := p.blocks[p.pkindex].Uint64[last:]
 	l := len(slice)
-	// min, max := slice[0], slice[l-1]
-	// if id < min || id > max {
-	// 	return -1, p.nValues
-	// }
-
-	// // for dense packs (pk's are continuous) compute offset directly
-	// if l == int(max-min)+1 {
-	// 	return int(id-min), int(id-min)
-	// }
 
 	// for sparse pk spaces, use binary search on sorted slices
 	idx := sort.Search(l, func(i int) bool { return slice[i] >= id })

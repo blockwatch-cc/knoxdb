@@ -114,11 +114,29 @@ func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
 		return err
 	}
 	defer tx.Rollback()
-	pkg, err := t.loadPack(tx, t.packidx.Get(i).Key, false, nil)
+	pkg, err := t.loadSharedPack(tx, t.packidx.Get(i).Key, false, nil)
 	if err != nil {
 		return err
 	}
 	return pkg.DumpData(w, mode, t.fields.Aliases())
+}
+
+func (t *Table) WalkPacks(fn func(*Package) error) error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for i := 0; i < t.packidx.Len(); i++ {
+		pkg, err := t.loadSharedPack(tx, t.packidx.Get(i).Key, false, nil)
+		if err != nil {
+			return err
+		}
+		if err := fn(pkg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
@@ -148,12 +166,12 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	defer tx.Rollback()
 	switch mode {
 	case DumpModeDec, DumpModeHex:
-		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-33s %-33s %-4s %-6s %-10s %-10s %7s %-10s\n",
-			"#", "Key", "Block", "Type", "Rows", "Min", "Max", "Prec", "Comp", "Stored", "Heap", "Ratio", "GoType")
+		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-7s %-33s %-33s %-4s %-6s %-10s %-10s %7s %-10s\n",
+			"#", "Key", "Block", "Type", "Rows", "Card", "Min", "Max", "Prec", "Comp", "Stored", "Heap", "Ratio", "GoType")
 	}
 	lineNo := 1
 	for i := 0; i < t.packidx.Len(); i++ {
-		pkg, err := t.loadPack(tx, t.packidx.Get(i).Key, false, nil)
+		pkg, err := t.loadSharedPack(tx, t.packidx.Get(i).Key, false, nil)
 		if err != nil {
 			return err
 		}
@@ -244,7 +262,7 @@ func (h PackInfo) Dump(w io.Writer, mode DumpMode, nfields int) error {
 			h.NValues,
 			min,
 			max,
-			util.ByteSize(h.Size))
+			util.ByteSize(h.Packsize))
 		return err
 	case DumpModeHex:
 		_, err := fmt.Fprintf(w, "%-10s %-7d %-7d %21x %21x %-10s\n",
@@ -253,7 +271,7 @@ func (h PackInfo) Dump(w io.Writer, mode DumpMode, nfields int) error {
 			h.NValues,
 			min,
 			max,
-			util.ByteSize(h.Size))
+			util.ByteSize(h.Packsize))
 		return err
 	case DumpModeCSV:
 		enc, ok := w.(*csv.Encoder)
@@ -266,7 +284,7 @@ func (h PackInfo) Dump(w io.Writer, mode DumpMode, nfields int) error {
 			Rows:  h.NValues,
 			MinPk: min,
 			MaxPk: max,
-			Size:  h.Size,
+			Size:  h.Packsize,
 		}
 		return enc.EncodeRecord(ch)
 	}
@@ -346,12 +364,17 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 				gotype = p.tinfo.fields[i].typname
 			}
 			blockinfo := info.Blocks[i]
-			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-33s %-33s %-4d %-6s %-10s %-10s %7s %-10s\n",
+			// reconstruct cardinality of missing
+			if blockinfo.Cardinality == 0 && v.Len() > 0 {
+				blockinfo.Cardinality = p.fields[i].Type.EstimateCardinality(v, 15)
+			}
+			_, err := fmt.Fprintf(w, "%-5d %-10s %-7d %-10s %-7d %-5d %-33s %-33s %-4d %-6s %-10s %-10s %7s %-10s\n",
 				lineNo,
 				key,      // pack key
 				i,        // block id
 				v.Type(), // block type
 				v.Len(),  // block values
+				blockinfo.Cardinality,
 				util.LimitStringEllipsis(util.ToString(blockinfo.MinValue), 33), // min val in block
 				util.LimitStringEllipsis(util.ToString(blockinfo.MaxValue), 33), // max val in block
 				blockinfo.Scale,
@@ -498,7 +521,13 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 	return nil
 }
 
-func (n ConditionTreeNode) Dump(level int, w io.Writer) {
+func (n ConditionTreeNode) Dump() string {
+	buf := bytes.NewBuffer(nil)
+	n.dump(0, buf)
+	return string(buf.Bytes())
+}
+
+func (n ConditionTreeNode) dump(level int, w io.Writer) {
 	if n.Leaf() {
 		fmt.Fprintln(w, strings.Repeat("  ", level), n.Cond.String())
 	}
@@ -510,15 +539,47 @@ func (n ConditionTreeNode) Dump(level int, w io.Writer) {
 		fmt.Fprintln(w, strings.Repeat("  ", level), kind)
 	}
 	for _, v := range n.Children {
-		v.Dump(level+1, w)
+		v.dump(level+1, w)
 	}
 }
 
 func (q Query) Dump() string {
 	buf := bytes.NewBuffer(nil)
 	fmt.Fprintln(buf, "Query:", q.Name, "=>")
-	q.Conditions.Dump(0, buf)
+	q.Conditions.dump(0, buf)
 	return string(buf.Bytes())
+}
+
+func (j Join) Dump() string {
+	buf := bytes.NewBuffer(nil)
+	fmt.Fprintln(buf, "Join:", j.Type.String(), "=>")
+	fmt.Fprintln(buf, "  Predicate:", j.Predicate.Left.Alias, j.Predicate.Mode.String(), j.Predicate.Right.Alias)
+	fmt.Fprintln(buf, "  Left:", j.Left.Table.Name())
+	fmt.Fprintln(buf, "  Where:")
+	j.Left.Where.dump(0, buf)
+	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Left.Fields.Names(), ","))
+	fmt.Fprintln(buf, "  AS:", strings.Join(j.Left.FieldsAs, ","))
+	fmt.Fprintln(buf, "  Limit:", j.Left.Limit)
+	fmt.Fprintln(buf, "  Right:", j.Right.Table.Name())
+	fmt.Fprintln(buf, "  Where:")
+	j.Right.Where.dump(0, buf)
+	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Right.Fields.Names(), ","))
+	fmt.Fprintln(buf, "  AS:", strings.Join(j.Right.FieldsAs, ","))
+	fmt.Fprintln(buf, "  Limit:", j.Right.Limit)
+	return string(buf.Bytes())
+}
+
+func (r Result) Dump() string {
+	buf := bytes.NewBuffer(nil)
+	fmt.Fprintf(buf, "Result ------------------------------------ \n")
+	fmt.Fprintf(buf, "Rows:       %d\n", r.Rows())
+	fmt.Fprintf(buf, "Cols:       %d\n", len(r.fields))
+	fmt.Fprintf(buf, "%-2s  %-15s  %-15s  %-10s  %-4s  %s\n", "No", "Name", "Alias", "Type", "Scale", "Flags")
+	for _, v := range r.fields {
+		fmt.Fprintf(buf, "%02d  %-15s  %-15s  %-10s  %2d    %s\n",
+			v.Index, v.Name, v.Alias, v.Type, v.Scale, v.Flags)
+	}
+	return buf.String()
 }
 
 func (p *Package) Validate() error {

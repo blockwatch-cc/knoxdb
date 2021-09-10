@@ -52,8 +52,8 @@ func randi(i1, i2 uint) uint {
 	return i2
 }
 
-// Insert inserts data into the counter and returns true upon success
-func (cf *Filter) Insert(data []byte) bool {
+// Add inserts data into the counter and returns true upon success
+func (cf *Filter) Add(data []byte) bool {
 	i1, i2, fp := getIndicesAndFingerprint(data, uint(len(cf.buckets)))
 	if cf.insert(fp, i1) || cf.insert(fp, i2) {
 		return true
@@ -62,11 +62,11 @@ func (cf *Filter) Insert(data []byte) bool {
 }
 
 // InsertUnique inserts data into the counter if not exists and returns true upon success
-func (cf *Filter) InsertUnique(data []byte) bool {
+func (cf *Filter) AddUnique(data []byte) bool {
 	if cf.Lookup(data) {
 		return false
 	}
-	return cf.Insert(data)
+	return cf.Add(data)
 }
 
 func (cf *Filter) insert(fp byte, i uint) bool {

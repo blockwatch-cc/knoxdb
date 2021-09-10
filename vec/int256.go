@@ -990,20 +990,28 @@ func MakeInt256LLSlice(sz int) Int256LLSlice {
 	return Int256LLSlice{make([]int64, sz), make([]uint64, sz), make([]uint64, sz), make([]uint64, sz)}
 }
 
-func (s Int256LLSlice) Append(val Int256) Int256LLSlice {
+func (s *Int256LLSlice) Append(val Int256) Int256LLSlice {
 	s.X0 = append(s.X0, int64(val[0]))
 	s.X1 = append(s.X1, val[1])
 	s.X2 = append(s.X2, val[2])
 	s.X3 = append(s.X3, val[3])
-	return s
+	return *s
 }
 
-func (dst Int256LLSlice) AppendFrom(src Int256LLSlice) Int256LLSlice {
+func (dst *Int256LLSlice) AppendFrom(src Int256LLSlice) Int256LLSlice {
 	dst.X0 = append(dst.X0, src.X0...)
 	dst.X1 = append(dst.X1, src.X1...)
 	dst.X2 = append(dst.X2, src.X2...)
 	dst.X3 = append(dst.X3, src.X3...)
-	return dst
+	return *dst
+}
+
+func (dst *Int256LLSlice) Delete(pos, n int) Int256LLSlice {
+	dst.X0 = append(dst.X0[:pos], dst.X0[pos+n:]...)
+	dst.X1 = append(dst.X1[:pos], dst.X1[pos+n:]...)
+	dst.X2 = append(dst.X2[:pos], dst.X2[pos+n:]...)
+	dst.X3 = append(dst.X3[:pos], dst.X3[pos+n:]...)
+	return *dst
 }
 
 func (s Int256LLSlice) Swap(i, j int) {

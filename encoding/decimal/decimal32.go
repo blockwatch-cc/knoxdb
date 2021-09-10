@@ -125,6 +125,19 @@ func (d *Decimal32) SetInt64(value int64, scale int) error {
 	return nil
 }
 
+func (d Decimal32) Add64(value int64) Decimal32 {
+	d.val += int32(value)
+	return d
+}
+
+func (d Decimal32) Add(value Decimal32) Decimal32 {
+	if d.scale != value.scale {
+		value = value.Quantize(d.scale)
+	}
+	d.val += value.val
+	return d
+}
+
 func (d Decimal32) RoundToInt64() int64 {
 	return d.Quantize(0).Int64()
 }

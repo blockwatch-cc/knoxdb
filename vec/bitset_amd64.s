@@ -1218,7 +1218,6 @@ loop_avx2:
 	JMP			loop_avx2
 
 exit_avx2:
-	VZEROUPPER
 	TESTQ		CX, CX
 	JLE			done
 	CMPQ		CX, $16
@@ -1244,7 +1243,6 @@ loop_avx:
 	JMP			loop_avx
 
 exit_avx:
-	VZEROUPPER
 	TESTQ	CX, CX
 	JLE		done
 
@@ -1264,6 +1262,7 @@ loop_i8:
 	JMP		loop_i8
 
 done:
+	VZEROUPPER
     SUBQ        R15, DI
     SHRQ        $2, DI
     MOVQ        DI, ret+96(FP)

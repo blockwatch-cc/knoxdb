@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/filter/bloom"
+	"blockwatch.cc/knoxdb/filter/loglogbeta"
 	"blockwatch.cc/knoxdb/util"
 
 	. "blockwatch.cc/knoxdb/encoding/decimal"
@@ -27,6 +29,7 @@ const (
 	FlagIndexed
 	FlagCompressSnappy
 	FlagCompressLZ4
+	FlagBloom
 
 	// internal type conversion flags used when a struct field's Go type
 	// does not directly match the requested field type
@@ -60,6 +63,8 @@ func (f FieldFlags) String() string {
 				s = append(s, "indexed")
 			case FlagCompressSnappy:
 				s = append(s, "snappy")
+			case FlagBloom:
+				s = append(s, "bloom")
 			case FlagCompressLZ4:
 				s = append(s, "lz4")
 			case flagFloatType:
@@ -109,7 +114,7 @@ type Field struct {
 	Alias string     `json:"alias"`
 	Type  FieldType  `json:"type"`
 	Flags FieldFlags `json:"flags"` // primary, indexed, compression
-	Scale int        `json:"scale"` // fixed point scale
+	Scale int        `json:"scale"` // 0..127 fixed point scale, bloom error probability 1/x
 }
 
 func (f Field) IsValid() bool {
@@ -361,6 +366,9 @@ func Fields(proto interface{}) (FieldList, error) {
 		// allow the user to specify a different type in struct tags
 		if finfo.override.IsValid() {
 			fields[i].Type = finfo.override
+			fields[i].Scale = finfo.scale
+		}
+		if finfo.flags.Contains(FlagBloom) {
 			fields[i].Scale = finfo.scale
 		}
 	}
@@ -2698,4 +2706,272 @@ func (t FieldType) EqualPacksAt(p1 *Package, i1, n1 int, p2 *Package, i2, n2 int
 	default:
 		return false
 	}
+}
+
+func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor int) *bloom.Filter {
+	if cardinality <= 0 {
+		cardinality = uint32(b.Len())
+	}
+	if factor <= 0 {
+		factor = 1
+	}
+	m := uint64(cardinality * uint32(factor) * 8) // unit is bits
+	flt := bloom.NewFilter(m, 4)
+	var buf [8]byte
+	switch t {
+	case FieldTypeBytes:
+		for _, v := range b.Bytes {
+			flt.Add(v)
+		}
+	case FieldTypeString:
+		for _, v := range b.Strings {
+			flt.Add([]byte(v))
+		}
+	case FieldTypeDatetime:
+		for _, v := range b.Int64 {
+			bigEndian.PutUint64(buf[:], uint64(v))
+			flt.Add(buf[:])
+		}
+	case FieldTypeBoolean:
+		var (
+			count int
+			last  bool
+		)
+		for _, v := range b.Bits.Slice() {
+			if count == 2 {
+				break
+			}
+			if v {
+				flt.Add([]byte{1})
+				if count == 0 || !last {
+					count++
+				}
+			} else {
+				flt.Add([]byte{0})
+				if count == 0 || last {
+					count++
+				}
+			}
+		}
+	case FieldTypeInt256, FieldTypeDecimal256:
+		for i := 0; i < b.Int256.Len(); i++ {
+			buf := b.Int256.Elem(i).Bytes32()
+			flt.Add(buf[:])
+		}
+	case FieldTypeInt128, FieldTypeDecimal128:
+		for i := 0; i < b.Int128.Len(); i++ {
+			buf := b.Int128.Elem(i).Bytes16()
+			flt.Add(buf[:])
+		}
+	case FieldTypeInt64, FieldTypeDecimal64:
+		for _, v := range b.Int64 {
+			bigEndian.PutUint64(buf[:], uint64(v))
+			flt.Add(buf[:])
+		}
+	case FieldTypeInt32, FieldTypeDecimal32:
+		for _, v := range b.Int32 {
+			bigEndian.PutUint32(buf[:], uint32(v))
+			flt.Add(buf[:4])
+		}
+	case FieldTypeInt16:
+		for _, v := range b.Int64 {
+			bigEndian.PutUint16(buf[:], uint16(v))
+			flt.Add(buf[:2])
+		}
+	case FieldTypeInt8:
+		for _, v := range b.Int8 {
+			flt.Add([]byte{byte(v)})
+		}
+	case FieldTypeUint64:
+		for _, v := range b.Uint64 {
+			bigEndian.PutUint64(buf[:], v)
+			flt.Add(buf[:])
+		}
+	case FieldTypeUint32:
+		for _, v := range b.Uint32 {
+			bigEndian.PutUint32(buf[:], v)
+			flt.Add(buf[:4])
+		}
+	case FieldTypeUint16:
+		for _, v := range b.Uint16 {
+			bigEndian.PutUint16(buf[:], v)
+			flt.Add(buf[:2])
+		}
+	case FieldTypeUint8:
+		for _, v := range b.Uint8 {
+			flt.Add([]byte{v})
+		}
+	case FieldTypeFloat64:
+		for _, v := range b.Float64 {
+			bigEndian.PutUint64(buf[:], math.Float64bits(v))
+			flt.Add(buf[:])
+		}
+	case FieldTypeFloat32:
+		for _, v := range b.Float32 {
+			bigEndian.PutUint32(buf[:], math.Float32bits(v))
+			flt.Add(buf[:4])
+		}
+	default:
+		return nil
+	}
+	return flt
+}
+
+// used for bloom filter test value compilation
+func (t FieldType) Bytes(val interface{}) []byte {
+	if val == nil {
+		return nil
+	}
+	var buf [8]byte
+	switch t {
+	case FieldTypeBytes:
+		return val.([]byte)
+	case FieldTypeString:
+		return []byte(val.(string))
+	case FieldTypeDatetime:
+		bigEndian.PutUint64(buf[:], uint64(val.(int64)))
+		return buf[:]
+	case FieldTypeBoolean:
+		if v := val.(bool); v {
+			return []byte{1}
+		} else {
+			return []byte{0}
+		}
+	case FieldTypeInt256, FieldTypeDecimal256:
+		buf := val.(Int256).Bytes32()
+		return buf[:]
+	case FieldTypeInt128, FieldTypeDecimal128:
+		buf := val.(Int128).Bytes16()
+		return buf[:]
+	case FieldTypeInt64, FieldTypeDecimal64:
+		bigEndian.PutUint64(buf[:], uint64(val.(int64)))
+		return buf[:]
+	case FieldTypeInt32, FieldTypeDecimal32:
+		bigEndian.PutUint32(buf[:], uint32(val.(int32)))
+		return buf[:4]
+	case FieldTypeInt16:
+		bigEndian.PutUint16(buf[:], uint16(val.(int16)))
+		return buf[:2]
+	case FieldTypeInt8:
+		return []byte{byte(val.(int8))}
+	case FieldTypeUint64:
+		bigEndian.PutUint64(buf[:], val.(uint64))
+		return buf[:]
+	case FieldTypeUint32:
+		bigEndian.PutUint32(buf[:], val.(uint32))
+		return buf[:4]
+	case FieldTypeUint16:
+		bigEndian.PutUint16(buf[:], val.(uint16))
+		return buf[:2]
+	case FieldTypeUint8:
+		return []byte{byte(val.(uint8))}
+	case FieldTypeFloat64:
+		bigEndian.PutUint64(buf[:], math.Float64bits(val.(float64)))
+		return buf[:]
+	case FieldTypeFloat32:
+		bigEndian.PutUint32(buf[:], math.Float32bits(val.(float32)))
+		return buf[:4]
+	default:
+		return nil
+	}
+}
+
+func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(precision)
+	var buf [8]byte
+	switch t {
+	case FieldTypeBytes:
+		for _, v := range b.Bytes {
+			filter.Add(v)
+		}
+	case FieldTypeString:
+		for _, v := range b.Strings {
+			filter.Add([]byte(v))
+		}
+	case FieldTypeDatetime:
+		for _, v := range b.Int64 {
+			bigEndian.PutUint64(buf[:], uint64(v))
+			filter.Add(buf[:])
+		}
+	case FieldTypeBoolean:
+		var (
+			count int
+			last  bool
+		)
+		for _, v := range b.Bits.Slice() {
+			if count == 2 {
+				break
+			}
+			if v {
+				filter.Add([]byte{1})
+				if count == 0 || !last {
+					count++
+				}
+			} else {
+				filter.Add([]byte{0})
+				if count == 0 || last {
+					count++
+				}
+			}
+		}
+	case FieldTypeInt256, FieldTypeDecimal256:
+		for i := 0; i < b.Int256.Len(); i++ {
+			buf := b.Int256.Elem(i).Bytes32()
+			filter.Add(buf[:])
+		}
+	case FieldTypeInt128, FieldTypeDecimal128:
+		for i := 0; i < b.Int128.Len(); i++ {
+			buf := b.Int128.Elem(i).Bytes16()
+			filter.Add(buf[:])
+		}
+	case FieldTypeInt64, FieldTypeDecimal64:
+		for _, v := range b.Int64 {
+			bigEndian.PutUint64(buf[:], uint64(v))
+			filter.Add(buf[:])
+		}
+	case FieldTypeInt32, FieldTypeDecimal32:
+		for _, v := range b.Int32 {
+			bigEndian.PutUint32(buf[:], uint32(v))
+			filter.Add(buf[:4])
+		}
+	case FieldTypeInt16:
+		for _, v := range b.Int16 {
+			bigEndian.PutUint16(buf[:], uint16(v))
+			filter.Add(buf[:2])
+		}
+	case FieldTypeInt8:
+		for _, v := range b.Int8 {
+			filter.Add([]byte{byte(v)})
+		}
+	case FieldTypeUint64:
+		for _, v := range b.Uint64 {
+			bigEndian.PutUint64(buf[:], v)
+			filter.Add(buf[:])
+		}
+	case FieldTypeUint32:
+		for _, v := range b.Uint32 {
+			bigEndian.PutUint32(buf[:], v)
+			filter.Add(buf[:4])
+		}
+	case FieldTypeUint16:
+		for _, v := range b.Uint16 {
+			bigEndian.PutUint16(buf[:], v)
+			filter.Add(buf[:2])
+		}
+	case FieldTypeUint8:
+		for _, v := range b.Uint8 {
+			filter.Add([]byte{byte(v)})
+		}
+	case FieldTypeFloat64:
+		for _, v := range b.Float64 {
+			bigEndian.PutUint64(buf[:], math.Float64bits(v))
+			filter.Add(buf[:])
+		}
+	case FieldTypeFloat32:
+		for _, v := range b.Float32 {
+			bigEndian.PutUint32(buf[:], math.Float32bits(v))
+			filter.Add(buf[:4])
+		}
+	}
+	return util.MinU32(uint32(b.Len()), uint32(filter.Cardinality()))
 }

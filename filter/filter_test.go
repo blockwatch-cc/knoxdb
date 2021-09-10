@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 - 2020 Blockwatch Data Inc.
+// Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 //
 
@@ -170,7 +170,7 @@ func BenchmarkUint64BloomFromUnsortedLE(B *testing.B) {
 				for _, v := range a {
 					var buf [8]byte
 					binary.LittleEndian.PutUint64(buf[:], v)
-					filter.Insert(buf[:])
+					filter.Add(buf[:])
 				}
 			}
 		})
@@ -189,7 +189,7 @@ func BenchmarkUint64BloomFromSortedLE(B *testing.B) {
 				for _, v := range a {
 					var buf [8]byte
 					binary.LittleEndian.PutUint64(buf[:], v)
-					filter.Insert(buf[:])
+					filter.Add(buf[:])
 				}
 			}
 		})
@@ -208,7 +208,7 @@ func BenchmarkUint64BloomFromUnsortedBE(B *testing.B) {
 				for _, v := range a {
 					var buf [8]byte
 					binary.BigEndian.PutUint64(buf[:], v)
-					filter.Insert(buf[:])
+					filter.Add(buf[:])
 				}
 			}
 		})
@@ -227,7 +227,7 @@ func BenchmarkUint64BloomFromSortedBE(B *testing.B) {
 				for _, v := range a {
 					var buf [8]byte
 					binary.BigEndian.PutUint64(buf[:], v)
-					filter.Insert(buf[:])
+					filter.Add(buf[:])
 				}
 			}
 		})
@@ -244,7 +244,7 @@ func BenchmarkBytes32Bloom(B *testing.B) {
 				m, k := bloom.Estimate(uint64(float64(len(a))/bloomFillFactor), maxFilterError)
 				filter := bloom.NewFilter(m, k)
 				for _, v := range a {
-					filter.Insert(v)
+					filter.Add(v)
 				}
 			}
 		})
@@ -265,7 +265,7 @@ func BenchmarkUint64CuckooFromUnsortedLE(B *testing.B) {
 				for _, v := range a {
 					var buf [8]byte
 					binary.LittleEndian.PutUint64(buf[:], v)
-					filter.Insert(buf[:])
+					filter.Add(buf[:])
 				}
 			}
 		})
@@ -283,7 +283,7 @@ func BenchmarkUint64CuckooFromSortedLE(B *testing.B) {
 				for _, v := range a {
 					var buf [8]byte
 					binary.LittleEndian.PutUint64(buf[:], v)
-					filter.Insert(buf[:])
+					filter.Add(buf[:])
 				}
 			}
 		})
@@ -301,7 +301,7 @@ func BenchmarkUint64CuckooFromUnsortedBE(B *testing.B) {
 				for _, v := range a {
 					var buf [8]byte
 					binary.BigEndian.PutUint64(buf[:], v)
-					filter.Insert(buf[:])
+					filter.Add(buf[:])
 				}
 			}
 		})
@@ -319,7 +319,7 @@ func BenchmarkUint64CuckooFromSortedBE(B *testing.B) {
 				for _, v := range a {
 					var buf [8]byte
 					binary.BigEndian.PutUint64(buf[:], v)
-					filter.Insert(buf[:])
+					filter.Add(buf[:])
 				}
 			}
 		})
@@ -335,7 +335,7 @@ func BenchmarkBytes32Cuckoo(B *testing.B) {
 			for i := 0; i < B.N; i++ {
 				filter := cuckoo.NewFilter(uint(float64(len(a)) / cuckooFillFactor))
 				for _, v := range a {
-					filter.Insert(v)
+					filter.Add(v)
 				}
 			}
 		})

@@ -141,6 +141,9 @@ func (q *Query) Compile(t *Table) error {
 		q.Fields = q.Fields.MergeUnique(t.Fields().Pk())
 	}
 	q.reqfields = q.Fields.MergeUnique(q.Conditions.Fields()...)
+	if len(q.idxFields) == 0 {
+		q.idxFields = t.fields.Indexed()
+	}
 
 	// check query can be processed
 	if err := q.Check(); err != nil {
@@ -149,9 +152,9 @@ func (q *Query) Compile(t *Table) error {
 	}
 	q.stats.CompileTime = time.Since(q.lap)
 
-	// log.Trace(newLogClosure(func() string {
-	// 	return q.Dump()
-	// }))
+	log.Debug(newLogClosure(func() string {
+		return q.Dump()
+	}))
 
 	return nil
 }
@@ -161,18 +164,18 @@ func (q Query) Check() error {
 	for _, v := range q.reqfields {
 		// field must exist
 		if !tfields.Contains(v.Name) {
-			return fmt.Errorf("undefined field '%s.%s' in query %s", q.table.name, v.Name, q.Name)
+			return fmt.Errorf("undefined field '%s/%s' in query %s", q.table.name, v.Name, q.Name)
 		}
 		// field type must match
 		if tfields.Find(v.Name).Type != v.Type {
-			return fmt.Errorf("mismatched type %s for field '%s.%s' in query %s", v.Type, q.table.name, v.Name, q.Name)
+			return fmt.Errorf("mismatched type %s for field '%s/%s' in query %s", v.Type, q.table.name, v.Name, q.Name)
 		}
 		// field index must be valid
 		if v.Index < 0 || v.Index >= len(tfields) {
-			return fmt.Errorf("illegal index %d for field '%s.%s' in query %s", v.Index, q.table.name, v.Name, q.Name)
+			return fmt.Errorf("illegal index %d for field '%s/%s' in query %s", v.Index, q.table.name, v.Name, q.Name)
 		}
 	}
-	// root condition may be empty but must not be a leaf
+	// root condition may be empty but must not be a leaf for index queries to work
 	if q.Conditions.Leaf() {
 		return fmt.Errorf("unexpected simple condition tree in query %s", q.Name)
 	}
@@ -194,23 +197,23 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 	for i, v := range node.Children {
 		if v.Leaf() {
 			if !q.idxFields.Contains(v.Cond.Field.Name) {
-				// log.Tracef("query: %s table non-indexed field %s for cond %s, fallback to table scan",
-				// 	q.Name, v.Cond.Field.Name, v.Cond.String())
+				log.Debugf("query: %s table non-indexed field %s for cond %s, fallback to table scan",
+					q.Name, v.Cond.Field.Name, v.Cond.String())
 				continue
 			}
 			idx := q.table.indexes.FindField(v.Cond.Field.Name)
 			if idx == nil {
-				// log.Tracef("query: %s table missing index on field %s for cond %d, fallback to table scan",
-				// 	q.Name, v.Cond.Field.Name, v.Cond.String())
+				log.Debugf("query: %s table missing index on field %s for cond %d, fallback to table scan",
+					q.Name, v.Cond.Field.Name, v.Cond.String())
 				continue
 			}
 			if !idx.CanMatch(*v.Cond) {
-				// log.Tracef("query: %s index %s cannot match cond %s, fallback to table scan",
-				//  q.Name, idx.Name, v.Cond.String())
+				log.Debugf("query: %s index %s cannot match cond %s, fallback to table scan",
+					q.Name, idx.Name, v.Cond.String())
 				continue
 			}
 
-			// log.Debugf("query: %s index scan for %s", q.Name, v.Cond.String())
+			log.Debugf("query: %s index scan for %s", q.Name, v.Cond.String())
 
 			// lookup matching primary keys from index (result is sorted)
 			pkmatch, err := idx.LookupTx(ctx, tx, *v.Cond)
@@ -227,7 +230,7 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 			if !idx.Type.MayHaveCollisions() {
 				v.Cond.processed = true
 			}
-			// log.Debugf("query: %s index scan found %d matches", q.Name, len(pkmatch))
+			log.Debugf("query: %s index scan found %d matches", q.Name, len(pkmatch))
 
 			if len(pkmatch) == 0 {
 				v.Cond.nomatch = true
@@ -270,12 +273,15 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 			// skip processed source conditions unless they led to an empty result
 			// because we need them to check for nomatch later
 			if v.Leaf() && v.Cond.processed && !v.Cond.nomatch {
-				// log.Debugf("query: %s replacing condition %s", q.Name, v.Cond.String())
+				log.Debugf("query: %s replacing condition %s", q.Name, v.Cond.String())
 				continue
 			}
 			ins = append(ins, v)
 		}
 		node.Children = ins
+		log.Debug(newLogClosure(func() string {
+			return "Updated query:\n" + q.Dump()
+		}))
 	}
 
 	return nil
@@ -375,8 +381,18 @@ func (q Query) WithOffset(o int) Query {
 	return q
 }
 
+func (q Query) WithIndex(enable bool) Query {
+	q.NoIndex = !enable
+	return q
+}
+
 func (q Query) WithoutIndex() Query {
 	q.NoIndex = true
+	return q
+}
+
+func (q Query) WithCache(enable bool) Query {
+	q.NoCache = !enable
 	return q
 }
 
@@ -389,25 +405,7 @@ func (q Query) And(conds ...UnboundCondition) Query {
 	if len(conds) == 0 {
 		return q
 	}
-
-	// create a new AND node to bind children
-	node := ConditionTreeNode{
-		OrKind:   COND_AND,
-		Children: make([]ConditionTreeNode, 0),
-	}
-
-	// bind each unbound condition and add the new node element
-	for _, v := range conds {
-		node.AddNode(v.Bind(q.table))
-	}
-
-	// append to tree
-	if q.Conditions.Empty() {
-		q.Conditions.ReplaceNode(node)
-	} else {
-		q.Conditions.AddNode(node)
-	}
-
+	q.Conditions.AddNode(And(conds...).Bind(q.table))
 	return q
 }
 
@@ -415,25 +413,7 @@ func (q Query) Or(conds ...UnboundCondition) Query {
 	if len(conds) == 0 {
 		return q
 	}
-
-	// create a new OR node to bind children
-	node := ConditionTreeNode{
-		OrKind:   COND_OR,
-		Children: make([]ConditionTreeNode, 0),
-	}
-
-	// bind each unbound condition and add to the new node element
-	for _, v := range conds {
-		node.AddNode(v.Bind(q.table))
-	}
-
-	// append to tree
-	if q.Conditions.Empty() {
-		q.Conditions.ReplaceNode(node)
-	} else {
-		q.Conditions.AddNode(node)
-	}
-
+	q.Conditions.AddNode(Or(conds...).Bind(q.table))
 	return q
 }
 

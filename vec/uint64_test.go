@@ -1308,7 +1308,7 @@ func TestUniqueUint64(T *testing.T) {
 }
 
 func BenchmarkUniqueUint64(B *testing.B) {
-	for _, n := range []int{10, 100, 1000, 10000} {
+	for _, n := range []int{10, 100, 1000, 10000, 100000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
 			a := randUint64Slice(n, 5)
 			B.ResetTimer()
