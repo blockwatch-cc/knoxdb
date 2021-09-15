@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
+	"blockwatch.cc/knoxdb/encoding/dedup"
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/vec"
 )
@@ -143,7 +144,7 @@ type Block struct {
 	//       but adds another level of indirection on each data access
 	// data interface{}
 	Strings []string
-	Bytes   [][]byte
+	Bytes   dedup.ByteArray
 	Bits    *vec.Bitset // -> Bitset
 	Int64   []int64     // re-used by Decimal64, Timestamps
 	Int32   []int32     // re-used by Decimal32
@@ -219,7 +220,7 @@ func (b Block) RawSlice() interface{} {
 	case BlockString:
 		return b.Strings
 	case BlockBytes:
-		return b.Bytes
+		return b.Bytes.Slice()
 	case BlockInt128:
 		return b.Int128.Int128Slice()
 	case BlockInt256:
@@ -256,7 +257,7 @@ func (b Block) RangeSlice(start, end int) interface{} {
 	case BlockString:
 		return b.Strings[start:end]
 	case BlockBytes:
-		return b.Bytes[start:end]
+		return b.Bytes.Subslice(start, end)
 	case BlockInt128:
 		return b.Int128.Subslice(start, end).Int128Slice()
 	case BlockInt256:
@@ -266,7 +267,7 @@ func (b Block) RangeSlice(start, end int) interface{} {
 	}
 }
 
-func (b Block) At(idx int) interface{} {
+func (b Block) Elem(idx int) interface{} {
 	if idx >= b.Len() {
 		return nil
 	}
@@ -296,7 +297,7 @@ func (b Block) At(idx int) interface{} {
 	case BlockString:
 		return b.Strings[idx]
 	case BlockBytes:
-		return b.Bytes[idx]
+		return b.Bytes.Elem(idx)
 	case BlockInt128:
 		return b.Int128.Elem(idx)
 	case BlockInt256:
@@ -386,11 +387,12 @@ func NewBlock(typ BlockType, comp Compression, sz int) *Block {
 			b.Strings = make([]string, 0, sz)
 		}
 	case BlockBytes:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Bytes = bytesPool.Get().([][]byte)
-		} else {
-			b.Bytes = make([][]byte, 0, sz)
-		}
+		b.Bytes = dedup.NewByteArray(sz)
+		// if sz <= DefaultMaxPointsPerBlock {
+		// 	b.Bytes = bytesPool.Get().([][]byte)
+		// } else {
+		// 	b.Bytes = make([][]byte, 0, sz)
+		// }
 	case BlockInt128:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Int128.X0 = int64Pool.Get().([]int64)
@@ -458,11 +460,13 @@ func (b *Block) Copy(src *Block) {
 		b.Strings = b.Strings[:len(src.Strings)]
 		copy(b.Strings, src.Strings)
 	case BlockBytes:
-		b.Bytes = b.Bytes[:len(src.Bytes)]
-		for i, v := range src.Bytes {
-			b.Bytes[i] = make([]byte, len(v))
-			copy(b.Bytes[i], v)
-		}
+		b.Bytes = dedup.NewByteArray(src.Bytes.Len())
+		b.Bytes.Copy(src.Bytes, 0, 0, src.Bytes.Len())
+		// b.Bytes = b.Bytes[:len(src.Bytes)]
+		// for i, v := range src.Bytes {
+		// 	b.Bytes[i] = make([]byte, len(v))
+		// 	copy(b.Bytes[i], v)
+		// }
 	case BlockInt128:
 		sz := len(b.Int128.X0)
 		b.Int128.X0 = b.Int128.X0[:sz]
@@ -509,7 +513,7 @@ func (b *Block) Len() int {
 	case BlockString:
 		return len(b.Strings)
 	case BlockBytes:
-		return len(b.Bytes)
+		return b.Bytes.Len()
 	case BlockInt128:
 		return b.Int128.Len()
 	case BlockInt256:
@@ -546,7 +550,7 @@ func (b *Block) Cap() int {
 	case BlockString:
 		return cap(b.Strings)
 	case BlockBytes:
-		return cap(b.Bytes)
+		return b.Bytes.Cap()
 	case BlockInt128:
 		return b.Int128.Cap()
 	case BlockInt256:
@@ -590,7 +594,7 @@ func (b *Block) MaxStoredSize() int {
 	case BlockString:
 		sz = compress.StringArrayEncodedSize(b.Strings)
 	case BlockBytes:
-		sz = compress.BytesArrayEncodedSize(b.Bytes)
+		sz = b.Bytes.MaxEncodedSize()
 	case BlockInt128:
 		sz = compress.Int128ArrayEncodedSize(b.Int128)
 	case BlockInt256:
@@ -633,9 +637,10 @@ func (b *Block) HeapSize() int {
 			sz += len(v) + stringSize
 		}
 	case BlockBytes:
-		for _, v := range b.Bytes {
-			sz += len(v) + sliceSize
-		}
+		sz += b.Bytes.HeapSize()
+		// for _, v := range b.Bytes {
+		// 	sz += len(v) + sliceSize
+		// }
 	case BlockInt128:
 		sz += b.Int128.Len() * 16
 	case BlockInt256:
@@ -672,10 +677,11 @@ func (b *Block) Clear() {
 		}
 		b.Strings = b.Strings[:0]
 	case BlockBytes:
-		for j := range b.Bytes {
-			b.Bytes[j] = nil
-		}
-		b.Bytes = b.Bytes[:0]
+		b.Bytes.Clear()
+		// for j := range b.Bytes {
+		// 	b.Bytes[j] = nil
+		// }
+		// b.Bytes = b.Bytes[:0]
 	case BlockBool:
 		b.Bits.Reset()
 	case BlockInt128:
@@ -763,12 +769,13 @@ func (b *Block) Release() {
 		}
 		b.Strings = nil
 	case BlockBytes:
-		for j := range b.Bytes {
-			b.Bytes[j] = nil
-		}
-		if cap(b.Bytes) == DefaultMaxPointsPerBlock {
-			bytesPool.Put(b.Bytes[:0])
-		}
+		b.Bytes.Release()
+		// for j := range b.Bytes {
+		// 	b.Bytes[j] = nil
+		// }
+		// if cap(b.Bytes) == DefaultMaxPointsPerBlock {
+		// 	bytesPool.Put(b.Bytes[:0])
+		// }
 		b.Bytes = nil
 	case BlockInt128:
 		if b.Int128.Cap() == DefaultMaxPointsPerBlock {
@@ -963,12 +970,13 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 		b.Strings, err = decodeStringBlock(buf, b.Strings)
 
 	case BlockBytes:
-		if b.Bytes == nil || cap(b.Bytes) < sz {
-			b.Bytes = make([][]byte, 0, sz)
-		} else {
-			b.Bytes = b.Bytes[:0]
-		}
-		b.Bytes, err = decodeBytesBlock(buf, b.Bytes)
+		// if b.Bytes == nil || cap(b.Bytes) < sz {
+		// 	b.Bytes = make([][]byte, 0, sz)
+		// } else {
+		// 	b.Bytes = b.Bytes[:0]
+		// }
+		// b.Bytes, err = decodeBytesBlock(buf, b.Bytes)
+		b.Bytes, err = decodeBytesBlock(buf, b.Bytes, sz)
 
 	case BlockInt128:
 		if b.Int128.X0 == nil || cap(b.Int128.X0) < sz {
@@ -1045,7 +1053,7 @@ func (b *Block) MinMax() (interface{}, interface{}) {
 	case BlockString:
 		return vec.Strings.MinMax(b.Strings)
 	case BlockBytes:
-		return vec.Bytes.MinMax(b.Bytes)
+		return b.Bytes.MinMax()
 	case BlockInt128:
 		return b.Int128.MinMax()
 	case BlockInt256:
@@ -1086,7 +1094,7 @@ func (b *Block) Less(i, j int) bool {
 	case BlockString:
 		return b.Strings[i] < b.Strings[j]
 	case BlockBytes:
-		return bytes.Compare(b.Bytes[i], b.Bytes[j]) < 0
+		return bytes.Compare(b.Bytes.Elem(i), b.Bytes.Elem(j)) < 0
 	default:
 		return false
 	}
@@ -1095,7 +1103,7 @@ func (b *Block) Less(i, j int) bool {
 func (b *Block) Swap(i, j int) {
 	switch b.typ {
 	case BlockBytes:
-		b.Bytes[i], b.Bytes[j] = b.Bytes[j], b.Bytes[i]
+		b.Bytes.Swap(i, j)
 
 	case BlockString:
 		b.Strings[i], b.Strings[j] = b.Strings[j], b.Strings[i]
@@ -1220,8 +1228,8 @@ func (b *Block) Hashes(res []uint64) []uint64 {
 			res[i] = xxhash.Sum64([]byte(v))
 		}
 	case BlockBytes:
-		for i, v := range b.Bytes {
-			res[i] = xxhash.Sum64(v)
+		for i := 0; i < b.Bytes.Len(); i++ {
+			res[i] = xxhash.Sum64(b.Bytes.Elem(i))
 		}
 	case BlockInt128:
 		for i := 0; i < b.Int128.Len(); i++ {

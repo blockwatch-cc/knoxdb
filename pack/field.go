@@ -1051,7 +1051,7 @@ func (t FieldType) EqualAt(pkg *Package, index, pos int, val interface{}) bool {
 func (t FieldType) EqualBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
-		return MatchBytesEqual(b.Bytes, val.([]byte), bits, mask)
+		return b.Bytes.MatchEqual(val.([]byte), bits, mask)
 	case FieldTypeString:
 		return MatchStringsEqual(b.Strings, val.(string), bits, mask)
 	case FieldTypeDatetime:
@@ -1094,7 +1094,7 @@ func (t FieldType) EqualBlock(b *block.Block, val interface{}, bits, mask *Bitse
 func (t FieldType) NotEqualBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
-		return MatchBytesNotEqual(b.Bytes, val.([]byte), bits, mask)
+		return b.Bytes.MatchNotEqual(val.([]byte), bits, mask)
 	case FieldTypeString:
 		return MatchStringsNotEqual(b.Strings, val.(string), bits, mask)
 	case FieldTypeDatetime:
@@ -1373,7 +1373,7 @@ func (t FieldType) GtAt(pkg *Package, index, pos int, val interface{}) bool {
 func (t FieldType) GtBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
-		return MatchBytesGreaterThan(b.Bytes, val.([]byte), bits, mask)
+		return b.Bytes.MatchGreaterThan(val.([]byte), bits, mask)
 	case FieldTypeString:
 		return MatchStringsGreaterThan(b.Strings, val.(string), bits, mask)
 	case FieldTypeDatetime:
@@ -1529,7 +1529,7 @@ func (t FieldType) GteAt(pkg *Package, index, pos int, val interface{}) bool {
 func (t FieldType) GteBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
-		return MatchBytesGreaterThanEqual(b.Bytes, val.([]byte), bits, mask)
+		return b.Bytes.MatchGreaterThanEqual(val.([]byte), bits, mask)
 	case FieldTypeString:
 		return MatchStringsGreaterThanEqual(b.Strings, val.(string), bits, mask)
 	case FieldTypeDatetime:
@@ -1682,7 +1682,7 @@ func (t FieldType) LtAt(pkg *Package, index, pos int, val interface{}) bool {
 func (t FieldType) LtBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
-		return MatchBytesLessThan(b.Bytes, val.([]byte), bits, mask)
+		return b.Bytes.MatchLessThan(val.([]byte), bits, mask)
 	case FieldTypeString:
 		return MatchStringsLessThan(b.Strings, val.(string), bits, mask)
 	case FieldTypeDatetime:
@@ -1839,7 +1839,7 @@ func (t FieldType) LteAt(pkg *Package, index, pos int, val interface{}) bool {
 func (t FieldType) LteBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
-		return MatchBytesLessThanEqual(b.Bytes, val.([]byte), bits, mask)
+		return b.Bytes.MatchLessThanEqual(val.([]byte), bits, mask)
 	case FieldTypeString:
 		return MatchStringsLessThanEqual(b.Strings, val.(string), bits, mask)
 	case FieldTypeDatetime:
@@ -2275,7 +2275,7 @@ func (t FieldType) BetweenAt(pkg *Package, index, pos int, from, to interface{})
 func (t FieldType) BetweenBlock(b *block.Block, from, to interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
-		return MatchBytesBetween(b.Bytes, from.([]byte), to.([]byte), bits, mask)
+		return b.Bytes.MatchBetween(from.([]byte), to.([]byte), bits, mask)
 	case FieldTypeString:
 		return MatchStringsBetween(b.Strings, from.(string), to.(string), bits, mask)
 	case FieldTypeDatetime:
@@ -2720,8 +2720,8 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 	var buf [8]byte
 	switch t {
 	case FieldTypeBytes:
-		for _, v := range b.Bytes {
-			flt.Add(v)
+		for i := 0; i < b.Bytes.Len(); i++ {
+			flt.Add(b.Bytes.Elem(i))
 		}
 	case FieldTypeString:
 		for _, v := range b.Strings {
@@ -2915,8 +2915,8 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 	var buf [8]byte
 	switch t {
 	case FieldTypeBytes:
-		for _, v := range b.Bytes {
-			filter.Add(v)
+		for i := 0; i < b.Bytes.Len(); i++ {
+			filter.Add(b.Bytes.Elem(i))
 		}
 	case FieldTypeString:
 		for _, v := range b.Strings {

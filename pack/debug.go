@@ -626,7 +626,7 @@ func (p *Package) Validate() error {
 		case FieldTypeBytes:
 			if b.Bytes == nil {
 				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Bytes), p.nValues; a != b {
+			} else if a, b := b.Bytes.Len(), p.nValues; a != b {
 				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
 			}
 

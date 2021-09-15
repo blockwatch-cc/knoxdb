@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"unsafe"
 )
 
 const (
@@ -36,20 +35,22 @@ func StringArrayEncodedSize(src []string) int {
 // StringArrayEncodeAll encodes src into b, returning b and any error encountered.
 // The returned slice may be of a different length and capactity to b.
 //
-func StringArrayEncodeAll(src []string, w io.Writer) error {
-	w.Write([]byte{bytesUncompressed << 4})
+func StringArrayEncodeAll(src []string, w io.Writer) (int, error) {
+	w.Write([]byte{stringUncompressed << 4})
+	count := 1
 	if len(src) == 0 {
-		return nil
+		return count, nil
 	}
-
 	var buf [binary.MaxVarintLen64]byte
 	for i := range src {
 		l := binary.PutUvarint(buf[:], uint64(len(src[i])))
 		w.Write(buf[:l])
-		w.Write([]byte(src[i]))
+		b := unsafeGetBytes(src[i])
+		w.Write(b)
+		count += l + len(b)
 	}
 
-	return nil
+	return count, nil
 }
 
 func StringArrayDecodeAll(b []byte, dst []string) ([]string, error) {
@@ -96,7 +97,7 @@ func StringArrayDecodeAll(b []byte, dst []string) ([]string, error) {
 		// allocations. This is just as "safe" as string.Builder, which
 		// returns a string mapped to the original byte slice
 		s := b[lower:upper]
-		val := *(*string)(unsafe.Pointer(&s))
+		val := unsafeGetString(s)
 		if j < len(dst) {
 			dst[j] = val
 		} else {

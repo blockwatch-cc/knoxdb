@@ -382,7 +382,7 @@ func (p *Package) Push(v interface{}) error {
 				buf = make([]byte, len(src))
 				copy(buf, src)
 			}
-			b.Bytes = append(b.Bytes, buf)
+			b.Bytes = b.Bytes.Append(buf)
 		case FieldTypeString:
 			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
 				txt, err := f.Interface().(encoding.TextMarshaler).MarshalText()
@@ -531,7 +531,7 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 				buf = make([]byte, len(src))
 				copy(buf, src)
 			}
-			b.Bytes[pos] = buf
+			b.Bytes.Set(pos, buf)
 
 		case FieldTypeString:
 			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
@@ -701,15 +701,16 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			if dst.CanAddr() {
 				pv := dst.Addr()
 				if pv.CanInterface() && pv.Type().Implements(binaryUnmarshalerType) {
-					if err := pv.Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes[pos]); err != nil {
+					if err := pv.Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes.Elem(pos)); err != nil {
 						return err
 					}
 					break
 				}
 			}
 			// copy to avoid memleaks of large blocks
-			buf := make([]byte, len(b.Bytes[pos]))
-			copy(buf, b.Bytes[pos])
+			elm := b.Bytes.Elem(pos)
+			buf := make([]byte, len(elm))
+			copy(buf, elm)
 			dst.SetBytes(buf)
 
 		case FieldTypeString:
@@ -841,7 +842,7 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 
 	switch field.Type {
 	case FieldTypeBytes:
-		return b.Bytes[pos], nil
+		return b.Bytes.Elem(pos), nil
 
 	case FieldTypeString:
 		return b.Strings[pos], nil
@@ -941,7 +942,7 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 			buf = make([]byte, len(src))
 			copy(buf, src)
 		}
-		b.Bytes[pos] = buf
+		b.Bytes.Set(pos, buf)
 
 	case FieldTypeString:
 		if val.CanInterface() && val.Type().Implements(textMarshalerType) {
@@ -1136,7 +1137,7 @@ func (p *Package) BytesAt(index, pos int) ([]byte, error) {
 	if err := p.isValidAt(index, pos, FieldTypeBytes); err != nil {
 		return nil, err
 	}
-	return p.blocks[index].Bytes[pos], nil
+	return p.blocks[index].Bytes.Elem(pos), nil
 }
 
 func (p *Package) BoolAt(index, pos int) (bool, error) {
@@ -1221,7 +1222,7 @@ func (p *Package) IsZeroAt(index, pos int, zeroIsNull bool) bool {
 	case FieldTypeString:
 		return len(p.blocks[index].Strings[pos]) == 0
 	case FieldTypeBytes:
-		return len(p.blocks[index].Bytes[pos]) == 0
+		return len(p.blocks[index].Bytes.Elem(pos)) == 0
 	case FieldTypeDatetime:
 		val := p.blocks[index].Int64[pos]
 		return val == 0 || (zeroIsNull && time.Unix(0, val).IsZero())
@@ -1323,8 +1324,9 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 
 		switch field.Type {
 		case FieldTypeBytes:
-			buf := make([]byte, len(b.Bytes[pos]))
-			copy(buf, b.Bytes[pos])
+			elem := b.Bytes.Elem(pos)
+			buf := make([]byte, len(elem))
+			copy(buf, elem)
 			out[i] = buf
 		case FieldTypeString:
 			str := b.Strings[pos]
@@ -1393,7 +1395,7 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 	switch field.Type {
 	case FieldTypeBytes:
 		// Note: does not copy data; don't reference!
-		return b.Bytes[start:end], nil
+		return b.Bytes.Subslice(start, end), nil
 	case FieldTypeString:
 		return b.Strings[start:end], nil
 	case FieldTypeDatetime:
@@ -1479,12 +1481,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 
 		switch dstField.Type {
 		case FieldTypeBytes:
-			for j, v := range src.Bytes[srcPos : srcPos+n] {
-				// always allocate new slice because underlying block slice is shared
-				buf := make([]byte, len(v))
-				copy(buf, v)
-				dst.Bytes[dstPos+j] = buf
-			}
+			dst.Bytes.Copy(src.Bytes, dstPos, srcPos, n)
 
 		case FieldTypeString:
 			copy(dst.Strings[dstPos:], src.Strings[srcPos:srcPos+n])
@@ -1601,11 +1598,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 
 		switch dstField.Type {
 		case FieldTypeBytes:
-			for _, v := range src.Bytes[srcPos : srcPos+srcLen] {
-				buf := make([]byte, len(v))
-				copy(buf, v)
-				dst.Bytes = append(dst.Bytes, buf)
-			}
+			dst.Bytes.Append(src.Bytes.Subslice(srcPos, srcPos+srcLen)...)
 
 		case FieldTypeString:
 			dst.Strings = append(dst.Strings, src.Strings[srcPos:srcPos+srcLen]...)
@@ -1724,7 +1717,7 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 
 		switch dstField.Type {
 		case FieldTypeBytes:
-			dst.Bytes = vec.Bytes.Insert(dst.Bytes, dstPos, src.Bytes[srcPos:srcPos+n]...)
+			dst.Bytes.Insert(dstPos, src.Bytes.Subslice(srcPos, srcPos+n)...)
 
 		case FieldTypeString:
 			dst.Strings = vec.Strings.Insert(dst.Strings, dstPos, src.Strings[srcPos:srcPos+n]...)
@@ -1839,7 +1832,7 @@ func (p *Package) Grow(n int) error {
 
 		switch field.Type {
 		case FieldTypeBytes:
-			b.Bytes = append(b.Bytes, make([][]byte, n)...)
+			b.Bytes.Append(make([][]byte, n)...)
 
 		case FieldTypeString:
 			b.Strings = append(b.Strings, make([]string, n)...)
@@ -1909,11 +1902,7 @@ func (p *Package) Delete(pos, n int) error {
 
 		switch field.Type {
 		case FieldTypeBytes:
-			// avoid mem leaks
-			for j, l := pos, pos+n; j < l; j++ {
-				b.Bytes[j] = nil
-			}
-			b.Bytes = append(b.Bytes[:pos], b.Bytes[pos+n:]...)
+			b.Bytes.Delete(pos, n)
 
 		case FieldTypeString:
 			// avoid mem leaks

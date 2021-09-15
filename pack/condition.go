@@ -52,7 +52,7 @@ type Condition struct {
 	uint16map    map[uint16]struct{} // compiled uint16 map for set membership
 	uint8map     map[uint8]struct{}  // compiled uint8 map for set membership
 	numValues    int                 // number of values when Value is a slice
-	bloomHashes  [][2]uint64         // opt bloom hash value(s) if field has bllom flag
+	bloomHashes  [][2]uint64         // opt bloom hash value(s) if field has bloom flag
 }
 
 // condition that is not bound to a table field yet
@@ -954,7 +954,8 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
 			if c.hashmap != nil {
-				for i, v := range block.Bytes {
+				for i := 0; i < block.Bytes.Len(); i++ {
+					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -983,7 +984,8 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 					}
 				}
 			} else {
-				for i, v := range block.Bytes {
+				for i := 0; i < block.Bytes.Len(); i++ {
+					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -1200,7 +1202,8 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 		// this case (i.e. the list contains all colliding values)
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
-			for i, v := range block.Bytes {
+			for i := 0; i < block.Bytes.Len(); i++ {
+				v := block.Bytes.Elem(i)
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue

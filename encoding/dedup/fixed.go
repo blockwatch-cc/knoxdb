@@ -1,0 +1,241 @@
+// Copyright (c) 2018-2021 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
+package dedup
+
+import (
+	"bytes"
+	"encoding/binary"
+	"io"
+
+	"blockwatch.cc/knoxdb/vec"
+)
+
+type FixedByteArray struct {
+	sz  int    // item size
+	buf []byte // data slice
+}
+
+func newFixedByteArray(sz, n int) *FixedByteArray {
+	return &FixedByteArray{
+		sz:  sz,
+		buf: make([]byte, 0, sz*n),
+	}
+}
+
+func makeFixedByteArray(sz int, data [][]byte) *FixedByteArray {
+	a := &FixedByteArray{
+		sz:  sz,
+		buf: make([]byte, sz*len(data)),
+	}
+	for i, v := range data {
+		copy(a.buf[i*sz:(i+1)*sz], v)
+	}
+	return a
+}
+
+func (a *FixedByteArray) Len() int {
+	return len(a.buf) / a.sz
+}
+
+func (a *FixedByteArray) Cap() int {
+	return cap(a.buf) / a.sz
+}
+
+func (a *FixedByteArray) Elem(index int) []byte {
+	return a.buf[index*a.sz : (index+1)*a.sz]
+}
+
+func (a *FixedByteArray) Set(index int, buf []byte) {
+	copy(a.buf[index*a.sz:(index+1)*a.sz], buf)
+}
+
+func (a *FixedByteArray) Append(val ...[]byte) ByteArray {
+	// unsupported
+	// for _, v := range val {
+	// 	a.buf = append(a.buf, v...)
+	// }
+	return a
+}
+
+func (a *FixedByteArray) AppendFrom(src ByteArray) ByteArray {
+	// unsupported
+	// for _, v := range src.Slice() {
+	// 	a.buf = append(a.buf, v...)
+	// }
+	return a
+}
+
+func (a *FixedByteArray) Insert(index int, buf ...[]byte) ByteArray {
+	// unsupported
+	// if cap(buf) < a.sz {
+	// 	s1 := make([][]byte, a.sz)
+	// 	copy(s1, buf)
+	// 	buf = s1
+	// }
+	// buf = buf[:a.sz]
+	// pos := index * a.sz
+	// n := len(a.buf) + len(buf)
+	// if n <= cap(a.buf) {
+	// 	s2 := a.buf[:n]
+	// 	copy(s2[pos+a.sz:], a.buf[pos:])
+	// 	copy(s2[pos:], buf)
+	// 	a.buf = s2
+	// 	return a
+	// }
+	// s2 := make([]byte, n)
+	// copy(s2, a.buf[:pos])
+	// copy(s2[pos:], buf)
+	// copy(s2[pos+a.sz:], a.buf[pos:])
+	// a.buf = s2
+	return a
+}
+
+func (a *FixedByteArray) InsertFrom(index int, src ByteArray) ByteArray {
+	// unsupported
+	return a
+}
+
+func (a *FixedByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
+	// unsupported
+	return a
+}
+
+func (a *FixedByteArray) Delete(index, n int) ByteArray {
+	// unsupported
+	return a
+}
+
+func (a *FixedByteArray) Clear() {
+	a.buf = a.buf[:0]
+}
+
+func (a *FixedByteArray) Release() {
+	a.Clear()
+	a.buf = nil
+	a.sz = 0
+}
+
+func (a *FixedByteArray) Slice() [][]byte {
+	return toSlice(a)
+}
+
+func (a *FixedByteArray) Subslice(start, end int) [][]byte {
+	return toSubSlice(a, start, end)
+}
+
+func (a *FixedByteArray) MinMax() ([]byte, []byte) {
+	return minMax(a)
+}
+
+func (a *FixedByteArray) MaxEncodedSize() int {
+	return 1 + 4 + len(a.buf)
+}
+
+func (a *FixedByteArray) HeapSize() int {
+	return fixedByteArraySz + len(a.buf)
+}
+
+func (a *FixedByteArray) WriteTo(w io.Writer) (int, error) {
+	count := 1
+	w.Write([]byte{bytesFixedFormat << 4})
+	if len(a.buf) == 0 {
+		return count, nil
+	}
+
+	// write item size
+	var num [binary.MaxVarintLen64]byte
+	l := binary.PutUvarint(num[:], uint64(a.sz))
+	w.Write(num[:l])
+	count += l
+
+	// write data
+	w.Write(a.buf)
+	count += len(a.buf)
+	return count, nil
+}
+
+func (a *FixedByteArray) Decode(buf []byte) error {
+	if len(buf) == 0 {
+		return nil
+	}
+
+	// check the encoding type
+	if buf[0] != byte(bytesFixedFormat<<4) {
+		return errUnexpectedFormat
+	}
+
+	// skip the encoding type
+	buf = buf[1:]
+
+	// read len in elements
+	length, n := binary.Uvarint(buf)
+	if n <= 0 {
+		return errInvalidLength
+	}
+	buf = buf[n:]
+	a.sz = int(length)
+
+	// copy the rest of our input buffer to avoid referencing memory
+	if cap(a.buf) < len(buf) {
+		a.buf = make([]byte, 0, len(buf))
+	}
+	a.buf = a.buf[:len(buf)]
+	copy(a.buf, buf)
+	return nil
+}
+
+func (a *FixedByteArray) Materialize() ByteArray {
+	return newNativeByteArrayFromBytes(a.Slice())
+}
+
+func (a *FixedByteArray) IsMaterialized() bool {
+	return false
+}
+
+func (a *FixedByteArray) Optimize() ByteArray {
+	return a
+}
+
+func (a *FixedByteArray) IsOptimized() bool {
+	return true
+}
+
+func (a *FixedByteArray) Less(i, j int) bool {
+	return bytes.Compare(a.Elem(i), a.Elem(j)) < 0
+}
+
+func (a *FixedByteArray) Swap(i, j int) {
+	l, r := i*a.sz, j*a.sz
+	for k := 0; k < a.sz; k++ {
+		a.buf[l+k], a.buf[r+k] = a.buf[r+k], a.buf[l+k]
+	}
+}
+
+func (a *FixedByteArray) MatchEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+	return matchEqual(a, val, bits, mask)
+}
+
+func (a *FixedByteArray) MatchNotEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+	return matchNotEqual(a, val, bits, mask)
+}
+
+func (a *FixedByteArray) MatchLessThan(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+	return matchLessThan(a, val, bits, mask)
+}
+
+func (a *FixedByteArray) MatchLessThanEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+	return matchLessThanEqual(a, val, bits, mask)
+}
+
+func (a *FixedByteArray) MatchGreaterThan(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+	return matchGreaterThan(a, val, bits, mask)
+}
+
+func (a *FixedByteArray) MatchGreaterThanEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+	return matchGreaterThanEqual(a, val, bits, mask)
+}
+
+func (a *FixedByteArray) MatchBetween(from, to []byte, bits, mask *vec.Bitset) *vec.Bitset {
+	return matchBetween(a, from, to, bits, mask)
+}

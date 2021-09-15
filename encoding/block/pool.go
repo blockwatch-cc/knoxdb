@@ -74,9 +74,9 @@ var (
 	stringPool = &sync.Pool{
 		New: func() interface{} { return make([]string, 0, DefaultMaxPointsPerBlock) },
 	}
-	bytesPool = &sync.Pool{
-		New: func() interface{} { return make([][]byte, 0, DefaultMaxPointsPerBlock) },
-	}
+	// bytesPool = &sync.Pool{
+	// 	New: func() interface{} { return make([][]byte, 0, DefaultMaxPointsPerBlock) },
+	// }
 )
 
 func RecycleBuffer(buf []byte) {

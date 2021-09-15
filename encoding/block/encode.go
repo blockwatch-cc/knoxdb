@@ -7,6 +7,7 @@ import (
 	"bytes"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
+	"blockwatch.cc/knoxdb/encoding/dedup"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -48,7 +49,7 @@ func encodeTimeBlock(buf *bytes.Buffer, val []int64, comp Compression) (int, err
 	}
 	copy(cp, val)
 
-	err := compress.TimeArrayEncodeAll(cp, w)
+	_, err := compress.TimeArrayEncodeAll(cp, w)
 	if v != nil {
 		int64Pool.Put(v)
 	}
@@ -71,7 +72,7 @@ func encodeFloat64Block(buf *bytes.Buffer, val []float64, comp Compression) (int
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockFloat64))
 	w := getWriter(buf, comp)
-	err := compress.FloatArrayEncodeAll(val, w)
+	_, err := compress.FloatArrayEncodeAll(val, w)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -106,7 +107,7 @@ func encodeFloat32Block(buf *bytes.Buffer, val []float32, comp Compression) (int
 		cp[i] = float64(val[i])
 	}
 
-	err := compress.FloatArrayEncodeAll(cp, w)
+	_, err := compress.FloatArrayEncodeAll(cp, w)
 	if v != nil {
 		float64Pool.Put(v)
 	}
@@ -144,20 +145,16 @@ func encodeInt256Block(buf *bytes.Buffer, val vec.Int256LLSlice, comp Compressio
 	// repack int256 into 4 int64 strides
 	var err error
 	for i := 0; i < 4; i++ {
-        if i == 0 {
-            copy(cp, val.X0)
-        } else {
-           	srcint := compress.ReintepretUint64ToInt64Slice(val.X1)
-            copy(cp, srcint)
-        }
+		if i == 0 {
+			copy(cp, val.X0)
+		} else {
+			srcint := compress.ReintepretUint64ToInt64Slice(val.X1)
+			copy(cp, srcint)
+		}
 
-		/*for j, v := range val {
-			cp[j] = int64(v[i])
-		}*/
-        
 		ebuf := BlockEncoderPool.Get().([]byte)[:0]
 		stride := bytes.NewBuffer(ebuf)
-		err = compress.IntegerArrayEncodeAll(cp, stride)
+		_, err = compress.IntegerArrayEncodeAll(cp, stride)
 		if err != nil {
 			break
 		}
@@ -211,19 +208,16 @@ func encodeInt128Block(buf *bytes.Buffer, val vec.Int128LLSlice, comp Compressio
 	// repack int128 into 2 int64 strides
 	var err error
 	for i := 0; i < 2; i++ {
-        if i == 0 {
-            copy(cp, val.X0)
-        } else {
-           	srcint := compress.ReintepretUint64ToInt64Slice(val.X1)
-            copy(cp, srcint)
-        }
+		if i == 0 {
+			copy(cp, val.X0)
+		} else {
+			srcint := compress.ReintepretUint64ToInt64Slice(val.X1)
+			copy(cp, srcint)
+		}
 
-		/*for j, v := range val {
-			cp[j] = int64(v[i])
-		}*/
 		ebuf := BlockEncoderPool.Get().([]byte)[:0]
 		stride := bytes.NewBuffer(ebuf)
-		err = compress.IntegerArrayEncodeAll(cp, stride)
+		_, err = compress.IntegerArrayEncodeAll(cp, stride)
 		if err != nil {
 			break
 		}
@@ -273,7 +267,7 @@ func encodeInt64Block(buf *bytes.Buffer, val []int64, comp Compression) (int, er
 	}
 	copy(cp, val)
 
-	err := compress.IntegerArrayEncodeAll(cp, w)
+	_, err := compress.IntegerArrayEncodeAll(cp, w)
 	if v != nil {
 		int64Pool.Put(v)
 	}
@@ -310,7 +304,7 @@ func encodeInt32Block(buf *bytes.Buffer, val []int32, comp Compression) (int, er
 		cp[i] = int64(val[i])
 	}
 
-	err := compress.IntegerArrayEncodeAll(cp, w)
+	_, err := compress.IntegerArrayEncodeAll(cp, w)
 	if v != nil {
 		int64Pool.Put(v)
 	}
@@ -347,7 +341,7 @@ func encodeInt16Block(buf *bytes.Buffer, val []int16, comp Compression) (int, er
 		cp[i] = int64(val[i])
 	}
 
-	err := compress.IntegerArrayEncodeAll(cp, w)
+	_, err := compress.IntegerArrayEncodeAll(cp, w)
 	if v != nil {
 		int64Pool.Put(v)
 	}
@@ -384,7 +378,7 @@ func encodeInt8Block(buf *bytes.Buffer, val []int8, comp Compression) (int, erro
 		cp[i] = int64(val[i])
 	}
 
-	err := compress.IntegerArrayEncodeAll(cp, w)
+	_, err := compress.IntegerArrayEncodeAll(cp, w)
 	if v != nil {
 		int64Pool.Put(v)
 	}
@@ -419,7 +413,7 @@ func encodeUint64Block(buf *bytes.Buffer, val []uint64, comp Compression) (int, 
 	}
 	copy(cp, val)
 
-	err := compress.UnsignedArrayEncodeAll(cp, w)
+	_, err := compress.UnsignedArrayEncodeAll(cp, w)
 	if v != nil {
 		uint64Pool.Put(v)
 	}
@@ -456,7 +450,7 @@ func encodeUint32Block(buf *bytes.Buffer, val []uint32, comp Compression) (int, 
 		cp[i] = uint64(val[i])
 	}
 
-	err := compress.UnsignedArrayEncodeAll(cp, w)
+	_, err := compress.UnsignedArrayEncodeAll(cp, w)
 	if v != nil {
 		uint64Pool.Put(v)
 	}
@@ -489,12 +483,11 @@ func encodeUint16Block(buf *bytes.Buffer, val []uint16, comp Compression) (int, 
 	} else {
 		cp = make([]uint64, len(val))
 	}
-	//copy(cp, val)
 	for i, _ := range val {
 		cp[i] = uint64(val[i])
 	}
 
-	err := compress.UnsignedArrayEncodeAll(cp, w)
+	_, err := compress.UnsignedArrayEncodeAll(cp, w)
 	if v != nil {
 		uint64Pool.Put(v)
 	}
@@ -531,7 +524,7 @@ func encodeUint8Block(buf *bytes.Buffer, val []uint8, comp Compression) (int, er
 		cp[i] = uint64(val[i])
 	}
 
-	err := compress.UnsignedArrayEncodeAll(cp, w)
+	_, err := compress.UnsignedArrayEncodeAll(cp, w)
 	if v != nil {
 		uint64Pool.Put(v)
 	}
@@ -554,7 +547,7 @@ func encodeBoolBlock(buf *bytes.Buffer, val *vec.Bitset, comp Compression) (int,
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockBool))
 	w := getWriter(buf, comp)
-	err := compress.BitsetEncodeAll(val, w)
+	_, err := compress.BitsetEncodeAll(val, w)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -574,7 +567,7 @@ func encodeStringBlock(buf *bytes.Buffer, val []string, comp Compression) (int, 
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockString))
 	w := getWriter(buf, comp)
-	err := compress.StringArrayEncodeAll(val, w)
+	_, err := compress.StringArrayEncodeAll(val, w)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -586,15 +579,15 @@ func encodeStringBlock(buf *bytes.Buffer, val []string, comp Compression) (int, 
 	return buf.Len() - l, err
 }
 
-func encodeBytesBlock(buf *bytes.Buffer, val [][]byte, comp Compression) (int, error) {
-	if len(val) == 0 {
+func encodeBytesBlock(buf *bytes.Buffer, val dedup.ByteArray, comp Compression) (int, error) {
+	if val.Len() == 0 {
 		return writeEmptyBlock(buf, BlockBytes)
 	}
 	l := buf.Len()
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockBytes))
 	w := getWriter(buf, comp)
-	err := compress.BytesArrayEncodeAll(val, w)
+	_, err := val.WriteTo(w)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
