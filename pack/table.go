@@ -2415,6 +2415,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	// reverse the bitfield order for descending walk
 	jbits = q.Conditions.MatchPack(t.journal.DataPack(), PackInfo{})
 	q.stats.JournalTime = time.Since(q.lap)
+	// log.Debugf("Table %s: %d journal results", t.name, jbits.Count())
 
 	// maybe run index query
 	if err := q.QueryIndexes(ctx, tx); err != nil {
@@ -2438,6 +2439,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	// walk in descending order
 	res.pkg = t.journal.DataPack()
 	idxs, pks := t.journal.SortedIndexesReversed(jbits)
+	// log.Debugf("Table %s: %d processing journal rows first", t.name, len(idxs))
 	for i, idx := range idxs {
 		// Note: deleted indexes are already removed from list
 
@@ -2492,6 +2494,7 @@ packloop:
 
 		// identify and forward matches
 		bits := q.Conditions.MatchPack(pkg, t.packidx.packs[p])
+		// log.Debugf("Table %s: %d results in pack %d", t.name, bits.Count(), pkg.key)
 		u32slice = bits.IndexesU32(u32slice)
 		for k := len(u32slice) - 1; k >= 0; k-- {
 			// take index
