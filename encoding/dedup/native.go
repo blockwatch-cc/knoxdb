@@ -49,7 +49,6 @@ func (a NativeByteArray) Elem(index int) []byte {
 func (a NativeByteArray) Set(index int, buf []byte) {
 	a.bufs[index] = make([]byte, len(buf))
 	copy(a.bufs[index], buf)
-
 }
 
 func (a *NativeByteArray) Append(vals ...[]byte) ByteArray {
@@ -63,7 +62,11 @@ func (a *NativeByteArray) AppendFrom(src ByteArray) ByteArray {
 }
 
 func (a *NativeByteArray) Insert(index int, vals ...[]byte) ByteArray {
+	pre := a.bufs
 	a.bufs = vec.Bytes.Insert(a.bufs, index, vals...)
+	if cap(pre) != cap(a.bufs) {
+		bytesPool.Put(pre[:0])
+	}
 	return a
 }
 
@@ -109,11 +112,11 @@ func (a *NativeByteArray) Release() {
 }
 
 func (a NativeByteArray) Slice() [][]byte {
-	return [][]byte(a.bufs)
+	return a.bufs
 }
 
 func (a NativeByteArray) Subslice(start, end int) [][]byte {
-	return [][]byte(a.bufs)[start:end]
+	return a.bufs[start:end]
 }
 
 func (a NativeByteArray) MinMax() ([]byte, []byte) {
@@ -172,7 +175,7 @@ func (a *NativeByteArray) Decode(buf []byte) error {
 	sz := cap(a.bufs)
 	if sz == 0 {
 		sz = DefaultMaxPointsPerBlock
-		a.bufs = make([][]byte, sz)
+		a.bufs = bytesPool.Get().([][]byte)[:0]
 	} else {
 		a.bufs = a.bufs[:sz]
 	}

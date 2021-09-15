@@ -57,10 +57,7 @@ func (a *CompactByteArray) Cap() int {
 }
 
 func (a *CompactByteArray) MaxEncodedSize() int {
-	sz := compress.Int32ArrayEncodedSize(a.offs)
-	sz += compress.Int32ArrayEncodedSize(a.size)
-	sz += len(a.buf)
-	return sz
+	return 1 + compress.Int32ArrayEncodedSize(a.offs) + len(a.buf)
 }
 
 func (a *CompactByteArray) HeapSize() int {
@@ -72,63 +69,36 @@ func (a *CompactByteArray) Elem(index int) []byte {
 }
 
 func (a *CompactByteArray) Set(index int, buf []byte) {
-	oldsz, newsz := int(a.size[index]), len(buf)
-	offs := int(a.offs[index])
-	if len(buf) != oldsz {
-		// move data in buffer
-		s2 := a.buf
-		if cap(a.buf) < len(a.buf)+newsz-oldsz {
-			s2 = make([]byte, len(a.buf)+newsz-oldsz)
-			copy(s2, a.buf[:offs])
-		}
-		copy(s2[offs+newsz:], a.buf[offs+oldsz:])
-		copy(s2[offs:], buf)
-		diff := newsz - oldsz
-		a.size[index] = int32(newsz)
-		for i := index + 1; i < a.Len(); i++ {
-			a.offs[i] += int32(diff)
-		}
-		a.buf = s2
-		return
-	}
-	copy(a.buf[a.offs[index]:], buf)
+	// unsupported
 }
 
 func (a *CompactByteArray) Append(val ...[]byte) ByteArray {
-	for _, v := range val {
-		a.offs = append(a.offs, int32(len(a.buf)))
-		a.size = append(a.size, int32(len(v)))
-		a.buf = append(a.buf, v...)
-	}
+	// unsupported
 	return a
 }
 
 func (a *CompactByteArray) AppendFrom(src ByteArray) ByteArray {
-	for _, v := range src.Slice() {
-		a.offs = append(a.offs, int32(len(a.buf)))
-		a.size = append(a.size, int32(len(v)))
-		a.buf = append(a.buf, v...)
-	}
+	// unsupported
 	return a
 }
 
 func (a *CompactByteArray) Insert(index int, buf ...[]byte) ByteArray {
-	// TODO
+	// unsupported
 	return a
 }
 
 func (a *CompactByteArray) InsertFrom(index int, src ByteArray) ByteArray {
-	// TODO
+	// unsupported
 	return a
 }
 
 func (a *CompactByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
-	// TODO
+	// unsupported
 	return a
 }
 
 func (a *CompactByteArray) Delete(index, n int) ByteArray {
-	// TODO
+	// unsupported
 	return a
 }
 

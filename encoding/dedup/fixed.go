@@ -47,47 +47,21 @@ func (a *FixedByteArray) Elem(index int) []byte {
 }
 
 func (a *FixedByteArray) Set(index int, buf []byte) {
-	copy(a.buf[index*a.sz:(index+1)*a.sz], buf)
+	// unsupported
 }
 
 func (a *FixedByteArray) Append(val ...[]byte) ByteArray {
 	// unsupported
-	// for _, v := range val {
-	// 	a.buf = append(a.buf, v...)
-	// }
 	return a
 }
 
 func (a *FixedByteArray) AppendFrom(src ByteArray) ByteArray {
 	// unsupported
-	// for _, v := range src.Slice() {
-	// 	a.buf = append(a.buf, v...)
-	// }
 	return a
 }
 
 func (a *FixedByteArray) Insert(index int, buf ...[]byte) ByteArray {
 	// unsupported
-	// if cap(buf) < a.sz {
-	// 	s1 := make([][]byte, a.sz)
-	// 	copy(s1, buf)
-	// 	buf = s1
-	// }
-	// buf = buf[:a.sz]
-	// pos := index * a.sz
-	// n := len(a.buf) + len(buf)
-	// if n <= cap(a.buf) {
-	// 	s2 := a.buf[:n]
-	// 	copy(s2[pos+a.sz:], a.buf[pos:])
-	// 	copy(s2[pos:], buf)
-	// 	a.buf = s2
-	// 	return a
-	// }
-	// s2 := make([]byte, n)
-	// copy(s2, a.buf[:pos])
-	// copy(s2[pos:], buf)
-	// copy(s2[pos+a.sz:], a.buf[pos:])
-	// a.buf = s2
 	return a
 }
 

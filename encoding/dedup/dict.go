@@ -49,8 +49,8 @@ func makeDictByteArray(sz, card int, data [][]byte, dupmap []int) *DictByteArray
 			a.offs = append(a.offs, int32(len(a.dict)))
 			a.size = append(a.size, int32(len(v)))
 			a.dict = append(a.dict, v...)
-		} else {
-			// reference as duplicate
+		} else if k > 0 {
+			// reference as duplicate, only write when >0
 			pack(a.ptr, i, k, a.log2)
 		}
 	}
@@ -133,7 +133,7 @@ func (a *DictByteArray) MinMax() ([]byte, []byte) {
 }
 
 func (a *DictByteArray) MaxEncodedSize() int {
-	return 1 + 3*4 + len(a.dict) + len(a.offs)*8 + len(a.ptr)
+	return 1 + 3*4 + len(a.dict) + len(a.offs)*4 + len(a.ptr)
 }
 
 func (a *DictByteArray) HeapSize() int {
