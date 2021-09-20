@@ -76,17 +76,20 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 			// EXPENSIVE:
 			// - estimate cardinality, use precision 12 for 4k fixed memory
 			// - build bloom filter from column vector using cardinality as size hint
-			if field.Flags.Contains(FlagBloom) {
+			if field.Flags.Contains(FlagBloom) && pkg.Len() > 2 && pkg.key != journalKey {
 				h.Blocks[i].Cardinality = field.Type.EstimateCardinality(
 					pkg.blocks[field.Index],
 					12,
 				)
 
-				h.Blocks[i].Bloom = field.Type.BuildBloomFilter(
-					pkg.blocks[field.Index],
-					h.Blocks[i].Cardinality,
-					field.Scale,
-				)
+				// correct error for very small values
+				if h.Blocks[i].Cardinality > 0 {
+					h.Blocks[i].Bloom = field.Type.BuildBloomFilter(
+						pkg.blocks[field.Index],
+						h.Blocks[i].Cardinality,
+						field.Scale,
+					)
+				}
 			}
 		}
 
@@ -137,11 +140,11 @@ func (h *PackInfo) UnmarshalBinary(data []byte) error {
 
 func (h PackInfo) Encode(buf *bytes.Buffer) error {
 	var b [4]byte
-	bigEndian.PutUint32(b[0:], uint32(h.Key))
+	bigEndian.PutUint32(b[:], uint32(h.Key))
 	buf.Write(b[:])
-	bigEndian.PutUint32(b[0:], uint32(h.NValues))
+	bigEndian.PutUint32(b[:], uint32(h.NValues))
 	buf.Write(b[:])
-	bigEndian.PutUint32(b[0:], uint32(h.Packsize))
+	bigEndian.PutUint32(b[:], uint32(h.Packsize))
 	buf.Write(b[:])
 	return h.Blocks.Encode(buf)
 }

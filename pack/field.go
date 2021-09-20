@@ -2709,11 +2709,8 @@ func (t FieldType) EqualPacksAt(p1 *Package, i1, n1 int, p2 *Package, i2, n2 int
 }
 
 func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor int) *bloom.Filter {
-	if cardinality <= 0 {
-		cardinality = uint32(b.Len())
-	}
-	if factor <= 0 {
-		factor = 1
+	if cardinality <= 0 || factor <= 0 {
+		return nil
 	}
 	m := uint64(cardinality * uint32(factor) * 8) // unit is bits
 	flt := bloom.NewFilter(m, 4)
@@ -2911,6 +2908,20 @@ func (t FieldType) Bytes(val interface{}) []byte {
 }
 
 func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
+	// shortcut for empty and very small packs
+	switch b.Len() {
+	case 0:
+		return 0
+	case 1:
+		return 1
+	case 2:
+		min, max := b.MinMax()
+		if t.Equal(min, max) {
+			return 1
+		}
+		return 2
+	}
+
 	filter := loglogbeta.NewFilterWithPrecision(precision)
 	var buf [8]byte
 	switch t {
