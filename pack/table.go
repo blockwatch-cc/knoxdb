@@ -2340,6 +2340,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 				}
 
 				// forward match
+				// log.Debugf("Table %s: using result at pack %d index %d", t.name, pkg.key, index)
 				if err := fn(Row{res: &res, n: index}); err != nil {
 					bits.Close()
 					return err
@@ -3024,8 +3025,14 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		if err != nil {
 			return nil, err
 		}
+		// set key
 		clone.key = pkg.key
 		clone.cached = false
+
+		// prepare for efficient writes
+		// log.Debugf("%s: materializing cloned pack %d with %d rows", t.name, clone.key, pkg.Len())
+		clone.Materialize()
+
 		// log.Debugf("%s: cloned writeable pack %d col=%d row=%d", t.name, clone.key, clone.nFields, clone.nValues)
 		return clone, nil
 	}
@@ -3037,6 +3044,11 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// prepare for efficient writes
+	// log.Debugf("%s: materializing loaded pack %d with %d rows", t.name, pkg.key, pkg.Len())
+	pkg.Materialize()
+
 	// log.Debugf("%s: loaded writeable pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
 	atomic.AddInt64(&t.stats.PackBytesRead, int64(pkg.size))
@@ -3069,6 +3081,10 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 			return 0, err
 		}
 
+		// optimize/dedup
+		// log.Debugf("%s: optimizing pack %d with %d rows", t.name, pkg.key, pkg.Len())
+		pkg.Optimize()
+
 		// write to disk
 		n, err := tx.storePack(t.key, key, pkg, t.opts.FillLevel)
 		if err != nil {
@@ -3084,6 +3100,7 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 
 	} else {
 		// If pack is empty
+		// log.Debugf("%s: store removing empty pack %d", t.name, pkg.key)
 
 		// drop from index
 		t.packidx.Remove(pkg.key)

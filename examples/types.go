@@ -96,7 +96,7 @@ func (s *Stringer) UnmarshalText(b []byte) error {
 type Types struct {
 	RowId     uint64             `knox:"I,pk"                     json:"row_id"`
 	Timestamp time.Time          `knox:"T,snappy"                 json:"time"`
-	Hash      []byte             `knox:"H,bloom"                  json:"hash"`
+	Hash      []byte             `knox:"H,bloom,snappy"           json:"hash"`
 	String    string             `knox:"str,snappy"               json:"string"`
 	Stringer  Stringer           `knox:"strlist,snappy"           json:"string_list"`
 	Bool      bool               `knox:"bool,snappy"              json:"bool"`

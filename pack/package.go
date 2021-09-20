@@ -309,6 +309,42 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 	return clone, nil
 }
 
+func (p *Package) Optimize() {
+	if p.key == journalKey {
+		return
+	}
+	for _, b := range p.blocks {
+		if b.IsIgnore() {
+			continue
+		}
+		if b.Type() == block.BlockBytes && !b.Bytes.IsOptimized() {
+			// log.Infof("Pack %d: optimize %T rows=%d len=%d cap=%d", p.key, b.Bytes, p.nValues, b.Bytes.Len(), b.Bytes.Cap())
+			opt := b.Bytes.Optimize()
+			b.Bytes.Release()
+			b.Bytes = opt
+			// log.Infof("Pack %d: optimized to %T len=%d cap=%d", p.key, b.Bytes, b.Bytes.Len(), b.Bytes.Cap())
+		}
+	}
+}
+
+func (p *Package) Materialize() {
+	if p.key == journalKey {
+		return
+	}
+	for _, b := range p.blocks {
+		if b.IsIgnore() {
+			continue
+		}
+		if b.Type() == block.BlockBytes && !b.Bytes.IsMaterialized() {
+			// log.Infof("Pack %d: materialize %T rows=%d len=%d cap=%d", p.key, b.Bytes, p.nValues, b.Bytes.Len(), b.Bytes.Cap())
+			mat := b.Bytes.Materialize()
+			b.Bytes.Release()
+			b.Bytes = mat
+			// log.Infof("Pack %d: materialized to %T len=%d cap=%d", p.key, b.Bytes, b.Bytes.Len(), b.Bytes.Cap())
+		}
+	}
+}
+
 func (p *Package) KeepFields(fields FieldList) *Package {
 	if len(fields) == 0 {
 		return p
@@ -378,11 +414,9 @@ func (p *Package) Push(v interface{}) error {
 					return err
 				}
 			} else {
-				src := f.Bytes()
-				buf = make([]byte, len(src))
-				copy(buf, src)
+				buf = f.Bytes()
 			}
-			b.Bytes = b.Bytes.Append(buf)
+			b.Bytes.Append(buf)
 		case FieldTypeString:
 			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
 				txt, err := f.Interface().(encoding.TextMarshaler).MarshalText()
@@ -527,9 +561,7 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 					return err
 				}
 			} else {
-				src := f.Bytes()
-				buf = make([]byte, len(src))
-				copy(buf, src)
+				buf = f.Bytes()
 			}
 			b.Bytes.Set(pos, buf)
 
@@ -671,6 +703,8 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
+	// log.Infof("Reading %s at pkg %d pos %d", tinfo.name, p.key, pos)
+
 	for _, fi := range tinfo.fields {
 		// Note: field to block mapping is required to be initialized in tinfo!
 		// this happens once for every new type used in Result.DecodeAt(),
@@ -938,9 +972,7 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 				return err
 			}
 		} else {
-			src := val.Bytes()
-			buf = make([]byte, len(src))
-			copy(buf, src)
+			buf = val.Bytes()
 		}
 		b.Bytes.Set(pos, buf)
 
@@ -1324,10 +1356,7 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 
 		switch field.Type {
 		case FieldTypeBytes:
-			elem := b.Bytes.Elem(pos)
-			buf := make([]byte, len(elem))
-			copy(buf, elem)
-			out[i] = buf
+			out[i] = b.Bytes.Elem(pos)
 		case FieldTypeString:
 			str := b.Strings[pos]
 			out[i] = str
@@ -1598,7 +1627,11 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 
 		switch dstField.Type {
 		case FieldTypeBytes:
-			dst.Bytes.Append(src.Bytes.Subslice(srcPos, srcPos+srcLen)...)
+			if srcLen == 1 {
+				dst.Bytes.Append(src.Bytes.Elem(srcPos))
+			} else {
+				dst.Bytes.Append(src.Bytes.Subslice(srcPos, srcPos+srcLen)...)
+			}
 
 		case FieldTypeString:
 			dst.Strings = append(dst.Strings, src.Strings[srcPos:srcPos+srcLen]...)

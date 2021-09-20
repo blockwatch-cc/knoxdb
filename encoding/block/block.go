@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"reflect"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
@@ -17,6 +18,8 @@ import (
 )
 
 var bigEndian = binary.BigEndian
+
+var blockSz = int(reflect.TypeOf(Block{}).Size())
 
 type Compression byte
 
@@ -388,11 +391,6 @@ func NewBlock(typ BlockType, comp Compression, sz int) *Block {
 		}
 	case BlockBytes:
 		b.Bytes = dedup.NewByteArray(sz)
-		// if sz <= DefaultMaxPointsPerBlock {
-		// 	b.Bytes = bytesPool.Get().([][]byte)
-		// } else {
-		// 	b.Bytes = make([][]byte, 0, sz)
-		// }
 	case BlockInt128:
 		if sz <= DefaultMaxPointsPerBlock {
 			b.Int128.X0 = int64Pool.Get().([]int64)
@@ -461,12 +459,7 @@ func (b *Block) Copy(src *Block) {
 		copy(b.Strings, src.Strings)
 	case BlockBytes:
 		b.Bytes = dedup.NewByteArray(src.Bytes.Len())
-		b.Bytes.Copy(src.Bytes, 0, 0, src.Bytes.Len())
-		// b.Bytes = b.Bytes[:len(src.Bytes)]
-		// for i, v := range src.Bytes {
-		// 	b.Bytes[i] = make([]byte, len(v))
-		// 	copy(b.Bytes[i], v)
-		// }
+		b.Bytes.AppendFrom(src.Bytes)
 	case BlockInt128:
 		sz := len(b.Int128.X0)
 		b.Int128.X0 = b.Int128.X0[:sz]
@@ -605,10 +598,9 @@ func (b *Block) MaxStoredSize() int {
 
 func (b *Block) HeapSize() int {
 	const (
-		sliceSize  = 24 // reflect.SliceHeader incl. padding
 		stringSize = 16 // reflect.StringHeader incl. padding
 	)
-	sz := 3 + 15*sliceSize
+	sz := blockSz
 	switch b.typ {
 	case BlockFloat64:
 		sz += len(b.Float64) * 8
@@ -638,9 +630,6 @@ func (b *Block) HeapSize() int {
 		}
 	case BlockBytes:
 		sz += b.Bytes.HeapSize()
-		// for _, v := range b.Bytes {
-		// 	sz += len(v) + sliceSize
-		// }
 	case BlockInt128:
 		sz += b.Int128.Len() * 16
 	case BlockInt256:
@@ -678,10 +667,11 @@ func (b *Block) Clear() {
 		b.Strings = b.Strings[:0]
 	case BlockBytes:
 		b.Bytes.Clear()
-		// for j := range b.Bytes {
-		// 	b.Bytes[j] = nil
-		// }
-		// b.Bytes = b.Bytes[:0]
+		if !b.Bytes.IsMaterialized() {
+			mat := b.Bytes.Materialize()
+			b.Bytes.Release()
+			b.Bytes = mat
+		}
 	case BlockBool:
 		b.Bits.Reset()
 	case BlockInt128:
@@ -770,12 +760,6 @@ func (b *Block) Release() {
 		b.Strings = nil
 	case BlockBytes:
 		b.Bytes.Release()
-		// for j := range b.Bytes {
-		// 	b.Bytes[j] = nil
-		// }
-		// if cap(b.Bytes) == DefaultMaxPointsPerBlock {
-		// 	bytesPool.Put(b.Bytes[:0])
-		// }
 		b.Bytes = nil
 	case BlockInt128:
 		if b.Int128.Cap() == DefaultMaxPointsPerBlock {
@@ -970,12 +954,6 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 		b.Strings, err = decodeStringBlock(buf, b.Strings)
 
 	case BlockBytes:
-		// if b.Bytes == nil || cap(b.Bytes) < sz {
-		// 	b.Bytes = make([][]byte, 0, sz)
-		// } else {
-		// 	b.Bytes = b.Bytes[:0]
-		// }
-		// b.Bytes, err = decodeBytesBlock(buf, b.Bytes)
 		b.Bytes, err = decodeBytesBlock(buf, b.Bytes, sz)
 
 	case BlockInt128:

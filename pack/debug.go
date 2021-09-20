@@ -190,7 +190,7 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	defer tx.Rollback()
 	switch mode {
 	case DumpModeDec, DumpModeHex:
-		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-7s %-33s %-33s %-4s %-6s %-10s %-10s %7s %-10s\n",
+		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-5s %-33s %-33s %-4s %-6s %-10s %-10s %7s %-10s\n",
 			"#", "Key", "Block", "Type", "Rows", "Card", "Min", "Max", "Prec", "Comp", "Stored", "Heap", "Ratio", "GoType")
 	}
 	lineNo := 1

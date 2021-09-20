@@ -42,9 +42,7 @@ func ReintepretUint64ToInt64Slice(src []uint64) []int64 {
 }
 
 func unsafeGetBytes(s string) []byte {
-	return (*[0x7fff0000]byte)(unsafe.Pointer(
-		(*reflect.StringHeader)(unsafe.Pointer(&s)).Data),
-	)[:len(s):len(s)]
+	return (*(*[]byte)(unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)))))[:len(s):len(s)]
 }
 
 func unsafeGetString(buf []byte) string {

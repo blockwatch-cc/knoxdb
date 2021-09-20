@@ -169,7 +169,7 @@ func (h BlockInfo) EncodedSize() int {
 	case block.BlockBytes:
 		min, max := h.MinValue.([]byte), h.MaxValue.([]byte)
 		l1, l2 := len(min), len(max)
-		var v [8]byte
+		var v [binary.MaxVarintLen64]byte
 		i1 := binary.PutUvarint(v[:], uint64(l1))
 		i2 := binary.PutUvarint(v[:], uint64(l2))
 		return sz + l1 + l2 + i1 + i2
@@ -324,7 +324,7 @@ func (h BlockInfo) Encode(buf *bytes.Buffer) error {
 	case block.BlockBytes:
 		// len prefixed byte slice
 		min, max := h.MinValue.([]byte), h.MaxValue.([]byte)
-		var v [8]byte
+		var v [binary.MaxVarintLen64]byte
 		i := binary.PutUvarint(v[:], uint64(len(min)))
 		_, _ = buf.Write(v[:i])
 		_, _ = buf.Write(min)
