@@ -95,6 +95,7 @@ func NewBitsetFromIndexes(indexes []int, size int) *Bitset {
 	for i := range indexes {
 		s.Set(indexes[i])
 	}
+	s.cnt = len(indexes)
 	return s
 }
 
