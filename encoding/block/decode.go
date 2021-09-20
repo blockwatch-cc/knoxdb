@@ -498,12 +498,12 @@ func decodeBoolBlock(block []byte, dst *vec.Bitset) (*vec.Bitset, error) {
 	return b, err
 }
 
-func decodeStringBlock(block []byte, dst []string) ([]string, error) {
+func decodeStringBlock(block []byte, dst dedup.ByteArray, sz int) (dedup.ByteArray, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockString)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compress.StringArrayDecodeAll(buf, dst)
+	b, err := dedup.Decode(buf, dst, sz)
 	if canRecycle && cap(buf) == BlockSizeHint {
 		BlockEncoderPool.Put(buf[:0])
 	}

@@ -66,7 +66,6 @@ func analyze(slice [][]byte) analysis {
 	return res
 }
 
-// FIXME: check for collisions between nil, 0x0, 0x0 0x0, ...
 func dedup(slice [][]byte) (dupmap []int, card int, sz int) {
 	m := make(map[uint64]int, len(slice))
 	dupmap = make([]int, len(slice))

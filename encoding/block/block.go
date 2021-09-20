@@ -146,11 +146,10 @@ type Block struct {
 	//       this can save up to 15x storage for slice headers / pointers
 	//       but adds another level of indirection on each data access
 	// data interface{}
-	Strings []string
-	Bytes   dedup.ByteArray
-	Bits    *vec.Bitset // -> Bitset
-	Int64   []int64     // re-used by Decimal64, Timestamps
-	Int32   []int32     // re-used by Decimal32
+	Bytes   dedup.ByteArray // re-used for bytes and strings
+	Bits    *vec.Bitset     // -> Bitset
+	Int64   []int64         // re-used by Decimal64, Timestamps
+	Int32   []int32         // re-used by Decimal32
 	Int16   []int16
 	Int8    []int8
 	Uint64  []uint64
@@ -221,7 +220,11 @@ func (b Block) RawSlice() interface{} {
 	case BlockBool:
 		return b.Bits.Slice()
 	case BlockString:
-		return b.Strings
+		s := make([]string, b.Bytes.Len())
+		for i, v := range b.Bytes.Slice() {
+			s[i] = compress.UnsafeGetString(v)
+		}
+		return s
 	case BlockBytes:
 		return b.Bytes.Slice()
 	case BlockInt128:
@@ -256,9 +259,13 @@ func (b Block) RangeSlice(start, end int) interface{} {
 	case BlockUint8:
 		return b.Uint8[start:end]
 	case BlockBool:
-		return b.Bits.SubSlice(start, end-start)
+		return b.Bits.SubSlice(start, end-start+1)
 	case BlockString:
-		return b.Strings[start:end]
+		s := make([]string, end-start+1)
+		for i, v := range b.Bytes.Subslice(start, end) {
+			s[i] = compress.UnsafeGetString(v)
+		}
+		return s
 	case BlockBytes:
 		return b.Bytes.Subslice(start, end)
 	case BlockInt128:
@@ -298,7 +305,7 @@ func (b Block) Elem(idx int) interface{} {
 	case BlockBool:
 		return b.Bits.IsSet(idx)
 	case BlockString:
-		return b.Strings[idx]
+		return compress.UnsafeGetString(b.Bytes.Elem(idx))
 	case BlockBytes:
 		return b.Bytes.Elem(idx)
 	case BlockInt128:
@@ -383,13 +390,7 @@ func NewBlock(typ BlockType, comp Compression, sz int) *Block {
 	case BlockBool:
 		b.Bits = vec.NewBitset(sz)
 		b.Bits.Reset()
-	case BlockString:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Strings = stringPool.Get().([]string)
-		} else {
-			b.Strings = make([]string, 0, sz)
-		}
-	case BlockBytes:
+	case BlockString, BlockBytes:
 		b.Bytes = dedup.NewByteArray(sz)
 	case BlockInt128:
 		if sz <= DefaultMaxPointsPerBlock {
@@ -454,10 +455,7 @@ func (b *Block) Copy(src *Block) {
 		copy(b.Uint8, src.Uint8)
 	case BlockBool:
 		b.Bits = vec.NewBitsetFromBytes(src.Bits.Bytes(), src.Bits.Len())
-	case BlockString:
-		b.Strings = b.Strings[:len(src.Strings)]
-		copy(b.Strings, src.Strings)
-	case BlockBytes:
+	case BlockString, BlockBytes:
 		b.Bytes = dedup.NewByteArray(src.Bytes.Len())
 		b.Bytes.AppendFrom(src.Bytes)
 	case BlockInt128:
@@ -503,9 +501,7 @@ func (b *Block) Len() int {
 		return len(b.Uint8)
 	case BlockBool:
 		return b.Bits.Len()
-	case BlockString:
-		return len(b.Strings)
-	case BlockBytes:
+	case BlockString, BlockBytes:
 		return b.Bytes.Len()
 	case BlockInt128:
 		return b.Int128.Len()
@@ -540,9 +536,7 @@ func (b *Block) Cap() int {
 		return cap(b.Uint8)
 	case BlockBool:
 		return b.Bits.Cap()
-	case BlockString:
-		return cap(b.Strings)
-	case BlockBytes:
+	case BlockString, BlockBytes:
 		return b.Bytes.Cap()
 	case BlockInt128:
 		return b.Int128.Cap()
@@ -584,9 +578,7 @@ func (b *Block) MaxStoredSize() int {
 		sz = compress.Uint8ArrayEncodedSize(b.Uint8)
 	case BlockBool:
 		sz = compress.BitsetEncodedSize(b.Bits)
-	case BlockString:
-		sz = compress.StringArrayEncodedSize(b.Strings)
-	case BlockBytes:
+	case BlockString, BlockBytes:
 		sz = b.Bytes.MaxEncodedSize()
 	case BlockInt128:
 		sz = compress.Int128ArrayEncodedSize(b.Int128)
@@ -597,9 +589,6 @@ func (b *Block) MaxStoredSize() int {
 }
 
 func (b *Block) HeapSize() int {
-	const (
-		stringSize = 16 // reflect.StringHeader incl. padding
-	)
 	sz := blockSz
 	switch b.typ {
 	case BlockFloat64:
@@ -624,11 +613,7 @@ func (b *Block) HeapSize() int {
 		sz += len(b.Uint8)
 	case BlockBool:
 		sz += b.Bits.HeapSize()
-	case BlockString:
-		for _, v := range b.Strings {
-			sz += len(v) + stringSize
-		}
-	case BlockBytes:
+	case BlockString, BlockBytes:
 		sz += b.Bytes.HeapSize()
 	case BlockInt128:
 		sz += b.Int128.Len() * 16
@@ -660,12 +645,7 @@ func (b *Block) Clear() {
 		b.Float64 = b.Float64[:0]
 	case BlockFloat32:
 		b.Float32 = b.Float32[:0]
-	case BlockString:
-		for j := range b.Strings {
-			b.Strings[j] = ""
-		}
-		b.Strings = b.Strings[:0]
-	case BlockBytes:
+	case BlockString, BlockBytes:
 		b.Bytes.Clear()
 		if !b.Bytes.IsMaterialized() {
 			mat := b.Bytes.Materialize()
@@ -750,15 +730,7 @@ func (b *Block) Release() {
 	case BlockBool:
 		b.Bits.Close()
 		b.Bits = nil
-	case BlockString:
-		for j := range b.Strings {
-			b.Strings[j] = ""
-		}
-		if cap(b.Strings) == DefaultMaxPointsPerBlock {
-			stringPool.Put(b.Strings[:0])
-		}
-		b.Strings = nil
-	case BlockBytes:
+	case BlockString, BlockBytes:
 		b.Bytes.Release()
 		b.Bytes = nil
 	case BlockInt128:
@@ -820,7 +792,7 @@ func (b *Block) Encode(buf *bytes.Buffer) (int, error) {
 	case BlockBool:
 		n, err = encodeBoolBlock(buf, b.Bits, b.Compression())
 	case BlockString:
-		n, err = encodeStringBlock(buf, b.Strings, b.Compression())
+		n, err = encodeStringBlock(buf, b.Bytes, b.Compression())
 	case BlockBytes:
 		n, err = encodeBytesBlock(buf, b.Bytes, b.Compression())
 	case BlockInt128:
@@ -946,12 +918,7 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 		b.Bits, err = decodeBoolBlock(buf, b.Bits)
 
 	case BlockString:
-		if b.Strings == nil || cap(b.Strings) < sz {
-			b.Strings = make([]string, 0, sz)
-		} else {
-			b.Strings = b.Strings[:0]
-		}
-		b.Strings, err = decodeStringBlock(buf, b.Strings)
+		b.Bytes, err = decodeStringBlock(buf, b.Bytes, sz)
 
 	case BlockBytes:
 		b.Bytes, err = decodeBytesBlock(buf, b.Bytes, sz)
@@ -1029,7 +996,8 @@ func (b *Block) MinMax() (interface{}, interface{}) {
 		}
 		return false, false
 	case BlockString:
-		return vec.Strings.MinMax(b.Strings)
+		min, max := b.Bytes.MinMax()
+		return compress.UnsafeGetString(min), compress.UnsafeGetString(max)
 	case BlockBytes:
 		return b.Bytes.MinMax()
 	case BlockInt128:
@@ -1069,9 +1037,7 @@ func (b *Block) Less(i, j int) bool {
 		return b.Float32[i] < b.Float32[j]
 	case BlockBool:
 		return !b.Bits.IsSet(i) && b.Bits.IsSet(j)
-	case BlockString:
-		return b.Strings[i] < b.Strings[j]
-	case BlockBytes:
+	case BlockString, BlockBytes:
 		return bytes.Compare(b.Bytes.Elem(i), b.Bytes.Elem(j)) < 0
 	default:
 		return false
@@ -1080,11 +1046,8 @@ func (b *Block) Less(i, j int) bool {
 
 func (b *Block) Swap(i, j int) {
 	switch b.typ {
-	case BlockBytes:
+	case BlockBytes, BlockString:
 		b.Bytes.Swap(i, j)
-
-	case BlockString:
-		b.Strings[i], b.Strings[j] = b.Strings[j], b.Strings[i]
 
 	case BlockBool:
 		b.Bits.Swap(i, j)
@@ -1201,11 +1164,7 @@ func (b *Block) Hashes(res []uint64) []uint64 {
 				res[i] = zero
 			}
 		}
-	case BlockString:
-		for i, v := range b.Strings {
-			res[i] = xxhash.Sum64([]byte(v))
-		}
-	case BlockBytes:
+	case BlockString, BlockBytes:
 		for i := 0; i < b.Bytes.Len(); i++ {
 			res[i] = xxhash.Sum64(b.Bytes.Elem(i))
 		}

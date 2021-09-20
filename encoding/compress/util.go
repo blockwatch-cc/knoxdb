@@ -41,10 +41,10 @@ func ReintepretUint64ToInt64Slice(src []uint64) []int64 {
 	return *(*[]int64)(unsafe.Pointer(&src))
 }
 
-func unsafeGetBytes(s string) []byte {
-	return (*(*[]byte)(unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)))))[:len(s):len(s)]
+func UnsafeGetBytes(s string) []byte {
+	return (*(*[]byte)(unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)))))[:len(s)]
 }
 
-func unsafeGetString(buf []byte) string {
+func UnsafeGetString(buf []byte) string {
 	return *(*string)(unsafe.Pointer(&buf))
 }

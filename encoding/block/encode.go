@@ -559,15 +559,15 @@ func encodeBoolBlock(buf *bytes.Buffer, val *vec.Bitset, comp Compression) (int,
 	return buf.Len() - l, err
 }
 
-func encodeStringBlock(buf *bytes.Buffer, val []string, comp Compression) (int, error) {
-	if len(val) == 0 {
+func encodeStringBlock(buf *bytes.Buffer, val dedup.ByteArray, comp Compression) (int, error) {
+	if val.Len() == 0 {
 		return writeEmptyBlock(buf, BlockString)
 	}
 	l := buf.Len()
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockString))
 	w := getWriter(buf, comp)
-	_, err := compress.StringArrayEncodeAll(val, w)
+	_, err := val.WriteTo(w)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/util"
 
 	. "blockwatch.cc/knoxdb/encoding/decimal"
@@ -419,15 +420,15 @@ func (p *Package) Push(v interface{}) error {
 			b.Bytes.Append(buf)
 		case FieldTypeString:
 			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
-				txt, err := f.Interface().(encoding.TextMarshaler).MarshalText()
+				buf, err := f.Interface().(encoding.TextMarshaler).MarshalText()
 				if err != nil {
 					return err
 				}
-				b.Strings = append(b.Strings, string(txt))
+				b.Bytes.Append(buf)
 			} else if f.CanInterface() && f.Type().Implements(stringerType) {
-				b.Strings = append(b.Strings, f.Interface().(fmt.Stringer).String())
+				b.Bytes.Append(compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
 			} else {
-				b.Strings = append(b.Strings, f.String())
+				b.Bytes.Append(compress.UnsafeGetBytes(f.String()))
 			}
 		case FieldTypeDatetime:
 			b.Int64 = append(b.Int64, f.Interface().(time.Time).UnixNano())
@@ -553,29 +554,28 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 
 		switch field.Type {
 		case FieldTypeBytes:
-			var buf []byte
 			// check if type implements BinaryMarshaler
 			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				var err error
-				if buf, err = f.Interface().(encoding.BinaryMarshaler).MarshalBinary(); err != nil {
-					return err
-				}
-			} else {
-				buf = f.Bytes()
-			}
-			b.Bytes.Set(pos, buf)
-
-		case FieldTypeString:
-			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
-				txt, err := f.Interface().(encoding.TextMarshaler).MarshalText()
+				buf, err := f.Interface().(encoding.BinaryMarshaler).MarshalBinary()
 				if err != nil {
 					return err
 				}
-				b.Strings[pos] = string(txt)
-			} else if f.CanInterface() && f.Type().Implements(stringerType) {
-				b.Strings[pos] = f.Interface().(fmt.Stringer).String()
+				b.Bytes.Set(pos, buf)
 			} else {
-				b.Strings[pos] = f.String()
+				b.Bytes.Set(pos, f.Bytes())
+			}
+
+		case FieldTypeString:
+			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
+				buf, err := f.Interface().(encoding.TextMarshaler).MarshalText()
+				if err != nil {
+					return err
+				}
+				b.Bytes.Set(pos, buf)
+			} else if f.CanInterface() && f.Type().Implements(stringerType) {
+				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
+			} else {
+				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.String()))
 			}
 
 		case FieldTypeDatetime:
@@ -751,13 +751,13 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			if dst.CanAddr() {
 				pv := dst.Addr()
 				if pv.CanInterface() && pv.Type().Implements(textUnmarshalerType) {
-					if err := pv.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(b.Strings[pos])); err != nil {
+					if err := pv.Interface().(encoding.TextUnmarshaler).UnmarshalText(b.Bytes.Elem(pos)); err != nil {
 						return err
 					}
 					break
 				}
 			}
-			dst.SetString(b.Strings[pos])
+			dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
 
 		case FieldTypeDatetime:
 			dst.Set(reflect.ValueOf(time.Unix(0, b.Int64[pos]).UTC()))
@@ -879,7 +879,7 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 		return b.Bytes.Elem(pos), nil
 
 	case FieldTypeString:
-		return b.Strings[pos], nil
+		return compress.UnsafeGetString(b.Bytes.Elem(pos)), nil
 
 	case FieldTypeDatetime:
 		val := time.Unix(0, b.Int64[pos]).UTC()
@@ -964,29 +964,28 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 
 	switch field.Type {
 	case FieldTypeBytes:
-		var buf []byte
 		// check if type implements BinaryMarshaler
 		if val.CanInterface() && val.Type().Implements(binaryMarshalerType) {
-			var err error
-			if buf, err = val.Interface().(encoding.BinaryMarshaler).MarshalBinary(); err != nil {
-				return err
-			}
-		} else {
-			buf = val.Bytes()
-		}
-		b.Bytes.Set(pos, buf)
-
-	case FieldTypeString:
-		if val.CanInterface() && val.Type().Implements(textMarshalerType) {
-			txt, err := val.Interface().(encoding.TextMarshaler).MarshalText()
+			buf, err := val.Interface().(encoding.BinaryMarshaler).MarshalBinary()
 			if err != nil {
 				return err
 			}
-			b.Strings[pos] = string(txt)
-		} else if val.CanInterface() && val.Type().Implements(stringerType) {
-			b.Strings[pos] = val.Interface().(fmt.Stringer).String()
+			b.Bytes.Set(pos, buf)
 		} else {
-			b.Strings[pos] = val.String()
+			b.Bytes.Set(pos, val.Bytes())
+		}
+
+	case FieldTypeString:
+		if val.CanInterface() && val.Type().Implements(textMarshalerType) {
+			buf, err := val.Interface().(encoding.TextMarshaler).MarshalText()
+			if err != nil {
+				return err
+			}
+			b.Bytes.Set(pos, buf)
+		} else if val.CanInterface() && val.Type().Implements(stringerType) {
+			b.Bytes.Set(pos, compress.UnsafeGetBytes(val.Interface().(fmt.Stringer).String()))
+		} else {
+			b.Bytes.Set(pos, compress.UnsafeGetBytes(val.String()))
 		}
 
 	case FieldTypeDatetime:
@@ -1162,7 +1161,7 @@ func (p *Package) StringAt(index, pos int) (string, error) {
 	if err := p.isValidAt(index, pos, FieldTypeString); err != nil {
 		return "", err
 	}
-	return p.blocks[index].Strings[pos], nil
+	return compress.UnsafeGetString(p.blocks[index].Bytes.Elem(pos)), nil
 }
 
 func (p *Package) BytesAt(index, pos int) ([]byte, error) {
@@ -1251,9 +1250,7 @@ func (p *Package) IsZeroAt(index, pos int, zeroIsNull bool) bool {
 	case FieldTypeFloat32:
 		v := float64(p.blocks[index].Float32[pos])
 		return math.IsNaN(v) || math.IsInf(v, 0) || (zeroIsNull && v == 0.0)
-	case FieldTypeString:
-		return len(p.blocks[index].Strings[pos]) == 0
-	case FieldTypeBytes:
+	case FieldTypeString, FieldTypeBytes:
 		return len(p.blocks[index].Bytes.Elem(pos)) == 0
 	case FieldTypeDatetime:
 		val := p.blocks[index].Int64[pos]
@@ -1358,8 +1355,7 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 		case FieldTypeBytes:
 			out[i] = b.Bytes.Elem(pos)
 		case FieldTypeString:
-			str := b.Strings[pos]
-			out[i] = str
+			out[i] = compress.UnsafeGetString(b.Bytes.Elem(pos))
 		case FieldTypeDatetime:
 			// materialize
 			out[i] = time.Unix(0, b.Int64[pos]).UTC()
@@ -1426,16 +1422,21 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		// Note: does not copy data; don't reference!
 		return b.Bytes.Subslice(start, end), nil
 	case FieldTypeString:
-		return b.Strings[start:end], nil
+		// Note: does not copy data; don't reference!
+		s := make([]string, end-start+1)
+		for i, v := range b.Bytes.Subslice(start, end) {
+			s[i] = compress.UnsafeGetString(v)
+		}
+		return s, nil
 	case FieldTypeDatetime:
 		// materialize
-		res := make([]time.Time, end-start)
+		res := make([]time.Time, end-start+1)
 		for i, v := range b.Int64[start:end] {
 			res[i+start] = time.Unix(0, v).UTC()
 		}
 		return res, nil
 	case FieldTypeBoolean:
-		return b.Bits.SubSlice(start, end-start), nil
+		return b.Bits.SubSlice(start, end-start+1), nil
 	case FieldTypeFloat64:
 		return b.Float64[start:end], nil
 	case FieldTypeFloat32:
@@ -1509,11 +1510,8 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 		}
 
 		switch dstField.Type {
-		case FieldTypeBytes:
+		case FieldTypeBytes, FieldTypeString:
 			dst.Bytes.Copy(src.Bytes, dstPos, srcPos, n)
-
-		case FieldTypeString:
-			copy(dst.Strings[dstPos:], src.Strings[srcPos:srcPos+n])
 
 		case FieldTypeBoolean:
 			dst.Bits.Replace(src.Bits, srcPos, n, dstPos)
@@ -1626,15 +1624,12 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 		}
 
 		switch dstField.Type {
-		case FieldTypeBytes:
+		case FieldTypeBytes, FieldTypeString:
 			if srcLen == 1 {
 				dst.Bytes.Append(src.Bytes.Elem(srcPos))
 			} else {
 				dst.Bytes.Append(src.Bytes.Subslice(srcPos, srcPos+srcLen)...)
 			}
-
-		case FieldTypeString:
-			dst.Strings = append(dst.Strings, src.Strings[srcPos:srcPos+srcLen]...)
 
 		case FieldTypeBoolean:
 			dst.Bits.Append(src.Bits, srcPos, srcLen)
@@ -1749,11 +1744,8 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 		}
 
 		switch dstField.Type {
-		case FieldTypeBytes:
+		case FieldTypeBytes, FieldTypeString:
 			dst.Bytes.Insert(dstPos, src.Bytes.Subslice(srcPos, srcPos+n)...)
-
-		case FieldTypeString:
-			dst.Strings = vec.Strings.Insert(dst.Strings, dstPos, src.Strings[srcPos:srcPos+n]...)
 
 		case FieldTypeBoolean:
 			dst.Bits.Insert(src.Bits, srcPos, srcLen, dstPos)
@@ -1864,11 +1856,8 @@ func (p *Package) Grow(n int) error {
 		field := p.fields[i]
 
 		switch field.Type {
-		case FieldTypeBytes:
+		case FieldTypeBytes, FieldTypeString:
 			b.Bytes.Append(make([][]byte, n)...)
-
-		case FieldTypeString:
-			b.Strings = append(b.Strings, make([]string, n)...)
 
 		case FieldTypeBoolean:
 			b.Bits.Grow(b.Bits.Len() + n)
@@ -1934,15 +1923,8 @@ func (p *Package) Delete(pos, n int) error {
 		field := p.fields[i]
 
 		switch field.Type {
-		case FieldTypeBytes:
+		case FieldTypeBytes, FieldTypeString:
 			b.Bytes.Delete(pos, n)
-
-		case FieldTypeString:
-			// avoid mem leaks
-			for j, l := pos, pos+n; j < l; j++ {
-				b.Strings[j] = ""
-			}
-			b.Strings = append(b.Strings[:pos], b.Strings[pos+n:]...)
 
 		case FieldTypeBoolean:
 			b.Bits.Delete(pos, n)
