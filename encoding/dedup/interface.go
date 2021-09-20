@@ -41,6 +41,9 @@ type ByteArray interface {
 	Less(int, int) bool
 	Swap(int, int)
 
+	// debug
+	Dump() string
+
 	// condition match interface
 	MatchEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset
 	MatchNotEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset

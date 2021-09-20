@@ -8,11 +8,6 @@ import (
 )
 
 const (
-	// same as in block
-	DefaultMaxPointsPerBlock = 1 << 16
-)
-
-const (
 	bytesNativeFormat  = 0
 	bytesFixedFormat   = 1
 	bytesCompactFormat = 2
@@ -39,7 +34,8 @@ var (
 
 func Decode(buf []byte, dst ByteArray, n int) (ByteArray, error) {
 	if len(buf) == 0 {
-		return newFixedByteArray(0, n), nil
+		// best for empty journals to use a native byte array here
+		return NewByteArray(n), nil
 	}
 
 	encoding := buf[0] >> 4
@@ -65,7 +61,9 @@ func decodeNative(buf []byte, dst ByteArray, n int) (ByteArray, error) {
 
 func decodeFixed(buf []byte, dst ByteArray, n int) (ByteArray, error) {
 	if _, ok := dst.(*FixedByteArray); !ok {
-		dst = newFixedByteArray((len(buf)-5)/n, n)
+		dst = newFixedByteArray(0, n)
+	} else {
+		dst.Clear()
 	}
 	err := dst.Decode(buf)
 	if err != nil {
@@ -77,6 +75,8 @@ func decodeFixed(buf []byte, dst ByteArray, n int) (ByteArray, error) {
 func decodeCompact(buf []byte, dst ByteArray, n int) (ByteArray, error) {
 	if _, ok := dst.(*CompactByteArray); !ok {
 		dst = newCompactByteArray(0, n)
+	} else {
+		dst.Clear()
 	}
 	err := dst.Decode(buf)
 	if err != nil {
@@ -88,6 +88,8 @@ func decodeCompact(buf []byte, dst ByteArray, n int) (ByteArray, error) {
 func decodeDict(buf []byte, dst ByteArray, _ int) (ByteArray, error) {
 	if _, ok := dst.(*DictByteArray); !ok {
 		dst = &DictByteArray{}
+	} else {
+		dst.Clear()
 	}
 	err := dst.Decode(buf)
 	if err != nil {

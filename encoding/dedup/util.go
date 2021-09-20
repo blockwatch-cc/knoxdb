@@ -3,6 +3,16 @@
 
 package dedup
 
+import (
+	"sync"
+)
+
+const DefaultMaxPointsPerBlock = 1 << 15 // same as in block
+
+var bytesPool = &sync.Pool{
+	New: func() interface{} { return make([][]byte, 0, DefaultMaxPointsPerBlock) },
+}
+
 func toSlice(a ByteArray) [][]byte {
 	var res [][]byte
 	if a.Len() <= DefaultMaxPointsPerBlock {
@@ -27,6 +37,12 @@ func toSubSlice(a ByteArray, start, end int) [][]byte {
 		res = append(res, a.Elem(i))
 	}
 	return res
+}
+
+func recycle(buf [][]byte) {
+	if cap(buf) == DefaultMaxPointsPerBlock {
+		bytesPool.Put(buf[:0])
+	}
 }
 
 func uvarIntLen(n int) int {

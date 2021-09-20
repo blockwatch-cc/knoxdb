@@ -66,6 +66,7 @@ func analyze(slice [][]byte) analysis {
 	return res
 }
 
+// FIXME: check for collisions between nil, 0x0, 0x0 0x0, ...
 func dedup(slice [][]byte) (dupmap []int, card int, sz int) {
 	m := make(map[uint64]int, len(slice))
 	dupmap = make([]int, len(slice))
@@ -76,36 +77,43 @@ func dedup(slice [][]byte) (dupmap []int, card int, sz int) {
 		}
 		if j, ok := m[h]; ok {
 			dupmap[i] = j
-			continue
+		} else {
+			sz += len(v)
+			m[h] = card
+			dupmap[i] = -1
+			card++
 		}
-		sz += len(v)
-		m[h] = len(m)
-		dupmap[i] = -1
 	}
-	card = len(m)
 	return
 }
 
 func optimize(slice [][]byte) ByteArray {
 	l := len(slice)
 	if l == 0 {
+		// fmt.Printf("dedup: empty\n")
 		return newFixedByteArray(0, 0)
 	}
 	an := analyze(slice)
 	switch true {
 	case an.nEmpty == l:
 		// all zeros
+		// fmt.Printf("dedup: zeros len=%d empty=%d\n", l, an.nEmpty)
 		return newFixedByteArray(0, l)
-	case an.isFixed && an.nEmpty == 0:
-		// all fixed
-		return makeFixedByteArray(an.fixedSize, slice)
 	default:
-		dm, card, sz := dedup(slice)
 		// analyze content for duplicates
-		if card < l/2 {
+		dm, card, sz := dedup(slice)
+		if an.isFixed && an.nEmpty == 0 && card == l {
+			// all fixed and unique
+			// fmt.Printf("dedup: fixed len=%d empty=%d esz=%d\n", l, an.nEmpty, an.fixedSize)
+			return makeFixedByteArray(an.fixedSize, slice)
+		} else if card < l/2 {
+			// many duplicates
+			// fmt.Printf("dedup: dict len=%d size=%d empty=%d card=%d\n", l, sz, an.nEmpty, card)
 			return makeDictByteArray(sz, card, slice, dm)
 		} else {
-			return makeCompactByteArray(sz, slice, dm)
+			// some duplicates
+			// fmt.Printf("dedup: compact len=%d size=%d empty=%d card=%d\n", l, sz, an.nEmpty, card)
+			return makeCompactByteArray(sz, card, slice, dm)
 		}
 	}
 }

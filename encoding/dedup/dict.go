@@ -6,6 +6,7 @@ package dedup
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
@@ -21,7 +22,7 @@ type DictByteArray struct {
 	n    int     // number of items
 }
 
-func newDictByteArray(n, card, sz int) *DictByteArray {
+func newDictByteArray(sz, card, n int) *DictByteArray {
 	return &DictByteArray{
 		dict: make([]byte, 0, sz),
 		offs: make([]int32, 0, card),
@@ -72,35 +73,42 @@ func (a *DictByteArray) Elem(index int) []byte {
 
 func (a *DictByteArray) Set(index int, buf []byte) {
 	// unsupported
+	panic("dict: Set unsupported")
 }
 
 func (a *DictByteArray) Append(...[]byte) ByteArray {
 	// unsupported
+	panic("dict: Append unsupported")
 	return nil
 }
 
 func (a *DictByteArray) AppendFrom(src ByteArray) ByteArray {
 	// unsupported
+	panic("dict: AppendFrom unsupported")
 	return nil
 }
 
 func (a *DictByteArray) Insert(index int, buf ...[]byte) ByteArray {
 	// unsupported
+	panic("dict: Insert unsupported")
 	return a
 }
 
 func (a *DictByteArray) InsertFrom(index int, src ByteArray) ByteArray {
 	// unsupported
+	panic("dict: InsertFrom unsupported")
 	return a
 }
 
 func (a *DictByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
 	// unsupported
+	panic("dict: Copy unsupported")
 	return a
 }
 
 func (a *DictByteArray) Delete(index, n int) ByteArray {
 	// unsupported
+	panic("dict: Delete unsupported")
 	return a
 }
 
@@ -109,6 +117,7 @@ func (a *DictByteArray) Clear() {
 	a.offs = a.offs[:0]
 	a.size = a.size[:0]
 	a.ptr = a.ptr[:0]
+	a.log2 = 0
 	a.n = 0
 }
 
@@ -141,11 +150,8 @@ func (a *DictByteArray) HeapSize() int {
 }
 
 func (a *DictByteArray) WriteTo(w io.Writer) (int, error) {
-	count := 1
 	w.Write([]byte{bytesDictFormat << 4})
-	if a.n == 0 {
-		return count, nil
-	}
+	count := 1
 
 	// write len in elements
 	var num [binary.MaxVarintLen64]byte
@@ -163,7 +169,7 @@ func (a *DictByteArray) WriteTo(w io.Writer) (int, error) {
 	w.Write(num[:l])
 	count += l
 
-	// prepare and write offsets
+	// prepare and write offsets (sizes can be reconstructed)
 	scratch := make([]int64, len(a.offs))
 	for i, v := range a.offs {
 		scratch[i] = int64(v)
@@ -188,10 +194,10 @@ func (a *DictByteArray) WriteTo(w io.Writer) (int, error) {
 	w.Write(a.ptr)
 	count += len(a.ptr)
 
-	// write compressed offset and size lens last
-	binary.BigEndian.PutUint64(num[:], uint64(olen))
-	w.Write(num[:8])
-	count += 8
+	// write compressed offset length last
+	binary.BigEndian.PutUint32(num[:], uint32(olen))
+	w.Write(num[:4])
+	count += 4
 
 	return count, nil
 }
@@ -203,7 +209,7 @@ func (a *DictByteArray) Decode(buf []byte) error {
 
 	// check the encoding type
 	if buf[0] != byte(bytesDictFormat<<4) {
-		return errUnexpectedFormat
+		return fmt.Errorf("dict: reading header: %w", errUnexpectedFormat)
 	}
 
 	// skip the encoding type
@@ -212,7 +218,7 @@ func (a *DictByteArray) Decode(buf []byte) error {
 	// read len in elements
 	val, n := binary.Uvarint(buf)
 	if n <= 0 {
-		return errInvalidLength
+		return fmt.Errorf("dict: reading count: %w", errInvalidLength)
 	}
 	buf = buf[n:]
 	a.n = int(val)
@@ -220,7 +226,7 @@ func (a *DictByteArray) Decode(buf []byte) error {
 	// read log2 in elements
 	val, n = binary.Uvarint(buf)
 	if n <= 0 {
-		return errInvalidLength
+		return fmt.Errorf("dict: reading log2: %w", errInvalidLength)
 	}
 	buf = buf[n:]
 	a.log2 = int(val)
@@ -228,7 +234,7 @@ func (a *DictByteArray) Decode(buf []byte) error {
 	// read dict len in entries
 	val, n = binary.Uvarint(buf)
 	if n <= 0 {
-		return errInvalidLength
+		return fmt.Errorf("dict: reading dict len: %w", errInvalidLength)
 	}
 	buf = buf[n:]
 
@@ -242,21 +248,22 @@ func (a *DictByteArray) Decode(buf []byte) error {
 	scratch := make([]int64, int(val))
 
 	// read compressed offs and size array lengths (stored at end of buffer)
-	if len(buf) < 16 {
-		return errShortBuffer
+	if len(buf) < 4 {
+		return fmt.Errorf("dict: reading offset len: %w", errShortBuffer)
 	}
-	olen := int(binary.BigEndian.Uint64(buf[len(buf)-8:]))
-	buf = buf[:len(buf)-8]
+	olen := int(binary.BigEndian.Uint32(buf[len(buf)-4:]))
+	buf = buf[:len(buf)-4]
 
-	// unpack offsets
+	// unpack offsets and reconstruct sizes (offsets are guaranteed to be
+	// strictly monotonic)
 	if len(buf) < olen {
-		return errShortBuffer
+		return fmt.Errorf("dict: reading offsets have=%d want=%d: %w", len(buf), olen, errShortBuffer)
 	}
 
 	var err error
 	scratch, err = compress.IntegerArrayDecodeAll(buf[:olen], scratch)
 	if err != nil {
-		return err
+		return fmt.Errorf("dict: decoding offsets: %w", err)
 	}
 	for i, v := range scratch {
 		a.offs[i] = int32(v)
@@ -269,10 +276,10 @@ func (a *DictByteArray) Decode(buf []byte) error {
 	// read dict size and dict slice
 	val, n = binary.Uvarint(buf)
 	if n <= 0 {
-		return errInvalidLength
+		return fmt.Errorf("dict: reading dict size: %w", errInvalidLength)
 	}
 	if len(buf) < int(val) {
-		return errInvalidLength
+		return fmt.Errorf("dict: reading dict data: %w", errShortBuffer)
 	}
 	buf = buf[n:]
 	if cap(a.dict) < int(val) {
@@ -287,10 +294,10 @@ func (a *DictByteArray) Decode(buf []byte) error {
 	// read ptr size and ptr slice
 	val, n = binary.Uvarint(buf)
 	if n <= 0 {
-		return errInvalidLength
+		return fmt.Errorf("dict: reading ptr len: %w", errInvalidLength)
 	}
 	if len(buf) < int(val) {
-		return errInvalidLength
+		return fmt.Errorf("dict: reading ptr data: %w", errShortBuffer)
 	}
 	buf = buf[n:]
 	if cap(a.ptr) < int(val) {
@@ -303,7 +310,14 @@ func (a *DictByteArray) Decode(buf []byte) error {
 }
 
 func (a *DictByteArray) Materialize() ByteArray {
-	return newNativeByteArrayFromBytes(a.Slice())
+	// copy to avoid referencing memory
+	ss := a.Slice()
+	for i, v := range ss {
+		buf := make([]byte, len(v))
+		copy(buf, v)
+		ss[i] = buf
+	}
+	return newNativeByteArrayFromBytes(ss)
 }
 
 func (a *DictByteArray) IsMaterialized() bool {

@@ -13,44 +13,46 @@ func log2up(v int) int {
 	return 0
 }
 
-// packs integer value as log2-bit integer into buf
+// packs integer value as n-bit packed integer into buf to position index
+// This is a write-once, read-only datastructure. Assumes buffer is zeroed
+// at start, does not support value overwrite once written.
 func pack(buf []byte, index, value, log2 int) {
-	// mask
-	value = value & ((1 << log2) - 1)
-
 	// shift
 	shift := (64 - log2) & 7 * (index + 1) & 7
-	val := uint64(value) << shift
+
+	// mast & shift value
+	val := uint64(value&((1<<log2)-1)) << shift
 
 	// output position
 	pos := (index * log2) >> 3
 
 	// most significant byte
-	msb := (log2+shift+7)>>3 - 1
+	msb := (log2 + shift - 1) >> 3
+
+	// patch into position
 	for i := msb; i >= 0; i-- {
 		buf[pos+i] |= byte(val)
 		val >>= 8
 	}
 }
 
-// unpacks integer value as log2-bit integer from buf
+// unpacks integer value from n-bit packed int at position index in buf
 func unpack(buf []byte, index, log2 int) int {
 	// output shift
 	shift := (64 - log2) & 7 * (index + 1) & 7
-
-	// output mask
-	mask := ((1 << log2) - 1)
 
 	// input position
 	pos := (index * log2) >> 3
 
 	// most significant byte
-	msb := (log2+shift+7)>>3 - 1
+	msb := (log2 + shift - 1) >> 3
 
 	var val int
 	for i := 0; i <= msb; i++ {
 		val <<= 8
 		val += int(buf[pos+i])
 	}
-	return (val >> shift) & mask
+
+	// shift and mask output
+	return (val >> shift) & ((1 << log2) - 1)
 }

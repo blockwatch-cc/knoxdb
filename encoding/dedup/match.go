@@ -305,5 +305,10 @@ func minMax(a ByteArray) ([]byte, []byte) {
 			}
 		}
 	}
-	return min, max
+	// copy to avoid reference
+	cmin := make([]byte, len(min))
+	copy(cmin, min)
+	cmax := make([]byte, len(max))
+	copy(cmax, max)
+	return cmin, cmax
 }

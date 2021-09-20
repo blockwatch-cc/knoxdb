@@ -6,6 +6,7 @@ package dedup
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
@@ -18,7 +19,7 @@ type CompactByteArray struct {
 	size []int32
 }
 
-func newCompactByteArray(n, sz int) *CompactByteArray {
+func newCompactByteArray(sz, n int) *CompactByteArray {
 	return &CompactByteArray{
 		buf:  make([]byte, 0, sz),
 		offs: make([]int32, 0, n),
@@ -26,12 +27,13 @@ func newCompactByteArray(n, sz int) *CompactByteArray {
 	}
 }
 
-func makeCompactByteArray(sz int, data [][]byte, dupmap []int) *CompactByteArray {
+func makeCompactByteArray(sz, card int, data [][]byte, dupmap []int) *CompactByteArray {
 	a := &CompactByteArray{
 		buf:  make([]byte, 0, sz),
 		offs: make([]int32, len(data)),
 		size: make([]int32, len(data)),
 	}
+	uniq := make([]int, 0, card)
 	for i, v := range data {
 		k := dupmap[i]
 		if k < 0 {
@@ -39,10 +41,11 @@ func makeCompactByteArray(sz int, data [][]byte, dupmap []int) *CompactByteArray
 			a.offs[i] = int32(len(a.buf))
 			a.size[i] = int32(len(v))
 			a.buf = append(a.buf, v...)
+			uniq = append(uniq, i)
 		} else {
 			// reference as duplicate
-			a.offs[i] = a.offs[k]
-			a.size[i] = a.size[k]
+			a.offs[i] = a.offs[uniq[k]]
+			a.size[i] = a.size[uniq[k]]
 		}
 	}
 	return a
@@ -70,35 +73,42 @@ func (a *CompactByteArray) Elem(index int) []byte {
 
 func (a *CompactByteArray) Set(index int, buf []byte) {
 	// unsupported
+	panic("compact: Set unsupported")
 }
 
 func (a *CompactByteArray) Append(val ...[]byte) ByteArray {
 	// unsupported
+	panic("compact: Append unsupported")
 	return a
 }
 
 func (a *CompactByteArray) AppendFrom(src ByteArray) ByteArray {
 	// unsupported
+	panic("compact: AppendFrom unsupported")
 	return a
 }
 
 func (a *CompactByteArray) Insert(index int, buf ...[]byte) ByteArray {
 	// unsupported
+	panic("compact: Insert unsupported")
 	return a
 }
 
 func (a *CompactByteArray) InsertFrom(index int, src ByteArray) ByteArray {
 	// unsupported
+	panic("compact: InsertFrom unsupported")
 	return a
 }
 
 func (a *CompactByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
 	// unsupported
+	panic("compact: Copy unsupported")
 	return a
 }
 
 func (a *CompactByteArray) Delete(index, n int) ByteArray {
 	// unsupported
+	panic("compact: Delete unsupported")
 	return a
 }
 
@@ -129,9 +139,6 @@ func (a *CompactByteArray) MinMax() ([]byte, []byte) {
 
 func (a *CompactByteArray) WriteTo(w io.Writer) (int, error) {
 	w.Write([]byte{bytesCompactFormat << 4})
-	if len(a.offs) == 0 {
-		return 1, nil
-	}
 
 	// write len in elements
 	count := 1
@@ -151,15 +158,27 @@ func (a *CompactByteArray) WriteTo(w io.Writer) (int, error) {
 	}
 	count += olen
 
+	// prepare and write sizes
+	for i, v := range a.size {
+		scratch[i] = int64(v)
+	}
+	slen, err := compress.IntegerArrayEncodeAll(scratch, w)
+	if err != nil {
+		return count, err
+	}
+	count += slen
+
 	// write raw data with leading size
 	l = binary.PutUvarint(num[:], uint64(len(a.buf)))
 	w.Write(num[:l])
 	w.Write(a.buf)
 	count += l + len(a.buf)
 
-	// write compressed offset and size lens last
-	binary.BigEndian.PutUint64(num[:], uint64(olen))
-	w.Write(num[:8])
+	// write compressed offset and sizes last
+	binary.BigEndian.PutUint32(num[:], uint32(olen))
+	w.Write(num[:4])
+	binary.BigEndian.PutUint32(num[:], uint32(slen))
+	w.Write(num[:4])
 	count += 8
 
 	return count, nil
@@ -172,7 +191,7 @@ func (a *CompactByteArray) Decode(buf []byte) error {
 
 	// check the encoding type
 	if buf[0] != byte(bytesCompactFormat<<4) {
-		return errUnexpectedFormat
+		return fmt.Errorf("compact: reading header: %w", errUnexpectedFormat)
 	}
 
 	// skip the encoding type
@@ -181,7 +200,7 @@ func (a *CompactByteArray) Decode(buf []byte) error {
 	// read len in elements
 	length, n := binary.Uvarint(buf)
 	if n <= 0 {
-		return errInvalidLength
+		return fmt.Errorf("compact: reading count: %w", errInvalidLength)
 	}
 	buf = buf[n:]
 	l := int(length)
@@ -195,31 +214,53 @@ func (a *CompactByteArray) Decode(buf []byte) error {
 	a.size = a.size[:l]
 	scratch := make([]int64, l)
 
-	// read compressed offs and size array lens (stored at end of buffer)
+	// read compressed offs and size array lengths (stored at end of buffer)
 	if len(buf) < 16 {
-		return errShortBuffer
+		return fmt.Errorf("compact: reading offset len: %w", errShortBuffer)
 	}
-	olen := int(binary.BigEndian.Uint64(buf[len(buf)-8:]))
-	buf = buf[:len(buf)-8]
+	slen := int(binary.BigEndian.Uint32(buf[len(buf)-4:]))
+	buf = buf[:len(buf)-4]
+	olen := int(binary.BigEndian.Uint32(buf[len(buf)-4:]))
+	buf = buf[:len(buf)-4]
 
 	// unpack offsets
 	if len(buf) < olen {
-		return errShortBuffer
+		return fmt.Errorf("compact: reading offset data: %w", errShortBuffer)
 	}
 
 	var err error
 	scratch, err = compress.IntegerArrayDecodeAll(buf[:olen], scratch)
 	if err != nil {
-		return err
+		return fmt.Errorf("compact: decoding offsets: %w", err)
 	}
 	for i, v := range scratch {
 		a.offs[i] = int32(v)
-		if i > 0 {
-			a.size[i-1] = a.offs[i] - a.offs[i-1]
-		}
 	}
 	buf = buf[olen:]
-	a.size[len(a.size)-1] = int32(len(buf)) - a.offs[len(a.size)-1]
+
+	// unpack sizes
+	if len(buf) < slen {
+		return fmt.Errorf("compact: reading size data: %w", errShortBuffer)
+	}
+	scratch, err = compress.IntegerArrayDecodeAll(buf[:slen], scratch)
+	if err != nil {
+		return fmt.Errorf("compact: decoding offsets: %w", err)
+	}
+	for i, v := range scratch {
+		a.size[i] = int32(v)
+	}
+	buf = buf[slen:]
+
+	// read data len in elements
+	length, n = binary.Uvarint(buf)
+	if n <= 0 {
+		return fmt.Errorf("compact: reading data len: %w", errInvalidLength)
+	}
+	buf = buf[n:]
+	if len(buf) < int(length) {
+		return fmt.Errorf("compact: reading data: %w", errShortBuffer)
+	}
+	buf = buf[:int(length)]
 
 	// copy data to private buffer
 	if cap(a.buf) < len(buf) {
@@ -232,7 +273,14 @@ func (a *CompactByteArray) Decode(buf []byte) error {
 }
 
 func (a *CompactByteArray) Materialize() ByteArray {
-	return newNativeByteArrayFromBytes(a.Slice())
+	// copy to avoid referencing memory
+	ss := a.Slice()
+	for i, v := range ss {
+		buf := make([]byte, len(v))
+		copy(buf, v)
+		ss[i] = buf
+	}
+	return newNativeByteArrayFromBytes(ss)
 }
 
 func (a *CompactByteArray) IsMaterialized() bool {

@@ -6,15 +6,11 @@ package dedup
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
-	"sync"
 
 	"blockwatch.cc/knoxdb/vec"
 )
-
-var bytesPool = &sync.Pool{
-	New: func() interface{} { return make([][]byte, 0, DefaultMaxPointsPerBlock) },
-}
 
 type NativeByteArray struct {
 	bufs [][]byte
@@ -22,7 +18,7 @@ type NativeByteArray struct {
 
 func newNativeByteArray(n int) *NativeByteArray {
 	a := &NativeByteArray{}
-	if n <= DefaultMaxPointsPerBlock {
+	if n == DefaultMaxPointsPerBlock {
 		a.bufs = bytesPool.Get().([][]byte)[:0]
 	} else {
 		a.bufs = make([][]byte, 0, n)
@@ -47,17 +43,36 @@ func (a NativeByteArray) Elem(index int) []byte {
 }
 
 func (a NativeByteArray) Set(index int, buf []byte) {
-	a.bufs[index] = make([]byte, len(buf))
+	if len(a.bufs) <= index {
+		return
+	}
+	if cap(a.bufs[index]) < len(buf) {
+		a.bufs[index] = make([]byte, len(buf))
+	} else {
+		a.bufs[index] = a.bufs[index][:len(buf)]
+	}
 	copy(a.bufs[index], buf)
 }
 
 func (a *NativeByteArray) Append(vals ...[]byte) ByteArray {
-	a.bufs = append(a.bufs, vals...)
+	for _, v := range vals {
+		buf := make([]byte, len(v))
+		copy(buf, v)
+		a.bufs = append(a.bufs, buf)
+	}
 	return a
 }
 
 func (a *NativeByteArray) AppendFrom(src ByteArray) ByteArray {
-	a.bufs = append(a.bufs, src.Slice()...)
+	ss := src.Slice()
+	for _, v := range ss {
+		buf := make([]byte, len(v))
+		copy(buf, v)
+		a.bufs = append(a.bufs, buf)
+	}
+	if src.IsOptimized() {
+		recycle(ss)
+	}
 	return a
 }
 
@@ -65,22 +80,34 @@ func (a *NativeByteArray) Insert(index int, vals ...[]byte) ByteArray {
 	pre := a.bufs
 	a.bufs = vec.Bytes.Insert(a.bufs, index, vals...)
 	if cap(pre) != cap(a.bufs) {
-		bytesPool.Put(pre[:0])
+		recycle(pre)
 	}
 	return a
 }
 
 func (a *NativeByteArray) InsertFrom(index int, src ByteArray) ByteArray {
-	a.bufs = vec.Bytes.Insert(a.bufs, index, src.Slice()...)
+	ss := src.Slice()
+	pre := a.bufs
+	a.bufs = vec.Bytes.Insert(a.bufs, index, ss...)
+	if src.IsOptimized() {
+		recycle(ss)
+	}
+	if cap(pre) != cap(a.bufs) {
+		recycle(pre)
+	}
 	return a
 }
 
 func (a *NativeByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
-	for j, v := range src.Slice()[srcPos : srcPos+n] {
+	ss := src.Subslice(srcPos, srcPos+n)
+	for j, v := range ss {
 		// always allocate new slice to avoid sharing memory
 		buf := make([]byte, len(v))
 		copy(buf, v)
 		a.bufs[dstPos+j] = buf
+	}
+	if src.IsOptimized() {
+		recycle(ss)
 	}
 	return a
 }
@@ -105,9 +132,7 @@ func (a *NativeByteArray) Release() {
 	for j := range a.bufs {
 		a.bufs[j] = nil
 	}
-	if cap(a.bufs) == DefaultMaxPointsPerBlock {
-		bytesPool.Put(a.bufs[:0])
-	}
+	recycle(a.bufs)
 	a.bufs = nil
 }
 
@@ -120,7 +145,13 @@ func (a NativeByteArray) Subslice(start, end int) [][]byte {
 }
 
 func (a NativeByteArray) MinMax() ([]byte, []byte) {
-	return vec.Bytes.MinMax(a.bufs)
+	min, max := vec.Bytes.MinMax(a.bufs)
+	// copy to avoid reference
+	cmin := make([]byte, len(min))
+	copy(cmin, min)
+	cmax := make([]byte, len(max))
+	copy(cmax, max)
+	return cmin, cmax
 }
 
 func (a NativeByteArray) MaxEncodedSize() int {
@@ -142,10 +173,6 @@ func (a NativeByteArray) HeapSize() int {
 
 func (a NativeByteArray) WriteTo(w io.Writer) (int, error) {
 	w.Write([]byte{bytesNativeFormat << 4})
-	if len(a.bufs) == 0 {
-		return 1, nil
-	}
-
 	count := 1
 	var buf [binary.MaxVarintLen64]byte
 	for i := range a.bufs {
@@ -154,7 +181,6 @@ func (a NativeByteArray) WriteTo(w io.Writer) (int, error) {
 		w.Write(a.bufs[i])
 		count += l + len(a.bufs[i])
 	}
-
 	return count, nil
 }
 
@@ -165,7 +191,7 @@ func (a *NativeByteArray) Decode(buf []byte) error {
 
 	// check the encoding type
 	if buf[0] != byte(bytesNativeFormat<<4) {
-		return errUnexpectedFormat
+		return fmt.Errorf("native: reading header: %w", errUnexpectedFormat)
 	}
 
 	// skip the encoding type
@@ -175,7 +201,7 @@ func (a *NativeByteArray) Decode(buf []byte) error {
 	sz := cap(a.bufs)
 	if sz == 0 {
 		sz = DefaultMaxPointsPerBlock
-		a.bufs = bytesPool.Get().([][]byte)[:0]
+		a.bufs = bytesPool.Get().([][]byte)[:sz]
 	} else {
 		a.bufs = a.bufs[:sz]
 	}
@@ -190,7 +216,7 @@ func (a *NativeByteArray) Decode(buf []byte) error {
 	for i < len(buf) {
 		length, n := binary.Uvarint(buf[i:])
 		if n <= 0 {
-			return errInvalidLength
+			return fmt.Errorf("native: reading element len: %w", errInvalidLength)
 		}
 
 		// The length of this string plus the length of the variable byte encoded length
@@ -199,10 +225,10 @@ func (a *NativeByteArray) Decode(buf []byte) error {
 		lower := i + n
 		upper := lower + int(length)
 		if upper < lower {
-			return errLengthOverflow
+			return fmt.Errorf("native: reading element: %w", errLengthOverflow)
 		}
 		if upper > len(buf) {
-			return errShortBuffer
+			return fmt.Errorf("native: reading element: %w", errShortBuffer)
 		}
 
 		val := buf[lower:upper]

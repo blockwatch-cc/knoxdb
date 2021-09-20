@@ -6,6 +6,7 @@ package dedup
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"blockwatch.cc/knoxdb/vec"
@@ -13,12 +14,14 @@ import (
 
 type FixedByteArray struct {
 	sz  int    // item size
+	n   int    // item count
 	buf []byte // data slice
 }
 
 func newFixedByteArray(sz, n int) *FixedByteArray {
 	return &FixedByteArray{
 		sz:  sz,
+		n:   n,
 		buf: make([]byte, 0, sz*n),
 	}
 }
@@ -26,7 +29,8 @@ func newFixedByteArray(sz, n int) *FixedByteArray {
 func makeFixedByteArray(sz int, data [][]byte) *FixedByteArray {
 	a := &FixedByteArray{
 		sz:  sz,
-		buf: make([]byte, sz*len(data)),
+		n:   len(data),
+		buf: make([]byte, sz*len(data), sz*len(data)),
 	}
 	for i, v := range data {
 		copy(a.buf[i*sz:(i+1)*sz], v)
@@ -35,59 +39,73 @@ func makeFixedByteArray(sz int, data [][]byte) *FixedByteArray {
 }
 
 func (a *FixedByteArray) Len() int {
-	return len(a.buf) / a.sz
+	return a.n
 }
 
 func (a *FixedByteArray) Cap() int {
+	if a.sz == 0 {
+		return 0
+	}
 	return cap(a.buf) / a.sz
 }
 
 func (a *FixedByteArray) Elem(index int) []byte {
+	if len(a.buf) == 0 {
+		return []byte{}
+	}
 	return a.buf[index*a.sz : (index+1)*a.sz]
 }
 
 func (a *FixedByteArray) Set(index int, buf []byte) {
 	// unsupported
+	panic("fixed: Set unsupported")
 }
 
 func (a *FixedByteArray) Append(val ...[]byte) ByteArray {
 	// unsupported
+	panic("fixed: Append unsupported")
 	return a
 }
 
 func (a *FixedByteArray) AppendFrom(src ByteArray) ByteArray {
 	// unsupported
+	panic("fixed: AppendFrom unsupported")
 	return a
 }
 
 func (a *FixedByteArray) Insert(index int, buf ...[]byte) ByteArray {
 	// unsupported
+	panic("fixed: Insert unsupported")
 	return a
 }
 
 func (a *FixedByteArray) InsertFrom(index int, src ByteArray) ByteArray {
 	// unsupported
+	panic("fixed: InsertFrom unsupported")
 	return a
 }
 
 func (a *FixedByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
 	// unsupported
+	panic("fixed: Copy unsupported")
 	return a
 }
 
 func (a *FixedByteArray) Delete(index, n int) ByteArray {
 	// unsupported
+	panic("fixed: Delete unsupported")
 	return a
 }
 
 func (a *FixedByteArray) Clear() {
 	a.buf = a.buf[:0]
+	a.sz = 0
+	a.n = 0
 }
 
 func (a *FixedByteArray) Release() {
 	a.Clear()
 	a.buf = nil
-	a.sz = 0
 }
 
 func (a *FixedByteArray) Slice() [][]byte {
@@ -113,13 +131,10 @@ func (a *FixedByteArray) HeapSize() int {
 func (a *FixedByteArray) WriteTo(w io.Writer) (int, error) {
 	count := 1
 	w.Write([]byte{bytesFixedFormat << 4})
-	if len(a.buf) == 0 {
-		return count, nil
-	}
 
-	// write item size
+	// write element count
 	var num [binary.MaxVarintLen64]byte
-	l := binary.PutUvarint(num[:], uint64(a.sz))
+	l := binary.PutUvarint(num[:], uint64(a.n))
 	w.Write(num[:l])
 	count += l
 
@@ -136,19 +151,23 @@ func (a *FixedByteArray) Decode(buf []byte) error {
 
 	// check the encoding type
 	if buf[0] != byte(bytesFixedFormat<<4) {
-		return errUnexpectedFormat
+		return fmt.Errorf("fixed: reading header: %w", errUnexpectedFormat)
 	}
 
 	// skip the encoding type
 	buf = buf[1:]
 
-	// read len in elements
-	length, n := binary.Uvarint(buf)
+	// read element count
+	count, n := binary.Uvarint(buf)
 	if n <= 0 {
-		return errInvalidLength
+		return fmt.Errorf("fixed: reading element count: %w", errInvalidLength)
 	}
 	buf = buf[n:]
-	a.sz = int(length)
+	a.n = int(count)
+	a.sz = 0
+	if a.n > 0 {
+		a.sz = len(buf) / a.n
+	}
 
 	// copy the rest of our input buffer to avoid referencing memory
 	if cap(a.buf) < len(buf) {
@@ -160,7 +179,14 @@ func (a *FixedByteArray) Decode(buf []byte) error {
 }
 
 func (a *FixedByteArray) Materialize() ByteArray {
-	return newNativeByteArrayFromBytes(a.Slice())
+	// copy to avoid referencing memory
+	ss := a.Slice()
+	for i, v := range ss {
+		buf := make([]byte, len(v))
+		copy(buf, v)
+		ss[i] = buf
+	}
+	return newNativeByteArrayFromBytes(ss)
 }
 
 func (a *FixedByteArray) IsMaterialized() bool {
