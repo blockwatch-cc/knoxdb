@@ -79,14 +79,22 @@ func (l *PackIndex) Len() int {
 	return len(l.packs)
 }
 
-func (l *PackIndex) Size() int {
+func (l *PackIndex) HeapSize() int {
 	sz := szPackIndex
 	sz += len(l.minpks) * 8
 	sz += len(l.maxpks) * 8
 	sz += len(l.removed) * 8
 	sz += len(l.pos) * 4
 	for i := range l.packs {
-		sz += l.packs[i].Size()
+		sz += l.packs[i].HeapSize()
+	}
+	return sz
+}
+
+func (l *PackIndex) TableSize() int {
+	var sz int
+	for i := range l.packs {
+		sz += l.packs[i].Packsize
 	}
 	return sz
 }

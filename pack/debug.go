@@ -190,7 +190,7 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	defer tx.Rollback()
 	switch mode {
 	case DumpModeDec, DumpModeHex:
-		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-7s %-33s %-33s %-4s %-6s %-10s %-10s %7s %-10s\n",
+		fmt.Fprintf(w, "%-5s %-10s %-7s %-10s %-7s %-5s %-33s %-33s %-4s %-6s %-10s %-10s %7s %-10s\n",
 			"#", "Key", "Block", "Type", "Rows", "Card", "Min", "Max", "Prec", "Comp", "Stored", "Heap", "Ratio", "GoType")
 	}
 	lineNo := 1
@@ -626,14 +626,14 @@ func (p *Package) Validate() error {
 		case FieldTypeBytes:
 			if b.Bytes == nil {
 				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Bytes), p.nValues; a != b {
+			} else if a, b := b.Bytes.Len(), p.nValues; a != b {
 				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
 			}
 
 		case FieldTypeString:
-			if b.Strings == nil {
+			if b.Bytes == nil {
 				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Strings), p.nValues; a != b {
+			} else if a, b := b.Bytes.Len(), p.nValues; a != b {
 				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
 			}
 

@@ -17,6 +17,7 @@ import (
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/util"
 
+	"blockwatch.cc/knoxdb/encoding/compress"
 	. "blockwatch.cc/knoxdb/encoding/decimal"
 	. "blockwatch.cc/knoxdb/vec"
 )
@@ -52,7 +53,7 @@ type Condition struct {
 	uint16map    map[uint16]struct{} // compiled uint16 map for set membership
 	uint8map     map[uint8]struct{}  // compiled uint8 map for set membership
 	numValues    int                 // number of values when Value is a slice
-	bloomHashes  [][2]uint64         // opt bloom hash value(s) if field has bllom flag
+	bloomHashes  [][2]uint64         // opt bloom hash value(s) if field has bloom flag
 }
 
 // condition that is not bound to a table field yet
@@ -366,7 +367,7 @@ func (c *Condition) Compile() (err error) {
 		}
 		if buildBloom {
 			for _, val := range slice {
-				c.bloomHashes = append(c.bloomHashes, bloom.Hash([]byte(val)))
+				c.bloomHashes = append(c.bloomHashes, bloom.Hash(compress.UnsafeGetBytes(val)))
 			}
 		}
 		// below min size a hash map is more expensive than memcmp
@@ -376,7 +377,7 @@ func (c *Condition) Compile() (err error) {
 		// convert to []byte for feeding the hash map below
 		vals = make([][]byte, len(slice))
 		for i, v := range slice {
-			vals[i] = []byte(v)
+			vals[i] = compress.UnsafeGetBytes(v)
 		}
 	case FieldTypeBoolean:
 		slice := c.Value.([]bool)
@@ -954,7 +955,8 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
 			if c.hashmap != nil {
-				for i, v := range block.Bytes {
+				for i := 0; i < block.Bytes.Len(); i++ {
+					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -983,7 +985,8 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 					}
 				}
 			} else {
-				for i, v := range block.Bytes {
+				for i := 0; i < block.Bytes.Len(); i++ {
+					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -998,17 +1001,19 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 		case FieldTypeString:
 			strs := c.Value.([]string)
 			if c.hashmap != nil {
-				for i, v := range block.Strings {
+				for i := 0; i < block.Bytes.Len(); i++ {
+					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
 					}
-					sum := xxhash.Sum64([]byte(v))
+					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; ok {
+						vs := compress.UnsafeGetString(v)
 						if pos != 0xFFFFFFFF {
 							// compare IN slice value at pos against buf
 							// to ensure we're collision free
-							if strings.Compare(v, strs[pos]) == 0 {
+							if strings.Compare(vs, strs[pos]) == 0 {
 								bits.Set(i)
 							}
 						} else {
@@ -1017,7 +1022,7 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 								if oflow.hash != sum {
 									continue
 								}
-								if strings.Compare(v, strs[oflow.pos]) != 0 {
+								if strings.Compare(vs, strs[oflow.pos]) != 0 {
 									continue
 								}
 								bits.Set(i)
@@ -1027,13 +1032,14 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 					}
 				}
 			} else {
-				for i, v := range block.Strings {
+				for i := 0; i < block.Bytes.Len(); i++ {
+					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
 					}
 					// without hash map, resort to type-based comparison
-					if c.Field.Type.In(v, c.Value) {
+					if c.Field.Type.In(compress.UnsafeGetString(v), c.Value) {
 						bits.Set(i)
 					}
 				}
@@ -1200,7 +1206,8 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 		// this case (i.e. the list contains all colliding values)
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
-			for i, v := range block.Bytes {
+			for i := 0; i < block.Bytes.Len(); i++ {
+				v := block.Bytes.Elem(i)
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1245,21 +1252,23 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 
 		case FieldTypeString:
 			strs := c.Value.([]string)
-			for i, v := range block.Strings {
+			for i := 0; i < block.Bytes.Len(); i++ {
+				v := block.Bytes.Elem(i)
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
 				if c.hashmap != nil {
-					sum := xxhash.Sum64([]byte(v))
+					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; !ok {
 						bits.Set(i)
 					} else {
+						vs := compress.UnsafeGetString(v)
 						// may still be a false positive due to hash collision
 						if pos != 0xFFFFFFFF {
 							// compare IN slice value at pos against buf
 							// to ensure we're collision free
-							if strings.Compare(v, strs[pos]) != 0 {
+							if strings.Compare(vs, strs[pos]) != 0 {
 								bits.Set(i)
 							}
 						} else {
@@ -1269,7 +1278,7 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 								if oflow.hash != sum {
 									continue
 								}
-								if strings.Compare(v, strs[oflow.pos]) == 0 {
+								if strings.Compare(vs, strs[oflow.pos]) == 0 {
 									// may break early when found
 									found = true
 									break
@@ -1282,7 +1291,7 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 					}
 				} else {
 					// without hash map, resort to type-based comparison
-					if !c.Field.Type.In(v, c.Value) {
+					if !c.Field.Type.In(compress.UnsafeGetString(v), c.Value) {
 						bits.Set(i)
 					}
 				}
@@ -1354,11 +1363,8 @@ func (c Condition) MatchAt(pkg *Package, pos int) bool {
 		// low probability
 		// type check on val was already performed in compile stage
 		var buf []byte
-		if c.Field.Type == FieldTypeBytes {
+		if c.Field.Type == FieldTypeBytes || c.Field.Type == FieldTypeString {
 			buf, _ = pkg.BytesAt(index, pos)
-		} else if c.Field.Type == FieldTypeString {
-			str, _ := pkg.StringAt(index, pos)
-			buf = []byte(str)
 		}
 		if buf != nil && c.hashmap != nil {
 			if _, ok := c.hashmap[xxhash.Sum64(buf)]; !ok {
@@ -1418,11 +1424,8 @@ func (c Condition) MatchAt(pkg *Package, pos int) bool {
 		// low probability
 		// type check on val was already performed in compile stage
 		var buf []byte
-		if c.Field.Type == FieldTypeBytes {
+		if c.Field.Type == FieldTypeBytes || c.Field.Type == FieldTypeString {
 			buf, _ = pkg.BytesAt(index, pos)
-		} else if c.Field.Type == FieldTypeString {
-			str, _ := pkg.StringAt(index, pos)
-			buf = []byte(str)
 		}
 		if buf != nil && c.hashmap != nil {
 			if _, ok := c.hashmap[xxhash.Sum64(buf)]; !ok {

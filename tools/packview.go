@@ -18,6 +18,7 @@ import (
 	"github.com/echa/log"
 	bolt "go.etcd.io/bbolt"
 
+	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/csv"
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
@@ -58,6 +59,7 @@ Available Commands:
   blocks      show pack block headers
   type        show type info (from journal pack)
   journal     dump journal contents
+  dump        dump raw block data after decode
   dump-all    dump full table contents
   dump-pack   dump pack contents (use -pack <id> to select a pack, default 0)
   dump-index  dump index pack contents (use -pack <id> to select a pack, default 0)
@@ -209,6 +211,8 @@ func run() error {
 		return table.DumpIndexPackHeaders(out, mode, sorted)
 	case "dump-all":
 		return viewAllPacks(table, out, mode)
+	case "dump":
+		return dumpByteBlock(table, out)
 	case "dump-pack":
 		return table.DumpPack(out, packid, mode)
 	case "dump-index":
@@ -233,4 +237,16 @@ func viewAllPacks(table *pack.Table, w io.Writer, mode pack.DumpMode) error {
 		}
 	}
 	return nil
+}
+
+func dumpByteBlock(table *pack.Table, w io.Writer) error {
+	return table.WalkPacksRange(packid, packid, func(p *pack.Package) error {
+		for i, v := range p.Blocks() {
+			if v.Type() == block.BlockBytes {
+				fmt.Printf("Dump raw data for pack=%x block=%d\n", p.Key(), i)
+				w.Write([]byte(v.Bytes.Dump()))
+			}
+		}
+		return nil
+	})
 }

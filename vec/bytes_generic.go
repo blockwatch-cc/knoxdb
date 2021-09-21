@@ -168,14 +168,15 @@ func matchBytesBetweenGeneric(src [][]byte, a, b, bits, mask []byte) int64 {
 	if len(a) == 0 {
 		if mask != nil {
 			copy(bits, mask)
+			return -1
 		} else {
 			bits[0] = 0xff
 			for bp := 1; bp < len(bits); bp *= 2 {
 				copy(bits[bp:], bits[:bp])
 			}
 			bits[len(bits)-1] &= bytemask(len(src))
+			return int64(len(src))
 		}
-		return int64(len(src))
 	}
 
 	// make sure min/max are in correct order

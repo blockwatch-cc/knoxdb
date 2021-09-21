@@ -43,57 +43,57 @@ const (
 	intCompressedRLE = 2
 )
 
-// upper bound
+// upper bound, may store uncompressed 64bit strides
 func Int256ArrayEncodedSize(src vec.Int256LLSlice) int {
 	return src.Len()*32 + 1
 }
 
-// upper bound
+// upper bound, may store uncompressed 64bit strides
 func Int128ArrayEncodedSize(src vec.Int128LLSlice) int {
 	return src.Len()*16 + 1
 }
 
-// upper bound
+// upper bound, may store uncompressed 64bit
 func Int64ArrayEncodedSize(src []int64) int {
 	return len(src)*8 + 1
 }
 
 // upper bound
 func Int32ArrayEncodedSize(src []int32) int {
-	return len(src)*8 + 1
+	return len(src)*4 + 1
 }
 
 // upper bound
 func Int16ArrayEncodedSize(src []int16) int {
-	return len(src)*8 + 1
+	return len(src)*2 + 1
 }
 
 // upper bound
 func Int8ArrayEncodedSize(src []int8) int {
-	return len(src)*8 + 1
+	return len(src) + 1
 }
 
-// upper bound
+// upper bound, may store uncompressed 64bit
 func Uint64ArrayEncodedSize(src []uint64) int {
 	return len(src)*8 + 1
 }
 
 // upper bound
 func Uint32ArrayEncodedSize(src []uint32) int {
-	return len(src)*8 + 1
+	return len(src)*4 + 1
 }
 
 // upper bound
 func Uint16ArrayEncodedSize(src []uint16) int {
-	return len(src)*8 + 1
+	return len(src)*2 + 1
 }
 
 // upper bound
 func Uint8ArrayEncodedSize(src []uint8) int {
-	return len(src)*8 + 1
+	return len(src) + 1
 }
 
-func IntegerArrayEncodeAll(src []int64, w io.Writer) error {
+func IntegerArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 	return integerArrayEncodeAll(src, w, false)
 }
 
@@ -106,9 +106,9 @@ func IntegerArrayEncodeAll(src []int64, w io.Writer) error {
 // Important: IntegerArrayEncodeAll modifies the contents of src by using it as
 // scratch space for delta encoded values. It is NOT SAFE to use src after
 // passing it into IntegerArrayEncodeAll.
-func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) error {
+func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) (int, error) {
 	if len(src) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	var maxdelta = uint64(0)
@@ -140,16 +140,20 @@ func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) error {
 			// 4 high bits used for the encoding type
 			w.Write([]byte{intCompressedRLE << 4})
 			var b [binary.MaxVarintLen64]byte
+			count := 1
 			// The first value
 			binary.BigEndian.PutUint64(b[:8], deltas[0])
 			w.Write(b[:8])
+			count += 8
 			// The first delta
 			n := binary.PutUvarint(b[:], deltas[1])
 			w.Write(b[:n])
+			count += n
 			// The number of times the delta is repeated
 			n = binary.PutUvarint(b[:], uint64(len(deltas)-1))
 			w.Write(b[:n])
-			return nil
+			count += n
+			return count, nil
 		}
 	}
 
@@ -159,34 +163,39 @@ func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) error {
 
 		// 4 high bits of first byte store the encoding type for the block
 		w.Write([]byte{intUncompressed << 4})
+		count := 1
 		for _, v := range deltas {
 			var b [8]byte
 			binary.BigEndian.PutUint64(b[:], uint64(v))
 			w.Write(b[:])
+			count += 8
 		}
-		return nil
+		return count, nil
 	}
 
 	// Encode with simple8b - fist value is written unencoded using 8 bytes.
 	encoded, err := simple8b.EncodeAll(deltas[1:])
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// 4 high bits of first byte store the encoding type for the block
 	w.Write([]byte{intCompressedSimple << 4})
+	count := 1
 
 	// Write the first value since it's not part of the encoded values
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], deltas[0])
 	w.Write(b[:])
+	count += 8
 
 	// Write the encoded values
 	for _, v := range encoded {
 		binary.BigEndian.PutUint64(b[:], v)
 		w.Write(b[:])
+		count += 8
 	}
-	return nil
+	return count, nil
 }
 
 // UnsignedArrayEncodeAll encodes src into b, returning b and any error encountered.
@@ -198,7 +207,7 @@ func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) error {
 // Important: IntegerArrayEncodeAll modifies the contents of src by using it as
 // scratch space for delta encoded values. It is NOT SAFE to use src after
 // passing it into IntegerArrayEncodeAll.
-func UnsignedArrayEncodeAll(src []uint64, w io.Writer) error {
+func UnsignedArrayEncodeAll(src []uint64, w io.Writer) (int, error) {
 	srcint := ReintepretUint64ToInt64Slice(src)
 	return integerArrayEncodeAll(srcint, w, true)
 }

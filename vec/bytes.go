@@ -119,7 +119,6 @@ func bytesInsert(s [][]byte, k int, vs ...[]byte) [][]byte {
 	if n := len(s) + len(vs); n <= cap(s) {
 		s2 := s[:n]
 		copy(s2[k+len(vs):], s[k:])
-		copy(s2[k:], vs)
 		for i, v := range vs {
 			s2[k+i] = make([]byte, len(v))
 			copy(s2[k+i], v)
@@ -128,7 +127,10 @@ func bytesInsert(s [][]byte, k int, vs ...[]byte) [][]byte {
 	}
 	s2 := make([][]byte, len(s)+len(vs))
 	copy(s2, s[:k])
-	copy(s2[k:], vs)
+	for i, v := range vs {
+		s2[k+i] = make([]byte, len(v))
+		copy(s2[k+i], v)
+	}
 	copy(s2[k+len(vs):], s[k:])
 	return s2
 }
@@ -228,7 +230,6 @@ func bytesMinMax(s [][]byte) ([]byte, []byte) {
 			}
 		}
 	}
-
 	return min, max
 }
 

@@ -58,7 +58,7 @@ func TimeArrayEncodedSize(src []int64) int {
 // Important: TimeArrayEncodeAll modifies the contents of src by using it as
 // scratch space for delta encoded values. It is NOT SAFE to use src after
 // passing it into TimeArrayEncodeAll.
-func TimeArrayEncodeAll(src []int64, w io.Writer) error {
+func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 	var (
 		maxdelta, div uint64 = 0, 1e12
 		ordered       bool   = true
@@ -66,7 +66,7 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) error {
 	)
 
 	if l == 0 {
-		return nil // Nothing to do
+		return 0, nil // Nothing to do
 	}
 
 	// To prevent an allocation of the entire block we reuse the
@@ -161,21 +161,25 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) error {
 
 			// Write the header
 			w.Write([]byte{typ})
+			count := 1
 
 			// The first value
 			var b [binary.MaxVarintLen64]byte
 			binary.BigEndian.PutUint64(b[:8], deltas[0])
 			w.Write(b[:8])
+			count += 8
 
 			// The delta
 			n := binary.PutUvarint(b[:], deltas[1])
 			w.Write(b[:n])
+			count += n
 
 			// The number of times the delta is repeated
 			n = binary.PutUvarint(b[:], uint64(len(deltas)))
 			w.Write(b[:n])
+			count += n
 
-			return nil
+			return count, nil
 		}
 	}
 
@@ -200,20 +204,22 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) error {
 
 		// Write the header
 		w.Write([]byte{typ})
+		count := 1
 
 		// Write all deltas
 		for _, v := range deltas {
 			var b [8]byte
 			binary.BigEndian.PutUint64(b[:], v)
 			w.Write(b[:])
+			count += 8
 		}
-		return nil
+		return count, nil
 	}
 
 	// Encode with simple8b - fist value is written unencoded using 8 bytes.
 	encoded, err := simple8b.EncodeAll(deltas[1:])
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// 4 high bits of first byte store the encoding type for the block
@@ -225,18 +231,21 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) error {
 	// 4 low bits are the log10 divisor
 	typ |= byte(math.Log10(float64(div)))
 	w.Write([]byte{typ})
+	count := 1
 
 	// Write the first value since it's not part of the encoded values
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], deltas[0])
 	w.Write(b[:])
+	count += 8
 
 	// Write the encoded values
 	for _, v := range encoded {
 		binary.BigEndian.PutUint64(b[:], v)
 		w.Write(b[:])
 	}
-	return nil
+	count += len(encoded) * 8
+	return count, nil
 }
 
 var (

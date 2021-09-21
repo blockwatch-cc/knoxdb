@@ -95,6 +95,7 @@ func NewBitsetFromIndexes(indexes []int, size int) *Bitset {
 	for i := range indexes {
 		s.Set(indexes[i])
 	}
+	s.cnt = len(indexes)
 	return s
 }
 
@@ -616,6 +617,13 @@ func (s *Bitset) Count() int {
 		s.cnt = int(bitsetPopCount(s.buf, s.size))
 	}
 	return s.cnt
+}
+
+func (s *Bitset) ResetCount(n ...int) {
+	s.cnt = -1
+	if n != nil {
+		s.cnt = n[0]
+	}
 }
 
 func (s Bitset) Len() int {

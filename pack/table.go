@@ -166,6 +166,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 			New: func() interface{} { return make([]uint32, 0, maxPackSize) },
 		},
 	}
+	t.stats.TableName = name
 	t.packPool = &sync.Pool{
 		New: t.makePackage,
 	}
@@ -222,7 +223,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		if err := t.journal.InitFields(fields); err != nil {
 			return err
 		}
-		_, err = t.journal.StoreLegacy(dbTx, t.metakey)
+		_, _, err = t.journal.StoreLegacy(dbTx, t.metakey)
 		if err != nil {
 			return err
 		}
@@ -311,6 +312,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		key:     []byte(name),
 		metakey: []byte(name + "_meta"),
 	}
+	t.stats.TableName = name
 	t.packPool = &sync.Pool{
 		New: t.makePackage,
 	}
@@ -546,16 +548,49 @@ func (t *Table) Unlock() {
 	t.mu.Unlock()
 }
 
-func (t *Table) Stats() TableStats {
+func (t *Table) Stats() []TableStats {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	var s TableStats = t.stats
 	s.TupleCount = t.meta.Rows
 	s.PacksCount = int64(t.packidx.Len())
-	s.PacksCached = int64(t.cache.Len())
-	for _, idx := range t.indexes {
-		s.IndexPacksCount += int64(idx.packidx.Len())
-		s.IndexPacksCached += int64(idx.cache.Len())
+	s.PackCacheCount = int64(t.cache.Len())
+	s.MetaSize = int64(t.packidx.HeapSize())
+	s.PacksSize = int64(t.packidx.TableSize())
+
+	s.JournalTuplesCount = int64(t.journal.data.Len())
+	s.JournalTuplesCapacity = int64(t.journal.data.Cap())
+	s.JournalTuplesThreshold = int64(t.journal.maxsize)
+	s.JournalSize = int64(t.journal.data.HeapSize())
+
+	s.TombstoneTuplesCount = int64(len(t.journal.tomb))
+	s.TombstoneTuplesCapacity = int64(cap(t.journal.tomb))
+	s.TombstoneTuplesThreshold = int64(t.journal.maxsize)
+	s.TombstoneSize = s.TombstoneTuplesCount * 8
+
+	for _, v := range t.cache.Keys() {
+		val, ok := t.cache.Peek(v)
+		if !ok {
+			continue
+		}
+		s.PackCacheSize += int64(val.(*Package).HeapSize())
 	}
-	return s
+
+	resp := []TableStats{s}
+	for _, idx := range t.indexes {
+		resp = append(resp, idx.Stats())
+	}
+	return resp
+}
+
+func (t *Table) PurgeCache() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.cache.Purge()
+	for _, idx := range t.indexes {
+		idx.PurgeCache()
+	}
 }
 
 func (t *Table) NextSequence() uint64 {
@@ -992,7 +1027,7 @@ func (t *Table) Close() error {
 	}
 
 	// save journal and tombstone
-	if _, err := t.journal.StoreLegacy(tx.tx, t.metakey); err != nil {
+	if _, _, err := t.journal.StoreLegacy(tx.tx, t.metakey); err != nil {
 		return err
 	}
 
@@ -1052,16 +1087,16 @@ func (t *Table) FlushJournal(ctx context.Context) error {
 
 func (t *Table) flushJournalTx(ctx context.Context, tx *Tx) error {
 	nTuples, nTomb := t.journal.Len(), t.journal.TombLen()
-	nBytes, err := t.journal.StoreLegacy(tx.tx, t.metakey)
+	nJournalBytes, nTombBytes, err := t.journal.StoreLegacy(tx.tx, t.metakey)
 	if err != nil {
 		return err
 	}
-	atomic.AddInt64(&t.stats.JournalFlushedTuples, int64(nTuples))
+	atomic.AddInt64(&t.stats.JournalTuplesFlushed, int64(nTuples))
 	atomic.AddInt64(&t.stats.JournalPacksStored, 1)
-	atomic.AddInt64(&t.stats.JournalBytesWritten, int64(nBytes))
-	atomic.AddInt64(&t.stats.TombstoneFlushedTuples, int64(nTomb))
+	atomic.AddInt64(&t.stats.JournalBytesWritten, int64(nJournalBytes))
+	atomic.AddInt64(&t.stats.TombstoneTuplesFlushed, int64(nTomb))
 	atomic.AddInt64(&t.stats.TombstonePacksStored, 1)
-	// atomic.AddInt64(&t.stats.TombstoneBytesWritten, int64(n))
+	atomic.AddInt64(&t.stats.TombstoneBytesWritten, int64(nTombBytes))
 	return nil
 }
 
@@ -1094,13 +1129,14 @@ func (t *Table) Flush(ctx context.Context) error {
 // merge journal entries into data partitions, repack, store, and update all indexes
 func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 	var (
-		nParts, nBytes, nUpd, nAdd, nDel int                    // total stats counters
-		pUpd, pAdd, pDel                 int                    // per-pack stats counters
-		start                            time.Time = time.Now() // logging
+		nParts, nBytes, nUpd, nAdd, nDel int                          // total stats counters
+		pUpd, pAdd, pDel                 int                          // per-pack stats counters
+		start                            time.Time = time.Now().UTC() // logging
 	)
 
 	atomic.AddInt64(&t.stats.FlushCalls, 1)
 	atomic.AddInt64(&t.stats.FlushedTuples, int64(t.journal.Len()+t.journal.TombLen()))
+	t.stats.LastFlushTime = start
 
 	// use internal journal data slices for faster lookups
 	live := t.journal.keys
@@ -1502,8 +1538,9 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		nBytes += n
 	}
 
+	t.stats.LastFlushDuration = time.Since(start)
 	log.Debugf("flush: %s table %d packs add=%d del=%d total_size=%s in %s",
-		t.name, nParts, nAdd, nDel, util.ByteSize(nBytes), time.Since(start))
+		t.name, nParts, nAdd, nDel, util.ByteSize(nBytes), t.stats.LastFlushDuration)
 
 	// flush indexes
 	for _, idx := range t.indexes {
@@ -2340,6 +2377,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 				}
 
 				// forward match
+				// log.Debugf("Table %s: using result at pack %d index %d", t.name, pkg.key, index)
 				if err := fn(Row{res: &res, n: index}); err != nil {
 					bits.Close()
 					return err
@@ -2992,7 +3030,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	}
 	// log.Debugf("%s: loaded shared pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
-	atomic.AddInt64(&t.stats.PackBytesRead, int64(pkg.size))
+	atomic.AddInt64(&t.stats.PacksBytesRead, int64(pkg.size))
 
 	// update stats on full packs only
 	// FIXME: writes to pack index which is supposed to be read-only
@@ -3024,8 +3062,14 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		if err != nil {
 			return nil, err
 		}
+		// set key
 		clone.key = pkg.key
 		clone.cached = false
+
+		// prepare for efficient writes
+		// log.Debugf("%s: materializing cloned pack %d with %d rows", t.name, clone.key, pkg.Len())
+		clone.Materialize()
+
 		// log.Debugf("%s: cloned writeable pack %d col=%d row=%d", t.name, clone.key, clone.nFields, clone.nValues)
 		return clone, nil
 	}
@@ -3037,9 +3081,14 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// prepare for efficient writes
+	// log.Debugf("%s: materializing loaded pack %d with %d rows", t.name, pkg.key, pkg.Len())
+	pkg.Materialize()
+
 	// log.Debugf("%s: loaded writeable pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
-	atomic.AddInt64(&t.stats.PackBytesRead, int64(pkg.size))
+	atomic.AddInt64(&t.stats.PacksBytesRead, int64(pkg.size))
 	return pkg, nil
 }
 
@@ -3069,6 +3118,10 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 			return 0, err
 		}
 
+		// optimize/dedup
+		// log.Debugf("%s: optimizing pack %d with %d rows", t.name, pkg.key, pkg.Len())
+		pkg.Optimize()
+
 		// write to disk
 		n, err := tx.storePack(t.key, key, pkg, t.opts.FillLevel)
 		if err != nil {
@@ -3079,11 +3132,12 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 		info.Packsize = n
 		t.packidx.AddOrUpdate(info)
 		atomic.AddInt64(&t.stats.PacksStored, 1)
-		atomic.AddInt64(&t.stats.PackBytesWritten, int64(n))
+		atomic.AddInt64(&t.stats.PacksBytesWritten, int64(n))
 		return n, nil
 
 	} else {
 		// If pack is empty
+		// log.Debugf("%s: store removing empty pack %d", t.name, pkg.key)
 
 		// drop from index
 		t.packidx.Remove(pkg.key)
@@ -3163,25 +3217,4 @@ func (t *Table) recyclePackage(pkg *Package) {
 	pkg.Clear()
 	atomic.AddInt64(&t.stats.PacksRecycled, 1)
 	t.packPool.Put(pkg)
-}
-
-func (t *Table) Size() TableSizeStats {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	var sz TableSizeStats
-	for _, idx := range t.indexes {
-		sz.IndexSize += idx.Size().TotalSize
-	}
-	for _, v := range t.cache.Keys() {
-		val, ok := t.cache.Peek(v)
-		if !ok {
-			continue
-		}
-		pkg := val.(*Package)
-		sz.CacheSize += pkg.HeapSize()
-	}
-	sz.StatsSize = t.packidx.Size()
-	sz.JournalSize = t.journal.HeapSize()
-	sz.TotalSize = sz.JournalSize + sz.IndexSize + sz.CacheSize + sz.StatsSize
-	return sz
 }

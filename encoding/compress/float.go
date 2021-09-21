@@ -53,7 +53,7 @@ func Float32ArrayEncodedSize(src []float32) int {
 //
 // Currently only the float compression scheme used in Facebook's Gorilla is
 // supported, so this method implements a batch oriented version of that.
-func FloatArrayEncodeAll(src []float64, w io.Writer) error {
+func FloatArrayEncodeAll(src []float64, w io.Writer) (int, error) {
 	// the original algorithm writes directly to a target []byte slice
 	// and we don't want to change this, so we allocate a slice and
 	// write it to the io.Writer at the very end
@@ -65,7 +65,7 @@ func FloatArrayEncodeAll(src []float64, w io.Writer) error {
 	var first float64
 	var finished bool
 	if len(src) > 0 && math.IsNaN(src[0]) {
-		return fmt.Errorf("compress: unsupported float value: NaN")
+		return 0, fmt.Errorf("compress: unsupported float value: NaN")
 	} else if len(src) == 0 {
 		first = math.NaN() // Write sentinal value to terminate batch.
 		finished = true
@@ -283,7 +283,7 @@ func FloatArrayEncodeAll(src []float64, w io.Writer) error {
 	}
 
 	if math.IsNaN(sum) {
-		return fmt.Errorf("compress: unsupported float value: NaN")
+		return 0, fmt.Errorf("compress: unsupported float value: NaN")
 	}
 
 	length := n >> 3
@@ -292,8 +292,7 @@ func FloatArrayEncodeAll(src []float64, w io.Writer) error {
 	}
 
 	// write out to writer
-	_, err := w.Write(b[:length])
-	return err
+	return w.Write(b[:length])
 }
 
 // bitMask contains a lookup table where the index is the number of bits

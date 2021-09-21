@@ -165,7 +165,7 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 	return nil
 }
 
-func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, error) {
+func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, int, error) {
 	// reconstructed deleted pks from key list
 	var idx, last int
 	for _, v := range j.tomb {
@@ -180,7 +180,7 @@ func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, error) {
 	}
 	n, err := storePackTx(dbTx, bucketName, encodePackKey(journalKey), j.data, defaultJournalFillLevel)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	tomb := NewPackage(len(j.tomb))
 	tomb.InitType(Tombstone{})
@@ -191,9 +191,8 @@ func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, error) {
 	}
 	m, err := storePackTx(dbTx, bucketName, encodePackKey(tombstoneKey), tomb, defaultJournalFillLevel)
 	if err != nil {
-		return n, err
+		return n, 0, err
 	}
-	n += m
 	// reset deleted pks to zero
 	for _, v := range j.tomb {
 		idx, last = j.PkIndex(v, last)
@@ -205,7 +204,7 @@ func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, error) {
 		}
 		j.data.SetFieldAt(j.data.pkindex, idx, uint64(0))
 	}
-	return n, nil
+	return n, m, nil
 }
 
 func (j *Journal) Len() int {
