@@ -584,6 +584,15 @@ func (t *Table) Stats() []TableStats {
 	return resp
 }
 
+func (t *Table) PurgeCache() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.cache.Purge()
+	for _, idx := range t.indexes {
+		idx.PurgeCache()
+	}
+}
+
 func (t *Table) NextSequence() uint64 {
 	t.meta.Sequence++
 	t.meta.dirty = true

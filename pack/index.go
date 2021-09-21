@@ -395,6 +395,10 @@ func (idx *Index) Options() Options {
 	return idx.opts
 }
 
+func (idx *Index) PurgeCache() {
+	idx.cache.Purge()
+}
+
 func (idx *Index) name() string {
 	return string(idx.key)
 }
