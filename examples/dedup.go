@@ -140,7 +140,7 @@ func run() error {
 			dupBytes[i].Add(db)
 
 			// optimize byte blocks and keep stats
-			if v.Type() == block.BlockBytes {
+			if v.Type() == block.BlockBytes || v.Type() == block.BlockString {
 				st := time.Now()
 				// a := dedup.NewByteArrayFromBytes(v.Bytes)
 				b := v.Bytes.Optimize()
@@ -205,7 +205,7 @@ func run() error {
 	fmt.Printf("\nCurrent sizes\n")
 	fmt.Printf("                                  Mem -------------------------------------------------------    Disk ----------------------------------------------------\n")
 	for i, f := range table.Fields() {
-		if f.Type != pack.FieldTypeBytes {
+		if f.Type != pack.FieldTypeBytes && f.Type != pack.FieldTypeString {
 			continue
 		}
 		a := nowBlocksMem[i]
@@ -217,7 +217,7 @@ func run() error {
 	fmt.Printf("\nOptimized sizes\n")
 	fmt.Printf("                                  Mem -------------------------------------------------------    Disk ----------------------------------------------------\n")
 	for i, f := range table.Fields() {
-		if f.Type != pack.FieldTypeBytes {
+		if f.Type != pack.FieldTypeBytes && f.Type != pack.FieldTypeString {
 			continue
 		}
 		a := optBlocksMem[i]

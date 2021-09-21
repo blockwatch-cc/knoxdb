@@ -42,7 +42,7 @@ func (p *Package) Info() PackInfo {
 	return h
 }
 
-func (h PackInfo) Size() int {
+func (h PackInfo) HeapSize() int {
 	// assume 8 bytes behind each min/max interface
 	sz := szPackInfo + len(h.Blocks)*(szBlockInfo+16)
 	for i := range h.Blocks {

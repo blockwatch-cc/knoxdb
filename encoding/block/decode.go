@@ -581,17 +581,10 @@ func unpackBlock(block []byte, typ BlockType) ([]byte, bool, error) {
 		return dst[:n], canRecycle, nil
 
 	case NoCompression:
-		switch typ {
-		case BlockBytes, BlockString:
-			// copy the block to a new slice because memory will be
-			// referenced, but the input data may come from an mmapped file
-			buf := make([]byte, len(block)-1)
-			copy(buf, block[1:])
-			return buf, false, nil
-		default:
-			// just strip the header byte
-			return block[1:], false, nil
-		}
+		// Just strip the header byte, dedup.ByteArray will copy data and
+		// never reference to prevent keeping refs into mmapped buffers
+		// (boltdb only guarantees buffer mappings are stable inside a tx).
+		return block[1:], false, nil
 
 	default:
 		return nil, false, err
