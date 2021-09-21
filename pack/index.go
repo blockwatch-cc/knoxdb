@@ -1403,18 +1403,19 @@ func (idx *Index) Stats() TableStats {
 	// s.TupleCount = idx.meta.Rows
 	s.PacksCount = int64(idx.packidx.Len())
 	s.PackCacheCount = int64(idx.cache.Len())
+	s.PackCacheCapacity = int64(idx.opts.CacheSize)
 	s.MetaSize = int64(idx.packidx.HeapSize())
 	s.PacksSize = int64(idx.packidx.TableSize())
 
 	// FIXME: currently unused
 	s.JournalTuplesCount = int64(idx.journal.Len())
 	s.JournalTuplesCapacity = int64(idx.journal.Cap())
-	// s.JournalTuplesThreshold = idx.journal.maxsize
+	s.JournalTuplesThreshold = int64(idx.opts.Journalsize())
 	s.JournalSize = int64(idx.journal.HeapSize())
 
 	s.TombstoneTuplesCount = int64(idx.tombstone.Len())
 	s.TombstoneTuplesCapacity = int64(idx.tombstone.Cap())
-	// s.TombstoneTuplesThreshold = t.journal.maxsize
+	s.TombstoneTuplesThreshold = int64(idx.opts.Journalsize())
 	s.TombstoneSize = int64(idx.tombstone.HeapSize())
 
 	for _, v := range idx.cache.Keys() {

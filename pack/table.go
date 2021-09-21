@@ -556,6 +556,7 @@ func (t *Table) Stats() []TableStats {
 	s.TupleCount = t.meta.Rows
 	s.PacksCount = int64(t.packidx.Len())
 	s.PackCacheCount = int64(t.cache.Len())
+	s.PackCacheCapacity = int64(t.opts.CacheSize)
 	s.MetaSize = int64(t.packidx.HeapSize())
 	s.PacksSize = int64(t.packidx.TableSize())
 
