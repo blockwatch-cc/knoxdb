@@ -84,11 +84,11 @@ type Options struct {
 	FillLevel       int `json:"fill_level"`
 }
 
-func (o Options) Packsize() int {
+func (o Options) PackSize() int {
 	return 1 << uint(o.PackSizeLog2)
 }
 
-func (o Options) Journalsize() int {
+func (o Options) JournalSize() int {
 	return 1 << uint(o.JournalSizeLog2)
 }
 
@@ -145,8 +145,8 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 	if err := opts.Check(); err != nil {
 		return nil, err
 	}
-	maxPackSize := opts.Packsize()
-	maxJournalSize := opts.Journalsize()
+	maxPackSize := opts.PackSize()
+	maxJournalSize := opts.JournalSize()
 	t := &Table{
 		name:   name,
 		opts:   opts,
@@ -332,8 +332,8 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		if opts[0].JournalSizeLog2 > 0 {
 			t.opts.JournalSizeLog2 = opts[0].JournalSizeLog2
 		}
-		maxJournalSize := t.opts.Journalsize()
-		maxPackSize := t.opts.Packsize()
+		maxJournalSize := t.opts.JournalSize()
+		maxPackSize := t.opts.PackSize()
 		t.u64Pool = &sync.Pool{
 			New: func() interface{} { return make([]uint64, 0, maxPackSize) },
 		}
@@ -441,7 +441,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 	if b == nil {
 		return ErrNoTable
 	}
-	maxPackSize := t.opts.Packsize()
+	maxPackSize := t.opts.PackSize()
 	packs := make(PackInfoList, 0)
 	bi := b.Bucket(infoKey)
 	if bi != nil {
@@ -1157,7 +1157,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 	)
 
 	// init global max
-	packsz = t.opts.Packsize()
+	packsz = t.opts.PackSize()
 	jlen, tlen = len(live), len(dead)
 	_, globalmax = t.packidx.GlobalMinMax()
 	maxloop = 2*t.packidx.Len() + 2*(tlen+jlen)/packsz + 2
@@ -2763,7 +2763,7 @@ func (t *Table) Compact(ctx context.Context) error {
 	// check if compaction is required, either because packs are non-sequential
 	// or not full (except the last)
 	var (
-		maxsz                 int = t.opts.Packsize()
+		maxsz                 int = t.opts.PackSize()
 		srcSize               int64
 		nextpack              uint32
 		needCompact           bool
@@ -3059,7 +3059,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	if cached, ok := t.cache.Get(t.cachekey(key)); ok {
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
 		pkg := cached.(*Package)
-		clone, err := pkg.Clone(t.opts.Packsize())
+		clone, err := pkg.Clone(t.opts.PackSize())
 		if err != nil {
 			return nil, err
 		}
@@ -3186,7 +3186,7 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 
 func (t *Table) makePackage() interface{} {
 	atomic.AddInt64(&t.stats.PacksAlloc, 1)
-	pkg := NewPackage(t.opts.Packsize())
+	pkg := NewPackage(t.opts.PackSize())
 	_ = pkg.InitFieldsFrom(t.journal.DataPack())
 	// log.Debugf("%s: alloc new pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	return pkg
@@ -3210,7 +3210,7 @@ func (t *Table) recyclePackage(pkg *Package) {
 		return
 	}
 	// don't recycle oversized packs
-	if c := pkg.Cap(); c <= 0 || c > t.opts.Packsize() {
+	if c := pkg.Cap(); c <= 0 || c > t.opts.PackSize() {
 		pkg.Release()
 		return
 	}

@@ -138,8 +138,8 @@ func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Option
 		return nil, err
 	}
 	field.Flags |= FlagIndexed
-	maxPackSize := opts.Packsize()
-	maxJournalSize := opts.Journalsize()
+	maxPackSize := opts.PackSize()
+	maxJournalSize := opts.JournalSize()
 	idx := &Index{
 		Name:         name,
 		Type:         typ,
@@ -351,7 +351,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 				idx.opts.JournalSizeLog2 = opts[0].JournalSizeLog2
 			}
 		}
-		maxPackSize := idx.opts.Packsize()
+		maxPackSize := idx.opts.PackSize()
 		idx.packidx = NewPackIndex(nil, 0, maxPackSize)
 		idx.journal, err = loadPackTx(dbTx, idx.metakey, encodePackKey(journalKey), nil)
 		if err != nil {
@@ -409,7 +409,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 		return ErrNoTable
 	}
 	packs := make(PackInfoList, 0)
-	maxPackSize := idx.opts.Packsize()
+	maxPackSize := idx.opts.PackSize()
 	bi := b.Bucket(infoKey)
 	if bi != nil {
 		c := bi.Cursor()
@@ -960,7 +960,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 	)
 
 	// init
-	packsz = idx.opts.Packsize()
+	packsz = idx.opts.PackSize()
 	jlen, tlen = len(pk), len(dead)
 	_, globalmax = idx.packidx.GlobalMinMax()
 	maxloop = 2*idx.packidx.Len() + 2*jlen/packsz + 2 // 2x to consider splits
@@ -1370,7 +1370,7 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 
 func (idx *Index) makePackage() interface{} {
 	atomic.AddInt64(&idx.stats.PacksAlloc, 1)
-	pkg := NewPackage(idx.opts.Packsize())
+	pkg := NewPackage(idx.opts.PackSize())
 	_ = pkg.InitFieldsFrom(idx.journal)
 	return pkg
 }
@@ -1387,7 +1387,7 @@ func (idx *Index) recyclePackage(pkg *Package) {
 		return
 	}
 	// don't recycle oversized packidx to free memory
-	if c := pkg.Cap(); c <= 0 || c > idx.opts.Packsize() {
+	if c := pkg.Cap(); c <= 0 || c > idx.opts.PackSize() {
 		pkg.Release()
 		return
 	}
@@ -1410,12 +1410,12 @@ func (idx *Index) Stats() TableStats {
 	// FIXME: currently unused
 	s.JournalTuplesCount = int64(idx.journal.Len())
 	s.JournalTuplesCapacity = int64(idx.journal.Cap())
-	s.JournalTuplesThreshold = int64(idx.opts.Journalsize())
+	s.JournalTuplesThreshold = int64(idx.opts.JournalSize())
 	s.JournalSize = int64(idx.journal.HeapSize())
 
 	s.TombstoneTuplesCount = int64(idx.tombstone.Len())
 	s.TombstoneTuplesCapacity = int64(idx.tombstone.Cap())
-	s.TombstoneTuplesThreshold = int64(idx.opts.Journalsize())
+	s.TombstoneTuplesThreshold = int64(idx.opts.JournalSize())
 	s.TombstoneSize = int64(idx.tombstone.HeapSize())
 
 	for _, v := range idx.cache.Keys() {
