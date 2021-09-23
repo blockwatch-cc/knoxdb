@@ -148,14 +148,6 @@ func (l *PackIndex) IsFull(i int) bool {
 	return l.maxsize > 0 && l.packs[i].NValues >= l.maxsize
 }
 
-func (l *PackIndex) UpdateStatistics(pkg *Package) {
-	// find the correct pack
-	idx := sort.Search(len(l.packs), func(i int) bool { return l.packs[i].Key >= pkg.key })
-	if idx < len(l.packs) && l.packs[idx].Key == pkg.key {
-		l.packs[idx].UpdateVolatileStats(pkg)
-	}
-}
-
 // called by storePack
 func (l *PackIndex) AddOrUpdate(head PackInfo) {
 	head.dirty = true

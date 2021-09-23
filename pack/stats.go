@@ -38,6 +38,7 @@ type TableStats struct {
 
 	// journal statistics
 	JournalSize            int64 `json:"journal_size"`
+	JournalDiskSize        int64 `json:"journal_disk_size"`
 	JournalTuplesCount     int64 `json:"journal_tuples_count"`
 	JournalTuplesThreshold int64 `json:"journal_tuples_threshold"`
 	JournalTuplesCapacity  int64 `json:"journal_tuples_capacity"`
@@ -47,6 +48,7 @@ type TableStats struct {
 
 	// tombstone statistics
 	TombstoneSize            int64 `json:"tombstone_size"`
+	TombstoneDiskSize        int64 `json:"tombstone_disk_size"`
 	TombstoneTuplesCount     int64 `json:"tomb_tuples_count"`
 	TombstoneTuplesThreshold int64 `json:"tomb_tuples_threshold"`
 	TombstoneTuplesCapacity  int64 `json:"tomb_tuples_capacity"`

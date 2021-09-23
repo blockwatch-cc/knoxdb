@@ -223,10 +223,12 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		if err := t.journal.InitFields(fields); err != nil {
 			return err
 		}
-		_, _, err = t.journal.StoreLegacy(dbTx, t.metakey)
+		jsz, tsz, err := t.journal.StoreLegacy(dbTx, t.metakey)
 		if err != nil {
 			return err
 		}
+		t.stats.JournalDiskSize = int64(jsz)
+		t.stats.TombstoneDiskSize = int64(tsz)
 		// TODO: switch to WAL for durability
 		// err = t.journal.Open(d.Dir())
 		// if err != nil {
@@ -1028,8 +1030,11 @@ func (t *Table) Close() error {
 	}
 
 	// save journal and tombstone
-	if _, _, err := t.journal.StoreLegacy(tx.tx, t.metakey); err != nil {
+	if jsz, tsz, err := t.journal.StoreLegacy(tx.tx, t.metakey); err != nil {
 		return err
+	} else {
+		t.stats.JournalDiskSize = int64(jsz)
+		t.stats.TombstoneDiskSize = int64(tsz)
 	}
 
 	// store pack headers
@@ -1098,6 +1103,8 @@ func (t *Table) flushJournalTx(ctx context.Context, tx *Tx) error {
 	atomic.AddInt64(&t.stats.TombstoneTuplesFlushed, int64(nTomb))
 	atomic.AddInt64(&t.stats.TombstonePacksStored, 1)
 	atomic.AddInt64(&t.stats.TombstoneBytesWritten, int64(nTombBytes))
+	atomic.StoreInt64(&t.stats.JournalDiskSize, int64(nJournalBytes))
+	atomic.StoreInt64(&t.stats.TombstoneDiskSize, int64(nTombBytes))
 	return nil
 }
 
@@ -3032,10 +3039,6 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	// log.Debugf("%s: loaded shared pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
 	atomic.AddInt64(&t.stats.PacksBytesRead, int64(pkg.size))
-
-	// update stats on full packs only
-	// FIXME: writes to pack index which is supposed to be read-only
-	t.packidx.UpdateStatistics(pkg)
 
 	pkg.cached = touch
 	// store in cache

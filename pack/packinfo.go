@@ -101,31 +101,6 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 	return nil
 }
 
-func (h *PackInfo) UpdateVolatileStats(pkg *Package) error {
-	// only bloom filters currently
-	for _, field := range pkg.Fields() {
-		// skip stripped blocks
-		if !h.Blocks[field.Index].IsValid() {
-			continue
-		}
-		// skip non-bloom blocks
-		if !field.Flags.Contains(FlagBloom) {
-			continue
-		}
-		// skip when bloom filter already exists
-		if h.Blocks[field.Index].Bloom != nil {
-			continue
-		}
-
-		h.Blocks[field.Index].Bloom = field.Type.BuildBloomFilter(
-			pkg.blocks[field.Index],
-			h.Blocks[field.Index].Cardinality,
-			field.Scale,
-		)
-	}
-	return nil
-}
-
 func (h PackInfo) MarshalBinary() ([]byte, error) {
 	buf := &bytes.Buffer{}
 	if err := h.Encode(buf); err != nil {
