@@ -231,7 +231,7 @@ func (a *NativeByteArray) Decode(buf []byte) error {
 			return fmt.Errorf("native: reading element: %w", errShortBuffer)
 		}
 
-		val := buf[lower:upper]
+		val := buf[lower:upper:upper]
 		if j < len(a.bufs) {
 			a.bufs[j] = val
 		} else {
