@@ -175,7 +175,7 @@ func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
 		return err
 	}
 	defer tx.Rollback()
-	pkg, err := t.indexes[i].loadPack(tx, t.indexes[i].packidx.Get(p).Key, false)
+	pkg, err := t.indexes[i].loadSharedPack(tx, t.indexes[i].packidx.Get(p).Key, false)
 	if err != nil {
 		return fmt.Errorf("pack %d not found: %v", t.indexes[i].packidx.Get(p).Key, err)
 	}

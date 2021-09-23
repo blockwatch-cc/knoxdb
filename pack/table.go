@@ -167,6 +167,8 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		},
 	}
 	t.stats.TableName = name
+	t.stats.JournalTuplesThreshold = int64(maxJournalSize)
+	t.stats.TombstoneTuplesThreshold = int64(maxJournalSize)
 	t.packPool = &sync.Pool{
 		New: t.makePackage,
 	}
@@ -244,6 +246,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		if err != nil {
 			return nil, err
 		}
+		t.stats.PackCacheCapacity = int64(t.opts.CacheSize)
 	} else {
 		t.cache = cache.NewNoCache()
 	}
@@ -336,6 +339,8 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		}
 		maxJournalSize := t.opts.JournalSize()
 		maxPackSize := t.opts.PackSize()
+		t.stats.JournalTuplesThreshold = int64(maxJournalSize)
+		t.stats.TombstoneTuplesThreshold = int64(maxJournalSize)
 		t.u64Pool = &sync.Pool{
 			New: func() interface{} { return make([]uint64, 0, maxPackSize) },
 		}
@@ -387,15 +392,13 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 	cacheSize := t.opts.CacheSize
 	if len(opts) > 0 {
 		cacheSize = opts[0].CacheSize
-		if opts[0].JournalSizeLog2 > 0 {
-			t.opts.JournalSizeLog2 = opts[0].JournalSizeLog2
-		}
 	}
 	if cacheSize > 0 {
 		t.cache, err = lru.New2QWithEvict(int(cacheSize), t.onEvictedPackage)
 		if err != nil {
 			return nil, err
 		}
+		t.stats.PackCacheCapacity = int64(t.opts.CacheSize)
 	} else {
 		t.cache = cache.NewNoCache()
 	}
@@ -551,34 +554,17 @@ func (t *Table) Unlock() {
 }
 
 func (t *Table) Stats() []TableStats {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	var s TableStats = t.stats
-	s.TupleCount = t.meta.Rows
-	s.PacksCount = int64(t.packidx.Len())
-	s.PackCacheCount = int64(t.cache.Len())
-	s.PackCacheCapacity = int64(t.opts.CacheSize)
-	s.MetaSize = int64(t.packidx.HeapSize())
-	s.PacksSize = int64(t.packidx.TableSize())
 
+	// update from journal and tomb (reading here may be more efficient than
+	// update on change, but creates a data race)
 	s.JournalTuplesCount = int64(t.journal.data.Len())
 	s.JournalTuplesCapacity = int64(t.journal.data.Cap())
-	s.JournalTuplesThreshold = int64(t.journal.maxsize)
 	s.JournalSize = int64(t.journal.data.HeapSize())
 
 	s.TombstoneTuplesCount = int64(len(t.journal.tomb))
 	s.TombstoneTuplesCapacity = int64(cap(t.journal.tomb))
-	s.TombstoneTuplesThreshold = int64(t.journal.maxsize)
 	s.TombstoneSize = s.TombstoneTuplesCount * 8
-
-	for _, v := range t.cache.Keys() {
-		val, ok := t.cache.Peek(v)
-		if !ok {
-			continue
-		}
-		s.PackCacheSize += int64(val.(*Package).HeapSize())
-	}
 
 	resp := []TableStats{s}
 	for _, idx := range t.indexes {
@@ -685,6 +671,7 @@ func (t *Table) insertJournal(val interface{}) error {
 	t.meta.Rows += int64(count)
 	t.meta.dirty = true
 	atomic.AddInt64(&t.stats.InsertedTuples, int64(count))
+	atomic.StoreInt64(&t.stats.TupleCount, t.meta.Rows)
 	return nil
 }
 
@@ -801,6 +788,7 @@ func (t *Table) appendPackIntoJournal(ctx context.Context, pkg *Package, pos, n 
 	t.meta.Rows += int64(count)
 	t.meta.dirty = true
 	atomic.AddInt64(&t.stats.InsertedTuples, int64(count))
+	atomic.StoreInt64(&t.stats.TupleCount, t.meta.Rows)
 	return nil
 }
 
@@ -998,9 +986,10 @@ func (t *Table) deleteJournal(ids []uint64) error {
 
 	// Note: we don't check if ids actually exist, so row counter may be off
 	// until journal/tombstone are flushed
-	atomic.AddInt64(&t.stats.DeletedTuples, int64(count))
 	t.meta.Rows -= int64(count)
 	t.meta.dirty = true
+	atomic.AddInt64(&t.stats.DeletedTuples, int64(count))
+	atomic.StoreInt64(&t.stats.TupleCount, t.meta.Rows)
 	return nil
 }
 
@@ -1561,6 +1550,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 	if tlen > nDel {
 		t.meta.Rows += int64(tlen - nDel)
 		t.meta.dirty = true
+		atomic.StoreInt64(&t.stats.TupleCount, t.meta.Rows)
 	}
 
 	// store table metadata
@@ -3048,6 +3038,8 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 			atomic.AddInt64(&t.stats.PackCacheUpdates, 1)
 		} else {
 			atomic.AddInt64(&t.stats.PackCacheInserts, 1)
+			atomic.AddInt64(&t.stats.PackCacheCount, 1)
+			atomic.AddInt64(&t.stats.PackCacheSize, int64(pkg.HeapSize()))
 		}
 	}
 	return pkg, nil
@@ -3077,11 +3069,10 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		// log.Debugf("%s: cloned writeable pack %d col=%d row=%d", t.name, clone.key, clone.nFields, clone.nValues)
 		return clone, nil
 	}
+	atomic.AddInt64(&t.stats.PackCacheMisses, 1)
 
 	// load from storage
-	var err error
-	pkg := t.packPool.Get().(*Package)
-	pkg, err = tx.loadPack(t.key, key, pkg)
+	pkg, err := tx.loadPack(t.key, key, t.packPool.Get().(*Package))
 	if err != nil {
 		return nil, err
 	}
@@ -3137,6 +3128,10 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 		t.packidx.AddOrUpdate(info)
 		atomic.AddInt64(&t.stats.PacksStored, 1)
 		atomic.AddInt64(&t.stats.PacksBytesWritten, int64(n))
+		atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
+		atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
+		atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
+
 		return n, nil
 
 	} else {
@@ -3150,6 +3145,10 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 		if err := tx.deletePack(t.key, key); err != nil {
 			return 0, err
 		}
+
+		atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
+		atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
+		atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
 
 		return 0, nil
 	}
@@ -3172,19 +3171,19 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 
 	// store both packs to update stats, this also stores the initial pack
 	// on first split which may have not been stored yet
-	_, err := t.storePack(tx, pkg)
+	n, err := t.storePack(tx, pkg)
 	if err != nil {
 		return 0, err
 	}
 
 	// save the new pack
 	newpkg.key = t.packidx.NextKey()
-	n, err := t.storePack(tx, newpkg)
+	m, err := t.storePack(tx, newpkg)
 	if err != nil {
 		return 0, err
 	}
 	t.recyclePackage(newpkg)
-	return n, nil
+	return n + m, nil
 }
 
 func (t *Table) makePackage() interface{} {
@@ -3200,6 +3199,8 @@ func (t *Table) onEvictedPackage(key, val interface{}) {
 	pkg.cached = false
 	// log.Debugf("%s: cache evict pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PackCacheEvictions, 1)
+	atomic.AddInt64(&t.stats.PackCacheCount, -1)
+	atomic.AddInt64(&t.stats.PackCacheSize, int64(-pkg.HeapSize()))
 	t.recyclePackage(pkg)
 }
 

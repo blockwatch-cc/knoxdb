@@ -154,6 +154,8 @@ func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Option
 		indexZeroAt:  typ.ZeroAtFunc(),
 	}
 	idx.stats.IndexName = t.name + "_" + name + "_index"
+	idx.stats.JournalTuplesThreshold = int64(maxJournalSize)
+	idx.stats.TombstoneTuplesThreshold = int64(maxJournalSize)
 	idx.packPool = &sync.Pool{
 		New: idx.makePackage,
 	}
@@ -237,6 +239,7 @@ func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Option
 		if err != nil {
 			return nil, err
 		}
+		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSize)
 	} else {
 		idx.cache = cache.NewNoCache()
 	}
@@ -352,6 +355,9 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 			}
 		}
 		maxPackSize := idx.opts.PackSize()
+		maxJournalSize := idx.opts.JournalSize()
+		idx.stats.JournalTuplesThreshold = int64(maxJournalSize)
+		idx.stats.TombstoneTuplesThreshold = int64(maxJournalSize)
 		idx.packidx = NewPackIndex(nil, 0, maxPackSize)
 		idx.journal, err = loadPackTx(dbTx, idx.metakey, encodePackKey(journalKey), nil)
 		if err != nil {
@@ -384,6 +390,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 		if err != nil {
 			return err
 		}
+		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSize)
 	} else {
 		idx.cache = cache.NewNoCache()
 	}
@@ -397,6 +404,7 @@ func (idx *Index) Options() Options {
 
 func (idx *Index) PurgeCache() {
 	idx.cache.Purge()
+	//todo
 }
 
 func (idx *Index) name() string {
@@ -660,7 +668,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 		}
 
 		// load and cache pack
-		ipkg, err := idx.loadPack(tx, idx.packidx.packs[nextpack].Key, true)
+		ipkg, err := idx.loadSharedPack(tx, idx.packidx.packs[nextpack].Key, true)
 		if err != nil {
 			return nil, err
 		}
@@ -1043,7 +1051,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 		// load the next pack
 		if pkg == nil {
 			var err error
-			pkg, err = idx.loadPack(tx, idx.packidx.packs[nextpack].Key, true)
+			pkg, err = idx.loadWritablePack(tx, idx.packidx.packs[nextpack].Key)
 			if err != nil {
 				return err
 			}
@@ -1286,7 +1294,7 @@ func (idx Index) cachekey(key []byte) string {
 	return string(idx.key) + "/" + hex.EncodeToString(key)
 }
 
-func (idx *Index) loadPack(tx *Tx, id uint32, touch bool) (*Package, error) {
+func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error) {
 	// try cache first
 	key := encodePackKey(id)
 	cachekey := idx.cachekey(key)
@@ -1316,56 +1324,98 @@ func (idx *Index) loadPack(tx *Tx, id uint32, touch bool) (*Package, error) {
 			atomic.AddInt64(&idx.stats.PackCacheUpdates, 1)
 		} else {
 			atomic.AddInt64(&idx.stats.PackCacheInserts, 1)
+			atomic.AddInt64(&idx.stats.PackCacheCount, 1)
+			atomic.AddInt64(&idx.stats.PackCacheSize, int64(pkg.HeapSize()))
 		}
 	}
+	return pkg, nil
+}
+
+func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
+	// try cache first
+	key := encodePackKey(id)
+	if cached, ok := idx.cache.Get(idx.cachekey(key)); ok {
+		atomic.AddInt64(&idx.stats.PackCacheHits, 1)
+		pkg := cached.(*Package)
+		clone, err := pkg.Clone(idx.opts.PackSize())
+		if err != nil {
+			return nil, err
+		}
+		// set key
+		clone.key = pkg.key
+		clone.cached = false
+
+		// prepare for efficient writes
+		clone.Materialize()
+		return clone, nil
+	}
+
+	// load from storage
+	atomic.AddInt64(&idx.stats.PackCacheMisses, 1)
+
+	// if not found, load from storage
+	pkg, err := tx.loadPack(idx.key, key, idx.packPool.Get().(*Package))
+	if err != nil {
+		return nil, err
+	}
+
+	atomic.AddInt64(&idx.stats.PacksLoaded, 1)
+	atomic.AddInt64(&idx.stats.PacksBytesRead, int64(pkg.size))
 	return pkg, nil
 }
 
 // Note: we keep empty index pack names to avoid (re)naming issues
 func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 	key := pkg.Key()
-	cachekey := idx.cachekey(key)
+
+	defer func() {
+		// remove from cache, returns back to pool
+		cachekey := idx.cachekey(key)
+		idx.cache.Remove(cachekey)
+	}()
 
 	// remove empty packs from pack index, storage and cache
-	if len(key) == 0 {
+	if pkg.Len() > 0 {
+		// build header statistics
+		info := pkg.Info()
+		err := info.UpdateStats(pkg)
+		if err != nil {
+			return 0, err
+		}
+
+		n, err := tx.storePack(idx.key, key, pkg, idx.opts.FillLevel)
+		if err != nil {
+			return 0, err
+		}
+
+		// update pack index
+		info.Packsize = n
+		idx.packidx.AddOrUpdate(info)
+		atomic.AddInt64(&idx.stats.PacksStored, 1)
+		atomic.AddInt64(&idx.stats.PacksBytesWritten, int64(n))
+		atomic.StoreInt64(&idx.stats.PacksCount, int64(idx.packidx.Len()))
+		atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.packidx.HeapSize()))
+		atomic.StoreInt64(&idx.stats.PacksSize, int64(idx.packidx.TableSize()))
+
+		return n, nil
+
+	} else {
+		// If pack is empty
+
+		// drop from index
 		idx.packidx.Remove(pkg.key)
+
+		// remove from storage
 		if err := tx.deletePack(idx.key, key); err != nil {
 			return 0, err
 		}
-		idx.cache.Remove(cachekey)
+
+		atomic.StoreInt64(&idx.stats.PacksCount, int64(idx.packidx.Len()))
+		atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.packidx.HeapSize()))
+		atomic.StoreInt64(&idx.stats.PacksSize, int64(idx.packidx.TableSize()))
+
 		return 0, nil
 	}
-
-	// build header statistics
-	info := pkg.Info()
-	err := info.UpdateStats(pkg)
-	if err != nil {
-		return 0, err
-	}
-
-	n, err := tx.storePack(idx.key, key, pkg, idx.opts.FillLevel)
-	if err != nil {
-		return 0, err
-	}
-	atomic.AddInt64(&idx.stats.PacksStored, 1)
-	atomic.AddInt64(&idx.stats.PacksBytesWritten, int64(n))
-
-	// update pack index
-	info.Packsize = n
-	idx.packidx.AddOrUpdate(info)
-
-	// remove empty packidx from cache and return to pool
-	if pkg.Len() == 0 {
-		idx.cache.Remove(cachekey)
-	} else if pkg.cached {
-		inserted, _ := idx.cache.ContainsOrAdd(cachekey, pkg)
-		if inserted {
-			atomic.AddInt64(&idx.stats.PackCacheInserts, 1)
-		} else {
-			atomic.AddInt64(&idx.stats.PackCacheUpdates, 1)
-		}
-	}
-	return n, nil
 }
 
 func (idx *Index) makePackage() interface{} {
@@ -1379,6 +1429,8 @@ func (idx *Index) onEvictedPackage(key, val interface{}) {
 	pkg := val.(*Package)
 	pkg.cached = false
 	atomic.AddInt64(&idx.stats.PackCacheEvictions, 1)
+	atomic.AddInt64(&idx.stats.PackCacheCount, -1)
+	atomic.AddInt64(&idx.stats.PackCacheSize, int64(-pkg.HeapSize()))
 	idx.recyclePackage(pkg)
 }
 
@@ -1401,30 +1453,14 @@ func (idx *Index) Stats() TableStats {
 
 	// TODO: count live index tuples
 	// s.TupleCount = idx.meta.Rows
-	s.PacksCount = int64(idx.packidx.Len())
-	s.PackCacheCount = int64(idx.cache.Len())
-	s.PackCacheCapacity = int64(idx.opts.CacheSize)
-	s.MetaSize = int64(idx.packidx.HeapSize())
-	s.PacksSize = int64(idx.packidx.TableSize())
 
-	// FIXME: currently unused
 	s.JournalTuplesCount = int64(idx.journal.Len())
 	s.JournalTuplesCapacity = int64(idx.journal.Cap())
-	s.JournalTuplesThreshold = int64(idx.opts.JournalSize())
 	s.JournalSize = int64(idx.journal.HeapSize())
 
 	s.TombstoneTuplesCount = int64(idx.tombstone.Len())
 	s.TombstoneTuplesCapacity = int64(idx.tombstone.Cap())
-	s.TombstoneTuplesThreshold = int64(idx.opts.JournalSize())
 	s.TombstoneSize = int64(idx.tombstone.HeapSize())
-
-	for _, v := range idx.cache.Keys() {
-		val, ok := idx.cache.Peek(v)
-		if !ok {
-			continue
-		}
-		s.PackCacheSize += int64(val.(*Package).HeapSize())
-	}
 
 	return s
 }
