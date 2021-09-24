@@ -133,7 +133,7 @@ func (l IndexList) FindField(fieldname string) *Index {
 }
 
 func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Options) (*Index, error) {
-	opts.MergeDefaults()
+	opts = DefaultOptions.Merge(opts)
 	if err := opts.Check(); err != nil {
 		return nil, err
 	}
@@ -350,9 +350,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 			return err
 		}
 		if len(opts) > 0 {
-			if opts[0].JournalSizeLog2 > 0 {
-				idx.opts.JournalSizeLog2 = opts[0].JournalSizeLog2
-			}
+			idx.opts = idx.opts.Merge(opts[0])
 		}
 		maxPackSize := idx.opts.PackSize()
 		maxJournalSize := idx.opts.JournalSize()
@@ -381,12 +379,8 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 	if err != nil {
 		return err
 	}
-	cacheSize := idx.opts.CacheSize
-	if len(opts) > 0 {
-		cacheSize = opts[0].CacheSize
-	}
-	if cacheSize > 0 {
-		idx.cache, err = lru.New2QWithEvict(int(cacheSize), idx.onEvictedPackage)
+	if idx.opts.CacheSize > 0 {
+		idx.cache, err = lru.New2QWithEvict(int(idx.opts.CacheSize), idx.onEvictedPackage)
 		if err != nil {
 			return err
 		}
@@ -404,7 +398,6 @@ func (idx *Index) Options() Options {
 
 func (idx *Index) PurgeCache() {
 	idx.cache.Purge()
-	//todo
 }
 
 func (idx *Index) name() string {
@@ -436,6 +429,9 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 			log.Errorf("pack: %s info decode failed for pack %x: %v", idx.name(), c.Key(), err)
 		} else {
 			idx.packidx = NewPackIndex(packs, 0, maxPackSize)
+			atomic.StoreInt64(&idx.stats.PacksCount, int64(idx.packidx.Len()))
+			atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.packidx.HeapSize()))
+			atomic.StoreInt64(&idx.stats.PacksSize, int64(idx.packidx.TableSize()))
 			log.Debugf("pack: %s loaded index data for %d packs", idx.name(), idx.packidx.Len())
 			return nil
 		}
@@ -465,6 +461,9 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 		pkg.Clear()
 	}
 	idx.packidx = NewPackIndex(packs, 0, maxPackSize)
+	atomic.StoreInt64(&idx.stats.PacksCount, int64(idx.packidx.Len()))
+	atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.packidx.HeapSize()))
+	atomic.StoreInt64(&idx.stats.PacksSize, int64(idx.packidx.TableSize()))
 	log.Debugf("pack: %s scanned %d package headers", idx.name(), idx.packidx.Len())
 	return nil
 }
@@ -1227,6 +1226,12 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 		nBytes += n
 	}
 
+	// update counters
+	atomic.StoreInt64(&idx.stats.PacksCount, int64(idx.packidx.Len()))
+	atomic.StoreInt64(&idx.stats.TupleCount, int64(idx.packidx.Count()))
+	atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.packidx.HeapSize()))
+	atomic.StoreInt64(&idx.stats.PacksSize, int64(idx.packidx.TableSize()))
+
 	idx.stats.LastFlushDuration = time.Since(start)
 	log.Debugf("pack: %s flushed %d packs add=%d/%d del=%d/%d total_size=%s in %s",
 		idx.name(), nParts, nAdd, idx.journal.Len(), nDel, idx.tombstone.Len(), util.ByteSize(nBytes),
@@ -1393,9 +1398,6 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 		idx.packidx.AddOrUpdate(info)
 		atomic.AddInt64(&idx.stats.PacksStored, 1)
 		atomic.AddInt64(&idx.stats.PacksBytesWritten, int64(n))
-		atomic.StoreInt64(&idx.stats.PacksCount, int64(idx.packidx.Len()))
-		atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.packidx.HeapSize()))
-		atomic.StoreInt64(&idx.stats.PacksSize, int64(idx.packidx.TableSize()))
 
 		return n, nil
 
@@ -1409,10 +1411,6 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 		if err := tx.deletePack(idx.key, key); err != nil {
 			return 0, err
 		}
-
-		atomic.StoreInt64(&idx.stats.PacksCount, int64(idx.packidx.Len()))
-		atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.packidx.HeapSize()))
-		atomic.StoreInt64(&idx.stats.PacksSize, int64(idx.packidx.TableSize()))
 
 		return 0, nil
 	}

@@ -79,6 +79,14 @@ func (l *PackIndex) Len() int {
 	return len(l.packs)
 }
 
+func (l *PackIndex) Count() int {
+	var count int
+	for i := range l.packs {
+		count += l.packs[i].NValues
+	}
+	return count
+}
+
 func (l *PackIndex) HeapSize() int {
 	sz := szPackIndex
 	sz += len(l.minpks) * 8

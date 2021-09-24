@@ -92,21 +92,25 @@ func (o Options) JournalSize() int {
 	return 1 << uint(o.JournalSizeLog2)
 }
 
-func (o *Options) MergeDefaults() {
-	o.CacheSize = util.NonZero(o.CacheSize, DefaultOptions.CacheSize)
-	o.PackSizeLog2 = util.NonZero(o.PackSizeLog2, DefaultOptions.PackSizeLog2)
-	o.JournalSizeLog2 = util.NonZero(o.JournalSizeLog2, DefaultOptions.JournalSizeLog2)
-	o.FillLevel = util.NonZero(o.FillLevel, DefaultOptions.FillLevel)
+func (o Options) Merge(o2 Options) Options {
+	// Notes:
+	// - allow cache size to be zero
+	// - keep pack size constant after creation
+	o.JournalSizeLog2 = util.NonZero(o2.JournalSizeLog2, o.JournalSizeLog2)
+	o.FillLevel = util.NonZero(o2.FillLevel, o.FillLevel)
+	o.CacheSize = o2.CacheSize
+	return o
 }
 
 func (o Options) Check() error {
-	if o.PackSizeLog2 < 2 || o.PackSizeLog2 > 22 {
-		return fmt.Errorf("PackSizeLog2 %d out of range [10, 22]", o.PackSizeLog2)
+	// limit pack sizes to 4k .. 4M
+	if o.PackSizeLog2 < 12 || o.PackSizeLog2 > 22 {
+		return fmt.Errorf("PackSizeLog2 %d out of range [12, 22]", o.PackSizeLog2)
 	}
-	if o.JournalSizeLog2 < 2 || o.JournalSizeLog2 > 22 {
-		return fmt.Errorf("JournalSizeLog2 %d out of range [10, 22]", o.JournalSizeLog2)
+	if o.JournalSizeLog2 < 12 || o.JournalSizeLog2 > 22 {
+		return fmt.Errorf("JournalSizeLog2 %d out of range [12, 22]", o.JournalSizeLog2)
 	}
-	if o.CacheSize > 64*1024 {
+	if o.CacheSize < 0 || o.CacheSize > 64*1024 {
 		return fmt.Errorf("CacheSize %d out of range [0, 64k]", o.CacheSize)
 	}
 	if o.FillLevel < 10 || o.FillLevel > 100 {
@@ -141,7 +145,7 @@ type Table struct {
 }
 
 func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, error) {
-	opts.MergeDefaults()
+	opts = DefaultOptions.Merge(opts)
 	if err := opts.Check(); err != nil {
 		return nil, err
 	}
@@ -309,7 +313,6 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		log.Debugf("Opening table %s with opts %#v", name, opts[0])
 	} else {
 		log.Debugf("Opening table %s with default opts", name)
-		opts = []Options{DefaultOptions}
 	}
 	t := &Table{
 		name:    name,
@@ -334,8 +337,8 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		if err != nil {
 			return err
 		}
-		if opts[0].JournalSizeLog2 > 0 {
-			t.opts.JournalSizeLog2 = opts[0].JournalSizeLog2
+		if len(opts) > 0 {
+			t.opts = t.opts.Merge(opts[0])
 		}
 		maxJournalSize := t.opts.JournalSize()
 		maxPackSize := t.opts.PackSize()
@@ -389,12 +392,8 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	cacheSize := t.opts.CacheSize
-	if len(opts) > 0 {
-		cacheSize = opts[0].CacheSize
-	}
-	if cacheSize > 0 {
-		t.cache, err = lru.New2QWithEvict(int(cacheSize), t.onEvictedPackage)
+	if t.opts.CacheSize > 0 {
+		t.cache, err = lru.New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
 		if err != nil {
 			return nil, err
 		}
@@ -467,6 +466,9 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 			log.Errorf("pack: info decode for table %s pack %x: %v", t.name, c.Key(), err)
 		} else {
 			t.packidx = NewPackIndex(packs, t.fields.PkIndex(), maxPackSize)
+			atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
+			atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
+			atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
 			log.Debugf("pack: %s table loaded index data for %d packs", t.name, t.packidx.Len())
 			return nil
 		}
@@ -490,6 +492,9 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 		pkg.Clear()
 	}
 	t.packidx = NewPackIndex(packs, t.fields.PkIndex(), maxPackSize)
+	atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
+	atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
+	atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
 	log.Debugf("pack: %s table scanned %d packages", t.name, t.packidx.Len())
 	return nil
 }
