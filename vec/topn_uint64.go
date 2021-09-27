@@ -112,6 +112,9 @@ func (h *TopUint64Heap) Gini() float64 {
 }
 
 func (h *TopUint64Heap) GiniCapped(cutoff uint64) float64 {
+	// sorts descending to satisfy top criteria
+	h.sorted()
+
 	// use binary search to find first value after cutoff
 	idx := sort.Search(h.Len(), func(i int) bool { return h.vals[i] < cutoff })
 	arr := h.TopN(idx)
