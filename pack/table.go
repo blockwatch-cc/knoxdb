@@ -374,6 +374,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		if err != nil {
 			return fmt.Errorf("pack: cannot read metadata for table %s: %v", name, err)
 		}
+		atomic.StoreInt64(&t.stats.TupleCount, t.meta.Rows)
 		t.journal = NewJournal(t.meta.Sequence, maxJournalSize, t.name)
 		t.journal.InitFields(t.fields)
 		err = t.journal.LoadLegacy(dbTx, t.metakey)
