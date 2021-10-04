@@ -92,10 +92,9 @@ func (o Options) JournalSize() int {
 	return 1 << uint(o.JournalSizeLog2)
 }
 
+// Notes: allow cache size to be zero
 func (o Options) Merge(o2 Options) Options {
-	// Notes:
-	// - allow cache size to be zero
-	// - keep pack size constant after creation
+	o.PackSizeLog2 = util.NonZero(o2.PackSizeLog2, o.PackSizeLog2)
 	o.JournalSizeLog2 = util.NonZero(o2.JournalSizeLog2, o.JournalSizeLog2)
 	o.FillLevel = util.NonZero(o2.FillLevel, o.FillLevel)
 	o.CacheSize = o2.CacheSize
@@ -338,6 +337,9 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 			return err
 		}
 		if len(opts) > 0 {
+			if opts[0].PackSizeLog2 > 0 && t.opts.PackSizeLog2 != opts[0].PackSizeLog2 {
+				return fmt.Errorf("pack: %s pack size change not allowed", name)
+			}
 			t.opts = t.opts.Merge(opts[0])
 		}
 		maxJournalSize := t.opts.JournalSize()

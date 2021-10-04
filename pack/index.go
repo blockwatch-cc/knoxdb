@@ -350,6 +350,9 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 			return err
 		}
 		if len(opts) > 0 {
+			if opts[0].PackSizeLog2 > 0 && idx.opts.PackSizeLog2 != opts[0].PackSizeLog2 {
+				return fmt.Errorf("pack: %s pack size change not allowed", idx.name())
+			}
 			idx.opts = idx.opts.Merge(opts[0])
 		}
 		maxPackSize := idx.opts.PackSize()
