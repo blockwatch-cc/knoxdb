@@ -6,7 +6,7 @@
 package vec
 
 import (
-//"fmt"
+	"blockwatch.cc/knoxdb/util"
 )
 
 var lengthTable = []uint8{
@@ -328,7 +328,7 @@ func bitsetNextZeroBitAVX2(src []byte, index uint64) uint64
 
 func bitsetAnd(dst, src []byte, size int) {
 	switch {
-	case useAVX2:
+	case util.UseAVX2:
 		bitsetAndAVX2(dst, src)
 		dst[len(dst)-1] &= bytemask(size)
 	default:
@@ -338,7 +338,7 @@ func bitsetAnd(dst, src []byte, size int) {
 
 func bitsetAndFlag(dst, src []byte, size int) (bool, bool) {
 	switch {
-	case useAVX2:
+	case util.UseAVX2:
 		return bitsetAndAVX2Flag(dst, src, size)
 	default:
 		return bitsetAndGenericFlag(dst, src, size)
@@ -347,7 +347,7 @@ func bitsetAndFlag(dst, src []byte, size int) (bool, bool) {
 
 func bitsetAndNot(dst, src []byte, size int) {
 	switch {
-	case useAVX2:
+	case util.UseAVX2:
 		bitsetAndNotAVX2(dst, src)
 		dst[len(dst)-1] &= bytemask(size)
 	default:
@@ -357,7 +357,7 @@ func bitsetAndNot(dst, src []byte, size int) {
 
 func bitsetOr(dst, src []byte, size int) {
 	switch {
-	case useAVX2:
+	case util.UseAVX2:
 		bitsetOrAVX2(dst, src)
 		dst[len(dst)-1] &= bytemask(size)
 	default:
@@ -367,7 +367,7 @@ func bitsetOr(dst, src []byte, size int) {
 
 func bitsetOrFlag(dst, src []byte, size int) (bool, bool) {
 	switch {
-	case useAVX2:
+	case util.UseAVX2:
 		return bitsetOrAVX2Flag(dst, src, size)
 	default:
 		return bitsetOrGenericFlag(dst, src, size)
@@ -376,7 +376,7 @@ func bitsetOrFlag(dst, src []byte, size int) (bool, bool) {
 
 func bitsetXor(dst, src []byte, size int) {
 	switch {
-	case useAVX2:
+	case util.UseAVX2:
 		bitsetXorAVX2(dst, src)
 		dst[len(dst)-1] &= bytemask(size)
 	default:
@@ -386,7 +386,7 @@ func bitsetXor(dst, src []byte, size int) {
 
 func bitsetNeg(src []byte, size int) {
 	switch {
-	case useAVX2:
+	case util.UseAVX2:
 		bitsetNegAVX2(src)
 		src[len(src)-1] &= bytemask(size)
 	default:
@@ -396,7 +396,7 @@ func bitsetNeg(src []byte, size int) {
 
 func bitsetReverse(src []byte) {
 	switch {
-	case useAVX2:
+	case util.UseAVX2:
 		bitsetReverseAVX2(src, bitsetReverseLut256)
 	default:
 		bitsetReverseGeneric(src)
@@ -419,7 +419,7 @@ func bitsetIndexesAVX2Skip(src []byte, size int, dst []uint32) int {
 
 func bitsetIndexes(src []byte, size int, dst []uint32) int {
 	switch {
-	case useAVX2:
+	case util.UseAVX2:
 		return bitsetIndexesAVX2Skip(src, size, dst)
 	default:
 		return bitsetIndexesGenericSkip64(src, size, dst)
@@ -428,7 +428,7 @@ func bitsetIndexes(src []byte, size int, dst []uint32) int {
 
 func bitsetPopCount(src []byte, size int) int64 {
 	switch {
-	case useAVX2:
+	case util.UseAVX2:
 		switch true {
 		case size == 0:
 			return 0
@@ -476,7 +476,7 @@ func bitsetOrAVX2Flag(dst, src []byte, size int) (bool, bool) {
 
 func bitsetRun(src []byte, index, size int) (int, int) {
 	switch {
-	case useAVX2:
+	case util.UseAVX2:
 		return bitsetRunAVX2Wrapper(src, index, size)
 	default:
 		return bitsetRunGeneric(src, index, size)

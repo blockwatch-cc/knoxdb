@@ -13,6 +13,8 @@ import (
 	"math/rand"
 	"reflect"
 	"testing"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 type BitsetTest struct {
@@ -164,7 +166,7 @@ func TestBitsetPopCountGeneric(T *testing.T) {
 }
 
 func TestBitsetPopCountAVX2(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	for _, c := range bitsetCases {
@@ -243,7 +245,7 @@ func TestBitAndGeneric(T *testing.T) {
 }
 
 func TestBitAndAVX2(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 
@@ -300,7 +302,7 @@ func TestBitAndAVX2(T *testing.T) {
 }
 
 func TestBitAndGenericFlag(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -416,7 +418,7 @@ func TestBitAndGenericFlag(T *testing.T) {
 }
 
 func TestBitAndAVX2Flag(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -584,7 +586,7 @@ func TestBitAndNotGeneric(T *testing.T) {
 }
 
 func TestBitAndNotAVX2(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -692,7 +694,7 @@ func TestBitOrGeneric(T *testing.T) {
 }
 
 func TestBitOrGenericFlag(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -808,7 +810,7 @@ func TestBitOrGenericFlag(T *testing.T) {
 }
 
 func TestBitOrAVX2(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -864,7 +866,7 @@ func TestBitOrAVX2(T *testing.T) {
 }
 
 func TestBitOrAVX2Flag(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -1033,7 +1035,7 @@ func TestBitXorGeneric(T *testing.T) {
 }
 
 func TestBitXorAVX2(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -1109,7 +1111,7 @@ func TestBitNegGeneric(T *testing.T) {
 }
 
 func TestBitNegAVX2(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -1522,7 +1524,7 @@ func TestBitsetIndexGenericSkip64(T *testing.T) {
 }
 
 func TestBitsetIndexAVX2Full(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	for _, c := range runTestcases {
@@ -1544,7 +1546,7 @@ func TestBitsetIndexAVX2Full(T *testing.T) {
 }
 
 func TestBitsetIndexAVX2Skip(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	for _, c := range runTestcases {
@@ -2123,7 +2125,7 @@ func TestBitsetRunReverse(T *testing.T) {
 }
 
 func TestBitsetRunAVX2(T *testing.T) {
-	if !useAVX2 {
+	if !util.UseAVX2 {
 		T.SkipNow()
 	}
 	for _, c := range runTestcases {
