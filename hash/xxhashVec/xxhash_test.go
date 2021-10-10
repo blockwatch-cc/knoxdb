@@ -8,6 +8,8 @@ import (
 	"math/rand"
 	"reflect"
 	"testing"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 type hashBenchmarkSize struct {
@@ -84,20 +86,20 @@ var (
 		{6, 7, 8, 9, 10, 11, 12, 13},
 		{7, 8, 9, 10, 11, 12, 13, 14},
 	}
-    /* reference values are calculatetd with xxhash library v0.8.0
-     * https://github.com/Cyan4973/xxHash */
+	/* reference values are calculatetd with xxhash library v0.8.0
+	 * https://github.com/Cyan4973/xxHash */
 	xxhash32Uint32Result = []uint32{2154372710, 4271296924, 2572881654, 3610179124,
-        1767988938, 2757935525, 3225940163, 3594529143}
-    xxhash32Uint64Result = []uint32{2746060985, 339348840, 1725762203, 1251338271,
-        1114514114, 1889681329, 3683323844, 2797893054}
-    xxhash64Uint32Result = []uint64{18432908232848821278, 6063570110359613137, 873772980599321746, 5856652436104769068,
-        5752797560547662665, 16833853067498898772, 3015398042591893023, 11282460491355425862}    
-    xxhash64Uint64Result = []uint64{9820687458478070669, 9316896406413536788, 13085766782279498260, 1636669749266472520,
-        7694617266880998282, 738958588033515616, 8444214855924868781, 5257069345255417428}    
-    xxh3Uint32Result = []uint64{6979084321315492338, 10992015174800262690, 9198932749014320068, 284606709437413655,
-        9636445692175435800, 10506574136472534422, 15288656668032338727, 17931165511542358483}    
-    xxh3Uint64Result = []uint64{4187271766389786872, 1653410307359580823, 10968988069148854349, 18394629982161883682,
-        7288085727936083465, 17701208102331325482, 17779176444116337920, 9817807099013809187}
+		1767988938, 2757935525, 3225940163, 3594529143}
+	xxhash32Uint64Result = []uint32{2746060985, 339348840, 1725762203, 1251338271,
+		1114514114, 1889681329, 3683323844, 2797893054}
+	xxhash64Uint32Result = []uint64{18432908232848821278, 6063570110359613137, 873772980599321746, 5856652436104769068,
+		5752797560547662665, 16833853067498898772, 3015398042591893023, 11282460491355425862}
+	xxhash64Uint64Result = []uint64{9820687458478070669, 9316896406413536788, 13085766782279498260, 1636669749266472520,
+		7694617266880998282, 738958588033515616, 8444214855924868781, 5257069345255417428}
+	xxh3Uint32Result = []uint64{6979084321315492338, 10992015174800262690, 9198932749014320068, 284606709437413655,
+		9636445692175435800, 10506574136472534422, 15288656668032338727, 17931165511542358483}
+	xxh3Uint64Result = []uint64{4187271766389786872, 1653410307359580823, 10968988069148854349, 18394629982161883682,
+		7288085727936083465, 17701208102331325482, 17779176444116337920, 9817807099013809187}
 )
 
 // creates an XXHash32 test case for uint32 input date from the given slice
@@ -309,6 +311,9 @@ func TestXXHash32Uint32SliceGeneric(T *testing.T) {
 }
 
 func TestXXhash32Uint32SliceAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range xxhash32Uint32Cases {
 		// pre-allocate the result slice
 		res := make([]uint32, len(c.slice))
@@ -336,6 +341,9 @@ func BenchmarkXXHash32Uint32SliceGeneric(B *testing.B) {
 }
 
 func BenchmarkXXHash32Uint32SliceAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range hashBenchmarkSizes {
 		a := randUint32Slice(n.l)
 		res := make([]uint32, n.l)
@@ -381,6 +389,9 @@ func TestXXHash32Uint64SliceGeneric(T *testing.T) {
 }
 
 func TestXXHash32Uint64SliceAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
 	for _, c := range xxhash32Uint64Cases {
 		// pre-allocate the result slice
 		res := make([]uint32, len(c.slice))
@@ -408,6 +419,9 @@ func BenchmarkXXHash32Uint64SliceGeneric(B *testing.B) {
 }
 
 func BenchmarkXXHash32Uint64SliceAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		B.SkipNow()
+	}
 	for _, n := range hashBenchmarkSizes {
 		a := randUint64Slice(n.l)
 		res := make([]uint32, n.l)
@@ -519,7 +533,6 @@ var xxh3Uint32Cases = []XXHash64Uint32Test{
 	CreateXXHash64Uint32TestCase("l8", xxhashInput, xxh3Uint32Result, 8),
 }
 
-
 func TestXXH3Uint32SliceGeneric(T *testing.T) {
 	for _, c := range xxh3Uint32Cases {
 		// pre-allocate the result slice
@@ -561,7 +574,6 @@ var xxh3Uint64Cases = []XXHash64Uint64Test{
 	},
 	CreateXXHash64Uint64TestCase("l8", xxhashInput, xxh3Uint64Result, 8),
 }
-
 
 func TestXXH3Uint64SliceGeneric(T *testing.T) {
 	for _, c := range xxh3Uint64Cases {

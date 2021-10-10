@@ -7,8 +7,8 @@ package util
 
 import (
 	"log"
-    
-    "golang.org/x/sys/cpu"
+
+	"golang.org/x/sys/cpu"
 )
 
 //go:noescape

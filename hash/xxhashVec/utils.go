@@ -1,6 +1,6 @@
 /* taken from
  * https://github.com/zeebo/xxh3
- * 
+ *
  * xxHash Library
  * Copyright (c) 2012-2014, Yann Collet
  * Copyright (c) 2019, Jeff Wendling
@@ -52,6 +52,7 @@ func readU16(p ptr, o ui) uint16  { return le.Uint16((*[2]byte)(ptr(ui(p) + o))[
 func readU32(p ptr, o ui) uint32  { return le.Uint32((*[4]byte)(ptr(ui(p) + o))[:]) }
 func readU64(p ptr, o ui) uint64  { return le.Uint64((*[8]byte)(ptr(ui(p) + o))[:]) }
 func writeU64(p ptr, o ui, v u64) { le.PutUint64((*[8]byte)(ptr(ui(p) + o))[:], v) }
+
 /*
 func initSecret(secret ptr, seed u64) {
 	for i := ui(0); i < secret_size/16; i++ {

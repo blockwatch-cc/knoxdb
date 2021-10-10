@@ -1,6 +1,6 @@
 /* taken from
  * https://github.com/zeebo/xxh3
- * 
+ *
  * xxHash Library
  * Copyright (c) 2012-2014, Yann Collet
  * Copyright (c) 2019, Jeff Wendling
@@ -11,11 +11,11 @@ package xxhashVec
 const (
 	_stripe = 64
 	_block  = 1024
-/*
-	prime32_1 = 2654435761
-	prime32_2 = 2246822519
-	prime32_3 = 3266489917
-*/
+	/*
+		prime32_1 = 2654435761
+		prime32_2 = 2246822519
+		prime32_3 = 3266489917
+	*/
 	prime64_1 = 11400714785074694791
 	prime64_2 = 14029467366897019727
 	prime64_3 = 1609587929392839161
