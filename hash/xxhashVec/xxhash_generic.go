@@ -18,36 +18,36 @@ const (
 func xxhash32Uint32SliceGeneric(src, res []uint32, seed uint32) {
 	for i, val := range src {
 
-		h32 := seed + prime32_5 + 4
-		h32 += val * prime32_3
-		h32 = rol32_17(h32) * prime32_4
+		h := seed + prime32_5 + 4
+		h += val * prime32_3
+		h = rol32_17(h) * prime32_4
 
-		h32 ^= h32 >> 15
-		h32 *= prime32_2
-		h32 ^= h32 >> 13
-		h32 *= prime32_3
-		h32 ^= h32 >> 16
+		h ^= h >> 15
+		h *= prime32_2
+		h ^= h >> 13
+		h *= prime32_3
+		h ^= h >> 16
 
-		res[i] = h32
+		res[i] = h
 	}
 }
 
 func xxhash32Uint64SliceGeneric(src []uint64, res []uint32, seed uint32) {
 	for i, val := range src {
 
-		h32 := seed + prime32_5 + 8
-		h32 += uint32(val&0xffffffff) * prime32_3
-		h32 = rol32_17(h32) * prime32_4
-		h32 += uint32(val>>32) * prime32_3
-		h32 = rol32_17(h32) * prime32_4
+		h := seed + prime32_5 + 8
+		h += uint32(val&0xffffffff) * prime32_3
+		h = rol32_17(h) * prime32_4
+		h += uint32(val>>32) * prime32_3
+		h = rol32_17(h) * prime32_4
 
-		h32 ^= h32 >> 15
-		h32 *= prime32_2
-		h32 ^= h32 >> 13
-		h32 *= prime32_3
-		h32 ^= h32 >> 16
+		h ^= h >> 15
+		h *= prime32_2
+		h ^= h >> 13
+		h *= prime32_3
+		h ^= h >> 16
 
-		res[i] = h32
+		res[i] = h
 	}
 }
 
@@ -95,16 +95,30 @@ func xxhash64Uint64SliceGeneric(src, res []uint64) {
 func xxh3Uint32SliceGeneric(src []uint32, res []uint64) {
 	for i, val := range src {
 		input64 := u64(val) + u64(val)<<32
-		keyed := input64 ^ (key64_008 ^ key64_016)
-		res[i] = rrmxmx(keyed, 4)
+		h := input64 ^ (key64_008 ^ key64_016)
+
+		h ^= rol64_49(h) ^ rol64_24(h)
+		h *= 0x9fb21c651e98df25
+		h ^= (h >> 35) + 4
+		h *= 0x9fb21c651e98df25
+		h ^= (h >> 28)
+
+		res[i] = h
 	}
 }
 
 func xxh3Uint64SliceGeneric(src, res []uint64) {
 	for i, val := range src {
 		input64 := val>>32 + val<<32
-		keyed := input64 ^ (key64_008 ^ key64_016)
-		res[i] = rrmxmx(keyed, u64(8))
+		h := input64 ^ (key64_008 ^ key64_016)
+
+		h ^= rol64_49(h) ^ rol64_24(h)
+		h *= 0x9fb21c651e98df25
+		h ^= (h >> 35) + 8
+		h *= 0x9fb21c651e98df25
+		h ^= (h >> 28)
+
+		res[i] = h
 	}
 }
 
@@ -112,5 +126,7 @@ func rol32_17(x uint32) uint32 { return bits.RotateLeft32(x, 17) }
 
 func rol64_11(x uint64) uint64 { return bits.RotateLeft64(x, 11) }
 func rol64_23(x uint64) uint64 { return bits.RotateLeft64(x, 23) }
+func rol64_24(x uint64) uint64 { return bits.RotateLeft64(x, 24) }
 func rol64_27(x uint64) uint64 { return bits.RotateLeft64(x, 27) }
 func rol64_31(x uint64) uint64 { return bits.RotateLeft64(x, 31) }
+func rol64_49(x uint64) uint64 { return bits.RotateLeft64(x, 49) }
