@@ -302,9 +302,6 @@ func TestBitAndAVX2(T *testing.T) {
 }
 
 func TestBitAndGenericFlag(T *testing.T) {
-	if !util.UseAVX2 {
-		T.SkipNow()
-	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
@@ -694,9 +691,6 @@ func TestBitOrGeneric(T *testing.T) {
 }
 
 func TestBitOrGenericFlag(T *testing.T) {
-	if !util.UseAVX2 {
-		T.SkipNow()
-	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
@@ -1450,6 +1444,9 @@ func TestBitsetClear(T *testing.T) {
 }
 
 func TestBitsetReverseAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
 	for _, sz := range bitsetSizes {
 		bits := fillBitsetSaw(nil, sz)
 		cmp := make([]byte, len(bits))

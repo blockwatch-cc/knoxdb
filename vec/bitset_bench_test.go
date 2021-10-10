@@ -819,6 +819,9 @@ func BenchmarkBitsetReverseGeneric(B *testing.B) {
 // BenchmarkBitsetReverseAVX2/32K-8   6202468          190.5 ns/op  21500.72 MB/s
 // BenchmarkBitsetReverseAVX2/64K-8   3164384          375.5 ns/op  21816.63 MB/s
 func BenchmarkBitsetReverseAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
 	for _, n := range bitsetBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			bits := fillBitset(nil, n.l, 0xfa)

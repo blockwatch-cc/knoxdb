@@ -331,6 +331,9 @@ func TestMatchFloat32EqualGeneric(T *testing.T) {
 }
 
 func TestMatchFloat32EqualAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping TestMatchFloat32EqualAVX2.")
+	}
 	for _, c := range float32EqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -401,6 +404,9 @@ func BenchmarkMatchFloat32EqualGeneric(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32EqualAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32EqualAVX2.")
+	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			a := randFloat32Slice(n.l, 1)
@@ -495,6 +501,9 @@ func TestMatchFloat32NotEqualGeneric(T *testing.T) {
 }
 
 func TestMatchFloat32NotEqualAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping TestMatchFloat32NotEqualAVX2.")
+	}
 	for _, c := range float32NotEqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -565,6 +574,9 @@ func BenchmarkMatchFloat32NotEqualGeneric(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32NotEqualAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32NotEqualAVX2.")
+	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			a := randFloat32Slice(n.l, 1)
@@ -659,6 +671,9 @@ func TestMatchFloat32LessGeneric(T *testing.T) {
 }
 
 func TestMatchFloat32LessAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping TestMatchFloat32LessAVX2.")
+	}
 	for _, c := range float32LessCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -729,6 +744,9 @@ func BenchmarkMatchFloat32LessGeneric(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32LessAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32LessAVX2.")
+	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			a := randFloat32Slice(n.l, 1)
@@ -823,6 +841,9 @@ func TestMatchFloat32LessEqualGeneric(T *testing.T) {
 }
 
 func TestMatchFloat32LessEqualAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping TestMatchFloat32LessEqualAVX2.")
+	}
 	for _, c := range float32LessEqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -893,6 +914,9 @@ func BenchmarkMatchFloat32LessEqualGeneric(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32LessEqualAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32LessEqualAVX2.")
+	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			a := randFloat32Slice(n.l, 1)
@@ -987,6 +1011,9 @@ func TestMatchFloat32GreaterGeneric(T *testing.T) {
 }
 
 func TestMatchFloat32GreaterAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping TestMatchFloat32GreaterAVX2.")
+	}
 	for _, c := range float32GreaterCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -1057,6 +1084,9 @@ func BenchmarkMatchFloat32GreaterGeneric(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32GreaterAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32GreaterAVX2.")
+	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			a := randFloat32Slice(n.l, 1)
@@ -1151,6 +1181,9 @@ func TestMatchFloat32GreaterEqualGeneric(T *testing.T) {
 }
 
 func TestMatchFloat32GreaterEqualAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping TestMatchFloat32GreaterEqualAVX2.")
+	}
 	for _, c := range float32GreaterEqualCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -1221,6 +1254,9 @@ func BenchmarkMatchFloat32GreaterEqualGeneric(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32GreaterEqualAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32GreaterEqualAVX2.")
+	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			a := randFloat32Slice(n.l, 1)
@@ -1315,6 +1351,9 @@ func TestMatchFloat32BetweenGeneric(T *testing.T) {
 }
 
 func TestMatchFloat32BetweenAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping TestMatchFloat32BetweenAVX2.")
+	}
 	for _, c := range float32BetweenCases {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.slice))
@@ -1385,6 +1424,9 @@ func BenchmarkMatchFloat32BetweenGeneric(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32BetweenAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32BetweenAVX2.")
+	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
 			a := randFloat32Slice(n.l, 1)
