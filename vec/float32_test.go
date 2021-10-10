@@ -405,7 +405,7 @@ func BenchmarkMatchFloat32EqualGeneric(B *testing.B) {
 
 func BenchmarkMatchFloat32EqualAVX2(B *testing.B) {
 	if !util.UseAVX2 {
-		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32EqualAVX2.")
+		B.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32EqualAVX2.")
 	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
@@ -575,7 +575,7 @@ func BenchmarkMatchFloat32NotEqualGeneric(B *testing.B) {
 
 func BenchmarkMatchFloat32NotEqualAVX2(B *testing.B) {
 	if !util.UseAVX2 {
-		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32NotEqualAVX2.")
+		B.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32NotEqualAVX2.")
 	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
@@ -745,7 +745,7 @@ func BenchmarkMatchFloat32LessGeneric(B *testing.B) {
 
 func BenchmarkMatchFloat32LessAVX2(B *testing.B) {
 	if !util.UseAVX2 {
-		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32LessAVX2.")
+		B.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32LessAVX2.")
 	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
@@ -915,7 +915,7 @@ func BenchmarkMatchFloat32LessEqualGeneric(B *testing.B) {
 
 func BenchmarkMatchFloat32LessEqualAVX2(B *testing.B) {
 	if !util.UseAVX2 {
-		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32LessEqualAVX2.")
+		B.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32LessEqualAVX2.")
 	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
@@ -1085,7 +1085,7 @@ func BenchmarkMatchFloat32GreaterGeneric(B *testing.B) {
 
 func BenchmarkMatchFloat32GreaterAVX2(B *testing.B) {
 	if !util.UseAVX2 {
-		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32GreaterAVX2.")
+		B.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32GreaterAVX2.")
 	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
@@ -1255,7 +1255,7 @@ func BenchmarkMatchFloat32GreaterEqualGeneric(B *testing.B) {
 
 func BenchmarkMatchFloat32GreaterEqualAVX2(B *testing.B) {
 	if !util.UseAVX2 {
-		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32GreaterEqualAVX2.")
+		B.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32GreaterEqualAVX2.")
 	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
@@ -1425,7 +1425,7 @@ func BenchmarkMatchFloat32BetweenGeneric(B *testing.B) {
 
 func BenchmarkMatchFloat32BetweenAVX2(B *testing.B) {
 	if !util.UseAVX2 {
-		T.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32BetweenAVX2.")
+		B.Skip("AVX2 not available. Skipping BenchmarkMatchFloat32BetweenAVX2.")
 	}
 	for _, n := range vecBenchmarkSizes {
 		B.Run(n.name, func(B *testing.B) {
