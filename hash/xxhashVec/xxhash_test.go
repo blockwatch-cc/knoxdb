@@ -520,6 +520,9 @@ var xxhash64Uint64Cases = []XXHash64Uint64Test{
 		slice:  nil,
 		result: []uint64{},
 	},
+	CreateXXHash64Uint64TestCase("l3", xxhashInput, xxhash64Uint64Result, 8),
+	CreateXXHash64Uint64TestCase("l4", xxhashInput, xxhash64Uint64Result, 8),
+	CreateXXHash64Uint64TestCase("l7", xxhashInput, xxhash64Uint64Result, 8),
 	CreateXXHash64Uint64TestCase("l8", xxhashInput, xxhash64Uint64Result, 8),
 }
 
@@ -537,6 +540,40 @@ func TestXXHash64Uint64SliceGeneric(T *testing.T) {
 	}
 }
 
+func TestXXHash64Uint64SliceAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range xxhash64Uint64Cases {
+		// pre-allocate the result slice
+		res := make([]uint64, len(c.slice))
+		xxhash64Uint64SliceAVX2(c.slice, res)
+		if got, want := len(res), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(res, c.result) {
+			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+		}
+	}
+}
+
+func TestXXHash64Uint64SliceAVX512(T *testing.T) {
+	if !util.UseAVX512_DQ {
+		T.SkipNow()
+	}
+	for _, c := range xxhash64Uint64Cases {
+		// pre-allocate the result slice
+		res := make([]uint64, len(c.slice))
+		xxhash64Uint64SliceAVX512(c.slice, res)
+		if got, want := len(res), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(res, c.result) {
+			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+		}
+	}
+}
+
 func BenchmarkXXHash64Uint64SliceGeneric(B *testing.B) {
 	for _, n := range hashBenchmarkSizes {
 		a := randUint64Slice(n.l)
@@ -545,6 +582,38 @@ func BenchmarkXXHash64Uint64SliceGeneric(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))
 			for i := 0; i < B.N; i++ {
 				xxhash64Uint64SliceGeneric(a, res)
+			}
+		})
+	}
+}
+
+func BenchmarkXXHash64Uint64SliceAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range hashBenchmarkSizes {
+		a := randUint64Slice(n.l)
+		res := make([]uint64, n.l)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(8 * int64(n.l))
+			for i := 0; i < B.N; i++ {
+				xxhash64Uint64SliceAVX2(a, res)
+			}
+		})
+	}
+}
+
+func BenchmarkXXHash64Uint64SliceAVX512(B *testing.B) {
+	if !util.UseAVX512_DQ {
+		B.SkipNow()
+	}
+	for _, n := range hashBenchmarkSizes {
+		a := randUint64Slice(n.l)
+		res := make([]uint64, n.l)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(8 * int64(n.l))
+			for i := 0; i < B.N; i++ {
+				xxhash64Uint64SliceAVX512(a, res)
 			}
 		})
 	}
