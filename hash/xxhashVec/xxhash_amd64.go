@@ -1,6 +1,7 @@
 // Copyright (c) 2021 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
+//go:build go1.7 && amd64 && !gccgo && !appengine
 // +build go1.7,amd64,!gccgo,!appengine
 
 package xxhashVec
@@ -13,10 +14,22 @@ import (
 func xxhash32Uint32SliceAVX2Core(src []uint32, res []uint32, seed uint32)
 
 //go:noescape
+func xxhash32Uint32SliceAVX512Core(src []uint32, res []uint32, seed uint32)
+
+//go:noescape
 func xxhash32Uint64SliceAVX2Core(src []uint64, res []uint32, seed uint32)
 
-// //go:noescape
-// func xxhash64Uint32SliceAVX2Core(src []uint32, res []uint64)
+//go:noescape
+func xxhash32Uint64SliceAVX2UnrollCore(src []uint64, res []uint32, seed uint32)
+
+//go:noescape
+func xxhash32Uint64SliceAVX512Core(src []uint64, res []uint32, seed uint32)
+
+//go:noescape
+func xxhash64Uint32SliceAVX2Core(src []uint32, res []uint64)
+
+//go:noescape
+func xxhash64Uint32SliceAVX512Core(src []uint32, res []uint64)
 
 //go:noescape
 func xxhash64Uint64SliceAVX2Core(src []uint64, res []uint64)
@@ -24,11 +37,20 @@ func xxhash64Uint64SliceAVX2Core(src []uint64, res []uint64)
 //go:noescape
 func xxhash64Uint64SliceAVX512Core(src []uint64, res []uint64)
 
-// //go:noescape
-// func xxh3Uint32SliceAVX2Core(src []uint32, res []uint64)
+//go:noescape
+func xxh3Uint32SliceAVX2Core(src []uint32, res []uint64)
 
-// //go:noescape
-// func xxh3Uint64SliceAVX2Core(src []uint64, res []uint64)
+//go:noescape
+func xxh3Uint32SliceAVX512Core(src []uint32, res []uint64)
+
+//go:noescape
+func xxh3Uint64SliceAVX2Core(src []uint64, res []uint64)
+
+//go:noescape
+func xxh3Uint64SliceAVX512Core(src []uint64, res []uint64)
+
+//go:noescape
+func xxh3Uint64SliceAVX512UnrollCore(src []uint64, res []uint64)
 
 func xxhash32Uint32Slice(src []uint32, res []uint32, seed uint32) {
 	switch {
@@ -102,10 +124,40 @@ func xxhash32Uint32SliceAVX2(src []uint32, res []uint32, seed uint32) {
 	xxhash32Uint32SliceGeneric(src[len_head:], res[len_head:], seed)
 }
 
+func xxhash32Uint32SliceAVX512(src []uint32, res []uint32, seed uint32) {
+	len_head := len(src) & 0x7ffffffffffffff0
+	xxhash32Uint32SliceAVX512Core(src, res, seed)
+	xxhash32Uint32SliceGeneric(src[len_head:], res[len_head:], seed)
+}
+
 func xxhash32Uint64SliceAVX2(src []uint64, res []uint32, seed uint32) {
 	len_head := len(src) & 0x7ffffffffffffff8
 	xxhash32Uint64SliceAVX2Core(src, res, seed)
 	xxhash32Uint64SliceGeneric(src[len_head:], res[len_head:], seed)
+}
+
+func xxhash32Uint64SliceAVX2Unroll(src []uint64, res []uint32, seed uint32) {
+	len_head := len(src) & 0x7ffffffffffffff0
+	xxhash32Uint64SliceAVX2UnrollCore(src, res, seed)
+	xxhash32Uint64SliceGeneric(src[len_head:], res[len_head:], seed)
+}
+
+func xxhash32Uint64SliceAVX512(src []uint64, res []uint32, seed uint32) {
+	len_head := len(src) & 0x7ffffffffffffff0
+	xxhash32Uint64SliceAVX512Core(src, res, seed)
+	xxhash32Uint64SliceGeneric(src[len_head:], res[len_head:], seed)
+}
+
+func xxhash64Uint32SliceAVX2(src []uint32, res []uint64) {
+	len_head := len(src) & 0x7ffffffffffffffc
+	xxhash64Uint32SliceAVX2Core(src, res)
+	xxhash64Uint32SliceGeneric(src[len_head:], res[len_head:])
+}
+
+func xxhash64Uint32SliceAVX512(src []uint32, res []uint64) {
+	len_head := len(src) & 0x7ffffffffffffff8
+	xxhash64Uint32SliceAVX512Core(src, res)
+	xxhash64Uint32SliceGeneric(src[len_head:], res[len_head:])
 }
 
 func xxhash64Uint64SliceAVX2(src []uint64, res []uint64) {
@@ -118,4 +170,34 @@ func xxhash64Uint64SliceAVX512(src []uint64, res []uint64) {
 	len_head := len(src) & 0x7ffffffffffffff8
 	xxhash64Uint64SliceAVX512Core(src, res)
 	xxhash64Uint64SliceGeneric(src[len_head:], res[len_head:])
+}
+
+func xxh3Uint32SliceAVX2(src []uint32, res []uint64) {
+	len_head := len(src) & 0x7ffffffffffffffc
+	xxh3Uint32SliceAVX2Core(src, res)
+	xxh3Uint32SliceGeneric(src[len_head:], res[len_head:])
+}
+
+func xxh3Uint32SliceAVX512(src []uint32, res []uint64) {
+	len_head := len(src) & 0x7ffffffffffffff8
+	xxh3Uint32SliceAVX512Core(src, res)
+	xxh3Uint32SliceGeneric(src[len_head:], res[len_head:])
+}
+
+func xxh3Uint64SliceAVX2(src []uint64, res []uint64) {
+	len_head := len(src) & 0x7ffffffffffffffc
+	xxh3Uint64SliceAVX2Core(src, res)
+	xxh3Uint64SliceGeneric(src[len_head:], res[len_head:])
+}
+
+func xxh3Uint64SliceAVX512(src []uint64, res []uint64) {
+	len_head := len(src) & 0x7ffffffffffffff8
+	xxh3Uint64SliceAVX512Core(src, res)
+	xxh3Uint64SliceGeneric(src[len_head:], res[len_head:])
+}
+
+func xxh3Uint64SliceAVX512Unroll(src []uint64, res []uint64) {
+	len_head := len(src) & 0x7ffffffffffffff0
+	xxh3Uint64SliceAVX512UnrollCore(src, res)
+	xxh3Uint64SliceGeneric(src[len_head:], res[len_head:])
 }
