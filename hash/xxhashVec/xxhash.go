@@ -3,6 +3,27 @@
 
 package xxhashVec
 
+import (
+	"math/bits"
+)
+
+const (
+	prime32_1 = 2654435761
+	prime32_2 = 2246822519
+	prime32_3 = 3266489917
+	prime32_4 = 668265263
+	prime32_5 = 374761393
+    
+	prime64_1 = 11400714785074694791
+	prime64_2 = 14029467366897019727
+	prime64_3 = 1609587929392839161
+	prime64_4 = 9650029242287828579
+	prime64_5 = 2870177450012600261
+
+	key64_008 = 0x1cad21f72c81017c
+	key64_016 = 0xdb979083e96dd4de
+)
+
 func XXHash32Uint32(val uint32, seed uint32) uint32 {
 	h := seed + prime32_5 + 4
 	h += val * prime32_3
@@ -69,7 +90,7 @@ func XXHash64Uint64(val uint64) uint64 {
 }
 
 func XXH3Uint32(val uint32) uint64 {
-	input64 := u64(val) + u64(val)<<32
+	input64 := uint64(val) + uint64(val)<<32
 	h := input64 ^ (key64_008 ^ key64_016)
 
 	h ^= rol64_49(h) ^ rol64_24(h)
@@ -92,6 +113,18 @@ func XXH3Uint64(val uint64) uint64 {
 	h ^= (h >> 28)
 
 	return h
+}
+
+const knuth = 2654435769
+
+func MHash32Uint32(val uint32, p int) uint32 {
+	val *= knuth
+	return val >> (32 - p)
+}
+
+func MHash32Uint64(val uint64, p int) uint32 {
+	val *= knuth
+	return uint32(val >> (32 - p))
 }
 
 func XXHash32Uint32Slice(src []uint32, res []uint32, seed uint32) []uint32 {
@@ -143,3 +176,12 @@ func ensureSizeUint64(src []uint64, size int) []uint64 {
 	}
 	return src[:size]
 }
+
+func rol32_17(x uint32) uint32 { return bits.RotateLeft32(x, 17) }
+
+func rol64_23(x uint64) uint64 { return bits.RotateLeft64(x, 23) }
+func rol64_24(x uint64) uint64 { return bits.RotateLeft64(x, 24) }
+func rol64_27(x uint64) uint64 { return bits.RotateLeft64(x, 27) }
+func rol64_31(x uint64) uint64 { return bits.RotateLeft64(x, 31) }
+func rol64_49(x uint64) uint64 { return bits.RotateLeft64(x, 49) }
+

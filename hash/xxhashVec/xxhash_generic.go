@@ -3,18 +3,6 @@
 
 package xxhashVec
 
-import (
-	"math/bits"
-)
-
-const (
-	prime32_1 = 2654435761
-	prime32_2 = 2246822519
-	prime32_3 = 3266489917
-	prime32_4 = 668265263
-	prime32_5 = 374761393
-)
-
 func xxhash32Uint32SliceGeneric(src, res []uint32, seed uint32) {
 	for i, val := range src {
 
@@ -94,7 +82,7 @@ func xxhash64Uint64SliceGeneric(src, res []uint64) {
 
 func xxh3Uint32SliceGeneric(src []uint32, res []uint64) {
 	for i, val := range src {
-		input64 := u64(val) + u64(val)<<32
+		input64 := uint64(val) + uint64(val)<<32
 		h := input64 ^ (key64_008 ^ key64_016)
 
 		h ^= rol64_49(h) ^ rol64_24(h)
@@ -121,12 +109,3 @@ func xxh3Uint64SliceGeneric(src, res []uint64) {
 		res[i] = h
 	}
 }
-
-func rol32_17(x uint32) uint32 { return bits.RotateLeft32(x, 17) }
-
-func rol64_11(x uint64) uint64 { return bits.RotateLeft64(x, 11) }
-func rol64_23(x uint64) uint64 { return bits.RotateLeft64(x, 23) }
-func rol64_24(x uint64) uint64 { return bits.RotateLeft64(x, 24) }
-func rol64_27(x uint64) uint64 { return bits.RotateLeft64(x, 27) }
-func rol64_31(x uint64) uint64 { return bits.RotateLeft64(x, 31) }
-func rol64_49(x uint64) uint64 { return bits.RotateLeft64(x, 49) }

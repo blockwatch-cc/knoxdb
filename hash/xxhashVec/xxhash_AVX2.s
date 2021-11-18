@@ -4,54 +4,9 @@
 #include "textflag.h"
 #include "constants_AVX2.h"
 
-#define rol32_1(Y_reg) \
-    VPSLLD  $1, Y_reg, Y15 \
-    VPSRLD  $31, Y_reg, Y_reg \
-    VPOR    Y15, Y_reg, Y_reg
-
-#define rol32_7(Y_reg) \
-    VPSLLD  $7, Y_reg, Y15 \
-    VPSRLD  $25, Y_reg, Y_reg \
-    VPOR    Y15, Y_reg, Y_reg
-
-#define rol32_12(Y_reg) \
-    VPSLLD  $12, Y_reg, Y15 \
-    VPSRLD  $20, Y_reg, Y_reg \
-    VPOR    Y15, Y_reg, Y_reg
-
-#define rol32_13(Y_reg) \
-    VPSLLD  $13, Y_reg, Y15 \
-    VPSRLD  $19, Y_reg, Y_reg \
-    VPOR    Y15, Y_reg, Y_reg
-
 #define rol32_17(Y_reg) \
     VPSLLD  $17, Y_reg, Y15 \
     VPSRLD  $15, Y_reg, Y_reg \
-    VPOR    Y15, Y_reg, Y_reg
-
-#define rol32_18(Y_reg) \
-    VPSLLD  $18, Y_reg, Y15 \
-    VPSRLD  $14, Y_reg, Y_reg \
-    VPOR    Y15, Y_reg, Y_reg
-
-#define rol64_1(Y_reg) \
-    VPSLLQ  $1, Y_reg, Y15 \
-    VPSRLQ  $31, Y_reg, Y_reg \
-    VPOR    Y15, Y_reg, Y_reg
-
-#define rol64_7(Y_reg) \
-    VPSLLQ  $7, Y_reg, Y15 \
-    VPSRLQ  $25, Y_reg, Y_reg \
-    VPOR    Y15, Y_reg, Y_reg
-
-#define rol64_12(Y_reg) \
-    VPSLLQ  $12, Y_reg, Y15 \
-    VPSRLQ  $20, Y_reg, Y_reg \
-    VPOR    Y15, Y_reg, Y_reg
-
-#define rol64_13(Y_reg) \
-    VPSLLQ  $13, Y_reg, Y15 \
-    VPSRLQ  $19, Y_reg, Y_reg \
     VPOR    Y15, Y_reg, Y_reg
 
 #define rol64_23(Y_reg) \
@@ -78,14 +33,6 @@
     VPSLLQ  $49, Y_reg, Y15 \
     VPSRLQ  $15, Y_reg, Y_reg \
     VPOR    Y15, Y_reg, Y_reg
-
-#define round(Y_seed, Y_input) \
-        VPMULLD         Y_input, Y14, Y15 \
-        VPADDD          Y_seed, Y15, Y_seed \
-        VPSLLD          $13, Y_seed, Y15 \
-        VPSRLD          $19, Y_seed, Y_seed \
-        VPOR            Y15, Y_seed, Y_seed \
-        VPMULLD         Y_seed, Y10, Y_seed
 
 #define mul64(Ya, Yb, Yab) \
     VPSHUFD     $0xb1, Yb, Yab \
@@ -253,96 +200,6 @@ loop_avx:
 
         VMOVDQU         Y0, (DI)
         ADDQ            $32, DI
-        SUBQ            $1, BX
-        JZ              exit_avx
-        JMP             loop_avx
-
-exit_avx:
-        VZEROUPPER
-        RET
-
-// func xxhash32Uint64SliceAVX2UnrollCore(src []uint64, res []uint32, seed uint32)
-TEXT ·xxhash32Uint64SliceAVX2UnrollCore(SB), NOSPLIT, $0-52
-        MOVQ    src_base+0(FP), SI
-        MOVQ    src_len+8(FP), BX
-        MOVQ    res_base+24(FP), DI
-
-        VPBROADCASTD    PRIME32_1<>+0x00(SB), Y10
-        VPBROADCASTD    PRIME32_2<>+0x00(SB), Y11
-        VPBROADCASTD    PRIME32_3<>+0x00(SB), Y12
-        VPBROADCASTD    PRIME32_4<>+0x00(SB), Y13
-        VPBROADCASTD    PRIME32_5<>+0x00(SB), Y14
-
-        VPBROADCASTD    seed+48(FP), Y9
-        VPBROADCASTD    constU32_8<>(SB), Y8
-        VMOVDQU	        perm<>(SB), Y7
-
-        SHRQ    $4, BX          
-        JZ      exit_avx
-
-loop_avx:
-
-        VMOVDQU	         0(SI), Y1
-        VMOVDQU	        32(SI), Y2
-        VMOVDQU	        64(SI), Y5
-        VMOVDQU	        96(SI), Y6
-        VPSRLQ          $32, Y1, Y3
-        VPSLLQ          $32, Y2, Y4
-        VPBLENDD        $0x55, Y1, Y4, Y1
-        VPBLENDD        $0xaa, Y2, Y3, Y2
-        VPSRLQ          $32, Y5, Y3
-        VPSLLQ          $32, Y6, Y4
-        VPBLENDD        $0x55, Y5, Y4, Y4
-        VPBLENDD        $0xaa, Y2, Y3, Y5
-
-        VPADDD          Y9, Y14, Y0    
-        VPADDD          Y9, Y14, Y3    
-        VPADDD          Y8, Y0, Y0
-        VPADDD          Y8, Y3, Y3
-
-        VPMULLD         Y1, Y12, Y1
-        VPMULLD         Y4, Y12, Y4
-        VPADDD          Y0, Y1, Y0
-        VPADDD          Y3, Y4, Y3
-        rol32_17           (Y0)
-        rol32_17           (Y3)
-        VPMULLD         Y0, Y13, Y0
-        VPMULLD         Y3, Y13, Y3
-
-        VPMULLD         Y2, Y12, Y2
-        VPMULLD         Y5, Y12, Y5
-        VPADDD          Y0, Y2, Y0
-        VPADDD          Y3, Y5, Y3
-        rol32_17           (Y0)
-        rol32_17           (Y3)
-        VPMULLD         Y0, Y13, Y0
-        VPMULLD         Y3, Y13, Y3
-
-        ADDQ            $128, SI
-
-        VPSRLD          $15, Y0, Y1
-        VPSRLD          $15, Y3, Y4
-        VPXOR           Y0, Y1, Y0
-        VPXOR           Y3, Y4, Y3
-        VPMULLD         Y0, Y11, Y0
-        VPMULLD         Y3, Y11, Y3
-        VPSRLD          $13, Y0, Y1
-        VPSRLD          $13, Y3, Y4
-        VPXOR           Y0, Y1, Y0
-        VPXOR           Y3, Y4, Y3
-        VPMULLD         Y0, Y12, Y0
-        VPMULLD         Y3, Y12, Y3
-        VPSRLD          $16, Y0, Y1
-        VPSRLD          $16, Y3, Y4
-        VPXOR           Y0, Y1, Y0
-        VPXOR           Y3, Y4, Y3
-
-        VPERMD          Y0, Y7, Y0
-        VPERMD          Y3, Y7, Y3
-
-        VMOVDQU         Y0, (DI)
-        VMOVDQU         Y3, 32(DI)
-        ADDQ            $64, DI
         SUBQ            $1, BX
         JZ              exit_avx
         JMP             loop_avx
@@ -916,4 +773,3 @@ loop_avx:
 exit_avx:
         VZEROUPPER
         RET
-        
