@@ -13,7 +13,7 @@ const (
 	prime32_3 = 3266489917
 	prime32_4 = 668265263
 	prime32_5 = 374761393
-    
+
 	prime64_1 = 11400714785074694791
 	prime64_2 = 14029467366897019727
 	prime64_3 = 1609587929392839161
@@ -184,4 +184,3 @@ func rol64_24(x uint64) uint64 { return bits.RotateLeft64(x, 24) }
 func rol64_27(x uint64) uint64 { return bits.RotateLeft64(x, 27) }
 func rol64_31(x uint64) uint64 { return bits.RotateLeft64(x, 31) }
 func rol64_49(x uint64) uint64 { return bits.RotateLeft64(x, 49) }
-

@@ -318,7 +318,7 @@ func TestXXhash32Uint32SliceAVX2(T *testing.T) {
 }
 
 func TestXXhash32Uint32SliceAVX512(T *testing.T) {
-	if !util.UseAVX512_DQ {
+	if !util.UseAVX512_F {
 		T.SkipNow()
 	}
 	for _, c := range xxhash32Uint32Cases {
@@ -364,7 +364,7 @@ func BenchmarkXXHash32Uint32SliceAVX2(B *testing.B) {
 }
 
 func BenchmarkXXHash32Uint32SliceAVX512(B *testing.B) {
-	if !util.UseAVX512_DQ {
+	if !util.UseAVX512_F {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
@@ -439,7 +439,7 @@ func TestXXHash32Uint64SliceAVX2(T *testing.T) {
 }
 
 func TestXXHash32Uint64SliceAVX512(T *testing.T) {
-	if !util.UseAVX512_DQ {
+	if !util.UseAVX512_F {
 		T.SkipNow()
 	}
 	for _, c := range xxhash32Uint64Cases {
@@ -485,7 +485,7 @@ func BenchmarkXXHash32Uint64SliceAVX2(B *testing.B) {
 }
 
 func BenchmarkXXHash32Uint64SliceAVX512(B *testing.B) {
-	if !util.UseAVX512_DQ {
+	if !util.UseAVX512_F {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
@@ -941,23 +941,6 @@ func TestXXH3Uint64SliceAVX512(T *testing.T) {
 	}
 }
 
-func TestXXH3Uint64SliceAVX512Unroll(T *testing.T) {
-	if !util.UseAVX512_DQ {
-		T.SkipNow()
-	}
-	for _, c := range xxh3Uint64Cases {
-		// pre-allocate the result slice
-		res := make([]uint64, len(c.slice))
-		xxh3Uint64SliceAVX512Unroll(c.slice, res)
-		if got, want := len(res), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
-		}
-		if !reflect.DeepEqual(res, c.result) {
-			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
-		}
-	}
-}
-
 func BenchmarkXXH3Uint64SliceGeneric(B *testing.B) {
 	for _, n := range hashBenchmarkSizes {
 		a := randUint64Slice(n.l)
@@ -998,22 +981,6 @@ func BenchmarkXXH3Uint64SliceAVX512(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))
 			for i := 0; i < B.N; i++ {
 				xxh3Uint64SliceAVX512(a, res)
-			}
-		})
-	}
-}
-
-func BenchmarkXXH3Uint64SliceAVX512Unroll(B *testing.B) {
-	if !util.UseAVX512_DQ {
-		B.SkipNow()
-	}
-	for _, n := range hashBenchmarkSizes {
-		a := randUint64Slice(n.l)
-		res := make([]uint64, n.l)
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(8 * int64(n.l))
-			for i := 0; i < B.N; i++ {
-				xxh3Uint64SliceAVX512Unroll(a, res)
 			}
 		})
 	}
