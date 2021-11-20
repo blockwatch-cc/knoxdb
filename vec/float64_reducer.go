@@ -38,8 +38,8 @@ func (b *Float64Reducer) Add(val float64) {
 		b.min = val
 		b.max = val
 	} else {
-		b.min = util.MinFloat64(b.min, val)
-		b.max = util.MaxFloat64(b.max, val)
+		b.min = util.MinF64(b.min, val)
+		b.max = util.MaxF64(b.max, val)
 	}
 	b.sum += val
 	b.n++
