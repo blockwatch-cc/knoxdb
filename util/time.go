@@ -53,6 +53,10 @@ func NewTime(t time.Time) Time {
 	return Time{tm: t}
 }
 
+func Date(year int, month time.Month, day, hour, min, sec, nsec int, loc *time.Location) Time {
+	return Time{tm: time.Date(year, month, day, hour, min, sec, nsec, loc)}
+}
+
 func Now() Time {
 	return NewTime(time.Now())
 }
@@ -223,11 +227,11 @@ func (f Time) String() string {
 	case TimeFormatUnix:
 		return strconv.FormatInt(f.Time().Unix(), 10)
 	case TimeFormatUnixMilli:
-		return strconv.FormatInt(f.Time().UnixNano()/1000, 10)
+		return strconv.FormatInt(f.UnixMicro(), 10)
 	case TimeFormatUnixMicro:
-		return strconv.FormatInt(f.Time().UnixNano()/1000000, 10)
+		return strconv.FormatInt(f.UnixMilli(), 10)
 	case TimeFormatUnixNano:
-		return strconv.FormatInt(f.Time().UnixNano(), 10)
+		return strconv.FormatInt(f.UnixNano(), 10)
 	default:
 		fs, ok := FormatMap[f.format]
 		if !ok {
@@ -266,7 +270,7 @@ func (f Time) MarshalJSON() ([]byte, error) {
 		return []byte(s), nil
 	}
 
-	return []byte("\"" + s + "\""), nil
+	return []byte(strconv.Quote(s)), nil
 }
 
 func (t Time) IsZero() bool {
@@ -285,6 +289,14 @@ func (t Time) Unix() int64 {
 	return t.Time().Unix()
 }
 
+func (t Time) Date() (int, time.Month, int) {
+	return t.Time().Date()
+}
+
+func (t Time) Year() int {
+	return t.Time().Year()
+}
+
 func (t Time) Truncate(d time.Duration) Time {
 	return Time{
 		tm:     t.Time().Truncate(d),
@@ -299,8 +311,27 @@ func (t Time) Add(d time.Duration) Time {
 	}
 }
 
+func (t Time) AddDate(years int, months int, days int) Time {
+	return Time{
+		tm:     t.Time().AddDate(years, months, days),
+		format: t.format,
+	}
+}
+
 func (t Time) Equal(t2 Time) bool {
 	return t.Time().Equal(t2.Time())
+}
+
+func (t Time) UnixMilli() int64 {
+	return t.tm.UnixNano() / 1000000
+}
+
+func (t Time) UnixMicro() int64 {
+	return t.tm.UnixNano() / 1000
+}
+
+func (t Time) UnixNano() int64 {
+	return t.tm.UnixNano()
 }
 
 func UnixNonZero(t time.Time) int64 {
