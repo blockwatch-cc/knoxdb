@@ -585,6 +585,8 @@ func (t *Table) PurgeCache() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cache.Purge()
+	atomic.StoreInt64(&t.stats.PackCacheCount, 0)
+	atomic.StoreInt64(&t.stats.PackCacheSize, 0)
 	for _, idx := range t.indexes {
 		idx.PurgeCache()
 	}
