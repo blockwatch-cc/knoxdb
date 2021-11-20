@@ -72,44 +72,31 @@ func (a *DictByteArray) Elem(index int) []byte {
 }
 
 func (a *DictByteArray) Set(index int, buf []byte) {
-	// unsupported
 	panic("dict: Set unsupported")
 }
 
 func (a *DictByteArray) Append(...[]byte) ByteArray {
-	// unsupported
 	panic("dict: Append unsupported")
-	return nil
 }
 
 func (a *DictByteArray) AppendFrom(src ByteArray) ByteArray {
-	// unsupported
 	panic("dict: AppendFrom unsupported")
-	return nil
 }
 
 func (a *DictByteArray) Insert(index int, buf ...[]byte) ByteArray {
-	// unsupported
 	panic("dict: Insert unsupported")
-	return a
 }
 
 func (a *DictByteArray) InsertFrom(index int, src ByteArray) ByteArray {
-	// unsupported
 	panic("dict: InsertFrom unsupported")
-	return a
 }
 
 func (a *DictByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
-	// unsupported
 	panic("dict: Copy unsupported")
-	return a
 }
 
 func (a *DictByteArray) Delete(index, n int) ByteArray {
-	// unsupported
 	panic("dict: Delete unsupported")
-	return a
 }
 
 func (a *DictByteArray) Clear() {
@@ -149,7 +136,7 @@ func (a *DictByteArray) HeapSize() int {
 	return dictByteArraySz + len(a.dict) + len(a.offs)*8 + len(a.ptr)
 }
 
-func (a *DictByteArray) WriteTo(w io.Writer) (int, error) {
+func (a *DictByteArray) WriteTo(w io.Writer) (int64, error) {
 	w.Write([]byte{bytesDictFormat << 4})
 	count := 1
 
@@ -176,7 +163,7 @@ func (a *DictByteArray) WriteTo(w io.Writer) (int, error) {
 	}
 	olen, err := compress.IntegerArrayEncodeAll(scratch, w)
 	if err != nil {
-		return count, err
+		return int64(count), err
 	}
 	count += olen
 
@@ -199,7 +186,7 @@ func (a *DictByteArray) WriteTo(w io.Writer) (int, error) {
 	w.Write(num[:4])
 	count += 4
 
-	return count, nil
+	return int64(count), nil
 }
 
 func (a *DictByteArray) Decode(buf []byte) error {

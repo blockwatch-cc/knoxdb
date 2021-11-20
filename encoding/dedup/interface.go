@@ -29,7 +29,7 @@ type ByteArray interface {
 
 	MaxEncodedSize() int
 	HeapSize() int
-	WriteTo(io.Writer) (int, error)
+	WriteTo(io.Writer) (int64, error)
 	Decode([]byte) error
 
 	Materialize() ByteArray // unpack to native [][]byte slice
