@@ -163,9 +163,21 @@ func XXHash32Uint32Slice(src []uint32, res []uint32, seed uint32) []uint32 {
 	return res
 }
 
+func XXHash32Int32Slice(src []int32, res []uint32, seed uint32) []uint32 {
+	res = ensureSizeUint32(res, len(src))
+	xxhash32Int32Slice(src, res, seed)
+	return res
+}
+
 func XXHash32Uint64Slice(src []uint64, res []uint32, seed uint32) []uint32 {
 	res = ensureSizeUint32(res, len(src))
 	xxhash32Uint64Slice(src, res, seed)
+	return res
+}
+
+func XXHash32Int64Slice(src []int64, res []uint32, seed uint32) []uint32 {
+	res = ensureSizeUint32(res, len(src))
+	xxhash32Int64Slice(src, res, seed)
 	return res
 }
 

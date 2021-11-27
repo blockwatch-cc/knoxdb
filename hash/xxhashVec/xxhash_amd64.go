@@ -69,6 +69,17 @@ func xxhash32Uint32Slice(src []uint32, res []uint32, seed uint32) {
 	}
 }
 
+func xxhash32Int32Slice(src []int32, res []uint32, seed uint32) {
+	switch {
+	case util.UseAVX512_F:
+		xxhash32Int32SliceAVX512(src, res, seed)
+	case util.UseAVX2:
+		xxhash32Int32SliceAVX2(src, res, seed)
+	default:
+		xxhash32Int32SliceGeneric(src, res, seed)
+	}
+}
+
 func xxhash32Uint64Slice(src []uint64, res []uint32, seed uint32) {
 	switch {
 	case util.UseAVX512_F:
@@ -77,6 +88,17 @@ func xxhash32Uint64Slice(src []uint64, res []uint32, seed uint32) {
 		xxhash32Uint64SliceAVX2(src, res, seed)
 	default:
 		xxhash32Uint64SliceGeneric(src, res, seed)
+	}
+}
+
+func xxhash32Int64Slice(src []int64, res []uint32, seed uint32) {
+	switch {
+	case util.UseAVX512_F:
+		xxhash32Int64SliceAVX512(src, res, seed)
+	case util.UseAVX2:
+		xxhash32Int64SliceAVX2(src, res, seed)
+	default:
+		xxhash32Int64SliceGeneric(src, res, seed)
 	}
 }
 
