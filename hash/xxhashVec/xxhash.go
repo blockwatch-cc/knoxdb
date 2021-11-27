@@ -38,7 +38,37 @@ func XXHash32Uint32(val uint32, seed uint32) uint32 {
 	return h
 }
 
+func XXHash32Int32(val int32, seed uint32) uint32 {
+	h := seed + prime32_5 + 4
+	h += uint32(val) * prime32_3
+	h = rol32_17(h) * prime32_4
+
+	h ^= h >> 15
+	h *= prime32_2
+	h ^= h >> 13
+	h *= prime32_3
+	h ^= h >> 16
+
+	return h
+}
+
 func XXHash32Uint64(val uint64, seed uint32) uint32 {
+	h := seed + prime32_5 + 8
+	h += uint32(val&0xffffffff) * prime32_3
+	h = rol32_17(h) * prime32_4
+	h += uint32(val>>32) * prime32_3
+	h = rol32_17(h) * prime32_4
+
+	h ^= h >> 15
+	h *= prime32_2
+	h ^= h >> 13
+	h *= prime32_3
+	h ^= h >> 16
+
+	return h
+}
+
+func XXHash32Int64(val int64, seed uint32) uint32 {
 	h := seed + prime32_5 + 8
 	h += uint32(val&0xffffffff) * prime32_3
 	h = rol32_17(h) * prime32_4

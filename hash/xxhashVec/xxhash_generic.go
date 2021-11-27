@@ -20,7 +20,43 @@ func xxhash32Uint32SliceGeneric(src, res []uint32, seed uint32) {
 	}
 }
 
+func xxhash32Int32SliceGeneric(src []int32, res []uint32, seed uint32) {
+	for i, val := range src {
+
+		h := seed + prime32_5 + 4
+		h += uint32(val) * prime32_3
+		h = rol32_17(h) * prime32_4
+
+		h ^= h >> 15
+		h *= prime32_2
+		h ^= h >> 13
+		h *= prime32_3
+		h ^= h >> 16
+
+		res[i] = h
+	}
+}
+
 func xxhash32Uint64SliceGeneric(src []uint64, res []uint32, seed uint32) {
+	for i, val := range src {
+
+		h := seed + prime32_5 + 8
+		h += uint32(val&0xffffffff) * prime32_3
+		h = rol32_17(h) * prime32_4
+		h += uint32(val>>32) * prime32_3
+		h = rol32_17(h) * prime32_4
+
+		h ^= h >> 15
+		h *= prime32_2
+		h ^= h >> 13
+		h *= prime32_3
+		h ^= h >> 16
+
+		res[i] = h
+	}
+}
+
+func xxhash32Int64SliceGeneric(src []int64, res []uint32, seed uint32) {
 	for i, val := range src {
 
 		h := seed + prime32_5 + 8

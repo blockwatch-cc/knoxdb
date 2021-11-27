@@ -35,10 +35,26 @@ func randUint32Slice(n int) []uint32 {
 	return s
 }
 
+func randInt32Slice(n int) []int32 {
+	s := make([]int32, n)
+	for i := range s {
+		s[i] = rand.Int31()
+	}
+	return s
+}
+
 func randUint64Slice(n int) []uint64 {
 	s := make([]uint64, n)
 	for i := range s {
 		s[i] = rand.Uint64()
+	}
+	return s
+}
+
+func randInt64Slice(n int) []int64 {
+	s := make([]int64, n)
+	for i := range s {
+		s[i] = rand.Int63()
 	}
 	return s
 }
@@ -49,9 +65,21 @@ type XXHash32Uint32Test struct {
 	result []uint32
 }
 
+type XXHash32Int32Test struct {
+	name   string
+	slice  []int32
+	result []uint32
+}
+
 type XXHash32Uint64Test struct {
 	name   string
 	slice  []uint64
+	result []uint32
+}
+
+type XXHash32Int64Test struct {
+	name   string
+	slice  []int64
 	result []uint32
 }
 
@@ -61,9 +89,21 @@ type XXHash64Uint32Test struct {
 	result []uint64
 }
 
+type XXHash64Int32Test struct {
+	name   string
+	slice  []int32
+	result []uint64
+}
+
 type XXHash64Uint64Test struct {
 	name   string
 	slice  []uint64
+	result []uint64
+}
+
+type XXHash64Int64Test struct {
+	name   string
+	slice  []int64
 	result []uint64
 }
 
@@ -135,6 +175,47 @@ func CreateXXHash32Uint32TestCase(name string, input [][]byte, result []uint32, 
 	}
 }
 
+// creates an XXHash32 test case for int32 input date from the given slice
+// Parameters:
+//  - name: desired name of the test case
+//  - slice: the slice for constructing the test case
+//  - result: result for the given slice
+//  - len: desired length of the test case
+func CreateXXHash32Int32TestCase(name string, input [][]byte, result []uint32, length int) XXHash32Int32Test {
+	if len(result) != len(input) {
+		panic("CreateXXHash32Int32TestCase: length of slice and length of result does not match")
+	}
+
+	// Create input slice from bytes
+	slice := make([]int32, len(input))
+	for i, v := range input {
+		slice[i] = int32(binary.LittleEndian.Uint32(v[0:4]))
+	}
+
+	// create new slice by concat of given slice
+	// we make it a little bit longer check buffer overruns
+	var new_slice []int32
+	var l int = length
+	for l > 0 {
+		new_slice = append(new_slice, slice...)
+		l -= len(slice)
+	}
+
+	// create new result by concat of given result
+	var new_result []uint32
+	l = length
+	for l > 0 {
+		new_result = append(new_result, result...)
+		l -= len(result)
+	}
+
+	return XXHash32Int32Test{
+		name:   name,
+		slice:  new_slice[:length],
+		result: new_result[:length],
+	}
+}
+
 // creates an XXHash32 test case for uint64 input date from the given slice
 // Parameters:
 //  - name: desired name of the test case
@@ -170,6 +251,47 @@ func CreateXXHash32Uint64TestCase(name string, input [][]byte, result []uint32, 
 	}
 
 	return XXHash32Uint64Test{
+		name:   name,
+		slice:  new_slice[:length],
+		result: new_result[:length],
+	}
+}
+
+// creates an XXHash32 test case for int64 input date from the given slice
+// Parameters:
+//  - name: desired name of the test case
+//  - slice: the slice for constructing the test case
+//  - result: result for the given slice
+//  - len: desired length of the test case
+func CreateXXHash32Int64TestCase(name string, input [][]byte, result []uint32, length int) XXHash32Int64Test {
+	if len(result) != len(input) {
+		panic("CreateXXHash32Int64TestCase: length of slice and length of result does not match")
+	}
+
+	// Create input slice from bytes
+	slice := make([]int64, len(input))
+	for i, v := range input {
+		slice[i] = int64(binary.LittleEndian.Uint64(v[0:8]))
+	}
+
+	// create new slice by concat of given slice
+	// we make it a little bit longer check buffer overruns
+	var new_slice []int64
+	var l int = length
+	for l > 0 {
+		new_slice = append(new_slice, slice...)
+		l -= len(slice)
+	}
+
+	// create new result by concat of given result
+	var new_result []uint32
+	l = length
+	for l > 0 {
+		new_result = append(new_result, result...)
+		l -= len(result)
+	}
+
+	return XXHash32Int64Test{
 		name:   name,
 		slice:  new_slice[:length],
 		result: new_result[:length],
@@ -379,6 +501,127 @@ func BenchmarkXXHash32Uint32SliceAVX512(B *testing.B) {
 	}
 }
 
+/*************** xxhash32Int32 *******************************************************/
+
+func TestXXHash32Int32(T *testing.T) {
+	for i, c := range xxhashInput {
+		if got, want := XXHash32Int32(int32(binary.LittleEndian.Uint32(c[0:4])), 0), xxhash32Uint32Result[i]; got != want {
+			T.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
+		}
+	}
+}
+
+var xxhash32Int32Cases = []XXHash32Int32Test{
+	{
+		name:   "l0",
+		slice:  make([]int32, 0),
+		result: []uint32{},
+	}, {
+		name:   "nil",
+		slice:  nil,
+		result: []uint32{},
+	},
+	CreateXXHash32Int32TestCase("l7", xxhashInput, xxhash32Uint32Result, 7),
+	CreateXXHash32Int32TestCase("l8", xxhashInput, xxhash32Uint32Result, 8),
+	CreateXXHash32Int32TestCase("l15", xxhashInput, xxhash32Uint32Result, 15),
+	CreateXXHash32Int32TestCase("l16", xxhashInput, xxhash32Uint32Result, 16),
+	CreateXXHash32Int32TestCase("l31", xxhashInput, xxhash32Uint32Result, 31),
+	CreateXXHash32Int32TestCase("l32", xxhashInput, xxhash32Uint32Result, 32),
+}
+
+func TestXXHash32Int32SliceGeneric(T *testing.T) {
+	for _, c := range xxhash32Int32Cases {
+		// pre-allocate the result slice
+		res := make([]uint32, len(c.slice))
+		xxhash32Int32SliceGeneric(c.slice, res, 0)
+		if got, want := len(res), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(res, c.result) {
+			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+		}
+	}
+}
+
+func TestXXhash32Int32SliceAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range xxhash32Int32Cases {
+		// pre-allocate the result slice
+		res := make([]uint32, len(c.slice))
+		xxhash32Int32SliceAVX2(c.slice, res, 0)
+		if got, want := len(res), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(res, c.result) {
+			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+		}
+	}
+}
+
+func TestXXhash32Int32SliceAVX512(T *testing.T) {
+	if !util.UseAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range xxhash32Int32Cases {
+		// pre-allocate the result slice
+		res := make([]uint32, len(c.slice))
+		xxhash32Int32SliceAVX512(c.slice, res, 0)
+		if got, want := len(res), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(res, c.result) {
+			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+		}
+	}
+}
+
+func BenchmarkXXHash32Int32SliceGeneric(B *testing.B) {
+	for _, n := range hashBenchmarkSizes {
+		a := randInt32Slice(n.l)
+		res := make([]uint32, n.l)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * 4))
+			for i := 0; i < B.N; i++ {
+				xxhash32Int32SliceGeneric(a, res, 0)
+			}
+		})
+	}
+}
+
+func BenchmarkXXHash32Int32SliceAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range hashBenchmarkSizes {
+		a := randInt32Slice(n.l)
+		res := make([]uint32, n.l)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * 4))
+			for i := 0; i < B.N; i++ {
+				xxhash32Int32SliceAVX2(a, res, 0)
+			}
+		})
+	}
+}
+
+func BenchmarkXXHash32Int32SliceAVX512(B *testing.B) {
+	if !util.UseAVX512_F {
+		B.SkipNow()
+	}
+	for _, n := range hashBenchmarkSizes {
+		a := randInt32Slice(n.l)
+		res := make([]uint32, n.l)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * 4))
+			for i := 0; i < B.N; i++ {
+				xxhash32Int32SliceAVX512(a, res, 0)
+			}
+		})
+	}
+}
+
 /*************** xxhash32Uint64 *******************************************************/
 
 func TestXXHash32Uint64(T *testing.T) {
@@ -495,6 +738,127 @@ func BenchmarkXXHash32Uint64SliceAVX512(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))
 			for i := 0; i < B.N; i++ {
 				xxhash32Uint64SliceAVX512(a, res, 0)
+			}
+		})
+	}
+}
+
+/*************** xxhash32Int64 *******************************************************/
+
+func TestXXHash32Int64(T *testing.T) {
+	for i, c := range xxhashInput {
+		if got, want := XXHash32Int64(int64(binary.LittleEndian.Uint64(c[0:8])), 0), xxhash32Uint64Result[i]; got != want {
+			T.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
+		}
+	}
+}
+
+var xxhash32Int64Cases = []XXHash32Int64Test{
+	{
+		name:   "l0",
+		slice:  make([]int64, 0),
+		result: []uint32{},
+	}, {
+		name:   "nil",
+		slice:  nil,
+		result: []uint32{},
+	},
+	CreateXXHash32Int64TestCase("l7", xxhashInput, xxhash32Uint64Result, 7),
+	CreateXXHash32Int64TestCase("l8", xxhashInput, xxhash32Uint64Result, 8),
+	CreateXXHash32Int64TestCase("l15", xxhashInput, xxhash32Uint64Result, 15),
+	CreateXXHash32Int64TestCase("l16", xxhashInput, xxhash32Uint64Result, 16),
+	CreateXXHash32Int64TestCase("l31", xxhashInput, xxhash32Uint64Result, 31),
+	CreateXXHash32Int64TestCase("l32", xxhashInput, xxhash32Uint64Result, 32),
+}
+
+func TestXXHash32Int64SliceGeneric(T *testing.T) {
+	for _, c := range xxhash32Int64Cases {
+		// pre-allocate the result slice
+		res := make([]uint32, len(c.slice))
+		xxhash32Int64SliceGeneric(c.slice, res, 0)
+		if got, want := len(res), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(res, c.result) {
+			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+		}
+	}
+}
+
+func TestXXhash32Int64SliceAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range xxhash32Int64Cases {
+		// pre-allocate the result slice
+		res := make([]uint32, len(c.slice))
+		xxhash32Int64SliceAVX2(c.slice, res, 0)
+		if got, want := len(res), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(res, c.result) {
+			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+		}
+	}
+}
+
+func TestXXhash32Int64SliceAVX512(T *testing.T) {
+	if !util.UseAVX512_F {
+		T.SkipNow()
+	}
+	for _, c := range xxhash32Int64Cases {
+		// pre-allocate the result slice
+		res := make([]uint32, len(c.slice))
+		xxhash32Int64SliceAVX512(c.slice, res, 0)
+		if got, want := len(res), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(res, c.result) {
+			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+		}
+	}
+}
+
+func BenchmarkXXHash32Int64SliceGeneric(B *testing.B) {
+	for _, n := range hashBenchmarkSizes {
+		a := randInt64Slice(n.l)
+		res := make([]uint32, n.l)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * 4))
+			for i := 0; i < B.N; i++ {
+				xxhash32Int64SliceGeneric(a, res, 0)
+			}
+		})
+	}
+}
+
+func BenchmarkXXHash32Int64SliceAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range hashBenchmarkSizes {
+		a := randInt64Slice(n.l)
+		res := make([]uint32, n.l)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * 4))
+			for i := 0; i < B.N; i++ {
+				xxhash32Int64SliceAVX2(a, res, 0)
+			}
+		})
+	}
+}
+
+func BenchmarkXXHash32Int64SliceAVX512(B *testing.B) {
+	if !util.UseAVX512_F {
+		B.SkipNow()
+	}
+	for _, n := range hashBenchmarkSizes {
+		a := randInt64Slice(n.l)
+		res := make([]uint32, n.l)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * 4))
+			for i := 0; i < B.N; i++ {
+				xxhash32Int64SliceAVX512(a, res, 0)
 			}
 		})
 	}
