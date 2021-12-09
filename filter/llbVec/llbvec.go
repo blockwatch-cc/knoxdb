@@ -111,16 +111,32 @@ func (llb *LogLogBeta) AddUint32(val uint32) {
 		llb.AddHash(xxhashVec.XXHash32Uint32(val, 0))
 }
 
+func (llb *LogLogBeta) AddInt32(val int32) {
+		llb.AddHash(xxhashVec.XXHash32Int32(val, 0))
+}
+
 func (llb *LogLogBeta) AddUint64(val uint64) {
 		llb.AddHash(xxhashVec.XXHash32Uint64(val, 0))
+}
+
+func (llb *LogLogBeta) AddInt64(val int64) {
+		llb.AddHash(xxhashVec.XXHash32Int64(val, 0))
 }
 
 func (llb *LogLogBeta) AddManyUint32(data []uint32) {
     filterAddManyUint32(llb, data, 0)
 }
 
+func (llb *LogLogBeta) AddManyInt32(data []int32) {
+    filterAddManyInt32(llb, data, 0)
+}
+
 func (llb *LogLogBeta) AddManyUint64(data []uint64) {
     filterAddManyUint64(llb, data, 0)
+}
+
+func (llb *LogLogBeta) AddManyInt64(data []int64) {
+    filterAddManyInt64(llb, data, 0)
 }
 
 // Cardinality returns the number of unique elements added to the sketch

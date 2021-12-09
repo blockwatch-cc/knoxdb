@@ -13,14 +13,26 @@ import (
 // go:noescape
 func filterAddManyUint32AVX2Core(f LogLogBeta, data []uint32, seed uint32)
 
-// // go:noescape
-// func filterAddManyUint32AVX512Core(f LogLogBeta, data []uint32, seed uint32)
+// go:noescape
+func filterAddManyUint32AVX512Core(f LogLogBeta, data []uint32, seed uint32)
 
-// // go:noescape
-// func filterAddManyUint64AVX2Core(f LogLogBeta, data []uint64, seed uint32)
+// go:noescape
+func filterAddManyInt32AVX2Core(f LogLogBeta, data []int32, seed uint32)
 
-// // go:noescape
-// func filterAddManyUint64AVX512Core(f LogLogBeta, data []uint64, seed uint32)
+// go:noescape
+func filterAddManyInt32AVX512Core(f LogLogBeta, data []int32, seed uint32)
+
+// go:noescape
+func filterAddManyUint64AVX2Core(f LogLogBeta, data []uint64, seed uint32)
+
+// go:noescape
+func filterAddManyUint64AVX512Core(f LogLogBeta, data []uint64, seed uint32)
+
+// go:noescape
+func filterAddManyInt64AVX2Core(f LogLogBeta, data []int64, seed uint32)
+
+// go:noescape
+func filterAddManyInt64AVX512Core(f LogLogBeta, data []int64, seed uint32)
 
 // // go:noescape
 // func filterCardinalityAVX2(f LogLogBeta)
@@ -30,8 +42,8 @@ func filterAddManyUint32AVX2Core(f LogLogBeta, data []uint32, seed uint32)
 
 func filterAddManyUint32(f *LogLogBeta, data []uint32, seed uint32) {
 	switch {
-//	case util.UseAVX512_CD:
-//        filterAddManyUint32AVX512(*f, data, seed)   
+	case util.UseAVX512_CD:
+        filterAddManyUint32AVX512(*f, data, seed)   
 	case util.UseAVX2:
         filterAddManyUint32AVX2(*f, data, seed)	
     default:
@@ -39,14 +51,36 @@ func filterAddManyUint32(f *LogLogBeta, data []uint32, seed uint32) {
 	}
 }
 
+func filterAddManyInt32(f *LogLogBeta, data []int32, seed uint32) {
+	switch {
+	case util.UseAVX512_CD:
+        filterAddManyInt32AVX512(*f, data, seed)   
+	case util.UseAVX2:
+        filterAddManyInt32AVX2(*f, data, seed)	
+    default:
+        filterAddManyInt32Generic(*f, data, seed)
+	}
+}
+
 func filterAddManyUint64(f *LogLogBeta, data []uint64, seed uint32) {
 	switch {
-//	case util.UseAVX512_CD:
-//        filterAddManyUint64AVX512(*f, data, seed)   
-//	case util.UseAVX2:
-//        filterAddManyUint64AVX2(*f, data, seed)	
+	case util.UseAVX512_CD:
+        filterAddManyUint64AVX512(*f, data, seed)   
+	case util.UseAVX2:
+        filterAddManyUint64AVX2(*f, data, seed)	
     default:
         filterAddManyUint64Generic(*f, data, seed)
+	}
+}
+
+func filterAddManyInt64(f *LogLogBeta, data []int64, seed uint32) {
+	switch {
+	case util.UseAVX512_CD:
+        filterAddManyInt64AVX512(*f, data, seed)   
+	case util.UseAVX2:
+        filterAddManyInt64AVX2(*f, data, seed)	
+    default:
+        filterAddManyInt64Generic(*f, data, seed)
 	}
 }
 
@@ -65,4 +99,46 @@ func filterAddManyUint32AVX2(f LogLogBeta, data []uint32, seed uint32) {
 	len_head := len(data) & 0x7ffffffffffffff8
 	filterAddManyUint32AVX2Core(f, data, seed)
 	filterAddManyUint32Generic(f, data[len_head:], seed)
+}
+
+func filterAddManyUint32AVX512(f LogLogBeta, data []uint32, seed uint32) {
+	len_head := len(data) & 0x7ffffffffffffff0
+	filterAddManyUint32AVX512Core(f, data, seed)
+	filterAddManyUint32Generic(f, data[len_head:], seed)
+}
+
+func filterAddManyInt32AVX2(f LogLogBeta, data []int32, seed uint32) {
+	len_head := len(data) & 0x7ffffffffffffff8
+	filterAddManyInt32AVX2Core(f, data, seed)
+	filterAddManyInt32Generic(f, data[len_head:], seed)
+}
+
+func filterAddManyInt32AVX512(f LogLogBeta, data []int32, seed uint32) {
+	len_head := len(data) & 0x7ffffffffffffff0
+	filterAddManyInt32AVX512Core(f, data, seed)
+	filterAddManyInt32Generic(f, data[len_head:], seed)
+}
+
+func filterAddManyUint64AVX2(f LogLogBeta, data []uint64, seed uint32) {
+	len_head := len(data) & 0x7ffffffffffffff8
+	filterAddManyUint64AVX2Core(f, data, seed)
+	filterAddManyUint64Generic(f, data[len_head:], seed)
+}
+
+func filterAddManyUint64AVX512(f LogLogBeta, data []uint64, seed uint32) {
+	len_head := len(data) & 0x7ffffffffffffff0
+	filterAddManyUint64AVX512Core(f, data, seed)
+	filterAddManyUint64Generic(f, data[len_head:], seed)
+}
+
+func filterAddManyInt64AVX2(f LogLogBeta, data []int64, seed uint32) {
+	len_head := len(data) & 0x7ffffffffffffff8
+	filterAddManyInt64AVX2Core(f, data, seed)
+	filterAddManyInt64Generic(f, data[len_head:], seed)
+}
+
+func filterAddManyInt64AVX512(f LogLogBeta, data []int64, seed uint32) {
+	len_head := len(data) & 0x7ffffffffffffff0
+	filterAddManyInt64AVX512Core(f, data, seed)
+	filterAddManyInt64Generic(f, data[len_head:], seed)
 }

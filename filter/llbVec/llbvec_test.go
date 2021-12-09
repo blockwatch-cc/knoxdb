@@ -142,7 +142,7 @@ func TestCardinalityManyUint32AVX2(t *testing.T) {
 		}
 	}
 }
-/*
+
 func TestCardinalityManyUint32AVX512(t *testing.T) {
 	if !util.UseAVX512_CD {
 		t.SkipNow()
@@ -172,7 +172,94 @@ func TestCardinalityManyUint32AVX512(t *testing.T) {
 		}
 	}
 }
-*/
+
+func TestCardinalityManyInt32Generic(t *testing.T) {
+	rand.Seed(0)
+	llb := NewFilter()
+	step := 10000
+	unique := map[int32]bool{}
+	slice := make([]int32, step)
+	var j int
+	for i := 0; i < 100000; i++ {
+		val := int32(rand.Intn(i + step))
+		unique[val] = true
+		slice[j] = val
+		j++
+
+		if j%step == 0 {
+			exact := uint64(len(unique))
+			filterAddManyInt32Generic(*llb, slice, 0)
+			j = 0
+			res := uint64(llb.Cardinality())
+
+			ratio := 100 * estimateError(res, exact)
+			if ratio > 2 {
+				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
+			}
+		}
+	}
+}
+
+func TestCardinalityManyInt32AVX2(t *testing.T) {
+	if !util.UseAVX2 {
+		t.SkipNow()
+	}
+	rand.Seed(0)
+	llb := NewFilter()
+	step := 10000
+	unique := map[int32]bool{}
+	slice := make([]int32, step)
+	var j int
+	for i := 0; i < 100000; i++ {
+		val := int32(rand.Intn(i + step))
+		unique[val] = true
+		slice[j] = val
+		j++
+
+		if j%step == 0 {
+			exact := uint64(len(unique))
+			filterAddManyInt32AVX2(*llb, slice, 0)
+			j = 0
+			res := uint64(llb.Cardinality())
+
+			ratio := 100 * estimateError(res, exact)
+			if ratio > 2 {
+				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
+			}
+		}
+	}
+}
+
+func TestCardinalityManyInt32AVX512(t *testing.T) {
+	if !util.UseAVX512_CD {
+		t.SkipNow()
+	}
+	rand.Seed(0)
+	llb := NewFilter()
+	step := 10000
+	unique := map[int32]bool{}
+	slice := make([]int32, step)
+	var j int
+	for i := 0; i < 100000; i++ {
+		val := int32(rand.Intn(i + step))
+		unique[val] = true
+		slice[j] = val
+		j++
+
+		if j%step == 0 {
+			exact := uint64(len(unique))
+			filterAddManyInt32AVX512(*llb, slice, 0)
+			j = 0
+			res := uint64(llb.Cardinality())
+
+			ratio := 100 * estimateError(res, exact)
+			if ratio > 2 {
+				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
+			}
+		}
+	}
+}
+
 func TestCardinalityManyUint64Generic(t *testing.T) {
 	rand.Seed(0)
 	llb := NewFilter()
@@ -199,7 +286,7 @@ func TestCardinalityManyUint64Generic(t *testing.T) {
 		}
 	}
 }
-/*
+
 func TestCardinalityManyUint64AVX2(t *testing.T) {
 	if !util.UseAVX2 {
 		t.SkipNow()
@@ -229,8 +316,7 @@ func TestCardinalityManyUint64AVX2(t *testing.T) {
 		}
 	}
 }
-*/
-/*
+
 func TestCardinalityManyUint64AVX512(t *testing.T) {
 	if !util.UseAVX512_CD {
 		t.SkipNow()
@@ -260,7 +346,94 @@ func TestCardinalityManyUint64AVX512(t *testing.T) {
 		}
 	}
 }
-*/
+
+func TestCardinalityManyInt64Generic(t *testing.T) {
+	rand.Seed(0)
+	llb := NewFilter()
+	step := 10000
+	unique := map[int64]bool{}
+	slice := make([]int64, step)
+	var j int
+	for i := 0; i < 100000; i++ {
+		val := int64(rand.Intn(i + step))
+		unique[val] = true
+		slice[j] = val
+		j++
+
+		if j%step == 0 {
+			exact := uint64(len(unique))
+			filterAddManyInt64Generic(*llb, slice, 0)
+			j = 0
+			res := uint64(llb.Cardinality())
+
+			ratio := 100 * estimateError(res, exact)
+			if ratio > 2 {
+				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
+			}
+		}
+	}
+}
+
+func TestCardinalityManyInt64AVX2(t *testing.T) {
+	if !util.UseAVX2 {
+		t.SkipNow()
+	}
+	rand.Seed(0)
+	llb := NewFilter()
+	step := 10000
+	unique := map[int64]bool{}
+	slice := make([]int64, step)
+	var j int
+	for i := 0; i < 100000; i++ {
+		val := int64(rand.Intn(i + step))
+		unique[val] = true
+		slice[j] = val
+		j++
+
+		if j%step == 0 {
+			exact := uint64(len(unique))
+			filterAddManyInt64AVX2(*llb, slice, 0)
+			j = 0
+			res := uint64(llb.Cardinality())
+
+			ratio := 100 * estimateError(res, exact)
+			if ratio > 2 {
+				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
+			}
+		}
+	}
+}
+
+func TestCardinalityManyInt64AVX512(t *testing.T) {
+	if !util.UseAVX512_CD {
+		t.SkipNow()
+	}
+	rand.Seed(0)
+	llb := NewFilter()
+	step := 10000
+	unique := map[int64]bool{}
+	slice := make([]int64, step)
+	var j int
+	for i := 0; i < 100000; i++ {
+		val := int64(rand.Intn(i + step))
+		unique[val] = true
+		slice[j] = val
+		j++
+
+		if j%step == 0 {
+			exact := uint64(len(unique))
+			filterAddManyInt64AVX512(*llb, slice, 0)
+			j = 0
+			res := uint64(llb.Cardinality())
+
+			ratio := 100 * estimateError(res, exact)
+			if ratio > 2 {
+				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
+			}
+		}
+	}
+}
+
 func TestMerge(t *testing.T) {
 	llb1 := NewFilter()
 	llb2 := NewFilter()
@@ -341,7 +514,6 @@ func Benchmark_FilterAddManyUint32Generic(b *testing.B) {
 	for _, c := range benchCases {
 		data := RandUint32(c.n)
 		b.Run(fmt.Sprintf("n=%d_p=%d", c.n, c.p), func(b *testing.B) {
-			//b.ReportAllocs()
 			b.SetBytes(int64(4 * c.n))
 			for i := 0; i < b.N; i++ {
 				filter := NewFilterWithPrecision(c.p)
@@ -358,7 +530,6 @@ func Benchmark_FilterAddManyUint32AVX2(b *testing.B) {
 	for _, c := range benchCases {
 		data := RandUint32(c.n)
 		b.Run(fmt.Sprintf("n=%d_p=%d", c.n, c.p), func(b *testing.B) {
-			//b.ReportAllocs()
 			b.SetBytes(int64(4 * c.n))
 			for i := 0; i < b.N; i++ {
 				filter := NewFilterWithPrecision(c.p)
@@ -368,12 +539,27 @@ func Benchmark_FilterAddManyUint32AVX2(b *testing.B) {
 	}
 }
 
+func Benchmark_FilterAddManyUint32AVX512(b *testing.B) {
+	if !util.UseAVX2 {
+		b.SkipNow()
+	}
+	for _, c := range benchCases {
+		data := RandUint32(c.n)
+		b.Run(fmt.Sprintf("n=%d_p=%d", c.n, c.p), func(b *testing.B) {
+			b.SetBytes(int64(4 * c.n))
+			for i := 0; i < b.N; i++ {
+				filter := NewFilterWithPrecision(c.p)
+				filterAddManyUint32AVX512(*filter, data, 0)
+			}
+		})
+	}
+}
+
 func Benchmark_FilterAddManyUint64Generic(b *testing.B) {
 	for _, c := range benchCases {
 		data := RandUint64(c.n)
 		b.Run(fmt.Sprintf("n=%d_p=%d", c.n, c.p), func(b *testing.B) {
-			//b.ReportAllocs()
-			b.SetBytes(int64(4 * c.n))
+			b.SetBytes(int64(8 * c.n))
 			for i := 0; i < b.N; i++ {
 				filter := NewFilterWithPrecision(c.p)
 				filterAddManyUint64Generic(*filter, data, 0)
@@ -381,7 +567,7 @@ func Benchmark_FilterAddManyUint64Generic(b *testing.B) {
 		})
 	}
 }
-/*
+
 func Benchmark_FilterAddManyUint64AVX2(b *testing.B) {
 	if !util.UseAVX2 {
 		b.SkipNow()
@@ -389,8 +575,7 @@ func Benchmark_FilterAddManyUint64AVX2(b *testing.B) {
 	for _, c := range benchCases {
 		data := RandUint64(c.n)
 		b.Run(fmt.Sprintf("n=%d_p=%d", c.n, c.p), func(b *testing.B) {
-			//b.ReportAllocs()
-			b.SetBytes(int64(4 * c.n))
+			b.SetBytes(int64(8 * c.n))
 			for i := 0; i < b.N; i++ {
 				filter := NewFilterWithPrecision(c.p)
 				filterAddManyUint64AVX2(*filter, data, 0)
@@ -406,8 +591,7 @@ func Benchmark_FilterAddManyUint64AVX512(b *testing.B) {
 	for _, c := range benchCases {
 		data := RandUint64(c.n)
 		b.Run(fmt.Sprintf("n=%d_p=%d", c.n, c.p), func(b *testing.B) {
-			//b.ReportAllocs()
-			b.SetBytes(int64(4 * c.n))
+			b.SetBytes(int64(8 * c.n))
 			for i := 0; i < b.N; i++ {
 				filter := NewFilterWithPrecision(c.p)
 				filterAddManyUint64AVX512(*filter, data, 0)
@@ -415,7 +599,7 @@ func Benchmark_FilterAddManyUint64AVX512(b *testing.B) {
 		})
 	}
 }
-*/
+
 func BenchmarkFilter_CardinalityGeneric(b *testing.B) {
 	for _, c := range benchCases {
 		data := RandUint32(c.n)

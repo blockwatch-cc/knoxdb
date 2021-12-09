@@ -15,7 +15,19 @@ func filterAddManyUint32Generic(llb LogLogBeta, val []uint32, seed uint32) {
 
 func filterAddManyUint64Generic(llb LogLogBeta, val []uint64, seed uint32) {
 	for _, v := range val {
-		llb.AddHash(xxhashVec.XXHash32Uint64(v, 0))
+		llb.AddHash(xxhashVec.XXHash32Uint64(v, seed))
+	}
+}
+
+func filterAddManyInt32Generic(llb LogLogBeta, val []int32, seed uint32) {
+	for _, v := range val {
+		llb.AddHash(xxhashVec.XXHash32Int32(v, seed))
+	}
+}
+
+func filterAddManyInt64Generic(llb LogLogBeta, val []int64, seed uint32) {
+	for _, v := range val {
+		llb.AddHash(xxhashVec.XXHash32Int64(v, seed))
 	}
 }
 
