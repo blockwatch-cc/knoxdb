@@ -43,55 +43,55 @@ func filterAddManyInt64AVX512Core(f LogLogBeta, data []int64, seed uint32)
 func filterAddManyUint32(f *LogLogBeta, data []uint32, seed uint32) {
 	switch {
 	case util.UseAVX512_CD:
-        filterAddManyUint32AVX512(*f, data, seed)   
+		filterAddManyUint32AVX512(*f, data, seed)
 	case util.UseAVX2:
-        filterAddManyUint32AVX2(*f, data, seed)	
-    default:
-        filterAddManyUint32Generic(*f, data, seed)
+		filterAddManyUint32AVX2(*f, data, seed)
+	default:
+		filterAddManyUint32Generic(*f, data, seed)
 	}
 }
 
 func filterAddManyInt32(f *LogLogBeta, data []int32, seed uint32) {
 	switch {
 	case util.UseAVX512_CD:
-        filterAddManyInt32AVX512(*f, data, seed)   
+		filterAddManyInt32AVX512(*f, data, seed)
 	case util.UseAVX2:
-        filterAddManyInt32AVX2(*f, data, seed)	
-    default:
-        filterAddManyInt32Generic(*f, data, seed)
+		filterAddManyInt32AVX2(*f, data, seed)
+	default:
+		filterAddManyInt32Generic(*f, data, seed)
 	}
 }
 
 func filterAddManyUint64(f *LogLogBeta, data []uint64, seed uint32) {
 	switch {
 	case util.UseAVX512_CD:
-        filterAddManyUint64AVX512(*f, data, seed)   
+		filterAddManyUint64AVX512(*f, data, seed)
 	case util.UseAVX2:
-        filterAddManyUint64AVX2(*f, data, seed)	
-    default:
-        filterAddManyUint64Generic(*f, data, seed)
+		filterAddManyUint64AVX2(*f, data, seed)
+	default:
+		filterAddManyUint64Generic(*f, data, seed)
 	}
 }
 
 func filterAddManyInt64(f *LogLogBeta, data []int64, seed uint32) {
 	switch {
 	case util.UseAVX512_CD:
-        filterAddManyInt64AVX512(*f, data, seed)   
+		filterAddManyInt64AVX512(*f, data, seed)
 	case util.UseAVX2:
-        filterAddManyInt64AVX2(*f, data, seed)	
-    default:
-        filterAddManyInt64Generic(*f, data, seed)
+		filterAddManyInt64AVX2(*f, data, seed)
+	default:
+		filterAddManyInt64Generic(*f, data, seed)
 	}
 }
 
 func filterCardinality(f *LogLogBeta) uint64 {
 	switch {
-//	case util.UseAVX512_F:
-//        return filterCardinalityAVX512(*f)   
-//	case util.UseAVX2:
-//        return filterCardinalityAVX2(*f)	
-    default:
-        return filterCardinalityGeneric(*f)
+	//	case util.UseAVX512_F:
+	//        return filterCardinalityAVX512(*f)
+	//	case util.UseAVX2:
+	//        return filterCardinalityAVX2(*f)
+	default:
+		return filterCardinalityGeneric(*f)
 	}
 }
 

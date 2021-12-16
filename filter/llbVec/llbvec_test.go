@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/encoding/block"
-	"blockwatch.cc/knoxdb/vec"
 	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 func estimateError(got, exp uint64) float64 {
@@ -54,6 +54,7 @@ func RandUint32(n int) []uint32 {
 	}
 	return b
 }
+
 /*
 func RandStringBytesMaskImprSrc(n uint32) string {
 	b := make([]byte, n)
@@ -69,7 +70,7 @@ func TestCardinality(t *testing.T) {
 	unique := map[uint64]bool{}
 
 	for i := 1; len(unique) <= 100000; i++ {
-        val := rand.Uint64()
+		val := rand.Uint64()
 		llb.AddUint64(val)
 		unique[val] = true
 
@@ -82,7 +83,7 @@ func TestCardinality(t *testing.T) {
 			if ratio > 2 {
 				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
 			}
-        }
+		}
 	}
 }
 
@@ -491,7 +492,7 @@ func TestMarshal(t *testing.T) {
 }
 
 var benchCases = []struct {
-	n int  // num values
+	n int    // num values
 	p uint32 // precision (size = 1<<p bytes)
 }{
 	{n: 32768, p: 10},
@@ -617,6 +618,7 @@ func BenchmarkFilter_CardinalityGeneric(b *testing.B) {
 		})
 	}
 }
+
 /*
 func BenchmarkFilter_CardinalityAVX2(b *testing.B) {
 	if !util.UseAVX2 {
