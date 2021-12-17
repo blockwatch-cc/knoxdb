@@ -6,7 +6,7 @@ import (
 	"math"
 	"math/bits"
 
-	//	"blockwatch.cc/knoxdb/hash/xxhash"
+	"blockwatch.cc/knoxdb/hash/xxHash32"
 	"blockwatch.cc/knoxdb/hash/xxhashVec"
 )
 
@@ -101,11 +101,9 @@ func (llb *LogLogBeta) AddHash(x uint32) {
 	}
 }
 
-/*
 func (llb *LogLogBeta) Add(value []byte) {
-	llb.AddHash(uint32(xxhash.Sum64(value)))
+	llb.AddHash(xxHash32.Checksum(value, 0))
 }
-*/
 
 func (llb *LogLogBeta) AddUint32(val uint32) {
 	llb.AddHash(xxhashVec.XXHash32Uint32(val, 0))

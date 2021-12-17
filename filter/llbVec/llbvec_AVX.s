@@ -2,7 +2,7 @@
 // Author: stefanx@blockwatch.cc
 
 #include "textflag.h"
-#include "constants_AVX2.h"
+#include "constants_AVX.h"
 
 #define rol32_17(Y_reg) \
     VPSLLD  $17, Y_reg, Y15 \
