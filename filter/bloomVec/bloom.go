@@ -181,6 +181,34 @@ func (f *Filter) ContainsInt64(v int64) bool {
 	return true
 }
 
+// ContainsHash returns true if the filter contains hash value h.
+// Returns false if the filter definitely does not contain h.
+func (f *Filter) ContainsHash(h [2]uint32) bool {
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// ContainsAnyHash returns true if the filter contains any hash value in l.
+// Returns false if the filter definitely does not contain any hash in l.
+func (f *Filter) ContainsAnyHash(l [][2]uint32) bool {
+hash_scan:
+	for _, h := range l {
+		for i := uint32(0); i < f.k; i++ {
+			loc := f.location(h, i)
+			if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+				continue hash_scan
+			}
+		}
+		return true
+	}
+	return false
+}
+
 // Merge performs an in-place union of other into f.
 // Returns an error if m or k of the filters differs.
 func (f *Filter) Merge(other *Filter) error {
@@ -217,6 +245,10 @@ func Estimate(n uint64, p float64) (m uint64, k uint64) {
 
 func hash(data []byte, seed uint32) [2]uint32 {
 	return [2]uint32{xxHash32.Checksum(data, seed), xxHash32.Checksum(data, 0)}
+}
+
+func Hash(data []byte) [2]uint32 {
+	return hash(data, xxHash32Seed)
 }
 
 // pow2 returns the number that is the next highest power of 2.

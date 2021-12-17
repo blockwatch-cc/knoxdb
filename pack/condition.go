@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"blockwatch.cc/knoxdb/filter/bloom"
+	"blockwatch.cc/knoxdb/filter/bloomVec"
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/util"
 
@@ -53,7 +53,7 @@ type Condition struct {
 	uint16map    map[uint16]struct{} // compiled uint16 map for set membership
 	uint8map     map[uint8]struct{}  // compiled uint8 map for set membership
 	numValues    int                 // number of values when Value is a slice
-	bloomHashes  [][2]uint64         // opt bloom hash value(s) if field has bloom flag
+	bloomHashes  [][2]uint32         // opt bloom hash value(s) if field has bloom flag
 }
 
 // condition that is not bound to a table field yet
@@ -315,12 +315,12 @@ func (c *Condition) Compile() (err error) {
 	switch c.Mode {
 	case FilterModeIn, FilterModeNotIn:
 		if buildBloom {
-			c.bloomHashes = make([][2]uint64, 0)
+			c.bloomHashes = make([][2]uint32, 0)
 		}
 		// handled below
 	default:
 		if buildBloom {
-			c.bloomHashes = [][2]uint64{bloom.Hash(c.Field.Type.Bytes(c.Value))}
+			c.bloomHashes = [][2]uint32{bloomVec.Hash(c.Field.Type.Bytes(c.Value))}
 		}
 		// anything but IN, NIN is finished here
 		return
@@ -346,7 +346,7 @@ func (c *Condition) Compile() (err error) {
 		}
 		if buildBloom {
 			for _, val := range slice {
-				c.bloomHashes = append(c.bloomHashes, bloom.Hash(val))
+				c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(val))
 			}
 		}
 		// below min size a hash map is more expensive than memcmp
@@ -367,7 +367,7 @@ func (c *Condition) Compile() (err error) {
 		}
 		if buildBloom {
 			for _, val := range slice {
-				c.bloomHashes = append(c.bloomHashes, bloom.Hash(compress.UnsafeGetBytes(val)))
+				c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(compress.UnsafeGetBytes(val)))
 			}
 		}
 		// below min size a hash map is more expensive than memcmp
@@ -388,9 +388,9 @@ func (c *Condition) Compile() (err error) {
 				c.numValues = 2
 				c.Value = []bool{false, true}
 				if buildBloom {
-					c.bloomHashes = [][2]uint64{
-						bloom.Hash([]byte{0}),
-						bloom.Hash([]byte{1}),
+					c.bloomHashes = [][2]uint32{
+						bloomVec.Hash([]byte{0}),
+						bloomVec.Hash([]byte{1}),
 					}
 				}
 			} else {
@@ -403,7 +403,7 @@ func (c *Condition) Compile() (err error) {
 					} else {
 						val = []byte{0}
 					}
-					c.bloomHashes = [][2]uint64{bloom.Hash(val)}
+					c.bloomHashes = [][2]uint32{bloomVec.Hash(val)}
 				}
 			}
 		}
@@ -418,7 +418,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 				}
 			}
 		}
@@ -433,7 +433,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 				}
 			}
 		}
@@ -448,7 +448,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 				}
 			}
 		}
@@ -463,7 +463,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 				}
 			}
 		}
@@ -478,7 +478,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 				}
 			}
 		}
@@ -493,7 +493,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 				}
 			}
 		}
@@ -518,7 +518,7 @@ func (c *Condition) Compile() (err error) {
 		}
 		if buildBloom {
 			for _, val := range slice {
-				c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+				c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 			}
 		}
 		return
@@ -532,7 +532,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 				}
 			}
 		}
@@ -547,7 +547,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 				}
 			}
 		}
@@ -562,7 +562,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 				}
 			}
 		}
@@ -577,7 +577,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 				}
 			}
 		}
@@ -592,7 +592,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloom.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
 				}
 			}
 		}
