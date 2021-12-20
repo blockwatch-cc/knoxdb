@@ -3070,7 +3070,6 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		}
 		// set key
 		clone.key = pkg.key
-		clone.cached = false
 
 		// prepare for efficient writes
 		// log.Debugf("%s: materializing cloned pack %d with %d rows", t.name, clone.key, pkg.Len())

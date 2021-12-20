@@ -1353,7 +1353,6 @@ func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		}
 		// set key
 		clone.key = pkg.key
-		clone.cached = false
 
 		// prepare for efficient writes
 		clone.Materialize()
