@@ -375,7 +375,7 @@ func run() error {
 	}
 	// table.Flush(context.Background())
 
-	log.Infof("Written %d entries", table.Stats().TupleCount)
+	log.Infof("Written %d entries", table.Stats()[0].TupleCount)
 
 	// read entries back
 	var (
