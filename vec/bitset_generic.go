@@ -39,7 +39,7 @@ func bitsetAndGenericFlag(dst, src []byte, size int) (bool, bool) {
 		any |= dst[i]
 		all &= dst[i]
 	}
-	if size&0x03 != 0 {
+	if size&0x07 != 0 {
 		dst[l] &= src[l]
 		dst[l] &= bytemask(size)
 		any |= dst[l]
@@ -73,7 +73,7 @@ func bitsetOrGenericFlag(dst, src []byte, size int) (bool, bool) {
 		any |= dst[i]
 		all &= dst[i]
 	}
-	if size&0x03 != 0 {
+	if size&0x07 != 0 {
 		dst[l] |= src[l]
 		dst[l] &= bytemask(size)
 		any |= dst[l]
