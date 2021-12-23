@@ -51,6 +51,9 @@ M3DB (Uber)
 QuestDB (raised 2.1M in 2019/20, London)
 - https://github.com/questdb/questdb // embedded, Postgres protocol, zero-GC, low latency
 
+Tarantool (in-memory + on-disk DB with SQL layer, WAL)
+https://github.com/tarantool/tarantool
+
 Apache Arrow (Columnar in-memory data processing library)
 - https://github.com/apache/arrow
 - https://arrow.apache.org/docs/index.html
