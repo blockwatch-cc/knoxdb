@@ -1505,3 +1505,77 @@ loop:
 exit:
         RET
 
+/***************************** filterMerge ****************************************************/
+
+// func filterMergeAVX2(dst, src []byte)
+TEXT ·filterMergeAVX2(SB), NOSPLIT, $0-48
+	MOVQ	dst_base+0(FP), SI
+	MOVQ	dst_len+8(FP), BX
+	MOVQ	src_base+24(FP), DI
+
+	TESTQ	BX, BX
+	JLE		done
+    
+	CMPQ	BX, $64     // slices smaller than 64 byte are handled separately
+	JB		prep_i64
+
+	// works for data size 64 byte
+loop_avx2:
+	VMOVDQU		0(DI), Y0
+	VPOR		0(SI), Y0, Y0
+	VMOVDQU		32(DI), Y1
+	VPOR		32(SI), Y1, Y1
+	VMOVDQU		Y0, 0(SI)
+	VMOVDQU		Y1, 32(SI)
+
+	LEAQ		64(DI), DI
+	LEAQ		64(SI), SI
+	SUBQ		$64, BX
+	CMPQ		BX, $64
+	JB			exit_avx2
+	JMP			loop_avx2
+
+exit_avx2:
+	VZEROUPPER
+	TESTQ	BX, BX
+	JLE		done
+
+	// works for data size 15 down to single byte
+prep_i64:
+	TESTQ	BX, BX
+	JLE		done
+	XORQ	AX, AX
+	CMPL	BX, $8
+	JB		prep_i8
+
+loop_i64:
+	MOVQ	0(DI), AX
+	ORQ	    0(SI), AX
+	MOVQ	AX, 0(SI)
+
+	LEAQ	8(DI), DI
+	LEAQ	8(SI), SI
+	SUBL	$8, BX
+	CMPL	BX, $8
+	JB		prep_i8
+	JMP		loop_i64
+
+prep_i8:
+	TESTQ	BX, BX
+	JLE		done
+	XORL	AX, AX
+
+loop_i8:
+	MOVB	0(DI), AX
+	ORB	    0(SI), AX
+	MOVB	AX, 0(SI)
+
+	INCQ	DI
+	INCQ	SI
+	DECL	BX
+	JZ		done
+	JMP		loop_i8
+
+done:
+	RET
+

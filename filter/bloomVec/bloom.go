@@ -222,12 +222,7 @@ func (f *Filter) Merge(other *Filter) error {
 	} else if f.k != other.k {
 		return fmt.Errorf("bloom.Filter.Merge(): k mismatch: %d <> %d", f.b, other.b)
 	}
-
-	// Perform union of each byte.
-	for i := range f.b {
-		f.b[i] |= other.b[i]
-	}
-
+	filterMerge(f.b, other.b)
 	return nil
 }
 

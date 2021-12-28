@@ -34,11 +34,14 @@ func filterAddManyInt64AVX2Core(f LogLogBeta, data []int64, seed uint32)
 // go:noescape
 func filterAddManyInt64AVX512Core(f LogLogBeta, data []int64, seed uint32)
 
-// // go:noescape
-// func filterCardinalityAVX2(f LogLogBeta)
+// go:noescape
+func filterMergeAVX2(dst, src []byte)
 
 // // go:noescape
-// func filterCardinalityAVX512(f LogLogBeta)
+func regSumAndZerosAVX2(registers []uint8) (float64, float64)
+
+// go:noescape
+func regSumAndZerosAVX512(registers []uint8) (float64, float64)
 
 func filterAddManyUint32(f *LogLogBeta, data []uint32, seed uint32) {
 	switch {
@@ -86,12 +89,21 @@ func filterAddManyInt64(f *LogLogBeta, data []int64, seed uint32) {
 
 func filterCardinality(f *LogLogBeta) uint64 {
 	switch {
-	//	case util.UseAVX512_F:
-	//        return filterCardinalityAVX512(*f)
-	//	case util.UseAVX2:
-	//        return filterCardinalityAVX2(*f)
+	case util.UseAVX512_F:
+		return filterCardinalityAVX512(*f)
+	case util.UseAVX2:
+		return filterCardinalityAVX2(*f)
 	default:
 		return filterCardinalityGeneric(*f)
+	}
+}
+
+func filterMerge(dst, src []byte) {
+	switch {
+	case util.UseAVX2:
+		filterMergeAVX2(dst, src)
+	default:
+		filterMergeGeneric(dst, src)
 	}
 }
 
@@ -141,4 +153,18 @@ func filterAddManyInt64AVX512(f LogLogBeta, data []int64, seed uint32) {
 	len_head := len(data) & 0x7ffffffffffffff0
 	filterAddManyInt64AVX512Core(f, data, seed)
 	filterAddManyInt64Generic(f, data[len_head:], seed)
+}
+
+// Cardinality returns the number of unique elements added to the sketch
+func filterCardinalityAVX2(llb LogLogBeta) uint64 {
+	sum, ez := regSumAndZerosAVX2(llb.buf[:])
+	m := float64(llb.m)
+	return uint64(llb.alpha * m * (m - ez) / (beta(ez) + sum))
+}
+
+// Cardinality returns the number of unique elements added to the sketch
+func filterCardinalityAVX512(llb LogLogBeta) uint64 {
+	sum, ez := regSumAndZerosAVX512(llb.buf[:])
+	m := float64(llb.m)
+	return uint64(llb.alpha * m * (m - ez) / (beta(ez) + sum))
 }

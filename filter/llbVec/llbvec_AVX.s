@@ -9,15 +9,6 @@
     VPSRLD  $15, Y_reg, Y_reg \
     VPOR    Y15, Y_reg, Y_reg
 
-#define mul64(Ya, Yb, Yab) \
-    VPSHUFD     $0xb1, Yb, Yab \
-    VPMULLD     Ya, Yab, Yab \
-    VPSLLQ      $32, Yab, Y15 \
-    VPADDD      Yab, Y15, Y15 \
-    VPAND       Y15, Y9, Y15 \
-    VPMULUDQ    Ya, Yb, Yab \
-    VPADDQ      Yab, Y15, Yab \ 
-
 /***************************** filterAddManyUint32 ****************************************************/
 
 // func filterAddManyUint32AVX2Core(f LogLogBeta, data []uint32, seed uint32)
@@ -1816,6 +1807,293 @@ loop:
 exit:
         RET
 
+/***************************** filterMerge ****************************************************/
+
+// func filterMergeAVX2(dst, src []byte)
+TEXT ·filterMergeAVX2(SB), NOSPLIT, $0-48
+	MOVQ	dst_base+0(FP), SI
+	MOVQ	dst_len+8(FP), BX
+	MOVQ	src_base+24(FP), DI
+
+	TESTQ	BX, BX
+	JLE		done
+    
+	CMPQ	BX, $64     // slices smaller than 64 byte are handled separately
+	JB		prep_i8
+
+	// works for data size 64 byte
+loop_avx2:
+	VMOVDQU		0(DI), Y0
+	VMOVDQU		32(DI), Y1
+	VMOVDQU		0(SI), Y2
+	VMOVDQU		32(SI), Y3
+
+        VPCMPGTB    Y2, Y0, Y4
+        VPCMPGTB    Y3, Y1, Y5
+
+        VPBLENDVB   Y4, Y0, Y2, Y0   
+        VPBLENDVB   Y5, Y1, Y3, Y1   
+
+	VMOVDQU		Y0, 0(SI)
+	VMOVDQU		Y1, 32(SI)
+
+	LEAQ		64(DI), DI
+	LEAQ		64(SI), SI
+	SUBQ		$64, BX
+	CMPQ		BX, $64
+	JB			exit_avx2
+	JMP			loop_avx2
+
+exit_avx2:
+	VZEROUPPER
+	TESTQ	BX, BX
+	JLE		done
+
+prep_i8:
+	XORQ	AX, AX
+
+loop_i8:
+	MOVB	    (DI), AX
+	MOVB	    (SI), DX
+        CMPB        DX, AX              // compare values 
+        CMOVLLE     AX, DX              // keep greater one       
+        MOVB        DX, (SI)            // write value back
+
+	INCQ	DI
+	INCQ	SI
+	DECL	BX
+	JZ		done
+	JMP		loop_i8
+
+done:
+	RET
+
+/***************************** regSumAndZeros ****************************************************/
+
+// func regSumAndZerosAVX2(registers []uint8) (float64, float64)
+TEXT ·regSumAndZerosAVX2(SB), NOSPLIT, $0-40
+	MOVQ	        registers_base+0(FP), SI
+	MOVQ	        registers_len+8(FP), BX
+
+        VPXOR           Y10, Y10, Y10   // sum0
+        VPXOR           Y11, Y11, Y11   // sum1
+        VPXOR           Y12, Y12, Y12   // sum2
+        VPXOR           Y13, Y13, Y13   // sum3
+        XORQ            R11, R11        // zero count
+
+	TESTQ	        BX, BX
+	JLE	        done
+
+        MOVQ            BX, DX
+        ANDQ            $31, DX         // runs of i8 loop
+	SHRQ	        $5, BX          // runs of avx2 loop
+	JZ	        prep_i8
+
+        VPBROADCASTD    constU32_1<>(SB), Y15
+        VPXOR           Y14, Y14, Y14
+
+	// works for data size 32 byte
+loop_avx2:
+        VMOVDQU	        (SI), Y4
+        // count zeros
+        VPCMPEQB        Y4, Y14, Y4
+        VPMOVMSKB	Y4, AX          // move per byte MSBs into packed bitmask to r32 or r64
+	POPCNTQ		AX, AX 
+        ADDQ            AX, R11
+
+        VPMOVZXBD       (SI), Y0        // load 32 bytes and convert to 32 32bit values
+        VPMOVZXBD       8(SI), Y1 
+        VPMOVZXBD       16(SI), Y2 
+        VPMOVZXBD       24(SI), Y3 
+    
+    
+        // calc sum
+        VPSLLVD         Y0, Y15, Y0     // calc 2^r[i]
+        VPSLLVD         Y1, Y15, Y1
+        VPSLLVD         Y2, Y15, Y2
+        VPSLLVD         Y3, Y15, Y3
+
+        VCVTDQ2PS       Y0, Y0          // convert to 32bit float
+        VCVTDQ2PS       Y1, Y1
+        VCVTDQ2PS       Y2, Y2
+        VCVTDQ2PS       Y3, Y3
+
+        VRCPPS          Y0, Y0          // calc 1/(2^r[i])
+        VRCPPS          Y1, Y1
+        VRCPPS          Y2, Y2
+        VRCPPS          Y3, Y3
+
+        VADDPS          Y10, Y0, Y10    // accumulate values
+        VADDPS          Y11, Y1, Y11
+        VADDPS          Y12, Y2, Y12
+        VADDPS          Y13, Y3, Y13
+
+	ADDQ		$32, SI
+	SUBQ		$1, BX
+	JZ		exit_avx2
+	JMP		loop_avx2
+
+exit_avx2:
+        // add Y10,...,Y13
+        VADDPS          Y10, Y11, Y10
+        VADDPS          Y12, Y13, Y12
+        VADDPS          Y10, Y12, Y10
+
+        // add all values in Y10
+        VHADDPS         Y10, Y10, Y10
+        VHADDPS         Y10, Y10, Y10
+        VEXTRACTF128    $1, Y10, X0
+        VADDSS          X0, X10, X10
+
+	TESTQ	        DX, DX
+	JLE		done
+
+prep_i8:
+        XORQ            R10, R10
+
+loop_i8:
+        MOVB            (SI), CX        // load 1 byte
+    
+        // count zeros
+        CMPB            CX, $0
+        SETEQ           R10
+        ADDQ            R10, R11
+
+        // calc sum
+        MOVQ            $1, AX
+        SHLQ            CL, AX          // calc 2^r[i]
+        VCVTSI2SSQ      AX, X0, X0      // convert to 32bit float
+        VRCPPS          X0, X0          // calc 1/(2^r[i])
+        VADDPS          X10, X0, X10    // accumulate values
+
+	INCQ	        SI
+	DECL	        DX
+	JZ		done
+	JMP		loop_i8
+
+done:
+        VCVTSS2SD       X10, X10, X10   // convert to float64
+        MOVSD           X10, ret+24(FP)
+
+        VCVTSI2SDQ      R11, X0, X0     // convert to float64
+        MOVSD           X0, ret+32(FP)
+    
+        VZEROUPPER
+	RET
+
+// func regSumAndZerosAVX512(registers []uint8) (float64, float64)
+TEXT ·regSumAndZerosAVX512(SB), NOSPLIT, $0-40
+	MOVQ	        registers_base+0(FP), SI
+	MOVQ	        registers_len+8(FP), BX
+
+        VPXORQ          Z10, Z10, Z10   // sum0
+        VPXORQ          Z11, Z11, Z11   // sum1
+        VPXORQ          Z12, Z12, Z12   // sum2
+        VPXORQ          Z13, Z13, Z13   // sum3
+        XORQ            R11, R11        // zero count
+
+	TESTQ	        BX, BX
+	JLE	        done
+
+        MOVQ            BX, DX
+        ANDQ            $63, DX         // runs of i8 loop
+	SHRQ	        $6, BX          // runs of avx2 loop
+	JZ	        prep_i8
+
+        VPBROADCASTD    constU32_1<>(SB), Z15
+        VPXORQ          Z14, Z14, Z14
+
+	// works for data size 64 byte
+loop_avx2:
+        VMOVDQU64       (SI), Z4
+        // count zeros
+        VPCMPEQB        Z4, Z14, K1
+	KMOVQ		K1, AX 
+	POPCNTQ		AX, AX 
+        ADDQ            AX, R11
+
+        VPMOVZXBD       (SI), Z0        // load 64 bytes and convert to 64 32bit values
+        VPMOVZXBD       16(SI), Z1 
+        VPMOVZXBD       32(SI), Z2 
+        VPMOVZXBD       48(SI), Z3 
+    
+    
+        // calc sum
+        VPSLLVD         Z0, Z15, Z0     // calc 2^r[i]
+        VPSLLVD         Z1, Z15, Z1
+        VPSLLVD         Z2, Z15, Z2
+        VPSLLVD         Z3, Z15, Z3
+
+        VCVTDQ2PS       Z0, Z0          // convert to 32bit float
+        VCVTDQ2PS       Z1, Z1
+        VCVTDQ2PS       Z2, Z2
+        VCVTDQ2PS       Z3, Z3
+
+        VRCP14PS        Z0, Z0          // calc 1/(2^r[i])
+        VRCP14PS        Z1, Z1
+        VRCP14PS        Z2, Z2
+        VRCP14PS        Z3, Z3
+
+        VADDPS          Z10, Z0, Z10    // accumulate values
+        VADDPS          Z11, Z1, Z11
+        VADDPS          Z12, Z2, Z12
+        VADDPS          Z13, Z3, Z13
+
+	ADDQ		$64, SI
+	SUBQ		$1, BX
+	JZ		exit_avx2
+	JMP		loop_avx2
+
+exit_avx2:
+        // add Z10,...,Z13
+        VADDPS          Z10, Z11, Z10
+        VADDPS          Z12, Z13, Z12
+        VADDPS          Z10, Z12, Z10
+
+        // add all values in Z10
+        VEXTRACTF64X4   $1, Z10, Y11
+        VADDPS          Y10, Y11, Y10
+        VHADDPS         Y10, Y10, Y10
+        VHADDPS         Y10, Y10, Y10
+        VEXTRACTF128    $1, Y10, X0
+        VADDSS          X0, X10, X10
+
+	TESTQ	        DX, DX
+	JLE		done
+
+prep_i8:
+        XORQ            R10, R10
+
+loop_i8:
+        MOVB            (SI), CX        // load 1 byte
+    
+        // count zeros
+        CMPB            CX, $0
+        SETEQ           R10
+        ADDQ            R10, R11
+
+        // calc sum
+        MOVQ            $1, AX
+        SHLQ            CL, AX          // calc 2^r[i]
+        VCVTSI2SSQ      AX, X0, X0      // convert to 32bit float
+        VRCPPS          X0, X0          // calc 1/(2^r[i])
+        VADDPS          X10, X0, X10    // accumulate values
+
+	INCQ	        SI
+	DECL	        DX
+	JZ		done
+	JMP		loop_i8
+
+done:
+        VCVTSS2SD       X10, X10, X10   // convert to float64
+        MOVSD           X10, ret+24(FP)
+
+        VCVTSI2SDQ      R11, X0, X0     // convert to float64
+        MOVSD           X0, ret+32(FP)
+    
+        VZEROUPPER
+	RET
+
 /************************************************************************************************+
  * Because the functions here are little bit sophisticated, we show their evolution for better understanding
  * for further develeopment
@@ -1913,8 +2191,8 @@ exit:
  * in the main loop first we put the last hashes in the filter and then we calculate the new hashes
  * furthermore the small loop for putting the hashes into the filter is unrolled
  *
- * next evolution step would be to interleave the code for for processing the old hashes and calculating
- * the new ones to achieve instruction level parallism. This is how the functions above are working
+ * next evolution step would be to interleave the code for processing the old hashes and calculating
+ * the new ones to achieve instruction level parallism. This leads to the functions above
 
 // func filterAddManyUint32AVX2Core(f LogLogBeta, data []uint32, seed uint32)
 TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-68

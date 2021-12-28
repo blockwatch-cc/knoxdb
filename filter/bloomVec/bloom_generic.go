@@ -50,3 +50,10 @@ func filterAddManyInt64Generic(f Filter, l []int64, seed uint32) {
 		}
 	}
 }
+
+func filterMergeGeneric(dst, src []byte) {
+	// Perform union of each byte.
+	for i := range dst {
+		dst[i] |= src[i]
+	}
+}

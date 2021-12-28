@@ -22,6 +22,9 @@ func filterAddManyUint64AVX2Core(f Filter, data []uint64, seed uint32)
 //go:noescape
 func filterAddManyInt64AVX2Core(f Filter, data []int64, seed uint32)
 
+//go:noescape
+func filterMergeAVX2(dst, src []byte)
+
 func filterAddManyUint32(f *Filter, data []uint32, seed uint32) {
 	switch {
 	case util.UseAVX2:
@@ -55,6 +58,15 @@ func filterAddManyInt64(f *Filter, data []int64, seed uint32) {
 		filterAddManyInt64AVX2(*f, data, seed)
 	default:
 		filterAddManyInt64Generic(*f, data, seed)
+	}
+}
+
+func filterMerge(dst, src []byte) {
+	switch {
+	case util.UseAVX2:
+		filterMergeAVX2(dst, src)
+	default:
+		filterMergeGeneric(dst, src)
 	}
 }
 

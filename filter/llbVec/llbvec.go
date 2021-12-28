@@ -31,14 +31,16 @@ func beta(ez float64) float64 {
 }
 
 func regSumAndZeros(registers []uint8) (float64, float64) {
-	sum, ez := 0.0, 0.0
+	var sum, ez float32
 	for _, val := range registers {
 		if val == 0 {
 			ez++
 		}
-		sum += 1.0 / math.Pow(2.0, float64(val))
+		//sum += 1.0 / math.Pow(2.0, float64(val))
+		tmp := float32(uint32(1) << val)
+		sum += 1.0 / tmp
 	}
-	return sum, ez
+	return float64(sum), float64(ez)
 }
 
 type LogLogBeta struct {
@@ -147,11 +149,10 @@ func (llb *LogLogBeta) Merge(other *LogLogBeta) {
 	if llb.precision != other.precision {
 		return
 	}
-	for i, v := range llb.buf {
-		if v < other.buf[i] {
-			llb.buf[i] = other.buf[i]
-		}
+	if len(llb.buf) != len(other.buf) {
+		return
 	}
+	filterMerge(llb.buf, other.buf)
 }
 
 func (llb *LogLogBeta) Bytes() []byte {

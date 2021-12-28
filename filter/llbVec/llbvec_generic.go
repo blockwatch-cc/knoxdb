@@ -37,3 +37,11 @@ func filterCardinalityGeneric(llb LogLogBeta) uint64 {
 	m := float64(llb.m)
 	return uint64(llb.alpha * m * (m - ez) / (beta(ez) + sum))
 }
+
+func filterMergeGeneric(dst, src []byte) {
+	for i, v := range dst {
+		if v < src[i] {
+			dst[i] = src[i]
+		}
+	}
+}
