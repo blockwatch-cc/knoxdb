@@ -582,7 +582,7 @@ func BenchmarkFilterAddManyUint32AVX2(b *testing.B) {
 }
 
 func BenchmarkFilterAddManyUint32AVX512(b *testing.B) {
-	if !util.UseAVX2 {
+	if !util.UseAVX512_CD {
 		b.SkipNow()
 	}
 	for _, c := range benchCases {
