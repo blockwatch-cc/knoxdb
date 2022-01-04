@@ -1,12 +1,17 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
+//go:build !amd64 || appengine || gccgo
 // +build !amd64 appengine gccgo
 
 package vec
 
-func bitsetAnd(dst, src []byte, size int) int {
-	return bitsetAndGeneric(dst, src, size)
+func bitsetAnd(dst, src []byte, size int) {
+	bitsetAndGeneric(dst, src, size)
+}
+
+func bitsetAndFlag(dst, src []byte, size int) (bool, bool) {
+	return bitsetAndGenericFlag(dst, src, size)
 }
 
 func bitsetAndNot(dst, src []byte, size int) {
@@ -15,6 +20,10 @@ func bitsetAndNot(dst, src []byte, size int) {
 
 func bitsetOr(dst, src []byte, size int) {
 	bitsetOrGeneric(dst, src, size)
+}
+
+func bitsetOrFlag(dst, src []byte, size int) (bool, bool) {
+	return bitsetOrGenericFlag(dst, src, size)
 }
 
 func bitsetXor(dst, src []byte, size int) {
@@ -26,7 +35,7 @@ func bitsetNeg(src []byte, size int) {
 }
 
 func bitsetReverse(src []byte) {
-	return bitsetReverseGeneric(src, index, size)
+	bitsetReverseGeneric(src)
 }
 
 func bitsetPopCount(src []byte, size int) int64 {

@@ -171,7 +171,7 @@ func (a NativeByteArray) HeapSize() int {
 	return sz
 }
 
-func (a NativeByteArray) WriteTo(w io.Writer) (int, error) {
+func (a NativeByteArray) WriteTo(w io.Writer) (int64, error) {
 	w.Write([]byte{bytesNativeFormat << 4})
 	count := 1
 	var buf [binary.MaxVarintLen64]byte
@@ -181,7 +181,7 @@ func (a NativeByteArray) WriteTo(w io.Writer) (int, error) {
 		w.Write(a.bufs[i])
 		count += l + len(a.bufs[i])
 	}
-	return count, nil
+	return int64(count), nil
 }
 
 func (a *NativeByteArray) Decode(buf []byte) error {

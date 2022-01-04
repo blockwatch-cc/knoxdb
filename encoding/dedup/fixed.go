@@ -57,44 +57,31 @@ func (a *FixedByteArray) Elem(index int) []byte {
 }
 
 func (a *FixedByteArray) Set(index int, buf []byte) {
-	// unsupported
 	panic("fixed: Set unsupported")
 }
 
 func (a *FixedByteArray) Append(val ...[]byte) ByteArray {
-	// unsupported
 	panic("fixed: Append unsupported")
-	return a
 }
 
 func (a *FixedByteArray) AppendFrom(src ByteArray) ByteArray {
-	// unsupported
 	panic("fixed: AppendFrom unsupported")
-	return a
 }
 
 func (a *FixedByteArray) Insert(index int, buf ...[]byte) ByteArray {
-	// unsupported
 	panic("fixed: Insert unsupported")
-	return a
 }
 
 func (a *FixedByteArray) InsertFrom(index int, src ByteArray) ByteArray {
-	// unsupported
 	panic("fixed: InsertFrom unsupported")
-	return a
 }
 
 func (a *FixedByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
-	// unsupported
 	panic("fixed: Copy unsupported")
-	return a
 }
 
 func (a *FixedByteArray) Delete(index, n int) ByteArray {
-	// unsupported
 	panic("fixed: Delete unsupported")
-	return a
 }
 
 func (a *FixedByteArray) Clear() {
@@ -128,7 +115,7 @@ func (a *FixedByteArray) HeapSize() int {
 	return fixedByteArraySz + len(a.buf)
 }
 
-func (a *FixedByteArray) WriteTo(w io.Writer) (int, error) {
+func (a *FixedByteArray) WriteTo(w io.Writer) (int64, error) {
 	count := 1
 	w.Write([]byte{bytesFixedFormat << 4})
 
@@ -141,7 +128,7 @@ func (a *FixedByteArray) WriteTo(w io.Writer) (int, error) {
 	// write data
 	w.Write(a.buf)
 	count += len(a.buf)
-	return count, nil
+	return int64(count), nil
 }
 
 func (a *FixedByteArray) Decode(buf []byte) error {

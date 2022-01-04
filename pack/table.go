@@ -585,6 +585,8 @@ func (t *Table) PurgeCache() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cache.Purge()
+	atomic.StoreInt64(&t.stats.PackCacheCount, 0)
+	atomic.StoreInt64(&t.stats.PackCacheSize, 0)
 	for _, idx := range t.indexes {
 		idx.PurgeCache()
 	}
@@ -3068,7 +3070,6 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		}
 		// set key
 		clone.key = pkg.key
-		clone.cached = false
 
 		// prepare for efficient writes
 		// log.Debugf("%s: materializing cloned pack %d with %d rows", t.name, clone.key, pkg.Len())

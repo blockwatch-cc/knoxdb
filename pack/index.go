@@ -401,6 +401,8 @@ func (idx *Index) Options() Options {
 
 func (idx *Index) PurgeCache() {
 	idx.cache.Purge()
+	atomic.StoreInt64(&idx.stats.PackCacheCount, 0)
+	atomic.StoreInt64(&idx.stats.PackCacheSize, 0)
 }
 
 func (idx *Index) name() string {
@@ -1351,7 +1353,6 @@ func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		}
 		// set key
 		clone.key = pkg.key
-		clone.cached = false
 
 		// prepare for efficient writes
 		clone.Materialize()

@@ -72,44 +72,31 @@ func (a *CompactByteArray) Elem(index int) []byte {
 }
 
 func (a *CompactByteArray) Set(index int, buf []byte) {
-	// unsupported
 	panic("compact: Set unsupported")
 }
 
 func (a *CompactByteArray) Append(val ...[]byte) ByteArray {
-	// unsupported
 	panic("compact: Append unsupported")
-	return a
 }
 
 func (a *CompactByteArray) AppendFrom(src ByteArray) ByteArray {
-	// unsupported
 	panic("compact: AppendFrom unsupported")
-	return a
 }
 
 func (a *CompactByteArray) Insert(index int, buf ...[]byte) ByteArray {
-	// unsupported
 	panic("compact: Insert unsupported")
-	return a
 }
 
 func (a *CompactByteArray) InsertFrom(index int, src ByteArray) ByteArray {
-	// unsupported
 	panic("compact: InsertFrom unsupported")
-	return a
 }
 
 func (a *CompactByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
-	// unsupported
 	panic("compact: Copy unsupported")
-	return a
 }
 
 func (a *CompactByteArray) Delete(index, n int) ByteArray {
-	// unsupported
 	panic("compact: Delete unsupported")
-	return a
 }
 
 func (a *CompactByteArray) Clear() {
@@ -137,7 +124,7 @@ func (a *CompactByteArray) MinMax() ([]byte, []byte) {
 	return minMax(a)
 }
 
-func (a *CompactByteArray) WriteTo(w io.Writer) (int, error) {
+func (a *CompactByteArray) WriteTo(w io.Writer) (int64, error) {
 	w.Write([]byte{bytesCompactFormat << 4})
 
 	// write len in elements
@@ -154,7 +141,7 @@ func (a *CompactByteArray) WriteTo(w io.Writer) (int, error) {
 	}
 	olen, err := compress.IntegerArrayEncodeAll(scratch, w)
 	if err != nil {
-		return count, err
+		return int64(count), err
 	}
 	count += olen
 
@@ -164,7 +151,7 @@ func (a *CompactByteArray) WriteTo(w io.Writer) (int, error) {
 	}
 	slen, err := compress.IntegerArrayEncodeAll(scratch, w)
 	if err != nil {
-		return count, err
+		return int64(count), err
 	}
 	count += slen
 
@@ -181,7 +168,7 @@ func (a *CompactByteArray) WriteTo(w io.Writer) (int, error) {
 	w.Write(num[:4])
 	count += 8
 
-	return count, nil
+	return int64(count), nil
 }
 
 func (a *CompactByteArray) Decode(buf []byte) error {

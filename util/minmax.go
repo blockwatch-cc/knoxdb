@@ -136,7 +136,7 @@ func Abs64(n int64) int64 {
 	return (n ^ y) - y
 }
 
-func ClampInt64(val, min, max int64) int64 {
+func Clamp64(val, min, max int64) int64 {
 	return Min64(Max64(val, min), max)
 }
 
@@ -211,7 +211,7 @@ func MinU64(x, y uint64) uint64 {
 	return x
 }
 
-func ClampUint64(val, min, max uint64) uint64 {
+func ClampU64(val, min, max uint64) uint64 {
 	return MinU64(MaxU64(val, min), max)
 }
 
@@ -272,19 +272,19 @@ func NonZeroMinU64(x ...uint64) uint64 {
 	return min
 }
 
-func MinFloat64(x, y float64) float64 {
+func MinF64(x, y float64) float64 {
 	return math.Min(x, y)
 }
 
-func MaxFloat64(x, y float64) float64 {
+func MaxF64(x, y float64) float64 {
 	return math.Max(x, y)
 }
 
-func ClampFloat64(val, min, max float64) float64 {
+func ClampF64(val, min, max float64) float64 {
 	return math.Min(math.Max(val, min), max)
 }
 
-func MinFloat64n(nums ...float64) float64 {
+func MinF64n(nums ...float64) float64 {
 	switch len(nums) {
 	case 0:
 		return 0
@@ -301,7 +301,7 @@ func MinFloat64n(nums ...float64) float64 {
 	}
 }
 
-func MaxFloat64n(nums ...float64) float64 {
+func MaxF64n(nums ...float64) float64 {
 	switch len(nums) {
 	case 0:
 		return 0
@@ -318,7 +318,7 @@ func MaxFloat64n(nums ...float64) float64 {
 	}
 }
 
-func NonZeroFloat64(x ...float64) float64 {
+func NonZeroF64(x ...float64) float64 {
 	for _, v := range x {
 		if v != 0 {
 			return v
@@ -327,14 +327,14 @@ func NonZeroFloat64(x ...float64) float64 {
 	return 0
 }
 
-func NonZeroMinFloat64(x ...float64) float64 {
+func NonZeroMinF64(x ...float64) float64 {
 	var min float64
 	for _, v := range x {
 		if v != 0 {
 			if min == 0 {
 				min = v
 			} else {
-				min = MinFloat64(min, v)
+				min = MinF64(min, v)
 			}
 		}
 	}

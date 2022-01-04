@@ -1,6 +1,7 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
+//go:build !amd64 || appengine || gccgo
 // +build !amd64 appengine gccgo
 
 package vec
