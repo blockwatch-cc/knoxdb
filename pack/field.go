@@ -2813,6 +2813,23 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 	return flt
 }
 
+func (t FieldType) BuildBitmap(b *block.Block) *Bitset {
+	var flt *Bitset
+	switch t {
+	case FieldTypeInt16:
+		flt = NewBitsetFromInt16(b.Int16, 65536)
+	case FieldTypeInt8:
+		flt = NewBitsetFromInt8(b.Int8, 65536)
+	case FieldTypeUint16:
+		flt = NewBitsetFromUint16(b.Uint16, 65536)
+	case FieldTypeUint8:
+		flt = NewBitsetFromUint8(b.Uint8, 65536)
+	default:
+		return nil
+	}
+	return flt
+}
+
 // used for bloom filter test value compilation
 func (t FieldType) Bytes(val interface{}) []byte {
 	if val == nil {

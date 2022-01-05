@@ -33,7 +33,8 @@ type BlockInfo struct {
 	// statistics
 	MinValue    interface{}      // vector min
 	MaxValue    interface{}      // vector max
-	Bloom       *bloomVec.Filter // optimized bloom filter
+	Bitmap      *vec.Bitset      // Bitmap for 8/16 bit datatypes
+	Bloom       *bloomVec.Filter // optimized bloom filter for other datatypes
 	Cardinality uint32           // unique items in vector
 	dirty       bool             // update required
 }

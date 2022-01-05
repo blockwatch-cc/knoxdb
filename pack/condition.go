@@ -638,6 +638,7 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 	min := info.Blocks[idx].MinValue
 	max := info.Blocks[idx].MaxValue
 	filter := info.Blocks[idx].Bloom
+	bitmap := info.Blocks[idx].Bitmap
 	scale := c.Field.Scale
 	typ := c.Field.Type
 	// decimals only: convert storage type used in block info to field type
@@ -661,7 +662,16 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 		// condition value is within range
 		res := typ.Between(c.Value, min, max)
 		if res && filter != nil {
-			return filter.ContainsHash(c.bloomHashes[0])
+			switch typ {
+			case FieldTypeBytes, FieldTypeString, FieldTypeDatetime,
+				FieldTypeFloat64, FieldTypeFloat32, FieldTypeInt256, FieldTypeInt128,
+				FieldTypeUint64, FieldTypeInt64, FieldTypeUint32, FieldTypeInt32,
+				FieldTypeDecimal256, FieldTypeDecimal128, FieldTypeDecimal64, FieldTypeDecimal32:
+
+				return filter.ContainsHash(c.bloomHashes[0])
+			case FieldTypeUint16, FieldTypeInt16, FieldTypeUint8, FieldTypeInt8:
+				return bitmap.IsSet(c.Value.(int))
+			}
 		}
 		return res
 	case FilterModeNotEqual:
@@ -673,7 +683,16 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 		// check if any of the IN condition values fall into the pack's min and max range
 		res := typ.InBetween(c.Value, min, max) // c.Value is a slice
 		if res && filter != nil {
-			return filter.ContainsAnyHash(c.bloomHashes)
+			switch typ {
+			case FieldTypeBytes, FieldTypeString, FieldTypeDatetime,
+				FieldTypeFloat64, FieldTypeFloat32, FieldTypeInt256, FieldTypeInt128,
+				FieldTypeUint64, FieldTypeInt64, FieldTypeUint32, FieldTypeInt32,
+				FieldTypeDecimal256, FieldTypeDecimal128, FieldTypeDecimal64, FieldTypeDecimal32:
+
+				return filter.ContainsAnyHash(c.bloomHashes)
+			case FieldTypeUint16, FieldTypeInt16, FieldTypeUint8, FieldTypeInt8:
+				return bitmap.IsSetAny(c.Value.([]int))
+			}
 		}
 		return res
 	case FilterModeNotIn:

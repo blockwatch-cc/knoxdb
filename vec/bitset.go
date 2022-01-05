@@ -99,6 +99,42 @@ func NewBitsetFromIndexes(indexes []int, size int) *Bitset {
 	return s
 }
 
+func NewBitsetFromUint16(indexes []uint16, size int) *Bitset {
+	s := makeBitset(size)
+	for i := range indexes {
+		s.Set(int(indexes[i]))
+	}
+	s.cnt = len(indexes)
+	return s
+}
+
+func NewBitsetFromInt16(indexes []int16, size int) *Bitset {
+	s := makeBitset(size)
+	for i := range indexes {
+		s.Set(int(indexes[i]))
+	}
+	s.cnt = len(indexes)
+	return s
+}
+
+func NewBitsetFromUint8(indexes []uint8, size int) *Bitset {
+	s := makeBitset(size)
+	for i := range indexes {
+		s.Set(int(indexes[i]))
+	}
+	s.cnt = len(indexes)
+	return s
+}
+
+func NewBitsetFromInt8(indexes []int8, size int) *Bitset {
+	s := makeBitset(size)
+	for i := range indexes {
+		s.Set(int(indexes[i]))
+	}
+	s.cnt = len(indexes)
+	return s
+}
+
 func (s *Bitset) SetFromBytes(buf []byte, size int) *Bitset {
 	if s.size > size {
 		s.Zero()
@@ -394,6 +430,19 @@ func (s *Bitset) IsSet(i int) bool {
 	}
 	mask := bitmask(i)
 	return (s.buf[i>>3] & mask) > 0
+}
+
+func (s *Bitset) IsSetAny(i []int) bool {
+	for v := range i {
+		if v >= s.size {
+			continue
+		}
+		mask := bitmask(v)
+		if (s.buf[v>>3] & mask) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // Insert inserts srcLen values from position srcPos in bitset src into the

@@ -84,11 +84,22 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 
 				// correct error for very small values
 				if h.Blocks[i].Cardinality > 0 {
-					h.Blocks[i].Bloom = field.Type.BuildBloomFilter(
-						pkg.blocks[field.Index],
-						h.Blocks[i].Cardinality,
-						field.Scale,
-					)
+					switch field.Type {
+					case FieldTypeBytes, FieldTypeString, FieldTypeDatetime,
+						FieldTypeFloat64, FieldTypeFloat32, FieldTypeInt256, FieldTypeInt128,
+						FieldTypeUint64, FieldTypeInt64, FieldTypeUint32, FieldTypeInt32,
+						FieldTypeDecimal256, FieldTypeDecimal128, FieldTypeDecimal64, FieldTypeDecimal32:
+
+						h.Blocks[i].Bloom = field.Type.BuildBloomFilter(
+							pkg.blocks[field.Index],
+							h.Blocks[i].Cardinality,
+							field.Scale,
+						)
+					case FieldTypeUint16, FieldTypeInt16, FieldTypeUint8, FieldTypeInt8:
+						h.Blocks[i].Bitmap = field.Type.BuildBitmap(pkg.blocks[field.Index])
+					default:
+						return fmt.Errorf("pack: bloom flag not allowed for %s", field.Type)
+					}
 				}
 			}
 		}
