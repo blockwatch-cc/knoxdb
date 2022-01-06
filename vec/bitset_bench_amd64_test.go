@@ -4,11 +4,15 @@
 package vec
 
 import (
+    "bytes"
+    "reflect"
     "testing"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 func TestBitAndAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
 
@@ -65,7 +69,7 @@ func TestBitAndAVX2(T *testing.T) {
 }
 
 func TestBitAndAVX2Flag(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     // calls use the function selector to do proper last byte masking!
@@ -181,7 +185,7 @@ func TestBitAndAVX2Flag(T *testing.T) {
 }
 
 func TestBitAndNotAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     // calls use the function selector to do proper last byte masking!
@@ -237,7 +241,7 @@ func TestBitAndNotAVX2(T *testing.T) {
 }
 
 func TestBitOrAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     // calls use the function selector to do proper last byte masking!
@@ -293,7 +297,7 @@ func TestBitOrAVX2(T *testing.T) {
 }
 
 func TestBitOrAVX2Flag(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     // calls use the function selector to do proper last byte masking!
@@ -409,7 +413,7 @@ func TestBitOrAVX2Flag(T *testing.T) {
 }
 
 func TestBitXorAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     // calls use the function selector to do proper last byte masking!
@@ -466,7 +470,7 @@ func TestBitXorAVX2(T *testing.T) {
 }
 
 func TestBitNegAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     // calls use the function selector to do proper last byte masking!
@@ -486,6 +490,32 @@ func TestBitNegAVX2(T *testing.T) {
             })
         }
     }
+}
+
+func TestBitsetPopCountAVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range bitsetCases {
+		// call the function selector to do proper last byte masking!
+		T.Run(c.name, func(t *testing.T) {
+			cnt := bitsetPopCount(c.source, c.size)
+			if got, want := int(cnt), c.count; got != want {
+				T.Errorf("unexpected count %d, expected %d", got, want)
+			}
+		})
+	}
+	for _, sz := range bitsetSizes {
+		for _, pt := range bitsetPatterns {
+			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+				buf := fillBitset(nil, sz, pt)
+				// call the function selector to do proper last byte masking!
+				if got, want := int(bitsetPopCount(buf, sz)), popcount(buf); got != want {
+					T.Errorf("unexpected count %d, expected %d", got, want)
+				}
+			})
+		}
+	}
 }
 
 func TestBitsetReverseAVX2(T *testing.T) {
@@ -509,7 +539,7 @@ func TestBitsetReverseAVX2(T *testing.T) {
 }
 
 func TestBitsetIndexAVX2Full(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     for _, c := range runTestcases {
@@ -531,7 +561,7 @@ func TestBitsetIndexAVX2Full(T *testing.T) {
 }
 
 func TestBitsetIndexAVX2Skip(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     for _, c := range runTestcases {
@@ -555,7 +585,7 @@ func TestBitsetIndexAVX2Skip(T *testing.T) {
 }
 
 func TestBitsetRunAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     for _, c := range runTestcases {
@@ -597,7 +627,7 @@ func TestBitsetRunAVX2(T *testing.T) {
 // BenchmarkBitsetIndexAVX2/64K-1/1024-8      138932     8270 ns/op   990.61 MB/s
 // BenchmarkBitsetIndexAVX2/64K-1/16384-8     133310     8640 ns/op   948.19 MB/s
 func BenchmarkBitsetIndexAVX2Full(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range bitsetBenchmarkSizes {
@@ -637,7 +667,7 @@ func BenchmarkBitsetIndexAVX2Full(B *testing.B) {
 // BenchmarkBitsetIndexAVX2New/64K-1/1024-8      1882911  697.2 ns/op  11749.93 MB/s
 // BenchmarkBitsetIndexAVX2New/64K-1/16384-8     5219270  216.9 ns/op  37773.08 MB/s
 func BenchmarkBitsetIndexAVX2Skip(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range bitsetBenchmarkSizes {
@@ -675,7 +705,7 @@ func BenchmarkBitsetIndexAVX2Skip(B *testing.B) {
 // BenchmarkBitsetRunAVX2/64K-1/1024-8            731426          1690 ns/op    4848.62 MB/s
 // BenchmarkBitsetRunAVX2/64K-1/16384-8          3774499           279.7 ns/op  29291.16 MB/s
 func BenchmarkBitsetRunAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range bitsetBenchmarkSizes {
@@ -705,7 +735,7 @@ func BenchmarkBitsetRunAVX2(B *testing.B) {
 // BenchmarkBitsetPopCountAVX2/128M-8               2000        894400 ns/op    18758.06 MB/s
 // BenchmarkBitsetPopCountAVX2/512M-8                500       3709751 ns/op    18089.85 MB/s
 func BenchmarkBitsetPopCountAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range bitsetBenchmarkSizes {
@@ -721,7 +751,7 @@ func BenchmarkBitsetPopCountAVX2(B *testing.B) {
 }
 
 func BenchmarkBitsetAndAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range bitsetBenchmarkSizes {
@@ -738,7 +768,7 @@ func BenchmarkBitsetAndAVX2(B *testing.B) {
 }
 
 func BenchmarkBitsetAndAVX2Flag(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range bitsetBenchmarkSizes {
@@ -764,7 +794,7 @@ func BenchmarkBitsetAndAVX2Flag(B *testing.B) {
 // BenchmarkBitsetAndNotAVX2/128M-8             1000       1844008 ns/op    9098.23 MB/s
 // BenchmarkBitsetAndNotAVX2/512M-8              100      10232017 ns/op    6558.71 MB/s
 func BenchmarkBitsetAndNotAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range bitsetBenchmarkSizes {
@@ -781,7 +811,7 @@ func BenchmarkBitsetAndNotAVX2(B *testing.B) {
 }
 
 func BenchmarkBitsetOrAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range bitsetBenchmarkSizes {
@@ -798,7 +828,7 @@ func BenchmarkBitsetOrAVX2(B *testing.B) {
 }
 
 func BenchmarkBitsetOrAVX2Flag(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range bitsetBenchmarkSizes {
@@ -824,7 +854,7 @@ func BenchmarkBitsetOrAVX2Flag(B *testing.B) {
 // BenchmarkBitsetXorAVX2/128M-8                1000       2075723 ns/op    8082.59 MB/s
 // BenchmarkBitsetXorAVX2/512M-8                 100      12700923 ns/op    5283.78 MB/s
 func BenchmarkBitsetXorAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range bitsetBenchmarkSizes {
@@ -850,7 +880,7 @@ func BenchmarkBitsetXorAVX2(B *testing.B) {
 // BenchmarkBitsetNotAVX2/128M-8                1000       1072039 ns/op    15649.81 MB/s
 // BenchmarkBitsetNotAVX2/512M-8                 300       4580533 ns/op    14650.88 MB/s
 func BenchmarkBitsetNotAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range bitsetBenchmarkSizes {

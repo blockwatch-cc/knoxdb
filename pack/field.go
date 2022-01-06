@@ -14,8 +14,9 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
-	"blockwatch.cc/knoxdb/filter/bloom"
-	"blockwatch.cc/knoxdb/filter/loglogbeta"
+	"blockwatch.cc/knoxdb/filter/bloomVec"
+	"blockwatch.cc/knoxdb/filter/llbVec"
+
 	"blockwatch.cc/knoxdb/util"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
@@ -2725,12 +2726,12 @@ func (t FieldType) EqualPacksAt(p1 *Package, i1, n1 int, p2 *Package, i2, n2 int
 	}
 }
 
-func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor int) *bloom.Filter {
+func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor int) *bloomVec.Filter {
 	if cardinality <= 0 || factor <= 0 {
 		return nil
 	}
-	m := uint64(cardinality * uint32(factor) * 8) // unit is bits
-	flt := bloom.NewFilter(m, 4)
+	m := int(cardinality) * factor * 8 // unit is bits
+	flt := bloomVec.NewFilter(m)
 	var buf [8]byte
 	switch t {
 	case FieldTypeBytes, FieldTypeString:
@@ -2738,10 +2739,7 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 			flt.Add(b.Bytes.Elem(i))
 		}
 	case FieldTypeDatetime:
-		for _, v := range b.Int64 {
-			bigEndian.PutUint64(buf[:], uint64(v))
-			flt.Add(buf[:])
-		}
+		flt.AddManyInt64(b.Int64)
 	case FieldTypeBoolean:
 		var (
 			count int
@@ -2774,15 +2772,9 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 			flt.Add(buf[:])
 		}
 	case FieldTypeInt64, FieldTypeDecimal64:
-		for _, v := range b.Int64 {
-			bigEndian.PutUint64(buf[:], uint64(v))
-			flt.Add(buf[:])
-		}
+		flt.AddManyInt64(b.Int64)
 	case FieldTypeInt32, FieldTypeDecimal32:
-		for _, v := range b.Int32 {
-			bigEndian.PutUint32(buf[:], uint32(v))
-			flt.Add(buf[:4])
-		}
+		flt.AddManyInt32(b.Int32)
 	case FieldTypeInt16:
 		for _, v := range b.Int64 {
 			bigEndian.PutUint16(buf[:], uint16(v))
@@ -2793,15 +2785,9 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 			flt.Add([]byte{byte(v)})
 		}
 	case FieldTypeUint64:
-		for _, v := range b.Uint64 {
-			bigEndian.PutUint64(buf[:], v)
-			flt.Add(buf[:])
-		}
+		flt.AddManyUint64(b.Uint64)
 	case FieldTypeUint32:
-		for _, v := range b.Uint32 {
-			bigEndian.PutUint32(buf[:], v)
-			flt.Add(buf[:4])
-		}
+		flt.AddManyUint32(b.Uint32)
 	case FieldTypeUint16:
 		for _, v := range b.Uint16 {
 			bigEndian.PutUint16(buf[:], v)
@@ -2938,7 +2924,7 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 		return 2
 	}
 
-	filter := loglogbeta.NewFilterWithPrecision(precision)
+	filter := llbVec.NewFilterWithPrecision(uint32(precision))
 	var buf [8]byte
 	switch t {
 	case FieldTypeBytes, FieldTypeString:
@@ -2946,10 +2932,7 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 			filter.Add(b.Bytes.Elem(i))
 		}
 	case FieldTypeDatetime:
-		for _, v := range b.Int64 {
-			bigEndian.PutUint64(buf[:], uint64(v))
-			filter.Add(buf[:])
-		}
+		filter.AddManyInt64(b.Int64)
 	case FieldTypeBoolean:
 		var (
 			count int
@@ -2982,15 +2965,9 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 			filter.Add(buf[:])
 		}
 	case FieldTypeInt64, FieldTypeDecimal64:
-		for _, v := range b.Int64 {
-			bigEndian.PutUint64(buf[:], uint64(v))
-			filter.Add(buf[:])
-		}
+		filter.AddManyInt64(b.Int64)
 	case FieldTypeInt32, FieldTypeDecimal32:
-		for _, v := range b.Int32 {
-			bigEndian.PutUint32(buf[:], uint32(v))
-			filter.Add(buf[:4])
-		}
+		filter.AddManyInt32(b.Int32)
 	case FieldTypeInt16:
 		for _, v := range b.Int16 {
 			bigEndian.PutUint16(buf[:], uint16(v))
@@ -3001,15 +2978,9 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 			filter.Add([]byte{byte(v)})
 		}
 	case FieldTypeUint64:
-		for _, v := range b.Uint64 {
-			bigEndian.PutUint64(buf[:], v)
-			filter.Add(buf[:])
-		}
+		filter.AddManyUint64(b.Uint64)
 	case FieldTypeUint32:
-		for _, v := range b.Uint32 {
-			bigEndian.PutUint32(buf[:], v)
-			filter.Add(buf[:4])
-		}
+		filter.AddManyUint32(b.Uint32)
 	case FieldTypeUint16:
 		for _, v := range b.Uint16 {
 			bigEndian.PutUint16(buf[:], v)

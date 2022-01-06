@@ -163,32 +163,6 @@ func TestBitsetPopCountGeneric(T *testing.T) {
 	}
 }
 
-func TestBitsetPopCountAVX2(T *testing.T) {
-	if !useAVX2 {
-		T.SkipNow()
-	}
-	for _, c := range bitsetCases {
-		// call the function selector to do proper last byte masking!
-		T.Run(c.name, func(t *testing.T) {
-			cnt := bitsetPopCount(c.source, c.size)
-			if got, want := int(cnt), c.count; got != want {
-				T.Errorf("unexpected count %d, expected %d", got, want)
-			}
-		})
-	}
-	for _, sz := range bitsetSizes {
-		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
-				buf := fillBitset(nil, sz, pt)
-				// call the function selector to do proper last byte masking!
-				if got, want := int(bitsetPopCount(buf, sz)), popcount(buf); got != want {
-					T.Errorf("unexpected count %d, expected %d", got, want)
-				}
-			})
-		}
-	}
-}
-
 func TestBitAndGeneric(T *testing.T) {
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
@@ -243,9 +217,6 @@ func TestBitAndGeneric(T *testing.T) {
 }
 
 func TestBitAndGenericFlag(T *testing.T) {
-	if !useAVX2 {
-		T.SkipNow()
-	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
@@ -463,9 +434,6 @@ func TestBitOrGeneric(T *testing.T) {
 }
 
 func TestBitOrGenericFlag(T *testing.T) {
-	if !useAVX2 {
-		T.SkipNow()
-	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)

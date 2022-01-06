@@ -5,11 +5,10 @@ package vec
 
 import (
     "bytes"
-    "fmt"
     "math"
-    "math/bits"
-    "math/rand"
     "testing"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 // -----------------------------------------------------------------------------
@@ -17,7 +16,7 @@ import (
 //
 
 func TestMatchUint64EqualAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     for _, c := range uint64EqualCases {
@@ -45,7 +44,7 @@ func TestMatchUint64EqualAVX2(T *testing.T) {
 }
 
 func TestMatchUint64EqualAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.SkipNow()
     }
     for _, c := range uint64EqualCases {
@@ -77,7 +76,7 @@ func TestMatchUint64EqualAVX512(T *testing.T) {
 //
 
 func BenchmarkMatchUint64EqualAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -93,7 +92,7 @@ func BenchmarkMatchUint64EqualAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchUint64EqualAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -113,7 +112,7 @@ func BenchmarkMatchUint64EqualAVX512(B *testing.B) {
 //
 
 func TestMatchUint64NotEqualAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     for _, c := range uint64NotEqualCases {
@@ -141,7 +140,7 @@ func TestMatchUint64NotEqualAVX2(T *testing.T) {
 }
 
 func TestMatchUint64NotEqualAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.SkipNow()
     }
     for _, c := range uint64NotEqualCases {
@@ -172,7 +171,7 @@ func TestMatchUint64NotEqualAVX512(T *testing.T) {
 // NotEqual benchmarks
 //
 func BenchmarkMatchUint64NotEqualAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -188,7 +187,7 @@ func BenchmarkMatchUint64NotEqualAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchUint64NotEqualAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -208,7 +207,7 @@ func BenchmarkMatchUint64NotEqualAVX512(B *testing.B) {
 //
 
 func TestMatchUint64LessAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     for _, c := range uint64LessCases {
@@ -236,7 +235,7 @@ func TestMatchUint64LessAVX2(T *testing.T) {
 }
 
 func TestMatchUint64LessAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.SkipNow()
     }
     for _, c := range uint64LessCases {
@@ -267,7 +266,7 @@ func TestMatchUint64LessAVX512(T *testing.T) {
 // Less benchmarks
 //
 func BenchmarkMatchUint64LessAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -283,7 +282,7 @@ func BenchmarkMatchUint64LessAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchUint64LessAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -303,7 +302,7 @@ func BenchmarkMatchUint64LessAVX512(B *testing.B) {
 //
 
 func TestMatchUint64LessEqualAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     for _, c := range uint64LessEqualCases {
@@ -331,7 +330,7 @@ func TestMatchUint64LessEqualAVX2(T *testing.T) {
 }
 
 func TestMatchUint64LessEqualAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.SkipNow()
     }
     for _, c := range uint64LessEqualCases {
@@ -362,7 +361,7 @@ func TestMatchUint64LessEqualAVX512(T *testing.T) {
 // Less equal benchmarks
 //
 func BenchmarkMatchUint64LessEqualAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -378,7 +377,7 @@ func BenchmarkMatchUint64LessEqualAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchUint64LessEqualAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -397,7 +396,7 @@ func BenchmarkMatchUint64LessEqualAVX512(B *testing.B) {
 // Greater Testcases
 //
 func TestMatchUint64GreaterAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     for _, c := range uint64GreaterCases {
@@ -425,7 +424,7 @@ func TestMatchUint64GreaterAVX2(T *testing.T) {
 }
 
 func TestMatchUint64GreaterAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.SkipNow()
     }
     for _, c := range uint64GreaterCases {
@@ -456,7 +455,7 @@ func TestMatchUint64GreaterAVX512(T *testing.T) {
 // Greater benchmarks
 //
 func BenchmarkMatchUint64GreaterAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -472,7 +471,7 @@ func BenchmarkMatchUint64GreaterAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchUint64GreaterAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -492,7 +491,7 @@ func BenchmarkMatchUint64GreaterAVX512(B *testing.B) {
 //
 
 func TestMatchUint64GreaterEqualAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     for _, c := range uint64GreaterEqualCases {
@@ -520,7 +519,7 @@ func TestMatchUint64GreaterEqualAVX2(T *testing.T) {
 }
 
 func TestMatchUint64GreaterEqualAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.SkipNow()
     }
     for _, c := range uint64GreaterEqualCases {
@@ -551,7 +550,7 @@ func TestMatchUint64GreaterEqualAVX512(T *testing.T) {
 // Greater equal benchmarks
 //
 func BenchmarkMatchUint64GreaterEqualAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -567,7 +566,7 @@ func BenchmarkMatchUint64GreaterEqualAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchUint64GreaterEqualAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -586,7 +585,7 @@ func BenchmarkMatchUint64GreaterEqualAVX512(B *testing.B) {
 // Between Testcases
 //
 func TestMatchUint64BetweenAVX2(T *testing.T) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         T.SkipNow()
     }
     for _, c := range uint64BetweenCases {
@@ -614,7 +613,7 @@ func TestMatchUint64BetweenAVX2(T *testing.T) {
 }
 
 func TestMatchUint64BetweenAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.SkipNow()
     }
     for _, c := range uint64BetweenCases {
@@ -645,7 +644,7 @@ func TestMatchUint64BetweenAVX512(T *testing.T) {
 // Between benchmarks
 //
 func BenchmarkMatchUint64BetweenAVX2(B *testing.B) {
-    if !useAVX2 {
+    if !util.UseAVX2 {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {
@@ -661,7 +660,7 @@ func BenchmarkMatchUint64BetweenAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchUint64BetweenAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.SkipNow()
     }
     for _, n := range vecBenchmarkSizes {

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
-	"blockwatch.cc/knoxdb/filter/bloom"
+	"blockwatch.cc/knoxdb/filter/bloomVec"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -31,11 +31,11 @@ type BlockInfo struct {
 	Scale       int
 
 	// statistics
-	MinValue    interface{}   // vector min
-	MaxValue    interface{}   // vector max
-	Bloom       *bloom.Filter // optimized bloom filter
-	Cardinality uint32        // unique items in vector
-	dirty       bool          // update required
+	MinValue    interface{}      // vector min
+	MaxValue    interface{}      // vector max
+	Bloom       *bloomVec.Filter // optimized bloom filter
+	Cardinality uint32           // unique items in vector
+	dirty       bool             // update required
 }
 
 func (h BlockInfo) IsValid() bool {
@@ -500,7 +500,7 @@ func (h *BlockInfo) Decode(buf *bytes.Buffer, version byte) error {
 		bCopy := make([]byte, sz)
 		copy(bCopy, b)
 		var err error
-		h.Bloom, err = bloom.NewFilterBuffer(bCopy, 4)
+		h.Bloom, err = bloomVec.NewFilterBuffer(bCopy)
 		if err != nil {
 			return fmt.Errorf("pack: reading bloom filter: %w", err)
 		}

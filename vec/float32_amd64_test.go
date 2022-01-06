@@ -5,11 +5,10 @@ package vec
 
 import (
     "bytes"
-    "fmt"
     "math"
-    "math/bits"
-    "math/rand"
     "testing"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 // -----------------------------------------------------------------------------
@@ -42,7 +41,7 @@ func TestMatchFloat32EqualAVX2(T *testing.T) {
 }
 
 func TestMatchFloat32EqualAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.Skip("AVX512F not available. Skipping TestMatchFloat32EqualAVX512.")
     }
     for _, c := range float32EqualCases {
@@ -87,7 +86,7 @@ func BenchmarkMatchFloat32EqualAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32EqualAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.Skip("AVX512F not available. Skipping BenchmarkMatchFloat32EqualAVX512.")
     }
     for _, n := range vecBenchmarkSizes {
@@ -132,7 +131,7 @@ func TestMatchFloat32NotEqualAVX2(T *testing.T) {
 }
 
 func TestMatchFloat32NotEqualAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.Skip("AVX512F not available. Skipping TestMatchFloat32NotEqualAVX512.")
     }
     for _, c := range float32NotEqualCases {
@@ -177,7 +176,7 @@ func BenchmarkMatchFloat32NotEqualAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32NotEqualAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.Skip("AVX512F not available. Skipping BenchmarkMatchFloat32NotEqualAVX512.")
     }
     for _, n := range vecBenchmarkSizes {
@@ -222,7 +221,7 @@ func TestMatchFloat32LessAVX2(T *testing.T) {
 }
 
 func TestMatchFloat32LessAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.Skip("AVX512F not available. Skipping TestMatchFloat32LessAVX512.")
     }
     for _, c := range float32LessCases {
@@ -267,7 +266,7 @@ func BenchmarkMatchFloat32LessAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32LessAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.Skip("AVX512F not available. Skipping BenchmarkMatchFloat32LessAVX512.")
     }
     for _, n := range vecBenchmarkSizes {
@@ -312,7 +311,7 @@ func TestMatchFloat32LessEqualAVX2(T *testing.T) {
 }
 
 func TestMatchFloat32LessEqualAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.Skip("AVX512F not available. Skipping TestMatchFloat32LessEqualAVX512.")
     }
     for _, c := range float32LessEqualCases {
@@ -357,7 +356,7 @@ func BenchmarkMatchFloat32LessEqualAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32LessEqualAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.Skip("AVX512F not available. Skipping BenchmarkMatchFloat32LessEqualAVX512.")
     }
     for _, n := range vecBenchmarkSizes {
@@ -402,7 +401,7 @@ func TestMatchFloat32GreaterAVX2(T *testing.T) {
 }
 
 func TestMatchFloat32GreaterAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.Skip("AVX512F not available. Skipping TestMatchFloat32GreaterAVX512.")
     }
     for _, c := range float32GreaterCases {
@@ -447,7 +446,7 @@ func BenchmarkMatchFloat32GreaterAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32GreaterAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.Skip("AVX512F not available. Skipping BenchmarkMatchFloat32GreaterAVX512.")
     }
     for _, n := range vecBenchmarkSizes {
@@ -492,7 +491,7 @@ func TestMatchFloat32GreaterEqualAVX2(T *testing.T) {
 }
 
 func TestMatchFloat32GreaterEqualAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.Skip("AVX512F not available. Skipping TestMatchFloat32GreaterEqualAVX512.")
     }
     for _, c := range float32GreaterEqualCases {
@@ -537,7 +536,7 @@ func BenchmarkMatchFloat32GreaterEqualAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32GreaterEqualAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.Skip("AVX512F not available. Skipping BenchmarkMatchFloat32GreaterEqualAVX512.")
     }
     for _, n := range vecBenchmarkSizes {
@@ -582,7 +581,7 @@ func TestMatchFloat32BetweenAVX2(T *testing.T) {
 }
 
 func TestMatchFloat32BetweenAVX512(T *testing.T) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         T.Skip("AVX512F not available. Skipping TestMatchFloat32BetweenAVX512.")
     }
     for _, c := range float32BetweenCases {
@@ -627,7 +626,7 @@ func BenchmarkMatchFloat32BetweenAVX2(B *testing.B) {
 }
 
 func BenchmarkMatchFloat32BetweenAVX512(B *testing.B) {
-    if !useAVX512_F {
+    if !util.UseAVX512_F {
         B.Skip("AVX512F not available. Skipping BenchmarkMatchFloat32BetweenAVX512.")
     }
     for _, n := range vecBenchmarkSizes {
