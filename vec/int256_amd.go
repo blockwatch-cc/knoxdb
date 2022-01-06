@@ -1,9 +1,14 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
+//go:build go1.7 && amd64 && !gccgo && !appengine
 // +build go1.7,amd64,!gccgo,!appengine
 
 package vec
+
+import (
+	"blockwatch.cc/knoxdb/util"
+)
 
 //go:noescape
 func matchInt256EqualAVX2Core(src Int256LLSlice, val Int256, bits []byte) int64
@@ -49,9 +54,9 @@ func matchInt256BetweenAVX2Core(src Int256LLSlice, a, b Int256, bits []byte) int
 
 func matchInt256Equal(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
-	// case useAVX512_F:
+	// case util.UseAVX512_F:
 	// 	return matchInt256EqualAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchInt256EqualAVX2(src, val, bits)
 	default:
 		return matchInt256EqualGeneric(src, val, bits, mask)
@@ -60,9 +65,9 @@ func matchInt256Equal(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 
 func matchInt256NotEqual(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
-	// case useAVX512_F:
+	// case util.UseAVX512_F:
 	// 	return matchInt256NotEqualAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchInt256NotEqualAVX2(src, val, bits)
 	default:
 		return matchInt256NotEqualGeneric(src, val, bits, mask)
@@ -71,9 +76,9 @@ func matchInt256NotEqual(src Int256LLSlice, val Int256, bits, mask []byte) int64
 
 func matchInt256LessThan(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
-	// case useAVX512_F:
+	// case util.UseAVX512_F:
 	// 	return matchInt256LessThanAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchInt256LessThanAVX2(src, val, bits)
 	default:
 		return matchInt256LessThanGeneric(src, val, bits, mask)
@@ -82,9 +87,9 @@ func matchInt256LessThan(src Int256LLSlice, val Int256, bits, mask []byte) int64
 
 func matchInt256LessThanEqual(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
-	// case useAVX512_F:
+	// case util.UseAVX512_F:
 	// 	return matchInt256LessThanEqualAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchInt256LessThanEqualAVX2(src, val, bits)
 	default:
 		return matchInt256LessThanEqualGeneric(src, val, bits, mask)
@@ -93,9 +98,9 @@ func matchInt256LessThanEqual(src Int256LLSlice, val Int256, bits, mask []byte) 
 
 func matchInt256GreaterThan(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
-	// case useAVX512_F:
+	// case util.UseAVX512_F:
 	// 	return matchInt256GreaterThanAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchInt256GreaterThanAVX2(src, val, bits)
 	default:
 		return matchInt256GreaterThanGeneric(src, val, bits, mask)
@@ -104,9 +109,9 @@ func matchInt256GreaterThan(src Int256LLSlice, val Int256, bits, mask []byte) in
 
 func matchInt256GreaterThanEqual(src Int256LLSlice, val Int256, bits, mask []byte) int64 {
 	switch {
-	// case useAVX512_F:
+	// case util.UseAVX512_F:
 	// 	return matchInt256GreaterThanEqualAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchInt256GreaterThanEqualAVX2(src, val, bits)
 	default:
 		return matchInt256GreaterThanEqualGeneric(src, val, bits, mask)
@@ -115,9 +120,9 @@ func matchInt256GreaterThanEqual(src Int256LLSlice, val Int256, bits, mask []byt
 
 func matchInt256Between(src Int256LLSlice, a, b Int256, bits, mask []byte) int64 {
 	switch {
-	// case useAVX512_F:
+	// case util.UseAVX512_F:
 	// 	return matchInt256BetweenAVX512(src, a, b, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchInt256BetweenAVX2(src, a, b, bits)
 	default:
 		return matchInt256BetweenGeneric(src, a, b, bits, mask)

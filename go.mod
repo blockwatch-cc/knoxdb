@@ -5,7 +5,7 @@ go 1.14
 require (
 	github.com/echa/log v1.0.6
 	github.com/frankban/quicktest v1.10.0 // indirect
-	github.com/golang/snappy v0.0.2
+	github.com/golang/snappy v0.0.4
 	github.com/google/go-cmp v0.5.1
 	github.com/kr/pretty v0.2.1 // indirect
 	github.com/pierrec/lz4 v2.6.0+incompatible

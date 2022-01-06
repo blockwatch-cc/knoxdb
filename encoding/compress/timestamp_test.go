@@ -58,7 +58,7 @@ func TestTimeArrayEncodeAll(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -140,7 +140,7 @@ func testTimeArrayEncodeAll_Compare(t *testing.T, input []int64, encoding byte) 
 	}
 
 	buf := &bytes.Buffer{}
-	err = TimeArrayEncodeAll(input, buf)
+	_, err = TimeArrayEncodeAll(input, buf)
 	buf2 := buf.Bytes()
 	if err != nil {
 		t.Fatalf("unexpected error: %v\nbuf: %db %x", err, len(buf2), buf2)
@@ -171,7 +171,7 @@ func testTimeArrayEncodeAll_Compare(t *testing.T, input []int64, encoding byte) 
 
 func TestTimeArrayEncodeAll_NoValues(t *testing.T) {
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(nil, buf)
+	_, err := TimeArrayEncodeAll(nil, buf)
 	b := buf.Bytes()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -190,7 +190,7 @@ func TestTimeArrayEncodeAll_One(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -217,7 +217,7 @@ func TestTimeArrayEncodeAll_Two(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -252,7 +252,7 @@ func TestTimeArrayEncodeAll_Three(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -295,7 +295,7 @@ func TestTimeArrayEncodeAll_Large_Range(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -334,7 +334,7 @@ func TestTimeArrayEncodeAll_Uncompressed(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if err != nil {
 		t.Fatalf("expected error: %v", err)
@@ -384,7 +384,7 @@ func TestTimeArrayEncodeAll_RLE(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if exp := 12; len(b) != exp {
 		t.Fatalf("length mismatch: got %v, exp %v", len(b), exp)
@@ -421,7 +421,7 @@ func TestTimeArrayEncodeAll_Reverse(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -453,7 +453,7 @@ func TestTimeArrayEncodeAll_220SecondDelta(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -502,7 +502,7 @@ func TestTimeArrayEncodeAll_Quick(t *testing.T) {
 
 		// Retrieve encoded bytes from encoder.
 		buf := &bytes.Buffer{}
-		err := TimeArrayEncodeAll(values, buf)
+		_, err := TimeArrayEncodeAll(values, buf)
 		b := buf.Bytes()
 		if err != nil {
 			t.Fatal(err)
@@ -549,7 +549,7 @@ func TestTimeArrayEncodeAll_RLESeconds(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if got := b[0] >> 4; got != timeCompressedRLE {
 		t.Fatalf("Wrong encoding used: expected rle, got %v", got)
@@ -588,7 +588,7 @@ func TestTimeArrayEncodeAll_Count_Uncompressed(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if got := b[0] >> 4; got != timeUncompressed {
 		t.Fatalf("Wrong encoding used: expected rle, got %v", got)
@@ -616,7 +616,7 @@ func TestTimeArrayEncodeAll_Count_RLE(t *testing.T) {
 	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if got := b[0] >> 4; got != timeCompressedRLE {
 		t.Fatalf("Wrong encoding used: expected rle, got %v", got)
@@ -635,7 +635,7 @@ func TestTimeArrayEncodeAll_Count_Simple8(t *testing.T) {
 	src := []int64{0, 1, 3}
 
 	buf := &bytes.Buffer{}
-	err := TimeArrayEncodeAll(src, buf)
+	_, err := TimeArrayEncodeAll(src, buf)
 	b := buf.Bytes()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1073,7 +1073,7 @@ func BenchmarkEncodeTimestamps(b *testing.B) {
 				b.ReportAllocs()
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
-					if err = TimeArrayEncodeAll(input, bufResultBuffer); err != nil {
+					if _, err = TimeArrayEncodeAll(input, bufResultBuffer); err != nil {
 						b.Fatal(err)
 					}
 					copy(input, src) // Reset input that gets modified in IntegerArrayEncodeAll
@@ -1115,7 +1115,7 @@ func BenchmarkEncodeTimestamps(b *testing.B) {
 				b.ReportAllocs()
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
-					if err = TimeArrayEncodeAll(input, bufResultBuffer); err != nil {
+					if _, err = TimeArrayEncodeAll(input, bufResultBuffer); err != nil {
 						b.Fatal(err)
 					}
 					copy(input, src) // Reset input that gets modified in IntegerArrayEncodeAll
@@ -1155,7 +1155,7 @@ func BenchmarkEncodeTimestamps(b *testing.B) {
 				b.ReportAllocs()
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
-					if err = TimeArrayEncodeAll(input, bufResultBuffer); err != nil {
+					if _, err = TimeArrayEncodeAll(input, bufResultBuffer); err != nil {
 						b.Fatal(err)
 					}
 					copy(input, src) // Reset input that gets modified in IntegerArrayEncodeAll

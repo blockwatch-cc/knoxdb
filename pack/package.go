@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/util"
 
 	. "blockwatch.cc/knoxdb/encoding/decimal"
@@ -30,7 +31,7 @@ type Package struct {
 	dirty    bool           // pack is updated, needs to be written
 	cached   bool           // pack is cached
 	stripped bool           // some blocks are ignored, don't store this pack
-	sizeHint int            // block size hint
+	capHint  int            // block size hint
 	size     int            // storage size
 }
 
@@ -64,9 +65,14 @@ func encodePackKey(key uint32) []byte {
 
 func NewPackage(sz int) *Package {
 	return &Package{
-		pkindex:  -1,
-		sizeHint: sz,
+		pkindex: -1,
+		capHint: sz,
+		dirty:   true,
 	}
+}
+
+func (p *Package) CopyType(pkg *Package) error {
+	return p.InitFields(pkg.fields, pkg.tinfo)
 }
 
 func (p *Package) IsDirty() bool {
@@ -107,6 +113,18 @@ func (p *Package) FieldByName(name string) Field {
 		}
 	}
 	return Field{Index: -1}
+}
+
+func (p *Package) PkField() Field {
+	return p.fields.Pk()
+}
+
+func (p *Package) Fields() FieldList {
+	return p.fields
+}
+
+func (p *Package) Blocks() []*block.Block {
+	return p.blocks
 }
 
 func (p *Package) FieldById(idx int) Field {
@@ -179,7 +197,7 @@ func (p *Package) InitType(proto interface{}) error {
 	if len(p.blocks) == 0 {
 		p.blocks = make([]*block.Block, p.nFields)
 		for i, f := range p.fields {
-			p.blocks[i] = f.NewBlock(p.sizeHint)
+			p.blocks[i] = f.NewBlock(p.capHint)
 		}
 	} else {
 		// make sure we use the correct compression (empty blocks are stored without)
@@ -230,7 +248,7 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	if len(p.blocks) == 0 {
 		p.blocks = make([]*block.Block, p.nFields)
 		for i, f := range fields {
-			p.blocks[i] = f.NewBlock(p.sizeHint)
+			p.blocks[i] = f.NewBlock(p.capHint)
 		}
 	} else {
 		// make sure we use the correct compression (empty blocks are stored without)
@@ -241,36 +259,91 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	return nil
 }
 
-func (p *Package) Clone(copydata bool, sz int) (*Package, error) {
-	clone := &Package{
-		nFields:  p.nFields,
-		nValues:  0,
-		fields:   p.fields,
-		key:      0, // cloned pack has no identity yet
-		dirty:    true,
-		stripped: p.stripped, // cloning a stripped pack is allowed
-		tinfo:    p.tinfo,    // share static type info
-		pkindex:  p.pkindex,
-		sizeHint: p.sizeHint,
+func (p *Package) InitFieldsFrom(src *Package) error {
+	return p.InitFields(src.fields, src.tinfo)
+}
+
+// may be called from Join, no pk required
+func (p *Package) InitResultFields(fields FieldList, tinfo *typeInfo) error {
+	if len(fields) > 256 {
+		return fmt.Errorf("pack: cannot handle more than 256 fields")
+	}
+	if len(fields) == 0 {
+		return fmt.Errorf("pack: empty fields")
+	}
+	if len(p.fields) > 0 {
+		return fmt.Errorf("pack: already initialized")
 	}
 
-	if len(p.blocks) > 0 {
-		clone.blocks = make([]*block.Block, p.nFields)
-		// create new empty blocks
-		for i, b := range p.blocks {
-			var err error
-			clone.blocks[i], err = b.Clone(sz, copydata)
-			if err != nil {
-				return nil, err
-			}
-			// overwrite compression (empty journal blocks get saved without)
-			clone.blocks[i].SetCompression(p.fields[i].Flags.Compression())
-		}
-		if copydata {
-			clone.nValues = p.nValues
+	p.fields = fields
+	p.nFields = len(fields)
+	p.pkindex = fields.PkIndex()
+	p.tinfo = tinfo
+
+	if len(p.blocks) == 0 {
+		p.blocks = make([]*block.Block, p.nFields)
+		for i, f := range fields {
+			p.blocks[i] = f.NewBlock(p.capHint)
 		}
 	}
+	return nil
+}
+
+func (p *Package) Clone(capacity int) (*Package, error) {
+	// cloned pack has no identity yet
+	// cloning a stripped pack is allowed
+	clone := NewPackage(capacity)
+	if err := clone.CopyType(p); err != nil {
+		return nil, err
+	}
+	clone.nValues = p.nValues
+	clone.size = p.size
+	clone.stripped = p.stripped
+
+	for i, src := range p.blocks {
+		if src.IsIgnore() {
+			continue
+		}
+		clone.blocks[i].Copy(src)
+	}
+
 	return clone, nil
+}
+
+func (p *Package) Optimize() {
+	if p.key == journalKey {
+		return
+	}
+	for _, b := range p.blocks {
+		if b.IsIgnore() {
+			continue
+		}
+		if b.Type() == block.BlockBytes && !b.Bytes.IsOptimized() {
+			// log.Infof("Pack %d: optimize %T rows=%d len=%d cap=%d", p.key, b.Bytes, p.nValues, b.Bytes.Len(), b.Bytes.Cap())
+			opt := b.Bytes.Optimize()
+			b.Bytes.Release()
+			b.Bytes = opt
+			// log.Infof("Pack %d: optimized to %T len=%d cap=%d", p.key, b.Bytes, b.Bytes.Len(), b.Bytes.Cap())
+		}
+	}
+}
+
+func (p *Package) Materialize() {
+	if p.key == journalKey {
+		return
+	}
+	for _, b := range p.blocks {
+		if b.IsIgnore() {
+			continue
+		}
+		if b.Type() == block.BlockBytes && !b.Bytes.IsMaterialized() {
+			// log.Infof("Pack %d: materialize %T rows=%d len=%d cap=%d", p.key, b.Bytes, p.nValues, b.Bytes.Len(), b.Bytes.Cap())
+			mat := b.Bytes.Materialize()
+			b.Bytes.Release()
+			b.Bytes = mat
+			// log.Infof("Pack %d: materialized to %T len=%d cap=%d", p.key, b.Bytes, b.Bytes.Len(), b.Bytes.Cap())
+		}
+	}
 }
 
 func (p *Package) KeepFields(fields FieldList) *Package {
@@ -342,22 +415,20 @@ func (p *Package) Push(v interface{}) error {
 					return err
 				}
 			} else {
-				src := f.Bytes()
-				buf = make([]byte, len(src))
-				copy(buf, src)
+				buf = f.Bytes()
 			}
-			b.Bytes = append(b.Bytes, buf)
+			b.Bytes.Append(buf)
 		case FieldTypeString:
 			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
-				txt, err := f.Interface().(encoding.TextMarshaler).MarshalText()
+				buf, err := f.Interface().(encoding.TextMarshaler).MarshalText()
 				if err != nil {
 					return err
 				}
-				b.Strings = append(b.Strings, string(txt))
+				b.Bytes.Append(buf)
 			} else if f.CanInterface() && f.Type().Implements(stringerType) {
-				b.Strings = append(b.Strings, f.Interface().(fmt.Stringer).String())
+				b.Bytes.Append(compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
 			} else {
-				b.Strings = append(b.Strings, f.String())
+				b.Bytes.Append(compress.UnsafeGetBytes(f.String()))
 			}
 		case FieldTypeDatetime:
 			b.Int64 = append(b.Int64, f.Interface().(time.Time).UnixNano())
@@ -483,31 +554,28 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 
 		switch field.Type {
 		case FieldTypeBytes:
-			var buf []byte
 			// check if type implements BinaryMarshaler
 			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				var err error
-				if buf, err = f.Interface().(encoding.BinaryMarshaler).MarshalBinary(); err != nil {
-					return err
-				}
-			} else {
-				src := f.Bytes()
-				buf = make([]byte, len(src))
-				copy(buf, src)
-			}
-			b.Bytes[pos] = buf
-
-		case FieldTypeString:
-			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
-				txt, err := f.Interface().(encoding.TextMarshaler).MarshalText()
+				buf, err := f.Interface().(encoding.BinaryMarshaler).MarshalBinary()
 				if err != nil {
 					return err
 				}
-				b.Strings[pos] = string(txt)
-			} else if f.CanInterface() && f.Type().Implements(stringerType) {
-				b.Strings[pos] = f.Interface().(fmt.Stringer).String()
+				b.Bytes.Set(pos, buf)
 			} else {
-				b.Strings[pos] = f.String()
+				b.Bytes.Set(pos, f.Bytes())
+			}
+
+		case FieldTypeString:
+			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
+				buf, err := f.Interface().(encoding.TextMarshaler).MarshalText()
+				if err != nil {
+					return err
+				}
+				b.Bytes.Set(pos, buf)
+			} else if f.CanInterface() && f.Type().Implements(stringerType) {
+				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
+			} else {
+				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.String()))
 			}
 
 		case FieldTypeDatetime:
@@ -635,6 +703,8 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
+	// log.Infof("Reading %s at pkg %d pos %d", tinfo.name, p.key, pos)
+
 	for _, fi := range tinfo.fields {
 		// Note: field to block mapping is required to be initialized in tinfo!
 		// this happens once for every new type used in Result.DecodeAt(),
@@ -665,28 +735,29 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			if dst.CanAddr() {
 				pv := dst.Addr()
 				if pv.CanInterface() && pv.Type().Implements(binaryUnmarshalerType) {
-					if err := pv.Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes[pos]); err != nil {
+					if err := pv.Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes.Elem(pos)); err != nil {
 						return err
 					}
 					break
 				}
 			}
 			// copy to avoid memleaks of large blocks
-			buf := make([]byte, len(b.Bytes[pos]))
-			copy(buf, b.Bytes[pos])
+			elm := b.Bytes.Elem(pos)
+			buf := make([]byte, len(elm))
+			copy(buf, elm)
 			dst.SetBytes(buf)
 
 		case FieldTypeString:
 			if dst.CanAddr() {
 				pv := dst.Addr()
 				if pv.CanInterface() && pv.Type().Implements(textUnmarshalerType) {
-					if err := pv.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(b.Strings[pos])); err != nil {
+					if err := pv.Interface().(encoding.TextUnmarshaler).UnmarshalText(b.Bytes.Elem(pos)); err != nil {
 						return err
 					}
 					break
 				}
 			}
-			dst.SetString(b.Strings[pos])
+			dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
 
 		case FieldTypeDatetime:
 			dst.Set(reflect.ValueOf(time.Unix(0, b.Int64[pos]).UTC()))
@@ -805,10 +876,10 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 
 	switch field.Type {
 	case FieldTypeBytes:
-		return b.Bytes[pos], nil
+		return b.Bytes.Elem(pos), nil
 
 	case FieldTypeString:
-		return b.Strings[pos], nil
+		return compress.UnsafeGetString(b.Bytes.Elem(pos)), nil
 
 	case FieldTypeDatetime:
 		val := time.Unix(0, b.Int64[pos]).UTC()
@@ -893,31 +964,28 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 
 	switch field.Type {
 	case FieldTypeBytes:
-		var buf []byte
 		// check if type implements BinaryMarshaler
 		if val.CanInterface() && val.Type().Implements(binaryMarshalerType) {
-			var err error
-			if buf, err = val.Interface().(encoding.BinaryMarshaler).MarshalBinary(); err != nil {
-				return err
-			}
-		} else {
-			src := val.Bytes()
-			buf = make([]byte, len(src))
-			copy(buf, src)
-		}
-		b.Bytes[pos] = buf
-
-	case FieldTypeString:
-		if val.CanInterface() && val.Type().Implements(textMarshalerType) {
-			txt, err := val.Interface().(encoding.TextMarshaler).MarshalText()
+			buf, err := val.Interface().(encoding.BinaryMarshaler).MarshalBinary()
 			if err != nil {
 				return err
 			}
-			b.Strings[pos] = string(txt)
-		} else if val.CanInterface() && val.Type().Implements(stringerType) {
-			b.Strings[pos] = val.Interface().(fmt.Stringer).String()
+			b.Bytes.Set(pos, buf)
 		} else {
-			b.Strings[pos] = val.String()
+			b.Bytes.Set(pos, val.Bytes())
+		}
+
+	case FieldTypeString:
+		if val.CanInterface() && val.Type().Implements(textMarshalerType) {
+			buf, err := val.Interface().(encoding.TextMarshaler).MarshalText()
+			if err != nil {
+				return err
+			}
+			b.Bytes.Set(pos, buf)
+		} else if val.CanInterface() && val.Type().Implements(stringerType) {
+			b.Bytes.Set(pos, compress.UnsafeGetBytes(val.Interface().(fmt.Stringer).String()))
+		} else {
+			b.Bytes.Set(pos, compress.UnsafeGetBytes(val.String()))
 		}
 
 	case FieldTypeDatetime:
@@ -1093,14 +1161,14 @@ func (p *Package) StringAt(index, pos int) (string, error) {
 	if err := p.isValidAt(index, pos, FieldTypeString); err != nil {
 		return "", err
 	}
-	return p.blocks[index].Strings[pos], nil
+	return compress.UnsafeGetString(p.blocks[index].Bytes.Elem(pos)), nil
 }
 
 func (p *Package) BytesAt(index, pos int) ([]byte, error) {
 	if err := p.isValidAt(index, pos, FieldTypeBytes); err != nil {
 		return nil, err
 	}
-	return p.blocks[index].Bytes[pos], nil
+	return p.blocks[index].Bytes.Elem(pos), nil
 }
 
 func (p *Package) BoolAt(index, pos int) (bool, error) {
@@ -1182,10 +1250,8 @@ func (p *Package) IsZeroAt(index, pos int, zeroIsNull bool) bool {
 	case FieldTypeFloat32:
 		v := float64(p.blocks[index].Float32[pos])
 		return math.IsNaN(v) || math.IsInf(v, 0) || (zeroIsNull && v == 0.0)
-	case FieldTypeString:
-		return len(p.blocks[index].Strings[pos]) == 0
-	case FieldTypeBytes:
-		return len(p.blocks[index].Bytes[pos]) == 0
+	case FieldTypeString, FieldTypeBytes:
+		return len(p.blocks[index].Bytes.Elem(pos)) == 0
 	case FieldTypeDatetime:
 		val := p.blocks[index].Int64[pos]
 		return val == 0 || (zeroIsNull && time.Unix(0, val).IsZero())
@@ -1287,12 +1353,9 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 
 		switch field.Type {
 		case FieldTypeBytes:
-			buf := make([]byte, len(b.Bytes[pos]))
-			copy(buf, b.Bytes[pos])
-			out[i] = buf
+			out[i] = b.Bytes.Elem(pos)
 		case FieldTypeString:
-			str := b.Strings[pos]
-			out[i] = str
+			out[i] = compress.UnsafeGetString(b.Bytes.Elem(pos))
 		case FieldTypeDatetime:
 			// materialize
 			out[i] = time.Unix(0, b.Int64[pos]).UTC()
@@ -1357,18 +1420,23 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 	switch field.Type {
 	case FieldTypeBytes:
 		// Note: does not copy data; don't reference!
-		return b.Bytes[start:end], nil
+		return b.Bytes.Subslice(start, end), nil
 	case FieldTypeString:
-		return b.Strings[start:end], nil
+		// Note: does not copy data; don't reference!
+		s := make([]string, end-start+1)
+		for i, v := range b.Bytes.Subslice(start, end) {
+			s[i] = compress.UnsafeGetString(v)
+		}
+		return s, nil
 	case FieldTypeDatetime:
 		// materialize
-		res := make([]time.Time, end-start)
+		res := make([]time.Time, end-start+1)
 		for i, v := range b.Int64[start:end] {
 			res[i+start] = time.Unix(0, v).UTC()
 		}
 		return res, nil
 	case FieldTypeBoolean:
-		return b.Bits.SubSlice(start, end-start), nil
+		return b.Bits.SubSlice(start, end-start+1), nil
 	case FieldTypeFloat64:
 		return b.Float64[start:end], nil
 	case FieldTypeFloat32:
@@ -1442,16 +1510,8 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 		}
 
 		switch dstField.Type {
-		case FieldTypeBytes:
-			for j, v := range src.Bytes[srcPos : srcPos+n] {
-				// always allocate new slice because underlying block slice is shared
-				buf := make([]byte, len(v))
-				copy(buf, v)
-				dst.Bytes[dstPos+j] = buf
-			}
-
-		case FieldTypeString:
-			copy(dst.Strings[dstPos:], src.Strings[srcPos:srcPos+n])
+		case FieldTypeBytes, FieldTypeString:
+			dst.Bytes.Copy(src.Bytes, dstPos, srcPos, n)
 
 		case FieldTypeBoolean:
 			dst.Bits.Replace(src.Bits, srcPos, n, dstPos)
@@ -1564,15 +1624,12 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 		}
 
 		switch dstField.Type {
-		case FieldTypeBytes:
-			for _, v := range src.Bytes[srcPos : srcPos+srcLen] {
-				buf := make([]byte, len(v))
-				copy(buf, v)
-				dst.Bytes = append(dst.Bytes, buf)
+		case FieldTypeBytes, FieldTypeString:
+			if srcLen == 1 {
+				dst.Bytes.Append(src.Bytes.Elem(srcPos))
+			} else {
+				dst.Bytes.Append(src.Bytes.Subslice(srcPos, srcPos+srcLen)...)
 			}
-
-		case FieldTypeString:
-			dst.Strings = append(dst.Strings, src.Strings[srcPos:srcPos+srcLen]...)
 
 		case FieldTypeBoolean:
 			dst.Bits.Append(src.Bits, srcPos, srcLen)
@@ -1687,11 +1744,8 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 		}
 
 		switch dstField.Type {
-		case FieldTypeBytes:
-			dst.Bytes = vec.Bytes.Insert(dst.Bytes, dstPos, src.Bytes[srcPos:srcPos+n]...)
-
-		case FieldTypeString:
-			dst.Strings = vec.Strings.Insert(dst.Strings, dstPos, src.Strings[srcPos:srcPos+n]...)
+		case FieldTypeBytes, FieldTypeString:
+			dst.Bytes.Insert(dstPos, src.Bytes.Subslice(srcPos, srcPos+n)...)
 
 		case FieldTypeBoolean:
 			dst.Bits.Insert(src.Bits, srcPos, srcLen, dstPos)
@@ -1802,11 +1856,8 @@ func (p *Package) Grow(n int) error {
 		field := p.fields[i]
 
 		switch field.Type {
-		case FieldTypeBytes:
-			b.Bytes = append(b.Bytes, make([][]byte, n)...)
-
-		case FieldTypeString:
-			b.Strings = append(b.Strings, make([]string, n)...)
+		case FieldTypeBytes, FieldTypeString:
+			b.Bytes.Append(make([][]byte, n)...)
 
 		case FieldTypeBoolean:
 			b.Bits.Grow(b.Bits.Len() + n)
@@ -1872,19 +1923,8 @@ func (p *Package) Delete(pos, n int) error {
 		field := p.fields[i]
 
 		switch field.Type {
-		case FieldTypeBytes:
-			// avoid mem leaks
-			for j, l := pos, pos+n; j < l; j++ {
-				b.Bytes[j] = nil
-			}
-			b.Bytes = append(b.Bytes[:pos], b.Bytes[pos+n:]...)
-
-		case FieldTypeString:
-			// avoid mem leaks
-			for j, l := pos, pos+n; j < l; j++ {
-				b.Strings[j] = ""
-			}
-			b.Strings = append(b.Strings[:pos], b.Strings[pos+n:]...)
+		case FieldTypeBytes, FieldTypeString:
+			b.Bytes.Delete(pos, n)
 
 		case FieldTypeBoolean:
 			b.Bits.Delete(pos, n)
@@ -1896,10 +1936,10 @@ func (p *Package) Delete(pos, n int) error {
 			b.Float32 = append(b.Float32[:pos], b.Float32[pos+n:]...)
 
 		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256 = b.Int256.Subslice(0, pos).AppendFrom(b.Int256.Subslice(pos+n, b.Int256.Len()))
+			b.Int256 = b.Int256.Delete(pos, n)
 
 		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128 = b.Int128.Subslice(0, pos).AppendFrom(b.Int128.Subslice(pos+n, b.Int128.Len()))
+			b.Int128 = b.Int128.Delete(pos, n)
 
 		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
 			b.Int64 = append(b.Int64[:pos], b.Int64[pos+n:]...)
@@ -1936,8 +1976,8 @@ func (p *Package) Delete(pos, n int) error {
 }
 
 func (p *Package) Clear() {
-	for _, v := range p.blocks {
-		v.Clear()
+	for i := range p.blocks {
+		p.blocks[i].Clear()
 	}
 	// Note: we keep all type-related data and blocks
 	// also keep pack key to avoid clearing journal/tombstone identity
@@ -1986,19 +2026,10 @@ func (p *Package) PkIndex(id uint64, last int) (int, int) {
 		return -1, p.nValues
 	}
 
-	// // search for id value in pk block (always an uint64) starting at last index
-	// // this helps limiting search space when ids are pre-sorted
+	// search for id value in pk block (always an uint64) starting at last index
+	// this helps limiting search space when ids are pre-sorted
 	slice := p.blocks[p.pkindex].Uint64[last:]
 	l := len(slice)
-	// min, max := slice[0], slice[l-1]
-	// if id < min || id > max {
-	// 	return -1, p.nValues
-	// }
-
-	// // for dense packs (pk's are continuous) compute offset directly
-	// if l == int(max-min)+1 {
-	// 	return int(id-min), int(id-min)
-	// }
 
 	// for sparse pk spaces, use binary search on sorted slices
 	idx := sort.Search(l, func(i int) bool { return slice[i] >= id })

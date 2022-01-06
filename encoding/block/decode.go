@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
+	"blockwatch.cc/knoxdb/encoding/dedup"
 	"blockwatch.cc/knoxdb/vec"
 	"github.com/golang/snappy"
 	"github.com/pierrec/lz4"
@@ -107,7 +108,7 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 		}
 
 		switch i {
-        case 0: 
+		case 0:
 			if cap(dst.X0) < len(tmp) {
 				if len(tmp) <= DefaultMaxPointsPerBlock {
 					dst.X0 = int64Pool.Get().([]int64)[:len(tmp)]
@@ -120,8 +121,8 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 
 			// copy stride
 			copy(dst.X0, tmp)
-        case 1:
-   			if cap(dst.X1) < len(tmp) {
+		case 1:
+			if cap(dst.X1) < len(tmp) {
 				if len(tmp) <= DefaultMaxPointsPerBlock {
 					dst.X1 = uint64Pool.Get().([]uint64)[:len(tmp)]
 				} else {
@@ -133,9 +134,9 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 
 			// copy stride
 			srcint := compress.ReintepretInt64ToUint64Slice(tmp)
-			copy(dst.X1, srcint)       
-        case 2:
-   			if cap(dst.X2) < len(tmp) {
+			copy(dst.X1, srcint)
+		case 2:
+			if cap(dst.X2) < len(tmp) {
 				if len(tmp) <= DefaultMaxPointsPerBlock {
 					dst.X2 = uint64Pool.Get().([]uint64)[:len(tmp)]
 				} else {
@@ -148,8 +149,8 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 			// copy stride
 			srcint := compress.ReintepretInt64ToUint64Slice(tmp)
 			copy(dst.X2, srcint)
-        case 3:
-   			if cap(dst.X3) < len(tmp) {
+		case 3:
+			if cap(dst.X3) < len(tmp) {
 				if len(tmp) <= DefaultMaxPointsPerBlock {
 					dst.X3 = uint64Pool.Get().([]uint64)[:len(tmp)]
 				} else {
@@ -162,8 +163,8 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 			// copy stride
 			srcint := compress.ReintepretInt64ToUint64Slice(tmp)
 			copy(dst.X3, srcint)
-        }
-    }
+		}
+	}
 	return dst, nil
 }
 
@@ -497,24 +498,24 @@ func decodeBoolBlock(block []byte, dst *vec.Bitset) (*vec.Bitset, error) {
 	return b, err
 }
 
-func decodeStringBlock(block []byte, dst []string) ([]string, error) {
+func decodeStringBlock(block []byte, dst dedup.ByteArray, sz int) (dedup.ByteArray, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockString)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compress.StringArrayDecodeAll(buf, dst)
+	b, err := dedup.Decode(buf, dst, sz)
 	if canRecycle && cap(buf) == BlockSizeHint {
 		BlockEncoderPool.Put(buf[:0])
 	}
 	return b, err
 }
 
-func decodeBytesBlock(block []byte, dst [][]byte) ([][]byte, error) {
+func decodeBytesBlock(block []byte, dst dedup.ByteArray, sz int) (dedup.ByteArray, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockBytes)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compress.BytesArrayDecodeAll(buf, dst)
+	b, err := dedup.Decode(buf, dst, sz)
 	if canRecycle && cap(buf) == BlockSizeHint {
 		BlockEncoderPool.Put(buf[:0])
 	}
@@ -580,17 +581,10 @@ func unpackBlock(block []byte, typ BlockType) ([]byte, bool, error) {
 		return dst[:n], canRecycle, nil
 
 	case NoCompression:
-		switch typ {
-		case BlockBytes, BlockString:
-			// copy the block to a new slice because memory will be
-			// referenced, but the input data may come from an mmapped file
-			buf := make([]byte, len(block)-1)
-			copy(buf, block[1:])
-			return buf, false, nil
-		default:
-			// just strip the header byte
-			return block[1:], false, nil
-		}
+		// Just strip the header byte, dedup.ByteArray will copy data and
+		// never reference to prevent keeping refs into mmapped buffers
+		// (boltdb only guarantees buffer mappings are stable inside a tx).
+		return block[1:], false, nil
 
 	default:
 		return nil, false, err

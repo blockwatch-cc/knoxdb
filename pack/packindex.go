@@ -79,6 +79,34 @@ func (l *PackIndex) Len() int {
 	return len(l.packs)
 }
 
+func (l *PackIndex) Count() int {
+	var count int
+	for i := range l.packs {
+		count += l.packs[i].NValues
+	}
+	return count
+}
+
+func (l *PackIndex) HeapSize() int {
+	sz := szPackIndex
+	sz += len(l.minpks) * 8
+	sz += len(l.maxpks) * 8
+	sz += len(l.removed) * 8
+	sz += len(l.pos) * 4
+	for i := range l.packs {
+		sz += l.packs[i].HeapSize()
+	}
+	return sz
+}
+
+func (l *PackIndex) TableSize() int {
+	var sz int
+	for i := range l.packs {
+		sz += l.packs[i].Packsize
+	}
+	return sz
+}
+
 func (l *PackIndex) Sort() {
 	sort.Slice(l.pos, func(i, j int) bool {
 		posi, posj := l.pos[i], l.pos[j]
@@ -125,7 +153,7 @@ func (l *PackIndex) IsFull(i int) bool {
 	if i < 0 || i >= l.Len() {
 		return false
 	}
-	return l.packs[i].NValues >= l.maxsize
+	return l.maxsize > 0 && l.packs[i].NValues >= l.maxsize
 }
 
 // called by storePack

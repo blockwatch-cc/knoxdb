@@ -11,12 +11,24 @@ import (
 	"strings"
 	"sync"
 
-	. "blockwatch.cc/knoxdb/encoding/decimal"
+	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/decimal"
+	"blockwatch.cc/knoxdb/filter/bloomVec"
 )
 
 const (
 	tagName  = "knox"
 	tagAlias = "json"
+)
+
+var (
+	szPackInfo    = int(reflect.TypeOf(PackInfo{}).Size())
+	szBlockInfo   = int(reflect.TypeOf(BlockInfo{}).Size())
+	szBloomFilter = int(reflect.TypeOf(bloomVec.Filter{}).Size())
+	szPackIndex   = int(reflect.TypeOf(PackIndex{}).Size())
+	szPackage     = int(reflect.TypeOf(Package{}).Size())
+	szField       = int(reflect.TypeOf(Field{}).Size())
+	szBlock       = int(reflect.TypeOf(block.Block{}).Size())
 )
 
 // typeInfo holds details for the representation of a type.
@@ -211,37 +223,57 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				prec := 0
 				switch finfo.typname {
 				case "decimal.Decimal32":
-					prec = MaxDecimal32Precision
+					prec = decimal.MaxDecimal32Precision
 				case "decimal.Decimal64":
-					prec = MaxDecimal64Precision
+					prec = decimal.MaxDecimal64Precision
 				case "decimal.Decimal128":
-					prec = MaxDecimal128Precision
+					prec = decimal.MaxDecimal128Precision
 				case "decimal.Decimal256":
-					prec = MaxDecimal256Precision
+					prec = decimal.MaxDecimal256Precision
 				default:
 					switch finfo.override {
 					case FieldTypeDecimal32:
-						prec = MaxDecimal32Precision
+						prec = decimal.MaxDecimal32Precision
 					case FieldTypeDecimal64:
-						prec = MaxDecimal64Precision
+						prec = decimal.MaxDecimal64Precision
 					case FieldTypeDecimal128:
-						prec = MaxDecimal128Precision
+						prec = decimal.MaxDecimal128Precision
 					case FieldTypeDecimal256:
-						prec = MaxDecimal256Precision
+						prec = decimal.MaxDecimal256Precision
 					default:
 						return nil, fmt.Errorf("pack: invalid scale tag on non-decimal field '%s' (%s/%s)", tag, typname, kind)
 					}
 				}
 				finfo.typname = typname
+				finfo.scale = prec
 				if len(ff) > 1 {
 					scale, err := strconv.Atoi(ff[1])
 					if err != nil {
 						return nil, fmt.Errorf("pack: invalid scale value %s on field '%s': %v", ff[1], tag, err)
 					}
 					if scale < 0 || scale > prec {
-						return nil, fmt.Errorf("pack: out of bound scale %d on field '%s' [0,%d]", scale, tag, prec)
+						return nil, fmt.Errorf("pack: out of bound scale %d on field '%s', should be [0..%d]", scale, tag, prec)
 					}
 					finfo.scale = scale
+				}
+			case "bloom":
+				finfo.flags |= FlagBloom
+				// bloom filter factor
+				// 1: 2% false positive rate (1 byte per item)
+				// 2: 0.2% false positive rate (2 bytes per item)
+				// 3: 0.02% false positive rate (3 bytes per item)
+				// 4: 0.002% false positive rate (4 bytes per item)
+				finfo.scale = 1
+				if len(ff) > 1 {
+					factor, err := strconv.Atoi(ff[1])
+					if err != nil {
+						return nil, fmt.Errorf("pack: invalid bloom filter factor %s on field '%s': %v", ff[1], tag, err)
+					}
+					if factor < 1 || factor > 4 {
+						return nil, fmt.Errorf("pack: out of bound bloom factor %d on field '%s', should be [1..4]", factor, tag)
+					}
+					// re-use scale to store bloom filter error probability factor
+					finfo.scale = factor
 				}
 			default:
 				return nil, fmt.Errorf("pack: unsupported struct tag '%s' on field '%s'", ff[0], tag)

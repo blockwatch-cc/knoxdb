@@ -33,7 +33,7 @@ func TestInsert(t *testing.T) {
 	io.ReadFull(rand.Reader, hash[:])
 
 	for i := 0; i < 100; i++ {
-		filter.Insert(hash[:])
+		filter.Add(hash[:])
 	}
 
 	fmt.Println(filter.Count())
@@ -49,7 +49,7 @@ func TestFilter_Lookup(t *testing.T) {
 	for i := 0; i < cap; i++ {
 		io.ReadFull(rand.Reader, hash[:])
 		m[hash] = struct{}{}
-		filter.Insert(hash[:])
+		filter.Add(hash[:])
 	}
 
 	fmt.Println(len(m))
@@ -76,7 +76,7 @@ func TestReset(t *testing.T) {
 	for i := 0; i < 10*cap; i++ {
 		io.ReadFull(rand.Reader, hash[:])
 
-		if filter.Insert(hash[:]) {
+		if filter.Add(hash[:]) {
 			insertSuccess++
 		} else {
 			fail++
@@ -109,7 +109,7 @@ func BenchmarkFilter_Insert(b *testing.B) {
 	var hash [32]byte
 	for i := 0; i < b.N; i++ {
 		io.ReadFull(rand.Reader, hash[:])
-		filter.Insert(hash[:])
+		filter.Add(hash[:])
 	}
 }
 

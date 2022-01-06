@@ -95,6 +95,7 @@ func NewBitsetFromIndexes(indexes []int, size int) *Bitset {
 	for i := range indexes {
 		s.Set(indexes[i])
 	}
+	s.cnt = len(indexes)
 	return s
 }
 
@@ -196,54 +197,114 @@ func (s *Bitset) Close() {
 	}
 }
 
-func (s *Bitset) And(r *Bitset) (*Bitset, int) {
-	if s.size == 0 || s.cnt == 0 {
-		return s, 0
-	}
-	if r.Count() == 0 {
-		s.Zero()
-		return s, 0
-	}
-	any := bitsetAnd(s.Bytes(), r.Bytes(), min(s.size, r.size))
-	if any == 0 {
-		s.cnt = 0
-	} else {
+func (s *Bitset) And(r *Bitset) *Bitset {
+	if s.size == r.size && s.size > 0 {
+		if s.cnt == 0 {
+			return s
+		}
+		if r.cnt == 0 {
+			s.Zero()
+			return s
+		}
+		bitsetAnd(s.Bytes(), r.Bytes(), s.size)
 		s.cnt = -1
 	}
-	return s, any
+	return s
+}
+
+func (s *Bitset) AndFlag(r *Bitset) (*Bitset, bool, bool) {
+	if s.size == 0 {
+		return s, false, true
+	}
+	if s.size != r.size {
+		switch s.cnt {
+		case 0:
+			return s, false, false
+		case s.size:
+			return s, true, true
+		default:
+			return s, true, false
+		}
+	}
+	if s.cnt == 0 {
+		return s, false, false
+	}
+	if r.cnt == 0 {
+		s.Zero()
+		return s, false, false
+	}
+	any, all := bitsetAndFlag(s.Bytes(), r.Bytes(), s.size)
+	s.cnt = -1
+	if !any {
+		s.cnt = 0
+	} else if all {
+		s.cnt = s.size
+	}
+	return s, any, all
 }
 
 func (s *Bitset) AndNot(r *Bitset) *Bitset {
-	if s.size == 0 || s.cnt == 0 {
-		return s
+	if s.size == r.size && s.size > 0 {
+		if s.size == 0 || s.cnt == 0 {
+			return s
+		}
+		bitsetAndNot(s.Bytes(), r.Bytes(), s.size)
+		s.cnt = -1
 	}
-	bitsetAndNot(s.Bytes(), r.Bytes(), min(s.size, r.size))
-	// if any == 0 {
-	// 	s.cnt = 0
-	// } else {
-	// 	s.cnt = -1
-	// }
-	s.cnt = -1
 	return s
 }
 
 func (s *Bitset) Or(r *Bitset) *Bitset {
-	if s.cnt == 0 {
-		copy(s.buf, r.buf)
-		s.cnt = r.cnt
-		return s
+	if s.size == r.size && s.size > 0 {
+		if s.cnt == s.size {
+			return s
+		}
+		if r.cnt == r.size {
+			s.One()
+			return s
+		}
+		bitsetOr(s.Bytes(), r.Bytes(), s.size)
+		s.cnt = -1
 	}
-	bitsetOr(s.Bytes(), r.Bytes(), min(s.size, r.size))
-	s.cnt = -1
 	return s
 }
 
-func (s *Bitset) Xor(r *Bitset) *Bitset {
+func (s *Bitset) OrFlag(r *Bitset) (*Bitset, bool, bool) {
 	if s.size == 0 {
-		return s
+		return s, false, true
 	}
-	bitsetXor(s.Bytes(), r.Bytes(), min(s.size, r.size))
+	if s.size != r.size {
+		switch s.cnt {
+		case 0:
+			return s, false, false
+		case s.size:
+			return s, true, true
+		default:
+			return s, true, false
+		}
+	}
+	if s.cnt == s.size {
+		return s, true, true
+	}
+	if r.cnt == r.size {
+		s.One()
+		return s, true, true
+	}
+	any, all := bitsetOrFlag(s.Bytes(), r.Bytes(), s.size)
 	s.cnt = -1
+	if !any {
+		s.cnt = 0
+	} else if all {
+		s.cnt = s.size
+	}
+	return s, any, all
+}
+
+func (s *Bitset) Xor(r *Bitset) *Bitset {
+	if s.size == r.size && s.size > 0 {
+		bitsetXor(s.Bytes(), r.Bytes(), s.size)
+		s.cnt = -1
+	}
 	return s
 }
 
@@ -558,6 +619,13 @@ func (s *Bitset) Count() int {
 	return s.cnt
 }
 
+func (s *Bitset) ResetCount(n ...int) {
+	s.cnt = -1
+	if n != nil {
+		s.cnt = n[0]
+	}
+}
+
 func (s Bitset) Len() int {
 	return s.size
 }
@@ -587,7 +655,13 @@ func (b Bitset) Run(index int) (int, int) {
 
 // Indexes returns a slice of indexes for one bits in the bitset.
 func (s Bitset) Indexes(slice []int) []int {
-	cnt := s.Count()
+	cnt := s.cnt
+	switch {
+	case cnt == 0:
+		return slice[:0]
+	case cnt < 0:
+		cnt = s.size
+	}
 	if slice == nil || cap(slice) < cnt {
 		slice = make([]int, cnt)
 	} else {
@@ -611,7 +685,28 @@ func (s Bitset) Indexes(slice []int) []int {
 		slice[j] = i
 		j++
 	}
-	return slice
+	return slice[:j]
+}
+
+// IndexesU32 returns a slice positions as uint32 for one bits in the bitset.
+func (s *Bitset) IndexesU32(slice []uint32) []uint32 {
+	cnt := s.cnt
+	switch {
+	case cnt == 0:
+		return slice[:0]
+	case cnt < 0:
+		cnt = s.size
+	}
+	// ensure slice dimension is multiple of 8, we need this for our
+	// index lookup algo which always writes multiples of 8 entries
+	cnt = roundUpPow2(cnt, 8)
+	if slice == nil || cap(slice) < cnt {
+		slice = make([]uint32, cnt)
+	} else {
+		slice = slice[:cnt]
+	}
+	n := bitsetIndexes(s.buf, s.size, slice)
+	return slice[:n]
 }
 
 // Slice returns a boolean slice containing all values

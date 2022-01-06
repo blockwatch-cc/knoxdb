@@ -1,9 +1,14 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
+//go:build go1.7 && amd64 && !gccgo && !appengine
 // +build go1.7,amd64,!gccgo,!appengine
 
 package vec
+
+import (
+	"blockwatch.cc/knoxdb/util"
+)
 
 //go:noescape
 func matchUint32EqualAVX2(src []uint32, val uint32, bits []byte) int64
@@ -49,9 +54,9 @@ func matchUint32BetweenAVX512(src []uint32, a, b uint32, bits []byte) int64
 
 func matchUint32Equal(src []uint32, val uint32, bits []byte) int64 {
 	switch {
-	case useAVX512_F:
+	case util.UseAVX512_F:
 		return matchUint32EqualAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchUint32EqualAVX2(src, val, bits)
 	default:
 		return matchUint32EqualGeneric(src, val, bits)
@@ -60,9 +65,9 @@ func matchUint32Equal(src []uint32, val uint32, bits []byte) int64 {
 
 func matchUint32NotEqual(src []uint32, val uint32, bits []byte) int64 {
 	switch {
-	case useAVX512_F:
+	case util.UseAVX512_F:
 		return matchUint32NotEqualAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchUint32NotEqualAVX2(src, val, bits)
 	default:
 		return matchUint32NotEqualGeneric(src, val, bits)
@@ -71,9 +76,9 @@ func matchUint32NotEqual(src []uint32, val uint32, bits []byte) int64 {
 
 func matchUint32LessThan(src []uint32, val uint32, bits []byte) int64 {
 	switch {
-	case useAVX512_F:
+	case util.UseAVX512_F:
 		return matchUint32LessThanAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchUint32LessThanAVX2(src, val, bits)
 	default:
 		return matchUint32LessThanGeneric(src, val, bits)
@@ -82,9 +87,9 @@ func matchUint32LessThan(src []uint32, val uint32, bits []byte) int64 {
 
 func matchUint32LessThanEqual(src []uint32, val uint32, bits []byte) int64 {
 	switch {
-	case useAVX512_F:
+	case util.UseAVX512_F:
 		return matchUint32LessThanEqualAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchUint32LessThanEqualAVX2(src, val, bits)
 	default:
 		return matchUint32LessThanEqualGeneric(src, val, bits)
@@ -93,9 +98,9 @@ func matchUint32LessThanEqual(src []uint32, val uint32, bits []byte) int64 {
 
 func matchUint32GreaterThan(src []uint32, val uint32, bits []byte) int64 {
 	switch {
-	case useAVX512_F:
+	case util.UseAVX512_F:
 		return matchUint32GreaterThanAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchUint32GreaterThanAVX2(src, val, bits)
 	default:
 		return matchUint32GreaterThanGeneric(src, val, bits)
@@ -104,9 +109,9 @@ func matchUint32GreaterThan(src []uint32, val uint32, bits []byte) int64 {
 
 func matchUint32GreaterThanEqual(src []uint32, val uint32, bits []byte) int64 {
 	switch {
-	case useAVX512_F:
+	case util.UseAVX512_F:
 		return matchUint32GreaterThanEqualAVX512(src, val, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchUint32GreaterThanEqualAVX2(src, val, bits)
 	default:
 		return matchUint32GreaterThanEqualGeneric(src, val, bits)
@@ -115,9 +120,9 @@ func matchUint32GreaterThanEqual(src []uint32, val uint32, bits []byte) int64 {
 
 func matchUint32Between(src []uint32, a, b uint32, bits []byte) int64 {
 	switch {
-	case useAVX512_F:
+	case util.UseAVX512_F:
 		return matchUint32BetweenAVX512(src, a, b, bits)
-	case useAVX2:
+	case util.UseAVX2:
 		return matchUint32BetweenAVX2(src, a, b, bits)
 	default:
 		return matchUint32BetweenGeneric(src, a, b, bits)

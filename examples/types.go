@@ -96,7 +96,7 @@ func (s *Stringer) UnmarshalText(b []byte) error {
 type Types struct {
 	RowId     uint64             `knox:"I,pk"                     json:"row_id"`
 	Timestamp time.Time          `knox:"T,snappy"                 json:"time"`
-	Hash      []byte             `knox:"H"                        json:"hash"`
+	Hash      []byte             `knox:"H,bloom,snappy"           json:"hash"`
 	String    string             `knox:"str,snappy"               json:"string"`
 	Stringer  Stringer           `knox:"strlist,snappy"           json:"string_list"`
 	Bool      bool               `knox:"bool,snappy"              json:"bool"`
@@ -109,7 +109,7 @@ type Types struct {
 	Int_16    int                `knox:"i_16,i16,snappy"          json:"int_as_int16"`
 	Int_32    int                `knox:"i_32,i32,snappy"          json:"int_as_int32"`
 	Int_64    int                `knox:"i_64,i64,snappy"          json:"int_as_int64"`
-	Uint64    uint64             `knox:"u64,snappy"               json:"uint64"`
+	Uint64    uint64             `knox:"u64,snappy,bloom"         json:"uint64"`
 	Uint32    uint32             `knox:"u32,snappy"               json:"uint32"`
 	Uint16    uint16             `knox:"u16,snappy"               json:"uint16"`
 	Uint8     uint8              `knox:"u8,snappy"                json:"uint8"`
@@ -146,8 +146,8 @@ func (t *Types) SetID(i uint64) {
 var _ pack.Item = (*Types)(nil)
 
 const (
-	TypesPackSizeLog2         = 15  // 32k packs ~4M
-	TypesJournalSizeLog2      = 16  // 64k - search for spending op, so keep small
+	TypesPackSizeLog2         = 16  // 32k packs ~4M
+	TypesJournalSizeLog2      = 17  // 64k - search for spending op, so keep small
 	TypesCacheSize            = 128 // 128=512MB
 	TypesFillLevel            = 100
 	TypesIndexPackSizeLog2    = 15   // 16k packs (32k split size) ~256k
@@ -375,7 +375,7 @@ func run() error {
 	}
 	// table.Flush(context.Background())
 
-	log.Infof("Written %d entries", table.Stats().TupleCount)
+	log.Infof("Written %d entries", table.Stats()[0].TupleCount)
 
 	// read entries back
 	var (

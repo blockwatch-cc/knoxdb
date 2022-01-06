@@ -13,9 +13,11 @@ import (
 	"strings"
 	"time"
 
+	"blockwatch.cc/knoxdb/filter/bloomVec"
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/util"
 
+	"blockwatch.cc/knoxdb/encoding/compress"
 	. "blockwatch.cc/knoxdb/encoding/decimal"
 	. "blockwatch.cc/knoxdb/vec"
 )
@@ -40,8 +42,8 @@ type Condition struct {
 	nomatch      bool                // condition is empty (used on index matches)
 	hashmap      map[uint64]int      // compiled hashmap for byte/string set queries
 	hashoverflow []hashvalue         // hash collision overflow list (one for all)
-	int256map    map[Int256]struct{} // compiled int64 map for set membership
-	int128map    map[Int128]struct{} // compiled int64 map for set membership
+	int256map    map[Int256]struct{} // compiled int256 map for set membership
+	int128map    map[Int128]struct{} // compiled int128 map for set membership
 	int64map     map[int64]struct{}  // compiled int64 map for set membership
 	int32map     map[int32]struct{}  // compiled int32 map for set membership
 	int16map     map[int16]struct{}  // compiled int16 map for set membership
@@ -51,6 +53,7 @@ type Condition struct {
 	uint16map    map[uint16]struct{} // compiled uint16 map for set membership
 	uint8map     map[uint8]struct{}  // compiled uint8 map for set membership
 	numValues    int                 // number of values when Value is a slice
+	bloomHashes  [][2]uint32         // opt bloom hash value(s) if field has bloom flag
 }
 
 // condition that is not bound to a table field yet
@@ -305,14 +308,21 @@ func (c *Condition) Compile() (err error) {
 			c.Value = conv
 			c.numValues = len(val)
 		}
-		return
 	}
 
-	// anything but IN, NIN is done here
+	// prepare bloom filter data
+	buildBloom := c.Field.Flags.Contains(FlagBloom)
 	switch c.Mode {
 	case FilterModeIn, FilterModeNotIn:
+		if buildBloom {
+			c.bloomHashes = make([][2]uint32, 0)
+		}
 		// handled below
 	default:
+		if buildBloom {
+			c.bloomHashes = [][2]uint32{bloomVec.Hash(c.Field.Type.Bytes(c.Value))}
+		}
+		// anything but IN, NIN is finished here
 		return
 	}
 
@@ -324,20 +334,26 @@ func (c *Condition) Compile() (err error) {
 	switch c.Field.Type {
 	case FieldTypeBytes:
 		// require [][]byte slice as value type
-		vals = c.Value.([][]byte)
-		c.numValues = len(vals)
+		slice := c.Value.([][]byte)
+		c.numValues = len(slice)
 		if c.numValues == 0 {
 			return
 		}
 		// sorted slice is always required for InBetween pack matches
 		if !c.IsSorted {
-			Bytes.Sort(vals) // sorts in-place
+			Bytes.Sort(slice) // sorts in-place
 			c.IsSorted = true
+		}
+		if buildBloom {
+			for _, val := range slice {
+				c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(val))
+			}
 		}
 		// below min size a hash map is more expensive than memcmp
 		if c.numValues < filterThreshold {
 			return
 		}
+		vals = slice
 	case FieldTypeString:
 		slice := c.Value.([]string)
 		c.numValues = len(slice)
@@ -349,6 +365,11 @@ func (c *Condition) Compile() (err error) {
 			Strings.Sort(slice) // sorts in-place
 			c.IsSorted = true
 		}
+		if buildBloom {
+			for _, val := range slice {
+				c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(compress.UnsafeGetBytes(val)))
+			}
+		}
 		// below min size a hash map is more expensive than memcmp
 		if c.numValues < filterThreshold {
 			return
@@ -356,7 +377,7 @@ func (c *Condition) Compile() (err error) {
 		// convert to []byte for feeding the hash map below
 		vals = make([][]byte, len(slice))
 		for i, v := range slice {
-			vals[i] = []byte(v)
+			vals[i] = compress.UnsafeGetBytes(v)
 		}
 	case FieldTypeBoolean:
 		slice := c.Value.([]bool)
@@ -366,9 +387,24 @@ func (c *Condition) Compile() (err error) {
 			if hasTrue && hasTrue == hasFalse {
 				c.numValues = 2
 				c.Value = []bool{false, true}
+				if buildBloom {
+					c.bloomHashes = [][2]uint32{
+						bloomVec.Hash([]byte{0}),
+						bloomVec.Hash([]byte{1}),
+					}
+				}
 			} else {
 				c.numValues = 1
 				c.Value = []bool{hasTrue}
+				if buildBloom {
+					var val []byte
+					if hasTrue {
+						val = []byte{1}
+					} else {
+						val = []byte{0}
+					}
+					c.bloomHashes = [][2]uint32{bloomVec.Hash(val)}
+				}
 			}
 		}
 		return
@@ -380,6 +416,11 @@ func (c *Condition) Compile() (err error) {
 			for _, v := range slice {
 				c.int256map[v] = struct{}{}
 			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				}
+			}
 		}
 		return
 	case FieldTypeInt128, FieldTypeDecimal128:
@@ -389,6 +430,11 @@ func (c *Condition) Compile() (err error) {
 			c.int128map = make(map[Int128]struct{}, len(slice))
 			for _, v := range slice {
 				c.int128map[v] = struct{}{}
+			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				}
 			}
 		}
 		return
@@ -400,6 +446,11 @@ func (c *Condition) Compile() (err error) {
 			for _, v := range slice {
 				c.int64map[v] = struct{}{}
 			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				}
+			}
 		}
 		return
 	case FieldTypeInt32, FieldTypeDecimal32:
@@ -409,6 +460,11 @@ func (c *Condition) Compile() (err error) {
 			c.int32map = make(map[int32]struct{}, len(slice))
 			for _, v := range slice {
 				c.int32map[v] = struct{}{}
+			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				}
 			}
 		}
 		return
@@ -420,6 +476,11 @@ func (c *Condition) Compile() (err error) {
 			for _, v := range slice {
 				c.int16map[v] = struct{}{}
 			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				}
+			}
 		}
 		return
 	case FieldTypeInt8:
@@ -429,6 +490,11 @@ func (c *Condition) Compile() (err error) {
 			c.int8map = make(map[int8]struct{}, len(slice))
 			for _, v := range slice {
 				c.int8map[v] = struct{}{}
+			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				}
 			}
 		}
 		return
@@ -450,6 +516,11 @@ func (c *Condition) Compile() (err error) {
 				c.uint64map[v] = struct{}{}
 			}
 		}
+		if buildBloom {
+			for _, val := range slice {
+				c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+			}
+		}
 		return
 	case FieldTypeUint32:
 		slice := c.Value.([]uint32)
@@ -458,6 +529,11 @@ func (c *Condition) Compile() (err error) {
 			c.uint32map = make(map[uint32]struct{}, len(slice))
 			for _, v := range slice {
 				c.uint32map[v] = struct{}{}
+			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				}
 			}
 		}
 		return
@@ -469,6 +545,11 @@ func (c *Condition) Compile() (err error) {
 			for _, v := range slice {
 				c.uint16map[v] = struct{}{}
 			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				}
+			}
 		}
 		return
 	case FieldTypeUint8:
@@ -478,6 +559,11 @@ func (c *Condition) Compile() (err error) {
 			c.uint8map = make(map[uint8]struct{}, len(slice))
 			for _, v := range slice {
 				c.uint8map[v] = struct{}{}
+			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				}
 			}
 		}
 		return
@@ -489,6 +575,11 @@ func (c *Condition) Compile() (err error) {
 				c.Value = Float64.Sort(slice)
 				c.IsSorted = true
 			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				}
+			}
 		}
 		return
 	case FieldTypeFloat32:
@@ -499,11 +590,16 @@ func (c *Condition) Compile() (err error) {
 				c.Value = Float32.Sort(slice)
 				c.IsSorted = true
 			}
+			if buildBloom {
+				for _, val := range slice {
+					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				}
+			}
 		}
 		return
 	}
 
-	// create a hash map
+	// create a hash map for bytes and strings
 	c.hashmap = make(map[uint64]int)
 	for i, v := range vals {
 		sum := xxhash.Sum64(v)
@@ -538,10 +634,14 @@ func (c *Condition) Compile() (err error) {
 // match package min/max values against the condition
 // Note: min/max are raw storage values (i.e. for decimals, they are scaled integers)
 func (c Condition) MaybeMatchPack(info PackInfo) bool {
-	min, max := info.Blocks[c.Field.Index].MinValue, info.Blocks[c.Field.Index].MaxValue
+	idx := c.Field.Index
+	min := info.Blocks[idx].MinValue
+	max := info.Blocks[idx].MaxValue
+	filter := info.Blocks[idx].Bloom
 	scale := c.Field.Scale
+	typ := c.Field.Type
 	// decimals only: convert storage type used in block info to field type
-	switch c.Field.Type {
+	switch typ {
 	case FieldTypeDecimal32:
 		min = NewDecimal32(min.(int32), scale)
 		max = NewDecimal32(max.(int32), scale)
@@ -559,31 +659,39 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 	switch c.Mode {
 	case FilterModeEqual:
 		// condition value is within range
-		return c.Field.Type.Between(c.Value, min, max)
+		res := typ.Between(c.Value, min, max)
+		if res && filter != nil {
+			return filter.ContainsHash(c.bloomHashes[0])
+		}
+		return res
 	case FilterModeNotEqual:
 		return true // we don't know, so full scan is required
 	case FilterModeRange:
 		// check if pack min-max range overlaps c.From-c.To range
-		return !(c.Field.Type.Lt(max, c.From) || c.Field.Type.Gt(min, c.To))
+		return !(typ.Lt(max, c.From) || typ.Gt(min, c.To))
 	case FilterModeIn:
 		// check if any of the IN condition values fall into the pack's min and max range
-		return c.Field.Type.InBetween(c.Value, min, max) // c.Value is a slice
+		res := typ.InBetween(c.Value, min, max) // c.Value is a slice
+		if res && filter != nil {
+			return filter.ContainsAnyHash(c.bloomHashes)
+		}
+		return res
 	case FilterModeNotIn:
 		return true // we don't know here, so full scan is required
 	case FilterModeRegexp:
 		return true // we don't know, so full scan is required
 	case FilterModeGt:
 		// min OR max is > condition value
-		return c.Field.Type.Gt(min, c.Value) || c.Field.Type.Gt(max, c.Value)
+		return typ.Gt(min, c.Value) || typ.Gt(max, c.Value)
 	case FilterModeGte:
 		// min OR max is >= condition value
-		return c.Field.Type.Gte(min, c.Value) || c.Field.Type.Gte(max, c.Value)
+		return typ.Gte(min, c.Value) || typ.Gte(max, c.Value)
 	case FilterModeLt:
 		// min OR max is < condition value
-		return c.Field.Type.Lt(min, c.Value) || c.Field.Type.Lt(max, c.Value)
+		return typ.Lt(min, c.Value) || typ.Lt(max, c.Value)
 	case FilterModeLte:
 		// min OR max is <= condition value
-		return c.Field.Type.Lte(min, c.Value) || c.Field.Type.Lte(max, c.Value)
+		return typ.Lte(min, c.Value) || typ.Lte(max, c.Value)
 	default:
 		return false
 	}
@@ -847,7 +955,8 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
 			if c.hashmap != nil {
-				for i, v := range block.Bytes {
+				for i := 0; i < block.Bytes.Len(); i++ {
+					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -876,7 +985,8 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 					}
 				}
 			} else {
-				for i, v := range block.Bytes {
+				for i := 0; i < block.Bytes.Len(); i++ {
+					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -891,17 +1001,19 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 		case FieldTypeString:
 			strs := c.Value.([]string)
 			if c.hashmap != nil {
-				for i, v := range block.Strings {
+				for i := 0; i < block.Bytes.Len(); i++ {
+					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
 					}
-					sum := xxhash.Sum64([]byte(v))
+					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; ok {
+						vs := compress.UnsafeGetString(v)
 						if pos != 0xFFFFFFFF {
 							// compare IN slice value at pos against buf
 							// to ensure we're collision free
-							if strings.Compare(v, strs[pos]) == 0 {
+							if strings.Compare(vs, strs[pos]) == 0 {
 								bits.Set(i)
 							}
 						} else {
@@ -910,7 +1022,7 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 								if oflow.hash != sum {
 									continue
 								}
-								if strings.Compare(v, strs[oflow.pos]) != 0 {
+								if strings.Compare(vs, strs[oflow.pos]) != 0 {
 									continue
 								}
 								bits.Set(i)
@@ -920,13 +1032,14 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 					}
 				}
 			} else {
-				for i, v := range block.Strings {
+				for i := 0; i < block.Bytes.Len(); i++ {
+					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
 					}
 					// without hash map, resort to type-based comparison
-					if c.Field.Type.In(v, c.Value) {
+					if c.Field.Type.In(compress.UnsafeGetString(v), c.Value) {
 						bits.Set(i)
 					}
 				}
@@ -1093,7 +1206,8 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 		// this case (i.e. the list contains all colliding values)
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
-			for i, v := range block.Bytes {
+			for i := 0; i < block.Bytes.Len(); i++ {
+				v := block.Bytes.Elem(i)
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -1138,21 +1252,23 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 
 		case FieldTypeString:
 			strs := c.Value.([]string)
-			for i, v := range block.Strings {
+			for i := 0; i < block.Bytes.Len(); i++ {
+				v := block.Bytes.Elem(i)
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
 				if c.hashmap != nil {
-					sum := xxhash.Sum64([]byte(v))
+					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; !ok {
 						bits.Set(i)
 					} else {
+						vs := compress.UnsafeGetString(v)
 						// may still be a false positive due to hash collision
 						if pos != 0xFFFFFFFF {
 							// compare IN slice value at pos against buf
 							// to ensure we're collision free
-							if strings.Compare(v, strs[pos]) != 0 {
+							if strings.Compare(vs, strs[pos]) != 0 {
 								bits.Set(i)
 							}
 						} else {
@@ -1162,7 +1278,7 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 								if oflow.hash != sum {
 									continue
 								}
-								if strings.Compare(v, strs[oflow.pos]) == 0 {
+								if strings.Compare(vs, strs[oflow.pos]) == 0 {
 									// may break early when found
 									found = true
 									break
@@ -1175,7 +1291,7 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 					}
 				} else {
 					// without hash map, resort to type-based comparison
-					if !c.Field.Type.In(v, c.Value) {
+					if !c.Field.Type.In(compress.UnsafeGetString(v), c.Value) {
 						bits.Set(i)
 					}
 				}
@@ -1247,11 +1363,8 @@ func (c Condition) MatchAt(pkg *Package, pos int) bool {
 		// low probability
 		// type check on val was already performed in compile stage
 		var buf []byte
-		if c.Field.Type == FieldTypeBytes {
+		if c.Field.Type == FieldTypeBytes || c.Field.Type == FieldTypeString {
 			buf, _ = pkg.BytesAt(index, pos)
-		} else if c.Field.Type == FieldTypeString {
-			str, _ := pkg.StringAt(index, pos)
-			buf = []byte(str)
 		}
 		if buf != nil && c.hashmap != nil {
 			if _, ok := c.hashmap[xxhash.Sum64(buf)]; !ok {
@@ -1311,11 +1424,8 @@ func (c Condition) MatchAt(pkg *Package, pos int) bool {
 		// low probability
 		// type check on val was already performed in compile stage
 		var buf []byte
-		if c.Field.Type == FieldTypeBytes {
+		if c.Field.Type == FieldTypeBytes || c.Field.Type == FieldTypeString {
 			buf, _ = pkg.BytesAt(index, pos)
-		} else if c.Field.Type == FieldTypeString {
-			str, _ := pkg.StringAt(index, pos)
-			buf = []byte(str)
 		}
 		if buf != nil && c.hashmap != nil {
 			if _, ok := c.hashmap[xxhash.Sum64(buf)]; !ok {
@@ -1410,6 +1520,37 @@ func (n ConditionTreeNode) Fields() FieldList {
 	return fl
 }
 
+// Size returns the total number of condition leaf nodes
+func (n ConditionTreeNode) Size() int {
+	if n.Leaf() {
+		return 1
+	}
+	l := 0
+	for _, v := range n.Children {
+		l += v.Size()
+	}
+	return l
+}
+
+// Depth returns the max number of tree levels
+func (n ConditionTreeNode) Depth() int {
+	return n.depth(0)
+}
+
+func (n ConditionTreeNode) depth(level int) int {
+	if n.Empty() {
+		return level
+	}
+	if n.Leaf() {
+		return level + 1
+	}
+	d := level + 1
+	for _, v := range n.Children {
+		d = util.Max(d, v.depth(level+1))
+	}
+	return d
+}
+
 // returns the decision tree size (including sub-conditions)
 func (n ConditionTreeNode) Weight() int {
 	if n.Leaf() {
@@ -1441,60 +1582,41 @@ func (n ConditionTreeNode) Conditions() []*Condition {
 }
 
 func (n *ConditionTreeNode) AddAndCondition(c *Condition) {
-	// create a new root when operation changes
-	if n.OrKind || n.Leaf() {
-		clone := ConditionTreeNode{
-			OrKind:   n.OrKind,
-			Children: n.Children,
-			Cond:     n.Cond,
-		}
-		n.OrKind = COND_AND
-		n.Children = []ConditionTreeNode{clone}
+	node := ConditionTreeNode{
+		OrKind: COND_AND,
+		Cond:   c,
 	}
-
-	// append new condition to this element
-	n.Children = append(n.Children, ConditionTreeNode{Cond: c})
+	n.AddNode(node)
 }
 
 func (n *ConditionTreeNode) AddOrCondition(c *Condition) {
-	// create a new root when operation changes
-	if !n.OrKind || n.Leaf() {
-		clone := ConditionTreeNode{
-			OrKind:   n.OrKind,
-			Children: n.Children,
-			Cond:     n.Cond,
-		}
-		n.OrKind = COND_OR
-		n.Children = []ConditionTreeNode{clone}
+	node := ConditionTreeNode{
+		OrKind: COND_OR,
+		Cond:   c,
 	}
-
-	// append new condition to this element
-	n.Children = append(n.Children, ConditionTreeNode{Cond: c})
+	n.AddNode(node)
 }
 
-func (n *ConditionTreeNode) ReplaceNode(node ConditionTreeNode) {
-	n.Cond = node.Cond
-	n.OrKind = node.OrKind
-	n.Children = node.Children
-}
-
+// Invariants
+// - root is always and AND node
+// - root is never a leaf node
+// - root may be empty
 func (n *ConditionTreeNode) AddNode(node ConditionTreeNode) {
-	// create a new root when operation changes
-	if n.Leaf() || (!node.Leaf() && n.OrKind != node.OrKind) {
+	if n.Leaf() {
 		clone := ConditionTreeNode{
 			OrKind:   n.OrKind,
 			Children: n.Children,
 			Cond:     n.Cond,
 		}
-		n.OrKind = node.OrKind
+		n.Cond = nil
 		n.Children = []ConditionTreeNode{clone}
 	}
 
 	// append new condition to this element
-	if node.Leaf() {
-		n.Children = append(n.Children, node)
-	} else {
+	if n.OrKind == node.OrKind && !node.Leaf() {
 		n.Children = append(n.Children, node.Children...)
+	} else {
+		n.Children = append(n.Children, node)
 	}
 }
 
@@ -1526,7 +1648,11 @@ func (n ConditionTreeNode) MaybeMatchPack(info PackInfo) bool {
 		}
 	}
 
-	// when all AND nodes match
+	// no OR nodes match
+	if n.OrKind {
+		return false
+	}
+	// all AND nodes match
 	return true
 }
 
@@ -1621,18 +1747,18 @@ func (n ConditionTreeNode) MatchPackAnd(pkg *Package, info PackInfo) *Bitset {
 		}
 
 		// shortcut
-		if bits.Count() == bits.Len() {
-			bits.Close()
-			bits = b
-			continue
-		}
+		// if bits.Count() == bits.Len() {
+		// 	bits.Close()
+		// 	bits = b
+		// 	continue
+		// }
 
 		// merge
-		_, any := bits.And(b)
+		_, any, _ := bits.AndFlag(b)
 		b.Close()
 
 		// early stop on empty aggregate match
-		if any == 0 {
+		if !any {
 			break
 		}
 	}
@@ -1647,7 +1773,7 @@ func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *Bitset {
 
 	// match conditions and merge bit vectors
 	// stop early when result contains all ones (assuming OR relation)
-	for _, cn := range n.Children {
+	for i, cn := range n.Children {
 		var b *Bitset
 		if !cn.Leaf() {
 			// recurse into another AND or OR condition subtree
@@ -1714,17 +1840,17 @@ func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *Bitset {
 		}
 
 		// shortcut
-		if b.Count() == 0 {
-			b.Close()
-			continue
-		}
+		// if b.Count() == 0 {
+		// 	b.Close()
+		// 	continue
+		// }
 
 		// merge
 		bits.Or(b)
 		b.Close()
 
 		// early stop on full aggregate match
-		if bits.Count() == bits.Len() {
+		if i < len(n.Children)-1 && bits.Count() == bits.Len() {
 			break
 		}
 	}

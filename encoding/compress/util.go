@@ -4,6 +4,7 @@
 package compress
 
 import (
+	"reflect"
 	"unsafe"
 )
 
@@ -38,4 +39,18 @@ func ReintepretInt64ToUint64Slice(src []int64) []uint64 {
 
 func ReintepretUint64ToInt64Slice(src []uint64) []int64 {
 	return *(*[]int64)(unsafe.Pointer(&src))
+}
+
+func UnsafeGetBytes(s string) []byte {
+	l := len(s)
+	b := (*(*[]byte)(unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)))))
+	if cap(b) < l {
+		// copy
+		return []byte(s)
+	}
+	return b[:l]
+}
+
+func UnsafeGetString(buf []byte) string {
+	return *(*string)(unsafe.Pointer(&buf))
 }

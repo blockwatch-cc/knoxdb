@@ -21,7 +21,7 @@ func TestInsertion(t *testing.T) {
 	var lineCount uint
 	for scanner.Scan() {
 		s := []byte(scanner.Text())
-		if cf.InsertUnique(s) {
+		if cf.AddUnique(s) {
 			lineCount++
 		}
 		values = append(values, s)

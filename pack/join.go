@@ -232,7 +232,7 @@ func (j *Join) Compile() error {
 	for i, v := range j.Left.Fields {
 		joinname := j.Left.Table.Name() + "." + v.Name
 		alias := joinname
-		if len(j.Left.FieldsAs) > i+1 {
+		if len(j.Left.FieldsAs) > i {
 			alias = j.Left.FieldsAs[i]
 		}
 		// save alias mapping (original to output name conversion)
@@ -240,18 +240,19 @@ func (j *Join) Compile() error {
 
 		// save output field
 		j.fields = append(j.fields, Field{
-			Index: len(j.fields), // position in output list
-			Name:  joinname,      // table name + original field name from source table
-			Alias: alias,         // joinname or user-defined alias
-			Type:  v.Type,        // original type from source table
-			Flags: 0,             // strip all flags (note: packs will have no Pk!)
+			Index: len(j.fields),          // position in output list
+			Name:  joinname,               // table name + original field name from source table
+			Alias: alias,                  // joinname or user-defined alias
+			Type:  v.Type,                 // original type from source table
+			Flags: v.Flags &^ FlagPrimary, // keep all flags except pk
+			Scale: v.Scale,                // keep scale
 		})
 	}
 
 	for i, v := range j.Right.Fields {
 		joinname := j.Right.Table.Name() + "." + v.Name
 		alias := joinname
-		if len(j.Right.FieldsAs) > i+1 {
+		if len(j.Right.FieldsAs) > i {
 			alias = j.Right.FieldsAs[i]
 		}
 
@@ -260,11 +261,12 @@ func (j *Join) Compile() error {
 
 		// save output field
 		j.fields = append(j.fields, Field{
-			Index: len(j.fields), // position in output list
-			Name:  joinname,      // table name + original field name from source table
-			Alias: alias,         // joinname or user-defined alias
-			Type:  v.Type,        // original type from source table
-			Flags: 0,             // strip all flags (note: packs will have no Pk!)
+			Index: len(j.fields),          // position in output list
+			Name:  joinname,               // table name + original field name from source table
+			Alias: alias,                  // joinname or user-defined alias
+			Type:  v.Type,                 // original type from source table
+			Flags: v.Flags &^ FlagPrimary, // keep all flags except pk
+			Scale: v.Scale,                // keep scale
 		})
 	}
 	return nil
@@ -319,14 +321,14 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 	// check and compile query using a temporary in-memory table without indexes
 	if err := q.Compile(&Table{
 		name: strings.Join([]string{
-			j.Type.String(),
 			j.Left.Table.Name(),
+			j.Type.String(),
 			j.Right.Table.Name(),
 			"on",
 			j.Predicate.Left.Name,
 			j.Predicate.Mode.String(),
 			j.Predicate.Right.Name,
-		}, "."),
+		}, "_"),
 		fields: j.fields,
 	}); err != nil {
 		return nil, err
@@ -335,7 +337,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 
 	// limit join to q.Limit when q has no extra conditions, otherwise the limit
 	// is used in post-processing the joined table
-	havePostFilter := q.Conditions.Empty()
+	havePostFilter := !q.Conditions.Empty()
 	if !havePostFilter {
 		j.limit = q.Limit
 	}
@@ -350,20 +352,18 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 		fields: j.fields,
 		pkg:    NewPackage(util.NonZero(q.Limit, maxPackSize)),
 	}
-	if err := out.pkg.InitFields(j.fields, nil); err != nil {
+	if err := out.pkg.InitResultFields(j.fields, nil); err != nil {
 		return nil, err
 	}
 
 	if havePostFilter {
 		agg = &Result{
 			fields: j.fields,
+			pkg:    NewPackage(util.NonZero(j.limit, maxPackSize)),
 		}
-		pkg, err := out.pkg.Clone(false, util.NonZero(j.limit, maxPackSize))
-		if err != nil {
+		if err := agg.pkg.InitResultFields(j.fields, nil); err != nil {
 			return nil, err
 		}
-		agg.pkg = pkg
-
 		defer agg.Close()
 	} else {
 		// without post filter we can directly collect result rows into out
@@ -431,20 +431,20 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 					Raw:   "left_join_cursor",
 				})
 			}
-			// log.Debugf("join: left table query with %d cond, cursor=%d limit=%d",
-			// 	len(lQ.Conditions), pkcursor, lQ.Limit)
-			// for i, c := range lQ.Conditions {
-			// 	log.Debugf("cond %d: %s", i, c.String())
-			// }
+			log.Debug(newLogClosure(func() string {
+				return fmt.Sprintf("join: left table query with %d cond, cursor=%d limit=%d: %s",
+					lQ.Conditions.Size(), pkcursor, lQ.Limit, lQ.Dump())
+			}))
+
 			lRes, err = j.Left.Table.Query(ctx, lQ)
 			if err != nil {
 				return nil, err
 			}
-			// log.Debugf("join: left table result %d rows", lRes.Rows())
+			log.Debugf("join: left table result %d rows", lRes.Rows())
 
 			// return result when no more rows are found
 			if lRes.Rows() == 0 {
-				// log.Debugf("join: final result contains %d rows", out.Rows())
+				log.Debugf("join: final result contains %d rows", out.Rows())
 				return out, nil
 			}
 
@@ -477,23 +477,22 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 				})
 			}
 
-			// query the right table
+			// query the right table without limit
 			rQ := Query{
 				Name:       q.Name + ".join_right",
 				Fields:     j.Right.Fields.AddUnique(j.Predicate.Right),
 				Conditions: rConds,
-				// Limit:      j.Right.Limit, // no limit
 			}
-			// log.Debugf("join: right table query with %d cond and limit %d", len(rQ.Conditions), rQ.Limit)
-			// for i, c := range rQ.Conditions {
-			// 	log.Debugf("cond %d: %s", i, c.String())
-			// }
+			log.Debug(newLogClosure(func() string {
+				return fmt.Sprintf("join: right table query with %d cond and limit %d: %s",
+					rQ.Conditions.Size(), rQ.Limit, rQ.Dump())
+			}))
 
 			rRes, err = j.Right.Table.Query(ctx, rQ)
 			if err != nil {
 				return nil, err
 			}
-			// log.Debugf("join: right table result %d rows", rRes.Rows())
+			log.Debugf("join: right table result %d rows", rRes.Rows())
 
 		} else {
 			// query the right table first (ensure predicate column is returned)
@@ -513,20 +512,20 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 					Raw:   "right_join_cursor",
 				})
 			}
-			// log.Debugf("join: right table query with %d cond, cursor=%d limit=%d",
-			// 	len(rQ.Conditions), pkcursor, rQ.Limit)
-			// for i, c := range rQ.Conditions {
-			// 	log.Debugf("cond %d: %s", i, c.String())
-			// }
+			log.Debug(newLogClosure(func() string {
+				return fmt.Sprintf("join: right table query with %d cond, cursor=%d limit=%d: %s",
+					rQ.Conditions.Size(), pkcursor, rQ.Limit, q.Dump())
+			}))
+
 			rRes, err = j.Right.Table.Query(ctx, rQ)
 			if err != nil {
 				return nil, err
 			}
-			// log.Debugf("join: right table result %d rows", rRes.Rows())
+			log.Debugf("join: right table result %d rows", rRes.Rows())
 
 			// return result when no more rows are found
 			if rRes.Rows() == 0 {
-				// log.Debugf("join: final result contains %d rows", out.Rows())
+				log.Debugf("join: final result contains %d rows", out.Rows())
 				return out, nil
 			}
 
@@ -558,22 +557,22 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 				})
 			}
 
-			// query the left table
+			// query the left table wihout limit
 			lQ := Query{
 				Name:       q.Name + ".join_left",
 				Fields:     j.Left.Fields.AddUnique(j.Predicate.Left),
 				Conditions: lConds,
-				// Limit:      j.Left.Limit, // no limit
 			}
-			// log.Debugf("join: left table query with %d cond and limit %d", len(lQ.Conditions), lQ.Limit)
-			// for i, c := range lQ.Conditions {
-			// 	log.Debugf("cond %d: %s", i, c.String())
-			// }
+			log.Debug(newLogClosure(func() string {
+				return fmt.Sprintf("join: left table query with %d cond and limit %d: %s",
+					lQ.Conditions.Size(), lQ.Limit, lQ.Dump())
+			}))
+
 			lRes, err = j.Left.Table.Query(ctx, lQ)
 			if err != nil {
 				return nil, err
 			}
-			// log.Debugf("join: left table result %d rows", lRes.Rows())
+			log.Debugf("join: left table result %d rows", lRes.Rows())
 		}
 
 		// ------------------------------------------------------------
@@ -626,7 +625,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 		// POST-PROCESS
 		// ------------------------------------------------------------
 		if havePostFilter {
-			// log.Debugf("join: filtering result with %d rows against %d conds", agg.Rows(), len(q.Conditions))
+			log.Debugf("join: filtering result with %d rows against %d conds", agg.Rows(), q.Conditions.Size())
 
 			// filter result by query
 			bits := q.Conditions.MatchPack(agg.pkg, PackInfo{})
@@ -644,7 +643,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 
 				// stop when limit is reached
 				if q.Limit > 0 && out.pkg.Len() >= q.Limit {
-					// log.Debugf("join: final result clipped at limit %d/%d", q.Limit, out.pkg.Len())
+					log.Debugf("join: final result clipped at limit %d/%d", q.Limit, out.pkg.Len())
 					return out, nil
 				}
 
@@ -654,16 +653,15 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 		}
 
 		if q.Limit > 0 && out.pkg.Len() >= q.Limit {
-			// log.Debugf("join: final result clipped at limit %d", q.Limit)
+			log.Debugf("join: final result clipped at limit %d", q.Limit)
 			return out, nil
 		}
 	}
-	// return out, nil
 }
 
 // non-equi joins
 func loopJoinInner(join Join, left, right, out *Result) error {
-	// log.Debugf("join: inner join on %d/%d rows using loop", left.Rows(), right.Rows())
+	log.Debugf("join: inner join on %d/%d rows using loop", left.Rows(), right.Rows())
 	// build cartesian product (O(n^2)) with
 	for i, il := 0, left.Rows(); i < il; i++ {
 		for j, jl := 0, right.Rows(); j < jl; j++ {
@@ -685,7 +683,7 @@ func loopJoinInner(join Join, left, right, out *Result) error {
 // equi-joins only, |l| ~ |r| (close set sizes)
 // TODO: never match NULL values (i.e. pkg.IsZeroAt(index,pos) == true)
 func mergeJoinInner(join Join, left, right, out *Result) error {
-	// log.Debugf("join: inner join on %d/%d rows using merge", left.Rows(), right.Rows())
+	log.Debugf("join: inner join on %d/%d rows using merge", left.Rows(), right.Rows())
 	// The algorithm works as follows
 	//
 	// for every left-side row find all matching right-side rows
@@ -797,7 +795,7 @@ func loopJoinLeft(join Join, left, right, out *Result) error {
 
 // TODO: never match NULL values (i.e. pkg.IsZeroAt(index,pos) == true)
 func mergeJoinLeft(join Join, left, right, out *Result) error {
-	// log.Debugf("join: left join on %d/%d rows using merge", left.Rows(), right.Rows())
+	log.Debugf("join: left join on %d/%d rows using merge", left.Rows(), right.Rows())
 	// The algorithm works as follows
 	//
 	// for every left-side row find all matching right-side rows
@@ -921,7 +919,7 @@ func mergeJoinFull(join Join, left, right, out *Result) error {
 }
 
 func loopJoinCross(join Join, left, right, out *Result) error {
-	// log.Debugf("join: cross join on %d/%d rows using loop", left.Rows(), right.Rows())
+	log.Debugf("join: cross join on %d/%d rows using loop", left.Rows(), right.Rows())
 	// build cartesian product (O(n^2))
 	for i, il := 0, left.Rows(); i < il; i++ {
 		for j, jl := 0, right.Rows(); j < jl; j++ {
