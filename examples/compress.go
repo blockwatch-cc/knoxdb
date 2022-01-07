@@ -22,7 +22,7 @@ import (
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
 	"blockwatch.cc/knoxdb/util"
-	"blockwatch.cc/knoxdb/vec"
+	// "blockwatch.cc/knoxdb/vec"
 )
 
 var (
@@ -112,7 +112,7 @@ func run() error {
 	pack.UseLogger(log.Log)
 
 	if debug {
-		vec.LogAVXFeatures(log.Log.Logger())
+		util.LogAVXFeatures(log.Log.Logger())
 	}
 
 	// cmd = flags.Arg(0)

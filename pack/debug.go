@@ -583,6 +583,38 @@ func (q Query) Dump() string {
 	return string(buf.Bytes())
 }
 
+func (j Join) Dump() string {
+	buf := bytes.NewBuffer(nil)
+	fmt.Fprintln(buf, "Join:", j.Type.String(), "=>")
+	fmt.Fprintln(buf, "  Predicate:", j.Predicate.Left.Alias, j.Predicate.Mode.String(), j.Predicate.Right.Alias)
+	fmt.Fprintln(buf, "  Left:", j.Left.Table.Name())
+	fmt.Fprintln(buf, "  Where:")
+	j.Left.Where.dump(0, buf)
+	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Left.Fields.Names(), ","))
+	fmt.Fprintln(buf, "  AS:", strings.Join(j.Left.FieldsAs, ","))
+	fmt.Fprintln(buf, "  Limit:", j.Left.Limit)
+	fmt.Fprintln(buf, "  Right:", j.Right.Table.Name())
+	fmt.Fprintln(buf, "  Where:")
+	j.Right.Where.dump(0, buf)
+	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Right.Fields.Names(), ","))
+	fmt.Fprintln(buf, "  AS:", strings.Join(j.Right.FieldsAs, ","))
+	fmt.Fprintln(buf, "  Limit:", j.Right.Limit)
+	return string(buf.Bytes())
+}
+
+func (r Result) Dump() string {
+	buf := bytes.NewBuffer(nil)
+	fmt.Fprintf(buf, "Result ------------------------------------ \n")
+	fmt.Fprintf(buf, "Rows:       %d\n", r.Rows())
+	fmt.Fprintf(buf, "Cols:       %d\n", len(r.fields))
+	fmt.Fprintf(buf, "%-2s  %-15s  %-15s  %-10s  %-4s  %s\n", "No", "Name", "Alias", "Type", "Scale", "Flags")
+	for _, v := range r.fields {
+		fmt.Fprintf(buf, "%02d  %-15s  %-15s  %-10s  %2d    %s\n",
+			v.Index, v.Name, v.Alias, v.Type, v.Scale, v.Flags)
+	}
+	return buf.String()
+}
+
 func ReintepretUint64ToByteSlice(src []uint64) []byte {
 	header := *(*reflect.SliceHeader)(unsafe.Pointer(&src))
 	header.Len *= 8
@@ -625,37 +657,907 @@ func convertBlockToByteSlice(b *block.Block) []byte {
 	return buf
 }
 
-func (j Join) Dump() string {
-	buf := bytes.NewBuffer(nil)
-	fmt.Fprintln(buf, "Join:", j.Type.String(), "=>")
-	fmt.Fprintln(buf, "  Predicate:", j.Predicate.Left.Alias, j.Predicate.Mode.String(), j.Predicate.Right.Alias)
-	fmt.Fprintln(buf, "  Left:", j.Left.Table.Name())
-	fmt.Fprintln(buf, "  Where:")
-	j.Left.Where.dump(0, buf)
-	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Left.Fields.Names(), ","))
-	fmt.Fprintln(buf, "  AS:", strings.Join(j.Left.FieldsAs, ","))
-	fmt.Fprintln(buf, "  Limit:", j.Left.Limit)
-	fmt.Fprintln(buf, "  Right:", j.Right.Table.Name())
-	fmt.Fprintln(buf, "  Where:")
-	j.Right.Where.dump(0, buf)
-	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Right.Fields.Names(), ","))
-	fmt.Fprintln(buf, "  AS:", strings.Join(j.Right.FieldsAs, ","))
-	fmt.Fprintln(buf, "  Limit:", j.Right.Limit)
-	return string(buf.Bytes())
+func compressSnappy(b *block.Block) ([]byte, int, error) {
+	src := convertBlockToByteSlice(b)
+	if src == nil {
+		return nil, -1, nil
+	}
+	dst := snappy.Encode(nil, src)
+	if dst != nil {
+		return dst, len(dst), nil
+	}
+	return nil, -1, nil
 }
 
-
-func (r Result) Dump() string {
-	buf := bytes.NewBuffer(nil)
-	fmt.Fprintf(buf, "Result ------------------------------------ \n")
-	fmt.Fprintf(buf, "Rows:       %d\n", r.Rows())
-	fmt.Fprintf(buf, "Cols:       %d\n", len(r.fields))
-	fmt.Fprintf(buf, "%-2s  %-15s  %-15s  %-10s  %-4s  %s\n", "No", "Name", "Alias", "Type", "Scale", "Flags")
-	for _, v := range r.fields {
-		fmt.Fprintf(buf, "%02d  %-15s  %-15s  %-10s  %2d    %s\n",
-			v.Index, v.Name, v.Alias, v.Type, v.Scale, v.Flags)
+func uncompressSnappy(src []byte) ([]byte, int, error) {
+	if src == nil {
+		return nil, -1, nil
 	}
-	return buf.String()
+	dst, err := snappy.Decode(nil, src)
+	if err != nil {
+		return nil, -1, err
+	}
+	return dst, len(dst), nil
+}
+
+func compressLz4(b *block.Block) ([]byte, int, error) {
+	src := convertBlockToByteSlice(b)
+	if src == nil {
+		return nil, -1, nil
+	}
+
+	dst := make([]byte, len(src))
+	ht := make([]int, 64<<10) // buffer for the compression table
+
+	n, err := lz4.CompressBlock(src, dst, ht)
+	if err != nil {
+		return nil, -1, err
+	}
+
+	return dst[:n], n, nil
+}
+
+func uncompressLz4(src []byte, size int) ([]byte, int, error) {
+	if src == nil {
+		return nil, -1, nil
+	}
+	dst := make([]byte, size)
+	n, err := lz4.UncompressBlock(src, dst)
+	if err != nil {
+		return nil, -1, err
+	}
+	return dst[:n], n, nil
+}
+
+func compressNo(b *block.Block) (int, error) {
+	src := convertBlockToByteSlice(b)
+	if src == nil {
+		return -1, nil
+	}
+	dst := make([]byte, len(src))
+	copy(dst, src)
+	return len(dst), nil
+}
+
+type CompressedHashBlock struct {
+	hash_size   int
+	hash_nbytes int
+	hash_data   []byte
+	pk_nbytes   int
+	pk_data     []byte
+}
+
+func compressHashBlock(pkg Package, hash_size int) (CompressedHashBlock, error) {
+	// compress hash block
+	b := pkg.blocks[0]
+	deltas := make([]uint64, len(b.Uint64))
+	shift := 64 - hash_size
+	for i := range b.Uint64 {
+		deltas[i] = b.Uint64[i] >> shift
+	}
+
+	// delta encoding
+
+	/* maxdelta := uint64(0)
+	for i := len(deltas) - 1; i > 7; i-- {
+		deltas[i] = deltas[i] - deltas[i-8]
+		maxdelta |= deltas[i]
+	}*/
+
+	maxdelta := compress.Delta8AVX2(deltas)
+	for i := len(deltas)%8 + 7; i > 7; i-- {
+		deltas[i] = deltas[i] - deltas[i-8]
+		maxdelta |= deltas[i]
+	}
+
+	var nbytes, nbytes2 int
+	if maxdelta == 0 {
+		nbytes = 1 // all number zero -> use 1 byte
+	} else {
+		lz := bits.LeadingZeros64(maxdelta)
+		nbytes = (71 - lz) >> 3 // = (64 - tz + 8 - 1) / 8 = ceil((64 - tz)/8)
+	}
+
+	buf := make([]byte, nbytes*(len(deltas)-8)+64)
+
+	for i := 0; i < 8; i++ {
+		binary.BigEndian.PutUint64(buf[8*i:], deltas[i])
+	}
+
+	_, err := compressBytes(deltas[8:], nbytes, buf[64:])
+	if err != nil {
+		return CompressedHashBlock{0, 0, nil, 0, nil}, err
+	}
+
+	// compress hash block
+	b = pkg.blocks[1]
+
+	src_max := uint64(0)
+	for _, v := range b.Uint64 {
+		src_max |= v
+	}
+	if src_max == 0 {
+		nbytes2 = 1 // all number zero -> use 1 byte
+	} else {
+		lz := bits.LeadingZeros64(src_max)
+		nbytes2 = (71 - lz) >> 3 // = (64 - tz + 8 - 1) / 8 = ceil((64 - tz)/8)
+	}
+
+	buf2 := make([]byte, nbytes2*len(b.Uint64))
+
+	_, err = compressBytes(b.Uint64, nbytes2, buf2)
+	if err != nil {
+		return CompressedHashBlock{0, 0, nil, 0, nil}, err
+	}
+
+	return CompressedHashBlock{hash_size, nbytes, buf, nbytes2, buf2}, nil
+}
+
+func compressBytes(src []uint64, nbytes int, buf []byte) ([]byte, error) {
+	var tmp []byte
+
+	if len(buf) < nbytes*len(src) {
+		return nil, fmt.Errorf("compressBytes: write buffer to small")
+	}
+
+	switch nbytes {
+	case 1:
+		for i, v := range src {
+			buf[i] = byte(v & 0xff)
+		}
+	case 2:
+		/*		for i, v := range src {
+				buf[2*i] = byte((v >> 8) & 0xff)
+				buf[1+2*i] = byte(v & 0xff)
+			}*/
+
+		len_head := len(src) & 0x7ffffffffffffff0
+		compress.PackIndex16BitAVX2(src, buf)
+
+		tmp = buf[len_head*2:]
+
+		for i, v := range src[len_head:] {
+			tmp[2*i] = byte((v >> 8) & 0xff)
+			tmp[1+2*i] = byte(v & 0xff)
+		}
+
+	case 3:
+		for i, v := range src {
+			buf[3*i] = byte((v >> 16) & 0xff)
+			buf[1+3*i] = byte((v >> 8) & 0xff)
+			buf[2+3*i] = byte(v & 0xff)
+		}
+	case 4:
+
+		len_head := len(src) & 0x7ffffffffffffff8
+		compress.PackIndex32BitAVX2(src, buf)
+
+		tmp = buf[len_head*4:]
+
+		for i, v := range src[len_head:] {
+			tmp[4*i] = byte((v >> 24) & 0xff)
+			tmp[1+4*i] = byte((v >> 16) & 0xff)
+			tmp[2+4*i] = byte((v >> 8) & 0xff)
+			tmp[3+4*i] = byte(v & 0xff)
+		}
+		/*for i, v := range deltas[8:] {
+			buf[4*i] = byte((v >> 24) & 0xff)
+			buf[1+4*i] = byte((v >> 16) & 0xff)
+			buf[2+4*i] = byte((v >> 8) & 0xff)
+			buf[3+4*i] = byte(v & 0xff)
+		}*/
+	default:
+		return nil, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
+	}
+	return buf, nil
+}
+
+func uncompressBytes(src []byte, nbytes int, res []uint64) ([]uint64, error) {
+	rlen := len(src) / nbytes
+
+	if len(res) < rlen {
+		return nil, fmt.Errorf("uncompressBytes: write buffer to small")
+	}
+
+	switch nbytes {
+	case 1:
+		for i, j := 0, 0; i < rlen; i++ {
+			res[i] = uint64(src[j])
+			j++
+		}
+	case 2:
+		/*		for i, j := 0, 0; i < len; i++ {
+				res[i] = uint64(src[j])<<8 | uint64(src[1+j])
+				j += 2
+			}*/
+
+		len_head := rlen & 0x7ffffffffffffff0
+		compress.UnpackIndex16BitAVX2(src, res)
+
+		tmp := src[len_head*2:]
+
+		for i, j := len_head, 0; i < rlen; i++ {
+			res[i] = uint64(tmp[j])<<8 | uint64(tmp[1+j])
+			j += 2
+		}
+
+	case 3:
+		for i, j := 0, 0; i < rlen; i++ {
+			res[i] = uint64(src[j])<<16 | uint64(src[1+j])<<8 | uint64(src[2+j])
+			j += 3
+		}
+	case 4:
+		/*for i, j := 0, 0; i < rlen; i++ {
+			res[i] = uint64(src[j])<<24 | uint64(src[1+j])<<16 | uint64(src[2+j])<<8 | uint64(src[3+j])
+			j += 4
+		}*/
+
+		len_head := rlen & 0x7ffffffffffffff8
+		compress.UnpackIndex32BitAVX2(src, res)
+
+		tmp := src[len_head*4:]
+
+		for i, j := len_head, 0; i < rlen; i++ {
+			res[i] = uint64(tmp[j])<<24 | uint64(tmp[1+j])<<16 | uint64(tmp[2+j])<<8 | uint64(tmp[3+j])
+			j += 4
+		}
+
+	default:
+		return nil, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
+	}
+	return res, nil
+}
+
+func uncompressHashBlock(chb CompressedHashBlock) ([]uint64, []uint64, error) {
+	// uncompress hashes
+	lenr := (len(chb.hash_data)-64)/chb.hash_nbytes + 8
+	res1 := make([]uint64, lenr)
+	for i := 0; i < 8; i++ {
+		res1[i] = binary.BigEndian.Uint64(chb.hash_data[8*i:])
+	}
+
+	_, err := uncompressBytes(chb.hash_data[64:], chb.hash_nbytes, res1[8:])
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	len_head := lenr & 0x7ffffffffffffff8
+	compress.Undelta8AVX2(res1)
+	for i := len_head; i < lenr; i++ {
+		res1[i] += res1[i-8]
+	}
+
+	/*for i := 8; i < len; i++ {
+		res[i] += res[i-8]
+	}*/
+
+	// uncompress pks
+	lenr = len(chb.pk_data) / chb.pk_nbytes
+	res2 := make([]uint64, lenr)
+
+	_, err = uncompressBytes(chb.pk_data, chb.pk_nbytes, res2)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return res1, res2, nil
+}
+
+func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, error) {
+	cr := make([]float64, p.nFields)
+	ct := make([]float64, p.nFields)
+	dt := make([]float64, p.nFields)
+
+	var tcomp float64 = -1
+	var tdecomp float64 = -1
+	var hashlen int
+	var err error
+
+	switch {
+	case len(cmethod) > 10 && cmethod[:10] == "delta-hash":
+		hashlen, err = strconv.Atoi(cmethod[10:])
+	case len(cmethod) > 11 && cmethod[:11] == "linear-hash":
+		hashlen, err = strconv.Atoi(cmethod[11:])
+	default:
+		return p.compress(cmethod)
+	}
+
+	if err != nil || hashlen < 1 || hashlen > 64 {
+		return nil, nil, nil, fmt.Errorf("unknown compression method %s", cmethod)
+	}
+
+	// build new Hash
+	data := make([]uint64, p.blocks[0].Len())
+	for i, v := range p.blocks[0].Uint64 {
+		data[i] = v >> (64 - hashlen)
+	}
+
+	var csize1, csize2 int
+	var res1, res2 []uint64
+
+	switch {
+	case cmethod[:10] == "delta-hash":
+		start := time.Now()
+		chb, err := compressHashBlock(*p, hashlen)
+		csize1 = len(chb.hash_data)
+		csize2 = len(chb.pk_data)
+
+		tcomp = time.Since(start).Seconds()
+		if err == nil {
+			start = time.Now()
+			res1, _, err = uncompressHashBlock(chb)
+			tdecomp = time.Since(start).Seconds()
+		}
+
+	default:
+		return nil, nil, nil, fmt.Errorf("not yet implemented %s", cmethod)
+
+	}
+
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for i := range res1 {
+		if res1[i] != data[i] {
+			fmt.Printf("hash compression: error at position %d\n", i)
+		}
+	}
+	for i := range res2 {
+		if res2[i] != p.blocks[1].Uint64[i] {
+			fmt.Printf("pk compression: error at position %d\n", i)
+		}
+	}
+
+	if csize1 < 0 {
+		ct[0] = -1
+		dt[0] = -1
+	} else {
+		ct[0] = float64(p.blocks[0].HeapSize()+p.blocks[1].HeapSize()) / tcomp / 1000000
+		dt[0] = float64(p.blocks[0].HeapSize()+p.blocks[1].HeapSize()) / tdecomp / 1000000
+	}
+	cr[0] = float64(csize1) / float64(p.blocks[0].HeapSize())
+	cr[1] = float64(csize2) / float64(p.blocks[0].HeapSize())
+
+	return cr, ct, dt, nil
+}
+
+func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, error) {
+	cr := make([]float64, p.nFields)
+	ct := make([]float64, p.nFields)
+	dt := make([]float64, p.nFields)
+
+	for j := 0; j < p.nFields; j++ {
+		if p.blocks[j].Type() == block.BlockIgnore {
+			cr[j] = -1
+			ct[j] = -1
+			dt[j] = -1
+			continue
+		}
+		var csize int = -1
+		var tcomp float64 = -1
+		var tdecomp float64 = -1
+		var err error
+		switch cmethod {
+		case "legacy", "legacy-no", "legacy-lz4", "legacy-snappy":
+			buf := bytes.NewBuffer(make([]byte, 0, p.blocks[j].MaxStoredSize()))
+			switch cmethod {
+			case "legacy-no":
+				for _, b := range p.blocks {
+					b.SetCompression(block.NoCompression)
+				}
+			case "legacy-snappy":
+				for _, b := range p.blocks {
+					b.SetCompression(block.SnappyCompression)
+				}
+			case "legacy-lz4":
+				for _, b := range p.blocks {
+					b.SetCompression(block.LZ4Compression)
+				}
+			}
+			start := time.Now()
+			csize, err = p.blocks[j].Encode(buf)
+			tcomp = time.Since(start).Seconds()
+			if err == nil {
+				start = time.Now()
+				err = p.blocks[j].Decode(buf.Bytes(), csize, p.blocks[j].MaxStoredSize())
+				tdecomp = time.Since(start).Seconds()
+			}
+		case "snappy":
+			var buf []byte
+			start := time.Now()
+			buf, csize, err = compressSnappy(p.blocks[j])
+			tcomp = time.Since(start).Seconds()
+			if err == nil {
+				start = time.Now()
+				_, _, err = uncompressSnappy(buf)
+				tdecomp = time.Since(start).Seconds()
+			}
+		case "lz4":
+			var buf []byte
+			start := time.Now()
+			buf, csize, err = compressLz4(p.blocks[j])
+			tcomp = time.Since(start).Seconds()
+			if err == nil {
+				start = time.Now()
+				_, _, err = uncompressLz4(buf, cap(buf))
+				tdecomp = time.Since(start).Seconds()
+			}
+		case "no":
+			start := time.Now()
+			csize, err = compressNo(p.blocks[j])
+			tcomp = time.Since(start).Seconds()
+		default:
+			return nil, nil, nil, fmt.Errorf("unknown compression method %s", cmethod)
+		}
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if csize < 0 {
+			ct[j] = -1
+			dt[j] = -1
+		} else {
+			ct[j] = float64(p.blocks[j].HeapSize()) / tcomp / 1000000
+			dt[j] = float64(p.blocks[j].HeapSize()) / tdecomp / 1000000
+		}
+		cr[j] = float64(csize) / float64(p.blocks[j].HeapSize())
+	}
+	return cr, ct, dt, nil
+}
+
+func (t *Table) CompressPack(cmethod string, w io.Writer, i int, mode DumpMode) error {
+	if i >= t.packidx.Len() || i < 0 {
+		return ErrPackNotFound
+	}
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, false, nil)
+	if err != nil {
+		return err
+	}
+
+	cratios := make([][]float64, 1)
+	ctimes := make([][]float64, 1)
+	dtimes := make([][]float64, 1)
+	cr, ct, dt, err := pkg.compress(cmethod)
+	if err != nil {
+		return err
+	}
+	cratios[0] = cr
+	ctimes[0] = ct
+	dtimes[0] = dt
+
+	return DumpCompressResults(t.fields, cratios, ctimes, dtimes, w, mode, false)
+}
+
+func (t *Table) CompressIndexPack(cmethod string, w io.Writer, i, p int, mode DumpMode) error {
+	if i >= len(t.indexes) || i < 0 {
+		return ErrIndexNotFound
+	}
+	if p >= t.indexes[i].packidx.Len() || p < 0 {
+		return ErrPackNotFound
+	}
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	pkg, err := t.indexes[i].loadSharedPack(tx, t.indexes[i].packidx.packs[p].Key, false)
+	if err != nil {
+		return err
+	}
+
+	cratios := make([][]float64, 1)
+	ctimes := make([][]float64, 1)
+	dtimes := make([][]float64, 1)
+	cr, ct, dt, err := pkg.compressIdx(cmethod)
+	if err != nil {
+		return err
+	}
+	cratios[0] = cr
+	ctimes[0] = ct
+	dtimes[0] = dt
+	fl := FieldList{{Name: "Hash", Type: "uint64"}, {Name: "PK", Type: "uint64"}}
+
+	return DumpCompressResults(fl, cratios, ctimes, dtimes, w, mode, false)
+}
+
+func (t *Table) CompressIndexAll(cmethod string, i int, w io.Writer, mode DumpMode, verbose bool) error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	cratios := make([][]float64, t.indexes[i].packidx.Len())
+	ctimes := make([][]float64, t.indexes[i].packidx.Len())
+	dtimes := make([][]float64, t.indexes[i].packidx.Len())
+
+	for p := 0; p < t.indexes[i].packidx.Len(); p++ {
+		pkg, err := t.indexes[i].loadSharedPack(tx, t.indexes[i].packidx.packs[p].Key, false)
+		if err != nil {
+			return err
+		}
+
+		cr, ct, dt, err := pkg.compressIdx(cmethod)
+		if err != nil {
+			return err
+		}
+		cratios[p] = cr
+		ctimes[p] = ct
+		dtimes[p] = dt
+	}
+	fl := FieldList{{Name: "Hash", Type: "uint64"}, {Name: "PK", Type: "uint64"}}
+
+	return DumpCompressResults(fl, cratios, ctimes, dtimes, w, mode, verbose)
+}
+
+func (t *Table) IndexCollisions(cmethod string, i int, w io.Writer, mode DumpMode, verbose bool) error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if cmethod[:4] != "hash" {
+		return fmt.Errorf("unknown compression method %s", cmethod)
+	}
+
+	hashlen, err := strconv.Atoi(cmethod[4:])
+
+	if err != nil || hashlen < 1 || hashlen > 64 {
+		return fmt.Errorf("unknown compression method %s", cmethod)
+	}
+
+	var collisions uint64
+
+	for p := 0; p < t.indexes[i].packidx.Len(); p++ {
+		pkg, err := t.indexes[i].loadSharedPack(tx, t.indexes[i].packidx.packs[p].Key, false)
+		if err != nil {
+			return err
+		}
+
+		data := pkg.blocks[0].Uint64
+		shift := 64 - hashlen
+		for i := 1; i < len(data); i++ {
+			if data[i] != data[i-1] && (data[i]>>shift) == (data[i-1]>>shift) {
+				collisions++
+			}
+		}
+	}
+
+	fmt.Printf("Index contains %d additional collisions\n", collisions)
+
+	return nil
+}
+
+func (t *Table) CompressAll(cmethod string, w io.Writer, mode DumpMode, verbose bool) error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	cratios := make([][]float64, t.packidx.Len())
+	ctimes := make([][]float64, t.packidx.Len())
+	dtimes := make([][]float64, t.packidx.Len())
+
+	for i := 0; i < t.packidx.Len(); i++ {
+		pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, false, nil)
+		if err != nil {
+			return err
+		}
+
+		cr, ct, dt, err := pkg.compress(cmethod)
+		if err != nil {
+			return err
+		}
+		cratios[i] = cr
+		ctimes[i] = ct
+		dtimes[i] = dt
+	}
+
+	return DumpCompressResults(t.fields, cratios, ctimes, dtimes, w, mode, verbose)
+}
+
+func DumpCompressResults(fl FieldList, cratios, ctimes, dtimes [][]float64, w io.Writer, mode DumpMode, verbose bool) error {
+	out := "Compression ratios\n"
+	if _, err := w.Write([]byte(out)); err != nil {
+		return err
+	}
+	if err := DumpRatios(fl, cratios, w, mode, verbose); err != nil {
+		return err
+	}
+
+	out = "\nCompression troughput [MB/s]\n"
+	if _, err := w.Write([]byte(out)); err != nil {
+		return err
+	}
+	if err := DumpTimes(fl, ctimes, w, mode, verbose); err != nil {
+		return err
+	}
+
+	out = "\nUncompression troughput [MB/s]\n"
+	if _, err := w.Write([]byte(out)); err != nil {
+		return err
+	}
+	if err := DumpTimes(fl, dtimes, w, mode, verbose); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func DumpRatios(fl FieldList, cratios [][]float64, w io.Writer, mode DumpMode, verbose bool) error {
+	names := fl.Names()
+	nFields := len(names)
+	if len(fl.Aliases()) == nFields && len(fl.Aliases()[0]) > 0 {
+		names = fl.Aliases()
+	}
+
+	names = append([]string{"Pack"}, names...)
+
+	// estimate sizes from the first 500 values
+	switch mode {
+	case DumpModeDec, DumpModeHex:
+		sz := make([]int, nFields+1)
+		row := make([]string, nFields+1)
+		for j := 0; j < nFields+1; j++ {
+			sz[j] = len(names[j])
+		}
+		for j := 0; j < nFields; j++ {
+			if len(fl[j].Type) > sz[j+1] {
+				sz[j+1] = len(fl[j].Type)
+			}
+			if sz[j+1] < 4 {
+				sz[j+1] = 4
+			}
+		}
+		for j := 0; j < nFields+1; j++ {
+			row[j] = fmt.Sprintf("%[2]*[1]s", names[j], -sz[j])
+		}
+		var out string
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		row[0] = fmt.Sprintf("%[2]*[1]s", "", -sz[0])
+		for j := 0; j < nFields; j++ {
+			row[j+1] = fmt.Sprintf("%[2]*[1]s", fl[j].Type, -sz[j+1])
+		}
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		for j := 0; j < nFields+1; j++ {
+			row[j] = strings.Repeat("-", sz[j])
+		}
+		out = "|-" + strings.Join(row, "-|-") + "-|\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		avg := make([]float64, len(cratios[0]))
+		for i := 0; i < len(cratios); i++ {
+			row[0] = fmt.Sprintf("%[2]*[1]d", i, sz[0])
+			for j := 0; j < len(cratios[0]); j++ {
+				avg[j] += cratios[i][j]
+				if cratios[i][j] < 0 {
+					row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
+				} else {
+					row[j+1] = fmt.Sprintf("%[2]*.[1]f%%", 100*(1-cratios[i][j]), sz[j+1]-1)
+				}
+			}
+			if verbose || len(cratios) == 1 {
+				out = "| " + strings.Join(row, " | ") + " |\n"
+				if _, err := w.Write([]byte(out)); err != nil {
+					return err
+				}
+			}
+		}
+		if len(cratios) == 1 {
+			return nil
+		}
+		if verbose {
+			for j := 0; j < nFields+1; j++ {
+				row[j] = strings.Repeat("-", sz[j])
+			}
+			out = "|-" + strings.Join(row, "-|-") + "-|\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			for j := 0; j < nFields+1; j++ {
+				row[j] = fmt.Sprintf("%[2]*[1]s", names[j], -sz[j])
+			}
+			out = "| " + strings.Join(row, " | ") + " |\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			row[0] = fmt.Sprintf("%[2]*[1]s", "", -sz[0])
+			for j := 0; j < nFields; j++ {
+				row[j+1] = fmt.Sprintf("%[2]*[1]s", fl[j].Type, -sz[j+1])
+			}
+			out = "| " + strings.Join(row, " | ") + " |\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			for j := 0; j < nFields+1; j++ {
+				row[j] = strings.Repeat("-", sz[j])
+			}
+			out = "|-" + strings.Join(row, "-|-") + "-|\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+		}
+		row[0] = fmt.Sprintf(" AVG")
+		for j := 0; j < len(avg); j++ {
+			if avg[j] < 0 {
+				row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
+			} else {
+				row[j+1] = fmt.Sprintf("%[2]*.[1]f%%", 100*(1-avg[j]/float64(len(cratios))), sz[j+1]-1)
+			}
+		}
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+
+		/*	case DumpModeCSV:
+			enc, ok := w.(*csv.Encoder)
+			if !ok {
+				enc = csv.NewEncoder(w)
+			}
+			if !enc.HeaderWritten() {
+				if err := enc.EncodeHeader(names, nil); err != nil {
+					return err
+				}
+			}
+			// csv encoder supports []interface{} records
+			for i := 0; i < p.nValues; i++ {
+				row, _ := p.RowAt(i)
+				if err := enc.EncodeRecord(row); err != nil {
+					return err
+				}
+			}*/
+	}
+	return nil
+}
+
+func DumpTimes(fl FieldList, ctimes [][]float64, w io.Writer, mode DumpMode, verbose bool) error {
+	names := fl.Names()
+	nFields := len(names)
+	if len(fl.Aliases()) == nFields && len(fl.Aliases()[0]) > 0 {
+		names = fl.Aliases()
+	}
+
+	names = append([]string{"Pack"}, names...)
+
+	// estimate sizes from the first 500 values
+	switch mode {
+	case DumpModeDec, DumpModeHex:
+		sz := make([]int, nFields+1)
+		row := make([]string, nFields+1)
+		for j := 0; j < nFields+1; j++ {
+			sz[j] = len(names[j])
+		}
+		for j := 0; j < nFields; j++ {
+			if len(fl[j].Type) > sz[j+1] {
+				sz[j+1] = len(fl[j].Type)
+			}
+			if sz[j+1] < 5 {
+				sz[j+1] = 5
+			}
+		}
+		for j := 0; j < nFields+1; j++ {
+			row[j] = fmt.Sprintf("%[2]*[1]s", names[j], -sz[j])
+		}
+		var out string
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		row[0] = fmt.Sprintf("%[2]*[1]s", "", -sz[0])
+		for j := 0; j < nFields; j++ {
+			row[j+1] = fmt.Sprintf("%[2]*[1]s", fl[j].Type, -sz[j+1])
+		}
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		for j := 0; j < nFields+1; j++ {
+			row[j] = strings.Repeat("-", sz[j])
+		}
+		out = "|-" + strings.Join(row, "-|-") + "-|\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+		avg := make([]float64, len(ctimes[0]))
+		for i := 0; i < len(ctimes); i++ {
+			row[0] = fmt.Sprintf("%[2]*[1]d", i, sz[0])
+			for j := 0; j < len(ctimes[0]); j++ {
+				avg[j] += ctimes[i][j]
+				if ctimes[i][j] < 0 {
+					row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
+				} else {
+					row[j+1] = fmt.Sprintf("%[2]*.[1]f", ctimes[i][j], sz[j+1])
+				}
+			}
+			if verbose || len(ctimes) == 1 {
+				out = "| " + strings.Join(row, " | ") + " |\n"
+				if _, err := w.Write([]byte(out)); err != nil {
+					return err
+				}
+			}
+		}
+		if len(ctimes) == 1 {
+			return nil
+		}
+		if verbose {
+			for j := 0; j < nFields+1; j++ {
+				row[j] = strings.Repeat("-", sz[j])
+			}
+			out = "|-" + strings.Join(row, "-|-") + "-|\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			for j := 0; j < nFields+1; j++ {
+				row[j] = fmt.Sprintf("%[2]*[1]s", names[j], -sz[j])
+			}
+			out = "| " + strings.Join(row, " | ") + " |\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			row[0] = fmt.Sprintf("%[2]*[1]s", "", -sz[0])
+			for j := 0; j < nFields; j++ {
+				row[j+1] = fmt.Sprintf("%[2]*[1]s", fl[j].Type, -sz[j+1])
+			}
+			out = "| " + strings.Join(row, " | ") + " |\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+			for j := 0; j < nFields+1; j++ {
+				row[j] = strings.Repeat("-", sz[j])
+			}
+			out = "|-" + strings.Join(row, "-|-") + "-|\n"
+			if _, err := w.Write([]byte(out)); err != nil {
+				return err
+			}
+		}
+		row[0] = fmt.Sprintf(" AVG")
+		for j := 0; j < len(avg); j++ {
+			if avg[j] < 0 {
+				row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
+			} else {
+				row[j+1] = fmt.Sprintf("%[2]*.[1]f", avg[j]/float64(len(ctimes)), sz[j+1])
+			}
+		}
+		out = "| " + strings.Join(row, " | ") + " |\n"
+		if _, err := w.Write([]byte(out)); err != nil {
+			return err
+		}
+
+		/*	case DumpModeCSV:
+			enc, ok := w.(*csv.Encoder)
+			if !ok {
+				enc = csv.NewEncoder(w)
+			}
+			if !enc.HeaderWritten() {
+				if err := enc.EncodeHeader(names, nil); err != nil {
+					return err
+				}
+			}
+			// csv encoder supports []interface{} records
+			for i := 0; i < p.nValues; i++ {
+				row, _ := p.RowAt(i)
+				if err := enc.EncodeRecord(row); err != nil {
+					return err
+				}
+			}*/
+	}
+	return nil
 }
 
 func (p *Package) Validate() error {

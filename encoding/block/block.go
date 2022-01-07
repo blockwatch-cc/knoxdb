@@ -623,7 +623,7 @@ func (b *Block) HeapSize() int {
 	return sz
 }
 
-func (b *Block) DataSize() int {
+/* func (b *Block) DataSize() int {
 	var sz int
 	switch b.Type() {
 	case BlockFloat64:
@@ -648,14 +648,8 @@ func (b *Block) DataSize() int {
 		sz = len(b.Uint8)
 	case BlockBool:
 		sz = len(b.Bits.Bytes())
-	case BlockString:
-		for _, v := range b.Strings {
-			sz += len(v)
-		}
-	case BlockBytes:
-		for _, v := range b.Bytes {
-			sz += len(v)
-		}
+	case BlockString, BlockBytes:
+		sz += b.Bytes.DataSize()
 	case BlockInt128:
 		sz = b.Int128.Len() * 16
 	case BlockInt256:
@@ -663,7 +657,7 @@ func (b *Block) DataSize() int {
 	}
 	return sz
 }
-
+*/
 func (b *Block) Clear() {
 	switch b.typ {
 	case BlockInt64, BlockTime:
