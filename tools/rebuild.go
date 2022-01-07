@@ -163,7 +163,7 @@ func run() error {
 	// walk source table in packs and bulk-insert data into target
 	stats := table.Stats()
 	log.Infof("Rebuild indexes over %d rows / %d packs from table %s",
-		stats.TupleCount, stats.PacksCount, table.Database().Path())
+		stats[0].TupleCount, stats[0].PacksCount, table.Database().Path())
 
 	// rebuild indexes
 	for _, idx := range table.Indexes() {
