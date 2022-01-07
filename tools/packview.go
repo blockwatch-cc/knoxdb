@@ -118,7 +118,7 @@ func run() error {
 	pack.UseLogger(log.Log)
 
 	if debug {
-		util.LogAVXFeatures(log.Log.Logger())
+		util.LogCPUFeatures(log.Log.Logger())
 	}
 
 	cmd = flags.Arg(0)
