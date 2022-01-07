@@ -1,5 +1,6 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+
 package main
 
 import (
@@ -15,7 +16,7 @@ import (
 
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
-	// "blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -117,52 +118,39 @@ func run() error {
 	errors := make([]vec.Uint64Reducer, len(table.Fields()))
 	bloomSizeErr := make([][2]int, len(table.Fields()))
 	fields := table.Fields()
-	// u64 := make([]uint64, 0, 1<<PackSizeLog2)
+	u64 := make([]uint64, 0, 1<<PackSizeLog2)
 	var totalSize uint64
 	err = table.WalkPacks(func(pkg *pack.Package) error {
 		count++
-		if count < 2000 {
-			return nil
-		}
 		for i, v := range pkg.Blocks() {
 			// skip for non-bloom fields when requested
 			if bloomOnly && !fields[i].Flags.Contains(pack.FlagBloom) {
 				continue
 			}
 
-			t1 := time.Now()
-			// estimated value
 			est := fields[i].Type.EstimateCardinality(v, prec)
 
-			t2 := time.Now()
+			// true values
+			u64 = vec.Uint64.Unique(v.Hashes(u64))
 
-			_ = fields[i].Type.BuildBloomFilter(v, est, 1)
+			// add to stats and errors
+			stats[i].Add(uint64(est))
+			errors[i].Add(uint64(util.Abs64(int64(est) - int64(len(u64)))))
 
-			t3 := time.Now()
+			b1 := pow2(uint64(est*8)) / 8
+			b2 := pow2(uint64(len(u64)*8)) / 8
+			if b1 < b2 {
+				bloomSizeErr[i][0]++
+			} else if b1 > b2 {
+				bloomSizeErr[i][1]++
+			}
 
-			fmt.Printf("Pack %04d %02d %-10s Card=%s Bloom=%s\n",
-				count, i, v.Type(), t2.Sub(t1), t3.Sub(t2))
-			// // true values
-			// u64 = vec.Uint64.Unique(v.Hashes(u64))
+			u64 = u64[:0]
 
-			// // add to stats and errors
-			// stats[i].Add(uint64(est))
-			// errors[i].Add(uint64(util.Abs64(int64(est) - int64(len(u64)))))
-
-			// b1 := pow2(uint64(est*8)) / 8
-			// b2 := pow2(uint64(len(u64)*8)) / 8
-			// if b1 < b2 {
-			// 	bloomSizeErr[i][0]++
-			// } else if b1 > b2 {
-			// 	bloomSizeErr[i][1]++
-			// }
-
-			// u64 = u64[:0]
-
-			// // track total size of bloom filters
-			// totalSize += pow2(uint64(est*8)) / 8
+			// track total size of bloom filters
+			totalSize += pow2(uint64(est*8)) / 8
 		}
-		// fmt.Printf(".")
+		fmt.Printf(".")
 		return nil
 	})
 	if err != nil {
