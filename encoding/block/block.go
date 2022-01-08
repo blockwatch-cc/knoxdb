@@ -58,6 +58,7 @@ type Filter byte
 const (
 	NoFilter Filter = iota
 	BloomFilter
+	Bitmap
 )
 
 func (f Filter) String() string {

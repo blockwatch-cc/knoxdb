@@ -311,21 +311,26 @@ func (c *Condition) Compile() (err error) {
 	}
 
 	// prepare bloom filter data
-	buildBloom := c.Field.Flags.Contains(FlagBloom)
-	switch c.Mode {
-	case FilterModeIn, FilterModeNotIn:
-		if buildBloom {
-			c.bloomHashes = make([][2]uint32, 0)
-		}
-		// handled below
+	var buildBloom bool
+	switch c.Field.Type {
+	case FieldTypeUint8, FieldTypeInt8, FieldTypeUint16, FieldTypeInt16:
+		buildBloom = false
 	default:
-		if buildBloom {
-			c.bloomHashes = [][2]uint32{bloomVec.Hash(c.Field.Type.Bytes(c.Value))}
+		buildBloom = c.Field.Flags.Contains(FlagBloom)
+		switch c.Mode {
+		case FilterModeIn, FilterModeNotIn:
+			if buildBloom {
+				c.bloomHashes = make([][2]uint32, 0)
+			}
+			// handled below
+		default:
+			if buildBloom {
+				c.bloomHashes = [][2]uint32{bloomVec.Hash(c.Field.Type.Bytes(c.Value))}
+			}
+			// anything but IN, NIN is finished here
+			return
 		}
-		// anything but IN, NIN is finished here
-		return
 	}
-
 	// hash maps are only used for expensive types, other types
 	// will use a standard go map (and hashing in Go's runtime)
 	var vals [][]byte
@@ -476,11 +481,6 @@ func (c *Condition) Compile() (err error) {
 			for _, v := range slice {
 				c.int16map[v] = struct{}{}
 			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
-				}
-			}
 		}
 		return
 	case FieldTypeInt8:
@@ -490,11 +490,6 @@ func (c *Condition) Compile() (err error) {
 			c.int8map = make(map[int8]struct{}, len(slice))
 			for _, v := range slice {
 				c.int8map[v] = struct{}{}
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
-				}
 			}
 		}
 		return
@@ -545,11 +540,6 @@ func (c *Condition) Compile() (err error) {
 			for _, v := range slice {
 				c.uint16map[v] = struct{}{}
 			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
-				}
-			}
 		}
 		return
 	case FieldTypeUint8:
@@ -559,11 +549,6 @@ func (c *Condition) Compile() (err error) {
 			c.uint8map = make(map[uint8]struct{}, len(slice))
 			for _, v := range slice {
 				c.uint8map[v] = struct{}{}
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
-				}
 			}
 		}
 		return
@@ -662,16 +647,10 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 		// condition value is within range
 		res := typ.Between(c.Value, min, max)
 		if res && filter != nil {
-			switch typ {
-			case FieldTypeBytes, FieldTypeString, FieldTypeDatetime,
-				FieldTypeFloat64, FieldTypeFloat32, FieldTypeInt256, FieldTypeInt128,
-				FieldTypeUint64, FieldTypeInt64, FieldTypeUint32, FieldTypeInt32,
-				FieldTypeDecimal256, FieldTypeDecimal128, FieldTypeDecimal64, FieldTypeDecimal32:
-
-				return filter.ContainsHash(c.bloomHashes[0])
-			case FieldTypeUint16, FieldTypeInt16, FieldTypeUint8, FieldTypeInt8:
-				return bitmap.IsSet(c.Value.(int))
-			}
+			return filter.ContainsHash(c.bloomHashes[0])
+		}
+		if res && bitmap != nil {
+			return bitmap.IsSet(c.Value.(int))
 		}
 		return res
 	case FilterModeNotEqual:
@@ -683,16 +662,10 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 		// check if any of the IN condition values fall into the pack's min and max range
 		res := typ.InBetween(c.Value, min, max) // c.Value is a slice
 		if res && filter != nil {
-			switch typ {
-			case FieldTypeBytes, FieldTypeString, FieldTypeDatetime,
-				FieldTypeFloat64, FieldTypeFloat32, FieldTypeInt256, FieldTypeInt128,
-				FieldTypeUint64, FieldTypeInt64, FieldTypeUint32, FieldTypeInt32,
-				FieldTypeDecimal256, FieldTypeDecimal128, FieldTypeDecimal64, FieldTypeDecimal32:
-
-				return filter.ContainsAnyHash(c.bloomHashes)
-			case FieldTypeUint16, FieldTypeInt16, FieldTypeUint8, FieldTypeInt8:
-				return bitmap.IsSetAny(c.Value.([]int))
-			}
+			return filter.ContainsAnyHash(c.bloomHashes)
+		}
+		if res && bitmap != nil {
+			return bitmap.IsSetAny(c.Value.([]int))
 		}
 		return res
 	case FilterModeNotIn:

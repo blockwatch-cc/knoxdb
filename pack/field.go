@@ -2819,11 +2819,11 @@ func (t FieldType) BuildBitmap(b *block.Block) *Bitset {
 	case FieldTypeInt16:
 		flt = NewBitsetFromInt16(b.Int16, 65536)
 	case FieldTypeInt8:
-		flt = NewBitsetFromInt8(b.Int8, 65536)
+		flt = NewBitsetFromInt8(b.Int8, 256)
 	case FieldTypeUint16:
 		flt = NewBitsetFromUint16(b.Uint16, 65536)
 	case FieldTypeUint8:
-		flt = NewBitsetFromUint8(b.Uint8, 65536)
+		flt = NewBitsetFromUint8(b.Uint8, 256)
 	default:
 		return nil
 	}

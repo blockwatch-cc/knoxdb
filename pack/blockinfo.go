@@ -216,6 +216,9 @@ func (h BlockInfo) Encode(buf *bytes.Buffer) error {
 	if h.Bloom != nil {
 		filter = block.BloomFilter
 	}
+	if h.Bitmap != nil {
+		filter = block.Bitmap
+	}
 	buf.WriteByte((byte(filter) & blockFilterMask) << 5)
 
 	// write cardinality, 32bit
@@ -351,6 +354,9 @@ func (h BlockInfo) Encode(buf *bytes.Buffer) error {
 	// write bloom filter data (size can be calculated from other info, so we skip this)
 	if h.Bloom != nil {
 		buf.Write(h.Bloom.Bytes())
+	}
+	if h.Bitmap != nil {
+		buf.Write(h.Bitmap.Bytes())
 	}
 
 	h.dirty = false
@@ -505,6 +511,23 @@ func (h *BlockInfo) Decode(buf *bytes.Buffer, version byte) error {
 		if err != nil {
 			return fmt.Errorf("pack: reading bloom filter: %w", err)
 		}
+	case block.Bitmap:
+		// bitmap size is determined by data type
+		var sz int
+		switch h.Type {
+		case block.BlockUint8, block.BlockInt8:
+			sz = 1 << 8
+		case block.BlockUint16, block.BlockInt16:
+			sz = 1 << 16
+		default:
+			return fmt.Errorf("pack: bitmap for %s not valid", h.Type)
+		}
+		b := buf.Next(sz)
+		if len(b) < sz {
+			return fmt.Errorf("pack: reading bitmap: %w", io.ErrShortBuffer)
+		}
+
+		h.Bitmap = vec.NewBitsetFromBytes(b, sz)
 	}
 
 	return nil
