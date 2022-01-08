@@ -313,7 +313,7 @@ func (c *Condition) Compile() (err error) {
 	// prepare bloom filter data
 	var buildBloom bool
 	switch c.Field.Type {
-	case FieldTypeUint8, FieldTypeInt8, FieldTypeUint16, FieldTypeInt16:
+	case FieldTypeUint8, FieldTypeInt8, FieldTypeUint16, FieldTypeInt16, FieldTypeBoolean:
 		buildBloom = false
 	default:
 		buildBloom = c.Field.Flags.Contains(FlagBloom)
@@ -392,24 +392,9 @@ func (c *Condition) Compile() (err error) {
 			if hasTrue && hasTrue == hasFalse {
 				c.numValues = 2
 				c.Value = []bool{false, true}
-				if buildBloom {
-					c.bloomHashes = [][2]uint32{
-						bloomVec.Hash([]byte{0}),
-						bloomVec.Hash([]byte{1}),
-					}
-				}
 			} else {
 				c.numValues = 1
 				c.Value = []bool{hasTrue}
-				if buildBloom {
-					var val []byte
-					if hasTrue {
-						val = []byte{1}
-					} else {
-						val = []byte{0}
-					}
-					c.bloomHashes = [][2]uint32{bloomVec.Hash(val)}
-				}
 			}
 		}
 		return

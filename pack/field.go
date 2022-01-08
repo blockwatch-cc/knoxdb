@@ -2740,27 +2740,6 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 		}
 	case FieldTypeDatetime:
 		flt.AddManyInt64(b.Int64)
-	case FieldTypeBoolean:
-		var (
-			count int
-			last  bool
-		)
-		for _, v := range b.Bits.Slice() {
-			if count == 2 {
-				break
-			}
-			if v {
-				flt.Add([]byte{1})
-				if count == 0 || !last {
-					count++
-				}
-			} else {
-				flt.Add([]byte{0})
-				if count == 0 || last {
-					count++
-				}
-			}
-		}
 	case FieldTypeInt256, FieldTypeDecimal256:
 		for i := 0; i < b.Int256.Len(); i++ {
 			buf := b.Int256.Elem(i).Bytes32()
@@ -2941,7 +2920,10 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 		return 2
 	}
 
-	filter := llbVec.NewFilterWithPrecision(uint32(precision))
+	var filter *llbVec.LogLogBeta
+	if t != FieldTypeBoolean {
+		filter = llbVec.NewFilterWithPrecision(uint32(precision))
+	}
 	var buf [8]byte
 	switch t {
 	case FieldTypeBytes, FieldTypeString:
@@ -2951,26 +2933,11 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 	case FieldTypeDatetime:
 		filter.AddManyInt64(b.Int64)
 	case FieldTypeBoolean:
-		var (
-			count int
-			last  bool
-		)
-		for _, v := range b.Bits.Slice() {
-			if count == 2 {
-				break
-			}
-			if v {
-				filter.Add([]byte{1})
-				if count == 0 || !last {
-					count++
-				}
-			} else {
-				filter.Add([]byte{0})
-				if count == 0 || last {
-					count++
-				}
-			}
+		min, max := b.MinMax()
+		if t.Equal(min, max) {
+			return 1
 		}
+		return 2
 	case FieldTypeInt256, FieldTypeDecimal256:
 		for i := 0; i < b.Int256.Len(); i++ {
 			buf := b.Int256.Elem(i).Bytes32()
