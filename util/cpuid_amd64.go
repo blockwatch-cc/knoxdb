@@ -104,7 +104,7 @@ var (
 )
 
 func LogCPUFeatures(l *log.Logger) {
-	l.Printf("amd64 cpu features")
+	l.Printf("AMD64 CPU detected")
 	l.Printf(" AVX2 %t", UseAVX2)
 	l.Printf(" AVX512-F %t", UseAVX512_F)
 	l.Printf(" AVX512-DQ %t", UseAVX512_DQ)

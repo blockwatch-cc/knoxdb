@@ -11,5 +11,5 @@ import (
 )
 
 func LogCPUFeatures(l *log.Logger) {
-	l.Printf("unsupported cpu architecture")
+	l.Printf("Non-Intel CPU architecture")
 }
