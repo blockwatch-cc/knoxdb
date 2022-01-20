@@ -1,7 +1,7 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-// packed index generation test
+// KnoxDB database inspector
 
 package main
 
@@ -35,7 +35,7 @@ var (
 	csvfile   string
 	dbname    string
 	cmd       string
-	packid    int
+	id1, id2  int
 	tablename string
 )
 
@@ -53,15 +53,17 @@ var (
 
 var cmdinfo = `
 Available Commands:
-  table       list all table packs
-  index       list all index packs
-  blocks      show pack block headers
-  type        show type info (from journal pack)
-  journal     dump journal contents
-  dump        dump raw block data after decode
-  dump-all    dump full table contents
-  dump-pack   dump pack contents (use -pack <id> to select a pack, default 0)
-  dump-index  dump index pack contents (use -pack <id> to select a pack, default 0)
+  table        list all table packs
+  index        list all index packs
+  blocks       show pack block headers
+  type         show type info (from journal pack)
+  dump-journal dump journal contents
+  dump-block   dump raw block data after decode
+  dump-table   dump full table contents
+  dump-index   dump full index contents (add /:index-id, default 0)
+  dump-tpack   dump pack contents (add /:pack-id to select a pack, default 0)
+  dump-ipack   dump index pack contents (add /:index-id/:pack-id, default 0)
+  validate     cross-check pack index lists for table and indexes
 `
 
 func b(n int) string {
@@ -76,10 +78,6 @@ func init() {
 	flags.BoolVar(&ashex, "hex", false, "hex output mode")
 	flags.BoolVar(&sorted, "sorted", false, "sort pack headers by min value")
 	flags.StringVar(&csvfile, "csv", "", "csv output `filename`")
-	flags.StringVar(&dbname, "db", "", "database")
-	flags.StringVar(&cmd, "cmd", "", "run `command`")
-	flags.IntVar(&packid, "pack", 0, "use pack `number`")
-	flags.StringVar(&tablename, "table", "", "use table `name` (optional, for multi-table files)")
 }
 
 func main() {
@@ -89,11 +87,27 @@ func main() {
 }
 
 func printhelp() {
-	fmt.Println("Usage:\n  packview [command] [database][/table][/pack] [flags]")
+	fmt.Println("Usage:\n  packview [flags] [command] [database][/table][/index][/pack]")
 	fmt.Println(cmdinfo)
 	fmt.Println("Flags:")
 	flags.PrintDefaults()
 	fmt.Println()
+}
+
+func readNumber(s string) (int, bool) {
+	var (
+		p   int
+		err error
+	)
+	if strings.HasPrefix(s, "0x") {
+		p, err = strconv.Atoi(strings.TrimPrefix(s, "0x"))
+	} else {
+		p, err = strconv.Atoi(s)
+	}
+	if err == nil {
+		return p, true
+	}
+	return 0, false
 }
 
 func run() error {
@@ -121,62 +135,84 @@ func run() error {
 		util.LogCPUFeatures(log.Log.Logger())
 	}
 
+	if flags.NArg() < 2 {
+		return fmt.Errorf("Missing argument. Need command and database file!")
+	}
+
 	cmd = flags.Arg(0)
 	dbname = strings.Split(flags.Arg(1), ".db")[0] + ".db"
 	switch dbx := strings.Split(strings.TrimPrefix(strings.TrimPrefix(flags.Arg(1), dbname), "/"), "/"); len(dbx) {
 	case 0:
 		// none
 	case 1:
-		// table or pack
-		var p int64
-		if strings.HasPrefix(dbx[0], "0x") {
-			p, err = strconv.ParseInt(strings.TrimPrefix(dbx[0], "0x"), 16, 64)
-		} else {
-			p, err = strconv.ParseInt(dbx[0], 10, 64)
-		}
-		if err == nil {
-			packid = int(p)
+		// 1: /:table-name
+		// 2: /:pack-id
+		// 3: /:index-id
+		if p, ok := readNumber(dbx[0]); ok {
+			id1 = p
 		} else {
 			tablename = dbx[0]
 		}
 	case 2:
-		// table and pack
-		var p int64
-		tablename = dbx[0]
-		if strings.HasPrefix(dbx[0], "0x") {
-			p, err = strconv.ParseInt(strings.TrimPrefix(dbx[1], "0x"), 16, 64)
+		// 1: /:table-name/:pack-id
+		// 2: /:table-name/:index-id
+		// 3: /:index-id/:pack-id
+		p1, ok1 := readNumber(dbx[0])
+		p2, ok2 := readNumber(dbx[1])
+		if !ok1 {
+			tablename = dbx[0]
+			id1 = p2
+		} else if ok2 {
+			id1 = p1
+			id2 = p2
 		} else {
-			p, err = strconv.ParseInt(dbx[1], 10, 64)
+			return fmt.Errorf("invalid id '%s': %v", dbx[1], err)
 		}
-		if err == nil {
-			packid = int(p)
+	case 3:
+		// 1: /:table-name/:index-id/:pack-id
+		tablename = dbx[0]
+		if p, ok := readNumber(dbx[1]); ok {
+			id1 = p
 		} else {
-			return fmt.Errorf("invalid pack id '%s': %v", dbx[1], err)
+			return fmt.Errorf("invalid index id '%s': %v", dbx[1], err)
+		}
+		if p, ok := readNumber(dbx[2]); ok {
+			id2 = p
+		} else {
+			return fmt.Errorf("invalid pack id '%s': %v", dbx[2], err)
 		}
 	default:
 		return fmt.Errorf("invalid database locator")
 	}
 
+	// table name defaults to same name as db file basename
+	if tablename == "" {
+		tablename = strings.TrimSuffix(filepath.Base(dbname), ".db")
+	}
+
 	if debug {
-		fmt.Printf("db=%s\n", dbname)
 		fmt.Printf("cmd=%s\n", cmd)
-		fmt.Printf("pack=%d\n", packid)
+		fmt.Printf("db=%s\n", dbname)
+		fmt.Printf("table=%s\n", tablename)
+		fmt.Printf("id1=%d\n", id1)
+		fmt.Printf("id2=%d\n", id2)
 	}
 
 	if cmd == "" {
 		return fmt.Errorf("Missing command. See -h")
 	}
 
-	name := strings.TrimSuffix(filepath.Base(dbname), ".db")
-	db, err := pack.OpenDatabase(filepath.Dir(dbname), name, "*", boltopts)
+	db, err := pack.OpenDatabase(
+		filepath.Dir(dbname),
+		strings.TrimSuffix(filepath.Base(dbname), ".db"),
+		"*",
+		boltopts,
+	)
 	if err != nil {
 		return fmt.Errorf("opening database: %v", err)
 	}
 	defer db.Close()
 
-	if tablename == "" {
-		tablename = name
-	}
 	table, err := db.Table(tablename)
 	if err != nil {
 		return fmt.Errorf("opening table '%s': %v", tablename, err)
@@ -198,34 +234,36 @@ func run() error {
 	}
 
 	switch cmd {
-	case "journal":
-		return table.DumpJournal(out, mode)
 	case "type":
 		return table.DumpType(out)
 	case "blocks":
 		return table.DumpPackBlocks(out, mode)
 	case "table":
-		return table.DumpPackHeaders(out, mode, sorted)
+		return table.DumpPackInfo(out, mode, sorted)
 	case "index":
-		return table.DumpIndexPackHeaders(out, mode, sorted)
-	case "dump-all":
-		return viewAllPacks(table, out, mode)
-	case "dump":
-		return dumpByteBlock(table, out)
-	case "dump-pack":
-		return table.DumpPack(out, packid, mode)
+		return table.DumpIndexPackInfo(out, id1, mode, sorted)
+	case "dump-journal":
+		return table.DumpJournal(out, mode)
+	case "dump-table":
+		return viewAllTablePacks(table, out, mode)
 	case "dump-index":
-		return table.DumpIndexPack(out, 0, packid, mode)
+		return viewAllIndexPacks(table, id1, out, mode)
+	case "dump-tpack":
+		return table.DumpPack(out, id1, mode)
+	case "dump-ipack":
+		return table.DumpIndexPack(out, id1, id2, mode)
+	case "dump-block":
+		return dumpByteBlock(table, id1, out)
 	case "validate":
-		table.ValidatePackHeaders(out)
-		table.ValidateIndexPackHeaders(out)
+		table.ValidatePackIndex(out)
+		table.ValidateIndexPackIndex(out)
 		return nil
 	default:
 		return fmt.Errorf("unsupported command %s", cmd)
 	}
 }
 
-func viewAllPacks(table *pack.Table, w io.Writer, mode pack.DumpMode) error {
+func viewAllTablePacks(table *pack.Table, w io.Writer, mode pack.DumpMode) error {
 	for i := 0; ; i++ {
 		err := table.DumpPack(w, i, mode)
 		if err != nil && err != pack.ErrPackNotFound {
@@ -238,8 +276,21 @@ func viewAllPacks(table *pack.Table, w io.Writer, mode pack.DumpMode) error {
 	return nil
 }
 
-func dumpByteBlock(table *pack.Table, w io.Writer) error {
-	return table.WalkPacksRange(packid, packid, func(p *pack.Package) error {
+func viewAllIndexPacks(table *pack.Table, idx int, w io.Writer, mode pack.DumpMode) error {
+	for i := 0; ; i++ {
+		err := table.DumpIndexPack(w, idx, i, mode)
+		if err != nil && err != pack.ErrPackNotFound {
+			return err
+		}
+		if err == pack.ErrPackNotFound {
+			break
+		}
+	}
+	return nil
+}
+
+func dumpByteBlock(table *pack.Table, id int, w io.Writer) error {
+	return table.WalkPacksRange(id, id, func(p *pack.Package) error {
 		for i, v := range p.Blocks() {
 			if v.Type() == block.BlockBytes {
 				fmt.Printf("Dump raw data for pack=%x block=%d\n", p.Key(), i)

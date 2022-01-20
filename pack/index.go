@@ -457,6 +457,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 		// ignore journal and tombstone
 		switch pkg.key {
 		case journalKey, tombstoneKey:
+			pkg.Clear()
 			continue
 		}
 		info := pkg.Info()
@@ -967,8 +968,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 		nextid                      uint64   // next index key to process (tomb or journal)
 		packmax, nextmin, globalmax uint64   // data placement hints
 		needsort                    bool     // true if current pack needs sort before store
-		loop                        int      // circuit breaker
-		maxloop                     int      // circuit breaker
+		loop, maxloop               int      // circuit breaker
 	)
 
 	// init

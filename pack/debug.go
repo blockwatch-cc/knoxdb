@@ -41,7 +41,7 @@ func (t *Table) DumpType(w io.Writer) error {
 	return t.journal.DataPack().DumpType(w)
 }
 
-func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode, sorted bool) error {
+func (t *Table) DumpPackInfo(w io.Writer, mode DumpMode, sorted bool) error {
 	tx, err := t.db.Tx(false)
 	if err != nil {
 		return err
@@ -208,21 +208,19 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	return nil
 }
 
-func (t *Table) DumpIndexPackHeaders(w io.Writer, mode DumpMode, sorted bool) error {
+func (t *Table) DumpIndexPackInfo(w io.Writer, idx int, mode DumpMode, sorted bool) error {
+	if len(t.indexes) <= idx {
+		return ErrNoIndex
+	}
 	tx, err := t.db.Tx(false)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	for _, v := range t.indexes {
-		if err := v.dumpPackHeaders(tx, w, mode, sorted); err != nil {
-			return err
-		}
-	}
-	return nil
+	return t.indexes[idx].dumpPackInfo(tx, w, mode, sorted)
 }
 
-func (idx *Index) dumpPackHeaders(tx *Tx, w io.Writer, mode DumpMode, sorted bool) error {
+func (idx *Index) dumpPackInfo(tx *Tx, w io.Writer, mode DumpMode, sorted bool) error {
 	switch mode {
 	case DumpModeDec, DumpModeHex:
 		fmt.Fprintf(w, "%-3s %-10s %-7s %-7s %-21s %-21s %-10s\n",
@@ -388,7 +386,7 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 				gotype = p.tinfo.fields[i].typname
 			}
 			blockinfo := info.Blocks[i]
-			// reconstruct cardinality of missing
+			// reconstruct cardinality when missing
 			if blockinfo.Cardinality == 0 && v.Len() > 0 {
 				blockinfo.Cardinality = p.fields[i].Type.EstimateCardinality(v, 15)
 			}
@@ -783,7 +781,7 @@ func (l PackIndex) Validate() []error {
 	return errs
 }
 
-func (t *Table) ValidatePackHeaders(w io.Writer) error {
+func (t *Table) ValidatePackIndex(w io.Writer) error {
 	if errs := t.packidx.Validate(); errs != nil {
 		for _, v := range errs {
 			w.Write([]byte(v.Error() + "\n"))
@@ -792,7 +790,7 @@ func (t *Table) ValidatePackHeaders(w io.Writer) error {
 	return nil
 }
 
-func (t *Table) ValidateIndexPackHeaders(w io.Writer) error {
+func (t *Table) ValidateIndexPackIndex(w io.Writer) error {
 	for _, idx := range t.indexes {
 		if errs := idx.packidx.Validate(); errs != nil {
 			for _, v := range errs {
