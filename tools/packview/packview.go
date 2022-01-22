@@ -40,7 +40,6 @@ var (
 )
 
 var (
-	b        = util.ByteSize
 	p        = util.PrettyInt64
 	pi       = util.PrettyInt
 	boltopts = &bolt.Options{
