@@ -21,6 +21,7 @@ import (
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/csv"
 	"blockwatch.cc/knoxdb/pack"
+	"blockwatch.cc/knoxdb/store"
 	_ "blockwatch.cc/knoxdb/store/bolt"
 	"blockwatch.cc/knoxdb/util"
 )
@@ -33,13 +34,13 @@ var (
 	ashex     bool
 	sorted    bool
 	csvfile   string
-	dbname    string
 	cmd       string
 	id1, id2  int
 	tablename string
 )
 
 var (
+	b        = util.ByteSize
 	p        = util.PrettyInt64
 	pi       = util.PrettyInt
 	boltopts = &bolt.Options{
@@ -55,6 +56,7 @@ var cmdinfo = `
 Available Commands:
   table        list all table packs
   index        list all index packs
+  detail      show pack info details (from metadata)
   blocks       show pack block headers
   type         show type info (from journal pack)
   dump-journal dump journal contents
@@ -65,10 +67,6 @@ Available Commands:
   dump-ipack   dump index pack contents (add /:index-id/:pack-id, default 0)
   validate     cross-check pack index lists for table and indexes
 `
-
-func b(n int) string {
-	return util.ByteSize(n).String()
-}
 
 func init() {
 	flags.Usage = func() {}
@@ -130,6 +128,7 @@ func run() error {
 	}
 	log.SetLevel(lvl)
 	pack.UseLogger(log.Log)
+	store.UseLogger(log.Log)
 
 	if debug {
 		util.LogCPUFeatures(log.Log.Logger())
@@ -140,8 +139,8 @@ func run() error {
 	}
 
 	cmd = flags.Arg(0)
-	dbname = strings.Split(flags.Arg(1), ".db")[0] + ".db"
-	switch dbx := strings.Split(strings.TrimPrefix(strings.TrimPrefix(flags.Arg(1), dbname), "/"), "/"); len(dbx) {
+	dbPath, dbx := separateTargetDescriptors(flags.Arg(1))
+	switch len(dbx) {
 	case 0:
 		// none
 	case 1:
@@ -187,12 +186,12 @@ func run() error {
 
 	// table name defaults to same name as db file basename
 	if tablename == "" {
-		tablename = strings.TrimSuffix(filepath.Base(dbname), ".db")
+		tablename = strings.TrimSuffix(filepath.Base(dbPath), ".db")
 	}
 
 	if debug {
 		fmt.Printf("cmd=%s\n", cmd)
-		fmt.Printf("db=%s\n", dbname)
+		fmt.Printf("db=%s\n", dbPath)
 		fmt.Printf("table=%s\n", tablename)
 		fmt.Printf("id1=%d\n", id1)
 		fmt.Printf("id2=%d\n", id2)
@@ -203,8 +202,8 @@ func run() error {
 	}
 
 	db, err := pack.OpenDatabase(
-		filepath.Dir(dbname),
-		strings.TrimSuffix(filepath.Base(dbname), ".db"),
+		filepath.Dir(dbPath),
+		strings.TrimSuffix(filepath.Base(dbPath), ".db"),
 		"*",
 		boltopts,
 	)
@@ -217,6 +216,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("opening table '%s': %v", tablename, err)
 	}
+	defer table.Close()
 
 	out := io.Writer(os.Stdout)
 	mode := pack.DumpModeDec
@@ -242,6 +242,8 @@ func run() error {
 		return table.DumpPackInfo(out, mode, sorted)
 	case "index":
 		return table.DumpIndexPackInfo(out, id1, mode, sorted)
+	case "detail":
+		return table.DumpPackInfoDetail(out, mode, sorted)
 	case "dump-journal":
 		return table.DumpJournal(out, mode)
 	case "dump-table":
@@ -299,4 +301,18 @@ func dumpByteBlock(table *pack.Table, id int, w io.Writer) error {
 		}
 		return nil
 	})
+}
+
+// Takes target descriptor and splits it into components
+//
+// returns the filename of the database and an array of optional descriptors
+func separateTargetDescriptors(descriptor string) (string, []string) {
+	targetSplit := strings.Split(descriptor, "/")
+	for i, _ := range targetSplit {
+		info, err := os.Stat(strings.Join(targetSplit[0:i+1], "/"))
+		if err == nil && !info.IsDir() {
+			return strings.Join(targetSplit[0:i+1], "/"), targetSplit[i+1 : len(targetSplit)]
+		}
+	}
+	return "", []string{}
 }

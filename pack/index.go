@@ -822,9 +822,11 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 		// flush index after every 128 packs
 		if i%flushEvery == 0 {
 			// signal progress
-			select {
-			case ch <- float64(i*100) / float64(idx.table.packidx.Len()):
-			default:
+			if ch != nil {
+				select {
+				case ch <- float64(i*100) / float64(idx.table.packidx.Len()):
+				default:
+				}
 			}
 			if err := idx.FlushTx(ctx, tx); err != nil {
 				return err
@@ -833,16 +835,20 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 	}
 
 	// final flush
-	select {
-	case ch <- float64(99):
-	default:
+	if ch != nil {
+		select {
+		case ch <- float64(99):
+		default:
+		}
 	}
 	if err := idx.FlushTx(ctx, tx); err != nil {
 		return err
 	}
-	select {
-	case ch <- float64(100):
-	default:
+	if ch != nil {
+		select {
+		case ch <- float64(100):
+		default:
+		}
 	}
 
 	// store journal with remaining data

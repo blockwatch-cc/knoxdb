@@ -263,7 +263,7 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				// 2: 0.2% false positive rate (2 bytes per item)
 				// 3: 0.02% false positive rate (3 bytes per item)
 				// 4: 0.002% false positive rate (4 bytes per item)
-				finfo.scale = 1
+				finfo.scale = 2
 				if len(ff) > 1 {
 					factor, err := strconv.Atoi(ff[1])
 					if err != nil {
