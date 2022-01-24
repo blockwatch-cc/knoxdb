@@ -33,7 +33,8 @@ var (
 	ErrIndexExists  = errors.New("pack: index already exists")
 	ErrResultClosed = errors.New("pack: result already closed")
 
-	bigEndian = binary.BigEndian
+	bigEndian    = binary.BigEndian
+	littleEndian = binary.LittleEndian
 )
 
 const (

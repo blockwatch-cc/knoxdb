@@ -2776,7 +2776,7 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 	case FieldTypeInt32, FieldTypeDecimal32:
 		flt.AddManyInt32(b.Int32)
 	case FieldTypeInt16:
-		for _, v := range b.Int64 {
+		for _, v := range b.Int16 {
 			bigEndian.PutUint16(buf[:], uint16(v))
 			flt.Add(buf[:2])
 		}
@@ -2828,10 +2828,16 @@ func (t FieldType) Bytes(val interface{}) []byte {
 		}
 		return val.([]byte)
 	case FieldTypeDatetime:
+		// xxhash requires LE (!)
+		// if i, ok := val.(int64); ok {
+		// 	bigEndian.PutUint64(buf[:], uint64(i))
+		// } else {
+		// 	bigEndian.PutUint64(buf[:], uint64(val.(time.Time).UnixNano()))
+		// }
 		if i, ok := val.(int64); ok {
-			bigEndian.PutUint64(buf[:], uint64(i))
+			littleEndian.PutUint64(buf[:], uint64(i))
 		} else {
-			bigEndian.PutUint64(buf[:], uint64(val.(time.Time).UnixNano()))
+			littleEndian.PutUint64(buf[:], uint64(val.(time.Time).UnixNano()))
 		}
 		return buf[:]
 	case FieldTypeBoolean:
@@ -2863,23 +2869,39 @@ func (t FieldType) Bytes(val interface{}) []byte {
 			return buf[:]
 		}
 	case FieldTypeInt64:
-		bigEndian.PutUint64(buf[:], uint64(val.(int64)))
+		// xxhash requires LE (!)
+		// bigEndian.PutUint64(buf[:], uint64(val.(int64)))
+		littleEndian.PutUint64(buf[:], uint64(val.(int64)))
 		return buf[:]
 	case FieldTypeDecimal64:
+		// xxhash requires LE (!)
+		// if i, ok := val.(int64); ok {
+		// 	bigEndian.PutUint64(buf[:], uint64(i))
+		// } else {
+		// 	bigEndian.PutUint64(buf[:], uint64(val.(decimal.Decimal64).Int64()))
+		// }
 		if i, ok := val.(int64); ok {
-			bigEndian.PutUint64(buf[:], uint64(i))
+			littleEndian.PutUint64(buf[:], uint64(i))
 		} else {
-			bigEndian.PutUint64(buf[:], uint64(val.(decimal.Decimal64).Int64()))
+			littleEndian.PutUint64(buf[:], uint64(val.(decimal.Decimal64).Int64()))
 		}
 		return buf[:]
 	case FieldTypeInt32:
-		bigEndian.PutUint32(buf[:], uint32(val.(int32)))
+		// xxhash requires LE (!)
+		// bigEndian.PutUint32(buf[:], uint32(val.(int32)))
+		littleEndian.PutUint32(buf[:], uint32(val.(int32)))
 		return buf[:4]
 	case FieldTypeDecimal32:
+		// xxhash requires LE (!)
+		// if i, ok := val.(int32); ok {
+		// 	bigEndian.PutUint64(buf[:], uint64(i))
+		// } else {
+		// 	bigEndian.PutUint32(buf[:], uint32(val.(decimal.Decimal32).Int32()))
+		// }
 		if i, ok := val.(int32); ok {
-			bigEndian.PutUint64(buf[:], uint64(i))
+			littleEndian.PutUint64(buf[:], uint64(i))
 		} else {
-			bigEndian.PutUint32(buf[:], uint32(val.(decimal.Decimal32).Int32()))
+			littleEndian.PutUint32(buf[:], uint32(val.(decimal.Decimal32).Int32()))
 		}
 		return buf[:4]
 	case FieldTypeInt16:
@@ -2888,10 +2910,14 @@ func (t FieldType) Bytes(val interface{}) []byte {
 	case FieldTypeInt8:
 		return []byte{byte(val.(int8))}
 	case FieldTypeUint64:
-		bigEndian.PutUint64(buf[:], val.(uint64))
+		// xxhash requires LE (!)
+		// bigEndian.PutUint64(buf[:], val.(uint64))
+		littleEndian.PutUint64(buf[:], val.(uint64))
 		return buf[:]
 	case FieldTypeUint32:
-		bigEndian.PutUint32(buf[:], val.(uint32))
+		// xxhash requires LE (!)
+		// bigEndian.PutUint32(buf[:], val.(uint32))
+		littleEndian.PutUint32(buf[:], val.(uint32))
 		return buf[:4]
 	case FieldTypeUint16:
 		bigEndian.PutUint16(buf[:], val.(uint16))
