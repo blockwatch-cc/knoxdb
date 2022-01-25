@@ -1743,7 +1743,6 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 	}
 
 	// optimize for lookup of most recently added values
-	q.lap = time.Now()
 	var nextid int
 	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
 		// stop when all inputs are matched
@@ -1876,7 +1875,6 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	// scan packs only if (a) index match returned any results or (b) no index exists
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
-		q.lap = time.Now()
 	packloop:
 		for _, p := range q.MakePackSchedule(false) {
 			if util.InterruptRequested(ctx) {
@@ -2073,7 +2071,6 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	}
 
 	// REVERSE PACK SCAN (either using found pk ids or non-indexed conditions)
-	q.lap = time.Now()
 	u32slice := t.u32Pool.Get().([]uint32)
 packloop:
 	for _, p := range q.MakePackSchedule(true) {
@@ -2201,7 +2198,6 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	// scan packs only when index match returned any results of when no index exists
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
-		q.lap = time.Now()
 	packloop:
 		for _, p := range q.MakePackSchedule(false) {
 			if util.InterruptRequested(ctx) {
@@ -2332,7 +2328,6 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// (b) when no index exists
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
-		q.lap = time.Now()
 	packloop:
 		for _, p := range q.MakePackSchedule(false) {
 			if util.InterruptRequested(ctx) {
@@ -2522,9 +2517,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 		return nil
 	}
 
-	q.lap = time.Now()
 	u32slice := t.u32Pool.Get().([]uint32)
-
 packloop:
 	for _, p := range q.MakePackSchedule(true) {
 		if util.InterruptRequested(ctx) {
@@ -2699,7 +2692,6 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 	}
 
 	// PACK SCAN, schedule uses fast range checks and schould be perfect
-	q.lap = time.Now()
 	var nextid int
 	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
 		// stop when all inputs are matched
