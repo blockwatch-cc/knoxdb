@@ -11,6 +11,7 @@ package bloomVec
 // This also optimizes the filter by always using a bitset size with a power of 2.
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math"
 
@@ -89,6 +90,28 @@ func (f *Filter) AddMany(l [][]byte) {
 }
 
 // AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyUint16(data []uint16) {
+	for _, v := range data {
+		h := HashUint16(v)
+		for i := uint32(0); i < f.k; i++ {
+			loc := f.location(h, i)
+			f.b[loc>>3] |= 1 << (loc & 7)
+		}
+	}
+}
+
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyInt16(data []int16) {
+	for _, v := range data {
+		h := HashInt16(v)
+		for i := uint32(0); i < f.k; i++ {
+			loc := f.location(h, i)
+			f.b[loc>>3] |= 1 << (loc & 7)
+		}
+	}
+}
+
+// AddMany inserts multiple data points to the filter.
 func (f *Filter) AddManyUint32(data []uint32) {
 	filterAddManyUint32(f, data, xxHash32Seed)
 }
@@ -108,6 +131,28 @@ func (f *Filter) AddManyInt64(data []int64) {
 	filterAddManyInt64(f, data, xxHash32Seed)
 }
 
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyFloat64(data []float64) {
+	for _, v := range data {
+		h := HashFloat64(v)
+		for i := uint32(0); i < f.k; i++ {
+			loc := f.location(h, i)
+			f.b[loc>>3] |= 1 << (loc & 7)
+		}
+	}
+}
+
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyFloat32(data []float32) {
+	for _, v := range data {
+		h := HashFloat32(v)
+		for i := uint32(0); i < f.k; i++ {
+			loc := f.location(h, i)
+			f.b[loc>>3] |= 1 << (loc & 7)
+		}
+	}
+}
+
 // Contains returns true if the filter possibly contains v.
 // Returns false if the filter definitely does not contain v.
 func (f *Filter) Contains(v []byte) bool {
@@ -123,10 +168,25 @@ func (f *Filter) Contains(v []byte) bool {
 
 // Contains returns true if the filter possibly contains v.
 // Returns false if the filter definitely does not contain v.
-func (f *Filter) ContainsUint32(v uint32) bool {
-	var h [2]uint32
-	h[0] = xxhashVec.XXHash32Uint32(v, xxHash32Seed)
-	h[1] = xxhashVec.XXHash32Uint32(v, 0)
+func (f *Filter) ContainsUint16(v uint16) bool {
+	var buf [2]byte
+	binary.LittleEndian.PutUint16(buf[:], v)
+	h := hash(buf[:], xxHash32Seed)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsInt16(v int16) bool {
+	var buf [2]byte
+	binary.LittleEndian.PutUint16(buf[:], uint16(v))
+	h := hash(buf[:], xxHash32Seed)
 	for i := uint32(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
@@ -142,6 +202,21 @@ func (f *Filter) ContainsInt32(v int32) bool {
 	var h [2]uint32
 	h[0] = xxhashVec.XXHash32Int32(v, xxHash32Seed)
 	h[1] = xxhashVec.XXHash32Int32(v, 0)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsUint32(v uint32) bool {
+	var h [2]uint32
+	h[0] = xxhashVec.XXHash32Uint32(v, xxHash32Seed)
+	h[1] = xxhashVec.XXHash32Uint32(v, 0)
 	for i := uint32(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
@@ -172,6 +247,38 @@ func (f *Filter) ContainsInt64(v int64) bool {
 	var h [2]uint32
 	h[0] = xxhashVec.XXHash32Int64(v, xxHash32Seed)
 	h[1] = xxhashVec.XXHash32Int64(v, 0)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsFloat64(v float64) bool {
+	u := math.Float64bits(v)
+	var h [2]uint32
+	h[0] = xxhashVec.XXHash32Uint64(u, xxHash32Seed)
+	h[1] = xxhashVec.XXHash32Uint64(u, 0)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsFloat32(v float32) bool {
+	u := math.Float32bits(v)
+	var h [2]uint32
+	h[0] = xxhashVec.XXHash32Uint32(u, xxHash32Seed)
+	h[1] = xxhashVec.XXHash32Uint32(u, 0)
 	for i := uint32(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
@@ -244,6 +351,68 @@ func hash(data []byte, seed uint32) [2]uint32 {
 
 func Hash(data []byte) [2]uint32 {
 	return hash(data, xxHash32Seed)
+}
+
+func HashUint16(v uint16) [2]uint32 {
+	var buf [2]byte
+	binary.LittleEndian.PutUint16(buf[:], v)
+	return [2]uint32{
+		xxHash32.Checksum(buf[:], xxHash32Seed),
+		xxHash32.Checksum(buf[:], 0),
+	}
+}
+
+func HashInt16(v int16) [2]uint32 {
+	var buf [2]byte
+	binary.LittleEndian.PutUint16(buf[:], uint16(v))
+	return [2]uint32{
+		xxHash32.Checksum(buf[:], xxHash32Seed),
+		xxHash32.Checksum(buf[:], 0),
+	}
+}
+
+func HashUint32(v uint32) [2]uint32 {
+	return [2]uint32{
+		xxhashVec.XXHash32Uint32(v, xxHash32Seed),
+		xxhashVec.XXHash32Uint32(v, 0),
+	}
+}
+
+func HashInt32(v int32) [2]uint32 {
+	return [2]uint32{
+		xxhashVec.XXHash32Int32(v, xxHash32Seed),
+		xxhashVec.XXHash32Int32(v, 0),
+	}
+}
+
+func HashUint64(v uint64) [2]uint32 {
+	return [2]uint32{
+		xxhashVec.XXHash32Uint64(v, xxHash32Seed),
+		xxhashVec.XXHash32Uint64(v, 0),
+	}
+}
+
+func HashInt64(v int64) [2]uint32 {
+	return [2]uint32{
+		xxhashVec.XXHash32Int64(v, xxHash32Seed),
+		xxhashVec.XXHash32Int64(v, 0),
+	}
+}
+
+func HashFloat64(v float64) [2]uint32 {
+	u := math.Float64bits(v)
+	return [2]uint32{
+		xxhashVec.XXHash32Uint64(u, xxHash32Seed),
+		xxhashVec.XXHash32Uint64(u, 0),
+	}
+}
+
+func HashFloat32(v float32) [2]uint32 {
+	u := math.Float32bits(v)
+	return [2]uint32{
+		xxhashVec.XXHash32Uint32(u, xxHash32Seed),
+		xxhashVec.XXHash32Uint32(u, 0),
+	}
 }
 
 // pow2 returns the number that is the next highest power of 2.

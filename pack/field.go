@@ -2732,7 +2732,6 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 	}
 	m := int(cardinality) * factor * 8 // unit is bits
 	flt := bloomVec.NewFilter(m)
-	var buf [8]byte
 	switch t {
 	case FieldTypeBytes, FieldTypeString:
 		for i := 0; i < b.Bytes.Len(); i++ {
@@ -2776,10 +2775,7 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 	case FieldTypeInt32, FieldTypeDecimal32:
 		flt.AddManyInt32(b.Int32)
 	case FieldTypeInt16:
-		for _, v := range b.Int16 {
-			bigEndian.PutUint16(buf[:], uint16(v))
-			flt.Add(buf[:2])
-		}
+		flt.AddManyInt16(b.Int16)
 	case FieldTypeInt8:
 		for _, v := range b.Int8 {
 			flt.Add([]byte{byte(v)})
@@ -2789,149 +2785,102 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 	case FieldTypeUint32:
 		flt.AddManyUint32(b.Uint32)
 	case FieldTypeUint16:
-		for _, v := range b.Uint16 {
-			bigEndian.PutUint16(buf[:], v)
-			flt.Add(buf[:2])
-		}
+		flt.AddManyUint16(b.Uint16)
 	case FieldTypeUint8:
 		for _, v := range b.Uint8 {
 			flt.Add([]byte{v})
 		}
 	case FieldTypeFloat64:
-		for _, v := range b.Float64 {
-			bigEndian.PutUint64(buf[:], math.Float64bits(v))
-			flt.Add(buf[:])
-		}
+		flt.AddManyFloat64(b.Float64)
 	case FieldTypeFloat32:
-		for _, v := range b.Float32 {
-			bigEndian.PutUint32(buf[:], math.Float32bits(v))
-			flt.Add(buf[:4])
-		}
+		flt.AddManyFloat32(b.Float32)
 	default:
 		return nil
 	}
 	return flt
 }
 
-// used for bloom filter test value compilation
-func (t FieldType) Bytes(val interface{}) []byte {
+// Hash produces a hash value compatible with bloom filters.
+func (t FieldType) Hash(val interface{}) [2]uint32 {
 	if val == nil {
-		return nil
+		return [2]uint32{}
 	}
-	var buf [8]byte
 	switch t {
 	case FieldTypeBytes:
-		return val.([]byte)
+		return bloomVec.Hash(val.([]byte))
 	case FieldTypeString:
 		if s, ok := val.(string); ok {
-			return compress.UnsafeGetBytes(s)
+			return bloomVec.Hash(compress.UnsafeGetBytes(s))
 		}
-		return val.([]byte)
+		return bloomVec.Hash(val.([]byte))
 	case FieldTypeDatetime:
-		// xxhash requires LE (!)
-		// if i, ok := val.(int64); ok {
-		// 	bigEndian.PutUint64(buf[:], uint64(i))
-		// } else {
-		// 	bigEndian.PutUint64(buf[:], uint64(val.(time.Time).UnixNano()))
-		// }
 		if i, ok := val.(int64); ok {
-			littleEndian.PutUint64(buf[:], uint64(i))
+			return bloomVec.HashInt64(i)
 		} else {
-			littleEndian.PutUint64(buf[:], uint64(val.(time.Time).UnixNano()))
+			return bloomVec.HashInt64(val.(time.Time).UnixNano())
 		}
-		return buf[:]
 	case FieldTypeBoolean:
 		if v := val.(bool); v {
-			return []byte{1}
+			return bloomVec.Hash([]byte{1})
 		} else {
-			return []byte{0}
+			return bloomVec.Hash([]byte{0})
 		}
 	case FieldTypeInt256:
 		buf := val.(Int256).Bytes32()
-		return buf[:]
+		return bloomVec.Hash(buf[:])
 	case FieldTypeDecimal256:
 		if i, ok := val.(Int256); ok {
 			buf := i.Bytes32()
-			return buf[:]
+			return bloomVec.Hash(buf[:])
 		} else {
 			buf := val.(decimal.Decimal256).Int256().Bytes32()
-			return buf[:]
+			return bloomVec.Hash(buf[:])
 		}
 	case FieldTypeInt128:
 		buf := val.(Int128).Bytes16()
-		return buf[:]
+		return bloomVec.Hash(buf[:])
 	case FieldTypeDecimal128:
 		if i, ok := val.(Int128); ok {
 			buf := i.Bytes16()
-			return buf[:]
+			return bloomVec.Hash(buf[:])
 		} else {
 			buf := val.(decimal.Decimal128).Int128().Bytes16()
-			return buf[:]
+			return bloomVec.Hash(buf[:])
 		}
 	case FieldTypeInt64:
-		// xxhash requires LE (!)
-		// bigEndian.PutUint64(buf[:], uint64(val.(int64)))
-		littleEndian.PutUint64(buf[:], uint64(val.(int64)))
-		return buf[:]
+		return bloomVec.HashInt64(val.(int64))
 	case FieldTypeDecimal64:
-		// xxhash requires LE (!)
-		// if i, ok := val.(int64); ok {
-		// 	bigEndian.PutUint64(buf[:], uint64(i))
-		// } else {
-		// 	bigEndian.PutUint64(buf[:], uint64(val.(decimal.Decimal64).Int64()))
-		// }
 		if i, ok := val.(int64); ok {
-			littleEndian.PutUint64(buf[:], uint64(i))
+			return bloomVec.HashInt64(i)
 		} else {
-			littleEndian.PutUint64(buf[:], uint64(val.(decimal.Decimal64).Int64()))
+			return bloomVec.HashInt64(val.(decimal.Decimal64).Int64())
 		}
-		return buf[:]
 	case FieldTypeInt32:
-		// xxhash requires LE (!)
-		// bigEndian.PutUint32(buf[:], uint32(val.(int32)))
-		littleEndian.PutUint32(buf[:], uint32(val.(int32)))
-		return buf[:4]
+		return bloomVec.HashInt32(val.(int32))
 	case FieldTypeDecimal32:
-		// xxhash requires LE (!)
-		// if i, ok := val.(int32); ok {
-		// 	bigEndian.PutUint64(buf[:], uint64(i))
-		// } else {
-		// 	bigEndian.PutUint32(buf[:], uint32(val.(decimal.Decimal32).Int32()))
-		// }
 		if i, ok := val.(int32); ok {
-			littleEndian.PutUint64(buf[:], uint64(i))
+			return bloomVec.HashInt32(i)
 		} else {
-			littleEndian.PutUint32(buf[:], uint32(val.(decimal.Decimal32).Int32()))
+			return bloomVec.HashInt32(val.(decimal.Decimal32).Int32())
 		}
-		return buf[:4]
 	case FieldTypeInt16:
-		bigEndian.PutUint16(buf[:], uint16(val.(int16)))
-		return buf[:2]
+		return bloomVec.HashInt16(val.(int16))
 	case FieldTypeInt8:
-		return []byte{byte(val.(int8))}
+		return bloomVec.Hash([]byte{byte(val.(int8))})
 	case FieldTypeUint64:
-		// xxhash requires LE (!)
-		// bigEndian.PutUint64(buf[:], val.(uint64))
-		littleEndian.PutUint64(buf[:], val.(uint64))
-		return buf[:]
+		return bloomVec.HashUint64(val.(uint64))
 	case FieldTypeUint32:
-		// xxhash requires LE (!)
-		// bigEndian.PutUint32(buf[:], val.(uint32))
-		littleEndian.PutUint32(buf[:], val.(uint32))
-		return buf[:4]
+		return bloomVec.HashUint32(val.(uint32))
 	case FieldTypeUint16:
-		bigEndian.PutUint16(buf[:], val.(uint16))
-		return buf[:2]
+		return bloomVec.HashUint16(val.(uint16))
 	case FieldTypeUint8:
-		return []byte{byte(val.(uint8))}
+		return bloomVec.Hash([]byte{byte(val.(uint8))})
 	case FieldTypeFloat64:
-		bigEndian.PutUint64(buf[:], math.Float64bits(val.(float64)))
-		return buf[:]
+		return bloomVec.HashFloat64(val.(float64))
 	case FieldTypeFloat32:
-		bigEndian.PutUint32(buf[:], math.Float32bits(val.(float32)))
-		return buf[:4]
+		return bloomVec.HashFloat32(val.(float32))
 	default:
-		return nil
+		return [2]uint32{}
 	}
 }
 
