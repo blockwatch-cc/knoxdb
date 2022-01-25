@@ -164,12 +164,13 @@ func (q *Query) Compile(t *Table) error {
 func (q Query) Check() error {
 	tfields := q.table.Fields()
 	for _, v := range q.reqfields {
+		tfield := tfields.Find(v.Name)
 		// field must exist
-		if !tfields.Contains(v.Name) {
+		if !tfield.IsValid() {
 			return fmt.Errorf("undefined field '%s/%s' in query %s", q.table.name, v.Name, q.Name)
 		}
 		// field type must match
-		if tfields.Find(v.Name).Type != v.Type {
+		if tfield.Type != v.Type {
 			return fmt.Errorf("mismatched type %s for field '%s/%s' in query %s", v.Type, q.table.name, v.Name, q.Name)
 		}
 		// field index must be valid
