@@ -1047,12 +1047,17 @@ func (t *Table) Close() error {
 			return err
 		}
 	}
+	t.indexes = t.indexes[:0]
 
 	// commit storage transaction
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	t.journal.Close()
+
+	// unregister from db
+	delete(t.db.tables, t.name)
+
 	return nil
 }
 

@@ -140,6 +140,13 @@ func (d *DB) Dump(w io.Writer) error {
 }
 
 func (d *DB) Close() error {
+	// close all remaining open tables
+	for _, t := range d.tables {
+		if err := t.Close(); err != nil {
+			return err
+		}
+	}
+	d.tables = make(map[string]*Table)
 	return d.db.Close()
 }
 
