@@ -1,54 +1,77 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package main
 
 import (
-	"context"
+    "context"
+    "fmt"
+    "time"
 
-	"github.com/echa/log"
+    "github.com/echa/log"
 
-	"blockwatch.cc/knoxdb/pack"
+    "blockwatch.cc/knoxdb/store"
 )
 
-// rebuild drops and re-creates all indexes defined for a given table.
-func rebuild(ctx context.Context, data interface{}) error {
-	table := data.(*pack.Table)
+// reindex drops and re-creates all indexes defined for a given table.
+func rebuildStatistics(args Args) error {
+    start := time.Now()
 
-	// make sure source table journals are flushed
-	log.Infof("Flushing source table %s", table.Name())
-	if err := table.Flush(ctx); err != nil {
-		return err
-	}
+    // open database file
+    db, err := openDatabase(args)
+    if err != nil {
+        return err
+    }
+    defer db.Close()
+    log.Infof("Using database %s", db.Path())
 
-	// walk source table in packs and bulk-insert data into target
-	stats := table.Stats()
-	log.Infof("Rebuild indexes over %d rows / %d packs from table %s",
-		stats[0].TupleCount, stats[0].PacksCount, table.Name())
+    // check table
+    table, err := db.Table(args.table)
+    if err != nil {
+        return err
+    }
+    // make sure source table journals are flushed
+    if err := table.Flush(context.Background()); err != nil {
+        return err
+    }
+    stats := table.Stats()
+    table.Close()
 
-	// rebuild indexes
-	for _, idx := range table.Indexes() {
-		log.Infof("Rebuilding %s index on field %s (%s)", idx.Name, idx.Field.Name, idx.Field.Type)
-		prog := make(chan float64, 100)
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case f := <-prog:
-					log.Infof("Index build progress %.2f%%", f)
-					if f == 100 {
-						return
-					}
-				}
-			}
-		}()
-		// flush every 128 packs
-		err := idx.Reindex(ctx, 128, prog)
-		close(prog)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+    log.Infof("Rebuilding metadata for %d rows / %d packs with statistics size %d bytes",
+        stats[0].TupleCount, stats[0].PacksCount, stats[0].MetaSize)
+
+    // Delete table metadata bucket
+    log.Info("Dropping table statistics")
+    err = db.Update(func(dbTx store.Tx) error {
+        meta := dbTx.Bucket([]byte(args.table + "_meta"))
+        if meta == nil {
+            return fmt.Errorf("missing table metdata bucket")
+        }
+        err := meta.DeleteBucket([]byte("_headers"))
+        if !store.IsError(err, store.ErrBucketNotFound) {
+            return err
+        }
+        return nil
+    })
+    if err != nil {
+        return err
+    }
+
+    // Open table, this will automatically rebuild all metadata
+    log.Info("Rebuilding table statistics")
+    table, err = db.Table(args.table)
+    if err != nil {
+        return err
+    }
+
+    // Close table, this will automatically store the new metadata
+    stats = table.Stats()
+    log.Info("Storing table statistics")
+    err = table.Close()
+    if err != nil {
+        return err
+    }
+
+    log.Infof("Rebuild took %s, new statistics size %d bytes", time.Since(start), stats[0].MetaSize)
+    return nil
 }

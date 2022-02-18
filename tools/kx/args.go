@@ -27,7 +27,8 @@ var (
 	cmdinfo = `
 Available Commands:
   stats       show boltdb stats
-  rebuild     rebuild index
+  reindex     rebuild indexes
+  rebuild     rebuild statistics
   compact     compact table
   flush       flush journals
   gc          garbage collect bolt storage space

@@ -44,14 +44,16 @@ func run() error {
 		defer db.Close()
 		defer table.Close()
 		return runAbortable(table, compact)
-	case "rebuild":
+	case "reindex":
 		db, table, err := openTable(args)
 		if err != nil {
 			return err
 		}
 		defer db.Close()
 		defer table.Close()
-		return runAbortable(table, rebuild)
+		return runAbortable(table, reindex)
+	case "rebuild":
+		return rebuildStatistics(args)
 	case "flush":
 		db, table, err := openTable(args)
 		if err != nil {
@@ -70,8 +72,6 @@ func run() error {
 	default:
 		return fmt.Errorf("unsupported command %s", args.cmd)
 	}
-
-	return nil
 }
 
 func openTable(args Args) (*pack.DB, *pack.Table, error) {

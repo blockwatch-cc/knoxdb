@@ -444,13 +444,13 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 }
 
 func (t *Table) loadPackInfo(dbTx store.Tx) error {
-	b := dbTx.Bucket(t.metakey)
-	if b == nil {
+	meta := dbTx.Bucket(t.metakey)
+	if meta == nil {
 		return ErrNoTable
 	}
 	maxPackSize := t.opts.PackSize()
 	packs := make(PackInfoList, 0)
-	bi := b.Bucket(infoKey)
+	bi := meta.Bucket(infoKey)
 	if bi != nil {
 		log.Debugf("pack: %s table loading package info from bucket", t.name)
 		c := bi.Cursor()
@@ -476,7 +476,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 			return nil
 		}
 	}
-	log.Warnf("pack: Corrupt or missing pack info for table %s! Scanning table. This may take a long time...", t.name)
+	log.Warnf("pack: %s table has corrupt or missing statistics! Re-scanning table. This may take some time...", t.name)
 	c := dbTx.Bucket(t.key).Cursor()
 	pkg := NewPackage(maxPackSize)
 	if err := pkg.InitFieldsFrom(t.journal.DataPack()); err != nil {
@@ -488,6 +488,10 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 			return fmt.Errorf("pack: cannot read %s/%x: %v", t.name, c.Key(), err)
 		}
 		pkg.SetKey(c.Key())
+		if pkg.IsJournal() || pkg.IsTomb() {
+			pkg.Clear()
+			continue
+		}
 		info := pkg.Info()
 		_ = info.UpdateStats(pkg)
 		packs = append(packs, info)
@@ -503,11 +507,19 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 }
 
 func (t *Table) storePackInfo(dbTx store.Tx) error {
-	b := dbTx.Bucket(t.metakey)
-	if b == nil {
+	meta := dbTx.Bucket(t.metakey)
+	if meta == nil {
 		return ErrNoTable
 	}
-	hb := b.Bucket(infoKey)
+	hb := meta.Bucket(infoKey)
+	// create statistics bucket when missing
+	if hb == nil {
+		var err error
+		hb, err = meta.CreateBucketIfNotExists(infoKey)
+		if err != nil {
+			return err
+		}
+	}
 	// remove headers for deleted packs, if any
 	for _, v := range t.packidx.removed {
 		log.Debugf("pack: %s table removing pack info %x", t.name, v)

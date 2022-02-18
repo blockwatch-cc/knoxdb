@@ -39,6 +39,14 @@ func (p *Package) Key() []byte {
 	return encodePackKey(p.key)
 }
 
+func (p Package) IsJournal() bool {
+	return p.key == journalKey
+}
+
+func (p Package) IsTomb() bool {
+	return p.key == tombstoneKey
+}
+
 func (p *Package) SetKey(key []byte) {
 	switch {
 	case bytes.Compare(key, []byte("_journal")) == 0:

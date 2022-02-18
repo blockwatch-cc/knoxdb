@@ -92,17 +92,16 @@ func printhelp() {
 }
 
 func readNumber(s string) (int, bool) {
-	var (
-		p   int
-		err error
-	)
 	if strings.HasPrefix(s, "0x") {
-		p, err = strconv.Atoi(strings.TrimPrefix(s, "0x"))
+		p, err := strconv.ParseInt(strings.TrimPrefix(s, "0x"), 16, 64)
+		if err == nil {
+			return int(p), true
+		}
 	} else {
-		p, err = strconv.Atoi(s)
-	}
-	if err == nil {
-		return p, true
+		p, err := strconv.Atoi(s)
+		if err == nil {
+			return p, true
+		}
 	}
 	return 0, false
 }

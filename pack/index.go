@@ -455,8 +455,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 		}
 		pkg.SetKey(c.Key())
 		// ignore journal and tombstone
-		switch pkg.key {
-		case journalKey, tombstoneKey:
+		if pkg.IsJournal() || pkg.IsTomb() {
 			pkg.Clear()
 			continue
 		}
@@ -475,13 +474,22 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 }
 
 func (idx *Index) storePackInfo(dbTx store.Tx) error {
-	b := dbTx.Bucket(idx.metakey)
-	if b == nil {
+	meta := dbTx.Bucket(idx.metakey)
+	if meta == nil {
 		return ErrNoTable
 	}
 
 	// pack headers are stored in a nested bucket
-	hb := b.Bucket(infoKey)
+	hb := meta.Bucket(infoKey)
+
+	// create statistics bucket when missing
+	if hb == nil {
+		var err error
+		hb, err = meta.CreateBucketIfNotExists(infoKey)
+		if err != nil {
+			return err
+		}
+	}
 
 	// remove old headers
 	for _, k := range idx.packidx.removed {
