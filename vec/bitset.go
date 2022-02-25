@@ -766,3 +766,31 @@ func (s Bitset) SubSlice(start, n int) []bool {
 	}
 	return res
 }
+
+func (s Bitset) MarshalBinary() ([]byte, error) {
+	return s.Bytes(), nil
+}
+
+func (s *Bitset) UnmarshalBinary(data []byte) error {
+	s.buf = make([]byte, len(data))
+	copy(s.buf, data)
+	s.cnt = -1
+	s.size = len(data) * 8
+	return nil
+}
+
+func (s Bitset) MarshalText() ([]byte, error) {
+	str := hex.EncodeToString(s.Bytes())
+	return []byte(str), nil
+}
+
+func (s *Bitset) UnmarshalText(data []byte) error {
+	buf, err := hex.DecodeString(string(data))
+	if err != nil {
+		return err
+	}
+	s.buf = buf
+	s.cnt = -1
+	s.size = len(buf) * 8
+	return nil
+}
