@@ -57,6 +57,7 @@ Available Commands:
   compress-index-pack   compress index pack (use -pack <id> to select a pack, default 0)
   compress-index-all    compress full index
   index-collisions      count hash collisions
+  show                  show compression
   `
 
 func b(n int) string {
@@ -209,6 +210,8 @@ func run() error {
 		return table.CompressIndexAll(cmethod, 0, out, mode, verbose)
 	case "index-collisions":
 		return table.IndexCollisions(cmethod, 0, out, mode, verbose)
+	case "show":
+		return table.ShowCompression(cmethod, out, mode, verbose)
 	default:
 		return fmt.Errorf("unsupported command %s", cmd)
 	}

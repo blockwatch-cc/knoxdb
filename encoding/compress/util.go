@@ -22,6 +22,7 @@ func ZigZagEncode(x int64) uint64 {
 // ZigZagDecode converts a previously zigzag encoded uint64 back to a int64.
 func ZigZagDecode(v uint64) int64 {
 	return int64((v >> 1) ^ uint64((int64(v&1)<<63)>>63))
+	// return int64((v >> 1) ^ (-(v & 1)))
 }
 
 func uvarIntLen(n int) int {

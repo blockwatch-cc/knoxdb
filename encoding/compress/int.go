@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 
+	"blockwatch.cc/knoxdb/encoding/s8bVec"
 	"blockwatch.cc/knoxdb/encoding/simple8b"
 	"blockwatch.cc/knoxdb/vec"
 )
@@ -33,6 +34,21 @@ import (
 // encoding slots are reserved for future use.  One improvement to be made is to use a patched
 // encoding such as PFOR if only a small number of values exceed the max compressed value range.
 // This should improve compression ratios with very large integers near the ends of the int64 range.
+
+//go:noescape
+func zigzagDecodeInt64AVX2Core(data []int64)
+
+//go:noescape
+func deltaDecodeInt64AVX2Core(data []int64)
+
+//go:noescape
+func zzdeltaDecodeInt64AVX2Core(data []int64)
+
+//go:noescape
+func zzdeltaDecodeUint64AVX2Core(data []uint64)
+
+//go:noescape
+func zigzagDecodeUint64AVX2Core(data []uint64)
 
 const (
 	// intUncompressed is an uncompressed format using 8 bytes per point
@@ -270,6 +286,10 @@ func integerBatchDecodeAllUncompressed(b []byte, dst []int64) ([]int64, error) {
 	return dst, nil
 }
 
+func IntegerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
+	return integerBatchDecodeAllSimple(b, dst)
+}
+
 func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 	b = b[1:]
 	if len(b) < 8 {
@@ -309,6 +329,143 @@ func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 	}
 
 	return dst, nil
+}
+
+func IntegerBatchDecodeAllSimpleNew(b []byte, dst []int64, count int) ([]int64, error) {
+	return integerBatchDecodeAllSimpleNew(b, dst, count)
+}
+
+func integerBatchDecodeAllSimpleNew(b []byte, dst []int64, count int) ([]int64, error) {
+	b = b[1:]
+	if len(b) < 8 {
+		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode packed value")
+	}
+
+	/*count, err := simple8b.CountBytes(b[8:])
+	if err != nil {
+		return []int64{}, err
+	}*/
+
+	if cap(dst) < count {
+		dst = make([]int64, count)
+	} else {
+		dst = dst[:count]
+	}
+
+	buf := ReintepretInt64ToUint64Slice(dst)
+
+	// first value
+	buf[0] = binary.BigEndian.Uint64(b)
+	// decode compressed values
+	n, err := s8bVec.DecodeBytesBigEndianAVX2(buf[1:], b[8:])
+	if err != nil {
+		return []int64{}, err
+	}
+	if n != count-1 {
+		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll unexpected number of values decoded; got=%d, exp=%d", n, count-1)
+	}
+
+	prefixSumInt64AVX2(dst)
+
+	return dst, nil
+}
+
+// calculate prefix sum
+func prefixSumInt64Generic(data []int64) {
+	data[0] = ZigZagDecode(uint64(data[0]))
+	prev := data[0]
+	for i := 1; i < len(data); i++ {
+		prev += ZigZagDecode(uint64(data[i]))
+		data[i] = prev
+	}
+}
+
+// calculate prefix sum
+func ZzDeltaDecodeUint64Generic(data []uint64) {
+	data[0] = uint64(ZigZagDecode(data[0]))
+	prev := data[0]
+	for i := 1; i < len(data); i++ {
+		prev += uint64(ZigZagDecode(data[i]))
+		data[i] = prev
+	}
+}
+
+func prefixSumInt64AVX2(data []int64) {
+	len_head := len(data) & 0x7ffffffffffffffc
+	zzdeltaDecodeInt64AVX2Core(data)
+	prev := data[len_head-1]
+	for i := len_head; i < len(data); i++ {
+		prev += ZigZagDecode(uint64(data[i]))
+		data[i] = prev
+	}
+}
+
+func ZzDeltaDecodeUint64AVX2(data []uint64) {
+	len_head := len(data) & 0x7ffffffffffffffc
+	zzdeltaDecodeUint64AVX2Core(data)
+	prev := data[len_head-1]
+	for i := len_head; i < len(data); i++ {
+		prev += uint64(ZigZagDecode(data[i]))
+		data[i] = prev
+	}
+}
+
+func ZzDeltaEncodeUint64(data []uint64) uint64 {
+	var maxdelta uint64
+	for i := len(data) - 1; i > 0; i-- {
+		data[i] = data[i] - data[i-1]
+		data[i] = ZigZagEncode(int64(data[i]))
+		if data[i] > maxdelta {
+			maxdelta = data[i]
+		}
+	}
+
+	data[0] = ZigZagEncode(int64(data[0]))
+	return maxdelta
+}
+
+func ZzEncodeUint64(data []uint64) uint64 {
+	var max uint64
+	for i := range data {
+		data[i] = ZigZagEncode(int64(data[i]))
+		if data[i] > max {
+			max = data[i]
+		}
+	}
+	return max
+}
+
+func ZzDecodeUint64Generic(data []uint64) {
+	for i := range data {
+		data[i] = uint64(ZigZagDecode(data[i]))
+	}
+}
+
+func ZzDecodeUint64AVX2(data []uint64) {
+	len_head := len(data) & 0x7ffffffffffffffc
+	zigzagDecodeUint64AVX2Core(data)
+	for i := len_head; i < len(data); i++ {
+		data[i] = uint64(ZigZagDecode(data[i]))
+	}
+}
+
+func MaxUint64(data []uint64) uint64 {
+	var max uint64
+	for _, v := range data {
+		if v > max {
+			max = v
+		}
+	}
+	return max
+}
+
+func HasNegUint64(data []uint64) bool {
+	for _, v := range data {
+		if int64(v) < 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func integerBatchDecodeAllRLE(b []byte, dst []int64) ([]int64, error) {

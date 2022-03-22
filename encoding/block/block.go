@@ -166,6 +166,35 @@ func (b Block) Type() BlockType {
 	return b.typ
 }
 
+func (b *Block) IsInt() bool {
+	if b.Type() == BlockInt64 || b.Type() == BlockInt32 || b.Type() == BlockInt16 || b.Type() == BlockInt8 ||
+		b.Type() == BlockUint64 || b.Type() == BlockUint32 || b.Type() == BlockUint16 || b.Type() == BlockUint8 {
+		return true
+	}
+	return false
+}
+
+func (b *Block) IsSint() bool {
+	if b.Type() == BlockInt64 || b.Type() == BlockInt32 || b.Type() == BlockInt16 || b.Type() == BlockInt8 {
+		return true
+	}
+	return false
+}
+
+func (b *Block) IsUint() bool {
+	if b.Type() == BlockUint64 || b.Type() == BlockUint32 || b.Type() == BlockUint16 || b.Type() == BlockUint8 {
+		return true
+	}
+	return false
+}
+
+func (b *Block) IsFloat() bool {
+	if b.Type() == BlockFloat64 || b.Type() == BlockFloat32 {
+		return true
+	}
+	return false
+}
+
 func (b Block) Compression() Compression {
 	return b.comp
 }
