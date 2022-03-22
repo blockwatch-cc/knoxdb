@@ -74,12 +74,12 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 			field := pkg.FieldById(i)
 
 			// EXPENSIVE:
-			// - estimate cardinality, use precision 12 for 4k fixed memory
+			// - estimate cardinality, use precision 16 for 16k fixed memory
 			// - build bloom filter from column vector using cardinality as size hint
 			if field.Flags.Contains(FlagBloom) && pkg.Len() > 2 && pkg.key != journalKey {
 				h.Blocks[i].Cardinality = field.Type.EstimateCardinality(
 					pkg.blocks[field.Index],
-					12,
+					16,
 				)
 
 				// correct error for very small values

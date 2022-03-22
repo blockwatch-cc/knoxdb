@@ -1,67 +1,51 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-// bolt-db status
+// knoxdb cli
 
 package main
 
 import (
-	"flag"
 	"fmt"
-	bolt "go.etcd.io/bbolt"
-	"os"
 	"time"
 
 	"blockwatch.cc/knoxdb/util"
+	bolt "go.etcd.io/bbolt"
 )
 
-var (
-	verbose = flag.Bool("v", false, "be more verbose")
-	p       = util.PrettyInt
-)
-
-func fail(err error) {
-	fmt.Printf("Error: %v\n", err)
-	os.Exit(1)
+func pct(x, n int) float64 {
+	return float64(x) / float64(n) * 100
 }
 
-func failUsage(err error) {
-	fmt.Printf("Error: %v\n", err)
-	flag.PrintDefaults()
-	os.Exit(1)
-}
+// boltStats prints detailed statistics about the bolt database file.
+func boltStats(name string) error {
 
-type summary struct {
-	Name  string
-	Keys  int
-	Used  int
-	Alloc int
-}
-
-func main() {
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: dbstats [-v] path\n")
+	type summary struct {
+		Name  string
+		Keys  int
+		Used  int
+		Alloc int
 	}
-	flag.Parse()
-	if flag.NArg() < 1 {
-		failUsage(fmt.Errorf("missing db"))
-	}
-	dbname := flag.Arg(0)
-	start := time.Now()
 
-	db, err := bolt.Open(dbname, 0666, &bolt.Options{
+	var (
+		p = util.PrettyInt
+		// pi = util.PrettyInt
+	)
+
+	db, err := bolt.Open(name, 0666, &bolt.Options{
 		Timeout:    time.Second, // open timeout when file is locked
 		NoGrowSync: true,        // assuming Docker + XFS
 		ReadOnly:   true,
 	})
 	if err != nil {
-		fail(err)
+		return err
 	}
+	start := time.Now()
 
 	total := summary{Name: "Total"}
 	perBucket := make([]summary, 0)
 
-	if *verbose {
+	if verbose {
 		// print db statistics
 		fmt.Printf("Database Statistics\n")
 		fmt.Printf("----------------------------------------------\n")
@@ -109,39 +93,39 @@ func main() {
 				Alloc: stats.LeafAlloc + stats.BranchAlloc,
 			})
 
-			if *verbose {
+			if verbose {
 				fmt.Printf("\nBucket Statistics: %s\n", string(name))
 				fmt.Printf("----------------------------------------------\n")
 
 				// Page count statistics.
-				fmt.Printf("BranchPageN:       %10s  (number of logical branch pages)\n", p(stats.BranchPageN))
-				fmt.Printf("BranchOverflowN:   %10s  (number of physical branch overflow pages)\n", p(stats.BranchOverflowN))
-				fmt.Printf("LeafPageN:         %10s  (number of logical leaf pages)\n", p(stats.LeafPageN))
-				fmt.Printf("LeafOverflowN:     %10s  (number of physical leaf overflow pages)\n", p(stats.LeafOverflowN))
+				fmt.Printf("BranchPageN:       %12s  (number of logical branch pages)\n", p(stats.BranchPageN))
+				fmt.Printf("BranchOverflowN:   %12s  (number of physical branch overflow pages)\n", p(stats.BranchOverflowN))
+				fmt.Printf("LeafPageN:         %12s  (number of logical leaf pages)\n", p(stats.LeafPageN))
+				fmt.Printf("LeafOverflowN:     %12s  (number of physical leaf overflow pages)\n", p(stats.LeafOverflowN))
 
 				// Tree statistics.
-				fmt.Printf("KeyN:              %10s  (number of keys/value pairs)\n", p(stats.KeyN))
-				fmt.Printf("Depth:             %10s  (number of levels in B+tree)\n", p(stats.Depth))
+				fmt.Printf("KeyN:              %12s  (number of keys/value pairs)\n", p(stats.KeyN))
+				fmt.Printf("Depth:             %12s  (number of levels in B+tree)\n", p(stats.Depth))
 
 				// Page size utilization.
-				fmt.Printf("BranchAlloc:       %10s  (bytes allocated for physical branch pages)\n", p(stats.BranchAlloc))
-				fmt.Printf("BranchInuse:       %10s  (bytes actually used for branch data)\n", p(stats.BranchInuse))
-				fmt.Printf("LeafAlloc:         %10s  (bytes allocated for physical leaf pages)\n", p(stats.LeafAlloc))
-				fmt.Printf("LeafInuse:         %10s  (bytes actually used for leaf data)\n", p(stats.LeafInuse))
+				fmt.Printf("BranchAlloc:       %12s  (bytes allocated for physical branch pages)\n", p(stats.BranchAlloc))
+				fmt.Printf("BranchInuse:       %12s  (bytes actually used for branch data)\n", p(stats.BranchInuse))
+				fmt.Printf("LeafAlloc:         %12s  (bytes allocated for physical leaf pages)\n", p(stats.LeafAlloc))
+				fmt.Printf("LeafInuse:         %12s  (bytes actually used for leaf data)\n", p(stats.LeafInuse))
 
 				// Bucket statistics
-				fmt.Printf("BucketN:           %10s  (total number of buckets including the top bucket)\n", p(stats.BucketN))
-				fmt.Printf("InlineBucketN:     %10s  (total number on inlined buckets)\n", p(stats.InlineBucketN))
-				fmt.Printf("InlineBucketInuse: %10s  (bytes used for inlined buckets (also accounted for in LeafInuse))\n", p(stats.InlineBucketInuse))
+				fmt.Printf("BucketN:           %12s  (total number of buckets including the top bucket)\n", p(stats.BucketN))
+				fmt.Printf("InlineBucketN:     %12s  (total number on inlined buckets)\n", p(stats.InlineBucketN))
+				fmt.Printf("InlineBucketInuse: %12s  (bytes used for inlined buckets (also accounted for in LeafInuse))\n", p(stats.InlineBucketInuse))
 			}
 			return nil
 		})
 	})
 	if err != nil {
-		fail(err)
+		return err
 	}
 
-	if *verbose {
+	if verbose {
 		fmt.Printf("\n")
 	}
 
@@ -153,7 +137,7 @@ func main() {
 
 	// write percentages as summary
 	fmt.Printf("%[1]*s      %15s           %15s           %15s\n",
-		-lName, "Name", "Keys (%)", "Alloc Bytes (%)", "Used Bytes (%)")
+		-lName, "Bucket/Key", "Keys (%)", "Alloc Bytes (%)", "Used Bytes (%)")
 	fmt.Printf("%[1]*s  %15s (%6.2f)  %15s (%6.2f)  %15s (%6.2f)\n",
 		-lName, total.Name, p(total.Keys), 100.0, p(total.Alloc), 100.0, p(total.Used), 100.0)
 	for _, v := range perBucket {
@@ -161,11 +145,8 @@ func main() {
 			-lName, v.Name, p(v.Keys), pct(v.Keys, total.Keys), p(v.Alloc), pct(v.Alloc, total.Alloc), p(v.Used), pct(v.Used, total.Used))
 	}
 
-	if *verbose {
+	if verbose {
 		fmt.Printf("\nDone in %s\n", time.Since(start))
 	}
-}
-
-func pct(x, n int) float64 {
-	return float64(x) / float64(n) * 100
+	return nil
 }

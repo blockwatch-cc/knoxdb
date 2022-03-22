@@ -46,6 +46,7 @@ type Query struct {
 
 type QueryStats struct {
 	CompileTime    time.Duration `json:"compile_time"`
+	AnalyzeTime    time.Duration `json:"analyze_time"`
 	JournalTime    time.Duration `json:"journal_time"`
 	IndexTime      time.Duration `json:"index_time"`
 	ScanTime       time.Duration `json:"scan_time"`
@@ -104,9 +105,10 @@ func (q *Query) Runtime() time.Duration {
 }
 
 func (q *Query) PrintTiming() string {
-	return fmt.Sprintf("query: %s compile=%s journal=%s index=%s scan=%s total=%s matched=%d rows, scheduled=%d packs, scanned=%d packs, searched=%d index rows",
+	return fmt.Sprintf("query: %s compile=%s analyze=%s journal=%s index=%s scan=%s total=%s matched=%d rows, scheduled=%d packs, scanned=%d packs, searched=%d index rows",
 		q.Name,
 		q.stats.CompileTime,
+		q.stats.AnalyzeTime,
 		q.stats.JournalTime,
 		q.stats.IndexTime,
 		q.stats.ScanTime,
@@ -162,12 +164,13 @@ func (q *Query) Compile(t *Table) error {
 func (q Query) Check() error {
 	tfields := q.table.Fields()
 	for _, v := range q.reqfields {
+		tfield := tfields.Find(v.Name)
 		// field must exist
-		if !tfields.Contains(v.Name) {
+		if !tfield.IsValid() {
 			return fmt.Errorf("undefined field '%s/%s' in query %s", q.table.name, v.Name, q.Name)
 		}
 		// field type must match
-		if tfields.Find(v.Name).Type != v.Type {
+		if tfield.Type != v.Type {
 			return fmt.Errorf("mismatched type %s for field '%s/%s' in query %s", v.Type, q.table.name, v.Name, q.Name)
 		}
 		// field index must be valid
@@ -305,6 +308,7 @@ func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 
 // collect list of packs to visit in pk order
 func (q *Query) MakePackSchedule(reverse bool) []int {
+	q.lap = time.Now()
 	schedule := make([]int, 0, q.table.packidx.Len())
 	// walk list in pk order (pairs are always sorted by min pk)
 	for _, p := range q.table.packidx.pos {
@@ -312,18 +316,21 @@ func (q *Query) MakePackSchedule(reverse bool) []int {
 			schedule = append(schedule, int(p))
 		}
 	}
-	q.stats.PacksScheduled = len(schedule)
 	// reverse for descending walk
 	if reverse {
 		for l, r := 0, len(schedule)-1; l < r; l, r = l+1, r-1 {
 			schedule[l], schedule[r] = schedule[r], schedule[l]
 		}
 	}
+	q.stats.PacksScheduled = len(schedule)
+	q.stats.AnalyzeTime = time.Since(q.lap)
+	q.lap = time.Now()
 	return schedule
 }
 
 // ordered list of packs that may contain matching ids (list can be reversed)
 func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
+	q.lap = time.Now()
 	schedule := make([]int, 0, q.table.packidx.Len())
 
 	// extract min/max values from pack header's pk column
@@ -348,6 +355,8 @@ func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
 		}
 	}
 	q.stats.PacksScheduled = len(schedule)
+	q.stats.AnalyzeTime = time.Since(q.lap)
+	q.lap = time.Now()
 	return schedule
 }
 

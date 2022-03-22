@@ -455,8 +455,8 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 		}
 		pkg.SetKey(c.Key())
 		// ignore journal and tombstone
-		switch pkg.key {
-		case journalKey, tombstoneKey:
+		if pkg.IsJournal() || pkg.IsTomb() {
+			pkg.Clear()
 			continue
 		}
 		info := pkg.Info()
@@ -474,13 +474,22 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 }
 
 func (idx *Index) storePackInfo(dbTx store.Tx) error {
-	b := dbTx.Bucket(idx.metakey)
-	if b == nil {
+	meta := dbTx.Bucket(idx.metakey)
+	if meta == nil {
 		return ErrNoTable
 	}
 
 	// pack headers are stored in a nested bucket
-	hb := b.Bucket(infoKey)
+	hb := meta.Bucket(infoKey)
+
+	// create statistics bucket when missing
+	if hb == nil {
+		var err error
+		hb, err = meta.CreateBucketIfNotExists(infoKey)
+		if err != nil {
+			return err
+		}
+	}
 
 	// remove old headers
 	for _, k := range idx.packidx.removed {
@@ -821,9 +830,11 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 		// flush index after every 128 packs
 		if i%flushEvery == 0 {
 			// signal progress
-			select {
-			case ch <- float64(i*100) / float64(idx.table.packidx.Len()):
-			default:
+			if ch != nil {
+				select {
+				case ch <- float64(i*100) / float64(idx.table.packidx.Len()):
+				default:
+				}
 			}
 			if err := idx.FlushTx(ctx, tx); err != nil {
 				return err
@@ -832,16 +843,20 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 	}
 
 	// final flush
-	select {
-	case ch <- float64(99):
-	default:
+	if ch != nil {
+		select {
+		case ch <- float64(99):
+		default:
+		}
 	}
 	if err := idx.FlushTx(ctx, tx); err != nil {
 		return err
 	}
-	select {
-	case ch <- float64(100):
-	default:
+	if ch != nil {
+		select {
+		case ch <- float64(100):
+		default:
+		}
 	}
 
 	// store journal with remaining data
@@ -967,8 +982,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 		nextid                      uint64   // next index key to process (tomb or journal)
 		packmax, nextmin, globalmax uint64   // data placement hints
 		needsort                    bool     // true if current pack needs sort before store
-		loop                        int      // circuit breaker
-		maxloop                     int      // circuit breaker
+		loop, maxloop               int      // circuit breaker
 	)
 
 	// init

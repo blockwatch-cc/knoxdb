@@ -243,3 +243,138 @@ Col            Name        Type    Min    Max    Avg              Var  Err-Min  
 44         is_batch     boolean      0      1      0           0.1980        1        2        1           0.1980
 45       is_sapling     boolean      0      1      0           0.0019        1        1        1           0.0000
 ```
+
+## Bloom (re)-dimensioning
+
+Measured on real data to count effects of false positives of table scan performance.
+
+Result:
+- change LLB to 16
+- change bloom factor to 2
+
+```sh
+## Mainnet 12/1 (current setting)
+
+>> 43s build time for 4341 packs
+
+Bloom Filter Accuracy Statistics
+--------------------------------
+Total Ids          2149563
+LLB precision      12
+Bloom Err Rate     2.000000 (scale=1)
+Total Bloom Bytes  12116224
+No Matches         1015185
+Optimal Matches    8407591
+Bloom Matches      109553618 (+1203.03%)
+--------------------------------
+Bloom Min Abs Err  0
+Bloom Max Abs Err  4202
+Bloom Avg Abs Err  46.95
+Bloom Med Abs Err  29.00
+Bloom Abs Err Std  60.87
+--------------------------------
+Bloom Min Pct Err  0.00
+Bloom Max Pct Err  4202.00
+Bloom Avg Pct Err  34.37
+Bloom Pct Err Std  52.49
+
+## Mainnet 14/1 (fair estimate)
+
+>> 43sec build time for 4341 packs
+
+Bloom Filter Accuracy Statistics
+--------------------------------
+Total Ids          2149563
+LLB precision      14
+Bloom Err Rate     2.000000 (scale=1)
+Total Bloom Bytes  12745472
+No Matches         1015185
+Optimal Matches    8407591
+Bloom Matches      92676057 (+1002.29%)
+--------------------------------
+Bloom Min Abs Err  0
+Bloom Max Abs Err  4202
+Bloom Avg Abs Err  39.11
+Bloom Med Abs Err  24.00
+Bloom Abs Err Std  53.14
+--------------------------------
+Bloom Min Pct Err  0.00
+Bloom Max Pct Err  4202.00
+Bloom Avg Pct Err  28.63
+Bloom Pct Err Std  45.66
+
+## Mainnet 16/1 (better estimate)
+
+>> 37sec build time for 4341 packs
+
+Bloom Filter Accuracy Statistics
+--------------------------------
+Total Ids          2149563
+LLB precision      16
+Bloom Err Rate     2.000000 (scale=1)
+Total Bloom Bytes  13410048
+No Matches         1015185
+Optimal Matches    8407591
+Bloom Matches      78019577 (+827.97%)
+--------------------------------
+Bloom Min Abs Err  0
+Bloom Max Abs Err  4199
+Bloom Avg Abs Err  32.31
+Bloom Med Abs Err  19.00
+Bloom Abs Err Std  46.22
+--------------------------------
+Bloom Min Pct Err  0.00
+Bloom Max Pct Err  4199.00
+Bloom Avg Pct Err  23.66
+Bloom Pct Err Std  39.58
+
+## Mainnet 16/2 (0.2% error, better estimate)
+
+>> 38sec build time for 4341 packs
+
+Bloom Filter Accuracy Statistics
+--------------------------------
+Total Ids          2149563
+LLB precision      16
+Bloom Err Rate     0.200000 (scale=2)
+Total Bloom Bytes  26820096
+No Matches         1015185
+Optimal Matches    8407591
+Bloom Matches      14726250 (+75.15%)
+--------------------------------
+Bloom Min Abs Err  0
+Bloom Max Abs Err  2035
+Bloom Avg Abs Err  2.92
+Bloom Med Abs Err  1.00
+Bloom Abs Err Std  10.03
+--------------------------------
+Bloom Min Pct Err  0.00
+Bloom Max Pct Err  2035.00
+Bloom Avg Pct Err  2.14
+Bloom Pct Err Std  8.20
+
+## Mainnet 16/3 (0.02% error, better estimate, long build time)
+
+>> 5m17s build time for 4341 packs
+
+Bloom Filter Accuracy Statistics
+--------------------------------
+Total Ids          2149563
+LLB precision      16
+Bloom Err Rate     0.020000 (scale=3)
+Total Bloom Bytes  35955200
+No Matches         1015185
+Optimal Matches    8407591
+Bloom Matches      10255709 (+21.98%)
+--------------------------------
+Bloom Min Abs Err  0
+Bloom Max Abs Err  1729
+Bloom Avg Abs Err  0.85
+Bloom Med Abs Err  0.00
+Bloom Abs Err Std  5.53
+--------------------------------
+Bloom Min Pct Err  0.00
+Bloom Max Pct Err  1729.00
+Bloom Avg Pct Err  0.62
+Bloom Pct Err Std  4.32
+```

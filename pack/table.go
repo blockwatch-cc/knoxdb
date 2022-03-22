@@ -444,13 +444,13 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 }
 
 func (t *Table) loadPackInfo(dbTx store.Tx) error {
-	b := dbTx.Bucket(t.metakey)
-	if b == nil {
+	meta := dbTx.Bucket(t.metakey)
+	if meta == nil {
 		return ErrNoTable
 	}
 	maxPackSize := t.opts.PackSize()
 	packs := make(PackInfoList, 0)
-	bi := b.Bucket(infoKey)
+	bi := meta.Bucket(infoKey)
 	if bi != nil {
 		log.Debugf("pack: %s table loading package info from bucket", t.name)
 		c := bi.Cursor()
@@ -476,7 +476,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 			return nil
 		}
 	}
-	log.Warnf("pack: Corrupt or missing pack info for table %s! Scanning table. This may take a long time...", t.name)
+	log.Warnf("pack: %s table has corrupt or missing statistics! Re-scanning table. This may take some time...", t.name)
 	c := dbTx.Bucket(t.key).Cursor()
 	pkg := NewPackage(maxPackSize)
 	if err := pkg.InitFieldsFrom(t.journal.DataPack()); err != nil {
@@ -488,6 +488,10 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 			return fmt.Errorf("pack: cannot read %s/%x: %v", t.name, c.Key(), err)
 		}
 		pkg.SetKey(c.Key())
+		if pkg.IsJournal() || pkg.IsTomb() {
+			pkg.Clear()
+			continue
+		}
 		info := pkg.Info()
 		_ = info.UpdateStats(pkg)
 		packs = append(packs, info)
@@ -503,11 +507,19 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 }
 
 func (t *Table) storePackInfo(dbTx store.Tx) error {
-	b := dbTx.Bucket(t.metakey)
-	if b == nil {
+	meta := dbTx.Bucket(t.metakey)
+	if meta == nil {
 		return ErrNoTable
 	}
-	hb := b.Bucket(infoKey)
+	hb := meta.Bucket(infoKey)
+	// create statistics bucket when missing
+	if hb == nil {
+		var err error
+		hb, err = meta.CreateBucketIfNotExists(infoKey)
+		if err != nil {
+			return err
+		}
+	}
 	// remove headers for deleted packs, if any
 	for _, v := range t.packidx.removed {
 		log.Debugf("pack: %s table removing pack info %x", t.name, v)
@@ -1047,12 +1059,17 @@ func (t *Table) Close() error {
 			return err
 		}
 	}
+	t.indexes = t.indexes[:0]
 
 	// commit storage transaction
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	t.journal.Close()
+
+	// unregister from db
+	delete(t.db.tables, t.name)
+
 	return nil
 }
 
@@ -1743,7 +1760,6 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 	}
 
 	// optimize for lookup of most recently added values
-	q.lap = time.Now()
 	var nextid int
 	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
 		// stop when all inputs are matched
@@ -1876,7 +1892,6 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	// scan packs only if (a) index match returned any results or (b) no index exists
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
-		q.lap = time.Now()
 	packloop:
 		for _, p := range q.MakePackSchedule(false) {
 			if util.InterruptRequested(ctx) {
@@ -2073,7 +2088,6 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	}
 
 	// REVERSE PACK SCAN (either using found pk ids or non-indexed conditions)
-	q.lap = time.Now()
 	u32slice := t.u32Pool.Get().([]uint32)
 packloop:
 	for _, p := range q.MakePackSchedule(true) {
@@ -2201,7 +2215,6 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	// scan packs only when index match returned any results of when no index exists
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
-		q.lap = time.Now()
 	packloop:
 		for _, p := range q.MakePackSchedule(false) {
 			if util.InterruptRequested(ctx) {
@@ -2332,7 +2345,6 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// (b) when no index exists
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
-		q.lap = time.Now()
 	packloop:
 		for _, p := range q.MakePackSchedule(false) {
 			if util.InterruptRequested(ctx) {
@@ -2522,9 +2534,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 		return nil
 	}
 
-	q.lap = time.Now()
 	u32slice := t.u32Pool.Get().([]uint32)
-
 packloop:
 	for _, p := range q.MakePackSchedule(true) {
 		if util.InterruptRequested(ctx) {
@@ -2699,7 +2709,6 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 	}
 
 	// PACK SCAN, schedule uses fast range checks and schould be perfect
-	q.lap = time.Now()
 	var nextid int
 	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
 		// stop when all inputs are matched

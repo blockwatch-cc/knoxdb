@@ -238,7 +238,7 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			vv := reflect.Indirect(reflect.ValueOf(val))
 			switch vv.Kind() {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				res, ok = uint64(vv.Uint()), true
+				res, ok = uint32(vv.Uint()), true
 			}
 		}
 	case FieldTypeUint16:
@@ -272,7 +272,7 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			vv := reflect.Indirect(reflect.ValueOf(val))
 			switch vv.Kind() {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				res, ok = uint64(vv.Uint()), true
+				res, ok = uint16(vv.Uint()), true
 			}
 		}
 	case FieldTypeUint8:

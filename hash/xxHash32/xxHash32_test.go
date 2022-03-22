@@ -6,7 +6,7 @@ import (
 	"hash/fnv"
 	"testing"
 
-	"github.com/pierrec/xxHash/xxHash32"
+	"blockwatch.cc/knoxdb/hash/xxHash32"
 )
 
 type test struct {

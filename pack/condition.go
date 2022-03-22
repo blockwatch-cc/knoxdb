@@ -320,7 +320,7 @@ func (c *Condition) Compile() (err error) {
 		// handled below
 	default:
 		if buildBloom {
-			c.bloomHashes = [][2]uint32{bloomVec.Hash(c.Field.Type.Bytes(c.Value))}
+			c.bloomHashes = [][2]uint32{c.Field.Type.Hash(c.Value)}
 		}
 		// anything but IN, NIN is finished here
 		return
@@ -418,7 +418,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 				}
 			}
 		}
@@ -433,7 +433,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 				}
 			}
 		}
@@ -448,7 +448,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 				}
 			}
 		}
@@ -463,7 +463,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 				}
 			}
 		}
@@ -478,7 +478,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 				}
 			}
 		}
@@ -493,7 +493,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 				}
 			}
 		}
@@ -518,7 +518,7 @@ func (c *Condition) Compile() (err error) {
 		}
 		if buildBloom {
 			for _, val := range slice {
-				c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+				c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 			}
 		}
 		return
@@ -532,7 +532,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 				}
 			}
 		}
@@ -547,7 +547,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 				}
 			}
 		}
@@ -562,7 +562,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 				}
 			}
 		}
@@ -577,7 +577,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 				}
 			}
 		}
@@ -592,7 +592,7 @@ func (c *Condition) Compile() (err error) {
 			}
 			if buildBloom {
 				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(c.Field.Type.Bytes(val)))
+					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 				}
 			}
 		}
@@ -870,13 +870,13 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 			pk := block.Uint64
 			in := c.Value.([]uint64)
 			// journal pack is unsorted, so we fall back to using a map
-			if pkg.key == journalKey && c.uint64map == nil {
+			if pkg.IsJournal() && c.uint64map == nil {
 				c.uint64map = make(map[uint64]struct{}, len(in))
 				for _, v := range in {
 					c.uint64map[v] = struct{}{}
 				}
 			}
-			if pkg.key != journalKey && c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
+			if !pkg.IsJournal() && c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
 				maxin := in[len(in)-1]
 				maxpk := pk[len(pk)-1]
 				for i, p, il, pl := 0, 0, len(in), len(pk); i < il && p < pl; {
@@ -1122,13 +1122,13 @@ func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
 			pk := block.Uint64
 			in := c.Value.([]uint64)
 			// journal pack is unsorted, so we fall back to using a map
-			if pkg.key == journalKey && c.uint64map == nil {
+			if pkg.IsJournal() && c.uint64map == nil {
 				c.uint64map = make(map[uint64]struct{}, len(in))
 				for _, v := range in {
 					c.uint64map[v] = struct{}{}
 				}
 			}
-			if pkg.key != journalKey && c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
+			if !pkg.IsJournal() && c.Field.Flags&FlagPrimary > 0 && len(in) > 0 {
 				maxin := in[len(in)-1]
 				maxpk := pk[len(pk)-1]
 				for i, p, il, pl := 0, 0, len(in), len(pk); i < il && p < pl; {
@@ -1700,7 +1700,7 @@ func (n ConditionTreeNode) MatchPackAnd(pkg *Package, info PackInfo) *Bitset {
 			// We exclude journal from quick check because we cannot rely on
 			// min/max values.
 			//
-			if pkg.key != journalKey && len(info.Blocks) > c.Field.Index {
+			if !pkg.IsJournal() && len(info.Blocks) > c.Field.Index {
 				blockInfo := info.Blocks[c.Field.Index]
 				min, max := blockInfo.MinValue, blockInfo.MaxValue
 				switch c.Mode {
@@ -1788,7 +1788,7 @@ func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *Bitset {
 			// We exclude journal from quick check because we cannot rely on
 			// min/max values.
 			//
-			if pkg.key != journalKey && len(info.Blocks) > c.Field.Index {
+			if !pkg.IsJournal() && len(info.Blocks) > c.Field.Index {
 				blockInfo := info.Blocks[c.Field.Index]
 				min, max := blockInfo.MinValue, blockInfo.MaxValue
 				skipEarly := false
