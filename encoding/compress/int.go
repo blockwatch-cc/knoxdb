@@ -35,21 +35,6 @@ import (
 // encoding such as PFOR if only a small number of values exceed the max compressed value range.
 // This should improve compression ratios with very large integers near the ends of the int64 range.
 
-//go:noescape
-func zigzagDecodeInt64AVX2Core(data []int64)
-
-//go:noescape
-func deltaDecodeInt64AVX2Core(data []int64)
-
-//go:noescape
-func zzdeltaDecodeInt64AVX2Core(data []int64)
-
-//go:noescape
-func zzdeltaDecodeUint64AVX2Core(data []uint64)
-
-//go:noescape
-func zigzagDecodeUint64AVX2Core(data []uint64)
-
 const (
 	// intUncompressed is an uncompressed format using 8 bytes per point
 	intUncompressed = 0
@@ -286,11 +271,7 @@ func integerBatchDecodeAllUncompressed(b []byte, dst []int64) ([]int64, error) {
 	return dst, nil
 }
 
-func IntegerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
-	return integerBatchDecodeAllSimple(b, dst)
-}
-
-func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
+func integerBatchDecodeAllSimpleOld(b []byte, dst []int64) ([]int64, error) {
 	b = b[1:]
 	if len(b) < 8 {
 		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode packed value")
@@ -331,20 +312,17 @@ func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 	return dst, nil
 }
 
-func IntegerBatchDecodeAllSimpleNew(b []byte, dst []int64, count int) ([]int64, error) {
-	return integerBatchDecodeAllSimpleNew(b, dst, count)
-}
-
-func integerBatchDecodeAllSimpleNew(b []byte, dst []int64, count int) ([]int64, error) {
+func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 	b = b[1:]
 	if len(b) < 8 {
 		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode packed value")
 	}
 
-	/*count, err := simple8b.CountBytes(b[8:])
+	count, err := s8bVec.CountBytes(b[8:])
 	if err != nil {
 		return []int64{}, err
-	}*/
+	}
+	count += 1
 
 	if cap(dst) < count {
 		dst = make([]int64, count)
@@ -365,49 +343,9 @@ func integerBatchDecodeAllSimpleNew(b []byte, dst []int64, count int) ([]int64, 
 		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll unexpected number of values decoded; got=%d, exp=%d", n, count-1)
 	}
 
-	prefixSumInt64AVX2(dst)
+	zzDeltaDecodeInt64(dst)
 
 	return dst, nil
-}
-
-// calculate prefix sum
-func prefixSumInt64Generic(data []int64) {
-	data[0] = ZigZagDecode(uint64(data[0]))
-	prev := data[0]
-	for i := 1; i < len(data); i++ {
-		prev += ZigZagDecode(uint64(data[i]))
-		data[i] = prev
-	}
-}
-
-// calculate prefix sum
-func ZzDeltaDecodeUint64Generic(data []uint64) {
-	data[0] = uint64(ZigZagDecode(data[0]))
-	prev := data[0]
-	for i := 1; i < len(data); i++ {
-		prev += uint64(ZigZagDecode(data[i]))
-		data[i] = prev
-	}
-}
-
-func prefixSumInt64AVX2(data []int64) {
-	len_head := len(data) & 0x7ffffffffffffffc
-	zzdeltaDecodeInt64AVX2Core(data)
-	prev := data[len_head-1]
-	for i := len_head; i < len(data); i++ {
-		prev += ZigZagDecode(uint64(data[i]))
-		data[i] = prev
-	}
-}
-
-func ZzDeltaDecodeUint64AVX2(data []uint64) {
-	len_head := len(data) & 0x7ffffffffffffffc
-	zzdeltaDecodeUint64AVX2Core(data)
-	prev := data[len_head-1]
-	for i := len_head; i < len(data); i++ {
-		prev += uint64(ZigZagDecode(data[i]))
-		data[i] = prev
-	}
 }
 
 func ZzDeltaEncodeUint64(data []uint64) uint64 {
@@ -435,18 +373,28 @@ func ZzEncodeUint64(data []uint64) uint64 {
 	return max
 }
 
-func ZzDecodeUint64Generic(data []uint64) {
-	for i := range data {
-		data[i] = uint64(ZigZagDecode(data[i]))
-	}
+func ZzDeltaDecodeInt64(data []int64) {
+	zzDeltaDecodeInt64(data)
 }
 
-func ZzDecodeUint64AVX2(data []uint64) {
-	len_head := len(data) & 0x7ffffffffffffffc
-	zigzagDecodeUint64AVX2Core(data)
-	for i := len_head; i < len(data); i++ {
-		data[i] = uint64(ZigZagDecode(data[i]))
-	}
+func ZzDeltaDecodeUint64(data []uint64) {
+	zzDeltaDecodeUint64(data)
+}
+
+func ZzDecodeInt64(data []int64) {
+	zzDecodeInt64(data)
+}
+
+func ZzDecodeUint64(data []uint64) {
+	zzDecodeUint64(data)
+}
+
+func Delta8DecodeUint64(data []uint64) {
+	delta8DecodeUint64(data)
+}
+
+func Delta8EncodeUint64(data []uint64) uint64 {
+	return delta8EncodeUint64(data)
 }
 
 func MaxUint64(data []uint64) uint64 {
@@ -518,4 +466,47 @@ func integerBatchDecodeAllRLE(b []byte, dst []int64) ([]int64, error) {
 
 func integerBatchDecodeAllInvalid(b []byte, _ []int64) ([]int64, error) {
 	return []int64{}, fmt.Errorf("compress: unknown integer encoding %v", b[0]>>4)
+}
+
+func PackBytes(src []uint64, nbytes int, buf []byte) ([]byte, error) {
+	if len(buf) < nbytes*len(src) {
+		return nil, fmt.Errorf("compressBytes: write buffer to small")
+	}
+
+	switch nbytes {
+	case 1:
+		packBytes8Bit(src, buf)
+	case 2:
+		packBytes16Bit(src, buf)
+	case 3:
+		packBytes24Bit(src, buf)
+	case 4:
+		packBytes32Bit(src, buf)
+	default:
+		return nil, fmt.Errorf("UnpackBytes: size (%d bytes) not yet implemented", nbytes)
+	}
+
+	return buf, nil
+}
+
+func UnpackBytes(src []byte, nbytes int, res []uint64) ([]uint64, error) {
+	rlen := len(src) / nbytes
+
+	if len(res) < rlen {
+		return nil, fmt.Errorf("uncompressBytes: write buffer to small")
+	}
+
+	switch nbytes {
+	case 1:
+		unpackBytes8Bit(src, res)
+	case 2:
+		unpackBytes16Bit(src, res)
+	case 3:
+		unpackBytes24Bit(src, res)
+	case 4:
+		unpackBytes32Bit(src, res)
+	default:
+		return nil, fmt.Errorf("UnpackBytes: size (%d bytes) not yet implemented", nbytes)
+	}
+	return res, nil
 }

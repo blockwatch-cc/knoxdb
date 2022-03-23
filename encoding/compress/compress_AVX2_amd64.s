@@ -5,12 +5,12 @@
 
 #include "textflag.h"
 
-// func zigzagDecodeInt64AVX2Core(data []int64)
+// func zzDecodeInt64AVX2Core(data []int64)
 //
 // input:
 //   SI = src_base
 //   BX = src_len
-TEXT ·zigzagDecodeInt64AVX2Core(SB), NOSPLIT, $0-24
+TEXT ·zzDecodeInt64AVX2Core(SB), NOSPLIT, $0-24
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 
@@ -52,12 +52,12 @@ exit_small:
 done:
 	RET
 
-// func zigzagDecodeUint64AVX2Core(data []int64)
+// func zzDecodeUint64AVX2Core(data []int64)
 //
 // input:
 //   SI = src_base
 //   BX = src_len
-TEXT ·zigzagDecodeUint64AVX2Core(SB), NOSPLIT, $0-24
+TEXT ·zzDecodeUint64AVX2Core(SB), NOSPLIT, $0-24
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 
@@ -264,7 +264,7 @@ exit_small:
 done:
 	RET
 
-// func Delta8AVX2(src []uint64) uint64
+// func delta8EncodeUint64AVX2Core(src []uint64) uint64
 //
 // input:
 //   SI = src_base
@@ -274,7 +274,7 @@ done:
 //   Y14, Y15 = accumulators for maxdelta
 //   Y0, Y1 = old vector data (to substract from)
 //   Y2, Y3 = new vector data (to substract)
-TEXT ·Delta8AVX2(SB), NOSPLIT, $0-32
+TEXT ·delta8EncodeUint64AVX2Core(SB), NOSPLIT, $0-32
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	XORQ	R9, R9
@@ -338,7 +338,7 @@ done:
 	MOVQ	R9, ret+24(FP)
 	RET
 
-// func Undelta8AVX2(src []uint64)
+// func delta8DecodeUint64AVX2Core(src []uint64)
 //
 // input:
 //   SI = src_base
@@ -347,7 +347,7 @@ done:
 //   R9 = maxdelta
 //   Y0, Y1 = old vector data (to substract from)
 //   Y2, Y3 = new vector data (to substract)
-TEXT ·Undelta8AVX2(SB), $0-24
+TEXT ·delta8DecodeUint64AVX2Core(SB), $0-24
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 
@@ -391,7 +391,7 @@ exit_small:
 done:
 	RET
 
-// func PackIndex32BitAVX2(src []uint64, dst []byte)
+// func packBytes32BitAVX2Core(src []uint64, dst []byte)
 //
 // input:
 //   SI = src_base
@@ -401,7 +401,7 @@ done:
 //   Y14, Y15 = accumulators for maxdelta
 //   Y0, Y1 = old vector data (to substract from)
 //   Y2, Y3 = new vector data (to substract)
-TEXT ·PackIndex32BitAVX2(SB), $0-32
+TEXT ·packBytes32BitAVX2Core(SB), $0-32
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	dst_base+24(FP), DI
@@ -444,7 +444,7 @@ exit_small:
 done:
 	RET
 
-// func UnpackIndex32BitAVX2(src []byte, dst []uint64)
+// func unpackBytes32BitAVX2Core(src []byte, dst []uint64)
 //
 // input:
 //   SI = src_base
@@ -454,7 +454,7 @@ done:
 //   Y14, Y15 = accumulators for maxdelta
 //   Y0, Y1 = old vector data (to substract from)
 //   Y2, Y3 = new vector data (to substract)
-TEXT ·UnpackIndex32BitAVX2(SB), $0-32
+TEXT ·unpackBytes32BitAVX2Core(SB), $0-32
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	dst_base+24(FP), DI
@@ -497,7 +497,7 @@ exit_small:
 done:
 	RET
 
-// func PackIndex16BitAVX2(src []uint64, dst []byte)
+// func packBytes16BitAVX2Core(src []uint64, dst []byte)
 //
 // input:
 //   SI = src_base
@@ -507,7 +507,7 @@ done:
 //   Y14, Y15 = accumulators for maxdelta
 //   Y0, Y1 = old vector data (to substract from)
 //   Y2, Y3 = new vector data (to substract)
-TEXT ·PackIndex16BitAVX2(SB), $0-32
+TEXT ·packBytes16BitAVX2Core(SB), $0-32
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	dst_base+24(FP), DI
@@ -557,7 +557,7 @@ exit_small:
 done:
 	RET
 
-// func UnpackIndex16BitAVX2(src []byte, dst []uint64)
+// func unpackBytes16BitAVX2Core(src []byte, dst []uint64)
 //
 // input:
 //   SI = src_base
@@ -567,7 +567,7 @@ done:
 //   Y14, Y15 = accumulators for maxdelta
 //   Y0, Y1 = old vector data (to substract from)
 //   Y2, Y3 = new vector data (to substract)
-TEXT ·UnpackIndex16BitAVX2(SB), $0-32
+TEXT ·unpackBytes16BitAVX2Core(SB), $0-32
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 	MOVQ	dst_base+24(FP), DI

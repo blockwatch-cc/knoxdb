@@ -942,18 +942,7 @@ func compressHashBlock(pkg Package, hash_size int) (CompressedHashBlock, error) 
 	}
 
 	// delta encoding
-
-	/* maxdelta := uint64(0)
-	for i := len(deltas) - 1; i > 7; i-- {
-		deltas[i] = deltas[i] - deltas[i-8]
-		maxdelta |= deltas[i]
-	}*/
-
-	maxdelta := compress.Delta8AVX2(deltas)
-	for i := len(deltas)%8 + 7; i > 7; i-- {
-		deltas[i] = deltas[i] - deltas[i-8]
-		maxdelta |= deltas[i]
-	}
+	maxdelta := compress.Delta8EncodeUint64(deltas)
 
 	var nbytes, nbytes2 int
 	if maxdelta == 0 {
@@ -969,7 +958,7 @@ func compressHashBlock(pkg Package, hash_size int) (CompressedHashBlock, error) 
 		binary.BigEndian.PutUint64(buf[8*i:], deltas[i])
 	}
 
-	_, err := compressBytes(deltas[8:], nbytes, buf[64:])
+	_, err := compress.PackBytes(deltas[8:], nbytes, buf[64:])
 	if err != nil {
 		return CompressedHashBlock{0, 0, nil, 0, nil}, err
 	}
@@ -990,127 +979,12 @@ func compressHashBlock(pkg Package, hash_size int) (CompressedHashBlock, error) 
 
 	buf2 := make([]byte, nbytes2*len(b.Uint64))
 
-	_, err = compressBytes(b.Uint64, nbytes2, buf2)
+	_, err = compress.PackBytes(b.Uint64, nbytes2, buf2)
 	if err != nil {
 		return CompressedHashBlock{0, 0, nil, 0, nil}, err
 	}
 
 	return CompressedHashBlock{hash_size, nbytes, buf, nbytes2, buf2}, nil
-}
-
-func compressBytes(src []uint64, nbytes int, buf []byte) ([]byte, error) {
-	var tmp []byte
-
-	if len(buf) < nbytes*len(src) {
-		return nil, fmt.Errorf("compressBytes: write buffer to small")
-	}
-
-	switch nbytes {
-	case 1:
-		for i, v := range src {
-			buf[i] = byte(v & 0xff)
-		}
-	case 2:
-		/*		for i, v := range src {
-				buf[2*i] = byte((v >> 8) & 0xff)
-				buf[1+2*i] = byte(v & 0xff)
-			}*/
-
-		len_head := len(src) & 0x7ffffffffffffff0
-		compress.PackIndex16BitAVX2(src, buf)
-
-		tmp = buf[len_head*2:]
-
-		for i, v := range src[len_head:] {
-			tmp[2*i] = byte((v >> 8) & 0xff)
-			tmp[1+2*i] = byte(v & 0xff)
-		}
-
-	case 3:
-		for i, v := range src {
-			buf[3*i] = byte((v >> 16) & 0xff)
-			buf[1+3*i] = byte((v >> 8) & 0xff)
-			buf[2+3*i] = byte(v & 0xff)
-		}
-	case 4:
-
-		len_head := len(src) & 0x7ffffffffffffff8
-		compress.PackIndex32BitAVX2(src, buf)
-
-		tmp = buf[len_head*4:]
-
-		for i, v := range src[len_head:] {
-			tmp[4*i] = byte((v >> 24) & 0xff)
-			tmp[1+4*i] = byte((v >> 16) & 0xff)
-			tmp[2+4*i] = byte((v >> 8) & 0xff)
-			tmp[3+4*i] = byte(v & 0xff)
-		}
-		/*for i, v := range deltas[8:] {
-			buf[4*i] = byte((v >> 24) & 0xff)
-			buf[1+4*i] = byte((v >> 16) & 0xff)
-			buf[2+4*i] = byte((v >> 8) & 0xff)
-			buf[3+4*i] = byte(v & 0xff)
-		}*/
-	default:
-		return nil, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
-	}
-	return buf, nil
-}
-
-func uncompressBytes(src []byte, nbytes int, res []uint64) ([]uint64, error) {
-	rlen := len(src) / nbytes
-
-	if len(res) < rlen {
-		return nil, fmt.Errorf("uncompressBytes: write buffer to small")
-	}
-
-	switch nbytes {
-	case 1:
-		for i, j := 0, 0; i < rlen; i++ {
-			res[i] = uint64(src[j])
-			j++
-		}
-	case 2:
-		/*		for i, j := 0, 0; i < len; i++ {
-				res[i] = uint64(src[j])<<8 | uint64(src[1+j])
-				j += 2
-			}*/
-
-		len_head := rlen & 0x7ffffffffffffff0
-		compress.UnpackIndex16BitAVX2(src, res)
-
-		tmp := src[len_head*2:]
-
-		for i, j := len_head, 0; i < rlen; i++ {
-			res[i] = uint64(tmp[j])<<8 | uint64(tmp[1+j])
-			j += 2
-		}
-
-	case 3:
-		for i, j := 0, 0; i < rlen; i++ {
-			res[i] = uint64(src[j])<<16 | uint64(src[1+j])<<8 | uint64(src[2+j])
-			j += 3
-		}
-	case 4:
-		/*for i, j := 0, 0; i < rlen; i++ {
-			res[i] = uint64(src[j])<<24 | uint64(src[1+j])<<16 | uint64(src[2+j])<<8 | uint64(src[3+j])
-			j += 4
-		}*/
-
-		len_head := rlen & 0x7ffffffffffffff8
-		compress.UnpackIndex32BitAVX2(src, res)
-
-		tmp := src[len_head*4:]
-
-		for i, j := len_head, 0; i < rlen; i++ {
-			res[i] = uint64(tmp[j])<<24 | uint64(tmp[1+j])<<16 | uint64(tmp[2+j])<<8 | uint64(tmp[3+j])
-			j += 4
-		}
-
-	default:
-		return nil, fmt.Errorf("hash size (%d bytes) not yet implemented", nbytes)
-	}
-	return res, nil
 }
 
 func uncompressHashBlock(chb CompressedHashBlock) ([]uint64, []uint64, error) {
@@ -1121,27 +995,19 @@ func uncompressHashBlock(chb CompressedHashBlock) ([]uint64, []uint64, error) {
 		res1[i] = binary.BigEndian.Uint64(chb.hash_data[8*i:])
 	}
 
-	_, err := uncompressBytes(chb.hash_data[64:], chb.hash_nbytes, res1[8:])
+	_, err := compress.UnpackBytes(chb.hash_data[64:], chb.hash_nbytes, res1[8:])
 
 	if err != nil {
 		return nil, nil, err
 	}
 
-	len_head := lenr & 0x7ffffffffffffff8
-	compress.Undelta8AVX2(res1)
-	for i := len_head; i < lenr; i++ {
-		res1[i] += res1[i-8]
-	}
-
-	/*for i := 8; i < len; i++ {
-		res[i] += res[i-8]
-	}*/
+	compress.Delta8DecodeUint64(res1)
 
 	// uncompress pks
 	lenr = len(chb.pk_data) / chb.pk_nbytes
 	res2 := make([]uint64, lenr)
 
-	_, err = uncompressBytes(chb.pk_data, chb.pk_nbytes, res2)
+	_, err = compress.UnpackBytes(chb.pk_data, chb.pk_nbytes, res2)
 
 	if err != nil {
 		return nil, nil, err
@@ -1280,7 +1146,7 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 				dst := make([]uint64, b.Len())
 				start := time.Now()
 				s8bVec.DecodeAll(dst, src)
-				compress.ZzDeltaDecodeUint64AVX2(dst)
+				compress.ZzDeltaDecodeUint64(dst)
 				tdecomp = time.Since(start).Seconds()
 				convertUint64ToBlock(b2, dst)
 			}
@@ -1323,7 +1189,7 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 					start := time.Now()
 					s8bVec.DecodeAll(dst, src)
 					if zz {
-						compress.ZzDecodeUint64AVX2(dst)
+						compress.ZzDecodeUint64(dst)
 					}
 					tdecomp = time.Since(start).Seconds()
 				}
@@ -1454,9 +1320,11 @@ func (t *Table) CompressIndexAll(cmethod string, i int, w io.Writer, mode DumpMo
 		cratios[p] = cr
 		ctimes[p] = ct
 		dtimes[p] = dt
+		fmt.Printf(".")
 	}
-	fl := FieldList{{Name: "Hash", Type: "uint64"}, {Name: "PK", Type: "uint64"}}
+	fmt.Printf("\nProcessed %d packs\n", t.indexes[i].packidx.Len())
 
+	fl := FieldList{{Name: "Hash", Type: "uint64"}, {Name: "PK", Type: "uint64"}}
 	return DumpCompressResults(fl, cratios, ctimes, dtimes, w, mode, verbose)
 }
 
