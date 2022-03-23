@@ -1,3 +1,9 @@
+// Copyright (c) 2022 Blockwatch Data Inc.
+// Author: stefan@blockwatch.cc
+
+//go:build go1.7 && amd64 && !gccgo && !appengine
+// +build go1.7,amd64,!gccgo,!appengine
+
 package s8bVec
 
 import (
@@ -9,7 +15,7 @@ import (
 )
 
 // TestEncodeAll ensures 100% test coverage of EncodeAll and
-// verifies all output by comparing the original input with the output of DecodeAll
+// verifies all output by comparing the original input with the output of decodeAll
 func TestEncodeAllAVX2(t *testing.T) {
 	if !util.UseAVX2 {
 		t.Skip()
@@ -31,7 +37,7 @@ func TestEncodeAllAVX2(t *testing.T) {
 			}
 
 			decoded := make([]uint64, len(test.in))
-			n, err := DecodeAllAVX2(decoded, encoded)
+			n, err := decodeAllAVX2(decoded, encoded)
 			if err != nil {
 				t.Fatalf("unexpected decode error\n%s", err)
 			}
@@ -44,7 +50,7 @@ func TestEncodeAllAVX2(t *testing.T) {
 }
 
 // TestEncodeAll ensures 100% test coverage of EncodeAll and
-// verifies all output by comparing the original input with the output of DecodeAll
+// verifies all output by comparing the original input with the output of decodeAll
 func TestEncodeAllAVX2Call(t *testing.T) {
 	if !util.UseAVX2 {
 		t.Skip()
@@ -66,7 +72,7 @@ func TestEncodeAllAVX2Call(t *testing.T) {
 			}
 
 			decoded := make([]uint64, len(test.in))
-			n := DecodeAllAVX2Call(decoded, encoded)
+			n := decodeAllAVX2Call(decoded, encoded)
 
 			if !cmp.Equal(decoded[:n], test.in) {
 				t.Fatalf("unexpected values; +got/-exp\n%s", cmp.Diff(decoded, test.in))
@@ -96,7 +102,7 @@ func TestEncodeAllAVX2Jmp(t *testing.T) {
 			}
 
 			decoded := make([]uint64, len(test.in))
-			n := DecodeAllAVX2Jmp(decoded, encoded)
+			n := decodeAllAVX2Jmp(decoded, encoded)
 
 			if !cmp.Equal(decoded[:n], test.in) {
 				t.Fatalf("unexpected values; +got/-exp\n%s", cmp.Diff(decoded, test.in))
@@ -126,7 +132,7 @@ func TestEncodeAllAVX2Opt(t *testing.T) {
 			}
 
 			decoded := make([]uint64, len(test.in))
-			n := DecodeAllAVX2Opt(decoded, encoded)
+			n := decodeAllAVX2Opt(decoded, encoded)
 
 			if !cmp.Equal(decoded[:n], test.in) {
 				t.Fatalf("unexpected values; +got/-exp\n%s", cmp.Diff(decoded, test.in))
@@ -143,7 +149,7 @@ func BenchmarkDecodeAllAVX2(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
 			for i := 0; i < b.N; i++ {
-				DecodeAllAVX2(out, comp)
+				decodeAllAVX2(out, comp)
 			}
 		})
 	}
@@ -161,7 +167,7 @@ func BenchmarkDecodeAllAVX2Call(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
 			for i := 0; i < b.N; i++ {
-				DecodeAllAVX2Call(out, comp)
+				decodeAllAVX2Call(out, comp)
 			}
 		})
 	}
@@ -179,7 +185,7 @@ func BenchmarkDecodeAllAVX2Jmp(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
 			for i := 0; i < b.N; i++ {
-				DecodeAllAVX2Call(out, comp)
+				decodeAllAVX2Call(out, comp)
 			}
 		})
 	}
@@ -197,7 +203,7 @@ func BenchmarkDecodeAllAVX2Opt(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
 			for i := 0; i < b.N; i++ {
-				DecodeAllAVX2Call(out, comp)
+				decodeAllAVX2Call(out, comp)
 			}
 		})
 	}

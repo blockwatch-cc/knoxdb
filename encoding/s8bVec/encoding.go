@@ -27,7 +27,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"unsafe"
 )
 
 const MaxValue = (1 << 60) - 1
@@ -215,22 +214,7 @@ var selector [16]packing = [16]packing{
 
 // Count returns the number of integers encoded in the byte slice
 func CountBytes(b []byte) (int, error) {
-	var count int
-	for len(b) >= 8 {
-		v := binary.BigEndian.Uint64(b[:8])
-		b = b[8:]
-
-		sel := v >> 60
-		if sel >= 16 {
-			return 0, fmt.Errorf("invalid selector value: %v", sel)
-		}
-		count += selector[sel].n
-	}
-
-	if len(b) > 0 {
-		return 0, fmt.Errorf("invalid slice len remaining: %v", len(b))
-	}
-	return count, nil
+	return countBytes(b)
 }
 
 // Count returns the number of integers encoded within an uint64
@@ -469,37 +453,14 @@ func Decode(dst *[240]uint64, v uint64) (n int, err error) {
 
 // Decode writes the uncompressed values from src to dst.  It returns the number
 // of values written or an error.
-//go:nocheckptr
-// nocheckptr while the underlying struct layout doesn't change
 func DecodeAll(dst, src []uint64) (value int, err error) {
-	j := 0
-	for _, v := range src {
-		sel := (v >> 60) & 0xf
-		selector[sel].unpack(v, (*[240]uint64)(unsafe.Pointer(&dst[j])))
-		j += selector[sel].n
-	}
-	return j, nil
+	return decodeAll(dst, src)
 }
 
 // DecodeBytesBigEndian writes the compressed, big-endian values from src to dst.  It returns the number
 // of values written or an error.
-//go:nocheckptr
-// nocheckptr while the underlying struct layout doesn't change
 func DecodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {
-	if len(src)&7 != 0 {
-		return 0, errors.New("src length is not multiple of 8")
-	}
-
-	i := 0
-	j := 0
-	for i < len(src) {
-		v := binary.BigEndian.Uint64(src[i:])
-		sel := (v >> 60) & 0xf
-		selector[sel].unpack(v, (*[240]uint64)(unsafe.Pointer(&dst[j])))
-		j += selector[sel].n
-		i += 8
-	}
-	return j, nil
+	return decodeBytesBigEndian(dst, src)
 }
 
 // canPack returs true if n elements from in can be stored using bits per element

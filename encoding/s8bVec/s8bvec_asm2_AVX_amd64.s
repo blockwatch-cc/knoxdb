@@ -40,8 +40,8 @@ TEXT ·initAVX2Jmp(SB), NOSPLIT, $0-68
 
         RET
 
-// func DecodeAllAVX2Jmp(dst, src []uint64) (value int)
-TEXT ·DecodeAllAVX2Jmp(SB), NOSPLIT, $0-68
+// func decodeAllAVX2Jmp(dst, src []uint64) (value int)
+TEXT ·decodeAllAVX2Jmp(SB), NOSPLIT, $0-68
         MOVQ            dst_base(FP), DI
         MOVQ            src_base+24(FP), SI
         MOVQ            src_len+32(FP), BX
@@ -49,29 +49,29 @@ TEXT ·DecodeAllAVX2Jmp(SB), NOSPLIT, $0-68
 
 	CMPQ	        BX, $0
 	JNE		start
-        JMP             ·DecodeAllAVX2JmpExit(SB)
+        JMP             ·decodeAllAVX2JmpExit(SB)
 start:
         LEAQ            funcTableJmp<>(SB), R14            // base of function pointer table
-        JMP             ·DecodeAllAVX2JmpLoop(SB)
+        JMP             ·decodeAllAVX2JmpLoop(SB)
 
-TEXT ·DecodeAllAVX2JmpLoop(SB), NOSPLIT, $0-0
+TEXT ·decodeAllAVX2JmpLoop(SB), NOSPLIT, $0-0
         MOVQ            (SI), DX
         SHRQ            $60, DX                 // calc selector
 
         MOVQ            (R14)(DX*8), AX
         JMP             AX
 
-TEXT ·DecodeAllAVX2JmpRet(SB), NOSPLIT, $0-0
+TEXT ·decodeAllAVX2JmpRet(SB), NOSPLIT, $0-0
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
-        JMP             ·DecodeAllAVX2JmpLoop(SB)
+        JMP             ·decodeAllAVX2JmpLoop(SB)
 
 exit:
         VZEROUPPER
-        JMP             ·DecodeAllAVX2JmpExit(SB)
+        JMP             ·decodeAllAVX2JmpExit(SB)
         
-TEXT ·DecodeAllAVX2JmpExit(SB), NOSPLIT, $0-0
+TEXT ·decodeAllAVX2JmpExit(SB), NOSPLIT, $0-0
         SUBQ            R15, DI
         SHRQ            $3, DI
         MOVQ            DI, ret+48(FP)
@@ -85,7 +85,7 @@ TEXT ·unpack1AVX2Jmp(SB), NOSPLIT, $0-68
         MOVQ            R8, (DI)
 
         ADDQ            $8, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack2AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack2AVX2Jmp(SB), NOSPLIT, $0-68
@@ -97,7 +97,7 @@ TEXT ·unpack2AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         X0, (DI)
 
         ADDQ            $16, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack3AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack3AVX2Jmp(SB), NOSPLIT, $0-68
@@ -109,7 +109,7 @@ TEXT ·unpack3AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, (DI)
 
         ADDQ            $24, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack4AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack4AVX2Jmp(SB), NOSPLIT, $0-68
@@ -121,7 +121,7 @@ TEXT ·unpack4AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, (DI)
 
         ADDQ            $32, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack5AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack5AVX2Jmp(SB), NOSPLIT, $0-68
@@ -136,7 +136,7 @@ TEXT ·unpack5AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 32(DI)
 
         ADDQ            $40, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack6AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack6AVX2Jmp(SB), NOSPLIT, $0-68
@@ -151,7 +151,7 @@ TEXT ·unpack6AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 32(DI)
 
         ADDQ            $48, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack7AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack7AVX2Jmp(SB), NOSPLIT, $0-68
@@ -166,7 +166,7 @@ TEXT ·unpack7AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 32(DI)
 
         ADDQ            $56, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack8AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack8AVX2Jmp(SB), NOSPLIT, $0-68
@@ -181,7 +181,7 @@ TEXT ·unpack8AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 32(DI)
 
         ADDQ            $64, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack10AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack10AVX2Jmp(SB), NOSPLIT, $0-68
@@ -199,7 +199,7 @@ TEXT ·unpack10AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 64(DI)
 
         ADDQ            $80, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack12AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack12AVX2Jmp(SB), NOSPLIT, $0-68
@@ -217,7 +217,7 @@ TEXT ·unpack12AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 64(DI)
 
         ADDQ            $96, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack15AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack15AVX2Jmp(SB), NOSPLIT, $0-68
@@ -238,7 +238,7 @@ TEXT ·unpack15AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 96(DI)
 
         ADDQ            $120, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack20AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack20AVX2Jmp(SB), NOSPLIT, $0-68
@@ -262,7 +262,7 @@ TEXT ·unpack20AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 128(DI)
 
         ADDQ            $160, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack30AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack30AVX2Jmp(SB), NOSPLIT, $0-68
@@ -296,7 +296,7 @@ TEXT ·unpack30AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 224(DI)
 
         ADDQ            $240, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack60AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack60AVX2Jmp(SB), NOSPLIT, $0-68
@@ -353,7 +353,7 @@ TEXT ·unpack60AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 448(DI)
 
         ADDQ            $480, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack120AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack120AVX2Jmp(SB), NOSPLIT, $0-68
@@ -392,7 +392,7 @@ TEXT ·unpack120AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 928(DI)
 
         ADDQ            $960, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)
 
 // func unpack240AVX2(v uint64, dst *[240]uint64)
 TEXT ·unpack240AVX2Jmp(SB), NOSPLIT, $0-68
@@ -461,4 +461,4 @@ TEXT ·unpack240AVX2Jmp(SB), NOSPLIT, $0-68
         VMOVDQU         Y0, 1888(DI)
 
         ADDQ            $1920, DI
-        JMP ·DecodeAllAVX2JmpRet(SB)
+        JMP ·decodeAllAVX2JmpRet(SB)

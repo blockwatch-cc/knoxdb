@@ -40,8 +40,8 @@ TEXT ·initAVX2Call(SB), NOSPLIT, $0-0
 
         RET
 
-// func DecodeAllAVX2Call(dst, src []uint64) (value int)
-TEXT ·DecodeAllAVX2Call(SB), NOSPLIT, $0-68
+// func decodeAllAVX2Call(dst, src []uint64) (value int)
+TEXT ·decodeAllAVX2Call(SB), NOSPLIT, $0-68
         MOVQ            dst_base(FP), DI
         MOVQ            src_base+24(FP), SI
         MOVQ            src_len+32(FP), BX
@@ -72,8 +72,8 @@ exit:
         MOVQ            DI, ret+48(FP)
         RET
 
-// func DecodeBytesBigEndianAVX2Core(dst []uint64, src []byte) (value int)
-TEXT ·DecodeBytesBigEndianAVX2Core(SB), NOSPLIT, $0-68
+// func decodeBytesBigEndianAVX2Core(dst []uint64, src []byte) (value int)
+TEXT ·decodeBytesBigEndianAVX2Core(SB), NOSPLIT, $0-68
         MOVQ            dst_base(FP), DI
         MOVQ            src_base+24(FP), SI
         MOVQ            src_len+32(FP), BX

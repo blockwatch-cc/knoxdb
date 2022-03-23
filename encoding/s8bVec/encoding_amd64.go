@@ -1,30 +1,38 @@
+// Copyright (c) 2022 Blockwatch Data Inc.
+// Author: stefan@blockwatch.cc
+
+//go:build go1.7 && amd64 && !gccgo && !appengine
+// +build go1.7,amd64,!gccgo,!appengine
+
 package s8bVec
 
 import (
 	"errors"
 	"unsafe"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 //go:noescape
-func DecodeAllAVX2Opt(dst, src []uint64) (value int)
+func decodeAllAVX2Opt(dst, src []uint64) (value int)
 
 //go:noescape
 func initAVX2Opt()
 
 //go:noescape
-func DecodeAllAVX2Jmp(dst, src []uint64) (value int)
+func decodeAllAVX2Jmp(dst, src []uint64) (value int)
 
 //go:noescape
-func DecodeAllAVX2JmpLoop()
+func decodeAllAVX2JmpLoop()
 
 //go:noescape
-func DecodeAllAVX2JmpRet()
+func decodeAllAVX2JmpRet()
 
 //go:noescape
-func DecodeAllAVX2JmpExit()
+func decodeAllAVX2JmpExit()
 
 //go:noescape
-func DecodeAllAVX2OptExit()
+func decodeAllAVX2OptExit()
 
 //go:noescape
 func initAVX2Jmp()
@@ -33,10 +41,10 @@ func initAVX2Jmp()
 func initAVX2Call()
 
 //go:noescape
-func DecodeAllAVX2Call(dst, src []uint64) (value int)
+func decodeAllAVX2Call(dst, src []uint64) (value int)
 
 //go:noescape
-func DecodeBytesBigEndianAVX2Core(dst []uint64, src []byte) (value int)
+func decodeBytesBigEndianAVX2Core(dst []uint64, src []byte) (value int)
 
 //go:noescape
 func unpack1AVX2Call(v uint64, dst *[240]uint64)
@@ -236,6 +244,33 @@ func init() {
 	initAVX2Call()
 }
 
+func decodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {
+	switch {
+	case util.UseAVX2:
+		return decodeBytesBigEndianAVX2(dst, src)
+	default:
+		return decodeBytesBigEndianGeneric(dst, src)
+	}
+}
+
+func decodeAll(dst, src []uint64) (value int, err error) {
+	switch {
+	case util.UseAVX2:
+		return decodeAllAVX2Call(dst, src), nil
+	default:
+		return decodeAllGeneric(dst, src)
+	}
+}
+
+func countBytes(b []byte) (int, error) {
+	switch {
+	// case util.UseAVX2:
+	//	return countBytesAVX2(b)
+	default:
+		return countBytesGeneric(b)
+	}
+}
+
 var selectorAVX2 [16]packing = [16]packing{
 	packing{240, 0, unpack240AVX2, pack240},
 	packing{120, 0, unpack120AVX2, pack120},
@@ -259,7 +294,7 @@ var selectorAVX2 [16]packing = [16]packing{
 // of values written or an error.
 //go:nocheckptr
 // nocheckptr while the underlying struct layout doesn't change
-func DecodeAllAVX2(dst, src []uint64) (value int, err error) {
+func decodeAllAVX2(dst, src []uint64) (value int, err error) {
 	j := 0
 	for _, v := range src {
 		sel := (v >> 60) & 0xf
@@ -269,9 +304,9 @@ func DecodeAllAVX2(dst, src []uint64) (value int, err error) {
 	return j, nil
 }
 
-func DecodeBytesBigEndianAVX2(dst []uint64, src []byte) (value int, err error) {
+func decodeBytesBigEndianAVX2(dst []uint64, src []byte) (value int, err error) {
 	if len(src)&7 != 0 {
 		return 0, errors.New("src length is not multiple of 8")
 	}
-	return DecodeBytesBigEndianAVX2Core(dst, src), nil
+	return decodeBytesBigEndianAVX2Core(dst, src), nil
 }

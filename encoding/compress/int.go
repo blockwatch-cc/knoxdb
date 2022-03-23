@@ -11,7 +11,7 @@ import (
 	"io"
 
 	"blockwatch.cc/knoxdb/encoding/s8bVec"
-	"blockwatch.cc/knoxdb/encoding/simple8b"
+	//	"blockwatch.cc/knoxdb/encoding/simple8b"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -173,7 +173,7 @@ func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) (int, error) {
 		}
 	}
 
-	if maxdelta > simple8b.MaxValue {
+	if maxdelta > s8bVec.MaxValue {
 		// There is an encoded value that's too big to simple8b encode, so
 		// encode uncompressed.
 
@@ -190,7 +190,7 @@ func integerArrayEncodeAll(src []int64, w io.Writer, isUint bool) (int, error) {
 	}
 
 	// Encode with simple8b - fist value is written unencoded using 8 bytes.
-	encoded, err := simple8b.EncodeAll(deltas[1:])
+	encoded, err := s8bVec.EncodeAll(deltas[1:])
 	if err != nil {
 		return 0, err
 	}
@@ -296,7 +296,7 @@ func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode packed value")
 	}
 
-	count, err := simple8b.CountBytes(b[8:])
+	count, err := s8bVec.CountBytes(b[8:])
 	if err != nil {
 		return []int64{}, err
 	}
@@ -313,7 +313,7 @@ func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 
 	// decode compressed values
 	buf := ReintepretInt64ToUint64Slice(dst)
-	n, err := simple8b.DecodeBytesBigEndian(buf[1:], b[8:])
+	n, err := s8bVec.DecodeBytesBigEndian(buf[1:], b[8:])
 	if err != nil {
 		return []int64{}, err
 	}
@@ -357,7 +357,7 @@ func integerBatchDecodeAllSimpleNew(b []byte, dst []int64, count int) ([]int64, 
 	// first value
 	buf[0] = binary.BigEndian.Uint64(b)
 	// decode compressed values
-	n, err := s8bVec.DecodeBytesBigEndianAVX2(buf[1:], b[8:])
+	n, err := s8bVec.DecodeBytesBigEndian(buf[1:], b[8:])
 	if err != nil {
 		return []int64{}, err
 	}

@@ -1230,7 +1230,6 @@ func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, 
 
 func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, error) {
 	cr := make([]float64, p.nFields)
-	ci := make([]int8, p.nFields)
 	ct := make([]float64, p.nFields)
 	dt := make([]float64, p.nFields)
 
@@ -1240,13 +1239,11 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 			cr[j] = -1
 			ct[j] = -1
 			dt[j] = -1
-			ci[j] = -1
 			continue
 		}
 		b2 := block.NewBlock(b.Type(), b.Compression(), b.Len())
 		check := true
 		var csize int = -1
-		var cinfo int8 = -1
 		var tcomp float64 = -1
 		var tdecomp float64 = -1
 		var err error
@@ -1264,7 +1261,6 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 			start := time.Now()
 			csize, err = b.Encode(buf)
 			tcomp = time.Since(start).Seconds()
-			cinfo = int8(buf.Bytes()[1])
 			if err == nil {
 				start = time.Now()
 				err = b2.Decode(buf.Bytes(), b.Len(), b2.MaxStoredSize())
@@ -1283,7 +1279,7 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 			if err == nil {
 				dst := make([]uint64, b.Len())
 				start := time.Now()
-				_ = s8bVec.DecodeAllAVX2Call(dst, src)
+				s8bVec.DecodeAll(dst, src)
 				compress.ZzDeltaDecodeUint64AVX2(dst)
 				tdecomp = time.Since(start).Seconds()
 				convertUint64ToBlock(b2, dst)
@@ -1303,7 +1299,7 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 				tcomp = time.Since(start).Seconds()
 				if err == nil {
 					start := time.Now()
-					_ = s8bVec.DecodeAllAVX2Call(dst, src)
+					s8bVec.DecodeAll(dst, src)
 					tdecomp = time.Since(start).Seconds()
 				}
 			} else {
@@ -1325,7 +1321,7 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 				tcomp = time.Since(start).Seconds()
 				if err == nil {
 					start := time.Now()
-					_ = s8bVec.DecodeAllAVX2Call(dst, src)
+					s8bVec.DecodeAll(dst, src)
 					if zz {
 						compress.ZzDecodeUint64AVX2(dst)
 					}
@@ -1368,7 +1364,6 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 		} else {
 			ct[j] = float64(p.blocks[j].HeapSize()) / tcomp / 1000000
 			dt[j] = float64(p.blocks[j].HeapSize()) / tdecomp / 1000000
-			ci[j] = cinfo
 		}
 		cr[j] = float64(csize) / float64(p.blocks[j].HeapSize())
 	}
