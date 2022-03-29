@@ -2080,6 +2080,11 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	}
 	q.stats.JournalTime = time.Since(q.lap)
 
+	// finalize on limit
+	if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
+		return res, nil
+	}
+
 	// reverse-scan packs only if
 	// (a) index match returned any results or
 	// (b) no index exists
