@@ -780,14 +780,16 @@ func (s *Bitset) UnmarshalBinary(data []byte) error {
 }
 
 func (s Bitset) MarshalText() ([]byte, error) {
-	str := hex.EncodeToString(s.Bytes())
-	return []byte(str), nil
+	return []byte(s.String()), nil
 }
 
 func (s *Bitset) UnmarshalText(data []byte) error {
 	buf, err := hex.DecodeString(string(data))
 	if err != nil {
 		return err
+	}
+	for i := range buf {
+		buf[i] = bitsetReverseLut256[buf[i]]
 	}
 	s.buf = buf
 	s.cnt = -1
