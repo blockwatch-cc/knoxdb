@@ -87,9 +87,9 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		case int32:
 			res, ok = int32(v), true
 		case int16:
-			res, ok = int64(v), true
+			res, ok = int32(v), true
 		case int8:
-			res, ok = int64(v), true
+			res, ok = int32(v), true
 		case Decimal32:
 			res, ok = int32(v.RoundToInt64()), true
 		case Decimal64:
