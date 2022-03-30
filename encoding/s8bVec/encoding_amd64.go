@@ -14,6 +14,9 @@ import (
 )
 
 //go:noescape
+func countBytesAVX2Core(src []byte) (count int)
+
+//go:noescape
 func decodeAllAVX2Opt(dst, src []uint64) (value int)
 
 //go:noescape
@@ -264,8 +267,8 @@ func decodeAll(dst, src []uint64) (value int, err error) {
 
 func countBytes(b []byte) (int, error) {
 	switch {
-	// case util.UseAVX2:
-	//	return countBytesAVX2(b)
+	case util.UseAVX2:
+		return countBytesAVX2(b)
 	default:
 		return countBytesGeneric(b)
 	}
@@ -309,4 +312,11 @@ func decodeBytesBigEndianAVX2(dst []uint64, src []byte) (value int, err error) {
 		return 0, errors.New("src length is not multiple of 8")
 	}
 	return decodeBytesBigEndianAVX2Core(dst, src), nil
+}
+
+func countBytesAVX2(src []byte) (int, error) {
+	if len(src)&7 != 0 {
+		return 0, errors.New("src length is not multiple of 8")
+	}
+	return countBytesAVX2Core(src), nil
 }

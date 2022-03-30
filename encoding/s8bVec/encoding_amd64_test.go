@@ -7,6 +7,7 @@
 package s8bVec
 
 import (
+	"encoding/binary"
 	"math/rand"
 	"testing"
 
@@ -34,6 +35,21 @@ func TestEncodeAllAVX2(t *testing.T) {
 					t.Fatalf("expected encode error, got\n%s", err)
 				}
 				return
+			}
+
+			buf := make([]byte, 8*len(encoded))
+			b := buf
+			for _, v := range encoded {
+				binary.BigEndian.PutUint64(b, v)
+				b = b[8:]
+			}
+			count, err := countBytesAVX2(buf)
+			if err != nil {
+				t.Fatalf("unexpected count error\n%s", err)
+			}
+
+			if count != len(test.in) {
+				t.Fatalf("unexpected count: got %d expected %d", count, len(test.in))
 			}
 
 			decoded := make([]uint64, len(test.in))
@@ -141,7 +157,34 @@ func TestEncodeAllAVX2Opt(t *testing.T) {
 	}
 }
 
+func BenchmarkCountBytesAVX2(b *testing.B) {
+	if !util.UseAVX2 {
+		b.Skip()
+	}
+	for _, bm := range s8bBenchmarks {
+		in := bm.fn(s8bBenchmarkSize)()
+		encoded, _ := EncodeAll(in)
+
+		buf := make([]byte, 8*len(encoded))
+		tmp := buf
+		for _, v := range encoded {
+			binary.BigEndian.PutUint64(tmp, v)
+			tmp = tmp[8:]
+		}
+
+		b.Run(bm.name, func(b *testing.B) {
+			b.SetBytes(int64(8 * bm.size))
+			for i := 0; i < b.N; i++ {
+				countBytesAVX2(buf)
+			}
+		})
+	}
+}
+
 func BenchmarkDecodeAllAVX2(b *testing.B) {
+	if !util.UseAVX2 {
+		b.Skip()
+	}
 	for _, bm := range s8bBenchmarks {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint64, len(in))

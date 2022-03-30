@@ -2,6 +2,7 @@
 package s8bVec
 
 import (
+	"encoding/binary"
 	"math/rand"
 	"testing"
 
@@ -138,7 +139,7 @@ var s8bTests = []struct {
 
 // TestEncodeAll ensures 100% test coverage of EncodeAll and
 // verifies all output by comparing the original input with the output of DecodeAll
-func TestEncodeAll(t *testing.T) {
+func TestEncodeAllGeneric(t *testing.T) {
 	rand.Seed(0)
 
 	for _, test := range s8bTests {
@@ -155,8 +156,23 @@ func TestEncodeAll(t *testing.T) {
 				return
 			}
 
+			buf := make([]byte, 8*len(encoded))
+			b := buf
+			for _, v := range encoded {
+				binary.BigEndian.PutUint64(b, v)
+				b = b[8:]
+			}
+			count, err := countBytesGeneric(buf)
+			if err != nil {
+				t.Fatalf("unexpected count error\n%s", err)
+			}
+
+			if count != len(test.in) {
+				t.Fatalf("unexpected count: got %d expected %d", count, len(test.in))
+			}
+
 			decoded := make([]uint64, len(test.in))
-			n, err := DecodeAll(decoded, encoded)
+			n, err := decodeAllGeneric(decoded, encoded)
 			if err != nil {
 				t.Fatalf("unexpected decode error\n%s", err)
 			}
@@ -462,7 +478,7 @@ func BenchmarkEncodeAll(b *testing.B) {
 	}
 }
 
-func BenchmarkDecodeAll(b *testing.B) {
+func BenchmarkDecodeAllGeneric(b *testing.B) {
 	for _, bm := range s8bBenchmarks {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint64, len(in))
@@ -470,7 +486,28 @@ func BenchmarkDecodeAll(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
 			for i := 0; i < b.N; i++ {
-				DecodeAll(out, comp)
+				decodeAllGeneric(out, comp)
+			}
+		})
+	}
+}
+
+func BenchmarkCountBytesGeneric(b *testing.B) {
+	for _, bm := range s8bBenchmarks {
+		in := bm.fn(s8bBenchmarkSize)()
+		encoded, _ := EncodeAll(in)
+
+		buf := make([]byte, 8*len(encoded))
+		tmp := buf
+		for _, v := range encoded {
+			binary.BigEndian.PutUint64(tmp, v)
+			tmp = tmp[8:]
+		}
+
+		b.Run(bm.name, func(b *testing.B) {
+			b.SetBytes(int64(8 * bm.size))
+			for i := 0; i < b.N; i++ {
+				countBytesGeneric(buf)
 			}
 		})
 	}
