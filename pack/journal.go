@@ -194,6 +194,7 @@ func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, int, error
 		return n, 0, err
 	}
 	// reset deleted pks to zero
+	idx, last = 0, 0
 	for _, v := range j.tomb {
 		idx, last = j.PkIndex(v, last)
 		if idx < 0 {
