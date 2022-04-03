@@ -22,7 +22,6 @@ import (
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
 	"blockwatch.cc/knoxdb/util"
-	// "blockwatch.cc/knoxdb/vec"
 )
 
 var (

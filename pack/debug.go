@@ -1017,7 +1017,7 @@ func uncompressHashBlock(chb CompressedHashBlock) ([]uint64, []uint64, error) {
 }
 
 func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, error) {
-	cr := make([]float64, p.nFields)
+	cs := make([]float64, p.nFields)
 	ct := make([]float64, p.nFields)
 	dt := make([]float64, p.nFields)
 
@@ -1085,24 +1085,24 @@ func (p *Package) compressIdx(cmethod string) ([]float64, []float64, []float64, 
 		ct[0] = -1
 		dt[0] = -1
 	} else {
-		ct[0] = float64(p.blocks[0].HeapSize()+p.blocks[1].HeapSize()) / tcomp / 1000000
-		dt[0] = float64(p.blocks[0].HeapSize()+p.blocks[1].HeapSize()) / tdecomp / 1000000
+		ct[0] = tcomp
+		dt[0] = tdecomp
 	}
-	cr[0] = float64(csize1) / float64(p.blocks[0].HeapSize())
-	cr[1] = float64(csize2) / float64(p.blocks[0].HeapSize())
+	cs[0] = float64(csize1)
+	cs[1] = float64(csize2)
 
-	return cr, ct, dt, nil
+	return cs, ct, dt, nil
 }
 
 func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, error) {
-	cr := make([]float64, p.nFields)
+	cs := make([]float64, p.nFields)
 	ct := make([]float64, p.nFields)
 	dt := make([]float64, p.nFields)
 
 	for j := 0; j < p.nFields; j++ {
 		b := p.blocks[j]
 		if !b.IsInt() {
-			cr[j] = -1
+			cs[j] = -1
 			ct[j] = -1
 			dt[j] = -1
 			continue
@@ -1224,16 +1224,11 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 		if check && !reflect.DeepEqual(b.RawSlice(), b2.RawSlice()) {
 			return nil, nil, nil, fmt.Errorf("Compression/Decompression error pack %v block %v", p.key, j)
 		}
-		if csize < 0 {
-			ct[j] = -1
-			dt[j] = -1
-		} else {
-			ct[j] = float64(p.blocks[j].HeapSize()) / tcomp / 1000000
-			dt[j] = float64(p.blocks[j].HeapSize()) / tdecomp / 1000000
-		}
-		cr[j] = float64(csize) / float64(p.blocks[j].HeapSize())
+		ct[j] = tcomp
+		dt[j] = tdecomp
+		cs[j] = float64(csize)
 	}
-	return cr, ct, dt, nil
+	return cs, ct, dt, nil
 }
 
 func (t *Table) CompressPack(cmethod string, w io.Writer, i int, mode DumpMode) error {
@@ -1253,11 +1248,24 @@ func (t *Table) CompressPack(cmethod string, w io.Writer, i int, mode DumpMode) 
 	cratios := make([][]float64, 1)
 	ctimes := make([][]float64, 1)
 	dtimes := make([][]float64, 1)
-	cr, ct, dt, err := pkg.compress(cmethod)
+	cs, ct, dt, err := pkg.compress(cmethod)
 	if err != nil {
 		return err
 	}
-	cratios[0] = cr
+
+	for j := 0; j < pkg.nFields; j++ {
+		if cs[j] < 0 {
+			ct[j] = -1
+			dt[j] = -1
+		} else {
+			usize := float64(pkg.blocks[j].HeapSize())
+			ct[j] = usize / ct[j] / 1000000
+			dt[j] = usize / dt[j] / 1000000
+			cs[j] = cs[j] / usize
+		}
+	}
+
+	cratios[0] = cs
 	ctimes[0] = ct
 	dtimes[0] = dt
 
@@ -1284,13 +1292,26 @@ func (t *Table) CompressIndexPack(cmethod string, w io.Writer, i, p int, mode Du
 	cratios := make([][]float64, 1)
 	ctimes := make([][]float64, 1)
 	dtimes := make([][]float64, 1)
-	cr, ct, dt, err := pkg.compressIdx(cmethod)
+	cs, ct, dt, err := pkg.compressIdx(cmethod)
 	if err != nil {
 		return err
 	}
-	cratios[0] = cr
+	for j := 0; j < pkg.nFields; j++ {
+		if cs[j] < 0 {
+			ct[j] = -1
+			dt[j] = -1
+		} else {
+			usize := float64(pkg.blocks[0].HeapSize() + pkg.blocks[1].HeapSize())
+			ct[j] = usize / ct[j] / 1000000
+			dt[j] = usize / dt[j] / 1000000
+			cs[j] = cs[j] / usize
+		}
+	}
+
+	cratios[0] = cs
 	ctimes[0] = ct
 	dtimes[0] = dt
+
 	fl := FieldList{{Name: "Hash", Type: "uint64"}, {Name: "PK", Type: "uint64"}}
 
 	return DumpCompressResults(fl, cratios, ctimes, dtimes, w, mode, false)
@@ -1303,26 +1324,64 @@ func (t *Table) CompressIndexAll(cmethod string, i int, w io.Writer, mode DumpMo
 	}
 	defer tx.Rollback()
 
-	cratios := make([][]float64, t.indexes[i].packidx.Len())
-	ctimes := make([][]float64, t.indexes[i].packidx.Len())
-	dtimes := make([][]float64, t.indexes[i].packidx.Len())
+	nPacks := t.packidx.Len()
+	cratios := make([][]float64, nPacks+1)
+	ctimes := make([][]float64, nPacks+1)
+	dtimes := make([][]float64, nPacks+1)
 
-	for p := 0; p < t.indexes[i].packidx.Len(); p++ {
+	colCSize := make([]float64, 2)
+	colUSize := make([]float64, 2)
+	colCTime := make([]float64, 2)
+	colDTime := make([]float64, 2)
+
+	for p := 0; p < nPacks; p++ {
 		pkg, err := t.indexes[i].loadSharedPack(tx, t.indexes[i].packidx.packs[p].Key, false)
 		if err != nil {
 			return err
 		}
 
-		cr, ct, dt, err := pkg.compressIdx(cmethod)
+		cs, ct, dt, err := pkg.compressIdx(cmethod)
 		if err != nil {
 			return err
 		}
-		cratios[p] = cr
+
+		for j := 0; j < pkg.nFields; j++ {
+			if cs[j] < 0 {
+				ct[j] = -1
+				dt[j] = -1
+			} else {
+				usize := float64(pkg.blocks[0].HeapSize() + pkg.blocks[1].HeapSize())
+				colUSize[j] += usize
+				colCSize[j] += cs[j]
+				colCTime[j] += ct[j]
+				colDTime[j] += dt[j]
+				ct[j] = usize / ct[j] / 1000000
+				dt[j] = usize / dt[j] / 1000000
+				cs[j] = cs[j] / usize
+			}
+		}
+		cratios[p] = cs
 		ctimes[p] = ct
 		dtimes[p] = dt
+
 		fmt.Printf(".")
 	}
 	fmt.Printf("\nProcessed %d packs\n", t.indexes[i].packidx.Len())
+
+	var totalUSize, totalCSize, totalCTime, totalDTime float64
+	for j := 0; j < 2; j++ {
+		usize := colUSize[j]
+		totalUSize += usize
+		totalCSize += colCSize[j]
+		totalCTime += colCTime[j]
+		totalDTime += colDTime[j]
+		colCTime[j] = usize / colCTime[j] / 1000000
+		colDTime[j] = usize / colDTime[j] / 1000000
+		colCSize[j] = colCSize[j] / usize
+	}
+	cratios[nPacks] = colCSize
+	ctimes[nPacks] = colCTime
+	dtimes[nPacks] = colDTime
 
 	fl := FieldList{{Name: "Hash", Type: "uint64"}, {Name: "PK", Type: "uint64"}}
 	return DumpCompressResults(fl, cratios, ctimes, dtimes, w, mode, verbose)
@@ -1374,28 +1433,77 @@ func (t *Table) CompressAll(cmethod string, w io.Writer, mode DumpMode, verbose 
 	}
 	defer tx.Rollback()
 
-	cratios := make([][]float64, t.packidx.Len())
-	ctimes := make([][]float64, t.packidx.Len())
-	dtimes := make([][]float64, t.packidx.Len())
+	nPacks := t.packidx.Len()
+	cratios := make([][]float64, nPacks+1)
+	ctimes := make([][]float64, nPacks+1)
+	dtimes := make([][]float64, nPacks+1)
 
-	for i := 0; i < t.packidx.Len(); i++ {
-		// fmt.Printf("Pack %d\n", i)
+	colCSize := make([]float64, len(t.fields))
+	colUSize := make([]float64, len(t.fields))
+	colCTime := make([]float64, len(t.fields))
+	colDTime := make([]float64, len(t.fields))
+
+	for i := 0; i < nPacks; i++ {
 		pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, false, nil)
 		if err != nil {
 			return err
 		}
 
-		cr, ct, dt, err := pkg.compress(cmethod)
+		cs, ct, dt, err := pkg.compress(cmethod)
 		if err != nil {
 			return err
 		}
-		cratios[i] = cr
+
+		for j := 0; j < pkg.nFields; j++ {
+			if cs[j] < 0 {
+				ct[j] = -1
+				dt[j] = -1
+			} else {
+				usize := float64(pkg.blocks[j].HeapSize())
+				colUSize[j] += usize
+				colCSize[j] += cs[j]
+				colCTime[j] += ct[j]
+				colDTime[j] += dt[j]
+				ct[j] = usize / ct[j] / 1000000
+				dt[j] = usize / dt[j] / 1000000
+				cs[j] = cs[j] / usize
+			}
+		}
+		cratios[i] = cs
 		ctimes[i] = ct
 		dtimes[i] = dt
 		fmt.Printf(".")
 	}
-	fmt.Printf("\nProcessed %d packs\n", t.packidx.Len())
-	return DumpCompressResults(t.fields, cratios, ctimes, dtimes, w, mode, verbose)
+	fmt.Printf("\nProcessed %d packs\n", nPacks)
+	var totalUSize, totalCSize, totalCTime, totalDTime float64
+	for j := 0; j < len(t.fields); j++ {
+		usize := colUSize[j]
+		totalUSize += usize
+		totalCSize += colCSize[j]
+		totalCTime += colCTime[j]
+		totalDTime += colDTime[j]
+		colCTime[j] = usize / colCTime[j] / 1000000
+		colDTime[j] = usize / colDTime[j] / 1000000
+		colCSize[j] = colCSize[j] / usize
+	}
+	cratios[nPacks] = colCSize
+	ctimes[nPacks] = colCTime
+	dtimes[nPacks] = colDTime
+
+	ret := DumpCompressResults(t.fields, cratios, ctimes, dtimes, w, mode, verbose)
+
+	if ret != nil {
+		return ret
+	}
+	fmt.Printf("\nUncompressed Size: %.2fGB\n", totalUSize/1000000000)
+	fmt.Printf("Compressed Size: %.2fGB\n", totalCSize/1000000000)
+	fmt.Printf("Compression Ratio: %.1f%%\n", (1-totalCSize/totalUSize)*100)
+	fmt.Printf("Compression Time: %.0fs\n", totalCTime)
+	fmt.Printf("Compression Throughput: %.0fMB/s\n", totalUSize/totalCTime/1000000)
+	fmt.Printf("Decompression Time: %.0fs\n", totalDTime)
+	fmt.Printf("Decompression Throughput: %.0fMB/s\n", totalUSize/totalDTime/1000000)
+
+	return nil
 }
 
 func (t *Table) ShowCompression(cmethod string, w io.Writer, mode DumpMode, verbose bool) error {
@@ -1410,7 +1518,6 @@ func (t *Table) ShowCompression(cmethod string, w io.Writer, mode DumpMode, verb
 
 	var csize int
 	for i := 0; i < t.packidx.Len(); i++ {
-		// fmt.Printf("Pack %d\n", i)
 		pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, false, nil)
 		cr := make([]float64, pkg.nFields)
 		ct := make([]int8, pkg.nFields)
@@ -1475,6 +1582,10 @@ func DumpRatios(fl FieldList, cratios [][]float64, w io.Writer, mode DumpMode, v
 	}
 
 	names = append([]string{"Pack"}, names...)
+	nPacks := len(cratios) - 1 // last row is average
+	if nPacks == 0 {
+		nPacks = 1
+	}
 
 	// estimate sizes from the first 500 values
 	switch mode {
@@ -1525,11 +1636,9 @@ func DumpRatios(fl FieldList, cratios [][]float64, w io.Writer, mode DumpMode, v
 		if _, err := w.Write([]byte(out)); err != nil {
 			return err
 		}
-		avg := make([]float64, len(cratios[0]))
-		for i := 0; i < len(cratios); i++ {
+		for i := 0; i < nPacks; i++ {
 			row[0] = fmt.Sprintf("%[2]*[1]d", i, sz[0])
 			for j := 0; j < len(cratios[0]); j++ {
-				avg[j] += cratios[i][j]
 				if cratios[i][j] < 0 {
 					row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
 				} else {
@@ -1578,11 +1687,12 @@ func DumpRatios(fl FieldList, cratios [][]float64, w io.Writer, mode DumpMode, v
 			}
 		}
 		row[0] = fmt.Sprintf(" AVG")
+		avg := cratios[nPacks]
 		for j := 0; j < len(avg); j++ {
 			if avg[j] < 0 {
 				row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
 			} else {
-				row[j+1] = fmt.Sprintf("%[2]*.[1]f%%", 100*(1-avg[j]/float64(len(cratios))), sz[j+1]-1)
+				row[j+1] = fmt.Sprintf("%[2]*.[1]f%%", 100*(1-avg[j]), sz[j+1]-1)
 			}
 		}
 		out = "| " + strings.Join(row, " | ") + " |\n"
@@ -1776,6 +1886,10 @@ func DumpTimes(fl FieldList, ctimes [][]float64, w io.Writer, mode DumpMode, ver
 	}
 
 	names = append([]string{"Pack"}, names...)
+	nPacks := len(ctimes) - 1 // last row is average
+	if nPacks == 0 {
+		nPacks = 1
+	}
 
 	// estimate sizes from the first 500 values
 	switch mode {
@@ -1816,11 +1930,9 @@ func DumpTimes(fl FieldList, ctimes [][]float64, w io.Writer, mode DumpMode, ver
 		if _, err := w.Write([]byte(out)); err != nil {
 			return err
 		}
-		avg := make([]float64, len(ctimes[0]))
-		for i := 0; i < len(ctimes); i++ {
+		for i := 0; i < nPacks; i++ {
 			row[0] = fmt.Sprintf("%[2]*[1]d", i, sz[0])
 			for j := 0; j < len(ctimes[0]); j++ {
-				avg[j] += ctimes[i][j]
 				if ctimes[i][j] < 0 {
 					row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
 				} else {
@@ -1869,11 +1981,12 @@ func DumpTimes(fl FieldList, ctimes [][]float64, w io.Writer, mode DumpMode, ver
 			}
 		}
 		row[0] = fmt.Sprintf(" AVG")
+		avg := ctimes[nPacks]
 		for j := 0; j < len(avg); j++ {
 			if avg[j] < 0 {
 				row[j+1] = fmt.Sprintf("%[2]*[1]s", "", sz[j+1])
 			} else {
-				row[j+1] = fmt.Sprintf("%[2]*.[1]f", avg[j]/float64(len(ctimes)), sz[j+1])
+				row[j+1] = fmt.Sprintf("%[2]*.[1]f", avg[j], sz[j+1])
 			}
 		}
 		out = "| " + strings.Join(row, " | ") + " |\n"
