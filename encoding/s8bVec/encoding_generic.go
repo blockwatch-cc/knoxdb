@@ -21,6 +21,18 @@ func decodeAllGeneric(dst, src []uint64) (value int, err error) {
 
 // go:nocheckptr
 // nocheckptr while the underlying struct layout doesn't change
+func decodeAll32bitGeneric(dst []uint32, src []uint64) (value int, err error) {
+	j := 0
+	for _, v := range src {
+		sel := (v >> 60) & 0xf
+		selector32[sel].unpack(v, (*[240]uint32)(unsafe.Pointer(&dst[j])))
+		j += selector[sel].n
+	}
+	return j, nil
+}
+
+// go:nocheckptr
+// nocheckptr while the underlying struct layout doesn't change
 func decodeBytesBigEndianGeneric(dst []uint64, src []byte) (value int, err error) {
 	if len(src)&7 != 0 {
 		return 0, errors.New("src length is not multiple of 8")

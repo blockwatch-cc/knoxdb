@@ -44,7 +44,13 @@ func initAVX2Jmp()
 func initAVX2Call()
 
 //go:noescape
+func init32bitAVX2Call()
+
+//go:noescape
 func decodeAllAVX2Call(dst, src []uint64) (value int)
+
+//go:noescape
+func decodeAll32bitAVX2(dst []uint32, src []uint64) (value int)
 
 //go:noescape
 func decodeBytesBigEndianAVX2Core(dst []uint64, src []byte) (value int)
@@ -96,6 +102,54 @@ func unpack120AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
 func unpack240AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit1AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit2AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit3AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit4AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit5AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit6AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit7AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit8AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit10AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit12AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit15AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit20AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit30AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit60AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit120AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit240AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
 func unpack1AVX2Jmp(v uint64, dst *[240]uint64)
@@ -245,6 +299,7 @@ func init() {
 	initAVX2Jmp()
 	initAVX2Opt()
 	initAVX2Call()
+	init32bitAVX2Call()
 }
 
 func decodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {

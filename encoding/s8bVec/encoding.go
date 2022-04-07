@@ -212,6 +212,31 @@ var selector [16]packing = [16]packing{
 	packing{1, 60, unpack1, pack1},
 }
 
+type packing32 struct {
+	n, bit int
+	unpack func(uint64, *[240]uint32)
+	pack   func([]uint64) uint64
+}
+
+var selector32 [16]packing32 = [16]packing32{
+	packing32{240, 0, unpack32bit240, pack240},
+	packing32{120, 0, unpack32bit120, pack120},
+	packing32{60, 1, unpack32bit60, pack60},
+	packing32{30, 2, unpack32bit30, pack30},
+	packing32{20, 3, unpack32bit20, pack20},
+	packing32{15, 4, unpack32bit15, pack15},
+	packing32{12, 5, unpack32bit12, pack12},
+	packing32{10, 6, unpack32bit10, pack10},
+	packing32{8, 7, unpack32bit8, pack8},
+	packing32{7, 8, unpack32bit7, pack7},
+	packing32{6, 10, unpack32bit6, pack6},
+	packing32{5, 12, unpack32bit5, pack5},
+	packing32{4, 15, unpack32bit4, pack4},
+	packing32{3, 20, unpack32bit3, pack3},
+	packing32{2, 30, unpack32bit2, pack2},
+	packing32{1, 60, unpack32bit1, pack1},
+}
+
 // Count returns the number of integers encoded in the byte slice
 func CountBytes(b []byte) (int, error) {
 	return countBytes(b)
@@ -1002,4 +1027,241 @@ func unpack2(v uint64, dst *[240]uint64) {
 
 func unpack1(v uint64, dst *[240]uint64) {
 	dst[0] = v & 1152921504606846975
+}
+
+func unpack32bit240(v uint64, dst *[240]uint32) {
+	for i := range dst {
+		dst[i] = 1
+	}
+}
+
+func unpack32bit120(v uint64, dst *[240]uint32) {
+	for i := range dst[:120] {
+		dst[i] = 1
+	}
+}
+
+func unpack32bit60(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 1)
+	dst[1] = uint32((v >> 1) & 1)
+	dst[2] = uint32((v >> 2) & 1)
+	dst[3] = uint32((v >> 3) & 1)
+	dst[4] = uint32((v >> 4) & 1)
+	dst[5] = uint32((v >> 5) & 1)
+	dst[6] = uint32((v >> 6) & 1)
+	dst[7] = uint32((v >> 7) & 1)
+	dst[8] = uint32((v >> 8) & 1)
+	dst[9] = uint32((v >> 9) & 1)
+	dst[10] = uint32((v >> 10) & 1)
+	dst[11] = uint32((v >> 11) & 1)
+	dst[12] = uint32((v >> 12) & 1)
+	dst[13] = uint32((v >> 13) & 1)
+	dst[14] = uint32((v >> 14) & 1)
+	dst[15] = uint32((v >> 15) & 1)
+	dst[16] = uint32((v >> 16) & 1)
+	dst[17] = uint32((v >> 17) & 1)
+	dst[18] = uint32((v >> 18) & 1)
+	dst[19] = uint32((v >> 19) & 1)
+	dst[20] = uint32((v >> 20) & 1)
+	dst[21] = uint32((v >> 21) & 1)
+	dst[22] = uint32((v >> 22) & 1)
+	dst[23] = uint32((v >> 23) & 1)
+	dst[24] = uint32((v >> 24) & 1)
+	dst[25] = uint32((v >> 25) & 1)
+	dst[26] = uint32((v >> 26) & 1)
+	dst[27] = uint32((v >> 27) & 1)
+	dst[28] = uint32((v >> 28) & 1)
+	dst[29] = uint32((v >> 29) & 1)
+	dst[30] = uint32((v >> 30) & 1)
+	dst[31] = uint32((v >> 31) & 1)
+	dst[32] = uint32((v >> 32) & 1)
+	dst[33] = uint32((v >> 33) & 1)
+	dst[34] = uint32((v >> 34) & 1)
+	dst[35] = uint32((v >> 35) & 1)
+	dst[36] = uint32((v >> 36) & 1)
+	dst[37] = uint32((v >> 37) & 1)
+	dst[38] = uint32((v >> 38) & 1)
+	dst[39] = uint32((v >> 39) & 1)
+	dst[40] = uint32((v >> 40) & 1)
+	dst[41] = uint32((v >> 41) & 1)
+	dst[42] = uint32((v >> 42) & 1)
+	dst[43] = uint32((v >> 43) & 1)
+	dst[44] = uint32((v >> 44) & 1)
+	dst[45] = uint32((v >> 45) & 1)
+	dst[46] = uint32((v >> 46) & 1)
+	dst[47] = uint32((v >> 47) & 1)
+	dst[48] = uint32((v >> 48) & 1)
+	dst[49] = uint32((v >> 49) & 1)
+	dst[50] = uint32((v >> 50) & 1)
+	dst[51] = uint32((v >> 51) & 1)
+	dst[52] = uint32((v >> 52) & 1)
+	dst[53] = uint32((v >> 53) & 1)
+	dst[54] = uint32((v >> 54) & 1)
+	dst[55] = uint32((v >> 55) & 1)
+	dst[56] = uint32((v >> 56) & 1)
+	dst[57] = uint32((v >> 57) & 1)
+	dst[58] = uint32((v >> 58) & 1)
+	dst[59] = uint32((v >> 59) & 1)
+}
+
+func unpack32bit30(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 3)
+	dst[1] = uint32((v >> 2) & 3)
+	dst[2] = uint32((v >> 4) & 3)
+	dst[3] = uint32((v >> 6) & 3)
+	dst[4] = uint32((v >> 8) & 3)
+	dst[5] = uint32((v >> 10) & 3)
+	dst[6] = uint32((v >> 12) & 3)
+	dst[7] = uint32((v >> 14) & 3)
+	dst[8] = uint32((v >> 16) & 3)
+	dst[9] = uint32((v >> 18) & 3)
+	dst[10] = uint32((v >> 20) & 3)
+	dst[11] = uint32((v >> 22) & 3)
+	dst[12] = uint32((v >> 24) & 3)
+	dst[13] = uint32((v >> 26) & 3)
+	dst[14] = uint32((v >> 28) & 3)
+	dst[15] = uint32((v >> 30) & 3)
+	dst[16] = uint32((v >> 32) & 3)
+	dst[17] = uint32((v >> 34) & 3)
+	dst[18] = uint32((v >> 36) & 3)
+	dst[19] = uint32((v >> 38) & 3)
+	dst[20] = uint32((v >> 40) & 3)
+	dst[21] = uint32((v >> 42) & 3)
+	dst[22] = uint32((v >> 44) & 3)
+	dst[23] = uint32((v >> 46) & 3)
+	dst[24] = uint32((v >> 48) & 3)
+	dst[25] = uint32((v >> 50) & 3)
+	dst[26] = uint32((v >> 52) & 3)
+	dst[27] = uint32((v >> 54) & 3)
+	dst[28] = uint32((v >> 56) & 3)
+	dst[29] = uint32((v >> 58) & 3)
+}
+
+func unpack32bit20(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 7)
+	dst[1] = uint32((v >> 3) & 7)
+	dst[2] = uint32((v >> 6) & 7)
+	dst[3] = uint32((v >> 9) & 7)
+	dst[4] = uint32((v >> 12) & 7)
+	dst[5] = uint32((v >> 15) & 7)
+	dst[6] = uint32((v >> 18) & 7)
+	dst[7] = uint32((v >> 21) & 7)
+	dst[8] = uint32((v >> 24) & 7)
+	dst[9] = uint32((v >> 27) & 7)
+	dst[10] = uint32((v >> 30) & 7)
+	dst[11] = uint32((v >> 33) & 7)
+	dst[12] = uint32((v >> 36) & 7)
+	dst[13] = uint32((v >> 39) & 7)
+	dst[14] = uint32((v >> 42) & 7)
+	dst[15] = uint32((v >> 45) & 7)
+	dst[16] = uint32((v >> 48) & 7)
+	dst[17] = uint32((v >> 51) & 7)
+	dst[18] = uint32((v >> 54) & 7)
+	dst[19] = uint32((v >> 57) & 7)
+}
+
+func unpack32bit15(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 15)
+	dst[1] = uint32((v >> 4) & 15)
+	dst[2] = uint32((v >> 8) & 15)
+	dst[3] = uint32((v >> 12) & 15)
+	dst[4] = uint32((v >> 16) & 15)
+	dst[5] = uint32((v >> 20) & 15)
+	dst[6] = uint32((v >> 24) & 15)
+	dst[7] = uint32((v >> 28) & 15)
+	dst[8] = uint32((v >> 32) & 15)
+	dst[9] = uint32((v >> 36) & 15)
+	dst[10] = uint32((v >> 40) & 15)
+	dst[11] = uint32((v >> 44) & 15)
+	dst[12] = uint32((v >> 48) & 15)
+	dst[13] = uint32((v >> 52) & 15)
+	dst[14] = uint32((v >> 56) & 15)
+}
+
+func unpack32bit12(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 31)
+	dst[1] = uint32((v >> 5) & 31)
+	dst[2] = uint32((v >> 10) & 31)
+	dst[3] = uint32((v >> 15) & 31)
+	dst[4] = uint32((v >> 20) & 31)
+	dst[5] = uint32((v >> 25) & 31)
+	dst[6] = uint32((v >> 30) & 31)
+	dst[7] = uint32((v >> 35) & 31)
+	dst[8] = uint32((v >> 40) & 31)
+	dst[9] = uint32((v >> 45) & 31)
+	dst[10] = uint32((v >> 50) & 31)
+	dst[11] = uint32((v >> 55) & 31)
+}
+
+func unpack32bit10(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 63)
+	dst[1] = uint32((v >> 6) & 63)
+	dst[2] = uint32((v >> 12) & 63)
+	dst[3] = uint32((v >> 18) & 63)
+	dst[4] = uint32((v >> 24) & 63)
+	dst[5] = uint32((v >> 30) & 63)
+	dst[6] = uint32((v >> 36) & 63)
+	dst[7] = uint32((v >> 42) & 63)
+	dst[8] = uint32((v >> 48) & 63)
+	dst[9] = uint32((v >> 54) & 63)
+}
+
+func unpack32bit8(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 127)
+	dst[1] = uint32((v >> 7) & 127)
+	dst[2] = uint32((v >> 14) & 127)
+	dst[3] = uint32((v >> 21) & 127)
+	dst[4] = uint32((v >> 28) & 127)
+	dst[5] = uint32((v >> 35) & 127)
+	dst[6] = uint32((v >> 42) & 127)
+	dst[7] = uint32((v >> 49) & 127)
+}
+
+func unpack32bit7(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 255)
+	dst[1] = uint32((v >> 8) & 255)
+	dst[2] = uint32((v >> 16) & 255)
+	dst[3] = uint32((v >> 24) & 255)
+	dst[4] = uint32((v >> 32) & 255)
+	dst[5] = uint32((v >> 40) & 255)
+	dst[6] = uint32((v >> 48) & 255)
+}
+
+func unpack32bit6(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 1023)
+	dst[1] = uint32((v >> 10) & 1023)
+	dst[2] = uint32((v >> 20) & 1023)
+	dst[3] = uint32((v >> 30) & 1023)
+	dst[4] = uint32((v >> 40) & 1023)
+	dst[5] = uint32((v >> 50) & 1023)
+}
+
+func unpack32bit5(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 4095)
+	dst[1] = uint32((v >> 12) & 4095)
+	dst[2] = uint32((v >> 24) & 4095)
+	dst[3] = uint32((v >> 36) & 4095)
+	dst[4] = uint32((v >> 48) & 4095)
+}
+
+func unpack32bit4(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 32767)
+	dst[1] = uint32((v >> 15) & 32767)
+	dst[2] = uint32((v >> 30) & 32767)
+	dst[3] = uint32((v >> 45) & 32767)
+}
+
+func unpack32bit3(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 1048575)
+	dst[1] = uint32((v >> 20) & 1048575)
+	dst[2] = uint32((v >> 40) & 1048575)
+}
+
+func unpack32bit2(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 1073741823)
+	dst[1] = uint32((v >> 30) & 1073741823)
+}
+
+func unpack32bit1(v uint64, dst *[240]uint32) {
+	dst[0] = uint32(v & 1152921504606846975)
 }
