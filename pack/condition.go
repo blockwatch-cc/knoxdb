@@ -1493,7 +1493,7 @@ func (n ConditionTreeNode) NoMatch() bool {
 func (n ConditionTreeNode) Compile() error {
 	if n.Leaf() {
 		if err := n.Cond.Compile(); err != nil {
-			return nil
+			return err
 		}
 	} else {
 		for _, v := range n.Children {
@@ -1836,14 +1836,15 @@ func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *Bitset {
 			}
 
 			// match vector against condition using last match as mask
+			//
+			// Note that an optimization exists for IN/NIN on all types
+			// which implicitly assumes an AND between mask and vector,
+			// i.e. it skips checks for all elems with a mask bit set.
+			// For correctness this still works because we merge mask
+			// and pack match set using OR below. However we cannot
+			// use a shortcut (on all pack bits == 1).
 			b = c.MatchPack(pkg, bits)
 		}
-
-		// shortcut
-		// if b.Count() == 0 {
-		// 	b.Close()
-		// 	continue
-		// }
 
 		// merge
 		bits.Or(b)
