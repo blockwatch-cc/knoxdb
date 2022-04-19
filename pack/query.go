@@ -131,6 +131,14 @@ func (q *Query) Compile(t *Table) error {
 	q.start = time.Now()
 	q.lap = q.start
 
+	// ensure all queried fields exist
+	tableFields := t.Fields()
+	for _, f := range q.Conditions.Fields() {
+		if !tableFields.Contains(f.Name) {
+			return fmt.Errorf("pack: missing table field %s in table %s for query %s", f.Name, t.Name, q.Name)
+		}
+	}
+
 	// process conditions first
 	if err := q.Conditions.Compile(); err != nil {
 		return fmt.Errorf("pack: %s %v", q.Name, err)
