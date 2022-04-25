@@ -13,44 +13,66 @@ import (
 	"blockwatch.cc/knoxdb/util"
 )
 
+/*************************** AVX2 ******************************/
+
 //go:noescape
 func countBytesAVX2Core(src []byte) (count int)
 
 //go:noescape
-func decodeAllAVX2Opt(dst, src []uint64) (value int)
+func unpack1AVX2(v uint64, dst *[240]uint64)
 
 //go:noescape
-func initAVX2Opt()
+func unpack2AVX2(v uint64, dst *[240]uint64)
 
 //go:noescape
-func decodeAllAVX2Jmp(dst, src []uint64) (value int)
+func unpack3AVX2(v uint64, dst *[240]uint64)
 
 //go:noescape
-func decodeAllAVX2JmpLoop()
+func unpack4AVX2(v uint64, dst *[240]uint64)
 
 //go:noescape
-func decodeAllAVX2JmpRet()
+func unpack5AVX2(v uint64, dst *[240]uint64)
 
 //go:noescape
-func decodeAllAVX2JmpExit()
+func unpack6AVX2(v uint64, dst *[240]uint64)
 
 //go:noescape
-func decodeAllAVX2OptExit()
+func unpack7AVX2(v uint64, dst *[240]uint64)
 
 //go:noescape
-func initAVX2Jmp()
+func unpack8AVX2(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack10AVX2(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack12AVX2(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack15AVX2(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack20AVX2(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack30AVX2(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack60AVX2(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack120AVX2(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack240AVX2(v uint64, dst *[240]uint64)
+
+/**************************** AVX2 Call **************************/
 
 //go:noescape
 func initAVX2Call()
 
 //go:noescape
-func init32bitAVX2Call()
-
-//go:noescape
 func decodeAllAVX2Call(dst, src []uint64) (value int)
-
-//go:noescape
-func decodeAll32bitAVX2(dst []uint32, src []uint64) (value int)
 
 //go:noescape
 func decodeBytesBigEndianAVX2Core(dst []uint64, src []byte) (value int)
@@ -103,53 +125,22 @@ func unpack120AVX2Call(v uint64, dst *[240]uint64)
 //go:noescape
 func unpack240AVX2Call(v uint64, dst *[240]uint64)
 
-//go:noescape
-func unpack32bit1AVX2Call(v uint64, dst *[240]uint64)
+/* ************************* AVX2 JMP ****************************/
 
 //go:noescape
-func unpack32bit2AVX2Call(v uint64, dst *[240]uint64)
+func initAVX2Jmp()
 
 //go:noescape
-func unpack32bit3AVX2Call(v uint64, dst *[240]uint64)
+func decodeAllAVX2Jmp(dst, src []uint64) (value int)
 
 //go:noescape
-func unpack32bit4AVX2Call(v uint64, dst *[240]uint64)
+func decodeAllAVX2JmpLoop()
 
 //go:noescape
-func unpack32bit5AVX2Call(v uint64, dst *[240]uint64)
+func decodeAllAVX2JmpRet()
 
 //go:noescape
-func unpack32bit6AVX2Call(v uint64, dst *[240]uint64)
-
-//go:noescape
-func unpack32bit7AVX2Call(v uint64, dst *[240]uint64)
-
-//go:noescape
-func unpack32bit8AVX2Call(v uint64, dst *[240]uint64)
-
-//go:noescape
-func unpack32bit10AVX2Call(v uint64, dst *[240]uint64)
-
-//go:noescape
-func unpack32bit12AVX2Call(v uint64, dst *[240]uint64)
-
-//go:noescape
-func unpack32bit15AVX2Call(v uint64, dst *[240]uint64)
-
-//go:noescape
-func unpack32bit20AVX2Call(v uint64, dst *[240]uint64)
-
-//go:noescape
-func unpack32bit30AVX2Call(v uint64, dst *[240]uint64)
-
-//go:noescape
-func unpack32bit60AVX2Call(v uint64, dst *[240]uint64)
-
-//go:noescape
-func unpack32bit120AVX2Call(v uint64, dst *[240]uint64)
-
-//go:noescape
-func unpack32bit240AVX2Call(v uint64, dst *[240]uint64)
+func decodeAllAVX2JmpExit()
 
 //go:noescape
 func unpack1AVX2Jmp(v uint64, dst *[240]uint64)
@@ -199,6 +190,17 @@ func unpack120AVX2Jmp(v uint64, dst *[240]uint64)
 //go:noescape
 func unpack240AVX2Jmp(v uint64, dst *[240]uint64)
 
+/************************ AVX2 Opt ******************************/
+
+//go:noescape
+func decodeAllAVX2Opt(dst, src []uint64) (value int)
+
+//go:noescape
+func initAVX2Opt()
+
+//go:noescape
+func decodeAllAVX2OptExit()
+
 //go:noescape
 func unpack1AVX2Opt(v uint64, dst *[240]uint64)
 
@@ -247,59 +249,134 @@ func unpack120AVX2Opt(v uint64, dst *[240]uint64)
 //go:noescape
 func unpack240AVX2Opt(v uint64, dst *[240]uint64)
 
-//go:noescape
-func unpack1AVX2(v uint64, dst *[240]uint64)
+/************************ AVX2 32bit ***************************/
 
 //go:noescape
-func unpack2AVX2(v uint64, dst *[240]uint64)
+func init32bitAVX2Call()
 
 //go:noescape
-func unpack3AVX2(v uint64, dst *[240]uint64)
+func decodeAll32bitAVX2(dst []uint32, src []uint64) (value int)
 
 //go:noescape
-func unpack4AVX2(v uint64, dst *[240]uint64)
+func unpack32bit1AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack5AVX2(v uint64, dst *[240]uint64)
+func unpack32bit2AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack6AVX2(v uint64, dst *[240]uint64)
+func unpack32bit3AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack7AVX2(v uint64, dst *[240]uint64)
+func unpack32bit4AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack8AVX2(v uint64, dst *[240]uint64)
+func unpack32bit5AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack10AVX2(v uint64, dst *[240]uint64)
+func unpack32bit6AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack12AVX2(v uint64, dst *[240]uint64)
+func unpack32bit7AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack15AVX2(v uint64, dst *[240]uint64)
+func unpack32bit8AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack20AVX2(v uint64, dst *[240]uint64)
+func unpack32bit10AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack30AVX2(v uint64, dst *[240]uint64)
+func unpack32bit12AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack60AVX2(v uint64, dst *[240]uint64)
+func unpack32bit15AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack120AVX2(v uint64, dst *[240]uint64)
+func unpack32bit20AVX2Call(v uint64, dst *[240]uint64)
 
 //go:noescape
-func unpack240AVX2(v uint64, dst *[240]uint64)
+func unpack32bit30AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit60AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit120AVX2Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack32bit240AVX2Call(v uint64, dst *[240]uint64)
+
+/**************************** AVX512 Call **************************/
+
+//go:noescape
+func initAVX512Call()
+
+//go:noescape
+func countBytesAVX512Core(src []byte) (count int)
+
+//go:noescape
+func decodeAllAVX512Call(dst, src []uint64) (value int)
+
+// //go:noescape
+// func decodeBytesBigEndianAVX512Core(dst []uint64, src []byte) (value int)
+
+//go:noescape
+func unpack1AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack2AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack3AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack4AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack5AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack6AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack7AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack8AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack10AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack12AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack15AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack20AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack30AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack60AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack120AVX512Call(v uint64, dst *[240]uint64)
+
+//go:noescape
+func unpack240AVX512Call(v uint64, dst *[240]uint64)
 
 func init() {
-	initAVX2Jmp()
-	initAVX2Opt()
-	initAVX2Call()
-	init32bitAVX2Call()
+	if util.UseAVX512_F {
+		initAVX512Call()
+	}
+	if util.UseAVX2 {
+		initAVX2Jmp()
+		initAVX2Opt()
+		initAVX2Call()
+		init32bitAVX2Call()
+	}
 }
 
 func decodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {
@@ -374,4 +451,11 @@ func countBytesAVX2(src []byte) (int, error) {
 		return 0, errors.New("src length is not multiple of 8")
 	}
 	return countBytesAVX2Core(src), nil
+}
+
+func countBytesAVX512(src []byte) (int, error) {
+	if len(src)&7 != 0 {
+		return 0, errors.New("src length is not multiple of 8")
+	}
+	return countBytesAVX512Core(src), nil
 }
