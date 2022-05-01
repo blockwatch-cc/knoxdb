@@ -490,8 +490,8 @@ func (h *BlockInfo) Decode(buf *bytes.Buffer, version byte) error {
 
 	switch filter {
 	case block.BloomFilter:
-		// filter size is cardinality rounded up to next pow-2 times scale factor
-		sz := h.Scale * int(pow2(int64(h.Cardinality)))
+		// filter size in bytes is cardinality times scale rounded up to next pow-2
+		sz := int(pow2(int64(h.Cardinality) * int64(h.Scale)))
 		b := buf.Next(sz)
 		if len(b) < sz {
 			return fmt.Errorf("pack: reading bloom filter: %w", io.ErrShortBuffer)
