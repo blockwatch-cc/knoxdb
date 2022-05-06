@@ -20,6 +20,9 @@ Blockwatch PackDB columnar database for fast blockchain analytics.
 
 ## Links / Competitors / Inspirations
 
+LibMDBX (faster lmdb, used by Erigon eth nodes)
+https://gitflic.ru/project/erthink/libmdbx
+
 OmniSciDB (MapD Core)
 https://github.com/omnisci/omniscidb
 
