@@ -135,7 +135,7 @@ func (q *Query) Compile(t *Table) error {
 	tableFields := t.Fields()
 	for _, f := range q.Conditions.Fields() {
 		if !tableFields.Contains(f.Name) {
-			return fmt.Errorf("pack: missing table field %s in table %s for query %s", f.Name, t.Name, q.Name)
+			return fmt.Errorf("pack: missing table field %s in table %s for query %s", f.Name, t.Name(), q.Name)
 		}
 	}
 

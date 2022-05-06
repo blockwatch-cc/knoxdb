@@ -2279,7 +2279,10 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 
 	// after all packs have been scanned, add remaining rows from journal, if any
 	// subtract offset and clamp to [0, limit]
-	q.stats.RowsMatched += util.NonZero(q.Limit, util.Max(int(jbits.Count())-q.Offset, 0))
+	q.stats.RowsMatched += util.Max(int(jbits.Count())-q.Offset, 0)
+	if q.Limit > 0 {
+		q.stats.RowsMatched = util.Max(q.stats.RowsMatched, q.Limit)
+	}
 
 	return int64(q.stats.RowsMatched), nil
 }
