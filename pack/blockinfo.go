@@ -39,7 +39,7 @@ type BlockInfo struct {
 }
 
 func (h BlockInfo) IsValid() bool {
-	return h.Type != block.BlockIgnore && h.MinValue != nil && h.MaxValue != nil
+	return h.Type.IsValid() && h.MinValue != nil && h.MaxValue != nil
 }
 
 func (h BlockInfo) IsDirty() bool {
