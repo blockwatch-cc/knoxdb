@@ -2221,7 +2221,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
 	packloop:
-		for _, p := range q.MakePackSchedule(false) {
+		for _, p := range q.MakePackSchedule(q.Order == OrderDesc) {
 			if util.InterruptRequested(ctx) {
 				return int64(q.stats.RowsMatched), ctx.Err()
 			}
@@ -2281,7 +2281,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	// subtract offset and clamp to [0, limit]
 	q.stats.RowsMatched += util.Max(int(jbits.Count())-q.Offset, 0)
 	if q.Limit > 0 {
-		q.stats.RowsMatched = util.Max(q.stats.RowsMatched, q.Limit)
+		q.stats.RowsMatched = util.Min(q.stats.RowsMatched, q.Limit)
 	}
 
 	return int64(q.stats.RowsMatched), nil
@@ -3021,9 +3021,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	cachekey := t.cachekey(key)
 	if cached, ok := cachefn(cachekey); ok {
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
-		pkg := cached.(*Package)
-		// log.Debugf("%s: use cached shared pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
-		return pkg, nil
+		return cached.(*Package), nil
 	}
 	if stripped {
 		// try cache lookup for stripped packs
