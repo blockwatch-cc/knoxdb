@@ -1,6 +1,6 @@
 There be dragons.
 
-© 2018-2020 Blockwatch Data Inc, All rights reserved.
+© 2018-2022 Blockwatch Data Inc, All rights reserved.
 
 Blockwatch PackDB columnar database for fast blockchain analytics.
 
@@ -25,6 +25,9 @@ https://gitflic.ru/project/erthink/libmdbx
 
 OmniSciDB (MapD Core)
 https://github.com/omnisci/omniscidb
+
+DuckDB (Columnar, Arrow, Parquet, SIMD)
+https://duckdb.org/
 
 TiDB
 - https://www.crunchbase.com/organization/pingcap
@@ -60,6 +63,8 @@ https://github.com/tarantool/tarantool
 Apache Arrow (Columnar in-memory data processing library)
 - https://github.com/apache/arrow
 - https://arrow.apache.org/docs/index.html
+Apache Parquet (columnar storage format)
+- https://github.com/segmentio/parquet-go
 
 Benchmarks
 - https://tech.marksblogg.com/benchmarks.html
@@ -92,6 +97,7 @@ This is the case in ClickHouse: if data is compressed, we decompress it in block
 Strictly speaking, LZ4 data decompression (typically 3 GB/sec) is slower than memcpy (typically 12 GB/sec). But when using e.g. 128 CPU cores, LZ4 decompression will scale up to memory bandwidth (typically 150 GB/sec) as well as memcpy. And memcpy is wasting more memory bandwidth by reading uncompressed data while LZ4 decompression reads compressed data.
 ```
 
+- [ ] faster bloom filter from Parquet https://github.com/apache/parquet-format/blob/master/BloomFilter.md - xxhash64, then spread to 8 sub-filters using a multiplicative salt
 - [ ] Filter Discussions: https://news.ycombinator.com/item?id=21840821
   https://lemire.me/blog/2019/12/19/xor-filters-faster-and-smaller-than-bloom-filters/
 - [ ] faster int64->int64 maps
@@ -169,6 +175,7 @@ Strictly speaking, LZ4 data decompression (typically 3 GB/sec) is slower than me
 - LVM can do snapshots, see https://github.com/benschweizer/dsnapshot
 
 ### Pack low-level features
+- [ ] aggregate hash table for group_by https://duckdb.org/2022/03/07/aggregate-hashtable.html
 - [ ] SIMD aggregate functions (int64, uint64, float64)
   - sum
   - mean
