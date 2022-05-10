@@ -39,9 +39,10 @@ type Query struct {
 	idxFields FieldList
 
 	// metrics
-	start time.Time
-	lap   time.Time
-	stats QueryStats
+	logAfter time.Duration
+	start    time.Time
+	lap      time.Time
+	stats    QueryStats
 }
 
 type QueryStats struct {
@@ -69,23 +70,23 @@ func (q Query) IsEmptyMatch() bool {
 
 func NewQuery(name string, table *Table) Query {
 	now := time.Now()
-	f := table.Fields()
 	return Query{
 		Name:      name,
 		table:     table,
 		start:     now,
 		lap:       now,
-		Fields:    f,
+		Fields:    table.Fields(),
 		Order:     OrderAsc,
-		reqfields: f,
+		reqfields: nil,
 		idxFields: table.fields.Indexed(),
+		logAfter:  QueryLogMinDuration,
 	}
 }
 
 func (q *Query) Close() {
 	if q.table != nil {
 		q.stats.TotalTime = time.Since(q.start)
-		if q.stats.TotalTime > QueryLogMinDuration {
+		if q.stats.TotalTime > q.logAfter {
 			log.Warnf("%s", newLogClosure(func() string {
 				return q.PrintTiming()
 			}))
@@ -131,6 +132,14 @@ func (q *Query) Compile(t *Table) error {
 	q.start = time.Now()
 	q.lap = q.start
 
+	// ensure all queried fields exist
+	tableFields := t.Fields()
+	for _, f := range q.Conditions.Fields() {
+		if !tableFields.Contains(f.Name) {
+			return fmt.Errorf("pack: missing table field %s in table %s for query %s", f.Name, t.Name(), q.Name)
+		}
+	}
+
 	// process conditions first
 	if err := q.Conditions.Compile(); err != nil {
 		return fmt.Errorf("pack: %s %v", q.Name, err)
@@ -140,9 +149,9 @@ func (q *Query) Compile(t *Table) error {
 	if len(q.Fields) == 0 {
 		q.Fields = t.Fields()
 	} else {
-		q.Fields = q.Fields.MergeUnique(t.Fields().Pk())
+		q.Fields = q.Fields.MergeUnique(t.Fields().Pk()).Sort()
 	}
-	q.reqfields = q.Fields.MergeUnique(q.Conditions.Fields()...)
+	q.reqfields = q.Fields.MergeUnique(q.Conditions.Fields()...).Sort()
 	if len(q.idxFields) == 0 {
 		q.idxFields = t.fields.Indexed()
 	}
@@ -407,6 +416,21 @@ func (q Query) WithCache(enable bool) Query {
 
 func (q Query) WithoutCache() Query {
 	q.NoCache = true
+	return q
+}
+
+func (q Query) WithStats() Query {
+	q.logAfter = 0
+	return q
+}
+
+func (q Query) WithoutStats() Query {
+	q.logAfter = time.Hour
+	return q
+}
+
+func (q Query) WithStatsAfter(d time.Duration) Query {
+	q.logAfter = d
 	return q
 }
 

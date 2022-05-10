@@ -91,8 +91,11 @@ const (
 	BlockFloat32 = BlockType(13)
 	BlockInt128  = BlockType(14)
 	BlockInt256  = BlockType(15)
-	BlockIgnore  = BlockType(255)
 )
+
+func (t BlockType) IsValid() bool {
+	return t <= BlockInt256
+}
 
 func (t BlockType) String() string {
 	switch t {
@@ -128,8 +131,6 @@ func (t BlockType) String() string {
 		return "int128"
 	case BlockInt256:
 		return "int256"
-	case BlockIgnore:
-		return "ignore"
 	default:
 		return "invalid block type"
 	}
@@ -216,8 +217,8 @@ func (b *Block) SetDirty() {
 }
 
 func (b *Block) SetIgnore() {
+	b.Clear()
 	b.ignore = true
-	b.Release()
 }
 
 func (b *Block) SetCompression(c Compression) {
@@ -583,6 +584,9 @@ func (b *Block) Cap() int {
 // This size hint is used to properly dimension the encoer/decoder buffers
 // as is required by LZ4 and to avoid memcopy during write.
 func (b *Block) MaxStoredSize() int {
+	if b.ignore {
+		return 0
+	}
 	var sz int
 	switch b.typ {
 	case BlockFloat64:
@@ -618,6 +622,9 @@ func (b *Block) MaxStoredSize() int {
 }
 
 func (b *Block) HeapSize() int {
+	if b.ignore {
+		return 0
+	}
 	sz := blockSz
 	switch b.typ {
 	case BlockFloat64:
@@ -732,10 +739,6 @@ func (b *Block) Clear() {
 }
 
 func (b *Block) Release() {
-	if b.ignore {
-		b.ignore = false
-		return
-	}
 	b.ignore = false
 	b.dirty = false
 	b.size = 0
@@ -815,8 +818,6 @@ func (b *Block) Release() {
 		b.Int256.X1 = nil
 		b.Int256.X2 = nil
 		b.Int256.X3 = nil
-	case BlockIgnore:
-		return
 	}
 	BlockPool.Put(b)
 }

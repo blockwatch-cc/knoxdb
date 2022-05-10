@@ -102,17 +102,19 @@ func (p *Package) UnmarshalBinary(data []byte) error {
 
 	// decode blocks
 	for i := 0; i < p.nFields; i++ {
-		// skip blocks that are set to type ignore before decoding
-		// this is the core magic of skipping blocks on load
-		if p.blocks[i].IsIgnore() {
-			continue
-		}
 		// calculate block size from offset table
 		var sz int
 		if i < p.nFields-1 {
 			sz = offsets[i+1] - offsets[i]
 		} else {
 			sz = blen - offsets[i]
+		}
+		// skip blocks that are set to type ignore before decoding
+		// this is the core magic of skipping blocks on load
+		if p.blocks[i].IsIgnore() {
+			// fmt.Printf("Pack: skipping block %d %s offs=%d len=%d buf=%d\n", i, p.blocks[i].Type(), offsets[i], sz, blen)
+			_ = buf.Next(sz)
+			continue
 		}
 		// fmt.Printf("Pack: decode block %d %s offs=%d len=%d buf=%d\n", i, p.blocks[i].Type(), offsets[i], sz, blen)
 		err := p.blocks[i].Decode(buf.Next(sz), p.nValues, sz)

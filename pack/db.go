@@ -263,10 +263,10 @@ func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package) (*Package, err
 	if buf == nil {
 		return nil, ErrPackNotFound
 	}
+	unpack.SetKey(key)
 	if err := unpack.UnmarshalBinary(buf); err != nil {
 		return nil, err
 	}
-	unpack.SetKey(key)
 	unpack.dirty = false
 	return unpack, nil
 }

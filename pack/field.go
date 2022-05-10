@@ -9,6 +9,7 @@ import (
 	"math"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -128,6 +129,11 @@ func (f Field) NewBlock(sz int) *block.Block {
 }
 
 type FieldList []Field
+
+func (l FieldList) Sort() FieldList {
+	sort.Slice(l, func(i, j int) bool { return l[i].Index < l[j].Index })
+	return l
+}
 
 func (l FieldList) Key() string {
 	s := make([]string, len(l))
