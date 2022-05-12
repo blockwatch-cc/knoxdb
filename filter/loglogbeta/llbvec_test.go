@@ -1,4 +1,7 @@
-package llbVec
+// Copyright (c) 2021 Blockwatch Data Inc.
+// Author: stefan@blockwatch.cc
+
+package loglogbeta
 
 import (
 	"bytes"

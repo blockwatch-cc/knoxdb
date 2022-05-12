@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"blockwatch.cc/knoxdb/filter/bloomVec"
+	"blockwatch.cc/knoxdb/filter/bloom"
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/util"
 
@@ -346,7 +346,7 @@ func (c *Condition) Compile() (err error) {
 		}
 		if buildBloom {
 			for _, val := range slice {
-				c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(val))
+				c.bloomHashes = append(c.bloomHashes, bloom.Hash(val))
 			}
 		}
 		// below min size a hash map is more expensive than memcmp
@@ -367,7 +367,7 @@ func (c *Condition) Compile() (err error) {
 		}
 		if buildBloom {
 			for _, val := range slice {
-				c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(compress.UnsafeGetBytes(val)))
+				c.bloomHashes = append(c.bloomHashes, bloom.Hash(compress.UnsafeGetBytes(val)))
 			}
 		}
 		// below min size a hash map is more expensive than memcmp
@@ -389,8 +389,8 @@ func (c *Condition) Compile() (err error) {
 				c.Value = []bool{false, true}
 				if buildBloom {
 					c.bloomHashes = [][2]uint32{
-						bloomVec.Hash([]byte{0}),
-						bloomVec.Hash([]byte{1}),
+						bloom.Hash([]byte{0}),
+						bloom.Hash([]byte{1}),
 					}
 				}
 			} else {
@@ -403,7 +403,7 @@ func (c *Condition) Compile() (err error) {
 					} else {
 						val = []byte{0}
 					}
-					c.bloomHashes = [][2]uint32{bloomVec.Hash(val)}
+					c.bloomHashes = [][2]uint32{bloom.Hash(val)}
 				}
 			}
 		}

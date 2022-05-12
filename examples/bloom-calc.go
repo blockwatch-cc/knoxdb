@@ -15,7 +15,7 @@ import (
 	"github.com/echa/log"
 	bolt "go.etcd.io/bbolt"
 
-	"blockwatch.cc/knoxdb/filter/bloomVec"
+	"blockwatch.cc/knoxdb/filter/bloom"
 	"blockwatch.cc/knoxdb/hash/xxhashVec"
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
@@ -122,7 +122,7 @@ func run() error {
 
 	// keep real and bloom filter data for each pack
 	reals := make([]*vec.Bitset, 0)
-	blooms := make([]*bloomVec.Filter, 0)
+	blooms := make([]*bloom.Filter, 0)
 	var (
 		maxid     uint64
 		bloomSize int

@@ -1,7 +1,7 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package llbVec
+package loglogbeta
 
 import (
 	"blockwatch.cc/knoxdb/hash/xxhashVec"

@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Blockwatch Data Inc.
+// Copyright (c) 2022 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
 #define mask1 $(0xfffffffffffffff)
