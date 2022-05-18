@@ -9,13 +9,14 @@ import (
 	"math"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
-	"blockwatch.cc/knoxdb/filter/bloomVec"
-	"blockwatch.cc/knoxdb/filter/llbVec"
+	"blockwatch.cc/knoxdb/filter/bloom"
+	"blockwatch.cc/knoxdb/filter/loglogbeta"
 
 	"blockwatch.cc/knoxdb/util"
 
@@ -128,6 +129,11 @@ func (f Field) NewBlock(sz int) *block.Block {
 }
 
 type FieldList []Field
+
+func (l FieldList) Sort() FieldList {
+	sort.Slice(l, func(i, j int) bool { return l[i].Index < l[j].Index })
+	return l
+}
 
 func (l FieldList) Key() string {
 	s := make([]string, len(l))
@@ -2726,12 +2732,12 @@ func (t FieldType) EqualPacksAt(p1 *Package, i1, n1 int, p2 *Package, i2, n2 int
 	}
 }
 
-func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor int) *bloomVec.Filter {
+func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor int) *bloom.Filter {
 	if cardinality <= 0 || factor <= 0 {
 		return nil
 	}
 	m := int(cardinality) * factor * 8 // unit is bits
-	flt := bloomVec.NewFilter(m)
+	flt := bloom.NewFilter(m)
 	switch t {
 	case FieldTypeBytes, FieldTypeString:
 		for i := 0; i < b.Bytes.Len(); i++ {
@@ -2807,78 +2813,78 @@ func (t FieldType) Hash(val interface{}) [2]uint32 {
 	}
 	switch t {
 	case FieldTypeBytes:
-		return bloomVec.Hash(val.([]byte))
+		return bloom.Hash(val.([]byte))
 	case FieldTypeString:
 		if s, ok := val.(string); ok {
-			return bloomVec.Hash(compress.UnsafeGetBytes(s))
+			return bloom.Hash(compress.UnsafeGetBytes(s))
 		}
-		return bloomVec.Hash(val.([]byte))
+		return bloom.Hash(val.([]byte))
 	case FieldTypeDatetime:
 		if i, ok := val.(int64); ok {
-			return bloomVec.HashInt64(i)
+			return bloom.HashInt64(i)
 		} else {
-			return bloomVec.HashInt64(val.(time.Time).UnixNano())
+			return bloom.HashInt64(val.(time.Time).UnixNano())
 		}
 	case FieldTypeBoolean:
 		if v := val.(bool); v {
-			return bloomVec.Hash([]byte{1})
+			return bloom.Hash([]byte{1})
 		} else {
-			return bloomVec.Hash([]byte{0})
+			return bloom.Hash([]byte{0})
 		}
 	case FieldTypeInt256:
 		buf := val.(Int256).Bytes32()
-		return bloomVec.Hash(buf[:])
+		return bloom.Hash(buf[:])
 	case FieldTypeDecimal256:
 		if i, ok := val.(Int256); ok {
 			buf := i.Bytes32()
-			return bloomVec.Hash(buf[:])
+			return bloom.Hash(buf[:])
 		} else {
 			buf := val.(decimal.Decimal256).Int256().Bytes32()
-			return bloomVec.Hash(buf[:])
+			return bloom.Hash(buf[:])
 		}
 	case FieldTypeInt128:
 		buf := val.(Int128).Bytes16()
-		return bloomVec.Hash(buf[:])
+		return bloom.Hash(buf[:])
 	case FieldTypeDecimal128:
 		if i, ok := val.(Int128); ok {
 			buf := i.Bytes16()
-			return bloomVec.Hash(buf[:])
+			return bloom.Hash(buf[:])
 		} else {
 			buf := val.(decimal.Decimal128).Int128().Bytes16()
-			return bloomVec.Hash(buf[:])
+			return bloom.Hash(buf[:])
 		}
 	case FieldTypeInt64:
-		return bloomVec.HashInt64(val.(int64))
+		return bloom.HashInt64(val.(int64))
 	case FieldTypeDecimal64:
 		if i, ok := val.(int64); ok {
-			return bloomVec.HashInt64(i)
+			return bloom.HashInt64(i)
 		} else {
-			return bloomVec.HashInt64(val.(decimal.Decimal64).Int64())
+			return bloom.HashInt64(val.(decimal.Decimal64).Int64())
 		}
 	case FieldTypeInt32:
-		return bloomVec.HashInt32(val.(int32))
+		return bloom.HashInt32(val.(int32))
 	case FieldTypeDecimal32:
 		if i, ok := val.(int32); ok {
-			return bloomVec.HashInt32(i)
+			return bloom.HashInt32(i)
 		} else {
-			return bloomVec.HashInt32(val.(decimal.Decimal32).Int32())
+			return bloom.HashInt32(val.(decimal.Decimal32).Int32())
 		}
 	case FieldTypeInt16:
-		return bloomVec.HashInt16(val.(int16))
+		return bloom.HashInt16(val.(int16))
 	case FieldTypeInt8:
-		return bloomVec.Hash([]byte{byte(val.(int8))})
+		return bloom.Hash([]byte{byte(val.(int8))})
 	case FieldTypeUint64:
-		return bloomVec.HashUint64(val.(uint64))
+		return bloom.HashUint64(val.(uint64))
 	case FieldTypeUint32:
-		return bloomVec.HashUint32(val.(uint32))
+		return bloom.HashUint32(val.(uint32))
 	case FieldTypeUint16:
-		return bloomVec.HashUint16(val.(uint16))
+		return bloom.HashUint16(val.(uint16))
 	case FieldTypeUint8:
-		return bloomVec.Hash([]byte{byte(val.(uint8))})
+		return bloom.Hash([]byte{byte(val.(uint8))})
 	case FieldTypeFloat64:
-		return bloomVec.HashFloat64(val.(float64))
+		return bloom.HashFloat64(val.(float64))
 	case FieldTypeFloat32:
-		return bloomVec.HashFloat32(val.(float32))
+		return bloom.HashFloat32(val.(float32))
 	default:
 		return [2]uint32{}
 	}
@@ -2899,7 +2905,7 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 		return 2
 	}
 
-	filter := llbVec.NewFilterWithPrecision(uint32(precision))
+	filter := loglogbeta.NewFilterWithPrecision(uint32(precision))
 	var buf [8]byte
 	switch t {
 	case FieldTypeBytes, FieldTypeString:

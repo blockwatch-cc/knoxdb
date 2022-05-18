@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
-	"blockwatch.cc/knoxdb/filter/bloomVec"
+	"blockwatch.cc/knoxdb/filter/bloom"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -31,15 +31,15 @@ type BlockInfo struct {
 	Scale       int
 
 	// statistics
-	MinValue    interface{}      // vector min
-	MaxValue    interface{}      // vector max
-	Bloom       *bloomVec.Filter // optimized bloom filter
-	Cardinality uint32           // unique items in vector
-	dirty       bool             // update required
+	MinValue    interface{}   // vector min
+	MaxValue    interface{}   // vector max
+	Bloom       *bloom.Filter // optimized bloom filter
+	Cardinality uint32        // unique items in vector
+	dirty       bool          // update required
 }
 
 func (h BlockInfo) IsValid() bool {
-	return h.Type != block.BlockIgnore && h.MinValue != nil && h.MaxValue != nil
+	return h.Type.IsValid() && h.MinValue != nil && h.MaxValue != nil
 }
 
 func (h BlockInfo) IsDirty() bool {
@@ -490,8 +490,8 @@ func (h *BlockInfo) Decode(buf *bytes.Buffer, version byte) error {
 
 	switch filter {
 	case block.BloomFilter:
-		// filter size is cardinality rounded up to next pow-2 times scale factor
-		sz := h.Scale * int(pow2(int64(h.Cardinality)))
+		// filter size in bytes is cardinality times scale rounded up to next pow-2
+		sz := int(pow2(int64(h.Cardinality) * int64(h.Scale)))
 		b := buf.Next(sz)
 		if len(b) < sz {
 			return fmt.Errorf("pack: reading bloom filter: %w", io.ErrShortBuffer)
@@ -500,7 +500,7 @@ func (h *BlockInfo) Decode(buf *bytes.Buffer, version byte) error {
 		bCopy := make([]byte, sz)
 		copy(bCopy, b)
 		var err error
-		h.Bloom, err = bloomVec.NewFilterBuffer(bCopy)
+		h.Bloom, err = bloom.NewFilterBuffer(bCopy)
 		if err != nil {
 			return fmt.Errorf("pack: reading bloom filter: %w", err)
 		}

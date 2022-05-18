@@ -4,7 +4,7 @@
 //go:build !amd64 || appengine || gccgo
 // +build !amd64 appengine gccgo
 
-package bloomVec
+package bloom
 
 func filterAddManyUint32(f *Filter, data []uint32, seed uint32) {
     filterAddManyUint32Generic(*f, data, seed)

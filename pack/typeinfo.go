@@ -13,7 +13,7 @@ import (
 
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/decimal"
-	"blockwatch.cc/knoxdb/filter/bloomVec"
+	"blockwatch.cc/knoxdb/filter/bloom"
 )
 
 const (
@@ -24,7 +24,7 @@ const (
 var (
 	szPackInfo    = int(reflect.TypeOf(PackInfo{}).Size())
 	szBlockInfo   = int(reflect.TypeOf(BlockInfo{}).Size())
-	szBloomFilter = int(reflect.TypeOf(bloomVec.Filter{}).Size())
+	szBloomFilter = int(reflect.TypeOf(bloom.Filter{}).Size())
 	szPackIndex   = int(reflect.TypeOf(PackIndex{}).Size())
 	szPackage     = int(reflect.TypeOf(Package{}).Size())
 	szField       = int(reflect.TypeOf(Field{}).Size())

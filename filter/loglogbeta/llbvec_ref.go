@@ -4,7 +4,7 @@
 //go:build !amd64 || appengine || gccgo
 // +build !amd64 appengine gccgo
 
-package llbVec
+package loglogbeta
 
 func filterAddManyUint32(f *LogLogBeta, data []uint32, seed uint32) {
     filterAddManyUint32Generic(*f, data, seed)

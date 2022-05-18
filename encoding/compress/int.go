@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 //
 // Original from: InfluxData, MIT
@@ -348,74 +348,6 @@ func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 	return dst, nil
 }
 
-func ZzDeltaEncodeUint64(data []uint64) uint64 {
-	var maxdelta uint64
-	for i := len(data) - 1; i > 0; i-- {
-		data[i] = data[i] - data[i-1]
-		data[i] = ZigZagEncode(int64(data[i]))
-		if data[i] > maxdelta {
-			maxdelta = data[i]
-		}
-	}
-
-	data[0] = ZigZagEncode(int64(data[0]))
-	return maxdelta
-}
-
-func ZzEncodeUint64(data []uint64) uint64 {
-	var max uint64
-	for i := range data {
-		data[i] = ZigZagEncode(int64(data[i]))
-		if data[i] > max {
-			max = data[i]
-		}
-	}
-	return max
-}
-
-func ZzDeltaDecodeInt64(data []int64) {
-	zzDeltaDecodeInt64(data)
-}
-
-func ZzDeltaDecodeUint64(data []uint64) {
-	zzDeltaDecodeUint64(data)
-}
-
-func ZzDecodeInt64(data []int64) {
-	zzDecodeInt64(data)
-}
-
-func ZzDecodeUint64(data []uint64) {
-	zzDecodeUint64(data)
-}
-
-func Delta8DecodeUint64(data []uint64) {
-	delta8DecodeUint64(data)
-}
-
-func Delta8EncodeUint64(data []uint64) uint64 {
-	return delta8EncodeUint64(data)
-}
-
-func MaxUint64(data []uint64) uint64 {
-	var max uint64
-	for _, v := range data {
-		if v > max {
-			max = v
-		}
-	}
-	return max
-}
-
-func HasNegUint64(data []uint64) bool {
-	for _, v := range data {
-		if int64(v) < 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func integerBatchDecodeAllRLE(b []byte, dst []int64) ([]int64, error) {
 	b = b[1:]
 	if len(b) < 8 {
@@ -466,47 +398,4 @@ func integerBatchDecodeAllRLE(b []byte, dst []int64) ([]int64, error) {
 
 func integerBatchDecodeAllInvalid(b []byte, _ []int64) ([]int64, error) {
 	return []int64{}, fmt.Errorf("compress: unknown integer encoding %v", b[0]>>4)
-}
-
-func PackBytes(src []uint64, nbytes int, buf []byte) ([]byte, error) {
-	if len(buf) < nbytes*len(src) {
-		return nil, fmt.Errorf("compressBytes: write buffer to small")
-	}
-
-	switch nbytes {
-	case 1:
-		packBytes8Bit(src, buf)
-	case 2:
-		packBytes16Bit(src, buf)
-	case 3:
-		packBytes24Bit(src, buf)
-	case 4:
-		packBytes32Bit(src, buf)
-	default:
-		return nil, fmt.Errorf("UnpackBytes: size (%d bytes) not yet implemented", nbytes)
-	}
-
-	return buf, nil
-}
-
-func UnpackBytes(src []byte, nbytes int, res []uint64) ([]uint64, error) {
-	rlen := len(src) / nbytes
-
-	if len(res) < rlen {
-		return nil, fmt.Errorf("uncompressBytes: write buffer to small")
-	}
-
-	switch nbytes {
-	case 1:
-		unpackBytes8Bit(src, res)
-	case 2:
-		unpackBytes16Bit(src, res)
-	case 3:
-		unpackBytes24Bit(src, res)
-	case 4:
-		unpackBytes32Bit(src, res)
-	default:
-		return nil, fmt.Errorf("UnpackBytes: size (%d bytes) not yet implemented", nbytes)
-	}
-	return res, nil
 }

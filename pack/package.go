@@ -1996,11 +1996,12 @@ func (p *Package) Clear() {
 }
 
 func (p *Package) Release() {
-	for _, v := range p.blocks {
-		v.Release()
+	for i := range p.blocks {
+		p.blocks[i].Release()
 	}
 	p.nFields = 0
 	p.nValues = 0
+	p.blocks = p.blocks[:0]
 	p.blocks = nil
 	p.key = 0
 	p.tinfo = nil

@@ -55,3 +55,22 @@ func UnsafeGetBytes(s string) []byte {
 func UnsafeGetString(buf []byte) string {
 	return *(*string)(unsafe.Pointer(&buf))
 }
+
+func MaxUint64(data []uint64) uint64 {
+	var max uint64
+	for _, v := range data {
+		if v > max {
+			max = v
+		}
+	}
+	return max
+}
+
+func HasNegUint64(data []uint64) bool {
+	for _, v := range data {
+		if int64(v) < 0 {
+			return true
+		}
+	}
+	return false
+}
