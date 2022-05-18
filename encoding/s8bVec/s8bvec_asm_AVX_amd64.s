@@ -76,7 +76,7 @@ prep_big:
 
 loop_big:
         // for big endian
-        VPAND           (SI), Y14, Y0   // determine selector
+/*        VPAND           (SI), Y14, Y0   // determine selector
         VPAND           32(SI), Y14, Y1   // determine selector
         VPAND           64(SI), Y14, Y2   // determine selector
         VPAND           96(SI), Y14, Y3   // determine selector
@@ -84,13 +84,18 @@ loop_big:
 	VPSRLQ	        $4, Y1, Y1      // determine selector
 	VPSRLQ	        $4, Y2, Y2      // determine selector
 	VPSRLQ	        $4, Y3, Y3      // determine selector
+*/
+        // for little endian 
+        VMOVDQU           (SI), Y0 
+        VMOVDQU           32(SI), Y1
+        VMOVDQU           64(SI), Y2
+        VMOVDQU           96(SI), Y3
 
-/*      // for little endian 
 	VPSRLQ	        $60, Y0, Y0      // determine selector
 	VPSRLQ	        $60, Y1, Y1      // determine selector
 	VPSRLQ	        $60, Y2, Y2      // determine selector
 	VPSRLQ	        $60, Y3, Y3     // determine selector
-*/
+
 	VPSLLQ	        $32, Y1, Y1      // combine selector vectors
         VPOR            Y1, Y0, Y0
 	VPSLLQ	        $32, Y3, Y3      // combine selector vectors
@@ -120,12 +125,13 @@ prep_small:
 
 loop_small:
         // for big endian
-        VPAND           (SI), Y14, Y0   // determine selector
-	VPSRLQ	        $4, Y0, Y0      // determine selector
+//        VPAND           (SI), Y14, Y0   // determine selector
+//	VPSRLQ	        $4, Y0, Y0      // determine selector
 
-/*      // for little endian 
+        // for little endian 
+        VMOVDQU           (SI), Y0 
 	VPSRLQ	        $60, Y0, Y0      // determine selector
-*/
+
 	VPSHUFB	        Y0, Y15, Y0     // look up number of values
         VPAND           Y0, Y14, Y0     // clear unused values
 
@@ -146,12 +152,12 @@ exit_small:
         VPMASKMOVQ      (SI), Y1, Y0            // load remaining values
 
         // for big endian
-        VPAND           Y0, Y14, Y0     // determine selector
-	VPSRLQ	        $4, Y0, Y0      // determine selector
+//        VPAND           Y0, Y14, Y0     // determine selector
+//	VPSRLQ	        $4, Y0, Y0      // determine selector
 
-/*      // for little endian 
+        // for little endian 
 	VPSRLQ	        $60, Y0, Y0      // determine selector
-*/
+
 	VPSHUFB	        Y0, Y15, Y0     // look up number of values
         VPAND           Y0, Y14, Y0     // clear unused values
         VPAND           Y0, Y1, Y0      // cut vector
@@ -169,13 +175,15 @@ exit_small:
 
 done:
         MOVQ            AX, ret+24(FP)
+        MOVQ            $100, AX
 	RET
 
-// func decodeAllAVX2Call(dst, src []uint64) (value int)
+// func decodeAllAVX2Call(dst []uint64, src []byte) (value int)
 TEXT ·decodeAllAVX2Call(SB), NOSPLIT, $0-68
         MOVQ            dst_base(FP), DI
         MOVQ            src_base+24(FP), SI
         MOVQ            src_len+32(FP), BX
+        SHRQ            $3, BX
         MOVQ            DI, R15                     // save DI
 
 	TESTQ	        BX, BX

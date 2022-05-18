@@ -40,7 +40,7 @@ func TestEncodeAllAVX2(t *testing.T) {
 			buf := make([]byte, 8*len(encoded))
 			b := buf
 			for _, v := range encoded {
-				binary.BigEndian.PutUint64(b, v)
+				binary.LittleEndian.PutUint64(b, v)
 				b = b[8:]
 			}
 			count, err := countBytesAVX2(buf)
@@ -90,7 +90,7 @@ func TestEncodeAllAVX2Call(t *testing.T) {
 			buf := make([]byte, 8*len(encoded))
 			b := buf
 			for _, v := range encoded {
-				binary.BigEndian.PutUint64(b, v)
+				binary.LittleEndian.PutUint64(b, v)
 				b = b[8:]
 			}
 			count, err := countBytesAVX2(buf)
@@ -103,7 +103,7 @@ func TestEncodeAllAVX2Call(t *testing.T) {
 			}
 
 			decoded := make([]uint64, len(test.in))
-			n := decodeAllAVX2Call(decoded, encoded)
+			n := decodeAllAVX2Call(decoded, buf)
 
 			if !cmp.Equal(decoded[:n], test.in) {
 				t.Fatalf("unexpected values; +got/-exp\n%s", cmp.Diff(decoded, test.in))
@@ -159,7 +159,7 @@ func TestEncodeAllAVX512Call(t *testing.T) {
 	}
 }
 
-func TestEncodeAll32bitAVX2(t *testing.T) {
+func TestEncodeAllUint32AVX2(t *testing.T) {
 	if !util.UseAVX2 {
 		t.Skip()
 	}
@@ -182,24 +182,23 @@ func TestEncodeAll32bitAVX2(t *testing.T) {
 				}
 				return
 			}
-
 			buf := make([]byte, 8*len(encoded))
 			b := buf
 			for _, v := range encoded {
-				binary.BigEndian.PutUint64(b, v)
+				binary.LittleEndian.PutUint64(b, v)
 				b = b[8:]
 			}
+
 			count, err := countBytesGeneric(buf)
 			if err != nil {
 				t.Fatalf("unexpected count error\n%s", err)
 			}
-
 			if count != len(test.in) {
 				t.Fatalf("unexpected count: got %d expected %d", count, len(test.in))
 			}
 
 			decoded := make([]uint32, len(test.in))
-			n := decodeAll32bitAVX2(decoded, encoded)
+			n := decodeAllUint32AVX2(decoded, buf)
 			if err != nil {
 				t.Fatalf("unexpected decode error\n%s", err)
 			}
@@ -321,10 +320,18 @@ func BenchmarkDecodeAllAVX2Call(b *testing.B) {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint64, len(in))
 		comp, _ := EncodeAll(in)
+
+		buf := make([]byte, 8*len(comp))
+		tmp := buf
+		for _, v := range comp {
+			binary.LittleEndian.PutUint64(tmp, v)
+			tmp = tmp[8:]
+		}
+
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
 			for i := 0; i < b.N; i++ {
-				decodeAllAVX2Call(out, comp)
+				decodeAllAVX2Call(out, buf)
 			}
 		})
 	}
@@ -348,19 +355,23 @@ func BenchmarkDecodeAllAVX512Call(b *testing.B) {
 	}
 }
 
-func BenchmarkDecodeAll32bitAVX2(b *testing.B) {
+func BenchmarkDecodeAllUint32AVX2(b *testing.B) {
 	if !util.UseAVX2 {
 		b.Skip()
 	}
 
-	for _, bm := range s8bBenchmarks {
+	for _, bm := range s8bBenchmarks32bit {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint32, len(in))
 		comp, _ := EncodeAll(in)
+		buf := make([]byte, 8*len(comp))
+		for i, v := range comp {
+			binary.LittleEndian.PutUint64(buf[8*i:], v)
+		}
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(4 * bm.size))
 			for i := 0; i < b.N; i++ {
-				decodeAll32bitAVX2(out, comp)
+				decodeAllUint32AVX2(out, buf)
 			}
 		})
 	}
@@ -371,15 +382,23 @@ func BenchmarkDecodeAll32bitAVX2Copy(b *testing.B) {
 		b.Skip()
 	}
 
-	for _, bm := range s8bBenchmarks {
+	for _, bm := range s8bBenchmarks32bit {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint32, len(in))
 		tmp := make([]uint64, len(in))
 		comp, _ := EncodeAll(in)
+
+		buf := make([]byte, 8*len(comp))
+		b0 := buf
+		for _, v := range comp {
+			binary.LittleEndian.PutUint64(b0, v)
+			b0 = b0[8:]
+		}
+
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(4 * bm.size))
 			for i := 0; i < b.N; i++ {
-				decodeAllAVX2Call(tmp, comp)
+				decodeAllAVX2Call(tmp, buf)
 				for i, v := range tmp {
 					out[i] = uint32(v)
 				}
@@ -400,7 +419,7 @@ func BenchmarkDecodeAllAVX2Jmp(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
 			for i := 0; i < b.N; i++ {
-				decodeAllAVX2Call(out, comp)
+				decodeAllAVX2Jmp(out, comp)
 			}
 		})
 	}
@@ -418,7 +437,7 @@ func BenchmarkDecodeAllAVX2Opt(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
 			for i := 0; i < b.N; i++ {
-				decodeAllAVX2Call(out, comp)
+				decodeAllAVX2Opt(out, comp)
 			}
 		})
 	}

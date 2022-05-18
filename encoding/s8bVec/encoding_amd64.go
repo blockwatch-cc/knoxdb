@@ -72,7 +72,7 @@ func unpack240AVX2(v uint64, dst *[240]uint64)
 func initAVX2Call()
 
 //go:noescape
-func decodeAllAVX2Call(dst, src []uint64) (value int)
+func decodeAllAVX2Call(dst []uint64, src []byte) (value int)
 
 //go:noescape
 func decodeBytesBigEndianAVX2Core(dst []uint64, src []byte) (value int)
@@ -255,7 +255,7 @@ func unpack240AVX2Opt(v uint64, dst *[240]uint64)
 func init32bitAVX2Call()
 
 //go:noescape
-func decodeAll32bitAVX2(dst []uint32, src []uint64) (value int)
+func decodeAllUint32AVX2(dst []uint32, src []byte) (value int)
 
 //go:noescape
 func unpack32bit1AVX2Call(v uint64, dst *[240]uint64)
@@ -379,6 +379,7 @@ func init() {
 	}
 }
 
+/*
 func decodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {
 	switch {
 	case util.UseAVX2:
@@ -387,13 +388,32 @@ func decodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {
 		return decodeBytesBigEndianGeneric(dst, src)
 	}
 }
+*/
 
-func decodeAll(dst, src []uint64) (value int, err error) {
+func decodeAllUint64(dst []uint64, src []byte) (value int, err error) {
 	switch {
 	case util.UseAVX2:
 		return decodeAllAVX2Call(dst, src), nil
 	default:
-		return decodeAllGeneric(dst, src)
+		return decodeAll64bitGeneric(dst, src)
+	}
+}
+
+func decodeAllUint32(dst []uint32, src []byte) (value int, err error) {
+	switch {
+	case util.UseAVX2:
+		return decodeAllUint32AVX2(dst, src), nil
+	default:
+		return decodeAll32bitGeneric(dst, src)
+	}
+}
+
+func decodeAllUint16(dst []uint16, src []byte) (value int, err error) {
+	switch {
+	//case util.UseAVX2:
+	//	return decodeAll16bitAVX2(dst, src), nil
+	default:
+		return decodeAll16bitGeneric(dst, src)
 	}
 }
 

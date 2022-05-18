@@ -40,6 +40,7 @@ TEXT ·init32bitAVX2Call(SB), NOSPLIT, $0-0
 
         RET
 
+/*
 // func countBytes32bitAVX2Core(src []byte) (count int)
 //
 // input:
@@ -85,12 +86,12 @@ loop_big:
 	VPSRLQ	        $4, Y2, Y2      // determine selector
 	VPSRLQ	        $4, Y3, Y3      // determine selector
 
-/*      // for little endian 
-	VPSRLQ	        $60, Y0, Y0      // determine selector
-	VPSRLQ	        $60, Y1, Y1      // determine selector
-	VPSRLQ	        $60, Y2, Y2      // determine selector
-	VPSRLQ	        $60, Y3, Y3     // determine selector
-*/
+        // for little endian 
+	// VPSRLQ	        $60, Y0, Y0      // determine selector
+	// VPSRLQ	        $60, Y1, Y1      // determine selector
+	// VPSRLQ	        $60, Y2, Y2      // determine selector
+	// VPSRLQ	        $60, Y3, Y3     // determine selector
+
 	VPSLLQ	        $32, Y1, Y1      // combine selector vectors
         VPOR            Y1, Y0, Y0
 	VPSLLQ	        $32, Y3, Y3      // combine selector vectors
@@ -123,9 +124,9 @@ loop_small:
         VPAND           (SI), Y14, Y0   // determine selector
 	VPSRLQ	        $4, Y0, Y0      // determine selector
 
-/*      // for little endian 
-	VPSRLQ	        $60, Y0, Y0      // determine selector
-*/
+        // for little endian 
+	// VPSRLQ	        $60, Y0, Y0      // determine selector
+
 	VPSHUFB	        Y0, Y15, Y0     // look up number of values
         VPAND           Y0, Y14, Y0     // clear unused values
 
@@ -149,9 +150,9 @@ exit_small:
         VPAND           Y0, Y14, Y0     // determine selector
 	VPSRLQ	        $4, Y0, Y0      // determine selector
 
-/*      // for little endian 
-	VPSRLQ	        $60, Y0, Y0      // determine selector
-*/
+        // for little endian 
+	// VPSRLQ	        $60, Y0, Y0      // determine selector
+
 	VPSHUFB	        Y0, Y15, Y0     // look up number of values
         VPAND           Y0, Y14, Y0     // clear unused values
         VPAND           Y0, Y1, Y0      // cut vector
@@ -170,12 +171,14 @@ exit_small:
 done:
         MOVQ            AX, ret+24(FP)
 	RET
+*/
 
-// func decodeAll32bitAVX2(dst []uint32, src []uint64) (value int)
-TEXT ·decodeAll32bitAVX2(SB), NOSPLIT, $0-56
+// func decodeAllUint32AVX2(dst []uint32, src []byte) (value int)
+TEXT ·decodeAllUint32AVX2(SB), NOSPLIT, $0-56
         MOVQ            dst_base(FP), DI
         MOVQ            src_base+24(FP), SI
         MOVQ            src_len+32(FP), BX
+        SHRQ            $3, BX
         MOVQ            DI, R15                     // save DI
 
 	TESTQ	        BX, BX
@@ -202,6 +205,7 @@ exit:
         MOVQ            DI, ret+48(FP)
         RET
 
+/*
 // func decodeBytesBigEndian32bitAVX2Core(dst []uint64, src []byte) (value int)
 TEXT ·decodeBytesBigEndian32bitAVX2Core(SB), NOSPLIT, $0-68
         MOVQ            dst_base(FP), DI
@@ -235,6 +239,7 @@ exit:
         SHRQ            $2, DI
         MOVQ            DI, ret+48(FP)
         RET
+*/
 
 // func unpack32bit1AVX2(v uint64, dst *[240]uint32)
 TEXT ·unpack32bit1AVX2Call(SB), NOSPLIT, $0-68
