@@ -6,8 +6,20 @@
 
 package s8bVec
 
-func decodeAll(dst, src []uint64) (value int, err error) {
-	return decodeAllGeneric(dst, src)
+func decodeAllUint64(dst []uint64, src []byte) (value int, err error) {
+	return decodeAllUint64Generic(dst, src)
+}
+
+func decodeAllUint32(dst []uint32, src []byte) (value int, err error) {
+	return decodeAllUint32Generic(dst, src)
+}
+
+func decodeAllUint16(dst []uint16, src []byte) (value int, err error) {
+	return decodeAllUint16Generic(dst, src)
+}
+
+func decodeAllUint8(dst []uint8, src []byte) (value int, err error) {
+	return decodeAllUint8Generic(dst, src)
 }
 
 func decodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {
@@ -16,4 +28,8 @@ func decodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {
 
 func countBytes(b []byte) (int, error) {
 	return countBytesGeneric(b)
+}
+
+func countBytesBigEndian(b []byte) (int, error) {
+	return countBytesBigEndianGeneric(b)
 }

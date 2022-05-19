@@ -9,7 +9,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-/*
 func Test_Encode_NoValues(t *testing.T) {
 	var in []uint64
 	encoded, _ := EncodeAll(in)
@@ -21,7 +20,6 @@ func Test_Encode_NoValues(t *testing.T) {
 		t.Fatalf("Len mismatch: got %v, exp %v", len(decoded), len(in))
 	}
 }
-*/
 
 func ones(n int) func() []uint64 {
 	return func() []uint64 {
@@ -235,7 +233,7 @@ func combine8(fns ...func() []uint8) func() []uint8 {
 	}
 }
 
-var s8bTests = []struct {
+var s8bTestsUint64 = []struct {
 	name string
 	in   []uint64
 	fn   func() []uint64
@@ -292,7 +290,7 @@ var s8bTests = []struct {
 	}},
 }
 
-var s8bTests32bit = []struct {
+var s8bTestsUint32 = []struct {
 	name string
 	in   []uint32
 	fn   func() []uint32
@@ -348,7 +346,7 @@ var s8bTests32bit = []struct {
 	}},
 }
 
-var s8bTests16bit = []struct {
+var s8bTestsUint16 = []struct {
 	name string
 	in   []uint16
 	fn   func() []uint16
@@ -400,7 +398,7 @@ var s8bTests16bit = []struct {
 	}},
 }
 
-var s8bTests8bit = []struct {
+var s8bTestsUint8 = []struct {
 	name string
 	in   []uint8
 	fn   func() []uint8
@@ -444,12 +442,44 @@ var s8bTests8bit = []struct {
 	}},
 }
 
-// TestEncodeAll ensures 100% test coverage of EncodeAll and
-// verifies all output by comparing the original input with the output of DecodeAll
-func TestEncodeAll64bitGeneric(t *testing.T) {
+// TestEncodeAll ensures 100% test coverage of simple8b.EncodeAll and
+// verifies all output by comparing the original input with the output of simple8b.DecodeAll
+func TestEncodeAll(t *testing.T) {
 	rand.Seed(0)
 
-	for _, test := range s8bTests {
+	for _, test := range s8bTestsUint64 {
+		t.Run(test.name, func(t *testing.T) {
+			if test.fn != nil {
+				test.in = test.fn()
+			}
+
+			encoded, err := EncodeAll(append(make([]uint64, 0, len(test.in)), test.in...))
+			if test.err != nil {
+				if err != test.err {
+					t.Fatalf("expected encode error, got\n%s", err)
+				}
+				return
+			}
+
+			decoded := make([]uint64, len(test.in))
+			n, err := DecodeAll(decoded, encoded)
+			if err != nil {
+				t.Fatalf("unexpected decode error\n%s", err)
+			}
+
+			if !cmp.Equal(decoded[:n], test.in) {
+				t.Fatalf("unexpected values; +got/-exp\n%s", cmp.Diff(decoded, test.in))
+			}
+		})
+	}
+}
+
+// TestEncodeAll ensures 100% test coverage of EncodeAll and
+// verifies all output by comparing the original input with the output of DecodeAll
+func TestEncodeAllUint64Generic(t *testing.T) {
+	rand.Seed(0)
+
+	for _, test := range s8bTestsUint64 {
 		t.Run(test.name, func(t *testing.T) {
 			if test.fn != nil {
 				test.in = test.fn()
@@ -479,7 +509,7 @@ func TestEncodeAll64bitGeneric(t *testing.T) {
 			}
 
 			decoded := make([]uint64, len(test.in))
-			n, err := decodeAll64bitGeneric(decoded, buf)
+			n, err := decodeAllUint64Generic(decoded, buf)
 			if err != nil {
 				t.Fatalf("unexpected decode error\n%s", err)
 			}
@@ -491,10 +521,10 @@ func TestEncodeAll64bitGeneric(t *testing.T) {
 	}
 }
 
-func TestEncodeAll32bitGeneric(t *testing.T) {
+func TestEncodeAllUint32Generic(t *testing.T) {
 	rand.Seed(0)
 
-	for _, test := range s8bTests32bit {
+	for _, test := range s8bTestsUint32 {
 		t.Run(test.name, func(t *testing.T) {
 			if test.fn != nil {
 				test.in = test.fn()
@@ -528,7 +558,7 @@ func TestEncodeAll32bitGeneric(t *testing.T) {
 			}
 
 			decoded := make([]uint32, len(test.in))
-			n, err := decodeAll32bitGeneric(decoded, buf)
+			n, err := decodeAllUint32Generic(decoded, buf)
 			if err != nil {
 				t.Fatalf("unexpected decode error\n%s", err)
 			}
@@ -540,10 +570,10 @@ func TestEncodeAll32bitGeneric(t *testing.T) {
 	}
 }
 
-func TestEncodeAll16bitGeneric(t *testing.T) {
+func TestEncodeAllUint16Generic(t *testing.T) {
 	rand.Seed(0)
 
-	for _, test := range s8bTests16bit {
+	for _, test := range s8bTestsUint16 {
 		t.Run(test.name, func(t *testing.T) {
 			if test.fn != nil {
 				test.in = test.fn()
@@ -577,7 +607,7 @@ func TestEncodeAll16bitGeneric(t *testing.T) {
 			}
 
 			decoded := make([]uint16, len(test.in))
-			n, err := decodeAll16bitGeneric(decoded, buf)
+			n, err := decodeAllUint16Generic(decoded, buf)
 			if err != nil {
 				t.Fatalf("unexpected decode error\n%s", err)
 			}
@@ -589,10 +619,10 @@ func TestEncodeAll16bitGeneric(t *testing.T) {
 	}
 }
 
-func TestEncodeAll8bitGeneric(t *testing.T) {
+func TestEncodeAllUint8Generic(t *testing.T) {
 	rand.Seed(0)
 
-	for _, test := range s8bTests8bit {
+	for _, test := range s8bTestsUint8 {
 		t.Run(test.name, func(t *testing.T) {
 			if test.fn != nil {
 				test.in = test.fn()
@@ -626,7 +656,7 @@ func TestEncodeAll8bitGeneric(t *testing.T) {
 			}
 
 			decoded := make([]uint8, len(test.in))
-			n, err := decodeAll8bitGeneric(decoded, buf)
+			n, err := decodeAllUint8Generic(decoded, buf)
 			if err != nil {
 				t.Fatalf("unexpected decode error\n%s", err)
 			}
@@ -638,7 +668,6 @@ func TestEncodeAll8bitGeneric(t *testing.T) {
 	}
 }
 
-/*
 func Test_FewValues(t *testing.T) {
 	testEncode(t, 20, 2)
 }
@@ -749,7 +778,7 @@ func testEncode(t *testing.T, n int, val uint64) {
 		t.Fatalf("Decode len mismatch: exp %v, got %v", exp, got)
 	}
 
-	got, err := CountBytes(encoded)
+	got, err := CountBytesBigEndian(encoded)
 	if err != nil {
 		t.Fatalf("Unexpected error in Count: %v", err)
 	}
@@ -758,7 +787,7 @@ func testEncode(t *testing.T, n int, val uint64) {
 	}
 
 }
-*/
+
 func Test_Bytes(t *testing.T) {
 	enc := NewEncoder()
 	for i := 0; i < 30; i++ {
@@ -883,7 +912,7 @@ func TestCountBytesBetween_SkipMin(t *testing.T) {
 
 var s8bBenchmarkSize = 6000
 
-var s8bBenchmarks = []struct {
+var s8bBenchmarksUint64 = []struct {
 	name string
 	fn   func(n int) func() []uint64
 	size int
@@ -922,7 +951,7 @@ var s8bBenchmarks = []struct {
 	), size: 15 * s8bBenchmarkSize},
 }
 
-var s8bBenchmarks32bit = []struct {
+var s8bBenchmarksUint32 = []struct {
 	name string
 	fn   func(n int) func() []uint64
 	size int
@@ -961,7 +990,7 @@ var s8bBenchmarks32bit = []struct {
 	), size: 15 * s8bBenchmarkSize},
 }
 
-var s8bBenchmarks16bit = []struct {
+var s8bBenchmarksUint16 = []struct {
 	name string
 	fn   func(n int) func() []uint64
 	size int
@@ -996,7 +1025,7 @@ var s8bBenchmarks16bit = []struct {
 	), size: 15 * s8bBenchmarkSize},
 }
 
-var s8bBenchmarks8bit = []struct {
+var s8bBenchmarksUint8 = []struct {
 	name string
 	fn   func(n int) func() []uint64
 	size int
@@ -1024,7 +1053,7 @@ var s8bBenchmarks8bit = []struct {
 }
 
 func BenchmarkEncodeAll(b *testing.B) {
-	for _, bm := range s8bBenchmarks {
+	for _, bm := range s8bBenchmarksUint64 {
 		in := bm.fn(s8bBenchmarkSize)()
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
@@ -1035,8 +1064,8 @@ func BenchmarkEncodeAll(b *testing.B) {
 	}
 }
 
-func BenchmarkDecodeAllGeneric(b *testing.B) {
-	for _, bm := range s8bBenchmarks {
+func BenchmarkDecodeAllUint64Generic(b *testing.B) {
+	for _, bm := range s8bBenchmarksUint64 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint64, len(in))
 		comp, _ := EncodeAll(in)
@@ -1049,14 +1078,14 @@ func BenchmarkDecodeAllGeneric(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
 			for i := 0; i < b.N; i++ {
-				decodeAll64bitGeneric(out, buf)
+				decodeAllUint64Generic(out, buf)
 			}
 		})
 	}
 }
 
-func BenchmarkDecodeAll32bitGeneric(b *testing.B) {
-	for _, bm := range s8bBenchmarks32bit {
+func BenchmarkDecodeAllUint3232Generic(b *testing.B) {
+	for _, bm := range s8bBenchmarksUint32 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint32, len(in))
 		comp, _ := EncodeAll(in)
@@ -1069,14 +1098,14 @@ func BenchmarkDecodeAll32bitGeneric(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(4 * bm.size))
 			for i := 0; i < b.N; i++ {
-				decodeAll32bitGeneric(out, buf)
+				decodeAllUint32Generic(out, buf)
 			}
 		})
 	}
 }
 
-func BenchmarkDecodeAll16bitGeneric(b *testing.B) {
-	for _, bm := range s8bBenchmarks16bit {
+func BenchmarkDecodeAllUint16Generic(b *testing.B) {
+	for _, bm := range s8bBenchmarksUint16 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint16, len(in))
 		comp, _ := EncodeAll(in)
@@ -1089,14 +1118,14 @@ func BenchmarkDecodeAll16bitGeneric(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(2 * bm.size))
 			for i := 0; i < b.N; i++ {
-				decodeAll16bitGeneric(out, buf)
+				decodeAllUint16Generic(out, buf)
 			}
 		})
 	}
 }
 
-func BenchmarkDecodeAll8bitGeneric(b *testing.B) {
-	for _, bm := range s8bBenchmarks8bit {
+func BenchmarkDecodeAllUint8Generic(b *testing.B) {
+	for _, bm := range s8bBenchmarksUint8 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint8, len(in))
 		comp, _ := EncodeAll(in)
@@ -1109,14 +1138,14 @@ func BenchmarkDecodeAll8bitGeneric(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(1 * bm.size))
 			for i := 0; i < b.N; i++ {
-				decodeAll8bitGeneric(out, buf)
+				decodeAllUint8Generic(out, buf)
 			}
 		})
 	}
 }
 
 func BenchmarkCountBytesGeneric(b *testing.B) {
-	for _, bm := range s8bBenchmarks {
+	for _, bm := range s8bBenchmarksUint64 {
 		in := bm.fn(s8bBenchmarkSize)()
 		encoded, _ := EncodeAll(in)
 
@@ -1167,7 +1196,6 @@ func BenchmarkEncoder(b *testing.B) {
 	}
 }
 
-/*
 func BenchmarkDecode(b *testing.B) {
 	total := 0
 
@@ -1187,7 +1215,7 @@ func BenchmarkDecode(b *testing.B) {
 		total += len(decoded)
 	}
 }
-*/
+
 func BenchmarkDecoder(b *testing.B) {
 	enc := NewEncoder()
 	x := make([]uint64, 1024)

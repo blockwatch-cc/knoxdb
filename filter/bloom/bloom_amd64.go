@@ -4,7 +4,7 @@
 //go:build go1.7 && amd64 && !gccgo && !appengine
 // +build go1.7,amd64,!gccgo,!appengine
 
-package bloomVec
+package bloom
 
 import (
 	"blockwatch.cc/knoxdb/util"

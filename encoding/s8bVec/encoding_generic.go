@@ -9,7 +9,7 @@ import (
 
 // go:nocheckptr
 // nocheckptr while the underlying struct layout doesn't change
-func decodeAll64bitGeneric(dst []uint64, src []byte) (value int, err error) {
+func decodeAllUint64Generic(dst []uint64, src []byte) (value int, err error) {
 	if len(src)&7 != 0 {
 		return 0, errors.New("src length is not multiple of 8")
 	}
@@ -28,7 +28,7 @@ func decodeAll64bitGeneric(dst []uint64, src []byte) (value int, err error) {
 
 // go:nocheckptr
 // nocheckptr while the underlying struct layout doesn't change
-func decodeAll32bitGeneric(dst []uint32, src []byte) (value int, err error) {
+func decodeAllUint32Generic(dst []uint32, src []byte) (value int, err error) {
 	if len(src)&7 != 0 {
 		return 0, errors.New("src length is not multiple of 8")
 	}
@@ -47,7 +47,7 @@ func decodeAll32bitGeneric(dst []uint32, src []byte) (value int, err error) {
 
 // go:nocheckptr
 // nocheckptr while the underlying struct layout doesn't change
-func decodeAll16bitGeneric(dst []uint16, src []byte) (value int, err error) {
+func decodeAllUint16Generic(dst []uint16, src []byte) (value int, err error) {
 	if len(src)&7 != 0 {
 		return 0, errors.New("src length is not multiple of 8")
 	}
@@ -66,7 +66,7 @@ func decodeAll16bitGeneric(dst []uint16, src []byte) (value int, err error) {
 
 // go:nocheckptr
 // nocheckptr while the underlying struct layout doesn't change
-func decodeAll8bitGeneric(dst []uint8, src []byte) (value int, err error) {
+func decodeAllUint8Generic(dst []uint8, src []byte) (value int, err error) {
 	if len(src)&7 != 0 {
 		return 0, errors.New("src length is not multiple of 8")
 	}
@@ -83,7 +83,6 @@ func decodeAll8bitGeneric(dst []uint8, src []byte) (value int, err error) {
 	return j, nil
 }
 
-/*
 // go:nocheckptr
 // nocheckptr while the underlying struct layout doesn't change
 func decodeBytesBigEndianGeneric(dst []uint64, src []byte) (value int, err error) {
@@ -102,12 +101,30 @@ func decodeBytesBigEndianGeneric(dst []uint64, src []byte) (value int, err error
 	}
 	return j, nil
 }
-*/
 
 func countBytesGeneric(b []byte) (int, error) {
 	var count int
 	for len(b) >= 8 {
 		v := binary.LittleEndian.Uint64(b[:8])
+		b = b[8:]
+
+		sel := v >> 60
+		if sel >= 16 {
+			return 0, fmt.Errorf("invalid selector value: %v", sel)
+		}
+		count += selector[sel].n
+	}
+
+	if len(b) > 0 {
+		return 0, fmt.Errorf("invalid slice len remaining: %v", len(b))
+	}
+	return count, nil
+}
+
+func countBytesBigEndianGeneric(b []byte) (int, error) {
+	var count int
+	for len(b) >= 8 {
+		v := binary.BigEndian.Uint64(b[:8])
 		b = b[8:]
 
 		sel := v >> 60

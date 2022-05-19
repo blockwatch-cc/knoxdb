@@ -27,6 +27,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"unsafe"
 )
 
 const MaxValue = (1 << 60) - 1
@@ -292,6 +293,11 @@ func CountBytes(b []byte) (int, error) {
 	return countBytes(b)
 }
 
+// Count returns the number of integers encoded in the byte slice
+func CountBytesBigEndian(b []byte) (int, error) {
+	return countBytesBigEndian(b)
+}
+
 // Count returns the number of integers encoded within an uint64
 func Count(v uint64) (int, error) {
 	sel := v >> 60
@@ -528,17 +534,47 @@ func Decode(dst *[240]uint64, v uint64) (n int, err error) {
 
 // Decode writes the uncompressed values from src to dst.  It returns the number
 // of values written or an error.
+//go:nocheckptr
+// nocheckptr while the underlying struct layout doesn't change
+func DecodeAll(dst, src []uint64) (value int, err error) {
+	j := 0
+	for _, v := range src {
+		sel := (v >> 60) & 0xf
+		selector[sel].unpack(v, (*[240]uint64)(unsafe.Pointer(&dst[j])))
+		j += selector[sel].n
+	}
+	return j, nil
+}
+
+// Decode writes the uncompressed values from src to dst.  It returns the number
+// of values written or an error.
 func DecodeAllUint64(dst []uint64, src []byte) (value int, err error) {
 	return decodeAllUint64(dst, src)
 }
 
-/*
+// Decode writes the uncompressed values from src to dst.  It returns the number
+// of values written or an error.
+func DecodeAllUint32(dst []uint32, src []byte) (value int, err error) {
+	return decodeAllUint32(dst, src)
+}
+
+// Decode writes the uncompressed values from src to dst.  It returns the number
+// of values written or an error.
+func DecodeAllUint16(dst []uint16, src []byte) (value int, err error) {
+	return decodeAllUint16(dst, src)
+}
+
+// Decode writes the uncompressed values from src to dst.  It returns the number
+// of values written or an error.
+func DecodeAllUint8(dst []uint8, src []byte) (value int, err error) {
+	return decodeAllUint8(dst, src)
+}
+
 // DecodeBytesBigEndian writes the compressed, big-endian values from src to dst.  It returns the number
 // of values written or an error.
 func DecodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {
 	return decodeBytesBigEndian(dst, src)
 }
-*/
 
 // canPack returs true if n elements from in can be stored using bits per element
 func canPack(src []uint64, n, bits int) bool {

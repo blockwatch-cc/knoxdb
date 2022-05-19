@@ -23,7 +23,7 @@ func TestEncodeAllAVX2(t *testing.T) {
 	}
 
 	rand.Seed(0)
-	for _, test := range s8bTests {
+	for _, test := range s8bTestsUint64 {
 		t.Run(test.name, func(t *testing.T) {
 			if test.fn != nil {
 				test.in = test.fn()
@@ -73,7 +73,7 @@ func TestEncodeAllAVX2Call(t *testing.T) {
 	}
 
 	rand.Seed(0)
-	for _, test := range s8bTests {
+	for _, test := range s8bTestsUint64 {
 		t.Run(test.name, func(t *testing.T) {
 			if test.fn != nil {
 				test.in = test.fn()
@@ -120,7 +120,7 @@ func TestEncodeAllAVX512Call(t *testing.T) {
 	}
 
 	rand.Seed(0)
-	for _, test := range s8bTests {
+	for _, test := range s8bTestsUint64 {
 		t.Run(test.name, func(t *testing.T) {
 			if test.fn != nil {
 				test.in = test.fn()
@@ -140,7 +140,7 @@ func TestEncodeAllAVX512Call(t *testing.T) {
 				binary.BigEndian.PutUint64(b, v)
 				b = b[8:]
 			}
-			count, err := countBytesAVX512(buf)
+			count, err := countBytesAVX2(buf)
 			if err != nil {
 				t.Fatalf("unexpected count error\n%s", err)
 			}
@@ -165,7 +165,7 @@ func TestEncodeAllUint32AVX2(t *testing.T) {
 	}
 	rand.Seed(0)
 
-	for _, test := range s8bTests32bit {
+	for _, test := range s8bTestsUint32 {
 		t.Run(test.name, func(t *testing.T) {
 			if test.fn != nil {
 				test.in = test.fn()
@@ -216,7 +216,7 @@ func TestEncodeAllAVX2Jmp(t *testing.T) {
 	}
 
 	rand.Seed(0)
-	for _, test := range s8bTests {
+	for _, test := range s8bTestsUint64 {
 		t.Run(test.name, func(t *testing.T) {
 			if test.fn != nil {
 				test.in = test.fn()
@@ -246,7 +246,7 @@ func TestEncodeAllAVX2Opt(t *testing.T) {
 	}
 
 	rand.Seed(0)
-	for _, test := range s8bTests {
+	for _, test := range s8bTestsUint64 {
 		t.Run(test.name, func(t *testing.T) {
 			if test.fn != nil {
 				test.in = test.fn()
@@ -274,7 +274,7 @@ func BenchmarkCountBytesAVX2(b *testing.B) {
 	if !util.UseAVX2 {
 		b.Skip()
 	}
-	for _, bm := range s8bBenchmarks {
+	for _, bm := range s8bBenchmarksUint64 {
 		in := bm.fn(s8bBenchmarkSize)()
 		encoded, _ := EncodeAll(in)
 
@@ -298,7 +298,7 @@ func BenchmarkDecodeAllAVX2(b *testing.B) {
 	if !util.UseAVX2 {
 		b.Skip()
 	}
-	for _, bm := range s8bBenchmarks {
+	for _, bm := range s8bBenchmarksUint64 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint64, len(in))
 		comp, _ := EncodeAll(in)
@@ -316,7 +316,7 @@ func BenchmarkDecodeAllAVX2Call(b *testing.B) {
 		b.Skip()
 	}
 
-	for _, bm := range s8bBenchmarks {
+	for _, bm := range s8bBenchmarksUint64 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint64, len(in))
 		comp, _ := EncodeAll(in)
@@ -342,7 +342,7 @@ func BenchmarkDecodeAllAVX512Call(b *testing.B) {
 		b.Skip()
 	}
 
-	for _, bm := range s8bBenchmarks {
+	for _, bm := range s8bBenchmarksUint64 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint64, len(in))
 		comp, _ := EncodeAll(in)
@@ -360,7 +360,7 @@ func BenchmarkDecodeAllUint32AVX2(b *testing.B) {
 		b.Skip()
 	}
 
-	for _, bm := range s8bBenchmarks32bit {
+	for _, bm := range s8bBenchmarksUint32 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint32, len(in))
 		comp, _ := EncodeAll(in)
@@ -377,12 +377,12 @@ func BenchmarkDecodeAllUint32AVX2(b *testing.B) {
 	}
 }
 
-func BenchmarkDecodeAll32bitAVX2Copy(b *testing.B) {
+func BenchmarkDecodeAllUint32AVX2Copy(b *testing.B) {
 	if !util.UseAVX2 {
 		b.Skip()
 	}
 
-	for _, bm := range s8bBenchmarks32bit {
+	for _, bm := range s8bBenchmarksUint32 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint32, len(in))
 		tmp := make([]uint64, len(in))
@@ -412,7 +412,7 @@ func BenchmarkDecodeAllAVX2Jmp(b *testing.B) {
 		b.Skip()
 	}
 
-	for _, bm := range s8bBenchmarks {
+	for _, bm := range s8bBenchmarksUint64 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint64, len(in))
 		comp, _ := EncodeAll(in)
@@ -430,7 +430,7 @@ func BenchmarkDecodeAllAVX2Opt(b *testing.B) {
 		b.Skip()
 	}
 
-	for _, bm := range s8bBenchmarks {
+	for _, bm := range s8bBenchmarksUint64 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint64, len(in))
 		comp, _ := EncodeAll(in)

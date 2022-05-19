@@ -318,7 +318,7 @@ func integerBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode packed value")
 	}
 
-	count, err := s8bVec.CountBytes(b[8:])
+	count, err := s8bVec.CountBytesBigEndian(b[8:])
 	if err != nil {
 		return []int64{}, err
 	}
