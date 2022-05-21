@@ -485,7 +485,7 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 			tcomp = time.Since(start).Seconds()
 			if err == nil {
 				start = time.Now()
-				err = b2.Decode(buf.Bytes(), b.Len(), b2.MaxStoredSize())
+				err = b2.DecodeNew(buf.Bytes(), b.Len(), b2.MaxStoredSize())
 				tdecomp = time.Since(start).Seconds()
 			}
 		case "delta-s8b":

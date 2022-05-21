@@ -75,22 +75,11 @@ prep_big:
         JZ      prep_small
 
 loop_big:
-        // for big endian
-/*        VPAND           (SI), Y14, Y0   // determine selector
-        VPAND           32(SI), Y14, Y1   // determine selector
-        VPAND           64(SI), Y14, Y2   // determine selector
-        VPAND           96(SI), Y14, Y3   // determine selector
-	VPSRLQ	        $4, Y0, Y0      // determine selector
-	VPSRLQ	        $4, Y1, Y1      // determine selector
-	VPSRLQ	        $4, Y2, Y2      // determine selector
-	VPSRLQ	        $4, Y3, Y3      // determine selector
-*/
         // for little endian 
         VMOVDQU           (SI), Y0 
         VMOVDQU           32(SI), Y1
         VMOVDQU           64(SI), Y2
         VMOVDQU           96(SI), Y3
-
 	VPSRLQ	        $60, Y0, Y0      // determine selector
 	VPSRLQ	        $60, Y1, Y1      // determine selector
 	VPSRLQ	        $60, Y2, Y2      // determine selector
@@ -124,10 +113,6 @@ prep_small:
         JZ      exit_small
 
 loop_small:
-        // for big endian
-//        VPAND           (SI), Y14, Y0   // determine selector
-//	VPSRLQ	        $4, Y0, Y0      // determine selector
-
         // for little endian 
         VMOVDQU           (SI), Y0 
 	VPSRLQ	        $60, Y0, Y0      // determine selector
@@ -150,10 +135,6 @@ exit_small:
         VPCMPGTQ        Y2, Y1, Y1              // mask remaining values
 
         VPMASKMOVQ      (SI), Y1, Y0            // load remaining values
-
-        // for big endian
-//        VPAND           Y0, Y14, Y0     // determine selector
-//	VPSRLQ	        $4, Y0, Y0      // determine selector
 
         // for little endian 
 	VPSRLQ	        $60, Y0, Y0      // determine selector
@@ -222,18 +203,7 @@ loop_big:
 	VPSRLQ	        $4, Y1, Y1      // determine selector
 	VPSRLQ	        $4, Y2, Y2      // determine selector
 	VPSRLQ	        $4, Y3, Y3      // determine selector
-/*
-        // for little endian 
-        VMOVDQU           (SI), Y0 
-        VMOVDQU           32(SI), Y1
-        VMOVDQU           64(SI), Y2
-        VMOVDQU           96(SI), Y3
 
-	VPSRLQ	        $60, Y0, Y0      // determine selector
-	VPSRLQ	        $60, Y1, Y1      // determine selector
-	VPSRLQ	        $60, Y2, Y2      // determine selector
-	VPSRLQ	        $60, Y3, Y3     // determine selector
-*/
 	VPSLLQ	        $32, Y1, Y1      // combine selector vectors
         VPOR            Y1, Y0, Y0
 	VPSLLQ	        $32, Y3, Y3      // combine selector vectors
@@ -266,10 +236,6 @@ loop_small:
         VPAND           (SI), Y14, Y0   // determine selector
 	VPSRLQ	        $4, Y0, Y0      // determine selector
 
-        // for little endian 
-//        VMOVDQU           (SI), Y0 
-//	VPSRLQ	        $60, Y0, Y0      // determine selector
-
 	VPSHUFB	        Y0, Y15, Y0     // look up number of values
         VPAND           Y0, Y14, Y0     // clear unused values
 
@@ -292,9 +258,6 @@ exit_small:
         // for big endian
         VPAND           Y0, Y14, Y0     // determine selector
 	VPSRLQ	        $4, Y0, Y0      // determine selector
-
-        // for little endian 
-//	VPSRLQ	        $60, Y0, Y0      // determine selector
 
 	VPSHUFB	        Y0, Y15, Y0     // look up number of values
         VPAND           Y0, Y14, Y0     // clear unused values

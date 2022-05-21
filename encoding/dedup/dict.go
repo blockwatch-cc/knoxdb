@@ -248,7 +248,7 @@ func (a *DictByteArray) Decode(buf []byte) error {
 	}
 
 	var err error
-	scratch, err = compress.IntegerArrayDecodeAll(buf[:olen], scratch)
+	scratch, err = compress.IntegerArrayDecodeAllOld(buf[:olen], scratch)
 	if err != nil {
 		return fmt.Errorf("dict: decoding offsets: %w", err)
 	}
