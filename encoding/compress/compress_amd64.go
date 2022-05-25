@@ -29,12 +29,75 @@ func delta8DecodeUint64AVX2Core(data []uint64)
 //go:noescape
 func delta8EncodeUint64AVX2Core(data []uint64) uint64
 
+func zzDeltaEncodeUint8(data []uint8) uint8 {
+	switch {
+	//case util.UseAVX2:
+	//	zzDeltaDecodeInt16AVX2(data)
+	default:
+		return zzDeltaEncodeUint8Generic(data)
+	}
+}
+
+func zzDeltaEncodeUint16(data []uint16) uint16 {
+	switch {
+	//case util.UseAVX2:
+	//	zzDeltaDecodeInt16AVX2(data)
+	default:
+		return zzDeltaEncodeUint16Generic(data)
+	}
+}
+
+func zzDeltaEncodeUint32(data []uint32) uint32 {
+	switch {
+	//case util.UseAVX2:
+	//	zzDeltaDecodeInt16AVX2(data)
+	default:
+		return zzDeltaEncodeUint32Generic(data)
+	}
+}
+
+func zzDeltaEncodeUint64(data []uint64) uint64 {
+	switch {
+	//case util.UseAVX2:
+	//	zzDeltaDecodeInt16AVX2(data)
+	default:
+		return zzDeltaEncodeUint64Generic(data)
+	}
+}
+
 func zzDeltaDecodeInt64(data []int64) {
 	switch {
 	case util.UseAVX2:
 		zzDeltaDecodeInt64AVX2(data)
 	default:
 		zzDeltaDecodeInt64Generic(data)
+	}
+}
+
+func zzDeltaDecodeInt32(data []int32) {
+	switch {
+	//case util.UseAVX2:
+	//	zzDeltaDecodeInt32AVX2(data)
+	default:
+		zzDeltaDecodeInt32Generic(data)
+	}
+}
+
+func zzDeltaDecodeInt16(data []int16) {
+	switch {
+	//case util.UseAVX2:
+	//	zzDeltaDecodeInt16AVX2(data)
+	default:
+		zzDeltaDecodeInt16Generic(data)
+	}
+}
+
+func zzDeltaDecodeInt8(data []int8) {
+	switch {
+	//case util.UseAVX2:
+	//	zzDeltaDecodeInt8AVX2(data)
+	default:
+		zzDeltaDecodeInt8Generic(data)
 	}
 }
 

@@ -139,7 +139,7 @@ func (a *CompactByteArray) WriteTo(w io.Writer) (int64, error) {
 	for i, v := range a.offs {
 		scratch[i] = int64(v)
 	}
-	olen, err := compress.IntegerArrayEncodeAll(scratch, w)
+	olen, err := compress.ArrayEncodeAllInt64(scratch, w)
 	if err != nil {
 		return int64(count), err
 	}
@@ -149,7 +149,7 @@ func (a *CompactByteArray) WriteTo(w io.Writer) (int64, error) {
 	for i, v := range a.size {
 		scratch[i] = int64(v)
 	}
-	slen, err := compress.IntegerArrayEncodeAll(scratch, w)
+	slen, err := compress.ArrayEncodeAllInt64(scratch, w)
 	if err != nil {
 		return int64(count), err
 	}

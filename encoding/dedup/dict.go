@@ -161,7 +161,7 @@ func (a *DictByteArray) WriteTo(w io.Writer) (int64, error) {
 	for i, v := range a.offs {
 		scratch[i] = int64(v)
 	}
-	olen, err := compress.IntegerArrayEncodeAll(scratch, w)
+	olen, err := compress.ArrayEncodeAllInt64(scratch, w)
 	if err != nil {
 		return int64(count), err
 	}
