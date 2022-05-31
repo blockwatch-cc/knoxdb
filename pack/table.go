@@ -2824,6 +2824,7 @@ func (t *Table) Compact(ctx context.Context) error {
 	)
 
 	log.Debugf("pack: %s table compacting %d packs / %d rows", t.name, srcPacks, total)
+	// t.DumpPackInfoDetail(os.Stdout, DumpModeDec, false)
 
 	// This algorithm walks the table's pack list in pack key order and
 	// collects/compacts contents in row id (pk) order. Note that pk order may
@@ -2849,19 +2850,19 @@ func (t *Table) Compact(ctx context.Context) error {
 			if dstKey == t.packidx.packs[dstIndex].Key {
 				// skip full packs
 				if t.packidx.packs[dstIndex].NValues == maxsz {
-					// log.Tracef("pack: skipping full dst pack %x", dstKey)
+					// log.Debugf("pack: skipping full dst pack key=%x", dstKey)
 					dstIndex++
 					continue
 				}
 				// skip out of order packs
 				pmin, pmax := t.packidx.MinMax(dstIndex)
 				if pmin < lastMaxPk {
-					// log.Tracef("pack: skipping out-of-order dst pack %x", dstKey)
+					// log.Debugf("pack: skipping out-of-order dst pack key=%x", dstKey)
 					dstIndex++
 					continue
 				}
 
-				// log.Tracef("pack: loading dst pack %d:%x", dstIndex, dstKey)
+				// log.Debugf("pack: loading dst pack %d key=%x", dstIndex, dstKey)
 				dstPack, err = t.loadWritablePack(tx, dstKey)
 				if err != nil {
 					return err
@@ -2871,7 +2872,7 @@ func (t *Table) Compact(ctx context.Context) error {
 			} else {
 				// handle gaps in key sequence
 				// clone new pack from journal
-				// log.Tracef("pack: creating new dst pack %d:%x", dstIndex, dstKey)
+				// log.Debugf("pack: creating new dst pack %d key=%x", dstIndex, dstKey)
 				dstPack = t.packPool.Get().(*Package)
 				dstPack.key = dstKey
 				isNewPack = true
@@ -2885,10 +2886,13 @@ func (t *Table) Compact(ctx context.Context) error {
 			minSlice, _ := t.packidx.MinMaxSlices()
 			var startIndex, srcIndex int = dstIndex, -1
 			var lastmin uint64 = math.MaxUint64
-			if isNewPack {
+			if isNewPack && startIndex > 0 {
 				startIndex--
 			}
 			for i := startIndex; i < len(minSlice); i++ {
+				if t.packidx.packs[i].Key < dstPack.key {
+					continue
+				}
 				currmin := minSlice[i]
 				if currmin <= lastMaxPk {
 					continue
@@ -2905,7 +2909,7 @@ func (t *Table) Compact(ctx context.Context) error {
 			}
 
 			ph := t.packidx.packs[srcIndex]
-			// log.Tracef("pack: loading src pack %d:%x", srcIndex, ph.Key)
+			// log.Debugf("pack: loading src pack %d key=%x", srcIndex, ph.Key)
 			srcPack, err = t.loadWritablePack(tx, ph.Key)
 			if err != nil {
 				return err
@@ -2922,7 +2926,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		moved += int64(cp)
 
 		// move data from src to dst
-		// log.Tracef("pack: moving %d/%d rows from pack %x to %x", cp, srcPack.Len(),
+		// log.Debugf("pack: moving %d/%d rows from pack %x to %x", cp, srcPack.Len(),
 		// 	srcPack.key, dstPack.key)
 		if err := dstPack.AppendFrom(srcPack, 0, cp); err != nil {
 			return err
@@ -2939,7 +2943,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		// write dst when full
 		if dstPack.Len() == maxsz {
 			// this may extend the pack header list when dstPack is new
-			// log.Tracef("pack: storing full dst pack %x", dstPack.key)
+			// log.Debugf("pack: storing full dst pack %x", dstPack.key)
 			n, err := t.storePack(tx, dstPack)
 			if err != nil {
 				return err
@@ -2953,7 +2957,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		}
 
 		// if srcPack.Len() == 0 {
-		// 	log.Tracef("pack: deleting empty src pack %x", srcPack.key)
+		// 	log.Debugf("pack: deleting empty src pack %x", srcPack.key)
 		// }
 
 		// store or delete source pack
@@ -2980,7 +2984,7 @@ func (t *Table) Compact(ctx context.Context) error {
 
 	// store the last dstPack
 	if dstPack != nil {
-		// log.Tracef("pack: storing last dst pack %x", dstPack.key)
+		// log.Debugf("pack: storing last dst pack %x", dstPack.key)
 		n, err := t.storePack(tx, dstPack)
 		if err != nil {
 			return err
@@ -2995,6 +2999,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		util.ByteSize(srcSize), util.ByteSize(dstSize),
 		time.Since(start),
 	)
+	// t.DumpPackInfoDetail(os.Stdout, DumpModeDec, false)
 
 	// store pack headers
 	if err := t.storePackInfo(tx.tx); err != nil {
