@@ -239,7 +239,7 @@ func (j *Join) Compile() error {
 		j.aliases[joinname] = alias
 
 		// save output field
-		j.fields = append(j.fields, Field{
+		j.fields = append(j.fields, &Field{
 			Index: len(j.fields),          // position in output list
 			Name:  joinname,               // table name + original field name from source table
 			Alias: alias,                  // joinname or user-defined alias
@@ -260,7 +260,7 @@ func (j *Join) Compile() error {
 		j.aliases[joinname] = alias
 
 		// save output field
-		j.fields = append(j.fields, Field{
+		j.fields = append(j.fields, &Field{
 			Index: len(j.fields),          // position in output list
 			Name:  joinname,               // table name + original field name from source table
 			Alias: alias,                  // joinname or user-defined alias

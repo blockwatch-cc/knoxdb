@@ -91,7 +91,7 @@ func (h *BlockInfoList) Decode(buf *bytes.Buffer) error {
 	return nil
 }
 
-func NewBlockInfo(b *block.Block, field Field) BlockInfo {
+func NewBlockInfo(b *block.Block, field *Field) BlockInfo {
 	h := BlockInfo{
 		Type:        b.Type(),
 		Compression: b.Compression(),

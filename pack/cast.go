@@ -13,7 +13,7 @@ import (
 )
 
 // Note: may evolve into a CAST function
-func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
+func (t FieldType) CastType(val interface{}, f *Field) (interface{}, error) {
 	var ok bool
 	res := val
 	switch t {
@@ -526,7 +526,7 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 }
 
 // Note: can evolve into a CAST function
-func (t FieldType) CastSliceType(val interface{}, f Field) (interface{}, error) {
+func (t FieldType) CastSliceType(val interface{}, f *Field) (interface{}, error) {
 	var ok bool
 	res := val
 	switch t {

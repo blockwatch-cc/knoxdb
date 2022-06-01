@@ -102,7 +102,7 @@ type IndexEntry struct {
 type Index struct {
 	Name  string    `json:"name"`  // stored in table metadata
 	Type  IndexType `json:"typ"`   // stored in table metadata
-	Field Field     `json:"field"` // stored in table metadata
+	Field *Field    `json:"field"` // stored in table metadata
 	opts  Options   // stored in table metadata
 
 	// function pointers
@@ -132,7 +132,7 @@ func (l IndexList) FindField(fieldname string) *Index {
 	return nil
 }
 
-func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Options) (*Index, error) {
+func (t *Table) CreateIndex(name string, field *Field, typ IndexType, opts Options) (*Index, error) {
 	opts = DefaultOptions.Merge(opts)
 	if err := opts.Check(); err != nil {
 		return nil, err
@@ -251,7 +251,7 @@ func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Option
 	return idx, nil
 }
 
-func (t *Table) CreateIndexIfNotExists(name string, field Field, typ IndexType, opts Options) (*Index, error) {
+func (t *Table) CreateIndexIfNotExists(name string, field *Field, typ IndexType, opts Options) (*Index, error) {
 	idx, err := t.CreateIndex(name, field, typ, opts)
 	if err != nil {
 		if err != ErrIndexExists {

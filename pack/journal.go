@@ -89,7 +89,7 @@ func NewJournal(maxid uint64, size int, name string) *Journal {
 	}
 }
 
-func (j *Journal) InitFields(fields []Field) error {
+func (j *Journal) InitFields(fields FieldList) error {
 	return j.data.InitFields(fields, nil)
 }
 

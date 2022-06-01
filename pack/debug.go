@@ -666,7 +666,7 @@ func (p *Package) Validate() error {
 	for i, f := range p.fields {
 		b := p.blocks[i]
 		if a, b := b.Type(), f.Type.BlockType(); a != b {
-			return fmt.Errorf("pack: mismatch block type %s/%s", a, b)
+			return fmt.Errorf("pack: mismatch field block type %s/%s", a, b)
 		}
 		if a, b := p.nValues, b.Len(); a != b {
 			return fmt.Errorf("pack: mismatch block len %d/%d", a, b)

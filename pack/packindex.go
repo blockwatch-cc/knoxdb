@@ -110,9 +110,14 @@ func (l *PackIndex) TableSize() int {
 func (l *PackIndex) Sort() {
 	sort.Slice(l.pos, func(i, j int) bool {
 		posi, posj := l.pos[i], l.pos[j]
-		mini, maxi := l.minpks[posi], l.maxpks[posi]
-		minj, maxj := l.minpks[posj], l.maxpks[posj]
-		return mini < minj || (mini == minj && maxi < maxj) || (mini == minj && maxi == maxj && i < j)
+
+		// TODO(echa): check it is safe to not sort by max
+		// mini, maxi := l.minpks[posi], l.maxpks[posi]
+		// minj, maxj := l.minpks[posj], l.maxpks[posj]
+		// return mini < minj || (mini == minj && maxi < maxj) || (mini == minj && maxi == maxj && i < j)
+
+		mini, minj := l.minpks[posi], l.minpks[posj]
+		return mini < minj || (mini == minj && i < j)
 	})
 }
 
@@ -210,9 +215,13 @@ func (l *PackIndex) AddOrUpdate(head PackInfo) {
 		l.maxpks[pos] = newmax
 
 		// skip sort if min/max values haven't changed
+
+		// TODO(echa): check it is safe to not sort on max change
+		// oldmin := old.Blocks[l.pkidx].MinValue.(uint64)
+		// oldmax := old.Blocks[l.pkidx].MaxValue.(uint64)
+		// needsort = oldmin != newmin || oldmax != newmax
 		oldmin := old.Blocks[l.pkidx].MinValue.(uint64)
-		oldmax := old.Blocks[l.pkidx].MaxValue.(uint64)
-		needsort = oldmin != newmin || oldmax != newmax
+		needsort = oldmin != newmin
 	}
 	if needsort {
 		l.Sort()

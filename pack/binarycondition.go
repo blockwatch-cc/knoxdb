@@ -8,8 +8,8 @@ import (
 )
 
 type BinaryCondition struct {
-	Left  Field
-	Right Field
+	Left  *Field
+	Right *Field
 	Mode  FilterMode
 }
 

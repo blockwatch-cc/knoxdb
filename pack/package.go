@@ -114,16 +114,16 @@ func (p *Package) FieldIndex(name string) int {
 	return -1
 }
 
-func (p *Package) FieldByName(name string) Field {
+func (p *Package) FieldByName(name string) *Field {
 	for _, v := range p.fields {
 		if v.Name == name || v.Alias == name {
 			return v
 		}
 	}
-	return Field{Index: -1}
+	return &Field{Index: -1}
 }
 
-func (p *Package) PkField() Field {
+func (p *Package) PkField() *Field {
 	return p.fields.Pk()
 }
 
@@ -135,9 +135,9 @@ func (p *Package) Blocks() []*block.Block {
 	return p.blocks
 }
 
-func (p *Package) FieldById(idx int) Field {
+func (p *Package) FieldById(idx int) *Field {
 	if idx < 0 {
-		return Field{Index: -1}
+		return &Field{Index: -1}
 	}
 	return p.fields[idx]
 }
@@ -374,7 +374,7 @@ func (p *Package) UpdateAliasesFrom(fields FieldList) *Package {
 	}
 	// clone our field list (since it may be shared with table)
 	prevfields := p.fields
-	p.fields = make([]Field, len(prevfields))
+	p.fields = make(FieldList, len(prevfields))
 	for i := range p.fields {
 		field := prevfields[i]
 		updated := fields.Find(field.Name)
@@ -397,6 +397,7 @@ func (p *Package) Push(v interface{}) error {
 	if !val.IsValid() {
 		return fmt.Errorf("pack: push: invalid value of type %T", v)
 	}
+
 	for _, fi := range p.tinfo.fields {
 		if fi.blockid < 0 {
 			continue
@@ -547,6 +548,7 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
+
 	for _, fi := range p.tinfo.fields {
 		if fi.blockid < 0 {
 			continue
@@ -1072,9 +1074,10 @@ func (p *Package) isValidAt(index, pos int, typ FieldType) error {
 	if p.fields[index].Type != typ {
 		return ErrInvalidType
 	}
-	if p.blocks[index].Type() != typ.BlockType() {
-		return ErrInvalidType
-	}
+	// expensive (call overhead)
+	// if p.blocks[index].Type() != typ.BlockType() {
+	// 	return ErrInvalidType
+	// }
 	if p.blocks[index].IsIgnore() {
 		return fmt.Errorf("pack: skipped block %d (%s)", index, p.fields[index].Type)
 	}

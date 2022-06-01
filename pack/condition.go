@@ -29,7 +29,7 @@ const (
 )
 
 type Condition struct {
-	Field    Field       // evaluated table field
+	Field    *Field      // evaluated table field
 	Mode     FilterMode  // eq|ne|gt|gte|lt|lte|in|nin|re
 	Raw      string      // string value when parsed from a query string
 	Value    interface{} // typed value
