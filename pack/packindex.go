@@ -108,16 +108,12 @@ func (l *PackIndex) TableSize() int {
 }
 
 func (l *PackIndex) Sort() {
+	// sort by min/max/pos -- see testcases
 	sort.Slice(l.pos, func(i, j int) bool {
 		posi, posj := l.pos[i], l.pos[j]
-
-		// TODO(echa): check it is safe to not sort by max
-		// mini, maxi := l.minpks[posi], l.maxpks[posi]
-		// minj, maxj := l.minpks[posj], l.maxpks[posj]
-		// return mini < minj || (mini == minj && maxi < maxj) || (mini == minj && maxi == maxj && i < j)
-
-		mini, minj := l.minpks[posi], l.minpks[posj]
-		return mini < minj || (mini == minj && i < j)
+		mini, maxi := l.minpks[posi], l.maxpks[posi]
+		minj, maxj := l.minpks[posj], l.maxpks[posj]
+		return mini < minj || (mini == minj && maxi < maxj) || (mini == minj && maxi == maxj && i < j)
 	})
 }
 
