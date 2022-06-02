@@ -504,13 +504,12 @@ func (c *Condition) Compile() (err error) {
 		if c.numValues == 0 {
 			return
 		}
+		if !c.IsSorted {
+			c.Value = Uint64.Sort(slice)
+			c.IsSorted = true
+		}
 		// use a map for lookups unless we check sorted pk slices
-		if c.Field.Flags&FlagPrimary > 0 {
-			if !c.IsSorted {
-				c.Value = Uint64.Sort(slice)
-				c.IsSorted = true
-			}
-		} else {
+		if c.Field.Flags&FlagPrimary == 0 {
 			c.uint64map = make(map[uint64]struct{}, len(slice))
 			for _, v := range slice {
 				c.uint64map[v] = struct{}{}
@@ -708,9 +707,9 @@ func (c Condition) String() string {
 			size = reflect.ValueOf(c.Value).Len()
 		}
 		if size > 16 {
-			return fmt.Sprintf("%s %s [%d values]", c.Field.Name, c.Mode.Op(), size)
+			return fmt.Sprintf("%s %s [%d values] sorted=%t", c.Field.Name, c.Mode.Op(), size, c.IsSorted)
 		} else {
-			return fmt.Sprintf("%s %s %v", c.Field.Name, c.Mode.Op(), c.Field.Type.SliceToString(c.Value, c.Field))
+			return fmt.Sprintf("%s %s sorted=%t %v", c.Field.Name, c.Mode.Op(), c.IsSorted, c.Field.Type.SliceToString(c.Value, c.Field))
 		}
 	default:
 		s := fmt.Sprintf("%s %s %s", c.Field.Name, c.Mode.Op(), util.ToString(c.Value))
@@ -1657,7 +1656,7 @@ func (n ConditionTreeNode) MaybeMatchPack(info PackInfo) bool {
 }
 
 func (n ConditionTreeNode) MatchPack(pkg *Package, info PackInfo) *Bitset {
-	// if root contains a snigle leaf only, match it
+	// if root contains a single leaf only, match it
 	if n.Leaf() {
 		return n.Cond.MatchPack(pkg, nil)
 	}
