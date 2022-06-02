@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/vec"
+	logpkg "github.com/echa/log"
 )
 
 var QueryLogMinDuration time.Duration = 500 * time.Millisecond
@@ -28,6 +29,7 @@ type Query struct {
 	Offset     int               // OFFSET ...
 	NoCache    bool              // explicitly disable pack caching for this query
 	NoIndex    bool              // explicitly disable index query (use for many known duplicates)
+	Debugf     logpkg.LogfFn
 
 	// GroupBy   FieldList   // GROUP BY ... - COLLATE/COLLAPSE
 	// OrderBy   FieldList    // ORDER BY ...
@@ -43,6 +45,7 @@ type Query struct {
 	start    time.Time
 	lap      time.Time
 	stats    QueryStats
+	debug    bool
 }
 
 type QueryStats struct {
@@ -72,11 +75,12 @@ func NewQuery(name string, table *Table) Query {
 	now := time.Now()
 	return Query{
 		Name:      name,
+		Fields:    table.Fields(),
+		Order:     OrderAsc,
+		Debugf:    logpkg.Noop,
 		table:     table,
 		start:     now,
 		lap:       now,
-		Fields:    table.Fields(),
-		Order:     OrderAsc,
 		reqfields: nil,
 		idxFields: table.fields.Indexed(),
 		logAfter:  QueryLogMinDuration,
@@ -163,10 +167,11 @@ func (q *Query) Compile(t *Table) error {
 	}
 	q.stats.CompileTime = time.Since(q.lap)
 
-	log.Debug(newLogClosure(func() string {
-		return q.Dump()
-	}))
-
+	if q.debug {
+		log.Debug(newLogClosure(func() string {
+			return q.Dump()
+		}))
+	}
 	return nil
 }
 
@@ -431,6 +436,12 @@ func (q Query) WithoutStats() Query {
 
 func (q Query) WithStatsAfter(d time.Duration) Query {
 	q.logAfter = d
+	return q
+}
+
+func (q Query) WithDebug() Query {
+	q.debug = true
+	q.Debugf = log.Debugf
 	return q
 }
 

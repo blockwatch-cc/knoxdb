@@ -346,11 +346,13 @@ func (i PackInfo) DumpDetail(w io.Writer) error {
 	fmt.Fprintf(w, "%-3s %-10s %-7s %-7s %-7s %-33s %-33s %-10s\n",
 		"#", "Type", "Comp", "Scale", "Card", "Min", "Max", "Bloom")
 	for id, head := range i.Blocks {
-		var blen uint
+		var bloom string
 		if head.Bloom != nil {
-			blen = head.Bloom.Len()
+			bloom = strconv.Itoa(int(head.Bloom.Len()))
+		} else {
+			bloom = "--"
 		}
-		fmt.Fprintf(w, "%-3d %-10s %-7s %-7d %-7d %-33s %-33s %-10d\n",
+		fmt.Fprintf(w, "%-3d %-10s %-7s %-7d %-7d %-33s %-33s %-10s\n",
 			id,
 			head.Type,
 			head.Compression,
@@ -358,7 +360,7 @@ func (i PackInfo) DumpDetail(w io.Writer) error {
 			head.Cardinality,
 			util.LimitStringEllipsis(util.ToString(head.MinValue), 33),
 			util.LimitStringEllipsis(util.ToString(head.MaxValue), 33),
-			blen,
+			bloom,
 		)
 	}
 	return nil
