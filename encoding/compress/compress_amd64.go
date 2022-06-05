@@ -147,11 +147,14 @@ func delta8EncodeUint64(data []uint64) uint64 {
 }
 
 func zzDeltaDecodeInt64AVX2(data []int64) {
+	if len(data) == 0 {
+		return
+	}
 	len_head := len(data) & 0x7ffffffffffffffc
 	zzdeltaDecodeInt64AVX2Core(data)
 	var prev int64
 	if len_head == 0 {
-		prev = ZigZagDecode(uint64(data[0]))
+		prev = 0
 	} else {
 		prev = data[len_head-1]
 	}
@@ -159,6 +162,11 @@ func zzDeltaDecodeInt64AVX2(data []int64) {
 		prev += ZigZagDecode(uint64(data[i]))
 		data[i] = prev
 	}
+}
+
+func zzDeltaDecodeInt64AVX2X(data []int64) {
+	zzDecodeInt64AVX2(data)
+	deltaDecodeInt64AVX2(data)
 }
 
 func zzDeltaDecodeUint64AVX2(data []uint64) {
@@ -197,6 +205,21 @@ func delta8DecodeUint64AVX2(data []uint64) {
 	delta8DecodeUint64AVX2Core(data)
 	for i := len_head; i < len(data); i++ {
 		data[i] += data[i-8]
+	}
+}
+
+func deltaDecodeInt64AVX2(data []int64) {
+	len_head := len(data) & 0x7ffffffffffffffc
+	deltaDecodeInt64AVX2Core(data)
+	var prev int64
+	if len_head == 0 {
+		prev = 0
+	} else {
+		prev = data[len_head-1]
+	}
+	for i := len_head; i < len(data); i++ {
+		prev += data[i]
+		data[i] = prev
 	}
 }
 

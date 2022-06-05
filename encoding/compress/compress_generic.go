@@ -4,6 +4,9 @@
 package compress
 
 func zzDeltaEncodeUint8Generic(data []uint8) uint8 {
+	if len(data) == 0 {
+		return 0
+	}
 	var maxdelta uint8
 	for i := len(data) - 1; i > 0; i-- {
 		data[i] = data[i] - data[i-1]
@@ -17,6 +20,9 @@ func zzDeltaEncodeUint8Generic(data []uint8) uint8 {
 }
 
 func zzDeltaEncodeUint16Generic(data []uint16) uint16 {
+	if len(data) == 0 {
+		return 0
+	}
 	var maxdelta uint16
 	for i := len(data) - 1; i > 0; i-- {
 		data[i] = data[i] - data[i-1]
@@ -30,6 +36,9 @@ func zzDeltaEncodeUint16Generic(data []uint16) uint16 {
 }
 
 func zzDeltaEncodeUint32Generic(data []uint32) uint32 {
+	if len(data) == 0 {
+		return 0
+	}
 	var maxdelta uint32
 	for i := len(data) - 1; i > 0; i-- {
 		data[i] = data[i] - data[i-1]
@@ -43,6 +52,9 @@ func zzDeltaEncodeUint32Generic(data []uint32) uint32 {
 }
 
 func zzDeltaEncodeUint64Generic(data []uint64) uint64 {
+	if len(data) == 0 {
+		return 0
+	}
 	var maxdelta uint64
 	for i := len(data) - 1; i > 0; i-- {
 		data[i] = data[i] - data[i-1]
@@ -57,6 +69,9 @@ func zzDeltaEncodeUint64Generic(data []uint64) uint64 {
 
 // calculate prefix sum
 func zzDeltaDecodeInt64Generic(data []int64) {
+	if (len(data)) == 0 {
+		return
+	}
 	data[0] = ZigZagDecode(uint64(data[0]))
 	prev := data[0]
 	for i := 1; i < len(data); i++ {
@@ -65,8 +80,22 @@ func zzDeltaDecodeInt64Generic(data []int64) {
 	}
 }
 
+func deltaDecodeInt64Generic(data []int64) {
+	if len(data) == 0 {
+		return
+	}
+	prev := data[0]
+	for i := 1; i < len(data); i++ {
+		prev += data[i]
+		data[i] = prev
+	}
+}
+
 // calculate prefix sum
 func zzDeltaDecodeInt32Generic(data []int32) {
+	if len(data) == 0 {
+		return
+	}
 	data[0] = ZigZagDecodeUint32(uint32(data[0]))
 	prev := data[0]
 	for i := 1; i < len(data); i++ {
@@ -77,6 +106,9 @@ func zzDeltaDecodeInt32Generic(data []int32) {
 
 // calculate prefix sum
 func zzDeltaDecodeInt16Generic(data []int16) {
+	if len(data) == 0 {
+		return
+	}
 	data[0] = ZigZagDecodeUint16(uint16(data[0]))
 	prev := data[0]
 	for i := 1; i < len(data); i++ {
@@ -87,6 +119,9 @@ func zzDeltaDecodeInt16Generic(data []int16) {
 
 // calculate prefix sum
 func zzDeltaDecodeInt8Generic(data []int8) {
+	if len(data) == 0 {
+		return
+	}
 	data[0] = ZigZagDecodeUint8(uint8(data[0]))
 	prev := data[0]
 	for i := 1; i < len(data); i++ {
