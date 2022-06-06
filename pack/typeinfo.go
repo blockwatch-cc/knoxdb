@@ -83,7 +83,7 @@ func (f fieldInfo) String() string {
 		f.name, f.typname, f.idx, f.scale, f.flags, f.override)
 }
 
-var tinfoMap = make(map[string]*typeInfo)
+var tinfoMap = make(map[reflect.Type]*typeInfo)
 var tinfoLock sync.RWMutex
 
 var (
@@ -107,7 +107,7 @@ func getTypeInfo(v interface{}) (*typeInfo, error) {
 
 func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 	tinfoLock.RLock()
-	tinfo, ok := tinfoMap[typ.String()]
+	tinfo, ok := tinfoMap[typ]
 	tinfoLock.RUnlock()
 	if ok {
 		return tinfo, nil
@@ -174,7 +174,7 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 		}
 	}
 	tinfoLock.Lock()
-	tinfoMap[tinfo.name] = tinfo
+	tinfoMap[typ] = tinfo
 	tinfoLock.Unlock()
 	return tinfo, nil
 }

@@ -713,7 +713,7 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
-	// log.Infof("Reading %s at pkg %d pos %d", tinfo.name, p.key, pos)
+	// log.Debugf("Reading %s at pkg %d pos %d", tinfo.name, p.key, pos)
 
 	for _, fi := range tinfo.fields {
 		// Note: field to block mapping is required to be initialized in tinfo!
