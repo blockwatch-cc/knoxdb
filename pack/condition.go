@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2021 Blockwatch Data Inc.
+// Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 // TODO
@@ -11,21 +11,18 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
 
-	"blockwatch.cc/knoxdb/filter/bloomVec"
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/util"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
-	. "blockwatch.cc/knoxdb/encoding/decimal"
-	. "blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/encoding/decimal"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
-	filterThreshold = 2 // use hash map for IN conds with at least N entries
-	COND_OR         = true
-	COND_AND        = false
+	COND_OR  = true
+	COND_AND = false
 )
 
 type Condition struct {
@@ -38,22 +35,22 @@ type Condition struct {
 	IsSorted bool        // IN/NIN condition slice is already pre-sorted
 
 	// internal data and statistics
-	processed    bool                // condition has been processed already
-	nomatch      bool                // condition is empty (used on index matches)
-	hashmap      map[uint64]int      // compiled hashmap for byte/string set queries
-	hashoverflow []hashvalue         // hash collision overflow list (one for all)
-	int256map    map[Int256]struct{} // compiled int256 map for set membership
-	int128map    map[Int128]struct{} // compiled int128 map for set membership
-	int64map     map[int64]struct{}  // compiled int64 map for set membership
-	int32map     map[int32]struct{}  // compiled int32 map for set membership
-	int16map     map[int16]struct{}  // compiled int16 map for set membership
-	int8map      map[int8]struct{}   // compiled int8 map for set membership
-	uint64map    map[uint64]struct{} // compiled uint64 map for set membership
-	uint32map    map[uint32]struct{} // compiled uint32 map for set membership
-	uint16map    map[uint16]struct{} // compiled uint16 map for set membership
-	uint8map     map[uint8]struct{}  // compiled uint8 map for set membership
-	numValues    int                 // number of values when Value is a slice
-	bloomHashes  [][2]uint32         // opt bloom hash value(s) if field has bloom flag
+	processed    bool                    // condition has been processed already
+	nomatch      bool                    // condition is empty (used on index matches)
+	hashmap      map[uint64]int          // compiled hashmap for byte/string set queries
+	hashoverflow []hashvalue             // hash collision overflow list (one for all)
+	int256map    map[vec.Int256]struct{} // compiled int256 map for set membership
+	int128map    map[vec.Int128]struct{} // compiled int128 map for set membership
+	int64map     map[int64]struct{}      // compiled int64 map for set membership
+	int32map     map[int32]struct{}      // compiled int32 map for set membership
+	int16map     map[int16]struct{}      // compiled int16 map for set membership
+	int8map      map[int8]struct{}       // compiled int8 map for set membership
+	uint64map    map[uint64]struct{}     // compiled uint64 map for set membership
+	uint32map    map[uint32]struct{}     // compiled uint32 map for set membership
+	uint16map    map[uint16]struct{}     // compiled uint16 map for set membership
+	uint8map     map[uint8]struct{}      // compiled uint8 map for set membership
+	numValues    int                     // number of values when Value is a slice
+	bloomHashes  [][2]uint32             // opt bloom hash value(s) if field has bloom flag
 }
 
 // condition that is not bound to a table field yet
@@ -150,484 +147,9 @@ func Range(field string, from, to interface{}) UnboundCondition {
 	return UnboundCondition{Name: field, Mode: FilterModeRange, From: from, To: to}
 }
 
-type hashvalue struct {
-	hash uint64
-	pos  int
-}
-
 // returns the number of values to compare 1 (other), 2 (RANGE), many (IN)
 func (c Condition) NValues() int {
 	return c.numValues
-}
-
-func (c *Condition) EnsureTypes() error {
-	// check condition values are of correct type for field
-	var err error
-	switch c.Mode {
-	case FilterModeRange:
-		// expects From and To to be set
-		if c.From == nil || c.To == nil {
-			return fmt.Errorf("range condition expects From and To values")
-		}
-		if c.From, err = c.Field.Type.CastType(c.From, c.Field); err != nil {
-			return err
-		}
-		if c.To, err = c.Field.Type.CastType(c.To, c.Field); err != nil {
-			return err
-		}
-		if c.Field.Type.Gt(c.From, c.To) {
-			return fmt.Errorf("range condition mismatch: from > to")
-		}
-	case FilterModeIn, FilterModeNotIn:
-		// expects a slice of values
-		if c.Value, err = c.Field.Type.CastSliceType(c.Value, c.Field); err != nil {
-			return err
-		}
-	case FilterModeRegexp:
-		// expects string only
-		if err := FieldTypeString.CheckType(c.Value); err != nil {
-			return err
-		}
-	default:
-		// c.Value is a simple value type
-		if c.Value, err = c.Field.Type.CastType(c.Value, c.Field); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (c *Condition) Compile() (err error) {
-	if !c.Field.IsValid() {
-		err = fmt.Errorf("invalid field in cond %s", c.String())
-		return
-	}
-	if err = c.EnsureTypes(); err != nil {
-		err = fmt.Errorf("%s cond %s: %v", c.Field.Name, c.String(), err)
-		return
-	}
-
-	// set number of values
-	if c.Value != nil {
-		c.numValues++
-	}
-	if c.From != nil {
-		c.numValues++
-	}
-	if c.To != nil {
-		c.numValues++
-	}
-
-	// SCALE decimal values to field scale and CONVERT slice types to underlying
-	// storage for comparison, this works for parsed values and programmatic
-	// conditions
-	switch c.Field.Type {
-	case FieldTypeDecimal32:
-		if val, ok := c.Value.([]Decimal32); ok {
-			// internal comparators use always the decimal's base type
-			conv := make([]int32, len(val))
-			for i := range val {
-				conv[i] = val[i].Quantize(c.Field.Scale).Int32()
-			}
-			c.Value = conv
-			c.numValues = len(val)
-		}
-		if val, ok := c.Value.(Decimal32); ok {
-			c.Value = val.Quantize(c.Field.Scale)
-		}
-		if from, ok := c.From.(Decimal32); ok {
-			c.From = from.Quantize(c.Field.Scale)
-		}
-		if to, ok := c.To.(Decimal32); ok {
-			c.To = to.Quantize(c.Field.Scale)
-		}
-	case FieldTypeDecimal64:
-		if val, ok := c.Value.([]Decimal64); ok {
-			// internal comparators use always the decimal's base type
-			conv := make([]int64, len(val))
-			for i := range val {
-				conv[i] = val[i].Quantize(c.Field.Scale).Int64()
-			}
-			c.Value = conv
-			c.numValues = len(val)
-		}
-		if val, ok := c.Value.(Decimal64); ok {
-			c.Value = val.Quantize(c.Field.Scale)
-		}
-		if from, ok := c.From.(Decimal64); ok {
-			c.From = from.Quantize(c.Field.Scale)
-		}
-		if to, ok := c.To.(Decimal64); ok {
-			c.To = to.Quantize(c.Field.Scale)
-		}
-	case FieldTypeDecimal128:
-		if val, ok := c.Value.([]Decimal128); ok {
-			// internal comparators use always the decimal's base type
-			conv := make([]Int128, len(val))
-			for i := range val {
-				conv[i] = val[i].Quantize(c.Field.Scale).Int128()
-			}
-			c.Value = conv
-			c.numValues = len(val)
-		}
-		if val, ok := c.Value.(Decimal128); ok {
-			c.Value = val.Quantize(c.Field.Scale)
-		}
-		if from, ok := c.From.(Decimal128); ok {
-			c.From = from.Quantize(c.Field.Scale)
-		}
-		if to, ok := c.To.(Decimal128); ok {
-			c.To = to.Quantize(c.Field.Scale)
-		}
-	case FieldTypeDecimal256:
-		if val, ok := c.Value.([]Decimal256); ok {
-			// internal comparators use always the decimal's base type
-			conv := make([]Int256, len(val))
-			for i := range val {
-				conv[i] = val[i].Quantize(c.Field.Scale).Int256()
-			}
-			c.Value = conv
-			c.numValues = len(val)
-		}
-		if val, ok := c.Value.(Decimal256); ok {
-			c.Value = val.Quantize(c.Field.Scale)
-		}
-		if from, ok := c.From.(Decimal256); ok {
-			c.From = from.Quantize(c.Field.Scale)
-		}
-		if to, ok := c.To.(Decimal256); ok {
-			c.To = to.Quantize(c.Field.Scale)
-		}
-	case FieldTypeDatetime:
-		// only convert slice values used in in/nin conditions to int64 slice
-		if val, ok := c.Value.([]time.Time); ok {
-			conv := make([]int64, len(val))
-			for i := range val {
-				conv[i] = val[i].UTC().UnixNano()
-			}
-			c.Value = conv
-			c.numValues = len(val)
-		}
-	}
-
-	// prepare bloom filter data
-	buildBloom := c.Field.Flags.Contains(FlagBloom)
-	switch c.Mode {
-	case FilterModeIn, FilterModeNotIn:
-		if buildBloom {
-			c.bloomHashes = make([][2]uint32, 0)
-		}
-		// handled below
-	default:
-		if buildBloom {
-			c.bloomHashes = [][2]uint32{c.Field.Type.Hash(c.Value)}
-		}
-		// anything but IN, NIN is finished here
-		return
-	}
-
-	// hash maps are only used for expensive types, other types
-	// will use a standard go map (and hashing in Go's runtime)
-	var vals [][]byte
-
-	// sort original input slices (required for later checks in FieldType.In/InAt)
-	switch c.Field.Type {
-	case FieldTypeBytes:
-		// require [][]byte slice as value type
-		slice := c.Value.([][]byte)
-		c.numValues = len(slice)
-		if c.numValues == 0 {
-			return
-		}
-		// sorted slice is always required for InBetween pack matches
-		if !c.IsSorted {
-			Bytes.Sort(slice) // sorts in-place
-			c.IsSorted = true
-		}
-		if buildBloom {
-			for _, val := range slice {
-				c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(val))
-			}
-		}
-		// below min size a hash map is more expensive than memcmp
-		if c.numValues < filterThreshold {
-			return
-		}
-		vals = slice
-	case FieldTypeString:
-		slice := c.Value.([]string)
-		c.numValues = len(slice)
-		if c.numValues == 0 {
-			return
-		}
-		// sorted slice is always required for InBetween pack matches
-		if !c.IsSorted {
-			Strings.Sort(slice) // sorts in-place
-			c.IsSorted = true
-		}
-		if buildBloom {
-			for _, val := range slice {
-				c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(compress.UnsafeGetBytes(val)))
-			}
-		}
-		// below min size a hash map is more expensive than memcmp
-		if c.numValues < filterThreshold {
-			return
-		}
-		// convert to []byte for feeding the hash map below
-		vals = make([][]byte, len(slice))
-		for i, v := range slice {
-			vals[i] = compress.UnsafeGetBytes(v)
-		}
-	case FieldTypeBoolean:
-		slice := c.Value.([]bool)
-		if slice != nil {
-			hasTrue := Booleans.Contains(slice, true)
-			hasFalse := Booleans.Contains(slice, false)
-			if hasTrue && hasTrue == hasFalse {
-				c.numValues = 2
-				c.Value = []bool{false, true}
-				if buildBloom {
-					c.bloomHashes = [][2]uint32{
-						bloomVec.Hash([]byte{0}),
-						bloomVec.Hash([]byte{1}),
-					}
-				}
-			} else {
-				c.numValues = 1
-				c.Value = []bool{hasTrue}
-				if buildBloom {
-					var val []byte
-					if hasTrue {
-						val = []byte{1}
-					} else {
-						val = []byte{0}
-					}
-					c.bloomHashes = [][2]uint32{bloomVec.Hash(val)}
-				}
-			}
-		}
-		return
-	case FieldTypeInt256, FieldTypeDecimal256:
-		slice := c.Value.([]Int256)
-		if slice != nil {
-			c.numValues = len(slice)
-			c.int256map = make(map[Int256]struct{}, len(slice))
-			for _, v := range slice {
-				c.int256map[v] = struct{}{}
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-				}
-			}
-		}
-		return
-	case FieldTypeInt128, FieldTypeDecimal128:
-		slice := c.Value.([]Int128)
-		if slice != nil {
-			c.numValues = len(slice)
-			c.int128map = make(map[Int128]struct{}, len(slice))
-			for _, v := range slice {
-				c.int128map[v] = struct{}{}
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-				}
-			}
-		}
-		return
-	case FieldTypeInt64, FieldTypeDecimal64, FieldTypeDatetime:
-		slice := c.Value.([]int64)
-		if slice != nil {
-			c.numValues = len(slice)
-			c.int64map = make(map[int64]struct{}, len(slice))
-			for _, v := range slice {
-				c.int64map[v] = struct{}{}
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-				}
-			}
-		}
-		return
-	case FieldTypeInt32, FieldTypeDecimal32:
-		slice := c.Value.([]int32)
-		if slice != nil {
-			c.numValues = len(slice)
-			c.int32map = make(map[int32]struct{}, len(slice))
-			for _, v := range slice {
-				c.int32map[v] = struct{}{}
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-				}
-			}
-		}
-		return
-	case FieldTypeInt16:
-		slice := c.Value.([]int16)
-		if slice != nil {
-			c.numValues = len(slice)
-			c.int16map = make(map[int16]struct{}, len(slice))
-			for _, v := range slice {
-				c.int16map[v] = struct{}{}
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-				}
-			}
-		}
-		return
-	case FieldTypeInt8:
-		slice := c.Value.([]int8)
-		if slice != nil {
-			c.numValues = len(slice)
-			c.int8map = make(map[int8]struct{}, len(slice))
-			for _, v := range slice {
-				c.int8map[v] = struct{}{}
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-				}
-			}
-		}
-		return
-	case FieldTypeUint64:
-		slice := c.Value.([]uint64)
-		c.numValues = len(slice)
-		if c.numValues == 0 {
-			return
-		}
-		if !c.IsSorted {
-			c.Value = Uint64.Sort(slice)
-			c.IsSorted = true
-		}
-		// use a map for lookups unless we check sorted pk slices
-		if c.Field.Flags&FlagPrimary == 0 {
-			c.uint64map = make(map[uint64]struct{}, len(slice))
-			for _, v := range slice {
-				c.uint64map[v] = struct{}{}
-			}
-		}
-		if buildBloom {
-			for _, val := range slice {
-				c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-			}
-		}
-		return
-	case FieldTypeUint32:
-		slice := c.Value.([]uint32)
-		if slice != nil {
-			c.numValues = len(slice)
-			c.uint32map = make(map[uint32]struct{}, len(slice))
-			for _, v := range slice {
-				c.uint32map[v] = struct{}{}
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-				}
-			}
-		}
-		return
-	case FieldTypeUint16:
-		slice := c.Value.([]uint16)
-		if slice != nil {
-			c.numValues = len(slice)
-			c.uint16map = make(map[uint16]struct{}, len(slice))
-			for _, v := range slice {
-				c.uint16map[v] = struct{}{}
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-				}
-			}
-		}
-		return
-	case FieldTypeUint8:
-		slice := c.Value.([]uint8)
-		if slice != nil {
-			c.numValues = len(slice)
-			c.uint8map = make(map[uint8]struct{}, len(slice))
-			for _, v := range slice {
-				c.uint8map[v] = struct{}{}
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-				}
-			}
-		}
-		return
-	case FieldTypeFloat64:
-		slice := c.Value.([]float64)
-		if slice != nil {
-			c.numValues = len(slice)
-			if !c.IsSorted {
-				c.Value = Float64.Sort(slice)
-				c.IsSorted = true
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-				}
-			}
-		}
-		return
-	case FieldTypeFloat32:
-		slice := c.Value.([]float32)
-		if slice != nil {
-			c.numValues = len(slice)
-			if !c.IsSorted {
-				c.Value = Float32.Sort(slice)
-				c.IsSorted = true
-			}
-			if buildBloom {
-				for _, val := range slice {
-					c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
-				}
-			}
-		}
-		return
-	}
-
-	// create a hash map for bytes and strings
-	c.hashmap = make(map[uint64]int)
-	for i, v := range vals {
-		sum := xxhash.Sum64(v)
-		// ensure we're collision free
-		if mapval, ok := c.hashmap[sum]; !ok {
-			c.hashmap[sum] = i
-		} else {
-			// move current value and new value into overflow list
-			if mapval != 0xFFFFFFFF {
-				log.Warnf("pack: condition hash collision %0x / %0x == %0x", v, vals[mapval], sum)
-				c.hashoverflow = append(c.hashoverflow, hashvalue{
-					hash: sum,
-					pos:  mapval,
-				})
-			} else {
-				log.Warnf("pack: double condition hash collision %0x == %0x", v, sum)
-			}
-			// add the current value to overflow
-			c.hashoverflow = append(c.hashoverflow, hashvalue{
-				hash: sum,
-				pos:  i,
-			})
-			// signal this hash map entry has overflow entries
-			c.hashmap[sum] = 0xFFFFFFFF
-		}
-	}
-	// log.Debugf("query: compiled hash map condition with size %s for %d values",
-	// 	util.ByteSize(len(vals)*12), len(vals))
-	return nil
 }
 
 // match package min/max values against the condition
@@ -642,17 +164,17 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 	// decimals only: convert storage type used in block info to field type
 	switch typ {
 	case FieldTypeDecimal32:
-		min = NewDecimal32(min.(int32), scale)
-		max = NewDecimal32(max.(int32), scale)
+		min = decimal.NewDecimal32(min.(int32), scale)
+		max = decimal.NewDecimal32(max.(int32), scale)
 	case FieldTypeDecimal64:
-		min = NewDecimal64(min.(int64), scale)
-		max = NewDecimal64(max.(int64), scale)
+		min = decimal.NewDecimal64(min.(int64), scale)
+		max = decimal.NewDecimal64(max.(int64), scale)
 	case FieldTypeDecimal128:
-		min = NewDecimal128(min.(Int128), scale)
-		max = NewDecimal128(max.(Int128), scale)
+		min = decimal.NewDecimal128(min.(vec.Int128), scale)
+		max = decimal.NewDecimal128(max.(vec.Int128), scale)
 	case FieldTypeDecimal256:
-		min = NewDecimal256(min.(Int256), scale)
-		max = NewDecimal256(max.(Int256), scale)
+		min = decimal.NewDecimal256(min.(vec.Int256), scale)
+		max = decimal.NewDecimal256(max.(vec.Int256), scale)
 	}
 	// compare pack header
 	switch c.Mode {
@@ -777,8 +299,8 @@ func ParseCondition(key, val string, fields FieldList) (Condition, error) {
 //
 // This implementation uses low level block vectors to efficiently execute
 // vectorized checks with custom assembly-optimized routines.
-func (c Condition) MatchPack(pkg *Package, mask *Bitset) *Bitset {
-	bits := NewBitset(pkg.Len())
+func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
+	bits := vec.NewBitset(pkg.Len())
 	block, _ := pkg.Block(c.Field.Index)
 	switch c.Mode {
 	case FilterModeEqual:
@@ -1655,7 +1177,7 @@ func (n ConditionTreeNode) MaybeMatchPack(info PackInfo) bool {
 	return true
 }
 
-func (n ConditionTreeNode) MatchPack(pkg *Package, info PackInfo) *Bitset {
+func (n ConditionTreeNode) MatchPack(pkg *Package, info PackInfo) *vec.Bitset {
 	// if root contains a single leaf only, match it
 	if n.Leaf() {
 		return n.Cond.MatchPack(pkg, nil)
@@ -1663,7 +1185,7 @@ func (n ConditionTreeNode) MatchPack(pkg *Package, info PackInfo) *Bitset {
 
 	// if root is empty and no leaf is defined, return a full match
 	if n.Empty() {
-		return NewBitset(pkg.Len()).One()
+		return vec.NewBitset(pkg.Len()).One()
 	}
 
 	// process all children
@@ -1677,15 +1199,15 @@ func (n ConditionTreeNode) MatchPack(pkg *Package, info PackInfo) *Bitset {
 // Return a bit vector containing matching positions in the pack combining
 // multiple AND conditions with efficient skipping and aggregation.
 // TODO: consider concurrent matches for multiple conditions and cascading bitset merge
-func (n ConditionTreeNode) MatchPackAnd(pkg *Package, info PackInfo) *Bitset {
+func (n ConditionTreeNode) MatchPackAnd(pkg *Package, info PackInfo) *vec.Bitset {
 	// start with a full bitset
-	bits := NewBitset(pkg.Len()).One()
+	bits := vec.NewBitset(pkg.Len()).One()
 
 	// match conditions and merge bit vectors
 	// stop early when result contains all zeros (assuming AND relation)
 	// always match empty condition list
 	for _, cn := range n.Children {
-		var b *Bitset
+		var b *vec.Bitset
 		if !cn.Leaf() {
 			// recurse into another AND or OR condition subtree
 			b = cn.MatchPack(pkg, info)
@@ -1766,14 +1288,14 @@ func (n ConditionTreeNode) MatchPackAnd(pkg *Package, info PackInfo) *Bitset {
 
 // Return a bit vector containing matching positions in the pack combining
 // multiple OR conditions with efficient skipping and aggregation.
-func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *Bitset {
+func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *vec.Bitset {
 	// start with an empty bitset
-	bits := NewBitset(pkg.Len())
+	bits := vec.NewBitset(pkg.Len())
 
 	// match conditions and merge bit vectors
 	// stop early when result contains all ones (assuming OR relation)
 	for i, cn := range n.Children {
-		var b *Bitset
+		var b *vec.Bitset
 		if !cn.Leaf() {
 			// recurse into another AND or OR condition subtree
 			b = cn.MatchPack(pkg, info)
@@ -1830,7 +1352,7 @@ func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *Bitset {
 				}
 				if skipEarly {
 					bits.Close()
-					return NewBitset(pkg.Len()).One()
+					return vec.NewBitset(pkg.Len()).One()
 				}
 			}
 
