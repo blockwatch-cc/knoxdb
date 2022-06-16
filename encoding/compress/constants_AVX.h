@@ -3,6 +3,12 @@
 
 #define mask1 $(0xfffffffffffffff)
 
+DATA const8_01<>+0x00(SB)/1, $(1)
+GLOBL const8_01<>(SB), (RODATA+NOPTR), $1
+
+DATA const8_7f<>+0x00(SB)/1, $(0x7f)
+GLOBL const8_7f<>(SB), (RODATA+NOPTR), $1
+
 DATA mask2<>+0x00(SB)/8, $(0x3fffffff)
 GLOBL mask2<>(SB), (RODATA+NOPTR), $8
 
@@ -273,3 +279,31 @@ GLOBL funcTableJmp<>(SB), (NOPTR), $128
 GLOBL funcTableCall<>(SB), (NOPTR), $128
 
 GLOBL funcTableOpt<>(SB), (NOPTR), $128
+
+// VPSHUFB input required to spread bytes in each YMM register
+DATA shuffle64<>+0x00(SB)/1, $(0xe)
+DATA shuffle64<>+0x01(SB)/1, $(0xf)
+GLOBL shuffle64<>(SB), (RODATA+NOPTR), $2
+
+// VPSHUFB input required to spread bytes in each YMM register
+DATA shuffle8<>+0x00(SB)/1, $(7)
+GLOBL shuffle8<>(SB), (RODATA+NOPTR), $1
+
+// VPSHUFB input required to spread bytes in each YMM register
+DATA shuffle81<>+0x00(SB)/1, $(0xff)
+DATA shuffle81<>+0x01(SB)/1, $(0xff)
+DATA shuffle81<>+0x02(SB)/1, $(0xff)
+DATA shuffle81<>+0x03(SB)/1, $(0xff)
+DATA shuffle81<>+0x04(SB)/1, $(3)
+DATA shuffle81<>+0x05(SB)/1, $(3)
+DATA shuffle81<>+0x06(SB)/1, $(3)
+DATA shuffle81<>+0x07(SB)/1, $(3)
+DATA shuffle81<>+0x08(SB)/1, $(0xff)
+DATA shuffle81<>+0x09(SB)/1, $(0xff)
+DATA shuffle81<>+0x0a(SB)/1, $(0xff)
+DATA shuffle81<>+0x0b(SB)/1, $(0xff)
+DATA shuffle81<>+0x0c(SB)/1, $(3)
+DATA shuffle81<>+0x0d(SB)/1, $(3)
+DATA shuffle81<>+0x0e(SB)/1, $(3)
+DATA shuffle81<>+0x0f(SB)/1, $(3)
+GLOBL shuffle81<>(SB), (RODATA+NOPTR), $16

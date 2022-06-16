@@ -91,6 +91,17 @@ func deltaDecodeInt64Generic(data []int64) {
 	}
 }
 
+func deltaDecodeInt32Generic(data []int32) {
+	if len(data) == 0 {
+		return
+	}
+	prev := data[0]
+	for i := 1; i < len(data); i++ {
+		prev += data[i]
+		data[i] = prev
+	}
+}
+
 // calculate prefix sum
 func zzDeltaDecodeInt32Generic(data []int32) {
 	if len(data) == 0 {

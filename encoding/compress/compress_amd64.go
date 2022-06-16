@@ -15,10 +15,22 @@ func zzDecodeInt64AVX2Core(data []int64)
 func deltaDecodeInt64AVX2Core(data []int64)
 
 //go:noescape
-func zzdeltaDecodeInt64AVX2Core(data []int64)
+func deltaDecodeInt32AVX2Core(data []int32)
 
 //go:noescape
-func zzdeltaDecodeUint64AVX2Core(data []uint64)
+func zzDeltaDecodeInt64AVX2Core(data []int64)
+
+//go:noescape
+func zzDeltaDecodeInt32AVX2Core(data []int32)
+
+//go:noescape
+func zzDeltaDecodeInt16AVX2Core(data []int16)
+
+//go:noescape
+func zzDeltaDecodeInt8AVX2Core(data []int8)
+
+//go:noescape
+func zzDeltaDecodeUint64AVX2Core(data []uint64)
 
 //go:noescape
 func zzDecodeUint64AVX2Core(data []uint64)
@@ -76,8 +88,8 @@ func zzDeltaDecodeInt64(data []int64) {
 
 func zzDeltaDecodeInt32(data []int32) {
 	switch {
-	//case util.UseAVX2:
-	//	zzDeltaDecodeInt32AVX2(data)
+	case util.UseAVX2:
+		zzDeltaDecodeInt32AVX2(data)
 	default:
 		zzDeltaDecodeInt32Generic(data)
 	}
@@ -85,8 +97,8 @@ func zzDeltaDecodeInt32(data []int32) {
 
 func zzDeltaDecodeInt16(data []int16) {
 	switch {
-	//case util.UseAVX2:
-	//	zzDeltaDecodeInt16AVX2(data)
+	case util.UseAVX2:
+		zzDeltaDecodeInt16AVX2(data)
 	default:
 		zzDeltaDecodeInt16Generic(data)
 	}
@@ -94,8 +106,8 @@ func zzDeltaDecodeInt16(data []int16) {
 
 func zzDeltaDecodeInt8(data []int8) {
 	switch {
-	//case util.UseAVX2:
-	//	zzDeltaDecodeInt8AVX2(data)
+	case util.UseAVX2:
+		zzDeltaDecodeInt8AVX2(data)
 	default:
 		zzDeltaDecodeInt8Generic(data)
 	}
@@ -151,7 +163,7 @@ func zzDeltaDecodeInt64AVX2(data []int64) {
 		return
 	}
 	len_head := len(data) & 0x7ffffffffffffffc
-	zzdeltaDecodeInt64AVX2Core(data)
+	zzDeltaDecodeInt64AVX2Core(data)
 	var prev int64
 	if len_head == 0 {
 		prev = 0
@@ -164,6 +176,60 @@ func zzDeltaDecodeInt64AVX2(data []int64) {
 	}
 }
 
+func zzDeltaDecodeInt32AVX2(data []int32) {
+	if len(data) == 0 {
+		return
+	}
+	len_head := len(data) & 0x7ffffffffffffff8
+	zzDeltaDecodeInt32AVX2Core(data)
+	var prev int32
+	if len_head == 0 {
+		prev = 0
+	} else {
+		prev = data[len_head-1]
+	}
+	for i := len_head; i < len(data); i++ {
+		prev += ZigZagDecodeUint32(uint32(data[i]))
+		data[i] = prev
+	}
+}
+
+func zzDeltaDecodeInt16AVX2(data []int16) {
+	if len(data) == 0 {
+		return
+	}
+	len_head := len(data) & 0x7ffffffffffffff8
+	zzDeltaDecodeInt16AVX2Core(data)
+	var prev int16
+	if len_head == 0 {
+		prev = 0
+	} else {
+		prev = data[len_head-1]
+	}
+	for i := len_head; i < len(data); i++ {
+		prev += ZigZagDecodeUint16(uint16(data[i]))
+		data[i] = prev
+	}
+}
+
+func zzDeltaDecodeInt8AVX2(data []int8) {
+	if len(data) == 0 {
+		return
+	}
+	len_head := len(data) & 0x7ffffffffffffff8
+	zzDeltaDecodeInt8AVX2Core(data)
+	var prev int8
+	if len_head == 0 {
+		prev = 0
+	} else {
+		prev = data[len_head-1]
+	}
+	for i := len_head; i < len(data); i++ {
+		prev += ZigZagDecodeUint8(uint8(data[i]))
+		data[i] = prev
+	}
+}
+
 func zzDeltaDecodeInt64AVX2X(data []int64) {
 	zzDecodeInt64AVX2(data)
 	deltaDecodeInt64AVX2(data)
@@ -171,7 +237,7 @@ func zzDeltaDecodeInt64AVX2X(data []int64) {
 
 func zzDeltaDecodeUint64AVX2(data []uint64) {
 	len_head := len(data) & 0x7ffffffffffffffc
-	zzdeltaDecodeUint64AVX2Core(data)
+	zzDeltaDecodeUint64AVX2Core(data)
 	var prev uint64
 	if len_head == 0 {
 		prev = uint64(ZigZagDecode(data[0]))
@@ -212,6 +278,21 @@ func deltaDecodeInt64AVX2(data []int64) {
 	len_head := len(data) & 0x7ffffffffffffffc
 	deltaDecodeInt64AVX2Core(data)
 	var prev int64
+	if len_head == 0 {
+		prev = 0
+	} else {
+		prev = data[len_head-1]
+	}
+	for i := len_head; i < len(data); i++ {
+		prev += data[i]
+		data[i] = prev
+	}
+}
+
+func deltaDecodeInt32AVX2(data []int32) {
+	len_head := len(data) & 0x7ffffffffffffffc
+	deltaDecodeInt32AVX2Core(data)
+	var prev int32
 	if len_head == 0 {
 		prev = 0
 	} else {

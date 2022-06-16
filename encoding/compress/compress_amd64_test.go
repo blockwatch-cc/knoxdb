@@ -78,6 +78,40 @@ func BenchmarkDeltaDecodeInt64AVX2(B *testing.B) {
 	}
 }
 
+// -------------- deltaDecodeInt64 ---------------------------------------------------------------
+
+func TestDeltaDecodeInt32AVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range deltaDecodeInt32Cases {
+		slice := make([]int32, len(c.slice))
+		copy(slice, c.slice)
+		deltaDecodeInt32AVX2(slice)
+		if got, want := len(slice), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(slice, c.result) {
+			T.Errorf("%s: unexpected result %v, expected %v", c.name, slice, c.result)
+		}
+	}
+}
+
+func BenchmarkDeltaDecodeInt32AVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range benchmarkSizes {
+		a := randInt32Slice(n.l, 1)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Int32Size))
+			for i := 0; i < B.N; i++ {
+				deltaDecodeInt32AVX2(a)
+			}
+		})
+	}
+}
+
 // ---------------- zzDeltaDecodeInt64 -------------------------------------------------------------
 
 func TestZzDeltaDecodeInt64AVX2(T *testing.T) {
@@ -112,6 +146,109 @@ func BenchmarkZzDeltaDecodeInt64AVX2(B *testing.B) {
 	}
 }
 
+// ---------------- zzDeltaDecodeInt32 -------------------------------------------------------------
+
+func TestZzDeltaDecodeInt32AVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range zzDeltaDecodeInt32Cases {
+		slice := make([]int32, len(c.slice))
+		copy(slice, c.slice)
+		zzDeltaDecodeInt32AVX2(slice)
+		if got, want := len(slice), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(slice, c.result) {
+			T.Errorf("%s: unexpected result %v, expected %v", c.name, slice, c.result)
+		}
+	}
+}
+
+func BenchmarkZzDeltaDecodeInt32AVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range benchmarkSizes {
+		a := randInt32Slice(n.l, 1)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Int32Size))
+			for i := 0; i < B.N; i++ {
+				zzDeltaDecodeInt32AVX2(a)
+			}
+		})
+	}
+}
+
+// ---------------- zzDeltaDecodeInt16 -------------------------------------------------------------
+
+func TestZzDeltaDecodeInt16AVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range zzDeltaDecodeInt16Cases {
+		slice := make([]int16, len(c.slice))
+		copy(slice, c.slice)
+		zzDeltaDecodeInt16AVX2(slice)
+		if got, want := len(slice), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(slice, c.result) {
+			T.Errorf("%s: unexpected result %v, expected %v", c.name, slice, c.result)
+		}
+	}
+}
+
+func BenchmarkZzDeltaDecodeInt16AVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range benchmarkSizes {
+		a := randInt16Slice(n.l, 1)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Int16Size))
+			for i := 0; i < B.N; i++ {
+				zzDeltaDecodeInt16AVX2(a)
+			}
+		})
+	}
+}
+
+// ---------------- zzDeltaDecodeInt8 -------------------------------------------------------------
+
+func TestZzDeltaDecodeInt8AVX2(T *testing.T) {
+	if !util.UseAVX2 {
+		T.SkipNow()
+	}
+	for _, c := range zzDeltaDecodeInt8Cases {
+		slice := make([]int8, len(c.slice))
+		copy(slice, c.slice)
+		zzDeltaDecodeInt8AVX2(slice)
+		if got, want := len(slice), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(slice, c.result) {
+			T.Errorf("%s: unexpected result %v, expected %v", c.name, slice, c.result)
+		}
+	}
+}
+
+func BenchmarkZzDeltaDecodeInt8AVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		B.SkipNow()
+	}
+	for _, n := range benchmarkSizes {
+		a := randInt8Slice(n.l, 1)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Int8Size))
+			for i := 0; i < B.N; i++ {
+				zzDeltaDecodeInt8AVX2(a)
+			}
+		})
+	}
+}
+
+/*
 func BenchmarkZzDeltaDecodeInt64AVX2Combine(B *testing.B) {
 	if !util.UseAVX2 {
 		B.SkipNow()
@@ -126,3 +263,4 @@ func BenchmarkZzDeltaDecodeInt64AVX2Combine(B *testing.B) {
 		})
 	}
 }
+*/

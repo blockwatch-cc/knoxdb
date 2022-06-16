@@ -272,6 +272,8 @@ var zzDeltaDecodeInt64Cases = []Int64Test{
 	CreateInt64TestCase("l4", int64ZzDeltaEncoded, int64DecodedSlice, 4),
 	CreateInt64TestCase("l7", int64ZzDeltaEncoded, int64DecodedSlice, 7),
 	CreateInt64TestCase("l8", int64ZzDeltaEncoded, int64DecodedSlice, 8),
+	CreateInt64TestCase("l15", int64ZzDeltaEncoded, int64DecodedSlice, 15),
+	CreateInt64TestCase("l16", int64ZzDeltaEncoded, int64DecodedSlice, 16),
 }
 
 func TestZzDeltaDecodeInt64Generic(T *testing.T) {
@@ -312,6 +314,8 @@ var zzDeltaDecodeInt32Cases = []Int32Test{
 	CreateInt32TestCase("l4", int64ZzDeltaEncoded, int64DecodedSlice, 4),
 	CreateInt32TestCase("l7", int64ZzDeltaEncoded, int64DecodedSlice, 7),
 	CreateInt32TestCase("l8", int64ZzDeltaEncoded, int64DecodedSlice, 8),
+	CreateInt32TestCase("l15", int64ZzDeltaEncoded, int64DecodedSlice, 15),
+	CreateInt32TestCase("l16", int64ZzDeltaEncoded, int64DecodedSlice, 16),
 }
 
 func TestZzDeltaDecodeInt32Generic(T *testing.T) {
@@ -352,6 +356,10 @@ var zzDeltaDecodeInt16Cases = []Int16Test{
 	CreateInt16TestCase("l4", int64ZzDeltaEncoded, int64DecodedSlice, 4),
 	CreateInt16TestCase("l7", int64ZzDeltaEncoded, int64DecodedSlice, 7),
 	CreateInt16TestCase("l8", int64ZzDeltaEncoded, int64DecodedSlice, 8),
+	CreateInt16TestCase("l15", int64ZzDeltaEncoded, int64DecodedSlice, 15),
+	CreateInt16TestCase("l16", int64ZzDeltaEncoded, int64DecodedSlice, 16),
+	CreateInt16TestCase("l31", int64ZzDeltaEncoded, int64DecodedSlice, 31),
+	CreateInt16TestCase("l32", int64ZzDeltaEncoded, int64DecodedSlice, 32),
 }
 
 func TestZzDeltaDecodeInt16Generic(T *testing.T) {
@@ -392,6 +400,8 @@ var zzDeltaDecodeInt8Cases = []Int8Test{
 	CreateInt8TestCase("l4", int64ZzDeltaEncoded, int64DecodedSlice, 4),
 	CreateInt8TestCase("l7", int64ZzDeltaEncoded, int64DecodedSlice, 7),
 	CreateInt8TestCase("l8", int64ZzDeltaEncoded, int64DecodedSlice, 8),
+	CreateInt8TestCase("l15", int64ZzDeltaEncoded, int64DecodedSlice, 15),
+	CreateInt8TestCase("l16", int64ZzDeltaEncoded, int64DecodedSlice, 16),
 }
 
 func TestZzDeltaDecodeInt8Generic(T *testing.T) {
@@ -523,6 +533,46 @@ func BenchmarkDeltaDecodeInt64Generic(B *testing.B) {
 			B.SetBytes(int64(n.l * Int64Size))
 			for i := 0; i < B.N; i++ {
 				deltaDecodeInt64Generic(a)
+			}
+		})
+	}
+}
+
+// ----------------- deltaDecodeInt32 ------------------------------------------------------------
+
+var deltaDecodeInt32Cases = []Int32Test{
+	{
+		name:   "l0",
+		slice:  make([]int32, 0),
+		result: []int32{},
+	},
+	CreateInt32TestCase("l3", int64DeltaEncoded, int64DecodedSlice, 3),
+	CreateInt32TestCase("l4", int64DeltaEncoded, int64DecodedSlice, 4),
+	CreateInt32TestCase("l7", int64DeltaEncoded, int64DecodedSlice, 7),
+	CreateInt32TestCase("l8", int64DeltaEncoded, int64DecodedSlice, 8),
+}
+
+func TestDeltaDecodeInt32Generic(T *testing.T) {
+	for _, c := range deltaDecodeInt32Cases {
+		slice := make([]int32, len(c.slice))
+		copy(slice, c.slice)
+		deltaDecodeInt32Generic(slice)
+		if got, want := len(slice), len(c.result); got != want {
+			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+		}
+		if !reflect.DeepEqual(slice, c.result) {
+			T.Errorf("%s: unexpected result %v, expected %v", c.name, slice, c.result)
+		}
+	}
+}
+
+func BenchmarkDeltaDecodeInt32Generic(B *testing.B) {
+	for _, n := range benchmarkSizes {
+		a := randInt32Slice(n.l, 1)
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Int32Size))
+			for i := 0; i < B.N; i++ {
+				deltaDecodeInt32Generic(a)
 			}
 		})
 	}
