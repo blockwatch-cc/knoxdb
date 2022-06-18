@@ -247,20 +247,3 @@ func BenchmarkZzDeltaDecodeInt8AVX2(B *testing.B) {
 		})
 	}
 }
-
-/*
-func BenchmarkZzDeltaDecodeInt64AVX2Combine(B *testing.B) {
-	if !util.UseAVX2 {
-		B.SkipNow()
-	}
-	for _, n := range benchmarkSizes {
-		a := randInt64Slice(n.l, 1)
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * Int64Size))
-			for i := 0; i < B.N; i++ {
-				zzDeltaDecodeInt64AVX2X(a)
-			}
-		})
-	}
-}
-*/

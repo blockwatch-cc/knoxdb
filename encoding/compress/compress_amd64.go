@@ -165,9 +165,7 @@ func zzDeltaDecodeInt64AVX2(data []int64) {
 	len_head := len(data) & 0x7ffffffffffffffc
 	zzDeltaDecodeInt64AVX2Core(data)
 	var prev int64
-	if len_head == 0 {
-		prev = 0
-	} else {
+	if len_head != 0 {
 		prev = data[len_head-1]
 	}
 	for i := len_head; i < len(data); i++ {
@@ -183,9 +181,7 @@ func zzDeltaDecodeInt32AVX2(data []int32) {
 	len_head := len(data) & 0x7ffffffffffffff8
 	zzDeltaDecodeInt32AVX2Core(data)
 	var prev int32
-	if len_head == 0 {
-		prev = 0
-	} else {
+	if len_head != 0 {
 		prev = data[len_head-1]
 	}
 	for i := len_head; i < len(data); i++ {
@@ -198,12 +194,10 @@ func zzDeltaDecodeInt16AVX2(data []int16) {
 	if len(data) == 0 {
 		return
 	}
-	len_head := len(data) & 0x7ffffffffffffff8
+	len_head := len(data) & 0x7ffffffffffffffc
 	zzDeltaDecodeInt16AVX2Core(data)
 	var prev int16
-	if len_head == 0 {
-		prev = 0
-	} else {
+	if len_head != 0 {
 		prev = data[len_head-1]
 	}
 	for i := len_head; i < len(data); i++ {
@@ -219,9 +213,7 @@ func zzDeltaDecodeInt8AVX2(data []int8) {
 	len_head := len(data) & 0x7ffffffffffffff8
 	zzDeltaDecodeInt8AVX2Core(data)
 	var prev int8
-	if len_head == 0 {
-		prev = 0
-	} else {
+	if len_head != 0 {
 		prev = data[len_head-1]
 	}
 	for i := len_head; i < len(data); i++ {
@@ -230,18 +222,11 @@ func zzDeltaDecodeInt8AVX2(data []int8) {
 	}
 }
 
-func zzDeltaDecodeInt64AVX2X(data []int64) {
-	zzDecodeInt64AVX2(data)
-	deltaDecodeInt64AVX2(data)
-}
-
 func zzDeltaDecodeUint64AVX2(data []uint64) {
 	len_head := len(data) & 0x7ffffffffffffffc
 	zzDeltaDecodeUint64AVX2Core(data)
 	var prev uint64
-	if len_head == 0 {
-		prev = uint64(ZigZagDecode(data[0]))
-	} else {
+	if len_head != 0 {
 		prev = data[len_head-1]
 	}
 	for i := len_head; i < len(data); i++ {
@@ -278,9 +263,7 @@ func deltaDecodeInt64AVX2(data []int64) {
 	len_head := len(data) & 0x7ffffffffffffffc
 	deltaDecodeInt64AVX2Core(data)
 	var prev int64
-	if len_head == 0 {
-		prev = 0
-	} else {
+	if len_head != 0 {
 		prev = data[len_head-1]
 	}
 	for i := len_head; i < len(data); i++ {
@@ -293,9 +276,7 @@ func deltaDecodeInt32AVX2(data []int32) {
 	len_head := len(data) & 0x7ffffffffffffffc
 	deltaDecodeInt32AVX2Core(data)
 	var prev int32
-	if len_head == 0 {
-		prev = 0
-	} else {
+	if len_head != 0 {
 		prev = data[len_head-1]
 	}
 	for i := len_head; i < len(data); i++ {

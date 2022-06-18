@@ -58,21 +58,24 @@ var (
 		1, 3, 6, 10,
 		15, 21, 28, 20,
 		13, 25, 24, 22,
-		19, 15, 10, 0,
+		19, 15, 10, 4,
+		0,
 	}
 
 	int64DeltaEncoded = []int64{
 		1, 2, 3, 4,
 		5, 6, 7, -8,
 		-7, 12, -1, -2,
-		-3, -4, -5, -10,
+		-3, -4, -5, -6,
+		-4,
 	}
 
 	int64ZzDeltaEncoded = []int64{
 		2, 4, 6, 8,
 		10, 12, 14, 15,
 		13, 24, 1, 3,
-		5, 7, 9, 19,
+		5, 7, 9, 11,
+		7,
 	}
 )
 
@@ -347,19 +350,19 @@ func BenchmarkZzDeltaDecodeInt32Generic(B *testing.B) {
 // --------------- zzDeltaDecodeInt16 --------------------------------------------------------------
 
 var zzDeltaDecodeInt16Cases = []Int16Test{
-	{
-		name:   "l0",
-		slice:  make([]int16, 0),
-		result: []int16{},
-	},
-	CreateInt16TestCase("l3", int64ZzDeltaEncoded, int64DecodedSlice, 3),
-	CreateInt16TestCase("l4", int64ZzDeltaEncoded, int64DecodedSlice, 4),
-	CreateInt16TestCase("l7", int64ZzDeltaEncoded, int64DecodedSlice, 7),
-	CreateInt16TestCase("l8", int64ZzDeltaEncoded, int64DecodedSlice, 8),
-	CreateInt16TestCase("l15", int64ZzDeltaEncoded, int64DecodedSlice, 15),
-	CreateInt16TestCase("l16", int64ZzDeltaEncoded, int64DecodedSlice, 16),
-	CreateInt16TestCase("l31", int64ZzDeltaEncoded, int64DecodedSlice, 31),
-	CreateInt16TestCase("l32", int64ZzDeltaEncoded, int64DecodedSlice, 32),
+	/*	{
+			name:   "l0",
+			slice:  make([]int16, 0),
+			result: []int16{},
+		},
+		CreateInt16TestCase("l3", int64ZzDeltaEncoded, int64DecodedSlice, 3),
+		CreateInt16TestCase("l4", int64ZzDeltaEncoded, int64DecodedSlice, 4),
+		CreateInt16TestCase("l7", int64ZzDeltaEncoded, int64DecodedSlice, 7),
+		CreateInt16TestCase("l8", int64ZzDeltaEncoded, int64DecodedSlice, 8),
+		CreateInt16TestCase("l15", int64ZzDeltaEncoded, int64DecodedSlice, 15),
+		CreateInt16TestCase("l16", int64ZzDeltaEncoded, int64DecodedSlice, 16),
+	*/CreateInt16TestCase("l31", int64ZzDeltaEncoded, int64DecodedSlice, 31),
+	//	CreateInt16TestCase("l32", int64ZzDeltaEncoded, int64DecodedSlice, 32),
 }
 
 func TestZzDeltaDecodeInt16Generic(T *testing.T) {
@@ -402,6 +405,12 @@ var zzDeltaDecodeInt8Cases = []Int8Test{
 	CreateInt8TestCase("l8", int64ZzDeltaEncoded, int64DecodedSlice, 8),
 	CreateInt8TestCase("l15", int64ZzDeltaEncoded, int64DecodedSlice, 15),
 	CreateInt8TestCase("l16", int64ZzDeltaEncoded, int64DecodedSlice, 16),
+	CreateInt8TestCase("l31", int64ZzDeltaEncoded, int64DecodedSlice, 31),
+	CreateInt8TestCase("l32", int64ZzDeltaEncoded, int64DecodedSlice, 32),
+	CreateInt8TestCase("l63", int64ZzDeltaEncoded, int64DecodedSlice, 63),
+	CreateInt8TestCase("l64", int64ZzDeltaEncoded, int64DecodedSlice, 64),
+	CreateInt8TestCase("l127", int64ZzDeltaEncoded, int64DecodedSlice, 127),
+	CreateInt8TestCase("l128", int64ZzDeltaEncoded, int64DecodedSlice, 128),
 }
 
 func TestZzDeltaDecodeInt8Generic(T *testing.T) {

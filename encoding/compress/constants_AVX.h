@@ -281,13 +281,22 @@ GLOBL funcTableCall<>(SB), (NOPTR), $128
 GLOBL funcTableOpt<>(SB), (NOPTR), $128
 
 // VPSHUFB input required to spread bytes in each YMM register
-DATA shuffle64<>+0x00(SB)/1, $(0xe)
-DATA shuffle64<>+0x01(SB)/1, $(0xf)
-GLOBL shuffle64<>(SB), (RODATA+NOPTR), $2
+DATA shuffle16<>+0x00(SB)/1, $(0xe)
+DATA shuffle16<>+0x01(SB)/1, $(0xf)
+GLOBL shuffle16<>(SB), (RODATA+NOPTR), $2
 
 // VPSHUFB input required to spread bytes in each YMM register
-DATA shuffle8<>+0x00(SB)/1, $(7)
+DATA shuffle16_1<>+0x00(SB)/1, $(0x6)
+DATA shuffle16_1<>+0x01(SB)/1, $(0x7)
+GLOBL shuffle16_1<>(SB), (RODATA+NOPTR), $2
+
+// VPSHUFB input required to spread bytes in each YMM register
+DATA shuffle8<>+0x00(SB)/1, $(15)
 GLOBL shuffle8<>(SB), (RODATA+NOPTR), $1
+
+// VPSHUFB input required to spread bytes in each YMM register
+DATA shuffle83<>+0x00(SB)/1, $(7)
+GLOBL shuffle83<>(SB), (RODATA+NOPTR), $1
 
 // VPSHUFB input required to spread bytes in each YMM register
 DATA shuffle81<>+0x00(SB)/1, $(0xff)
@@ -302,8 +311,78 @@ DATA shuffle81<>+0x08(SB)/1, $(0xff)
 DATA shuffle81<>+0x09(SB)/1, $(0xff)
 DATA shuffle81<>+0x0a(SB)/1, $(0xff)
 DATA shuffle81<>+0x0b(SB)/1, $(0xff)
-DATA shuffle81<>+0x0c(SB)/1, $(3)
-DATA shuffle81<>+0x0d(SB)/1, $(3)
-DATA shuffle81<>+0x0e(SB)/1, $(3)
-DATA shuffle81<>+0x0f(SB)/1, $(3)
-GLOBL shuffle81<>(SB), (RODATA+NOPTR), $16
+DATA shuffle81<>+0x0c(SB)/1, $(11)
+DATA shuffle81<>+0x0d(SB)/1, $(11)
+DATA shuffle81<>+0x0e(SB)/1, $(11)
+DATA shuffle81<>+0x0f(SB)/1, $(11)
+DATA shuffle81<>+0x10(SB)/1, $(0xff)
+DATA shuffle81<>+0x11(SB)/1, $(0xff)
+DATA shuffle81<>+0x12(SB)/1, $(0xff)
+DATA shuffle81<>+0x13(SB)/1, $(0xff)
+DATA shuffle81<>+0x14(SB)/1, $(3)
+DATA shuffle81<>+0x15(SB)/1, $(3)
+DATA shuffle81<>+0x16(SB)/1, $(3)
+DATA shuffle81<>+0x17(SB)/1, $(3)
+DATA shuffle81<>+0x18(SB)/1, $(0xff)
+DATA shuffle81<>+0x19(SB)/1, $(0xff)
+DATA shuffle81<>+0x1a(SB)/1, $(0xff)
+DATA shuffle81<>+0x1b(SB)/1, $(0xff)
+DATA shuffle81<>+0x1c(SB)/1, $(11)
+DATA shuffle81<>+0x1d(SB)/1, $(11)
+DATA shuffle81<>+0x1e(SB)/1, $(11)
+DATA shuffle81<>+0x1f(SB)/1, $(11)
+GLOBL shuffle81<>(SB), (RODATA+NOPTR), $32
+
+// VPSHUFB input required to spread bytes in each YMM register
+DATA shuffle82<>+0x00(SB)/1, $(0xff)
+DATA shuffle82<>+0x01(SB)/1, $(0xff)
+DATA shuffle82<>+0x02(SB)/1, $(0xff)
+DATA shuffle82<>+0x03(SB)/1, $(0xff)
+DATA shuffle82<>+0x04(SB)/1, $(0xff)
+DATA shuffle82<>+0x05(SB)/1, $(0xff)
+DATA shuffle82<>+0x06(SB)/1, $(0xff)
+DATA shuffle82<>+0x07(SB)/1, $(0xff)
+DATA shuffle82<>+0x08(SB)/1, $(7)
+DATA shuffle82<>+0x09(SB)/1, $(7)
+DATA shuffle82<>+0x0a(SB)/1, $(7)
+DATA shuffle82<>+0x0b(SB)/1, $(7)
+DATA shuffle82<>+0x0c(SB)/1, $(7)
+DATA shuffle82<>+0x0d(SB)/1, $(7)
+DATA shuffle82<>+0x0e(SB)/1, $(7)
+DATA shuffle82<>+0x0f(SB)/1, $(7)
+DATA shuffle82<>+0x10(SB)/1, $(0xff)
+DATA shuffle82<>+0x11(SB)/1, $(0xff)
+DATA shuffle82<>+0x12(SB)/1, $(0xff)
+DATA shuffle82<>+0x13(SB)/1, $(0xff)
+DATA shuffle82<>+0x14(SB)/1, $(0xff)
+DATA shuffle82<>+0x15(SB)/1, $(0xff)
+DATA shuffle82<>+0x16(SB)/1, $(0xff)
+DATA shuffle82<>+0x17(SB)/1, $(0xff)
+DATA shuffle82<>+0x18(SB)/1, $(7)
+DATA shuffle82<>+0x19(SB)/1, $(7)
+DATA shuffle82<>+0x1a(SB)/1, $(7)
+DATA shuffle82<>+0x1b(SB)/1, $(7)
+DATA shuffle82<>+0x1c(SB)/1, $(7)
+DATA shuffle82<>+0x1d(SB)/1, $(7)
+DATA shuffle82<>+0x1e(SB)/1, $(7)
+DATA shuffle82<>+0x1f(SB)/1, $(7)
+GLOBL shuffle82<>(SB), (RODATA+NOPTR), $32
+
+// VPSHUFB input required to spread bytes in each YMM register
+DATA shuffle8e<>+0x00(SB)/1, $(3)
+DATA shuffle8e<>+0x01(SB)/1, $(3)
+DATA shuffle8e<>+0x02(SB)/1, $(3)
+DATA shuffle8e<>+0x03(SB)/1, $(3)
+DATA shuffle8e<>+0x04(SB)/1, $(7)
+DATA shuffle8e<>+0x05(SB)/1, $(7)
+DATA shuffle8e<>+0x06(SB)/1, $(7)
+DATA shuffle8e<>+0x07(SB)/1, $(7)
+DATA shuffle8e<>+0x08(SB)/1, $(11)
+DATA shuffle8e<>+0x09(SB)/1, $(11)
+DATA shuffle8e<>+0x0a(SB)/1, $(11)
+DATA shuffle8e<>+0x0b(SB)/1, $(11)
+DATA shuffle8e<>+0x0c(SB)/1, $(15)
+DATA shuffle8e<>+0x0d(SB)/1, $(15)
+DATA shuffle8e<>+0x0e(SB)/1, $(15)
+DATA shuffle8e<>+0x0f(SB)/1, $(15)
+GLOBL shuffle8e<>(SB), (RODATA+NOPTR), $16
