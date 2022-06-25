@@ -1674,13 +1674,15 @@ func (t *Table) Lookup(ctx context.Context, ids []uint64) (*Result, error) {
 
 // unsafe when called concurrently! lock table _before_ starting bolt tx!
 func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, error) {
+	q := NewQuery(t.name+".lookup", t)
+	if err := q.Compile(t); err != nil {
+		return nil, err
+	}
 	res := &Result{
 		fields: t.Fields(),                  // we return all fields
 		pkg:    t.packPool.Get().(*Package), // clone full table structure
 		table:  t,
 	}
-
-	q := NewQuery(t.name+".lookup", t)
 	defer func() {
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
 		q.Close()
