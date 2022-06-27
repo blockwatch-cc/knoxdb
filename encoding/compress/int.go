@@ -595,7 +595,7 @@ func integerBatchDecodeAllSimpleDeprecated(b []byte, dst []int64) ([]int64, erro
 		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode packed value")
 	}
 
-	count, err := s8bVec.CountBytesBigEndian(b[8:])
+	count, err := s8bVec.CountValuesBigEndian(b[8:])
 	if err != nil {
 		return []int64{}, err
 	}
@@ -636,7 +636,7 @@ func integerBatchDecodeAllSimpleOld(b []byte, dst []int64) ([]int64, error) {
 		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode packed value")
 	}
 
-	count, err := s8bVec.CountBytesBigEndian(b[8:])
+	count, err := s8bVec.CountValuesBigEndian(b[8:])
 	if err != nil {
 		return []int64{}, err
 	}
@@ -672,7 +672,7 @@ func decodeAllSimpleInt64(b []byte, dst []int64) ([]int64, error) {
 		return []int64{}, fmt.Errorf("compress: decodeAllSimpleInt64 not enough data to decode packed value")
 	}
 
-	count, err := s8bVec.CountBytes(b[8:])
+	count, err := s8bVec.CountValues(b[8:])
 	if err != nil {
 		return []int64{}, err
 	}
@@ -708,7 +708,7 @@ func decodeAllSimpleInt32(b []byte, dst []int32) ([]int32, error) {
 		return []int32{}, fmt.Errorf("compress: decodeAllSimpleInt32 not enough data to decode packed value")
 	}
 
-	count, err := s8bVec.CountBytes(b[8:])
+	count, err := s8bVec.CountValues(b[8:])
 	if err != nil {
 		return []int32{}, err
 	}
@@ -744,7 +744,7 @@ func decodeAllSimpleInt16(b []byte, dst []int16) ([]int16, error) {
 		return []int16{}, fmt.Errorf("compress: decodeAllSimpleInt16 not enough data to decode packed value")
 	}
 
-	count, err := s8bVec.CountBytes(b[8:])
+	count, err := s8bVec.CountValues(b[8:])
 	if err != nil {
 		return []int16{}, err
 	}
@@ -780,7 +780,7 @@ func decodeAllSimpleInt8(b []byte, dst []int8) ([]int8, error) {
 		return []int8{}, fmt.Errorf("compress: decodeAllSimpleInt8 not enough data to decode packed value")
 	}
 
-	count, err := s8bVec.CountBytes(b[8:])
+	count, err := s8bVec.CountValues(b[8:])
 	if err != nil {
 		return []int8{}, err
 	}

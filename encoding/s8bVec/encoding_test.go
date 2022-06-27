@@ -499,7 +499,7 @@ func TestEncodeAllUint64Generic(t *testing.T) {
 				binary.LittleEndian.PutUint64(b, v)
 				b = b[8:]
 			}
-			count, err := countBytesGeneric(buf)
+			count, err := countValuesGeneric(buf)
 			if err != nil {
 				t.Fatalf("unexpected count error\n%s", err)
 			}
@@ -548,7 +548,7 @@ func TestEncodeAllUint32Generic(t *testing.T) {
 				binary.LittleEndian.PutUint64(b, v)
 				b = b[8:]
 			}
-			count, err := countBytesGeneric(buf)
+			count, err := countValuesGeneric(buf)
 			if err != nil {
 				t.Fatalf("unexpected count error\n%s", err)
 			}
@@ -597,7 +597,7 @@ func TestEncodeAllUint16Generic(t *testing.T) {
 				binary.LittleEndian.PutUint64(b, v)
 				b = b[8:]
 			}
-			count, err := countBytesGeneric(buf)
+			count, err := countValuesGeneric(buf)
 			if err != nil {
 				t.Fatalf("unexpected count error\n%s", err)
 			}
@@ -646,7 +646,7 @@ func TestEncodeAllUint8Generic(t *testing.T) {
 				binary.LittleEndian.PutUint64(b, v)
 				b = b[8:]
 			}
-			count, err := countBytesGeneric(buf)
+			count, err := countValuesGeneric(buf)
 			if err != nil {
 				t.Fatalf("unexpected count error\n%s", err)
 			}
@@ -778,7 +778,7 @@ func testEncode(t *testing.T, n int, val uint64) {
 		t.Fatalf("Decode len mismatch: exp %v, got %v", exp, got)
 	}
 
-	got, err := CountBytesBigEndian(encoded)
+	got, err := CountValuesBigEndian(encoded)
 	if err != nil {
 		t.Fatalf("Unexpected error in Count: %v", err)
 	}
@@ -1084,7 +1084,7 @@ func BenchmarkDecodeAllUint64Generic(b *testing.B) {
 	}
 }
 
-func BenchmarkDecodeAllUint3232Generic(b *testing.B) {
+func BenchmarkDecodeAllUint32Generic(b *testing.B) {
 	for _, bm := range s8bBenchmarksUint32 {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint32, len(in))
@@ -1159,7 +1159,7 @@ func BenchmarkCountBytesGeneric(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
 			for i := 0; i < b.N; i++ {
-				countBytesGeneric(buf)
+				countValuesGeneric(buf)
 			}
 		})
 	}

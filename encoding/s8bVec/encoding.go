@@ -289,13 +289,13 @@ var selector8 [16]packing8 = [16]packing8{
 }
 
 // Count returns the number of integers encoded in the byte slice
-func CountBytes(b []byte) (int, error) {
-	return countBytes(b)
+func CountValues(b []byte) (int, error) {
+	return countValues(b)
 }
 
 // Count returns the number of integers encoded in the byte slice
-func CountBytesBigEndian(b []byte) (int, error) {
-	return countBytesBigEndian(b)
+func CountValuesBigEndian(b []byte) (int, error) {
+	return countValuesBigEndian(b)
 }
 
 // Count returns the number of integers encoded within an uint64

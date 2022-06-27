@@ -2,46 +2,46 @@
 // Author: stefanx@blockwatch.cc
 
 #include "textflag.h"
-#include "constants_32bit_AVX.h"
+#include "constants_Uint32_AVX2.h"
 
-TEXT ·init32bitAVX2Call(SB), NOSPLIT, $0-0
-        LEAQ            ·unpack32bit240AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>(SB)
-        LEAQ            ·unpack32bit120AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+8(SB)
-        LEAQ            ·unpack32bit60AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+16(SB)
-        LEAQ            ·unpack32bit30AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+24(SB)
-        LEAQ            ·unpack32bit20AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+32(SB)
-        LEAQ            ·unpack32bit15AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+40(SB)
-        LEAQ            ·unpack32bit12AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+48(SB)
-        LEAQ            ·unpack32bit10AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+56(SB)
-        LEAQ            ·unpack32bit8AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+64(SB)
-        LEAQ            ·unpack32bit7AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+72(SB)
-        LEAQ            ·unpack32bit6AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+80(SB)
-        LEAQ            ·unpack32bit5AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+88(SB)
-        LEAQ            ·unpack32bit4AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+96(SB)
-        LEAQ            ·unpack32bit3AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+104(SB)
-        LEAQ            ·unpack32bit2AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+112(SB)
-        LEAQ            ·unpack32bit1AVX2Call(SB), DX
-        MOVQ            DX, funcTable32bitCall<>+120(SB)
+TEXT ·initUint32AVX2(SB), NOSPLIT, $0-0
+        LEAQ            ·unpack240Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>(SB)
+        LEAQ            ·unpack120Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+8(SB)
+        LEAQ            ·unpack60Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+16(SB)
+        LEAQ            ·unpack30Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+24(SB)
+        LEAQ            ·unpack20Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+32(SB)
+        LEAQ            ·unpack15Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+40(SB)
+        LEAQ            ·unpack12Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+48(SB)
+        LEAQ            ·unpack10Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+56(SB)
+        LEAQ            ·unpack8Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+64(SB)
+        LEAQ            ·unpack7Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+72(SB)
+        LEAQ            ·unpack6Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+80(SB)
+        LEAQ            ·unpack5Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+88(SB)
+        LEAQ            ·unpack4Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+96(SB)
+        LEAQ            ·unpack3Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+104(SB)
+        LEAQ            ·unpack2Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+112(SB)
+        LEAQ            ·unpack1Uint32AVX2(SB), DX
+        MOVQ            DX, funcTableUint32AVX2<>+120(SB)
 
         RET
 
 /*
-// func countBytes32bitAVX2Core(src []byte) (count int)
+// func countBytesAVX2Core(src []byte) (count int)
 //
 // input:
 //   SI = src_base
@@ -49,12 +49,12 @@ TEXT ·init32bitAVX2Call(SB), NOSPLIT, $0-0
 // internal:
 //   Y15 = LUT selector -> number of values
 //   Y14 = selector mask for using 4x64bit vector
-//   Y13 = selector mask for using 8x32bit vector
+//   Y13 = selector mask for using 8x vector
 //   Y12, Y11 = sum registers
 //   Y0-Y3 = vector data
 //   BX = remaining bytes
 //   CX = loop counter 
-TEXT ·countBytes32bitAVX2Core(SB), NOSPLIT, $0-32
+TEXT ·countBytesAVX2Core(SB), NOSPLIT, $0-32
 	MOVQ	src_base+0(FP), SI
 	MOVQ	src_len+8(FP), BX
 
@@ -184,7 +184,7 @@ TEXT ·decodeAllUint32AVX2(SB), NOSPLIT, $0-56
 	TESTQ	        BX, BX
 	JLE		exit
 
-        LEAQ            funcTable32bitCall<>(SB), R14    // base of function pointer table
+        LEAQ            funcTableUint32AVX2<>(SB), R14    // base of function pointer table
 
 loop:
         MOVQ            (SI), DX
@@ -206,8 +206,8 @@ exit:
         RET
 
 /*
-// func decodeBytesBigEndian32bitAVX2Core(dst []uint64, src []byte) (value int)
-TEXT ·decodeBytesBigEndian32bitAVX2Core(SB), NOSPLIT, $0-68
+// func decodeBytesBigEndianAVX2Core(dst []uint64, src []byte) (value int)
+TEXT ·decodeBytesBigEndianAVX2Core(SB), NOSPLIT, $0-68
         MOVQ            dst_base(FP), DI
         MOVQ            src_base+24(FP), SI
         MOVQ            src_len+32(FP), BX
@@ -217,7 +217,7 @@ TEXT ·decodeBytesBigEndian32bitAVX2Core(SB), NOSPLIT, $0-68
 	TESTQ	        BX, BX
 	JLE		exit
 
-        LEAQ            funcTableCall<>(SB), R14    // base of function pointer table
+        LEAQ            funcTableUint32AVX2<>(SB), R14    // base of function pointer table
 
 loop:
         MOVQ            (SI), DX
@@ -241,8 +241,8 @@ exit:
         RET
 */
 
-// func unpack32bit1AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit1AVX2Call(SB), NOSPLIT, $0-68
+// func unpack1AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack1Uint32AVX2(SB), NOSPLIT, $0-68
         MOVQ            mask1, R8
 
         ANDQ            (SI), R8            
@@ -251,8 +251,8 @@ TEXT ·unpack32bit1AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $4, DI
         RET
 
-// func unpack32bit2AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit2AVX2Call(SB), NOSPLIT, $0-68
+// func unpack2AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack2Uint32AVX2(SB), NOSPLIT, $0-68
         MOVQ            mask2, R8
 
         MOVQ            (SI), R9
@@ -268,8 +268,8 @@ TEXT ·unpack32bit2AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $8, DI
         RET
 
-// func unpack32bit3AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit3AVX2Call(SB), NOSPLIT, $0-68
+// func unpack3AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack3Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), X0
         VPBROADCASTQ    mask3<>(SB), X15
         VMOVDQU         write3mask<>(SB), X14
@@ -287,8 +287,8 @@ TEXT ·unpack32bit3AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $12, DI
         RET
 
-// func unpack32bit4AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit4AVX2Call(SB), NOSPLIT, $0-68
+// func unpack4AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack4Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), X0
         VPBROADCASTQ    mask4<>(SB), X15
 //        VMOVDQU         perm4<>(SB), Y13         
@@ -307,8 +307,8 @@ TEXT ·unpack32bit4AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $16, DI
         RET
 
-// func unpack32bit5AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit5AVX2Call(SB), NOSPLIT, $0-68
+// func unpack5AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack5Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Y0
         VPBROADCASTQ    mask5<>(SB), Y15
         VMOVDQU         write5mask<>(SB), Y14
@@ -326,8 +326,8 @@ TEXT ·unpack32bit5AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $20, DI
         RET
 
-// func unpack32bit6AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit6AVX2Call(SB), NOSPLIT, $0-68
+// func unpack6AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack6Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Y0
         VPBROADCASTQ    mask6<>(SB), Y15
         VMOVDQU         write6mask<>(SB), Y14
@@ -345,8 +345,8 @@ TEXT ·unpack32bit6AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $24, DI
         RET
 
-// func unpack32bit7AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit7AVX2Call(SB), NOSPLIT, $0-68
+// func unpack7AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack7Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Y0
         VPBROADCASTQ    mask7<>(SB), Y15
         VMOVDQU         write7mask<>(SB), Y14
@@ -364,8 +364,8 @@ TEXT ·unpack32bit7AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $28, DI
         RET
 
-// func unpack32bit8AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit8AVX2Call(SB), NOSPLIT, $0-68
+// func unpack8AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack8Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Y0
         VPBROADCASTQ    mask8<>(SB), Y15
 
@@ -382,8 +382,8 @@ TEXT ·unpack32bit8AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $32, DI
         RET
 
-// func unpack32bit10AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit10AVX2Call(SB), NOSPLIT, $0-68
+// func unpack10AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack10Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Y0
         VPBROADCASTQ    mask10<>(SB), Y15
 
@@ -411,8 +411,8 @@ TEXT ·unpack32bit10AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $40, DI
         RET
 
-// func unpack32bit12AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit12AVX2Call(SB), NOSPLIT, $0-68
+// func unpack12AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack12Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Y0
         VPBROADCASTQ    mask12<>(SB), Y15
 
@@ -436,8 +436,8 @@ TEXT ·unpack32bit12AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $48, DI
         RET
 
-// func unpack32bit15AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit15AVX2Call(SB), NOSPLIT, $0-68
+// func unpack15AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack15Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Y0
         VPBROADCASTQ    mask15<>(SB), Y15
         VMOVDQU         write7mask<>(SB), Y14
@@ -462,8 +462,8 @@ TEXT ·unpack32bit15AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $60, DI
         RET
 
-// func unpack32bit20AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit20AVX2Call(SB), NOSPLIT, $0-68
+// func unpack20AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack20Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Y0
         VPBROADCASTQ    mask20<>(SB), Y15
 
@@ -494,8 +494,8 @@ TEXT ·unpack32bit20AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $80, DI
         RET
 
-// func unpack32bit30AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit30AVX2Call(SB), NOSPLIT, $0-68
+// func unpack30AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack30Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Y0
         VPBROADCASTQ    mask30<>(SB), Y15
         VMOVDQU         write6mask<>(SB), Y14
@@ -534,8 +534,8 @@ TEXT ·unpack32bit30AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $120, DI
         RET
 
-// func unpack32bit60AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit60AVX2Call(SB), NOSPLIT, $0-68
+// func unpack60AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack60Uint32AVX2(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Y0
         VPBROADCASTQ    mask60<>(SB), Y15
 
@@ -604,8 +604,8 @@ TEXT ·unpack32bit60AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $240, DI
         RET
 
-// func unpack32bit120AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit120AVX2Call(SB), NOSPLIT, $0-68
+// func unpack120AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack120Uint32AVX2(SB), NOSPLIT, $0-68
         VPCMPEQQ        Y0, Y0, Y0
         VPSRLD          $31, Y0, Y0             // Y0 = [1,1,...] 
 
@@ -628,8 +628,8 @@ TEXT ·unpack32bit120AVX2Call(SB), NOSPLIT, $0-68
         ADDQ            $480, DI
         RET
 
-// func unpack32bit240AVX2(v uint64, dst *[240]uint32)
-TEXT ·unpack32bit240AVX2Call(SB), NOSPLIT, $0-68
+// func unpack240AVX2(v uint64, dst *[240]uint32)
+TEXT ·unpack240Uint32AVX2(SB), NOSPLIT, $0-68
         VPCMPEQQ        Y0, Y0, Y0
         VPSRLD          $31, Y0, Y0             // Y0 = [1,1,...] 
 

@@ -102,7 +102,7 @@ func decodeBytesBigEndianGeneric(dst []uint64, src []byte) (value int, err error
 	return j, nil
 }
 
-func countBytesGeneric(b []byte) (int, error) {
+func countValuesGeneric(b []byte) (int, error) {
 	var count int
 	for len(b) >= 8 {
 		v := binary.LittleEndian.Uint64(b[:8])
@@ -121,7 +121,7 @@ func countBytesGeneric(b []byte) (int, error) {
 	return count, nil
 }
 
-func countBytesBigEndianGeneric(b []byte) (int, error) {
+func countValuesBigEndianGeneric(b []byte) (int, error) {
 	var count int
 	for len(b) >= 8 {
 		v := binary.BigEndian.Uint64(b[:8])

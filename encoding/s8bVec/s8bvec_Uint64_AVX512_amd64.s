@@ -2,46 +2,46 @@
 // Author: stefanx@blockwatch.cc
 
 #include "textflag.h"
-#include "constants_AVX512.h"
+#include "constants_Uint64_AVX512.h"
 
-TEXT ·initAVX512Call(SB), NOSPLIT, $0-0
-        LEAQ            ·unpack240AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>(SB)
-        LEAQ            ·unpack120AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+8(SB)
-        LEAQ            ·unpack60AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+16(SB)
-        LEAQ            ·unpack30AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+24(SB)
-        LEAQ            ·unpack20AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+32(SB)
-        LEAQ            ·unpack15AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+40(SB)
-        LEAQ            ·unpack12AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+48(SB)
-        LEAQ            ·unpack10AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+56(SB)
-        LEAQ            ·unpack8AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+64(SB)
-        LEAQ            ·unpack7AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+72(SB)
-        LEAQ            ·unpack6AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+80(SB)
-        LEAQ            ·unpack5AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+88(SB)
-        LEAQ            ·unpack4AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+96(SB)
-        LEAQ            ·unpack3AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+104(SB)
-        LEAQ            ·unpack2AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+112(SB)
-        LEAQ            ·unpack1AVX512Call(SB), DX
-        MOVQ            DX, funcTableCall<>+120(SB)
+TEXT ·initUint64AVX512(SB), NOSPLIT, $0-0
+        LEAQ            ·unpack240Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>(SB)
+        LEAQ            ·unpack120Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+8(SB)
+        LEAQ            ·unpack60Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+16(SB)
+        LEAQ            ·unpack30Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+24(SB)
+        LEAQ            ·unpack20Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+32(SB)
+        LEAQ            ·unpack15Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+40(SB)
+        LEAQ            ·unpack12Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+48(SB)
+        LEAQ            ·unpack10Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+56(SB)
+        LEAQ            ·unpack8Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+64(SB)
+        LEAQ            ·unpack7Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+72(SB)
+        LEAQ            ·unpack6Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+80(SB)
+        LEAQ            ·unpack5Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+88(SB)
+        LEAQ            ·unpack4Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+96(SB)
+        LEAQ            ·unpack3Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+104(SB)
+        LEAQ            ·unpack2Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+112(SB)
+        LEAQ            ·unpack1Uint64AVX512(SB), DX
+        MOVQ            DX, funcTableUint64AVX512<>+120(SB)
 
         RET
 
-// func decodeAllAVX512Call(dst, src []uint64) (value int)
-TEXT ·decodeAllAVX512Call(SB), NOSPLIT, $0-68
+// func decodeAllUint64AVX512(dst, src []uint64) (value int)
+TEXT ·decodeAllUint64AVX512(SB), NOSPLIT, $0-68
         MOVQ            dst_base(FP), DI
         MOVQ            src_base+24(FP), SI
         MOVQ            src_len+32(FP), BX
@@ -50,8 +50,7 @@ TEXT ·decodeAllAVX512Call(SB), NOSPLIT, $0-68
 	TESTQ	        BX, BX
 	JLE		exit
 
-        LEAQ            funcTableCall<>(SB), R14    // base of function pointer table
-        VMOVDQU         write3mask<>(SB), Y14
+        LEAQ            funcTableUint64AVX512<>(SB), R14    // base of function pointer table
         MOVQ            $0x3, AX
         KMOVQ           AX, K2
         MOVQ            $0x7, AX
@@ -84,43 +83,8 @@ exit:
         MOVQ            DI, ret+48(FP)
         RET
 
-// func decodeBytesBigEndianAVX512Core(dst []uint64, src []byte) (value int)
-TEXT ·decodeBytesBigEndianAVX512Core(SB), NOSPLIT, $0-68
-        MOVQ            dst_base(FP), DI
-        MOVQ            src_base+24(FP), SI
-        MOVQ            src_len+32(FP), BX
-        SHRQ            $3, BX
-        MOVQ            DI, R15                     // save DI
-
-	TESTQ	        BX, BX
-	JLE		exit
-
-        LEAQ            funcTableCall<>(SB), R14    // base of function pointer table
-        VMOVDQU         write3mask<>(SB), Y14
-
-loop:
-        MOVQ            (SI), DX
-//        BSWAPQ          DX
-        MOVQ            DX, (SI)
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-        CALL            AX
-
-        ADDQ            $8, SI
-        SUBQ            $1, BX
-        JZ              exit
-        JMP             loop
-
-exit:
-        VZEROUPPER
-        SUBQ            R15, DI
-        SHRQ            $3, DI
-        MOVQ            DI, ret+48(FP)
-        RET
-
-// func unpack1AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack1AVX512Call(SB), NOSPLIT, $0-68
+// func unpack1Uint64AVX512()
+TEXT ·unpack1Uint64AVX512(SB), NOSPLIT, $0-68
         MOVQ            mask1, R8
 
         ANDQ            (SI), R8            
@@ -129,8 +93,8 @@ TEXT ·unpack1AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $8, DI
         RET
 
-// func unpack2AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack2AVX512Call(SB), NOSPLIT, $0-68
+// func unpack2Uint64AVX512()
+TEXT ·unpack2Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask2<>(SB), Z15
 
@@ -141,8 +105,8 @@ TEXT ·unpack2AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $16, DI
         RET
 
-// func unpack3AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack3AVX512Call(SB), NOSPLIT, $0-68
+// func unpack3Uint64AVX512()
+TEXT ·unpack3Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask3<>(SB), Z15
 
@@ -153,8 +117,8 @@ TEXT ·unpack3AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $24, DI
         RET
 
-// func unpack4AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack4AVX512Call(SB), NOSPLIT, $0-68
+// func unpack4Uint64AVX512()
+TEXT ·unpack4Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask4<>(SB), Z15
 
@@ -165,8 +129,8 @@ TEXT ·unpack4AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $32, DI
         RET
 
-// func unpack5AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack5AVX512Call(SB), NOSPLIT, $0-68
+// func unpack5Uint64AVX512()
+TEXT ·unpack5Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask5<>(SB), Z15
 
@@ -177,8 +141,8 @@ TEXT ·unpack5AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $40, DI
         RET
 
-// func unpack6AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack6AVX512Call(SB), NOSPLIT, $0-68
+// func unpack6Uint64AVX512()
+TEXT ·unpack6Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask6<>(SB), Z15
 
@@ -189,8 +153,8 @@ TEXT ·unpack6AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $48, DI
         RET
 
-// func unpack7AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack7AVX512Call(SB), NOSPLIT, $0-68
+// func unpack7Uint64AVX512()
+TEXT ·unpack7Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask7<>(SB), Z15
 
@@ -201,8 +165,8 @@ TEXT ·unpack7AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $56, DI
         RET
 
-// func unpack8AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack8AVX512Call(SB), NOSPLIT, $0-68
+// func unpack8Uint64AVX512()
+TEXT ·unpack8Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask8<>(SB), Z15
 
@@ -213,8 +177,8 @@ TEXT ·unpack8AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $64, DI
         RET
 
-// func unpack10AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack10AVX512Call(SB), NOSPLIT, $0-68
+// func unpack10Uint64AVX512()
+TEXT ·unpack10Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask10<>(SB), Z15
 
@@ -228,8 +192,8 @@ TEXT ·unpack10AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $80, DI
         RET
 
-// func unpack12AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack12AVX512Call(SB), NOSPLIT, $0-68
+// func unpack12Uint64AVX512()
+TEXT ·unpack12Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask12<>(SB), Z15
 
@@ -243,8 +207,8 @@ TEXT ·unpack12AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $96, DI
         RET
 
-// func unpack15AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack15AVX512Call(SB), NOSPLIT, $0-68
+// func unpack15Uint64AVX512()
+TEXT ·unpack15Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask15<>(SB), Z15
 
@@ -258,8 +222,8 @@ TEXT ·unpack15AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $120, DI
         RET
 
-// func unpack20AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack20AVX512Call(SB), NOSPLIT, $0-68
+// func unpack20Uint64AVX512()
+TEXT ·unpack20Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask20<>(SB), Z15
 
@@ -276,8 +240,8 @@ TEXT ·unpack20AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $160, DI
         RET
 
-// func unpack30AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack30AVX512Call(SB), NOSPLIT, $0-68
+// func unpack30Uint64AVX512()
+TEXT ·unpack30Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask30<>(SB), Z15
 
@@ -297,8 +261,8 @@ TEXT ·unpack30AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $240, DI
         RET
 
-// func unpack60AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack60AVX512Call(SB), NOSPLIT, $0-68
+// func unpack60Uint64AVX512()
+TEXT ·unpack60Uint64AVX512(SB), NOSPLIT, $0-68
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask60<>(SB), Z15
 
@@ -331,8 +295,8 @@ TEXT ·unpack60AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $480, DI
         RET
 
-// func unpack120AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack120AVX512Call(SB), NOSPLIT, $0-68
+// func unpack120Uint64AVX512()
+TEXT ·unpack120Uint64AVX512(SB), NOSPLIT, $0-68
         MOVQ            $1, AX
         VPBROADCASTQ    AX, Z0          // Z0 = [1,1,...]
 
@@ -355,8 +319,8 @@ TEXT ·unpack120AVX512Call(SB), NOSPLIT, $0-68
         ADDQ            $960, DI
         RET
 
-// func unpack240AVX512(v uint64, dst *[240]uint64)
-TEXT ·unpack240AVX512Call(SB), NOSPLIT, $0-68
+// func unpack240Uint64AVX512()
+TEXT ·unpack240Uint64AVX512(SB), NOSPLIT, $0-68
         MOVQ            $1, AX
         VPBROADCASTQ    AX, Z0          // Z0 = [1,1,...]
 
