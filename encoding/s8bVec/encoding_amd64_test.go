@@ -137,7 +137,7 @@ func TestEncodeAllAVX512Call(t *testing.T) {
 			buf := make([]byte, 8*len(encoded))
 			b := buf
 			for _, v := range encoded {
-				binary.BigEndian.PutUint64(b, v)
+				binary.LittleEndian.PutUint64(b, v)
 				b = b[8:]
 			}
 			count, err := countBytesAVX2(buf)
@@ -260,8 +260,23 @@ func TestEncodeAllAVX2Opt(t *testing.T) {
 				return
 			}
 
+			buf := make([]byte, 8*len(encoded))
+			b := buf
+			for _, v := range encoded {
+				binary.LittleEndian.PutUint64(b, v)
+				b = b[8:]
+			}
+
+			count, err := countBytesGeneric(buf)
+			if err != nil {
+				t.Fatalf("unexpected count error\n%s", err)
+			}
+			if count != len(test.in) {
+				t.Fatalf("unexpected count: got %d expected %d", count, len(test.in))
+			}
+
 			decoded := make([]uint64, len(test.in))
-			n := decodeAllAVX2Opt(decoded, encoded)
+			n := decodeAllAVX2Opt(decoded, buf)
 
 			if !cmp.Equal(decoded[:n], test.in) {
 				t.Fatalf("unexpected values; +got/-exp\n%s", cmp.Diff(decoded, test.in))
@@ -434,10 +449,18 @@ func BenchmarkDecodeAllAVX2Opt(b *testing.B) {
 		in := bm.fn(s8bBenchmarkSize)()
 		out := make([]uint64, len(in))
 		comp, _ := EncodeAll(in)
+
+		buf := make([]byte, 8*len(comp))
+		tmp := buf
+		for _, v := range comp {
+			binary.LittleEndian.PutUint64(tmp, v)
+			tmp = tmp[8:]
+		}
+
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.size))
 			for i := 0; i < b.N; i++ {
-				decodeAllAVX2Opt(out, comp)
+				decodeAllAVX2Opt(out, buf)
 			}
 		})
 	}

@@ -196,7 +196,7 @@ func unpack240AVX2Jmp(v uint64, dst *[240]uint64)
 /************************ AVX2 Opt ******************************/
 
 //go:noescape
-func decodeAllAVX2Opt(dst, src []uint64) (value int)
+func decodeAllAVX2Opt(dst []uint64, src []byte) (value int)
 
 //go:noescape
 func initAVX2Opt()
@@ -394,7 +394,7 @@ func decodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {
 func decodeAllUint64(dst []uint64, src []byte) (value int, err error) {
 	switch {
 	case util.UseAVX2:
-		return decodeAllAVX2Call(dst, src), nil
+		return decodeAllAVX2Opt(dst, src), nil
 	default:
 		return decodeAllUint64Generic(dst, src)
 	}

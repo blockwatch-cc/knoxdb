@@ -3,6 +3,9 @@
 
 #define mask1 $(0xfffffffffffffff)
 
+DATA mask1x<>+0x00(SB)/8, $(0xfffffffffffffff)
+GLOBL mask1x<>(SB), (RODATA+NOPTR), $8
+
 DATA mask2<>+0x00(SB)/8, $(0x3fffffff)
 GLOBL mask2<>(SB), (RODATA+NOPTR), $8
 
@@ -51,6 +54,10 @@ DATA shift3<>+0x08(SB)/8, $(20)
 DATA shift3<>+0x10(SB)/8, $(40)
 DATA shift3<>+0x18(SB)/8, $(0)
 GLOBL shift3<>(SB), (RODATA+NOPTR), $32
+
+DATA shift3x<>+0x00(SB)/8, $(20)
+DATA shift3x<>+0x08(SB)/8, $(40)
+GLOBL shift3x<>(SB), (RODATA+NOPTR), $16
 
 DATA shift4<>+0x00(SB)/8, $(0)
 DATA shift4<>+0x08(SB)/8, $(15)
