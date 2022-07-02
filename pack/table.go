@@ -1907,6 +1907,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 			// load pack from cache or storage, will be recycled on cache eviction
 			if q.NoCache {
 				t.recyclePackage(spack)
+				spack = nil
 			}
 			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
 			if err != nil {
@@ -1974,6 +1975,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	t.u32Pool.Put(u32slice)
 	if q.NoCache {
 		t.recyclePackage(spack)
+		spack = nil
 	}
 
 	// finalize on limit
@@ -2119,6 +2121,7 @@ packloop:
 		// load pack from cache or storage, will be recycled on cache eviction
 		if q.NoCache {
 			t.recyclePackage(spack)
+			spack = nil
 		}
 		spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
 		if err != nil {
@@ -2182,6 +2185,7 @@ packloop:
 	t.u32Pool.Put(u32slice)
 	if q.NoCache {
 		t.recyclePackage(spack)
+		spack = nil
 	}
 
 	q.stats.ScanTime = time.Since(q.lap)
@@ -2255,6 +2259,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 			// load pack from cache or storage, will be recycled on cache eviction
 			if q.NoCache {
 				t.recyclePackage(spack)
+				spack = nil
 			}
 			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
 			if err != nil {
@@ -2307,6 +2312,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	t.u32Pool.Put(u32slice)
 	if q.NoCache {
 		t.recyclePackage(spack)
+		spack = nil
 	}
 
 	// after all packs have been scanned, add remaining rows from journal, if any
@@ -2398,6 +2404,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 			// load pack from cache or storage, will be recycled on cache eviction
 			if q.NoCache {
 				t.recyclePackage(spack)
+				spack = nil
 			}
 			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
 			if err != nil {
@@ -2465,6 +2472,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	t.u32Pool.Put(u32slice)
 	if q.NoCache {
 		t.recyclePackage(spack)
+		spack = nil
 	}
 
 	if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
@@ -2599,6 +2607,7 @@ packloop:
 		// load pack from cache or storage, will be recycled on cache eviction
 		if q.NoCache {
 			t.recyclePackage(spack)
+			spack = nil
 		}
 		spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
 		if err != nil {
@@ -2662,6 +2671,7 @@ packloop:
 	t.u32Pool.Put(u32slice)
 	if q.NoCache {
 		t.recyclePackage(spack)
+		spack = nil
 	}
 
 	q.stats.ScanTime = time.Since(q.lap)

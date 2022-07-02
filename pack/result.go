@@ -47,12 +47,9 @@ func (r Row) Field(name string) (interface{}, error) {
 }
 
 func (r *Result) Close() {
-	if r.table == nil {
-		r.pkg = nil
-		r.tinfo = nil
-		return
+	if r.table != nil {
+		r.table.recyclePackage(r.pkg)
 	}
-	r.table.recyclePackage(r.pkg)
 	r.table = nil
 	r.pkg = nil
 	r.tinfo = nil
