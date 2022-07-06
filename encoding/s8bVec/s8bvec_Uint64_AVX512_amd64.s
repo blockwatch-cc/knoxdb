@@ -41,7 +41,7 @@ TEXT ·initUint64AVX512(SB), NOSPLIT, $0-0
         RET
 
 // func decodeAllUint64AVX512(dst, src []uint64) (value int)
-TEXT ·decodeAllUint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·decodeAllUint64AVX512(SB), NOSPLIT, $0-0
         MOVQ            dst_base(FP), DI
         MOVQ            src_base+24(FP), SI
         MOVQ            src_len+32(FP), BX
@@ -80,11 +80,11 @@ exit:
         VZEROUPPER
         SUBQ            R15, DI
         SHRQ            $3, DI
-        MOVQ            DI, ret+48(FP)
+        MOVQ            DI, value+48(FP)
         RET
 
 // func unpack1Uint64AVX512()
-TEXT ·unpack1Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack1Uint64AVX512(SB), NOSPLIT, $0-0
         MOVQ            mask1, R8
 
         ANDQ            (SI), R8            
@@ -94,7 +94,7 @@ TEXT ·unpack1Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack2Uint64AVX512()
-TEXT ·unpack2Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack2Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask2<>(SB), Z15
 
@@ -106,7 +106,7 @@ TEXT ·unpack2Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack3Uint64AVX512()
-TEXT ·unpack3Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack3Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask3<>(SB), Z15
 
@@ -118,7 +118,7 @@ TEXT ·unpack3Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack4Uint64AVX512()
-TEXT ·unpack4Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack4Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask4<>(SB), Z15
 
@@ -130,7 +130,7 @@ TEXT ·unpack4Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack5Uint64AVX512()
-TEXT ·unpack5Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack5Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask5<>(SB), Z15
 
@@ -142,7 +142,7 @@ TEXT ·unpack5Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack6Uint64AVX512()
-TEXT ·unpack6Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack6Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask6<>(SB), Z15
 
@@ -154,7 +154,7 @@ TEXT ·unpack6Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack7Uint64AVX512()
-TEXT ·unpack7Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack7Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask7<>(SB), Z15
 
@@ -166,7 +166,7 @@ TEXT ·unpack7Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack8Uint64AVX512()
-TEXT ·unpack8Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack8Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask8<>(SB), Z15
 
@@ -178,7 +178,7 @@ TEXT ·unpack8Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack10Uint64AVX512()
-TEXT ·unpack10Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack10Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask10<>(SB), Z15
 
@@ -193,7 +193,7 @@ TEXT ·unpack10Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack12Uint64AVX512()
-TEXT ·unpack12Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack12Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask12<>(SB), Z15
 
@@ -208,7 +208,7 @@ TEXT ·unpack12Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack15Uint64AVX512()
-TEXT ·unpack15Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack15Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask15<>(SB), Z15
 
@@ -223,7 +223,7 @@ TEXT ·unpack15Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack20Uint64AVX512()
-TEXT ·unpack20Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack20Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask20<>(SB), Z15
 
@@ -241,7 +241,7 @@ TEXT ·unpack20Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack30Uint64AVX512()
-TEXT ·unpack30Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack30Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask30<>(SB), Z15
 
@@ -262,7 +262,7 @@ TEXT ·unpack30Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack60Uint64AVX512()
-TEXT ·unpack60Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack60Uint64AVX512(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Z0
         VPBROADCASTQ    mask60<>(SB), Z15
 
@@ -296,7 +296,7 @@ TEXT ·unpack60Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack120Uint64AVX512()
-TEXT ·unpack120Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack120Uint64AVX512(SB), NOSPLIT, $0-0
         MOVQ            $1, AX
         VPBROADCASTQ    AX, Z0          // Z0 = [1,1,...]
 
@@ -320,7 +320,7 @@ TEXT ·unpack120Uint64AVX512(SB), NOSPLIT, $0-68
         RET
 
 // func unpack240Uint64AVX512()
-TEXT ·unpack240Uint64AVX512(SB), NOSPLIT, $0-68
+TEXT ·unpack240Uint64AVX512(SB), NOSPLIT, $0-0
         MOVQ            $1, AX
         VPBROADCASTQ    AX, Z0          // Z0 = [1,1,...]
 

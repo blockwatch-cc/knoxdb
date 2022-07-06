@@ -119,7 +119,7 @@ exit_small:
 	VZEROUPPER           // clear upper part of Y regs, prevents AVX-SSE penalty
 
 done:
-        MOVQ            AX, ret+24(FP)
+        MOVQ            AX, count+24(FP)
         MOVQ            $100, AX
 	RET
 
@@ -239,6 +239,6 @@ exit_small:
 	VZEROUPPER           // clear upper part of Y regs, prevents AVX-SSE penalty
 
 done:
-        MOVQ            AX, ret+24(FP)
+        MOVQ            AX, count+24(FP)
         MOVQ            $100, AX
 	RET

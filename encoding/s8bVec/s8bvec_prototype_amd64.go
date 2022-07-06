@@ -80,6 +80,9 @@ func initUint32AVX2()
 func decodeAllUint32AVX2(dst []uint32, src []byte) (value int)
 
 //go:noescape
+func decodeAllUint32AVX2Exit()
+
+//go:noescape
 func unpack1Uint32AVX2()
 
 //go:noescape

@@ -42,8 +42,8 @@ func decodeAllUint64(dst []uint64, src []byte) (value int, err error) {
 
 func decodeAllUint32(dst []uint32, src []byte) (value int, err error) {
 	switch {
-	//case util.UseAVX2:
-	//	return decodeAllUint32AVX2(dst, src), nil
+	case util.UseAVX2:
+		return decodeAllUint32AVX2(dst, src), nil
 	default:
 		return decodeAllUint32Generic(dst, src)
 	}

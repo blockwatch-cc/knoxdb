@@ -463,7 +463,7 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 			dt[j] = -1
 			continue
 		}
-		b2 := block.NewBlock(b.Type(), b.Compression(), b.Len())
+		b2 := block.NewBlock(b.Type(), b.Compression(), b.Len()+8)
 		check := true
 		var csize int = -1
 		var tcomp float64 = -1
@@ -484,9 +484,75 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 			csize, err = b.Encode(buf)
 			tcomp = time.Since(start).Seconds()
 			if err == nil {
+				switch b2.Type() {
+				case block.BlockInt64:
+					tmp := b2.Int64[len(b2.Int64):cap(b2.Int64)]
+					for i := range tmp {
+						tmp[i] = 12345
+					}
+				case block.BlockUint64:
+					tmp := b2.Uint64[len(b2.Uint64):cap(b2.Uint64)]
+					for i := range tmp {
+						tmp[i] = 12345
+					}
+				case block.BlockInt32:
+					tmp := b2.Int32[len(b2.Int32):cap(b2.Int32)]
+					for i := range tmp {
+						tmp[i] = 12345
+					}
+				case block.BlockUint32:
+					tmp := b2.Uint32[len(b2.Uint32):cap(b2.Uint32)]
+					for i := range tmp {
+						tmp[i] = 12345
+					}
+				}
+				t1 := b2.Type()
+				c1 := b2.Compression()
+				encoding := buf.Bytes()[1] >> 4
 				start = time.Now()
 				err = b2.DecodeNew(buf.Bytes(), b.Len(), b2.MaxStoredSize())
 				tdecomp = time.Since(start).Seconds()
+				t2 := b2.Type()
+				c2 := b2.Compression()
+				if t1 != t2 {
+					fmt.Printf("\nBlock %d: %s != %s %s != %s\n", j, t1.String(), t2.String(), c1.String(), c2.String())
+				}
+				l := b2.Len()
+				c := b2.Cap()
+				bo := false
+				switch b2.Type() {
+				case block.BlockInt64:
+					tmp := b2.Int64[len(b2.Int64):cap(b2.Int64)]
+					for _, v := range tmp {
+						if v != 12345 {
+							bo = true
+						}
+					}
+				case block.BlockUint64:
+					tmp := b2.Uint64[len(b2.Uint64):cap(b2.Uint64)]
+					for _, v := range tmp {
+						if v != 12345 {
+							bo = true
+						}
+					}
+				case block.BlockInt32:
+					tmp := b2.Int32[len(b2.Int32):cap(b2.Int32)]
+					for _, v := range tmp {
+						if v != 12345 {
+							bo = true
+						}
+					}
+				case block.BlockUint32:
+					tmp := b2.Uint32[len(b2.Uint32):cap(b2.Uint32)]
+					for _, v := range tmp {
+						if v != 12345 {
+							bo = true
+						}
+					}
+				}
+				if bo {
+					fmt.Printf("Pack %d, Block %d[%s,%d]: Overflow %v\n", p.key, j, t1.String(), encoding, b2.RangeSlice(l, c))
+				}
 			}
 		case "delta-s8b":
 			src := convertBlockToUint64(b)
@@ -581,7 +647,7 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 			return nil, nil, nil, err
 		}
 		if check && !reflect.DeepEqual(b.RawSlice(), b2.RawSlice()) {
-			return nil, nil, nil, fmt.Errorf("Compression/Decompression error pack %v block %v", p.key, j)
+			fmt.Printf("Compression/Decompression error pack %v block %v\n", p.key, j)
 		}
 		ct[j] = tcomp
 		dt[j] = tdecomp

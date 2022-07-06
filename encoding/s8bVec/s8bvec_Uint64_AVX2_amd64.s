@@ -75,13 +75,12 @@ TEXT ·decodeAllUint64AVX2Exit(SB), NOSPLIT, $0-0
         VZEROUPPER
         SUBQ            R15, DI
         SHRQ            $3, DI
-        MOVQ            DI, ret+48(FP)
+        MOVQ            DI, value+48(FP)
         RET
 
 // func unpack1Uint64AVX2()
 TEXT ·unpack1Uint64AVX2(SB), NOSPLIT, $0-0
-        VMOVQ           (SI), X0
-        VPAND           X0, X5, X0
+        VPAND           (SI), X5, X0
         VMOVQ           X0, (DI)
 
         ADDQ            $8, DI
@@ -127,7 +126,6 @@ TEXT ·unpack3Uint64AVX2(SB), NOSPLIT, $0-0
         VPAND           Y0, Y7, Y0
 
         VPMASKMOVQ      Y0, Y15, (DI)
-        VMOVDQU         Y0, (DI)
 
         ADDQ            $24, DI
 
