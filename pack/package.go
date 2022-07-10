@@ -386,16 +386,15 @@ func (p *Package) UpdateAliasesFrom(fields FieldList) *Package {
 	return p
 }
 
-// Push append a new row to all columns. Requires a type that strictly defines
-// all columns in this pack! Column mapping uses the default struct tag `pack`,
-// hence the fields name only (not the fields alias).
+// Push appends a new row to all columns. Requires a type that strictly defines
+// all columns in this pack! Column mapping uses the default struct tag `knox`.
 func (p *Package) Push(v interface{}) error {
 	if err := p.InitType(v); err != nil {
 		return err
 	}
 	val := reflect.Indirect(reflect.ValueOf(v))
 	if !val.IsValid() {
-		return fmt.Errorf("pack: push: invalid value of type %T", v)
+		return fmt.Errorf("pack: pushed invalid value of type %T", v)
 	}
 
 	for _, fi := range p.tinfo.fields {
@@ -724,11 +723,9 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 		}
 		// skip early
 		b := p.blocks[fi.blockid]
-		field := p.fields[fi.blockid]
 		if b.IsIgnore() {
 			continue
 		}
-
 		dst := fi.value(val)
 		if !dst.IsValid() {
 			continue
@@ -740,6 +737,7 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst = dst.Elem()
 		}
 
+		field := p.fields[fi.blockid]
 		switch field.Type {
 		case FieldTypeBytes:
 			if dst.CanAddr() {

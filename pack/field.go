@@ -5,6 +5,7 @@ package pack
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"reflect"
@@ -135,12 +136,18 @@ func (l FieldList) Sort() FieldList {
 	return l
 }
 
-func (l FieldList) Key() string {
-	s := make([]string, len(l))
+func (l FieldList) MaskString(m FieldList) string {
+	return hex.EncodeToString(l.Mask(m))
+}
+
+func (l FieldList) Mask(m FieldList) []byte {
+	b := make([]byte, (len(l)+7)>>3)
 	for i, v := range l {
-		s[i] = v.Name
+		if m.Contains(v.Name) {
+			b[i>>3] |= byte(1 << uint(i&0x7))
+		}
 	}
-	return strings.Join(s, "")
+	return b
 }
 
 func (l FieldList) Names() []string {
@@ -308,18 +315,17 @@ func Fields(proto interface{}) (FieldList, error) {
 			fields[i].Type = FieldTypeString
 		case reflect.Slice:
 			// check if type implements BinaryMarshaler -> BlockBytes
-			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				// log.Debugf("Slice type field %s type %s implements binary marshaler", finfo.name, f.Type().String())
+			if canMarshalBinary(f) {
 				fields[i].Type = FieldTypeBytes
 				break
 			}
 			// check if type implements TextMarshaler -> BlockString
-			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
+			if canMarshalText(f) {
 				fields[i].Type = FieldTypeString
 				break
 			}
 			// check if type implements fmt.Stringer -> BlockString
-			if f.CanInterface() && f.Type().Implements(stringerType) {
+			if canMarshalString(f) {
 				fields[i].Type = FieldTypeString
 				break
 			}
@@ -347,7 +353,7 @@ func Fields(proto interface{}) (FieldList, error) {
 				fields[i].Type = FieldTypeDecimal256
 				fields[i].Scale = finfo.scale
 			default:
-				if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
+				if canMarshalBinary(f) {
 					fields[i].Type = FieldTypeBytes
 				} else {
 					return nil, fmt.Errorf("pack: unsupported embedded struct type %s", f.Type().String())
@@ -362,8 +368,7 @@ func Fields(proto interface{}) (FieldList, error) {
 				fields[i].Type = FieldTypeInt256
 			default:
 				// check if type implements BinaryMarshaler -> BlockBytes
-				if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-					log.Debugf("Array type field %s type %s implements binary marshaler", finfo.name, f.Type().String())
+				if canMarshalBinary(f) {
 					fields[i].Type = FieldTypeBytes
 				} else {
 					return nil, fmt.Errorf("pack: unsupported array type %s", f.Type().String())

@@ -3099,7 +3099,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		// FIXME: this caching scheme results in duplicate pack blocks
 		//        being cached under different keys! instead we should
 		//        cache individual data blocks rather than entire packs!
-		cachekey += "#" + fields.Key()
+		cachekey += "#" + t.fields.MaskString(fields)
 		if cached, ok := cachefn(cachekey); ok {
 			atomic.AddInt64(&t.stats.PackCacheHits, 1)
 			return cached.(*Package), nil

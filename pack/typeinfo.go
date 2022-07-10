@@ -95,6 +95,22 @@ var (
 	byteSliceType         = reflect.TypeOf([]byte(nil))
 )
 
+func canMarshalBinary(v reflect.Value) bool {
+	return v.CanInterface() &&
+		v.Type().Implements(binaryMarshalerType) &&
+		reflect.PointerTo(v.Type()).Implements(binaryUnmarshalerType)
+}
+
+func canMarshalText(v reflect.Value) bool {
+	return v.CanInterface() &&
+		v.Type().Implements(textMarshalerType) &&
+		reflect.PointerTo(v.Type()).Implements(textUnmarshalerType)
+}
+
+func canMarshalString(v reflect.Value) bool {
+	return v.CanInterface() && v.Type().Implements(stringerType)
+}
+
 // getTypeInfo returns the typeInfo structure with details necessary
 // for marshaling and unmarshaling typ.
 func getTypeInfo(v interface{}) (*typeInfo, error) {
