@@ -1,9 +1,10 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 //
 package pack
 
 import (
+	"encoding"
 	"fmt"
 	"reflect"
 	"time"
@@ -12,15 +13,32 @@ import (
 	. "blockwatch.cc/knoxdb/vec"
 )
 
-// Note: may evolve into a CAST function
 func (t FieldType) CastType(val interface{}, f *Field) (interface{}, error) {
 	var ok bool
 	res := val
 	switch t {
 	case FieldTypeBytes:
-		_, ok = val.([]byte)
+		if vv, ok2 := val.(encoding.BinaryMarshaler); ok2 {
+			r, err := vv.MarshalBinary()
+			if err != nil {
+				return nil, err
+			}
+			res = r
+			ok = true
+		} else {
+			_, ok = val.([]byte)
+		}
 	case FieldTypeString:
-		_, ok = val.(string)
+		if vv, ok2 := val.(encoding.TextMarshaler); ok2 {
+			r, err := vv.MarshalText()
+			if err != nil {
+				return nil, err
+			}
+			res = r
+			ok = true
+		} else {
+			_, ok = val.(string)
+		}
 	case FieldTypeDatetime:
 		_, ok = val.(time.Time)
 	case FieldTypeBoolean:
@@ -520,20 +538,51 @@ func (t FieldType) CastType(val interface{}, f *Field) (interface{}, error) {
 		}
 	}
 	if !ok {
-		return res, fmt.Errorf("pack: unexpected value type %T for %s condition", val, t)
+		return res, fmt.Errorf("pack: cast unexpected value type %T for %s condition", val, t)
 	}
 	return res, nil
 }
 
-// Note: can evolve into a CAST function
 func (t FieldType) CastSliceType(val interface{}, f *Field) (interface{}, error) {
-	var ok bool
+	var (
+		ok  bool
+		err error
+	)
 	res := val
 	switch t {
 	case FieldTypeBytes:
 		_, ok = val.([][]byte)
+		if !ok {
+			vv, ok2 := val.([]encoding.BinaryMarshaler)
+			if ok2 {
+				slice := make([][]byte, len(vv))
+				for i := range vv {
+					slice[i], err = vv[i].(encoding.BinaryMarshaler).MarshalBinary()
+					if err != nil {
+						return nil, err
+					}
+				}
+				res = slice
+				ok = true
+			}
+		}
 	case FieldTypeString:
 		_, ok = val.([]string)
+		if !ok {
+			vv, ok2 := val.([]encoding.TextMarshaler)
+			if ok2 {
+				slice := make([]string, len(vv))
+				for i := range vv {
+					buf, err := vv[i].(encoding.TextMarshaler).MarshalText()
+					slice[i] = string(buf)
+					if err != nil {
+						return nil, err
+					}
+				}
+				res = slice
+				ok = true
+			}
+		}
 	case FieldTypeDatetime:
 		_, ok = val.([]time.Time)
 	case FieldTypeBoolean:
@@ -965,7 +1014,7 @@ func (t FieldType) CastSliceType(val interface{}, f *Field) (interface{}, error)
 		_, ok = val.([]Int256)
 	}
 	if !ok {
-		return res, fmt.Errorf("pack: unexpected value type %T for %s slice condition", val, t)
+		return res, fmt.Errorf("pack: cast unexpected value type %T for %s slice condition", val, t)
 	}
 	return res, nil
 }
@@ -1015,7 +1064,7 @@ func (t FieldType) CheckType(val interface{}) error {
 		_, ok = val.(Decimal32)
 	}
 	if !ok {
-		return fmt.Errorf("pack: unexpected value type %T for %s condition", val, t)
+		return fmt.Errorf("pack: check unexpected value type %T for %s condition", val, t)
 	}
 	return nil
 }
@@ -1065,7 +1114,7 @@ func (t FieldType) CheckSliceType(val interface{}) error {
 		_, ok = val.([]Decimal32)
 	}
 	if !ok {
-		return fmt.Errorf("pack: unexpected value type %T for %s slice condition", val, t)
+		return fmt.Errorf("pack: check unexpected value type %T for %s slice condition", val, t)
 	}
 	return nil
 }
