@@ -54,10 +54,14 @@ func (t JoinType) String() string {
 
 type JoinTable struct {
 	Table    *Table
-	Where    ConditionTreeNode // optional filters for table rows
-	Fields   FieldList         // list of output fields, in order
-	FieldsAs util.StringList   // alias names of output fields, in order
-	Limit    int               // individual table scan limit
+	Where    UnboundCondition // optional filters for table rows
+	Fields   util.StringList  // list of output fields, in order
+	FieldsAs util.StringList  // alias names of output fields, in order
+	Limit    int              // individual table scan limit
+
+	// compiled
+	where  ConditionTreeNode
+	fields FieldList
 }
 
 type Join struct {
@@ -68,7 +72,7 @@ type Join struct {
 
 	// compiled data below
 	limit   int
-	fields  FieldList         // ordered list of output columns
+	fields  FieldList         // ordered list of output fields
 	aliases map[string]string // query to output field translation
 }
 
@@ -80,16 +84,10 @@ func (j Join) IsEquiJoin() bool {
 	return j.Predicate.Mode == FilterModeEqual
 }
 
-// check pre-conditions
-func (j Join) Check() error {
+func (j Join) CheckInputs() error {
 	// join type is valid
 	if j.Type < InnerJoin || j.Type > WindowJoin {
 		return fmt.Errorf("pack: invalid join type %d", j.Type)
-	}
-
-	// predicate mode is allowed, fields are valid and have same type
-	if err := j.Predicate.Check(); err != nil {
-		return err
 	}
 
 	// tables are valid
@@ -124,43 +122,32 @@ func (j Join) Check() error {
 
 	// output fields exist
 	for _, v := range j.Left.Fields {
-		// field must exist
-		if !lfields.Contains(v.Name) {
-			return fmt.Errorf("pack: undefined field '%s.%s' used in join output",
-				lname, v.Name)
-		}
-		// field type must match
-		if lfields.Find(v.Name).Type != v.Type {
-			return fmt.Errorf("pack: mismatched type %s for field '%s.%s' used in join output",
-				v.Type, lname, v.Name)
-		}
-		// field index must be valid
-		if v.Index < 0 || v.Index >= len(lfields) {
-			return fmt.Errorf("pack: illegal index %d for field '%s.%s' used in join output",
-				v.Index, lname, v.Name)
+		if !lfields.Contains(v) {
+			return fmt.Errorf("pack: undefined field '%s.%s' used in join output", lname, v)
 		}
 	}
 
 	for _, v := range j.Right.Fields {
-		// field must exist
-		if !rfields.Contains(v.Name) {
-			return fmt.Errorf("pack: undefined field '%s.%s' used in join output",
-				rname, v.Name)
-		}
-		// field type must match
-		if rfields.Find(v.Name).Type != v.Type {
-			return fmt.Errorf("pack: mismatched type %s for field '%s.%s' used in join output",
-				v.Type, rname, v.Name)
-		}
-		// field index must be valid
-		if v.Index < 0 || v.Index >= len(lfields) {
-			return fmt.Errorf("pack: illegal index %d for field '%s.%s' used in join output",
-				v.Index, rname, v.Name)
+		if !rfields.Contains(v) {
+			return fmt.Errorf("pack: undefined field '%s.%s' used in join output", rname, v)
 		}
 	}
+	return nil
+}
 
-	// where conditions are valid if set
-	for i, c := range j.Left.Where.Conditions() {
+func (j Join) CheckConditions() error {
+	// predicate mode is allowed, fields are valid and have same type
+	if err := j.Predicate.Check(); err != nil {
+		return err
+	}
+
+	lfields := j.Left.Table.Fields()
+	lname := j.Left.Table.Name()
+	rfields := j.Right.Table.Fields()
+	rname := j.Right.Table.Name()
+
+	// compiled where conditions are valid if set
+	for i, c := range j.Left.where.Conditions() {
 		if err := c.ensureTypes(); err != nil {
 			return fmt.Errorf("pack: invalid cond %d in join field '%s.%s': %v",
 				i, lname, c.Field.Name, err)
@@ -182,7 +169,7 @@ func (j Join) Check() error {
 		}
 	}
 
-	for i, c := range j.Right.Where.Conditions() {
+	for i, c := range j.Right.where.Conditions() {
 		if err := c.ensureTypes(); err != nil {
 			return fmt.Errorf("pack: invalid cond %d in join field '%s.%s': %v",
 				i, rname, c.Field.Name, err)
@@ -203,6 +190,7 @@ func (j Join) Check() error {
 				c.Field.Index, rname, c.Field.Name, i)
 		}
 	}
+
 	return nil
 }
 
@@ -213,7 +201,7 @@ func (j *Join) Compile() error {
 		return nil
 	}
 
-	if err := j.Check(); err != nil {
+	if err := j.CheckInputs(); err != nil {
 		return err
 	}
 
@@ -221,15 +209,19 @@ func (j *Join) Compile() error {
 
 	// use all table fields when none are defined
 	if len(j.Left.Fields) == 0 {
-		j.Left.Fields = j.Left.Table.Fields()
+		j.Left.fields = j.Left.Table.fields
+	} else {
+		j.Left.fields = j.Left.Table.fields.Select(j.Left.Fields...)
 	}
 	if len(j.Right.Fields) == 0 {
-		j.Right.Fields = j.Right.Table.Fields()
+		j.Right.fields = j.Right.Table.fields
+	} else {
+		j.Right.fields = j.Right.Table.fields.Select(j.Right.Fields...)
 	}
 
 	// assemble output field list from left and right table fields
 	// default output names are of form {table_name}.{field_name}
-	for i, v := range j.Left.Fields {
+	for i, v := range j.Left.fields {
 		joinname := j.Left.Table.Name() + "." + v.Name
 		alias := joinname
 		if len(j.Left.FieldsAs) > i {
@@ -249,7 +241,7 @@ func (j *Join) Compile() error {
 		})
 	}
 
-	for i, v := range j.Right.Fields {
+	for i, v := range j.Right.fields {
 		joinname := j.Right.Table.Name() + "." + v.Name
 		alias := joinname
 		if len(j.Right.FieldsAs) > i {
@@ -269,7 +261,13 @@ func (j *Join) Compile() error {
 			Scale: v.Scale,                // keep scale
 		})
 	}
-	return nil
+
+	// now bind the unbound conditions to our tables
+	j.Predicate.Bind(j.Left.Table, j.Right.Table)
+	j.Left.where = j.Left.Where.Bind(j.Left.Table)
+	j.Right.where = j.Right.Where.Bind(j.Right.Table)
+
+	return j.CheckConditions()
 }
 
 func (j Join) AppendResult(out, left *Package, l int, right *Package, r int) error {
@@ -278,7 +276,7 @@ func (j Join) AppendResult(out, left *Package, l int, right *Package, r int) err
 	}
 	ins := out.Len() - 1
 	if left != nil {
-		for i, v := range j.Left.Fields {
+		for i, v := range j.Left.fields {
 			f, err := left.FieldAt(v.Index, l)
 			if err != nil {
 				return err
@@ -288,9 +286,9 @@ func (j Join) AppendResult(out, left *Package, l int, right *Package, r int) err
 			}
 		}
 	}
-	offs := len(j.Left.Fields)
+	offs := len(j.Left.fields)
 	if right != nil {
-		for i, v := range j.Right.Fields {
+		for i, v := range j.Right.fields {
 			f, err := right.FieldAt(v.Index, r)
 			if err != nil {
 				return err
@@ -416,16 +414,16 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 		if queryOrderLR {
 			// query the left table first (ensure predicate column is returned)
 			lQ := Query{
-				Name:       q.Name + ".join_left",
-				Fields:     j.Left.Fields.AddUnique(j.Predicate.Left),
-				Conditions: j.Left.Where,
-				Limit:      util.NonZeroMin(j.Left.Limit, maxPackSize),
+				Name:  q.Name + ".join_left",
+				Limit: util.NonZeroMin(j.Left.Limit, maxPackSize),
+				fout:  j.Left.fields.AddUnique(j.Predicate.Left),
+				conds: j.Left.where,
 			}
 			if pkcursor > 0 {
 				// FIXME: optimize/merge conditions (there may already exist one
 				// or more conditions for the pk column)
-				lQ.Conditions.AddAndCondition(&Condition{
-					Field: j.Left.Fields.Pk(),
+				lQ.conds.AddAndCondition(&Condition{
+					Field: j.Left.fields.Pk(),
 					Mode:  FilterModeGt,
 					Value: pkcursor,
 					Raw:   "left_join_cursor",
@@ -433,7 +431,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			}
 			log.Debug(newLogClosure(func() string {
 				return fmt.Sprintf("join: left table query with %d cond, cursor=%d limit=%d: %s",
-					lQ.Conditions.Size(), pkcursor, lQ.Limit, lQ.Dump())
+					lQ.conds.Size(), pkcursor, lQ.Limit, lQ.Dump())
 			}))
 
 			lRes, err = j.Left.Table.Query(ctx, lQ)
@@ -456,7 +454,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			}
 
 			// use right in-condition only for equi joins
-			rConds := j.Right.Where
+			rConds := j.Right.where
 			if j.IsEquiJoin() && lRes.Rows() > 0 {
 				// get a copy of the left predicate column
 				lPredCol, err := lRes.Column(j.Predicate.Left.Name)
@@ -479,13 +477,13 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 
 			// query the right table without limit
 			rQ := Query{
-				Name:       q.Name + ".join_right",
-				Fields:     j.Right.Fields.AddUnique(j.Predicate.Right),
-				Conditions: rConds,
+				Name:  q.Name + ".join_right",
+				fout:  j.Right.fields.AddUnique(j.Predicate.Right),
+				conds: rConds,
 			}
 			log.Debug(newLogClosure(func() string {
 				return fmt.Sprintf("join: right table query with %d cond and limit %d: %s",
-					rQ.Conditions.Size(), rQ.Limit, rQ.Dump())
+					rQ.conds.Size(), rQ.Limit, rQ.Dump())
 			}))
 
 			rRes, err = j.Right.Table.Query(ctx, rQ)
@@ -497,16 +495,16 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 		} else {
 			// query the right table first (ensure predicate column is returned)
 			rQ := Query{
-				Name:       q.Name + ".join_right",
-				Fields:     j.Right.Fields.AddUnique(j.Predicate.Right),
-				Conditions: j.Right.Where,
-				Limit:      util.NonZeroMin(j.Right.Limit, maxPackSize),
+				Name:  q.Name + ".join_right",
+				Limit: util.NonZeroMin(j.Right.Limit, maxPackSize),
+				fout:  j.Right.fields.AddUnique(j.Predicate.Right),
+				conds: j.Right.where,
 			}
 			if pkcursor > 0 {
 				// FIXME: optimize/merge conditions (there may already exist one
 				// or more conditions for the pk column)
-				rQ.Conditions.AddAndCondition(&Condition{
-					Field: j.Right.Fields.Pk(),
+				rQ.conds.AddAndCondition(&Condition{
+					Field: j.Right.fields.Pk(),
 					Mode:  FilterModeGt,
 					Value: pkcursor,
 					Raw:   "right_join_cursor",
@@ -514,7 +512,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			}
 			log.Debug(newLogClosure(func() string {
 				return fmt.Sprintf("join: right table query with %d cond, cursor=%d limit=%d: %s",
-					rQ.Conditions.Size(), pkcursor, rQ.Limit, q.Dump())
+					rQ.conds.Size(), pkcursor, rQ.Limit, q.Dump())
 			}))
 
 			rRes, err = j.Right.Table.Query(ctx, rQ)
@@ -536,7 +534,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 				return nil, err
 			}
 
-			lConds := j.Left.Where
+			lConds := j.Left.where
 			if j.IsEquiJoin() && rRes.Rows() > 0 {
 				// get a copy of the right predicate column as slice (actually interface{} to slice)
 				rPredCol, err := rRes.Column(j.Predicate.Right.Name)
@@ -559,13 +557,13 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 
 			// query the left table wihout limit
 			lQ := Query{
-				Name:       q.Name + ".join_left",
-				Fields:     j.Left.Fields.AddUnique(j.Predicate.Left),
-				Conditions: lConds,
+				Name:  q.Name + ".join_left",
+				fout:  j.Left.fields.AddUnique(j.Predicate.Left),
+				conds: lConds,
 			}
 			log.Debug(newLogClosure(func() string {
 				return fmt.Sprintf("join: left table query with %d cond and limit %d: %s",
-					lQ.Conditions.Size(), lQ.Limit, lQ.Dump())
+					lQ.conds.Size(), lQ.Limit, lQ.Dump())
 			}))
 
 			lRes, err = j.Left.Table.Query(ctx, lQ)
@@ -625,10 +623,10 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 		// POST-PROCESS
 		// ------------------------------------------------------------
 		if havePostFilter {
-			log.Debugf("join: filtering result with %d rows against %d conds", agg.Rows(), q.Conditions.Size())
+			log.Debugf("join: filtering result with %d rows against %d where", agg.Rows(), q.conds.Size())
 
 			// filter result by query
-			bits := q.Conditions.MatchPack(agg.pkg, PackInfo{})
+			bits := q.conds.MatchPack(agg.pkg, PackInfo{})
 			for idx, length := bits.Run(0); idx >= 0; idx, length = bits.Run(idx + length) {
 				n := length
 				if q.Limit > 0 {

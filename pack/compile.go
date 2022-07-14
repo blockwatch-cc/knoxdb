@@ -24,6 +24,10 @@ func (c *Condition) Compile() (err error) {
         err = fmt.Errorf("invalid field in cond %s", c.String())
         return
     }
+
+    // cast user defined types into Go types supported by internal matching
+    // algorithms, e.g. convert BinaryMarshaler interface type to []byte,
+    // convert enum types to native int8/16/32/64
     if err = c.ensureTypes(); err != nil {
         err = fmt.Errorf("%s cond %s: %v", c.Field.Name, c.String(), err)
         return

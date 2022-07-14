@@ -13,6 +13,19 @@ type BinaryCondition struct {
 	Mode  FilterMode
 }
 
+func NewPredicate(left, right string, mode FilterMode) BinaryCondition {
+	return BinaryCondition{
+		Left:  &Field{Name: left},
+		Right: &Field{Name: right},
+		Mode:  mode,
+	}
+}
+
+func (b *BinaryCondition) Bind(l, r *Table) {
+	b.Left = l.Fields().Find(b.Left.Name)
+	b.Right = r.Fields().Find(b.Right.Name)
+}
+
 func (b BinaryCondition) Check() error {
 	if !b.Left.IsValid() {
 		return fmt.Errorf("pack: invalid left field '%s' in binary condition", b.Left.Name)
