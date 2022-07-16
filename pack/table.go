@@ -1667,9 +1667,8 @@ func (t *Table) Lookup(ctx context.Context, ids []uint64) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := t.LookupTx(ctx, tx, ids)
-	tx.Rollback()
-	return res, err
+	defer tx.Rollback()
+	return t.LookupTx(ctx, tx, ids)
 }
 
 // unsafe when called concurrently! lock table _before_ starting bolt tx!
