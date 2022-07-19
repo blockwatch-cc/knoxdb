@@ -614,8 +614,8 @@ func (t *Table) Insert(ctx context.Context, val interface{}) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := t.insertJournal(val); err != nil {
@@ -701,8 +701,8 @@ func (t *Table) InsertRow(ctx context.Context, row Row) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := t.appendPackIntoJournal(ctx, row.res.pkg, row.n, 1); err != nil {
@@ -753,8 +753,8 @@ func (t *Table) InsertResult(ctx context.Context, res *Result) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := t.appendPackIntoJournal(ctx, res.pkg, 0, res.pkg.Len()); err != nil {
@@ -818,8 +818,8 @@ func (t *Table) Update(ctx context.Context, val interface{}) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := t.updateJournal(val); err != nil {
@@ -904,8 +904,8 @@ func (t *Table) Delete(ctx context.Context, q Query) (int64, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return 0, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
 
 	tx, err := t.db.Tx(true)
@@ -936,8 +936,8 @@ func (t *Table) DeleteIds(ctx context.Context, val []uint64) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := t.deleteJournal(val); err != nil {
@@ -1077,8 +1077,8 @@ func (t *Table) FlushJournal(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	tx, err := t.db.Tx(true)
@@ -1128,8 +1128,8 @@ func (t *Table) Flush(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	tx, err := t.db.Tx(true)
@@ -1264,8 +1264,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					// - write table metadata and pack headers
 					//
 					// // check context before next turn
-					// if interruptRequested(ctx) {
-					// 	return ctx.Err()
+					// if err := ctx.Err(); err != nil {
+					// 	return err
 					// }
 				}
 				// update next values after pack index has changed
@@ -1532,8 +1532,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 						// - write table metadata and pack headers
 						//
 						// // check context before next turn
-						// if interruptRequested(ctx) {
-						// 	return ctx.Err()
+						// if err:=ctx.Err(); err != nil {
+						// 	return err
 						// }
 					}
 
@@ -1659,8 +1659,8 @@ func (t *Table) Lookup(ctx context.Context, ids []uint64) (*Result, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return nil, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	tx, err := t.db.Tx(false)
@@ -1769,9 +1769,9 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		}
 
 		// stop when context is canceled
-		if util.InterruptRequested(ctx) {
+		if err := ctx.Err(); err != nil {
 			res.Close()
-			return nil, ctx.Err()
+			return nil, err
 		}
 
 		// continue with next pack, always load via cache
@@ -1806,7 +1806,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 				continue
 			}
 
-			// on match, copy result from journal
+			// on match, copy result from package
 			if err := res.pkg.AppendFrom(pkg, j, 1); err != nil {
 				res.Close()
 				return nil, err
@@ -1824,8 +1824,8 @@ func (t *Table) Query(ctx context.Context, q Query) (*Result, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return nil, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	tx, err := t.db.Tx(false)
@@ -1898,9 +1898,9 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	if !q.IsEmptyMatch() {
 	packloop:
 		for _, p := range q.MakePackSchedule(false) {
-			if util.InterruptRequested(ctx) {
+			if err := ctx.Err(); err != nil {
 				res.Close()
-				return nil, ctx.Err()
+				return nil, err
 			}
 
 			// load pack from cache or storage, will be recycled on cache eviction
@@ -2112,9 +2112,9 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	u32slice := t.u32Pool.Get().([]uint32)
 packloop:
 	for _, p := range q.MakePackSchedule(true) {
-		if util.InterruptRequested(ctx) {
+		if err := ctx.Err(); err != nil {
 			res.Close()
-			return nil, ctx.Err()
+			return nil, err
 		}
 
 		// load pack from cache or storage, will be recycled on cache eviction
@@ -2197,8 +2197,8 @@ func (t *Table) Count(ctx context.Context, q Query) (int64, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return 0, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
 
 	tx, err := t.db.Tx(false)
@@ -2251,8 +2251,8 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	if !q.IsEmptyMatch() {
 	packloop:
 		for _, p := range q.MakePackSchedule(q.Order == OrderDesc) {
-			if util.InterruptRequested(ctx) {
-				return int64(q.stats.RowsMatched), ctx.Err()
+			if err := ctx.Err(); err != nil {
+				return int64(q.stats.RowsMatched), err
 			}
 
 			// load pack from cache or storage, will be recycled on cache eviction
@@ -2328,8 +2328,8 @@ func (t *Table) Stream(ctx context.Context, q Query, fn func(r Row) error) error
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	tx, err := t.db.Tx(false)
@@ -2396,8 +2396,8 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	if !q.IsEmptyMatch() {
 	packloop:
 		for _, p := range q.MakePackSchedule(false) {
-			if util.InterruptRequested(ctx) {
-				return ctx.Err()
+			if err := ctx.Err(); err != nil {
+				return err
 			}
 
 			// load pack from cache or storage, will be recycled on cache eviction
@@ -2599,8 +2599,8 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	u32slice := t.u32Pool.Get().([]uint32)
 packloop:
 	for _, p := range q.MakePackSchedule(true) {
-		if util.InterruptRequested(ctx) {
-			return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
 		// load pack from cache or storage, will be recycled on cache eviction
@@ -2683,8 +2683,8 @@ func (t *Table) StreamLookup(ctx context.Context, ids []uint64, fn func(r Row) e
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	tx, err := t.db.Tx(false)
@@ -2791,8 +2791,8 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			break
 		}
 
-		if util.InterruptRequested(ctx) {
-			return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
 		// always load via cache
@@ -2843,8 +2843,8 @@ func (t *Table) Compact(ctx context.Context) error {
 	defer t.mu.Unlock()
 	start := time.Now()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	// check if compaction is possible
@@ -3044,8 +3044,8 @@ func (t *Table) Compact(ctx context.Context) error {
 			if err := tx.CommitAndContinue(); err != nil {
 				return err
 			}
-			if util.InterruptRequested(ctx) {
-				return ctx.Err()
+			if err := ctx.Err(); err != nil {
+				return err
 			}
 		}
 	}

@@ -674,10 +674,10 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 		// log.Debugf("Maybe in pack %03d [%d:%d]", nextpack, min, max)
 
 		// stop when context is canceled
-		if util.InterruptRequested(ctx) {
+		if err := ctx.Err(); err != nil {
 			out = out[:0]
 			idx.table.u64Pool.Put(out)
-			return nil, ctx.Err()
+			return nil, err
 		}
 
 		// load and cache pack
@@ -808,8 +808,8 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 	// scan table in pk order block by block and create new index
 	for i, ph := range idx.table.packidx.packs {
 		// stop when context is canceled
-		if util.InterruptRequested(ctx) {
-			return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
 		// load pack (we need pk field and all index fields)
