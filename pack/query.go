@@ -163,13 +163,14 @@ func (q *Query) Compile(t *Table) error {
 			q.fout = tableFields
 		} else {
 			q.fout = tableFields.Select(q.Fields...)
-			q.fout.MergeUnique(tableFields.Pk()).Sort()
+			q.fout = q.fout.MergeUnique(tableFields.Pk()).Sort()
 		}
 	}
 
 	// identify required fields (output + used in conditions)
 	if len(q.freq) == 0 {
 		q.freq = q.fout.MergeUnique(q.conds.Fields()...).Sort()
+		q.freq = q.freq.MergeUnique(tableFields.Pk()).Sort()
 	}
 
 	// identify index fields
@@ -185,7 +186,7 @@ func (q *Query) Compile(t *Table) error {
 	q.stats.CompileTime = time.Since(q.lap)
 
 	if q.debug {
-		log.Debug(newLogClosure(func() string {
+		q.Debugf("%s", newLogClosure(func() string {
 			return q.Dump()
 		}))
 	}
