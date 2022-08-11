@@ -7,6 +7,7 @@
 package s8bVec
 
 import (
+	"encoding/binary"
 	"errors"
 
 	"blockwatch.cc/knoxdb/util"
@@ -19,6 +20,7 @@ func init() {
 	if util.UseAVX2 {
 		initUint64AVX2()
 		initUint32AVX2()
+		initUint16AVX2()
 	}
 }
 
@@ -43,7 +45,7 @@ func decodeAllUint64(dst []uint64, src []byte) (value int, err error) {
 func decodeAllUint32(dst []uint32, src []byte) (value int, err error) {
 	switch {
 	case util.UseAVX2:
-		return decodeAllUint32AVX2(dst, src), nil
+		return decodeAllUint32AVX2(dst, src)
 	default:
 		return decodeAllUint32Generic(dst, src)
 	}
@@ -51,8 +53,8 @@ func decodeAllUint32(dst []uint32, src []byte) (value int, err error) {
 
 func decodeAllUint16(dst []uint16, src []byte) (value int, err error) {
 	switch {
-	//case util.UseAVX2:
-	//	return decodeAllUint16AVX2(dst, src), nil
+	case util.UseAVX2:
+		return decodeAllUint16AVX2(dst, src)
 	default:
 		return decodeAllUint16Generic(dst, src)
 	}
@@ -83,6 +85,58 @@ func countValuesBigEndian(b []byte) (int, error) {
 	default:
 		return countValuesBigEndianGeneric(b)
 	}
+}
+
+var BufOvUint16 = [16]int{0, 0, 4, 2, 0, 1, 4, 6, 0, 1, 2, 0, 0, 1, 0, 0}
+
+func decodeAllUint16AVX2(dst []uint16, src []byte) (int, error) {
+	pos := len(src)
+	if pos&7 != 0 {
+		return 0, errors.New("src length is not multiple of 8")
+	}
+
+	var max_pos int = pos
+	var num_val int
+	pos -= 8
+	for pos >= 0 && num_val < 6 {
+		v := binary.LittleEndian.Uint64(src[pos:])
+		sel := (v >> 60) & 0xf
+		bo := BufOvUint16[sel]
+		if bo > num_val {
+			max_pos = pos
+		}
+		num_val += selector16[sel].n
+		pos -= 8
+	}
+	n1 := decodeAllUint16AVX2Core(dst, src[:max_pos])
+	n2, err := decodeAllUint16Generic(dst[n1:], src[max_pos:])
+	return n1 + n2, err
+}
+
+var BufOvUint32 = [16]int{0, 0, 0, 2, 0, 1, 0, 0, 0, 1, 2, 3, 0, 1, 0, 0}
+
+func decodeAllUint32AVX2(dst []uint32, src []byte) (int, error) {
+	pos := len(src)
+	if pos&7 != 0 {
+		return 0, errors.New("src length is not multiple of 8")
+	}
+
+	var max_pos int = pos
+	var num_val int
+	pos -= 8
+	for pos >= 0 && num_val < 3 {
+		v := binary.LittleEndian.Uint64(src[pos:])
+		sel := (v >> 60) & 0xf
+		bo := BufOvUint32[sel]
+		if bo > num_val {
+			max_pos = pos
+		}
+		num_val += selector16[sel].n
+		pos -= 8
+	}
+	n1 := decodeAllUint32AVX2Core(dst, src[:max_pos])
+	n2, err := decodeAllUint32Generic(dst[n1:], src[max_pos:])
+	return n1 + n2, err
 }
 
 func countValuesAVX2(src []byte) (int, error) {

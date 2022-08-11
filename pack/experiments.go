@@ -505,6 +505,16 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 					for i := range tmp {
 						tmp[i] = 12345
 					}
+				case block.BlockInt16:
+					tmp := b2.Int16[len(b2.Int16):cap(b2.Int16)]
+					for i := range tmp {
+						tmp[i] = 12345
+					}
+				case block.BlockUint16:
+					tmp := b2.Uint16[len(b2.Uint16):cap(b2.Uint16)]
+					for i := range tmp {
+						tmp[i] = 12345
+					}
 				}
 				t1 := b2.Type()
 				c1 := b2.Compression()
@@ -544,6 +554,20 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 					}
 				case block.BlockUint32:
 					tmp := b2.Uint32[len(b2.Uint32):cap(b2.Uint32)]
+					for _, v := range tmp {
+						if v != 12345 {
+							bo = true
+						}
+					}
+				case block.BlockInt16:
+					tmp := b2.Int16[len(b2.Int16):cap(b2.Int16)]
+					for _, v := range tmp {
+						if v != 12345 {
+							bo = true
+						}
+					}
+				case block.BlockUint16:
+					tmp := b2.Uint16[len(b2.Uint16):cap(b2.Uint16)]
 					for _, v := range tmp {
 						if v != 12345 {
 							bo = true

@@ -4,6 +4,10 @@
 #include "textflag.h"
 #include "constants_Uint64_AVX2.h"
 
+// allow buffer overflows due to writung full vector even its not full
+// caller hast to care about
+// #define ALLOW_BO
+
 TEXT ·initUint64AVX2(SB), NOSPLIT, $0-0
         LEAQ            ·unpack240Uint64AVX2(SB), DX
         MOVQ            DX, funcTableUint64AVX2<>(SB)
@@ -125,7 +129,11 @@ TEXT ·unpack3Uint64AVX2(SB), NOSPLIT, $0-0
         VPSRLVQ         shift3<>(SB), Y0, Y0
         VPAND           Y0, Y7, Y0
 
+#ifdef ALLOW_BO
+        VMOVDQU         Y0, (DI)
+#else
         VPMASKMOVQ      Y0, Y15, (DI)
+#endif
 
         ADDQ            $24, DI
 
@@ -218,7 +226,12 @@ TEXT ·unpack7Uint64AVX2(SB), NOSPLIT, $0-0
         VPAND           Y0, Y11, Y0
         VPAND           Y1, Y11, Y1
         VMOVDQU         Y1, (DI)
+
+#ifdef ALLOW_BO
+        VMOVDQU         Y0, 32(DI)
+#else
         VPMASKMOVQ      Y0, Y15, 32(DI)
+#endif
 
         ADDQ            $56, DI
 
@@ -330,7 +343,12 @@ TEXT ·unpack15Uint64AVX2(SB), NOSPLIT, $0-0
         VMOVDQU         Y3, (DI)
         VMOVDQU         Y2, 32(DI)
         VMOVDQU         Y1, 64(DI)
+
+#ifdef ALLOW_BO
+        VMOVDQU         Y0, 96(DI)
+#else
         VPMASKMOVQ      Y0, Y15, 96(DI)
+#endif
 
         ADDQ            $120, DI
 

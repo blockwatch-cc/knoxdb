@@ -77,7 +77,7 @@ func unpack240Uint64AVX2()
 func initUint32AVX2()
 
 //go:noescape
-func decodeAllUint32AVX2(dst []uint32, src []byte) (value int)
+func decodeAllUint32AVX2Core(dst []uint32, src []byte) (value int)
 
 //go:noescape
 func decodeAllUint32AVX2Exit()
@@ -129,6 +129,65 @@ func unpack120Uint32AVX2()
 
 //go:noescape
 func unpack240Uint32AVX2()
+
+/************************ AVX2 16bit ***************************/
+
+//go:noescape
+func initUint16AVX2()
+
+//go:noescape
+func decodeAllUint16AVX2Core(dst []uint16, src []byte) (value int)
+
+//go:noescape
+func decodeAllUint16AVX2Exit()
+
+//go:noescape
+func unpack1Uint16AVX2()
+
+//go:noescape
+func unpack2Uint16AVX2()
+
+//go:noescape
+func unpack3Uint16AVX2()
+
+//go:noescape
+func unpack4Uint16AVX2()
+
+//go:noescape
+func unpack5Uint16AVX2()
+
+//go:noescape
+func unpack6Uint16AVX2()
+
+//go:noescape
+func unpack7Uint16AVX2()
+
+//go:noescape
+func unpack8Uint16AVX2()
+
+//go:noescape
+func unpack10Uint16AVX2()
+
+//go:noescape
+func unpack12Uint16AVX2()
+
+//go:noescape
+func unpack15Uint16AVX2()
+
+//go:noescape
+func unpack20Uint16AVX2()
+
+//go:noescape
+func unpack30Uint16AVX2()
+
+//go:noescape
+func unpack60Uint16AVX2()
+
+//go:noescape
+func unpack120Uint16AVX2()
+
+//go:noescape
+func unpack240Uint16AVX2()
 
 /**************************** AVX512 64bit **************************/
 

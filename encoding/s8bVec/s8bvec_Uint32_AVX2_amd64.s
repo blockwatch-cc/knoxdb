@@ -4,6 +4,10 @@
 #include "textflag.h"
 #include "constants_Uint32_AVX2.h"
 
+// allow buffer overflows due to writung full vector even its not full
+// caller hast to care about
+#define ALLOW_BO
+
 TEXT ·initUint32AVX2(SB), NOSPLIT, $0-0
         LEAQ            ·unpack240Uint32AVX2(SB), DX
         MOVQ            DX, funcTableUint32AVX2<>(SB)
@@ -41,7 +45,7 @@ TEXT ·initUint32AVX2(SB), NOSPLIT, $0-0
         RET
 
 // func decodeAllUint32AVX2(dst []uint32, src []byte) (value int)
-TEXT ·decodeAllUint32AVX2(SB), NOSPLIT, $0-56
+TEXT ·decodeAllUint32AVX2Core(SB), NOSPLIT, $0-56
         MOVQ            dst_base(FP), DI
         MOVQ            src_base+24(FP), SI
         MOVQ            src_len+32(FP), BX
@@ -117,7 +121,10 @@ exit:
 // func unpack3AVX2()
 TEXT ·unpack3Uint32AVX2(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), X0
+
+#ifndef ALLOW_BO
         VMOVDQU         write3mask<>(SB), X14
+#endif
 
         VPSRLVQ         shift3<>(SB), X0, X1
         VPSRLVQ         shift3<>+0x10(SB), X0, X0
@@ -126,7 +133,11 @@ TEXT ·unpack3Uint32AVX2(SB), NOSPLIT, $0-0
         VPBLENDW        $(0x33), X1, X0, X0
         VPAND           mask3<>(SB), X0, X0
 
+#ifdef ALLOW_BO
+        VMOVDQU         X0, (DI)
+#else
         VPMASKMOVD      X0, X14, (DI)
+#endif
 
         ADDQ            $12, DI
 
@@ -170,7 +181,10 @@ exit:
 // func unpack5AVX2()
 TEXT ·unpack5Uint32AVX2(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Y0
+
+#ifndef ALLOW_BO
         VMOVDQU         write5mask<>(SB), Y14
+#endif
 
         VPSRLVQ         shift5<>(SB), Y0, Y1
         VPSRLVQ         shift5<>+0x20(SB), Y0, Y0
@@ -179,7 +193,11 @@ TEXT ·unpack5Uint32AVX2(SB), NOSPLIT, $0-0
         VPBLENDW        $(0x33), Y1, Y0, Y0
         VPAND           mask5<>(SB), Y0, Y0
 
+#ifdef ALLOW_BO
+        VMOVDQU         Y0, (DI)
+#else
         VPMASKMOVD      Y0, Y14, (DI)
+#endif
 
         ADDQ            $20, DI
 
@@ -198,7 +216,10 @@ exit:
 // func unpack6AVX2()
 TEXT ·unpack6Uint32AVX2(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Y0
+
+#ifndef ALLOW_BO
         VMOVDQU         write6mask<>(SB), Y14
+#endif
 
         VPSRLVQ         shift6<>(SB), Y0, Y1
         VPSRLVQ         shift6<>+0x20(SB), Y0, Y0
@@ -206,7 +227,11 @@ TEXT ·unpack6Uint32AVX2(SB), NOSPLIT, $0-0
         VPBLENDW        $(0x33), Y1, Y0, Y0
         VPAND           mask6<>(SB), Y0, Y0
 
+#ifdef ALLOW_BO
+        VMOVDQU         Y0, (DI)
+#else
         VPMASKMOVD      Y0, Y14, (DI)
+#endif
 
         ADDQ            $24, DI
 
@@ -227,11 +252,19 @@ TEXT ·unpack7Uint32AVX2(SB), NOSPLIT, $0-0
         VPBROADCASTD    (SI), X0
         VPBROADCASTD    4(SI), X1
         VPERM2I128      $0x20, Y1, Y0, Y0
+
+#ifndef ALLOW_BO
         VMOVDQU         write7mask<>(SB), Y14
+#endif
 
         VPSRLVD         shift7<>(SB), Y0, Y0
         VPAND           mask7<>(SB), Y0, Y0
+
+#ifdef ALLOW_BO
+        VMOVDQU         Y0, (DI)
+#else
         VPMASKMOVD      Y0, Y14, (DI)
+#endif
 
         ADDQ            $28, DI
 
@@ -344,15 +377,23 @@ TEXT ·unpack15Uint32AVX2(SB), NOSPLIT, $0-0
         VPBROADCASTD    (SI), Y0
         VPBROADCASTD    4(SI), Y1
         VPBROADCASTD    mask15<>(SB), Y15
-        VMOVDQU         write7mask<>(SB), Y14
         VMOVDQU         shift15<>+0x00(SB), Y2
+
+#ifndef ALLOW_BO
+        VMOVDQU         write7mask<>(SB), Y14
+#endif
 
         VPSRLVD         Y2, Y0, Y0
         VPSRLVD         Y2, Y1, Y1
         VPAND           Y0, Y15, Y0
         VPAND           Y1, Y15, Y1
         VMOVDQU         Y0, (DI)
+
+#ifdef ALLOW_BO
+        VMOVDQU         Y1, 32(DI)
+#else
         VPMASKMOVD      Y1, Y14, 32(DI)
+#endif
 
         ADDQ            $60, DI
 
@@ -411,7 +452,9 @@ TEXT ·unpack30Uint32AVX2(SB), NOSPLIT, $0-0
         VPBROADCASTD    (SI), Y0
         VPBROADCASTD    4(SI), Y2
         VPBROADCASTD    mask30<>(SB), Y15
+#ifndef ALLOW_BO
         VMOVDQU         write6mask<>(SB), Y14
+#endif
         VMOVDQU         shift30<>+0x00(SB), Y4
         VMOVDQU         shift30<>+0x20(SB), Y5
 
@@ -427,7 +470,11 @@ TEXT ·unpack30Uint32AVX2(SB), NOSPLIT, $0-0
         VMOVDQU         Y1, (DI)
         VMOVDQU         Y0, 32(DI)
         VMOVDQU         Y3, 64(DI)
+#ifdef ALLOW_BO
+        VMOVDQU         Y2, 96(DI)
+#else
         VPMASKMOVD      Y2, Y14, 96(DI)
+#endif
 
         ADDQ            $120, DI
 
