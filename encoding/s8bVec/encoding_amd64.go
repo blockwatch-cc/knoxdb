@@ -21,6 +21,7 @@ func init() {
 		initUint64AVX2()
 		initUint32AVX2()
 		initUint16AVX2()
+		initUint8AVX2()
 	}
 }
 
@@ -62,8 +63,8 @@ func decodeAllUint16(dst []uint16, src []byte) (value int, err error) {
 
 func decodeAllUint8(dst []uint8, src []byte) (value int, err error) {
 	switch {
-	//case util.UseAVX2:
-	//	return decodeAllUint8AVX2(dst, src), nil
+	case util.UseAVX2:
+		return decodeAllUint8AVX2(dst, src)
 	default:
 		return decodeAllUint8Generic(dst, src)
 	}
@@ -85,6 +86,32 @@ func countValuesBigEndian(b []byte) (int, error) {
 	default:
 		return countValuesBigEndianGeneric(b)
 	}
+}
+
+var BufOvUint8 = [16]int{0, 0, 0, 2, 0, 1, 4, 6, 0, 1, 0, 0, 0, 0, 0, 0}
+
+func decodeAllUint8AVX2(dst []uint8, src []byte) (int, error) {
+	pos := len(src)
+	if pos&7 != 0 {
+		return 0, errors.New("src length is not multiple of 8")
+	}
+
+	var max_pos int = pos
+	var num_val int
+	pos -= 8
+	for pos >= 0 && num_val < 6 {
+		v := binary.LittleEndian.Uint64(src[pos:])
+		sel := (v >> 60) & 0xf
+		bo := BufOvUint8[sel]
+		if bo > num_val {
+			max_pos = pos
+		}
+		num_val += selector16[sel].n
+		pos -= 8
+	}
+	n1 := decodeAllUint8AVX2Core(dst, src[:max_pos])
+	n2, err := decodeAllUint8Generic(dst[n1:], src[max_pos:])
+	return n1 + n2, err
 }
 
 var BufOvUint16 = [16]int{0, 0, 4, 2, 0, 1, 4, 6, 0, 1, 2, 0, 0, 1, 0, 0}

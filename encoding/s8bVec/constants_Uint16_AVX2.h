@@ -1,10 +1,7 @@
 // Copyright (c) 2021 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
-#define mask1 $(0xffffffff)
-
-DATA mask2<>+0x00(SB)/8, $(0x3fffffff3fffffff)
-GLOBL mask2<>(SB), (RODATA+NOPTR), $8
+#define mask1 $(0xffff)
 
 DATA mask3<>+0x00(SB)/2, $(0xffff)
 DATA mask3<>+0x02(SB)/2, $(0xffff)

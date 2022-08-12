@@ -189,6 +189,65 @@ func unpack120Uint16AVX2()
 //go:noescape
 func unpack240Uint16AVX2()
 
+/************************ AVX2 8bit ***************************/
+
+//go:noescape
+func initUint8AVX2()
+
+//go:noescape
+func decodeAllUint8AVX2Core(dst []uint8, src []byte) (value int)
+
+//go:noescape
+func decodeAllUint8AVX2Exit()
+
+//go:noescape
+func unpack1Uint8AVX2()
+
+//go:noescape
+func unpack2Uint8AVX2()
+
+//go:noescape
+func unpack3Uint8AVX2()
+
+//go:noescape
+func unpack4Uint8AVX2()
+
+//go:noescape
+func unpack5Uint8AVX2()
+
+//go:noescape
+func unpack6Uint8AVX2()
+
+//go:noescape
+func unpack7Uint8AVX2()
+
+//go:noescape
+func unpack8Uint8AVX2()
+
+//go:noescape
+func unpack10Uint8AVX2()
+
+//go:noescape
+func unpack12Uint8AVX2()
+
+//go:noescape
+func unpack15Uint8AVX2()
+
+//go:noescape
+func unpack20Uint8AVX2()
+
+//go:noescape
+func unpack30Uint8AVX2()
+
+//go:noescape
+func unpack60Uint8AVX2()
+
+//go:noescape
+func unpack120Uint8AVX2()
+
+//go:noescape
+func unpack240Uint8AVX2()
+
 /**************************** AVX512 64bit **************************/
 
 //go:noescape

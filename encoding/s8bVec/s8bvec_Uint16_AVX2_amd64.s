@@ -73,10 +73,6 @@ TEXT ·decodeAllUint16AVX2Exit(SB), NOSPLIT, $0-0
 
 // func unpack1AVX2()
 TEXT ·unpack1Uint16AVX2(SB), NOSPLIT, $0-0
-//        VMOVQ           mask1<>(SB), X5
-//        VPAND           (SI), X5, X0
-//        VMOVQ           X0, (DI)
-
         MOVQ            mask1, R8
         ANDQ            (SI), R8            
         MOVW            R8, (DI)
@@ -100,7 +96,6 @@ TEXT ·unpack2Uint16AVX2(SB), NOSPLIT, $0-0
         VMOVQ           (SI), X0
         VPSRLQ          $14, X0, X1
         VPBLENDW        $(0x11), X0, X1, X0
-//        VPAND           mask2<>(SB), X0, X0
 
         VMOVD           X0, (DI)
 
@@ -127,7 +122,6 @@ TEXT ·unpack3Uint16AVX2(SB), NOSPLIT, $0-0
 
         VPBLENDW        $(0xaa), X1, X0, X0
         VPBLENDW        $(0xcc), X2, X0, X0
-        VPAND           mask3<>(SB), X0, X0
 
 #ifdef ALLOW_BO
         VMOVQ           X0, (DI)
@@ -195,10 +189,9 @@ TEXT ·unpack5Uint16AVX2(SB), NOSPLIT, $0-0
 
         VMOVQ           X1, (DI)
 
-        VPSRLQ          $48, X0, X0
         VPAND           X15, X0, X0
 
-        VPEXTRW         $0, X0, 8(DI)
+        VPEXTRW         $3, X0, 8(DI)
 
         ADDQ            $10, DI
 
