@@ -64,19 +64,19 @@ func Int64ArrayEncodedSize(src []int64) int {
 	return len(src)*8 + 1
 }
 
-// upper bound
+// upper bound, s8b may inflate
 func Int32ArrayEncodedSize(src []int32) int {
-	return len(src)*4 + 1
+	return len(src)*8 + 1
 }
 
-// upper bound
+// upper bound, s8b may inflate
 func Int16ArrayEncodedSize(src []int16) int {
-	return len(src)*2 + 1
+	return len(src)*8/3 + 6 + 1
 }
 
 // upper bound
 func Int8ArrayEncodedSize(src []int8) int {
-	return len(src) + 1
+	return len(src)*8/7 + 7 + 1
 }
 
 // upper bound, may store uncompressed 64bit
@@ -86,17 +86,17 @@ func Uint64ArrayEncodedSize(src []uint64) int {
 
 // upper bound
 func Uint32ArrayEncodedSize(src []uint32) int {
-	return len(src)*4 + 1
+	return len(src)*8 + 1
 }
 
 // upper bound
 func Uint16ArrayEncodedSize(src []uint16) int {
-	return len(src)*2 + 1
+	return len(src)*8/3 + 6 + 1
 }
 
 // upper bound
 func Uint8ArrayEncodedSize(src []uint8) int {
-	return len(src) + 1
+	return len(src)*8/7 + 7 + 1
 }
 
 // UnsignedArrayEncodeAll encodes src into b, returning b and any error encountered.
