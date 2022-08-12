@@ -891,7 +891,7 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 		} else {
 			b.Int64 = b.Int64[:0]
 		}
-		b.Int64, err = decodeTimeBlock(buf, b.Int64)
+		b.Int64, err = decodeTimeBlockOld(buf, b.Int64)
 
 	case BlockFloat64:
 		if b.Float64 == nil || cap(b.Float64) < sz {

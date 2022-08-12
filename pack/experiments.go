@@ -457,7 +457,7 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 
 	for j := 0; j < p.nFields; j++ {
 		b := p.blocks[j]
-		if !b.IsInt() {
+		if !b.IsInt() && b.Type().String() != "time" {
 			cs[j] = -1
 			ct[j] = -1
 			dt[j] = -1

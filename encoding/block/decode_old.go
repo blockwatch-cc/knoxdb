@@ -10,6 +10,19 @@ import (
 	"blockwatch.cc/knoxdb/vec"
 )
 
+func decodeTimeBlockOld(block []byte, dst []int64) ([]int64, error) {
+	buf, canRecycle, err := unpackBlock(block, BlockTime)
+	if err != nil {
+		return nil, err
+	}
+
+	b, err := compress.TimeArrayDecodeAllOld(buf, dst)
+	if canRecycle && cap(buf) == BlockSizeHint {
+		BlockEncoderPool.Put(buf[:0])
+	}
+	return b, err
+}
+
 func decodeInt256BlockOld(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockInt256)
 	if err != nil {
