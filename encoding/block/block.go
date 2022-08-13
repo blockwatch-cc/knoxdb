@@ -418,8 +418,7 @@ func NewBlock(typ BlockType, comp Compression, sz int) *Block {
 			b.Uint8 = make([]uint8, 0, sz)
 		}
 	case BlockBool:
-		b.Bits = vec.NewBitset(sz)
-		b.Bits.Reset()
+		b.Bits = vec.NewBitset(sz).Reset()
 	case BlockString, BlockBytes:
 		b.Bytes = dedup.NewByteArray(sz)
 	case BlockInt128:

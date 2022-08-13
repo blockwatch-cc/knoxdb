@@ -271,7 +271,7 @@ func TestJournalInit(t *testing.T) {
 
 			// empty fields are not ok
 			j = NewJournal(uint64(i), sz, "")
-			if err := j.InitFields([]Field{}); err == nil {
+			if err := j.InitFields([]*Field{}); err == nil {
 				t.Errorf("no error when fields are empty")
 			}
 

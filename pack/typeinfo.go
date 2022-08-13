@@ -34,7 +34,7 @@ var (
 // typeInfo holds details for the representation of a type.
 type typeInfo struct {
 	name   string
-	fields []fieldInfo
+	fields []*fieldInfo
 	gotype bool
 }
 
@@ -50,10 +50,12 @@ func (t *typeInfo) PkColumn() int {
 func (t *typeInfo) Clone() *typeInfo {
 	clone := &typeInfo{
 		name:   t.name,
-		fields: make([]fieldInfo, len(t.fields)),
+		fields: make([]*fieldInfo, len(t.fields), len(t.fields)),
 		gotype: t.gotype,
 	}
-	copy(clone.fields, t.fields)
+	for i, v := range t.fields {
+		clone.fields[i] = v.Clone()
+	}
 	return clone
 }
 
@@ -67,6 +69,13 @@ type fieldInfo struct {
 	typname  string
 	blockid  int
 	override FieldType
+}
+
+func (f *fieldInfo) Clone() *fieldInfo {
+	fi := *f
+	fi.idx = make([]int, len(f.idx), len(f.idx))
+	copy(fi.idx, f.idx)
+	return &fi
 }
 
 func (f fieldInfo) String() string {
@@ -85,6 +94,22 @@ var (
 	stringerType          = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
 	byteSliceType         = reflect.TypeOf([]byte(nil))
 )
+
+func canMarshalBinary(v reflect.Value) bool {
+	return v.CanInterface() &&
+		v.Type().Implements(binaryMarshalerType) &&
+		reflect.PointerTo(v.Type()).Implements(binaryUnmarshalerType)
+}
+
+func canMarshalText(v reflect.Value) bool {
+	return v.CanInterface() &&
+		v.Type().Implements(textMarshalerType) &&
+		reflect.PointerTo(v.Type()).Implements(textUnmarshalerType)
+}
+
+func canMarshalString(v reflect.Value) bool {
+	return v.CanInterface() && v.Type().Implements(stringerType)
+}
 
 // getTypeInfo returns the typeInfo structure with details necessary
 // for marshaling and unmarshaling typ.
@@ -129,9 +154,10 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 				if err != nil {
 					return nil, err
 				}
-				for _, finfo := range inner.fields {
+				for _, f := range inner.fields {
+					finfo := f.Clone()
 					finfo.idx = append([]int{i}, finfo.idx...)
-					if err := addFieldInfo(typ, tinfo, &finfo); err != nil {
+					if err := addFieldInfo(typ, tinfo, finfo); err != nil {
 						return nil, err
 					}
 				}
@@ -322,7 +348,7 @@ func addFieldInfo(typ reflect.Type, tinfo *typeInfo, newf *fieldInfo) error {
 	var conflicts []int
 	// Find all conflicts.
 	for i := range tinfo.fields {
-		oldf := &tinfo.fields[i]
+		oldf := tinfo.fields[i]
 		if newf.name == oldf.name {
 			conflicts = append(conflicts, i)
 		}
@@ -330,7 +356,7 @@ func addFieldInfo(typ reflect.Type, tinfo *typeInfo, newf *fieldInfo) error {
 
 	// Return the first error.
 	for _, i := range conflicts {
-		oldf := &tinfo.fields[i]
+		oldf := tinfo.fields[i]
 		f1 := typ.FieldByIndex(oldf.idx)
 		f2 := typ.FieldByIndex(newf.idx)
 		return fmt.Errorf("%s: %s field %q with tag %q conflicts with field %q with tag %q",
@@ -341,7 +367,7 @@ func addFieldInfo(typ reflect.Type, tinfo *typeInfo, newf *fieldInfo) error {
 	newf.blockid = len(tinfo.fields)
 
 	// Without conflicts, add the new field and return.
-	tinfo.fields = append(tinfo.fields, *newf)
+	tinfo.fields = append(tinfo.fields, newf)
 	return nil
 }
 

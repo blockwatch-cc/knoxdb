@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/store"
@@ -167,6 +168,57 @@ func (d *DB) Tx(writeable bool) (*Tx, error) {
 		tx: tx,
 		db: d,
 	}, nil
+}
+
+func (d *DB) NumOpenTables() int {
+	return len(d.tables)
+}
+
+func (d *DB) OpenTables() []*Table {
+	var list []*Table
+	for _, v := range d.tables {
+		list = append(list, v)
+	}
+	return list
+}
+
+func (d *DB) ListTableNames() ([]string, error) {
+	var names []string
+	err := d.db.View(func(tx store.Tx) error {
+		return tx.Root().ForEachBucket(func(k []byte, _ store.Bucket) error {
+			name := string(k)
+			if !strings.HasSuffix(name, "_meta") {
+				return nil
+			}
+			name = strings.TrimSuffix(name, "_meta")
+			if strings.HasSuffix(name, "_index") {
+				return nil
+			}
+			name = strings.TrimSuffix(name, "_index")
+			names = append(names, name)
+			return nil
+		})
+	})
+	return names, err
+}
+
+func (d *DB) ListIndexNames(table string) ([]string, error) {
+	var names []string
+	err := d.db.View(func(tx store.Tx) error {
+		return tx.Root().ForEachBucket(func(k []byte, _ store.Bucket) error {
+			name := string(k)
+			if !strings.HasSuffix(name, "_meta") {
+				return nil
+			}
+			name = strings.TrimSuffix(name, "_meta")
+			if !strings.HasSuffix(name, "_index") {
+				return nil
+			}
+			names = append(names, name)
+			return nil
+		})
+	})
+	return names, err
 }
 
 func (t *Tx) Pending() int {

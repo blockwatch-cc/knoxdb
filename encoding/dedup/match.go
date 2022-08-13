@@ -37,7 +37,7 @@ func matchEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bitse
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
-			if bytes.Compare(v, val) != 0 {
+			if !bytes.Equal(v, val) {
 				continue
 			}
 			bits[i>>3] |= bit
@@ -46,7 +46,7 @@ func matchEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bitse
 	} else {
 		for i := 0; i < a.Len(); i++ {
 			v := a.Elem(i)
-			if bytes.Compare(v, val) != 0 {
+			if !bytes.Equal(v, val) {
 				continue
 			}
 			bits[i>>3] |= bitmask(i)
@@ -69,7 +69,7 @@ func matchNotEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bi
 			if mask != nil && (mask[i>>3]&bit) == 0 {
 				continue
 			}
-			if bytes.Compare(v, val) == 0 {
+			if bytes.Equal(v, val) {
 				continue
 			}
 			bits[i>>3] |= bit
@@ -78,7 +78,7 @@ func matchNotEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bi
 	} else {
 		for i := 0; i < a.Len(); i++ {
 			v := a.Elem(i)
-			if bytes.Compare(v, val) == 0 {
+			if bytes.Equal(v, val) {
 				continue
 			}
 			bits[i>>3] |= bitmask(i)

@@ -102,7 +102,7 @@ type IndexEntry struct {
 type Index struct {
 	Name  string    `json:"name"`  // stored in table metadata
 	Type  IndexType `json:"typ"`   // stored in table metadata
-	Field Field     `json:"field"` // stored in table metadata
+	Field *Field    `json:"field"` // stored in table metadata
 	opts  Options   // stored in table metadata
 
 	// function pointers
@@ -132,7 +132,7 @@ func (l IndexList) FindField(fieldname string) *Index {
 	return nil
 }
 
-func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Options) (*Index, error) {
+func (t *Table) CreateIndex(name string, field *Field, typ IndexType, opts Options) (*Index, error) {
 	opts = DefaultOptions.Merge(opts)
 	if err := opts.Check(); err != nil {
 		return nil, err
@@ -251,7 +251,7 @@ func (t *Table) CreateIndex(name string, field Field, typ IndexType, opts Option
 	return idx, nil
 }
 
-func (t *Table) CreateIndexIfNotExists(name string, field Field, typ IndexType, opts Options) (*Index, error) {
+func (t *Table) CreateIndexIfNotExists(name string, field *Field, typ IndexType, opts Options) (*Index, error) {
 	idx, err := t.CreateIndex(name, field, typ, opts)
 	if err != nil {
 		if err != ErrIndexExists {
@@ -674,10 +674,10 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 		// log.Debugf("Maybe in pack %03d [%d:%d]", nextpack, min, max)
 
 		// stop when context is canceled
-		if util.InterruptRequested(ctx) {
+		if err := ctx.Err(); err != nil {
 			out = out[:0]
 			idx.table.u64Pool.Put(out)
-			return nil, ctx.Err()
+			return nil, err
 		}
 
 		// load and cache pack
@@ -808,8 +808,8 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 	// scan table in pk order block by block and create new index
 	for i, ph := range idx.table.packidx.packs {
 		// stop when context is canceled
-		if util.InterruptRequested(ctx) {
-			return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
 		// load pack (we need pk field and all index fields)
