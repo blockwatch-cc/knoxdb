@@ -7,7 +7,7 @@ import (
     "fmt"
     "time"
 
-    "blockwatch.cc/knoxdb/filter/bloomVec"
+    "blockwatch.cc/knoxdb/filter/bloom"
     "blockwatch.cc/knoxdb/hash/xxhash"
 
     "blockwatch.cc/knoxdb/encoding/compress"
