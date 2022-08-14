@@ -786,7 +786,7 @@ func (t *Table) CompressIndexPack(cmethod string, w io.Writer, i, p int, mode Du
 	ctimes[0] = ct
 	dtimes[0] = dt
 
-	fl := FieldList{{Name: "Hash", Type: "uint64"}, {Name: "PK", Type: "uint64"}}
+	fl := FieldList{{Name: "Hash", Type: FieldTypeUint64}, {Name: "PK", Type: FieldTypeUint64}}
 
 	return DumpCompressResults(fl, cratios, ctimes, dtimes, w, mode, false)
 }
@@ -857,7 +857,7 @@ func (t *Table) CompressIndexAll(cmethod string, i int, w io.Writer, mode DumpMo
 	ctimes[nPacks] = colCTime
 	dtimes[nPacks] = colDTime
 
-	fl := FieldList{{Name: "Hash", Type: "uint64"}, {Name: "PK", Type: "uint64"}}
+	fl := FieldList{{Name: "Hash", Type: FieldTypeUint64}, {Name: "PK", Type: FieldTypeUint64}}
 	return DumpCompressResults(fl, cratios, ctimes, dtimes, w, mode, verbose)
 }
 
@@ -1070,8 +1070,8 @@ func DumpRatios(fl FieldList, cratios [][]float64, w io.Writer, mode DumpMode, v
 			sz[j] = len(names[j])
 		}
 		for j := 0; j < nFields; j++ {
-			if len(fl[j].Type) > sz[j+1] {
-				sz[j+1] = len(fl[j].Type)
+			if l := len(fl[j].Type.String()); l > sz[j+1] {
+				sz[j+1] = l
 			}
 			if sz[j+1] < 6 {
 				sz[j+1] = 6
@@ -1213,8 +1213,8 @@ func DumpInfos(fl FieldList, cinfos [][]int8, w io.Writer, mode DumpMode, verbos
 			sz[j] = len(names[j])
 		}
 		for j := 0; j < nFields; j++ {
-			if len(fl[j].Type) > sz[j+1] {
-				sz[j+1] = len(fl[j].Type)
+			if l := len(fl[j].Type.String()); l > sz[j+1] {
+				sz[j+1] = l
 			}
 			if sz[j+1] < 6 {
 				sz[j+1] = 6
@@ -1374,8 +1374,8 @@ func DumpTimes(fl FieldList, ctimes [][]float64, w io.Writer, mode DumpMode, ver
 			sz[j] = len(names[j])
 		}
 		for j := 0; j < nFields; j++ {
-			if len(fl[j].Type) > sz[j+1] {
-				sz[j+1] = len(fl[j].Type)
+			if l := len(fl[j].Type.String()); l > sz[j+1] {
+				sz[j+1] = l
 			}
 			if sz[j+1] < 5 {
 				sz[j+1] = 5

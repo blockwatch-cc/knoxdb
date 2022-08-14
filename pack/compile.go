@@ -471,11 +471,11 @@ func (c *Condition) buildBloomData() {
     switch c.Field.Type {
     case FieldTypeBytes:
         for _, val := range c.Value.([][]byte) {
-            c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(val))
+            c.bloomHashes = append(c.bloomHashes, bloom.Hash(val))
         }
     case FieldTypeString:
         for _, val := range c.Value.([]string) {
-            c.bloomHashes = append(c.bloomHashes, bloomVec.Hash(compress.UnsafeGetBytes(val)))
+            c.bloomHashes = append(c.bloomHashes, bloom.Hash(compress.UnsafeGetBytes(val)))
         }
     case FieldTypeInt256, FieldTypeDecimal256:
         for _, val := range c.Value.([]vec.Int256) {
@@ -531,7 +531,7 @@ func (c *Condition) buildBloomData() {
             if val {
                 b = 1
             }
-            c.bloomHashes = append(c.bloomHashes, bloomVec.Hash([]byte{b}))
+            c.bloomHashes = append(c.bloomHashes, bloom.Hash([]byte{b}))
         }
     }
 }
