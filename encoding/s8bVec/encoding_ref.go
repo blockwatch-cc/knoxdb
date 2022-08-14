@@ -26,10 +26,10 @@ func decodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {
 	return decodeBytesBigEndianGeneric(dst, src)
 }
 
-func countBytes(b []byte) (int, error) {
-	return countBytesGeneric(b)
+func countValues(b []byte) (int, error) {
+	return countValuesGeneric(b)
 }
 
-func countBytesBigEndian(b []byte) (int, error) {
-	return countBytesBigEndianGeneric(b)
+func countValuesBigEndian(b []byte) (int, error) {
+	return countValuesBigEndianGeneric(b)
 }
