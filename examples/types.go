@@ -393,7 +393,7 @@ func run() error {
 	}
 
 	// read a single entry
-	q := pack.NewQuery("my-query").AndGte("int64", 42).AndLt("int64", 1024)
+	q := pack.NewQuery("my-query").WithTable(table).AndGte("int64", 42).AndLt("int64", 1024)
 	var single Types
 	err = q.Execute(context.Background(), &single)
 	if err != nil {
@@ -413,7 +413,7 @@ func run() error {
 	// }
 
 	// delete some entries
-	n, err := pack.NewQuery("del").AndLt("i64", 1024).Delete(context.Background())
+	n, err := pack.NewQuery("del").WithTable(table).AndLt("i64", 1024).Delete(context.Background())
 	if err != nil {
 		log.Errorf("Decode: %v", err)
 	} else {
