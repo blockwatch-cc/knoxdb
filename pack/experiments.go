@@ -531,7 +531,7 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 				c1 := b2.Compression()
 				encoding := buf.Bytes()[1] >> 4
 				start = time.Now()
-				err = b2.DecodeNew(buf.Bytes(), b.Len(), b2.MaxStoredSize())
+				err = b2.Decode(buf.Bytes(), b.Len(), b2.MaxStoredSize())
 				tdecomp = time.Since(start).Seconds()
 				t2 := b2.Type()
 				c2 := b2.Compression()

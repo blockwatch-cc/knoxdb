@@ -874,7 +874,7 @@ func (b *Block) Encode(buf *bytes.Buffer) (int, error) {
 	return n, nil
 }
 
-func (b *Block) Decode(buf []byte, sz, stored int) error {
+func (b *Block) DecodeOld(buf []byte, sz, stored int) error {
 	var err error
 	b.typ, err = readBlockType(buf)
 	if err != nil {
@@ -1029,7 +1029,7 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 	return err
 }
 
-func (b *Block) DecodeNew(buf []byte, sz, stored int) error {
+func (b *Block) Decode(buf []byte, sz, stored int) error {
 	var err error
 	b.typ, err = readBlockType(buf)
 	if err != nil {
