@@ -216,7 +216,7 @@ func (a *CompactByteArray) Decode(buf []byte) error {
 	}
 
 	var err error
-	scratch, err = compress.IntegerArrayDecodeAllOld(buf[:olen], scratch)
+	scratch, err = compress.ArrayDecodeAllInt64(buf[:olen], scratch)
 	if err != nil {
 		return fmt.Errorf("compact: decoding offsets: %w", err)
 	}
@@ -229,7 +229,7 @@ func (a *CompactByteArray) Decode(buf []byte) error {
 	if len(buf) < slen {
 		return fmt.Errorf("compact: reading size data: %w", errShortBuffer)
 	}
-	scratch, err = compress.IntegerArrayDecodeAllOld(buf[:slen], scratch)
+	scratch, err = compress.ArrayDecodeAllInt64(buf[:slen], scratch)
 	if err != nil {
 		return fmt.Errorf("compact: decoding offsets: %w", err)
 	}
