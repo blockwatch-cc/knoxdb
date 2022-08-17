@@ -1,11 +1,11 @@
 // Copyright (c) 2022 Blockwatch Data Inc.
-// Author: stefanx@blockwatch.cc
+// Author: stefan@blockwatch.cc
 
 #include "textflag.h"
 #include "constants_Uint64_AVX2.h"
 
 // allow buffer overflows due to writung full vector even its not full
-// caller hast to care about
+// caller has to care about
 // #define ALLOW_BO
 
 TEXT ·initUint64AVX2(SB), NOSPLIT, $0-0

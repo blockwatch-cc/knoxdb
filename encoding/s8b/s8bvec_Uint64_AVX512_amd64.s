@@ -1,5 +1,5 @@
 // Copyright (c) 2022 Blockwatch Data Inc.
-// Author: stefanx@blockwatch.cc
+// Author: stefan@blockwatch.cc
 
 #include "textflag.h"
 #include "constants_Uint64_AVX512.h"

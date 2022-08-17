@@ -17,7 +17,7 @@ import (
 
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/compress"
-	"blockwatch.cc/knoxdb/encoding/s8bVec"
+	"blockwatch.cc/knoxdb/encoding/s8b"
 	"github.com/golang/snappy"
 	"github.com/pierrec/lz4"
 )
@@ -610,14 +610,14 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 				fmt.Printf("\nCannot s8b compress pack %v block %v\n", p.key, j)
 				continue
 			}
-			src, err = s8bVec.EncodeAll(src)
+			src, err = s8b.EncodeAll(src)
 			csize = 8 * len(src)
 			tcomp = time.Since(start).Seconds()
 			if err == nil {
 				dst := make([]uint64, b.Len())
 				buf := ReintepretAnySliceToByteSlice(src)
 				start := time.Now()
-				s8bVec.DecodeAllUint64(dst, buf)
+				s8b.DecodeAllUint64(dst, buf)
 				compress.ZzDeltaDecodeUint64(dst)
 				tdecomp = time.Since(start).Seconds()
 				convertUint64ToBlock(b2, dst)
@@ -632,13 +632,13 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 					fmt.Printf("\nCannot s8b compress pack %v block %v\n", p.key, j)
 					continue
 				}
-				src, err = s8bVec.EncodeAll(src)
+				src, err = s8b.EncodeAll(src)
 				csize = 8 * len(src)
 				tcomp = time.Since(start).Seconds()
 				if err == nil {
 					buf := ReintepretAnySliceToByteSlice(src)
 					start := time.Now()
-					s8bVec.DecodeAllUint64(dst, buf)
+					s8b.DecodeAllUint64(dst, buf)
 					tdecomp = time.Since(start).Seconds()
 				}
 			} else {
@@ -655,13 +655,13 @@ func (p *Package) compress(cmethod string) ([]float64, []float64, []float64, err
 						continue
 					}
 				}
-				src, err = s8bVec.EncodeAll(src)
+				src, err = s8b.EncodeAll(src)
 				csize = 8 * len(src)
 				tcomp = time.Since(start).Seconds()
 				if err == nil {
 					buf := ReintepretAnySliceToByteSlice(src)
 					start := time.Now()
-					s8bVec.DecodeAllUint64(dst, buf)
+					s8b.DecodeAllUint64(dst, buf)
 					if zz {
 						compress.ZzDecodeUint64(dst)
 					}

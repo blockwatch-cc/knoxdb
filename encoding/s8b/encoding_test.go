@@ -1,5 +1,5 @@
 // from: github.com/jwilder/encoding
-package s8bVec
+package s8b
 
 import (
 	"encoding/binary"

@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Blockwatch Data Inc.
+// Copyright (c) 2022 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
 DATA countdown<>+0x00(SB)/8, $(0x00)

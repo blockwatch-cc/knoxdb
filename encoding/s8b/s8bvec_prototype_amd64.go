@@ -4,7 +4,7 @@
 //go:build go1.7 && amd64 && !gccgo && !appengine
 // +build go1.7,amd64,!gccgo,!appengine
 
-package s8bVec
+package s8b
 
 //go:noescape
 func countValuesAVX2Core(src []byte) (count int)

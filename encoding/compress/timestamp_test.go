@@ -16,7 +16,7 @@ import (
 	"testing/quick"
 	"time"
 
-	"blockwatch.cc/knoxdb/encoding/s8bVec"
+	"blockwatch.cc/knoxdb/encoding/s8b"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -1275,14 +1275,14 @@ type TimeEncoder interface {
 type encoder struct {
 	ts    []uint64
 	bytes []byte
-	enc   *s8bVec.Encoder
+	enc   *s8b.Encoder
 }
 
 // NewTimeEncoder returns a TimeEncoder with an initial buffer ready to hold sz bytes.
 func NewTimeEncoder(sz int) TimeEncoder {
 	return &encoder{
 		ts:  make([]uint64, 0, sz),
-		enc: s8bVec.NewEncoder(),
+		enc: s8b.NewEncoder(),
 	}
 }
 
@@ -1347,7 +1347,7 @@ func (e *encoder) Bytes() ([]byte, error) {
 	}
 
 	// We can't compress this time-range, the deltas exceed 1 << 60
-	if max > s8bVec.MaxValue {
+	if max > s8b.MaxValue {
 		return e.encodeRaw()
 	}
 
@@ -1436,7 +1436,7 @@ type TimeDecoder struct {
 	v    int64
 	i, n int
 	ts   []uint64
-	dec  s8bVec.Decoder
+	dec  s8b.Decoder
 	err  error
 
 	// The delta value for a run-length encoded byte slice
@@ -1622,7 +1622,7 @@ func CountTimestamps(b []byte) int {
 		return int(count)
 	case timeCompressedPackedSimple:
 		// First 9 bytes are the starting timestamp and scaling factor, skip over them
-		count, _ := s8bVec.CountValues(b[9:])
+		count, _ := s8b.CountValues(b[9:])
 		return count + 1 // +1 is for the first uncompressed timestamp, starting timestamep in b[1:9]
 	default:
 		return 0

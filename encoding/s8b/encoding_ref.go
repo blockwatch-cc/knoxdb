@@ -1,10 +1,10 @@
-// Copyright (c) 2021 Blockwatch Data Inc.
+// Copyright (c) 2022 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
 //go:build !amd64 || appengine || gccgo
 // +build !amd64 appengine gccgo
 
-package s8bVec
+package s8b
 
 func decodeAllUint64(dst []uint64, src []byte) (value int, err error) {
 	return decodeAllUint64Generic(dst, src)

@@ -5,7 +5,7 @@
 //
 // Imported from github.com/jwilder/encoding
 
-package s8bVec
+package s8b
 
 // Simple8b is 64bit word-sized encoder that packs multiple integers into a single word using
 // a 4 bit selector values and up to 60 bits for the remaining values.  Integers are encoded using
@@ -534,8 +534,9 @@ func Decode(dst *[240]uint64, v uint64) (n int, err error) {
 
 // Decode writes the uncompressed values from src to dst.  It returns the number
 // of values written or an error.
-//go:nocheckptr
 // nocheckptr while the underlying struct layout doesn't change
+//
+//go:nocheckptr
 func DecodeAll(dst, src []uint64) (value int, err error) {
 	j := 0
 	for _, v := range src {

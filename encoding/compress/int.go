@@ -11,8 +11,7 @@ import (
 	"io"
 	"sync"
 
-	"blockwatch.cc/knoxdb/encoding/s8bVec"
-	//	"blockwatch.cc/knoxdb/encoding/simple8b"
+	"blockwatch.cc/knoxdb/encoding/s8b"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -98,33 +97,6 @@ func Uint16ArrayEncodedSize(src []uint16) int {
 func Uint8ArrayEncodedSize(src []uint8) int {
 	return len(src)*8/7 + 7 + 1
 }
-
-// UnsignedArrayEncodeAll encodes src into b, returning b and any error encountered.
-// The returned slice may be of a different length and capactity to b.
-//
-// UnsignedArrayEncodeAll implements batch oriented versions of the three integer
-// encoding types we support: uncompressed, simple8b and RLE.
-//
-// Important: IntegerArrayEncodeAll modifies the contents of src by using it as
-// scratch space for delta encoded values. It is NOT SAFE to use src after
-// passing it into IntegerArrayEncodeAll.
-/*func UnsignedArrayEncodeAll(src []uint64, w io.Writer) (int, error) {
-	srcint := ReintepretUint64ToInt64Slice(src)
-	return arrayEncodeAllInt64(srcint, w)
-}*/
-
-// IntegerArrayEncodeAll encodes src into b, returning b and any error encountered.
-// The returned slice may be of a different length and capactity to b.
-//
-// IntegerArrayEncodeAll implements batch oriented versions of the three integer
-// encoding types we support: uncompressed, simple8b and RLE.
-//
-// Important: IntegerArrayEncodeAll modifies the contents of src by using it as
-// scratch space for delta encoded values. It is NOT SAFE to use src after
-// passing it into IntegerArrayEncodeAll.
-/*func IntegerArrayEncodeAll(src []int64, w io.Writer) (int, error) {
-	return arrayEncodeAllInt64(src, w)
-}*/
 
 func ArrayEncodeAllInt64(src []int64, w io.Writer) (int, error) {
 	if len(src) == 0 {
@@ -358,7 +330,7 @@ func integerArrayEncodeAll(deltas []uint64, maxdelta uint64, w io.Writer) (int, 
 		}
 	}
 
-	if maxdelta > s8bVec.MaxValue {
+	if maxdelta > s8b.MaxValue {
 		// There is an encoded value that's too big to simple8b encode, so
 		// encode uncompressed.
 
@@ -375,7 +347,7 @@ func integerArrayEncodeAll(deltas []uint64, maxdelta uint64, w io.Writer) (int, 
 	}
 
 	// Encode with simple8b - fist value is written unencoded using 8 bytes.
-	encoded, err := s8bVec.EncodeAll(deltas[1:])
+	encoded, err := s8b.EncodeAll(deltas[1:])
 	if err != nil {
 		return 0, err
 	}
@@ -400,16 +372,10 @@ func integerArrayEncodeAll(deltas []uint64, maxdelta uint64, w io.Writer) (int, 
 }
 
 var (
-	integerBatchDecoderFuncOld = [...]func(b []byte, dst []int64) ([]int64, error){
-		integerBatchDecodeAllUncompressed,
-		integerBatchDecodeAllSimpleOld,
-		integerBatchDecodeAllRLE,
-		integerBatchDecodeAllInvalid,
-	}
 	decoderFuncInt64 = [...]func(b []byte, dst []int64) ([]int64, error){
 		integerBatchDecodeAllUncompressed,
 		decodeAllSimpleInt64,
-		integerBatchDecodeAllRLE,
+		decodeAllRLEInt64,
 		decodeAllInvalidInt64,
 	}
 	decoderFuncInt32 = [...]func(b []byte, dst []int32) ([]int32, error){
@@ -431,19 +397,6 @@ var (
 		decodeAllInvalidInt8,
 	}
 )
-
-func IntegerArrayDecodeAllOld(b []byte, dst []int64) ([]int64, error) {
-	if len(b) == 0 {
-		return []int64{}, nil
-	}
-
-	encoding := b[0] >> 4
-	if encoding > intCompressedRLE {
-		encoding = 3 // integerBatchDecodeAllInvalid
-	}
-
-	return integerBatchDecoderFuncOld[encoding&3](b, dst)
-}
 
 func ArrayDecodeAllInt64(b []byte, dst []int64) ([]int64, error) {
 	if len(b) == 0 {
@@ -495,20 +448,6 @@ func ArrayDecodeAllInt8(b []byte, dst []int8) ([]int8, error) {
 	}
 
 	return decoderFuncInt8[encoding&3](b, dst)
-}
-
-func UnsignedArrayDecodeAllOld(b []byte, dst []uint64) ([]uint64, error) {
-	if len(b) == 0 {
-		return []uint64{}, nil
-	}
-
-	encoding := b[0] >> 4
-	if encoding > intCompressedRLE {
-		encoding = 3 // integerBatchDecodeAllInvalid
-	}
-
-	res, err := integerBatchDecoderFuncOld[encoding&3](b, ReintepretUint64ToInt64Slice(dst))
-	return ReintepretInt64ToUint64Slice(res), err
 }
 
 func ArrayDecodeAllUint64(b []byte, dst []uint64) ([]uint64, error) {
@@ -589,90 +528,13 @@ func integerBatchDecodeAllUncompressed(b []byte, dst []int64) ([]int64, error) {
 	return dst, nil
 }
 
-func integerBatchDecodeAllSimpleDeprecated(b []byte, dst []int64) ([]int64, error) {
-	b = b[1:]
-	if len(b) < 8 {
-		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode packed value")
-	}
-
-	count, err := s8bVec.CountValuesBigEndian(b[8:])
-	if err != nil {
-		return []int64{}, err
-	}
-
-	count += 1
-	if cap(dst) < count {
-		dst = make([]int64, count)
-	} else {
-		dst = dst[:count]
-	}
-
-	// first value
-	dst[0] = ZigZagDecode(binary.BigEndian.Uint64(b))
-
-	// decode compressed values
-	buf := ReintepretInt64ToUint64Slice(dst)
-	n, err := s8bVec.DecodeBytesBigEndian(buf[1:], b[8:])
-	if err != nil {
-		return []int64{}, err
-	}
-	if n != count-1 {
-		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAllOld unexpected number of values decoded; got=%d, exp=%d", n, count-1)
-	}
-
-	// calculate prefix sum
-	prev := dst[0]
-	for i := 1; i < len(dst); i++ {
-		prev += ZigZagDecode(uint64(dst[i]))
-		dst[i] = prev
-	}
-
-	return dst, nil
-}
-
-func integerBatchDecodeAllSimpleOld(b []byte, dst []int64) ([]int64, error) {
-	b = b[1:]
-	if len(b) < 8 {
-		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode packed value")
-	}
-
-	count, err := s8bVec.CountValuesBigEndian(b[8:])
-	if err != nil {
-		return []int64{}, err
-	}
-	count += 1
-
-	if cap(dst) < count {
-		dst = make([]int64, count)
-	} else {
-		dst = dst[:count]
-	}
-
-	buf := ReintepretInt64ToUint64Slice(dst)
-
-	// first value
-	buf[0] = binary.BigEndian.Uint64(b)
-	// decode compressed values
-	n, err := s8bVec.DecodeBytesBigEndian(buf[1:], b[8:])
-	if err != nil {
-		return []int64{}, err
-	}
-	if n != count-1 {
-		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll unexpected number of values decoded; got=%d, exp=%d", n, count-1)
-	}
-
-	zzDeltaDecodeInt64(dst)
-
-	return dst, nil
-}
-
 func decodeAllSimpleInt64(b []byte, dst []int64) ([]int64, error) {
 	b = b[1:]
 	if len(b) < 8 {
 		return []int64{}, fmt.Errorf("compress: decodeAllSimpleInt64 not enough data to decode packed value")
 	}
 
-	count, err := s8bVec.CountValues(b[8:])
+	count, err := s8b.CountValues(b[8:])
 	if err != nil {
 		return []int64{}, err
 	}
@@ -689,7 +551,7 @@ func decodeAllSimpleInt64(b []byte, dst []int64) ([]int64, error) {
 	// first value
 	buf[0] = binary.LittleEndian.Uint64(b)
 	// decode compressed values
-	n, err := s8bVec.DecodeAllUint64(buf[1:], b[8:])
+	n, err := s8b.DecodeAllUint64(buf[1:], b[8:])
 	if err != nil {
 		return []int64{}, err
 	}
@@ -708,7 +570,7 @@ func decodeAllSimpleInt32(b []byte, dst []int32) ([]int32, error) {
 		return []int32{}, fmt.Errorf("compress: decodeAllSimpleInt32 not enough data to decode packed value")
 	}
 
-	count, err := s8bVec.CountValues(b[8:])
+	count, err := s8b.CountValues(b[8:])
 	if err != nil {
 		return []int32{}, err
 	}
@@ -725,7 +587,7 @@ func decodeAllSimpleInt32(b []byte, dst []int32) ([]int32, error) {
 	// first value
 	buf[0] = uint32(binary.LittleEndian.Uint64(b))
 	// decode compressed values
-	n, err := s8bVec.DecodeAllUint32(buf[1:], b[8:])
+	n, err := s8b.DecodeAllUint32(buf[1:], b[8:])
 	if err != nil {
 		return []int32{}, err
 	}
@@ -744,7 +606,7 @@ func decodeAllSimpleInt16(b []byte, dst []int16) ([]int16, error) {
 		return []int16{}, fmt.Errorf("compress: decodeAllSimpleInt16 not enough data to decode packed value")
 	}
 
-	count, err := s8bVec.CountValues(b[8:])
+	count, err := s8b.CountValues(b[8:])
 	if err != nil {
 		return []int16{}, err
 	}
@@ -761,7 +623,7 @@ func decodeAllSimpleInt16(b []byte, dst []int16) ([]int16, error) {
 	// first value
 	buf[0] = uint16(binary.LittleEndian.Uint64(b))
 	// decode compressed values
-	n, err := s8bVec.DecodeAllUint16(buf[1:], b[8:])
+	n, err := s8b.DecodeAllUint16(buf[1:], b[8:])
 	if err != nil {
 		return []int16{}, err
 	}
@@ -780,7 +642,7 @@ func decodeAllSimpleInt8(b []byte, dst []int8) ([]int8, error) {
 		return []int8{}, fmt.Errorf("compress: decodeAllSimpleInt8 not enough data to decode packed value")
 	}
 
-	count, err := s8bVec.CountValues(b[8:])
+	count, err := s8b.CountValues(b[8:])
 	if err != nil {
 		return []int8{}, err
 	}
@@ -797,7 +659,7 @@ func decodeAllSimpleInt8(b []byte, dst []int8) ([]int8, error) {
 	// first value
 	buf[0] = uint8(binary.LittleEndian.Uint64(b))
 	// decode compressed values
-	n, err := s8bVec.DecodeAllUint8(buf[1:], b[8:])
+	n, err := s8b.DecodeAllUint8(buf[1:], b[8:])
 	if err != nil {
 		return []int8{}, err
 	}
@@ -810,7 +672,7 @@ func decodeAllSimpleInt8(b []byte, dst []int8) ([]int8, error) {
 	return dst, nil
 }
 
-func integerBatchDecodeAllRLE(b []byte, dst []int64) ([]int64, error) {
+func decodeAllRLEInt64(b []byte, dst []int64) ([]int64, error) {
 	b = b[1:]
 	if len(b) < 8 {
 		return []int64{}, fmt.Errorf("compress: IntegerArrayDecodeAll not enough data to decode RLE starting value")

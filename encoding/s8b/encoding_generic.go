@@ -1,4 +1,7 @@
-package s8bVec
+// Copyright (c) 2022 Blockwatch Data Inc.
+// Author: stefan@blockwatch.cc
+
+package s8b
 
 import (
 	"encoding/binary"
