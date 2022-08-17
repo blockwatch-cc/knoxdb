@@ -11,7 +11,7 @@ import (
 	"io"
 	"math"
 
-	"blockwatch.cc/knoxdb/encoding/simple8b"
+	"blockwatch.cc/knoxdb/encoding/s8b"
 )
 
 const (
@@ -189,7 +189,7 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 	}
 
 	// We can't compress this time-range, the deltas exceed 1 << 60
-	if maxdelta > simple8b.MaxValue {
+	if maxdelta > s8b.MaxValue {
 		// Encode uncompressed.
 
 		// 4 high bits of first byte store the encoding type for the block
@@ -217,7 +217,7 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 	}
 
 	// Encode with simple8b - fist value is written unencoded using 8 bytes.
-	encoded, err := simple8b.EncodeAll(deltas[1:])
+	encoded, err := s8b.EncodeAll(deltas[1:])
 	if err != nil {
 		return 0, err
 	}
@@ -235,13 +235,13 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 
 	// Write the first value since it's not part of the encoded values
 	var b [8]byte
-	binary.BigEndian.PutUint64(b[:], deltas[0])
+	binary.LittleEndian.PutUint64(b[:], deltas[0])
 	w.Write(b[:])
 	count += 8
 
 	// Write the encoded values
 	for _, v := range encoded {
-		binary.BigEndian.PutUint64(b[:], v)
+		binary.LittleEndian.PutUint64(b[:], v)
 		w.Write(b[:])
 	}
 	count += len(encoded) * 8
@@ -314,7 +314,7 @@ func timeBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 
 	mod := uint64(math.Pow10(int(b[0] & 0xF))) // multiplier
 
-	count, err := simple8b.CountBytes(b[9:])
+	count, err := s8b.CountValues(b[9:])
 	if err != nil {
 		return []int64{}, err
 	}
@@ -330,8 +330,8 @@ func timeBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 	buf := ReintepretInt64ToUint64Slice(dst)
 
 	// first value
-	buf[0] = binary.BigEndian.Uint64(b[1:9])
-	n, err := simple8b.DecodeBytesBigEndian(buf[1:], b[9:])
+	buf[0] = binary.LittleEndian.Uint64(b[1:9])
+	n, err := s8b.DecodeAllUint64(buf[1:], b[9:])
 	if err != nil {
 		return []int64{}, err
 	}
@@ -449,7 +449,7 @@ func timeBatchDecodeAllZigZagPacked(b []byte, dst []int64) ([]int64, error) {
 
 	mod := int64(math.Pow10(int(b[0] & 0xF))) // multiplier
 
-	count, err := simple8b.CountBytes(b[9:])
+	count, err := s8b.CountValues(b[9:])
 	if err != nil {
 		return []int64{}, err
 	}
@@ -465,8 +465,8 @@ func timeBatchDecodeAllZigZagPacked(b []byte, dst []int64) ([]int64, error) {
 	buf := ReintepretInt64ToUint64Slice(dst)
 
 	// first value
-	buf[0] = binary.BigEndian.Uint64(b[1:9])
-	n, err := simple8b.DecodeBytesBigEndian(buf[1:], b[9:])
+	buf[0] = binary.LittleEndian.Uint64(b[1:9])
+	n, err := s8b.DecodeAllUint64(buf[1:], b[9:])
 	if err != nil {
 		return []int64{}, err
 	}

@@ -1,51 +1,59 @@
-// Copyright (c) 2020-2021 Blockwatch Data Inc.
-// Original: InfluxData
+// Copyright (c) 2022 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
 //
 package bloom
 
-// NOTE:
-// This package implements a limited bloom filter implementation loosely based on
-// Will Fitzgerald's bloom & bitset packages. It uses a zero-allocation xxhash
-// implementation.
+// This package implements a custom bloom filter implementation loosely based on
+// Will Fitzgerald's bloom & bitset packages. It uses a vectorized zero-allocation
+// xxhash32 implementation, limits the filter size to powers of 2 and fixes the
+// number of hash functions to 4. The empirical false positive rate of this filter is
 //
-// This also optimizes the filter by always using a bitset size with a power of 2.
+// - 2% for m = set cardinality * 2
+// - 0.2% for m = set cardinality * 3
+// - 0.02% for m = set cardinality * 4
+//
+// etc.
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math"
 
-	"blockwatch.cc/knoxdb/hash/xxhash"
+	"blockwatch.cc/knoxdb/hash/xxHash32"
+	"blockwatch.cc/knoxdb/hash/xxhashVec"
 )
+
+const xxHash32Seed = 1312
 
 // Filter represents a bloom filter.
 type Filter struct {
-	k    uint64
+	k    uint32
+	mask uint32
 	b    []byte
-	mask uint64
 }
 
-// NewFilter returns a new instance of Filter using m bits and k hash functions.
+// NewFilter returns a new instance of Filter using m bits.
 // If m is not a power of two then it is rounded to the next highest power of 2.
-func NewFilter(m uint64, k uint64) *Filter {
+func NewFilter(m int) *Filter {
 	m = pow2(m)
-	return &Filter{k: k, b: make([]byte, m>>3), mask: m - 1}
+	return &Filter{k: 4, b: make([]byte, m>>3), mask: uint32(m - 1)}
 }
 
 // NewFilterBuffer returns a new instance of a filter using a backing buffer.
 // The buffer length MUST be a power of 2.
-func NewFilterBuffer(buf []byte, k uint64) (*Filter, error) {
-	m := pow2(uint64(len(buf)) * 8)
-	if m != uint64(len(buf))*8 {
-		return nil, fmt.Errorf("bloom.Filter: buffer bit count must be a power of two: %d/%d", len(buf)*8, m)
+func NewFilterBuffer(buf []byte) (*Filter, error) {
+	m := pow2(len(buf) * 8)
+	if m != len(buf)*8 {
+		return nil, fmt.Errorf("bloom: buffer bit count must be a power of two: %d/%d", len(buf)*8, m)
 	}
-	return &Filter{k: k, b: buf, mask: m - 1}, nil
+	return &Filter{k: 4, b: buf, mask: uint32(m - 1)}, nil
 }
 
 // Len returns the number of bits used in the filter.
 func (f *Filter) Len() uint { return uint(len(f.b)) }
 
 // K returns the number of hash functions used in the filter.
-func (f *Filter) K() uint64 { return f.k }
+func (f *Filter) K() uint32 { return f.k }
 
 // Bytes returns the underlying backing slice.
 func (f *Filter) Bytes() []byte { return f.b }
@@ -67,8 +75,8 @@ func (f *Filter) Clone() *Filter {
 
 // Add inserts data to the filter.
 func (f *Filter) Add(v []byte) {
-	h := Hash(v)
-	for i := uint64(0); i < f.k; i++ {
+	h := hash(v, xxHash32Seed)
+	for i := uint32(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		f.b[loc>>3] |= 1 << (loc & 7)
 	}
@@ -77,26 +85,72 @@ func (f *Filter) Add(v []byte) {
 // AddMany inserts multiple data points to the filter.
 func (f *Filter) AddMany(l [][]byte) {
 	for _, v := range l {
-		h := Hash(v)
-		for i := uint64(0); i < f.k; i++ {
+		h := hash(v, xxHash32Seed)
+		for i := uint32(0); i < f.k; i++ {
 			loc := f.location(h, i)
 			f.b[loc>>3] |= 1 << (loc & 7)
 		}
 	}
 }
 
-// AddHash inserts pre-hased data to the filter.
-func (f *Filter) AddHash(h [2]uint64) {
-	for i := uint64(0); i < f.k; i++ {
-		loc := f.location(h, i)
-		f.b[loc>>3] |= 1 << (loc & 7)
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyUint16(data []uint16) {
+	for _, v := range data {
+		h := HashUint16(v)
+		for i := uint32(0); i < f.k; i++ {
+			loc := f.location(h, i)
+			f.b[loc>>3] |= 1 << (loc & 7)
+		}
 	}
 }
 
-// AddHashMany inserts multiple pre-hased values to the filter.
-func (f *Filter) AddHashMany(l [][2]uint64) {
-	for _, h := range l {
-		for i := uint64(0); i < f.k; i++ {
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyInt16(data []int16) {
+	for _, v := range data {
+		h := HashInt16(v)
+		for i := uint32(0); i < f.k; i++ {
+			loc := f.location(h, i)
+			f.b[loc>>3] |= 1 << (loc & 7)
+		}
+	}
+}
+
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyUint32(data []uint32) {
+	filterAddManyUint32(f, data, xxHash32Seed)
+}
+
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyInt32(data []int32) {
+	filterAddManyInt32(f, data, xxHash32Seed)
+}
+
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyUint64(data []uint64) {
+	filterAddManyUint64(f, data, xxHash32Seed)
+}
+
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyInt64(data []int64) {
+	filterAddManyInt64(f, data, xxHash32Seed)
+}
+
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyFloat64(data []float64) {
+	for _, v := range data {
+		h := HashFloat64(v)
+		for i := uint32(0); i < f.k; i++ {
+			loc := f.location(h, i)
+			f.b[loc>>3] |= 1 << (loc & 7)
+		}
+	}
+}
+
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddManyFloat32(data []float32) {
+	for _, v := range data {
+		h := HashFloat32(v)
+		for i := uint32(0); i < f.k; i++ {
 			loc := f.location(h, i)
 			f.b[loc>>3] |= 1 << (loc & 7)
 		}
@@ -106,8 +160,130 @@ func (f *Filter) AddHashMany(l [][2]uint64) {
 // Contains returns true if the filter possibly contains v.
 // Returns false if the filter definitely does not contain v.
 func (f *Filter) Contains(v []byte) bool {
-	h := Hash(v)
-	for i := uint64(0); i < f.k; i++ {
+	h := hash(v, xxHash32Seed)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsUint16(v uint16) bool {
+	var buf [2]byte
+	binary.LittleEndian.PutUint16(buf[:], v)
+	h := hash(buf[:], xxHash32Seed)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsInt16(v int16) bool {
+	var buf [2]byte
+	binary.LittleEndian.PutUint16(buf[:], uint16(v))
+	h := hash(buf[:], xxHash32Seed)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsInt32(v int32) bool {
+	var h [2]uint32
+	h[0] = xxhashVec.XXHash32Int32(v, xxHash32Seed)
+	h[1] = xxhashVec.XXHash32Int32(v, 0)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsUint32(v uint32) bool {
+	var h [2]uint32
+	h[0] = xxhashVec.XXHash32Uint32(v, xxHash32Seed)
+	h[1] = xxhashVec.XXHash32Uint32(v, 0)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsUint64(v uint64) bool {
+	var h [2]uint32
+	h[0] = xxhashVec.XXHash32Uint64(v, xxHash32Seed)
+	h[1] = xxhashVec.XXHash32Uint64(v, 0)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsInt64(v int64) bool {
+	var h [2]uint32
+	h[0] = xxhashVec.XXHash32Int64(v, xxHash32Seed)
+	h[1] = xxhashVec.XXHash32Int64(v, 0)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsFloat64(v float64) bool {
+	u := math.Float64bits(v)
+	var h [2]uint32
+	h[0] = xxhashVec.XXHash32Uint64(u, xxHash32Seed)
+	h[1] = xxhashVec.XXHash32Uint64(u, 0)
+	for i := uint32(0); i < f.k; i++ {
+		loc := f.location(h, i)
+		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Contains returns true if the filter possibly contains v.
+// Returns false if the filter definitely does not contain v.
+func (f *Filter) ContainsFloat32(v float32) bool {
+	u := math.Float32bits(v)
+	var h [2]uint32
+	h[0] = xxhashVec.XXHash32Uint32(u, xxHash32Seed)
+	h[1] = xxhashVec.XXHash32Uint32(u, 0)
+	for i := uint32(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
 			return false
@@ -118,8 +294,8 @@ func (f *Filter) Contains(v []byte) bool {
 
 // ContainsHash returns true if the filter contains hash value h.
 // Returns false if the filter definitely does not contain h.
-func (f *Filter) ContainsHash(h [2]uint64) bool {
-	for i := uint64(0); i < f.k; i++ {
+func (f *Filter) ContainsHash(h [2]uint32) bool {
+	for i := uint32(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
 			return false
@@ -130,10 +306,10 @@ func (f *Filter) ContainsHash(h [2]uint64) bool {
 
 // ContainsAnyHash returns true if the filter contains any hash value in l.
 // Returns false if the filter definitely does not contain any hash in l.
-func (f *Filter) ContainsAnyHash(l [][2]uint64) bool {
+func (f *Filter) ContainsAnyHash(l [][2]uint32) bool {
 hash_scan:
 	for _, h := range l {
-		for i := uint64(0); i < f.k; i++ {
+		for i := uint32(0); i < f.k; i++ {
 			loc := f.location(h, i)
 			if f.b[loc>>3]&(1<<(loc&7)) == 0 {
 				continue hash_scan
@@ -153,53 +329,102 @@ func (f *Filter) Merge(other *Filter) error {
 
 	// Ensure m & k fields match.
 	if len(f.b) != len(other.b) {
-		return fmt.Errorf("bloom.Filter.Merge(): m mismatch: %d <> %d", len(f.b), len(other.b))
+		return fmt.Errorf("bloom.Merge(): m mismatch: %d <> %d", len(f.b), len(other.b))
 	} else if f.k != other.k {
-		return fmt.Errorf("bloom.Filter.Merge(): k mismatch: %d <> %d", f.b, other.b)
+		return fmt.Errorf("bloom.Merge(): k mismatch: %d <> %d", f.b, other.b)
 	}
-
-	// Perform union of each byte.
-	for i := range f.b {
-		f.b[i] |= other.b[i]
-	}
-
+	filterMerge(f.b, other.b)
 	return nil
 }
 
 // location returns the ith hashed location using two hash values.
-func (f *Filter) location(h [2]uint64, i uint64) uint {
-	return uint((h[0] + h[1]*i) & f.mask)
+func (f *Filter) location(h [2]uint32, i uint32) uint32 {
+	return (h[0] + h[1]*i) & f.mask
 }
 
-// hash returns two 64-bit hashes based on the output of xxhash.
-func (f *Filter) hash(data []byte) [2]uint64 {
-	return Hash(data)
-}
-
-// Estimate returns an estimated bit count and hash count given the element count and false positive rate.
-func Estimate(n uint64, p float64) (m uint64, k uint64) {
-	m = uint64(math.Ceil(-1 * float64(n) * math.Log(p) / math.Pow(math.Log(2), 2)))
-	k = uint64(math.Ceil(math.Log(2) * float64(m) / float64(n)))
+// Estimate returns an estimated bit count and hash count given the element count
+// and false positive rate.
+// TODO: adjust formula to fixed k = 4
+func Estimate(n uint64, p float64) (m int, k int) {
+	m = int(math.Ceil(-1 * float64(n) * math.Log(p) / math.Pow(math.Log(2), 2)))
+	k = int(math.Ceil(math.Log(2) * float64(m) / float64(n)))
 	return m, k
 }
 
-func Hash(data []byte) [2]uint64 {
-	v1 := xxhash.Sum64(data)
-	var v2 uint64
-	if l := len(data); l > 0 {
-		l = l - 1
-		b := data[l] // We'll put the original byte back.
-		data[l] = byte(0)
-		v2 = xxhash.Sum64(data)
-		data[l] = b
+func hash(data []byte, seed uint32) [2]uint32 {
+	return [2]uint32{xxHash32.Checksum(data, seed), xxHash32.Checksum(data, 0)}
+}
+
+func Hash(data []byte) [2]uint32 {
+	return hash(data, xxHash32Seed)
+}
+
+func HashUint16(v uint16) [2]uint32 {
+	var buf [2]byte
+	binary.LittleEndian.PutUint16(buf[:], v)
+	return [2]uint32{
+		xxHash32.Checksum(buf[:], xxHash32Seed),
+		xxHash32.Checksum(buf[:], 0),
 	}
-	return [2]uint64{v1, v2}
+}
+
+func HashInt16(v int16) [2]uint32 {
+	var buf [2]byte
+	binary.LittleEndian.PutUint16(buf[:], uint16(v))
+	return [2]uint32{
+		xxHash32.Checksum(buf[:], xxHash32Seed),
+		xxHash32.Checksum(buf[:], 0),
+	}
+}
+
+func HashUint32(v uint32) [2]uint32 {
+	return [2]uint32{
+		xxhashVec.XXHash32Uint32(v, xxHash32Seed),
+		xxhashVec.XXHash32Uint32(v, 0),
+	}
+}
+
+func HashInt32(v int32) [2]uint32 {
+	return [2]uint32{
+		xxhashVec.XXHash32Int32(v, xxHash32Seed),
+		xxhashVec.XXHash32Int32(v, 0),
+	}
+}
+
+func HashUint64(v uint64) [2]uint32 {
+	return [2]uint32{
+		xxhashVec.XXHash32Uint64(v, xxHash32Seed),
+		xxhashVec.XXHash32Uint64(v, 0),
+	}
+}
+
+func HashInt64(v int64) [2]uint32 {
+	return [2]uint32{
+		xxhashVec.XXHash32Int64(v, xxHash32Seed),
+		xxhashVec.XXHash32Int64(v, 0),
+	}
+}
+
+func HashFloat64(v float64) [2]uint32 {
+	u := math.Float64bits(v)
+	return [2]uint32{
+		xxhashVec.XXHash32Uint64(u, xxHash32Seed),
+		xxhashVec.XXHash32Uint64(u, 0),
+	}
+}
+
+func HashFloat32(v float32) [2]uint32 {
+	u := math.Float32bits(v)
+	return [2]uint32{
+		xxhashVec.XXHash32Uint32(u, xxHash32Seed),
+		xxhashVec.XXHash32Uint32(u, 0),
+	}
 }
 
 // pow2 returns the number that is the next highest power of 2.
 // Returns v if it is a power of 2.
-func pow2(v uint64) uint64 {
-	for i := uint64(8); i < 1<<62; i *= 2 {
+func pow2(v int) int {
+	for i := 8; i < 1<<30; i *= 2 {
 		if i >= v {
 			return i
 		}

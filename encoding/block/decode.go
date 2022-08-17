@@ -102,7 +102,7 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 	strideBuf := bytes.NewBuffer(buf)
 	for i := 0; i < 4; i++ {
 		strideLen := int(bigEndian.Uint32(strideBuf.Next(4)[:]))
-		tmp, err := compress.IntegerArrayDecodeAll(strideBuf.Next(strideLen), tmp)
+		tmp, err := compress.ArrayDecodeAllInt64(strideBuf.Next(strideLen), tmp)
 		if err != nil {
 			return dst, err
 		}
@@ -194,7 +194,7 @@ func decodeInt128Block(block []byte, dst vec.Int128LLSlice) (vec.Int128LLSlice, 
 	strideBuf := bytes.NewBuffer(buf)
 	for i := 0; i < 2; i++ {
 		strideLen := int(bigEndian.Uint32(strideBuf.Next(4)[:]))
-		tmp, err := compress.IntegerArrayDecodeAll(strideBuf.Next(strideLen), tmp)
+		tmp, err := compress.ArrayDecodeAllInt64(strideBuf.Next(strideLen), tmp)
 		if err != nil {
 			return dst, err
 		}
@@ -236,13 +236,50 @@ func decodeInt64Block(block []byte, dst []int64) ([]int64, error) {
 	if err != nil {
 		return nil, err
 	}
-	b, err := compress.IntegerArrayDecodeAll(buf, dst)
+	b, err := compress.ArrayDecodeAllInt64(buf, dst)
 	if canRecycle && cap(buf) == BlockSizeHint {
 		BlockEncoderPool.Put(buf[:0])
 	}
 	return b, err
 }
 
+func decodeInt32Block(block []byte, dst []int32) ([]int32, error) {
+	buf, canRecycle, err := unpackBlock(block, BlockInt32)
+	if err != nil {
+		return nil, err
+	}
+	b, err := compress.ArrayDecodeAllInt32(buf, dst)
+	if canRecycle && cap(buf) == BlockSizeHint {
+		BlockEncoderPool.Put(buf[:0])
+	}
+	return b, err
+}
+
+func decodeInt16Block(block []byte, dst []int16) ([]int16, error) {
+	buf, canRecycle, err := unpackBlock(block, BlockInt16)
+	if err != nil {
+		return nil, err
+	}
+	b, err := compress.ArrayDecodeAllInt16(buf, dst)
+	if canRecycle && cap(buf) == BlockSizeHint {
+		BlockEncoderPool.Put(buf[:0])
+	}
+	return b, err
+}
+
+func decodeInt8Block(block []byte, dst []int8) ([]int8, error) {
+	buf, canRecycle, err := unpackBlock(block, BlockInt8)
+	if err != nil {
+		return nil, err
+	}
+	b, err := compress.ArrayDecodeAllInt8(buf, dst)
+	if canRecycle && cap(buf) == BlockSizeHint {
+		BlockEncoderPool.Put(buf[:0])
+	}
+	return b, err
+}
+
+/*
 func decodeInt32Block(block []byte, dst []int32) ([]int32, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockInt32)
 	if err != nil {
@@ -356,19 +393,57 @@ func decodeInt8Block(block []byte, dst []int8) ([]int8, error) {
 	}
 	return dst, err
 }
+*/
 
 func decodeUint64Block(block []byte, dst []uint64) ([]uint64, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockUint64)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compress.UnsignedArrayDecodeAll(buf, dst)
+	b, err := compress.ArrayDecodeAllUint64(buf, dst)
 	if canRecycle && cap(buf) == BlockSizeHint {
 		BlockEncoderPool.Put(buf[:0])
 	}
 	return b, err
 }
 
+func decodeUint32Block(block []byte, dst []uint32) ([]uint32, error) {
+	buf, canRecycle, err := unpackBlock(block, BlockUint32)
+	if err != nil {
+		return nil, err
+	}
+	b, err := compress.ArrayDecodeAllUint32(buf, dst)
+	if canRecycle && cap(buf) == BlockSizeHint {
+		BlockEncoderPool.Put(buf[:0])
+	}
+	return b, err
+}
+
+func decodeUint16Block(block []byte, dst []uint16) ([]uint16, error) {
+	buf, canRecycle, err := unpackBlock(block, BlockUint16)
+	if err != nil {
+		return nil, err
+	}
+	b, err := compress.ArrayDecodeAllUint16(buf, dst)
+	if canRecycle && cap(buf) == BlockSizeHint {
+		BlockEncoderPool.Put(buf[:0])
+	}
+	return b, err
+}
+
+func decodeUint8Block(block []byte, dst []uint8) ([]uint8, error) {
+	buf, canRecycle, err := unpackBlock(block, BlockUint8)
+	if err != nil {
+		return nil, err
+	}
+	b, err := compress.ArrayDecodeAllUint8(buf, dst)
+	if canRecycle && cap(buf) == BlockSizeHint {
+		BlockEncoderPool.Put(buf[:0])
+	}
+	return b, err
+}
+
+/*
 func decodeUint32Block(block []byte, dst []uint32) ([]uint32, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockUint32)
 	if err != nil {
@@ -485,6 +560,7 @@ func decodeUint8Block(block []byte, dst []uint8) ([]uint8, error) {
 	}
 	return dst, err
 }
+*/
 
 func decodeBoolBlock(block []byte, dst *vec.Bitset) (*vec.Bitset, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockBool)

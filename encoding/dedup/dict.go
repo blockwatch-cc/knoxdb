@@ -161,7 +161,7 @@ func (a *DictByteArray) WriteTo(w io.Writer) (int64, error) {
 	for i, v := range a.offs {
 		scratch[i] = int64(v)
 	}
-	olen, err := compress.IntegerArrayEncodeAll(scratch, w)
+	olen, err := compress.ArrayEncodeAllInt64(scratch, w)
 	if err != nil {
 		return int64(count), err
 	}
@@ -248,7 +248,7 @@ func (a *DictByteArray) Decode(buf []byte) error {
 	}
 
 	var err error
-	scratch, err = compress.IntegerArrayDecodeAll(buf[:olen], scratch)
+	scratch, err = compress.ArrayDecodeAllInt64(buf[:olen], scratch)
 	if err != nil {
 		return fmt.Errorf("dict: decoding offsets: %w", err)
 	}
