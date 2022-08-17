@@ -13,8 +13,11 @@ import (
 )
 
 const (
-	packageStorageFormatVersionV1 byte = 0xa1 // KnoxDB v1
-	currentStorageFormat               = packageStorageFormatVersionV1
+	// Note: we use a higher format number starting at 0xa0 to prevent collisions
+	// with packdb files (i.e. the alpha version of knox)
+	packageStorageFormatVersionV1 byte = 0xa1 // KnoxDB v1 (BE, simple compression)
+	packageStorageFormatVersionV2 byte = 0xa2 // KnoxDB v2 (LE, vectorized compression)
+	currentStorageFormat               = packageStorageFormatVersionV2
 )
 
 func (p *Package) MarshalBinary() ([]byte, error) {
@@ -23,10 +26,8 @@ func (p *Package) MarshalBinary() ([]byte, error) {
 		maxSize += b.MaxStoredSize()
 	}
 
-	// TODO: ask blocks for their size
-	// buf := bytes.NewBuffer(make([]byte, 0, p.nFields*block.BlockSizeHint))
 	buf := bytes.NewBuffer(make([]byte, 0, maxSize))
-	buf.WriteByte(packageStorageFormatVersionV1)
+	buf.WriteByte(packageStorageFormatVersionV2)
 
 	var b [8]byte
 	binary.BigEndian.PutUint32(b[0:], uint32(p.nFields))
@@ -69,8 +70,10 @@ func (p *Package) UnmarshalBinary(data []byte) error {
 
 	buf := bytes.NewBuffer(data)
 	version, _ := buf.ReadByte()
-	if version > currentStorageFormat {
-		return fmt.Errorf("pack: invalid storage format version %d", version)
+
+	// Note: encodings are not upwards or downwards compatible between v1 and v2 !
+	if version != currentStorageFormat {
+		return fmt.Errorf("pack: invalid v%d storage format", version-0xa0)
 	}
 	p.size = blen
 	p.nFields = int(binary.BigEndian.Uint32(buf.Next(4)))
@@ -112,11 +115,9 @@ func (p *Package) UnmarshalBinary(data []byte) error {
 		// skip blocks that are set to type ignore before decoding
 		// this is the core magic of skipping blocks on load
 		if p.blocks[i].IsIgnore() {
-			// fmt.Printf("Pack: skipping block %d %s offs=%d len=%d buf=%d\n", i, p.blocks[i].Type(), offsets[i], sz, blen)
 			_ = buf.Next(sz)
 			continue
 		}
-		// fmt.Printf("Pack: decode block %d %s offs=%d len=%d buf=%d\n", i, p.blocks[i].Type(), offsets[i], sz, blen)
 		err := p.blocks[i].Decode(buf.Next(sz), p.nValues, sz)
 		if err != nil {
 			return err
