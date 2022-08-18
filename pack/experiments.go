@@ -1000,7 +1000,7 @@ func (t *Table) ShowCompression(cmethod string, w io.Writer, mode DumpMode, verb
 		}
 		for j := 0; j < pkg.nFields; j++ {
 			b := pkg.blocks[j]
-			if !b.IsInt() {
+			if !b.IsInt() && b.Type().String() != "time" {
 				cr[j] = -1
 				ct[j] = -1
 				continue
@@ -1252,11 +1252,11 @@ func DumpInfos(fl FieldList, cinfos [][]int8, w io.Writer, mode DumpMode, verbos
 			row[0] = fmt.Sprintf("%[2]*[1]d", i, sz[0])
 			for j := 0; j < len(cinfos[0]); j++ {
 				switch cinfos[i][j] {
-				case 0:
+				case 0, 3:
 					s1[j]++
-				case 1:
+				case 1, 4:
 					s2[j]++
-				case 2:
+				case 2, 5:
 					s3[j]++
 				}
 				if cinfos[i][j] < 0 {

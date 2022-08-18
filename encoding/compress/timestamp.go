@@ -60,7 +60,7 @@ func TimeArrayEncodedSize(src []int64) int {
 // passing it into TimeArrayEncodeAll.
 func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 	var (
-		maxdelta, div uint64 = 0, 1e12
+		maxdelta, div uint64 = 0, 1e9
 		ordered       bool   = true
 		l             int    = len(src)
 	)
@@ -181,6 +181,8 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 
 			return count, nil
 		}
+	} else {
+		div = 1
 	}
 
 	// scale and zigzag first value too to simplify decoder loops
@@ -189,7 +191,7 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 	}
 
 	// We can't compress this time-range, the deltas exceed 1 << 60
-	if maxdelta > s8b.MaxValue {
+	if maxdelta > s8b.MaxValue || l == 1 {
 		// Encode uncompressed.
 
 		// 4 high bits of first byte store the encoding type for the block
@@ -235,7 +237,11 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 
 	// Write the first value since it's not part of the encoded values
 	var b [8]byte
-	binary.LittleEndian.PutUint64(b[:], deltas[0])
+	if ordered {
+		binary.LittleEndian.PutUint64(b[:], deltas[0]/div)
+	} else {
+		binary.LittleEndian.PutUint64(b[:], deltas[0])
+	}
 	w.Write(b[:])
 	count += 8
 
@@ -332,6 +338,44 @@ func timeBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 	// first value
 	buf[0] = binary.LittleEndian.Uint64(b[1:9])
 	n, err := s8b.DecodeAllUint64(buf[1:], b[9:])
+	if err != nil {
+		return []int64{}, err
+	}
+	if n != count-1 {
+		return []int64{}, fmt.Errorf("pack: TimeArrayDecodeAll unexpected number of values decoded; got=%d, exp=%d", n, count-1)
+	}
+
+	deltaScaleDecodeTime(buf, mod)
+
+	return dst, nil
+}
+
+// legacy simple8b encoding with or without scaling
+func timeBatchDecodeAllSimpleOld(b []byte, dst []int64) ([]int64, error) {
+	if len(b) < 9 {
+		return []int64{}, fmt.Errorf("pack: TimeArrayDecodeAll not enough data to decode packed timestamps")
+	}
+
+	mod := uint64(math.Pow10(int(b[0] & 0xF))) // multiplier
+
+	count, err := s8b.CountValuesBigEndian(b[9:])
+	if err != nil {
+		return []int64{}, err
+	}
+
+	count += 1
+
+	if cap(dst) < count {
+		dst = make([]int64, count)
+	} else {
+		dst = dst[:count]
+	}
+
+	buf := ReintepretInt64ToUint64Slice(dst)
+
+	// first value
+	buf[0] = binary.BigEndian.Uint64(b[1:9])
+	n, err := s8b.DecodeBytesBigEndian(buf[1:], b[9:])
 	if err != nil {
 		return []int64{}, err
 	}
@@ -447,7 +491,7 @@ func timeBatchDecodeAllZigZagPacked(b []byte, dst []int64) ([]int64, error) {
 		return []int64{}, fmt.Errorf("pack: TimeArrayDecodeAll not enough data to decode packed timestamps")
 	}
 
-	mod := int64(math.Pow10(int(b[0] & 0xF))) // multiplier
+	mod := uint64(math.Pow10(int(b[0] & 0xF))) // multiplier
 
 	count, err := s8b.CountValues(b[9:])
 	if err != nil {
@@ -467,6 +511,43 @@ func timeBatchDecodeAllZigZagPacked(b []byte, dst []int64) ([]int64, error) {
 	// first value
 	buf[0] = binary.LittleEndian.Uint64(b[1:9])
 	n, err := s8b.DecodeAllUint64(buf[1:], b[9:])
+	if err != nil {
+		return []int64{}, err
+	}
+	if n != count-1 {
+		return []int64{}, fmt.Errorf("pack: TimeArrayDecodeAll unexpected number of values decoded; got=%d, exp=%d", n, count-1)
+	}
+
+	deltaZzScaleDecodeTime(buf, mod)
+
+	return dst, nil
+}
+
+func timeBatchDecodeAllZigZagPackedOld(b []byte, dst []int64) ([]int64, error) {
+	if len(b) < 9 {
+		return []int64{}, fmt.Errorf("pack: TimeArrayDecodeAll not enough data to decode packed timestamps")
+	}
+
+	mod := int64(math.Pow10(int(b[0] & 0xF))) // multiplier
+
+	count, err := s8b.CountValuesBigEndian(b[9:])
+	if err != nil {
+		return []int64{}, err
+	}
+
+	count += 1
+
+	if cap(dst) < count {
+		dst = make([]int64, count)
+	} else {
+		dst = dst[:count]
+	}
+
+	buf := ReintepretInt64ToUint64Slice(dst)
+
+	// first value
+	buf[0] = binary.BigEndian.Uint64(b[1:9])
+	n, err := s8b.DecodeBytesBigEndian(buf[1:], b[9:])
 	if err != nil {
 		return []int64{}, err
 	}
