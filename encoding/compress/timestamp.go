@@ -182,6 +182,8 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 
 			return count, nil
 		}
+	} else {
+		div = 1
 	}
 
 	// scale and zigzag first value too to simplify decoder loops
@@ -190,7 +192,7 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 	}
 
 	// We can't compress this time-range, the deltas exceed 1 << 60
-	if maxdelta > s8bVec.MaxValue {
+	if maxdelta > s8bVec.MaxValue || l == 1 {
 		// Encode uncompressed.
 
 		// 4 high bits of first byte store the encoding type for the block
@@ -236,7 +238,11 @@ func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 
 	// Write the first value since it's not part of the encoded values
 	var b [8]byte
-	binary.LittleEndian.PutUint64(b[:], deltas[0])
+	if ordered {
+		binary.LittleEndian.PutUint64(b[:], deltas[0]/div)
+	} else {
+		binary.LittleEndian.PutUint64(b[:], deltas[0])
+	}
 	w.Write(b[:])
 	count += 8
 
@@ -366,20 +372,7 @@ func timeBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 		return []int64{}, fmt.Errorf("pack: TimeArrayDecodeAll unexpected number of values decoded; got=%d, exp=%d", n, count-1)
 	}
 
-	// Compute the prefix sum and scale the deltas back up
-	last := buf[0]
-	if mod > 1 {
-		for i := 1; i < len(buf); i++ {
-			dgap := buf[i] * mod
-			buf[i] = last + dgap
-			last = buf[i]
-		}
-	} else {
-		for i := 1; i < len(buf); i++ {
-			buf[i] += last
-			last = buf[i]
-		}
-	}
+	deltaScaleDecodeTime(buf, mod)
 
 	return dst, nil
 }
@@ -525,7 +518,7 @@ func timeBatchDecodeAllZigZagPacked(b []byte, dst []int64) ([]int64, error) {
 		return []int64{}, fmt.Errorf("pack: TimeArrayDecodeAll not enough data to decode packed timestamps")
 	}
 
-	mod := int64(math.Pow10(int(b[0] & 0xF))) // multiplier
+	mod := uint64(math.Pow10(int(b[0] & 0xF))) // multiplier
 
 	count, err := s8bVec.CountValues(b[9:])
 	if err != nil {
@@ -552,19 +545,7 @@ func timeBatchDecodeAllZigZagPacked(b []byte, dst []int64) ([]int64, error) {
 		return []int64{}, fmt.Errorf("pack: TimeArrayDecodeAll unexpected number of values decoded; got=%d, exp=%d", n, count-1)
 	}
 
-	// Compute the prefix sum and scale the timestamps back up
-	prev := int64(0)
-	if mod > 1 {
-		for i := 0; i < len(buf); i++ {
-			prev += ZigZagDecode(buf[i])
-			dst[i] = prev * mod
-		}
-	} else {
-		for i := 0; i < len(buf); i++ {
-			prev += ZigZagDecode(buf[i])
-			dst[i] = prev
-		}
-	}
+	deltaZzScaleDecodeTime(buf, mod)
 
 	return dst, nil
 }

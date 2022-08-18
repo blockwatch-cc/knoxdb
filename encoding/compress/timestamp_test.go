@@ -87,7 +87,7 @@ func TestTimeArrayEncodeAll_Compare(t *testing.T) {
 	// generate random values (should use simple8b)
 	input := make([]int64, 1000)
 	for i := 0; i < len(input); i++ {
-		input[i] = rand.Int63n(100000) //- 50000
+		input[i] = rand.Int63n(100000) * 10 //- 50000
 	}
 	sort.Slice(input, func(i int, j int) bool { return input[i] < input[j] })
 	testTimeArrayEncodeAll_Compare(t, input, timeCompressedPackedSimple)
@@ -196,7 +196,7 @@ func TestTimeArrayEncodeAll_One(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got := b[0] >> 4; got != timeCompressedPackedSimple {
+	if got := b[0] >> 4; got != timeUncompressed {
 		t.Fatalf("Wrong encoding used: expected uncompressed, got %v", got)
 	}
 
