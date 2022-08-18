@@ -61,7 +61,7 @@ func TimeArrayEncodedSize(src []int64) int {
 // passing it into TimeArrayEncodeAll.
 func TimeArrayEncodeAll(src []int64, w io.Writer) (int, error) {
 	var (
-		maxdelta, div uint64 = 0, 1e12
+		maxdelta, div uint64 = 0, 1e9
 		ordered       bool   = true
 		l             int    = len(src)
 	)

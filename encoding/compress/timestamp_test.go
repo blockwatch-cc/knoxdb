@@ -449,7 +449,7 @@ func TestTimeArrayEncodeAll_220SecondDelta(t *testing.T) {
 	now := time.Now()
 
 	for i := 0; i < 220; i++ {
-		src = append(src, now.Truncate(60*time.Second).Add(time.Duration(i*60)*time.Second).UnixNano())
+		src = append(src, now.Truncate(60*time.Second).Add(time.Duration(i*60)*time.Second).UnixMicro())
 	}
 	exp := make([]int64, len(src))
 	copy(exp, src)
@@ -466,7 +466,7 @@ func TestTimeArrayEncodeAll_220SecondDelta(t *testing.T) {
 		t.Fatalf("Wrong encoding used: expected uncompressed, got %v", got)
 	}
 
-	if got := b[0] & 0xf; got != 10 {
+	if got := b[0] & 0xf; got != 7 {
 		t.Fatalf("Wrong scale used: expected 10, got %v", got)
 	}
 
@@ -1256,6 +1256,22 @@ func BenchmarkTimeArrayDecodeAllRLE(b *testing.B) {
 			dst := make([]int64, bm.n)
 			for i := 0; i < b.N; i++ {
 				dst, _ = TimeArrayDecodeAll(bytes, dst)
+			}
+		})
+	}
+}
+
+func BenchmarkDeltaScaleDecodeTimeGeneric(B *testing.B) {
+	mod := uint64(1000000000)
+	for _, n := range benchmarkSizes {
+		a := make([]uint64, n.l)
+		for i := 0; i < n.l; i++ {
+			a[i] = uint64(rand.Intn(10000))
+		}
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				deltaScaleDecodeTimeGeneric(a, mod)
 			}
 		})
 	}

@@ -23,9 +23,6 @@ func deltaScaleDecodeTime(data []uint64, mod uint64) {
 func deltaScaleDecodeTimeAVX2(data []uint64, mod uint64) {
 	len_head := len(data) & 0x7ffffffffffffffc
 	deltaScaleDecodeTimeAVX2Core(data, mod)
-	/*for i := 0; i < len_head; i++ {
-		data[i] *= mod
-	}*/
 	var prev uint64
 	if len_head != 0 {
 		prev = data[len_head-1]
