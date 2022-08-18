@@ -266,6 +266,18 @@ var (
 	}
 )
 
+var (
+	timeBatchDecoderFuncOld = [...]func(b []byte, dst []int64) ([]int64, error){
+		timeBatchDecodeAllUncompressed,
+		timeBatchDecodeAllSimpleOld,
+		timeBatchDecodeAllRLE,
+		timeBatchDecodeAllZigZag,
+		timeBatchDecodeAllZigZagPackedOld,
+		timeBatchDecodeAllZigZagRLE,
+		timeBatchDecodeAllInvalid,
+	}
+)
+
 func TimeArrayDecodeAll(b []byte, dst []int64) ([]int64, error) {
 	if len(b) == 0 {
 		return []int64{}, nil
@@ -278,6 +290,20 @@ func TimeArrayDecodeAll(b []byte, dst []int64) ([]int64, error) {
 	// log.Infof("pack: time block is encoded with type %d mod %d", encoding, b[0]&0xf)
 
 	return timeBatchDecoderFunc[encoding&7](b, dst)
+}
+
+func TimeArrayDecodeAllOld(b []byte, dst []int64) ([]int64, error) {
+	if len(b) == 0 {
+		return []int64{}, nil
+	}
+
+	encoding := b[0] >> 4
+	if encoding >= timeCompressedInvalid {
+		encoding = timeCompressedInvalid // timeBatchDecodeAllInvalid
+	}
+	// log.Infof("pack: time block is encoded with type %d mod %d", encoding, b[0]&0xf)
+
+	return timeBatchDecoderFuncOld[encoding&7](b, dst)
 }
 
 // legacy uncompressed encoding
