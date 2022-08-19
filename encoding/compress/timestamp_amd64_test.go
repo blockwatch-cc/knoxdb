@@ -13,7 +13,7 @@ import (
 	"blockwatch.cc/knoxdb/util"
 )
 
-func BenchmarkDeltaScaleDecodeTimeAVX2(B *testing.B) {
+func BenchmarkDeltaDecodeTimeAVX2(B *testing.B) {
 	if !util.UseAVX2 {
 		B.SkipNow()
 	}
@@ -26,7 +26,26 @@ func BenchmarkDeltaScaleDecodeTimeAVX2(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int64Size))
 			for i := 0; i < B.N; i++ {
-				deltaScaleDecodeTimeAVX2(a, mod)
+				deltaDecodeTimeAVX2(a, mod)
+			}
+		})
+	}
+}
+
+func BenchmarkZzDeltaDecodeTimeAVX2(B *testing.B) {
+	if !util.UseAVX2 {
+		B.SkipNow()
+	}
+	mod := uint64(1000000000)
+	for _, n := range benchmarkSizes {
+		a := make([]uint64, n.l)
+		for i := 0; i < n.l; i++ {
+			a[i] = uint64(rand.Intn(10000))
+		}
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				zzDeltaDecodeTimeAVX2(a, mod)
 			}
 		})
 	}

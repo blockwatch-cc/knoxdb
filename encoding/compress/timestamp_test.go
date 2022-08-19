@@ -105,7 +105,7 @@ func TestTimeArrayEncodeAll_Compare(t *testing.T) {
 
 	// generate random values that are unsorted (should use simple8b with zigzag)
 	for i := 0; i < len(input); i++ {
-		input[i] = rand.Int63n(100000) //- 50000
+		input[i] = rand.Int63n(100000) * 10 //- 50000
 	}
 	testTimeArrayEncodeAll_Compare(t, input, timeCompressedZigZagPacked)
 
@@ -1261,7 +1261,7 @@ func BenchmarkTimeArrayDecodeAllRLE(b *testing.B) {
 	}
 }
 
-func BenchmarkDeltaScaleDecodeTimeGeneric(B *testing.B) {
+func BenchmarkDeltaDecodeTimeGeneric(B *testing.B) {
 	mod := uint64(1000000000)
 	for _, n := range benchmarkSizes {
 		a := make([]uint64, n.l)
@@ -1271,7 +1271,23 @@ func BenchmarkDeltaScaleDecodeTimeGeneric(B *testing.B) {
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int64Size))
 			for i := 0; i < B.N; i++ {
-				deltaScaleDecodeTimeGeneric(a, mod)
+				deltaDecodeTimeGeneric(a, mod)
+			}
+		})
+	}
+}
+
+func BenchmarkZzDeltaDecodeTimeGeneric(B *testing.B) {
+	mod := uint64(1000000000)
+	for _, n := range benchmarkSizes {
+		a := make([]uint64, n.l)
+		for i := 0; i < n.l; i++ {
+			a[i] = uint64(rand.Intn(10000))
+		}
+		B.Run(n.name, func(B *testing.B) {
+			B.SetBytes(int64(n.l * Int64Size))
+			for i := 0; i < B.N; i++ {
+				zzDeltaDecodeTimeGeneric(a, mod)
 			}
 		})
 	}

@@ -371,7 +371,7 @@ func timeBatchDecodeAllSimple(b []byte, dst []int64) ([]int64, error) {
 		return []int64{}, fmt.Errorf("pack: TimeArrayDecodeAll unexpected number of values decoded; got=%d, exp=%d", n, count-1)
 	}
 
-	deltaScaleDecodeTime(buf, mod)
+	deltaDecodeTime(buf, mod)
 
 	return dst, nil
 }
@@ -544,7 +544,7 @@ func timeBatchDecodeAllZigZagPacked(b []byte, dst []int64) ([]int64, error) {
 		return []int64{}, fmt.Errorf("pack: TimeArrayDecodeAll unexpected number of values decoded; got=%d, exp=%d", n, count-1)
 	}
 
-	deltaZzScaleDecodeTime(buf, mod)
+	zzDeltaDecodeTime(buf, mod)
 
 	return dst, nil
 }
