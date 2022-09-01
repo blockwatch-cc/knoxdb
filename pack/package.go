@@ -33,6 +33,7 @@ type Package struct {
 	stripped bool           // some blocks are ignored, don't store this pack
 	capHint  int            // block size hint
 	size     int            // storage size
+	RefCount int64
 }
 
 func (p *Package) Key() []byte {

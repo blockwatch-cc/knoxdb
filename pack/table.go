@@ -132,6 +132,7 @@ type Table struct {
 	meta     TableMeta    // authoritative metadata
 	db       *DB          // lower-level storage (e.g. boltdb wrapper)
 	cache    cache.Cache  // keep decoded packs for query/updates
+	clock    sync.RWMutex // Cache lock
 	journal  *Journal     // in-memory data not yet written to packs
 	packidx  *PackIndex   // in-memory list of pack and block info
 	key      []byte       // name of table data bucket
@@ -3092,9 +3093,13 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		cachefn = t.cache.Get
 	}
 	cachekey := t.cachekey(key)
+	t.clock.RLock()
 	if cached, ok := cachefn(cachekey); ok {
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
-		return cached.(*Package), nil
+		pkg := cached.(*Package)
+		atomic.AddInt64(&pkg.RefCount, 1)
+		t.clock.RUnlock()
+		return pkg, nil
 	}
 	if stripped {
 		// try cache lookup for stripped packs
@@ -3105,9 +3110,13 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		cachekey += "#" + t.fields.MaskString(fields)
 		if cached, ok := cachefn(cachekey); ok {
 			atomic.AddInt64(&t.stats.PackCacheHits, 1)
-			return cached.(*Package), nil
+			pkg := cached.(*Package)
+			atomic.AddInt64(&pkg.RefCount, 1)
+			t.clock.RUnlock()
+			return pkg, nil
 		}
 	}
+	t.clock.RUnlock()
 
 	// if not found, load from storage using a pre-allocated pack as buffer
 	atomic.AddInt64(&t.stats.PackCacheMisses, 1)
@@ -3131,6 +3140,15 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	pkg.cached = touch
 	// store in cache
 	if touch {
+		t.clock.Lock()
+		if cached, ok := cachefn(cachekey); ok {
+			pkg := cached.(*Package)
+			atomic.AddInt64(&pkg.RefCount, 1)
+			t.clock.Unlock()
+			return pkg, nil
+		}
+
+		pkg.RefCount = 2 // caller and cache are referencing
 		updated, _ := t.cache.Add(cachekey, pkg)
 		if updated {
 			atomic.AddInt64(&t.stats.PackCacheUpdates, 1)
@@ -3139,6 +3157,9 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 			atomic.AddInt64(&t.stats.PackCacheCount, 1)
 			atomic.AddInt64(&t.stats.PackCacheSize, int64(pkg.HeapSize()))
 		}
+		t.clock.Unlock()
+	} else {
+		pkg.RefCount = 1 // only caller is referencing
 	}
 	return pkg, nil
 }
@@ -3298,7 +3319,16 @@ func (t *Table) onEvictedPackage(key, val interface{}) {
 	atomic.AddInt64(&t.stats.PackCacheEvictions, 1)
 	atomic.AddInt64(&t.stats.PackCacheCount, -1)
 	atomic.AddInt64(&t.stats.PackCacheSize, int64(-pkg.HeapSize()))
-	t.recyclePackage(pkg)
+	t.releaseSharedPackage(pkg)
+}
+
+func (t *Table) releaseSharedPackage(pkg *Package) {
+	//t.clock.Lock()
+	atomic.AddInt64(&pkg.RefCount, -1)
+	if pkg.RefCount == 0 {
+		t.recyclePackage(pkg)
+	}
+	//t.clock.Unlock()
 }
 
 func (t *Table) recyclePackage(pkg *Package) {
