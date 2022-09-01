@@ -3170,15 +3170,21 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 
 	// when package is cached, create a private clone
 	// FIXME: we cannot do this concurrently when we rework the global lock
+	t.clock.RLock()
 	if cached, ok := t.cache.Get(t.cachekey(key)); ok {
-		atomic.AddInt64(&t.stats.PackCacheHits, 1)
 		pkg := cached.(*Package)
+		atomic.AddInt64(&pkg.RefCount, 1)
+		t.clock.RUnlock()
+
+		atomic.AddInt64(&t.stats.PackCacheHits, 1)
 		clone, err := pkg.Clone(t.opts.PackSize())
 		if err != nil {
 			return nil, err
 		}
 		// set key
 		clone.key = pkg.key
+
+		t.releaseSharedPackage(pkg)
 
 		// prepare for efficient writes
 		// log.Debugf("%s: materializing cloned pack %d with %d rows", t.name, clone.key, pkg.Len())
@@ -3187,6 +3193,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		// log.Debugf("%s: cloned writeable pack %d col=%d row=%d", t.name, clone.key, clone.nFields, clone.nValues)
 		return clone, nil
 	}
+	t.clock.RUnlock()
 	atomic.AddInt64(&t.stats.PackCacheMisses, 1)
 
 	// load from storage
@@ -3210,17 +3217,26 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 	key := pkg.Key()
 
 	defer func() {
+		t.clock.Lock()
 		// remove from cache, returns back to pool
 		cachekey := t.cachekey(key)
+
+		if cached, ok := t.cache.Peek(cachekey); ok {
+			atomic.AddInt64(&cached.(*Package).RefCount, -1)
+		}
 		t.cache.Remove(cachekey)
 
 		// also remove all stripped packs from cache
 		cachekey += "#"
 		for _, v := range t.cache.Keys() {
 			if strings.HasPrefix(v.(string), cachekey) {
+				if cached, ok := t.cache.Peek(v); ok {
+					atomic.AddInt64(&cached.(*Package).RefCount, -1)
+				}
 				t.cache.Remove(v)
 			}
 		}
+		t.clock.Unlock()
 	}()
 
 	if pkg.Len() > 0 {
