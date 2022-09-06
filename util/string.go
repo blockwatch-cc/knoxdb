@@ -294,6 +294,10 @@ func (u U64String) String() string {
 	return u.Hex()
 }
 
+func (u U64String) U64() uint64 {
+	return uint64(u)
+}
+
 func (u U64String) Hex() string {
 	var tmp [8]byte
 	binary.BigEndian.PutUint64(tmp[:], uint64(u))
@@ -306,17 +310,20 @@ func (u U64String) Base64() string {
 	return base64.StdEncoding.EncodeToString(tmp[:])
 }
 
-func (u *U64String) UnmarshalText(data []byte) error {
-	s := string(data)
+func DecodeU64String(s string) (U64String, error) {
 	if buf, err := base64.StdEncoding.DecodeString(s); err == nil && len(buf) == 8 {
-		*u = U64String(binary.BigEndian.Uint64(buf))
-		return nil
+		return U64String(binary.BigEndian.Uint64(buf)), nil
 	}
 	if buf, err := hex.DecodeString(s); err == nil && len(buf) == 8 {
-		*u = U64String(binary.BigEndian.Uint64(buf))
-		return nil
+		return U64String(binary.BigEndian.Uint64(buf)), nil
 	}
-	return fmt.Errorf("Invalid u64 hex or base64 string")
+	return 0, fmt.Errorf("Invalid u64 hex or base64 string")
+}
+
+func (u *U64String) UnmarshalText(data []byte) error {
+	uu, err := DecodeU64String(string(data))
+	*u = uu
+	return err
 }
 
 func (u U64String) MarshalText() ([]byte, error) {
