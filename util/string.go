@@ -6,6 +6,7 @@ package util
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -285,4 +286,41 @@ func IsASCII(s string) bool {
 		}
 	}
 	return true
+}
+
+type U64String uint64
+
+func (u U64String) String() string {
+	return u.Hex()
+}
+
+func (u U64String) Hex() string {
+	var tmp [8]byte
+	binary.BigEndian.PutUint64(tmp[:], uint64(u))
+	return hex.EncodeToString(tmp[:])
+}
+
+func (u U64String) Base64() string {
+	var tmp [8]byte
+	binary.BigEndian.PutUint64(tmp[:], uint64(u))
+	return base64.StdEncoding.EncodeToString(tmp[:])
+}
+
+func (u *U64String) UnmarshalText(data []byte) error {
+	s := string(data)
+	if buf, err := base64.StdEncoding.DecodeString(s); err == nil && len(buf) == 8 {
+		*u = U64String(binary.BigEndian.Uint64(buf))
+		return nil
+	}
+	if buf, err := hex.DecodeString(s); err == nil && len(buf) == 8 {
+		*u = U64String(binary.BigEndian.Uint64(buf))
+		return nil
+	}
+	return fmt.Errorf("Invalid u64 hex or base64 string")
+}
+
+func (u U64String) MarshalText() ([]byte, error) {
+	var tmp [8]byte
+	binary.BigEndian.PutUint64(tmp[:], uint64(u))
+	return []byte(hex.EncodeToString(tmp[:])), nil
 }
