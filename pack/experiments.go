@@ -788,6 +788,8 @@ func (t *Table) CompressIndexPack(cmethod string, w io.Writer, i, p int, mode Du
 	ctimes[0] = ct
 	dtimes[0] = dt
 
+	t.indexes[i].releaseSharedPack(pkg)
+
 	fl := FieldList{{Name: "Hash", Type: FieldTypeUint64}, {Name: "PK", Type: FieldTypeUint64}}
 
 	return DumpCompressResults(fl, cratios, ctimes, dtimes, w, mode, false)
@@ -839,6 +841,8 @@ func (t *Table) CompressIndexAll(cmethod string, i int, w io.Writer, mode DumpMo
 		cratios[p] = cs
 		ctimes[p] = ct
 		dtimes[p] = dt
+
+		t.indexes[i].releaseSharedPack(pkg)
 
 		fmt.Printf(".")
 	}
@@ -895,6 +899,7 @@ func (t *Table) IndexCollisions(cmethod string, i int, w io.Writer, mode DumpMod
 				collisions++
 			}
 		}
+		t.indexes[i].releaseSharedPack(pkg)
 	}
 
 	fmt.Printf("Index contains %d additional collisions\n", collisions)

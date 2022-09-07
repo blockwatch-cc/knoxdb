@@ -210,7 +210,13 @@ func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
 	if err != nil {
 		return fmt.Errorf("pack %d not found: %v", t.indexes[i].packidx.Get(p).Key, err)
 	}
-	return pkg.DumpData(w, mode, []string{"Hash", "Pk"})
+
+	err = pkg.DumpData(w, mode, t.fields.Aliases())
+	if err != nil {
+		return err
+	}
+	t.indexes[i].releaseSharedPack(pkg)
+	return nil
 }
 
 func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {

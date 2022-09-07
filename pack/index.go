@@ -112,13 +112,14 @@ type Index struct {
 
 	table     *Table
 	cache     cache.Cache
-	journal   *Package   // append log
-	tombstone *Package   // delete log
-	packidx   *PackIndex // in-memory list of pack and block headers
-	key       []byte     // bucket name
-	metakey   []byte     // metadata bucket name
-	packPool  *sync.Pool // buffer pool for new packages
-	stats     TableStats // usage statistics
+	clock     sync.RWMutex // Cache lock
+	journal   *Package     // append log
+	tombstone *Package     // delete log
+	packidx   *PackIndex   // in-memory list of pack and block headers
+	key       []byte       // bucket name
+	metakey   []byte       // metadata bucket name
+	packPool  *sync.Pool   // buffer pool for new packages
+	stats     TableStats   // usage statistics
 }
 
 type IndexList []*Index
@@ -742,6 +743,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 				i++
 			}
 		}
+		idx.releaseSharedPack(ipkg)
 	}
 
 	// `in` contains only missing keys now
@@ -825,7 +827,7 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 		}
 
 		// return pack to table's (!) pool
-		idx.table.recyclePackage(pkg)
+		idx.table.releaseSharedPack(pkg)
 
 		// flush index after every 128 packs
 		if i%flushEvery == 0 {
@@ -1326,10 +1328,15 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 	if touch {
 		cachefn = idx.cache.Get
 	}
+	idx.clock.RLock()
 	if cached, ok := cachefn(cachekey); ok {
 		atomic.AddInt64(&idx.stats.PackCacheHits, 1)
-		return cached.(*Package), nil
+		pkg := cached.(*Package)
+		atomic.AddInt64(&pkg.refCount, 1)
+		idx.clock.RUnlock()
+		return pkg, nil
 	}
+	idx.clock.RUnlock()
 	atomic.AddInt64(&idx.stats.PackCacheMisses, 1)
 
 	// if not found, load from storage
@@ -1339,10 +1346,23 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 	}
 	atomic.AddInt64(&idx.stats.PacksLoaded, 1)
 	atomic.AddInt64(&idx.stats.PacksBytesRead, int64(pkg.size))
-	pkg.cached = touch
 
 	// store in cache
 	if touch {
+		idx.clock.Lock()
+		if cached, ok := cachefn(cachekey); ok { // same package was cached meanwhile
+			idx.recyclePackage(pkg)
+			// use the cached one
+			p := cached.(*Package)
+			atomic.AddInt64(&p.refCount, 1)
+			idx.clock.Unlock()
+			return p, nil
+		}
+
+		pkg.cached = touch
+
+		atomic.StoreInt64(&pkg.refCount, 2) // caller and cache are referencing
+
 		updated, _ := idx.cache.Add(cachekey, pkg)
 		if updated {
 			atomic.AddInt64(&idx.stats.PackCacheUpdates, 1)
@@ -1351,16 +1371,25 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 			atomic.AddInt64(&idx.stats.PackCacheCount, 1)
 			atomic.AddInt64(&idx.stats.PackCacheSize, int64(pkg.HeapSize()))
 		}
+		idx.clock.Unlock()
+	} else {
+		atomic.StoreInt64(&pkg.refCount, 1) // only caller is referencing
 	}
+
 	return pkg, nil
 }
 
 func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	// try cache first
 	key := encodePackKey(id)
+	idx.clock.RLock()
 	if cached, ok := idx.cache.Get(idx.cachekey(key)); ok {
-		atomic.AddInt64(&idx.stats.PackCacheHits, 1)
 		pkg := cached.(*Package)
+		atomic.AddInt64(&pkg.refCount, 1)
+
+		idx.clock.RUnlock()
+
+		atomic.AddInt64(&idx.stats.PackCacheHits, 1)
 		clone, err := pkg.Clone(idx.opts.PackSize())
 		if err != nil {
 			return nil, err
@@ -1368,10 +1397,13 @@ func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		// set key
 		clone.key = pkg.key
 
+		idx.releaseSharedPack(pkg)
+
 		// prepare for efficient writes
 		clone.Materialize()
 		return clone, nil
 	}
+	idx.clock.RUnlock()
 
 	// load from storage
 	atomic.AddInt64(&idx.stats.PackCacheMisses, 1)
@@ -1392,9 +1424,11 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 	key := pkg.Key()
 
 	defer func() {
+		idx.clock.Lock()
 		// remove from cache, returns back to pool
 		cachekey := idx.cachekey(key)
 		idx.cache.Remove(cachekey)
+		idx.clock.Unlock()
 	}()
 
 	// remove empty packs from pack index, storage and cache
@@ -1447,7 +1481,16 @@ func (idx *Index) onEvictedPackage(key, val interface{}) {
 	atomic.AddInt64(&idx.stats.PackCacheEvictions, 1)
 	atomic.AddInt64(&idx.stats.PackCacheCount, -1)
 	atomic.AddInt64(&idx.stats.PackCacheSize, int64(-pkg.HeapSize()))
-	idx.recyclePackage(pkg)
+	idx.releaseSharedPack(pkg)
+}
+
+func (idx *Index) releaseSharedPack(pkg *Package) {
+	if pkg == nil {
+		return
+	}
+	if atomic.AddInt64(&pkg.refCount, -1) == 0 {
+		idx.recyclePackage(pkg)
+	}
 }
 
 func (idx *Index) recyclePackage(pkg *Package) {
