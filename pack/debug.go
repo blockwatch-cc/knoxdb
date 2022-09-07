@@ -142,7 +142,12 @@ func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
 	if err != nil {
 		return err
 	}
-	return pkg.DumpData(w, mode, t.fields.Aliases())
+	err = pkg.DumpData(w, mode, t.fields.Aliases())
+	if err != nil {
+		return err
+	}
+	t.releaseSharedPack(pkg)
+	return nil
 }
 
 func (t *Table) WalkPacks(fn func(*Package) error) error {
@@ -159,6 +164,7 @@ func (t *Table) WalkPacks(fn func(*Package) error) error {
 		if err := fn(pkg); err != nil {
 			return err
 		}
+		t.releaseSharedPack(pkg)
 	}
 	return nil
 }
@@ -183,6 +189,7 @@ func (t *Table) WalkPacksRange(start, end int, fn func(*Package) error) error {
 		if err := fn(pkg); err != nil {
 			return err
 		}
+		t.releaseSharedPack(pkg)
 	}
 	return nil
 }
@@ -228,6 +235,7 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 		} else {
 			lineNo = n
 		}
+		t.releaseSharedPack(pkg)
 	}
 	return nil
 }

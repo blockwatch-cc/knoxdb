@@ -1816,6 +1816,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 			q.stats.RowsMatched++
 			last = j
 		}
+		t.releaseSharedPack(pkg)
 	}
 	q.stats.ScanTime = time.Since(q.lap)
 	return res, nil
@@ -1967,6 +1968,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 					break packloop
 				}
 			}
+			t.releaseSharedPack(spack)
 			bits.Close()
 		}
 		q.stats.ScanTime = time.Since(q.lap)
@@ -2180,6 +2182,7 @@ packloop:
 				break packloop
 			}
 		}
+		t.releaseSharedPack(spack)
 		bits.Close()
 	}
 	t.u32Pool.Put(u32slice)
@@ -2305,6 +2308,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 					break packloop
 				}
 			}
+			t.releaseSharedPack(spack)
 			bits.Close()
 		}
 		q.stats.ScanTime = time.Since(q.lap)
@@ -2464,6 +2468,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 					break packloop
 				}
 			}
+			t.releaseSharedPack(spack)
 			bits.Close()
 		}
 		q.stats.ScanTime = time.Since(q.lap)
@@ -2666,6 +2671,7 @@ packloop:
 				break packloop
 			}
 		}
+		t.releaseSharedPack(spack)
 		bits.Close()
 	}
 	t.u32Pool.Put(u32slice)
@@ -2832,6 +2838,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			q.stats.RowsMatched++
 			last = j
 		}
+		t.releaseSharedPack(pkg)
 	}
 	q.stats.ScanTime = time.Since(q.lap)
 	return nil
@@ -3097,7 +3104,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	if cached, ok := cachefn(cachekey); ok {
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
 		pkg := cached.(*Package)
-		atomic.AddInt64(&pkg.RefCount, 1)
+		atomic.AddInt64(&pkg.refCount, 1)
 		t.clock.RUnlock()
 		return pkg, nil
 	}
@@ -3111,7 +3118,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		if cached, ok := cachefn(cachekey); ok {
 			atomic.AddInt64(&t.stats.PackCacheHits, 1)
 			pkg := cached.(*Package)
-			atomic.AddInt64(&pkg.RefCount, 1)
+			atomic.AddInt64(&pkg.refCount, 1)
 			t.clock.RUnlock()
 			return pkg, nil
 		}
@@ -3137,18 +3144,21 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
 	atomic.AddInt64(&t.stats.PacksBytesRead, int64(pkg.size))
 
-	pkg.cached = touch
 	// store in cache
 	if touch {
 		t.clock.Lock()
-		if cached, ok := cachefn(cachekey); ok {
-			pkg := cached.(*Package)
-			atomic.AddInt64(&pkg.RefCount, 1)
+		if cached, ok := cachefn(cachekey); ok { // same package was cached meanwhile
+			t.recyclePackage(pkg)
+			// use the cached one
+			p := cached.(*Package)
+			atomic.AddInt64(&p.refCount, 1)
 			t.clock.Unlock()
-			return pkg, nil
+			return p, nil
 		}
 
-		pkg.RefCount = 2 // caller and cache are referencing
+		pkg.cached = touch
+
+		atomic.StoreInt64(&pkg.refCount, 2) // caller and cache are referencing
 		updated, _ := t.cache.Add(cachekey, pkg)
 		if updated {
 			atomic.AddInt64(&t.stats.PackCacheUpdates, 1)
@@ -3159,7 +3169,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		}
 		t.clock.Unlock()
 	} else {
-		pkg.RefCount = 1 // only caller is referencing
+		atomic.StoreInt64(&pkg.refCount, 1) // only caller is referencing
 	}
 	return pkg, nil
 }
@@ -3173,7 +3183,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	t.clock.RLock()
 	if cached, ok := t.cache.Get(t.cachekey(key)); ok {
 		pkg := cached.(*Package)
-		atomic.AddInt64(&pkg.RefCount, 1)
+		atomic.AddInt64(&pkg.refCount, 1)
 		t.clock.RUnlock()
 
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
@@ -3184,7 +3194,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		// set key
 		clone.key = pkg.key
 
-		t.releaseSharedPackage(pkg)
+		t.releaseSharedPack(pkg)
 
 		// prepare for efficient writes
 		// log.Debugf("%s: materializing cloned pack %d with %d rows", t.name, clone.key, pkg.Len())
@@ -3221,18 +3231,12 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 		// remove from cache, returns back to pool
 		cachekey := t.cachekey(key)
 
-		if cached, ok := t.cache.Peek(cachekey); ok {
-			atomic.AddInt64(&cached.(*Package).RefCount, -1)
-		}
 		t.cache.Remove(cachekey)
 
 		// also remove all stripped packs from cache
 		cachekey += "#"
 		for _, v := range t.cache.Keys() {
 			if strings.HasPrefix(v.(string), cachekey) {
-				if cached, ok := t.cache.Peek(v); ok {
-					atomic.AddInt64(&cached.(*Package).RefCount, -1)
-				}
 				t.cache.Remove(v)
 			}
 		}
@@ -3335,16 +3339,16 @@ func (t *Table) onEvictedPackage(key, val interface{}) {
 	atomic.AddInt64(&t.stats.PackCacheEvictions, 1)
 	atomic.AddInt64(&t.stats.PackCacheCount, -1)
 	atomic.AddInt64(&t.stats.PackCacheSize, int64(-pkg.HeapSize()))
-	t.releaseSharedPackage(pkg)
+	t.releaseSharedPack(pkg)
 }
 
-func (t *Table) releaseSharedPackage(pkg *Package) {
-	//t.clock.Lock()
-	atomic.AddInt64(&pkg.RefCount, -1)
-	if pkg.RefCount == 0 {
+func (t *Table) releaseSharedPack(pkg *Package) {
+	if pkg == nil {
+		return
+	}
+	if atomic.AddInt64(&pkg.refCount, -1) == 0 {
 		t.recyclePackage(pkg)
 	}
-	//t.clock.Unlock()
 }
 
 func (t *Table) recyclePackage(pkg *Package) {

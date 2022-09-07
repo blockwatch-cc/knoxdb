@@ -743,6 +743,8 @@ func (t *Table) CompressPack(cmethod string, w io.Writer, i int, mode DumpMode) 
 	ctimes[0] = ct
 	dtimes[0] = dt
 
+	t.releaseSharedPack(pkg)
+
 	return DumpCompressResults(t.fields, cratios, ctimes, dtimes, w, mode, false)
 }
 
@@ -946,6 +948,9 @@ func (t *Table) CompressAll(cmethod string, w io.Writer, mode DumpMode, verbose 
 		cratios[i] = cs
 		ctimes[i] = ct
 		dtimes[i] = dt
+
+		t.releaseSharedPack(pkg)
+
 		fmt.Printf(".")
 	}
 	fmt.Printf("\nProcessed %d packs\n", nPacks)
@@ -976,6 +981,41 @@ func (t *Table) CompressAll(cmethod string, w io.Writer, mode DumpMode, verbose 
 	fmt.Printf("Compression Throughput: %.0fMB/s\n", totalUSize/totalCTime/1000000)
 	fmt.Printf("Decompression Time: %.0fs\n", totalDTime)
 	fmt.Printf("Decompression Throughput: %.0fMB/s\n", totalUSize/totalDTime/1000000)
+
+	return nil
+}
+
+func (t *Table) CacheTest() error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	//nPacks := t.packidx.Len()
+
+	var count int
+
+	var list = []int{0, 0, 2, 3, 4, 5}
+
+	for _, i := range list {
+		pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, true, nil)
+		if err != nil {
+			return err
+		}
+		t.releaseSharedPack(pkg)
+		fmt.Printf(".")
+		count++
+	}
+	fmt.Printf("\nProcessed %d packs\n", count)
+	fmt.Printf("PackCacheSize %d\n", t.stats.PackCacheSize)
+	fmt.Printf("PackCacheCount %d\n", t.stats.PackCacheCount)
+	fmt.Printf("PackCacheCapacity %d\n", t.stats.PackCacheCapacity)
+	fmt.Printf("PackCacheHits %d\n", t.stats.PackCacheHits)
+	fmt.Printf("PackCacheMisses %d\n", t.stats.PackCacheMisses)
+	fmt.Printf("PackCacheInserts %d\n", t.stats.PackCacheInserts)
+	fmt.Printf("PackCacheUpdates %d\n", t.stats.PackCacheUpdates)
+	fmt.Printf("PackCacheEvictions %d\n", t.stats.PackCacheEvictions)
 
 	return nil
 }
@@ -1014,6 +1054,9 @@ func (t *Table) ShowCompression(cmethod string, w io.Writer, mode DumpMode, verb
 		}
 		cratios[i] = cr
 		ctype[i] = ct
+
+		t.releaseSharedPack(pkg)
+
 		fmt.Printf(".")
 	}
 	fmt.Printf("\nProcessed %d packs\n", t.packidx.Len())
