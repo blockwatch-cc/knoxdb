@@ -1019,7 +1019,6 @@ func (t *Table) CacheTest() error {
 	fmt.Printf("PackCacheHits %d\n", t.stats.PackCacheHits)
 	fmt.Printf("PackCacheMisses %d\n", t.stats.PackCacheMisses)
 	fmt.Printf("PackCacheInserts %d\n", t.stats.PackCacheInserts)
-	fmt.Printf("PackCacheUpdates %d\n", t.stats.PackCacheUpdates)
 	fmt.Printf("PackCacheEvictions %d\n", t.stats.PackCacheEvictions)
 
 	return nil

@@ -1363,14 +1363,10 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 
 		atomic.StoreInt64(&pkg.refCount, 2) // caller and cache are referencing
 
-		updated, _ := idx.cache.Add(cachekey, pkg)
-		if updated {
-			atomic.AddInt64(&idx.stats.PackCacheUpdates, 1)
-		} else {
-			atomic.AddInt64(&idx.stats.PackCacheInserts, 1)
-			atomic.AddInt64(&idx.stats.PackCacheCount, 1)
-			atomic.AddInt64(&idx.stats.PackCacheSize, int64(pkg.HeapSize()))
-		}
+		idx.cache.Add(cachekey, pkg)
+		atomic.AddInt64(&idx.stats.PackCacheInserts, 1)
+		atomic.AddInt64(&idx.stats.PackCacheCount, 1)
+		atomic.AddInt64(&idx.stats.PackCacheSize, int64(pkg.HeapSize()))
 		idx.clock.Unlock()
 	} else {
 		atomic.StoreInt64(&pkg.refCount, 1) // only caller is referencing

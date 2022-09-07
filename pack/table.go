@@ -3159,14 +3159,10 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		pkg.cached = touch
 
 		atomic.StoreInt64(&pkg.refCount, 2) // caller and cache are referencing
-		updated, _ := t.cache.Add(cachekey, pkg)
-		if updated {
-			atomic.AddInt64(&t.stats.PackCacheUpdates, 1)
-		} else {
-			atomic.AddInt64(&t.stats.PackCacheInserts, 1)
-			atomic.AddInt64(&t.stats.PackCacheCount, 1)
-			atomic.AddInt64(&t.stats.PackCacheSize, int64(pkg.HeapSize()))
-		}
+		t.cache.Add(cachekey, pkg)
+		atomic.AddInt64(&t.stats.PackCacheInserts, 1)
+		atomic.AddInt64(&t.stats.PackCacheCount, 1)
+		atomic.AddInt64(&t.stats.PackCacheSize, int64(pkg.HeapSize()))
 		t.clock.Unlock()
 	} else {
 		atomic.StoreInt64(&pkg.refCount, 1) // only caller is referencing
