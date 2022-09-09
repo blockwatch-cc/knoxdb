@@ -41,8 +41,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"blockwatch.cc/knoxdb/cache"
-	"blockwatch.cc/knoxdb/cache/lru"
+	//"blockwatch.cc/knoxdb/cache"
+	//"blockwatch.cc/knoxdb/cache/lru"
 	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
@@ -131,7 +131,7 @@ type Table struct {
 	indexes  IndexList    // list of indexes (similar structure as the table)
 	meta     TableMeta    // authoritative metadata
 	db       *DB          // lower-level storage (e.g. boltdb wrapper)
-	cache    cache.Cache  // keep decoded packs for query/updates
+	cache    Cache        // keep decoded packs for query/updates
 	clock    sync.RWMutex // Cache lock
 	journal  *Journal     // in-memory data not yet written to packs
 	packidx  *PackIndex   // in-memory list of pack and block info
@@ -246,13 +246,13 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		return nil, err
 	}
 	if t.opts.CacheSize > 0 {
-		t.cache, err = lru.New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
+		t.cache, err = New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
 		if err != nil {
 			return nil, err
 		}
 		t.stats.PackCacheCapacity = int64(t.opts.CacheSize)
 	} else {
-		t.cache = cache.NewNoCache()
+		t.cache = NewNoCache()
 	}
 	log.Debugf("Created table %s", name)
 	d.tables[name] = t
@@ -397,13 +397,13 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		return nil, err
 	}
 	if t.opts.CacheSize > 0 {
-		t.cache, err = lru.New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
+		t.cache, err = New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
 		if err != nil {
 			return nil, err
 		}
 		t.stats.PackCacheCapacity = int64(t.opts.CacheSize)
 	} else {
-		t.cache = cache.NewNoCache()
+		t.cache = NewNoCache()
 	}
 
 	needFlush := make([]*Index, 0)
@@ -3101,9 +3101,9 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	}
 	cachekey := t.cachekey(key)
 	t.clock.RLock()
-	if cached, ok := cachefn(cachekey); ok {
+	if pkg, ok := cachefn(cachekey); ok {
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
-		pkg := cached.(*Package)
+		//pkg := cached.(*Package)
 		atomic.AddInt64(&pkg.refCount, 1)
 		t.clock.RUnlock()
 		return pkg, nil
@@ -3115,9 +3115,9 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		//        being cached under different keys! instead we should
 		//        cache individual data blocks rather than entire packs!
 		cachekey += "#" + t.fields.MaskString(fields)
-		if cached, ok := cachefn(cachekey); ok {
+		if pkg, ok := cachefn(cachekey); ok {
 			atomic.AddInt64(&t.stats.PackCacheHits, 1)
-			pkg := cached.(*Package)
+			//pkg := cached.(*Package)
 			atomic.AddInt64(&pkg.refCount, 1)
 			t.clock.RUnlock()
 			return pkg, nil
@@ -3147,10 +3147,10 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	// store in cache
 	if touch {
 		t.clock.Lock()
-		if cached, ok := cachefn(cachekey); ok { // same package was cached meanwhile
+		if p, ok := cachefn(cachekey); ok { // same package was cached meanwhile
 			t.recyclePackage(pkg)
 			// use the cached one
-			p := cached.(*Package)
+			//p := cached.(*Package)
 			atomic.AddInt64(&p.refCount, 1)
 			t.clock.Unlock()
 			return p, nil
@@ -3177,8 +3177,8 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	// when package is cached, create a private clone
 	// FIXME: we cannot do this concurrently when we rework the global lock
 	t.clock.RLock()
-	if cached, ok := t.cache.Get(t.cachekey(key)); ok {
-		pkg := cached.(*Package)
+	if pkg, ok := t.cache.Get(t.cachekey(key)); ok {
+		//pkg := cached.(*Package)
 		atomic.AddInt64(&pkg.refCount, 1)
 		t.clock.RUnlock()
 
