@@ -121,6 +121,14 @@ func (f Time) EODTime() time.Time {
 	return time.Date(yy, mm, dd, 23, 59, 59, 0, time.UTC)
 }
 
+func (f Time) EOD() Time {
+	return Time{tm: f.EODTime(), format: f.format}
+}
+
+func (f Time) GetFormat() TimeFormat {
+	return f.format
+}
+
 func (t *Time) SetFormat(f TimeFormat) *Time {
 	t.format = f
 	return t
