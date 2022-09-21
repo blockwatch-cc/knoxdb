@@ -23,6 +23,13 @@ type UnboundCondition struct {
     Children []UnboundCondition
 }
 
+func (u UnboundCondition) Rename(name string) UnboundCondition {
+    if name != "" {
+        u.Name = name
+    }
+    return u
+}
+
 func (u *UnboundCondition) Clear() {
     u.Name = ""
     u.Mode = 0
