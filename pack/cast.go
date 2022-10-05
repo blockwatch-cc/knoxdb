@@ -1,6 +1,5 @@
 // Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//
 package pack
 
 import (
@@ -42,7 +41,35 @@ func (t FieldType) CastType(val interface{}, f *Field) (interface{}, error) {
 	case FieldTypeDatetime:
 		_, ok = val.(time.Time)
 	case FieldTypeBoolean:
-		_, ok = val.(bool)
+		switch v := val.(type) {
+		case bool:
+			res, ok = v, true
+		case int:
+			res, ok = v > 0, true
+		case int64:
+			res, ok = v > 0, true
+		case int32:
+			res, ok = v > 0, true
+		case int16:
+			res, ok = v > 0, true
+		case int8:
+			res, ok = v > 0, true
+		case string:
+			res, ok = len(v) > 0, true
+		default:
+			// type aliases
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			switch vv.Kind() {
+			case reflect.Bool:
+				res, ok = vv.Bool(), true
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				res, ok = int(vv.Int()) > 0, true
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				res, ok = int(vv.Uint()) > 0, true
+			case reflect.String, reflect.Slice, reflect.Array:
+				res, ok = vv.Len() > 0, true
+			}
+		}
 	case FieldTypeInt128:
 		switch v := val.(type) {
 		case int:
