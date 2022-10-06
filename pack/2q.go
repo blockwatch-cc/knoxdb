@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-
-	"blockwatch.cc/knoxdb/pack/internal"
 )
 
 const (
@@ -31,10 +29,10 @@ type TwoQueueCache struct {
 	size       int
 	recentSize int
 
-	recent      internal.LRUCache
-	frequent    internal.LRUCache
-	recentEvict internal.LRUCache
-	onEvict     internal.EvictCallback
+	recent      LRUCache
+	frequent    LRUCache
+	recentEvict LRUCache
+	onEvict     EvictCallback
 	lock        sync.RWMutex
 }
 
@@ -44,13 +42,13 @@ func New2Q(size int) (*TwoQueueCache, error) {
 	return New2QParams(size, Default2QRecentRatio, Default2QGhostEntries, nil)
 }
 
-func New2QWithEvict(size int, onEvicted func(key interface{}, value interface{})) (*TwoQueueCache, error) {
+func New2QWithEvict(size int, onEvicted func(key string, value *Package)) (*TwoQueueCache, error) {
 	return New2QParams(size, Default2QRecentRatio, Default2QGhostEntries, onEvicted)
 }
 
 // New2QParams creates a new TwoQueueCache using the provided
 // parameter values.
-func New2QParams(size int, recentRatio float64, ghostRatio float64, onEvicted func(key interface{}, value interface{})) (*TwoQueueCache, error) {
+func New2QParams(size int, recentRatio float64, ghostRatio float64, onEvicted func(key string, value *Package)) (*TwoQueueCache, error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("2qcache: invalid size")
 	}
@@ -66,15 +64,15 @@ func New2QParams(size int, recentRatio float64, ghostRatio float64, onEvicted fu
 	evictSize := int(float64(size) * ghostRatio)
 
 	// Allocate the LRUs
-	recent, err := internal.NewLRU(size, nil)
+	recent, err := NewLRU(size, nil)
 	if err != nil {
 		return nil, err
 	}
-	frequent, err := internal.NewLRU(size, nil)
+	frequent, err := NewLRU(size, nil)
 	if err != nil {
 		return nil, err
 	}
-	recentEvict, err := internal.NewLRU(evictSize, nil)
+	recentEvict, err := NewLRU(evictSize, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -92,12 +90,11 @@ func New2QParams(size int, recentRatio float64, ghostRatio float64, onEvicted fu
 }
 
 // Get looks up a key's value from the cache.
-func (c *TwoQueueCache) Get(key interface{}) (value *Package, ok bool) {
+func (c *TwoQueueCache) Get(key string) (value *Package, ok bool) {
 	c.lock.Lock()
 
 	// Check if this is a frequent value
-	if val, ok := c.frequent.Get(key); ok {
-		pkg := val.(*Package)
+	if pkg, ok := c.frequent.Get(key); ok {
 		atomic.AddInt64(&pkg.refCount, 1)
 		c.lock.Unlock()
 		return pkg, ok
@@ -105,10 +102,9 @@ func (c *TwoQueueCache) Get(key interface{}) (value *Package, ok bool) {
 
 	// If the value is contained in recent, then we
 	// promote it to frequent
-	if val, ok := c.recent.Peek(key); ok {
+	if pkg, ok := c.recent.Peek(key); ok {
 		c.recent.Remove(key)
-		c.frequent.Add(key, val)
-		pkg := val.(*Package)
+		c.frequent.Add(key, pkg)
 		atomic.AddInt64(&pkg.refCount, 1)
 		c.lock.Unlock()
 		return pkg, ok
@@ -120,14 +116,14 @@ func (c *TwoQueueCache) Get(key interface{}) (value *Package, ok bool) {
 }
 
 // Add adds a value to the cache.
-func (c *TwoQueueCache) Add(key interface{}, value *Package) (updated, evicted bool) {
+func (c *TwoQueueCache) Add(key string, value *Package) (updated, evicted bool) {
 	c.lock.Lock()
 
 	// Check if the value is frequently used already,
 	// and just update the value
 	if val, ok := c.frequent.Peek(key); ok {
-		if val.(*Package) != value {
-			c.onEvict(key, val.(*Package))
+		if val != value {
+			c.onEvict(key, val)
 		}
 		c.frequent.Add(key, value)
 		c.lock.Unlock()
@@ -138,8 +134,8 @@ func (c *TwoQueueCache) Add(key interface{}, value *Package) (updated, evicted b
 	// Check if the value is recently used, and promote
 	// the value into the frequent list
 	if val, ok := c.recent.Peek(key); ok {
-		if val.(*Package) != value {
-			c.onEvict(key, val.(*Package))
+		if val != value {
+			c.onEvict(key, val)
 		}
 		c.recent.Remove(key)
 		c.frequent.Add(key, value)
@@ -168,7 +164,7 @@ func (c *TwoQueueCache) Add(key interface{}, value *Package) (updated, evicted b
 // ContainsOrAdd checks if a key is in the cache  without updating the
 // recent-ness or deleting it for being stale,  and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
-func (c *TwoQueueCache) ContainsOrAdd(key interface{}, value *Package) (ok, evicted bool) {
+func (c *TwoQueueCache) ContainsOrAdd(key string, value *Package) (ok, evicted bool) {
 	c.lock.Lock()
 	if c.frequent.Contains(key) {
 		c.lock.Unlock()
@@ -221,7 +217,7 @@ func (c *TwoQueueCache) Len() int {
 
 // Keys returns a slice of the keys in the cache.
 // The frequently used keys are first in the returned slice.
-func (c *TwoQueueCache) Keys() []interface{} {
+func (c *TwoQueueCache) Keys() []string {
 	c.lock.RLock()
 	k1 := c.frequent.Keys()
 	k2 := c.recent.Keys()
@@ -230,7 +226,7 @@ func (c *TwoQueueCache) Keys() []interface{} {
 }
 
 // Remove removes the provided key from the cache.
-func (c *TwoQueueCache) Remove(key interface{}) {
+func (c *TwoQueueCache) Remove(key string) {
 	c.lock.Lock()
 	if c.onEvict != nil {
 		if val, ok := c.frequent.Peek(key); ok {
@@ -274,7 +270,7 @@ func (c *TwoQueueCache) Purge() {
 
 // Contains is used to check if the cache contains a key
 // without updating recency or frequency.
-func (c *TwoQueueCache) Contains(key interface{}) bool {
+func (c *TwoQueueCache) Contains(key string) bool {
 	c.lock.RLock()
 	ok := c.frequent.Contains(key) || c.recent.Contains(key)
 	c.lock.RUnlock()
@@ -283,19 +279,19 @@ func (c *TwoQueueCache) Contains(key interface{}) bool {
 
 // Peek is used to inspect the cache value of a key
 // without updating recency or frequency.
-func (c *TwoQueueCache) Peek(key interface{}) (value *Package, ok bool) {
+func (c *TwoQueueCache) Peek(key string) (value *Package, ok bool) {
 	c.lock.RLock()
-	var v interface{}
+	var v *Package
 	v, ok = c.frequent.Peek(key)
 	if ok {
-		value = v.(*Package)
+		value = v
 		atomic.AddInt64(&value.refCount, 1)
 		c.lock.RUnlock()
 		return
 	}
 	v, ok = c.recent.Peek(key)
 	if ok {
-		value = v.(*Package)
+		value = v
 		atomic.AddInt64(&value.refCount, 1)
 	}
 	c.lock.RUnlock()

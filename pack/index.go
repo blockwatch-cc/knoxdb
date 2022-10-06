@@ -1442,8 +1442,7 @@ func (idx *Index) makePackage() interface{} {
 	return pkg
 }
 
-func (idx *Index) onEvictedPackage(key, val interface{}) {
-	pkg := val.(*Package)
+func (idx *Index) onEvictedPackage(key string, pkg *Package) {
 	pkg.cached = false
 	atomic.AddInt64(&idx.stats.PackCacheEvictions, 1)
 	atomic.AddInt64(&idx.stats.PackCacheCount, -1)

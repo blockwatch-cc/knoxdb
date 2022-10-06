@@ -1,10 +1,10 @@
-package internal
+package pack
 
 import "testing"
 
 func TestLRU(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
+	onEvicted := func(k string, v interface{}) {
 		if k != v {
 			t.Fatalf("Evict values not equal (%v!=%v)", k, v)
 		}

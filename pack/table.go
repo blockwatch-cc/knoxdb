@@ -3203,7 +3203,7 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 		// also remove all stripped packs from cache
 		cachekey += "#"
 		for _, v := range t.cache.Keys() {
-			if strings.HasPrefix(v.(string), cachekey) {
+			if strings.HasPrefix(v, cachekey) {
 				t.cache.Remove(v)
 			}
 		}
@@ -3299,8 +3299,7 @@ func (t *Table) makePackage() interface{} {
 	return pkg
 }
 
-func (t *Table) onEvictedPackage(key, val interface{}) {
-	pkg := val.(*Package)
+func (t *Table) onEvictedPackage(key string, pkg *Package) {
 	pkg.cached = false
 	// log.Debugf("%s: cache evict pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PackCacheEvictions, 1)

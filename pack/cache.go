@@ -5,14 +5,14 @@ package pack
 
 type Cache interface {
 	Purge()
-	Add(key interface{}, value *Package) (updated, evicted bool)
-	Get(key interface{}) (value *Package, ok bool)
-	Contains(key interface{}) bool
-	Peek(key interface{}) (value *Package, ok bool)
-	ContainsOrAdd(key interface{}, value *Package) (ok, evicted bool)
-	Remove(key interface{})
+	Add(key string, value *Package) (updated, evicted bool)
+	Get(key string) (value *Package, ok bool)
+	Contains(key string) bool
+	Peek(key string) (value *Package, ok bool)
+	ContainsOrAdd(key string, value *Package) (ok, evicted bool)
+	Remove(key string)
 	RemoveOldest()
-	Keys() []interface{}
+	Keys() []string
 	Len() int
 }
 
@@ -24,31 +24,31 @@ type NoCache struct{}
 
 func (n *NoCache) Purge() {}
 
-func (n *NoCache) Add(_ interface{}, _ *Package) (updated, evicted bool) {
+func (n *NoCache) Add(_ string, _ *Package) (updated, evicted bool) {
 	return
 }
 
-func (n *NoCache) Get(_ interface{}) (value *Package, ok bool) {
+func (n *NoCache) Get(_ string) (value *Package, ok bool) {
 	return
 }
 
-func (n *NoCache) Contains(_ interface{}) bool {
+func (n *NoCache) Contains(_ string) bool {
 	return false
 }
 
-func (n *NoCache) Peek(_ interface{}) (value *Package, ok bool) {
+func (n *NoCache) Peek(_ string) (value *Package, ok bool) {
 	return
 }
 
-func (n *NoCache) ContainsOrAdd(key interface{}, value *Package) (ok, evicted bool) {
+func (n *NoCache) ContainsOrAdd(key string, value *Package) (ok, evicted bool) {
 	return
 }
 
-func (n *NoCache) Remove(key interface{}) {}
+func (n *NoCache) Remove(key string) {}
 
 func (n *NoCache) RemoveOldest() {}
 
-func (n *NoCache) Keys() []interface{} {
+func (n *NoCache) Keys() []string {
 	return nil
 }
 
