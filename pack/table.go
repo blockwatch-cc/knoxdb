@@ -125,14 +125,14 @@ type TableMeta struct {
 }
 
 type Table struct {
-	name     string       // printable table name
-	opts     Options      // runtime configuration options
-	fields   FieldList    // ordered list of table fields as central type info
-	indexes  IndexList    // list of indexes (similar structure as the table)
-	meta     TableMeta    // authoritative metadata
-	db       *DB          // lower-level storage (e.g. boltdb wrapper)
-	cache    Cache        // keep decoded packs for query/updates
-	clock    sync.RWMutex // Cache lock
+	name    string    // printable table name
+	opts    Options   // runtime configuration options
+	fields  FieldList // ordered list of table fields as central type info
+	indexes IndexList // list of indexes (similar structure as the table)
+	meta    TableMeta // authoritative metadata
+	db      *DB       // lower-level storage (e.g. boltdb wrapper)
+	cache   Cache     // keep decoded packs for query/updates
+	//	clock    sync.RWMutex // Cache lock
 	journal  *Journal     // in-memory data not yet written to packs
 	packidx  *PackIndex   // in-memory list of pack and block info
 	key      []byte       // name of table data bucket
@@ -3100,14 +3100,6 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		cachefn = t.cache.Get
 	}
 	cachekey := t.cachekey(key)
-	t.clock.RLock()
-	if pkg, ok := cachefn(cachekey); ok {
-		atomic.AddInt64(&t.stats.PackCacheHits, 1)
-		//pkg := cached.(*Package)
-		atomic.AddInt64(&pkg.refCount, 1)
-		t.clock.RUnlock()
-		return pkg, nil
-	}
 	if stripped {
 		// try cache lookup for stripped packs
 		//
@@ -3115,15 +3107,12 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		//        being cached under different keys! instead we should
 		//        cache individual data blocks rather than entire packs!
 		cachekey += "#" + t.fields.MaskString(fields)
-		if pkg, ok := cachefn(cachekey); ok {
-			atomic.AddInt64(&t.stats.PackCacheHits, 1)
-			//pkg := cached.(*Package)
-			atomic.AddInt64(&pkg.refCount, 1)
-			t.clock.RUnlock()
-			return pkg, nil
-		}
 	}
-	t.clock.RUnlock()
+
+	if pkg, ok := cachefn(cachekey); ok {
+		atomic.AddInt64(&t.stats.PackCacheHits, 1)
+		return pkg, nil
+	}
 
 	// if not found, load from storage using a pre-allocated pack as buffer
 	atomic.AddInt64(&t.stats.PackCacheMisses, 1)
@@ -3140,32 +3129,20 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	if err != nil {
 		return nil, err
 	}
+	pkg.refCount = 1
+
 	// log.Debugf("%s: loaded shared pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
 	atomic.AddInt64(&t.stats.PacksBytesRead, int64(pkg.size))
 
 	// store in cache
 	if touch {
-		t.clock.Lock()
-		if p, ok := cachefn(cachekey); ok { // same package was cached meanwhile
-			t.recyclePackage(pkg)
-			// use the cached one
-			//p := cached.(*Package)
-			atomic.AddInt64(&p.refCount, 1)
-			t.clock.Unlock()
-			return p, nil
-		}
-
 		pkg.cached = touch
 
-		atomic.StoreInt64(&pkg.refCount, 2) // caller and cache are referencing
 		t.cache.Add(cachekey, pkg)
 		atomic.AddInt64(&t.stats.PackCacheInserts, 1)
 		atomic.AddInt64(&t.stats.PackCacheCount, 1)
 		atomic.AddInt64(&t.stats.PackCacheSize, int64(pkg.HeapSize()))
-		t.clock.Unlock()
-	} else {
-		atomic.StoreInt64(&pkg.refCount, 1) // only caller is referencing
 	}
 	return pkg, nil
 }
@@ -3176,12 +3153,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 
 	// when package is cached, create a private clone
 	// FIXME: we cannot do this concurrently when we rework the global lock
-	t.clock.RLock()
 	if pkg, ok := t.cache.Get(t.cachekey(key)); ok {
-		//pkg := cached.(*Package)
-		atomic.AddInt64(&pkg.refCount, 1)
-		t.clock.RUnlock()
-
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
 		clone, err := pkg.Clone(t.opts.PackSize())
 		if err != nil {
@@ -3199,7 +3171,6 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		// log.Debugf("%s: cloned writeable pack %d col=%d row=%d", t.name, clone.key, clone.nFields, clone.nValues)
 		return clone, nil
 	}
-	t.clock.RUnlock()
 	atomic.AddInt64(&t.stats.PackCacheMisses, 1)
 
 	// load from storage
@@ -3223,7 +3194,7 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 	key := pkg.Key()
 
 	defer func() {
-		t.clock.Lock()
+		// t.clock.Lock()
 		// remove from cache, returns back to pool
 		cachekey := t.cachekey(key)
 
@@ -3236,7 +3207,7 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 				t.cache.Remove(v)
 			}
 		}
-		t.clock.Unlock()
+		// t.clock.Unlock()
 	}()
 
 	if pkg.Len() > 0 {

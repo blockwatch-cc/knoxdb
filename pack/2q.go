@@ -3,6 +3,7 @@ package pack
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/pack/internal"
 )
@@ -96,8 +97,10 @@ func (c *TwoQueueCache) Get(key interface{}) (value *Package, ok bool) {
 
 	// Check if this is a frequent value
 	if val, ok := c.frequent.Get(key); ok {
+		pkg := val.(*Package)
+		atomic.AddInt64(&pkg.refCount, 1)
 		c.lock.Unlock()
-		return val.(*Package), ok
+		return pkg, ok
 	}
 
 	// If the value is contained in recent, then we
@@ -105,8 +108,10 @@ func (c *TwoQueueCache) Get(key interface{}) (value *Package, ok bool) {
 	if val, ok := c.recent.Peek(key); ok {
 		c.recent.Remove(key)
 		c.frequent.Add(key, val)
+		pkg := val.(*Package)
+		atomic.AddInt64(&pkg.refCount, 1)
 		c.lock.Unlock()
-		return val.(*Package), ok
+		return pkg, ok
 	}
 
 	// No hit
@@ -120,7 +125,10 @@ func (c *TwoQueueCache) Add(key interface{}, value *Package) (updated, evicted b
 
 	// Check if the value is frequently used already,
 	// and just update the value
-	if c.frequent.Contains(key) {
+	if val, ok := c.frequent.Peek(key); ok {
+		if val.(*Package) != value {
+			c.onEvict(key, val.(*Package))
+		}
 		c.frequent.Add(key, value)
 		c.lock.Unlock()
 		updated = true
@@ -129,7 +137,10 @@ func (c *TwoQueueCache) Add(key interface{}, value *Package) (updated, evicted b
 
 	// Check if the value is recently used, and promote
 	// the value into the frequent list
-	if c.recent.Contains(key) {
+	if val, ok := c.recent.Peek(key); ok {
+		if val.(*Package) != value {
+			c.onEvict(key, val.(*Package))
+		}
 		c.recent.Remove(key)
 		c.frequent.Add(key, value)
 		c.lock.Unlock()
@@ -276,13 +287,17 @@ func (c *TwoQueueCache) Peek(key interface{}) (value *Package, ok bool) {
 	c.lock.RLock()
 	var v interface{}
 	v, ok = c.frequent.Peek(key)
-	value = v.(*Package)
 	if ok {
+		value = v.(*Package)
+		atomic.AddInt64(&value.refCount, 1)
 		c.lock.RUnlock()
 		return
 	}
-	v, ok = c.frequent.Peek(key)
-	value = v.(*Package)
+	v, ok = c.recent.Peek(key)
+	if ok {
+		value = v.(*Package)
+		atomic.AddInt64(&value.refCount, 1)
+	}
 	c.lock.RUnlock()
 	return
 }
