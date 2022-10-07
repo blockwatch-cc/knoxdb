@@ -2,7 +2,6 @@ package pack
 
 import (
 	"container/list"
-	"errors"
 )
 
 // EvictCallback is used to get a callback when a cache entry is evicted
@@ -10,7 +9,6 @@ type EvictCallback func(key string, value *Package)
 
 // LRU implements a non-thread safe fixed size LRU cache
 type LRU struct {
-	size      int
 	evictList *list.List
 	items     map[string]*list.Element
 	onEvict   EvictCallback
@@ -23,12 +21,8 @@ type entry struct {
 }
 
 // NewLRU constructs an LRU of the given size
-func NewLRU(size int, onEvict EvictCallback) (*LRU, error) {
-	if size <= 0 {
-		return nil, errors.New("lru: must provide a positive size")
-	}
+func NewLRU(onEvict EvictCallback) (*LRU, error) {
 	c := &LRU{
-		size:      size,
 		evictList: list.New(),
 		items:     make(map[string]*list.Element),
 		onEvict:   onEvict,
@@ -61,12 +55,7 @@ func (c *LRU) Add(key string, value *Package) (updated, evicted bool) {
 	entry := c.evictList.PushFront(ent)
 	c.items[key] = entry
 
-	evict := c.evictList.Len() > c.size
-	// Verify size not exceeded
-	if evict {
-		c.removeOldest()
-	}
-	return false, evict
+	return false, false
 }
 
 // Get looks up a key's value from the cache.

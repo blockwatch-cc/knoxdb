@@ -14,6 +14,7 @@ type Cache interface {
 	RemoveOldest()
 	Keys() []string
 	Len() int
+	GetParams() (int, int, int, int)
 }
 
 func NewNoCache() *NoCache {
@@ -54,4 +55,8 @@ func (n *NoCache) Keys() []string {
 
 func (n *NoCache) Len() int {
 	return 0
+}
+
+func (n *NoCache) GetParams() (int, int, int, int) {
+	return 0, 0, 0, 0
 }

@@ -1001,17 +1001,24 @@ func (t *Table) CacheTest() error {
 
 	var count int
 
-	var list = []int{0, 0, 2, 3, 4, 5}
+	var list = []int{0, 0, 2, 3, 4, 5, 6, 2, -2}
 
 	for _, i := range list {
-		pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, true, nil)
-		if err != nil {
-			return err
+		if i >= 0 {
+			pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, true, nil)
+			if err != nil {
+				return err
+			}
+			t.releaseSharedPack(pkg)
+		} else {
+			t.cache.Remove(t.cachekey(encodePackKey(uint32(-i))))
 		}
-		t.releaseSharedPack(pkg)
-		fmt.Printf(".")
+
+		r, f, e, b := t.cache.GetParams()
+		fmt.Printf("size=%d recent=%d frequent=%d evicted=%d %dBytes\n", r+f, r, f, e, b)
 		count++
 	}
+
 	fmt.Printf("\nProcessed %d packs\n", count)
 	fmt.Printf("PackCacheSize %d\n", t.stats.PackCacheSize)
 	fmt.Printf("PackCacheCount %d\n", t.stats.PackCacheCount)

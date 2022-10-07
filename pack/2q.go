@@ -26,14 +26,20 @@ const (
 // head. The ARCCache is similar, but does not require setting any
 // parameters.
 type TwoQueueCache struct {
-	size       int
-	recentSize int
+	byteSize    int
+	maxByteSize int
+	recentRatio float64
+	ghostRatio  float64
 
 	recent      LRUCache
 	frequent    LRUCache
 	recentEvict LRUCache
 	onEvict     EvictCallback
 	lock        sync.RWMutex
+}
+
+func (c *TwoQueueCache) GetParams() (int, int, int, int) {
+	return c.recent.Len(), c.frequent.Len(), c.recentEvict.Len(), c.byteSize
 }
 
 // New2Q creates a new TwoQueueCache using the default
@@ -59,28 +65,27 @@ func New2QParams(size int, recentRatio float64, ghostRatio float64, onEvicted fu
 		return nil, fmt.Errorf("2qcache: invalid ghost ratio")
 	}
 
-	// Determine the sub-sizes
-	recentSize := int(float64(size) * recentRatio)
-	evictSize := int(float64(size) * ghostRatio)
-
 	// Allocate the LRUs
-	recent, err := NewLRU(size, nil)
+	recent, err := NewLRU(nil)
 	if err != nil {
 		return nil, err
 	}
-	frequent, err := NewLRU(size, nil)
+	frequent, err := NewLRU(nil)
 	if err != nil {
 		return nil, err
 	}
-	recentEvict, err := NewLRU(evictSize, nil)
+	recentEvict, err := NewLRU(nil)
 	if err != nil {
 		return nil, err
 	}
 
 	// Initialize the cache
 	c := &TwoQueueCache{
-		size:        size,
-		recentSize:  recentSize,
+		byteSize:    0,
+		maxByteSize: size,
+		recentRatio: recentRatio,
+		ghostRatio:  ghostRatio,
+
 		recent:      recent,
 		frequent:    frequent,
 		recentEvict: recentEvict,
@@ -119,15 +124,20 @@ func (c *TwoQueueCache) Get(key string) (value *Package, ok bool) {
 func (c *TwoQueueCache) Add(key string, value *Package) (updated, evicted bool) {
 	c.lock.Lock()
 
+	c.byteSize += value.HeapSize()
+	atomic.AddInt64(&value.refCount, 1)
+
 	// Check if the value is frequently used already,
 	// and just update the value
 	if val, ok := c.frequent.Peek(key); ok {
 		if val != value {
+			c.byteSize -= val.HeapSize()
+			c.frequent.Add(key, value)
 			c.onEvict(key, val)
+			evicted = c.ensureSpace()
+			updated = true
 		}
-		c.frequent.Add(key, value)
 		c.lock.Unlock()
-		updated = true
 		return
 	}
 
@@ -135,28 +145,31 @@ func (c *TwoQueueCache) Add(key string, value *Package) (updated, evicted bool) 
 	// the value into the frequent list
 	if val, ok := c.recent.Peek(key); ok {
 		if val != value {
+			c.byteSize -= val.HeapSize()
+			c.recent.Remove(key)
 			c.onEvict(key, val)
+			c.frequent.Add(key, value)
+			evicted = c.ensureSpace()
+			updated = true
 		}
-		c.recent.Remove(key)
-		c.frequent.Add(key, value)
+
 		c.lock.Unlock()
-		updated = true
 		return
 	}
 
 	// If the value was recently evicted, add it to the
 	// frequently used list
 	if c.recentEvict.Contains(key) {
-		evicted = c.ensureSpace(true)
 		c.recentEvict.Remove(key)
 		c.frequent.Add(key, value)
+		evicted = c.ensureSpace()
 		c.lock.Unlock()
 		return
 	}
 
 	// Add to the recently seen list
-	evicted = c.ensureSpace(false)
 	c.recent.Add(key, value)
+	evicted = c.ensureSpace()
 	c.lock.Unlock()
 	return
 }
@@ -180,30 +193,40 @@ func (c *TwoQueueCache) ContainsOrAdd(key string, value *Package) (ok, evicted b
 }
 
 // ensureSpace is used to ensure we have space in the cache
-func (c *TwoQueueCache) ensureSpace(recentEvict bool) bool {
-	// If we have space, nothing to do
-	recentLen := c.recent.Len()
-	freqLen := c.frequent.Len()
-	if recentLen+freqLen < c.size {
-		return false
-	}
+func (c *TwoQueueCache) ensureSpace() (evicted bool) {
 
-	// If the recent buffer is larger than
-	// the target, evict from there
-	if recentLen > 0 && (recentLen > c.recentSize || (recentLen == c.recentSize && !recentEvict)) {
-		k, v, evicted := c.recent.RemoveOldest()
-		c.recentEvict.Add(k, nil)
-		if evicted && c.onEvict != nil {
+	for c.byteSize > c.maxByteSize {
+		recentLen := c.recent.Len()
+		freqLen := c.frequent.Len()
+		recentSize := int(float64(recentLen+freqLen) * c.recentRatio)
+
+		var e bool
+		var k string
+		var v *Package
+		if recentLen > 0 && (recentLen > recentSize) {
+			// If the recent buffer is larger than
+			// the target, evict from there
+			k, v, e = c.recent.RemoveOldest()
+			c.recentEvict.Add(k, nil)
+		} else {
+			// Remove from the frequent list otherwise
+			k, v, e = c.frequent.RemoveOldest()
+		}
+		c.byteSize -= v.HeapSize()
+		if e && c.onEvict != nil {
 			c.onEvict(k, v)
 		}
-		return evicted
+		evicted = evicted || e
 	}
 
-	// Remove from the frequent list otherwise
-	k, v, evicted := c.frequent.RemoveOldest()
-	if evicted && c.onEvict != nil {
-		c.onEvict(k, v)
+	recentLen := c.recent.Len()
+	freqLen := c.frequent.Len()
+	evictSize := int(float64(recentLen+freqLen) * c.ghostRatio)
+
+	for evictSize < c.recentEvict.Len() {
+		c.recentEvict.RemoveOldest()
 	}
+
 	return evicted
 }
 
@@ -228,13 +251,18 @@ func (c *TwoQueueCache) Keys() []string {
 // Remove removes the provided key from the cache.
 func (c *TwoQueueCache) Remove(key string) {
 	c.lock.Lock()
-	if c.onEvict != nil {
-		if val, ok := c.frequent.Peek(key); ok {
-			c.onEvict(key, val)
-		} else if val, ok := c.recent.Peek(key); ok {
+	var val *Package
+	var ok bool
+	if val, ok = c.frequent.Peek(key); !ok {
+		val, ok = c.recent.Peek(key)
+	}
+	if ok {
+		c.byteSize -= val.HeapSize()
+		if c.onEvict != nil {
 			c.onEvict(key, val)
 		}
 	}
+
 	if c.frequent.Remove(key) {
 		c.lock.Unlock()
 		return
