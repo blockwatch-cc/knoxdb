@@ -49,10 +49,7 @@ import (
 )
 
 const (
-	idFieldName             = "I"
-	defaultCacheSize        = 128 // keep 128 unpacked partitions in memory (per table/index)
-	defaultPackSizeLog2     = 16  // 64k entries per partition
-	defaultJournalFillLevel = 50  // keep space for extension
+	idFieldName = "I"
 )
 
 var (
@@ -63,59 +60,10 @@ var (
 	indexesKey          = []byte("_indexes")
 	journalKey   uint32 = 0xFFFFFFFF
 	tombstoneKey uint32 = 0xFFFFFFFE
-
-	DefaultOptions = Options{
-		PackSizeLog2:    defaultPackSizeLog2, // 64k entries
-		JournalSizeLog2: 17,                  // 128k entries
-		CacheSize:       defaultCacheSize,    // in packs
-		FillLevel:       90,                  // boltdb fill level to limit reallocations
-	}
-	NoOptions = Options{}
 )
 
 type Tombstone struct {
 	Id uint64 `knox:"I,pk,snappy"`
-}
-
-type Options struct {
-	PackSizeLog2    int `json:"pack_size_log2"`
-	JournalSizeLog2 int `json:"journal_size_log2"`
-	CacheSize       int `json:"cache_size"`
-	FillLevel       int `json:"fill_level"`
-}
-
-func (o Options) PackSize() int {
-	return 1 << uint(o.PackSizeLog2)
-}
-
-func (o Options) JournalSize() int {
-	return 1 << uint(o.JournalSizeLog2)
-}
-
-// Notes: allow cache size to be zero
-func (o Options) Merge(o2 Options) Options {
-	o.PackSizeLog2 = util.NonZero(o2.PackSizeLog2, o.PackSizeLog2)
-	o.JournalSizeLog2 = util.NonZero(o2.JournalSizeLog2, o.JournalSizeLog2)
-	o.FillLevel = util.NonZero(o2.FillLevel, o.FillLevel)
-	o.CacheSize = o2.CacheSize
-	return o
-}
-
-func (o Options) Check() error {
-	// limit pack sizes to 256 .. 4M
-	if o.PackSizeLog2 < 8 || o.PackSizeLog2 > 22 {
-		return fmt.Errorf("PackSizeLog2 %d out of range [8, 22]", o.PackSizeLog2)
-	}
-	if o.JournalSizeLog2 < 8 || o.JournalSizeLog2 > 22 {
-		return fmt.Errorf("JournalSizeLog2 %d out of range [8, 22]", o.JournalSizeLog2)
-	}
-	if o.CacheSize < 0 || o.CacheSize > 64*1024 {
-		return fmt.Errorf("CacheSize %d out of range [0, 64k]", o.CacheSize)
-	}
-	if o.FillLevel < 10 || o.FillLevel > 100 {
-		return fmt.Errorf("FillLevel %d out of range [10, 100]", o.FillLevel)
-	}
-	return nil
 }
 
 type TableMeta struct {
@@ -1015,10 +963,20 @@ func (t *Table) deleteJournal(ids []uint64) error {
 	return nil
 }
 
+func (t *Table) IsClosed() bool {
+	return t.db == nil
+}
+
 func (t *Table) Close() error {
+	if t.db == nil {
+		return nil
+	}
 	log.Debugf("pack: closing %s table with %d journal records", t.name, t.journal.Len())
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.db == nil {
+		return nil
+	}
 
 	tx, err := t.db.Tx(true)
 	if err != nil {
@@ -1069,6 +1027,7 @@ func (t *Table) Close() error {
 
 	// unregister from db
 	delete(t.db.tables, t.name)
+	t.db = nil
 
 	return nil
 }
@@ -1616,13 +1575,11 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 // of the same keys. This will lead to pack fragmentation. See flushTx for more
 // details.
 //
-//
 // The placement algorithm works as follows:
 // - keep lastpack when no pack exists (effectively == 0)
 // - choose pack with pack.min <= val <= pack.max
 // - choose pack with closest max < val
 // - when val < min of first pack, choose first pack
-//
 func (t *Table) findBestPack(pkval uint64) (int, uint64, uint64, uint64) {
 	// returns 0 when list is empty, this ensures we initially stick
 	// to the first pack until it's full; returns last pack for values
