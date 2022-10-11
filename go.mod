@@ -3,6 +3,7 @@ module blockwatch.cc/knoxdb
 go 1.19
 
 require (
+	github.com/dgraph-io/sroar v0.0.0-20220527172339-b92b7eaaf6e0
 	github.com/echa/log v1.2.2
 	github.com/golang/snappy v0.0.4
 	github.com/google/go-cmp v0.5.1
@@ -18,5 +19,5 @@ require (
 	github.com/kr/pretty v0.2.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 )
