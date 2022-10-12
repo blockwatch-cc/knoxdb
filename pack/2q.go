@@ -290,23 +290,21 @@ func (c *TwoQueueCache) RemoveOldest() {
 // Purge is used to completely clear the cache.
 func (c *TwoQueueCache) Purge() {
 	c.lock.Lock()
-	k, v, ok := c.recent.GetOldest()
+	k, v, ok := c.recent.RemoveOldest()
 	for ok {
 		if c.onEvict != nil {
 			c.onEvict(k, v)
 		}
-		c.recent.RemoveOldest()
-		k, v, ok = c.recent.GetOldest()
+		k, v, ok = c.recent.RemoveOldest()
 	}
 	c.recent.Purge()
 
-	k, v, ok = c.frequent.GetOldest()
+	k, v, ok = c.frequent.RemoveOldest()
 	for ok {
 		if c.onEvict != nil {
 			c.onEvict(k, v)
 		}
-		c.frequent.RemoveOldest()
-		k, v, ok = c.frequent.GetOldest()
+		k, v, ok = c.frequent.RemoveOldest()
 	}
 	c.frequent.Purge()
 	c.recentEvict.Purge()

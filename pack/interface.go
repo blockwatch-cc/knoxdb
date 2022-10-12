@@ -4,7 +4,7 @@ package pack
 type LRUCache interface {
 	// Adds a value to the cache, returns true if an eviction occurred and
 	// updates the "recently used"-ness of the key.
-	Add(key string, value *Package) (updated bool, evicted bool)
+	Add(key string, value *Package) (updated bool)
 
 	// Returns key's value from the cache and
 	// updates the "recently used"-ness of the key. #value, isFound

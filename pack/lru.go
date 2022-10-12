@@ -42,12 +42,12 @@ func (c *LRU) Purge() {
 }
 
 // Add adds a value to the cache.  Returns true if an eviction occurred.
-func (c *LRU) Add(key string, value *Package) (updated, evicted bool) {
+func (c *LRU) Add(key string, value *Package) (updated bool) {
 	// Check for existing item
 	if ent, ok := c.items[key]; ok {
 		c.evictList.MoveToFront(ent)
 		ent.Value.(*entry).value = value
-		return true, false
+		return true
 	}
 
 	// Add new item
@@ -55,7 +55,7 @@ func (c *LRU) Add(key string, value *Package) (updated, evicted bool) {
 	entry := c.evictList.PushFront(ent)
 	c.items[key] = entry
 
-	return false, false
+	return false
 }
 
 // Get looks up a key's value from the cache.

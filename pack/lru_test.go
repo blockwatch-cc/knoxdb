@@ -1,22 +1,30 @@
 package pack
 
-import "testing"
+import (
+	"strconv"
+	"testing"
+)
 
 func TestLRU(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k string, v interface{}) {
-		if k != v {
+	onEvicted := func(k string, v *Package) {
+		if k != strconv.FormatUint(uint64(v.key), 10) {
 			t.Fatalf("Evict values not equal (%v!=%v)", k, v)
 		}
 		evictCounter++
 	}
-	l, err := NewLRU(128, onEvicted)
+	l, err := NewLRU(onEvicted)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
 	for i := 0; i < 256; i++ {
-		l.Add(i, i)
+		pkg := NewPackage(0)
+		pkg.key = uint32(i)
+		l.Add(strconv.FormatUint(uint64(i), 10), pkg)
+	}
+	for i := 0; i < 128; i++ {
+		l.RemoveOldest()
 	}
 	if l.Len() != 128 {
 		t.Fatalf("bad len: %v", l.Len())
@@ -27,41 +35,41 @@ func TestLRU(t *testing.T) {
 	}
 
 	for i, k := range l.Keys() {
-		if v, ok := l.Get(k); !ok || v != k || v != i+128 {
+		if v, ok := l.Get(k); !ok || strconv.FormatUint(uint64(v.key), 10) != k || int(v.key) != i+128 {
 			t.Fatalf("bad key: %v", k)
 		}
 	}
 	for i := 0; i < 128; i++ {
-		_, ok := l.Get(i)
+		_, ok := l.Get(strconv.FormatUint(uint64(i), 10))
 		if ok {
 			t.Fatalf("should be evicted")
 		}
 	}
 	for i := 128; i < 256; i++ {
-		_, ok := l.Get(i)
+		_, ok := l.Get(strconv.FormatUint(uint64(i), 10))
 		if !ok {
 			t.Fatalf("should not be evicted")
 		}
 	}
 	for i := 128; i < 192; i++ {
-		ok := l.Remove(i)
+		ok := l.Remove(strconv.FormatUint(uint64(i), 10))
 		if !ok {
 			t.Fatalf("should be contained")
 		}
-		ok = l.Remove(i)
+		ok = l.Remove(strconv.FormatUint(uint64(i), 10))
 		if ok {
 			t.Fatalf("should not be contained")
 		}
-		_, ok = l.Get(i)
+		_, ok = l.Get(strconv.FormatUint(uint64(i), 10))
 		if ok {
 			t.Fatalf("should be deleted")
 		}
 	}
 
-	l.Get(192) // expect 192 to be last key in l.Keys()
+	l.Get("192") // expect 192 to be last key in l.Keys()
 
 	for i, k := range l.Keys() {
-		if (i < 63 && k != i+193) || (i == 63 && k != 192) {
+		if (i < 63 && k != strconv.FormatUint(uint64(i+193), 10)) || (i == 63 && k != "192") {
 			t.Fatalf("out of order key: %v", k)
 		}
 	}
@@ -70,24 +78,28 @@ func TestLRU(t *testing.T) {
 	if l.Len() != 0 {
 		t.Fatalf("bad len: %v", l.Len())
 	}
-	if _, ok := l.Get(200); ok {
+	if _, ok := l.Get("200"); ok {
 		t.Fatalf("should contain nothing")
 	}
 }
 
 func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
-	l, err := NewLRU(128, nil)
+	l, err := NewLRU(nil)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 	for i := 0; i < 256; i++ {
-		l.Add(i, i)
+		l.Add(strconv.FormatUint(uint64(i), 10), nil)
 	}
+	for i := 0; i < 128; i++ {
+		l.RemoveOldest()
+	}
+
 	k, _, ok := l.GetOldest()
 	if !ok {
 		t.Fatalf("missing")
 	}
-	if k.(int) != 128 {
+	if k != "128" {
 		t.Fatalf("bad: %v", k)
 	}
 
@@ -95,7 +107,7 @@ func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing")
 	}
-	if k.(int) != 128 {
+	if k != "128" {
 		t.Fatalf("bad: %v", k)
 	}
 
@@ -103,65 +115,52 @@ func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing")
 	}
-	if k.(int) != 129 {
+	if k != "129" {
 		t.Fatalf("bad: %v", k)
-	}
-}
-
-// Test that Add returns true/false if an eviction occurred
-func TestLRU_Add(t *testing.T) {
-	evictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
-		evictCounter++
-	}
-
-	l, err := NewLRU(1, onEvicted)
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-
-	if _, evict := l.Add(1, 1); evict == true || evictCounter != 0 {
-		t.Errorf("should not have an eviction")
-	}
-	if _, evict := l.Add(2, 2); evict == false || evictCounter != 1 {
-		t.Errorf("should have an eviction")
 	}
 }
 
 // Test that Contains doesn't update recent-ness
 func TestLRU_Contains(t *testing.T) {
-	l, err := NewLRU(2, nil)
+	l, err := NewLRU(nil)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
-	l.Add(1, 1)
-	l.Add(2, 2)
-	if !l.Contains(1) {
+	l.Add("1", nil)
+	l.Add("2", nil)
+	if !l.Contains("1") {
 		t.Errorf("1 should be contained")
 	}
 
-	l.Add(3, 3)
-	if l.Contains(1) {
+	l.Add("3", nil)
+	l.removeOldest()
+	if l.Contains("1") {
 		t.Errorf("Contains should not have updated recent-ness of 1")
 	}
 }
 
 // Test that Peek doesn't update recent-ness
 func TestLRU_Peek(t *testing.T) {
-	l, err := NewLRU(2, nil)
+	l, err := NewLRU(nil)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
-	l.Add(1, 1)
-	l.Add(2, 2)
-	if v, ok := l.Peek(1); !ok || v != 1 {
+	for i := 1; i < 3; i++ {
+		pkg := NewPackage(0)
+		pkg.key = uint32(i)
+		l.Add(strconv.FormatUint(uint64(i), 10), pkg)
+	}
+	if v, ok := l.Peek("1"); !ok || v.key != 1 {
 		t.Errorf("1 should be set to 1: %v, %v", v, ok)
 	}
 
-	l.Add(3, 3)
-	if l.Contains(1) {
+	pkg := NewPackage(0)
+	pkg.key = uint32(3)
+	l.Add("3", pkg)
+	l.removeOldest()
+	if l.Contains("1") {
 		t.Errorf("should not have updated recent-ness of 1")
 	}
 }
