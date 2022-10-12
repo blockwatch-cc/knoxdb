@@ -1617,13 +1617,11 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 // of the same keys. This will lead to pack fragmentation. See flushTx for more
 // details.
 //
-//
 // The placement algorithm works as follows:
 // - keep lastpack when no pack exists (effectively == 0)
 // - choose pack with pack.min <= val <= pack.max
 // - choose pack with closest max < val
 // - when val < min of first pack, choose first pack
-//
 func (t *Table) findBestPack(pkval uint64) (int, uint64, uint64, uint64) {
 	// returns 0 when list is empty, this ensures we initially stick
 	// to the first pack until it's full; returns last pack for values
@@ -1657,8 +1655,8 @@ func (t *Table) findBestPack(pkval uint64) (int, uint64, uint64, uint64) {
 }
 
 func (t *Table) Lookup(ctx context.Context, ids []uint64) (*Result, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -1823,8 +1821,8 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 }
 
 func (t *Table) Query(ctx context.Context, q Query) (*Result, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -2198,8 +2196,8 @@ packloop:
 }
 
 func (t *Table) Count(ctx context.Context, q Query) (int64, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -2330,8 +2328,8 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 }
 
 func (t *Table) Stream(ctx context.Context, q Query, fn func(r Row) error) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	if err := ctx.Err(); err != nil {
 		return err
@@ -2687,8 +2685,8 @@ packloop:
 }
 
 func (t *Table) StreamLookup(ctx context.Context, ids []uint64, fn func(r Row) error) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	if err := ctx.Err(); err != nil {
 		return err
