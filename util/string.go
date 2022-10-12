@@ -5,6 +5,7 @@ package util
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -217,6 +218,14 @@ func QuoteString(s string) string {
 func JsonString(v interface{}) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+func HexString(v interface{}) string {
+	var b []byte
+	if enc, ok := v.(encoding.BinaryMarshaler); ok {
+		b, _ = enc.MarshalBinary()
+	}
+	return hex.EncodeToString(b)
 }
 
 func ContainsString(s string, list []string) bool {
