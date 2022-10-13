@@ -36,6 +36,8 @@ type Package struct {
 	size     int            // storage size
 }
 
+var packSz = int(reflect.TypeOf(Package{}).Size())
+
 func (p *Package) Key() []byte {
 	return encodePackKey(p.key)
 }
@@ -2015,7 +2017,8 @@ func (p *Package) Release() {
 }
 
 func (p *Package) HeapSize() int {
-	var sz int
+	var sz int = packSz
+	sz += 8 * len(p.blocks)
 	for _, v := range p.blocks {
 		sz += v.HeapSize()
 	}
