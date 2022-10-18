@@ -133,7 +133,9 @@ func (c *TwoQueueCache) Add(key string, value *Package) (updated, evicted bool) 
 		if val != value {
 			c.byteSize -= val.HeapSize()
 			c.frequent.Add(key, value)
-			c.onEvict(key, val)
+			if c.onEvict != nil {
+				c.onEvict(key, val)
+			}
 			evicted = c.ensureSpace()
 			updated = true
 		}
@@ -147,7 +149,9 @@ func (c *TwoQueueCache) Add(key string, value *Package) (updated, evicted bool) 
 		if val != value {
 			c.byteSize -= val.HeapSize()
 			c.recent.Remove(key)
-			c.onEvict(key, val)
+			if c.onEvict != nil {
+				c.onEvict(key, val)
+			}
 			c.frequent.Add(key, value)
 			evicted = c.ensureSpace()
 			updated = true
