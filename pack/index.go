@@ -804,6 +804,14 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 		flushEvery = 128
 	}
 
+	var (
+		pkg *Package
+		err error
+	)
+	defer func() {
+		idx.releaseSharedPack(pkg)
+	}()
+
 	// scan table in pk order block by block and create new index
 	for i, ph := range idx.table.packidx.packs {
 		// stop when context is canceled
@@ -813,7 +821,7 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 
 		// load pack (we need pk field and all index fields)
 		fields := idx.table.Fields().Select(idx.Field.Name).Add(idx.table.Fields().Pk())
-		pkg, err := idx.table.loadSharedPack(tx, ph.Key, false, fields)
+		pkg, err = idx.table.loadSharedPack(tx, ph.Key, false, fields)
 		if err != nil {
 			return err
 		}
@@ -825,6 +833,7 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 
 		// return pack to table's (!) pool
 		idx.table.releaseSharedPack(pkg)
+		pkg = nil
 
 		// flush index after every 128 packs
 		if i%flushEvery == 0 {
@@ -1287,7 +1296,6 @@ func (idx *Index) splitPack(tx *Tx, pkg *Package) (int, error) {
 	// move half of the packidx contents to a new pack (don't cache the new pack
 	// to avoid possible eviction of the pack we are currently splitting!)
 	newpkg := idx.packPool.Get().(*Package)
-	newpkg.cached = false
 	half := pkg.Len() / 2
 	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half); err != nil {
 		return 0, err
@@ -1343,7 +1351,6 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 
 	// store in cache
 	if touch {
-		pkg.cached = touch
 		idx.cache.Add(cachekey, pkg)
 
 		atomic.AddInt64(&idx.stats.PackCacheInserts, 1)
@@ -1443,7 +1450,6 @@ func (idx *Index) makePackage() interface{} {
 }
 
 func (idx *Index) onEvictedPackage(key string, pkg *Package) {
-	pkg.cached = false
 	atomic.AddInt64(&idx.stats.PackCacheEvictions, 1)
 	atomic.AddInt64(&idx.stats.PackCacheCount, -1)
 	atomic.AddInt64(&idx.stats.PackCacheSize, int64(-pkg.HeapSize()))
@@ -1460,7 +1466,7 @@ func (idx *Index) releaseSharedPack(pkg *Package) {
 }
 
 func (idx *Index) recyclePackage(pkg *Package) {
-	if pkg == nil || pkg.cached {
+	if pkg == nil {
 		return
 	}
 	// don't recycle oversized packidx to free memory

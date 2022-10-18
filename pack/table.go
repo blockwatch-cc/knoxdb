@@ -1297,7 +1297,6 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				nextmin = 0
 				pkg = t.packPool.Get().(*Package)
 				pkg.key = t.packidx.NextKey()
-				pkg.cached = false
 				// log.Debugf("Starting new pack %d/%d with key %d", nextpack, t.packidx.Len(), pkg.key)
 			}
 			lastpack = nextpack
@@ -1759,6 +1758,14 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		return res, nil
 	}
 
+	var (
+		pkg *Package
+		err error
+	)
+	defer func() {
+		t.releaseSharedPack(pkg)
+	}()
+
 	// optimize for lookup of most recently added values
 	var nextid int
 	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
@@ -1768,17 +1775,20 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		}
 
 		// stop when context is canceled
-		if err := ctx.Err(); err != nil {
+		if err = ctx.Err(); err != nil {
 			res.Close()
 			return nil, err
 		}
+
+		t.releaseSharedPack(pkg)
+		pkg = nil
 
 		// continue with next pack, always load via cache
 
 		// check pack headers again because now we have stripped some values
 		// from the id lookup slice, so we may know better if the pack
 		// matches or not
-		pkg, err := t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.freq)
+		pkg, err = t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.freq)
 		if err != nil {
 			res.Close()
 			return nil, err
@@ -1814,7 +1824,6 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 			q.stats.RowsMatched++
 			last = j
 		}
-		t.releaseSharedPack(pkg)
 	}
 	q.stats.ScanTime = time.Since(q.lap)
 	return res, nil
@@ -1894,6 +1903,10 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 		spack *Package
 		err   error
 	)
+	defer func() {
+		t.releaseSharedPack(spack)
+	}()
+
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
 	packloop:
@@ -1903,11 +1916,9 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 				return nil, err
 			}
 
-			// load pack from cache or storage, will be recycled on cache eviction
-			if q.NoCache {
-				t.recyclePackage(spack)
-				spack = nil
-			}
+			t.releaseSharedPack(spack)
+			spack = nil
+			// load pack from cache or storage
 			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
 			if err != nil {
 				res.Close()
@@ -1966,17 +1977,12 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 					break packloop
 				}
 			}
-			t.releaseSharedPack(spack)
 			bits.Close()
 		}
 		q.stats.ScanTime = time.Since(q.lap)
 		q.lap = time.Now()
 	}
 	t.u32Pool.Put(u32slice)
-	if q.NoCache {
-		t.recyclePackage(spack)
-		spack = nil
-	}
 
 	// finalize on limit
 	if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
@@ -2110,6 +2116,10 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 		spack *Package
 		err   error
 	)
+	defer func() {
+		t.releaseSharedPack(spack)
+	}()
+
 	u32slice := t.u32Pool.Get().([]uint32)
 packloop:
 	for _, p := range q.MakePackSchedule(true) {
@@ -2118,11 +2128,10 @@ packloop:
 			return nil, err
 		}
 
-		// load pack from cache or storage, will be recycled on cache eviction
-		if q.NoCache {
-			t.recyclePackage(spack)
-			spack = nil
-		}
+		t.releaseSharedPack(spack)
+		spack = nil
+
+		// load pack from cache or storage
 		spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
 		if err != nil {
 			res.Close()
@@ -2180,14 +2189,9 @@ packloop:
 				break packloop
 			}
 		}
-		t.releaseSharedPack(spack)
 		bits.Close()
 	}
 	t.u32Pool.Put(u32slice)
-	if q.NoCache {
-		t.recyclePackage(spack)
-		spack = nil
-	}
 
 	q.stats.ScanTime = time.Since(q.lap)
 	q.lap = time.Now()
@@ -2249,6 +2253,10 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 		spack *Package
 		err   error
 	)
+	defer func() {
+		t.releaseSharedPack(spack)
+	}()
+
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
 	packloop:
@@ -2257,11 +2265,10 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 				return int64(q.stats.RowsMatched), err
 			}
 
-			// load pack from cache or storage, will be recycled on cache eviction
-			if q.NoCache {
-				t.recyclePackage(spack)
-				spack = nil
-			}
+			t.releaseSharedPack(spack)
+			spack = nil
+
+			// load pack from cache or storage
 			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
 			if err != nil {
 				return 0, err
@@ -2306,16 +2313,11 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 					break packloop
 				}
 			}
-			t.releaseSharedPack(spack)
 			bits.Close()
 		}
 		q.stats.ScanTime = time.Since(q.lap)
 	}
 	t.u32Pool.Put(u32slice)
-	if q.NoCache {
-		t.recyclePackage(spack)
-		spack = nil
-	}
 
 	// after all packs have been scanned, add remaining rows from journal, if any
 	// subtract offset and clamp to [0, limit]
@@ -2395,6 +2397,10 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 		spack *Package
 		err   error
 	)
+	defer func() {
+		t.releaseSharedPack(spack)
+	}()
+
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
 	packloop:
@@ -2403,11 +2409,10 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 				return err
 			}
 
-			// load pack from cache or storage, will be recycled on cache eviction
-			if q.NoCache {
-				t.recyclePackage(spack)
-				spack = nil
-			}
+			t.releaseSharedPack(spack)
+			spack = nil
+
+			// load pack from cache or storage
 			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
 			if err != nil {
 				return err
@@ -2466,17 +2471,12 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 					break packloop
 				}
 			}
-			t.releaseSharedPack(spack)
 			bits.Close()
 		}
 		q.stats.ScanTime = time.Since(q.lap)
 		q.lap = time.Now()
 	}
 	t.u32Pool.Put(u32slice)
-	if q.NoCache {
-		t.recyclePackage(spack)
-		spack = nil
-	}
 
 	if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 		return nil
@@ -2600,6 +2600,10 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 		spack *Package
 		err   error
 	)
+	defer func() {
+		t.releaseSharedPack(spack)
+	}()
+
 	u32slice := t.u32Pool.Get().([]uint32)
 packloop:
 	for _, p := range q.MakePackSchedule(true) {
@@ -2607,11 +2611,10 @@ packloop:
 			return err
 		}
 
-		// load pack from cache or storage, will be recycled on cache eviction
-		if q.NoCache {
-			t.recyclePackage(spack)
-			spack = nil
-		}
+		t.releaseSharedPack(spack)
+		spack = nil
+
+		// load pack from cache or storage
 		spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
 		if err != nil {
 			return err
@@ -2669,14 +2672,9 @@ packloop:
 				break packloop
 			}
 		}
-		t.releaseSharedPack(spack)
 		bits.Close()
 	}
 	t.u32Pool.Put(u32slice)
-	if q.NoCache {
-		t.recyclePackage(spack)
-		spack = nil
-	}
 
 	q.stats.ScanTime = time.Since(q.lap)
 	q.lap = time.Now()
@@ -2788,6 +2786,14 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 		return nil
 	}
 
+	var (
+		pkg *Package
+		err error
+	)
+	defer func() {
+		t.releaseSharedPack(pkg)
+	}()
+
 	// PACK SCAN, schedule uses fast range checks and schould be perfect
 	var nextid int
 	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
@@ -2800,8 +2806,11 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			return err
 		}
 
+		t.releaseSharedPack(pkg)
+		pkg = nil
+
 		// always load via cache
-		pkg, err := t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.freq)
+		pkg, err = t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.freq)
 		if err != nil {
 			return err
 		}
@@ -2836,7 +2845,6 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			q.stats.RowsMatched++
 			last = j
 		}
-		t.releaseSharedPack(pkg)
 	}
 	q.stats.ScanTime = time.Since(q.lap)
 	return nil
@@ -3135,8 +3143,6 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 
 	// store in cache
 	if touch {
-		pkg.cached = touch
-
 		t.cache.Add(cachekey, pkg)
 		atomic.AddInt64(&t.stats.PackCacheInserts, 1)
 		atomic.AddInt64(&t.stats.PackCacheCount, 1)
@@ -3263,7 +3269,6 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	// move half of the packs contents to a new pack (don't cache the new pack
 	// to avoid possible eviction of the pack we are currently splitting!)
 	newpkg := t.packPool.Get().(*Package)
-	newpkg.cached = false
 	half := pkg.Len() / 2
 	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half); err != nil {
 		return 0, err
@@ -3298,7 +3303,6 @@ func (t *Table) makePackage() interface{} {
 }
 
 func (t *Table) onEvictedPackage(key string, pkg *Package) {
-	pkg.cached = false
 	// log.Debugf("%s: cache evict pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PackCacheEvictions, 1)
 	atomic.AddInt64(&t.stats.PackCacheCount, -1)
@@ -3316,7 +3320,7 @@ func (t *Table) releaseSharedPack(pkg *Package) {
 }
 
 func (t *Table) recyclePackage(pkg *Package) {
-	if pkg == nil || pkg.cached {
+	if pkg == nil {
 		return
 	}
 	// don't recycle stripped packs

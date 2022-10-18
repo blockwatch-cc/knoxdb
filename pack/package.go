@@ -30,13 +30,10 @@ type Package struct {
 	tinfo    *typeInfo      // Go typeinfo
 	pkindex  int            // field index of primary key (optional)
 	dirty    bool           // pack is updated, needs to be written
-	cached   bool           // pack is cached
 	stripped bool           // some blocks are ignored, don't store this pack
 	capHint  int            // block size hint
 	size     int            // storage size
 }
-
-var packSz = int(reflect.TypeOf(Package{}).Size())
 
 func (p *Package) Key() []byte {
 	return encodePackKey(p.key)
@@ -1995,7 +1992,6 @@ func (p *Package) Clear() {
 	// also keep pack key to avoid clearing journal/tombstone identity
 	p.nValues = 0
 	p.dirty = true
-	p.cached = false
 	p.size = 0
 }
 
@@ -2011,13 +2007,12 @@ func (p *Package) Release() {
 	p.tinfo = nil
 	p.pkindex = -1
 	p.dirty = false
-	p.cached = false
 	p.stripped = false
 	p.size = 0
 }
 
 func (p *Package) HeapSize() int {
-	var sz int = packSz
+	var sz int = szPackage
 	sz += 8 * len(p.blocks)
 	for _, v := range p.blocks {
 		sz += v.HeapSize()
