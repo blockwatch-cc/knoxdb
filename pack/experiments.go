@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math/bits"
+	"math/rand"
 	"reflect"
 	"strconv"
 	"strings"
@@ -1025,6 +1026,62 @@ func (t *Table) CacheTest() error {
 	fmt.Printf("PackCacheCapacity %d\n", t.stats.PackCacheCapacity)
 	fmt.Printf("PackCacheHits %d\n", t.stats.PackCacheHits)
 	fmt.Printf("PackCacheMisses %d\n", t.stats.PackCacheMisses)
+	fmt.Printf("PackCacheInserts %d\n", t.stats.PackCacheInserts)
+	fmt.Printf("PackCacheEvictions %d\n", t.stats.PackCacheEvictions)
+
+	return nil
+}
+
+func (t *Table) CacheBench() error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// nPacks := t.packidx.Len()
+	nPacks := 1000
+	max_loop := 1000
+
+	var count int
+
+	// popuate the Cache
+	for n := 0; n < nPacks; n++ {
+		pkg, err := t.loadSharedPack(tx, t.packidx.packs[n].Key, true, nil)
+		if err != nil {
+			return err
+		}
+		t.releaseSharedPack(pkg)
+	}
+
+	// reset cache stats
+	t.stats.PackCacheSize = 0
+	t.stats.PackCacheCount = 0
+	t.stats.PackCacheCapacity = 0
+	t.stats.PackCacheHits = 0
+	t.stats.PackCacheMisses = 0
+	t.stats.PackCacheInserts = 0
+	t.stats.PackCacheEvictions = 0
+
+	tstart := time.Now()
+	for n := 0; n < max_loop; n++ {
+		i := rand.Intn(nPacks)
+		pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, true, nil)
+		if err != nil {
+			return err
+		}
+		t.releaseSharedPack(pkg)
+
+		count++
+	}
+	dur := time.Since(tstart)
+
+	fmt.Printf("\nProcessed %d packs in %f seconds (%f s/Pack)\n", count, dur.Seconds(), dur.Seconds()/float64(count))
+	fmt.Printf("PackCacheSize %d\n", t.stats.PackCacheSize)
+	fmt.Printf("PackCacheCount %d\n", t.stats.PackCacheCount)
+	fmt.Printf("PackCacheCapacity %d\n", t.stats.PackCacheCapacity)
+	fmt.Printf("PackCacheHits %d (%.2f%%)\n", t.stats.PackCacheHits, 100*float64(t.stats.PackCacheHits)/float64(count))
+	fmt.Printf("PackCacheMisses %d (%.2f%%)\n", t.stats.PackCacheMisses, 100*float64(t.stats.PackCacheMisses)/float64(count))
 	fmt.Printf("PackCacheInserts %d\n", t.stats.PackCacheInserts)
 	fmt.Printf("PackCacheEvictions %d\n", t.stats.PackCacheEvictions)
 

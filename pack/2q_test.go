@@ -4,6 +4,8 @@ import (
 	"math/rand"
 	"strconv"
 	"testing"
+
+	"blockwatch.cc/knoxdb/encoding/block"
 )
 
 func encKey(key uint32) string {
@@ -88,11 +90,23 @@ func Test2Q_RandomOps(t *testing.T) {
 		r := rand.Int63()
 		switch r % 3 {
 		case 0:
-			pkg := NewPackage(0)
-			pkg.key = key
+			size := rand.Intn(32768)
+			pkg := NewPackage(size)
+			b := block.NewBlock(block.BlockUint8, 0, size)
+			b.Uint8 = b.Uint8[:size]
+			pkg.blocks = append(pkg.blocks, b)
 			l.Add(encKey(key), pkg)
+			if int(pkg.refCount) != 1 {
+				t.Fatalf("bad: refCount == %d after Add", pkg.refCount)
+			}
+
 		case 1:
-			l.Get(encKey(key))
+			if pkg, ok := l.Get(encKey(key)); ok {
+				if int(pkg.refCount) != 2 {
+					t.Fatalf("bad: refCount == %d after Get", pkg.refCount)
+				}
+				pkg.refCount--
+			}
 		case 2:
 			l.Remove(encKey(key))
 		}
@@ -248,11 +262,14 @@ func Test2Q(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-
+	pkg := make([]*Package, 256)
 	for i := uint32(0); i < 256; i++ {
-		pkg := NewPackage(0)
-		pkg.key = i
-		l.Add(encKey(i), pkg)
+		pkg[i] = NewPackage(0)
+		pkg[i].key = i
+		if i == 128 {
+
+		}
+		l.Add(encKey(i), pkg[i])
 	}
 	if l.Len() != 128 {
 		t.Fatalf("bad len: %v", l.Len())
@@ -261,6 +278,11 @@ func Test2Q(t *testing.T) {
 	for i, k := range l.Keys() {
 		if v, ok := l.Get(k); !ok || encKey(v.key) != k || int(v.key) != i+128 {
 			t.Fatalf("bad key: %v", k)
+		} else {
+			if v.refCount != 2 {
+				t.Errorf("refCount of %d should be 2: %v", v.key, v)
+			}
+			v.refCount--
 		}
 	}
 	for i := uint32(0); i < 128; i++ {
@@ -270,8 +292,13 @@ func Test2Q(t *testing.T) {
 		}
 	}
 	for i := uint32(128); i < 256; i++ {
-		_, ok := l.Get(encKey(i))
-		if !ok {
+		v, ok := l.Get(encKey(i))
+		if ok {
+			if v.refCount != 2 {
+				t.Errorf("refCount of %d should be 2: %v", v.key, v)
+			}
+			v.refCount--
+		} else {
 			t.Fatalf("should not be evicted")
 		}
 	}
@@ -330,6 +357,10 @@ func Test2Q_Peek(t *testing.T) {
 	}
 	if v, ok := l.Peek("1"); !ok || v.key != 1 {
 		t.Errorf("1 should be set to 1: %v, %v", v, ok)
+	} else {
+		if v.refCount != 2 {
+			t.Errorf("refCount of 1 should be 2: %v", v)
+		}
 	}
 
 	pkg := NewPackage(0)
