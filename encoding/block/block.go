@@ -204,6 +204,10 @@ func (b Block) CompressedSize() int {
 	return b.size
 }
 
+func (b *Block) SetCompressedSize(s int) {
+	b.size = s
+}
+
 func (b *Block) IsIgnore() bool {
 	return b.ignore
 }
