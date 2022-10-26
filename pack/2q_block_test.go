@@ -2,25 +2,20 @@ package pack
 
 import (
 	"math/rand"
-	"strconv"
 	"testing"
 
 	"blockwatch.cc/knoxdb/encoding/block"
 )
 
-func encKey(key uint32) string {
-	return strconv.FormatUint(uint64(key), 10)
-}
-
-func Benchmark2Q_Rand(b *testing.B) {
-	l, err := New2Q(8192 * szPackage)
+func BenchmarkBlock2Q_Rand(b *testing.B) {
+	l, err := NewBlock2Q(8192 * block.BlockSz)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
 
-	trace := make([]uint32, b.N*2)
+	trace := make([]uint64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
-		trace[i] = rand.Uint32() % 32768
+		trace[i] = rand.Uint64() % 32768
 	}
 
 	b.ResetTimer()
@@ -28,11 +23,10 @@ func Benchmark2Q_Rand(b *testing.B) {
 	var hit, miss int
 	for i := 0; i < 2*b.N; i++ {
 		if i%2 == 0 {
-			pkg := NewPackage(0)
-			pkg.key = trace[i]
-			l.Add(encKey(trace[i]), pkg)
+			b := block.NewBlock(block.BlockUint8, 0, 0)
+			l.Add(trace[i], b)
 		} else {
-			_, ok := l.Get(encKey(trace[i]))
+			_, ok := l.Get(trace[i])
 			if ok {
 				hit++
 			} else {
@@ -43,31 +37,30 @@ func Benchmark2Q_Rand(b *testing.B) {
 	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(miss))
 }
 
-func Benchmark2Q_Freq(b *testing.B) {
-	l, err := New2Q(8192 * szPackage)
+func BenchmarkBlock2Q_Freq(b *testing.B) {
+	l, err := NewBlock2Q(8192 * block.BlockSz)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
 
-	trace := make([]uint32, b.N*2)
+	trace := make([]uint64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
 		if i%2 == 0 {
-			trace[i] = rand.Uint32() % 16384
+			trace[i] = rand.Uint64() % 16384
 		} else {
-			trace[i] = rand.Uint32() % 32768
+			trace[i] = rand.Uint64() % 32768
 		}
 	}
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		pkg := NewPackage(0)
-		pkg.key = trace[i]
-		l.Add(encKey(trace[i]), pkg)
+		b := block.NewBlock(block.BlockUint8, 0, 0)
+		l.Add(uint64(trace[i]), b)
 	}
 	var hit, miss int
 	for i := 0; i < b.N; i++ {
-		_, ok := l.Get(encKey(trace[i]))
+		_, ok := l.Get(trace[i])
 		if ok {
 			hit++
 		} else {
@@ -77,38 +70,36 @@ func Benchmark2Q_Freq(b *testing.B) {
 	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(miss))
 }
 
-func Test2Q_RandomOps(t *testing.T) {
-	size := 128 * (szPackage + block.BlockSz + 16384)
-	l, err := New2Q(size)
+func TestBlock2Q_RandomOps(t *testing.T) {
+	size := 128 * (block.BlockSz + 16384)
+	l, err := NewBlock2Q(size)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
 	n := 200000
 	for i := 0; i < n; i++ {
-		key := uint32(rand.Int63() % 512)
+		key := rand.Uint64() % 512
 		r := rand.Int63()
 		switch r % 3 {
 		case 0:
 			size := rand.Intn(32768)
-			pkg := NewPackage(size)
 			b := block.NewBlock(block.BlockUint8, 0, size)
 			b.Uint8 = b.Uint8[:size]
-			pkg.blocks = append(pkg.blocks, b)
-			l.Add(encKey(key), pkg)
-			if int(pkg.refCount) != 1 {
-				t.Fatalf("bad: refCount == %d after Add", pkg.refCount)
+			l.Add(key, b)
+			if int(b.RefCount) != 1 {
+				t.Fatalf("bad: RefCount == %d after Add", b.RefCount)
 			}
 
 		case 1:
-			if pkg, ok := l.Get(encKey(key)); ok {
-				if int(pkg.refCount) != 2 {
-					t.Fatalf("bad: refCount == %d after Get", pkg.refCount)
+			if b, ok := l.Get(key); ok {
+				if int(b.RefCount) != 2 {
+					t.Fatalf("bad: RefCount == %d after Get", b.RefCount)
 				}
-				pkg.refCount--
+				b.RefCount--
 			}
 		case 2:
-			l.Remove(encKey(key))
+			l.Remove(key)
 		}
 
 		if l.byteSize > size {
@@ -118,17 +109,16 @@ func Test2Q_RandomOps(t *testing.T) {
 	}
 }
 
-func Test2Q_Get_RecentToFrequent(t *testing.T) {
-	l, err := New2Q(128 * szPackage)
+func TestBlock2Q_Get_RecentToFrequent(t *testing.T) {
+	l, err := NewBlock2Q(128 * block.BlockSz)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
 	// Touch all the entries, should be in t1
-	for i := uint32(0); i < 128; i++ {
-		pkg := NewPackage(0)
-		pkg.key = i
-		l.Add(encKey(i), pkg)
+	for i := 0; i < 128; i++ {
+		b := block.NewBlock(block.BlockUint8, 0, 0)
+		l.Add(uint64(i), b)
 	}
 	if n := l.recent.Len(); n != 128 {
 		t.Fatalf("bad: %d", n)
@@ -138,8 +128,8 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 	}
 
 	// Get should upgrade to t2
-	for i := uint32(0); i < 128; i++ {
-		_, ok := l.Get(encKey(i))
+	for i := 0; i < 128; i++ {
+		_, ok := l.Get(uint64(i))
 		if !ok {
 			t.Fatalf("missing: %d", i)
 		}
@@ -152,8 +142,8 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 	}
 
 	// Get be from t2
-	for i := uint32(0); i < 128; i++ {
-		_, ok := l.Get(encKey(i))
+	for i := 0; i < 128; i++ {
+		_, ok := l.Get(uint64(i))
 		if !ok {
 			t.Fatalf("missing: %d", i)
 		}
@@ -166,16 +156,15 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 	}
 }
 
-func Test2Q_Add_RecentToFrequent(t *testing.T) {
-	l, err := New2Q(128 * szPackage)
+func TestBlock2Q_Add_RecentToFrequent(t *testing.T) {
+	l, err := NewBlock2Q(128 * block.BlockSz)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
 	// Add initially to recent
-	pkg := NewPackage(0)
-	pkg.key = 1
-	l.Add(encKey(1), pkg)
+	b := block.NewBlock(block.BlockUint8, 0, 0)
+	l.Add(1, b)
 	if n := l.recent.Len(); n != 1 {
 		t.Fatalf("bad: %d", n)
 	}
@@ -184,9 +173,8 @@ func Test2Q_Add_RecentToFrequent(t *testing.T) {
 	}
 
 	// Add should upgrade to frequent
-	pkg = NewPackage(0)
-	pkg.key = 1
-	l.Add(encKey(1), pkg)
+	b = block.NewBlock(block.BlockUint8, 0, 0)
+	l.Add(1, b)
 	if n := l.recent.Len(); n != 0 {
 		t.Fatalf("bad: %d", n)
 	}
@@ -195,9 +183,8 @@ func Test2Q_Add_RecentToFrequent(t *testing.T) {
 	}
 
 	// Add should remain in frequent
-	pkg = NewPackage(0)
-	pkg.key = 1
-	l.Add(encKey(1), pkg)
+	b = block.NewBlock(block.BlockUint8, 0, 0)
+	l.Add(1, b)
 	if n := l.recent.Len(); n != 0 {
 		t.Fatalf("bad: %d", n)
 	}
@@ -206,17 +193,16 @@ func Test2Q_Add_RecentToFrequent(t *testing.T) {
 	}
 }
 
-func Test2Q_Add_RecentEvict(t *testing.T) {
-	l, err := New2Q(4 * szPackage)
+func TestBlock2Q_Add_RecentEvict(t *testing.T) {
+	l, err := NewBlock2Q(4 * block.BlockSz)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
 	// Add 1,2,3,4,5 -> Evict 1
-	for i := uint32(1); i < 6; i++ {
-		pkg := NewPackage(0)
-		pkg.key = i
-		l.Add(encKey(i), pkg)
+	for i := 1; i < 6; i++ {
+		b := block.NewBlock(block.BlockUint8, 0, 0)
+		l.Add(uint64(i), b)
 	}
 	if n := l.recent.Len(); n != 4 {
 		t.Fatalf("bad: %d", n)
@@ -229,9 +215,8 @@ func Test2Q_Add_RecentEvict(t *testing.T) {
 	}
 
 	// Pull in the recently evicted
-	pkg := NewPackage(0)
-	pkg.key = 1
-	l.Add(encKey(1), pkg)
+	b := block.NewBlock(block.BlockUint8, 0, 0)
+	l.Add(1, b)
 	if n := l.recent.Len(); n != 3 {
 		t.Fatalf("bad: %d", n)
 	}
@@ -243,9 +228,8 @@ func Test2Q_Add_RecentEvict(t *testing.T) {
 	}
 
 	// Add 6, should cause another recent evict
-	pkg = NewPackage(0)
-	pkg.key = 6
-	l.Add(encKey(6), pkg)
+	b = block.NewBlock(block.BlockUint8, 0, 0)
+	l.Add(6, b)
 	if n := l.recent.Len(); n != 3 {
 		t.Fatalf("bad: %d", n)
 	}
@@ -257,51 +241,50 @@ func Test2Q_Add_RecentEvict(t *testing.T) {
 	}
 }
 
-func Test2Q(t *testing.T) {
-	l, err := New2Q(128 * szPackage)
+func TestBlock2Q(t *testing.T) {
+	l, err := NewBlock2Q(128 * block.BlockSz)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	pkg := make([]*Package, 256)
-	for i := uint32(0); i < 256; i++ {
-		pkg[i] = NewPackage(0)
-		pkg[i].key = i
-		l.Add(encKey(i), pkg[i])
+	b := make([]*block.Block, 256)
+	for i := 0; i < 256; i++ {
+		b[i] = block.NewBlock(block.BlockUint8, block.Compression(i), 0)
+		l.Add(uint64(i), b[i])
 	}
 	if l.Len() != 128 {
 		t.Fatalf("bad len: %v", l.Len())
 	}
 
 	for i, k := range l.Keys() {
-		if v, ok := l.Get(k); !ok || encKey(v.key) != k || int(v.key) != i+128 {
+		if v, ok := l.Get(k); !ok || uint64(v.Compression()) != k || int(v.Compression()) != i+128 {
 			t.Fatalf("bad key: %v", k)
 		} else {
-			if v.refCount != 2 {
-				t.Errorf("refCount of %d should be 2: %v", v.key, v)
+			if v.RefCount != 2 {
+				t.Errorf("RefCount of %d should be 2: %v", v.Compression(), v)
 			}
-			v.refCount--
+			v.RefCount--
 		}
 	}
-	for i := uint32(0); i < 128; i++ {
-		_, ok := l.Get(encKey(i))
+	for i := 0; i < 128; i++ {
+		_, ok := l.Get(uint64(i))
 		if ok {
 			t.Fatalf("should be evicted")
 		}
 	}
-	for i := uint32(128); i < 256; i++ {
-		v, ok := l.Get(encKey(i))
+	for i := 128; i < 256; i++ {
+		v, ok := l.Get(uint64(i))
 		if ok {
-			if v.refCount != 2 {
-				t.Errorf("refCount of %d should be 2: %v", v.key, v)
+			if v.RefCount != 2 {
+				t.Errorf("RefCount of %d should be 2: %v", v.Compression(), v)
 			}
-			v.refCount--
+			v.RefCount--
 		} else {
 			t.Fatalf("should not be evicted")
 		}
 	}
-	for i := uint32(128); i < 192; i++ {
-		l.Remove(encKey(i))
-		_, ok := l.Get(encKey(i))
+	for i := 128; i < 192; i++ {
+		l.Remove(uint64(i))
+		_, ok := l.Get(uint64(i))
 		if ok {
 			t.Fatalf("should be deleted")
 		}
@@ -311,59 +294,55 @@ func Test2Q(t *testing.T) {
 	if l.Len() != 0 {
 		t.Fatalf("bad len: %v", l.Len())
 	}
-	if _, ok := l.Get(encKey(200)); ok {
+	if _, ok := l.Get(200); ok {
 		t.Fatalf("should contain nothing")
 	}
 }
 
 // Test that Contains doesn't update recent-ness
-func Test2Q_Contains(t *testing.T) {
-	l, err := New2Q(2 * szPackage)
+func TestBlock2Q_Contains(t *testing.T) {
+	l, err := NewBlock2Q(2 * block.BlockSz)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
-	for i := uint32(1); i < 3; i++ {
-		pkg := NewPackage(0)
-		pkg.key = i
-		l.Add(encKey(i), pkg)
+	for i := 1; i < 3; i++ {
+		b := block.NewBlock(block.BlockUint8, 0, 0)
+		l.Add(uint64(i), b)
 	}
-	if !l.Contains(encKey(1)) {
+	if !l.Contains(1) {
 		t.Errorf("1 should be contained")
 	}
 
-	pkg := NewPackage(0)
-	pkg.key = 3
-	l.Add(encKey(3), pkg)
-	if l.Contains(encKey(1)) {
+	b := block.NewBlock(block.BlockUint8, 0, 0)
+	l.Add(3, b)
+	if l.Contains(1) {
 		t.Errorf("Contains should not have updated recent-ness of 1")
 	}
 }
 
 // Test that Peek doesn't update recent-ness
-func Test2Q_Peek(t *testing.T) {
-	l, err := New2Q(2 * szPackage)
+func TestBlock2Q_Peek(t *testing.T) {
+	l, err := NewBlock2Q(2 * block.BlockSz)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
-	for i := uint32(1); i < 3; i++ {
-		pkg := NewPackage(0)
-		pkg.key = i
-		l.Add(encKey(i), pkg)
+	for i := 1; i < 3; i++ {
+		b := block.NewBlock(block.BlockUint8, block.Compression(i), 0)
+		l.Add(uint64(i), b)
 	}
-	if v, ok := l.Peek("1"); !ok || v.key != 1 {
+	if v, ok := l.Peek(1); !ok || v.Compression() != 1 {
 		t.Errorf("1 should be set to 1: %v, %v", v, ok)
 	} else {
-		if v.refCount != 2 {
-			t.Errorf("refCount of 1 should be 2: %v", v)
+		if v.RefCount != 2 {
+			t.Errorf("RefCount of 1 should be 2: %v", v)
 		}
 	}
 
-	pkg := NewPackage(0)
-	pkg.key = 3
-	l.Add(encKey(3), pkg)
-	if l.Contains(encKey(1)) {
+	b := block.NewBlock(block.BlockUint8, 0, 0)
+	l.Add(3, b)
+	if l.Contains(1) {
 		t.Errorf("should not have updated recent-ness of 1")
 	}
 }

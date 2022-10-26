@@ -9,7 +9,7 @@ import (
 func TestBlockLRU(t *testing.T) {
 	evictCounter := 0
 	onEvicted := func(k uint64, v *block.Block) {
-		if k != uint64(v.CompressedSize()) {
+		if k != uint64(v.Compression()) {
 			t.Fatalf("Evict values not equal (%v!=%v)", k, v)
 		}
 		evictCounter++
@@ -20,8 +20,8 @@ func TestBlockLRU(t *testing.T) {
 	}
 
 	for i := 0; i < 256; i++ {
-		b := block.NewBlock(block.BlockUint8, 0, 0)
-		b.SetCompressedSize(i)
+		b := block.NewBlock(block.BlockUint8, block.Compression(i), 0)
+		//b.SetCompressedSize(i)
 		l.Add(uint64(i), b)
 	}
 	for i := 0; i < 128; i++ {
@@ -36,7 +36,7 @@ func TestBlockLRU(t *testing.T) {
 	}
 
 	for i, k := range l.Keys() {
-		if v, ok := l.Get(k); !ok || uint64(v.CompressedSize()) != k || int(v.CompressedSize()) != i+128 {
+		if v, ok := l.Get(k); !ok || uint64(v.Compression()) != k || int(v.Compression()) != i+128 {
 			t.Fatalf("bad key: %v", k)
 		}
 	}
@@ -149,16 +149,14 @@ func TestBlockLRU_Peek(t *testing.T) {
 	}
 
 	for i := 1; i < 3; i++ {
-		b := block.NewBlock(block.BlockUint8, 0, 0)
-		b.SetCompressedSize(i)
+		b := block.NewBlock(block.BlockUint8, block.Compression(i), 0)
 		l.Add(uint64(i), b)
 	}
-	if v, ok := l.Peek(1); !ok || v.CompressedSize() != 1 {
+	if v, ok := l.Peek(1); !ok || v.Compression() != 1 {
 		t.Errorf("1 should be set to 1: %v, %v", v, ok)
 	}
 
 	b := block.NewBlock(block.BlockUint8, 0, 0)
-	b.SetCompressedSize(3)
 	l.Add(3, b)
 	l.removeOldest()
 	if l.Contains(1) {

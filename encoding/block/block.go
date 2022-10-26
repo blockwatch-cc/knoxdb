@@ -19,7 +19,7 @@ import (
 
 var bigEndian = binary.BigEndian
 
-var blockSz = int(reflect.TypeOf(Block{}).Size())
+var BlockSz = int(reflect.TypeOf(Block{}).Size())
 
 type Compression byte
 
@@ -137,11 +137,12 @@ func (t BlockType) String() string {
 }
 
 type Block struct {
-	typ    BlockType
-	comp   Compression
-	ignore bool
-	dirty  bool
-	size   int // stored size, debug data
+	RefCount int64
+	typ      BlockType
+	comp     Compression
+	ignore   bool
+	dirty    bool
+	size     int // stored size, debug data
 
 	// TODO: measure performance impact of using an interface instead of direct slices
 	//       this can save up to 15x storage for slice headers / pointers
@@ -202,10 +203,6 @@ func (b Block) Compression() Compression {
 
 func (b Block) CompressedSize() int {
 	return b.size
-}
-
-func (b *Block) SetCompressedSize(s int) {
-	b.size = s
 }
 
 func (b *Block) IsIgnore() bool {
@@ -628,7 +625,7 @@ func (b *Block) HeapSize() int {
 	if b.ignore {
 		return 0
 	}
-	sz := blockSz
+	sz := BlockSz
 	switch b.typ {
 	case BlockFloat64:
 		sz += len(b.Float64) * 8

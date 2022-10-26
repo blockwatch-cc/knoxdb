@@ -6,6 +6,41 @@ import (
 	"blockwatch.cc/knoxdb/encoding/block"
 )
 
+// LRUCache is the interface for simple LRU cache.
+type BlockLRUCache interface {
+	// Adds a value to the cache, returns true if an eviction occurred and
+	// updates the "recently used"-ness of the key.
+	Add(key uint64, value *block.Block) (updated bool)
+
+	// Returns key's value from the cache and
+	// updates the "recently used"-ness of the key. #value, isFound
+	Get(key uint64) (value *block.Block, ok bool)
+
+	// Check if a key exsists in cache without updating the recent-ness.
+	Contains(key uint64) (ok bool)
+
+	// Returns key's value without updating the "recently used"-ness of the key.
+	Peek(key uint64) (value *block.Block, ok bool)
+
+	// Removes a key from the cache.
+	Remove(key uint64) bool
+
+	// Removes the oldest entry from cache.
+	RemoveOldest() (uint64, *block.Block, bool)
+
+	// Returns the oldest entry from the cache. #key, value, isFound
+	GetOldest() (uint64, *block.Block, bool)
+
+	// Returns a slice of the keys in the cache, from oldest to newest.
+	Keys() []uint64
+
+	// Returns the number of items in the cache.
+	Len() int
+
+	// Clear all cache entries
+	Purge()
+}
+
 // EvictCallback is used to get a callback when a cache entry is evicted
 type BlockEvictCallback func(key uint64, value *block.Block)
 
