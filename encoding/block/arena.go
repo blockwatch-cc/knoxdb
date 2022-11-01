@@ -16,7 +16,7 @@ type Allocator interface {
     Free(any)
 }
 
-// 1k (10) .. 128k (18) = 8 sync.Pools
+// 1k (10) .. 128k (17) = 8 sync.Pools
 type allocator[T any] struct {
     pools [8]*sync.Pool
 }
@@ -100,9 +100,9 @@ func NewArena() *Arena {
             &allocator[int64]{},      // BlockInt64
             &allocator[uint64]{},     // BlockUint64
             &allocator[float64]{},    // BlockFloat64
-            &bitSetAllocator{},       // BlockBool !! unsused, blocks alloc direct
-            &dedupAllocator{},        // BlockString !! unsused, blocks alloc direct
-            &dedupAllocator{},        // BlockBytes !! unsused, blocks alloc direct
+            &bitSetAllocator{},       // BlockBool !! unused, blocks alloc direct
+            &dedupAllocator{},        // BlockString !! unused, blocks alloc direct
+            &dedupAllocator{},        // BlockBytes !! unused, blocks alloc direct
             &allocator[int32]{},      // BlockInt32
             &allocator[int16]{},      // BlockInt16
             &allocator[int8]{},       // BlockInt8
@@ -110,8 +110,8 @@ func NewArena() *Arena {
             &allocator[uint16]{},     // BlockUint16
             &allocator[uint8]{},      // BlockUint8
             &allocator[float32]{},    // BlockFloat32
-            &allocator[vec.Int128]{}, // BlockInt128 !! blocks use strides
-            &allocator[vec.Int256]{}, // BlockInt256 !! blocks use strides
+            &allocator[vec.Int128]{}, // BlockInt128 !! unused, blocks use strides
+            &allocator[vec.Int256]{}, // BlockInt256 !! unused, blocks use strides
         },
     }
 }
