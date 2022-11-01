@@ -238,10 +238,7 @@ func Close(table *pack.Table) error {
 	if table == nil {
 		return nil
 	}
-	if err := table.Close(); err != nil {
-		return err
-	}
-	return table.Database().Close()
+	return table.Close()
 }
 
 // GenerateRandomKey creates a random key with the given length in bytes.
