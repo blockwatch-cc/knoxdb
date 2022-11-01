@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sync/atomic"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
@@ -137,7 +138,7 @@ func (t BlockType) String() string {
 }
 
 type Block struct {
-	RefCount int64
+	refCount int64
 	typ      BlockType
 	comp     Compression
 	ignore   bool
@@ -164,37 +165,53 @@ type Block struct {
 	Int256  vec.Int256LLSlice // re-used by Decimal256, Int256
 }
 
+func (b *Block) IncRef() int64 {
+	return atomic.AddInt64(&b.refCount, 1)
+}
+
+func (b *Block) DecRef() int64 {
+	return atomic.AddInt64(&b.refCount, -1)
+}
+
 func (b Block) Type() BlockType {
 	return b.typ
 }
 
 func (b *Block) IsInt() bool {
-	if b.Type() == BlockInt64 || b.Type() == BlockInt32 || b.Type() == BlockInt16 || b.Type() == BlockInt8 ||
-		b.Type() == BlockUint64 || b.Type() == BlockUint32 || b.Type() == BlockUint16 || b.Type() == BlockUint8 {
+	switch b.Type() {
+	case BlockInt64, BlockInt32, BlockInt16, BlockInt8,
+		BlockUint64, BlockUint32, BlockUint16, BlockUint8:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (b *Block) IsSint() bool {
-	if b.Type() == BlockInt64 || b.Type() == BlockInt32 || b.Type() == BlockInt16 || b.Type() == BlockInt8 {
+	switch b.Type() {
+	case BlockInt64, BlockInt32, BlockInt16, BlockInt8:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (b *Block) IsUint() bool {
-	if b.Type() == BlockUint64 || b.Type() == BlockUint32 || b.Type() == BlockUint16 || b.Type() == BlockUint8 {
+	switch b.Type() {
+	case BlockUint64, BlockUint32, BlockUint16, BlockUint8:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (b *Block) IsFloat() bool {
-	if b.Type() == BlockFloat64 || b.Type() == BlockFloat32 {
+	switch b.Type() {
+	case BlockFloat64, BlockFloat32:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (b Block) Compression() Compression {

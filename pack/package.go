@@ -10,6 +10,7 @@ import (
 	"math"
 	"reflect"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
@@ -33,6 +34,14 @@ type Package struct {
 	stripped bool           // some blocks are ignored, don't store this pack
 	capHint  int            // block size hint
 	size     int            // storage size
+}
+
+func (p *Package) IncRef() int64 {
+	return atomic.AddInt64(&p.refCount, 1)
+}
+
+func (p *Package) DecRef() int64 {
+	return atomic.AddInt64(&p.refCount, -1)
 }
 
 func (p *Package) Key() []byte {

@@ -41,8 +41,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	//"blockwatch.cc/knoxdb/cache"
-	//"blockwatch.cc/knoxdb/cache/lru"
+	"blockwatch.cc/knoxdb/cache/rclru"
 	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
@@ -125,14 +124,13 @@ type TableMeta struct {
 }
 
 type Table struct {
-	name    string    // printable table name
-	opts    Options   // runtime configuration options
-	fields  FieldList // ordered list of table fields as central type info
-	indexes IndexList // list of indexes (similar structure as the table)
-	meta    TableMeta // authoritative metadata
-	db      *DB       // lower-level storage (e.g. boltdb wrapper)
-	cache   Cache     // keep decoded packs for query/updates
-	//	clock    sync.RWMutex // Cache lock
+	name     string       // printable table name
+	opts     Options      // runtime configuration options
+	fields   FieldList    // ordered list of table fields as central type info
+	indexes  IndexList    // list of indexes (similar structure as the table)
+	meta     TableMeta    // authoritative metadata
+	db       *DB          // lower-level storage (e.g. boltdb wrapper)
+	cache    rclru.Cache  // keep decoded packs for query/updates
 	journal  *Journal     // in-memory data not yet written to packs
 	packidx  *PackIndex   // in-memory list of pack and block info
 	key      []byte       // name of table data bucket
@@ -246,13 +244,13 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		return nil, err
 	}
 	if t.opts.CacheSize > 0 {
-		t.cache, err = New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
+		t.cache, err = rclru.New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
 		if err != nil {
 			return nil, err
 		}
 		t.stats.PackCacheCapacity = int64(t.opts.CacheSize)
 	} else {
-		t.cache = NewNoCache()
+		t.cache = rclru.NewNoCache()
 	}
 	log.Debugf("Created table %s", name)
 	d.tables[name] = t
@@ -397,13 +395,13 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		return nil, err
 	}
 	if t.opts.CacheSize > 0 {
-		t.cache, err = New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
+		t.cache, err = rclru.New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
 		if err != nil {
 			return nil, err
 		}
 		t.stats.PackCacheCapacity = int64(t.opts.CacheSize)
 	} else {
-		t.cache = NewNoCache()
+		t.cache = rclru.NewNoCache()
 	}
 
 	needFlush := make([]*Index, 0)
@@ -3117,7 +3115,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 
 	if pkg, ok := cachefn(cachekey); ok {
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
-		return pkg, nil
+		return pkg.(*Package), nil
 	}
 
 	// if not found, load from storage using a pre-allocated pack as buffer
@@ -3135,7 +3133,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	if err != nil {
 		return nil, err
 	}
-	pkg.refCount = 1
+	pkg.IncRef()
 
 	// log.Debugf("%s: loaded shared pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
@@ -3157,8 +3155,9 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 
 	// when package is cached, create a private clone
 	// FIXME: we cannot do this concurrently when we rework the global lock
-	if pkg, ok := t.cache.Get(t.cachekey(key)); ok {
+	if cached, ok := t.cache.Get(t.cachekey(key)); ok {
 		atomic.AddInt64(&t.stats.PackCacheHits, 1)
+		pkg := cached.(*Package)
 		clone, err := pkg.Clone(t.opts.PackSize())
 		if err != nil {
 			return nil, err
@@ -3198,7 +3197,6 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 	key := pkg.Key()
 
 	defer func() {
-		// t.clock.Lock()
 		// remove from cache, returns back to pool
 		cachekey := t.cachekey(key)
 
@@ -3211,7 +3209,6 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 				t.cache.Remove(v)
 			}
 		}
-		// t.clock.Unlock()
 	}()
 
 	if pkg.Len() > 0 {
@@ -3302,7 +3299,8 @@ func (t *Table) makePackage() interface{} {
 	return pkg
 }
 
-func (t *Table) onEvictedPackage(key string, pkg *Package) {
+func (t *Table) onEvictedPackage(key string, val rclru.RefCountedElem) {
+	pkg := val.(*Package)
 	// log.Debugf("%s: cache evict pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PackCacheEvictions, 1)
 	atomic.AddInt64(&t.stats.PackCacheCount, -1)
@@ -3314,7 +3312,7 @@ func (t *Table) releaseSharedPack(pkg *Package) {
 	if pkg == nil {
 		return
 	}
-	if atomic.AddInt64(&pkg.refCount, -1) == 0 {
+	if pkg.DecRef() == 0 {
 		t.recyclePackage(pkg)
 	}
 }

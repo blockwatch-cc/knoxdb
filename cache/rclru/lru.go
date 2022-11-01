@@ -1,11 +1,11 @@
-package pack
+package rclru
 
 import (
 	"container/list"
 )
 
 // EvictCallback is used to get a callback when a cache entry is evicted
-type EvictCallback func(key string, value *Package)
+type EvictCallback func(key string, value RefCountedElem)
 
 // LRU implements a non-thread safe fixed size LRU cache
 type LRU struct {
@@ -17,7 +17,7 @@ type LRU struct {
 // entry is used to hold a value in the evictList
 type entry struct {
 	key   string
-	value *Package
+	value RefCountedElem
 }
 
 // NewLRU constructs an LRU of the given size
@@ -42,7 +42,7 @@ func (c *LRU) Purge() {
 }
 
 // Add adds a value to the cache.  Returns true if an eviction occurred.
-func (c *LRU) Add(key string, value *Package) (updated bool) {
+func (c *LRU) Add(key string, value RefCountedElem) (updated bool) {
 	// Check for existing item
 	if ent, ok := c.items[key]; ok {
 		c.evictList.MoveToFront(ent)
@@ -59,7 +59,7 @@ func (c *LRU) Add(key string, value *Package) (updated bool) {
 }
 
 // Get looks up a key's value from the cache.
-func (c *LRU) Get(key string) (value *Package, ok bool) {
+func (c *LRU) Get(key string) (value RefCountedElem, ok bool) {
 	if ent, ok := c.items[key]; ok {
 		c.evictList.MoveToFront(ent)
 		return ent.Value.(*entry).value, true
@@ -76,7 +76,7 @@ func (c *LRU) Contains(key string) (ok bool) {
 
 // Peek returns the key value (or undefined if not found) without updating
 // the "recently used"-ness of the key.
-func (c *LRU) Peek(key string) (value *Package, ok bool) {
+func (c *LRU) Peek(key string) (value RefCountedElem, ok bool) {
 	var ent *list.Element
 	if ent, ok = c.items[key]; ok {
 		return ent.Value.(*entry).value, true
@@ -95,7 +95,7 @@ func (c *LRU) Remove(key string) (present bool) {
 }
 
 // RemoveOldest removes the oldest item from the cache.
-func (c *LRU) RemoveOldest() (key string, value *Package, ok bool) {
+func (c *LRU) RemoveOldest() (key string, value RefCountedElem, ok bool) {
 	ent := c.evictList.Back()
 	if ent != nil {
 		c.removeElement(ent)
@@ -106,7 +106,7 @@ func (c *LRU) RemoveOldest() (key string, value *Package, ok bool) {
 }
 
 // GetOldest returns the oldest entry
-func (c *LRU) GetOldest() (key string, value *Package, ok bool) {
+func (c *LRU) GetOldest() (key string, value RefCountedElem, ok bool) {
 	ent := c.evictList.Back()
 	if ent != nil {
 		kv := ent.Value.(*entry)

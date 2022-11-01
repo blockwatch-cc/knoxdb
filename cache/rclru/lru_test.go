@@ -1,15 +1,43 @@
-package pack
+package rclru
 
 import (
+	"reflect"
 	"strconv"
+	"sync/atomic"
 	"testing"
+
+	"blockwatch.cc/knoxdb/encoding/block"
 )
+
+var szPackage = int(reflect.TypeOf(TestPackage{}).Size())
+
+type TestPackage struct {
+	refCount int64
+	key      uint32
+	blocks   []*block.Block
+}
+
+func NewPackage(_ int) *TestPackage {
+	return &TestPackage{}
+}
+
+func (p *TestPackage) IncRef() int64 {
+	return atomic.AddInt64(&p.refCount, 1)
+}
+
+func (p *TestPackage) DecRef() int64 {
+	return atomic.AddInt64(&p.refCount, -1)
+}
+
+func (p *TestPackage) HeapSize() int {
+	return szPackage
+}
 
 func TestLRU(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k string, v *Package) {
-		if k != strconv.FormatUint(uint64(v.key), 10) {
-			t.Fatalf("Evict values not equal (%v!=%v)", k, v)
+	onEvicted := func(k string, v RefCountedElem) {
+		if k != strconv.FormatUint(uint64(v.(*TestPackage).key), 10) {
+			t.Fatalf("Evict values not equal (%v!=%v)", k, v.(*TestPackage).key)
 		}
 		evictCounter++
 	}
@@ -35,7 +63,7 @@ func TestLRU(t *testing.T) {
 	}
 
 	for i, k := range l.Keys() {
-		if v, ok := l.Get(k); !ok || strconv.FormatUint(uint64(v.key), 10) != k || int(v.key) != i+128 {
+		if v, ok := l.Get(k); !ok || strconv.FormatUint(uint64(v.(*TestPackage).key), 10) != k || int(v.(*TestPackage).key) != i+128 {
 			t.Fatalf("bad key: %v", k)
 		}
 	}
@@ -152,7 +180,7 @@ func TestLRU_Peek(t *testing.T) {
 		pkg.key = uint32(i)
 		l.Add(strconv.FormatUint(uint64(i), 10), pkg)
 	}
-	if v, ok := l.Peek("1"); !ok || v.key != 1 {
+	if v, ok := l.Peek("1"); !ok || v.(*TestPackage).key != 1 {
 		t.Errorf("1 should be set to 1: %v, %v", v, ok)
 	}
 

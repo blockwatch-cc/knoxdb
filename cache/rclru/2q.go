@@ -1,14 +1,11 @@
-package pack
+package rclru
 
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
-
-	"blockwatch.cc/knoxdb/encoding/block"
 )
 
-/*const (
+const (
 	// Default2QRecentRatio is the ratio of the 2Q cache dedicated
 	// to recently added entries that have only been accessed once.
 	Default2QRecentRatio = 0.25
@@ -16,9 +13,9 @@ import (
 	// Default2QGhostEntries is the default ratio of ghost
 	// entries kept to track entries recently evicted
 	Default2QGhostEntries = 0.50
-)*/
+)
 
-// BlockTwoQueueCache is a thread-safe fixed size 2Q cache.
+// TwoQueueCache is a thread-safe fixed size 2Q cache.
 // 2Q is an enhancement over the standard LRU cache
 // in that it tracks both frequently and recently used
 // entries separately. This avoids a burst in access to new
@@ -27,36 +24,36 @@ import (
 // computationally about 2x the cost, and adds some metadata over
 // head. The ARCCache is similar, but does not require setting any
 // parameters.
-type BlockTwoQueueCache struct {
+type TwoQueueCache struct {
 	byteSize    int
 	maxByteSize int
 	recentRatio float64
 	ghostRatio  float64
 
-	recent      BlockLRUCache
-	frequent    BlockLRUCache
-	recentEvict BlockLRUCache
-	onEvict     BlockEvictCallback
+	recent      *LRU
+	frequent    *LRU
+	recentEvict *LRU
+	onEvict     EvictCallback
 	lock        sync.RWMutex
 }
 
-func (c *BlockTwoQueueCache) GetParams() (int, int, int, int) {
+func (c *TwoQueueCache) GetParams() (int, int, int, int) {
 	return c.recent.Len(), c.frequent.Len(), c.recentEvict.Len(), c.byteSize
 }
 
-// New2Q creates a new BlockTwoQueueCache using the default
+// New2Q creates a new TwoQueueCache using the default
 // values for the parameters.
-func NewBlock2Q(size int) (*BlockTwoQueueCache, error) {
-	return NewBlock2QParams(size, Default2QRecentRatio, Default2QGhostEntries, nil)
+func New2Q(size int) (*TwoQueueCache, error) {
+	return New2QParams(size, Default2QRecentRatio, Default2QGhostEntries, nil)
 }
 
-func NewBlock2QWithEvict(size int, onEvicted func(key uint64, value *block.Block)) (*BlockTwoQueueCache, error) {
-	return NewBlock2QParams(size, Default2QRecentRatio, Default2QGhostEntries, onEvicted)
+func New2QWithEvict(size int, onEvicted func(key string, value RefCountedElem)) (*TwoQueueCache, error) {
+	return New2QParams(size, Default2QRecentRatio, Default2QGhostEntries, onEvicted)
 }
 
-// New2QParams creates a new BlockTwoQueueCache using the provided
+// New2QParams creates a new TwoQueueCache using the provided
 // parameter values.
-func NewBlock2QParams(size int, recentRatio float64, ghostRatio float64, onEvicted func(key uint64, value *block.Block)) (*BlockTwoQueueCache, error) {
+func New2QParams(size int, recentRatio float64, ghostRatio float64, onEvicted func(key string, value RefCountedElem)) (*TwoQueueCache, error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("2qcache: invalid size")
 	}
@@ -68,21 +65,21 @@ func NewBlock2QParams(size int, recentRatio float64, ghostRatio float64, onEvict
 	}
 
 	// Allocate the LRUs
-	recent, err := NewBlockLRU(nil)
+	recent, err := NewLRU(nil)
 	if err != nil {
 		return nil, err
 	}
-	frequent, err := NewBlockLRU(nil)
+	frequent, err := NewLRU(nil)
 	if err != nil {
 		return nil, err
 	}
-	recentEvict, err := NewBlockLRU(nil)
+	recentEvict, err := NewLRU(nil)
 	if err != nil {
 		return nil, err
 	}
 
 	// Initialize the cache
-	c := &BlockTwoQueueCache{
+	c := &TwoQueueCache{
 		byteSize:    0,
 		maxByteSize: size,
 		recentRatio: recentRatio,
@@ -97,24 +94,24 @@ func NewBlock2QParams(size int, recentRatio float64, ghostRatio float64, onEvict
 }
 
 // Get looks up a key's value from the cache.
-func (c *BlockTwoQueueCache) Get(key uint64) (value *block.Block, ok bool) {
+func (c *TwoQueueCache) Get(key string) (RefCountedElem, bool) {
 	c.lock.Lock()
 
 	// Check if this is a frequent value
-	if pkg, ok := c.frequent.Get(key); ok {
-		atomic.AddInt64(&pkg.RefCount, 1)
+	if val, ok := c.frequent.Get(key); ok {
+		val.IncRef()
 		c.lock.Unlock()
-		return pkg, ok
+		return val, ok
 	}
 
 	// If the value is contained in recent, then we
 	// promote it to frequent
-	if pkg, ok := c.recent.Peek(key); ok {
+	if val, ok := c.recent.Peek(key); ok {
 		c.recent.Remove(key)
-		c.frequent.Add(key, pkg)
-		atomic.AddInt64(&pkg.RefCount, 1)
+		c.frequent.Add(key, val)
+		val.IncRef()
 		c.lock.Unlock()
-		return pkg, ok
+		return val, ok
 	}
 
 	// No hit
@@ -123,11 +120,11 @@ func (c *BlockTwoQueueCache) Get(key uint64) (value *block.Block, ok bool) {
 }
 
 // Add adds a value to the cache.
-func (c *BlockTwoQueueCache) Add(key uint64, value *block.Block) (updated, evicted bool) {
+func (c *TwoQueueCache) Add(key string, value RefCountedElem) (updated, evicted bool) {
 	c.lock.Lock()
 
 	c.byteSize += value.HeapSize()
-	atomic.AddInt64(&value.RefCount, 1)
+	value.IncRef()
 
 	// Check if the value is frequently used already,
 	// and just update the value
@@ -183,7 +180,7 @@ func (c *BlockTwoQueueCache) Add(key uint64, value *block.Block) (updated, evict
 // ContainsOrAdd checks if a key is in the cache  without updating the
 // recent-ness or deleting it for being stale,  and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
-func (c *BlockTwoQueueCache) ContainsOrAdd(key uint64, value *block.Block) (ok, evicted bool) {
+func (c *TwoQueueCache) ContainsOrAdd(key string, value RefCountedElem) (ok, evicted bool) {
 	c.lock.Lock()
 	if c.frequent.Contains(key) {
 		c.lock.Unlock()
@@ -199,7 +196,7 @@ func (c *BlockTwoQueueCache) ContainsOrAdd(key uint64, value *block.Block) (ok, 
 }
 
 // ensureSpace is used to ensure we have space in the cache
-func (c *BlockTwoQueueCache) ensureSpace() (evicted bool) {
+func (c *TwoQueueCache) ensureSpace() (evicted bool) {
 
 	for c.byteSize > c.maxByteSize {
 		recentLen := c.recent.Len()
@@ -207,8 +204,8 @@ func (c *BlockTwoQueueCache) ensureSpace() (evicted bool) {
 		recentSize := int(float64(recentLen+freqLen) * c.recentRatio)
 
 		var e bool
-		var k uint64
-		var v *block.Block
+		var k string
+		var v RefCountedElem
 		if recentLen > 0 && (recentLen > recentSize) {
 			// If the recent buffer is larger than
 			// the target, evict from there
@@ -237,7 +234,7 @@ func (c *BlockTwoQueueCache) ensureSpace() (evicted bool) {
 }
 
 // Len returns the number of items in the cache.
-func (c *BlockTwoQueueCache) Len() int {
+func (c *TwoQueueCache) Len() int {
 	c.lock.RLock()
 	l := c.recent.Len() + c.frequent.Len()
 	c.lock.RUnlock()
@@ -246,7 +243,7 @@ func (c *BlockTwoQueueCache) Len() int {
 
 // Keys returns a slice of the keys in the cache.
 // The frequently used keys are first in the returned slice.
-func (c *BlockTwoQueueCache) Keys() []uint64 {
+func (c *TwoQueueCache) Keys() []string {
 	c.lock.RLock()
 	k1 := c.frequent.Keys()
 	k2 := c.recent.Keys()
@@ -255,9 +252,9 @@ func (c *BlockTwoQueueCache) Keys() []uint64 {
 }
 
 // Remove removes the provided key from the cache.
-func (c *BlockTwoQueueCache) Remove(key uint64) {
+func (c *TwoQueueCache) Remove(key string) {
 	c.lock.Lock()
-	var val *block.Block
+	var val RefCountedElem
 	var ok bool
 	if val, ok = c.frequent.Peek(key); !ok {
 		val, ok = c.recent.Peek(key)
@@ -284,7 +281,7 @@ func (c *BlockTwoQueueCache) Remove(key uint64) {
 	c.lock.Unlock()
 }
 
-func (c *BlockTwoQueueCache) RemoveOldest() {
+func (c *TwoQueueCache) RemoveOldest() {
 	c.lock.Lock()
 	key, _, ok := c.recent.GetOldest()
 	c.lock.Unlock()
@@ -294,7 +291,7 @@ func (c *BlockTwoQueueCache) RemoveOldest() {
 }
 
 // Purge is used to completely clear the cache.
-func (c *BlockTwoQueueCache) Purge() {
+func (c *TwoQueueCache) Purge() {
 	c.lock.Lock()
 	k, v, ok := c.recent.RemoveOldest()
 	for ok {
@@ -320,7 +317,7 @@ func (c *BlockTwoQueueCache) Purge() {
 
 // Contains is used to check if the cache contains a key
 // without updating recency or frequency.
-func (c *BlockTwoQueueCache) Contains(key uint64) bool {
+func (c *TwoQueueCache) Contains(key string) bool {
 	c.lock.RLock()
 	ok := c.frequent.Contains(key) || c.recent.Contains(key)
 	c.lock.RUnlock()
@@ -329,20 +326,20 @@ func (c *BlockTwoQueueCache) Contains(key uint64) bool {
 
 // Peek is used to inspect the cache value of a key
 // without updating recency or frequency.
-func (c *BlockTwoQueueCache) Peek(key uint64) (value *block.Block, ok bool) {
+func (c *TwoQueueCache) Peek(key string) (value RefCountedElem, ok bool) {
 	c.lock.RLock()
-	var v *block.Block
+	var v RefCountedElem
 	v, ok = c.frequent.Peek(key)
 	if ok {
 		value = v
-		atomic.AddInt64(&value.RefCount, 1)
+		value.IncRef()
 		c.lock.RUnlock()
 		return
 	}
 	v, ok = c.recent.Peek(key)
 	if ok {
 		value = v
-		atomic.AddInt64(&value.RefCount, 1)
+		value.IncRef()
 	}
 	c.lock.RUnlock()
 	return
