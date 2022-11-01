@@ -131,6 +131,7 @@ func run() error {
 			for j, h := range v.Hashes(u64) {
 				if _, ok := dup[h]; ok {
 					dr++
+					// FIXME: FieldType.Bytes is deprecated
 					db += uint64(len(fields[i].Type.Bytes(v.Elem(j))))
 				} else {
 					dup[h] = struct{}{}
@@ -233,7 +234,7 @@ func run() error {
 // same name as the file's basename (without extension). Optional parameter `opts`
 // allows to configure settings of the underlying boltdb engine.
 //
-// Example
+// # Example
 //
 // ```
 // // opens file `op.db` in path `./db` and looks for table `op`

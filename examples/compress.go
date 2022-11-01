@@ -91,6 +91,10 @@ func printhelp() {
 }
 
 func run() error {
+	if len(os.Args) < 4 {
+		printhelp()
+		return nil
+	}
 	err := flags.Parse(os.Args[4:])
 	if err != nil {
 		if err == flag.ErrHelp {
