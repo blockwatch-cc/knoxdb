@@ -53,18 +53,9 @@ func decodeFloat32Block(block []byte, dst []float32) ([]float32, error) {
 	if err != nil {
 		return nil, err
 	}
-	// var (
-	// 	cp []float64
-	// 	v  interface{}
-	// )
+
 	v := arena.Alloc(BlockFloat64, len(dst))
 	cp := v.([]float64)[:len(dst)]
-	// if len(dst) <= DefaultMaxPointsPerBlock {
-	// 	v = float64Pool.Get()
-	// 	cp = v.([]float64)[:len(dst)]
-	// } else {
-	// 	cp = make([]float64, len(dst))
-	// }
 	b, err := compress.FloatArrayDecodeAll(buf, cp)
 	if cap(dst) >= len(b) {
 		dst = dst[:len(b)]
@@ -75,11 +66,7 @@ func decodeFloat32Block(block []byte, dst []float32) ([]float32, error) {
 	for i, _ := range b {
 		dst[i] = float32(b[i])
 	}
-
 	arena.Free(BlockFloat64, v)
-	// if v != nil {
-	// float64Pool.Put(v)
-	// }
 
 	if canRecycle && cap(buf) == bufSizeHint {
 		bufferPool.Put(buf[:0])
@@ -98,9 +85,6 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 		return dst, nil
 	}
 
-	// use a temp int64 slice for decoding
-	// v := int64Pool.Get()
-	// tmp := v.([]int64)[:0]
 	v := arena.Alloc(BlockInt64, dst.Len())
 	tmp := v.([]int64)[:0]
 
@@ -109,7 +93,6 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 			bufferPool.Put(buf[:0])
 		}
 		arena.Free(BlockInt64, v)
-		// int64Pool.Put(v)
 	}()
 
 	// unpack 4 int64 strides
@@ -121,60 +104,21 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 			return dst, err
 		}
 
+		// copy stride
 		switch i {
 		case 0:
-			// if cap(dst.X0) < len(tmp) {
-			// 	if len(tmp) <= DefaultMaxPointsPerBlock {
-			// 		dst.X0 = int64Pool.Get().([]int64)[:len(tmp)]
-			// 	} else {
-			// 		dst.X0 = make([]int64, len(tmp))
-			// 	}
-			// } else {
 			dst.X0 = dst.X0[:len(tmp)]
-			// }
-
-			// copy stride
 			copy(dst.X0, tmp)
 		case 1:
-			// if cap(dst.X1) < len(tmp) {
-			// 	if len(tmp) <= DefaultMaxPointsPerBlock {
-			// 		dst.X1 = uint64Pool.Get().([]uint64)[:len(tmp)]
-			// 	} else {
-			// 		dst.X1 = make([]uint64, len(tmp))
-			// 	}
-			// } else {
 			dst.X1 = dst.X1[:len(tmp)]
-			// }
-
-			// copy stride
 			srcint := compress.ReintepretInt64ToUint64Slice(tmp)
 			copy(dst.X1, srcint)
 		case 2:
-			// if cap(dst.X2) < len(tmp) {
-			// 	if len(tmp) <= DefaultMaxPointsPerBlock {
-			// 		dst.X2 = uint64Pool.Get().([]uint64)[:len(tmp)]
-			// 	} else {
-			// 		dst.X2 = make([]uint64, len(tmp))
-			// 	}
-			// } else {
 			dst.X2 = dst.X2[:len(tmp)]
-			// }
-
-			// copy stride
 			srcint := compress.ReintepretInt64ToUint64Slice(tmp)
 			copy(dst.X2, srcint)
 		case 3:
-			// if cap(dst.X3) < len(tmp) {
-			// 	if len(tmp) <= DefaultMaxPointsPerBlock {
-			// 		dst.X3 = uint64Pool.Get().([]uint64)[:len(tmp)]
-			// 	} else {
-			// 		dst.X3 = make([]uint64, len(tmp))
-			// 	}
-			// } else {
 			dst.X3 = dst.X3[:len(tmp)]
-			// }
-
-			// copy stride
 			srcint := compress.ReintepretInt64ToUint64Slice(tmp)
 			copy(dst.X3, srcint)
 		}
@@ -194,8 +138,6 @@ func decodeInt128Block(block []byte, dst vec.Int128LLSlice) (vec.Int128LLSlice, 
 	}
 
 	// use a temp int64 slice for decoding
-	// v := int64Pool.Get()
-	// tmp := v.([]int64)[:0]
 	v := arena.Alloc(BlockInt64, dst.Len())
 	tmp := v.([]int64)[:0]
 
@@ -203,7 +145,6 @@ func decodeInt128Block(block []byte, dst vec.Int128LLSlice) (vec.Int128LLSlice, 
 		if canRecycle && cap(buf) == bufSizeHint {
 			bufferPool.Put(buf[:0])
 		}
-		// int64Pool.Put(v)
 		arena.Free(BlockInt64, v)
 	}()
 
@@ -216,31 +157,12 @@ func decodeInt128Block(block []byte, dst vec.Int128LLSlice) (vec.Int128LLSlice, 
 			return dst, err
 		}
 
+		// copy stride
 		if i == 0 {
-			// if cap(dst.X0) < len(tmp) {
-			// 	if len(tmp) <= DefaultMaxPointsPerBlock {
-			// 		dst.X0 = int64Pool.Get().([]int64)[:len(tmp)]
-			// 	} else {
-			// 		dst.X0 = make([]int64, len(tmp))
-			// 	}
-			// } else {
 			dst.X0 = dst.X0[:len(tmp)]
-			// }
-
-			// copy stride
 			copy(dst.X0, tmp)
 		} else {
-			// if cap(dst.X1) < len(tmp) {
-			// 	if len(tmp) <= DefaultMaxPointsPerBlock {
-			// 		dst.X1 = uint64Pool.Get().([]uint64)[:len(tmp)]
-			// 	} else {
-			// 		dst.X1 = make([]uint64, len(tmp))
-			// 	}
-			// } else {
 			dst.X1 = dst.X1[:len(tmp)]
-			// }
-
-			// copy stride
 			srcint := compress.ReintepretInt64ToUint64Slice(tmp)
 			copy(dst.X1, srcint)
 		}

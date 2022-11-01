@@ -360,7 +360,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 		idx.stats.JournalTuplesThreshold = int64(maxJournalSize)
 		idx.stats.TombstoneTuplesThreshold = int64(maxJournalSize)
 		idx.packidx = NewPackIndex(nil, 0, maxPackSize)
-		idx.journal, err = loadPackTx(dbTx, idx.metakey, encodePackKey(journalKey), nil)
+		idx.journal, err = loadPackTx(dbTx, idx.metakey, encodePackKey(journalKey), nil, maxJournalSize)
 		if err != nil {
 			return fmt.Errorf("pack: %s journal open failed: %v", idx.name(), err)
 		}
@@ -368,7 +368,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 			return err
 		}
 		log.Debugf("pack: %s loaded journal with %d records", idx.name(), idx.journal.Len())
-		idx.tombstone, err = loadPackTx(dbTx, idx.metakey, encodePackKey(tombstoneKey), nil)
+		idx.tombstone, err = loadPackTx(dbTx, idx.metakey, encodePackKey(tombstoneKey), nil, maxJournalSize)
 		if err != nil {
 			return fmt.Errorf("pack: %s index cannot open tombstone: %v", idx.name(), err)
 		}
@@ -1333,7 +1333,7 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 	atomic.AddInt64(&idx.stats.PackCacheMisses, 1)
 
 	// if not found, load from storage
-	pkg, err := tx.loadPack(idx.key, key, idx.packPool.Get().(*Package))
+	pkg, err := tx.loadPack(idx.key, key, idx.packPool.Get().(*Package), idx.opts.PackSize())
 	if err != nil {
 		return nil, err
 	}
@@ -1377,7 +1377,7 @@ func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	atomic.AddInt64(&idx.stats.PackCacheMisses, 1)
 
 	// if not found, load from storage
-	pkg, err := tx.loadPack(idx.key, key, idx.packPool.Get().(*Package))
+	pkg, err := tx.loadPack(idx.key, key, idx.packPool.Get().(*Package), idx.opts.PackSize())
 	if err != nil {
 		return nil, err
 	}

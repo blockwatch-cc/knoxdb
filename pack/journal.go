@@ -12,7 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/vec"
 )
 
-const sizeStep int = 1 << 12 // 4096
+const sizeStep int = 1 << 8 // 256
 
 // RoundSize rounds size up to a multiple of sizeStep
 func roundSize(sz int) int {
@@ -32,7 +32,7 @@ func roundSize(sz int) int {
 // in pk sort order (in queries or flush and in both directions), we keep a
 // mapping from pk to journal position in `keys` which is always sorted by pk.
 //
-// How the journal is used
+// # How the journal is used
 //
 // Lookup: (non-order-preserving) matches against pk values only. For best performance
 // we pre-sort the pk's we want to look up.
@@ -49,7 +49,6 @@ func roundSize(sz int) int {
 // TODO
 // - write all incoming inserts/updates/deletes to a WAL
 // - load and reconstructed journal + tomb from WAL
-//
 type Journal struct {
 	lastid   uint64 // the highest primary key in the journal, used for sorting
 	maxid    uint64 // the highest primary key in the table, used to generate new ids
@@ -126,7 +125,7 @@ func (j *Journal) Close() {
 
 func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 	j.Reset()
-	if _, err := loadPackTx(dbTx, bucketName, encodePackKey(journalKey), j.data); err != nil {
+	if _, err := loadPackTx(dbTx, bucketName, encodePackKey(journalKey), j.data, j.maxsize); err != nil {
 		return err
 	}
 	j.sortData = false
@@ -139,7 +138,7 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 	if j.sortData {
 		sort.Sort(j.keys)
 	}
-	tomb, err := loadPackTx(dbTx, bucketName, encodePackKey(tombstoneKey), nil)
+	tomb, err := loadPackTx(dbTx, bucketName, encodePackKey(tombstoneKey), nil, j.maxsize)
 	if err != nil {
 		return fmt.Errorf("pack: cannot open tombstone for table %s: %v", string(bucketName), err)
 	}
@@ -824,9 +823,10 @@ func (j *Journal) IsDeleted(pk uint64, last int) (bool, int) {
 // queried primary keys are sorted, i.e. the next pk is larger than the previous pk.
 //
 // var last, index int
-// for last < journal.Len() {
-//    index, last = journal.PkIndex(pk, last)
-// }
+//
+//	for last < journal.Len() {
+//	   index, last = journal.PkIndex(pk, last)
+//	}
 //
 // Invariant: keys list is always sorted
 func (j *Journal) PkIndex(pk uint64, last int) (int, int) {
@@ -915,7 +915,6 @@ func (s dualSorter) Swap(i, j int) {
 // 3. data.Column(pkid) -> []uint64 (lookup pks at indexes)
 // 4. Joined sort index/pks by pk
 // 5. Return pk-sorted index list
-//
 func (j *Journal) SortedIndexes(b *vec.Bitset) ([]int, []uint64) {
 	ds := dualSorter{
 		pk: make([]uint64, b.Count()),

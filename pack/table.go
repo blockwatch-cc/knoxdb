@@ -3077,7 +3077,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	if stripped {
 		pkg = pkg.KeepFields(fields)
 	}
-	pkg, err = tx.loadPack(t.key, key, pkg)
+	pkg, err = tx.loadPack(t.key, key, pkg, t.opts.PackSize())
 	if err != nil {
 		return nil, err
 	}
@@ -3126,7 +3126,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	atomic.AddInt64(&t.stats.PackCacheMisses, 1)
 
 	// load from storage
-	pkg, err := tx.loadPack(t.key, key, t.packPool.Get().(*Package))
+	pkg, err := tx.loadPack(t.key, key, t.packPool.Get().(*Package), t.opts.PackSize())
 	if err != nil {
 		return nil, err
 	}
