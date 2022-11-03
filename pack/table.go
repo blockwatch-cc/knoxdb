@@ -3176,9 +3176,12 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 	}
 	// fetch full pack from pool or create new full pack
 	pkg := t.packPool.Get().(*Package)
-	pkg.key = t.packidx.packs[id].Key
-	pkg.nValues = t.packidx.packs[id].NValues
-	pkg.size = t.packidx.packs[id].Packsize
+
+	// Get PackInfo and fill metadata
+	pi := t.packidx.GetByKey(id)
+	pkg.key = pi.Key
+	pkg.nValues = pi.NValues
+	pkg.size = pi.Packsize
 
 	var loadField FieldList
 	for i, v := range pkg.fields {

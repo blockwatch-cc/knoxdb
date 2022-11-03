@@ -23,7 +23,6 @@ import (
 //
 // PackIndex keeps a list of all current pack info/stats and a list of all
 // removed keys in memory. Use storePackHeader to persist the pack index to storage.
-//
 type PackIndex struct {
 	packs   PackInfoList // list of pack headers (identity and metadata for all blocks)
 	minpks  []uint64     // min statistics for pk field
@@ -138,6 +137,27 @@ func (l *PackIndex) MinMaxSlices() ([]uint64, []uint64) {
 
 func (l *PackIndex) Get(i int) PackInfo {
 	if i < 0 || i >= l.Len() {
+		return PackInfo{}
+	}
+	return l.packs[i]
+}
+
+func (l *PackIndex) GetByKey(key uint32) PackInfo {
+	if len(l.packs) == 0 {
+		return PackInfo{}
+	}
+
+	// check if pack was removed
+	i := sort.Search(len(l.removed), func(i int) bool { return l.removed[i] >= key })
+	if i < len(l.removed) && l.removed[i] == key {
+		// key is present at l.removed[i] -> pack was removed
+		return PackInfo{}
+	}
+
+	// search for pack
+	i = sort.Search(len(l.packs), func(i int) bool { return l.packs[i].Key >= key })
+	if i >= len(l.packs) || l.packs[i].Key != key {
+		// key is not present at l.packs[i]
 		return PackInfo{}
 	}
 	return l.packs[i]
@@ -266,7 +286,6 @@ func (l *PackIndex) Remove(key uint32) {
 // Assumes pos list is sorted by min value and pack min/max ranges don't overlap
 // this is the case for all index and table packs because placement and split
 // algorithms ensure overlaps never exist.
-//
 func (l *PackIndex) Best(val uint64) (pos int, packmin uint64, packmax uint64, nextmin uint64, isFull bool) {
 	count := l.Len()
 
