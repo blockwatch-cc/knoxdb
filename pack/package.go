@@ -71,6 +71,10 @@ func encodePackKey(key uint32) []byte {
 	}
 }
 
+func encodeBlockKey(packkey uint32, col int) uint64 {
+	return (uint64(packkey) << 32) | uint64(col&0xffffffff)
+}
+
 func NewPackage(sz int) *Package {
 	return &Package{
 		pkindex: -1,
@@ -316,6 +320,24 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 	}
 
 	return clone, nil
+}
+
+func (dst *Package) MergeCols(src *Package) (*Package, error) {
+	if src == nil {
+		return dst, nil
+	}
+	if dst.nValues != src.nValues {
+		return nil, fmt.Errorf("pack: MergeCols: differnt number of values")
+	}
+	for i := range dst.blocks {
+		if i > len(src.blocks) {
+			break
+		}
+		if dst.blocks[i].IsIgnore() && !src.blocks[i].IsIgnore() {
+			dst.blocks[i] = src.blocks[i]
+		}
+	}
+	return dst, nil
 }
 
 func (p *Package) Optimize() {

@@ -227,7 +227,7 @@ func (c *TwoQueueCache) ensureSpace() (evicted bool) {
 	freqLen := c.frequent.Len()
 	evictSize := int(float64(recentLen+freqLen) * c.ghostRatio)
 
-	for evictSize < c.recentEvict.Len() {
+	for evictSize <= c.recentEvict.Len() {
 		c.recentEvict.RemoveOldest()
 	}
 

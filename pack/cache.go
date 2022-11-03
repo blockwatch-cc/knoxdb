@@ -3,6 +3,10 @@
 
 package pack
 
+import (
+	"blockwatch.cc/knoxdb/encoding/block"
+)
+
 type Cache interface {
 	Purge()
 	Add(key string, value *Package) (updated, evicted bool)
@@ -13,6 +17,20 @@ type Cache interface {
 	Remove(key string)
 	RemoveOldest()
 	Keys() []string
+	Len() int
+	GetParams() (int, int, int, int)
+}
+
+type BlockCache interface {
+	Purge()
+	Add(key uint64, value *block.Block) (updated, evicted bool)
+	Get(key uint64) (value *block.Block, ok bool)
+	Contains(key uint64) bool
+	Peek(key uint64) (value *block.Block, ok bool)
+	ContainsOrAdd(key uint64, value *block.Block) (ok, evicted bool)
+	Remove(key uint64)
+	RemoveOldest()
+	Keys() []uint64
 	Len() int
 	GetParams() (int, int, int, int)
 }

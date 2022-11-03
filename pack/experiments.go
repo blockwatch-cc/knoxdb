@@ -1002,21 +1002,24 @@ func (t *Table) CacheTest() error {
 
 	var count int
 
-	var list = []int{0, 0, 2, 3, 4, 5, 6, 2, -2}
+	var list = []int{0, 0, 2, 3, 3, 4, 4, 5, 5, 2, -2}
 
 	for _, i := range list {
 		if i >= 0 {
-			pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, true, nil)
+			pkg, err := t.loadSharedPack2(tx, t.packidx.packs[i].Key, true, nil)
 			if err != nil {
 				return err
 			}
-			t.releaseSharedPack(pkg)
+			t.releaseSharedPack2(pkg)
 		} else {
-			t.cache.Remove(t.cachekey(encodePackKey(uint32(-i))))
+			for j := range t.fields {
+				t.bcache.Remove(encodeBlockKey(uint32(-i), j))
+			}
+			//t.cache.Remove(t.cachekey(encodePackKey(uint32(-i))))
 		}
 
-		r, f, e, b := t.cache.GetParams()
-		fmt.Printf("size=%d recent=%d frequent=%d evicted=%d %dBytes\n", r+f, r, f, e, b)
+		r, f, e, b := t.bcache.GetParams()
+		fmt.Printf("%d: size=%d recent=%d frequent=%d evicted=%d %dBytes\n", i, r+f, r, f, e, b)
 		count++
 	}
 
@@ -1047,11 +1050,11 @@ func (t *Table) CacheBench() error {
 
 	// popuate the Cache
 	for n := 0; n < nPacks; n++ {
-		pkg, err := t.loadSharedPack(tx, t.packidx.packs[n].Key, true, nil)
+		pkg, err := t.loadSharedPack2(tx, t.packidx.packs[n].Key, true, nil)
 		if err != nil {
 			return err
 		}
-		t.releaseSharedPack(pkg)
+		t.releaseSharedPack2(pkg)
 	}
 
 	// reset cache stats

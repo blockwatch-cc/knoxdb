@@ -41,7 +41,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	//"blockwatch.cc/knoxdb/cache"
+	"blockwatch.cc/knoxdb/encoding/block"
 	//"blockwatch.cc/knoxdb/cache/lru"
 	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
@@ -125,13 +125,14 @@ type TableMeta struct {
 }
 
 type Table struct {
-	name    string    // printable table name
-	opts    Options   // runtime configuration options
-	fields  FieldList // ordered list of table fields as central type info
-	indexes IndexList // list of indexes (similar structure as the table)
-	meta    TableMeta // authoritative metadata
-	db      *DB       // lower-level storage (e.g. boltdb wrapper)
-	cache   Cache     // keep decoded packs for query/updates
+	name    string     // printable table name
+	opts    Options    // runtime configuration options
+	fields  FieldList  // ordered list of table fields as central type info
+	indexes IndexList  // list of indexes (similar structure as the table)
+	meta    TableMeta  // authoritative metadata
+	db      *DB        // lower-level storage (e.g. boltdb wrapper)
+	cache   Cache      // keep decoded packs for query/updates
+	bcache  BlockCache // keep decoded packs for query/updates
 	//	clock    sync.RWMutex // Cache lock
 	journal  *Journal     // in-memory data not yet written to packs
 	packidx  *PackIndex   // in-memory list of pack and block info
@@ -247,6 +248,10 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 	}
 	if t.opts.CacheSize > 0 {
 		t.cache, err = New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
+		if err != nil {
+			return nil, err
+		}
+		t.bcache, err = NewBlock2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage2)
 		if err != nil {
 			return nil, err
 		}
@@ -398,6 +403,10 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 	}
 	if t.opts.CacheSize > 0 {
 		t.cache, err = New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
+		if err != nil {
+			return nil, err
+		}
+		t.bcache, err = NewBlock2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage2)
 		if err != nil {
 			return nil, err
 		}
@@ -3151,6 +3160,82 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	return pkg, nil
 }
 
+func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
+	// determine if we need to load a full pack or a stripped version with less fields
+	//	stripped := len(fields) > 0 && len(fields) < len(t.Fields())
+
+	if len(fields) == 0 {
+		fields = t.fields
+	}
+	key := encodePackKey(id)
+
+	// try cache lookup for the full pack first
+	cachefn := t.bcache.Peek
+	if touch {
+		cachefn = t.bcache.Get
+	}
+	// fetch full pack from pool or create new full pack
+	pkg := t.packPool.Get().(*Package)
+	pkg.key = t.packidx.packs[id].Key
+	pkg.nValues = t.packidx.packs[id].NValues
+	pkg.size = t.packidx.packs[id].Packsize
+
+	var loadField FieldList
+	for i, v := range pkg.fields {
+		if !fields.Contains(v.Name) {
+			pkg.blocks[i].SetIgnore()
+			continue
+		}
+		cachekey := encodeBlockKey(id, i)
+
+		if b, ok := cachefn(cachekey); ok {
+			atomic.AddInt64(&t.stats.PackCacheHits, 1)
+			pkg.blocks[i] = b
+		} else {
+			atomic.AddInt64(&t.stats.PackCacheMisses, 1)
+			pkg.blocks[i].SetIgnore()
+			loadField = loadField.Add(v)
+		}
+	}
+	// all blocks found in cache
+	if len(loadField) == 0 {
+		return pkg, nil
+	}
+	// if not found, load from storage using a pre-allocated pack as buffer
+	var (
+		err error
+	)
+	// fetch full pack from pool or create new full pack
+	pkg2 := t.packPool.Get().(*Package)
+	// skip undesired fields while loading
+	pkg2 = pkg2.KeepFields(loadField)
+
+	pkg2, err = tx.loadPack(t.key, key, pkg2)
+	if err != nil {
+		return nil, err
+	}
+
+	// log.Debugf("%s: loaded shared pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
+	atomic.AddInt64(&t.stats.PacksLoaded, 1)
+	atomic.AddInt64(&t.stats.PacksBytesRead, int64(pkg.size))
+
+	// store in cache
+	if touch {
+		for i, v := range pkg2.blocks {
+			if !v.IsIgnore() {
+				t.bcache.Add(encodeBlockKey(id, i), v)
+			}
+		}
+		atomic.AddInt64(&t.stats.PackCacheInserts, 1)
+		atomic.AddInt64(&t.stats.PackCacheCount, 1)
+		atomic.AddInt64(&t.stats.PackCacheSize, int64(pkg.HeapSize()))
+	}
+
+	pkg, err = pkg.MergeCols(pkg2)
+
+	return pkg, err
+}
+
 // loads a private copy of a pack for writing
 func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	key := encodePackKey(id)
@@ -3310,12 +3395,38 @@ func (t *Table) onEvictedPackage(key string, pkg *Package) {
 	t.releaseSharedPack(pkg)
 }
 
+func (t *Table) onEvictedPackage2(key uint64, bl *block.Block) {
+	// log.Debugf("%s: cache evict pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
+	atomic.AddInt64(&t.stats.PackCacheEvictions, 1)
+	atomic.AddInt64(&t.stats.PackCacheCount, -1)
+	atomic.AddInt64(&t.stats.PackCacheSize, int64(-bl.HeapSize()))
+	t.releaseSharedBlock(bl)
+}
+
 func (t *Table) releaseSharedPack(pkg *Package) {
 	if pkg == nil {
 		return
 	}
 	if atomic.AddInt64(&pkg.refCount, -1) == 0 {
 		t.recyclePackage(pkg)
+	}
+}
+
+func (t *Table) releaseSharedPack2(pkg *Package) {
+	if pkg == nil {
+		return
+	}
+	for _, v := range pkg.blocks {
+		t.releaseSharedBlock(v)
+	}
+}
+
+func (t *Table) releaseSharedBlock(bl *block.Block) {
+	if bl == nil {
+		return
+	}
+	if atomic.AddInt64(&bl.RefCount, -1) == 0 {
+		//t.recyclePackage(pkg)
 	}
 }
 
