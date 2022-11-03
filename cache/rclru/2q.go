@@ -139,11 +139,13 @@ func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 		// on update replace the cached value with new value (this may or may not
 		// be the same pointer/interface; if == we just decrement the reference counter
 		// to not count twice, if != we properly release the element's reference
-		// counter which may release the element)
+		// counter which may release the element) new value can take more space in memory,
+		// so maybe we have to evict something
 		c.stats.Rem(val.HeapSize())
 		val.DecRef()
 		c.frequent.Add(key, value)
 		c.stats.Add(value.HeapSize())
+		evicted = c.ensureSpace()
 		updated = true
 		c.lock.Unlock()
 		return
@@ -159,6 +161,7 @@ func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 		val.DecRef()
 		c.stats.Add(value.HeapSize())
 		c.frequent.Add(key, value)
+		evicted = c.ensureSpace()
 		updated = true
 		c.lock.Unlock()
 		return
