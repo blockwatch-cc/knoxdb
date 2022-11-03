@@ -9,60 +9,60 @@ type RefCountedElem interface {
 	HeapSize() int
 }
 
-type Cache interface {
+type Cache[KeyType comparable, ValType RefCountedElem] interface {
 	Purge()
-	Add(key string, value RefCountedElem) (updated, evicted bool)
-	Get(key string) (value RefCountedElem, ok bool)
-	Contains(key string) bool
-	Peek(key string) (value RefCountedElem, ok bool)
-	ContainsOrAdd(key string, value RefCountedElem) (ok, evicted bool)
-	Remove(key string)
+	Add(KeyType, ValType) (updated, evicted bool)
+	Get(KeyType) (ValType, bool)
+	Contains(KeyType) bool
+	Peek(KeyType) (ValType, bool)
+	ContainsOrAdd(KeyType, ValType) (ok, evicted bool)
+	Remove(KeyType)
 	RemoveOldest()
-	Keys() []string
+	Keys() []KeyType
 	Len() int
 	GetParams() (int, int, int, int)
 }
 
-func NewNoCache() *NoCache {
-	return &NoCache{}
+type NoCache[K comparable, V RefCountedElem] struct{}
+
+func NewNoCache[K comparable, V RefCountedElem]() *NoCache[K, V] {
+	return &NoCache[K, V]{}
 }
 
-type NoCache struct{}
+func (n *NoCache[K, V]) Purge() {}
 
-func (n *NoCache) Purge() {}
-
-func (n *NoCache) Add(_ string, _ RefCountedElem) (updated, evicted bool) {
+func (n *NoCache[K, V]) Add(_ K, _ V) (updated, evicted bool) {
 	return
 }
 
-func (n *NoCache) Get(_ string) (value RefCountedElem, ok bool) {
+func (n *NoCache[K, V]) Get(_ K) (val V, ok bool) {
 	return
 }
 
-func (n *NoCache) Contains(_ string) bool {
+func (n *NoCache[K, V]) Contains(_ K) bool {
 	return false
 }
 
-func (n *NoCache) Peek(_ string) (value RefCountedElem, ok bool) {
+func (n *NoCache[K, V]) Peek(_ K) (val V, ok bool) {
 	return
 }
 
-func (n *NoCache) ContainsOrAdd(key string, value RefCountedElem) (ok, evicted bool) {
+func (n *NoCache[K, V]) ContainsOrAdd(_ K, val V) (ok, evicted bool) {
 	return
 }
 
-func (n *NoCache) Remove(key string) {}
+func (n *NoCache[K, V]) Remove(_ K) {}
 
-func (n *NoCache) RemoveOldest() {}
+func (n *NoCache[K, V]) RemoveOldest() {}
 
-func (n *NoCache) Keys() []string {
+func (n *NoCache[K, V]) Keys() []K {
 	return nil
 }
 
-func (n *NoCache) Len() int {
+func (n *NoCache[K, V]) Len() int {
 	return 0
 }
 
-func (n *NoCache) GetParams() (int, int, int, int) {
+func (n *NoCache[K, V]) GetParams() (int, int, int, int) {
 	return 0, 0, 0, 0
 }

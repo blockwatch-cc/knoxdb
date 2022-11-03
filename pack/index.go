@@ -110,7 +110,7 @@ type Index struct {
 	indexZeroAt  IndexZeroAtFunc
 
 	table     *Table
-	cache     rclru.Cache
+	cache     rclru.Cache[string, *Package]
 	journal   *Package   // append log
 	tombstone *Package   // delete log
 	packidx   *PackIndex // in-memory list of pack and block headers
@@ -234,13 +234,13 @@ func (t *Table) CreateIndex(name string, field *Field, typ IndexType, opts Optio
 		return nil, err
 	}
 	if idx.opts.CacheSize > 0 {
-		idx.cache, err = rclru.New2QWithEvict(int(idx.opts.CacheSize), idx.onEvictedPackage)
+		idx.cache, err = rclru.New2QWithEvict[string, *Package](int(idx.opts.CacheSize), idx.onEvictedPackage)
 		if err != nil {
 			return nil, err
 		}
 		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSize)
 	} else {
-		idx.cache = rclru.NewNoCache()
+		idx.cache = rclru.NewNoCache[string, *Package]()
 	}
 
 	// Note: reindex may take a long time and requires a context which we don't have
@@ -382,13 +382,13 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 		return err
 	}
 	if idx.opts.CacheSize > 0 {
-		idx.cache, err = rclru.New2QWithEvict(int(idx.opts.CacheSize), idx.onEvictedPackage)
+		idx.cache, err = rclru.New2QWithEvict[string, *Package](int(idx.opts.CacheSize), idx.onEvictedPackage)
 		if err != nil {
 			return err
 		}
 		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSize)
 	} else {
-		idx.cache = rclru.NewNoCache()
+		idx.cache = rclru.NewNoCache[string, *Package]()
 	}
 
 	return nil
@@ -1334,9 +1334,9 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 	if touch {
 		cachefn = idx.cache.Get
 	}
-	if cached, ok := cachefn(cachekey); ok {
+	if pkg, ok := cachefn(cachekey); ok {
 		atomic.AddInt64(&idx.stats.PackCacheHits, 1)
-		return cached.(*Package), nil
+		return pkg, nil
 	}
 	atomic.AddInt64(&idx.stats.PackCacheMisses, 1)
 
@@ -1365,9 +1365,8 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	// try cache first
 	key := encodePackKey(id)
-	if cached, ok := idx.cache.Get(idx.cachekey(key)); ok {
+	if pkg, ok := idx.cache.Get(idx.cachekey(key)); ok {
 		atomic.AddInt64(&idx.stats.PackCacheHits, 1)
-		pkg := cached.(*Package)
 		clone, err := pkg.Clone(idx.opts.PackSize())
 		if err != nil {
 			return nil, err
@@ -1450,8 +1449,7 @@ func (idx *Index) makePackage() interface{} {
 	return pkg
 }
 
-func (idx *Index) onEvictedPackage(key string, val rclru.RefCountedElem) {
-	pkg := val.(*Package)
+func (idx *Index) onEvictedPackage(key string, pkg *Package) {
 	atomic.AddInt64(&idx.stats.PackCacheEvictions, 1)
 	atomic.AddInt64(&idx.stats.PackCacheCount, -1)
 	atomic.AddInt64(&idx.stats.PackCacheSize, int64(-pkg.HeapSize()))
