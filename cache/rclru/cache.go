@@ -1,5 +1,5 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
-// Author: alex@blockwatch.cc
+// Copyright (c) 2022 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc, stefan@blockwatch.cc
 
 package rclru
 
@@ -21,6 +21,7 @@ type Cache[KeyType comparable, ValType RefCountedElem] interface {
 	Keys() []KeyType
 	Len() int
 	GetParams() (int, int, int, int)
+	Stats() CacheStats
 }
 
 type NoCache[K comparable, V RefCountedElem] struct{}
@@ -65,4 +66,8 @@ func (n *NoCache[K, V]) Len() int {
 
 func (n *NoCache[K, V]) GetParams() (int, int, int, int) {
 	return 0, 0, 0, 0
+}
+
+func (n *NoCache[K, V]) Stats() CacheStats {
+	return CacheStats{}
 }

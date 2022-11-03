@@ -1,3 +1,6 @@
+// Copyright (c) 2022 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc, stefan@blockwatch.cc
+
 package rclru
 
 import (
@@ -11,8 +14,8 @@ import (
 
 var szPackage = int(reflect.TypeOf(TestPackage{}).Size())
 
-func NewTestLRU(onEvict EvictCallback[string, *TestPackage]) (*LRU[string, *TestPackage], error) {
-	return NewLRU[string, *TestPackage](onEvict)
+func NewTestLRU() (*LRU[string, *TestPackage], error) {
+	return NewLRU[string, *TestPackage]()
 }
 
 type TestPackage struct {
@@ -52,14 +55,7 @@ func (p *TestPackage) HeapSize() int {
 }
 
 func TestLRU(t *testing.T) {
-	evictCounter := 0
-	onEvicted := func(k string, v *TestPackage) {
-		if k != strconv.FormatUint(uint64(v.key), 10) {
-			t.Fatalf("Evict values not equal (%v!=%v)", k, v.key)
-		}
-		evictCounter++
-	}
-	l, err := NewTestLRU(onEvicted)
+	l, err := NewTestLRU()
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -75,8 +71,8 @@ func TestLRU(t *testing.T) {
 		t.Fatalf("bad len: %v", l.Len())
 	}
 
-	if evictCounter != 128 {
-		t.Fatalf("bad evict count: %v", evictCounter)
+	if l.evictCounter != 128 {
+		t.Fatalf("bad evict count: %v", l.evictCounter)
 	}
 
 	for i, k := range l.Keys() {
@@ -129,7 +125,7 @@ func TestLRU(t *testing.T) {
 }
 
 func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
-	l, err := NewTestLRU(nil)
+	l, err := NewTestLRU()
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -167,7 +163,7 @@ func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
 
 // Test that Contains doesn't update recent-ness
 func TestLRU_Contains(t *testing.T) {
-	l, err := NewTestLRU(nil)
+	l, err := NewTestLRU()
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -187,7 +183,7 @@ func TestLRU_Contains(t *testing.T) {
 
 // Test that Peek doesn't update recent-ness
 func TestLRU_Peek(t *testing.T) {
-	l, err := NewTestLRU(nil)
+	l, err := NewTestLRU()
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}

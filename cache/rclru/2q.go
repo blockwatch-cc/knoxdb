@@ -1,3 +1,6 @@
+// Copyright (c) 2022 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc, stefan@blockwatch.cc
+
 package rclru
 
 import (
@@ -25,35 +28,38 @@ const (
 // head. The ARCCache is similar, but does not require setting any
 // parameters.
 type TwoQueueCache[K comparable, V RefCountedElem] struct {
-	byteSize    int
 	maxByteSize int
 	recentRatio float64
 	ghostRatio  float64
+	stats       CacheStats
 
 	recent      *LRU[K, V]
 	frequent    *LRU[K, V]
 	recentEvict *LRU[K, V]
-	onEvict     EvictCallback[K, V]
 	lock        sync.RWMutex
 }
 
+func (c *TwoQueueCache[K, V]) Stats() CacheStats {
+	return c.stats
+}
+
+func (c *TwoQueueCache[K, V]) Size() int {
+	return int(c.stats.Size)
+}
+
 func (c *TwoQueueCache[K, V]) GetParams() (int, int, int, int) {
-	return c.recent.Len(), c.frequent.Len(), c.recentEvict.Len(), c.byteSize
+	return c.recent.Len(), c.frequent.Len(), c.recentEvict.Len(), int(c.stats.Size)
 }
 
 // New2Q creates a new TwoQueueCache using the default
 // values for the parameters.
 func New2Q[K comparable, V RefCountedElem](size int) (*TwoQueueCache[K, V], error) {
-	return New2QParams[K, V](size, Default2QRecentRatio, Default2QGhostEntries, nil)
-}
-
-func New2QWithEvict[K comparable, V RefCountedElem](size int, onEvicted EvictCallback[K, V]) (*TwoQueueCache[K, V], error) {
-	return New2QParams[K, V](size, Default2QRecentRatio, Default2QGhostEntries, onEvicted)
+	return New2QParams[K, V](size, Default2QRecentRatio, Default2QGhostEntries)
 }
 
 // New2QParams creates a new TwoQueueCache using the provided
 // parameter values.
-func New2QParams[K comparable, V RefCountedElem](size int, recentRatio float64, ghostRatio float64, onEvicted EvictCallback[K, V]) (*TwoQueueCache[K, V], error) {
+func New2QParams[K comparable, V RefCountedElem](size int, recentRatio float64, ghostRatio float64) (*TwoQueueCache[K, V], error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("2qcache: invalid size")
 	}
@@ -65,22 +71,21 @@ func New2QParams[K comparable, V RefCountedElem](size int, recentRatio float64, 
 	}
 
 	// Allocate the LRUs
-	recent, err := NewLRU[K, V](nil)
+	recent, err := NewLRU[K, V]()
 	if err != nil {
 		return nil, err
 	}
-	frequent, err := NewLRU[K, V](nil)
+	frequent, err := NewLRU[K, V]()
 	if err != nil {
 		return nil, err
 	}
-	recentEvict, err := NewLRU[K, V](nil)
+	recentEvict, err := NewLRU[K, V]()
 	if err != nil {
 		return nil, err
 	}
 
 	// Initialize the cache
 	c := &TwoQueueCache[K, V]{
-		byteSize:    0,
 		maxByteSize: size,
 		recentRatio: recentRatio,
 		ghostRatio:  ghostRatio,
@@ -88,7 +93,6 @@ func New2QParams[K comparable, V RefCountedElem](size int, recentRatio float64, 
 		recent:      recent,
 		frequent:    frequent,
 		recentEvict: recentEvict,
-		onEvict:     onEvicted,
 	}
 	return c, nil
 }
@@ -100,6 +104,7 @@ func (c *TwoQueueCache[K, V]) Get(key K) (val V, ok bool) {
 	// Check if this is a frequent value
 	if val, ok = c.frequent.Get(key); ok {
 		val.IncRef()
+		c.stats.Hit()
 		c.lock.Unlock()
 		return
 	}
@@ -110,11 +115,13 @@ func (c *TwoQueueCache[K, V]) Get(key K) (val V, ok bool) {
 		c.recent.Remove(key)
 		c.frequent.Add(key, val)
 		val.IncRef()
+		c.stats.Hit()
 		c.lock.Unlock()
 		return
 	}
 
 	// No hit
+	c.stats.Miss()
 	c.lock.Unlock()
 	return
 }
@@ -123,32 +130,21 @@ func (c *TwoQueueCache[K, V]) Get(key K) (val V, ok bool) {
 func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 	c.lock.Lock()
 
-	// FIXME(echa): shouldn't we first check if the value is already cached
-	// and only if it is not not, then update the byte size and increment
-	// the reference counter?
-	c.byteSize += value.HeapSize()
+	// Grab a reference since this element will stay in the cache (even on update)
 	value.IncRef()
 
 	// Check if the value is frequently used already,
 	// and just update the value
 	if val, ok := c.frequent.Peek(key); ok {
-		// FIXME(echa): why do we have to compare value here? If a key matches,
-		// the invariant of a cache is that the value is the same.
-		// if val != value {
-		c.byteSize -= val.HeapSize()
+		// on update replace the cached value with new value (this may or may not
+		// be the same pointer/interface; if == we just decrement the reference counter
+		// to not count twice, if != we properly release the element's reference
+		// counter which may release the element)
+		c.stats.Rem(val.HeapSize())
+		val.DecRef()
 		c.frequent.Add(key, value)
-		// FIXME(echa): is this correct here? isn't ensureSpace() the only
-		// point in the code that evicts? FYI, I had to add the `if` because
-		// the testcase panicked.
-		if c.onEvict != nil {
-			c.onEvict(key, val)
-		}
-		// FIXME(echa): if the value is frequently used already, then we
-		// don't have to call ensureSpace because all we did in Add() above
-		// was to move the key to the front of the frequent list.
-		evicted = c.ensureSpace()
+		c.stats.Add(value.HeapSize())
 		updated = true
-		// }
 		c.lock.Unlock()
 		return
 	}
@@ -156,18 +152,14 @@ func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 	// Check if the value is recently used, and promote
 	// the value into the frequent list
 	if val, ok := c.recent.Peek(key); ok {
-		// FIXME(echa): same questions like above
-		// if val != value {
-		c.byteSize -= val.HeapSize()
+		// on update replace the cached value with new value; this assumes
+		// the same element is never added twice to the cache
+		c.stats.Rem(val.HeapSize())
 		c.recent.Remove(key)
-		if c.onEvict != nil {
-			c.onEvict(key, val)
-		}
+		val.DecRef()
+		c.stats.Add(value.HeapSize())
 		c.frequent.Add(key, value)
-		evicted = c.ensureSpace()
 		updated = true
-		// }
-
 		c.lock.Unlock()
 		return
 	}
@@ -177,7 +169,7 @@ func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 	if c.recentEvict.Contains(key) {
 		c.recentEvict.Remove(key)
 		c.frequent.Add(key, value)
-		// FIXME(echa): why has this line moved after the Add call?
+		c.stats.Add(value.HeapSize())
 		evicted = c.ensureSpace()
 		c.lock.Unlock()
 		return
@@ -185,14 +177,14 @@ func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 
 	// Add to the recently seen list
 	c.recent.Add(key, value)
-	// FIXME(echa): why has this line moved after the Add call?
+	c.stats.Add(value.HeapSize())
 	evicted = c.ensureSpace()
 	c.lock.Unlock()
 	return
 }
 
-// ContainsOrAdd checks if a key is in the cache  without updating the
-// recent-ness or deleting it for being stale,  and if not, adds the value.
+// ContainsOrAdd checks if a key is in the cache without updating the
+// recent-ness or deleting it for being stale, and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
 func (c *TwoQueueCache[K, V]) ContainsOrAdd(key K, value V) (ok, evicted bool) {
 	c.lock.Lock()
@@ -211,8 +203,7 @@ func (c *TwoQueueCache[K, V]) ContainsOrAdd(key K, value V) (ok, evicted bool) {
 
 // ensureSpace is used to ensure we have space in the cache
 func (c *TwoQueueCache[K, V]) ensureSpace() (evicted bool) {
-
-	for c.byteSize > c.maxByteSize {
+	for int(c.stats.Size) > c.maxByteSize {
 		recentLen := c.recent.Len()
 		freqLen := c.frequent.Len()
 		recentSize := int(float64(recentLen+freqLen) * c.recentRatio)
@@ -230,9 +221,9 @@ func (c *TwoQueueCache[K, V]) ensureSpace() (evicted bool) {
 			// Remove from the frequent list otherwise
 			k, v, e = c.frequent.RemoveOldest()
 		}
-		c.byteSize -= v.HeapSize()
-		if e && c.onEvict != nil {
-			c.onEvict(k, v)
+		if e {
+			c.stats.Rem(v.HeapSize())
+			v.DecRef()
 		}
 		evicted = evicted || e
 	}
@@ -275,10 +266,8 @@ func (c *TwoQueueCache[K, V]) Remove(key K) {
 		val, ok = c.recent.Peek(key)
 	}
 	if ok {
-		c.byteSize -= val.HeapSize()
-		if c.onEvict != nil {
-			c.onEvict(key, val)
-		}
+		c.stats.Rem(val.HeapSize())
+		val.DecRef()
 	}
 
 	if c.frequent.Remove(key) {
@@ -308,25 +297,22 @@ func (c *TwoQueueCache[K, V]) RemoveOldest() {
 // Purge is used to completely clear the cache.
 func (c *TwoQueueCache[K, V]) Purge() {
 	c.lock.Lock()
-	k, v, ok := c.recent.RemoveOldest()
+	_, v, ok := c.recent.RemoveOldest()
 	for ok {
-		if c.onEvict != nil {
-			c.onEvict(k, v)
-		}
-		k, v, ok = c.recent.RemoveOldest()
+		c.stats.Rem(v.HeapSize())
+		v.DecRef()
+		_, v, ok = c.recent.RemoveOldest()
 	}
 	c.recent.Purge()
 
-	k, v, ok = c.frequent.RemoveOldest()
+	_, v, ok = c.frequent.RemoveOldest()
 	for ok {
-		if c.onEvict != nil {
-			c.onEvict(k, v)
-		}
-		k, v, ok = c.frequent.RemoveOldest()
+		c.stats.Rem(v.HeapSize())
+		v.DecRef()
+		_, v, ok = c.frequent.RemoveOldest()
 	}
 	c.frequent.Purge()
 	c.recentEvict.Purge()
-	c.byteSize = 0
 	c.lock.Unlock()
 }
 
@@ -340,7 +326,7 @@ func (c *TwoQueueCache[K, V]) Contains(key K) bool {
 }
 
 // Peek is used to inspect the cache value of a key
-// without updating recency or frequency.
+// without updating recency or frequency or stats.
 func (c *TwoQueueCache[K, V]) Peek(key K) (value V, ok bool) {
 	c.lock.RLock()
 	value, ok = c.frequent.Peek(key)

@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package pack
@@ -184,7 +184,7 @@ func (t *Table) CreateIndex(name string, field *Field, typ IndexType, opts Optio
 			return err
 		}
 		// create empty journal
-		idx.journal = NewPackage(maxJournalSize)
+		idx.journal = NewPackage(maxJournalSize, nil)
 		idx.journal.key = journalKey
 		if err := idx.journal.InitType(IndexEntry{}); err != nil {
 			return err
@@ -194,7 +194,7 @@ func (t *Table) CreateIndex(name string, field *Field, typ IndexType, opts Optio
 			return err
 		}
 		// create empty tombstone
-		idx.tombstone = NewPackage(maxJournalSize)
+		idx.tombstone = NewPackage(maxJournalSize, nil)
 		idx.tombstone.key = tombstoneKey
 		if err := idx.tombstone.InitType(IndexEntry{}); err != nil {
 			return err
@@ -234,7 +234,7 @@ func (t *Table) CreateIndex(name string, field *Field, typ IndexType, opts Optio
 		return nil, err
 	}
 	if idx.opts.CacheSize > 0 {
-		idx.cache, err = rclru.New2QWithEvict[string, *Package](int(idx.opts.CacheSize), idx.onEvictedPackage)
+		idx.cache, err = rclru.New2Q[string, *Package](int(idx.opts.CacheSize))
 		if err != nil {
 			return nil, err
 		}
@@ -359,7 +359,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 		idx.stats.JournalTuplesThreshold = int64(maxJournalSize)
 		idx.stats.TombstoneTuplesThreshold = int64(maxJournalSize)
 		idx.packidx = NewPackIndex(nil, 0, maxPackSize)
-		idx.journal, err = loadPackTx(dbTx, idx.metakey, encodePackKey(journalKey), nil)
+		idx.journal, err = loadPackTx(dbTx, idx.metakey, encodePackKey(journalKey), nil, maxJournalSize)
 		if err != nil {
 			return fmt.Errorf("pack: %s journal open failed: %v", idx.name(), err)
 		}
@@ -367,7 +367,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 			return err
 		}
 		log.Debugf("pack: %s loaded journal with %d records", idx.name(), idx.journal.Len())
-		idx.tombstone, err = loadPackTx(dbTx, idx.metakey, encodePackKey(tombstoneKey), nil)
+		idx.tombstone, err = loadPackTx(dbTx, idx.metakey, encodePackKey(tombstoneKey), nil, maxJournalSize)
 		if err != nil {
 			return fmt.Errorf("pack: %s index cannot open tombstone: %v", idx.name(), err)
 		}
@@ -382,7 +382,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 		return err
 	}
 	if idx.opts.CacheSize > 0 {
-		idx.cache, err = rclru.New2QWithEvict[string, *Package](int(idx.opts.CacheSize), idx.onEvictedPackage)
+		idx.cache, err = rclru.New2Q[string, *Package](int(idx.opts.CacheSize))
 		if err != nil {
 			return err
 		}
@@ -443,7 +443,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 	// on error, scan packs
 	log.Warnf("pack: Corrupt or missing pack info for %s! Scanning table. This may take a long time...", idx.name())
 	c := dbTx.Bucket(idx.key).Cursor()
-	pkg := NewPackage(maxPackSize)
+	pkg := NewPackage(maxPackSize, nil)
 	if err := pkg.InitFieldsFrom(idx.journal); err != nil {
 		return err
 	}
@@ -1004,6 +1004,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 	if idx.packidx.Len() == 0 {
 		pkg = idx.packPool.Get().(*Package)
 		pkg.key = idx.packidx.NextKey()
+		pkg.IncRef()
 	}
 
 	// This algorithm works like a merge-sort over a sequence of sorted packs.
@@ -1071,6 +1072,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 				// log.Debugf("Post-store next pack %d max=%d nextmin=%d", nextpack, packmax, nextmin)
 			}
 			// prepare for next pack
+			pkg.DecRef()
 			pkg = nil
 			needsort = false
 		}
@@ -1212,6 +1214,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 				nParts++
 				nBytes += n
 				lastpack = -1 // force pack load in next round
+				pkg.DecRef()
 				pkg = nil
 
 				// commit tx after each N written packs
@@ -1249,6 +1252,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 		if err != nil {
 			return err
 		}
+		pkg.DecRef()
 		pkg = nil
 		nParts++
 		nBytes += n
@@ -1318,7 +1322,7 @@ func (idx *Index) splitPack(tx *Tx, pkg *Package) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	idx.recyclePackage(newpkg)
+	newpkg.recycle()
 	return n + m, nil
 }
 
@@ -1335,13 +1339,11 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 		cachefn = idx.cache.Get
 	}
 	if pkg, ok := cachefn(cachekey); ok {
-		atomic.AddInt64(&idx.stats.PackCacheHits, 1)
 		return pkg, nil
 	}
-	atomic.AddInt64(&idx.stats.PackCacheMisses, 1)
 
 	// if not found, load from storage
-	pkg, err := tx.loadPack(idx.key, key, idx.packPool.Get().(*Package))
+	pkg, err := tx.loadPack(idx.key, key, idx.packPool.Get().(*Package), idx.opts.PackSize())
 	if err != nil {
 		return nil, err
 	}
@@ -1353,10 +1355,6 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 	// store in cache
 	if touch {
 		idx.cache.Add(cachekey, pkg)
-
-		atomic.AddInt64(&idx.stats.PackCacheInserts, 1)
-		atomic.AddInt64(&idx.stats.PackCacheCount, 1)
-		atomic.AddInt64(&idx.stats.PackCacheSize, int64(pkg.HeapSize()))
 	}
 
 	return pkg, nil
@@ -1366,14 +1364,11 @@ func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	// try cache first
 	key := encodePackKey(id)
 	if pkg, ok := idx.cache.Get(idx.cachekey(key)); ok {
-		atomic.AddInt64(&idx.stats.PackCacheHits, 1)
 		clone, err := pkg.Clone(idx.opts.PackSize())
 		if err != nil {
 			return nil, err
 		}
-		// set key
-		clone.key = pkg.key
-
+		clone.IncRef()
 		idx.releaseSharedPack(pkg)
 
 		// prepare for efficient writes
@@ -1382,11 +1377,13 @@ func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	}
 
 	// load from storage
-	atomic.AddInt64(&idx.stats.PackCacheMisses, 1)
+	pkg := idx.packPool.Get().(*Package)
+	pkg.IncRef()
 
-	// if not found, load from storage
-	pkg, err := tx.loadPack(idx.key, key, idx.packPool.Get().(*Package))
+	var err error
+	pkg, err = tx.loadPack(idx.key, key, pkg, idx.opts.PackSize())
 	if err != nil {
+		pkg.DecRef()
 		return nil, err
 	}
 
@@ -1401,8 +1398,7 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 
 	defer func() {
 		// remove from cache, returns back to pool
-		cachekey := idx.cachekey(key)
-		idx.cache.Remove(cachekey)
+		idx.cache.Remove(idx.cachekey(key))
 	}()
 
 	// remove empty packs from pack index, storage and cache
@@ -1444,16 +1440,9 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 
 func (idx *Index) makePackage() interface{} {
 	atomic.AddInt64(&idx.stats.PacksAlloc, 1)
-	pkg := NewPackage(idx.opts.PackSize())
+	pkg := NewPackage(idx.opts.PackSize(), idx.packPool)
 	_ = pkg.InitFieldsFrom(idx.journal)
 	return pkg
-}
-
-func (idx *Index) onEvictedPackage(key string, pkg *Package) {
-	atomic.AddInt64(&idx.stats.PackCacheEvictions, 1)
-	atomic.AddInt64(&idx.stats.PackCacheCount, -1)
-	atomic.AddInt64(&idx.stats.PackCacheSize, int64(-pkg.HeapSize()))
-	idx.releaseSharedPack(pkg)
 }
 
 func (idx *Index) releaseSharedPack(pkg *Package) {
@@ -1461,22 +1450,8 @@ func (idx *Index) releaseSharedPack(pkg *Package) {
 		return
 	}
 	if pkg.DecRef() == 0 {
-		idx.recyclePackage(pkg)
+		atomic.AddInt64(&idx.stats.PacksRecycled, 1)
 	}
-}
-
-func (idx *Index) recyclePackage(pkg *Package) {
-	if pkg == nil {
-		return
-	}
-	// don't recycle oversized packidx to free memory
-	if c := pkg.Cap(); c <= 0 || c > idx.opts.PackSize() {
-		pkg.Release()
-		return
-	}
-	pkg.Clear()
-	atomic.AddInt64(&idx.stats.PacksRecycled, 1)
-	idx.packPool.Put(pkg)
 }
 
 func (idx *Index) Stats() TableStats {
@@ -1492,6 +1467,15 @@ func (idx *Index) Stats() TableStats {
 	s.TombstoneTuplesCount = int64(idx.tombstone.Len())
 	s.TombstoneTuplesCapacity = int64(idx.tombstone.Cap())
 	s.TombstoneSize = int64(idx.tombstone.HeapSize())
+
+	// copy cache stats
+	cs := idx.cache.Stats()
+	s.PackCacheHits = cs.Hits
+	s.PackCacheMisses = cs.Misses
+	s.PackCacheInserts = cs.Inserts
+	s.PackCacheEvictions = cs.Evictions
+	s.PackCacheCount = cs.Count
+	s.PackCacheSize = cs.Size
 
 	return s
 }

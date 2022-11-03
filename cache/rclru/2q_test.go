@@ -1,3 +1,6 @@
+// Copyright (c) 2022 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc, stefan@blockwatch.cc
+
 package rclru
 
 import (
@@ -109,9 +112,9 @@ func Test2Q_RandomOps(t *testing.T) {
             l.Remove(encodeKeyU32(key))
         }
 
-        if l.byteSize > size {
+        if l.Size() > size {
             t.Fatalf("bad: byteSize: %d size: %d recent: %d freq: %d",
-                l.byteSize, size, l.recent.Len(), l.frequent.Len())
+                l.Size(), size, l.recent.Len(), l.frequent.Len())
         }
     }
 }

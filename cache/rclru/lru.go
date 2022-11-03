@@ -1,17 +1,17 @@
+// Copyright (c) 2022 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc, stefan@blockwatch.cc
+
 package rclru
 
 import (
 	"container/list"
 )
 
-// EvictCallback is used to get a callback when a cache entry is evicted
-type EvictCallback[K comparable, V RefCountedElem] func(K, V)
-
 // LRU implements a non-thread safe fixed size LRU cache
 type LRU[K comparable, V RefCountedElem] struct {
-	evictList *list.List
-	items     map[K]*list.Element
-	onEvict   EvictCallback[K, V]
+	evictList    *list.List
+	items        map[K]*list.Element
+	evictCounter int
 }
 
 // entry is used to hold a value in the evictList
@@ -21,27 +21,24 @@ type entry[K comparable, V RefCountedElem] struct {
 }
 
 // NewLRU constructs an LRU of the given size
-func NewLRU[K comparable, V RefCountedElem](onEvict EvictCallback[K, V]) (*LRU[K, V], error) {
+func NewLRU[K comparable, V RefCountedElem]() (*LRU[K, V], error) {
 	c := &LRU[K, V]{
-		evictList: list.New(),
-		items:     make(map[K]*list.Element),
-		onEvict:   onEvict,
+		evictList:    list.New(),
+		items:        make(map[K]*list.Element),
+		evictCounter: 0,
 	}
 	return c, nil
 }
 
 // Purge is used to completely clear the cache.
 func (c *LRU[K, V]) Purge() {
-	for k, v := range c.items {
-		if c.onEvict != nil {
-			c.onEvict(k, v.Value.(*entry[K, V]).value)
-		}
+	for k := range c.items {
 		delete(c.items, k)
 	}
 	c.evictList.Init()
 }
 
-// Add adds a value to the cache.  Returns true if an eviction occurred.
+// Add adds a value to the cache.  Returns true if an update occurred.
 func (c *LRU[K, V]) Add(key K, value V) (updated bool) {
 	// Check for existing item
 	if ent, ok := c.items[key]; ok {
@@ -143,7 +140,5 @@ func (c *LRU[K, V]) removeElement(e *list.Element) {
 	c.evictList.Remove(e)
 	kv := e.Value.(*entry[K, V])
 	delete(c.items, kv.key)
-	if c.onEvict != nil {
-		c.onEvict(kv.key, kv.value)
-	}
+	c.evictCounter++
 }
