@@ -124,7 +124,7 @@ func run() error {
 	reals := make([]*vec.Bitset, 0)
 	blooms := make([]*bloom.Filter, 0)
 	var (
-		maxid     uint64
+		maxid     uint32
 		bloomSize int
 	)
 
@@ -138,15 +138,15 @@ func run() error {
 		return fmt.Errorf("Field %q has no bloom flag", fieldname)
 	}
 
-	fmt.Printf("Using database field %s flags=%s\n", field.Alias, field.Flags)
+	fmt.Printf("Using database field %s flags=%s type=%s\n", field.Alias, field.Flags, field.Type)
 	err = table.WalkPacks(func(pkg *pack.Package) error {
 		block := pkg.Blocks()[field.Index]
 		_, max := block.MinMax()
-		maxVal := max.(uint64)
-		maxid = util.MaxU64(maxid, maxVal)
+		maxVal := max.(uint32)
+		maxid = util.MaxU32(maxid, maxVal)
 
 		realBits := vec.NewBitset(int(maxVal))
-		for _, v := range block.Uint64 {
+		for _, v := range block.Uint32 {
 			realBits.Set(int(v))
 		}
 		reals = append(reals, realBits)
@@ -159,7 +159,7 @@ func run() error {
 
 		flt := field.Type.BuildBloomFilter(block, est, scale)
 		if flt == nil {
-			return fmt.Errorf("creating bloom filter for pack=%d len=%d sz=%d scale=%d", count, v.Len(), est, scale)
+			return fmt.Errorf("creating bloom filter for pack=%d len=%d sz=%d scale=%d", count, pkg.Len(), est, scale)
 		}
 		bloomSize += int(flt.Len())
 		blooms = append(blooms, flt)
@@ -193,11 +193,11 @@ func run() error {
 		noMatches      int64
 	)
 	absStats := vec.NewWindowInt64Reducer(int(maxid))
-	for id := uint64(1); id <= maxid; id++ {
+	for id := uint32(1); id <= maxid; id++ {
 		var optimal, bloomed int64
 		var h [2]uint32
-		h[0] = xxhashVec.XXHash32Uint64(id, 1312) // same as in bloom lib
-		h[1] = xxhashVec.XXHash32Uint64(id, 0)
+		h[0] = xxhashVec.XXHash32Uint32(id, 1312) // same as in bloom lib
+		h[1] = xxhashVec.XXHash32Uint32(id, 0)
 		for packid := range reals {
 			if reals[packid].IsSet(int(id)) {
 				optimal++
@@ -253,7 +253,7 @@ func run() error {
 // same name as the file's basename (without extension). Optional parameter `opts`
 // allows to configure settings of the underlying boltdb engine.
 //
-// Example
+// # Example
 //
 // ```
 // // opens file `op.db` in path `./db` and looks for table `op`
