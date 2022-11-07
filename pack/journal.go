@@ -75,7 +75,7 @@ func (l journalEntryList) Less(i, j int) bool { return l[i].pk < l[j].pk }
 func (l journalEntryList) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 
 func NewJournal(maxid uint64, size int, name string) *Journal {
-	pkg := NewPackage(size)
+	pkg := NewPackage(size, nil)
 	pkg.key = journalKey
 	return &Journal{
 		maxid:   maxid,
@@ -183,7 +183,7 @@ func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, int, error
 	if err != nil {
 		return 0, 0, err
 	}
-	tomb := NewPackage(len(j.tomb))
+	tomb := NewPackage(len(j.tomb), nil)
 	tomb.InitType(Tombstone{})
 	defer tomb.Release()
 	for _, v := range j.tomb {

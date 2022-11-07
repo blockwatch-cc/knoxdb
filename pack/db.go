@@ -357,7 +357,7 @@ func (tx *Tx) loadPack(name, key []byte, unpack *Package, sz int) (*Package, err
 
 func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package, sz int) (*Package, error) {
 	if unpack == nil {
-		unpack = NewPackage(sz)
+		unpack = NewPackage(sz, nil)
 	}
 	b := dbTx.Bucket(name)
 	if b == nil {

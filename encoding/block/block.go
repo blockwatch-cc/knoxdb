@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sync/atomic"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
@@ -19,7 +20,7 @@ import (
 
 var bigEndian = binary.BigEndian
 
-var blockSz = int(reflect.TypeOf(Block{}).Size())
+var BlockSz = int(reflect.TypeOf(Block{}).Size())
 
 type Compression byte
 
@@ -137,11 +138,12 @@ func (t BlockType) String() string {
 }
 
 type Block struct {
-	typ    BlockType
-	comp   Compression
-	ignore bool
-	dirty  bool
-	size   int // stored size, debug data
+	refCount int64
+	typ      BlockType
+	comp     Compression
+	ignore   bool
+	dirty    bool
+	size     int // stored size, debug data
 
 	// TODO: measure performance impact of using an interface instead of direct slices
 	//       this can save up to 15x storage for slice headers / pointers
@@ -163,37 +165,53 @@ type Block struct {
 	Int256  vec.Int256LLSlice // re-used by Decimal256, Int256
 }
 
+func (b *Block) IncRef() int64 {
+	return atomic.AddInt64(&b.refCount, 1)
+}
+
+func (b *Block) DecRef() int64 {
+	return atomic.AddInt64(&b.refCount, -1)
+}
+
 func (b Block) Type() BlockType {
 	return b.typ
 }
 
 func (b *Block) IsInt() bool {
-	if b.Type() == BlockInt64 || b.Type() == BlockInt32 || b.Type() == BlockInt16 || b.Type() == BlockInt8 ||
-		b.Type() == BlockUint64 || b.Type() == BlockUint32 || b.Type() == BlockUint16 || b.Type() == BlockUint8 {
+	switch b.Type() {
+	case BlockInt64, BlockInt32, BlockInt16, BlockInt8,
+		BlockUint64, BlockUint32, BlockUint16, BlockUint8:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (b *Block) IsSint() bool {
-	if b.Type() == BlockInt64 || b.Type() == BlockInt32 || b.Type() == BlockInt16 || b.Type() == BlockInt8 {
+	switch b.Type() {
+	case BlockInt64, BlockInt32, BlockInt16, BlockInt8:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (b *Block) IsUint() bool {
-	if b.Type() == BlockUint64 || b.Type() == BlockUint32 || b.Type() == BlockUint16 || b.Type() == BlockUint8 {
+	switch b.Type() {
+	case BlockUint64, BlockUint32, BlockUint16, BlockUint8:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (b *Block) IsFloat() bool {
-	if b.Type() == BlockFloat64 || b.Type() == BlockFloat32 {
+	switch b.Type() {
+	case BlockFloat64, BlockFloat32:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (b Block) Compression() Compression {
@@ -574,7 +592,7 @@ func (b *Block) HeapSize() int {
 	if b.ignore {
 		return 0
 	}
-	sz := blockSz
+	sz := BlockSz
 	switch b.typ {
 	case BlockFloat64:
 		sz += len(b.Float64) * 8

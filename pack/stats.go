@@ -73,6 +73,5 @@ type TableStats struct {
 	PackCacheHits      int64 `json:"pack_cache_hits"`
 	PackCacheMisses    int64 `json:"pack_cache_misses"`
 	PackCacheInserts   int64 `json:"pack_cache_inserts"`
-	PackCacheUpdates   int64 `json:"pack_cache_updates"`
 	PackCacheEvictions int64 `json:"pack_cache_evictions"`
 }

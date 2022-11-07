@@ -212,52 +212,40 @@ func (t OpType) String() string {
 }
 
 type Op struct {
-	RowId        uint64    `knox:"I,pk,snappy"   json:"row_id"`                 // internal: unique row id
-	Timestamp    time.Time `knox:"T,snappy"      json:"time"`                   // bc: op block time
-	Height       int64     `knox:"h,i32,snappy"  json:"height"`                 // bc: block height op was mined at
-	Cycle        int64     `knox:"c,i16,snappy"  json:"cycle"`                  // bc: block cycle (tezos specific)
-	Hash         []byte    `knox:"H"             json:"hash"`                   // bc: unique op_id (op hash)
-	Counter      int64     `knox:"j,i32,snappy"  json:"counter"`                // bc: counter
-	OpN          int       `knox:"n,i16,snappy"  json:"op_n"`                   // bc: gobal position in block (block.Operations.([][]*OperationHeader) list position)
-	OpC          int       `knox:"o,i16,snappy"  json:"op_c"`                   // bc: position in OperationHeader.Contents.([]Operation) list
-	OpI          int       `knox:"i,i16,snappy"  json:"op_i"`                   // bc: position in internal operation result list
-	OpL          int       `knox:"L,i16,snappy"  json:"op_l"`                   // bc: operation list (i.e. 0 for endorsements, etc corresponding to validation pass)
-	OpP          int       `knox:"P,i16,snappy"  json:"op_p"`                   // bc: operation list position (use in combination with op_l to lookup op on RPC)
-	Type         OpType    `knox:"t,u8,snappy"   json:"type"`                   // stats: operation type as defined byprotocol
-	Status       OpStatus  `knox:"?,u8,snappy"   json:"status"`                 // stats: operation status
-	IsSuccess    bool      `knox:"!,snappy"      json:"is_success"`             // bc: operation succesful flag
-	IsContract   bool      `knox:"C,snappy"      json:"is_contract"`            // bc: operation succesful flag
-	GasLimit     int64     `knox:"l,i32,snappy"  json:"gas_limit"`              // stats: gas limit
-	GasUsed      int64     `knox:"G,i32,snappy"  json:"gas_used"`               // stats: gas used
-	GasPrice     float64   `knox:"g,d32,scale=5,snappy"  json:"gas_price"`      // stats: gas price in tezos per unit gas, relative to tx fee
-	StorageLimit int64     `knox:"Z,i32,snappy"  json:"storage_limit"`          // stats: storage size limit
-	StorageSize  int64     `knox:"z,i32,snappy"  json:"storage_size"`           // stats: storage size used/allocated by this op
-	StoragePaid  int64     `knox:"$,i32,snappy"  json:"storage_paid"`           // stats: extra storage size paid by this op
-	Volume       int64     `knox:"v,snappy"      json:"volume"`                 // stats: sum of transacted tezos volume
-	Fee          int64     `knox:"f,snappy"      json:"fee"`                    // stats: transaction fees
-	Reward       int64     `knox:"r,snappy"      json:"reward"`                 // stats: baking and endorsement rewards
-	Deposit      int64     `knox:"d,snappy"      json:"deposit"`                // stats: bonded deposits for baking and endorsement
-	Burned       int64     `knox:"b,snappy"      json:"burned"`                 // stats: burned tezos
-	SenderId     uint64    `knox:"S,snappy,bloom"      json:"sender_id"`        // internal: op sender
-	ReceiverId   uint64    `knox:"R,snappy,bloom"      json:"receiver_id"`      // internal: op receiver
-	CreatorId    uint64    `knox:"M,snappy"      json:"creator_id"`             // internal: op creator for originations
-	DelegateId   uint64    `knox:"D,snappy"      json:"delegate_id"`            // internal: op delegate for originations and delegations
-	IsInternal   bool      `knox:"N,snappy"      json:"is_internal"`            // bc: internal from contract call
-	HasData      bool      `knox:"w,snappy"      json:"has_data"`               // internal: flag to signal if data is available
-	Data         string    `knox:"a,snappy"      json:"data"`                   // bc: extra op data
-	Parameters   []byte    `knox:"p,snappy"      json:"parameters"`             // bc: input params
-	Storage      []byte    `knox:"s,snappy"      json:"storage"`                // bc: result storage
-	BigMapDiff   []byte    `knox:"B,snappy"      json:"big_map_diff"`           // bc: result big map diff
-	Errors       string    `knox:"e,snappy"      json:"errors"`                 // bc: result errors
-	TDD          float64   `knox:"x,d32,scale=6,snappy"  json:"days_destroyed"` // stats: token days destroyed
-	BranchId     uint64    `knox:"X,snappy"      json:"branch_id"`              // bc: branch block the op is based on
-	BranchHeight int64     `knox:"#,i32,snappy"  json:"branch_height"`          // bc: height of the branch block
-	BranchDepth  int64     `knox:"<,i8,snappy"   json:"branch_depth"`           // stats: diff between branch block and current block
-	IsImplicit   bool      `knox:"m,snappy"      json:"is_implicit"`            // bc: implicit operation not published on chain
-	Entrypoint   int       `knox:"E,i8,snappy"   json:"entrypoint_id"`          // entrypoint sequence id
-	IsOrphan     bool      `knox:"O,snappy"      json:"is_orphan"`
-	IsBatch      bool      `knox:"y,snappy"      json:"is_batch"`
-	IsSapling    bool      `knox:"Y,snappy"      json:"is_sapling"`
+	RowId        uint64    `knox:"I,pk"             json:"row_id"`         // internal: unique row id
+	Type         OpType    `knox:"t,u8,bloom"       json:"type"`           // indexer op type
+	Hash         []byte    `knox:"H,snappy,bloom=3" json:"hash"`           // op hash
+	Height       int64     `knox:"h,i32"            json:"height"`         // block height
+	Cycle        int64     `knox:"c,i16"            json:"cycle"`          // block cycle
+	Timestamp    time.Time `knox:"T"                json:"time"`           // block time
+	OpN          int       `knox:"n,i32"            json:"op_n"`           // unique in-block pos
+	OpP          int       `knox:"P,i16"            json:"op_p"`           // op list pos (list can be derived from type)
+	Status       OpStatus  `knox:"?,u8"             json:"status"`         // op status
+	IsSuccess    bool      `knox:"!,snappy"         json:"is_success"`     // success flag
+	IsContract   bool      `knox:"C,snappy"         json:"is_contract"`    // contract call flag (target is contract)
+	IsInternal   bool      `knox:"N,snappy"         json:"is_internal"`    // internal contract call or op
+	IsEvent      bool      `knox:"m,snappy"         json:"is_event"`       // this is an implicit event
+	IsRollup     bool      `knox:"u,snappy"         json:"is_rollup"`      // this is an rollup operation
+	Counter      int64     `knox:"j,i32"            json:"counter"`        // signer counter
+	GasLimit     int64     `knox:"l,i32"            json:"gas_limit"`      // gas limit
+	GasUsed      int64     `knox:"G,i32"            json:"gas_used"`       // gas used
+	StorageLimit int64     `knox:"Z,i32"            json:"storage_limit"`  // storage size limit
+	StoragePaid  int64     `knox:"$,i32"            json:"storage_paid"`   // storage allocated/paid
+	Volume       int64     `knox:"v"                json:"volume"`         // transacted tez volume
+	Fee          int64     `knox:"f"                json:"fee"`            // tx fees
+	Reward       int64     `knox:"r"                json:"reward"`         // baking/endorsement reward
+	Deposit      int64     `knox:"d"                json:"deposit"`        // baker deposit
+	Burned       int64     `knox:"b"                json:"burned"`         // burned tez (for storage allocation)
+	SenderId     uint64    `knox:"S,u32,bloom"      json:"sender_id"`      // sender id, also on internal ops
+	ReceiverId   uint64    `knox:"R,u32,bloom"      json:"receiver_id"`    // receiver id
+	CreatorId    uint64    `knox:"M,u32"            json:"creator_id"`     // creator id, direct source for internal ops
+	BakerId      uint64    `knox:"D,u32,bloom"      json:"baker_id"`       // delegate id
+	Data         string    `knox:"a,snappy"         json:"data"`           // custom op data
+	Parameters   []byte    `knox:"p,snappy"         json:"parameters"`     // call params
+	StorageHash  uint64    `knox:"s"                json:"storage_hash"`   // storage hash
+	Errors       []byte    `knox:"e,snappy"         json:"errors"`         // call errors
+	TDD          float64   `knox:"x,d32,scale=6"    json:"days_destroyed"` // token days destroyed
+	Entrypoint   int       `knox:"E,i8"             json:"entrypoint_id"`  // update contract counters, search by entrypoint
 }
 
 func (o Op) ID() uint64 {
@@ -359,7 +347,7 @@ func Create(path string, schema, opts interface{}) (*pack.Table, error) {
 // same name as the file's basename (without extension). Optional parameter `opts`
 // allows to configure settings of the underlying boltdb engine.
 //
-// Example
+// # Example
 //
 // ```
 // // opens file `op.db` in path `./db` and looks for table `op`
@@ -402,7 +390,8 @@ func ListOpTypes(ctx context.Context, table *pack.Table, typ OpType, limit int) 
 	// different Query struct with the respoecive option set, but keeps the original
 	// query untouched. That way, partical queries can be re-used later if needed.
 	//
-	q := pack.NewQuery("list_"+typ.String(), table).
+	q := pack.NewQuery("list_"+typ.String()).
+		WithTable(table).
 		AndEqual("type", typ).
 		WithLimit(limit).
 		WithCache(cache)
@@ -496,7 +485,8 @@ func run() error {
 	// Note: uses streaming and constant memory to visit all table rows
 	var count int
 	start := time.Now()
-	err = pack.NewQuery("stream_tx", table).
+	err = pack.NewQuery("stream_tx").
+		WithTable(table).
 		AndEqual("type", OpTypeTransaction).
 		WithCache(cache).
 		Stream(ctx, func(r pack.Row) error {
@@ -515,7 +505,8 @@ func run() error {
 	start = time.Now()
 	count = 0
 	vol = 0
-	err = pack.NewQuery("stream_tx", table).
+	err = pack.NewQuery("stream_tx").
+		WithTable(table).
 		AndEqual("type", OpTypeTransaction).
 		AndEqual("receiver_id", sender_id).
 		WithCache(cache).

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math/bits"
+	"math/rand"
 	"reflect"
 	"strconv"
 	"strings"
@@ -743,6 +744,8 @@ func (t *Table) CompressPack(cmethod string, w io.Writer, i int, mode DumpMode) 
 	ctimes[0] = ct
 	dtimes[0] = dt
 
+	t.releaseSharedPack(pkg)
+
 	return DumpCompressResults(t.fields, cratios, ctimes, dtimes, w, mode, false)
 }
 
@@ -785,6 +788,8 @@ func (t *Table) CompressIndexPack(cmethod string, w io.Writer, i, p int, mode Du
 	cratios[0] = cs
 	ctimes[0] = ct
 	dtimes[0] = dt
+
+	t.indexes[i].releaseSharedPack(pkg)
 
 	fl := FieldList{{Name: "Hash", Type: FieldTypeUint64}, {Name: "PK", Type: FieldTypeUint64}}
 
@@ -837,6 +842,8 @@ func (t *Table) CompressIndexAll(cmethod string, i int, w io.Writer, mode DumpMo
 		cratios[p] = cs
 		ctimes[p] = ct
 		dtimes[p] = dt
+
+		t.indexes[i].releaseSharedPack(pkg)
 
 		fmt.Printf(".")
 	}
@@ -893,6 +900,7 @@ func (t *Table) IndexCollisions(cmethod string, i int, w io.Writer, mode DumpMod
 				collisions++
 			}
 		}
+		t.indexes[i].releaseSharedPack(pkg)
 	}
 
 	fmt.Printf("Index contains %d additional collisions\n", collisions)
@@ -946,6 +954,9 @@ func (t *Table) CompressAll(cmethod string, w io.Writer, mode DumpMode, verbose 
 		cratios[i] = cs
 		ctimes[i] = ct
 		dtimes[i] = dt
+
+		t.releaseSharedPack(pkg)
+
 		fmt.Printf(".")
 	}
 	fmt.Printf("\nProcessed %d packs\n", nPacks)
@@ -976,6 +987,106 @@ func (t *Table) CompressAll(cmethod string, w io.Writer, mode DumpMode, verbose 
 	fmt.Printf("Compression Throughput: %.0fMB/s\n", totalUSize/totalCTime/1000000)
 	fmt.Printf("Decompression Time: %.0fs\n", totalDTime)
 	fmt.Printf("Decompression Throughput: %.0fMB/s\n", totalUSize/totalDTime/1000000)
+
+	return nil
+}
+
+func (t *Table) CacheTest() error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	//nPacks := t.packidx.Len()
+
+	var count int
+
+	var list = []int{0, 0, 2, 3, 3, 4, 4, 5, 5, 2, -2}
+
+	for _, i := range list {
+		if i >= 0 {
+			pkg, err := t.loadSharedPack2(tx, t.packidx.packs[i].Key, true, nil)
+			if err != nil {
+				return err
+			}
+			t.releaseSharedPack2(pkg)
+		} else {
+			for j := range t.fields {
+				t.bcache.Remove(encodeBlockKey(uint32(-i), j))
+			}
+			//t.cache.Remove(t.cachekey(encodePackKey(uint32(-i))))
+		}
+
+		r, f, e, b := t.bcache.GetParams()
+		fmt.Printf("%d: size=%d recent=%d frequent=%d evicted=%d %dBytes\n", i, r+f, r, f, e, b)
+		count++
+	}
+
+	fmt.Printf("\nProcessed %d packs\n", count)
+	fmt.Printf("PackCacheSize %d\n", t.stats.PackCacheSize)
+	fmt.Printf("PackCacheCount %d\n", t.stats.PackCacheCount)
+	fmt.Printf("PackCacheCapacity %d\n", t.stats.PackCacheCapacity)
+	fmt.Printf("PackCacheHits %d\n", t.stats.PackCacheHits)
+	fmt.Printf("PackCacheMisses %d\n", t.stats.PackCacheMisses)
+	fmt.Printf("PackCacheInserts %d\n", t.stats.PackCacheInserts)
+	fmt.Printf("PackCacheEvictions %d\n", t.stats.PackCacheEvictions)
+
+	return nil
+}
+
+func (t *Table) CacheBench() error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// nPacks := t.packidx.Len()
+	nPacks := 1000
+	max_loop := 1000
+
+	var count int
+
+	// popuate the Cache
+	for n := 0; n < nPacks; n++ {
+		pkg, err := t.loadSharedPack2(tx, t.packidx.packs[n].Key, true, nil)
+		if err != nil {
+			return err
+		}
+		t.releaseSharedPack2(pkg)
+	}
+
+	// reset cache stats
+	t.stats.PackCacheSize = 0
+	t.stats.PackCacheCount = 0
+	t.stats.PackCacheCapacity = 0
+	t.stats.PackCacheHits = 0
+	t.stats.PackCacheMisses = 0
+	t.stats.PackCacheInserts = 0
+	t.stats.PackCacheEvictions = 0
+
+	tstart := time.Now()
+	for n := 0; n < max_loop; n++ {
+		i := rand.Intn(nPacks)
+		pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, true, nil)
+		if err != nil {
+			return err
+		}
+		t.releaseSharedPack(pkg)
+
+		count++
+	}
+	dur := time.Since(tstart)
+
+	fmt.Printf("\nProcessed %d packs in %f seconds (%f s/Pack)\n", count, dur.Seconds(), dur.Seconds()/float64(count))
+	fmt.Printf("PackCacheSize %d\n", t.stats.PackCacheSize)
+	fmt.Printf("PackCacheCount %d\n", t.stats.PackCacheCount)
+	fmt.Printf("PackCacheCapacity %d\n", t.stats.PackCacheCapacity)
+	fmt.Printf("PackCacheHits %d (%.2f%%)\n", t.stats.PackCacheHits, 100*float64(t.stats.PackCacheHits)/float64(count))
+	fmt.Printf("PackCacheMisses %d (%.2f%%)\n", t.stats.PackCacheMisses, 100*float64(t.stats.PackCacheMisses)/float64(count))
+	fmt.Printf("PackCacheInserts %d\n", t.stats.PackCacheInserts)
+	fmt.Printf("PackCacheEvictions %d\n", t.stats.PackCacheEvictions)
 
 	return nil
 }
@@ -1014,6 +1125,9 @@ func (t *Table) ShowCompression(cmethod string, w io.Writer, mode DumpMode, verb
 		}
 		cratios[i] = cr
 		ctype[i] = ct
+
+		t.releaseSharedPack(pkg)
+
 		fmt.Printf(".")
 	}
 	fmt.Printf("\nProcessed %d packs\n", t.packidx.Len())

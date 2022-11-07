@@ -10,6 +10,8 @@ import (
 	"math"
 	"reflect"
 	"sort"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
@@ -21,6 +23,7 @@ import (
 )
 
 type Package struct {
+	refCount int64
 	key      uint32 // identity
 	nFields  int
 	nValues  int
@@ -29,10 +32,33 @@ type Package struct {
 	tinfo    *typeInfo      // Go typeinfo
 	pkindex  int            // field index of primary key (optional)
 	dirty    bool           // pack is updated, needs to be written
-	cached   bool           // pack is cached
 	stripped bool           // some blocks are ignored, don't store this pack
 	capHint  int            // block size hint
 	size     int            // storage size
+	pool     *sync.Pool
+}
+
+func (p *Package) IncRef() int64 {
+	return atomic.AddInt64(&p.refCount, 1)
+}
+
+func (p *Package) DecRef() int64 {
+	val := atomic.AddInt64(&p.refCount, -1)
+	if val == 0 {
+		p.recycle()
+	}
+	return val
+}
+
+func (p *Package) recycle() {
+	// don't recycle stripped or oversized packs
+	c := p.Cap()
+	if p.pool == nil || p.stripped || c <= 0 || c > p.capHint {
+		p.Release()
+		return
+	}
+	p.Clear()
+	p.pool.Put(p)
 }
 
 func (p *Package) Key() []byte {
@@ -71,11 +97,16 @@ func encodePackKey(key uint32) []byte {
 	}
 }
 
-func NewPackage(sz int) *Package {
+func encodeBlockKey(packkey uint32, col int) uint64 {
+	return (uint64(packkey) << 32) | uint64(col&0xffffffff)
+}
+
+func NewPackage(sz int, pool *sync.Pool) *Package {
 	return &Package{
 		pkindex: -1,
 		capHint: sz,
 		dirty:   true,
+		pool:    pool,
 	}
 }
 
@@ -300,10 +331,11 @@ func (p *Package) InitResultFields(fields FieldList, tinfo *typeInfo) error {
 func (p *Package) Clone(capacity int) (*Package, error) {
 	// cloned pack has no identity yet
 	// cloning a stripped pack is allowed
-	clone := NewPackage(capacity)
+	clone := NewPackage(capacity, p.pool)
 	if err := clone.CopyType(p); err != nil {
 		return nil, err
 	}
+	clone.key = p.key
 	clone.nValues = p.nValues
 	clone.size = p.size
 	clone.stripped = p.stripped
@@ -314,8 +346,25 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 		}
 		clone.blocks[i].Copy(src)
 	}
-
 	return clone, nil
+}
+
+func (dst *Package) MergeCols(src *Package) (*Package, error) {
+	if src == nil {
+		return dst, nil
+	}
+	if dst.nValues != src.nValues {
+		return nil, fmt.Errorf("pack: MergeCols: differnt number of values")
+	}
+	for i := range dst.blocks {
+		if i > len(src.blocks) {
+			break
+		}
+		if dst.blocks[i].IsIgnore() && !src.blocks[i].IsIgnore() {
+			dst.blocks[i] = src.blocks[i]
+		}
+	}
+	return dst, nil
 }
 
 func (p *Package) Optimize() {
@@ -2011,11 +2060,10 @@ func (p *Package) Clear() {
 	for i := range p.blocks {
 		p.blocks[i].Clear()
 	}
-	// Note: we keep all type-related data and blocks
+	// Note: we keep all type-related data and blocks, pool reference
 	// also keep pack key to avoid clearing journal/tombstone identity
 	p.nValues = 0
 	p.dirty = true
-	p.cached = false
 	p.size = 0
 }
 
@@ -2023,6 +2071,7 @@ func (p *Package) Release() {
 	for i := range p.blocks {
 		p.blocks[i].Release()
 	}
+	p.refCount = 0
 	p.nFields = 0
 	p.nValues = 0
 	p.blocks = p.blocks[:0]
@@ -2031,13 +2080,14 @@ func (p *Package) Release() {
 	p.tinfo = nil
 	p.pkindex = -1
 	p.dirty = false
-	p.cached = false
 	p.stripped = false
 	p.size = 0
+	p.pool = nil
 }
 
 func (p *Package) HeapSize() int {
-	var sz int
+	var sz int = szPackage
+	sz += 8 * len(p.blocks)
 	for _, v := range p.blocks {
 		sz += v.HeapSize()
 	}
