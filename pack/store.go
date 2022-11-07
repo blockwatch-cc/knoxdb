@@ -10,8 +10,7 @@ import (
     "fmt"
     "sync/atomic"
 
-    "blockwatch.cc/knoxdb/cache"
-    "blockwatch.cc/knoxdb/cache/lru"
+    "blockwatch.cc/knoxdb/cache/rclru"
     "blockwatch.cc/knoxdb/store"
 )
 
@@ -19,14 +18,39 @@ var (
     storeKey = []byte("_store")
 )
 
+type Buffer struct {
+    ref int64
+    buf []byte
+}
+
+func (b *Buffer) IncRef() int64 {
+    return atomic.AddInt64(&b.ref, 1)
+}
+
+func (b *Buffer) DecRef() int64 {
+    return atomic.AddInt64(&b.ref, -1)
+}
+
+func (b *Buffer) HeapSize() int {
+    return 8 + 24 + len(b.buf)
+}
+
+func (b *Buffer) Bytes() []byte {
+    return b.buf
+}
+
+func NewBuffer(b []byte) *Buffer {
+    return &Buffer{buf: b}
+}
+
 type Store struct {
-    name    string      // printable pool name
-    opts    Options     // runtime configuration options
-    db      *DB         // lower-level storage (e.g. boltdb wrapper)
-    cache   cache.Cache // cache for improving data loads
-    key     []byte      // name of store's data bucket
-    metakey []byte      // name of store's metadata bucket
-    stats   TableStats  // usage statistics
+    name    string                       // printable pool name
+    opts    Options                      // runtime configuration options
+    db      *DB                          // lower-level storage (e.g. boltdb wrapper)
+    cache   rclru.Cache[uint64, *Buffer] // cache for improving data loads
+    key     []byte                       // name of store's data bucket
+    metakey []byte                       // name of store's metadata bucket
+    stats   TableStats                   // usage statistics
 }
 
 func (d *DB) CreateStore(name string, opts Options) (*Store, error) {
@@ -69,13 +93,13 @@ func (d *DB) CreateStore(name string, opts Options) (*Store, error) {
         return nil, err
     }
     if s.opts.CacheSize > 0 {
-        s.cache, err = lru.New2QWithEvict(int(s.opts.CacheSize), s.onEvicted)
+        s.cache, err = rclru.New2Q[uint64, *Buffer](int(s.opts.CacheSize))
         if err != nil {
             return nil, err
         }
         s.stats.PackCacheCapacity = int64(s.opts.CacheSize)
     } else {
-        s.cache = cache.NewNoCache()
+        s.cache = rclru.NewNoCache[uint64, *Buffer]()
     }
     log.Debugf("Created bitpool %s", name)
     d.stores[name] = s
@@ -159,13 +183,13 @@ func (d *DB) Store(name string, opts ...Options) (*Store, error) {
         return nil, err
     }
     if s.opts.CacheSize > 0 {
-        s.cache, err = lru.New2QWithEvict(int(s.opts.CacheSize), s.onEvicted)
+        s.cache, err = rclru.New2Q[uint64, *Buffer](int(s.opts.CacheSize))
         if err != nil {
             return nil, err
         }
         s.stats.PackCacheCapacity = int64(s.opts.CacheSize)
     } else {
-        s.cache = cache.NewNoCache()
+        s.cache = rclru.NewNoCache[uint64, *Buffer]()
     }
     d.stores[name] = s
     return s, nil
@@ -184,7 +208,19 @@ func (s *Store) Options() Options {
 }
 
 func (s *Store) Stats() []TableStats {
-    return []TableStats{s.stats}
+    // copy store stats
+    stats := s.stats
+
+    // copy cache stats
+    cs := s.cache.Stats()
+    stats.PackCacheHits = cs.Hits
+    stats.PackCacheMisses = cs.Misses
+    stats.PackCacheInserts = cs.Inserts
+    stats.PackCacheEvictions = cs.Evictions
+    stats.PackCacheCount = cs.Count
+    stats.PackCacheSize = cs.Size
+
+    return []TableStats{stats}
 }
 
 func (s *Store) PurgeCache() {
@@ -219,14 +255,7 @@ func (s *Store) Put(ctx context.Context, key uint64, val interface{}) (int, erro
     bigEndian.PutUint64(bkey[:], key)
     n, err := s.PutBytes(ctx, bkey[:], buf)
     if err == nil {
-        upd, _ := s.cache.Add(key, val)
-        if upd {
-            atomic.AddInt64(&s.stats.PackCacheUpdates, 1)
-        } else {
-            atomic.AddInt64(&s.stats.PackCacheInserts, 1)
-            atomic.AddInt64(&s.stats.PackCacheCount, 1)
-            atomic.AddInt64(&s.stats.PackCacheSize, int64(n))
-        }
+        s.cache.Add(key, NewBuffer(buf))
     }
     return n, err
 }
@@ -251,39 +280,34 @@ func (s *Store) Get(ctx context.Context, key uint64, val interface{}) error {
     if val == nil {
         return ErrNilValue
     }
-    if v, ok := s.cache.Get(key); ok {
-        atomic.AddInt64(&s.stats.PackCacheHits, 1)
-        val = v
-        return nil
+    buf, ok := s.cache.Get(key)
+    if !ok {
+        var bkey [8]byte
+        bigEndian.PutUint64(bkey[:], key)
+        b, err := s.GetBytes(ctx, bkey[:])
+        if err != nil {
+            return err
+        }
+        buf = NewBuffer(b)
+        buf.IncRef()
+        // cache result
+        s.cache.Add(key, buf)
     }
-    atomic.AddInt64(&s.stats.PackCacheMisses, 1)
-    var bkey [8]byte
-    bigEndian.PutUint64(bkey[:], key)
-    err := s.db.View(func(tx store.Tx) error {
-        b := tx.Bucket(s.key)
-        if b == nil {
-            return ErrBucketNotFound
-        }
-        buf := b.Get(bkey[:])
-        if buf == nil {
-            return ErrKeyNotFound
-        }
-        var err error
-        if b, ok := val.([]byte); ok {
-            ret := make([]byte, len(b))
-            copy(ret, buf)
-            val = ret
-        } else if m, ok := val.(encoding.BinaryUnmarshaler); ok {
-            err = m.UnmarshalBinary(buf)
-        } else if m, ok := val.(json.Unmarshaler); ok {
-            err = m.UnmarshalJSON(buf)
-        } else if m, ok := val.(encoding.TextUnmarshaler); ok {
-            err = m.UnmarshalText(buf)
-        } else {
-            err = fmt.Errorf("no compatible unmarshaler interface on type %T", val)
-        }
-        return err
-    })
+
+    // decode if a decoder interface is found
+    var err error
+    if _, ok := val.([]byte); ok {
+        val = buf.Bytes()
+    } else if m, ok := val.(encoding.BinaryUnmarshaler); ok {
+        err = m.UnmarshalBinary(buf.Bytes())
+    } else if m, ok := val.(json.Unmarshaler); ok {
+        err = m.UnmarshalJSON(buf.Bytes())
+    } else if m, ok := val.(encoding.TextUnmarshaler); ok {
+        err = m.UnmarshalText(buf.Bytes())
+    } else {
+        err = fmt.Errorf("no compatible unmarshaler interface on type %T", val)
+    }
+    buf.DecRef()
     return err
 }
 
@@ -309,6 +333,7 @@ func (s *Store) GetBytes(ctx context.Context, key []byte) ([]byte, error) {
 }
 
 func (s *Store) Delete(ctx context.Context, key uint64) error {
+    s.cache.Remove(key)
     var bkey [8]byte
     bigEndian.PutUint64(bkey[:], key)
     err := s.db.Update(func(tx store.Tx) error {
@@ -331,13 +356,4 @@ func (s *Store) Close() error {
     delete(s.db.stores, s.name)
     s.db = nil
     return nil
-}
-
-func (s *Store) onEvicted(key, val interface{}) {
-    // log.Debugf("%s: cache evict pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
-    atomic.AddInt64(&s.stats.PackCacheEvictions, 1)
-    atomic.AddInt64(&s.stats.PackCacheCount, -1)
-    if buf, ok := val.([]byte); ok {
-        atomic.AddInt64(&s.stats.PackCacheSize, int64(len(buf)))
-    }
 }
