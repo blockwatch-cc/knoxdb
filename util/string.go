@@ -5,7 +5,9 @@ package util
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -218,6 +220,14 @@ func JsonString(v interface{}) string {
 	return string(b)
 }
 
+func HexString(v interface{}) string {
+	var b []byte
+	if enc, ok := v.(encoding.BinaryMarshaler); ok {
+		b, _ = enc.MarshalBinary()
+	}
+	return hex.EncodeToString(b)
+}
+
 func ContainsString(s string, list []string) bool {
 	for _, b := range list {
 		if b == s {
@@ -285,4 +295,48 @@ func IsASCII(s string) bool {
 		}
 	}
 	return true
+}
+
+type U64String uint64
+
+func (u U64String) String() string {
+	return u.Hex()
+}
+
+func (u U64String) U64() uint64 {
+	return uint64(u)
+}
+
+func (u U64String) Hex() string {
+	var tmp [8]byte
+	binary.BigEndian.PutUint64(tmp[:], uint64(u))
+	return hex.EncodeToString(tmp[:])
+}
+
+func (u U64String) Base64() string {
+	var tmp [8]byte
+	binary.BigEndian.PutUint64(tmp[:], uint64(u))
+	return base64.StdEncoding.EncodeToString(tmp[:])
+}
+
+func DecodeU64String(s string) (U64String, error) {
+	if buf, err := base64.StdEncoding.DecodeString(s); err == nil && len(buf) == 8 {
+		return U64String(binary.BigEndian.Uint64(buf)), nil
+	}
+	if buf, err := hex.DecodeString(s); err == nil && len(buf) == 8 {
+		return U64String(binary.BigEndian.Uint64(buf)), nil
+	}
+	return 0, fmt.Errorf("Invalid u64 hex or base64 string")
+}
+
+func (u *U64String) UnmarshalText(data []byte) error {
+	uu, err := DecodeU64String(string(data))
+	*u = uu
+	return err
+}
+
+func (u U64String) MarshalText() ([]byte, error) {
+	var tmp [8]byte
+	binary.BigEndian.PutUint64(tmp[:], uint64(u))
+	return []byte(hex.EncodeToString(tmp[:])), nil
 }

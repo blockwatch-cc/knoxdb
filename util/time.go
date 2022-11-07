@@ -112,6 +112,23 @@ func (f Time) Time() time.Time {
 	return f.tm
 }
 
+func (f Time) IsDate() bool {
+	return f.format == TimeFormatDate
+}
+
+func (f Time) EODTime() time.Time {
+	dd, mm, yy := f.tm.Date()
+	return time.Date(yy, mm, dd, 23, 59, 59, 0, time.UTC)
+}
+
+func (f Time) EOD() Time {
+	return Time{tm: f.EODTime(), format: f.format}
+}
+
+func (f Time) GetFormat() TimeFormat {
+	return f.format
+}
+
 func (t *Time) SetFormat(f TimeFormat) *Time {
 	t.format = f
 	return t

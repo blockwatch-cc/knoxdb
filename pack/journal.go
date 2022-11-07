@@ -12,7 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/vec"
 )
 
-const sizeStep int = 1 << 12 // 4096
+const sizeStep int = 1 << 8 // 256
 
 // RoundSize rounds size up to a multiple of sizeStep
 func roundSize(sz int) int {

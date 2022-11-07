@@ -817,7 +817,11 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
 
 		case FieldTypeDatetime:
-			dst.Set(reflect.ValueOf(time.Unix(0, b.Int64[pos]).UTC()))
+			if ts := b.Int64[pos]; ts > 0 {
+				dst.Set(reflect.ValueOf(time.Unix(0, ts)))
+			} else {
+				dst.Set(reflect.ValueOf(zeroTime))
+			}
 
 		case FieldTypeBoolean:
 			dst.SetBool(b.Bits.IsSet(pos))
@@ -939,8 +943,11 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 		return compress.UnsafeGetString(b.Bytes.Elem(pos)), nil
 
 	case FieldTypeDatetime:
-		val := time.Unix(0, b.Int64[pos]).UTC()
-		return val, nil
+		if ts := b.Int64[pos]; ts > 0 {
+			return time.Unix(0, ts), nil
+		} else {
+			return zeroTime, nil
+		}
 
 	case FieldTypeBoolean:
 		return b.Bits.IsSet(pos), nil
@@ -1240,7 +1247,11 @@ func (p *Package) TimeAt(index, pos int) (time.Time, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDatetime); err != nil {
 		return zeroTime, err
 	}
-	return time.Unix(0, p.blocks[index].Int64[pos]).UTC(), nil
+	if ts := p.blocks[index].Int64[pos]; ts == 0 {
+		return zeroTime, nil
+	} else {
+		return time.Unix(0, ts), nil
+	}
 }
 
 func (p *Package) Decimal32At(index, pos int) (Decimal32, error) {
@@ -1367,7 +1378,11 @@ func (p *Package) Column(index int) (interface{}, error) {
 		// materialize
 		res := make([]time.Time, len(b.Int64))
 		for i, v := range b.Int64 {
-			res[i] = time.Unix(0, v).UTC()
+			if v > 0 {
+				res[i] = time.Unix(0, v)
+			} else {
+				res[i] = zeroTime
+			}
 		}
 		return res, nil
 
@@ -1416,7 +1431,11 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 			out[i] = compress.UnsafeGetString(b.Bytes.Elem(pos))
 		case FieldTypeDatetime:
 			// materialize
-			out[i] = time.Unix(0, b.Int64[pos]).UTC()
+			if ts := b.Int64[pos]; ts > 0 {
+				out[i] = time.Unix(0, ts)
+			} else {
+				out[i] = time.Time{}
+			}
 		case FieldTypeBoolean:
 			out[i] = b.Bits.IsSet(pos)
 		case FieldTypeFloat64:
@@ -1490,7 +1509,11 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		// materialize
 		res := make([]time.Time, end-start+1)
 		for i, v := range b.Int64[start:end] {
-			res[i+start] = time.Unix(0, v).UTC()
+			if v > 0 {
+				res[i+start] = time.Unix(0, v)
+			} else {
+				res[i+start] = zeroTime
+			}
 		}
 		return res, nil
 	case FieldTypeBoolean:

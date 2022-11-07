@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package block
@@ -375,90 +375,40 @@ func NewBlock(typ BlockType, comp Compression, sz int) *Block {
 	b.comp = comp
 	b.dirty = true
 	switch typ {
-	case BlockInt64, BlockTime:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Int64 = int64Pool.Get().([]int64)
-		} else {
-			b.Int64 = make([]int64, 0, sz)
-		}
+	case BlockTime, BlockInt64:
+		b.Int64 = arena.Alloc(typ, sz).([]int64)
 	case BlockFloat64:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Float64 = float64Pool.Get().([]float64)
-		} else {
-			b.Float64 = make([]float64, 0, sz)
-		}
+		b.Float64 = arena.Alloc(typ, sz).([]float64)
 	case BlockFloat32:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Float32 = float32Pool.Get().([]float32)
-		} else {
-			b.Float32 = make([]float32, 0, sz)
-		}
+		b.Float32 = arena.Alloc(typ, sz).([]float32)
 	case BlockInt32:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Int32 = int32Pool.Get().([]int32)
-		} else {
-			b.Int32 = make([]int32, 0, sz)
-		}
+		b.Int32 = arena.Alloc(typ, sz).([]int32)
 	case BlockInt16:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Int16 = int16Pool.Get().([]int16)
-		} else {
-			b.Int16 = make([]int16, 0, sz)
-		}
+		b.Int16 = arena.Alloc(typ, sz).([]int16)
 	case BlockInt8:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Int8 = int8Pool.Get().([]int8)
-		} else {
-			b.Int8 = make([]int8, 0, sz)
-		}
+		b.Int8 = arena.Alloc(typ, sz).([]int8)
 	case BlockUint64:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Uint64 = uint64Pool.Get().([]uint64)
-		} else {
-			b.Uint64 = make([]uint64, 0, sz)
-		}
+		b.Uint64 = arena.Alloc(typ, sz).([]uint64)
 	case BlockUint32:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Uint32 = uint32Pool.Get().([]uint32)
-		} else {
-			b.Uint32 = make([]uint32, 0, sz)
-		}
+		b.Uint32 = arena.Alloc(typ, sz).([]uint32)
 	case BlockUint16:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Uint16 = uint16Pool.Get().([]uint16)
-		} else {
-			b.Uint16 = make([]uint16, 0, sz)
-		}
+		b.Uint16 = arena.Alloc(typ, sz).([]uint16)
 	case BlockUint8:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Uint8 = uint8Pool.Get().([]uint8)
-		} else {
-			b.Uint8 = make([]uint8, 0, sz)
-		}
+		b.Uint8 = arena.Alloc(typ, sz).([]uint8)
 	case BlockBool:
+		// b.Bits = arena.Alloc(typ, sz).(*vec.Bitset)
 		b.Bits = vec.NewBitset(sz).Reset()
 	case BlockString, BlockBytes:
+		// b.Bytes = arena.Alloc(typ, sz).(dedup.ByteArray)
 		b.Bytes = dedup.NewByteArray(sz)
 	case BlockInt128:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Int128.X0 = int64Pool.Get().([]int64)
-			b.Int128.X1 = uint64Pool.Get().([]uint64)
-		} else {
-			b.Int128.X0 = make([]int64, 0, sz)
-			b.Int128.X1 = make([]uint64, 0, sz)
-		}
+		b.Int128.X0 = arena.Alloc(BlockInt64, sz).([]int64)
+		b.Int128.X1 = arena.Alloc(BlockUint64, sz).([]uint64)
 	case BlockInt256:
-		if sz <= DefaultMaxPointsPerBlock {
-			b.Int256.X0 = int64Pool.Get().([]int64)
-			b.Int256.X1 = uint64Pool.Get().([]uint64)
-			b.Int256.X2 = uint64Pool.Get().([]uint64)
-			b.Int256.X3 = uint64Pool.Get().([]uint64)
-		} else {
-			b.Int256.X0 = make([]int64, 0, sz)
-			b.Int256.X1 = make([]uint64, 0, sz)
-			b.Int256.X2 = make([]uint64, 0, sz)
-			b.Int256.X3 = make([]uint64, 0, sz)
-		}
+		b.Int256.X0 = arena.Alloc(BlockInt64, sz).([]int64)
+		b.Int256.X1 = arena.Alloc(BlockUint64, sz).([]uint64)
+		b.Int256.X2 = arena.Alloc(BlockUint64, sz).([]uint64)
+		b.Int256.X3 = arena.Alloc(BlockUint64, sz).([]uint64)
 	}
 	return b
 }
@@ -727,54 +677,34 @@ func (b *Block) Release() {
 
 	switch b.typ {
 	case BlockFloat64:
-		if cap(b.Float64) == DefaultMaxPointsPerBlock {
-			float64Pool.Put(b.Float64[:0])
-		}
+		arena.Free(b.typ, b.Float64[:0])
 		b.Float64 = nil
 	case BlockFloat32:
-		if cap(b.Float32) == DefaultMaxPointsPerBlock {
-			float32Pool.Put(b.Float32[:0])
-		}
+		arena.Free(b.typ, b.Float32[:0])
 		b.Float32 = nil
 	case BlockInt64, BlockTime:
-		if cap(b.Int64) == DefaultMaxPointsPerBlock {
-			int64Pool.Put(b.Int64[:0])
-		}
+		arena.Free(b.typ, b.Int64[:0])
 		b.Int64 = nil
 	case BlockInt32:
-		if cap(b.Int32) == DefaultMaxPointsPerBlock {
-			int32Pool.Put(b.Int32[:0])
-		}
+		arena.Free(b.typ, b.Int32[:0])
 		b.Int32 = nil
 	case BlockInt16:
-		if cap(b.Int16) == DefaultMaxPointsPerBlock {
-			int16Pool.Put(b.Int16[:0])
-		}
+		arena.Free(b.typ, b.Int16[:0])
 		b.Int16 = nil
 	case BlockInt8:
-		if cap(b.Int8) == DefaultMaxPointsPerBlock {
-			int8Pool.Put(b.Int8[:0])
-		}
+		arena.Free(b.typ, b.Int8[:0])
 		b.Int8 = nil
 	case BlockUint64:
-		if cap(b.Uint64) == DefaultMaxPointsPerBlock {
-			uint64Pool.Put(b.Uint64[:0])
-		}
+		arena.Free(b.typ, b.Uint64[:0])
 		b.Uint64 = nil
 	case BlockUint32:
-		if cap(b.Uint32) == DefaultMaxPointsPerBlock {
-			uint32Pool.Put(b.Uint32[:0])
-		}
+		arena.Free(b.typ, b.Uint32[:0])
 		b.Uint32 = nil
 	case BlockUint16:
-		if cap(b.Uint16) == DefaultMaxPointsPerBlock {
-			uint16Pool.Put(b.Uint16[:0])
-		}
+		arena.Free(b.typ, b.Uint16[:0])
 		b.Uint16 = nil
 	case BlockUint8:
-		if cap(b.Uint8) == DefaultMaxPointsPerBlock {
-			uint8Pool.Put(b.Uint8[:0])
-		}
+		arena.Free(b.typ, b.Uint8[:0])
 		b.Uint8 = nil
 	case BlockBool:
 		b.Bits.Close()
@@ -783,19 +713,15 @@ func (b *Block) Release() {
 		b.Bytes.Release()
 		b.Bytes = nil
 	case BlockInt128:
-		if b.Int128.Cap() == DefaultMaxPointsPerBlock {
-			int64Pool.Put(b.Int128.X0[:0])
-			uint64Pool.Put(b.Int128.X1[:0])
-		}
+		arena.Free(BlockInt64, b.Int128.X0[:0])
+		arena.Free(BlockUint64, b.Int128.X1[:0])
 		b.Int128.X0 = nil
 		b.Int128.X1 = nil
 	case BlockInt256:
-		if b.Int256.Cap() == DefaultMaxPointsPerBlock {
-			int64Pool.Put(b.Int256.X0[:0])
-			uint64Pool.Put(b.Int256.X1[:0])
-			uint64Pool.Put(b.Int256.X2[:0])
-			uint64Pool.Put(b.Int256.X3[:0])
-		}
+		arena.Free(BlockInt64, b.Int256.X0[:0])
+		arena.Free(BlockUint64, b.Int256.X1[:0])
+		arena.Free(BlockUint64, b.Int256.X2[:0])
+		arena.Free(BlockUint64, b.Int256.X3[:0])
 		b.Int256.X0 = nil
 		b.Int256.X1 = nil
 		b.Int256.X2 = nil
@@ -869,91 +795,80 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 	switch b.typ {
 	case BlockTime:
 		if b.Int64 == nil || cap(b.Int64) < sz {
-			b.Int64 = make([]int64, 0, sz)
-		} else {
-			b.Int64 = b.Int64[:0]
+			arena.Free(b.typ, b.Int64)
+			b.Int64 = arena.Alloc(b.typ, sz).([]int64)
 		}
-		b.Int64, err = decodeTimeBlock(buf, b.Int64)
+		b.Int64, err = decodeTimeBlock(buf, b.Int64[:0])
 
 	case BlockFloat64:
 		if b.Float64 == nil || cap(b.Float64) < sz {
-			b.Float64 = make([]float64, 0, sz)
-		} else {
-			b.Float64 = b.Float64[:0]
+			arena.Free(b.typ, b.Float64)
+			b.Float64 = arena.Alloc(b.typ, sz).([]float64)
 		}
-		b.Float64, err = decodeFloat64Block(buf, b.Float64)
+		b.Float64, err = decodeFloat64Block(buf, b.Float64[:0])
 
 	case BlockFloat32:
 		if b.Float32 == nil || cap(b.Float32) < sz {
-			b.Float32 = make([]float32, 0, sz)
-		} else {
-			b.Float32 = b.Float32[:0]
+			arena.Free(b.typ, b.Float32)
+			b.Float32 = arena.Alloc(b.typ, sz).([]float32)
 		}
-		b.Float32, err = decodeFloat32Block(buf, b.Float32)
+		b.Float32, err = decodeFloat32Block(buf, b.Float32[:0])
 
 	case BlockInt64:
 		if b.Int64 == nil || cap(b.Int64) < sz {
-			b.Int64 = make([]int64, 0, sz)
-		} else {
-			b.Int64 = b.Int64[:0]
+			arena.Free(b.typ, b.Int64)
+			b.Int64 = arena.Alloc(b.typ, sz).([]int64)
 		}
-		b.Int64, err = decodeInt64Block(buf, b.Int64)
+		b.Int64, err = decodeInt64Block(buf, b.Int64[:0])
 
 	case BlockInt32:
 		if b.Int32 == nil || cap(b.Int32) < sz {
-			b.Int32 = make([]int32, 0, sz)
-		} else {
-			b.Int32 = b.Int32[:0]
+			arena.Free(b.typ, b.Int32)
+			b.Int32 = arena.Alloc(b.typ, sz).([]int32)
 		}
-		b.Int32, err = decodeInt32Block(buf, b.Int32)
+		b.Int32, err = decodeInt32Block(buf, b.Int32[:0])
 
 	case BlockInt16:
 		if b.Int16 == nil || cap(b.Int16) < sz {
-			b.Int16 = make([]int16, 0, sz)
-		} else {
-			b.Int16 = b.Int16[:0]
+			arena.Free(b.typ, b.Int16)
+			b.Int16 = arena.Alloc(b.typ, sz).([]int16)
 		}
-		b.Int16, err = decodeInt16Block(buf, b.Int16)
+		b.Int16, err = decodeInt16Block(buf, b.Int16[:0])
 
 	case BlockInt8:
 		if b.Int8 == nil || cap(b.Int8) < sz {
-			b.Int8 = make([]int8, 0, sz)
-		} else {
-			b.Int8 = b.Int8[:0]
+			arena.Free(b.typ, b.Int8)
+			b.Int8 = arena.Alloc(b.typ, sz).([]int8)
 		}
-		b.Int8, err = decodeInt8Block(buf, b.Int8)
+		b.Int8, err = decodeInt8Block(buf, b.Int8[:0])
 
 	case BlockUint64:
 		if b.Uint64 == nil || cap(b.Uint64) < sz {
-			b.Uint64 = make([]uint64, 0, sz)
-		} else {
-			b.Uint64 = b.Uint64[:0]
+			arena.Free(b.typ, b.Uint64)
+			b.Uint64 = arena.Alloc(b.typ, sz).([]uint64)
 		}
-		b.Uint64, err = decodeUint64Block(buf, b.Uint64)
+		b.Uint64, err = decodeUint64Block(buf, b.Uint64[:0])
 
 	case BlockUint32:
 		if b.Uint32 == nil || cap(b.Uint32) < sz {
-			b.Uint32 = make([]uint32, 0, sz)
-		} else {
-			b.Uint32 = b.Uint32[:0]
+			arena.Free(b.typ, b.Uint32)
+			b.Uint32 = arena.Alloc(b.typ, sz).([]uint32)
 		}
-		b.Uint32, err = decodeUint32Block(buf, b.Uint32)
+		b.Uint32, err = decodeUint32Block(buf, b.Uint32[:0])
 
 	case BlockUint16:
 		if b.Uint16 == nil || cap(b.Uint16) < sz {
-			b.Uint16 = make([]uint16, 0, sz)
-		} else {
-			b.Uint16 = b.Uint16[:0]
+			arena.Free(b.typ, b.Uint16)
+			b.Uint16 = arena.Alloc(b.typ, sz).([]uint16)
 		}
-		b.Uint16, err = decodeUint16Block(buf, b.Uint16)
+		b.Uint16, err = decodeUint16Block(buf, b.Uint16[:0])
 
 	case BlockUint8:
 		if b.Uint8 == nil || cap(b.Uint8) < sz {
-			b.Uint8 = make([]uint8, 0, sz)
-		} else {
-			b.Uint8 = b.Uint8[:0]
+			arena.Free(b.typ, b.Uint8)
+			b.Uint8 = arena.Alloc(b.typ, sz).([]uint8)
 		}
-		b.Uint8, err = decodeUint8Block(buf, b.Uint8)
+		b.Uint8, err = decodeUint8Block(buf, b.Uint8[:0])
 
 	case BlockBool:
 		if b.Bits == nil || b.Bits.Cap() < sz {
@@ -972,38 +887,38 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 
 	case BlockInt128:
 		if b.Int128.X0 == nil || cap(b.Int128.X0) < sz {
-			b.Int128.X0 = make([]int64, 0, sz)
-		} else {
-			b.Int128.X0 = b.Int128.X0[:0]
+			arena.Free(b.typ, b.Int128.X0)
+			b.Int128.X0 = arena.Alloc(BlockInt64, sz).([]int64)
 		}
 		if b.Int128.X1 == nil || cap(b.Int128.X1) < sz {
-			b.Int128.X1 = make([]uint64, 0, sz)
-		} else {
-			b.Int128.X1 = b.Int128.X1[:0]
+			arena.Free(b.typ, b.Int128.X1)
+			b.Int128.X1 = arena.Alloc(BlockUint64, sz).([]uint64)
 		}
+		b.Int128.X0 = b.Int128.X0[:0]
+		b.Int128.X1 = b.Int128.X1[:0]
 		b.Int128, err = decodeInt128Block(buf, b.Int128)
 
 	case BlockInt256:
 		if b.Int256.X0 == nil || cap(b.Int256.X0) < sz {
-			b.Int256.X0 = make([]int64, 0, sz)
-		} else {
-			b.Int256.X0 = b.Int256.X0[:0]
+			arena.Free(b.typ, b.Int256.X0)
+			b.Int256.X0 = arena.Alloc(BlockInt64, sz).([]int64)
 		}
 		if b.Int256.X1 == nil || cap(b.Int256.X1) < sz {
-			b.Int256.X1 = make([]uint64, 0, sz)
-		} else {
-			b.Int256.X1 = b.Int256.X1[:0]
+			arena.Free(b.typ, b.Int256.X1)
+			b.Int256.X1 = arena.Alloc(BlockUint64, sz).([]uint64)
 		}
 		if b.Int256.X2 == nil || cap(b.Int256.X2) < sz {
-			b.Int256.X2 = make([]uint64, 0, sz)
-		} else {
-			b.Int256.X2 = b.Int256.X2[:0]
+			arena.Free(b.typ, b.Int256.X2)
+			b.Int256.X2 = arena.Alloc(BlockUint64, sz).([]uint64)
 		}
 		if b.Int256.X3 == nil || cap(b.Int256.X3) < sz {
-			b.Int256.X3 = make([]uint64, 0, sz)
-		} else {
-			b.Int256.X3 = b.Int256.X3[:0]
+			arena.Free(b.typ, b.Int256.X3)
+			b.Int256.X3 = arena.Alloc(BlockUint64, sz).([]uint64)
 		}
+		b.Int256.X0 = b.Int256.X0[:0]
+		b.Int256.X1 = b.Int256.X1[:0]
+		b.Int256.X2 = b.Int256.X2[:0]
+		b.Int256.X3 = b.Int256.X3[:0]
 		b.Int256, err = decodeInt256Block(buf, b.Int256)
 
 	default:
@@ -1140,11 +1055,7 @@ func (b *Block) Swap(i, j int) {
 func (b *Block) Hashes(res []uint64) []uint64 {
 	sz := b.Len()
 	if res == nil || cap(res) < sz {
-		if sz <= DefaultMaxPointsPerBlock {
-			res = uint64Pool.Get().([]uint64)
-		} else {
-			res = make([]uint64, sz)
-		}
+		res = arena.Alloc(BlockUint64, sz).([]uint64)
 	}
 	res = res[:sz]
 	var buf [8]byte

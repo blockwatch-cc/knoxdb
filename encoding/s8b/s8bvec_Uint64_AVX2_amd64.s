@@ -84,7 +84,8 @@ TEXT ·decodeAllUint64AVX2Exit(SB), NOSPLIT, $0-0
 
 // func unpack1Uint64AVX2()
 TEXT ·unpack1Uint64AVX2(SB), NOSPLIT, $0-0
-        VPAND           (SI), X5, X0
+        VMOVQ           (SI), X0
+        VPAND           X0, X5, X0
         VMOVQ           X0, (DI)
 
         ADDQ            $8, DI

@@ -11,7 +11,6 @@ import (
 	"sort"
 	"testing"
 
-	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
@@ -231,7 +230,7 @@ func TestJournalInit(t *testing.T) {
 	for i, sz := range journalTestSizes {
 		t.Run(fmt.Sprintf("%d_init", sz), func(t *testing.T) {
 			// packs use a default minimum defined in block
-			expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
+			expDataCap := sz
 
 			// create journal
 			j := NewJournal(uint64(i), sz, "")
@@ -362,7 +361,7 @@ func TestJournalInsert(t *testing.T) {
 	rand.Seed(0)
 	for i, sz := range journalTestSizes {
 		t.Run(fmt.Sprintf("%d_insert", sz), func(t *testing.T) {
-			expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
+			expDataCap := sz
 			j := NewJournal(uint64(i), sz, "")
 			j.InitType(JournalTestType{})
 			items := makeJournalTestData(4)
@@ -489,7 +488,7 @@ func TestJournalInsertBatch(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
+				expDataCap := sz
 				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				max := batch[len(batch)-1].ID()
@@ -615,7 +614,7 @@ func TestJournalUpsertBatch(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
+				expDataCap := sz
 				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				max := batch[sz/2-1].ID()
@@ -695,7 +694,7 @@ func TestJournalUpdate(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
+				expDataCap := sz
 				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				max := batch[len(batch)-1].ID()
@@ -751,7 +750,7 @@ func TestJournalInsertUpdateBatch(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
+				expDataCap := sz
 				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				max := batch[len(batch)-1].ID()
@@ -815,7 +814,7 @@ func TestJournalUpdateBatch(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
+				expDataCap := sz
 				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 
@@ -878,7 +877,7 @@ func TestJournalDelete(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k, batch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(T *testing.T) {
-				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
+				expDataCap := sz
 				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
 				max := batch[len(batch)-1].ID()
@@ -960,7 +959,7 @@ func TestJournalDeleteBatch(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k, originalbatch := range randJournalData(journalRndRuns, sz) {
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(T *testing.T) {
-				expDataCap := util.Max(block.DefaultMaxPointsPerBlock, sz)
+				expDataCap := sz
 
 				// pick list of a random items to delete
 				for l, idxs := range randNN(10, sz/8, sz) {
