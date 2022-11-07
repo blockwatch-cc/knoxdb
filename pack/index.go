@@ -234,11 +234,11 @@ func (t *Table) CreateIndex(name string, field *Field, typ IndexType, opts Optio
 		return nil, err
 	}
 	if idx.opts.CacheSize > 0 {
-		idx.cache, err = rclru.New2Q[string, *Package](int(idx.opts.CacheSize))
+		idx.cache, err = rclru.New2Q[string, *Package](idx.opts.CacheSizeMBytes())
 		if err != nil {
 			return nil, err
 		}
-		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSize)
+		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSizeMBytes())
 	} else {
 		idx.cache = rclru.NewNoCache[string, *Package]()
 	}
@@ -382,11 +382,11 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 		return err
 	}
 	if idx.opts.CacheSize > 0 {
-		idx.cache, err = rclru.New2Q[string, *Package](int(idx.opts.CacheSize))
+		idx.cache, err = rclru.New2Q[string, *Package](idx.opts.CacheSizeMBytes())
 		if err != nil {
 			return err
 		}
-		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSize)
+		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSizeMBytes())
 	} else {
 		idx.cache = rclru.NewNoCache[string, *Package]()
 	}
@@ -400,8 +400,6 @@ func (idx *Index) Options() Options {
 
 func (idx *Index) PurgeCache() {
 	idx.cache.Purge()
-	atomic.StoreInt64(&idx.stats.PackCacheCount, 0)
-	atomic.StoreInt64(&idx.stats.PackCacheSize, 0)
 }
 
 func (idx *Index) name() string {

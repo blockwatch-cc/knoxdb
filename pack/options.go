@@ -10,7 +10,7 @@ import (
 )
 
 const (
-    defaultCacheSize        = 128 // keep 128 unpacked partitions in memory (per table/index)
+    defaultCacheSize        = 128 // use 128 MB memory (per table/index)
     defaultPackSizeLog2     = 16  // 64k entries per partition
     defaultJournalFillLevel = 50  // keep space for extension
 )
@@ -47,6 +47,10 @@ func (o Options) Merge(o2 Options) Options {
     o.FillLevel = util.NonZero(o2.FillLevel, o.FillLevel)
     o.CacheSize = o2.CacheSize
     return o
+}
+
+func (o Options) CacheSizeMBytes() int {
+    return o.CacheSize * (1 << 20)
 }
 
 func (o Options) Check() error {

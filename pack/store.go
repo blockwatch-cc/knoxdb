@@ -93,11 +93,11 @@ func (d *DB) CreateStore(name string, opts Options) (*Store, error) {
         return nil, err
     }
     if s.opts.CacheSize > 0 {
-        s.cache, err = rclru.New2Q[uint64, *Buffer](int(s.opts.CacheSize))
+        s.cache, err = rclru.New2Q[uint64, *Buffer](int(s.opts.CacheSizeMBytes()))
         if err != nil {
             return nil, err
         }
-        s.stats.PackCacheCapacity = int64(s.opts.CacheSize)
+        s.stats.PackCacheCapacity = int64(s.opts.CacheSizeMBytes())
     } else {
         s.cache = rclru.NewNoCache[uint64, *Buffer]()
     }
@@ -183,11 +183,11 @@ func (d *DB) Store(name string, opts ...Options) (*Store, error) {
         return nil, err
     }
     if s.opts.CacheSize > 0 {
-        s.cache, err = rclru.New2Q[uint64, *Buffer](int(s.opts.CacheSize))
+        s.cache, err = rclru.New2Q[uint64, *Buffer](int(s.opts.CacheSizeMBytes()))
         if err != nil {
             return nil, err
         }
-        s.stats.PackCacheCapacity = int64(s.opts.CacheSize)
+        s.stats.PackCacheCapacity = int64(s.opts.CacheSizeMBytes())
     } else {
         s.cache = rclru.NewNoCache[uint64, *Buffer]()
     }
@@ -225,8 +225,6 @@ func (s *Store) Stats() []TableStats {
 
 func (s *Store) PurgeCache() {
     s.cache.Purge()
-    atomic.StoreInt64(&s.stats.PackCacheCount, 0)
-    atomic.StoreInt64(&s.stats.PackCacheSize, 0)
 }
 
 func (s *Store) Put(ctx context.Context, key uint64, val interface{}) (int, error) {

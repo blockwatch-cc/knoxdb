@@ -194,16 +194,15 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		return nil, err
 	}
 	if t.opts.CacheSize > 0 {
-		// t.cache, err = rclru.New2QWithEvict[string, *Package](int(t.opts.CacheSize), t.onEvictedPackage)
-		t.cache, err = rclru.New2Q[string, *Package](int(t.opts.CacheSize))
+		t.cache, err = rclru.New2Q[string, *Package](t.opts.CacheSizeMBytes())
 		if err != nil {
 			return nil, err
 		}
-		t.bcache, err = rclru.New2Q[uint64, *block.Block](int(t.opts.CacheSize))
+		t.bcache, err = rclru.New2Q[uint64, *block.Block](t.opts.CacheSizeMBytes())
 		if err != nil {
 			return nil, err
 		}
-		t.stats.PackCacheCapacity = int64(t.opts.CacheSize)
+		t.stats.PackCacheCapacity = int64(t.opts.CacheSizeMBytes())
 	} else {
 		t.cache = rclru.NewNoCache[string, *Package]()
 	}
@@ -350,15 +349,15 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		return nil, err
 	}
 	if t.opts.CacheSize > 0 {
-		t.cache, err = rclru.New2Q[string, *Package](int(t.opts.CacheSize))
+		t.cache, err = rclru.New2Q[string, *Package](t.opts.CacheSizeMBytes())
 		if err != nil {
 			return nil, err
 		}
-		t.bcache, err = rclru.New2Q[uint64, *block.Block](int(t.opts.CacheSize))
+		t.bcache, err = rclru.New2Q[uint64, *block.Block](t.opts.CacheSizeMBytes())
 		if err != nil {
 			return nil, err
 		}
-		t.stats.PackCacheCapacity = int64(t.opts.CacheSize)
+		t.stats.PackCacheCapacity = int64(t.opts.CacheSizeMBytes())
 	} else {
 		t.cache = rclru.NewNoCache[string, *Package]()
 	}
@@ -3113,7 +3112,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		pkg = pkg.KeepFields(fields)
 	}
 
-  var err error
+	var err error
 	pkg, err = tx.loadPack(t.key, key, pkg, t.opts.PackSize())
 	if err != nil {
 		pkg.DecRef()
@@ -3162,10 +3161,8 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 		cachekey := encodeBlockKey(id, i)
 
 		if b, ok := cachefn(cachekey); ok {
-			atomic.AddInt64(&t.stats.PackCacheHits, 1)
 			pkg.blocks[i] = b
 		} else {
-			atomic.AddInt64(&t.stats.PackCacheMisses, 1)
 			pkg.blocks[i].SetIgnore()
 			loadField = loadField.Add(v)
 		}
@@ -3199,9 +3196,6 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 				t.bcache.Add(encodeBlockKey(id, i), v)
 			}
 		}
-		atomic.AddInt64(&t.stats.PackCacheInserts, 1)
-		atomic.AddInt64(&t.stats.PackCacheCount, 1)
-		atomic.AddInt64(&t.stats.PackCacheSize, int64(pkg.HeapSize()))
 	}
 
 	pkg, err = pkg.MergeCols(pkg2)
