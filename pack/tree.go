@@ -394,7 +394,9 @@ func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *vec.Bitset 
                 }
             }
 
-            // match vector against condition using last match as mask
+            // match vector against condition using last match as mask;
+            // since this is an OR match we only have to test all values
+            // with unset mask bits, that's why we negate the mask first
             //
             // Note that an optimization exists for IN/NIN on all types
             // which implicitly assumes an AND between mask and vector,
@@ -402,7 +404,9 @@ func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *vec.Bitset 
             // For correctness this still works because we merge mask
             // and pack match set using OR below. However we cannot
             // use a shortcut (on all pack bits == 1).
-            b = c.MatchPack(pkg, bits)
+            mask := bits.Clone().Neg()
+            b = c.MatchPack(pkg, mask)
+            mask.Close()
         }
 
         // merge
