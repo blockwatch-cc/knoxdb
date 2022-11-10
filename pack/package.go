@@ -75,9 +75,9 @@ func (p Package) IsTomb() bool {
 
 func (p *Package) SetKey(key []byte) {
 	switch {
-	case bytes.Compare(key, []byte("_journal")) == 0:
+	case bytes.Equal(key, []byte("_journal")):
 		p.key = journalKey
-	case bytes.Compare(key, []byte("_tombstone")) == 0:
+	case bytes.Equal(key, []byte("_tombstone")):
 		p.key = tombstoneKey
 	default:
 		p.key = bigEndian.Uint32(key)

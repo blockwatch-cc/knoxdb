@@ -999,7 +999,7 @@ func (t FieldType) SliceToString(val interface{}, f *Field) string {
 func (t FieldType) Equal(xa, xb interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
-		return bytes.Compare(xa.([]byte), xb.([]byte)) == 0
+		return bytes.Equal(xa.([]byte), xb.([]byte))
 	case FieldTypeString:
 		return xa.(string) == xb.(string)
 	case FieldTypeDatetime:
@@ -1047,7 +1047,7 @@ func (t FieldType) EqualAt(pkg *Package, index, pos int, val interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
 		a, _ := pkg.BytesAt(index, pos)
-		return bytes.Compare(a, val.([]byte)) == 0
+		return bytes.Equal(a, val.([]byte))
 	case FieldTypeString:
 		a, _ := pkg.StringAt(index, pos)
 		return a == val.(string)
@@ -2700,11 +2700,11 @@ func (t FieldType) EqualPacksAt(p1 *Package, i1, n1 int, p2 *Package, i2, n2 int
 	case FieldTypeBytes:
 		v1, _ := p1.BytesAt(i1, n1)
 		v2, _ := p2.BytesAt(i2, n2)
-		return bytes.Compare(v1, v2) == 0
+		return bytes.Equal(v1, v2)
 	case FieldTypeString:
 		v1, _ := p1.StringAt(i1, n1)
 		v2, _ := p2.StringAt(i2, n2)
-		return strings.Compare(v1, v2) == 0
+		return v1 == v2
 	case FieldTypeDatetime:
 		v1, _ := p1.TimeAt(i1, n1)
 		v2, _ := p2.TimeAt(i2, n2)
