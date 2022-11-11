@@ -1009,11 +1009,11 @@ func (t *Table) CacheTest() error {
 
 	for _, i := range list {
 		if i >= 0 {
-			pkg, err := t.loadSharedPack2(tx, t.packidx.packs[i].Key, true, nil)
+			pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, true, nil)
 			if err != nil {
 				return err
 			}
-			t.releaseSharedPack2(pkg)
+			t.releaseSharedPack(pkg)
 		} else {
 			for j := range t.fields {
 				t.bcache.Remove(encodeBlockKey(uint32(-i), j))
@@ -1059,11 +1059,11 @@ func (t *Table) CacheBench() error {
 
 	// popuate the Cache
 	for n := 0; n < nPacks; n++ {
-		pkg, err := t.loadSharedPack2(tx, t.packidx.packs[n].Key, true, fl)
+		pkg, err := t.loadSharedPack(tx, t.packidx.packs[n].Key, true, fl)
 		if err != nil {
 			return err
 		}
-		t.releaseSharedPack2(pkg)
+		t.releaseSharedPack(pkg)
 		fmt.Printf(".")
 	}
 
@@ -1076,14 +1076,14 @@ func (t *Table) CacheBench() error {
 	tstart := time.Now()
 	for n := 0; n < max_loop; n++ {
 		i := rand.Intn(nPacks)
-		pkg, err := t.loadSharedPack2(tx, t.packidx.packs[i].Key, true, fl)
+		pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, true, fl)
 		if err != nil {
 			return err
 		}
 		/*bits := vec.NewBitset(len(pkg.blocks[0].Uint64))
 		vec.MatchUint64Equal(pkg.blocks[0].Uint64, 0, bits, nil)
 		bits.Close()*/
-		t.releaseSharedPack2(pkg)
+		t.releaseSharedPack(pkg)
 
 		count++
 	}

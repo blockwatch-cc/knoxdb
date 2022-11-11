@@ -61,6 +61,20 @@ func (p *Package) recycle() {
 	p.pool.Put(p)
 }
 
+func (p *Package) recycleNew() {
+	// don't recycle stripped or oversized packs
+	for i, v := range p.blocks {
+		if v == nil {
+			continue
+		}
+		p.blocks[i] = nil
+		if v.DecRef() == 0 {
+			// do stats here
+		}
+	}
+	p.pool.Put(p)
+}
+
 func (p *Package) Key() []byte {
 	return encodePackKey(p.key)
 }
@@ -112,6 +126,10 @@ func NewPackage(sz int, pool *sync.Pool) *Package {
 
 func (p *Package) CopyType(pkg *Package) error {
 	return p.InitFields(pkg.fields, pkg.tinfo)
+}
+
+func (p *Package) CopyType2(pkg *Package) error {
+	return p.InitFields2(pkg.fields, pkg.tinfo)
 }
 
 func (p *Package) IsDirty() bool {
@@ -383,7 +401,7 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 	// cloned pack has no identity yet
 	// cloning a stripped pack is allowed
 	clone := NewPackage(capacity, p.pool)
-	if err := clone.CopyType(p); err != nil {
+	if err := clone.CopyType2(p); err != nil {
 		return nil, err
 	}
 	clone.key = p.key
@@ -392,7 +410,12 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 	clone.stripped = p.stripped
 
 	for i, src := range p.blocks {
+		if src == nil {
+			continue
+		}
+		clone.blocks[i] = block.NewBlock(src.Type(), src.Compression(), capacity)
 		if src.IsIgnore() {
+			clone.blocks[i].SetIgnore()
 			continue
 		}
 		clone.blocks[i].Copy(src)
@@ -400,13 +423,35 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 	return clone, nil
 }
 
+/*
+	func (p *Package) Clone(capacity int) (*Package, error) {
+		// cloned pack has no identity yet
+		// cloning a stripped pack is allowed
+		clone := NewPackage(capacity, p.pool)
+		if err := clone.CopyType(p); err != nil {
+			return nil, err
+		}
+		clone.key = p.key
+		clone.nValues = p.nValues
+		clone.size = p.size
+		clone.stripped = p.stripped
+
+		for i, src := range p.blocks {
+			if src.IsIgnore() {
+				continue
+			}
+			clone.blocks[i].Copy(src)
+		}
+		return clone, nil
+	}
+*/
 func (dst *Package) MergeCols(src *Package) (*Package, error) {
 	if src == nil {
 		return dst, nil
 	}
-	//if dst.nValues != src.nValues {
-	//	return nil, fmt.Errorf("pack: MergeCols: differnt number of values")
-	//}
+	if dst.nValues != src.nValues {
+		return nil, fmt.Errorf("pack: MergeCols: differnt number of values")
+	}
 	for i := range dst.blocks {
 		if i > len(src.blocks) {
 			break

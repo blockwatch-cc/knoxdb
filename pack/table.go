@@ -1256,7 +1256,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 			}
 			// prepare for next pack
 			// t.recyclePackage(pkg)
-			pkg.recycle()
+			pkg.recycleNew()
 			pkg = nil
 			needsort = false
 		}
@@ -3085,7 +3085,7 @@ func (t *Table) cachekey(key []byte) string {
 	return t.name + "/" + hex.EncodeToString(key)
 }
 
-func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
+func (t *Table) loadSharedPackOld(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
 	// determine if we need to load a full pack or a stripped version with less fields
 	stripped := len(fields) > 0 && len(fields) < len(t.Fields())
 	key := encodePackKey(id)
@@ -3136,7 +3136,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	return pkg, nil
 }
 
-func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
+func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
 	// determine if we need to load a full pack or a stripped version with less fields
 	//	stripped := len(fields) > 0 && len(fields) < len(t.Fields())
 
@@ -3154,15 +3154,14 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 	pkg := t.packPool2.Get().(*Package)
 
 	// Get PackInfo and fill metadata
-	//	pi := t.packidx.GetByKey(id)
-	//	pkg.key = pi.Key
-	//	pkg.nValues = pi.NValues
-	//	pkg.size = pi.Packsize
+	pi := t.packidx.GetByKey(id)
+	pkg.key = pi.Key
+	pkg.nValues = pi.NValues
+	pkg.size = pi.Packsize
 
 	var loadField FieldList
 	for i, v := range pkg.fields {
 		if !fields.Contains(v.Name) {
-			// pkg.blocks[i].SetIgnore()
 			continue
 		}
 		cachekey := encodeBlockKey(id, i)
@@ -3170,7 +3169,6 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 		if b, ok := cachefn(cachekey); ok {
 			pkg.blocks[i] = b
 		} else {
-			// pkg.blocks[i].SetIgnore()
 			loadField = loadField.Add(v)
 		}
 	}
@@ -3183,15 +3181,14 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 		err error
 	)
 
-	// fetch full pack from pool or create new full pack
+	// fetch pack from pool or create new pack
 	pkg2 := t.packPool2.Get().(*Package)
-	// skip undesired fields while loading
-	//	pkg2 = pkg2.KeepFields(loadField)
 	pkg2 = pkg2.PopulateFields(loadField)
 	pkg2 = pkg2.PopulateEmptyFields()
 
 	pkg2, err = tx.loadPack(t.key, key, pkg2, t.opts.PackSize())
 	if err != nil {
+		t.releaseSharedPack(pkg)
 		return nil, err
 	}
 
@@ -3212,11 +3209,75 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 	pkg, err = pkg.MergeCols(pkg2)
 	pkg = pkg.PopulateEmptyFields()
 
+	// FIXME: recycle pkg2
 	return pkg, err
 }
 
 // loads a private copy of a pack for writing
 func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
+	key := encodePackKey(id)
+
+	// fetch pack from pool or create new pack, has nil in block slice
+	pkg := t.packPool2.Get().(*Package)
+
+	// Get PackInfo and fill metadata
+	pi := t.packidx.GetByKey(id)
+	pkg.key = pi.Key
+	pkg.nValues = pi.NValues
+	pkg.size = pi.Packsize
+
+	var loadField FieldList
+	for i, v := range pkg.fields {
+		cachekey := encodeBlockKey(id, i)
+		if b, ok := t.bcache.Get(cachekey); ok {
+			pkg.blocks[i] = b
+		} else {
+			loadField = loadField.Add(v)
+		}
+	}
+
+	clone, err := pkg.Clone(t.opts.PackSize())
+	t.releaseSharedPack(pkg)
+
+	// FIXME: check how dirty has to be
+	// clone.dirty = false
+
+	if err != nil {
+		// FIXME: recycle clone
+		return nil, err
+	}
+
+	// all blocks found in cache
+	if len(loadField) == 0 {
+		// prepare for efficient writes
+		clone.Materialize()
+		return clone, nil
+	}
+
+	// fetch pack from pool or create new pack
+	pkg2 := t.packPool2.Get().(*Package)
+	pkg2 = pkg2.PopulateFields(loadField)
+	pkg2 = pkg2.PopulateEmptyFields()
+
+	pkg2, err = tx.loadPack(t.key, key, pkg2, t.opts.PackSize())
+	if err != nil {
+		// FIXME: recycle pkg2
+		return nil, err
+	}
+
+	clone, err = clone.MergeCols(pkg2)
+	// FIXME: recycle pkg2
+
+	// prepare for efficient writes
+	clone.Materialize()
+
+	atomic.AddInt64(&t.stats.PacksLoaded, 1)
+	atomic.AddInt64(&t.stats.PacksBytesRead, int64(pkg2.size))
+	return clone, nil
+}
+
+// loads a private copy of a pack for writing
+func (t *Table) loadWritablePackOld(tx *Tx, id uint32) (*Package, error) {
 	key := encodePackKey(id)
 
 	// when package is cached, create a private clone
@@ -3358,12 +3419,12 @@ func (t *Table) makePackage() interface{} {
 
 func (t *Table) makePackage2() interface{} {
 	atomic.AddInt64(&t.stats.PacksAlloc, 1)
-	pkg := NewPackage(t.opts.PackSize(), t.packPool)
+	pkg := NewPackage(t.opts.PackSize(), t.packPool2)
 	_ = pkg.InitFieldsFrom2(t.journal.DataPack())
 	return pkg
 }
 
-func (t *Table) releaseSharedPack(pkg *Package) {
+func (t *Table) releaseSharedPackOld(pkg *Package) {
 	if pkg == nil {
 		return
 	}
@@ -3372,22 +3433,9 @@ func (t *Table) releaseSharedPack(pkg *Package) {
 	}
 }
 
-func (t *Table) releaseSharedPack2(pkg *Package) {
+func (t *Table) releaseSharedPack(pkg *Package) {
 	if pkg == nil {
 		return
 	}
-	for i, v := range pkg.blocks {
-		pkg.blocks[i] = nil
-		t.releaseSharedBlock(v)
-	}
-	t.packPool.Put(pkg)
-}
-
-func (t *Table) releaseSharedBlock(bl *block.Block) {
-	if bl == nil {
-		return
-	}
-	if bl.DecRef() == 0 {
-		// do stats here
-	}
+	pkg.recycleNew()
 }
