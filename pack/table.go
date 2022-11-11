@@ -73,23 +73,24 @@ type TableMeta struct {
 }
 
 type Table struct {
-	name     string                            // printable table name
-	opts     Options                           // runtime configuration options
-	fields   FieldList                         // ordered list of table fields as central type info
-	indexes  IndexList                         // list of indexes (similar structure as the table)
-	meta     TableMeta                         // authoritative metadata
-	db       *DB                               // lower-level storage (e.g. boltdb wrapper)
-	cache    rclru.Cache[string, *Package]     // keep decoded packs for query/updates
-	bcache   rclru.Cache[uint64, *block.Block] // keep decoded packs for query/updates
-	journal  *Journal                          // in-memory data not yet written to packs
-	packidx  *PackIndex                        // in-memory list of pack and block info
-	key      []byte                            // name of table data bucket
-	metakey  []byte                            // name of table metadata bucket
-	packPool *sync.Pool                        // buffer pool for new packages
-	u64Pool  *sync.Pool                        // buffer pool for uint64 slices (used by indexes)
-	u32Pool  *sync.Pool                        // buffer pool for uint32 slices (used by match algos)
-	stats    TableStats                        // usage statistics
-	mu       sync.RWMutex                      // global table lock
+	name      string                            // printable table name
+	opts      Options                           // runtime configuration options
+	fields    FieldList                         // ordered list of table fields as central type info
+	indexes   IndexList                         // list of indexes (similar structure as the table)
+	meta      TableMeta                         // authoritative metadata
+	db        *DB                               // lower-level storage (e.g. boltdb wrapper)
+	cache     rclru.Cache[string, *Package]     // keep decoded packs for query/updates
+	bcache    rclru.Cache[uint64, *block.Block] // keep decoded packs for query/updates
+	journal   *Journal                          // in-memory data not yet written to packs
+	packidx   *PackIndex                        // in-memory list of pack and block info
+	key       []byte                            // name of table data bucket
+	metakey   []byte                            // name of table metadata bucket
+	packPool  *sync.Pool                        // buffer pool for new packages
+	packPool2 *sync.Pool                        // buffer pool for new packages
+	u64Pool   *sync.Pool                        // buffer pool for uint64 slices (used by indexes)
+	u32Pool   *sync.Pool                        // buffer pool for uint32 slices (used by match algos)
+	stats     TableStats                        // usage statistics
+	mu        sync.RWMutex                      // global table lock
 }
 
 func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, error) {
@@ -123,6 +124,9 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 	t.stats.TombstoneTuplesThreshold = int64(maxJournalSize)
 	t.packPool = &sync.Pool{
 		New: t.makePackage,
+	}
+	t.packPool2 = &sync.Pool{
+		New: t.makePackage2,
 	}
 	err := d.db.Update(func(dbTx store.Tx) error {
 		b := dbTx.Bucket(t.key)
@@ -275,6 +279,9 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 	t.stats.TableName = name
 	t.packPool = &sync.Pool{
 		New: t.makePackage,
+	}
+	t.packPool2 = &sync.Pool{
+		New: t.makePackage2,
 	}
 	err := d.db.View(func(dbTx store.Tx) error {
 		b := dbTx.Bucket(t.metakey)
@@ -3143,19 +3150,19 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 	if touch {
 		cachefn = t.bcache.Get
 	}
-	// fetch full pack from pool or create new full pack
-	pkg := t.packPool.Get().(*Package)
+	// fetch pack from pool or create new pack, has nil in block slice
+	pkg := t.packPool2.Get().(*Package)
 
 	// Get PackInfo and fill metadata
-	pi := t.packidx.GetByKey(id)
-	pkg.key = pi.Key
-	pkg.nValues = pi.NValues
-	pkg.size = pi.Packsize
+	//	pi := t.packidx.GetByKey(id)
+	//	pkg.key = pi.Key
+	//	pkg.nValues = pi.NValues
+	//	pkg.size = pi.Packsize
 
 	var loadField FieldList
 	for i, v := range pkg.fields {
 		if !fields.Contains(v.Name) {
-			pkg.blocks[i].SetIgnore()
+			// pkg.blocks[i].SetIgnore()
 			continue
 		}
 		cachekey := encodeBlockKey(id, i)
@@ -3163,7 +3170,7 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 		if b, ok := cachefn(cachekey); ok {
 			pkg.blocks[i] = b
 		} else {
-			pkg.blocks[i].SetIgnore()
+			// pkg.blocks[i].SetIgnore()
 			loadField = loadField.Add(v)
 		}
 	}
@@ -3175,10 +3182,13 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 	var (
 		err error
 	)
+
 	// fetch full pack from pool or create new full pack
-	pkg2 := t.packPool.Get().(*Package)
+	pkg2 := t.packPool2.Get().(*Package)
 	// skip undesired fields while loading
-	pkg2 = pkg2.KeepFields(loadField)
+	//	pkg2 = pkg2.KeepFields(loadField)
+	pkg2 = pkg2.PopulateFields(loadField)
+	pkg2 = pkg2.PopulateEmptyFields()
 
 	pkg2, err = tx.loadPack(t.key, key, pkg2, t.opts.PackSize())
 	if err != nil {
@@ -3192,6 +3202,7 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 	// store in cache
 	if touch {
 		for i, v := range pkg2.blocks {
+			v.IncRef()
 			if !v.IsIgnore() {
 				t.bcache.Add(encodeBlockKey(id, i), v)
 			}
@@ -3199,6 +3210,7 @@ func (t *Table) loadSharedPack2(tx *Tx, id uint32, touch bool, fields FieldList)
 	}
 
 	pkg, err = pkg.MergeCols(pkg2)
+	pkg = pkg.PopulateEmptyFields()
 
 	return pkg, err
 }
@@ -3344,6 +3356,13 @@ func (t *Table) makePackage() interface{} {
 	return pkg
 }
 
+func (t *Table) makePackage2() interface{} {
+	atomic.AddInt64(&t.stats.PacksAlloc, 1)
+	pkg := NewPackage(t.opts.PackSize(), t.packPool)
+	_ = pkg.InitFieldsFrom2(t.journal.DataPack())
+	return pkg
+}
+
 func (t *Table) releaseSharedPack(pkg *Package) {
 	if pkg == nil {
 		return
@@ -3357,18 +3376,18 @@ func (t *Table) releaseSharedPack2(pkg *Package) {
 	if pkg == nil {
 		return
 	}
-	for _, v := range pkg.blocks {
+	for i, v := range pkg.blocks {
+		pkg.blocks[i] = nil
 		t.releaseSharedBlock(v)
 	}
+	t.packPool.Put(pkg)
 }
 
 func (t *Table) releaseSharedBlock(bl *block.Block) {
 	if bl == nil {
 		return
 	}
-	//	if atomic.AddInt64(&bl.RefCount, -1) == 0 {
-	//
-	// t.recyclePackage(pkg)
-	//
-	//	}
+	if bl.DecRef() == 0 {
+		// do stats here
+	}
 }

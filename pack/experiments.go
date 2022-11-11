@@ -19,6 +19,8 @@ import (
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/s8b"
+
+	//	"blockwatch.cc/knoxdb/vec"
 	"github.com/golang/snappy"
 	"github.com/pierrec/lz4"
 )
@@ -1002,7 +1004,8 @@ func (t *Table) CacheTest() error {
 
 	var count int
 
-	var list = []int{0, 0, 2, 3, 3, 4, 4, 5, 5, 2, -2}
+	var list = []int{0, 0, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 2, -2}
+	c := t.bcache
 
 	for _, i := range list {
 		if i >= 0 {
@@ -1018,19 +1021,19 @@ func (t *Table) CacheTest() error {
 			//t.cache.Remove(t.cachekey(encodePackKey(uint32(-i))))
 		}
 
-		r, f, e, b := t.bcache.GetParams()
-		fmt.Printf("%d: size=%d recent=%d frequent=%d evicted=%d %dBytes\n", i, r+f, r, f, e, b)
+		r, f, e := c.GetQueueLen()
+		fmt.Printf("%d: size=%d recent=%d frequent=%d evicted=%d %dBytes\n", i, r+f, r, f, e, c.Stats().Size)
 		count++
 	}
 
 	fmt.Printf("\nProcessed %d packs\n", count)
-	fmt.Printf("PackCacheSize %d\n", t.stats.PackCacheSize)
-	fmt.Printf("PackCacheCount %d\n", t.stats.PackCacheCount)
-	fmt.Printf("PackCacheCapacity %d\n", t.stats.PackCacheCapacity)
-	fmt.Printf("PackCacheHits %d\n", t.stats.PackCacheHits)
-	fmt.Printf("PackCacheMisses %d\n", t.stats.PackCacheMisses)
-	fmt.Printf("PackCacheInserts %d\n", t.stats.PackCacheInserts)
-	fmt.Printf("PackCacheEvictions %d\n", t.stats.PackCacheEvictions)
+	fmt.Printf("Size %v\n", c.Stats().Size)
+	fmt.Printf("Count %d\n", c.Stats().Count)
+	fmt.Printf("Capacity %d\n", c.Params().Cap)
+	fmt.Printf("CacheHits %d\n", c.Stats().Hits)
+	fmt.Printf("CacheMisses %d\n", c.Stats().Misses)
+	fmt.Printf("CacheInserts %d\n", c.Stats().Inserts)
+	fmt.Printf("CacheEvictions %d\n", c.Stats().Evictions)
 
 	return nil
 }
@@ -1043,50 +1046,58 @@ func (t *Table) CacheBench() error {
 	defer tx.Rollback()
 
 	// nPacks := t.packidx.Len()
-	nPacks := 1000
-	max_loop := 1000
+	nPacks := 500
+	max_loop := 10000
 
 	var count int
 
+	fmt.Printf("populating cache ")
+
+	var fl FieldList
+	//fl = fl.Add(t.fields[0])
+	//fl = fl.Add(t.fields[1])
+
 	// popuate the Cache
 	for n := 0; n < nPacks; n++ {
-		pkg, err := t.loadSharedPack2(tx, t.packidx.packs[n].Key, true, nil)
+		pkg, err := t.loadSharedPack2(tx, t.packidx.packs[n].Key, true, fl)
 		if err != nil {
 			return err
 		}
 		t.releaseSharedPack2(pkg)
+		fmt.Printf(".")
 	}
 
-	// reset cache stats
-	t.stats.PackCacheSize = 0
-	t.stats.PackCacheCount = 0
-	t.stats.PackCacheCapacity = 0
-	t.stats.PackCacheHits = 0
-	t.stats.PackCacheMisses = 0
-	t.stats.PackCacheInserts = 0
-	t.stats.PackCacheEvictions = 0
+	c := t.bcache
+
+	c.ResetStats()
+
+	fmt.Printf("\nStarting benchmark")
 
 	tstart := time.Now()
 	for n := 0; n < max_loop; n++ {
 		i := rand.Intn(nPacks)
-		pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, true, nil)
+		pkg, err := t.loadSharedPack2(tx, t.packidx.packs[i].Key, true, fl)
 		if err != nil {
 			return err
 		}
-		t.releaseSharedPack(pkg)
+		/*bits := vec.NewBitset(len(pkg.blocks[0].Uint64))
+		vec.MatchUint64Equal(pkg.blocks[0].Uint64, 0, bits, nil)
+		bits.Close()*/
+		t.releaseSharedPack2(pkg)
 
 		count++
 	}
 	dur := time.Since(tstart)
 
 	fmt.Printf("\nProcessed %d packs in %f seconds (%f s/Pack)\n", count, dur.Seconds(), dur.Seconds()/float64(count))
-	fmt.Printf("PackCacheSize %d\n", t.stats.PackCacheSize)
-	fmt.Printf("PackCacheCount %d\n", t.stats.PackCacheCount)
-	fmt.Printf("PackCacheCapacity %d\n", t.stats.PackCacheCapacity)
-	fmt.Printf("PackCacheHits %d (%.2f%%)\n", t.stats.PackCacheHits, 100*float64(t.stats.PackCacheHits)/float64(count))
-	fmt.Printf("PackCacheMisses %d (%.2f%%)\n", t.stats.PackCacheMisses, 100*float64(t.stats.PackCacheMisses)/float64(count))
-	fmt.Printf("PackCacheInserts %d\n", t.stats.PackCacheInserts)
-	fmt.Printf("PackCacheEvictions %d\n", t.stats.PackCacheEvictions)
+	fmt.Printf("\nProcessed %d packs\n", count)
+	fmt.Printf("Size %v\n", c.Stats().Size)
+	fmt.Printf("Count %d\n", c.Stats().Count)
+	fmt.Printf("Capacity %d\n", c.Params().Cap)
+	fmt.Printf("PackCacheHits %d (%.2f%%)\n", c.Stats().Hits, 100*float64(c.Stats().Hits)/float64(count))
+	fmt.Printf("PackCacheMisses %d (%.2f%%)\n", c.Stats().Misses, 100*float64(c.Stats().Misses)/float64(count))
+	fmt.Printf("CacheInserts %d\n", c.Stats().Inserts)
+	fmt.Printf("CacheEvictions %d\n", c.Stats().Evictions)
 
 	return nil
 }

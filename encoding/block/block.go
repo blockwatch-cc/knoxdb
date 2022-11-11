@@ -170,7 +170,11 @@ func (b *Block) IncRef() int64 {
 }
 
 func (b *Block) DecRef() int64 {
-	return atomic.AddInt64(&b.refCount, -1)
+	val := atomic.AddInt64(&b.refCount, -1)
+	if val == 0 {
+		b.Release()
+	}
+	return val
 }
 
 func (b Block) Type() BlockType {

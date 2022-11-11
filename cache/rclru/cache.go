@@ -20,8 +20,10 @@ type Cache[KeyType comparable, ValType RefCountedElem] interface {
 	RemoveOldest()
 	Keys() []KeyType
 	Len() int
-	GetParams() (int, int, int, int)
+	GetQueueLen() (int, int, int)
+	Params() CacheParams
 	Stats() CacheStats
+	ResetStats()
 }
 
 type NoCache[K comparable, V RefCountedElem] struct{}
@@ -64,10 +66,16 @@ func (n *NoCache[K, V]) Len() int {
 	return 0
 }
 
-func (n *NoCache[K, V]) GetParams() (int, int, int, int) {
-	return 0, 0, 0, 0
+func (n *NoCache[K, V]) GetQueueLen() (int, int, int) {
+	return 0, 0, 0
+}
+
+func (n *NoCache[K, V]) Params() CacheParams {
+	return CacheParams{}
 }
 
 func (n *NoCache[K, V]) Stats() CacheStats {
 	return CacheStats{}
 }
+
+func (n *NoCache[K, V]) ResetStats() {}

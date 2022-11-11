@@ -298,8 +298,59 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	return nil
 }
 
+// Init from field list when Go type is unavailable
+func (p *Package) InitFields2(fields FieldList, tinfo *typeInfo) error {
+	if len(fields) > 256 {
+		return fmt.Errorf("pack: cannot handle more than 256 fields")
+	}
+	if len(fields) == 0 {
+		return fmt.Errorf("pack: empty fields")
+	}
+	if len(p.fields) > 0 {
+		return fmt.Errorf("pack: already initialized")
+	}
+	// require pk field
+	if fields.PkIndex() < 0 {
+		return fmt.Errorf("pack: missing primary key field")
+	}
+	// if pack has been loaded, check if field types match block types
+	if p.nFields > 0 && len(p.blocks) > 0 {
+		if len(fields) > len(p.blocks) {
+			return fmt.Errorf("pack: inconsistent Go type for loaded pack: %d fields, %d blocks", len(fields), len(p.blocks))
+		}
+		for i, f := range fields {
+			b := p.blocks[i]
+			if b.Type() != f.Type.BlockType() {
+				return fmt.Errorf("pack: mismatch block type %s for %s field %d", b.Type(), f.Type, i)
+			}
+		}
+	}
+
+	p.fields = fields
+	p.nFields = len(fields)
+	p.pkindex = fields.PkIndex()
+	p.tinfo = tinfo
+
+	if len(p.blocks) == 0 {
+		p.blocks = make([]*block.Block, p.nFields)
+		/*for i, f := range fields {
+			p.blocks[i] = f.NewBlock(p.capHint)
+		}*/
+	} else {
+		// make sure we use the correct compression (empty blocks are stored without)
+		for i := range p.blocks {
+			p.blocks[i].SetCompression(fields[i].Flags.Compression())
+		}
+	}
+	return nil
+}
+
 func (p *Package) InitFieldsFrom(src *Package) error {
 	return p.InitFields(src.fields, src.tinfo)
+}
+
+func (p *Package) InitFieldsFrom2(src *Package) error {
+	return p.InitFields2(src.fields, src.tinfo)
 }
 
 // may be called from Join, no pk required
@@ -353,14 +404,14 @@ func (dst *Package) MergeCols(src *Package) (*Package, error) {
 	if src == nil {
 		return dst, nil
 	}
-	if dst.nValues != src.nValues {
-		return nil, fmt.Errorf("pack: MergeCols: differnt number of values")
-	}
+	//if dst.nValues != src.nValues {
+	//	return nil, fmt.Errorf("pack: MergeCols: differnt number of values")
+	//}
 	for i := range dst.blocks {
 		if i > len(src.blocks) {
 			break
 		}
-		if dst.blocks[i].IsIgnore() && !src.blocks[i].IsIgnore() {
+		if dst.blocks[i] == nil && !src.blocks[i].IsIgnore() {
 			dst.blocks[i] = src.blocks[i]
 		}
 	}
@@ -411,6 +462,32 @@ func (p *Package) KeepFields(fields FieldList) *Package {
 		if !fields.Contains(v.Name) {
 			p.blocks[i].SetIgnore()
 			p.stripped = true
+		}
+	}
+	return p
+}
+
+func (p *Package) PopulateFields(fields FieldList) *Package {
+	if len(fields) == 0 {
+		return p
+	}
+	for i, v := range p.fields {
+		if p.blocks[i] == nil {
+			if fields.Contains(v.Name) {
+				p.blocks[i] = v.NewBlock(p.capHint)
+			} else {
+				p.stripped = true
+			}
+		}
+	}
+	return p
+}
+
+func (p *Package) PopulateEmptyFields() *Package {
+	for i, v := range p.fields {
+		if p.blocks[i] == nil {
+			p.blocks[i] = v.NewBlock(0)
+			p.blocks[i].SetIgnore()
 		}
 	}
 	return p

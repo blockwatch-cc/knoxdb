@@ -39,16 +39,34 @@ type TwoQueueCache[K comparable, V RefCountedElem] struct {
 	lock        sync.RWMutex
 }
 
+type CacheParams struct {
+	Cap         int
+	RecentRatio float64
+	GhostRatio  float64
+}
+
 func (c *TwoQueueCache[K, V]) Stats() CacheStats {
 	return c.stats
+}
+
+func (c *TwoQueueCache[K, V]) ResetStats() {
+	c.stats.Reset()
 }
 
 func (c *TwoQueueCache[K, V]) Size() int {
 	return int(c.stats.Size)
 }
 
-func (c *TwoQueueCache[K, V]) GetParams() (int, int, int, int) {
-	return c.recent.Len(), c.frequent.Len(), c.recentEvict.Len(), int(c.stats.Size)
+func (c *TwoQueueCache[K, V]) GetQueueLen() (int, int, int) {
+	return c.recent.Len(), c.frequent.Len(), c.recentEvict.Len()
+}
+
+func (c *TwoQueueCache[K, V]) Params() CacheParams {
+	return CacheParams{
+		Cap:         c.maxByteSize,
+		RecentRatio: c.recentRatio,
+		GhostRatio:  c.ghostRatio,
+	}
 }
 
 // New2Q creates a new TwoQueueCache using the default
