@@ -423,28 +423,6 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 	return clone, nil
 }
 
-/*
-	func (p *Package) Clone(capacity int) (*Package, error) {
-		// cloned pack has no identity yet
-		// cloning a stripped pack is allowed
-		clone := NewPackage(capacity, p.pool)
-		if err := clone.CopyType(p); err != nil {
-			return nil, err
-		}
-		clone.key = p.key
-		clone.nValues = p.nValues
-		clone.size = p.size
-		clone.stripped = p.stripped
-
-		for i, src := range p.blocks {
-			if src.IsIgnore() {
-				continue
-			}
-			clone.blocks[i].Copy(src)
-		}
-		return clone, nil
-	}
-*/
 func (dst *Package) MergeCols(src *Package) (*Package, error) {
 	if src == nil {
 		return dst, nil

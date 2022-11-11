@@ -110,7 +110,7 @@ type Index struct {
 	indexZeroAt  IndexZeroAtFunc
 
 	table     *Table
-	cache     rclru.Cache[string, *Package]
+	cache     rclru.Cache[uint32, *Package]
 	journal   *Package   // append log
 	tombstone *Package   // delete log
 	packidx   *PackIndex // in-memory list of pack and block headers
@@ -234,13 +234,13 @@ func (t *Table) CreateIndex(name string, field *Field, typ IndexType, opts Optio
 		return nil, err
 	}
 	if idx.opts.CacheSize > 0 {
-		idx.cache, err = rclru.New2Q[string, *Package](idx.opts.CacheSizeMBytes())
+		idx.cache, err = rclru.New2Q[uint32, *Package](idx.opts.CacheSizeMBytes())
 		if err != nil {
 			return nil, err
 		}
 		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSizeMBytes())
 	} else {
-		idx.cache = rclru.NewNoCache[string, *Package]()
+		idx.cache = rclru.NewNoCache[uint32, *Package]()
 	}
 
 	// Note: reindex may take a long time and requires a context which we don't have
@@ -382,13 +382,13 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 		return err
 	}
 	if idx.opts.CacheSize > 0 {
-		idx.cache, err = rclru.New2Q[string, *Package](idx.opts.CacheSizeMBytes())
+		idx.cache, err = rclru.New2Q[uint32, *Package](idx.opts.CacheSizeMBytes())
 		if err != nil {
 			return err
 		}
 		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSizeMBytes())
 	} else {
-		idx.cache = rclru.NewNoCache[string, *Package]()
+		idx.cache = rclru.NewNoCache[uint32, *Package]()
 	}
 
 	return nil
@@ -777,7 +777,7 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 	// drop index data partitions
 	for i := idx.packidx.Len() - 1; i >= 0; i-- {
 		key := idx.packidx.packs[i].KeyBytes()
-		cachekey := idx.cachekey(key)
+		cachekey := idx.packidx.packs[i].Key
 		if err := tx.deletePack(idx.key, key); err != nil {
 			return err
 		}
@@ -1331,12 +1331,11 @@ func (idx Index) cachekey(key []byte) string {
 func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error) {
 	// try cache first
 	key := encodePackKey(id)
-	cachekey := idx.cachekey(key)
 	cachefn := idx.cache.Peek
 	if touch {
 		cachefn = idx.cache.Get
 	}
-	if pkg, ok := cachefn(cachekey); ok {
+	if pkg, ok := cachefn(id); ok {
 		return pkg, nil
 	}
 
@@ -1352,7 +1351,7 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 
 	// store in cache
 	if touch {
-		idx.cache.Add(cachekey, pkg)
+		idx.cache.Add(id, pkg)
 	}
 
 	return pkg, nil
@@ -1361,7 +1360,7 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	// try cache first
 	key := encodePackKey(id)
-	if pkg, ok := idx.cache.Get(idx.cachekey(key)); ok {
+	if pkg, ok := idx.cache.Get(id); ok {
 		clone, err := pkg.Clone(idx.opts.PackSize())
 		if err != nil {
 			return nil, err
@@ -1396,7 +1395,7 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 
 	defer func() {
 		// remove from cache, returns back to pool
-		idx.cache.Remove(idx.cachekey(key))
+		idx.cache.Remove(pkg.key)
 	}()
 
 	// remove empty packs from pack index, storage and cache
