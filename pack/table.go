@@ -36,7 +36,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -3318,15 +3317,11 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 	key := pkg.Key()
 
 	defer func() {
-		// remove from cache, returns back to pool
-		cachekey := t.cachekey(key)
-		t.cache.Remove(cachekey)
-
-		// also remove all stripped packs from cache
-		cachekey += "#"
-		for _, v := range t.cache.Keys() {
-			if strings.HasPrefix(v, cachekey) {
-				t.cache.Remove(v)
+		id := uint64(pkg.key)
+		// remove all blocks of pkg from cache
+		for _, v := range t.bcache.Keys() {
+			if v>>32 == id {
+				t.bcache.Remove(v)
 			}
 		}
 	}()
