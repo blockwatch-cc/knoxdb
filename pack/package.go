@@ -68,9 +68,7 @@ func (p *Package) recycleNew() {
 			continue
 		}
 		p.blocks[i] = nil
-		if v.DecRef() == 0 {
-			// do stats here
-		}
+		v.Release()
 	}
 	p.pool.Put(p)
 }
@@ -436,6 +434,7 @@ func (dst *Package) MergeCols(src *Package) (*Package, error) {
 		}
 		if dst.blocks[i] == nil && !src.blocks[i].IsIgnore() {
 			dst.blocks[i] = src.blocks[i]
+			src.blocks[i] = nil
 		}
 	}
 	return dst, nil

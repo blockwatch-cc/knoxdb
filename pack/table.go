@@ -3208,7 +3208,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	pkg, err = pkg.MergeCols(pkg2)
 	pkg = pkg.PopulateEmptyFields()
 
-	// FIXME: recycle pkg2
+	pkg2.recycleNew()
 	return pkg, err
 }
 
@@ -3242,7 +3242,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	// clone.dirty = false
 
 	if err != nil {
-		// FIXME: recycle clone
+		clone.recycleNew()
 		return nil, err
 	}
 
@@ -3260,12 +3260,13 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 
 	pkg2, err = tx.loadPack(t.key, key, pkg2, t.opts.PackSize())
 	if err != nil {
-		// FIXME: recycle pkg2
+		pkg2.recycleNew()
+		clone.recycleNew()
 		return nil, err
 	}
 
 	clone, err = clone.MergeCols(pkg2)
-	// FIXME: recycle pkg2
+	pkg2.recycleNew()
 
 	// prepare for efficient writes
 	clone.Materialize()
@@ -3432,5 +3433,14 @@ func (t *Table) releaseSharedPack(pkg *Package) {
 	if pkg == nil {
 		return
 	}
-	pkg.recycleNew()
+	for i, v := range pkg.blocks {
+		if v == nil {
+			continue
+		}
+		pkg.blocks[i] = nil
+		if v.DecRef() == 0 {
+			// do stats here
+		}
+	}
+	pkg.pool.Put(pkg)
 }
