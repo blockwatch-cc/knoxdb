@@ -208,6 +208,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		t.stats.PackCacheCapacity = int64(t.opts.CacheSizeMBytes())
 	} else {
 		t.cache = rclru.NewNoCache[string, *Package]()
+		t.bcache = rclru.NewNoCache[uint64, *block.Block]()
 	}
 	log.Debugf("Created table %s", name)
 	d.tables[name] = t
@@ -366,6 +367,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		t.stats.PackCacheCapacity = int64(t.opts.CacheSizeMBytes())
 	} else {
 		t.cache = rclru.NewNoCache[string, *Package]()
+		t.bcache = rclru.NewNoCache[uint64, *block.Block]()
 	}
 
 	needFlush := make([]*Index, 0)
