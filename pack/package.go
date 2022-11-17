@@ -32,7 +32,6 @@ type Package struct {
 	tinfo    *typeInfo      // Go typeinfo
 	pkindex  int            // field index of primary key (optional)
 	dirty    bool           // pack is updated, needs to be written
-	stripped bool           // some blocks are ignored, don't store this pack
 	capHint  int            // block size hint
 	size     int            // storage size
 	pool     *sync.Pool
@@ -53,7 +52,7 @@ func (p *Package) DecRef() int64 {
 func (p *Package) recycle() {
 	// don't recycle stripped or oversized packs
 	c := p.Cap()
-	if p.pool == nil || p.stripped || c <= 0 || c > p.capHint {
+	if p.pool == nil || c <= 0 || c > p.capHint {
 		p.Release()
 		return
 	}
@@ -405,7 +404,6 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 	clone.key = p.key
 	clone.nValues = p.nValues
 	clone.size = p.size
-	clone.stripped = p.stripped
 
 	for i, src := range p.blocks {
 		if src == nil {
@@ -479,7 +477,6 @@ func (p *Package) KeepFields(fields FieldList) *Package {
 	for i, v := range p.fields {
 		if !fields.Contains(v.Name) {
 			p.blocks[i] = nil
-			p.stripped = true
 		}
 	}
 	return p
@@ -493,8 +490,6 @@ func (p *Package) PopulateFields(fields FieldList) *Package {
 		if p.blocks[i] == nil {
 			if fields.Contains(v.Name) {
 				p.blocks[i] = v.NewBlock(p.capHint)
-			} else {
-				p.stripped = true
 			}
 		}
 	}
@@ -2165,7 +2160,6 @@ func (p *Package) Release() {
 	p.tinfo = nil
 	p.pkindex = -1
 	p.dirty = false
-	p.stripped = false
 	p.size = 0
 	p.pool = nil
 }

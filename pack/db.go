@@ -376,8 +376,10 @@ func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package, sz int) (*Pack
 }
 
 func storePackTx(dbTx store.Tx, name, key []byte, p *Package, fill int) (int, error) {
-	if p.stripped {
-		return 0, ErrPackStripped
+	for _, v := range p.blocks {
+		if v == nil {
+			return 0, ErrPackStripped
+		}
 	}
 	buf, err := p.MarshalBinary()
 	if err != nil {
