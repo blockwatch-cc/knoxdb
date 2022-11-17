@@ -60,18 +60,6 @@ func (p *Package) recycle() {
 	p.pool.Put(p)
 }
 
-func (p *Package) recycleNew() {
-	for i, v := range p.blocks {
-		if v == nil {
-			continue
-		}
-		p.blocks[i] = nil
-		v.Release()
-	}
-	p.nValues = 0
-	p.pool.Put(p)
-}
-
 func (p *Package) Key() []byte {
 	return encodePackKey(p.key)
 }
@@ -2150,18 +2138,16 @@ func (p *Package) Clear() {
 func (p *Package) Release() {
 	for i := range p.blocks {
 		p.blocks[i].Release()
+		p.blocks[i] = nil
 	}
 	p.refCount = 0
-	p.nFields = 0
 	p.nValues = 0
-	p.blocks = p.blocks[:0]
-	p.blocks = nil
 	p.key = 0
-	p.tinfo = nil
-	p.pkindex = -1
 	p.dirty = false
 	p.size = 0
-	p.pool = nil
+	if p.pool != nil {
+		p.pool.Put(p)
+	}
 }
 
 func (p *Package) HeapSize() int {

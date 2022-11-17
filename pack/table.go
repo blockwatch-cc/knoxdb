@@ -1257,7 +1257,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 			}
 			// prepare for next pack
 			// t.recyclePackage(pkg)
-			pkg.recycleNew()
+			pkg.Release()
 			pkg = nil
 			needsort = false
 		}
@@ -1524,7 +1524,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					// after store, leave journal for-loop to trigger pack selection
 					jpos++
 					lastpack = -1 // force pack load in next round
-					pkg.recycleNew()
+					pkg.Release()
 					pkg = nil
 					break
 				}
@@ -1545,7 +1545,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		}
 		nParts++
 		nBytes += n
-		pkg.recycleNew()
+		pkg.Release()
 		pkg = nil
 	}
 
@@ -3026,7 +3026,7 @@ func (t *Table) Compact(ctx context.Context) error {
 
 			// will load or create another output pack in next iteration
 			// dstPack.DecRef()
-			dstPack.recycleNew()
+			dstPack.Release()
 			dstPack = nil
 		}
 
@@ -3041,7 +3041,7 @@ func (t *Table) Compact(ctx context.Context) error {
 
 		// load new src in next iteration (or stop there)
 		// srcPack.DecRef()
-		srcPack.recycleNew()
+		srcPack.Release()
 		srcPack = nil
 
 		// commit tx after each N written packs
@@ -3068,7 +3068,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		dstSize += int64(n)
 		written += int64(dstPack.Len())
 		// dstPack.DecRef()
-		dstPack.recycleNew()
+		dstPack.Release()
 	}
 
 	log.Debugf("pack: %s table compacted %d(+%d) rows into %d(%d) packs (%s ->> %s) in %s",
@@ -3214,7 +3214,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 
 	pkg, err = pkg.MergeCols(pkg2)
 
-	pkg2.recycleNew()
+	pkg2.Release()
 	return pkg, err
 }
 
@@ -3248,7 +3248,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	// clone.dirty = false
 
 	if err != nil {
-		clone.recycleNew()
+		clone.Release()
 		return nil, err
 	}
 
@@ -3265,13 +3265,13 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 
 	pkg2, err = tx.loadPack(t.key, key, pkg2, t.opts.PackSize())
 	if err != nil {
-		pkg2.recycleNew()
-		clone.recycleNew()
+		pkg2.Release()
+		clone.Release()
 		return nil, err
 	}
 
 	clone, err = clone.MergeCols(pkg2)
-	pkg2.recycleNew()
+	pkg2.Release()
 
 	// prepare for efficient writes
 	clone.Materialize()
@@ -3409,7 +3409,7 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 		return 0, err
 	}
 
-	newpkg.recycleNew()
+	newpkg.Release()
 	return n + m, nil
 }
 
