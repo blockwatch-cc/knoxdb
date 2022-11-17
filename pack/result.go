@@ -47,7 +47,7 @@ func (r Row) Field(name string) (interface{}, error) {
 }
 
 func (r *Result) Close() {
-	r.pkg.recycle()
+	r.pkg.recycleNew()
 	r.table = nil
 	r.pkg = nil
 	r.tinfo = nil

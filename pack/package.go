@@ -62,7 +62,6 @@ func (p *Package) recycle() {
 }
 
 func (p *Package) recycleNew() {
-	// don't recycle stripped or oversized packs
 	for i, v := range p.blocks {
 		if v == nil {
 			continue
@@ -70,6 +69,7 @@ func (p *Package) recycleNew() {
 		p.blocks[i] = nil
 		v.Release()
 	}
+	p.nValues = 0
 	p.pool.Put(p)
 }
 
@@ -412,10 +412,6 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 			continue
 		}
 		clone.blocks[i] = block.NewBlock(src.Type(), src.Compression(), capacity)
-		if src.IsIgnore() {
-			clone.blocks[i].SetIgnore()
-			continue
-		}
 		clone.blocks[i].Copy(src)
 	}
 	return clone, nil
@@ -432,7 +428,7 @@ func (dst *Package) MergeCols(src *Package) (*Package, error) {
 		if i > len(src.blocks) {
 			break
 		}
-		if dst.blocks[i] == nil && !src.blocks[i].IsIgnore() {
+		if dst.blocks[i] == nil && src.blocks[i] != nil {
 			dst.blocks[i] = src.blocks[i]
 			src.blocks[i] = nil
 		}
@@ -482,7 +478,7 @@ func (p *Package) KeepFields(fields FieldList) *Package {
 	}
 	for i, v := range p.fields {
 		if !fields.Contains(v.Name) {
-			p.blocks[i].SetIgnore()
+			p.blocks[i] = nil
 			p.stripped = true
 		}
 	}
@@ -491,7 +487,7 @@ func (p *Package) KeepFields(fields FieldList) *Package {
 
 func (p *Package) PopulateFields(fields FieldList) *Package {
 	if len(fields) == 0 {
-		return p
+		fields = p.fields
 	}
 	for i, v := range p.fields {
 		if p.blocks[i] == nil {
@@ -500,16 +496,6 @@ func (p *Package) PopulateFields(fields FieldList) *Package {
 			} else {
 				p.stripped = true
 			}
-		}
-	}
-	return p
-}
-
-func (p *Package) PopulateEmptyFields() *Package {
-	for i, v := range p.fields {
-		if p.blocks[i] == nil {
-			p.blocks[i] = v.NewBlock(0)
-			p.blocks[i].SetIgnore()
 		}
 	}
 	return p

@@ -1004,7 +1004,7 @@ func (t *Table) CacheTest() error {
 
 	var count int
 
-	var list = []int{0, 0, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 2, -2}
+	var list = []int{0, 0, 2, 3, 3, 4, 4, 5, 2, -2}
 	c := t.bcache
 
 	for _, i := range list {

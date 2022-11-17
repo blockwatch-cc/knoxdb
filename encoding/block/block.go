@@ -141,9 +141,9 @@ type Block struct {
 	refCount int64
 	typ      BlockType
 	comp     Compression
-	ignore   bool
-	dirty    bool
-	size     int // stored size, debug data
+	// ignore   bool
+	dirty bool
+	size  int // stored size, debug data
 
 	// TODO: measure performance impact of using an interface instead of direct slices
 	//       this can save up to 15x storage for slice headers / pointers
@@ -227,7 +227,7 @@ func (b Block) CompressedSize() int {
 }
 
 func (b *Block) IsIgnore() bool {
-	return b.ignore
+	return b == nil
 }
 
 func (b *Block) IsDirty() bool {
@@ -236,11 +236,6 @@ func (b *Block) IsDirty() bool {
 
 func (b *Block) SetDirty() {
 	b.dirty = true
-}
-
-func (b *Block) SetIgnore() {
-	b.Clear()
-	b.ignore = true
 }
 
 func (b *Block) SetCompression(c Compression) {
@@ -555,7 +550,7 @@ func (b *Block) Cap() int {
 // This size hint is used to properly dimension the encoer/decoder buffers
 // as is required by LZ4 and to avoid memcopy during write.
 func (b *Block) MaxStoredSize() int {
-	if b.ignore {
+	if b.IsIgnore() {
 		return 0
 	}
 	var sz int
@@ -593,7 +588,7 @@ func (b *Block) MaxStoredSize() int {
 }
 
 func (b *Block) HeapSize() int {
-	if b.ignore {
+	if b.IsIgnore() {
 		return 0
 	}
 	sz := BlockSz
@@ -675,7 +670,9 @@ func (b *Block) Clear() {
 }
 
 func (b *Block) Release() {
-	b.ignore = false
+	if b == nil {
+		return
+	}
 	b.dirty = false
 	b.size = 0
 
