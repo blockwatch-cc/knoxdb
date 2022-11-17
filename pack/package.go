@@ -109,14 +109,6 @@ func NewPackage(sz int, pool *sync.Pool) *Package {
 	}
 }
 
-func (p *Package) CopyType(pkg *Package) error {
-	return p.InitFields(pkg.fields, pkg.tinfo)
-}
-
-func (p *Package) CopyType2(pkg *Package) error {
-	return p.InitFields2(pkg.fields, pkg.tinfo)
-}
-
 func (p *Package) IsDirty() bool {
 	return p.dirty
 }
@@ -302,7 +294,7 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 }
 
 // Init from field list when Go type is unavailable
-func (p *Package) InitFields2(fields FieldList, tinfo *typeInfo) error {
+func (p *Package) InitFieldsEmpty(fields FieldList, tinfo *typeInfo) error {
 	if len(fields) > 256 {
 		return fmt.Errorf("pack: cannot handle more than 256 fields")
 	}
@@ -336,9 +328,7 @@ func (p *Package) InitFields2(fields FieldList, tinfo *typeInfo) error {
 
 	if len(p.blocks) == 0 {
 		p.blocks = make([]*block.Block, p.nFields)
-		/*for i, f := range fields {
-			p.blocks[i] = f.NewBlock(p.capHint)
-		}*/
+		// Keep the blocks empty
 	} else {
 		// make sure we use the correct compression (empty blocks are stored without)
 		for i := range p.blocks {
@@ -352,8 +342,8 @@ func (p *Package) InitFieldsFrom(src *Package) error {
 	return p.InitFields(src.fields, src.tinfo)
 }
 
-func (p *Package) InitFieldsFrom2(src *Package) error {
-	return p.InitFields2(src.fields, src.tinfo)
+func (p *Package) InitFieldsFromEmpty(src *Package) error {
+	return p.InitFieldsEmpty(src.fields, src.tinfo)
 }
 
 // may be called from Join, no pk required
@@ -386,9 +376,10 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 	// cloned pack has no identity yet
 	// cloning a stripped pack is allowed
 	clone := NewPackage(capacity, p.pool)
-	if err := clone.CopyType2(p); err != nil {
+	if err := clone.InitFieldsEmpty(p.fields, p.tinfo); err != nil {
 		return nil, err
 	}
+
 	clone.key = p.key
 	clone.nValues = p.nValues
 	clone.size = p.size
@@ -456,18 +447,6 @@ func (p *Package) Materialize() {
 			// log.Infof("Pack %d: materialized to %T len=%d cap=%d", p.key, b.Bytes, b.Bytes.Len(), b.Bytes.Cap())
 		}
 	}
-}
-
-func (p *Package) KeepFields(fields FieldList) *Package {
-	if len(fields) == 0 {
-		return p
-	}
-	for i, v := range p.fields {
-		if !fields.Contains(v.Name) {
-			p.blocks[i] = nil
-		}
-	}
-	return p
 }
 
 func (p *Package) PopulateFields(fields FieldList) *Package {
