@@ -5,6 +5,8 @@ package rclru
 
 import (
 	"math/rand"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -426,5 +428,87 @@ func Test2Q_Peek(t *testing.T) {
 	l.Add(3, NewTestPackage(0, 0))
 	if l.Contains(1) {
 		t.Errorf("should not have updated recent-ness of 1")
+	}
+}
+
+func Test2Q_Parallism(t *testing.T) {
+	const (
+		cSize    = 4
+		nPacks   = 8
+		nThreads = 16
+		nRuns    = 1000
+	)
+	l, err := NewTest2Q(cSize * szPackage)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	b := make([]*TestPackage, nPacks)
+	for i := 0; i < nPacks; i++ {
+		b[i] = NewTestPackage(i, 0)
+	}
+	refs := make([]int64, nPacks)    // counts the refernces to the packs
+	actions := make([]int, nThreads) // actions of the parallel threads
+	ids := make([]int, nThreads)     // ids for the parallel threads
+
+	for r := 0; r < nRuns; r++ {
+		// 1st determine actions for the threads
+		for i := 0; i < nThreads; i++ {
+			act := rand.Intn(6)
+			id := rand.Intn(nPacks)
+			actions[i] = act
+			ids[i] = id
+		}
+		// 2nd perform threads in parrallel and determine what to expect
+		var wg sync.WaitGroup
+		wg.Add(nThreads)
+		for j := 0; j < nThreads; j++ {
+			go func(act, id int) {
+				switch act {
+				case 0: // DecRef
+					b[id].DecRef()
+					atomic.AddInt64(&refs[id], -1)
+				case 1: // IncRef
+					b[id].IncRef()
+					atomic.AddInt64(&refs[id], 1)
+				case 2: // Peek
+					v, ok := l.Peek(id)
+					if ok {
+						atomic.AddInt64(&refs[id], 1)
+						if id != v.key {
+							t.Errorf("Thread %d: act=%d id= %d: got %d", j, act, id, v.key)
+						}
+					}
+				case 3: // Get
+					v, ok := l.Get(id)
+					if ok {
+						atomic.AddInt64(&refs[id], 1)
+						if id != v.key {
+							t.Errorf("Thread %d: act=%d id= %d: got %d", j, act, id, v.key)
+						}
+					}
+				case 4: // Add
+					l.Add(id, b[id])
+				case 5: // Remove
+					l.Remove(id)
+				}
+				wg.Done()
+			}(actions[j], ids[j])
+		}
+		wg.Wait()
+		// 3rd compare current state with expected
+		cached := l.Keys()
+		for id := 0; id < nPacks; id++ {
+			want := refs[id]
+			for _, v := range cached {
+				if v == id {
+					want++
+					break
+				}
+			}
+			if got := b[id].refCount; got != want {
+				t.Errorf("run %d id= %d: refCount %d expected %d\n  actions: %v\n      ids: %v",
+					r, id, got, want, actions, ids)
+			}
+		}
 	}
 }
