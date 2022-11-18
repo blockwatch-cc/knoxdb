@@ -71,14 +71,47 @@ func (b *Bitmap) UnmarshalBinary(src []byte) error {
     return nil
 }
 
-func Or(a, b *Bitmap) Bitmap {
+func (b *Bitmap) Or(a Bitmap) Bitmap {
+    b.Bitmap.Or(a.Bitmap)
+    return *b
+}
+
+func (b *Bitmap) And(a Bitmap) Bitmap {
+    b.Bitmap.And(a.Bitmap)
+    return *b
+}
+
+func (b *Bitmap) AndNot(a Bitmap) Bitmap {
+    b.Bitmap.AndNot(a.Bitmap)
+    return *b
+}
+
+func Or(a, b Bitmap) Bitmap {
     return Bitmap{sroar.Or(a.Bitmap, b.Bitmap)}
 }
 
-func FastOr(bitmaps ...*Bitmap) Bitmap {
+func FastOr(bitmaps ...Bitmap) Bitmap {
     bm := make([]*sroar.Bitmap, len(bitmaps))
     for i, v := range bitmaps {
         bm[i] = v.Bitmap
     }
     return Bitmap{sroar.FastOr(bm...)}
+}
+
+func And(a, b Bitmap) Bitmap {
+    return Bitmap{sroar.And(a.Bitmap, b.Bitmap)}
+}
+
+func FastAnd(bitmaps ...Bitmap) Bitmap {
+    bm := make([]*sroar.Bitmap, len(bitmaps))
+    for i, v := range bitmaps {
+        bm[i] = v.Bitmap
+    }
+    return Bitmap{sroar.FastAnd(bm...)}
+}
+
+func AndNot(a, b Bitmap) Bitmap {
+    bm := a.Bitmap.Clone()
+    bm.AndNot(b.Bitmap)
+    return Bitmap{bm}
 }
