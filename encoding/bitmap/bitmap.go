@@ -4,6 +4,7 @@
 package bitmap
 
 import (
+    "encoding/base64"
     "errors"
     "io"
     "sync"
@@ -68,6 +69,23 @@ func (b *Bitmap) UnmarshalBinary(src []byte) error {
         return ErrInvalidBuffer
     }
     b.Bitmap = sroar.FromBufferWithCopy(src)
+    return nil
+}
+
+func (b Bitmap) MarshalText() ([]byte, error) {
+    src := b.ToBuffer()
+    dst := make([]byte, base64.RawStdEncoding.EncodedLen(len(src)))
+    base64.RawStdEncoding.Encode(dst, src)
+    return dst, nil
+}
+
+func (b *Bitmap) UnmarshalText(src []byte) error {
+    dst := make([]byte, 0, base64.RawStdEncoding.DecodedLen(len(src)))
+    _, err := base64.RawStdEncoding.Decode(dst, src)
+    if err != nil {
+        return err
+    }
+    b.Bitmap = sroar.FromBuffer(dst)
     return nil
 }
 
