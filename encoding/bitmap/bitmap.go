@@ -74,14 +74,14 @@ func (b *Bitmap) UnmarshalBinary(src []byte) error {
 
 func (b Bitmap) MarshalText() ([]byte, error) {
     src := b.ToBuffer()
-    dst := make([]byte, base64.RawStdEncoding.EncodedLen(len(src)))
-    base64.RawStdEncoding.Encode(dst, src)
+    dst := make([]byte, base64.StdEncoding.EncodedLen(len(src)))
+    base64.StdEncoding.Encode(dst, src)
     return dst, nil
 }
 
 func (b *Bitmap) UnmarshalText(src []byte) error {
-    dst := make([]byte, 0, base64.RawStdEncoding.DecodedLen(len(src)))
-    _, err := base64.RawStdEncoding.Decode(dst, src)
+    dst := make([]byte, 0, base64.StdEncoding.DecodedLen(len(src)))
+    _, err := base64.StdEncoding.Decode(dst, src)
     if err != nil {
         return err
     }
