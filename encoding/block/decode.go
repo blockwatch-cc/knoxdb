@@ -12,7 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/dedup"
 	"blockwatch.cc/knoxdb/vec"
-	"github.com/golang/snappy"
+	"github.com/klauspost/compress/snappy"
 	"github.com/pierrec/lz4"
 )
 
