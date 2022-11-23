@@ -6,10 +6,10 @@ package bitmap
 import (
     "encoding/base64"
     "errors"
-    "io"
     "sync"
 
     "github.com/dgraph-io/sroar"
+    "github.com/klauspost/compress/snappy"
 )
 
 var ErrInvalidBuffer = errors.New("invalid buffer length")
@@ -58,17 +58,22 @@ func (b *Bitmap) CloneFrom(a Bitmap) {
 }
 
 func (b Bitmap) MarshalBinary() ([]byte, error) {
-    return b.ToBuffer(), nil
+    src := b.ToBuffer()
+    dst := make([]byte, 0, snappy.MaxEncodedLen(len(src)))
+    dst = snappy.Encode(dst, src)
+    return dst, nil
 }
 
 func (b *Bitmap) UnmarshalBinary(src []byte) error {
-    if len(src) > 0 && len(src) < 8 {
-        return io.ErrShortBuffer
+    l, err := snappy.DecodedLen(src)
+    if err != nil {
+        return err
     }
-    if len(src)%2 != 0 {
-        return ErrInvalidBuffer
+    dst, err := snappy.Decode(make([]byte, 0, l), src)
+    if err != nil {
+        return err
     }
-    b.Bitmap = sroar.FromBufferWithCopy(src)
+    b.Bitmap = sroar.FromBufferWithCopy(dst)
     return nil
 }
 
