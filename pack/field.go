@@ -1,6 +1,5 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//
 package pack
 
 import (
@@ -40,6 +39,9 @@ const (
 	flagFloatType
 	flagIntType
 	flagUintType
+	flagStringerType
+	flagBinaryMarshalerType
+	flagTextMarshalerType
 )
 
 func (f FieldFlags) Compression() block.Compression {
