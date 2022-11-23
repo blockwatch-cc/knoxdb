@@ -165,7 +165,7 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 			}
 		}
 
-		finfo, err := structFieldInfo(typ, &f)
+		finfo, err := structFieldInfo(&f)
 		if err != nil {
 			return nil, err
 		}
@@ -196,11 +196,22 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 }
 
 // structFieldInfo builds and returns a fieldInfo for f.
-func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, error) {
+func structFieldInfo(f *reflect.StructField) (*fieldInfo, error) {
 	finfo := &fieldInfo{idx: f.Index, typname: f.Type.String()}
 	tag := f.Tag.Get(tagName)
 	kind := f.Type.Kind()
 	typname := f.Type.String()
+
+	// detect marshaler types
+	if f.Type.Implements(binaryMarshalerType) && reflect.PointerTo(f.Type).Implements(binaryUnmarshalerType) {
+		finfo.flags |= flagBinaryMarshalerType
+	}
+	if f.Type.Implements(textMarshalerType) && reflect.PointerTo(f.Type).Implements(textUnmarshalerType) {
+		finfo.flags |= flagTextMarshalerType
+	}
+	if f.Type.Implements(stringerType) {
+		finfo.flags |= flagStringerType
+	}
 
 	tokens := strings.Split(tag, ",")
 	if len(tokens) > 1 {

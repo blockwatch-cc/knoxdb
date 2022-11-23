@@ -40,6 +40,9 @@ const (
 	flagFloatType
 	flagIntType
 	flagUintType
+	flagStringerType
+	flagBinaryMarshalerType
+	flagTextMarshalerType
 )
 
 func (f FieldFlags) Compression() block.Compression {

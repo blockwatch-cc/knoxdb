@@ -55,7 +55,7 @@ var cmdinfo = `
 Available Commands:
   table        list all table packs
   index        list all index packs
-  detail      show pack info details (from metadata)
+  detail       show pack info details (from metadata)
   blocks       show pack block headers
   type         show type info (from journal pack)
   dump-journal dump journal contents

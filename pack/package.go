@@ -511,25 +511,24 @@ func (p *Package) Push(v interface{}) error {
 
 		switch field.Type {
 		case FieldTypeBytes:
-			var buf []byte
-			// check if type implements BinaryMarshaler
-			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				var err error
-				if buf, err = f.Interface().(encoding.BinaryMarshaler).MarshalBinary(); err != nil {
+			if fi.flags.Contains(flagBinaryMarshalerType) {
+				buf, err := f.Interface().(encoding.BinaryMarshaler).MarshalBinary()
+				if err != nil {
 					return err
 				}
+				b.Bytes.Append(buf)
 			} else {
-				buf = f.Bytes()
+				b.Bytes.Append(f.Bytes())
 			}
-			b.Bytes.Append(buf)
+
 		case FieldTypeString:
-			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
+			if fi.flags.Contains(flagTextMarshalerType) {
 				buf, err := f.Interface().(encoding.TextMarshaler).MarshalText()
 				if err != nil {
 					return err
 				}
 				b.Bytes.Append(buf)
-			} else if f.CanInterface() && f.Type().Implements(stringerType) {
+			} else if fi.flags.Contains(flagStringerType) {
 				b.Bytes.Append(compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
 			} else {
 				b.Bytes.Append(compress.UnsafeGetBytes(f.String()))
@@ -659,8 +658,7 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 
 		switch field.Type {
 		case FieldTypeBytes:
-			// check if type implements BinaryMarshaler
-			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
+			if fi.flags.Contains(flagBinaryMarshalerType) {
 				buf, err := f.Interface().(encoding.BinaryMarshaler).MarshalBinary()
 				if err != nil {
 					return err
@@ -671,13 +669,13 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			}
 
 		case FieldTypeString:
-			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
+			if fi.flags.Contains(flagTextMarshalerType) {
 				buf, err := f.Interface().(encoding.TextMarshaler).MarshalText()
 				if err != nil {
 					return err
 				}
 				b.Bytes.Set(pos, buf)
-			} else if f.CanInterface() && f.Type().Implements(stringerType) {
+			} else if fi.flags.Contains(flagStringerType) {
 				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
 			} else {
 				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.String()))
@@ -836,32 +834,27 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 		field := p.fields[fi.blockid]
 		switch field.Type {
 		case FieldTypeBytes:
-			if dst.CanAddr() {
-				pv := dst.Addr()
-				if pv.CanInterface() && pv.Type().Implements(binaryUnmarshalerType) {
-					if err := pv.Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes.Elem(pos)); err != nil {
-						return err
-					}
-					break
+			if fi.flags.Contains(flagBinaryMarshalerType) {
+				// decode using unmarshaler, requires the unmarshaler makes a copy
+				if err := dst.Addr().Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes.Elem(pos)); err != nil {
+					return err
 				}
+			} else {
+				// copy to avoid memleaks of large blocks
+				elm := b.Bytes.Elem(pos)
+				buf := make([]byte, len(elm))
+				copy(buf, elm)
+				dst.SetBytes(buf)
 			}
-			// copy to avoid memleaks of large blocks
-			elm := b.Bytes.Elem(pos)
-			buf := make([]byte, len(elm))
-			copy(buf, elm)
-			dst.SetBytes(buf)
 
 		case FieldTypeString:
-			if dst.CanAddr() {
-				pv := dst.Addr()
-				if pv.CanInterface() && pv.Type().Implements(textUnmarshalerType) {
-					if err := pv.Interface().(encoding.TextUnmarshaler).UnmarshalText(b.Bytes.Elem(pos)); err != nil {
-						return err
-					}
-					break
+			if fi.flags.Contains(flagTextMarshalerType) {
+				if err := dst.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText(b.Bytes.Elem(pos)); err != nil {
+					return err
 				}
+			} else {
+				dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
 			}
-			dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
 
 		case FieldTypeDatetime:
 			if ts := b.Int64[pos]; ts > 0 {
@@ -1075,7 +1068,7 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 
 	switch field.Type {
 	case FieldTypeBytes:
-		// check if type implements BinaryMarshaler
+		// explicit check if type implements Marshaler (v != struct type)
 		if val.CanInterface() && val.Type().Implements(binaryMarshalerType) {
 			buf, err := val.Interface().(encoding.BinaryMarshaler).MarshalBinary()
 			if err != nil {
@@ -1087,6 +1080,7 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 		}
 
 	case FieldTypeString:
+		// explicit check if type implements Marshaler (v != struct type)
 		if val.CanInterface() && val.Type().Implements(textMarshalerType) {
 			buf, err := val.Interface().(encoding.TextMarshaler).MarshalText()
 			if err != nil {
