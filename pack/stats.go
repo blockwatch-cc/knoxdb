@@ -57,21 +57,23 @@ type TableStats struct {
 	TombstoneBytesWritten    int64 `json:"tomb_bytes_written"`
 
 	// pack statistics
-	PacksCount        int64 `json:"packs_count"`
-	PacksAlloc        int64 `json:"packs_alloc"`
-	PacksRecycled     int64 `json:"packs_recycled"`
-	PacksLoaded       int64 `json:"packs_loaded"`
-	PacksStored       int64 `json:"packs_stored"`
-	PacksBytesRead    int64 `json:"packs_bytes_read"`
-	PacksBytesWritten int64 `json:"packs_bytes_written"`
-	PacksSize         int64 `json:"packs_size"`
+	PacksCount    int64 `json:"packs_count"`
+	PacksAlloc    int64 `json:"packs_alloc"`
+	PacksRecycled int64 `json:"packs_recycled"`
+	PacksLoaded   int64 `json:"packs_loaded"`
+	PacksStored   int64 `json:"packs_stored"`
+
+	// I/O statistics
+	BytesRead    int64 `json:"bytes_read"`
+	BytesWritten int64 `json:"bytes_written"`
+	TotalSize    int64 `json:"total_size"`
 
 	// pack cache statistics
-	PackCacheSize      int64 `json:"pack_cache_size"`
-	PackCacheCount     int64 `json:"pack_cache_count"`
-	PackCacheCapacity  int64 `json:"pack_cache_capacity"`
-	PackCacheHits      int64 `json:"pack_cache_hits"`
-	PackCacheMisses    int64 `json:"pack_cache_misses"`
-	PackCacheInserts   int64 `json:"pack_cache_inserts"`
-	PackCacheEvictions int64 `json:"pack_cache_evictions"`
+	CacheSize      int64 `json:"cache_size"`
+	CacheCount     int64 `json:"cache_count"`
+	CacheCapacity  int64 `json:"cache_capacity"`
+	CacheHits      int64 `json:"cache_hits"`
+	CacheMisses    int64 `json:"cache_misses"`
+	CacheInserts   int64 `json:"cache_inserts"`
+	CacheEvictions int64 `json:"cache_evictions"`
 }

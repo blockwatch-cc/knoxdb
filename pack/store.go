@@ -9,6 +9,7 @@ import (
     "encoding/json"
     "fmt"
     "sync/atomic"
+    "time"
 
     "blockwatch.cc/knoxdb/cache/rclru"
     "blockwatch.cc/knoxdb/store"
@@ -97,7 +98,7 @@ func (d *DB) CreateStore(name string, opts Options) (*Store, error) {
         if err != nil {
             return nil, err
         }
-        s.stats.PackCacheCapacity = int64(s.opts.CacheSizeMBytes())
+        s.stats.CacheCapacity = int64(s.opts.CacheSizeMBytes())
     } else {
         s.cache = rclru.NewNoCache[uint64, *Buffer]()
     }
@@ -187,7 +188,7 @@ func (d *DB) Store(name string, opts ...Options) (*Store, error) {
         if err != nil {
             return nil, err
         }
-        s.stats.PackCacheCapacity = int64(s.opts.CacheSizeMBytes())
+        s.stats.CacheCapacity = int64(s.opts.CacheSizeMBytes())
     } else {
         s.cache = rclru.NewNoCache[uint64, *Buffer]()
     }
@@ -211,14 +212,25 @@ func (s *Store) Stats() []TableStats {
     // copy store stats
     stats := s.stats
 
+    // read tuple count
+    _ = s.db.View(func(tx store.Tx) error {
+        b := tx.Bucket(s.key)
+        if b == nil {
+            return ErrBucketNotFound
+        }
+        bs := b.Stats()
+        stats.TupleCount = int64(bs.KeyN)
+        return nil
+    })
+
     // copy cache stats
     cs := s.cache.Stats()
-    stats.PackCacheHits = cs.Hits
-    stats.PackCacheMisses = cs.Misses
-    stats.PackCacheInserts = cs.Inserts
-    stats.PackCacheEvictions = cs.Evictions
-    stats.PackCacheCount = cs.Count
-    stats.PackCacheSize = cs.Size
+    stats.CacheHits = cs.Hits
+    stats.CacheMisses = cs.Misses
+    stats.CacheInserts = cs.Inserts
+    stats.CacheEvictions = cs.Evictions
+    stats.CacheCount = cs.Count
+    stats.CacheSize = cs.Size
 
     return []TableStats{stats}
 }
@@ -259,18 +271,39 @@ func (s *Store) Put(ctx context.Context, key uint64, val interface{}) (int, erro
 }
 
 func (s *Store) PutBytes(ctx context.Context, key, val []byte) (int, error) {
+    start := time.Now().UTC()
+    prevSize := -1
     err := s.db.Update(func(tx store.Tx) error {
         b := tx.Bucket(s.key)
         if b == nil {
             return ErrBucketNotFound
         }
         b.FillPercent(float64(s.opts.FillLevel) / 100.0)
+        buf := b.Get(key)
+        if buf != nil {
+            prevSize = len(buf)
+        }
         return b.Put(key, val)
     })
     if err != nil {
         return 0, err
     }
-    atomic.AddInt64(&s.stats.PacksBytesWritten, 8+int64(len(val)))
+    sz := int64(len(key) + len(val))
+    if prevSize >= 0 {
+        // update
+        atomic.AddInt64(&s.stats.UpdatedTuples, 1)
+        atomic.AddInt64(&s.stats.UpdateCalls, 1)
+        atomic.AddInt64(&s.stats.TotalSize, sz-int64(prevSize))
+    } else {
+        // insert
+        atomic.AddInt64(&s.stats.InsertedTuples, 1)
+        atomic.AddInt64(&s.stats.InsertCalls, 1)
+        atomic.AddInt64(&s.stats.TupleCount, 1)
+        atomic.AddInt64(&s.stats.TotalSize, sz)
+    }
+    atomic.AddInt64(&s.stats.BytesWritten, sz)
+    s.stats.LastFlushTime = start
+    s.stats.LastFlushDuration = time.Since(start)
     return len(val), nil
 }
 
@@ -291,6 +324,9 @@ func (s *Store) Get(ctx context.Context, key uint64, val interface{}) error {
         // cache result
         s.cache.Add(key, buf)
     }
+
+    atomic.AddInt64(&s.stats.QueriedTuples, 1)
+    atomic.AddInt64(&s.stats.QueryCalls, 1)
 
     // decode if a decoder interface is found
     var err error
@@ -325,12 +361,13 @@ func (s *Store) GetBytes(ctx context.Context, key []byte) ([]byte, error) {
         return nil
     })
     if err == nil {
-        atomic.AddInt64(&s.stats.PacksBytesRead, int64(len(ret)))
+        atomic.AddInt64(&s.stats.BytesRead, int64(len(ret)))
     }
     return ret, err
 }
 
 func (s *Store) Delete(ctx context.Context, key uint64) error {
+    prevSize := -1
     s.cache.Remove(key)
     var bkey [8]byte
     bigEndian.PutUint64(bkey[:], key)
@@ -339,8 +376,17 @@ func (s *Store) Delete(ctx context.Context, key uint64) error {
         if b == nil {
             return ErrBucketNotFound
         }
+        buf := b.Get(bkey[:])
+        if buf != nil {
+            prevSize = len(buf)
+        }
         return b.Delete(bkey[:])
     })
+    if err == nil && prevSize >= 0 {
+        atomic.AddInt64(&s.stats.DeletedTuples, 1)
+        atomic.AddInt64(&s.stats.DeleteCalls, 1)
+        atomic.AddInt64(&s.stats.TotalSize, -int64(prevSize))
+    }
     return err
 }
 

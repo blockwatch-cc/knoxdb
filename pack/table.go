@@ -196,7 +196,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		if err != nil {
 			return nil, err
 		}
-		t.stats.PackCacheCapacity = int64(t.opts.CacheSizeMBytes())
+		t.stats.CacheCapacity = int64(t.opts.CacheSizeMBytes())
 	} else {
 		t.bcache = rclru.NewNoCache[uint64, *block.Block]()
 	}
@@ -347,7 +347,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		if err != nil {
 			return nil, err
 		}
-		t.stats.PackCacheCapacity = int64(t.opts.CacheSizeMBytes())
+		t.stats.CacheCapacity = int64(t.opts.CacheSizeMBytes())
 	} else {
 		t.bcache = rclru.NewNoCache[uint64, *block.Block]()
 	}
@@ -418,7 +418,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 			t.packidx = NewPackIndex(packs, t.fields.PkIndex(), maxPackSize)
 			atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
 			atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
-			atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
+			atomic.StoreInt64(&t.stats.TotalSize, int64(t.packidx.TableSize()))
 			log.Debugf("pack: %s table loaded index data for %d packs", t.name, t.packidx.Len())
 			return nil
 		}
@@ -448,7 +448,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 	t.packidx = NewPackIndex(packs, t.fields.PkIndex(), maxPackSize)
 	atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
 	atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
-	atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
+	atomic.StoreInt64(&t.stats.TotalSize, int64(t.packidx.TableSize()))
 	log.Debugf("pack: %s table scanned %d packages", t.name, t.packidx.Len())
 	return nil
 }
@@ -535,12 +535,12 @@ func (t *Table) Stats() []TableStats {
 
 	// copy cache stats
 	cs := t.bcache.Stats()
-	s.PackCacheHits = cs.Hits
-	s.PackCacheMisses = cs.Misses
-	s.PackCacheInserts = cs.Inserts
-	s.PackCacheEvictions = cs.Evictions
-	s.PackCacheCount = cs.Count
-	s.PackCacheSize = cs.Size
+	s.CacheHits = cs.Hits
+	s.CacheMisses = cs.Misses
+	s.CacheInserts = cs.Inserts
+	s.CacheEvictions = cs.Evictions
+	s.CacheCount = cs.Count
+	s.CacheSize = cs.Size
 
 	resp := []TableStats{s}
 	for _, idx := range t.indexes {
@@ -3127,7 +3127,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 
 	// log.Debugf("%s: loaded shared pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
-	atomic.AddInt64(&t.stats.PacksBytesRead, int64(pkg.size))
+	atomic.AddInt64(&t.stats.BytesRead, int64(pkg.size))
 
 	// store in cache
 	if touch {
@@ -3204,7 +3204,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	clone.Materialize()
 
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
-	atomic.AddInt64(&t.stats.PacksBytesRead, int64(pkg2.size))
+	atomic.AddInt64(&t.stats.BytesRead, int64(pkg2.size))
 	return clone, nil
 }
 
@@ -3242,10 +3242,10 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 		info.Packsize = n
 		t.packidx.AddOrUpdate(info)
 		atomic.AddInt64(&t.stats.PacksStored, 1)
-		atomic.AddInt64(&t.stats.PacksBytesWritten, int64(n))
+		atomic.AddInt64(&t.stats.BytesWritten, int64(n))
 		atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
 		atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
-		atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
+		atomic.StoreInt64(&t.stats.TotalSize, int64(t.packidx.TableSize()))
 
 		return n, nil
 
@@ -3262,7 +3262,7 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 
 		atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
 		atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
-		atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
+		atomic.StoreInt64(&t.stats.TotalSize, int64(t.packidx.TableSize()))
 
 		return 0, nil
 	}

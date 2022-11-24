@@ -238,7 +238,7 @@ func (t *Table) CreateIndex(name string, field *Field, typ IndexType, opts Optio
 		if err != nil {
 			return nil, err
 		}
-		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSizeMBytes())
+		idx.stats.CacheCapacity = int64(idx.opts.CacheSizeMBytes())
 	} else {
 		idx.cache = rclru.NewNoCache[uint32, *Package]()
 	}
@@ -386,7 +386,7 @@ func (t *Table) OpenIndex(idx *Index, opts ...Options) error {
 		if err != nil {
 			return err
 		}
-		idx.stats.PackCacheCapacity = int64(idx.opts.CacheSizeMBytes())
+		idx.stats.CacheCapacity = int64(idx.opts.CacheSizeMBytes())
 	} else {
 		idx.cache = rclru.NewNoCache[uint32, *Package]()
 	}
@@ -433,7 +433,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 			idx.packidx = NewPackIndex(packs, 0, maxPackSize)
 			atomic.StoreInt64(&idx.stats.PacksCount, int64(idx.packidx.Len()))
 			atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.packidx.HeapSize()))
-			atomic.StoreInt64(&idx.stats.PacksSize, int64(idx.packidx.TableSize()))
+			atomic.StoreInt64(&idx.stats.TotalSize, int64(idx.packidx.TableSize()))
 			log.Debugf("pack: %s loaded index data for %d packs", idx.name(), idx.packidx.Len())
 			return nil
 		}
@@ -465,7 +465,7 @@ func (idx *Index) loadPackInfo(dbTx store.Tx) error {
 	idx.packidx = NewPackIndex(packs, 0, maxPackSize)
 	atomic.StoreInt64(&idx.stats.PacksCount, int64(idx.packidx.Len()))
 	atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.packidx.HeapSize()))
-	atomic.StoreInt64(&idx.stats.PacksSize, int64(idx.packidx.TableSize()))
+	atomic.StoreInt64(&idx.stats.TotalSize, int64(idx.packidx.TableSize()))
 	log.Debugf("pack: %s scanned %d package headers", idx.name(), idx.packidx.Len())
 	return nil
 }
@@ -1260,7 +1260,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 	atomic.StoreInt64(&idx.stats.PacksCount, int64(idx.packidx.Len()))
 	atomic.StoreInt64(&idx.stats.TupleCount, int64(idx.packidx.Count()))
 	atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.packidx.HeapSize()))
-	atomic.StoreInt64(&idx.stats.PacksSize, int64(idx.packidx.TableSize()))
+	atomic.StoreInt64(&idx.stats.TotalSize, int64(idx.packidx.TableSize()))
 
 	idx.stats.LastFlushDuration = time.Since(start)
 	log.Debugf("pack: %s flushed %d packs add=%d/%d del=%d/%d total_size=%s in %s",
@@ -1347,7 +1347,7 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 	pkg.IncRef()
 
 	atomic.AddInt64(&idx.stats.PacksLoaded, 1)
-	atomic.AddInt64(&idx.stats.PacksBytesRead, int64(pkg.size))
+	atomic.AddInt64(&idx.stats.BytesRead, int64(pkg.size))
 
 	// store in cache
 	if touch {
@@ -1385,7 +1385,7 @@ func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	}
 
 	atomic.AddInt64(&idx.stats.PacksLoaded, 1)
-	atomic.AddInt64(&idx.stats.PacksBytesRead, int64(pkg.size))
+	atomic.AddInt64(&idx.stats.BytesRead, int64(pkg.size))
 	return pkg, nil
 }
 
@@ -1416,7 +1416,7 @@ func (idx *Index) storePack(tx *Tx, pkg *Package) (int, error) {
 		info.Packsize = n
 		idx.packidx.AddOrUpdate(info)
 		atomic.AddInt64(&idx.stats.PacksStored, 1)
-		atomic.AddInt64(&idx.stats.PacksBytesWritten, int64(n))
+		atomic.AddInt64(&idx.stats.BytesWritten, int64(n))
 
 		return n, nil
 
@@ -1467,12 +1467,12 @@ func (idx *Index) Stats() TableStats {
 
 	// copy cache stats
 	cs := idx.cache.Stats()
-	s.PackCacheHits = cs.Hits
-	s.PackCacheMisses = cs.Misses
-	s.PackCacheInserts = cs.Inserts
-	s.PackCacheEvictions = cs.Evictions
-	s.PackCacheCount = cs.Count
-	s.PackCacheSize = cs.Size
+	s.CacheHits = cs.Hits
+	s.CacheMisses = cs.Misses
+	s.CacheInserts = cs.Inserts
+	s.CacheEvictions = cs.Evictions
+	s.CacheCount = cs.Count
+	s.CacheSize = cs.Size
 
 	return s
 }
