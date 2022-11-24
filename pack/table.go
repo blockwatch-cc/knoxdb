@@ -2926,6 +2926,7 @@ func (t *Table) Compact(ctx context.Context) error {
 				// clone new pack from journal
 				// log.Debugf("pack: creating new dst pack %d key=%x", dstIndex, dstKey)
 				dstPack = t.packPool.Get().(*Package)
+				dstPack.PopulateFields(nil)
 				dstPack.key = dstKey
 				// dstPack.IncRef()
 				isNewPack = true
@@ -3273,6 +3274,7 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	// move half of the packs contents to a new pack (don't cache the new pack
 	// to avoid possible eviction of the pack we are currently splitting!)
 	newpkg := t.packPool.Get().(*Package)
+	newpkg.PopulateFields(nil)
 	half := pkg.Len() / 2
 	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half); err != nil {
 		return 0, err
