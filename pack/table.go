@@ -1648,7 +1648,6 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 	res := &Result{
 		fields: t.Fields(), // we return all fields
 		pkg:    p,
-		table:  t,
 	}
 	defer func() {
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
@@ -1859,7 +1858,6 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	res := &Result{
 		fields: q.freq,
 		pkg:    pkg,
-		table:  t,
 	}
 
 	// early return
@@ -2025,7 +2023,6 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	res := &Result{
 		fields: q.freq,
 		pkg:    pkg,
-		table:  t,
 	}
 
 	// early return
