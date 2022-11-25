@@ -24,7 +24,7 @@ func CheckOutput(t *testing.T, b []byte, s string) {
 	if bytes.HasSuffix(b, LF) && !bytes.HasSuffix([]byte(s), LF) {
 		b = bytes.TrimSuffix(b, LF)
 	}
-	if bytes.Compare(b, []byte(s)) != 0 {
+	if !bytes.Equal(b, []byte(s)) {
 		t.Errorf("invalid output='%s' expected='%s'", string(b), s)
 	}
 }

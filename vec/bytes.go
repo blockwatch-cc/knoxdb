@@ -173,7 +173,7 @@ func bytesContains(s [][]byte, val []byte) bool {
 	}
 	// use binary search to find value in sorted s
 	i := sort.Search(len(s), func(i int) bool { return bytes.Compare(s[i], val) >= 0 })
-	if i < len(s) && bytes.Compare(s[i], val) == 0 {
+	if i < len(s) && bytes.Equal(s[i], val) {
 		return true
 	}
 
@@ -198,7 +198,7 @@ func bytesIndex(s [][]byte, val []byte, last int) int {
 
 	// use binary search (slice is sorted)
 	idx := sort.Search(l, func(i int) bool { return bytes.Compare(s[i], val) >= 0 })
-	if idx < l && bytes.Compare(s[idx], val) == 0 {
+	if idx < l && bytes.Equal(s[idx], val) {
 		return idx + last
 	}
 	return -1
@@ -275,7 +275,7 @@ func bytesContainsRange(s [][]byte, from, to []byte) bool {
 	max = max + min
 
 	// exit when to was found (also solves case C1a)
-	if max < n && bytes.Compare(s[max], to) == 0 {
+	if max < n && bytes.Equal(s[max], to) {
 		return true
 	}
 

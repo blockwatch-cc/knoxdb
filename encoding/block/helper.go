@@ -20,8 +20,8 @@ type SnappyWriter struct {
 func NewSnappyWriter(w io.Writer) *SnappyWriter {
 	return &SnappyWriter{
 		w:    w,
-		buf:  bytes.NewBuffer(make([]byte, 0, BlockSizeHint)),
-		data: make([]byte, BlockSizeHint),
+		buf:  bytes.NewBuffer(make([]byte, 0, bufSizeHint)),
+		data: make([]byte, bufSizeHint),
 	}
 }
 
@@ -74,7 +74,7 @@ func getWriter(buf *bytes.Buffer, comp Compression) io.WriteCloser {
 		// we use the dest buffer's capacity as total size hint;
 		// the buffer is allocated in `block.EncodeBody()` according
 		// to the true storage size of the target data. This is either
-		// the blockSizeHint (when actual size is smaller) or the true
+		// the bufSizeHint (when actual size is smaller) or the true
 		// stored size of the data as calculated by `*ArrayEncodedSize()`.
 		enc.Header.Size = uint64(buf.Cap())
 		enc.Header.BlockChecksum = true

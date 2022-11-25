@@ -12,12 +12,6 @@ import (
 )
 
 const (
-	// default encoder/decoder buffer size in elements (32k)
-	DefaultMaxPointsPerBlock = 1 << 15
-
-	// 512k - size of a single block that fits 32k 8byte values + 1 page extra headers
-	BlockSizeHint = 1<<18 + 4096
-
 	// storedBlockHeaderSize is the size of the header for an encoded block.
 	// There is one byte encoding the type of the block.
 	storedBlockHeaderSize = 1
@@ -37,22 +31,12 @@ func encodeTimeBlock(buf *bytes.Buffer, val []int64, comp Compression) (int, err
 	w := getWriter(buf, comp)
 
 	// copy source values to avoid overwriting them
-	var (
-		cp []int64
-		v  interface{}
-	)
-	if len(val) <= DefaultMaxPointsPerBlock {
-		v = int64Pool.Get()
-		cp = v.([]int64)[:len(val)]
-	} else {
-		cp = make([]int64, len(val))
-	}
+	v := arena.Alloc(BlockInt64, len(val))
+	cp := v.([]int64)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.TimeArrayEncodeAll(cp, w)
-	if v != nil {
-		int64Pool.Put(v)
-	}
+	arena.Free(BlockInt64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -92,25 +76,15 @@ func encodeFloat32Block(buf *bytes.Buffer, val []float32, comp Compression) (int
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockFloat32))
 	w := getWriter(buf, comp)
-	var (
-		cp []float64
-		v  interface{}
-	)
-	if len(val) <= DefaultMaxPointsPerBlock {
-		v = float64Pool.Get()
-		cp = v.([]float64)[:len(val)]
-	} else {
-		cp = make([]float64, len(val))
-	}
-	//copy(cp, val)
+
+	v := arena.Alloc(BlockFloat64, len(val))
+	cp := v.([]float64)[:len(val)]
 	for i, _ := range val {
 		cp[i] = float64(val[i])
 	}
 
 	_, err := compress.FloatArrayEncodeAll(cp, w)
-	if v != nil {
-		float64Pool.Put(v)
-	}
+	arena.Free(BlockFloat64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -131,16 +105,8 @@ func encodeInt256Block(buf *bytes.Buffer, val vec.Int256LLSlice, comp Compressio
 	w := getWriter(buf, comp)
 
 	// prepare scratch space
-	var (
-		cp []int64
-		v  interface{}
-	)
-	if val.Len() <= DefaultMaxPointsPerBlock {
-		v = int64Pool.Get()
-		cp = v.([]int64)[:val.Len()]
-	} else {
-		cp = make([]int64, val.Len())
-	}
+	v := arena.Alloc(BlockInt64, val.Len())
+	cp := v.([]int64)[:val.Len()]
 
 	// repack int256 into 4 int64 strides
 	var err error
@@ -152,7 +118,7 @@ func encodeInt256Block(buf *bytes.Buffer, val vec.Int256LLSlice, comp Compressio
 			copy(cp, srcint)
 		}
 
-		ebuf := BlockEncoderPool.Get().([]byte)[:0]
+		ebuf := bufferPool.Get().([]byte)[:0]
 		stride := bytes.NewBuffer(ebuf)
 		_, err = compress.ArrayEncodeAllInt64(cp, stride)
 		if err != nil {
@@ -166,13 +132,11 @@ func encodeInt256Block(buf *bytes.Buffer, val vec.Int256LLSlice, comp Compressio
 		if _, err = w.Write(stride.Bytes()); err != nil {
 			break
 		}
-		BlockEncoderPool.Put(ebuf)
+		bufferPool.Put(ebuf)
 	}
 
 	// cleanup
-	if v != nil {
-		int64Pool.Put(v)
-	}
+	arena.Free(BlockInt64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -194,16 +158,8 @@ func encodeInt128Block(buf *bytes.Buffer, val vec.Int128LLSlice, comp Compressio
 	w := getWriter(buf, comp)
 
 	// prepare scratch space
-	var (
-		cp []int64
-		v  interface{}
-	)
-	if val.Len() <= DefaultMaxPointsPerBlock {
-		v = int64Pool.Get()
-		cp = v.([]int64)[:val.Len()]
-	} else {
-		cp = make([]int64, val.Len())
-	}
+	v := arena.Alloc(BlockInt64, val.Len())
+	cp := v.([]int64)[:val.Len()]
 
 	// repack int128 into 2 int64 strides
 	var err error
@@ -215,7 +171,7 @@ func encodeInt128Block(buf *bytes.Buffer, val vec.Int128LLSlice, comp Compressio
 			copy(cp, srcint)
 		}
 
-		ebuf := BlockEncoderPool.Get().([]byte)[:0]
+		ebuf := bufferPool.Get().([]byte)[:0]
 		stride := bytes.NewBuffer(ebuf)
 		_, err = compress.ArrayEncodeAllInt64(cp, stride)
 		if err != nil {
@@ -229,13 +185,11 @@ func encodeInt128Block(buf *bytes.Buffer, val vec.Int128LLSlice, comp Compressio
 		if _, err = w.Write(stride.Bytes()); err != nil {
 			break
 		}
-		BlockEncoderPool.Put(ebuf)
+		bufferPool.Put(ebuf)
 	}
 
 	// cleanup
-	if v != nil {
-		int64Pool.Put(v)
-	}
+	arena.Free(BlockInt64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -255,22 +209,14 @@ func encodeInt64Block(buf *bytes.Buffer, val []int64, comp Compression) (int, er
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockInt64))
 	w := getWriter(buf, comp)
-	var (
-		cp []int64
-		v  interface{}
-	)
-	if len(val) <= DefaultMaxPointsPerBlock {
-		v = int64Pool.Get()
-		cp = v.([]int64)[:len(val)]
-	} else {
-		cp = make([]int64, len(val))
-	}
+
+	v := arena.Alloc(BlockInt64, len(val))
+	cp := v.([]int64)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllInt64(cp, w)
-	if v != nil {
-		int64Pool.Put(v)
-	}
+
+	arena.Free(BlockInt64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -290,22 +236,13 @@ func encodeInt32Block(buf *bytes.Buffer, val []int32, comp Compression) (int, er
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockInt32))
 	w := getWriter(buf, comp)
-	var (
-		cp []int32
-		v  interface{}
-	)
-	if len(val) <= DefaultMaxPointsPerBlock {
-		v = int32Pool.Get()
-		cp = v.([]int32)[:len(val)]
-	} else {
-		cp = make([]int32, len(val))
-	}
+	v := arena.Alloc(BlockInt32, len(val))
+	cp := v.([]int32)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllInt32(cp, w)
-	if v != nil {
-		int32Pool.Put(v)
-	}
+
+	arena.Free(BlockInt32, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -325,22 +262,13 @@ func encodeInt16Block(buf *bytes.Buffer, val []int16, comp Compression) (int, er
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockInt16))
 	w := getWriter(buf, comp)
-	var (
-		cp []int16
-		v  interface{}
-	)
-	if len(val) <= DefaultMaxPointsPerBlock {
-		v = int16Pool.Get()
-		cp = v.([]int16)[:len(val)]
-	} else {
-		cp = make([]int16, len(val))
-	}
+	v := arena.Alloc(BlockInt16, len(val))
+	cp := v.([]int16)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllInt16(cp, w)
-	if v != nil {
-		int16Pool.Put(v)
-	}
+
+	arena.Free(BlockInt16, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -360,22 +288,13 @@ func encodeInt8Block(buf *bytes.Buffer, val []int8, comp Compression) (int, erro
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockInt8))
 	w := getWriter(buf, comp)
-	var (
-		cp []int8
-		v  interface{}
-	)
-	if len(val) <= DefaultMaxPointsPerBlock {
-		v = int8Pool.Get()
-		cp = v.([]int8)[:len(val)]
-	} else {
-		cp = make([]int8, len(val))
-	}
+	v := arena.Alloc(BlockInt8, len(val))
+	cp := v.([]int8)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllInt8(cp, w)
-	if v != nil {
-		int8Pool.Put(v)
-	}
+
+	arena.Free(BlockInt8, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -395,22 +314,12 @@ func encodeUint64Block(buf *bytes.Buffer, val []uint64, comp Compression) (int, 
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockUint64))
 	w := getWriter(buf, comp)
-	var (
-		cp []uint64
-		v  interface{}
-	)
-	if len(val) <= DefaultMaxPointsPerBlock {
-		v = uint64Pool.Get()
-		cp = v.([]uint64)[:len(val)]
-	} else {
-		cp = make([]uint64, len(val))
-	}
+	v := arena.Alloc(BlockUint64, len(val))
+	cp := v.([]uint64)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllUint64(cp, w)
-	if v != nil {
-		uint64Pool.Put(v)
-	}
+	arena.Free(BlockUint64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -430,22 +339,13 @@ func encodeUint32Block(buf *bytes.Buffer, val []uint32, comp Compression) (int, 
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockUint32))
 	w := getWriter(buf, comp)
-	var (
-		cp []uint32
-		v  interface{}
-	)
-	if len(val) <= DefaultMaxPointsPerBlock {
-		v = uint32Pool.Get()
-		cp = v.([]uint32)[:len(val)]
-	} else {
-		cp = make([]uint32, len(val))
-	}
+	v := arena.Alloc(BlockUint32, len(val))
+	cp := v.([]uint32)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllUint32(cp, w)
-	if v != nil {
-		uint32Pool.Put(v)
-	}
+
+	arena.Free(BlockUint32, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -465,22 +365,13 @@ func encodeUint16Block(buf *bytes.Buffer, val []uint16, comp Compression) (int, 
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockUint16))
 	w := getWriter(buf, comp)
-	var (
-		cp []uint16
-		v  interface{}
-	)
-	if len(val) <= DefaultMaxPointsPerBlock {
-		v = uint16Pool.Get()
-		cp = v.([]uint16)[:len(val)]
-	} else {
-		cp = make([]uint16, len(val))
-	}
+	v := arena.Alloc(BlockUint16, len(val))
+	cp := v.([]uint16)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllUint16(cp, w)
-	if v != nil {
-		uint16Pool.Put(v)
-	}
+
+	arena.Free(BlockUint16, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -500,22 +391,13 @@ func encodeUint8Block(buf *bytes.Buffer, val []uint8, comp Compression) (int, er
 
 	buf.WriteByte(byte(comp<<5) | byte(BlockUint8))
 	w := getWriter(buf, comp)
-	var (
-		cp []uint8
-		v  interface{}
-	)
-	if len(val) <= DefaultMaxPointsPerBlock {
-		v = uint8Pool.Get()
-		cp = v.([]uint8)[:len(val)]
-	} else {
-		cp = make([]uint8, len(val))
-	}
+	v := arena.Alloc(BlockUint8, len(val))
+	cp := v.([]uint8)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllUint8(cp, w)
-	if v != nil {
-		uint8Pool.Put(v)
-	}
+
+	arena.Free(BlockUint8, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)

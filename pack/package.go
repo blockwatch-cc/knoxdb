@@ -10,6 +10,8 @@ import (
 	"math"
 	"reflect"
 	"sort"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
@@ -21,6 +23,7 @@ import (
 )
 
 type Package struct {
+	refCount int64
 	key      uint32 // identity
 	nFields  int
 	nValues  int
@@ -29,10 +32,32 @@ type Package struct {
 	tinfo    *typeInfo      // Go typeinfo
 	pkindex  int            // field index of primary key (optional)
 	dirty    bool           // pack is updated, needs to be written
-	cached   bool           // pack is cached
-	stripped bool           // some blocks are ignored, don't store this pack
 	capHint  int            // block size hint
 	size     int            // storage size
+	pool     *sync.Pool
+}
+
+func (p *Package) IncRef() int64 {
+	return atomic.AddInt64(&p.refCount, 1)
+}
+
+func (p *Package) DecRef() int64 {
+	val := atomic.AddInt64(&p.refCount, -1)
+	if val == 0 {
+		p.recycle()
+	}
+	return val
+}
+
+func (p *Package) recycle() {
+	// don't recycle stripped or oversized packs
+	c := p.Cap()
+	if p.pool == nil || c <= 0 || c > p.capHint {
+		p.Release()
+		return
+	}
+	p.Clear()
+	p.pool.Put(p)
 }
 
 func (p *Package) Key() []byte {
@@ -49,9 +74,9 @@ func (p Package) IsTomb() bool {
 
 func (p *Package) SetKey(key []byte) {
 	switch {
-	case bytes.Compare(key, []byte("_journal")) == 0:
+	case bytes.Equal(key, []byte("_journal")):
 		p.key = journalKey
-	case bytes.Compare(key, []byte("_tombstone")) == 0:
+	case bytes.Equal(key, []byte("_tombstone")):
 		p.key = tombstoneKey
 	default:
 		p.key = bigEndian.Uint32(key)
@@ -71,16 +96,17 @@ func encodePackKey(key uint32) []byte {
 	}
 }
 
-func NewPackage(sz int) *Package {
+func encodeBlockKey(packkey uint32, col int) uint64 {
+	return (uint64(packkey) << 32) | uint64(col&0xffffffff)
+}
+
+func NewPackage(sz int, pool *sync.Pool) *Package {
 	return &Package{
 		pkindex: -1,
 		capHint: sz,
 		dirty:   true,
+		pool:    pool,
 	}
-}
-
-func (p *Package) CopyType(pkg *Package) error {
-	return p.InitFields(pkg.fields, pkg.tinfo)
 }
 
 func (p *Package) IsDirty() bool {
@@ -267,8 +293,57 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	return nil
 }
 
+// Init from field list when Go type is unavailable
+func (p *Package) InitFieldsEmpty(fields FieldList, tinfo *typeInfo) error {
+	if len(fields) > 256 {
+		return fmt.Errorf("pack: cannot handle more than 256 fields")
+	}
+	if len(fields) == 0 {
+		return fmt.Errorf("pack: empty fields")
+	}
+	if len(p.fields) > 0 {
+		return fmt.Errorf("pack: already initialized")
+	}
+	// require pk field
+	if fields.PkIndex() < 0 {
+		return fmt.Errorf("pack: missing primary key field")
+	}
+	// if pack has been loaded, check if field types match block types
+	if p.nFields > 0 && len(p.blocks) > 0 {
+		if len(fields) > len(p.blocks) {
+			return fmt.Errorf("pack: inconsistent Go type for loaded pack: %d fields, %d blocks", len(fields), len(p.blocks))
+		}
+		for i, f := range fields {
+			b := p.blocks[i]
+			if b.Type() != f.Type.BlockType() {
+				return fmt.Errorf("pack: mismatch block type %s for %s field %d", b.Type(), f.Type, i)
+			}
+		}
+	}
+
+	p.fields = fields
+	p.nFields = len(fields)
+	p.pkindex = fields.PkIndex()
+	p.tinfo = tinfo
+
+	if len(p.blocks) == 0 {
+		p.blocks = make([]*block.Block, p.nFields)
+		// Keep the blocks empty
+	} else {
+		// make sure we use the correct compression (empty blocks are stored without)
+		for i := range p.blocks {
+			p.blocks[i].SetCompression(fields[i].Flags.Compression())
+		}
+	}
+	return nil
+}
+
 func (p *Package) InitFieldsFrom(src *Package) error {
 	return p.InitFields(src.fields, src.tinfo)
+}
+
+func (p *Package) InitFieldsFromEmpty(src *Package) error {
+	return p.InitFieldsEmpty(src.fields, src.tinfo)
 }
 
 // may be called from Join, no pk required
@@ -300,22 +375,42 @@ func (p *Package) InitResultFields(fields FieldList, tinfo *typeInfo) error {
 func (p *Package) Clone(capacity int) (*Package, error) {
 	// cloned pack has no identity yet
 	// cloning a stripped pack is allowed
-	clone := NewPackage(capacity)
-	if err := clone.CopyType(p); err != nil {
+	clone := NewPackage(capacity, p.pool)
+	if err := clone.InitFieldsEmpty(p.fields, p.tinfo); err != nil {
 		return nil, err
 	}
+
+	clone.key = p.key
 	clone.nValues = p.nValues
 	clone.size = p.size
-	clone.stripped = p.stripped
 
 	for i, src := range p.blocks {
-		if src.IsIgnore() {
+		if src == nil {
 			continue
 		}
+		clone.blocks[i] = block.NewBlock(src.Type(), src.Compression(), capacity)
 		clone.blocks[i].Copy(src)
 	}
-
 	return clone, nil
+}
+
+func (dst *Package) MergeCols(src *Package) (*Package, error) {
+	if src == nil {
+		return dst, nil
+	}
+	if dst.nValues != src.nValues {
+		return nil, fmt.Errorf("pack: MergeCols: differnt number of values")
+	}
+	for i := range dst.blocks {
+		if i > len(src.blocks) {
+			break
+		}
+		if dst.blocks[i] == nil && src.blocks[i] != nil {
+			dst.blocks[i] = src.blocks[i]
+			src.blocks[i] = nil
+		}
+	}
+	return dst, nil
 }
 
 func (p *Package) Optimize() {
@@ -354,14 +449,15 @@ func (p *Package) Materialize() {
 	}
 }
 
-func (p *Package) KeepFields(fields FieldList) *Package {
+func (p *Package) PopulateFields(fields FieldList) *Package {
 	if len(fields) == 0 {
-		return p
+		fields = p.fields
 	}
 	for i, v := range p.fields {
-		if !fields.Contains(v.Name) {
-			p.blocks[i].SetIgnore()
-			p.stripped = true
+		if p.blocks[i] == nil {
+			if fields.Contains(v.Name) {
+				p.blocks[i] = v.NewBlock(p.capHint)
+			}
 		}
 	}
 	return p
@@ -2005,33 +2101,31 @@ func (p *Package) Clear() {
 	for i := range p.blocks {
 		p.blocks[i].Clear()
 	}
-	// Note: we keep all type-related data and blocks
+	// Note: we keep all type-related data and blocks, pool reference
 	// also keep pack key to avoid clearing journal/tombstone identity
 	p.nValues = 0
 	p.dirty = true
-	p.cached = false
 	p.size = 0
 }
 
 func (p *Package) Release() {
 	for i := range p.blocks {
 		p.blocks[i].Release()
+		p.blocks[i] = nil
 	}
-	p.nFields = 0
+	p.refCount = 0
 	p.nValues = 0
-	p.blocks = p.blocks[:0]
-	p.blocks = nil
 	p.key = 0
-	p.tinfo = nil
-	p.pkindex = -1
 	p.dirty = false
-	p.cached = false
-	p.stripped = false
 	p.size = 0
+	if p.pool != nil {
+		p.pool.Put(p)
+	}
 }
 
 func (p *Package) HeapSize() int {
-	var sz int
+	var sz int = szPackage
+	sz += 8 * len(p.blocks)
 	for _, v := range p.blocks {
 		sz += v.HeapSize()
 	}

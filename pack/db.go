@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/store"
 )
 
@@ -324,12 +323,12 @@ func (db *DB) storePack(name, key []byte, p *Package, fill int) (int, error) {
 	return n, nil
 }
 
-func (db *DB) loadPack(name, key []byte, unpack *Package) (*Package, error) {
+func (db *DB) loadPack(name, key []byte, unpack *Package, sz int) (*Package, error) {
 	tx, err := db.Tx(false)
 	if err != nil {
 		return nil, err
 	}
-	pkg, err := tx.loadPack(name, key, unpack)
+	pkg, err := tx.loadPack(name, key, unpack, sz)
 	tx.Rollback()
 	return pkg, err
 }
@@ -352,13 +351,13 @@ func (tx *Tx) deletePack(name, key []byte) error {
 	return nil
 }
 
-func (tx *Tx) loadPack(name, key []byte, unpack *Package) (*Package, error) {
-	return loadPackTx(tx.tx, name, key, unpack)
+func (tx *Tx) loadPack(name, key []byte, unpack *Package, sz int) (*Package, error) {
+	return loadPackTx(tx.tx, name, key, unpack, sz)
 }
 
-func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package) (*Package, error) {
+func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package, sz int) (*Package, error) {
 	if unpack == nil {
-		unpack = NewPackage(block.DefaultMaxPointsPerBlock)
+		unpack = NewPackage(sz, nil)
 	}
 	b := dbTx.Bucket(name)
 	if b == nil {
@@ -377,8 +376,10 @@ func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package) (*Package, err
 }
 
 func storePackTx(dbTx store.Tx, name, key []byte, p *Package, fill int) (int, error) {
-	if p.stripped {
-		return 0, ErrPackStripped
+	for _, v := range p.blocks {
+		if v == nil {
+			return 0, ErrPackStripped
+		}
 	}
 	buf, err := p.MarshalBinary()
 	if err != nil {

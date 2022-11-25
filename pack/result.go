@@ -14,7 +14,6 @@ import (
 type Result struct {
 	fields FieldList
 	pkg    *Package
-	table  *Table
 	tinfo  *typeInfo
 }
 
@@ -47,10 +46,7 @@ func (r Row) Field(name string) (interface{}, error) {
 }
 
 func (r *Result) Close() {
-	if r.table != nil {
-		r.table.recyclePackage(r.pkg)
-	}
-	r.table = nil
+	r.pkg.Release()
 	r.pkg = nil
 	r.tinfo = nil
 }
