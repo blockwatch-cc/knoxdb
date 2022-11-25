@@ -585,3 +585,7 @@ func (q Query) Delete(ctx context.Context) (int64, error) {
 func (q Query) Count(ctx context.Context) (int64, error) {
 	return q.table.Count(ctx, q)
 }
+
+func (q Query) Run(ctx context.Context) (*Result, error) {
+	return q.table.Query(ctx, q)
+}
