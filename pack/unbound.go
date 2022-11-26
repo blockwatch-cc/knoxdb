@@ -225,10 +225,8 @@ func ParseCondition(key, val string, fields FieldList) (UnboundCondition, error)
         f, m string
         err  error
     )
-    if ff := strings.Split(key, "."); len(ff) == 2 {
-        f, m = ff[0], ff[1]
-    } else {
-        f = ff[0]
+    f, m, ok := strings.Cut(key, ".")
+    if !ok {
         m = "eq"
     }
     field := fields.Find(f)
