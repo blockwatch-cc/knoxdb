@@ -2311,10 +2311,14 @@ func (t *Table) Stream(ctx context.Context, q Query, fn func(r Row) error) error
 
 	defer tx.Rollback()
 	if q.Order == OrderAsc {
-		return t.StreamTx(ctx, tx, q, fn)
+		err = t.StreamTx(ctx, tx, q, fn)
 	} else {
-		return t.StreamTxDesc(ctx, tx, q, fn)
+		err = t.StreamTxDesc(ctx, tx, q, fn)
 	}
+	if err == EndStream {
+		return nil
+	}
+	return err
 }
 
 // Similar to QueryTx but returns each match via callback function to allow stream
@@ -2663,7 +2667,11 @@ func (t *Table) StreamLookup(ctx context.Context, ids []uint64, fn func(r Row) e
 	}
 	defer tx.Rollback()
 
-	return t.StreamLookupTx(ctx, tx, ids, fn)
+	err = t.StreamLookupTx(ctx, tx, ids, fn)
+	if err == EndStream {
+		return nil
+	}
+	return err
 }
 
 func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn func(r Row) error) error {

@@ -37,6 +37,8 @@ var (
 	ErrIndexExists  = errors.New("pack: index already exists")
 	ErrResultClosed = errors.New("pack: result already closed")
 
+	EndStream = errors.New("end stream")
+
 	bigEndian    = binary.BigEndian
 	littleEndian = binary.LittleEndian
 )
