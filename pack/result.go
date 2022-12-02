@@ -45,6 +45,93 @@ func (r Row) Field(name string) (interface{}, error) {
 	return r.res.pkg.FieldAt(i, r.n)
 }
 
+func (r Row) Index(i int) (interface{}, error) {
+	if r.res.pkg == nil {
+		return nil, ErrResultClosed
+	}
+	return r.res.pkg.FieldAt(i, r.n)
+}
+
+func (r Row) Uint64(index int) (uint64, error) {
+	return r.res.pkg.Uint64At(index, r.n)
+}
+
+func (r Row) Uint32(index int) (uint32, error) {
+	return r.res.pkg.Uint32At(index, r.n)
+}
+
+func (r Row) Uint16(index int) (uint16, error) {
+	return r.res.pkg.Uint16At(index, r.n)
+}
+
+func (r Row) Uint8(index int) (uint8, error) {
+	return r.res.pkg.Uint8At(index, r.n)
+}
+
+func (r Row) Int256(index int) (Int256, error) {
+	return r.res.pkg.Int256At(index, r.n)
+}
+
+func (r Row) Int128(index int) (Int128, error) {
+	return r.res.pkg.Int128At(index, r.n)
+}
+
+func (r Row) Int64(index int) (int64, error) {
+	return r.res.pkg.Int64At(index, r.n)
+}
+
+func (r Row) Int32(index int) (int32, error) {
+	return r.res.pkg.Int32At(index, r.n)
+}
+
+func (r Row) Int16(index int) (int16, error) {
+	return r.res.pkg.Int16At(index, r.n)
+}
+
+func (r Row) Int8(index int) (int8, error) {
+	return r.res.pkg.Int8At(index, r.n)
+}
+
+func (r Row) Decimal256(index int) (Decimal256, error) {
+	return r.res.pkg.Decimal256At(index, r.n)
+}
+
+func (r Row) Decimal128(index int) (Decimal128, error) {
+	return r.res.pkg.Decimal128At(index, r.n)
+}
+
+func (r Row) Decimal64(index int) (Decimal64, error) {
+	return r.res.pkg.Decimal64At(index, r.n)
+}
+
+func (r Row) Decimal32(index int) (Decimal32, error) {
+	return r.res.pkg.Decimal32At(index, r.n)
+}
+
+func (r Row) Float64(index int) (float64, error) {
+	return r.res.pkg.Float64At(index, r.n)
+}
+
+func (r Row) Float32(index int) (float32, error) {
+	return r.res.pkg.Float32At(index, r.n)
+}
+
+func (r Row) String(index int) (string, error) {
+	return r.res.pkg.StringAt(index, r.n)
+}
+
+func (r Row) Bytes(index int) ([]byte, error) {
+	return r.res.pkg.BytesAt(index, r.n)
+}
+
+func (r Row) Bool(index int) (bool, error) {
+	return r.res.pkg.BoolAt(index, r.n)
+}
+
+func (r Row) Time(index int) (time.Time, error) {
+	return r.res.pkg.TimeAt(index, r.n)
+}
+
 func (r *Result) Close() {
 	r.pkg.Release()
 	r.pkg = nil
