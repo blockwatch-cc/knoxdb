@@ -1,5 +1,7 @@
 // Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
+//go:build ignore
+// +build ignore
 
 package pack
 
@@ -26,19 +28,20 @@ import (
 )
 
 func ReintepretUint64ToByteSlice(src []uint64) []byte {
-	header := *(*reflect.SliceHeader)(unsafe.Pointer(&src))
+	header := (*reflect.SliceHeader)(unsafe.Pointer(&src))
 	header.Len *= 8
 	header.Cap *= 8
 	return *(*[]byte)(unsafe.Pointer(&header))
 }
 
 func ReintepretAnySliceToByteSlice(src interface{}) []byte {
-	var header reflect.SliceHeader
 	v := reflect.ValueOf(src)
 	so := int(reflect.TypeOf(src).Elem().Size())
-	header.Data = v.Pointer()
-	header.Len = so * v.Len()
-	header.Cap = so * v.Cap()
+	header := reflect.SliceHeader{
+		Data: v.Pointer(),
+		Len:  so * v.Len(),
+		Cap:  so * v.Cap(),
+	}
 	return *(*[]byte)(unsafe.Pointer(&header))
 }
 

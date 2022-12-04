@@ -853,7 +853,9 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 					return err
 				}
 			} else {
-				dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
+				// copy to avoid memleaks of large blocks
+				// dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
+				dst.SetString(string(b.Bytes.Elem(pos)))
 			}
 
 		case FieldTypeDatetime:
