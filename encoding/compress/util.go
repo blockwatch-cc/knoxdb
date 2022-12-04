@@ -101,18 +101,37 @@ func ReintepretUint8ToInt8Slice(src []uint8) []int8 {
 	return *(*[]int8)(unsafe.Pointer(&src))
 }
 
+// func UnsafeGetBytes(s string) []byte {
+// 	l := len(s)
+// 	b := (*(*[]byte)(unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)))))
+// 	if cap(b) < l {
+// 		// copy
+// 		return []byte(s)
+// 	}
+// 	return b[:l]
+// }
+
 func UnsafeGetBytes(s string) []byte {
-	l := len(s)
-	b := (*(*[]byte)(unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)))))
-	if cap(b) < l {
-		// copy
-		return []byte(s)
+	sh := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	bh := reflect.SliceHeader{
+		Data: sh.Data,
+		Len:  sh.Len,
+		Cap:  sh.Len,
 	}
-	return b[:l]
+	return *(*[]byte)(unsafe.Pointer(&bh))
 }
 
+// func UnsafeGetString(buf []byte) string {
+// 	return *(*string)(unsafe.Pointer(&buf))
+// }
+
 func UnsafeGetString(buf []byte) string {
-	return *(*string)(unsafe.Pointer(&buf))
+	bh := (*reflect.SliceHeader)(unsafe.Pointer(&buf))
+	sh := reflect.StringHeader{
+		Data: bh.Data,
+		Len:  bh.Len,
+	}
+	return *(*string)(unsafe.Pointer(&sh))
 }
 
 func MaxUint64(data []uint64) uint64 {
