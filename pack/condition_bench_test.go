@@ -52,42 +52,42 @@ var packBenchmarkSizes = []packBenchmarkSize{
 var (
 	benchMaxConds = 6
 	benchFields   = FieldList{
-		Field{
+		&Field{
 			Index: 0,
 			Name:  "uint64",
 			Alias: "",
 			Type:  FieldTypeUint64,
 			Flags: FlagPrimary,
 		},
-		Field{
+		&Field{
 			Index: 1,
 			Name:  "int64",
 			Alias: "",
 			Type:  FieldTypeInt64,
 			Flags: 0,
 		},
-		Field{
+		&Field{
 			Index: 2,
 			Name:  "float64",
 			Alias: "",
 			Type:  FieldTypeFloat64,
 			Flags: 0,
 		},
-		Field{
+		&Field{
 			Index: 3,
 			Name:  "uint8",
 			Alias: "",
 			Type:  FieldTypeUint8,
 			Flags: 0,
 		},
-		Field{
+		&Field{
 			Index: 4,
 			Name:  "uint32",
 			Alias: "",
 			Type:  FieldTypeUint32,
 			Flags: 0,
 		},
-		Field{
+		&Field{
 			Index: 5,
 			Name:  "int16",
 			Alias: "",
@@ -95,7 +95,7 @@ var (
 			Flags: 0,
 		},
 		// used for IN bechmarks
-		Field{
+		&Field{
 			Index: 6,
 			Name:  "bytes",
 			Alias: "",
@@ -114,7 +114,7 @@ var (
 )
 
 func makeTestPackage(sz int) *Package {
-	pkg := NewPackage(sz)
+	pkg := NewPackage(sz, nil)
 	pkg.InitFields(benchFields, nil)
 	for i := 0; i < sz; i++ {
 		pkg.Grow(1)

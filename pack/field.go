@@ -1,21 +1,23 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//
+
 package pack
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
-	"blockwatch.cc/knoxdb/filter/bloomVec"
-	"blockwatch.cc/knoxdb/filter/llbVec"
+	"blockwatch.cc/knoxdb/filter/bloom"
+	"blockwatch.cc/knoxdb/filter/loglogbeta"
 
 	"blockwatch.cc/knoxdb/util"
 
@@ -38,6 +40,9 @@ const (
 	flagFloatType
 	flagIntType
 	flagUintType
+	flagStringerType
+	flagBinaryMarshalerType
+	flagTextMarshalerType
 )
 
 func (f FieldFlags) Compression() block.Compression {
@@ -81,30 +86,30 @@ func (f FieldFlags) String() string {
 	return strings.Join(s, ",")
 }
 
-type FieldType string
+type FieldType byte
 
 const (
-	FieldTypeUndefined  FieldType = ""
-	FieldTypeBytes      FieldType = "bytes"      // BlockBytes
-	FieldTypeString     FieldType = "string"     // BlockString
-	FieldTypeDatetime   FieldType = "datetime"   // BlockTime
-	FieldTypeBoolean    FieldType = "boolean"    // BlockBool
-	FieldTypeFloat64    FieldType = "float64"    // BlockFloat64
-	FieldTypeFloat32    FieldType = "float32"    // BlockFloat32
-	FieldTypeInt256     FieldType = "int256"     // BlockInt256
-	FieldTypeInt128     FieldType = "int128"     // BlockInt128
-	FieldTypeInt64      FieldType = "int64"      // BlockInt64
-	FieldTypeInt32      FieldType = "int32"      // BlockInt32
-	FieldTypeInt16      FieldType = "int16"      // BlockInt16
-	FieldTypeInt8       FieldType = "int8"       // BlockInt8
-	FieldTypeUint64     FieldType = "uint64"     // BlockUint64
-	FieldTypeUint32     FieldType = "uint32"     // BlockUint32
-	FieldTypeUint16     FieldType = "uint16"     // BlockUint16
-	FieldTypeUint8      FieldType = "uint8"      // BlockUint8
-	FieldTypeDecimal256 FieldType = "decimal256" // BlockDecimal256
-	FieldTypeDecimal128 FieldType = "decimal128" // BlockDecimal128
-	FieldTypeDecimal64  FieldType = "decimal64"  // BlockDecimal64
-	FieldTypeDecimal32  FieldType = "decimal32"  // BlockDecimal32
+	FieldTypeUndefined  FieldType = iota
+	FieldTypeDatetime             // BlockTime
+	FieldTypeInt64                // BlockInt64
+	FieldTypeUint64               // BlockUint64
+	FieldTypeFloat64              // BlockFloat64
+	FieldTypeBoolean              // BlockBool
+	FieldTypeString               // BlockString
+	FieldTypeBytes                // BlockBytes
+	FieldTypeInt32                // BlockInt32
+	FieldTypeInt16                // BlockInt16
+	FieldTypeInt8                 // BlockInt8
+	FieldTypeUint32               // BlockUint32
+	FieldTypeUint16               // BlockUint16
+	FieldTypeUint8                // BlockUint8
+	FieldTypeFloat32              // BlockFloat32
+	FieldTypeInt256               // BlockInt256
+	FieldTypeInt128               // BlockInt128
+	FieldTypeDecimal256           // BlockDecimal256
+	FieldTypeDecimal128           // BlockDecimal128
+	FieldTypeDecimal64            // BlockDecimal64
+	FieldTypeDecimal32            // BlockDecimal32
 
 	// TODO: extend pack encoders and block types
 	// FieldTypeDate                   = "date" // BlockDate (unix second / 24*3600)
@@ -127,14 +132,25 @@ func (f Field) NewBlock(sz int) *block.Block {
 	return block.NewBlock(f.Type.BlockType(), f.Flags.Compression(), sz)
 }
 
-type FieldList []Field
+type FieldList []*Field
 
-func (l FieldList) Key() string {
-	s := make([]string, len(l))
+func (l FieldList) Sort() FieldList {
+	sort.Slice(l, func(i, j int) bool { return l[i].Index < l[j].Index })
+	return l
+}
+
+func (l FieldList) MaskString(m FieldList) string {
+	return hex.EncodeToString(l.Mask(m))
+}
+
+func (l FieldList) Mask(m FieldList) []byte {
+	b := make([]byte, (len(l)+7)>>3)
 	for i, v := range l {
-		s[i] = v.Name
+		if m.Contains(v.Name) {
+			b[i>>3] |= byte(1 << uint(i&0x7))
+		}
 	}
-	return strings.Join(s, "")
+	return b
 }
 
 func (l FieldList) Names() []string {
@@ -153,13 +169,13 @@ func (l FieldList) Aliases() []string {
 	return s
 }
 
-func (l FieldList) Find(name string) Field {
+func (l FieldList) Find(name string) *Field {
 	for _, v := range l {
 		if v.Name == name || v.Alias == name {
 			return v
 		}
 	}
-	return Field{Index: -1, Name: name, Alias: name}
+	return &Field{Index: -1, Name: name, Alias: name}
 }
 
 func (l FieldList) Select(names ...string) FieldList {
@@ -172,11 +188,11 @@ func (l FieldList) Select(names ...string) FieldList {
 	return res
 }
 
-func (l FieldList) Add(field Field) FieldList {
+func (l FieldList) Add(field *Field) FieldList {
 	return append(l, field)
 }
 
-func (l FieldList) AddUnique(fields ...Field) FieldList {
+func (l FieldList) AddUnique(fields ...*Field) FieldList {
 	res := make(FieldList, len(l))
 	copy(res, l)
 	for _, f := range fields {
@@ -197,13 +213,13 @@ func (l FieldList) Indexed() FieldList {
 	return res
 }
 
-func (l FieldList) Pk() Field {
+func (l FieldList) Pk() *Field {
 	for _, v := range l {
 		if v.Flags&FlagPrimary > 0 {
 			return v
 		}
 	}
-	return Field{Index: -1}
+	return &Field{Index: -1}
 }
 
 func (l FieldList) PkIndex() int {
@@ -224,7 +240,7 @@ func (l FieldList) Contains(name string) bool {
 	return false
 }
 
-func (l FieldList) MergeUnique(fields ...Field) FieldList {
+func (l FieldList) MergeUnique(fields ...*Field) FieldList {
 	for _, v := range fields {
 		if !v.IsValid() {
 			continue
@@ -271,10 +287,12 @@ func Fields(proto interface{}) (FieldList, error) {
 	fields := make(FieldList, len(tinfo.fields))
 	for i, finfo := range tinfo.fields {
 		f := finfo.value(val)
-		fields[i].Name = finfo.name
-		fields[i].Alias = finfo.alias
-		fields[i].Index = i
-		fields[i].Flags = finfo.flags
+		fields[i] = &Field{
+			Name:  finfo.name,
+			Alias: finfo.alias,
+			Index: i,
+			Flags: finfo.flags,
+		}
 		switch f.Kind() {
 		case reflect.Int, reflect.Int64:
 			fields[i].Type = FieldTypeInt64
@@ -300,18 +318,17 @@ func Fields(proto interface{}) (FieldList, error) {
 			fields[i].Type = FieldTypeString
 		case reflect.Slice:
 			// check if type implements BinaryMarshaler -> BlockBytes
-			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				// log.Debugf("Slice type field %s type %s implements binary marshaler", finfo.name, f.Type().String())
+			if canMarshalBinary(f) {
 				fields[i].Type = FieldTypeBytes
 				break
 			}
 			// check if type implements TextMarshaler -> BlockString
-			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
+			if canMarshalText(f) {
 				fields[i].Type = FieldTypeString
 				break
 			}
 			// check if type implements fmt.Stringer -> BlockString
-			if f.CanInterface() && f.Type().Implements(stringerType) {
+			if canMarshalString(f) {
 				fields[i].Type = FieldTypeString
 				break
 			}
@@ -339,7 +356,7 @@ func Fields(proto interface{}) (FieldList, error) {
 				fields[i].Type = FieldTypeDecimal256
 				fields[i].Scale = finfo.scale
 			default:
-				if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
+				if canMarshalBinary(f) {
 					fields[i].Type = FieldTypeBytes
 				} else {
 					return nil, fmt.Errorf("pack: unsupported embedded struct type %s", f.Type().String())
@@ -354,8 +371,7 @@ func Fields(proto interface{}) (FieldList, error) {
 				fields[i].Type = FieldTypeInt256
 			default:
 				// check if type implements BinaryMarshaler -> BlockBytes
-				if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-					log.Debugf("Array type field %s type %s implements binary marshaler", finfo.name, f.Type().String())
+				if canMarshalBinary(f) {
 					fields[i].Type = FieldTypeBytes
 				} else {
 					return nil, fmt.Errorf("pack: unsupported array type %s", f.Type().String())
@@ -375,6 +391,53 @@ func Fields(proto interface{}) (FieldList, error) {
 		}
 	}
 	return fields, nil
+}
+
+func (t FieldType) String() string {
+	switch t {
+	case FieldTypeBytes:
+		return "bytes"
+	case FieldTypeString:
+		return "string"
+	case FieldTypeDatetime:
+		return "datetime"
+	case FieldTypeBoolean:
+		return "boolean"
+	case FieldTypeFloat64:
+		return "float64"
+	case FieldTypeFloat32:
+		return "float32"
+	case FieldTypeInt256:
+		return "int256"
+	case FieldTypeInt128:
+		return "int128"
+	case FieldTypeInt64:
+		return "int64"
+	case FieldTypeInt32:
+		return "int32"
+	case FieldTypeInt16:
+		return "int16"
+	case FieldTypeInt8:
+		return "int8"
+	case FieldTypeUint64:
+		return "uint64"
+	case FieldTypeUint32:
+		return "uint32"
+	case FieldTypeUint16:
+		return "uint16"
+	case FieldTypeUint8:
+		return "uint8"
+	case FieldTypeDecimal256:
+		return "decimal256"
+	case FieldTypeDecimal128:
+		return "decimal128"
+	case FieldTypeDecimal64:
+		return "decimal64"
+	case FieldTypeDecimal32:
+		return "decimal32"
+	default:
+		return ""
+	}
 }
 
 func ParseFieldType(s string) FieldType {
@@ -426,38 +489,38 @@ func ParseFieldType(s string) FieldType {
 
 func (t FieldType) BlockType() block.BlockType {
 	switch t {
-	case FieldTypeBytes:
-		return block.BlockBytes
-	case FieldTypeString:
-		return block.BlockString
-	case FieldTypeDatetime:
-		return block.BlockTime
+	case FieldTypeUint64:
+		return block.BlockUint64
+	case FieldTypeInt64, FieldTypeDecimal64:
+		return block.BlockInt64
+	case FieldTypeUint32:
+		return block.BlockUint32
+	case FieldTypeInt32, FieldTypeDecimal32:
+		return block.BlockInt32
+	case FieldTypeUint16:
+		return block.BlockUint16
+	case FieldTypeInt16:
+		return block.BlockInt16
+	case FieldTypeUint8:
+		return block.BlockUint8
+	case FieldTypeInt8:
+		return block.BlockInt8
 	case FieldTypeBoolean:
 		return block.BlockBool
+	case FieldTypeDatetime:
+		return block.BlockTime
 	case FieldTypeFloat64:
 		return block.BlockFloat64
 	case FieldTypeFloat32:
 		return block.BlockFloat32
+	case FieldTypeBytes:
+		return block.BlockBytes
+	case FieldTypeString:
+		return block.BlockString
 	case FieldTypeInt128, FieldTypeDecimal128:
 		return block.BlockInt128
 	case FieldTypeInt256, FieldTypeDecimal256:
 		return block.BlockInt256
-	case FieldTypeInt64, FieldTypeDecimal64:
-		return block.BlockInt64
-	case FieldTypeInt32, FieldTypeDecimal32:
-		return block.BlockInt32
-	case FieldTypeInt16:
-		return block.BlockInt16
-	case FieldTypeInt8:
-		return block.BlockInt8
-	case FieldTypeUint64:
-		return block.BlockUint64
-	case FieldTypeUint32:
-		return block.BlockUint32
-	case FieldTypeUint16:
-		return block.BlockUint16
-	case FieldTypeUint8:
-		return block.BlockUint8
 	default:
 		return block.BlockBytes
 	}
@@ -468,7 +531,7 @@ func (t FieldType) IsValid() bool {
 }
 
 func (r FieldType) MarshalText() ([]byte, error) {
-	return []byte(r), nil
+	return []byte(r.String()), nil
 }
 
 func (t *FieldType) UnmarshalText(data []byte) error {
@@ -480,7 +543,7 @@ func (t *FieldType) UnmarshalText(data []byte) error {
 	return nil
 }
 
-func (t FieldType) ParseAs(s string, f Field) (interface{}, error) {
+func (t FieldType) ParseAs(s string, f *Field) (interface{}, error) {
 	switch t {
 	case FieldTypeBytes:
 		return []byte(s), nil
@@ -599,7 +662,7 @@ func (t FieldType) ParseAs(s string, f Field) (interface{}, error) {
 	}
 }
 
-func (t FieldType) ParseSliceAs(s string, f Field) (interface{}, error) {
+func (t FieldType) ParseSliceAs(s string, f *Field) (interface{}, error) {
 	vv := strings.Split(s, ",")
 	switch t {
 	case FieldTypeBytes:
@@ -795,7 +858,7 @@ func (t FieldType) ParseSliceAs(s string, f Field) (interface{}, error) {
 	}
 }
 
-func (t FieldType) SliceToString(val interface{}, f Field) string {
+func (t FieldType) SliceToString(val interface{}, f *Field) string {
 	ss := make([]string, 0)
 	switch t {
 	case FieldTypeBytes:
@@ -939,7 +1002,7 @@ func (t FieldType) SliceToString(val interface{}, f Field) string {
 func (t FieldType) Equal(xa, xb interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
-		return bytes.Compare(xa.([]byte), xb.([]byte)) == 0
+		return bytes.Equal(xa.([]byte), xb.([]byte))
 	case FieldTypeString:
 		return xa.(string) == xb.(string)
 	case FieldTypeDatetime:
@@ -987,7 +1050,7 @@ func (t FieldType) EqualAt(pkg *Package, index, pos int, val interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
 		a, _ := pkg.BytesAt(index, pos)
-		return bytes.Compare(a, val.([]byte)) == 0
+		return bytes.Equal(a, val.([]byte))
 	case FieldTypeString:
 		a, _ := pkg.StringAt(index, pos)
 		return a == val.(string)
@@ -2640,11 +2703,11 @@ func (t FieldType) EqualPacksAt(p1 *Package, i1, n1 int, p2 *Package, i2, n2 int
 	case FieldTypeBytes:
 		v1, _ := p1.BytesAt(i1, n1)
 		v2, _ := p2.BytesAt(i2, n2)
-		return bytes.Compare(v1, v2) == 0
+		return bytes.Equal(v1, v2)
 	case FieldTypeString:
 		v1, _ := p1.StringAt(i1, n1)
 		v2, _ := p2.StringAt(i2, n2)
-		return strings.Compare(v1, v2) == 0
+		return v1 == v2
 	case FieldTypeDatetime:
 		v1, _ := p1.TimeAt(i1, n1)
 		v2, _ := p2.TimeAt(i2, n2)
@@ -2726,13 +2789,12 @@ func (t FieldType) EqualPacksAt(p1 *Package, i1, n1 int, p2 *Package, i2, n2 int
 	}
 }
 
-func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor int) *bloomVec.Filter {
+func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor int) *bloom.Filter {
 	if cardinality <= 0 || factor <= 0 {
 		return nil
 	}
 	m := int(cardinality) * factor * 8 // unit is bits
-	flt := bloomVec.NewFilter(m)
-	var buf [8]byte
+	flt := bloom.NewFilter(m)
 	switch t {
 	case FieldTypeBytes, FieldTypeString:
 		for i := 0; i < b.Bytes.Len(); i++ {
@@ -2755,10 +2817,7 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 	case FieldTypeInt32, FieldTypeDecimal32:
 		flt.AddManyInt32(b.Int32)
 	case FieldTypeInt16:
-		for _, v := range b.Int64 {
-			bigEndian.PutUint16(buf[:], uint16(v))
-			flt.Add(buf[:2])
-		}
+		flt.AddManyInt16(b.Int16)
 	case FieldTypeInt8:
 		for _, v := range b.Int8 {
 			flt.Add([]byte{byte(v)})
@@ -2768,24 +2827,15 @@ func (t FieldType) BuildBloomFilter(b *block.Block, cardinality uint32, factor i
 	case FieldTypeUint32:
 		flt.AddManyUint32(b.Uint32)
 	case FieldTypeUint16:
-		for _, v := range b.Uint16 {
-			bigEndian.PutUint16(buf[:], v)
-			flt.Add(buf[:2])
-		}
+		flt.AddManyUint16(b.Uint16)
 	case FieldTypeUint8:
 		for _, v := range b.Uint8 {
 			flt.Add([]byte{v})
 		}
 	case FieldTypeFloat64:
-		for _, v := range b.Float64 {
-			bigEndian.PutUint64(buf[:], math.Float64bits(v))
-			flt.Add(buf[:])
-		}
+		flt.AddManyFloat64(b.Float64)
 	case FieldTypeFloat32:
-		for _, v := range b.Float32 {
-			bigEndian.PutUint32(buf[:], math.Float32bits(v))
-			flt.Add(buf[:4])
-		}
+		flt.AddManyFloat32(b.Float32)
 	default:
 		return nil
 	}
@@ -2809,99 +2859,87 @@ func (t FieldType) BuildBitmap(b *block.Block) *Bitset {
 	return flt
 }
 
-// used for bloom filter test value compilation
-func (t FieldType) Bytes(val interface{}) []byte {
+// Hash produces a hash value compatible with bloom filters.
+func (t FieldType) Hash(val interface{}) [2]uint32 {
 	if val == nil {
-		return nil
+		return [2]uint32{}
 	}
-	var buf [8]byte
 	switch t {
 	case FieldTypeBytes:
-		return val.([]byte)
+		return bloom.Hash(val.([]byte))
 	case FieldTypeString:
 		if s, ok := val.(string); ok {
-			return compress.UnsafeGetBytes(s)
+			return bloom.Hash(compress.UnsafeGetBytes(s))
 		}
-		return val.([]byte)
+		return bloom.Hash(val.([]byte))
 	case FieldTypeDatetime:
 		if i, ok := val.(int64); ok {
-			bigEndian.PutUint64(buf[:], uint64(i))
+			return bloom.HashInt64(i)
 		} else {
-			bigEndian.PutUint64(buf[:], uint64(val.(time.Time).UnixNano()))
+			return bloom.HashInt64(val.(time.Time).UnixNano())
 		}
-		return buf[:]
 	case FieldTypeBoolean:
 		if v := val.(bool); v {
-			return []byte{1}
+			return bloom.Hash([]byte{1})
 		} else {
-			return []byte{0}
+			return bloom.Hash([]byte{0})
 		}
 	case FieldTypeInt256:
 		buf := val.(Int256).Bytes32()
-		return buf[:]
+		return bloom.Hash(buf[:])
 	case FieldTypeDecimal256:
 		if i, ok := val.(Int256); ok {
 			buf := i.Bytes32()
-			return buf[:]
+			return bloom.Hash(buf[:])
 		} else {
 			buf := val.(decimal.Decimal256).Int256().Bytes32()
-			return buf[:]
+			return bloom.Hash(buf[:])
 		}
 	case FieldTypeInt128:
 		buf := val.(Int128).Bytes16()
-		return buf[:]
+		return bloom.Hash(buf[:])
 	case FieldTypeDecimal128:
 		if i, ok := val.(Int128); ok {
 			buf := i.Bytes16()
-			return buf[:]
+			return bloom.Hash(buf[:])
 		} else {
 			buf := val.(decimal.Decimal128).Int128().Bytes16()
-			return buf[:]
+			return bloom.Hash(buf[:])
 		}
 	case FieldTypeInt64:
-		bigEndian.PutUint64(buf[:], uint64(val.(int64)))
-		return buf[:]
+		return bloom.HashInt64(val.(int64))
 	case FieldTypeDecimal64:
 		if i, ok := val.(int64); ok {
-			bigEndian.PutUint64(buf[:], uint64(i))
+			return bloom.HashInt64(i)
 		} else {
-			bigEndian.PutUint64(buf[:], uint64(val.(decimal.Decimal64).Int64()))
+			return bloom.HashInt64(val.(decimal.Decimal64).Int64())
 		}
-		return buf[:]
 	case FieldTypeInt32:
-		bigEndian.PutUint32(buf[:], uint32(val.(int32)))
-		return buf[:4]
+		return bloom.HashInt32(val.(int32))
 	case FieldTypeDecimal32:
 		if i, ok := val.(int32); ok {
-			bigEndian.PutUint64(buf[:], uint64(i))
+			return bloom.HashInt32(i)
 		} else {
-			bigEndian.PutUint32(buf[:], uint32(val.(decimal.Decimal32).Int32()))
+			return bloom.HashInt32(val.(decimal.Decimal32).Int32())
 		}
-		return buf[:4]
 	case FieldTypeInt16:
-		bigEndian.PutUint16(buf[:], uint16(val.(int16)))
-		return buf[:2]
+		return bloom.HashInt16(val.(int16))
 	case FieldTypeInt8:
-		return []byte{byte(val.(int8))}
+		return bloom.Hash([]byte{byte(val.(int8))})
 	case FieldTypeUint64:
-		bigEndian.PutUint64(buf[:], val.(uint64))
-		return buf[:]
+		return bloom.HashUint64(val.(uint64))
 	case FieldTypeUint32:
-		bigEndian.PutUint32(buf[:], val.(uint32))
-		return buf[:4]
+		return bloom.HashUint32(val.(uint32))
 	case FieldTypeUint16:
-		bigEndian.PutUint16(buf[:], val.(uint16))
-		return buf[:2]
+		return bloom.HashUint16(val.(uint16))
 	case FieldTypeUint8:
-		return []byte{byte(val.(uint8))}
+		return bloom.Hash([]byte{byte(val.(uint8))})
 	case FieldTypeFloat64:
-		bigEndian.PutUint64(buf[:], math.Float64bits(val.(float64)))
-		return buf[:]
+		return bloom.HashFloat64(val.(float64))
 	case FieldTypeFloat32:
-		bigEndian.PutUint32(buf[:], math.Float32bits(val.(float32)))
-		return buf[:4]
+		return bloom.HashFloat32(val.(float32))
 	default:
-		return nil
+		return [2]uint32{}
 	}
 }
 
@@ -2920,9 +2958,9 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 		return 2
 	}
 
-	var filter *llbVec.LogLogBeta
+	var filter *loglogbeta.LogLogBeta
 	if t != FieldTypeBoolean {
-		filter = llbVec.NewFilterWithPrecision(uint32(precision))
+		filter = loglogbeta.NewFilterWithPrecision(uint32(precision))
 	}
 	var buf [8]byte
 	switch t {

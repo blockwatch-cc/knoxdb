@@ -13,7 +13,7 @@ import (
 
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/decimal"
-	"blockwatch.cc/knoxdb/filter/bloomVec"
+	"blockwatch.cc/knoxdb/filter/bloom"
 )
 
 const (
@@ -24,7 +24,7 @@ const (
 var (
 	szPackInfo    = int(reflect.TypeOf(PackInfo{}).Size())
 	szBlockInfo   = int(reflect.TypeOf(BlockInfo{}).Size())
-	szBloomFilter = int(reflect.TypeOf(bloomVec.Filter{}).Size())
+	szBloomFilter = int(reflect.TypeOf(bloom.Filter{}).Size())
 	szPackIndex   = int(reflect.TypeOf(PackIndex{}).Size())
 	szPackage     = int(reflect.TypeOf(Package{}).Size())
 	szField       = int(reflect.TypeOf(Field{}).Size())
@@ -34,7 +34,7 @@ var (
 // typeInfo holds details for the representation of a type.
 type typeInfo struct {
 	name   string
-	fields []fieldInfo
+	fields []*fieldInfo
 	gotype bool
 }
 
@@ -50,10 +50,12 @@ func (t *typeInfo) PkColumn() int {
 func (t *typeInfo) Clone() *typeInfo {
 	clone := &typeInfo{
 		name:   t.name,
-		fields: make([]fieldInfo, len(t.fields)),
+		fields: make([]*fieldInfo, len(t.fields), len(t.fields)),
 		gotype: t.gotype,
 	}
-	copy(clone.fields, t.fields)
+	for i, v := range t.fields {
+		clone.fields[i] = v.Clone()
+	}
 	return clone
 }
 
@@ -67,6 +69,13 @@ type fieldInfo struct {
 	typname  string
 	blockid  int
 	override FieldType
+}
+
+func (f *fieldInfo) Clone() *fieldInfo {
+	fi := *f
+	fi.idx = make([]int, len(f.idx), len(f.idx))
+	copy(fi.idx, f.idx)
+	return &fi
 }
 
 func (f fieldInfo) String() string {
@@ -85,6 +94,22 @@ var (
 	stringerType          = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
 	byteSliceType         = reflect.TypeOf([]byte(nil))
 )
+
+func canMarshalBinary(v reflect.Value) bool {
+	return v.CanInterface() &&
+		v.Type().Implements(binaryMarshalerType) &&
+		reflect.PointerTo(v.Type()).Implements(binaryUnmarshalerType)
+}
+
+func canMarshalText(v reflect.Value) bool {
+	return v.CanInterface() &&
+		v.Type().Implements(textMarshalerType) &&
+		reflect.PointerTo(v.Type()).Implements(textUnmarshalerType)
+}
+
+func canMarshalString(v reflect.Value) bool {
+	return v.CanInterface() && v.Type().Implements(stringerType)
+}
 
 // getTypeInfo returns the typeInfo structure with details necessary
 // for marshaling and unmarshaling typ.
@@ -129,9 +154,10 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 				if err != nil {
 					return nil, err
 				}
-				for _, finfo := range inner.fields {
+				for _, f := range inner.fields {
+					finfo := f.Clone()
 					finfo.idx = append([]int{i}, finfo.idx...)
-					if err := addFieldInfo(typ, tinfo, &finfo); err != nil {
+					if err := addFieldInfo(typ, tinfo, finfo); err != nil {
 						return nil, err
 					}
 				}
@@ -139,7 +165,7 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 			}
 		}
 
-		finfo, err := structFieldInfo(typ, &f)
+		finfo, err := structFieldInfo(&f)
 		if err != nil {
 			return nil, err
 		}
@@ -155,7 +181,7 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 
 		// extract long name
 		if a := f.Tag.Get(tagAlias); a != "-" {
-			finfo.alias = strings.Split(a, ",")[0]
+			finfo.alias, _, _ = strings.Cut(a, ",")
 		}
 
 		// Add the field if it doesn't conflict with other fields.
@@ -170,18 +196,29 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 }
 
 // structFieldInfo builds and returns a fieldInfo for f.
-func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, error) {
+func structFieldInfo(f *reflect.StructField) (*fieldInfo, error) {
 	finfo := &fieldInfo{idx: f.Index, typname: f.Type.String()}
 	tag := f.Tag.Get(tagName)
 	kind := f.Type.Kind()
 	typname := f.Type.String()
 
+	// detect marshaler types
+	if f.Type.Implements(binaryMarshalerType) && reflect.PointerTo(f.Type).Implements(binaryUnmarshalerType) {
+		finfo.flags |= flagBinaryMarshalerType
+	}
+	if f.Type.Implements(textMarshalerType) && reflect.PointerTo(f.Type).Implements(textUnmarshalerType) {
+		finfo.flags |= flagTextMarshalerType
+	}
+	if f.Type.Implements(stringerType) {
+		finfo.flags |= flagStringerType
+	}
+
 	tokens := strings.Split(tag, ",")
 	if len(tokens) > 1 {
 		tag = tokens[0]
 		for _, flag := range tokens[1:] {
-			ff := strings.Split(flag, "=")
-			switch ff[0] {
+			key, val, ok := strings.Cut(flag, "=")
+			switch key {
 			case "u8":
 				finfo.override = FieldTypeUint8
 			case "u16":
@@ -246,10 +283,10 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				}
 				finfo.typname = typname
 				finfo.scale = prec
-				if len(ff) > 1 {
-					scale, err := strconv.Atoi(ff[1])
+				if ok {
+					scale, err := strconv.Atoi(val)
 					if err != nil {
-						return nil, fmt.Errorf("pack: invalid scale value %s on field '%s': %v", ff[1], tag, err)
+						return nil, fmt.Errorf("pack: invalid scale value %s on field '%s': %v", val, tag, err)
 					}
 					if scale < 0 || scale > prec {
 						return nil, fmt.Errorf("pack: out of bound scale %d on field '%s', should be [0..%d]", scale, tag, prec)
@@ -263,11 +300,11 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				// 2: 0.2% false positive rate (2 bytes per item)
 				// 3: 0.02% false positive rate (3 bytes per item)
 				// 4: 0.002% false positive rate (4 bytes per item)
-				finfo.scale = 1
-				if len(ff) > 1 {
-					factor, err := strconv.Atoi(ff[1])
+				finfo.scale = 2
+				if ok {
+					factor, err := strconv.Atoi(val)
 					if err != nil {
-						return nil, fmt.Errorf("pack: invalid bloom filter factor %s on field '%s': %v", ff[1], tag, err)
+						return nil, fmt.Errorf("pack: invalid bloom filter factor %s on field '%s': %v", val, tag, err)
 					}
 					if factor < 1 || factor > 4 {
 						return nil, fmt.Errorf("pack: out of bound bloom factor %d on field '%s', should be [1..4]", factor, tag)
@@ -276,7 +313,7 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 					finfo.scale = factor
 				}
 			default:
-				return nil, fmt.Errorf("pack: unsupported struct tag '%s' on field '%s'", ff[0], tag)
+				return nil, fmt.Errorf("pack: unsupported struct tag '%s' on field '%s'", key, tag)
 			}
 			// check type override matches the Go type
 			switch finfo.override {
@@ -285,14 +322,14 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 					// OK
 				default:
-					return nil, fmt.Errorf("pack: incompatible type tag '%s' on unsigned field '%s' (%s/%s)", ff[0], tag, typname, kind)
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on unsigned field '%s' (%s/%s)", key, tag, typname, kind)
 				}
 			case FieldTypeInt8, FieldTypeInt16, FieldTypeInt32, FieldTypeInt64, FieldTypeInt128, FieldTypeInt256:
 				switch kind {
 				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 					// OK
 				default:
-					return nil, fmt.Errorf("pack: incompatible type tag '%s' on integer field '%s' (%s/%s)", ff[0], tag, typname, kind)
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on integer field '%s' (%s/%s)", key, tag, typname, kind)
 				}
 			case FieldTypeDecimal32, FieldTypeDecimal64, FieldTypeDecimal128, FieldTypeDecimal256:
 				switch kind {
@@ -303,7 +340,7 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				case reflect.Float32, reflect.Float64:
 					finfo.flags |= flagFloatType
 				default:
-					return nil, fmt.Errorf("pack: incompatible type tag '%s' on decimal field '%s' (%s/%s)", ff[0], tag, typname, kind)
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on decimal field '%s' (%s/%s)", key, tag, typname, kind)
 				}
 			}
 		}
@@ -322,7 +359,7 @@ func addFieldInfo(typ reflect.Type, tinfo *typeInfo, newf *fieldInfo) error {
 	var conflicts []int
 	// Find all conflicts.
 	for i := range tinfo.fields {
-		oldf := &tinfo.fields[i]
+		oldf := tinfo.fields[i]
 		if newf.name == oldf.name {
 			conflicts = append(conflicts, i)
 		}
@@ -330,7 +367,7 @@ func addFieldInfo(typ reflect.Type, tinfo *typeInfo, newf *fieldInfo) error {
 
 	// Return the first error.
 	for _, i := range conflicts {
-		oldf := &tinfo.fields[i]
+		oldf := tinfo.fields[i]
 		f1 := typ.FieldByIndex(oldf.idx)
 		f2 := typ.FieldByIndex(newf.idx)
 		return fmt.Errorf("%s: %s field %q with tag %q conflicts with field %q with tag %q",
@@ -341,7 +378,7 @@ func addFieldInfo(typ reflect.Type, tinfo *typeInfo, newf *fieldInfo) error {
 	newf.blockid = len(tinfo.fields)
 
 	// Without conflicts, add the new field and return.
-	tinfo.fields = append(tinfo.fields, *newf)
+	tinfo.fields = append(tinfo.fields, newf)
 	return nil
 }
 

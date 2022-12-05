@@ -22,29 +22,29 @@ var packBenchmarkReadWriteSizes = []packBenchmarkSize{
 }
 
 var readWriteTestFields = FieldList{
-	Field{Index: 0, Name: "I", Alias: "row_id", Type: FieldTypeUint64, Flags: FlagPrimary},
-	Field{Index: 1, Name: "T", Alias: "time", Type: FieldTypeDatetime, Flags: 0},
-	Field{Index: 2, Name: "h", Alias: "height", Type: FieldTypeUint64, Flags: 0},
-	Field{Index: 3, Name: "p", Alias: "tx_n", Type: FieldTypeInt64, Flags: 0},
-	Field{Index: 4, Name: "H", Alias: "tx_id", Type: FieldTypeBytes, Flags: 0},
-	Field{Index: 5, Name: "L", Alias: "locktime", Type: FieldTypeInt64, Flags: 0},
-	Field{Index: 6, Name: "s", Alias: "size", Type: FieldTypeInt64, Flags: 0},
-	Field{Index: 7, Name: "S", Alias: "vsize", Type: FieldTypeInt64, Flags: 0},
-	Field{Index: 8, Name: "V", Alias: "version", Type: FieldTypeInt64, Flags: 0},
-	Field{Index: 9, Name: "N", Alias: "n_in", Type: FieldTypeInt64, Flags: 0},
-	Field{Index: 10, Name: "n", Alias: "n_out", Type: FieldTypeInt64, Flags: 0},
-	Field{Index: 11, Name: "t", Alias: "type", Type: FieldTypeInt64, Flags: 0},
-	Field{Index: 12, Name: "D", Alias: "has_data", Type: FieldTypeBoolean, Flags: 0},
-	Field{Index: 13, Name: "v", Alias: "volume", Type: FieldTypeUint64, Flags: 0},
-	Field{Index: 14, Name: "f", Alias: "fee", Type: FieldTypeUint64, Flags: 0},
-	Field{Index: 15, Name: "d", Alias: "days", Type: FieldTypeFloat64, Flags: 0},
+	&Field{Index: 0, Name: "I", Alias: "row_id", Type: FieldTypeUint64, Flags: FlagPrimary},
+	&Field{Index: 1, Name: "T", Alias: "time", Type: FieldTypeDatetime, Flags: 0},
+	&Field{Index: 2, Name: "h", Alias: "height", Type: FieldTypeUint64, Flags: 0},
+	&Field{Index: 3, Name: "p", Alias: "tx_n", Type: FieldTypeInt64, Flags: 0},
+	&Field{Index: 4, Name: "H", Alias: "tx_id", Type: FieldTypeBytes, Flags: 0},
+	&Field{Index: 5, Name: "L", Alias: "locktime", Type: FieldTypeInt64, Flags: 0},
+	&Field{Index: 6, Name: "s", Alias: "size", Type: FieldTypeInt64, Flags: 0},
+	&Field{Index: 7, Name: "S", Alias: "vsize", Type: FieldTypeInt64, Flags: 0},
+	&Field{Index: 8, Name: "V", Alias: "version", Type: FieldTypeInt64, Flags: 0},
+	&Field{Index: 9, Name: "N", Alias: "n_in", Type: FieldTypeInt64, Flags: 0},
+	&Field{Index: 10, Name: "n", Alias: "n_out", Type: FieldTypeInt64, Flags: 0},
+	&Field{Index: 11, Name: "t", Alias: "type", Type: FieldTypeInt64, Flags: 0},
+	&Field{Index: 12, Name: "D", Alias: "has_data", Type: FieldTypeBoolean, Flags: 0},
+	&Field{Index: 13, Name: "v", Alias: "volume", Type: FieldTypeUint64, Flags: 0},
+	&Field{Index: 14, Name: "f", Alias: "fee", Type: FieldTypeUint64, Flags: 0},
+	&Field{Index: 15, Name: "d", Alias: "days", Type: FieldTypeFloat64, Flags: 0},
 
-	// Field{Index: 16, Name: "1", Alias: "i128", Type: FieldTypeInt128, Flags: 0},
-	// Field{Index: 17, Name: "2", Alias: "i256", Type: FieldTypeInt256, Flags: 0},
-	// Field{Index: 18, Name: "3", Alias: "d32", Type: FieldTypeDecimal32, Flags: 0, Scale: 5},
-	// Field{Index: 19, Name: "4", Alias: "d64", Type: FieldTypeDecimal64, Flags: 0, Scale: 12},
-	// Field{Index: 20, Name: "5", Alias: "d128", Type: FieldTypeDecimal128, Flags: 0, Scale: 18},
-	// Field{Index: 21, Name: "6", Alias: "d256", Type: FieldTypeDecimal256, Flags: 0, Scale: 24},
+	// &Field{Index: 16, Name: "1", Alias: "i128", Type: FieldTypeInt128, Flags: 0},
+	// &Field{Index: 17, Name: "2", Alias: "i256", Type: FieldTypeInt256, Flags: 0},
+	// &Field{Index: 18, Name: "3", Alias: "d32", Type: FieldTypeDecimal32, Flags: 0, Scale: 5},
+	// &Field{Index: 19, Name: "4", Alias: "d64", Type: FieldTypeDecimal64, Flags: 0, Scale: 12},
+	// &Field{Index: 20, Name: "5", Alias: "d128", Type: FieldTypeDecimal128, Flags: 0, Scale: 18},
+	// &Field{Index: 21, Name: "6", Alias: "d256", Type: FieldTypeDecimal256, Flags: 0, Scale: 24},
 }
 
 // Data size is compressed size
@@ -120,7 +120,7 @@ func makeReadWriteTestPackage(fields FieldList, c block.Compression, sz int) *Pa
 			fields[i].Flags &^= FlagCompressLZ4 | FlagCompressSnappy
 		}
 	}
-	pkg := NewPackage(sz)
+	pkg := NewPackage(sz, nil)
 	pkg.InitFields(fields, nil)
 	now := time.Now().UTC()
 	for i := 0; i < sz; i++ {
@@ -225,7 +225,7 @@ func BenchmarkPackReadLZ4(B *testing.B) {
 			B.ReportAllocs()
 			B.SetBytes(int64(len(buf)))
 			for b := 0; b < B.N; b++ {
-				pkg2 := NewPackage(0)
+				pkg2 := NewPackage(0, nil)
 				err := pkg2.UnmarshalBinary(buf)
 				if err != nil {
 					B.Fatalf("read error: %v", err)
@@ -248,7 +248,7 @@ func BenchmarkPackReadSnappy(B *testing.B) {
 			B.ReportAllocs()
 			B.SetBytes(int64(len(buf)))
 			for b := 0; b < B.N; b++ {
-				pkg2 := NewPackage(0)
+				pkg2 := NewPackage(0, nil)
 				err := pkg2.UnmarshalBinary(buf)
 				if err != nil {
 					B.Fatalf("read error: %v", err)
@@ -271,7 +271,7 @@ func BenchmarkPackReadNoCompression(B *testing.B) {
 			B.ReportAllocs()
 			B.SetBytes(int64(len(buf)))
 			for b := 0; b < B.N; b++ {
-				pkg2 := NewPackage(0)
+				pkg2 := NewPackage(0, nil)
 				err := pkg2.UnmarshalBinary(buf)
 				if err != nil {
 					B.Fatalf("read error: %v", err)

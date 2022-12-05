@@ -139,7 +139,7 @@ func (a *CompactByteArray) WriteTo(w io.Writer) (int64, error) {
 	for i, v := range a.offs {
 		scratch[i] = int64(v)
 	}
-	olen, err := compress.IntegerArrayEncodeAll(scratch, w)
+	olen, err := compress.ArrayEncodeAllInt64(scratch, w)
 	if err != nil {
 		return int64(count), err
 	}
@@ -149,7 +149,7 @@ func (a *CompactByteArray) WriteTo(w io.Writer) (int64, error) {
 	for i, v := range a.size {
 		scratch[i] = int64(v)
 	}
-	slen, err := compress.IntegerArrayEncodeAll(scratch, w)
+	slen, err := compress.ArrayEncodeAllInt64(scratch, w)
 	if err != nil {
 		return int64(count), err
 	}
@@ -216,7 +216,7 @@ func (a *CompactByteArray) Decode(buf []byte) error {
 	}
 
 	var err error
-	scratch, err = compress.IntegerArrayDecodeAll(buf[:olen], scratch)
+	scratch, err = compress.ArrayDecodeAllInt64(buf[:olen], scratch)
 	if err != nil {
 		return fmt.Errorf("compact: decoding offsets: %w", err)
 	}
@@ -229,7 +229,7 @@ func (a *CompactByteArray) Decode(buf []byte) error {
 	if len(buf) < slen {
 		return fmt.Errorf("compact: reading size data: %w", errShortBuffer)
 	}
-	scratch, err = compress.IntegerArrayDecodeAll(buf[:slen], scratch)
+	scratch, err = compress.ArrayDecodeAllInt64(buf[:slen], scratch)
 	if err != nil {
 		return fmt.Errorf("compact: decoding offsets: %w", err)
 	}

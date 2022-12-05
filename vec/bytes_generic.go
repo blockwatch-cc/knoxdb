@@ -15,7 +15,7 @@ func matchBytesEqualGeneric(src [][]byte, val []byte, bits, mask []byte) int64 {
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
-			if bytes.Compare(v, val) != 0 {
+			if !bytes.Equal(v, val) {
 				continue
 			}
 			bits[i>>3] |= bit
@@ -23,7 +23,7 @@ func matchBytesEqualGeneric(src [][]byte, val []byte, bits, mask []byte) int64 {
 		}
 	} else {
 		for i, v := range src {
-			if bytes.Compare(v, val) != 0 {
+			if !bytes.Equal(v, val) {
 				continue
 			}
 			bits[i>>3] |= bitmask(i)
@@ -41,7 +41,7 @@ func matchBytesNotEqualGeneric(src [][]byte, val []byte, bits, mask []byte) int6
 			if mask != nil && (mask[i>>3]&bit) == 0 {
 				continue
 			}
-			if bytes.Compare(v, val) == 0 {
+			if bytes.Equal(v, val) {
 				continue
 			}
 			bits[i>>3] |= bit
@@ -49,7 +49,7 @@ func matchBytesNotEqualGeneric(src [][]byte, val []byte, bits, mask []byte) int6
 		}
 	} else {
 		for i, v := range src {
-			if bytes.Compare(v, val) == 0 {
+			if bytes.Equal(v, val) {
 				continue
 			}
 			bits[i>>3] |= bitmask(i)

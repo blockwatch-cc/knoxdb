@@ -15,37 +15,44 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/vec"
+	logpkg "github.com/echa/log"
 )
 
 var QueryLogMinDuration time.Duration = 500 * time.Millisecond
 
 type Query struct {
-	Name       string            // optional, used for query stats
-	Fields     FieldList         // SELECT ...
-	Conditions ConditionTreeNode // WHERE ... AND / OR tree
-	Order      OrderType         // ASC|DESC
-	Limit      int               // LIMIT ...
-	Offset     int               // OFFSET ...
-	NoCache    bool              // explicitly disable pack caching for this query
-	NoIndex    bool              // explicitly disable index query (use for many known duplicates)
+	Name       string           // optional, used for query stats
+	Fields     []string         // SELECT ...
+	Conditions UnboundCondition // WHERE ... AND / OR tree
+	Order      OrderType        // ASC|DESC
+	Limit      int              // LIMIT ...
+	Offset     int              // OFFSET ...
+	NoCache    bool             // explicitly disable pack caching for this query
+	NoIndex    bool             // explicitly disable index query (use for many known duplicates)
+	Debugf     logpkg.LogfFn
 
 	// GroupBy   FieldList   // GROUP BY ... - COLLATE/COLLAPSE
 	// OrderBy   FieldList    // ORDER BY ...
 	// Aggregate AggregateList // sum, mean, ...
 
 	// internal
-	table     *Table    // cached table pointer
-	reqfields FieldList // all fields required by this query
-	idxFields FieldList
+	table *Table            // cached table pointer
+	conds ConditionTreeNode // compiled conditions
+	fout  FieldList         // output fields
+	freq  FieldList         // required fields (for out and query matching)
+	fidx  FieldList         // existing index fields
 
 	// metrics
-	start time.Time
-	lap   time.Time
-	stats QueryStats
+	logAfter time.Duration
+	start    time.Time
+	lap      time.Time
+	stats    QueryStats
+	debug    bool
 }
 
 type QueryStats struct {
 	CompileTime    time.Duration `json:"compile_time"`
+	AnalyzeTime    time.Duration `json:"analyze_time"`
 	JournalTime    time.Duration `json:"journal_time"`
 	IndexTime      time.Duration `json:"index_time"`
 	ScanTime       time.Duration `json:"scan_time"`
@@ -63,28 +70,26 @@ type QueryStats struct {
 // }
 
 func (q Query) IsEmptyMatch() bool {
-	return q.Conditions.NoMatch()
+	return q.conds.NoMatch()
 }
 
-func NewQuery(name string, table *Table) Query {
-	now := time.Now()
-	f := table.Fields()
+func NewQuery(name string) Query {
 	return Query{
-		Name:      name,
-		table:     table,
-		start:     now,
-		lap:       now,
-		Fields:    f,
-		Order:     OrderAsc,
-		reqfields: f,
-		idxFields: table.fields.Indexed(),
+		Name:     name,
+		Order:    OrderAsc,
+		Debugf:   logpkg.Noop,
+		logAfter: QueryLogMinDuration,
 	}
+}
+
+func (t *Table) NewQuery(name string) Query {
+	return NewQuery(name).WithTable(t)
 }
 
 func (q *Query) Close() {
 	if q.table != nil {
 		q.stats.TotalTime = time.Since(q.start)
-		if q.stats.TotalTime > QueryLogMinDuration {
+		if q.stats.TotalTime > q.logAfter {
 			log.Warnf("%s", newLogClosure(func() string {
 				return q.PrintTiming()
 			}))
@@ -92,21 +97,28 @@ func (q *Query) Close() {
 		q.table = nil
 	}
 	q.Fields = nil
-	q.reqfields = nil
+	q.fout = nil
+	q.freq = nil
+	q.fidx = nil
 }
 
-func (q *Query) Table() *Table {
+func (q Query) Table() *Table {
 	return q.table
 }
 
-func (q *Query) Runtime() time.Duration {
+func (q Query) Runtime() time.Duration {
 	return time.Since(q.start)
 }
 
-func (q *Query) PrintTiming() string {
-	return fmt.Sprintf("query: %s compile=%s journal=%s index=%s scan=%s total=%s matched=%d rows, scheduled=%d packs, scanned=%d packs, searched=%d index rows",
+func (q Query) IsBound() bool {
+	return q.table != nil && !q.conds.Empty()
+}
+
+func (q Query) PrintTiming() string {
+	return fmt.Sprintf("query: %s compile=%s analyze=%s journal=%s index=%s scan=%s total=%s matched=%d rows, scheduled=%d packs, scanned=%d packs, searched=%d index rows",
 		q.Name,
 		q.stats.CompileTime,
+		q.stats.AnalyzeTime,
 		q.stats.JournalTime,
 		q.stats.IndexTime,
 		q.stats.ScanTime,
@@ -129,45 +141,68 @@ func (q *Query) Compile(t *Table) error {
 	q.start = time.Now()
 	q.lap = q.start
 
-	// process conditions first
-	if err := q.Conditions.Compile(); err != nil {
-		return fmt.Errorf("pack: %s %v", q.Name, err)
+	// ensure all queried fields exist
+	tableFields := q.table.fields
+	for _, f := range q.conds.Fields() {
+		if !tableFields.Contains(f.Name) {
+			return fmt.Errorf("pack: missing table field %s in table %s for query %s", f.Name, t.Name(), q.Name)
+		}
 	}
 
-	// determine required table fields for this query
-	if len(q.Fields) == 0 {
-		q.Fields = t.Fields()
-	} else {
-		q.Fields = q.Fields.MergeUnique(t.Fields().Pk())
+	// process conditions
+	if q.conds.Empty() {
+		q.conds = q.Conditions.Bind(q.table)
+		if err := q.conds.Compile(); err != nil {
+			return fmt.Errorf("pack: %s %v", q.Name, err)
+		}
 	}
-	q.reqfields = q.Fields.MergeUnique(q.Conditions.Fields()...)
-	if len(q.idxFields) == 0 {
-		q.idxFields = t.fields.Indexed()
+
+	// identify output fields
+	if len(q.fout) == 0 {
+		if len(q.Fields) == 0 {
+			q.fout = tableFields
+		} else {
+			q.fout = tableFields.Select(q.Fields...)
+			q.fout = q.fout.MergeUnique(tableFields.Pk()).Sort()
+		}
+	}
+
+	// identify required fields (output + used in conditions)
+	if len(q.freq) == 0 {
+		q.freq = q.fout.MergeUnique(q.conds.Fields()...).Sort()
+		q.freq = q.freq.MergeUnique(tableFields.Pk()).Sort()
+	}
+
+	// identify index fields
+	if len(q.fidx) == 0 {
+		q.fidx = t.fields.Indexed()
 	}
 
 	// check query can be processed
-	if err := q.Check(); err != nil {
+	if err := q.check(); err != nil {
 		q.stats.TotalTime = time.Since(q.lap)
 		return err
 	}
 	q.stats.CompileTime = time.Since(q.lap)
 
-	log.Debug(newLogClosure(func() string {
-		return q.Dump()
-	}))
-
+	if q.debug {
+		q.Debugf("%s", newLogClosure(func() string {
+			return q.Dump()
+		}))
+	}
 	return nil
 }
 
-func (q Query) Check() error {
-	tfields := q.table.Fields()
-	for _, v := range q.reqfields {
+func (q Query) check() error {
+	tfields := q.table.fields
+	for _, v := range q.freq {
+		tfield := tfields.Find(v.Name)
 		// field must exist
-		if !tfields.Contains(v.Name) {
+		if !tfield.IsValid() {
 			return fmt.Errorf("undefined field '%s/%s' in query %s", q.table.name, v.Name, q.Name)
 		}
 		// field type must match
-		if tfields.Find(v.Name).Type != v.Type {
+		if tfield.Type != v.Type {
 			return fmt.Errorf("mismatched type %s for field '%s/%s' in query %s", v.Type, q.table.name, v.Name, q.Name)
 		}
 		// field index must be valid
@@ -176,7 +211,7 @@ func (q Query) Check() error {
 		}
 	}
 	// root condition may be empty but must not be a leaf for index queries to work
-	if q.Conditions.Leaf() {
+	if q.conds.Leaf() {
 		return fmt.Errorf("unexpected simple condition tree in query %s", q.Name)
 	}
 	if q.Limit < 0 {
@@ -196,7 +231,7 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 	ins := make([]ConditionTreeNode, 0)
 	for i, v := range node.Children {
 		if v.Leaf() {
-			if !q.idxFields.Contains(v.Cond.Field.Name) {
+			if !q.fidx.Contains(v.Cond.Field.Name) {
 				// log.Debugf("query: %s table non-indexed field %s for cond %s, fallback to table scan",
 				// 	q.Name, v.Cond.Field.Name, v.Cond.String())
 				continue
@@ -239,10 +274,10 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 
 			// create new leaf node
 			c := &Condition{
-				Field:    q.table.Fields().Pk(), // primary key
-				Mode:     FilterModeIn,          // IN
-				Value:    pkmatch,               // list
-				IsSorted: true,                  // already sorted by index lookup
+				Field:    q.table.fields.Pk(), // primary key
+				Mode:     FilterModeIn,        // IN
+				Value:    pkmatch,             // list
+				IsSorted: true,                // already sorted by index lookup
 				Raw:      v.Cond.Raw + "/index_lookup",
 			}
 
@@ -292,11 +327,11 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 // - when resolved, replace source condition with new FilterModeIn condition
 func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 	q.lap = time.Now()
-	if q.NoIndex || q.Conditions.Empty() {
+	if q.NoIndex || q.conds.Empty() {
 		q.stats.IndexTime = time.Since(q.lap)
 		return nil
 	}
-	if err := q.queryIndexNode(ctx, tx, &q.Conditions); err != nil {
+	if err := q.queryIndexNode(ctx, tx, &q.conds); err != nil {
 		return err
 	}
 	q.stats.IndexTime = time.Since(q.lap)
@@ -305,25 +340,29 @@ func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 
 // collect list of packs to visit in pk order
 func (q *Query) MakePackSchedule(reverse bool) []int {
+	q.lap = time.Now()
 	schedule := make([]int, 0, q.table.packidx.Len())
 	// walk list in pk order (pairs are always sorted by min pk)
 	for _, p := range q.table.packidx.pos {
-		if q.Conditions.MaybeMatchPack(q.table.packidx.packs[p]) {
+		if q.conds.MaybeMatchPack(q.table.packidx.packs[p]) {
 			schedule = append(schedule, int(p))
 		}
 	}
-	q.stats.PacksScheduled = len(schedule)
 	// reverse for descending walk
 	if reverse {
 		for l, r := 0, len(schedule)-1; l < r; l, r = l+1, r-1 {
 			schedule[l], schedule[r] = schedule[r], schedule[l]
 		}
 	}
+	q.stats.PacksScheduled = len(schedule)
+	q.stats.AnalyzeTime = time.Since(q.lap)
+	q.lap = time.Now()
 	return schedule
 }
 
 // ordered list of packs that may contain matching ids (list can be reversed)
 func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
+	q.lap = time.Now()
 	schedule := make([]int, 0, q.table.packidx.Len())
 
 	// extract min/max values from pack header's pk column
@@ -348,11 +387,18 @@ func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
 		}
 	}
 	q.stats.PacksScheduled = len(schedule)
+	q.stats.AnalyzeTime = time.Since(q.lap)
+	q.lap = time.Now()
 	return schedule
 }
 
+func (q Query) WithTable(table *Table) Query {
+	q.table = table
+	return q
+}
+
 func (q Query) WithFields(names ...string) Query {
-	q.Fields = q.table.Fields().Select(names...)
+	q.Fields = append(q.Fields, names...)
 	return q
 }
 
@@ -401,92 +447,91 @@ func (q Query) WithoutCache() Query {
 	return q
 }
 
-func (q Query) And(conds ...UnboundCondition) Query {
+func (q Query) WithStats() Query {
+	q.logAfter = 0
+	return q
+}
+
+func (q Query) WithoutStats() Query {
+	q.logAfter = time.Hour
+	return q
+}
+
+func (q Query) WithStatsAfter(d time.Duration) Query {
+	q.logAfter = d
+	return q
+}
+
+func (q Query) WithDebug() Query {
+	q.debug = true
+	q.Debugf = log.Debugf
+	return q
+}
+
+func (q Query) AndCondition(conds ...UnboundCondition) Query {
 	if len(conds) == 0 {
 		return q
 	}
-	q.Conditions.AddNode(And(conds...).Bind(q.table))
+	q.Conditions.Add(And(conds...))
 	return q
 }
 
-func (q Query) Or(conds ...UnboundCondition) Query {
+func (q Query) OrCondition(conds ...UnboundCondition) Query {
 	if len(conds) == 0 {
 		return q
 	}
-	q.Conditions.AddNode(Or(conds...).Bind(q.table))
+	q.Conditions.Add(Or(conds...))
 	return q
 }
 
-func (q Query) AndCondition(field string, mode FilterMode, value interface{}) Query {
-	q.Conditions.AddAndCondition(&Condition{
-		Field: q.table.Fields().Find(field),
-		Mode:  mode,
-		Value: value,
-	})
+func (q Query) And(field string, mode FilterMode, value interface{}) Query {
+	q.Conditions.And(field, mode, value)
 	return q
 }
 
-func (q Query) OrCondition(field string, mode FilterMode, value interface{}) Query {
-	q.Conditions.AddOrCondition(&Condition{
-		Field: q.table.Fields().Find(field),
-		Mode:  mode,
-		Value: value,
-	})
+func (q Query) Or(field string, mode FilterMode, value interface{}) Query {
+	q.Conditions.Or(field, mode, value)
 	return q
 }
 
 func (q Query) AndEqual(field string, value interface{}) Query {
-	return q.AndCondition(field, FilterModeEqual, value)
+	return q.And(field, FilterModeEqual, value)
 }
 
 func (q Query) AndNotEqual(field string, value interface{}) Query {
-	return q.AndCondition(field, FilterModeNotEqual, value)
+	return q.And(field, FilterModeNotEqual, value)
 }
 
 func (q Query) AndIn(field string, value interface{}) Query {
-	return q.AndCondition(field, FilterModeIn, value)
+	return q.And(field, FilterModeIn, value)
 }
 
 func (q Query) AndNotIn(field string, value interface{}) Query {
-	return q.AndCondition(field, FilterModeNotIn, value)
+	return q.And(field, FilterModeNotIn, value)
 }
 
 func (q Query) AndLt(field string, value interface{}) Query {
-	return q.AndCondition(field, FilterModeLt, value)
+	return q.And(field, FilterModeLt, value)
 }
 
 func (q Query) AndLte(field string, value interface{}) Query {
-	return q.AndCondition(field, FilterModeLte, value)
+	return q.And(field, FilterModeLte, value)
 }
 
 func (q Query) AndGt(field string, value interface{}) Query {
-	return q.AndCondition(field, FilterModeGt, value)
+	return q.And(field, FilterModeGt, value)
 }
 
 func (q Query) AndGte(field string, value interface{}) Query {
-	return q.AndCondition(field, FilterModeGte, value)
+	return q.And(field, FilterModeGte, value)
 }
 
 func (q Query) AndRegexp(field string, value interface{}) Query {
-	return q.AndCondition(field, FilterModeRegexp, value)
+	return q.And(field, FilterModeRegexp, value)
 }
 
 func (q Query) AndRange(field string, from, to interface{}) Query {
-	if q.Conditions.OrKind {
-		q.Conditions = ConditionTreeNode{
-			OrKind:   false,
-			Children: []ConditionTreeNode{q.Conditions},
-		}
-	}
-	q.Conditions.Children = append(q.Conditions.Children,
-		ConditionTreeNode{
-			Cond: &Condition{
-				Field: q.table.Fields().Find(field),
-				Mode:  FilterModeRange,
-				From:  from,
-				To:    to,
-			},
-		})
+	q.Conditions.AndRange(field, from, to)
 	return q
 }
 
@@ -539,4 +584,8 @@ func (q Query) Delete(ctx context.Context) (int64, error) {
 
 func (q Query) Count(ctx context.Context) (int64, error) {
 	return q.table.Count(ctx, q)
+}
+
+func (q Query) Run(ctx context.Context) (*Result, error) {
+	return q.table.Query(ctx, q)
 }

@@ -10,6 +10,8 @@ import (
 	"math"
 	"reflect"
 	"sort"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
@@ -21,6 +23,7 @@ import (
 )
 
 type Package struct {
+	refCount int64
 	key      uint32 // identity
 	nFields  int
 	nValues  int
@@ -29,21 +32,51 @@ type Package struct {
 	tinfo    *typeInfo      // Go typeinfo
 	pkindex  int            // field index of primary key (optional)
 	dirty    bool           // pack is updated, needs to be written
-	cached   bool           // pack is cached
-	stripped bool           // some blocks are ignored, don't store this pack
 	capHint  int            // block size hint
 	size     int            // storage size
+	pool     *sync.Pool
+}
+
+func (p *Package) IncRef() int64 {
+	return atomic.AddInt64(&p.refCount, 1)
+}
+
+func (p *Package) DecRef() int64 {
+	val := atomic.AddInt64(&p.refCount, -1)
+	if val == 0 {
+		p.recycle()
+	}
+	return val
+}
+
+func (p *Package) recycle() {
+	// don't recycle stripped or oversized packs
+	c := p.Cap()
+	if p.pool == nil || c <= 0 || c > p.capHint {
+		p.Release()
+		return
+	}
+	p.Clear()
+	p.pool.Put(p)
 }
 
 func (p *Package) Key() []byte {
 	return encodePackKey(p.key)
 }
 
+func (p Package) IsJournal() bool {
+	return p.key == journalKey
+}
+
+func (p Package) IsTomb() bool {
+	return p.key == tombstoneKey
+}
+
 func (p *Package) SetKey(key []byte) {
 	switch {
-	case bytes.Compare(key, []byte("_journal")) == 0:
+	case bytes.Equal(key, []byte("_journal")):
 		p.key = journalKey
-	case bytes.Compare(key, []byte("_tombstone")) == 0:
+	case bytes.Equal(key, []byte("_tombstone")):
 		p.key = tombstoneKey
 	default:
 		p.key = bigEndian.Uint32(key)
@@ -63,16 +96,17 @@ func encodePackKey(key uint32) []byte {
 	}
 }
 
-func NewPackage(sz int) *Package {
+func encodeBlockKey(packkey uint32, col int) uint64 {
+	return (uint64(packkey) << 32) | uint64(col&0xffffffff)
+}
+
+func NewPackage(sz int, pool *sync.Pool) *Package {
 	return &Package{
 		pkindex: -1,
 		capHint: sz,
 		dirty:   true,
+		pool:    pool,
 	}
-}
-
-func (p *Package) CopyType(pkg *Package) error {
-	return p.InitFields(pkg.fields, pkg.tinfo)
 }
 
 func (p *Package) IsDirty() bool {
@@ -106,16 +140,16 @@ func (p *Package) FieldIndex(name string) int {
 	return -1
 }
 
-func (p *Package) FieldByName(name string) Field {
+func (p *Package) FieldByName(name string) *Field {
 	for _, v := range p.fields {
 		if v.Name == name || v.Alias == name {
 			return v
 		}
 	}
-	return Field{Index: -1}
+	return &Field{Index: -1}
 }
 
-func (p *Package) PkField() Field {
+func (p *Package) PkField() *Field {
 	return p.fields.Pk()
 }
 
@@ -127,9 +161,9 @@ func (p *Package) Blocks() []*block.Block {
 	return p.blocks
 }
 
-func (p *Package) FieldById(idx int) Field {
+func (p *Package) FieldById(idx int) *Field {
 	if idx < 0 {
-		return Field{Index: -1}
+		return &Field{Index: -1}
 	}
 	return p.fields[idx]
 }
@@ -259,8 +293,57 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	return nil
 }
 
+// Init from field list when Go type is unavailable
+func (p *Package) InitFieldsEmpty(fields FieldList, tinfo *typeInfo) error {
+	if len(fields) > 256 {
+		return fmt.Errorf("pack: cannot handle more than 256 fields")
+	}
+	if len(fields) == 0 {
+		return fmt.Errorf("pack: empty fields")
+	}
+	if len(p.fields) > 0 {
+		return fmt.Errorf("pack: already initialized")
+	}
+	// require pk field
+	if fields.PkIndex() < 0 {
+		return fmt.Errorf("pack: missing primary key field")
+	}
+	// if pack has been loaded, check if field types match block types
+	if p.nFields > 0 && len(p.blocks) > 0 {
+		if len(fields) > len(p.blocks) {
+			return fmt.Errorf("pack: inconsistent Go type for loaded pack: %d fields, %d blocks", len(fields), len(p.blocks))
+		}
+		for i, f := range fields {
+			b := p.blocks[i]
+			if b.Type() != f.Type.BlockType() {
+				return fmt.Errorf("pack: mismatch block type %s for %s field %d", b.Type(), f.Type, i)
+			}
+		}
+	}
+
+	p.fields = fields
+	p.nFields = len(fields)
+	p.pkindex = fields.PkIndex()
+	p.tinfo = tinfo
+
+	if len(p.blocks) == 0 {
+		p.blocks = make([]*block.Block, p.nFields)
+		// Keep the blocks empty
+	} else {
+		// make sure we use the correct compression (empty blocks are stored without)
+		for i := range p.blocks {
+			p.blocks[i].SetCompression(fields[i].Flags.Compression())
+		}
+	}
+	return nil
+}
+
 func (p *Package) InitFieldsFrom(src *Package) error {
 	return p.InitFields(src.fields, src.tinfo)
+}
+
+func (p *Package) InitFieldsFromEmpty(src *Package) error {
+	return p.InitFieldsEmpty(src.fields, src.tinfo)
 }
 
 // may be called from Join, no pk required
@@ -292,22 +375,42 @@ func (p *Package) InitResultFields(fields FieldList, tinfo *typeInfo) error {
 func (p *Package) Clone(capacity int) (*Package, error) {
 	// cloned pack has no identity yet
 	// cloning a stripped pack is allowed
-	clone := NewPackage(capacity)
-	if err := clone.CopyType(p); err != nil {
+	clone := NewPackage(capacity, p.pool)
+	if err := clone.InitFieldsEmpty(p.fields, p.tinfo); err != nil {
 		return nil, err
 	}
+
+	clone.key = p.key
 	clone.nValues = p.nValues
 	clone.size = p.size
-	clone.stripped = p.stripped
 
 	for i, src := range p.blocks {
-		if src.IsIgnore() {
+		if src == nil {
 			continue
 		}
+		clone.blocks[i] = block.NewBlock(src.Type(), src.Compression(), capacity)
 		clone.blocks[i].Copy(src)
 	}
-
 	return clone, nil
+}
+
+func (dst *Package) MergeCols(src *Package) (*Package, error) {
+	if src == nil {
+		return dst, nil
+	}
+	if dst.nValues != src.nValues {
+		return nil, fmt.Errorf("pack: MergeCols: differnt number of values")
+	}
+	for i := range dst.blocks {
+		if i > len(src.blocks) {
+			break
+		}
+		if dst.blocks[i] == nil && src.blocks[i] != nil {
+			dst.blocks[i] = src.blocks[i]
+			src.blocks[i] = nil
+		}
+	}
+	return dst, nil
 }
 
 func (p *Package) Optimize() {
@@ -346,14 +449,15 @@ func (p *Package) Materialize() {
 	}
 }
 
-func (p *Package) KeepFields(fields FieldList) *Package {
+func (p *Package) PopulateFields(fields FieldList) *Package {
 	if len(fields) == 0 {
-		return p
+		fields = p.fields
 	}
 	for i, v := range p.fields {
-		if !fields.Contains(v.Name) {
-			p.blocks[i].SetIgnore()
-			p.stripped = true
+		if p.blocks[i] == nil {
+			if fields.Contains(v.Name) {
+				p.blocks[i] = v.NewBlock(p.capHint)
+			}
 		}
 	}
 	return p
@@ -366,7 +470,7 @@ func (p *Package) UpdateAliasesFrom(fields FieldList) *Package {
 	}
 	// clone our field list (since it may be shared with table)
 	prevfields := p.fields
-	p.fields = make([]Field, len(prevfields))
+	p.fields = make(FieldList, len(prevfields))
 	for i := range p.fields {
 		field := prevfields[i]
 		updated := fields.Find(field.Name)
@@ -378,17 +482,17 @@ func (p *Package) UpdateAliasesFrom(fields FieldList) *Package {
 	return p
 }
 
-// Push append a new row to all columns. Requires a type that strictly defines
-// all columns in this pack! Column mapping uses the default struct tag `pack`,
-// hence the fields name only (not the fields alias).
+// Push appends a new row to all columns. Requires a type that strictly defines
+// all columns in this pack! Column mapping uses the default struct tag `knox`.
 func (p *Package) Push(v interface{}) error {
 	if err := p.InitType(v); err != nil {
 		return err
 	}
 	val := reflect.Indirect(reflect.ValueOf(v))
 	if !val.IsValid() {
-		return fmt.Errorf("pack: push: invalid value of type %T", v)
+		return fmt.Errorf("pack: pushed invalid value of type %T", v)
 	}
+
 	for _, fi := range p.tinfo.fields {
 		if fi.blockid < 0 {
 			continue
@@ -407,25 +511,24 @@ func (p *Package) Push(v interface{}) error {
 
 		switch field.Type {
 		case FieldTypeBytes:
-			var buf []byte
-			// check if type implements BinaryMarshaler
-			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
-				var err error
-				if buf, err = f.Interface().(encoding.BinaryMarshaler).MarshalBinary(); err != nil {
+			if fi.flags.Contains(flagBinaryMarshalerType) {
+				buf, err := f.Interface().(encoding.BinaryMarshaler).MarshalBinary()
+				if err != nil {
 					return err
 				}
+				b.Bytes.Append(buf)
 			} else {
-				buf = f.Bytes()
+				b.Bytes.Append(f.Bytes())
 			}
-			b.Bytes.Append(buf)
+
 		case FieldTypeString:
-			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
+			if fi.flags.Contains(flagTextMarshalerType) {
 				buf, err := f.Interface().(encoding.TextMarshaler).MarshalText()
 				if err != nil {
 					return err
 				}
 				b.Bytes.Append(buf)
-			} else if f.CanInterface() && f.Type().Implements(stringerType) {
+			} else if fi.flags.Contains(flagStringerType) {
 				b.Bytes.Append(compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
 			} else {
 				b.Bytes.Append(compress.UnsafeGetBytes(f.String()))
@@ -539,6 +642,7 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
+
 	for _, fi := range p.tinfo.fields {
 		if fi.blockid < 0 {
 			continue
@@ -554,8 +658,7 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 
 		switch field.Type {
 		case FieldTypeBytes:
-			// check if type implements BinaryMarshaler
-			if f.CanInterface() && f.Type().Implements(binaryMarshalerType) {
+			if fi.flags.Contains(flagBinaryMarshalerType) {
 				buf, err := f.Interface().(encoding.BinaryMarshaler).MarshalBinary()
 				if err != nil {
 					return err
@@ -566,13 +669,13 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			}
 
 		case FieldTypeString:
-			if f.CanInterface() && f.Type().Implements(textMarshalerType) {
+			if fi.flags.Contains(flagTextMarshalerType) {
 				buf, err := f.Interface().(encoding.TextMarshaler).MarshalText()
 				if err != nil {
 					return err
 				}
 				b.Bytes.Set(pos, buf)
-			} else if f.CanInterface() && f.Type().Implements(stringerType) {
+			} else if fi.flags.Contains(flagStringerType) {
 				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
 			} else {
 				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.String()))
@@ -703,7 +806,7 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
-	// log.Infof("Reading %s at pkg %d pos %d", tinfo.name, p.key, pos)
+	// log.Debugf("Reading %s at pkg %d pos %d", tinfo.name, p.key, pos)
 
 	for _, fi := range tinfo.fields {
 		// Note: field to block mapping is required to be initialized in tinfo!
@@ -714,11 +817,9 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 		}
 		// skip early
 		b := p.blocks[fi.blockid]
-		field := p.fields[fi.blockid]
 		if b.IsIgnore() {
 			continue
 		}
-
 		dst := fi.value(val)
 		if !dst.IsValid() {
 			continue
@@ -730,37 +831,39 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 			dst = dst.Elem()
 		}
 
+		field := p.fields[fi.blockid]
 		switch field.Type {
 		case FieldTypeBytes:
-			if dst.CanAddr() {
-				pv := dst.Addr()
-				if pv.CanInterface() && pv.Type().Implements(binaryUnmarshalerType) {
-					if err := pv.Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes.Elem(pos)); err != nil {
-						return err
-					}
-					break
+			if fi.flags.Contains(flagBinaryMarshalerType) {
+				// decode using unmarshaler, requires the unmarshaler makes a copy
+				if err := dst.Addr().Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes.Elem(pos)); err != nil {
+					return err
 				}
+			} else {
+				// copy to avoid memleaks of large blocks
+				elm := b.Bytes.Elem(pos)
+				buf := make([]byte, len(elm))
+				copy(buf, elm)
+				dst.SetBytes(buf)
 			}
-			// copy to avoid memleaks of large blocks
-			elm := b.Bytes.Elem(pos)
-			buf := make([]byte, len(elm))
-			copy(buf, elm)
-			dst.SetBytes(buf)
 
 		case FieldTypeString:
-			if dst.CanAddr() {
-				pv := dst.Addr()
-				if pv.CanInterface() && pv.Type().Implements(textUnmarshalerType) {
-					if err := pv.Interface().(encoding.TextUnmarshaler).UnmarshalText(b.Bytes.Elem(pos)); err != nil {
-						return err
-					}
-					break
+			if fi.flags.Contains(flagTextMarshalerType) {
+				if err := dst.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText(b.Bytes.Elem(pos)); err != nil {
+					return err
 				}
+			} else {
+				// copy to avoid memleaks of large blocks
+				// dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
+				dst.SetString(string(b.Bytes.Elem(pos)))
 			}
-			dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
 
 		case FieldTypeDatetime:
-			dst.Set(reflect.ValueOf(time.Unix(0, b.Int64[pos]).UTC()))
+			if ts := b.Int64[pos]; ts > 0 {
+				dst.Set(reflect.ValueOf(time.Unix(0, ts)))
+			} else {
+				dst.Set(reflect.ValueOf(zeroTime))
+			}
 
 		case FieldTypeBoolean:
 			dst.SetBool(b.Bits.IsSet(pos))
@@ -882,8 +985,11 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 		return compress.UnsafeGetString(b.Bytes.Elem(pos)), nil
 
 	case FieldTypeDatetime:
-		val := time.Unix(0, b.Int64[pos]).UTC()
-		return val, nil
+		if ts := b.Int64[pos]; ts > 0 {
+			return time.Unix(0, ts), nil
+		} else {
+			return zeroTime, nil
+		}
 
 	case FieldTypeBoolean:
 		return b.Bits.IsSet(pos), nil
@@ -964,7 +1070,7 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 
 	switch field.Type {
 	case FieldTypeBytes:
-		// check if type implements BinaryMarshaler
+		// explicit check if type implements Marshaler (v != struct type)
 		if val.CanInterface() && val.Type().Implements(binaryMarshalerType) {
 			buf, err := val.Interface().(encoding.BinaryMarshaler).MarshalBinary()
 			if err != nil {
@@ -976,6 +1082,7 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 		}
 
 	case FieldTypeString:
+		// explicit check if type implements Marshaler (v != struct type)
 		if val.CanInterface() && val.Type().Implements(textMarshalerType) {
 			buf, err := val.Interface().(encoding.TextMarshaler).MarshalText()
 			if err != nil {
@@ -1064,9 +1171,10 @@ func (p *Package) isValidAt(index, pos int, typ FieldType) error {
 	if p.fields[index].Type != typ {
 		return ErrInvalidType
 	}
-	if p.blocks[index].Type() != typ.BlockType() {
-		return ErrInvalidType
-	}
+	// expensive (call overhead)
+	// if p.blocks[index].Type() != typ.BlockType() {
+	// 	return ErrInvalidType
+	// }
 	if p.blocks[index].IsIgnore() {
 		return fmt.Errorf("pack: skipped block %d (%s)", index, p.fields[index].Type)
 	}
@@ -1182,7 +1290,11 @@ func (p *Package) TimeAt(index, pos int) (time.Time, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDatetime); err != nil {
 		return zeroTime, err
 	}
-	return time.Unix(0, p.blocks[index].Int64[pos]).UTC(), nil
+	if ts := p.blocks[index].Int64[pos]; ts == 0 {
+		return zeroTime, nil
+	} else {
+		return time.Unix(0, ts), nil
+	}
 }
 
 func (p *Package) Decimal32At(index, pos int) (Decimal32, error) {
@@ -1309,7 +1421,11 @@ func (p *Package) Column(index int) (interface{}, error) {
 		// materialize
 		res := make([]time.Time, len(b.Int64))
 		for i, v := range b.Int64 {
-			res[i] = time.Unix(0, v).UTC()
+			if v > 0 {
+				res[i] = time.Unix(0, v)
+			} else {
+				res[i] = zeroTime
+			}
 		}
 		return res, nil
 
@@ -1358,7 +1474,11 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 			out[i] = compress.UnsafeGetString(b.Bytes.Elem(pos))
 		case FieldTypeDatetime:
 			// materialize
-			out[i] = time.Unix(0, b.Int64[pos]).UTC()
+			if ts := b.Int64[pos]; ts > 0 {
+				out[i] = time.Unix(0, ts)
+			} else {
+				out[i] = time.Time{}
+			}
 		case FieldTypeBoolean:
 			out[i] = b.Bits.IsSet(pos)
 		case FieldTypeFloat64:
@@ -1432,7 +1552,11 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		// materialize
 		res := make([]time.Time, end-start+1)
 		for i, v := range b.Int64[start:end] {
-			res[i+start] = time.Unix(0, v).UTC()
+			if v > 0 {
+				res[i+start] = time.Unix(0, v)
+			} else {
+				res[i+start] = zeroTime
+			}
 		}
 		return res, nil
 	case FieldTypeBoolean:
@@ -1979,32 +2103,31 @@ func (p *Package) Clear() {
 	for i := range p.blocks {
 		p.blocks[i].Clear()
 	}
-	// Note: we keep all type-related data and blocks
+	// Note: we keep all type-related data and blocks, pool reference
 	// also keep pack key to avoid clearing journal/tombstone identity
 	p.nValues = 0
 	p.dirty = true
-	p.cached = false
 	p.size = 0
 }
 
 func (p *Package) Release() {
-	for _, v := range p.blocks {
-		v.Release()
+	for i := range p.blocks {
+		p.blocks[i].Release()
+		p.blocks[i] = nil
 	}
-	p.nFields = 0
+	p.refCount = 0
 	p.nValues = 0
-	p.blocks = nil
 	p.key = 0
-	p.tinfo = nil
-	p.pkindex = -1
 	p.dirty = false
-	p.cached = false
-	p.stripped = false
 	p.size = 0
+	if p.pool != nil {
+		p.pool.Put(p)
+	}
 }
 
 func (p *Package) HeapSize() int {
-	var sz int
+	var sz int = szPackage
+	sz += 8 * len(p.blocks)
 	for _, v := range p.blocks {
 		sz += v.HeapSize()
 	}

@@ -3,7 +3,8 @@ package xxHash32_test
 import (
 	"bytes"
 	"fmt"
-	"github.com/pierrec/xxHash/xxHash32"
+
+	"blockwatch.cc/knoxdb/hash/xxHash32"
 )
 
 func ExampleNew() {

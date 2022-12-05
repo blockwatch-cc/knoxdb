@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package pack
@@ -13,7 +13,6 @@ import (
 
 	logpkg "github.com/echa/log"
 
-	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/csv"
 	"blockwatch.cc/knoxdb/util"
 )
@@ -41,7 +40,7 @@ func (t *Table) DumpType(w io.Writer) error {
 	return t.journal.DataPack().DumpType(w)
 }
 
-func (t *Table) DumpPackHeaders(w io.Writer, mode DumpMode, sorted bool) error {
+func (t *Table) DumpPackInfo(w io.Writer, mode DumpMode, sorted bool) error {
 	tx, err := t.db.Tx(false)
 	if err != nil {
 		return err
@@ -105,6 +104,31 @@ func (t *Table) DumpJournal(w io.Writer, mode DumpMode) error {
 	return nil
 }
 
+func (t *Table) DumpPackInfoDetail(w io.Writer, mode DumpMode, sorted bool) error {
+	switch mode {
+	case DumpModeDec, DumpModeHex:
+	default:
+		// unsupported
+		return nil
+	}
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var i int
+	for i = 0; i < t.packidx.Len(); i++ {
+		var info PackInfo
+		if sorted {
+			info = t.packidx.GetSorted(i)
+		} else {
+			info = t.packidx.Get(i)
+		}
+		info.DumpDetail(w)
+	}
+	return nil
+}
+
 func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
 	if i >= t.packidx.Len() || i < 0 {
 		return ErrPackNotFound
@@ -118,7 +142,12 @@ func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
 	if err != nil {
 		return err
 	}
-	return pkg.DumpData(w, mode, t.fields.Aliases())
+	err = pkg.DumpData(w, mode, t.fields.Aliases())
+	if err != nil {
+		return err
+	}
+	t.releaseSharedPack(pkg)
+	return nil
 }
 
 func (t *Table) WalkPacks(fn func(*Package) error) error {
@@ -135,6 +164,7 @@ func (t *Table) WalkPacks(fn func(*Package) error) error {
 		if err := fn(pkg); err != nil {
 			return err
 		}
+		t.releaseSharedPack(pkg)
 	}
 	return nil
 }
@@ -159,6 +189,7 @@ func (t *Table) WalkPacksRange(start, end int, fn func(*Package) error) error {
 		if err := fn(pkg); err != nil {
 			return err
 		}
+		t.releaseSharedPack(pkg)
 	}
 	return nil
 }
@@ -179,7 +210,13 @@ func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
 	if err != nil {
 		return fmt.Errorf("pack %d not found: %v", t.indexes[i].packidx.Get(p).Key, err)
 	}
-	return pkg.DumpData(w, mode, []string{"Hash", "Pk"})
+
+	err = pkg.DumpData(w, mode, t.fields.Aliases())
+	if err != nil {
+		return err
+	}
+	t.indexes[i].releaseSharedPack(pkg)
+	return nil
 }
 
 func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
@@ -204,25 +241,24 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 		} else {
 			lineNo = n
 		}
+		t.releaseSharedPack(pkg)
 	}
 	return nil
 }
 
-func (t *Table) DumpIndexPackHeaders(w io.Writer, mode DumpMode, sorted bool) error {
+func (t *Table) DumpIndexPackInfo(w io.Writer, idx int, mode DumpMode, sorted bool) error {
+	if len(t.indexes) <= idx {
+		return ErrNoIndex
+	}
 	tx, err := t.db.Tx(false)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	for _, v := range t.indexes {
-		if err := v.dumpPackHeaders(tx, w, mode, sorted); err != nil {
-			return err
-		}
-	}
-	return nil
+	return t.indexes[idx].dumpPackInfo(tx, w, mode, sorted)
 }
 
-func (idx *Index) dumpPackHeaders(tx *Tx, w io.Writer, mode DumpMode, sorted bool) error {
+func (idx *Index) dumpPackInfo(tx *Tx, w io.Writer, mode DumpMode, sorted bool) error {
 	switch mode {
 	case DumpModeDec, DumpModeHex:
 		fmt.Fprintf(w, "%-3s %-10s %-7s %-7s %-21s %-21s %-10s\n",
@@ -315,6 +351,35 @@ func (h PackInfo) Dump(w io.Writer, mode DumpMode, nfields int) error {
 	return nil
 }
 
+func (i PackInfo) DumpDetail(w io.Writer) error {
+	fmt.Fprintf(w, "Pack Key   %08x ------------------------------------\n", i.Key)
+	fmt.Fprintf(w, "Values     %s\n", util.PrettyInt(i.NValues))
+	fmt.Fprintf(w, "Pack Size  %s\n", util.ByteSize(i.Packsize))
+	fmt.Fprintf(w, "Meta Size  %s\n", util.ByteSize(i.HeapSize()))
+	fmt.Fprintf(w, "Blocks     %d\n", len(i.Blocks))
+	fmt.Fprintf(w, "%-3s %-10s %-7s %-7s %-7s %-33s %-33s %-10s\n",
+		"#", "Type", "Comp", "Scale", "Card", "Min", "Max", "Bloom")
+	for id, head := range i.Blocks {
+		var bloom string
+		if head.Bloom != nil {
+			bloom = strconv.Itoa(int(head.Bloom.Len()))
+		} else {
+			bloom = "--"
+		}
+		fmt.Fprintf(w, "%-3d %-10s %-7s %-7d %-7d %-33s %-33s %-10s\n",
+			id,
+			head.Type,
+			head.Compression,
+			head.Scale,
+			head.Cardinality,
+			util.LimitStringEllipsis(util.ToString(head.MinValue), 33),
+			util.LimitStringEllipsis(util.ToString(head.MaxValue), 33),
+			bloom,
+		)
+	}
+	return nil
+}
+
 func (p *Package) DumpType(w io.Writer) error {
 	typname := "undefined"
 	if p.tinfo != nil {
@@ -388,7 +453,7 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 				gotype = p.tinfo.fields[i].typname
 			}
 			blockinfo := info.Blocks[i]
-			// reconstruct cardinality of missing
+			// reconstruct cardinality when missing
 			if blockinfo.Cardinality == 0 && v.Len() > 0 {
 				blockinfo.Cardinality = p.fields[i].Type.EstimateCardinality(v, 15)
 			}
@@ -466,6 +531,7 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 	}
 	return lineNo, nil
 }
+
 func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 	names := p.fields.Names()
 	if len(aliases) == p.nFields && len(aliases[0]) > 0 {
@@ -483,7 +549,7 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 		for i, l := 0, util.Min(500, p.nValues); i < l; i++ {
 			for j := 0; j < p.nFields; j++ {
 				var str string
-				if p.blocks[j].Type() == block.BlockIgnore {
+				if p.blocks[j].IsIgnore() {
 					str = "[strip]"
 				} else {
 					val, _ := p.FieldAt(j, i)
@@ -510,7 +576,7 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 		for i := 0; i < p.nValues; i++ {
 			for j := 0; j < p.nFields; j++ {
 				var str string
-				if p.blocks[j].Type() == block.BlockIgnore {
+				if p.blocks[j].IsIgnore() {
 					str = "[strip]"
 				} else {
 					val, _ := p.FieldAt(j, i)
@@ -545,6 +611,28 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 	return nil
 }
 
+func (n UnboundCondition) Dump() string {
+	buf := bytes.NewBuffer(nil)
+	n.dump(0, buf)
+	return string(buf.Bytes())
+}
+
+func (n UnboundCondition) dump(level int, w io.Writer) {
+	if n.Leaf() {
+		fmt.Fprintln(w, strings.Repeat("  ", level), n.String())
+	}
+	if len(n.Children) > 0 {
+		kind := "AND"
+		if n.OrKind {
+			kind = "OR"
+		}
+		fmt.Fprintln(w, strings.Repeat("  ", level), kind)
+	}
+	for _, v := range n.Children {
+		v.dump(level+1, w)
+	}
+}
+
 func (n ConditionTreeNode) Dump() string {
 	buf := bytes.NewBuffer(nil)
 	n.dump(0, buf)
@@ -569,8 +657,10 @@ func (n ConditionTreeNode) dump(level int, w io.Writer) {
 
 func (q Query) Dump() string {
 	buf := bytes.NewBuffer(nil)
-	fmt.Fprintln(buf, "Query:", q.Name, "=>")
-	q.Conditions.dump(0, buf)
+	fmt.Fprintln(buf, "Q>", q.Name, "=>", "SELECT(", strings.Join(q.fout.Aliases(), ", "), ") WHERE")
+	q.conds.dump(0, buf)
+	fmt.Fprintln(buf, ">> fields:", strings.Join(q.freq.Aliases(), ", "))
+	fmt.Fprintln(buf, ">> indexes:", strings.Join(q.fidx.Aliases(), ", "))
 	return string(buf.Bytes())
 }
 
@@ -581,13 +671,13 @@ func (j Join) Dump() string {
 	fmt.Fprintln(buf, "  Left:", j.Left.Table.Name())
 	fmt.Fprintln(buf, "  Where:")
 	j.Left.Where.dump(0, buf)
-	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Left.Fields.Names(), ","))
+	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Left.Fields, ","))
 	fmt.Fprintln(buf, "  AS:", strings.Join(j.Left.FieldsAs, ","))
 	fmt.Fprintln(buf, "  Limit:", j.Left.Limit)
 	fmt.Fprintln(buf, "  Right:", j.Right.Table.Name())
 	fmt.Fprintln(buf, "  Where:")
 	j.Right.Where.dump(0, buf)
-	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Right.Fields.Names(), ","))
+	fmt.Fprintln(buf, "  Fields:", strings.Join(j.Right.Fields, ","))
 	fmt.Fprintln(buf, "  AS:", strings.Join(j.Right.FieldsAs, ","))
 	fmt.Fprintln(buf, "  Limit:", j.Right.Limit)
 	return string(buf.Bytes())
@@ -604,201 +694,4 @@ func (r Result) Dump() string {
 			v.Index, v.Name, v.Alias, v.Type, v.Scale, v.Flags)
 	}
 	return buf.String()
-}
-
-func (p *Package) Validate() error {
-	if a, b := len(p.fields), p.nFields; a != b {
-		return fmt.Errorf("pack: mismatch len %d/%d", a, b)
-	}
-	if a, b := len(p.fields), len(p.blocks); a != b {
-		return fmt.Errorf("pack: mismatch block len %d/%d", a, b)
-	}
-
-	for i, f := range p.fields {
-		b := p.blocks[i]
-		if a, b := b.Type(), f.Type.BlockType(); a != b {
-			return fmt.Errorf("pack: mismatch block type %s/%s", a, b)
-		}
-		if a, b := p.nValues, b.Len(); a != b {
-			return fmt.Errorf("pack: mismatch block len %d/%d", a, b)
-		}
-		switch f.Type {
-		case FieldTypeBytes:
-			if b.Bytes == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := b.Bytes.Len(), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeString:
-			if b.Bytes == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := b.Bytes.Len(), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeBoolean:
-			if b.Bits == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := b.Bits.Len(), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeFloat64:
-			if b.Float64 == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Float64), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeFloat32:
-			if b.Float32 == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Float32), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeInt256, FieldTypeDecimal256:
-			if b.Int256.IsNil() {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := b.Int256.Len(), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeInt128, FieldTypeDecimal128:
-			if b.Int128.IsNil() {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := b.Int128.Len(), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
-			if b.Int64 == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Int64), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeInt32, FieldTypeDecimal32:
-			if b.Int32 == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Int32), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeInt16:
-			if b.Int16 == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Int16), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeInt8:
-			if b.Int8 == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Int8), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeUint64:
-			if b.Uint64 == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Uint64), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeUint32:
-			if b.Uint32 == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Uint32), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-		case FieldTypeUint16:
-			if b.Uint16 == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Uint16), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		case FieldTypeUint8:
-			if b.Uint8 == nil {
-				return fmt.Errorf("pack: nil %s block", f.Type)
-			} else if a, b := len(b.Uint8), p.nValues; a != b {
-				return fmt.Errorf("pack: mismatch %s block slice len %d/%d", f.Type, a, b)
-			}
-
-		}
-	}
-	return nil
-}
-
-func (l PackIndex) Validate() []error {
-	errs := make([]error, 0)
-	for i := range l.packs {
-		head := l.packs[i]
-		if head.NValues == 0 {
-			errs = append(errs, fmt.Errorf("%03d empty pack", head.Key))
-		}
-		// check min <= max
-		min, max := l.minpks[i], l.maxpks[i]
-		if min > max {
-			errs = append(errs, fmt.Errorf("%03d min %d > max %d", head.Key, min, max))
-		}
-		// check invariant
-		// - id's don't overlap between packs
-		// - same key can span many packs, so min_a == max_b
-		// - for long rows of same keys min_a == max_a
-		for j := range l.packs {
-			if i == j {
-				continue
-			}
-			jmin, jmax := l.minpks[j], l.maxpks[j]
-			dist := jmax - jmin + 1
-
-			// single key packs are allowed
-			if min == max {
-				// check the signle key is not between any other pack (exclusing)
-				if jmin < min && jmax > max {
-					errs = append(errs, fmt.Errorf("%03d overlaps %03d - key %d E [%d:%d]",
-						head.Key, l.packs[j].Key, min, jmin, jmax))
-				}
-			} else {
-				// check min val is not contained in any other pack unless continued
-				if min != jmin && min != jmax && min-jmin < dist {
-					errs = append(errs, fmt.Errorf("%03d overlaps %03d - min %d E [%d:%d]",
-						head.Key, l.packs[j].Key, min, jmin, jmax))
-				}
-
-				// check max val is not contained in any other pack unless continued
-				if max != jmin && max-jmin < dist {
-					errs = append(errs, fmt.Errorf("%03d overlaps %03d - max %d E [%d:%d]",
-						head.Key, l.packs[j].Key, max, jmin, jmax))
-				}
-			}
-		}
-	}
-	if len(errs) == 0 {
-		return nil
-	}
-	return errs
-}
-
-func (t *Table) ValidatePackHeaders(w io.Writer) error {
-	if errs := t.packidx.Validate(); errs != nil {
-		for _, v := range errs {
-			w.Write([]byte(v.Error() + "\n"))
-		}
-	}
-	return nil
-}
-
-func (t *Table) ValidateIndexPackHeaders(w io.Writer) error {
-	for _, idx := range t.indexes {
-		if errs := idx.packidx.Validate(); errs != nil {
-			for _, v := range errs {
-				w.Write([]byte(fmt.Sprintf("%s: %v\n", idx.Name, v.Error())))
-			}
-		}
-	}
-	return nil
 }

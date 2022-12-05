@@ -16,7 +16,7 @@ import (
 	"testing/quick"
 	"time"
 
-	"blockwatch.cc/knoxdb/encoding/simple8b"
+	"blockwatch.cc/knoxdb/encoding/s8b"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -246,6 +246,7 @@ func TestTimeArrayEncodeAll_Two(t *testing.T) {
 	}
 }
 
+/*
 func TestTimeArrayEncodeAll_Three(t *testing.T) {
 	src := []int64{0, 1, 3}
 	exp := make([]int64, len(src))
@@ -288,6 +289,7 @@ func TestTimeArrayEncodeAll_Three(t *testing.T) {
 		t.Fatalf("read value mismatch: got %v, exp %v", dec.Read(), exp[2])
 	}
 }
+*/
 
 func TestTimeArrayEncodeAll_Large_Range(t *testing.T) {
 	src := []int64{1442369134000000000, 1442369135000000000}
@@ -724,16 +726,13 @@ func TestTimeArrayDecodeAll_Two(t *testing.T) {
 }
 
 func TestTimeArrayDecodeAll_Three(t *testing.T) {
-	enc := NewTimeEncoder(3)
 	exp := []int64{0, 1, 3}
-	for _, v := range exp {
-		enc.Write(v)
-	}
+	tmp := make([]int64, len(exp))
+	copy(tmp, exp)
+	enc := &bytes.Buffer{}
+	TimeArrayEncodeAll(tmp, enc)
 
-	b, err := enc.Bytes()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	b := enc.Bytes()
 
 	if got := b[0] >> 4; got != timeCompressedPackedSimple {
 		t.Fatalf("Wrong encoding used: expected rle, got %v", got)
@@ -949,19 +948,15 @@ func TestTimeArrayDecodeAll_220SecondDelta(t *testing.T) {
 
 func TestTimeArrayDecodeAll_Quick(t *testing.T) {
 	quick.Check(func(values []int64) bool {
-		// Write values to encoder.
-		enc := NewTimeEncoder(1024)
 		exp := make([]int64, len(values))
 		for i, v := range values {
 			exp[i] = int64(v)
-			enc.Write(exp[i])
 		}
 
-		// Retrieve encoded bytes from encoder.
-		buf, err := enc.Bytes()
-		if err != nil {
-			t.Fatal(err)
-		}
+		enc := &bytes.Buffer{}
+		TimeArrayEncodeAll(values, enc)
+
+		buf := enc.Bytes()
 
 		got, err := TimeArrayDecodeAll(buf, nil)
 		if err != nil {
@@ -1280,14 +1275,14 @@ type TimeEncoder interface {
 type encoder struct {
 	ts    []uint64
 	bytes []byte
-	enc   *simple8b.Encoder
+	enc   *s8b.Encoder
 }
 
 // NewTimeEncoder returns a TimeEncoder with an initial buffer ready to hold sz bytes.
 func NewTimeEncoder(sz int) TimeEncoder {
 	return &encoder{
 		ts:  make([]uint64, 0, sz),
-		enc: simple8b.NewEncoder(),
+		enc: s8b.NewEncoder(),
 	}
 }
 
@@ -1352,7 +1347,7 @@ func (e *encoder) Bytes() ([]byte, error) {
 	}
 
 	// We can't compress this time-range, the deltas exceed 1 << 60
-	if max > simple8b.MaxValue {
+	if max > s8b.MaxValue {
 		return e.encodeRaw()
 	}
 
@@ -1441,7 +1436,7 @@ type TimeDecoder struct {
 	v    int64
 	i, n int
 	ts   []uint64
-	dec  simple8b.Decoder
+	dec  s8b.Decoder
 	err  error
 
 	// The delta value for a run-length encoded byte slice
@@ -1627,7 +1622,7 @@ func CountTimestamps(b []byte) int {
 		return int(count)
 	case timeCompressedPackedSimple:
 		// First 9 bytes are the starting timestamp and scaling factor, skip over them
-		count, _ := simple8b.CountBytes(b[9:])
+		count, _ := s8b.CountValues(b[9:])
 		return count + 1 // +1 is for the first uncompressed timestamp, starting timestamep in b[1:9]
 	default:
 		return 0

@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 // Design concepts
@@ -36,23 +36,19 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"blockwatch.cc/knoxdb/cache"
-	"blockwatch.cc/knoxdb/cache/lru"
+	"blockwatch.cc/knoxdb/cache/rclru"
+	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
-	idFieldName             = "I"
-	defaultCacheSize        = 128 // keep 128 unpacked partitions in memory (per table/index)
-	defaultPackSizeLog2     = 16  // 64k entries per partition
-	defaultJournalFillLevel = 50  // keep space for extension
+	idFieldName = "I"
 )
 
 var (
@@ -63,59 +59,10 @@ var (
 	indexesKey          = []byte("_indexes")
 	journalKey   uint32 = 0xFFFFFFFF
 	tombstoneKey uint32 = 0xFFFFFFFE
-
-	DefaultOptions = Options{
-		PackSizeLog2:    defaultPackSizeLog2, // 64k entries
-		JournalSizeLog2: 17,                  // 128k entries
-		CacheSize:       defaultCacheSize,    // in packs
-		FillLevel:       90,                  // boltdb fill level to limit reallocations
-	}
-	NoOptions = Options{}
 )
 
 type Tombstone struct {
 	Id uint64 `knox:"I,pk,snappy"`
-}
-
-type Options struct {
-	PackSizeLog2    int `json:"pack_size_log2"`
-	JournalSizeLog2 int `json:"journal_size_log2"`
-	CacheSize       int `json:"cache_size"`
-	FillLevel       int `json:"fill_level"`
-}
-
-func (o Options) PackSize() int {
-	return 1 << uint(o.PackSizeLog2)
-}
-
-func (o Options) JournalSize() int {
-	return 1 << uint(o.JournalSizeLog2)
-}
-
-// Notes: allow cache size to be zero
-func (o Options) Merge(o2 Options) Options {
-	o.PackSizeLog2 = util.NonZero(o2.PackSizeLog2, o.PackSizeLog2)
-	o.JournalSizeLog2 = util.NonZero(o2.JournalSizeLog2, o.JournalSizeLog2)
-	o.FillLevel = util.NonZero(o2.FillLevel, o.FillLevel)
-	o.CacheSize = o2.CacheSize
-	return o
-}
-
-func (o Options) Check() error {
-	// limit pack sizes to 4k .. 4M
-	if o.PackSizeLog2 < 12 || o.PackSizeLog2 > 22 {
-		return fmt.Errorf("PackSizeLog2 %d out of range [12, 22]", o.PackSizeLog2)
-	}
-	if o.JournalSizeLog2 < 12 || o.JournalSizeLog2 > 22 {
-		return fmt.Errorf("JournalSizeLog2 %d out of range [12, 22]", o.JournalSizeLog2)
-	}
-	if o.CacheSize < 0 || o.CacheSize > 64*1024 {
-		return fmt.Errorf("CacheSize %d out of range [0, 64k]", o.CacheSize)
-	}
-	if o.FillLevel < 10 || o.FillLevel > 100 {
-		return fmt.Errorf("FillLevel %d out of range [10, 100]", o.FillLevel)
-	}
-	return nil
 }
 
 type TableMeta struct {
@@ -125,22 +72,22 @@ type TableMeta struct {
 }
 
 type Table struct {
-	name     string       // printable table name
-	opts     Options      // runtime configuration options
-	fields   FieldList    // ordered list of table fields as central type info
-	indexes  IndexList    // list of indexes (similar structure as the table)
-	meta     TableMeta    // authoritative metadata
-	db       *DB          // lower-level storage (e.g. boltdb wrapper)
-	cache    cache.Cache  // keep decoded packs for query/updates
-	journal  *Journal     // in-memory data not yet written to packs
-	packidx  *PackIndex   // in-memory list of pack and block info
-	key      []byte       // name of table data bucket
-	metakey  []byte       // name of table metadata bucket
-	packPool *sync.Pool   // buffer pool for new packages
-	u64Pool  *sync.Pool   // buffer pool for uint64 slices (used by indexes)
-	u32Pool  *sync.Pool   // buffer pool for uint32 slices (used by match algos)
-	stats    TableStats   // usage statistics
-	mu       sync.RWMutex // global table lock
+	name     string                            // printable table name
+	opts     Options                           // runtime configuration options
+	fields   FieldList                         // ordered list of table fields as central type info
+	indexes  IndexList                         // list of indexes (similar structure as the table)
+	meta     TableMeta                         // authoritative metadata
+	db       *DB                               // lower-level storage (e.g. boltdb wrapper)
+	bcache   rclru.Cache[uint64, *block.Block] // keep decoded packs for query/updates
+	journal  *Journal                          // in-memory data not yet written to packs
+	packidx  *PackIndex                        // in-memory list of pack and block info
+	key      []byte                            // name of table data bucket
+	metakey  []byte                            // name of table metadata bucket
+	packPool *sync.Pool                        // buffer pool for new packages
+	u64Pool  *sync.Pool                        // buffer pool for uint64 slices (used by indexes)
+	u32Pool  *sync.Pool                        // buffer pool for uint32 slices (used by match algos)
+	stats    TableStats                        // usage statistics
+	mu       sync.RWMutex                      // global table lock
 }
 
 func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, error) {
@@ -245,13 +192,13 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		return nil, err
 	}
 	if t.opts.CacheSize > 0 {
-		t.cache, err = lru.New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
+		t.bcache, err = rclru.New2Q[uint64, *block.Block](t.opts.CacheSizeMBytes())
 		if err != nil {
 			return nil, err
 		}
-		t.stats.PackCacheCapacity = int64(t.opts.CacheSize)
+		t.stats.CacheCapacity = int64(t.opts.CacheSizeMBytes())
 	} else {
-		t.cache = cache.NewNoCache()
+		t.bcache = rclru.NewNoCache[uint64, *block.Block]()
 	}
 	log.Debugf("Created table %s", name)
 	d.tables[name] = t
@@ -288,7 +235,7 @@ func (d *DB) DropTable(name string) error {
 			return err
 		}
 	}
-	t.cache.Purge()
+	t.bcache.Purge()
 	err = d.db.Update(func(dbTx store.Tx) error {
 		err = dbTx.Root().DeleteBucket([]byte(name))
 		if err != nil {
@@ -396,13 +343,13 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		return nil, err
 	}
 	if t.opts.CacheSize > 0 {
-		t.cache, err = lru.New2QWithEvict(int(t.opts.CacheSize), t.onEvictedPackage)
+		t.bcache, err = rclru.New2Q[uint64, *block.Block](t.opts.CacheSizeMBytes())
 		if err != nil {
 			return nil, err
 		}
-		t.stats.PackCacheCapacity = int64(t.opts.CacheSize)
+		t.stats.CacheCapacity = int64(t.opts.CacheSizeMBytes())
 	} else {
-		t.cache = cache.NewNoCache()
+		t.bcache = rclru.NewNoCache[uint64, *block.Block]()
 	}
 
 	needFlush := make([]*Index, 0)
@@ -444,13 +391,13 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 }
 
 func (t *Table) loadPackInfo(dbTx store.Tx) error {
-	b := dbTx.Bucket(t.metakey)
-	if b == nil {
+	meta := dbTx.Bucket(t.metakey)
+	if meta == nil {
 		return ErrNoTable
 	}
 	maxPackSize := t.opts.PackSize()
 	packs := make(PackInfoList, 0)
-	bi := b.Bucket(infoKey)
+	bi := meta.Bucket(infoKey)
 	if bi != nil {
 		log.Debugf("pack: %s table loading package info from bucket", t.name)
 		c := bi.Cursor()
@@ -471,14 +418,14 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 			t.packidx = NewPackIndex(packs, t.fields.PkIndex(), maxPackSize)
 			atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
 			atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
-			atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
+			atomic.StoreInt64(&t.stats.TotalSize, int64(t.packidx.TableSize()))
 			log.Debugf("pack: %s table loaded index data for %d packs", t.name, t.packidx.Len())
 			return nil
 		}
 	}
-	log.Warnf("pack: Corrupt or missing pack info for table %s! Scanning table. This may take a long time...", t.name)
+	log.Warnf("pack: %s table has corrupt or missing statistics! Re-scanning table. This may take some time...", t.name)
 	c := dbTx.Bucket(t.key).Cursor()
-	pkg := NewPackage(maxPackSize)
+	pkg := NewPackage(maxPackSize, nil)
 	if err := pkg.InitFieldsFrom(t.journal.DataPack()); err != nil {
 		return err
 	}
@@ -488,6 +435,10 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 			return fmt.Errorf("pack: cannot read %s/%x: %v", t.name, c.Key(), err)
 		}
 		pkg.SetKey(c.Key())
+		if pkg.IsJournal() || pkg.IsTomb() {
+			pkg.Clear()
+			continue
+		}
 		info := pkg.Info()
 		_ = info.UpdateStats(pkg)
 		packs = append(packs, info)
@@ -497,17 +448,25 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 	t.packidx = NewPackIndex(packs, t.fields.PkIndex(), maxPackSize)
 	atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
 	atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
-	atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
+	atomic.StoreInt64(&t.stats.TotalSize, int64(t.packidx.TableSize()))
 	log.Debugf("pack: %s table scanned %d packages", t.name, t.packidx.Len())
 	return nil
 }
 
 func (t *Table) storePackInfo(dbTx store.Tx) error {
-	b := dbTx.Bucket(t.metakey)
-	if b == nil {
+	meta := dbTx.Bucket(t.metakey)
+	if meta == nil {
 		return ErrNoTable
 	}
-	hb := b.Bucket(infoKey)
+	hb := meta.Bucket(infoKey)
+	// create statistics bucket when missing
+	if hb == nil {
+		var err error
+		hb, err = meta.CreateBucketIfNotExists(infoKey)
+		if err != nil {
+			return err
+		}
+	}
 	// remove headers for deleted packs, if any
 	for _, v := range t.packidx.removed {
 		log.Debugf("pack: %s table removing pack info %x", t.name, v)
@@ -574,6 +533,15 @@ func (t *Table) Stats() []TableStats {
 	s.TombstoneTuplesCapacity = int64(cap(t.journal.tomb))
 	s.TombstoneSize = s.TombstoneTuplesCount * 8
 
+	// copy cache stats
+	cs := t.bcache.Stats()
+	s.CacheHits = cs.Hits
+	s.CacheMisses = cs.Misses
+	s.CacheInserts = cs.Inserts
+	s.CacheEvictions = cs.Evictions
+	s.CacheCount = cs.Count
+	s.CacheSize = cs.Size
+
 	resp := []TableStats{s}
 	for _, idx := range t.indexes {
 		resp = append(resp, idx.Stats())
@@ -584,9 +552,7 @@ func (t *Table) Stats() []TableStats {
 func (t *Table) PurgeCache() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.cache.Purge()
-	atomic.StoreInt64(&t.stats.PackCacheCount, 0)
-	atomic.StoreInt64(&t.stats.PackCacheSize, 0)
+	t.bcache.Purge()
 	for _, idx := range t.indexes {
 		idx.PurgeCache()
 	}
@@ -602,8 +568,8 @@ func (t *Table) Insert(ctx context.Context, val interface{}) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := t.insertJournal(val); err != nil {
@@ -689,8 +655,8 @@ func (t *Table) InsertRow(ctx context.Context, row Row) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := t.appendPackIntoJournal(ctx, row.res.pkg, row.n, 1); err != nil {
@@ -741,8 +707,8 @@ func (t *Table) InsertResult(ctx context.Context, res *Result) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := t.appendPackIntoJournal(ctx, res.pkg, 0, res.pkg.Len()); err != nil {
@@ -806,8 +772,8 @@ func (t *Table) Update(ctx context.Context, val interface{}) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := t.updateJournal(val); err != nil {
@@ -892,8 +858,8 @@ func (t *Table) Delete(ctx context.Context, q Query) (int64, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return 0, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
 
 	tx, err := t.db.Tx(true)
@@ -902,7 +868,7 @@ func (t *Table) Delete(ctx context.Context, q Query) (int64, error) {
 	}
 	defer tx.Rollback()
 
-	q.Fields = FieldList{t.Fields().Pk()}
+	q.Fields = []string{t.fields.Pk().Name}
 	res, err := t.QueryTx(ctx, tx, q)
 	if err != nil {
 		return 0, err
@@ -924,8 +890,8 @@ func (t *Table) DeleteIds(ctx context.Context, val []uint64) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := t.deleteJournal(val); err != nil {
@@ -1003,10 +969,20 @@ func (t *Table) deleteJournal(ids []uint64) error {
 	return nil
 }
 
+func (t *Table) IsClosed() bool {
+	return t.db == nil
+}
+
 func (t *Table) Close() error {
+	if t.db == nil {
+		return nil
+	}
 	log.Debugf("pack: closing %s table with %d journal records", t.name, t.journal.Len())
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.db == nil {
+		return nil
+	}
 
 	tx, err := t.db.Tx(true)
 	if err != nil {
@@ -1047,12 +1023,18 @@ func (t *Table) Close() error {
 			return err
 		}
 	}
+	t.indexes = t.indexes[:0]
 
 	// commit storage transaction
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	t.journal.Close()
+
+	// unregister from db
+	delete(t.db.tables, t.name)
+	t.db = nil
+
 	return nil
 }
 
@@ -1060,8 +1042,8 @@ func (t *Table) FlushJournal(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	tx, err := t.db.Tx(true)
@@ -1111,8 +1093,8 @@ func (t *Table) Flush(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	tx, err := t.db.Tx(true)
@@ -1247,8 +1229,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					// - write table metadata and pack headers
 					//
 					// // check context before next turn
-					// if interruptRequested(ctx) {
-					// 	return ctx.Err()
+					// if err := ctx.Err(); err != nil {
+					// 	return err
 					// }
 				}
 				// update next values after pack index has changed
@@ -1256,7 +1238,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				// log.Debugf("Post-store next pack %d max=%d nextmin=%d", nextpack, packmax, nextmin)
 			}
 			// prepare for next pack
-			t.recyclePackage(pkg)
+			pkg.Release()
 			pkg = nil
 			needsort = false
 		}
@@ -1278,8 +1260,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				packmax = 0
 				nextmin = 0
 				pkg = t.packPool.Get().(*Package)
+				pkg.PopulateFields(nil)
 				pkg.key = t.packidx.NextKey()
-				pkg.cached = false
 				// log.Debugf("Starting new pack %d/%d with key %d", nextpack, t.packidx.Len(), pkg.key)
 			}
 			lastpack = nextpack
@@ -1515,14 +1497,15 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 						// - write table metadata and pack headers
 						//
 						// // check context before next turn
-						// if interruptRequested(ctx) {
-						// 	return ctx.Err()
+						// if err:=ctx.Err(); err != nil {
+						// 	return err
 						// }
 					}
 
 					// after store, leave journal for-loop to trigger pack selection
 					jpos++
 					lastpack = -1 // force pack load in next round
+					pkg.Release()
 					pkg = nil
 					break
 				}
@@ -1543,6 +1526,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		}
 		nParts++
 		nBytes += n
+		pkg.Release()
+		pkg = nil
 	}
 
 	t.stats.LastFlushDuration = time.Since(start)
@@ -1599,13 +1584,11 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 // of the same keys. This will lead to pack fragmentation. See flushTx for more
 // details.
 //
-//
 // The placement algorithm works as follows:
 // - keep lastpack when no pack exists (effectively == 0)
 // - choose pack with pack.min <= val <= pack.max
 // - choose pack with closest max < val
 // - when val < min of first pack, choose first pack
-//
 func (t *Table) findBestPack(pkval uint64) (int, uint64, uint64, uint64) {
 	// returns 0 when list is empty, this ensures we initially stick
 	// to the first pack until it's full; returns last pack for values
@@ -1639,31 +1622,33 @@ func (t *Table) findBestPack(pkval uint64) (int, uint64, uint64, uint64) {
 }
 
 func (t *Table) Lookup(ctx context.Context, ids []uint64) (*Result, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
-	if util.InterruptRequested(ctx) {
-		return nil, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	tx, err := t.db.Tx(false)
 	if err != nil {
 		return nil, err
 	}
-	res, err := t.LookupTx(ctx, tx, ids)
-	tx.Rollback()
-	return res, err
+	defer tx.Rollback()
+	return t.LookupTx(ctx, tx, ids)
 }
 
 // unsafe when called concurrently! lock table _before_ starting bolt tx!
 func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, error) {
-	res := &Result{
-		fields: t.Fields(),                  // we return all fields
-		pkg:    t.packPool.Get().(*Package), // clone full table structure
-		table:  t,
+	q := NewQuery(t.name + ".lookup")
+	if err := q.Compile(t); err != nil {
+		return nil, err
 	}
-
-	q := NewQuery(t.name+".lookup", t)
+	p := t.packPool.Get().(*Package) // clone full table structure
+	p.PopulateFields(nil)
+	res := &Result{
+		fields: t.Fields(), // we return all fields
+		pkg:    p,
+	}
 	defer func() {
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
 		q.Close()
@@ -1742,8 +1727,15 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		return res, nil
 	}
 
+	var (
+		pkg *Package
+		err error
+	)
+	defer func() {
+		t.releaseSharedPack(pkg)
+	}()
+
 	// optimize for lookup of most recently added values
-	q.lap = time.Now()
 	var nextid int
 	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
 		// stop when all inputs are matched
@@ -1752,18 +1744,20 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		}
 
 		// stop when context is canceled
-		if util.InterruptRequested(ctx) {
+		if err = ctx.Err(); err != nil {
 			res.Close()
-			return nil, ctx.Err()
+			return nil, err
 		}
 
-		// continue with next pack
+		t.releaseSharedPack(pkg)
+		pkg = nil
+
+		// continue with next pack, always load via cache
 
 		// check pack headers again because now we have stripped some values
 		// from the id lookup slice, so we may know better if the pack
 		// matches or not
-
-		pkg, err := t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.reqfields)
+		pkg, err = t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.freq)
 		if err != nil {
 			res.Close()
 			return nil, err
@@ -1790,7 +1784,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 				continue
 			}
 
-			// on match, copy result from journal
+			// on match, copy result from package
 			if err := res.pkg.AppendFrom(pkg, j, 1); err != nil {
 				res.Close()
 				return nil, err
@@ -1805,11 +1799,11 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 }
 
 func (t *Table) Query(ctx context.Context, q Query) (*Result, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
-	if util.InterruptRequested(ctx) {
-		return nil, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	tx, err := t.db.Tx(false)
@@ -1847,7 +1841,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	// run journal query before index query to avoid side-effects of
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
-	jbits = q.Conditions.MatchPack(t.journal.DataPack(), PackInfo{})
+	jbits = q.conds.MatchPack(t.journal.DataPack(), PackInfo{})
 	q.stats.JournalTime = time.Since(q.lap)
 	// log.Debugf("Table %s: %d journal results", t.name, jbits.Count())
 
@@ -1858,13 +1852,12 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 
 	// prepare result package
 	pkg := t.packPool.Get().(*Package)
-	pkg.KeepFields(q.reqfields)
-	pkg.UpdateAliasesFrom(q.reqfields)
+	pkg.PopulateFields(q.freq)
+	pkg.UpdateAliasesFrom(q.freq)
 
 	res := &Result{
-		fields: q.reqfields,
+		fields: q.freq,
 		pkg:    pkg,
-		table:  t,
 	}
 
 	// early return
@@ -1874,18 +1867,27 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 
 	// PACK SCAN (either using found pk ids or non-indexed conditions)
 	// scan packs only if (a) index match returned any results or (b) no index exists
+	var (
+		spack *Package
+		err   error
+	)
+	defer func() {
+		t.releaseSharedPack(spack)
+	}()
+
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
-		q.lap = time.Now()
 	packloop:
 		for _, p := range q.MakePackSchedule(false) {
-			if util.InterruptRequested(ctx) {
+			if err := ctx.Err(); err != nil {
 				res.Close()
-				return nil, ctx.Err()
+				return nil, err
 			}
 
-			// load pack from cache or storage, will be recycled on cache eviction
-			pkg, err := t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
+			t.releaseSharedPack(spack)
+			spack = nil
+			// load pack from cache or storage
+			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
 			if err != nil {
 				res.Close()
 				return nil, err
@@ -1893,13 +1895,13 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 			q.stats.PacksScanned++
 
 			// identify and copy matches
-			bits := q.Conditions.MatchPack(pkg, t.packidx.packs[p])
+			bits := q.conds.MatchPack(spack, t.packidx.packs[p])
 			// log.Debugf("Table %s: %d results in pack %d", t.name, bits.Count(), pkg.key)
 			for _, idx := range bits.IndexesU32(u32slice) {
 				i := int(idx)
 
 				// skip broken entries
-				pkid, err := pkg.Uint64At(pkg.pkindex, i)
+				pkid, err := spack.Uint64At(spack.pkindex, i)
 				if err != nil {
 					continue
 				}
@@ -1909,7 +1911,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 					continue
 				}
 
-				src := pkg
+				src := spack
 				index := i
 
 				// when exists, use row version found in journal
@@ -2005,7 +2007,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
 	// reverse the bitfield order for descending walk
-	jbits = q.Conditions.MatchPack(t.journal.DataPack(), PackInfo{})
+	jbits = q.conds.MatchPack(t.journal.DataPack(), PackInfo{})
 	q.stats.JournalTime = time.Since(q.lap)
 
 	// maybe run index query
@@ -2015,13 +2017,12 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 
 	// prepare result package
 	pkg := t.packPool.Get().(*Package)
-	pkg.KeepFields(q.reqfields)
-	pkg.UpdateAliasesFrom(q.reqfields)
+	pkg.PopulateFields(q.freq)
+	pkg.UpdateAliasesFrom(q.freq)
 
 	res := &Result{
-		fields: q.reqfields,
+		fields: q.freq,
 		pkg:    pkg,
-		table:  t,
 	}
 
 	// early return
@@ -2065,6 +2066,11 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	}
 	q.stats.JournalTime = time.Since(q.lap)
 
+	// finalize on limit
+	if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
+		return res, nil
+	}
+
 	// reverse-scan packs only if
 	// (a) index match returned any results or
 	// (b) no index exists
@@ -2073,17 +2079,27 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	}
 
 	// REVERSE PACK SCAN (either using found pk ids or non-indexed conditions)
-	q.lap = time.Now()
+	var (
+		spack *Package
+		err   error
+	)
+	defer func() {
+		t.releaseSharedPack(spack)
+	}()
+
 	u32slice := t.u32Pool.Get().([]uint32)
 packloop:
 	for _, p := range q.MakePackSchedule(true) {
-		if util.InterruptRequested(ctx) {
+		if err := ctx.Err(); err != nil {
 			res.Close()
-			return nil, ctx.Err()
+			return nil, err
 		}
 
-		// load pack from cache or storage, will be recycled on cache eviction
-		pkg, err := t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
+		t.releaseSharedPack(spack)
+		spack = nil
+
+		// load pack from cache or storage
+		spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
 		if err != nil {
 			res.Close()
 			return nil, err
@@ -2091,14 +2107,14 @@ packloop:
 		q.stats.PacksScanned++
 
 		// identify and copy matches
-		bits := q.Conditions.MatchPack(pkg, t.packidx.packs[p])
+		bits := q.conds.MatchPack(spack, t.packidx.packs[p])
 		u32slice = bits.IndexesU32(u32slice)
 		for k := len(u32slice) - 1; k >= 0; k-- {
 			// take index
 			i := int(u32slice[k])
 
 			// skip broken entries
-			pkid, err := pkg.Uint64At(pkg.pkindex, i)
+			pkid, err := spack.Uint64At(spack.pkindex, i)
 			if err != nil {
 				continue
 			}
@@ -2108,7 +2124,7 @@ packloop:
 				continue
 			}
 
-			src := pkg
+			src := spack
 			index := i
 
 			// when exists, use row from journal
@@ -2143,6 +2159,7 @@ packloop:
 		bits.Close()
 	}
 	t.u32Pool.Put(u32slice)
+
 	q.stats.ScanTime = time.Since(q.lap)
 	q.lap = time.Now()
 
@@ -2150,11 +2167,11 @@ packloop:
 }
 
 func (t *Table) Count(ctx context.Context, q Query) (int64, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
-	if util.InterruptRequested(ctx) {
-		return 0, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
 
 	tx, err := t.db.Tx(false)
@@ -2184,7 +2201,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	// run journal query before index query to avoid side-effects of
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
-	jbits = q.Conditions.MatchPack(t.journal.DataPack(), PackInfo{})
+	jbits = q.conds.MatchPack(t.journal.DataPack(), PackInfo{})
 	q.stats.JournalTime = time.Since(q.lap)
 
 	// maybe run index query
@@ -2199,29 +2216,39 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 
 	// PACK SCAN (either using found pk ids or non-indexed conditions)
 	// scan packs only when index match returned any results of when no index exists
+	var (
+		spack *Package
+		err   error
+	)
+	defer func() {
+		t.releaseSharedPack(spack)
+	}()
+
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
-		q.lap = time.Now()
 	packloop:
-		for _, p := range q.MakePackSchedule(false) {
-			if util.InterruptRequested(ctx) {
-				return int64(q.stats.RowsMatched), ctx.Err()
+		for _, p := range q.MakePackSchedule(q.Order == OrderDesc) {
+			if err := ctx.Err(); err != nil {
+				return int64(q.stats.RowsMatched), err
 			}
 
-			// load pack from cache or storage, will be recycled on cache eviction
-			pkg, err := t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
+			t.releaseSharedPack(spack)
+			spack = nil
+
+			// load pack from cache or storage
+			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
 			if err != nil {
 				return 0, err
 			}
 			q.stats.PacksScanned++
 
 			// identify and count matches
-			bits := q.Conditions.MatchPack(pkg, t.packidx.packs[p])
+			bits := q.conds.MatchPack(spack, t.packidx.packs[p])
 			for _, idx := range bits.IndexesU32(u32slice) {
 				i := int(idx)
 
 				// skip broken entries
-				pkid, err := pkg.Uint64At(pkg.pkindex, i)
+				pkid, err := spack.Uint64At(spack.pkindex, i)
 				if err != nil {
 					continue
 				}
@@ -2261,17 +2288,20 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 
 	// after all packs have been scanned, add remaining rows from journal, if any
 	// subtract offset and clamp to [0, limit]
-	q.stats.RowsMatched += util.NonZero(q.Limit, util.Max(int(jbits.Count())-q.Offset, 0))
+	q.stats.RowsMatched += util.Max(int(jbits.Count())-q.Offset, 0)
+	if q.Limit > 0 {
+		q.stats.RowsMatched = util.Min(q.stats.RowsMatched, q.Limit)
+	}
 
 	return int64(q.stats.RowsMatched), nil
 }
 
 func (t *Table) Stream(ctx context.Context, q Query, fn func(r Row) error) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	tx, err := t.db.Tx(false)
@@ -2281,10 +2311,14 @@ func (t *Table) Stream(ctx context.Context, q Query, fn func(r Row) error) error
 
 	defer tx.Rollback()
 	if q.Order == OrderAsc {
-		return t.StreamTx(ctx, tx, q, fn)
+		err = t.StreamTx(ctx, tx, q, fn)
 	} else {
-		return t.StreamTxDesc(ctx, tx, q, fn)
+		err = t.StreamTxDesc(ctx, tx, q, fn)
 	}
+	if err == EndStream {
+		return nil
+	}
+	return err
 }
 
 // Similar to QueryTx but returns each match via callback function to allow stream
@@ -2309,9 +2343,9 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// run journal query before index query to avoid side-effects of
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
-	jbits = q.Conditions.MatchPack(t.journal.DataPack(), PackInfo{})
+	jbits = q.conds.MatchPack(t.journal.DataPack(), PackInfo{})
 	q.stats.JournalTime = time.Since(q.lap)
-	// log.Debugf("Table %s: %d journal results", t.name, jbits.Count())
+	// q.Debugf("Table %s: %d journal results", t.name, jbits.Count())
 
 	// maybe run index query
 	if err := q.QueryIndexes(ctx, tx); err != nil {
@@ -2324,36 +2358,46 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	}
 
 	// prepare result
-	res := Result{fields: q.reqfields}
+	res := &Result{fields: q.freq}
 
 	// PACK SCAN (either using found pk ids or non-indexed conditions)
 	// scan packs only when
 	// (a) index match returned any results or
 	// (b) when no index exists
+	var (
+		spack *Package
+		err   error
+	)
+	defer func() {
+		t.releaseSharedPack(spack)
+	}()
+
 	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
-		q.lap = time.Now()
 	packloop:
 		for _, p := range q.MakePackSchedule(false) {
-			if util.InterruptRequested(ctx) {
-				return ctx.Err()
+			if err := ctx.Err(); err != nil {
+				return err
 			}
 
-			// load pack from cache or storage, will be recycled on cache eviction
-			pkg, err := t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
+			t.releaseSharedPack(spack)
+			spack = nil
+
+			// load pack from cache or storage
+			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
 			if err != nil {
 				return err
 			}
 			q.stats.PacksScanned++
 
 			// identify and forward matches
-			bits := q.Conditions.MatchPack(pkg, t.packidx.packs[p])
-			// log.Debugf("Table %s: %d results in pack %d", t.name, bits.Count(), pkg.key)
+			bits := q.conds.MatchPack(spack, t.packidx.packs[p])
+			// q.Debugf("Table %s: %d results in pack %d", t.name, bits.Count(), spack.key)
 			for _, idx := range bits.IndexesU32(u32slice) {
 				i := int(idx)
 
 				// skip broken entries
-				pkid, err := pkg.Uint64At(pkg.pkindex, i)
+				pkid, err := spack.Uint64At(spack.pkindex, i)
 				if err != nil {
 					continue
 				}
@@ -2364,7 +2408,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 				}
 
 				// default to pack row
-				res.pkg = pkg
+				res.pkg = spack
 				index := i
 
 				// when exist, use journal row
@@ -2385,8 +2429,8 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 				}
 
 				// forward match
-				// log.Debugf("Table %s: using result at pack %d index %d", t.name, pkg.key, index)
-				if err := fn(Row{res: &res, n: index}); err != nil {
+				// q.Debugf("Table %s: using result at pack=%d index=%d pkid=%d", t.name, spack.key, index, pkid)
+				if err := fn(Row{res: res, n: index}); err != nil {
 					bits.Close()
 					return err
 				}
@@ -2412,7 +2456,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// after all packs have been scanned, add remaining rows from journal, if any
 	res.pkg = t.journal.DataPack()
 	idxs, _ := t.journal.SortedIndexes(jbits)
-	// log.Debugf("Table %s: %d remaining journal rows", t.name, len(idxs))
+	// q.Debugf("Table %s: %d remaining journal rows", t.name, len(idxs))
 	for _, idx := range idxs {
 		// Note: deleted indexes are already removed from list
 
@@ -2423,7 +2467,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 		}
 
 		// forward match
-		if err := fn(Row{res: &res, n: idx}); err != nil {
+		if err := fn(Row{res: res, n: idx}); err != nil {
 			return err
 		}
 		q.stats.RowsMatched++
@@ -2433,6 +2477,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 		}
 	}
 	q.stats.JournalTime += time.Since(q.lap)
+	// q.Debugf("%s", q.PrintTiming())
 
 	return nil
 }
@@ -2459,7 +2504,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
 	// reverse the bitfield order for descending walk
-	jbits = q.Conditions.MatchPack(t.journal.DataPack(), PackInfo{})
+	jbits = q.conds.MatchPack(t.journal.DataPack(), PackInfo{})
 	q.stats.JournalTime = time.Since(q.lap)
 	// log.Debugf("Table %s: %d journal results", t.name, jbits.Count())
 
@@ -2479,7 +2524,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	_, maxPackedPk := t.packidx.GlobalMinMax()
 
 	// prepare result
-	res := Result{fields: q.reqfields}
+	res := &Result{fields: q.freq}
 
 	// before scanning packs, add 'new' rows from journal (i.e. pk > maxPackedPk),
 	// walk in descending order
@@ -2504,7 +2549,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 		}
 
 		// forward match
-		if err := fn(Row{res: &res, n: idx}); err != nil {
+		if err := fn(Row{res: res, n: idx}); err != nil {
 			return err
 		}
 		q.stats.RowsMatched++
@@ -2522,24 +2567,33 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 		return nil
 	}
 
-	q.lap = time.Now()
-	u32slice := t.u32Pool.Get().([]uint32)
+	var (
+		spack *Package
+		err   error
+	)
+	defer func() {
+		t.releaseSharedPack(spack)
+	}()
 
+	u32slice := t.u32Pool.Get().([]uint32)
 packloop:
 	for _, p := range q.MakePackSchedule(true) {
-		if util.InterruptRequested(ctx) {
-			return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
-		// load pack from cache or storage, will be recycled on cache eviction
-		pkg, err := t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.reqfields)
+		t.releaseSharedPack(spack)
+		spack = nil
+
+		// load pack from cache or storage
+		spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
 		if err != nil {
 			return err
 		}
 		q.stats.PacksScanned++
 
 		// identify and forward matches
-		bits := q.Conditions.MatchPack(pkg, t.packidx.packs[p])
+		bits := q.conds.MatchPack(spack, t.packidx.packs[p])
 		// log.Debugf("Table %s: %d results in pack %d", t.name, bits.Count(), pkg.key)
 		u32slice = bits.IndexesU32(u32slice)
 		for k := len(u32slice) - 1; k >= 0; k-- {
@@ -2547,7 +2601,7 @@ packloop:
 			i := int(u32slice[k])
 
 			// skip broken entries
-			pkid, err := pkg.Uint64At(pkg.pkindex, i)
+			pkid, err := spack.Uint64At(spack.pkindex, i)
 			if err != nil {
 				continue
 			}
@@ -2557,7 +2611,7 @@ packloop:
 				continue
 			}
 
-			res.pkg = pkg
+			res.pkg = spack
 			index := i
 
 			// when exist, use journal row
@@ -2577,7 +2631,7 @@ packloop:
 			}
 
 			// forward match
-			if err := fn(Row{res: &res, n: index}); err != nil {
+			if err := fn(Row{res: res, n: index}); err != nil {
 				bits.Close()
 				return err
 			}
@@ -2592,6 +2646,7 @@ packloop:
 		bits.Close()
 	}
 	t.u32Pool.Put(u32slice)
+
 	q.stats.ScanTime = time.Since(q.lap)
 	q.lap = time.Now()
 
@@ -2599,11 +2654,11 @@ packloop:
 }
 
 func (t *Table) StreamLookup(ctx context.Context, ids []uint64, fn func(r Row) error) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	tx, err := t.db.Tx(false)
@@ -2612,12 +2667,20 @@ func (t *Table) StreamLookup(ctx context.Context, ids []uint64, fn func(r Row) e
 	}
 	defer tx.Rollback()
 
-	return t.StreamLookupTx(ctx, tx, ids, fn)
+	err = t.StreamLookupTx(ctx, tx, ids, fn)
+	if err == EndStream {
+		return nil
+	}
+	return err
 }
 
 func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn func(r Row) error) error {
 	atomic.AddInt64(&t.stats.StreamCalls, 1)
-	q := NewQuery(t.name+".stream-lookup", t)
+	q := NewQuery(t.name + ".stream-lookup")
+	if err := q.Compile(t); err != nil {
+		return err
+	}
+
 	defer func() {
 		atomic.AddInt64(&t.stats.StreamedTuples, int64(q.stats.RowsMatched))
 		q.Close()
@@ -2655,7 +2718,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 	maxRows := len(ids)
 	maxNonZeroId := ids[maxRows-1]
 
-	res := Result{
+	res := &Result{
 		fields: t.Fields(),
 		pkg:    t.journal.DataPack(),
 	}
@@ -2678,7 +2741,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 		}
 
 		// on match, forward result from journal
-		if err := fn(Row{res: &res, n: idx}); err != nil {
+		if err := fn(Row{res: res, n: idx}); err != nil {
 			return err
 		}
 		q.stats.RowsMatched++
@@ -2698,8 +2761,15 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 		return nil
 	}
 
+	var (
+		pkg *Package
+		err error
+	)
+	defer func() {
+		t.releaseSharedPack(pkg)
+	}()
+
 	// PACK SCAN, schedule uses fast range checks and schould be perfect
-	q.lap = time.Now()
 	var nextid int
 	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
 		// stop when all inputs are matched
@@ -2707,11 +2777,15 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			break
 		}
 
-		if util.InterruptRequested(ctx) {
-			return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
-		pkg, err := t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.reqfields)
+		t.releaseSharedPack(pkg)
+		pkg = nil
+
+		// always load via cache
+		pkg, err = t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.freq)
 		if err != nil {
 			return err
 		}
@@ -2738,7 +2812,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			}
 
 			// forward match
-			if err := fn(Row{res: &res, n: j}); err != nil {
+			if err := fn(Row{res: res, n: j}); err != nil {
 				return err
 			}
 
@@ -2758,8 +2832,8 @@ func (t *Table) Compact(ctx context.Context) error {
 	defer t.mu.Unlock()
 	start := time.Now()
 
-	if util.InterruptRequested(ctx) {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	// check if compaction is possible
@@ -2807,6 +2881,7 @@ func (t *Table) Compact(ctx context.Context) error {
 	)
 
 	log.Debugf("pack: %s table compacting %d packs / %d rows", t.name, srcPacks, total)
+	// t.DumpPackInfoDetail(os.Stdout, DumpModeDec, false)
 
 	// This algorithm walks the table's pack list in pack key order and
 	// collects/compacts contents in row id (pk) order. Note that pk order may
@@ -2832,19 +2907,19 @@ func (t *Table) Compact(ctx context.Context) error {
 			if dstKey == t.packidx.packs[dstIndex].Key {
 				// skip full packs
 				if t.packidx.packs[dstIndex].NValues == maxsz {
-					// log.Tracef("pack: skipping full dst pack %x", dstKey)
+					// log.Debugf("pack: skipping full dst pack key=%x", dstKey)
 					dstIndex++
 					continue
 				}
 				// skip out of order packs
 				pmin, pmax := t.packidx.MinMax(dstIndex)
 				if pmin < lastMaxPk {
-					// log.Tracef("pack: skipping out-of-order dst pack %x", dstKey)
+					// log.Debugf("pack: skipping out-of-order dst pack key=%x", dstKey)
 					dstIndex++
 					continue
 				}
 
-				// log.Tracef("pack: loading dst pack %d:%x", dstIndex, dstKey)
+				// log.Debugf("pack: loading dst pack %d key=%x", dstIndex, dstKey)
 				dstPack, err = t.loadWritablePack(tx, dstKey)
 				if err != nil {
 					return err
@@ -2854,9 +2929,11 @@ func (t *Table) Compact(ctx context.Context) error {
 			} else {
 				// handle gaps in key sequence
 				// clone new pack from journal
-				// log.Tracef("pack: creating new dst pack %d:%x", dstIndex, dstKey)
+				// log.Debugf("pack: creating new dst pack %d key=%x", dstIndex, dstKey)
 				dstPack = t.packPool.Get().(*Package)
+				dstPack.PopulateFields(nil)
 				dstPack.key = dstKey
+				// dstPack.IncRef()
 				isNewPack = true
 			}
 		}
@@ -2868,10 +2945,13 @@ func (t *Table) Compact(ctx context.Context) error {
 			minSlice, _ := t.packidx.MinMaxSlices()
 			var startIndex, srcIndex int = dstIndex, -1
 			var lastmin uint64 = math.MaxUint64
-			if isNewPack {
+			if isNewPack && startIndex > 0 {
 				startIndex--
 			}
 			for i := startIndex; i < len(minSlice); i++ {
+				if t.packidx.packs[i].Key < dstPack.key {
+					continue
+				}
 				currmin := minSlice[i]
 				if currmin <= lastMaxPk {
 					continue
@@ -2888,7 +2968,7 @@ func (t *Table) Compact(ctx context.Context) error {
 			}
 
 			ph := t.packidx.packs[srcIndex]
-			// log.Tracef("pack: loading src pack %d:%x", srcIndex, ph.Key)
+			// log.Debugf("pack: loading src pack %d key=%x", srcIndex, ph.Key)
 			srcPack, err = t.loadWritablePack(tx, ph.Key)
 			if err != nil {
 				return err
@@ -2905,7 +2985,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		moved += int64(cp)
 
 		// move data from src to dst
-		// log.Tracef("pack: moving %d/%d rows from pack %x to %x", cp, srcPack.Len(),
+		// log.Debugf("pack: moving %d/%d rows from pack %x to %x", cp, srcPack.Len(),
 		// 	srcPack.key, dstPack.key)
 		if err := dstPack.AppendFrom(srcPack, 0, cp); err != nil {
 			return err
@@ -2922,7 +3002,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		// write dst when full
 		if dstPack.Len() == maxsz {
 			// this may extend the pack header list when dstPack is new
-			// log.Tracef("pack: storing full dst pack %x", dstPack.key)
+			// log.Debugf("pack: storing full dst pack %x", dstPack.key)
 			n, err := t.storePack(tx, dstPack)
 			if err != nil {
 				return err
@@ -2932,11 +3012,13 @@ func (t *Table) Compact(ctx context.Context) error {
 			written += int64(maxsz)
 
 			// will load or create another output pack in next iteration
+			// dstPack.DecRef()
+			dstPack.Release()
 			dstPack = nil
 		}
 
 		// if srcPack.Len() == 0 {
-		// 	log.Tracef("pack: deleting empty src pack %x", srcPack.key)
+		// 	log.Debugf("pack: deleting empty src pack %x", srcPack.key)
 		// }
 
 		// store or delete source pack
@@ -2945,6 +3027,8 @@ func (t *Table) Compact(ctx context.Context) error {
 		}
 
 		// load new src in next iteration (or stop there)
+		// srcPack.DecRef()
+		srcPack.Release()
 		srcPack = nil
 
 		// commit tx after each N written packs
@@ -2955,21 +3039,23 @@ func (t *Table) Compact(ctx context.Context) error {
 			if err := tx.CommitAndContinue(); err != nil {
 				return err
 			}
-			if util.InterruptRequested(ctx) {
-				return ctx.Err()
+			if err := ctx.Err(); err != nil {
+				return err
 			}
 		}
 	}
 
 	// store the last dstPack
 	if dstPack != nil {
-		// log.Tracef("pack: storing last dst pack %x", dstPack.key)
+		// log.Debugf("pack: storing last dst pack %x", dstPack.key)
 		n, err := t.storePack(tx, dstPack)
 		if err != nil {
 			return err
 		}
 		dstSize += int64(n)
 		written += int64(dstPack.Len())
+		// dstPack.DecRef()
+		dstPack.Release()
 	}
 
 	log.Debugf("pack: %s table compacted %d(+%d) rows into %d(%d) packs (%s ->> %s) in %s",
@@ -2978,6 +3064,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		util.ByteSize(srcSize), util.ByteSize(dstSize),
 		time.Since(start),
 	)
+	// t.DumpPackInfoDetail(os.Stdout, DumpModeDec, false)
 
 	// store pack headers
 	if err := t.storePackInfo(tx.tx); err != nil {
@@ -2992,124 +3079,149 @@ func (t *Table) cachekey(key []byte) string {
 }
 
 func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
-	// determine if we need to load a full pack or a stripped version with less fields
-	stripped := len(fields) > 0 && len(fields) < len(t.Fields())
+	if len(fields) == 0 {
+		fields = t.fields
+	}
 	key := encodePackKey(id)
 
-	// try cache lookup for the full pack first
-	cachefn := t.cache.Peek
+	// try cache lookup for existing blocks first
+	cachefn := t.bcache.Peek
 	if touch {
-		cachefn = t.cache.Get
+		cachefn = t.bcache.Get
 	}
-	cachekey := t.cachekey(key)
-	if cached, ok := cachefn(cachekey); ok {
-		atomic.AddInt64(&t.stats.PackCacheHits, 1)
-		pkg := cached.(*Package)
-		// log.Debugf("%s: use cached shared pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
-		return pkg, nil
-	}
-	if stripped {
-		// try cache lookup for stripped packs
-		//
-		// FIXME: this caching scheme results in duplicate pack blocks
-		//        being cached under different keys! instead we should
-		//        cache individual data blocks rather than entire packs!
-		cachekey += "#" + fields.Key()
-		if cached, ok := cachefn(cachekey); ok {
-			atomic.AddInt64(&t.stats.PackCacheHits, 1)
-			return cached.(*Package), nil
+	// fetch pack from pool or create new pack, has nil in block slice
+	pkg := t.packPool.Get().(*Package)
+
+	// Get PackInfo and fill metadata
+	pi := t.packidx.GetByKey(id)
+	pkg.key = pi.Key
+	pkg.nValues = pi.NValues
+	pkg.size = pi.Packsize
+
+	var loadField FieldList // list of uncached blocks
+	for i, v := range pkg.fields {
+		if !fields.Contains(v.Name) {
+			continue
+		}
+		cachekey := encodeBlockKey(id, i)
+
+		if b, ok := cachefn(cachekey); ok {
+			pkg.blocks[i] = b
+		} else {
+			loadField = loadField.Add(v)
 		}
 	}
-
+	// all blocks found in cache
+	if len(loadField) == 0 {
+		return pkg, nil
+	}
 	// if not found, load from storage using a pre-allocated pack as buffer
-	atomic.AddInt64(&t.stats.PackCacheMisses, 1)
 	var (
 		err error
 	)
-	// fetch full pack from pool or create new full pack
-	pkg := t.packPool.Get().(*Package)
-	// skip undesired fields while loading
-	if stripped {
-		pkg = pkg.KeepFields(fields)
-	}
-	pkg, err = tx.loadPack(t.key, key, pkg)
+
+	// fetch pack from pool or create new pack
+	pkg2 := t.packPool.Get().(*Package)
+	pkg2 = pkg2.PopulateFields(loadField)
+
+	pkg2, err = tx.loadPack(t.key, key, pkg2, t.opts.PackSize())
 	if err != nil {
+		t.releaseSharedPack(pkg)
 		return nil, err
 	}
+
 	// log.Debugf("%s: loaded shared pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
-	atomic.AddInt64(&t.stats.PacksBytesRead, int64(pkg.size))
+	atomic.AddInt64(&t.stats.BytesRead, int64(pkg.size))
 
-	pkg.cached = touch
 	// store in cache
 	if touch {
-		updated, _ := t.cache.Add(cachekey, pkg)
-		if updated {
-			atomic.AddInt64(&t.stats.PackCacheUpdates, 1)
-		} else {
-			atomic.AddInt64(&t.stats.PackCacheInserts, 1)
-			atomic.AddInt64(&t.stats.PackCacheCount, 1)
-			atomic.AddInt64(&t.stats.PackCacheSize, int64(pkg.HeapSize()))
+		for i, v := range pkg2.blocks {
+			if v != nil {
+				v.IncRef()
+				t.bcache.Add(encodeBlockKey(id, i), v)
+			}
 		}
 	}
-	return pkg, nil
+
+	pkg, err = pkg.MergeCols(pkg2)
+
+	pkg2.Release()
+	return pkg, err
 }
 
 // loads a private copy of a pack for writing
 func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	key := encodePackKey(id)
 
-	// when package is cached, create a private clone
-	// FIXME: we cannot do this concurrently when we rework the global lock
-	if cached, ok := t.cache.Get(t.cachekey(key)); ok {
-		atomic.AddInt64(&t.stats.PackCacheHits, 1)
-		pkg := cached.(*Package)
-		clone, err := pkg.Clone(t.opts.PackSize())
-		if err != nil {
-			return nil, err
+	// fetch pack from pool or create new pack, has nil in block slice
+	pkg := t.packPool.Get().(*Package)
+
+	// Get PackInfo and fill metadata
+	pi := t.packidx.GetByKey(id)
+	pkg.key = pi.Key
+	pkg.nValues = pi.NValues
+	pkg.size = pi.Packsize
+
+	var loadField FieldList
+	for i, v := range pkg.fields {
+		cachekey := encodeBlockKey(id, i)
+		if b, ok := t.bcache.Get(cachekey); ok {
+			pkg.blocks[i] = b
+		} else {
+			loadField = loadField.Add(v)
 		}
-		// set key
-		clone.key = pkg.key
-
-		// prepare for efficient writes
-		// log.Debugf("%s: materializing cloned pack %d with %d rows", t.name, clone.key, pkg.Len())
-		clone.Materialize()
-
-		// log.Debugf("%s: cloned writeable pack %d col=%d row=%d", t.name, clone.key, clone.nFields, clone.nValues)
-		return clone, nil
 	}
-	atomic.AddInt64(&t.stats.PackCacheMisses, 1)
 
-	// load from storage
-	pkg, err := tx.loadPack(t.key, key, t.packPool.Get().(*Package))
+	clone, err := pkg.Clone(t.opts.PackSize())
+	t.releaseSharedPack(pkg)
+
+	// FIXME: check how dirty has to be
+	// clone.dirty = false
+
 	if err != nil {
+		clone.Release()
 		return nil, err
 	}
 
-	// prepare for efficient writes
-	// log.Debugf("%s: materializing loaded pack %d with %d rows", t.name, pkg.key, pkg.Len())
-	pkg.Materialize()
+	// all blocks found in cache
+	if len(loadField) == 0 {
+		// prepare for efficient writes
+		clone.Materialize()
+		return clone, nil
+	}
 
-	// log.Debugf("%s: loaded writeable pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
+	// fetch pack from pool or create new pack
+	pkg2 := t.packPool.Get().(*Package)
+	pkg2 = pkg2.PopulateFields(loadField)
+
+	pkg2, err = tx.loadPack(t.key, key, pkg2, t.opts.PackSize())
+	if err != nil {
+		pkg2.Release()
+		clone.Release()
+		return nil, err
+	}
+
+	clone, err = clone.MergeCols(pkg2)
+	pkg2.Release()
+
+	// prepare for efficient writes
+	clone.Materialize()
+
 	atomic.AddInt64(&t.stats.PacksLoaded, 1)
-	atomic.AddInt64(&t.stats.PacksBytesRead, int64(pkg.size))
-	return pkg, nil
+	atomic.AddInt64(&t.stats.BytesRead, int64(pkg2.size))
+	return clone, nil
 }
 
 func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
-	// log.Debugf("%s: store pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	key := pkg.Key()
 
 	defer func() {
-		// remove from cache, returns back to pool
-		cachekey := t.cachekey(key)
-		t.cache.Remove(cachekey)
-
-		// also remove all stripped packs from cache
-		cachekey += "#"
-		for _, v := range t.cache.Keys() {
-			if strings.HasPrefix(v.(string), cachekey) {
-				t.cache.Remove(v)
+		id := uint64(pkg.key)
+		// remove all blocks of pkg from cache
+		for _, v := range t.bcache.Keys() {
+			if v>>32 == id {
+				t.bcache.Remove(v)
 			}
 		}
 	}()
@@ -3123,7 +3235,6 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 		}
 
 		// optimize/dedup
-		// log.Debugf("%s: optimizing pack %d with %d rows", t.name, pkg.key, pkg.Len())
 		pkg.Optimize()
 
 		// write to disk
@@ -3136,16 +3247,15 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 		info.Packsize = n
 		t.packidx.AddOrUpdate(info)
 		atomic.AddInt64(&t.stats.PacksStored, 1)
-		atomic.AddInt64(&t.stats.PacksBytesWritten, int64(n))
+		atomic.AddInt64(&t.stats.BytesWritten, int64(n))
 		atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
 		atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
-		atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
+		atomic.StoreInt64(&t.stats.TotalSize, int64(t.packidx.TableSize()))
 
 		return n, nil
 
 	} else {
 		// If pack is empty
-		// log.Debugf("%s: store removing empty pack %d", t.name, pkg.key)
 
 		// drop from index
 		t.packidx.Remove(pkg.key)
@@ -3157,7 +3267,7 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 
 		atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
 		atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
-		atomic.StoreInt64(&t.stats.PacksSize, int64(t.packidx.TableSize()))
+		atomic.StoreInt64(&t.stats.TotalSize, int64(t.packidx.TableSize()))
 
 		return 0, nil
 	}
@@ -3169,7 +3279,7 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	// move half of the packs contents to a new pack (don't cache the new pack
 	// to avoid possible eviction of the pack we are currently splitting!)
 	newpkg := t.packPool.Get().(*Package)
-	newpkg.cached = false
+	newpkg.PopulateFields(nil)
 	half := pkg.Len() / 2
 	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half); err != nil {
 		return 0, err
@@ -3191,44 +3301,31 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	t.recyclePackage(newpkg)
+
+	newpkg.Release()
 	return n + m, nil
 }
 
 func (t *Table) makePackage() interface{} {
 	atomic.AddInt64(&t.stats.PacksAlloc, 1)
-	pkg := NewPackage(t.opts.PackSize())
-	_ = pkg.InitFieldsFrom(t.journal.DataPack())
-	// log.Debugf("%s: alloc new pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
+	pkg := NewPackage(t.opts.PackSize(), t.packPool)
+	_ = pkg.InitFieldsFromEmpty(t.journal.DataPack())
 	return pkg
 }
 
-func (t *Table) onEvictedPackage(key, val interface{}) {
-	pkg := val.(*Package)
-	pkg.cached = false
-	// log.Debugf("%s: cache evict pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
-	atomic.AddInt64(&t.stats.PackCacheEvictions, 1)
-	atomic.AddInt64(&t.stats.PackCacheCount, -1)
-	atomic.AddInt64(&t.stats.PackCacheSize, int64(-pkg.HeapSize()))
-	t.recyclePackage(pkg)
-}
-
-func (t *Table) recyclePackage(pkg *Package) {
-	if pkg == nil || pkg.cached {
+func (t *Table) releaseSharedPack(pkg *Package) {
+	if pkg == nil {
 		return
 	}
-	// don't recycle stripped packs
-	if pkg.stripped {
-		pkg.Release()
-		return
+	for i, v := range pkg.blocks {
+		if v == nil {
+			continue
+		}
+		pkg.blocks[i] = nil
+		if v.DecRef() == 0 {
+			// do stats here
+		}
 	}
-	// don't recycle oversized packs
-	if c := pkg.Cap(); c <= 0 || c > t.opts.PackSize() {
-		pkg.Release()
-		return
-	}
-	// log.Debugf("%s: recycle pack %d", t.name, pkg.key)
-	pkg.Clear()
-	atomic.AddInt64(&t.stats.PacksRecycled, 1)
-	t.packPool.Put(pkg)
+	pkg.nValues = 0
+	pkg.pool.Put(pkg)
 }

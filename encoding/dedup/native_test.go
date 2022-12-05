@@ -53,7 +53,7 @@ func TestNativeElem(t *testing.T) {
 		t.Errorf("Cap mismatch got=%d want=%d", got, want)
 	}
 	for i := range data {
-		if got, want := arr.Elem(i), data[i]; bytes.Compare(got, want) != 0 {
+		if got, want := arr.Elem(i), data[i]; !bytes.Equal(got, want) {
 			t.Errorf("Elem %d mismatch got=%x want=%x", i, got, want)
 		}
 	}
@@ -73,7 +73,7 @@ func TestNativeAppend(t *testing.T) {
 			}
 			for i := range data {
 				arr.Append(data[i])
-				if got, want := arr.Elem(i), data[i]; bytes.Compare(got, want) != 0 {
+				if got, want := arr.Elem(i), data[i]; !bytes.Equal(got, want) {
 					t.Errorf("Elem %d mismatch got=%x want=%x", i, got, want)
 				}
 			}
@@ -93,7 +93,7 @@ func TestNativeAppendFrom(t *testing.T) {
 	}
 	src.Clear()
 	for i := range clone {
-		if got, want := dst.Elem(i), clone[i]; bytes.Compare(got, want) != 0 {
+		if got, want := dst.Elem(i), clone[i]; !bytes.Equal(got, want) {
 			t.Errorf("Elem %d mismatch got=%x want=%x", i, got, want)
 		}
 	}

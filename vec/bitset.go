@@ -8,11 +8,28 @@ import (
 	"sync"
 )
 
-const defaultBitsetSize = 16 // 8kB
+const (
+	minBitsetSize     = 13 // 8k bits = 1kB
+	defaultBitsetSize = 16 // 64k bits = 8kB
+)
 
-var bitsetPool = &sync.Pool{
-	New: func() interface{} { return makeBitset(1 << defaultBitsetSize) },
-}
+var (
+	bitsetPool8 = &sync.Pool{
+		New: func() interface{} { return makeBitset(1 << 13) }, // 1kB
+	}
+	bitsetPool16 = &sync.Pool{
+		New: func() interface{} { return makeBitset(1 << 14) }, // 4kB
+	}
+	bitsetPool32 = &sync.Pool{
+		New: func() interface{} { return makeBitset(1 << 15) }, // 8kB
+	}
+	bitsetPool64 = &sync.Pool{
+		New: func() interface{} { return makeBitset(1 << 16) }, // 16kB
+	}
+	bitsetPool128 = &sync.Pool{
+		New: func() interface{} { return makeBitset(1 << 17) }, // 32kB
+	}
+)
 
 type Bitset struct {
 	buf  []byte
@@ -26,13 +43,21 @@ type Bitset struct {
 // the capacity with Grow() may make the Bitset uneligible for recycling.
 func NewBitset(size int) *Bitset {
 	var s *Bitset
-	if size <= 1<<defaultBitsetSize {
-		s = bitsetPool.Get().(*Bitset)
-		s.Grow(size)
-	} else {
-		s = makeBitset(size)
+	switch {
+	case size <= 1<<13:
+		s = bitsetPool8.Get().(*Bitset)
+	case size <= 1<<14:
+		s = bitsetPool16.Get().(*Bitset)
+	case size <= 1<<15:
+		s = bitsetPool32.Get().(*Bitset)
+	case size <= 1<<16:
+		s = bitsetPool64.Get().(*Bitset)
+	case size <= 1<<17:
+		s = bitsetPool128.Get().(*Bitset)
+	default:
+		return makeBitset(size)
 	}
-	return s
+	return s.Grow(size)
 }
 
 // NewCustomBitset allocates a new bitset of arbitrary small size and capacity
@@ -46,7 +71,7 @@ func NewCustomBitset(size int) *Bitset {
 // of `buf`. Buf may be nil and size must be >= zero.
 func NewBitsetFromBytes(buf []byte, size int) *Bitset {
 	s := &Bitset{
-		buf:  make([]byte, bitFieldLen(size)),
+		buf:  make([]byte, bitFieldLen(size), bitFieldLen(size)),
 		cnt:  -1,
 		size: size,
 	}
@@ -73,7 +98,7 @@ func NewBitsetFromString(s string, size int) *Bitset {
 // in bools. If bools is nil, the bitset is initially empty.
 func NewBitsetFromSlice(bools []bool) *Bitset {
 	s := &Bitset{
-		buf:  make([]byte, bitFieldLen(len(bools))),
+		buf:  make([]byte, bitFieldLen(len(bools)), bitFieldLen(len(bools))),
 		cnt:  0,
 		size: len(bools),
 	}
@@ -136,11 +161,10 @@ func NewBitsetFromInt8(indexes []int8, size int) *Bitset {
 }
 
 func (s *Bitset) SetFromBytes(buf []byte, size int) *Bitset {
-	if s.size > size {
-		s.Zero()
-	}
 	if cap(s.buf) < len(buf) {
 		s.buf = make([]byte, len(buf))
+	} else if s.size > size && s.cnt != 0 {
+		s.Zero()
 	}
 	s.size = size
 	s.buf = s.buf[:len(buf)]
@@ -151,7 +175,7 @@ func (s *Bitset) SetFromBytes(buf []byte, size int) *Bitset {
 
 func makeBitset(size int) *Bitset {
 	return &Bitset{
-		buf:  make([]byte, bitFieldLen(size)),
+		buf:  make([]byte, bitFieldLen(size), bitFieldLen(size)),
 		cnt:  0,
 		size: size,
 	}
@@ -186,33 +210,31 @@ func (s *Bitset) Grow(size int) *Bitset {
 	}
 	sz := bitFieldLen(size)
 	if s.buf == nil || cap(s.buf) < sz {
-		buf := make([]byte, sz, (sz>>defaultBitsetSize+1)<<defaultBitsetSize)
+		buf := make([]byte, sz, sz)
 		copy(buf, s.buf)
 		s.buf = buf
-	} else {
-		if size < s.size {
-			// clear trailing bytes
-			if len(s.buf) > sz {
-				s.buf[sz] = 0
-				for bp := 1; sz+bp < len(s.buf); bp *= 2 {
-					copy(s.buf[sz+bp:], s.buf[sz:sz+bp])
-				}
+	} else if size < s.size && s.cnt != 0 {
+		// clear trailing bytes
+		if len(s.buf) > sz {
+			s.buf[sz] = 0
+			for bp := 1; sz+bp < len(s.buf); bp *= 2 {
+				copy(s.buf[sz+bp:], s.buf[sz:sz+bp])
 			}
-			// clear trailing bits
-			if sz > 0 {
-				s.buf[sz-1] &= bytemask(size)
-			}
-			s.cnt = -1
 		}
-		s.buf = s.buf[:sz]
+		// clear trailing bits
+		if sz > 0 {
+			s.buf[sz-1] &= bytemask(size)
+		}
+		s.cnt = -1
 	}
+	s.buf = s.buf[:sz]
 	s.size = size
 	return s
 }
 
 // Reset clears the bitset contents and sets its size to zero.
-func (s *Bitset) Reset() {
-	if len(s.buf) > 0 {
+func (s *Bitset) Reset() *Bitset {
+	if len(s.buf) > 0 && s.cnt != 0 {
 		s.buf[0] = 0
 		for bp := 1; bp < len(s.buf); bp *= 2 {
 			copy(s.buf[bp:], s.buf[:bp])
@@ -221,6 +243,7 @@ func (s *Bitset) Reset() {
 	s.size = 0
 	s.cnt = 0
 	s.buf = s.buf[:0]
+	return s
 }
 
 // Close clears the bitset contents, sets its size to zero and returns it
@@ -228,8 +251,20 @@ func (s *Bitset) Reset() {
 // illegal.
 func (s *Bitset) Close() {
 	s.Reset()
-	if cap(s.buf) == 1<<defaultBitsetSize {
-		bitsetPool.Put(s)
+	if cap(s.buf)&(1<<10)-1 > 0 {
+		return
+	}
+	switch cap(s.buf) {
+	case 1 << 13:
+		bitsetPool8.Put(s)
+	case 1 << 14:
+		bitsetPool16.Put(s)
+	case 1 << 15:
+		bitsetPool32.Put(s)
+	case 1 << 16:
+		bitsetPool64.Put(s)
+	case 1 << 17:
+		bitsetPool128.Put(s)
 	}
 }
 
@@ -814,4 +849,34 @@ func (s Bitset) SubSlice(start, n int) []bool {
 		res[j] = s.buf[i>>3]&bitmask(i) > 0
 	}
 	return res
+}
+
+func (s Bitset) MarshalBinary() ([]byte, error) {
+	return s.Bytes(), nil
+}
+
+func (s *Bitset) UnmarshalBinary(data []byte) error {
+	s.buf = make([]byte, len(data))
+	copy(s.buf, data)
+	s.cnt = -1
+	s.size = len(data) * 8
+	return nil
+}
+
+func (s Bitset) MarshalText() ([]byte, error) {
+	return []byte(s.String()), nil
+}
+
+func (s *Bitset) UnmarshalText(data []byte) error {
+	buf, err := hex.DecodeString(string(data))
+	if err != nil {
+		return err
+	}
+	for i := range buf {
+		buf[i] = bitsetReverseLut256[buf[i]]
+	}
+	s.buf = buf
+	s.cnt = -1
+	s.size = len(buf) * 8
+	return nil
 }

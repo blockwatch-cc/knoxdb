@@ -277,6 +277,9 @@ func (e *Encoder) marshal(val reflect.Value) error {
 		for i, fName := range e.headerKeys {
 			// init with empty string
 			tokens[i] = ""
+			if fName[0] == '"' {
+				fName = fName[1 : len(fName)-1]
+			}
 
 			finfo, f := e.findStructField(val, fName)
 			if finfo == nil || !f.IsValid() {

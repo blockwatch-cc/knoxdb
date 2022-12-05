@@ -1,9 +1,9 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//
 package pack
 
 import (
+	"encoding"
 	"fmt"
 	"reflect"
 	"time"
@@ -12,19 +12,64 @@ import (
 	. "blockwatch.cc/knoxdb/vec"
 )
 
-// Note: may evolve into a CAST function
-func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
+func (t FieldType) CastType(val interface{}, f *Field) (interface{}, error) {
 	var ok bool
 	res := val
 	switch t {
 	case FieldTypeBytes:
-		_, ok = val.([]byte)
+		if vv, ok2 := val.(encoding.BinaryMarshaler); ok2 {
+			r, err := vv.MarshalBinary()
+			if err != nil {
+				return nil, err
+			}
+			res = r
+			ok = true
+		} else {
+			_, ok = val.([]byte)
+		}
 	case FieldTypeString:
-		_, ok = val.(string)
+		if vv, ok2 := val.(encoding.TextMarshaler); ok2 {
+			r, err := vv.MarshalText()
+			if err != nil {
+				return nil, err
+			}
+			res = r
+			ok = true
+		} else {
+			_, ok = val.(string)
+		}
 	case FieldTypeDatetime:
 		_, ok = val.(time.Time)
 	case FieldTypeBoolean:
-		_, ok = val.(bool)
+		switch v := val.(type) {
+		case bool:
+			res, ok = v, true
+		case int:
+			res, ok = v > 0, true
+		case int64:
+			res, ok = v > 0, true
+		case int32:
+			res, ok = v > 0, true
+		case int16:
+			res, ok = v > 0, true
+		case int8:
+			res, ok = v > 0, true
+		case string:
+			res, ok = len(v) > 0, true
+		default:
+			// type aliases
+			vv := reflect.Indirect(reflect.ValueOf(val))
+			switch vv.Kind() {
+			case reflect.Bool:
+				res, ok = vv.Bool(), true
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				res, ok = int(vv.Int()) > 0, true
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				res, ok = int(vv.Uint()) > 0, true
+			case reflect.String, reflect.Slice, reflect.Array:
+				res, ok = vv.Len() > 0, true
+			}
+		}
 	case FieldTypeInt128:
 		switch v := val.(type) {
 		case int:
@@ -87,9 +132,9 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		case int32:
 			res, ok = int32(v), true
 		case int16:
-			res, ok = int64(v), true
+			res, ok = int32(v), true
 		case int8:
-			res, ok = int64(v), true
+			res, ok = int32(v), true
 		case Decimal32:
 			res, ok = int32(v.RoundToInt64()), true
 		case Decimal64:
@@ -238,7 +283,7 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			vv := reflect.Indirect(reflect.ValueOf(val))
 			switch vv.Kind() {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				res, ok = uint64(vv.Uint()), true
+				res, ok = uint32(vv.Uint()), true
 			}
 		}
 	case FieldTypeUint16:
@@ -272,7 +317,7 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 			vv := reflect.Indirect(reflect.ValueOf(val))
 			switch vv.Kind() {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				res, ok = uint64(vv.Uint()), true
+				res, ok = uint16(vv.Uint()), true
 			}
 		}
 	case FieldTypeUint8:
@@ -520,20 +565,51 @@ func (t FieldType) CastType(val interface{}, f Field) (interface{}, error) {
 		}
 	}
 	if !ok {
-		return res, fmt.Errorf("pack: unexpected value type %T for %s condition", val, t)
+		return res, fmt.Errorf("pack: cast unexpected value type %T for %s condition", val, t)
 	}
 	return res, nil
 }
 
-// Note: can evolve into a CAST function
-func (t FieldType) CastSliceType(val interface{}, f Field) (interface{}, error) {
-	var ok bool
+func (t FieldType) CastSliceType(val interface{}, f *Field) (interface{}, error) {
+	var (
+		ok  bool
+		err error
+	)
 	res := val
 	switch t {
 	case FieldTypeBytes:
 		_, ok = val.([][]byte)
+		if !ok {
+			vv, ok2 := val.([]encoding.BinaryMarshaler)
+			if ok2 {
+				slice := make([][]byte, len(vv))
+				for i := range vv {
+					slice[i], err = vv[i].(encoding.BinaryMarshaler).MarshalBinary()
+					if err != nil {
+						return nil, err
+					}
+				}
+				res = slice
+				ok = true
+			}
+		}
 	case FieldTypeString:
 		_, ok = val.([]string)
+		if !ok {
+			vv, ok2 := val.([]encoding.TextMarshaler)
+			if ok2 {
+				slice := make([]string, len(vv))
+				for i := range vv {
+					buf, err := vv[i].(encoding.TextMarshaler).MarshalText()
+					slice[i] = string(buf)
+					if err != nil {
+						return nil, err
+					}
+				}
+				res = slice
+				ok = true
+			}
+		}
 	case FieldTypeDatetime:
 		_, ok = val.([]time.Time)
 	case FieldTypeBoolean:
@@ -965,7 +1041,7 @@ func (t FieldType) CastSliceType(val interface{}, f Field) (interface{}, error) 
 		_, ok = val.([]Int256)
 	}
 	if !ok {
-		return res, fmt.Errorf("pack: unexpected value type %T for %s slice condition", val, t)
+		return res, fmt.Errorf("pack: cast unexpected value type %T for %s slice condition", val, t)
 	}
 	return res, nil
 }
@@ -1015,7 +1091,7 @@ func (t FieldType) CheckType(val interface{}) error {
 		_, ok = val.(Decimal32)
 	}
 	if !ok {
-		return fmt.Errorf("pack: unexpected value type %T for %s condition", val, t)
+		return fmt.Errorf("pack: check unexpected value type %T for %s condition", val, t)
 	}
 	return nil
 }
@@ -1065,7 +1141,7 @@ func (t FieldType) CheckSliceType(val interface{}) error {
 		_, ok = val.([]Decimal32)
 	}
 	if !ok {
-		return fmt.Errorf("pack: unexpected value type %T for %s slice condition", val, t)
+		return fmt.Errorf("pack: check unexpected value type %T for %s slice condition", val, t)
 	}
 	return nil
 }

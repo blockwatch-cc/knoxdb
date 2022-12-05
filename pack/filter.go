@@ -13,7 +13,8 @@ type FilterMode int
 var zeroTime = time.Time{}
 
 const (
-	FilterModeEqual FilterMode = iota
+	FilterModeInvalid FilterMode = iota
+	FilterModeEqual
 	FilterModeNotEqual
 	FilterModeGt
 	FilterModeGte
@@ -23,7 +24,6 @@ const (
 	FilterModeNotIn
 	FilterModeRange
 	FilterModeRegexp
-	FilterModeInvalid
 )
 
 func ParseFilterMode(s string) FilterMode {
