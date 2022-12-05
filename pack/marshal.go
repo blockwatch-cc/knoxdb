@@ -114,7 +114,8 @@ func (p *Package) UnmarshalBinary(data []byte) error {
 		}
 		// skip blocks that are set to type ignore before decoding
 		// this is the core magic of skipping blocks on load
-		if p.blocks[i].IsIgnore() {
+		//		if p.blocks[i].IsIgnore() {
+		if p.blocks[i] == nil {
 			_ = buf.Next(sz)
 			continue
 		}

@@ -165,7 +165,7 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 			}
 		}
 
-		finfo, err := structFieldInfo(typ, &f)
+		finfo, err := structFieldInfo(&f)
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +181,7 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 
 		// extract long name
 		if a := f.Tag.Get(tagAlias); a != "-" {
-			finfo.alias = strings.Split(a, ",")[0]
+			finfo.alias, _, _ = strings.Cut(a, ",")
 		}
 
 		// Add the field if it doesn't conflict with other fields.
@@ -196,18 +196,29 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 }
 
 // structFieldInfo builds and returns a fieldInfo for f.
-func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, error) {
+func structFieldInfo(f *reflect.StructField) (*fieldInfo, error) {
 	finfo := &fieldInfo{idx: f.Index, typname: f.Type.String()}
 	tag := f.Tag.Get(tagName)
 	kind := f.Type.Kind()
 	typname := f.Type.String()
 
+	// detect marshaler types
+	if f.Type.Implements(binaryMarshalerType) && reflect.PointerTo(f.Type).Implements(binaryUnmarshalerType) {
+		finfo.flags |= flagBinaryMarshalerType
+	}
+	if f.Type.Implements(textMarshalerType) && reflect.PointerTo(f.Type).Implements(textUnmarshalerType) {
+		finfo.flags |= flagTextMarshalerType
+	}
+	if f.Type.Implements(stringerType) {
+		finfo.flags |= flagStringerType
+	}
+
 	tokens := strings.Split(tag, ",")
 	if len(tokens) > 1 {
 		tag = tokens[0]
 		for _, flag := range tokens[1:] {
-			ff := strings.Split(flag, "=")
-			switch ff[0] {
+			key, val, ok := strings.Cut(flag, "=")
+			switch key {
 			case "u8":
 				finfo.override = FieldTypeUint8
 			case "u16":
@@ -272,10 +283,10 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				}
 				finfo.typname = typname
 				finfo.scale = prec
-				if len(ff) > 1 {
-					scale, err := strconv.Atoi(ff[1])
+				if ok {
+					scale, err := strconv.Atoi(val)
 					if err != nil {
-						return nil, fmt.Errorf("pack: invalid scale value %s on field '%s': %v", ff[1], tag, err)
+						return nil, fmt.Errorf("pack: invalid scale value %s on field '%s': %v", val, tag, err)
 					}
 					if scale < 0 || scale > prec {
 						return nil, fmt.Errorf("pack: out of bound scale %d on field '%s', should be [0..%d]", scale, tag, prec)
@@ -290,10 +301,10 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				// 3: 0.02% false positive rate (3 bytes per item)
 				// 4: 0.002% false positive rate (4 bytes per item)
 				finfo.scale = 2
-				if len(ff) > 1 {
-					factor, err := strconv.Atoi(ff[1])
+				if ok {
+					factor, err := strconv.Atoi(val)
 					if err != nil {
-						return nil, fmt.Errorf("pack: invalid bloom filter factor %s on field '%s': %v", ff[1], tag, err)
+						return nil, fmt.Errorf("pack: invalid bloom filter factor %s on field '%s': %v", val, tag, err)
 					}
 					if factor < 1 || factor > 4 {
 						return nil, fmt.Errorf("pack: out of bound bloom factor %d on field '%s', should be [1..4]", factor, tag)
@@ -302,7 +313,7 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 					finfo.scale = factor
 				}
 			default:
-				return nil, fmt.Errorf("pack: unsupported struct tag '%s' on field '%s'", ff[0], tag)
+				return nil, fmt.Errorf("pack: unsupported struct tag '%s' on field '%s'", key, tag)
 			}
 			// check type override matches the Go type
 			switch finfo.override {
@@ -311,14 +322,14 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 					// OK
 				default:
-					return nil, fmt.Errorf("pack: incompatible type tag '%s' on unsigned field '%s' (%s/%s)", ff[0], tag, typname, kind)
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on unsigned field '%s' (%s/%s)", key, tag, typname, kind)
 				}
 			case FieldTypeInt8, FieldTypeInt16, FieldTypeInt32, FieldTypeInt64, FieldTypeInt128, FieldTypeInt256:
 				switch kind {
 				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 					// OK
 				default:
-					return nil, fmt.Errorf("pack: incompatible type tag '%s' on integer field '%s' (%s/%s)", ff[0], tag, typname, kind)
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on integer field '%s' (%s/%s)", key, tag, typname, kind)
 				}
 			case FieldTypeDecimal32, FieldTypeDecimal64, FieldTypeDecimal128, FieldTypeDecimal256:
 				switch kind {
@@ -329,7 +340,7 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 				case reflect.Float32, reflect.Float64:
 					finfo.flags |= flagFloatType
 				default:
-					return nil, fmt.Errorf("pack: incompatible type tag '%s' on decimal field '%s' (%s/%s)", ff[0], tag, typname, kind)
+					return nil, fmt.Errorf("pack: incompatible type tag '%s' on decimal field '%s' (%s/%s)", key, tag, typname, kind)
 				}
 			}
 		}

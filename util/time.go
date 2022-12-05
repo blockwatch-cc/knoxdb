@@ -112,6 +112,23 @@ func (f Time) Time() time.Time {
 	return f.tm
 }
 
+func (f Time) IsDate() bool {
+	return f.format == TimeFormatDate
+}
+
+func (f Time) EODTime() time.Time {
+	dd, mm, yy := f.tm.Date()
+	return time.Date(yy, mm, dd, 23, 59, 59, 0, time.UTC)
+}
+
+func (f Time) EOD() Time {
+	return Time{tm: f.EODTime(), format: f.format}
+}
+
+func (f Time) GetFormat() TimeFormat {
+	return f.format
+}
+
 func (t *Time) SetFormat(f TimeFormat) *Time {
 	t.format = f
 	return t
@@ -156,14 +173,14 @@ func ParseTime(value string) (Time, error) {
 	case strings.HasPrefix(value, "now"):
 		now := time.Now().UTC()
 		// check for truncation and modification operators
-		if strings.Contains(value, "/") {
-			fields := strings.Split(value, "/")
-			if fields[0] != "now" {
+		if key, val, ok := strings.Cut(value, "/"); ok {
+			if key != "now" {
 				return Time{}, fmt.Errorf("time: parsing '%s': invalid truncation syntax, must be `now/arg`", value)
 			}
-			value = fields[1]
+			value = val
 			// parse arg as duration modifier (strip optional modifier)
-			switch strings.Split(value, "-")[0] {
+			left, _, _ := strings.Cut(value, "-")
+			switch left {
 			case "s":
 				now = now.Truncate(time.Second)
 			case "m":
@@ -187,9 +204,8 @@ func ParseTime(value string) (Time, error) {
 			}
 		}
 		// continue handling minus operator
-		if strings.Contains(value, "-") {
-			fields := strings.Split(value, "-")
-			d, derr := ParseDuration(fields[1])
+		if _, val, ok := strings.Cut(value, "-"); ok {
+			d, derr := ParseDuration(val)
 			if derr != nil {
 				return Time{}, fmt.Errorf("time: parsing '%s': %v", value, derr)
 			}

@@ -83,14 +83,13 @@ TEXT ·unpack1Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $4, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -106,14 +105,13 @@ TEXT ·unpack2Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $8, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -141,14 +139,13 @@ TEXT ·unpack3Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $12, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -166,14 +163,13 @@ TEXT ·unpack4Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $16, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -201,14 +197,13 @@ TEXT ·unpack5Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $20, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -235,14 +230,13 @@ TEXT ·unpack6Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $24, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -268,14 +262,13 @@ TEXT ·unpack7Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $28, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -295,14 +288,13 @@ TEXT ·unpack8Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $32, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -326,14 +318,13 @@ TEXT ·unpack10Uint32AVX2(SB), NOSPLIT, $0-0
         VMOVQ           X2, 32(DI)
         ADDQ            $40, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -360,14 +351,13 @@ TEXT ·unpack12Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $48, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -397,14 +387,13 @@ TEXT ·unpack15Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $60, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -435,14 +424,13 @@ TEXT ·unpack20Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $80, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -478,14 +466,13 @@ TEXT ·unpack30Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $120, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -529,14 +516,13 @@ TEXT ·unpack60Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $240, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -564,14 +550,13 @@ TEXT ·unpack120Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $480, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)
@@ -614,14 +599,13 @@ TEXT ·unpack240Uint32AVX2(SB), NOSPLIT, $0-0
 
         ADDQ            $960, DI
 
-        MOVQ            8(SI), DX
-        SHRQ            $60, DX                 // calc selector
-
-        MOVQ            (R14)(DX*8), AX
-
         ADDQ            $8, SI
         SUBQ            $1, BX
         JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
         JMP             AX
 exit:
         JMP ·decodeAllUint32AVX2Exit(SB)

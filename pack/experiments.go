@@ -1,5 +1,7 @@
 // Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
+//go:build ignore
+// +build ignore
 
 package pack
 
@@ -9,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math/bits"
+	"math/rand"
 	"reflect"
 	"strconv"
 	"strings"
@@ -18,24 +21,27 @@ import (
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/s8b"
+
+	//	"blockwatch.cc/knoxdb/vec"
 	"github.com/golang/snappy"
 	"github.com/pierrec/lz4"
 )
 
 func ReintepretUint64ToByteSlice(src []uint64) []byte {
-	header := *(*reflect.SliceHeader)(unsafe.Pointer(&src))
+	header := (*reflect.SliceHeader)(unsafe.Pointer(&src))
 	header.Len *= 8
 	header.Cap *= 8
 	return *(*[]byte)(unsafe.Pointer(&header))
 }
 
 func ReintepretAnySliceToByteSlice(src interface{}) []byte {
-	var header reflect.SliceHeader
 	v := reflect.ValueOf(src)
 	so := int(reflect.TypeOf(src).Elem().Size())
-	header.Data = v.Pointer()
-	header.Len = so * v.Len()
-	header.Cap = so * v.Cap()
+	header := reflect.SliceHeader{
+		Data: v.Pointer(),
+		Len:  so * v.Len(),
+		Cap:  so * v.Cap(),
+	}
 	return *(*[]byte)(unsafe.Pointer(&header))
 }
 
@@ -743,6 +749,8 @@ func (t *Table) CompressPack(cmethod string, w io.Writer, i int, mode DumpMode) 
 	ctimes[0] = ct
 	dtimes[0] = dt
 
+	t.releaseSharedPack(pkg)
+
 	return DumpCompressResults(t.fields, cratios, ctimes, dtimes, w, mode, false)
 }
 
@@ -785,6 +793,8 @@ func (t *Table) CompressIndexPack(cmethod string, w io.Writer, i, p int, mode Du
 	cratios[0] = cs
 	ctimes[0] = ct
 	dtimes[0] = dt
+
+	t.indexes[i].releaseSharedPack(pkg)
 
 	fl := FieldList{{Name: "Hash", Type: FieldTypeUint64}, {Name: "PK", Type: FieldTypeUint64}}
 
@@ -837,6 +847,8 @@ func (t *Table) CompressIndexAll(cmethod string, i int, w io.Writer, mode DumpMo
 		cratios[p] = cs
 		ctimes[p] = ct
 		dtimes[p] = dt
+
+		t.indexes[i].releaseSharedPack(pkg)
 
 		fmt.Printf(".")
 	}
@@ -893,6 +905,7 @@ func (t *Table) IndexCollisions(cmethod string, i int, w io.Writer, mode DumpMod
 				collisions++
 			}
 		}
+		t.indexes[i].releaseSharedPack(pkg)
 	}
 
 	fmt.Printf("Index contains %d additional collisions\n", collisions)
@@ -946,6 +959,9 @@ func (t *Table) CompressAll(cmethod string, w io.Writer, mode DumpMode, verbose 
 		cratios[i] = cs
 		ctimes[i] = ct
 		dtimes[i] = dt
+
+		t.releaseSharedPack(pkg)
+
 		fmt.Printf(".")
 	}
 	fmt.Printf("\nProcessed %d packs\n", nPacks)
@@ -976,6 +992,115 @@ func (t *Table) CompressAll(cmethod string, w io.Writer, mode DumpMode, verbose 
 	fmt.Printf("Compression Throughput: %.0fMB/s\n", totalUSize/totalCTime/1000000)
 	fmt.Printf("Decompression Time: %.0fs\n", totalDTime)
 	fmt.Printf("Decompression Throughput: %.0fMB/s\n", totalUSize/totalDTime/1000000)
+
+	return nil
+}
+
+func (t *Table) CacheTest() error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	//nPacks := t.packidx.Len()
+
+	var count int
+
+	var list = []int{0, 0, 2, 3, 3, 4, 4, 5, 2, -2}
+	c := t.bcache
+
+	for _, i := range list {
+		if i >= 0 {
+			pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, true, nil)
+			if err != nil {
+				return err
+			}
+			t.releaseSharedPack(pkg)
+		} else {
+			for j := range t.fields {
+				t.bcache.Remove(encodeBlockKey(uint32(-i), j))
+			}
+			//t.cache.Remove(t.cachekey(encodePackKey(uint32(-i))))
+		}
+
+		r, f, e := c.GetQueueLen()
+		fmt.Printf("%d: size=%d recent=%d frequent=%d evicted=%d %dBytes\n", i, r+f, r, f, e, c.Stats().Size)
+		count++
+	}
+
+	fmt.Printf("\nProcessed %d packs\n", count)
+	fmt.Printf("Size %v\n", c.Stats().Size)
+	fmt.Printf("Count %d\n", c.Stats().Count)
+	fmt.Printf("Capacity %d\n", c.Params().Cap)
+	fmt.Printf("CacheHits %d\n", c.Stats().Hits)
+	fmt.Printf("CacheMisses %d\n", c.Stats().Misses)
+	fmt.Printf("CacheInserts %d\n", c.Stats().Inserts)
+	fmt.Printf("CacheEvictions %d\n", c.Stats().Evictions)
+
+	return nil
+}
+
+func (t *Table) CacheBench() error {
+	tx, err := t.db.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// nPacks := t.packidx.Len()
+	nPacks := 500
+	max_loop := 10000
+
+	var count int
+
+	fmt.Printf("populating cache ")
+
+	var fl FieldList
+	//fl = fl.Add(t.fields[0])
+	//fl = fl.Add(t.fields[1])
+
+	// popuate the Cache
+	for n := 0; n < nPacks; n++ {
+		pkg, err := t.loadSharedPack(tx, t.packidx.packs[n].Key, true, fl)
+		if err != nil {
+			return err
+		}
+		t.releaseSharedPack(pkg)
+		fmt.Printf(".")
+	}
+
+	c := t.bcache
+
+	c.ResetStats()
+
+	fmt.Printf("\nStarting benchmark")
+
+	tstart := time.Now()
+	for n := 0; n < max_loop; n++ {
+		i := rand.Intn(nPacks)
+		pkg, err := t.loadSharedPack(tx, t.packidx.packs[i].Key, true, fl)
+		if err != nil {
+			return err
+		}
+		/*bits := vec.NewBitset(len(pkg.blocks[0].Uint64))
+		vec.MatchUint64Equal(pkg.blocks[0].Uint64, 0, bits, nil)
+		bits.Close()*/
+		t.releaseSharedPack(pkg)
+
+		count++
+	}
+	dur := time.Since(tstart)
+
+	fmt.Printf("\nProcessed %d packs in %f seconds (%f s/Pack)\n", count, dur.Seconds(), dur.Seconds()/float64(count))
+	fmt.Printf("\nProcessed %d packs\n", count)
+	fmt.Printf("Size %v\n", c.Stats().Size)
+	fmt.Printf("Count %d\n", c.Stats().Count)
+	fmt.Printf("Capacity %d\n", c.Params().Cap)
+	fmt.Printf("PackCacheHits %d (%.2f%%)\n", c.Stats().Hits, 100*float64(c.Stats().Hits)/float64(count))
+	fmt.Printf("PackCacheMisses %d (%.2f%%)\n", c.Stats().Misses, 100*float64(c.Stats().Misses)/float64(count))
+	fmt.Printf("CacheInserts %d\n", c.Stats().Inserts)
+	fmt.Printf("CacheEvictions %d\n", c.Stats().Evictions)
 
 	return nil
 }
@@ -1014,6 +1139,9 @@ func (t *Table) ShowCompression(cmethod string, w io.Writer, mode DumpMode, verb
 		}
 		cratios[i] = cr
 		ctype[i] = ct
+
+		t.releaseSharedPack(pkg)
+
 		fmt.Printf(".")
 	}
 	fmt.Printf("\nProcessed %d packs\n", t.packidx.Len())

@@ -111,9 +111,28 @@ func UnsafeGetBytes(s string) []byte {
 	return b[:l]
 }
 
+// func UnsafeGetBytes(s string) []byte {
+// 	sh := (*reflect.StringHeader)(unsafe.Pointer(&s))
+// 	bh := reflect.SliceHeader{
+// 		Data: sh.Data,
+// 		Len:  sh.Len,
+// 		Cap:  sh.Len,
+// 	}
+// 	return *(*[]byte)(unsafe.Pointer(&bh))
+// }
+
 func UnsafeGetString(buf []byte) string {
 	return *(*string)(unsafe.Pointer(&buf))
 }
+
+// func UnsafeGetString(buf []byte) string {
+// 	bh := (*reflect.SliceHeader)(unsafe.Pointer(&buf))
+// 	sh := reflect.StringHeader{
+// 		Data: bh.Data,
+// 		Len:  bh.Len,
+// 	}
+// 	return *(*string)(unsafe.Pointer(&sh))
+// }
 
 func MaxUint64(data []uint64) uint64 {
 	var max uint64

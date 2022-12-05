@@ -12,27 +12,32 @@ import (
 	"path/filepath"
 	"strings"
 
-	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/store"
 )
 
 var (
 	ErrNoTable      = errors.New("pack: table does not exist")
+	ErrNoStore      = errors.New("pack: store does not exist")
 	ErrNoIndex      = errors.New("pack: index does not exist")
 	ErrNoColumn     = errors.New("pack: column does not exist")
 	ErrTypeMismatch = errors.New("pack: type mismatch")
 	ErrNoField      = errors.New("pack: field does not exist")
 	ErrInvalidType  = errors.New("pack: unsupported block type")
+	ErrNilValue     = errors.New("pack: nil value passed")
 
 	ErrIndexNotFound  = errors.New("pack: index not found")
 	ErrBucketNotFound = errors.New("pack: bucket not found")
 	ErrPackNotFound   = errors.New("pack: pack not found")
 	ErrPackStripped   = errors.New("pack: pack is stripped")
 	ErrIdNotFound     = errors.New("pack: id not found")
+	ErrKeyNotFound    = errors.New("pack: key not found")
 
 	ErrTableExists  = errors.New("pack: table already exists")
+	ErrStoreExists  = errors.New("pack: store already exists")
 	ErrIndexExists  = errors.New("pack: index already exists")
 	ErrResultClosed = errors.New("pack: result already closed")
+
+	EndStream = errors.New("end stream")
 
 	bigEndian    = binary.BigEndian
 	littleEndian = binary.LittleEndian
@@ -46,6 +51,7 @@ const (
 type DB struct {
 	db     store.DB
 	tables map[string]*Table
+	stores map[string]*Store
 }
 
 type Tx struct {
@@ -71,6 +77,7 @@ func CreateDatabase(path, name, label string, opts interface{}) (*DB, error) {
 	return &DB{
 		db:     db,
 		tables: make(map[string]*Table),
+		stores: make(map[string]*Store),
 	}, nil
 }
 
@@ -107,6 +114,7 @@ func OpenDatabase(path, name, label string, opts interface{}) (*DB, error) {
 	return &DB{
 		db:     db,
 		tables: make(map[string]*Table),
+		stores: make(map[string]*Store),
 	}, nil
 }
 
@@ -140,14 +148,33 @@ func (d *DB) Dump(w io.Writer) error {
 	return d.db.Dump(w)
 }
 
+func (d *DB) IsUsed() bool {
+	return len(d.tables)+len(d.stores) > 0
+}
+
+func (d *DB) IsClosed() bool {
+	if d.db == nil {
+		return true
+	}
+	_, err := d.db.Manifest()
+	return store.IsError(err, store.ErrTxClosed)
+}
+
 func (d *DB) Close() error {
 	// close all remaining open tables
-	for _, t := range d.tables {
+	for n, t := range d.tables {
 		if err := t.Close(); err != nil {
-			return err
+			log.Errorf("Closing table %s: %v", t.Name(), err)
 		}
+		delete(d.tables, n)
 	}
-	d.tables = make(map[string]*Table)
+	// close all remaining open stores
+	for n, s := range d.stores {
+		if err := s.Close(); err != nil {
+			log.Errorf("Closing store %s: %v", s.Name(), err)
+		}
+		delete(d.stores, n)
+	}
 	return d.db.Close()
 }
 
@@ -174,9 +201,21 @@ func (d *DB) NumOpenTables() int {
 	return len(d.tables)
 }
 
+func (d *DB) NumOpenStores() int {
+	return len(d.stores)
+}
+
 func (d *DB) OpenTables() []*Table {
 	var list []*Table
 	for _, v := range d.tables {
+		list = append(list, v)
+	}
+	return list
+}
+
+func (d *DB) OpenStores() []*Store {
+	var list []*Store
+	for _, v := range d.stores {
 		list = append(list, v)
 	}
 	return list
@@ -215,6 +254,21 @@ func (d *DB) ListIndexNames(table string) ([]string, error) {
 				return nil
 			}
 			names = append(names, name)
+			return nil
+		})
+	})
+	return names, err
+}
+
+func (d *DB) ListStoreNames() ([]string, error) {
+	var names []string
+	err := d.db.View(func(tx store.Tx) error {
+		return tx.Root().ForEachBucket(func(k []byte, _ store.Bucket) error {
+			name := string(k)
+			if !strings.HasSuffix(name, "_store") {
+				return nil
+			}
+			names = append(names, strings.TrimSuffix(name, "_store"))
 			return nil
 		})
 	})
@@ -271,12 +325,12 @@ func (db *DB) storePack(name, key []byte, p *Package, fill int) (int, error) {
 	return n, nil
 }
 
-func (db *DB) loadPack(name, key []byte, unpack *Package) (*Package, error) {
+func (db *DB) loadPack(name, key []byte, unpack *Package, sz int) (*Package, error) {
 	tx, err := db.Tx(false)
 	if err != nil {
 		return nil, err
 	}
-	pkg, err := tx.loadPack(name, key, unpack)
+	pkg, err := tx.loadPack(name, key, unpack, sz)
 	tx.Rollback()
 	return pkg, err
 }
@@ -299,13 +353,13 @@ func (tx *Tx) deletePack(name, key []byte) error {
 	return nil
 }
 
-func (tx *Tx) loadPack(name, key []byte, unpack *Package) (*Package, error) {
-	return loadPackTx(tx.tx, name, key, unpack)
+func (tx *Tx) loadPack(name, key []byte, unpack *Package, sz int) (*Package, error) {
+	return loadPackTx(tx.tx, name, key, unpack, sz)
 }
 
-func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package) (*Package, error) {
+func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package, sz int) (*Package, error) {
 	if unpack == nil {
-		unpack = NewPackage(block.DefaultMaxPointsPerBlock)
+		unpack = NewPackage(sz, nil)
 	}
 	b := dbTx.Bucket(name)
 	if b == nil {
@@ -324,8 +378,10 @@ func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package) (*Package, err
 }
 
 func storePackTx(dbTx store.Tx, name, key []byte, p *Package, fill int) (int, error) {
-	if p.stripped {
-		return 0, ErrPackStripped
+	for _, v := range p.blocks {
+		if v == nil {
+			return 0, ErrPackStripped
+		}
 	}
 	buf, err := p.MarshalBinary()
 	if err != nil {

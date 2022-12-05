@@ -91,9 +91,11 @@ func (x Int128) IsZero() bool {
 }
 
 // Sign returns:
+//
 //	-1 if x <  0
 //	 0 if x == 0
 //	+1 if x >  0
+//
 // Where x is interpreted as a two's complement signed number
 func (x Int128) Sign() int {
 	if x.IsZero() {
@@ -347,10 +349,11 @@ func (x Int128) BitLen() int {
 
 // Abs interprets x as a two's complement signed number,
 // and returns its absolute value
-//   Abs(0)        = 0
-//   Abs(1)        = 1
-//   Abs(2**127)   = -2**127
-//   Abs(2**128-1) = -1
+//
+//	Abs(0)        = 0
+//	Abs(1)        = 1
+//	Abs(2**127)   = -2**127
+//	Abs(2**128-1) = -1
 func (x Int128) Abs() Int128 {
 	if x[0] < 0x8000000000000000 {
 		return x

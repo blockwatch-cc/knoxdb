@@ -114,7 +114,7 @@ var (
 )
 
 func makeTestPackage(sz int) *Package {
-	pkg := NewPackage(sz)
+	pkg := NewPackage(sz, nil)
 	pkg.InitFields(benchFields, nil)
 	for i := 0; i < sz; i++ {
 		pkg.Grow(1)

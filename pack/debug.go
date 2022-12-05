@@ -142,7 +142,12 @@ func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
 	if err != nil {
 		return err
 	}
-	return pkg.DumpData(w, mode, t.fields.Aliases())
+	err = pkg.DumpData(w, mode, t.fields.Aliases())
+	if err != nil {
+		return err
+	}
+	t.releaseSharedPack(pkg)
+	return nil
 }
 
 func (t *Table) WalkPacks(fn func(*Package) error) error {
@@ -159,6 +164,7 @@ func (t *Table) WalkPacks(fn func(*Package) error) error {
 		if err := fn(pkg); err != nil {
 			return err
 		}
+		t.releaseSharedPack(pkg)
 	}
 	return nil
 }
@@ -183,6 +189,7 @@ func (t *Table) WalkPacksRange(start, end int, fn func(*Package) error) error {
 		if err := fn(pkg); err != nil {
 			return err
 		}
+		t.releaseSharedPack(pkg)
 	}
 	return nil
 }
@@ -203,7 +210,13 @@ func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
 	if err != nil {
 		return fmt.Errorf("pack %d not found: %v", t.indexes[i].packidx.Get(p).Key, err)
 	}
-	return pkg.DumpData(w, mode, []string{"Hash", "Pk"})
+
+	err = pkg.DumpData(w, mode, t.fields.Aliases())
+	if err != nil {
+		return err
+	}
+	t.indexes[i].releaseSharedPack(pkg)
+	return nil
 }
 
 func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
@@ -228,6 +241,7 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 		} else {
 			lineNo = n
 		}
+		t.releaseSharedPack(pkg)
 	}
 	return nil
 }

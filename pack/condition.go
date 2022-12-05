@@ -342,7 +342,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 						if pos != 0xFFFFFFFF {
 							// compare IN slice value at pos against value
 							// to ensure we're collision free
-							if bytes.Compare(v, vals[pos]) == 0 {
+							if bytes.Equal(v, vals[pos]) {
 								bits.Set(i)
 							}
 						} else {
@@ -351,7 +351,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 								if oflow.hash != sum {
 									continue
 								}
-								if bytes.Compare(v, vals[oflow.pos]) != 0 {
+								if !bytes.Equal(v, vals[oflow.pos]) {
 									continue
 								}
 								bits.Set(i)
@@ -597,7 +597,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 						if pos != 0xFFFFFFFF {
 							// compare IN slice value at pos against buf
 							// to ensure we're collision free
-							if bytes.Compare(v, vals[pos]) != 0 {
+							if !bytes.Equal(v, vals[pos]) {
 								bits.Set(i)
 							}
 						} else {
@@ -607,7 +607,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 								if oflow.hash != sum {
 									continue
 								}
-								if bytes.Compare(v, vals[oflow.pos]) == 0 {
+								if bytes.Equal(v, vals[oflow.pos]) {
 									// may break early when found
 									found = true
 									break
