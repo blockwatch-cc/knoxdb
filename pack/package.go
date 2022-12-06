@@ -394,12 +394,13 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 	return clone, nil
 }
 
-func (dst *Package) MergeCols(src *Package) (*Package, error) {
+func (dst *Package) MergeCols(src *Package) error {
 	if src == nil {
-		return dst, nil
+		return nil
 	}
 	if dst.nValues != src.nValues {
-		return nil, fmt.Errorf("pack: MergeCols: differnt number of values")
+		return fmt.Errorf("pack: size mismatch on merge: src[%x]=%d dst[%x]=%d",
+			src.key, src.nValues, dst.key, dst.nValues)
 	}
 	for i := range dst.blocks {
 		if i > len(src.blocks) {
@@ -410,7 +411,7 @@ func (dst *Package) MergeCols(src *Package) (*Package, error) {
 			src.blocks[i] = nil
 		}
 	}
-	return dst, nil
+	return nil
 }
 
 func (p *Package) Optimize() {

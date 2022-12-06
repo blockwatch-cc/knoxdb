@@ -3144,8 +3144,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		}
 	}
 
-	pkg, err = pkg.MergeCols(pkg2)
-
+	err = pkg.MergeCols(pkg2)
 	pkg2.Release()
 	return pkg, err
 }
@@ -3175,9 +3174,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 
 	clone, err := pkg.Clone(t.opts.PackSize())
 	t.releaseSharedPack(pkg)
-
-	// FIXME: check how dirty has to be
-	// clone.dirty = false
+	pkg = nil
 
 	if err != nil {
 		clone.Release()
@@ -3202,7 +3199,11 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		return nil, err
 	}
 
-	clone, err = clone.MergeCols(pkg2)
+	if err = clone.MergeCols(pkg2); err != nil {
+		pkg2.Release()
+		clone.Release()
+		return nil, err
+	}
 	pkg2.Release()
 
 	// prepare for efficient writes

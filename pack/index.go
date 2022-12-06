@@ -849,7 +849,7 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 		}
 	}
 
-	// final flush
+	// final flush (this clears the index journal)
 	if ch != nil {
 		select {
 		case ch <- float64(99):
@@ -866,7 +866,8 @@ func (idx *Index) ReindexTx(ctx context.Context, tx *Tx, flushEvery int, ch chan
 		}
 	}
 
-	// store journal with remaining data
+	// store journal with remaining data (should not be necessary as long as we don't
+	// keep index data in the journal)
 	if idx.journal.IsDirty() {
 		_, err := tx.storePack(idx.metakey, idx.journal.Key(), idx.journal, idx.opts.FillLevel)
 		if err != nil {
