@@ -580,34 +580,46 @@ func (t FieldType) CastSliceType(val interface{}, f *Field) (interface{}, error)
 	case FieldTypeBytes:
 		_, ok = val.([][]byte)
 		if !ok {
-			vv, ok2 := val.([]encoding.BinaryMarshaler)
-			if ok2 {
-				slice := make([][]byte, len(vv))
-				for i := range vv {
-					slice[i], err = vv[i].(encoding.BinaryMarshaler).MarshalBinary()
-					if err != nil {
-						return nil, err
+			// must use reflect to convert to interface
+			v := reflect.ValueOf(val)
+			if v.Kind() == reflect.Slice {
+				slice := make([][]byte, v.Len())
+				if v.Len() == 0 {
+					res = slice
+					ok = true
+				} else if v.Index(0).CanInterface() && v.Index(0).Type().Implements(binaryMarshalerType) {
+					for i := 0; i < v.Len(); i++ {
+						slice[i], err = v.Index(i).Interface().(encoding.BinaryMarshaler).MarshalBinary()
+						if err != nil {
+							return nil, err
+						}
 					}
+					res = slice
+					ok = true
 				}
-				res = slice
-				ok = true
 			}
 		}
 	case FieldTypeString:
 		_, ok = val.([]string)
 		if !ok {
-			vv, ok2 := val.([]encoding.TextMarshaler)
-			if ok2 {
-				slice := make([]string, len(vv))
-				for i := range vv {
-					buf, err := vv[i].(encoding.TextMarshaler).MarshalText()
-					slice[i] = string(buf)
-					if err != nil {
-						return nil, err
+			// must use reflect to convert to interface
+			v := reflect.ValueOf(val)
+			if v.Kind() == reflect.Slice {
+				slice := make([]string, v.Len())
+				if v.Len() == 0 {
+					res = slice
+					ok = true
+				} else if v.Index(0).CanInterface() && v.Index(0).Type().Implements(textMarshalerType) {
+					for i := 0; i < v.Len(); i++ {
+						str, err := v.Index(i).Interface().(encoding.TextMarshaler).MarshalText()
+						if err != nil {
+							return nil, err
+						}
+						slice[i] = string(str)
 					}
+					res = slice
+					ok = true
 				}
-				res = slice
-				ok = true
 			}
 		}
 	case FieldTypeDatetime:

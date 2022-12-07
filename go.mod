@@ -5,7 +5,6 @@ go 1.19
 require (
 	github.com/dgraph-io/sroar v0.0.0-20220527172339-b92b7eaaf6e0
 	github.com/echa/log v1.2.2
-	github.com/golang/snappy v0.0.4
 	github.com/google/go-cmp v0.5.1
 	github.com/klauspost/compress v1.15.12
 	github.com/pierrec/lz4 v2.6.1+incompatible
