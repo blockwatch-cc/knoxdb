@@ -61,14 +61,15 @@ func (t *typeInfo) Clone() *typeInfo {
 
 // fieldInfo holds details for the representation of a single field.
 type fieldInfo struct {
-	idx      []int
-	name     string
-	alias    string
-	flags    FieldFlags
-	scale    int
-	typname  string
-	blockid  int
-	override FieldType
+	idx       []int
+	name      string
+	alias     string
+	flags     FieldFlags
+	scale     int
+	typname   string
+	blockid   int
+	override  FieldType
+	indextype IndexType
 }
 
 func (f *fieldInfo) Clone() *fieldInfo {
@@ -251,6 +252,14 @@ func structFieldInfo(f *reflect.StructField) (*fieldInfo, error) {
 				finfo.flags |= FlagPrimary
 			case "index":
 				finfo.flags |= FlagIndexed
+				switch val {
+				case "", "hash":
+					finfo.indextype = IndexTypeHash
+				case "int":
+					finfo.indextype = IndexTypeInteger
+				default:
+					return nil, fmt.Errorf("pack: unsupported index type %q on field '%s' (%s/%s)", val, tag, typname, kind)
+				}
 			case "lz4":
 				finfo.flags |= FlagCompressLZ4
 			case "snappy":

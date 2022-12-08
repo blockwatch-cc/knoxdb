@@ -34,12 +34,15 @@ type IndexValueAtFunc func(typ FieldType, pkg *Package, index, pos int) uint64
 type IndexZeroAtFunc func(pkg *Package, index, pos int) bool
 
 const (
-	IndexTypeHash    IndexType = iota // any col (any type) -> uint64 FNV hash
-	IndexTypeInteger                  // any col ((u)int64) -> pk (uint64)
+	IndexTypeNone    IndexType = iota
+	IndexTypeHash              // any col (any type) -> uint64 FNV hash
+	IndexTypeInteger           // any col ((u)int64) -> pk (uint64)
 )
 
 func (t IndexType) String() string {
 	switch t {
+	case IndexTypeNone:
+		return ""
 	case IndexTypeHash:
 		return "hash"
 	case IndexTypeInteger:
@@ -47,6 +50,24 @@ func (t IndexType) String() string {
 	default:
 		return "invalid"
 	}
+}
+
+func (t IndexType) MarshalText() ([]byte, error) {
+	return []byte(t.String()), nil
+}
+
+func (t *IndexType) UnmarshalText(d []byte) error {
+	switch string(d) {
+	case "":
+		*t = IndexTypeNone
+	case "hash":
+		*t = IndexTypeHash
+	case "int":
+		*t = IndexTypeInteger
+	default:
+		return fmt.Errorf("Invalid index type %q", string(d))
+	}
+	return nil
 }
 
 func (t IndexType) ValueFunc() IndexValueFunc {
