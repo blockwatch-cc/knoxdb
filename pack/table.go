@@ -630,6 +630,9 @@ func (t *Table) InsertTx(ctx context.Context, tx *Tx, val interface{}) error {
 }
 
 func (t *Table) insertJournal(val interface{}) error {
+	if t.db.IsReadOnly() {
+		return ErrReadOnlyDatabase
+	}
 	var batch []Item
 	if v, ok := val.([]Item); ok {
 		batch = v
@@ -754,6 +757,10 @@ func (t *Table) appendPackIntoJournal(ctx context.Context, pkg *Package, pos, n 
 	if pkg.Len() == 0 {
 		return nil
 	}
+	if t.db.IsReadOnly() {
+		return ErrReadOnlyDatabase
+	}
+
 	atomic.AddInt64(&t.stats.InsertCalls, 1)
 
 	count, err := t.journal.InsertPack(pkg, pos, n)
@@ -834,6 +841,9 @@ func (t *Table) UpdateTx(ctx context.Context, tx *Tx, val interface{}) error {
 }
 
 func (t *Table) updateJournal(val interface{}) error {
+	if t.db.IsReadOnly() {
+		return ErrReadOnlyDatabase
+	}
 	var batch []Item
 	if v, ok := val.([]Item); ok {
 		batch = v
@@ -954,8 +964,11 @@ func (t *Table) DeleteIdsTx(ctx context.Context, tx *Tx, val []uint64) error {
 }
 
 func (t *Table) deleteJournal(ids []uint64) error {
-	atomic.AddInt64(&t.stats.DeleteCalls, 1)
+	if t.db.IsReadOnly() {
+		return ErrReadOnlyDatabase
+	}
 
+	atomic.AddInt64(&t.stats.DeleteCalls, 1)
 	count, err := t.journal.DeleteBatch(ids)
 	if err != nil {
 		return err
@@ -985,51 +998,55 @@ func (t *Table) Close() error {
 		return nil
 	}
 
-	tx, err := t.db.Tx(true)
-	if err != nil {
-		return err
-	}
-
-	defer tx.Rollback()
-
-	// store table metadata
-	if t.meta.dirty {
-		buf, err := json.Marshal(t.meta)
+	if !t.db.IsReadOnly() {
+		tx, err := t.db.Tx(true)
 		if err != nil {
 			return err
 		}
-		err = tx.tx.Bucket(t.metakey).Put(metaKey, buf)
-		if err != nil {
+
+		defer tx.Rollback()
+
+		// store table metadata
+		if t.meta.dirty {
+			buf, err := json.Marshal(t.meta)
+			if err != nil {
+				return err
+			}
+			err = tx.tx.Bucket(t.metakey).Put(metaKey, buf)
+			if err != nil {
+				return err
+			}
+			t.meta.dirty = false
+		}
+
+		// save journal and tombstone
+		if jsz, tsz, err := t.journal.StoreLegacy(tx.tx, t.metakey); err != nil {
+			return err
+		} else {
+			t.stats.JournalDiskSize = int64(jsz)
+			t.stats.TombstoneDiskSize = int64(tsz)
+		}
+
+		// store pack headers
+		if err := t.storePackInfo(tx.tx); err != nil {
 			return err
 		}
-		t.meta.dirty = false
-	}
 
-	// save journal and tombstone
-	if jsz, tsz, err := t.journal.StoreLegacy(tx.tx, t.metakey); err != nil {
-		return err
-	} else {
-		t.stats.JournalDiskSize = int64(jsz)
-		t.stats.TombstoneDiskSize = int64(tsz)
-	}
+		// close indexes
+		for _, idx := range t.indexes {
+			if err := idx.CloseTx(tx); err != nil {
+				return err
+			}
+		}
+		t.indexes = t.indexes[:0]
 
-	// store pack headers
-	if err := t.storePackInfo(tx.tx); err != nil {
-		return err
-	}
-
-	// close indexes
-	for _, idx := range t.indexes {
-		if err := idx.CloseTx(tx); err != nil {
+		// commit storage transaction
+		if err := tx.Commit(); err != nil {
 			return err
 		}
 	}
-	t.indexes = t.indexes[:0]
 
-	// commit storage transaction
-	if err := tx.Commit(); err != nil {
-		return err
-	}
+	// close journal
 	t.journal.Close()
 
 	// unregister from db

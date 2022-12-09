@@ -16,14 +16,15 @@ import (
 )
 
 var (
-	ErrNoTable      = errors.New("pack: table does not exist")
-	ErrNoStore      = errors.New("pack: store does not exist")
-	ErrNoIndex      = errors.New("pack: index does not exist")
-	ErrNoColumn     = errors.New("pack: column does not exist")
-	ErrTypeMismatch = errors.New("pack: type mismatch")
-	ErrNoField      = errors.New("pack: field does not exist")
-	ErrInvalidType  = errors.New("pack: unsupported block type")
-	ErrNilValue     = errors.New("pack: nil value passed")
+	ErrNoTable          = errors.New("pack: table does not exist")
+	ErrNoStore          = errors.New("pack: store does not exist")
+	ErrNoIndex          = errors.New("pack: index does not exist")
+	ErrNoColumn         = errors.New("pack: column does not exist")
+	ErrTypeMismatch     = errors.New("pack: type mismatch")
+	ErrNoField          = errors.New("pack: field does not exist")
+	ErrInvalidType      = errors.New("pack: unsupported block type")
+	ErrNilValue         = errors.New("pack: nil value passed")
+	ErrReadOnlyDatabase = errors.New("pack: database is read-only")
 
 	ErrIndexNotFound  = errors.New("pack: index not found")
 	ErrBucketNotFound = errors.New("pack: bucket not found")
@@ -146,6 +147,10 @@ func (d *DB) GC(ctx context.Context, ratio float64) error {
 
 func (d *DB) Dump(w io.Writer) error {
 	return d.db.Dump(w)
+}
+
+func (d *DB) IsReadOnly() bool {
+	return d.db.IsReadOnly()
 }
 
 func (d *DB) IsUsed() bool {

@@ -292,6 +292,10 @@ type DB interface {
 	// Path returns the path where the current database is stored.
 	Path() string
 
+	// IsReadOnly returns true if the database was opened in readonly mode
+	// and no write transactions are supported.
+	IsReadOnly() bool
+
 	// Manifest returns the current database manifest metadata.
 	Manifest() (Manifest, error)
 

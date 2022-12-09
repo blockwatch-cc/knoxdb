@@ -955,7 +955,6 @@ func putManifest(bdb *bolt.DB, manifest store.Manifest) error {
 }
 
 // Sequence creates a new managed sequence stored in the sequences bucket.
-//
 func (db *db) Sequence(key []byte, lease uint64) (store.Sequence, error) {
 	return &sequence{
 		db:  db,
@@ -1274,6 +1273,10 @@ func (db *db) Restore(r io.Reader) error {
 	// - restore/overwrite file with reader contents
 	// - open bolt db from restored file
 	return nil
+}
+
+func (db *db) IsReadOnly() bool {
+	return db.store.IsReadOnly()
 }
 
 // Should be called on a database that is not running any concurrent tx.
