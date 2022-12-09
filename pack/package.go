@@ -122,13 +122,11 @@ func (p *Package) Len() int {
 }
 
 func (p *Package) Cap() int {
-	if p.pkindex > 0 {
-		return p.blocks[p.pkindex].Cap()
-	}
-	if p.nFields > 0 {
-		return p.blocks[0].Cap()
-	}
-	return 0
+	return p.capHint
+}
+
+func (p *Package) IsFull() bool {
+	return p.nValues == p.capHint
 }
 
 func (p *Package) FieldIndex(name string) int {
@@ -492,6 +490,9 @@ func (p *Package) Push(v interface{}) error {
 	val := reflect.Indirect(reflect.ValueOf(v))
 	if !val.IsValid() {
 		return fmt.Errorf("pack: pushed invalid value of type %T", v)
+	}
+	if !p.IsJournal() && p.nValues+1 > p.capHint {
+		panic(fmt.Errorf("pack: overflow on push into pack 0x%x with %d/%d rows", p.key, p.nValues, p.capHint))
 	}
 
 	for _, fi := range p.tinfo.fields {
@@ -1395,7 +1396,6 @@ func (p *Package) Column(index int) (interface{}, error) {
 	if b.IsIgnore() {
 		return nil, fmt.Errorf("pack: skipped block %d (%s)", index, field.Type)
 	}
-	//slice := b.RawSlice()
 
 	switch field.Type {
 	case FieldTypeBytes,
@@ -1736,6 +1736,10 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 	if srcPack.nValues < srcPos+srcLen {
 		return fmt.Errorf("pack: invalid source pack offset %d len %d (max %d)", srcPos, srcLen, srcPack.nValues)
 	}
+	if !p.IsJournal() && p.nValues+srcLen > p.capHint {
+		panic(fmt.Errorf("pack: overflow on append %d rows into pack 0x%x with %d/%d rows (first block %d/%d)",
+			srcLen, p.key, p.nValues, p.capHint, p.blocks[0].Len(), p.blocks[0].Cap()))
+	}
 	for i, dst := range p.blocks {
 		src := srcPack.blocks[i]
 		if dst.IsIgnore() || src.IsIgnore() {
@@ -1855,6 +1859,9 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 	if srcPack.nValues < srcPos+srcLen {
 		return fmt.Errorf("pack: invalid source pack offset %d len %d (max %d)", srcPos, srcLen, srcPack.nValues)
 	}
+	if !p.IsJournal() && p.nValues+srcLen > p.capHint {
+		panic(fmt.Errorf("pack: overflow on insert %d rows into pack 0x%x with %d/%d rows", srcLen, p.key, p.nValues, p.capHint))
+	}
 	n := util.Min(srcPack.Len()-srcPos, srcLen)
 	for i, dst := range p.blocks {
 		src := srcPack.blocks[i]
@@ -1973,6 +1980,9 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 func (p *Package) Grow(n int) error {
 	if n <= 0 {
 		return fmt.Errorf("pack: grow requires positive value")
+	}
+	if !p.IsJournal() && p.nValues+n > p.capHint {
+		panic(fmt.Errorf("pack: overflow on grow %d rows in pack 0x%x with %d/%d rows", n, p.key, p.nValues, p.capHint))
 	}
 	for i, b := range p.blocks {
 		if b.IsIgnore() {

@@ -1197,8 +1197,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		// skip when we're already appending to a new pack
 		if lastpack < t.packidx.Len() {
 			nextpack, packmin, packmax, nextmin = t.findBestPack(nextid)
-			// log.Debugf("Using next pack %d with range [%d:%d] for id %d (last=%d/%d) ",
-			// 	nextpack, packmin, packmax, nextid, lastpack, t.packidx.Len())
+			// log.Debugf("%s: selecting next pack %d with range [%d:%d] for next pkid=%d last-pack=%d/%d next-min=%d",
+			// 	t.name, nextpack, packmin, packmax, nextid, lastpack, t.packidx.Len(), nextmin)
 		}
 
 		// store last pack when nextpack changes
@@ -1235,7 +1235,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				}
 				// update next values after pack index has changed
 				nextpack, _, packmax, nextmin = t.findBestPack(nextid)
-				// log.Debugf("Post-store next pack %d max=%d nextmin=%d", nextpack, packmax, nextmin)
+				// log.Debugf("%s: post-store next pack %d max=%d nextmin=%d", t.name, nextpack, packmax, nextmin)
 			}
 			// prepare for next pack
 			pkg.Release()
@@ -1246,7 +1246,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		// load or create the next pack
 		if pkg == nil {
 			if nextpack < t.packidx.Len() {
-				// log.Debugf("Loading pack %d/%d with key %d", nextpack, t.packidx.Len(), t.packidx.packs[nextpack].Key)
+				// log.Debugf("%s: loading pack %d/%d key=%d len=%d", t.name, nextpack, t.packidx.Len(), t.packidx.packs[nextpack].Key, t.packidx.packs[nextpack].NValues)
 				var err error
 				pkg, err = t.loadWritablePack(tx, t.packidx.packs[nextpack].Key)
 				if err != nil && err != ErrPackNotFound {
@@ -1262,7 +1262,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				pkg = t.packPool.Get().(*Package)
 				pkg.PopulateFields(nil)
 				pkg.key = t.packidx.NextKey()
-				// log.Debugf("Starting new pack %d/%d with key %d", nextpack, t.packidx.Len(), pkg.key)
+				// log.Debugf("%s: starting new pack %d/%d with key %d", t.name, nextpack, t.packidx.Len(), pkg.key)
 			}
 			lastpack = nextpack
 			pAdd = 0
@@ -1418,6 +1418,18 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					continue
 
 				} else {
+					// Don't insert when pack is full to prevent buffer overflows. This may
+					// happen when the current full pack was selected for a prior update,
+					// but no re-selection happened before this insert.
+					//
+					// Reason is that the above boundary check does not always work, in
+					// particular for the edge case of the very last pack because
+					// nextmin = 0 in this case.
+					//
+					if pkg.IsFull() {
+						break
+					}
+
 					// insert new record
 					isOOInsert = key.pk < packmax
 					if isOOInsert {
@@ -1474,7 +1486,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 						nBytes += n
 					} else {
 						// store pack, will update t.packidx
-						// log.Debugf("Storing pack %d with %d records at key %d", lastpack, pkg.Len(), pkg.key)
+						// log.Debugf("%s: storing pack %d with %d records at key %d", t.name, lastpack, pkg.Len(), pkg.key)
 						n, err := t.storePack(tx, pkg)
 						if err != nil {
 							return err
