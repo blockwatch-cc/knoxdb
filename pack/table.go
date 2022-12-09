@@ -3295,7 +3295,7 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	// log.Debugf("%s: split pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	// move half of the packs contents to a new pack (don't cache the new pack
 	// to avoid possible eviction of the pack we are currently splitting!)
-	newpkg := t.newPackage().PopulateFields(nil).WithKey(t.packidx.NextKey())
+	newpkg := t.newPackage().PopulateFields(nil)
 	half := pkg.Len() / 2
 	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half); err != nil {
 		return 0, err
@@ -3310,6 +3310,10 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+
+	// set the new pack's key here to avoid overwrite when the very first pack
+	// has never been stored
+	newpkg.WithKey(t.packidx.NextKey())
 
 	// save the new pack
 	m, err := t.storePack(tx, newpkg)

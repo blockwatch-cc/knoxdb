@@ -671,6 +671,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 	out := idx.table.u64Pool.Get().([]uint64)
 	var nPacks int
 
+	// log.Debugf("%s: searching for %d keys", idx.name(), len(in))
 	// log.Debugf("Searching for keys %#v", in)
 
 	// Optimize for rollback and lookup of most recently added index values.
@@ -686,10 +687,10 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 		// skip packs that don't contain keys in range
 		min, max := idx.packidx.MinMax(nextpack)
 		if !vec.Uint64.ContainsRange(in, min, max) {
-			// log.Debugf("Not in pack %03d [%d:%d]", nextpack, min, max)
+			// log.Debugf("%s: not in pack %03d [%016x:%016x]", idx.name(), nextpack, min, max)
 			continue
 		}
-		// log.Debugf("Maybe in pack %03d [%d:%d]", nextpack, min, max)
+		// log.Debugf("%s: maybe in pack %03d [%016x:%016x]", idx.name(), nextpack, min, max)
 
 		// stop when context is canceled
 		if err := ctx.Err(); err != nil {
@@ -721,38 +722,41 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 
 			// stop at pack end
 			if k == kl {
-				// log.Debugf("Reached pack end")
+				// log.Debugf("%s: reached pack end", idx.name())
 				break
 			}
 
 			// if no match was found, advance in-slice
 			for i < il && keys[k] > in[i] {
-				// log.Debugf("Next key=%d (%d/%d) > term=%d", keys[k], k, len(keys), in[i])
+				// log.Debugf("%s: key=0x%016x not found, skipping ahead", idx.name(), in[i])
 				i++
 			}
 
 			// stop at in-slice end
 			if i == il {
-				// log.Debugf("No more search terms")
+				// log.Debugf("%s: no more search keys", idx.name())
 				break
 			}
 
 			// handle multiple matches
 			if keys[k] == in[i] {
 				// append to result
-				// log.Debugf("Found key=%d val=%d at pos %d/%d in pack %03d [%d:%d]",
-				// 	keys[k], values[k], k, len(keys), nextpack, min, max)
+				// log.Debugf("%s: match found key=0x%016x val=%d at pos %d/%d in pack %03d [%016x:%016x]",
+				// 	idx.name(), keys[k], values[k], k, len(keys), nextpack, min, max)
 				out = append(out, values[k])
 
 				// remove found key from control slice
-				notfound = vec.Uint64.Remove(notfound, in[i])
+				if notfound != nil {
+					notfound = vec.Uint64.Remove(notfound, in[i])
+				}
 
 				// Peek the next index entries to handle key collisions and
 				// multi-matches for integer indexes. K can safely be advanced
 				// because collisions/multi-matches for in[i] are directly after
 				// the first match.
 				for ; k+1 < kl && keys[k+1] == in[i]; k++ {
-					// log.Debugf("Found more key=%d val=%d in pack %03d [%d:%d]", keys[k+1], values[k+1], nextpack, min, max)
+					// log.Debugf("%s: found more key=0x%016x val=%d in pack %03d [%016x:%016x]",
+					// 	idx.name(), keys[k+1], values[k+1], nextpack, min, max)
 					out = append(out, values[k+1])
 				}
 
@@ -946,8 +950,8 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 
 	var nAdd, nDel, nParts, nBytes int
 
-	log.Debugf("pack: %s flushing %d journal and %d tombstone records",
-		idx.name(), len(pk), len(dead))
+	// log.Debugf("pack: %s flushing %d journal and %d tombstone records",
+	// 	idx.name(), len(pk), len(dead))
 
 	// Mark deleted journal records first (set value to zero; zero keys have
 	// meaning for hash indexes)
@@ -999,7 +1003,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 			}
 			d++
 		}
-		log.Debugf("pack: %s flush marked %d dead journal records", idx.name(), nDel)
+		// log.Debugf("pack: %s flush marked %d dead journal records", idx.name(), nDel)
 	}
 
 	// walk journal/tombstone and group updates by pack
@@ -1070,7 +1074,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 				if needsort {
 					pkg.PkSort()
 				}
-				// log.Debugf("Storing pack %d with %d records", pkg.key, pkg.Len())
+				// log.Debugf("%s: storing pack %d with %d records", idx.name(), pkg.key, pkg.Len())
 				n, err := idx.storePack(tx, pkg)
 				if err != nil {
 					return err
@@ -1088,7 +1092,8 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 				}
 				// update next values after pack index has changed
 				nextpack, _, packmax, nextmin, _ = idx.packidx.Best(nextid)
-				// log.Debugf("Post-store next pack %d max=%d nextmin=%d", nextpack, packmax, nextmin)
+				// log.Debugf("%s: post-store next pack %d max=%d nextmin=%d",
+				// 	idx.name(), nextpack, packmax, nextmin)
 			}
 			// prepare for next pack
 			pkg.DecRef()
@@ -1104,7 +1109,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 				return err
 			}
 			lastpack = nextpack
-			// log.Debugf("Loaded pack %d with %d records", pkg.key, pkg.Len())
+			// log.Debugf("%s: loaded pack %d with %d records", idx.name(), pkg.key, pkg.Len())
 		}
 
 		// circuit breaker
@@ -1225,7 +1230,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 					pkg.PkSort()
 					needsort = false
 				}
-				// log.Debugf("Split pack %d with %d records", pkg.key, pkg.Len())
+				// log.Debugf("%s: split pack %d with %d records", idx.name(), pkg.key, pkg.Len())
 				n, err := idx.splitPack(tx, pkg)
 				if err != nil {
 					return err
@@ -1267,6 +1272,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 			pkg.PkSort()
 			needsort = false
 		}
+		// log.Debugf("%s: storing final pack %d with %d records", idx.name(), pkg.key, pkg.Len())
 		n, err := idx.storePack(tx, pkg)
 		if err != nil {
 			return err
@@ -1319,7 +1325,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 func (idx *Index) splitPack(tx *Tx, pkg *Package) (int, error) {
 	// move half of the packidx contents to a new pack (don't cache the new pack
 	// to avoid possible eviction of the pack we are currently splitting!)
-	newpkg := idx.newPackage().WithKey(idx.packidx.NextKey())
+	newpkg := idx.newPackage().PopulateFields(nil)
 	half := pkg.Len() / 2
 	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half); err != nil {
 		return 0, err
@@ -1334,6 +1340,10 @@ func (idx *Index) splitPack(tx *Tx, pkg *Package) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+
+	// set the new pack's key here to avoid overwrite when the very first pack
+	// has never been stored
+	newpkg.WithKey(idx.packidx.NextKey())
 
 	// save the new pack
 	m, err := idx.storePack(tx, newpkg)

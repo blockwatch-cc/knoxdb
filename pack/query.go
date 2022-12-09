@@ -232,23 +232,23 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 	for i, v := range node.Children {
 		if v.Leaf() {
 			if !q.fidx.Contains(v.Cond.Field.Name) {
-				// log.Debugf("query: %s table non-indexed field %s for cond %s, fallback to table scan",
-				// 	q.Name, v.Cond.Field.Name, v.Cond.String())
+				q.Debugf("query: %s table non-indexed field %s for cond %s, fallback to table scan",
+					q.Name, v.Cond.Field.Name, v.Cond.String())
 				continue
 			}
 			idx := q.table.indexes.FindField(v.Cond.Field.Name)
 			if idx == nil {
-				// log.Debugf("query: %s table missing index on field %s for cond %d, fallback to table scan",
-				// 	q.Name, v.Cond.Field.Name, v.Cond.String())
+				q.Debugf("query: %s table missing index on field %s for cond %d, fallback to table scan",
+					q.Name, v.Cond.Field.Name, v.Cond.String())
 				continue
 			}
 			if !idx.CanMatch(*v.Cond) {
-				// log.Debugf("query: %s index %s cannot match cond %s, fallback to table scan",
-				// 	q.Name, idx.Name, v.Cond.String())
+				q.Debugf("query: %s index %s cannot match cond %s, fallback to table scan",
+					q.Name, idx.Name, v.Cond.String())
 				continue
 			}
 
-			// log.Debugf("query: %s index scan for %s", q.Name, v.Cond.String())
+			q.Debugf("query: %s index scan for %s", idx.name, v.Cond.String())
 
 			// lookup matching primary keys from index (result is sorted)
 			pkmatch, err := idx.LookupTx(ctx, tx, *v.Cond)
@@ -265,7 +265,7 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 			if !idx.Type.MayHaveCollisions() {
 				v.Cond.processed = true
 			}
-			// log.Debugf("query: %s index scan found %d matches", q.Name, len(pkmatch))
+			q.Debugf("query: %s index scan found %d matches", q.Name, len(pkmatch))
 
 			if len(pkmatch) == 0 {
 				v.Cond.nomatch = true
@@ -308,15 +308,15 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 			// skip processed source conditions unless they led to an empty result
 			// because we need them to check for nomatch later
 			if v.Leaf() && v.Cond.processed && !v.Cond.nomatch {
-				// log.Debugf("query: %s replacing condition %s", q.Name, v.Cond.String())
+				q.Debugf("query: %s replacing condition %s", q.Name, v.Cond.String())
 				continue
 			}
 			ins = append(ins, v)
 		}
 		node.Children = ins
-		// log.Debug(newLogClosure(func() string {
-		// 	return "Updated query:\n" + q.Dump()
-		// }))
+		q.Debugf("Updated query: %v", logpkg.NewClosure(func() string {
+			return q.Dump()
+		}))
 	}
 
 	return nil
