@@ -64,6 +64,11 @@ func (p *Package) Key() []byte {
 	return encodePackKey(p.key)
 }
 
+func (p *Package) WithKey(k uint32) *Package {
+	p.key = k
+	return p
+}
+
 func (p Package) IsJournal() bool {
 	return p.key == journalKey
 }
@@ -72,12 +77,18 @@ func (p Package) IsTomb() bool {
 	return p.key == tombstoneKey
 }
 
+func (p Package) IsResult() bool {
+	return p.key == resultKey
+}
+
 func (p *Package) SetKey(key []byte) {
 	switch {
 	case bytes.Equal(key, []byte("_journal")):
 		p.key = journalKey
 	case bytes.Equal(key, []byte("_tombstone")):
 		p.key = tombstoneKey
+	case bytes.Equal(key, []byte("_result")):
+		p.key = resultKey
 	default:
 		p.key = bigEndian.Uint32(key)
 	}
@@ -89,6 +100,8 @@ func encodePackKey(key uint32) []byte {
 		return []byte("_journal")
 	case tombstoneKey:
 		return []byte("_tombstone")
+	case resultKey:
+		return []byte("_result")
 	default:
 		var buf [4]byte
 		bigEndian.PutUint32(buf[:], key)
@@ -127,6 +140,13 @@ func (p *Package) Cap() int {
 
 func (p *Package) IsFull() bool {
 	return p.nValues == p.capHint
+}
+
+func (p *Package) CanGrow(n int) bool {
+	if p.IsJournal() || p.IsResult() || p.IsTomb() {
+		return true
+	}
+	return p.nValues+n <= p.capHint
 }
 
 func (p *Package) FieldIndex(name string) int {
@@ -491,7 +511,7 @@ func (p *Package) Push(v interface{}) error {
 	if !val.IsValid() {
 		return fmt.Errorf("pack: pushed invalid value of type %T", v)
 	}
-	if !p.IsJournal() && p.nValues+1 > p.capHint {
+	if !p.CanGrow(1) {
 		panic(fmt.Errorf("pack: overflow on push into pack 0x%x with %d/%d rows", p.key, p.nValues, p.capHint))
 	}
 
@@ -1736,7 +1756,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 	if srcPack.nValues < srcPos+srcLen {
 		return fmt.Errorf("pack: invalid source pack offset %d len %d (max %d)", srcPos, srcLen, srcPack.nValues)
 	}
-	if !p.IsJournal() && p.nValues+srcLen > p.capHint {
+	if !p.CanGrow(srcLen) {
 		panic(fmt.Errorf("pack: overflow on append %d rows into pack 0x%x with %d/%d rows (first block %d/%d)",
 			srcLen, p.key, p.nValues, p.capHint, p.blocks[0].Len(), p.blocks[0].Cap()))
 	}
@@ -1859,7 +1879,7 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 	if srcPack.nValues < srcPos+srcLen {
 		return fmt.Errorf("pack: invalid source pack offset %d len %d (max %d)", srcPos, srcLen, srcPack.nValues)
 	}
-	if !p.IsJournal() && p.nValues+srcLen > p.capHint {
+	if !p.CanGrow(srcLen) {
 		panic(fmt.Errorf("pack: overflow on insert %d rows into pack 0x%x with %d/%d rows", srcLen, p.key, p.nValues, p.capHint))
 	}
 	n := util.Min(srcPack.Len()-srcPos, srcLen)
@@ -1981,7 +2001,7 @@ func (p *Package) Grow(n int) error {
 	if n <= 0 {
 		return fmt.Errorf("pack: grow requires positive value")
 	}
-	if !p.IsJournal() && p.nValues+n > p.capHint {
+	if !p.CanGrow(n) {
 		panic(fmt.Errorf("pack: overflow on grow %d rows in pack 0x%x with %d/%d rows", n, p.key, p.nValues, p.capHint))
 	}
 	for i, b := range p.blocks {

@@ -1022,8 +1022,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 
 	// create an initial pack on first insert
 	if idx.packidx.Len() == 0 {
-		pkg = idx.packPool.Get().(*Package)
-		pkg.key = idx.packidx.NextKey()
+		pkg = idx.newPackage().WithKey(idx.packidx.NextKey())
 		pkg.IncRef()
 	}
 
@@ -1320,7 +1319,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 func (idx *Index) splitPack(tx *Tx, pkg *Package) (int, error) {
 	// move half of the packidx contents to a new pack (don't cache the new pack
 	// to avoid possible eviction of the pack we are currently splitting!)
-	newpkg := idx.packPool.Get().(*Package)
+	newpkg := idx.newPackage().WithKey(idx.packidx.NextKey())
 	half := pkg.Len() / 2
 	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half); err != nil {
 		return 0, err
@@ -1337,7 +1336,6 @@ func (idx *Index) splitPack(tx *Tx, pkg *Package) (int, error) {
 	}
 
 	// save the new pack
-	newpkg.key = idx.packidx.NextKey()
 	m, err := idx.storePack(tx, newpkg)
 	if err != nil {
 		return 0, err
@@ -1362,7 +1360,7 @@ func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error
 	}
 
 	// if not found, load from storage
-	pkg, err := tx.loadPack(idx.key, key, idx.packPool.Get().(*Package), idx.opts.PackSize())
+	pkg, err := tx.loadPack(idx.key, key, idx.newPackage(), idx.opts.PackSize())
 	if err != nil {
 		return nil, err
 	}
@@ -1396,7 +1394,7 @@ func (idx *Index) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	}
 
 	// load from storage
-	pkg := idx.packPool.Get().(*Package)
+	pkg := idx.newPackage()
 	pkg.IncRef()
 
 	var err error
@@ -1462,6 +1460,10 @@ func (idx *Index) makePackage() interface{} {
 	pkg := NewPackage(idx.opts.PackSize(), idx.packPool)
 	_ = pkg.InitFieldsFrom(idx.journal)
 	return pkg
+}
+
+func (idx *Index) newPackage() *Package {
+	return idx.packPool.Get().(*Package)
 }
 
 func (idx *Index) releaseSharedPack(pkg *Package) {

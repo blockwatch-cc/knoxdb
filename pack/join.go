@@ -348,7 +348,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 	// Note: result is not owned by any table, so pkg will not be recycled
 	out = &Result{
 		fields: j.fields,
-		pkg:    NewPackage(util.NonZero(q.Limit, maxPackSize), nil),
+		pkg:    NewPackage(util.NonZero(q.Limit, maxPackSize), nil).WithKey(resultKey),
 	}
 	if err := out.pkg.InitResultFields(j.fields, nil); err != nil {
 		return nil, err
@@ -357,7 +357,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 	if havePostFilter {
 		agg = &Result{
 			fields: j.fields,
-			pkg:    NewPackage(util.NonZero(j.limit, maxPackSize), nil),
+			pkg:    NewPackage(util.NonZero(j.limit, maxPackSize), nil).WithKey(resultKey),
 		}
 		if err := agg.pkg.InitResultFields(j.fields, nil); err != nil {
 			return nil, err

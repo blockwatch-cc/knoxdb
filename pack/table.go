@@ -59,6 +59,7 @@ var (
 	indexesKey          = []byte("_indexes")
 	journalKey   uint32 = 0xFFFFFFFF
 	tombstoneKey uint32 = 0xFFFFFFFE
+	resultKey    uint32 = 0xFFFFFFFD
 )
 
 type Tombstone struct {
@@ -1259,9 +1260,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				packmin = 0
 				packmax = 0
 				nextmin = 0
-				pkg = t.packPool.Get().(*Package)
-				pkg.PopulateFields(nil)
-				pkg.key = t.packidx.NextKey()
+				pkg = t.newPackage().PopulateFields(nil).WithKey(t.packidx.NextKey())
 				// log.Debugf("%s: starting new pack %d/%d with key %d", t.name, nextpack, t.packidx.Len(), pkg.key)
 			}
 			lastpack = nextpack
@@ -1655,11 +1654,9 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 	if err := q.Compile(t); err != nil {
 		return nil, err
 	}
-	p := t.packPool.Get().(*Package) // clone full table structure
-	p.PopulateFields(nil)
 	res := &Result{
 		fields: t.Fields(), // we return all fields
-		pkg:    p,
+		pkg:    t.newPackage().PopulateFields(nil).WithKey(resultKey),
 	}
 	defer func() {
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
@@ -1863,13 +1860,12 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	}
 
 	// prepare result package
-	pkg := t.packPool.Get().(*Package)
-	pkg.PopulateFields(q.freq)
-	pkg.UpdateAliasesFrom(q.freq)
-
 	res := &Result{
 		fields: q.freq,
-		pkg:    pkg,
+		pkg: t.newPackage().
+			WithKey(resultKey).
+			PopulateFields(q.freq).
+			UpdateAliasesFrom(q.freq),
 	}
 
 	// early return
@@ -2028,13 +2024,12 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	}
 
 	// prepare result package
-	pkg := t.packPool.Get().(*Package)
-	pkg.PopulateFields(q.freq)
-	pkg.UpdateAliasesFrom(q.freq)
-
 	res := &Result{
 		fields: q.freq,
-		pkg:    pkg,
+		pkg: t.newPackage().
+			WithKey(resultKey).
+			PopulateFields(q.freq).
+			UpdateAliasesFrom(q.freq),
 	}
 
 	// early return
@@ -2942,9 +2937,7 @@ func (t *Table) Compact(ctx context.Context) error {
 				// handle gaps in key sequence
 				// clone new pack from journal
 				// log.Debugf("pack: creating new dst pack %d key=%x", dstIndex, dstKey)
-				dstPack = t.packPool.Get().(*Package)
-				dstPack.PopulateFields(nil)
-				dstPack.key = dstKey
+				dstPack = t.newPackage().PopulateFields(nil).WithKey(dstKey)
 				// dstPack.IncRef()
 				isNewPack = true
 			}
@@ -3101,12 +3094,11 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	if touch {
 		cachefn = t.bcache.Get
 	}
-	// fetch pack from pool or create new pack, has nil in block slice
-	pkg := t.packPool.Get().(*Package)
-
 	// Get PackInfo and fill metadata
 	pi := t.packidx.GetByKey(id)
-	pkg.key = pi.Key
+
+	// fetch pack from pool or create new pack, has nil in block slice
+	pkg := t.newPackage().WithKey(pi.Key)
 	pkg.nValues = pi.NValues
 	pkg.size = pi.Packsize
 
@@ -3133,9 +3125,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	)
 
 	// fetch pack from pool or create new pack
-	pkg2 := t.packPool.Get().(*Package)
-	pkg2 = pkg2.PopulateFields(loadField)
-
+	pkg2 := t.newPackage().PopulateFields(loadField)
 	pkg2, err = tx.loadPack(t.key, key, pkg2, t.opts.PackSize())
 	if err != nil {
 		t.releaseSharedPack(pkg)
@@ -3165,12 +3155,11 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	key := encodePackKey(id)
 
-	// fetch pack from pool or create new pack, has nil in block slice
-	pkg := t.packPool.Get().(*Package)
-
 	// Get PackInfo and fill metadata
 	pi := t.packidx.GetByKey(id)
-	pkg.key = pi.Key
+
+	// fetch pack from pool or create new pack, has nil in block slice
+	pkg := t.newPackage().WithKey(pi.Key)
 	pkg.nValues = pi.NValues
 	pkg.size = pi.Packsize
 
@@ -3201,9 +3190,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	}
 
 	// fetch pack from pool or create new pack
-	pkg2 := t.packPool.Get().(*Package)
-	pkg2 = pkg2.PopulateFields(loadField)
-
+	pkg2 := t.newPackage().PopulateFields(loadField)
 	pkg2, err = tx.loadPack(t.key, key, pkg2, t.opts.PackSize())
 	if err != nil {
 		pkg2.Release()
@@ -3291,8 +3278,7 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	// log.Debugf("%s: split pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	// move half of the packs contents to a new pack (don't cache the new pack
 	// to avoid possible eviction of the pack we are currently splitting!)
-	newpkg := t.packPool.Get().(*Package)
-	newpkg.PopulateFields(nil)
+	newpkg := t.newPackage().PopulateFields(nil).WithKey(t.packidx.NextKey())
 	half := pkg.Len() / 2
 	if err := newpkg.AppendFrom(pkg, half, pkg.Len()-half); err != nil {
 		return 0, err
@@ -3309,7 +3295,6 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	}
 
 	// save the new pack
-	newpkg.key = t.packidx.NextKey()
 	m, err := t.storePack(tx, newpkg)
 	if err != nil {
 		return 0, err
@@ -3324,6 +3309,10 @@ func (t *Table) makePackage() interface{} {
 	pkg := NewPackage(t.opts.PackSize(), t.packPool)
 	_ = pkg.InitFieldsFromEmpty(t.journal.DataPack())
 	return pkg
+}
+
+func (t *Table) newPackage() *Package {
+	return t.packPool.Get().(*Package)
 }
 
 func (t *Table) releaseSharedPack(pkg *Package) {
