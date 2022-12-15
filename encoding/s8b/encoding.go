@@ -190,7 +190,7 @@ func (d *Decoder) read() {
 
 type packing struct {
 	n, bit int
-	unpack func(uint64, *[240]uint64)
+	unpack func(uint64, unsafe.Pointer)
 	pack   func([]uint64) uint64
 }
 
@@ -215,7 +215,7 @@ var selector [16]packing = [16]packing{
 
 type packing32 struct {
 	n, bit int
-	unpack func(uint64, *[240]uint32)
+	unpack func(uint64, unsafe.Pointer)
 	pack   func([]uint64) uint64
 }
 
@@ -240,7 +240,7 @@ var selector32 [16]packing32 = [16]packing32{
 
 type packing16 struct {
 	n, bit int
-	unpack func(uint64, *[240]uint16)
+	unpack func(uint64, unsafe.Pointer)
 	pack   func([]uint64) uint64
 }
 
@@ -265,7 +265,7 @@ var selector16 [16]packing16 = [16]packing16{
 
 type packing8 struct {
 	n, bit int
-	unpack func(uint64, *[240]uint8)
+	unpack func(uint64, unsafe.Pointer)
 	pack   func([]uint64) uint64
 }
 
@@ -528,7 +528,7 @@ func Decode(dst *[240]uint64, v uint64) (n int, err error) {
 	if sel >= 16 {
 		return 0, fmt.Errorf("invalid selector value: %b", sel)
 	}
-	selector[sel].unpack(v, dst)
+	selector[sel].unpack(v, (unsafe.Pointer)(dst))
 	return selector[sel].n, nil
 }
 
@@ -541,7 +541,7 @@ func DecodeAll(dst, src []uint64) (value int, err error) {
 	j := 0
 	for _, v := range src {
 		sel := (v >> 60) & 0xf
-		selector[sel].unpack(v, (*[240]uint64)(unsafe.Pointer(&dst[j])))
+		selector[sel].unpack(v, unsafe.Pointer(&dst[j]))
 		j += selector[sel].n
 	}
 	return j, nil
@@ -881,19 +881,22 @@ func pack1(src []uint64) uint64 {
 		src[0]
 }
 
-func unpack240(v uint64, dst *[240]uint64) {
+func unpack240(v uint64, p unsafe.Pointer) {
+	dst := (*[240]uint64)(p)
 	for i := range dst {
 		dst[i] = 1
 	}
 }
 
-func unpack120(v uint64, dst *[240]uint64) {
-	for i := range dst[:120] {
+func unpack120(v uint64, p unsafe.Pointer) {
+	dst := (*[120]uint64)(p)
+	for i := range dst {
 		dst[i] = 1
 	}
 }
 
-func unpack60(v uint64, dst *[240]uint64) {
+func unpack60(v uint64, p unsafe.Pointer) {
+	dst := (*[60]uint64)(p)
 	dst[0] = v & 1
 	dst[1] = (v >> 1) & 1
 	dst[2] = (v >> 2) & 1
@@ -956,7 +959,8 @@ func unpack60(v uint64, dst *[240]uint64) {
 	dst[59] = (v >> 59) & 1
 }
 
-func unpack30(v uint64, dst *[240]uint64) {
+func unpack30(v uint64, p unsafe.Pointer) {
+	dst := (*[30]uint64)(p)
 	dst[0] = v & 3
 	dst[1] = (v >> 2) & 3
 	dst[2] = (v >> 4) & 3
@@ -989,7 +993,8 @@ func unpack30(v uint64, dst *[240]uint64) {
 	dst[29] = (v >> 58) & 3
 }
 
-func unpack20(v uint64, dst *[240]uint64) {
+func unpack20(v uint64, p unsafe.Pointer) {
+	dst := (*[20]uint64)(p)
 	dst[0] = v & 7
 	dst[1] = (v >> 3) & 7
 	dst[2] = (v >> 6) & 7
@@ -1012,7 +1017,8 @@ func unpack20(v uint64, dst *[240]uint64) {
 	dst[19] = (v >> 57) & 7
 }
 
-func unpack15(v uint64, dst *[240]uint64) {
+func unpack15(v uint64, p unsafe.Pointer) {
+	dst := (*[15]uint64)(p)
 	dst[0] = v & 15
 	dst[1] = (v >> 4) & 15
 	dst[2] = (v >> 8) & 15
@@ -1030,7 +1036,8 @@ func unpack15(v uint64, dst *[240]uint64) {
 	dst[14] = (v >> 56) & 15
 }
 
-func unpack12(v uint64, dst *[240]uint64) {
+func unpack12(v uint64, p unsafe.Pointer) {
+	dst := (*[12]uint64)(p)
 	dst[0] = v & 31
 	dst[1] = (v >> 5) & 31
 	dst[2] = (v >> 10) & 31
@@ -1045,7 +1052,8 @@ func unpack12(v uint64, dst *[240]uint64) {
 	dst[11] = (v >> 55) & 31
 }
 
-func unpack10(v uint64, dst *[240]uint64) {
+func unpack10(v uint64, p unsafe.Pointer) {
+	dst := (*[10]uint64)(p)
 	dst[0] = v & 63
 	dst[1] = (v >> 6) & 63
 	dst[2] = (v >> 12) & 63
@@ -1058,7 +1066,8 @@ func unpack10(v uint64, dst *[240]uint64) {
 	dst[9] = (v >> 54) & 63
 }
 
-func unpack8(v uint64, dst *[240]uint64) {
+func unpack8(v uint64, p unsafe.Pointer) {
+	dst := (*[8]uint64)(p)
 	dst[0] = v & 127
 	dst[1] = (v >> 7) & 127
 	dst[2] = (v >> 14) & 127
@@ -1069,7 +1078,8 @@ func unpack8(v uint64, dst *[240]uint64) {
 	dst[7] = (v >> 49) & 127
 }
 
-func unpack7(v uint64, dst *[240]uint64) {
+func unpack7(v uint64, p unsafe.Pointer) {
+	dst := (*[7]uint64)(p)
 	dst[0] = v & 255
 	dst[1] = (v >> 8) & 255
 	dst[2] = (v >> 16) & 255
@@ -1079,7 +1089,8 @@ func unpack7(v uint64, dst *[240]uint64) {
 	dst[6] = (v >> 48) & 255
 }
 
-func unpack6(v uint64, dst *[240]uint64) {
+func unpack6(v uint64, p unsafe.Pointer) {
+	dst := (*[6]uint64)(p)
 	dst[0] = v & 1023
 	dst[1] = (v >> 10) & 1023
 	dst[2] = (v >> 20) & 1023
@@ -1088,7 +1099,8 @@ func unpack6(v uint64, dst *[240]uint64) {
 	dst[5] = (v >> 50) & 1023
 }
 
-func unpack5(v uint64, dst *[240]uint64) {
+func unpack5(v uint64, p unsafe.Pointer) {
+	dst := (*[5]uint64)(p)
 	dst[0] = v & 4095
 	dst[1] = (v >> 12) & 4095
 	dst[2] = (v >> 24) & 4095
@@ -1096,41 +1108,48 @@ func unpack5(v uint64, dst *[240]uint64) {
 	dst[4] = (v >> 48) & 4095
 }
 
-func unpack4(v uint64, dst *[240]uint64) {
+func unpack4(v uint64, p unsafe.Pointer) {
+	dst := (*[4]uint64)(p)
 	dst[0] = v & 32767
 	dst[1] = (v >> 15) & 32767
 	dst[2] = (v >> 30) & 32767
 	dst[3] = (v >> 45) & 32767
 }
 
-func unpack3(v uint64, dst *[240]uint64) {
+func unpack3(v uint64, p unsafe.Pointer) {
+	dst := (*[3]uint64)(p)
 	dst[0] = v & 1048575
 	dst[1] = (v >> 20) & 1048575
 	dst[2] = (v >> 40) & 1048575
 }
 
-func unpack2(v uint64, dst *[240]uint64) {
+func unpack2(v uint64, p unsafe.Pointer) {
+	dst := (*[2]uint64)(p)
 	dst[0] = v & 1073741823
 	dst[1] = (v >> 30) & 1073741823
 }
 
-func unpack1(v uint64, dst *[240]uint64) {
+func unpack1(v uint64, p unsafe.Pointer) {
+	dst := (*[1]uint64)(p)
 	dst[0] = v & 1152921504606846975
 }
 
-func unpack32bit240(v uint64, dst *[240]uint32) {
+func unpack32bit240(v uint64, p unsafe.Pointer) {
+	dst := (*[240]uint32)(p)
 	for i := range dst {
 		dst[i] = 1
 	}
 }
 
-func unpack32bit120(v uint64, dst *[240]uint32) {
-	for i := range dst[:120] {
+func unpack32bit120(v uint64, p unsafe.Pointer) {
+	dst := (*[120]uint32)(p)
+	for i := range dst {
 		dst[i] = 1
 	}
 }
 
-func unpack32bit60(v uint64, dst *[240]uint32) {
+func unpack32bit60(v uint64, p unsafe.Pointer) {
+	dst := (*[60]uint32)(p)
 	dst[0] = uint32(v & 1)
 	dst[1] = uint32((v >> 1) & 1)
 	dst[2] = uint32((v >> 2) & 1)
@@ -1193,7 +1212,8 @@ func unpack32bit60(v uint64, dst *[240]uint32) {
 	dst[59] = uint32((v >> 59) & 1)
 }
 
-func unpack32bit30(v uint64, dst *[240]uint32) {
+func unpack32bit30(v uint64, p unsafe.Pointer) {
+	dst := (*[30]uint32)(p)
 	dst[0] = uint32(v & 3)
 	dst[1] = uint32((v >> 2) & 3)
 	dst[2] = uint32((v >> 4) & 3)
@@ -1226,7 +1246,8 @@ func unpack32bit30(v uint64, dst *[240]uint32) {
 	dst[29] = uint32((v >> 58) & 3)
 }
 
-func unpack32bit20(v uint64, dst *[240]uint32) {
+func unpack32bit20(v uint64, p unsafe.Pointer) {
+	dst := (*[20]uint32)(p)
 	dst[0] = uint32(v & 7)
 	dst[1] = uint32((v >> 3) & 7)
 	dst[2] = uint32((v >> 6) & 7)
@@ -1249,7 +1270,8 @@ func unpack32bit20(v uint64, dst *[240]uint32) {
 	dst[19] = uint32((v >> 57) & 7)
 }
 
-func unpack32bit15(v uint64, dst *[240]uint32) {
+func unpack32bit15(v uint64, p unsafe.Pointer) {
+	dst := (*[15]uint32)(p)
 	dst[0] = uint32(v & 15)
 	dst[1] = uint32((v >> 4) & 15)
 	dst[2] = uint32((v >> 8) & 15)
@@ -1267,7 +1289,8 @@ func unpack32bit15(v uint64, dst *[240]uint32) {
 	dst[14] = uint32((v >> 56) & 15)
 }
 
-func unpack32bit12(v uint64, dst *[240]uint32) {
+func unpack32bit12(v uint64, p unsafe.Pointer) {
+	dst := (*[12]uint32)(p)
 	dst[0] = uint32(v & 31)
 	dst[1] = uint32((v >> 5) & 31)
 	dst[2] = uint32((v >> 10) & 31)
@@ -1282,7 +1305,8 @@ func unpack32bit12(v uint64, dst *[240]uint32) {
 	dst[11] = uint32((v >> 55) & 31)
 }
 
-func unpack32bit10(v uint64, dst *[240]uint32) {
+func unpack32bit10(v uint64, p unsafe.Pointer) {
+	dst := (*[10]uint32)(p)
 	dst[0] = uint32(v & 63)
 	dst[1] = uint32((v >> 6) & 63)
 	dst[2] = uint32((v >> 12) & 63)
@@ -1295,7 +1319,8 @@ func unpack32bit10(v uint64, dst *[240]uint32) {
 	dst[9] = uint32((v >> 54) & 63)
 }
 
-func unpack32bit8(v uint64, dst *[240]uint32) {
+func unpack32bit8(v uint64, p unsafe.Pointer) {
+	dst := (*[8]uint32)(p)
 	dst[0] = uint32(v & 127)
 	dst[1] = uint32((v >> 7) & 127)
 	dst[2] = uint32((v >> 14) & 127)
@@ -1306,7 +1331,8 @@ func unpack32bit8(v uint64, dst *[240]uint32) {
 	dst[7] = uint32((v >> 49) & 127)
 }
 
-func unpack32bit7(v uint64, dst *[240]uint32) {
+func unpack32bit7(v uint64, p unsafe.Pointer) {
+	dst := (*[7]uint32)(p)
 	dst[0] = uint32(v & 255)
 	dst[1] = uint32((v >> 8) & 255)
 	dst[2] = uint32((v >> 16) & 255)
@@ -1316,7 +1342,8 @@ func unpack32bit7(v uint64, dst *[240]uint32) {
 	dst[6] = uint32((v >> 48) & 255)
 }
 
-func unpack32bit6(v uint64, dst *[240]uint32) {
+func unpack32bit6(v uint64, p unsafe.Pointer) {
+	dst := (*[6]uint32)(p)
 	dst[0] = uint32(v & 1023)
 	dst[1] = uint32((v >> 10) & 1023)
 	dst[2] = uint32((v >> 20) & 1023)
@@ -1325,7 +1352,8 @@ func unpack32bit6(v uint64, dst *[240]uint32) {
 	dst[5] = uint32((v >> 50) & 1023)
 }
 
-func unpack32bit5(v uint64, dst *[240]uint32) {
+func unpack32bit5(v uint64, p unsafe.Pointer) {
+	dst := (*[5]uint32)(p)
 	dst[0] = uint32(v & 4095)
 	dst[1] = uint32((v >> 12) & 4095)
 	dst[2] = uint32((v >> 24) & 4095)
@@ -1333,41 +1361,48 @@ func unpack32bit5(v uint64, dst *[240]uint32) {
 	dst[4] = uint32((v >> 48) & 4095)
 }
 
-func unpack32bit4(v uint64, dst *[240]uint32) {
+func unpack32bit4(v uint64, p unsafe.Pointer) {
+	dst := (*[4]uint32)(p)
 	dst[0] = uint32(v & 32767)
 	dst[1] = uint32((v >> 15) & 32767)
 	dst[2] = uint32((v >> 30) & 32767)
 	dst[3] = uint32((v >> 45) & 32767)
 }
 
-func unpack32bit3(v uint64, dst *[240]uint32) {
+func unpack32bit3(v uint64, p unsafe.Pointer) {
+	dst := (*[3]uint32)(p)
 	dst[0] = uint32(v & 1048575)
 	dst[1] = uint32((v >> 20) & 1048575)
 	dst[2] = uint32((v >> 40) & 1048575)
 }
 
-func unpack32bit2(v uint64, dst *[240]uint32) {
+func unpack32bit2(v uint64, p unsafe.Pointer) {
+	dst := (*[2]uint32)(p)
 	dst[0] = uint32(v & 1073741823)
 	dst[1] = uint32((v >> 30) & 1073741823)
 }
 
-func unpack32bit1(v uint64, dst *[240]uint32) {
+func unpack32bit1(v uint64, p unsafe.Pointer) {
+	dst := (*[1]uint32)(p)
 	dst[0] = uint32(v & 1152921504606846975)
 }
 
-func unpack16bit240(v uint64, dst *[240]uint16) {
+func unpack16bit240(v uint64, p unsafe.Pointer) {
+	dst := (*[240]uint16)(p)
 	for i := range dst {
 		dst[i] = 1
 	}
 }
 
-func unpack16bit120(v uint64, dst *[240]uint16) {
-	for i := range dst[:120] {
+func unpack16bit120(v uint64, p unsafe.Pointer) {
+	dst := (*[120]uint16)(p)
+	for i := range dst {
 		dst[i] = 1
 	}
 }
 
-func unpack16bit60(v uint64, dst *[240]uint16) {
+func unpack16bit60(v uint64, p unsafe.Pointer) {
+	dst := (*[60]uint16)(p)
 	dst[0] = uint16(v & 1)
 	dst[1] = uint16((v >> 1) & 1)
 	dst[2] = uint16((v >> 2) & 1)
@@ -1430,7 +1465,8 @@ func unpack16bit60(v uint64, dst *[240]uint16) {
 	dst[59] = uint16((v >> 59) & 1)
 }
 
-func unpack16bit30(v uint64, dst *[240]uint16) {
+func unpack16bit30(v uint64, p unsafe.Pointer) {
+	dst := (*[30]uint16)(p)
 	dst[0] = uint16(v & 3)
 	dst[1] = uint16((v >> 2) & 3)
 	dst[2] = uint16((v >> 4) & 3)
@@ -1463,7 +1499,8 @@ func unpack16bit30(v uint64, dst *[240]uint16) {
 	dst[29] = uint16((v >> 58) & 3)
 }
 
-func unpack16bit20(v uint64, dst *[240]uint16) {
+func unpack16bit20(v uint64, p unsafe.Pointer) {
+	dst := (*[20]uint16)(p)
 	dst[0] = uint16(v & 7)
 	dst[1] = uint16((v >> 3) & 7)
 	dst[2] = uint16((v >> 6) & 7)
@@ -1486,7 +1523,8 @@ func unpack16bit20(v uint64, dst *[240]uint16) {
 	dst[19] = uint16((v >> 57) & 7)
 }
 
-func unpack16bit15(v uint64, dst *[240]uint16) {
+func unpack16bit15(v uint64, p unsafe.Pointer) {
+	dst := (*[15]uint16)(p)
 	dst[0] = uint16(v & 15)
 	dst[1] = uint16((v >> 4) & 15)
 	dst[2] = uint16((v >> 8) & 15)
@@ -1504,7 +1542,8 @@ func unpack16bit15(v uint64, dst *[240]uint16) {
 	dst[14] = uint16((v >> 56) & 15)
 }
 
-func unpack16bit12(v uint64, dst *[240]uint16) {
+func unpack16bit12(v uint64, p unsafe.Pointer) {
+	dst := (*[12]uint16)(p)
 	dst[0] = uint16(v & 31)
 	dst[1] = uint16((v >> 5) & 31)
 	dst[2] = uint16((v >> 10) & 31)
@@ -1519,7 +1558,8 @@ func unpack16bit12(v uint64, dst *[240]uint16) {
 	dst[11] = uint16((v >> 55) & 31)
 }
 
-func unpack16bit10(v uint64, dst *[240]uint16) {
+func unpack16bit10(v uint64, p unsafe.Pointer) {
+	dst := (*[10]uint16)(p)
 	dst[0] = uint16(v & 63)
 	dst[1] = uint16((v >> 6) & 63)
 	dst[2] = uint16((v >> 12) & 63)
@@ -1532,7 +1572,8 @@ func unpack16bit10(v uint64, dst *[240]uint16) {
 	dst[9] = uint16((v >> 54) & 63)
 }
 
-func unpack16bit8(v uint64, dst *[240]uint16) {
+func unpack16bit8(v uint64, p unsafe.Pointer) {
+	dst := (*[8]uint16)(p)
 	dst[0] = uint16(v & 127)
 	dst[1] = uint16((v >> 7) & 127)
 	dst[2] = uint16((v >> 14) & 127)
@@ -1543,7 +1584,8 @@ func unpack16bit8(v uint64, dst *[240]uint16) {
 	dst[7] = uint16((v >> 49) & 127)
 }
 
-func unpack16bit7(v uint64, dst *[240]uint16) {
+func unpack16bit7(v uint64, p unsafe.Pointer) {
+	dst := (*[7]uint16)(p)
 	dst[0] = uint16(v & 255)
 	dst[1] = uint16((v >> 8) & 255)
 	dst[2] = uint16((v >> 16) & 255)
@@ -1553,7 +1595,8 @@ func unpack16bit7(v uint64, dst *[240]uint16) {
 	dst[6] = uint16((v >> 48) & 255)
 }
 
-func unpack16bit6(v uint64, dst *[240]uint16) {
+func unpack16bit6(v uint64, p unsafe.Pointer) {
+	dst := (*[6]uint16)(p)
 	dst[0] = uint16(v & 1023)
 	dst[1] = uint16((v >> 10) & 1023)
 	dst[2] = uint16((v >> 20) & 1023)
@@ -1562,7 +1605,8 @@ func unpack16bit6(v uint64, dst *[240]uint16) {
 	dst[5] = uint16((v >> 50) & 1023)
 }
 
-func unpack16bit5(v uint64, dst *[240]uint16) {
+func unpack16bit5(v uint64, p unsafe.Pointer) {
+	dst := (*[5]uint16)(p)
 	dst[0] = uint16(v & 4095)
 	dst[1] = uint16((v >> 12) & 4095)
 	dst[2] = uint16((v >> 24) & 4095)
@@ -1570,41 +1614,48 @@ func unpack16bit5(v uint64, dst *[240]uint16) {
 	dst[4] = uint16((v >> 48) & 4095)
 }
 
-func unpack16bit4(v uint64, dst *[240]uint16) {
+func unpack16bit4(v uint64, p unsafe.Pointer) {
+	dst := (*[4]uint16)(p)
 	dst[0] = uint16(v & 32767)
 	dst[1] = uint16((v >> 15) & 32767)
 	dst[2] = uint16((v >> 30) & 32767)
 	dst[3] = uint16((v >> 45) & 32767)
 }
 
-func unpack16bit3(v uint64, dst *[240]uint16) {
+func unpack16bit3(v uint64, p unsafe.Pointer) {
+	dst := (*[3]uint16)(p)
 	dst[0] = uint16(v & 1048575)
 	dst[1] = uint16((v >> 20) & 1048575)
 	dst[2] = uint16((v >> 40) & 1048575)
 }
 
-func unpack16bit2(v uint64, dst *[240]uint16) {
+func unpack16bit2(v uint64, p unsafe.Pointer) {
+	dst := (*[2]uint16)(p)
 	dst[0] = uint16(v & 1073741823)
 	dst[1] = uint16((v >> 30) & 1073741823)
 }
 
-func unpack16bit1(v uint64, dst *[240]uint16) {
+func unpack16bit1(v uint64, p unsafe.Pointer) {
+	dst := (*[1]uint16)(p)
 	dst[0] = uint16(v & 1152921504606846975)
 }
 
-func unpack8bit240(v uint64, dst *[240]uint8) {
+func unpack8bit240(v uint64, p unsafe.Pointer) {
+	dst := (*[240]uint8)(p)
 	for i := range dst {
 		dst[i] = 1
 	}
 }
 
-func unpack8bit120(v uint64, dst *[240]uint8) {
-	for i := range dst[:120] {
+func unpack8bit120(v uint64, p unsafe.Pointer) {
+	dst := (*[120]uint8)(p)
+	for i := range dst {
 		dst[i] = 1
 	}
 }
 
-func unpack8bit60(v uint64, dst *[240]uint8) {
+func unpack8bit60(v uint64, p unsafe.Pointer) {
+	dst := (*[60]uint8)(p)
 	dst[0] = uint8(v & 1)
 	dst[1] = uint8((v >> 1) & 1)
 	dst[2] = uint8((v >> 2) & 1)
@@ -1667,7 +1718,8 @@ func unpack8bit60(v uint64, dst *[240]uint8) {
 	dst[59] = uint8((v >> 59) & 1)
 }
 
-func unpack8bit30(v uint64, dst *[240]uint8) {
+func unpack8bit30(v uint64, p unsafe.Pointer) {
+	dst := (*[30]uint8)(p)
 	dst[0] = uint8(v & 3)
 	dst[1] = uint8((v >> 2) & 3)
 	dst[2] = uint8((v >> 4) & 3)
@@ -1700,7 +1752,8 @@ func unpack8bit30(v uint64, dst *[240]uint8) {
 	dst[29] = uint8((v >> 58) & 3)
 }
 
-func unpack8bit20(v uint64, dst *[240]uint8) {
+func unpack8bit20(v uint64, p unsafe.Pointer) {
+	dst := (*[20]uint8)(p)
 	dst[0] = uint8(v & 7)
 	dst[1] = uint8((v >> 3) & 7)
 	dst[2] = uint8((v >> 6) & 7)
@@ -1723,7 +1776,8 @@ func unpack8bit20(v uint64, dst *[240]uint8) {
 	dst[19] = uint8((v >> 57) & 7)
 }
 
-func unpack8bit15(v uint64, dst *[240]uint8) {
+func unpack8bit15(v uint64, p unsafe.Pointer) {
+	dst := (*[15]uint8)(p)
 	dst[0] = uint8(v & 15)
 	dst[1] = uint8((v >> 4) & 15)
 	dst[2] = uint8((v >> 8) & 15)
@@ -1741,7 +1795,8 @@ func unpack8bit15(v uint64, dst *[240]uint8) {
 	dst[14] = uint8((v >> 56) & 15)
 }
 
-func unpack8bit12(v uint64, dst *[240]uint8) {
+func unpack8bit12(v uint64, p unsafe.Pointer) {
+	dst := (*[12]uint8)(p)
 	dst[0] = uint8(v & 31)
 	dst[1] = uint8((v >> 5) & 31)
 	dst[2] = uint8((v >> 10) & 31)
@@ -1756,7 +1811,8 @@ func unpack8bit12(v uint64, dst *[240]uint8) {
 	dst[11] = uint8((v >> 55) & 31)
 }
 
-func unpack8bit10(v uint64, dst *[240]uint8) {
+func unpack8bit10(v uint64, p unsafe.Pointer) {
+	dst := (*[10]uint8)(p)
 	dst[0] = uint8(v & 63)
 	dst[1] = uint8((v >> 6) & 63)
 	dst[2] = uint8((v >> 12) & 63)
@@ -1769,7 +1825,8 @@ func unpack8bit10(v uint64, dst *[240]uint8) {
 	dst[9] = uint8((v >> 54) & 63)
 }
 
-func unpack8bit8(v uint64, dst *[240]uint8) {
+func unpack8bit8(v uint64, p unsafe.Pointer) {
+	dst := (*[8]uint8)(p)
 	dst[0] = uint8(v & 127)
 	dst[1] = uint8((v >> 7) & 127)
 	dst[2] = uint8((v >> 14) & 127)
@@ -1780,7 +1837,8 @@ func unpack8bit8(v uint64, dst *[240]uint8) {
 	dst[7] = uint8((v >> 49) & 127)
 }
 
-func unpack8bit7(v uint64, dst *[240]uint8) {
+func unpack8bit7(v uint64, p unsafe.Pointer) {
+	dst := (*[7]uint8)(p)
 	dst[0] = uint8(v & 255)
 	dst[1] = uint8((v >> 8) & 255)
 	dst[2] = uint8((v >> 16) & 255)
@@ -1790,7 +1848,8 @@ func unpack8bit7(v uint64, dst *[240]uint8) {
 	dst[6] = uint8((v >> 48) & 255)
 }
 
-func unpack8bit6(v uint64, dst *[240]uint8) {
+func unpack8bit6(v uint64, p unsafe.Pointer) {
+	dst := (*[6]uint8)(p)
 	dst[0] = uint8(v & 1023)
 	dst[1] = uint8((v >> 10) & 1023)
 	dst[2] = uint8((v >> 20) & 1023)
@@ -1799,7 +1858,8 @@ func unpack8bit6(v uint64, dst *[240]uint8) {
 	dst[5] = uint8((v >> 50) & 1023)
 }
 
-func unpack8bit5(v uint64, dst *[240]uint8) {
+func unpack8bit5(v uint64, p unsafe.Pointer) {
+	dst := (*[5]uint8)(p)
 	dst[0] = uint8(v & 4095)
 	dst[1] = uint8((v >> 12) & 4095)
 	dst[2] = uint8((v >> 24) & 4095)
@@ -1807,24 +1867,28 @@ func unpack8bit5(v uint64, dst *[240]uint8) {
 	dst[4] = uint8((v >> 48) & 4095)
 }
 
-func unpack8bit4(v uint64, dst *[240]uint8) {
+func unpack8bit4(v uint64, p unsafe.Pointer) {
+	dst := (*[4]uint8)(p)
 	dst[0] = uint8(v & 32767)
 	dst[1] = uint8((v >> 15) & 32767)
 	dst[2] = uint8((v >> 30) & 32767)
 	dst[3] = uint8((v >> 45) & 32767)
 }
 
-func unpack8bit3(v uint64, dst *[240]uint8) {
+func unpack8bit3(v uint64, p unsafe.Pointer) {
+	dst := (*[3]uint8)(p)
 	dst[0] = uint8(v & 1048575)
 	dst[1] = uint8((v >> 20) & 1048575)
 	dst[2] = uint8((v >> 40) & 1048575)
 }
 
-func unpack8bit2(v uint64, dst *[240]uint8) {
+func unpack8bit2(v uint64, p unsafe.Pointer) {
+	dst := (*[2]uint8)(p)
 	dst[0] = uint8(v & 1073741823)
 	dst[1] = uint8((v >> 30) & 1073741823)
 }
 
-func unpack8bit1(v uint64, dst *[240]uint8) {
+func unpack8bit1(v uint64, p unsafe.Pointer) {
+	dst := (*[1]uint8)(p)
 	dst[0] = uint8(v & 1152921504606846975)
 }

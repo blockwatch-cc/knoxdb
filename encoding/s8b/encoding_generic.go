@@ -22,7 +22,7 @@ func decodeAllUint64Generic(dst []uint64, src []byte) (value int, err error) {
 	for i < len(src) {
 		v := binary.LittleEndian.Uint64(src[i:])
 		sel := (v >> 60) & 0xf
-		selector[sel].unpack(v, (*[240]uint64)(unsafe.Pointer(&dst[j])))
+		selector[sel].unpack(v, unsafe.Pointer(&dst[j]))
 		j += selector[sel].n
 		i += 8
 	}
@@ -41,7 +41,7 @@ func decodeAllUint32Generic(dst []uint32, src []byte) (value int, err error) {
 	for i < len(src) {
 		v := binary.LittleEndian.Uint64(src[i:])
 		sel := (v >> 60) & 0xf
-		selector32[sel].unpack(v, (*[240]uint32)(unsafe.Pointer(&dst[j])))
+		selector32[sel].unpack(v, unsafe.Pointer(&dst[j]))
 		j += selector[sel].n
 		i += 8
 	}
@@ -60,7 +60,7 @@ func decodeAllUint16Generic(dst []uint16, src []byte) (value int, err error) {
 	for i < len(src) {
 		v := binary.LittleEndian.Uint64(src[i:])
 		sel := (v >> 60) & 0xf
-		selector16[sel].unpack(v, (*[240]uint16)(unsafe.Pointer(&dst[j])))
+		selector16[sel].unpack(v, unsafe.Pointer(&dst[j]))
 		j += selector[sel].n
 		i += 8
 	}
@@ -79,7 +79,7 @@ func decodeAllUint8Generic(dst []uint8, src []byte) (value int, err error) {
 	for i < len(src) {
 		v := binary.LittleEndian.Uint64(src[i:])
 		sel := (v >> 60) & 0xf
-		selector8[sel].unpack(v, (*[240]uint8)(unsafe.Pointer(&dst[j])))
+		selector8[sel].unpack(v, unsafe.Pointer(&dst[j]))
 		j += selector[sel].n
 		i += 8
 	}
@@ -98,7 +98,7 @@ func decodeBytesBigEndianGeneric(dst []uint64, src []byte) (value int, err error
 	for i < len(src) {
 		v := binary.BigEndian.Uint64(src[i:])
 		sel := (v >> 60) & 0xf
-		selector[sel].unpack(v, (*[240]uint64)(unsafe.Pointer(&dst[j])))
+		selector[sel].unpack(v, unsafe.Pointer(&dst[j]))
 		j += selector[sel].n
 		i += 8
 	}
