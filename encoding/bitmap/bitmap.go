@@ -32,6 +32,12 @@ func New() Bitmap {
     }
 }
 
+func NewFromBytes(src []byte) Bitmap {
+    return Bitmap{
+        Bitmap: sroar.FromBufferWithCopy(src),
+    }
+}
+
 func (b *Bitmap) Free() {
     b.Bitmap.Reset()
     pool.Put(b.Bitmap)
@@ -49,6 +55,12 @@ func (b Bitmap) Count() int {
         return 0
     }
     return b.Bitmap.GetCardinality()
+}
+
+func (b *Bitmap) CloneFromBytes(src []byte) {
+    b.Bitmap.Reset()
+    pool.Put(b.Bitmap)
+    *b = NewFromBytes(src)
 }
 
 func (b *Bitmap) CloneFrom(a Bitmap) {
