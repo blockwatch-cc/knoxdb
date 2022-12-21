@@ -133,6 +133,9 @@ func (r Row) Time(index int) (time.Time, error) {
 }
 
 func (r *Result) Close() {
+	if r == nil || r.pkg == nil {
+		return
+	}
 	r.pkg.Release()
 	r.pkg = nil
 	r.tinfo = nil

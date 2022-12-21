@@ -397,12 +397,8 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 		err        error
 	)
 	defer func() {
-		if lRes != nil {
-			lRes.Close()
-		}
-		if rRes != nil {
-			rRes.Close()
-		}
+		lRes.Close()
+		rRes.Close()
 	}()
 
 	// use row_id as an extra cursor to fetch a new block of matching rows
