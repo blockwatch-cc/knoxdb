@@ -130,6 +130,18 @@ func (q Query) PrintTiming() string {
 	)
 }
 
+func (q *Query) Tick() time.Duration {
+	dur, _ := q.TickNow()
+	return dur
+}
+
+func (q *Query) TickNow() (time.Duration, time.Time) {
+	now := time.Now()
+	diff := now.Sub(q.lap)
+	q.lap = now
+	return diff, now
+}
+
 func (q *Query) Compile(t *Table) error {
 	if t == nil {
 		return ErrNoTable
@@ -179,11 +191,11 @@ func (q *Query) Compile(t *Table) error {
 	}
 
 	// check query can be processed
+	q.stats.CompileTime = q.Tick()
 	if err := q.check(); err != nil {
-		q.stats.TotalTime = time.Since(q.lap)
+		q.stats.TotalTime = q.stats.CompileTime
 		return err
 	}
-	q.stats.CompileTime = time.Since(q.lap)
 
 	if q.debug {
 		q.Debugf("%s", newLogClosure(func() string {
@@ -326,21 +338,18 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 // - fetch pk lists for every indexed field
 // - when resolved, replace source condition with new FilterModeIn condition
 func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
-	q.lap = time.Now()
 	if q.NoIndex || q.conds.Empty() {
-		q.stats.IndexTime = time.Since(q.lap)
 		return nil
 	}
 	if err := q.queryIndexNode(ctx, tx, &q.conds); err != nil {
 		return err
 	}
-	q.stats.IndexTime = time.Since(q.lap)
+	q.stats.IndexTime = q.Tick()
 	return nil
 }
 
 // collect list of packs to visit in pk order
 func (q *Query) MakePackSchedule(reverse bool) []int {
-	q.lap = time.Now()
 	schedule := make([]int, 0, q.table.packidx.Len())
 	// walk list in pk order (pairs are always sorted by min pk)
 	for _, p := range q.table.packidx.pos {
@@ -355,14 +364,12 @@ func (q *Query) MakePackSchedule(reverse bool) []int {
 		}
 	}
 	q.stats.PacksScheduled = len(schedule)
-	q.stats.AnalyzeTime = time.Since(q.lap)
-	q.lap = time.Now()
+	q.stats.AnalyzeTime = q.Tick()
 	return schedule
 }
 
 // ordered list of packs that may contain matching ids (list can be reversed)
 func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
-	q.lap = time.Now()
 	schedule := make([]int, 0, q.table.packidx.Len())
 
 	// extract min/max values from pack header's pk column
@@ -387,8 +394,7 @@ func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
 		}
 	}
 	q.stats.PacksScheduled = len(schedule)
-	q.stats.AnalyzeTime = time.Since(q.lap)
-	q.lap = time.Now()
+	q.stats.AnalyzeTime = q.Tick()
 	return schedule
 }
 

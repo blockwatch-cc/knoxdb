@@ -1746,7 +1746,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		ids = vec.Uint64.RemoveZeros(ids)
 	}
 
-	q.stats.JournalTime = time.Since(q.lap)
+	q.stats.JournalTime = q.Tick()
 
 	// everything found in journal?, return early
 	if len(ids) == 0 {
@@ -1820,7 +1820,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 			last = j
 		}
 	}
-	q.stats.ScanTime = time.Since(q.lap)
+	q.stats.ScanTime = q.Tick()
 	return res, nil
 }
 
@@ -1868,7 +1868,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
 	jbits = q.conds.MatchPack(t.journal.DataPack(), PackInfo{})
-	q.stats.JournalTime = time.Since(q.lap)
+	q.stats.JournalTime = q.Tick()
 	// log.Debugf("Table %s: %d journal results", t.name, jbits.Count())
 
 	// maybe run index query
@@ -1972,8 +1972,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 			}
 			bits.Close()
 		}
-		q.stats.ScanTime = time.Since(q.lap)
-		q.lap = time.Now()
+		q.stats.ScanTime = q.Tick()
 	}
 	t.u32Pool.Put(u32slice)
 
@@ -2004,7 +2003,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 			break
 		}
 	}
-	q.stats.JournalTime = time.Since(q.lap)
+	q.stats.JournalTime += q.Tick()
 
 	return res, nil
 }
@@ -2033,7 +2032,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	// but not new pks that are only in journal)
 	// reverse the bitfield order for descending walk
 	jbits = q.conds.MatchPack(t.journal.DataPack(), PackInfo{})
-	q.stats.JournalTime = time.Since(q.lap)
+	q.stats.JournalTime = q.Tick()
 
 	// maybe run index query
 	if err := q.QueryIndexes(ctx, tx); err != nil {
@@ -2088,7 +2087,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 			break
 		}
 	}
-	q.stats.JournalTime = time.Since(q.lap)
+	q.stats.JournalTime = q.Tick()
 
 	// finalize on limit
 	if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
@@ -2183,10 +2182,7 @@ packloop:
 		bits.Close()
 	}
 	t.u32Pool.Put(u32slice)
-
-	q.stats.ScanTime = time.Since(q.lap)
-	q.lap = time.Now()
-
+	q.stats.ScanTime = q.Tick()
 	return res, nil
 }
 
@@ -2226,7 +2222,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
 	jbits = q.conds.MatchPack(t.journal.DataPack(), PackInfo{})
-	q.stats.JournalTime = time.Since(q.lap)
+	q.stats.JournalTime = q.Tick()
 
 	// maybe run index query
 	if err := q.QueryIndexes(ctx, tx); err != nil {
@@ -2306,7 +2302,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 			}
 			bits.Close()
 		}
-		q.stats.ScanTime = time.Since(q.lap)
+		q.stats.ScanTime = q.Tick()
 	}
 	t.u32Pool.Put(u32slice)
 
@@ -2368,7 +2364,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
 	jbits = q.conds.MatchPack(t.journal.DataPack(), PackInfo{})
-	q.stats.JournalTime = time.Since(q.lap)
+	q.stats.JournalTime = q.Tick()
 	// q.Debugf("Table %s: %d journal results", t.name, jbits.Count())
 
 	// maybe run index query
@@ -2468,8 +2464,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 			}
 			bits.Close()
 		}
-		q.stats.ScanTime = time.Since(q.lap)
-		q.lap = time.Now()
+		q.stats.ScanTime = q.Tick()
 	}
 	t.u32Pool.Put(u32slice)
 
@@ -2500,7 +2495,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 			return nil
 		}
 	}
-	q.stats.JournalTime += time.Since(q.lap)
+	q.stats.JournalTime += q.Tick()
 	// q.Debugf("%s", q.PrintTiming())
 
 	return nil
@@ -2529,7 +2524,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	// but not new pks that are only in journal)
 	// reverse the bitfield order for descending walk
 	jbits = q.conds.MatchPack(t.journal.DataPack(), PackInfo{})
-	q.stats.JournalTime = time.Since(q.lap)
+	q.stats.JournalTime = q.Tick()
 	// log.Debugf("Table %s: %d journal results", t.name, jbits.Count())
 
 	// maybe run index query
@@ -2582,7 +2577,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 			return nil
 		}
 	}
-	q.stats.JournalTime += time.Since(q.lap)
+	q.stats.JournalTime += q.Tick()
 
 	// reverse-scan packs only when
 	// (a) index match returned any results or
@@ -2670,10 +2665,7 @@ packloop:
 		bits.Close()
 	}
 	t.u32Pool.Put(u32slice)
-
-	q.stats.ScanTime = time.Since(q.lap)
-	q.lap = time.Now()
-
+	q.stats.ScanTime = q.Tick()
 	return nil
 }
 
@@ -2778,7 +2770,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 		// remove processed ids
 		ids = vec.Uint64.RemoveZeros(ids)
 	}
-	q.stats.JournalTime = time.Since(q.lap)
+	q.stats.JournalTime = q.Tick()
 
 	// everything found in journal?, return early
 	if len(ids) == 0 {
@@ -2845,7 +2837,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			last = j
 		}
 	}
-	q.stats.ScanTime = time.Since(q.lap)
+	q.stats.ScanTime = q.Tick()
 	return nil
 }
 
