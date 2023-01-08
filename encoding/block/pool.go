@@ -5,17 +5,18 @@ package block
 
 import (
 	"runtime"
-	"sync"
+	//"sync"
 
 	"blockwatch.cc/knoxdb/util"
 	"github.com/pierrec/lz4"
 )
 
 var (
-	BlockPool = &sync.Pool{
-		New: func() interface{} { return &Block{} },
-	}
-	snappyWriterPool = util.NewGenericPool(
+	/*
+		BlockPool = &sync.Pool{
+			New: func() interface{} { return &Block{} },
+		}
+	*/snappyWriterPool = util.NewGenericPool(
 		runtime.NumCPU(),
 		func() interface{} { return NewSnappyWriter(nil) },
 	)

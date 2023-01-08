@@ -23,20 +23,20 @@ const (
 
 func encodeTimeBlock(buf *bytes.Buffer, val []int64, comp Compression) (int, error) {
 	if len(val) == 0 {
-		return writeEmptyBlock(buf, BlockTime)
+		return writeEmptyBlock(buf, BlockTypeTime)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockTime))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeTime))
 	w := getWriter(buf, comp)
 
 	// copy source values to avoid overwriting them
-	v := arena.Alloc(BlockInt64, len(val))
+	v := arena.Alloc(BlockTypeInt64, len(val))
 	cp := v.([]int64)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.TimeArrayEncodeAll(cp, w)
-	arena.Free(BlockInt64, v)
+	arena.Free(BlockTypeInt64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -50,11 +50,11 @@ func encodeTimeBlock(buf *bytes.Buffer, val []int64, comp Compression) (int, err
 
 func encodeFloat64Block(buf *bytes.Buffer, val []float64, comp Compression) (int, error) {
 	if len(val) == 0 {
-		return writeEmptyBlock(buf, BlockFloat64)
+		return writeEmptyBlock(buf, BlockTypeFloat64)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockFloat64))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeFloat64))
 	w := getWriter(buf, comp)
 	_, err := compress.FloatArrayEncodeAll(val, w)
 	if err != nil {
@@ -70,21 +70,21 @@ func encodeFloat64Block(buf *bytes.Buffer, val []float64, comp Compression) (int
 
 func encodeFloat32Block(buf *bytes.Buffer, val []float32, comp Compression) (int, error) {
 	if len(val) == 0 {
-		return writeEmptyBlock(buf, BlockFloat32)
+		return writeEmptyBlock(buf, BlockTypeFloat32)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockFloat32))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeFloat32))
 	w := getWriter(buf, comp)
 
-	v := arena.Alloc(BlockFloat64, len(val))
+	v := arena.Alloc(BlockTypeFloat64, len(val))
 	cp := v.([]float64)[:len(val)]
 	for i, _ := range val {
 		cp[i] = float64(val[i])
 	}
 
 	_, err := compress.FloatArrayEncodeAll(cp, w)
-	arena.Free(BlockFloat64, v)
+	arena.Free(BlockTypeFloat64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -97,15 +97,15 @@ func encodeFloat32Block(buf *bytes.Buffer, val []float32, comp Compression) (int
 
 func encodeInt256Block(buf *bytes.Buffer, val vec.Int256LLSlice, comp Compression) (int, error) {
 	if val.Len() == 0 {
-		return writeEmptyBlock(buf, BlockInt256)
+		return writeEmptyBlock(buf, BlockTypeInt256)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockInt256))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeInt256))
 	w := getWriter(buf, comp)
 
 	// prepare scratch space
-	v := arena.Alloc(BlockInt64, val.Len())
+	v := arena.Alloc(BlockTypeInt64, val.Len())
 	cp := v.([]int64)[:val.Len()]
 
 	// repack int256 into 4 int64 strides
@@ -136,7 +136,7 @@ func encodeInt256Block(buf *bytes.Buffer, val vec.Int256LLSlice, comp Compressio
 	}
 
 	// cleanup
-	arena.Free(BlockInt64, v)
+	arena.Free(BlockTypeInt64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -150,15 +150,15 @@ func encodeInt256Block(buf *bytes.Buffer, val vec.Int256LLSlice, comp Compressio
 
 func encodeInt128Block(buf *bytes.Buffer, val vec.Int128LLSlice, comp Compression) (int, error) {
 	if val.Len() == 0 {
-		return writeEmptyBlock(buf, BlockInt128)
+		return writeEmptyBlock(buf, BlockTypeInt128)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockInt128))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeInt128))
 	w := getWriter(buf, comp)
 
 	// prepare scratch space
-	v := arena.Alloc(BlockInt64, val.Len())
+	v := arena.Alloc(BlockTypeInt64, val.Len())
 	cp := v.([]int64)[:val.Len()]
 
 	// repack int128 into 2 int64 strides
@@ -189,7 +189,7 @@ func encodeInt128Block(buf *bytes.Buffer, val vec.Int128LLSlice, comp Compressio
 	}
 
 	// cleanup
-	arena.Free(BlockInt64, v)
+	arena.Free(BlockTypeInt64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -203,20 +203,20 @@ func encodeInt128Block(buf *bytes.Buffer, val vec.Int128LLSlice, comp Compressio
 
 func encodeInt64Block(buf *bytes.Buffer, val []int64, comp Compression) (int, error) {
 	if len(val) == 0 {
-		return writeEmptyBlock(buf, BlockInt64)
+		return writeEmptyBlock(buf, BlockTypeInt64)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockInt64))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeInt64))
 	w := getWriter(buf, comp)
 
-	v := arena.Alloc(BlockInt64, len(val))
+	v := arena.Alloc(BlockTypeInt64, len(val))
 	cp := v.([]int64)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllInt64(cp, w)
 
-	arena.Free(BlockInt64, v)
+	arena.Free(BlockTypeInt64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -230,19 +230,19 @@ func encodeInt64Block(buf *bytes.Buffer, val []int64, comp Compression) (int, er
 
 func encodeInt32Block(buf *bytes.Buffer, val []int32, comp Compression) (int, error) {
 	if len(val) == 0 {
-		return writeEmptyBlock(buf, BlockInt32)
+		return writeEmptyBlock(buf, BlockTypeInt32)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockInt32))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeInt32))
 	w := getWriter(buf, comp)
-	v := arena.Alloc(BlockInt32, len(val))
+	v := arena.Alloc(BlockTypeInt32, len(val))
 	cp := v.([]int32)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllInt32(cp, w)
 
-	arena.Free(BlockInt32, v)
+	arena.Free(BlockTypeInt32, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -256,19 +256,19 @@ func encodeInt32Block(buf *bytes.Buffer, val []int32, comp Compression) (int, er
 
 func encodeInt16Block(buf *bytes.Buffer, val []int16, comp Compression) (int, error) {
 	if len(val) == 0 {
-		return writeEmptyBlock(buf, BlockInt16)
+		return writeEmptyBlock(buf, BlockTypeInt16)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockInt16))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeInt16))
 	w := getWriter(buf, comp)
-	v := arena.Alloc(BlockInt16, len(val))
+	v := arena.Alloc(BlockTypeInt16, len(val))
 	cp := v.([]int16)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllInt16(cp, w)
 
-	arena.Free(BlockInt16, v)
+	arena.Free(BlockTypeInt16, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -282,19 +282,19 @@ func encodeInt16Block(buf *bytes.Buffer, val []int16, comp Compression) (int, er
 
 func encodeInt8Block(buf *bytes.Buffer, val []int8, comp Compression) (int, error) {
 	if len(val) == 0 {
-		return writeEmptyBlock(buf, BlockInt8)
+		return writeEmptyBlock(buf, BlockTypeInt8)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockInt8))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeInt8))
 	w := getWriter(buf, comp)
-	v := arena.Alloc(BlockInt8, len(val))
+	v := arena.Alloc(BlockTypeInt8, len(val))
 	cp := v.([]int8)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllInt8(cp, w)
 
-	arena.Free(BlockInt8, v)
+	arena.Free(BlockTypeInt8, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -308,18 +308,18 @@ func encodeInt8Block(buf *bytes.Buffer, val []int8, comp Compression) (int, erro
 
 func encodeUint64Block(buf *bytes.Buffer, val []uint64, comp Compression) (int, error) {
 	if len(val) == 0 {
-		return writeEmptyBlock(buf, BlockUint64)
+		return writeEmptyBlock(buf, BlockTypeUint64)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockUint64))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeUint64))
 	w := getWriter(buf, comp)
-	v := arena.Alloc(BlockUint64, len(val))
+	v := arena.Alloc(BlockTypeUint64, len(val))
 	cp := v.([]uint64)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllUint64(cp, w)
-	arena.Free(BlockUint64, v)
+	arena.Free(BlockTypeUint64, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -333,19 +333,19 @@ func encodeUint64Block(buf *bytes.Buffer, val []uint64, comp Compression) (int, 
 
 func encodeUint32Block(buf *bytes.Buffer, val []uint32, comp Compression) (int, error) {
 	if len(val) == 0 {
-		return writeEmptyBlock(buf, BlockUint32)
+		return writeEmptyBlock(buf, BlockTypeUint32)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockUint32))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeUint32))
 	w := getWriter(buf, comp)
-	v := arena.Alloc(BlockUint32, len(val))
+	v := arena.Alloc(BlockTypeUint32, len(val))
 	cp := v.([]uint32)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllUint32(cp, w)
 
-	arena.Free(BlockUint32, v)
+	arena.Free(BlockTypeUint32, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -359,19 +359,19 @@ func encodeUint32Block(buf *bytes.Buffer, val []uint32, comp Compression) (int, 
 
 func encodeUint16Block(buf *bytes.Buffer, val []uint16, comp Compression) (int, error) {
 	if len(val) == 0 {
-		return writeEmptyBlock(buf, BlockUint16)
+		return writeEmptyBlock(buf, BlockTypeUint16)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockUint16))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeUint16))
 	w := getWriter(buf, comp)
-	v := arena.Alloc(BlockUint16, len(val))
+	v := arena.Alloc(BlockTypeUint16, len(val))
 	cp := v.([]uint16)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllUint16(cp, w)
 
-	arena.Free(BlockUint16, v)
+	arena.Free(BlockTypeUint16, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -385,19 +385,19 @@ func encodeUint16Block(buf *bytes.Buffer, val []uint16, comp Compression) (int, 
 
 func encodeUint8Block(buf *bytes.Buffer, val []uint8, comp Compression) (int, error) {
 	if len(val) == 0 {
-		return writeEmptyBlock(buf, BlockUint8)
+		return writeEmptyBlock(buf, BlockTypeUint8)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockUint8))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeUint8))
 	w := getWriter(buf, comp)
-	v := arena.Alloc(BlockUint8, len(val))
+	v := arena.Alloc(BlockTypeUint8, len(val))
 	cp := v.([]uint8)[:len(val)]
 	copy(cp, val)
 
 	_, err := compress.ArrayEncodeAllUint8(cp, w)
 
-	arena.Free(BlockUint8, v)
+	arena.Free(BlockTypeUint8, v)
 	if err != nil {
 		_ = w.Close()
 		putWriter(w, comp)
@@ -411,11 +411,11 @@ func encodeUint8Block(buf *bytes.Buffer, val []uint8, comp Compression) (int, er
 
 func encodeBoolBlock(buf *bytes.Buffer, val *vec.Bitset, comp Compression) (int, error) {
 	if val.Len() == 0 {
-		return writeEmptyBlock(buf, BlockBool)
+		return writeEmptyBlock(buf, BlockTypeBool)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockBool))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeBool))
 	w := getWriter(buf, comp)
 	_, err := compress.BitsetEncodeAll(val, w)
 	if err != nil {
@@ -431,11 +431,11 @@ func encodeBoolBlock(buf *bytes.Buffer, val *vec.Bitset, comp Compression) (int,
 
 func encodeStringBlock(buf *bytes.Buffer, val dedup.ByteArray, comp Compression) (int, error) {
 	if val.Len() == 0 {
-		return writeEmptyBlock(buf, BlockString)
+		return writeEmptyBlock(buf, BlockTypeString)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockString))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeString))
 	w := getWriter(buf, comp)
 	_, err := val.WriteTo(w)
 	if err != nil {
@@ -451,11 +451,11 @@ func encodeStringBlock(buf *bytes.Buffer, val dedup.ByteArray, comp Compression)
 
 func encodeBytesBlock(buf *bytes.Buffer, val dedup.ByteArray, comp Compression) (int, error) {
 	if val.Len() == 0 {
-		return writeEmptyBlock(buf, BlockBytes)
+		return writeEmptyBlock(buf, BlockTypeBytes)
 	}
 	l := buf.Len()
 
-	buf.WriteByte(byte(comp<<5) | byte(BlockBytes))
+	buf.WriteByte(byte(comp<<5) | byte(BlockTypeBytes))
 	w := getWriter(buf, comp)
 	_, err := val.WriteTo(w)
 	if err != nil {

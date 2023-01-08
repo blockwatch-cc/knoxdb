@@ -361,7 +361,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 					}
 				}
 			} else {
-				for i := 0; i < block.Bytes.Len(); i++ {
+				for i := 0; i < block.Len(); i++ {
 					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {

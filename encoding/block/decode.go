@@ -24,7 +24,7 @@ var bufferPool = &sync.Pool{
 }
 
 func decodeTimeBlock(block []byte, dst []int64) ([]int64, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockTime)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeTime)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func decodeTimeBlock(block []byte, dst []int64) ([]int64, error) {
 }
 
 func decodeFloat64Block(block []byte, dst []float64) ([]float64, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockFloat64)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeFloat64)
 	if err != nil {
 		return nil, err
 	}
@@ -49,12 +49,12 @@ func decodeFloat64Block(block []byte, dst []float64) ([]float64, error) {
 }
 
 func decodeFloat32Block(block []byte, dst []float32) ([]float32, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockFloat32)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeFloat32)
 	if err != nil {
 		return nil, err
 	}
 
-	v := arena.Alloc(BlockFloat64, len(dst))
+	v := arena.Alloc(BlockTypeFloat64, len(dst))
 	cp := v.([]float64)[:len(dst)]
 	b, err := compress.FloatArrayDecodeAll(buf, cp)
 	if cap(dst) >= len(b) {
@@ -66,7 +66,7 @@ func decodeFloat32Block(block []byte, dst []float32) ([]float32, error) {
 	for i, _ := range b {
 		dst[i] = float32(b[i])
 	}
-	arena.Free(BlockFloat64, v)
+	arena.Free(BlockTypeFloat64, v)
 
 	if canRecycle && cap(buf) == bufSizeHint {
 		bufferPool.Put(buf[:0])
@@ -75,7 +75,7 @@ func decodeFloat32Block(block []byte, dst []float32) ([]float32, error) {
 }
 
 func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockInt256)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeInt256)
 	if err != nil {
 		return dst, err
 	}
@@ -85,14 +85,14 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 		return dst, nil
 	}
 
-	v := arena.Alloc(BlockInt64, dst.Len())
+	v := arena.Alloc(BlockTypeInt64, dst.Len())
 	tmp := v.([]int64)[:0]
 
 	defer func() {
 		if canRecycle && cap(buf) == bufSizeHint {
 			bufferPool.Put(buf[:0])
 		}
-		arena.Free(BlockInt64, v)
+		arena.Free(BlockTypeInt64, v)
 	}()
 
 	// unpack 4 int64 strides
@@ -127,7 +127,7 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 }
 
 func decodeInt128Block(block []byte, dst vec.Int128LLSlice) (vec.Int128LLSlice, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockInt128)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeInt128)
 	if err != nil {
 		return dst, err
 	}
@@ -138,14 +138,14 @@ func decodeInt128Block(block []byte, dst vec.Int128LLSlice) (vec.Int128LLSlice, 
 	}
 
 	// use a temp int64 slice for decoding
-	v := arena.Alloc(BlockInt64, dst.Len())
+	v := arena.Alloc(BlockTypeInt64, dst.Len())
 	tmp := v.([]int64)[:0]
 
 	defer func() {
 		if canRecycle && cap(buf) == bufSizeHint {
 			bufferPool.Put(buf[:0])
 		}
-		arena.Free(BlockInt64, v)
+		arena.Free(BlockTypeInt64, v)
 	}()
 
 	// unpack 2 int64 strides
@@ -171,7 +171,7 @@ func decodeInt128Block(block []byte, dst vec.Int128LLSlice) (vec.Int128LLSlice, 
 }
 
 func decodeInt64Block(block []byte, dst []int64) ([]int64, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockInt64)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeInt64)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +183,7 @@ func decodeInt64Block(block []byte, dst []int64) ([]int64, error) {
 }
 
 func decodeInt32Block(block []byte, dst []int32) ([]int32, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockInt32)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeInt32)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func decodeInt32Block(block []byte, dst []int32) ([]int32, error) {
 }
 
 func decodeInt16Block(block []byte, dst []int16) ([]int16, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockInt16)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeInt16)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func decodeInt16Block(block []byte, dst []int16) ([]int16, error) {
 }
 
 func decodeInt8Block(block []byte, dst []int8) ([]int8, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockInt8)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeInt8)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func decodeInt8Block(block []byte, dst []int8) ([]int8, error) {
 }
 
 func decodeUint64Block(block []byte, dst []uint64) ([]uint64, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockUint64)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeUint64)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func decodeUint64Block(block []byte, dst []uint64) ([]uint64, error) {
 }
 
 func decodeUint32Block(block []byte, dst []uint32) ([]uint32, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockUint32)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeUint32)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func decodeUint32Block(block []byte, dst []uint32) ([]uint32, error) {
 }
 
 func decodeUint16Block(block []byte, dst []uint16) ([]uint16, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockUint16)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeUint16)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func decodeUint16Block(block []byte, dst []uint16) ([]uint16, error) {
 }
 
 func decodeUint8Block(block []byte, dst []uint8) ([]uint8, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockUint8)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeUint8)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +267,7 @@ func decodeUint8Block(block []byte, dst []uint8) ([]uint8, error) {
 }
 
 func decodeBoolBlock(block []byte, dst *vec.Bitset) (*vec.Bitset, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockBool)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeBool)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func decodeBoolBlock(block []byte, dst *vec.Bitset) (*vec.Bitset, error) {
 }
 
 func decodeStringBlock(block []byte, dst dedup.ByteArray, sz int) (dedup.ByteArray, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockString)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeString)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +291,7 @@ func decodeStringBlock(block []byte, dst dedup.ByteArray, sz int) (dedup.ByteArr
 }
 
 func decodeBytesBlock(block []byte, dst dedup.ByteArray, sz int) (dedup.ByteArray, error) {
-	buf, canRecycle, err := unpackBlock(block, BlockBytes)
+	buf, canRecycle, err := unpackBlock(block, BlockTypeBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +316,7 @@ func unpackBlock(block []byte, typ BlockType) ([]byte, bool, error) {
 			return nil, false, err
 		}
 		var dst []byte
-		canRecycle := typ != BlockBytes && typ != BlockString
+		canRecycle := typ != BlockTypeBytes && typ != BlockTypeString
 		if sz <= bufSizeHint {
 			dst = bufferPool.Get().([]byte)[:0]
 		} else {
@@ -346,7 +346,7 @@ func unpackBlock(block []byte, typ BlockType) ([]byte, bool, error) {
 		// alloc output buffer (note: this will be referenced if type is byte or string)
 		sz := dec.Header.Size
 		var dst []byte
-		canRecycle := typ != BlockBytes && typ != BlockString
+		canRecycle := typ != BlockTypeBytes && typ != BlockTypeString
 		if sz <= bufSizeHint {
 			dst = bufferPool.Get().([]byte)[:0]
 		} else {
@@ -376,22 +376,22 @@ func unpackBlock(block []byte, typ BlockType) ([]byte, bool, error) {
 func readBlockType(block []byte) (BlockType, error) {
 	blockType := BlockType(block[0] & blockTypeMask)
 	switch blockType {
-	case BlockTime,
-		BlockInt64,
-		BlockUint64,
-		BlockFloat64,
-		BlockBool,
-		BlockString,
-		BlockBytes,
-		BlockInt32,
-		BlockInt16,
-		BlockInt8,
-		BlockUint32,
-		BlockUint16,
-		BlockUint8,
-		BlockFloat32,
-		BlockInt128,
-		BlockInt256:
+	case BlockTypeTime,
+		BlockTypeInt64,
+		BlockTypeUint64,
+		BlockTypeFloat64,
+		BlockTypeBool,
+		BlockTypeString,
+		BlockTypeBytes,
+		BlockTypeInt32,
+		BlockTypeInt16,
+		BlockTypeInt8,
+		BlockTypeUint32,
+		BlockTypeUint16,
+		BlockTypeUint8,
+		BlockTypeFloat32,
+		BlockTypeInt128,
+		BlockTypeInt256:
 		return blockType, nil
 	default:
 		return 0, fmt.Errorf("pack: unknown block type: %d", blockType)

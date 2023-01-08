@@ -58,13 +58,13 @@ func RandUint32(n int) []uint32 {
 }
 
 /*
-func RandStringBytesMaskImprSrc(n uint32) string {
-	b := make([]byte, n)
-	for i := uint32(0); i < n; i++ {
-		b[i] = letterBytes[rand.Int()%len(letterBytes)]
+	func RandStringBytesMaskImprSrc(n uint32) string {
+		b := make([]byte, n)
+		for i := uint32(0); i < n; i++ {
+			b[i] = letterBytes[rand.Int()%len(letterBytes)]
+		}
+		return string(b)
 	}
-	return string(b)
-}
 */
 func TestCardinality(t *testing.T) {
 	llb := NewFilter()
@@ -392,7 +392,7 @@ func BenchmarkFilterAddExactHashed(b *testing.B) {
 			continue
 		}
 		lastn = c.n
-		blk := block.NewBlock(block.BlockUint64, 0, c.n)
+		blk := block.NewBlock(block.BlockTypeUint64, 0, c.n)
 		blk.Uint64 = RandUint64(c.n)
 		b.Run(fmt.Sprintf("n=%d", c.n), func(b *testing.B) {
 			b.ReportAllocs()
@@ -410,7 +410,7 @@ func BenchmarkFilterCardinalityExactHashed(b *testing.B) {
 			continue
 		}
 		lastn = c.n
-		blk := block.NewBlock(block.BlockUint64, 0, c.n)
+		blk := block.NewBlock(block.BlockTypeUint64, 0, c.n)
 		blk.Uint64 = RandUint64(c.n)
 		h := blk.Hashes(nil)
 

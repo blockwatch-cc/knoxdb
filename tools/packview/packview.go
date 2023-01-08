@@ -292,7 +292,7 @@ func viewAllIndexPacks(table *pack.Table, idx int, w io.Writer, mode pack.DumpMo
 func dumpByteBlock(table *pack.Table, id int, w io.Writer) error {
 	return table.WalkPacksRange(id, id, func(p *pack.Package) error {
 		for i, v := range p.Blocks() {
-			if v.Type() == block.BlockBytes {
+			if v.Type() == block.BlockTypeBytes {
 				fmt.Printf("Dump raw data for pack=%x block=%d\n", p.Key(), i)
 				w.Write([]byte(v.Bytes.Dump()))
 			}

@@ -91,7 +91,7 @@ func (p *Package) UnmarshalBinary(data []byte) error {
 			b.Release()
 			p.blocks[i] = nil
 		}
-		p.blocks = make([]*block.Block, p.nFields)
+		p.blocks = make([]block.Block, p.nFields)
 		for i := range p.blocks {
 			p.blocks[i] = block.AllocBlock()
 		}

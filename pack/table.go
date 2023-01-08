@@ -73,22 +73,22 @@ type TableMeta struct {
 }
 
 type Table struct {
-	name     string                            // printable table name
-	opts     Options                           // runtime configuration options
-	fields   FieldList                         // ordered list of table fields as central type info
-	indexes  IndexList                         // list of indexes (similar structure as the table)
-	meta     TableMeta                         // authoritative metadata
-	db       *DB                               // lower-level storage (e.g. boltdb wrapper)
-	bcache   rclru.Cache[uint64, *block.Block] // keep decoded packs for query/updates
-	journal  *Journal                          // in-memory data not yet written to packs
-	packidx  *PackIndex                        // in-memory list of pack and block info
-	key      []byte                            // name of table data bucket
-	metakey  []byte                            // name of table metadata bucket
-	packPool *sync.Pool                        // buffer pool for new packages
-	u64Pool  *sync.Pool                        // buffer pool for uint64 slices (used by indexes)
-	u32Pool  *sync.Pool                        // buffer pool for uint32 slices (used by match algos)
-	stats    TableStats                        // usage statistics
-	mu       sync.RWMutex                      // global table lock
+	name     string                           // printable table name
+	opts     Options                          // runtime configuration options
+	fields   FieldList                        // ordered list of table fields as central type info
+	indexes  IndexList                        // list of indexes (similar structure as the table)
+	meta     TableMeta                        // authoritative metadata
+	db       *DB                              // lower-level storage (e.g. boltdb wrapper)
+	bcache   rclru.Cache[uint64, block.Block] // keep decoded packs for query/updates
+	journal  *Journal                         // in-memory data not yet written to packs
+	packidx  *PackIndex                       // in-memory list of pack and block info
+	key      []byte                           // name of table data bucket
+	metakey  []byte                           // name of table metadata bucket
+	packPool *sync.Pool                       // buffer pool for new packages
+	u64Pool  *sync.Pool                       // buffer pool for uint64 slices (used by indexes)
+	u32Pool  *sync.Pool                       // buffer pool for uint32 slices (used by match algos)
+	stats    TableStats                       // usage statistics
+	mu       sync.RWMutex                     // global table lock
 }
 
 func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, error) {
@@ -193,13 +193,13 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		return nil, err
 	}
 	if t.opts.CacheSize > 0 {
-		t.bcache, err = rclru.New2Q[uint64, *block.Block](t.opts.CacheSizeMBytes())
+		t.bcache, err = rclru.New2Q[uint64, block.Block](t.opts.CacheSizeMBytes())
 		if err != nil {
 			return nil, err
 		}
 		t.stats.CacheCapacity = int64(t.opts.CacheSizeMBytes())
 	} else {
-		t.bcache = rclru.NewNoCache[uint64, *block.Block]()
+		t.bcache = rclru.NewNoCache[uint64, block.Block]()
 	}
 	log.Debugf("Created table %s", name)
 	d.tables[name] = t
@@ -344,13 +344,13 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		return nil, err
 	}
 	if t.opts.CacheSize > 0 {
-		t.bcache, err = rclru.New2Q[uint64, *block.Block](t.opts.CacheSizeMBytes())
+		t.bcache, err = rclru.New2Q[uint64, block.Block](t.opts.CacheSizeMBytes())
 		if err != nil {
 			return nil, err
 		}
 		t.stats.CacheCapacity = int64(t.opts.CacheSizeMBytes())
 	} else {
-		t.bcache = rclru.NewNoCache[uint64, *block.Block]()
+		t.bcache = rclru.NewNoCache[uint64, block.Block]()
 	}
 
 	needFlush := make([]*Index, 0)

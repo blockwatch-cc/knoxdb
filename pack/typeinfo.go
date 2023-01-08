@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"blockwatch.cc/knoxdb/encoding/block"
+	//"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/filter/bloom"
 )
@@ -28,7 +28,7 @@ var (
 	szPackIndex   = int(reflect.TypeOf(PackIndex{}).Size())
 	szPackage     = int(reflect.TypeOf(Package{}).Size())
 	szField       = int(reflect.TypeOf(Field{}).Size())
-	szBlock       = int(reflect.TypeOf(block.Block{}).Size())
+	//szBlock       = int(reflect.TypeOf(block.Block{}).Size())
 )
 
 // typeInfo holds details for the representation of a type.

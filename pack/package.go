@@ -27,13 +27,13 @@ type Package struct {
 	key      uint32 // identity
 	nFields  int
 	nValues  int
-	blocks   []*block.Block // embedded blocks
-	fields   FieldList      // shared with table
-	tinfo    *typeInfo      // Go typeinfo
-	pkindex  int            // field index of primary key (optional)
-	dirty    bool           // pack is updated, needs to be written
-	capHint  int            // block size hint
-	size     int            // storage size
+	blocks   []block.Block // embedded blocks
+	fields   FieldList     // shared with table
+	tinfo    *typeInfo     // Go typeinfo
+	pkindex  int           // field index of primary key (optional)
+	dirty    bool          // pack is updated, needs to be written
+	capHint  int           // block size hint
+	size     int           // storage size
 	pool     *sync.Pool
 }
 
@@ -175,7 +175,7 @@ func (p *Package) Fields() FieldList {
 	return p.fields
 }
 
-func (p *Package) Blocks() []*block.Block {
+func (p *Package) Blocks() []block.Block {
 	return p.blocks
 }
 
@@ -247,7 +247,7 @@ func (p *Package) InitType(proto interface{}) error {
 		}
 	}
 	if len(p.blocks) == 0 {
-		p.blocks = make([]*block.Block, p.nFields)
+		p.blocks = make([]block.Block, p.nFields)
 		for i, f := range p.fields {
 			p.blocks[i] = f.NewBlock(p.capHint)
 		}
@@ -298,7 +298,7 @@ func (p *Package) InitFields(fields FieldList, tinfo *typeInfo) error {
 	p.tinfo = tinfo
 
 	if len(p.blocks) == 0 {
-		p.blocks = make([]*block.Block, p.nFields)
+		p.blocks = make([]block.Block, p.nFields)
 		for i, f := range fields {
 			p.blocks[i] = f.NewBlock(p.capHint)
 		}
@@ -345,7 +345,7 @@ func (p *Package) InitFieldsEmpty(fields FieldList, tinfo *typeInfo) error {
 	p.tinfo = tinfo
 
 	if len(p.blocks) == 0 {
-		p.blocks = make([]*block.Block, p.nFields)
+		p.blocks = make([]block.Block, p.nFields)
 		// Keep the blocks empty
 	} else {
 		// make sure we use the correct compression (empty blocks are stored without)
@@ -382,7 +382,7 @@ func (p *Package) InitResultFields(fields FieldList, tinfo *typeInfo) error {
 	p.tinfo = tinfo
 
 	if len(p.blocks) == 0 {
-		p.blocks = make([]*block.Block, p.nFields)
+		p.blocks = make([]block.Block, p.nFields)
 		for i, f := range fields {
 			p.blocks[i] = f.NewBlock(p.capHint)
 		}
@@ -440,7 +440,7 @@ func (p *Package) Optimize() {
 		if b.IsIgnore() {
 			continue
 		}
-		if b.Type() == block.BlockBytes && !b.Bytes.IsOptimized() {
+		if b.Type() == block.BlockTypeBytes && !b.Bytes.IsOptimized() {
 			// log.Infof("Pack %d: optimize %T rows=%d len=%d cap=%d", p.key, b.Bytes, p.nValues, b.Bytes.Len(), b.Bytes.Cap())
 			opt := b.Bytes.Optimize()
 			b.Bytes.Release()
@@ -458,7 +458,7 @@ func (p *Package) Materialize() {
 		if b.IsIgnore() {
 			continue
 		}
-		if b.Type() == block.BlockBytes && !b.Bytes.IsMaterialized() {
+		if b.Type() == block.BlockTypeBytes && !b.Bytes.IsMaterialized() {
 			// log.Infof("Pack %d: materialize %T rows=%d len=%d cap=%d", p.key, b.Bytes, p.nValues, b.Bytes.Len(), b.Bytes.Cap())
 			mat := b.Bytes.Materialize()
 			b.Bytes.Release()
@@ -1396,7 +1396,7 @@ func (p *Package) IsZeroAt(index, pos int, zeroIsNull bool) bool {
 // Block allows raw access to the underlying block for a field. Use this for
 // implementing efficient matching algorithms that can work with optimized data
 // vectors used at the block layer.
-func (p *Package) Block(index int) (*block.Block, error) {
+func (p *Package) Block(index int) (block.Block, error) {
 	if index < 0 || p.nFields <= index {
 		return nil, ErrNoField
 	}
@@ -2218,7 +2218,7 @@ func (p *Package) PkIndexUnsorted(id uint64, last int) int {
 
 type PackageSorter struct {
 	*Package
-	block *block.Block
+	block block.Block
 }
 
 func NewPackageSorter(p *Package, col int) (*PackageSorter, error) {
