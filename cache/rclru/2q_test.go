@@ -75,6 +75,68 @@ func Benchmark2Q_Freq(b *testing.B) {
 	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(miss))
 }
 
+type benchmarkSize struct {
+	name string
+	l    int
+}
+
+var benchmarkSizes = []benchmarkSize{
+	{"1K", 1 * 1024},
+	{"8K", 8 * 1024},
+	{"64K", 64 * 1024},
+	{"512K", 512 * 1024},
+	{"2M", 2 * 1024 * 1024},
+}
+
+func Benchmark2QCacheHits(b *testing.B) {
+	for _, bm := range benchmarkSizes {
+		l, err := NewTest2Q(bm.l * szPackage)
+		if err != nil {
+			b.Fatalf("err: %v", err)
+		}
+		// populate cache
+		for i := 0; i < bm.l; i++ {
+			l.Add(i, NewTestPackage(i, 0))
+		}
+		b.Run("Hits_"+bm.name, func(B *testing.B) {
+			trace := make([]int, b.N)
+			for i := 0; i < b.N; i++ {
+				trace[i] = rand.Int() % bm.l
+			}
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				l.Get(trace[i])
+			}
+		})
+		b.Run("Misses_"+bm.name, func(B *testing.B) {
+			trace := make([]int, b.N)
+			for i := 0; i < b.N; i++ {
+				trace[i] = (rand.Int() % bm.l) + bm.l
+			}
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				l.Get(trace[i])
+			}
+		})
+		b.Run("Both_"+bm.name, func(B *testing.B) {
+			trace := make([]int, b.N)
+			for i := 0; i < b.N; i++ {
+				trace[i] = (rand.Int() % bm.l) + bm.l/2
+			}
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				l.Get(trace[i])
+			}
+		})
+	}
+}
+
 func Test2Q_RandomOps(t *testing.T) {
 	size := 128 * (szPackage + 16384)
 	l, err := NewTest2Q(size)
@@ -435,7 +497,7 @@ func Test2Q_Parallism(t *testing.T) {
 	const (
 		cSize    = 4
 		nPacks   = 8
-		nThreads = 16
+		nThreads = 32
 		nRuns    = 1000
 	)
 	l, err := NewTest2Q(cSize * szPackage)
@@ -453,7 +515,7 @@ func Test2Q_Parallism(t *testing.T) {
 	for r := 0; r < nRuns; r++ {
 		// 1st determine actions for the threads
 		for i := 0; i < nThreads; i++ {
-			act := rand.Intn(6)
+			act := rand.Intn(8)
 			id := rand.Intn(nPacks)
 			actions[i] = act
 			ids[i] = id
@@ -486,9 +548,9 @@ func Test2Q_Parallism(t *testing.T) {
 							t.Errorf("Thread %d: act=%d id= %d: got %d", j, act, id, v.key)
 						}
 					}
-				case 4: // Add
+				case 4, 5, 6: // Add, we want to have more adds than removes
 					l.Add(id, b[id])
-				case 5: // Remove
+				case 7: // Remove
 					l.Remove(id)
 				}
 				wg.Done()

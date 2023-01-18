@@ -437,15 +437,11 @@ func (p *Package) Optimize() {
 		return
 	}
 	for _, b := range p.blocks {
-		if b.IsIgnore() {
+		if b == nil {
 			continue
 		}
-		if b.Type() == block.BlockTypeBytes && !b.Bytes.IsOptimized() {
-			// log.Infof("Pack %d: optimize %T rows=%d len=%d cap=%d", p.key, b.Bytes, p.nValues, b.Bytes.Len(), b.Bytes.Cap())
-			opt := b.Bytes.Optimize()
-			b.Bytes.Release()
-			b.Bytes = opt
-			// log.Infof("Pack %d: optimized to %T len=%d cap=%d", p.key, b.Bytes, b.Bytes.Len(), b.Bytes.Cap())
+		if b.Type() == block.BlockTypeBytes {
+			b.Optimize()
 		}
 	}
 }
@@ -455,20 +451,26 @@ func (p *Package) Materialize() {
 		return
 	}
 	for _, b := range p.blocks {
-		if b.IsIgnore() {
+		if b == nil {
 			continue
 		}
-		if b.Type() == block.BlockTypeBytes && !b.Bytes.IsMaterialized() {
-			// log.Infof("Pack %d: materialize %T rows=%d len=%d cap=%d", p.key, b.Bytes, p.nValues, b.Bytes.Len(), b.Bytes.Cap())
-			mat := b.Bytes.Materialize()
-			b.Bytes.Release()
-			b.Bytes = mat
-			// log.Infof("Pack %d: materialized to %T len=%d cap=%d", p.key, b.Bytes, b.Bytes.Len(), b.Bytes.Cap())
+		if b.Type() == block.BlockTypeBytes {
+			b.Materialize()
 		}
 	}
 }
 
 func (p *Package) PopulateFields(fields FieldList) *Package {
+	// FIXME: This is Quick and Dirty Hack
+	if p.nFields == 1 && len(p.blocks) == 1 { // seems to be tombstone
+		p.blocks[0] = block.NewBlock(block.BlockTypeUint64, block.NoCompression, p.capHint)
+		return p
+	}
+	if p.nFields == 2 && len(p.blocks) == 2 { // seems to be index
+		p.blocks[0] = block.NewBlock(block.BlockTypeUint64, block.NoCompression, p.capHint)
+		p.blocks[1] = block.NewBlock(block.BlockTypeUint64, block.NoCompression, p.capHint)
+		return p
+	}
 	if len(fields) == 0 {
 		fields = p.fields
 	}
@@ -522,7 +524,7 @@ func (p *Package) Push(v interface{}) error {
 		b := p.blocks[fi.blockid]
 		field := p.fields[fi.blockid]
 		// skip early
-		if b.IsIgnore() {
+		if b == nil {
 			continue
 		}
 		f := fi.value(val)
@@ -538,9 +540,9 @@ func (p *Package) Push(v interface{}) error {
 				if err != nil {
 					return err
 				}
-				b.Bytes.Append(buf)
+				b.Append(buf)
 			} else {
-				b.Bytes.Append(f.Bytes())
+				b.Append(f.Bytes())
 			}
 
 		case FieldTypeString:
@@ -549,95 +551,91 @@ func (p *Package) Push(v interface{}) error {
 				if err != nil {
 					return err
 				}
-				b.Bytes.Append(buf)
+				b.Append(buf)
 			} else if fi.flags.Contains(flagStringerType) {
-				b.Bytes.Append(compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
+				b.Append(compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
 			} else {
-				b.Bytes.Append(compress.UnsafeGetBytes(f.String()))
+				b.Append(compress.UnsafeGetBytes(f.String()))
 			}
 		case FieldTypeDatetime:
-			b.Int64 = append(b.Int64, f.Interface().(time.Time).UnixNano())
+			b.Append(f.Interface().(time.Time).UnixNano())
 		case FieldTypeBoolean:
-			l := b.Bits.Len()
-			b.Bits.Grow(l + 1)
-			if f.Bool() {
-				b.Bits.Set(l)
-			}
+			b.Append(f.Bool())
 		case FieldTypeFloat64:
-			b.Float64 = append(b.Float64, f.Float())
+			b.Append(f.Float())
 		case FieldTypeFloat32:
-			b.Float32 = append(b.Float32, float32(f.Float()))
+			b.Append(float32(f.Float()))
 		case FieldTypeInt256:
-			b.Int256.Append(f.Interface().(vec.Int256))
+			b.Append(f.Interface())
 		case FieldTypeInt128:
-			b.Int128.Append(f.Interface().(vec.Int128))
+			b.Append(f.Interface())
 		case FieldTypeInt64:
-			b.Int64 = append(b.Int64, f.Int())
+			b.Append(f.Int())
 		case FieldTypeInt32:
-			b.Int32 = append(b.Int32, int32(f.Int()))
+			b.Append(int32(f.Int()))
 		case FieldTypeInt16:
-			b.Int16 = append(b.Int16, int16(f.Int()))
+			b.Append(int16(f.Int()))
 		case FieldTypeInt8:
-			b.Int8 = append(b.Int8, int8(f.Int()))
+			b.Append(int8(f.Int()))
 		case FieldTypeUint64:
-			b.Uint64 = append(b.Uint64, f.Uint())
+			b.Append(f.Uint())
 		case FieldTypeUint32:
-			b.Uint32 = append(b.Uint32, uint32(f.Uint()))
+			b.Append(uint32(f.Uint()))
 		case FieldTypeUint16:
-			b.Uint16 = append(b.Uint16, uint16(f.Uint()))
+			b.Append(uint16(f.Uint()))
 		case FieldTypeUint8:
-			b.Uint8 = append(b.Uint8, uint8(f.Uint()))
+			b.Append(uint8(f.Uint()))
 		case FieldTypeDecimal256:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int256.Append(vec.Int256{0, 0, 0, f.Uint()})
+				b.Append(vec.Int256{0, 0, 0, f.Uint()})
 			case field.Flags.Contains(flagIntType):
-				b.Int256.Append(vec.Int256{0, 0, 0, uint64(f.Int())})
+				b.Append(vec.Int256{0, 0, 0, uint64(f.Int())})
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal256{}
 				dec.SetFloat64(f.Float(), field.Scale)
-				b.Int256.Append(dec.Int256())
+				b.Append(dec.Int256())
 			default:
-				b.Int256.Append(f.Interface().(Decimal256).Quantize(field.Scale).Int256())
+				b.Append(f.Interface().(Decimal256).Quantize(field.Scale).Int256())
 			}
 		case FieldTypeDecimal128:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int128.Append(vec.Int128{0, f.Uint()})
+				b.Append(vec.Int128{0, f.Uint()})
 			case field.Flags.Contains(flagIntType):
-				b.Int128.Append(vec.Int128{0, uint64(f.Int())})
+				b.Append(vec.Int128{0, uint64(f.Int())})
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal128{}
 				dec.SetFloat64(f.Float(), field.Scale)
-				b.Int128.Append(dec.Int128())
+				b.Append(dec.Int128())
 			default:
-				b.Int128.Append(f.Interface().(Decimal128).Quantize(field.Scale).Int128())
+				b.Append(f.Interface().(Decimal128).Quantize(field.Scale).Int128())
 			}
 		case FieldTypeDecimal64:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int64 = append(b.Int64, int64(f.Uint()))
+				b.Append(int64(f.Uint()))
 			case field.Flags.Contains(flagIntType):
-				b.Int64 = append(b.Int64, f.Int())
+				b.Append(f.Int())
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal64{}
 				dec.SetFloat64(f.Float(), field.Scale)
-				b.Int64 = append(b.Int64, dec.Int64())
+				b.Append(dec.Int64())
 			default:
-				b.Int64 = append(b.Int64, f.Interface().(Decimal64).Quantize(field.Scale).Int64())
+				b.Append(f.Interface().(Decimal64).Quantize(field.Scale).Int64())
 			}
 		case FieldTypeDecimal32:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int32 = append(b.Int32, int32(f.Uint()))
+				b.Append(int32(f.Uint()))
 			case field.Flags.Contains(flagIntType):
-				b.Int32 = append(b.Int32, int32(f.Int()))
+				b.Append(int32(f.Int()))
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal32{}
 				dec.SetFloat64(f.Float(), field.Scale)
-				b.Int32 = append(b.Int32, dec.Int32())
+				b.Append(dec.Int32())
 			default:
-				b.Int32 = append(b.Int32, f.Interface().(Decimal32).Quantize(field.Scale).Int32())
+				b.Append(f.Interface().(Decimal32).Quantize(field.Scale).Int32())
 			}
 		default:
 			return fmt.Errorf("pack: pushed unsupported value type %s (%v) for %s field %d",
@@ -673,7 +671,7 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 		field := p.fields[fi.blockid]
 
 		// skip early
-		if b.IsIgnore() {
+		if b == nil {
 			continue
 		}
 		f := fi.value(val)
@@ -685,9 +683,9 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 				if err != nil {
 					return err
 				}
-				b.Bytes.Set(pos, buf)
+				b.Set(pos, buf)
 			} else {
-				b.Bytes.Set(pos, f.Bytes())
+				b.Set(pos, f.Bytes())
 			}
 
 		case FieldTypeString:
@@ -696,113 +694,109 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 				if err != nil {
 					return err
 				}
-				b.Bytes.Set(pos, buf)
+				b.Set(pos, buf)
 			} else if fi.flags.Contains(flagStringerType) {
-				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
+				b.Set(pos, compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
 			} else {
-				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.String()))
+				b.Set(pos, compress.UnsafeGetBytes(f.String()))
 			}
 
 		case FieldTypeDatetime:
-			b.Int64[pos] = f.Interface().(time.Time).UnixNano()
+			b.Set(pos, f.Interface().(time.Time).UnixNano())
 
 		case FieldTypeBoolean:
-			if f.Bool() {
-				b.Bits.Set(pos)
-			} else {
-				b.Bits.Clear(pos)
-			}
+			b.Set(pos, f.Interface())
 
 		case FieldTypeFloat64:
-			b.Float64[pos] = f.Float()
+			b.Set(pos, f.Interface())
 
 		case FieldTypeFloat32:
-			b.Float32[pos] = float32(f.Float())
+			b.Set(pos, f.Interface())
 
 		case FieldTypeInt256:
-			b.Int256.Set(pos, f.Interface().(vec.Int256))
+			b.Set(pos, f.Interface())
 
 		case FieldTypeInt128:
-			b.Int128.Set(pos, f.Interface().(vec.Int128))
+			b.Set(pos, f.Interface())
 
 		case FieldTypeInt64:
-			b.Int64[pos] = f.Int()
+			b.Set(pos, f.Interface())
 
 		case FieldTypeInt32:
-			b.Int32[pos] = int32(f.Int())
+			b.Set(pos, f.Interface())
 
 		case FieldTypeInt16:
-			b.Int16[pos] = int16(f.Int())
+			b.Set(pos, f.Interface())
 
 		case FieldTypeInt8:
-			b.Int8[pos] = int8(f.Int())
+			b.Set(pos, f.Interface())
 
 		case FieldTypeUint64:
-			b.Uint64[pos] = f.Uint()
+			b.Set(pos, f.Interface())
 
 		case FieldTypeUint32:
-			b.Uint32[pos] = uint32(f.Uint())
+			b.Set(pos, f.Interface())
 
 		case FieldTypeUint16:
-			b.Uint16[pos] = uint16(f.Uint())
+			b.Set(pos, f.Interface())
 
 		case FieldTypeUint8:
-			b.Uint8[pos] = uint8(f.Uint())
+			b.Set(pos, f.Interface())
 
 		case FieldTypeDecimal256:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int256.Set(pos, vec.Int256{0, 0, 0, f.Uint()})
+				b.Set(pos, vec.Int256{0, 0, 0, f.Uint()})
 			case field.Flags.Contains(flagIntType):
-				b.Int256.Set(pos, vec.Int256{0, 0, 0, uint64(f.Int())})
+				b.Set(pos, vec.Int256{0, 0, 0, uint64(f.Int())})
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal256{}
 				dec.SetFloat64(f.Float(), field.Scale)
-				b.Int256.Set(pos, dec.Int256())
+				b.Set(pos, dec.Int256())
 			default:
-				b.Int256.Set(pos, f.Interface().(Decimal256).Quantize(field.Scale).Int256())
+				b.Set(pos, f.Interface().(Decimal256).Quantize(field.Scale).Int256())
 			}
 
 		case FieldTypeDecimal128:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int128.Set(pos, vec.Int128{0, f.Uint()})
+				b.Set(pos, vec.Int128{0, f.Uint()})
 			case field.Flags.Contains(flagIntType):
-				b.Int128.Set(pos, vec.Int128{0, uint64(f.Int())})
+				b.Set(pos, vec.Int128{0, uint64(f.Int())})
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal128{}
 				dec.SetFloat64(f.Float(), field.Scale)
-				b.Int128.Set(pos, dec.Int128())
+				b.Set(pos, dec.Int128())
 			default:
-				b.Int128.Set(pos, f.Interface().(Decimal128).Quantize(field.Scale).Int128())
+				b.Set(pos, f.Interface().(Decimal128).Quantize(field.Scale).Int128())
 			}
 
 		case FieldTypeDecimal64:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int64[pos] = int64(f.Uint())
+				b.Set(pos, int64(f.Uint()))
 			case field.Flags.Contains(flagIntType):
-				b.Int64[pos] = f.Int()
+				b.Set(pos, f.Int())
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal64{}
 				dec.SetFloat64(f.Float(), field.Scale)
-				b.Int64[pos] = dec.Int64()
+				b.Set(pos, dec.Int64())
 			default:
-				b.Int64[pos] = f.Interface().(Decimal64).Quantize(field.Scale).Int64()
+				b.Set(pos, f.Interface().(Decimal64).Quantize(field.Scale).Int64())
 			}
 
 		case FieldTypeDecimal32:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				b.Int32[pos] = int32(f.Uint())
+				b.Set(pos, int32(f.Uint()))
 			case field.Flags.Contains(flagIntType):
-				b.Int32[pos] = int32(f.Int())
+				b.Set(pos, int32(f.Int()))
 			case field.Flags.Contains(flagFloatType):
 				dec := Decimal32{}
 				dec.SetFloat64(f.Float(), field.Scale)
-				b.Int32[pos] = dec.Int32()
+				b.Set(pos, dec.Int32())
 			default:
-				b.Int32[pos] = f.Interface().(Decimal32).Quantize(field.Scale).Int32()
+				b.Set(pos, f.Interface().(Decimal32).Quantize(field.Scale).Int32())
 			}
 
 		default:
@@ -839,7 +833,7 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 		}
 		// skip early
 		b := p.blocks[fi.blockid]
-		if b.IsIgnore() {
+		if b == nil {
 			continue
 		}
 		dst := fi.value(val)
@@ -858,12 +852,12 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 		case FieldTypeBytes:
 			if fi.flags.Contains(flagBinaryMarshalerType) {
 				// decode using unmarshaler, requires the unmarshaler makes a copy
-				if err := dst.Addr().Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes.Elem(pos)); err != nil {
+				if err := dst.Addr().Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Elem(pos).([]byte)); err != nil {
 					return err
 				}
 			} else {
 				// copy to avoid memleaks of large blocks
-				elm := b.Bytes.Elem(pos)
+				elm := b.Elem(pos).([]byte)
 				buf := make([]byte, len(elm))
 				copy(buf, elm)
 				dst.SetBytes(buf)
@@ -871,110 +865,110 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 
 		case FieldTypeString:
 			if fi.flags.Contains(flagTextMarshalerType) {
-				if err := dst.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText(b.Bytes.Elem(pos)); err != nil {
+				if err := dst.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText(compress.UnsafeGetBytes(b.Elem(pos).(string))); err != nil {
 					return err
 				}
 			} else {
 				// copy to avoid memleaks of large blocks
 				// dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
-				dst.SetString(string(b.Bytes.Elem(pos)))
+				dst.SetString(b.Elem(pos).(string))
 			}
 
 		case FieldTypeDatetime:
-			if ts := b.Int64[pos]; ts > 0 {
+			if ts := b.Elem(pos).(int64); ts > 0 {
 				dst.Set(reflect.ValueOf(time.Unix(0, ts)))
 			} else {
 				dst.Set(reflect.ValueOf(zeroTime))
 			}
 
 		case FieldTypeBoolean:
-			dst.SetBool(b.Bits.IsSet(pos))
+			dst.SetBool(b.Elem(pos).(bool))
 
 		case FieldTypeFloat64:
-			dst.SetFloat(b.Float64[pos])
+			dst.SetFloat(b.Elem(pos).(float64))
 
 		case FieldTypeFloat32:
-			dst.SetFloat(float64(b.Float32[pos]))
+			dst.SetFloat(float64(b.Elem(pos).(float32)))
 
 		case FieldTypeInt256:
-			dst.Set(reflect.ValueOf(b.Int256.Elem(pos)))
+			dst.Set(reflect.ValueOf(b.Elem(pos)))
 
 		case FieldTypeInt128:
-			dst.Set(reflect.ValueOf(b.Int128.Elem(pos)))
+			dst.Set(reflect.ValueOf(b.Elem(pos)))
 
 		case FieldTypeInt64:
-			dst.SetInt(b.Int64[pos])
+			dst.SetInt(b.Elem(pos).(int64))
 
 		case FieldTypeInt32:
-			dst.SetInt(int64(b.Int32[pos]))
+			dst.SetInt(int64(b.Elem(pos).(int32)))
 
 		case FieldTypeInt16:
-			dst.SetInt(int64(b.Int16[pos]))
+			dst.SetInt(int64(b.Elem(pos).(int16)))
 
 		case FieldTypeInt8:
-			dst.SetInt(int64(b.Int8[pos]))
+			dst.SetInt(int64(b.Elem(pos).(int8)))
 
 		case FieldTypeUint64:
-			dst.SetUint(b.Uint64[pos])
+			dst.SetUint(b.Elem(pos).(uint64))
 
 		case FieldTypeUint32:
-			dst.SetUint(uint64(b.Uint32[pos]))
+			dst.SetUint(uint64(b.Elem(pos).(uint32)))
 
 		case FieldTypeUint16:
-			dst.SetUint(uint64(b.Uint16[pos]))
+			dst.SetUint(uint64(b.Elem(pos).(uint16)))
 
 		case FieldTypeUint8:
-			dst.SetUint(uint64(b.Uint8[pos]))
+			dst.SetUint(uint64(b.Elem(pos).(uint8)))
 
 		case FieldTypeDecimal256:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				dst.SetUint(uint64(b.Int256.Elem(pos).Int64()))
+				dst.SetUint(uint64(b.Elem(pos).(vec.Int256).Int64()))
 			case field.Flags.Contains(flagIntType):
-				dst.SetInt(b.Int256.Elem(pos).Int64())
+				dst.SetInt(b.Elem(pos).(vec.Int256).Int64())
 			case field.Flags.Contains(flagFloatType):
-				dst.SetFloat(NewDecimal256(b.Int256.Elem(pos), field.Scale).Float64())
+				dst.SetFloat(NewDecimal256(b.Elem(pos).(vec.Int256), field.Scale).Float64())
 			default:
-				val := NewDecimal256(b.Int256.Elem(pos), field.Scale)
+				val := NewDecimal256(b.Elem(pos).(vec.Int256), field.Scale)
 				dst.Set(reflect.ValueOf(val))
 			}
 
 		case FieldTypeDecimal128:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				dst.SetUint(uint64(b.Int128.Elem(pos).Int64()))
+				dst.SetUint(uint64(b.Elem(pos).(vec.Int128).Int64()))
 			case field.Flags.Contains(flagIntType):
-				dst.SetInt(b.Int128.Elem(pos).Int64())
+				dst.SetInt(b.Elem(pos).(vec.Int128).Int64())
 			case field.Flags.Contains(flagFloatType):
-				dst.SetFloat(NewDecimal128(b.Int128.Elem(pos), field.Scale).Float64())
+				dst.SetFloat(NewDecimal128(b.Elem(pos).(vec.Int128), field.Scale).Float64())
 			default:
-				val := NewDecimal128(b.Int128.Elem(pos), field.Scale)
+				val := NewDecimal128(b.Elem(pos).(vec.Int128), field.Scale)
 				dst.Set(reflect.ValueOf(val))
 			}
 
 		case FieldTypeDecimal64:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				dst.SetUint(uint64(b.Int64[pos]))
+				dst.SetUint(uint64(b.Elem(pos).(int64)))
 			case field.Flags.Contains(flagIntType):
-				dst.SetInt(b.Int64[pos])
+				dst.SetInt(b.Elem(pos).(int64))
 			case field.Flags.Contains(flagFloatType):
-				dst.SetFloat(NewDecimal64(b.Int64[pos], field.Scale).Float64())
+				dst.SetFloat(NewDecimal64(b.Elem(pos).(int64), field.Scale).Float64())
 			default:
-				val := NewDecimal64(b.Int64[pos], field.Scale)
+				val := NewDecimal64(b.Elem(pos).(int64), field.Scale)
 				dst.Set(reflect.ValueOf(val))
 			}
 
 		case FieldTypeDecimal32:
 			switch {
 			case field.Flags.Contains(flagUintType):
-				dst.SetUint(uint64(b.Int32[pos]))
+				dst.SetUint(uint64(b.Elem(pos).(int32)))
 			case field.Flags.Contains(flagIntType):
-				dst.SetInt(int64(b.Int32[pos]))
+				dst.SetInt(int64(b.Elem(pos).(int32)))
 			case field.Flags.Contains(flagFloatType):
-				dst.SetFloat(NewDecimal32(b.Int32[pos], field.Scale).Float64())
+				dst.SetFloat(NewDecimal32(b.Elem(pos).(int32), field.Scale).Float64())
 			default:
-				val := NewDecimal32(b.Int32[pos], field.Scale)
+				val := NewDecimal32(b.Elem(pos).(int32), field.Scale)
 				dst.Set(reflect.ValueOf(val))
 			}
 
@@ -995,77 +989,77 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 
 	b := p.blocks[index]
 	field := p.fields[index]
-	if b.IsIgnore() {
+	if b == nil {
 		return nil, fmt.Errorf("pack: skipped block %d (%s)", index, field.Type)
 	}
 
 	switch field.Type {
 	case FieldTypeBytes:
-		return b.Bytes.Elem(pos), nil
+		return b.Elem(pos), nil
 
 	case FieldTypeString:
-		return compress.UnsafeGetString(b.Bytes.Elem(pos)), nil
+		return compress.UnsafeGetString(b.Elem(pos).([]byte)), nil
 
 	case FieldTypeDatetime:
-		if ts := b.Int64[pos]; ts > 0 {
+		if ts := b.Elem(pos).(int64); ts > 0 {
 			return time.Unix(0, ts), nil
 		} else {
 			return zeroTime, nil
 		}
 
 	case FieldTypeBoolean:
-		return b.Bits.IsSet(pos), nil
+		return b.Elem(pos), nil
 
 	case FieldTypeFloat64:
-		return b.Float64[pos], nil
+		return b.Elem(pos), nil
 
 	case FieldTypeFloat32:
-		return b.Float32[pos], nil
+		return b.Elem(pos), nil
 
 	case FieldTypeInt256:
-		return b.Int256.Elem(pos), nil
+		return b.Elem(pos), nil
 
 	case FieldTypeInt128:
-		return b.Int128.Elem(pos), nil
+		return b.Elem(pos), nil
 
 	case FieldTypeInt64:
-		return b.Int64[pos], nil
+		return b.Elem(pos), nil
 
 	case FieldTypeInt32:
-		return b.Int32[pos], nil
+		return b.Elem(pos), nil
 
 	case FieldTypeInt16:
-		return b.Int16[pos], nil
+		return b.Elem(pos), nil
 
 	case FieldTypeInt8:
-		return b.Int8[pos], nil
+		return b.Elem(pos), nil
 
 	case FieldTypeUint64:
-		return b.Uint64[pos], nil
+		return b.Elem(pos), nil
 
 	case FieldTypeUint32:
-		return b.Uint32[pos], nil
+		return b.Elem(pos), nil
 
 	case FieldTypeUint16:
-		return b.Uint16[pos], nil
+		return b.Elem(pos), nil
 
 	case FieldTypeUint8:
-		return b.Uint8[pos], nil
+		return b.Elem(pos), nil
 
 	case FieldTypeDecimal256:
-		val := NewDecimal256(b.Int256.Elem(pos), field.Scale)
+		val := NewDecimal256(b.Elem(pos).(vec.Int256), field.Scale)
 		return val, nil
 
 	case FieldTypeDecimal128:
-		val := NewDecimal128(b.Int128.Elem(pos), field.Scale)
+		val := NewDecimal128(b.Elem(pos).(vec.Int128), field.Scale)
 		return val, nil
 
 	case FieldTypeDecimal64:
-		val := NewDecimal64(b.Int64[pos], field.Scale)
+		val := NewDecimal64(b.Elem(pos).(int64), field.Scale)
 		return val, nil
 
 	case FieldTypeDecimal32:
-		val := NewDecimal32(b.Int32[pos], field.Scale)
+		val := NewDecimal32(b.Elem(pos).(int32), field.Scale)
 		return val, nil
 
 	default:
@@ -1082,7 +1076,7 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 	}
 	b := p.blocks[index]
 	field := p.fields[index]
-	if b.IsIgnore() {
+	if b == nil {
 		return fmt.Errorf("pack: skipped block %d (%s)", index, field.Type)
 	}
 	val := reflect.Indirect(reflect.ValueOf(v))
@@ -1098,9 +1092,9 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 			if err != nil {
 				return err
 			}
-			b.Bytes.Set(pos, buf)
+			b.Set(pos, buf)
 		} else {
-			b.Bytes.Set(pos, val.Bytes())
+			b.Set(pos, val.Bytes())
 		}
 
 	case FieldTypeString:
@@ -1110,70 +1104,66 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 			if err != nil {
 				return err
 			}
-			b.Bytes.Set(pos, buf)
+			b.Set(pos, buf)
 		} else if val.CanInterface() && val.Type().Implements(stringerType) {
-			b.Bytes.Set(pos, compress.UnsafeGetBytes(val.Interface().(fmt.Stringer).String()))
+			b.Set(pos, compress.UnsafeGetBytes(val.Interface().(fmt.Stringer).String()))
 		} else {
-			b.Bytes.Set(pos, compress.UnsafeGetBytes(val.String()))
+			b.Set(pos, compress.UnsafeGetBytes(val.String()))
 		}
 
 	case FieldTypeDatetime:
-		b.Int64[pos] = val.Interface().(time.Time).UnixNano()
+		b.Set(pos, val.Interface().(time.Time).UnixNano())
 
 	case FieldTypeBoolean:
-		if val.Bool() {
-			b.Bits.Set(pos)
-		} else {
-			b.Bits.Clear(pos)
-		}
+		b.Set(pos, val.Interface())
 
 	case FieldTypeFloat64:
-		b.Float64[pos] = val.Float()
+		b.Set(pos, val.Interface())
 
 	case FieldTypeFloat32:
-		b.Float32[pos] = float32(val.Float())
+		b.Set(pos, val.Interface())
 
 	case FieldTypeInt256:
-		b.Int256.Set(pos, val.Interface().(vec.Int256))
+		b.Set(pos, val.Interface())
 
 	case FieldTypeInt128:
-		b.Int128.Set(pos, val.Interface().(vec.Int128))
+		b.Set(pos, val.Interface())
 
 	case FieldTypeInt64:
-		b.Int64[pos] = val.Int()
+		b.Set(pos, val.Interface())
 
 	case FieldTypeInt32:
-		b.Int32[pos] = int32(val.Int())
+		b.Set(pos, val.Interface())
 
 	case FieldTypeInt16:
-		b.Int16[pos] = int16(val.Int())
+		b.Set(pos, val.Interface())
 
 	case FieldTypeInt8:
-		b.Int8[pos] = int8(val.Int())
+		b.Set(pos, val.Interface())
 
 	case FieldTypeUint64:
-		b.Uint64[pos] = val.Uint()
+		b.Set(pos, val.Interface())
 
 	case FieldTypeUint32:
-		b.Uint32[pos] = uint32(val.Uint())
+		b.Set(pos, val.Interface())
 
 	case FieldTypeUint16:
-		b.Uint16[pos] = uint16(val.Uint())
+		b.Set(pos, val.Interface())
 
 	case FieldTypeUint8:
-		b.Uint8[pos] = uint8(val.Uint())
+		b.Set(pos, val.Interface())
 
 	case FieldTypeDecimal256:
-		b.Int256.Set(pos, val.Interface().(Decimal256).Quantize(field.Scale).Int256())
+		b.Set(pos, val.Interface().(Decimal256).Quantize(field.Scale).Int256())
 
 	case FieldTypeDecimal128:
-		b.Int128.Set(pos, val.Interface().(Decimal128).Quantize(field.Scale).Int128())
+		b.Set(pos, val.Interface().(Decimal128).Quantize(field.Scale).Int128())
 
 	case FieldTypeDecimal64:
-		b.Int64[pos] = val.Interface().(Decimal64).Quantize(field.Scale).Int64()
+		b.Set(pos, val.Interface().(Decimal64).Quantize(field.Scale).Int64())
 
 	case FieldTypeDecimal32:
-		b.Int32[pos] = val.Interface().(Decimal32).Quantize(field.Scale).Int32()
+		b.Set(pos, val.Interface().(Decimal32).Quantize(field.Scale).Int32())
 
 	default:
 		return fmt.Errorf("pack: unsupported field type %s", field.Type)
@@ -1197,7 +1187,7 @@ func (p *Package) isValidAt(index, pos int, typ FieldType) error {
 	// if p.blocks[index].Type() != typ.BlockType() {
 	// 	return ErrInvalidType
 	// }
-	if p.blocks[index].IsIgnore() {
+	if p.blocks[index] == nil {
 		return fmt.Errorf("pack: skipped block %d (%s)", index, p.fields[index].Type)
 	}
 	return nil
@@ -1207,112 +1197,112 @@ func (p *Package) Uint64At(index, pos int) (uint64, error) {
 	if err := p.isValidAt(index, pos, FieldTypeUint64); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Uint64[pos], nil
+	return p.blocks[index].Elem(pos).(uint64), nil
 }
 
 func (p *Package) Uint32At(index, pos int) (uint32, error) {
 	if err := p.isValidAt(index, pos, FieldTypeUint32); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Uint32[pos], nil
+	return p.blocks[index].Elem(pos).(uint32), nil
 }
 
 func (p *Package) Uint16At(index, pos int) (uint16, error) {
 	if err := p.isValidAt(index, pos, FieldTypeUint16); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Uint16[pos], nil
+	return p.blocks[index].Elem(pos).(uint16), nil
 }
 
 func (p *Package) Uint8At(index, pos int) (uint8, error) {
 	if err := p.isValidAt(index, pos, FieldTypeUint8); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Uint8[pos], nil
+	return p.blocks[index].Elem(pos).(uint8), nil
 }
 
 func (p *Package) Int256At(index, pos int) (vec.Int256, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt256); err != nil {
 		return vec.Int256{}, err
 	}
-	return p.blocks[index].Int256.Elem(pos), nil
+	return p.blocks[index].Elem(pos).(vec.Int256), nil
 }
 
 func (p *Package) Int128At(index, pos int) (vec.Int128, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt128); err != nil {
 		return vec.Int128{}, err
 	}
-	return p.blocks[index].Int128.Elem(pos), nil
+	return p.blocks[index].Elem(pos).(vec.Int128), nil
 }
 
 func (p *Package) Int64At(index, pos int) (int64, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt64); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Int64[pos], nil
+	return p.blocks[index].Elem(pos).(int64), nil
 }
 
 func (p *Package) Int32At(index, pos int) (int32, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt32); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Int32[pos], nil
+	return p.blocks[index].Elem(pos).(int32), nil
 }
 
 func (p *Package) Int16At(index, pos int) (int16, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt16); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Int16[pos], nil
+	return p.blocks[index].Elem(pos).(int16), nil
 }
 
 func (p *Package) Int8At(index, pos int) (int8, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt8); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Int8[pos], nil
+	return p.blocks[index].Elem(pos).(int8), nil
 }
 
 func (p *Package) Float64At(index, pos int) (float64, error) {
 	if err := p.isValidAt(index, pos, FieldTypeFloat64); err != nil {
 		return 0.0, err
 	}
-	return p.blocks[index].Float64[pos], nil
+	return p.blocks[index].Elem(pos).(float64), nil
 }
 
 func (p *Package) Float32At(index, pos int) (float32, error) {
 	if err := p.isValidAt(index, pos, FieldTypeFloat32); err != nil {
 		return 0.0, err
 	}
-	return p.blocks[index].Float32[pos], nil
+	return p.blocks[index].Elem(pos).(float32), nil
 }
 
 func (p *Package) StringAt(index, pos int) (string, error) {
 	if err := p.isValidAt(index, pos, FieldTypeString); err != nil {
 		return "", err
 	}
-	return compress.UnsafeGetString(p.blocks[index].Bytes.Elem(pos)), nil
+	return compress.UnsafeGetString(p.blocks[index].Elem(pos).([]byte)), nil
 }
 
 func (p *Package) BytesAt(index, pos int) ([]byte, error) {
 	if err := p.isValidAt(index, pos, FieldTypeBytes); err != nil {
 		return nil, err
 	}
-	return p.blocks[index].Bytes.Elem(pos), nil
+	return p.blocks[index].Elem(pos).([]byte), nil
 }
 
 func (p *Package) BoolAt(index, pos int) (bool, error) {
 	if err := p.isValidAt(index, pos, FieldTypeBoolean); err != nil {
 		return false, err
 	}
-	return p.blocks[index].Bits.IsSet(pos), nil
+	return p.blocks[index].Elem(pos).(bool), nil
 }
 
 func (p *Package) TimeAt(index, pos int) (time.Time, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDatetime); err != nil {
 		return zeroTime, err
 	}
-	if ts := p.blocks[index].Int64[pos]; ts == 0 {
+	if ts := p.blocks[index].Elem(pos).(int64); ts == 0 {
 		return zeroTime, nil
 	} else {
 		return time.Unix(0, ts), nil
@@ -1323,71 +1313,71 @@ func (p *Package) Decimal32At(index, pos int) (Decimal32, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal32); err != nil {
 		return Decimal32{}, err
 	}
-	return NewDecimal32(p.blocks[index].Int32[pos], p.fields[index].Scale), nil
+	return NewDecimal32(p.blocks[index].Elem(pos).(int32), p.fields[index].Scale), nil
 }
 
 func (p *Package) Decimal64At(index, pos int) (Decimal64, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal64); err != nil {
 		return Decimal64{}, err
 	}
-	return NewDecimal64(p.blocks[index].Int64[pos], p.fields[index].Scale), nil
+	return NewDecimal64(p.blocks[index].Elem(pos).(int64), p.fields[index].Scale), nil
 }
 
 func (p *Package) Decimal128At(index, pos int) (Decimal128, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal128); err != nil {
 		return Decimal128{}, err
 	}
-	return NewDecimal128(p.blocks[index].Int128.Elem(pos), p.fields[index].Scale), nil
+	return NewDecimal128(p.blocks[index].Elem(pos).(vec.Int128), p.fields[index].Scale), nil
 }
 
 func (p *Package) Decimal256At(index, pos int) (Decimal256, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal256); err != nil {
 		return Decimal256{}, err
 	}
-	return NewDecimal256(p.blocks[index].Int256.Elem(pos), p.fields[index].Scale), nil
+	return NewDecimal256(p.blocks[index].Elem(pos).(vec.Int256), p.fields[index].Scale), nil
 }
 
 func (p *Package) IsZeroAt(index, pos int, zeroIsNull bool) bool {
 	if p.nFields <= index || p.nValues <= pos {
 		return true
 	}
-	if p.blocks[index].IsIgnore() {
+	if p.blocks[index] == nil {
 		return true
 	}
 	field := p.fields[index]
 	switch field.Type {
 	case FieldTypeInt256, FieldTypeDecimal256:
-		return zeroIsNull && p.blocks[index].Int256.Elem(pos).IsZero()
+		return zeroIsNull && p.blocks[index].Elem(pos).(vec.Int256).IsZero()
 	case FieldTypeInt128, FieldTypeDecimal128:
-		return zeroIsNull && p.blocks[index].Int128.Elem(pos).IsZero()
+		return zeroIsNull && p.blocks[index].Elem(pos).(vec.Int128).IsZero()
 	case FieldTypeInt64, FieldTypeDecimal64:
-		return zeroIsNull && p.blocks[index].Int64[pos] == 0
+		return zeroIsNull && p.blocks[index].Elem(pos).(int64) == 0
 	case FieldTypeInt32, FieldTypeDecimal32:
-		return zeroIsNull && p.blocks[index].Int32[pos] == 0
+		return zeroIsNull && p.blocks[index].Elem(pos).(int32) == 0
 	case FieldTypeInt16:
-		return zeroIsNull && p.blocks[index].Int16[pos] == 0
+		return zeroIsNull && p.blocks[index].Elem(pos).(int16) == 0
 	case FieldTypeInt8:
-		return zeroIsNull && p.blocks[index].Int8[pos] == 0
+		return zeroIsNull && p.blocks[index].Elem(pos).(int8) == 0
 	case FieldTypeUint64:
-		return zeroIsNull && p.blocks[index].Uint64[pos] == 0
+		return zeroIsNull && p.blocks[index].Elem(pos).(uint64) == 0
 	case FieldTypeUint32:
-		return zeroIsNull && p.blocks[index].Uint32[pos] == 0
+		return zeroIsNull && p.blocks[index].Elem(pos).(uint32) == 0
 	case FieldTypeUint16:
-		return zeroIsNull && p.blocks[index].Uint16[pos] == 0
+		return zeroIsNull && p.blocks[index].Elem(pos).(uint16) == 0
 	case FieldTypeUint8:
-		return zeroIsNull && p.blocks[index].Uint8[pos] == 0
+		return zeroIsNull && p.blocks[index].Elem(pos).(uint8) == 0
 	case FieldTypeBoolean:
-		return zeroIsNull && !p.blocks[index].Bits.IsSet(pos)
+		return zeroIsNull && !p.blocks[index].Elem(pos).(bool)
 	case FieldTypeFloat64:
-		v := p.blocks[index].Float64[pos]
+		v := p.blocks[index].Elem(pos).(float64)
 		return math.IsNaN(v) || math.IsInf(v, 0) || (zeroIsNull && v == 0.0)
 	case FieldTypeFloat32:
-		v := float64(p.blocks[index].Float32[pos])
+		v := float64(p.blocks[index].Elem(pos).(float32))
 		return math.IsNaN(v) || math.IsInf(v, 0) || (zeroIsNull && v == 0.0)
 	case FieldTypeString, FieldTypeBytes:
-		return len(p.blocks[index].Bytes.Elem(pos)) == 0
+		return len(p.blocks[index].Elem(pos).([]byte)) == 0
 	case FieldTypeDatetime:
-		val := p.blocks[index].Int64[pos]
+		val := p.blocks[index].Elem(pos).(int64)
 		return val == 0 || (zeroIsNull && time.Unix(0, val).IsZero())
 	}
 	return false
@@ -1413,7 +1403,7 @@ func (p *Package) Column(index int) (interface{}, error) {
 	}
 	b := p.blocks[index]
 	field := p.fields[index]
-	if b.IsIgnore() {
+	if b == nil {
 		return nil, fmt.Errorf("pack: skipped block %d (%s)", index, field.Type)
 	}
 
@@ -1432,16 +1422,16 @@ func (p *Package) Column(index int) (interface{}, error) {
 		FieldTypeUint16,
 		FieldTypeUint8:
 		// direct access, no copy
-		return b.RawSlice(), nil
+		return b.Slice(), nil
 
 	case FieldTypeInt128:
 		// materialized from Int128LLSlice
-		return b.RawSlice(), nil
+		return b.Slice(), nil
 
 	case FieldTypeDatetime:
 		// materialize
-		res := make([]time.Time, len(b.Int64))
-		for i, v := range b.Int64 {
+		res := make([]time.Time, b.Len())
+		for i, v := range b.Slice().([]int64) {
 			if v > 0 {
 				res[i] = time.Unix(0, v)
 			} else {
@@ -1452,23 +1442,23 @@ func (p *Package) Column(index int) (interface{}, error) {
 
 	case FieldTypeBoolean:
 		// materialized from bitset
-		return b.RawSlice(), nil
+		return b.Slice(), nil
 
 	case FieldTypeDecimal256:
 		// materialize
-		return Decimal256Slice{Int256: b.Int256.Int256Slice(), Scale: field.Scale}, nil
+		return Decimal256Slice{Int256: b.Slice().(vec.Int256Slice), Scale: field.Scale}, nil
 
 	case FieldTypeDecimal128:
 		// materialize
-		return Decimal128Slice{Int128: b.Int128.Int128Slice(), Scale: field.Scale}, nil
+		return Decimal128Slice{Int128: b.Slice().(vec.Int128Slice), Scale: field.Scale}, nil
 
 	case FieldTypeDecimal64:
 		// materialize
-		return Decimal64Slice{Int64: b.Int64, Scale: field.Scale}, nil
+		return Decimal64Slice{Int64: b.Slice().([]int64), Scale: field.Scale}, nil
 
 	case FieldTypeDecimal32:
 		// materialize
-		return Decimal32Slice{Int32: b.Int32, Scale: field.Scale}, nil
+		return Decimal32Slice{Int32: b.Slice().([]int32), Scale: field.Scale}, nil
 
 	default:
 		return nil, fmt.Errorf("pack: unsupported type %s", field.Type)
@@ -1483,61 +1473,61 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 	out := make([]interface{}, p.nFields)
 	for i, b := range p.blocks {
 		// skip
-		if b.IsIgnore() {
+		if b == nil {
 			continue
 		}
 		field := p.fields[i]
 
 		switch field.Type {
 		case FieldTypeBytes:
-			out[i] = b.Bytes.Elem(pos)
+			out[i] = b.Elem(pos)
 		case FieldTypeString:
-			out[i] = compress.UnsafeGetString(b.Bytes.Elem(pos))
+			out[i] = compress.UnsafeGetString(b.Elem(pos).([]byte))
 		case FieldTypeDatetime:
 			// materialize
-			if ts := b.Int64[pos]; ts > 0 {
+			if ts := b.Elem(pos).(int64); ts > 0 {
 				out[i] = time.Unix(0, ts)
 			} else {
 				out[i] = time.Time{}
 			}
 		case FieldTypeBoolean:
-			out[i] = b.Bits.IsSet(pos)
+			out[i] = b.Elem(pos)
 		case FieldTypeFloat64:
-			out[i] = b.Float64[pos]
+			out[i] = b.Elem(pos)
 		case FieldTypeFloat32:
-			out[i] = b.Float32[pos]
+			out[i] = b.Elem(pos)
 		case FieldTypeInt256:
-			out[i] = b.Int256.Elem(pos)
+			out[i] = b.Elem(pos)
 		case FieldTypeInt128:
-			out[i] = b.Int128.Elem(pos)
+			out[i] = b.Elem(pos)
 		case FieldTypeInt64:
-			out[i] = b.Int64[pos]
+			out[i] = b.Elem(pos)
 		case FieldTypeInt32:
-			out[i] = b.Int32[pos]
+			out[i] = b.Elem(pos)
 		case FieldTypeInt16:
-			out[i] = b.Int16[pos]
+			out[i] = b.Elem(pos)
 		case FieldTypeInt8:
-			out[i] = b.Int8[pos]
+			out[i] = b.Elem(pos)
 		case FieldTypeUint64:
-			out[i] = b.Uint64[pos]
+			out[i] = b.Elem(pos)
 		case FieldTypeUint32:
-			out[i] = b.Uint32[pos]
+			out[i] = b.Elem(pos)
 		case FieldTypeUint16:
-			out[i] = b.Uint16[pos]
+			out[i] = b.Elem(pos)
 		case FieldTypeUint8:
-			out[i] = b.Uint8[pos]
+			out[i] = b.Elem(pos)
 		case FieldTypeDecimal256:
 			// materialize
-			out[i] = NewDecimal256(b.Int256.Elem(pos), field.Scale)
+			out[i] = NewDecimal256(b.Elem(pos).(vec.Int256), field.Scale)
 		case FieldTypeDecimal128:
 			// materialize
-			out[i] = NewDecimal128(b.Int128.Elem(pos), field.Scale)
+			out[i] = NewDecimal128(b.Elem(pos).(vec.Int128), field.Scale)
 		case FieldTypeDecimal64:
 			// materialize
-			out[i] = NewDecimal64(b.Int64[pos], field.Scale)
+			out[i] = NewDecimal64(b.Elem(pos).(int64), field.Scale)
 		case FieldTypeDecimal32:
 			// materialize
-			out[i] = NewDecimal32(b.Int32[pos], field.Scale)
+			out[i] = NewDecimal32(b.Elem(pos).(int32), field.Scale)
 		default:
 			return nil, fmt.Errorf("pack: unsupported type %s", field.Type)
 		}
@@ -1554,25 +1544,25 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 	}
 	b := p.blocks[index]
 	field := p.fields[index]
-	if b.IsIgnore() {
+	if b == nil {
 		return nil, fmt.Errorf("pack: skipped block %d (%s)", index, field.Type)
 	}
 
 	switch field.Type {
 	case FieldTypeBytes:
 		// Note: does not copy data; don't reference!
-		return b.Bytes.Subslice(start, end), nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeString:
 		// Note: does not copy data; don't reference!
 		s := make([]string, end-start+1)
-		for i, v := range b.Bytes.Subslice(start, end) {
+		for i, v := range b.RangeSlice(start, end).([][]byte) {
 			s[i] = compress.UnsafeGetString(v)
 		}
 		return s, nil
 	case FieldTypeDatetime:
 		// materialize
 		res := make([]time.Time, end-start+1)
-		for i, v := range b.Int64[start:end] {
+		for i, v := range b.RangeSlice(start, end).([]int64) {
 			if v > 0 {
 				res[i+start] = time.Unix(0, v)
 			} else {
@@ -1581,43 +1571,43 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		}
 		return res, nil
 	case FieldTypeBoolean:
-		return b.Bits.SubSlice(start, end-start+1), nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeFloat64:
-		return b.Float64[start:end], nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeFloat32:
-		return b.Float32[start:end], nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeInt256:
-		return b.Int256.Subslice(start, end).Int256Slice(), nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeInt128:
-		return b.Int128.Subslice(start, end).Int128Slice(), nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeInt64:
-		return b.Int64[start:end], nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeInt32:
-		return b.Int32[start:end], nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeInt16:
-		return b.Int16[start:end], nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeInt8:
-		return b.Int8[start:end], nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeUint64:
-		return b.Uint64[start:end], nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeUint32:
-		return b.Uint32[start:end], nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeUint16:
-		return b.Uint16[start:end], nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeUint8:
-		return b.Uint8[start:end], nil
+		return b.RangeSlice(start, end), nil
 	case FieldTypeDecimal256:
 		// materialize
-		return Decimal256Slice{Int256: b.Int256.Subslice(start, end).Int256Slice(), Scale: field.Scale}, nil
+		return Decimal256Slice{Int256: b.RangeSlice(start, end).(vec.Int256Slice), Scale: field.Scale}, nil
 	case FieldTypeDecimal128:
 		// materialize
-		return Decimal128Slice{Int128: b.Int128.Subslice(start, end).Int128Slice(), Scale: field.Scale}, nil
+		return Decimal128Slice{Int128: b.RangeSlice(start, end).(vec.Int128Slice), Scale: field.Scale}, nil
 	case FieldTypeDecimal64:
 		// materialize
-		return Decimal64Slice{Int64: b.Int64[start:end], Scale: field.Scale}, nil
+		return Decimal64Slice{Int64: b.RangeSlice(start, end).([]int64), Scale: field.Scale}, nil
 	case FieldTypeDecimal32:
 		// materialize
-		return Decimal32Slice{Int32: b.Int32[start:end], Scale: field.Scale}, nil
+		return Decimal32Slice{Int32: b.RangeSlice(start, end).([]int32), Scale: field.Scale}, nil
 	default:
 		return nil, fmt.Errorf("pack: unsupported type %s", field.Type)
 	}
@@ -1644,7 +1634,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 	for i, dst := range p.blocks {
 		src := srcPack.blocks[i]
 		// skip
-		if dst.IsIgnore() || src.IsIgnore() {
+		if dst == nil || src == nil {
 			continue
 		}
 		srcField := srcPack.fields[i]
@@ -1656,84 +1646,88 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 
 		switch dstField.Type {
 		case FieldTypeBytes, FieldTypeString:
-			dst.Bytes.Copy(src.Bytes, dstPos, srcPos, n)
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeBoolean:
-			dst.Bits.Replace(src.Bits, srcPos, n, dstPos)
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeFloat64:
-			copy(dst.Float64[dstPos:], src.Float64[srcPos:srcPos+n])
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeFloat32:
-			copy(dst.Float32[dstPos:], src.Float32[srcPos:srcPos+n])
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt256:
-			dst.Int256.Copy(src.Int256, dstPos, srcPos, n)
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt128:
-			dst.Int128.Copy(src.Int128, dstPos, srcPos, n)
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt64, FieldTypeDatetime:
-			copy(dst.Int64[dstPos:], src.Int64[srcPos:srcPos+n])
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt32:
-			copy(dst.Int32[dstPos:], src.Int32[srcPos:srcPos+n])
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt16:
-			copy(dst.Int16[dstPos:], src.Int16[srcPos:srcPos+n])
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt8:
-			copy(dst.Int8[dstPos:], src.Int8[srcPos:srcPos+n])
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeUint64:
-			copy(dst.Uint64[dstPos:], src.Uint64[srcPos:srcPos+n])
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeUint32:
-			copy(dst.Uint32[dstPos:], src.Uint32[srcPos:srcPos+n])
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeUint16:
-			copy(dst.Uint16[dstPos:], src.Uint16[srcPos:srcPos+n])
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeUint8:
-			copy(dst.Uint8[dstPos:], src.Uint8[srcPos:srcPos+n])
+			dst.ReplaceFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeDecimal256:
+			// FIXME: are different scales possible here?
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				dst.Int256.Copy(src.Int256, dstPos, srcPos, n)
+				dst.ReplaceFrom(src, srcPos, dstPos, n)
 			} else {
 				for j := 0; j < n; j++ {
-					dst.Int256.Set(dstPos+j, NewDecimal256(src.Int256.Elem(srcPos+j), sc).Quantize(dc).Int256())
+					dst.Set(dstPos+j, NewDecimal256(src.Elem(srcPos+j).(vec.Int256), sc).Quantize(dc).Int256())
 				}
 			}
 
 		case FieldTypeDecimal128:
+			// FIXME: are different scales possible here?
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				dst.Int128.Copy(src.Int128, dstPos, srcPos, n)
+				dst.ReplaceFrom(src, srcPos, dstPos, n)
 			} else {
 				for j := 0; j < n; j++ {
-					dst.Int128.Set(dstPos+j, NewDecimal128(src.Int128.Elem(srcPos+j), sc).Quantize(dc).Int128())
+					dst.Set(dstPos+j, NewDecimal128(src.Elem(srcPos+j).(vec.Int128), sc).Quantize(dc).Int128())
 				}
 			}
 
 		case FieldTypeDecimal64:
+			// FIXME: are different scales possible here?
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				copy(dst.Int64[dstPos:], src.Int64[srcPos:srcPos+n])
+				dst.ReplaceFrom(src, srcPos, dstPos, n)
 			} else {
-				for j, v := range src.Int64[srcPos : srcPos+n] {
-					dst.Int64[dstPos+j] = NewDecimal64(v, sc).Quantize(dc).Int64()
+				for j, v := range src.RangeSlice(srcPos, srcPos+n).([]int64) {
+					dst.Set(dstPos+j, NewDecimal64(v, sc).Quantize(dc).Int64())
 				}
 			}
 
 		case FieldTypeDecimal32:
+			// FIXME: are different scales possible here?
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				copy(dst.Int32[dstPos:], src.Int32[srcPos:srcPos+n])
+				dst.ReplaceFrom(src, srcPos, dstPos, n)
 			} else {
-				for j, v := range src.Int32[srcPos : srcPos+n] {
-					dst.Int32[dstPos+j] = NewDecimal32(v, sc).Quantize(dc).Int32()
+				for j, v := range src.RangeSlice(srcPos, srcPos+n).([]int32) {
+					dst.Set(dstPos+j, NewDecimal32(v, sc).Quantize(dc).Int64())
 				}
 			}
 
@@ -1762,7 +1756,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 	}
 	for i, dst := range p.blocks {
 		src := srcPack.blocks[i]
-		if dst.IsIgnore() || src.IsIgnore() {
+		if dst == nil || src == nil {
 			continue
 		}
 		srcField := srcPack.fields[i]
@@ -1774,88 +1768,88 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 
 		switch dstField.Type {
 		case FieldTypeBytes, FieldTypeString:
-			if srcLen == 1 {
-				dst.Bytes.Append(src.Bytes.Elem(srcPos))
-			} else {
-				dst.Bytes.Append(src.Bytes.Subslice(srcPos, srcPos+srcLen)...)
-			}
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeBoolean:
-			dst.Bits.Append(src.Bits, srcPos, srcLen)
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeFloat64:
-			dst.Float64 = append(dst.Float64, src.Float64[srcPos:srcPos+srcLen]...)
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeFloat32:
-			dst.Float32 = append(dst.Float32, src.Float32[srcPos:srcPos+srcLen]...)
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeInt256:
-			dst.Int256.AppendFrom(src.Int256.Subslice(srcPos, srcPos+srcLen))
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeInt128:
-			dst.Int128.AppendFrom(src.Int128.Subslice(srcPos, srcPos+srcLen))
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeInt64, FieldTypeDatetime:
-			dst.Int64 = append(dst.Int64, src.Int64[srcPos:srcPos+srcLen]...)
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeInt32:
-			dst.Int32 = append(dst.Int32, src.Int32[srcPos:srcPos+srcLen]...)
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeInt16:
-			dst.Int16 = append(dst.Int16, src.Int16[srcPos:srcPos+srcLen]...)
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeInt8:
-			dst.Int8 = append(dst.Int8, src.Int8[srcPos:srcPos+srcLen]...)
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeUint64:
-			dst.Uint64 = append(dst.Uint64, src.Uint64[srcPos:srcPos+srcLen]...)
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeUint32:
-			dst.Uint32 = append(dst.Uint32, src.Uint32[srcPos:srcPos+srcLen]...)
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeUint16:
-			dst.Uint16 = append(dst.Uint16, src.Uint16[srcPos:srcPos+srcLen]...)
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeUint8:
-			dst.Uint8 = append(dst.Uint8, src.Uint8[srcPos:srcPos+srcLen]...)
+			dst.AppendFrom(src, srcPos, srcLen)
 
 		case FieldTypeDecimal256:
+			// FIXME: are different scales possible here?
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				dst.Int256.AppendFrom(src.Int256.Subslice(srcPos, srcPos+srcLen))
+				dst.AppendFrom(src, srcPos, srcLen)
 			} else {
 				for j := 0; j < srcLen; j++ {
-					dst.Int256.Append(NewDecimal256(src.Int256.Elem(srcPos+j), sc).Quantize(dc).Int256())
+					dst.Append(NewDecimal256(src.Elem(srcPos+j).(vec.Int256), sc).Quantize(dc).Int256())
 				}
 			}
 
 		case FieldTypeDecimal128:
+			// FIXME: are different scales possible here?
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				dst.Int128.AppendFrom(src.Int128.Subslice(srcPos, srcPos+srcLen))
+				dst.AppendFrom(src, srcPos, srcLen)
 			} else {
 				for j := 0; j < srcLen; j++ {
-					dst.Int128.Append(NewDecimal128(src.Int128.Elem(srcPos+j), sc).Quantize(dc).Int128())
+					dst.Append(NewDecimal128(src.Elem(srcPos+j).(vec.Int128), sc).Quantize(dc).Int128())
 				}
 			}
 
 		case FieldTypeDecimal64:
+			// FIXME: are different scales possible here?
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				dst.Int64 = append(dst.Int64, src.Int64[srcPos:srcPos+srcLen]...)
+				dst.AppendFrom(src, srcPos, srcLen)
 			} else {
-				for _, v := range src.Int64[srcPos : srcPos+srcLen] {
-					dst.Int64 = append(dst.Int64, NewDecimal64(v, sc).Quantize(dc).Int64())
+				for _, v := range src.RangeSlice(srcPos, srcPos+srcLen).([]int64) {
+					dst.Append(NewDecimal64(v, sc).Quantize(dc).Int64())
 				}
 			}
 
 		case FieldTypeDecimal32:
+			// FIXME: are different scales possible here?
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				dst.Int32 = append(dst.Int32, src.Int32[srcPos:srcPos+srcLen]...)
+				dst.AppendFrom(src, srcPos, srcLen)
 			} else {
-				for _, v := range src.Int32[srcPos : srcPos+srcLen] {
-					dst.Int32 = append(dst.Int32, NewDecimal32(v, sc).Quantize(dc).Int32())
+				for _, v := range src.RangeSlice(srcPos, srcPos+srcLen).([]int32) {
+					dst.Append(NewDecimal32(v, sc).Quantize(dc).Int32())
 				}
 			}
 
@@ -1885,7 +1879,7 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 	n := util.Min(srcPack.Len()-srcPos, srcLen)
 	for i, dst := range p.blocks {
 		src := srcPack.blocks[i]
-		if dst.IsIgnore() || src.IsIgnore() {
+		if dst == nil || src == nil {
 			continue
 		}
 		srcField := srcPack.fields[i]
@@ -1897,93 +1891,97 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 
 		switch dstField.Type {
 		case FieldTypeBytes, FieldTypeString:
-			dst.Bytes.Insert(dstPos, src.Bytes.Subslice(srcPos, srcPos+n)...)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeBoolean:
-			dst.Bits.Insert(src.Bits, srcPos, srcLen, dstPos)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeFloat64:
-			dst.Float64 = vec.Float64.Insert(dst.Float64, dstPos, src.Float64[srcPos:srcPos+n]...)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeFloat32:
-			dst.Float32 = vec.Float32.Insert(dst.Float32, dstPos, src.Float32[srcPos:srcPos+n]...)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt256:
-			dst.Int256.Insert(dstPos, src.Int256.Subslice(srcPos, srcPos+n))
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt128:
-			dst.Int128.Insert(dstPos, src.Int128.Subslice(srcPos, srcPos+n))
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt64, FieldTypeDatetime:
-			dst.Int64 = vec.Int64.Insert(dst.Int64, dstPos, src.Int64[srcPos:srcPos+n]...)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt32:
-			dst.Int32 = vec.Int32.Insert(dst.Int32, dstPos, src.Int32[srcPos:srcPos+n]...)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt16:
-			dst.Int16 = vec.Int16.Insert(dst.Int16, dstPos, src.Int16[srcPos:srcPos+n]...)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeInt8:
-			dst.Int8 = vec.Int8.Insert(dst.Int8, dstPos, src.Int8[srcPos:srcPos+n]...)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeUint64:
-			dst.Uint64 = vec.Uint64.Insert(dst.Uint64, dstPos, src.Uint64[srcPos:srcPos+n]...)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeUint32:
-			dst.Uint32 = vec.Uint32.Insert(dst.Uint32, dstPos, src.Uint32[srcPos:srcPos+n]...)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeUint16:
-			dst.Uint16 = vec.Uint16.Insert(dst.Uint16, dstPos, src.Uint16[srcPos:srcPos+n]...)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeUint8:
-			dst.Uint8 = vec.Uint8.Insert(dst.Uint8, dstPos, src.Uint8[srcPos:srcPos+n]...)
+			dst.InsertFrom(src, srcPos, dstPos, n)
 
 		case FieldTypeDecimal256:
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				dst.Int256.Insert(dstPos, src.Int256.Subslice(srcPos, srcPos+n))
+				dst.InsertFrom(src, srcPos, dstPos, n)
 			} else {
 				cp := vec.MakeInt256LLSlice(n)
 				for i := 0; i < n; i++ {
-					cp.Set(i, NewDecimal256(src.Int256.Elem(srcPos+n), sc).Quantize(dc).Int256())
+					cp.Set(i, NewDecimal256(src.Elem(srcPos+n).(vec.Int256), sc).Quantize(dc).Int256())
 				}
-				dst.Int256.Insert(dstPos, cp)
+				b := block.NewBlockFromSlice(block.BlockTypeInt256, block.NoCompression, cp)
+				dst.InsertFrom(b, dstPos, 0, n)
 			}
 
 		case FieldTypeDecimal128:
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				dst.Int128.Insert(dstPos, src.Int128.Subslice(srcPos, srcPos+n))
+				dst.InsertFrom(src, srcPos, dstPos, n)
 			} else {
 				cp := vec.MakeInt128LLSlice(n)
 				for i := 0; i < n; i++ {
-					cp.Set(i, NewDecimal128(src.Int128.Elem(srcPos+n), sc).Quantize(dc).Int128())
+					cp.Set(i, NewDecimal128(src.Elem(srcPos+n).(vec.Int128), sc).Quantize(dc).Int128())
 				}
-				dst.Int128.Insert(dstPos, cp)
+				b := block.NewBlockFromSlice(block.BlockTypeInt128, block.NoCompression, cp)
+				dst.InsertFrom(b, dstPos, 0, n)
 			}
 
 		case FieldTypeDecimal64:
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				vec.Int64.Insert(dst.Int64, dstPos, src.Int64[srcPos:srcPos+n]...)
+				dst.InsertFrom(src, srcPos, dstPos, n)
 			} else {
 				cp := make([]int64, n)
-				for i, v := range src.Int64[srcPos : srcPos+srcLen] {
+				for i, v := range src.RangeSlice(srcPos, srcPos+srcLen).([]int64) {
 					cp[i] = NewDecimal64(v, sc).Quantize(dc).Int64()
 				}
-				vec.Int64.Insert(dst.Int64, dstPos, cp...)
+				b := block.NewBlockFromSlice(block.BlockTypeInt64, block.NoCompression, cp)
+				dst.InsertFrom(b, dstPos, 0, n)
 			}
 
 		case FieldTypeDecimal32:
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				vec.Int32.Insert(dst.Int32, dstPos, src.Int32[srcPos:srcPos+n]...)
+				dst.InsertFrom(src, srcPos, dstPos, n)
 			} else {
 				cp := make([]int32, n)
-				for i, v := range src.Int32[srcPos : srcPos+srcLen] {
+				for i, v := range src.RangeSlice(srcPos, srcPos+srcLen).([]int32) {
 					cp[i] = NewDecimal32(v, sc).Quantize(dc).Int32()
 				}
-				vec.Int32.Insert(dst.Int32, dstPos, cp...)
+				b := block.NewBlockFromSlice(block.BlockTypeInt32, block.NoCompression, cp)
+				dst.InsertFrom(b, dstPos, 0, n)
 			}
 
 		default:
@@ -2005,53 +2003,53 @@ func (p *Package) Grow(n int) error {
 		panic(fmt.Errorf("pack: overflow on grow %d rows in pack 0x%x with %d/%d rows", n, p.key, p.nValues, p.capHint))
 	}
 	for i, b := range p.blocks {
-		if b.IsIgnore() {
+		if b == nil {
 			continue
 		}
 		field := p.fields[i]
 
 		switch field.Type {
 		case FieldTypeBytes, FieldTypeString:
-			b.Bytes.Append(make([][]byte, n)...)
+			b.Grow(n)
 
 		case FieldTypeBoolean:
-			b.Bits.Grow(b.Bits.Len() + n)
+			b.Grow(n)
 
 		case FieldTypeFloat64:
-			b.Float64 = append(b.Float64, make([]float64, n)...)
+			b.Grow(n)
 
 		case FieldTypeFloat32:
-			b.Float32 = append(b.Float32, make([]float32, n)...)
+			b.Grow(n)
 
 		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256.AppendFrom(vec.MakeInt256LLSlice(n))
+			b.Grow(n)
 
 		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128.AppendFrom(vec.MakeInt128LLSlice(n))
+			b.Grow(n)
 
 		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
-			b.Int64 = append(b.Int64, make([]int64, n)...)
+			b.Grow(n)
 
 		case FieldTypeInt32, FieldTypeDecimal32:
-			b.Int32 = append(b.Int32, make([]int32, n)...)
+			b.Grow(n)
 
 		case FieldTypeInt16:
-			b.Int16 = append(b.Int16, make([]int16, n)...)
+			b.Grow(n)
 
 		case FieldTypeInt8:
-			b.Int8 = append(b.Int8, make([]int8, n)...)
+			b.Grow(n)
 
 		case FieldTypeUint64:
-			b.Uint64 = append(b.Uint64, make([]uint64, n)...)
+			b.Grow(n)
 
 		case FieldTypeUint32:
-			b.Uint32 = append(b.Uint32, make([]uint32, n)...)
+			b.Grow(n)
 
 		case FieldTypeUint16:
-			b.Uint16 = append(b.Uint16, make([]uint16, n)...)
+			b.Grow(n)
 
 		case FieldTypeUint8:
-			b.Uint8 = append(b.Uint8, make([]uint8, n)...)
+			b.Grow(n)
 
 		default:
 			return fmt.Errorf("pack: invalid data type %s", field.Type)
@@ -2072,53 +2070,53 @@ func (p *Package) Delete(pos, n int) error {
 	}
 	n = util.Min(p.Len()-pos, n)
 	for i, b := range p.blocks {
-		if b.IsIgnore() {
+		if b == nil {
 			continue
 		}
 		field := p.fields[i]
 
 		switch field.Type {
 		case FieldTypeBytes, FieldTypeString:
-			b.Bytes.Delete(pos, n)
+			b.Delete(pos, n)
 
 		case FieldTypeBoolean:
-			b.Bits.Delete(pos, n)
+			b.Delete(pos, n)
 
 		case FieldTypeFloat64:
-			b.Float64 = append(b.Float64[:pos], b.Float64[pos+n:]...)
+			b.Delete(pos, n)
 
 		case FieldTypeFloat32:
-			b.Float32 = append(b.Float32[:pos], b.Float32[pos+n:]...)
+			b.Delete(pos, n)
 
 		case FieldTypeInt256, FieldTypeDecimal256:
-			b.Int256 = b.Int256.Delete(pos, n)
+			b.Delete(pos, n)
 
 		case FieldTypeInt128, FieldTypeDecimal128:
-			b.Int128 = b.Int128.Delete(pos, n)
+			b.Delete(pos, n)
 
 		case FieldTypeInt64, FieldTypeDatetime, FieldTypeDecimal64:
-			b.Int64 = append(b.Int64[:pos], b.Int64[pos+n:]...)
+			b.Delete(pos, n)
 
 		case FieldTypeInt32, FieldTypeDecimal32:
-			b.Int32 = append(b.Int32[:pos], b.Int32[pos+n:]...)
+			b.Delete(pos, n)
 
 		case FieldTypeInt16:
-			b.Int16 = append(b.Int16[:pos], b.Int16[pos+n:]...)
+			b.Delete(pos, n)
 
 		case FieldTypeInt8:
-			b.Int8 = append(b.Int8[:pos], b.Int8[pos+n:]...)
+			b.Delete(pos, n)
 
 		case FieldTypeUint64:
-			b.Uint64 = append(b.Uint64[:pos], b.Uint64[pos+n:]...)
+			b.Delete(pos, n)
 
 		case FieldTypeUint32:
-			b.Uint32 = append(b.Uint32[:pos], b.Uint32[pos+n:]...)
+			b.Delete(pos, n)
 
 		case FieldTypeUint16:
-			b.Uint16 = append(b.Uint16[:pos], b.Uint16[pos+n:]...)
+			b.Delete(pos, n)
 
 		case FieldTypeUint8:
-			b.Uint8 = append(b.Uint8[:pos], b.Uint8[pos+n:]...)
+			b.Delete(pos, n)
 
 		default:
 			return fmt.Errorf("pack: invalid data type %s", field.Type)
@@ -2143,6 +2141,9 @@ func (p *Package) Clear() {
 
 func (p *Package) Release() {
 	for i := range p.blocks {
+		if p.blocks[i] == nil {
+			continue
+		}
 		p.blocks[i].Release()
 		p.blocks[i] = nil
 	}
@@ -2160,7 +2161,9 @@ func (p *Package) HeapSize() int {
 	var sz int = szPackage
 	sz += 8 * len(p.blocks)
 	for _, v := range p.blocks {
-		sz += v.HeapSize()
+		if v != nil {
+			sz += v.HeapSize()
+		}
 	}
 	return sz
 }
@@ -2169,7 +2172,7 @@ func (p *Package) PkColumn() []uint64 {
 	if p.pkindex < 0 {
 		return []uint64{}
 	}
-	return p.blocks[p.pkindex].Uint64
+	return p.blocks[p.pkindex].Slice().([]uint64)
 }
 
 // Searches id in primary key column and return index or -1 when not found
@@ -2182,7 +2185,7 @@ func (p *Package) PkIndex(id uint64, last int) (int, int) {
 
 	// search for id value in pk block (always an uint64) starting at last index
 	// this helps limiting search space when ids are pre-sorted
-	slice := p.blocks[p.pkindex].Uint64[last:]
+	slice := p.blocks[p.pkindex].Slice().([]uint64)[last:]
 	l := len(slice)
 
 	// for sparse pk spaces, use binary search on sorted slices
@@ -2204,7 +2207,7 @@ func (p *Package) PkIndexUnsorted(id uint64, last int) int {
 
 	// search for id value in pk block (always an uint64) starting at last index
 	// this helps limiting search space when ids are pre-sorted
-	slice := p.blocks[p.pkindex].Uint64[last:]
+	slice := p.blocks[p.pkindex].Slice().([]uint64)[last:]
 
 	// run full scan on unsorted slices
 	for i, v := range slice {
@@ -2247,7 +2250,7 @@ func (s *PackageSorter) Less(i, j int) bool { return s.block.Less(i, j) }
 
 func (s *PackageSorter) Swap(i, j int) {
 	for _, b := range s.Package.blocks {
-		if b.IsIgnore() {
+		if b == nil {
 			continue
 		}
 		b.Swap(i, j)

@@ -180,27 +180,27 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 		// type check was already performed in compile stage
 		switch c.Field.Type {
 		case FieldTypeInt256, FieldTypeDecimal256:
-			for i := 0; i < block.Int256.Len(); i++ {
+			for i := 0; i < block.Len(); i++ {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
-				if _, ok := c.int256map[block.Int256.Elem(i)]; ok {
+				if _, ok := c.int256map[block.Elem(i).(vec.Int256)]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt128, FieldTypeDecimal128:
-			for i := 0; i < block.Int128.Len(); i++ {
+			for i := 0; i < block.Len(); i++ {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
-				if _, ok := c.int128map[block.Int128.Elem(i)]; ok {
+				if _, ok := c.int128map[block.Elem(i).(vec.Int128)]; ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt64, FieldTypeDecimal64, FieldTypeDatetime:
-			for i, v := range block.Int64 {
+			for i, v := range block.Slice().([]int64) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -210,7 +210,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			}
 		case FieldTypeInt32:
-			for i, v := range block.Int32 {
+			for i, v := range block.Slice().([]int32) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -220,7 +220,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			}
 		case FieldTypeInt16:
-			for i, v := range block.Int16 {
+			for i, v := range block.Slice().([]int16) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -230,7 +230,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			}
 		case FieldTypeInt8:
-			for i, v := range block.Int8 {
+			for i, v := range block.Slice().([]int8) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -243,7 +243,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 			// optimization for primary key fields: where pk columns
 			// are sorted, so we can employ a more space/time efficient
 			// matching algorithm here
-			pk := block.Uint64
+			pk := block.Slice().([]uint64)
 			in := c.Value.([]uint64)
 			// journal pack is unsorted, so we fall back to using a map
 			if pkg.IsJournal() && c.uint64map == nil {
@@ -293,7 +293,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 			}
 
 		case FieldTypeUint32:
-			for i, v := range block.Uint32 {
+			for i, v := range block.Slice().([]uint32) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -303,7 +303,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			}
 		case FieldTypeUint16:
-			for i, v := range block.Uint16 {
+			for i, v := range block.Slice().([]uint16) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -313,7 +313,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			}
 		case FieldTypeUint8:
-			for i, v := range block.Uint8 {
+			for i, v := range block.Slice().([]uint8) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -331,8 +331,8 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
 			if c.hashmap != nil {
-				for i := 0; i < block.Bytes.Len(); i++ {
-					v := block.Bytes.Elem(i)
+				for i := 0; i < block.Len(); i++ {
+					v := block.Elem(i).([]byte)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -362,7 +362,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			} else {
 				for i := 0; i < block.Len(); i++ {
-					v := block.Bytes.Elem(i)
+					v := block.Elem(i).([]byte)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -377,8 +377,8 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 		case FieldTypeString:
 			strs := c.Value.([]string)
 			if c.hashmap != nil {
-				for i := 0; i < block.Bytes.Len(); i++ {
-					v := block.Bytes.Elem(i)
+				for i := 0; i < block.Len(); i++ {
+					v := block.Elem(i).([]byte)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -408,8 +408,8 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 					}
 				}
 			} else {
-				for i := 0; i < block.Bytes.Len(); i++ {
-					v := block.Bytes.Elem(i)
+				for i := 0; i < block.Len(); i++ {
+					v := block.Elem(i).([]byte)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -431,27 +431,27 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 		// type check was already performed in compile stage
 		switch c.Field.Type {
 		case FieldTypeInt256, FieldTypeDecimal256:
-			for i := 0; i < block.Int256.Len(); i++ {
+			for i := 0; i < block.Len(); i++ {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
-				if _, ok := c.int256map[block.Int256.Elem(i)]; !ok {
+				if _, ok := c.int256map[block.Elem(i).(vec.Int256)]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt128, FieldTypeDecimal128:
-			for i := 0; i < block.Int128.Len(); i++ {
+			for i := 0; i < block.Len(); i++ {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
-				if _, ok := c.int128map[block.Int128.Elem(i)]; !ok {
+				if _, ok := c.int128map[block.Elem(i).(vec.Int128)]; !ok {
 					bits.Set(i)
 				}
 			}
 		case FieldTypeInt64, FieldTypeDecimal64, FieldTypeDatetime:
-			for i, v := range block.Int64 {
+			for i, v := range block.Slice().([]int64) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -461,7 +461,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			}
 		case FieldTypeInt32, FieldTypeDecimal32:
-			for i, v := range block.Int32 {
+			for i, v := range block.Slice().([]int32) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -471,7 +471,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			}
 		case FieldTypeInt16:
-			for i, v := range block.Int16 {
+			for i, v := range block.Slice().([]int16) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -481,7 +481,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			}
 		case FieldTypeInt8:
-			for i, v := range block.Int8 {
+			for i, v := range block.Slice().([]int8) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -495,7 +495,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 			// are sorted, so we can employ a more space/time efficient
 			// matching algorithm here; Note that in contrast to IN
 			// conditions we negate the bitset in the end
-			pk := block.Uint64
+			pk := block.Slice().([]uint64)
 			in := c.Value.([]uint64)
 			// journal pack is unsorted, so we fall back to using a map
 			if pkg.IsJournal() && c.uint64map == nil {
@@ -545,7 +545,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			}
 		case FieldTypeUint32:
-			for i, v := range block.Uint32 {
+			for i, v := range block.Slice().([]uint32) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -555,7 +555,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			}
 		case FieldTypeUint16:
-			for i, v := range block.Uint16 {
+			for i, v := range block.Slice().([]uint16) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -565,7 +565,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			}
 		case FieldTypeUint8:
-			for i, v := range block.Uint8 {
+			for i, v := range block.Slice().([]uint8) {
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -582,8 +582,8 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 		// this case (i.e. the list contains all colliding values)
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
-			for i := 0; i < block.Bytes.Len(); i++ {
-				v := block.Bytes.Elem(i)
+			for i := 0; i < block.Len(); i++ {
+				v := block.Elem(i).([]byte)
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -628,8 +628,8 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 
 		case FieldTypeString:
 			strs := c.Value.([]string)
-			for i := 0; i < block.Bytes.Len(); i++ {
-				v := block.Bytes.Elem(i)
+			for i := 0; i < block.Len(); i++ {
+				v := block.Elem(i).([]byte)
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue

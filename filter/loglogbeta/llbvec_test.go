@@ -392,8 +392,7 @@ func BenchmarkFilterAddExactHashed(b *testing.B) {
 			continue
 		}
 		lastn = c.n
-		blk := block.NewBlock(block.BlockTypeUint64, 0, c.n)
-		blk.Uint64 = RandUint64(c.n)
+		blk := block.NewBlockFromSlice(block.BlockTypeUint64, 0, RandUint64(c.n))
 		b.Run(fmt.Sprintf("n=%d", c.n), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
@@ -410,8 +409,7 @@ func BenchmarkFilterCardinalityExactHashed(b *testing.B) {
 			continue
 		}
 		lastn = c.n
-		blk := block.NewBlock(block.BlockTypeUint64, 0, c.n)
-		blk.Uint64 = RandUint64(c.n)
+		blk := block.NewBlockFromSlice(block.BlockTypeUint64, 0, RandUint64(c.n))
 		h := blk.Hashes(nil)
 
 		b.Run(fmt.Sprintf("n=%d", c.n), func(b *testing.B) {

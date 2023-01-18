@@ -147,7 +147,6 @@ type Number interface {
 type Block interface {
 	DecRef() int64
 	IncRef() int64
-	IsIgnore() bool
 	IsDirty() bool
 	Type() BlockType
 	SetDirty()
@@ -155,18 +154,38 @@ type Block interface {
 	Release()
 	Hashes([]uint64) []uint64
 	HeapSize() int
-	Copy()
 	Compression() Compression
-	RawSlice() interface{}
+	Slice() interface{}
+	RangeSlice(int, int) interface{}
 	Clear()
 	Len() int
 	Cap() int
 	MaxStoredSize() int
 	Encode(*bytes.Buffer) (int, error)
+	Decode([]byte, int, int) error
 	MinMax() (interface{}, interface{})
 	CompressedSize() int
 	Less(int, int) bool
 	Swap(int, int)
+	Elem(int) interface{}
+	Set(int, interface{})
+	Append(interface{})
+	AppendFrom(Block, int, int)
+	ReplaceFrom(Block, int, int, int)
+	Delete(int, int)
+	Copy(Block)
+	Grow(int)
+	InsertFrom(Block, int, int, int)
+	Optimize()
+	Materialize()
+	MatchEqual(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchNotEqual(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchGreaterThan(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchGreaterThanEqual(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchLessThan(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchLessThanEqual(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchBetween(interface{}, interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	Dump() []byte
 }
 
 type blockCommon struct {
@@ -177,15 +196,15 @@ type blockCommon struct {
 	size  int // stored size, debug data
 }
 
-type BlockNum[N Number] struct {
+type BlockNum[T Number] struct {
 	blockCommon
 	//typ  BlockType
-	data []N
+	dataNum[T]
 }
 
 type BlockBytes struct {
 	blockCommon
-	Data dedup.ByteArray
+	data dedup.ByteArray
 }
 
 type BlockString struct {
@@ -209,6 +228,10 @@ type BlockInt256 struct {
 
 type BlockTime struct {
 	BlockNum[int64]
+}
+
+type dataNum[T Number] struct {
+	data []T
 }
 
 func (b *blockCommon) IncRef() int64 {
@@ -351,10 +374,6 @@ func (b *blockCommon) CompressedSize() int {
 	return b.size
 }
 
-func (b *blockCommon) IsIgnore() bool {
-	return b == nil
-}
-
 func (b *blockCommon) IsDirty() bool {
 	return b.dirty
 }
@@ -367,27 +386,27 @@ func (b *blockCommon) SetCompression(c Compression) {
 	b.comp = c
 }
 
-func (b *BlockNum[N]) RawSlice() interface{} {
+func (b *BlockNum[N]) Slice() interface{} {
 	return b.data
 }
 
-func (b *BlockBool) RawSlice() interface{} {
+func (b *BlockBool) Slice() interface{} {
 	return b.data.Slice()
 }
 
-func (b *BlockInt128) RawSlice() interface{} {
+func (b *BlockInt128) Slice() interface{} {
 	return b.data.Int128Slice()
 }
 
-func (b *BlockInt256) RawSlice() interface{} {
+func (b *BlockInt256) Slice() interface{} {
 	return b.data.Int256Slice()
 }
 
-func (b *BlockBytes) RawSlice() interface{} {
+func (b *BlockBytes) Slice() interface{} {
 	return b.data.Slice()
 }
 
-func (b *BlockString) RawSlice() interface{} {
+func (b *BlockString) Slice() interface{} {
 	s := make([]string, b.data.Len())
 	for i, v := range b.data.Slice() {
 		s[i] = compress.UnsafeGetString(v)
@@ -437,18 +456,18 @@ func (b *BlockBool) Elem(idx int) interface{} {
 	return b.data.IsSet(idx)
 }
 
-func (b *BlockString) Elem(idx int) interface{} {
-	if idx >= b.Len() {
-		return nil
-	}
-	return compress.UnsafeGetString(b.data.Elem(idx))
-}
-
 func (b *BlockBytes) Elem(idx int) interface{} {
 	if idx >= b.Len() {
 		return nil
 	}
 	return b.data.Elem(idx)
+}
+
+func (b *BlockString) Elem(idx int) interface{} {
+	if idx >= b.Len() {
+		return nil
+	}
+	return compress.UnsafeGetString(b.data.Elem(idx))
 }
 
 func (b *BlockInt128) Elem(idx int) interface{} {
@@ -463,6 +482,94 @@ func (b *BlockInt256) Elem(idx int) interface{} {
 		return nil
 	}
 	return b.data.Elem(idx)
+}
+
+func (b *BlockNum[T]) Set(i int, val interface{}) {
+	b.data[i] = val.(T)
+}
+
+func (b *BlockInt128) Set(i int, val interface{}) {
+	b.data.Set(i, val.(vec.Int128))
+}
+
+func (b *BlockInt256) Set(i int, val interface{}) {
+	b.data.Set(i, val.(vec.Int256))
+}
+
+func (b *BlockBool) Set(i int, val interface{}) {
+	if val.(bool) {
+		b.data.Set(i)
+	} else {
+		b.data.Clear(i)
+	}
+}
+
+func (b *BlockBytes) Set(i int, val interface{}) {
+	b.data.Set(i, val.([]byte))
+}
+
+func (b *BlockNum[T]) Grow(n int) {
+	b.data = append(b.data, make([]T, n)...)
+}
+
+func (b *BlockInt256) Grow(n int) {
+	b.data.AppendFrom(vec.MakeInt256LLSlice(n))
+}
+
+func (b *BlockInt128) Grow(n int) {
+	b.data.AppendFrom(vec.MakeInt128LLSlice(n))
+}
+
+func (b *BlockBytes) Grow(n int) {
+	b.data.Append(make([][]byte, n)...)
+}
+
+func (b *BlockBool) Grow(n int) {
+	b.data.Grow(b.data.Len() + n)
+}
+
+func (b *BlockNum[T]) Append(val interface{}) {
+	b.data = append(b.data, val.(T))
+}
+
+func (b *BlockInt128) Append(val interface{}) {
+	b.data.Append(val.(vec.Int128))
+}
+
+func (b *BlockInt256) Append(val interface{}) {
+	b.data.Append(val.(vec.Int256))
+}
+
+func (b *BlockBytes) Append(val interface{}) {
+	b.data.Append(val.([]byte))
+}
+
+func (b *BlockBool) Append(val interface{}) {
+	l := b.data.Len()
+	b.data.Grow(l + 1)
+	if val.(bool) {
+		b.data.Set(l)
+	}
+}
+
+func (b *BlockNum[T]) Delete(pos, n int) {
+	b.data = append(b.data[:pos], b.data[pos+n:]...)
+}
+
+func (b *BlockBytes) Delete(pos, n int) {
+	b.data.Delete(pos, n)
+}
+
+func (b *BlockBool) Delete(pos, n int) {
+	b.data.Delete(pos, n)
+}
+
+func (b *BlockInt256) Delete(pos, n int) {
+	b.data = b.data.Delete(pos, n)
+}
+
+func (b *BlockInt128) Delete(pos, n int) {
+	b.data = b.data.Delete(pos, n)
 }
 
 /*func AllocBlock() *Block {
@@ -547,63 +654,301 @@ func NewBlock(typ BlockType, comp Compression, sz int) Block {
 	return bl
 }
 
-func (b *BlockNum[T]) Copy(src *BlockNum[T]) {
-	if src == nil || b.Type() != src.Type() {
-		return
+func NewBlockFromSlice(typ BlockType, comp Compression, slice interface{}) Block {
+	var bl Block
+	switch typ {
+	case BlockTypeTime:
+		b := new(BlockTime)
+		b.data = slice.([]int64)
+		bl = b
+	case BlockTypeInt64:
+		b := new(BlockNum[int64])
+		b.data = slice.([]int64)
+		bl = b
+	case BlockTypeFloat64:
+		b := new(BlockNum[float64])
+		b.data = slice.([]float64)
+		bl = b
+	case BlockTypeFloat32:
+		b := new(BlockNum[float32])
+		b.data = slice.([]float32)
+		bl = b
+	case BlockTypeInt32:
+		b := new(BlockNum[int32])
+		b.data = slice.([]int32)
+		bl = b
+	case BlockTypeInt16:
+		b := new(BlockNum[int16])
+		b.data = slice.([]int16)
+		bl = b
+	case BlockTypeInt8:
+		b := new(BlockNum[int8])
+		b.data = slice.([]int8)
+		bl = b
+	case BlockTypeUint64:
+		b := new(BlockNum[uint64])
+		b.data = slice.([]uint64)
+		bl = b
+	case BlockTypeUint32:
+		b := new(BlockNum[uint32])
+		b.data = slice.([]uint32)
+		bl = b
+	case BlockTypeUint16:
+		b := new(BlockNum[uint16])
+		b.data = slice.([]uint16)
+		bl = b
+	case BlockTypeUint8:
+		b := new(BlockNum[uint8])
+		b.data = slice.([]uint8)
+		bl = b
+		/*	case BlockTypeBool:
+				b := new(BlockBool)
+				b.data = vec.NewBitset(sz).Reset()
+				bl = b
+			case BlockTypeString:
+				b := new(BlockString)
+				b.data = dedup.NewByteArray(sz)
+				bl = b
+			case BlockTypeBytes:
+				b := new(BlockBytes)
+				b.data = dedup.NewByteArray(sz)
+				bl = b*/
+	case BlockTypeInt128:
+		b := new(BlockInt128)
+		b.data = slice.(vec.Int128LLSlice)
+		bl = b
+	case BlockTypeInt256:
+		b := new(BlockInt256)
+		b.data = slice.(vec.Int256LLSlice)
+		bl = b
+	default:
+		errorString := fmt.Sprintf("NewBlockFromSlice not yet implemented for Type %s", typ.String())
+		panic(errorString)
 	}
-	b.size = src.size
-	b.dirty = true
-	b.data = b.data[:len(src.data)]
-	copy(b.data, src.data)
+	//b.typ = typ
+	bl.SetCompression(comp)
+	bl.SetDirty()
+	return bl
 }
 
-func (b *BlockBool) Copy(src *BlockBool) {
-	if src == nil || b.Type() != src.Type() {
+func (b *BlockTime) Copy(src Block) {
+	if src == nil {
 		return
 	}
-	b.size = src.size
+	sb := src.(*BlockTime)
+	b.size = sb.size
 	b.dirty = true
-	b.data = vec.NewBitsetFromBytes(src.data.Bytes(), src.data.Len())
+	b.data = b.data[:sb.size]
+	copy(b.data, sb.data)
 }
 
-func (b *BlockBytes) Copy(src *BlockBytes) {
-	if src == nil || b.Type() != src.Type() {
+func (b *BlockNum[T]) Copy(src Block) {
+	if src == nil {
 		return
 	}
-	b.size = src.size
+	sb := src.(*BlockNum[T])
+	b.size = sb.size
 	b.dirty = true
-	b.data = dedup.NewByteArray(src.data.Len())
-	b.data.AppendFrom(src.data)
+	b.data = b.data[:sb.size]
+	copy(b.data, sb.data)
 }
 
-func (b *BlockInt128) Copy(src *BlockInt128) {
-	if src == nil || b.Type() != src.Type() {
+func (b *BlockBool) Copy(src Block) {
+	if src == nil {
 		return
 	}
-	b.size = src.size
+	sb := src.(*BlockBool)
+	b.size = sb.size
+	b.dirty = true
+	b.data = vec.NewBitsetFromBytes(sb.data.Bytes(), sb.size)
+}
+
+func (b *BlockBytes) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockBytes)
+	b.size = sb.size
+	b.dirty = true
+	b.data = dedup.NewByteArray(b.size)
+	b.data.AppendFrom(sb.data)
+}
+
+func (b *BlockString) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockString)
+	b.size = sb.size
+	b.dirty = true
+	b.data = dedup.NewByteArray(b.size)
+	b.data.AppendFrom(sb.data)
+}
+
+func (b *BlockInt128) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockInt128)
+	b.size = sb.size
 	b.dirty = true
 	sz := len(b.data.X0)
 	b.data.X0 = b.data.X0[:sz]
-	copy(b.data.X0, src.data.X0)
+	copy(b.data.X0, sb.data.X0)
 	b.data.X1 = b.data.X1[:sz]
-	copy(b.data.X1, src.data.X1)
+	copy(b.data.X1, sb.data.X1)
 }
 
-func (b *BlockInt256) Copy(src *BlockInt256) {
+func (b *BlockInt256) Copy(src Block) {
 	if src == nil || b.Type() != src.Type() {
 		return
 	}
-	b.size = src.size
+	sb := src.(*BlockInt256)
+	b.size = sb.size
 	b.dirty = true
 	sz := len(b.data.X0)
 	b.data.X0 = b.data.X0[:sz]
-	copy(b.data.X0, src.data.X0)
+	copy(b.data.X0, sb.data.X0)
 	b.data.X1 = b.data.X1[:sz]
-	copy(b.data.X1, src.data.X1)
+	copy(b.data.X1, sb.data.X1)
 	b.data.X2 = b.data.X2[:sz]
-	copy(b.data.X2, src.data.X2)
+	copy(b.data.X2, sb.data.X2)
 	b.data.X3 = b.data.X3[:sz]
-	copy(b.data.X3, src.data.X3)
+	copy(b.data.X3, sb.data.X3)
+}
+
+func (b *BlockTime) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockTime)
+	b.data = append(b.data, sb.data[pos:pos+len]...)
+}
+
+func (b *BlockNum[T]) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockNum[T])
+	b.data = append(b.data, sb.data[pos:pos+len]...)
+}
+
+func (b *BlockInt256) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockInt256)
+	b.data.AppendFrom(sb.data.Subslice(pos, pos+len))
+}
+
+func (b *BlockInt128) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockInt128)
+	b.data.AppendFrom(sb.data.Subslice(pos, pos+len))
+}
+
+func (b *BlockBytes) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockBytes)
+	if len == 1 {
+		b.data.Append(sb.data.Elem(pos))
+	} else {
+		b.data.Append(sb.data.Subslice(pos, pos+len)...)
+	}
+}
+
+func (b *BlockString) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockString)
+	if len == 1 {
+		b.data.Append(sb.data.Elem(pos))
+	} else {
+		b.data.Append(sb.data.Subslice(pos, pos+len)...)
+	}
+}
+
+func (b *BlockBool) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockBool)
+	b.data.Append(sb.data, pos, len)
+}
+
+func (b *BlockTime) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockTime)
+	copy(b.data[dpos:], sb.data[spos:spos+len])
+}
+
+func (b *BlockNum[T]) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockNum[T])
+	copy(b.data[dpos:], sb.data[spos:spos+len])
+}
+
+func (b *BlockInt256) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt256)
+	b.data.Copy(sb.data, dpos, spos, len)
+}
+
+func (b *BlockInt128) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt128)
+	b.data.Copy(sb.data, dpos, spos, len)
+}
+
+func (b *BlockBytes) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockBytes)
+	b.data.Copy(sb.data, dpos, spos, len)
+}
+
+func (b *BlockString) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockBytes)
+	b.data.Copy(sb.data, dpos, spos, len)
+}
+
+func (b *BlockBool) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockBool)
+	b.data.Replace(sb.data, spos, len, dpos)
+}
+
+func (b *BlockTime) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockTime)
+	b.data = vec.Int64.Insert(b.data, dpos, sb.data[spos:spos+len]...)
+}
+
+func (b *BlockNum[T]) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockNum[T])
+	switch b.Type() {
+	case BlockTypeFloat64:
+		b.data = interface{}(vec.Float64.Insert(interface{}(b.data).([]float64), dpos, interface{}(sb.data).([]float64)[spos:spos+len]...)).([]T)
+	case BlockTypeFloat32:
+		b.data = interface{}(vec.Float32.Insert(interface{}(b.data).([]float32), dpos, interface{}(sb.data).([]float32)[spos:spos+len]...)).([]T)
+	case BlockTypeInt64:
+		b.data = interface{}(vec.Int64.Insert(interface{}(b.data).([]int64), dpos, interface{}(sb.data).([]int64)[spos:spos+len]...)).([]T)
+	case BlockTypeInt32:
+		b.data = interface{}(vec.Int32.Insert(interface{}(b.data).([]int32), dpos, interface{}(sb.data).([]int32)[spos:spos+len]...)).([]T)
+	case BlockTypeInt16:
+		b.data = interface{}(vec.Int16.Insert(interface{}(b.data).([]int16), dpos, interface{}(sb.data).([]int16)[spos:spos+len]...)).([]T)
+	case BlockTypeInt8:
+		b.data = interface{}(vec.Int8.Insert(interface{}(b.data).([]int8), dpos, interface{}(sb.data).([]int8)[spos:spos+len]...)).([]T)
+	case BlockTypeUint64:
+		b.data = interface{}(vec.Uint64.Insert(interface{}(b.data).([]uint64), dpos, interface{}(sb.data).([]uint64)[spos:spos+len]...)).([]T)
+	case BlockTypeUint32:
+		b.data = interface{}(vec.Uint32.Insert(interface{}(b.data).([]uint32), dpos, interface{}(sb.data).([]uint32)[spos:spos+len]...)).([]T)
+	case BlockTypeUint16:
+		b.data = interface{}(vec.Uint16.Insert(interface{}(b.data).([]uint16), dpos, interface{}(sb.data).([]uint16)[spos:spos+len]...)).([]T)
+	case BlockTypeUint8:
+		b.data = interface{}(vec.Uint8.Insert(interface{}(b.data).([]uint8), dpos, interface{}(sb.data).([]uint8)[spos:spos+len]...)).([]T)
+	}
+}
+
+func (b *BlockBytes) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockBytes)
+	b.data.Insert(dpos, sb.data.Subslice(spos, spos+len)...)
+}
+
+func (b *BlockString) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockString)
+	b.data.Insert(dpos, sb.data.Subslice(spos, spos+len)...)
+}
+
+func (b *BlockBool) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockBool)
+	b.data.Insert(sb.data, spos, len, dpos)
+}
+
+func (b *BlockInt256) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt256)
+	b.data.Insert(dpos, sb.data.Subslice(spos, spos+len))
+}
+
+func (b *BlockInt128) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt128)
+	b.data.Insert(dpos, sb.data.Subslice(spos, spos+len))
 }
 
 func (b *BlockNum[T]) Len() int {
@@ -653,9 +998,6 @@ func (b *BlockInt256) Cap() int {
 // This size hint is used to properly dimension the encoer/decoder buffers
 // as is required by LZ4 and to avoid memcopy during write.
 func (b *BlockNum[T]) MaxStoredSize() int {
-	if b.IsIgnore() {
-		return 0
-	}
 	var sz int
 	switch b.Type() {
 	case BlockTypeFloat64:
@@ -683,81 +1025,54 @@ func (b *BlockNum[T]) MaxStoredSize() int {
 }
 
 func (b *BlockBool) MaxStoredSize() int {
-	if b.IsIgnore() {
-		return 0
-	}
 	var sz int
 	sz = compress.BitsetEncodedSize(b.data)
 	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
 }
 
 func (b *BlockBytes) MaxStoredSize() int {
-	if b.IsIgnore() {
-		return 0
-	}
 	var sz int
 	sz = b.data.MaxEncodedSize()
 	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
 }
 
 func (b *BlockInt128) MaxStoredSize() int {
-	if b.IsIgnore() {
-		return 0
-	}
 	var sz int
 	sz = compress.Int128ArrayEncodedSize(b.data)
 	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
 }
 
 func (b *BlockInt256) MaxStoredSize() int {
-	if b.IsIgnore() {
-		return 0
-	}
 	var sz int
 	sz = compress.Int256ArrayEncodedSize(b.data)
 	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
 }
 
 func (b *BlockNum[T]) HeapSize() int {
-	if b.IsIgnore() {
-		return 0
-	}
 	sz := BlockSz
 	sz += len(b.data) * int(unsafe.Sizeof(new(T)))
 	return sz
 }
 
 func (b *BlockBool) HeapSize() int {
-	if b.IsIgnore() {
-		return 0
-	}
 	sz := BlockSz
 	sz += b.data.HeapSize()
 	return sz
 }
 
 func (b *BlockBytes) HeapSize() int {
-	if b.IsIgnore() {
-		return 0
-	}
 	sz := BlockSz
 	sz += b.data.HeapSize()
 	return sz
 }
 
 func (b *BlockInt128) HeapSize() int {
-	if b.IsIgnore() {
-		return 0
-	}
 	sz := BlockSz
 	sz += b.data.Len() * 16
 	return sz
 }
 
 func (b *BlockInt256) HeapSize() int {
-	if b.IsIgnore() {
-		return 0
-	}
 	sz := BlockSz
 	sz += b.data.Len() * 32
 	return sz
@@ -803,33 +1118,21 @@ func (b *BlockInt256) Clear() {
 }
 
 func (b *BlockNum[T]) Release() {
-	if b == nil {
-		return
-	}
 	arena.Free(b.Type(), b.data[:0])
 	b.data = nil
 }
 
 func (b *BlockBool) Release() {
-	if b == nil {
-		return
-	}
 	b.data.Close()
 	b.data = nil
 }
 
 func (b *BlockBytes) Release() {
-	if b == nil {
-		return
-	}
 	b.data.Release()
 	b.data = nil
 }
 
 func (b *BlockInt128) Release() {
-	if b == nil {
-		return
-	}
 	arena.Free(BlockTypeInt64, b.data.X0[:0])
 	arena.Free(BlockTypeUint64, b.data.X1[:0])
 	b.data.X0 = nil
@@ -837,9 +1140,6 @@ func (b *BlockInt128) Release() {
 }
 
 func (b *BlockInt256) Release() {
-	if b == nil {
-		return
-	}
 	arena.Free(BlockTypeInt64, b.data.X0[:0])
 	arena.Free(BlockTypeUint64, b.data.X1[:0])
 	arena.Free(BlockTypeUint64, b.data.X2[:0])
@@ -980,146 +1280,248 @@ func (b *BlockInt256) Encode(buf *bytes.Buffer) (int, error) {
 	return n, nil
 }
 
-func (b *Block) Decode(buf []byte, sz, stored int) error {
-	var err error
-	b.typ, err = readBlockType(buf)
+func (b *BlockTime) Decode(buf []byte, sz, stored int) error {
+	typ, err := readBlockType(buf)
 	if err != nil {
 		return err
+	}
+	if typ != b.Type() {
+		return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
+			typ, typ.String(), b.Type(), b.Type().String())
 	}
 	b.dirty = false
 	b.size = stored
 
-	switch b.typ {
-	case BlockTime:
-		if b.Int64 == nil || cap(b.Int64) < sz {
-			arena.Free(b.typ, b.Int64)
-			b.Int64 = arena.Alloc(b.typ, sz).([]int64)
-		}
-		b.Int64, err = decodeTimeBlock(buf, b.Int64[:0])
+	if b.data == nil || cap(b.data) < sz {
+		arena.Free(typ, b.data)
+		b.data = arena.Alloc(typ, sz).([]int64)
+	}
+	b.data, err = decodeTimeBlock(buf, b.data[:0])
+	return err
+}
 
-	case BlockFloat64:
-		if b.Float64 == nil || cap(b.Float64) < sz {
-			arena.Free(b.typ, b.Float64)
-			b.Float64 = arena.Alloc(b.typ, sz).([]float64)
-		}
-		b.Float64, err = decodeFloat64Block(buf, b.Float64[:0])
+func (b *BlockString) Decode(buf []byte, sz, stored int) error {
+	typ, err := readBlockType(buf)
+	if err != nil {
+		return err
+	}
+	if typ != b.Type() {
+		return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
+			typ, typ.String(), b.Type(), b.Type().String())
+	}
+	b.dirty = false
+	b.size = stored
 
-	case BlockFloat32:
-		if b.Float32 == nil || cap(b.Float32) < sz {
-			arena.Free(b.typ, b.Float32)
-			b.Float32 = arena.Alloc(b.typ, sz).([]float32)
-		}
-		b.Float32, err = decodeFloat32Block(buf, b.Float32[:0])
+	b.data, err = decodeStringBlock(buf, b.data, sz)
+	return err
+}
 
-	case BlockInt64:
-		if b.Int64 == nil || cap(b.Int64) < sz {
-			arena.Free(b.typ, b.Int64)
-			b.Int64 = arena.Alloc(b.typ, sz).([]int64)
-		}
-		b.Int64, err = decodeInt64Block(buf, b.Int64[:0])
+func (b *BlockBytes) Decode(buf []byte, sz, stored int) error {
+	typ, err := readBlockType(buf)
+	if err != nil {
+		return err
+	}
+	if typ != b.Type() {
+		return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
+			typ, typ.String(), b.Type(), b.Type().String())
+	}
+	b.dirty = false
+	b.size = stored
 
-	case BlockInt32:
-		if b.Int32 == nil || cap(b.Int32) < sz {
-			arena.Free(b.typ, b.Int32)
-			b.Int32 = arena.Alloc(b.typ, sz).([]int32)
-		}
-		b.Int32, err = decodeInt32Block(buf, b.Int32[:0])
+	b.data, err = decodeBytesBlock(buf, b.data, sz)
+	return err
+}
 
-	case BlockInt16:
-		if b.Int16 == nil || cap(b.Int16) < sz {
-			arena.Free(b.typ, b.Int16)
-			b.Int16 = arena.Alloc(b.typ, sz).([]int16)
-		}
-		b.Int16, err = decodeInt16Block(buf, b.Int16[:0])
+func (b *BlockBool) Decode(buf []byte, sz, stored int) error {
+	typ, err := readBlockType(buf)
+	if err != nil {
+		return err
+	}
+	if typ != b.Type() {
+		return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
+			typ, typ.String(), b.Type(), b.Type().String())
+	}
+	b.dirty = false
+	b.size = stored
 
-	case BlockInt8:
-		if b.Int8 == nil || cap(b.Int8) < sz {
-			arena.Free(b.typ, b.Int8)
-			b.Int8 = arena.Alloc(b.typ, sz).([]int8)
-		}
-		b.Int8, err = decodeInt8Block(buf, b.Int8[:0])
+	if b.data == nil || b.data.Cap() < sz {
+		b.data = vec.NewBitset(sz)
+		b.data.Reset()
+	} else {
+		b.data.Grow(sz).Reset()
+	}
+	b.data, err = decodeBoolBlock(buf, b.data)
 
-	case BlockUint64:
-		if b.Uint64 == nil || cap(b.Uint64) < sz {
-			arena.Free(b.typ, b.Uint64)
-			b.Uint64 = arena.Alloc(b.typ, sz).([]uint64)
-		}
-		b.Uint64, err = decodeUint64Block(buf, b.Uint64[:0])
+	return err
+}
 
-	case BlockUint32:
-		if b.Uint32 == nil || cap(b.Uint32) < sz {
-			arena.Free(b.typ, b.Uint32)
-			b.Uint32 = arena.Alloc(b.typ, sz).([]uint32)
-		}
-		b.Uint32, err = decodeUint32Block(buf, b.Uint32[:0])
+func (b *BlockInt128) Decode(buf []byte, sz, stored int) error {
+	typ, err := readBlockType(buf)
+	if err != nil {
+		return err
+	}
+	if typ != b.Type() {
+		return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
+			typ, typ.String(), b.Type(), b.Type().String())
+	}
+	b.dirty = false
+	b.size = stored
 
-	case BlockUint16:
-		if b.Uint16 == nil || cap(b.Uint16) < sz {
-			arena.Free(b.typ, b.Uint16)
-			b.Uint16 = arena.Alloc(b.typ, sz).([]uint16)
-		}
-		b.Uint16, err = decodeUint16Block(buf, b.Uint16[:0])
+	if b.data.X0 == nil || cap(b.data.X0) < sz {
+		// FIXME: should we not free here int64 slice
+		arena.Free(typ, b.data.X0)
+		b.data.X0 = arena.Alloc(BlockTypeInt64, sz).([]int64)
+	}
+	if b.data.X1 == nil || cap(b.data.X1) < sz {
+		// FIXME: should we not free here uint64 slice
+		arena.Free(typ, b.data.X1)
+		b.data.X1 = arena.Alloc(BlockTypeUint64, sz).([]uint64)
+	}
+	b.data.X0 = b.data.X0[:0]
+	b.data.X1 = b.data.X1[:0]
+	b.data, err = decodeInt128Block(buf, b.data)
 
-	case BlockUint8:
-		if b.Uint8 == nil || cap(b.Uint8) < sz {
-			arena.Free(b.typ, b.Uint8)
-			b.Uint8 = arena.Alloc(b.typ, sz).([]uint8)
-		}
-		b.Uint8, err = decodeUint8Block(buf, b.Uint8[:0])
+	return err
+}
 
-	case BlockBool:
-		if b.Bits == nil || b.Bits.Cap() < sz {
-			b.Bits = vec.NewBitset(sz)
-			b.Bits.Reset()
-		} else {
-			b.Bits.Grow(sz).Reset()
-		}
-		b.Bits, err = decodeBoolBlock(buf, b.Bits)
+func (b *BlockInt256) Decode(buf []byte, sz, stored int) error {
+	typ, err := readBlockType(buf)
+	if err != nil {
+		return err
+	}
+	if typ != b.Type() {
+		return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
+			typ, typ.String(), b.Type(), b.Type().String())
+	}
+	b.dirty = false
+	b.size = stored
 
-	case BlockString:
-		b.Bytes, err = decodeStringBlock(buf, b.Bytes, sz)
+	if b.data.X0 == nil || cap(b.data.X0) < sz {
+		// FIXME: should we not free here uint64 slice
+		arena.Free(typ, b.data.X0)
+		b.data.X0 = arena.Alloc(BlockTypeInt64, sz).([]int64)
+	}
+	if b.data.X1 == nil || cap(b.data.X1) < sz {
+		// FIXME: should we not free here uint64 slice
+		arena.Free(typ, b.data.X1)
+		b.data.X1 = arena.Alloc(BlockTypeUint64, sz).([]uint64)
+	}
+	if b.data.X2 == nil || cap(b.data.X2) < sz {
+		// FIXME: should we not free here uint64 slice
+		arena.Free(typ, b.data.X2)
+		b.data.X2 = arena.Alloc(BlockTypeUint64, sz).([]uint64)
+	}
+	if b.data.X3 == nil || cap(b.data.X3) < sz {
+		// FIXME: should we not free here uint64 slice
+		arena.Free(typ, b.data.X3)
+		b.data.X3 = arena.Alloc(BlockTypeUint64, sz).([]uint64)
+	}
+	b.data.X0 = b.data.X0[:0]
+	b.data.X1 = b.data.X1[:0]
+	b.data.X2 = b.data.X2[:0]
+	b.data.X3 = b.data.X3[:0]
+	b.data, err = decodeInt256Block(buf, b.data)
 
-	case BlockBytes:
-		b.Bytes, err = decodeBytesBlock(buf, b.Bytes, sz)
+	return err
+}
 
-	case BlockInt128:
-		if b.Int128.X0 == nil || cap(b.Int128.X0) < sz {
-			arena.Free(b.typ, b.Int128.X0)
-			b.Int128.X0 = arena.Alloc(BlockInt64, sz).([]int64)
-		}
-		if b.Int128.X1 == nil || cap(b.Int128.X1) < sz {
-			arena.Free(b.typ, b.Int128.X1)
-			b.Int128.X1 = arena.Alloc(BlockUint64, sz).([]uint64)
-		}
-		b.Int128.X0 = b.Int128.X0[:0]
-		b.Int128.X1 = b.Int128.X1[:0]
-		b.Int128, err = decodeInt128Block(buf, b.Int128)
+func (b *BlockNum[T]) Decode(buf []byte, sz, stored int) error {
+	typ, err := readBlockType(buf)
+	if err != nil {
+		return err
+	}
+	if typ != b.Type() {
+		return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
+			typ, typ.String(), b.Type(), b.Type().String())
+	}
+	b.dirty = false
+	b.size = stored
 
-	case BlockInt256:
-		if b.Int256.X0 == nil || cap(b.Int256.X0) < sz {
-			arena.Free(b.typ, b.Int256.X0)
-			b.Int256.X0 = arena.Alloc(BlockInt64, sz).([]int64)
+	var tmp interface{}
+
+	switch typ {
+	case BlockTypeFloat64:
+		if b.data == nil || cap(b.data) < sz {
+			arena.Free(typ, b.data)
+			b.data = arena.Alloc(typ, sz).([]T)
 		}
-		if b.Int256.X1 == nil || cap(b.Int256.X1) < sz {
-			arena.Free(b.typ, b.Int256.X1)
-			b.Int256.X1 = arena.Alloc(BlockUint64, sz).([]uint64)
+		tmp, err = decodeFloat64Block(buf, interface{}(b.data).([]float64)[:0])
+		b.data = tmp.([]T)
+
+	case BlockTypeFloat32:
+		if b.data == nil || cap(b.data) < sz {
+			arena.Free(typ, b.data)
+			b.data = arena.Alloc(typ, sz).([]T)
 		}
-		if b.Int256.X2 == nil || cap(b.Int256.X2) < sz {
-			arena.Free(b.typ, b.Int256.X2)
-			b.Int256.X2 = arena.Alloc(BlockUint64, sz).([]uint64)
+		tmp, err = decodeFloat32Block(buf, interface{}(b.data).([]float32)[:0])
+		b.data = tmp.([]T)
+
+	case BlockTypeInt64:
+		if b.data == nil || cap(b.data) < sz {
+			arena.Free(typ, b.data)
+			b.data = arena.Alloc(typ, sz).([]T)
 		}
-		if b.Int256.X3 == nil || cap(b.Int256.X3) < sz {
-			arena.Free(b.typ, b.Int256.X3)
-			b.Int256.X3 = arena.Alloc(BlockUint64, sz).([]uint64)
+		tmp, err = decodeInt64Block(buf, interface{}(b.data).([]int64)[:0])
+		b.data = tmp.([]T)
+
+	case BlockTypeInt32:
+		if b.data == nil || cap(b.data) < sz {
+			arena.Free(typ, b.data)
+			b.data = arena.Alloc(typ, sz).([]T)
 		}
-		b.Int256.X0 = b.Int256.X0[:0]
-		b.Int256.X1 = b.Int256.X1[:0]
-		b.Int256.X2 = b.Int256.X2[:0]
-		b.Int256.X3 = b.Int256.X3[:0]
-		b.Int256, err = decodeInt256Block(buf, b.Int256)
+		tmp, err = decodeInt32Block(buf, interface{}(b.data).([]int32)[:0])
+		b.data = tmp.([]T)
+
+	case BlockTypeInt16:
+		if b.data == nil || cap(b.data) < sz {
+			arena.Free(typ, b.data)
+			b.data = arena.Alloc(typ, sz).([]T)
+		}
+		tmp, err = decodeInt16Block(buf, interface{}(b.data).([]int16)[:0])
+		b.data = tmp.([]T)
+
+	case BlockTypeInt8:
+		if b.data == nil || cap(b.data) < sz {
+			arena.Free(typ, b.data)
+			b.data = arena.Alloc(typ, sz).([]T)
+		}
+		tmp, err = decodeInt8Block(buf, interface{}(b.data).([]int8)[:0])
+		b.data = tmp.([]T)
+
+	case BlockTypeUint64:
+		if b.data == nil || cap(b.data) < sz {
+			arena.Free(typ, b.data)
+			b.data = arena.Alloc(typ, sz).([]T)
+		}
+		tmp, err = decodeUint64Block(buf, interface{}(b.data).([]uint64)[:0])
+		b.data = tmp.([]T)
+
+	case BlockTypeUint32:
+		if b.data == nil || cap(b.data) < sz {
+			arena.Free(typ, b.data)
+			b.data = arena.Alloc(typ, sz).([]T)
+		}
+		tmp, err = decodeUint32Block(buf, interface{}(b.data).([]uint32)[:0])
+		b.data = tmp.([]T)
+
+	case BlockTypeUint16:
+		if b.data == nil || cap(b.data) < sz {
+			arena.Free(typ, b.data)
+			b.data = arena.Alloc(typ, sz).([]T)
+		}
+		tmp, err = decodeUint16Block(buf, interface{}(b.data).([]uint16)[:0])
+		b.data = tmp.([]T)
+
+	case BlockTypeUint8:
+		if b.data == nil || cap(b.data) < sz {
+			arena.Free(typ, b.data)
+			b.data = arena.Alloc(typ, sz).([]T)
+		}
+		tmp, err = decodeUint8Block(buf, interface{}(b.data).([]uint8)[:0])
+		b.data = tmp.([]T)
 
 	default:
-		err = fmt.Errorf("block: invalid data type %s (%[1]d)", b.typ)
+		err = fmt.Errorf("block: invalid data type %s (%[1]d)", typ)
 	}
 	return err
 }
@@ -1167,7 +1569,7 @@ func (b *BlockString) MinMax() (interface{}, interface{}) {
 	return compress.UnsafeGetString(min), compress.UnsafeGetString(max)
 }
 
-func (b *BlockBytes) Bytes() (interface{}, interface{}) {
+func (b *BlockBytes) MinMax() (interface{}, interface{}) {
 	return b.data.MinMax()
 }
 
@@ -1332,4 +1734,414 @@ func (b *BlockInt256) Hashes(res []uint64) []uint64 {
 		res[i] = xxhash.Sum64(buf[:])
 	}
 	return res
+}
+
+func (b *blockCommon) Optimize() {}
+
+func (b *BlockBytes) Optimize() {
+	if b.data.IsOptimized() {
+		return
+	}
+	// log.Infof("Pack %d: optimize %T rows=%d len=%d cap=%d", p.key, b.Bytes, p.nValues, b.Bytes.Len(), b.Bytes.Cap())
+	opt := b.data.Optimize()
+	b.data.Release()
+	b.data = opt
+	// log.Infof("Pack %d: optimized to %T len=%d cap=%d", p.key, b.Bytes, b.Bytes.Len(), b.Bytes.Cap())
+}
+
+func (b *blockCommon) Materialize() {}
+
+func (b *BlockBytes) Materialize() {
+	if b.data.IsMaterialized() {
+		return
+	}
+	// log.Infof("Pack %d: materialize %T rows=%d len=%d cap=%d", p.key, b.Bytes, p.nValues, b.Bytes.Len(), b.Bytes.Cap())
+	mat := b.data.Materialize()
+	b.data.Release()
+	b.data = mat
+	// log.Infof("Pack %d: materialized to %T len=%d cap=%d", p.key, b.Bytes, b.Bytes.Len(), b.Bytes.Cap())
+}
+
+func (b *BlockBytes) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchEqual(val.([]byte), bits, mask)
+}
+
+func (b *BlockString) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchEqual([]byte(val.(string)), bits, mask)
+}
+
+func (b *BlockTime) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt64Equal(b.data, val.(time.Time).UnixNano(), bits, mask)
+}
+
+func (b *BlockBool) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	if val.(bool) {
+		return bits.Copy(b.data)
+	} else {
+		return bits.Copy(b.data).Neg()
+	}
+}
+
+func (b *BlockInt256) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt256Equal(b.data, val.(vec.Int256), bits, mask)
+}
+
+func (b *BlockInt128) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt128Equal(b.data, val.(vec.Int128), bits, mask)
+}
+
+func (b *BlockNum[T]) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	switch b.Type() {
+	case BlockTypeFloat64:
+		return vec.MatchFloat64Equal(interface{}(b.data).([]float64), val.(float64), bits, mask)
+	case BlockTypeFloat32:
+		return vec.MatchFloat32Equal(interface{}(b.data).([]float32), val.(float32), bits, mask)
+	case BlockTypeInt64:
+		return vec.MatchInt64Equal(interface{}(b.data).([]int64), val.(int64), bits, mask)
+	case BlockTypeInt32:
+		return vec.MatchInt32Equal(interface{}(b.data).([]int32), val.(int32), bits, mask)
+	case BlockTypeInt16:
+		return vec.MatchInt16Equal(interface{}(b.data).([]int16), val.(int16), bits, mask)
+	case BlockTypeInt8:
+		return vec.MatchInt8Equal(interface{}(b.data).([]int8), val.(int8), bits, mask)
+	case BlockTypeUint64:
+		return vec.MatchUint64Equal(interface{}(b.data).([]uint64), val.(uint64), bits, mask)
+	case BlockTypeUint32:
+		return vec.MatchUint32Equal(interface{}(b.data).([]uint32), val.(uint32), bits, mask)
+	case BlockTypeUint16:
+		return vec.MatchUint16Equal(interface{}(b.data).([]uint16), val.(uint16), bits, mask)
+	case BlockTypeUint8:
+		return vec.MatchUint8Equal(interface{}(b.data).([]uint8), val.(uint8), bits, mask)
+	}
+	return nil
+}
+
+func (b *BlockBytes) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchNotEqual(val.([]byte), bits, mask)
+}
+
+func (b *BlockString) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchNotEqual([]byte(val.(string)), bits, mask)
+}
+
+func (b *BlockTime) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt64NotEqual(b.data, val.(time.Time).UnixNano(), bits, mask)
+}
+
+func (b *BlockBool) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	if val.(bool) {
+		return bits.Copy(b.data).Neg()
+	} else {
+		return bits.Copy(b.data)
+	}
+}
+
+func (b *BlockInt256) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt256NotEqual(b.data, val.(vec.Int256), bits, mask)
+}
+
+func (b *BlockInt128) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt128NotEqual(b.data, val.(vec.Int128), bits, mask)
+}
+
+func (b *BlockNum[T]) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	switch b.Type() {
+	case BlockTypeFloat64:
+		return vec.MatchFloat64NotEqual(interface{}(b.data).([]float64), val.(float64), bits, mask)
+	case BlockTypeFloat32:
+		return vec.MatchFloat32NotEqual(interface{}(b.data).([]float32), val.(float32), bits, mask)
+	case BlockTypeInt64:
+		return vec.MatchInt64NotEqual(interface{}(b.data).([]int64), val.(int64), bits, mask)
+	case BlockTypeInt32:
+		return vec.MatchInt32NotEqual(interface{}(b.data).([]int32), val.(int32), bits, mask)
+	case BlockTypeInt16:
+		return vec.MatchInt16NotEqual(interface{}(b.data).([]int16), val.(int16), bits, mask)
+	case BlockTypeInt8:
+		return vec.MatchInt8NotEqual(interface{}(b.data).([]int8), val.(int8), bits, mask)
+	case BlockTypeUint64:
+		return vec.MatchUint64NotEqual(interface{}(b.data).([]uint64), val.(uint64), bits, mask)
+	case BlockTypeUint32:
+		return vec.MatchUint32NotEqual(interface{}(b.data).([]uint32), val.(uint32), bits, mask)
+	case BlockTypeUint16:
+		return vec.MatchUint16NotEqual(interface{}(b.data).([]uint16), val.(uint16), bits, mask)
+	case BlockTypeUint8:
+		return vec.MatchUint8NotEqual(interface{}(b.data).([]uint8), val.(uint8), bits, mask)
+	}
+	return nil
+}
+
+func (b *BlockBytes) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchGreaterThan(val.([]byte), bits, mask)
+}
+
+func (b *BlockString) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchGreaterThan([]byte(val.(string)), bits, mask)
+}
+
+func (b *BlockTime) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt64GreaterThan(b.data, val.(time.Time).UnixNano(), bits, mask)
+}
+
+func (b *BlockBool) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	if val.(bool) {
+		return bits
+	} else {
+		return bits.Copy(b.data)
+	}
+}
+
+func (b *BlockInt256) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt256GreaterThan(b.data, val.(vec.Int256), bits, mask)
+}
+
+func (b *BlockInt128) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt128GreaterThan(b.data, val.(vec.Int128), bits, mask)
+}
+
+func (b *BlockNum[T]) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	switch b.Type() {
+	case BlockTypeFloat64:
+		return vec.MatchFloat64GreaterThan(interface{}(b.data).([]float64), val.(float64), bits, mask)
+	case BlockTypeFloat32:
+		return vec.MatchFloat32GreaterThan(interface{}(b.data).([]float32), val.(float32), bits, mask)
+	case BlockTypeInt64:
+		return vec.MatchInt64GreaterThan(interface{}(b.data).([]int64), val.(int64), bits, mask)
+	case BlockTypeInt32:
+		return vec.MatchInt32GreaterThan(interface{}(b.data).([]int32), val.(int32), bits, mask)
+	case BlockTypeInt16:
+		return vec.MatchInt16GreaterThan(interface{}(b.data).([]int16), val.(int16), bits, mask)
+	case BlockTypeInt8:
+		return vec.MatchInt8GreaterThan(interface{}(b.data).([]int8), val.(int8), bits, mask)
+	case BlockTypeUint64:
+		return vec.MatchUint64GreaterThan(interface{}(b.data).([]uint64), val.(uint64), bits, mask)
+	case BlockTypeUint32:
+		return vec.MatchUint32GreaterThan(interface{}(b.data).([]uint32), val.(uint32), bits, mask)
+	case BlockTypeUint16:
+		return vec.MatchUint16GreaterThan(interface{}(b.data).([]uint16), val.(uint16), bits, mask)
+	case BlockTypeUint8:
+		return vec.MatchUint8GreaterThan(interface{}(b.data).([]uint8), val.(uint8), bits, mask)
+	}
+	return nil
+}
+
+func (b *BlockBytes) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchGreaterThanEqual(val.([]byte), bits, mask)
+}
+
+func (b *BlockString) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchGreaterThanEqual([]byte(val.(string)), bits, mask)
+}
+
+func (b *BlockTime) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt64GreaterThanEqual(b.data, val.(time.Time).UnixNano(), bits, mask)
+}
+
+func (b *BlockBool) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return bits.Copy(b.data)
+}
+
+func (b *BlockInt256) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt256GreaterThanEqual(b.data, val.(vec.Int256), bits, mask)
+}
+
+func (b *BlockInt128) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt128GreaterThanEqual(b.data, val.(vec.Int128), bits, mask)
+}
+
+func (b *BlockNum[T]) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	switch b.Type() {
+	case BlockTypeFloat64:
+		return vec.MatchFloat64GreaterThanEqual(interface{}(b.data).([]float64), val.(float64), bits, mask)
+	case BlockTypeFloat32:
+		return vec.MatchFloat32GreaterThanEqual(interface{}(b.data).([]float32), val.(float32), bits, mask)
+	case BlockTypeInt64:
+		return vec.MatchInt64GreaterThanEqual(interface{}(b.data).([]int64), val.(int64), bits, mask)
+	case BlockTypeInt32:
+		return vec.MatchInt32GreaterThanEqual(interface{}(b.data).([]int32), val.(int32), bits, mask)
+	case BlockTypeInt16:
+		return vec.MatchInt16GreaterThanEqual(interface{}(b.data).([]int16), val.(int16), bits, mask)
+	case BlockTypeInt8:
+		return vec.MatchInt8GreaterThanEqual(interface{}(b.data).([]int8), val.(int8), bits, mask)
+	case BlockTypeUint64:
+		return vec.MatchUint64GreaterThanEqual(interface{}(b.data).([]uint64), val.(uint64), bits, mask)
+	case BlockTypeUint32:
+		return vec.MatchUint32GreaterThanEqual(interface{}(b.data).([]uint32), val.(uint32), bits, mask)
+	case BlockTypeUint16:
+		return vec.MatchUint16GreaterThanEqual(interface{}(b.data).([]uint16), val.(uint16), bits, mask)
+	case BlockTypeUint8:
+		return vec.MatchUint8GreaterThanEqual(interface{}(b.data).([]uint8), val.(uint8), bits, mask)
+	}
+	return nil
+}
+
+func (b *BlockBytes) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchLessThan(val.([]byte), bits, mask)
+}
+
+func (b *BlockString) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchLessThan([]byte(val.(string)), bits, mask)
+}
+
+func (b *BlockTime) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt64LessThan(b.data, val.(time.Time).UnixNano(), bits, mask)
+}
+
+func (b *BlockBool) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	if val.(bool) {
+		return bits.Copy(b.data).Neg()
+	} else {
+		return bits
+	}
+}
+
+func (b *BlockInt256) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt256LessThan(b.data, val.(vec.Int256), bits, mask)
+}
+
+func (b *BlockInt128) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt128LessThan(b.data, val.(vec.Int128), bits, mask)
+}
+
+func (b *BlockNum[T]) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	switch b.Type() {
+	case BlockTypeFloat64:
+		return vec.MatchFloat64LessThan(interface{}(b.data).([]float64), val.(float64), bits, mask)
+	case BlockTypeFloat32:
+		return vec.MatchFloat32LessThan(interface{}(b.data).([]float32), val.(float32), bits, mask)
+	case BlockTypeInt64:
+		return vec.MatchInt64LessThan(interface{}(b.data).([]int64), val.(int64), bits, mask)
+	case BlockTypeInt32:
+		return vec.MatchInt32LessThan(interface{}(b.data).([]int32), val.(int32), bits, mask)
+	case BlockTypeInt16:
+		return vec.MatchInt16LessThan(interface{}(b.data).([]int16), val.(int16), bits, mask)
+	case BlockTypeInt8:
+		return vec.MatchInt8LessThan(interface{}(b.data).([]int8), val.(int8), bits, mask)
+	case BlockTypeUint64:
+		return vec.MatchUint64LessThan(interface{}(b.data).([]uint64), val.(uint64), bits, mask)
+	case BlockTypeUint32:
+		return vec.MatchUint32LessThan(interface{}(b.data).([]uint32), val.(uint32), bits, mask)
+	case BlockTypeUint16:
+		return vec.MatchUint16LessThan(interface{}(b.data).([]uint16), val.(uint16), bits, mask)
+	case BlockTypeUint8:
+		return vec.MatchUint8LessThan(interface{}(b.data).([]uint8), val.(uint8), bits, mask)
+	}
+	return nil
+}
+
+func (b *BlockBytes) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchLessThanEqual(val.([]byte), bits, mask)
+}
+
+func (b *BlockString) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchLessThanEqual([]byte(val.(string)), bits, mask)
+}
+
+func (b *BlockTime) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt64LessThanEqual(b.data, val.(time.Time).UnixNano(), bits, mask)
+}
+
+func (b *BlockBool) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return bits.Copy(b.data)
+}
+
+func (b *BlockInt256) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt256LessThanEqual(b.data, val.(vec.Int256), bits, mask)
+}
+
+func (b *BlockInt128) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt128LessThanEqual(b.data, val.(vec.Int128), bits, mask)
+}
+
+func (b *BlockNum[T]) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	switch b.Type() {
+	case BlockTypeFloat64:
+		return vec.MatchFloat64LessThanEqual(interface{}(b.data).([]float64), val.(float64), bits, mask)
+	case BlockTypeFloat32:
+		return vec.MatchFloat32LessThanEqual(interface{}(b.data).([]float32), val.(float32), bits, mask)
+	case BlockTypeInt64:
+		return vec.MatchInt64LessThanEqual(interface{}(b.data).([]int64), val.(int64), bits, mask)
+	case BlockTypeInt32:
+		return vec.MatchInt32LessThanEqual(interface{}(b.data).([]int32), val.(int32), bits, mask)
+	case BlockTypeInt16:
+		return vec.MatchInt16LessThanEqual(interface{}(b.data).([]int16), val.(int16), bits, mask)
+	case BlockTypeInt8:
+		return vec.MatchInt8LessThanEqual(interface{}(b.data).([]int8), val.(int8), bits, mask)
+	case BlockTypeUint64:
+		return vec.MatchUint64LessThanEqual(interface{}(b.data).([]uint64), val.(uint64), bits, mask)
+	case BlockTypeUint32:
+		return vec.MatchUint32LessThanEqual(interface{}(b.data).([]uint32), val.(uint32), bits, mask)
+	case BlockTypeUint16:
+		return vec.MatchUint16LessThanEqual(interface{}(b.data).([]uint16), val.(uint16), bits, mask)
+	case BlockTypeUint8:
+		return vec.MatchUint8LessThanEqual(interface{}(b.data).([]uint8), val.(uint8), bits, mask)
+	}
+	return nil
+}
+
+func (b *BlockBytes) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return b.data.MatchBetween(from.([]byte), to.([]byte), bits, mask)
+}
+
+func (b *BlockString) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	fromb := compress.UnsafeGetBytes(from.(string))
+	tob := compress.UnsafeGetBytes(to.(string))
+	return b.data.MatchBetween(fromb, tob, bits, mask)
+}
+
+func (b *BlockTime) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt64Between(b.data, from.(time.Time).UnixNano(), to.(time.Time).UnixNano(), bits, mask)
+}
+
+func (b *BlockBool) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	switch from, to := from.(bool), to.(bool); true {
+	case from != to:
+		return bits.Copy(b.data)
+	case from:
+		return bits.Copy(b.data)
+	default:
+		return bits.Copy(b.data).Neg()
+	}
+}
+
+func (b *BlockInt256) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt256Between(b.data, from.(vec.Int256), to.(vec.Int256), bits, mask)
+}
+
+func (b *BlockInt128) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	return vec.MatchInt128Between(b.data, from.(vec.Int128), to.(vec.Int128), bits, mask)
+}
+
+func (b *BlockNum[T]) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+	switch b.Type() {
+	case BlockTypeFloat64:
+		return vec.MatchFloat64Between(interface{}(b.data).([]float64), from.(float64), to.(float64), bits, mask)
+	case BlockTypeFloat32:
+		return vec.MatchFloat32Between(interface{}(b.data).([]float32), from.(float32), to.(float32), bits, mask)
+	case BlockTypeInt64:
+		return vec.MatchInt64Between(interface{}(b.data).([]int64), from.(int64), to.(int64), bits, mask)
+	case BlockTypeInt32:
+		return vec.MatchInt32Between(interface{}(b.data).([]int32), from.(int32), to.(int32), bits, mask)
+	case BlockTypeInt16:
+		return vec.MatchInt16Between(interface{}(b.data).([]int16), from.(int16), to.(int16), bits, mask)
+	case BlockTypeInt8:
+		return vec.MatchInt8Between(interface{}(b.data).([]int8), from.(int8), to.(int8), bits, mask)
+	case BlockTypeUint64:
+		return vec.MatchUint64Between(interface{}(b.data).([]uint64), from.(uint64), to.(uint64), bits, mask)
+	case BlockTypeUint32:
+		return vec.MatchUint32Between(interface{}(b.data).([]uint32), from.(uint32), to.(uint32), bits, mask)
+	case BlockTypeUint16:
+		return vec.MatchUint16Between(interface{}(b.data).([]uint16), from.(uint16), to.(uint16), bits, mask)
+	case BlockTypeUint8:
+		return vec.MatchUint8Between(interface{}(b.data).([]uint8), from.(uint8), to.(uint8), bits, mask)
+	}
+	return nil
+}
+
+// FIXME: Dump should not be part of Block interface
+func (b *blockCommon) Dump() []byte {
+	return []byte{}
+}
+
+func (b *BlockBytes) Dump() []byte {
+	return []byte(b.data.Dump())
 }

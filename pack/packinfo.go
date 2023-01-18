@@ -65,7 +65,7 @@ func (h *PackInfo) UpdateStats(pkg *Package) error {
 
 		if i == pkg.pkindex {
 			// optimization for pk slices (always sorted)
-			pkslice := pkg.blocks[i].Uint64
+			pkslice := pkg.blocks[i].Slice().([]uint64)
 			h.Blocks[i].MinValue, h.Blocks[i].MaxValue = pkslice[0], pkslice[len(pkslice)-1]
 		} else {
 			// EXPENSIVE: collects full min/max statistics

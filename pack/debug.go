@@ -501,8 +501,10 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 			cols[7] = blockinfo.Scale
 			cols[8] = v.Compression().String()
 			cols[9] = v.CompressedSize()
-			cols[10] = v.HeapSize()
-			cols[11] = v.MaxStoredSize()
+			if v != nil {
+				cols[10] = v.HeapSize()
+				cols[11] = v.MaxStoredSize()
+			}
 			cols[12] = fi
 			if !enc.HeaderWritten() {
 				if err := enc.EncodeHeader([]string{
@@ -549,7 +551,7 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 		for i, l := 0, util.Min(500, p.nValues); i < l; i++ {
 			for j := 0; j < p.nFields; j++ {
 				var str string
-				if p.blocks[j].IsIgnore() {
+				if p.blocks[j] == nil {
 					str = "[strip]"
 				} else {
 					val, _ := p.FieldAt(j, i)
@@ -576,7 +578,7 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 		for i := 0; i < p.nValues; i++ {
 			for j := 0; j < p.nFields; j++ {
 				var str string
-				if p.blocks[j].IsIgnore() {
+				if p.blocks[j] == nil {
 					str = "[strip]"
 				} else {
 					val, _ := p.FieldAt(j, i)

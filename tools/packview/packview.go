@@ -294,7 +294,7 @@ func dumpByteBlock(table *pack.Table, id int, w io.Writer) error {
 		for i, v := range p.Blocks() {
 			if v.Type() == block.BlockTypeBytes {
 				fmt.Printf("Dump raw data for pack=%x block=%d\n", p.Key(), i)
-				w.Write([]byte(v.Bytes.Dump()))
+				w.Write([]byte(v.Dump()))
 			}
 		}
 		return nil

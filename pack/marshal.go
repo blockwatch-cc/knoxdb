@@ -23,7 +23,9 @@ const (
 func (p *Package) MarshalBinary() ([]byte, error) {
 	var maxSize int
 	for _, b := range p.blocks {
-		maxSize += b.MaxStoredSize()
+		if b != nil {
+			maxSize += b.MaxStoredSize()
+		}
 	}
 
 	buf := bytes.NewBuffer(make([]byte, 0, maxSize))
@@ -88,15 +90,22 @@ func (p *Package) UnmarshalBinary(data []byte) error {
 	// prepare blocks, re-use when pack already contains sufficient blocks
 	if len(p.blocks) < p.nFields {
 		for i, b := range p.blocks {
+			if b == nil {
+				continue
+			}
 			b.Release()
 			p.blocks[i] = nil
 		}
 		p.blocks = make([]block.Block, p.nFields)
-		for i := range p.blocks {
+		p.PopulateFields(nil)
+		/*for i := range p.blocks {
 			p.blocks[i] = block.AllocBlock()
-		}
+		}*/
 	} else {
 		for i, b := range p.blocks[p.nFields:] {
+			if b == nil {
+				continue
+			}
 			b.Release()
 			p.blocks[i] = nil
 		}
@@ -114,7 +123,6 @@ func (p *Package) UnmarshalBinary(data []byte) error {
 		}
 		// skip blocks that are set to type ignore before decoding
 		// this is the core magic of skipping blocks on load
-		//		if p.blocks[i].IsIgnore() {
 		if p.blocks[i] == nil {
 			_ = buf.Next(sz)
 			continue
