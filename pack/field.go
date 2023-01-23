@@ -2942,9 +2942,13 @@ func (t FieldType) EstimateCardinality(b block.Block, precision uint) uint32 {
 	filter := loglogbeta.NewFilterWithPrecision(uint32(precision))
 	var buf [8]byte
 	switch t {
-	case FieldTypeBytes, FieldTypeString:
+	case FieldTypeBytes:
 		for i := 0; i < b.Len(); i++ {
 			filter.Add(b.Elem(i).([]byte))
+		}
+	case FieldTypeString:
+		for i := 0; i < b.Len(); i++ {
+			filter.Add(compress.UnsafeGetBytes(b.Elem(i).(string)))
 		}
 	case FieldTypeDatetime:
 		filter.AddManyInt64(b.Slice().([]int64))

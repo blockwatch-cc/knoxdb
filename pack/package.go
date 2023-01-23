@@ -708,10 +708,10 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			b.Set(pos, f.Interface())
 
 		case FieldTypeFloat64:
-			b.Set(pos, f.Interface())
+			b.Set(pos, f.Float())
 
 		case FieldTypeFloat32:
-			b.Set(pos, f.Interface())
+			b.Set(pos, float32(f.Float()))
 
 		case FieldTypeInt256:
 			b.Set(pos, f.Interface())
@@ -720,28 +720,28 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 			b.Set(pos, f.Interface())
 
 		case FieldTypeInt64:
-			b.Set(pos, f.Interface())
+			b.Set(pos, f.Int())
 
 		case FieldTypeInt32:
-			b.Set(pos, f.Interface())
+			b.Set(pos, int32(f.Int()))
 
 		case FieldTypeInt16:
-			b.Set(pos, f.Interface())
+			b.Set(pos, int16(f.Int()))
 
 		case FieldTypeInt8:
-			b.Set(pos, f.Interface())
+			b.Set(pos, int8(f.Int()))
 
 		case FieldTypeUint64:
-			b.Set(pos, f.Interface())
+			b.Set(pos, f.Uint())
 
 		case FieldTypeUint32:
-			b.Set(pos, f.Interface())
+			b.Set(pos, uint32(f.Uint()))
 
 		case FieldTypeUint16:
-			b.Set(pos, f.Interface())
+			b.Set(pos, uint16(f.Uint()))
 
 		case FieldTypeUint8:
-			b.Set(pos, f.Interface())
+			b.Set(pos, uint8(f.Uint()))
 
 		case FieldTypeDecimal256:
 			switch {
