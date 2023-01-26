@@ -113,11 +113,13 @@ func (b *Bitmap) Or(a Bitmap) Bitmap {
 
 func (b *Bitmap) And(a Bitmap) Bitmap {
     b.Bitmap.And(a.Bitmap)
+    b.Bitmap.Cleanup()
     return *b
 }
 
 func (b *Bitmap) AndNot(a Bitmap) Bitmap {
     b.Bitmap.AndNot(a.Bitmap)
+    b.Bitmap.Cleanup()
     return *b
 }
 
@@ -134,7 +136,8 @@ func FastOr(bitmaps ...Bitmap) Bitmap {
 }
 
 func And(a, b Bitmap) Bitmap {
-    return Bitmap{sroar.And(a.Bitmap, b.Bitmap)}
+    bm := sroar.And(a.Bitmap, b.Bitmap)
+    return Bitmap{bm}
 }
 
 func FastAnd(bitmaps ...Bitmap) Bitmap {
