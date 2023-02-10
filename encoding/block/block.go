@@ -73,27 +73,50 @@ func (f Filter) String() string {
 	}
 }
 
+type FieldFlags int
+
+const (
+	FlagPrimary FieldFlags = 1 << iota
+	FlagIndexed
+	FlagCompressSnappy
+	FlagCompressLZ4
+	FlagBloom
+
+	// internal type conversion flags used when a struct field's Go type
+	// does not directly match the requested field type
+	flagFloatType
+	flagIntType
+	flagUintType
+	flagStringerType
+	flagBinaryMarshalerType
+	flagTextMarshalerType
+)
+
 // Note: uses 5 bit encoding (max 32 values)
 type BlockType byte
 
 const (
-	BlockTypeTime    = BlockType(0)
-	BlockTypeInt64   = BlockType(1)
-	BlockTypeUint64  = BlockType(2)
-	BlockTypeFloat64 = BlockType(3)
-	BlockTypeBool    = BlockType(4)
-	BlockTypeString  = BlockType(5)
-	BlockTypeBytes   = BlockType(6)
-	BlockTypeInt32   = BlockType(7)
-	BlockTypeInt16   = BlockType(8)
-	BlockTypeInt8    = BlockType(9)
-	BlockTypeUint32  = BlockType(10)
-	BlockTypeUint16  = BlockType(11)
-	BlockTypeUint8   = BlockType(12)
-	BlockTypeFloat32 = BlockType(13)
-	BlockTypeInt128  = BlockType(14)
-	BlockTypeInt256  = BlockType(15)
-	BlockTypeInvalid = BlockType(16)
+	BlockTypeTime       = BlockType(0)
+	BlockTypeInt64      = BlockType(1)
+	BlockTypeUint64     = BlockType(2)
+	BlockTypeFloat64    = BlockType(3)
+	BlockTypeBool       = BlockType(4)
+	BlockTypeString     = BlockType(5)
+	BlockTypeBytes      = BlockType(6)
+	BlockTypeInt32      = BlockType(7)
+	BlockTypeInt16      = BlockType(8)
+	BlockTypeInt8       = BlockType(9)
+	BlockTypeUint32     = BlockType(10)
+	BlockTypeUint16     = BlockType(11)
+	BlockTypeUint8      = BlockType(12)
+	BlockTypeFloat32    = BlockType(13)
+	BlockTypeInt128     = BlockType(14)
+	BlockTypeInt256     = BlockType(15)
+	BlockTypeDecimal32  = BlockType(16)
+	BlockTypeDecimal64  = BlockType(17)
+	BlockTypeDecimal128 = BlockType(18)
+	BlockTypeDecimal256 = BlockType(19)
+	BlockTypeInvalid    = BlockType(20)
 )
 
 func (t BlockType) IsValid() bool {
@@ -134,6 +157,14 @@ func (t BlockType) String() string {
 		return "int128"
 	case BlockTypeInt256:
 		return "int256"
+	case BlockTypeDecimal32:
+		return "decimal32"
+	case BlockTypeDecimal64:
+		return "decimal64"
+	case BlockTypeDecimal128:
+		return "decimal128"
+	case BlockTypeDecimal256:
+		return "decimal256"
 	default:
 		return "invalid block type"
 	}
@@ -149,6 +180,10 @@ type Block interface {
 	IsDirty() bool
 	Type() BlockType
 	SetDirty()
+	SetScale(int)
+	Scale() int
+	SetFlags(FieldFlags)
+	Flags() FieldFlags
 	SetCompression(Compression)
 	Release()
 	Hashes([]uint64) []uint64
@@ -193,6 +228,8 @@ type blockCommon struct {
 	comp  Compression
 	dirty bool
 	size  int // stored size, debug data
+	scale int
+	flags FieldFlags
 }
 
 type BlockNum[T Number] struct {
@@ -222,6 +259,22 @@ type BlockInt128 struct {
 type BlockInt256 struct {
 	blockCommon
 	data vec.Int256LLSlice
+}
+
+type BlockDec32 struct {
+	BlockNum[int32]
+}
+
+type BlockDec64 struct {
+	BlockNum[int64]
+}
+
+type BlockDec128 struct {
+	BlockInt128
+}
+
+type BlockDec256 struct {
+	BlockInt256
 }
 
 type BlockTime struct {
@@ -322,6 +375,22 @@ func (b *BlockInt256) Type() BlockType {
 	return BlockTypeInt256
 }
 
+func (b *BlockDec32) Type() BlockType {
+	return BlockTypeDecimal32
+}
+
+func (b *BlockDec64) Type() BlockType {
+	return BlockTypeDecimal64
+}
+
+func (b *BlockDec128) Type() BlockType {
+	return BlockTypeDecimal128
+}
+
+func (b *BlockDec256) Type() BlockType {
+	return BlockTypeDecimal256
+}
+
 /*
 	func (b Block) IsInt() bool {
 		switch b.Type() {
@@ -360,6 +429,7 @@ func (b *BlockInt256) Type() BlockType {
 		}
 	}
 */
+
 func (b *blockCommon) Compression() Compression {
 	return b.comp
 }
@@ -374,6 +444,22 @@ func (b *blockCommon) IsDirty() bool {
 
 func (b *blockCommon) SetDirty() {
 	b.dirty = true
+}
+
+func (b *blockCommon) SetScale(scale int) {
+	b.scale = scale
+}
+
+func (b *blockCommon) Scale() int {
+	return b.scale
+}
+
+func (b *blockCommon) SetFlags(flags FieldFlags) {
+	b.flags = flags
+}
+
+func (b *blockCommon) Flags() FieldFlags {
+	return b.flags
 }
 
 func (b *blockCommon) SetCompression(c Compression) {
@@ -566,7 +652,7 @@ func (b *BlockInt128) Delete(pos, n int) {
 	b.data = b.data.Delete(pos, n)
 }
 
-func NewBlock(typ BlockType, comp Compression, sz int) Block {
+func NewBlock(typ BlockType, comp Compression, sz int, scale int, flags FieldFlags) Block {
 	var bl Block
 	switch typ {
 	case BlockTypeTime:
@@ -637,10 +723,32 @@ func NewBlock(typ BlockType, comp Compression, sz int) Block {
 		b.data.X2 = arena.Alloc(BlockTypeUint64, sz).([]uint64)
 		b.data.X3 = arena.Alloc(BlockTypeUint64, sz).([]uint64)
 		bl = b
+	case BlockTypeDecimal32:
+		b := new(BlockDec32)
+		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]int32))
+		bl = b
+	case BlockTypeDecimal64:
+		b := new(BlockDec64)
+		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]int64))
+		bl = b
+	case BlockTypeDecimal128:
+		b := new(BlockDec128)
+		b.data.X0 = arena.Alloc(BlockTypeInt64, sz).([]int64)
+		b.data.X1 = arena.Alloc(BlockTypeUint64, sz).([]uint64)
+		bl = b
+	case BlockTypeDecimal256:
+		b := new(BlockDec256)
+		b.data.X0 = arena.Alloc(BlockTypeInt64, sz).([]int64)
+		b.data.X1 = arena.Alloc(BlockTypeUint64, sz).([]uint64)
+		b.data.X2 = arena.Alloc(BlockTypeUint64, sz).([]uint64)
+		b.data.X3 = arena.Alloc(BlockTypeUint64, sz).([]uint64)
+		bl = b
 	}
 	//b.typ = typ
 	bl.SetCompression(comp)
 	bl.SetDirty()
+	bl.SetScale(scale)
+	bl.SetFlags(flags)
 	return bl
 }
 
@@ -728,6 +836,8 @@ func (b *BlockTime) Copy(src Block) {
 	sb := src.(*BlockTime)
 	b.size = sb.size
 	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
 	b.data.Copy(sb.data.Slice())
 }
 
@@ -738,6 +848,8 @@ func (b *BlockNum[T]) Copy(src Block) {
 	sb := src.(*BlockNum[T])
 	b.size = sb.size
 	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
 	b.data.Copy(sb.data.Slice())
 }
 
@@ -748,6 +860,8 @@ func (b *BlockBool) Copy(src Block) {
 	sb := src.(*BlockBool)
 	b.size = sb.size
 	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
 	b.data = vec.NewBitsetFromBytes(sb.data.Bytes(), sb.size)
 }
 
@@ -758,6 +872,8 @@ func (b *BlockBytes) Copy(src Block) {
 	sb := src.(*BlockBytes)
 	b.size = sb.size
 	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
 	b.data = dedup.NewByteArray(b.size)
 	b.data.AppendFrom(sb.data)
 }
@@ -769,6 +885,8 @@ func (b *BlockString) Copy(src Block) {
 	sb := src.(*BlockString)
 	b.size = sb.size
 	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
 	b.data = dedup.NewByteArray(b.size)
 	b.data.AppendFrom(sb.data)
 }
@@ -780,6 +898,8 @@ func (b *BlockInt128) Copy(src Block) {
 	sb := src.(*BlockInt128)
 	b.size = sb.size
 	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
 	sz := len(b.data.X0)
 	b.data.X0 = b.data.X0[:sz]
 	copy(b.data.X0, sb.data.X0)
@@ -794,6 +914,68 @@ func (b *BlockInt256) Copy(src Block) {
 	sb := src.(*BlockInt256)
 	b.size = sb.size
 	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	sz := len(b.data.X0)
+	b.data.X0 = b.data.X0[:sz]
+	copy(b.data.X0, sb.data.X0)
+	b.data.X1 = b.data.X1[:sz]
+	copy(b.data.X1, sb.data.X1)
+	b.data.X2 = b.data.X2[:sz]
+	copy(b.data.X2, sb.data.X2)
+	b.data.X3 = b.data.X3[:sz]
+	copy(b.data.X3, sb.data.X3)
+}
+
+func (b *BlockDec32) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockDec32)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	b.data.Copy(sb.data.Slice())
+}
+
+func (b *BlockDec64) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockDec64)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	b.data.Copy(sb.data.Slice())
+}
+
+func (b *BlockDec128) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockDec128)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	sz := len(b.data.X0)
+	b.data.X0 = b.data.X0[:sz]
+	copy(b.data.X0, sb.data.X0)
+	b.data.X1 = b.data.X1[:sz]
+	copy(b.data.X1, sb.data.X1)
+}
+
+func (b *BlockDec256) Copy(src Block) {
+	if src == nil || b.Type() != src.Type() {
+		return
+	}
+	sb := src.(*BlockDec256)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
 	sz := len(b.data.X0)
 	b.data.X0 = b.data.X0[:sz]
 	copy(b.data.X0, sb.data.X0)
@@ -822,6 +1004,26 @@ func (b *BlockInt256) AppendFrom(src Block, pos, len int) {
 
 func (b *BlockInt128) AppendFrom(src Block, pos, len int) {
 	sb := src.(*BlockInt128)
+	b.data.AppendFrom(sb.data.Subslice(pos, pos+len))
+}
+
+func (b *BlockDec32) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockDec32)
+	b.data.AppendFrom(sb.data.Slice(), pos, len)
+}
+
+func (b *BlockDec64) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockDec64)
+	b.data.AppendFrom(sb.data.Slice(), pos, len)
+}
+
+func (b *BlockDec128) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockDec128)
+	b.data.AppendFrom(sb.data.Subslice(pos, pos+len))
+}
+
+func (b *BlockDec256) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockDec256)
 	b.data.AppendFrom(sb.data.Subslice(pos, pos+len))
 }
 
@@ -883,6 +1085,26 @@ func (b *BlockBool) ReplaceFrom(src Block, spos, dpos, len int) {
 	b.data.Replace(sb.data, spos, len, dpos)
 }
 
+func (b *BlockDec32) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockDec32)
+	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockDec64) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockDec64)
+	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockDec128) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockDec128)
+	b.data.Copy(sb.data, dpos, spos, len)
+}
+
+func (b *BlockDec256) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockDec256)
+	b.data.Copy(sb.data, dpos, spos, len)
+}
+
 func (b *BlockTime) InsertFrom(src Block, spos, dpos, len int) {
 	sb := src.(*BlockTime)
 	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
@@ -915,6 +1137,26 @@ func (b *BlockInt256) InsertFrom(src Block, spos, dpos, len int) {
 
 func (b *BlockInt128) InsertFrom(src Block, spos, dpos, len int) {
 	sb := src.(*BlockInt128)
+	b.data.Insert(dpos, sb.data.Subslice(spos, spos+len))
+}
+
+func (b *BlockDec32) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockDec32)
+	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockDec64) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockDec64)
+	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockDec128) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockDec128)
+	b.data.Insert(dpos, sb.data.Subslice(spos, spos+len))
+}
+
+func (b *BlockDec256) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockDec256)
 	b.data.Insert(dpos, sb.data.Subslice(spos, spos+len))
 }
 

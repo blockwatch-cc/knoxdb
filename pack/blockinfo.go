@@ -246,14 +246,14 @@ func (h BlockInfo) Encode(buf *bytes.Buffer) error {
 		bigEndian.PutUint32(v[4:], math.Float32bits(max))
 		_, _ = buf.Write(v[:])
 
-	case block.BlockTypeInt64:
+	case block.BlockTypeInt64, block.BlockTypeDecimal64:
 		var v [16]byte
 		min, max := h.MinValue.(int64), h.MaxValue.(int64)
 		bigEndian.PutUint64(v[0:], uint64(min))
 		bigEndian.PutUint64(v[8:], uint64(max))
 		_, _ = buf.Write(v[:])
 
-	case block.BlockTypeInt32:
+	case block.BlockTypeInt32, block.BlockTypeDecimal32:
 		var v [8]byte
 		min, max := h.MinValue.(int32), h.MaxValue.(int32)
 		bigEndian.PutUint32(v[0:], uint32(min))
@@ -333,12 +333,12 @@ func (h BlockInfo) Encode(buf *bytes.Buffer) error {
 		_, _ = buf.Write(v[:i])
 		_, _ = buf.Write(max)
 
-	case block.BlockTypeInt128:
+	case block.BlockTypeInt128, block.BlockTypeDecimal128:
 		min, max := h.MinValue.(vec.Int128).Bytes16(), h.MaxValue.(vec.Int128).Bytes16()
 		_, _ = buf.Write(min[:])
 		_, _ = buf.Write(max[:])
 
-	case block.BlockTypeInt256:
+	case block.BlockTypeInt256, block.BlockTypeDecimal256:
 		min, max := h.MinValue.(vec.Int256).Bytes32(), h.MaxValue.(vec.Int256).Bytes32()
 		_, _ = buf.Write(min[:])
 		_, _ = buf.Write(max[:])
@@ -394,12 +394,12 @@ func (h *BlockInfo) Decode(buf *bytes.Buffer, version byte) error {
 		h.MinValue = math.Float32frombits(bigEndian.Uint32(v[0:]))
 		h.MaxValue = math.Float32frombits(bigEndian.Uint32(v[4:]))
 
-	case block.BlockTypeInt64:
+	case block.BlockTypeInt64, block.BlockTypeDecimal64:
 		v := buf.Next(16)
 		h.MinValue = int64(bigEndian.Uint64(v[0:]))
 		h.MaxValue = int64(bigEndian.Uint64(v[8:]))
 
-	case block.BlockTypeInt32:
+	case block.BlockTypeInt32, block.BlockTypeDecimal32:
 		v := buf.Next(8)
 		h.MinValue = int32(bigEndian.Uint32(v[0:]))
 		h.MaxValue = int32(bigEndian.Uint32(v[4:]))
@@ -474,12 +474,12 @@ func (h *BlockInfo) Decode(buf *bytes.Buffer, version byte) error {
 		h.MinValue = mincopy
 		h.MaxValue = maxcopy
 
-	case block.BlockTypeInt128:
+	case block.BlockTypeInt128, block.BlockTypeDecimal128:
 		v := buf.Next(32)
 		h.MinValue = vec.Int128FromBytes(v[0:16])
 		h.MaxValue = vec.Int128FromBytes(v[16:32])
 
-	case block.BlockTypeInt256:
+	case block.BlockTypeInt256, block.BlockTypeDecimal256:
 		v := buf.Next(64)
 		h.MinValue = vec.Int256FromBytes(v[0:32])
 		h.MaxValue = vec.Int256FromBytes(v[32:64])

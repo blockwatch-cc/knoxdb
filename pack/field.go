@@ -26,7 +26,7 @@ import (
 	. "blockwatch.cc/knoxdb/vec"
 )
 
-type FieldFlags int
+type FieldFlags block.FieldFlags
 
 const (
 	FlagPrimary FieldFlags = 1 << iota
@@ -130,7 +130,7 @@ func (f Field) IsValid() bool {
 }
 
 func (f Field) NewBlock(sz int) block.Block {
-	return block.NewBlock(f.Type.BlockType(), f.Flags.Compression(), sz)
+	return block.NewBlock(f.Type.BlockType(), f.Flags.Compression(), sz, f.Scale, block.FieldFlags(f.Flags))
 }
 
 type FieldList []*Field
@@ -493,11 +493,11 @@ func (t FieldType) BlockType() block.BlockType {
 	switch t {
 	case FieldTypeUint64:
 		return block.BlockTypeUint64
-	case FieldTypeInt64, FieldTypeDecimal64:
+	case FieldTypeInt64:
 		return block.BlockTypeInt64
 	case FieldTypeUint32:
 		return block.BlockTypeUint32
-	case FieldTypeInt32, FieldTypeDecimal32:
+	case FieldTypeInt32:
 		return block.BlockTypeInt32
 	case FieldTypeUint16:
 		return block.BlockTypeUint16
@@ -519,10 +519,18 @@ func (t FieldType) BlockType() block.BlockType {
 		return block.BlockTypeBytes
 	case FieldTypeString:
 		return block.BlockTypeString
-	case FieldTypeInt128, FieldTypeDecimal128:
+	case FieldTypeInt128:
 		return block.BlockTypeInt128
-	case FieldTypeInt256, FieldTypeDecimal256:
+	case FieldTypeInt256:
 		return block.BlockTypeInt256
+	case FieldTypeDecimal32:
+		return block.BlockTypeDecimal32
+	case FieldTypeDecimal64:
+		return block.BlockTypeDecimal64
+	case FieldTypeDecimal128:
+		return block.BlockTypeDecimal128
+	case FieldTypeDecimal256:
+		return block.BlockTypeDecimal256
 	default:
 		return block.BlockTypeBytes
 	}

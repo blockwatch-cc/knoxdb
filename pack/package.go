@@ -406,7 +406,7 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 		if src == nil {
 			continue
 		}
-		clone.blocks[i] = block.NewBlock(src.Type(), src.Compression(), capacity)
+		clone.blocks[i] = block.NewBlock(src.Type(), src.Compression(), capacity, src.Scale(), src.Flags())
 		clone.blocks[i].Copy(src)
 	}
 	return clone, nil
@@ -463,12 +463,12 @@ func (p *Package) Materialize() {
 func (p *Package) PopulateFields(fields FieldList) *Package {
 	// FIXME: This is Quick and Dirty Hack
 	if p.nFields == 1 && len(p.blocks) == 1 { // seems to be tombstone
-		p.blocks[0] = block.NewBlock(block.BlockTypeUint64, block.NoCompression, p.capHint)
+		p.blocks[0] = block.NewBlock(block.BlockTypeUint64, block.NoCompression, p.capHint, 0, 0)
 		return p
 	}
 	if p.nFields == 2 && len(p.blocks) == 2 { // seems to be index
-		p.blocks[0] = block.NewBlock(block.BlockTypeUint64, block.NoCompression, p.capHint)
-		p.blocks[1] = block.NewBlock(block.BlockTypeUint64, block.NoCompression, p.capHint)
+		p.blocks[0] = block.NewBlock(block.BlockTypeUint64, block.NoCompression, p.capHint, 0, 0)
+		p.blocks[1] = block.NewBlock(block.BlockTypeUint64, block.NoCompression, p.capHint, 0, 0)
 		return p
 	}
 	if len(fields) == 0 {
