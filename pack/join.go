@@ -410,11 +410,12 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 		if queryOrderLR {
 			// query the left table first (ensure predicate column is returned)
 			lQ := Query{
-				Name:   q.Name + ".join_left",
-				Limit:  util.NonZeroMin(j.Left.Limit, maxPackSize),
-				fout:   j.Left.fields.AddUnique(j.Predicate.Left),
-				conds:  j.Left.where,
-				Debugf: q.Debugf,
+				Name:     q.Name + ".join_left",
+				Limit:    util.NonZeroMin(j.Left.Limit, maxPackSize),
+				fout:     j.Left.fields.AddUnique(j.Predicate.Left),
+				conds:    j.Left.where,
+				Debugf:   q.Debugf,
+				logAfter: QueryLogMinDuration,
 			}
 			if pkcursor > 0 {
 				// FIXME: optimize/merge conditions (there may already exist one
@@ -474,10 +475,11 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 
 			// query the right table without limit
 			rQ := Query{
-				Name:   q.Name + ".join_right",
-				fout:   j.Right.fields.AddUnique(j.Predicate.Right),
-				conds:  rConds,
-				Debugf: q.Debugf,
+				Name:     q.Name + ".join_right",
+				fout:     j.Right.fields.AddUnique(j.Predicate.Right),
+				conds:    rConds,
+				Debugf:   q.Debugf,
+				logAfter: QueryLogMinDuration,
 			}
 			log.Debug(newLogClosure(func() string {
 				return fmt.Sprintf("join: right table query with %d cond and limit %d: %s",
@@ -493,11 +495,12 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 		} else {
 			// query the right table first (ensure predicate column is returned)
 			rQ := Query{
-				Name:   q.Name + ".join_right",
-				Limit:  util.NonZeroMin(j.Right.Limit, maxPackSize),
-				fout:   j.Right.fields.AddUnique(j.Predicate.Right),
-				conds:  j.Right.where,
-				Debugf: q.Debugf,
+				Name:     q.Name + ".join_right",
+				Limit:    util.NonZeroMin(j.Right.Limit, maxPackSize),
+				fout:     j.Right.fields.AddUnique(j.Predicate.Right),
+				conds:    j.Right.where,
+				Debugf:   q.Debugf,
+				logAfter: QueryLogMinDuration,
 			}
 			if pkcursor > 0 {
 				// FIXME: optimize/merge conditions (there may already exist one
@@ -556,10 +559,11 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 
 			// query the left table wihout limit
 			lQ := Query{
-				Name:   q.Name + ".join_left",
-				fout:   j.Left.fields.AddUnique(j.Predicate.Left),
-				conds:  lConds,
-				Debugf: q.Debugf,
+				Name:     q.Name + ".join_left",
+				fout:     j.Left.fields.AddUnique(j.Predicate.Left),
+				conds:    lConds,
+				Debugf:   q.Debugf,
+				logAfter: QueryLogMinDuration,
 			}
 			log.Debug(newLogClosure(func() string {
 				return fmt.Sprintf("join: left table query with %d cond and limit %d: %s",
