@@ -155,8 +155,8 @@ func (n *NumArray[T]) ReplaceFrom(src []T, spos, dpos, len int) {
 	copy(n.slice[dpos:], src[spos:spos+len])
 }
 
-func (n *NumArray[T]) InsertFrom(src interface{}, spos, dpos, len int) {
-	slice := src.([]T)
+func (n *NumArray[T]) InsertFrom(slice []T, spos, dpos, len int) {
+	//slice := src.([]T)
 	switch n.Type() {
 	case BlockTypeFloat64:
 		n.slice = interface{}(vec.Float64.Insert(interface{}(n.slice).([]float64), dpos, interface{}(slice).([]float64)[spos:spos+len]...)).([]T)

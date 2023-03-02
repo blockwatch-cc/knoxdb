@@ -5,16 +5,24 @@ package block
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"reflect"
+	"regexp"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/compress"
+	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/encoding/dedup"
 	"blockwatch.cc/knoxdb/encoding/num"
+	"blockwatch.cc/knoxdb/filter/bloom"
+	"blockwatch.cc/knoxdb/filter/loglogbeta"
 	"blockwatch.cc/knoxdb/hash/xxhash"
+	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -22,6 +30,18 @@ var bigEndian = binary.BigEndian
 
 // FixMe: check if this works correctly
 var BlockSz = int(reflect.TypeOf(blockCommon{}).Size()) + 8
+
+var (
+	//	textUnmarshalerType   = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
+	textMarshalerType = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
+	//	binaryUnmarshalerType = reflect.TypeOf((*encoding.BinaryUnmarshaler)(nil)).Elem()
+	binaryMarshalerType = reflect.TypeOf((*encoding.BinaryMarshaler)(nil)).Elem()
+	stringerType        = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
+
+// byteSliceType         = reflect.TypeOf([]byte(nil))
+)
+
+var zeroTime = time.Time{}
 
 type Compression byte
 
@@ -91,6 +111,10 @@ const (
 	flagBinaryMarshalerType
 	flagTextMarshalerType
 )
+
+func (f FieldFlags) Contains(i FieldFlags) bool {
+	return f&i > 0
+}
 
 // Note: uses 5 bit encoding (max 32 values)
 type BlockType byte
@@ -177,41 +201,48 @@ type Number interface {
 type Block interface {
 	DecRef() int64
 	IncRef() int64
-	IsDirty() bool
-	Type() BlockType
-	SetDirty()
-	SetScale(int)
-	Scale() int
-	SetFlags(FieldFlags)
-	Flags() FieldFlags
-	SetCompression(Compression)
-	Release()
-	Hashes([]uint64) []uint64
 	HeapSize() int
+
+	Type() BlockType
+	setType(BlockType)
+	IsDirty() bool
+	SetDirty()
+	Scale() int
+	SetScale(int)
+	Flags() FieldFlags
+	SetFlags(FieldFlags)
 	Compression() Compression
-	Slice() interface{}
-	RangeSlice(int, int) interface{}
-	Clear()
+	SetCompression(Compression)
+
 	Len() int
 	Cap() int
+	Release()
+	Clear()
 	MaxStoredSize() int
+	CompressedSize() int
+
 	Encode(*bytes.Buffer) (int, error)
 	Decode([]byte, int, int) error
-	MinMax() (interface{}, interface{})
-	CompressedSize() int
-	Less(int, int) bool
-	Swap(int, int)
+
+	ReadAtWithInfo(int, reflect.Value) error
+	FieldAt(int) interface{}
 	Elem(int) interface{}
-	Set(int, interface{})
-	Append(interface{})
+	IsZeroAt(int, bool) bool
+	Slice() interface{}
+	RangeSlice(int, int) interface{}
+
+	SetWithCast(int, reflect.Value) error
+	SetFieldAt(int, reflect.Value) error
+	Append(reflect.Value) error
+	Delete(int, int)
+	Grow(int)
+	Copy(Block)
 	AppendFrom(Block, int, int)
 	ReplaceFrom(Block, int, int, int)
-	Delete(int, int)
-	Copy(Block)
-	Grow(int)
 	InsertFrom(Block, int, int, int)
-	Optimize()
-	Materialize()
+	Swap(int, int)
+
+	Less(int, int) bool
 	MatchEqual(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
 	MatchNotEqual(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
 	MatchGreaterThan(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
@@ -219,22 +250,78 @@ type Block interface {
 	MatchLessThan(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
 	MatchLessThanEqual(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
 	MatchBetween(interface{}, interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchRegExp(string, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	EqualAt(int, interface{}) bool
+	GtAt(int, interface{}) bool
+	GteAt(int, interface{}) bool
+	LtAt(int, interface{}) bool
+	LteAt(int, interface{}) bool
+	BetweenAt(int, interface{}, interface{}) bool
+	RegExpAt(int, string) bool
+
+	Hashes([]uint64) []uint64
+	EstimateCardinality(uint) uint32
+	BuildBloomFilter(int) *bloom.Filter
+	MinMax() (interface{}, interface{})
+	Optimize()
+	Materialize()
+	// FIXME: Dump should not be part of Block interface
 	Dump() []byte
 }
 
 type blockCommon struct {
 	refCount int64
-	//typ      BlockType
-	comp  Compression
-	dirty bool
-	size  int // stored size, debug data
-	scale int
-	flags FieldFlags
+	typ      BlockType
+	comp     Compression
+	dirty    bool
+	size     int // stored size, debug data
+	scale    int
+	flags    FieldFlags
 }
 
 type BlockNum[T Number] struct {
 	blockCommon
 	data num.NumArray[T]
+}
+
+type BlockInt64 struct {
+	BlockNum[int64]
+}
+
+type BlockInt32 struct {
+	BlockNum[int32]
+}
+
+type BlockInt16 struct {
+	BlockNum[int16]
+}
+
+type BlockInt8 struct {
+	BlockNum[int8]
+}
+
+type BlockUint64 struct {
+	BlockNum[uint64]
+}
+
+type BlockUint32 struct {
+	BlockNum[uint32]
+}
+
+type BlockUint16 struct {
+	BlockNum[uint16]
+}
+
+type BlockUint8 struct {
+	BlockNum[uint8]
+}
+
+type BlockFloat64 struct {
+	BlockNum[float64]
+}
+
+type BlockFloat32 struct {
+	BlockNum[float32]
 }
 
 type BlockBytes struct {
@@ -262,11 +349,11 @@ type BlockInt256 struct {
 }
 
 type BlockDec32 struct {
-	BlockNum[int32]
+	BlockInt32
 }
 
 type BlockDec64 struct {
-	BlockNum[int64]
+	BlockInt64
 }
 
 type BlockDec128 struct {
@@ -278,7 +365,7 @@ type BlockDec256 struct {
 }
 
 type BlockTime struct {
-	BlockNum[int64]
+	BlockInt64
 }
 
 func (b *blockCommon) IncRef() int64 {
@@ -325,110 +412,101 @@ func (b *BlockInt256) DecRef() int64 {
 	return val
 }
 
-func (b *BlockNum[N]) Type() BlockType {
-	switch reflect.ValueOf(*new(N)).Kind() {
-	case reflect.Int64:
-		return BlockTypeInt64
-	case reflect.Int32:
-		return BlockTypeInt32
-	case reflect.Int16:
-		return BlockTypeInt16
-	case reflect.Int8:
-		return BlockTypeInt8
-	case reflect.Uint64:
-		return BlockTypeUint64
-	case reflect.Uint32:
-		return BlockTypeUint32
-	case reflect.Uint16:
-		return BlockTypeUint16
-	case reflect.Uint8:
-		return BlockTypeUint8
-	case reflect.Float64:
-		return BlockTypeFloat64
-	case reflect.Float32:
-		return BlockTypeFloat32
-	}
-	return BlockTypeInvalid
+func (b *blockCommon) Type() BlockType {
+	return b.typ
 }
 
-func (b *BlockTime) Type() BlockType {
-	return BlockTypeTime
+func (b *blockCommon) setType(typ BlockType) {
+	b.typ = typ
 }
 
-func (b *BlockBytes) Type() BlockType {
-	return BlockTypeBytes
+func (b blockCommon) IsInt() bool {
+	return false
 }
 
-func (b *BlockString) Type() BlockType {
-	return BlockTypeString
+func (b BlockInt64) IsInt() bool {
+	return true
 }
 
-func (b *BlockBool) Type() BlockType {
-	return BlockTypeBool
+func (b BlockInt32) IsInt() bool {
+	return true
 }
 
-func (b *BlockInt128) Type() BlockType {
-	return BlockTypeInt128
+func (b BlockInt16) IsInt() bool {
+	return true
 }
 
-func (b *BlockInt256) Type() BlockType {
-	return BlockTypeInt256
+func (b BlockInt8) IsInt() bool {
+	return true
 }
 
-func (b *BlockDec32) Type() BlockType {
-	return BlockTypeDecimal32
+func (b BlockUint64) IsInt() bool {
+	return true
 }
 
-func (b *BlockDec64) Type() BlockType {
-	return BlockTypeDecimal64
+func (b BlockUint32) IsInt() bool {
+	return true
 }
 
-func (b *BlockDec128) Type() BlockType {
-	return BlockTypeDecimal128
+func (b BlockUint16) IsInt() bool {
+	return true
 }
 
-func (b *BlockDec256) Type() BlockType {
-	return BlockTypeDecimal256
+func (b BlockUint8) IsInt() bool {
+	return true
 }
 
-/*
-	func (b Block) IsInt() bool {
-		switch b.Type() {
-		case BlockTypeInt64, BlockTypeInt32, BlockTypeInt16, BlockTypeInt8,
-			BlockTypeUint64, BlockTypeUint32, BlockTypeUint16, BlockTypeUint8:
-			return true
-		default:
-			return false
-		}
-	}
+func (b blockCommon) IsSint() bool {
+	return false
+}
 
-	func (b Block) IsSint() bool {
-		switch b.Type() {
-		case BlockTypeInt64, BlockTypeInt32, BlockTypeInt16, BlockTypeInt8:
-			return true
-		default:
-			return false
-		}
-	}
+func (b BlockInt64) IsSint() bool {
+	return true
+}
 
-	func (b Block) IsUint() bool {
-		switch b.Type() {
-		case BlockTypeUint64, BlockTypeUint32, BlockTypeUint16, BlockTypeUint8:
-			return true
-		default:
-			return false
-		}
-	}
+func (b BlockInt32) IsSint() bool {
+	return true
+}
 
-	func (b Block) IsFloat() bool {
-		switch b.Type() {
-		case BlockTypeFloat64, BlockTypeFloat32:
-			return true
-		default:
-			return false
-		}
-	}
-*/
+func (b BlockInt16) IsSint() bool {
+	return true
+}
+
+func (b BlockInt8) IsSint() bool {
+	return true
+}
+
+func (b blockCommon) IsUint() bool {
+	return false
+}
+
+func (b BlockUint64) IsUint() bool {
+	return true
+}
+
+func (b BlockUint32) IsUint() bool {
+	return true
+}
+
+func (b BlockUint16) IsUint() bool {
+	return true
+}
+
+func (b BlockUint8) IsUint() bool {
+	return true
+}
+
+func (b blockCommon) IsFloat() bool {
+	return false
+}
+
+func (b BlockFloat64) IsFloat() bool {
+	return true
+}
+
+func (b BlockFloat32) IsFloat() bool {
+	return true
+}
 
 func (b *blockCommon) Compression() Compression {
 	return b.comp
@@ -470,6 +548,17 @@ func (b *BlockNum[N]) Slice() interface{} {
 	return b.data.Slice()
 }
 
+func (b *BlockTime) Slice() interface{} {
+	res := make([]time.Time, b.Len())
+	for i, v := range b.data.Slice() {
+		if v > 0 {
+			res[i] = time.Unix(0, v)
+		} else {
+			res[i] = zeroTime
+		}
+	}
+	return res
+}
 func (b *BlockBool) Slice() interface{} {
 	return b.data.Slice()
 }
@@ -494,8 +583,36 @@ func (b *BlockString) Slice() interface{} {
 	return s
 }
 
+func (b *BlockDec256) Slice() interface{} {
+	return decimal.Decimal256Slice{Int256: b.data.Int256Slice(), Scale: b.scale}
+}
+
+func (b *BlockDec128) Slice() interface{} {
+	return decimal.Decimal128Slice{Int128: b.data.Int128Slice(), Scale: b.scale}
+}
+
+func (b *BlockDec64) Slice() interface{} {
+	return decimal.Decimal64Slice{Int64: b.data.Slice(), Scale: b.scale}
+}
+
+func (b *BlockDec32) Slice() interface{} {
+	return decimal.Decimal32Slice{Int32: b.data.Slice(), Scale: b.scale}
+}
+
 func (b *BlockNum[T]) RangeSlice(start, end int) interface{} {
 	return b.data.RangeSlice(start, end)
+}
+
+func (b *BlockTime) RangeSlice(start, end int) interface{} {
+	res := make([]time.Time, end-start+1)
+	for i, v := range b.data.RangeSlice(start, end) {
+		if v > 0 {
+			res[i+start] = time.Unix(0, v)
+		} else {
+			res[i+start] = zeroTime
+		}
+	}
+	return res
 }
 
 func (b *BlockBool) RangeSlice(start, end int) interface{} {
@@ -520,6 +637,22 @@ func (b *BlockInt128) RangeSlice(start, end int) interface{} {
 
 func (b *BlockInt256) RangeSlice(start, end int) interface{} {
 	return b.data.Subslice(start, end).Int256Slice()
+}
+
+func (b *BlockDec256) RangeSlice(start, end int) interface{} {
+	return decimal.Decimal256Slice{Int256: b.data.Subslice(start, end).Int256Slice(), Scale: b.scale}
+}
+
+func (b *BlockDec128) RangeSlice(start, end int) interface{} {
+	return decimal.Decimal128Slice{Int128: b.data.Subslice(start, end).Int128Slice(), Scale: b.scale}
+}
+
+func (b *BlockDec64) RangeSlice(start, end int) interface{} {
+	return decimal.Decimal64Slice{Int64: b.data.RangeSlice(start, end), Scale: b.scale}
+}
+
+func (b *BlockDec32) RangeSlice(start, end int) interface{} {
+	return decimal.Decimal32Slice{Int32: b.data.RangeSlice(start, end), Scale: b.scale}
 }
 
 func (b *BlockNum[T]) Elem(idx int) interface{} {
@@ -564,28 +697,413 @@ func (b *BlockInt256) Elem(idx int) interface{} {
 	return b.data.Elem(idx)
 }
 
-func (b *BlockNum[T]) Set(i int, val interface{}) {
-	b.data.Set(i, val.(T))
+func (b *BlockBytes) FieldAt(i int) interface{} {
+	return b.data.Elem(i)
 }
 
-func (b *BlockInt128) Set(i int, val interface{}) {
-	b.data.Set(i, val.(vec.Int128))
+func (b *BlockString) FieldAt(i int) interface{} {
+	return compress.UnsafeGetString(b.data.Elem(i))
 }
 
-func (b *BlockInt256) Set(i int, val interface{}) {
-	b.data.Set(i, val.(vec.Int256))
+func (b *BlockTime) FieldAt(i int) interface{} {
+	if ts := b.data.Elem(i); ts > 0 {
+		return time.Unix(0, ts)
+	}
+	return zeroTime
 }
 
-func (b *BlockBool) Set(i int, val interface{}) {
-	if val.(bool) {
+func (b *BlockBool) FieldAt(i int) interface{} {
+	return b.data.IsSet(i)
+}
+
+func (b *BlockNum[T]) FieldAt(i int) interface{} {
+	return b.data.Elem(i)
+}
+
+func (b *BlockInt256) FieldAt(i int) interface{} {
+	return b.data.Elem(i)
+}
+
+func (b *BlockInt128) FieldAt(i int) interface{} {
+	return b.data.Elem(i)
+}
+
+func (b *BlockDec256) FieldAt(i int) interface{} {
+	return decimal.NewDecimal256(b.data.Elem(i), b.scale)
+}
+
+func (b *BlockDec128) FieldAt(i int) interface{} {
+	return decimal.NewDecimal128(b.data.Elem(i), b.scale)
+}
+
+func (b *BlockDec64) FieldAt(i int) interface{} {
+	return decimal.NewDecimal64(b.data.Elem(i), b.scale)
+}
+
+func (b *BlockDec32) FieldAt(i int) interface{} {
+	return decimal.NewDecimal32(b.data.Elem(i), b.scale)
+}
+
+func (b *BlockNum[T]) IsZeroAt(i int, zeroIsNull bool) bool {
+	return zeroIsNull && b.data.Elem(i) == 0
+}
+
+func (b *BlockFloat32) IsZeroAt(i int, zeroIsNull bool) bool {
+	v := float64(b.data.Elem(i))
+	return math.IsNaN(v) || math.IsInf(v, 0) || (zeroIsNull && v == 0.0)
+}
+
+func (b *BlockFloat64) IsZeroAt(i int, zeroIsNull bool) bool {
+	v := b.data.Elem(i)
+	return math.IsNaN(v) || math.IsInf(v, 0) || (zeroIsNull && v == 0.0)
+}
+
+func (b *BlockBool) IsZeroAt(i int, zeroIsNull bool) bool {
+	return zeroIsNull && !b.data.IsSet(i)
+}
+
+func (b *BlockTime) IsZeroAt(i int, zeroIsNull bool) bool {
+	val := b.data.Elem(i)
+	return val == 0 || (zeroIsNull && time.Unix(0, val).IsZero())
+}
+
+func (b *BlockBytes) IsZeroAt(i int, zeroIsNull bool) bool {
+	return len(b.data.Elem(i)) == 0
+}
+
+func (b *BlockInt256) IsZeroAt(i int, zeroIsNull bool) bool {
+	return zeroIsNull && b.data.Elem(i).IsZero()
+}
+
+func (b *BlockInt128) IsZeroAt(i int, zeroIsNull bool) bool {
+	return zeroIsNull && b.data.Elem(i).IsZero()
+}
+
+func (b *BlockNum[T]) ReadAtWithInfo(i int, val reflect.Value) error {
+	switch {
+	case val.CanInt():
+		val.SetInt(int64(b.data.Elem(i)))
+	case val.CanUint():
+		val.SetUint(uint64(b.data.Elem(i)))
+	case val.CanFloat():
+		val.SetFloat(float64(b.data.Elem(i)))
+	}
+	return nil
+}
+
+func (b *BlockTime) ReadAtWithInfo(i int, val reflect.Value) error {
+	if ts := b.data.Elem(i); ts > 0 {
+		val.Set(reflect.ValueOf(time.Unix(0, ts)))
+	} else {
+		val.Set(reflect.ValueOf(zeroTime))
+	}
+	return nil
+}
+
+func (b *BlockBool) ReadAtWithInfo(i int, val reflect.Value) error {
+	if b.data.IsSet(i) {
+		val.SetBool(true)
+	} else {
+		val.SetBool(false)
+	}
+	return nil
+}
+
+func (b *BlockBytes) ReadAtWithInfo(i int, val reflect.Value) error {
+	if b.flags.Contains(flagBinaryMarshalerType) {
+		// decode using unmarshaler, requires the unmarshaler makes a copy
+		if err := val.Addr().Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.data.Elem(i)); err != nil {
+			return err
+		}
+	} else {
+		// copy to avoid memleaks of large blocks
+		elm := b.data.Elem(i)
+		buf := make([]byte, len(elm))
+		copy(buf, elm)
+		val.SetBytes(buf)
+	}
+	return nil
+}
+
+func (b *BlockString) ReadAtWithInfo(i int, val reflect.Value) error {
+	if b.flags.Contains(flagTextMarshalerType) {
+		if err := val.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText(b.data.Elem(i)); err != nil {
+			return err
+		}
+	} else {
+		// copy to avoid memleaks of large blocks
+		// dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
+		val.SetString(compress.UnsafeGetString(b.data.Elem(i)))
+	}
+	return nil
+}
+
+func (b *BlockInt256) ReadAtWithInfo(i int, val reflect.Value) error {
+	val.Set(reflect.ValueOf(b.data.Elem(i)))
+	return nil
+}
+
+func (b *BlockInt128) ReadAtWithInfo(i int, val reflect.Value) error {
+	val.Set(reflect.ValueOf(b.data.Elem(i)))
+	return nil
+}
+
+func (b *BlockDec256) ReadAtWithInfo(i int, val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		val.SetUint(uint64(b.data.Elem(i).Int64()))
+	case b.flags.Contains(flagIntType):
+		val.SetInt(b.data.Elem(i).Int64())
+	case b.flags.Contains(flagFloatType):
+		val.SetFloat(decimal.NewDecimal256(b.data.Elem(i), b.scale).Float64())
+	default:
+		v := decimal.NewDecimal256(b.data.Elem(i), b.scale)
+		val.Set(reflect.ValueOf(v))
+	}
+	return nil
+}
+
+func (b *BlockDec128) ReadAtWithInfo(i int, val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		val.SetUint(uint64(b.data.Elem(i).Int64()))
+	case b.flags.Contains(flagIntType):
+		val.SetInt(b.data.Elem(i).Int64())
+	case b.flags.Contains(flagFloatType):
+		val.SetFloat(decimal.NewDecimal128(b.data.Elem(i), b.scale).Float64())
+	default:
+		v := decimal.NewDecimal128(b.data.Elem(i), b.scale)
+		val.Set(reflect.ValueOf(v))
+	}
+	return nil
+}
+
+func (b *BlockDec64) ReadAtWithInfo(i int, val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		val.SetUint(uint64(b.data.Elem(i)))
+	case b.flags.Contains(flagIntType):
+		val.SetInt(b.data.Elem(i))
+	case b.flags.Contains(flagFloatType):
+		val.SetFloat(decimal.NewDecimal64(b.data.Elem(i), b.scale).Float64())
+	default:
+		v := decimal.NewDecimal64(b.data.Elem(i), b.scale)
+		val.Set(reflect.ValueOf(v))
+	}
+	return nil
+}
+
+func (b *BlockDec32) ReadAtWithInfo(i int, val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		val.SetUint(uint64(b.data.Elem(i)))
+	case b.flags.Contains(flagIntType):
+		val.SetInt(int64(b.data.Elem(i)))
+	case b.flags.Contains(flagFloatType):
+		val.SetFloat(decimal.NewDecimal32(b.data.Elem(i), b.scale).Float64())
+	default:
+		v := decimal.NewDecimal32(b.data.Elem(i), b.scale)
+		val.Set(reflect.ValueOf(v))
+	}
+	return nil
+}
+
+func (b *BlockNum[T]) SetWithCast(i int, val reflect.Value) error {
+	switch {
+	case val.CanInt():
+		b.data.Set(i, T(val.Int()))
+	case val.CanUint():
+		b.data.Set(i, T(val.Uint()))
+	case val.CanFloat():
+		b.data.Set(i, T(val.Float()))
+	}
+	return nil
+}
+
+func (b *BlockNum[T]) SetFieldAt(i int, val reflect.Value) error {
+	return b.SetWithCast(i, val)
+}
+
+func (b *BlockTime) SetWithCast(i int, val reflect.Value) error {
+	b.data.Set(i, val.Interface().(time.Time).UnixNano())
+	return nil
+}
+
+func (b *BlockTime) SetFieldAt(i int, val reflect.Value) error {
+	return b.SetWithCast(i, val)
+}
+
+func (b *BlockInt128) SetWithCast(i int, val reflect.Value) error {
+	b.data.Set(i, val.Interface().(vec.Int128))
+	return nil
+}
+
+func (b *BlockInt128) SetFieldAt(i int, val reflect.Value) error {
+	return b.SetWithCast(i, val)
+}
+
+func (b *BlockInt256) SetWithCast(i int, val reflect.Value) error {
+	b.data.Set(i, val.Interface().(vec.Int256))
+	return nil
+}
+
+func (b *BlockInt256) SetFieldAt(i int, val reflect.Value) error {
+	return b.SetWithCast(i, val)
+}
+
+func (b *BlockBool) SetWithCast(i int, val reflect.Value) error {
+	if val.Bool() {
 		b.data.Set(i)
 	} else {
 		b.data.Clear(i)
 	}
+	return nil
 }
 
-func (b *BlockBytes) Set(i int, val interface{}) {
-	b.data.Set(i, val.([]byte))
+func (b *BlockBool) SetFieldAt(i int, val reflect.Value) error {
+	return b.SetWithCast(i, val)
+}
+
+func (b *BlockBytes) SetWithCast(i int, val reflect.Value) error {
+	if b.flags.Contains(flagBinaryMarshalerType) {
+		buf, err := val.Interface().(encoding.BinaryMarshaler).MarshalBinary()
+		if err != nil {
+			return err
+		}
+		b.data.Set(i, buf)
+	} else {
+		b.data.Set(i, val.Bytes())
+	}
+	return nil
+}
+
+func (b *BlockBytes) SetFieldAt(i int, val reflect.Value) error {
+	// explicit check if type implements Marshaler (v != struct type)
+	if val.CanInterface() && val.Type().Implements(binaryMarshalerType) {
+		buf, err := val.Interface().(encoding.BinaryMarshaler).MarshalBinary()
+		if err != nil {
+			return err
+		}
+		b.data.Set(i, buf)
+	} else {
+		b.data.Set(i, val.Bytes())
+	}
+	return nil
+}
+
+func (b *BlockString) SetWithCast(i int, val reflect.Value) error {
+	if b.flags.Contains(flagTextMarshalerType) {
+		buf, err := val.Interface().(encoding.TextMarshaler).MarshalText()
+		if err != nil {
+			return err
+		}
+		b.data.Set(i, buf)
+	} else if b.flags.Contains(flagStringerType) {
+		b.data.Set(i, compress.UnsafeGetBytes(val.Interface().(fmt.Stringer).String()))
+	} else {
+		b.data.Set(i, compress.UnsafeGetBytes(val.String()))
+	}
+	return nil
+}
+
+func (b *BlockString) SetFieldAt(i int, val reflect.Value) error {
+	// explicit check if type implements Marshaler (v != struct type)
+	if val.CanInterface() && val.Type().Implements(textMarshalerType) {
+		buf, err := val.Interface().(encoding.TextMarshaler).MarshalText()
+		if err != nil {
+			return err
+		}
+		b.data.Set(i, buf)
+	} else if val.CanInterface() && val.Type().Implements(stringerType) {
+		b.data.Set(i, compress.UnsafeGetBytes(val.Interface().(fmt.Stringer).String()))
+	} else {
+		b.data.Set(i, compress.UnsafeGetBytes(val.String()))
+	}
+	return nil
+}
+
+func (b *BlockDec256) SetWithCast(i int, val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		b.data.Set(i, vec.Int256{0, 0, 0, val.Uint()})
+	case b.flags.Contains(flagIntType):
+		b.data.Set(i, vec.Int256{0, 0, 0, uint64(val.Int())})
+	case b.flags.Contains(flagFloatType):
+		dec := decimal.Decimal256{}
+		dec.SetFloat64(val.Float(), b.scale)
+		b.data.Set(i, dec.Int256())
+	default:
+		b.data.Set(i, val.Interface().(decimal.Decimal256).Quantize(b.scale).Int256())
+	}
+	return nil
+}
+
+func (b *BlockDec256) SetFieldAt(i int, val reflect.Value) error {
+	b.data.Set(i, val.Interface().(decimal.Decimal256).Quantize(b.scale).Int256())
+	return nil
+}
+
+func (b *BlockDec128) SetWithCast(i int, val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		b.data.Set(i, vec.Int128{0, val.Uint()})
+	case b.flags.Contains(flagIntType):
+		b.data.Set(i, vec.Int128{0, uint64(val.Int())})
+	case b.flags.Contains(flagFloatType):
+		dec := decimal.Decimal128{}
+		dec.SetFloat64(val.Float(), b.scale)
+		b.data.Set(i, dec.Int128())
+	default:
+		b.data.Set(i, val.Interface().(decimal.Decimal128).Quantize(b.scale).Int128())
+	}
+	return nil
+}
+
+func (b *BlockDec128) SetFieldAt(i int, val reflect.Value) error {
+	b.data.Set(i, val.Interface().(decimal.Decimal128).Quantize(b.scale).Int128())
+	return nil
+}
+
+func (b *BlockDec64) SetWithCast(i int, val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		b.data.Set(i, int64(val.Uint()))
+	case b.flags.Contains(flagIntType):
+		b.data.Set(i, val.Int())
+	case b.flags.Contains(flagFloatType):
+		dec := decimal.Decimal64{}
+		dec.SetFloat64(val.Float(), b.scale)
+		b.data.Set(i, dec.Int64())
+	default:
+		b.data.Set(i, val.Interface().(decimal.Decimal64).Quantize(b.scale).Int64())
+	}
+	return nil
+}
+
+func (b *BlockDec64) SetFieldAt(i int, val reflect.Value) error {
+	b.data.Set(i, val.Interface().(decimal.Decimal64).Quantize(b.scale).Int64())
+	return nil
+}
+
+func (b *BlockDec32) SetWithCast(i int, val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		b.data.Set(i, int32(val.Uint()))
+	case b.flags.Contains(flagIntType):
+		b.data.Set(i, int32(val.Int()))
+	case b.flags.Contains(flagFloatType):
+		dec := decimal.Decimal32{}
+		dec.SetFloat64(val.Float(), b.scale)
+		b.data.Set(i, dec.Int32())
+	default:
+		b.data.Set(i, val.Interface().(decimal.Decimal32).Quantize(b.scale).Int32())
+	}
+	return nil
+}
+
+func (b *BlockDec32) SetFieldAt(i int, val reflect.Value) error {
+	b.data.Set(i, val.Interface().(decimal.Decimal32).Quantize(b.scale).Int32())
+	return nil
 }
 
 func (b *BlockNum[T]) Grow(n int) {
@@ -608,28 +1126,132 @@ func (b *BlockBool) Grow(n int) {
 	b.data.Grow(b.data.Len() + n)
 }
 
-func (b *BlockNum[T]) Append(val interface{}) {
-	b.data.Append(val.(T))
+func (b *BlockNum[T]) Append(val reflect.Value) error {
+	switch {
+	case val.CanInt():
+		b.data.Append(T(val.Int()))
+	case val.CanUint():
+		b.data.Append(T(val.Uint()))
+	case val.CanFloat():
+		b.data.Append(T(val.Float()))
+	}
+	return nil
 }
 
-func (b *BlockInt128) Append(val interface{}) {
-	b.data.Append(val.(vec.Int128))
+func (b *BlockTime) Append(val reflect.Value) error {
+	b.data.Append(val.Interface().(time.Time).UnixNano())
+	return nil
 }
 
-func (b *BlockInt256) Append(val interface{}) {
-	b.data.Append(val.(vec.Int256))
+func (b *BlockInt128) Append(val reflect.Value) error {
+	b.data.Append(val.Interface().(vec.Int128))
+	return nil
 }
 
-func (b *BlockBytes) Append(val interface{}) {
-	b.data.Append(val.([]byte))
+func (b *BlockInt256) Append(val reflect.Value) error {
+	b.data.Append(val.Interface().(vec.Int256))
+	return nil
 }
 
-func (b *BlockBool) Append(val interface{}) {
+func (b *BlockBytes) Append(val reflect.Value) error {
+	if b.flags.Contains(flagBinaryMarshalerType) {
+		buf, err := val.Interface().(encoding.BinaryMarshaler).MarshalBinary()
+		if err != nil {
+			return err
+		}
+		b.data.Append(buf)
+	} else {
+		b.data.Append(val.Bytes())
+	}
+	return nil
+}
+
+func (b *BlockString) Append(val reflect.Value) error {
+	if b.flags.Contains(flagTextMarshalerType) {
+		buf, err := val.Interface().(encoding.TextMarshaler).MarshalText()
+		if err != nil {
+			return err
+		}
+		b.data.Append(buf)
+	} else if b.flags.Contains(flagStringerType) {
+		b.data.Append(compress.UnsafeGetBytes(val.Interface().(fmt.Stringer).String()))
+	} else {
+		b.data.Append(compress.UnsafeGetBytes(val.String()))
+	}
+	return nil
+}
+
+func (b *BlockBool) Append(val reflect.Value) error {
 	l := b.data.Len()
 	b.data.Grow(l + 1)
-	if val.(bool) {
+	if val.Bool() {
 		b.data.Set(l)
 	}
+	return nil
+}
+
+func (b *BlockDec256) Append(val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		b.data.Append(vec.Int256{0, 0, 0, val.Uint()})
+	case b.flags.Contains(flagIntType):
+		b.data.Append(vec.Int256{0, 0, 0, uint64(val.Int())})
+	case b.flags.Contains(flagFloatType):
+		dec := decimal.Decimal256{}
+		dec.SetFloat64(val.Float(), b.scale)
+		b.data.Append(dec.Int256())
+	default:
+		b.data.Append(val.Interface().(decimal.Decimal256).Quantize(b.scale).Int256())
+	}
+	return nil
+}
+
+func (b *BlockDec128) Append(val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		b.data.Append(vec.Int128{0, val.Uint()})
+	case b.flags.Contains(flagIntType):
+		b.data.Append(vec.Int128{0, uint64(val.Int())})
+	case b.flags.Contains(flagFloatType):
+		dec := decimal.Decimal128{}
+		dec.SetFloat64(val.Float(), b.scale)
+		b.data.Append(dec.Int128())
+	default:
+		b.data.Append(val.Interface().(decimal.Decimal128).Quantize(b.scale).Int128())
+	}
+	return nil
+}
+
+func (b *BlockDec64) Append(val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		b.data.Append(int64(val.Uint()))
+	case b.flags.Contains(flagIntType):
+		b.data.Append(val.Int())
+	case b.flags.Contains(flagFloatType):
+		dec := decimal.Decimal64{}
+		dec.SetFloat64(val.Float(), b.scale)
+		b.data.Append(dec.Int64())
+	default:
+		b.data.Append(val.Interface().(decimal.Decimal64).Quantize(b.scale).Int64())
+	}
+	return nil
+}
+
+func (b *BlockDec32) Append(val reflect.Value) error {
+	switch {
+	case b.flags.Contains(flagUintType):
+		b.data.Append(int32(val.Uint()))
+	case b.flags.Contains(flagIntType):
+		b.data.Append(int32(val.Int()))
+	case b.flags.Contains(flagFloatType):
+		dec := decimal.Decimal32{}
+		dec.SetFloat64(val.Float(), b.scale)
+		b.data.Append(dec.Int32())
+	default:
+		b.data.Append(val.Interface().(decimal.Decimal32).Quantize(b.scale).Int32())
+	}
+	return nil
 }
 
 func (b *BlockNum[T]) Delete(pos, n int) {
@@ -660,43 +1282,43 @@ func NewBlock(typ BlockType, comp Compression, sz int, scale int, flags FieldFla
 		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]int64))
 		bl = b
 	case BlockTypeInt64:
-		b := new(BlockNum[int64])
+		b := new(BlockInt64)
 		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]int64))
 		bl = b
 	case BlockTypeFloat64:
-		b := new(BlockNum[float64])
+		b := new(BlockFloat64)
 		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]float64))
 		bl = b
 	case BlockTypeFloat32:
-		b := new(BlockNum[float32])
+		b := new(BlockFloat32)
 		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]float32))
 		bl = b
 	case BlockTypeInt32:
-		b := new(BlockNum[int32])
+		b := new(BlockInt32)
 		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]int32))
 		bl = b
 	case BlockTypeInt16:
-		b := new(BlockNum[int16])
+		b := new(BlockInt16)
 		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]int16))
 		bl = b
 	case BlockTypeInt8:
-		b := new(BlockNum[int8])
+		b := new(BlockInt8)
 		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]int8))
 		bl = b
 	case BlockTypeUint64:
-		b := new(BlockNum[uint64])
+		b := new(BlockUint64)
 		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]uint64))
 		bl = b
 	case BlockTypeUint32:
-		b := new(BlockNum[uint32])
+		b := new(BlockUint32)
 		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]uint32))
 		bl = b
 	case BlockTypeUint16:
-		b := new(BlockNum[uint16])
+		b := new(BlockUint16)
 		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]uint16))
 		bl = b
 	case BlockTypeUint8:
-		b := new(BlockNum[uint8])
+		b := new(BlockUint8)
 		b.data = *num.NewNumArrayFromSlice(arena.Alloc(typ, sz).([]uint8))
 		bl = b
 	case BlockTypeBool:
@@ -744,7 +1366,7 @@ func NewBlock(typ BlockType, comp Compression, sz int, scale int, flags FieldFla
 		b.data.X3 = arena.Alloc(BlockTypeUint64, sz).([]uint64)
 		bl = b
 	}
-	//b.typ = typ
+	bl.setType(typ)
 	bl.SetCompression(comp)
 	bl.SetDirty()
 	bl.SetScale(scale)
@@ -760,43 +1382,43 @@ func NewBlockFromSlice(typ BlockType, comp Compression, slice interface{}) Block
 		b.data = *num.NewNumArrayFromSlice(slice.([]int64))
 		bl = b
 	case BlockTypeInt64:
-		b := new(BlockNum[int64])
+		b := new(BlockInt64)
 		b.data = *num.NewNumArrayFromSlice(slice.([]int64))
 		bl = b
 	case BlockTypeFloat64:
-		b := new(BlockNum[float64])
+		b := new(BlockFloat64)
 		b.data = *num.NewNumArrayFromSlice(slice.([]float64))
 		bl = b
 	case BlockTypeFloat32:
-		b := new(BlockNum[float32])
+		b := new(BlockFloat32)
 		b.data = *num.NewNumArrayFromSlice(slice.([]float32))
 		bl = b
 	case BlockTypeInt32:
-		b := new(BlockNum[int32])
+		b := new(BlockInt32)
 		b.data = *num.NewNumArrayFromSlice(slice.([]int32))
 		bl = b
 	case BlockTypeInt16:
-		b := new(BlockNum[int16])
+		b := new(BlockInt16)
 		b.data = *num.NewNumArrayFromSlice(slice.([]int16))
 		bl = b
 	case BlockTypeInt8:
-		b := new(BlockNum[int8])
+		b := new(BlockInt8)
 		b.data = *num.NewNumArrayFromSlice(slice.([]int8))
 		bl = b
 	case BlockTypeUint64:
-		b := new(BlockNum[uint64])
+		b := new(BlockUint64)
 		b.data = *num.NewNumArrayFromSlice(slice.([]uint64))
 		bl = b
 	case BlockTypeUint32:
-		b := new(BlockNum[uint32])
+		b := new(BlockUint32)
 		b.data = *num.NewNumArrayFromSlice(slice.([]uint32))
 		bl = b
 	case BlockTypeUint16:
-		b := new(BlockNum[uint16])
+		b := new(BlockUint16)
 		b.data = *num.NewNumArrayFromSlice(slice.([]uint16))
 		bl = b
 	case BlockTypeUint8:
-		b := new(BlockNum[uint8])
+		b := new(BlockUint8)
 		b.data = *num.NewNumArrayFromSlice(slice.([]uint8))
 		bl = b
 		/*	case BlockTypeBool:
@@ -823,7 +1445,7 @@ func NewBlockFromSlice(typ BlockType, comp Compression, slice interface{}) Block
 		errorString := fmt.Sprintf("NewBlockFromSlice not yet implemented for Type %s", typ.String())
 		panic(errorString)
 	}
-	//b.typ = typ
+	bl.setType(typ)
 	bl.SetCompression(comp)
 	bl.SetDirty()
 	return bl
@@ -841,11 +1463,119 @@ func (b *BlockTime) Copy(src Block) {
 	b.data.Copy(sb.data.Slice())
 }
 
-func (b *BlockNum[T]) Copy(src Block) {
+func (b *BlockInt64) Copy(src Block) {
 	if src == nil {
 		return
 	}
-	sb := src.(*BlockNum[T])
+	sb := src.(*BlockInt64)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	b.data.Copy(sb.data.Slice())
+}
+
+func (b *BlockInt32) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockInt32)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	b.data.Copy(sb.data.Slice())
+}
+
+func (b *BlockInt16) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockInt16)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	b.data.Copy(sb.data.Slice())
+}
+
+func (b *BlockInt8) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockInt8)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	b.data.Copy(sb.data.Slice())
+}
+
+func (b *BlockUint64) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockUint64)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	b.data.Copy(sb.data.Slice())
+}
+
+func (b *BlockUint32) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockUint32)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	b.data.Copy(sb.data.Slice())
+}
+
+func (b *BlockUint16) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockUint16)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	b.data.Copy(sb.data.Slice())
+}
+
+func (b *BlockUint8) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockUint8)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	b.data.Copy(sb.data.Slice())
+}
+
+func (b *BlockFloat64) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockFloat64)
+	b.size = sb.size
+	b.dirty = true
+	b.scale = sb.scale
+	b.flags = sb.flags
+	b.data.Copy(sb.data.Slice())
+}
+
+func (b *BlockFloat32) Copy(src Block) {
+	if src == nil {
+		return
+	}
+	sb := src.(*BlockFloat32)
 	b.size = sb.size
 	b.dirty = true
 	b.scale = sb.scale
@@ -992,8 +1722,53 @@ func (b *BlockTime) AppendFrom(src Block, pos, len int) {
 	b.data.AppendFrom(sb.data.Slice(), pos, len)
 }
 
-func (b *BlockNum[T]) AppendFrom(src Block, pos, len int) {
-	sb := src.(*BlockNum[T])
+func (b *BlockInt64) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockInt64)
+	b.data.AppendFrom(sb.data.Slice(), pos, len)
+}
+
+func (b *BlockInt32) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockInt32)
+	b.data.AppendFrom(sb.data.Slice(), pos, len)
+}
+
+func (b *BlockInt16) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockInt16)
+	b.data.AppendFrom(sb.data.Slice(), pos, len)
+}
+
+func (b *BlockInt8) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockInt8)
+	b.data.AppendFrom(sb.data.Slice(), pos, len)
+}
+
+func (b *BlockUint64) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockUint64)
+	b.data.AppendFrom(sb.data.Slice(), pos, len)
+}
+
+func (b *BlockUint32) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockUint32)
+	b.data.AppendFrom(sb.data.Slice(), pos, len)
+}
+
+func (b *BlockUint16) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockUint16)
+	b.data.AppendFrom(sb.data.Slice(), pos, len)
+}
+
+func (b *BlockUint8) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockUint8)
+	b.data.AppendFrom(sb.data.Slice(), pos, len)
+}
+
+func (b *BlockFloat64) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockFloat64)
+	b.data.AppendFrom(sb.data.Slice(), pos, len)
+}
+
+func (b *BlockFloat32) AppendFrom(src Block, pos, len int) {
+	sb := src.(*BlockFloat32)
 	b.data.AppendFrom(sb.data.Slice(), pos, len)
 }
 
@@ -1009,22 +1784,58 @@ func (b *BlockInt128) AppendFrom(src Block, pos, len int) {
 
 func (b *BlockDec32) AppendFrom(src Block, pos, len int) {
 	sb := src.(*BlockDec32)
-	b.data.AppendFrom(sb.data.Slice(), pos, len)
+
+	// FIXME: are different scales possible here?
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.AppendFrom(sb.data.Slice(), pos, len)
+	} else {
+		for _, v := range sb.data.RangeSlice(pos, pos+len) {
+			b.data.Append(decimal.NewDecimal32(v, sc).Quantize(dc).Int32())
+		}
+	}
 }
 
 func (b *BlockDec64) AppendFrom(src Block, pos, len int) {
 	sb := src.(*BlockDec64)
-	b.data.AppendFrom(sb.data.Slice(), pos, len)
+
+	// FIXME: are different scales possible here?
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.AppendFrom(sb.data.Slice(), pos, len)
+	} else {
+		for _, v := range sb.data.RangeSlice(pos, pos+len) {
+			b.data.Append(decimal.NewDecimal64(v, sc).Quantize(dc).Int64())
+		}
+	}
 }
 
 func (b *BlockDec128) AppendFrom(src Block, pos, len int) {
 	sb := src.(*BlockDec128)
-	b.data.AppendFrom(sb.data.Subslice(pos, pos+len))
+
+	// FIXME: are different scales possible here?
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.AppendFrom(sb.data.Subslice(pos, pos+len))
+	} else {
+		for j := 0; j < len; j++ {
+			b.data.Append(decimal.NewDecimal128(sb.data.Elem(pos+j), sc).Quantize(dc).Int128())
+		}
+	}
 }
 
 func (b *BlockDec256) AppendFrom(src Block, pos, len int) {
 	sb := src.(*BlockDec256)
-	b.data.AppendFrom(sb.data.Subslice(pos, pos+len))
+
+	// FIXME: are different scales possible here?
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.AppendFrom(sb.data.Subslice(pos, pos+len))
+	} else {
+		for j := 0; j < len; j++ {
+			b.data.Append(decimal.NewDecimal256(sb.data.Elem(pos+j), sc).Quantize(dc).Int256())
+		}
+	}
 }
 
 func (b *BlockBytes) AppendFrom(src Block, pos, len int) {
@@ -1055,8 +1866,53 @@ func (b *BlockTime) ReplaceFrom(src Block, spos, dpos, len int) {
 	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
 }
 
-func (b *BlockNum[T]) ReplaceFrom(src Block, spos, dpos, len int) {
-	sb := src.(*BlockNum[T])
+func (b *BlockInt64) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt64)
+	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockInt32) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt32)
+	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockInt16) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt16)
+	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockInt8) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt8)
+	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockUint64) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockUint64)
+	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockUint32) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockUint32)
+	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockUint16) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockUint16)
+	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockUint8) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockUint8)
+	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockFloat64) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockFloat64)
+	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockFloat32) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockFloat32)
 	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
 }
 
@@ -1085,24 +1941,60 @@ func (b *BlockBool) ReplaceFrom(src Block, spos, dpos, len int) {
 	b.data.Replace(sb.data, spos, len, dpos)
 }
 
-func (b *BlockDec32) ReplaceFrom(src Block, spos, dpos, len int) {
-	sb := src.(*BlockDec32)
-	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
-}
+func (b *BlockDec256) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockDec256)
 
-func (b *BlockDec64) ReplaceFrom(src Block, spos, dpos, len int) {
-	sb := src.(*BlockDec64)
-	b.data.ReplaceFrom(sb.data.Slice(), spos, dpos, len)
+	// FIXME: are different scales possible here?
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.Copy(sb.data, dpos, spos, len)
+	} else {
+		for j := 0; j < len; j++ {
+			b.data.Set(dpos+j, decimal.NewDecimal256(sb.data.Elem(spos+j), sc).Quantize(dc).Int256())
+		}
+	}
 }
 
 func (b *BlockDec128) ReplaceFrom(src Block, spos, dpos, len int) {
 	sb := src.(*BlockDec128)
-	b.data.Copy(sb.data, dpos, spos, len)
+
+	// FIXME: are different scales possible here?
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.Copy(sb.data, dpos, spos, len)
+	} else {
+		for j := 0; j < len; j++ {
+			b.data.Set(dpos+j, decimal.NewDecimal128(sb.data.Elem(spos+j), sc).Quantize(dc).Int128())
+		}
+	}
 }
 
-func (b *BlockDec256) ReplaceFrom(src Block, spos, dpos, len int) {
-	sb := src.(*BlockDec256)
-	b.data.Copy(sb.data, dpos, spos, len)
+func (b *BlockDec64) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockDec64)
+
+	// FIXME: are different scales possible here?
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.ReplaceFrom(sb.data.Slice(), dpos, spos, len)
+	} else {
+		for j := 0; j < len; j++ {
+			b.data.Set(dpos+j, decimal.NewDecimal64(sb.data.Elem(spos+j), sc).Quantize(dc).Int64())
+		}
+	}
+}
+
+func (b *BlockDec32) ReplaceFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockDec32)
+
+	// FIXME: are different scales possible here?
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.ReplaceFrom(sb.data.Slice(), dpos, spos, len)
+	} else {
+		for j := 0; j < len; j++ {
+			b.data.Set(dpos+j, decimal.NewDecimal32(sb.data.Elem(spos+j), sc).Quantize(dc).Int32())
+		}
+	}
 }
 
 func (b *BlockTime) InsertFrom(src Block, spos, dpos, len int) {
@@ -1110,8 +2002,53 @@ func (b *BlockTime) InsertFrom(src Block, spos, dpos, len int) {
 	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
 }
 
-func (b *BlockNum[T]) InsertFrom(src Block, spos, dpos, len int) {
-	sb := src.(*BlockNum[T])
+func (b *BlockInt64) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt64)
+	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockInt32) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt32)
+	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockInt16) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt16)
+	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockInt8) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockInt8)
+	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockUint64) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockUint64)
+	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockUint32) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockUint32)
+	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockUint16) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockUint16)
+	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockUint8) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockUint8)
+	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockFloat64) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockFloat64)
+	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+}
+
+func (b *BlockFloat32) InsertFrom(src Block, spos, dpos, len int) {
+	sb := src.(*BlockFloat32)
 	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
 }
 
@@ -1142,22 +2079,62 @@ func (b *BlockInt128) InsertFrom(src Block, spos, dpos, len int) {
 
 func (b *BlockDec32) InsertFrom(src Block, spos, dpos, len int) {
 	sb := src.(*BlockDec32)
-	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+	} else {
+		cp := make([]int32, len)
+		for i, v := range sb.data.RangeSlice(spos, spos+len) {
+			cp[i] = decimal.NewDecimal32(v, sc).Quantize(dc).Int32()
+		}
+		b.data.InsertFrom(cp, 0, dpos, len)
+	}
 }
 
 func (b *BlockDec64) InsertFrom(src Block, spos, dpos, len int) {
 	sb := src.(*BlockDec64)
-	b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.InsertFrom(sb.data.Slice(), spos, dpos, len)
+	} else {
+		cp := make([]int64, len)
+		for i, v := range sb.data.RangeSlice(spos, spos+len) {
+			cp[i] = decimal.NewDecimal64(v, sc).Quantize(dc).Int64()
+		}
+		b.data.InsertFrom(cp, 0, dpos, len)
+	}
 }
 
 func (b *BlockDec128) InsertFrom(src Block, spos, dpos, len int) {
 	sb := src.(*BlockDec128)
-	b.data.Insert(dpos, sb.data.Subslice(spos, spos+len))
+
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.Insert(dpos, sb.data.Subslice(spos, spos+len))
+	} else {
+		cp := vec.MakeInt128LLSlice(len)
+		for i := 0; i < len; i++ {
+			cp.Set(i, decimal.NewDecimal128(sb.data.Elem(spos+len), sc).Quantize(dc).Int128())
+		}
+		b.data.Insert(dpos, cp)
+	}
 }
 
 func (b *BlockDec256) InsertFrom(src Block, spos, dpos, len int) {
 	sb := src.(*BlockDec256)
-	b.data.Insert(dpos, sb.data.Subslice(spos, spos+len))
+
+	sc, dc := sb.scale, b.scale
+	if sc == dc {
+		b.data.Insert(dpos, sb.data.Subslice(spos, spos+len))
+	} else {
+		cp := vec.MakeInt256LLSlice(len)
+		for i := 0; i < len; i++ {
+			cp.Set(i, decimal.NewDecimal256(sb.data.Elem(spos+len), sc).Quantize(dc).Int256())
+		}
+		b.data.Insert(dpos, cp)
+	}
 }
 
 func (b *BlockNum[T]) Len() int {
@@ -1206,30 +2183,52 @@ func (b *BlockInt256) Cap() int {
 //
 // This size hint is used to properly dimension the encoer/decoder buffers
 // as is required by LZ4 and to avoid memcopy during write.
-func (b *BlockNum[T]) MaxStoredSize() int {
-	var sz int
-	switch b.Type() {
-	case BlockTypeFloat64:
-		sz = compress.Float64ArrayEncodedSize(interface{}(b.data.Slice()).([]float64))
-	case BlockTypeFloat32:
-		sz = compress.Float32ArrayEncodedSize(interface{}(b.data.Slice()).([]float32))
-	case BlockTypeInt64:
-		sz = compress.Int64ArrayEncodedSize(interface{}(b.data.Slice()).([]int64))
-	case BlockTypeInt32:
-		sz = compress.Int32ArrayEncodedSize(interface{}(b.data.Slice()).([]int32))
-	case BlockTypeInt16:
-		sz = compress.Int16ArrayEncodedSize(interface{}(b.data.Slice()).([]int16))
-	case BlockTypeInt8:
-		sz = compress.Int8ArrayEncodedSize(interface{}(b.data.Slice()).([]int8))
-	case BlockTypeUint64:
-		sz = compress.Uint64ArrayEncodedSize(interface{}(b.data.Slice()).([]uint64))
-	case BlockTypeUint32:
-		sz = compress.Uint32ArrayEncodedSize(interface{}(b.data.Slice()).([]uint32))
-	case BlockTypeUint16:
-		sz = compress.Uint16ArrayEncodedSize(interface{}(b.data.Slice()).([]uint16))
-	case BlockTypeUint8:
-		sz = compress.Uint8ArrayEncodedSize(interface{}(b.data.Slice()).([]uint8))
-	}
+func (b *BlockInt64) MaxStoredSize() int {
+	sz := compress.Int64ArrayEncodedSize(b.data.Slice())
+	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
+}
+
+func (b *BlockInt32) MaxStoredSize() int {
+	sz := compress.Int32ArrayEncodedSize(b.data.Slice())
+	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
+}
+
+func (b *BlockInt16) MaxStoredSize() int {
+	sz := compress.Int16ArrayEncodedSize(b.data.Slice())
+	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
+}
+func (b *BlockInt8) MaxStoredSize() int {
+	sz := compress.Int8ArrayEncodedSize(b.data.Slice())
+	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
+}
+
+func (b *BlockUint64) MaxStoredSize() int {
+	sz := compress.Uint64ArrayEncodedSize(b.data.Slice())
+	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
+}
+
+func (b *BlockUint32) MaxStoredSize() int {
+	sz := compress.Uint32ArrayEncodedSize(b.data.Slice())
+	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
+}
+
+func (b *BlockUint16) MaxStoredSize() int {
+	sz := compress.Uint16ArrayEncodedSize(b.data.Slice())
+	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
+}
+
+func (b *BlockUint8) MaxStoredSize() int {
+	sz := compress.Uint8ArrayEncodedSize(b.data.Slice())
+	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
+}
+
+func (b *BlockFloat64) MaxStoredSize() int {
+	sz := compress.Float64ArrayEncodedSize(b.data.Slice())
+	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
+}
+
+func (b *BlockFloat32) MaxStoredSize() int {
+	sz := compress.Float32ArrayEncodedSize(b.data.Slice())
 	return sz + storedBlockHeaderSize + b.comp.HeaderSize(sz)
 }
 
@@ -1361,44 +2360,124 @@ func (b *BlockInt256) Release() {
 	b.data.X3 = nil
 }
 
-func (b *BlockNum[T]) Encode(buf *bytes.Buffer) (int, error) {
+func (b *BlockInt64) Encode(buf *bytes.Buffer) (int, error) {
 	if buf == nil {
 		return 0, fmt.Errorf("block: nil buffer while encoding")
 	}
-	var (
-		err error
-		n   int
-	)
-
-	switch b.Type() {
-	case BlockTypeFloat64:
-		n, err = encodeFloat64Block(buf, interface{}(b.data.Slice()).([]float64), b.Compression())
-	case BlockTypeFloat32:
-		n, err = encodeFloat32Block(buf, interface{}(b.data.Slice()).([]float32), b.Compression())
-	case BlockTypeInt64:
-		n, err = encodeInt64Block(buf, interface{}(b.data.Slice()).([]int64), b.Compression())
-	case BlockTypeInt32:
-		n, err = encodeInt32Block(buf, interface{}(b.data.Slice()).([]int32), b.Compression())
-	case BlockTypeInt16:
-		n, err = encodeInt16Block(buf, interface{}(b.data.Slice()).([]int16), b.Compression())
-	case BlockTypeInt8:
-		n, err = encodeInt8Block(buf, interface{}(b.data.Slice()).([]int8), b.Compression())
-	case BlockTypeUint64:
-		n, err = encodeUint64Block(buf, interface{}(b.data.Slice()).([]uint64), b.Compression())
-	case BlockTypeUint32:
-		n, err = encodeUint32Block(buf, interface{}(b.data.Slice()).([]uint32), b.Compression())
-	case BlockTypeUint16:
-		n, err = encodeUint16Block(buf, interface{}(b.data.Slice()).([]uint16), b.Compression())
-	case BlockTypeUint8:
-		n, err = encodeUint8Block(buf, interface{}(b.data.Slice()).([]uint8), b.Compression())
+	n, err := encodeInt64Block(buf, b.data.Slice(), b.Compression())
+	if err == nil {
+		b.dirty = false
+		b.size = n
 	}
-	if err != nil {
-		return n, err
-	}
+	return n, err
+}
 
-	b.dirty = false
-	b.size = n
-	return n, nil
+func (b *BlockInt32) Encode(buf *bytes.Buffer) (int, error) {
+	if buf == nil {
+		return 0, fmt.Errorf("block: nil buffer while encoding")
+	}
+	n, err := encodeInt32Block(buf, b.data.Slice(), b.Compression())
+	if err == nil {
+		b.dirty = false
+		b.size = n
+	}
+	return n, err
+}
+
+func (b *BlockInt16) Encode(buf *bytes.Buffer) (int, error) {
+	if buf == nil {
+		return 0, fmt.Errorf("block: nil buffer while encoding")
+	}
+	n, err := encodeInt16Block(buf, b.data.Slice(), b.Compression())
+	if err == nil {
+		b.dirty = false
+		b.size = n
+	}
+	return n, err
+}
+
+func (b *BlockInt8) Encode(buf *bytes.Buffer) (int, error) {
+	if buf == nil {
+		return 0, fmt.Errorf("block: nil buffer while encoding")
+	}
+	n, err := encodeInt8Block(buf, b.data.Slice(), b.Compression())
+	if err == nil {
+		b.dirty = false
+		b.size = n
+	}
+	return n, err
+}
+
+func (b *BlockUint64) Encode(buf *bytes.Buffer) (int, error) {
+	if buf == nil {
+		return 0, fmt.Errorf("block: nil buffer while encoding")
+	}
+	n, err := encodeUint64Block(buf, b.data.Slice(), b.Compression())
+	if err == nil {
+		b.dirty = false
+		b.size = n
+	}
+	return n, err
+}
+
+func (b *BlockUint32) Encode(buf *bytes.Buffer) (int, error) {
+	if buf == nil {
+		return 0, fmt.Errorf("block: nil buffer while encoding")
+	}
+	n, err := encodeUint32Block(buf, b.data.Slice(), b.Compression())
+	if err == nil {
+		b.dirty = false
+		b.size = n
+	}
+	return n, err
+}
+
+func (b *BlockUint16) Encode(buf *bytes.Buffer) (int, error) {
+	if buf == nil {
+		return 0, fmt.Errorf("block: nil buffer while encoding")
+	}
+	n, err := encodeUint16Block(buf, b.data.Slice(), b.Compression())
+	if err == nil {
+		b.dirty = false
+		b.size = n
+	}
+	return n, err
+}
+
+func (b *BlockUint8) Encode(buf *bytes.Buffer) (int, error) {
+	if buf == nil {
+		return 0, fmt.Errorf("block: nil buffer while encoding")
+	}
+	n, err := encodeUint8Block(buf, b.data.Slice(), b.Compression())
+	if err == nil {
+		b.dirty = false
+		b.size = n
+	}
+	return n, err
+}
+
+func (b *BlockFloat64) Encode(buf *bytes.Buffer) (int, error) {
+	if buf == nil {
+		return 0, fmt.Errorf("block: nil buffer while encoding")
+	}
+	n, err := encodeFloat64Block(buf, b.data.Slice(), b.Compression())
+	if err == nil {
+		b.dirty = false
+		b.size = n
+	}
+	return n, err
+}
+
+func (b *BlockFloat32) Encode(buf *bytes.Buffer) (int, error) {
+	if buf == nil {
+		return 0, fmt.Errorf("block: nil buffer while encoding")
+	}
+	n, err := encodeFloat32Block(buf, b.data.Slice(), b.Compression())
+	if err == nil {
+		b.dirty = false
+		b.size = n
+	}
+	return n, err
 }
 
 func (b *BlockTime) Encode(buf *bytes.Buffer) (int, error) {
@@ -1576,8 +2655,8 @@ func (b *BlockInt128) Decode(buf []byte, sz, stored int) error {
 		return err
 	}
 	if typ != b.Type() {
-		return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
-			typ, typ.String(), b.Type(), b.Type().String())
+		//return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
+		//	typ, typ.String(), b.Type(), b.Type().String())
 	}
 	b.dirty = false
 	b.size = stored
@@ -1605,8 +2684,8 @@ func (b *BlockInt256) Decode(buf []byte, sz, stored int) error {
 		return err
 	}
 	if typ != b.Type() {
-		return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
-			typ, typ.String(), b.Type(), b.Type().String())
+		//return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
+		//	typ, typ.String(), b.Type(), b.Type().String())
 	}
 	b.dirty = false
 	b.size = stored
@@ -1646,8 +2725,8 @@ func (b *BlockNum[T]) Decode(buf []byte, sz, stored int) error {
 		return err
 	}
 	if typ != b.Type() {
-		return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
-			typ, typ.String(), b.Type(), b.Type().String())
+		//return fmt.Errorf("Decode: unexpected block type %d(%s), expected %d(%s)",
+		//	typ, typ.String(), b.Type(), b.Type().String())
 	}
 	b.dirty = false
 	b.size = stored
@@ -1877,6 +2956,257 @@ func (b *BlockInt256) Hashes(res []uint64) []uint64 {
 		res[i] = xxhash.Sum64(buf[:])
 	}
 	return res
+}
+
+func (b *BlockBytes) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	l := b.data.Len()
+	for i := 0; i < l; i++ {
+		filter.Add(b.data.Elem(i))
+	}
+	return util.MinU32(uint32(l), uint32(filter.Cardinality()))
+}
+
+func (b *BlockBool) EstimateCardinality(prec uint) uint32 {
+	// FIXME: make more efficient: no loglogbeta, process bytes
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	var (
+		count int
+		last  bool
+	)
+	for _, v := range b.data.Slice() {
+		if count == 2 {
+			break
+		}
+		if v {
+			filter.Add([]byte{1})
+			if count == 0 || !last {
+				count++
+			}
+		} else {
+			filter.Add([]byte{0})
+			if count == 0 || last {
+				count++
+			}
+		}
+	}
+	return util.MinU32(uint32(b.data.Len()), uint32(filter.Cardinality()))
+}
+
+func (b *BlockInt256) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	l := b.data.Len()
+	for i := 0; i < l; i++ {
+		buf := b.data.Elem(i).Bytes32()
+		filter.Add(buf[:])
+	}
+	return util.MinU32(uint32(l), uint32(filter.Cardinality()))
+}
+
+func (b *BlockInt128) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	l := b.data.Len()
+	for i := 0; i < l; i++ {
+		buf := b.data.Elem(i).Bytes16()
+		filter.Add(buf[:])
+	}
+	return util.MinU32(uint32(l), uint32(filter.Cardinality()))
+}
+
+func (b *BlockInt64) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	filter.AddManyInt64(b.data.Slice())
+	return util.MinU32(uint32(b.data.Len()), uint32(filter.Cardinality()))
+}
+
+func (b *BlockInt32) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	filter.AddManyInt32(b.data.Slice())
+	return util.MinU32(uint32(b.data.Len()), uint32(filter.Cardinality()))
+}
+
+func (b *BlockInt16) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	var buf [2]byte
+	for _, v := range b.data.Slice() {
+		bigEndian.PutUint16(buf[:], uint16(v))
+		filter.Add(buf[:2])
+	}
+	return util.MinU32(uint32(b.data.Len()), uint32(filter.Cardinality()))
+}
+
+func (b *BlockInt8) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	for _, v := range b.data.Slice() {
+		filter.Add([]byte{byte(v)})
+	}
+	return util.MinU32(uint32(b.data.Len()), uint32(filter.Cardinality()))
+}
+
+func (b *BlockUint64) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	filter.AddManyUint64(b.data.Slice())
+	return util.MinU32(uint32(b.data.Len()), uint32(filter.Cardinality()))
+}
+
+func (b *BlockUint32) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	filter.AddManyUint32(b.data.Slice())
+	return util.MinU32(uint32(b.data.Len()), uint32(filter.Cardinality()))
+}
+
+func (b *BlockUint16) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	var buf [2]byte
+	for _, v := range b.data.Slice() {
+		bigEndian.PutUint16(buf[:], v)
+		filter.Add(buf[:2])
+	}
+	return util.MinU32(uint32(b.data.Len()), uint32(filter.Cardinality()))
+}
+
+func (b *BlockUint8) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	for _, v := range b.data.Slice() {
+		filter.Add([]byte{v})
+	}
+	return util.MinU32(uint32(b.data.Len()), uint32(filter.Cardinality()))
+}
+
+func (b *BlockFloat64) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	var buf [8]byte
+	for _, v := range b.data.Slice() {
+		bigEndian.PutUint64(buf[:], math.Float64bits(v))
+		filter.Add(buf[:])
+	}
+	return util.MinU32(uint32(b.data.Len()), uint32(filter.Cardinality()))
+}
+
+func (b *BlockFloat32) EstimateCardinality(prec uint) uint32 {
+	filter := loglogbeta.NewFilterWithPrecision(uint32(prec))
+	var buf [4]byte
+	for _, v := range b.data.Slice() {
+		bigEndian.PutUint32(buf[:], math.Float32bits(v))
+		filter.Add(buf[:4])
+	}
+	return util.MinU32(uint32(b.data.Len()), uint32(filter.Cardinality()))
+}
+
+func (b *BlockBytes) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	for i := 0; i < b.data.Len(); i++ {
+		flt.Add(b.data.Elem(i))
+	}
+	return flt
+}
+
+func (b *BlockBool) BuildBloomFilter(m int) *bloom.Filter {
+	// FIXME: make more efficiant
+	flt := bloom.NewFilter(m)
+	var (
+		count int
+		last  bool
+	)
+	for _, v := range b.data.Slice() {
+		if count == 2 {
+			break
+		}
+		if v {
+			flt.Add([]byte{1})
+			if count == 0 || !last {
+				count++
+			}
+		} else {
+			flt.Add([]byte{0})
+			if count == 0 || last {
+				count++
+			}
+		}
+	}
+	return flt
+}
+
+func (b *BlockInt256) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	for i := 0; i < b.data.Len(); i++ {
+		buf := b.data.Elem(i).Bytes32()
+		flt.Add(buf[:])
+	}
+	return flt
+}
+
+func (b *BlockInt128) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	for i := 0; i < b.data.Len(); i++ {
+		buf := b.data.Elem(i).Bytes16()
+		flt.Add(buf[:])
+	}
+	return flt
+}
+
+func (b *BlockInt64) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	flt.AddManyInt64(b.data.Slice())
+	return flt
+}
+
+func (b *BlockInt32) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	flt.AddManyInt32(b.data.Slice())
+	return flt
+}
+
+func (b *BlockInt16) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	flt.AddManyInt16(b.data.Slice())
+	return flt
+}
+
+func (b *BlockInt8) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	for _, v := range b.data.Slice() {
+		flt.Add([]byte{byte(v)})
+	}
+	return flt
+}
+
+func (b *BlockUint64) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	flt.AddManyUint64(b.data.Slice())
+	return flt
+}
+
+func (b *BlockUint32) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	flt.AddManyUint32(b.data.Slice())
+	return flt
+}
+
+func (b *BlockUint16) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	flt.AddManyUint16(b.data.Slice())
+	return flt
+}
+
+func (b *BlockUint8) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	for _, v := range b.data.Slice() {
+		flt.Add([]byte{v})
+	}
+	return flt
+}
+
+func (b *BlockFloat64) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	flt.AddManyFloat64(b.data.Slice())
+	return flt
+}
+
+func (b *BlockFloat32) BuildBloomFilter(m int) *bloom.Filter {
+	flt := bloom.NewFilter(m)
+	flt.AddManyFloat32(b.data.Slice())
+	return flt
 }
 
 func (b *blockCommon) Optimize() {}
@@ -2124,6 +3454,407 @@ func (b *BlockInt128) MatchBetween(from, to interface{}, bits, mask *vec.Bitset)
 
 func (b *BlockNum[T]) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
 	return b.data.MatchBetween(from, to, bits, mask)
+}
+
+func (b *blockCommon) MatchRegExp(re string, bits, mask *vec.Bitset) *vec.Bitset {
+	return bits
+}
+
+func (b *BlockString) MatchRegExp(re string, bits, mask *vec.Bitset) *vec.Bitset {
+	rematch := strings.Replace(re, "*", ".*", -1)
+	for i, v := range b.data.Slice() {
+		// skip masked values
+		if mask != nil && !mask.IsSet(i) {
+			continue
+		}
+		if match, _ := regexp.Match(rematch, v); match {
+			bits.Set(i)
+		}
+	}
+	return bits
+}
+
+func (b *BlockTime) MatchRegExp(re string, bits, mask *vec.Bitset) *vec.Bitset {
+	rematch := strings.Replace(re, "*", ".*", -1)
+	for i, v := range b.data.Slice() {
+		// skip masked values
+		if mask != nil && !mask.IsSet(i) {
+			continue
+		}
+		val := time.Unix(0, v).Format(time.RFC3339)
+		if match, _ := regexp.MatchString(rematch, val); match {
+			bits.Set(i)
+		}
+	}
+	return bits
+}
+
+func (b *BlockNum[T]) EqualAt(i int, val interface{}) bool {
+	return b.data.Elem(i) == val.(T)
+}
+
+func (b *BlockBytes) EqualAt(i int, val interface{}) bool {
+	return bytes.Equal(b.data.Elem(i), val.([]byte))
+}
+
+func (b *BlockString) EqualAt(i int, val interface{}) bool {
+	return compress.UnsafeGetString(b.data.Elem(i)) == val.(string)
+}
+
+func (b *BlockTime) EqualAt(i int, val interface{}) bool {
+	ts := b.data.Elem(i)
+	if ts == 0 {
+		return zeroTime.Equal(val.(time.Time))
+	}
+	return time.Unix(0, ts).Equal(val.(time.Time))
+}
+
+func (b *BlockBool) EqualAt(i int, val interface{}) bool {
+	return b.data.IsSet(i) == val.(bool)
+}
+
+func (b *BlockInt128) EqualAt(i int, val interface{}) bool {
+	return b.data.Elem(i).Eq(val.(vec.Int128))
+}
+
+func (b *BlockInt256) EqualAt(i int, val interface{}) bool {
+	return b.data.Elem(i).Eq(val.(vec.Int256))
+}
+
+func (b *BlockDec256) EqualAt(i int, val interface{}) bool {
+	return decimal.NewDecimal256(b.data.Elem(i), b.scale).Eq(val.(decimal.Decimal256))
+}
+
+func (b *BlockDec128) EqualAt(i int, val interface{}) bool {
+	return decimal.NewDecimal128(b.data.Elem(i), b.scale).Eq(val.(decimal.Decimal128))
+}
+
+func (b *BlockDec64) EqualAt(i int, val interface{}) bool {
+	return decimal.NewDecimal64(b.data.Elem(i), b.scale).Eq(val.(decimal.Decimal64))
+}
+
+func (b *BlockDec32) EqualAt(i int, val interface{}) bool {
+	return decimal.NewDecimal32(b.data.Elem(i), b.scale).Eq(val.(decimal.Decimal32))
+}
+
+func (b *BlockNum[T]) GtAt(i int, val interface{}) bool {
+	return b.data.Elem(i) > val.(T)
+}
+
+func (b *BlockBytes) GtAt(i int, val interface{}) bool {
+	return bytes.Compare(b.data.Elem(i), val.([]byte)) > 0
+}
+
+func (b *BlockString) GtAt(i int, val interface{}) bool {
+	return compress.UnsafeGetString(b.data.Elem(i)) > val.(string)
+}
+
+func (b *BlockTime) GtAt(i int, val interface{}) bool {
+	ts := b.data.Elem(i)
+	if ts == 0 {
+		return zeroTime.After(val.(time.Time))
+	}
+	return time.Unix(0, ts).After(val.(time.Time))
+}
+
+func (b *BlockBool) GtAt(i int, val interface{}) bool {
+	// FIXME: check this
+	return b.data.IsSet(i) != val.(bool)
+}
+
+func (b *BlockInt128) GtAt(i int, val interface{}) bool {
+	return b.data.Elem(i).Gt(val.(vec.Int128))
+}
+
+func (b *BlockInt256) GtAt(i int, val interface{}) bool {
+	return b.data.Elem(i).Gt(val.(vec.Int256))
+}
+
+func (b *BlockDec256) GtAt(i int, val interface{}) bool {
+	return decimal.NewDecimal256(b.data.Elem(i), b.scale).Gt(val.(decimal.Decimal256))
+}
+
+func (b *BlockDec128) GtAt(i int, val interface{}) bool {
+	return decimal.NewDecimal128(b.data.Elem(i), b.scale).Gt(val.(decimal.Decimal128))
+}
+
+func (b *BlockDec64) GtAt(i int, val interface{}) bool {
+	return decimal.NewDecimal64(b.data.Elem(i), b.scale).Gt(val.(decimal.Decimal64))
+}
+
+func (b *BlockDec32) GtAt(i int, val interface{}) bool {
+	return decimal.NewDecimal32(b.data.Elem(i), b.scale).Gt(val.(decimal.Decimal32))
+}
+
+func (b *BlockNum[T]) GteAt(i int, val interface{}) bool {
+	return b.data.Elem(i) >= val.(T)
+}
+
+func (b *BlockBytes) GteAt(i int, val interface{}) bool {
+	return bytes.Compare(b.data.Elem(i), val.([]byte)) >= 0
+}
+
+func (b *BlockString) GteAt(i int, val interface{}) bool {
+	return compress.UnsafeGetString(b.data.Elem(i)) >= val.(string)
+}
+
+func (b *BlockTime) GteAt(i int, val interface{}) bool {
+	ts := b.data.Elem(i)
+	if ts == 0 {
+		return !zeroTime.Before(val.(time.Time))
+	}
+	return !time.Unix(0, ts).Before(val.(time.Time))
+}
+
+func (b *BlockBool) GteAt(i int, val interface{}) bool {
+	// FIXME: check this
+	return true
+}
+
+func (b *BlockInt128) GteAt(i int, val interface{}) bool {
+	return b.data.Elem(i).Gte(val.(vec.Int128))
+}
+
+func (b *BlockInt256) GteAt(i int, val interface{}) bool {
+	return b.data.Elem(i).Gte(val.(vec.Int256))
+}
+
+func (b *BlockDec256) GteAt(i int, val interface{}) bool {
+	return decimal.NewDecimal256(b.data.Elem(i), b.scale).Gte(val.(decimal.Decimal256))
+}
+
+func (b *BlockDec128) GteAt(i int, val interface{}) bool {
+	return decimal.NewDecimal128(b.data.Elem(i), b.scale).Gte(val.(decimal.Decimal128))
+}
+
+func (b *BlockDec64) GteAt(i int, val interface{}) bool {
+	return decimal.NewDecimal64(b.data.Elem(i), b.scale).Gte(val.(decimal.Decimal64))
+}
+
+func (b *BlockDec32) GteAt(i int, val interface{}) bool {
+	return decimal.NewDecimal32(b.data.Elem(i), b.scale).Gte(val.(decimal.Decimal32))
+}
+
+func (b *BlockNum[T]) LtAt(i int, val interface{}) bool {
+	return b.data.Elem(i) < val.(T)
+}
+
+func (b *BlockBytes) LtAt(i int, val interface{}) bool {
+	return bytes.Compare(b.data.Elem(i), val.([]byte)) < 0
+}
+
+func (b *BlockString) LtAt(i int, val interface{}) bool {
+	return compress.UnsafeGetString(b.data.Elem(i)) < val.(string)
+}
+
+func (b *BlockTime) LtAt(i int, val interface{}) bool {
+	ts := b.data.Elem(i)
+	if ts == 0 {
+		return zeroTime.Before(val.(time.Time))
+	}
+	return time.Unix(0, ts).Before(val.(time.Time))
+}
+
+func (b *BlockBool) LtAt(i int, val interface{}) bool {
+	// FIXME: check this
+	return b.data.IsSet(i) != val.(bool)
+}
+
+func (b *BlockInt128) LtAt(i int, val interface{}) bool {
+	return b.data.Elem(i).Lt(val.(vec.Int128))
+}
+
+func (b *BlockInt256) LtAt(i int, val interface{}) bool {
+	return b.data.Elem(i).Lt(val.(vec.Int256))
+}
+
+func (b *BlockDec256) LtAt(i int, val interface{}) bool {
+	return decimal.NewDecimal256(b.data.Elem(i), b.scale).Lt(val.(decimal.Decimal256))
+}
+
+func (b *BlockDec128) LtAt(i int, val interface{}) bool {
+	return decimal.NewDecimal128(b.data.Elem(i), b.scale).Lt(val.(decimal.Decimal128))
+}
+
+func (b *BlockDec64) LtAt(i int, val interface{}) bool {
+	return decimal.NewDecimal64(b.data.Elem(i), b.scale).Lt(val.(decimal.Decimal64))
+}
+
+func (b *BlockDec32) LtAt(i int, val interface{}) bool {
+	return decimal.NewDecimal32(b.data.Elem(i), b.scale).Lt(val.(decimal.Decimal32))
+}
+
+func (b *BlockNum[T]) LteAt(i int, val interface{}) bool {
+	return b.data.Elem(i) <= val.(T)
+}
+
+func (b *BlockBytes) LteAt(i int, val interface{}) bool {
+	return bytes.Compare(b.data.Elem(i), val.([]byte)) <= 0
+}
+
+func (b *BlockString) LteAt(i int, val interface{}) bool {
+	return compress.UnsafeGetString(b.data.Elem(i)) <= val.(string)
+}
+
+func (b *BlockTime) LteAt(i int, val interface{}) bool {
+	ts := b.data.Elem(i)
+	if ts == 0 {
+		return !zeroTime.After(val.(time.Time))
+	}
+	return !time.Unix(0, ts).After(val.(time.Time))
+}
+
+func (b *BlockBool) LteAt(i int, val interface{}) bool {
+	// FIXME: check this
+	v := val.(bool)
+	return v || b.data.IsSet(i) == v
+}
+
+func (b *BlockInt128) LteAt(i int, val interface{}) bool {
+	return b.data.Elem(i).Lte(val.(vec.Int128))
+}
+
+func (b *BlockInt256) LteAt(i int, val interface{}) bool {
+	return b.data.Elem(i).Lte(val.(vec.Int256))
+}
+
+func (b *BlockDec256) LteAt(i int, val interface{}) bool {
+	return decimal.NewDecimal256(b.data.Elem(i), b.scale).Lte(val.(decimal.Decimal256))
+}
+
+func (b *BlockDec128) LteAt(i int, val interface{}) bool {
+	return decimal.NewDecimal128(b.data.Elem(i), b.scale).Lte(val.(decimal.Decimal128))
+}
+
+func (b *BlockDec64) LteAt(i int, val interface{}) bool {
+	return decimal.NewDecimal64(b.data.Elem(i), b.scale).Lte(val.(decimal.Decimal64))
+}
+
+func (b *BlockDec32) LteAt(i int, val interface{}) bool {
+	return decimal.NewDecimal32(b.data.Elem(i), b.scale).Lte(val.(decimal.Decimal32))
+}
+
+func (b *BlockNum[T]) BetweenAt(i int, from, to interface{}) bool {
+	val := b.data.Elem(i)
+	return !(val < from.(T) || val > to.(T))
+}
+
+func (b *BlockBytes) BetweenAt(i int, from, to interface{}) bool {
+	val := b.data.Elem(i)
+	fromMatch := bytes.Compare(val, from.([]byte))
+	if fromMatch == 0 || len(from.([]byte)) == 0 {
+		return true
+	}
+	if fromMatch < 0 {
+		return false
+	}
+	toMatch := bytes.Compare(val, to.([]byte))
+	if toMatch > 0 {
+		return false
+	}
+	return true
+}
+
+func (b *BlockString) BetweenAt(i int, from, to interface{}) bool {
+	val := compress.UnsafeGetString(b.data.Elem(i))
+	fromMatch := strings.Compare(val, from.(string))
+	if fromMatch == 0 || len(from.(string)) == 0 {
+		return true
+	}
+	if fromMatch < 0 {
+		return false
+	}
+	toMatch := strings.Compare(val, to.(string))
+	if toMatch > 0 {
+		return false
+	}
+	return true
+}
+
+func (b *BlockTime) BetweenAt(i int, from, to interface{}) bool {
+	var val time.Time
+	if ts := b.data.Elem(i); ts == 0 {
+		val = zeroTime
+	} else {
+		val = time.Unix(0, ts)
+	}
+
+	if val.Before(from.(time.Time)) {
+		return false
+	}
+	if val.After(to.(time.Time)) {
+		return false
+	}
+	return true
+}
+
+func (b *BlockBool) BetweenAt(i int, from, to interface{}) bool {
+	// FIXME: check this
+	val := b.data.IsSet(i)
+	switch true {
+	case from.(bool) != to.(bool):
+		return true
+	case from.(bool) == val:
+		return true
+	case to.(bool) == val:
+		return true
+	}
+	return false
+}
+
+func (b *BlockInt256) BetweenAt(i int, from, to interface{}) bool {
+	val := b.data.Elem(i)
+	return !(val.Lt(from.(vec.Int256)) || val.Gt(to.(vec.Int256)))
+}
+
+func (b *BlockInt128) BetweenAt(i int, from, to interface{}) bool {
+	val := b.data.Elem(i)
+	return !(val.Lt(from.(vec.Int128)) || val.Gt(to.(vec.Int128)))
+}
+
+func (b *BlockDec256) BetweenAt(i int, from, to interface{}) bool {
+	val := decimal.NewDecimal256(b.data.Elem(i), b.scale)
+	return !(val.Lt(from.(decimal.Decimal256)) || val.Gt(to.(decimal.Decimal256)))
+}
+
+func (b *BlockDec128) BetweenAt(i int, from, to interface{}) bool {
+	val := decimal.NewDecimal128(b.data.Elem(i), b.scale)
+	return !(val.Lt(from.(decimal.Decimal128)) || val.Gt(to.(decimal.Decimal128)))
+}
+
+func (b *BlockDec64) BetweenAt(i int, from, to interface{}) bool {
+	val := decimal.NewDecimal64(b.data.Elem(i), b.scale)
+	return !(val.Lt(from.(decimal.Decimal64)) || val.Gt(to.(decimal.Decimal64)))
+}
+
+func (b *BlockDec32) BetweenAt(i int, from, to interface{}) bool {
+	val := decimal.NewDecimal32(b.data.Elem(i), b.scale)
+	return !(val.Lt(from.(decimal.Decimal32)) || val.Gt(to.(decimal.Decimal32)))
+}
+
+func (b *blockCommon) RegExpAt(i int, re string) bool {
+	return false
+}
+
+func (b *BlockString) RegExpAt(i int, re string) bool {
+	val := compress.UnsafeGetString(b.data.Elem(i))
+	match, _ := regexp.MatchString(strings.Replace(re, "*", ".*", -1), val)
+	return match
+}
+
+func (b *BlockTime) RegExpAt(i int, re string) bool {
+	var val time.Time
+	if ts := b.data.Elem(i); ts == 0 {
+		val = zeroTime
+	} else {
+		val = time.Unix(0, ts)
+	}
+
+	match, _ := regexp.MatchString(
+		strings.Replace(re, "*", ".*", -1),
+		val.Format(time.RFC3339),
+	)
+	return match
 }
 
 // FIXME: Dump should not be part of Block interface

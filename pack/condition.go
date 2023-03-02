@@ -159,21 +159,21 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 	block, _ := pkg.Block(c.Field.Index)
 	switch c.Mode {
 	case FilterModeEqual:
-		return c.Field.Type.EqualBlock(block, c.Value, bits, mask)
+		return block.MatchEqual(c.Value, bits, mask)
 	case FilterModeNotEqual:
-		return c.Field.Type.NotEqualBlock(block, c.Value, bits, mask)
+		return block.MatchNotEqual(c.Value, bits, mask)
 	case FilterModeGt:
-		return c.Field.Type.GtBlock(block, c.Value, bits, mask)
+		return block.MatchGreaterThan(c.Value, bits, mask)
 	case FilterModeGte:
-		return c.Field.Type.GteBlock(block, c.Value, bits, mask)
+		return block.MatchGreaterThanEqual(c.Value, bits, mask)
 	case FilterModeLt:
-		return c.Field.Type.LtBlock(block, c.Value, bits, mask)
+		return block.MatchLessThan(c.Value, bits, mask)
 	case FilterModeLte:
-		return c.Field.Type.LteBlock(block, c.Value, bits, mask)
+		return block.MatchLessThanEqual(c.Value, bits, mask)
 	case FilterModeRange:
-		return c.Field.Type.BetweenBlock(block, c.From, c.To, bits, mask)
+		return block.MatchBetween(c.From, c.To, bits, mask)
 	case FilterModeRegexp:
-		return c.Field.Type.RegexpBlock(block, c.Value.(string), bits, mask)
+		return block.MatchRegExp(c.Value.(string), bits, mask)
 	case FilterModeIn:
 		// unlike on other conditions we run matches against a standard map
 		// rather than using vectorized type functions
@@ -683,11 +683,11 @@ func (c Condition) MatchAt(pkg *Package, pos int) bool {
 	index := c.Field.Index
 	switch c.Mode {
 	case FilterModeEqual:
-		return c.Field.Type.EqualAt(pkg, index, pos, c.Value)
+		return pkg.blocks[index].EqualAt(pos, c.Value)
 	case FilterModeNotEqual:
-		return !c.Field.Type.EqualAt(pkg, index, pos, c.Value)
+		return !pkg.blocks[index].EqualAt(pos, c.Value)
 	case FilterModeRange:
-		return c.Field.Type.BetweenAt(pkg, index, pos, c.From, c.To)
+		return pkg.blocks[index].BetweenAt(pos, c.From, c.To)
 	case FilterModeIn:
 		// type check was already performed in compile stage
 		switch c.Field.Type {
@@ -811,15 +811,15 @@ func (c Condition) MatchAt(pkg *Package, pos int) bool {
 		return !c.Field.Type.InAt(pkg, index, pos, c.Value) // c.Value is a slice
 
 	case FilterModeRegexp:
-		return c.Field.Type.RegexpAt(pkg, index, pos, c.Value.(string)) // c.Value is regexp string
+		return pkg.blocks[index].RegExpAt(pos, c.Value.(string))
 	case FilterModeGt:
-		return c.Field.Type.GtAt(pkg, index, pos, c.Value)
+		return pkg.blocks[index].GtAt(pos, c.Value)
 	case FilterModeGte:
-		return c.Field.Type.GteAt(pkg, index, pos, c.Value)
+		return pkg.blocks[index].GteAt(pos, c.Value)
 	case FilterModeLt:
-		return c.Field.Type.LtAt(pkg, index, pos, c.Value)
+		return pkg.blocks[index].LtAt(pos, c.Value)
 	case FilterModeLte:
-		return c.Field.Type.LteAt(pkg, index, pos, c.Value)
+		return pkg.blocks[index].LteAt(pos, c.Value)
 	default:
 		return false
 	}
