@@ -226,7 +226,20 @@ type Block interface {
 
 	ReadAtWithInfo(int, reflect.Value) error
 	FieldAt(int) interface{}
-	Elem(int) interface{}
+	Int256At(int) vec.Int256
+	Int128At(int) vec.Int128
+	Int64At(int) int64
+	Int32At(int) int32
+	Int16At(int) int16
+	Int8At(int) int8
+	Uint64At(int) uint64
+	Uint32At(int) uint32
+	Uint16At(int) uint16
+	Uint8At(int) uint8
+	Float64At(int) float64
+	Float32At(int) float32
+	BytesAt(int) []byte
+	BoolAt(int) bool
 	IsZeroAt(int, bool) bool
 	Slice() interface{}
 	RangeSlice(int, int) interface{}
@@ -655,46 +668,159 @@ func (b *BlockDec32) RangeSlice(start, end int) interface{} {
 	return decimal.Decimal32Slice{Int32: b.data.RangeSlice(start, end), Scale: b.scale}
 }
 
-func (b *BlockNum[T]) Elem(idx int) interface{} {
-	if idx >= b.Len() {
-		return nil
+/*
+	func (b *BlockNum[T]) Elem(idx int) interface{} {
+		if idx >= b.Len() {
+			return nil
+		}
+		return b.data.Elem(idx)
 	}
-	return b.data.Elem(idx)
+
+	func (b *BlockBool) Elem(idx int) interface{} {
+		if idx >= b.Len() {
+			return nil
+		}
+		return b.data.IsSet(idx)
+	}
+
+	func (b *BlockBytes) Elem(idx int) interface{} {
+		if idx >= b.Len() {
+			return nil
+		}
+		return b.data.Elem(idx)
+	}
+
+	func (b *BlockString) Elem(idx int) interface{} {
+		if idx >= b.Len() {
+			return nil
+		}
+		return compress.UnsafeGetString(b.data.Elem(idx))
+	}
+
+	func (b *BlockInt128) Elem(idx int) interface{} {
+		if idx >= b.Len() {
+			return nil
+		}
+		return b.data.Elem(idx)
+	}
+
+	func (b *BlockInt256) Elem(idx int) interface{} {
+		if idx >= b.Len() {
+			return nil
+		}
+		return b.data.Elem(idx)
+	}
+*/
+func (b *blockCommon) Int256At(i int) vec.Int256 {
+	return vec.ZeroInt256
 }
 
-func (b *BlockBool) Elem(idx int) interface{} {
-	if idx >= b.Len() {
-		return nil
-	}
-	return b.data.IsSet(idx)
+func (b *BlockInt256) Int256At(i int) vec.Int256 {
+	return b.data.Elem(i)
 }
 
-func (b *BlockBytes) Elem(idx int) interface{} {
-	if idx >= b.Len() {
-		return nil
-	}
-	return b.data.Elem(idx)
+func (b *blockCommon) Int128At(i int) vec.Int128 {
+	return vec.ZeroInt128
 }
 
-func (b *BlockString) Elem(idx int) interface{} {
-	if idx >= b.Len() {
-		return nil
-	}
-	return compress.UnsafeGetString(b.data.Elem(idx))
+func (b *BlockInt128) Int128At(i int) vec.Int128 {
+	return b.data.Elem(i)
 }
 
-func (b *BlockInt128) Elem(idx int) interface{} {
-	if idx >= b.Len() {
-		return nil
-	}
-	return b.data.Elem(idx)
+func (b *blockCommon) Int64At(i int) int64 {
+	return 0
 }
 
-func (b *BlockInt256) Elem(idx int) interface{} {
-	if idx >= b.Len() {
-		return nil
-	}
-	return b.data.Elem(idx)
+func (b *BlockInt64) Int64At(i int) int64 {
+	return b.data.Elem(i)
+}
+
+func (b *blockCommon) Int32At(i int) int32 {
+	return 0
+}
+
+func (b *BlockInt32) Int32At(i int) int32 {
+	return b.data.Elem(i)
+}
+
+func (b *blockCommon) Int16At(i int) int16 {
+	return 0
+}
+
+func (b *BlockInt16) Int16At(i int) int16 {
+	return b.data.Elem(i)
+}
+
+func (b *blockCommon) Int8At(i int) int8 {
+	return 0
+}
+
+func (b *BlockInt8) Int8At(i int) int8 {
+	return b.data.Elem(i)
+}
+
+func (b *blockCommon) Uint64At(i int) uint64 {
+	return 0
+}
+
+func (b *BlockUint64) Uint64At(i int) uint64 {
+	return b.data.Elem(i)
+}
+
+func (b *blockCommon) Uint32At(i int) uint32 {
+	return 0
+}
+
+func (b *BlockUint32) Uint32At(i int) uint32 {
+	return b.data.Elem(i)
+}
+
+func (b *blockCommon) Uint16At(i int) uint16 {
+	return 0
+}
+
+func (b *BlockUint16) Uint16At(i int) uint16 {
+	return b.data.Elem(i)
+}
+
+func (b *blockCommon) Uint8At(i int) uint8 {
+	return 0
+}
+
+func (b *BlockUint8) Uint8At(i int) uint8 {
+	return b.data.Elem(i)
+}
+
+func (b *blockCommon) Float64At(i int) float64 {
+	return 0
+}
+
+func (b *BlockFloat64) Float64At(i int) float64 {
+	return b.data.Elem(i)
+}
+
+func (b *blockCommon) Float32At(i int) float32 {
+	return 0
+}
+
+func (b *BlockFloat32) Float32At(i int) float32 {
+	return b.data.Elem(i)
+}
+
+func (b *blockCommon) BytesAt(i int) []byte {
+	return []byte{}
+}
+
+func (b *BlockBytes) BytesAt(i int) []byte {
+	return b.data.Elem(i)
+}
+
+func (b *blockCommon) BoolAt(i int) bool {
+	return false
+}
+
+func (b *BlockBool) BoolAt(i int) bool {
+	return b.data.IsSet(i)
 }
 
 func (b *BlockBytes) FieldAt(i int) interface{} {

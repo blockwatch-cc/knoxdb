@@ -691,112 +691,112 @@ func (p *Package) Uint64At(index, pos int) (uint64, error) {
 	if err := p.isValidAt(index, pos, FieldTypeUint64); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Elem(pos).(uint64), nil
+	return p.blocks[index].Uint64At(pos), nil
 }
 
 func (p *Package) Uint32At(index, pos int) (uint32, error) {
 	if err := p.isValidAt(index, pos, FieldTypeUint32); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Elem(pos).(uint32), nil
+	return p.blocks[index].Uint32At(pos), nil
 }
 
 func (p *Package) Uint16At(index, pos int) (uint16, error) {
 	if err := p.isValidAt(index, pos, FieldTypeUint16); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Elem(pos).(uint16), nil
+	return p.blocks[index].Uint16At(pos), nil
 }
 
 func (p *Package) Uint8At(index, pos int) (uint8, error) {
 	if err := p.isValidAt(index, pos, FieldTypeUint8); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Elem(pos).(uint8), nil
+	return p.blocks[index].Uint8At(pos), nil
 }
 
 func (p *Package) Int256At(index, pos int) (vec.Int256, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt256); err != nil {
 		return vec.Int256{}, err
 	}
-	return p.blocks[index].Elem(pos).(vec.Int256), nil
+	return p.blocks[index].Int256At(pos), nil
 }
 
 func (p *Package) Int128At(index, pos int) (vec.Int128, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt128); err != nil {
 		return vec.Int128{}, err
 	}
-	return p.blocks[index].Elem(pos).(vec.Int128), nil
+	return p.blocks[index].Int128At(pos), nil
 }
 
 func (p *Package) Int64At(index, pos int) (int64, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt64); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Elem(pos).(int64), nil
+	return p.blocks[index].Int64At(pos), nil
 }
 
 func (p *Package) Int32At(index, pos int) (int32, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt32); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Elem(pos).(int32), nil
+	return p.blocks[index].Int32At(pos), nil
 }
 
 func (p *Package) Int16At(index, pos int) (int16, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt16); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Elem(pos).(int16), nil
+	return p.blocks[index].Int16At(pos), nil
 }
 
 func (p *Package) Int8At(index, pos int) (int8, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt8); err != nil {
 		return 0, err
 	}
-	return p.blocks[index].Elem(pos).(int8), nil
+	return p.blocks[index].Int8At(pos), nil
 }
 
 func (p *Package) Float64At(index, pos int) (float64, error) {
 	if err := p.isValidAt(index, pos, FieldTypeFloat64); err != nil {
 		return 0.0, err
 	}
-	return p.blocks[index].Elem(pos).(float64), nil
+	return p.blocks[index].Float64At(pos), nil
 }
 
 func (p *Package) Float32At(index, pos int) (float32, error) {
 	if err := p.isValidAt(index, pos, FieldTypeFloat32); err != nil {
 		return 0.0, err
 	}
-	return p.blocks[index].Elem(pos).(float32), nil
+	return p.blocks[index].Float32At(pos), nil
 }
 
 func (p *Package) StringAt(index, pos int) (string, error) {
 	if err := p.isValidAt(index, pos, FieldTypeString); err != nil {
 		return "", err
 	}
-	return compress.UnsafeGetString(p.blocks[index].Elem(pos).([]byte)), nil
+	return compress.UnsafeGetString(p.blocks[index].BytesAt(pos)), nil
 }
 
 func (p *Package) BytesAt(index, pos int) ([]byte, error) {
 	if err := p.isValidAt(index, pos, FieldTypeBytes); err != nil {
 		return nil, err
 	}
-	return p.blocks[index].Elem(pos).([]byte), nil
+	return p.blocks[index].BytesAt(pos), nil
 }
 
 func (p *Package) BoolAt(index, pos int) (bool, error) {
 	if err := p.isValidAt(index, pos, FieldTypeBoolean); err != nil {
 		return false, err
 	}
-	return p.blocks[index].Elem(pos).(bool), nil
+	return p.blocks[index].BoolAt(pos), nil
 }
 
 func (p *Package) TimeAt(index, pos int) (time.Time, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDatetime); err != nil {
 		return zeroTime, err
 	}
-	if ts := p.blocks[index].Elem(pos).(int64); ts == 0 {
+	if ts := p.blocks[index].Int64At(pos); ts == 0 {
 		return zeroTime, nil
 	} else {
 		return time.Unix(0, ts), nil
@@ -807,28 +807,28 @@ func (p *Package) Decimal32At(index, pos int) (Decimal32, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal32); err != nil {
 		return Decimal32{}, err
 	}
-	return NewDecimal32(p.blocks[index].Elem(pos).(int32), p.fields[index].Scale), nil
+	return NewDecimal32(p.blocks[index].Int32At(pos), p.fields[index].Scale), nil
 }
 
 func (p *Package) Decimal64At(index, pos int) (Decimal64, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal64); err != nil {
 		return Decimal64{}, err
 	}
-	return NewDecimal64(p.blocks[index].Elem(pos).(int64), p.fields[index].Scale), nil
+	return NewDecimal64(p.blocks[index].Int64At(pos), p.fields[index].Scale), nil
 }
 
 func (p *Package) Decimal128At(index, pos int) (Decimal128, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal128); err != nil {
 		return Decimal128{}, err
 	}
-	return NewDecimal128(p.blocks[index].Elem(pos).(vec.Int128), p.fields[index].Scale), nil
+	return NewDecimal128(p.blocks[index].Int128At(pos), p.fields[index].Scale), nil
 }
 
 func (p *Package) Decimal256At(index, pos int) (Decimal256, error) {
 	if err := p.isValidAt(index, pos, FieldTypeDecimal256); err != nil {
 		return Decimal256{}, err
 	}
-	return NewDecimal256(p.blocks[index].Elem(pos).(vec.Int256), p.fields[index].Scale), nil
+	return NewDecimal256(p.blocks[index].Int256At(pos), p.fields[index].Scale), nil
 }
 
 func (p *Package) IsZeroAt(index, pos int, zeroIsNull bool) bool {

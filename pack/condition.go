@@ -185,7 +185,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
-				if _, ok := c.int256map[block.Elem(i).(vec.Int256)]; ok {
+				if _, ok := c.int256map[block.Int256At(i)]; ok {
 					bits.Set(i)
 				}
 			}
@@ -195,7 +195,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
-				if _, ok := c.int128map[block.Elem(i).(vec.Int128)]; ok {
+				if _, ok := c.int128map[block.Int128At(i)]; ok {
 					bits.Set(i)
 				}
 			}
@@ -332,7 +332,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 			vals := c.Value.([][]byte)
 			if c.hashmap != nil {
 				for i := 0; i < block.Len(); i++ {
-					v := block.Elem(i).([]byte)
+					v := block.BytesAt(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -362,7 +362,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			} else {
 				for i := 0; i < block.Len(); i++ {
-					v := block.Elem(i).([]byte)
+					v := block.BytesAt(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -378,7 +378,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 			strs := c.Value.([]string)
 			if c.hashmap != nil {
 				for i := 0; i < block.Len(); i++ {
-					v := block.Elem(i).([]byte)
+					v := block.BytesAt(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -409,7 +409,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			} else {
 				for i := 0; i < block.Len(); i++ {
-					v := block.Elem(i).([]byte)
+					v := block.BytesAt(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
@@ -436,7 +436,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
-				if _, ok := c.int256map[block.Elem(i).(vec.Int256)]; !ok {
+				if _, ok := c.int256map[block.Int256At(i)]; !ok {
 					bits.Set(i)
 				}
 			}
@@ -446,7 +446,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
-				if _, ok := c.int128map[block.Elem(i).(vec.Int128)]; !ok {
+				if _, ok := c.int128map[block.Int128At(i)]; !ok {
 					bits.Set(i)
 				}
 			}
@@ -583,7 +583,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
 			for i := 0; i < block.Len(); i++ {
-				v := block.Elem(i).([]byte)
+				v := block.BytesAt(i)
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
@@ -629,7 +629,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 		case FieldTypeString:
 			strs := c.Value.([]string)
 			for i := 0; i < block.Len(); i++ {
-				v := block.Elem(i).([]byte)
+				v := block.BytesAt(i)
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
