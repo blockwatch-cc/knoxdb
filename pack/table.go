@@ -42,6 +42,7 @@ import (
 
 	"blockwatch.cc/knoxdb/cache/rclru"
 	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
@@ -1682,8 +1683,8 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 	atomic.AddInt64(&t.stats.QueryCalls, 1)
 
 	// make sorted and unique copy of ids and strip any zero (i.e. illegal) ids
-	ids = vec.Uint64.RemoveZeros(ids)
-	ids = vec.Uint64.Unique(ids)
+	ids = num.Uint64.RemoveZeros(ids)
+	ids = num.Uint64.Unique(ids)
 
 	// since journal can contain deleted entries, remove them from lookup
 	if t.journal.TombLen() > 0 {
@@ -1701,7 +1702,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 			}
 		}
 		// remove zeros again
-		ids = vec.Uint64.RemoveZeros(ids)
+		ids = num.Uint64.RemoveZeros(ids)
 	}
 
 	// early return if all lookup ids are deleted or out of range
@@ -1743,7 +1744,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 	}
 	if needUpdate {
 		// remove processed ids
-		ids = vec.Uint64.RemoveZeros(ids)
+		ids = num.Uint64.RemoveZeros(ids)
 	}
 
 	q.stats.JournalTime = q.Tick()
@@ -2703,8 +2704,8 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 	}()
 
 	// make sorted and unique copy of ids and strip any zero (i.e. illegal) ids
-	ids = vec.Uint64.RemoveZeros(ids)
-	ids = vec.Uint64.Unique(ids)
+	ids = num.Uint64.RemoveZeros(ids)
+	ids = num.Uint64.Unique(ids)
 
 	// since journal can contain deleted entries, remove them from lookup
 	if t.journal.TombLen() > 0 {
@@ -2722,7 +2723,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			}
 		}
 		// sort and remove zeros again
-		ids = vec.Uint64.RemoveZeros(ids)
+		ids = num.Uint64.RemoveZeros(ids)
 	}
 
 	// early return if all lookup ids are deleted or out of range
@@ -2768,7 +2769,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 	}
 	if needUpdate {
 		// remove processed ids
-		ids = vec.Uint64.RemoveZeros(ids)
+		ids = num.Uint64.RemoveZeros(ids)
 	}
 	q.stats.JournalTime = q.Tick()
 

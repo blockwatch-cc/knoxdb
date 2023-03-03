@@ -169,6 +169,10 @@ func (s *Bitset) Copy(b *Bitset) *Bitset {
 // Grow resizes the bitset to a new size, either growing or shrinking it.
 // Content remains unchanged on grow, when shrinking trailing bits are clipped.
 func (s *Bitset) Grow(size int) *Bitset {
+	if s == nil {
+		s = NewBitset(size)
+		return s
+	}
 	if size < 0 {
 		return s
 	}

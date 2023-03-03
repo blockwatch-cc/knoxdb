@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 
+	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
@@ -369,7 +370,7 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 	// analyze primary keys of the data we insert
 	pkcol := pkg.PkColumn()
 	pks := pkcol[pos : pos+n]
-	minid, maxid := vec.Uint64.MinMax(pks)
+	minid, maxid := num.Uint64.MinMax(pks)
 	isSorted := minid == 0 && maxid == 0
 	isSorted = isSorted || sort.SliceIsSorted(pks, func(i, j int) bool { return pks[i] < pks[j] })
 
@@ -651,7 +652,7 @@ func (j *Journal) DeleteBatch(pks []uint64) (int, error) {
 	}
 
 	// the algorithm below requires ids to be sorted and unique
-	pks = vec.Uint64.Unique(pks)
+	pks = num.Uint64.Unique(pks)
 	for pks[0] == 0 {
 		pks = pks[1:]
 	}
@@ -882,7 +883,7 @@ func (j *Journal) checkInvariants(when string) error {
 	pks := j.data.PkColumn()
 	sorted := make([]uint64, len(pks))
 	copy(sorted, pks)
-	sorted = vec.Uint64.Sort(sorted)
+	sorted = num.Uint64.Sort(sorted)
 	for i, v := range sorted {
 		if i == 0 || v == 0 || sorted[i-1] == 0 {
 			continue

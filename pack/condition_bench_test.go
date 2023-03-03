@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/hash"
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/util"
@@ -449,7 +450,7 @@ func BenchmarkInLoop(B *testing.B) {
 				inSlice[i] = pk[rand.Intn(n.l)]
 			}
 			// unique and sort
-			inSlice = vec.UniqueUint64Slice(inSlice)
+			inSlice = num.UniqueUint64Slice(inSlice)
 
 			B.ResetTimer()
 			B.ReportAllocs()
@@ -478,7 +479,7 @@ func BenchmarkInNestedLoop(B *testing.B) {
 				inSlice[i] = pk[rand.Intn(n.l)]
 			}
 			// unique and sort
-			inSlice = vec.UniqueUint64Slice(inSlice)
+			inSlice = num.UniqueUint64Slice(inSlice)
 
 			B.ResetTimer()
 			B.ReportAllocs()

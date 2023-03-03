@@ -16,10 +16,10 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/cache/rclru"
+	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/hash"
 	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 // Collision handling
@@ -640,7 +640,7 @@ func (idx *Index) LookupTx(ctx context.Context, tx *Tx, cond Condition) ([]uint6
 				keys = append(keys, idx.indexValue(idx.Field.Type, v))
 			}
 		}
-		keys = vec.Uint64.Sort(keys)
+		keys = num.Uint64.Sort(keys)
 	}
 
 	res, err := idx.lookupKeys(ctx, tx, keys, cond.Mode == FilterModeNotIn)
@@ -686,7 +686,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 		// so we're safe to assume the following call will not fail); then
 		// skip packs that don't contain keys in range
 		min, max := idx.packidx.MinMax(nextpack)
-		if !vec.Uint64.ContainsRange(in, min, max) {
+		if !num.Uint64.ContainsRange(in, min, max) {
 			// log.Debugf("%s: not in pack %03d [%016x:%016x]", idx.name(), nextpack, min, max)
 			continue
 		}
@@ -747,7 +747,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 
 				// remove found key from control slice
 				if notfound != nil {
-					notfound = vec.Uint64.Remove(notfound, in[i])
+					notfound = num.Uint64.Remove(notfound, in[i])
 				}
 
 				// Peek the next index entries to handle key collisions and
@@ -775,7 +775,7 @@ func (idx *Index) lookupKeys(ctx context.Context, tx *Tx, in []uint64, neg bool)
 
 	// sort result before return
 	if len(out) > 1 && !neg {
-		out = vec.Uint64.Sort(out)
+		out = num.Uint64.Sort(out)
 	}
 	atomic.AddInt64(&idx.stats.QueriedTuples, int64(len(out)))
 	return out, nil

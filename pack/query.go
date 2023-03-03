@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/encoding/num"
 	logpkg "github.com/echa/log"
 )
 
@@ -379,7 +379,7 @@ func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
 	// because we only test the global max/min of requested lookup id's
 	for i := range mins {
 		// skip packs that don't contain pks in range
-		if !vec.Uint64.ContainsRange(ids, mins[i], maxs[i]) {
+		if !num.Uint64.ContainsRange(ids, mins[i], maxs[i]) {
 			continue
 		}
 		schedule = append(schedule, i)

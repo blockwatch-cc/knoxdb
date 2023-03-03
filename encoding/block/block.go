@@ -2947,7 +2947,7 @@ func (b *BlockNum[T]) Decode(buf []byte, sz, stored int) error {
 }
 
 func (b *BlockTime) MinMax() (interface{}, interface{}) {
-	min, max := vec.Int64.MinMax(b.data.Slice())
+	min, max := num.Int64.MinMax(b.data.Slice())
 	return time.Unix(0, min).UTC(), time.Unix(0, max).UTC()
 }
 
@@ -3370,7 +3370,7 @@ func (b *BlockString) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.B
 }
 
 func (b *BlockTime) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt64Equal(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
+	return num.MatchInt64Equal(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
 func (b *BlockBool) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3402,7 +3402,7 @@ func (b *BlockString) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *ve
 }
 
 func (b *BlockTime) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt64NotEqual(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
+	return num.MatchInt64NotEqual(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
 func (b *BlockBool) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3434,7 +3434,7 @@ func (b *BlockString) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) 
 }
 
 func (b *BlockTime) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt64GreaterThan(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
+	return num.MatchInt64GreaterThan(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
 func (b *BlockBool) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3466,7 +3466,7 @@ func (b *BlockString) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bit
 }
 
 func (b *BlockTime) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt64GreaterThanEqual(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
+	return num.MatchInt64GreaterThanEqual(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
 func (b *BlockBool) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3494,7 +3494,7 @@ func (b *BlockString) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *ve
 }
 
 func (b *BlockTime) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt64LessThan(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
+	return num.MatchInt64LessThan(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
 func (b *BlockBool) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3526,7 +3526,7 @@ func (b *BlockString) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset
 }
 
 func (b *BlockTime) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt64LessThanEqual(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
+	return num.MatchInt64LessThanEqual(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
 func (b *BlockBool) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3556,7 +3556,7 @@ func (b *BlockString) MatchBetween(from, to interface{}, bits, mask *vec.Bitset)
 }
 
 func (b *BlockTime) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt64Between(b.data.Slice(), from.(time.Time).UnixNano(), to.(time.Time).UnixNano(), bits, mask)
+	return num.MatchInt64Between(b.data.Slice(), from.(time.Time).UnixNano(), to.(time.Time).UnixNano(), bits, mask)
 }
 
 func (b *BlockBool) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {

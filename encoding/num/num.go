@@ -159,50 +159,50 @@ func (n *NumArray[T]) InsertFrom(slice []T, spos, dpos, len int) {
 	//slice := src.([]T)
 	switch n.Type() {
 	case BlockTypeFloat64:
-		n.slice = interface{}(vec.Float64.Insert(interface{}(n.slice).([]float64), dpos, interface{}(slice).([]float64)[spos:spos+len]...)).([]T)
+		n.slice = interface{}(Float64.Insert(interface{}(n.slice).([]float64), dpos, interface{}(slice).([]float64)[spos:spos+len]...)).([]T)
 	case BlockTypeFloat32:
-		n.slice = interface{}(vec.Float32.Insert(interface{}(n.slice).([]float32), dpos, interface{}(slice).([]float32)[spos:spos+len]...)).([]T)
+		n.slice = interface{}(Float32.Insert(interface{}(n.slice).([]float32), dpos, interface{}(slice).([]float32)[spos:spos+len]...)).([]T)
 	case BlockTypeInt64:
-		n.slice = interface{}(vec.Int64.Insert(interface{}(n.slice).([]int64), dpos, interface{}(slice).([]int64)[spos:spos+len]...)).([]T)
+		n.slice = interface{}(Int64.Insert(interface{}(n.slice).([]int64), dpos, interface{}(slice).([]int64)[spos:spos+len]...)).([]T)
 	case BlockTypeInt32:
-		n.slice = interface{}(vec.Int32.Insert(interface{}(n.slice).([]int32), dpos, interface{}(slice).([]int32)[spos:spos+len]...)).([]T)
+		n.slice = interface{}(Int32.Insert(interface{}(n.slice).([]int32), dpos, interface{}(slice).([]int32)[spos:spos+len]...)).([]T)
 	case BlockTypeInt16:
-		n.slice = interface{}(vec.Int16.Insert(interface{}(n.slice).([]int16), dpos, interface{}(slice).([]int16)[spos:spos+len]...)).([]T)
+		n.slice = interface{}(Int16.Insert(interface{}(n.slice).([]int16), dpos, interface{}(slice).([]int16)[spos:spos+len]...)).([]T)
 	case BlockTypeInt8:
-		n.slice = interface{}(vec.Int8.Insert(interface{}(n.slice).([]int8), dpos, interface{}(slice).([]int8)[spos:spos+len]...)).([]T)
+		n.slice = interface{}(Int8.Insert(interface{}(n.slice).([]int8), dpos, interface{}(slice).([]int8)[spos:spos+len]...)).([]T)
 	case BlockTypeUint64:
-		n.slice = interface{}(vec.Uint64.Insert(interface{}(n.slice).([]uint64), dpos, interface{}(slice).([]uint64)[spos:spos+len]...)).([]T)
+		n.slice = interface{}(Uint64.Insert(interface{}(n.slice).([]uint64), dpos, interface{}(slice).([]uint64)[spos:spos+len]...)).([]T)
 	case BlockTypeUint32:
-		n.slice = interface{}(vec.Uint32.Insert(interface{}(n.slice).([]uint32), dpos, interface{}(slice).([]uint32)[spos:spos+len]...)).([]T)
+		n.slice = interface{}(Uint32.Insert(interface{}(n.slice).([]uint32), dpos, interface{}(slice).([]uint32)[spos:spos+len]...)).([]T)
 	case BlockTypeUint16:
-		n.slice = interface{}(vec.Uint16.Insert(interface{}(n.slice).([]uint16), dpos, interface{}(slice).([]uint16)[spos:spos+len]...)).([]T)
+		n.slice = interface{}(Uint16.Insert(interface{}(n.slice).([]uint16), dpos, interface{}(slice).([]uint16)[spos:spos+len]...)).([]T)
 	case BlockTypeUint8:
-		n.slice = interface{}(vec.Uint8.Insert(interface{}(n.slice).([]uint8), dpos, interface{}(slice).([]uint8)[spos:spos+len]...)).([]T)
+		n.slice = interface{}(Uint8.Insert(interface{}(n.slice).([]uint8), dpos, interface{}(slice).([]uint8)[spos:spos+len]...)).([]T)
 	}
 }
 
 func (n *NumArray[T]) MinMax() (interface{}, interface{}) {
 	switch n.Type() {
 	case BlockTypeFloat64:
-		return vec.Float64.MinMax(interface{}(n.slice).([]float64))
+		return Float64.MinMax(interface{}(n.slice).([]float64))
 	case BlockTypeFloat32:
-		return vec.Float32.MinMax(interface{}(n.slice).([]float32))
+		return Float32.MinMax(interface{}(n.slice).([]float32))
 	case BlockTypeInt64:
-		return vec.Int64.MinMax(interface{}(n.slice).([]int64))
+		return Int64.MinMax(interface{}(n.slice).([]int64))
 	case BlockTypeInt32:
-		return vec.Int32.MinMax(interface{}(n.slice).([]int32))
+		return Int32.MinMax(interface{}(n.slice).([]int32))
 	case BlockTypeInt16:
-		return vec.Int16.MinMax(interface{}(n.slice).([]int16))
+		return Int16.MinMax(interface{}(n.slice).([]int16))
 	case BlockTypeInt8:
-		return vec.Int8.MinMax(interface{}(n.slice).([]int8))
+		return Int8.MinMax(interface{}(n.slice).([]int8))
 	case BlockTypeUint64:
-		return vec.Uint64.MinMax(interface{}(n.slice).([]uint64))
+		return Uint64.MinMax(interface{}(n.slice).([]uint64))
 	case BlockTypeUint32:
-		return vec.Uint32.MinMax(interface{}(n.slice).([]uint32))
+		return Uint32.MinMax(interface{}(n.slice).([]uint32))
 	case BlockTypeUint16:
-		return vec.Uint16.MinMax(interface{}(n.slice).([]uint16))
+		return Uint16.MinMax(interface{}(n.slice).([]uint16))
 	case BlockTypeUint8:
-		return vec.Uint8.MinMax(interface{}(n.slice).([]uint8))
+		return Uint8.MinMax(interface{}(n.slice).([]uint8))
 	}
 	return nil, nil
 }
@@ -214,25 +214,25 @@ func (n *NumArray[T]) Less(i, j int) bool {
 func (n *NumArray[T]) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
 	switch n.Type() {
 	case BlockTypeFloat64:
-		return vec.MatchFloat64Equal(interface{}(n.slice).([]float64), val.(float64), bits, mask)
+		return MatchFloat64Equal(interface{}(n.slice).([]float64), val.(float64), bits, mask)
 	case BlockTypeFloat32:
-		return vec.MatchFloat32Equal(interface{}(n.slice).([]float32), val.(float32), bits, mask)
+		return MatchFloat32Equal(interface{}(n.slice).([]float32), val.(float32), bits, mask)
 	case BlockTypeInt64:
-		return vec.MatchInt64Equal(interface{}(n.slice).([]int64), val.(int64), bits, mask)
+		return MatchInt64Equal(interface{}(n.slice).([]int64), val.(int64), bits, mask)
 	case BlockTypeInt32:
-		return vec.MatchInt32Equal(interface{}(n.slice).([]int32), val.(int32), bits, mask)
+		return MatchInt32Equal(interface{}(n.slice).([]int32), val.(int32), bits, mask)
 	case BlockTypeInt16:
-		return vec.MatchInt16Equal(interface{}(n.slice).([]int16), val.(int16), bits, mask)
+		return MatchInt16Equal(interface{}(n.slice).([]int16), val.(int16), bits, mask)
 	case BlockTypeInt8:
-		return vec.MatchInt8Equal(interface{}(n.slice).([]int8), val.(int8), bits, mask)
+		return MatchInt8Equal(interface{}(n.slice).([]int8), val.(int8), bits, mask)
 	case BlockTypeUint64:
-		return vec.MatchUint64Equal(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
+		return MatchUint64Equal(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
 	case BlockTypeUint32:
-		return vec.MatchUint32Equal(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
+		return MatchUint32Equal(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
 	case BlockTypeUint16:
-		return vec.MatchUint16Equal(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
+		return MatchUint16Equal(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
 	case BlockTypeUint8:
-		return vec.MatchUint8Equal(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
+		return MatchUint8Equal(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
 	}
 	return nil
 }
@@ -240,25 +240,25 @@ func (n *NumArray[T]) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.B
 func (n *NumArray[T]) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
 	switch n.Type() {
 	case BlockTypeFloat64:
-		return vec.MatchFloat64NotEqual(interface{}(n.slice).([]float64), val.(float64), bits, mask)
+		return MatchFloat64NotEqual(interface{}(n.slice).([]float64), val.(float64), bits, mask)
 	case BlockTypeFloat32:
-		return vec.MatchFloat32NotEqual(interface{}(n.slice).([]float32), val.(float32), bits, mask)
+		return MatchFloat32NotEqual(interface{}(n.slice).([]float32), val.(float32), bits, mask)
 	case BlockTypeInt64:
-		return vec.MatchInt64NotEqual(interface{}(n.slice).([]int64), val.(int64), bits, mask)
+		return MatchInt64NotEqual(interface{}(n.slice).([]int64), val.(int64), bits, mask)
 	case BlockTypeInt32:
-		return vec.MatchInt32NotEqual(interface{}(n.slice).([]int32), val.(int32), bits, mask)
+		return MatchInt32NotEqual(interface{}(n.slice).([]int32), val.(int32), bits, mask)
 	case BlockTypeInt16:
-		return vec.MatchInt16NotEqual(interface{}(n.slice).([]int16), val.(int16), bits, mask)
+		return MatchInt16NotEqual(interface{}(n.slice).([]int16), val.(int16), bits, mask)
 	case BlockTypeInt8:
-		return vec.MatchInt8NotEqual(interface{}(n.slice).([]int8), val.(int8), bits, mask)
+		return MatchInt8NotEqual(interface{}(n.slice).([]int8), val.(int8), bits, mask)
 	case BlockTypeUint64:
-		return vec.MatchUint64NotEqual(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
+		return MatchUint64NotEqual(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
 	case BlockTypeUint32:
-		return vec.MatchUint32NotEqual(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
+		return MatchUint32NotEqual(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
 	case BlockTypeUint16:
-		return vec.MatchUint16NotEqual(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
+		return MatchUint16NotEqual(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
 	case BlockTypeUint8:
-		return vec.MatchUint8NotEqual(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
+		return MatchUint8NotEqual(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
 	}
 	return nil
 }
@@ -266,25 +266,25 @@ func (n *NumArray[T]) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *ve
 func (n *NumArray[T]) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
 	switch n.Type() {
 	case BlockTypeFloat64:
-		return vec.MatchFloat64GreaterThan(interface{}(n.slice).([]float64), val.(float64), bits, mask)
+		return MatchFloat64GreaterThan(interface{}(n.slice).([]float64), val.(float64), bits, mask)
 	case BlockTypeFloat32:
-		return vec.MatchFloat32GreaterThan(interface{}(n.slice).([]float32), val.(float32), bits, mask)
+		return MatchFloat32GreaterThan(interface{}(n.slice).([]float32), val.(float32), bits, mask)
 	case BlockTypeInt64:
-		return vec.MatchInt64GreaterThan(interface{}(n.slice).([]int64), val.(int64), bits, mask)
+		return MatchInt64GreaterThan(interface{}(n.slice).([]int64), val.(int64), bits, mask)
 	case BlockTypeInt32:
-		return vec.MatchInt32GreaterThan(interface{}(n.slice).([]int32), val.(int32), bits, mask)
+		return MatchInt32GreaterThan(interface{}(n.slice).([]int32), val.(int32), bits, mask)
 	case BlockTypeInt16:
-		return vec.MatchInt16GreaterThan(interface{}(n.slice).([]int16), val.(int16), bits, mask)
+		return MatchInt16GreaterThan(interface{}(n.slice).([]int16), val.(int16), bits, mask)
 	case BlockTypeInt8:
-		return vec.MatchInt8GreaterThan(interface{}(n.slice).([]int8), val.(int8), bits, mask)
+		return MatchInt8GreaterThan(interface{}(n.slice).([]int8), val.(int8), bits, mask)
 	case BlockTypeUint64:
-		return vec.MatchUint64GreaterThan(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
+		return MatchUint64GreaterThan(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
 	case BlockTypeUint32:
-		return vec.MatchUint32GreaterThan(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
+		return MatchUint32GreaterThan(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
 	case BlockTypeUint16:
-		return vec.MatchUint16GreaterThan(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
+		return MatchUint16GreaterThan(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
 	case BlockTypeUint8:
-		return vec.MatchUint8GreaterThan(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
+		return MatchUint8GreaterThan(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
 	}
 	return nil
 }
@@ -292,25 +292,25 @@ func (n *NumArray[T]) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) 
 func (n *NumArray[T]) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
 	switch n.Type() {
 	case BlockTypeFloat64:
-		return vec.MatchFloat64GreaterThanEqual(interface{}(n.slice).([]float64), val.(float64), bits, mask)
+		return MatchFloat64GreaterThanEqual(interface{}(n.slice).([]float64), val.(float64), bits, mask)
 	case BlockTypeFloat32:
-		return vec.MatchFloat32GreaterThanEqual(interface{}(n.slice).([]float32), val.(float32), bits, mask)
+		return MatchFloat32GreaterThanEqual(interface{}(n.slice).([]float32), val.(float32), bits, mask)
 	case BlockTypeInt64:
-		return vec.MatchInt64GreaterThanEqual(interface{}(n.slice).([]int64), val.(int64), bits, mask)
+		return MatchInt64GreaterThanEqual(interface{}(n.slice).([]int64), val.(int64), bits, mask)
 	case BlockTypeInt32:
-		return vec.MatchInt32GreaterThanEqual(interface{}(n.slice).([]int32), val.(int32), bits, mask)
+		return MatchInt32GreaterThanEqual(interface{}(n.slice).([]int32), val.(int32), bits, mask)
 	case BlockTypeInt16:
-		return vec.MatchInt16GreaterThanEqual(interface{}(n.slice).([]int16), val.(int16), bits, mask)
+		return MatchInt16GreaterThanEqual(interface{}(n.slice).([]int16), val.(int16), bits, mask)
 	case BlockTypeInt8:
-		return vec.MatchInt8GreaterThanEqual(interface{}(n.slice).([]int8), val.(int8), bits, mask)
+		return MatchInt8GreaterThanEqual(interface{}(n.slice).([]int8), val.(int8), bits, mask)
 	case BlockTypeUint64:
-		return vec.MatchUint64GreaterThanEqual(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
+		return MatchUint64GreaterThanEqual(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
 	case BlockTypeUint32:
-		return vec.MatchUint32GreaterThanEqual(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
+		return MatchUint32GreaterThanEqual(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
 	case BlockTypeUint16:
-		return vec.MatchUint16GreaterThanEqual(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
+		return MatchUint16GreaterThanEqual(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
 	case BlockTypeUint8:
-		return vec.MatchUint8GreaterThanEqual(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
+		return MatchUint8GreaterThanEqual(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
 	}
 	return nil
 }
@@ -318,25 +318,25 @@ func (n *NumArray[T]) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bit
 func (n *NumArray[T]) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
 	switch n.Type() {
 	case BlockTypeFloat64:
-		return vec.MatchFloat64LessThan(interface{}(n.slice).([]float64), val.(float64), bits, mask)
+		return MatchFloat64LessThan(interface{}(n.slice).([]float64), val.(float64), bits, mask)
 	case BlockTypeFloat32:
-		return vec.MatchFloat32LessThan(interface{}(n.slice).([]float32), val.(float32), bits, mask)
+		return MatchFloat32LessThan(interface{}(n.slice).([]float32), val.(float32), bits, mask)
 	case BlockTypeInt64:
-		return vec.MatchInt64LessThan(interface{}(n.slice).([]int64), val.(int64), bits, mask)
+		return MatchInt64LessThan(interface{}(n.slice).([]int64), val.(int64), bits, mask)
 	case BlockTypeInt32:
-		return vec.MatchInt32LessThan(interface{}(n.slice).([]int32), val.(int32), bits, mask)
+		return MatchInt32LessThan(interface{}(n.slice).([]int32), val.(int32), bits, mask)
 	case BlockTypeInt16:
-		return vec.MatchInt16LessThan(interface{}(n.slice).([]int16), val.(int16), bits, mask)
+		return MatchInt16LessThan(interface{}(n.slice).([]int16), val.(int16), bits, mask)
 	case BlockTypeInt8:
-		return vec.MatchInt8LessThan(interface{}(n.slice).([]int8), val.(int8), bits, mask)
+		return MatchInt8LessThan(interface{}(n.slice).([]int8), val.(int8), bits, mask)
 	case BlockTypeUint64:
-		return vec.MatchUint64LessThan(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
+		return MatchUint64LessThan(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
 	case BlockTypeUint32:
-		return vec.MatchUint32LessThan(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
+		return MatchUint32LessThan(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
 	case BlockTypeUint16:
-		return vec.MatchUint16LessThan(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
+		return MatchUint16LessThan(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
 	case BlockTypeUint8:
-		return vec.MatchUint8LessThan(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
+		return MatchUint8LessThan(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
 	}
 	return nil
 }
@@ -344,25 +344,25 @@ func (n *NumArray[T]) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *ve
 func (n *NumArray[T]) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
 	switch n.Type() {
 	case BlockTypeFloat64:
-		return vec.MatchFloat64LessThanEqual(interface{}(n.slice).([]float64), val.(float64), bits, mask)
+		return MatchFloat64LessThanEqual(interface{}(n.slice).([]float64), val.(float64), bits, mask)
 	case BlockTypeFloat32:
-		return vec.MatchFloat32LessThanEqual(interface{}(n.slice).([]float32), val.(float32), bits, mask)
+		return MatchFloat32LessThanEqual(interface{}(n.slice).([]float32), val.(float32), bits, mask)
 	case BlockTypeInt64:
-		return vec.MatchInt64LessThanEqual(interface{}(n.slice).([]int64), val.(int64), bits, mask)
+		return MatchInt64LessThanEqual(interface{}(n.slice).([]int64), val.(int64), bits, mask)
 	case BlockTypeInt32:
-		return vec.MatchInt32LessThanEqual(interface{}(n.slice).([]int32), val.(int32), bits, mask)
+		return MatchInt32LessThanEqual(interface{}(n.slice).([]int32), val.(int32), bits, mask)
 	case BlockTypeInt16:
-		return vec.MatchInt16LessThanEqual(interface{}(n.slice).([]int16), val.(int16), bits, mask)
+		return MatchInt16LessThanEqual(interface{}(n.slice).([]int16), val.(int16), bits, mask)
 	case BlockTypeInt8:
-		return vec.MatchInt8LessThanEqual(interface{}(n.slice).([]int8), val.(int8), bits, mask)
+		return MatchInt8LessThanEqual(interface{}(n.slice).([]int8), val.(int8), bits, mask)
 	case BlockTypeUint64:
-		return vec.MatchUint64LessThanEqual(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
+		return MatchUint64LessThanEqual(interface{}(n.slice).([]uint64), val.(uint64), bits, mask)
 	case BlockTypeUint32:
-		return vec.MatchUint32LessThanEqual(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
+		return MatchUint32LessThanEqual(interface{}(n.slice).([]uint32), val.(uint32), bits, mask)
 	case BlockTypeUint16:
-		return vec.MatchUint16LessThanEqual(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
+		return MatchUint16LessThanEqual(interface{}(n.slice).([]uint16), val.(uint16), bits, mask)
 	case BlockTypeUint8:
-		return vec.MatchUint8LessThanEqual(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
+		return MatchUint8LessThanEqual(interface{}(n.slice).([]uint8), val.(uint8), bits, mask)
 	}
 	return nil
 }
@@ -370,25 +370,25 @@ func (n *NumArray[T]) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset
 func (n *NumArray[T]) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
 	switch n.Type() {
 	case BlockTypeFloat64:
-		return vec.MatchFloat64Between(interface{}(n.slice).([]float64), from.(float64), to.(float64), bits, mask)
+		return MatchFloat64Between(interface{}(n.slice).([]float64), from.(float64), to.(float64), bits, mask)
 	case BlockTypeFloat32:
-		return vec.MatchFloat32Between(interface{}(n.slice).([]float32), from.(float32), to.(float32), bits, mask)
+		return MatchFloat32Between(interface{}(n.slice).([]float32), from.(float32), to.(float32), bits, mask)
 	case BlockTypeInt64:
-		return vec.MatchInt64Between(interface{}(n.slice).([]int64), from.(int64), to.(int64), bits, mask)
+		return MatchInt64Between(interface{}(n.slice).([]int64), from.(int64), to.(int64), bits, mask)
 	case BlockTypeInt32:
-		return vec.MatchInt32Between(interface{}(n.slice).([]int32), from.(int32), to.(int32), bits, mask)
+		return MatchInt32Between(interface{}(n.slice).([]int32), from.(int32), to.(int32), bits, mask)
 	case BlockTypeInt16:
-		return vec.MatchInt16Between(interface{}(n.slice).([]int16), from.(int16), to.(int16), bits, mask)
+		return MatchInt16Between(interface{}(n.slice).([]int16), from.(int16), to.(int16), bits, mask)
 	case BlockTypeInt8:
-		return vec.MatchInt8Between(interface{}(n.slice).([]int8), from.(int8), to.(int8), bits, mask)
+		return MatchInt8Between(interface{}(n.slice).([]int8), from.(int8), to.(int8), bits, mask)
 	case BlockTypeUint64:
-		return vec.MatchUint64Between(interface{}(n.slice).([]uint64), from.(uint64), to.(uint64), bits, mask)
+		return MatchUint64Between(interface{}(n.slice).([]uint64), from.(uint64), to.(uint64), bits, mask)
 	case BlockTypeUint32:
-		return vec.MatchUint32Between(interface{}(n.slice).([]uint32), from.(uint32), to.(uint32), bits, mask)
+		return MatchUint32Between(interface{}(n.slice).([]uint32), from.(uint32), to.(uint32), bits, mask)
 	case BlockTypeUint16:
-		return vec.MatchUint16Between(interface{}(n.slice).([]uint16), from.(uint16), to.(uint16), bits, mask)
+		return MatchUint16Between(interface{}(n.slice).([]uint16), from.(uint16), to.(uint16), bits, mask)
 	case BlockTypeUint8:
-		return vec.MatchUint8Between(interface{}(n.slice).([]uint8), from.(uint8), to.(uint8), bits, mask)
+		return MatchUint8Between(interface{}(n.slice).([]uint8), from.(uint8), to.(uint8), bits, mask)
 	}
 	return nil
 }

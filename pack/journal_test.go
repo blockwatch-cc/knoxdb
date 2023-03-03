@@ -11,6 +11,7 @@ import (
 	"sort"
 	"testing"
 
+	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
@@ -56,7 +57,7 @@ func makeJournalTestDataWithRandomPk(n int) ItemList {
 	values := randUint64Slice(n, 1)
 
 	// strip duplicates and sort
-	values = vec.UniqueUint64Slice(values)
+	values = num.UniqueUint64Slice(values)
 
 	items := make(ItemList, len(values))
 	for i := range values {
@@ -1043,7 +1044,7 @@ func TestJournalDeleteBatch(t *testing.T) {
 							ok   bool
 							last int
 						)
-						pks = vec.Uint64.Sort(pks)
+						pks = num.Uint64.Sort(pks)
 						for _, pk := range pks {
 							// use `last` to skip, checks if we got the offsets right
 							ok, last = j.IsDeleted(pk, last)

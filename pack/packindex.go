@@ -6,7 +6,7 @@ package pack
 import (
 	"sort"
 
-	"blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/encoding/num"
 )
 
 // PackIndex implements efficient and scalable pack info/stats management as
@@ -180,7 +180,7 @@ func (l *PackIndex) IsFull(i int) bool {
 // called by storePack
 func (l *PackIndex) AddOrUpdate(head PackInfo) {
 	head.dirty = true
-	l.removed = vec.Uint32.Remove(l.removed, head.Key)
+	l.removed = num.Uint32.Remove(l.removed, head.Key)
 	old, pos, isAdd := l.packs.Add(head)
 	var needsort bool
 
@@ -251,7 +251,7 @@ func (l *PackIndex) Remove(key uint32) {
 		return
 	}
 	// store as dead key
-	l.removed = vec.Uint32.AddUnique(l.removed, key)
+	l.removed = num.Uint32.AddUnique(l.removed, key)
 
 	// when just the trailing head has been removed we can use a more efficient
 	// algorithm because head positions haven't changed

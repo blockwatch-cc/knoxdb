@@ -8,7 +8,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/encoding/num"
 )
 
 func randUint64Slice(n, u int) []uint64 {
@@ -27,7 +27,7 @@ func makeSortedPackInfoList(n int) PackInfoList {
 	values := randUint64Slice(n, 1)
 
 	// strip duplicates and sort
-	values = vec.UniqueUint64Slice(values)
+	values = num.UniqueUint64Slice(values)
 
 	// generate pack packers
 	packs := make(PackInfoList, 0)
@@ -56,7 +56,7 @@ func makeUnsortedPackInfoList(n int) PackInfoList {
 	values := randUint64Slice(n, 1)
 
 	// strip duplicates and sort
-	values = vec.UniqueUint64Slice(values)
+	values = num.UniqueUint64Slice(values)
 	maxvalues := make([]uint64, len(values))
 	minvalues := make([]uint64, len(values))
 

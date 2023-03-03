@@ -10,10 +10,10 @@ import (
 	"math/rand"
 	"testing"
 
+	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/filter/bloom"
 	"blockwatch.cc/knoxdb/filter/cuckoo"
 	"blockwatch.cc/knoxdb/hash"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 var filterTestSizes = []int{10000}
@@ -39,7 +39,7 @@ func randByteSlice(n, u int) [][]byte {
 
 func randBytes(n int) []byte {
 	v := make([]byte, n)
-	for i, _ := range v {
+	for i := range v {
 		v[i] = byte(rand.Intn(256))
 	}
 	return v
@@ -48,7 +48,7 @@ func randBytes(n int) []byte {
 func BenchmarkUint64MapFromSorted(B *testing.B) {
 	for _, n := range filterTestSizes {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64.Sort(randUint64Slice(n, 1))
+			a := num.Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -62,7 +62,6 @@ func BenchmarkUint64MapFromSorted(B *testing.B) {
 }
 
 // Bytes(32) in hash map
-//
 func BenchmarkBytes32HashMap(B *testing.B) {
 	for _, n := range filterTestSizes {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
@@ -85,7 +84,6 @@ func BenchmarkBytes32HashMap(B *testing.B) {
 }
 
 // Bloom filter on uint64
-//
 const maxFilterError float64 = 0.02
 const cuckooFillFactor = 0.75
 const bloomFillFactor = 1
@@ -111,7 +109,7 @@ func BenchmarkUint64BloomFromUnsortedLE(B *testing.B) {
 func BenchmarkUint64BloomFromSortedLE(B *testing.B) {
 	for _, n := range filterTestSizes {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64.Sort(randUint64Slice(n, 1))
+			a := num.Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -147,7 +145,7 @@ func BenchmarkUint64BloomFromUnsortedBE(B *testing.B) {
 func BenchmarkUint64BloomFromSortedBE(B *testing.B) {
 	for _, n := range filterTestSizes {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64.Sort(randUint64Slice(n, 1))
+			a := num.Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -202,7 +200,7 @@ func BenchmarkUint64CuckooFromUnsortedLE(B *testing.B) {
 func BenchmarkUint64CuckooFromSortedLE(B *testing.B) {
 	for _, n := range filterTestSizes {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64.Sort(randUint64Slice(n, 1))
+			a := num.Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
@@ -238,7 +236,7 @@ func BenchmarkUint64CuckooFromUnsortedBE(B *testing.B) {
 func BenchmarkUint64CuckooFromSortedBE(B *testing.B) {
 	for _, n := range filterTestSizes {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := vec.Uint64.Sort(randUint64Slice(n, 1))
+			a := num.Uint64.Sort(randUint64Slice(n, 1))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {

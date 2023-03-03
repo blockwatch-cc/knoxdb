@@ -11,8 +11,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"blockwatch.cc/knoxdb/encoding/block"
-	"blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/encoding/num"
 )
 
 func estimateError(got, exp uint64) float64 {
@@ -392,11 +391,12 @@ func BenchmarkFilterAddExactHashed(b *testing.B) {
 			continue
 		}
 		lastn = c.n
-		blk := block.NewBlockFromSlice(block.BlockTypeUint64, 0, RandUint64(c.n))
+		n := num.NewNumArrayFromSlice(RandUint64(c.n))
 		b.Run(fmt.Sprintf("n=%d", c.n), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				_ = blk.Hashes(nil)
+				h := make([]uint64, c.n)
+				n.Hashes(h)
 			}
 		})
 	}
@@ -409,13 +409,15 @@ func BenchmarkFilterCardinalityExactHashed(b *testing.B) {
 			continue
 		}
 		lastn = c.n
-		blk := block.NewBlockFromSlice(block.BlockTypeUint64, 0, RandUint64(c.n))
-		h := blk.Hashes(nil)
+
+		n := num.NewNumArrayFromSlice(RandUint64(c.n))
+		h := make([]uint64, c.n)
+		n.Hashes(h)
 
 		b.Run(fmt.Sprintf("n=%d", c.n), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				u64 := vec.Uint64.Unique(h)
+				u64 := num.Uint64.Unique(h)
 				_ = len(u64)
 			}
 		})

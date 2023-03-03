@@ -22,6 +22,7 @@ import (
 
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/decimal"
+	. "blockwatch.cc/knoxdb/encoding/num"
 	. "blockwatch.cc/knoxdb/vec"
 )
 
