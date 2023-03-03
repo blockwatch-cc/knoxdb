@@ -4,7 +4,7 @@
 // https://github.com/chfast/intx
 // https://github.com/holiman/uint256
 
-package vec
+package bignum
 
 import (
 	"encoding/binary"
@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"blockwatch.cc/knoxdb/vec"
 )
 
 var (
@@ -79,9 +81,11 @@ func (x Int256) IsZero() bool {
 }
 
 // Sign returns:
+//
 //	-1 if x <  0
 //	 0 if x == 0
 //	+1 if x >  0
+//
 // Where x is interpreted as a two's complement signed number
 func (x Int256) Sign() int {
 	if x.IsZero() {
@@ -347,10 +351,11 @@ func (x Int256) BitLen() int {
 
 // Abs interprets x as a two's complement signed number,
 // and returns its absolute value
-//   Abs(0)        = 0
-//   Abs(1)        = 1
-//   Abs(2**255)   = -2**255
-//   Abs(2**256-1) = -1
+//
+//	Abs(0)        = 0
+//	Abs(1)        = 1
+//	Abs(2**255)   = -2**255
+//	Abs(2**256-1) = -1
 func (x Int256) Abs() Int256 {
 	if x[0] < 0x8000000000000000 {
 		return x
@@ -714,45 +719,45 @@ func (x Uint256) Gte(y Uint256) bool {
 }
 
 // Match helpers
-func MatchInt256Equal(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, src.Len())
-	bits.cnt = int(matchInt256Equal(src, val, bits.Bytes(), mask.Bytes()))
+func MatchInt256Equal(src Int256LLSlice, val Int256, bits, mask *vec.Bitset) *vec.Bitset {
+	bits = bits.Grow(src.Len())
+	bits.ResetCount(int(matchInt256Equal(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt256NotEqual(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, src.Len())
-	bits.cnt = int(matchInt256NotEqual(src, val, bits.Bytes(), mask.Bytes()))
+func MatchInt256NotEqual(src Int256LLSlice, val Int256, bits, mask *vec.Bitset) *vec.Bitset {
+	bits = bits.Grow(src.Len())
+	bits.ResetCount(int(matchInt256NotEqual(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt256LessThan(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, src.Len())
-	bits.cnt = int(matchInt256LessThan(src, val, bits.Bytes(), mask.Bytes()))
+func MatchInt256LessThan(src Int256LLSlice, val Int256, bits, mask *vec.Bitset) *vec.Bitset {
+	bits = bits.Grow(src.Len())
+	bits.ResetCount(int(matchInt256LessThan(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt256LessThanEqual(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, src.Len())
-	bits.cnt = int(matchInt256LessThanEqual(src, val, bits.Bytes(), mask.Bytes()))
+func MatchInt256LessThanEqual(src Int256LLSlice, val Int256, bits, mask *vec.Bitset) *vec.Bitset {
+	bits = bits.Grow(src.Len())
+	bits.ResetCount(int(matchInt256LessThanEqual(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt256GreaterThan(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, src.Len())
-	bits.cnt = int(matchInt256GreaterThan(src, val, bits.Bytes(), mask.Bytes()))
+func MatchInt256GreaterThan(src Int256LLSlice, val Int256, bits, mask *vec.Bitset) *vec.Bitset {
+	bits = bits.Grow(src.Len())
+	bits.ResetCount(int(matchInt256GreaterThan(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt256GreaterThanEqual(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, src.Len())
-	bits.cnt = int(matchInt256GreaterThanEqual(src, val, bits.Bytes(), mask.Bytes()))
+func MatchInt256GreaterThanEqual(src Int256LLSlice, val Int256, bits, mask *vec.Bitset) *vec.Bitset {
+	bits = bits.Grow(src.Len())
+	bits.ResetCount(int(matchInt256GreaterThanEqual(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt256Between(src Int256LLSlice, a, b Int256, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, src.Len())
-	bits.cnt = int(matchInt256Between(src, a, b, bits.Bytes(), mask.Bytes()))
+func MatchInt256Between(src Int256LLSlice, a, b Int256, bits, mask *vec.Bitset) *vec.Bitset {
+	bits = bits.Grow(src.Len())
+	bits.ResetCount(int(matchInt256Between(src, a, b, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
@@ -1117,6 +1122,6 @@ func (s *Int256LLSlice) Insert(k int, vs Int256LLSlice) {
 	*s = s2
 }
 
-func (s Int256Slice) MatchEqual(val Int256, bits, mask *Bitset) *Bitset {
+func (s Int256Slice) MatchEqual(val Int256, bits, mask *vec.Bitset) *vec.Bitset {
 	return MatchInt256Equal(s.Int256LLSlice(), val, bits, mask)
 }

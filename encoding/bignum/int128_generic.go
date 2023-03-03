@@ -1,7 +1,7 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package vec
+package bignum
 
 func matchInt128EqualGeneric(src Int128LLSlice, val Int128, bits, mask []byte) int64 {
 	var cnt int64

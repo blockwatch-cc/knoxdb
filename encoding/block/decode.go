@@ -9,6 +9,7 @@ import (
 	"io"
 	"sync"
 
+	"blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/dedup"
 	"blockwatch.cc/knoxdb/vec"
@@ -74,7 +75,7 @@ func decodeFloat32Block(block []byte, dst []float32) ([]float32, error) {
 	return dst, err
 }
 
-func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, error) {
+func decodeInt256Block(block []byte, dst bignum.Int256LLSlice) (bignum.Int256LLSlice, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockTypeInt256)
 	if err != nil {
 		return dst, err
@@ -126,7 +127,7 @@ func decodeInt256Block(block []byte, dst vec.Int256LLSlice) (vec.Int256LLSlice, 
 	return dst, nil
 }
 
-func decodeInt128Block(block []byte, dst vec.Int128LLSlice) (vec.Int128LLSlice, error) {
+func decodeInt128Block(block []byte, dst bignum.Int128LLSlice) (bignum.Int128LLSlice, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockTypeInt128)
 	if err != nil {
 		return dst, err

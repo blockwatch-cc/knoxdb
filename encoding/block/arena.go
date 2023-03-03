@@ -7,6 +7,7 @@ import (
 	"math/bits"
 	"sync"
 
+	"blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/dedup"
 	"blockwatch.cc/knoxdb/vec"
 )
@@ -96,26 +97,26 @@ type Arena struct {
 func NewArena() *Arena {
 	return &Arena{
 		alloc: [20]Allocator{
-			&allocator[int64]{},      // BlockTime
-			&allocator[int64]{},      // BlockInt64
-			&allocator[uint64]{},     // BlockUint64
-			&allocator[float64]{},    // BlockFloat64
-			&bitSetAllocator{},       // BlockBool !! unused, blocks alloc direct
-			&dedupAllocator{},        // BlockString !! unused, blocks alloc direct
-			&dedupAllocator{},        // BlockBytes !! unused, blocks alloc direct
-			&allocator[int32]{},      // BlockInt32
-			&allocator[int16]{},      // BlockInt16
-			&allocator[int8]{},       // BlockInt8
-			&allocator[uint32]{},     // BlockUint32
-			&allocator[uint16]{},     // BlockUint16
-			&allocator[uint8]{},      // BlockUint8
-			&allocator[float32]{},    // BlockFloat32
-			&allocator[vec.Int128]{}, // BlockInt128 !! unused, blocks use strides
-			&allocator[vec.Int256]{}, // BlockInt256 !! unused, blocks use strides
-			&allocator[int32]{},      // BlockDecimal32
-			&allocator[int64]{},      // BlockDecimal64
-			&allocator[vec.Int128]{}, // BlockDecimal128 !! unused, blocks use strides
-			&allocator[vec.Int256]{}, // BlockDecimal256 !! unused, blocks use strides
+			&allocator[int64]{},         // BlockTime
+			&allocator[int64]{},         // BlockInt64
+			&allocator[uint64]{},        // BlockUint64
+			&allocator[float64]{},       // BlockFloat64
+			&bitSetAllocator{},          // BlockBool !! unused, blocks alloc direct
+			&dedupAllocator{},           // BlockString !! unused, blocks alloc direct
+			&dedupAllocator{},           // BlockBytes !! unused, blocks alloc direct
+			&allocator[int32]{},         // BlockInt32
+			&allocator[int16]{},         // BlockInt16
+			&allocator[int8]{},          // BlockInt8
+			&allocator[uint32]{},        // BlockUint32
+			&allocator[uint16]{},        // BlockUint16
+			&allocator[uint8]{},         // BlockUint8
+			&allocator[float32]{},       // BlockFloat32
+			&allocator[bignum.Int128]{}, // BlockInt128 !! unused, blocks use strides
+			&allocator[bignum.Int256]{}, // BlockInt256 !! unused, blocks use strides
+			&allocator[int32]{},         // BlockDecimal32
+			&allocator[int64]{},         // BlockDecimal64
+			&allocator[bignum.Int128]{}, // BlockDecimal128 !! unused, blocks use strides
+			&allocator[bignum.Int256]{}, // BlockDecimal256 !! unused, blocks use strides
 		},
 	}
 }

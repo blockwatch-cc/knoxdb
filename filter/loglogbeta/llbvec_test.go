@@ -56,15 +56,6 @@ func RandUint32(n int) []uint32 {
 	return b
 }
 
-/*
-	func RandStringBytesMaskImprSrc(n uint32) string {
-		b := make([]byte, n)
-		for i := uint32(0); i < n; i++ {
-			b[i] = letterBytes[rand.Int()%len(letterBytes)]
-		}
-		return string(b)
-	}
-*/
 func TestCardinality(t *testing.T) {
 	llb := NewFilter()
 	step := 10000

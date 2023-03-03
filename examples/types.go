@@ -19,10 +19,10 @@ import (
 	"github.com/echa/log"
 	bolt "go.etcd.io/bbolt"
 
+	"blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 type Enum uint
@@ -131,8 +131,8 @@ type Types struct {
 	D64       decimal.Decimal64  `knox:"d64,scale=15,snappy"      json:"decimal64"`
 	D128      decimal.Decimal128 `knox:"d128,scale=18,snappy"     json:"decimal128"`
 	D256      decimal.Decimal256 `knox:"d256,scale=24,snappy"     json:"decimal256"`
-	I128      vec.Int128         `knox:"i128,snappy"              json:"int128"`
-	I256      vec.Int256         `knox:"i256,snappy"              json:"int256"`
+	I128      bignum.Int128      `knox:"i128,snappy"              json:"int128"`
+	I256      bignum.Int256      `knox:"i256,snappy"              json:"int256"`
 }
 
 func (t Types) ID() uint64 {
@@ -297,10 +297,10 @@ func NewRandomTypes(i int) *Types {
 		// decimals
 		D32:  decimal.NewDecimal32(int32(100123456789-i), 5),
 		D64:  decimal.NewDecimal64(1123456789123456789-int64(i), 15),
-		D128: decimal.NewDecimal128(vec.MustParseInt128(strconv.Itoa(i)+"00000000000000000000"), 18),
-		D256: decimal.NewDecimal256(vec.MustParseInt256(strconv.Itoa(i)+"0000000000000000000000000000000000000000"), 24),
-		I128: vec.MustParseInt128(strconv.Itoa(i) + "000000000000000000000000000000"),
-		I256: vec.MustParseInt256(strconv.Itoa(i) + "000000000000000000000000000000000000000000000000000000000000"),
+		D128: decimal.NewDecimal128(bignum.MustParseInt128(strconv.Itoa(i)+"00000000000000000000"), 18),
+		D256: decimal.NewDecimal256(bignum.MustParseInt256(strconv.Itoa(i)+"0000000000000000000000000000000000000000"), 24),
+		I128: bignum.MustParseInt128(strconv.Itoa(i) + "000000000000000000000000000000"),
+		I256: bignum.MustParseInt256(strconv.Itoa(i) + "000000000000000000000000000000000000000000000000000000000000"),
 	}
 }
 

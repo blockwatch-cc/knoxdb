@@ -1,7 +1,7 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package vec
+package bignum
 
 import (
 	"bytes"
@@ -146,11 +146,11 @@ var (
 
 // creates an Int128 test case from the given slice
 // Parameters:
-//  - name: desired name of the test case
-//  - slice: the slice for constructing the test case
-//  - match, match2: are only copied to the resulting test case
-//  - result: result for the given slice
-//  - len: desired length of the test case
+//   - name: desired name of the test case
+//   - slice: the slice for constructing the test case
+//   - match, match2: are only copied to the resulting test case
+//   - result: result for the given slice
+//   - len: desired length of the test case
 func CreateInt128TestCase(name string, slice []Int128, match, match2 Int128, result []byte, length int) Int128MatchTest {
 	if len(slice)%8 != 0 {
 		panic("CreateInt128TestCase: length of slice has to be a multiple of 8")
@@ -194,7 +194,6 @@ func CreateInt128TestCase(name string, slice []Int128, match, match2 Int128, res
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-//
 var Int128EqualCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -245,11 +244,13 @@ func TestMatchInt128EqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Equal benchmarks
-//
 func BenchmarkMatchInt128EqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt128Slice(n.l, 1).Int128LLSlice()
-		mask := fillBitset(nil, a.Len(), 0xff)
+		mask := make([]byte, bitFieldLen(a.Len()))
+		for i := range mask {
+			mask[i] = 0xff
+		}
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int128Size))
@@ -314,7 +315,6 @@ func TestMatchInt128NotEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Not Equal benchmarks
-//
 func BenchmarkMatchInt128NotEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt128Slice(n.l, 1).Int128LLSlice()
@@ -330,7 +330,6 @@ func BenchmarkMatchInt128NotEqualGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-//
 var Int128LessCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -381,7 +380,6 @@ func TestMatchInt128LessGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Less benchmarks
-//
 func BenchmarkMatchInt128LessGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt128Slice(n.l, 1).Int128LLSlice()
@@ -397,7 +395,6 @@ func BenchmarkMatchInt128LessGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-//
 var Int128LessEqualCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -448,7 +445,6 @@ func TestMatchInt128LessEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
-//
 func BenchmarkMatchInt128LessEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt128Slice(n.l, 1).Int128LLSlice()
@@ -464,7 +460,6 @@ func BenchmarkMatchInt128LessEqualGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-//
 var Int128GreaterCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -515,7 +510,6 @@ func TestMatchInt128GreaterGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Greater benchmarks
-//
 func BenchmarkMatchInt128GreaterGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt128Slice(n.l, 1).Int128LLSlice()
@@ -531,7 +525,6 @@ func BenchmarkMatchInt128GreaterGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-//
 var Int128GreaterEqualCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -582,7 +575,6 @@ func TestMatchInt128GreaterEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
-//
 func BenchmarkMatchInt128GreaterEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt128Slice(n.l, 1).Int128LLSlice()
@@ -598,7 +590,6 @@ func BenchmarkMatchInt128GreaterEqualGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-//
 var Int128BetweenCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -651,7 +642,6 @@ func TestMatchInt128BetweenGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Between benchmarks
-//
 func BenchmarkMatchInt128BetweenGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt128Slice(n.l, 1).Int128LLSlice()
@@ -667,7 +657,6 @@ func BenchmarkMatchInt128BetweenGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------
 // Int128 Slice
-//
 func TestUniqueInt128(T *testing.T) {
 	a := randInt128Slice(1000, 5)
 	b := UniqueInt128Slice(a)

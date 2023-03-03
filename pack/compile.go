@@ -10,6 +10,7 @@ import (
 	"blockwatch.cc/knoxdb/filter/bloom"
 	"blockwatch.cc/knoxdb/hash/xxhash"
 
+	"blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/encoding/num"
@@ -146,7 +147,7 @@ func (c *Condition) convertInputTypes() {
 	case FieldTypeDecimal128:
 		if val, ok := c.Value.([]decimal.Decimal128); ok {
 			// internal comparators use always the decimal's base type
-			conv := make([]vec.Int128, len(val))
+			conv := make([]bignum.Int128, len(val))
 			for i := range val {
 				conv[i] = val[i].Quantize(c.Field.Scale).Int128()
 			}
@@ -165,7 +166,7 @@ func (c *Condition) convertInputTypes() {
 	case FieldTypeDecimal256:
 		if val, ok := c.Value.([]decimal.Decimal256); ok {
 			// internal comparators use always the decimal's base type
-			conv := make([]vec.Int256, len(val))
+			conv := make([]bignum.Int256, len(val))
 			for i := range val {
 				conv[i] = val[i].Quantize(c.Field.Scale).Int256()
 			}
@@ -192,11 +193,11 @@ func (c *Condition) convertInputTypes() {
 			c.numValues = len(slice)
 		}
 	case FieldTypeInt256:
-		if slice, ok := c.Value.([]vec.Int256); ok {
+		if slice, ok := c.Value.([]bignum.Int256); ok {
 			c.numValues = len(slice)
 		}
 	case FieldTypeInt128:
-		if slice, ok := c.Value.([]vec.Int128); ok {
+		if slice, ok := c.Value.([]bignum.Int128); ok {
 			c.numValues = len(slice)
 		}
 	case FieldTypeInt64:
@@ -293,12 +294,12 @@ func (c *Condition) sortValueSlice() {
 			c.Value = num.Uint8.Sort(slice)
 		}
 	case FieldTypeInt256, FieldTypeDecimal256:
-		if slice := c.Value.([]vec.Int256); slice != nil {
-			vec.Int256Sorter(slice).Sort()
+		if slice := c.Value.([]bignum.Int256); slice != nil {
+			bignum.Int256Sorter(slice).Sort()
 		}
 	case FieldTypeInt128, FieldTypeDecimal128:
-		if slice := c.Value.([]vec.Int128); slice != nil {
-			vec.Int128Sorter(slice).Sort()
+		if slice := c.Value.([]bignum.Int128); slice != nil {
+			bignum.Int128Sorter(slice).Sort()
 		}
 	case FieldTypeInt64, FieldTypeDecimal64, FieldTypeDatetime:
 		if slice := c.Value.([]int64); slice != nil {
@@ -361,15 +362,15 @@ func (c *Condition) buildValueMap() {
 			}
 		}
 	case FieldTypeInt256, FieldTypeDecimal256:
-		if slice := c.Value.([]vec.Int256); slice != nil {
-			c.int256map = make(map[vec.Int256]struct{}, len(slice))
+		if slice := c.Value.([]bignum.Int256); slice != nil {
+			c.int256map = make(map[bignum.Int256]struct{}, len(slice))
 			for _, v := range slice {
 				c.int256map[v] = struct{}{}
 			}
 		}
 	case FieldTypeInt128, FieldTypeDecimal128:
-		if slice := c.Value.([]vec.Int128); slice != nil {
-			c.int128map = make(map[vec.Int128]struct{}, len(slice))
+		if slice := c.Value.([]bignum.Int128); slice != nil {
+			c.int128map = make(map[bignum.Int128]struct{}, len(slice))
 			for _, v := range slice {
 				c.int128map[v] = struct{}{}
 			}
@@ -479,11 +480,11 @@ func (c *Condition) buildBloomData() {
 			c.bloomHashes = append(c.bloomHashes, bloom.Hash(compress.UnsafeGetBytes(val)))
 		}
 	case FieldTypeInt256, FieldTypeDecimal256:
-		for _, val := range c.Value.([]vec.Int256) {
+		for _, val := range c.Value.([]bignum.Int256) {
 			c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 		}
 	case FieldTypeInt128, FieldTypeDecimal128:
-		for _, val := range c.Value.([]vec.Int128) {
+		for _, val := range c.Value.([]bignum.Int128) {
 			c.bloomHashes = append(c.bloomHashes, c.Field.Type.Hash(val))
 		}
 	case FieldTypeInt64, FieldTypeDecimal64, FieldTypeDatetime:

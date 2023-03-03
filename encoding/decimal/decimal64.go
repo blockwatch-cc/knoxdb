@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	. "blockwatch.cc/knoxdb/vec"
+	. "blockwatch.cc/knoxdb/encoding/bignum"
 )
 
 var Decimal64Zero = Decimal64{0, 0}

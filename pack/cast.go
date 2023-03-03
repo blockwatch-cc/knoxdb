@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"time"
 
+	. "blockwatch.cc/knoxdb/encoding/bignum"
 	. "blockwatch.cc/knoxdb/encoding/decimal"
-	. "blockwatch.cc/knoxdb/vec"
 )
 
 func (t FieldType) CastType(val interface{}, f *Field) (interface{}, error) {

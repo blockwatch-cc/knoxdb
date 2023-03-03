@@ -15,6 +15,7 @@ import (
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/util"
 
+	"blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/vec"
@@ -35,22 +36,22 @@ type Condition struct {
 	IsSorted bool        // IN/NIN condition slice is already pre-sorted
 
 	// internal data and statistics
-	processed    bool                    // condition has been processed already
-	nomatch      bool                    // condition is empty (used on index matches)
-	hashmap      map[uint64]int          // compiled hashmap for byte/string set queries
-	hashoverflow []hashvalue             // hash collision overflow list (one for all)
-	int256map    map[vec.Int256]struct{} // compiled int256 map for set membership
-	int128map    map[vec.Int128]struct{} // compiled int128 map for set membership
-	int64map     map[int64]struct{}      // compiled int64 map for set membership
-	int32map     map[int32]struct{}      // compiled int32 map for set membership
-	int16map     map[int16]struct{}      // compiled int16 map for set membership
-	int8map      map[int8]struct{}       // compiled int8 map for set membership
-	uint64map    map[uint64]struct{}     // compiled uint64 map for set membership
-	uint32map    map[uint32]struct{}     // compiled uint32 map for set membership
-	uint16map    map[uint16]struct{}     // compiled uint16 map for set membership
-	uint8map     map[uint8]struct{}      // compiled uint8 map for set membership
-	numValues    int                     // number of values when Value is a slice
-	bloomHashes  [][2]uint32             // opt bloom hash value(s) if field has bloom flag
+	processed    bool                       // condition has been processed already
+	nomatch      bool                       // condition is empty (used on index matches)
+	hashmap      map[uint64]int             // compiled hashmap for byte/string set queries
+	hashoverflow []hashvalue                // hash collision overflow list (one for all)
+	int256map    map[bignum.Int256]struct{} // compiled int256 map for set membership
+	int128map    map[bignum.Int128]struct{} // compiled int128 map for set membership
+	int64map     map[int64]struct{}         // compiled int64 map for set membership
+	int32map     map[int32]struct{}         // compiled int32 map for set membership
+	int16map     map[int16]struct{}         // compiled int16 map for set membership
+	int8map      map[int8]struct{}          // compiled int8 map for set membership
+	uint64map    map[uint64]struct{}        // compiled uint64 map for set membership
+	uint32map    map[uint32]struct{}        // compiled uint32 map for set membership
+	uint16map    map[uint16]struct{}        // compiled uint16 map for set membership
+	uint8map     map[uint8]struct{}         // compiled uint8 map for set membership
+	numValues    int                        // number of values when Value is a slice
+	bloomHashes  [][2]uint32                // opt bloom hash value(s) if field has bloom flag
 }
 
 // returns the number of values to compare 1 (other), 2 (RANGE), many (IN)
@@ -76,11 +77,11 @@ func (c Condition) MaybeMatchPack(info PackInfo) bool {
 		min = decimal.NewDecimal64(min.(int64), scale)
 		max = decimal.NewDecimal64(max.(int64), scale)
 	case FieldTypeDecimal128:
-		min = decimal.NewDecimal128(min.(vec.Int128), scale)
-		max = decimal.NewDecimal128(max.(vec.Int128), scale)
+		min = decimal.NewDecimal128(min.(bignum.Int128), scale)
+		max = decimal.NewDecimal128(max.(bignum.Int128), scale)
 	case FieldTypeDecimal256:
-		min = decimal.NewDecimal256(min.(vec.Int256), scale)
-		max = decimal.NewDecimal256(max.(vec.Int256), scale)
+		min = decimal.NewDecimal256(min.(bignum.Int256), scale)
+		max = decimal.NewDecimal256(max.(bignum.Int256), scale)
 	}
 	// compare pack header
 	switch c.Mode {

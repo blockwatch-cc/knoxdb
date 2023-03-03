@@ -11,8 +11,8 @@ import (
 	"io"
 	"sync"
 
+	"blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/s8b"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 // Integer encoding uses two different strategies depending on the range of values in
@@ -49,12 +49,12 @@ var uint64Pool = &sync.Pool{
 }
 
 // upper bound, may store uncompressed 64bit strides
-func Int256ArrayEncodedSize(src vec.Int256LLSlice) int {
+func Int256ArrayEncodedSize(src bignum.Int256LLSlice) int {
 	return src.Len()*32 + 1
 }
 
 // upper bound, may store uncompressed 64bit strides
-func Int128ArrayEncodedSize(src vec.Int128LLSlice) int {
+func Int128ArrayEncodedSize(src bignum.Int128LLSlice) int {
 	return src.Len()*16 + 1
 }
 

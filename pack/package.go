@@ -12,12 +12,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/util"
 
 	. "blockwatch.cc/knoxdb/encoding/decimal"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 type Package struct {
@@ -715,16 +715,16 @@ func (p *Package) Uint8At(index, pos int) (uint8, error) {
 	return p.blocks[index].Uint8At(pos), nil
 }
 
-func (p *Package) Int256At(index, pos int) (vec.Int256, error) {
+func (p *Package) Int256At(index, pos int) (bignum.Int256, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt256); err != nil {
-		return vec.Int256{}, err
+		return bignum.Int256{}, err
 	}
 	return p.blocks[index].Int256At(pos), nil
 }
 
-func (p *Package) Int128At(index, pos int) (vec.Int128, error) {
+func (p *Package) Int128At(index, pos int) (bignum.Int128, error) {
 	if err := p.isValidAt(index, pos, FieldTypeInt128); err != nil {
-		return vec.Int128{}, err
+		return bignum.Int128{}, err
 	}
 	return p.blocks[index].Int128At(pos), nil
 }

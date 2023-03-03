@@ -1,7 +1,7 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package vec
+package bignum
 
 import (
 	"bytes"
@@ -148,11 +148,11 @@ var (
 
 // creates an Int256 test case from the given slice
 // Parameters:
-//  - name: desired name of the test case
-//  - slice: the slice for constructing the test case
-//  - match, match2: are only copied to the resulting test case
-//  - result: result for the given slice
-//  - len: desired length of the test case
+//   - name: desired name of the test case
+//   - slice: the slice for constructing the test case
+//   - match, match2: are only copied to the resulting test case
+//   - result: result for the given slice
+//   - len: desired length of the test case
 func CreateInt256TestCase(name string, slice []Int256, match, match2 Int256, result []byte, length int) Int256MatchTest {
 	if len(slice)%8 != 0 {
 		panic("CreateInt256TestCase: length of slice has to be a multiple of 8")
@@ -196,7 +196,6 @@ func CreateInt256TestCase(name string, slice []Int256, match, match2 Int256, res
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-//
 var Int256EqualCases = []Int256MatchTest{
 	{
 		name:   "l0",
@@ -247,11 +246,13 @@ func TestMatchInt256EqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Equal benchmarks
-//
 func BenchmarkMatchInt256EqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt256Slice(n.l, 1).Int256LLSlice()
-		mask := fillBitset(nil, a.Len(), 0xff)
+		mask := make([]byte, bitFieldLen(a.Len()))
+		for i := range mask {
+			mask[i] = 0xff
+		}
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int256Size))
@@ -316,7 +317,6 @@ func TestMatchInt256NotEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Not Equal benchmarks
-//
 func BenchmarkMatchInt256NotEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt256Slice(n.l, 1).Int256LLSlice()
@@ -332,7 +332,6 @@ func BenchmarkMatchInt256NotEqualGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-//
 var Int256LessCases = []Int256MatchTest{
 	{
 		name:   "l0",
@@ -383,7 +382,6 @@ func TestMatchInt256LessGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Less benchmarks
-//
 func BenchmarkMatchInt256LessGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt256Slice(n.l, 1).Int256LLSlice()
@@ -399,7 +397,6 @@ func BenchmarkMatchInt256LessGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-//
 var Int256LessEqualCases = []Int256MatchTest{
 	{
 		name:   "l0",
@@ -450,7 +447,6 @@ func TestMatchInt256LessEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
-//
 func BenchmarkMatchInt256LessEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt256Slice(n.l, 1).Int256LLSlice()
@@ -466,7 +462,6 @@ func BenchmarkMatchInt256LessEqualGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-//
 var Int256GreaterCases = []Int256MatchTest{
 	{
 		name:   "l0",
@@ -517,7 +512,6 @@ func TestMatchInt256GreaterGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Greater benchmarks
-//
 func BenchmarkMatchInt256GreaterGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt256Slice(n.l, 1).Int256LLSlice()
@@ -533,7 +527,6 @@ func BenchmarkMatchInt256GreaterGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-//
 var Int256GreaterEqualCases = []Int256MatchTest{
 	{
 		name:   "l0",
@@ -584,7 +577,6 @@ func TestMatchInt256GreaterEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
-//
 func BenchmarkMatchInt256GreaterEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt256Slice(n.l, 1).Int256LLSlice()
@@ -600,7 +592,6 @@ func BenchmarkMatchInt256GreaterEqualGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-//
 var Int256BetweenCases = []Int256MatchTest{
 	{
 		name:   "l0",
@@ -653,7 +644,6 @@ func TestMatchInt256BetweenGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Between benchmarks
-//
 func BenchmarkMatchInt256BetweenGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randInt256Slice(n.l, 1).Int256LLSlice()
@@ -669,7 +659,6 @@ func BenchmarkMatchInt256BetweenGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------
 // Int256 Slice
-//
 func TestUniqueInt256(T *testing.T) {
 	a := randInt256Slice(1000, 5)
 	b := UniqueInt256Slice(a)

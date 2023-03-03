@@ -6,10 +6,9 @@ package decimal
 import (
 	"math"
 	"strconv"
-	// "strings"
 	"testing"
 
-	. "blockwatch.cc/knoxdb/vec"
+	. "blockwatch.cc/knoxdb/encoding/bignum"
 )
 
 func n256(hi int64, lo ...uint64) Int256 {

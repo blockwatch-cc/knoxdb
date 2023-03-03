@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"time"
 
+	. "blockwatch.cc/knoxdb/encoding/bignum"
 	. "blockwatch.cc/knoxdb/encoding/decimal"
-	. "blockwatch.cc/knoxdb/vec"
 )
 
 type Result struct {

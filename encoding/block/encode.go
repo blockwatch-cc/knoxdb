@@ -6,6 +6,7 @@ package block
 import (
 	"bytes"
 
+	"blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/dedup"
 	"blockwatch.cc/knoxdb/vec"
@@ -95,7 +96,7 @@ func encodeFloat32Block(buf *bytes.Buffer, val []float32, comp Compression) (int
 	return buf.Len() - l, err
 }
 
-func encodeInt256Block(buf *bytes.Buffer, val vec.Int256LLSlice, comp Compression) (int, error) {
+func encodeInt256Block(buf *bytes.Buffer, val bignum.Int256LLSlice, comp Compression) (int, error) {
 	if val.Len() == 0 {
 		return writeEmptyBlock(buf, BlockTypeInt256)
 	}
@@ -148,7 +149,7 @@ func encodeInt256Block(buf *bytes.Buffer, val vec.Int256LLSlice, comp Compressio
 	return buf.Len() - l, err
 }
 
-func encodeInt128Block(buf *bytes.Buffer, val vec.Int128LLSlice, comp Compression) (int, error) {
+func encodeInt128Block(buf *bytes.Buffer, val bignum.Int128LLSlice, comp Compression) (int, error) {
 	if val.Len() == 0 {
 		return writeEmptyBlock(buf, BlockTypeInt128)
 	}

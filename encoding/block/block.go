@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/encoding/dedup"
@@ -226,8 +227,8 @@ type Block interface {
 
 	ReadAtWithInfo(int, reflect.Value) error
 	FieldAt(int) interface{}
-	Int256At(int) vec.Int256
-	Int128At(int) vec.Int128
+	Int256At(int) bignum.Int256
+	Int128At(int) bignum.Int128
 	Int64At(int) int64
 	Int32At(int) int32
 	Int16At(int) int16
@@ -353,12 +354,12 @@ type BlockBool struct {
 
 type BlockInt128 struct {
 	blockCommon
-	data vec.Int128LLSlice
+	data bignum.Int128LLSlice
 }
 
 type BlockInt256 struct {
 	blockCommon
-	data vec.Int256LLSlice
+	data bignum.Int256LLSlice
 }
 
 type BlockDec32 struct {
@@ -711,19 +712,19 @@ func (b *BlockDec32) RangeSlice(start, end int) interface{} {
 		return b.data.Elem(idx)
 	}
 */
-func (b *blockCommon) Int256At(i int) vec.Int256 {
-	return vec.ZeroInt256
+func (b *blockCommon) Int256At(i int) bignum.Int256 {
+	return bignum.ZeroInt256
 }
 
-func (b *BlockInt256) Int256At(i int) vec.Int256 {
+func (b *BlockInt256) Int256At(i int) bignum.Int256 {
 	return b.data.Elem(i)
 }
 
-func (b *blockCommon) Int128At(i int) vec.Int128 {
-	return vec.ZeroInt128
+func (b *blockCommon) Int128At(i int) bignum.Int128 {
+	return bignum.ZeroInt128
 }
 
-func (b *BlockInt128) Int128At(i int) vec.Int128 {
+func (b *BlockInt128) Int128At(i int) bignum.Int128 {
 	return b.data.Elem(i)
 }
 
@@ -1060,7 +1061,7 @@ func (b *BlockTime) SetFieldAt(i int, val reflect.Value) error {
 }
 
 func (b *BlockInt128) SetWithCast(i int, val reflect.Value) error {
-	b.data.Set(i, val.Interface().(vec.Int128))
+	b.data.Set(i, val.Interface().(bignum.Int128))
 	return nil
 }
 
@@ -1069,7 +1070,7 @@ func (b *BlockInt128) SetFieldAt(i int, val reflect.Value) error {
 }
 
 func (b *BlockInt256) SetWithCast(i int, val reflect.Value) error {
-	b.data.Set(i, val.Interface().(vec.Int256))
+	b.data.Set(i, val.Interface().(bignum.Int256))
 	return nil
 }
 
@@ -1151,9 +1152,9 @@ func (b *BlockString) SetFieldAt(i int, val reflect.Value) error {
 func (b *BlockDec256) SetWithCast(i int, val reflect.Value) error {
 	switch {
 	case b.flags.Contains(flagUintType):
-		b.data.Set(i, vec.Int256{0, 0, 0, val.Uint()})
+		b.data.Set(i, bignum.Int256{0, 0, 0, val.Uint()})
 	case b.flags.Contains(flagIntType):
-		b.data.Set(i, vec.Int256{0, 0, 0, uint64(val.Int())})
+		b.data.Set(i, bignum.Int256{0, 0, 0, uint64(val.Int())})
 	case b.flags.Contains(flagFloatType):
 		dec := decimal.Decimal256{}
 		dec.SetFloat64(val.Float(), b.scale)
@@ -1172,9 +1173,9 @@ func (b *BlockDec256) SetFieldAt(i int, val reflect.Value) error {
 func (b *BlockDec128) SetWithCast(i int, val reflect.Value) error {
 	switch {
 	case b.flags.Contains(flagUintType):
-		b.data.Set(i, vec.Int128{0, val.Uint()})
+		b.data.Set(i, bignum.Int128{0, val.Uint()})
 	case b.flags.Contains(flagIntType):
-		b.data.Set(i, vec.Int128{0, uint64(val.Int())})
+		b.data.Set(i, bignum.Int128{0, uint64(val.Int())})
 	case b.flags.Contains(flagFloatType):
 		dec := decimal.Decimal128{}
 		dec.SetFloat64(val.Float(), b.scale)
@@ -1237,11 +1238,11 @@ func (b *BlockNum[T]) Grow(n int) {
 }
 
 func (b *BlockInt256) Grow(n int) {
-	b.data.AppendFrom(vec.MakeInt256LLSlice(n))
+	b.data.AppendFrom(bignum.MakeInt256LLSlice(n))
 }
 
 func (b *BlockInt128) Grow(n int) {
-	b.data.AppendFrom(vec.MakeInt128LLSlice(n))
+	b.data.AppendFrom(bignum.MakeInt128LLSlice(n))
 }
 
 func (b *BlockBytes) Grow(n int) {
@@ -1270,12 +1271,12 @@ func (b *BlockTime) Append(val reflect.Value) error {
 }
 
 func (b *BlockInt128) Append(val reflect.Value) error {
-	b.data.Append(val.Interface().(vec.Int128))
+	b.data.Append(val.Interface().(bignum.Int128))
 	return nil
 }
 
 func (b *BlockInt256) Append(val reflect.Value) error {
-	b.data.Append(val.Interface().(vec.Int256))
+	b.data.Append(val.Interface().(bignum.Int256))
 	return nil
 }
 
@@ -1319,9 +1320,9 @@ func (b *BlockBool) Append(val reflect.Value) error {
 func (b *BlockDec256) Append(val reflect.Value) error {
 	switch {
 	case b.flags.Contains(flagUintType):
-		b.data.Append(vec.Int256{0, 0, 0, val.Uint()})
+		b.data.Append(bignum.Int256{0, 0, 0, val.Uint()})
 	case b.flags.Contains(flagIntType):
-		b.data.Append(vec.Int256{0, 0, 0, uint64(val.Int())})
+		b.data.Append(bignum.Int256{0, 0, 0, uint64(val.Int())})
 	case b.flags.Contains(flagFloatType):
 		dec := decimal.Decimal256{}
 		dec.SetFloat64(val.Float(), b.scale)
@@ -1335,9 +1336,9 @@ func (b *BlockDec256) Append(val reflect.Value) error {
 func (b *BlockDec128) Append(val reflect.Value) error {
 	switch {
 	case b.flags.Contains(flagUintType):
-		b.data.Append(vec.Int128{0, val.Uint()})
+		b.data.Append(bignum.Int128{0, val.Uint()})
 	case b.flags.Contains(flagIntType):
-		b.data.Append(vec.Int128{0, uint64(val.Int())})
+		b.data.Append(bignum.Int128{0, uint64(val.Int())})
 	case b.flags.Contains(flagFloatType):
 		dec := decimal.Decimal128{}
 		dec.SetFloat64(val.Float(), b.scale)
@@ -1561,11 +1562,11 @@ func NewBlockFromSlice(typ BlockType, comp Compression, slice interface{}) Block
 				bl = b*/
 	case BlockTypeInt128:
 		b := new(BlockInt128)
-		b.data = slice.(vec.Int128LLSlice)
+		b.data = slice.(bignum.Int128LLSlice)
 		bl = b
 	case BlockTypeInt256:
 		b := new(BlockInt256)
-		b.data = slice.(vec.Int256LLSlice)
+		b.data = slice.(bignum.Int256LLSlice)
 		bl = b
 	default:
 		errorString := fmt.Sprintf("NewBlockFromSlice not yet implemented for Type %s", typ.String())
@@ -2240,7 +2241,7 @@ func (b *BlockDec128) InsertFrom(src Block, spos, dpos, len int) {
 	if sc == dc {
 		b.data.Insert(dpos, sb.data.Subslice(spos, spos+len))
 	} else {
-		cp := vec.MakeInt128LLSlice(len)
+		cp := bignum.MakeInt128LLSlice(len)
 		for i := 0; i < len; i++ {
 			cp.Set(i, decimal.NewDecimal128(sb.data.Elem(spos+len), sc).Quantize(dc).Int128())
 		}
@@ -2255,7 +2256,7 @@ func (b *BlockDec256) InsertFrom(src Block, spos, dpos, len int) {
 	if sc == dc {
 		b.data.Insert(dpos, sb.data.Subslice(spos, spos+len))
 	} else {
-		cp := vec.MakeInt256LLSlice(len)
+		cp := bignum.MakeInt256LLSlice(len)
 		for i := 0; i < len; i++ {
 			cp.Set(i, decimal.NewDecimal256(sb.data.Elem(spos+len), sc).Quantize(dc).Int256())
 		}
@@ -3382,11 +3383,11 @@ func (b *BlockBool) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bit
 }
 
 func (b *BlockInt256) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt256Equal(b.data, val.(vec.Int256), bits, mask)
+	return bignum.MatchInt256Equal(b.data, val.(bignum.Int256), bits, mask)
 }
 
 func (b *BlockInt128) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt128Equal(b.data, val.(vec.Int128), bits, mask)
+	return bignum.MatchInt128Equal(b.data, val.(bignum.Int128), bits, mask)
 }
 
 func (b *BlockNum[T]) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3414,11 +3415,11 @@ func (b *BlockBool) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.
 }
 
 func (b *BlockInt256) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt256NotEqual(b.data, val.(vec.Int256), bits, mask)
+	return bignum.MatchInt256NotEqual(b.data, val.(bignum.Int256), bits, mask)
 }
 
 func (b *BlockInt128) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt128NotEqual(b.data, val.(vec.Int128), bits, mask)
+	return bignum.MatchInt128NotEqual(b.data, val.(bignum.Int128), bits, mask)
 }
 
 func (b *BlockNum[T]) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3446,11 +3447,11 @@ func (b *BlockBool) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *v
 }
 
 func (b *BlockInt256) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt256GreaterThan(b.data, val.(vec.Int256), bits, mask)
+	return bignum.MatchInt256GreaterThan(b.data, val.(bignum.Int256), bits, mask)
 }
 
 func (b *BlockInt128) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt128GreaterThan(b.data, val.(vec.Int128), bits, mask)
+	return bignum.MatchInt128GreaterThan(b.data, val.(bignum.Int128), bits, mask)
 }
 
 func (b *BlockNum[T]) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3474,11 +3475,11 @@ func (b *BlockBool) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitse
 }
 
 func (b *BlockInt256) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt256GreaterThanEqual(b.data, val.(vec.Int256), bits, mask)
+	return bignum.MatchInt256GreaterThanEqual(b.data, val.(bignum.Int256), bits, mask)
 }
 
 func (b *BlockInt128) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt128GreaterThanEqual(b.data, val.(vec.Int128), bits, mask)
+	return bignum.MatchInt128GreaterThanEqual(b.data, val.(bignum.Int128), bits, mask)
 }
 
 func (b *BlockNum[T]) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3506,11 +3507,11 @@ func (b *BlockBool) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.
 }
 
 func (b *BlockInt256) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt256LessThan(b.data, val.(vec.Int256), bits, mask)
+	return bignum.MatchInt256LessThan(b.data, val.(bignum.Int256), bits, mask)
 }
 
 func (b *BlockInt128) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt128LessThan(b.data, val.(vec.Int128), bits, mask)
+	return bignum.MatchInt128LessThan(b.data, val.(bignum.Int128), bits, mask)
 }
 
 func (b *BlockNum[T]) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3534,11 +3535,11 @@ func (b *BlockBool) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) 
 }
 
 func (b *BlockInt256) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt256LessThanEqual(b.data, val.(vec.Int256), bits, mask)
+	return bignum.MatchInt256LessThanEqual(b.data, val.(bignum.Int256), bits, mask)
 }
 
 func (b *BlockInt128) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt128LessThanEqual(b.data, val.(vec.Int128), bits, mask)
+	return bignum.MatchInt128LessThanEqual(b.data, val.(bignum.Int128), bits, mask)
 }
 
 func (b *BlockNum[T]) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3571,11 +3572,11 @@ func (b *BlockBool) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *
 }
 
 func (b *BlockInt256) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt256Between(b.data, from.(vec.Int256), to.(vec.Int256), bits, mask)
+	return bignum.MatchInt256Between(b.data, from.(bignum.Int256), to.(bignum.Int256), bits, mask)
 }
 
 func (b *BlockInt128) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchInt128Between(b.data, from.(vec.Int128), to.(vec.Int128), bits, mask)
+	return bignum.MatchInt128Between(b.data, from.(bignum.Int128), to.(bignum.Int128), bits, mask)
 }
 
 func (b *BlockNum[T]) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
@@ -3640,11 +3641,11 @@ func (b *BlockBool) EqualAt(i int, val interface{}) bool {
 }
 
 func (b *BlockInt128) EqualAt(i int, val interface{}) bool {
-	return b.data.Elem(i).Eq(val.(vec.Int128))
+	return b.data.Elem(i).Eq(val.(bignum.Int128))
 }
 
 func (b *BlockInt256) EqualAt(i int, val interface{}) bool {
-	return b.data.Elem(i).Eq(val.(vec.Int256))
+	return b.data.Elem(i).Eq(val.(bignum.Int256))
 }
 
 func (b *BlockDec256) EqualAt(i int, val interface{}) bool {
@@ -3689,11 +3690,11 @@ func (b *BlockBool) GtAt(i int, val interface{}) bool {
 }
 
 func (b *BlockInt128) GtAt(i int, val interface{}) bool {
-	return b.data.Elem(i).Gt(val.(vec.Int128))
+	return b.data.Elem(i).Gt(val.(bignum.Int128))
 }
 
 func (b *BlockInt256) GtAt(i int, val interface{}) bool {
-	return b.data.Elem(i).Gt(val.(vec.Int256))
+	return b.data.Elem(i).Gt(val.(bignum.Int256))
 }
 
 func (b *BlockDec256) GtAt(i int, val interface{}) bool {
@@ -3738,11 +3739,11 @@ func (b *BlockBool) GteAt(i int, val interface{}) bool {
 }
 
 func (b *BlockInt128) GteAt(i int, val interface{}) bool {
-	return b.data.Elem(i).Gte(val.(vec.Int128))
+	return b.data.Elem(i).Gte(val.(bignum.Int128))
 }
 
 func (b *BlockInt256) GteAt(i int, val interface{}) bool {
-	return b.data.Elem(i).Gte(val.(vec.Int256))
+	return b.data.Elem(i).Gte(val.(bignum.Int256))
 }
 
 func (b *BlockDec256) GteAt(i int, val interface{}) bool {
@@ -3787,11 +3788,11 @@ func (b *BlockBool) LtAt(i int, val interface{}) bool {
 }
 
 func (b *BlockInt128) LtAt(i int, val interface{}) bool {
-	return b.data.Elem(i).Lt(val.(vec.Int128))
+	return b.data.Elem(i).Lt(val.(bignum.Int128))
 }
 
 func (b *BlockInt256) LtAt(i int, val interface{}) bool {
-	return b.data.Elem(i).Lt(val.(vec.Int256))
+	return b.data.Elem(i).Lt(val.(bignum.Int256))
 }
 
 func (b *BlockDec256) LtAt(i int, val interface{}) bool {
@@ -3837,11 +3838,11 @@ func (b *BlockBool) LteAt(i int, val interface{}) bool {
 }
 
 func (b *BlockInt128) LteAt(i int, val interface{}) bool {
-	return b.data.Elem(i).Lte(val.(vec.Int128))
+	return b.data.Elem(i).Lte(val.(bignum.Int128))
 }
 
 func (b *BlockInt256) LteAt(i int, val interface{}) bool {
-	return b.data.Elem(i).Lte(val.(vec.Int256))
+	return b.data.Elem(i).Lte(val.(bignum.Int256))
 }
 
 func (b *BlockDec256) LteAt(i int, val interface{}) bool {
@@ -3930,12 +3931,12 @@ func (b *BlockBool) BetweenAt(i int, from, to interface{}) bool {
 
 func (b *BlockInt256) BetweenAt(i int, from, to interface{}) bool {
 	val := b.data.Elem(i)
-	return !(val.Lt(from.(vec.Int256)) || val.Gt(to.(vec.Int256)))
+	return !(val.Lt(from.(bignum.Int256)) || val.Gt(to.(bignum.Int256)))
 }
 
 func (b *BlockInt128) BetweenAt(i int, from, to interface{}) bool {
 	val := b.data.Elem(i)
-	return !(val.Lt(from.(vec.Int128)) || val.Gt(to.(vec.Int128)))
+	return !(val.Lt(from.(bignum.Int128)) || val.Gt(to.(bignum.Int128)))
 }
 
 func (b *BlockDec256) BetweenAt(i int, from, to interface{}) bool {

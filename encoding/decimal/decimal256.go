@@ -8,7 +8,7 @@ import (
 	"math"
 	"strings"
 
-	. "blockwatch.cc/knoxdb/vec"
+	. "blockwatch.cc/knoxdb/encoding/bignum"
 )
 
 var Decimal256Zero = Decimal256{ZeroInt256, 0}

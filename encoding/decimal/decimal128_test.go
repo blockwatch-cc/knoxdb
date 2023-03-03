@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	. "blockwatch.cc/knoxdb/vec"
+	. "blockwatch.cc/knoxdb/encoding/bignum"
 )
 
 func n128(hi int64, lo ...uint64) Int128 {

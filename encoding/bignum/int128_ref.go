@@ -4,7 +4,7 @@
 //go:build !amd64 || appengine || gccgo
 // +build !amd64 appengine gccgo
 
-package vec
+package bignum
 
 func matchInt128Equal(src Int128LLSlice, val Int128, bits, mask []byte) int64 {
 	return matchInt128EqualGeneric(src, val, bits, mask)

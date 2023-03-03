@@ -20,6 +20,7 @@ import (
 
 	"blockwatch.cc/knoxdb/util"
 
+	. "blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/decimal"
 	. "blockwatch.cc/knoxdb/encoding/num"
@@ -367,9 +368,9 @@ func Fields(proto interface{}) (FieldList, error) {
 		case reflect.Array:
 			// string-check is much quicker
 			switch f.Type().String() {
-			case "vec.Int128":
+			case "bignum.Int128":
 				fields[i].Type = FieldTypeInt128
-			case "vec.Int256":
+			case "bignum.Int256":
 				fields[i].Type = FieldTypeInt256
 			default:
 				// check if type implements BinaryMarshaler -> BlockBytes

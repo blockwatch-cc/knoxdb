@@ -11,9 +11,9 @@ import (
 	"math"
 	"time"
 
+	"blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/filter/bloom"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -142,11 +142,11 @@ func NewBlockInfo(b block.Block, field *Field) BlockInfo {
 		h.MinValue = []byte{}
 		h.MaxValue = []byte{}
 	case block.BlockTypeInt128:
-		h.MinValue = vec.ZeroInt128
-		h.MaxValue = vec.ZeroInt128
+		h.MinValue = bignum.ZeroInt128
+		h.MaxValue = bignum.ZeroInt128
 	case block.BlockTypeInt256:
-		h.MinValue = vec.ZeroInt256
-		h.MaxValue = vec.ZeroInt256
+		h.MinValue = bignum.ZeroInt256
+		h.MaxValue = bignum.ZeroInt256
 	}
 	return h
 }
@@ -334,12 +334,12 @@ func (h BlockInfo) Encode(buf *bytes.Buffer) error {
 		_, _ = buf.Write(max)
 
 	case block.BlockTypeInt128, block.BlockTypeDecimal128:
-		min, max := h.MinValue.(vec.Int128).Bytes16(), h.MaxValue.(vec.Int128).Bytes16()
+		min, max := h.MinValue.(bignum.Int128).Bytes16(), h.MaxValue.(bignum.Int128).Bytes16()
 		_, _ = buf.Write(min[:])
 		_, _ = buf.Write(max[:])
 
 	case block.BlockTypeInt256, block.BlockTypeDecimal256:
-		min, max := h.MinValue.(vec.Int256).Bytes32(), h.MaxValue.(vec.Int256).Bytes32()
+		min, max := h.MinValue.(bignum.Int256).Bytes32(), h.MaxValue.(bignum.Int256).Bytes32()
 		_, _ = buf.Write(min[:])
 		_, _ = buf.Write(max[:])
 
@@ -476,13 +476,13 @@ func (h *BlockInfo) Decode(buf *bytes.Buffer, version byte) error {
 
 	case block.BlockTypeInt128, block.BlockTypeDecimal128:
 		v := buf.Next(32)
-		h.MinValue = vec.Int128FromBytes(v[0:16])
-		h.MaxValue = vec.Int128FromBytes(v[16:32])
+		h.MinValue = bignum.Int128FromBytes(v[0:16])
+		h.MaxValue = bignum.Int128FromBytes(v[16:32])
 
 	case block.BlockTypeInt256, block.BlockTypeDecimal256:
 		v := buf.Next(64)
-		h.MinValue = vec.Int256FromBytes(v[0:32])
-		h.MaxValue = vec.Int256FromBytes(v[32:64])
+		h.MinValue = bignum.Int256FromBytes(v[0:32])
+		h.MaxValue = bignum.Int256FromBytes(v[32:64])
 
 	default:
 		return fmt.Errorf("pack: invalid block type %d", h.Type)
