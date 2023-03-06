@@ -2948,7 +2948,7 @@ func (b *BlockNum[T]) Decode(buf []byte, sz, stored int) error {
 }
 
 func (b *BlockTime) MinMax() (interface{}, interface{}) {
-	min, max := num.Int64.MinMax(b.data.Slice())
+	min, max := b.data.MinMax()
 	return time.Unix(0, min).UTC(), time.Unix(0, max).UTC()
 }
 

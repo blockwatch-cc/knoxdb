@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"math"
 	"reflect"
+	"sort"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/hash/xxhash"
@@ -155,56 +156,178 @@ func (n *NumArray[T]) ReplaceFrom(src []T, spos, dpos, len int) {
 	copy(n.slice[dpos:], src[spos:spos+len])
 }
 
-func (n *NumArray[T]) InsertFrom(slice []T, spos, dpos, len int) {
-	//slice := src.([]T)
-	switch n.Type() {
-	case BlockTypeFloat64:
-		n.slice = interface{}(Float64.Insert(interface{}(n.slice).([]float64), dpos, interface{}(slice).([]float64)[spos:spos+len]...)).([]T)
-	case BlockTypeFloat32:
-		n.slice = interface{}(Float32.Insert(interface{}(n.slice).([]float32), dpos, interface{}(slice).([]float32)[spos:spos+len]...)).([]T)
-	case BlockTypeInt64:
-		n.slice = interface{}(Int64.Insert(interface{}(n.slice).([]int64), dpos, interface{}(slice).([]int64)[spos:spos+len]...)).([]T)
-	case BlockTypeInt32:
-		n.slice = interface{}(Int32.Insert(interface{}(n.slice).([]int32), dpos, interface{}(slice).([]int32)[spos:spos+len]...)).([]T)
-	case BlockTypeInt16:
-		n.slice = interface{}(Int16.Insert(interface{}(n.slice).([]int16), dpos, interface{}(slice).([]int16)[spos:spos+len]...)).([]T)
-	case BlockTypeInt8:
-		n.slice = interface{}(Int8.Insert(interface{}(n.slice).([]int8), dpos, interface{}(slice).([]int8)[spos:spos+len]...)).([]T)
-	case BlockTypeUint64:
-		n.slice = interface{}(Uint64.Insert(interface{}(n.slice).([]uint64), dpos, interface{}(slice).([]uint64)[spos:spos+len]...)).([]T)
-	case BlockTypeUint32:
-		n.slice = interface{}(Uint32.Insert(interface{}(n.slice).([]uint32), dpos, interface{}(slice).([]uint32)[spos:spos+len]...)).([]T)
-	case BlockTypeUint16:
-		n.slice = interface{}(Uint16.Insert(interface{}(n.slice).([]uint16), dpos, interface{}(slice).([]uint16)[spos:spos+len]...)).([]T)
-	case BlockTypeUint8:
-		n.slice = interface{}(Uint8.Insert(interface{}(n.slice).([]uint8), dpos, interface{}(slice).([]uint8)[spos:spos+len]...)).([]T)
+func Insert[T Number](s []T, k int, vs ...T) []T {
+	if n := len(s) + len(vs); n <= cap(s) {
+		s2 := s[:n]
+		copy(s2[k+len(vs):], s[k:])
+		copy(s2[k:], vs)
+		return s2
 	}
+	s2 := make([]T, len(s)+len(vs))
+	copy(s2, s[:k])
+	copy(s2[k:], vs)
+	copy(s2[k+len(vs):], s[k:])
+	return s2
 }
 
-func (n *NumArray[T]) MinMax() (interface{}, interface{}) {
-	switch n.Type() {
-	case BlockTypeFloat64:
-		return Float64.MinMax(interface{}(n.slice).([]float64))
-	case BlockTypeFloat32:
-		return Float32.MinMax(interface{}(n.slice).([]float32))
-	case BlockTypeInt64:
-		return Int64.MinMax(interface{}(n.slice).([]int64))
-	case BlockTypeInt32:
-		return Int32.MinMax(interface{}(n.slice).([]int32))
-	case BlockTypeInt16:
-		return Int16.MinMax(interface{}(n.slice).([]int16))
-	case BlockTypeInt8:
-		return Int8.MinMax(interface{}(n.slice).([]int8))
-	case BlockTypeUint64:
-		return Uint64.MinMax(interface{}(n.slice).([]uint64))
-	case BlockTypeUint32:
-		return Uint32.MinMax(interface{}(n.slice).([]uint32))
-	case BlockTypeUint16:
-		return Uint16.MinMax(interface{}(n.slice).([]uint16))
-	case BlockTypeUint8:
-		return Uint8.MinMax(interface{}(n.slice).([]uint8))
+func (n *NumArray[T]) InsertFrom(slice []T, spos, dpos, len int) {
+	n.slice = Insert(n.slice, dpos, slice[spos:spos+len]...)
+}
+
+func (n *NumArray[T]) MinMax() (T, T) {
+	return MinMax(n.slice)
+}
+
+func MinMax[T Number](s []T) (T, T) {
+	var min, max T
+	switch l := len(s); l {
+	case 0:
+		// nothing
+	case 1:
+		min, max = s[0], s[0]
+	default:
+		// If there is more than one element, then initialize min and max
+		if s[0] > s[1] {
+			max = s[0]
+			min = s[1]
+		} else {
+			max = s[1]
+			min = s[0]
+		}
+
+		for i := 2; i < l; i++ {
+			if s[i] > max {
+				max = s[i]
+			} else if s[i] < min {
+				min = s[i]
+			}
+		}
 	}
-	return nil, nil
+
+	return min, max
+}
+
+func RemoveZeros[T Number](s []T) ([]T, int) {
+	var n int
+	for i, v := range s {
+		if v == 0 {
+			continue
+		}
+		s[n] = s[i]
+		n++
+	}
+	s = s[:n]
+	return s, n
+}
+
+func index[T Number](s []T, val T, last int) int {
+	if len(s) <= last {
+		return -1
+	}
+
+	// search for value in slice starting at last index
+	slice := s[last:]
+	l := len(slice)
+	min, max := slice[0], slice[l-1]
+	if val < min || val > max {
+		return -1
+	}
+
+	// for dense slices (values are continuous) compute offset directly
+	if l == int(max-min)+1 {
+		return int(val-min) + last
+	}
+
+	// for sparse slices, use binary search (slice is sorted)
+	idx := sort.Search(l, func(i int) bool { return slice[i] >= val })
+	if idx < l && slice[idx] == val {
+		return idx + last
+	}
+	return -1
+}
+
+func Remove[T Number](s []T, val T) ([]T, bool) {
+	idx := index(s, val, 0)
+	if idx < 0 {
+		return s, false
+	}
+	s = append(s[:idx], s[idx+1:]...)
+	return s, true
+}
+
+func Contains[T Number](s []T, val T) bool {
+	// empty s cannot contain values
+	if len(s) == 0 {
+		return false
+	}
+
+	// s is sorted, check against first (min) and last (max) entries
+	if s[0] > val || s[len(s)-1] < val {
+		return false
+	}
+
+	// for dense slices (continuous, no dups) compute offset directly
+	if ofs := int(val - s[0]); ofs >= 0 && ofs < len(s) && s[ofs] == val {
+		return true
+	}
+
+	// use binary search to find value in sorted s
+	i := sort.Search(len(s), func(i int) bool { return s[i] >= val })
+	if i < len(s) && s[i] == val {
+		return true
+	}
+
+	return false
+}
+
+// ContainsRange returns true when slice s contains any values between
+// from and to. Note that from/to do not necessarily have to be members
+// themselves, but some intermediate values are. Slice s is expected
+// to be sorted and from must be less than or equal to to.
+func ContainsRange[T Number](s []T, from, to T) bool {
+	n := len(s)
+	if n == 0 {
+		return false
+	}
+	// Case A
+	if to < s[0] {
+		return false
+	}
+	// shortcut for B.1
+	if to == s[0] {
+		return true
+	}
+	// Case E
+	if from > s[n-1] {
+		return false
+	}
+	// shortcut for D.3
+	if from == s[n-1] {
+		return true
+	}
+	// Case B-D
+	// search if lower interval bound is within slice
+	min := sort.Search(n, func(i int) bool {
+		return s[i] >= from
+	})
+	// exit when from was found (no need to check if min < n)
+	if s[min] == from {
+		return true
+	}
+	// continue search for upper interval bound in the remainder of the slice
+	max := sort.Search(n-min, func(i int) bool {
+		return s[i+min] >= to
+	})
+	max = max + min
+
+	// exit when to was found (also solves case C1a)
+	if max < n && s[max] == to {
+		return true
+	}
+
+	// range is contained iff min < max; note that from/to do not necessarily
+	// have to be members, but some intermediate values are
+	return min < max
 }
 
 func (n *NumArray[T]) Less(i, j int) bool {
