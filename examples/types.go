@@ -379,7 +379,7 @@ func run() error {
 		res   Types
 		count int
 	)
-	err = table.Stream(context.Background(), pack.Query{}, func(r pack.Row) error {
+	err = table.Stream(context.Background(), pack.NewQuery("stream"), func(r pack.Row) error {
 		count++
 		return r.Decode(&res)
 	})
