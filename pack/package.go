@@ -1633,7 +1633,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 	if srcPack.nValues <= srcPos {
 		return fmt.Errorf("pack: invalid source pack offset %d (max %d)", srcPos, srcPack.nValues)
 	}
-	if srcPack.nValues < srcPos+srcLen {
+	if srcPack.nValues <= srcPos+srcLen-1 {
 		return fmt.Errorf("pack: invalid source pack offset %d len %d (max %d)", srcPos, srcLen, srcPack.nValues)
 	}
 	if p.nValues <= dstPos {
@@ -1753,7 +1753,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 	if srcPack.nValues <= srcPos {
 		return fmt.Errorf("pack: invalid source pack offset %d (max %d)", srcPos, srcPack.nValues)
 	}
-	if srcPack.nValues < srcPos+srcLen {
+	if srcPack.nValues <= srcPos+srcLen-1 {
 		return fmt.Errorf("pack: invalid source pack offset %d len %d (max %d)", srcPos, srcLen, srcPack.nValues)
 	}
 	if !p.CanGrow(srcLen) {
@@ -1876,7 +1876,7 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 	if srcPack.nValues <= srcPos {
 		return fmt.Errorf("pack: invalid source pack offset %d (max %d)", srcPos, srcPack.nValues)
 	}
-	if srcPack.nValues < srcPos+srcLen {
+	if srcPack.nValues <= srcPos+srcLen-1 {
 		return fmt.Errorf("pack: invalid source pack offset %d len %d (max %d)", srcPos, srcLen, srcPack.nValues)
 	}
 	if !p.CanGrow(srcLen) {
