@@ -420,31 +420,3 @@ func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *vec.Bitset 
     }
     return bits
 }
-
-func (n ConditionTreeNode) MatchAt(pkg *Package, pos int) bool {
-    // if root contains a snigle leaf only, match it
-    if n.Leaf() {
-        return n.Cond.MatchAt(pkg, pos)
-    }
-
-    // if root is empty and no leaf is defined, return a full match
-    if n.Empty() {
-        return true
-    }
-
-    // process all children
-    if n.OrKind {
-        for _, c := range n.Children {
-            if c.MatchAt(pkg, pos) {
-                return true
-            }
-        }
-    } else {
-        for _, c := range n.Children {
-            if !c.MatchAt(pkg, pos) {
-                return false
-            }
-        }
-    }
-    return true
-}

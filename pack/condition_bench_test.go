@@ -157,32 +157,6 @@ func makeAndConds(c, n int) ConditionTreeNode {
 	return conds
 }
 
-func BenchmarkAndConditionLoop(B *testing.B) {
-	for i := 1; i <= benchMaxConds; i += 2 {
-		for _, n := range packBenchmarkSizes {
-			B.Run(fmt.Sprintf("%s_%dC", n.name, i), func(B *testing.B) {
-				pkg := makeTestPackage(n.l)
-				conds := makeAndConds(i, n.l)
-				B.ResetTimer()
-				B.ReportAllocs()
-				bits := conds.MatchPack(pkg, PackInfo{})
-				B.SetBytes(int64(bits.Count()))
-				for b := 0; b < B.N; b++ {
-					// this is the core of a typical matching loop
-					// as used in the current table implementation
-					for i, l := 0, pkg.Len(); i < l; i++ {
-						ismatch := conds.MatchAt(pkg, i)
-						if !ismatch {
-							continue
-						}
-					}
-					// handle row
-				}
-			})
-		}
-	}
-}
-
 func BenchmarkAndConditionRun(B *testing.B) {
 	for i := 1; i <= benchMaxConds; i += 2 {
 		for _, n := range packBenchmarkSizes {
@@ -244,52 +218,6 @@ func BenchmarkXXHash(B *testing.B) {
 	B.ReportAllocs()
 	for b := 0; b < B.N; b++ {
 		xxhash.Sum64(testslice[b%len(testslice)])
-	}
-}
-
-func BenchmarkInConditionLoop(B *testing.B) {
-	for _, n := range packBenchmarkSizes {
-		B.Run(n.name, func(B *testing.B) {
-			pkg := makeTestPackage(n.l)
-			// build IN slice of size 0.1*pack.Size() from
-			// - 5% (min 2) pack values
-			// - 5% random values
-			checkN := util.Max(n.l/20, 2)
-			inSlice := make([][]byte, 0, 2*checkN)
-			for i := 0; i < checkN; i++ {
-				// add existing values
-				buf, err := pkg.BytesAt(6, rand.Intn(n.l))
-				if err != nil {
-					B.Fatalf("error with pack bytes: %v", err)
-				}
-				inSlice = append(inSlice, buf)
-			}
-			// add random values
-			inSlice = append(inSlice, randByteSlice(checkN, 32)...)
-
-			conds := ConditionTreeNode{}
-			conds.AddAndCondition(&Condition{
-				Field: benchFields[6],
-				Mode:  FilterModeIn,
-				Value: inSlice,
-			})
-			conds.Compile()
-			B.ResetTimer()
-			B.ReportAllocs()
-			B.SetBytes(int64(n.l) * 32)
-			for b := 0; b < B.N; b++ {
-				// this is the core of a typical matching loop
-				// as used in the current table implementation
-				for i, l := 0, pkg.Len(); i < l; i++ {
-					ismatch := true
-					ismatch = conds.MatchAt(pkg, i)
-					if !ismatch {
-						break
-					}
-					// handle row
-				}
-			}
-		})
 	}
 }
 

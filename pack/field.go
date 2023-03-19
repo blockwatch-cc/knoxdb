@@ -1000,7 +1000,7 @@ func (t FieldType) SliceToString(val interface{}, f *Field) string {
 	return util.ToString(val)
 }
 
-// always called with concrete types, used in BinaryCondition only
+// Used in BinaryCondition MatchPacksAt() for loop joins only
 func (t FieldType) Equal(xa, xb interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
@@ -1043,73 +1043,6 @@ func (t FieldType) Equal(xa, xb interface{}) bool {
 		return xa.(decimal.Decimal128).Eq(xb.(decimal.Decimal128))
 	case FieldTypeDecimal256:
 		return xa.(decimal.Decimal256).Eq(xb.(decimal.Decimal256))
-	default:
-		return false
-	}
-}
-
-func (t FieldType) EqualAt(pkg *Package, index, pos int, val interface{}) bool {
-	switch t {
-	case FieldTypeBytes:
-		a, _ := pkg.BytesAt(index, pos)
-		return bytes.Equal(a, val.([]byte))
-	case FieldTypeString:
-		a, _ := pkg.StringAt(index, pos)
-		return a == val.(string)
-	case FieldTypeDatetime:
-		a, _ := pkg.TimeAt(index, pos)
-		return a.Equal(val.(time.Time))
-	case FieldTypeBoolean:
-		a, _ := pkg.BoolAt(index, pos)
-		return a == val.(bool)
-	case FieldTypeInt256:
-		a, _ := pkg.Int256At(index, pos)
-		return a.Eq(val.(Int256))
-	case FieldTypeInt128:
-		a, _ := pkg.Int128At(index, pos)
-		return a.Eq(val.(Int128))
-	case FieldTypeInt64:
-		a, _ := pkg.Int64At(index, pos)
-		return a == val.(int64)
-	case FieldTypeInt32:
-		a, _ := pkg.Int32At(index, pos)
-		return a == val.(int32)
-	case FieldTypeInt16:
-		a, _ := pkg.Int16At(index, pos)
-		return a == val.(int16)
-	case FieldTypeInt8:
-		a, _ := pkg.Int8At(index, pos)
-		return a == val.(int8)
-	case FieldTypeUint64:
-		a, _ := pkg.Uint64At(index, pos)
-		return a == val.(uint64)
-	case FieldTypeUint32:
-		a, _ := pkg.Uint32At(index, pos)
-		return a == val.(uint32)
-	case FieldTypeUint16:
-		a, _ := pkg.Uint16At(index, pos)
-		return a == val.(uint16)
-	case FieldTypeUint8:
-		a, _ := pkg.Uint8At(index, pos)
-		return a == val.(uint8)
-	case FieldTypeFloat64:
-		a, _ := pkg.Float64At(index, pos)
-		return a == val.(float64)
-	case FieldTypeFloat32:
-		a, _ := pkg.Float32At(index, pos)
-		return a == val.(float32)
-	case FieldTypeDecimal32:
-		a, _ := pkg.Decimal32At(index, pos)
-		return a.Eq(val.(decimal.Decimal32))
-	case FieldTypeDecimal64:
-		a, _ := pkg.Decimal64At(index, pos)
-		return a.Eq(val.(decimal.Decimal64))
-	case FieldTypeDecimal128:
-		a, _ := pkg.Decimal128At(index, pos)
-		return a.Eq(val.(decimal.Decimal128))
-	case FieldTypeDecimal256:
-		a, _ := pkg.Decimal256At(index, pos)
-		return a.Eq(val.(decimal.Decimal256))
 	default:
 		return false
 	}
@@ -1235,43 +1168,6 @@ func (t FieldType) Regexp(v interface{}, re string) bool {
 	}
 }
 
-func (t FieldType) RegexpAt(pkg *Package, index, pos int, re string) bool {
-	switch t {
-	case FieldTypeBytes,
-		FieldTypeBoolean,
-		FieldTypeInt256,
-		FieldTypeInt128,
-		FieldTypeInt64,
-		FieldTypeInt32,
-		FieldTypeInt16,
-		FieldTypeInt8,
-		FieldTypeUint64,
-		FieldTypeUint32,
-		FieldTypeUint16,
-		FieldTypeUint8,
-		FieldTypeFloat32,
-		FieldTypeFloat64,
-		FieldTypeDecimal32,
-		FieldTypeDecimal64,
-		FieldTypeDecimal128,
-		FieldTypeDecimal256:
-		return false
-	case FieldTypeString:
-		val, _ := pkg.StringAt(index, pos)
-		match, _ := regexp.MatchString(strings.Replace(re, "*", ".*", -1), val)
-		return match
-	case FieldTypeDatetime:
-		val, _ := pkg.TimeAt(index, pos)
-		match, _ := regexp.MatchString(
-			strings.Replace(re, "*", ".*", -1),
-			val.Format(time.RFC3339),
-		)
-		return match
-	default:
-		return false
-	}
-}
-
 func (t FieldType) RegexpBlock(b *block.Block, re string, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes,
@@ -1370,73 +1266,6 @@ func (t FieldType) Gt(xa, xb interface{}) bool {
 	}
 }
 
-func (t FieldType) GtAt(pkg *Package, index, pos int, val interface{}) bool {
-	switch t {
-	case FieldTypeBytes:
-		a, _ := pkg.BytesAt(index, pos)
-		return bytes.Compare(a, val.([]byte)) > 0
-	case FieldTypeString:
-		a, _ := pkg.StringAt(index, pos)
-		return a > val.(string)
-	case FieldTypeDatetime:
-		a, _ := pkg.TimeAt(index, pos)
-		return a.After(val.(time.Time))
-	case FieldTypeBoolean:
-		a, _ := pkg.BoolAt(index, pos)
-		return a != val.(bool)
-	case FieldTypeInt256:
-		a, _ := pkg.Int256At(index, pos)
-		return a.Gt(val.(Int256))
-	case FieldTypeInt128:
-		a, _ := pkg.Int128At(index, pos)
-		return a.Gt(val.(Int128))
-	case FieldTypeInt64:
-		a, _ := pkg.Int64At(index, pos)
-		return a > val.(int64)
-	case FieldTypeInt32:
-		a, _ := pkg.Int32At(index, pos)
-		return a > val.(int32)
-	case FieldTypeInt16:
-		a, _ := pkg.Int16At(index, pos)
-		return a > val.(int16)
-	case FieldTypeInt8:
-		a, _ := pkg.Int8At(index, pos)
-		return a > val.(int8)
-	case FieldTypeUint64:
-		a, _ := pkg.Uint64At(index, pos)
-		return a > val.(uint64)
-	case FieldTypeUint32:
-		a, _ := pkg.Uint32At(index, pos)
-		return a > val.(uint32)
-	case FieldTypeUint16:
-		a, _ := pkg.Uint16At(index, pos)
-		return a > val.(uint16)
-	case FieldTypeUint8:
-		a, _ := pkg.Uint8At(index, pos)
-		return a > val.(uint8)
-	case FieldTypeFloat64:
-		a, _ := pkg.Float64At(index, pos)
-		return a > val.(float64)
-	case FieldTypeFloat32:
-		a, _ := pkg.Float32At(index, pos)
-		return a > val.(float32)
-	case FieldTypeDecimal32:
-		a, _ := pkg.Decimal32At(index, pos)
-		return a.Gt(val.(decimal.Decimal32))
-	case FieldTypeDecimal64:
-		a, _ := pkg.Decimal64At(index, pos)
-		return a.Gt(val.(decimal.Decimal64))
-	case FieldTypeDecimal128:
-		a, _ := pkg.Decimal128At(index, pos)
-		return a.Gt(val.(decimal.Decimal128))
-	case FieldTypeDecimal256:
-		a, _ := pkg.Decimal256At(index, pos)
-		return a.Gt(val.(decimal.Decimal256))
-	default:
-		return false
-	}
-}
-
 func (t FieldType) GtBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
@@ -1522,72 +1351,6 @@ func (t FieldType) Gte(xa, xb interface{}) bool {
 		return xa.(decimal.Decimal128).Gte(xb.(decimal.Decimal128))
 	case FieldTypeDecimal256:
 		return xa.(decimal.Decimal256).Gte(xb.(decimal.Decimal256))
-	default:
-		return false
-	}
-}
-
-func (t FieldType) GteAt(pkg *Package, index, pos int, val interface{}) bool {
-	switch t {
-	case FieldTypeBytes:
-		a, _ := pkg.BytesAt(index, pos)
-		return bytes.Compare(a, val.([]byte)) >= 0
-	case FieldTypeString:
-		a, _ := pkg.StringAt(index, pos)
-		return a >= val.(string)
-	case FieldTypeDatetime:
-		a, _ := pkg.TimeAt(index, pos)
-		return !a.Before(val.(time.Time))
-	case FieldTypeBoolean:
-		return true
-	case FieldTypeInt256:
-		a, _ := pkg.Int256At(index, pos)
-		return a.Gte(val.(Int256))
-	case FieldTypeInt128:
-		a, _ := pkg.Int128At(index, pos)
-		return a.Gte(val.(Int128))
-	case FieldTypeInt64:
-		a, _ := pkg.Int64At(index, pos)
-		return a >= val.(int64)
-	case FieldTypeInt32:
-		a, _ := pkg.Int32At(index, pos)
-		return a >= val.(int32)
-	case FieldTypeInt16:
-		a, _ := pkg.Int16At(index, pos)
-		return a >= val.(int16)
-	case FieldTypeInt8:
-		a, _ := pkg.Int8At(index, pos)
-		return a >= val.(int8)
-	case FieldTypeUint64:
-		a, _ := pkg.Uint64At(index, pos)
-		return a >= val.(uint64)
-	case FieldTypeUint32:
-		a, _ := pkg.Uint32At(index, pos)
-		return a >= val.(uint32)
-	case FieldTypeUint16:
-		a, _ := pkg.Uint16At(index, pos)
-		return a >= val.(uint16)
-	case FieldTypeUint8:
-		a, _ := pkg.Uint8At(index, pos)
-		return a >= val.(uint8)
-	case FieldTypeFloat64:
-		a, _ := pkg.Float64At(index, pos)
-		return a >= val.(float64)
-	case FieldTypeFloat32:
-		a, _ := pkg.Float32At(index, pos)
-		return a >= val.(float32)
-	case FieldTypeDecimal32:
-		a, _ := pkg.Decimal32At(index, pos)
-		return a.Gte(val.(decimal.Decimal32))
-	case FieldTypeDecimal64:
-		a, _ := pkg.Decimal64At(index, pos)
-		return a.Gte(val.(decimal.Decimal64))
-	case FieldTypeDecimal128:
-		a, _ := pkg.Decimal128At(index, pos)
-		return a.Gte(val.(decimal.Decimal128))
-	case FieldTypeDecimal256:
-		a, _ := pkg.Decimal256At(index, pos)
-		return a.Gte(val.(decimal.Decimal256))
 	default:
 		return false
 	}
@@ -1679,73 +1442,6 @@ func (t FieldType) Lt(xa, xb interface{}) bool {
 	}
 }
 
-func (t FieldType) LtAt(pkg *Package, index, pos int, val interface{}) bool {
-	switch t {
-	case FieldTypeBytes:
-		a, _ := pkg.BytesAt(index, pos)
-		return bytes.Compare(a, val.([]byte)) < 0
-	case FieldTypeString:
-		a, _ := pkg.StringAt(index, pos)
-		return a < val.(string)
-	case FieldTypeDatetime:
-		a, _ := pkg.TimeAt(index, pos)
-		return a.Before(val.(time.Time))
-	case FieldTypeBoolean:
-		a, _ := pkg.BoolAt(index, pos)
-		return a != val.(bool)
-	case FieldTypeInt256:
-		a, _ := pkg.Int256At(index, pos)
-		return a.Lt(val.(Int256))
-	case FieldTypeInt128:
-		a, _ := pkg.Int128At(index, pos)
-		return a.Lt(val.(Int128))
-	case FieldTypeInt64:
-		a, _ := pkg.Int64At(index, pos)
-		return a < val.(int64)
-	case FieldTypeInt32:
-		a, _ := pkg.Int32At(index, pos)
-		return a < val.(int32)
-	case FieldTypeInt16:
-		a, _ := pkg.Int16At(index, pos)
-		return a < val.(int16)
-	case FieldTypeInt8:
-		a, _ := pkg.Int8At(index, pos)
-		return a < val.(int8)
-	case FieldTypeUint64:
-		a, _ := pkg.Uint64At(index, pos)
-		return a < val.(uint64)
-	case FieldTypeUint32:
-		a, _ := pkg.Uint32At(index, pos)
-		return a < val.(uint32)
-	case FieldTypeUint16:
-		a, _ := pkg.Uint16At(index, pos)
-		return a < val.(uint16)
-	case FieldTypeUint8:
-		a, _ := pkg.Uint8At(index, pos)
-		return a < val.(uint8)
-	case FieldTypeFloat64:
-		a, _ := pkg.Float64At(index, pos)
-		return a < val.(float64)
-	case FieldTypeFloat32:
-		a, _ := pkg.Float32At(index, pos)
-		return a < val.(float32)
-	case FieldTypeDecimal32:
-		a, _ := pkg.Decimal32At(index, pos)
-		return a.Lt(val.(decimal.Decimal32))
-	case FieldTypeDecimal64:
-		a, _ := pkg.Decimal64At(index, pos)
-		return a.Lt(val.(decimal.Decimal64))
-	case FieldTypeDecimal128:
-		a, _ := pkg.Decimal128At(index, pos)
-		return a.Lt(val.(decimal.Decimal128))
-	case FieldTypeDecimal256:
-		a, _ := pkg.Decimal256At(index, pos)
-		return a.Lt(val.(decimal.Decimal256))
-	default:
-		return false
-	}
-}
-
 func (t FieldType) LtBlock(b *block.Block, val interface{}, bits, mask *Bitset) *Bitset {
 	switch t {
 	case FieldTypeBytes:
@@ -1831,73 +1527,6 @@ func (t FieldType) Lte(xa, xb interface{}) bool {
 		return xa.(decimal.Decimal128).Lte(xb.(decimal.Decimal128))
 	case FieldTypeDecimal256:
 		return xa.(decimal.Decimal256).Lte(xb.(decimal.Decimal256))
-	default:
-		return false
-	}
-}
-
-func (t FieldType) LteAt(pkg *Package, index, pos int, val interface{}) bool {
-	switch t {
-	case FieldTypeBytes:
-		a, _ := pkg.BytesAt(index, pos)
-		return bytes.Compare(a, val.([]byte)) <= 0
-	case FieldTypeString:
-		a, _ := pkg.StringAt(index, pos)
-		return a <= val.(string)
-	case FieldTypeDatetime:
-		a, _ := pkg.TimeAt(index, pos)
-		return !a.After(val.(time.Time))
-	case FieldTypeBoolean:
-		a, _ := pkg.BoolAt(index, pos)
-		return val.(bool) || a == val.(bool)
-	case FieldTypeInt256:
-		a, _ := pkg.Int256At(index, pos)
-		return a.Lte(val.(Int256))
-	case FieldTypeInt128:
-		a, _ := pkg.Int128At(index, pos)
-		return a.Lte(val.(Int128))
-	case FieldTypeInt64:
-		a, _ := pkg.Int64At(index, pos)
-		return a <= val.(int64)
-	case FieldTypeInt32:
-		a, _ := pkg.Int32At(index, pos)
-		return a <= val.(int32)
-	case FieldTypeInt16:
-		a, _ := pkg.Int16At(index, pos)
-		return a <= val.(int16)
-	case FieldTypeInt8:
-		a, _ := pkg.Int8At(index, pos)
-		return a <= val.(int8)
-	case FieldTypeUint64:
-		a, _ := pkg.Uint64At(index, pos)
-		return a <= val.(uint64)
-	case FieldTypeUint32:
-		a, _ := pkg.Uint32At(index, pos)
-		return a <= val.(uint32)
-	case FieldTypeUint16:
-		a, _ := pkg.Uint16At(index, pos)
-		return a <= val.(uint16)
-	case FieldTypeUint8:
-		a, _ := pkg.Uint8At(index, pos)
-		return a <= val.(uint8)
-	case FieldTypeFloat64:
-		a, _ := pkg.Float64At(index, pos)
-		return a <= val.(float64)
-	case FieldTypeFloat32:
-		a, _ := pkg.Float32At(index, pos)
-		return a <= val.(float32)
-	case FieldTypeDecimal32:
-		a, _ := pkg.Decimal32At(index, pos)
-		return a.Lte(val.(decimal.Decimal32))
-	case FieldTypeDecimal64:
-		a, _ := pkg.Decimal64At(index, pos)
-		return a.Lte(val.(decimal.Decimal64))
-	case FieldTypeDecimal128:
-		a, _ := pkg.Decimal128At(index, pos)
-		return a.Lte(val.(decimal.Decimal128))
-	case FieldTypeDecimal256:
-		a, _ := pkg.Decimal256At(index, pos)
-		return a.Lte(val.(decimal.Decimal256))
 	default:
 		return false
 	}
@@ -2005,93 +1634,6 @@ func (t FieldType) In(v, in interface{}) bool {
 	case FieldTypeDecimal256:
 		val, list := v.(decimal.Decimal256).Int256(), in.([]Int256)
 		return Int256Slice(list).Contains(val)
-	}
-	return false
-}
-
-// assumes `in` is sorted
-func (t FieldType) InAt(pkg *Package, index, pos int, in interface{}) bool {
-	switch t {
-	case FieldTypeBytes:
-		val, _ := pkg.BytesAt(index, pos)
-		list := in.([][]byte)
-		return Bytes.Contains(list, val)
-	case FieldTypeString:
-		val, _ := pkg.StringAt(index, pos)
-		list := in.([]string)
-		return Strings.Contains(list, val)
-	case FieldTypeDatetime:
-		val, _ := pkg.TimeAt(index, pos)
-		list := in.([]time.Time)
-		return Times.Contains(list, val)
-	case FieldTypeBoolean:
-		val, _ := pkg.BoolAt(index, pos)
-		list := in.([]bool)
-		return Booleans.Contains(list, val)
-	case FieldTypeInt256:
-		val, _ := pkg.Int256At(index, pos)
-		list := in.([]Int256)
-		return Int256Slice(list).Contains(val)
-	case FieldTypeInt128:
-		val, _ := pkg.Int128At(index, pos)
-		list := in.([]Int128)
-		return Int128Slice(list).Contains(val)
-	case FieldTypeInt64:
-		val, _ := pkg.Int64At(index, pos)
-		list := in.([]int64)
-		return Int64.Contains(list, val)
-	case FieldTypeInt32:
-		val, _ := pkg.Int32At(index, pos)
-		list := in.([]int32)
-		return Int32.Contains(list, val)
-	case FieldTypeInt16:
-		val, _ := pkg.Int16At(index, pos)
-		list := in.([]int16)
-		return Int16.Contains(list, val)
-	case FieldTypeInt8:
-		val, _ := pkg.Int8At(index, pos)
-		list := in.([]int8)
-		return Int8.Contains(list, val)
-	case FieldTypeUint64:
-		val, _ := pkg.Uint64At(index, pos)
-		list := in.([]uint64)
-		return Uint64.Contains(list, val)
-	case FieldTypeUint32:
-		val, _ := pkg.Uint32At(index, pos)
-		list := in.([]uint32)
-		return Uint32.Contains(list, val)
-	case FieldTypeUint16:
-		val, _ := pkg.Uint16At(index, pos)
-		list := in.([]uint16)
-		return Uint16.Contains(list, val)
-	case FieldTypeUint8:
-		val, _ := pkg.Uint8At(index, pos)
-		list := in.([]uint8)
-		return Uint8.Contains(list, val)
-	case FieldTypeFloat64:
-		val, _ := pkg.Float64At(index, pos)
-		list := in.([]float64)
-		return Float64.Contains(list, val)
-	case FieldTypeFloat32:
-		val, _ := pkg.Float32At(index, pos)
-		list := in.([]float32)
-		return Float32.Contains(list, val)
-	case FieldTypeDecimal32:
-		val, _ := pkg.Decimal32At(index, pos)
-		list := in.([]int32)
-		return Int32.Contains(list, val.Int32())
-	case FieldTypeDecimal64:
-		val, _ := pkg.Decimal64At(index, pos)
-		list := in.([]int64)
-		return Int64.Contains(list, val.Int64())
-	case FieldTypeDecimal128:
-		val, _ := pkg.Decimal128At(index, pos)
-		list := in.([]Int128)
-		return Int128Slice(list).Contains(val.Int128())
-	case FieldTypeDecimal256:
-		val, _ := pkg.Decimal256At(index, pos)
-		list := in.([]Int256)
-		return Int256Slice(list).Contains(val.Int256())
 	}
 	return false
 }
@@ -2212,128 +1754,6 @@ func (t FieldType) Between(val, from, to interface{}) bool {
 	case FieldTypeDecimal256:
 		v := val.(decimal.Decimal256)
 		return !(v.Lt(from.(decimal.Decimal256)) || v.Gt(to.(decimal.Decimal256)))
-	}
-	return false
-}
-
-// assumes from <= to
-func (t FieldType) BetweenAt(pkg *Package, index, pos int, from, to interface{}) bool {
-	switch t {
-	case FieldTypeBytes:
-		val, _ := pkg.BytesAt(index, pos)
-		fromMatch := bytes.Compare(val, from.([]byte))
-		if fromMatch == 0 || len(from.([]byte)) == 0 {
-			return true
-		}
-		if fromMatch < 0 {
-			return false
-		}
-		toMatch := bytes.Compare(val, to.([]byte))
-		if toMatch > 0 {
-			return false
-		}
-		return true
-
-	case FieldTypeString:
-		val, _ := pkg.StringAt(index, pos)
-		fromMatch := strings.Compare(val, from.(string))
-		if fromMatch == 0 || len(from.(string)) == 0 {
-			return true
-		}
-		if fromMatch < 0 {
-			return false
-		}
-		toMatch := strings.Compare(val, to.(string))
-		if toMatch > 0 {
-			return false
-		}
-		return true
-
-	case FieldTypeDatetime:
-		val, _ := pkg.TimeAt(index, pos)
-		if val.Before(from.(time.Time)) {
-			return false
-		}
-		if val.After(to.(time.Time)) {
-			return false
-		}
-		return true
-
-	case FieldTypeBoolean:
-		val, _ := pkg.BoolAt(index, pos)
-		switch true {
-		case from.(bool) != to.(bool):
-			return true
-		case from.(bool) == val:
-			return true
-		case to.(bool) == val:
-			return true
-		}
-
-	case FieldTypeInt256:
-		val, _ := pkg.Int256At(index, pos)
-		return !(val.Lt(from.(Int256)) || val.Gt(to.(Int256)))
-
-	case FieldTypeInt128:
-		val, _ := pkg.Int128At(index, pos)
-		return !(val.Lt(from.(Int128)) || val.Gt(to.(Int128)))
-
-	case FieldTypeInt64:
-		val, _ := pkg.Int64At(index, pos)
-		return !(val < from.(int64) || val > to.(int64))
-
-	case FieldTypeInt32:
-		val, _ := pkg.Int32At(index, pos)
-		return !(val < from.(int32) || val > to.(int32))
-
-	case FieldTypeInt16:
-		val, _ := pkg.Int16At(index, pos)
-		return !(val < from.(int16) || val > to.(int16))
-
-	case FieldTypeInt8:
-		val, _ := pkg.Int8At(index, pos)
-		return !(val < from.(int8) || val > to.(int8))
-
-	case FieldTypeUint64:
-		val, _ := pkg.Uint64At(index, pos)
-		return !(val < from.(uint64) || val > to.(uint64))
-
-	case FieldTypeUint32:
-		val, _ := pkg.Uint32At(index, pos)
-		return !(val < from.(uint32) || val > to.(uint32))
-
-	case FieldTypeUint16:
-		val, _ := pkg.Uint16At(index, pos)
-		return !(val < from.(uint16) || val > to.(uint16))
-
-	case FieldTypeUint8:
-		val, _ := pkg.Uint8At(index, pos)
-		return !(val < from.(uint8) || val > to.(uint8))
-
-	case FieldTypeFloat64:
-		val, _ := pkg.Float64At(index, pos)
-		return !(val < from.(float64) || val > to.(float64))
-
-	case FieldTypeFloat32:
-		val, _ := pkg.Float32At(index, pos)
-		return !(val < from.(float32) || val > to.(float32))
-
-	case FieldTypeDecimal32:
-		val, _ := pkg.Decimal32At(index, pos)
-		return !(val.Lt(from.(decimal.Decimal32)) || val.Gt(to.(decimal.Decimal32)))
-
-	case FieldTypeDecimal64:
-		val, _ := pkg.Decimal64At(index, pos)
-		return !(val.Lt(from.(decimal.Decimal64)) || val.Gt(to.(decimal.Decimal64)))
-
-	case FieldTypeDecimal128:
-		val, _ := pkg.Decimal128At(index, pos)
-		return !(val.Lt(from.(decimal.Decimal128)) || val.Gt(to.(decimal.Decimal128)))
-
-	case FieldTypeDecimal256:
-		val, _ := pkg.Decimal256At(index, pos)
-		return !(val.Lt(from.(decimal.Decimal256)) || val.Gt(to.(decimal.Decimal256)))
-
 	}
 	return false
 }
@@ -2506,53 +1926,7 @@ func (t FieldType) isZero(val interface{}) bool {
 	return true
 }
 
-func (t FieldType) Less(xa, xb interface{}) bool {
-	switch t {
-	case FieldTypeBytes:
-		return bytes.Compare(xa.([]byte), xb.([]byte)) < 0
-	case FieldTypeString:
-		return xa.(string) < xb.(string)
-	case FieldTypeDatetime:
-		return xa.(time.Time).Before(xb.(time.Time))
-	case FieldTypeBoolean:
-		return xa.(bool) != xb.(bool)
-	case FieldTypeInt256:
-		return xa.(Int256).Lt(xb.(Int256))
-	case FieldTypeInt128:
-		return xa.(Int128).Lt(xb.(Int128))
-	case FieldTypeInt64:
-		return xa.(int64) < xb.(int64)
-	case FieldTypeInt32:
-		return xa.(int32) < xb.(int32)
-	case FieldTypeInt16:
-		return xa.(int16) < xb.(int16)
-	case FieldTypeInt8:
-		return xa.(int8) < xb.(int8)
-	case FieldTypeUint64:
-		return xa.(uint64) < xb.(uint64)
-	case FieldTypeUint32:
-		return xa.(uint32) < xb.(uint32)
-	case FieldTypeUint16:
-		return xa.(uint16) < xb.(uint16)
-	case FieldTypeUint8:
-		return xa.(uint8) < xb.(uint8)
-	case FieldTypeFloat64:
-		return xa.(float64) < xb.(float64)
-	case FieldTypeFloat32:
-		return xa.(float32) < xb.(float32)
-	case FieldTypeDecimal32:
-		return xa.(decimal.Decimal32).Lt(xb.(decimal.Decimal32))
-	case FieldTypeDecimal64:
-		return xa.(decimal.Decimal64).Lt(xb.(decimal.Decimal64))
-	case FieldTypeDecimal128:
-		return xa.(decimal.Decimal128).Lt(xb.(decimal.Decimal128))
-	case FieldTypeDecimal256:
-		return xa.(decimal.Decimal256).Lt(xb.(decimal.Decimal256))
-	default:
-		return false
-	}
-}
-
+// Used by BinaryCondition during join.
 func (t FieldType) Compare(xa, xb interface{}) int {
 	switch t {
 	case FieldTypeBytes:
@@ -2700,6 +2074,8 @@ func (t FieldType) Compare(xa, xb interface{}) int {
 	}
 }
 
+// Used by flushTx for checking whether a row update changes any indexed column
+// and updates indexes when true.
 func (t FieldType) EqualPacksAt(p1 *Package, i1, n1 int, p2 *Package, i2, n2 int) bool {
 	switch t {
 	case FieldTypeBytes:
