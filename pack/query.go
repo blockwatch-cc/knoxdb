@@ -201,6 +201,9 @@ func (q *Query) Compile(t *Table) error {
 		q.Debugf("%s", newLogClosure(func() string {
 			return q.Dump()
 		}))
+	} else {
+		// set a sane default in case query struct was created with q := pack.Query{}
+		q.Debugf = logpkg.Noop
 	}
 	return nil
 }
