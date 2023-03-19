@@ -1639,6 +1639,15 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 	if p.nValues <= dstPos {
 		return fmt.Errorf("pack: invalid dest pack offset %d (max %d)", dstPos, p.nValues)
 	}
+	defer func() {
+		if e := recover(); e != nil {
+			log.Errorf("CRASH: %v", e)
+			log.Errorf("SRC: id=%d vals=%d pklen=%d", srcPack.key, srcPack.nValues, len(srcPack.PkColumn()))
+			log.Errorf("DST: id=%d vals=%d pklen=%d", p.key, p.nValues, len(p.PkColumn()))
+			log.Errorf("REQ: dpos=%d spos=%d slen=%d", dstPos, srcPos, srcLen)
+			panic(e)
+		}
+	}()
 	// copy at most N rows without overflowing dst
 	n := util.Min(p.Len()-dstPos, srcLen)
 	for i, dst := range p.blocks {
@@ -1965,25 +1974,25 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 		case FieldTypeDecimal64:
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				vec.Int64.Insert(dst.Int64, dstPos, src.Int64[srcPos:srcPos+n]...)
+				dst.Int64 = vec.Int64.Insert(dst.Int64, dstPos, src.Int64[srcPos:srcPos+n]...)
 			} else {
 				cp := make([]int64, n)
 				for i, v := range src.Int64[srcPos : srcPos+srcLen] {
 					cp[i] = NewDecimal64(v, sc).Quantize(dc).Int64()
 				}
-				vec.Int64.Insert(dst.Int64, dstPos, cp...)
+				dst.Int64 = vec.Int64.Insert(dst.Int64, dstPos, cp...)
 			}
 
 		case FieldTypeDecimal32:
 			sc, dc := srcField.Scale, dstField.Scale
 			if sc == dc {
-				vec.Int32.Insert(dst.Int32, dstPos, src.Int32[srcPos:srcPos+n]...)
+				dst.Int32 = vec.Int32.Insert(dst.Int32, dstPos, src.Int32[srcPos:srcPos+n]...)
 			} else {
 				cp := make([]int32, n)
 				for i, v := range src.Int32[srcPos : srcPos+srcLen] {
 					cp[i] = NewDecimal32(v, sc).Quantize(dc).Int32()
 				}
-				vec.Int32.Insert(dst.Int32, dstPos, cp...)
+				dst.Int32 = vec.Int32.Insert(dst.Int32, dstPos, cp...)
 			}
 
 		default:
