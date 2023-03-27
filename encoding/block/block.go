@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"blockwatch.cc/knoxdb/encoding/bignum"
 	"blockwatch.cc/knoxdb/encoding/compress"
@@ -243,6 +244,7 @@ type Block interface {
 	BoolAt(int) bool
 	IsZeroAt(int, bool) bool
 	Slice() interface{}
+	SlicePtr() unsafe.Pointer
 	RangeSlice(int, int) interface{}
 
 	SetWithCast(int, reflect.Value) error
@@ -252,6 +254,7 @@ type Block interface {
 	Grow(int)
 	Copy(Block)
 	AppendFrom(Block, int, int)
+	AppendFromPtr(unsafe.Pointer, int, int)
 	ReplaceFrom(Block, int, int, int)
 	InsertFrom(Block, int, int, int)
 	Swap(int, int)
@@ -562,6 +565,11 @@ func (b *BlockNum[N]) Slice() interface{} {
 	return b.data.Slice()
 }
 
+func (b *BlockNum[N]) SlicePtr() unsafe.Pointer {
+	slice := b.data.Slice()
+	return unsafe.Pointer(&slice)
+}
+
 func (b *BlockTime) Slice() interface{} {
 	res := make([]time.Time, b.Len())
 	for i, v := range b.data.Slice() {
@@ -577,16 +585,36 @@ func (b *BlockBool) Slice() interface{} {
 	return b.data.Slice()
 }
 
+func (b *BlockBool) SlicePtr() unsafe.Pointer {
+	slice := b.data
+	return unsafe.Pointer(slice)
+}
+
 func (b *BlockInt128) Slice() interface{} {
 	return b.data.Int128Slice()
+}
+
+func (b *BlockInt128) SlicePtr() unsafe.Pointer {
+	slice := b.data.Subslice(0, b.data.Len())
+	return unsafe.Pointer(&slice)
 }
 
 func (b *BlockInt256) Slice() interface{} {
 	return b.data.Int256Slice()
 }
 
+func (b *BlockInt256) SlicePtr() unsafe.Pointer {
+	slice := b.data.Subslice(0, b.data.Len())
+	return unsafe.Pointer(&slice)
+}
+
 func (b *BlockBytes) Slice() interface{} {
 	return b.data.Slice()
+}
+
+func (b *BlockBytes) SlicePtr() unsafe.Pointer {
+	slice := (b.data.Slice())
+	return unsafe.Pointer(&slice)
 }
 
 func (b *BlockString) Slice() interface{} {
@@ -1854,6 +1882,11 @@ func (b *BlockInt64) AppendFrom(src Block, pos, len int) {
 	b.data.AppendFrom(sb.data.Slice(), pos, len)
 }
 
+func (b *BlockNum[T]) AppendFromPtr(src unsafe.Pointer, pos, len int) {
+	sb := *(*[]T)(src)
+	b.data.AppendFrom(sb, pos, len)
+}
+
 func (b *BlockInt32) AppendFrom(src Block, pos, len int) {
 	sb := src.(*BlockInt32)
 	b.data.AppendFrom(sb.data.Slice(), pos, len)
@@ -1904,9 +1937,19 @@ func (b *BlockInt256) AppendFrom(src Block, pos, len int) {
 	b.data.AppendFrom(sb.data.Subslice(pos, pos+len))
 }
 
+func (b *BlockInt256) AppendFromPtr(src unsafe.Pointer, pos, len int) {
+	sb := *(*bignum.Int256LLSlice)(src)
+	b.data.AppendFrom(sb.Subslice(pos, pos+len))
+}
+
 func (b *BlockInt128) AppendFrom(src Block, pos, len int) {
 	sb := src.(*BlockInt128)
 	b.data.AppendFrom(sb.data.Subslice(pos, pos+len))
+}
+
+func (b *BlockInt128) AppendFromPtr(src unsafe.Pointer, pos, len int) {
+	sb := *(*bignum.Int128LLSlice)(src)
+	b.data.AppendFrom(sb.Subslice(pos, pos+len))
 }
 
 func (b *BlockDec32) AppendFrom(src Block, pos, len int) {
@@ -1974,6 +2017,11 @@ func (b *BlockBytes) AppendFrom(src Block, pos, len int) {
 	}
 }
 
+func (b *BlockBytes) AppendFromPtr(src unsafe.Pointer, pos, len int) {
+	sb := *(*[][]byte)(src)
+	b.data.Append(sb[pos : pos+len]...)
+}
+
 func (b *BlockString) AppendFrom(src Block, pos, len int) {
 	sb := src.(*BlockString)
 	if len == 1 {
@@ -1986,6 +2034,11 @@ func (b *BlockString) AppendFrom(src Block, pos, len int) {
 func (b *BlockBool) AppendFrom(src Block, pos, len int) {
 	sb := src.(*BlockBool)
 	b.data.Append(sb.data, pos, len)
+}
+
+func (b *BlockBool) AppendFromPtr(src unsafe.Pointer, pos, len int) {
+	sb := (*vec.Bitset)(src)
+	b.data.Append(sb, pos, len)
 }
 
 func (b *BlockTime) ReplaceFrom(src Block, spos, dpos, len int) {

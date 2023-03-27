@@ -966,8 +966,10 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 			return fmt.Errorf("pack: replace from: field mismatch %d (%s) != %d (%s)",
 				srcField.Index, srcField.Type, dstField.Index, dstField.Type)
 		}
-
 		dst.AppendFrom(src, srcPos, srcLen)
+		//dst.AppendFromPtr(src.SlicePtr(), srcPos, srcLen)
+		//fmt.Printf("AppendFrom: %s, pos = %d, len = %d\n  dst.len = %d\n",
+		//	srcField.Type.String(), srcPos, srcLen, dst.Len())
 		dst.SetDirty()
 	}
 
