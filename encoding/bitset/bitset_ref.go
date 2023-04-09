@@ -4,7 +4,7 @@
 //go:build !amd64 || appengine || gccgo
 // +build !amd64 appengine gccgo
 
-package vec
+package bitset
 
 func bitsetAnd(dst, src []byte, size int) {
 	bitsetAndGeneric(dst, src, size)

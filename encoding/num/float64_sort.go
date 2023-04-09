@@ -5,6 +5,8 @@ package num
 
 import (
 	"sort"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 type Float64Sorter []float64
@@ -24,7 +26,7 @@ func (s Float64Sorter) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 func IntersectSortedFloat64(x, y, out []float64) []float64 {
 	if out == nil {
-		out = make([]float64, 0, min(len(x), len(y)))
+		out = make([]float64, 0, util.Min(len(x), len(y)))
 	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {

@@ -4,8 +4,9 @@
 package dedup
 
 import (
-	"blockwatch.cc/knoxdb/vec"
 	"bytes"
+
+	"blockwatch.cc/knoxdb/encoding/bitset"
 )
 
 func bitmask(i int) byte {
@@ -16,17 +17,8 @@ func bytemask(size int) byte {
 	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
 }
 
-func ensureBitfieldSize(bits *vec.Bitset, sz int) *vec.Bitset {
-	if bits == nil {
-		bits = vec.NewBitset(sz)
-	} else {
-		bits.Grow(sz)
-	}
-	return bits
-}
-
-func matchEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bitset {
-	bitvec = ensureBitfieldSize(bitvec, a.Len())
+func matchEqual(a ByteArray, val []byte, bitvec, maskvec *bitset.Bitset) *bitset.Bitset {
+	bitvec = bitvec.Grow(a.Len())
 	bits := bitvec.Bytes()
 	mask := maskvec.Bytes()
 	var cnt int
@@ -57,8 +49,8 @@ func matchEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bitse
 	return bitvec
 }
 
-func matchNotEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bitset {
-	bitvec = ensureBitfieldSize(bitvec, a.Len())
+func matchNotEqual(a ByteArray, val []byte, bitvec, maskvec *bitset.Bitset) *bitset.Bitset {
+	bitvec = bitvec.Grow(a.Len())
 	bits := bitvec.Bytes()
 	mask := maskvec.Bytes()
 	var cnt int
@@ -89,8 +81,8 @@ func matchNotEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bi
 	return bitvec
 }
 
-func matchLessThan(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bitset {
-	bitvec = ensureBitfieldSize(bitvec, a.Len())
+func matchLessThan(a ByteArray, val []byte, bitvec, maskvec *bitset.Bitset) *bitset.Bitset {
+	bitvec = bitvec.Grow(a.Len())
 	bits := bitvec.Bytes()
 	mask := maskvec.Bytes()
 	var cnt int
@@ -121,8 +113,8 @@ func matchLessThan(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bi
 	return bitvec
 }
 
-func matchLessThanEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bitset {
-	bitvec = ensureBitfieldSize(bitvec, a.Len())
+func matchLessThanEqual(a ByteArray, val []byte, bitvec, maskvec *bitset.Bitset) *bitset.Bitset {
+	bitvec = bitvec.Grow(a.Len())
 	bits := bitvec.Bytes()
 	mask := maskvec.Bytes()
 	var cnt int
@@ -153,8 +145,8 @@ func matchLessThanEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *v
 	return bitvec
 }
 
-func matchGreaterThan(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bitset {
-	bitvec = ensureBitfieldSize(bitvec, a.Len())
+func matchGreaterThan(a ByteArray, val []byte, bitvec, maskvec *bitset.Bitset) *bitset.Bitset {
+	bitvec = bitvec.Grow(a.Len())
 	bits := bitvec.Bytes()
 	mask := maskvec.Bytes()
 	var cnt int
@@ -185,8 +177,8 @@ func matchGreaterThan(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec
 	return bitvec
 }
 
-func matchGreaterThanEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset) *vec.Bitset {
-	bitvec = ensureBitfieldSize(bitvec, a.Len())
+func matchGreaterThanEqual(a ByteArray, val []byte, bitvec, maskvec *bitset.Bitset) *bitset.Bitset {
+	bitvec = bitvec.Grow(a.Len())
 	bits := bitvec.Bytes()
 	mask := maskvec.Bytes()
 	var cnt int
@@ -217,8 +209,8 @@ func matchGreaterThanEqual(a ByteArray, val []byte, bitvec, maskvec *vec.Bitset)
 	return bitvec
 }
 
-func matchBetween(a ByteArray, from, to []byte, bitvec, maskvec *vec.Bitset) *vec.Bitset {
-	bitvec = ensureBitfieldSize(bitvec, a.Len())
+func matchBetween(a ByteArray, from, to []byte, bitvec, maskvec *bitset.Bitset) *bitset.Bitset {
+	bitvec = bitvec.Grow(a.Len())
 	bits := bitvec.Bytes()
 	mask := maskvec.Bytes()
 	// short-cut for empty min

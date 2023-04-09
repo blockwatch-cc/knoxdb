@@ -3,7 +3,7 @@
 //
 // go test -bench=. -benchmem
 
-package vec
+package util
 
 import (
 	"math/rand"

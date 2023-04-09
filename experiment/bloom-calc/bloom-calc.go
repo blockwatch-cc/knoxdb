@@ -15,13 +15,13 @@ import (
 	"github.com/echa/log"
 	bolt "go.etcd.io/bbolt"
 
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/filter/bloom"
 	"blockwatch.cc/knoxdb/hash/xxhashVec"
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
 	"blockwatch.cc/knoxdb/util"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -122,7 +122,7 @@ func run() error {
 	}
 
 	// keep real and bloom filter data for each pack
-	reals := make([]*vec.Bitset, 0)
+	reals := make([]*bitset.Bitset, 0)
 	blooms := make([]*bloom.Filter, 0)
 	var (
 		maxid     uint32
@@ -146,7 +146,7 @@ func run() error {
 		maxVal := max.(uint32)
 		maxid = util.MaxU32(maxid, maxVal)
 
-		realBits := vec.NewBitset(int(maxVal))
+		realBits := bitset.NewBitset(int(maxVal))
 		for _, v := range block.Slice().([]uint32) {
 			realBits.Set(int(v))
 		}

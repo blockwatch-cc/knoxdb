@@ -1,7 +1,7 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package vec
+package bitset
 
 func matchBoolEqualGeneric(src []bool, val bool, bits []byte) int64 {
 	var cnt int64

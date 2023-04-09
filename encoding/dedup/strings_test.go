@@ -2,7 +2,7 @@
 // Author: alex@blockwatch.cc
 //
 
-package vec
+package dedup
 
 import (
 	"fmt"
@@ -48,7 +48,6 @@ func randStringSlice(n, u int) []string {
 
 // -----------------------------------------------------------------------
 // Strings
-//
 func TestStringSliceContains(T *testing.T) {
 	// nil slice
 	if Strings.Contains(nil, "1") {

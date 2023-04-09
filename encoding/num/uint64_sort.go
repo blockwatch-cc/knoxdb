@@ -5,6 +5,8 @@ package num
 
 import (
 	"sort"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 type Uint64Sorter []uint64
@@ -45,7 +47,7 @@ func UniqueUint64Slice(a []uint64) []uint64 {
 
 func IntersectSortedUint64(x, y, out []uint64) []uint64 {
 	if out == nil {
-		out = make([]uint64, 0, min(len(x), len(y)))
+		out = make([]uint64, 0, util.Min(len(x), len(y)))
 	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {

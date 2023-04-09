@@ -2,7 +2,7 @@
 // Author: alex@blockwatch.cc
 //
 // go test ./vec/... -bench=.
-package vec
+package bitset
 
 import (
 	"testing"

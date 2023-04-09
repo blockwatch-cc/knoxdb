@@ -11,9 +11,9 @@ import (
 	"sort"
 	"testing"
 
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/util"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 var journalTestSizes = []int{1 << 8, 1 << 10, 1 << 12}
@@ -1135,7 +1135,7 @@ var journalE2Etests = []journalE2ETest{
 func (x journalE2ETest) Run(t *testing.T) {
 	t.Run(x.name, func(t *testing.T) {
 		j := makeJournalFromPks(x.pks, x.del)
-		ids, pks := j.SortedIndexes(vec.NewBitsetFromBytes(x.bit, len(x.bit)*8))
+		ids, pks := j.SortedIndexes(bitset.NewBitsetFromBytes(x.bit, len(x.bit)*8))
 		if got, want := len(ids), len(x.idx); got != want {
 			t.Errorf("invalid result ids len: got=%d want=%d", got, want)
 		}

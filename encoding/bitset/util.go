@@ -1,16 +1,7 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package vec
-
-func ensureBitfieldSize(bits *Bitset, srcsize int) *Bitset {
-	if bits == nil {
-		bits = NewBitset(srcsize)
-	} else {
-		bits.Grow(srcsize)
-	}
-	return bits
-}
+package bitset
 
 func bitFieldLen(n int) int {
 	return roundUpPow2(n, 8) >> 3
@@ -26,18 +17,4 @@ func bitmask(i int) byte {
 
 func roundUpPow2(n int, pow2 int) int {
 	return (n + (pow2 - 1)) & ^(pow2 - 1)
-}
-
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
-}
-
-func max(x, y int) int {
-	if x > y {
-		return x
-	}
-	return y
 }

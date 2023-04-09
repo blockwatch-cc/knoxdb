@@ -10,9 +10,9 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/encoding/bignum"
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/dedup"
-	"blockwatch.cc/knoxdb/vec"
 	"github.com/klauspost/compress/snappy"
 	"github.com/pierrec/lz4"
 )
@@ -267,7 +267,7 @@ func decodeUint8Block(block []byte, dst []uint8) ([]uint8, error) {
 	return b, err
 }
 
-func decodeBoolBlock(block []byte, dst *vec.Bitset) (*vec.Bitset, error) {
+func decodeBoolBlock(block []byte, dst *bitset.Bitset) (*bitset.Bitset, error) {
 	buf, canRecycle, err := unpackBlock(block, BlockTypeBool)
 	if err != nil {
 		return nil, err

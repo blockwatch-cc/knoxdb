@@ -2,7 +2,7 @@
 // Author: alex@blockwatch.cc
 //
 
-package vec
+package bitset
 
 import (
 	"bytes"
@@ -13,6 +13,8 @@ import (
 	"math/rand"
 	"reflect"
 	"testing"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 type BitsetTest struct {
@@ -619,7 +621,6 @@ func TestBitNegGeneric(T *testing.T) {
 }
 
 // Test high-level bitset API
-//
 func TestBitsetNew(T *testing.T) {
 	for _, c := range bitsetCases {
 		T.Run(c.name, func(t *testing.T) {
@@ -718,7 +719,7 @@ func TestBitsetGrow(T *testing.T) {
 					T.Errorf("unexpected size %d, expected %d", got, want)
 					T.FailNow()
 				}
-				if got, want := bits.Count(), min(sz, sznew); got != want {
+				if got, want := bits.Count(), util.Min(sz, sznew); got != want {
 					T.Errorf("unexpected count %d, expected %d", got, want)
 					T.FailNow()
 				}
@@ -729,8 +730,8 @@ func TestBitsetGrow(T *testing.T) {
 				lena := bitFieldLen(sz)
 				lenb := bitFieldLen(sznew)
 				diff := lena - lenb
-				buf := bytes.Repeat([]byte{0xff}, min(lena, lenb))
-				buf[len(buf)-1] &= byte(0xff >> (7 - uint(min(sz, sznew)-1)&0x7))
+				buf := bytes.Repeat([]byte{0xff}, util.Min(lena, lenb))
+				buf[len(buf)-1] &= byte(0xff >> (7 - uint(util.Min(sz, sznew)-1)&0x7))
 				if diff < 0 {
 					buf = append(buf, bytes.Repeat([]byte{0x0}, -diff)...)
 				}
@@ -1731,7 +1732,7 @@ func TestBitsetReplace(T *testing.T) {
 					dst.Replace(src, srcPos, srcLen, dstPos)
 
 					dstSlice := dst.SubSlice(dstPos, srcLen)
-					srcSlice := src.SubSlice(srcPos, min(srcLen, dst.Len()-dstPos))
+					srcSlice := src.SubSlice(srcPos, util.Min(srcLen, dst.Len()-dstPos))
 					// T.Logf("SRC=%x DST=%x srcPos=%d dstPos=%d n=%d\n",
 					// 	src.Bytes(), dst.Bytes(), srcPos, dstPos, srcLen)
 					if got, want := dst.Len(), lbefore; got != want {

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/encoding/bitset"
 )
 
 type NativeByteArray struct {
@@ -78,7 +78,7 @@ func (a *NativeByteArray) AppendFrom(src ByteArray) ByteArray {
 
 func (a *NativeByteArray) Insert(index int, vals ...[]byte) ByteArray {
 	pre := a.bufs
-	a.bufs = vec.Bytes.Insert(a.bufs, index, vals...)
+	a.bufs = Bytes.Insert(a.bufs, index, vals...)
 	if cap(pre) != cap(a.bufs) {
 		recycle(pre)
 	}
@@ -88,7 +88,7 @@ func (a *NativeByteArray) Insert(index int, vals ...[]byte) ByteArray {
 func (a *NativeByteArray) InsertFrom(index int, src ByteArray) ByteArray {
 	ss := src.Slice()
 	pre := a.bufs
-	a.bufs = vec.Bytes.Insert(a.bufs, index, ss...)
+	a.bufs = Bytes.Insert(a.bufs, index, ss...)
 	if src.IsOptimized() {
 		recycle(ss)
 	}
@@ -145,7 +145,7 @@ func (a NativeByteArray) Subslice(start, end int) [][]byte {
 }
 
 func (a NativeByteArray) MinMax() ([]byte, []byte) {
-	min, max := vec.Bytes.MinMax(a.bufs)
+	min, max := Bytes.MinMax(a.bufs)
 	// copy to avoid reference
 	cmin := make([]byte, len(min))
 	copy(cmin, min)
@@ -270,30 +270,30 @@ func (a NativeByteArray) Swap(i, j int) {
 	a.bufs[i], a.bufs[j] = a.bufs[j], a.bufs[i]
 }
 
-func (a NativeByteArray) MatchEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchBytesEqual(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	return MatchBytesEqual(a.bufs, val, bits, mask)
 }
 
-func (a NativeByteArray) MatchNotEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchBytesNotEqual(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchNotEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	return MatchBytesNotEqual(a.bufs, val, bits, mask)
 }
 
-func (a NativeByteArray) MatchLessThan(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchBytesLessThan(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchLessThan(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	return MatchBytesLessThan(a.bufs, val, bits, mask)
 }
 
-func (a NativeByteArray) MatchLessThanEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchBytesLessThanEqual(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchLessThanEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	return MatchBytesLessThanEqual(a.bufs, val, bits, mask)
 }
 
-func (a NativeByteArray) MatchGreaterThan(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchBytesGreaterThan(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchGreaterThan(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	return MatchBytesGreaterThan(a.bufs, val, bits, mask)
 }
 
-func (a NativeByteArray) MatchGreaterThanEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchBytesGreaterThanEqual(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchGreaterThanEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	return MatchBytesGreaterThanEqual(a.bufs, val, bits, mask)
 }
 
-func (a NativeByteArray) MatchBetween(from, to []byte, bits, mask *vec.Bitset) *vec.Bitset {
-	return vec.MatchBytesBetween(a.bufs, from, to, bits, mask)
+func (a NativeByteArray) MatchBetween(from, to []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	return MatchBytesBetween(a.bufs, from, to, bits, mask)
 }

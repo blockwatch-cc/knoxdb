@@ -18,17 +18,3 @@ func bitmask(i int) byte {
 func roundUpPow2(n int, pow2 int) int {
 	return (n + (pow2 - 1)) & ^(pow2 - 1)
 }
-
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
-}
-
-func max(x, y int) int {
-	if x > y {
-		return x
-	}
-	return y
-}

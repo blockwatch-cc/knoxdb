@@ -1,7 +1,7 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package vec
+package bitset
 
 func (s *Bitset) Reverse() *ReverseBitset {
 	r := &ReverseBitset{

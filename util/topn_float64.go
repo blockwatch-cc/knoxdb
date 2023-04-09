@@ -1,7 +1,7 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package vec
+package util
 
 import (
 	"container/heap"
@@ -82,12 +82,12 @@ func (h *TopFloat64Heap) sorted() []float64 {
 }
 
 func (h *TopFloat64Heap) TopN(n int) []float64 {
-	n = min(n, len(h.vals))
+	n = Min(n, len(h.vals))
 	return h.sorted()[:n]
 }
 
 func (h *TopFloat64Heap) SumN(n int) float64 {
-	n = min(n, len(h.vals))
+	n = Min(n, len(h.vals))
 	var sum float64
 	for _, v := range h.sorted()[:n] {
 		sum += v

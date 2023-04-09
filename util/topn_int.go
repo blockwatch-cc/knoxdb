@@ -1,7 +1,7 @@
 // Copyright (c) 2018 - 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package vec
+package util
 
 import (
 	"container/heap"
@@ -107,12 +107,12 @@ func (h *TopHeap) sorted() []Topable {
 }
 
 func (h *TopHeap) TopN(n int) []Topable {
-	n = min(n, len(h.vals))
+	n = Min(n, len(h.vals))
 	return h.sorted()[:n]
 }
 
 func (h *TopHeap) SumN(n int) int {
-	n = min(n, len(h.vals))
+	n = Min(n, len(h.vals))
 	var sum int
 	for _, v := range h.sorted()[:n] {
 		sum += v.Value()

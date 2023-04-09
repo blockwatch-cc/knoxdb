@@ -1,7 +1,7 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package vec
+package util
 
 import (
 	"container/heap"
@@ -82,12 +82,12 @@ func (h *TopUint64Heap) sorted() []uint64 {
 }
 
 func (h *TopUint64Heap) TopN(n int) []uint64 {
-	n = min(n, len(h.vals))
+	n = Min(n, len(h.vals))
 	return h.sorted()[:n]
 }
 
 func (h *TopUint64Heap) SumN(n int) uint64 {
-	n = min(n, len(h.vals))
+	n = Min(n, len(h.vals))
 	var sum uint64
 	for _, v := range h.sorted()[:n] {
 		sum += v

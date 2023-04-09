@@ -2,7 +2,7 @@
 // Author: alex@blockwatch.cc
 //
 
-package vec
+package dedup
 
 import (
 	"bytes"
@@ -30,7 +30,6 @@ func randBytes(n int) []byte {
 
 // -----------------------------------------------------------------------
 // Byte Slice
-//
 func TestByteSliceContains(T *testing.T) {
 	// nil slice
 	if Bytes.Contains(nil, []byte{1}) {

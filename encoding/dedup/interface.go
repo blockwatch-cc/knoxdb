@@ -7,7 +7,7 @@ import (
 	"io"
 	"reflect"
 
-	"blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/encoding/bitset"
 )
 
 type ByteArray interface {
@@ -45,13 +45,13 @@ type ByteArray interface {
 	Dump() string
 
 	// condition match interface
-	MatchEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset
-	MatchNotEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset
-	MatchLessThan(val []byte, bits, mask *vec.Bitset) *vec.Bitset
-	MatchLessThanEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset
-	MatchGreaterThan(val []byte, bits, mask *vec.Bitset) *vec.Bitset
-	MatchGreaterThanEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset
-	MatchBetween(a, b []byte, bits, mask *vec.Bitset) *vec.Bitset
+	MatchEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
+	MatchNotEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
+	MatchLessThan(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
+	MatchLessThanEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
+	MatchGreaterThan(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
+	MatchGreaterThanEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
+	MatchBetween(a, b []byte, bits, mask *bitset.Bitset) *bitset.Bitset
 }
 
 func NewByteArray(sz int) ByteArray {

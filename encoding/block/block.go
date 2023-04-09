@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/encoding/bignum"
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/encoding/dedup"
@@ -25,7 +26,6 @@ import (
 	"blockwatch.cc/knoxdb/filter/loglogbeta"
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/util"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 var bigEndian = binary.BigEndian
@@ -264,14 +264,14 @@ type Block interface {
 	Swap(int, int)
 
 	Less(int, int) bool
-	MatchEqual(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
-	MatchNotEqual(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
-	MatchGreaterThan(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
-	MatchGreaterThanEqual(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
-	MatchLessThan(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
-	MatchLessThanEqual(interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
-	MatchBetween(interface{}, interface{}, *vec.Bitset, *vec.Bitset) *vec.Bitset
-	MatchRegExp(string, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchEqual(interface{}, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
+	MatchNotEqual(interface{}, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
+	MatchGreaterThan(interface{}, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
+	MatchGreaterThanEqual(interface{}, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
+	MatchLessThan(interface{}, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
+	MatchLessThanEqual(interface{}, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
+	MatchBetween(interface{}, interface{}, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
+	MatchRegExp(string, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
 	EqualAt(int, interface{}) bool
 	GtAt(int, interface{}) bool
 	GteAt(int, interface{}) bool
@@ -356,7 +356,7 @@ type BlockString struct {
 
 type BlockBool struct {
 	blockCommon
-	data *vec.Bitset
+	data *bitset.Bitset
 }
 
 type BlockInt128 struct {
@@ -1482,7 +1482,7 @@ func NewBlock(typ BlockType, comp Compression, sz int, scale int, flags FieldFla
 		bl = b
 	case BlockTypeBool:
 		b := new(BlockBool)
-		b.data = vec.NewBitset(sz).Reset()
+		b.data = bitset.NewBitset(sz).Reset()
 		bl = b
 	case BlockTypeString:
 		b := new(BlockString)
@@ -1582,7 +1582,7 @@ func NewBlockFromSlice(typ BlockType, comp Compression, slice interface{}) Block
 		bl = b
 		/*	case BlockTypeBool:
 				b := new(BlockBool)
-				b.data = vec.NewBitset(sz).Reset()
+				b.data = bitset.NewBitset(sz).Reset()
 				bl = b
 			case BlockTypeString:
 				b := new(BlockString)
@@ -1751,7 +1751,7 @@ func (b *BlockBool) Copy(src Block) {
 	b.dirty = true
 	b.scale = sb.scale
 	b.flags = sb.flags
-	b.data = vec.NewBitsetFromBytes(sb.data.Bytes(), sb.size)
+	b.data = bitset.NewBitsetFromBytes(sb.data.Bytes(), sb.size)
 }
 
 func (b *BlockBytes) Copy(src Block) {
@@ -2041,7 +2041,7 @@ func (b *BlockBool) AppendFrom(src Block, pos, len int) {
 }
 
 func (b *BlockBool) AppendFromPtr(src unsafe.Pointer, pos, len int) {
-	sb := (*vec.Bitset)(src)
+	sb := (*bitset.Bitset)(src)
 	b.data.Append(sb, pos, len)
 }
 
@@ -2823,7 +2823,7 @@ func (b *BlockBool) Decode(buf []byte, sz, stored int) error {
 	b.size = stored
 
 	if b.data == nil || b.data.Cap() < sz {
-		b.data = vec.NewBitset(sz)
+		b.data = bitset.NewBitset(sz)
 		b.data.Reset()
 	} else {
 		b.data.Grow(sz).Reset()
@@ -3419,19 +3419,19 @@ func (b *BlockBytes) Materialize() {
 	// log.Infof("Pack %d: materialized to %T len=%d cap=%d", p.key, b.Bytes, b.Bytes.Len(), b.Bytes.Cap())
 }
 
-func (b *BlockBytes) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBytes) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchEqual(val.([]byte), bits, mask)
 }
 
-func (b *BlockString) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockString) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchEqual([]byte(val.(string)), bits, mask)
 }
 
-func (b *BlockTime) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockTime) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64Equal(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
-func (b *BlockBool) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBool) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	if val.(bool) {
 		return bits.Copy(b.data)
 	} else {
@@ -3439,67 +3439,67 @@ func (b *BlockBool) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bit
 	}
 }
 
-func (b *BlockInt256) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt256) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt256Equal(b.data, val.(bignum.Int256), bits, mask)
 }
 
-func (b *BlockInt128) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt128) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt128Equal(b.data, val.(bignum.Int128), bits, mask)
 }
 
-func (b *BlockInt64) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt64) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64Equal(b.data.Slice(), val.(int64), bits, mask)
 }
 
-func (b *BlockInt32) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt32) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt32Equal(b.data.Slice(), val.(int32), bits, mask)
 }
 
-func (b *BlockInt16) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt16) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt16Equal(b.data.Slice(), val.(int16), bits, mask)
 }
 
-func (b *BlockInt8) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt8) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt8Equal(b.data.Slice(), val.(int8), bits, mask)
 }
 
-func (b *BlockUint64) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint64) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint64Equal(b.data.Slice(), val.(uint64), bits, mask)
 }
 
-func (b *BlockUint32) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint32) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint32Equal(b.data.Slice(), val.(uint32), bits, mask)
 }
 
-func (b *BlockUint16) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint16) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint16Equal(b.data.Slice(), val.(uint16), bits, mask)
 }
 
-func (b *BlockUint8) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint8) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint8Equal(b.data.Slice(), val.(uint8), bits, mask)
 }
 
-func (b *BlockFloat64) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat64) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat64Equal(b.data.Slice(), val.(float64), bits, mask)
 }
 
-func (b *BlockFloat32) MatchEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat32) MatchEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat32Equal(b.data.Slice(), val.(float32), bits, mask)
 }
 
-func (b *BlockBytes) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBytes) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchNotEqual(val.([]byte), bits, mask)
 }
 
-func (b *BlockString) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockString) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchNotEqual([]byte(val.(string)), bits, mask)
 }
 
-func (b *BlockTime) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockTime) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64NotEqual(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
-func (b *BlockBool) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBool) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	if val.(bool) {
 		return bits.Copy(b.data).Neg()
 	} else {
@@ -3507,67 +3507,67 @@ func (b *BlockBool) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.
 	}
 }
 
-func (b *BlockInt256) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt256) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt256NotEqual(b.data, val.(bignum.Int256), bits, mask)
 }
 
-func (b *BlockInt128) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt128) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt128NotEqual(b.data, val.(bignum.Int128), bits, mask)
 }
 
-func (b *BlockInt64) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt64) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64NotEqual(b.data.Slice(), val.(int64), bits, mask)
 }
 
-func (b *BlockInt32) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt32) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt32NotEqual(b.data.Slice(), val.(int32), bits, mask)
 }
 
-func (b *BlockInt16) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt16) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt16NotEqual(b.data.Slice(), val.(int16), bits, mask)
 }
 
-func (b *BlockInt8) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt8) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt8NotEqual(b.data.Slice(), val.(int8), bits, mask)
 }
 
-func (b *BlockUint64) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint64) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint64NotEqual(b.data.Slice(), val.(uint64), bits, mask)
 }
 
-func (b *BlockUint32) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint32) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint32NotEqual(b.data.Slice(), val.(uint32), bits, mask)
 }
 
-func (b *BlockUint16) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint16) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint16NotEqual(b.data.Slice(), val.(uint16), bits, mask)
 }
 
-func (b *BlockUint8) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint8) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint8NotEqual(b.data.Slice(), val.(uint8), bits, mask)
 }
 
-func (b *BlockFloat64) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat64) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat64NotEqual(b.data.Slice(), val.(float64), bits, mask)
 }
 
-func (b *BlockFloat32) MatchNotEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat32) MatchNotEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat32NotEqual(b.data.Slice(), val.(float32), bits, mask)
 }
 
-func (b *BlockBytes) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBytes) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchGreaterThan(val.([]byte), bits, mask)
 }
 
-func (b *BlockString) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockString) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchGreaterThan([]byte(val.(string)), bits, mask)
 }
 
-func (b *BlockTime) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockTime) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64GreaterThan(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
-func (b *BlockBool) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBool) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	if val.(bool) {
 		return bits
 	} else {
@@ -3575,131 +3575,131 @@ func (b *BlockBool) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *v
 	}
 }
 
-func (b *BlockInt256) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt256) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt256GreaterThan(b.data, val.(bignum.Int256), bits, mask)
 }
 
-func (b *BlockInt128) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt128) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt128GreaterThan(b.data, val.(bignum.Int128), bits, mask)
 }
 
-func (b *BlockInt64) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt64) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64GreaterThan(b.data.Slice(), val.(int64), bits, mask)
 }
 
-func (b *BlockInt32) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt32) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt32GreaterThan(b.data.Slice(), val.(int32), bits, mask)
 }
 
-func (b *BlockInt16) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt16) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt16GreaterThan(b.data.Slice(), val.(int16), bits, mask)
 }
 
-func (b *BlockInt8) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt8) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt8GreaterThan(b.data.Slice(), val.(int8), bits, mask)
 }
 
-func (b *BlockUint64) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint64) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint64GreaterThan(b.data.Slice(), val.(uint64), bits, mask)
 }
 
-func (b *BlockUint32) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint32) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint32GreaterThan(b.data.Slice(), val.(uint32), bits, mask)
 }
 
-func (b *BlockUint16) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint16) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint16GreaterThan(b.data.Slice(), val.(uint16), bits, mask)
 }
 
-func (b *BlockUint8) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint8) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint8GreaterThan(b.data.Slice(), val.(uint8), bits, mask)
 }
 
-func (b *BlockFloat64) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat64) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat64GreaterThan(b.data.Slice(), val.(float64), bits, mask)
 }
 
-func (b *BlockFloat32) MatchGreaterThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat32) MatchGreaterThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat32GreaterThan(b.data.Slice(), val.(float32), bits, mask)
 }
 
-func (b *BlockBytes) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBytes) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchGreaterThanEqual(val.([]byte), bits, mask)
 }
 
-func (b *BlockString) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockString) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchGreaterThanEqual([]byte(val.(string)), bits, mask)
 }
 
-func (b *BlockTime) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockTime) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64GreaterThanEqual(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
-func (b *BlockBool) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBool) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bits.Copy(b.data)
 }
 
-func (b *BlockInt256) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt256) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt256GreaterThanEqual(b.data, val.(bignum.Int256), bits, mask)
 }
 
-func (b *BlockInt128) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt128) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt128GreaterThanEqual(b.data, val.(bignum.Int128), bits, mask)
 }
 
-func (b *BlockInt64) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt64) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64GreaterThanEqual(b.data.Slice(), val.(int64), bits, mask)
 }
 
-func (b *BlockInt32) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt32) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt32GreaterThanEqual(b.data.Slice(), val.(int32), bits, mask)
 }
 
-func (b *BlockInt16) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt16) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt16GreaterThanEqual(b.data.Slice(), val.(int16), bits, mask)
 }
 
-func (b *BlockInt8) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt8) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt8GreaterThanEqual(b.data.Slice(), val.(int8), bits, mask)
 }
 
-func (b *BlockUint64) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint64) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint64GreaterThanEqual(b.data.Slice(), val.(uint64), bits, mask)
 }
 
-func (b *BlockUint32) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint32) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint32GreaterThanEqual(b.data.Slice(), val.(uint32), bits, mask)
 }
 
-func (b *BlockUint16) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint16) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint16GreaterThanEqual(b.data.Slice(), val.(uint16), bits, mask)
 }
 
-func (b *BlockUint8) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint8) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint8GreaterThanEqual(b.data.Slice(), val.(uint8), bits, mask)
 }
 
-func (b *BlockFloat64) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat64) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat64GreaterThanEqual(b.data.Slice(), val.(float64), bits, mask)
 }
 
-func (b *BlockFloat32) MatchGreaterThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat32) MatchGreaterThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat32GreaterThanEqual(b.data.Slice(), val.(float32), bits, mask)
 }
 
-func (b *BlockBytes) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBytes) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchLessThan(val.([]byte), bits, mask)
 }
 
-func (b *BlockString) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockString) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchLessThan([]byte(val.(string)), bits, mask)
 }
 
-func (b *BlockTime) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockTime) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64LessThan(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
-func (b *BlockBool) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBool) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	if val.(bool) {
 		return bits.Copy(b.data).Neg()
 	} else {
@@ -3707,133 +3707,133 @@ func (b *BlockBool) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.
 	}
 }
 
-func (b *BlockInt256) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt256) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt256LessThan(b.data, val.(bignum.Int256), bits, mask)
 }
 
-func (b *BlockInt128) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt128) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt128LessThan(b.data, val.(bignum.Int128), bits, mask)
 }
 
-func (b *BlockInt64) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt64) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64LessThan(b.data.Slice(), val.(int64), bits, mask)
 }
 
-func (b *BlockInt32) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt32) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt32LessThan(b.data.Slice(), val.(int32), bits, mask)
 }
 
-func (b *BlockInt16) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt16) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt16LessThan(b.data.Slice(), val.(int16), bits, mask)
 }
 
-func (b *BlockInt8) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt8) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt8LessThan(b.data.Slice(), val.(int8), bits, mask)
 }
 
-func (b *BlockUint64) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint64) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint64LessThan(b.data.Slice(), val.(uint64), bits, mask)
 }
 
-func (b *BlockUint32) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint32) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint32LessThan(b.data.Slice(), val.(uint32), bits, mask)
 }
 
-func (b *BlockUint16) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint16) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint16LessThan(b.data.Slice(), val.(uint16), bits, mask)
 }
 
-func (b *BlockUint8) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint8) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint8LessThan(b.data.Slice(), val.(uint8), bits, mask)
 }
 
-func (b *BlockFloat64) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat64) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat64LessThan(b.data.Slice(), val.(float64), bits, mask)
 }
 
-func (b *BlockFloat32) MatchLessThan(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat32) MatchLessThan(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat32LessThan(b.data.Slice(), val.(float32), bits, mask)
 }
 
-func (b *BlockBytes) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBytes) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchLessThanEqual(val.([]byte), bits, mask)
 }
 
-func (b *BlockString) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockString) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchLessThanEqual([]byte(val.(string)), bits, mask)
 }
 
-func (b *BlockTime) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockTime) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64LessThanEqual(b.data.Slice(), val.(time.Time).UnixNano(), bits, mask)
 }
 
-func (b *BlockBool) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBool) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bits.Copy(b.data)
 }
 
-func (b *BlockInt256) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt256) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt256LessThanEqual(b.data, val.(bignum.Int256), bits, mask)
 }
 
-func (b *BlockInt128) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt128) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt128LessThanEqual(b.data, val.(bignum.Int128), bits, mask)
 }
 
-func (b *BlockInt64) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt64) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64LessThanEqual(b.data.Slice(), val.(int64), bits, mask)
 }
 
-func (b *BlockInt32) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt32) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt32LessThanEqual(b.data.Slice(), val.(int32), bits, mask)
 }
 
-func (b *BlockInt16) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt16) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt16LessThanEqual(b.data.Slice(), val.(int16), bits, mask)
 }
 
-func (b *BlockInt8) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt8) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt8LessThanEqual(b.data.Slice(), val.(int8), bits, mask)
 }
 
-func (b *BlockUint64) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint64) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint64LessThanEqual(b.data.Slice(), val.(uint64), bits, mask)
 }
 
-func (b *BlockUint32) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint32) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint32LessThanEqual(b.data.Slice(), val.(uint32), bits, mask)
 }
 
-func (b *BlockUint16) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint16) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint16LessThanEqual(b.data.Slice(), val.(uint16), bits, mask)
 }
 
-func (b *BlockUint8) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint8) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint8LessThanEqual(b.data.Slice(), val.(uint8), bits, mask)
 }
 
-func (b *BlockFloat64) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat64) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat64LessThanEqual(b.data.Slice(), val.(float64), bits, mask)
 }
 
-func (b *BlockFloat32) MatchLessThanEqual(val interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat32) MatchLessThanEqual(val interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat32LessThanEqual(b.data.Slice(), val.(float32), bits, mask)
 }
 
-func (b *BlockBytes) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBytes) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return b.data.MatchBetween(from.([]byte), to.([]byte), bits, mask)
 }
 
-func (b *BlockString) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockString) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	fromb := compress.UnsafeGetBytes(from.(string))
 	tob := compress.UnsafeGetBytes(to.(string))
 	return b.data.MatchBetween(fromb, tob, bits, mask)
 }
 
-func (b *BlockTime) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockTime) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64Between(b.data.Slice(), from.(time.Time).UnixNano(), to.(time.Time).UnixNano(), bits, mask)
 }
 
-func (b *BlockBool) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockBool) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	switch from, to := from.(bool), to.(bool); true {
 	case from != to:
 		return bits.Copy(b.data)
@@ -3844,59 +3844,59 @@ func (b *BlockBool) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *
 	}
 }
 
-func (b *BlockInt256) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt256) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt256Between(b.data, from.(bignum.Int256), to.(bignum.Int256), bits, mask)
 }
 
-func (b *BlockInt128) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt128) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bignum.MatchInt128Between(b.data, from.(bignum.Int128), to.(bignum.Int128), bits, mask)
 }
 
-func (b *BlockInt64) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt64) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt64Between(b.data.Slice(), from.(int64), to.(int64), bits, mask)
 }
 
-func (b *BlockInt32) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt32) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt32Between(b.data.Slice(), from.(int32), to.(int32), bits, mask)
 }
 
-func (b *BlockInt16) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt16) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt16Between(b.data.Slice(), from.(int16), to.(int16), bits, mask)
 }
 
-func (b *BlockInt8) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockInt8) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchInt8Between(b.data.Slice(), from.(int8), to.(int8), bits, mask)
 }
 
-func (b *BlockUint64) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint64) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint64Between(b.data.Slice(), from.(uint64), to.(uint64), bits, mask)
 }
 
-func (b *BlockUint32) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint32) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint32Between(b.data.Slice(), from.(uint32), to.(uint32), bits, mask)
 }
 
-func (b *BlockUint16) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint16) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint16Between(b.data.Slice(), from.(uint16), to.(uint16), bits, mask)
 }
 
-func (b *BlockUint8) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockUint8) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchUint8Between(b.data.Slice(), from.(uint8), to.(uint8), bits, mask)
 }
 
-func (b *BlockFloat64) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat64) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat64Between(b.data.Slice(), from.(float64), to.(float64), bits, mask)
 }
 
-func (b *BlockFloat32) MatchBetween(from, to interface{}, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockFloat32) MatchBetween(from, to interface{}, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return num.MatchFloat32Between(b.data.Slice(), from.(float32), to.(float32), bits, mask)
 }
 
-func (b *blockCommon) MatchRegExp(re string, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *blockCommon) MatchRegExp(re string, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return bits
 }
 
-func (b *BlockString) MatchRegExp(re string, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockString) MatchRegExp(re string, bits, mask *bitset.Bitset) *bitset.Bitset {
 	rematch := strings.Replace(re, "*", ".*", -1)
 	for i, v := range b.data.Slice() {
 		// skip masked values
@@ -3910,7 +3910,7 @@ func (b *BlockString) MatchRegExp(re string, bits, mask *vec.Bitset) *vec.Bitset
 	return bits
 }
 
-func (b *BlockTime) MatchRegExp(re string, bits, mask *vec.Bitset) *vec.Bitset {
+func (b *BlockTime) MatchRegExp(re string, bits, mask *bitset.Bitset) *bitset.Bitset {
 	rematch := strings.Replace(re, "*", ".*", -1)
 	for i, v := range b.data.Slice() {
 		// skip masked values

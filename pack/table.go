@@ -41,11 +41,11 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/cache/rclru"
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -1864,7 +1864,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	}
 
 	// prepare journal match
-	var jbits *vec.Bitset
+	var jbits *bitset.Bitset
 	defer func() {
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
 		q.Close()
@@ -2027,7 +2027,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	}
 
 	// prepare journal query
-	var jbits *vec.Bitset
+	var jbits *bitset.Bitset
 	defer func() {
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
 		q.Close()
@@ -2219,7 +2219,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 		return 0, err
 	}
 
-	var jbits *vec.Bitset
+	var jbits *bitset.Bitset
 
 	defer func() {
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
@@ -2360,7 +2360,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	}
 
 	// prepare journal query
-	var jbits *vec.Bitset
+	var jbits *bitset.Bitset
 	defer func() {
 		atomic.AddInt64(&t.stats.StreamedTuples, int64(q.stats.RowsMatched))
 		if jbits != nil {
@@ -2519,7 +2519,7 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 	}
 
 	// prepare journal query
-	var jbits *vec.Bitset
+	var jbits *bitset.Bitset
 	defer func() {
 		atomic.AddInt64(&t.stats.StreamedTuples, int64(q.stats.RowsMatched))
 		if jbits != nil {

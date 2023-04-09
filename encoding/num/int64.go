@@ -3,47 +3,45 @@
 
 package num
 
-import (
-	"blockwatch.cc/knoxdb/vec"
-)
+import "blockwatch.cc/knoxdb/encoding/bitset"
 
-func MatchInt64Equal(src []int64, val int64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt64Equal(src []int64, val int64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchInt64Equal(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchInt64NotEqual(src []int64, val int64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt64NotEqual(src []int64, val int64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchInt64NotEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchInt64LessThan(src []int64, val int64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt64LessThan(src []int64, val int64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchInt64LessThan(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchInt64LessThanEqual(src []int64, val int64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt64LessThanEqual(src []int64, val int64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchInt64LessThanEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchInt64GreaterThan(src []int64, val int64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt64GreaterThan(src []int64, val int64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchInt64GreaterThan(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchInt64GreaterThanEqual(src []int64, val int64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt64GreaterThanEqual(src []int64, val int64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchInt64GreaterThanEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchInt64Between(src []int64, a, b int64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt64Between(src []int64, a, b int64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchInt64Between(src, a, b, bits.Bytes())))
 	return bits
@@ -61,7 +59,7 @@ var Int64 = struct {
 	MinMax        func([]int64) (int64, int64)
 	ContainsRange func([]int64, int64, int64) bool
 	Intersect     func([]int64, []int64, []int64) []int64
-	MatchEqual    func([]int64, int64, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchEqual    func([]int64, int64, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
 }{
 	Sort: func(s []int64) []int64 {
 		return Int64Sorter(s).Sort()
@@ -99,7 +97,7 @@ var Int64 = struct {
 	Intersect: func(x, y, out []int64) []int64 {
 		return IntersectSortedInt64(x, y, out)
 	},
-	MatchEqual: func(s []int64, val int64, bits, mask *vec.Bitset) *vec.Bitset {
+	MatchEqual: func(s []int64, val int64, bits, mask *bitset.Bitset) *bitset.Bitset {
 		return MatchInt64Equal(s, val, bits, mask)
 	},
 }

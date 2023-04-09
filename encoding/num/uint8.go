@@ -3,47 +3,45 @@
 
 package num
 
-import (
-	"blockwatch.cc/knoxdb/vec"
-)
+import "blockwatch.cc/knoxdb/encoding/bitset"
 
-func MatchUint8Equal(src []uint8, val uint8, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint8Equal(src []uint8, val uint8, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint8Equal(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint8NotEqual(src []uint8, val uint8, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint8NotEqual(src []uint8, val uint8, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint8NotEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint8LessThan(src []uint8, val uint8, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint8LessThan(src []uint8, val uint8, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint8LessThan(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint8LessThanEqual(src []uint8, val uint8, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint8LessThanEqual(src []uint8, val uint8, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint8LessThanEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint8GreaterThan(src []uint8, val uint8, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint8GreaterThan(src []uint8, val uint8, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint8GreaterThan(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint8GreaterThanEqual(src []uint8, val uint8, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint8GreaterThanEqual(src []uint8, val uint8, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint8GreaterThanEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint8Between(src []uint8, a, b uint8, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint8Between(src []uint8, a, b uint8, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint8Between(src, a, b, bits.Bytes())))
 	return bits
@@ -61,7 +59,7 @@ var Uint8 = struct {
 	MinMax        func([]uint8) (uint8, uint8)
 	ContainsRange func([]uint8, uint8, uint8) bool
 	Intersect     func([]uint8, []uint8, []uint8) []uint8
-	MatchEqual    func([]uint8, uint8, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchEqual    func([]uint8, uint8, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
 }{
 	Sort: func(s []uint8) []uint8 {
 		return Uint8Sorter(s).Sort()
@@ -99,7 +97,7 @@ var Uint8 = struct {
 	Intersect: func(x, y, out []uint8) []uint8 {
 		return IntersectSortedUint8(x, y, out)
 	},
-	MatchEqual: func(s []uint8, val uint8, bits, mask *vec.Bitset) *vec.Bitset {
+	MatchEqual: func(s []uint8, val uint8, bits, mask *bitset.Bitset) *bitset.Bitset {
 		return MatchUint8Equal(s, val, bits, mask)
 	},
 }

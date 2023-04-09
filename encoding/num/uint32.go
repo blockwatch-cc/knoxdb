@@ -3,47 +3,45 @@
 
 package num
 
-import (
-	"blockwatch.cc/knoxdb/vec"
-)
+import "blockwatch.cc/knoxdb/encoding/bitset"
 
-func MatchUint32Equal(src []uint32, val uint32, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint32Equal(src []uint32, val uint32, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint32Equal(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint32NotEqual(src []uint32, val uint32, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint32NotEqual(src []uint32, val uint32, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint32NotEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint32LessThan(src []uint32, val uint32, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint32LessThan(src []uint32, val uint32, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint32LessThan(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint32LessThanEqual(src []uint32, val uint32, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint32LessThanEqual(src []uint32, val uint32, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint32LessThanEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint32GreaterThan(src []uint32, val uint32, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint32GreaterThan(src []uint32, val uint32, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint32GreaterThan(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint32GreaterThanEqual(src []uint32, val uint32, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint32GreaterThanEqual(src []uint32, val uint32, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint32GreaterThanEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchUint32Between(src []uint32, a, b uint32, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchUint32Between(src []uint32, a, b uint32, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchUint32Between(src, a, b, bits.Bytes())))
 	return bits
@@ -61,7 +59,7 @@ var Uint32 = struct {
 	MinMax        func([]uint32) (uint32, uint32)
 	ContainsRange func([]uint32, uint32, uint32) bool
 	Intersect     func([]uint32, []uint32, []uint32) []uint32
-	MatchEqual    func([]uint32, uint32, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchEqual    func([]uint32, uint32, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
 }{
 	Sort: func(s []uint32) []uint32 {
 		return Uint32Sorter(s).Sort()
@@ -99,7 +97,7 @@ var Uint32 = struct {
 	Intersect: func(x, y, out []uint32) []uint32 {
 		return IntersectSortedUint32(x, y, out)
 	},
-	MatchEqual: func(s []uint32, val uint32, bits, mask *vec.Bitset) *vec.Bitset {
+	MatchEqual: func(s []uint32, val uint32, bits, mask *bitset.Bitset) *bitset.Bitset {
 		return MatchUint32Equal(s, val, bits, mask)
 	},
 }

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/encoding/bitset"
 )
 
 type FixedByteArray struct {
@@ -199,30 +199,30 @@ func (a *FixedByteArray) Swap(i, j int) {
 	}
 }
 
-func (a *FixedByteArray) MatchEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *FixedByteArray) MatchEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchEqual(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchNotEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *FixedByteArray) MatchNotEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchNotEqual(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchLessThan(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *FixedByteArray) MatchLessThan(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchLessThan(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchLessThanEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *FixedByteArray) MatchLessThanEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchLessThanEqual(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchGreaterThan(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *FixedByteArray) MatchGreaterThan(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchGreaterThan(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchGreaterThanEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *FixedByteArray) MatchGreaterThanEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchGreaterThanEqual(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchBetween(from, to []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *FixedByteArray) MatchBetween(from, to []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchBetween(a, from, to, bits, mask)
 }

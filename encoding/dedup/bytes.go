@@ -1,52 +1,55 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package vec
+package dedup
 
 import (
 	"bytes"
 	"sort"
+
+	"blockwatch.cc/knoxdb/encoding/bitset"
+	"blockwatch.cc/knoxdb/util"
 )
 
-func MatchBytesEqual(src [][]byte, val []byte, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = int(matchBytesEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
+func MatchBytesEqual(src [][]byte, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	bits = bits.Grow(len(src))
+	bits.ResetCount(int(matchBytesEqualGeneric(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchBytesNotEqual(src [][]byte, val []byte, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = int(matchBytesNotEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
+func MatchBytesNotEqual(src [][]byte, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	bits = bits.Grow(len(src))
+	bits.ResetCount(int(matchBytesNotEqualGeneric(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchBytesLessThan(src [][]byte, val []byte, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = int(matchBytesLessThanGeneric(src, val, bits.Bytes(), mask.Bytes()))
+func MatchBytesLessThan(src [][]byte, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	bits = bits.Grow(len(src))
+	bits.ResetCount(int(matchBytesLessThanGeneric(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchBytesLessThanEqual(src [][]byte, val []byte, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = int(matchBytesLessThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
+func MatchBytesLessThanEqual(src [][]byte, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	bits = bits.Grow(len(src))
+	bits.ResetCount(int(matchBytesLessThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchBytesGreaterThan(src [][]byte, val []byte, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = int(matchBytesGreaterThanGeneric(src, val, bits.Bytes(), mask.Bytes()))
+func MatchBytesGreaterThan(src [][]byte, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	bits = bits.Grow(len(src))
+	bits.ResetCount(int(matchBytesGreaterThanGeneric(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchBytesGreaterThanEqual(src [][]byte, val []byte, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = int(matchBytesGreaterThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes()))
+func MatchBytesGreaterThanEqual(src [][]byte, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	bits = bits.Grow(len(src))
+	bits.ResetCount(int(matchBytesGreaterThanEqualGeneric(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchBytesBetween(src [][]byte, a, b []byte, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
-	bits.cnt = int(matchBytesBetweenGeneric(src, a, b, bits.Bytes(), mask.Bytes()))
+func MatchBytesBetween(src [][]byte, a, b []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+	bits = bits.Grow(len(src))
+	bits.ResetCount(int(matchBytesBetweenGeneric(src, a, b, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
@@ -62,7 +65,7 @@ var Bytes = struct {
 	MinMax        func([][]byte) ([]byte, []byte)
 	ContainsRange func([][]byte, []byte, []byte) bool
 	Intersect     func([][]byte, [][]byte, [][]byte) [][]byte
-	MatchEqual    func([][]byte, []byte, *Bitset, *Bitset) *Bitset
+	MatchEqual    func([][]byte, []byte, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
 }{
 	Sort: func(s [][]byte) [][]byte {
 		return BytesSorter(s).Sort()
@@ -100,7 +103,7 @@ var Bytes = struct {
 	Intersect: func(x, y, out [][]byte) [][]byte {
 		return IntersectSortedBytes(x, y, out)
 	},
-	MatchEqual: func(s [][]byte, val []byte, bits, mask *Bitset) *Bitset {
+	MatchEqual: func(s [][]byte, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 		return MatchBytesEqual(s, val, bits, mask)
 	},
 }
@@ -320,7 +323,7 @@ func UniqueBytesSlice(a [][]byte) [][]byte {
 
 func IntersectSortedBytes(x, y, out [][]byte) [][]byte {
 	if out == nil {
-		out = make([][]byte, 0, min(len(x), len(y)))
+		out = make([][]byte, 0, util.Min(len(x), len(y)))
 	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {

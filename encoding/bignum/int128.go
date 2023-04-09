@@ -15,8 +15,8 @@ import (
 	"strconv"
 	"strings"
 
-	"blockwatch.cc/knoxdb/vec"
-	//	"fmt"
+	"blockwatch.cc/knoxdb/encoding/bitset"
+	"blockwatch.cc/knoxdb/util"
 )
 
 var ErrInvalidNumber = errors.New("vec: invalid number")
@@ -553,43 +553,43 @@ func Max128(x, y Int128) Int128 {
 }
 
 // Match helpers
-func MatchInt128Equal(src Int128LLSlice, val Int128, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt128Equal(src Int128LLSlice, val Int128, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(src.Len())
 	bits.ResetCount(int(matchInt128Equal(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt128NotEqual(src Int128LLSlice, val Int128, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt128NotEqual(src Int128LLSlice, val Int128, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(src.Len())
 	bits.ResetCount(int(matchInt128NotEqual(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt128LessThan(src Int128LLSlice, val Int128, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt128LessThan(src Int128LLSlice, val Int128, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(src.Len())
 	bits.ResetCount(int(matchInt128LessThan(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt128LessThanEqual(src Int128LLSlice, val Int128, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt128LessThanEqual(src Int128LLSlice, val Int128, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(src.Len())
 	bits.ResetCount(int(matchInt128LessThanEqual(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt128GreaterThan(src Int128LLSlice, val Int128, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt128GreaterThan(src Int128LLSlice, val Int128, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(src.Len())
 	bits.ResetCount(int(matchInt128GreaterThan(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt128GreaterThanEqual(src Int128LLSlice, val Int128, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt128GreaterThanEqual(src Int128LLSlice, val Int128, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(src.Len())
 	bits.ResetCount(int(matchInt128GreaterThanEqual(src, val, bits.Bytes(), mask.Bytes())))
 	return bits
 }
 
-func MatchInt128Between(src Int128LLSlice, a, b Int128, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchInt128Between(src Int128LLSlice, a, b Int128, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(src.Len())
 	bits.ResetCount(int(matchInt128Between(src, a, b, bits.Bytes(), mask.Bytes())))
 	return bits
@@ -780,7 +780,7 @@ func (s Int128Slice) ContainsRange(from, to Int128) bool {
 
 func (s Int128Slice) Intersect(x, out Int128Slice) Int128Slice {
 	if out == nil {
-		out = make(Int128Slice, 0, min(len(x), len(s)))
+		out = make(Int128Slice, 0, util.Min(len(x), len(s)))
 	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(s); i < il && j < jl; {
@@ -951,6 +951,6 @@ func (s *Int128LLSlice) Insert(k int, vs Int128LLSlice) {
 	*s = s2
 }
 
-func (s Int128Slice) MatchEqual(val Int128, bits, mask *vec.Bitset) *vec.Bitset {
+func (s Int128Slice) MatchEqual(val Int128, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return MatchInt128Equal(s.Int128LLSlice(), val, bits, nil)
 }

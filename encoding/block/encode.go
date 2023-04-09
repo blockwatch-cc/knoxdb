@@ -7,9 +7,9 @@ import (
 	"bytes"
 
 	"blockwatch.cc/knoxdb/encoding/bignum"
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/dedup"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -410,7 +410,7 @@ func encodeUint8Block(buf *bytes.Buffer, val []uint8, comp Compression) (int, er
 	return buf.Len() - l, err
 }
 
-func encodeBoolBlock(buf *bytes.Buffer, val *vec.Bitset, comp Compression) (int, error) {
+func encodeBoolBlock(buf *bytes.Buffer, val *bitset.Bitset, comp Compression) (int, error) {
 	if val.Len() == 0 {
 		return writeEmptyBlock(buf, BlockTypeBool)
 	}

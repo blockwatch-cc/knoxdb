@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"io"
 
-	"blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/encoding/bitset"
 )
 
 const (
@@ -25,11 +25,11 @@ const (
 	// integer compressions simple8, ?
 )
 
-func BitsetEncodedSize(b *vec.Bitset) int {
+func BitsetEncodedSize(b *bitset.Bitset) int {
 	return b.EncodedSize() + 1 + binary.MaxVarintLen64
 }
 
-func BitsetEncodeAll(src *vec.Bitset, w io.Writer) (int, error) {
+func BitsetEncodeAll(src *bitset.Bitset, w io.Writer) (int, error) {
 	// Store the encoding type in the 4 high bits of the first byte
 	w.Write([]byte{booleanCompressedBitPacked << 4})
 
@@ -43,7 +43,7 @@ func BitsetEncodeAll(src *vec.Bitset, w io.Writer) (int, error) {
 	return 1 + i + len(src.Bytes()), nil
 }
 
-func BitsetDecodeAll(b []byte, dst *vec.Bitset) (*vec.Bitset, error) {
+func BitsetDecodeAll(b []byte, dst *bitset.Bitset) (*bitset.Bitset, error) {
 	if len(b) == 0 {
 		return dst, nil
 	}
@@ -62,7 +62,7 @@ func BitsetDecodeAll(b []byte, dst *vec.Bitset) (*vec.Bitset, error) {
 	}
 
 	if dst == nil {
-		dst = vec.NewBitsetFromBytes(b[n:], int(val))
+		dst = bitset.NewBitsetFromBytes(b[n:], int(val))
 	} else {
 		dst.SetFromBytes(b[n:], int(val))
 	}

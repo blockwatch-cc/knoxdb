@@ -8,8 +8,8 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/encoding/bignum"
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/dedup"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 type Allocator interface {
@@ -65,11 +65,11 @@ func (a *allocator[T]) Free(val any) {
 type bitSetAllocator struct{}
 
 func (a bitSetAllocator) Alloc(sz int) any {
-	return vec.NewBitset(sz).Reset()
+	return bitset.NewBitset(sz).Reset()
 }
 
 func (a bitSetAllocator) Free(val any) {
-	b, ok := val.(*vec.Bitset)
+	b, ok := val.(*bitset.Bitset)
 	if ok {
 		b.Close()
 	}

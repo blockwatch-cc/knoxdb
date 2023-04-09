@@ -5,6 +5,8 @@ package bignum
 
 import (
 	"sort"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 func (s Int256Slice) Sort() Int256Slice {
@@ -52,7 +54,7 @@ func UniqueInt256Slice(a []Int256) []Int256 {
 }
 
 func IntersectSortedInt256(x, y []Int256) []Int256 {
-	res := make([]Int256, 0, min(len(x), len(y)))
+	res := make([]Int256, 0, util.Min(len(x), len(y)))
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {
 		if x[i].Lt(y[j]) {

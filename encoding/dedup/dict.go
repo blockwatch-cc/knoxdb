@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"io"
 
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/compress"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 type DictByteArray struct {
@@ -330,30 +330,30 @@ func (a *DictByteArray) Swap(i, j int) {
 	pack(a.ptr, j, pi, a.log2)
 }
 
-func (a *DictByteArray) MatchEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *DictByteArray) MatchEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchEqual(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchNotEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *DictByteArray) MatchNotEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchNotEqual(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchLessThan(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *DictByteArray) MatchLessThan(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchLessThan(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchLessThanEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *DictByteArray) MatchLessThanEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchLessThanEqual(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchGreaterThan(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *DictByteArray) MatchGreaterThan(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchGreaterThan(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchGreaterThanEqual(val []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *DictByteArray) MatchGreaterThanEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchGreaterThanEqual(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchBetween(from, to []byte, bits, mask *vec.Bitset) *vec.Bitset {
+func (a *DictByteArray) MatchBetween(from, to []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return matchBetween(a, from, to, bits, mask)
 }

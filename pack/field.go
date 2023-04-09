@@ -21,10 +21,11 @@ import (
 	"blockwatch.cc/knoxdb/util"
 
 	. "blockwatch.cc/knoxdb/encoding/bignum"
+	. "blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/decimal"
+	. "blockwatch.cc/knoxdb/encoding/dedup"
 	. "blockwatch.cc/knoxdb/encoding/num"
-	. "blockwatch.cc/knoxdb/vec"
 )
 
 type FieldFlags block.FieldFlags

@@ -3,47 +3,45 @@
 
 package num
 
-import (
-	"blockwatch.cc/knoxdb/vec"
-)
+import "blockwatch.cc/knoxdb/encoding/bitset"
 
-func MatchFloat64Equal(src []float64, val float64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchFloat64Equal(src []float64, val float64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchFloat64Equal(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchFloat64NotEqual(src []float64, val float64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchFloat64NotEqual(src []float64, val float64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchFloat64NotEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchFloat64LessThan(src []float64, val float64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchFloat64LessThan(src []float64, val float64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchFloat64LessThan(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchFloat64LessThanEqual(src []float64, val float64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchFloat64LessThanEqual(src []float64, val float64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchFloat64LessThanEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchFloat64GreaterThan(src []float64, val float64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchFloat64GreaterThan(src []float64, val float64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchFloat64GreaterThan(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchFloat64GreaterThanEqual(src []float64, val float64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchFloat64GreaterThanEqual(src []float64, val float64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchFloat64GreaterThanEqual(src, val, bits.Bytes())))
 	return bits
 }
 
-func MatchFloat64Between(src []float64, a, b float64, bits, mask *vec.Bitset) *vec.Bitset {
+func MatchFloat64Between(src []float64, a, b float64, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Grow(len(src))
 	bits.ResetCount(int(matchFloat64Between(src, a, b, bits.Bytes())))
 	return bits
@@ -61,7 +59,7 @@ var Float64 = struct {
 	MinMax        func([]float64) (float64, float64)
 	ContainsRange func([]float64, float64, float64) bool
 	Intersect     func([]float64, []float64, []float64) []float64
-	MatchEqual    func([]float64, float64, *vec.Bitset, *vec.Bitset) *vec.Bitset
+	MatchEqual    func([]float64, float64, *bitset.Bitset, *bitset.Bitset) *bitset.Bitset
 }{
 	Sort: func(s []float64) []float64 {
 		return Float64Sorter(s).Sort()
@@ -99,7 +97,7 @@ var Float64 = struct {
 	Intersect: func(x, y, out []float64) []float64 {
 		return IntersectSortedFloat64(x, y, out)
 	},
-	MatchEqual: func(s []float64, val float64, bits, mask *vec.Bitset) *vec.Bitset {
+	MatchEqual: func(s []float64, val float64, bits, mask *bitset.Bitset) *bitset.Bitset {
 		return MatchFloat64Equal(s, val, bits, mask)
 	},
 }

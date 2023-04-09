@@ -5,6 +5,8 @@ package num
 
 import (
 	"sort"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 type Uint8Sorter []uint8
@@ -45,7 +47,7 @@ func UniqueUint8Slice(a []uint8) []uint8 {
 
 func IntersectSortedUint8(x, y, out []uint8) []uint8 {
 	if out == nil {
-		out = make([]uint8, 0, min(len(x), len(y)))
+		out = make([]uint8, 0, util.Min(len(x), len(y)))
 	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {

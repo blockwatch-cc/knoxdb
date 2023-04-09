@@ -5,6 +5,8 @@ package num
 
 import (
 	"sort"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 type Int32Sorter []int32
@@ -45,7 +47,7 @@ func UniqueInt32Slice(a []int32) []int32 {
 
 func IntersectSortedInt32(x, y, out []int32) []int32 {
 	if out == nil {
-		out = make([]int32, 0, min(len(x), len(y)))
+		out = make([]int32, 0, util.Min(len(x), len(y)))
 	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {

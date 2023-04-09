@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"sort"
 
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 const sizeStep int = 1 << 8 // 256
@@ -59,7 +59,7 @@ type Journal struct {
 	data    *Package         // journal pack storing live data
 	keys    journalEntryList // 0: pk, 1: index in journal; sorted by pk, always sorted
 	tomb    []uint64         // list of deleted primary keys, always sorted
-	deleted *vec.Bitset      // tracks which journal positions are in tomb
+	deleted *bitset.Bitset   // tracks which journal positions are in tomb
 	wal     *Wal             // write-ahead log (unused for now, will ensure the D in ACID)
 	prefix  string           // table name, used for debugging, maybe WAL file name
 }
@@ -84,7 +84,7 @@ func NewJournal(maxid uint64, size int, name string) *Journal {
 		data:    pkg,
 		keys:    make(journalEntryList, 0, roundSize(size)),
 		tomb:    make([]uint64, 0, roundSize(size)),
-		deleted: vec.NewCustomBitset(roundSize(size)).Grow(0),
+		deleted: bitset.NewCustomBitset(roundSize(size)).Grow(0),
 		prefix:  name,
 	}
 }
@@ -916,7 +916,7 @@ func (s dualSorter) Swap(i, j int) {
 // 3. data.Column(pkid) -> []uint64 (lookup pks at indexes)
 // 4. Joined sort index/pks by pk
 // 5. Return pk-sorted index list
-func (j *Journal) SortedIndexes(b *vec.Bitset) ([]int, []uint64) {
+func (j *Journal) SortedIndexes(b *bitset.Bitset) ([]int, []uint64) {
 	ds := dualSorter{
 		pk: make([]uint64, b.Count()),
 		id: b.Indexes(nil),
@@ -937,7 +937,7 @@ func (j *Journal) SortedIndexes(b *vec.Bitset) ([]int, []uint64) {
 	return ds.id, ds.pk
 }
 
-func (j *Journal) SortedIndexesReversed(b *vec.Bitset) ([]int, []uint64) {
+func (j *Journal) SortedIndexesReversed(b *bitset.Bitset) ([]int, []uint64) {
 	id, pk := j.SortedIndexes(b)
 	for i, j := 0, len(id)-1; i < j; i, j = i+1, j-1 {
 		id[i], id[j] = id[j], id[i]

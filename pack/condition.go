@@ -16,9 +16,9 @@ import (
 	"blockwatch.cc/knoxdb/util"
 
 	"blockwatch.cc/knoxdb/encoding/bignum"
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/decimal"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -155,8 +155,8 @@ func (c Condition) String() string {
 //
 // This implementation uses low level block vectors to efficiently execute
 // vectorized checks with custom assembly-optimized routines.
-func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
-	bits := vec.NewBitset(pkg.Len())
+func (c Condition) MatchPack(pkg *Package, mask *bitset.Bitset) *bitset.Bitset {
+	bits := bitset.NewBitset(pkg.Len())
 	block, _ := pkg.Block(c.Field.Index)
 	switch c.Mode {
 	case FilterModeEqual:

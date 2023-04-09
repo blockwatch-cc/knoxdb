@@ -1,50 +1,50 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package vec
+package bitset
 
 import (
 	"sort"
 )
 
 func MatchBoolEqual(src []bool, val bool, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+	bits = bits.Grow(len(src))
 	bits.cnt = int(matchBoolEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchBoolNotEqual(src []bool, val bool, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+	bits = bits.Grow(len(src))
 	bits.cnt = int(matchBoolNotEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchBoolLessThan(src []bool, val bool, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+	bits = bits.Grow(len(src))
 	bits.cnt = int(matchBoolLessThanGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchBoolLessThanEqual(src []bool, val bool, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+	bits = bits.Grow(len(src))
 	bits.cnt = int(matchBoolLessThanEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchBoolGreaterThan(src []bool, val bool, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+	bits = bits.Grow(len(src))
 	bits.cnt = int(matchBoolGreaterThanGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchBoolGreaterThanEqual(src []bool, val bool, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+	bits = bits.Grow(len(src))
 	bits.cnt = int(matchBoolGreaterThanEqualGeneric(src, val, bits.Bytes()))
 	return bits
 }
 
 func MatchBoolBetween(src []bool, a, b bool, bits, mask *Bitset) *Bitset {
-	bits = ensureBitfieldSize(bits, len(src))
+	bits = bits.Grow(len(src))
 	bits.cnt = int(matchBoolBetweenGeneric(src, a, b, bits.Bytes()))
 	return bits
 }

@@ -13,10 +13,10 @@ import (
 	"reflect"
 	"testing"
 
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/util"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 func bitsN(b int) func(n int) func() []uint64 {
@@ -138,7 +138,7 @@ func BenchmarkMatchUint64L2Unomp(b *testing.B) {
 
 	//bin.Encode(buf)
 
-	bits := vec.NewBitset(len(in))
+	bits := bitset.NewBitset(len(in))
 
 	b.Run(bm.name, func(b *testing.B) {
 		b.SetBytes(int64(8 * bm.size))
@@ -168,7 +168,7 @@ func BenchmarkMatchUint64L2Comp(b *testing.B) {
 
 	bin.Encode(buf)
 
-	bits := vec.NewBitset(len(in))
+	bits := bitset.NewBitset(len(in))
 
 	b.Run(bm.name, func(b *testing.B) {
 		b.SetBytes(int64(8 * bm.size))

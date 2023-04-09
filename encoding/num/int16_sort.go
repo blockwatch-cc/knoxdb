@@ -5,6 +5,8 @@ package num
 
 import (
 	"sort"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 type Int16Sorter []int16
@@ -45,7 +47,7 @@ func UniqueInt16Slice(a []int16) []int16 {
 
 func IntersectSortedInt16(x, y, out []int16) []int16 {
 	if out == nil {
-		out = make([]int16, 0, min(len(x), len(y)))
+		out = make([]int16, 0, util.Min(len(x), len(y)))
 	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {

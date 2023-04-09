@@ -2,7 +2,7 @@
 // Author: alex@blockwatch.cc
 //
 
-package vec
+package bitset
 
 import (
 	"math/rand"

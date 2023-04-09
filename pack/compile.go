@@ -11,10 +11,11 @@ import (
 	"blockwatch.cc/knoxdb/hash/xxhash"
 
 	"blockwatch.cc/knoxdb/encoding/bignum"
+	"blockwatch.cc/knoxdb/encoding/bitset"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/decimal"
+	"blockwatch.cc/knoxdb/encoding/dedup"
 	"blockwatch.cc/knoxdb/encoding/num"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -250,8 +251,8 @@ func (c *Condition) convertInputTypes() {
 		}
 	case FieldTypeBoolean:
 		if slice, ok := c.Value.([]bool); ok {
-			hasTrue := vec.Booleans.Contains(slice, true)
-			hasFalse := vec.Booleans.Contains(slice, false)
+			hasTrue := bitset.Booleans.Contains(slice, true)
+			hasFalse := bitset.Booleans.Contains(slice, false)
 			if hasTrue && hasTrue == hasFalse {
 				c.Value = []bool{false, true}
 				c.numValues = 2
@@ -271,11 +272,11 @@ func (c *Condition) sortValueSlice() {
 	switch c.Field.Type {
 	case FieldTypeBytes:
 		if slice := c.Value.([][]byte); slice != nil {
-			vec.Bytes.Sort(slice) // sorts in-place
+			dedup.Bytes.Sort(slice) // sorts in-place
 		}
 	case FieldTypeString:
 		if slice := c.Value.([]string); slice != nil {
-			vec.Strings.Sort(slice) // sorts in-place
+			dedup.Strings.Sort(slice) // sorts in-place
 		}
 	case FieldTypeUint64:
 		if slice := c.Value.([]uint64); slice != nil {
