@@ -1289,8 +1289,8 @@ func (t FieldType) In(v, in interface{}) bool {
 		val, list := v.(string), in.([]string)
 		return Strings.Contains(list, val)
 	case FieldTypeDatetime:
-		val, list := v.(time.Time), in.([]time.Time)
-		return Times.Contains(list, val)
+		val, list := v.(int64), in.([]int64)
+		return Int64.Contains(list, val)
 	case FieldTypeBoolean:
 		val, list := v.(bool), in.([]bool)
 		return Booleans.Contains(list, val)
@@ -1358,9 +1358,9 @@ func (t FieldType) InAt(pkg *Package, index, pos int, in interface{}) bool {
 		list := in.([]string)
 		return Strings.Contains(list, val)
 	case FieldTypeDatetime:
-		val, _ := pkg.TimeAt(index, pos)
-		list := in.([]time.Time)
-		return Times.Contains(list, val)
+		val, _ := pkg.Int64At(index, pos)
+		list := in.([]int64)
+		return Int64.Contains(list, val)
 	case FieldTypeBoolean:
 		val, _ := pkg.BoolAt(index, pos)
 		list := in.([]bool)
@@ -1565,7 +1565,7 @@ func (t FieldType) InBetween(slice, from, to interface{}) bool {
 		return Strings.ContainsRange(slice.([]string), from.(string), to.(string))
 
 	case FieldTypeDatetime:
-		return Times.ContainsRange(slice.([]time.Time), from.(time.Time), to.(time.Time))
+		return Int64.ContainsRange(slice.([]int64), from.(int64), to.(int64))
 
 	case FieldTypeBoolean:
 		return Booleans.ContainsRange(slice.([]bool), from.(bool), to.(bool))
