@@ -15,6 +15,7 @@ import (
 	"github.com/echa/log"
 	bolt "go.etcd.io/bbolt"
 
+	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/filter/bloom"
 	"blockwatch.cc/knoxdb/hash/xxhashVec"
 	"blockwatch.cc/knoxdb/pack"
@@ -146,7 +147,7 @@ func run() error {
 		maxid = util.MaxU32(maxid, maxVal)
 
 		realBits := vec.NewBitset(int(maxVal))
-		for _, v := range block.Uint32 {
+		for _, v := range block.Slice().([]uint32) {
 			realBits.Set(int(v))
 		}
 		reals = append(reals, realBits)
@@ -187,12 +188,12 @@ func run() error {
 	// - number of extra packs read over optimum
 	// - percent of extra packs vs optimal packs read
 	var (
-		pctStats       vec.Float64Reducer
+		pctStats       num.Float64Reducer
 		optimalMatches int64
 		bloomMatches   int64
 		noMatches      int64
 	)
-	absStats := vec.NewWindowInt64Reducer(int(maxid))
+	absStats := num.NewWindowInt64Reducer(int(maxid))
 	for id := uint32(1); id <= maxid; id++ {
 		var optimal, bloomed int64
 		var h [2]uint32

@@ -506,12 +506,20 @@ func (t *Table) Database() *DB {
 	return t.db
 }
 
+func (t *Table) Cache() rclru.Cache[uint64, block.Block] {
+	return t.bcache
+}
+
 func (t *Table) Options() Options {
 	return t.opts
 }
 
 func (t *Table) Indexes() IndexList {
 	return t.indexes
+}
+
+func (t *Table) Packs() PackInfoList {
+	return t.packidx.packs
 }
 
 func (t *Table) Lock() {
@@ -3093,6 +3101,10 @@ func (t *Table) cachekey(key []byte) string {
 	return t.name + "/" + hex.EncodeToString(key)
 }
 
+func (t *Table) LoadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
+	return t.loadSharedPack(tx, id, touch, fields)
+}
+
 func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
 	if len(fields) == 0 {
 		fields = t.fields
@@ -3117,7 +3129,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		if !fields.Contains(v.Name) {
 			continue
 		}
-		cachekey := encodeBlockKey(id, i)
+		cachekey := EncodeBlockKey(id, i)
 
 		if b, ok := cachefn(cachekey); ok {
 			pkg.blocks[i] = b
@@ -3151,7 +3163,7 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 		for i, v := range pkg2.blocks {
 			if v != nil {
 				v.IncRef()
-				t.bcache.Add(encodeBlockKey(id, i), v)
+				t.bcache.Add(EncodeBlockKey(id, i), v)
 			}
 		}
 	}
@@ -3175,7 +3187,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 
 	var loadField FieldList
 	for i, v := range pkg.fields {
-		cachekey := encodeBlockKey(id, i)
+		cachekey := EncodeBlockKey(id, i)
 		if b, ok := t.bcache.Get(cachekey); ok {
 			pkg.blocks[i] = b
 		} else {
@@ -3327,6 +3339,10 @@ func (t *Table) makePackage() interface{} {
 
 func (t *Table) newPackage() *Package {
 	return t.packPool.Get().(*Package)
+}
+
+func (t *Table) ReleaseSharedPack(pkg *Package) {
+	t.releaseSharedPack(pkg)
 }
 
 func (t *Table) releaseSharedPack(pkg *Package) {

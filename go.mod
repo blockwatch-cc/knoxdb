@@ -16,6 +16,7 @@ require (
 require (
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/frankban/quicktest v1.10.0 // indirect
+	github.com/golang/snappy v0.0.4
 	github.com/kr/pretty v0.2.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect

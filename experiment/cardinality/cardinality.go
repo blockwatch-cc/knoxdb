@@ -14,10 +14,10 @@ import (
 	"github.com/echa/log"
 	bolt "go.etcd.io/bbolt"
 
+	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
 	"blockwatch.cc/knoxdb/util"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -114,8 +114,8 @@ func run() error {
 
 	count := 0
 	start := time.Now()
-	stats := make([]vec.Uint64Reducer, len(table.Fields()))
-	errors := make([]vec.Uint64Reducer, len(table.Fields()))
+	stats := make([]num.Uint64Reducer, len(table.Fields()))
+	errors := make([]num.Uint64Reducer, len(table.Fields()))
 	bloomSizeErr := make([][2]int, len(table.Fields()))
 	fields := table.Fields()
 	u64 := make([]uint64, 0, 1<<PackSizeLog2)
@@ -131,7 +131,7 @@ func run() error {
 			est := fields[i].Type.EstimateCardinality(v, prec)
 
 			// true values
-			u64 = vec.Uint64.Unique(v.Hashes(u64))
+			u64 = num.Uint64.Unique(v.Hashes(u64))
 
 			// add to stats and errors
 			stats[i].Add(uint64(est))
@@ -179,7 +179,7 @@ func run() error {
 // same name as the file's basename (without extension). Optional parameter `opts`
 // allows to configure settings of the underlying boltdb engine.
 //
-// Example
+// # Example
 //
 // ```
 // // opens file `op.db` in path `./db` and looks for table `op`

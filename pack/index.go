@@ -419,6 +419,10 @@ func (idx *Index) Options() Options {
 	return idx.opts
 }
 
+func (idx *Index) Packs() PackInfoList {
+	return idx.packidx.packs
+}
+
 func (idx *Index) PurgeCache() {
 	idx.cache.Purge()
 }
@@ -1358,6 +1362,10 @@ func (idx Index) cachekey(key []byte) string {
 	return string(idx.key) + "/" + hex.EncodeToString(key)
 }
 
+func (idx *Index) LoadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error) {
+	return idx.loadSharedPack(tx, id, touch)
+}
+
 func (idx *Index) loadSharedPack(tx *Tx, id uint32, touch bool) (*Package, error) {
 	// try cache first
 	key := encodePackKey(id)
@@ -1474,6 +1482,10 @@ func (idx *Index) makePackage() interface{} {
 
 func (idx *Index) newPackage() *Package {
 	return idx.packPool.Get().(*Package)
+}
+
+func (idx *Index) ReleaseSharedPack(pkg *Package) {
+	idx.releaseSharedPack(pkg)
 }
 
 func (idx *Index) releaseSharedPack(pkg *Package) {

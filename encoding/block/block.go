@@ -215,6 +215,10 @@ type Block interface {
 	SetFlags(FieldFlags)
 	Compression() Compression
 	SetCompression(Compression)
+	IsInt() bool
+	IsSint() bool
+	IsUint() bool
+	IsFloat() bool
 
 	Len() int
 	Cap() int

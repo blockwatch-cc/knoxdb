@@ -16,9 +16,10 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/dedup"
+	"blockwatch.cc/knoxdb/encoding/num"
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
-	"blockwatch.cc/knoxdb/vec"
 )
 
 const (
@@ -115,12 +116,12 @@ func run() error {
 
 	count := 0
 	start := time.Now()
-	dupRows := make([]vec.Uint64Reducer, len(table.Fields()))
-	dupBytes := make([]vec.Uint64Reducer, len(table.Fields()))
-	optBlocksMem := make([]vec.Uint64Reducer, len(table.Fields()))
-	optBlocksStore := make([]vec.Uint64Reducer, len(table.Fields()))
-	nowBlocksMem := make([]vec.Uint64Reducer, len(table.Fields()))
-	nowBlocksStore := make([]vec.Uint64Reducer, len(table.Fields()))
+	dupRows := make([]num.Uint64Reducer, len(table.Fields()))
+	dupBytes := make([]num.Uint64Reducer, len(table.Fields()))
+	optBlocksMem := make([]num.Uint64Reducer, len(table.Fields()))
+	optBlocksStore := make([]num.Uint64Reducer, len(table.Fields()))
+	nowBlocksMem := make([]num.Uint64Reducer, len(table.Fields()))
+	nowBlocksStore := make([]num.Uint64Reducer, len(table.Fields()))
 	fields := table.Fields()
 	u64 := make([]uint64, 0, 1<<PackSizeLog2)
 	w := bytes.NewBuffer(nil)
@@ -141,10 +142,10 @@ func run() error {
 			dupBytes[i].Add(db)
 
 			// optimize byte blocks and keep stats
-			if v.Type() == block.BlockBytes || v.Type() == block.BlockString {
+			if v.Type() == block.BlockTypeBytes || v.Type() == block.BlockTypeString {
 				st := time.Now()
-				// a := dedup.NewByteArrayFromBytes(v.Bytes)
-				b := v.Bytes.Optimize()
+				a := dedup.NewByteArrayFromBytes(v.Slice().([][]byte))
+				b := a.Optimize()
 				snap := block.NewSnappyWriter(w)
 				_, err := b.WriteTo(snap)
 				if err != nil {

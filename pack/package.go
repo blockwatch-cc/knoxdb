@@ -62,6 +62,10 @@ func (p *Package) Key() []byte {
 	return encodePackKey(p.key)
 }
 
+func (p *Package) KeyUint32() uint32 {
+	return p.key
+}
+
 func (p *Package) WithKey(k uint32) *Package {
 	p.key = k
 	return p
@@ -107,7 +111,7 @@ func encodePackKey(key uint32) []byte {
 	}
 }
 
-func encodeBlockKey(packkey uint32, col int) uint64 {
+func EncodeBlockKey(packkey uint32, col int) uint64 {
 	return (uint64(packkey) << 32) | uint64(col&0xffffffff)
 }
 

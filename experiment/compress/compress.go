@@ -19,6 +19,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	"blockwatch.cc/knoxdb/encoding/csv"
+	"blockwatch.cc/knoxdb/experiment/exp"
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
 	"blockwatch.cc/knoxdb/util"
@@ -182,10 +183,13 @@ func run() error {
 	if tablename == "" {
 		tablename = name
 	}
-	table, err := db.Table(tablename)
+	tmp, err := db.Table(tablename)
 	if err != nil {
 		return fmt.Errorf("opening table '%s': %v", tablename, err)
 	}
+
+	var table exp.MyTable
+	table.Table = *tmp
 
 	out := io.Writer(os.Stdout)
 	mode := pack.DumpModeDec
