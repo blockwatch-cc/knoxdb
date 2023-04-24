@@ -131,8 +131,33 @@ func run() error {
 			for j, h := range v.Hashes(u64) {
 				if _, ok := dup[h]; ok {
 					dr++
-					// FIXME: FieldType.Bytes is deprecated
-					db += uint64(len(fields[i].Type.Bytes(v.Elem(j))))
+					switch fields[i].Type {
+					case pack.FieldTypeDatetime,
+						pack.FieldTypeInt64,
+						pack.FieldTypeUint64,
+						pack.FieldTypeFloat64,
+						pack.FieldTypeDecimal64:
+						db += 8
+					case pack.FieldTypeBoolean:
+						db++
+					case pack.FieldTypeInt32,
+						pack.FieldTypeUint32,
+						pack.FieldTypeFloat32,
+						pack.FieldTypeDecimal32:
+						db += 4
+					case pack.FieldTypeInt16, pack.FieldTypeUint16:
+						db += 2
+					case pack.FieldTypeInt8, pack.FieldTypeUint8:
+						db++
+					case pack.FieldTypeInt256, pack.FieldTypeDecimal256:
+						db += 32
+					case pack.FieldTypeInt128, pack.FieldTypeDecimal128:
+						db += 16
+					case pack.FieldTypeString:
+						db += uint64(len(v.Elem(j).(string)))
+					case pack.FieldTypeBytes:
+						db += uint64(len(v.Elem(j).([]byte)))
+					}
 				} else {
 					dup[h] = struct{}{}
 				}
@@ -148,7 +173,7 @@ func run() error {
 				snap := block.NewSnappyWriter(w)
 				_, err := b.WriteTo(snap)
 				if err != nil {
-					return fmt.Errorf("%04x/%d: %v", pkg.Key, i, err)
+					return fmt.Errorf("%04x/%d: %v", pkg.Key(), i, err)
 				}
 				snap.Close()
 				compressedSize := w.Len()
