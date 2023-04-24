@@ -1434,18 +1434,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					continue
 
 				} else {
-					// Don't insert when pack is full to prevent buffer overflows. This may
-					// happen when the current full pack was selected for a prior update,
-					// but no re-selection happened before this insert.
-					//
-					// Reason is that the above boundary check does not always work, in
-					// particular for the edge case of the very last pack because
-					// nextmin = 0 in this case.
-					//
-					if pkg.IsFull() && lastpack == t.packidx.Len() {
-						break
-					}
-
+					// detect out of order inserts
 					isOOInsert = key.pk < packmax
 
 					// split on out-of-order inserts into a full pack
@@ -1471,6 +1460,18 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 						lastpack = -1 // force pack load in next round
 						pkg.Release()
 						pkg = nil
+						break
+					}
+
+					// Don't insert when pack is full to prevent buffer overflows. This may
+					// happen when the current full pack was selected for a prior update,
+					// but no re-selection happened before this insert.
+					//
+					// Reason is that the above boundary check does not always work, in
+					// particular for the edge case of the very last pack because
+					// nextmin = 0 in this case.
+					//
+					if pkg.IsFull() {
 						break
 					}
 
