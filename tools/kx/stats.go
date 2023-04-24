@@ -28,7 +28,8 @@ func boltStats(name string) error {
 	}
 
 	var (
-		p = util.PrettyInt
+		p64 = util.PrettyInt64
+		p   = util.PrettyInt
 		// pi = util.PrettyInt
 	)
 
@@ -60,22 +61,22 @@ func boltStats(name string) error {
 		fmt.Printf("OpenTxN:           %10s  (number of currently open read transactions)\n", p(dbstats.OpenTxN))
 		// Ongong TX stats
 		// Page statistics.
-		fmt.Printf("PageCount:         %10s  (number of page allocations)\n", p(dbstats.TxStats.PageCount))
-		fmt.Printf("PageAlloc:         %10s  (total bytes allocated)\n", p(dbstats.TxStats.PageAlloc))
+		fmt.Printf("PageCount:         %10s  (number of page allocations)\n", p64(dbstats.TxStats.PageCount))
+		fmt.Printf("PageAlloc:         %10s  (total bytes allocated)\n", p64(dbstats.TxStats.PageAlloc))
 		// Cursor statistics.
-		fmt.Printf("CursorCount:       %10s  (number of cursors created)\n", p(dbstats.TxStats.CursorCount))
+		fmt.Printf("CursorCount:       %10s  (number of cursors created)\n", p64(dbstats.TxStats.CursorCount))
 		// Node statistics
-		fmt.Printf("NodeCount:         %10s  (number of node allocations)\n", p(dbstats.TxStats.NodeCount))
-		fmt.Printf("NodeDeref:         %10s  (number of node dereferences)\n", p(dbstats.TxStats.NodeDeref))
+		fmt.Printf("NodeCount:         %10s  (number of node allocations)\n", p64(dbstats.TxStats.NodeCount))
+		fmt.Printf("NodeDeref:         %10s  (number of node dereferences)\n", p64(dbstats.TxStats.NodeDeref))
 		// Rebalance statistics.
-		fmt.Printf("Rebalance:         %10s  (number of node rebalances)\n", p(dbstats.TxStats.Rebalance))
+		fmt.Printf("Rebalance:         %10s  (number of node rebalances)\n", p64(dbstats.TxStats.Rebalance))
 		fmt.Printf("RebalanceTime:     %11s (total time spent rebalancing)\n", dbstats.TxStats.RebalanceTime)
 		// Split/Spill statistics.
-		fmt.Printf("Split:             %10s  (number of nodes split)\n", p(dbstats.TxStats.Split))
-		fmt.Printf("Spill:             %10s  (number of nodes spilled)\n", p(dbstats.TxStats.Spill))
+		fmt.Printf("Split:             %10s  (number of nodes split)\n", p64(dbstats.TxStats.Split))
+		fmt.Printf("Spill:             %10s  (number of nodes spilled)\n", p64(dbstats.TxStats.Spill))
 		fmt.Printf("SpillTime:         %11s (total time spent spilling)\n", dbstats.TxStats.SpillTime)
 		// Write statistics.
-		fmt.Printf("Write:             %10s  (number of writes performed)\n", p(dbstats.TxStats.Write))
+		fmt.Printf("Write:             %10s  (number of writes performed)\n", p64(dbstats.TxStats.Write))
 		fmt.Printf("WriteTime:         %11s (total time spent writing to disk)\n", dbstats.TxStats.WriteTime)
 	}
 
