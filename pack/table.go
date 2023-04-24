@@ -1442,12 +1442,39 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					// particular for the edge case of the very last pack because
 					// nextmin = 0 in this case.
 					//
-					if pkg.IsFull() {
+					if pkg.IsFull() && lastpack == t.packidx.Len() {
+						break
+					}
+
+					isOOInsert = key.pk < packmax
+
+					// split on out-of-order inserts into a full pack
+					if isOOInsert && pkg.IsFull() {
+						log.Warnf("flush: split %s table pack %d [%d:%d] at out-of-order insert key %d ",
+							t.name, pkg.key, packmin, packmax, key.pk)
+
+						// keep sorted
+						if needsort {
+							pkg.PkSort()
+							needsort = false
+						}
+						// split pack
+						n, err := t.splitPack(tx, pkg)
+						if err != nil {
+							return err
+						}
+						nParts++
+						nBytes += n
+
+						// leave journal for-loop to trigger new pack selection
+						loop--        // discount this round from circuit breaker check
+						lastpack = -1 // force pack load in next round
+						pkg.Release()
+						pkg = nil
 						break
 					}
 
 					// insert new record
-					isOOInsert = key.pk < packmax
 					if isOOInsert {
 						// insert in-place (EXPENSIVE!)
 						// log.Debugf("Insert key %d to pack %d", key.pk, lastpack)
@@ -1471,12 +1498,11 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 							return err
 						}
 					}
-
 				}
 				nAdd++
 				pAdd++
 
-				// save or split when full
+				// save when full
 				if pkg.Len() >= packsz {
 					// keep sorted
 					if needsort {
@@ -1484,32 +1510,14 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 						needsort = false
 					}
 
-					// allow ooo-inserts by splitting full packs
-					if lastpack < t.packidx.Len() && isOOInsert {
-						// will fragment when pks are non-monotone and previous packs
-						// are full (the next created pack will be appended at end of
-						// list). This especially hurts when deletion of a middle
-						// pack is combined with re-inserting its values later.
-						//
-						// warn, but continue appending below
-						// log.Warnf("flush: %s table splitting full pack %d (%d/%d) len %d with range [%d:%d] on out-of-order insert pk %d",
-						// 	t.name, pkg.Key(), lastpack, t.packidx.Len(), pkg.Len(), packmin, packmax, key.pk)
-						n, err := t.splitPack(tx, pkg)
-						if err != nil {
-							return err
-						}
-						nParts++
-						nBytes += n
-					} else {
-						// store pack, will update t.packidx
-						// log.Debugf("%s: storing pack %d with %d records at key %d", t.name, lastpack, pkg.Len(), pkg.key)
-						n, err := t.storePack(tx, pkg)
-						if err != nil {
-							return err
-						}
-						nParts++
-						nBytes += n
+					// store pack, will update t.packidx
+					// log.Debugf("%s: storing pack %d with %d records at key %d", t.name, lastpack, pkg.Len(), pkg.key)
+					n, err := t.storePack(tx, pkg)
+					if err != nil {
+						return err
 					}
+					nParts++
+					nBytes += n
 
 					// commit tx after each N written packs
 					if tx.Pending() >= txMaxSize {
@@ -3312,8 +3320,13 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-
 	newpkg.Release()
+
+	// drop origial pack blocks from cache
+	for i := range pkg.fields {
+		t.bcache.Remove(encodeBlockKey(pkg.key, i))
+	}
+
 	return n + m, nil
 }
 
