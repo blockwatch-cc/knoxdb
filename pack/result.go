@@ -181,6 +181,10 @@ func (r *Result) Rows() int {
 	return r.pkg.nValues
 }
 
+func (r *Result) Row(n int) Row {
+	return Row{r, n}
+}
+
 func (r *Result) DecodeAt(n int, val interface{}) error {
 	if r.pkg == nil {
 		return ErrResultClosed
