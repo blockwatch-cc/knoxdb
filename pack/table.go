@@ -1136,9 +1136,10 @@ func (t *Table) Flush(ctx context.Context) error {
 // merge journal entries into data partitions, repack, store, and update all indexes
 func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 	var (
-		nParts, nBytes, nUpd, nAdd, nDel int                          // total stats counters
-		pUpd, pAdd, pDel                 int                          // per-pack stats counters
-		start                            time.Time = time.Now().UTC() // logging
+		nParts, nBytes, nUpd, nAdd, nDel, n int                          // total stats counters
+		pUpd, pAdd, pDel                    int                          // per-pack stats counters
+		start                               time.Time = time.Now().UTC() // logging
+		err                                 error
 	)
 
 	atomic.AddInt64(&t.stats.FlushCalls, 1)
@@ -1161,6 +1162,16 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		needsort                             bool     // true if current pack needs sort before store
 		loop, maxloop                        int      // circuit breaker
 	)
+
+	// on error roll back table metadata to last valid value on storage
+	defer func() {
+		if e := recover(); e != nil || err != nil {
+			log.Debugf("pack: %s table restore metadata on error", t.name)
+			if err := t.loadPackInfo(tx.tx); err != nil {
+				log.Errorf("pack: %s table metadata rollback on error failed: %v", t.name, err)
+			}
+		}
+	}()
 
 	// init global max
 	packsz = t.opts.PackSize()
@@ -1227,7 +1238,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					pkg.PkSort()
 				}
 				// log.Debugf("Storing pack %d with key %d with %d records", lastpack, pkg.key, pkg.Len())
-				n, err := t.storePack(tx, pkg)
+				n, err = t.storePack(tx, pkg)
 				if err != nil {
 					return err
 				}
@@ -1235,10 +1246,10 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				nBytes += n
 				// commit storage tx after each N written packs
 				if tx.Pending() >= txMaxSize {
-					if err := t.storePackInfo(tx.tx); err != nil {
+					if err = t.storePackInfo(tx.tx); err != nil {
 						return err
 					}
-					if err := tx.CommitAndContinue(); err != nil {
+					if err = tx.CommitAndContinue(); err != nil {
 						return err
 					}
 					// TODO: for a safe return we must also
@@ -1265,7 +1276,6 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		if pkg == nil {
 			if nextpack < t.packidx.Len() {
 				// log.Debugf("%s: loading pack %d/%d key=%d len=%d", t.name, nextpack, t.packidx.Len(), t.packidx.packs[nextpack].Key, t.packidx.packs[nextpack].NValues)
-				var err error
 				pkg, err = t.loadWritablePack(tx, t.packidx.packs[nextpack].Key)
 				if err != nil && err != ErrPackNotFound {
 					return err
@@ -1292,7 +1302,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 			log.Errorf("pack: %s stopping infinite flush loop %d: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d",
 				t.name, loop, tpos, tlen, jpos, jlen, lastpack, t.packidx.Len(), nextid,
 			)
-			return fmt.Errorf("pack: %s infinite flush loop detected. Database is likely corrupted.", t.name)
+			err = fmt.Errorf("pack: %s infinite flush loop detected. Database is likely corrupted.", t.name)
+			return err
 		} else if loop == maxloop {
 			lvl := log.Level()
 			log.SetLevel(levelDebug)
@@ -1340,7 +1351,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 				// remove records from all indexes
 				for _, idx := range t.indexes {
-					if err := idx.RemoveTx(tx, pkg, ppos, n); err != nil {
+					if err = idx.RemoveTx(tx, pkg, ppos, n); err != nil {
 						return err
 					}
 				}
@@ -1389,7 +1400,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 				// stop on pack boundary
 				if nextmin > 0 && key.pk >= nextmin {
-					// best, min, max, _ := t.findBestPack(key.pk)
+					best, min, max, _ := t.findBestPack(key.pk)
 					// log.Debugf("Key %d does not fit into pack %d [%d:%d], suggested %d/%d [%d:%d] nextmin=%d",
 					// 	key.pk, lastpack, packmin, packmax, best, t.packidx.Len(), min, max, nextmin)
 					break
@@ -1413,18 +1424,18 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 							jpack, idx.Field.Index, key.idx,
 						) {
 							// remove index for original data
-							if err := idx.RemoveTx(tx, pkg, offs, 1); err != nil {
+							if err = idx.RemoveTx(tx, pkg, offs, 1); err != nil {
 								return err
 							}
 							// add new index record
-							if err := idx.AddTx(tx, jpack, key.idx, 1); err != nil {
+							if err = idx.AddTx(tx, jpack, key.idx, 1); err != nil {
 								return err
 							}
 						}
 					}
 
 					// overwrite original
-					if err := pkg.ReplaceFrom(jpack, offs, key.idx, 1); err != nil {
+					if err = pkg.ReplaceFrom(jpack, offs, key.idx, 1); err != nil {
 						return err
 					}
 					nUpd++
@@ -1448,7 +1459,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 							needsort = false
 						}
 						// split pack
-						n, err := t.splitPack(tx, pkg)
+						n, err = t.splitPack(tx, pkg)
 						if err != nil {
 							return err
 						}
@@ -1456,7 +1467,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 						nBytes += n
 
 						// leave journal for-loop to trigger new pack selection
-						loop--        // discount this round from circuit breaker check
+						loop = 0      // reset circuit breaker check
 						lastpack = -1 // force pack load in next round
 						pkg.Release()
 						pkg = nil
@@ -1479,14 +1490,14 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 					if isOOInsert {
 						// insert in-place (EXPENSIVE!)
 						// log.Debugf("Insert key %d to pack %d", key.pk, lastpack)
-						if err := pkg.InsertFrom(jpack, last, key.idx, 1); err != nil {
+						if err = pkg.InsertFrom(jpack, last, key.idx, 1); err != nil {
 							return err
 						}
 						packmin = util.NonZeroMinU64(packmin, key.pk)
 					} else {
 						// append new records
 						// log.Debugf("Append key %d to pack %d", key.pk, lastpack)
-						if err := pkg.AppendFrom(jpack, key.idx, 1); err != nil {
+						if err = pkg.AppendFrom(jpack, key.idx, 1); err != nil {
 							return err
 						}
 						packmax = util.MaxU64(packmax, key.pk)
@@ -1495,7 +1506,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 					// add to indexes
 					for _, idx := range t.indexes {
-						if err := idx.AddTx(tx, jpack, key.idx, 1); err != nil {
+						if err = idx.AddTx(tx, jpack, key.idx, 1); err != nil {
 							return err
 						}
 					}
@@ -1513,7 +1524,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 					// store pack, will update t.packidx
 					// log.Debugf("%s: storing pack %d with %d records at key %d", t.name, lastpack, pkg.Len(), pkg.key)
-					n, err := t.storePack(tx, pkg)
+					n, err = t.storePack(tx, pkg)
 					if err != nil {
 						return err
 					}
@@ -1522,10 +1533,10 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 					// commit tx after each N written packs
 					if tx.Pending() >= txMaxSize {
-						if err := t.storePackInfo(tx.tx); err != nil {
+						if err = t.storePackInfo(tx.tx); err != nil {
 							return err
 						}
-						if err := tx.CommitAndContinue(); err != nil {
+						if err = tx.CommitAndContinue(); err != nil {
 							return err
 						}
 						// TODO: for a safe return we must also
@@ -1557,7 +1568,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 			needsort = false
 		}
 		// log.Debugf("Storing final pack %d with %d records at key %d", lastpack, pkg.Len(), pkg.key)
-		n, err := t.storePack(tx, pkg)
+		n, err = t.storePack(tx, pkg)
 		if err != nil {
 			return err
 		}
@@ -1573,7 +1584,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 	// flush indexes
 	for _, idx := range t.indexes {
-		if err := idx.FlushTx(ctx, tx); err != nil {
+		if err = idx.FlushTx(ctx, tx); err != nil {
 			return err
 		}
 	}
@@ -1587,7 +1598,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 	// store table metadata
 	if t.meta.dirty {
-		buf, err := json.Marshal(t.meta)
+		var buf []byte
+		buf, err = json.Marshal(t.meta)
 		if err != nil {
 			return err
 		}
@@ -1599,7 +1611,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 	}
 
 	// store pack headers
-	if err := t.storePackInfo(tx.tx); err != nil {
+	if err = t.storePackInfo(tx.tx); err != nil {
 		return err
 	}
 

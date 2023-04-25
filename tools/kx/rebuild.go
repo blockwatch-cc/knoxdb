@@ -30,9 +30,12 @@ func rebuildStatistics(args Args) error {
     if err != nil {
         return err
     }
-    // make sure source table journals are flushed
-    if err := table.Flush(context.Background()); err != nil {
-        return err
+
+    if !noflush {
+        // make sure source table journals are flushed
+        if err := table.Flush(context.Background()); err != nil {
+            return err
+        }
     }
     stats := table.Stats()
     table.Close()
@@ -47,7 +50,7 @@ func rebuildStatistics(args Args) error {
         if meta == nil {
             return fmt.Errorf("missing table metdata bucket")
         }
-        err := meta.DeleteBucket([]byte("_headers"))
+        err := meta.DeleteBucket([]byte("_packinfo"))
         if !store.IsError(err, store.ErrBucketNotFound) {
             return err
         }

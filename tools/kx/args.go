@@ -24,6 +24,7 @@ var (
 	verbose bool
 	debug   bool
 	trace   bool
+	noflush bool
 	cmdinfo = `
 Available Commands:
   stats       show boltdb stats
@@ -40,6 +41,7 @@ func init() {
 	flags.BoolVar(&verbose, "v", false, "be verbose")
 	flags.BoolVar(&debug, "vv", false, "debug mode")
 	flags.BoolVar(&trace, "vvv", false, "trace mode")
+	flags.BoolVar(&noflush, "noflush", false, "disable journal flush")
 }
 
 func printhelp() {
