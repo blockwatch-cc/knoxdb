@@ -1400,7 +1400,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 				// stop on pack boundary
 				if nextmin > 0 && key.pk >= nextmin {
-					best, min, max, _ := t.findBestPack(key.pk)
+					// best, min, max, _ := t.findBestPack(key.pk)
 					// log.Debugf("Key %d does not fit into pack %d [%d:%d], suggested %d/%d [%d:%d] nextmin=%d",
 					// 	key.pk, lastpack, packmin, packmax, best, t.packidx.Len(), min, max, nextmin)
 					break
