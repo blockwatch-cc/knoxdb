@@ -365,10 +365,9 @@ func (c array) String() string {
 
 type bitmap []uint16
 
-var bitmapMask []uint16
+var bitmapMask [16]uint16
 
 func init() {
-	bitmapMask = make([]uint16, 16)
 	for i := 0; i < 16; i++ {
 		bitmapMask[i] = 1 << (15 - i)
 	}
@@ -466,15 +465,10 @@ func (b bitmap) rank(x uint16) int {
 }
 
 // TODO: This can perhaps be using SIMD instructions.
-func (b bitmap) andBitmap(other bitmap) []uint16 {
-	out := make([]uint16, maxContainerSize)
+func (b bitmap) andBitmap(other bitmap, out []uint16) []uint16 {
 	out[indexSize] = maxContainerSize
 	out[indexType] = typeBitmap
-	var num int
-	for i := int(startIdx); i < len(b); i++ {
-		out[i] = b[i] & other[i]
-		num += bits.OnesCount16(out[i])
-	}
+	num := bitmapAnd(b[startIdx:], other[startIdx:], out[startIdx:])
 	setCardinality(out, num)
 	return out
 }
@@ -492,21 +486,11 @@ func (b bitmap) orBitmap(other bitmap, buf []uint16, runMode int) []uint16 {
 		// do nothing. bitmap is already full.
 
 	} else if runMode&runLazy > 0 || num == invalidCardinality {
-		data := buf[startIdx:]
-		for i, v := range other[startIdx:] {
-			data[i] |= v
-		}
+		bitmapOr(buf[startIdx:], other[startIdx:])
 		setCardinality(buf, invalidCardinality)
 
 	} else {
-		var num int
-		data := buf[startIdx:]
-		for i, v := range other[startIdx:] {
-			data[i] |= v
-			// We are going to iterate over the entire container. So, we can
-			// just recount the cardinality, starting from num=0.
-			num += bits.OnesCount16(data[i])
-		}
+		num := bitmapOr(buf[startIdx:], other[startIdx:])
 		setCardinality(buf, num)
 	}
 	if runMode&runInline > 0 {
@@ -516,12 +500,7 @@ func (b bitmap) orBitmap(other bitmap, buf []uint16, runMode int) []uint16 {
 }
 
 func (b bitmap) andNotBitmap(other bitmap) []uint16 {
-	var num int
-	data := b[startIdx:]
-	for i, v := range other[startIdx:] {
-		data[i] = data[i] ^ (data[i] & v)
-		num += bits.OnesCount16(data[i])
-	}
+	num := bitmapAndNot(b[startIdx:], other[startIdx:], b[startIdx:])
 	setCardinality(b, num)
 	return b
 }
@@ -712,7 +691,7 @@ func containerOr(ac, bc, buf []uint16, runMode int) []uint16 {
 	panic("containerOr: We should not reach here")
 }
 
-func containerAnd(ac, bc []uint16) []uint16 {
+func containerAnd(ac, bc, buf []uint16) []uint16 {
 	at := ac[indexType]
 	bt := bc[indexType]
 
@@ -735,7 +714,7 @@ func containerAnd(ac, bc []uint16) []uint16 {
 	if at == typeBitmap && bt == typeBitmap {
 		left := bitmap(ac)
 		right := bitmap(bc)
-		return left.andBitmap(right)
+		return left.andBitmap(right, buf)
 	}
 	panic("containerAnd: We should not reach here")
 }

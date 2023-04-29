@@ -608,6 +608,12 @@ func (ra *Bitmap) RemoveRange(lo, hi uint64) {
 	}
 }
 
+// Capacity returns the underlying arrays uint16 capacity.
+// used to reduce amount of reallocations.
+func (ra *Bitmap) Capacity() int {
+	return cap(ra.data)
+}
+
 func (ra *Bitmap) Reset() {
 	// reset ra.data to size enough for one container and corresponding key.
 	// 2 u64 is needed for header and another 2 u16 for the key 0.
@@ -790,9 +796,13 @@ func (ra *Bitmap) And(bm *Bitmap) {
 			off = b.keys.val(bi)
 			bc := b.getContainer(off)
 
+			var buf []uint16
+			if ac[indexType] == typeBitmap && bc[indexType] == typeBitmap {
+				buf = make([]uint16, maxContainerSize)
+			}
 			// do the intersection
 			// TODO: See if we can do containerAnd operation in-place.
-			c := containerAnd(ac, bc)
+			c := containerAnd(ac, bc, buf)
 
 			// create a new container and update the key offset to this container.
 			offset := a.newContainer(uint16(len(c)))
@@ -831,7 +841,11 @@ func And(a, b *Bitmap) *Bitmap {
 			off = b.keys.val(bi)
 			bc := b.getContainer(off)
 
-			outc := containerAnd(ac, bc)
+			var buf []uint16
+			if ac[indexType] == typeBitmap && bc[indexType] == typeBitmap {
+				buf = make([]uint16, maxContainerSize)
+			}
+			outc := containerAnd(ac, bc, buf)
 			if getCardinality(outc) > 0 {
 				offset := res.newContainer(uint16(len(outc)))
 				copy(res.data[offset:], outc)
@@ -859,19 +873,15 @@ func (ra *Bitmap) AndNot(bm *Bitmap) {
 	for ai < a.keys.numKeys() && bi < b.keys.numKeys() {
 		ak := a.keys.key(ai)
 		bk := b.keys.key(bi)
-		// fmt.Printf("AND_NOT ai=%d bi=%d ak=%#8x bk=%#8x\n", ai, bi, ak, bk)
 		if ak == bk {
 			off := a.keys.val(ai)
 			ac := a.getContainer(off)
-			// fmt.Printf("> A key= %#8x offs=%d typ=%d sz=%d card=%d\n", ak, off, ac[indexType], ac[indexSize], getCardinality(ac))
 
 			off = b.keys.val(bi)
 			bc := b.getContainer(off)
-			// fmt.Printf("> B key= %#8x offs=%d typ=%d sz=%d card=%d\n", bk, off, bc[indexType], bc[indexSize], getCardinality(bc))
 
 			// TODO: See if we can do containerAndNot operation in-place.
 			c := containerAndNot(ac, bc, buf)
-			// fmt.Printf("-> typ=%d sz=%d card=%d\n", c[indexType], c[indexSize], getCardinality(c))
 
 			// create a new container and update the key offset to this container.
 			offset := a.newContainer(uint16(len(c)))
