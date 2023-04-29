@@ -832,7 +832,7 @@ func And(a, b *Bitmap) *Bitmap {
 	res := NewBitmap()
 	for ai < an && bi < bn {
 		ak := a.keys.key(ai)
-		bk := a.keys.key(bi)
+		bk := b.keys.key(bi)
 		if ak == bk {
 			// Do the intersection.
 			off := a.keys.val(ai)
