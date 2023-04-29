@@ -6,41 +6,48 @@ package bitmap
 import (
     "encoding/base64"
     "errors"
-    "sync"
+    // "sync"
 
-    "github.com/dgraph-io/sroar"
+    "blockwatch.cc/knoxdb/encoding/xroar"
     "github.com/klauspost/compress/snappy"
 )
 
 var ErrInvalidBuffer = errors.New("invalid buffer length")
 
-var pool = &sync.Pool{
-    New: func() interface{} { return sroar.NewBitmap() },
-}
+// var pool = &sync.Pool{
+//     New: func() interface{} { return xroar.NewBitmap() },
+// }
 
 type Bitmap struct {
-    *sroar.Bitmap
+    Bitmap *xroar.Bitmap
 }
 
-func newBitmap() *Bitmap {
-    return &Bitmap{sroar.NewBitmap()}
-}
+// func newBitmap() *Bitmap {
+//     return &Bitmap{xroar.NewBitmap()}
+// }
 
 func New() Bitmap {
     return Bitmap{
-        Bitmap: pool.New().(*sroar.Bitmap),
+        // Bitmap: pool.New().(*xroar.Bitmap),
+        Bitmap: xroar.NewBitmap(),
     }
 }
 
 func NewFromBytes(src []byte) Bitmap {
     return Bitmap{
-        Bitmap: sroar.FromBufferWithCopy(src),
+        Bitmap: xroar.FromBufferWithCopy(src),
+    }
+}
+
+func NewFromArray(src []uint64) Bitmap {
+    return Bitmap{
+        Bitmap: xroar.FromSortedList(src),
     }
 }
 
 func (b *Bitmap) Free() {
-    b.Bitmap.Reset()
-    pool.Put(b.Bitmap)
+    // b.Bitmap.Reset()
+    // pool.Put(b.Bitmap)
     b.Bitmap = nil
 }
 
@@ -57,20 +64,37 @@ func (b Bitmap) Count() int {
     return b.Bitmap.GetCardinality()
 }
 
+func (b Bitmap) Set(x uint64) bool {
+    return b.Bitmap.Set(x)
+}
+
+func (b Bitmap) Remove(x uint64) bool {
+    return b.Bitmap.Remove(x)
+}
+
+func (b Bitmap) Contains(x uint64) bool {
+    return b.Bitmap.Contains(x)
+}
+
+func (b Bitmap) Bytes() []byte {
+    return b.Bitmap.ToBuffer()
+}
+
 func (b *Bitmap) CloneFromBytes(src []byte) {
-    b.Bitmap.Reset()
-    pool.Put(b.Bitmap)
-    *b = NewFromBytes(src)
+    // b.Bitmap.Reset()
+    // pool.Put(b.Bitmap)
+    // *b = NewFromBytes(src)
+    b.Bitmap = xroar.FromBufferWithCopy(src)
 }
 
 func (b *Bitmap) CloneFrom(a Bitmap) {
-    b.Bitmap.Reset()
-    pool.Put(b.Bitmap)
+    // b.Bitmap.Reset()
+    // pool.Put(b.Bitmap)
     b.Bitmap = a.Bitmap.Clone()
 }
 
 func (b Bitmap) MarshalBinary() ([]byte, error) {
-    src := b.ToBuffer()
+    src := b.Bytes()
     dst := make([]byte, 0, snappy.MaxEncodedLen(len(src)))
     dst = snappy.Encode(dst, src)
     return dst, nil
@@ -85,12 +109,12 @@ func (b *Bitmap) UnmarshalBinary(src []byte) error {
     if err != nil {
         return err
     }
-    b.Bitmap = sroar.FromBufferWithCopy(dst)
+    b.Bitmap = xroar.FromBufferWithCopy(dst)
     return nil
 }
 
 func (b Bitmap) MarshalText() ([]byte, error) {
-    src := b.ToBuffer()
+    src := b.Bytes()
     dst := make([]byte, base64.StdEncoding.EncodedLen(len(src)))
     base64.StdEncoding.Encode(dst, src)
     return dst, nil
@@ -102,7 +126,7 @@ func (b *Bitmap) UnmarshalText(src []byte) error {
     if err != nil {
         return err
     }
-    b.Bitmap = sroar.FromBuffer(dst)
+    b.Bitmap = xroar.FromBuffer(dst)
     return nil
 }
 
@@ -124,32 +148,34 @@ func (b *Bitmap) AndNot(a Bitmap) Bitmap {
 }
 
 func Or(a, b Bitmap) Bitmap {
-    return Bitmap{sroar.Or(a.Bitmap, b.Bitmap)}
+    return Bitmap{xroar.Or(a.Bitmap, b.Bitmap)}
 }
 
 func FastOr(bitmaps ...Bitmap) Bitmap {
-    bm := make([]*sroar.Bitmap, len(bitmaps))
+    bm := make([]*xroar.Bitmap, len(bitmaps))
     for i, v := range bitmaps {
         bm[i] = v.Bitmap
     }
-    return Bitmap{sroar.FastOr(bm...)}
+    return Bitmap{xroar.FastOr(bm...)}
 }
 
 func And(a, b Bitmap) Bitmap {
-    bm := sroar.And(a.Bitmap, b.Bitmap)
+    bm := xroar.And(a.Bitmap, b.Bitmap)
+    bm.Cleanup()
     return Bitmap{bm}
 }
 
 func FastAnd(bitmaps ...Bitmap) Bitmap {
-    bm := make([]*sroar.Bitmap, len(bitmaps))
+    bm := make([]*xroar.Bitmap, len(bitmaps))
     for i, v := range bitmaps {
         bm[i] = v.Bitmap
     }
-    return Bitmap{sroar.FastAnd(bm...)}
+    return Bitmap{xroar.FastAnd(bm...)}
 }
 
 func AndNot(a, b Bitmap) Bitmap {
     bm := a.Bitmap.Clone()
     bm.AndNot(b.Bitmap)
+    bm.Cleanup()
     return Bitmap{bm}
 }
