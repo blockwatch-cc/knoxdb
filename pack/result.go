@@ -4,6 +4,7 @@
 package pack
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 
@@ -207,6 +208,49 @@ func (r *Result) buildTypeInfo(val interface{}) error {
 		r.tinfo.fields[i].blockid = r.pkg.FieldIndex(v.name)
 	}
 	return nil
+}
+
+func (r *Result) Decode(val interface{}) error {
+	v := reflect.ValueOf(val)
+	if v.Kind() != reflect.Ptr {
+		return fmt.Errorf("pack: non-pointer passed to Decode")
+	}
+	if r.pkg == nil {
+		return ErrResultClosed
+	}
+	v = reflect.Indirect(v)
+	switch v.Kind() {
+	case reflect.Slice:
+		// get slice element type
+		typ := v.Type().Elem()
+		if err := r.buildTypeInfo(reflect.New(typ).Interface()); err != nil {
+			return err
+		}
+		for i := 0; i < r.pkg.Len(); i++ {
+			// create new slice element (may be a pointer to struct)
+			e := reflect.New(typ)
+			ev := e
+
+			// if element is ptr to struct, allocate the underlying struct
+			if e.Elem().Kind() == reflect.Ptr {
+				ev.Elem().Set(reflect.New(e.Elem().Type().Elem()))
+				ev = reflect.Indirect(e)
+			}
+
+			// decode the struct element (re-use our interface-based methods)
+			if err := r.pkg.ReadAtWithInfo(i, ev.Interface(), r.tinfo); err != nil {
+				return err
+			}
+
+			// append slice element
+			v.Set(reflect.Append(v, e.Elem()))
+		}
+		return nil
+	case reflect.Struct:
+		return r.DecodeAt(0, val)
+	default:
+		return fmt.Errorf("pack: non-slice/struct passed to Decode")
+	}
 }
 
 func (r *Result) DecodeRange(start, end int, proto interface{}) (interface{}, error) {
