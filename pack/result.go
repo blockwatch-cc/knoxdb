@@ -210,6 +210,13 @@ func (r *Result) buildTypeInfo(val interface{}) error {
 	return nil
 }
 
+func (r *Result) buildTypeInfoReflect(typ reflect.Type) error {
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	return r.buildTypeInfo(reflect.New(typ).Interface())
+}
+
 func (r *Result) Decode(val interface{}) error {
 	v := reflect.ValueOf(val)
 	if v.Kind() != reflect.Ptr {
@@ -223,7 +230,7 @@ func (r *Result) Decode(val interface{}) error {
 	case reflect.Slice:
 		// get slice element type
 		typ := v.Type().Elem()
-		if err := r.buildTypeInfo(reflect.New(typ).Interface()); err != nil {
+		if err := r.buildTypeInfoReflect(typ); err != nil {
 			return err
 		}
 		for i := 0; i < r.pkg.Len(); i++ {
