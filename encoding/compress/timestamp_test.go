@@ -1163,10 +1163,9 @@ func BenchmarkEncodeTimestamps(b *testing.B) {
 
 func BenchmarkTimeArrayDecodeAllUncompressed(b *testing.B) {
 	benchmarks := []int{
-		5,
-		55,
-		555,
-		1000,
+		1024,
+		1 << 14,
+		1 << 16,
 	}
 
 	values := []int64{
@@ -1190,12 +1189,12 @@ func BenchmarkTimeArrayDecodeAllUncompressed(b *testing.B) {
 		bytes, _ := enc.Bytes()
 
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
+			dst := make([]int64, size)
 			b.SetBytes(int64(size * 8))
 			b.ReportAllocs()
-
-			dst := make([]int64, size)
+			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				dst, _ = TimeArrayDecodeAll(bytes, dst)
+				_, _ = TimeArrayDecodeAll(bytes, dst)
 			}
 		})
 	}
@@ -1203,10 +1202,9 @@ func BenchmarkTimeArrayDecodeAllUncompressed(b *testing.B) {
 
 func BenchmarkTimeArrayDecodeAllPackedSimple(b *testing.B) {
 	benchmarks := []int{
-		5,
-		55,
-		555,
-		1000,
+		1024,
+		1 << 14,
+		1 << 16,
 	}
 	for _, size := range benchmarks {
 		rand.Seed(int64(size * 1e3))
@@ -1219,12 +1217,12 @@ func BenchmarkTimeArrayDecodeAllPackedSimple(b *testing.B) {
 		bytes, _ := enc.Bytes()
 
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
+			dst := make([]int64, size)
 			b.SetBytes(int64(size * 8))
 			b.ReportAllocs()
-
-			dst := make([]int64, size)
+			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				dst, _ = TimeArrayDecodeAll(bytes, dst)
+				_, _ = TimeArrayDecodeAll(bytes, dst)
 			}
 		})
 	}
@@ -1235,10 +1233,9 @@ func BenchmarkTimeArrayDecodeAllRLE(b *testing.B) {
 		n     int
 		delta int64
 	}{
-		{5, 10},
-		{55, 10},
-		{555, 10},
-		{1000, 10},
+		{1024, 10},
+		{1 << 14, 10},
+		{1 << 16, 10},
 	}
 	for _, bm := range benchmarks {
 		enc := NewTimeEncoder(bm.n)
@@ -1250,12 +1247,12 @@ func BenchmarkTimeArrayDecodeAllRLE(b *testing.B) {
 		bytes, _ := enc.Bytes()
 
 		b.Run(fmt.Sprintf("%d_delta_%d", bm.n, bm.delta), func(b *testing.B) {
+			dst := make([]int64, bm.n)
 			b.SetBytes(int64(bm.n * 8))
 			b.ReportAllocs()
-
-			dst := make([]int64, bm.n)
+			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				dst, _ = TimeArrayDecodeAll(bytes, dst)
+				_, _ = TimeArrayDecodeAll(bytes, dst)
 			}
 		})
 	}
