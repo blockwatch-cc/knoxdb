@@ -489,12 +489,12 @@ func (p *Package) UpdateAliasesFrom(fields FieldList) *Package {
 	prevfields := p.fields
 	p.fields = make(FieldList, len(prevfields))
 	for i := range p.fields {
-		field := prevfields[i]
+		field := *prevfields[i]
 		updated := fields.Find(field.Name)
 		if updated.IsValid() {
 			field.Alias = updated.Alias
 		}
-		p.fields[i] = field
+		p.fields[i] = &field
 	}
 	return p
 }
