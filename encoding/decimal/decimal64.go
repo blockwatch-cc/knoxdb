@@ -142,6 +142,14 @@ func (d Decimal64) Float64() float64 {
 	return float64(d.val) / float64(pow10[d.scale])
 }
 
+func (d *Decimal64) Set(value int64) {
+	d.val = value
+}
+
+func (d *Decimal64) SetScale(scale int) {
+	d.scale = scale
+}
+
 func (d *Decimal64) SetFloat64(value float64, scale int) error {
 	if scale < 0 {
 		return ErrScaleUnderflow

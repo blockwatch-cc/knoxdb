@@ -164,6 +164,14 @@ func (d Decimal256) Int256() Int256 {
 	return d.val
 }
 
+func (d *Decimal256) Set(value Int256) {
+	d.val = value
+}
+
+func (d *Decimal256) SetScale(scale int) {
+	d.scale = scale
+}
+
 func (d *Decimal256) SetInt64(value int64, scale int) error {
 	if scale < 0 {
 		return ErrScaleUnderflow

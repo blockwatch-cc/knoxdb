@@ -113,6 +113,14 @@ func (d Decimal32) Int256() Int256 {
 	return Int256{uint64(d.val >> 31), uint64(d.val >> 31), uint64(d.val >> 31), uint64(d.val)}
 }
 
+func (d *Decimal32) Set(value int32) {
+	d.val = value
+}
+
+func (d *Decimal32) SetScale(scale int) {
+	d.scale = scale
+}
+
 func (d *Decimal32) SetInt64(value int64, scale int) error {
 	if scale < 0 {
 		return ErrScaleUnderflow
