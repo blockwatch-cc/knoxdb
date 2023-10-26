@@ -210,7 +210,7 @@ func TestJournalNew(t *testing.T) {
 			j := NewJournal(uint64(i), sz, "")
 			// sizes & caps (note, pack storage is allocated on Init)
 			checkJournalSizes(t, j, 0, 0, 0)
-			checkJournalCaps(t, j, 0, sz, sz)
+			checkJournalCaps(t, j, sz, sz, sz)
 
 			// other
 			if got, want := j.maxid, uint64(i); got != want {
@@ -831,7 +831,7 @@ func TestJournalUpdateBatch(t *testing.T) {
 							val := batch[idxs[i]].(*JournalTestType)
 							val.N += sz
 							newBatch[i] = val
-							max = util.MaxU64(max, val.Pk)
+							max = util.Max(max, val.Pk)
 							unique[val.Pk] = struct{}{}
 						}
 

@@ -1053,7 +1053,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 		// init on each iteration, either from journal or tombstone
 		switch true {
 		case jpos < jlen && tpos < tlen:
-			nextid = util.MinU64(pk[jpos], dead[tpos])
+			nextid = util.Min(pk[jpos], dead[tpos])
 		case jpos < jlen && tpos >= tlen:
 			nextid = pk[jpos]
 		case jpos >= jlen && tpos < tlen:
@@ -1219,8 +1219,8 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 
 			// update state
 			needsort = needsort || pk[jpos] < packmax
-			packmax = util.MaxU64(packmax, pk[jpos])
-			globalmax = util.MaxU64(globalmax, packmax)
+			packmax = util.Max(packmax, pk[jpos])
+			globalmax = util.Max(globalmax, packmax)
 			nAdd += n
 			jpos += n
 

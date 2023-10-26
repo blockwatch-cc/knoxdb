@@ -450,7 +450,7 @@ func (p *Package) DumpBlocks(w io.Writer, mode DumpMode, lineNo int) (int, error
 		for i, v := range p.blocks {
 			gotype := "-"
 			if p.tinfo != nil && p.tinfo.gotype {
-				gotype = p.tinfo.fields[i].typname
+				gotype = p.tinfo.fields[i].typ.String()
 			}
 			blockinfo := info.Blocks[i]
 			// reconstruct cardinality when missing

@@ -647,7 +647,7 @@ func (t *Table) insertJournal(val interface{}) error {
 	if err != nil {
 		return err
 	}
-	t.meta.Sequence = util.MaxU64(t.meta.Sequence, t.journal.MaxId())
+	t.meta.Sequence = util.Max(t.meta.Sequence, t.journal.MaxId())
 	t.meta.Rows += int64(count)
 	t.meta.dirty = true
 	atomic.AddInt64(&t.stats.InsertedTuples, int64(count))
@@ -768,7 +768,7 @@ func (t *Table) appendPackIntoJournal(ctx context.Context, pkg *Package, pos, n 
 		return err
 	}
 
-	t.meta.Sequence = util.MaxU64(t.meta.Sequence, t.journal.MaxId())
+	t.meta.Sequence = util.Max(t.meta.Sequence, t.journal.MaxId())
 	t.meta.Rows += int64(count)
 	t.meta.dirty = true
 	atomic.AddInt64(&t.stats.InsertedTuples, int64(count))
@@ -859,7 +859,7 @@ func (t *Table) updateJournal(val interface{}) error {
 	if err != nil {
 		return err
 	}
-	t.meta.Sequence = util.MaxU64(t.meta.Sequence, t.journal.MaxId())
+	t.meta.Sequence = util.Max(t.meta.Sequence, t.journal.MaxId())
 	t.meta.dirty = true
 	atomic.AddInt64(&t.stats.UpdatedTuples, int64(count))
 	return nil
@@ -1205,7 +1205,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		var nextid uint64
 		switch true {
 		case jpos < jlen && tpos < tlen:
-			nextid = util.MinU64(live[jpos].pk, dead[tpos])
+			nextid = util.Min(live[jpos].pk, dead[tpos])
 			// if nextid == live[jpos].pk {
 			// 	log.Debugf("%s: next id %d from journal %d/%d, gmax=%d", t.name, nextid, jpos, jlen, globalmax)
 			// } else {
@@ -1493,15 +1493,15 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 						if err = pkg.InsertFrom(jpack, last, key.idx, 1); err != nil {
 							return err
 						}
-						packmin = util.NonZeroMinU64(packmin, key.pk)
+						packmin = util.NonZeroMin(packmin, key.pk)
 					} else {
 						// append new records
 						// log.Debugf("Append key %d to pack %d", key.pk, lastpack)
 						if err = pkg.AppendFrom(jpack, key.idx, 1); err != nil {
 							return err
 						}
-						packmax = util.MaxU64(packmax, key.pk)
-						globalmax = util.MaxU64(globalmax, key.pk)
+						packmax = util.Max(packmax, key.pk)
+						globalmax = util.Max(globalmax, key.pk)
 					}
 
 					// add to indexes

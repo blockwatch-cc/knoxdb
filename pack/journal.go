@@ -83,7 +83,7 @@ func NewJournal(maxid uint64, size int, name string) *Journal {
 		data:    pkg,
 		keys:    make(journalEntryList, 0, roundSize(size)),
 		tomb:    make([]uint64, 0, roundSize(size)),
-		deleted: vec.NewCustomBitset(roundSize(size)).Grow(0),
+		deleted: vec.NewCustomBitset(roundSize(size)).Resize(0),
 		prefix:  name,
 	}
 }
@@ -132,7 +132,7 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 	for i, n := range j.data.PkColumn() {
 		j.keys = append(j.keys, journalEntry{n, i})
 		j.sortData = j.sortData || n < j.lastid
-		j.lastid = util.MaxU64(j.lastid, n)
+		j.lastid = util.Max(j.lastid, n)
 	}
 	// ensure invariant, keep keys always sorted
 	if j.sortData {
@@ -150,7 +150,7 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 	j.tomb = j.tomb[:len(pk)]
 	copy(j.tomb, pk)
 	tomb.Release()
-	j.deleted.Grow(len(j.keys))
+	j.deleted.Resize(len(j.keys))
 	var idx, last int
 	for _, v := range j.tomb {
 		idx, last = j.PkIndex(v, last)
@@ -267,7 +267,7 @@ func (j *Journal) Insert(item Item) error {
 
 		// update keys
 		j.mergeKeys(journalEntryList{journalEntry{pk, j.data.Len() - 1}})
-		j.deleted.Grow(len(j.keys))
+		j.deleted.Resize(len(j.keys))
 
 		// set sortData flag
 		j.sortData = j.sortData || pk < j.lastid
@@ -281,8 +281,8 @@ func (j *Journal) Insert(item Item) error {
 	}
 
 	// update lastid and maxid
-	j.lastid = util.MaxU64(j.lastid, pk)
-	j.maxid = util.MaxU64(j.maxid, pk)
+	j.lastid = util.Max(j.lastid, pk)
+	j.maxid = util.Max(j.maxid, pk)
 
 	return nil
 }
@@ -331,8 +331,8 @@ func (j *Journal) InsertBatch(batch []Item) (int, error) {
 			j.sortData = j.sortData || pk < j.lastid
 
 			// update lastid and maxid
-			j.lastid = util.MaxU64(j.lastid, pk)
-			j.maxid = util.MaxU64(j.maxid, pk)
+			j.lastid = util.Max(j.lastid, pk)
+			j.maxid = util.Max(j.maxid, pk)
 		} else {
 			// write update record to WAL
 			j.wal.Write(WalRecordTypeUpdate, pk, item)
@@ -351,7 +351,7 @@ func (j *Journal) InsertBatch(batch []Item) (int, error) {
 
 	// merge new keys (sorted) into sorted key list
 	j.mergeKeys(newKeys)
-	j.deleted.Grow(len(j.keys))
+	j.deleted.Resize(len(j.keys))
 
 	return count, nil
 }
@@ -423,7 +423,7 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 				}
 			}
 			count++
-			j.lastid = util.MaxU64(j.lastid, pk)
+			j.lastid = util.Max(j.lastid, pk)
 		}
 	}
 
@@ -435,9 +435,9 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 		sort.Sort(newKeys)
 	}
 	j.mergeKeys(newKeys)
-	j.deleted.Grow(len(j.keys))
+	j.deleted.Resize(len(j.keys))
 	j.sortData = j.sortData || !isSorted
-	j.maxid = util.MaxU64(j.maxid, j.lastid)
+	j.maxid = util.Max(j.maxid, j.lastid)
 
 	return count, nil
 }
@@ -464,15 +464,15 @@ func (j *Journal) Update(item Item) error {
 
 		// update keys
 		j.mergeKeys(journalEntryList{journalEntry{pk, j.data.Len() - 1}})
-		j.deleted.Grow(len(j.keys))
+		j.deleted.Resize(len(j.keys))
 
 		// set sortData flag
 		j.sortData = j.sortData || pk < j.lastid
 
 		// update maxid (Note: since we just check if primary key exists in
 		// the journal, but not in the entire table, an update can be an insert)
-		j.lastid = util.MaxU64(j.lastid, pk)
-		j.maxid = util.MaxU64(j.maxid, pk)
+		j.lastid = util.Max(j.lastid, pk)
+		j.maxid = util.Max(j.maxid, pk)
 	} else {
 		// replace in data pack if exists, this also resets a zero pk after deletion
 		if err := j.data.ReplaceAt(idx, item); err != nil {
@@ -525,7 +525,7 @@ func (j *Journal) UpdateBatch(batch []Item) (int, error) {
 
 			// set sortData flag
 			j.sortData = j.sortData || pk < j.lastid
-			j.lastid = util.MaxU64(j.lastid, pk)
+			j.lastid = util.Max(j.lastid, pk)
 
 		} else {
 			// replace in data pack if exists
@@ -542,11 +542,11 @@ func (j *Journal) UpdateBatch(batch []Item) (int, error) {
 
 	// merge new journal keys (they are known to be sorted because batch was sorted)
 	j.mergeKeys(newKeys)
-	j.deleted.Grow(len(j.keys))
+	j.deleted.Resize(len(j.keys))
 
 	// update maxid (Note: since we just check if primary key exists in
 	// the journal, but not in the entire table, an update be a hidden insert)
-	j.maxid = util.MaxU64(j.maxid, j.lastid)
+	j.maxid = util.Max(j.maxid, j.lastid)
 
 	return count, nil
 }
