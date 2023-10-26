@@ -15,6 +15,7 @@ import (
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/dedup"
 	"blockwatch.cc/knoxdb/hash/xxhash"
+	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -269,15 +270,15 @@ func (b Block) RawSlice() interface{} {
 	case BlockString:
 		s := make([]string, b.Bytes.Len())
 		for i, v := range b.Bytes.Slice() {
-			s[i] = compress.UnsafeGetString(v)
+			s[i] = util.UnsafeGetString(v)
 		}
 		return s
 	case BlockBytes:
 		return b.Bytes.Slice()
 	case BlockInt128:
-		return b.Int128.Int128Slice()
+		return b.Int128.Materialize()
 	case BlockInt256:
-		return b.Int256.Int256Slice()
+		return b.Int256.Materialize()
 	default:
 		return nil
 	}
@@ -310,15 +311,15 @@ func (b Block) RangeSlice(start, end int) interface{} {
 	case BlockString:
 		s := make([]string, end-start+1)
 		for i, v := range b.Bytes.Subslice(start, end) {
-			s[i] = compress.UnsafeGetString(v)
+			s[i] = util.UnsafeGetString(v)
 		}
 		return s
 	case BlockBytes:
 		return b.Bytes.Subslice(start, end)
 	case BlockInt128:
-		return b.Int128.Subslice(start, end).Int128Slice()
+		return b.Int128.Subslice(start, end).Materialize()
 	case BlockInt256:
-		return b.Int256.Subslice(start, end).Int256Slice()
+		return b.Int256.Subslice(start, end).Materialize()
 	default:
 		return nil
 	}
@@ -352,7 +353,7 @@ func (b Block) Elem(idx int) interface{} {
 	case BlockBool:
 		return b.Bits.IsSet(idx)
 	case BlockString:
-		return compress.UnsafeGetString(b.Bytes.Elem(idx))
+		return util.UnsafeGetString(b.Bytes.Elem(idx))
 	case BlockBytes:
 		return b.Bytes.Elem(idx)
 	case BlockInt128:
@@ -876,7 +877,7 @@ func (b *Block) Decode(buf []byte, sz, stored int) error {
 			b.Bits = vec.NewBitset(sz)
 			b.Bits.Reset()
 		} else {
-			b.Bits.Grow(sz).Reset()
+			b.Bits.Resize(sz).Reset()
 		}
 		b.Bits, err = decodeBoolBlock(buf, b.Bits)
 
@@ -960,7 +961,7 @@ func (b *Block) MinMax() (interface{}, interface{}) {
 		return false, false
 	case BlockString:
 		min, max := b.Bytes.MinMax()
-		return compress.UnsafeGetString(min), compress.UnsafeGetString(max)
+		return util.UnsafeGetString(min), util.UnsafeGetString(max)
 	case BlockBytes:
 		return b.Bytes.MinMax()
 	case BlockInt128:

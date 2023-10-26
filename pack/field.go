@@ -16,13 +16,10 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/filter/bloom"
 	"blockwatch.cc/knoxdb/filter/loglogbeta"
-
 	"blockwatch.cc/knoxdb/util"
-
-	"blockwatch.cc/knoxdb/encoding/compress"
-	"blockwatch.cc/knoxdb/encoding/decimal"
 	. "blockwatch.cc/knoxdb/vec"
 )
 
@@ -1764,8 +1761,8 @@ func (t FieldType) BetweenBlock(b *block.Block, from, to interface{}, bits, mask
 	case FieldTypeBytes:
 		return b.Bytes.MatchBetween(from.([]byte), to.([]byte), bits, mask)
 	case FieldTypeString:
-		fromb := compress.UnsafeGetBytes(from.(string))
-		tob := compress.UnsafeGetBytes(to.(string))
+		fromb := util.UnsafeGetBytes(from.(string))
+		tob := util.UnsafeGetBytes(to.(string))
 		return b.Bytes.MatchBetween(fromb, tob, bits, mask)
 	case FieldTypeDatetime:
 		return MatchInt64Between(b.Int64, from.(time.Time).UnixNano(), to.(time.Time).UnixNano(), bits, mask)
@@ -2251,7 +2248,7 @@ func (t FieldType) Hash(val interface{}) [2]uint32 {
 		return bloom.Hash(val.([]byte))
 	case FieldTypeString:
 		if s, ok := val.(string); ok {
-			return bloom.Hash(compress.UnsafeGetBytes(s))
+			return bloom.Hash(util.UnsafeGetBytes(s))
 		}
 		return bloom.Hash(val.([]byte))
 	case FieldTypeDatetime:
@@ -2417,5 +2414,5 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 			filter.Add(buf[:4])
 		}
 	}
-	return util.MinU32(uint32(b.Len()), uint32(filter.Cardinality()))
+	return util.Min(uint32(b.Len()), uint32(filter.Cardinality()))
 }

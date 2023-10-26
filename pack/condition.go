@@ -12,11 +12,9 @@ import (
 	"reflect"
 	"strings"
 
+	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/hash/xxhash"
 	"blockwatch.cc/knoxdb/util"
-
-	"blockwatch.cc/knoxdb/encoding/compress"
-	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -385,7 +383,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 					}
 					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; ok {
-						vs := compress.UnsafeGetString(v)
+						vs := util.UnsafeGetString(v)
 						if pos != 0xFFFFFFFF {
 							// compare IN slice value at pos against buf
 							// to ensure we're collision free
@@ -415,7 +413,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 						continue
 					}
 					// without hash map, resort to type-based comparison
-					if c.Field.Type.In(compress.UnsafeGetString(v), c.Value) {
+					if c.Field.Type.In(util.UnsafeGetString(v), c.Value) {
 						bits.Set(i)
 					}
 				}
@@ -639,7 +637,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 					if pos, ok := c.hashmap[sum]; !ok {
 						bits.Set(i)
 					} else {
-						vs := compress.UnsafeGetString(v)
+						vs := util.UnsafeGetString(v)
 						// may still be a false positive due to hash collision
 						if pos != 0xFFFFFFFF {
 							// compare IN slice value at pos against buf
@@ -667,7 +665,7 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 					}
 				} else {
 					// without hash map, resort to type-based comparison
-					if !c.Field.Type.In(compress.UnsafeGetString(v), c.Value) {
+					if !c.Field.Type.In(util.UnsafeGetString(v), c.Value) {
 						bits.Set(i)
 					}
 				}

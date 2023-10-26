@@ -15,10 +15,8 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
-	"blockwatch.cc/knoxdb/encoding/compress"
-	"blockwatch.cc/knoxdb/util"
-
 	. "blockwatch.cc/knoxdb/encoding/decimal"
+	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -551,17 +549,16 @@ func (p *Package) Push(v interface{}) error {
 				}
 				b.Bytes.Append(buf)
 			} else if fi.flags.Contains(flagStringerType) {
-				b.Bytes.Append(compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
+				b.Bytes.Append(util.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
 			} else {
-				b.Bytes.Append(compress.UnsafeGetBytes(f.String()))
+				b.Bytes.Append(util.UnsafeGetBytes(f.String()))
 			}
 		case FieldTypeDatetime:
 			b.Int64 = append(b.Int64, f.Interface().(time.Time).UnixNano())
 		case FieldTypeBoolean:
-			l := b.Bits.Len()
-			b.Bits.Grow(l + 1)
+			b.Bits.Grow(1)
 			if f.Bool() {
-				b.Bits.Set(l)
+				b.Bits.Set(p.nValues)
 			}
 		case FieldTypeFloat64:
 			b.Float64 = append(b.Float64, f.Float())
@@ -698,9 +695,9 @@ func (p *Package) ReplaceAt(pos int, v interface{}) error {
 				}
 				b.Bytes.Set(pos, buf)
 			} else if fi.flags.Contains(flagStringerType) {
-				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
+				b.Bytes.Set(pos, util.UnsafeGetBytes(f.Interface().(fmt.Stringer).String()))
 			} else {
-				b.Bytes.Set(pos, compress.UnsafeGetBytes(f.String()))
+				b.Bytes.Set(pos, util.UnsafeGetBytes(f.String()))
 			}
 
 		case FieldTypeDatetime:
@@ -828,7 +825,7 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 	if !val.IsValid() {
 		return fmt.Errorf("pack: invalid value of type %T", v)
 	}
-	// log.Debugf("Reading %s at pkg %d pos %d", tinfo.name, p.key, pos)
+	log.Debugf("Reading %s at pkg %d pos %d", tinfo.name, p.key, pos)
 
 	for _, fi := range tinfo.fields {
 		// Note: field to block mapping is required to be initialized in tinfo!
@@ -863,10 +860,7 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 				}
 			} else {
 				// copy to avoid memleaks of large blocks
-				elm := b.Bytes.Elem(pos)
-				buf := make([]byte, len(elm))
-				copy(buf, elm)
-				dst.SetBytes(buf)
+				dst.SetBytes(bytes.Clone(b.Bytes.Elem(pos)))
 			}
 
 		case FieldTypeString:
@@ -876,7 +870,7 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 				}
 			} else {
 				// copy to avoid memleaks of large blocks
-				// dst.SetString(compress.UnsafeGetString(b.Bytes.Elem(pos)))
+				// dst.SetString(util.UnsafeGetString(b.Bytes.Elem(pos)))
 				dst.SetString(string(b.Bytes.Elem(pos)))
 			}
 
@@ -1004,7 +998,7 @@ func (p *Package) FieldAt(index, pos int) (interface{}, error) {
 		return b.Bytes.Elem(pos), nil
 
 	case FieldTypeString:
-		return compress.UnsafeGetString(b.Bytes.Elem(pos)), nil
+		return util.UnsafeGetString(b.Bytes.Elem(pos)), nil
 
 	case FieldTypeDatetime:
 		if ts := b.Int64[pos]; ts > 0 {
@@ -1112,9 +1106,9 @@ func (p *Package) SetFieldAt(index, pos int, v interface{}) error {
 			}
 			b.Bytes.Set(pos, buf)
 		} else if val.CanInterface() && val.Type().Implements(stringerType) {
-			b.Bytes.Set(pos, compress.UnsafeGetBytes(val.Interface().(fmt.Stringer).String()))
+			b.Bytes.Set(pos, util.UnsafeGetBytes(val.Interface().(fmt.Stringer).String()))
 		} else {
-			b.Bytes.Set(pos, compress.UnsafeGetBytes(val.String()))
+			b.Bytes.Set(pos, util.UnsafeGetBytes(val.String()))
 		}
 
 	case FieldTypeDatetime:
@@ -1291,7 +1285,7 @@ func (p *Package) StringAt(index, pos int) (string, error) {
 	if err := p.isValidAt(index, pos, FieldTypeString); err != nil {
 		return "", err
 	}
-	return compress.UnsafeGetString(p.blocks[index].Bytes.Elem(pos)), nil
+	return util.UnsafeGetString(p.blocks[index].Bytes.Elem(pos)), nil
 }
 
 func (p *Package) BytesAt(index, pos int) ([]byte, error) {
@@ -1456,11 +1450,11 @@ func (p *Package) Column(index int) (interface{}, error) {
 
 	case FieldTypeDecimal256:
 		// materialize
-		return Decimal256Slice{Int256: b.Int256.Int256Slice(), Scale: field.Scale}, nil
+		return Decimal256Slice{Int256: b.Int256.Materialize(), Scale: field.Scale}, nil
 
 	case FieldTypeDecimal128:
 		// materialize
-		return Decimal128Slice{Int128: b.Int128.Int128Slice(), Scale: field.Scale}, nil
+		return Decimal128Slice{Int128: b.Int128.Materialize(), Scale: field.Scale}, nil
 
 	case FieldTypeDecimal64:
 		// materialize
@@ -1492,7 +1486,7 @@ func (p *Package) RowAt(pos int) ([]interface{}, error) {
 		case FieldTypeBytes:
 			out[i] = b.Bytes.Elem(pos)
 		case FieldTypeString:
-			out[i] = compress.UnsafeGetString(b.Bytes.Elem(pos))
+			out[i] = util.UnsafeGetString(b.Bytes.Elem(pos))
 		case FieldTypeDatetime:
 			// materialize
 			if ts := b.Int64[pos]; ts > 0 {
@@ -1566,7 +1560,7 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		// Note: does not copy data; don't reference!
 		s := make([]string, end-start+1)
 		for i, v := range b.Bytes.Subslice(start, end) {
-			s[i] = compress.UnsafeGetString(v)
+			s[i] = util.UnsafeGetString(v)
 		}
 		return s, nil
 	case FieldTypeDatetime:
@@ -1587,9 +1581,9 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 	case FieldTypeFloat32:
 		return b.Float32[start:end], nil
 	case FieldTypeInt256:
-		return b.Int256.Subslice(start, end).Int256Slice(), nil
+		return b.Int256.Subslice(start, end).Materialize(), nil
 	case FieldTypeInt128:
-		return b.Int128.Subslice(start, end).Int128Slice(), nil
+		return b.Int128.Subslice(start, end).Materialize(), nil
 	case FieldTypeInt64:
 		return b.Int64[start:end], nil
 	case FieldTypeInt32:
@@ -1608,10 +1602,10 @@ func (p *Package) RangeAt(index, start, end int) (interface{}, error) {
 		return b.Uint8[start:end], nil
 	case FieldTypeDecimal256:
 		// materialize
-		return Decimal256Slice{Int256: b.Int256.Subslice(start, end).Int256Slice(), Scale: field.Scale}, nil
+		return Decimal256Slice{Int256: b.Int256.Subslice(start, end).Materialize(), Scale: field.Scale}, nil
 	case FieldTypeDecimal128:
 		// materialize
-		return Decimal128Slice{Int128: b.Int128.Subslice(start, end).Int128Slice(), Scale: field.Scale}, nil
+		return Decimal128Slice{Int128: b.Int128.Subslice(start, end).Materialize(), Scale: field.Scale}, nil
 	case FieldTypeDecimal64:
 		// materialize
 		return Decimal64Slice{Int64: b.Int64[start:end], Scale: field.Scale}, nil
@@ -2024,7 +2018,7 @@ func (p *Package) Grow(n int) error {
 			b.Bytes.Append(make([][]byte, n)...)
 
 		case FieldTypeBoolean:
-			b.Bits.Grow(b.Bits.Len() + n)
+			b.Bits.Grow(n)
 
 		case FieldTypeFloat64:
 			b.Float64 = append(b.Float64, make([]float64, n)...)
