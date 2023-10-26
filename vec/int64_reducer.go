@@ -4,8 +4,9 @@
 package vec
 
 import (
-	"blockwatch.cc/knoxdb/util"
 	"math"
+
+	"blockwatch.cc/knoxdb/util"
 )
 
 type Int64Reducer struct {
@@ -38,8 +39,8 @@ func (b *Int64Reducer) Add(val int64) {
 		b.min = val
 		b.max = val
 	} else {
-		b.min = util.Min64(b.min, val)
-		b.max = util.Max64(b.max, val)
+		b.min = util.Min(b.min, val)
+		b.max = util.Max(b.max, val)
 	}
 	b.sum += val
 	b.n++

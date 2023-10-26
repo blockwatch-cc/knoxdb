@@ -38,8 +38,8 @@ func (b *Uint64Reducer) Add(val uint64) {
 		b.min = val
 		b.max = val
 	} else {
-		b.min = util.MinU64(b.min, val)
-		b.max = util.MaxU64(b.max, val)
+		b.min = util.Min(b.min, val)
+		b.max = util.Max(b.max, val)
 	}
 	b.sum += val
 	b.n++
