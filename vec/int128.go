@@ -902,7 +902,7 @@ func (s Int128LLSlice) MinMax() (Int128, Int128) {
 	return min, max
 }
 
-func (s Int128Slice) Int128LLSlice() Int128LLSlice {
+func (s Int128Slice) Optimize() Int128LLSlice {
 	var res Int128LLSlice
 	res.X0 = make([]int64, len(s))
 	res.X1 = make([]uint64, len(s))
@@ -913,7 +913,7 @@ func (s Int128Slice) Int128LLSlice() Int128LLSlice {
 	return res
 }
 
-func (s Int128LLSlice) Int128Slice() []Int128 {
+func (s Int128LLSlice) Materialize() []Int128 {
 	res := make([]Int128, s.Len())
 	for i, v := range res {
 		v[0] = uint64(s.X0[i])
@@ -950,5 +950,5 @@ func (s *Int128LLSlice) Insert(k int, vs Int128LLSlice) {
 }
 
 func (s Int128Slice) MatchEqual(val Int128, bits, mask *Bitset) *Bitset {
-	return MatchInt128Equal(s.Int128LLSlice(), val, bits, nil)
+	return MatchInt128Equal(s.Optimize(), val, bits, nil)
 }

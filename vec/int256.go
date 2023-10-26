@@ -79,9 +79,11 @@ func (x Int256) IsZero() bool {
 }
 
 // Sign returns:
+//
 //	-1 if x <  0
 //	 0 if x == 0
 //	+1 if x >  0
+//
 // Where x is interpreted as a two's complement signed number
 func (x Int256) Sign() int {
 	if x.IsZero() {
@@ -347,10 +349,11 @@ func (x Int256) BitLen() int {
 
 // Abs interprets x as a two's complement signed number,
 // and returns its absolute value
-//   Abs(0)        = 0
-//   Abs(1)        = 1
-//   Abs(2**255)   = -2**255
-//   Abs(2**256-1) = -1
+//
+//	Abs(0)        = 0
+//	Abs(1)        = 1
+//	Abs(2**255)   = -2**255
+//	Abs(2**256-1) = -1
 func (x Int256) Abs() Int256 {
 	if x[0] < 0x8000000000000000 {
 		return x
@@ -1062,7 +1065,7 @@ func (s Int256LLSlice) MinMax() (Int256, Int256) {
 	return min, max
 }
 
-func (s Int256Slice) Int256LLSlice() Int256LLSlice {
+func (s Int256Slice) Optimize() Int256LLSlice {
 	var res Int256LLSlice
 	res.X0 = make([]int64, len(s))
 	res.X1 = make([]uint64, len(s))
@@ -1077,7 +1080,7 @@ func (s Int256Slice) Int256LLSlice() Int256LLSlice {
 	return res
 }
 
-func (s Int256LLSlice) Int256Slice() []Int256 {
+func (s Int256LLSlice) Materialize() []Int256 {
 	res := make([]Int256, s.Len())
 	for i, v := range res {
 		v[0] = uint64(s.X0[i])
@@ -1118,5 +1121,5 @@ func (s *Int256LLSlice) Insert(k int, vs Int256LLSlice) {
 }
 
 func (s Int256Slice) MatchEqual(val Int256, bits, mask *Bitset) *Bitset {
-	return MatchInt256Equal(s.Int256LLSlice(), val, bits, mask)
+	return MatchInt256Equal(s.Optimize(), val, bits, mask)
 }

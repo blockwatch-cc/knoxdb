@@ -146,11 +146,11 @@ var (
 
 // creates an Int128 test case from the given slice
 // Parameters:
-//  - name: desired name of the test case
-//  - slice: the slice for constructing the test case
-//  - match, match2: are only copied to the resulting test case
-//  - result: result for the given slice
-//  - len: desired length of the test case
+//   - name: desired name of the test case
+//   - slice: the slice for constructing the test case
+//   - match, match2: are only copied to the resulting test case
+//   - result: result for the given slice
+//   - len: desired length of the test case
 func CreateInt128TestCase(name string, slice []Int128, match, match2 Int128, result []byte, length int) Int128MatchTest {
 	if len(slice)%8 != 0 {
 		panic("CreateInt128TestCase: length of slice has to be a multiple of 8")
@@ -194,7 +194,6 @@ func CreateInt128TestCase(name string, slice []Int128, match, match2 Int128, res
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-//
 var Int128EqualCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -230,7 +229,7 @@ func TestMatchInt128EqualGeneric(T *testing.T) {
 	for _, c := range Int128EqualCases {
 		// pre-allocate the result slice and fill with poison
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt128EqualGeneric(c.slice.Int128LLSlice(), c.match, bits, nil)
+		cnt := matchInt128EqualGeneric(c.slice.Optimize(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -245,10 +244,9 @@ func TestMatchInt128EqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Equal benchmarks
-//
 func BenchmarkMatchInt128EqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt128Slice(n.l, 1).Int128LLSlice()
+		a := randInt128Slice(n.l, 1).Optimize()
 		mask := fillBitset(nil, a.Len(), 0xff)
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
@@ -299,7 +297,7 @@ func TestMatchInt128NotEqualGeneric(T *testing.T) {
 	for _, c := range Int128NotEqualCases {
 		// pre-allocate the result slice and fill with poison
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt128NotEqualGeneric(c.slice.Int128LLSlice(), c.match, bits, nil)
+		cnt := matchInt128NotEqualGeneric(c.slice.Optimize(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -314,10 +312,9 @@ func TestMatchInt128NotEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Not Equal benchmarks
-//
 func BenchmarkMatchInt128NotEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt128Slice(n.l, 1).Int128LLSlice()
+		a := randInt128Slice(n.l, 1).Optimize()
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int128Size))
@@ -330,7 +327,6 @@ func BenchmarkMatchInt128NotEqualGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-//
 var Int128LessCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -366,7 +362,7 @@ func TestMatchInt128LessGeneric(T *testing.T) {
 	for _, c := range Int128LessCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt128LessThanGeneric(c.slice.Int128LLSlice(), c.match, bits, nil)
+		cnt := matchInt128LessThanGeneric(c.slice.Optimize(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -381,10 +377,9 @@ func TestMatchInt128LessGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Less benchmarks
-//
 func BenchmarkMatchInt128LessGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt128Slice(n.l, 1).Int128LLSlice()
+		a := randInt128Slice(n.l, 1).Optimize()
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int128Size))
@@ -397,7 +392,6 @@ func BenchmarkMatchInt128LessGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-//
 var Int128LessEqualCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -433,7 +427,7 @@ func TestMatchInt128LessEqualGeneric(T *testing.T) {
 	for _, c := range Int128LessEqualCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt128LessThanEqualGeneric(c.slice.Int128LLSlice(), c.match, bits, nil)
+		cnt := matchInt128LessThanEqualGeneric(c.slice.Optimize(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -448,10 +442,9 @@ func TestMatchInt128LessEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
-//
 func BenchmarkMatchInt128LessEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt128Slice(n.l, 1).Int128LLSlice()
+		a := randInt128Slice(n.l, 1).Optimize()
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int128Size))
@@ -464,7 +457,6 @@ func BenchmarkMatchInt128LessEqualGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-//
 var Int128GreaterCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -500,7 +492,7 @@ func TestMatchInt128GreaterGeneric(T *testing.T) {
 	for _, c := range Int128GreaterCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt128GreaterThanGeneric(c.slice.Int128LLSlice(), c.match, bits, nil)
+		cnt := matchInt128GreaterThanGeneric(c.slice.Optimize(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -515,10 +507,9 @@ func TestMatchInt128GreaterGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Greater benchmarks
-//
 func BenchmarkMatchInt128GreaterGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt128Slice(n.l, 1).Int128LLSlice()
+		a := randInt128Slice(n.l, 1).Optimize()
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int128Size))
@@ -531,7 +522,6 @@ func BenchmarkMatchInt128GreaterGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-//
 var Int128GreaterEqualCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -567,7 +557,7 @@ func TestMatchInt128GreaterEqualGeneric(T *testing.T) {
 	for _, c := range Int128GreaterEqualCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt128GreaterThanEqualGeneric(c.slice.Int128LLSlice(), c.match, bits, nil)
+		cnt := matchInt128GreaterThanEqualGeneric(c.slice.Optimize(), c.match, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -582,10 +572,9 @@ func TestMatchInt128GreaterEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
-//
 func BenchmarkMatchInt128GreaterEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt128Slice(n.l, 1).Int128LLSlice()
+		a := randInt128Slice(n.l, 1).Optimize()
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int128Size))
@@ -598,7 +587,6 @@ func BenchmarkMatchInt128GreaterEqualGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-//
 var Int128BetweenCases = []Int128MatchTest{
 	{
 		name:   "l0",
@@ -636,7 +624,7 @@ func TestMatchInt128BetweenGeneric(T *testing.T) {
 	for _, c := range Int128BetweenCases {
 		// pre-allocate the result slice
 		bits := make([]byte, bitFieldLen(len(c.slice)))
-		cnt := matchInt128BetweenGeneric(c.slice.Int128LLSlice(), c.match, c.match2, bits, nil)
+		cnt := matchInt128BetweenGeneric(c.slice.Optimize(), c.match, c.match2, bits, nil)
 		if got, want := len(bits), len(c.result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
@@ -651,10 +639,9 @@ func TestMatchInt128BetweenGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Between benchmarks
-//
 func BenchmarkMatchInt128BetweenGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
-		a := randInt128Slice(n.l, 1).Int128LLSlice()
+		a := randInt128Slice(n.l, 1).Optimize()
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * Int128Size))
@@ -667,7 +654,6 @@ func BenchmarkMatchInt128BetweenGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------
 // Int128 Slice
-//
 func TestUniqueInt128(T *testing.T) {
 	a := randInt128Slice(1000, 5)
 	b := UniqueInt128Slice(a)
