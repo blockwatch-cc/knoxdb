@@ -67,6 +67,13 @@ func (p *Package) WithKey(k uint32) *Package {
 	return p
 }
 
+func (p *Package) WithCap(c int) *Package {
+	if c > 0 {
+		p.capHint = c
+	}
+	return p
+}
+
 func (p Package) IsJournal() bool {
 	return p.key == journalKey
 }

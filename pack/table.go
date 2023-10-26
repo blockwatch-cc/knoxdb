@@ -1694,7 +1694,10 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 	}
 	res := &Result{
 		fields: t.Fields(), // we return all fields
-		pkg:    t.newPackage().PopulateFields(nil).WithKey(resultKey),
+		pkg: t.newPackage().
+			WithKey(resultKey).
+			WithCap(q.Limit).
+			PopulateFields(nil),
 	}
 	defer func() {
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
@@ -1902,6 +1905,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 		fields: q.freq,
 		pkg: t.newPackage().
 			WithKey(resultKey).
+			WithCap(q.Limit).
 			PopulateFields(q.freq).
 			UpdateAliasesFrom(q.freq),
 	}
@@ -2065,6 +2069,7 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 		fields: q.freq,
 		pkg: t.newPackage().
 			WithKey(resultKey).
+			WithCap(q.Limit).
 			PopulateFields(q.freq).
 			UpdateAliasesFrom(q.freq),
 	}
@@ -3351,7 +3356,7 @@ func (t *Table) makePackage() interface{} {
 }
 
 func (t *Table) newPackage() *Package {
-	return t.packPool.Get().(*Package)
+	return t.packPool.Get().(*Package).WithCap(t.opts.PackSize())
 }
 
 func (t *Table) releaseSharedPack(pkg *Package) {
