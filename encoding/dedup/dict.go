@@ -71,7 +71,15 @@ func (a *DictByteArray) Elem(index int) []byte {
 	return a.dict[a.offs[ptr] : a.offs[ptr]+a.size[ptr]]
 }
 
-func (a *DictByteArray) Set(index int, buf []byte) {
+func (a *DictByteArray) Grow(int) ByteArray {
+	panic("dict: Grow unsupported")
+}
+
+func (a *DictByteArray) Set(int, []byte) {
+	panic("dict: Set unsupported")
+}
+
+func (a *DictByteArray) SetZeroCopy(int, []byte) {
 	panic("dict: Set unsupported")
 }
 
@@ -79,23 +87,27 @@ func (a *DictByteArray) Append(...[]byte) ByteArray {
 	panic("dict: Append unsupported")
 }
 
-func (a *DictByteArray) AppendFrom(src ByteArray) ByteArray {
+func (a *DictByteArray) AppendZeroCopy(...[]byte) ByteArray {
+	panic("dict: Append unsupported")
+}
+
+func (a *DictByteArray) AppendFrom(ByteArray) ByteArray {
 	panic("dict: AppendFrom unsupported")
 }
 
-func (a *DictByteArray) Insert(index int, buf ...[]byte) ByteArray {
+func (a *DictByteArray) Insert(int, ...[]byte) ByteArray {
 	panic("dict: Insert unsupported")
 }
 
-func (a *DictByteArray) InsertFrom(index int, src ByteArray) ByteArray {
+func (a *DictByteArray) InsertFrom(int, ByteArray) ByteArray {
 	panic("dict: InsertFrom unsupported")
 }
 
-func (a *DictByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
+func (a *DictByteArray) Copy(ByteArray, int, int, int) ByteArray {
 	panic("dict: Copy unsupported")
 }
 
-func (a *DictByteArray) Delete(index, n int) ByteArray {
+func (a *DictByteArray) Delete(int, int) ByteArray {
 	panic("dict: Delete unsupported")
 }
 

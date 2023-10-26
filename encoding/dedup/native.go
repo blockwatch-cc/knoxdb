@@ -10,6 +10,7 @@ import (
 	"io"
 
 	"blockwatch.cc/knoxdb/vec"
+	"golang.org/x/exp/slices"
 )
 
 type NativeByteArray struct {
@@ -54,12 +55,27 @@ func (a NativeByteArray) Set(index int, buf []byte) {
 	copy(a.bufs[index], buf)
 }
 
+func (a NativeByteArray) SetZeroCopy(index int, buf []byte) {
+	if len(a.bufs) <= index {
+		return
+	}
+	a.bufs[index] = buf
+}
+
+func (a *NativeByteArray) Grow(n int) ByteArray {
+	a.bufs = slices.Grow(a.bufs, n)
+	return a
+}
+
 func (a *NativeByteArray) Append(vals ...[]byte) ByteArray {
 	for _, v := range vals {
-		buf := make([]byte, len(v))
-		copy(buf, v)
-		a.bufs = append(a.bufs, buf)
+		a.bufs = append(a.bufs, bytes.Clone(v))
 	}
+	return a
+}
+
+func (a *NativeByteArray) AppendZeroCopy(vals ...[]byte) ByteArray {
+	a.bufs = append(a.bufs, vals...)
 	return a
 }
 

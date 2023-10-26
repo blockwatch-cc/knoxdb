@@ -4,8 +4,9 @@
 package dedup
 
 import (
-	"blockwatch.cc/knoxdb/vec"
 	"bytes"
+
+	"blockwatch.cc/knoxdb/vec"
 )
 
 func bitmask(i int) byte {
@@ -20,7 +21,7 @@ func ensureBitfieldSize(bits *vec.Bitset, sz int) *vec.Bitset {
 	if bits == nil {
 		bits = vec.NewBitset(sz)
 	} else {
-		bits.Grow(sz)
+		bits.Resize(sz)
 	}
 	return bits
 }

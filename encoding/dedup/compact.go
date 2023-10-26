@@ -71,31 +71,43 @@ func (a *CompactByteArray) Elem(index int) []byte {
 	return a.buf[a.offs[index] : a.offs[index]+a.size[index]]
 }
 
-func (a *CompactByteArray) Set(index int, buf []byte) {
+func (a *CompactByteArray) Grow(int) ByteArray {
+	panic("compact: Grow unsupported")
+}
+
+func (a *CompactByteArray) Set(int, []byte) {
 	panic("compact: Set unsupported")
 }
 
-func (a *CompactByteArray) Append(val ...[]byte) ByteArray {
+func (a *CompactByteArray) SetZeroCopy(int, []byte) {
+	panic("compact: Set unsupported")
+}
+
+func (a *CompactByteArray) Append(...[]byte) ByteArray {
 	panic("compact: Append unsupported")
 }
 
-func (a *CompactByteArray) AppendFrom(src ByteArray) ByteArray {
+func (a *CompactByteArray) AppendZeroCopy(...[]byte) ByteArray {
+	panic("compact: Append unsupported")
+}
+
+func (a *CompactByteArray) AppendFrom(ByteArray) ByteArray {
 	panic("compact: AppendFrom unsupported")
 }
 
-func (a *CompactByteArray) Insert(index int, buf ...[]byte) ByteArray {
+func (a *CompactByteArray) Insert(int, ...[]byte) ByteArray {
 	panic("compact: Insert unsupported")
 }
 
-func (a *CompactByteArray) InsertFrom(index int, src ByteArray) ByteArray {
+func (a *CompactByteArray) InsertFrom(int, ByteArray) ByteArray {
 	panic("compact: InsertFrom unsupported")
 }
 
-func (a *CompactByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
+func (a *CompactByteArray) Copy(ByteArray, int, int, int) ByteArray {
 	panic("compact: Copy unsupported")
 }
 
-func (a *CompactByteArray) Delete(index, n int) ByteArray {
+func (a *CompactByteArray) Delete(int, int) ByteArray {
 	panic("compact: Delete unsupported")
 }
 

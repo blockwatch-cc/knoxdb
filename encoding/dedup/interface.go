@@ -13,14 +13,17 @@ import (
 type ByteArray interface {
 	Len() int
 	Cap() int
-	Elem(int) []byte // index
-	Set(int, []byte) // index, buf
+	Elem(int) []byte         // index
+	Set(int, []byte)         // index, buf
+	SetZeroCopy(int, []byte) // index, buf
 	Append(...[]byte) ByteArray
+	AppendZeroCopy(...[]byte) ByteArray
 	AppendFrom(ByteArray) ByteArray
 	Insert(int, ...[]byte) ByteArray
 	InsertFrom(int, ByteArray) ByteArray
 	Copy(ByteArray, int, int, int) ByteArray // src, dstPos, srcPos, len (ReplaceFrom)
 	Delete(int, int) ByteArray               // index, len
+	Grow(int) ByteArray                      // len
 	Clear()                                  // zero elements and length
 	Release()                                // recycle buffers
 	Slice() [][]byte

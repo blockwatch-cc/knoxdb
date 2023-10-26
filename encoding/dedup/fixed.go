@@ -56,31 +56,43 @@ func (a *FixedByteArray) Elem(index int) []byte {
 	return a.buf[index*a.sz : (index+1)*a.sz]
 }
 
-func (a *FixedByteArray) Set(index int, buf []byte) {
+func (a *FixedByteArray) Grow(int) ByteArray {
+	panic("fixed: Grow unsupported")
+}
+
+func (a *FixedByteArray) Set(int, []byte) {
 	panic("fixed: Set unsupported")
 }
 
-func (a *FixedByteArray) Append(val ...[]byte) ByteArray {
+func (a *FixedByteArray) SetZeroCopy(int, []byte) {
+	panic("fixed: Set unsupported")
+}
+
+func (a *FixedByteArray) Append(...[]byte) ByteArray {
 	panic("fixed: Append unsupported")
 }
 
-func (a *FixedByteArray) AppendFrom(src ByteArray) ByteArray {
+func (a *FixedByteArray) AppendZeroCopy(...[]byte) ByteArray {
+	panic("fixed: Append unsupported")
+}
+
+func (a *FixedByteArray) AppendFrom(ByteArray) ByteArray {
 	panic("fixed: AppendFrom unsupported")
 }
 
-func (a *FixedByteArray) Insert(index int, buf ...[]byte) ByteArray {
+func (a *FixedByteArray) Insert(int, ...[]byte) ByteArray {
 	panic("fixed: Insert unsupported")
 }
 
-func (a *FixedByteArray) InsertFrom(index int, src ByteArray) ByteArray {
+func (a *FixedByteArray) InsertFrom(int, ByteArray) ByteArray {
 	panic("fixed: InsertFrom unsupported")
 }
 
-func (a *FixedByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
+func (a *FixedByteArray) Copy(ByteArray, int, int, int) ByteArray {
 	panic("fixed: Copy unsupported")
 }
 
-func (a *FixedByteArray) Delete(index, n int) ByteArray {
+func (a *FixedByteArray) Delete(int, int) ByteArray {
 	panic("fixed: Delete unsupported")
 }
 
