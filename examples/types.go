@@ -94,45 +94,45 @@ func (s *Stringer) UnmarshalText(b []byte) error {
 }
 
 type Types struct {
-	RowId     uint64             `knox:"I,pk"                     json:"row_id"`
-	Timestamp time.Time          `knox:"T,snappy"                 json:"time"`
-	Hash      []byte             `knox:"H,bloom,snappy"           json:"hash"`
-	String    string             `knox:"str,snappy"               json:"string"`
-	Stringer  Stringer           `knox:"strlist,snappy"           json:"string_list"`
-	Bool      bool               `knox:"bool,snappy"              json:"bool"`
-	Enum      Enum               `knox:"enum,u8,snappy"           json:"enum"`
-	Int64     int64              `knox:"i64,snappy"               json:"int64"`
-	Int32     int32              `knox:"i32,snappy"               json:"int32"`
-	Int16     int16              `knox:"i16,snappy"               json:"int16"`
-	Int8      int8               `knox:"i8,snappy"                json:"int8"`
-	Int_8     int                `knox:"i_8,i8,snappy"            json:"int_as_int8"`
-	Int_16    int                `knox:"i_16,i16,snappy"          json:"int_as_int16"`
-	Int_32    int                `knox:"i_32,i32,snappy"          json:"int_as_int32"`
-	Int_64    int                `knox:"i_64,i64,snappy"          json:"int_as_int64"`
-	Uint64    uint64             `knox:"u64,snappy,bloom"         json:"uint64"`
-	Uint32    uint32             `knox:"u32,snappy"               json:"uint32"`
-	Uint16    uint16             `knox:"u16,snappy"               json:"uint16"`
-	Uint8     uint8              `knox:"u8,snappy"                json:"uint8"`
-	Uint_8    uint               `knox:"u_8,u8,snappy"            json:"uint_as_uint8"`
-	Uint_16   uint               `knox:"u_16,u16,snappy"          json:"uint_as_uint16"`
-	Uint_32   uint               `knox:"u_32,u32,snappy"          json:"uint_as_uint32"`
-	Uint_64   uint               `knox:"u_64,u64,snappy"          json:"uint_as_uint64"`
-	Float64   float64            `knox:"f64,snappy"               json:"float64"`
-	Float32   float32            `knox:"f32,snappy"               json:"float32"`
-	FD32      float32            `knox:"f_d32,d32,scale=2,snappy" json:"f32_as_d32"`
-	FD64      float64            `knox:"f_d64,d64,scale=2,snappy" json:"f64_as_d64"`
-	ID32      int32              `knox:"i_d32,d32,scale=2,snappy" json:"i32_as_d32"`
-	ID64      int64              `knox:"i_d64,d64,scale=2,snappy" json:"i64_as_d64"`
-	I_D       int                `knox:"i_d,d64,scale=2,snappy"   json:"int_as_d64"`
-	UD32      uint32             `knox:"u_d32,d32,scale=2,snappy" json:"u32_as_d32"`
-	UD64      uint64             `knox:"u_d64,d64,scale=2,snappy" json:"u64_as_d64"`
-	U_D       uint               `knox:"u_d,d64,scale=2,snappy"   json:"uint_as_d64"`
-	D32       decimal.Decimal32  `knox:"d32,scale=5,snappy"       json:"decimal32"`
-	D64       decimal.Decimal64  `knox:"d64,scale=15,snappy"      json:"decimal64"`
-	D128      decimal.Decimal128 `knox:"d128,scale=18,snappy"     json:"decimal128"`
-	D256      decimal.Decimal256 `knox:"d256,scale=24,snappy"     json:"decimal256"`
-	I128      vec.Int128         `knox:"i128,snappy"              json:"int128"`
-	I256      vec.Int256         `knox:"i256,snappy"              json:"int256"`
+	RowId     uint64    `knox:"I,pk"                     json:"row_id"`
+	Timestamp time.Time `knox:"T,snappy"                 json:"time"`
+	Hash      []byte    `knox:"H,bloom,snappy"           json:"hash"`
+	String    string    `knox:"str,snappy"               json:"string"`
+	Stringer  Stringer  `knox:"strlist,snappy"           json:"string_list"`
+	Bool      bool      `knox:"bool,snappy"              json:"bool"`
+	Enum      Enum      `knox:"enum,u8,snappy"           json:"enum"`
+	Int64     int64     `knox:"i64,snappy"               json:"int64"`
+	Int32     int32     `knox:"i32,snappy"               json:"int32"`
+	Int16     int16     `knox:"i16,snappy"               json:"int16"`
+	Int8      int8      `knox:"i8,snappy"                json:"int8"`
+	Int_8     int       `knox:"i_8,i8,snappy"            json:"int_as_int8"`
+	Int_16    int       `knox:"i_16,i16,snappy"          json:"int_as_int16"`
+	Int_32    int       `knox:"i_32,i32,snappy"          json:"int_as_int32"`
+	Int_64    int       `knox:"i_64,i64,snappy"          json:"int_as_int64"`
+	Uint64    uint64    `knox:"u64,snappy,bloom"         json:"uint64"`
+	Uint32    uint32    `knox:"u32,snappy"               json:"uint32"`
+	Uint16    uint16    `knox:"u16,snappy"               json:"uint16"`
+	Uint8     uint8     `knox:"u8,snappy"                json:"uint8"`
+	Uint_8    uint      `knox:"u_8,u8,snappy"            json:"uint_as_uint8"`
+	Uint_16   uint      `knox:"u_16,u16,snappy"          json:"uint_as_uint16"`
+	Uint_32   uint      `knox:"u_32,u32,snappy"          json:"uint_as_uint32"`
+	Uint_64   uint      `knox:"u_64,u64,snappy"          json:"uint_as_uint64"`
+	Float64   float64   `knox:"f64,snappy"               json:"float64"`
+	Float32   float32   `knox:"f32,snappy"               json:"float32"`
+	// FD32      float32            `knox:"f_d32,d32,scale=2,snappy" json:"f32_as_d32"`
+	// FD64      float64            `knox:"f_d64,d64,scale=2,snappy" json:"f64_as_d64"`
+	// ID32      int32              `knox:"i_d32,d32,scale=2,snappy" json:"i32_as_d32"`
+	// ID64      int64              `knox:"i_d64,d64,scale=2,snappy" json:"i64_as_d64"`
+	// I_D       int                `knox:"i_d,d64,scale=2,snappy"   json:"int_as_d64"`
+	// UD32      uint32             `knox:"u_d32,d32,scale=2,snappy" json:"u32_as_d32"`
+	// UD64      uint64             `knox:"u_d64,d64,scale=2,snappy" json:"u64_as_d64"`
+	// U_D       uint               `knox:"u_d,d64,scale=2,snappy"   json:"uint_as_d64"`
+	D32  decimal.Decimal32  `knox:"d32,scale=5,snappy"       json:"decimal32"`
+	D64  decimal.Decimal64  `knox:"d64,scale=15,snappy"      json:"decimal64"`
+	D128 decimal.Decimal128 `knox:"d128,scale=18,snappy"     json:"decimal128"`
+	D256 decimal.Decimal256 `knox:"d256,scale=24,snappy"     json:"decimal256"`
+	I128 vec.Int128         `knox:"i128,snappy"              json:"int128"`
+	I256 vec.Int256         `knox:"i256,snappy"              json:"int256"`
 }
 
 func (t Types) ID() uint64 {
@@ -286,14 +286,14 @@ func NewRandomTypes(i int) *Types {
 		Float32: float32(i / 1000000),
 		Float64: float64(i / 1000000),
 		// number to decimal
-		FD32: float32(i) / 100,
-		FD64: float64(i) / 100,
-		ID32: int32(i),
-		ID64: int64(i),
-		I_D:  i,
-		UD32: uint32(i),
-		UD64: uint64(i),
-		U_D:  uint(i),
+		// FD32: float32(i) / 100,
+		// FD64: float64(i) / 100,
+		// ID32: int32(i),
+		// ID64: int64(i),
+		// I_D:  i,
+		// UD32: uint32(i),
+		// UD64: uint64(i),
+		// U_D:  uint(i),
 		// decimals
 		D32:  decimal.NewDecimal32(int32(100123456789-i), 5),
 		D64:  decimal.NewDecimal64(1123456789123456789-int64(i), 15),
