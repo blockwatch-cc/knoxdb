@@ -395,7 +395,7 @@ TEXT ·matchInt64EqualAVX2(SB), NOSPLIT, $0-64
 	WORD $0xf685                // TEST ESI, ESI // if len(src) == 0
 	JLE  done
 
-	VBROADCASTSD val+24(FP), Y0             // load val into AVX2 reg
+	VPBROADCASTQ val+24(FP), Y0             // load val into AVX2 reg
 	VMOVDQU      crosslane<>+0x00(SB), Y9   // load permute control mask
 	VMOVDQU      shuffle<>+0x00(SB), Y10    // load shuffle control mask
 

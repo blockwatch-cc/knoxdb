@@ -7,7 +7,7 @@ func ensureBitfieldSize(bits *Bitset, srcsize int) *Bitset {
 	if bits == nil {
 		bits = NewBitset(srcsize)
 	} else {
-		bits.Grow(srcsize)
+		bits.Resize(srcsize)
 	}
 	return bits
 }

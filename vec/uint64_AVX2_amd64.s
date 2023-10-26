@@ -33,7 +33,7 @@ TEXT ·matchUint64EqualAVX2(SB), NOSPLIT, $0-64
 	JBE		prep_scalar
 
 prep_avx:
-	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
+	VPBROADCASTQ val+24(FP), Y0            // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
 	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
@@ -212,7 +212,7 @@ TEXT ·matchUint64NotEqualAVX2(SB), NOSPLIT, $0-64
 	JBE		prep_scalar
 
 prep_avx:
-	VBROADCASTSD val+24(FP), Y0            // load val into AVX2 reg
+	VPBROADCASTQ val+24(FP), Y0            // load val into AVX2 reg
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
 	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
 	CMPQ	BX, $63      // slices smaller than 64 byte are handled in small loop
@@ -395,7 +395,7 @@ TEXT ·matchUint64LessThanAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VPCMPEQQ		Y11, Y11, Y11                    // create 0x8000.. mask
 	VPSLLQ			$63, Y11, Y11                    // create 0x8000.. mask
-	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
+	VPBROADCASTQ 	val+24(FP), Y0                   // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
 	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
@@ -629,7 +629,7 @@ TEXT ·matchUint64LessThanEqualAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VPCMPEQQ		Y11, Y11, Y11                    // create 0x8000.. mask
 	VPSLLQ			$63, Y11, Y11                    // create 0x8000.. mask
-	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
+	VPBROADCASTQ 	val+24(FP), Y0                   // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
 	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
@@ -865,7 +865,7 @@ TEXT ·matchUint64GreaterThanAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VPCMPEQQ		Y11, Y11, Y11                    // create 0x8000.. mask
 	VPSLLQ			$63, Y11, Y11                    // create 0x8000.. mask
-	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
+	VPBROADCASTQ 	val+24(FP), Y0                   // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
 	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
@@ -1099,7 +1099,7 @@ TEXT ·matchUint64GreaterThanEqualAVX2(SB), NOSPLIT, $0-64
 prep_avx:
 	VPCMPEQQ		Y11, Y11, Y11                    // create 0x8000.. mask
 	VPSLLQ			$63, Y11, Y11                    // create 0x8000.. mask
-	VBROADCASTSD 	val+24(FP), Y0                   // load val into AVX2 reg
+	VPBROADCASTQ 	val+24(FP), Y0                   // load val into AVX2 reg
 	VPXOR			Y11, Y0, Y0                      // flip sign bit
 	VMOVDQU		crosslane<>+0x00(SB), Y9   // load permute control mask
 	VMOVDQU		shuffle64<>+0x00(SB), Y10    // load shuffle control mask
@@ -1344,8 +1344,8 @@ prep_avx:
 	VPSLLQ			$63, Y11, Y11                   // create 0x8000.. mask
 	VPCMPEQQ		Y13, Y13, Y13                   // create 1 for adding
 	VPSRLQ			$63, Y13, Y13
-	VBROADCASTSD 	a+24(FP), Y12                   // load val a into AVX2 reg
-	VBROADCASTSD 	b+32(FP), Y0                    // load val b into AVX2 reg
+	VPBROADCASTQ 	a+24(FP), Y12                   // load val a into AVX2 reg
+	VPBROADCASTQ 	b+32(FP), Y0                    // load val b into AVX2 reg
 	VPSUBQ			Y12, Y0, Y0                     // compute diff
 	VPADDQ			Y13, Y0, Y0
 	VPXOR			Y11, Y0, Y0                     // flip sign bit

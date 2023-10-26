@@ -112,9 +112,7 @@ func uint64AddUnique(s []uint64, val uint64) ([]uint64, bool) {
 	if idx > -1 {
 		return s, false
 	}
-	s = append(s, val)
-	Uint64Sorter(s).Sort()
-	return s, true
+	return uint64Insert(s, idx, val), true
 }
 
 func uint64Insert(s []uint64, k int, vs ...uint64) []uint64 {

@@ -137,11 +137,11 @@ func randUint64Slice(n, u int) []uint64 {
 
 // creates an uint64 test case from the given slice
 // Parameters:
-//  - name: desired name of the test case
-//  - slice: the slice for constructing the test case
-//  - match, match2: are only copied to the resulting test case
-//  - result: result for the given slice
-//  - len: desired length of the test case
+//   - name: desired name of the test case
+//   - slice: the slice for constructing the test case
+//   - match, match2: are only copied to the resulting test case
+//   - result: result for the given slice
+//   - len: desired length of the test case
 func CreateUint64TestCase(name string, slice []uint64, match, match2 uint64, result []byte, length int) Uint64MatchTest {
 	if len(slice)%8 != 0 {
 		panic("CreateUint64TestCase: length of slice has to be a multiple of 8")
@@ -239,7 +239,6 @@ func TestMatchUint64EqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Equal benchmarks
-//
 func BenchmarkMatchUint64EqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randUint64Slice(n.l, 1)
@@ -309,7 +308,6 @@ func TestMatchUint64NotEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // NotEqual benchmarks
-//
 func BenchmarkMatchUint64NotEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randUint64Slice(n.l, 1)
@@ -379,7 +377,6 @@ func TestMatchUint64LessGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Less benchmarks
-//
 func BenchmarkMatchUint64LessGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randUint64Slice(n.l, 1)
@@ -449,7 +446,6 @@ func TestMatchUint64LessEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
-//
 func BenchmarkMatchUint64LessEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randUint64Slice(n.l, 1)
@@ -519,7 +515,6 @@ func TestMatchUint64GreaterGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Greater benchmarks
-//
 func BenchmarkMatchUint64GreaterGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randUint64Slice(n.l, 1)
@@ -589,7 +584,6 @@ func TestMatchUint64GreaterEqualGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
-//
 func BenchmarkMatchUint64GreaterEqualGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randUint64Slice(n.l, 1)
@@ -605,7 +599,6 @@ func BenchmarkMatchUint64GreaterEqualGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-//
 var uint64BetweenCases = []Uint64MatchTest{
 	{
 		name:   "l0",
@@ -660,7 +653,6 @@ func TestMatchUint64BetweenGeneric(T *testing.T) {
 
 // -----------------------------------------------------------------------------
 // Between benchmarks
-//
 func BenchmarkMatchUint64BetweenGeneric(B *testing.B) {
 	for _, n := range vecBenchmarkSizes {
 		a := randUint64Slice(n.l, 1)
@@ -676,7 +668,6 @@ func BenchmarkMatchUint64BetweenGeneric(B *testing.B) {
 
 // -----------------------------------------------------------------------
 // Uint64 Slice
-//
 func TestUniqueUint64(T *testing.T) {
 	a := randUint64Slice(1000, 5)
 	b := UniqueUint64Slice(a)
@@ -792,80 +783,80 @@ func TestUint64SliceContainsRange(T *testing.T) {
 
 	var tests = []VecTestcase{
 		// nil slice
-		VecTestcase{
+		{
 			Slice: nil,
 			Ranges: []VecTestRange{
-				VecTestRange{Name: "X", From: 0, To: 2, Match: false},
+				{Name: "X", From: 0, To: 2, Match: false},
 			},
 		},
 		// empty slice
-		VecTestcase{
+		{
 			Slice: []uint64{},
 			Ranges: []VecTestRange{
-				VecTestRange{Name: "X", From: 0, To: 2, Match: false},
+				{Name: "X", From: 0, To: 2, Match: false},
 			},
 		},
 		// 1-element slice
-		VecTestcase{
+		{
 			Slice: []uint64{3},
 			Ranges: []VecTestRange{
-				VecTestRange{Name: "A", From: 0, To: 2, Match: false},   // Case A
-				VecTestRange{Name: "B1", From: 1, To: 3, Match: true},   // Case B.1, D1
-				VecTestRange{Name: "B3", From: 3, To: 4, Match: true},   // Case B.3, D3
-				VecTestRange{Name: "E", From: 15, To: 16, Match: false}, // Case E
-				VecTestRange{Name: "F", From: 1, To: 4, Match: true},    // Case F
+				{Name: "A", From: 0, To: 2, Match: false},   // Case A
+				{Name: "B1", From: 1, To: 3, Match: true},   // Case B.1, D1
+				{Name: "B3", From: 3, To: 4, Match: true},   // Case B.3, D3
+				{Name: "E", From: 15, To: 16, Match: false}, // Case E
+				{Name: "F", From: 1, To: 4, Match: true},    // Case F
 			},
 		},
 		// 1-element slice, from == to
-		VecTestcase{
+		{
 			Slice: []uint64{3},
 			Ranges: []VecTestRange{
-				VecTestRange{Name: "BCD", From: 3, To: 3, Match: true}, // Case B.3, C.1, D.1
+				{Name: "BCD", From: 3, To: 3, Match: true}, // Case B.3, C.1, D.1
 			},
 		},
 		// N-element slice
-		VecTestcase{
+		{
 			Slice: []uint64{3, 5, 7, 11, 13},
 			Ranges: []VecTestRange{
-				VecTestRange{Name: "A", From: 0, To: 2, Match: false},    // Case A
-				VecTestRange{Name: "B1a", From: 1, To: 3, Match: true},   // Case B.1
-				VecTestRange{Name: "B1b", From: 3, To: 3, Match: true},   // Case B.1
-				VecTestRange{Name: "B2a", From: 1, To: 4, Match: true},   // Case B.2
-				VecTestRange{Name: "B2b", From: 1, To: 5, Match: true},   // Case B.2
-				VecTestRange{Name: "B3a", From: 3, To: 4, Match: true},   // Case B.3
-				VecTestRange{Name: "B3b", From: 3, To: 5, Match: true},   // Case B.3
-				VecTestRange{Name: "C1a", From: 4, To: 5, Match: true},   // Case C.1
-				VecTestRange{Name: "C1b", From: 4, To: 6, Match: true},   // Case C.1
-				VecTestRange{Name: "C1c", From: 4, To: 7, Match: true},   // Case C.1
-				VecTestRange{Name: "C1d", From: 5, To: 5, Match: true},   // Case C.1
-				VecTestRange{Name: "C2a", From: 8, To: 8, Match: false},  // Case C.2
-				VecTestRange{Name: "C2b", From: 8, To: 10, Match: false}, // Case C.2
-				VecTestRange{Name: "D1a", From: 11, To: 13, Match: true}, // Case D.1
-				VecTestRange{Name: "D1b", From: 12, To: 13, Match: true}, // Case D.1
-				VecTestRange{Name: "D2", From: 12, To: 14, Match: true},  // Case D.2
-				VecTestRange{Name: "D3a", From: 13, To: 13, Match: true}, // Case D.3
-				VecTestRange{Name: "D3b", From: 13, To: 14, Match: true}, // Case D.3
-				VecTestRange{Name: "E", From: 15, To: 16, Match: false},  // Case E
-				VecTestRange{Name: "Fa", From: 0, To: 16, Match: true},   // Case F
-				VecTestRange{Name: "Fb", From: 0, To: 13, Match: true},   // Case F
-				VecTestRange{Name: "Fc", From: 3, To: 13, Match: true},   // Case F
+				{Name: "A", From: 0, To: 2, Match: false},    // Case A
+				{Name: "B1a", From: 1, To: 3, Match: true},   // Case B.1
+				{Name: "B1b", From: 3, To: 3, Match: true},   // Case B.1
+				{Name: "B2a", From: 1, To: 4, Match: true},   // Case B.2
+				{Name: "B2b", From: 1, To: 5, Match: true},   // Case B.2
+				{Name: "B3a", From: 3, To: 4, Match: true},   // Case B.3
+				{Name: "B3b", From: 3, To: 5, Match: true},   // Case B.3
+				{Name: "C1a", From: 4, To: 5, Match: true},   // Case C.1
+				{Name: "C1b", From: 4, To: 6, Match: true},   // Case C.1
+				{Name: "C1c", From: 4, To: 7, Match: true},   // Case C.1
+				{Name: "C1d", From: 5, To: 5, Match: true},   // Case C.1
+				{Name: "C2a", From: 8, To: 8, Match: false},  // Case C.2
+				{Name: "C2b", From: 8, To: 10, Match: false}, // Case C.2
+				{Name: "D1a", From: 11, To: 13, Match: true}, // Case D.1
+				{Name: "D1b", From: 12, To: 13, Match: true}, // Case D.1
+				{Name: "D2", From: 12, To: 14, Match: true},  // Case D.2
+				{Name: "D3a", From: 13, To: 13, Match: true}, // Case D.3
+				{Name: "D3b", From: 13, To: 14, Match: true}, // Case D.3
+				{Name: "E", From: 15, To: 16, Match: false},  // Case E
+				{Name: "Fa", From: 0, To: 16, Match: true},   // Case F
+				{Name: "Fb", From: 0, To: 13, Match: true},   // Case F
+				{Name: "Fc", From: 3, To: 13, Match: true},   // Case F
 			},
 		},
 		// real-word testcase
-		VecTestcase{
+		{
 			Slice: []uint64{
 				699421, 1374016, 1692360, 1797909, 1809339,
 				2552208, 2649552, 2740915, 2769610, 3043393,
 			},
 			Ranges: []VecTestRange{
-				VecTestRange{Name: "1", From: 2785281, To: 2818048, Match: false},
-				VecTestRange{Name: "2", From: 2818049, To: 2850816, Match: false},
-				VecTestRange{Name: "3", From: 2850817, To: 2883584, Match: false},
-				VecTestRange{Name: "4", From: 2883585, To: 2916352, Match: false},
-				VecTestRange{Name: "5", From: 2916353, To: 2949120, Match: false},
-				VecTestRange{Name: "6", From: 2949121, To: 2981888, Match: false},
-				VecTestRange{Name: "7", From: 2981889, To: 3014656, Match: false},
-				VecTestRange{Name: "8", From: 3014657, To: 3047424, Match: true},
+				{Name: "1", From: 2785281, To: 2818048, Match: false},
+				{Name: "2", From: 2818049, To: 2850816, Match: false},
+				{Name: "3", From: 2850817, To: 2883584, Match: false},
+				{Name: "4", From: 2883585, To: 2916352, Match: false},
+				{Name: "5", From: 2916353, To: 2949120, Match: false},
+				{Name: "6", From: 2949121, To: 2981888, Match: false},
+				{Name: "7", From: 2981889, To: 3014656, Match: false},
+				{Name: "8", From: 3014657, To: 3047424, Match: true},
 			},
 		},
 	}
