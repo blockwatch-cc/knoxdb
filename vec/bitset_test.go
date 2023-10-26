@@ -619,7 +619,6 @@ func TestBitNegGeneric(T *testing.T) {
 }
 
 // Test high-level bitset API
-//
 func TestBitsetNew(T *testing.T) {
 	for _, c := range bitsetCases {
 		T.Run(c.name, func(t *testing.T) {
@@ -703,13 +702,13 @@ func TestBitsetZero(T *testing.T) {
 	}
 }
 
-func TestBitsetGrow(T *testing.T) {
+func TestBitsetResize(T *testing.T) {
 	for _, sz := range bitsetSizes {
 		for _, sznew := range bitsetSizes {
 			T.Run(f("%d_%d", sz, sznew), func(t *testing.T) {
 				bits := NewBitset(sz)
 				bits.One()
-				bits.Grow(sznew)
+				bits.Resize(sznew)
 				if got, want := len(bits.Bytes()), bitFieldLen(sznew); got != want {
 					T.Errorf("unexpected buf length %d, expected %d", got, want)
 					T.FailNow()
@@ -744,10 +743,10 @@ func TestBitsetGrow(T *testing.T) {
 	}
 	// clear/reset bitset to zero
 	for _, sz := range bitsetSizes {
-		T.Run(f("%d_grow_0", sz), func(t *testing.T) {
+		T.Run(f("%d_resize_0", sz), func(t *testing.T) {
 			bits := NewBitset(sz)
 			bits.One()
-			bits.Grow(0)
+			bits.Resize(0)
 			if got, want := len(bits.Bytes()), 0; got != want {
 				T.Errorf("unexpected buf length %d, expected %d", got, want)
 				T.FailNow()
@@ -765,10 +764,10 @@ func TestBitsetGrow(T *testing.T) {
 	}
 	// grow + 1
 	for _, sz := range bitsetSizes {
-		T.Run(f("%d_grow+1", sz), func(t *testing.T) {
+		T.Run(f("%d_resize+1", sz), func(t *testing.T) {
 			bits := NewBitset(sz)
 			bits.One()
-			bits.Grow(bits.Len() + 1)
+			bits.Resize(bits.Len() + 1)
 			bits.Set(bits.Len() - 1)
 			if got, want := len(bits.Bytes()), bitFieldLen(sz+1); got != want {
 				T.Errorf("unexpected buf length %d, expected %d", got, want)

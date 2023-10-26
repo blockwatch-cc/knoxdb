@@ -237,6 +237,9 @@ func bitsetRunAVX2Wrapper(src []byte, index, size int) (int, int) {
 		}
 		start = i<<3 + bitsetLeadingZeros[src[i]]
 		length = -bitsetLeadingZeros[src[i]]
+		if start+length > size {
+			length = size - start
+		}
 	}
 
 	// find next 0 bit beginning at 'start' position in the current byte:
@@ -268,7 +271,7 @@ func bitsetRunAVX2Wrapper(src []byte, index, size int) (int, int) {
 	// count trailing one bits
 	if src[i] != 0xff {
 		length += bitsetLeadingZeros[^src[i]]
-		// corner-case overlow check
+		// corner-case overflow check
 		if start+length > size {
 			length = size - start
 		}

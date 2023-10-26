@@ -57,7 +57,7 @@ func NewBitset(size int) *Bitset {
 	default:
 		return makeBitset(size)
 	}
-	return s.Grow(size)
+	return s.Resize(size)
 }
 
 // NewCustomBitset allocates a new bitset of arbitrary small size and capacity
@@ -166,9 +166,9 @@ func (s *Bitset) Copy(b *Bitset) *Bitset {
 	return s
 }
 
-// Grow resizes the bitset to a new size, either growing or shrinking it.
+// Resize resizes the bitset to a new size, either growing or shrinking it.
 // Content remains unchanged on grow, when shrinking trailing bits are clipped.
-func (s *Bitset) Grow(size int) *Bitset {
+func (s *Bitset) Resize(size int) *Bitset {
 	if size < 0 {
 		return s
 	}
@@ -194,6 +194,11 @@ func (s *Bitset) Grow(size int) *Bitset {
 	s.buf = s.buf[:sz]
 	s.size = size
 	return s
+}
+
+// Grow increases the bitset to a new size.
+func (s *Bitset) Grow(size int) *Bitset {
+	return s.Resize(s.size + size)
 }
 
 // Reset clears the bitset contents and sets its size to zero.
@@ -464,7 +469,7 @@ func (s *Bitset) Insert(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
 
 	// grow bitset, restore counter for fast-path
 	cnt := s.cnt
-	s.Grow(s.size + srcLen)
+	s.Resize(s.size + srcLen)
 	s.cnt = cnt
 
 	// insert
@@ -557,7 +562,7 @@ func (s *Bitset) Append(src *Bitset, srcPos, srcLen int) *Bitset {
 
 	end := s.size
 	cnt := s.cnt
-	s.Grow(s.size + srcLen)
+	s.Resize(s.size + srcLen)
 	s.cnt = cnt
 
 	if end&0x7+srcPos&0x7+srcLen&0x7 == 0 {
@@ -605,7 +610,7 @@ func (s *Bitset) Delete(pos, n int) *Bitset {
 	}
 
 	// shrink and reset counter
-	s.Grow(s.size - n)
+	s.Resize(s.size - n)
 	return s
 }
 
