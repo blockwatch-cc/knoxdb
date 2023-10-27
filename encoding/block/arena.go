@@ -29,8 +29,9 @@ const (
 func newAllocator[T any]() *allocator[T] {
 	a := &allocator[T]{}
 	for i := range a.pools {
+		sz := 1 << (minAllocClass + i)
 		a.pools[i] = &sync.Pool{
-			New: func() any { return make([]T, 0, 1<<(minAllocClass+i)) },
+			New: func() any { return make([]T, 0, sz) },
 		}
 	}
 	return a
