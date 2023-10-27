@@ -2141,8 +2141,11 @@ func (p *Package) Delete(pos, n int) error {
 }
 
 func (p *Package) Clear() {
-	for i := range p.blocks {
-		p.blocks[i].Clear()
+	for _, v := range p.blocks {
+		if v == nil {
+			continue
+		}
+		v.Clear()
 	}
 	// Note: we keep all type-related data and blocks, pool reference
 	// also keep pack key to avoid clearing journal/tombstone identity
@@ -2152,8 +2155,11 @@ func (p *Package) Clear() {
 }
 
 func (p *Package) Release() {
-	for i := range p.blocks {
-		p.blocks[i].Release()
+	for i, v := range p.blocks {
+		if v == nil {
+			continue
+		}
+		v.DecRef()
 		p.blocks[i] = nil
 	}
 	p.refCount = 0

@@ -2973,7 +2973,6 @@ func (t *Table) Compact(ctx context.Context) error {
 				// clone new pack from journal
 				// log.Debugf("pack: creating new dst pack %d key=%x", dstIndex, dstKey)
 				dstPack = t.newPackage().PopulateFields(nil).WithKey(dstKey)
-				// dstPack.IncRef()
 				isNewPack = true
 			}
 		}
@@ -3175,7 +3174,6 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	if touch {
 		for i, v := range pkg2.blocks {
 			if v != nil {
-				v.IncRef()
 				t.bcache.Add(encodeBlockKey(id, i), v)
 			}
 		}

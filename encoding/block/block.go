@@ -374,6 +374,7 @@ func NewBlock(typ BlockType, comp Compression, sz int) *Block {
 	b.typ = typ
 	b.comp = comp
 	b.dirty = true
+	b.refCount = 1
 	switch typ {
 	case BlockTime, BlockInt64:
 		b.Int64 = arena.Alloc(typ, sz).([]int64)
@@ -676,6 +677,7 @@ func (b *Block) Release() {
 	}
 	b.dirty = false
 	b.size = 0
+	b.refCount = 0
 
 	switch b.typ {
 	case BlockFloat64:
