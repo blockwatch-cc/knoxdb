@@ -26,30 +26,30 @@ const (
 // computationally about 2x the cost, and adds some metadata over
 // head. The ARCCache is similar, but does not require setting any
 // parameters.
-type TwoQueueCache struct {
+type TwoQueueCache[K comparable, V any] struct {
 	size       int
 	recentSize int
 
-	recent      internal.LRUCache
-	frequent    internal.LRUCache
-	recentEvict internal.LRUCache
-	onEvict     internal.EvictCallback
+	recent      internal.LRUCache[K, V]
+	frequent    internal.LRUCache[K, V]
+	recentEvict internal.LRUCache[K, V]
+	onEvict     internal.EvictCallback[K, V]
 	lock        sync.RWMutex
 }
 
 // New2Q creates a new TwoQueueCache using the default
 // values for the parameters.
-func New2Q(size int) (*TwoQueueCache, error) {
-	return New2QParams(size, Default2QRecentRatio, Default2QGhostEntries, nil)
+func New2Q[K comparable, V any](size int) (*TwoQueueCache[K, V], error) {
+	return New2QParams[K, V](size, Default2QRecentRatio, Default2QGhostEntries, nil)
 }
 
-func New2QWithEvict(size int, onEvicted func(key interface{}, value interface{})) (*TwoQueueCache, error) {
-	return New2QParams(size, Default2QRecentRatio, Default2QGhostEntries, onEvicted)
+func New2QWithEvict[K comparable, V any](size int, onEvicted func(key K, value V)) (*TwoQueueCache[K, V], error) {
+	return New2QParams[K, V](size, Default2QRecentRatio, Default2QGhostEntries, onEvicted)
 }
 
 // New2QParams creates a new TwoQueueCache using the provided
 // parameter values.
-func New2QParams(size int, recentRatio float64, ghostRatio float64, onEvicted func(key interface{}, value interface{})) (*TwoQueueCache, error) {
+func New2QParams[K comparable, V any](size int, recentRatio float64, ghostRatio float64, onEvicted func(key K, value V)) (*TwoQueueCache[K, V], error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("2qcache: invalid size")
 	}
@@ -65,21 +65,21 @@ func New2QParams(size int, recentRatio float64, ghostRatio float64, onEvicted fu
 	evictSize := int(float64(size) * ghostRatio)
 
 	// Allocate the LRUs
-	recent, err := internal.NewLRU(size, nil)
+	recent, err := internal.NewLRU[K, V](size, nil)
 	if err != nil {
 		return nil, err
 	}
-	frequent, err := internal.NewLRU(size, nil)
+	frequent, err := internal.NewLRU[K, V](size, nil)
 	if err != nil {
 		return nil, err
 	}
-	recentEvict, err := internal.NewLRU(evictSize, nil)
+	recentEvict, err := internal.NewLRU[K, V](evictSize, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	// Initialize the cache
-	c := &TwoQueueCache{
+	c := &TwoQueueCache[K, V]{
 		size:        size,
 		recentSize:  recentSize,
 		recent:      recent,
@@ -91,7 +91,7 @@ func New2QParams(size int, recentRatio float64, ghostRatio float64, onEvicted fu
 }
 
 // Get looks up a key's value from the cache.
-func (c *TwoQueueCache) Get(key interface{}) (value interface{}, ok bool) {
+func (c *TwoQueueCache[K, V]) Get(key K) (value V, ok bool) {
 	c.lock.Lock()
 
 	// Check if this is a frequent value
@@ -111,11 +111,11 @@ func (c *TwoQueueCache) Get(key interface{}) (value interface{}, ok bool) {
 
 	// No hit
 	c.lock.Unlock()
-	return nil, false
+	return
 }
 
 // Add adds a value to the cache.
-func (c *TwoQueueCache) Add(key, value interface{}) (updated, evicted bool) {
+func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 	c.lock.Lock()
 
 	// Check if the value is frequently used already,
@@ -157,7 +157,7 @@ func (c *TwoQueueCache) Add(key, value interface{}) (updated, evicted bool) {
 // ContainsOrAdd checks if a key is in the cache  without updating the
 // recent-ness or deleting it for being stale,  and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
-func (c *TwoQueueCache) ContainsOrAdd(key, value interface{}) (ok, evicted bool) {
+func (c *TwoQueueCache[K, V]) ContainsOrAdd(key K, value V) (ok, evicted bool) {
 	c.lock.Lock()
 	if c.frequent.Contains(key) {
 		c.lock.Unlock()
@@ -173,7 +173,7 @@ func (c *TwoQueueCache) ContainsOrAdd(key, value interface{}) (ok, evicted bool)
 }
 
 // ensureSpace is used to ensure we have space in the cache
-func (c *TwoQueueCache) ensureSpace(recentEvict bool) bool {
+func (c *TwoQueueCache[K, V]) ensureSpace(recentEvict bool) bool {
 	// If we have space, nothing to do
 	recentLen := c.recent.Len()
 	freqLen := c.frequent.Len()
@@ -185,7 +185,8 @@ func (c *TwoQueueCache) ensureSpace(recentEvict bool) bool {
 	// the target, evict from there
 	if recentLen > 0 && (recentLen > c.recentSize || (recentLen == c.recentSize && !recentEvict)) {
 		k, v, evicted := c.recent.RemoveOldest()
-		c.recentEvict.Add(k, nil)
+		var null V
+		c.recentEvict.Add(k, null)
 		if evicted && c.onEvict != nil {
 			c.onEvict(k, v)
 		}
@@ -201,7 +202,7 @@ func (c *TwoQueueCache) ensureSpace(recentEvict bool) bool {
 }
 
 // Len returns the number of items in the cache.
-func (c *TwoQueueCache) Len() int {
+func (c *TwoQueueCache[K, V]) Len() int {
 	c.lock.RLock()
 	l := c.recent.Len() + c.frequent.Len()
 	c.lock.RUnlock()
@@ -210,7 +211,7 @@ func (c *TwoQueueCache) Len() int {
 
 // Keys returns a slice of the keys in the cache.
 // The frequently used keys are first in the returned slice.
-func (c *TwoQueueCache) Keys() []interface{} {
+func (c *TwoQueueCache[K, V]) Keys() []K {
 	c.lock.RLock()
 	k1 := c.frequent.Keys()
 	k2 := c.recent.Keys()
@@ -219,7 +220,7 @@ func (c *TwoQueueCache) Keys() []interface{} {
 }
 
 // Remove removes the provided key from the cache.
-func (c *TwoQueueCache) Remove(key interface{}) {
+func (c *TwoQueueCache[K, V]) Remove(key K) {
 	c.lock.Lock()
 	if c.onEvict != nil {
 		if val, ok := c.frequent.Peek(key); ok {
@@ -243,7 +244,7 @@ func (c *TwoQueueCache) Remove(key interface{}) {
 	c.lock.Unlock()
 }
 
-func (c *TwoQueueCache) RemoveOldest() {
+func (c *TwoQueueCache[K, V]) RemoveOldest() {
 	c.lock.Lock()
 	key, _, ok := c.recent.GetOldest()
 	c.lock.Unlock()
@@ -253,7 +254,7 @@ func (c *TwoQueueCache) RemoveOldest() {
 }
 
 // Purge is used to completely clear the cache.
-func (c *TwoQueueCache) Purge() {
+func (c *TwoQueueCache[K, V]) Purge() {
 	c.lock.Lock()
 	c.recent.Purge()
 	c.frequent.Purge()
@@ -263,7 +264,7 @@ func (c *TwoQueueCache) Purge() {
 
 // Contains is used to check if the cache contains a key
 // without updating recency or frequency.
-func (c *TwoQueueCache) Contains(key interface{}) bool {
+func (c *TwoQueueCache[K, V]) Contains(key K) bool {
 	c.lock.RLock()
 	ok := c.frequent.Contains(key) || c.recent.Contains(key)
 	c.lock.RUnlock()
@@ -272,7 +273,7 @@ func (c *TwoQueueCache) Contains(key interface{}) bool {
 
 // Peek is used to inspect the cache value of a key
 // without updating recency or frequency.
-func (c *TwoQueueCache) Peek(key interface{}) (value interface{}, ok bool) {
+func (c *TwoQueueCache[K, V]) Peek(key K) (value V, ok bool) {
 	c.lock.RLock()
 	if value, ok = c.frequent.Peek(key); ok {
 		c.lock.RUnlock()

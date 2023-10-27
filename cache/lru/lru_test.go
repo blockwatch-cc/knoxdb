@@ -6,7 +6,7 @@ import (
 )
 
 func BenchmarkLRU_Rand(b *testing.B) {
-	l, err := New(8192)
+	l, err := New[any, any](8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
@@ -35,7 +35,7 @@ func BenchmarkLRU_Rand(b *testing.B) {
 }
 
 func BenchmarkLRU_Freq(b *testing.B) {
-	l, err := New(8192)
+	l, err := New[any, any](8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestLRUAdd(t *testing.T) {
 
 // test that Contains doesn't update recent-ness
 func TestLRUContains(t *testing.T) {
-	l, err := New(2)
+	l, err := New[any, any](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestLRUContains(t *testing.T) {
 
 // test that Contains doesn't update recent-ness
 func TestLRUContainsOrAdd(t *testing.T) {
-	l, err := New(2)
+	l, err := New[any, any](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestLRUContainsOrAdd(t *testing.T) {
 
 // test that Peek doesn't update recent-ness
 func TestLRUPeek(t *testing.T) {
-	l, err := New(2)
+	l, err := New[any, any](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
