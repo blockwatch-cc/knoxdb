@@ -42,3 +42,13 @@ func (s *CacheStats) Reset() {
 	atomic.StoreInt64(&s.Inserts, 0)
 	atomic.StoreInt64(&s.Evictions, 0)
 }
+
+func (s *CacheStats) Clone() (c CacheStats) {
+	c.Hits = atomic.LoadInt64(&s.Hits)
+	c.Misses = atomic.LoadInt64(&s.Misses)
+	c.Inserts = atomic.LoadInt64(&s.Inserts)
+	c.Evictions = atomic.LoadInt64(&s.Evictions)
+	c.Count = atomic.LoadInt64(&s.Count)
+	c.Size = atomic.LoadInt64(&s.Size)
+	return
+}

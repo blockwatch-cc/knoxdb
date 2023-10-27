@@ -522,7 +522,7 @@ func (t *Table) Unlock() {
 }
 
 func (t *Table) Stats() []TableStats {
-	var s TableStats = t.stats
+	s := t.stats.Clone()
 
 	// update from journal and tomb (reading here may be more efficient than
 	// update on change, but creates a data race)
@@ -1144,7 +1144,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 	atomic.AddInt64(&t.stats.FlushCalls, 1)
 	atomic.AddInt64(&t.stats.FlushedTuples, int64(t.journal.Len()+t.journal.TombLen()))
-	t.stats.LastFlushTime = start
+	atomic.StoreInt64(&t.stats.LastFlushTime, start.UnixNano())
 
 	// use internal journal data slices for faster lookups
 	live := t.journal.keys
@@ -1578,9 +1578,10 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		pkg = nil
 	}
 
-	t.stats.LastFlushDuration = time.Since(start)
+	dur := time.Since(start)
+	atomic.StoreInt64(&t.stats.LastFlushDuration, int64(dur))
 	log.Debugf("flush: %s table %d packs add=%d del=%d total_size=%s in %s",
-		t.name, nParts, nAdd, nDel, util.ByteSize(nBytes), t.stats.LastFlushDuration)
+		t.name, nParts, nAdd, nDel, util.ByteSize(nBytes), dur)
 
 	// flush indexes
 	for _, idx := range t.indexes {

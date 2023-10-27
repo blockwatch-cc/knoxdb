@@ -8,12 +8,14 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/vec"
 	"golang.org/x/exp/slices"
 )
 
 type NativeByteArray struct {
+	size int64
 	bufs [][]byte
 }
 
@@ -28,7 +30,7 @@ func newNativeByteArray(n int) *NativeByteArray {
 }
 
 func newNativeByteArrayFromBytes(b [][]byte) *NativeByteArray {
-	return &NativeByteArray{bufs: b}
+	return &NativeByteArray{bufs: b, size: heapSize(b)}
 }
 
 func (a NativeByteArray) Len() int {
@@ -43,27 +45,32 @@ func (a NativeByteArray) Elem(index int) []byte {
 	return a.bufs[index]
 }
 
-func (a NativeByteArray) Set(index int, buf []byte) {
+func (a *NativeByteArray) Set(index int, buf []byte) {
 	if len(a.bufs) <= index {
 		return
 	}
+	diff := len(buf) - len(a.bufs[index])
 	if cap(a.bufs[index]) < len(buf) {
 		a.bufs[index] = make([]byte, len(buf))
 	} else {
 		a.bufs[index] = a.bufs[index][:len(buf)]
 	}
 	copy(a.bufs[index], buf)
+	atomic.AddInt64(&a.size, int64(diff))
 }
 
-func (a NativeByteArray) SetZeroCopy(index int, buf []byte) {
+func (a *NativeByteArray) SetZeroCopy(index int, buf []byte) {
 	if len(a.bufs) <= index {
 		return
 	}
+	diff := len(buf) - len(a.bufs[index])
+	atomic.AddInt64(&a.size, int64(diff))
 	a.bufs[index] = buf
 }
 
 func (a *NativeByteArray) Grow(n int) ByteArray {
 	a.bufs = slices.Grow(a.bufs, n)
+	atomic.AddInt64(&a.size, int64(24*n))
 	return a
 }
 
@@ -71,11 +78,13 @@ func (a *NativeByteArray) Append(vals ...[]byte) ByteArray {
 	for _, v := range vals {
 		a.bufs = append(a.bufs, bytes.Clone(v))
 	}
+	atomic.AddInt64(&a.size, heapSize(vals))
 	return a
 }
 
 func (a *NativeByteArray) AppendZeroCopy(vals ...[]byte) ByteArray {
 	a.bufs = append(a.bufs, vals...)
+	atomic.AddInt64(&a.size, heapSize(vals))
 	return a
 }
 
@@ -86,6 +95,7 @@ func (a *NativeByteArray) AppendFrom(src ByteArray) ByteArray {
 		copy(buf, v)
 		a.bufs = append(a.bufs, buf)
 	}
+	atomic.AddInt64(&a.size, heapSize(ss))
 	if src.IsOptimized() {
 		recycle(ss)
 	}
@@ -98,6 +108,7 @@ func (a *NativeByteArray) Insert(index int, vals ...[]byte) ByteArray {
 	if cap(pre) != cap(a.bufs) {
 		recycle(pre)
 	}
+	atomic.AddInt64(&a.size, heapSize(vals))
 	return a
 }
 
@@ -108,6 +119,7 @@ func (a *NativeByteArray) InsertFrom(index int, src ByteArray) ByteArray {
 	if src.IsOptimized() {
 		recycle(ss)
 	}
+	atomic.AddInt64(&a.size, heapSize(ss))
 	if cap(pre) != cap(a.bufs) {
 		recycle(pre)
 	}
@@ -116,12 +128,15 @@ func (a *NativeByteArray) InsertFrom(index int, src ByteArray) ByteArray {
 
 func (a *NativeByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
 	ss := src.Subslice(srcPos, srcPos+n)
+	diff := heapSize(ss)
 	for j, v := range ss {
+		diff -= int64(len(a.bufs[dstPos+j]))
 		// always allocate new slice to avoid sharing memory
 		buf := make([]byte, len(v))
 		copy(buf, v)
 		a.bufs[dstPos+j] = buf
 	}
+	atomic.AddInt64(&a.size, diff)
 	if src.IsOptimized() {
 		recycle(ss)
 	}
@@ -130,9 +145,12 @@ func (a *NativeByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
 
 func (a *NativeByteArray) Delete(index, n int) ByteArray {
 	// avoid mem leaks
+	var diff int
 	for j, l := index, index+n; j < l; j++ {
+		diff -= len(a.bufs[j]) + 24
 		a.bufs[j] = nil
 	}
+	atomic.AddInt64(&a.size, int64(diff))
 	a.bufs = append(a.bufs[:index], a.bufs[index+n:]...)
 	return a
 }
@@ -142,6 +160,7 @@ func (a *NativeByteArray) Clear() {
 		a.bufs[j] = nil
 	}
 	a.bufs = a.bufs[:0]
+	atomic.StoreInt64(&a.size, 0)
 }
 
 func (a *NativeByteArray) Release() {
@@ -150,6 +169,7 @@ func (a *NativeByteArray) Release() {
 	}
 	recycle(a.bufs)
 	a.bufs = nil
+	atomic.StoreInt64(&a.size, 0)
 }
 
 func (a NativeByteArray) Slice() [][]byte {
@@ -179,12 +199,8 @@ func (a NativeByteArray) MaxEncodedSize() int {
 	return sz + 1
 }
 
-func (a NativeByteArray) HeapSize() int {
-	sz := nativeByteArraySz
-	for _, v := range a.bufs {
-		sz += len(v) + 24
-	}
-	return sz
+func (a *NativeByteArray) HeapSize() int {
+	return nativeByteArraySz + int(atomic.LoadInt64(&a.size))
 }
 
 func (a NativeByteArray) WriteTo(w io.Writer) (int64, error) {
@@ -228,7 +244,7 @@ func (a *NativeByteArray) Decode(buf []byte) error {
 	buf = cp
 
 	j := 0
-
+	var heapSize int
 	for i < len(buf) {
 		length, n := binary.Uvarint(buf[i:])
 		if n <= 0 {
@@ -248,6 +264,7 @@ func (a *NativeByteArray) Decode(buf []byte) error {
 		}
 
 		val := buf[lower:upper:upper]
+		heapSize += len(val) + 24
 		if j < len(a.bufs) {
 			a.bufs[j] = val
 		} else {
@@ -258,7 +275,7 @@ func (a *NativeByteArray) Decode(buf []byte) error {
 		j++
 	}
 	a.bufs = a.bufs[:j]
-
+	atomic.StoreInt64(&a.size, int64(heapSize))
 	return nil
 }
 

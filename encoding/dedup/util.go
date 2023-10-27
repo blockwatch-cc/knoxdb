@@ -53,3 +53,10 @@ func uvarIntLen(n int) int {
 	}
 	return i + 1
 }
+
+func heapSize(vals [][]byte) (sz int64) {
+	for _, v := range vals {
+		sz += int64(len(v) + 24)
+	}
+	return
+}

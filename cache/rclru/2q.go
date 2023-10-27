@@ -6,6 +6,7 @@ package rclru
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -46,7 +47,7 @@ type CacheParams struct {
 }
 
 func (c *TwoQueueCache[K, V]) Stats() CacheStats {
-	return c.stats
+	return c.stats.Clone()
 }
 
 func (c *TwoQueueCache[K, V]) ResetStats() {
@@ -54,7 +55,7 @@ func (c *TwoQueueCache[K, V]) ResetStats() {
 }
 
 func (c *TwoQueueCache[K, V]) Size() int {
-	return int(c.stats.Size)
+	return int(atomic.LoadInt64(&c.stats.Size))
 }
 
 func (c *TwoQueueCache[K, V]) GetQueueLen() (int, int, int) {

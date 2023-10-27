@@ -927,7 +927,7 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 	atomic.AddInt64(&idx.stats.FlushedTuples, int64(idx.journal.Len()+idx.tombstone.Len()))
 	start := time.Now().UTC()
 	lvl := log.Level()
-	idx.stats.LastFlushTime = start
+	atomic.StoreInt64(&idx.stats.LastFlushTime, start.UnixNano())
 
 	// requires sorted journal
 	if err := idx.journal.PkSort(); err != nil {
@@ -1289,10 +1289,15 @@ func (idx *Index) FlushTx(ctx context.Context, tx *Tx) error {
 	atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.packidx.HeapSize()))
 	atomic.StoreInt64(&idx.stats.TotalSize, int64(idx.packidx.TableSize()))
 
-	idx.stats.LastFlushDuration = time.Since(start)
+	dur := time.Since(start)
+	atomic.StoreInt64(&idx.stats.LastFlushDuration, int64(dur))
 	log.Debugf("pack: %s flushed %d packs add=%d/%d del=%d/%d total_size=%s in %s",
-		idx.name(), nParts, nAdd, idx.journal.Len(), nDel, idx.tombstone.Len(), util.ByteSize(nBytes),
-		idx.stats.LastFlushDuration)
+		idx.name(), nParts, nAdd,
+		idx.journal.Len(), nDel,
+		idx.tombstone.Len(),
+		util.ByteSize(nBytes),
+		dur,
+	)
 
 	// ignore any remaining records
 	idx.tombstone.Clear()

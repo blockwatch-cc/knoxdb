@@ -3,16 +3,14 @@
 
 package pack
 
-import (
-	"time"
-)
+import "sync/atomic"
 
 type TableStats struct {
 	// global statistics
-	TableName         string        `json:"table_name,omitempty"`
-	IndexName         string        `json:"index_name,omitempty"`
-	LastFlushTime     time.Time     `json:"last_flush_time"`
-	LastFlushDuration time.Duration `json:"last_flush_duration"`
+	TableName         string `json:"table_name,omitempty"`
+	IndexName         string `json:"index_name,omitempty"`
+	LastFlushTime     int64  `json:"last_flush_time"`
+	LastFlushDuration int64  `json:"last_flush_duration"`
 
 	// tuple statistics
 	TupleCount     int64 `json:"tuples_count"`
@@ -76,4 +74,76 @@ type TableStats struct {
 	CacheMisses    int64 `json:"cache_misses"`
 	CacheInserts   int64 `json:"cache_inserts"`
 	CacheEvictions int64 `json:"cache_evictions"`
+}
+
+func (s *TableStats) Clone() (c TableStats) {
+	c.TableName = s.TableName
+	c.IndexName = s.IndexName
+	c.LastFlushTime = atomic.LoadInt64(&s.LastFlushTime)
+	c.LastFlushDuration = atomic.LoadInt64(&s.LastFlushDuration)
+
+	// tuple statistics
+	c.TupleCount = atomic.LoadInt64(&s.TupleCount)
+	c.InsertedTuples = atomic.LoadInt64(&s.InsertedTuples)
+	c.UpdatedTuples = atomic.LoadInt64(&s.UpdatedTuples)
+	c.DeletedTuples = atomic.LoadInt64(&s.DeletedTuples)
+	c.FlushedTuples = atomic.LoadInt64(&s.FlushedTuples)
+	c.QueriedTuples = atomic.LoadInt64(&s.QueriedTuples)
+	c.StreamedTuples = atomic.LoadInt64(&s.StreamedTuples)
+
+	// call statistics
+	c.InsertCalls = atomic.LoadInt64(&s.InsertCalls)
+	c.UpdateCalls = atomic.LoadInt64(&s.UpdateCalls)
+	c.DeleteCalls = atomic.LoadInt64(&s.DeleteCalls)
+	c.FlushCalls = atomic.LoadInt64(&s.FlushCalls)
+	c.QueryCalls = atomic.LoadInt64(&s.QueryCalls)
+	c.StreamCalls = atomic.LoadInt64(&s.StreamCalls)
+
+	// metadata statistics
+	c.MetaBytesRead = atomic.LoadInt64(&s.MetaBytesRead)
+	c.MetaBytesWritten = atomic.LoadInt64(&s.MetaBytesWritten)
+	c.MetaSize = atomic.LoadInt64(&s.MetaSize)
+
+	// journal statistics
+	c.JournalSize = atomic.LoadInt64(&s.JournalSize)
+	c.JournalDiskSize = atomic.LoadInt64(&s.JournalDiskSize)
+	c.JournalTuplesCount = atomic.LoadInt64(&s.JournalTuplesCount)
+	c.JournalTuplesThreshold = atomic.LoadInt64(&s.JournalTuplesThreshold)
+	c.JournalTuplesCapacity = atomic.LoadInt64(&s.JournalTuplesCapacity)
+	c.JournalPacksStored = atomic.LoadInt64(&s.JournalPacksStored)
+	c.JournalTuplesFlushed = atomic.LoadInt64(&s.JournalTuplesFlushed)
+	c.JournalBytesWritten = atomic.LoadInt64(&s.JournalBytesWritten)
+
+	// tombstone statistics
+	c.TombstoneSize = atomic.LoadInt64(&s.TombstoneSize)
+	c.TombstoneDiskSize = atomic.LoadInt64(&s.TombstoneDiskSize)
+	c.TombstoneTuplesCount = atomic.LoadInt64(&s.TombstoneTuplesCount)
+	c.TombstoneTuplesThreshold = atomic.LoadInt64(&s.TombstoneTuplesThreshold)
+	c.TombstoneTuplesCapacity = atomic.LoadInt64(&s.TombstoneTuplesCapacity)
+	c.TombstonePacksStored = atomic.LoadInt64(&s.TombstonePacksStored)
+	c.TombstoneTuplesFlushed = atomic.LoadInt64(&s.TombstoneTuplesFlushed)
+	c.TombstoneBytesWritten = atomic.LoadInt64(&s.TombstoneBytesWritten)
+
+	// pack statistics
+	c.PacksCount = atomic.LoadInt64(&s.PacksCount)
+	c.PacksAlloc = atomic.LoadInt64(&s.PacksAlloc)
+	c.PacksRecycled = atomic.LoadInt64(&s.PacksRecycled)
+	c.PacksLoaded = atomic.LoadInt64(&s.PacksLoaded)
+	c.PacksStored = atomic.LoadInt64(&s.PacksStored)
+
+	// I/O statistics
+	c.BytesRead = atomic.LoadInt64(&s.BytesRead)
+	c.BytesWritten = atomic.LoadInt64(&s.BytesWritten)
+	c.TotalSize = atomic.LoadInt64(&s.TotalSize)
+
+	// pack cache statistics
+	c.CacheSize = atomic.LoadInt64(&s.CacheSize)
+	c.CacheCount = atomic.LoadInt64(&s.CacheCount)
+	c.CacheCapacity = atomic.LoadInt64(&s.CacheCapacity)
+	c.CacheHits = atomic.LoadInt64(&s.CacheHits)
+	c.CacheMisses = atomic.LoadInt64(&s.CacheMisses)
+	c.CacheInserts = atomic.LoadInt64(&s.CacheInserts)
+	c.CacheEvictions = atomic.LoadInt64(&s.CacheEvictions)
+
+	return
 }
