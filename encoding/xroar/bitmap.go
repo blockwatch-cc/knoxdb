@@ -78,6 +78,10 @@ func FromBufferWithCopy(src []byte) *Bitmap {
 	}
 }
 
+func (ra *Bitmap) Size() int {
+	return len(ra.data) * 2
+}
+
 func (ra *Bitmap) ToBuffer() []byte {
 	if ra.IsEmpty() {
 		return nil
