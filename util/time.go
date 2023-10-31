@@ -205,11 +205,11 @@ func ParseTime(value string) (Time, error) {
 		}
 		// continue handling minus operator
 		if _, val, ok := strings.Cut(value, "-"); ok {
-			d, derr := ParseDuration(val)
+			u, derr := ParseTimeUnit(val)
 			if derr != nil {
 				return Time{}, fmt.Errorf("time: parsing '%s': %v", value, derr)
 			}
-			now = now.Add(-d.Duration())
+			now = u.Sub(now)
 		}
 		return Time{tm: now}, nil
 	case value == "today":
@@ -498,4 +498,100 @@ func FirstNonZeroTime(val time.Time, others ...time.Time) time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+const (
+	units string = "mhdwMqy"
+)
+
+type TimeUnit struct {
+	Value int
+	Unit  rune
+}
+
+func (c TimeUnit) String() string {
+	if c.Value == 1 {
+		return string(c.Unit)
+	}
+	return strconv.Itoa(c.Value) + string(c.Unit)
+}
+
+func ParseTimeUnit(s string) (TimeUnit, error) {
+	var c TimeUnit
+	if len(s) < 1 {
+		return c, fmt.Errorf("unit: invalid value %q", s)
+	}
+	if u := s[len(s)-1]; !strings.Contains(units, string(u)) {
+		return c, fmt.Errorf("unit: invalid unit %q", u)
+	} else {
+		c.Unit = rune(u)
+	}
+	if sval := s[:len(s)-1]; len(sval) > 0 {
+		if val, err := strconv.Atoi(sval); err != nil {
+			return c, fmt.Errorf("unit: %v", err)
+		} else {
+			c.Value = val
+		}
+	}
+	if c.Value < 0 {
+		c.Value = -c.Value
+	}
+	if c.Value == 0 {
+		c.Value = 1
+	}
+	return c, nil
+}
+
+func (c TimeUnit) MarshalText() ([]byte, error) {
+	return []byte(c.String()), nil
+}
+
+func (c *TimeUnit) UnmarshalText(data []byte) error {
+	cc, err := ParseTimeUnit(string(data))
+	if err != nil {
+		return err
+	}
+	*c = cc
+	return nil
+}
+
+func (c TimeUnit) Sub(t time.Time) time.Time {
+	switch c.Unit {
+	default:
+		// add n*m units
+		return t.Add(-c.Duration())
+	case 'w':
+		// add n*m weeks
+		return t.AddDate(0, 0, -c.Value*7)
+	case 'M':
+		// add n*m months
+		return t.AddDate(0, -c.Value, 0)
+	case 'q':
+		// add n*3m months
+		return t.AddDate(0, -3*c.Value, 0)
+	case 'y':
+		// add n*m years
+		return t.AddDate(-c.Value, 0, 0)
+	}
+}
+
+func (c TimeUnit) Duration() time.Duration {
+	base := time.Minute
+	switch c.Unit {
+	case 'm':
+		base = time.Minute
+	case 'h':
+		base = time.Hour
+	case 'd':
+		base = 24 * time.Hour
+	case 'w':
+		base = 24 * 7 * time.Hour
+	case 'M':
+		base = 30*24*time.Hour + 629*time.Minute + 28*time.Second // 30.437 days
+	case 'q':
+		base = 91*24*time.Hour + 6*time.Hour // 91.25 days
+	case 'y':
+		base = 365 * 24 * time.Hour
+	}
+	return time.Duration(c.Value) * base
 }
