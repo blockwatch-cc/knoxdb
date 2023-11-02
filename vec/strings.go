@@ -6,6 +6,8 @@ package vec
 import (
 	"sort"
 	"strings"
+
+	"golang.org/x/exp/slices"
 )
 
 func MatchStringsEqual(src []string, val string, bits, mask *Bitset) *Bitset {
@@ -106,13 +108,11 @@ var Strings = struct {
 }
 
 func stringAddUnique(s []string, val string) ([]string, bool) {
-	idx := stringIndex(s, val, 0)
-	if idx > -1 {
+	idx, ok := slices.BinarySearchFunc(s, val, strings.Compare)
+	if ok {
 		return s, false
 	}
-	s = append(s, val)
-	StringsSorter(s).Sort()
-	return s, true
+	return stringInsert(s, idx, val), true
 }
 
 func stringInsert(s []string, k int, vs ...string) []string {
@@ -130,8 +130,8 @@ func stringInsert(s []string, k int, vs ...string) []string {
 }
 
 func stringRemove(s []string, val string) ([]string, bool) {
-	idx := stringIndex(s, val, 0)
-	if idx < 0 {
+	idx, ok := slices.BinarySearchFunc(s, val, strings.Compare)
+	if !ok {
 		return s, false
 	}
 	s = append(s[:idx], s[idx+1:]...)

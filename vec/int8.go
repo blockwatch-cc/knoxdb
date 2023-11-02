@@ -5,6 +5,8 @@ package vec
 
 import (
 	"sort"
+
+	"golang.org/x/exp/slices"
 )
 
 func MatchInt8Equal(src []int8, val int8, bits, mask *Bitset) *Bitset {
@@ -105,13 +107,11 @@ var Int8 = struct {
 }
 
 func int8AddUnique(s []int8, val int8) ([]int8, bool) {
-	idx := int8Index(s, val, 0)
-	if idx > -1 {
+	idx, ok := slices.BinarySearch(s, val)
+	if ok {
 		return s, false
 	}
-	s = append(s, val)
-	Int8Sorter(s).Sort()
-	return s, true
+	return int8Insert(s, idx, val), true
 }
 
 func int8Insert(s []int8, k int, vs ...int8) []int8 {
@@ -129,8 +129,8 @@ func int8Insert(s []int8, k int, vs ...int8) []int8 {
 }
 
 func int8Remove(s []int8, val int8) ([]int8, bool) {
-	idx := int8Index(s, val, 0)
-	if idx < 0 {
+	idx, ok := slices.BinarySearch(s, val)
+	if !ok {
 		return s, false
 	}
 	s = append(s[:idx], s[idx+1:]...)

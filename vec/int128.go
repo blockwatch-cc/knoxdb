@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"golang.org/x/exp/slices"
 	//	"fmt"
 )
 
@@ -550,6 +552,10 @@ func Max128(x, y Int128) Int128 {
 	return y
 }
 
+func Int128Compare(a, b Int128) int {
+	return a.Cmp(b)
+}
+
 // Match helpers
 func MatchInt128Equal(src Int128LLSlice, val Int128, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, src.Len())
@@ -600,12 +606,11 @@ func (s *Int128Slice) Unique() {
 }
 
 func (s *Int128Slice) AddUnique(val Int128) bool {
-	idx := s.Index(val, 0)
-	if idx > -1 {
+	idx, ok := slices.BinarySearchFunc(*s, val, Int128Compare)
+	if ok {
 		return false
 	}
-	*s = append(*s, val)
-	s.Sort()
+	s.Insert(idx, val)
 	return true
 }
 
@@ -624,8 +629,8 @@ func (s *Int128Slice) Insert(k int, vs ...Int128) {
 }
 
 func (s *Int128Slice) Remove(val Int128) bool {
-	idx := s.Index(val, 0)
-	if idx < 0 {
+	idx, ok := slices.BinarySearchFunc(*s, val, Int128Compare)
+	if !ok {
 		return false
 	}
 	*s = append((*s)[:idx], (*s)[idx+1:]...)

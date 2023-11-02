@@ -5,6 +5,8 @@ package vec
 
 import (
 	"sort"
+
+	"golang.org/x/exp/slices"
 )
 
 func MatchFloat32Equal(src []float32, val float32, bits, mask *Bitset) *Bitset {
@@ -105,13 +107,11 @@ var Float32 = struct {
 }
 
 func float32AddUnique(s []float32, val float32) ([]float32, bool) {
-	idx := float32Index(s, val, 0)
-	if idx > -1 {
+	idx, ok := slices.BinarySearch(s, val)
+	if ok {
 		return s, false
 	}
-	s = append(s, val)
-	Float32Sorter(s).Sort()
-	return s, true
+	return float32Insert(s, idx, val), true
 }
 
 func float32Insert(s []float32, k int, vs ...float32) []float32 {
@@ -129,8 +129,8 @@ func float32Insert(s []float32, k int, vs ...float32) []float32 {
 }
 
 func float32Remove(s []float32, val float32) ([]float32, bool) {
-	idx := float32Index(s, val, 0)
-	if idx < 0 {
+	idx, ok := slices.BinarySearch(s, val)
+	if !ok {
 		return s, false
 	}
 	s = append(s[:idx], s[idx+1:]...)

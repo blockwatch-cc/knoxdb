@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"golang.org/x/exp/slices"
 )
 
 var (
@@ -716,6 +718,10 @@ func (x Uint256) Gte(y Uint256) bool {
 	return !x.Int256().ult(y.Int256())
 }
 
+func Int256Compare(a, b Int256) int {
+	return a.Cmp(b)
+}
+
 // Match helpers
 func MatchInt256Equal(src Int256LLSlice, val Int256, bits, mask *Bitset) *Bitset {
 	bits = ensureBitfieldSize(bits, src.Len())
@@ -766,12 +772,11 @@ func (s *Int256Slice) Unique() {
 }
 
 func (s *Int256Slice) AddUnique(val Int256) bool {
-	idx := s.Index(val, 0)
-	if idx > -1 {
+	idx, ok := slices.BinarySearchFunc(*s, val, Int256Compare)
+	if ok {
 		return false
 	}
-	*s = append(*s, val)
-	s.Sort()
+	s.Insert(idx, val)
 	return true
 }
 
@@ -790,8 +795,8 @@ func (s *Int256Slice) Insert(k int, vs ...Int256) {
 }
 
 func (s *Int256Slice) Remove(val Int256) bool {
-	idx := s.Index(val, 0)
-	if idx < 0 {
+	idx, ok := slices.BinarySearchFunc(*s, val, Int256Compare)
+	if !ok {
 		return false
 	}
 	*s = append((*s)[:idx], (*s)[idx+1:]...)

@@ -6,6 +6,8 @@ package vec
 import (
 	"bytes"
 	"sort"
+
+	"golang.org/x/exp/slices"
 )
 
 func MatchBytesEqual(src [][]byte, val []byte, bits, mask *Bitset) *Bitset {
@@ -106,13 +108,11 @@ var Bytes = struct {
 }
 
 func bytesAddUnique(s [][]byte, val []byte) ([][]byte, bool) {
-	idx := bytesIndex(s, val, 0)
-	if idx > -1 {
+	idx, ok := slices.BinarySearchFunc(s, val, bytes.Compare)
+	if ok {
 		return s, false
 	}
-	s = append(s, val)
-	BytesSorter(s).Sort()
-	return s, true
+	return bytesInsert(s, idx, val), true
 }
 
 func bytesInsert(s [][]byte, k int, vs ...[]byte) [][]byte {
@@ -136,8 +136,8 @@ func bytesInsert(s [][]byte, k int, vs ...[]byte) [][]byte {
 }
 
 func bytesRemove(s [][]byte, val []byte) ([][]byte, bool) {
-	idx := bytesIndex(s, val, 0)
-	if idx < 0 {
+	idx, ok := slices.BinarySearchFunc(s, val, bytes.Compare)
+	if !ok {
 		return s, false
 	}
 	s = append(s[:idx], s[idx+1:]...)

@@ -6,6 +6,8 @@ package vec
 import (
 	"sort"
 	"time"
+
+	"golang.org/x/exp/slices"
 )
 
 func MatchTimeEqual(src []time.Time, val time.Time, bits, mask *Bitset) *Bitset {
@@ -104,19 +106,42 @@ var Times = struct {
 	},
 }
 
+func TimeCompare(a, b time.Time) int {
+	switch {
+	case a.Equal(b):
+		return 0
+	case a.Before(b):
+		return -1
+	default:
+		return 1
+	}
+}
+
 func timeAddUnique(s []time.Time, val time.Time) ([]time.Time, bool) {
-	idx := timeIndex(s, val, 0)
-	if idx > -1 {
+	idx, ok := slices.BinarySearchFunc(s, val, TimeCompare)
+	if ok {
 		return s, false
 	}
-	s = append(s, val)
-	TimeSorter(s).Sort()
-	return s, true
+	return timeInsert(s, idx, val), true
+}
+
+func timeInsert(s []time.Time, k int, vs ...time.Time) []time.Time {
+	if n := len(s) + len(vs); n <= cap(s) {
+		s2 := s[:n]
+		copy(s2[k+len(vs):], s[k:])
+		copy(s2[k:], vs)
+		return s2
+	}
+	s2 := make([]time.Time, len(s)+len(vs))
+	copy(s2, s[:k])
+	copy(s2[k:], vs)
+	copy(s2[k+len(vs):], s[k:])
+	return s2
 }
 
 func timeRemove(s []time.Time, val time.Time) ([]time.Time, bool) {
-	idx := timeIndex(s, val, 0)
-	if idx < 0 {
+	idx, ok := slices.BinarySearchFunc(s, val, TimeCompare)
+	if !ok {
 		return s, false
 	}
 	s = append(s[:idx], s[idx+1:]...)

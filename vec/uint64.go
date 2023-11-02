@@ -5,6 +5,8 @@ package vec
 
 import (
 	"sort"
+
+	"golang.org/x/exp/slices"
 )
 
 func MatchUint64Equal(src []uint64, val uint64, bits, mask *Bitset) *Bitset {
@@ -108,8 +110,8 @@ var Uint64 = struct {
 }
 
 func uint64AddUnique(s []uint64, val uint64) ([]uint64, bool) {
-	idx := uint64Index(s, val, 0)
-	if idx > -1 {
+	idx, ok := slices.BinarySearch(s, val)
+	if ok {
 		return s, false
 	}
 	return uint64Insert(s, idx, val), true
@@ -130,8 +132,8 @@ func uint64Insert(s []uint64, k int, vs ...uint64) []uint64 {
 }
 
 func uint64Remove(s []uint64, val uint64) ([]uint64, bool) {
-	idx := uint64Index(s, val, 0)
-	if idx < 0 {
+	idx, ok := slices.BinarySearch(s, val)
+	if !ok {
 		return s, false
 	}
 	s = append(s[:idx], s[idx+1:]...)
