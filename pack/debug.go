@@ -657,10 +657,32 @@ func (n ConditionTreeNode) dump(level int, w io.Writer) {
 
 func (q Query) Dump() string {
 	buf := bytes.NewBuffer(nil)
-	fmt.Fprintln(buf, "Q>", q.Name, "=>", "SELECT(", strings.Join(q.fout.Aliases(), ", "), ") WHERE")
-	q.conds.dump(0, buf)
-	fmt.Fprintln(buf, ">> fields:", strings.Join(q.freq.Aliases(), ", "))
-	fmt.Fprintln(buf, ">> indexes:", strings.Join(q.fidx.Aliases(), ", "))
+	if q.IsBound() {
+		fmt.Fprintln(buf, "Q>", q.Name, "=>", "SELECT(", strings.Join(q.fout.Aliases(), ", "), ") WHERE")
+		q.conds.dump(0, buf)
+		fmt.Fprintln(buf, ">> fields:", strings.Join(q.freq.Aliases(), ", "))
+		fmt.Fprintln(buf, ">> indexes:", strings.Join(q.fidx.Aliases(), ", "))
+	} else {
+		fmt.Fprintln(buf, "Q>", q.Name, "=>", "SELECT(", strings.Join(q.Fields, ", "), ") WHERE")
+		q.Conditions.dump(0, buf)
+		if q.Order == OrderDesc {
+			fmt.Fprintf(buf, "ORDER BY ID DESC ")
+		}
+		if q.Limit > 0 || q.Offset > 0 {
+			fmt.Fprintf(buf, "LIMIT %d OFFSET %d", q.Limit, q.Offset)
+		}
+		if q.NoCache || q.NoIndex {
+			nc, ni := " NOCACHE", " NOINDEX"
+			if !q.NoCache {
+				nc = ""
+			}
+			if !q.NoIndex {
+				ni = ""
+			}
+			fmt.Fprintf(buf, "%s%s", nc, ni)
+		}
+		fmt.Fprintln(buf)
+	}
 	return string(buf.Bytes())
 }
 
