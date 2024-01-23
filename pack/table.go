@@ -2334,8 +2334,10 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	t.u32Pool.Put(u32slice)
 
 	// after all packs have been scanned, add remaining rows from journal, if any
+	// use SortedIndexes to mask deleted rows that are only in journal
 	// subtract offset and clamp to [0, limit]
-	q.stats.RowsMatched += util.Max(int(jbits.Count())-q.Offset, 0)
+	ids, _ := t.journal.SortedIndexes(jbits)
+	q.stats.RowsMatched += util.Max(len(ids)-q.Offset, 0)
 	if q.Limit > 0 {
 		q.stats.RowsMatched = util.Min(q.stats.RowsMatched, q.Limit)
 	}
