@@ -215,9 +215,11 @@ func structFieldInfo(f *reflect.StructField) (*fieldInfo, error) {
 
 	tokens := strings.Split(tag, ",")
 	if len(tokens) > 1 {
-		tag = tokens[0]
+		tag = strings.TrimSpace(tokens[0])
 		for _, flag := range tokens[1:] {
-			key, val, ok := strings.Cut(flag, "=")
+			key, val, ok := strings.Cut(strings.TrimSpace(flag), "=")
+			key = strings.TrimSpace(key)
+			val = strings.TrimSpace(val)
 			switch key {
 			case "u8":
 				finfo.override = FieldTypeUint8
