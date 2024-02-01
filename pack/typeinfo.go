@@ -183,6 +183,7 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 		// extract long name
 		if a := f.Tag.Get(tagAlias); a != "-" {
 			finfo.alias, _, _ = strings.Cut(a, ",")
+			finfo.alias = strings.TrimSpace(finfo.alias)
 		}
 
 		// Add the field if it doesn't conflict with other fields.

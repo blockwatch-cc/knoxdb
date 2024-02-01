@@ -652,8 +652,9 @@ func (j *Journal) DeleteBatch(pks []uint64) (int, error) {
 
 	// the algorithm below requires ids to be sorted and unique
 	pks = vec.Uint64.Unique(pks)
-	for pks[0] == 0 {
-		pks = pks[1:]
+	pks = vec.Uint64.RemoveZeros(pks)
+	if len(pks) == 0 {
+		return 0, nil
 	}
 
 	// pks must exist
