@@ -24,42 +24,6 @@ func MaxBytes(a, b []byte) []byte {
 	return b
 }
 
-func Max[T constraints.Ordered](vals ...T) T {
-	var zero T
-	switch len(vals) {
-	case 0:
-		return zero
-	case 1:
-		return vals[0]
-	default:
-		n := vals[0]
-		for _, v := range vals[1:] {
-			if v > n {
-				n = v
-			}
-		}
-		return n
-	}
-}
-
-func Min[T constraints.Ordered](vals ...T) T {
-	var zero T
-	switch len(vals) {
-	case 0:
-		return zero
-	case 1:
-		return vals[0]
-	default:
-		n := vals[0]
-		for _, v := range vals[1:] {
-			if v < n {
-				n = v
-			}
-		}
-		return n
-	}
-}
-
 func MinMax[T constraints.Ordered](vals ...T) (T, T) {
 	var min, max T
 	switch l := len(vals); l {
@@ -87,8 +51,8 @@ func MinMax[T constraints.Ordered](vals ...T) (T, T) {
 	return min, max
 }
 
-func Clamp[T constraints.Ordered](val, min, max T) T {
-	return Min(Max(val, min), max)
+func Clamp[T constraints.Ordered](val, minIn, maxIn T) T {
+	return min(max(val, minIn), maxIn)
 }
 
 func NonZero[T constraints.Ordered](x ...T) T {
@@ -102,35 +66,23 @@ func NonZero[T constraints.Ordered](x ...T) T {
 }
 
 func NonZeroMin[T constraints.Ordered](x ...T) T {
-	var min, zero T
+	var val, zero T
 	for _, v := range x {
 		if v != zero {
-			if min == zero {
-				min = v
+			if val == zero {
+				val = v
 			} else {
-				min = Min(min, v)
+				val = min(val, v)
 			}
 		}
 	}
-	return min
+	return val
 }
 
 func Abs[T constraints.Signed](n T) T {
 	y := int64(n) >> 63
 	return T((int64(n) ^ y) - y)
 }
-
-// func MinF64(x, y float64) float64 {
-// 	return math.Min(x, y)
-// }
-
-// func MaxF64(x, y float64) float64 {
-// 	return math.Max(x, y)
-// }
-
-// func ClampF64(val, min, max float64) float64 {
-// 	return math.Min(math.Max(val, min), max)
-// }
 
 func MinMaxTime(s []time.Time) (time.Time, time.Time) {
 	var min, max time.Time

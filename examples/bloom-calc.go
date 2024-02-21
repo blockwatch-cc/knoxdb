@@ -19,7 +19,6 @@ import (
 	"blockwatch.cc/knoxdb/hash/xxhashVec"
 	"blockwatch.cc/knoxdb/pack"
 	_ "blockwatch.cc/knoxdb/store/bolt"
-	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -143,7 +142,7 @@ func run() error {
 		block := pkg.Blocks()[field.Index]
 		_, max := block.MinMax()
 		maxVal := max.(uint32)
-		maxid = util.MaxU32(maxid, maxVal)
+		maxid = max(maxid, maxVal)
 
 		realBits := vec.NewBitset(int(maxVal))
 		for _, v := range block.Uint32 {

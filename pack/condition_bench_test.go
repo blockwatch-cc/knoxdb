@@ -11,7 +11,6 @@ import (
 
 	"blockwatch.cc/knoxdb/hash"
 	"blockwatch.cc/knoxdb/hash/xxhash"
-	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -228,7 +227,7 @@ func BenchmarkInConditionRun(B *testing.B) {
 			// build IN slice of size 0.1*pack.Size() from
 			// - 5% (min 2) pack values
 			// - 5% random values
-			checkN := util.Max(n.l/20, 2)
+			checkN := max(n.l/20, 2)
 			inSlice := make([][]byte, 0, 2*checkN)
 			for i := 0; i < checkN; i++ {
 				// add existing values
@@ -269,7 +268,7 @@ func BenchmarkInConditionIndexes(B *testing.B) {
 			// build IN slice of size 0.1*pack.Size() from
 			// - 5% (min 2) pack values
 			// - 5% random values
-			checkN := util.Max(n.l/20, 2)
+			checkN := max(n.l/20, 2)
 			inSlice := make([][]byte, 0, 2*checkN)
 			for i := 0; i < checkN; i++ {
 				// add existing values
@@ -370,7 +369,7 @@ func BenchmarkInLoop(B *testing.B) {
 			}
 			// build IN slice of size 0.1*pack.Size() from
 			// - 10% (min 2) pack values
-			checkN := util.Max(n.l/10, 2)
+			checkN := max(n.l/10, 2)
 			inSlice := make([]uint64, checkN)
 			for i := 0; i < checkN; i++ {
 				// add existing values
@@ -399,7 +398,7 @@ func BenchmarkInNestedLoop(B *testing.B) {
 			}
 			// build IN slice of size 0.1*pack.Size() from
 			// - 10% (min 2) pack values
-			checkN := util.Max(n.l/10, 2)
+			checkN := max(n.l/10, 2)
 			inSlice := make([]uint64, checkN)
 			for i := 0; i < checkN; i++ {
 				// add existing values
@@ -429,7 +428,7 @@ func BenchmarkInMap(B *testing.B) {
 			}
 			// build IN slice of size 0.1*pack.Size() from
 			// - 10% (min 2) pack values
-			checkN := util.Max(n.l/10, 2)
+			checkN := max(n.l/10, 2)
 			for i := 0; i < checkN; i++ {
 				// add existing values
 				inmap[pk[rand.Intn(n.l)]] = struct{}{}

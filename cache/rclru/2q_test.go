@@ -462,6 +462,7 @@ func Test2Q_Parallism(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(nThreads)
 		for j := 0; j < nThreads; j++ {
+			n := j
 			go func(act, id int) {
 				switch act {
 				case 0: // DecRef
@@ -475,7 +476,7 @@ func Test2Q_Parallism(t *testing.T) {
 					if ok {
 						atomic.AddInt64(&refs[id], 1)
 						if id != v.key {
-							t.Errorf("Thread %d: act=%d id= %d: got %d", j, act, id, v.key)
+							t.Errorf("Thread %d: act=%d id= %d: got %d", n, act, id, v.key)
 						}
 					}
 				case 3: // Get
@@ -483,7 +484,7 @@ func Test2Q_Parallism(t *testing.T) {
 					if ok {
 						atomic.AddInt64(&refs[id], 1)
 						if id != v.key {
-							t.Errorf("Thread %d: act=%d id= %d: got %d", j, act, id, v.key)
+							t.Errorf("Thread %d: act=%d id= %d: got %d", n, act, id, v.key)
 						}
 					}
 				case 4: // Add

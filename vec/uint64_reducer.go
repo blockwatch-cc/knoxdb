@@ -4,7 +4,6 @@
 package vec
 
 import (
-	"blockwatch.cc/knoxdb/util"
 	"math"
 )
 
@@ -38,8 +37,8 @@ func (b *Uint64Reducer) Add(val uint64) {
 		b.min = val
 		b.max = val
 	} else {
-		b.min = util.Min(b.min, val)
-		b.max = util.Max(b.max, val)
+		b.min = min(b.min, val)
+		b.max = max(b.max, val)
 	}
 	b.sum += val
 	b.n++

@@ -546,7 +546,7 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 		for j := 0; j < p.nFields; j++ {
 			sz[j] = len(names[j])
 		}
-		for i, l := 0, util.Min(500, p.nValues); i < l; i++ {
+		for i, l := 0, min(500, p.nValues); i < l; i++ {
 			for j := 0; j < p.nFields; j++ {
 				var str string
 				if p.blocks[j].IsIgnore() {
@@ -555,7 +555,7 @@ func (p *Package) DumpData(w io.Writer, mode DumpMode, aliases []string) error {
 					val, _ := p.FieldAt(j, i)
 					str = util.ToString(val)
 				}
-				sz[j] = util.Max(sz[j], len(str))
+				sz[j] = max(sz[j], len(str))
 			}
 		}
 		for j := 0; j < p.nFields; j++ {

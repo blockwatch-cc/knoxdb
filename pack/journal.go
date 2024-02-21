@@ -8,7 +8,6 @@ import (
 	"sort"
 
 	"blockwatch.cc/knoxdb/store"
-	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -132,7 +131,7 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 	for i, n := range j.data.PkColumn() {
 		j.keys = append(j.keys, journalEntry{n, i})
 		j.sortData = j.sortData || n < j.lastid
-		j.lastid = util.Max(j.lastid, n)
+		j.lastid = max(j.lastid, n)
 	}
 	// ensure invariant, keep keys always sorted
 	if j.sortData {
@@ -281,8 +280,8 @@ func (j *Journal) Insert(item Item) error {
 	}
 
 	// update lastid and maxid
-	j.lastid = util.Max(j.lastid, pk)
-	j.maxid = util.Max(j.maxid, pk)
+	j.lastid = max(j.lastid, pk)
+	j.maxid = max(j.maxid, pk)
 
 	return nil
 }
@@ -331,8 +330,8 @@ func (j *Journal) InsertBatch(batch []Item) (int, error) {
 			j.sortData = j.sortData || pk < j.lastid
 
 			// update lastid and maxid
-			j.lastid = util.Max(j.lastid, pk)
-			j.maxid = util.Max(j.maxid, pk)
+			j.lastid = max(j.lastid, pk)
+			j.maxid = max(j.maxid, pk)
 		} else {
 			// write update record to WAL
 			j.wal.Write(WalRecordTypeUpdate, pk, item)
@@ -423,7 +422,7 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 				}
 			}
 			count++
-			j.lastid = util.Max(j.lastid, pk)
+			j.lastid = max(j.lastid, pk)
 		}
 	}
 
@@ -437,7 +436,7 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 	j.mergeKeys(newKeys)
 	j.deleted.Resize(len(j.keys))
 	j.sortData = j.sortData || !isSorted
-	j.maxid = util.Max(j.maxid, j.lastid)
+	j.maxid = max(j.maxid, j.lastid)
 
 	return count, nil
 }
@@ -471,8 +470,8 @@ func (j *Journal) Update(item Item) error {
 
 		// update maxid (Note: since we just check if primary key exists in
 		// the journal, but not in the entire table, an update can be an insert)
-		j.lastid = util.Max(j.lastid, pk)
-		j.maxid = util.Max(j.maxid, pk)
+		j.lastid = max(j.lastid, pk)
+		j.maxid = max(j.maxid, pk)
 	} else {
 		// replace in data pack if exists, this also resets a zero pk after deletion
 		if err := j.data.ReplaceAt(idx, item); err != nil {
@@ -525,7 +524,7 @@ func (j *Journal) UpdateBatch(batch []Item) (int, error) {
 
 			// set sortData flag
 			j.sortData = j.sortData || pk < j.lastid
-			j.lastid = util.Max(j.lastid, pk)
+			j.lastid = max(j.lastid, pk)
 
 		} else {
 			// replace in data pack if exists
@@ -546,7 +545,7 @@ func (j *Journal) UpdateBatch(batch []Item) (int, error) {
 
 	// update maxid (Note: since we just check if primary key exists in
 	// the journal, but not in the entire table, an update be a hidden insert)
-	j.maxid = util.Max(j.maxid, j.lastid)
+	j.maxid = max(j.maxid, j.lastid)
 
 	return count, nil
 }

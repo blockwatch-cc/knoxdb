@@ -647,7 +647,7 @@ func (t *Table) insertJournal(val interface{}) error {
 	if err != nil {
 		return err
 	}
-	t.meta.Sequence = util.Max(t.meta.Sequence, t.journal.MaxId())
+	t.meta.Sequence = max(t.meta.Sequence, t.journal.MaxId())
 	t.meta.Rows += int64(count)
 	t.meta.dirty = true
 	atomic.AddInt64(&t.stats.InsertedTuples, int64(count))
@@ -768,7 +768,7 @@ func (t *Table) appendPackIntoJournal(ctx context.Context, pkg *Package, pos, n 
 		return err
 	}
 
-	t.meta.Sequence = util.Max(t.meta.Sequence, t.journal.MaxId())
+	t.meta.Sequence = max(t.meta.Sequence, t.journal.MaxId())
 	t.meta.Rows += int64(count)
 	t.meta.dirty = true
 	atomic.AddInt64(&t.stats.InsertedTuples, int64(count))
@@ -859,7 +859,7 @@ func (t *Table) updateJournal(val interface{}) error {
 	if err != nil {
 		return err
 	}
-	t.meta.Sequence = util.Max(t.meta.Sequence, t.journal.MaxId())
+	t.meta.Sequence = max(t.meta.Sequence, t.journal.MaxId())
 	t.meta.dirty = true
 	atomic.AddInt64(&t.stats.UpdatedTuples, int64(count))
 	return nil
@@ -1205,7 +1205,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 		var nextid uint64
 		switch true {
 		case jpos < jlen && tpos < tlen:
-			nextid = util.Min(live[jpos].pk, dead[tpos])
+			nextid = min(live[jpos].pk, dead[tpos])
 			// if nextid == live[jpos].pk {
 			// 	log.Debugf("%s: next id %d from journal %d/%d, gmax=%d", t.name, nextid, jpos, jlen, globalmax)
 			// } else {
@@ -1500,8 +1500,8 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 						if err = pkg.AppendFrom(jpack, key.idx, 1); err != nil {
 							return err
 						}
-						packmax = util.Max(packmax, key.pk)
-						globalmax = util.Max(globalmax, key.pk)
+						packmax = max(packmax, key.pk)
+						globalmax = max(globalmax, key.pk)
 					}
 
 					// add to indexes
@@ -2337,9 +2337,9 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	// use SortedIndexes to mask deleted rows that are only in journal
 	// subtract offset and clamp to [0, limit]
 	ids, _ := t.journal.SortedIndexes(jbits)
-	q.stats.RowsMatched += util.Max(len(ids)-q.Offset, 0)
+	q.stats.RowsMatched += max(len(ids)-q.Offset, 0)
 	if q.Limit > 0 {
-		q.stats.RowsMatched = util.Min(q.stats.RowsMatched, q.Limit)
+		q.stats.RowsMatched = min(q.stats.RowsMatched, q.Limit)
 	}
 
 	return int64(q.stats.RowsMatched), nil
@@ -3023,7 +3023,7 @@ func (t *Table) Compact(ctx context.Context) error {
 
 		// determine free space in destination
 		free := maxsz - dstPack.Len()
-		cp := util.Min(free, srcPack.Len())
+		cp := min(free, srcPack.Len())
 		moved += int64(cp)
 
 		// move data from src to dst

@@ -133,7 +133,7 @@ func boltStats(name string) error {
 	// find longest name
 	var lName int
 	for _, v := range perBucket {
-		lName = util.Max(lName, len(v.Name))
+		lName = max(lName, len(v.Name))
 	}
 
 	// write percentages as summary

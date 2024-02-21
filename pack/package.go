@@ -1650,7 +1650,7 @@ func (p *Package) ReplaceFrom(srcPack *Package, dstPos, srcPos, srcLen int) erro
 		}
 	}()
 	// copy at most N rows without overflowing dst
-	n := util.Min(p.Len()-dstPos, srcLen)
+	n := min(p.Len()-dstPos, srcLen)
 	for i, dst := range p.blocks {
 		src := srcPack.blocks[i]
 		// skip
@@ -1892,7 +1892,7 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 	if !p.CanGrow(srcLen) {
 		panic(fmt.Errorf("pack: overflow on insert %d rows into pack 0x%x with %d/%d rows", srcLen, p.key, p.nValues, p.capHint))
 	}
-	n := util.Min(srcPack.Len()-srcPos, srcLen)
+	n := min(srcPack.Len()-srcPos, srcLen)
 	for i, dst := range p.blocks {
 		src := srcPack.blocks[i]
 		if dst.IsIgnore() || src.IsIgnore() {
@@ -2080,7 +2080,7 @@ func (p *Package) Delete(pos, n int) error {
 	if p.nValues <= pos {
 		return fmt.Errorf("pack: invalid pack offset %d (max %d)", pos, p.nValues)
 	}
-	n = util.Min(p.Len()-pos, n)
+	n = min(p.Len()-pos, n)
 	for i, b := range p.blocks {
 		if b.IsIgnore() {
 			continue

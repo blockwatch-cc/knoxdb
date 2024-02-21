@@ -32,7 +32,7 @@ func (r *Request) ApplyLimits(def, max int) {
 	if r.Limit == 0 {
 		r.Limit = def
 	}
-	r.Limit = util.Min(r.Limit, max)
+	r.Limit = min(r.Limit, max)
 }
 
 func (r *Request) Sanitize() error {

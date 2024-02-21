@@ -2417,5 +2417,5 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 			filter.Add(buf[:4])
 		}
 	}
-	return util.Min(uint32(b.Len()), uint32(filter.Cardinality()))
+	return min(uint32(b.Len()), uint32(filter.Cardinality()))
 }

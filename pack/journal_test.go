@@ -11,7 +11,6 @@ import (
 	"sort"
 	"testing"
 
-	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -820,7 +819,7 @@ func TestJournalUpdateBatch(t *testing.T) {
 
 				// pick a random number of items from batch, change their values,
 				// update and check
-				var max uint64
+				var mx uint64
 				unique := make(map[uint64]struct{})
 				for l, idxs := range randNN(100, 100, sz) {
 					t.Run(fmt.Sprintf("rand_%03d", l), func(t *testing.T) {
@@ -831,7 +830,7 @@ func TestJournalUpdateBatch(t *testing.T) {
 							val := batch[idxs[i]].(*JournalTestType)
 							val.N += sz
 							newBatch[i] = val
-							max = util.Max(max, val.Pk)
+							mx = max(mx, val.Pk)
 							unique[val.Pk] = struct{}{}
 						}
 
@@ -855,10 +854,10 @@ func TestJournalUpdateBatch(t *testing.T) {
 						// if got, want := n, len(batch); got != want {
 						// 	t.Errorf("invalid update count: got=%d want=%d", got, want)
 						// }
-						if got, want := j.maxid, max; got != want {
+						if got, want := j.maxid, mx; got != want {
 							t.Errorf("invalid max id: got=%d want=%d", got, want)
 						}
-						if got, want := j.lastid, max; got != want {
+						if got, want := j.lastid, mx; got != want {
 							t.Errorf("invalid last id: got=%d want=%d", got, want)
 						}
 						if got, want := j.sortData, l > 0; got != want {

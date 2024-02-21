@@ -635,7 +635,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 				n := length
 				if q.Limit > 0 {
 					// limit copy length to q.Limit
-					n = util.Min(n, q.Limit-out.pkg.Len())
+					n = min(n, q.Limit-out.pkg.Len())
 				}
 
 				// append match to new output
