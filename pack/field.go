@@ -160,9 +160,12 @@ func (l FieldList) Names() []string {
 }
 
 func (l FieldList) Aliases() []string {
-	s := make([]string, len(l))
-	for i, v := range l {
-		s[i] = v.Alias
+	s := make([]string, 0, len(l))
+	for _, v := range l {
+		if v.Alias == "" {
+			continue
+		}
+		s = append(s, v.Alias)
 	}
 	return s
 }
