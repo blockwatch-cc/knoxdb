@@ -352,24 +352,24 @@ func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 }
 
 // collect list of packs to visit in pk order
-func (q *Query) MakePackSchedule(reverse bool) []int {
-	schedule := make([]int, 0, q.table.packidx.Len())
-	// walk list in pk order (pairs are always sorted by min pk)
-	for _, p := range q.table.packidx.pos {
-		if q.conds.MaybeMatchPack(q.table.packidx.packs[p]) {
-			schedule = append(schedule, int(p))
-		}
-	}
-	// reverse for descending walk
-	if reverse {
-		for l, r := 0, len(schedule)-1; l < r; l, r = l+1, r-1 {
-			schedule[l], schedule[r] = schedule[r], schedule[l]
-		}
-	}
-	q.stats.PacksScheduled = len(schedule)
-	q.stats.AnalyzeTime = q.Tick()
-	return schedule
-}
+// func (q *Query) MakePackSchedule(reverse bool) []int {
+// 	schedule := make([]int, 0, q.table.packidx.Len())
+// 	// walk list in pk order (pairs are always sorted by min pk)
+// 	for _, p := range q.table.packidx.pos {
+// 		if q.conds.MaybeMatchPack(q.table.packidx.packs[p]) {
+// 			schedule = append(schedule, int(p))
+// 		}
+// 	}
+// 	// reverse for descending walk
+// 	if reverse {
+// 		for l, r := 0, len(schedule)-1; l < r; l, r = l+1, r-1 {
+// 			schedule[l], schedule[r] = schedule[r], schedule[l]
+// 		}
+// 	}
+// 	q.stats.PacksScheduled = len(schedule)
+// 	q.stats.AnalyzeTime = q.Tick()
+// 	return schedule
+// }
 
 // ordered list of packs that may contain matching ids (list can be reversed)
 func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {

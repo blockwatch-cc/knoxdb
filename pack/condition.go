@@ -330,11 +330,11 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 			vals := c.Value.([][]byte)
 			if c.hashmap != nil {
 				for i := 0; i < block.Bytes.Len(); i++ {
-					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
 					}
+					v := block.Bytes.Elem(i)
 					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; ok {
 						if pos != 0xFFFFFFFF {
@@ -360,13 +360,12 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			} else {
 				for i := 0; i < block.Bytes.Len(); i++ {
-					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
 					}
 					// without hash map, resort to type-based comparison
-					if c.Field.Type.In(v, c.Value) {
+					if c.Field.Type.In(block.Bytes.Elem(i), c.Value) {
 						bits.Set(i)
 					}
 				}
@@ -376,11 +375,11 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 			strs := c.Value.([]string)
 			if c.hashmap != nil {
 				for i := 0; i < block.Bytes.Len(); i++ {
-					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
 					}
+					v := block.Bytes.Elem(i)
 					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; ok {
 						vs := util.UnsafeGetString(v)
@@ -407,12 +406,12 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 				}
 			} else {
 				for i := 0; i < block.Bytes.Len(); i++ {
-					v := block.Bytes.Elem(i)
 					// skip masked values
 					if mask != nil && !mask.IsSet(i) {
 						continue
 					}
 					// without hash map, resort to type-based comparison
+					v := block.Bytes.Elem(i)
 					if c.Field.Type.In(util.UnsafeGetString(v), c.Value) {
 						bits.Set(i)
 					}
@@ -581,11 +580,11 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 		case FieldTypeBytes:
 			vals := c.Value.([][]byte)
 			for i := 0; i < block.Bytes.Len(); i++ {
-				v := block.Bytes.Elem(i)
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
+				v := block.Bytes.Elem(i)
 				if c.hashmap != nil {
 					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; !ok {
@@ -627,11 +626,11 @@ func (c Condition) MatchPack(pkg *Package, mask *vec.Bitset) *vec.Bitset {
 		case FieldTypeString:
 			strs := c.Value.([]string)
 			for i := 0; i < block.Bytes.Len(); i++ {
-				v := block.Bytes.Elem(i)
 				// skip masked values
 				if mask != nil && !mask.IsSet(i) {
 					continue
 				}
+				v := block.Bytes.Elem(i)
 				if c.hashmap != nil {
 					sum := xxhash.Sum64(v)
 					if pos, ok := c.hashmap[sum]; !ok {

@@ -1918,41 +1918,35 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 
 	// PACK SCAN (either using found pk ids or non-indexed conditions)
 	// scan packs only if (a) index match returned any results or (b) no index exists
-	var (
-		spack *Package
-		err   error
-	)
-	defer func() {
-		t.releaseSharedPack(spack)
-	}()
-
-	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
+		it := NewForwardIterator(&q)
+		defer it.Close()
+
 	packloop:
-		for _, p := range q.MakePackSchedule(false) {
+		for {
+			// check context
 			if err := ctx.Err(); err != nil {
 				res.Close()
 				return nil, err
 			}
 
-			t.releaseSharedPack(spack)
-			spack = nil
-			// load pack from cache or storage
-			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
+			// load next pack with real matches
+			pack, hits, err := it.Next(tx)
 			if err != nil {
 				res.Close()
 				return nil, err
 			}
-			q.stats.PacksScanned++
 
-			// identify and copy matches
-			bits := q.conds.MatchPack(spack, t.packidx.packs[p])
-			// log.Debugf("Table %s: %d results in pack %d", t.name, bits.Count(), pkg.key)
-			for _, idx := range bits.IndexesU32(u32slice) {
+			// finish when no more packs are found
+			if pack == nil {
+				break
+			}
+
+			for _, idx := range hits {
 				i := int(idx)
 
 				// skip broken entries
-				pkid, err := spack.Uint64At(spack.pkindex, i)
+				pkid, err := pack.Uint64At(pack.pkindex, i)
 				if err != nil {
 					continue
 				}
@@ -1962,7 +1956,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 					continue
 				}
 
-				src := spack
+				src := pack
 				index := i
 
 				// when exists, use row version found in journal
@@ -1985,22 +1979,18 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 				}
 
 				if err := res.pkg.AppendFrom(src, index, 1); err != nil {
-					bits.Close()
 					res.Close()
 					return nil, err
 				}
 				q.stats.RowsMatched++
 
-				if q.Limit > 0 && q.stats.RowsMatched == q.Limit {
-					bits.Close()
+				if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 					break packloop
 				}
 			}
-			bits.Close()
 		}
 		q.stats.ScanTime = q.Tick()
 	}
-	t.u32Pool.Put(u32slice)
 
 	// finalize on limit
 	if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
@@ -2129,42 +2119,35 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	}
 
 	// REVERSE PACK SCAN (either using found pk ids or non-indexed conditions)
-	var (
-		spack *Package
-		err   error
-	)
-	defer func() {
-		t.releaseSharedPack(spack)
-	}()
+	it := NewReverseIterator(&q)
+	defer it.Close()
 
-	u32slice := t.u32Pool.Get().([]uint32)
 packloop:
-	for _, p := range q.MakePackSchedule(true) {
+	for {
+		// check context
 		if err := ctx.Err(); err != nil {
 			res.Close()
 			return nil, err
 		}
 
-		t.releaseSharedPack(spack)
-		spack = nil
-
-		// load pack from cache or storage
-		spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
+		// load next pack with real matches
+		pack, hits, err := it.Next(tx)
 		if err != nil {
 			res.Close()
 			return nil, err
 		}
-		q.stats.PacksScanned++
 
-		// identify and copy matches
-		bits := q.conds.MatchPack(spack, t.packidx.packs[p])
-		u32slice = bits.IndexesU32(u32slice)
-		for k := len(u32slice) - 1; k >= 0; k-- {
-			// take index
-			i := int(u32slice[k])
+		// finish when no more packs are found
+		if pack == nil {
+			break
+		}
+
+		// walk hits in reverse pk order
+		for k := len(hits) - 1; k >= 0; k-- {
+			i := int(hits[k])
 
 			// skip broken entries
-			pkid, err := spack.Uint64At(spack.pkindex, i)
+			pkid, err := pack.Uint64At(pack.pkindex, i)
 			if err != nil {
 				continue
 			}
@@ -2174,7 +2157,7 @@ packloop:
 				continue
 			}
 
-			src := spack
+			src := pack
 			index := i
 
 			// when exists, use row from journal
@@ -2195,20 +2178,17 @@ packloop:
 			}
 
 			if err := res.pkg.AppendFrom(src, index, 1); err != nil {
-				bits.Close()
 				res.Close()
 				return nil, err
 			}
 			q.stats.RowsMatched++
 
 			if q.Limit > 0 && q.stats.RowsMatched == q.Limit {
-				bits.Close()
 				break packloop
 			}
 		}
-		bits.Close()
 	}
-	t.u32Pool.Put(u32slice)
+
 	q.stats.ScanTime = q.Tick()
 	return res, nil
 }
@@ -2263,39 +2243,33 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 
 	// PACK SCAN (either using found pk ids or non-indexed conditions)
 	// scan packs only when index match returned any results of when no index exists
-	var (
-		spack *Package
-		err   error
-	)
-	defer func() {
-		t.releaseSharedPack(spack)
-	}()
-
-	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
+		it := NewForwardIterator(&q)
+		defer it.Close()
+
 	packloop:
-		for _, p := range q.MakePackSchedule(q.Order == OrderDesc) {
+		for {
+			// check context
 			if err := ctx.Err(); err != nil {
 				return int64(q.stats.RowsMatched), err
 			}
 
-			t.releaseSharedPack(spack)
-			spack = nil
-
-			// load pack from cache or storage
-			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
+			// load next pack with real matches
+			pack, hits, err := it.Next(tx)
 			if err != nil {
-				return 0, err
+				return int64(q.stats.RowsMatched), err
 			}
-			q.stats.PacksScanned++
 
-			// identify and count matches
-			bits := q.conds.MatchPack(spack, t.packidx.packs[p])
-			for _, idx := range bits.IndexesU32(u32slice) {
+			// finish when no more packs are found
+			if pack == nil {
+				break
+			}
+
+			for _, idx := range hits {
 				i := int(idx)
 
 				// skip broken entries
-				pkid, err := spack.Uint64At(spack.pkindex, i)
+				pkid, err := pack.Uint64At(pack.pkindex, i)
 				if err != nil {
 					continue
 				}
@@ -2319,19 +2293,15 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 					q.Offset--
 					continue
 				}
-
 				q.stats.RowsMatched++
 
 				if q.Limit > 0 && q.stats.RowsMatched == q.Limit {
-					bits.Close()
 					break packloop
 				}
 			}
-			bits.Close()
 		}
 		q.stats.ScanTime = q.Tick()
 	}
-	t.u32Pool.Put(u32slice)
 
 	// after all packs have been scanned, add remaining rows from journal, if any
 	// use SortedIndexes to mask deleted rows that are only in journal
@@ -2413,40 +2383,32 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 	// scan packs only when
 	// (a) index match returned any results or
 	// (b) when no index exists
-	var (
-		spack *Package
-		err   error
-	)
-	defer func() {
-		t.releaseSharedPack(spack)
-	}()
-
-	u32slice := t.u32Pool.Get().([]uint32)
 	if !q.IsEmptyMatch() {
+		it := NewForwardIterator(&q)
+		defer it.Close()
 	packloop:
-		for _, p := range q.MakePackSchedule(false) {
+		for {
+			// check context
 			if err := ctx.Err(); err != nil {
 				return err
 			}
 
-			t.releaseSharedPack(spack)
-			spack = nil
-
-			// load pack from cache or storage
-			spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
+			// load next pack with real matches
+			pack, hits, err := it.Next(tx)
 			if err != nil {
 				return err
 			}
-			q.stats.PacksScanned++
 
-			// identify and forward matches
-			bits := q.conds.MatchPack(spack, t.packidx.packs[p])
-			// q.Debugf("Table %s: %d results in pack %d", t.name, bits.Count(), spack.key)
-			for _, idx := range bits.IndexesU32(u32slice) {
+			// finish when no more packs are found
+			if pack == nil {
+				break
+			}
+
+			for _, idx := range hits {
 				i := int(idx)
 
 				// skip broken entries
-				pkid, err := spack.Uint64At(spack.pkindex, i)
+				pkid, err := pack.Uint64At(pack.pkindex, i)
 				if err != nil {
 					continue
 				}
@@ -2456,19 +2418,20 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 					continue
 				}
 
-				// default to pack row
-				res.pkg = spack
+				res.pkg = pack
 				index := i
 
-				// when exist, use journal row
+				// when exists, use row version found in journal
 				if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
-					// cross-check if journal row actually matches the cond
+					// cross-check the journal row actually matches the cond
 					if !jbits.IsSet(j) {
 						continue
 					}
+
+					// remove match bit
+					jbits.Clear(j)
 					res.pkg = t.journal.DataPack()
 					index = j
-					jbits.Clear(j)
 				}
 
 				// skip offset
@@ -2478,24 +2441,20 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 				}
 
 				// forward match
-				// q.Debugf("Table %s: using result at pack=%d index=%d pkid=%d", t.name, spack.key, index, pkid)
+				// q.Debugf("Table %s: using result at pack=%d index=%d pkid=%d", t.name, pack.key, index, pkid)
 				if err := fn(Row{res: res, n: index}); err != nil {
-					bits.Close()
 					return err
 				}
 				res.pkg = nil
 				q.stats.RowsMatched++
 
 				if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
-					bits.Close()
 					break packloop
 				}
 			}
-			bits.Close()
 		}
 		q.stats.ScanTime = q.Tick()
 	}
-	t.u32Pool.Put(u32slice)
 
 	if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 		return nil
@@ -2615,41 +2574,35 @@ func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row
 		return nil
 	}
 
-	var (
-		spack *Package
-		err   error
-	)
-	defer func() {
-		t.releaseSharedPack(spack)
-	}()
+	it := NewReverseIterator(&q)
+	defer it.Close()
 
-	u32slice := t.u32Pool.Get().([]uint32)
 packloop:
-	for _, p := range q.MakePackSchedule(true) {
+	for {
+		// check context
 		if err := ctx.Err(); err != nil {
+			res.Close()
 			return err
 		}
 
-		t.releaseSharedPack(spack)
-		spack = nil
-
-		// load pack from cache or storage
-		spack, err = t.loadSharedPack(tx, t.packidx.packs[p].Key, !q.NoCache, q.freq)
+		// load next pack with real matches
+		pack, hits, err := it.Next(tx)
 		if err != nil {
 			return err
 		}
-		q.stats.PacksScanned++
 
-		// identify and forward matches
-		bits := q.conds.MatchPack(spack, t.packidx.packs[p])
-		// log.Debugf("Table %s: %d results in pack %d", t.name, bits.Count(), pkg.key)
-		u32slice = bits.IndexesU32(u32slice)
-		for k := len(u32slice) - 1; k >= 0; k-- {
-			// take index
-			i := int(u32slice[k])
+		// finish when no more packs are found
+		if pack == nil {
+			break
+		}
+		// log.Debugf("Table %s: %d results in pack %d", t.name, len(hits), pkg.key)
+
+		// walk hits in reverse pk order
+		for k := len(hits) - 1; k >= 0; k-- {
+			i := int(hits[k])
 
 			// skip broken entries
-			pkid, err := spack.Uint64At(spack.pkindex, i)
+			pkid, err := pack.Uint64At(pack.pkindex, i)
 			if err != nil {
 				continue
 			}
@@ -2659,10 +2612,10 @@ packloop:
 				continue
 			}
 
-			res.pkg = spack
+			res.pkg = pack
 			index := i
 
-			// when exist, use journal row
+			// when exists, use row from journal
 			if j, _ := t.journal.PkIndex(pkid, 0); j >= 0 {
 				if !jbits.IsSet(j) {
 					continue
@@ -2680,20 +2633,17 @@ packloop:
 
 			// forward match
 			if err := fn(Row{res: res, n: index}); err != nil {
-				bits.Close()
 				return err
 			}
 			res.pkg = nil
 			q.stats.RowsMatched++
 
 			if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
-				bits.Close()
 				break packloop
 			}
 		}
-		bits.Close()
 	}
-	t.u32Pool.Put(u32slice)
+
 	q.stats.ScanTime = q.Tick()
 	return nil
 }
