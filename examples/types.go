@@ -364,15 +364,16 @@ func run() error {
 	log.Infof("Created Table %s", table.Name())
 
 	// fill with random data
-	for i := 0; i < 64*1024+1; i++ {
+	c := 64 * 1024
+	for i := 0; i < c+1; i++ {
 		err = table.Insert(context.Background(), NewRandomTypes(i))
 		if err != nil {
 			return err
 		}
 	}
 	// table.Flush(context.Background())
-
-	log.Infof("Written %d entries", table.Stats()[0].TupleCount)
+	log.Infof("Written %d entries", c)
+	log.Infof("Total %d entries", table.Stats()[0].TupleCount)
 
 	// read entries back
 	var (
@@ -396,7 +397,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	// log.Infof("Single value int64=%d", single.Int64)
+	log.Infof("Single value int64=%d", single.Int64)
 
 	// read up to 10 entries via query interface
 	multi := make([]*Types, 0)
@@ -404,10 +405,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	// log.Infof("%d Multi values", len(multi))
-	// for i, v := range multi {
-	// 	log.Infof("%d int64=%d", i, v.Int64)
-	// }
+	log.Infof("%d Multi values", len(multi))
+	for i, v := range multi {
+		log.Infof("%d int64=%d", i, v.Int64)
+	}
 
 	// delete some entries
 	n, err := pack.NewQuery("del").WithTable(table).AndLt("i64", 1024).Delete(context.Background())

@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/echa/log"
 	bolt "go.etcd.io/bbolt"
 
 	"blockwatch.cc/knoxdb/store"
