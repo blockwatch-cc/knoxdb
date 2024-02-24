@@ -1,40 +1,50 @@
-// Copyright (c) 2020 Blockwatch Data Inc.
+// Copyright (c) 2018 - 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package bolt
+package badger
 
 import (
 	"encoding/binary"
 	"fmt"
 
-	bolt "go.etcd.io/bbolt"
-
 	"blockwatch.cc/knoxdb/store"
+	"github.com/dgraph-io/badger/v4"
 	logpkg "github.com/echa/log"
 )
-
-// Bolt Limits
-// Max Tx size: 15% of MaxTableSize, default = 0.15*64M = 10M
-// Max key update count per Tx: default ~ 100k
 
 var log = logpkg.Disabled
 
 const (
-	dbType = "bolt"
+	dbType = "badger"
+
+	// bucketIdLen is the length in bytes for bucket ids
+	bucketIdLen int = 1
 )
 
 var (
-	// byteOrder is the preferred byte order used through the database.
+	// byteOrder is the preferred byte order used through the store.
 	// Sometimes big endian will be used to allow ordered byte
 	// sortable integer values.
 	byteOrder = binary.LittleEndian
 
-	// max size of compact transactions
-	compactTxSize int64 = 1048576
+	// bucketIndexPrefix is the prefix used for all entries in the bucket
+	// index.
+	bucketIndexPrefix = []byte("bidx")
+
+	// curBucketIDKeyName is the name of the key used to keep track of the
+	// current bucket ID counter.
+	curBucketIDKeyName = []byte("bidx-cbid")
+
+	// metadataBucketID is the ID of the top-level metadata bucket.
+	// It is the value 0 encoded as an unsigned big-endian uint32.
+	metadataBucketID = [bucketIdLen]byte{}
+
+	// sequenceBucketId is the prefix used for all sequences generated
+	// by the store.
+	sequenceBucketID = [bucketIdLen]byte{1}
 
 	// manifestKey is the name of the top-level manifest key.
-	manifestKey           = []byte("manifest")
-	manifestBucketKeyName = []byte("manifest")
+	manifestKey = []byte("manifest")
 )
 
 // Common error strings.
@@ -42,10 +52,6 @@ const (
 	// errDbNotOpenStr is the text to use for the store.ErrDbNotOpen
 	// error code.
 	errDbNotOpenStr = "database is not open"
-
-	// errDbReadOnlyStr is the text to use for the store.ErrDbTxNotWriteable
-	// error code.
-	errDbReadOnlyStr = "database is in read-only mode"
 
 	// errTxClosedStr is the text to use for the store.ErrTxClosed error
 	// code.
@@ -60,115 +66,86 @@ func makeDbErr(c store.ErrorCode, desc string, err error) store.Error {
 // convertErr converts the passed badger error into a database error with an
 // equivalent error code  and the passed description.  It also sets the passed
 // error as the underlying error.
-func convertErr(desc string, boltErr error) store.Error {
+func convertErr(desc string, bdbErr error) store.Error {
 	// Use the driver-specific error code by default.  The code below will
 	// update this with the converted error if it's recognized.
 	var code = store.ErrDriverSpecific
 
-	switch boltErr {
-	// Database corruption errors.
-	case bolt.ErrChecksum:
-		code = store.ErrCorruption
-
-		// Database open/create errors. Most badger errors are dynamic and
-		// difficult to dissect, so we pass them as driver-specific.
-		//  code = store.ErrDbDoesNotExist
-	case bolt.ErrDatabaseOpen:
-		code = store.ErrDbAlreadyOpen
-	case bolt.ErrDatabaseNotOpen:
+	switch bdbErr {
+	// Database open/create errors.
+	case badger.ErrDBClosed:
 		code = store.ErrDbNotOpen
-	case bolt.ErrInvalid:
-		code = store.ErrInvalid
-	case bolt.ErrVersionMismatch:
-		code = store.ErrInvalid
-		// case bolt.ErrTimeout:
 
 	// Transaction errors.
-	case bolt.ErrTxNotWritable:
+	case badger.ErrConflict:
+		code = store.ErrTxConflict
+	case badger.ErrReadOnlyTxn:
 		code = store.ErrTxNotWritable
-	case bolt.ErrTxClosed:
+	case badger.ErrDiscardedTxn:
 		code = store.ErrTxClosed
-	case bolt.ErrDatabaseReadOnly:
-		code = store.ErrTxNotWritable
-	case bolt.ErrBucketNotFound:
-		code = store.ErrBucketNotFound
-	case bolt.ErrBucketExists:
-		code = store.ErrBucketExists
-	case bolt.ErrBucketNameRequired:
-		code = store.ErrBucketNameRequired
-	case bolt.ErrKeyTooLarge:
-		code = store.ErrKeyTooLarge
-	case bolt.ErrValueTooLarge:
-		code = store.ErrValueTooLarge
-	case bolt.ErrIncompatibleValue:
-		code = store.ErrIncompatibleValue
-
-	case bolt.ErrKeyRequired:
+	case badger.ErrEmptyKey:
 		code = store.ErrKeyRequired
 	}
 
-	return store.Error{ErrorCode: code, Description: desc, Err: boltErr}
+	return store.Error{ErrorCode: code, Description: desc, Err: bdbErr}
 }
 
 // copySlice returns a copy of the passed slice.  This is mostly used to copy
 // badger iterator keys and values since they are only valid until the iterator
 // is moved instead of during the entirety of the transaction.
 func copySlice(slice []byte) []byte {
-	if slice == nil {
-		return nil
-	}
 	ret := make([]byte, len(slice))
 	copy(ret, slice)
 	return ret
 }
 
 // parseArgs parses the arguments from the database Open/Create methods.
-func parseArgs(funcName string, args ...interface{}) (string, *bolt.Options, error) {
+func parseArgs(funcName string, args ...interface{}) (string, string, error) {
 	if len(args) < 1 {
-		return "", nil, fmt.Errorf("invalid arguments to %s.%s -- "+
-			"expected database path and optional options", dbType,
+		return "", "", fmt.Errorf("invalid arguments to %s.%s -- "+
+			"expected database path and optional block network", dbType,
 			funcName)
 	}
 
 	dbPath, ok := args[0].(string)
 	if !ok {
-		return "", nil, fmt.Errorf("first argument to %s.%s is invalid -- "+
+		return "", "", fmt.Errorf("first argument to %s.%s is invalid -- "+
 			"expected database path string", dbType, funcName)
 	}
 
 	if len(args) == 1 || args[1] == nil {
-		return dbPath, nil, nil
+		return dbPath, dbPath, nil
 	}
 
-	opts, ok := args[1].(*bolt.Options)
+	dbValuePath, ok := args[1].(string)
 	if !ok {
-		return "", nil, fmt.Errorf("second argument to %s.%s is invalid -- "+
-			"expected database options, got %T", dbType, funcName, args[1])
+		return "", "", fmt.Errorf("second argument to %s.%s is invalid -- "+
+			"expected database value file path", dbType, funcName)
 	}
 
-	return dbPath, opts, nil
+	return dbPath, dbValuePath, nil
 }
 
 // openDBDriver is the callback provided during driver registration that opens
 // an existing database for use.
 func openDBDriver(args ...interface{}) (store.DB, error) {
-	dbPath, opts, err := parseArgs("Open", args...)
+	dbPath, dbValuePath, err := parseArgs("Open", args...)
 	if err != nil {
 		return nil, err
 	}
 
-	return openDB(dbPath, opts, false)
+	return openDB(dbPath, dbValuePath, false)
 }
 
 // createDBDriver is the callback provided during driver registration that
 // creates, initializes, and opens a database for use.
 func createDBDriver(args ...interface{}) (store.DB, error) {
-	dbPath, opts, err := parseArgs("Create", args...)
+	dbPath, dbValuePath, err := parseArgs("Create", args...)
 	if err != nil {
 		return nil, err
 	}
 
-	return openDB(dbPath, opts, true)
+	return openDB(dbPath, dbValuePath, true)
 }
 
 // useLogger is the callback provided during driver registration that sets the
@@ -186,7 +163,7 @@ func init() {
 		UseLogger: useLogger,
 	}
 	if err := store.RegisterDriver(driver); err != nil {
-		panic(fmt.Sprintf("Failed to register database driver '%s': %v",
+		panic(fmt.Sprintf("Failed to regiser database driver '%s': %v",
 			dbType, err))
 	}
 }

@@ -35,7 +35,6 @@ func TestErrorCodeStringer(t *testing.T) {
 		{store.ErrValueTooLarge, "ErrValueTooLarge"},
 		{store.ErrIncompatibleValue, "ErrIncompatibleValue"},
 		{store.ErrRetry, "ErrRetry"},
-		{store.ErrInvalidDump, "ErrInvalidDump"},
 		// {store.ErrBlockNotFound, "ErrBlockNotFound"},
 		// {store.ErrBlockExists, "ErrBlockExists"},
 		// {store.ErrBlockRegionInvalid, "ErrBlockRegionInvalid"},

@@ -111,8 +111,6 @@ const (
 	// ***********************************
 	// Support for driver-specific errors.
 	// ***********************************
-	ErrInvalidDump
-
 	// ErrDriverSpecific indicates the Err field is a driver-specific error.
 	// This provides a mechanism for drivers to plug-in their own custom
 	// errors for any situations which aren't already covered by the error
@@ -146,7 +144,6 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrValueTooLarge:      "ErrValueTooLarge",
 	ErrIncompatibleValue:  "ErrIncompatibleValue",
 	ErrRetry:              "ErrRetry",
-	ErrInvalidDump:        "ErrInvalidDump",
 	ErrDriverSpecific:     "ErrDriverSpecific",
 	ErrNotImplemented:     "ErrNotImplemented",
 }
