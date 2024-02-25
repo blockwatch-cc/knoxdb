@@ -61,8 +61,8 @@ type Tx struct {
 	pending int
 }
 
-func CreateDatabase(path, name, label string, opts interface{}) (*DB, error) {
-	db, err := store.Create("bolt", filepath.Join(path, name+".db"), opts)
+func CreateDatabase(engine, path, name, label string, opts any) (*DB, error) {
+	db, err := store.Create(engine, filepath.Join(path, name+".db"), opts)
 	if err != nil {
 		return nil, fmt.Errorf("pack: creating database: %v", err)
 	}
@@ -82,19 +82,19 @@ func CreateDatabase(path, name, label string, opts interface{}) (*DB, error) {
 	}, nil
 }
 
-func CreateDatabaseIfNotExists(path, name, label string, opts interface{}) (*DB, error) {
-	db, err := OpenDatabase(path, name, label, opts)
+func CreateDatabaseIfNotExists(engine, path, name, label string, opts any) (*DB, error) {
+	db, err := OpenDatabase(engine, path, name, label, opts)
 	if err == nil {
 		return db, nil
 	}
 	if err != nil && !store.IsError(err, store.ErrDbDoesNotExist) {
 		return nil, err
 	}
-	return CreateDatabase(path, name, label, opts)
+	return CreateDatabase(engine, path, name, label, opts)
 }
 
-func OpenDatabase(path, name, label string, opts interface{}) (*DB, error) {
-	db, err := store.Open("bolt", filepath.Join(path, name+".db"), opts)
+func OpenDatabase(engine, path, name, label string, opts any) (*DB, error) {
+	db, err := store.Open(engine, filepath.Join(path, name+".db"), opts)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +151,10 @@ func (d *DB) Dump(w io.Writer) error {
 
 func (d *DB) IsReadOnly() bool {
 	return d.db.IsReadOnly()
+}
+
+func (d *DB) Engine() string {
+	return d.db.Type()
 }
 
 func (d *DB) IsUsed() bool {

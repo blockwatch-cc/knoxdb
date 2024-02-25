@@ -88,6 +88,7 @@ func openTable(args Args) (*pack.DB, *pack.Table, error) {
 
 func openDatabase(args Args) (*pack.DB, error) {
 	db, err := pack.OpenDatabase(
+		"bolt",
 		filepath.Dir(args.db),
 		strings.TrimSuffix(filepath.Base(args.db), ".db"),
 		"*",

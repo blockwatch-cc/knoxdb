@@ -200,6 +200,7 @@ func run() error {
 	}
 
 	db, err := pack.OpenDatabase(
+		"bolt",
 		filepath.Dir(dbPath),
 		strings.TrimSuffix(filepath.Base(dbPath), ".db"),
 		"*",

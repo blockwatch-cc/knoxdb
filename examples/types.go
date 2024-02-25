@@ -179,7 +179,7 @@ func Create(path string, dbOpts interface{}) (*pack.Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := pack.CreateDatabaseIfNotExists(filepath.Dir(path), TypesTableKey, "*", boltopts)
+	db, err := pack.CreateDatabaseIfNotExists("bolt", filepath.Dir(path), TypesTableKey, "*", boltopts)
 	if err != nil {
 		return nil, fmt.Errorf("creating %s database: %v", TypesTableKey, err)
 	}
@@ -218,7 +218,7 @@ func Create(path string, dbOpts interface{}) (*pack.Table, error) {
 }
 
 func Open(path string) (*pack.Table, error) {
-	db, err := pack.OpenDatabase(filepath.Dir(path), TypesTableKey, "*", boltopts)
+	db, err := pack.OpenDatabase("bolt", filepath.Dir(path), TypesTableKey, "*", boltopts)
 	if err != nil {
 		return nil, err
 	}
