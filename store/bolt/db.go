@@ -44,6 +44,16 @@ func (db *db) Type() string {
 	return dbType
 }
 
+func (db *db) IsReadOnly() bool {
+	return db.store.IsReadOnly()
+}
+
+// IsZeroCopyRead returns true if keys and values on Get and from Cursors
+// are NOT safe to use without copy.
+func (db *db) IsZeroCopyRead() bool {
+	return false
+}
+
 // Path returns the path where the current database is stored.
 //
 // This function is part of the store.DB interface implementation.
@@ -432,10 +442,6 @@ func (db *db) Restore(r io.Reader) error {
 	// - restore/overwrite file with reader contents
 	// - open bolt db from restored file
 	return nil
-}
-
-func (db *db) IsReadOnly() bool {
-	return db.store.IsReadOnly()
 }
 
 // Should be called on a database that is not running any concurrent tx.

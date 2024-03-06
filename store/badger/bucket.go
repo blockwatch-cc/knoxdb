@@ -4,12 +4,9 @@
 package badger
 
 import (
-	"bytes"
 	"fmt"
-	"runtime"
 
 	"blockwatch.cc/knoxdb/store"
-	"github.com/dgraph-io/badger/v4"
 )
 
 // bucket is an internal type used to represent a collection of key/value pairs
@@ -59,15 +56,38 @@ func (b *bucket) Bucket(key []byte) store.Bucket {
 		return nil
 	}
 
+	// Attempt to fetch child bucket id from cache.
+	cache := b.tx.db.bucketIds.Load()
+	if cache != nil {
+		if id, ok := cache.(map[string][bucketIdLen]byte)[string(key)]; ok {
+			return &bucket{tx: b.tx, key: key, id: id}
+		}
+	}
+
 	// Attempt to fetch the ID for the child bucket.  The bucket does not
 	// exist if the bucket index entry does not exist.
-	childID := b.tx.fetchKey(bucketIndexKey(b.id, key))
+	childID, err := b.tx.fetchKey(bucketizedKey(metadataBucketID, bucketIndexKey(b.id, key)))
+	if err != nil {
+		b.tx.db.log.Errorf("read bucket %s: %v", string(key), err)
+		return nil
+	}
 	if childID == nil {
 		return nil
 	}
 
-	childBucket := &bucket{tx: b.tx, key: copySlice(key)}
+	childBucket := &bucket{tx: b.tx, key: key}
 	copy(childBucket.id[:], childID)
+
+	// Update cache with an extended map, copy current contents
+	next := make(map[string][bucketIdLen]byte)
+	if cache != nil {
+		for n, v := range cache.(map[string][bucketIdLen]byte) {
+			next[n] = v
+		}
+	}
+	next[string(key)] = childBucket.id
+	b.tx.db.bucketIds.Store(next)
+
 	return childBucket
 }
 
@@ -101,7 +121,7 @@ func (b *bucket) CreateBucket(key []byte) (store.Bucket, error) {
 	}
 
 	// Ensure bucket does not already exist.
-	bidxKey := bucketIndexKey(b.id, key)
+	bidxKey := bucketizedKey(metadataBucketID, bucketIndexKey(b.id, key))
 	if b.tx.hasKey(bidxKey) {
 		str := "bucket already exists"
 		return nil, makeDbErr(store.ErrBucketExists, str, nil)
@@ -115,7 +135,7 @@ func (b *bucket) CreateBucket(key []byte) (store.Bucket, error) {
 	}
 
 	// Add the new bucket to the bucket index.
-	// log.Infof("Creating bucket %s with id %d", string(key), childID)
+	b.tx.db.log.Debugf("Creating bucket %s with id 0x%x", string(key), childID)
 	if err := b.tx.putKey(bidxKey, childID[:]); err != nil {
 		str := fmt.Sprintf("failed to create bucket with key %q", key)
 		return nil, convertErr(str, err)
@@ -176,12 +196,14 @@ func (b *bucket) DeleteBucket(key []byte) error {
 	// Attempt to fetch the ID for the child bucket.  The bucket does not
 	// exist if the bucket index entry does not exist.  In the case of the
 	// special internal block index, keep the fixed ID.
-	bidxKey := bucketIndexKey(b.id, key)
-	childID := b.tx.fetchKey(bidxKey)
+	bidxKey := bucketizedKey(metadataBucketID, bucketIndexKey(b.id, key))
+	childID, _ := b.tx.fetchKey(bidxKey)
 	if childID == nil {
 		str := fmt.Sprintf("bucket %q does not exist", key)
 		return makeDbErr(store.ErrBucketNotFound, str, nil)
 	}
+
+	b.tx.db.log.Debugf("Deleting bucket %s with id 0x%x", string(key), childID)
 
 	// Remove all nested buckets and their keys.
 	childIDs := [][]byte{childID}
@@ -189,15 +211,23 @@ func (b *bucket) DeleteBucket(key []byte) error {
 		childID = childIDs[len(childIDs)-1]
 		childIDs = childIDs[:len(childIDs)-1]
 
-		// Delete all keys in the nested bucket.
-		keyCursor := newCursor(b, childID, ctKeys)
-		for ok := keyCursor.First(); ok; ok = keyCursor.Next() {
-			b.tx.deleteKey(keyCursor.rawKey(), false)
+		b.tx.db.log.Debugf("Deleting nested bucket id 0x%x", childID)
+
+		// experimental: check this does not produce a deadlock
+		err := b.tx.db.store.DropPrefix(childID)
+		if err != nil {
+			return convertErr("drop prefix", err)
 		}
-		cursorFinalizer(keyCursor)
+
+		// Delete all keys in the nested bucket.
+		// keyCursor := newCursor(b, childID, ctKeys)
+		// for ok := keyCursor.First(); ok; ok = keyCursor.Next() {
+		// 	b.tx.deleteKey(keyCursor.rawKey())
+		// }
+		// cursorFinalizer(keyCursor)
 
 		// Iterate through all nested buckets.
-		bucketCursor := newCursor(b, childID, ctBuckets)
+		bucketCursor := newCursor(b, childID, ctBuckets, store.ForwardCursor)
 		for ok := bucketCursor.First(); ok; ok = bucketCursor.Next() {
 			// Push the id of the nested bucket onto the stack for
 			// the next iteration.
@@ -205,9 +235,9 @@ func (b *bucket) DeleteBucket(key []byte) error {
 			childIDs = append(childIDs, childID)
 
 			// Remove the nested bucket from the bucket index.
-			b.tx.deleteKey(bucketCursor.rawKey(), false)
+			b.tx.deleteKey(bucketCursor.rawKey())
 		}
-		cursorFinalizer(bucketCursor)
+		bucketCursor.Close()
 	}
 
 	// Remove bucket sequence
@@ -223,7 +253,11 @@ func (b *bucket) DeleteBucket(key []byte) error {
 
 	// Remove the nested bucket from the bucket index.  Any buckets nested
 	// under it were already removed above.
-	b.tx.deleteKey(bidxKey, true)
+	b.tx.deleteKey(bidxKey)
+
+	// Invalidate bucket id cache
+	b.tx.db.bucketIds.Store(make(map[string][bucketIdLen]byte))
+
 	return nil
 }
 
@@ -236,17 +270,46 @@ func (b *bucket) DeleteBucket(key []byte) error {
 // the Prev and Next functions and nil for Key and Value functions.
 //
 // This function is part of the store.Bucket interface implementation.
-func (b *bucket) Cursor() store.Cursor {
+func (b *bucket) Cursor(opts ...store.CursorOptions) store.Cursor {
 	// Ensure transaction state is valid.
 	if err := b.tx.checkClosed(); err != nil {
 		return &cursor{bucket: b}
 	}
 
-	// Create the cursor and setup a runtime finalizer to ensure the
-	// iterators are released when the cursor is garbage collected.
-	c := newCursor(b, b.id[:], ctKeys)
-	runtime.SetFinalizer(c, cursorFinalizer)
-	return c
+	// use default opts when unset
+	o := store.ForwardCursor
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+
+	// Create the cursor. The user must ensure to close all cursors
+	// before tx commit or rollback.
+	return newCursor(b, b.id[:], ctKeys, o)
+}
+
+// Range returns a new ranged cursor, allowing for iteration over the
+// bucket's key/value pairs (and nested buckets) that satisfy the prefix
+// condition in forward or backward order.
+//
+// This cursor automatically seeks to the first key that satisfies prefix
+// stops when the next key does not match the prefix. Its sufficient to
+// only use Next, but you can reset the cursor with First, Last and Seek,
+// however, calls to these functions consider the original prefix.
+func (b *bucket) Range(prefix []byte, opts ...store.CursorOptions) store.Cursor {
+	// Ensure transaction state is valid.
+	if err := b.tx.checkClosed(); err != nil {
+		return &cursor{bucket: b}
+	}
+
+	// use default opts when unset
+	o := store.ForwardCursor
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+
+	// Create the cursor with custom prefix. User must close this cursor
+	// before tx commit/rollback.
+	return newCursor(b, append(b.id[:], prefix...), ctKeys, o)
 }
 
 // ForEach invokes the passed function with every key/value pair in the bucket.
@@ -273,8 +336,8 @@ func (b *bucket) ForEach(fn func(k, v []byte) error) error {
 
 	// Invoke the callback for each cursor item.  Return the error returned
 	// from the callback when it is non-nil.
-	c := newCursor(b, b.id[:], ctKeys)
-	defer cursorFinalizer(c)
+	c := newCursor(b, b.id[:], ctKeys, store.ForwardCursor)
+	defer c.Close()
 	for ok := c.First(); ok; ok = c.Next() {
 		err := fn(c.Key(), c.Value())
 		if err != nil {
@@ -309,8 +372,8 @@ func (b *bucket) ForEachBucket(fn func(k []byte, b store.Bucket) error) error {
 
 	// Invoke the callback for each cursor item.  Return the error returned
 	// from the callback when it is non-nil.
-	c := newCursor(b, b.id[:], ctBuckets)
-	defer cursorFinalizer(c)
+	c := newCursor(b, b.id[:], ctBuckets, store.ForwardCursor)
+	defer c.Close()
 	for ok := c.First(); ok; ok = c.Next() {
 		bucket := &bucket{tx: b.tx, key: copySlice(c.Key())}
 		err := fn(c.Key(), bucket)
@@ -356,8 +419,10 @@ func (b *bucket) Put(key, value []byte) error {
 		str := "put requires a key"
 		return makeDbErr(store.ErrKeyRequired, str, nil)
 	}
-
-	return b.tx.putKey(bucketizedKey(b.id, key), value)
+	if err := b.tx.putKey(bucketizedKey(b.id, key), value); err != nil {
+		return convertErr("put", err)
+	}
+	return nil
 }
 
 // Get returns the value for the given key.  Returns nil if the key does not
@@ -380,7 +445,8 @@ func (b *bucket) Get(key []byte) []byte {
 		return nil
 	}
 
-	return b.tx.fetchKey(bucketizedKey(b.id, key))
+	val, _ := b.tx.fetchKey(bucketizedKey(b.id, key))
+	return val
 }
 
 // Delete removes the specified key from the bucket.  Deleting a key that does
@@ -410,7 +476,9 @@ func (b *bucket) Delete(key []byte) error {
 		return nil
 	}
 
-	b.tx.deleteKey(bucketizedKey(b.id, key), true)
+	if err := b.tx.deleteKey(bucketizedKey(b.id, key)); err != nil {
+		return convertErr("del", err)
+	}
 	return nil
 }
 
@@ -455,16 +523,10 @@ func (b *bucket) Stats() store.BucketStats {
 		return stats
 	}
 
-	// count keys
-	it := b.tx.tx.NewIterator(badger.IteratorOptions{
-		PrefetchValues: false,
-		PrefetchSize:   1024,
-		Reverse:        false,
-		AllVersions:    false,
-	})
-	keyRange := store.BytesPrefix(b.id[:])
-	for it.Seek(keyRange.Start); it.Valid() && bytes.Compare(it.Item().Key(), keyRange.Limit) <= 0; it.Next() {
-		stats.KeyN++
-	}
+	// LSM+valuelog table size on disk (approximate)
+	ondisk, _ := b.tx.db.store.EstimateSize(b.id[:])
+	stats.Size = int(ondisk)
+
+	// counting keys is too expensive
 	return stats
 }

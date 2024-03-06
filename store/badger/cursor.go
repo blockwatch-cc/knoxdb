@@ -39,6 +39,13 @@ func (c *cursor) Bucket() store.Bucket {
 	return c.bucket
 }
 
+func (c *cursor) Close() {
+	if c.currentIter != nil {
+		c.currentIter.Close()
+		c.currentIter = nil
+	}
+}
+
 // Delete removes the current key/value pair the cursor is at without
 // invalidating the cursor.
 //
@@ -56,7 +63,7 @@ func (c *cursor) Delete() error {
 	}
 
 	// Error if the cursor is exhausted.
-	if c.currentIter == nil {
+	if !c.currentIter.Valid() {
 		str := "cursor is exhausted"
 		return makeDbErr(store.ErrIncompatibleValue, str, nil)
 	}
@@ -68,7 +75,7 @@ func (c *cursor) Delete() error {
 		return makeDbErr(store.ErrIncompatibleValue, str, nil)
 	}
 
-	c.bucket.tx.deleteKey(copySlice(key), true)
+	c.bucket.tx.deleteKey(copySlice(key))
 	return nil
 }
 
@@ -84,7 +91,7 @@ func (c *cursor) First() bool {
 
 	// Seek to the first key.
 	c.currentIter.Seek(c.keyRange.Start)
-	return c.currentIter.Valid()
+	return c.currentIter.Valid() && c.currentIter.ValidForPrefix(c.keyRange.Start)
 }
 
 // Not supported.
@@ -105,19 +112,19 @@ func (c *cursor) Next() bool {
 	}
 
 	// Nothing to return if cursor is exhausted.
-	if c.currentIter == nil {
+	if !c.currentIter.Valid() {
 		return false
 	}
 
 	// Move the current iterator to the next entry.
 	c.currentIter.Next()
 
-	// check iterator range
-	if bytes.Compare(c.currentIter.Item().Key(), c.keyRange.Limit) > 0 {
+	if !c.currentIter.Valid() {
 		return false
 	}
 
-	return c.currentIter.Valid()
+	// check iterator range
+	return bytes.Compare(c.currentIter.Item().Key(), c.keyRange.Limit) <= 0
 }
 
 // Not supported
@@ -139,7 +146,7 @@ func (c *cursor) Seek(seek []byte) bool {
 
 	// Seek to the provided key in both the database and pending iterators
 	// then choose the iterator that is both valid and has the larger key.
-	seekKey := bucketizedKey(c.bucket.id, seek)
+	seekKey := append(bucketizedKey(c.bucket.id, c.keyRange.Start), seek...)
 	c.currentIter.Seek(seekKey)
 	return c.currentIter.Valid()
 }
@@ -148,11 +155,11 @@ func (c *cursor) Seek(seek []byte) bool {
 // the current bucket prefix or bucket index prefix.
 func (c *cursor) rawKey() []byte {
 	// Nothing to return if cursor is exhausted.
-	if c.currentIter == nil {
+	if !c.currentIter.Valid() {
 		return nil
 	}
 
-	return copySlice(c.currentIter.Item().Key())
+	return c.currentIter.Item().KeyCopy(nil)
 }
 
 // Key returns the current key the cursor is pointing to.
@@ -165,7 +172,7 @@ func (c *cursor) Key() []byte {
 	}
 
 	// Nothing to return if cursor is exhausted.
-	if c.currentIter == nil {
+	if !c.currentIter.Valid() {
 		return nil
 	}
 
@@ -174,30 +181,26 @@ func (c *cursor) Key() []byte {
 	//
 	// The key is after the bucket index prefix and parent ID when the
 	// cursor is pointing to a nested bucket.
-	key := c.currentIter.Item().Key()
+	key := c.currentIter.Item().KeyCopy(nil)
 	if bytes.HasPrefix(key, bucketIndexPrefix) {
-		key = key[len(bucketIndexPrefix)+bucketIdLen:]
-		return copySlice(key)
+		return key[len(bucketIndexPrefix)+bucketIdLen:]
 	}
 
 	// The key is after the bucket ID when the cursor is pointing to a
 	// normal entry.
-	key = key[len(c.bucket.id):]
-	return copySlice(key)
+	return key[len(c.bucket.id):]
 }
 
 // rawValue returns the current value the cursor is pointing to without
-// stripping without filtering bucket index values.
+// stripping and without filtering bucket index values.
 func (c *cursor) rawValue() []byte {
 	// Nothing to return if cursor is exhausted.
-	if c.currentIter == nil {
+	if !c.currentIter.Valid() {
 		return nil
 	}
 
 	val, err := c.currentIter.Item().ValueCopy(nil)
 	if err != nil {
-		log.Tracef("value read error for key %s: %v",
-			c.currentIter.Item().Key(), err)
 		return nil
 	}
 
@@ -215,7 +218,7 @@ func (c *cursor) Value() []byte {
 	}
 
 	// Nothing to return if cursor is exhausted.
-	if c.currentIter == nil {
+	if !c.currentIter.Valid() {
 		return nil
 	}
 
@@ -228,8 +231,6 @@ func (c *cursor) Value() []byte {
 
 	val, err := c.currentIter.Item().ValueCopy(nil)
 	if err != nil {
-		log.Tracef("value read error for key %s: %v",
-			c.currentIter.Item().Key(), err)
 		return nil
 	}
 
@@ -247,34 +248,29 @@ const (
 	// ctBuckets iterates through all directly nested buckets in a given
 	// bucket.
 	ctBuckets
-
-	// ctFull iterates through both the keys and the directly nested buckets
-	// in a given bucket.
-	// ctFull
 )
-
-// cursorFinalizer is either invoked when a cursor is being garbage collected or
-// called manually to ensure the underlying cursor iterators are released.
-func cursorFinalizer(c *cursor) {
-	c.currentIter.Close()
-	c.currentIter = nil
-}
 
 // newCursor returns a new cursor for the given bucket, bucket ID, and cursor
 // type.
 //
 // NOTE: The caller is responsible for calling the cursorFinalizer function on
 // the returned cursor.
-func newCursor(b *bucket, bucketID []byte, cursorTyp cursorType) *cursor {
+func newCursor(b *bucket, bucketID []byte, cursorTyp cursorType, o store.CursorOptions) *cursor {
 	var (
 		iter     *badger.Iterator
 		keyRange *store.Range
 	)
 
+	opts := badger.IteratorOptions{
+		PrefetchSize:   o.PrefetchSize,
+		PrefetchValues: o.PrefetchValues,
+		Reverse:        o.Reverse,
+	}
+
 	switch cursorTyp {
 	case ctKeys:
 		keyRange = store.BytesPrefix(bucketID)
-		iter = b.tx.tx.NewIterator(defaultIteratorOpts)
+		iter = b.tx.tx.NewIterator(opts)
 
 	case ctBuckets:
 		// The serialized bucket index key format is:
@@ -282,41 +278,12 @@ func newCursor(b *bucket, bucketID []byte, cursorTyp cursorType) *cursor {
 
 		// Create an iterator for the database prefixed by the bucket
 		// index identifier and the provided bucket ID.
-		prefix := make([]byte, len(bucketIndexPrefix)+bucketIdLen)
+		prefix := make([]byte, len(bucketIndexPrefix)+bucketIdLen*2)
+		copy(prefix, metadataBucketID[:])
 		copy(prefix, bucketIndexPrefix)
 		copy(prefix[len(bucketIndexPrefix):], bucketID)
 		keyRange = store.BytesPrefix(prefix)
-		iter = b.tx.tx.NewIterator(defaultIteratorOpts)
-
-		// case ctFull:
-		// unsupported
-		//  fallthrough
-		// default:
-		//  // The serialized bucket index key format is:
-		//  //   <bucketindexprefix><parentbucketid><bucketname>
-		//  prefix := make([]byte, len(bucketIndexPrefix)+bucketIdLen)
-		//  copy(prefix, bucketIndexPrefix)
-		//  copy(prefix[len(bucketIndexPrefix):], bucketID)
-		//  bucketRange := util.BytesPrefix(prefix)
-		//  keyRange := util.BytesPrefix(bucketID)
-
-		//  // Since both keys and buckets are needed from the database,
-		//  // create an individual iterator for each prefix and then create
-		//  // a merged iterator from them.
-		//  dbKeyIter := b.tx.snapshot.NewIterator(keyRange)
-		//  dbBucketIter := b.tx.snapshot.NewIterator(bucketRange)
-		//  iters := []iterator.Iterator{dbKeyIter, dbBucketIter}
-		//  dbIter = iterator.NewMergedIterator(iters,
-		//      comparer.DefaultComparer, true)
-
-		//  // Since both keys and buckets are needed from the pending keys,
-		//  // create an individual iterator for each prefix and then create
-		//  // a merged iterator from them.
-		//  // pendingKeyIter := newLdbTreapIter(b.tx, keyRange)
-		//  // pendingBucketIter := newLdbTreapIter(b.tx, bucketRange)
-		//  // iters = []iterator.Iterator{pendingKeyIter, pendingBucketIter}
-		//  // pendingIter = iterator.NewMergedIterator(iters,
-		//  //  comparer.DefaultComparer, true)
+		iter = b.tx.tx.NewIterator(opts)
 	}
 
 	// Create the cursor using the iterators.

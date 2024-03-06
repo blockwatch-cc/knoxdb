@@ -61,11 +61,38 @@ type Cursor interface {
 	// Value returns the current value the cursor is pointing to.  This will
 	// be nil for nested buckets.
 	Value() []byte
+
+	// Close must be called to closes each open cursor before the transaction
+	// commits or rolls back.
+	Close()
 }
+
+type CursorOptions struct {
+	PrefetchSize   int
+	PrefetchValues bool
+	Reverse        bool
+}
+
+var (
+	ForwardCursor = CursorOptions{
+		PrefetchSize:   100,
+		PrefetchValues: true,
+	}
+	ReverseCursor = CursorOptions{
+		PrefetchSize:   100,
+		PrefetchValues: true,
+		Reverse:        true,
+	}
+	IndexCursor = CursorOptions{
+		PrefetchSize:   16,
+		PrefetchValues: false,
+	}
+)
 
 type BucketStats struct {
 	KeyN    int // number of keys/value pairs
 	BucketN int // total number of buckets including the top bucket
+	Size    int // total bucket size in bytes
 }
 
 // Bucket represents a collection of key/value pairs.
@@ -156,7 +183,18 @@ type Bucket interface {
 	// do so will result in the same return values as an exhausted cursor,
 	// which is false for the Prev and Next functions and nil for Key and
 	// Value functions.
-	Cursor() Cursor
+	Cursor(...CursorOptions) Cursor
+
+	// Range returns a new ranged cursor, allowing for iteration over the
+	// bucket's key/value pairs (and nested buckets) that satisfy the prefix
+	// condition in forward or backward order.
+	//
+	// You must seek to a position using the First, Last, or Seek functions
+	// before calling the Next, Prev, Key, or Value functions.  Failure to
+	// do so will result in the same return values as an exhausted cursor,
+	// which is false for the Prev and Next functions and nil for Key and
+	// Value functions.
+	Range(prefix []byte, opts ...CursorOptions) Cursor
 
 	// Writable returns whether or not the bucket is writable.
 	Writable() bool
@@ -295,6 +333,10 @@ type DB interface {
 	// IsReadOnly returns true if the database was opened in readonly mode
 	// and no write transactions are supported.
 	IsReadOnly() bool
+
+	// IsZeroCopyRead returns true if keys and values on Get and from Cursors
+	// are NOT safe to use without copy.
+	IsZeroCopyRead() bool
 
 	// Manifest returns the current database manifest metadata.
 	Manifest() (Manifest, error)

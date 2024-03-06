@@ -9,10 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/store"
 	"github.com/dgraph-io/badger/v4"
-	logpkg "github.com/echa/log"
 )
-
-var log = logpkg.Disabled
 
 const (
 	dbType = "badger"
@@ -100,58 +97,42 @@ func copySlice(slice []byte) []byte {
 }
 
 // parseArgs parses the arguments from the database Open/Create methods.
-func parseArgs(funcName string, args ...interface{}) (string, string, error) {
+func parseArgs(funcName string, args ...interface{}) (string, error) {
 	if len(args) < 1 {
-		return "", "", fmt.Errorf("invalid arguments to %s.%s -- "+
+		return "", fmt.Errorf("invalid arguments to %s.%s -- "+
 			"expected database path and optional block network", dbType,
 			funcName)
 	}
 
 	dbPath, ok := args[0].(string)
 	if !ok {
-		return "", "", fmt.Errorf("first argument to %s.%s is invalid -- "+
+		return "", fmt.Errorf("first argument to %s.%s is invalid -- "+
 			"expected database path string", dbType, funcName)
 	}
 
-	if len(args) == 1 || args[1] == nil {
-		return dbPath, dbPath, nil
-	}
-
-	dbValuePath, ok := args[1].(string)
-	if !ok {
-		return "", "", fmt.Errorf("second argument to %s.%s is invalid -- "+
-			"expected database value file path", dbType, funcName)
-	}
-
-	return dbPath, dbValuePath, nil
+	return dbPath, nil
 }
 
 // openDBDriver is the callback provided during driver registration that opens
 // an existing database for use.
 func openDBDriver(args ...interface{}) (store.DB, error) {
-	dbPath, dbValuePath, err := parseArgs("Open", args...)
+	dbPath, err := parseArgs("Open", args...)
 	if err != nil {
 		return nil, err
 	}
 
-	return openDB(dbPath, dbValuePath, false)
+	return openDB(dbPath, false)
 }
 
 // createDBDriver is the callback provided during driver registration that
 // creates, initializes, and opens a database for use.
 func createDBDriver(args ...interface{}) (store.DB, error) {
-	dbPath, dbValuePath, err := parseArgs("Create", args...)
+	dbPath, err := parseArgs("Create", args...)
 	if err != nil {
 		return nil, err
 	}
 
-	return openDB(dbPath, dbValuePath, true)
-}
-
-// useLogger is the callback provided during driver registration that sets the
-// current logger to the provided one.
-func useLogger(logger logpkg.Logger) {
-	log = logger
+	return openDB(dbPath, true)
 }
 
 func init() {

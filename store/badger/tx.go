@@ -56,15 +56,21 @@ func (tx *transaction) putKey(key, value []byte) error {
 // fetchKey attempts to fetch the provided key from the database cache (and
 // hence underlying database) while taking into account the current transaction
 // state.  Returns nil if the key does not exist.
-func (tx *transaction) fetchKey(key []byte) []byte {
+func (tx *transaction) fetchKey(key []byte) ([]byte, error) {
 	// Consult the underlying store. Ignore ErrKeyNotFound for compatibility
 	// with other drivers.
-	if item, err := tx.tx.Get(key); err == nil {
-		if val, err := item.ValueCopy(nil); err == nil {
-			return val
+	item, err := tx.tx.Get(key)
+	if err != nil {
+		if err == badger.ErrKeyNotFound {
+			return nil, nil
 		}
+		return nil, err
 	}
-	return nil
+	val, err := item.ValueCopy(nil)
+	if err != nil {
+		return nil, err
+	}
+	return val, nil
 }
 
 // deleteKey adds the provided key to the list of keys to be deleted from the
@@ -73,8 +79,8 @@ func (tx *transaction) fetchKey(key []byte) []byte {
 //
 // NOTE: This function must only be called on a writable transaction.  Since it
 // is an internal helper function, it does not check.
-func (tx *transaction) deleteKey(key []byte, notifyIterators bool) {
-	tx.tx.Delete(key)
+func (tx *transaction) deleteKey(key []byte) error {
+	return tx.tx.Delete(key)
 }
 
 // nextBucketID returns the next bucket ID to use for creating a new bucket.
@@ -161,7 +167,9 @@ func (tx *transaction) SetManifest(manifest store.Manifest) error {
 // close marks the transaction closed then releases any pending data.
 func (tx *transaction) close() {
 	tx.closed = true
-	tx.db.activeTx.Done()
+	if tx.writable {
+		tx.db.activeTx.Done()
+	}
 	tx.db.closeLock.RUnlock()
 }
 

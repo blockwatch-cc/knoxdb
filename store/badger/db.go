@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"blockwatch.cc/knoxdb/store"
@@ -22,13 +23,15 @@ import (
 // All database access is performed through transactions which are managed.
 type db struct {
 	seqLock   sync.RWMutex         // Guard access to sequences.
-	closeLock sync.RWMutex         // Make database close block while txns active.
-	txLock    sync.Mutex           // block creating new tx during backup/restore.
-	activeTx  sync.WaitGroup       // count active tx (needed for backup/restore).
+	closeLock sync.RWMutex         // Make database close block while write txns are active.
+	txLock    sync.Mutex           // block creating new write tx during backup/restore.
+	activeTx  sync.WaitGroup       // count active write tx (needed for backup/restore).
+	bucketIds atomic.Value         // read-mostly cache map of bucket ids
 	closed    bool                 // Is the database closed?
 	store     *badger.DB           // the database
 	sequences map[string]*sequence // map of open sequences
 	dbPath    string               // storage path
+	log       Logger               // private logger instance
 }
 
 // Enforce db implements the store.DB interface.
@@ -46,6 +49,12 @@ func (db *db) IsReadOnly() bool {
 	return db.store.Opts().ReadOnly
 }
 
+// IsZeroCopyRead returns true if keys and values on Get and from Cursors
+// are NOT safe to use without copy.
+func (db *db) IsZeroCopyRead() bool {
+	return true
+}
+
 // Path returns the path where the current database is stored.
 //
 // This function is part of the store.DB interface implementation.
@@ -57,8 +66,6 @@ func (db *db) Path() string {
 //
 // This function is part of the store.DB interface implementation.
 func (db *db) Manifest() (store.Manifest, error) {
-	db.closeLock.RLock()
-	defer db.closeLock.RUnlock()
 	if db.closed {
 		return store.Manifest{}, makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
 	}
@@ -69,8 +76,6 @@ func (db *db) Manifest() (store.Manifest, error) {
 //
 // This function is part of the store.DB interface implementation.
 func (db *db) SetManifest(manifest store.Manifest) error {
-	db.closeLock.RLock()
-	defer db.closeLock.RUnlock()
 	if db.closed {
 		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
 	}
@@ -81,6 +86,8 @@ func (db *db) SetManifest(manifest store.Manifest) error {
 	// we only allow some fields to be overwritten
 	mft.Name = manifest.Name
 	mft.Version = manifest.Version
+	mft.Label = manifest.Label
+	mft.Schema = manifest.Schema
 	return putManifest(db.store, mft)
 }
 
@@ -131,7 +138,6 @@ func (db *db) Sequence(key []byte, lease uint64) (store.Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Tracef("Opening sequence %s", string(key))
 	seq := &sequence{
 		key: copySlice(key),
 		db:  db,
@@ -162,9 +168,11 @@ func (db *db) begin(writable bool) (*transaction, error) {
 
 	// The metadata and block index buckets are internal-only buckets, so
 	// they have defined IDs.
-	db.txLock.Lock()
-	defer db.txLock.Unlock()
-	db.activeTx.Add(1)
+	if writable {
+		db.txLock.Lock()
+		defer db.txLock.Unlock()
+		db.activeTx.Add(1)
+	}
 	tx := &transaction{
 		writable: writable,
 		db:       db,
@@ -200,6 +208,7 @@ func (db *db) Begin(writable bool) (store.Tx, error) {
 // released.
 func rollbackOnPanic(tx *transaction) {
 	if err := recover(); err != nil {
+		tx.db.log.Error(err)
 		tx.managed = false
 		_ = tx.Rollback()
 		panic(err)
@@ -297,7 +306,7 @@ func (db *db) Close() error {
 			return err
 		}
 	}
-	log.Infof("Closing %s database (this may take a while)...", strings.Title(mft.Name))
+	db.log.Infof("Closing %s database (this may take a while)...", strings.Title(mft.Name))
 
 	// close all sequences
 	for _, v := range db.sequences {
@@ -313,12 +322,13 @@ func (db *db) Close() error {
 		return convertErr("close", err)
 	}
 	if mft.Name != "" {
-		log.Infof("%s database closed successfully.", strings.Title(mft.Name))
+		db.log.Infof("%s database closed successfully.", strings.Title(mft.Name))
 	} else {
-		log.Debugf("Database closed successfully.")
+		db.log.Debugf("Database closed successfully.")
 	}
 	db.closed = true
 	db.store = nil
+	db.bucketIds.Store(make(map[string][bucketIdLen]byte))
 	return nil
 }
 
@@ -364,20 +374,11 @@ func initDB(db *badger.DB) error {
 
 // openDB opens the database at the provided path.  store.ErrDbDoesNotExist
 // is returned if the database doesn't exist and the create flag is not set.
-func openDB(dbPath, dbValuePath string, create bool) (store.DB, error) {
-	if dbValuePath != "" {
-		dbValuePath = dbPath
-	}
+func openDB(dbPath string, create bool) (store.DB, error) {
 	dbExists := fileExists(dbPath)
-	dbValueExists := fileExists(dbValuePath)
 
 	if !create && !dbExists {
 		str := fmt.Sprintf("database %q does not exist", dbPath)
-		return nil, makeDbErr(store.ErrDbDoesNotExist, str, nil)
-	}
-
-	if !create && !dbValueExists {
-		str := fmt.Sprintf("database value store %q does not exist", dbValuePath)
 		return nil, makeDbErr(store.ErrDbDoesNotExist, str, nil)
 	}
 
@@ -387,14 +388,6 @@ func openDB(dbPath, dbValuePath string, create bool) (store.DB, error) {
 		// badger.Open will fail if the directory couldn't be
 		// created.
 		_ = os.MkdirAll(dbPath, 0700)
-	}
-
-	// Ensure the full path to the database value log files exists.
-	if !dbValueExists {
-		// The error can be ignored here since the call to
-		// badger.Open will fail if the directory couldn't be
-		// created.
-		_ = os.MkdirAll(dbValuePath, 0700)
 	}
 
 	// Open the metadata database (will create it if needed). Use Badger
@@ -430,9 +423,10 @@ func openDB(dbPath, dbValuePath string, create bool) (store.DB, error) {
 	// EncryptionKeyRotationDuration: 10 * 24 * time.Hour, // Default 10 days.
 	// DetectConflicts:               true,
 	// NamespaceOffset:               -1,
+	log := NewLogger()
 	opts := badger.DefaultOptions(dbPath).
-		WithDetectConflicts(false)
-	// WithLogger(log.Log) // TODO: add WarningF(string, ...any) func
+		WithDetectConflicts(false).
+		WithLogger(log)
 
 	log.Info("Opening database (this may take a while)...")
 	bdb, err := badger.Open(opts)
@@ -462,7 +456,7 @@ func openDB(dbPath, dbValuePath string, create bool) (store.DB, error) {
 			log.Info("Database opened successfully.")
 		}
 	}
-	return &db{store: bdb, dbPath: dbPath, sequences: make(map[string]*sequence)}, nil
+	return &db{store: bdb, dbPath: dbPath, sequences: make(map[string]*sequence), log: log}, nil
 }
 
 // Database maintenance functions
@@ -475,11 +469,11 @@ func (db *db) Dump(w io.Writer) error {
 		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
 	}
 
-	// let new transactions wait until backup is finished
+	// let new write transactions wait until backup is finished
 	db.txLock.Lock()
 	defer db.txLock.Unlock()
 
-	// wait for all active transactions to finish
+	// wait for all active write transactions to finish
 	db.activeTx.Wait()
 
 	// dump full db contents to writer
@@ -496,11 +490,11 @@ func (db *db) Restore(r io.Reader) error {
 		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
 	}
 
-	// let new transactions wait until backup is finished
+	// let new write transactions wait until backup is finished
 	db.txLock.Lock()
 	defer db.txLock.Unlock()
 
-	// wait for all active transactions to finish
+	// wait for all active write transactions to finish
 	db.activeTx.Wait()
 
 	// load db data from reader
@@ -515,7 +509,7 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
 	}
 
-	// let new transactions wait until backup is finished
+	// let new write transactions wait until backup is finished
 	db.txLock.Lock()
 	defer db.txLock.Unlock()
 
@@ -540,7 +534,7 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 	// first, purge old versions of keys
 	start := time.Now()
 	lsm, vlog := db.store.Size()
-	log.Info("[GC] Flatting sstables.")
+	db.log.Info("[GC] Flatting sstables.")
 	if err := db.store.Flatten(8); err != nil {
 		return err
 	}
@@ -548,11 +542,11 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 		lsm2, vlog2 := db.store.Size()
 		diff := (lsm - lsm2) + (vlog - vlog2)
 		if diff > 0 {
-			log.Infof("[GC] Reclaimed %s in %s",
+			db.log.Infof("[GC] Reclaimed %s in %s",
 				util.ByteSize(diff),
 				time.Since(start))
 		} else {
-			log.Infof("[GC] No compaction possible. Database grew by %s in %s",
+			db.log.Infof("[GC] No compaction possible. Database grew by %s in %s",
 				util.ByteSize(-diff),
 				time.Since(start))
 
@@ -567,7 +561,7 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 
 	// then, compact value log (set discardRatio to 0.5, thus
 	// indicating that a file be rewritten if half the space can be discarded)
-	log.Info("[GC] Compacting value log.")
+	db.log.Info("[GC] Compacting value log.")
 	if err := db.store.RunValueLogGC(ratio); err != nil && err != badger.ErrNoRewrite {
 		return err
 	}

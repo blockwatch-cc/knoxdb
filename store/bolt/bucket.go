@@ -164,7 +164,7 @@ func (b *bucket) DeleteBucket(key []byte) error {
 // the Prev and Next functions and nil for Key and Value functions.
 //
 // This function is part of the store.Bucket interface implementation.
-func (b *bucket) Cursor() store.Cursor {
+func (b *bucket) Cursor(_ ...store.CursorOptions) store.Cursor {
 	// Ensure transaction state is valid.
 	if err := b.tx.checkClosed(); err != nil {
 		return &cursor{bucket: b}
@@ -175,6 +175,28 @@ func (b *bucket) Cursor() store.Cursor {
 		return &cursor{bucket: b, currentIter: b.tx.tx.Cursor()}
 	} else {
 		return &cursor{bucket: b, currentIter: b.bucket.Cursor()}
+	}
+}
+
+// Range returns a new ranged cursor, allowing for iteration over the
+// bucket's key/value pairs (and nested buckets) that satisfy the prefix
+// condition in forward or backward order.
+//
+// This cursor automatically seeks to the first key that satisfies prefix
+// stops when the next key does not match the prefix. Its sufficient to
+// only use Next, but you can reset the cursor with First, Last and Seek,
+// however, calls to these functions consider the original prefix.
+func (b *bucket) Range(prefix []byte, _ ...store.CursorOptions) store.Cursor {
+	// Ensure transaction state is valid.
+	if err := b.tx.checkClosed(); err != nil {
+		return &cursor{bucket: b}
+	}
+
+	// Create the cursor for either the root bucket or a nested bucket.
+	if b.bucket == nil {
+		return &cursor{bucket: b, currentIter: b.tx.tx.Cursor(), keyRange: store.BytesPrefix(prefix)}
+	} else {
+		return &cursor{bucket: b, currentIter: b.bucket.Cursor(), keyRange: store.BytesPrefix(prefix)}
 	}
 }
 
@@ -372,5 +394,6 @@ func (b *bucket) Stats() store.BucketStats {
 	internalStats := b.bucket.Stats()
 	stats.KeyN = internalStats.KeyN
 	stats.BucketN = internalStats.BucketN
+	stats.Size = internalStats.BranchAlloc + internalStats.LeafAlloc
 	return stats
 }
