@@ -48,6 +48,10 @@ func NewFromArray(src []uint64) Bitmap {
 	}
 }
 
+func (b Bitmap) IsValid() bool {
+	return b.Bitmap != nil
+}
+
 func (b *Bitmap) Free() {
 	// b.Bitmap.Reset()
 	// pool.Put(b.Bitmap)

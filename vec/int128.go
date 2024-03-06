@@ -82,6 +82,11 @@ func (x Int128) Bytes16() [16]byte {
 	return b
 }
 
+func (x Int128) Bytes() []byte {
+	b16 := x.Bytes16()
+	return b16[:]
+}
+
 // IsInt64 reports whether x can be represented as a int64.
 func (x Int128) IsInt64() bool {
 	return (x[0]|x[1]>>63) == 0 || ^x[0] == 0

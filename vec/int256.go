@@ -70,6 +70,11 @@ func (x Int256) Bytes32() [32]byte {
 	return b
 }
 
+func (x Int256) Bytes() []byte {
+	b32 := x.Bytes32()
+	return b32[:]
+}
+
 // IsInt64 reports whether x can be represented as a int64.
 func (x Int256) IsInt64() bool {
 	return (x[0]|x[1]|x[2]|x[3]>>63) == 0 || (^x[0]|^x[1]|^x[2]) == 0
