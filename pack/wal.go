@@ -64,7 +64,7 @@ func (w *Wal) Sync() error {
 	return w.w.Sync()
 }
 
-func (w *Wal) Write(rec WalRecordType, pk uint64, val Item) error {
+func (w *Wal) Write(rec WalRecordType, pk uint64, val any) error {
 	if w == nil || w.w == nil {
 		return nil
 	}
@@ -79,7 +79,7 @@ func (w *Wal) Write(rec WalRecordType, pk uint64, val Item) error {
 	return nil
 }
 
-func (w *Wal) WriteMulti(rec WalRecordType, pks []uint64, vals []Item) error {
+func (w *Wal) WriteMulti(rec WalRecordType, pks []uint64, vals any) error {
 	if w == nil || w.w == nil {
 		return nil
 	}

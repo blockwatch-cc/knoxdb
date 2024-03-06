@@ -5,6 +5,7 @@ package pack
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 
 	"blockwatch.cc/knoxdb/store"
@@ -241,23 +242,42 @@ func (j *Journal) next() uint64 {
 	return j.maxid
 }
 
-func (j *Journal) Insert(item Item) error {
-	// check ID and generate next sequence if missing
-	pk := item.ID()
-	updateIdx := -1
+// check ID and generate next sequence if missing
+func (j *Journal) getOrAssignPk(val any) (uint64, bool) {
+	if j.data.pkindex < 0 {
+		return 0, false
+	}
+	pkv := reflect.Indirect(reflect.ValueOf(val)).Field(j.data.pkindex)
+	pk := pkv.Uint()
 	if pk == 0 {
 		pk = j.next()
-		item.SetID(pk)
-	} else {
+		pkv.SetUint(pk)
+		return pk, true
+	}
+	return pk, false
+}
+
+func (j *Journal) getPk(val any) uint64 {
+	if j.data.pkindex < 0 {
+		return 0
+	}
+	pkv := reflect.Indirect(reflect.ValueOf(val)).Field(j.data.pkindex)
+	return pkv.Uint()
+}
+
+func (j *Journal) Insert(val any) error {
+	updateIdx := -1
+	pk, isNew := j.getOrAssignPk(val)
+	if !isNew {
 		updateIdx, _ = j.PkIndex(pk, 0)
 	}
 
 	// write insert record to WAL
-	j.wal.Write(WalRecordTypeInsert, pk, item)
+	j.wal.Write(WalRecordTypeInsert, pk, val)
 
 	if updateIdx < 0 {
 		// append to data pack
-		if err := j.data.Push(item); err != nil {
+		if err := j.data.Push(val); err != nil {
 			return err
 		}
 
@@ -272,7 +292,7 @@ func (j *Journal) Insert(item Item) error {
 		j.sortData = j.sortData || pk < j.lastid
 	} else {
 		// replace in data pack, this also resets a zero pk after deletion
-		if err := j.data.ReplaceAt(updateIdx, item); err != nil {
+		if err := j.data.ReplaceAt(updateIdx, val); err != nil {
 			return err
 		}
 		// undelete if deleted
@@ -290,36 +310,32 @@ func (j *Journal) Insert(item Item) error {
 // Inserts with pk == 0 will generate a new pk > maxpk in sequential order.
 // Inserts with an external pk (pk > 0) will insert or upsert and track the
 // maximum pk seen.
-func (j *Journal) InsertBatch(batch []Item) (int, error) {
+func (j *Journal) InsertBatch(batch reflect.Value) (int, error) {
 	// when inserting with external pk, make sure batch is sorted
-	if len(batch) == 0 {
+	if batch.Len() == 0 {
 		return 0, nil
 	}
-	if batch[0].ID() != 0 {
-		SortItems(batch)
-	}
+	SortBatch(j.data.pkindex, batch, nil)
 
 	var count, last int
-	newKeys := make(journalEntryList, 0, len(batch))
-	newPks := make([]uint64, 0, len(batch))
+	newKeys := make(journalEntryList, 0, batch.Len())
+	newPks := make([]uint64, 0, batch.Len())
 
-	for _, item := range batch {
+	for i, l := 0, batch.Len(); i < l; i++ {
 		// check ID and generate next sequence if missing
-		pk := item.ID()
+		val := batch.Index(i).Interface()
 		updateIdx := -1
-		if pk == 0 {
-			pk = j.next()
-			item.SetID(pk)
-		} else {
+		pk, isNew := j.getOrAssignPk(val)
+		if !isNew {
 			updateIdx, last = j.PkIndex(pk, last)
 		}
 
 		if updateIdx < 0 {
 			// write insert record to WAL
-			j.wal.Write(WalRecordTypeInsert, pk, item)
+			j.wal.Write(WalRecordTypeInsert, pk, val)
 
 			// append to data pack
-			if err := j.data.Push(item); err != nil {
+			if err := j.data.Push(val); err != nil {
 				return count, err
 			}
 
@@ -334,10 +350,10 @@ func (j *Journal) InsertBatch(batch []Item) (int, error) {
 			j.maxid = max(j.maxid, pk)
 		} else {
 			// write update record to WAL
-			j.wal.Write(WalRecordTypeUpdate, pk, item)
+			j.wal.Write(WalRecordTypeUpdate, pk, val)
 
 			// replace in data pack, this also resets a zero pk after deletion
-			if err := j.data.ReplaceAt(updateIdx, item); err != nil {
+			if err := j.data.ReplaceAt(updateIdx, val); err != nil {
 				return count, err
 			}
 		}
@@ -441,20 +457,20 @@ func (j *Journal) InsertPack(pkg *Package, pos, n int) (int, error) {
 	return count, nil
 }
 
-func (j *Journal) Update(item Item) error {
+func (j *Journal) Update(val any) error {
 	// require primary key
-	pk := item.ID()
+	pk := j.getPk(val)
 	if pk == 0 {
-		return fmt.Errorf("pack: missing primary key on %T item", item)
+		return fmt.Errorf("pack: missing primary key on val %T", val)
 	}
 
 	// write update record to WAL
-	j.wal.Write(WalRecordTypeUpdate, pk, item)
+	j.wal.Write(WalRecordTypeUpdate, pk, val)
 
 	// find existing key and position in journal
 	if idx, _ := j.PkIndex(pk, 0); idx < 0 {
 		// append to data pack if not exists
-		if err := j.data.Push(item); err != nil {
+		if err := j.data.Push(val); err != nil {
 			return err
 		}
 
@@ -474,7 +490,7 @@ func (j *Journal) Update(item Item) error {
 		j.maxid = max(j.maxid, pk)
 	} else {
 		// replace in data pack if exists, this also resets a zero pk after deletion
-		if err := j.data.ReplaceAt(idx, item); err != nil {
+		if err := j.data.ReplaceAt(idx, val); err != nil {
 			return err
 		}
 
@@ -488,33 +504,36 @@ func (j *Journal) Update(item Item) error {
 // Updates multiple items by inserting or overwriting them in the journal,
 // returns the number of successsfully processed items. Batch is expected
 // to be sorted.
-func (j *Journal) UpdateBatch(batch []Item) (int, error) {
+func (j *Journal) UpdateBatch(batch reflect.Value) (int, error) {
+	if batch.Len() == 0 {
+		return 0, nil
+	}
 	// sort for improved update performance
-	SortItems(batch)
-	newPks := make([]uint64, len(batch))
+	newPks := make([]uint64, batch.Len())
 
 	// require primary keys for all items
-	for i, item := range batch {
-		pk := item.ID()
+	for i, l := 0, batch.Len(); i < l; i++ {
+		val := batch.Index(i).Interface()
+		pk := j.getPk(val)
 		if pk == 0 {
-			return 0, fmt.Errorf("pack: missing primary key on %T item", item)
+			return 0, fmt.Errorf("pack: missing primary key on val %T", val)
 		}
 		newPks[i] = pk
 	}
+	SortBatch(j.data.pkindex, batch, newPks)
 
 	// write update record to WAL
-	j.wal.WriteMulti(WalRecordTypeUpdate, newPks, batch)
+	j.wal.WriteMulti(WalRecordTypeUpdate, newPks, batch.Interface())
 
 	var last, idx, count int
-	newPks = newPks[:0]
-	newKeys := make(journalEntryList, 0, len(batch))
-	for _, item := range batch {
-		pk := item.ID()
-
+	newKeys := make(journalEntryList, 0, batch.Len())
+	for i, l := 0, batch.Len(); i < l; i++ {
+		val := batch.Index(i).Interface()
+		pk := newPks[i]
 		idx, last = j.PkIndex(pk, last)
 		if idx < 0 {
 			// append to data pack if not exists
-			if err := j.data.Push(item); err != nil {
+			if err := j.data.Push(val); err != nil {
 				return count, err
 			}
 			count++
@@ -528,12 +547,12 @@ func (j *Journal) UpdateBatch(batch []Item) (int, error) {
 
 		} else {
 			// replace in data pack if exists
-			if err := j.data.ReplaceAt(idx, item); err != nil {
+			if err := j.data.ReplaceAt(idx, val); err != nil {
 				return count, err
 			}
 			count++
 		}
-		newPks = append(newPks, pk)
+		// newPks = append(newPks, pk)
 	}
 
 	// undelete if deleted, must call before mergeKeys
@@ -971,4 +990,61 @@ func (j *Journal) Reset() {
 	j.sortData = false
 	j.deleted.Reset()
 	j.wal.Reset()
+}
+
+func SortBatch(idx int, rval reflect.Value, pks []uint64) {
+	if idx < 0 {
+		return
+	}
+
+	// sort with known pks
+	if pks != nil {
+		if pks[0] == 0 {
+			return
+		}
+		NewBatchSorter(rval, pks).Sort()
+	} else {
+		// reflect only sort
+		if reflect.Indirect(rval.Index(0)).Field(idx).Uint() == 0 {
+			return
+		}
+		sort.Slice(rval.Interface(), func(i, j int) bool {
+			// idA := reflect.Indirect(reflect.ValueOf(l[i])).Field(idx).Uint()
+			// idB := reflect.Indirect(reflect.ValueOf(l[j])).Field(idx).Uint()
+			idA := reflect.Indirect(rval.Index(i)).Field(idx).Uint()
+			idB := reflect.Indirect(rval.Index(j)).Field(idx).Uint()
+			return idA < idB
+		})
+	}
+}
+
+type BatchSorter struct {
+	val  reflect.Value
+	pks  []uint64
+	swap func(i, j int)
+}
+
+func NewBatchSorter(val reflect.Value, pks []uint64) BatchSorter {
+	return BatchSorter{
+		val:  val,
+		pks:  pks,
+		swap: reflect.Swapper(val.Interface()),
+	}
+}
+
+func (s BatchSorter) Sort() bool {
+	if sort.IsSorted(s) {
+		return false
+	}
+	sort.Sort(s)
+	return true
+}
+
+func (s BatchSorter) Len() int { return s.val.Len() }
+
+func (s BatchSorter) Less(i, j int) bool { return s.pks[i] < s.pks[j] }
+
+func (s BatchSorter) Swap(i, j int) {
+	s.swap(i, j)
+	s.pks[i], s.pks[j] = s.pks[j], s.pks[i]
 }

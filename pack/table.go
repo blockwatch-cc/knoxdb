@@ -35,6 +35,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -109,7 +110,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		indexes: make(IndexList, 0),
 		packidx: NewPackIndex(nil, fields.PkIndex(), maxPackSize),
 		key:     []byte(name),
-		metakey: []byte(name + "_meta"),
+		metakey: append([]byte(name), metaKey...),
 		u64Pool: &sync.Pool{
 			New: func() interface{} { return make([]uint64, 0, maxPackSize) },
 		},
@@ -242,7 +243,7 @@ func (d *DB) DropTable(name string) error {
 		if err != nil {
 			return err
 		}
-		return dbTx.Root().DeleteBucket([]byte(name + "_meta"))
+		return dbTx.Root().DeleteBucket(append([]byte(name), metaKey...))
 	})
 	if err != nil {
 		return err
@@ -265,7 +266,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		name:    name,
 		db:      d,
 		key:     []byte(name),
-		metakey: []byte(name + "_meta"),
+		metakey: append([]byte(name), metaKey...),
 	}
 	t.stats.TableName = name
 	t.packPool = &sync.Pool{
@@ -565,7 +566,7 @@ func (t *Table) NextSequence() uint64 {
 	return t.meta.Sequence
 }
 
-func (t *Table) Insert(ctx context.Context, val interface{}) error {
+func (t *Table) Insert(ctx context.Context, val any) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -588,28 +589,11 @@ func (t *Table) Insert(ctx context.Context, val interface{}) error {
 		}
 		return tx.Commit()
 	}
-	// FIXME: flushing packed journal after every insert slows down by 10-20x
-	// else {
-	// 	// save journal and tombstone
-	// 	if t.journal.IsDirty() {
-	// 		tx, err := t.db.Tx(true)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		// be panic safe
-	// 		defer tx.Rollback()
-	// 		if err := t.flushJournalTx(ctx, tx); err != nil {
-	// 			return err
-	// 		}
-	// 		// commit storage transaction
-	// 		return tx.Commit()
-	// 	}
-	// }
 	return nil
 }
 
 // unsafe when used concurrently, need to obtain lock _before_ starting bolt tx
-func (t *Table) InsertTx(ctx context.Context, tx *Tx, val interface{}) error {
+func (t *Table) InsertTx(ctx context.Context, tx *Tx, val any) error {
 	if err := t.insertJournal(val); err != nil {
 		return err
 	}
@@ -619,31 +603,28 @@ func (t *Table) InsertTx(ctx context.Context, tx *Tx, val interface{}) error {
 			return err
 		}
 	}
-	// FIXME: flushing packed journal after every insert slows down by 10-20x
-	//  else {
-	// 	if err := t.flushJournalTx(ctx, tx); err != nil {
-	// 		return err
-	// 	}
-	// }
 
 	return nil
 }
 
-func (t *Table) insertJournal(val interface{}) error {
+func (t *Table) insertJournal(val any) error {
 	if t.db.IsReadOnly() {
 		return ErrReadOnlyDatabase
 	}
-	var batch []Item
-	if v, ok := val.([]Item); ok {
-		batch = v
-	} else if i, ok := val.(Item); ok {
-		batch = []Item{i}
-	} else {
-		return fmt.Errorf("pack: type %T does not implement Item interface", val)
-	}
 	atomic.AddInt64(&t.stats.InsertCalls, 1)
 
-	count, err := t.journal.InsertBatch(batch)
+	var (
+		count int
+		err   error
+	)
+
+	switch rval := reflect.Indirect(reflect.ValueOf(val)); rval.Kind() {
+	case reflect.Slice, reflect.Array:
+		count, err = t.journal.InsertBatch(rval)
+	default:
+		count, err = 1, t.journal.Insert(val)
+	}
+
 	if err != nil {
 		return err
 	}
@@ -680,26 +661,6 @@ func (t *Table) InsertRow(ctx context.Context, row Row) error {
 
 		return tx.Commit()
 	}
-	// FIXME: flushing packed journal after every insert slows down by 10-20x
-	// else {
-	// 	// FIXME
-	// 	// in-memory journal inserts are fast, but unsafe for data durability
-	// 	//
-	// 	// save journal and tombstone
-	// 	if t.journal.IsDirty() {
-	// 		tx, err := t.db.Tx(true)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		// be panic safe
-	// 		defer tx.Rollback()
-	// 		if err := t.flushJournalTx(ctx, tx); err != nil {
-	// 			return err
-	// 		}
-	// 		// commit storage transaction
-	// 		return tx.Commit()
-	// 	}
-	// }
 	return nil
 }
 
@@ -732,23 +693,6 @@ func (t *Table) InsertResult(ctx context.Context, res *Result) error {
 
 		return tx.Commit()
 	}
-	// FIXME: flushing packed journal after every insert slows down by 10-20x
-	// else {
-	// 		// save journal and tombstone
-	// 		if t.journal.IsDirty() {
-	// 			tx, err := t.db.Tx(true)
-	// 			if err != nil {
-	// 				return err
-	// 			}
-	// 			// be panic safe
-	// 			defer tx.Rollback()
-	// 			if err := t.flushJournalTx(ctx, tx); err != nil {
-	// 				return err
-	// 			}
-	// 			// commit storage transaction
-	// 			return tx.Commit()
-	// 		}
-	// 	}
 	return nil
 }
 
@@ -776,7 +720,7 @@ func (t *Table) appendPackIntoJournal(ctx context.Context, pkg *Package, pos, n 
 	return nil
 }
 
-func (t *Table) Update(ctx context.Context, val interface{}) error {
+func (t *Table) Update(ctx context.Context, val any) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -801,27 +745,11 @@ func (t *Table) Update(ctx context.Context, val interface{}) error {
 
 		return tx.Commit()
 	}
-	// FIXME: flushing packed journal after every insert slows down by 10-20x
-	// else {
-	// 	// save journal and tombstone
-	// 	if t.journal.IsDirty() {
-	// 		tx, err := t.db.Tx(true)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		// be panic safe
-	// 		defer tx.Rollback()
-	// 		if err := t.flushJournalTx(ctx, tx); err != nil {
-	// 			return err
-	// 		}
-	// 		// commit storage transaction
-	// 		return tx.Commit()
-	// 	}
-	// }
+
 	return nil
 }
 
-func (t *Table) UpdateTx(ctx context.Context, tx *Tx, val interface{}) error {
+func (t *Table) UpdateTx(ctx context.Context, tx *Tx, val any) error {
 	if err := t.updateJournal(val); err != nil {
 		return err
 	}
@@ -831,34 +759,31 @@ func (t *Table) UpdateTx(ctx context.Context, tx *Tx, val interface{}) error {
 			return err
 		}
 	}
-	// FIXME: flushing packed journal after every insert slows down by 10-20x
-	// else {
-	// 	if err := t.flushJournalTx(ctx, tx); err != nil {
-	// 		return err
-	// 	}
-	// }
+
 	return nil
 }
 
-func (t *Table) updateJournal(val interface{}) error {
+func (t *Table) updateJournal(val any) error {
 	if t.db.IsReadOnly() {
 		return ErrReadOnlyDatabase
 	}
-	var batch []Item
-	if v, ok := val.([]Item); ok {
-		batch = v
-	} else if i, ok := val.(Item); ok {
-		batch = []Item{i}
-	} else {
-		return fmt.Errorf("type %T does not implement Item interface", val)
-	}
-
 	atomic.AddInt64(&t.stats.UpdateCalls, 1)
 
-	count, err := t.journal.UpdateBatch(batch)
+	var (
+		count int
+		err   error
+	)
+
+	switch rval := reflect.Indirect(reflect.ValueOf(val)); rval.Kind() {
+	case reflect.Slice, reflect.Array:
+		count, err = t.journal.UpdateBatch(rval)
+	default:
+		count, err = 1, t.journal.Update(val)
+	}
 	if err != nil {
 		return err
 	}
+
 	t.meta.Sequence = max(t.meta.Sequence, t.journal.MaxId())
 	t.meta.dirty = true
 	atomic.AddInt64(&t.stats.UpdatedTuples, int64(count))
@@ -922,23 +847,6 @@ func (t *Table) DeleteIds(ctx context.Context, val []uint64) error {
 
 		return tx.Commit()
 	}
-	// FIXME: flushing packed journal after every insert slows down by 10-20x
-	// else {
-	// 	// save journal and tombstone
-	// 	if t.journal.IsDirty() {
-	// 		tx, err := t.db.Tx(true)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		// be panic safe
-	// 		defer tx.Rollback()
-	// 		if err := t.flushJournalTx(ctx, tx); err != nil {
-	// 			return err
-	// 		}
-	// 		// commit storage transaction
-	// 		return tx.Commit()
-	// 	}
-	// }
 
 	return nil
 }
@@ -953,12 +861,6 @@ func (t *Table) DeleteIdsTx(ctx context.Context, tx *Tx, val []uint64) error {
 			return err
 		}
 	}
-	// FIXME: flushing packed journal after every insert slows down by 10-20x
-	// else {
-	// 	if err := t.flushJournalTx(ctx, tx); err != nil {
-	// 		return err
-	// 	}
-	// }
 
 	return nil
 }
@@ -1689,8 +1591,8 @@ func (t *Table) Lookup(ctx context.Context, ids []uint64) (*Result, error) {
 
 // unsafe when called concurrently! lock table _before_ starting bolt tx!
 func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, error) {
-	q := NewQuery(t.name + ".lookup")
-	if err := q.Compile(t); err != nil {
+	q := NewQuery(t.name + ".lookup").WithTable(t)
+	if err := q.Compile(); err != nil {
 		return nil, err
 	}
 	res := &Result{
@@ -1875,7 +1777,8 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	atomic.AddInt64(&t.stats.QueryCalls, 1)
 
 	// check conditions match table
-	if err := q.Compile(t); err != nil {
+	q = q.WithTable(t)
+	if err := q.Compile(); err != nil {
 		return nil, err
 	}
 
@@ -2029,7 +1932,8 @@ func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, erro
 	atomic.AddInt64(&t.stats.QueryCalls, 1)
 
 	// check conditions match table
-	if err := q.Compile(t); err != nil {
+	q = q.WithTable(t)
+	if err := q.Compile(); err != nil {
 		return nil, err
 	}
 
@@ -2213,7 +2117,8 @@ func (t *Table) Count(ctx context.Context, q Query) (int64, error) {
 func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	atomic.AddInt64(&t.stats.QueryCalls, 1)
 
-	if err := q.Compile(t); err != nil {
+	q = q.WithTable(t)
+	if err := q.Compile(); err != nil {
 		return 0, err
 	}
 
@@ -2345,7 +2250,8 @@ func (t *Table) Stream(ctx context.Context, q Query, fn func(r Row) error) error
 func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) error) error {
 	atomic.AddInt64(&t.stats.StreamCalls, 1)
 
-	if err := q.Compile(t); err != nil {
+	q = q.WithTable(t)
+	if err := q.Compile(); err != nil {
 		return err
 	}
 
@@ -2493,7 +2399,8 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row) error) error {
 	atomic.AddInt64(&t.stats.StreamCalls, 1)
 
-	if err := q.Compile(t); err != nil {
+	q = q.WithTable(t)
+	if err := q.Compile(); err != nil {
 		return err
 	}
 
@@ -2671,8 +2578,8 @@ func (t *Table) StreamLookup(ctx context.Context, ids []uint64, fn func(r Row) e
 
 func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn func(r Row) error) error {
 	atomic.AddInt64(&t.stats.StreamCalls, 1)
-	q := NewQuery(t.name + ".stream-lookup")
-	if err := q.Compile(t); err != nil {
+	q := NewQuery(t.name + ".stream-lookup").WithTable(t)
+	if err := q.Compile(); err != nil {
 		return err
 	}
 

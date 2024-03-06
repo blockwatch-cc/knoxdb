@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"reflect"
 	"sort"
 	"testing"
 
@@ -23,16 +24,19 @@ type JournalTestType struct {
 	N  int    `knox:"n,i32"`
 }
 
-func (j JournalTestType) ID() uint64 {
-	return j.Pk
+type ItemList []*JournalTestType
+
+func getPk(val any) uint64 {
+	return reflect.Indirect(reflect.ValueOf(val)).Field(0).Uint()
 }
 
-func (j *JournalTestType) SetID(id uint64) {
-	j.Pk = id
+func setPk(val any, pk uint64) {
+	pkv := reflect.Indirect(reflect.ValueOf(val)).Field(0)
+	pkv.SetUint(pk)
 }
 
-func makeJournalTestData(n int) ItemList {
-	items := make(ItemList, n)
+func makeJournalTestData(n int) []*JournalTestType {
+	items := make([]*JournalTestType, n)
 	for i := 0; i < n; i++ {
 		items[i] = &JournalTestType{
 			Pk: 0,
@@ -45,7 +49,7 @@ func makeJournalTestData(n int) ItemList {
 func itemsToJournalEntryList(items ItemList) journalEntryList {
 	l := make(journalEntryList, len(items))
 	for i := range items {
-		l[i] = journalEntry{items[i].ID(), i}
+		l[i] = journalEntry{getPk(items[i]), i}
 	}
 	return l
 }
@@ -170,11 +174,11 @@ func comparePackWithBatch(t *testing.T, name string, j *Journal, batch ItemList)
 				t.Errorf("package type mismatch, got=%T want=JournalTestType", v)
 				return io.EOF
 			}
-			cmp, ok := batch[i].(*JournalTestType)
-			if !ok {
-				t.Errorf("batch type mismatch, got=%T want=*JournalTestType", v)
-				return io.EOF
-			}
+			cmp := batch[i]
+			// if !ok {
+			// 	t.Errorf("batch type mismatch, got=%T want=*JournalTestType", v)
+			// 	return io.EOF
+			// }
 			if got, want := val.Pk, cmp.Pk; got != want {
 				t.Errorf("mismatched pk at pos %d: got=%d want=%d", i, got, want)
 				return io.EOF
@@ -372,7 +376,7 @@ func TestJournalInsert(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 			// item update
-			if got, want := items[0].ID(), uint64(i)+1; got != want {
+			if got, want := getPk(items[0]), uint64(i)+1; got != want {
 				t.Errorf("invalid item id: got=%d want=%d", got, want)
 			}
 			// counters and state
@@ -400,7 +404,7 @@ func TestJournalInsert(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 			// item update
-			if got, want := items[1].ID(), uint64(i)+2; got != want {
+			if got, want := getPk(items[1]), uint64(i)+2; got != want {
 				t.Errorf("invalid item id: got=%d want=%d", got, want)
 			}
 			// counters and state
@@ -423,13 +427,13 @@ func TestJournalInsert(t *testing.T) {
 
 			// 3rd insert (with existing pk)
 			//
-			items[2].SetID(uint64(42))
+			setPk(items[2], uint64(42))
 			err = j.Insert(items[2])
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 			// item update
-			if got, want := items[2].ID(), uint64(42); got != want {
+			if got, want := getPk(items[2]), uint64(42); got != want {
 				t.Errorf("invalid item id: got=%d want=%d", got, want)
 			}
 			// counters and state
@@ -452,13 +456,13 @@ func TestJournalInsert(t *testing.T) {
 
 			// 4th insert (with existing smaller pk)
 			//
-			items[3].SetID(uint64(41))
+			setPk(items[3], uint64(41))
 			err = j.Insert(items[3])
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 			// item update
-			if got, want := items[3].ID(), uint64(41); got != want {
+			if got, want := getPk(items[3]), uint64(41); got != want {
 				t.Errorf("invalid item id: got=%d want=%d", got, want)
 			}
 			// counters and state
@@ -490,10 +494,10 @@ func TestJournalInsertBatch(t *testing.T) {
 				expDataCap := sz
 				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
-				max := batch[len(batch)-1].ID()
+				max := getPk(batch[len(batch)-1])
 
 				// random test data is sorted
-				n, err := j.InsertBatch(batch)
+				n, err := j.InsertBatch(reflect.ValueOf(batch))
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -528,7 +532,7 @@ func TestJournalInsertBatch(t *testing.T) {
 				batch = shuffleItems(batch)
 				j = NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
-				n, err = j.InsertBatch(batch)
+				n, err = j.InsertBatch(reflect.ValueOf(batch))
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -563,7 +567,7 @@ func TestJournalInsertBatch(t *testing.T) {
 				batch = shuffleItems(batch)
 				j = NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
-				_, err = j.InsertBatch(batch[:sz/2])
+				_, err = j.InsertBatch(reflect.ValueOf(batch[:sz/2]))
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -572,7 +576,7 @@ func TestJournalInsertBatch(t *testing.T) {
 				checkJournalCaps(t, j, expDataCap, sz, sz)
 				checkJournalSizes(t, j, sz/2, 0, 0)
 
-				_, err = j.InsertBatch(batch[sz/2:])
+				_, err = j.InsertBatch(reflect.ValueOf(batch[sz/2:]))
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -616,10 +620,10 @@ func TestJournalUpsertBatch(t *testing.T) {
 				expDataCap := sz
 				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
-				max := batch[sz/2-1].ID()
+				max := getPk(batch[sz/2-1])
 
 				// random test data is sorted, insert half
-				n, err := j.InsertBatch(batch[:sz/2])
+				n, err := j.InsertBatch(reflect.ValueOf(batch[:sz/2]))
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -651,7 +655,7 @@ func TestJournalUpsertBatch(t *testing.T) {
 				comparePackWithBatch(t, "first-half", j, batch[:sz/2])
 
 				// 2nd insert, same data
-				n, err = j.InsertBatch(batch[:sz/2])
+				n, err = j.InsertBatch(reflect.ValueOf(batch[:sz/2]))
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -696,10 +700,10 @@ func TestJournalUpdate(t *testing.T) {
 				expDataCap := sz
 				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
-				max := batch[len(batch)-1].ID()
+				max := getPk(batch[len(batch)-1])
 
 				// random test data is sorted
-				n, err := j.InsertBatch(batch)
+				n, err := j.InsertBatch(reflect.ValueOf(batch))
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -707,7 +711,7 @@ func TestJournalUpdate(t *testing.T) {
 				// pick a random item from batch, change its value, update and check
 				for i, idx := range randN(100, sz) {
 					t.Run(fmt.Sprintf("rand_%03d", i), func(t *testing.T) {
-						val := batch[idx].(*JournalTestType)
+						val := batch[idx]
 						val.N++
 						err := j.Update(val)
 						if err != nil {
@@ -752,10 +756,10 @@ func TestJournalInsertUpdateBatch(t *testing.T) {
 				expDataCap := sz
 				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
-				max := batch[len(batch)-1].ID()
+				max := getPk(batch[len(batch)-1])
 
 				// random test data is sorted
-				n, err := j.InsertBatch(batch)
+				n, err := j.InsertBatch(reflect.ValueOf(batch))
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -766,13 +770,13 @@ func TestJournalInsertUpdateBatch(t *testing.T) {
 					t.Run(fmt.Sprintf("rand_%03d", l), func(t *testing.T) {
 						// this changes the batch because ItemList contains
 						// pointers to structs
-						newBatch := make([]Item, len(idxs))
+						newBatch := make(ItemList, len(idxs))
 						for i := range newBatch {
-							val := batch[idxs[i]].(*JournalTestType)
+							val := batch[idxs[i]]
 							val.N += sz
 							newBatch[i] = val
 						}
-						_, err := j.UpdateBatch(newBatch)
+						_, err := j.UpdateBatch(reflect.ValueOf(newBatch))
 						if err != nil {
 							t.Errorf("unexpected error: %v", err)
 						}
@@ -825,16 +829,16 @@ func TestJournalUpdateBatch(t *testing.T) {
 					t.Run(fmt.Sprintf("rand_%03d", l), func(t *testing.T) {
 						// this changes the batch because ItemList contains
 						// pointers to structs
-						newBatch := make([]Item, len(idxs))
+						newBatch := make(ItemList, len(idxs))
 						for i := range newBatch {
-							val := batch[idxs[i]].(*JournalTestType)
+							val := batch[idxs[i]]
 							val.N += sz
 							newBatch[i] = val
 							mx = max(mx, val.Pk)
 							unique[val.Pk] = struct{}{}
 						}
 
-						_, err := j.UpdateBatch(newBatch)
+						_, err := j.UpdateBatch(reflect.ValueOf(newBatch))
 						if err != nil {
 							t.Errorf("unexpected error: %v", err)
 						}
@@ -879,10 +883,10 @@ func TestJournalDelete(t *testing.T) {
 				expDataCap := sz
 				j := NewJournal(0, sz, "")
 				j.InitType(JournalTestType{})
-				max := batch[len(batch)-1].ID()
+				max := getPk(batch[len(batch)-1])
 
 				// random test data is sorted
-				_, err := j.InsertBatch(batch)
+				_, err := j.InsertBatch(reflect.ValueOf(batch))
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -891,7 +895,7 @@ func TestJournalDelete(t *testing.T) {
 				for i, idx := range randN(sz/8, sz) {
 					T.Run(fmt.Sprintf("rand_%03d", i), func(t *testing.T) {
 						// value to delete
-						val := batch[idx].(*JournalTestType)
+						val := batch[idx]
 						// pk := val.Pk
 						// remove from batch (so test does not find it)
 						// batch = append(batch[:idx], batch[idx+1:]...)
@@ -966,15 +970,15 @@ func TestJournalDeleteBatch(t *testing.T) {
 						// start with a fresh batch
 						batch := make(ItemList, len(originalbatch))
 						for i, v := range originalbatch {
-							v := v.(*JournalTestType)
+							// v := v.(*JournalTestType)
 							c := *v
 							batch[i] = &c
 						}
 						// and a fresh journal
 						j := NewJournal(0, sz, "")
 						j.InitType(JournalTestType{})
-						max := batch[len(batch)-1].ID()
-						_, err := j.InsertBatch(batch)
+						max := getPk(batch[len(batch)-1])
+						_, err := j.InsertBatch(reflect.ValueOf(batch))
 						if err != nil {
 							t.Errorf("unexpected error: %v", err)
 						}
@@ -982,7 +986,7 @@ func TestJournalDeleteBatch(t *testing.T) {
 						// prepare values to delete
 						pks := make([]uint64, len(idxs))
 						for i, idx := range idxs {
-							val := batch[idx].(*JournalTestType)
+							val := batch[idx]
 							pks[i] = val.Pk
 							val.Pk = 0
 						}
@@ -1065,7 +1069,7 @@ func TestJournalDeleteBatch(t *testing.T) {
 
 						// non-match middle (+1 is just a guess because data is random,
 						// but worked for the number of random tests selected)
-						ok, last = j.IsDeleted(batch[0].ID()+1, 0)
+						ok, last = j.IsDeleted(getPk(batch[0])+1, 0)
 						if ok {
 							t.Errorf("invalid IsDeleted for not deleted item")
 						}
@@ -1188,7 +1192,7 @@ func BenchmarkJournalInsertSingle(B *testing.B) {
 			batch := makeJournalTestData(n.l)
 			j := NewJournal(0, n.l, "")
 			j.InitType(JournalTestType{})
-			j.InsertBatch(batch)
+			j.InsertBatch(reflect.ValueOf(batch))
 			B.ResetTimer()
 			B.ReportAllocs()
 			B.SetBytes(16) // JournalTestItem = pk + val
@@ -1210,7 +1214,7 @@ func BenchmarkJournalInsertBatch(B *testing.B) {
 			B.ReportAllocs()
 			B.SetBytes(int64(len(batch) * 16))
 			for b := 0; b < B.N; b++ {
-				j.InsertBatch(batch)
+				j.InsertBatch(reflect.ValueOf(batch))
 			}
 		})
 	}
@@ -1226,7 +1230,7 @@ func BenchmarkJournalInsertBatchPk(B *testing.B) {
 			B.ReportAllocs()
 			B.SetBytes(int64(len(batch) * 16))
 			for b := 0; b < B.N; b++ {
-				j.InsertBatch(batch)
+				j.InsertBatch(reflect.ValueOf(batch))
 			}
 		})
 	}
@@ -1238,12 +1242,12 @@ func BenchmarkJournalUpdateSingle(B *testing.B) {
 			batch := makeJournalTestData(n.l)
 			j := NewJournal(0, n.l, "")
 			j.InitType(JournalTestType{})
-			j.InsertBatch(batch)
+			j.InsertBatch(reflect.ValueOf(batch))
 			B.ResetTimer()
 			B.ReportAllocs()
 			B.SetBytes(16) // JournalTestItem = pk + val
 			for b := 0; b < B.N; b++ {
-				j.Update(&JournalTestType{batch[len(batch)/2].ID(), 0xffff})
+				j.Update(&JournalTestType{getPk(batch[len(batch)/2]), 0xffff})
 			}
 		})
 	}
@@ -1255,12 +1259,12 @@ func BenchmarkJournalUpdateBatch(B *testing.B) {
 			batch := makeJournalTestDataWithRandomPk(n.l)
 			j := NewJournal(0, n.l, "")
 			j.InitType(JournalTestType{})
-			j.InsertBatch(batch)
+			j.InsertBatch(reflect.ValueOf(batch))
 			B.ResetTimer()
 			B.ReportAllocs()
 			B.SetBytes(int64(len(batch) * 16))
 			for b := 0; b < B.N; b++ {
-				j.UpdateBatch(batch)
+				j.UpdateBatch(reflect.ValueOf(batch))
 			}
 		})
 	}
