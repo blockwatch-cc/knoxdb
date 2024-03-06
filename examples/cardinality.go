@@ -135,7 +135,7 @@ func run() error {
 
 			// add to stats and errors
 			stats[i].Add(uint64(est))
-			errors[i].Add(uint64(util.Abs64(int64(est) - int64(len(u64)))))
+			errors[i].Add(uint64(util.Abs(int64(est) - int64(len(u64)))))
 
 			b1 := pow2(uint64(est*8)) / 8
 			b2 := pow2(uint64(len(u64)*8)) / 8
@@ -179,7 +179,7 @@ func run() error {
 // same name as the file's basename (without extension). Optional parameter `opts`
 // allows to configure settings of the underlying boltdb engine.
 //
-// Example
+// # Example
 //
 // ```
 // // opens file `op.db` in path `./db` and looks for table `op`
@@ -188,7 +188,7 @@ func run() error {
 func Open(path string, opts interface{}) (*pack.Table, error) {
 	name := filepath.Base(path)
 	name = name[:len(name)-len(filepath.Ext(name))]
-	db, err := pack.OpenDatabase(filepath.Dir(path), name, "*", opts)
+	db, err := pack.OpenDatabase("bolt", filepath.Dir(path), name, "*", opts)
 	if err != nil {
 		return nil, err
 	}

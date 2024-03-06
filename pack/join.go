@@ -264,8 +264,8 @@ func (j *Join) Compile() error {
 
 	// now bind the unbound conditions to our tables
 	j.Predicate.Bind(j.Left.Table, j.Right.Table)
-	j.Left.where = j.Left.Where.Bind(j.Left.Table)
-	j.Right.where = j.Right.Where.Bind(j.Right.Table)
+	j.Left.where = j.Left.Where.Bind(j.Left.Table.fields)
+	j.Right.where = j.Right.Where.Bind(j.Right.Table.fields)
 
 	return j.CheckConditions()
 }
@@ -317,7 +317,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 	}
 
 	// check and compile query using a temporary in-memory table without indexes
-	if err := q.Compile(&Table{
+	q = q.WithTable(&Table{
 		name: strings.Join([]string{
 			j.Left.Table.Name(),
 			j.Type.String(),
@@ -328,7 +328,8 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 			j.Predicate.Right.Name,
 		}, "_"),
 		fields: j.fields,
-	}); err != nil {
+	})
+	if err := q.Compile(); err != nil {
 		return nil, err
 	}
 	defer q.Close()

@@ -113,25 +113,25 @@ func TestConditionTreeBind(t *testing.T) {
 		name:   "test",
 		fields: fields,
 	}
-	node := And(Equal("A", 1)).Bind(table)
+	node := And(Equal("A", 1)).Bind(table.fields)
 	checkNode(t, "AND(A)", node, COND_AND, false, false, false, 1, 2, 1)
 
-	node = And(Equal("A", 1), Equal("B", 1)).Bind(table)
+	node = And(Equal("A", 1), Equal("B", 1)).Bind(table.fields)
 	checkNode(t, "AND(A,B)", node, COND_AND, false, false, false, 2, 2, 2)
 
-	node = Or(Equal("A", 1), Equal("B", 1)).Bind(table)
+	node = Or(Equal("A", 1), Equal("B", 1)).Bind(table.fields)
 	checkNode(t, "OR(A,B)", node, COND_OR, false, false, false, 2, 2, 2)
 
 	node = And(
 		Equal("A", 1),
 		Or(Equal("B", 1), Equal("C", 1)),
-	).Bind(table)
+	).Bind(table.fields)
 	checkNode(t, "AND(A,OR(B,C))", node, COND_AND, false, false, false, 3, 3, 2)
 
 	node = And(
 		Or(Equal("B", 1), Equal("C", 1)),
 		Equal("A", 1),
-	).Bind(table)
+	).Bind(table.fields)
 	checkNode(t, "AND(OR(B,C),A)", node, COND_AND, false, false, false, 3, 3, 2)
 	// 1st branch is an inner node
 	checkNode(t, "->OR(B,C)", node.Children[0], COND_OR, false, false, false, 2, 2, 2)
@@ -147,35 +147,41 @@ func TestConditionTreeQuery(t *testing.T) {
 	}
 
 	// Note: AND nodes become direct children of the root
-	q := NewQuery("test").AndCondition(Equal("A", 1))
-	assertNoError(t, q.Compile(table))
+	q := NewQuery("test").WithTable(table).AndCondition(Equal("A", 1))
+	assertNoError(t, q.Compile())
 	checkNode(t, "AND(A)", q.conds, COND_AND, false, false, false, 1, 2, 1)
 
-	q = NewQuery("test").AndCondition(Equal("A", 1), Equal("B", 1))
-	assertNoError(t, q.Compile(table))
+	q = NewQuery("test").WithTable(table).AndCondition(Equal("A", 1), Equal("B", 1))
+	assertNoError(t, q.Compile())
 	checkNode(t, "AND(A,B)", q.conds, COND_AND, false, false, false, 2, 2, 2)
 
 	// Note: OR nodes increase tree depth, adds 1 inner OR node and its children
-	q = NewQuery("test").OrCondition(Equal("A", 1), Equal("B", 1))
-	assertNoError(t, q.Compile(table))
+	q = NewQuery("test").WithTable(table).OrCondition(Equal("A", 1), Equal("B", 1))
+	assertNoError(t, q.Compile())
 	checkNode(t, "OR(A,B)", q.conds, COND_AND, false, false, false, 2, 3, 1)
 	checkNode(t, "OR(A,B)[0]", q.conds.Children[0], COND_OR, false, false, false, 2, 2, 2)
 
-	q = NewQuery("test").AndCondition(
-		Equal("A", 1),
-		Or(Equal("B", 1), Equal("C", 1)),
-	)
-	assertNoError(t, q.Compile(table))
+	q = NewQuery("test").
+		WithTable(table).
+		AndCondition(
+			Equal("A", 1),
+			Or(Equal("B", 1), Equal("C", 1)),
+		)
+	assertNoError(t, q.Compile())
 	checkNode(t, "AND(A,OR(B,C))", q.conds, COND_AND, false, false, false, 3, 3, 2)
 
-	q = NewQuery("test").AndCondition(
-		Or(Equal("B", 1), Equal("C", 1)),
-		Equal("A", 1),
-	)
-	assertNoError(t, q.Compile(table))
+	q = NewQuery("test").
+		WithTable(table).
+		AndCondition(
+			Or(Equal("B", 1), Equal("C", 1)),
+			Equal("A", 1),
+		)
+
+	// Note: branches are optimized (reordered) by weight !
+	assertNoError(t, q.Compile())
 	checkNode(t, "AND(OR(B,C),A)", q.conds, COND_AND, false, false, false, 3, 3, 2)
-	// 1st branch is an inner OR node
-	checkNode(t, "AND(OR(B,C),A)[0]", q.conds.Children[0], COND_OR, false, false, false, 2, 2, 2)
-	// 2nd branch is a leaf
-	checkNode(t, "AND(OR(B,C),A)[1]", q.conds.Children[1], COND_AND, false, true, true, 1, 1, 0)
+	// 1st branch is AND (leaf)
+	checkNode(t, "AND(A,OR(B,C))[0]", q.conds.Children[0], COND_AND, false, true, true, 1, 1, 0)
+	// 2nd branch is OR node
+	checkNode(t, "AND(A,OR(B,C))[1]", q.conds.Children[1], COND_OR, false, false, false, 2, 2, 2)
 }

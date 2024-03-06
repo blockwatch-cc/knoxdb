@@ -140,8 +140,8 @@ func run() error {
 	fmt.Printf("Using database field %s flags=%s type=%s\n", field.Alias, field.Flags, field.Type)
 	err = table.WalkPacks(func(pkg *pack.Package) error {
 		block := pkg.Blocks()[field.Index]
-		_, max := block.MinMax()
-		maxVal := max.(uint32)
+		_, maxN := block.MinMax()
+		maxVal := maxN.(uint32)
 		maxid = max(maxid, maxVal)
 
 		realBits := vec.NewBitset(int(maxVal))
@@ -261,7 +261,7 @@ func run() error {
 func Open(path string, opts interface{}) (*pack.Table, error) {
 	name := filepath.Base(path)
 	name = name[:len(name)-len(filepath.Ext(name))]
-	db, err := pack.OpenDatabase(filepath.Dir(path), name, "*", opts)
+	db, err := pack.OpenDatabase("bolt", filepath.Dir(path), name, "*", opts)
 	if err != nil {
 		return nil, err
 	}

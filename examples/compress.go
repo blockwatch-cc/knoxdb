@@ -1,5 +1,7 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+//go:build ignore
+// +build ignore
 
 // packed index generation test
 
@@ -173,7 +175,7 @@ func run() error {
 	}
 
 	name := strings.TrimSuffix(filepath.Base(dbname), ".db")
-	db, err := pack.OpenDatabase(filepath.Dir(dbname), name, "*", boltopts)
+	db, err := pack.OpenDatabase("bolt", filepath.Dir(dbname), name, "*", boltopts)
 	if err != nil {
 		return fmt.Errorf("opening database: %v", err)
 	}

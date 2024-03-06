@@ -7,6 +7,7 @@
 package pack
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"reflect"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"blockwatch.cc/knoxdb/encoding/bitmap"
+	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/vec"
 	logpkg "github.com/echa/log"
 )
@@ -37,6 +40,7 @@ type Query struct {
 
 	// internal
 	table *Table            // cached table pointer
+	store *Store            // cached store pointer
 	conds ConditionTreeNode // compiled conditions
 	fout  FieldList         // output fields
 	freq  FieldList         // required fields (for out and query matching)
@@ -86,8 +90,12 @@ func (t *Table) NewQuery(name string) Query {
 	return NewQuery(name).WithTable(t)
 }
 
+func (s *Store) NewQuery(name string) Query {
+	return NewQuery(name).WithStore(s)
+}
+
 func (q *Query) Close() {
-	if q.table != nil {
+	if q.table != nil || q.store != nil {
 		q.stats.TotalTime = time.Since(q.start)
 		if q.stats.TotalTime > q.logAfter {
 			log.Warnf("%s", newLogClosure(func() string {
@@ -95,6 +103,7 @@ func (q *Query) Close() {
 			}))
 		}
 		q.table = nil
+		q.store = nil
 	}
 	q.Fields = nil
 	q.fout = nil
@@ -106,12 +115,16 @@ func (q Query) Table() *Table {
 	return q.table
 }
 
+func (q Query) Store() *Store {
+	return q.store
+}
+
 func (q Query) Runtime() time.Duration {
 	return time.Since(q.start)
 }
 
 func (q Query) IsBound() bool {
-	return q.table != nil && !q.conds.Empty()
+	return (q.table != nil || q.store != nil) && !q.conds.Empty()
 }
 
 func (q Query) PrintTiming() string {
@@ -142,28 +155,28 @@ func (q *Query) TickNow() (time.Duration, time.Time) {
 	return diff, now
 }
 
-func (q *Query) Compile(t *Table) error {
-	if t == nil {
+func (q *Query) Compile() error {
+	table := q.getStore()
+	if table == nil {
 		return ErrNoTable
 	}
-	if !strings.HasPrefix(q.Name, t.Name()) {
-		q.Name = t.Name() + "." + q.Name
+	fields := table.Fields()
+	if !strings.HasPrefix(q.Name, table.Name()) {
+		q.Name = table.Name() + "." + q.Name
 	}
-	q.table = t
 	q.start = time.Now()
 	q.lap = q.start
 
 	// ensure all queried fields exist
-	tableFields := q.table.fields
 	for _, f := range q.conds.Fields() {
-		if !tableFields.Contains(f.Name) {
-			return fmt.Errorf("pack: missing table field %s in table %s for query %s", f.Name, t.Name(), q.Name)
+		if !fields.Contains(f.Name) {
+			return fmt.Errorf("pack: missing table field %s in table %s for query %s", f.Name, q.table.Name(), q.Name)
 		}
 	}
 
 	// process conditions
 	if q.conds.Empty() {
-		q.conds = q.Conditions.Bind(q.table)
+		q.conds = q.Conditions.Bind(fields)
 		if err := q.conds.Compile(); err != nil {
 			return fmt.Errorf("pack: %s %v", q.Name, err)
 		}
@@ -172,27 +185,27 @@ func (q *Query) Compile(t *Table) error {
 	// identify output fields
 	if len(q.fout) == 0 {
 		if len(q.Fields) == 0 {
-			q.fout = tableFields
+			q.fout = fields
 		} else {
-			q.fout = tableFields.Select(q.Fields...)
-			q.fout = q.fout.MergeUnique(tableFields.Pk()).Sort()
+			q.fout = fields.Select(q.Fields...)
+			q.fout = q.fout.MergeUnique(fields.Pk()).Sort()
 		}
 	}
 
 	// identify required fields (output + used in conditions)
 	if len(q.freq) == 0 {
 		q.freq = q.fout.MergeUnique(q.conds.Fields()...).Sort()
-		q.freq = q.freq.MergeUnique(tableFields.Pk()).Sort()
+		q.freq = q.freq.MergeUnique(fields.Pk()).Sort()
 	}
 
 	// identify index fields
 	if len(q.fidx) == 0 {
-		q.fidx = t.fields.Indexed()
+		q.fidx = fields.Indexed()
 	}
 
 	// check query can be processed
 	q.stats.CompileTime = q.Tick()
-	if err := q.check(); err != nil {
+	if err := q.check(fields); err != nil {
 		q.stats.TotalTime = q.stats.CompileTime
 		return err
 	}
@@ -208,21 +221,20 @@ func (q *Query) Compile(t *Table) error {
 	return nil
 }
 
-func (q Query) check() error {
-	tfields := q.table.fields
+func (q Query) check(fields FieldList) error {
 	for _, v := range q.freq {
-		tfield := tfields.Find(v.Name)
+		field := fields.Find(v.Name)
 		// field must exist
-		if !tfield.IsValid() {
-			return fmt.Errorf("undefined field '%s/%s' in query %s", q.table.name, v.Name, q.Name)
+		if !field.IsValid() {
+			return fmt.Errorf("undefined field '%s' in query %s", v.Name, q.Name)
 		}
 		// field type must match
-		if tfield.Type != v.Type {
-			return fmt.Errorf("mismatched type %s for field '%s/%s' in query %s", v.Type, q.table.name, v.Name, q.Name)
+		if field.Type != v.Type {
+			return fmt.Errorf("mismatched type %s for field '%s' in query %s", v.Type, v.Name, q.Name)
 		}
 		// field index must be valid
-		if v.Index < 0 || v.Index >= len(tfields) {
-			return fmt.Errorf("illegal index %d for field '%s/%s' in query %s", v.Index, q.table.name, v.Name, q.Name)
+		if v.Index < 0 || v.Index >= len(fields) {
+			return fmt.Errorf("illegal index %d for field '%s' in query %s", v.Index, v.Name, q.Name)
 		}
 	}
 	// root condition may be empty but must not be a leaf for index queries to work
@@ -238,7 +250,7 @@ func (q Query) check() error {
 	return nil
 }
 
-func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeNode) error {
+func (q *Query) queryTableIndexes(ctx context.Context, tx *Tx, node *ConditionTreeNode) error {
 	// - visit all leafs, run index scan when field is indexed and condition allowed
 	// - if collission-free, mark condition as processed (don't execute again)
 	// - add IN cond to front of current tree branch level
@@ -305,7 +317,7 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 			ins = append(ins, ConditionTreeNode{Cond: c})
 		} else {
 			// recurse into child (use ptr to slice element)
-			if err := q.queryIndexNode(ctx, tx, &node.Children[i]); err != nil {
+			if err := q.queryTableIndexes(ctx, tx, &node.Children[i]); err != nil {
 				return err
 			}
 		}
@@ -337,18 +349,284 @@ func (q *Query) queryIndexNode(ctx context.Context, tx *Tx, node *ConditionTreeN
 	return nil
 }
 
+var (
+	ZERO = []byte{}
+	FF   = []byte{0xff}
+)
+
+func (q *Query) queryStoreIndexes(ctx context.Context, tx *Tx, node *ConditionTreeNode) error {
+	// Pre-condition invariants
+	// - root node is empty or not leaf
+	// - AND nodes are flattened
+	// NON-LEAF nodes
+	// - recurse
+	// AND nodes
+	// - foreach indexes check if we can produce a prefix scan from any condition combi
+	// - calculate prefix and run scan -> bitset
+	// - mark conditions as processed
+	// - append bitset as new condition
+	// - continue until no more indexes or no more conditions are left
+	// OR nodes
+	// - handle each child separately
+	//
+	// Limitations
+	// - IN, NI, NE, RE mode conditions cannot use range scans
+	// - index scans do not consider offset and limit (full index scans are costly)
+	//
+	// TODO
+	// - run index scans in blocks & forward results through operator tree,
+	//   then consume final aggregate with offset/limit
+
+	if node.OrKind {
+		// visit OR nodes individually
+		if node.Leaf() {
+			// run index scan
+			for _, idx := range q.store.indexes {
+				if !node.Cond.Field.Equal(*idx.fields[0]) {
+					continue
+				}
+				val := node.Cond.Value
+				if val == nil {
+					val = node.Cond.From
+				}
+				prefix, err := node.Cond.Field.Encode(val)
+				if err != nil {
+					return err
+				}
+				switch node.Cond.Mode {
+				case FilterModeEqual:
+					node.Bits, err = idx.ScanTx(tx, prefix)
+				case FilterModeLt:
+					// LT    => scan(0x, to)
+					// EQ+LT => scan(prefix, prefix+to)
+					node.Bits, err = idx.RangeTx(tx, ZERO, prefix)
+				case FilterModeLte:
+					// LE    => scan(0x, to)
+					// EQ+LE => scan(prefix, prefix+to)
+					node.Bits, err = idx.RangeTx(tx, ZERO, store.BytesPrefix(prefix).Limit)
+				case FilterModeGt:
+					// GT    => scan(from, FF)
+					// EQ+GT => scan(prefix+from, prefix+FF)
+					node.Bits, err = idx.RangeTx(tx, store.BytesPrefix(prefix).Limit, bytes.Repeat(FF, len(prefix)))
+				case FilterModeGte:
+					// GE    => scan(from, FF)
+					// EQ+GE => scan(prefix+from, prefix+FF)
+					node.Bits, err = idx.RangeTx(tx, prefix, bytes.Repeat(FF, len(prefix)))
+				case FilterModeRange:
+					// RG    => scan(from, to)
+					// EQ+RG => scan(prefix+from, prefix+to)
+					var to []byte
+					to, err = node.Cond.Field.Encode(node.Cond.To)
+					if err != nil {
+						return err
+					}
+					node.Bits, err = idx.RangeTx(tx, prefix, store.BytesPrefix(to).Limit)
+				default:
+					log.Warnf("Unsupported filter mode %s for field %s in store index query",
+						node.Cond.Mode, node.Cond.Field.Alias)
+				}
+				if err != nil {
+					return err
+				}
+				if node.Bits.IsValid() {
+					node.Cond.processed = true
+				}
+				break
+			}
+		} else {
+			// recurse into children one by one
+			var agg bitmap.Bitmap
+			for i := range node.Children {
+				if err := q.queryStoreIndexes(ctx, tx, &node.Children[i]); err != nil {
+					return err
+				}
+			}
+			// collect nested child bitmap results
+			for _, v := range node.Children {
+				if !v.Bits.IsValid() {
+					continue
+				}
+				if agg.IsValid() {
+					agg.Or(v.Bits)
+				} else {
+					agg = v.Bits.Clone()
+				}
+			}
+			node.Bits = agg
+		}
+		return nil
+	}
+
+	// AND nodes may contain leafs and nested OR nodes which we need to visit separately
+	var agg bitmap.Bitmap
+	eq := make(map[string]*Condition) // all equal child conditions
+	ex := make(map[string]*Condition) // all eligible extra child conditions
+	for i := range node.Children {
+		if node.Children[i].IsNested() {
+			if err := q.queryStoreIndexes(ctx, tx, &node.Children[i]); err != nil {
+				return err
+			}
+		}
+
+		// identify eligible conditions for constructing range scans
+		if node.Children[i].Leaf() {
+			c := node.Children[i].Cond
+			switch c.Mode {
+			case FilterModeEqual:
+				eq[c.Field.Name] = c
+			case FilterModeLt, FilterModeLte, FilterModeGt, FilterModeGte, FilterModeRange:
+				ex[c.Field.Name] = c
+			default:
+				log.Warnf("Unsupported filter mode %s for field %s in store index query",
+					c.Mode, c.Field.Alias)
+			}
+		}
+	}
+
+	// collect nested child bitmap results
+	for _, v := range node.Children {
+		if !v.Bits.IsValid() {
+			continue
+		}
+		if agg.IsValid() {
+			agg.And(v.Bits)
+		} else {
+			agg = v.Bits.Clone()
+		}
+	}
+
+	// try combine AND node leaf conditions for index scans
+	for _, idx := range q.store.indexes {
+		// see if we can produce an ordered prefix from existing conditions
+		var (
+			prefix []byte
+			extra  *Condition
+		)
+		for _, field := range idx.fields {
+			c, ok := eq[field.Name]
+			if !ok {
+				// before stopping, check if we can append an extra range condition
+				extra, _ = ex[field.Name]
+				break
+			}
+			buf, err := c.Field.Encode(c.Value)
+			if err != nil {
+				return err
+			}
+			prefix = append(prefix, buf...)
+			c.processed = true
+			delete(eq, field.Name)
+		}
+
+		if len(prefix) == 0 && extra == nil {
+			continue
+		}
+
+		var (
+			bits bitmap.Bitmap
+			err  error
+		)
+		if extra != nil {
+			// equal plus extra range condition
+			extra.processed = true
+			val := extra.Value
+			if val == nil {
+				val = extra.From
+			}
+			var buf []byte
+			buf, err = extra.Field.Encode(val)
+			if err != nil {
+				return err
+			}
+			switch extra.Mode {
+			case FilterModeLt:
+				// LT    => scan(0x, to)
+				// EQ+LT => scan(prefix, prefix+to)
+				bits, err = idx.RangeTx(tx, prefix, append(prefix, buf...))
+			case FilterModeLte:
+				// LE    => scan(0x, to)
+				// EQ+LE => scan(prefix, prefix+to)
+				bits, err = idx.RangeTx(tx, prefix, store.BytesPrefix(append(prefix, buf...)).Limit)
+			case FilterModeGt:
+				// GT    => scan(from, FF)
+				// EQ+GT => scan(prefix+from, prefix+FF)
+				bits, err = idx.RangeTx(tx, store.BytesPrefix(append(prefix, buf...)).Limit, bytes.Repeat(FF, len(prefix)+len(buf)))
+			case FilterModeGte:
+				// GE    => scan(from, FF)
+				// EQ+GE => scan(prefix+from, prefix+FF)
+				bits, err = idx.RangeTx(tx, append(prefix, buf...), bytes.Repeat(FF, len(prefix)+len(buf)))
+			case FilterModeRange:
+				// RG    => scan(from, to)
+				// EQ+RG => scan(prefix+from, prefix+to)
+				var to []byte
+				to, err = extra.Field.Encode(extra.To)
+				if err != nil {
+					return err
+				}
+				bits, err = idx.RangeTx(tx, append(prefix, buf...), store.BytesPrefix(append(prefix, to...)).Limit)
+			}
+		} else {
+			// equal condition(s) only
+			bits, err = idx.ScanTx(tx, prefix)
+		}
+		if err != nil {
+			return err
+		}
+		if agg.IsValid() {
+			agg.And(bits)
+			bits.Free()
+		} else {
+			agg = bits
+		}
+		if len(eq) == 0 {
+			break
+		}
+	}
+
+	// store aggregate bitmap in node
+	if agg.IsValid() {
+		node.Bits = agg
+	}
+
+	// Cases
+	//
+	// A - AND(C,C) with full index
+	//   > AND(c,c,IN) -> merge bitsets -> scan bitset only
+	// B - AND(C,C) with partial index
+	//   > AND(c,C,IN) -> scan bitset, apply cond tree to each val
+	// C - AND(C,C) no index (or no index matched)
+	//   > AND(C,C) -> full scan, apply cond tree to each val
+	//
+	// D - OR(C,C) with full index
+	//   > OR(IN,IN) -> merge bitsets -> scan bitset only
+	// E - OR(C,C) with partial index
+	//   > OR(IN,C) -> full scan, apply cond tree to each val
+	// F - OR(C,C) with no index
+	//   > OR(C,C) -> full scan, apply cond tree to each val
+	//
+	// G - OR(AND(C,C),AND(C)) with full index
+	//   > OR(AND(c,c,IN),AND(c,IN)) -> merge bitsets -> scan bitset only
+	// H - OR(AND(C,C),AND(C)) with partial index
+	//   > OR(AND(C,c,IN),AND(C)) -> full scan, apply cond tree to each val
+	// I - OR(AND(C,C),C) with no index
+	//   > OR(AND(C,C),C) -> full scan, apply cond tree to each val
+	return nil
+}
+
 // INDEX QUERY: use index lookup for indexed fields
 // - fetch pk lists for every indexed field
 // - when resolved, replace source condition with new FilterModeIn condition
-func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
+func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) (err error) {
 	if q.NoIndex || q.conds.Empty() {
 		return nil
 	}
-	if err := q.queryIndexNode(ctx, tx, &q.conds); err != nil {
-		return err
+	if q.table != nil {
+		err = q.queryTableIndexes(ctx, tx, &q.conds)
+	} else {
+		err = q.queryStoreIndexes(ctx, tx, &q.conds)
 	}
 	q.stats.IndexTime = q.Tick()
-	return nil
+	return
 }
 
 // collect list of packs to visit in pk order
@@ -403,6 +681,11 @@ func (q *Query) MakePackLookupSchedule(ids []uint64, reverse bool) []int {
 
 func (q Query) WithTable(table *Table) Query {
 	q.table = table
+	return q
+}
+
+func (q Query) WithStore(store *Store) Query {
+	q.store = store
 	return q
 }
 
@@ -544,6 +827,22 @@ func (q Query) AndRange(field string, from, to interface{}) Query {
 	return q
 }
 
+type IStore interface {
+	Name() string
+	Fields() FieldList
+	Query(context.Context, Query) (*Result, error)
+	Stream(context.Context, Query, func(Row) error) error
+	Delete(context.Context, Query) (int64, error)
+	Count(context.Context, Query) (int64, error)
+}
+
+func (q Query) getStore() IStore {
+	if q.table != nil {
+		return q.table
+	}
+	return q.store
+}
+
 func (q Query) Execute(ctx context.Context, val interface{}) error {
 	v := reflect.ValueOf(val)
 	if v.Kind() != reflect.Ptr {
@@ -554,7 +853,7 @@ func (q Query) Execute(ctx context.Context, val interface{}) error {
 	case reflect.Slice:
 		// get slice element type
 		elem := v.Type().Elem()
-		return q.table.Stream(ctx, q, func(r Row) error {
+		return q.getStore().Stream(ctx, q, func(r Row) error {
 			// create new slice element (may be a pointer to struct)
 			e := reflect.New(elem)
 			ev := e
@@ -575,7 +874,7 @@ func (q Query) Execute(ctx context.Context, val interface{}) error {
 			return nil
 		})
 	case reflect.Struct:
-		return q.table.Stream(ctx, q.WithLimit(1), func(r Row) error {
+		return q.getStore().Stream(ctx, q.WithLimit(1), func(r Row) error {
 			return r.Decode(val)
 		})
 	default:
@@ -584,17 +883,17 @@ func (q Query) Execute(ctx context.Context, val interface{}) error {
 }
 
 func (q Query) Stream(ctx context.Context, fn func(r Row) error) error {
-	return q.table.Stream(ctx, q, fn)
+	return q.getStore().Stream(ctx, q, fn)
 }
 
 func (q Query) Delete(ctx context.Context) (int64, error) {
-	return q.table.Delete(ctx, q)
+	return q.getStore().Delete(ctx, q)
 }
 
 func (q Query) Count(ctx context.Context) (int64, error) {
-	return q.table.Count(ctx, q)
+	return q.getStore().Count(ctx, q)
 }
 
 func (q Query) Run(ctx context.Context) (*Result, error) {
-	return q.table.Query(ctx, q)
+	return q.Store().Query(ctx, q)
 }

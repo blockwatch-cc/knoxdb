@@ -41,12 +41,12 @@ func (u *UnboundCondition) Clear() {
 	u.Children = nil
 }
 
-func (u UnboundCondition) Bind(table *Table) ConditionTreeNode {
+func (u UnboundCondition) Bind(fields FieldList) ConditionTreeNode {
 	// bind single condition leaf node
 	if u.Name != "" {
 		return ConditionTreeNode{
 			Cond: &Condition{
-				Field: table.Fields().Find(u.Name),
+				Field: fields.Find(u.Name),
 				Mode:  u.Mode,
 				Raw:   u.Raw,
 				Value: u.Value,
@@ -62,7 +62,7 @@ func (u UnboundCondition) Bind(table *Table) ConditionTreeNode {
 		Children: make([]ConditionTreeNode, 0),
 	}
 	for _, v := range u.Children {
-		node.Children = append(node.Children, v.Bind(table))
+		node.Children = append(node.Children, v.Bind(fields))
 	}
 	return node
 }

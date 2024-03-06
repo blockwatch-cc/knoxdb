@@ -268,7 +268,7 @@ func run() error {
 func Open(path string, opts interface{}) (*pack.Table, error) {
 	name := filepath.Base(path)
 	name = name[:len(name)-len(filepath.Ext(name))]
-	db, err := pack.OpenDatabase(filepath.Dir(path), name, "*", opts)
+	db, err := pack.OpenDatabase("bolt", filepath.Dir(path), name, "*", opts)
 	if err != nil {
 		return nil, err
 	}

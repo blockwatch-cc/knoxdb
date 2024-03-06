@@ -4,6 +4,9 @@
 package pack
 
 import (
+	"sort"
+
+	"blockwatch.cc/knoxdb/encoding/bitmap"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -11,6 +14,7 @@ type ConditionTreeNode struct {
 	OrKind   bool                // AND|OR
 	Children []ConditionTreeNode // sub conditions
 	Cond     *Condition          // ptr to condition
+	Bits     bitmap.Bitmap       // index query result
 }
 
 func (n ConditionTreeNode) Empty() bool {
@@ -19,6 +23,31 @@ func (n ConditionTreeNode) Empty() bool {
 
 func (n ConditionTreeNode) Leaf() bool {
 	return n.Cond != nil
+}
+
+func (n ConditionTreeNode) IsNested() bool {
+	if n.Cond != nil {
+		return false
+	}
+	for _, v := range n.Children {
+		if !v.Leaf() {
+			return true
+		}
+	}
+	return false
+}
+
+func (n ConditionTreeNode) IsProcessed() bool {
+	if n.Leaf() {
+		return n.Cond.processed
+	}
+
+	for _, v := range n.Children {
+		if !v.IsProcessed() {
+			return false
+		}
+	}
+	return true
 }
 
 func (n ConditionTreeNode) NoMatch() bool {
@@ -47,18 +76,35 @@ func (n ConditionTreeNode) NoMatch() bool {
 	}
 }
 
-// may otimize (reduce/merge/replace) conditions in the future
-func (n ConditionTreeNode) Compile() error {
+// may otimize (merge/replace) conditions in the future
+func (n *ConditionTreeNode) Compile() error {
 	if n.Leaf() {
 		if err := n.Cond.Compile(); err != nil {
 			return err
 		}
 	} else {
-		for _, v := range n.Children {
-			if err := v.Compile(); err != nil {
+		for i := range n.Children {
+			if err := n.Children[i].Compile(); err != nil {
 				return err
 			}
 		}
+		// merge nested intermediate AND nodes
+		if !n.OrKind {
+			for i := 0; i < len(n.Children); i++ {
+				node := n.Children[i]
+				if node.Leaf() || node.OrKind {
+					continue
+				}
+				// remove nested node
+				n.Children = append(n.Children[:i], n.Children[i+1:]...)
+				// append nested node's children
+				n.Children = append(n.Children, node.Children...)
+			}
+		}
+		// sort by weight
+		sort.Slice(n.Children, func(i, j int) bool {
+			return n.Children[i].Weight() < n.Children[j].Weight()
+		})
 	}
 	return nil
 }
@@ -156,7 +202,7 @@ func (n *ConditionTreeNode) AddOrCondition(c *Condition) {
 }
 
 // Invariants
-// - root is always and AND node
+// - root is always an AND node
 // - root is never a leaf node
 // - root may be empty
 func (n *ConditionTreeNode) AddNode(node ConditionTreeNode) {
@@ -418,4 +464,33 @@ func (n ConditionTreeNode) MatchPackOr(pkg *Package, info PackInfo) *vec.Bitset 
 		}
 	}
 	return bits
+}
+
+func (n ConditionTreeNode) MatchValue(v *Value) bool {
+	// if root is empty and no leaf is defined, return a full match
+	if n.Empty() {
+		return true
+	}
+
+	// if root contains a single leaf only, match it
+	if n.Leaf() {
+		return n.Cond.MatchValue(v)
+	}
+
+	// process all children
+	if n.OrKind {
+		for _, c := range n.Children {
+			if c.MatchValue(v) {
+				return true
+			}
+		}
+		return false
+	} else {
+		for _, c := range n.Children {
+			if !c.MatchValue(v) {
+				return false
+			}
+		}
+		return true
+	}
 }

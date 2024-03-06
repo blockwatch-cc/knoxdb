@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package pack
@@ -8,14 +8,272 @@ import (
 	"reflect"
 	"time"
 
-	. "blockwatch.cc/knoxdb/encoding/decimal"
-	. "blockwatch.cc/knoxdb/vec"
+	"blockwatch.cc/knoxdb/encoding/decimal"
+	"blockwatch.cc/knoxdb/vec"
 )
 
 type Result struct {
-	fields FieldList
-	pkg    *Package
-	tinfo  *typeInfo
+	fields  FieldList
+	pkg     *Package
+	tinfo   *typeInfo
+	values  []byte
+	offsets []int
+}
+
+func (r *Result) Close() {
+	if r == nil {
+		return
+	}
+	if r.pkg != nil {
+		r.pkg.Release()
+	}
+	r.pkg = nil
+	r.values = nil
+	r.offsets = nil
+	r.tinfo = nil
+}
+
+func (r *Result) Fields() FieldList {
+	return r.fields
+}
+
+func (r *Result) IsValid() bool {
+	return r.pkg != nil || r.values != nil
+}
+
+func (r *Result) Cols() int {
+	if !r.IsValid() {
+		return 0
+	}
+	return len(r.fields)
+}
+
+func (r *Result) Rows() int {
+	switch {
+	case r.pkg != nil:
+		return r.pkg.nValues
+	case r.offsets != nil:
+		return len(r.offsets)
+	default:
+		return 0
+	}
+}
+
+func (r *Result) Row(n int) Row {
+	return Row{r, n}
+}
+
+func (r *Result) PkColumn() []uint64 {
+	return r.pkg.PkColumn()
+}
+
+func (r *Result) Column(colname string) (interface{}, error) {
+	if r.pkg == nil {
+		return nil, ErrResultClosed
+	}
+	i := r.pkg.FieldIndex(colname)
+	if i < 0 {
+		return nil, ErrNoField
+	}
+	return r.pkg.Column(i)
+}
+
+func (r *Result) SortByField(name string) error {
+	if r.pkg == nil {
+		return ErrResultClosed
+	}
+	i := r.pkg.FieldIndex(name)
+	if i < 0 {
+		return ErrNoField
+	}
+	if r.pkg.Len() == 0 {
+		return nil
+	}
+	sorter, err := NewPackageSorter(r.pkg, i)
+	if err != nil {
+		return err
+	}
+
+	// update dirty state when package has changed
+	updated := sorter.Sort()
+	r.pkg.dirty = r.pkg.dirty || updated
+	return nil
+}
+
+func (r *Result) DecodeAt(n int, val interface{}) error {
+	if !r.IsValid() {
+		return ErrResultClosed
+	}
+	if r.tinfo == nil {
+		if err := r.buildTypeInfo(val); err != nil {
+			return err
+		}
+	}
+	if r.pkg != nil {
+		return r.pkg.ReadAtWithInfo(n, val, r.tinfo)
+	}
+	start, end := r.offsets[n], len(r.values)
+	if n < len(r.offsets)-1 {
+		end = r.offsets[n+1]
+	}
+	return r.fields.DecodeWithInfo(r.values[start:end], val, r.tinfo)
+}
+
+func (r *Result) buildTypeInfo(val interface{}) error {
+	sharedTypeInfo, err := getTypeInfo(val)
+	if err != nil {
+		return err
+	}
+	r.tinfo = sharedTypeInfo.Clone()
+	if r.pkg != nil {
+		for i, v := range r.tinfo.fields {
+			r.tinfo.fields[i].blockid = r.pkg.FieldIndex(v.name)
+		}
+	} else {
+		r.fields = r.fields.Clone()
+		for i := range r.fields {
+			r.fields[i].Index = -1
+		}
+		for i, v := range r.tinfo.fields {
+			r.fields.Find(v.name).Index = i
+		}
+	}
+	return nil
+}
+
+func (r *Result) buildTypeInfoReflect(typ reflect.Type) error {
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	return r.buildTypeInfo(reflect.New(typ).Interface())
+}
+
+func (r *Result) Decode(val interface{}) error {
+	v := reflect.ValueOf(val)
+	if v.Kind() != reflect.Ptr {
+		return fmt.Errorf("pack: non-pointer passed to Decode")
+	}
+	if r.pkg == nil {
+		return ErrResultClosed
+	}
+	v = reflect.Indirect(v)
+	switch v.Kind() {
+	case reflect.Slice:
+		// get slice element type
+		typ := v.Type().Elem()
+		err := r.buildTypeInfoReflect(typ)
+		if err != nil {
+			return err
+		}
+		for i := 0; i < r.pkg.Len(); i++ {
+			// create new slice element (may be a pointer to struct)
+			e := reflect.New(typ)
+			ev := e
+
+			// if element is ptr to struct, allocate the underlying struct
+			if e.Elem().Kind() == reflect.Ptr {
+				ev.Elem().Set(reflect.New(e.Elem().Type().Elem()))
+				ev = reflect.Indirect(e)
+			}
+
+			// decode the struct element (re-use our interface-based methods)
+			if r.pkg != nil {
+				err = r.pkg.ReadAtWithInfo(i, ev.Interface(), r.tinfo)
+			} else {
+				start, end := r.offsets[i], len(r.values)
+				if i < len(r.offsets) {
+					end = r.offsets[i+1]
+				}
+				err = r.fields.DecodeWithInfo(r.values[start:end], ev.Interface(), r.tinfo)
+			}
+			if err != nil {
+				return err
+			}
+			// append slice element
+			v.Set(reflect.Append(v, e.Elem()))
+		}
+		return nil
+	case reflect.Struct:
+		return r.DecodeAt(0, val)
+	default:
+		return fmt.Errorf("pack: non-slice/struct passed to Decode")
+	}
+}
+
+func (r *Result) DecodeRange(start, end int, proto interface{}) (interface{}, error) {
+	if r.pkg == nil {
+		return nil, ErrResultClosed
+	}
+	if r.tinfo == nil {
+		if err := r.buildTypeInfo(proto); err != nil {
+			return nil, err
+		}
+	}
+	typ := reflect.Indirect(reflect.ValueOf(proto)).Type()
+	slice := reflect.MakeSlice(reflect.SliceOf(typ), end-start, end-start)
+	for i := start; i < end; i++ {
+		var err error
+		if r.pkg != nil {
+			err = r.pkg.ReadAtWithInfo(i, slice.Index(i-start).Interface(), r.tinfo)
+		} else {
+			start, end := r.offsets[i], len(r.values)
+			if i < len(r.offsets) {
+				end = r.offsets[i+1]
+			}
+			err = r.fields.DecodeWithInfo(r.values[start:end], slice.Index(i-start).Interface(), r.tinfo)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return slice.Interface(), nil
+}
+
+func (r *Result) Walk(fn func(r Row) error) error {
+	if r.pkg == nil {
+		return ErrResultClosed
+	}
+	for i, l := 0, r.pkg.Len(); i < l; i++ {
+		if err := fn(Row{res: r, n: i}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Result) ForEach(proto interface{}, fn func(i int, val interface{}) error) error {
+	if r.pkg == nil {
+		return ErrResultClosed
+	}
+	if r.tinfo == nil {
+		if err := r.buildTypeInfo(proto); err != nil {
+			return err
+		}
+	}
+	typ := derefIndirect(proto).Type()
+	for i, l := 0, r.Rows(); i < l; i++ {
+		var err error
+		// create new empty value for interface prototype
+		val := reflect.New(typ)
+		// unmarshal and map
+		if r.pkg != nil {
+			err = r.pkg.ReadAtWithInfo(i, val.Interface(), r.tinfo)
+		} else {
+			start, end := r.offsets[i], len(r.values)
+			if i < len(r.offsets) {
+				end = r.offsets[i+1]
+			}
+			err = r.fields.DecodeWithInfo(r.values[start:end], val.Interface(), r.tinfo)
+		}
+		if err != nil {
+			return err
+		}
+		// forward to callback
+		if err := fn(i, val.Interface()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type Row struct {
@@ -69,11 +327,11 @@ func (r Row) Uint8(index int) (uint8, error) {
 	return r.res.pkg.Uint8At(index, r.n)
 }
 
-func (r Row) Int256(index int) (Int256, error) {
+func (r Row) Int256(index int) (vec.Int256, error) {
 	return r.res.pkg.Int256At(index, r.n)
 }
 
-func (r Row) Int128(index int) (Int128, error) {
+func (r Row) Int128(index int) (vec.Int128, error) {
 	return r.res.pkg.Int128At(index, r.n)
 }
 
@@ -93,19 +351,19 @@ func (r Row) Int8(index int) (int8, error) {
 	return r.res.pkg.Int8At(index, r.n)
 }
 
-func (r Row) Decimal256(index int) (Decimal256, error) {
+func (r Row) Decimal256(index int) (decimal.Decimal256, error) {
 	return r.res.pkg.Decimal256At(index, r.n)
 }
 
-func (r Row) Decimal128(index int) (Decimal128, error) {
+func (r Row) Decimal128(index int) (decimal.Decimal128, error) {
 	return r.res.pkg.Decimal128At(index, r.n)
 }
 
-func (r Row) Decimal64(index int) (Decimal64, error) {
+func (r Row) Decimal64(index int) (decimal.Decimal64, error) {
 	return r.res.pkg.Decimal64At(index, r.n)
 }
 
-func (r Row) Decimal32(index int) (Decimal32, error) {
+func (r Row) Decimal32(index int) (decimal.Decimal32, error) {
 	return r.res.pkg.Decimal32At(index, r.n)
 }
 
@@ -131,597 +389,4 @@ func (r Row) Bool(index int) (bool, error) {
 
 func (r Row) Time(index int) (time.Time, error) {
 	return r.res.pkg.TimeAt(index, r.n)
-}
-
-func (r *Result) Close() {
-	if r == nil || r.pkg == nil {
-		return
-	}
-	r.pkg.Release()
-	r.pkg = nil
-	r.tinfo = nil
-}
-
-func (r *Result) Fields() FieldList {
-	return r.fields
-}
-
-func (r *Result) SortByField(name string) error {
-	if r.pkg == nil {
-		return ErrResultClosed
-	}
-	i := r.pkg.FieldIndex(name)
-	if i < 0 {
-		return ErrNoField
-	}
-	if r.pkg.Len() == 0 {
-		return nil
-	}
-	sorter, err := NewPackageSorter(r.pkg, i)
-	if err != nil {
-		return err
-	}
-
-	// update dirty state when package has changed
-	updated := sorter.Sort()
-	r.pkg.dirty = r.pkg.dirty || updated
-	return nil
-}
-
-func (r *Result) Cols() int {
-	if r.pkg == nil {
-		return 0
-	}
-	return r.pkg.nFields
-}
-
-func (r *Result) Rows() int {
-	if r.pkg == nil {
-		return 0
-	}
-	return r.pkg.nValues
-}
-
-func (r *Result) Row(n int) Row {
-	return Row{r, n}
-}
-
-func (r *Result) DecodeAt(n int, val interface{}) error {
-	if r.pkg == nil {
-		return ErrResultClosed
-	}
-	if r.tinfo == nil {
-		if err := r.buildTypeInfo(val); err != nil {
-			return err
-		}
-	}
-	return r.pkg.ReadAtWithInfo(n, val, r.tinfo)
-}
-
-func (r *Result) buildTypeInfo(val interface{}) error {
-	sharedTypeInfo, err := getTypeInfo(val)
-	if err != nil {
-		return err
-	}
-	r.tinfo = sharedTypeInfo.Clone()
-	for i, v := range r.tinfo.fields {
-		r.tinfo.fields[i].blockid = r.pkg.FieldIndex(v.name)
-	}
-	return nil
-}
-
-func (r *Result) buildTypeInfoReflect(typ reflect.Type) error {
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-	return r.buildTypeInfo(reflect.New(typ).Interface())
-}
-
-func (r *Result) Decode(val interface{}) error {
-	v := reflect.ValueOf(val)
-	if v.Kind() != reflect.Ptr {
-		return fmt.Errorf("pack: non-pointer passed to Decode")
-	}
-	if r.pkg == nil {
-		return ErrResultClosed
-	}
-	v = reflect.Indirect(v)
-	switch v.Kind() {
-	case reflect.Slice:
-		// get slice element type
-		typ := v.Type().Elem()
-		if err := r.buildTypeInfoReflect(typ); err != nil {
-			return err
-		}
-		for i := 0; i < r.pkg.Len(); i++ {
-			// create new slice element (may be a pointer to struct)
-			e := reflect.New(typ)
-			ev := e
-
-			// if element is ptr to struct, allocate the underlying struct
-			if e.Elem().Kind() == reflect.Ptr {
-				ev.Elem().Set(reflect.New(e.Elem().Type().Elem()))
-				ev = reflect.Indirect(e)
-			}
-
-			// decode the struct element (re-use our interface-based methods)
-			if err := r.pkg.ReadAtWithInfo(i, ev.Interface(), r.tinfo); err != nil {
-				return err
-			}
-
-			// append slice element
-			v.Set(reflect.Append(v, e.Elem()))
-		}
-		return nil
-	case reflect.Struct:
-		return r.DecodeAt(0, val)
-	default:
-		return fmt.Errorf("pack: non-slice/struct passed to Decode")
-	}
-}
-
-func (r *Result) DecodeRange(start, end int, proto interface{}) (interface{}, error) {
-	if r.pkg == nil {
-		return nil, ErrResultClosed
-	}
-	if r.tinfo == nil {
-		if err := r.buildTypeInfo(proto); err != nil {
-			return nil, err
-		}
-	}
-	typ := reflect.Indirect(reflect.ValueOf(proto)).Type()
-	slice := reflect.MakeSlice(reflect.SliceOf(typ), end-start, end-start)
-	for i := start; i < end; i++ {
-		if err := r.pkg.ReadAtWithInfo(i, slice.Index(i-start).Interface(), r.tinfo); err != nil {
-			return nil, err
-		}
-	}
-	return slice.Interface(), nil
-}
-
-func (r *Result) Walk(fn func(r Row) error) error {
-	if r.pkg == nil {
-		return ErrResultClosed
-	}
-	for i, l := 0, r.pkg.Len(); i < l; i++ {
-		if err := fn(Row{res: r, n: i}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (r *Result) ForEach(proto interface{}, fn func(i int, val interface{}) error) error {
-	if r.pkg == nil {
-		return ErrResultClosed
-	}
-	if r.tinfo == nil {
-		if err := r.buildTypeInfo(proto); err != nil {
-			return err
-		}
-	}
-	typ := derefIndirect(proto).Type()
-	for i := 0; i < r.pkg.nValues; i++ {
-		// create new empty value for interface prototype
-		val := reflect.New(typ)
-		// unmarshal and map
-		if err := r.pkg.ReadAtWithInfo(i, val.Interface(), r.tinfo); err != nil {
-			return err
-		}
-		// forward to callback
-		if err := fn(i, val.Interface()); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (r *Result) PkColumn() []uint64 {
-	return r.pkg.PkColumn()
-}
-
-func (r *Result) Column(colname string) (interface{}, error) {
-	if r.pkg == nil {
-		return nil, ErrResultClosed
-	}
-	i := r.pkg.FieldIndex(colname)
-	if i < 0 {
-		return nil, ErrNoField
-	}
-	return r.pkg.Column(i)
-}
-
-func (r *Result) Range(colname string, start, end int) (interface{}, error) {
-	if r.pkg == nil {
-		return nil, ErrResultClosed
-	}
-	i := r.pkg.FieldIndex(colname)
-	if i < 0 {
-		return nil, ErrNoField
-	}
-	return r.pkg.RangeAt(i, start, end)
-}
-
-func (r *Result) Uint64At(index, pos int) (uint64, error) {
-	if r.pkg == nil {
-		return 0, ErrResultClosed
-	}
-	return r.pkg.Uint64At(index, pos)
-}
-
-func (r *Result) Uint32At(index, pos int) (uint32, error) {
-	if r.pkg == nil {
-		return 0, ErrResultClosed
-	}
-	return r.pkg.Uint32At(index, pos)
-}
-
-func (r *Result) Uint16At(index, pos int) (uint16, error) {
-	if r.pkg == nil {
-		return 0, ErrResultClosed
-	}
-	return r.pkg.Uint16At(index, pos)
-}
-
-func (r *Result) Uint8At(index, pos int) (uint8, error) {
-	if r.pkg == nil {
-		return 0, ErrResultClosed
-	}
-	return r.pkg.Uint8At(index, pos)
-}
-
-func (r *Result) Int256At(index, pos int) (Int256, error) {
-	if r.pkg == nil {
-		return ZeroInt256, ErrResultClosed
-	}
-	return r.pkg.Int256At(index, pos)
-}
-
-func (r *Result) Int128At(index, pos int) (Int128, error) {
-	if r.pkg == nil {
-		return ZeroInt128, ErrResultClosed
-	}
-	return r.pkg.Int128At(index, pos)
-}
-
-func (r *Result) Int64At(index, pos int) (int64, error) {
-	if r.pkg == nil {
-		return 0, ErrResultClosed
-	}
-	return r.pkg.Int64At(index, pos)
-}
-
-func (r *Result) Int32At(index, pos int) (int32, error) {
-	if r.pkg == nil {
-		return 0, ErrResultClosed
-	}
-	return r.pkg.Int32At(index, pos)
-}
-
-func (r *Result) Int16At(index, pos int) (int16, error) {
-	if r.pkg == nil {
-		return 0, ErrResultClosed
-	}
-	return r.pkg.Int16At(index, pos)
-}
-
-func (r *Result) Int8At(index, pos int) (int8, error) {
-	if r.pkg == nil {
-		return 0, ErrResultClosed
-	}
-	return r.pkg.Int8At(index, pos)
-}
-
-func (r *Result) Decimal256At(index, pos int) (Decimal256, error) {
-	if r.pkg == nil {
-		return Decimal256Zero, ErrResultClosed
-	}
-	return r.pkg.Decimal256At(index, pos)
-}
-
-func (r *Result) Decimal128At(index, pos int) (Decimal128, error) {
-	if r.pkg == nil {
-		return Decimal128Zero, ErrResultClosed
-	}
-	return r.pkg.Decimal128At(index, pos)
-}
-
-func (r *Result) Decimal64At(index, pos int) (Decimal64, error) {
-	if r.pkg == nil {
-		return Decimal64Zero, ErrResultClosed
-	}
-	return r.pkg.Decimal64At(index, pos)
-}
-
-func (r *Result) Decimal32At(index, pos int) (Decimal32, error) {
-	if r.pkg == nil {
-		return Decimal32Zero, ErrResultClosed
-	}
-	return r.pkg.Decimal32At(index, pos)
-}
-
-func (r *Result) Float64At(index, pos int) (float64, error) {
-	if r.pkg == nil {
-		return 0, ErrResultClosed
-	}
-	return r.pkg.Float64At(index, pos)
-}
-
-func (r *Result) Float32At(index, pos int) (float32, error) {
-	if r.pkg == nil {
-		return 0, ErrResultClosed
-	}
-	return r.pkg.Float32At(index, pos)
-}
-
-func (r *Result) StringAt(index, pos int) (string, error) {
-	if r.pkg == nil {
-		return "", ErrResultClosed
-	}
-	return r.pkg.StringAt(index, pos)
-}
-
-func (r *Result) BytesAt(index, pos int) ([]byte, error) {
-	if r.pkg == nil {
-		return nil, ErrResultClosed
-	}
-	return r.pkg.BytesAt(index, pos)
-}
-
-func (r *Result) BoolAt(index, pos int) (bool, error) {
-	if r.pkg == nil {
-		return false, ErrResultClosed
-	}
-	return r.pkg.BoolAt(index, pos)
-}
-
-func (r *Result) TimeAt(index, pos int) (time.Time, error) {
-	if r.pkg == nil {
-		return time.Time{}, ErrResultClosed
-	}
-	return r.pkg.TimeAt(index, pos)
-}
-
-func (r *Result) TimeColumn(colname string) ([]time.Time, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]int64)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	res := make([]time.Time, len(tcol))
-	for i := range tcol {
-		res[i] = time.Unix(0, tcol[i]).UTC()
-	}
-	return res, nil
-}
-
-func (r *Result) Uint64Column(colname string) ([]uint64, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]uint64)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Uint32Column(colname string) ([]uint32, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]uint32)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Uint16Column(colname string) ([]uint16, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]uint16)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Uint8Column(colname string) ([]uint8, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]uint8)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Int256Column(colname string) ([]Int256, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]Int256)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Int128Column(colname string) ([]Int128, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]Int128)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Int64Column(colname string) ([]int64, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]int64)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Int32Column(colname string) ([]int32, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]int32)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Int16Column(colname string) ([]int16, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]int16)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Int8Column(colname string) ([]int8, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]int8)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Decimal256Column(colname string) (Decimal256Slice, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return Decimal256Slice{}, err
-	}
-	tcol, ok := col.(Decimal256Slice)
-	if !ok {
-		return Decimal256Slice{}, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Decimal128Column(colname string) (Decimal128Slice, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return Decimal128Slice{}, err
-	}
-	tcol, ok := col.(Decimal128Slice)
-	if !ok {
-		return Decimal128Slice{}, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Decimal64Column(colname string) (Decimal64Slice, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return Decimal64Slice{}, err
-	}
-	tcol, ok := col.(Decimal64Slice)
-	if !ok {
-		return Decimal64Slice{}, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Decimal32Column(colname string) (Decimal32Slice, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return Decimal32Slice{}, err
-	}
-	tcol, ok := col.(Decimal32Slice)
-	if !ok {
-		return Decimal32Slice{}, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Float64Column(colname string) ([]float64, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]float64)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) Float32Column(colname string) ([]float32, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]float32)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) StringColumn(colname string) ([]string, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]string)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) BytesColumn(colname string) ([][]byte, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([][]byte)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
-}
-
-func (r *Result) BoolColumn(colname string) ([]bool, error) {
-	col, err := r.Column(colname)
-	if err != nil {
-		return nil, err
-	}
-	tcol, ok := col.([]bool)
-	if !ok {
-		return nil, ErrTypeMismatch
-	}
-	return tcol, nil
 }

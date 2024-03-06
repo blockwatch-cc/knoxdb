@@ -21,6 +21,7 @@ var (
 	ErrNoIndex          = errors.New("pack: index does not exist")
 	ErrNoColumn         = errors.New("pack: column does not exist")
 	ErrTypeMismatch     = errors.New("pack: type mismatch")
+	ErrNoPk             = errors.New("pack: primary key not defined")
 	ErrNoField          = errors.New("pack: field does not exist")
 	ErrInvalidType      = errors.New("pack: unsupported block type")
 	ErrNilValue         = errors.New("pack: nil value passed")
@@ -107,10 +108,10 @@ func OpenDatabase(engine, path, name, label string, opts any) (*DB, error) {
 			mft.Version, schemaVersion)
 	}
 	if mft.Name != name {
-		return nil, fmt.Errorf("pack: invalid DB name %s (expected %s)", mft.Name, name)
+		return nil, fmt.Errorf("pack: invalid DB name %q (expected %s)", mft.Name, name)
 	}
 	if mft.Label != label && label != "*" {
-		return nil, fmt.Errorf("pack: invalid DB label %s (expected %s)", mft.Label, label)
+		return nil, fmt.Errorf("pack: invalid DB label %q (expected %s)", mft.Label, label)
 	}
 	return &DB{
 		db:     db,

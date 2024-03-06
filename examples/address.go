@@ -144,7 +144,7 @@ func CreateTable() (*pack.DB, *pack.Table, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	db, err := pack.CreateDatabaseIfNotExists(".", "address", "TEST", nil)
+	db, err := pack.CreateDatabaseIfNotExists("bolt", ".", "address", "TEST", nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating database: %v", err)
 	}
@@ -181,7 +181,7 @@ func run() error {
 	}
 	defer table.Close()
 	defer db.Close()
-	accs := make([]pack.Item, 0)
+	accs := make([]any, 0)
 	accHashes := make(map[uint64][]byte)
 	accKeys := make(map[uint64][]byte)
 	for round := 0; round < 32; round++ {

@@ -248,17 +248,6 @@ type Op struct {
 	Entrypoint   int       `knox:"E,i8"             json:"entrypoint_id"`  // update contract counters, search by entrypoint
 }
 
-func (o Op) ID() uint64 {
-	return o.RowId
-}
-
-func (o *Op) SetID(i uint64) {
-	o.RowId = i
-}
-
-// Static check to ensure Op implements the pack.Item interface.
-var _ pack.Item = (*Op)(nil)
-
 const (
 	PackSizeLog2         = 15  // 32k packs ~4M
 	JournalSizeLog2      = 16  // 64k - search for spending op, so keep small
@@ -305,7 +294,7 @@ func Create(path string, schema, opts interface{}) (*pack.Table, error) {
 	}
 	name := filepath.Base(path)
 	name = name[:len(name)-len(filepath.Ext(name))]
-	db, err := pack.CreateDatabaseIfNotExists(filepath.Dir(path), name, "*", opts)
+	db, err := pack.CreateDatabaseIfNotExists("bolt", filepath.Dir(path), name, "*", opts)
 	if err != nil {
 		return nil, fmt.Errorf("creating %s database: %v", name, err)
 	}
@@ -356,7 +345,7 @@ func Create(path string, schema, opts interface{}) (*pack.Table, error) {
 func Open(path string, opts interface{}) (*pack.Table, error) {
 	name := filepath.Base(path)
 	name = name[:len(name)-len(filepath.Ext(name))]
-	db, err := pack.OpenDatabase(filepath.Dir(path), name, "*", opts)
+	db, err := pack.OpenDatabase("bolt", filepath.Dir(path), name, "*", opts)
 	if err != nil {
 		return nil, err
 	}

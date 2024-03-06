@@ -51,6 +51,39 @@ type Condition struct {
 	bloomHashes  [][2]uint32             // opt bloom hash value(s) if field has bloom flag
 }
 
+func (c Condition) MatchValue(val *Value) bool {
+	// get data value as interface
+	v, ok := val.Get(c.Field.Index)
+	if !ok {
+		return false
+	}
+	// compare against condition value
+	switch c.Mode {
+	case FilterModeEqual:
+		return c.Field.Type.Equal(v, c.Value)
+	case FilterModeNotEqual:
+		return !c.Field.Type.Equal(v, c.Value)
+	case FilterModeRange:
+		return c.Field.Type.Between(v, c.From, c.To)
+	case FilterModeIn:
+		return c.Field.Type.In(v, c.Value)
+	case FilterModeNotIn:
+		return !c.Field.Type.In(v, c.Value)
+	case FilterModeRegexp:
+		return c.Field.Type.Regexp(v, c.Value.(string))
+	case FilterModeGt:
+		return c.Field.Type.Gt(v, c.Value)
+	case FilterModeGte:
+		return c.Field.Type.Gte(v, c.Value)
+	case FilterModeLt:
+		return c.Field.Type.Lt(v, c.Value)
+	case FilterModeLte:
+		return c.Field.Type.Lte(v, c.Value)
+	default:
+		return false
+	}
+}
+
 // returns the number of values to compare 1 (other), 2 (RANGE), many (IN)
 func (c Condition) NValues() int {
 	return c.numValues

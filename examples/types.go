@@ -135,16 +135,6 @@ type Types struct {
 	I256 vec.Int256         `knox:"i256,snappy"              json:"int256"`
 }
 
-func (t Types) ID() uint64 {
-	return t.RowId
-}
-
-func (t *Types) SetID(i uint64) {
-	t.RowId = i
-}
-
-var _ pack.Item = (*Types)(nil)
-
 const (
 	TypesPackSizeLog2         = 16  // 32k packs ~4M
 	TypesJournalSizeLog2      = 17  // 64k - search for spending op, so keep small

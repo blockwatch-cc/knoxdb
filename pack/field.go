@@ -5,6 +5,8 @@ package pack
 
 import (
 	"bytes"
+	"encoding"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -19,7 +21,9 @@ import (
 	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/filter/bloom"
 	"blockwatch.cc/knoxdb/filter/loglogbeta"
+	"blockwatch.cc/knoxdb/hash"
 	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/vec"
 	. "blockwatch.cc/knoxdb/vec"
 )
 
@@ -112,6 +116,30 @@ const (
 	// FieldTypeDate                   = "date" // BlockDate (unix second / 24*3600)
 )
 
+var fieldTypeLen = []int{
+	0,  // FieldTypeUndefined
+	8,  // FieldTypeDatetime
+	8,  // FieldTypeInt64
+	8,  // FieldTypeUint64
+	8,  // FieldTypeFloat64
+	1,  // FieldTypeBoolean
+	-1, // FieldTypeString
+	-1, // FieldTypeBytes
+	4,  // FieldTypeInt32
+	2,  // FieldTypeInt16
+	1,  // FieldTypeInt8
+	4,  // FieldTypeUint32
+	2,  // FieldTypeUint16
+	1,  // FieldTypeUint8
+	4,  // FieldTypeFloat32
+	32, // FieldTypeInt256
+	16, // FieldTypeInt128
+	32, // FieldTypeDecimal256
+	16, // FieldTypeDecimal128
+	8,  // FieldTypeDecimal64
+	4,  // FieldTypeDecimal32
+}
+
 type Field struct {
 	Index int        `json:"index"`
 	Name  string     `json:"name"`
@@ -130,11 +158,19 @@ func (f Field) NewBlock(sz int) *block.Block {
 	return block.NewBlock(f.Type.BlockType(), f.Flags.Compression(), sz)
 }
 
+func (f Field) Equal(f2 Field) bool {
+	return f.Index == f2.Index && f.Name == f2.Name && f.Type == f2.Type && f.Flags == f2.Flags
+}
+
 type FieldList []*Field
 
 func (l FieldList) Sort() FieldList {
 	sort.Slice(l, func(i, j int) bool { return l[i].Index < l[j].Index })
 	return l
+}
+
+func (l FieldList) String() string {
+	return strings.Join(l.Names(), ":")
 }
 
 func (l FieldList) MaskString(m FieldList) string {
@@ -149,6 +185,16 @@ func (l FieldList) Mask(m FieldList) []byte {
 		}
 	}
 	return b
+}
+
+func (l FieldList) Hash() uint64 {
+	h := hash.NewInlineFNV64a()
+	for _, v := range l {
+		h.WriteString(v.Name)
+		h.WriteByte(byte(v.Type))
+		h.WriteByte(byte(v.Flags))
+	}
+	return h.Sum64()
 }
 
 func (l FieldList) Names() []string {
@@ -189,6 +235,27 @@ func (l FieldList) Select(names ...string) FieldList {
 	return res
 }
 
+func (l FieldList) SelectChecked(names ...string) (FieldList, error) {
+	res := make(FieldList, 0)
+	for _, v := range names {
+		if f := l.Find(v); f.IsValid() {
+			res = append(res, f)
+		} else {
+			return nil, fmt.Errorf("missing field %q", v)
+		}
+	}
+	return res, nil
+}
+
+func (l FieldList) Clone() FieldList {
+	cp := make(FieldList, len(l))
+	for i, v := range l {
+		cp[i] = new(Field)
+		*(cp[i]) = *v
+	}
+	return cp
+}
+
 func (l FieldList) Add(field *Field) FieldList {
 	return append(l, field)
 }
@@ -214,9 +281,36 @@ func (l FieldList) Indexed() FieldList {
 	return res
 }
 
-func (l FieldList) Pk() *Field {
+func (l FieldList) HasPk() bool {
+	return l.HasCompositePk() || l.PkIndex() > -1
+}
+
+func (l FieldList) HasCompositePk() bool {
+	var first bool
 	for _, v := range l {
 		if v.Flags&FlagPrimary > 0 {
+			if first {
+				return true
+			}
+			first = true
+		}
+	}
+	return false
+}
+
+func (l FieldList) CompositePk() FieldList {
+	res := make(FieldList, 0)
+	for _, v := range l {
+		if v.Flags&FlagPrimary > 0 {
+			res = append(res, v)
+		}
+	}
+	return res
+}
+
+func (l FieldList) Pk() *Field {
+	for _, v := range l {
+		if v.Flags&FlagPrimary > 0 && v.Type == FieldTypeUint64 {
 			return v
 		}
 	}
@@ -225,7 +319,7 @@ func (l FieldList) Pk() *Field {
 
 func (l FieldList) PkIndex() int {
 	for _, v := range l {
-		if v.Flags&FlagPrimary > 0 {
+		if v.Flags&FlagPrimary > 0 && v.Type == FieldTypeUint64 {
 			return v.Index
 		}
 	}
@@ -487,6 +581,10 @@ func ParseFieldType(s string) FieldType {
 	default:
 		return FieldTypeUndefined
 	}
+}
+
+func (t FieldType) Len() int {
+	return fieldTypeLen[t]
 }
 
 func (t FieldType) BlockType() block.BlockType {
@@ -2418,4 +2516,325 @@ func (t FieldType) EstimateCardinality(b *block.Block, precision uint) uint32 {
 		}
 	}
 	return min(uint32(b.Len()), uint32(filter.Cardinality()))
+}
+
+func (f Field) Encode(val any) ([]byte, error) {
+	buf := bytes.NewBuffer(make([]byte, 0, 128))
+	err := f.EncodeValue(buf, reflect.Indirect(reflect.ValueOf(val)), nil)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// use BigEndian to be able to reuse encoded data as searchable key
+func (f Field) EncodeValue(buf *bytes.Buffer, val reflect.Value, finfo *fieldInfo) (err error) {
+	var uv [binary.MaxVarintLen64]byte
+	fval := reflect.Indirect(val)
+	if fval.Kind() == reflect.Struct {
+		fval = fval.Field(f.Index)
+	}
+	switch f.Type {
+	case FieldTypeInt64:
+		err = binary.Write(buf, binary.BigEndian, fval.Int())
+	case FieldTypeUint64:
+		err = binary.Write(buf, binary.BigEndian, fval.Uint())
+	case FieldTypeFloat64:
+		err = binary.Write(buf, binary.BigEndian, fval.Float())
+	case FieldTypeInt32:
+		err = binary.Write(buf, binary.BigEndian, int32(fval.Int()))
+	case FieldTypeUint32:
+		err = binary.Write(buf, binary.BigEndian, uint32(fval.Uint()))
+	case FieldTypeFloat32:
+		err = binary.Write(buf, binary.BigEndian, float32(fval.Float()))
+	case FieldTypeInt16:
+		err = binary.Write(buf, binary.BigEndian, int16(fval.Int()))
+	case FieldTypeUint16:
+		err = binary.Write(buf, binary.BigEndian, uint16(fval.Uint()))
+	case FieldTypeInt8:
+		err = binary.Write(buf, binary.BigEndian, int8(fval.Int()))
+	case FieldTypeUint8:
+		err = binary.Write(buf, binary.BigEndian, uint8(fval.Uint()))
+	case FieldTypeDatetime:
+		err = binary.Write(buf, binary.BigEndian, fval.Interface().(time.Time).UnixNano())
+	case FieldTypeBoolean:
+		if fval.Interface().(bool) {
+			err = buf.WriteByte(1)
+		} else {
+			err = buf.WriteByte(0)
+		}
+	case FieldTypeInt256:
+		_, err = buf.Write(fval.Interface().(vec.Int256).Bytes())
+	case FieldTypeInt128:
+		_, err = buf.Write(fval.Interface().(vec.Int128).Bytes())
+	case FieldTypeDecimal256:
+		_, err = buf.Write(fval.Interface().(decimal.Decimal256).Int256().Bytes())
+	case FieldTypeDecimal128:
+		_, err = buf.Write(fval.Interface().(decimal.Decimal128).Int128().Bytes())
+	case FieldTypeDecimal64:
+		err = binary.Write(buf, binary.BigEndian, fval.Interface().(decimal.Decimal64).Int64())
+	case FieldTypeDecimal32:
+		err = binary.Write(buf, binary.BigEndian, fval.Interface().(decimal.Decimal32).Int32())
+	case FieldTypeString:
+		var b []byte
+		if finfo != nil && finfo.flags.Contains(flagTextMarshalerType) {
+			b, err = fval.Interface().(encoding.TextMarshaler).MarshalText()
+		} else {
+			b = util.UnsafeGetBytes(fval.Interface().(string))
+		}
+		if err == nil {
+			n := binary.PutUvarint(uv[:], uint64(len(b)))
+			_, err = buf.Write(uv[:n])
+			if err == nil {
+				_, err = buf.Write(b)
+			}
+		}
+	case FieldTypeBytes:
+		var b []byte
+		if finfo != nil && finfo.flags.Contains(flagBinaryMarshalerType) {
+			b, err = fval.Interface().(encoding.BinaryMarshaler).MarshalBinary()
+		} else {
+			b = fval.Interface().([]byte)
+		}
+		if err == nil {
+			n := binary.PutUvarint(uv[:], uint64(len(b)))
+			_, err = buf.Write(uv[:n])
+			if err == nil {
+				_, err = buf.Write(b)
+			}
+		}
+	}
+	return
+}
+
+func (f Field) DecodeValue(buf *bytes.Buffer, val reflect.Value, finfo *fieldInfo) (err error) {
+	var n uint64
+	dst := reflect.Indirect(val)
+	if dst.Kind() == reflect.Struct {
+		dst = dst.Field(f.Index)
+	}
+	switch f.Type {
+	case FieldTypeInt64:
+		dst.SetInt(int64(bigEndian.Uint64(buf.Next(8))))
+	case FieldTypeInt32:
+		dst.SetInt(int64(bigEndian.Uint32(buf.Next(4))))
+	case FieldTypeInt16:
+		dst.SetInt(int64(bigEndian.Uint16(buf.Next(2))))
+	case FieldTypeInt8:
+		dst.SetInt(int64(buf.Next(1)[0]))
+	case FieldTypeUint64:
+		dst.SetUint(bigEndian.Uint64(buf.Next(8)))
+	case FieldTypeUint32:
+		dst.SetUint(uint64(bigEndian.Uint32(buf.Next(4))))
+	case FieldTypeUint16:
+		dst.SetUint(uint64(bigEndian.Uint16(buf.Next(2))))
+	case FieldTypeUint8:
+		dst.SetUint(uint64(buf.Next(1)[0]))
+	case FieldTypeFloat64:
+		dst.SetFloat(math.Float64frombits(bigEndian.Uint64(buf.Next(8))))
+	case FieldTypeFloat32:
+		dst.SetFloat(float64(math.Float32frombits(bigEndian.Uint32(buf.Next(4)))))
+	case FieldTypeDatetime:
+		dst.Set(reflect.ValueOf(time.Unix(0, int64(bigEndian.Uint64(buf.Next(8))))))
+	case FieldTypeBoolean:
+		if n := buf.Next(1); len(n) > 0 && n[0] == 1 {
+			dst.SetBool(true)
+		} else {
+			dst.SetBool(false)
+		}
+	case FieldTypeInt256:
+		dst.Set(reflect.ValueOf(vec.Int256FromBytes(buf.Next(32))))
+	case FieldTypeInt128:
+		dst.Set(reflect.ValueOf(vec.Int128FromBytes(buf.Next(16))))
+	case FieldTypeDecimal256:
+		i256 := vec.Int256FromBytes(buf.Next(32))
+		d := decimal.NewDecimal256(i256, f.Scale)
+		dst.Set(reflect.ValueOf(d))
+	case FieldTypeDecimal128:
+		i128 := vec.Int128FromBytes(buf.Next(16))
+		d := decimal.NewDecimal128(i128, f.Scale)
+		dst.Set(reflect.ValueOf(d))
+	case FieldTypeDecimal64:
+		var i64 int64
+		err = binary.Read(buf, binary.BigEndian, &i64)
+		d := decimal.NewDecimal64(i64, f.Scale)
+		dst.Set(reflect.ValueOf(d))
+	case FieldTypeDecimal32:
+		var i32 int32
+		err = binary.Read(buf, binary.BigEndian, &i32)
+		d := decimal.NewDecimal32(i32, f.Scale)
+		dst.Set(reflect.ValueOf(d))
+	case FieldTypeString:
+		n, err = binary.ReadUvarint(buf)
+		tmp := buf.Next(int(n))
+		if finfo.flags.Contains(flagTextMarshalerType) {
+			dst.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText(tmp)
+		} else {
+			dst.SetString(string(tmp))
+		}
+	case FieldTypeBytes:
+		n, err = binary.ReadUvarint(buf)
+		tmp := buf.Next(int(n))
+		if finfo.flags.Contains(flagBinaryMarshalerType) {
+			// decode using unmarshaler, requires the unmarshaler makes a copy
+			err = dst.Addr().Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(tmp)
+		} else {
+			dst.SetBytes(tmp)
+		}
+	}
+	return
+}
+
+func (f Field) SkipValue(buf *bytes.Buffer) (err error) {
+	var sz int
+	switch f.Type {
+	case FieldTypeInt64,
+		FieldTypeUint64,
+		FieldTypeFloat64,
+		FieldTypeDecimal64,
+		FieldTypeDatetime:
+		sz = 8
+	case FieldTypeInt32, FieldTypeUint32, FieldTypeDecimal32, FieldTypeFloat32:
+		sz = 4
+	case FieldTypeInt16, FieldTypeUint16:
+		sz = 2
+	case FieldTypeInt8, FieldTypeUint8, FieldTypeBoolean:
+		sz = 1
+	case FieldTypeInt128, FieldTypeDecimal128:
+		sz = 16
+	case FieldTypeInt256, FieldTypeDecimal256:
+		sz = 32
+	case FieldTypeString, FieldTypeBytes:
+		var n uint64
+		n, err = binary.ReadUvarint(buf)
+		sz = int(n)
+	}
+	buf.Next(sz)
+	return
+}
+
+func (l FieldList) EncodeValue(buf *bytes.Buffer, val reflect.Value, tinfo *typeInfo) error {
+	for _, f := range l {
+		if err := f.EncodeValue(buf, val, tinfo.fields[f.Index]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l FieldList) Encode(val any) ([]byte, error) {
+	tinfo, err := getTypeInfo(val)
+	if err != nil {
+		return nil, err
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, 128))
+	err = l.EncodeValue(buf, reflect.Indirect(reflect.ValueOf(val)), tinfo)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// TODO: refactor to use Value type
+// assumes value contains all encoded data fields
+// outputs byte and string with length prefixed
+func (l FieldList) CopyData(pos []int, val []byte) []byte {
+	if len(val) == 0 {
+		return nil
+	}
+	res := make([][]byte, len(pos))
+	var cnt int
+	for _, field := range l {
+		var sz int
+		switch field.Type {
+		case FieldTypeInt64,
+			FieldTypeUint64,
+			FieldTypeFloat64,
+			FieldTypeDecimal64,
+			FieldTypeDatetime:
+			sz = 8
+		case FieldTypeInt32, FieldTypeUint32, FieldTypeDecimal32, FieldTypeFloat32:
+			sz = 4
+		case FieldTypeInt16, FieldTypeUint16:
+			sz = 2
+		case FieldTypeInt8, FieldTypeUint8, FieldTypeBoolean:
+			sz = 1
+		case FieldTypeInt128, FieldTypeDecimal128:
+			sz = 16
+		case FieldTypeInt256, FieldTypeDecimal256:
+			sz = 32
+		case FieldTypeString, FieldTypeBytes:
+			u, n := binary.Uvarint(val)
+			sz = int(u) + n
+		default:
+			break
+		}
+
+		// reference source bytes in query order
+		for i, n := range pos {
+			if n != field.Index {
+				continue
+			}
+			res[i] = val[:sz]
+			cnt++
+			break
+		}
+		if len(pos) == cnt {
+			break
+		}
+		val = val[sz:]
+	}
+	return bytes.Join(res, nil)
+}
+
+func (l FieldList) Decode(buf []byte, val any) error {
+	switch dec := val.(type) {
+	case KeyValueUnmarshaler:
+		return dec.UnmarshalValue(buf)
+	case encoding.BinaryUnmarshaler:
+		return dec.UnmarshalBinary(buf)
+	}
+	tinfo, err := getTypeInfo(val)
+	if err != nil {
+		return err
+	}
+	v := reflect.Indirect(reflect.ValueOf(val))
+	b := bytes.NewBuffer(buf)
+	for _, f := range l {
+		if err := f.DecodeValue(b, v, tinfo.fields[f.Index]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l FieldList) DecodeWithInfo(buf []byte, val any, tinfo *typeInfo) error {
+	switch dec := val.(type) {
+	case KeyValueUnmarshaler:
+		return dec.UnmarshalValue(buf)
+	case encoding.BinaryUnmarshaler:
+		return dec.UnmarshalBinary(buf)
+	}
+	v := reflect.Indirect(reflect.ValueOf(val))
+	b := bytes.NewBuffer(buf)
+	for _, f := range l {
+		if f.Index < 0 {
+			if err := f.SkipValue(b); err != nil {
+				return err
+			}
+			continue
+		}
+		fi := tinfo.fields[f.Index]
+		dst := fi.value(v)
+		if dst.Kind() == reflect.Ptr {
+			if dst.IsNil() && dst.CanSet() {
+				dst.Set(reflect.New(dst.Type().Elem()))
+			}
+			dst = dst.Elem()
+		}
+		if err := f.DecodeValue(b, dst, fi); err != nil {
+			return err
+		}
+	}
+	return nil
 }
