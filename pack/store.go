@@ -1137,6 +1137,27 @@ func (s *Store) Query(ctx context.Context, q Query) (*Result, error) {
 
 	// handle cases
 	switch {
+	case q.conds.Empty():
+		// No conds: walk entire table
+		c := data.Cursor(store.ForwardCursor)
+		defer c.Close()
+		for ok := c.First(); ok; ok = c.Next() {
+			// skip offset
+			if q.Offset > 0 {
+				q.Offset--
+				continue
+			}
+
+			res.offsets = append(res.offsets, len(res.values))
+			res.values = append(res.values, c.Value()...)
+
+			// apply limit
+			q.stats.RowsMatched++
+			if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
+				break
+			}
+		}
+
 	case q.conds.IsProcessed():
 		// 1: full index query -> everything is resolved, walk bitset
 		it := q.conds.Bits.Bitmap.NewIterator()
@@ -1279,6 +1300,32 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 
 	// handle cases
 	switch {
+	case q.conds.Empty():
+		// No conds: walk entire table
+		c := data.Cursor(store.ForwardCursor)
+		defer c.Close()
+		for ok := c.First(); ok; ok = c.Next() {
+			// skip offset
+			if q.Offset > 0 {
+				q.Offset--
+				continue
+			}
+
+			res.values = c.Value()
+			if err := fn(Row{res: res, n: 0}); err != nil {
+				if err != EndStream {
+					return err
+				}
+				return nil
+			}
+
+			// apply limit
+			q.stats.RowsMatched++
+			if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
+				break
+			}
+		}
+
 	case q.conds.IsProcessed():
 		// 1: full index query -> everything is resolved, walk bitset
 		it := q.conds.Bits.Bitmap.NewIterator()
@@ -1353,6 +1400,7 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 		// 3: partial index query & root = OR: walk full table and check each value
 		// 4: no index query: walk full table and check each value
 		c := data.Cursor(store.ForwardCursor)
+		defer c.Close()
 		val := NewValue(s.fields)
 		for ok := c.First(); ok; ok = c.Next() {
 			buf := c.Value()

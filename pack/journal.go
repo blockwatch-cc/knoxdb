@@ -1009,8 +1009,6 @@ func SortBatch(idx int, rval reflect.Value, pks []uint64) {
 			return
 		}
 		sort.Slice(rval.Interface(), func(i, j int) bool {
-			// idA := reflect.Indirect(reflect.ValueOf(l[i])).Field(idx).Uint()
-			// idB := reflect.Indirect(reflect.ValueOf(l[j])).Field(idx).Uint()
 			idA := reflect.Indirect(rval.Index(i)).Field(idx).Uint()
 			idB := reflect.Indirect(rval.Index(j)).Field(idx).Uint()
 			return idA < idB
