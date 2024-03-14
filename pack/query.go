@@ -63,6 +63,7 @@ type QueryStats struct {
 	TotalTime      time.Duration `json:"total_time"`
 	PacksScheduled int           `json:"packs_scheduled"`
 	PacksScanned   int           `json:"packs_scanned"`
+	RowsScanned    int           `json:"rows_scanned"`
 	RowsMatched    int           `json:"rows_matched"`
 	IndexLookups   int           `json:"index_lookups"`
 }
@@ -128,7 +129,7 @@ func (q Query) IsBound() bool {
 }
 
 func (q Query) PrintTiming() string {
-	return fmt.Sprintf("query: %s compile=%s analyze=%s journal=%s index=%s scan=%s total=%s matched=%d rows, scheduled=%d packs, scanned=%d packs, searched=%d index rows",
+	return fmt.Sprintf("query: %s compile=%s analyze=%s journal=%s index=%s scan=%s total=%s matched=%d rows, scanned=%d rows, scheduled=%d packs, scanned=%d packs, searched=%d index rows",
 		q.Name,
 		q.stats.CompileTime,
 		q.stats.AnalyzeTime,
@@ -137,6 +138,7 @@ func (q Query) PrintTiming() string {
 		q.stats.ScanTime,
 		q.stats.TotalTime,
 		q.stats.RowsMatched,
+		q.stats.RowsScanned,
 		q.stats.PacksScheduled,
 		q.stats.PacksScanned,
 		q.stats.IndexLookups,
@@ -376,10 +378,29 @@ func (q *Query) queryStoreIndexes(ctx context.Context, tx *Tx, node *ConditionTr
 	// TODO
 	// - run index scans in blocks & forward results through operator tree,
 	//   then consume final aggregate with offset/limit
+	pkfield := q.store.fields.Pk()
 
 	if node.OrKind {
 		// visit OR nodes individually
 		if node.Leaf() {
+			// convert primary key query to bitset
+			if pkfield != nil && pkfield.Equal(*node.Cond.Field) {
+				var bits bitmap.Bitmap
+				switch node.Cond.Mode {
+				case FilterModeEqual:
+					bits = bitmap.New()
+					bits.Set(node.Cond.Value.(uint64))
+				case FilterModeIn:
+					bits = bitmap.New()
+					for _, pk := range node.Cond.Value.([]uint64) {
+						bits.Set(pk)
+					}
+				}
+				if bits.IsValid() {
+					node.Bits = bits
+					return nil
+				}
+			}
 			// run index scan
 			for _, idx := range q.store.indexes {
 				if !node.Cond.Field.Equal(*idx.fields[0]) {
@@ -421,6 +442,7 @@ func (q *Query) queryStoreIndexes(ctx context.Context, tx *Tx, node *ConditionTr
 						return err
 					}
 					node.Bits, err = idx.RangeTx(tx, prefix, store.BytesPrefix(to).Limit)
+					q.stats.IndexLookups = node.Bits.Count()
 				default:
 					log.Warnf("Unsupported filter mode %s for field %s in store index query",
 						node.Cond.Mode, node.Cond.Field.Alias)
@@ -471,6 +493,27 @@ func (q *Query) queryStoreIndexes(ctx context.Context, tx *Tx, node *ConditionTr
 		// identify eligible conditions for constructing range scans
 		if node.Children[i].Leaf() {
 			c := node.Children[i].Cond
+
+			// convert primary key query to bitset
+			if pkfield != nil && pkfield.Equal(*c.Field) {
+				var bits bitmap.Bitmap
+				switch c.Mode {
+				case FilterModeEqual:
+					bits = bitmap.New()
+					bits.Set(c.Value.(uint64))
+				case FilterModeIn:
+					bits = bitmap.New()
+					for _, pk := range c.Value.([]uint64) {
+						bits.Set(pk)
+					}
+				}
+				if bits.IsValid() {
+					node.Children[i].Bits = bits
+					continue
+				}
+			}
+
+			// keep range-scan compatible conditions
 			switch c.Mode {
 			case FilterModeEqual:
 				eq[c.Field.Name] = c
@@ -571,6 +614,9 @@ func (q *Query) queryStoreIndexes(ctx context.Context, tx *Tx, node *ConditionTr
 		}
 		if err != nil {
 			return err
+		}
+		if bits.IsValid() {
+			q.stats.IndexLookups = bits.Count()
 		}
 		if agg.IsValid() {
 			agg.And(bits)

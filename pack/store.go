@@ -68,7 +68,7 @@ type StoreIndex struct {
 	key    []byte    // name of index data bucket
 	fields FieldList // list of field names and types
 	idxs   []int     // list of field index positions in original data
-	store  *Store    // lower-level KV store (e.g. boltdb or badger)
+	store  *Store    // related KV table
 }
 
 func (i StoreIndex) MarshalJSON() ([]byte, error) {
@@ -951,7 +951,6 @@ func (s *Store) PutTx(tx *Tx, key, val []byte) ([]byte, error) {
 	} else {
 		// insert
 		atomic.AddInt64(&s.stats.InsertedTuples, 1)
-		atomic.AddInt64(&s.stats.InsertCalls, 1)
 		atomic.AddInt64(&s.stats.TupleCount, 1)
 		atomic.AddInt64(&s.stats.TotalSize, int64(sz))
 	}
@@ -960,6 +959,8 @@ func (s *Store) PutTx(tx *Tx, key, val []byte) ([]byte, error) {
 }
 
 func (s *Store) DeleteValue(val any) error {
+	atomic.AddInt64(&s.stats.DeleteCalls, 1)
+
 	// use PK based indexing when struct defines a PK
 	if s.pkindex >= 0 {
 		var pk uint64
@@ -1028,7 +1029,6 @@ func (s *Store) DelTx(tx *Tx, key []byte) ([]byte, error) {
 	if err == nil && prevSize >= 0 {
 		atomic.AddInt64(&s.stats.TupleCount, -1)
 		atomic.AddInt64(&s.stats.DeletedTuples, 1)
-		atomic.AddInt64(&s.stats.DeleteCalls, 1)
 		atomic.AddInt64(&s.stats.TotalSize, -int64(prevSize))
 	}
 	return buf, err
@@ -1078,6 +1078,27 @@ func (s *Store) Range(from, to []byte, fn func(k, v []byte) error) error {
 		return nil
 	}
 	return err
+}
+
+// Table Compat interface
+func (s *Store) Insert(_ context.Context, val any) error {
+	atomic.AddInt64(&s.stats.InsertCalls, 1)
+	switch rval := reflect.Indirect(reflect.ValueOf(val)); rval.Kind() {
+	case reflect.Slice, reflect.Array:
+		for i, l := 0, rval.Len(); i < l; i++ {
+			if err := s.PutValue(rval.Index(i).Interface()); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return s.PutValue(val)
+	}
+}
+
+func (s *Store) Update(ctx context.Context, val any) error {
+	atomic.AddInt64(&s.stats.UpdateCalls, 1)
+	return s.Insert(ctx, val)
 }
 
 // Table Query Interface
@@ -1177,15 +1198,14 @@ func (s *Store) Query(ctx context.Context, q Query) (*Result, error) {
 			res.offsets = append(res.offsets, len(res.values))
 			res.values = append(res.values, val...)
 
-			// q.stats.RowsScanned++ // TODO: add to stats
-
 			// apply limit
+			q.stats.RowsScanned++
 			q.stats.RowsMatched++
 			if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 				break
 			}
 		}
-	case !q.conds.OrKind:
+	case !q.conds.OrKind && q.conds.Bits.IsValid():
 		// 2: partial index query & root = AND: walk bitset but check each value
 		it := q.conds.Bits.Bitmap.NewIterator()
 		val := NewValue(s.fields)
@@ -1199,6 +1219,7 @@ func (s *Store) Query(ctx context.Context, q Query) (*Result, error) {
 			}
 
 			// check conditions
+			q.stats.RowsScanned++
 			if !q.conds.MatchValue(val.Reset(buf)) {
 				continue
 			}
@@ -1219,6 +1240,7 @@ func (s *Store) Query(ctx context.Context, q Query) (*Result, error) {
 			}
 		}
 	default:
+		// TODO: construct prefix scan from unprocessed pk condition
 		// 3: partial index query & root = OR: walk full table and check each value
 		// 4: no index query: walk full table and check each value
 		c := data.Cursor(store.ForwardCursor)
@@ -1227,6 +1249,7 @@ func (s *Store) Query(ctx context.Context, q Query) (*Result, error) {
 			buf := c.Value()
 
 			// check conditions
+			q.stats.RowsScanned++
 			if !q.conds.MatchValue(val.Reset(buf)) {
 				continue
 			}
@@ -1286,9 +1309,13 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 	}
 
 	// prepare result
-	res := &Result{
-		fields:  s.fields,
-		offsets: make([]int, 1),
+	var ofs [1]int
+	row := Row{
+		res: &Result{
+			fields:  s.fields,
+			offsets: ofs[:],
+		},
+		n: 0,
 	}
 
 	// run index queries
@@ -1311,8 +1338,8 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 				continue
 			}
 
-			res.values = c.Value()
-			if err := fn(Row{res: res, n: 0}); err != nil {
+			row.res.values = c.Value()
+			if err := fn(row); err != nil {
 				if err != EndStream {
 					return err
 				}
@@ -1320,6 +1347,7 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 			}
 
 			// apply limit
+			q.stats.RowsScanned++
 			q.stats.RowsMatched++
 			if q.Limit > 0 && q.stats.RowsMatched >= q.Limit {
 				break
@@ -1342,11 +1370,11 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 				log.Warnf("Missing PK %d from index scan in query %s", id, q.Name)
 				continue
 			}
+			q.stats.RowsScanned++
 			q.stats.RowsMatched++
-			// q.stats.RowsScanned++ // TODO: add to stats
 
-			res.values = val
-			if err := fn(Row{res: res, n: 0}); err != nil {
+			row.res.values = val
+			if err := fn(row); err != nil {
 				if err != EndStream {
 					return err
 				}
@@ -1358,7 +1386,7 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 				break
 			}
 		}
-	case !q.conds.OrKind:
+	case !q.conds.OrKind && q.conds.Bits.IsValid():
 		// 2: partial index query & root = AND: walk bitset but check each value
 		it := q.conds.Bits.Bitmap.NewIterator()
 		val := NewValue(s.fields)
@@ -1372,6 +1400,7 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 			}
 
 			// check conditions
+			q.stats.RowsScanned++
 			if !q.conds.MatchValue(val.Reset(buf)) {
 				continue
 			}
@@ -1382,8 +1411,8 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 				continue
 			}
 
-			res.values = buf
-			if err := fn(Row{res: res, n: 0}); err != nil {
+			row.res.values = buf
+			if err := fn(row); err != nil {
 				if err != EndStream {
 					return err
 				}
@@ -1397,6 +1426,7 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 			}
 		}
 	default:
+		// TODO: construct prefix scan from unprocessed pk condition
 		// 3: partial index query & root = OR: walk full table and check each value
 		// 4: no index query: walk full table and check each value
 		c := data.Cursor(store.ForwardCursor)
@@ -1406,6 +1436,7 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 			buf := c.Value()
 
 			// check conditions
+			q.stats.RowsScanned++
 			if !q.conds.MatchValue(val.Reset(buf)) {
 				continue
 			}
@@ -1416,8 +1447,8 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 				continue
 			}
 
-			res.values = buf
-			if err := fn(Row{res: res, n: 0}); err != nil {
+			row.res.values = buf
+			if err := fn(row); err != nil {
 				if err != EndStream {
 					return err
 				}
@@ -1436,11 +1467,371 @@ func (s *Store) Stream(ctx context.Context, q Query, fn func(Row) error) error {
 }
 
 func (s *Store) Delete(ctx context.Context, q Query) (int64, error) {
-	// TODO
-	return 0, nil
+	var key [8]byte
+	atomic.AddInt64(&s.stats.DeleteCalls, 1)
+
+	// check conditions match schema
+	err := q.Compile()
+	if err != nil {
+		return 0, err
+	}
+
+	// open read transaction
+	tx, err := s.db.Tx(false)
+	if err != nil {
+		return 0, err
+	}
+
+	// cleanup on exit
+	defer func() {
+		atomic.AddInt64(&s.stats.DeletedTuples, int64(q.stats.RowsMatched))
+		tx.Rollback()
+		q.Close()
+	}()
+
+	data := tx.tx.Bucket(s.key)
+	if data == nil {
+		return 0, ErrBucketNotFound
+	}
+
+	// run index queries
+	// q.stats.IndexLookups = ??
+	err = q.QueryIndexes(ctx, tx)
+	if err != nil {
+		return 0, err
+	}
+
+	// handle cases
+	switch {
+	case q.conds.Empty():
+		// nothing to delete
+		return 0, nil
+
+	case q.conds.IsProcessed():
+		// 1: full index query -> everything is resolved, walk bitset
+		it := q.conds.Bits.Bitmap.NewIterator()
+		for pk := it.Next(); pk > 0; pk = it.Next() {
+			bigEndian.PutUint64(key[:], pk)
+			prev, err := s.DelTx(tx, key[:])
+			if err != nil {
+				return 0, err
+			}
+			if prev == nil {
+				continue
+			}
+			q.stats.RowsMatched++
+
+			// update indexes
+			for _, idx := range s.indexes {
+				idx.DelTx(tx, prev)
+			}
+		}
+
+	case !q.conds.OrKind:
+		// 2: partial index query & root = AND: walk bitset but check each value
+		it := q.conds.Bits.Bitmap.NewIterator()
+		val := NewValue(s.fields)
+		for id := it.Next(); id > 0; id = it.Next() {
+			bigEndian.PutUint64(key[:], id)
+			buf := data.Get(key[:])
+			if buf == nil {
+				continue
+			}
+
+			// check conditions
+			q.stats.RowsScanned++
+			if !q.conds.MatchValue(val.Reset(buf)) {
+				continue
+			}
+
+			// delete
+			prev, err := s.DelTx(tx, key[:])
+			if err != nil {
+				return 0, err
+			}
+			q.stats.RowsMatched++
+
+			// update indexes
+			for _, idx := range s.indexes {
+				idx.DelTx(tx, prev)
+			}
+		}
+	default:
+		// 3: partial index query & root = OR: walk full table and check each value
+		// 4: no index query: walk full table and check each value
+		c := data.Cursor(store.ForwardCursor)
+		val := NewValue(s.fields)
+		for ok := c.First(); ok; ok = c.Next() {
+			buf := c.Value()
+
+			// check conditions
+			q.stats.RowsScanned++
+			if !q.conds.MatchValue(val.Reset(buf)) {
+				continue
+			}
+
+			// delete
+			prev, err := s.DelTx(tx, key[:])
+			if err != nil {
+				return 0, err
+			}
+			q.stats.RowsMatched++
+
+			// update indexes
+			for _, idx := range s.indexes {
+				idx.DelTx(tx, prev)
+			}
+		}
+	}
+	q.stats.ScanTime = q.Tick()
+
+	return int64(q.stats.RowsMatched), nil
 }
 
 func (s *Store) Count(ctx context.Context, q Query) (int64, error) {
-	// TODO
-	return 0, nil
+	var (
+		bits bitmap.Bitmap
+		key  [8]byte
+	)
+	atomic.AddInt64(&s.stats.QueryCalls, 1)
+
+	// check conditions match schema
+	err := q.Compile()
+	if err != nil {
+		return 0, err
+	}
+
+	// open read transaction
+	tx, err := s.db.Tx(false)
+	if err != nil {
+		return 0, err
+	}
+
+	// cleanup on exit
+	defer func() {
+		atomic.AddInt64(&s.stats.QueriedTuples, int64(q.stats.RowsMatched))
+		tx.Rollback()
+		q.Close()
+		bits.Free()
+	}()
+
+	data := tx.tx.Bucket(s.key)
+	if data == nil {
+		return 0, ErrBucketNotFound
+	}
+
+	// run index queries
+	// q.stats.IndexLookups = ??
+	err = q.QueryIndexes(ctx, tx)
+	if err != nil {
+		return 0, err
+	}
+
+	// handle cases
+	switch {
+	case q.conds.Empty():
+		// No conds: walk entire table
+		c := data.Cursor(store.IndexCursor)
+		defer c.Close()
+		for ok := c.First(); ok; ok = c.Next() {
+			q.stats.RowsMatched++
+		}
+
+	case q.conds.IsProcessed():
+		// 1: full index query -> everything is resolved, count bitset
+		q.stats.RowsMatched = q.conds.Bits.Count()
+
+	case !q.conds.OrKind:
+		// 2: partial index query & root = AND: walk bitset but check each value
+		it := q.conds.Bits.Bitmap.NewIterator()
+		val := NewValue(s.fields)
+		for id := it.Next(); id > 0; id = it.Next() {
+			bigEndian.PutUint64(key[:], id)
+			buf := data.Get(key[:])
+			if buf == nil {
+				// warn on indexed but missing pks
+				log.Warnf("Missing PK %d from index scan in query %s", id, q.Name)
+				continue
+			}
+
+			// check conditions
+			q.stats.RowsScanned++
+			if !q.conds.MatchValue(val.Reset(buf)) {
+				continue
+			}
+
+			q.stats.RowsMatched++
+		}
+
+	default:
+		// 3: partial index query & root = OR: walk full table and check each value
+		// 4: no index query: walk full table and check each value
+		c := data.Cursor(store.ForwardCursor)
+		val := NewValue(s.fields)
+		for ok := c.First(); ok; ok = c.Next() {
+			buf := c.Value()
+
+			// check conditions
+			q.stats.RowsScanned++
+			if !q.conds.MatchValue(val.Reset(buf)) {
+				continue
+			}
+
+			q.stats.RowsMatched++
+		}
+	}
+	q.stats.ScanTime = q.Tick()
+
+	return int64(q.stats.RowsMatched), nil
+}
+
+func (s *Store) LookupPks(ctx context.Context, pks []uint64) (*Result, error) {
+	var (
+		key [8]byte
+		cnt int64
+	)
+	atomic.AddInt64(&s.stats.QueryCalls, 1)
+
+	// open read transaction
+	tx, err := s.db.Tx(false)
+	if err != nil {
+		return nil, err
+	}
+
+	// cleanup on exit
+	defer func() {
+		atomic.AddInt64(&s.stats.QueriedTuples, cnt)
+		tx.Rollback()
+	}()
+
+	data := tx.tx.Bucket(s.key)
+	if data == nil {
+		return nil, ErrBucketNotFound
+	}
+
+	// prepare result
+	res := &Result{
+		fields:  s.fields,
+		offsets: make([]int, 0, len(pks)),
+		values:  make([]byte, 0, len(pks)),
+	}
+	for _, pk := range pks {
+		if pk == 0 {
+			continue
+		}
+
+		bigEndian.PutUint64(key[:], pk)
+		buf := data.Get(key[:])
+		if buf == nil {
+			continue
+		}
+
+		cnt++
+		res.offsets = append(res.offsets, len(res.values))
+		res.values = append(res.values, buf...)
+	}
+	return res, nil
+}
+
+func (s *Store) StreamPks(ctx context.Context, pks []uint64, fn func(r Row) error) error {
+	var (
+		key [8]byte
+		cnt int64
+	)
+	atomic.AddInt64(&s.stats.StreamCalls, 1)
+
+	// open read transaction
+	tx, err := s.db.Tx(false)
+	if err != nil {
+		return err
+	}
+
+	// cleanup on exit
+	defer func() {
+		atomic.AddInt64(&s.stats.QueriedTuples, cnt)
+		tx.Rollback()
+	}()
+
+	data := tx.tx.Bucket(s.key)
+	if data == nil {
+		return ErrBucketNotFound
+	}
+
+	// prepare result
+	var ofs [1]int
+	res := &Result{
+		fields:  s.fields,
+		offsets: ofs[:],
+	}
+	for _, pk := range pks {
+		if pk == 0 {
+			continue
+		}
+
+		bigEndian.PutUint64(key[:], pk)
+		buf := data.Get(key[:])
+		if buf == nil {
+			continue
+		}
+
+		cnt++
+		res.values = buf
+		if err := fn(Row{res: res, n: 0}); err != nil {
+			if err != EndStream {
+				return err
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+func (s *Store) DeletePks(ctx context.Context, pks []uint64) (int64, error) {
+	atomic.AddInt64(&s.stats.DeleteCalls, 1)
+	if len(pks) == 0 {
+		return 0, nil
+	}
+
+	// open write transaction
+	tx, err := s.db.Tx(true)
+	if err != nil {
+		return 0, err
+	}
+
+	// cleanup on exit
+	defer func() {
+		tx.Rollback()
+	}()
+
+	// remove each key
+	var (
+		key [8]byte
+		cnt int64
+	)
+	for _, pk := range pks {
+		if pk == 0 {
+			continue
+		}
+
+		// remove value (check if exists to allow index removal)
+		binary.BigEndian.PutUint64(key[:], pk)
+		prev, err := s.DelTx(tx, key[:])
+		if err != nil {
+			return 0, err
+		}
+		if prev == nil {
+			continue
+		}
+		cnt++
+
+		// update indexes
+		for _, idx := range s.indexes {
+			idx.DelTx(tx, prev)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	atomic.AddInt64(&s.stats.DeletedTuples, cnt)
+	return cnt, nil
 }

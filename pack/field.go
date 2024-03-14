@@ -2607,12 +2607,8 @@ func (f Field) EncodeValue(buf *bytes.Buffer, val reflect.Value, finfo *fieldInf
 	return
 }
 
-func (f Field) DecodeValue(buf *bytes.Buffer, val reflect.Value, finfo *fieldInfo) (err error) {
+func (f Field) DecodeValue(buf *bytes.Buffer, dst reflect.Value, finfo *fieldInfo) (err error) {
 	var n uint64
-	dst := reflect.Indirect(val)
-	if dst.Kind() == reflect.Struct {
-		dst = dst.Field(f.Index)
-	}
 	switch f.Type {
 	case FieldTypeInt64:
 		dst.SetInt(int64(bigEndian.Uint64(buf.Next(8))))
@@ -2635,7 +2631,7 @@ func (f Field) DecodeValue(buf *bytes.Buffer, val reflect.Value, finfo *fieldInf
 	case FieldTypeFloat32:
 		dst.SetFloat(float64(math.Float32frombits(bigEndian.Uint32(buf.Next(4)))))
 	case FieldTypeDatetime:
-		dst.Set(reflect.ValueOf(time.Unix(0, int64(bigEndian.Uint64(buf.Next(8))))))
+		dst.Set(reflect.ValueOf(time.Unix(0, int64(bigEndian.Uint64(buf.Next(8)))).UTC()))
 	case FieldTypeBoolean:
 		if n := buf.Next(1); len(n) > 0 && n[0] == 1 {
 			dst.SetBool(true)
@@ -2801,7 +2797,9 @@ func (l FieldList) Decode(buf []byte, val any) error {
 	v := reflect.Indirect(reflect.ValueOf(val))
 	b := bytes.NewBuffer(buf)
 	for _, f := range l {
-		if err := f.DecodeValue(b, v, tinfo.fields[f.Index]); err != nil {
+		fi := tinfo.fields[f.Index]
+		dst := fi.value(v)
+		if err := f.DecodeValue(b, dst, fi); err != nil {
 			return err
 		}
 	}
