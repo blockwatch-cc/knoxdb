@@ -164,7 +164,7 @@ var (
 	}
 )
 
-func Create(path string, dbOpts interface{}) (*pack.Table, error) {
+func Create(path string, dbOpts interface{}) (pack.Table, error) {
 	fields, err := pack.Fields(Types{})
 	if err != nil {
 		return nil, err
@@ -175,6 +175,7 @@ func Create(path string, dbOpts interface{}) (*pack.Table, error) {
 	}
 
 	table, err := db.CreateTableIfNotExists(
+		pack.TableEnginePack,
 		TypesTableKey,
 		fields,
 		pack.Options{
@@ -185,13 +186,12 @@ func Create(path string, dbOpts interface{}) (*pack.Table, error) {
 		})
 	if err != nil {
 		db.Close()
-		return nil, err
+		return nil, fmt.Errorf("Create: %v", err)
 	}
 
-	_, err = table.CreateIndexIfNotExists(
-		"hash",
-		fields.Find("H"),   // op hash field (32 byte op hashes)
-		pack.IndexTypeHash, // hash table, index stores hash(field) -> pk value
+	err = table.CreateIndexIfNotExists(
+		pack.IndexKindHash, // hash table, index stores hash(field) -> pk value
+		fields.Select("H"), // op hash field (32 byte op hashes)
 		pack.Options{
 			PackSizeLog2:    TypesIndexPackSizeLog2,
 			JournalSizeLog2: TypesIndexJournalSizeLog2,
@@ -201,30 +201,36 @@ func Create(path string, dbOpts interface{}) (*pack.Table, error) {
 	if err != nil {
 		table.Close()
 		db.Close()
-		return nil, err
+		return nil, fmt.Errorf("Create index: %v", err)
 	}
 
 	return table, nil
 }
 
-func Open(path string) (*pack.Table, error) {
+func Open(path string) (pack.Table, error) {
 	db, err := pack.OpenDatabase("bolt", filepath.Dir(path), TypesTableKey, "*", boltopts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Open db: %v", err)
 	}
-	return db.Table(
+	t, err := db.OpenTable(
+		pack.TableEnginePack,
 		TypesTableKey,
 		pack.Options{
 			JournalSizeLog2: TypesJournalSizeLog2,
 			CacheSize:       TypesCacheSize,
 		},
-		pack.Options{
-			JournalSizeLog2: TypesIndexJournalSizeLog2,
-			CacheSize:       TypesIndexCacheSize,
-		})
+		// pack.Options{
+		// 	JournalSizeLog2: TypesIndexJournalSizeLog2,
+		// 	CacheSize:       TypesIndexCacheSize,
+		// }
+	)
+	if err != nil {
+		return nil, fmt.Errorf("Open table: %v", err)
+	}
+	return t, nil
 }
 
-func Close(table *pack.Table) error {
+func Close(table pack.Table) error {
 	if table == nil {
 		return nil
 	}
