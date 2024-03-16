@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package pack
@@ -21,7 +21,7 @@ func NewPredicate(left, right string, mode FilterMode) BinaryCondition {
 	}
 }
 
-func (b *BinaryCondition) Bind(l, r *Table) {
+func (b *BinaryCondition) Bind(l, r Table) {
 	b.Left = l.Fields().Find(b.Left.Name)
 	b.Right = r.Fields().Find(b.Right.Name)
 }

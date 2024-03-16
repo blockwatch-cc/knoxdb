@@ -25,7 +25,7 @@ var (
 	szPackInfo    = int(reflect.TypeOf(PackInfo{}).Size())
 	szBlockInfo   = int(reflect.TypeOf(BlockInfo{}).Size())
 	szBloomFilter = int(reflect.TypeOf(bloom.Filter{}).Size())
-	szPackIndex   = int(reflect.TypeOf(PackIndex{}).Size())
+	szPackHeader  = int(reflect.TypeOf(PackHeader{}).Size())
 	szPackage     = int(reflect.TypeOf(Package{}).Size())
 	szField       = int(reflect.TypeOf(Field{}).Size())
 	szBlock       = int(reflect.TypeOf(block.Block{}).Size())
@@ -69,7 +69,7 @@ type fieldInfo struct {
 	typ       reflect.Type
 	blockid   int
 	override  FieldType
-	indextype IndexType
+	indexkind IndexKind
 }
 
 func (f *fieldInfo) Clone() *fieldInfo {
@@ -256,9 +256,9 @@ func structFieldInfo(f *reflect.StructField) (*fieldInfo, error) {
 				finfo.flags |= FlagIndexed
 				switch val {
 				case "", "hash":
-					finfo.indextype = IndexTypeHash
+					finfo.indexkind = IndexKindHash
 				case "int":
-					finfo.indextype = IndexTypeInteger
+					finfo.indexkind = IndexKindInteger
 				default:
 					return nil, fmt.Errorf("pack: unsupported index type %q on field '%s' (%s/%s)", val, tag, finfo.typ, kind)
 				}

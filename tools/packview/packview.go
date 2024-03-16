@@ -211,7 +211,7 @@ func run() error {
 	}
 	defer db.Close()
 
-	table, err := db.Table(tablename)
+	table, err := pack.OpenPackTable(db, tablename, pack.NoOptions)
 	if err != nil {
 		return fmt.Errorf("opening table '%s': %v", tablename, err)
 	}
@@ -256,15 +256,15 @@ func run() error {
 	case "dump-block":
 		return dumpByteBlock(table, id1, out)
 	case "validate":
-		table.ValidatePackIndex(out)
-		table.ValidateIndexPackIndex(out)
+		table.ValidatePackHeader(out)
+		table.ValidateIndexPackHeader(out)
 		return nil
 	default:
 		return fmt.Errorf("unsupported command %s", cmd)
 	}
 }
 
-func viewAllTablePacks(table *pack.Table, w io.Writer, mode pack.DumpMode) error {
+func viewAllTablePacks(table *pack.PackTable, w io.Writer, mode pack.DumpMode) error {
 	for i := 0; ; i++ {
 		err := table.DumpPack(w, i, mode)
 		if err != nil && err != pack.ErrPackNotFound {
@@ -277,7 +277,7 @@ func viewAllTablePacks(table *pack.Table, w io.Writer, mode pack.DumpMode) error
 	return nil
 }
 
-func viewAllIndexPacks(table *pack.Table, idx int, w io.Writer, mode pack.DumpMode) error {
+func viewAllIndexPacks(table *pack.PackTable, idx int, w io.Writer, mode pack.DumpMode) error {
 	for i := 0; ; i++ {
 		err := table.DumpIndexPack(w, idx, i, mode)
 		if err != nil && err != pack.ErrPackNotFound {
@@ -290,7 +290,7 @@ func viewAllIndexPacks(table *pack.Table, idx int, w io.Writer, mode pack.DumpMo
 	return nil
 }
 
-func dumpByteBlock(table *pack.Table, id int, w io.Writer) error {
+func dumpByteBlock(table *pack.PackTable, id int, w io.Writer) error {
 	return table.WalkPacksRange(id, id, func(p *pack.Package) error {
 		for i, v := range p.Blocks() {
 			if v.Type() == block.BlockBytes {

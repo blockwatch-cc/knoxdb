@@ -26,10 +26,10 @@ var (
 )
 
 type Options struct {
-	PackSizeLog2    int `json:"pack_size_log2"`
-	JournalSizeLog2 int `json:"journal_size_log2"`
-	CacheSize       int `json:"cache_size"`
-	FillLevel       int `json:"fill_level"`
+	PackSizeLog2    int `json:"pack_size_log2,omitempty"`
+	JournalSizeLog2 int `json:"journal_size_log2,omitempty"`
+	CacheSize       int `json:"cache_size,omitempty"`
+	FillLevel       int `json:"fill_level,omitempty"`
 }
 
 func (o Options) IsValid() bool {

@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Blockwatch Data Inc.
+// Copyright (c) 2018-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package pack
@@ -36,11 +36,11 @@ type CSVHeader struct {
 	Size  int    `csv:"Pack Size"`
 }
 
-func (t *Table) DumpType(w io.Writer) error {
+func (t *PackTable) DumpType(w io.Writer) error {
 	return t.journal.DataPack().DumpType(w)
 }
 
-func (t *Table) DumpPackInfo(w io.Writer, mode DumpMode, sorted bool) error {
+func (t *PackTable) DumpPackInfo(w io.Writer, mode DumpMode, sorted bool) error {
 	tx, err := t.db.Tx(false)
 	if err != nil {
 		return err
@@ -79,7 +79,7 @@ func (t *Table) DumpPackInfo(w io.Writer, mode DumpMode, sorted bool) error {
 	return nil
 }
 
-func (t *Table) DumpJournal(w io.Writer, mode DumpMode) error {
+func (t *PackTable) DumpJournal(w io.Writer, mode DumpMode) error {
 	err := t.journal.DataPack().DumpData(w, mode, t.fields.Aliases())
 	if err != nil {
 		return err
@@ -104,7 +104,7 @@ func (t *Table) DumpJournal(w io.Writer, mode DumpMode) error {
 	return nil
 }
 
-func (t *Table) DumpPackInfoDetail(w io.Writer, mode DumpMode, sorted bool) error {
+func (t *PackTable) DumpPackInfoDetail(w io.Writer, mode DumpMode, sorted bool) error {
 	switch mode {
 	case DumpModeDec, DumpModeHex:
 	default:
@@ -129,7 +129,7 @@ func (t *Table) DumpPackInfoDetail(w io.Writer, mode DumpMode, sorted bool) erro
 	return nil
 }
 
-func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
+func (t *PackTable) DumpPack(w io.Writer, i int, mode DumpMode) error {
 	if i >= t.packidx.Len() || i < 0 {
 		return ErrPackNotFound
 	}
@@ -150,7 +150,7 @@ func (t *Table) DumpPack(w io.Writer, i int, mode DumpMode) error {
 	return nil
 }
 
-func (t *Table) WalkPacks(fn func(*Package) error) error {
+func (t *PackTable) WalkPacks(fn func(*Package) error) error {
 	tx, err := t.db.Tx(false)
 	if err != nil {
 		return err
@@ -169,7 +169,7 @@ func (t *Table) WalkPacks(fn func(*Package) error) error {
 	return nil
 }
 
-func (t *Table) WalkPacksRange(start, end int, fn func(*Package) error) error {
+func (t *PackTable) WalkPacksRange(start, end int, fn func(*Package) error) error {
 	tx, err := t.db.Tx(false)
 	if err != nil {
 		return err
@@ -194,7 +194,7 @@ func (t *Table) WalkPacksRange(start, end int, fn func(*Package) error) error {
 	return nil
 }
 
-func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
+func (t *PackTable) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
 	if i >= len(t.indexes) || i < 0 {
 		return ErrIndexNotFound
 	}
@@ -219,7 +219,7 @@ func (t *Table) DumpIndexPack(w io.Writer, i, p int, mode DumpMode) error {
 	return nil
 }
 
-func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
+func (t *PackTable) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	tx, err := t.db.Tx(false)
 	if err != nil {
 		return err
@@ -246,7 +246,7 @@ func (t *Table) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 	return nil
 }
 
-func (t *Table) DumpIndexPackInfo(w io.Writer, idx int, mode DumpMode, sorted bool) error {
+func (t *PackTable) DumpIndexPackInfo(w io.Writer, idx int, mode DumpMode, sorted bool) error {
 	if len(t.indexes) <= idx {
 		return ErrNoIndex
 	}
@@ -258,7 +258,7 @@ func (t *Table) DumpIndexPackInfo(w io.Writer, idx int, mode DumpMode, sorted bo
 	return t.indexes[idx].dumpPackInfo(tx, w, mode, sorted)
 }
 
-func (idx *Index) dumpPackInfo(tx *Tx, w io.Writer, mode DumpMode, sorted bool) error {
+func (idx *PackIndex) dumpPackInfo(tx *Tx, w io.Writer, mode DumpMode, sorted bool) error {
 	switch mode {
 	case DumpModeDec, DumpModeHex:
 		fmt.Fprintf(w, "%-3s %-10s %-7s %-7s %-21s %-21s %-10s\n",
@@ -661,7 +661,6 @@ func (q Query) Dump() string {
 		fmt.Fprintln(buf, "Q>", q.Name, "=>", "SELECT(", strings.Join(q.fout.Aliases(), ", "), ") WHERE")
 		q.conds.dump(0, buf)
 		fmt.Fprintln(buf, ">> fields:", strings.Join(q.freq.Aliases(), ", "))
-		fmt.Fprintln(buf, ">> indexes:", strings.Join(q.fidx.Aliases(), ", "))
 	} else {
 		fmt.Fprintln(buf, "Q>", q.Name, "=>", "SELECT(", strings.Join(q.Fields, ", "), ") WHERE")
 		q.Conditions.dump(0, buf)

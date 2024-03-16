@@ -326,9 +326,9 @@ func buildPackHeaderList(items []packIndexTestListItem) PackInfoList {
 	return packs
 }
 
-func TestPackIndexBest(t *testing.T) {
+func TestPackHeaderBest(t *testing.T) {
 	for _, c := range packIndexTestCases {
-		idx := NewPackIndex(buildPackHeaderList(c.List), 0, 1)
+		idx := NewPackHeader(buildPackHeaderList(c.List), 0, 1)
 		for _, v := range c.Values {
 			p, min, max, _, _ := idx.Best(v.Value)
 			if exp, got := v.ExpKey, idx.packs[p].Key; exp != got {
@@ -494,9 +494,9 @@ var packListAddTestCases = []packIndexTestCase{
 	},
 }
 
-func TestPackIndexAfterAdd(t *testing.T) {
+func TestPackHeaderAfterAdd(t *testing.T) {
 	for _, c := range packListAddTestCases {
-		idx := NewPackIndex(buildPackHeaderList(c.List), 0, 1)
+		idx := NewPackHeader(buildPackHeaderList(c.List), 0, 1)
 		idx.AddOrUpdate(c.Info)
 		for _, v := range c.Values {
 			p, min, max, _, _ := idx.Best(v.Value)
@@ -576,9 +576,9 @@ var packListRemoveTestCases = []packIndexTestCase{
 	},
 }
 
-func TestPackIndexAfterRemove(t *testing.T) {
+func TestPackHeaderAfterRemove(t *testing.T) {
 	for _, c := range packListRemoveTestCases {
-		idx := NewPackIndex(buildPackHeaderList(c.List), 0, 1)
+		idx := NewPackHeader(buildPackHeaderList(c.List), 0, 1)
 		idx.Remove(c.Key)
 		for _, v := range c.Values {
 			p, min, max, _, _ := idx.Best(v.Value)
@@ -605,10 +605,10 @@ var bestPackBenchmarkSizes = []benchmarkSize{
 	{"64k", 64 * 1024},
 }
 
-func BenchmarkPackIndexBestSorted(B *testing.B) {
+func BenchmarkPackHeaderBestSorted(B *testing.B) {
 	for _, n := range bestPackBenchmarkSizes {
 		B.Run(fmt.Sprintf("%s", n.name), func(B *testing.B) {
-			v2 := NewPackIndex(makeSortedPackInfoList(n.l), 0, 1)
+			v2 := NewPackHeader(makeSortedPackInfoList(n.l), 0, 1)
 			max := v2.packs[v2.pos[len(v2.pos)-1]].Blocks[v2.pkidx].MaxValue.(uint64)
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
@@ -618,10 +618,10 @@ func BenchmarkPackIndexBestSorted(B *testing.B) {
 	}
 }
 
-func BenchmarkPackIndexBestUnsorted(B *testing.B) {
+func BenchmarkPackHeaderBestUnsorted(B *testing.B) {
 	for _, n := range bestPackBenchmarkSizes {
 		B.Run(fmt.Sprintf("%s", n.name), func(B *testing.B) {
-			v2 := NewPackIndex(makeUnsortedPackInfoList(n.l), 0, 1)
+			v2 := NewPackHeader(makeUnsortedPackInfoList(n.l), 0, 1)
 			max := v2.packs[v2.pos[len(v2.pos)-1]].Blocks[v2.pkidx].MaxValue.(uint64)
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
@@ -631,10 +631,10 @@ func BenchmarkPackIndexBestUnsorted(B *testing.B) {
 	}
 }
 
-func BenchmarkPackIndexAppend(B *testing.B) {
+func BenchmarkPackHeaderAppend(B *testing.B) {
 	for _, n := range bestPackBenchmarkSizes {
 		B.Run(fmt.Sprintf("%s", n.name), func(B *testing.B) {
-			v2 := NewPackIndex(makeSortedPackInfoList(n.l), 0, 1)
+			v2 := NewPackHeader(makeSortedPackInfoList(n.l), 0, 1)
 			l := v2.Len()
 			_, max := v2.MinMax(l - 1)
 			// pack := buildPackHeaderInt(l, max+1, max+1000)
@@ -648,10 +648,10 @@ func BenchmarkPackIndexAppend(B *testing.B) {
 	}
 }
 
-func BenchmarkPackIndexAdd(B *testing.B) {
+func BenchmarkPackHeaderAdd(B *testing.B) {
 	for _, n := range bestPackBenchmarkSizes {
 		B.Run(fmt.Sprintf("%s", n.name), func(B *testing.B) {
-			v2 := NewPackIndex(makeSortedPackInfoList(n.l), 0, 1)
+			v2 := NewPackHeader(makeSortedPackInfoList(n.l), 0, 1)
 			l := v2.Len() / 2
 			min, max := v2.MinMax(l)
 			pack := buildPackHeaderInt(l, min, max)
@@ -665,10 +665,10 @@ func BenchmarkPackIndexAdd(B *testing.B) {
 	}
 }
 
-func BenchmarkPackIndexUpdate(B *testing.B) {
+func BenchmarkPackHeaderUpdate(B *testing.B) {
 	for _, n := range bestPackBenchmarkSizes {
 		B.Run(fmt.Sprintf("%s", n.name), func(B *testing.B) {
-			v2 := NewPackIndex(makeSortedPackInfoList(n.l), 0, 1)
+			v2 := NewPackHeader(makeSortedPackInfoList(n.l), 0, 1)
 			pos := v2.Len() / 2
 			min, max := v2.MinMax(pos)
 			B.ResetTimer()

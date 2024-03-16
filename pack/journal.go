@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"sort"
 
-	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/vec"
 )
 
@@ -123,9 +122,9 @@ func (j *Journal) Close() {
 	}
 }
 
-func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
+func (j *Journal) LoadLegacy(tx *Tx, bucketName []byte) error {
 	j.Reset()
-	if _, err := loadPackTx(dbTx, bucketName, encodePackKey(journalKey), j.data, j.maxsize); err != nil {
+	if _, err := loadPackTx(tx, bucketName, encodePackKey(journalKey), j.data, j.maxsize); err != nil {
 		return err
 	}
 	j.sortData = false
@@ -138,7 +137,7 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 	if j.sortData {
 		sort.Sort(j.keys)
 	}
-	tomb, err := loadPackTx(dbTx, bucketName, encodePackKey(tombstoneKey), nil, j.maxsize)
+	tomb, err := loadPackTx(tx, bucketName, encodePackKey(tombstoneKey), nil, j.maxsize)
 	if err != nil {
 		return fmt.Errorf("pack: cannot open tombstone for table %s: %v", string(bucketName), err)
 	}
@@ -166,7 +165,7 @@ func (j *Journal) LoadLegacy(dbTx store.Tx, bucketName []byte) error {
 	return nil
 }
 
-func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, int, error) {
+func (j *Journal) StoreLegacy(tx *Tx, bucketName []byte) (int, int, error) {
 	// reconstructed deleted pks from key list
 	var idx, last int
 	for _, v := range j.tomb {
@@ -179,7 +178,7 @@ func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, int, error
 		}
 		j.data.SetFieldAt(j.data.pkindex, idx, v)
 	}
-	n, err := storePackTx(dbTx, bucketName, encodePackKey(journalKey), j.data, defaultJournalFillLevel)
+	n, err := storePackTx(tx, bucketName, encodePackKey(journalKey), j.data, defaultJournalFillLevel)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -190,7 +189,7 @@ func (j *Journal) StoreLegacy(dbTx store.Tx, bucketName []byte) (int, int, error
 		ts := Tombstone{v}
 		_ = tomb.Push(ts)
 	}
-	m, err := storePackTx(dbTx, bucketName, encodePackKey(tombstoneKey), tomb, defaultJournalFillLevel)
+	m, err := storePackTx(tx, bucketName, encodePackKey(tombstoneKey), tomb, defaultJournalFillLevel)
 	if err != nil {
 		return n, 0, err
 	}

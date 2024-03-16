@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 // TODO
@@ -53,7 +53,7 @@ func (t JoinType) String() string {
 }
 
 type JoinTable struct {
-	Table    *Table
+	Table    Table
 	Where    UnboundCondition // optional filters for table rows
 	Fields   util.StringList  // list of output fields, in order
 	FieldsAs util.StringList  // alias names of output fields, in order
@@ -209,14 +209,14 @@ func (j *Join) Compile() error {
 
 	// use all table fields when none are defined
 	if len(j.Left.Fields) == 0 {
-		j.Left.fields = j.Left.Table.fields
+		j.Left.fields = j.Left.Table.Fields()
 	} else {
-		j.Left.fields = j.Left.Table.fields.Select(j.Left.Fields...)
+		j.Left.fields = j.Left.Table.Fields().Select(j.Left.Fields...)
 	}
 	if len(j.Right.Fields) == 0 {
-		j.Right.fields = j.Right.Table.fields
+		j.Right.fields = j.Right.Table.Fields()
 	} else {
-		j.Right.fields = j.Right.Table.fields.Select(j.Right.Fields...)
+		j.Right.fields = j.Right.Table.Fields().Select(j.Right.Fields...)
 	}
 
 	// assemble output field list from left and right table fields
@@ -264,8 +264,8 @@ func (j *Join) Compile() error {
 
 	// now bind the unbound conditions to our tables
 	j.Predicate.Bind(j.Left.Table, j.Right.Table)
-	j.Left.where = j.Left.Where.Bind(j.Left.Table.fields)
-	j.Right.where = j.Right.Where.Bind(j.Right.Table.fields)
+	j.Left.where = j.Left.Where.Bind(j.Left.Table.Fields())
+	j.Right.where = j.Right.Where.Bind(j.Right.Table.Fields())
 
 	return j.CheckConditions()
 }
@@ -317,7 +317,7 @@ func (j Join) Query(ctx context.Context, q Query) (*Result, error) {
 	}
 
 	// check and compile query using a temporary in-memory table without indexes
-	q = q.WithTable(&Table{
+	q = q.WithTable(&PackTable{
 		name: strings.Join([]string{
 			j.Left.Table.Name(),
 			j.Type.String(),

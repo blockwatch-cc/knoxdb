@@ -147,7 +147,7 @@ type Field struct {
 	Type  FieldType  `json:"type"`
 	Flags FieldFlags `json:"flags"` // primary, indexed, compression
 	Scale int        `json:"scale"` // 0..127 fixed point scale, bloom error probability 1/x
-	IType IndexType  `json:"itype"` // index type: hash, integer
+	IKind IndexKind  `json:"ikind"` // index type: hash, integer
 }
 
 func (f Field) IsValid() bool {
@@ -387,7 +387,7 @@ func Fields(proto interface{}) (FieldList, error) {
 			Alias: finfo.alias,
 			Index: i,
 			Flags: finfo.flags,
-			IType: finfo.indextype,
+			IKind: finfo.indexkind,
 		}
 		switch f.Kind() {
 		case reflect.Int, reflect.Int64:

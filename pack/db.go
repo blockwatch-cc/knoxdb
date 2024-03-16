@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2018-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package pack
@@ -16,6 +16,7 @@ import (
 )
 
 var (
+	ErrNoEngine         = errors.New("pack: engine does not exist")
 	ErrNoTable          = errors.New("pack: table does not exist")
 	ErrNoStore          = errors.New("pack: store does not exist")
 	ErrNoIndex          = errors.New("pack: index does not exist")
@@ -52,8 +53,8 @@ const (
 
 type DB struct {
 	db     store.DB
-	tables map[string]*Table
-	stores map[string]*Store
+	tables map[string]Table
+	stores map[string]Store
 }
 
 type Tx struct {
@@ -78,8 +79,8 @@ func CreateDatabase(engine, path, name, label string, opts any) (*DB, error) {
 	}
 	return &DB{
 		db:     db,
-		tables: make(map[string]*Table),
-		stores: make(map[string]*Store),
+		tables: make(map[string]Table),
+		stores: make(map[string]Store),
 	}, nil
 }
 
@@ -115,8 +116,8 @@ func OpenDatabase(engine, path, name, label string, opts any) (*DB, error) {
 	}
 	return &DB{
 		db:     db,
-		tables: make(map[string]*Table),
-		stores: make(map[string]*Store),
+		tables: make(map[string]Table),
+		stores: make(map[string]Store),
 	}, nil
 }
 
@@ -132,6 +133,146 @@ func (d *DB) UpdateManifest(name, label string) error {
 	mft.Name = name
 	mft.Label = label
 	return d.db.SetManifest(mft)
+}
+
+func (d *DB) CreateTable(engine TableEngine, name string, fields FieldList, opts Options) (Table, error) {
+	switch engine {
+	case TableEnginePack:
+		t, err := CreatePackTable(d, name, fields, opts)
+		if err != nil {
+			return nil, err
+		}
+		d.tables[name] = t
+		return t, nil
+	case TableEngineKV:
+		t, err := CreateKeyValueTable(d, name, fields, opts)
+		if err != nil {
+			return nil, err
+		}
+		d.tables[name] = t
+		return t, nil
+	default:
+		return nil, ErrNoEngine
+	}
+}
+
+func (d *DB) CreateTableIfNotExists(engine TableEngine, name string, fields FieldList, opts Options) (Table, error) {
+	t, err := d.CreateTable(engine, name, fields, opts)
+	if err != nil {
+		if err != ErrTableExists {
+			return nil, err
+		}
+		t, err = d.OpenTable(engine, name, opts)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
+}
+
+func (d *DB) OpenTable(engine TableEngine, name string, opts Options) (Table, error) {
+	if t, ok := d.tables[name]; ok {
+		return t, nil
+	}
+	switch engine {
+	case TableEnginePack:
+		t, err := OpenPackTable(d, name, opts)
+		if err != nil {
+			return nil, err
+		}
+		d.tables[name] = t
+		return t, nil
+	case TableEngineKV:
+		t, err := OpenKeyValueTable(d, name, opts)
+		if err != nil {
+			return nil, err
+		}
+		d.tables[name] = t
+		return t, nil
+	default:
+		return nil, ErrNoEngine
+	}
+}
+
+func (d *DB) DropTable(name string) error {
+	t, ok := d.tables[name]
+	if !ok {
+		return ErrNoTable
+	}
+	if err := t.Drop(); err != nil {
+		return err
+	}
+	delete(d.tables, name)
+	return nil
+}
+
+func (d *DB) CloseTable(t Table) error {
+	if t.IsClosed() {
+		return ErrNoTable
+	}
+	if err := t.Close(); err != nil {
+		return err
+	}
+	delete(d.tables, t.Name())
+	return nil
+}
+
+func (d *DB) CreateStore(name string, opts Options) (Store, error) {
+	s, err := CreateGenericStore(d, name, opts)
+	if err != nil {
+		return nil, err
+	}
+	d.stores[name] = s
+	return s, nil
+}
+
+func (d *DB) CreateStoreIfNotExists(name string, opts Options) (Store, error) {
+	s, err := d.CreateStore(name, opts)
+	if err != nil {
+		if err != ErrStoreExists {
+			return nil, err
+		}
+		s, err = d.OpenStore(name, opts)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
+func (d *DB) OpenStore(name string, opts Options) (Store, error) {
+	if s, ok := d.stores[name]; ok {
+		return s, nil
+	}
+	s, err := OpenGenericStore(d, name, opts)
+	if err != nil {
+		return nil, err
+	}
+	d.stores[name] = s
+	return s, nil
+}
+
+func (d *DB) DropStore(name string) error {
+	s, ok := d.stores[name]
+	if !ok {
+		return ErrNoStore
+	}
+	if err := s.Drop(); err != nil {
+		return err
+	}
+	delete(d.stores, name)
+	return nil
+}
+
+func (d *DB) CloseStore(s Store) error {
+	if s.IsClosed() {
+		return ErrNoStore
+	}
+	if err := s.Close(); err != nil {
+		return err
+	}
+	delete(d.stores, s.Name())
+	return nil
 }
 
 func (d *DB) Path() string {
@@ -188,25 +329,6 @@ func (d *DB) Close() error {
 	return d.db.Close()
 }
 
-func (d *DB) View(fn func(store.Tx) error) error {
-	return d.db.View(fn)
-}
-
-func (d *DB) Update(fn func(store.Tx) error) error {
-	return d.db.Update(fn)
-}
-
-func (d *DB) Tx(writeable bool) (*Tx, error) {
-	tx, err := d.db.Begin(writeable)
-	if err != nil {
-		return nil, err
-	}
-	return &Tx{
-		tx: tx,
-		db: d,
-	}, nil
-}
-
 func (d *DB) NumOpenTables() int {
 	return len(d.tables)
 }
@@ -215,16 +337,16 @@ func (d *DB) NumOpenStores() int {
 	return len(d.stores)
 }
 
-func (d *DB) OpenTables() []*Table {
-	var list []*Table
+func (d *DB) OpenTables() []Table {
+	var list []Table
 	for _, v := range d.tables {
 		list = append(list, v)
 	}
 	return list
 }
 
-func (d *DB) OpenStores() []*Store {
-	var list []*Store
+func (d *DB) OpenStores() []Store {
+	var list []Store
 	for _, v := range d.stores {
 		list = append(list, v)
 	}
@@ -285,6 +407,38 @@ func (d *DB) ListStoreNames() ([]string, error) {
 	return names, err
 }
 
+func (d *DB) View(fn func(*Tx) error) error {
+	tx, err := d.Tx(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	return fn(tx)
+}
+
+func (d *DB) Update(fn func(*Tx) error) error {
+	tx, err := d.Tx(true)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (d *DB) Tx(writeable bool) (*Tx, error) {
+	tx, err := d.db.Begin(writeable)
+	if err != nil {
+		return nil, err
+	}
+	return &Tx{
+		tx: tx,
+		db: d,
+	}, nil
+}
+
 func (t *Tx) Pending() int {
 	return t.pending
 }
@@ -321,99 +475,10 @@ func (t *Tx) Rollback() error {
 	return nil
 }
 
-func (db *DB) storePack(name, key []byte, p *Package, fill int) (int, error) {
-	tx, err := db.Tx(true)
-	if err != nil {
-		return 0, err
-	}
-	n, err := tx.storePack(name, key, p, fill)
-	if err != nil {
-		tx.Rollback()
-		return 0, err
-	}
-	tx.Commit()
-	return n, nil
+func (t *Tx) Bucket(key []byte) store.Bucket {
+	return t.tx.Bucket(key)
 }
 
-func (db *DB) loadPack(name, key []byte, unpack *Package, sz int) (*Package, error) {
-	tx, err := db.Tx(false)
-	if err != nil {
-		return nil, err
-	}
-	pkg, err := tx.loadPack(name, key, unpack, sz)
-	tx.Rollback()
-	return pkg, err
-}
-
-func (tx *Tx) storePack(name, key []byte, p *Package, fill int) (int, error) {
-	n, err := storePackTx(tx.tx, name, key, p, fill)
-	if err != nil {
-		return 0, err
-	}
-	tx.pending++
-	return n, nil
-}
-
-func (tx *Tx) deletePack(name, key []byte) error {
-	err := deletePackTx(tx.tx, name, key)
-	if err != nil {
-		return err
-	}
-	tx.pending++
-	return nil
-}
-
-func (tx *Tx) loadPack(name, key []byte, unpack *Package, sz int) (*Package, error) {
-	return loadPackTx(tx.tx, name, key, unpack, sz)
-}
-
-func loadPackTx(dbTx store.Tx, name, key []byte, unpack *Package, sz int) (*Package, error) {
-	if unpack == nil {
-		unpack = NewPackage(sz, nil)
-	}
-	b := dbTx.Bucket(name)
-	if b == nil {
-		return nil, ErrBucketNotFound
-	}
-	buf := b.Get(key)
-	if buf == nil {
-		return nil, ErrPackNotFound
-	}
-	unpack.SetKey(key)
-	if err := unpack.UnmarshalBinary(buf); err != nil {
-		return nil, err
-	}
-	unpack.dirty = false
-	return unpack, nil
-}
-
-func storePackTx(dbTx store.Tx, name, key []byte, p *Package, fill int) (int, error) {
-	for _, v := range p.blocks {
-		if v == nil {
-			return 0, ErrPackStripped
-		}
-	}
-	buf, err := p.MarshalBinary()
-	if err != nil {
-		return 0, err
-	}
-	b := dbTx.Bucket(name)
-	if b == nil {
-		return 0, ErrBucketNotFound
-	}
-	b.FillPercent(float64(fill) / 100.0)
-	err = b.Put(key, buf)
-	if err != nil {
-		return 0, err
-	}
-	p.dirty = false
-	return len(buf), nil
-}
-
-func deletePackTx(dbTx store.Tx, name, key []byte) error {
-	b := dbTx.Bucket(name)
-	if b == nil {
-		return ErrBucketNotFound
-	}
-	return b.Delete(key)
+func (t *Tx) Root() store.Bucket {
+	return t.tx.Root()
 }

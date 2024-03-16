@@ -109,7 +109,7 @@ func TestConditionTreeAdd(t *testing.T) {
 // Test for binding nested tree nodes. There is no root node invariant established
 // in this test. Its meant for building tree fragments.
 func TestConditionTreeBind(t *testing.T) {
-	table := &Table{
+	table := &PackTable{
 		name:   "test",
 		fields: fields,
 	}
@@ -141,7 +141,7 @@ func TestConditionTreeBind(t *testing.T) {
 
 // Tests tree construction and bind with root-node invariants as it happens in queries.
 func TestConditionTreeQuery(t *testing.T) {
-	table := &Table{
+	table := &PackTable{
 		name:   "test",
 		fields: fields,
 	}

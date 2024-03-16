@@ -93,7 +93,7 @@ func (r Request) Query(key string) (pack.Query, error) {
 	return q, nil
 }
 
-func (req Request) Run(ctx context.Context, table *pack.Table, q pack.Query) (*Result, error) {
+func (req Request) Run(ctx context.Context, table pack.Table, q pack.Query) (*Result, error) {
 	// load table type
 	tinfo := table.Fields()
 	timeIndex := tinfo.Find("time").Index

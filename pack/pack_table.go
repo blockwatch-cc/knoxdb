@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Blockwatch Data Inc.
+// Copyright (c) 2018-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 // Design concepts
@@ -43,14 +43,11 @@ import (
 
 	"blockwatch.cc/knoxdb/cache/rclru"
 	"blockwatch.cc/knoxdb/encoding/block"
-	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
 
-const (
-	idFieldName = "I"
-)
+var _ Table = (*PackTable)(nil)
 
 var (
 	optsKey             = []byte("_options")
@@ -73,16 +70,16 @@ type TableMeta struct {
 	dirty    bool   `json:"-"`
 }
 
-type Table struct {
+type PackTable struct {
 	name     string                            // printable table name
 	opts     Options                           // runtime configuration options
 	fields   FieldList                         // ordered list of table fields as central type info
-	indexes  IndexList                         // list of indexes (similar structure as the table)
+	indexes  PackIndexList                     // pack indexes only
 	meta     TableMeta                         // authoritative metadata
 	db       *DB                               // lower-level storage (e.g. boltdb wrapper)
 	bcache   rclru.Cache[uint64, *block.Block] // keep decoded packs for query/updates
 	journal  *Journal                          // in-memory data not yet written to packs
-	packidx  *PackIndex                        // in-memory list of pack and block info
+	packidx  *PackHeader                       // in-memory list of pack and block info
 	key      []byte                            // name of table data bucket
 	metakey  []byte                            // name of table metadata bucket
 	packPool *sync.Pool                        // buffer pool for new packages
@@ -92,14 +89,14 @@ type Table struct {
 	mu       sync.RWMutex                      // global table lock
 }
 
-func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, error) {
+func CreatePackTable(d *DB, name string, fields FieldList, opts Options) (*PackTable, error) {
 	opts = DefaultOptions.Merge(opts)
 	if err := opts.Check(); err != nil {
 		return nil, err
 	}
 	maxPackSize := opts.PackSize()
 	maxJournalSize := opts.JournalSize()
-	t := &Table{
+	t := &PackTable{
 		name:   name,
 		opts:   opts,
 		fields: fields,
@@ -107,8 +104,8 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 			Sequence: 0,
 		},
 		db:      d,
-		indexes: make(IndexList, 0),
-		packidx: NewPackIndex(nil, fields.PkIndex(), maxPackSize),
+		indexes: make(PackIndexList, 0),
+		packidx: NewPackHeader(nil, fields.PkIndex(), maxPackSize),
 		key:     []byte(name),
 		metakey: append([]byte(name), metaKey...),
 		u64Pool: &sync.Pool{
@@ -124,16 +121,16 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 	t.packPool = &sync.Pool{
 		New: t.makePackage,
 	}
-	err := d.db.Update(func(dbTx store.Tx) error {
-		b := dbTx.Bucket(t.key)
+	err := d.Update(func(tx *Tx) error {
+		b := tx.Bucket(t.key)
 		if b != nil {
 			return ErrTableExists
 		}
-		_, err := dbTx.Root().CreateBucketIfNotExists(t.key)
+		_, err := tx.Root().CreateBucketIfNotExists(t.key)
 		if err != nil {
 			return err
 		}
-		meta, err := dbTx.Root().CreateBucketIfNotExists(t.metakey)
+		meta, err := tx.Root().CreateBucketIfNotExists(t.metakey)
 		if err != nil {
 			return err
 		}
@@ -157,11 +154,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		if err != nil {
 			return err
 		}
-		buf, err = json.Marshal(t.indexes)
-		if err != nil {
-			return err
-		}
-		err = meta.Put(indexesKey, buf)
+		err = meta.Put(indexesKey, []byte(`[]`))
 		if err != nil {
 			return err
 		}
@@ -177,7 +170,7 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		if err := t.journal.InitFields(fields); err != nil {
 			return err
 		}
-		jsz, tsz, err := t.journal.StoreLegacy(dbTx, t.metakey)
+		jsz, tsz, err := t.journal.StoreLegacy(tx, t.metakey)
 		if err != nil {
 			return err
 		}
@@ -203,66 +196,16 @@ func (d *DB) CreateTable(name string, fields FieldList, opts Options) (*Table, e
 		t.bcache = rclru.NewNoCache[uint64, *block.Block]()
 	}
 	log.Debugf("Created table %s", name)
-	d.tables[name] = t
 	return t, nil
 }
 
-func (d *DB) CreateTableIfNotExists(name string, fields FieldList, opts Options) (*Table, error) {
-	t, err := d.CreateTable(name, fields, opts)
-	if err != nil {
-		if err != ErrTableExists {
-			return nil, err
-		}
-		t, err = d.Table(name, opts)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return t, nil
-}
-
-func (d *DB) DropTable(name string) error {
-	t, err := d.Table(name)
-	if err != nil {
-		return err
-	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	idxnames := make([]string, len(t.indexes))
-	for i, idx := range t.indexes {
-		idxnames[i] = idx.Name
-	}
-	for _, v := range idxnames {
-		if err := t.DropIndex(v); err != nil {
-			return err
-		}
-	}
-	t.bcache.Purge()
-	err = d.db.Update(func(dbTx store.Tx) error {
-		err = dbTx.Root().DeleteBucket([]byte(name))
-		if err != nil {
-			return err
-		}
-		return dbTx.Root().DeleteBucket(append([]byte(name), metaKey...))
-	})
-	if err != nil {
-		return err
-	}
-	delete(d.tables, t.name)
-	t = nil
-	return nil
-}
-
-func (d *DB) Table(name string, opts ...Options) (*Table, error) {
-	if t, ok := d.tables[name]; ok {
-		return t, nil
-	}
+func OpenPackTable(d *DB, name string, opts ...Options) (*PackTable, error) {
 	if len(opts) > 0 {
 		log.Debugf("Opening table %s with opts %#v", name, opts[0])
 	} else {
 		log.Debugf("Opening table %s with default opts", name)
 	}
-	t := &Table{
+	t := &PackTable{
 		name:    name,
 		db:      d,
 		key:     []byte(name),
@@ -272,8 +215,9 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 	t.packPool = &sync.Pool{
 		New: t.makePackage,
 	}
-	err := d.db.View(func(dbTx store.Tx) error {
-		b := dbTx.Bucket(t.metakey)
+	var indexes []IndexData
+	err := d.View(func(tx *Tx) error {
+		b := tx.Bucket(t.metakey)
 		if b == nil {
 			return ErrNoTable
 		}
@@ -313,7 +257,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		if buf == nil {
 			return fmt.Errorf("pack: missing indexes for table %s", name)
 		}
-		err = json.Unmarshal(buf, &t.indexes)
+		err = json.Unmarshal(buf, &indexes)
 		if err != nil {
 			return fmt.Errorf("pack: cannot read indexes for table %s: %v", name, err)
 		}
@@ -328,7 +272,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		atomic.StoreInt64(&t.stats.TupleCount, t.meta.Rows)
 		t.journal = NewJournal(t.meta.Sequence, maxJournalSize, t.name)
 		t.journal.InitFields(t.fields)
-		err = t.journal.LoadLegacy(dbTx, t.metakey)
+		err = t.journal.LoadLegacy(tx, t.metakey)
 		if err != nil {
 			return fmt.Errorf("pack: cannot open journal for table %s: %v", name, err)
 		}
@@ -339,7 +283,7 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		// }
 		// log.Debugf("pack: %s table opened WAL with %d entries", name, t.journal.Len())
 		log.Debugf("pack: %s table opened journal with %d entries", name, t.journal.Len())
-		return t.loadPackInfo(dbTx)
+		return t.loadPackInfo(tx)
 	})
 	if err != nil {
 		return nil, err
@@ -354,46 +298,121 @@ func (d *DB) Table(name string, opts ...Options) (*Table, error) {
 		t.bcache = rclru.NewNoCache[uint64, *block.Block]()
 	}
 
-	needFlush := make([]*Index, 0)
-	for _, idx := range t.indexes {
-		if len(opts) > 1 {
-			if err := t.OpenIndex(idx, opts[1]); err != nil {
-				return nil, err
-			}
-		} else {
-			if err := t.OpenIndex(idx); err != nil {
-				return nil, err
-			}
-		}
-		if idx.journal.Len() > 0 {
-			needFlush = append(needFlush, idx)
-		}
+	// open existing indexes
+	iopts := DefaultOptions
+	if len(opts) > 1 {
+		iopts = iopts.Merge(opts[1])
 	}
-
-	// FIXME: change index lookups to also use index journal
-	// flush any previously stored index data; this is necessary because
-	// index lookups are only implemented for non-journal packs
-	if len(needFlush) > 0 {
-		log.Warnf("pack: %s index flush required", t.name)
-		if tx, err := t.db.Tx(true); err == nil {
-			defer tx.Rollback()
-			for _, idx := range needFlush {
-				log.Infof("pack: %s flushing %d records on load", idx.name(), idx.journal.Len())
-				if err := idx.FlushTx(context.Background(), tx); err != nil {
-					return nil, err
-				}
-			}
-			tx.Commit()
-		} else if !store.IsError(err, store.ErrTxNotWritable) {
+	for _, v := range indexes {
+		idx, err := OpenPackIndex(t, v.Kind, v.Fields, iopts)
+		if err != nil {
 			return nil, err
 		}
+		t.indexes = append(t.indexes, idx)
 	}
-	d.tables[name] = t
+
 	return t, nil
 }
 
-func (t *Table) loadPackInfo(dbTx store.Tx) error {
-	meta := dbTx.Bucket(t.metakey)
+func (t *PackTable) Drop() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// clear cache
+	t.bcache.Purge()
+
+	// drop indexes
+	for _, idx := range t.indexes {
+		if err := idx.Drop(); err != nil {
+			log.Errorf("pack: drop index %s: %v", idx.Name(), err)
+		}
+	}
+
+	// drop data
+	return t.db.Update(func(dbTx *Tx) error {
+		err := dbTx.Root().DeleteBucket([]byte(t.name))
+		if err != nil {
+			return err
+		}
+		return dbTx.Root().DeleteBucket(append([]byte(t.name), metaKey...))
+	})
+}
+
+func (t *PackTable) CreateIndex(kind IndexKind, fields FieldList, opts Options) error {
+	idx, err := CreatePackIndex(t, kind, fields, opts)
+	if err != nil {
+		return err
+	}
+
+	// add index to table's list of indexes and store the list
+	t.indexes = append(t.indexes, idx)
+
+	data := make([]IndexData, len(t.indexes))
+	for i, v := range t.indexes {
+		data[i].Kind = v.kind
+		data[i].Fields = FieldList{v.field}
+	}
+
+	return t.db.Update(func(tx *Tx) error {
+		meta := tx.Bucket(t.metakey)
+		if meta == nil {
+			return fmt.Errorf("pack: table %s: missing metadata bucket", t.name)
+		}
+		buf, err := json.Marshal(data)
+		if err != nil {
+			return err
+		}
+		err = meta.Put(indexesKey, buf)
+		return err
+	})
+}
+
+func (t *PackTable) CreateIndexIfNotExists(kind IndexKind, fields FieldList, opts Options) error {
+	err := t.CreateIndex(kind, fields, opts)
+	if err != nil && err != ErrIndexExists {
+		return err
+	}
+	return nil
+}
+
+func (t *PackTable) DropIndex(fields FieldList) error {
+	name := fields.String()
+	for i, idx := range t.indexes {
+		if idx.Name() != name {
+			continue
+		}
+
+		// delete index buckets
+		if err := idx.Drop(); err != nil {
+			return err
+		}
+
+		// store table metadata
+		t.indexes = append(t.indexes[:i], t.indexes[i+1:]...)
+
+		data := make([]IndexData, len(t.indexes))
+		for i, v := range t.indexes {
+			data[i].Kind = v.kind
+			data[i].Fields = FieldList{v.field}
+		}
+
+		return t.DB().Update(func(tx *Tx) error {
+			meta := tx.Bucket(t.metakey)
+			if meta == nil {
+				return fmt.Errorf("pack: table %s: missing metadata bucket", t.name)
+			}
+			buf, err := json.Marshal(data)
+			if err != nil {
+				return err
+			}
+			return meta.Put(indexesKey, buf)
+		})
+	}
+	return nil
+}
+
+func (t *PackTable) loadPackInfo(tx *Tx) error {
+	meta := tx.Bucket(t.metakey)
 	if meta == nil {
 		return ErrNoTable
 	}
@@ -417,7 +436,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 			packs = packs[:0]
 			log.Errorf("pack: info decode for table %s pack %x: %v", t.name, c.Key(), err)
 		} else {
-			t.packidx = NewPackIndex(packs, t.fields.PkIndex(), maxPackSize)
+			t.packidx = NewPackHeader(packs, t.fields.PkIndex(), maxPackSize)
 			atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
 			atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
 			atomic.StoreInt64(&t.stats.TotalSize, int64(t.packidx.TableSize()))
@@ -426,7 +445,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 		}
 	}
 	log.Warnf("pack: %s table has corrupt or missing statistics! Re-scanning table. This may take some time...", t.name)
-	c := dbTx.Bucket(t.key).Cursor()
+	c := tx.Bucket(t.key).Cursor()
 	pkg := NewPackage(maxPackSize, nil)
 	if err := pkg.InitFieldsFrom(t.journal.DataPack()); err != nil {
 		return err
@@ -447,7 +466,7 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 		atomic.AddInt64(&t.stats.MetaBytesRead, int64(len(c.Value())))
 		pkg.Clear()
 	}
-	t.packidx = NewPackIndex(packs, t.fields.PkIndex(), maxPackSize)
+	t.packidx = NewPackHeader(packs, t.fields.PkIndex(), maxPackSize)
 	atomic.StoreInt64(&t.stats.PacksCount, int64(t.packidx.Len()))
 	atomic.StoreInt64(&t.stats.MetaSize, int64(t.packidx.HeapSize()))
 	atomic.StoreInt64(&t.stats.TotalSize, int64(t.packidx.TableSize()))
@@ -455,8 +474,8 @@ func (t *Table) loadPackInfo(dbTx store.Tx) error {
 	return nil
 }
 
-func (t *Table) storePackInfo(dbTx store.Tx) error {
-	meta := dbTx.Bucket(t.metakey)
+func (t *PackTable) storePackInfo(tx *Tx) error {
+	meta := tx.Bucket(t.metakey)
 	if meta == nil {
 		return ErrNoTable
 	}
@@ -494,35 +513,39 @@ func (t *Table) storePackInfo(dbTx store.Tx) error {
 	return nil
 }
 
-func (t *Table) Fields() FieldList {
+func (t *PackTable) Fields() FieldList {
 	return t.fields
 }
 
-func (t *Table) Name() string {
+func (t *PackTable) Name() string {
 	return t.name
 }
 
-func (t *Table) Database() *DB {
+func (t *PackTable) DB() *DB {
 	return t.db
 }
 
-func (t *Table) Options() Options {
+func (t *PackTable) Engine() TableEngine {
+	return TableEnginePack
+}
+
+func (t *PackTable) Options() Options {
 	return t.opts
 }
 
-func (t *Table) Indexes() IndexList {
+func (t *PackTable) Indexes() PackIndexList {
 	return t.indexes
 }
 
-func (t *Table) Lock() {
+func (t *PackTable) Lock() {
 	t.mu.Lock()
 }
 
-func (t *Table) Unlock() {
+func (t *PackTable) Unlock() {
 	t.mu.Unlock()
 }
 
-func (t *Table) Stats() []TableStats {
+func (t *PackTable) Stats() []TableStats {
 	s := t.stats.Clone()
 
 	// update from journal and tomb (reading here may be more efficient than
@@ -551,7 +574,7 @@ func (t *Table) Stats() []TableStats {
 	return resp
 }
 
-func (t *Table) PurgeCache() {
+func (t *PackTable) PurgeCache() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.bcache.Purge()
@@ -560,13 +583,13 @@ func (t *Table) PurgeCache() {
 	}
 }
 
-func (t *Table) NextSequence() uint64 {
+func (t *PackTable) NextSequence() uint64 {
 	t.meta.Sequence++
 	t.meta.dirty = true
 	return t.meta.Sequence
 }
 
-func (t *Table) Insert(ctx context.Context, val any) error {
+func (t *PackTable) Insert(ctx context.Context, val any) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -593,7 +616,7 @@ func (t *Table) Insert(ctx context.Context, val any) error {
 }
 
 // unsafe when used concurrently, need to obtain lock _before_ starting bolt tx
-func (t *Table) InsertTx(ctx context.Context, tx *Tx, val any) error {
+func (t *PackTable) InsertTx(ctx context.Context, tx *Tx, val any) error {
 	if err := t.insertJournal(val); err != nil {
 		return err
 	}
@@ -607,7 +630,7 @@ func (t *Table) InsertTx(ctx context.Context, tx *Tx, val any) error {
 	return nil
 }
 
-func (t *Table) insertJournal(val any) error {
+func (t *PackTable) insertJournal(val any) error {
 	if t.db.IsReadOnly() {
 		return ErrReadOnlyDatabase
 	}
@@ -636,7 +659,7 @@ func (t *Table) insertJournal(val any) error {
 	return nil
 }
 
-func (t *Table) InsertRow(ctx context.Context, row Row) error {
+func (t *PackTable) InsertRow(ctx context.Context, row Row) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -664,7 +687,7 @@ func (t *Table) InsertRow(ctx context.Context, row Row) error {
 	return nil
 }
 
-func (t *Table) InsertResult(ctx context.Context, res *Result) error {
+func (t *PackTable) InsertResult(ctx context.Context, res *Result) error {
 	if res == nil {
 		return nil
 	}
@@ -697,7 +720,7 @@ func (t *Table) InsertResult(ctx context.Context, res *Result) error {
 }
 
 // FIXME: only works for same table schema, requires pkg to be sorted by pk
-func (t *Table) appendPackIntoJournal(ctx context.Context, pkg *Package, pos, n int) error {
+func (t *PackTable) appendPackIntoJournal(ctx context.Context, pkg *Package, pos, n int) error {
 	if pkg.Len() == 0 {
 		return nil
 	}
@@ -720,7 +743,7 @@ func (t *Table) appendPackIntoJournal(ctx context.Context, pkg *Package, pos, n 
 	return nil
 }
 
-func (t *Table) Update(ctx context.Context, val any) error {
+func (t *PackTable) Update(ctx context.Context, val any) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -749,7 +772,7 @@ func (t *Table) Update(ctx context.Context, val any) error {
 	return nil
 }
 
-func (t *Table) UpdateTx(ctx context.Context, tx *Tx, val any) error {
+func (t *PackTable) UpdateTx(ctx context.Context, tx *Tx, val any) error {
 	if err := t.updateJournal(val); err != nil {
 		return err
 	}
@@ -763,7 +786,7 @@ func (t *Table) UpdateTx(ctx context.Context, tx *Tx, val any) error {
 	return nil
 }
 
-func (t *Table) updateJournal(val any) error {
+func (t *PackTable) updateJournal(val any) error {
 	if t.db.IsReadOnly() {
 		return ErrReadOnlyDatabase
 	}
@@ -790,7 +813,7 @@ func (t *Table) updateJournal(val any) error {
 	return nil
 }
 
-func (t *Table) Delete(ctx context.Context, q Query) (int64, error) {
+func (t *PackTable) Delete(ctx context.Context, q Query) (int64, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -811,61 +834,63 @@ func (t *Table) Delete(ctx context.Context, q Query) (int64, error) {
 	}
 	defer res.Close()
 
-	n := res.Rows()
-	if err := t.DeleteIdsTx(ctx, tx, res.PkColumn()); err != nil {
+	n, err := t.DeletePksTx(ctx, tx, res.PkColumn())
+	if err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 
-	return int64(n), nil
+	return n, nil
 }
 
-func (t *Table) DeleteIds(ctx context.Context, val []uint64) error {
+func (t *PackTable) DeletePks(ctx context.Context, val []uint64) (int64, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	if err := ctx.Err(); err != nil {
-		return err
+		return 0, err
 	}
 
 	if err := t.deleteJournal(val); err != nil {
-		return err
+		return 0, err
 	}
 
 	if t.journal.ShouldFlush() {
 		tx, err := t.db.Tx(true)
 		if err != nil {
-			return err
+			return 0, err
 		}
 
 		defer tx.Rollback()
 		if err := t.flushTx(ctx, tx); err != nil {
-			return err
+			return 0, err
 		}
 
-		return tx.Commit()
+		if err := tx.Commit(); err != nil {
+			return 0, err
+		}
 	}
 
-	return nil
+	return int64(len(val)), nil
 }
 
-func (t *Table) DeleteIdsTx(ctx context.Context, tx *Tx, val []uint64) error {
+func (t *PackTable) DeletePksTx(ctx context.Context, tx *Tx, val []uint64) (int64, error) {
 	if err := t.deleteJournal(val); err != nil {
-		return err
+		return 0, err
 	}
 
 	if t.journal.ShouldFlush() {
 		if err := t.flushTx(ctx, tx); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
-	return nil
+	return int64(len(val)), nil
 }
 
-func (t *Table) deleteJournal(ids []uint64) error {
+func (t *PackTable) deleteJournal(ids []uint64) error {
 	if t.db.IsReadOnly() {
 		return ErrReadOnlyDatabase
 	}
@@ -885,11 +910,11 @@ func (t *Table) deleteJournal(ids []uint64) error {
 	return nil
 }
 
-func (t *Table) IsClosed() bool {
+func (t *PackTable) IsClosed() bool {
 	return t.db == nil
 }
 
-func (t *Table) Close() error {
+func (t *PackTable) Close() error {
 	if t.db == nil {
 		return nil
 	}
@@ -922,7 +947,7 @@ func (t *Table) Close() error {
 		}
 
 		// save journal and tombstone
-		if jsz, tsz, err := t.journal.StoreLegacy(tx.tx, t.metakey); err != nil {
+		if jsz, tsz, err := t.journal.StoreLegacy(tx, t.metakey); err != nil {
 			return err
 		} else {
 			t.stats.JournalDiskSize = int64(jsz)
@@ -930,7 +955,7 @@ func (t *Table) Close() error {
 		}
 
 		// store pack headers
-		if err := t.storePackInfo(tx.tx); err != nil {
+		if err := t.storePackInfo(tx); err != nil {
 			return err
 		}
 
@@ -950,15 +975,16 @@ func (t *Table) Close() error {
 
 	// close journal
 	t.journal.Close()
-
-	// unregister from db
-	delete(t.db.tables, t.name)
 	t.db = nil
 
 	return nil
 }
 
-func (t *Table) FlushJournal(ctx context.Context) error {
+func (t *PackTable) Sync(ctx context.Context) error {
+	return t.FlushJournal(ctx)
+}
+
+func (t *PackTable) FlushJournal(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -992,9 +1018,9 @@ func (t *Table) FlushJournal(ctx context.Context) error {
 	return tx.Commit()
 }
 
-func (t *Table) flushJournalTx(ctx context.Context, tx *Tx) error {
+func (t *PackTable) flushJournalTx(ctx context.Context, tx *Tx) error {
 	nTuples, nTomb := t.journal.Len(), t.journal.TombLen()
-	nJournalBytes, nTombBytes, err := t.journal.StoreLegacy(tx.tx, t.metakey)
+	nJournalBytes, nTombBytes, err := t.journal.StoreLegacy(tx, t.metakey)
 	if err != nil {
 		return err
 	}
@@ -1009,7 +1035,7 @@ func (t *Table) flushJournalTx(ctx context.Context, tx *Tx) error {
 	return nil
 }
 
-func (t *Table) Flush(ctx context.Context) error {
+func (t *PackTable) Flush(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -1036,7 +1062,7 @@ func (t *Table) Flush(ctx context.Context) error {
 // - support context cancellation
 //
 // merge journal entries into data partitions, repack, store, and update all indexes
-func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
+func (t *PackTable) flushTx(ctx context.Context, tx *Tx) error {
 	var (
 		nParts, nBytes, nUpd, nAdd, nDel, n int                          // total stats counters
 		pUpd, pAdd, pDel                    int                          // per-pack stats counters
@@ -1069,7 +1095,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 	defer func() {
 		if e := recover(); e != nil || err != nil {
 			log.Debugf("pack: %s table restore metadata on error", t.name)
-			if err := t.loadPackInfo(tx.tx); err != nil {
+			if err := t.loadPackInfo(tx); err != nil {
 				log.Errorf("pack: %s table metadata rollback on error failed: %v", t.name, err)
 			}
 		}
@@ -1148,7 +1174,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 				nBytes += n
 				// commit storage tx after each N written packs
 				if tx.Pending() >= txMaxSize {
-					if err = t.storePackInfo(tx.tx); err != nil {
+					if err = t.storePackInfo(tx); err != nil {
 						return err
 					}
 					if err = tx.CommitAndContinue(); err != nil {
@@ -1321,9 +1347,9 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 					// replace index records when data has changed
 					for _, idx := range t.indexes {
-						if !idx.Field.Type.EqualPacksAt(
-							pkg, idx.Field.Index, offs,
-							jpack, idx.Field.Index, key.idx,
+						if !idx.field.Type.EqualPacksAt(
+							pkg, idx.field.Index, offs,
+							jpack, idx.field.Index, key.idx,
 						) {
 							// remove index for original data
 							if err = idx.RemoveTx(tx, pkg, offs, 1); err != nil {
@@ -1435,7 +1461,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 
 					// commit tx after each N written packs
 					if tx.Pending() >= txMaxSize {
-						if err = t.storePackInfo(tx.tx); err != nil {
+						if err = t.storePackInfo(tx); err != nil {
 							return err
 						}
 						if err = tx.CommitAndContinue(); err != nil {
@@ -1514,7 +1540,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 	}
 
 	// store pack headers
-	if err = t.storePackInfo(tx.tx); err != nil {
+	if err = t.storePackInfo(tx); err != nil {
 		return err
 	}
 
@@ -1541,7 +1567,7 @@ func (t *Table) flushTx(ctx context.Context, tx *Tx) error {
 // - choose pack with pack.min <= val <= pack.max
 // - choose pack with closest max < val
 // - when val < min of first pack, choose first pack
-func (t *Table) findBestPack(pkval uint64) (int, uint64, uint64, uint64) {
+func (t *PackTable) findBestPack(pkval uint64) (int, uint64, uint64, uint64) {
 	// returns 0 when list is empty, this ensures we initially stick
 	// to the first pack until it's full; returns last pack for values
 	// > global max
@@ -1573,7 +1599,108 @@ func (t *Table) findBestPack(pkval uint64) (int, uint64, uint64, uint64) {
 
 }
 
-func (t *Table) Lookup(ctx context.Context, ids []uint64) (*Result, error) {
+func (t *PackTable) QueryIndexesTx(ctx context.Context, tx *Tx, node *ConditionTreeNode) (int, error) {
+	// - visit all leafs, run index scan when field is indexed and condition allowed
+	// - if collission-free, mark condition as processed (don't execute again)
+	// - add IN cond to front of current tree branch level
+	//   -> leaf-roots do not exist (invariant)
+	var hits int
+	ins := make([]ConditionTreeNode, 0)
+	for i, v := range node.Children {
+		if v.Leaf() {
+			// if !q.fidx.Contains(v.Cond.Field.Name) {
+			// 	// q.Debugf("query: %s table non-indexed field %s for cond %s, fallback to table scan",
+			// 	// 	q.Name, v.Cond.Field.Name, v.Cond.String())
+			// 	continue
+			// }
+			idx := t.Indexes().Find(v.Cond.Field.Name)
+			if idx == nil {
+				// q.Debugf("query: %s table missing index on field %s for cond %d, fallback to table scan",
+				// 	q.Name, v.Cond.Field.Name, v.Cond.String())
+				continue
+			}
+			if !idx.CanMatch(*v.Cond) {
+				// q.Debugf("query: %s index %s cannot match cond %s, fallback to table scan",
+				// 	q.Name, idx.Name, v.Cond.String())
+				continue
+			}
+
+			// q.Debugf("query: %s index scan for %s", idx.stats.IndexName, v.Cond.String())
+
+			// lookup matching primary keys from index (result is sorted)
+			pkmatch, err := idx.LookupTx(ctx, tx, *v.Cond)
+			if err != nil {
+				return hits, fmt.Errorf("index scan: %v", err)
+			}
+			hits += len(pkmatch)
+
+			// mark condition as processed (exclude hash indexes because they may
+			// have collisions; to protect against this, we continue matching this
+			// condition against the full result set, which should be much smaller
+			// now)
+			if !idx.kind.MayHaveCollisions() {
+				v.Cond.processed = true
+			}
+			// q.Debugf("query: %s index scan found %d matches", q.Name, len(pkmatch))
+
+			if len(pkmatch) == 0 {
+				v.Cond.nomatch = true
+				continue
+			}
+
+			// create new leaf node
+			c := &Condition{
+				Field:    t.Fields().Pk(), // primary key
+				Mode:     FilterModeIn,    // IN
+				Value:    pkmatch,         // list
+				IsSorted: true,            // already sorted by index lookup
+				Raw:      v.Cond.Raw + "/index_lookup",
+			}
+
+			// compile to build internal maps
+			if err := c.Compile(); err != nil {
+				return 0, fmt.Errorf("compile index cond: %v", err)
+			}
+
+			// keep for later append
+			ins = append(ins, ConditionTreeNode{Cond: c})
+		} else {
+			// recurse into child (use ptr to slice element)
+			n, err := t.QueryIndexesTx(ctx, tx, &node.Children[i])
+			if err != nil {
+				return hits, err
+			}
+			hits += n
+		}
+	}
+
+	// add new leafs to front of child list; this assumes the new indexed
+	// condition (a list of primary keys) has lower execution cost than
+	// other conditions in the same sub-tree
+	//
+	// FIXME: ideally we would keep processed conditions around and just skip
+	// them in MaybeMatchPack() and MatchPack(); then we could just prepend
+	// node.Children = append(ins, node.Children...)
+	if len(ins) > 0 {
+		for _, v := range node.Children {
+			// skip processed source conditions unless they led to an empty result
+			// because we need them to check for nomatch later
+			if v.Leaf() && v.Cond.processed && !v.Cond.nomatch {
+				// q.Debugf("query: %s replacing condition %s", q.Name, v.Cond.String())
+				continue
+			}
+			ins = append(ins, v)
+		}
+		node.Children = ins
+		// q.Debugf("Updated query: %v", logpkg.NewClosure(func() string {
+		// 	return q.Dump()
+		// }))
+	}
+
+	return hits, nil
+}
+
+func (t *PackTable) LookupPks(ctx context.Context, ids []uint64) (*Result, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -1586,11 +1713,11 @@ func (t *Table) Lookup(ctx context.Context, ids []uint64) (*Result, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	return t.LookupTx(ctx, tx, ids)
+	return t.LookupPksTx(ctx, tx, ids)
 }
 
 // unsafe when called concurrently! lock table _before_ starting bolt tx!
-func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, error) {
+func (t *PackTable) LookupPksTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, error) {
 	q := NewQuery(t.name + ".lookup").WithTable(t)
 	if err := q.Compile(); err != nil {
 		return nil, err
@@ -1680,65 +1807,54 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 		return res, nil
 	}
 
-	var (
-		pkg *Package
-		err error
-	)
-	defer func() {
-		t.releaseSharedPack(pkg)
-	}()
-
-	// optimize for lookup of most recently added values
+	// PACK SCAN, iterator uses range checks
 	var nextid int
-	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
+	it := NewLookupIterator(&q, ids)
+	defer it.Close()
+
+	for {
 		// stop when all inputs are matched
 		if maxRows == q.stats.RowsMatched {
 			break
 		}
 
-		// stop when context is canceled
-		if err = ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			res.Close()
 			return nil, err
 		}
 
-		t.releaseSharedPack(pkg)
-		pkg = nil
-
-		// continue with next pack, always load via cache
-
-		// check pack headers again because now we have stripped some values
-		// from the id lookup slice, so we may know better if the pack
-		// matches or not
-		pkg, err = t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.freq)
+		// load next pack with potential matches, use pack max pk to break early
+		pack, maxPk, err := it.Next(tx)
 		if err != nil {
 			res.Close()
 			return nil, err
 		}
-		q.stats.PacksScanned++
 
-		pk := pkg.PkColumn()
+		// finish when no more packs are found
+		if pack == nil {
+			break
+		}
 
-		// we use pack max value to break early
-		_, max := t.packidx.MinMax(nextpack)
+		pk := pack.PkColumn()
 
+		// loop over the remaining (unresolved) list of pks
 		// packs are sorted by pk, ids does not contain zero values
 		last := 0
 		for _, v := range ids[nextid:] {
 			// no more matches in this pack?
-			if max < v || pk[last] > maxNonZeroId {
+			if maxPk < v || pk[last] > maxNonZeroId {
 				break
 			}
 
 			// not in pack
-			j, _ := pkg.PkIndex(v, last)
+			j, _ := pack.PkIndex(v, last)
 			if j < 0 {
 				nextid++
 				continue
 			}
 
 			// on match, copy result from package
-			if err := res.pkg.AppendFrom(pkg, j, 1); err != nil {
+			if err := res.pkg.AppendFrom(pack, j, 1); err != nil {
 				res.Close()
 				return nil, err
 			}
@@ -1751,7 +1867,7 @@ func (t *Table) LookupTx(ctx context.Context, tx *Tx, ids []uint64) (*Result, er
 	return res, nil
 }
 
-func (t *Table) Query(ctx context.Context, q Query) (*Result, error) {
+func (t *PackTable) Query(ctx context.Context, q Query) (*Result, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -1773,7 +1889,7 @@ func (t *Table) Query(ctx context.Context, q Query) (*Result, error) {
 }
 
 // NOTE: not concurrency safe lock table _before_ starting bolt tx!
-func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
+func (t *PackTable) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	atomic.AddInt64(&t.stats.QueryCalls, 1)
 
 	// check conditions match table
@@ -1928,7 +2044,7 @@ func (t *Table) QueryTx(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 }
 
 // DESCENDING pk order algorithm
-func (t *Table) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, error) {
+func (t *PackTable) QueryTxDesc(ctx context.Context, tx *Tx, q Query) (*Result, error) {
 	atomic.AddInt64(&t.stats.QueryCalls, 1)
 
 	// check conditions match table
@@ -2097,7 +2213,7 @@ packloop:
 	return res, nil
 }
 
-func (t *Table) Count(ctx context.Context, q Query) (int64, error) {
+func (t *PackTable) Count(ctx context.Context, q Query) (int64, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -2114,7 +2230,7 @@ func (t *Table) Count(ctx context.Context, q Query) (int64, error) {
 	return t.CountTx(ctx, tx, q)
 }
 
-func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
+func (t *PackTable) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	atomic.AddInt64(&t.stats.QueryCalls, 1)
 
 	q = q.WithTable(t)
@@ -2220,7 +2336,7 @@ func (t *Table) CountTx(ctx context.Context, tx *Tx, q Query) (int64, error) {
 	return int64(q.stats.RowsMatched), nil
 }
 
-func (t *Table) Stream(ctx context.Context, q Query, fn func(r Row) error) error {
+func (t *PackTable) Stream(ctx context.Context, q Query, fn func(r Row) error) error {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -2247,7 +2363,7 @@ func (t *Table) Stream(ctx context.Context, q Query, fn func(r Row) error) error
 
 // Similar to QueryTx but returns each match via callback function to allow stream
 // processing at low memory overheads.
-func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) error) error {
+func (t *PackTable) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) error) error {
 	atomic.AddInt64(&t.stats.StreamCalls, 1)
 
 	q = q.WithTable(t)
@@ -2396,7 +2512,7 @@ func (t *Table) StreamTx(ctx context.Context, tx *Tx, q Query, fn func(r Row) er
 }
 
 // DESCENDING order stream
-func (t *Table) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row) error) error {
+func (t *PackTable) StreamTxDesc(ctx context.Context, tx *Tx, q Query, fn func(r Row) error) error {
 	atomic.AddInt64(&t.stats.StreamCalls, 1)
 
 	q = q.WithTable(t)
@@ -2555,7 +2671,7 @@ packloop:
 	return nil
 }
 
-func (t *Table) StreamLookup(ctx context.Context, ids []uint64, fn func(r Row) error) error {
+func (t *PackTable) StreamPks(ctx context.Context, ids []uint64, fn func(r Row) error) error {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -2569,14 +2685,14 @@ func (t *Table) StreamLookup(ctx context.Context, ids []uint64, fn func(r Row) e
 	}
 	defer tx.Rollback()
 
-	err = t.StreamLookupTx(ctx, tx, ids, fn)
+	err = t.StreamPksTx(ctx, tx, ids, fn)
 	if err == EndStream {
 		return nil
 	}
 	return err
 }
 
-func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn func(r Row) error) error {
+func (t *PackTable) StreamPksTx(ctx context.Context, tx *Tx, ids []uint64, fn func(r Row) error) error {
 	atomic.AddInt64(&t.stats.StreamCalls, 1)
 	q := NewQuery(t.name + ".stream-lookup").WithTable(t)
 	if err := q.Compile(); err != nil {
@@ -2663,17 +2779,12 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 		return nil
 	}
 
-	var (
-		pkg *Package
-		err error
-	)
-	defer func() {
-		t.releaseSharedPack(pkg)
-	}()
-
-	// PACK SCAN, schedule uses fast range checks and schould be perfect
+	// PACK SCAN, iterator uses range checks
 	var nextid int
-	for _, nextpack := range q.MakePackLookupSchedule(ids, false) {
+	it := NewLookupIterator(&q, ids)
+	defer it.Close()
+
+	for {
 		// stop when all inputs are matched
 		if maxRows == q.stats.RowsMatched {
 			break
@@ -2683,31 +2794,30 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 			return err
 		}
 
-		t.releaseSharedPack(pkg)
-		pkg = nil
-
-		// always load via cache
-		pkg, err = t.loadSharedPack(tx, t.packidx.packs[nextpack].Key, true, q.freq)
+		// load next pack with potential matches, use pack max pk to break early
+		pack, maxPk, err := it.Next(tx)
 		if err != nil {
 			return err
 		}
-		res.pkg = pkg
-		q.stats.PacksScanned++
-		pk := pkg.PkColumn()
 
-		// we use pack max value to break early
-		_, max := t.packidx.MinMax(nextpack)
+		// finish when no more packs are found
+		if pack == nil {
+			break
+		}
+
+		res.pkg = pack
+		pk := pack.PkColumn()
 
 		// loop over the remaining (unresolved) list of pks
 		last := 0
 		for _, v := range ids[nextid:] {
 			// no more matches in this pack?
-			if max < v || pk[last] > maxNonZeroId {
+			if maxPk < v || pk[last] > maxNonZeroId {
 				break
 			}
 
 			// not in pack == not in table, skip this id
-			j, _ := pkg.PkIndex(v, last)
+			j, _ := pack.PkIndex(v, last)
 			if j < 0 {
 				nextid++
 				continue
@@ -2729,7 +2839,7 @@ func (t *Table) StreamLookupTx(ctx context.Context, tx *Tx, ids []uint64, fn fun
 
 // merges non-full packs to minimize total pack count, also re-establishes a
 // sequential/gapless pack key order when packs have been deleted
-func (t *Table) Compact(ctx context.Context) error {
+func (t *PackTable) Compact(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	start := time.Now()
@@ -2932,7 +3042,7 @@ func (t *Table) Compact(ctx context.Context) error {
 
 		// commit tx after each N written packs
 		if tx.Pending() >= txMaxSize {
-			if err := t.storePackInfo(tx.tx); err != nil {
+			if err := t.storePackInfo(tx); err != nil {
 				return err
 			}
 			if err := tx.CommitAndContinue(); err != nil {
@@ -2966,18 +3076,18 @@ func (t *Table) Compact(ctx context.Context) error {
 	// t.DumpPackInfoDetail(os.Stdout, DumpModeDec, false)
 
 	// store pack headers
-	if err := t.storePackInfo(tx.tx); err != nil {
+	if err := t.storePackInfo(tx); err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
 
-func (t *Table) cachekey(key []byte) string {
+func (t *PackTable) cachekey(key []byte) string {
 	return t.name + "/" + hex.EncodeToString(key)
 }
 
-func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
+func (t *PackTable) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) (*Package, error) {
 	if len(fields) == 0 {
 		fields = t.fields
 	}
@@ -2996,7 +3106,8 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 	pkg.nValues = pi.NValues
 	pkg.size = pi.Packsize
 
-	var loadField FieldList // list of uncached blocks
+	// identify uncached blocks
+	var loadField FieldList
 	for i, v := range pkg.fields {
 		if !fields.Contains(v.Name) {
 			continue
@@ -3009,18 +3120,16 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 			loadField = loadField.Add(v)
 		}
 	}
+
 	// all blocks found in cache
 	if len(loadField) == 0 {
 		return pkg, nil
 	}
-	// if not found, load from storage using a pre-allocated pack as buffer
-	var (
-		err error
-	)
 
-	// fetch pack from pool or create new pack
+	// load missing blocks from storage using a temp pack as buffer
+	var err error
 	pkg2 := t.newPackage().PopulateFields(loadField)
-	pkg2, err = tx.loadPack(t.key, key, pkg2, t.opts.PackSize())
+	pkg2, err = loadPackTx(tx, t.key, key, pkg2, t.opts.PackSize())
 	if err != nil {
 		t.releaseSharedPack(pkg)
 		return nil, err
@@ -3045,13 +3154,13 @@ func (t *Table) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldList) 
 }
 
 // loads a private copy of a pack for writing
-func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
+func (t *PackTable) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	key := encodePackKey(id)
 
 	// Get PackInfo and fill metadata
 	pi := t.packidx.GetByKey(id)
 
-	// fetch pack from pool or create new pack, has nil in block slice
+	// fetch pack from pool or create new pack, blocks are nil at this point
 	pkg := t.newPackage().WithKey(pi.Key)
 	pkg.nValues = pi.NValues
 	pkg.size = pi.Packsize
@@ -3084,7 +3193,7 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 
 	// fetch pack from pool or create new pack
 	pkg2 := t.newPackage().PopulateFields(loadField)
-	pkg2, err = tx.loadPack(t.key, key, pkg2, t.opts.PackSize())
+	pkg2, err = loadPackTx(tx, t.key, key, pkg2, t.opts.PackSize())
 	if err != nil {
 		pkg2.Release()
 		clone.Release()
@@ -3106,12 +3215,12 @@ func (t *Table) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	return clone, nil
 }
 
-func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
+func (t *PackTable) storePack(tx *Tx, pkg *Package) (int, error) {
 	key := pkg.Key()
 
 	defer func() {
 		id := uint64(pkg.key)
-		// remove all blocks of pkg from cache
+		// remove all blocks from cache
 		for _, v := range t.bcache.Keys() {
 			if v>>32 == id {
 				t.bcache.Remove(v)
@@ -3131,7 +3240,7 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 		pkg.Optimize()
 
 		// write to disk
-		n, err := tx.storePack(t.key, key, pkg, t.opts.FillLevel)
+		n, err := storePackTx(tx, t.key, key, pkg, t.opts.FillLevel)
 		if err != nil {
 			return 0, err
 		}
@@ -3148,13 +3257,13 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 		return n, nil
 
 	} else {
-		// If pack is empty
+		// pack is empty
 
 		// drop from index
 		t.packidx.Remove(pkg.key)
 
 		// remove from storage
-		if err := tx.deletePack(t.key, key); err != nil {
+		if err := deletePackTx(tx, t.key, key); err != nil {
 			return 0, err
 		}
 
@@ -3167,7 +3276,7 @@ func (t *Table) storePack(tx *Tx, pkg *Package) (int, error) {
 }
 
 // Note: pack must have been storted before splitting
-func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
+func (t *PackTable) splitPack(tx *Tx, pkg *Package) (int, error) {
 	// log.Debugf("%s: split pack %d col=%d row=%d", t.name, pkg.key, pkg.nFields, pkg.nValues)
 	// move half of the packs contents to a new pack (don't cache the new pack
 	// to avoid possible eviction of the pack we are currently splitting!)
@@ -3198,7 +3307,7 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	}
 	newpkg.Release()
 
-	// drop origial pack blocks from cache
+	// drop original blocks from cache
 	for i := range pkg.fields {
 		t.bcache.Remove(encodeBlockKey(pkg.key, i))
 	}
@@ -3206,18 +3315,18 @@ func (t *Table) splitPack(tx *Tx, pkg *Package) (int, error) {
 	return n + m, nil
 }
 
-func (t *Table) makePackage() interface{} {
+func (t *PackTable) makePackage() interface{} {
 	atomic.AddInt64(&t.stats.PacksAlloc, 1)
 	pkg := NewPackage(t.opts.PackSize(), t.packPool)
 	_ = pkg.InitFieldsFromEmpty(t.journal.DataPack())
 	return pkg
 }
 
-func (t *Table) newPackage() *Package {
+func (t *PackTable) newPackage() *Package {
 	return t.packPool.Get().(*Package).WithCap(t.opts.PackSize())
 }
 
-func (t *Table) releaseSharedPack(pkg *Package) {
+func (t *PackTable) releaseSharedPack(pkg *Package) {
 	if pkg == nil {
 		return
 	}
@@ -3232,4 +3341,103 @@ func (t *Table) releaseSharedPack(pkg *Package) {
 	}
 	pkg.nValues = 0
 	pkg.pool.Put(pkg)
+}
+
+// func (db *DB) storePack(name, key []byte, p *Package, fill int) (int, error) {
+// 	tx, err := db.Tx(true)
+// 	if err != nil {
+// 		return 0, err
+// 	}
+// 	n, err := tx.storePack(name, key, p, fill)
+// 	if err != nil {
+// 		tx.Rollback()
+// 		return 0, err
+// 	}
+// 	tx.Commit()
+// 	return n, nil
+// }
+
+// func (db *DB) loadPack(name, key []byte, unpack *Package, sz int) (*Package, error) {
+// 	tx, err := db.Tx(false)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	pkg, err := tx.loadPack(name, key, unpack, sz)
+// 	tx.Rollback()
+// 	return pkg, err
+// }
+
+// func (tx *Tx) storePack(name, key []byte, p *Package, fill int) (int, error) {
+// 	n, err := storePackTx(tx.tx, name, key, p, fill)
+// 	if err != nil {
+// 		return 0, err
+// 	}
+// 	tx.pending++
+// 	return n, nil
+// }
+
+// func (tx *Tx) deletePack(name, key []byte) error {
+// 	err := deletePackTx(tx.tx, name, key)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	tx.pending++
+// 	return nil
+// }
+
+// func (tx *Tx) loadPack(name, key []byte, unpack *Package, sz int) (*Package, error) {
+// 	return loadPackTx(tx.tx, name, key, unpack, sz)
+// }
+
+func loadPackTx(tx *Tx, name, key []byte, unpack *Package, sz int) (*Package, error) {
+	if unpack == nil {
+		unpack = NewPackage(sz, nil)
+	}
+	b := tx.Bucket(name)
+	if b == nil {
+		return nil, ErrBucketNotFound
+	}
+	buf := b.Get(key)
+	if buf == nil {
+		return nil, ErrPackNotFound
+	}
+	unpack.SetKey(key)
+	if err := unpack.UnmarshalBinary(buf); err != nil {
+		return nil, err
+	}
+	unpack.dirty = false
+	return unpack, nil
+}
+
+func storePackTx(tx *Tx, name, key []byte, p *Package, fill int) (int, error) {
+	for _, v := range p.blocks {
+		if v == nil {
+			return 0, ErrPackStripped
+		}
+	}
+	buf, err := p.MarshalBinary()
+	if err != nil {
+		return 0, err
+	}
+	b := tx.Bucket(name)
+	if b == nil {
+		return 0, ErrBucketNotFound
+	}
+	b.FillPercent(float64(fill) / 100.0)
+	err = b.Put(key, buf)
+	if err != nil {
+		return 0, err
+	}
+	p.dirty = false
+	tx.pending++
+	return len(buf), nil
+}
+
+func deletePackTx(tx *Tx, name, key []byte) error {
+	b := tx.Bucket(name)
+	if b == nil {
+		return ErrBucketNotFound
+	}
+	tx.pending++
+	return b.Delete(key)
 }

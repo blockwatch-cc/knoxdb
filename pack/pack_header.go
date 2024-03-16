@@ -9,21 +9,21 @@ import (
 	"blockwatch.cc/knoxdb/vec"
 )
 
-// PackIndex implements efficient and scalable pack info/stats management as
+// PackHeader implements efficient and scalable pack info/stats management as
 // well as primary key placement (i.e. best pack selection) for tables and indexes.
 //
 // Packs are stored and referenced in key order ([4]byte = big endian uint32),
 // and primary keys have a global order across packs. This means pk min-max ranges
 // are unordered, but never overlap.
 //
-// PackIndex takes care of searching a pack that may contain a given pk and can select
+// PackHeader takes care of searching a pack that may contain a given pk and can select
 // the best pack to store a new pk into. New or updated packs (i.e. from calls to split
 // or storePack) are registered using their pack info. When empty packs are deleted
 // (Table only) they must be deregistered.
 //
-// PackIndex keeps a list of all current pack info/stats and a list of all
+// PackHeader keeps a list of all current pack info/stats and a list of all
 // removed keys in memory. Use storePackHeader to persist the pack index to storage.
-type PackIndex struct {
+type PackHeader struct {
 	packs   PackInfoList // list of pack headers (identity and metadata for all blocks)
 	minpks  []uint64     // min statistics for pk field
 	maxpks  []uint64     // max statistics for pk field
@@ -34,11 +34,11 @@ type PackIndex struct {
 }
 
 // may be used in {Index|Table}.loadPackHeaders
-func NewPackIndex(packs PackInfoList, pkidx, maxsize int) *PackIndex {
+func NewPackHeader(packs PackInfoList, pkidx, maxsize int) *PackHeader {
 	if packs == nil {
 		packs = make(PackInfoList, 0)
 	}
-	l := &PackIndex{
+	l := &PackHeader{
 		packs:   packs,
 		minpks:  make([]uint64, len(packs), cap(packs)),
 		maxpks:  make([]uint64, len(packs), cap(packs)),
@@ -57,7 +57,7 @@ func NewPackIndex(packs PackInfoList, pkidx, maxsize int) *PackIndex {
 	return l
 }
 
-func (l *PackIndex) Clear() {
+func (l *PackHeader) Clear() {
 	for _, v := range l.packs {
 		l.removed = append(l.removed, v.Key)
 	}
@@ -67,18 +67,18 @@ func (l *PackIndex) Clear() {
 	l.pos = l.pos[:0]
 }
 
-func (l PackIndex) NextKey() uint32 {
+func (l PackHeader) NextKey() uint32 {
 	if len(l.packs) == 0 {
 		return 0
 	}
 	return l.packs[len(l.packs)-1].Key + 1
 }
 
-func (l *PackIndex) Len() int {
+func (l *PackHeader) Len() int {
 	return len(l.packs)
 }
 
-func (l *PackIndex) Count() int {
+func (l *PackHeader) Count() int {
 	var count int
 	for i := range l.packs {
 		count += l.packs[i].NValues
@@ -86,8 +86,8 @@ func (l *PackIndex) Count() int {
 	return count
 }
 
-func (l *PackIndex) HeapSize() int {
-	sz := szPackIndex
+func (l *PackHeader) HeapSize() int {
+	sz := szPackHeader
 	sz += len(l.minpks) * 8
 	sz += len(l.maxpks) * 8
 	sz += len(l.removed) * 8
@@ -98,7 +98,7 @@ func (l *PackIndex) HeapSize() int {
 	return sz
 }
 
-func (l *PackIndex) TableSize() int {
+func (l *PackHeader) TableSize() int {
 	var sz int
 	for i := range l.packs {
 		sz += l.packs[i].Packsize
@@ -106,7 +106,7 @@ func (l *PackIndex) TableSize() int {
 	return sz
 }
 
-func (l *PackIndex) Sort() {
+func (l *PackHeader) Sort() {
 	// sort by min/max/pos -- see testcases
 	sort.Slice(l.pos, func(i, j int) bool {
 		posi, posj := l.pos[i], l.pos[j]
@@ -116,14 +116,14 @@ func (l *PackIndex) Sort() {
 	})
 }
 
-func (l *PackIndex) MinMax(n int) (uint64, uint64) {
+func (l *PackHeader) MinMax(n int) (uint64, uint64) {
 	if n >= l.Len() {
 		return 0, 0
 	}
 	return l.minpks[n], l.maxpks[n]
 }
 
-func (l *PackIndex) GlobalMinMax() (uint64, uint64) {
+func (l *PackHeader) GlobalMinMax() (uint64, uint64) {
 	if l.Len() == 0 {
 		return 0, 0
 	}
@@ -131,18 +131,18 @@ func (l *PackIndex) GlobalMinMax() (uint64, uint64) {
 	return l.minpks[pos], l.maxpks[pos]
 }
 
-func (l *PackIndex) MinMaxSlices() ([]uint64, []uint64) {
+func (l *PackHeader) MinMaxSlices() ([]uint64, []uint64) {
 	return l.minpks, l.maxpks
 }
 
-func (l *PackIndex) Get(i int) PackInfo {
+func (l *PackHeader) Get(i int) PackInfo {
 	if i < 0 || i >= l.Len() {
 		return PackInfo{}
 	}
 	return l.packs[i]
 }
 
-func (l *PackIndex) GetByKey(key uint32) PackInfo {
+func (l *PackHeader) GetByKey(key uint32) PackInfo {
 	if len(l.packs) == 0 {
 		return PackInfo{}
 	}
@@ -163,14 +163,14 @@ func (l *PackIndex) GetByKey(key uint32) PackInfo {
 	return l.packs[i]
 }
 
-func (l *PackIndex) GetSorted(i int) PackInfo {
+func (l *PackHeader) GetSorted(i int) PackInfo {
 	if i < 0 || i >= l.Len() {
 		return PackInfo{}
 	}
 	return l.packs[l.pos[i]]
 }
 
-func (l *PackIndex) IsFull(i int) bool {
+func (l *PackHeader) IsFull(i int) bool {
 	if i < 0 || i >= l.Len() {
 		return false
 	}
@@ -178,7 +178,7 @@ func (l *PackIndex) IsFull(i int) bool {
 }
 
 // called by storePack
-func (l *PackIndex) AddOrUpdate(head PackInfo) {
+func (l *PackHeader) AddOrUpdate(head PackInfo) {
 	head.dirty = true
 	l.removed = vec.Uint32.Remove(l.removed, head.Key)
 	old, pos, isAdd := l.packs.Add(head)
@@ -245,7 +245,7 @@ func (l *PackIndex) AddOrUpdate(head PackInfo) {
 }
 
 // called by storePack when packs are empty (Table only, index packs are never removed)
-func (l *PackIndex) Remove(key uint32) {
+func (l *PackHeader) Remove(key uint32) {
 	oldhead, pos := l.packs.RemoveKey(key)
 	if pos < 0 {
 		return
@@ -286,7 +286,7 @@ func (l *PackIndex) Remove(key uint32) {
 // Assumes pos list is sorted by min value and pack min/max ranges don't overlap
 // this is the case for all index and table packs because placement and split
 // algorithms ensure overlaps never exist.
-func (l *PackIndex) Best(val uint64) (pos int, packmin uint64, packmax uint64, nextmin uint64, isFull bool) {
+func (l *PackHeader) Best(val uint64) (pos int, packmin uint64, packmax uint64, nextmin uint64, isFull bool) {
 	count := l.Len()
 
 	// initially we stick to the first pack until split
@@ -317,7 +317,7 @@ func (l *PackIndex) Best(val uint64) (pos int, packmin uint64, packmax uint64, n
 }
 
 // Returns pack info for the logical follower pack (in min/max sort order).
-func (l *PackIndex) Next(last int) (pos int, packmin uint64, packmax uint64, nextmin uint64, isFull bool) {
+func (l *PackHeader) Next(last int) (pos int, packmin uint64, packmax uint64, nextmin uint64, isFull bool) {
 	next := last + 1
 	count := l.Len()
 	if next >= count {
