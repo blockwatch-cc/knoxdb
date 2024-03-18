@@ -162,6 +162,13 @@ func (q *Query) Compile() error {
 		}
 	}
 
+	// ensure all selected fields exist
+	for _, n := range q.Fields {
+		if !fields.Contains(n) {
+			return fmt.Errorf("pack: missing table field %s in table %s for query %s", n, q.table.Name(), q.Name)
+		}
+	}
+
 	// process conditions
 	if q.conds.Empty() {
 		q.conds = q.Conditions.Bind(fields)
