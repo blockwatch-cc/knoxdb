@@ -93,9 +93,9 @@ func (ra *Bitmap) ToBufferWithCopy() []byte {
 	if ra.IsEmpty() {
 		return nil
 	}
-	buf := make([]uint16, len(ra.data))
-	copy(buf, ra.data)
-	return toByteSlice(buf)
+	buf := make([]byte, len(ra.data)*2)
+	copy(buf, toByteSlice(ra.data))
+	return buf
 }
 
 func NewBitmap() *Bitmap {
@@ -390,16 +390,19 @@ func (ra *Bitmap) Set(x uint64) bool {
 		offset = ra.setKey(key, o)
 	}
 	c := ra.getContainer(offset)
+	if c[indexType] == typeArray {
+		p := array(c)
+		if p.isFull() {
+			ra.expandContainer(offset)
+			// offsets might have changed. Safer to re-run Set.
+			return ra.Set(x)
+		}
+	}
+
 	switch c[indexType] {
 	case typeArray:
 		p := array(c)
-		if added := p.add(uint16(x)); !added {
-			return false
-		}
-		if p.isFull() {
-			ra.expandContainer(offset)
-		}
-		return true
+		return p.add(uint16(x))
 	case typeBitmap:
 		b := bitmap(c)
 		return b.add(uint16(x))

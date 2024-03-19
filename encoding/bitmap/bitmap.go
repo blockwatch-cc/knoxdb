@@ -91,7 +91,7 @@ func (b Bitmap) Contains(x uint64) bool {
 }
 
 func (b Bitmap) Bytes() []byte {
-	return b.Bitmap.ToBuffer()
+	return b.Bitmap.ToBufferWithCopy()
 }
 
 func (b *Bitmap) CloneFromBytes(src []byte) {
@@ -108,7 +108,7 @@ func (b *Bitmap) CloneFrom(a Bitmap) {
 }
 
 func (b Bitmap) MarshalBinary() ([]byte, error) {
-	src := b.Bytes()
+	src := b.Bitmap.ToBuffer()
 	dst := make([]byte, 0, snappy.MaxEncodedLen(len(src)))
 	dst = snappy.Encode(dst, src)
 	return dst, nil
@@ -123,12 +123,12 @@ func (b *Bitmap) UnmarshalBinary(src []byte) error {
 	if err != nil {
 		return err
 	}
-	b.Bitmap = xroar.FromBufferWithCopy(dst)
+	b.Bitmap = xroar.FromBuffer(dst)
 	return nil
 }
 
 func (b Bitmap) MarshalText() ([]byte, error) {
-	src := b.Bytes()
+	src := b.Bitmap.ToBuffer()
 	dst := make([]byte, base64.StdEncoding.EncodedLen(len(src)))
 	base64.StdEncoding.Encode(dst, src)
 	return dst, nil
