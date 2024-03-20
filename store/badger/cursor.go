@@ -146,8 +146,8 @@ func (c *cursor) Seek(seek []byte) bool {
 
 	// Seek to the provided key in both the database and pending iterators
 	// then choose the iterator that is both valid and has the larger key.
-	seekKey := append(bucketizedKey(c.bucket.id, c.keyRange.Start), seek...)
-	c.currentIter.Seek(seekKey)
+	// seekKey := append(bucketizedKey(c.bucket.id, c.keyRange.Start), seek...)
+	c.currentIter.Seek(bucketizedKey(c.bucket.id, seek))
 	return c.currentIter.Valid()
 }
 

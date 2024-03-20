@@ -51,8 +51,8 @@ type Cursor interface {
 	Prev() bool
 
 	// Seek positions the cursor at the first key/value pair that is greater
-	// than or equal to the passed seek key.  Returns whether or not the
-	// pair exists.
+	// than or equal to the passed seek key.  Returns whether or not such key
+	// exists.
 	Seek(seek []byte) bool
 
 	// Key returns the current key the cursor is pointing to.
