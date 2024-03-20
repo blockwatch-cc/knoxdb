@@ -286,6 +286,10 @@ func (idx *PackIndex) Kind() IndexKind {
 	return idx.kind
 }
 
+func (idx *PackIndex) Field() *Field {
+	return idx.field
+}
+
 func (idx *PackIndex) Options() Options {
 	return idx.opts
 }

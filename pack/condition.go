@@ -9,6 +9,7 @@ package pack
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 
@@ -81,6 +82,51 @@ func (c Condition) MatchValue(val *Value) bool {
 		return c.Field.Type.Lte(v, c.Value)
 	default:
 		return false
+	}
+}
+
+const (
+	NoPk  uint64 = 0
+	MinPk uint64 = 1
+	MaxPk uint64 = math.MaxUint64
+)
+
+// Notes:
+// - 0 is an illegal PK, legal range is 1..uint64_max
+// - compiled conditions guarantee:
+//   - value type is uint64
+//   - from/to and IN/NIN slices are sorted
+func (c Condition) PkRange() (uint64, uint64) {
+	if !c.Field.IsPk() {
+		return MinPk, MaxPk
+	}
+	switch c.Mode {
+	case FilterModeEqual:
+		u := c.Value.(uint64)
+		return u, u
+	case FilterModeRange:
+		return c.From.(uint64), c.To.(uint64)
+	case FilterModeIn:
+		u := c.Value.([]uint64)
+		if len(u) == 0 {
+			return NoPk, NoPk
+		}
+		return u[0], u[len(u)-1]
+	case FilterModeGt:
+		u := c.Value.(uint64)
+		return u + 1, MaxPk
+	case FilterModeGte:
+		u := c.Value.(uint64)
+		return u, MaxPk
+	case FilterModeLt:
+		u := c.Value.(uint64)
+		return MinPk, u - 1
+	case FilterModeLte:
+		u := c.Value.(uint64)
+		return MinPk, u
+	default:
+		// FilterModeNotEqual, FilterModeNotIn, FilterModeRegexp, (other)
+		return MinPk, MaxPk
 	}
 }
 

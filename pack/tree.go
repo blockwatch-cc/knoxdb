@@ -494,3 +494,36 @@ func (n ConditionTreeNode) MatchValue(v *Value) bool {
 		return true
 	}
 }
+
+func (n ConditionTreeNode) PkRange() (uint64, uint64) {
+	// if root is empty and no leaf is defined, return full range
+	if n.Empty() {
+		return MinPk, MaxPk
+	}
+
+	// if root contains a single leaf only, use its range
+	if n.Leaf() {
+		return n.Cond.PkRange()
+	}
+
+	// process all children
+	if n.OrKind {
+		// smallest min / largest max of all children
+		minPk, maxPk := MaxPk, MinPk
+		for _, c := range n.Children {
+			cmin, cmax := c.PkRange()
+			minPk = min(minPk, cmin)
+			maxPk = max(maxPk, cmax)
+		}
+		return minPk, maxPk
+	} else {
+		// intersection of all cildren
+		minPk, maxPk := MinPk, MaxPk
+		for _, c := range n.Children {
+			cmin, cmax := c.PkRange()
+			minPk = max(minPk, cmin)
+			maxPk = min(maxPk, cmax)
+		}
+		return minPk, maxPk
+	}
+}

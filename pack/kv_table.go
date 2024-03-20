@@ -768,6 +768,7 @@ func (t *KeyValueTable) Query(ctx context.Context, q Query) (*Result, error) {
 
 	// cleanup on exit
 	defer func() {
+		q.stats.ScanTime = q.Tick()
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(q.stats.RowsMatched))
 		tx.Rollback()
 		q.Close()
@@ -877,12 +878,19 @@ func (t *KeyValueTable) Query(ctx context.Context, q Query) (*Result, error) {
 			}
 		}
 	default:
-		// TODO: construct prefix scan from unprocessed pk condition
 		// 3: partial index query & root = OR: walk full table and check each value
 		// 4: no index query: walk full table and check each value
 		c := data.Cursor(store.ForwardCursor)
+		defer c.Close()
 		val := NewValue(t.fields)
-		for ok := c.First(); ok; ok = c.Next() {
+
+		// construct prefix scan from unprocessed pk condition(s)
+		var first, last [8]byte
+		from, to := q.conds.PkRange()
+		bigEndian.PutUint64(first[:], from)
+		bigEndian.PutUint64(last[:], to)
+
+		for ok := c.Seek(first[:]); ok && bytes.Compare(c.Key(), last[:]) <= 0; ok = c.Next() {
 			buf := c.Value()
 
 			// check conditions
@@ -907,7 +915,6 @@ func (t *KeyValueTable) Query(ctx context.Context, q Query) (*Result, error) {
 			}
 		}
 	}
-	q.stats.ScanTime = q.Tick()
 
 	return res, nil
 }
@@ -1063,13 +1070,19 @@ func (t *KeyValueTable) Stream(ctx context.Context, q Query, fn func(Row) error)
 			}
 		}
 	default:
-		// TODO: construct prefix scan from unprocessed pk condition
 		// 3: partial index query & root = OR: walk full table and check each value
 		// 4: no index query: walk full table and check each value
 		c := data.Cursor(store.ForwardCursor)
 		defer c.Close()
 		val := NewValue(t.fields)
-		for ok := c.First(); ok; ok = c.Next() {
+
+		// construct prefix scan from unprocessed pk condition(s)
+		var first, last [8]byte
+		from, to := q.conds.PkRange()
+		bigEndian.PutUint64(first[:], from)
+		bigEndian.PutUint64(last[:], to)
+
+		for ok := c.Seek(first[:]); ok && bytes.Compare(c.Key(), last[:]) <= 0; ok = c.Next() {
 			buf := c.Value()
 
 			// check conditions

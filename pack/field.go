@@ -154,6 +154,10 @@ func (f Field) IsValid() bool {
 	return f.Index >= 0 && f.Type.IsValid()
 }
 
+func (f Field) IsPk() bool {
+	return f.Flags.Contains(FlagPrimary)
+}
+
 func (f Field) NewBlock(sz int) *block.Block {
 	return block.NewBlock(f.Type.BlockType(), f.Flags.Compression(), sz)
 }
@@ -1098,7 +1102,8 @@ func (t FieldType) SliceToString(val interface{}, f *Field) string {
 	return util.ToString(val)
 }
 
-// Used in BinaryCondition MatchPacksAt() for loop joins only
+// Used in BinaryCondition MatchPacksAt() for loop joins
+// Used in Condition.MatchValue for KV table matches
 func (t FieldType) Equal(xa, xb interface{}) bool {
 	switch t {
 	case FieldTypeBytes:
