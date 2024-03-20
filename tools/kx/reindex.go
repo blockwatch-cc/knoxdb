@@ -13,7 +13,7 @@ import (
 
 // reindex drops and re-creates all indexes defined for a given table.
 func reindex(ctx context.Context, data interface{}) error {
-	table := data.(*pack.Table)
+	table := data.(*pack.PackTable)
 
 	// make sure source table journals are flushed
 	log.Infof("Flushing source table %s", table.Name())
@@ -28,7 +28,7 @@ func reindex(ctx context.Context, data interface{}) error {
 
 	// rebuild indexes
 	for _, idx := range table.Indexes() {
-		log.Infof("Rebuilding %s index on field %s (%s)", idx.Name, idx.Field.Name, idx.Field.Type)
+		log.Infof("Rebuilding %s index on field %s (%s)", idx.Name(), idx.Field().Name, idx.Field().Type)
 		prog := make(chan float64, 100)
 		go func() {
 			for {

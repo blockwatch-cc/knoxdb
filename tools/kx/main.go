@@ -74,12 +74,12 @@ func run() error {
 	}
 }
 
-func openTable(args Args) (*pack.DB, *pack.Table, error) {
+func openTable(args Args) (*pack.DB, pack.Table, error) {
 	db, err := openDatabase(args)
 	if err != nil {
 		return nil, nil, err
 	}
-	table, err := db.Table(args.table)
+	table, err := db.OpenTable(pack.TableEnginePack, args.table, pack.NoOptions)
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening table '%s': %v", args.table, err)
 	}

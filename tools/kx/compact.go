@@ -5,20 +5,28 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"blockwatch.cc/knoxdb/pack"
 )
 
 // compact compacts a table and its indexes to remove pack fragmentation
-func compact(ctx context.Context, data interface{}) error {
-	table := data.(*pack.Table)
-	if err := table.Flush(ctx); err != nil {
-		return err
+func compact(ctx context.Context, data interface{}) (err error) {
+	switch t := data.(type) {
+	case *pack.PackTable:
+		err = t.Flush(ctx)
+		if err == nil {
+			err = t.Compact(ctx)
+		}
+	case *pack.KeyValueTable:
+		err = t.Sync(ctx)
+		if err == nil {
+			err = t.Compact(ctx)
+		}
+	default:
+		err = fmt.Errorf("compaction for %T tables not implemented", data)
 	}
-	if err := table.Compact(ctx); err != nil {
-		return err
-	}
-	return nil
+	return
 }
 
 // gc runs garbace collection on a bolt kv store by creating a new boltdb file
@@ -32,6 +40,6 @@ func gc(ctx context.Context, data interface{}) error {
 
 // flush flushes journal data to packs
 func flush(ctx context.Context, data interface{}) error {
-	table := data.(*pack.Table)
+	table := data.(*pack.PackTable)
 	return table.Flush(ctx)
 }
