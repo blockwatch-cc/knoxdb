@@ -12,6 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/vec"
 )
 
+// TODO: migrate to interface and implement PackResult + KeyValueResult
 type Result struct {
 	fields  FieldList
 	pkg     *Package
@@ -51,7 +52,7 @@ func (r *Result) Cols() int {
 func (r *Result) Rows() int {
 	switch {
 	case r.pkg != nil:
-		return r.pkg.nValues
+		return r.pkg.Len()
 	case r.offsets != nil:
 		return len(r.offsets)
 	default:
@@ -63,12 +64,26 @@ func (r *Result) Row(n int) Row {
 	return Row{r, n}
 }
 
+func (r *Result) Record(n int) []byte {
+	olen := len(r.offsets)
+	if r.values == nil || olen < n {
+		return nil
+	}
+	start, end := r.offsets[n], len(r.values)
+	if n < olen-1 {
+		end = r.offsets[n+1]
+	}
+	return r.values[start:end]
+}
+
+// TODO: extend to value type results
 func (r *Result) PkColumn() []uint64 {
 	return r.pkg.PkColumn()
 }
 
+// TODO: extend to value type results
 func (r *Result) Column(colname string) (interface{}, error) {
-	if r.pkg == nil {
+	if !r.IsValid() {
 		return nil, ErrResultClosed
 	}
 	i := r.pkg.FieldIndex(colname)
@@ -78,8 +93,9 @@ func (r *Result) Column(colname string) (interface{}, error) {
 	return r.pkg.Column(i)
 }
 
+// TODO: extend to value type results
 func (r *Result) SortByField(name string) error {
-	if r.pkg == nil {
+	if !r.IsValid() {
 		return ErrResultClosed
 	}
 	i := r.pkg.FieldIndex(name)
@@ -112,11 +128,7 @@ func (r *Result) DecodeAt(n int, val interface{}) error {
 	if r.pkg != nil {
 		return r.pkg.ReadAtWithInfo(n, val, r.tinfo)
 	}
-	start, end := r.offsets[n], len(r.values)
-	if n < len(r.offsets)-1 {
-		end = r.offsets[n+1]
-	}
-	return r.fields.DecodeWithInfo(r.values[start:end], val, r.tinfo)
+	return r.fields.DecodeWithInfo(r.Record(n), val, r.tinfo)
 }
 
 func (r *Result) buildTypeInfo(val interface{}) error {
@@ -153,7 +165,7 @@ func (r *Result) Decode(val interface{}) error {
 	if v.Kind() != reflect.Ptr {
 		return fmt.Errorf("pack: non-pointer passed to Decode")
 	}
-	if r.pkg == nil {
+	if !r.IsValid() {
 		return ErrResultClosed
 	}
 	v = reflect.Indirect(v)
@@ -180,11 +192,7 @@ func (r *Result) Decode(val interface{}) error {
 			if r.pkg != nil {
 				err = r.pkg.ReadAtWithInfo(i, ev.Interface(), r.tinfo)
 			} else {
-				start, end := r.offsets[i], len(r.values)
-				if i < len(r.offsets) {
-					end = r.offsets[i+1]
-				}
-				err = r.fields.DecodeWithInfo(r.values[start:end], ev.Interface(), r.tinfo)
+				err = r.fields.DecodeWithInfo(r.Record(i), ev.Interface(), r.tinfo)
 			}
 			if err != nil {
 				return err
@@ -201,7 +209,7 @@ func (r *Result) Decode(val interface{}) error {
 }
 
 func (r *Result) DecodeRange(start, end int, proto interface{}) (interface{}, error) {
-	if r.pkg == nil {
+	if !r.IsValid() {
 		return nil, ErrResultClosed
 	}
 	if r.tinfo == nil {
@@ -216,11 +224,7 @@ func (r *Result) DecodeRange(start, end int, proto interface{}) (interface{}, er
 		if r.pkg != nil {
 			err = r.pkg.ReadAtWithInfo(i, slice.Index(i-start).Interface(), r.tinfo)
 		} else {
-			start, end := r.offsets[i], len(r.values)
-			if i < len(r.offsets) {
-				end = r.offsets[i+1]
-			}
-			err = r.fields.DecodeWithInfo(r.values[start:end], slice.Index(i-start).Interface(), r.tinfo)
+			err = r.fields.DecodeWithInfo(r.Record(i), slice.Index(i-start).Interface(), r.tinfo)
 		}
 		if err != nil {
 			return nil, err
@@ -230,10 +234,10 @@ func (r *Result) DecodeRange(start, end int, proto interface{}) (interface{}, er
 }
 
 func (r *Result) Walk(fn func(r Row) error) error {
-	if r.pkg == nil {
+	if !r.IsValid() {
 		return ErrResultClosed
 	}
-	for i, l := 0, r.pkg.Len(); i < l; i++ {
+	for i, l := 0, r.Rows(); i < l; i++ {
 		if err := fn(Row{res: r, n: i}); err != nil {
 			return err
 		}
@@ -242,7 +246,7 @@ func (r *Result) Walk(fn func(r Row) error) error {
 }
 
 func (r *Result) ForEach(proto interface{}, fn func(i int, val interface{}) error) error {
-	if r.pkg == nil {
+	if !r.IsValid() {
 		return ErrResultClosed
 	}
 	if r.tinfo == nil {
@@ -259,11 +263,7 @@ func (r *Result) ForEach(proto interface{}, fn func(i int, val interface{}) erro
 		if r.pkg != nil {
 			err = r.pkg.ReadAtWithInfo(i, val.Interface(), r.tinfo)
 		} else {
-			start, end := r.offsets[i], len(r.values)
-			if i < len(r.offsets) {
-				end = r.offsets[i+1]
-			}
-			err = r.fields.DecodeWithInfo(r.values[start:end], val.Interface(), r.tinfo)
+			err = r.fields.DecodeWithInfo(r.Record(i), val.Interface(), r.tinfo)
 		}
 		if err != nil {
 			return err
@@ -294,16 +294,29 @@ func (r Row) N() int {
 }
 
 func (r Row) Field(name string) (interface{}, error) {
-	if r.res.pkg == nil {
+	if !r.res.IsValid() {
 		return nil, ErrResultClosed
 	}
-	i := r.res.pkg.FieldIndex(name)
-	if i < 0 {
-		return nil, ErrNoField
+	if r.res.pkg != nil {
+		i := r.res.pkg.FieldIndex(name)
+		if i < 0 {
+			return nil, ErrNoField
+		}
+		return r.res.pkg.FieldAt(i, r.n)
+	} else {
+		f := r.res.fields.Find(name)
+		if f.Index < 0 {
+			return nil, ErrNoField
+		}
+		val, ok := NewValue(r.res.fields).Reset(r.res.Record(r.n)).Get(f.Index)
+		if !ok {
+			return nil, ErrNoColumn
+		}
+		return val, nil
 	}
-	return r.res.pkg.FieldAt(i, r.n)
 }
 
+// TODO: extend to value type results
 func (r Row) Index(i int) (interface{}, error) {
 	if r.res.pkg == nil {
 		return nil, ErrResultClosed
