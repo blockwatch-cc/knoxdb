@@ -55,8 +55,11 @@ func (r *Request) Sanitize() error {
 
 func (r Request) MakeBucket(expr Expr, tinfo pack.FieldList) (Bucket, error) {
 	// handle special count(*) expression
-	if expr.Field == "count" || (expr.Reduce.String() == "count" && expr.Field == "*") {
-		return NewCountBucket(), nil
+	if expr.Field == "count" || (expr.Reduce == ReducerFuncCount && expr.Field == "*") {
+		return NewCountBucket().
+			WithDimensions(r.Range, r.Interval).
+			WithLimit(r.Limit).
+			WithFill(r.Fill), nil
 	}
 	f := tinfo.Find(expr.Field)
 	if f.Index < 0 {
@@ -86,6 +89,16 @@ type ExprList []Expr
 
 func (l ExprList) Cols() (cols util.StringList) {
 	for _, v := range l {
+		cols = append(cols, v.Field)
+	}
+	return
+}
+
+func (l ExprList) QueryFields() (cols util.StringList) {
+	for _, v := range l {
+		if v.Field == "count" || (v.Reduce == ReducerFuncCount && v.Field == "*") {
+			continue
+		}
 		cols = append(cols, v.Field)
 	}
 	return

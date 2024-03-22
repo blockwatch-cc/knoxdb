@@ -47,7 +47,7 @@ func (b *CountBucket) WithLimit(limit int) Bucket {
 	return b
 }
 
-func (b *CountBucket) WithReducer(fn ReducerFunc) Bucket {
+func (b *CountBucket) WithReducer(_ ReducerFunc) Bucket {
 	return b
 }
 
@@ -88,7 +88,7 @@ func (b *CountBucket) grow() *CountReducer[int] {
 	return r
 }
 
-func (b *CountBucket) Push(t time.Time, r pack.Row, join bool) error {
+func (b *CountBucket) Push(t time.Time, _ pack.Row, join bool) error {
 	target := len(b.reducers) - 1
 
 	switch {

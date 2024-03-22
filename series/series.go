@@ -80,7 +80,7 @@ func (r Request) Query(key string) (pack.Query, error) {
 		return pack.Query{}, fmt.Errorf("invalid time series request: %v", err)
 	}
 
-	cols := r.Select.Cols()
+	cols := r.Select.QueryFields()
 	if r.GroupBy != "" {
 		cols.AddUnique(r.GroupBy)
 	}
@@ -112,12 +112,12 @@ func (req Request) Run(ctx context.Context, table pack.Table, q pack.Query) (*Re
 
 	// create buckets from type info
 	for i, expr := range req.Select {
-		log.Tracef("NEW bucket fn=%s field=%s", expr.Reduce, expr.Field)
 		b, err := req.MakeBucket(expr, tinfo)
 		if err != nil {
 			return nil, err
 		}
 		res.buckets[""][i] = b
+		log.Tracef("NEW bucket fn=%s field=%s typ=%T", expr.Reduce, expr.Field, b)
 	}
 
 	// identify groupBy column
@@ -170,13 +170,13 @@ func (req Request) Run(ctx context.Context, table pack.Table, q pack.Query) (*Re
 				buckets = groupBuckets
 			} else {
 				// create new bucket group
-				log.Tracef("NEW bucket group for %s with %d buckets", groupName, len(req.Select))
 				buckets = make([]Bucket, len(req.Select))
 				for i, expr := range req.Select {
 					buckets[i], _ = req.MakeBucket(expr, tinfo)
 				}
 				res.buckets[groupName] = buckets
 				res.groups = append(res.groups, groupName)
+				log.Tracef("NEW bucket group for %s with %d buckets", groupName, len(req.Select))
 			}
 		}
 
