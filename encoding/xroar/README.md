@@ -13,6 +13,7 @@ outperforms RoaringBitmaps as shown in the Benchmarks section.
 
 [Dgraph]: https://github.com/dgraph-io/dgraph
 [Roaring]: https://github.com/RoaringBitmap/roaring
+[Docu]: https://dgraph.io/blog/post/serialized-roaring-bitmaps-golang/
 
 The code borrows concepts and code from [RoaringBitmaps][Roaring].
 
