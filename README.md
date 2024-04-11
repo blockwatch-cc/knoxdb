@@ -154,7 +154,7 @@ db, err := pack.CreateDatabaseIfNotExists(engine, path, name, label)
 
 // define table schema: we use Go struct tags here, but you can also define an
 // explicit field list; make sure column names are unique
-type Account {
+type Account struct {
     Id      uint64 `knox:"id,pk"`
     Address []byte `knox:"address,bloom=3"`
     Balance uint64 `knox:"balance"`
@@ -187,7 +187,7 @@ If we were to use a KV table instead, we would define a slightly different schem
 
 ```go
 // define a KV table schema
-type AccountKV {
+type AccountKV struct {
     Id      uint64 `knox:"id,pk"`
     Address []byte `knox:"address,index"`
     Balance uint64 `knox:"balance"`
