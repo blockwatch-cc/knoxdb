@@ -27,7 +27,7 @@ type Aggregatable interface {
 
 // Exported type templates for use in type maps
 var (
-	// ZAgg         = func(scale int) Aggregatable { return &ZAggregator{scale: scale} }
+	// BigIntAgg         = func(scale int) Aggregatable { return &BigIntAggregator{scale: scale} }
 	I128Agg      = func(scale int) Aggregatable { return &Int128Aggregator{scale: scale} }
 	I256Agg      = func(scale int) Aggregatable { return &Int256Aggregator{scale: scale} }
 	BitAgg       = func() Aggregatable { return &BitmapAggregator{} }
@@ -131,56 +131,56 @@ func (b *BitmapAggregator) SetFloat64(f64 float64) {
 	b.count = int(math.RoundToEven(f64))
 }
 
-// tezos.Z
-// type ZAggregator struct {
-// 	tezos.Z
+// BigInt
+// type BigIntAggregator struct {
+// 	BigInt
 // 	scale int
 // }
 
-// func (b *ZAggregator) Init(val Aggregatable) {
-// 	b.scale = val.(*ZAggregator).scale
+// func (b *BigIntAggregator) Init(val Aggregatable) {
+// 	b.scale = val.(*BigIntAggregator).scale
 // }
 
-// func (b *ZAggregator) UnmarshalBinary(src []byte) error {
-// 	return b.Z.UnmarshalBinary(src)
+// func (b *BigIntAggregator) UnmarshalBinary(src []byte) error {
+// 	return b.BigInt.UnmarshalBinary(src)
 // }
 
-// func (b ZAggregator) Emit(buf *bytes.Buffer) error {
-// 	_, err := buf.WriteString(strconv.Quote(b.Z.Decimals(b.scale)))
+// func (b BigIntAggregator) Emit(buf *bytes.Buffer) error {
+// 	_, err := buf.WriteString(strconv.Quote(b.BigInt.Decimals(b.scale)))
 // 	return err
 // }
 
-// func (b ZAggregator) Zero() Aggregatable {
-// 	return &ZAggregator{
+// func (b BigIntAggregator) Zero() Aggregatable {
+// 	return &BigIntAggregator{
 // 		scale: b.scale,
 // 	}
 // }
 
-// func (b *ZAggregator) Add(val Aggregatable) Aggregatable {
-// 	a, ok := val.(*ZAggregator)
+// func (b *BigIntAggregator) Add(val Aggregatable) Aggregatable {
+// 	a, ok := val.(*BigIntAggregator)
 // 	if !ok {
 // 		return b
 // 	}
-// 	return &ZAggregator{b.Z.Add(a.Z), b.scale}
+// 	return &BigIntAggregator{b.BigInt.Add(a.BigInt), b.scale}
 // }
 
-// func (b ZAggregator) Cmp(val Aggregatable) int {
-// 	a, ok := val.(*ZAggregator)
+// func (b BigIntAggregator) Cmp(val Aggregatable) int {
+// 	a, ok := val.(*BigIntAggregator)
 // 	if !ok {
 // 		return 0
 // 	}
-// 	return b.Z.Big().Cmp(a.Z.Big())
+// 	return b.BigInt.Big().Cmp(a.BigInt.Big())
 // }
 
-// func (b ZAggregator) Float64() float64 {
-// 	return b.Z.Float64(0)
+// func (b BigIntAggregator) Float64() float64 {
+// 	return b.BigInt.Float64(0)
 // }
 
-// func (b *ZAggregator) SetFloat64(f64 float64) {
+// func (b *BigIntAggregator) SetFloat64(f64 float64) {
 // 	f64 = math.RoundToEven(f64)
 // 	fs, _, _ := strings.Cut(strconv.FormatFloat(f64, 'f', -1, 64), ".")
-// 	z, _ := tezos.ParseZ(fs)
-// 	b.Z = z
+// 	bi, _ := ParseBigInt(fs)
+// 	b.BigInt = bi
 // }
 
 // Int128

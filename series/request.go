@@ -6,6 +6,7 @@ package series
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"blockwatch.cc/knoxdb/pack"
 	"blockwatch.cc/knoxdb/util"
@@ -26,16 +27,74 @@ type Request struct {
 	GroupBy  string    `form:"group_by"`
 	Table    string    `form:"table"`
 	TypeMap  TypeMap
+	table    pack.Table
 }
 
-func (r *Request) ApplyLimits(def, max int) {
+func NewRequest() *Request {
+	now := time.Now().UTC()
+	unit := TimeUnit{Value: 1, Unit: 'M'}
+	return &Request{
+		Select: make(ExprList, 0),
+		Range: TimeRange{
+			From: unit.Sub(now).UTC(),
+			To:   now,
+		},
+		Interval: unit,
+		Fill:     FillModeNone,
+		Limit:    100,
+		TypeMap:  make(TypeMap),
+	}
+}
+
+func (r *Request) WithTable(t pack.Table) *Request {
+	r.table = t
+	return r
+}
+
+func (r *Request) WithExpr(field string, fn ReducerFunc) *Request {
+	r.Select.AddUnique(field, fn)
+	return r
+}
+
+func (r *Request) WithRange(rng TimeRange) *Request {
+	r.Range = rng
+	return r
+}
+
+func (r *Request) WithInterval(u TimeUnit) *Request {
+	r.Interval = u
+	return r
+}
+
+func (r *Request) WithFill(m FillMode) *Request {
+	r.Fill = m
+	return r
+}
+
+func (r *Request) WithLimit(l int) *Request {
+	r.Limit = l
+	return r
+}
+
+func (r *Request) WithGroupBy(g string) *Request {
+	r.GroupBy = g
+	return r
+}
+
+func (r *Request) WithType(name string, agg Aggregatable) *Request {
+	r.TypeMap[name] = agg
+	return r
+}
+
+func (r *Request) ApplyLimits(def, max int) *Request {
 	if r.Limit == 0 {
 		r.Limit = def
 	}
 	r.Limit = min(r.Limit, max)
+	return r
 }
 
-func (r *Request) Sanitize() error {
+func (r *Request) Sanitize() *Request {
 	// add time column
 	r.Select.AddUniqueFront("time", ReducerFuncFirst)
 
@@ -50,7 +109,7 @@ func (r *Request) Sanitize() error {
 		r.Limit = num
 	}
 
-	return nil
+	return r
 }
 
 func (r Request) MakeBucket(expr Expr, tinfo pack.FieldList) (Bucket, error) {
@@ -102,6 +161,15 @@ func (l ExprList) QueryFields() (cols util.StringList) {
 		cols = append(cols, v.Field)
 	}
 	return
+}
+
+func (l *ExprList) AddUnique(name string, fn ReducerFunc) {
+	for _, v := range *l {
+		if v.Field == name {
+			return
+		}
+	}
+	*l = append(*l, Expr{name, fn})
 }
 
 func (l *ExprList) AddUniqueFront(name string, fn ReducerFunc) {

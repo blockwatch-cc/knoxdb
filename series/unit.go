@@ -14,6 +14,16 @@ const units string = "mhdwMqy"
 
 var titles = []string{"Minute", "Hour", "Day", "Week", "Month", "Quarter", "Year"}
 
+var (
+	TimeUnitMinute  = MustParseTimeUnit("m")
+	TimeUnitHour    = MustParseTimeUnit("h")
+	TimeUnitDay     = MustParseTimeUnit("d")
+	TimeUnitWeek    = MustParseTimeUnit("w")
+	TimeUnitMonth   = MustParseTimeUnit("M")
+	TimeUnitQuarter = MustParseTimeUnit("q")
+	TimeUnitYear    = MustParseTimeUnit("y")
+)
+
 type TimeUnit struct {
 	Value int
 	Unit  rune

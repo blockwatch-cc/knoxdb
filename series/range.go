@@ -35,6 +35,16 @@ type TimeRange struct {
 	IsRelative bool
 }
 
+func NewTimeRangeSince(u TimeUnit) TimeRange {
+	now := time.Now().UTC()
+	return TimeRange{
+		Key:        "since",
+		From:       u.Sub(now).UTC(),
+		To:         now,
+		IsRelative: true,
+	}
+}
+
 func (r TimeRange) String() string {
 	return fmt.Sprintf("%s,%s", r.From.Format(rangeLayout), r.To.Format(rangeLayout))
 }

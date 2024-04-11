@@ -26,6 +26,21 @@ type Result struct {
 	fill     FillMode
 }
 
+func (r Result) Groups() []string {
+	return r.groups
+}
+
+func (r Result) Columns() []string {
+	return r.cols
+}
+
+// TODO: allow programmatic access to time-series data
+// func GetResultTimes() []time.Time {
+// }
+
+// func GetResultVector[T any](group, column string) []T {
+// }
+
 // output series from all buckets
 //
 //	{"series": [{
@@ -74,11 +89,9 @@ func (r Result) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (r Request) Query(key string) (pack.Query, error) {
+func (r Request) Query(key string) pack.Query {
 	// round custom time ranges
-	if err := r.Sanitize(); err != nil {
-		return pack.Query{}, fmt.Errorf("invalid time series request: %v", err)
-	}
+	r.Sanitize()
 
 	cols := r.Select.QueryFields()
 	if r.GroupBy != "" {
@@ -87,14 +100,20 @@ func (r Request) Query(key string) (pack.Query, error) {
 
 	// build stream query
 	q := pack.NewQuery(key).
+		WithTable(r.table).
 		WithFields(cols...).
 		AndRange("time", r.Range.From, r.Range.To)
 
-	return q, nil
+	return q
 }
 
-func (req Request) Run(ctx context.Context, table pack.Table, q pack.Query) (*Result, error) {
+func (r Request) Run(ctx context.Context, key string) (*Result, error) {
+	return r.RunQuery(ctx, r.Query(key))
+}
+
+func (req Request) RunQuery(ctx context.Context, q pack.Query) (*Result, error) {
 	// load table type
+	table := q.Table()
 	tinfo := table.Fields()
 	timeIndex := tinfo.Find("time").Index
 
