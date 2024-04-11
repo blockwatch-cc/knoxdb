@@ -377,6 +377,10 @@ func mustParseFields(proto interface{}) FieldList {
 	return fields
 }
 
+func MakeSchema(proto any) (FieldList, error) {
+	return Fields(proto)
+}
+
 func Fields(proto interface{}) (FieldList, error) {
 	tinfo, err := getTypeInfo(proto)
 	if err != nil {

@@ -80,14 +80,6 @@ func NewQuery(name string) Query {
 	}
 }
 
-// func (t *Table) NewQuery(name string) Query {
-// 	return NewQuery(name).WithTable(t)
-// }
-
-// func (s *Store) NewQuery(name string) Query {
-// 	return NewQuery(name).WithStore(s)
-// }
-
 func (q *Query) Close() {
 	if q.table != nil {
 		q.stats.TotalTime = time.Since(q.start)
@@ -258,6 +250,11 @@ func (q *Query) QueryIndexes(ctx context.Context, tx *Tx) error {
 
 func (q Query) WithTable(table Table) Query {
 	q.table = table
+	return q
+}
+
+func (q Query) WithColumns(names ...string) Query {
+	q.Fields = append(q.Fields, names...)
 	return q
 }
 
