@@ -206,9 +206,12 @@ func (s *GenericStore) GetValue64(key uint64, val any) error {
 		if err != nil {
 			return err
 		}
+		// cache (copy of) result
+		if s.isZeroCopy {
+			b = bytes.Clone(b)
+		}
 		buf = NewBuffer(b)
 		buf.IncRef()
-		// cache result
 		s.cache.Add(key, buf)
 	}
 
@@ -286,12 +289,7 @@ func (s *GenericStore) Get(key []byte) ([]byte, error) {
 		if buf == nil {
 			return ErrKeyNotFound
 		}
-		if s.isZeroCopy {
-			ret = make([]byte, len(buf))
-			copy(ret, buf)
-		} else {
-			ret = buf
-		}
+		ret = buf
 		return nil
 	})
 	if err == nil {
