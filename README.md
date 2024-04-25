@@ -2,6 +2,8 @@
 
 Blockwatch KnoxDB is a columnar database for fast and efficient blockchain analytics. KnoxDB is stable and ready to use, but has a few limitations which will be addressed in future versions.
 
+>> KnoxDB is fully functional but still an early prototype. Interfaces and concepts may change in future versions.
+
 ## Concepts
 
 KnoxDB is an in-process hybrid transactional and analytics database for building blockchain indexes and derived datasets written in Go. It provides high-level APIs for working with relational data models, key-value data and time-series. Internal data structures and algorithms are designed for maximum speed, storage efficiency and flexibility.
