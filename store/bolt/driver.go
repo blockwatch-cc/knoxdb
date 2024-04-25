@@ -4,6 +4,7 @@
 package bolt
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 
@@ -111,15 +112,10 @@ func convertErr(desc string, boltErr error) store.Error {
 }
 
 // copySlice returns a copy of the passed slice.  This is mostly used to copy
-// badger iterator keys and values since they are only valid until the iterator
-// is moved instead of during the entirety of the transaction.
+// user data to internal structures. Cursor and Get calls return zero-copy data
+// which is inly valid during a transaction.
 func copySlice(slice []byte) []byte {
-	if slice == nil {
-		return nil
-	}
-	ret := make([]byte, len(slice))
-	copy(ret, slice)
-	return ret
+	return bytes.Clone(slice)
 }
 
 // parseArgs parses the arguments from the database Open/Create methods.

@@ -4,6 +4,7 @@
 package badger
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 
@@ -91,9 +92,7 @@ func convertErr(desc string, bdbErr error) store.Error {
 // badger iterator keys and values since they are only valid until the iterator
 // is moved instead of during the entirety of the transaction.
 func copySlice(slice []byte) []byte {
-	ret := make([]byte, len(slice))
-	copy(ret, slice)
-	return ret
+	return bytes.Clone(slice)
 }
 
 // parseArgs parses the arguments from the database Open/Create methods.

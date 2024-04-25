@@ -49,9 +49,9 @@ func (db *db) IsReadOnly() bool {
 }
 
 // IsZeroCopyRead returns true if keys and values on Get and from Cursors
-// are NOT safe to use without copy.
+// are only valid within the current transaction (or iterator step).
 func (db *db) IsZeroCopyRead() bool {
-	return false
+	return true
 }
 
 // Path returns the path where the current database is stored.

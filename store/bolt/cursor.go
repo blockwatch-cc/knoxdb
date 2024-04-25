@@ -87,14 +87,11 @@ func (c *cursor) First() bool {
 		return false
 	}
 
-	var k, v []byte
 	if c.keyRange != nil {
-		k, v = c.currentIter.Seek(c.keyRange.Start)
+		c.key, c.val = c.currentIter.Seek(c.keyRange.Start)
 	} else {
-		k, v = c.currentIter.First()
+		c.key, c.val = c.currentIter.First()
 	}
-	c.key = copySlice(k)
-	c.val = copySlice(v)
 	return c.key != nil
 }
 
@@ -112,16 +109,13 @@ func (c *cursor) Last() bool {
 		return false
 	}
 
-	var k, v []byte
 	if c.keyRange != nil {
 		_, _ = c.currentIter.Seek(c.keyRange.Limit)
-		k, v = c.currentIter.Prev()
+		c.key, c.val = c.currentIter.Prev()
 	} else {
-		k, v = c.currentIter.Last()
+		c.key, c.val = c.currentIter.Last()
 	}
 
-	c.key = copySlice(k)
-	c.val = copySlice(v)
 	return c.key != nil
 }
 
@@ -141,13 +135,11 @@ func (c *cursor) Next() bool {
 	}
 
 	// Move the current iterator to the next entry.
-	k, v := c.currentIter.Next()
-	if c.keyRange != nil && bytes.Compare(k, c.keyRange.Limit) <= 0 {
-		k, v = nil, nil
+	c.key, c.val = c.currentIter.Next()
+	if c.keyRange != nil && bytes.Compare(c.key, c.keyRange.Limit) <= 0 {
+		c.key, c.val = nil, nil
 	}
 
-	c.key = copySlice(k)
-	c.val = copySlice(v)
 	return c.key != nil
 }
 
@@ -166,13 +158,11 @@ func (c *cursor) Prev() bool {
 	}
 
 	// Move the current iterator to the next entry.
-	k, v := c.currentIter.Prev()
-	if c.keyRange != nil && bytes.Compare(k, c.keyRange.Start) < 0 {
-		k, v = nil, nil
+	c.key, c.val = c.currentIter.Prev()
+	if c.keyRange != nil && bytes.Compare(c.key, c.keyRange.Start) < 0 {
+		c.key, c.val = nil, nil
 	}
 
-	c.key = copySlice(k)
-	c.val = copySlice(v)
 	return c.key != nil
 }
 
@@ -190,9 +180,7 @@ func (c *cursor) Seek(seek []byte) bool {
 		seek = append(c.keyRange.Start, seek...)
 	}
 
-	k, v := c.currentIter.Seek(seek)
-	c.key = copySlice(k)
-	c.val = copySlice(v)
+	c.key, c.val = c.currentIter.Seek(seek)
 	return c.key != nil
 }
 
