@@ -616,9 +616,13 @@ func (b *Block) HeapSize() int {
 	case BlockUint8:
 		sz += len(b.Uint8)
 	case BlockBool:
-		sz += b.Bits.HeapSize()
+		if b.Bits != nil {
+			sz += b.Bits.HeapSize()
+		}
 	case BlockString, BlockBytes:
-		sz += b.Bytes.HeapSize()
+		if b.Bytes != nil {
+			sz += b.Bytes.HeapSize()
+		}
 	case BlockInt128:
 		sz += b.Int128.Len() * 16
 	case BlockInt256:
