@@ -16,6 +16,11 @@
 *.csr
 *.crt
 
+# database files
+*.db
+db/
+
 # OSX specific files
 .DS_Store
 playground/
+vendor/
