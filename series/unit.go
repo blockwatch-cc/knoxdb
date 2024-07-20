@@ -125,7 +125,7 @@ func (c TimeUnit) Duration() time.Duration {
 	return time.Duration(c.Value) * c.Base()
 }
 
-// Truncate truncates t to time unit ignoring its value, e.g.
+// Truncate truncates t to time unit, e.g.
 // - minutes: full minute
 // - hours: full hour
 // - days: midnight UTC
@@ -134,29 +134,34 @@ func (c TimeUnit) Duration() time.Duration {
 // - quarters: midnight UTC on first day of quarter
 // - years: midnight UTC on first day of year
 func (c TimeUnit) Truncate(t time.Time) time.Time {
+	if c.Value == 0 {
+		return t
+	}
 	switch c.Unit {
 	default:
 		// anything below a day is fine for go's time library
-		return t.Truncate(c.Base())
+		return t.Truncate(c.Duration())
 	case 'd':
-		// truncate to day start,
+		// truncate to day start
 		yy, mm, dd := t.Date()
-		return time.Date(yy, mm, dd, 0, 0, 0, 0, time.UTC)
+		// truncate again to multiple days
+		return time.Date(yy, mm, dd-((dd-1)%c.Value), 0, 0, 0, 0, time.UTC)
 	case 'w':
 		// truncate to midnight on first day of week (weekdays are zero-based)
+		_, ww := t.ISOWeek()
 		yy, mm, dd := t.AddDate(0, 0, -int(t.Weekday())).Date()
-		return time.Date(yy, mm, dd, 0, 0, 0, 0, time.UTC)
+		return time.Date(yy, mm, dd-(ww%c.Value)*7, 0, 0, 0, 0, time.UTC)
 
 	case 'M':
 		// truncate to midnight on first day of month
 		yy, mm, _ := t.Date()
-		return time.Date(yy, mm, 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(yy, mm-time.Month((int(mm)-1)%c.Value), 1, 0, 0, 0, 0, time.UTC)
 
 	case 'q':
 		// truncate to midnight on first day of quarter
 		yy, mm, _ := t.Date()
 		val := yy*12 + int(mm) - 1
-		val -= val % 3
+		val -= val % (3 * c.Value)
 		yy = val / 12
 		mm = time.Month(val%12 + 1)
 		return time.Date(yy, mm, 1, 0, 0, 0, 0, time.UTC)
@@ -164,7 +169,7 @@ func (c TimeUnit) Truncate(t time.Time) time.Time {
 	case 'y':
 		// truncate to midnight on first day of year
 		yy := t.Year()
-		return time.Date(yy, time.January, 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(yy-((yy)%c.Value), time.January, 1, 0, 0, 0, 0, time.UTC)
 	}
 }
 

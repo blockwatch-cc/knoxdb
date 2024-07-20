@@ -16,16 +16,18 @@ type unitTestCase struct {
 }
 
 var unitTestCases = []unitTestCase{
+	{"m", TimeUnit{1, 'm'}, time.Minute, 0},
 	{"h", TimeUnit{1, 'h'}, time.Hour, 0},
 	{"d", TimeUnit{1, 'd'}, 24 * time.Hour, 0},
 	{"w", TimeUnit{1, 'w'}, 7 * 24 * time.Hour, 0},
-	{"m", TimeUnit{1, 'm'}, 730 * time.Hour, time.Hour},
+	{"M", TimeUnit{1, 'M'}, 730 * time.Hour, time.Hour},
 	{"q", TimeUnit{1, 'q'}, 2190 * time.Hour, time.Hour},
 	{"y", TimeUnit{1, 'y'}, 365 * 24 * time.Hour, 0},
+	{"2m", TimeUnit{2, 'm'}, 2 * time.Minute, 0},
 	{"2h", TimeUnit{2, 'h'}, 2 * time.Hour, 0},
 	{"2d", TimeUnit{2, 'd'}, 2 * 24 * time.Hour, 0},
 	{"2w", TimeUnit{2, 'w'}, 2 * 7 * 24 * time.Hour, 0},
-	{"2m", TimeUnit{2, 'm'}, 2 * 730 * time.Hour, time.Hour},
+	{"2M", TimeUnit{2, 'M'}, 2 * 730 * time.Hour, time.Hour},
 	{"2q", TimeUnit{2, 'q'}, 2 * 2190 * time.Hour, time.Hour},
 	{"2y", TimeUnit{2, 'y'}, 2 * 365 * 24 * time.Hour, 0},
 }
@@ -85,6 +87,7 @@ var truncateTestCases = map[string][]inOutTestCase{
 	"24h": []inOutTestCase{
 		{tm("2022-12-01T00:00:00Z"), tm("2022-12-01T00:00:00Z")},
 		{tm("2022-12-01T00:01:01Z"), tm("2022-12-01T00:00:00Z")},
+		{tm("2022-12-01T01:01:01Z"), tm("2022-12-01T00:00:00Z")},
 	},
 	"d": []inOutTestCase{
 		{tm("2022-12-01T00:00:00Z"), tm("2022-12-01T00:00:00Z")},
@@ -109,12 +112,12 @@ var truncateTestCases = map[string][]inOutTestCase{
 		{tm("2022-12-01T00:01:01Z"), tm("2022-11-27T00:00:00Z")},
 		{tm("2022-12-04T00:01:01Z"), tm("2022-12-04T00:00:00Z")},
 	},
-	"m": []inOutTestCase{
+	"M": []inOutTestCase{
 		{tm("2022-01-01T00:00:00Z"), tm("2022-01-01T00:00:00Z")},
 		{tm("2022-12-01T00:01:01Z"), tm("2022-12-01T00:00:00Z")},
 		{tm("2022-12-15T00:01:01Z"), tm("2022-12-01T00:00:00Z")},
 	},
-	"2m": []inOutTestCase{
+	"2M": []inOutTestCase{
 		{tm("2022-01-01T00:00:00Z"), tm("2022-01-01T00:00:00Z")},
 		{tm("2022-11-01T00:01:01Z"), tm("2022-11-01T00:00:00Z")},
 		{tm("2022-10-15T00:01:01Z"), tm("2022-09-01T00:00:00Z")},
@@ -147,8 +150,8 @@ func TestTruncate(t *testing.T) {
 		}
 		for i, v := range cases {
 			if got, want := u.Truncate(v.in), v.out; !got.Equal(want) {
-				t.Errorf("%d truncate %s[%s] got=%s want=%s",
-					i, v.in.Format(tf), n, got.Format(tf), want.Format(tf),
+				t.Errorf("%s.%d truncate %s[%s] got=%s want=%s",
+					n, i, v.in.Format(tf), n, got.Format(tf), want.Format(tf),
 				)
 			}
 		}
@@ -196,12 +199,12 @@ var nextTestCases = map[string][]inOutTestCase{
 		{tm("2022-12-01T00:01:01Z"), tm("2022-12-11T00:00:00Z")},
 		{tm("2022-12-04T00:01:01Z"), tm("2022-12-18T00:00:00Z")},
 	},
-	"m": []inOutTestCase{
+	"M": []inOutTestCase{
 		{tm("2022-01-01T00:00:00Z"), tm("2022-02-01T00:00:00Z")},
 		{tm("2022-12-01T00:01:01Z"), tm("2023-01-01T00:00:00Z")},
 		{tm("2022-12-15T00:01:01Z"), tm("2023-01-01T00:00:00Z")},
 	},
-	"2m": []inOutTestCase{
+	"2M": []inOutTestCase{
 		{tm("2022-01-01T00:00:00Z"), tm("2022-03-01T00:00:00Z")},
 		{tm("2022-11-01T00:01:01Z"), tm("2023-01-01T00:00:00Z")},
 		{tm("2022-10-15T00:01:01Z"), tm("2022-11-01T00:00:00Z")},
@@ -232,8 +235,8 @@ func TestNext(t *testing.T) {
 		}
 		for i, v := range cases {
 			if got, want := u.Next(v.in, 1), v.out; !got.Equal(want) {
-				t.Errorf("%d next %s[%s] got=%s want=%s",
-					i, v.in.Format(tf), n, got.Format(tf), want.Format(tf),
+				t.Errorf("%s.%d next %s[%s] got=%s want=%s",
+					n, i, v.in.Format(tf), n, got.Format(tf), want.Format(tf),
 				)
 			}
 		}
