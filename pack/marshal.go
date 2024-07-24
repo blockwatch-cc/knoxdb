@@ -94,6 +94,7 @@ func (p *Package) UnmarshalBinary(data []byte) error {
 		p.blocks = make([]*block.Block, p.nFields)
 		for i := range p.blocks {
 			p.blocks[i] = block.AllocBlock()
+			p.blocks[i].IncRef()
 		}
 	} else {
 		for i, b := range p.blocks[p.nFields:] {

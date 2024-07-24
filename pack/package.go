@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package pack
@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"blockwatch.cc/knoxdb/assert"
 	"blockwatch.cc/knoxdb/encoding/block"
 	. "blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/util"
@@ -36,26 +37,19 @@ type Package struct {
 }
 
 func (p *Package) IncRef() int64 {
+	assert.Always(p != nil, "nil package, potential use after free", nil)
+	assert.Always(atomic.LoadInt64(&p.refCount) >= 0, "package refcount < 0", nil)
 	return atomic.AddInt64(&p.refCount, 1)
 }
 
 func (p *Package) DecRef() int64 {
+	assert.Always(p != nil, "nil package, potential use after free", nil)
+	assert.Always(atomic.LoadInt64(&p.refCount) > 0, "package refcount <= 0", nil)
 	val := atomic.AddInt64(&p.refCount, -1)
 	if val == 0 {
-		p.recycle()
+		p.Release()
 	}
 	return val
-}
-
-func (p *Package) recycle() {
-	// don't recycle stripped or oversized packs
-	c := p.Cap()
-	if p.pool == nil || c <= 0 || c > p.capHint {
-		p.Release()
-		return
-	}
-	p.Clear()
-	p.pool.Put(p)
 }
 
 func (p *Package) Key() []byte {
@@ -120,10 +114,11 @@ func encodeBlockKey(packkey uint32, col int) uint64 {
 
 func NewPackage(sz int, pool *sync.Pool) *Package {
 	return &Package{
-		pkindex: -1,
-		capHint: sz,
-		dirty:   true,
-		pool:    pool,
+		refCount: 1,
+		pkindex:  -1,
+		capHint:  sz,
+		dirty:    true,
+		pool:     pool,
 	}
 }
 
@@ -396,17 +391,17 @@ func (p *Package) InitResultFields(fields FieldList, tinfo *typeInfo) error {
 }
 
 func (p *Package) Clone(capacity int) (*Package, error) {
-	// cloned pack has no identity yet
-	// cloning a stripped pack is allowed
 	clone := NewPackage(capacity, p.pool)
 	if err := clone.InitFieldsEmpty(p.fields, p.tinfo); err != nil {
 		return nil, err
 	}
 
+	// cloned pack inherits src pack identity
 	clone.key = p.key
 	clone.nValues = p.nValues
 	clone.size = p.size
 
+	// cloning a stripped pack is allowed
 	for i, src := range p.blocks {
 		if src == nil {
 			continue
@@ -417,10 +412,9 @@ func (p *Package) Clone(capacity int) (*Package, error) {
 	return clone, nil
 }
 
-func (dst *Package) MergeCols(src *Package) error {
-	if src == nil {
-		return nil
-	}
+func (dst *Package) Merge(src *Package) error {
+	assert.Always(src != nil, "nil source package", nil)
+
 	if dst.nValues != src.nValues {
 		return fmt.Errorf("pack: size mismatch on merge: src[%x]=%d dst[%x]=%d",
 			src.key, src.nValues, dst.key, dst.nValues)
@@ -513,12 +507,21 @@ func (p *Package) Push(v interface{}) error {
 		return err
 	}
 	val := reflect.Indirect(reflect.ValueOf(v))
+	// assert.Always(val.IsValid(), "pack: invalid value type on push", map[string]any{
+	// 	"val": v,
+	// 	"typ": reflect.TypeOf(v).Name(),
+	// })
 	if !val.IsValid() {
 		return fmt.Errorf("pack: pushed invalid value of type %T", v)
 	}
-	if !p.CanGrow(1) {
-		panic(fmt.Errorf("pack: overflow on push into pack 0x%x with %d/%d rows", p.key, p.nValues, p.capHint))
-	}
+	assert.Always(p.CanGrow(1), "pack: overflow on push", map[string]any{
+		"pack": p.key,
+		"len":  p.nValues,
+		"cap":  p.capHint,
+	})
+	// if !p.CanGrow(1) {
+	// 	panic(fmt.Errorf("pack: overflow on push into pack 0x%x with %d/%d rows", p.key, p.nValues, p.capHint))
+	// }
 
 	for _, fi := range p.tinfo.fields {
 		if fi.blockid < 0 {
@@ -1766,10 +1769,18 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 	if srcPack.nValues <= srcPos+srcLen-1 {
 		return fmt.Errorf("pack: invalid source pack offset %d len %d (max %d)", srcPos, srcLen, srcPack.nValues)
 	}
-	if !p.CanGrow(srcLen) {
-		panic(fmt.Errorf("pack: overflow on append %d rows into pack 0x%x with %d/%d rows (first block %d/%d)",
-			srcLen, p.key, p.nValues, p.capHint, p.blocks[0].Len(), p.blocks[0].Cap()))
-	}
+	assert.Always(p.CanGrow(srcLen), "pack: overflow on append", map[string]any{
+		"rows":     srcLen,
+		"pack":     p.key,
+		"len":      p.nValues,
+		"cap":      p.capHint,
+		"blockLen": p.blocks[0].Len(),
+		"blockCap": p.blocks[0].Cap(),
+	})
+	// if !p.CanGrow(srcLen) {
+	// 	panic(fmt.Errorf("pack: overflow on append %d rows into pack 0x%x with %d/%d rows (first block %d/%d)",
+	// 		srcLen, p.key, p.nValues, p.capHint, p.blocks[0].Len(), p.blocks[0].Cap()))
+	// }
 	for i, dst := range p.blocks {
 		src := srcPack.blocks[i]
 		if dst.IsIgnore() || src.IsIgnore() {
@@ -1778,7 +1789,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 		srcField := srcPack.fields[i]
 		dstField := p.fields[i]
 		if srcField.Index != dstField.Index || srcField.Type != dstField.Type {
-			return fmt.Errorf("pack: replace from: field mismatch %d (%s) != %d (%s)",
+			return fmt.Errorf("pack: append from: field mismatch %d (%s) != %d (%s)",
 				srcField.Index, srcField.Type, dstField.Index, dstField.Type)
 		}
 
@@ -1870,6 +1881,7 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 			}
 
 		default:
+			// assert.Unreachable("pack: invalid data type", map[string]any{"typ": dstField.Type})
 			return fmt.Errorf("pack: invalid data type %s", dstField.Type)
 		}
 		dst.SetDirty()
@@ -1889,9 +1901,18 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 	if srcPack.nValues <= srcPos+srcLen-1 {
 		return fmt.Errorf("pack: invalid source pack offset %d len %d (max %d)", srcPos, srcLen, srcPack.nValues)
 	}
-	if !p.CanGrow(srcLen) {
-		panic(fmt.Errorf("pack: overflow on insert %d rows into pack 0x%x with %d/%d rows", srcLen, p.key, p.nValues, p.capHint))
-	}
+	assert.Always(p.CanGrow(srcLen), "pack: overflow on insert", map[string]any{
+		"rows":     srcLen,
+		"pack":     p.key,
+		"len":      p.nValues,
+		"cap":      p.capHint,
+		"blockLen": p.blocks[0].Len(),
+		"blockCap": p.blocks[0].Cap(),
+	})
+	// if !p.CanGrow(srcLen) {
+	// 	panic(fmt.Errorf("pack: overflow on insert %d rows into pack 0x%x with %d/%d rows",
+	// 		srcLen, p.key, p.nValues, p.capHint))
+	// }
 	n := min(srcPack.Len()-srcPos, srcLen)
 	for i, dst := range p.blocks {
 		src := srcPack.blocks[i]
@@ -2011,9 +2032,17 @@ func (p *Package) Grow(n int) error {
 	if n <= 0 {
 		return fmt.Errorf("pack: grow requires positive value")
 	}
-	if !p.CanGrow(n) {
-		panic(fmt.Errorf("pack: overflow on grow %d rows in pack 0x%x with %d/%d rows", n, p.key, p.nValues, p.capHint))
-	}
+	assert.Always(p.CanGrow(n), "pack: overflow on grow", map[string]any{
+		"rows":     n,
+		"pack":     p.key,
+		"len":      p.nValues,
+		"cap":      p.capHint,
+		"blockLen": p.blocks[0].Len(),
+		"blockCap": p.blocks[0].Cap(),
+	})
+	// if !p.CanGrow(n) {
+	// 	panic(fmt.Errorf("pack: overflow on grow %d rows in pack 0x%x with %d/%d rows", n, p.key, p.nValues, p.capHint))
+	// }
 	for i, b := range p.blocks {
 		if b.IsIgnore() {
 			continue
@@ -2140,6 +2169,8 @@ func (p *Package) Delete(pos, n int) error {
 	return nil
 }
 
+// Clear resets pack size to zero. Pack identity and type info is preserved.
+// Non-nil blocks remain allocated.
 func (p *Package) Clear() {
 	for _, v := range p.blocks {
 		if v == nil {
@@ -2147,14 +2178,17 @@ func (p *Package) Clear() {
 		}
 		v.Clear()
 	}
-	// Note: we keep all type-related data and blocks, pool reference
-	// also keep pack key to avoid clearing journal/tombstone identity
 	p.nValues = 0
 	p.dirty = true
 	p.size = 0
 }
 
 func (p *Package) Release() {
+	assert.Always(p != nil, "nil package release, potential use after free", nil)
+	assert.Always(p.refCount <= 1, "shared package release, check alloc/release", map[string]any{"ref": p.refCount})
+	// if p == nil {
+	// 	return
+	// }
 	for i, v := range p.blocks {
 		if v == nil {
 			continue
@@ -2176,6 +2210,9 @@ func (p *Package) HeapSize() int {
 	var sz int = szPackage
 	sz += 8 * len(p.blocks)
 	for _, v := range p.blocks {
+		if v == nil {
+			continue
+		}
 		sz += v.HeapSize()
 	}
 	return sz

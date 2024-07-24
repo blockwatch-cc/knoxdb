@@ -120,6 +120,13 @@ func (j *Journal) Close() {
 		j.wal.Close()
 		j.wal = nil
 	}
+	j.data.Release()
+	j.data = nil
+	j.tomb = nil
+	j.keys = nil
+	j.deleted = nil
+	j.lastid = 0
+	j.maxid = 0
 }
 
 func (j *Journal) LoadLegacy(tx *Tx, bucketName []byte) error {

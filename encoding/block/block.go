@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"blockwatch.cc/knoxdb/assert"
 	"blockwatch.cc/knoxdb/encoding/compress"
 	"blockwatch.cc/knoxdb/encoding/dedup"
 	"blockwatch.cc/knoxdb/hash/xxhash"
@@ -167,10 +168,14 @@ type Block struct {
 }
 
 func (b *Block) IncRef() int64 {
+	assert.Always(b != nil, "nil block, potential use after free", nil)
+	assert.Always(atomic.LoadInt64(&b.refCount) >= 0, "block refcount < 0", nil)
 	return atomic.AddInt64(&b.refCount, 1)
 }
 
 func (b *Block) DecRef() int64 {
+	assert.Always(b != nil, "nil block, potential use after free", nil)
+	assert.Always(atomic.LoadInt64(&b.refCount) > 0, "block refcount <= 0", nil)
 	val := atomic.AddInt64(&b.refCount, -1)
 	if val == 0 {
 		b.Release()
@@ -370,7 +375,7 @@ func AllocBlock() *Block {
 }
 
 func NewBlock(typ BlockType, comp Compression, sz int) *Block {
-	b := BlockPool.Get().(*Block)
+	b := AllocBlock()
 	b.typ = typ
 	b.comp = comp
 	b.dirty = true
@@ -616,13 +621,11 @@ func (b *Block) HeapSize() int {
 	case BlockUint8:
 		sz += len(b.Uint8)
 	case BlockBool:
-		if b.Bits != nil {
-			sz += b.Bits.HeapSize()
-		}
+		assert.Always(b.Bits != nil, "nil bitset, potential use after free", nil)
+		sz += b.Bits.HeapSize()
 	case BlockString, BlockBytes:
-		if b.Bytes != nil {
-			sz += b.Bytes.HeapSize()
-		}
+		assert.Always(b.Bytes != nil, "nil ByteArray, potential use after free", nil)
+		sz += b.Bytes.HeapSize()
 	case BlockInt128:
 		sz += b.Int128.Len() * 16
 	case BlockInt256:
@@ -676,9 +679,10 @@ func (b *Block) Clear() {
 }
 
 func (b *Block) Release() {
-	if b == nil {
-		return
-	}
+	assert.Always(b != nil, "nil block release, potential use after free", nil)
+	// if b == nil {
+	// 	return
+	// }
 	b.dirty = false
 	b.size = 0
 	b.refCount = 0

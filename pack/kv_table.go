@@ -294,6 +294,10 @@ func (t *KeyValueTable) Compact(_ context.Context) error {
 	return nil
 }
 
+func (t *KeyValueTable) Sequence() uint64 {
+	return t.meta.Sequence
+}
+
 func (t *KeyValueTable) NextSequence() uint64 {
 	// todo: maybe use bucket sequence for better crash safety
 	t.meta.Sequence++

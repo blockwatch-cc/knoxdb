@@ -30,7 +30,7 @@ func NewForwardIterator(q *Query) *ForwardIterator {
 func (it *ForwardIterator) Next(tx *Tx) (*Package, []uint32, error) {
 	// release last pack
 	if it.pack != nil {
-		it.table.releaseSharedPack(it.pack)
+		it.pack.Release()
 		it.pack = nil
 	}
 
@@ -72,7 +72,7 @@ func (it *ForwardIterator) Next(tx *Tx) (*Package, []uint32, error) {
 		// handle false positive metadata matches
 		if bits.Count() == 0 {
 			bits.Close()
-			it.table.releaseSharedPack(it.pack)
+			it.pack.Release()
 			it.pack = nil
 			continue
 		}
@@ -90,7 +90,7 @@ func (it *ForwardIterator) Next(tx *Tx) (*Package, []uint32, error) {
 
 func (it *ForwardIterator) Close() {
 	if it.pack != nil {
-		it.table.releaseSharedPack(it.pack)
+		it.pack.Release()
 	}
 	it.table.u32Pool.Put(it.hits[:0])
 	it.pack = nil
@@ -121,7 +121,7 @@ func NewReverseIterator(q *Query) *ReverseIterator {
 func (it *ReverseIterator) Next(tx *Tx) (*Package, []uint32, error) {
 	// release last pack
 	if it.pack != nil {
-		it.table.releaseSharedPack(it.pack)
+		it.pack.Release()
 		it.pack = nil
 	}
 
@@ -163,7 +163,7 @@ func (it *ReverseIterator) Next(tx *Tx) (*Package, []uint32, error) {
 		// handle false positive metadata matches
 		if bits.Count() == 0 {
 			bits.Close()
-			it.table.releaseSharedPack(it.pack)
+			it.pack.Release()
 			it.pack = nil
 			continue
 		}
@@ -181,7 +181,7 @@ func (it *ReverseIterator) Next(tx *Tx) (*Package, []uint32, error) {
 
 func (it *ReverseIterator) Close() {
 	if it.pack != nil {
-		it.table.releaseSharedPack(it.pack)
+		it.pack.Release()
 	}
 	it.table.u32Pool.Put(it.hits[:0])
 	it.pack = nil
@@ -217,7 +217,7 @@ func NewLookupIterator(q *Query, pks []uint64) *LookupIterator {
 func (it *LookupIterator) Next(tx *Tx) (*Package, uint64, error) {
 	// release last pack
 	if it.pack != nil {
-		it.table.releaseSharedPack(it.pack)
+		it.pack.Release()
 		it.pack = nil
 	}
 
@@ -272,7 +272,7 @@ func (it *LookupIterator) Next(tx *Tx) (*Package, uint64, error) {
 
 func (it *LookupIterator) Close() {
 	if it.pack != nil {
-		it.table.releaseSharedPack(it.pack)
+		it.pack.Release()
 	}
 	it.pks = nil
 	it.minPks = nil

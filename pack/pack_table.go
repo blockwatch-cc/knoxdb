@@ -18,7 +18,6 @@
 
 // TODO Performance and Safety
 // - WAL for durable journal insert/update/delete
-// - concurrent reads
 // - concurrent/background pack compaction/storage
 // - concurrent index build
 
@@ -41,6 +40,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"blockwatch.cc/knoxdb/assert"
 	"blockwatch.cc/knoxdb/cache/rclru"
 	"blockwatch.cc/knoxdb/encoding/block"
 	"blockwatch.cc/knoxdb/util"
@@ -583,6 +583,10 @@ func (t *PackTable) PurgeCache() {
 	}
 }
 
+func (t *PackTable) Sequence() uint64 {
+	return t.meta.Sequence
+}
+
 func (t *PackTable) NextSequence() uint64 {
 	t.meta.Sequence++
 	t.meta.dirty = true
@@ -632,7 +636,10 @@ func (t *PackTable) InsertTx(ctx context.Context, tx *Tx, val any) error {
 
 func (t *PackTable) insertJournal(val any) error {
 	if t.db.IsReadOnly() {
-		return ErrReadOnlyDatabase
+		return ErrDatabaseReadOnly
+	}
+	if t.IsClosed() {
+		return ErrDatabaseClosed
 	}
 	atomic.AddInt64(&t.stats.InsertCalls, 1)
 
@@ -725,7 +732,10 @@ func (t *PackTable) appendPackIntoJournal(ctx context.Context, pkg *Package, pos
 		return nil
 	}
 	if t.db.IsReadOnly() {
-		return ErrReadOnlyDatabase
+		return ErrDatabaseReadOnly
+	}
+	if t.IsClosed() {
+		return ErrDatabaseClosed
 	}
 
 	atomic.AddInt64(&t.stats.InsertCalls, 1)
@@ -788,7 +798,10 @@ func (t *PackTable) UpdateTx(ctx context.Context, tx *Tx, val any) error {
 
 func (t *PackTable) updateJournal(val any) error {
 	if t.db.IsReadOnly() {
-		return ErrReadOnlyDatabase
+		return ErrDatabaseReadOnly
+	}
+	if t.IsClosed() {
+		return ErrDatabaseClosed
 	}
 	atomic.AddInt64(&t.stats.UpdateCalls, 1)
 
@@ -892,7 +905,10 @@ func (t *PackTable) DeletePksTx(ctx context.Context, tx *Tx, val []uint64) (int6
 
 func (t *PackTable) deleteJournal(ids []uint64) error {
 	if t.db.IsReadOnly() {
-		return ErrReadOnlyDatabase
+		return ErrDatabaseReadOnly
+	}
+	if t.IsClosed() {
+		return ErrDatabaseClosed
 	}
 
 	atomic.AddInt64(&t.stats.DeleteCalls, 1)
@@ -1518,12 +1534,12 @@ func (t *PackTable) flushTx(ctx context.Context, tx *Tx) error {
 		}
 	}
 
-	// adjust row count if non-existing ids were inserted into tombstone
-	if tlen > nDel {
-		t.meta.Rows += int64(tlen - nDel)
-		t.meta.dirty = true
-		atomic.StoreInt64(&t.stats.TupleCount, t.meta.Rows)
-	}
+	// fix row count which may be wrong when
+	// - non-existing pks were deleted
+	// - updates are actually inserts
+	t.meta.Rows = int64(t.packidx.Count())
+	t.meta.dirty = true
+	atomic.StoreInt64(&t.stats.TupleCount, t.meta.Rows)
 
 	// store table metadata
 	if t.meta.dirty {
@@ -2604,7 +2620,6 @@ packloop:
 	for {
 		// check context
 		if err := ctx.Err(); err != nil {
-			res.Close()
 			return err
 		}
 
@@ -3021,7 +3036,6 @@ func (t *PackTable) Compact(ctx context.Context) error {
 			written += int64(maxsz)
 
 			// will load or create another output pack in next iteration
-			// dstPack.DecRef()
 			dstPack.Release()
 			dstPack = nil
 		}
@@ -3036,7 +3050,6 @@ func (t *PackTable) Compact(ctx context.Context) error {
 		}
 
 		// load new src in next iteration (or stop there)
-		// srcPack.DecRef()
 		srcPack.Release()
 		srcPack = nil
 
@@ -3063,7 +3076,6 @@ func (t *PackTable) Compact(ctx context.Context) error {
 		}
 		dstSize += int64(n)
 		written += int64(dstPack.Len())
-		// dstPack.DecRef()
 		dstPack.Release()
 	}
 
@@ -3131,7 +3143,8 @@ func (t *PackTable) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldLi
 	pkg2 := t.newPackage().PopulateFields(loadField)
 	pkg2, err = loadPackTx(tx, t.key, key, pkg2, t.opts.PackSize())
 	if err != nil {
-		t.releaseSharedPack(pkg)
+		pkg2.Release()
+		pkg.Release()
 		return nil, err
 	}
 
@@ -3148,9 +3161,15 @@ func (t *PackTable) loadSharedPack(tx *Tx, id uint32, touch bool, fields FieldLi
 		}
 	}
 
-	err = pkg.MergeCols(pkg2)
+	// merge blocks into target pack
+	err = pkg.Merge(pkg2)
 	pkg2.Release()
-	return pkg, err
+	if err != nil {
+		pkg.Release()
+		return nil, err
+	}
+
+	return pkg, nil
 }
 
 // loads a private copy of a pack for writing
@@ -3176,7 +3195,7 @@ func (t *PackTable) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 	}
 
 	clone, err := pkg.Clone(t.opts.PackSize())
-	t.releaseSharedPack(pkg)
+	pkg.Release()
 	pkg = nil
 
 	if err != nil {
@@ -3200,12 +3219,12 @@ func (t *PackTable) loadWritablePack(tx *Tx, id uint32) (*Package, error) {
 		return nil, err
 	}
 
-	if err = clone.MergeCols(pkg2); err != nil {
-		pkg2.Release()
+	err = clone.Merge(pkg2)
+	pkg2.Release()
+	if err != nil {
 		clone.Release()
 		return nil, err
 	}
-	pkg2.Release()
 
 	// prepare for efficient writes
 	clone.Materialize()
@@ -3323,71 +3342,16 @@ func (t *PackTable) makePackage() interface{} {
 }
 
 func (t *PackTable) newPackage() *Package {
-	return t.packPool.Get().(*Package).WithCap(t.opts.PackSize())
+	pkg := t.packPool.Get().(*Package)
+	assert.Always(pkg.key == 0, "pack: illegal package reuse", map[string]any{
+		"ref":   pkg.refCount,
+		"key":   pkg.key,
+		"len":   pkg.nValues,
+		"cap":   pkg.capHint,
+		"dirty": pkg.dirty,
+	})
+	return pkg.WithCap(t.opts.PackSize())
 }
-
-func (t *PackTable) releaseSharedPack(pkg *Package) {
-	if pkg == nil {
-		return
-	}
-	for i, v := range pkg.blocks {
-		if v == nil {
-			continue
-		}
-		pkg.blocks[i] = nil
-		if v.DecRef() == 0 {
-			// do stats here
-		}
-	}
-	pkg.nValues = 0
-	pkg.pool.Put(pkg)
-}
-
-// func (db *DB) storePack(name, key []byte, p *Package, fill int) (int, error) {
-// 	tx, err := db.Tx(true)
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	n, err := tx.storePack(name, key, p, fill)
-// 	if err != nil {
-// 		tx.Rollback()
-// 		return 0, err
-// 	}
-// 	tx.Commit()
-// 	return n, nil
-// }
-
-// func (db *DB) loadPack(name, key []byte, unpack *Package, sz int) (*Package, error) {
-// 	tx, err := db.Tx(false)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	pkg, err := tx.loadPack(name, key, unpack, sz)
-// 	tx.Rollback()
-// 	return pkg, err
-// }
-
-// func (tx *Tx) storePack(name, key []byte, p *Package, fill int) (int, error) {
-// 	n, err := storePackTx(tx.tx, name, key, p, fill)
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	tx.pending++
-// 	return n, nil
-// }
-
-// func (tx *Tx) deletePack(name, key []byte) error {
-// 	err := deletePackTx(tx.tx, name, key)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	tx.pending++
-// 	return nil
-// }
-
-// func (tx *Tx) loadPack(name, key []byte, unpack *Package, sz int) (*Package, error) {
-// 	return loadPackTx(tx.tx, name, key, unpack, sz)
-// }
 
 func loadPackTx(tx *Tx, name, key []byte, unpack *Package, sz int) (*Package, error) {
 	if unpack == nil {

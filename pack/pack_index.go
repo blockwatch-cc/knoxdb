@@ -1241,7 +1241,7 @@ func (idx *PackIndex) splitPack(tx *Tx, pkg *Package) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	newpkg.recycle()
+	newpkg.Release()
 	return n + m, nil
 }
 

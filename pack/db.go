@@ -26,7 +26,8 @@ var (
 	ErrNoField          = errors.New("pack: field does not exist")
 	ErrInvalidType      = errors.New("pack: unsupported block type")
 	ErrNilValue         = errors.New("pack: nil value passed")
-	ErrReadOnlyDatabase = errors.New("pack: database is read-only")
+	ErrDatabaseReadOnly = errors.New("pack: database is read-only")
+	ErrDatabaseClosed   = errors.New("pack: database is closed")
 
 	ErrIndexNotFound  = errors.New("pack: index not found")
 	ErrBucketNotFound = errors.New("pack: bucket not found")
@@ -208,7 +209,7 @@ func (d *DB) DropTable(name string) error {
 
 func (d *DB) CloseTable(t Table) error {
 	if t.IsClosed() {
-		return ErrNoTable
+		return ErrDatabaseClosed
 	}
 	if err := t.Close(); err != nil {
 		return err
@@ -266,7 +267,7 @@ func (d *DB) DropStore(name string) error {
 
 func (d *DB) CloseStore(s Store) error {
 	if s.IsClosed() {
-		return ErrNoStore
+		return ErrDatabaseClosed
 	}
 	if err := s.Close(); err != nil {
 		return err

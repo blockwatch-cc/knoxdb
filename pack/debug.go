@@ -146,7 +146,7 @@ func (t *PackTable) DumpPack(w io.Writer, i int, mode DumpMode) error {
 	if err != nil {
 		return err
 	}
-	t.releaseSharedPack(pkg)
+	pkg.Release()
 	return nil
 }
 
@@ -164,7 +164,7 @@ func (t *PackTable) WalkPacks(fn func(*Package) error) error {
 		if err := fn(pkg); err != nil {
 			return err
 		}
-		t.releaseSharedPack(pkg)
+		pkg.Release()
 	}
 	return nil
 }
@@ -189,7 +189,7 @@ func (t *PackTable) WalkPacksRange(start, end int, fn func(*Package) error) erro
 		if err := fn(pkg); err != nil {
 			return err
 		}
-		t.releaseSharedPack(pkg)
+		pkg.Release()
 	}
 	return nil
 }
@@ -241,7 +241,7 @@ func (t *PackTable) DumpPackBlocks(w io.Writer, mode DumpMode) error {
 		} else {
 			lineNo = n
 		}
-		t.releaseSharedPack(pkg)
+		pkg.Release()
 	}
 	return nil
 }

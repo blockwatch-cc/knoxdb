@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/encoding/block"
-	// "blockwatch.cc/knoxdb/encoding/decimal"
-	// "blockwatch.cc/knoxdb/vec"
 )
 
 var packBenchmarkReadWriteSizes = []packBenchmarkSize{

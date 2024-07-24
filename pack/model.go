@@ -56,6 +56,9 @@ type Table interface {
 	CreateIndexIfNotExists(IndexKind, FieldList, Options) error
 	DropIndex(FieldList) error
 	QueryIndexesTx(context.Context, *Tx, *ConditionTreeNode) (int, error)
+
+	Sequence() uint64
+	NextSequence() uint64
 }
 
 type Store interface {
