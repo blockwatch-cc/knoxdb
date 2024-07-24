@@ -680,9 +680,6 @@ func (b *Block) Clear() {
 
 func (b *Block) Release() {
 	assert.Always(b != nil, "nil block release, potential use after free", nil)
-	// if b == nil {
-	// 	return
-	// }
 	b.dirty = false
 	b.size = 0
 	b.refCount = 0

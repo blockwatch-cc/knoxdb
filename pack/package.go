@@ -519,9 +519,6 @@ func (p *Package) Push(v interface{}) error {
 		"len":  p.nValues,
 		"cap":  p.capHint,
 	})
-	// if !p.CanGrow(1) {
-	// 	panic(fmt.Errorf("pack: overflow on push into pack 0x%x with %d/%d rows", p.key, p.nValues, p.capHint))
-	// }
 
 	for _, fi := range p.tinfo.fields {
 		if fi.blockid < 0 {
@@ -880,7 +877,6 @@ func (p *Package) ReadAtWithInfo(pos int, v interface{}, tinfo *typeInfo) error 
 				}
 			} else {
 				// copy to avoid memleaks of large blocks
-				// dst.SetString(util.UnsafeGetString(b.Bytes.Elem(pos)))
 				dst.SetString(string(b.Bytes.Elem(pos)))
 			}
 
@@ -1777,10 +1773,6 @@ func (p *Package) AppendFrom(srcPack *Package, srcPos, srcLen int) error {
 		"blockLen": p.blocks[0].Len(),
 		"blockCap": p.blocks[0].Cap(),
 	})
-	// if !p.CanGrow(srcLen) {
-	// 	panic(fmt.Errorf("pack: overflow on append %d rows into pack 0x%x with %d/%d rows (first block %d/%d)",
-	// 		srcLen, p.key, p.nValues, p.capHint, p.blocks[0].Len(), p.blocks[0].Cap()))
-	// }
 	for i, dst := range p.blocks {
 		src := srcPack.blocks[i]
 		if dst.IsIgnore() || src.IsIgnore() {
@@ -1909,10 +1901,6 @@ func (p *Package) InsertFrom(srcPack *Package, dstPos, srcPos, srcLen int) error
 		"blockLen": p.blocks[0].Len(),
 		"blockCap": p.blocks[0].Cap(),
 	})
-	// if !p.CanGrow(srcLen) {
-	// 	panic(fmt.Errorf("pack: overflow on insert %d rows into pack 0x%x with %d/%d rows",
-	// 		srcLen, p.key, p.nValues, p.capHint))
-	// }
 	n := min(srcPack.Len()-srcPos, srcLen)
 	for i, dst := range p.blocks {
 		src := srcPack.blocks[i]
@@ -2040,9 +2028,6 @@ func (p *Package) Grow(n int) error {
 		"blockLen": p.blocks[0].Len(),
 		"blockCap": p.blocks[0].Cap(),
 	})
-	// if !p.CanGrow(n) {
-	// 	panic(fmt.Errorf("pack: overflow on grow %d rows in pack 0x%x with %d/%d rows", n, p.key, p.nValues, p.capHint))
-	// }
 	for i, b := range p.blocks {
 		if b.IsIgnore() {
 			continue
@@ -2186,9 +2171,6 @@ func (p *Package) Clear() {
 func (p *Package) Release() {
 	assert.Always(p != nil, "nil package release, potential use after free", nil)
 	assert.Always(p.refCount <= 1, "shared package release, check alloc/release", map[string]any{"ref": p.refCount})
-	// if p == nil {
-	// 	return
-	// }
 	for i, v := range p.blocks {
 		if v == nil {
 			continue
