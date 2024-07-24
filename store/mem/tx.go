@@ -1,24 +1,24 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package bolt
+package mem
 
 import (
-	"encoding/json"
+	"encoding/binary"
 
 	"blockwatch.cc/knoxdb/store"
-	bolt "go.etcd.io/bbolt"
 )
 
 // transaction represents a database transaction.  It can either be read-only or
 // read-write and implements the store.Bucket interface.  The transaction
 // provides a root bucket against which all read and writes occur.
 type transaction struct {
-	managed  bool     // Is the transaction managed by this driver?
-	closed   bool     // Is the transaction closed?
-	writable bool     // Is the transaction writable?
-	db       *db      // DB instance the tx was created from.
-	tx       *bolt.Tx // the DB transaction
+	managed  bool // Is the transaction managed by this driver?
+	closed   bool // Is the transaction closed?
+	writable bool // Is the transaction writable?
+	db       *db  // DB instance the tx was created from.
+	updates  map[string][]byte
+	deletes  map[string]struct{}
 }
 
 // Enforce transaction implements the store.Tx interface.
@@ -33,41 +33,56 @@ func (tx *transaction) checkClosed() error {
 	return nil
 }
 
+// checkWriteable returns an error if the the database or transaction is closed.
+func (tx *transaction) checkWriteable() error {
+	if !tx.writable {
+		return makeDbErr(store.ErrTxNotWritable, "tx is not writeable", nil)
+	}
+	return nil
+}
+
+// nextBucketID returns the next bucket ID to use for creating a new bucket.
+//
+// NOTE: This function must only be called on a writable transaction.  Since it
+// is an internal helper function, it does not check.
+func (tx *transaction) nextBucketID() ([bucketIdLen]byte, error) {
+	nextId := len(tx.db.bucketIds) + 1
+	if nextId > 1<<uint(8*bucketIdLen) {
+		return [bucketIdLen]byte{}, makeDbErr(store.ErrTxConflict, "bucket sequence overflow", nil)
+	}
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, uint64(nextId))
+	var id [bucketIdLen]byte
+	copy(id[:], buf[8-bucketIdLen:8])
+	return id, nil
+}
+
 // Root returns the top-most bucket for all metadata storage.
 //
 // This function is part of the store.Tx interface implementation.
 func (tx *transaction) Root() store.Bucket {
-	return &bucket{tx: tx, bucket: nil}
+	return &bucket{tx: tx, id: [bucketIdLen]byte{}, key: []byte("root")}
 }
 
-// Root returns the bucket with given name.
+// Bucket returns the bucket with given name.
 func (tx *transaction) Bucket(key []byte) store.Bucket {
-	b := tx.tx.Bucket(key)
-	if b == nil {
+	effectiveKey := bucketizedKey([bucketIdLen]byte{}, key)
+	id, ok := tx.db.bucketIds[string(effectiveKey)]
+	if !ok {
 		return nil
 	}
-	return &bucket{tx: tx, bucket: b}
+	return &bucket{tx: tx, id: id, key: effectiveKey}
 }
 
 // Manifest returns the current database manifest metadata.
 //
 // This function is part of the store.DB interface implementation.
-func (tx *transaction) Manifest() (store.Manifest, error) {
-	var mft store.Manifest
-	if err := tx.checkClosed(); err != nil {
-		return mft, err
+func (tx *transaction) Manifest() (mft store.Manifest, err error) {
+	if err = tx.checkClosed(); err != nil {
+		return
 	}
-	b := tx.tx.Bucket(manifestBucketKeyName)
-	if b == nil {
-		return mft, makeDbErr(store.ErrInvalid, "invalid database: missing manifest", nil)
-	}
-	buf := b.Get(manifestKey)
-	if buf != nil {
-		if err := json.Unmarshal(buf, &mft); err != nil {
-			return mft, makeDbErr(store.ErrInvalid, "invalid database: corrupted manifest", err)
-		}
-	}
-	return mft, nil
+	mft = tx.db.manifest
+	return
 }
 
 // SetManifest overwrites the current database manifest.
@@ -77,33 +92,32 @@ func (tx *transaction) SetManifest(manifest store.Manifest) error {
 	if err := tx.checkClosed(); err != nil {
 		return err
 	}
-	mft, err := tx.Manifest()
-	if err != nil {
+	if err := tx.checkWriteable(); err != nil {
 		return err
 	}
+
 	// we only allow some fields to be overwritten
-	mft.Name = manifest.Name
-	mft.Version = manifest.Version
-	mft.Label = manifest.Label
-	mft.Schema = manifest.Schema
-	buf, err := json.Marshal(mft)
-	if err != nil {
-		return err
-	}
-	if err := tx.tx.Bucket(manifestBucketKeyName).Put(manifestKey, buf); err != nil {
-		return convertErr("set manifest", err)
-	}
+	tx.db.manifest.Name = manifest.Name
+	tx.db.manifest.Version = manifest.Version
+	tx.db.manifest.Label = manifest.Label
+	tx.db.manifest.Schema = manifest.Schema
 	return nil
 }
 
 // close marks the transaction closed then releases any pending data.
 func (tx *transaction) close() {
-	if !tx.writable {
-		tx.tx.Rollback()
-	}
 	tx.closed = true
-	tx.db.activeTx.Done()
-	tx.db.closeLock.RUnlock()
+	clear(tx.updates)
+	tx.updates = nil
+	clear(tx.deletes)
+	tx.deletes = nil
+
+	// free locks
+	if tx.writable {
+		tx.db.writeLock.Unlock()
+	} else {
+		tx.db.writeLock.RUnlock()
+	}
 }
 
 // Commit commits all changes that have been made to the root metadata bucket
@@ -136,10 +150,14 @@ func (tx *transaction) Commit() error {
 		return makeDbErr(store.ErrTxNotWritable, str, nil)
 	}
 
-	// Write pending data.  The function will rollback if any errors occur.
-	if err := tx.tx.Commit(); err != nil {
-		return convertErr("commit tx", err)
+	// Write (merge) pending updates and deletes.
+	for k := range tx.deletes {
+		tx.db.store.Delete(Item{[]byte(k), nil})
 	}
+	for k, v := range tx.updates {
+		tx.db.store.ReplaceOrInsert(Item{[]byte(k), v})
+	}
+
 	return nil
 }
 
@@ -159,9 +177,7 @@ func (tx *transaction) Rollback() error {
 		return err
 	}
 
-	if err := tx.tx.Rollback(); err != nil {
-		return convertErr("rollback tx", err)
-	}
+	// we have not yet altered any data in the db, so rollback is a noop
 	tx.close()
 	return nil
 }

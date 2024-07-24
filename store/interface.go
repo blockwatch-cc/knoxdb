@@ -18,7 +18,9 @@ import (
 // Note that open cursors are not tracked on bucket changes and any
 // modifications to the bucket, with the exception of Cursor.Delete, invalidates
 // the cursor.  After invalidation, the cursor must be repositioned, or the keys
-// and values returned may be unpredictable.
+// and values returned may be unpredictable. Keys added or removed during the
+// current transaction may not be visible to cursors depending on the
+// underlying database implementation.
 type Cursor interface {
 	// Bucket returns the bucket the cursor was created for.
 	Bucket() Bucket

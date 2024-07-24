@@ -20,7 +20,7 @@ import (
 	"blockwatch.cc/knoxdb/util"
 )
 
-// db wraps a Badger instance and implements the store.DB interface.
+// db wraps a boltdb instance and implements the store.DB interface.
 // All database access is performed through transactions which are managed.
 type db struct {
 	seqLock   sync.RWMutex   // Guard access to sequences.
@@ -368,7 +368,7 @@ func openDB(dbPath string, opts *bolt.Options, create bool) (store.DB, error) {
 	// Ensure the full path to the database exists.
 	if !dbExists {
 		// The error can be ignored here since the call to
-		// badger.Open will fail if the directory couldn't be
+		// bolt.Open will fail if the directory couldn't be
 		// created.
 		_ = os.MkdirAll(filepath.Dir(dbPath), 0700)
 	}
