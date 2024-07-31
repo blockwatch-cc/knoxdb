@@ -338,6 +338,7 @@ func runTestDST(t *testing.T) {
 			})
 		case stream:
 			action := random.Intn(3)
+			order := pack.OrderType(random.Intn(1))
 			after := random.Int63()
 			errg.Go(func() error {
 				// This is a hack to ensure some randomized goroutine scheduling.
@@ -347,7 +348,7 @@ func runTestDST(t *testing.T) {
 				after = after % int64(max(atomic.LoadInt64(&numTuples), 1))
 				err := table.
 					Stream(ctx2,
-						pack.NewQuery("query").AndGt("id", 0).WithDesc(),
+						pack.NewQuery("query").AndGt("id", 0).WithOrder(order),
 						func(r pack.Row) error {
 							var val testType
 							if err := r.Decode(&val); err != nil {
