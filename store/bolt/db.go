@@ -287,13 +287,6 @@ func (db *db) close() error {
 	if err != nil {
 		return err
 	}
-	if !db.store.IsReadOnly() {
-		// write manifest
-		mft.IsLocked = false
-		if err := putManifest(db.store, mft); err != nil {
-			return err
-		}
-	}
 
 	// NOTE: Since the above lock waits for all transactions to finish and
 	// prevents any new ones from being started, it is safe to close the
@@ -329,7 +322,6 @@ func initDB(db *bolt.DB) error {
 	now := time.Now().UTC()
 	mft := store.Manifest{
 		CreatedAt: now,
-		IsLocked:  true,
 	}
 	buf, err := json.Marshal(mft)
 	if err != nil {
@@ -385,18 +377,11 @@ func openDB(dbPath string, opts *bolt.Options, create bool) (store.DB, error) {
 			return nil, convertErr("init db", err)
 		}
 	} else {
-		// update manifest
+		// read manifest
 		mft, err := getManifest(bdb)
 		if err != nil {
 			bdb.Close()
 			return nil, err
-		}
-		if !bdb.IsReadOnly() {
-			mft.IsLocked = true
-			if err := putManifest(bdb, mft); err != nil {
-				bdb.Close()
-				return nil, err
-			}
 		}
 		if mft.Name != "" {
 			log.Debugf("%s database opened successfully.", strings.Title(mft.Name))
@@ -538,19 +523,6 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 	db.store, err = bolt.Open(srcPath, 0600, db.opts)
 	if err != nil {
 		return convertErr("open compacted db", err)
-	}
-	// update manifest
-	if !db.store.IsReadOnly() {
-		mft, err := getManifest(db.store)
-		if err != nil {
-			db.store.Close()
-			return convertErr("get manifest after compact", err)
-		}
-		mft.IsLocked = true
-		if err := putManifest(db.store, mft); err != nil {
-			db.store.Close()
-			return convertErr("store manifest after compact", err)
-		}
 	}
 	log.Debugf("[GC] Database %s reopened successfully.", db.dbPath)
 	db.closed = false

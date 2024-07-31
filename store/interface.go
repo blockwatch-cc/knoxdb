@@ -301,7 +301,6 @@ type Manifest struct {
 	Label     string    `json:"label"`
 	Schema    string    `json:"schema"`
 	CreatedAt time.Time `json:"createdAt"`
-	IsLocked  bool      `json:"isLocked"`
 }
 
 func (m Manifest) IsValid() bool {

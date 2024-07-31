@@ -322,7 +322,6 @@ func initDB(db *db) error {
 	now := time.Now().UTC()
 	db.manifest = store.Manifest{
 		CreatedAt: now,
-		IsLocked:  true,
 	}
 
 	// init buckets
