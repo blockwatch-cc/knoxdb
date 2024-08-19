@@ -139,41 +139,49 @@ type testType struct {
 	Count int64  `knox:"count"` // counting updates
 }
 
-var opts = &mem.Options{
-	// GetCallback: func(k, v []byte) []byte {
-	// 	log.Infof("GET %x (%s)", k, string(k))
-	// 	return v
-	// },
-	// PutCallback: func(k, v []byte) ([]byte, []byte, error) {
-	// 	log.Infof("PUT %x (%s)", k, string(k))
-	// 	return k, v, nil
-	// },
-	// DeleteCallback: func(k []byte) ([]byte, error) {
-	// 	log.Infof("DEL %x (%s)", k, string(k))
-	// 	return k, nil
-	// },
-}
+var (
+	memopts = &mem.Options{
+		// GetCallback: func(k, v []byte) []byte {
+		// 	log.Infof("GET %x (%s)", k, string(k))
+		// 	return v
+		// },
+		// PutCallback: func(k, v []byte) ([]byte, []byte, error) {
+		// 	log.Infof("PUT %x (%s)", k, string(k))
+		// 	return k, v, nil
+		// },
+		// DeleteCallback: func(k []byte) ([]byte, error) {
+		// 	log.Infof("DEL %x (%s)", k, string(k))
+		// 	return k, nil
+		// },
+	}
+
+	dbopts = pack.Options{
+		PackSizeLog2:    8, // 256 entries
+		JournalSizeLog2: 8, // 256 entries
+		CacheSize:       1,
+		FillLevel:       100,
+		Engine:          pack.TableEnginePack,
+		Driver:          "mem",
+		DriverOpts:      memopts,
+	}
+)
 
 func newPackTable(path string) (pack.Table, error) {
 	fields, err := pack.Fields(testType{})
 	if err != nil {
 		return nil, err
 	}
-	db, err := pack.CreateDatabaseIfNotExists("mem", path, dbName, "*", opts)
+
+	db, err := pack.CreateDatabaseIfNotExists(path, dbName, "*", dbopts)
 	if err != nil {
 		return nil, fmt.Errorf("creating database %q: %v", dbName, err)
 	}
 
 	table, err := db.CreateTableIfNotExists(
-		pack.TableEnginePack,
 		tableName,
 		fields,
-		pack.Options{
-			PackSizeLog2:    8, // 256 entries
-			JournalSizeLog2: 8, // 256 entries
-			CacheSize:       1,
-			FillLevel:       100,
-		})
+		dbopts,
+	)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("creating table %q: %v", tableName, err)
@@ -183,17 +191,13 @@ func newPackTable(path string) (pack.Table, error) {
 }
 
 func openPackTable(path string) (pack.Table, error) {
-	db, err := pack.OpenDatabase("mem", path, dbName, "*", opts)
+	db, err := pack.OpenDatabase(path, dbName, "*", dbopts)
 	if err != nil {
 		return nil, fmt.Errorf("open database %q: %v", dbName, err)
 	}
 	table, err := db.OpenTable(
-		pack.TableEnginePack,
 		tableName,
-		pack.Options{
-			JournalSizeLog2: 8,
-			CacheSize:       1,
-		},
+		dbopts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("open table %q: %v", tableName, err)
