@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"blockwatch.cc/knoxdb/encoding/bitmap"
+	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 // Marshaler interface, a more performant alternative to type based
@@ -35,6 +36,7 @@ type Table interface {
 	Options() Options
 	IsClosed() bool
 	Fields() FieldList
+	Schema() *schema.Schema
 	Stats() []TableStats
 	PurgeCache()
 	Close() error

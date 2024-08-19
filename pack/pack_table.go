@@ -43,6 +43,7 @@ import (
 	"blockwatch.cc/knoxdb/assert"
 	"blockwatch.cc/knoxdb/cache/rclru"
 	"blockwatch.cc/knoxdb/encoding/block"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/util"
 	"blockwatch.cc/knoxdb/vec"
 )
@@ -515,6 +516,10 @@ func (t *PackTable) storePackInfo(tx *Tx) error {
 
 func (t *PackTable) Fields() FieldList {
 	return t.fields
+}
+
+func (t *PackTable) Schema() *schema.Schema {
+	return fieldsToSchema(t.name, t.fields, t.journal.data.tinfo)
 }
 
 func (t *PackTable) Name() string {
@@ -1103,7 +1108,6 @@ func (t *PackTable) flushTx(ctx context.Context, tx *Tx) error {
 		jpos, tpos, jlen, tlen               int      // journal/tomb slice offsets & lengths
 		nextpack, lastpack                   int      // pack list positions (not keys)
 		packmin, packmax, nextmin, globalmax uint64   // data placement hints
-		needsort                             bool     // true if current pack needs sort before store
 		loop, maxloop                        int      // circuit breaker
 	)
 
@@ -1178,9 +1182,6 @@ func (t *PackTable) flushTx(ctx context.Context, tx *Tx) error {
 		if lastpack != nextpack && pkg != nil {
 			// saving a pack also deletes empty packs from storage!
 			if pkg.IsDirty() {
-				if needsort {
-					pkg.PkSort()
-				}
 				// log.Debugf("Storing pack %d with key %d with %d records", lastpack, pkg.key, pkg.Len())
 				n, err = t.storePack(tx, pkg)
 				if err != nil {
@@ -1213,7 +1214,6 @@ func (t *PackTable) flushTx(ctx context.Context, tx *Tx) error {
 			// prepare for next pack
 			pkg.Release()
 			pkg = nil
-			needsort = false
 		}
 
 		// load or create the next pack
@@ -1397,11 +1397,6 @@ func (t *PackTable) flushTx(ctx context.Context, tx *Tx) error {
 						log.Warnf("flush: split %s table pack %d [%d:%d] at out-of-order insert key %d ",
 							t.name, pkg.key, packmin, packmax, key.pk)
 
-						// keep sorted
-						if needsort {
-							pkg.PkSort()
-							needsort = false
-						}
 						// split pack
 						n, err = t.splitPack(tx, pkg)
 						if err != nil {
@@ -1460,12 +1455,6 @@ func (t *PackTable) flushTx(ctx context.Context, tx *Tx) error {
 
 				// save when full
 				if pkg.Len() >= packsz {
-					// keep sorted
-					if needsort {
-						pkg.PkSort()
-						needsort = false
-					}
-
 					// store pack, will update t.packidx
 					// log.Debugf("%s: storing pack %d with %d records at key %d", t.name, lastpack, pkg.Len(), pkg.key)
 					n, err = t.storePack(tx, pkg)
@@ -1507,10 +1496,6 @@ func (t *PackTable) flushTx(ctx context.Context, tx *Tx) error {
 
 	// store last processed pack
 	if pkg != nil && pkg.IsDirty() {
-		if needsort {
-			pkg.PkSort()
-			needsort = false
-		}
 		// log.Debugf("Storing final pack %d with %d records at key %d", lastpack, pkg.Len(), pkg.key)
 		n, err = t.storePack(tx, pkg)
 		if err != nil {
