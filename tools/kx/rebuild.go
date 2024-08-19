@@ -26,8 +26,14 @@ func rebuildStatistics(args Args) error {
 	defer db.Close()
 	log.Infof("Using database %s", db.Path())
 
+	opts := pack.DefaultOptions.
+		WithEngine(pack.TableEnginePack).
+		WithDriver("bolt").
+		WithDriverOpts(args.bolt).
+		WithReadOnly(true)
+
 	// check table
-	table, err := db.OpenTable(pack.TableEnginePack, args.table, pack.NoOptions)
+	table, err := db.OpenTable(args.table, opts)
 	if err != nil {
 		return err
 	}
@@ -63,7 +69,7 @@ func rebuildStatistics(args Args) error {
 
 	// Open table, this will automatically rebuild all metadata
 	log.Info("Rebuilding table statistics")
-	table, err = db.OpenTable(pack.TableEnginePack, args.table, pack.NoOptions)
+	table, err = db.OpenTable(args.table, opts)
 	if err != nil {
 		return err
 	}

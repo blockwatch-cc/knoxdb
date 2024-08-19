@@ -79,7 +79,13 @@ func openTable(args Args) (*pack.DB, pack.Table, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	table, err := db.OpenTable(pack.TableEnginePack, args.table, pack.NoOptions)
+	opts := pack.DefaultOptions.
+		WithEngine(pack.TableEnginePack).
+		WithDriver("bolt").
+		WithDriverOpts(args.bolt).
+		WithReadOnly(true)
+
+	table, err := db.OpenTable(args.table, opts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening table '%s': %v", args.table, err)
 	}
@@ -87,12 +93,16 @@ func openTable(args Args) (*pack.DB, pack.Table, error) {
 }
 
 func openDatabase(args Args) (*pack.DB, error) {
+	opts := pack.DefaultOptions.
+		WithEngine(pack.TableEnginePack).
+		WithDriver("bolt").
+		WithDriverOpts(args.bolt).
+		WithReadOnly(true)
 	db, err := pack.OpenDatabase(
-		"bolt",
 		filepath.Dir(args.db),
 		strings.TrimSuffix(filepath.Base(args.db), ".db"),
 		"*",
-		args.bolt,
+		opts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %v", err)

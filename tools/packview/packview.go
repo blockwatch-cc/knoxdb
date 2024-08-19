@@ -199,19 +199,20 @@ func run() error {
 		return fmt.Errorf("Missing command. See -h")
 	}
 
+	opts := pack.DefaultOptions.WithReadOnly(true).WithDriverOpts(boltopts)
+
 	db, err := pack.OpenDatabase(
-		"bolt",
 		filepath.Dir(dbPath),
 		strings.TrimSuffix(filepath.Base(dbPath), ".db"),
 		"*",
-		boltopts,
+		opts,
 	)
 	if err != nil {
 		return fmt.Errorf("opening database: %v", err)
 	}
 	defer db.Close()
 
-	table, err := pack.OpenPackTable(db, tablename, pack.NoOptions)
+	table, err := pack.OpenPackTable(db, tablename, opts)
 	if err != nil {
 		return fmt.Errorf("opening table '%s': %v", tablename, err)
 	}

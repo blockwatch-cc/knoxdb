@@ -149,41 +149,45 @@ const (
 )
 
 var (
-	verbose  bool
-	debug    bool
-	trace    bool
-	profile  bool
-	dbname   string
-	flags    = flag.NewFlagSet("types", flag.ContinueOnError)
-	boltopts = &bolt.Options{
-		Timeout:      time.Second, // open timeout when file is locked
-		NoGrowSync:   true,        // assuming Docker + XFS
-		ReadOnly:     false,
-		NoSync:       true, // skip fsync (DANGEROUS on crashes)
-		FreelistType: bolt.FreelistMapType,
+	verbose bool
+	debug   bool
+	trace   bool
+	profile bool
+	dbname  string
+	flags   = flag.NewFlagSet("types", flag.ContinueOnError)
+	opts    = pack.Options{
+		PackSizeLog2:    TypesPackSizeLog2,
+		JournalSizeLog2: TypesJournalSizeLog2,
+		CacheSize:       TypesCacheSize,
+		FillLevel:       TypesFillLevel,
+		Engine:          pack.TableEnginePack,
+		Driver:          "bolt",
+		DriverOpts: &bolt.Options{
+			Timeout:      time.Second, // open timeout when file is locked
+			NoGrowSync:   true,        // assuming Docker + XFS
+			ReadOnly:     false,
+			NoSync:       true, // skip fsync (DANGEROUS on crashes)
+			FreelistType: bolt.FreelistMapType,
+		},
 	}
 )
 
-func Create(path string, dbOpts interface{}) (pack.Table, error) {
+func Create(path string) (pack.Table, error) {
 	fields, err := pack.Fields(Types{})
 	if err != nil {
 		return nil, err
 	}
-	db, err := pack.CreateDatabaseIfNotExists("bolt", filepath.Dir(path), TypesTableKey, "*", boltopts)
+
+	db, err := pack.CreateDatabaseIfNotExists(filepath.Dir(path), TypesTableKey, "*", opts)
 	if err != nil {
 		return nil, fmt.Errorf("creating %s database: %v", TypesTableKey, err)
 	}
 
 	table, err := db.CreateTableIfNotExists(
-		pack.TableEnginePack,
 		TypesTableKey,
 		fields,
-		pack.Options{
-			PackSizeLog2:    TypesPackSizeLog2,
-			JournalSizeLog2: TypesJournalSizeLog2,
-			CacheSize:       TypesCacheSize,
-			FillLevel:       TypesFillLevel,
-		})
+		opts,
+	)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("Create: %v", err)
@@ -208,22 +212,11 @@ func Create(path string, dbOpts interface{}) (pack.Table, error) {
 }
 
 func Open(path string) (pack.Table, error) {
-	db, err := pack.OpenDatabase("bolt", filepath.Dir(path), TypesTableKey, "*", boltopts)
+	db, err := pack.OpenDatabase(filepath.Dir(path), TypesTableKey, "*", opts)
 	if err != nil {
 		return nil, fmt.Errorf("Open db: %v", err)
 	}
-	t, err := db.OpenTable(
-		pack.TableEnginePack,
-		TypesTableKey,
-		pack.Options{
-			JournalSizeLog2: TypesJournalSizeLog2,
-			CacheSize:       TypesCacheSize,
-		},
-		// pack.Options{
-		// 	JournalSizeLog2: TypesIndexJournalSizeLog2,
-		// 	CacheSize:       TypesIndexCacheSize,
-		// }
-	)
+	t, err := db.OpenTable(TypesTableKey, opts)
 	if err != nil {
 		return nil, fmt.Errorf("Open table: %v", err)
 	}
@@ -353,7 +346,7 @@ func run() error {
 		defer pprof.StopCPUProfile()
 	}
 
-	table, err := Create(".", nil)
+	table, err := Create(".")
 	if err != nil {
 		return err
 	}
