@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/metadata"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
@@ -63,7 +62,7 @@ var (
 // Deleted blocks are only marked as deleted in schema and omitted from new
 // stored packs, existing packs may still contain deleted blocks, but we
 // won't load them anymore
-func (p *Package) Encode(buf *bytes.Buffer, meta *metadata.PackMetadata) error {
+func (p *Package) Encode(buf *bytes.Buffer) error {
 	buf.WriteByte(currentPackFormat)
 
 	var b [8]byte
@@ -93,18 +92,18 @@ func (p *Package) Encode(buf *bytes.Buffer, meta *metadata.PackMetadata) error {
 		// encode block data using optional compressor
 		buf.WriteByte(byte(f.Compress()))
 		enc := NewCompressor(buf, f.Compress())
-		n, err := p.blocks[i].WriteTo(enc)
+		_, err := p.blocks[i].WriteTo(enc)
 		enc.Close()
 		if err != nil {
 			return err
 		}
 
-		// export block size to statistics
-		meta.Blocks[i].StoredSize = int(n)
+		// TODO: howto export block size to statistics
+		// meta.Blocks[i].StoredSize = int(n)
 	}
 
-	// export pack size to statistics
-	meta.StoredSize = buf.Len()
+	// TODO: howto export pack size to statistics
+	// meta.StoredSize = buf.Len()
 
 	// write offset table
 	packed := buf.Bytes()
