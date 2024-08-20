@@ -103,22 +103,22 @@ var (
 	matchFloat64Between      = avx2.MatchFloat64Between
 
 	// bytes
-	matchBytesEqual        = avx2.MatchBytesEqual
-	matchBytesNotEqual     = avx2.MatchBytesNotEqual
-	matchBytesLess         = avx2.MatchBytesLess
-	matchBytesLessEqual    = avx2.MatchBytesLessEqual
-	matchBytesGreater      = avx2.MatchBytesGreater
-	matchBytesGreaterEqual = avx2.MatchBytesGreaterEqual
-	matchBytesBetween      = avx2.MatchBytesBetween
+	matchBytesEqual        = generic.MatchBytesEqual
+	matchBytesNotEqual     = generic.MatchBytesNotEqual
+	matchBytesLess         = generic.MatchBytesLess
+	matchBytesLessEqual    = generic.MatchBytesLessEqual
+	matchBytesGreater      = generic.MatchBytesGreater
+	matchBytesGreaterEqual = generic.MatchBytesGreaterEqual
+	matchBytesBetween      = generic.MatchBytesBetween
 
 	// string
-	matchStringsEqual        = avx2.MatchStringsEqual
-	matchStringsNotEqual     = avx2.MatchStringsNotEqual
-	matchStringsLess         = avx2.MatchStringsLess
-	matchStringsLessEqual    = avx2.MatchStringsLessEqual
-	matchStringsGreater      = avx2.MatchStringsGreater
-	matchStringsGreaterEqual = avx2.MatchStringsGreaterEqual
-	matchStringsBetween      = avx2.MatchStringsBetween
+	matchStringsEqual        = generic.MatchStringsEqual
+	matchStringsNotEqual     = generic.MatchStringsNotEqual
+	matchStringsLess         = generic.MatchStringsLess
+	matchStringsLessEqual    = generic.MatchStringsLessEqual
+	matchStringsGreater      = generic.MatchStringsGreater
+	matchStringsGreaterEqual = generic.MatchStringsGreaterEqual
+	matchStringsBetween      = generic.MatchStringsBetween
 
 	// int128
 	matchInt128Equal        = avx2.MatchInt128Equal
