@@ -366,15 +366,15 @@ func (p *Package) SetValue(col, row int, val any) error {
 				b.Bytes().SetZeroCopy(row, UnsafeGetBytes(val.((fmt.Stringer)).String()))
 			default:
 				// oh, its a type we don't support yet
-				assert.Unreachable("unhandled value type", map[string]any{
-					"rtype":   rval.Type().String(),
-					"rkind":   rval.Kind().String(),
-					"field":   f.Name(),
-					"type":    f.Type().String(),
-					"pack":    p.key,
-					"schema":  p.schema.Name(),
-					"version": p.schema.Version(),
-				})
+				assert.Unreachable("unhandled value type",
+					"rtype", rval.Type().String(),
+					"rkind", rval.Kind().String(),
+					"field", f.Name(),
+					"type", f.Type().String(),
+					"pack", p.key,
+					"schema", p.schema.Name(),
+					"version", p.schema.Version(),
+				)
 			}
 		}
 	}
@@ -486,6 +486,8 @@ func (p *Package) SetRow(row int, val any) error {
 							field.Type, field.Name, err)
 					}
 					b.Bytes().SetZeroCopy(row, buf)
+				case rfield.Type().Elem().Kind() == reflect.Uint8:
+					b.Bytes().SetZeroCopy(row, rfield.Bytes())
 				default:
 					// oh, its a type we don't support yet
 					assert.Unreachable("unhandled array type",
