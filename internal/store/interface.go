@@ -8,6 +8,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 )
@@ -307,6 +308,22 @@ func (m Manifest) IsValid() bool {
 	return m.Version > 0
 }
 
+func (m Manifest) Validate(name, label, schema string, version int) error {
+	if name != "*" && name != m.Name {
+		return fmt.Errorf("manifest name: expected=%s, actual=%s", name, m.Name)
+	}
+	if label != "*" && label != m.Label {
+		return fmt.Errorf("manifest label: expected=%s, actual=%s", label, m.Label)
+	}
+	if schema != "*" && schema != m.Schema {
+		return fmt.Errorf("manifest schema: expected=%s, actual=%s", schema, m.Schema)
+	}
+	if version > 0 && version != m.Version {
+		return fmt.Errorf("manifest version: expected=%s, actual=%s", version, m.Version)
+	}
+	return nil
+}
+
 // DB provides a generic interface that is used to store KV indexes and KV data.
 // This interface is intended to be agnostic to the actual mechanism
 // used for backend data storage.  The RegisterDriver function can be used to
@@ -379,8 +396,11 @@ type DB interface {
 	// a sequence by calling Release().
 	Sequence(key []byte, lease uint64) (Sequence, error)
 
-	// Triggers garbage collection cycle, removing deleted keys and old versions
-	// of values from the underlying database. This
+	// Triggers a full garbage collection cycle, removing deleted keys and old
+	// versions of values from the underlying database. This process is synchronous.
+	// It first waits until all concurrent transactions are closed before it run
+	// file compaction and reclaims free space. This may take a long time
+	// and generate spikes in iops while data files are rewritten on disk.
 	GC(ctx context.Context, ratio float64) error
 
 	// Writes the entire database to io.Writer. During this process the

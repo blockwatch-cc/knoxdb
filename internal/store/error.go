@@ -124,7 +124,7 @@ const (
 )
 
 // Map of ErrorCode values back to their constant names for pretty printing.
-var errorCodeStrings = map[ErrorCode]string{
+var errorCodeStrings = [...]string{
 	ErrDbTypeRegistered:   "ErrDbTypeRegistered",
 	ErrDbUnknownType:      "ErrDbUnknownType",
 	ErrDbDoesNotExist:     "ErrDbDoesNotExist",
