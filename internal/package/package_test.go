@@ -31,23 +31,22 @@ var testStructs = []Encodable{
 	&encodeTestStruct{},
 }
 
-func TestSetRow(T *testing.T) {
+func TestSetRow(t *testing.T) {
 	for _, v := range testStructs {
-		T.Run(fmt.Sprintf("%T", v), func(T *testing.T) {
+		t.Run(fmt.Sprintf("%T", v), func(t *testing.T) {
 			pkg := makeTypedPackage(v, 1, 1)
-			if err := pkg.SetRow(0, v); err != nil {
-				T.Error(err)
-			}
+			err := pkg.SetRow(0, v)
+			require.NoError(t, err)
 		})
 	}
 }
 
-func BenchmarkSetRow(B *testing.B) {
+func BenchmarkSetRow(b *testing.B) {
 	for _, v := range testStructs {
 		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
-		B.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(B *testing.B) {
-			B.ReportAllocs()
-			for b := 0; b < B.N; b++ {
+		b.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(b *testing.B) {
+			b.ReportAllocs()
+			for n := 0; n < b.N; n++ {
 				for i := 0; i < PACK_SIZE; i++ {
 					pkg.SetRow(i, v)
 				}
@@ -56,23 +55,22 @@ func BenchmarkSetRow(B *testing.B) {
 	}
 }
 
-func TestAppend(T *testing.T) {
+func TestAppend(t *testing.T) {
 	for _, v := range testStructs {
-		T.Run(fmt.Sprintf("%T", v), func(T *testing.T) {
+		t.Run(fmt.Sprintf("%T", v), func(t *testing.T) {
 			pkg := makeTypedPackage(v, 1, 0)
-			if err := pkg.AppendStruct(v); err != nil {
-				T.Error(err)
-			}
+			err := pkg.AppendStruct(v)
+			require.NoError(t, err)
 		})
 	}
 }
 
-func BenchmarkAppend(B *testing.B) {
+func BenchmarkAppend(b *testing.B) {
 	for _, v := range testStructs {
 		pkg := makeTypedPackage(v, PACK_SIZE, 0)
-		B.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(B *testing.B) {
-			B.ReportAllocs()
-			for b := 0; b < B.N; b++ {
+		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
+			b.ReportAllocs()
+			for n := 0; n < b.N; n++ {
 				for i := 0; i < PACK_SIZE; i++ {
 					pkg.AppendStruct(v)
 				}
@@ -82,14 +80,40 @@ func BenchmarkAppend(B *testing.B) {
 	}
 }
 
-func BenchmarkAppendWire(B *testing.B) {
+func TestAppendSlice(t *testing.T) {
+	for _, v := range testStructs {
+		t.Run(fmt.Sprintf("%T", v), func(t *testing.T) {
+			pkg := makeTypedPackage(v, PACK_SIZE, 0)
+			rslice := makeZeroSlice(v, PACK_SIZE)
+			err := pkg.AppendSlice(rslice)
+			require.NoError(t, err)
+			require.Equal(t, PACK_SIZE, pkg.Len())
+		})
+	}
+}
+
+func BenchmarkAppendSlice(b *testing.B) {
+	for _, v := range testStructs {
+		pkg := makeTypedPackage(v, PACK_SIZE, 0)
+		rslice := makeZeroSlice(v, PACK_SIZE)
+		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
+			b.ReportAllocs()
+			for n := 0; n < b.N; n++ {
+				pkg.AppendSlice(rslice)
+				pkg.Clear()
+			}
+		})
+	}
+}
+
+func BenchmarkAppendWire(b *testing.B) {
 	for _, v := range testStructs {
 		pkg := makeTypedPackage(v, PACK_SIZE, 0)
 		s := makeZeroStruct(v)
 		buf := s.(Encodable).Encode()
-		B.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(B *testing.B) {
-			B.ReportAllocs()
-			for b := 0; b < B.N; b++ {
+		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
+			b.ReportAllocs()
+			for n := 0; n < b.N; n++ {
 				for i := 0; i < PACK_SIZE; i++ {
 					pkg.AppendWire(buf)
 				}
@@ -99,13 +123,13 @@ func BenchmarkAppendWire(B *testing.B) {
 	}
 }
 
-func BenchmarkAppendWireE2E(B *testing.B) {
+func BenchmarkAppendWireE2E(b *testing.B) {
 	for _, v := range testStructs {
 		pkg := makeTypedPackage(v, PACK_SIZE, 0)
 		z := makeZeroStruct(v)
-		B.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(B *testing.B) {
-			B.ReportAllocs()
-			for b := 0; b < B.N; b++ {
+		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
+			b.ReportAllocs()
+			for n := 0; n < b.N; n++ {
 				for i := 0; i < PACK_SIZE; i++ {
 					pkg.AppendWire(z.(Encodable).Encode())
 				}
@@ -131,6 +155,19 @@ func TestReadStruct(t *testing.T) {
 	}
 }
 
+func TestReadChildStruct(t *testing.T) {
+	pkg := makeTypedPackage(&encodeTestStruct{}, PACK_SIZE, PACK_SIZE)
+	dst := &encodeTestSubStruct{}
+	dstSchema, err := schema.SchemaOf(dst)
+	require.NoError(t, err)
+	maps, err := pkg.schema.MapTo(dstSchema)
+	require.NoError(t, err)
+	for i := 0; i < PACK_SIZE; i++ {
+		err := pkg.ReadStruct(i, dst, dstSchema, maps)
+		require.NoError(t, err)
+	}
+}
+
 func BenchmarkReadStruct(b *testing.B) {
 	for _, v := range testStructs {
 		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
@@ -147,13 +184,13 @@ func BenchmarkReadStruct(b *testing.B) {
 	}
 }
 
-func BenchmarkReadRow(B *testing.B) {
+func BenchmarkReadRow(b *testing.B) {
 	for _, v := range testStructs {
 		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
 		dst := make([]any, pkg.Cols())
-		B.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(B *testing.B) {
-			B.ReportAllocs()
-			for b := 0; b < B.N; b++ {
+		b.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(b *testing.B) {
+			b.ReportAllocs()
+			for n := 0; n < b.N; n++ {
 				for i := 0; i < PACK_SIZE; i++ {
 					dst = pkg.ReadRow(i, dst)
 				}
@@ -162,13 +199,13 @@ func BenchmarkReadRow(B *testing.B) {
 	}
 }
 
-func BenchmarkReadWire(B *testing.B) {
+func BenchmarkReadWire(b *testing.B) {
 	for _, v := range testStructs {
 		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
 		buf := bytes.NewBuffer(make([]byte, 0, pkg.schema.WireSize()+128))
-		B.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(B *testing.B) {
-			B.ReportAllocs()
-			for b := 0; b < B.N; b++ {
+		b.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(b *testing.B) {
+			b.ReportAllocs()
+			for n := 0; n < b.N; n++ {
 				for i := 0; i < PACK_SIZE; i++ {
 					buf.Reset()
 					_ = pkg.ReadWireBuffer(buf, i)
@@ -178,13 +215,13 @@ func BenchmarkReadWire(B *testing.B) {
 	}
 }
 
-func BenchmarkReadWireE2E(B *testing.B) {
+func BenchmarkReadWireE2E(b *testing.B) {
 	for _, v := range testStructs {
 		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
 		buf := bytes.NewBuffer(make([]byte, 0, pkg.schema.WireSize()+128))
-		B.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(B *testing.B) {
-			B.ReportAllocs()
-			for b := 0; b < B.N; b++ {
+		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
+			b.ReportAllocs()
+			for n := 0; n < b.N; n++ {
 				for i := 0; i < PACK_SIZE; i++ {
 					buf.Reset()
 					_ = pkg.ReadWireBuffer(buf, i)
@@ -207,6 +244,15 @@ func makeTypedPackage(typ any, sz, fill int) *Package {
 		}
 	}
 	return pkg
+}
+
+func makeZeroSlice(v any, n int) reflect.Value {
+	rtyp := reflect.TypeOf(v).Elem()
+	rslice := reflect.MakeSlice(reflect.SliceOf(rtyp), 0, n)
+	for i := 0; i < n; i++ {
+		rslice = reflect.Append(rslice, reflect.Zero(rtyp))
+	}
+	return rslice
 }
 
 func makeZeroStruct(v any) any {
@@ -313,41 +359,41 @@ type Encodable interface {
 }
 
 var (
-	scalarStructEnc = schema.NewEncoder[scalarStruct]()
-	scalarStructDec = schema.NewDecoder[scalarStruct]()
+	scalarStructEnc = schema.NewGenericEncoder[scalarStruct]()
+	scalarStructDec = schema.NewGenericDecoder[scalarStruct]()
 	scalarStructBuf = scalarStructEnc.NewBuffer(1)
 
-	byteStructEnc = schema.NewEncoder[byteStruct]()
-	byteStructDec = schema.NewDecoder[byteStruct]()
+	byteStructEnc = schema.NewGenericEncoder[byteStruct]()
+	byteStructDec = schema.NewGenericDecoder[byteStruct]()
 	byteStructBuf = byteStructEnc.NewBuffer(1)
 
-	byteUnmarshalStructEnc = schema.NewEncoder[byteUnmarshalStruct]()
-	byteUnmarshalStructDec = schema.NewDecoder[byteUnmarshalStruct]()
+	byteUnmarshalStructEnc = schema.NewGenericEncoder[byteUnmarshalStruct]()
+	byteUnmarshalStructDec = schema.NewGenericDecoder[byteUnmarshalStruct]()
 	byteUnmarshalStructBuf = byteUnmarshalStructEnc.NewBuffer(1)
 
-	smallStructEnc = schema.NewEncoder[smallStruct]()
-	smallStructDec = schema.NewDecoder[smallStruct]()
+	smallStructEnc = schema.NewGenericEncoder[smallStruct]()
+	smallStructDec = schema.NewGenericDecoder[smallStruct]()
 	smallStructBuf = smallStructEnc.NewBuffer(1)
 
-	largeStructEnc = schema.NewEncoder[largeStruct]()
-	largeStructDec = schema.NewDecoder[largeStruct]()
+	largeStructEnc = schema.NewGenericEncoder[largeStruct]()
+	largeStructDec = schema.NewGenericDecoder[largeStruct]()
 	largeStructBuf = largeStructEnc.NewBuffer(1)
 
-	tradeStructEnc = schema.NewEncoder[tradeStruct]()
-	tradeStructDec = schema.NewDecoder[tradeStruct]()
+	tradeStructEnc = schema.NewGenericEncoder[tradeStruct]()
+	tradeStructDec = schema.NewGenericDecoder[tradeStruct]()
 	tradeStructBuf = tradeStructEnc.NewBuffer(1)
 
-	specialStructEnc = schema.NewEncoder[specialStruct]()
-	specialStructDec = schema.NewDecoder[specialStruct]()
+	specialStructEnc = schema.NewGenericEncoder[specialStruct]()
+	specialStructDec = schema.NewGenericDecoder[specialStruct]()
 	specialStructBuf = specialStructEnc.NewBuffer(1)
 
-	encodeTestStructEnc = schema.NewEncoder[encodeTestStruct]()
-	encodeTestStructDec = schema.NewDecoder[encodeTestStruct]()
+	encodeTestStructEnc = schema.NewGenericEncoder[encodeTestStruct]()
+	encodeTestStructDec = schema.NewGenericDecoder[encodeTestStruct]()
 	encodeTestStructBuf = encodeTestStructEnc.NewBuffer(1)
 )
 
 type scalarStruct struct {
-	One uint64 `knox:"one,pk"`
+	Id uint64 `knox:"id,pk"`
 }
 
 func (s scalarStruct) Encode() []byte {
@@ -357,12 +403,12 @@ func (s scalarStruct) Encode() []byte {
 }
 
 func (s *scalarStruct) Decode(buf []byte) error {
-	_, err := scalarStructDec.DecodeTo(buf, s)
+	_, err := scalarStructDec.Decode(buf, s)
 	return err
 }
 
 type byteStruct struct {
-	One   uint64 `knox:"one,pk"`
+	Id    uint64 `knox:"id,pk"`
 	Seven []byte `knox:"seven"`
 }
 
@@ -373,14 +419,14 @@ func (s byteStruct) Encode() []byte {
 }
 
 func (s *byteStruct) Decode(buf []byte) error {
-	_, err := byteStructDec.DecodeTo(buf, s)
+	_, err := byteStructDec.Decode(buf, s)
 	return err
 }
 
 type OpHash [32]byte
 
 type byteUnmarshalStruct struct {
-	One   uint64 `knox:"one,pk"`
+	Id    uint64 `knox:"id,pk"`
 	Seven OpHash `knox:"seven"`
 }
 
@@ -391,12 +437,12 @@ func (s byteUnmarshalStruct) Encode() []byte {
 }
 
 func (s *byteUnmarshalStruct) Decode(buf []byte) error {
-	_, err := byteUnmarshalStructDec.DecodeTo(buf, s)
+	_, err := byteUnmarshalStructDec.Decode(buf, s)
 	return err
 }
 
 type smallStruct struct {
-	One   uint64  `knox:"one,pk"`
+	Id    uint64  `knox:"id,pk"`
 	Two   int64   `knox:"two"`
 	Three float64 `knox:"three"`
 	Four  uint8   `knox:"four"`
@@ -411,14 +457,14 @@ func (s smallStruct) Encode() []byte {
 }
 
 func (s *smallStruct) Decode(buf []byte) error {
-	_, err := smallStructDec.DecodeTo(buf, s)
+	_, err := smallStructDec.Decode(buf, s)
 	return err
 }
 
 type largeStruct struct {
-	One            uint64    `knox:"one,pk"`
+	Id             uint64    `knox:"id,pk"`
 	Time           time.Time `knox:"time"`
-	ID             int64     `knox:"id"`
+	One            int64     `knox:"one"`
 	Index          int       `knox:"index"`
 	UUID           uint64    `knox:"uuid"`
 	IsActive       bool      `knox:"isActive"`
@@ -467,7 +513,7 @@ func (s largeStruct) Encode() []byte {
 }
 
 func (s *largeStruct) Decode(buf []byte) error {
-	_, err := largeStructDec.DecodeTo(buf, s)
+	_, err := largeStructDec.Decode(buf, s)
 	return err
 }
 
@@ -528,12 +574,12 @@ func (s tradeStruct) Encode() []byte {
 }
 
 func (s *tradeStruct) Decode(buf []byte) error {
-	_, err := tradeStructDec.DecodeTo(buf, s)
+	_, err := tradeStructDec.Decode(buf, s)
 	return err
 }
 
 type specialStruct struct {
-	Pk       uint64         `knox:"key,pk"`
+	Id       uint64         `knox:"id,pk"`
 	Enum     Enum           `knox:"enum"`
 	Stringer Stringer       `knox:"strlist"`
 	D32      num.Decimal32  `knox:"d32,scale=5"`
@@ -552,7 +598,7 @@ func (s specialStruct) Encode() []byte {
 }
 
 func (s *specialStruct) Decode(buf []byte) error {
-	_, err := specialStructDec.DecodeTo(buf, s)
+	_, err := specialStructDec.Decode(buf, s)
 	return err
 }
 
@@ -589,6 +635,13 @@ func (s encodeTestStruct) Encode() []byte {
 }
 
 func (s *encodeTestStruct) Decode(buf []byte) error {
-	_, err := encodeTestStructDec.DecodeTo(buf, s)
+	_, err := encodeTestStructDec.Decode(buf, s)
 	return err
+}
+
+type encodeTestSubStruct struct {
+	Id    uint64    `knox:"id,pk"`
+	Int64 int64     `knox:"i64"`
+	Hash  OpHash    `knox:"hash"`
+	Time  time.Time `knox:"time"`
 }

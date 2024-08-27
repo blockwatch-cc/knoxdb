@@ -5,8 +5,8 @@ package schema
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"blockwatch.cc/knoxdb/internal/hash/fnv"
@@ -20,7 +20,6 @@ const (
 
 type Schema struct {
 	name        string
-	nameHash    uint64
 	schemaHash  uint64
 	fields      []Field
 	exports     []*ExportedField
@@ -60,20 +59,36 @@ func (s *Schema) Version() uint32 {
 	return s.version
 }
 
+func (s *Schema) TypeLabel(vendor string) string {
+	var b strings.Builder
+	if vendor == "" {
+		b.WriteString(vendor)
+		b.WriteByte('.')
+	}
+	b.WriteString(s.name)
+	b.WriteString(".v")
+	b.WriteString(strconv.Itoa(int(s.version)))
+	return b.String()
+}
+
 func (s *Schema) WithName(n string) *Schema {
-	// can only set name once
-	if len(s.name) == 0 && len(n) > 0 {
+	if len(n) > 0 {
 		s.name = n
 	}
 	return s
 }
 
-func (s *Schema) NameHash() uint64 {
-	return s.nameHash
+// generate name hash with tag
+func (s *Schema) TaggedHash(tag HashTag) uint64 {
+	return TaggedHash(tag, s.name)
 }
 
 func (s *Schema) Hash() uint64 {
 	return s.schemaHash
+}
+
+func (s *Schema) EqualHash(x uint64) bool {
+	return x == 0 || s.schemaHash == x
 }
 
 func (s *Schema) WithField(f Field) *Schema {
@@ -81,6 +96,7 @@ func (s *Schema) WithField(f Field) *Schema {
 		f.id = uint16(len(s.fields) + 1)
 		s.fields = append(s.fields, f)
 		s.encode, s.decode = nil, nil
+		s.version++
 	}
 	return s
 }
@@ -95,6 +111,7 @@ func (s *Schema) UpdateField(id uint16, f Field) *Schema {
 			f.id = id
 			s.fields[i] = f
 			s.encode, s.decode = nil, nil
+			s.version++
 			break
 		}
 	}
@@ -109,11 +126,8 @@ func (s *Schema) Complete() *Schema {
 	s.maxWireSize = 0
 	s.isFixedSize = true
 	s.isInterface = false
-	s.nameHash = 0
 	s.schemaHash = 0
 
-	// generate name hash
-	s.nameHash = fnv.Sum64a([]byte(s.name))
 	// generate schema hash
 	h := fnv.New64a()
 	h.Write(Uint32Bytes(uint32(s.version)))
@@ -133,7 +147,6 @@ func (s *Schema) Complete() *Schema {
 	}
 	s.schemaHash = h.Sum64()
 	s.encode, s.decode = compileCodecs(s)
-	s.version++
 
 	s.exports = make([]*ExportedField, len(s.fields))
 	for i := range s.fields {
@@ -144,12 +157,12 @@ func (s *Schema) Complete() *Schema {
 			Flags:     s.fields[i].flags,
 			Compress:  s.fields[i].compress,
 			Index:     s.fields[i].index,
-			Fixed:     s.fields[i].fixed,
-			Scale:     s.fields[i].scale,
-			Offset:    s.fields[i].offset,
-			Iface:     s.fields[i].iface,
 			IsVisible: s.fields[i].IsVisible(),
 			IsArray:   s.fields[i].isArray,
+			Iface:     s.fields[i].iface,
+			Scale:     s.fields[i].scale,
+			Fixed:     s.fields[i].fixed,
+			Offset:    s.fields[i].offset,
 			path:      s.fields[i].path,
 		}
 	}
@@ -262,6 +275,16 @@ func (s *Schema) Pk() Field {
 	return Field{}
 }
 
+func (s *Schema) CompositePk() []Field {
+	res := make([]Field, 0)
+	for _, v := range s.fields {
+		if v.index.Is(IndexKindComposite) {
+			res = append(res, v)
+		}
+	}
+	return res
+}
+
 func (s *Schema) PkIndex() int {
 	for _, v := range s.fields {
 		if v.flags&FieldFlagPrimary > 0 {
@@ -293,25 +316,22 @@ func (s *Schema) CanSelect(x *Schema) error {
 	return nil
 }
 
-func (s *Schema) Select(names ...string) *Schema {
+func (s *Schema) Select(name string, fields ...string) *Schema {
 	ns := &Schema{
-		fields:      make([]Field, 0, len(names)),
+		fields:      make([]Field, 0, len(fields)),
 		isFixedSize: true,
 		version:     s.version,
+		name:        name,
 	}
 
 	// choose fields
-	for _, name := range names {
-		f, ok := s.FieldByName(name)
+	for _, fname := range fields {
+		f, ok := s.FieldByName(fname)
 		if !ok {
 			continue
 		}
 		ns.fields = append(ns.fields, f)
 	}
-
-	// derive name from original schema name and hash
-	base, _, _ := strings.Cut(s.name, "-")
-	ns.name = base + "-" + hex.EncodeToString(Uint64Bytes(ns.Hash()))
 
 	// produce mapping to parent fields
 	return ns.Complete()
@@ -324,26 +344,21 @@ func (s *Schema) Select(names ...string) *Schema {
 func (s *Schema) MapTo(dst *Schema) ([]int, error) {
 	maps := make([]int, 0, dst.NumFields())
 	for _, dstField := range dst.Fields() {
-		if !dstField.IsVisible() {
-			continue
-		}
 		var (
 			srcField Field
 			pos      int = -1
 		)
 		for i, f := range s.fields {
 			if dstField.name == f.name {
-				pos = i
 				srcField = f
+				// hide invisible source fields
+				if f.IsVisible() {
+					pos = i
+				}
 				break
 			}
 		}
 
-		// allow child -> parent and parent -> child mappings
-		// if pos < 0 {
-		// 	return nil, fmt.Errorf("schema %s: field %s not found in parent schema %s",
-		// 		dst.name, dstField.name, s.name)
-		// }
 		if srcField.typ != dstField.typ {
 			return nil, fmt.Errorf("schema %s: field %s type %s mismatch with source type %s",
 				dst.name, dstField.name, dstField.typ, srcField.typ)

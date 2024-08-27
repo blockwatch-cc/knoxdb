@@ -8,87 +8,56 @@ import (
 	"encoding"
 	"fmt"
 	"reflect"
-	"strconv"
 	"time"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
-type OpCode byte
-
-const (
-	OpCodeInvalid         OpCode = iota // 0x0  0
-	OpCodeInt8                          // 0x1  1
-	OpCodeInt16                         // 0x2  2
-	OpCodeInt32                         // 0x3  3
-	OpCodeInt64                         // 0x4  4
-	OpCodeUint8                         // 0x5  5
-	OpCodeUint16                        // 0x6  6
-	OpCodeUint32                        // 0x7  7
-	OpCodeUint64                        // 0x8  8
-	OpCodeFloat32                       // 0x9  9
-	OpCodeFloat64                       // 0xA  10
-	OpCodeBool                          // 0xB  11
-	OpCodeFixedArray                    // 0xC  12
-	OpCodeFixedString                   // 0xD  13
-	OpCodeFixedBytes                    // 0xE  14
-	OpCodeString                        // 0xF  15
-	OpCodeBytes                         // 0x10 16
-	OpCodeDateTime                      // 0x11 17
-	OpCodeInt128                        // 0x12 18
-	OpCodeInt256                        // 0x13 19
-	OpCodeDecimal32                     // 0x14 20
-	OpCodeDecimal64                     // 0x15 21
-	OpCodeDecimal128                    // 0x16 22
-	OpCodeDecimal256                    // 0x17 23
-	OpCodeMarshalBinary                 // 0x18 24
-	OpCodeMarshalText                   // 0x19 25
-	OpCodeStringer                      // 0x1A 26
-	OpCodeUnmarshalBinary               // 0x1B 27
-	OpCodeUnmarshalText                 // 0x1C 28
-)
-
-var (
-	opCodeStrings = "_i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixarr_fixstr_fixbyte_str_byte_dtime_i128_i256_d32_d64_d128_d256_mshbin_mshtxt_mshstr_ushbin_ushtxt"
-	opCodeIdx     = [...][2]int{
-		{0, 1},                            // invalid
-		{1, 3}, {4, 7}, {8, 11}, {12, 15}, // int
-		{16, 18}, {19, 22}, {23, 26}, {27, 30}, // uint
-		{31, 34}, {35, 38}, // float
-		{39, 43},                     // bool
-		{44, 50}, {51, 57}, {58, 65}, // fixed
-		{66, 69}, {70, 74}, // string, bytes
-		{75, 80},           // datetime
-		{81, 85}, {86, 90}, // i128/256
-		{91, 94}, {95, 98}, {99, 103}, {104, 108}, // decimals
-		{109, 115}, {116, 122}, {123, 129}, // marshalers
-		{130, 136}, {137, 143}, // unmarshalers
-	}
-)
-
-func (c OpCode) String() string {
-	if int(c) >= len(opCodeIdx) {
-		return "opcode_" + strconv.Itoa(int(c))
-	}
-	idx := opCodeIdx[c]
-	return opCodeStrings[idx[0]:idx[1]]
+type GenericEncoder[T any] struct {
+	enc *Encoder
 }
 
-func (c OpCode) NeedsInterface() bool {
-	return c >= OpCodeMarshalBinary
-}
-
-type Encoder[T any] struct {
-	schema  *Schema
-	needsif bool
-}
-
-func NewEncoder[T any]() *Encoder[T] {
+func NewGenericEncoder[T any]() *GenericEncoder[T] {
 	s, err := GenericSchema[T]()
 	if err != nil {
 		panic(err)
 	}
+	return &GenericEncoder[T]{
+		enc: NewEncoder(s),
+	}
+}
+
+func (e *GenericEncoder[T]) Schema() *Schema {
+	return e.enc.schema
+}
+
+func (e *GenericEncoder[T]) NewBuffer(sz int) *bytes.Buffer {
+	return e.enc.schema.NewBuffer(sz)
+}
+
+func (e *GenericEncoder[T]) Encode(buf *bytes.Buffer, val T) {
+	e.enc.Encode(buf, &val)
+}
+
+func (e *GenericEncoder[T]) EncodePtr(buf *bytes.Buffer, val *T) {
+	e.enc.Encode(buf, val)
+}
+
+func (e *GenericEncoder[T]) EncodeSlice(buf *bytes.Buffer, slice []T) {
+	e.enc.EncodeSlice(buf, &slice)
+}
+
+func (e *GenericEncoder[T]) EncodePtrSlice(buf *bytes.Buffer, slice []*T) {
+	e.enc.EncodeSlice(buf, &slice)
+}
+
+type Encoder struct {
+	schema  *Schema
+	needsif bool
+}
+
+func NewEncoder(s *Schema) *Encoder {
 	var needsif bool
 	for _, c := range s.encode {
 		if c.NeedsInterface() {
@@ -96,28 +65,24 @@ func NewEncoder[T any]() *Encoder[T] {
 			break
 		}
 	}
-	return &Encoder[T]{
+	return &Encoder{
 		schema:  s,
 		needsif: needsif,
 	}
 }
 
-func (e *Encoder[T]) Schema() *Schema {
+func (e *Encoder) Schema() *Schema {
 	return e.schema
 }
 
-func (e *Encoder[T]) NewBuffer(sz int) *bytes.Buffer {
+func (e *Encoder) NewBuffer(sz int) *bytes.Buffer {
 	return e.schema.NewBuffer(sz)
 }
 
-func (e *Encoder[T]) Encode(buf *bytes.Buffer, val T) {
-	e.EncodePtr(buf, &val)
-}
-
-func (e *Encoder[T]) EncodePtr(buf *bytes.Buffer, val *T) {
-	base := unsafe.Pointer(val)
+func (e *Encoder) Encode(buf *bytes.Buffer, val any) {
+	rval := reflect.Indirect(reflect.ValueOf(val))
+	base := rval.Addr().UnsafePointer()
 	if e.needsif {
-		rval := reflect.Indirect(reflect.ValueOf(val))
 		for op, code := range e.schema.encode {
 			field := e.schema.fields[op]
 			if code.NeedsInterface() {
@@ -137,38 +102,76 @@ func (e *Encoder[T]) EncodePtr(buf *bytes.Buffer, val *T) {
 	}
 }
 
-func (e *Encoder[T]) EncodeSlice(buf *bytes.Buffer, slice []T) {
-	if !e.needsif {
-		for i := range slice {
-			base := unsafe.Pointer(&slice[i])
-			for op, code := range e.schema.encode {
-				field := e.schema.fields[op]
-				ptr := unsafe.Add(base, field.offset)
-				writeField(buf, code, field, ptr)
+func (e *Encoder) EncodeSlice(buf *bytes.Buffer, slice any) {
+	rslice := reflect.Indirect(reflect.ValueOf(slice))
+	base := rslice.UnsafePointer()
+	etyp := rslice.Type().Elem()
+	sz := etyp.Size()
+	isPtr := etyp.Kind() == reflect.Pointer
+	if isPtr {
+		sz = etyp.Elem().Size()
+	}
+	num := rslice.Len()
+
+	if isPtr {
+		if !e.needsif {
+			for i, l := 0, num; i < l; i++ {
+				base = rslice.Index(i).UnsafePointer()
+				for op, code := range e.schema.encode {
+					field := e.schema.fields[op]
+					ptr := unsafe.Add(base, field.offset)
+					writeField(buf, code, field, ptr)
+				}
+			}
+		} else {
+			for i, l := 0, num; i < l; i++ {
+				rval := rslice.Index(i)
+				base = rval.UnsafePointer()
+				for op, code := range e.schema.encode {
+					field := e.schema.fields[op]
+					if !code.NeedsInterface() {
+						ptr := unsafe.Add(base, field.offset)
+						writeField(buf, code, field, ptr)
+					} else {
+						writeReflectField(buf, code, rval.Elem().FieldByIndex(field.path).Interface())
+					}
+				}
 			}
 		}
 	} else {
-		for i := range slice {
-			base := unsafe.Pointer(&slice[i])
-			rval := reflect.ValueOf(slice[i])
-			for op, code := range e.schema.encode {
-				field := e.schema.fields[op]
-				if !code.NeedsInterface() {
+		if !e.needsif {
+			for i, l := 0, num; i < l; i++ {
+				for op, code := range e.schema.encode {
+					field := e.schema.fields[op]
 					ptr := unsafe.Add(base, field.offset)
 					writeField(buf, code, field, ptr)
-				} else {
-					writeReflectField(buf, code, rval.FieldByIndex(field.path).Interface())
 				}
+				base = unsafe.Add(base, sz)
+			}
+		} else {
+			for i, l := 0, num; i < l; i++ {
+				rval := rslice.Index(i)
+				for op, code := range e.schema.encode {
+					field := e.schema.fields[op]
+					if !code.NeedsInterface() {
+						ptr := unsafe.Add(base, field.offset)
+						writeField(buf, code, field, ptr)
+					} else {
+						writeReflectField(buf, code, rval.FieldByIndex(field.path).Interface())
+					}
+				}
+				base = unsafe.Add(base, sz)
 			}
 		}
 	}
 }
 
-func (e *Encoder[T]) EncodePtrSlice(buf *bytes.Buffer, slice []*T) {
+func (e *Encoder) EncodePtrSlice(buf *bytes.Buffer, slice any) {
+	rslice := reflect.Indirect(reflect.ValueOf(slice))
 	if e.needsif {
-		for i := range slice {
-			base := unsafe.Pointer(slice[i])
-			rval := reflect.Indirect(reflect.ValueOf(slice[i]))
+		for i, l := 0, rslice.Len(); i < l; i++ {
+			rval := reflect.Indirect(rslice.Index(i))
+			base := rval.UnsafePointer()
 			for op, code := range e.schema.encode {
 				field := e.schema.fields[op]
 				if !code.NeedsInterface() {
@@ -180,8 +183,9 @@ func (e *Encoder[T]) EncodePtrSlice(buf *bytes.Buffer, slice []*T) {
 			}
 		}
 	} else {
-		for i := range slice {
-			base := unsafe.Pointer(slice[i])
+		for i, l := 0, rslice.Len(); i < l; i++ {
+			rval := reflect.Indirect(rslice.Index(i))
+			base := rval.UnsafePointer()
 			for op, code := range e.schema.encode {
 				field := e.schema.fields[op]
 				ptr := unsafe.Add(base, field.offset)

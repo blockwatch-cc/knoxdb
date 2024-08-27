@@ -56,6 +56,7 @@ func SchemaOf(m any) (*Schema, error) {
 		name:        strings.ToLower(typ.Name()),
 		fields:      make([]Field, 0),
 		isFixedSize: true,
+		version:     1,
 	}
 
 	// use table name when type implements the Model interface

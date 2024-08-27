@@ -109,7 +109,7 @@ func makeTestData(sz int) (res []encodeTestStruct) {
 func TestEncodeVal(t *testing.T) {
 	vals := makeTestData(1)
 	val := vals[0]
-	enc := NewEncoder[encodeTestStruct]()
+	enc := NewGenericEncoder[encodeTestStruct]()
 	buf := enc.NewBuffer(1)
 	enc.Encode(buf, val)
 	require.NotNil(t, buf)
@@ -119,22 +119,22 @@ func TestEncodeVal(t *testing.T) {
 func TestEncodeRoundtrip(t *testing.T) {
 	vals := makeTestData(1)
 	val := vals[0]
-	enc := NewEncoder[encodeTestStruct]()
+	enc := NewGenericEncoder[encodeTestStruct]()
 	buf := enc.NewBuffer(1)
 	enc.Encode(buf, val)
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
 
-	dec := NewDecoder[encodeTestStruct]()
-	val2, err := dec.Decode(buf.Bytes())
+	dec := NewGenericDecoder[encodeTestStruct]()
+	val2, err := dec.Decode(buf.Bytes(), nil)
 	require.NoError(t, err)
 	require.IsType(t, val, *val2)
 	require.Exactly(t, val, *val2)
 }
 
 func TestDecoderRead(t *testing.T) {
-	enc := NewEncoder[encodeTestStruct]()
-	dec := NewDecoder[encodeTestStruct]()
+	enc := NewGenericEncoder[encodeTestStruct]()
+	dec := NewGenericDecoder[encodeTestStruct]()
 	t.Log("E", enc.Schema())
 	t.Log("D", dec.Schema())
 	buf := enc.NewBuffer(100)
@@ -158,7 +158,7 @@ func TestDecoderRead(t *testing.T) {
 
 func TestEncodeSlice(t *testing.T) {
 	vals := makeTestData(2)
-	enc := NewEncoder[encodeTestStruct]()
+	enc := NewGenericEncoder[encodeTestStruct]()
 	buf := enc.NewBuffer(len(vals))
 	enc.EncodeSlice(buf, vals)
 	require.NotNil(t, buf)
@@ -168,7 +168,7 @@ func TestEncodeSlice(t *testing.T) {
 func TestEncodeValPtr(t *testing.T) {
 	vals := makeTestData(1)
 	val := &vals[0]
-	enc := NewEncoder[encodeTestStruct]()
+	enc := NewGenericEncoder[encodeTestStruct]()
 	buf := enc.NewBuffer(1)
 	enc.EncodePtr(buf, val)
 	require.NotNil(t, buf)
@@ -181,7 +181,7 @@ func TestEncodePtrSlice(t *testing.T) {
 	for i := range vals {
 		ptrs[i] = &vals[i]
 	}
-	enc := NewEncoder[encodeTestStruct]()
+	enc := NewGenericEncoder[encodeTestStruct]()
 	buf := enc.NewBuffer(len(ptrs))
 	enc.EncodePtrSlice(buf, ptrs)
 	require.NotNil(t, buf)
@@ -252,7 +252,7 @@ func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
 			I256:    num.MustParseInt256(strconv.Itoa(i) + "000000000000000000000000000000000000000000000000000000000000"),
 		})
 	}
-	enc := NewEncoder[encodeBenchStruct]()
+	enc := NewGenericEncoder[encodeBenchStruct]()
 	buf := enc.NewBuffer(sz)
 	enc.EncodeSlice(buf, res)
 	return res, int64(buf.Len())
@@ -260,7 +260,7 @@ func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
 
 func BenchmarkEncodeVal(b *testing.B) {
 	slice, sz := makeBenchData(1)
-	enc := NewEncoder[encodeBenchStruct]()
+	enc := NewGenericEncoder[encodeBenchStruct]()
 	buf := enc.NewBuffer(1)
 	b.ReportAllocs()
 	b.SetBytes(sz)
@@ -273,7 +273,7 @@ func BenchmarkEncodeVal(b *testing.B) {
 
 func BenchmarkEncodePtr(b *testing.B) {
 	slice, sz := makeBenchData(1)
-	enc := NewEncoder[encodeBenchStruct]()
+	enc := NewGenericEncoder[encodeBenchStruct]()
 	buf := enc.NewBuffer(1)
 	b.ReportAllocs()
 	b.SetBytes(sz)
@@ -285,7 +285,7 @@ func BenchmarkEncodePtr(b *testing.B) {
 }
 
 func BenchmarkEncodeSlice(b *testing.B) {
-	enc := NewEncoder[encodeBenchStruct]()
+	enc := NewGenericEncoder[encodeBenchStruct]()
 	for _, n := range encodeBenchmarkSizes {
 		b.Run(n.name, func(b *testing.B) {
 			slice, sz := makeBenchData(n.num)
@@ -302,7 +302,7 @@ func BenchmarkEncodeSlice(b *testing.B) {
 }
 
 func BenchmarkEncodePtrSlice(b *testing.B) {
-	enc := NewEncoder[encodeBenchStruct]()
+	enc := NewGenericEncoder[encodeBenchStruct]()
 	for _, n := range encodeBenchmarkSizes {
 		b.Run(n.name, func(b *testing.B) {
 			slice, sz := makeBenchData(n.num)
@@ -326,7 +326,7 @@ func BenchmarkMemcopy(b *testing.B) {
 	for _, n := range encodeBenchmarkSizes {
 		b.Run(n.name, func(b *testing.B) {
 			slice, sz := makeBenchData(n.num)
-			enc := NewEncoder[encodeBenchStruct]()
+			enc := NewGenericEncoder[encodeBenchStruct]()
 			buf := enc.NewBuffer(n.num)
 			enc.EncodeSlice(buf, slice)
 			dst := make([]byte, buf.Len())
@@ -342,22 +342,22 @@ func BenchmarkMemcopy(b *testing.B) {
 
 func BenchmarkDecodeVal(b *testing.B) {
 	slice, sz := makeBenchData(1)
-	enc := NewEncoder[encodeBenchStruct]()
-	dec := NewDecoder[encodeBenchStruct]()
+	enc := NewGenericEncoder[encodeBenchStruct]()
+	dec := NewGenericDecoder[encodeBenchStruct]()
 	buf := enc.NewBuffer(1)
 	enc.Encode(buf, slice[0])
 	b.ReportAllocs()
 	b.SetBytes(sz)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = dec.Decode(buf.Bytes())
+		_, _ = dec.Decode(buf.Bytes(), nil)
 	}
 }
 
 func BenchmarkDecodeTo(b *testing.B) {
 	slice, sz := makeBenchData(1)
-	enc := NewEncoder[encodeBenchStruct]()
-	dec := NewDecoder[encodeBenchStruct]()
+	enc := NewGenericEncoder[encodeBenchStruct]()
+	dec := NewGenericDecoder[encodeBenchStruct]()
 	buf := enc.NewBuffer(1)
 	enc.Encode(buf, slice[0])
 	var val encodeBenchStruct
@@ -365,13 +365,13 @@ func BenchmarkDecodeTo(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(sz)
 	for i := 0; i < b.N; i++ {
-		_, _ = dec.DecodeTo(buf.Bytes(), &val)
+		_, _ = dec.Decode(buf.Bytes(), &val)
 	}
 }
 
 func BenchmarkDecodeSlice(b *testing.B) {
-	enc := NewEncoder[encodeBenchStruct]()
-	dec := NewDecoder[encodeBenchStruct]()
+	enc := NewGenericEncoder[encodeBenchStruct]()
+	dec := NewGenericDecoder[encodeBenchStruct]()
 	for _, n := range encodeBenchmarkSizes {
 		b.Run(n.name, func(b *testing.B) {
 			slice, sz := makeBenchData(n.num)
@@ -388,8 +388,8 @@ func BenchmarkDecodeSlice(b *testing.B) {
 }
 
 func BenchmarkDecodeSliceNoAlloc(b *testing.B) {
-	enc := NewEncoder[encodeBenchStruct]()
-	dec := NewDecoder[encodeBenchStruct]()
+	enc := NewGenericEncoder[encodeBenchStruct]()
+	dec := NewGenericDecoder[encodeBenchStruct]()
 	for _, n := range encodeBenchmarkSizes {
 		b.Run(n.name, func(b *testing.B) {
 			slice, sz := makeBenchData(n.num)
@@ -407,8 +407,8 @@ func BenchmarkDecodeSliceNoAlloc(b *testing.B) {
 }
 
 func BenchmarkDecodeSliceRead(b *testing.B) {
-	enc := NewEncoder[encodeBenchStruct]()
-	dec := NewDecoder[encodeBenchStruct]()
+	enc := NewGenericEncoder[encodeBenchStruct]()
+	dec := NewGenericDecoder[encodeBenchStruct]()
 	for _, n := range encodeBenchmarkSizes {
 		b.Run(n.name, func(b *testing.B) {
 			slice, sz := makeBenchData(n.num)

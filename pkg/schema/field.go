@@ -43,13 +43,14 @@ type ExportedField struct {
 	Flags     FieldFlags
 	Compress  FieldCompression
 	Index     IndexKind
-	Fixed     uint16
-	Scale     uint8
-	Offset    uintptr
-	Iface     IfaceFlags
 	IsVisible bool
 	IsArray   bool
+	Iface     IfaceFlags
+	Scale     uint8
+	Fixed     uint16
+	Offset    uintptr
 	path      []int
+	_         [4]byte // padding
 }
 
 func NewField(typ FieldType) Field {

@@ -14,17 +14,78 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
-type Decoder[T any] struct {
+type GenericDecoder[T any] struct {
+	dec *Decoder
+}
+
+func NewGenericDecoder[T any]() *GenericDecoder[T] {
+	s, err := GenericSchema[T]()
+	if err != nil {
+		panic(err)
+	}
+	return &GenericDecoder[T]{
+		dec: NewDecoder(s),
+	}
+}
+
+func (d *GenericDecoder[T]) Schema() *Schema {
+	return d.dec.schema
+}
+
+// Read reads wire encoded data from r and decodes into val based on
+// the schema for T.
+//
+// When wire size is fixed we can read and decode in one step.
+// Otherwise we take a slow path that reads variable length data
+// as length fields are encountered. This issues multiple calls
+// to the underlying reader, likely a host-side io.Stream.
+//
+// Reading is staged through an internal decoder buffer
+// with an inital size of minWireSize bytes. This buffer gets
+// extended whenever a dynamic data type length is found so
+// that it contains at least the bytes for the dynamic data
+// plus all fixed bytes for following fields a that time.
+// Because the buffer may grow and reallocate it is NOT SAFE
+// to reference memory for strings and byte slices and hence
+// we make explicit copies. Moreover, a copy is necessary to
+// safely retain returned objects since the internal buffer is
+// re-used between calls.
+func (d *GenericDecoder[T]) Read(r io.Reader) (val *T, err error) {
+	val = new(T)
+	err = d.dec.Read(r, val)
+	return
+}
+
+func (d *GenericDecoder[T]) Decode(buf []byte, val *T) (*T, error) {
+	if val == nil {
+		val = new(T)
+	}
+	err := d.dec.Decode(buf, val)
+	return val, err
+}
+
+func (d *GenericDecoder[T]) DecodeSlice(buf []byte, res []T) ([]T, error) {
+	if res == nil {
+		// We slightly over-allocate the result slice when data contains
+		// long strings/bytes, however this single allocation is still
+		// much more performant than growing the slice multiple times.
+		// For fixed-size schemas, the single allocation is all we need.
+		res = make([]T, len(buf)/max(d.dec.schema.minWireSize, 1))
+	}
+	n, err := d.dec.DecodeSlice(buf, res)
+	if err != nil {
+		return nil, err
+	}
+	return res[:n], nil
+}
+
+type Decoder struct {
 	schema  *Schema
 	needsif bool
 	buf     *bytes.Buffer
 }
 
-func NewDecoder[T any]() *Decoder[T] {
-	s, err := GenericSchema[T]()
-	if err != nil {
-		panic(err)
-	}
+func NewDecoder(s *Schema) *Decoder {
 	var needsif bool
 	for _, c := range s.decode {
 		if c.NeedsInterface() {
@@ -32,14 +93,14 @@ func NewDecoder[T any]() *Decoder[T] {
 			break
 		}
 	}
-	return &Decoder[T]{
+	return &Decoder{
 		schema:  s,
 		needsif: needsif,
 		buf:     bytes.NewBuffer(make([]byte, 0, s.maxWireSize)),
 	}
 }
 
-func (d *Decoder[T]) Schema() *Schema {
+func (d *Decoder) Schema() *Schema {
 	return d.schema
 }
 
@@ -61,31 +122,30 @@ func (d *Decoder[T]) Schema() *Schema {
 // we make explicit copies. Moreover, a copy is necessary to
 // safely retain returned objects since the internal buffer is
 // re-used between calls.
-func (d *Decoder[T]) Read(r io.Reader) (val *T, err error) {
+func (d *Decoder) Read(r io.Reader, val any) error {
 	// reset decoder buffer
 	d.buf.Reset()
 
 	// read first chunk of data (this is sufficient when schema is fixed size)
 	n, err := io.CopyN(d.buf, r, int64(d.schema.minWireSize))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if n != int64(d.schema.minWireSize) {
-		return nil, ErrShortBuffer
+		return ErrShortBuffer
 	}
 
 	// fast path decode fixed size data
 	if d.schema.isFixedSize {
-		return d.DecodeTo(d.buf.Bytes(), nil)
+		return d.Decode(d.buf.Bytes(), val)
 	}
 
 	// slow path decode with additional read calls (may reallocate buffer!)
-	val = new(T)
-	base := unsafe.Pointer(val)
-	var rval reflect.Value
-	if d.needsif {
-		rval = reflect.Indirect(reflect.ValueOf(val))
+	if val == nil {
+		return ErrNilValue
 	}
+	rval := reflect.Indirect(reflect.ValueOf(val))
+	base := rval.Addr().UnsafePointer()
 
 	for op, code := range d.schema.decode {
 		field := d.schema.fields[op]
@@ -110,10 +170,10 @@ func (d *Decoder[T]) Read(r io.Reader) (val *T, err error) {
 			l, _ := ReadUint32(d.buf.Next(4))
 			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if n != int64(l) {
-				return nil, ErrShortBuffer
+				return ErrShortBuffer
 			}
 			// explicit copy
 			*(*string)(ptr) = string(d.buf.Next(int(l)))
@@ -122,10 +182,10 @@ func (d *Decoder[T]) Read(r io.Reader) (val *T, err error) {
 			l, _ := ReadUint32(d.buf.Next(4))
 			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if n != int64(l) {
-				return nil, ErrShortBuffer
+				return ErrShortBuffer
 			}
 			// explicit copy
 			*(*[]byte)(ptr) = bytes.Clone(d.buf.Next(int(l)))
@@ -134,10 +194,10 @@ func (d *Decoder[T]) Read(r io.Reader) (val *T, err error) {
 			l, _ := ReadUint32(d.buf.Next(4))
 			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if n != int64(l) {
-				return nil, ErrShortBuffer
+				return ErrShortBuffer
 			}
 
 			// need reflection to access interface
@@ -179,24 +239,19 @@ func (d *Decoder[T]) Read(r io.Reader) (val *T, err error) {
 		}
 
 		if err != nil {
-			return
+			return err
 		}
 	}
-	return
+	return nil
 }
 
-func (d *Decoder[T]) Decode(buf []byte) (*T, error) {
-	var val T
-	return d.DecodeTo(buf, &val)
-}
-
-func (d *Decoder[T]) DecodeTo(buf []byte, val *T) (*T, error) {
+func (d *Decoder) Decode(buf []byte, val any) error {
 	if val == nil {
-		val = new(T)
+		return ErrNilValue
 	}
-	base := unsafe.Pointer(val)
+	rval := reflect.Indirect(reflect.ValueOf(val))
+	base := rval.Addr().UnsafePointer()
 	if d.needsif {
-		rval := reflect.Indirect(reflect.ValueOf(val))
 		for op, code := range d.schema.decode {
 			field := &d.schema.fields[op]
 			if code.NeedsInterface() {
@@ -214,23 +269,24 @@ func (d *Decoder[T]) DecodeTo(buf []byte, val *T) (*T, error) {
 			buf = readField(code, field, ptr, buf)
 		}
 	}
-	return val, nil
+	return nil
 }
 
-func (d *Decoder[T]) DecodeSlice(buf []byte, res []T) ([]T, error) {
-	if res == nil {
-		// We slightly over-allocate the result slice when data contains
-		// long strings/bytes, however this single allocation is still
-		// much more performant than growing the slice multiple times.
-		// For fixed-size schemas, the single allocation is all we need.
-		res = make([]T, len(buf)/max(d.schema.minWireSize, 1))
+func (d *Decoder) DecodeSlice(buf []byte, slice any) (int, error) {
+	if slice == nil {
+		return 0, ErrNilValue
 	}
+	rslice := reflect.Indirect(reflect.ValueOf(slice))
+	base := rslice.UnsafePointer()
+	sz := rslice.Type().Elem().Size()
+	num := rslice.Len()
+	ops := d.schema.decode
+
 	var i int
 	if d.needsif {
-		for i = 0; i < len(res) && len(buf) > 0; i++ {
-			base := unsafe.Pointer(&res[i])
-			rval := reflect.ValueOf(res[i])
-			for op, code := range d.schema.decode {
+		for i = 0; i < num && len(buf) > 0; i++ {
+			rval := rslice.Index(i)
+			for op, code := range ops {
 				field := &d.schema.fields[op]
 				if code.NeedsInterface() {
 					dst := field.StructValue(rval)
@@ -240,18 +296,19 @@ func (d *Decoder[T]) DecodeSlice(buf []byte, res []T) ([]T, error) {
 					buf = readField(code, field, ptr, buf)
 				}
 			}
+			base = unsafe.Add(base, sz)
 		}
 	} else {
-		for i = 0; i < len(res) && len(buf) > 0; i++ {
-			base := unsafe.Pointer(&res[i])
-			for op, code := range d.schema.decode {
+		for i = 0; i < num && len(buf) > 0; i++ {
+			for op, code := range ops {
 				field := &d.schema.fields[op]
 				ptr := unsafe.Add(base, field.offset)
 				buf = readField(code, field, ptr, buf)
 			}
+			base = unsafe.Add(base, sz)
 		}
 	}
-	return res[:i], nil
+	return i, nil
 }
 
 func readReflectField(code OpCode, rval any, buf []byte) []byte {
