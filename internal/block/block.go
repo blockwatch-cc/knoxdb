@@ -85,6 +85,10 @@ func (b *Block) DecRef() int64 {
 	return val
 }
 
+func (b Block) Ptr() unsafe.Pointer {
+	return b.ptr
+}
+
 func (b Block) Type() BlockType {
 	return b.typ
 }

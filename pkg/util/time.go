@@ -529,3 +529,14 @@ func FirstNonZeroTime(val time.Time, others ...time.Time) time.Time {
 	}
 	return time.Time{}
 }
+
+func CmpTime(a, b time.Time) int {
+	switch {
+	case a.Equal(b):
+		return 0
+	case a.Before(b):
+		return -1
+	default:
+		return 1
+	}
+}

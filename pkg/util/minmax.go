@@ -23,6 +23,17 @@ func MaxBytes(a, b []byte) []byte {
 	return b
 }
 
+func Cmp[T constraints.Ordered](a, b T) int {
+	switch {
+	case a == b:
+		return 0
+	case a < b:
+		return -1
+	default:
+		return 1
+	}
+}
+
 func Max[T constraints.Ordered](vals ...T) T {
 	var zero T
 	switch len(vals) {
