@@ -72,8 +72,12 @@ func (c *TwoQueueCache[K, V]) Params() CacheParams {
 
 // New2Q creates a new TwoQueueCache using the default
 // values for the parameters.
-func New2Q[K comparable, V RefCountedElem](size int) (*TwoQueueCache[K, V], error) {
-	return New2QParams[K, V](size, Default2QRecentRatio, Default2QGhostEntries)
+func New2Q[K comparable, V RefCountedElem](size int) *TwoQueueCache[K, V] {
+	c, err := New2QParams[K, V](size, Default2QRecentRatio, Default2QGhostEntries)
+	if err != nil {
+		panic(err)
+	}
+	return c
 }
 
 // New2QParams creates a new TwoQueueCache using the provided
@@ -90,18 +94,9 @@ func New2QParams[K comparable, V RefCountedElem](size int, recentRatio float64, 
 	}
 
 	// Allocate the LRUs
-	recent, err := NewLRU[K, V]()
-	if err != nil {
-		return nil, err
-	}
-	frequent, err := NewLRU[K, V]()
-	if err != nil {
-		return nil, err
-	}
-	recentEvict, err := NewLRU[K, V]()
-	if err != nil {
-		return nil, err
-	}
+	recent := NewLRU[K, V]()
+	frequent := NewLRU[K, V]()
+	recentEvict := NewLRU[K, V]()
 
 	// Initialize the cache
 	c := &TwoQueueCache[K, V]{

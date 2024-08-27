@@ -21,13 +21,12 @@ type entry[K comparable, V RefCountedElem] struct {
 }
 
 // NewLRU constructs an LRU of the given size
-func NewLRU[K comparable, V RefCountedElem]() (*LRU[K, V], error) {
-	c := &LRU[K, V]{
+func NewLRU[K comparable, V RefCountedElem]() *LRU[K, V] {
+	return &LRU[K, V]{
 		evictList:    list.New(),
 		items:        make(map[K]*list.Element),
 		evictCounter: 0,
 	}
-	return c, nil
 }
 
 // Purge is used to completely clear the cache.
