@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Blockwatch Data Inc.
+// Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package pack
@@ -19,6 +19,11 @@ import (
 // AppendWire appends a new row of values from a wire protocol message. The caller must
 // ensure the message matches the currrent package schema.
 func (p *Package) AppendWire(buf []byte) error {
+	assert.Always(p.CanGrow(1), "pack: overflow on wire append",
+		"pack", p.key,
+		"len", p.nRows,
+		"cap", p.maxRows,
+	)
 	for i, field := range p.schema.Exported() {
 		// deleted and internal fields are invisible
 		if !field.IsVisible {
@@ -88,13 +93,194 @@ func (p *Package) AppendWire(buf []byte) error {
 	return nil
 }
 
+// vector load data from a slice
+func (p *Package) AppendSlice(val reflect.Value) error {
+	assert.Always(val.Kind() == reflect.Slice, "pack: invalid relect type in append",
+		"rtyp", val.Type().String(),
+		"rkind", val.Kind().String(),
+	)
+
+	base := val.UnsafePointer()    // ptr to first slice element
+	n := val.Len()                 // number of elements
+	sz := val.Type().Elem().Size() // size of elements
+
+	assert.Always(p.CanGrow(n), "pack: overflow on slice append",
+		"n", n,
+		"pack", p.key,
+		"len", p.nRows,
+		"cap", p.maxRows,
+	)
+
+	for i, field := range p.schema.Exported() {
+		// deleted and internal fields are invisible
+		if !field.IsVisible {
+			continue
+		}
+
+		// skipped and new blocks in old packages are missing
+		b := p.blocks[i]
+		if b == nil {
+			continue
+		}
+
+		// pointer to first struct
+		fptr := unsafe.Add(base, field.Offset)
+
+		// walk all structs and append in column order
+		// TODO: SIMD gather
+
+		switch field.Type {
+		case FieldTypeInt64, FieldTypeUint64, FieldTypeFloat64:
+			for i := 0; i < n; i++ {
+				b.Uint64().Append(*(*uint64)(fptr))
+				fptr = unsafe.Add(fptr, sz)
+			}
+
+		case FieldTypeInt32, FieldTypeUint32, FieldTypeFloat32:
+			for i := 0; i < n; i++ {
+				b.Uint32().Append(*(*uint32)(fptr))
+				fptr = unsafe.Add(fptr, sz)
+			}
+
+		case FieldTypeInt16, FieldTypeUint16:
+			for i := 0; i < n; i++ {
+				b.Uint16().Append(*(*uint16)(fptr))
+				fptr = unsafe.Add(fptr, sz)
+			}
+
+		case FieldTypeInt8, FieldTypeUint8:
+			for i := 0; i < n; i++ {
+				b.Uint8().Append(*(*uint8)(fptr))
+				fptr = unsafe.Add(fptr, sz)
+			}
+
+		case FieldTypeDatetime:
+			for i := 0; i < n; i++ {
+				b.Int64().Append((*(*time.Time)(fptr)).UnixNano())
+				fptr = unsafe.Add(fptr, sz)
+			}
+
+		case FieldTypeBoolean:
+			for i := 0; i < n; i++ {
+				if *(*bool)(fptr) {
+					b.Bool().Set(p.nRows + i)
+				}
+				fptr = unsafe.Add(fptr, sz)
+			}
+
+		case FieldTypeBytes:
+			switch {
+			case field.Iface&schema.IfaceBinaryMarshaler > 0:
+				for i := 0; i < n; i++ {
+					rval := val.Index(i)
+					rfield := field.StructValue(rval)
+					buf, err := rfield.Interface().(encoding.BinaryMarshaler).MarshalBinary()
+					if err != nil {
+						return err
+					}
+					b.Bytes().AppendZeroCopy(buf)
+				}
+			case field.IsArray:
+				for i := 0; i < n; i++ {
+					b.Bytes().Append(unsafe.Slice((*byte)(fptr), field.Fixed))
+					fptr = unsafe.Add(fptr, sz)
+				}
+			default:
+				for i := 0; i < n; i++ {
+					b.Bytes().Append(*(*[]byte)(fptr))
+					fptr = unsafe.Add(fptr, sz)
+				}
+			}
+
+		case FieldTypeString:
+			switch {
+			case field.Iface&schema.IfaceTextMarshaler > 0:
+				for i := 0; i < n; i++ {
+					rval := val.Index(i)
+					rfield := field.StructValue(rval)
+					buf, err := rfield.Interface().(encoding.TextMarshaler).MarshalText()
+					if err != nil {
+						return err
+					}
+					b.Bytes().AppendZeroCopy(buf)
+				}
+			case field.Iface&schema.IfaceStringer > 0:
+				for i := 0; i < n; i++ {
+					rval := val.Index(i)
+					rfield := field.StructValue(rval)
+					s := rfield.Interface().(fmt.Stringer).String()
+					b.Bytes().AppendZeroCopy(UnsafeGetBytes(s))
+				}
+			default:
+				for i := 0; i < n; i++ {
+					s := *(*string)(fptr)
+					b.Bytes().Append(UnsafeGetBytes(s))
+					fptr = unsafe.Add(fptr, sz)
+				}
+			}
+
+		case FieldTypeInt256:
+			for i := 0; i < n; i++ {
+				b.Int256().Append((*(*num.Int256)(fptr)))
+				fptr = unsafe.Add(fptr, sz)
+			}
+		case FieldTypeInt128:
+			for i := 0; i < n; i++ {
+				b.Int128().Append((*(*num.Int128)(fptr)))
+				fptr = unsafe.Add(fptr, sz)
+			}
+
+		case FieldTypeDecimal256:
+			for i := 0; i < n; i++ {
+				b.Int256().Append((*(*num.Decimal256)(fptr)).Quantize(field.Scale).Int256())
+				fptr = unsafe.Add(fptr, sz)
+			}
+
+		case FieldTypeDecimal128:
+			for i := 0; i < n; i++ {
+				b.Int128().Append((*(*num.Decimal128)(fptr)).Quantize(field.Scale).Int128())
+				fptr = unsafe.Add(fptr, sz)
+			}
+
+		case FieldTypeDecimal64:
+			for i := 0; i < n; i++ {
+				b.Int64().Append((*(*num.Decimal64)(fptr)).Quantize(field.Scale).Int64())
+				fptr = unsafe.Add(fptr, sz)
+			}
+
+		case FieldTypeDecimal32:
+			for i := 0; i < n; i++ {
+				b.Int32().Append((*(*num.Decimal32)(fptr)).Quantize(field.Scale).Int32())
+				fptr = unsafe.Add(fptr, sz)
+			}
+
+		default:
+			// oh, its a type we don't support yet
+			assert.Unreachable("unhandled value type",
+				// "rtype":   rfield.Type().String(),
+				// "rkind":   rfield.Kind().String(),
+				"field", field.Name,
+				"type", field.Type.String(),
+				"pack", p.key,
+				"schema", p.schema.Name(),
+				"version", p.schema.Version(),
+			)
+		}
+
+		b.SetDirty()
+	}
+	p.nRows += n
+	p.dirty = true
+	return nil
+}
+
 // AppendStruct appends a new row of values from a Go struct. The caller must
 // ensure strict type match as no additional check, cast or conversion is done.
 //
 // Column mapping uses the default struct tag `knox`.
 // Only flat structs are supported (no anonymous nesting)
 func (p *Package) AppendStruct(val any) error {
-	assert.Always(p.CanGrow(1), "pack: overflow on push",
+	assert.Always(p.CanGrow(1), "pack: overflow on struct append",
 		"pack", p.key,
 		"len", p.nRows,
 		"cap", p.maxRows,
@@ -159,7 +345,7 @@ func (p *Package) AppendStruct(val any) error {
 				}
 				b.Bytes().AppendZeroCopy(buf)
 			case field.IsArray:
-				b.Bytes().AppendZeroCopy(unsafe.Slice((*byte)(fptr), field.Fixed))
+				b.Bytes().Append(unsafe.Slice((*byte)(fptr), field.Fixed))
 			default:
 				b.Bytes().Append(*(*[]byte)(fptr))
 			}
@@ -179,7 +365,7 @@ func (p *Package) AppendStruct(val any) error {
 				b.Bytes().AppendZeroCopy(UnsafeGetBytes(s))
 			default:
 				s := *(*string)(fptr)
-				b.Bytes().Append(unsafe.Slice(unsafe.StringData(s), len(s)))
+				b.Bytes().Append(UnsafeGetBytes(s))
 			}
 
 		case FieldTypeInt256:
@@ -487,7 +673,7 @@ func (p *Package) SetRow(row int, val any) error {
 					}
 					b.Bytes().SetZeroCopy(row, buf)
 				case rfield.Type().Elem().Kind() == reflect.Uint8:
-					b.Bytes().SetZeroCopy(row, rfield.Bytes())
+					b.Bytes().Set(row, rfield.Bytes())
 				default:
 					// oh, its a type we don't support yet
 					assert.Unreachable("unhandled array type",

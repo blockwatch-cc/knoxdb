@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Blockwatch Data Inc.
+// Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package pack
@@ -6,7 +6,6 @@ package pack
 import (
 	"bytes"
 	"encoding"
-	"fmt"
 	"math"
 	"reflect"
 	"sort"
@@ -116,21 +115,28 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 
 // Reads package column data at row into custom struct dst. Target schema must be
 // compatible to package schema (types must match), but may contain less fields.
-// Maps defines the mapping of package columns to dst fields. Hidden columns are
-// ignored.
+// Maps defines the mapping of dst fields to source package columns.
 func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []int) error {
 	rval := reflect.Indirect(reflect.ValueOf(dst))
-	if !rval.IsValid() || rval.Kind() != reflect.Struct {
-		return fmt.Errorf("read: using invalid %s value of type %T", rval.Kind(), dst)
-	}
+	assert.Always(rval.IsValid() && rval.Kind() == reflect.Struct, "invalid value",
+		"kind", rval.Kind().String(),
+		"type", rval.Type().String(),
+	)
+	assert.Always(dstSchema != nil, "nil target schema")
+	assert.Always(maps != nil, "nil target mapping")
 
 	var err error
 	base := rval.Addr().UnsafePointer()
-	for i, field := range p.schema.Exported() {
+	for i, field := range dstSchema.Exported() {
 		// identify source field
 		srcId := maps[i]
 
-		// skipped and new blocks in old packages are missing
+		// skip unmapped fields
+		if srcId < 0 {
+			continue
+		}
+
+		// skip missing blocks (e.g. in old package versions)
 		b := p.blocks[srcId]
 		if b == nil {
 			continue
@@ -324,7 +330,7 @@ func (p *Package) ReadRow(row int, dst []any) []any {
 		dst = dst[:maxFields]
 	}
 	for i, field := range p.schema.Exported() {
-		// skipped and new blocks in old packages are missing
+		// skip blocks when not selected or missing (e.g. old package versions)
 		b := p.blocks[i]
 		if b == nil {
 			continue

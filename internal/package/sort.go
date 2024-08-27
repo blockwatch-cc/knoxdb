@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Blockwatch Data Inc.
+// Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package pack
