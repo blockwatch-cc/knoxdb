@@ -33,6 +33,10 @@ func (tx *transaction) checkClosed() error {
 	return nil
 }
 
+func (tx *transaction) IsWriteable() bool {
+	return tx.writable
+}
+
 // Root returns the top-most bucket for all metadata storage.
 //
 // This function is part of the store.Tx interface implementation.

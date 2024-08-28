@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2018-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package store
@@ -26,4 +26,17 @@ func BytesPrefix(prefix []byte) *Range {
 		}
 	}
 	return &Range{prefix, limit}
+}
+
+// CommitAndContinue commits the current transaction and
+// opens a new transaction of the same type. This is useful
+// to batch commit large quantities of data in a loop.
+func CommitAndContinue(tx Tx) (Tx, error) {
+	db := tx.DB()
+	iswrite := tx.IsWriteable()
+	err := tx.Commit()
+	if err != nil {
+		return nil, err
+	}
+	return db.Begin(iswrite)
 }

@@ -294,6 +294,9 @@ type Tx interface {
 
 	// DB returns the current database for the transaction.
 	DB() DB
+
+	// IsWriteable returns true when the current tx can write to the db.
+	IsWriteable() bool
 }
 
 type Manifest struct {
@@ -319,7 +322,7 @@ func (m Manifest) Validate(name, label, schema string, version int) error {
 		return fmt.Errorf("manifest schema: expected=%s, actual=%s", schema, m.Schema)
 	}
 	if version > 0 && version != m.Version {
-		return fmt.Errorf("manifest version: expected=%s, actual=%s", version, m.Version)
+		return fmt.Errorf("manifest version: expected=%d, actual=%d", version, m.Version)
 	}
 	return nil
 }

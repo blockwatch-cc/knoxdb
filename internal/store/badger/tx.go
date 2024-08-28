@@ -110,6 +110,10 @@ func (tx *transaction) nextBucketID() ([bucketIdLen]byte, error) {
 	return id, nil
 }
 
+func (tx *transaction) IsWriteable() bool {
+	return tx.writable
+}
+
 // Bucket returns a bucket under the top-most bucket.
 //
 // This function is part of the store.Tx interface implementation.
