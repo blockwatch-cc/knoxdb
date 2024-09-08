@@ -17,6 +17,7 @@ import (
 	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
 	"github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/badger/v4/options"
 )
 
 // db wraps a Badger instance and implements the store.DB interface.
@@ -426,6 +427,10 @@ func openDB(dbPath string, create bool) (store.DB, error) {
 	log := NewLogger()
 	opts := badger.DefaultOptions(dbPath).
 		WithDetectConflicts(false).
+		WithValueThreshold(1 << 20).
+		WithMetricsEnabled(false).
+		WithVerifyValueChecksum(true).
+		WithChecksumVerificationMode(options.OnBlockRead).
 		WithLogger(log)
 
 	log.Info("Opening database (this may take a while)...")

@@ -5,13 +5,14 @@ package series
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 
 	"reflect"
 	"strconv"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/engine"
 )
 
 type NativeBucket[T Number] struct {
@@ -27,7 +28,6 @@ type NativeBucket[T Number] struct {
 	limit    int          // value limit
 	fill     FillMode     // fill missing data
 	emit     func(T) string
-	read     func(query.Row) (T, error)
 }
 
 func NewNativeBucket[T Number]() *NativeBucket[T] {
@@ -100,7 +100,7 @@ func (b *NativeBucket[T]) grow() Reducer[T] {
 	return r
 }
 
-func (b *NativeBucket[T]) Push(t time.Time, r query.Row, join bool) error {
+func (b *NativeBucket[T]) Push(t time.Time, r engine.QueryRow, join bool) error {
 	// read next value from database stream
 	nextVal, err := b.read(r)
 	if err != nil {
@@ -228,62 +228,15 @@ func emitFloats[T Float](num T) string {
 	return strconv.FormatFloat(float64(num), 'f', -1, 64)
 }
 
-func (b *NativeBucket[T]) readInt64(r query.Row) (int64, error) {
-	return r.Int64(b.index)
-}
-
-func (b *NativeBucket[T]) readInt32(r query.Row) (int32, error) {
-	return r.Int32(b.index)
-}
-
-func (b *NativeBucket[T]) readInt16(r query.Row) (int16, error) {
-	return r.Int16(b.index)
-}
-
-func (b *NativeBucket[T]) readInt8(r query.Row) (int8, error) {
-	return r.Int8(b.index)
-}
-
-func (b *NativeBucket[T]) readUint64(r query.Row) (uint64, error) {
-	return r.Uint64(b.index)
-}
-
-func (b *NativeBucket[T]) readUint32(r query.Row) (uint32, error) {
-	return r.Uint32(b.index)
-}
-
-func (b *NativeBucket[T]) readUint16(r query.Row) (uint16, error) {
-	return r.Uint16(b.index)
-}
-
-func (b *NativeBucket[T]) readUint8(r query.Row) (uint8, error) {
-	return r.Uint8(b.index)
-}
-
-func (b *NativeBucket[T]) readFloat64(r query.Row) (float64, error) {
-	return r.Float64(b.index)
-}
-
-func (b *NativeBucket[T]) readFloat32(r query.Row) (float32, error) {
-	return r.Float32(b.index)
-}
-
-func (b *NativeBucket[T]) readDecimal256(r query.Row) (float64, error) {
-	val, err := r.Decimal256(b.index)
-	return val.Float64(), err
-}
-
-func (b *NativeBucket[T]) readDecimal128(r query.Row) (float64, error) {
-	val, err := r.Decimal128(b.index)
-	return val.Float64(), err
-}
-
-func (b *NativeBucket[T]) readDecimal64(r query.Row) (float64, error) {
-	val, err := r.Decimal64(b.index)
-	return val.Float64(), err
-}
-
-func (b *NativeBucket[T]) readDecimal32(r query.Row) (float64, error) {
-	val, err := r.Decimal32(b.index)
-	return val.Float64(), err
+func (b *NativeBucket[T]) read(r engine.QueryRow) (T, error) {
+	val, err := r.Index(b.index)
+	if err != nil {
+		var t T
+		return t, err
+	}
+	t, ok := val.(T)
+	if !ok {
+		return t, fmt.Errorf("invalid value type %T for %T", val, t)
+	}
+	return t, nil
 }

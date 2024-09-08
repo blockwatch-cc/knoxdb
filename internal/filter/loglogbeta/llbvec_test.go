@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Blockwatch Data Inc.
+// Copyright (c) 2021-2024 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
 package loglogbeta
@@ -11,7 +11,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/block"
+	"blockwatch.cc/knoxdb/internal/hash/xxhashVec"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
@@ -392,13 +392,12 @@ func BenchmarkFilterAddExactHashed(b *testing.B) {
 			continue
 		}
 		lastn = c.n
-		blk := block.New(block.BlockUint64, c.n)
-		u64 := (*[]uint64)(blk.Ptr())
-		*u64 = append(*u64, RandUint64(c.n)...)
+		u64 := xxhashVec.XXHash64Uint64Slice(RandUint64(c.n), nil)
 		b.Run(fmt.Sprintf("n=%d", c.n), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				_ = blk.Hashes(nil)
+				flt := NewFilterWithPrecision(16)
+				flt.AddManyUint64(u64)
 			}
 		})
 	}
@@ -411,16 +410,12 @@ func BenchmarkFilterCardinalityExactHashed(b *testing.B) {
 			continue
 		}
 		lastn = c.n
-		blk := block.New(block.BlockUint64, c.n)
-		u64 := (*[]uint64)(blk.Ptr())
-		*u64 = append(*u64, RandUint64(c.n)...)
-		h := blk.Hashes(nil)
-
+		u64 := xxhashVec.XXHash64Uint64Slice(RandUint64(c.n), nil)
 		b.Run(fmt.Sprintf("n=%d", c.n), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				u64 := slicex.NewOrderedNumbers(h).SetUnique().Values
-				_ = len(u64)
+				res := slicex.NewOrderedNumbers(u64).SetUnique().Values
+				_ = len(res)
 			}
 		})
 	}

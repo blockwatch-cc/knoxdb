@@ -38,13 +38,13 @@ func EncodeBitset(src *bitset.Bitset, w io.Writer) (int, error) {
 	w.Write([]byte{booleanCompressedBitPacked << 4})
 
 	// Encode the number of bits written.
-	var b [8]byte
-	binary.LittleEndian.PutUint64(b[:], uint64(src.Len()))
+	var b [4]byte
+	binary.LittleEndian.PutUint32(b[:], uint32(src.Len()))
 	w.Write(b[:])
 
 	// write raw bitset data
 	w.Write(src.Bytes())
-	return 1 + 8 + len(src.Bytes()), nil
+	return 1 + 4 + len(src.Bytes()), nil
 }
 
 // ReadBitset is the io.Reader version of the bitset block decoder.
@@ -53,8 +53,7 @@ func ReadBitset(dst *bitset.Bitset, r io.Reader) (int64, error) {
 	// read, but ignore type
 	_ = readByte(r)
 
-	// we need a byte reader for uvarints
-	var sz uint64
+	var sz uint32
 	err := binary.Read(r, binary.LittleEndian, &sz)
 	if err != nil {
 		return 1, fmt.Errorf("zip: bitset decode: invalid size value: %v", err)
@@ -66,10 +65,10 @@ func ReadBitset(dst *bitset.Bitset, r io.Reader) (int64, error) {
 	// and have it read the remainder
 	_, err = dst.ReadFrom(r)
 	if err != nil {
-		return 9, fmt.Errorf("zip: bitset decode: %v", err)
+		return 5, fmt.Errorf("zip: bitset decode: %v", err)
 	}
 
-	return int64(9 + sz), nil
+	return int64(5 + sz), nil
 }
 
 // DecodeBitset is a block decoder for bitset data.
@@ -77,17 +76,17 @@ func DecodeBitset(dst *bitset.Bitset, buf []byte) error {
 	if len(buf) == 0 {
 		return nil
 	}
+	if len(buf) < 5 {
+		return io.ErrShortBuffer
+	}
 
 	// skip type byte
 	buf = buf[1:]
 
 	// read size
-	sz, n := binary.Uvarint(buf)
-	if n <= 0 {
-		return fmt.Errorf("zip: decodeBitset invalid size value")
-	}
+	sz := binary.LittleEndian.Uint32(buf[:4])
 
 	// resize bitset and copy data
-	dst.SetFromBytes(buf[n:], int(sz))
+	dst.SetFromBytes(buf[4:], int(sz))
 	return nil
 }

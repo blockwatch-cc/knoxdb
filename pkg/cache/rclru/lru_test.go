@@ -12,7 +12,7 @@ import (
 var szPackage = int(reflect.TypeOf(TestPackage{}).Size())
 
 func NewTestLRU() (*LRU[int, *TestPackage], error) {
-	return NewLRU[int, *TestPackage]()
+	return NewLRU[int, *TestPackage](), nil
 }
 
 type TestPackage struct {

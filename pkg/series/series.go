@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/pkg/util"
-	"github.com/echa/log"
 )
 
 type Result struct {
@@ -89,7 +89,7 @@ func (r Result) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (r Request) Query(key string) query.Query {
+func (r Request) Query(key string) (*query.QueryPlan, error) {
 	// round custom time ranges
 	r.Sanitize()
 
@@ -98,25 +98,45 @@ func (r Request) Query(key string) query.Query {
 		cols.AddUnique(r.GroupBy)
 	}
 
-	// build stream query
-	q := query.NewQuery().
-		WithName(key).
-		WithTable(r.table).
-		WithFields(cols...).
-		AndRange("time", r.Range.From, r.Range.To)
+	// derive query schema from table schema
+	s, err := r.table.Schema().SelectNames(key, false, cols...)
+	if err != nil {
+		return nil, err
+	}
 
-	return q
+	filters, err := query.Range("time", r.Range.From, r.Range.To).
+		Compile(r.table.Schema())
+	if err != nil {
+		return nil, err
+	}
+
+	// build stream query
+	plan := query.NewQueryPlan().
+		WithSchema(s).
+		WithTable(r.table).
+		WithFilters(filters)
+
+	return plan, nil
 }
 
 func (r Request) Run(ctx context.Context, key string) (*Result, error) {
-	return r.RunQuery(ctx, r.Query(key))
+	plan, err := r.Query(key)
+	if err != nil {
+		return nil, err
+	}
+	if err := plan.Compile(ctx); err != nil {
+		return nil, err
+	}
+	return r.RunQuery(ctx, plan)
 }
 
-func (req Request) RunQuery(ctx context.Context, q query.Query) (*Result, error) {
+func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result, error) {
 	// load table type
-	table := q.Table()
-	tinfo := table.Fields()
-	timeIndex := tinfo.Find("time").Index
+	timeIndex, ok := plan.ResultSchema.FieldIndexByName("time")
+	if !ok {
+		return nil, fmt.Errorf("missing time field in result schema")
+	}
+	defer plan.Close()
 
 	// create stream manager
 	res := &Result{
@@ -132,35 +152,38 @@ func (req Request) RunQuery(ctx context.Context, q query.Query) (*Result, error)
 
 	// create buckets from type info
 	for i, expr := range req.Select {
-		b, err := req.MakeBucket(expr, tinfo)
+		b, err := req.MakeBucket(expr, plan.ResultSchema)
 		if err != nil {
 			return nil, err
 		}
 		res.buckets[""][i] = b
-		log.Tracef("NEW bucket fn=%s field=%s typ=%T", expr.Reduce, expr.Field, b)
+		req.log.Tracef("NEW bucket fn=%s field=%s typ=%T", expr.Reduce, expr.Field, b)
 	}
 
 	// identify groupBy column
 	var groupByIndex int = -1
 	if req.GroupBy != "" {
-		f := tinfo.Find(req.GroupBy)
-		if f == nil {
-			return nil, fmt.Errorf("unknown column %q", req.GroupBy)
+		groupByIndex, ok = plan.ResultSchema.FieldIndexByName(req.GroupBy)
+		if !ok {
+			return nil, fmt.Errorf("unknown group_by field %q", req.GroupBy)
 		}
-		groupByIndex = f.Index
 	} else {
 		res.groups = append(res.groups, "")
 	}
 
-	log.Debugf("Query from=%s to=%s unit=%s limit=%d", req.Range.From, req.Range.To, req.Interval, req.Limit)
+	req.log.Debugf("Query from=%s to=%s unit=%s limit=%d", req.Range.From, req.Range.To, req.Interval, req.Limit)
 
 	// execute stream query
 	var last time.Time
-	err := q.WithTable(table).Stream(ctx, func(r query.Row) error {
+	err := plan.Table.Stream(ctx, plan, func(r engine.QueryRow) error {
 		// read time
-		t, err := r.Time(timeIndex)
+		val, err := r.Index(timeIndex)
 		if err != nil {
 			return err
+		}
+		t, ok := val.(time.Time)
+		if !ok {
+			return fmt.Errorf("invalid value type %T for time field", val)
 		}
 
 		// join same timestamp records
@@ -192,25 +215,25 @@ func (req Request) RunQuery(ctx context.Context, q query.Query) (*Result, error)
 				// create new bucket group
 				buckets = make([]Bucket, len(req.Select))
 				for i, expr := range req.Select {
-					buckets[i], _ = req.MakeBucket(expr, tinfo)
+					buckets[i], _ = req.MakeBucket(expr, plan.ResultSchema)
 				}
 				res.buckets[groupName] = buckets
 				res.groups = append(res.groups, groupName)
-				log.Tracef("NEW bucket group for %s with %d buckets", groupName, len(req.Select))
+				req.log.Tracef("NEW bucket group for %s with %d buckets", groupName, len(req.Select))
 			}
 		}
 
 		// process row
 		for _, v := range buckets {
 			if err := v.Push(t, r, join); err != nil {
-				log.Error(err)
+				req.log.Error(err)
 			}
 		}
 
 		// stop when limit is reached, make sure we process/aggregate all data rows
 		// for the last window (stop at the first data point exceeding the limit)
 		if req.Limit > 0 && buckets[0].Len() > req.Limit {
-			return query.EndStream
+			return engine.EndStream
 		}
 		return nil
 	})

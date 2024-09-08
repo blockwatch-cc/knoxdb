@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"unsafe"
 
 	"math/rand"
 	"reflect"
@@ -97,7 +96,7 @@ func testEncodeTime_Compare(t *testing.T, input []int64, encoding byte) {
 	}
 
 	result := make([]int64, len(input))
-	err = DecodeTime(unsafe.Pointer(&result), buf2)
+	_, err = DecodeTime(result, buf2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\nbuf: %db %x", err, len(buf2), buf2)
 	}
@@ -137,7 +136,7 @@ func TestEncodeTime_Large_Range(t *testing.T) {
 
 	// use the matching decoder (with support for all enc types)
 	got := make([]int64, len(src))
-	err = DecodeTime(unsafe.Pointer(&got), b)
+	_, err = DecodeTime(got, b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +174,7 @@ func TestEncodeTime_Uncompressed(t *testing.T) {
 
 	// use the matching decoder (with support for all enc types)
 	got := make([]int64, len(src))
-	err = DecodeTime(unsafe.Pointer(&got), b)
+	_, err = DecodeTime(got, b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +211,7 @@ func TestEncodeTime_RLE(t *testing.T) {
 
 	// use the matching decoder (with support for all enc types)
 	got := make([]int64, len(src))
-	err = DecodeTime(unsafe.Pointer(&got), b)
+	_, err = DecodeTime(got, b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +241,7 @@ func TestEncodeTime_Reverse(t *testing.T) {
 
 	// use the matching decoder (with support for all enc types)
 	got := make([]int64, len(src))
-	err = DecodeTime(unsafe.Pointer(&got), b)
+	_, err = DecodeTime(got, b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +285,7 @@ func TestEncodeTime_220SecondDelta(t *testing.T) {
 
 	// use the matching decoder (with support for all enc types)
 	got := make([]int64, len(src))
-	err = DecodeTime(unsafe.Pointer(&got), b)
+	_, err = DecodeTime(got, b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +309,7 @@ func TestEncodeTime_Quick(t *testing.T) {
 
 		// use the matching decoder (with support for all enc types)
 		got := make([]int64, len(values))
-		err = DecodeTime(unsafe.Pointer(&got), b)
+		_, err = DecodeTime(got, b)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -351,7 +350,7 @@ func TestEncodeTime_RLESeconds(t *testing.T) {
 
 	// use the matching decoder (with support for all enc types)
 	got := make([]int64, len(src))
-	err = DecodeTime(unsafe.Pointer(&got), b)
+	_, err = DecodeTime(got, b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -453,7 +452,7 @@ func TestTimeDecode_Corrupt(t *testing.T) {
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%q", c), func(t *testing.T) {
 			got := make([]int64, 0)
-			err := DecodeTime(unsafe.Pointer(&got), []byte(c))
+			_, err := DecodeTime(got, []byte(c))
 			if err == nil {
 				t.Fatal("exp an err, got nil")
 			}
@@ -556,7 +555,7 @@ func BenchmarkTimeDecodeUncompressed(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = DecodeTime(unsafe.Pointer(&dst), buf.Bytes())
+				_, _ = DecodeTime(dst, buf.Bytes())
 			}
 		})
 	}
@@ -595,7 +594,7 @@ func BenchmarkTimeReadUncompressed(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, _ = ReadTime(unsafe.Pointer(&dst), bytes.NewBuffer(buf.Bytes()))
+				_, _, _ = ReadTime(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}
@@ -623,7 +622,7 @@ func BenchmarkTimeDecodePacked(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = DecodeTime(unsafe.Pointer(&dst), buf.Bytes())
+				_, _ = DecodeTime(dst, buf.Bytes())
 			}
 		})
 	}
@@ -650,7 +649,7 @@ func BenchmarkTimeReadPacked(b *testing.B) {
 			b.SetBytes(int64(size * 8))
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				_, _ = ReadTime(unsafe.Pointer(&dst), bytes.NewBuffer(buf.Bytes()))
+				_, _, _ = ReadTime(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}
@@ -681,7 +680,7 @@ func BenchmarkTimeDecodeRLE(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = DecodeTime(unsafe.Pointer(&dst), buf.Bytes())
+				_, _ = DecodeTime(dst, buf.Bytes())
 			}
 		})
 	}
@@ -712,7 +711,7 @@ func BenchmarkTimeReadRLE(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, _ = ReadTime(unsafe.Pointer(&dst), bytes.NewBuffer(buf.Bytes()))
+				_, _, _ = ReadTime(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}

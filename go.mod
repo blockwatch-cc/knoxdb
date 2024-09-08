@@ -1,6 +1,6 @@
 module blockwatch.cc/knoxdb
 
-go 1.21
+go 1.22
 
 require (
 	github.com/RoaringBitmap/roaring v1.2.3
@@ -12,12 +12,12 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.8
 	github.com/pierrec/lz4 v2.6.1+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.8.4
 	github.com/tetratelabs/wazero v1.7.3
-	go.etcd.io/bbolt v1.3.10
+	go.etcd.io/bbolt v1.3.11
 	golang.org/x/exp v0.0.0-20240604190554-fc45aab8b7f8
 	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.22.0
+	golang.org/x/sys v0.25.0
 )
 
 require (

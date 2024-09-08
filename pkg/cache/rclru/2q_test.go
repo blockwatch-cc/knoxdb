@@ -11,7 +11,7 @@ import (
 )
 
 func NewTest2Q(sz int) (*TwoQueueCache[int, *TestPackage], error) {
-	return New2Q[int, *TestPackage](sz)
+	return New2Q[int, *TestPackage](sz), nil
 }
 
 func Benchmark2Q_Rand(b *testing.B) {

@@ -6,7 +6,6 @@ package zip
 import (
 	"bytes"
 	"fmt"
-	"unsafe"
 
 	"math/rand"
 	"reflect"
@@ -55,7 +54,7 @@ func testEncodeInt8_Compare(t *testing.T, input []int8, encoding byte) {
 	}
 
 	result := make([]int8, len(input))
-	err = DecodeInt8(unsafe.Pointer(&result), buf2)
+	_, err = DecodeInt8(result, buf2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\nbuf: %db %x", err, len(buf2), buf2)
 	}
@@ -89,7 +88,7 @@ func TestEncodeInt8_Quick(t *testing.T) {
 
 		// use the matching decoder (with support for all enc types)
 		got := make([]int8, len(values))
-		err = DecodeInt8(unsafe.Pointer(&got), b)
+		_, err = DecodeInt8(got, b)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -117,7 +116,7 @@ func TestInt8Decode_Corrupt(t *testing.T) {
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%q", c), func(t *testing.T) {
 			got := make([]int8, 0)
-			err := DecodeInt8(unsafe.Pointer(&got), []byte(c))
+			_, err := DecodeInt8(got, []byte(c))
 			if err == nil {
 				t.Fatal("exp an err, got nil")
 			}
@@ -209,7 +208,7 @@ func BenchmarkInt8DecodePacked(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = DecodeInt8(unsafe.Pointer(&dst), buf.Bytes())
+				_, _ = DecodeInt8(dst, buf.Bytes())
 			}
 		})
 	}
@@ -232,11 +231,11 @@ func BenchmarkInt8ReadPacked(b *testing.B) {
 		EncodeInt8(src, buf)
 
 		b.Run(fmt.Sprintf("reader_%d", size), func(b *testing.B) {
-			dst := make([]int8, size)
+			dst := make([]uint8, size)
 			b.SetBytes(int64(size * 4))
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				_, _ = ReadInt8(unsafe.Pointer(&dst), bytes.NewBuffer(buf.Bytes()))
+				_, _, _ = ReadInt8(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}
@@ -267,7 +266,7 @@ func BenchmarkInt8DecodeRLE(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = DecodeInt8(unsafe.Pointer(&dst), buf.Bytes())
+				_, _ = DecodeInt8(dst, buf.Bytes())
 			}
 		})
 	}
@@ -293,12 +292,12 @@ func BenchmarkInt8ReadRLE(b *testing.B) {
 		EncodeInt8(src, buf)
 
 		b.Run(fmt.Sprintf("reader_%d_delta_%d", bm.n, bm.delta), func(b *testing.B) {
-			dst := make([]int8, bm.n)
+			dst := make([]uint8, bm.n)
 			b.SetBytes(int64(bm.n * 4))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, _ = ReadInt8(unsafe.Pointer(&dst), bytes.NewBuffer(buf.Bytes()))
+				_, _, _ = ReadInt8(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}

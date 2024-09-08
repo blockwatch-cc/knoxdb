@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Blockwatch Data Inc.
+// Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package bitmap
@@ -32,6 +32,10 @@ func NewFromBytes(src []byte) Bitmap {
 
 func NewFromArray(src []uint64) Bitmap {
 	slices.Sort(src)
+	return NewFromSortedArray(src)
+}
+
+func NewFromSortedArray(src []uint64) Bitmap {
 	return Bitmap{
 		Bitmap: xroar.FromSortedList(src),
 	}
@@ -87,6 +91,10 @@ func (b *Bitmap) CloneFromBytes(src []byte) {
 
 func (b *Bitmap) CloneFrom(a Bitmap) {
 	b.Bitmap = a.Bitmap.Clone()
+}
+
+func (b *Bitmap) ToArray() []uint64 {
+	return b.Bitmap.ToArray()
 }
 
 func (b Bitmap) MarshalBinary() ([]byte, error) {

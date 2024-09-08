@@ -5,11 +5,13 @@ package series
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"sort"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 type TypedBucket struct {
@@ -24,7 +26,7 @@ type TypedBucket struct {
 	trange   TimeRange      // series time range
 	limit    int            // value limit
 	fill     FillMode       // fill missing data
-	read     func(query.Row) (Aggregatable, error)
+	read     func(engine.QueryRow) (Aggregatable, error)
 }
 
 func NewTypedBucket() *TypedBucket {
@@ -119,7 +121,7 @@ func (b *TypedBucket) grow() TypedReducer {
 	return r
 }
 
-func (b *TypedBucket) Push(t time.Time, r query.Row, join bool) error {
+func (b *TypedBucket) Push(t time.Time, r engine.QueryRow, join bool) error {
 	// read next value from database stream
 	nextVal, err := b.read(r)
 	if err != nil {
@@ -241,10 +243,14 @@ func (b *TypedBucket) Emit(buf *bytes.Buffer) error {
 	return nil
 }
 
-func (b *TypedBucket) readBytes(r query.Row) (Aggregatable, error) {
-	buf, err := r.Bytes(b.index)
+func (b *TypedBucket) readBytes(r engine.QueryRow) (Aggregatable, error) {
+	val, err := r.Index(b.index)
 	if err != nil {
 		return nil, err
+	}
+	buf, ok := val.([]byte)
+	if !ok {
+		return nil, fmt.Errorf("invalid value type %T for []byte", val)
 	}
 	elem := reflect.New(b.typ).Interface().(Aggregatable)
 	elem.Init(b.template.Config())
@@ -252,16 +258,30 @@ func (b *TypedBucket) readBytes(r query.Row) (Aggregatable, error) {
 	return elem, err
 }
 
-func (b *TypedBucket) readInt128(r query.Row) (Aggregatable, error) {
-	val, err := r.Int128(b.index)
-	elem := &Int128Aggregator{val, 0}
+func (b *TypedBucket) readInt128(r engine.QueryRow) (Aggregatable, error) {
+	val, err := r.Index(b.index)
+	if err != nil {
+		return nil, err
+	}
+	i128, ok := val.(num.Int128)
+	if !ok {
+		return nil, fmt.Errorf("invalid value type %T for num.Int128", val)
+	}
+	elem := &Int128Aggregator{i128, 0}
 	elem.Init(b.template.Config())
 	return elem, err
 }
 
-func (b *TypedBucket) readInt256(r query.Row) (Aggregatable, error) {
-	val, err := r.Int256(b.index)
-	elem := &Int256Aggregator{val, 0}
+func (b *TypedBucket) readInt256(r engine.QueryRow) (Aggregatable, error) {
+	val, err := r.Index(b.index)
+	if err != nil {
+		return nil, err
+	}
+	i256, ok := val.(num.Int256)
+	if !ok {
+		return nil, fmt.Errorf("invalid value type %T for num.Int256", val)
+	}
+	elem := &Int256Aggregator{i256, 0}
 	elem.Init(b.template.Config())
 	return elem, err
 }

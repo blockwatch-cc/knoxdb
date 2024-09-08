@@ -11,20 +11,16 @@ import (
 const (
 	AllocTime = iota
 	AllocInt64
-	AllocUint64
-	AllocFloat64
-	_
-	_
-	AllocBytes
 	AllocInt32
 	AllocInt16
 	AllocInt8
+	AllocUint64
 	AllocUint32
 	AllocUint16
 	AllocUint8
+	AllocFloat64
 	AllocFloat32
-	_
-	_
+	AllocBytes
 	AllocBytesSlice
 )
 
@@ -55,20 +51,16 @@ func newArena() *arena {
 		alloc: [17]Allocator{
 			newAllocator[int64](),   // BlockTime
 			newAllocator[int64](),   // BlockInt64
-			newAllocator[uint64](),  // BlockUint64
-			newAllocator[float64](), // BlockFloat64
-			nullAllocator{},         // BlockBool !! unused, blocks alloc direct
-			nullAllocator{},         // BlockString !! unused, blocks alloc direct
-			newAllocator[byte](),    // BlockBytes !! unused in block, used in bitset
 			newAllocator[int32](),   // BlockInt32
 			newAllocator[int16](),   // BlockInt16
 			newAllocator[int8](),    // BlockInt8
+			newAllocator[uint64](),  // BlockUint64
 			newAllocator[uint32](),  // BlockUint32
 			newAllocator[uint16](),  // BlockUint16
 			newAllocator[uint8](),   // BlockUint8
+			newAllocator[float64](), // BlockFloat64
 			newAllocator[float32](), // BlockFloat32
-			nullAllocator{},         // BlockInt128 !! unused, blocks use strides
-			nullAllocator{},         // BlockInt256 !! unused, blocks use strides
+			newAllocator[byte](),    // BlockBytes !! unused in block, used in bitset
 			newAllocator[[]byte](),  // extra: used in dedup
 		},
 	}

@@ -17,10 +17,10 @@ const (
 )
 
 var (
-	errUnexpectedFormat = fmt.Errorf("ByteArray: Decode unexpected format")
-	errInvalidLength    = fmt.Errorf("ByteArray: Decode invalid encoded length")
-	errLengthOverflow   = fmt.Errorf("ByteArray: Decode length overflow")
-	errShortBuffer      = fmt.Errorf("ByteArray: Decode short buffer")
+	errUnexpectedFormat = fmt.Errorf("unexpected format")
+	errInvalidLength    = fmt.Errorf("invalid encoded length")
+	errLengthOverflow   = fmt.Errorf("length overflow")
+	errShortBuffer      = fmt.Errorf("short buffer")
 )
 
 var (

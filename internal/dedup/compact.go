@@ -307,7 +307,7 @@ func (a *CompactByteArray) Decode(buf []byte) error {
 	if len(buf) < 4 {
 		return fmt.Errorf("compact: reading offset len: %w", errShortBuffer)
 	}
-	olen := int(binary.BigEndian.Uint32(buf))
+	olen := int(binary.LittleEndian.Uint32(buf))
 	buf = buf[4:]
 
 	// unpack offsets
@@ -326,7 +326,7 @@ func (a *CompactByteArray) Decode(buf []byte) error {
 	if len(buf) < 4 {
 		return fmt.Errorf("compact: reading size len: %w", errShortBuffer)
 	}
-	slen := int(binary.BigEndian.Uint32(buf))
+	slen := int(binary.LittleEndian.Uint32(buf))
 	buf = buf[4:]
 
 	// unpack sizes

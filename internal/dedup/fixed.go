@@ -140,7 +140,7 @@ func (a *FixedByteArray) ReadFrom(r io.Reader) (int64, error) {
 	// read data size
 	err = binary.Read(r, binary.LittleEndian, &l)
 	if err != nil {
-		return c, fmt.Errorf("fixed: reading count: %w", err)
+		return c, fmt.Errorf("fixed: reading size: %w", err)
 	}
 	c += 4
 
@@ -254,7 +254,7 @@ func (a *FixedByteArray) Swap(i, j int) {
 }
 
 func (a FixedByteArray) ForEach(fn func(int, []byte)) {
-	for i, p, l := 0, 0, len(a.buf); i < l; i, p = i+1, p+a.sz {
+	for i, p := 0, 0; i < a.n; i, p = i+1, p+a.sz {
 		fn(i, a.buf[p:p+a.sz])
 	}
 }

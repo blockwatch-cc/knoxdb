@@ -72,19 +72,19 @@ func (b *Block) WriteTo(w io.Writer) (int64, error) {
 	)
 	switch b.typ {
 	case BlockInt64, BlockUint64:
-		n, err = zip.EncodeUint64(b.Uint64().FullSlice(), w)
+		n, err = zip.EncodeUint64(b.Uint64().Slice(), w)
 
 	case BlockInt32, BlockUint32:
-		n, err = zip.EncodeUint32(b.Uint32().FullSlice(), w)
+		n, err = zip.EncodeUint32(b.Uint32().Slice(), w)
 
 	case BlockInt16, BlockUint16:
-		n, err = zip.EncodeUint16(b.Uint16().FullSlice(), w)
+		n, err = zip.EncodeUint16(b.Uint16().Slice(), w)
 
 	case BlockInt8, BlockUint8:
-		n, err = zip.EncodeUint8(b.Uint8().FullSlice(), w)
+		n, err = zip.EncodeUint8(b.Uint8().Slice(), w)
 
 	case BlockTime:
-		n, err = zip.EncodeTime(b.Int64().FullSlice(), w)
+		n, err = zip.EncodeTime(b.Int64().Slice(), w)
 
 	case BlockBytes, BlockString:
 		var n64 int64
@@ -95,10 +95,10 @@ func (b *Block) WriteTo(w io.Writer) (int64, error) {
 		n, err = zip.EncodeBitset((*bitset.Bitset)(b.ptr), w)
 
 	case BlockFloat64:
-		n, err = zip.EncodeFloat64(b.Float64().FullSlice(), w)
+		n, err = zip.EncodeFloat64(b.Float64().Slice(), w)
 
 	case BlockFloat32:
-		n, err = zip.EncodeFloat32(b.Float32().FullSlice(), w)
+		n, err = zip.EncodeFloat32(b.Float32().Slice(), w)
 
 	case BlockInt128:
 		n, err = zip.EncodeInt128(*(*num.Int128Stride)(b.ptr), w)
@@ -110,9 +110,6 @@ func (b *Block) WriteTo(w io.Writer) (int64, error) {
 		err = fmt.Errorf("block: invalid data type %s (%[1]d)", b.typ)
 	}
 
-	if err == nil {
-		b.dirty = false
-	}
 	return int64(n), err
 }
 

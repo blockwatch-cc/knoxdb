@@ -26,9 +26,9 @@ type Aggregatable interface {
 
 // Exported type templates for use in type maps
 var (
-	// BigIntAgg         = func(scale int) Aggregatable { return &BigIntAggregator{scale: scale} }
-	I128Agg      = func(scale int) Aggregatable { return &Int128Aggregator{scale: scale} }
-	I256Agg      = func(scale int) Aggregatable { return &Int256Aggregator{scale: scale} }
+	// BigIntAgg         = func(scale uint8) Aggregatable { return &BigIntAggregator{scale: scale} }
+	I128Agg      = func(scale uint8) Aggregatable { return &Int128Aggregator{scale: scale} }
+	I256Agg      = func(scale uint8) Aggregatable { return &Int256Aggregator{scale: scale} }
 	BitAgg       = func() Aggregatable { return &BitmapAggregator{} }
 	BitAggAnd    = func(src bitmap.Bitmap) Aggregatable { return &BitmapAggregator{src: src, fn: bitmap.And} }
 	BitAggOr     = func(src bitmap.Bitmap) Aggregatable { return &BitmapAggregator{src: src, fn: bitmap.Or} }
@@ -185,7 +185,7 @@ func (b *BitmapAggregator) SetFloat64(f64 float64) {
 // Int128
 type Int128Aggregator struct {
 	num.Int128
-	scale int
+	scale uint8
 }
 
 func (b *Int128Aggregator) Init(val Aggregatable) {
@@ -232,7 +232,7 @@ func (b *Int128Aggregator) SetFloat64(f64 float64) {
 // Int256
 type Int256Aggregator struct {
 	num.Int256
-	scale int
+	scale uint8
 }
 
 func (b *Int256Aggregator) Init(val Aggregatable) {

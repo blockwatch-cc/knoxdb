@@ -19,6 +19,7 @@ import (
 
 type Options struct {
 	ReadOnly bool
+	Persist  bool // keep in memory after close
 
 	// Fault simulation
 	SimulateReadErrors   bool
@@ -59,6 +60,9 @@ type db struct {
 
 // Enforce db implements the store.DB interface.
 var _ store.DB = (*db)(nil)
+
+// Registry stores open memdb instances
+var registry sync.Map
 
 // Type returns the database driver type the current database instance was
 // created with.
@@ -200,10 +204,17 @@ func (db *db) Begin(writable bool) (store.Tx, error) {
 // or the database will fail to close since the read-lock will never be
 // released.
 func rollbackOnPanic(tx *transaction) {
-	if err := recover(); err != nil {
+	// note: runtime.Goexit used in testing.Fail does not panic but
+	// still unwinds all defered functions
+	err := recover()
+	if err != nil {
 		log.Error(err)
-		tx.managed = false
-		_ = tx.Rollback()
+	}
+
+	tx.managed = false
+	_ = tx.Rollback()
+
+	if err != nil {
 		panic(err)
 	}
 }
@@ -293,6 +304,11 @@ func (db *db) Close() error {
 }
 
 func (db *db) close() error {
+	// don't clear when persist flag is set
+	if db.opts.Persist {
+		return nil
+	}
+
 	// drop all sequences and buckets
 	clear(db.sequences)
 	db.sequences = nil
@@ -333,9 +349,13 @@ func initDB(db *db) error {
 // openDB opens the database at the provided path.  store.ErrDbDoesNotExist
 // is returned if the database doesn't exist and the create flag is not set.
 func openDB(dbPath string, opts *Options, create bool) (store.DB, error) {
-	if !create {
+	val, ok := registry.Load(dbPath)
+	if !ok && !create {
 		str := fmt.Sprintf("database %q does not exist", dbPath)
 		return nil, makeDbErr(store.ErrDbDoesNotExist, str, nil)
+	}
+	if val != nil {
+		return val.(*db), nil
 	}
 
 	db := &db{
@@ -351,6 +371,9 @@ func openDB(dbPath string, opts *Options, create bool) (store.DB, error) {
 		db.Close()
 		return nil, err
 	}
+
+	registry.Store(dbPath, db)
+
 	return db, nil
 }
 

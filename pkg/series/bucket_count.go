@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/engine"
 )
 
 type CountBucket struct {
@@ -88,7 +88,7 @@ func (b *CountBucket) grow() *CountReducer[int] {
 	return r
 }
 
-func (b *CountBucket) Push(t time.Time, _ query.Row, join bool) error {
+func (b *CountBucket) Push(t time.Time, _ engine.QueryRow, join bool) error {
 	target := len(b.reducers) - 1
 
 	switch {

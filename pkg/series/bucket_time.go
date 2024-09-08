@@ -4,10 +4,11 @@
 package series
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/engine"
 )
 
 type TimeBucket struct {
@@ -21,15 +22,18 @@ func NewTimeBucket() *TimeBucket {
 	t.template = NewReducer[int64](ReducerFuncFirst)
 	t.fill = FillModeNow
 	t.locked = true
-	t.read = t.readTime
 	t.emit = t.emitTime
 	return t
 }
 
-func (b *TimeBucket) readTime(r query.Row) (int64, error) {
-	t, err := r.Time(b.index)
+func (b *TimeBucket) read(r engine.QueryRow) (int64, error) {
+	val, err := r.Index(b.index)
 	if err != nil {
 		return 0, err
+	}
+	t, ok := val.(time.Time)
+	if !ok {
+		return 0, fmt.Errorf("invalid value type %T for time.Time", val)
 	}
 	return t.UnixNano(), nil
 }

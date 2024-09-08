@@ -26,6 +26,24 @@ func NewOrderedStrings(s []string) *OrderedStrings {
 	}
 }
 
+func UniqueStrings(s []string) []string {
+	slices.Sort(s)
+	return removeDuplicates(s)
+}
+
+func UniqueStringsStable(s []string) []string {
+	seen := make(map[string]struct{}, len(s))
+	for i := 0; i < len(s); {
+		if _, ok := seen[s[i]]; ok {
+			s = slices.Delete(s, i, i)
+		} else {
+			seen[s[i]] = struct{}{}
+			i++
+		}
+	}
+	return s
+}
+
 func (o *OrderedStrings) SetNonZero() *OrderedStrings {
 	// remove zero values
 	var zero string
@@ -39,6 +57,10 @@ func (o *OrderedStrings) SetUnique() *OrderedStrings {
 	o.Values = removeDuplicates(o.Values)
 	o.Unique = true
 	return o
+}
+
+func (o OrderedStrings) Len() int {
+	return len(o.Values)
 }
 
 func (o OrderedStrings) MinMax() (string, string) {

@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/table"
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/echa/log"
 )
 
 type TypeMap map[string]Aggregatable
@@ -28,7 +29,8 @@ type Request struct {
 	GroupBy  string    `form:"group_by"`
 	Table    string    `form:"table"`
 	TypeMap  TypeMap
-	table    table.Table
+	table    engine.TableEngine
+	log      log.Logger
 }
 
 func NewRequest() *Request {
@@ -44,10 +46,16 @@ func NewRequest() *Request {
 		Fill:     FillModeNone,
 		Limit:    100,
 		TypeMap:  make(TypeMap),
+		log:      log.Disabled,
 	}
 }
 
-func (r *Request) WithTable(t table.Table) *Request {
+func (r *Request) WithLogger(l log.Logger) *Request {
+	r.log = l
+	return r
+}
+
+func (r *Request) WithTable(t engine.TableEngine) *Request {
 	r.table = t
 	return r
 }
@@ -125,9 +133,9 @@ func (r *Request) MakeBucket(expr Expr, s *schema.Schema) (Bucket, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown column %q", expr.Field)
 	}
-	b := NewBucket(f.Typ())
+	b := NewBucket(f.Type())
 	if b == nil {
-		return nil, fmt.Errorf("unsupported column type %q", f.Typ())
+		return nil, fmt.Errorf("unsupported column type %q", f.Type())
 	}
 	if v, ok := r.TypeMap[expr.Field]; ok {
 		b = b.WithTypeOf(v)

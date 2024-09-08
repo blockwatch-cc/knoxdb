@@ -43,7 +43,7 @@ func FloatEncodedSize(n int) int {
 func EncodeFloat32(src []float32, w io.Writer) (int, error) {
 	scratch := arena.Alloc(arena.AllocFloat64, len(src))
 	defer arena.Free(arena.AllocFloat64, scratch)
-	dst := scratch.([]float64)[:0]
+	dst := scratch.([]float64)[:len(src)]
 	for i, v := range src {
 		dst[i] = float64(v)
 	}

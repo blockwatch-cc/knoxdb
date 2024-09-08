@@ -39,6 +39,10 @@ func (o *OrderedBytes) SetUnique() *OrderedBytes {
 	return o
 }
 
+func (o OrderedBytes) Len() int {
+	return len(o.Values)
+}
+
 func (o OrderedBytes) MinMax() ([]byte, []byte) {
 	switch l := len(o.Values); l {
 	case 0:

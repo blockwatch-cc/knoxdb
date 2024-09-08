@@ -207,10 +207,15 @@ func (db *db) Begin(writable bool) (store.Tx, error) {
 // or the database will fail to close since the read-lock will never be
 // released.
 func rollbackOnPanic(tx *transaction) {
-	if err := recover(); err != nil {
+	err := recover()
+	if err != nil {
 		tx.db.log.Error(err)
-		tx.managed = false
-		_ = tx.Rollback()
+	}
+
+	tx.managed = false
+	_ = tx.Rollback()
+
+	if err != nil {
 		panic(err)
 	}
 }

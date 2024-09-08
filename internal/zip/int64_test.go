@@ -6,7 +6,6 @@ package zip
 import (
 	"bytes"
 	"fmt"
-	"unsafe"
 
 	"math/rand"
 	"reflect"
@@ -67,7 +66,7 @@ func testEncodeInt64_Compare(t *testing.T, input []int64, encoding byte) {
 	}
 
 	result := make([]int64, len(input))
-	err = DecodeInt64(unsafe.Pointer(&result), buf2)
+	_, err = DecodeInt64(result, buf2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\nbuf: %db %x", err, len(buf2), buf2)
 	}
@@ -101,7 +100,7 @@ func TestEncodeInt64_Quick(t *testing.T) {
 
 		// use the matching decoder (with support for all enc types)
 		got := make([]int64, len(values))
-		err = DecodeInt64(unsafe.Pointer(&got), b)
+		_, err = DecodeInt64(got, b)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -129,7 +128,7 @@ func TestInt64Decode_Corrupt(t *testing.T) {
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%q", c), func(t *testing.T) {
 			got := make([]int64, 0)
-			err := DecodeInt64(unsafe.Pointer(&got), []byte(c))
+			_, err := DecodeInt64(got, []byte(c))
 			if err == nil {
 				t.Fatal("exp an err, got nil")
 			}
@@ -232,7 +231,7 @@ func BenchmarkInt64DecodeUncompressed(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = DecodeInt64(unsafe.Pointer(&dst), buf.Bytes())
+				_, _ = DecodeInt64(dst, buf.Bytes())
 			}
 		})
 	}
@@ -266,12 +265,12 @@ func BenchmarkInt64ReadUncompressed(b *testing.B) {
 		EncodeInt64(src, buf)
 
 		b.Run(fmt.Sprintf("reader_%d", size), func(b *testing.B) {
-			dst := make([]int64, size)
+			dst := make([]uint64, size)
 			b.SetBytes(int64(size * 8))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, _ = ReadInt64(unsafe.Pointer(&dst), bytes.NewBuffer(buf.Bytes()))
+				_, _, _ = ReadInt64(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}
@@ -299,7 +298,7 @@ func BenchmarkInt64DecodePacked(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = DecodeInt64(unsafe.Pointer(&dst), buf.Bytes())
+				_, _ = DecodeInt64(dst, buf.Bytes())
 			}
 		})
 	}
@@ -322,11 +321,11 @@ func BenchmarkInt64ReadPacked(b *testing.B) {
 		EncodeInt64(src, buf)
 
 		b.Run(fmt.Sprintf("reader_%d", size), func(b *testing.B) {
-			dst := make([]int64, size)
+			dst := make([]uint64, size)
 			b.SetBytes(int64(size * 8))
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				_, _ = ReadInt64(unsafe.Pointer(&dst), bytes.NewBuffer(buf.Bytes()))
+				_, _, _ = ReadInt64(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}
@@ -357,7 +356,7 @@ func BenchmarkInt64DecodeRLE(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = DecodeInt64(unsafe.Pointer(&dst), buf.Bytes())
+				_, _ = DecodeInt64(dst, buf.Bytes())
 			}
 		})
 	}
@@ -383,12 +382,12 @@ func BenchmarkInt64ReadRLE(b *testing.B) {
 		EncodeInt64(src, buf)
 
 		b.Run(fmt.Sprintf("reader_%d_delta_%d", bm.n, bm.delta), func(b *testing.B) {
-			dst := make([]int64, bm.n)
+			dst := make([]uint64, bm.n)
 			b.SetBytes(int64(bm.n * 8))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, _ = ReadInt64(unsafe.Pointer(&dst), bytes.NewBuffer(buf.Bytes()))
+				_, _, _ = ReadInt64(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}

@@ -42,13 +42,13 @@ func init() {
 // It returns the number of decoded elements and an error.
 func DecodeFloat32(dst []float32, buf []byte) (int, error) {
 	// call decoder with slice arg and return new slice dimension
-	return decodeFloat32(dst, buf)
+	return decodeFloat32(dst, buf[1:])
 }
 
 // DecodeFloat64 is the morst efficient version for decoding 32bit float data.
 func DecodeFloat64(dst []float64, buf []byte) (int, error) {
 	// call decoder with slice arg and store new slice dimension
-	return decodeFloat64(dst, buf)
+	return decodeFloat64(dst, buf[1:])
 }
 
 // ReadFloat32 is the io.Reader version for decoding 32bit float data.
@@ -81,7 +81,7 @@ func ReadFloat64(dst []float64, r io.Reader) (int, int64, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	l, err := DecodeFloat64(dst, buf.Bytes())
+	l, err := decodeFloat64(dst, buf.Bytes())
 	return l, int64(buf.Len()), err
 }
 

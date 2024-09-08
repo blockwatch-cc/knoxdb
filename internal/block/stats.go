@@ -4,6 +4,7 @@
 package block
 
 import (
+	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -161,8 +162,8 @@ func (b *Block) EstimateCardinality(precision int) int {
 	case 1:
 		return 1
 	case 2:
-		min, max := b.MinMax()
-		if min == max {
+		minVal, maxVal := b.MinMax()
+		if cmp.EQ(b.typ, minVal, maxVal) {
 			return 1
 		}
 		return 2
@@ -303,12 +304,12 @@ func (b *Block) BuildBitsFilter(cardinality int) *xroar.Bitmap {
 	flt := xroar.NewBitmapWith(cardinality)
 
 	switch b.typ {
-	case BlockInt64, BlockTime, BlockUint64, BlockFloat64:
+	case BlockInt64, BlockTime, BlockUint64:
 		for _, v := range b.Uint64().Slice() {
 			flt.Set(v)
 		}
 
-	case BlockInt32, BlockUint32, BlockFloat32:
+	case BlockInt32, BlockUint32:
 		for _, v := range b.Uint32().Slice() {
 			flt.Set(uint64(v))
 		}

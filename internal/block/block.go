@@ -4,7 +4,9 @@
 package block
 
 import (
+	"encoding/binary"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 
@@ -13,12 +15,61 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/dedup"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 var (
 	blockSz = int(reflect.TypeOf(Block{}).Size())
+
+	blockPool = &sync.Pool{
+		New: func() any { return &Block{} },
+	}
+
+	bigEndian = binary.BigEndian
+
+	BlockSz = int(reflect.TypeOf(Block{}).Size())
+
+	blockTypeDataSize = [...]int{
+		BlockTime:    8,
+		BlockInt64:   8,
+		BlockInt32:   4,
+		BlockInt16:   2,
+		BlockInt8:    1,
+		BlockUint64:  8,
+		BlockUint32:  4,
+		BlockUint16:  2,
+		BlockUint8:   1,
+		BlockFloat64: 8,
+		BlockFloat32: 4,
+		BlockBool:    1,
+		BlockString:  0, // variable
+		BlockBytes:   0, // variable
+		BlockInt256:  32,
+		BlockInt128:  16,
+	}
+)
+
+type BlockType = types.BlockType
+
+const (
+	BlockTime    = types.BlockTime
+	BlockInt64   = types.BlockInt64
+	BlockInt32   = types.BlockInt32
+	BlockInt16   = types.BlockInt16
+	BlockInt8    = types.BlockInt8
+	BlockUint64  = types.BlockUint64
+	BlockUint32  = types.BlockUint32
+	BlockUint16  = types.BlockUint16
+	BlockUint8   = types.BlockUint8
+	BlockFloat64 = types.BlockFloat64
+	BlockFloat32 = types.BlockFloat32
+	BlockBool    = types.BlockBool
+	BlockString  = types.BlockString
+	BlockBytes   = types.BlockBytes
+	BlockInt128  = types.BlockInt128
+	BlockInt256  = types.BlockInt256
 )
 
 type Block struct {
@@ -42,18 +93,18 @@ func New(typ BlockType, sz int) *Block {
 	switch typ {
 	case BlockInt128:
 		var i128 num.Int128Stride
-		i128.X0 = arena.Alloc(int(BlockInt64), sz).([]int64)
-		i128.X1 = arena.Alloc(int(BlockUint64), sz).([]uint64)
+		i128.X0 = arena.Alloc(arena.AllocInt64, sz).([]int64)[:0]
+		i128.X1 = arena.Alloc(arena.AllocUint64, sz).([]uint64)[:0]
 		b.ptr = unsafe.Pointer(&i128)
 	case BlockInt256:
 		var i256 num.Int256Stride
-		i256.X0 = arena.Alloc(int(BlockInt64), sz).([]int64)
-		i256.X1 = arena.Alloc(int(BlockUint64), sz).([]uint64)
-		i256.X2 = arena.Alloc(int(BlockUint64), sz).([]uint64)
-		i256.X3 = arena.Alloc(int(BlockUint64), sz).([]uint64)
+		i256.X0 = arena.Alloc(arena.AllocInt64, sz).([]int64)[:0]
+		i256.X1 = arena.Alloc(arena.AllocUint64, sz).([]uint64)[:0]
+		i256.X2 = arena.Alloc(arena.AllocUint64, sz).([]uint64)[:0]
+		i256.X3 = arena.Alloc(arena.AllocUint64, sz).([]uint64)[:0]
 		b.ptr = unsafe.Pointer(&i256)
 	case BlockBool:
-		b.ptr = unsafe.Pointer(bitset.NewBitset(sz))
+		b.ptr = unsafe.Pointer(bitset.NewBitset(sz).Resize(0))
 	case BlockString, BlockBytes:
 		arr := dedup.NewByteArray(sz)
 		b.ptr = unsafe.Pointer(&arr)
@@ -99,6 +150,10 @@ func (b *Block) IsDirty() bool {
 
 func (b *Block) SetDirty() {
 	b.dirty = true
+}
+
+func (b *Block) SetClean() {
+	b.dirty = false
 }
 
 func (b *Block) CanOptimize() bool {
@@ -199,22 +254,25 @@ func (b *Block) HeapSize() int {
 	return sz
 }
 
-func (b *Block) Clone() *Block {
+func (b *Block) Clone(sz int) *Block {
 	assert.Always(b != nil, "nil block, potential use after free")
 	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	sz := b.Cap()
+	assert.Always(b.Len() <= sz, "clone size smaller than block size")
 	c := New(b.typ, sz)
 	c.dirty = true
+	c.len = b.len
 	switch b.typ {
 	case BlockString, BlockBytes:
 		(*(*dedup.ByteArray)(c.ptr)).AppendFrom((*(*dedup.ByteArray)(b.ptr)))
 	case BlockBool:
-		((*bitset.Bitset)(c.ptr)).Append(((*bitset.Bitset)(b.ptr)), 0, sz)
+		((*bitset.Bitset)(c.ptr)).Append(((*bitset.Bitset)(b.ptr)), 0, b.Len())
 	case BlockInt128:
 		d128 := (*num.Int128Stride)(c.ptr)
 		s128 := (*num.Int128Stride)(b.ptr)
 		d128.X0 = append(d128.X0, s128.X0...)
 		d128.X1 = append(d128.X1, s128.X1...)
+		d128.X0 = d128.X0[:sz]
+		d128.X1 = d128.X1[:sz]
 	case BlockInt256:
 		d256 := (*num.Int256Stride)(c.ptr)
 		s256 := (*num.Int256Stride)(b.ptr)
@@ -222,6 +280,10 @@ func (b *Block) Clone() *Block {
 		d256.X1 = append(d256.X1, s256.X1...)
 		d256.X2 = append(d256.X2, s256.X2...)
 		d256.X3 = append(d256.X3, s256.X3...)
+		d256.X0 = d256.X0[:sz]
+		d256.X1 = d256.X1[:sz]
+		d256.X2 = d256.X2[:sz]
+		d256.X3 = d256.X3[:sz]
 	default:
 		copy(c.buf, b.buf)
 	}
@@ -327,16 +389,16 @@ func (b *Block) free() {
 	switch b.typ {
 	case BlockInt128:
 		i128 := (*num.Int128Stride)(b.ptr)
-		arena.Free(int(BlockInt64), i128.X0[:0])
-		arena.Free(int(BlockUint64), i128.X1[:0])
+		arena.Free(arena.AllocInt64, i128.X0[:0])
+		arena.Free(arena.AllocUint64, i128.X1[:0])
 		i128.X0 = nil
 		i128.X1 = nil
 	case BlockInt256:
 		i256 := (*num.Int256Stride)(b.ptr)
-		arena.Free(int(BlockInt64), i256.X0[:0])
-		arena.Free(int(BlockUint64), i256.X1[:0])
-		arena.Free(int(BlockUint64), i256.X2[:0])
-		arena.Free(int(BlockUint64), i256.X3[:0])
+		arena.Free(arena.AllocInt64, i256.X0[:0])
+		arena.Free(arena.AllocUint64, i256.X1[:0])
+		arena.Free(arena.AllocUint64, i256.X2[:0])
+		arena.Free(arena.AllocUint64, i256.X3[:0])
 		i256.X0 = nil
 		i256.X1 = nil
 		i256.X2 = nil
@@ -394,6 +456,7 @@ func (b *Block) AppendBlock(src *Block, from, n int) {
 	assert.Always(src != nil, "nil source block, potential use after free")
 	assert.Always(b.typ == src.typ, "block type mismatch")
 	assert.Always(b.len+n < b.cap, "out of bounds append")
+	assert.Always(src.len+n < src.cap, "out of bounds src append")
 	end := b.len
 	b.len += n
 	switch b.typ {
@@ -408,21 +471,27 @@ func (b *Block) AppendBlock(src *Block, from, n int) {
 	case BlockInt128:
 		d128 := (*num.Int128Stride)(b.ptr)
 		s128 := (*num.Int128Stride)(src.ptr)
-		slices.Replace(d128.X0, end, end, s128.X0[from:from+n]...)
-		slices.Replace(d128.X1, end, end, s128.X1[from:from+n]...)
+		// slices.Replace(d128.X0, end, end, s128.X0[from:from+n]...)
+		// slices.Replace(d128.X1, end, end, s128.X1[from:from+n]...)
+		d128.X0 = append(d128.X0, s128.X0[from:from+n]...)
+		d128.X1 = append(d128.X1, s128.X1[from:from+n]...)
 	case BlockInt256:
 		d256 := (*num.Int256Stride)(b.ptr)
 		s256 := (*num.Int256Stride)(src.ptr)
-		slices.Replace(d256.X0, end, end, s256.X0[from:from+n]...)
-		slices.Replace(d256.X1, end, end, s256.X1[from:from+n]...)
-		slices.Replace(d256.X2, end, end, s256.X2[from:from+n]...)
-		slices.Replace(d256.X3, end, end, s256.X3[from:from+n]...)
+		// slices.Replace(d256.X0, end, end, s256.X0[from:from+n]...)
+		// slices.Replace(d256.X1, end, end, s256.X1[from:from+n]...)
+		// slices.Replace(d256.X2, end, end, s256.X2[from:from+n]...)
+		// slices.Replace(d256.X3, end, end, s256.X3[from:from+n]...)
+		d256.X0 = append(d256.X0, s256.X0[from:from+n]...)
+		d256.X1 = append(d256.X1, s256.X1[from:from+n]...)
+		d256.X2 = append(d256.X2, s256.X2[from:from+n]...)
+		d256.X3 = append(d256.X3, s256.X3[from:from+n]...)
 	default:
-		b.len += n
 		from *= blockTypeDataSize[b.typ]
 		end *= blockTypeDataSize[b.typ]
 		n *= blockTypeDataSize[b.typ]
-		slices.Replace(b.buf, end, end, src.buf[from:from+n]...)
+		// slices.Replace(b.buf, end, end, src.buf[from:from+n]...)
+		copy(b.buf[end:], src.buf[from:from+n])
 	}
 	b.dirty = true
 }

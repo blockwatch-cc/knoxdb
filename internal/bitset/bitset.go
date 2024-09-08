@@ -618,7 +618,7 @@ func (s *Bitset) Bytes() []byte {
 	if s == nil {
 		return nil
 	}
-	return s.buf
+	return s.buf[:(s.size+7)>>3]
 }
 
 func (s *Bitset) String() string {

@@ -55,6 +55,10 @@ func (o *OrderedNumbers[T]) SetUnique() *OrderedNumbers[T] {
 	return o
 }
 
+func (o OrderedNumbers[T]) Len() int {
+	return len(o.Values)
+}
+
 func (o OrderedNumbers[T]) MinMax() (T, T) {
 	switch l := len(o.Values); l {
 	case 0:

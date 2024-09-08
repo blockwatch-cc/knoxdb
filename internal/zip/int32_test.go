@@ -6,7 +6,6 @@ package zip
 import (
 	"bytes"
 	"fmt"
-	"unsafe"
 
 	"math/rand"
 	"reflect"
@@ -67,7 +66,7 @@ func testEncodeInt32_Compare(t *testing.T, input []int32, encoding byte) {
 	}
 
 	result := make([]int32, len(input))
-	err = DecodeInt32(unsafe.Pointer(&result), buf2)
+	_, err = DecodeInt32(result, buf2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\nbuf: %db %x", err, len(buf2), buf2)
 	}
@@ -101,7 +100,7 @@ func TestEncodeInt32_Quick(t *testing.T) {
 
 		// use the matching decoder (with support for all enc types)
 		got := make([]int32, len(values))
-		err = DecodeInt32(unsafe.Pointer(&got), b)
+		_, err = DecodeInt32(got, b)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -129,7 +128,7 @@ func TestInt32Decode_Corrupt(t *testing.T) {
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%q", c), func(t *testing.T) {
 			got := make([]int32, 0)
-			err := DecodeInt32(unsafe.Pointer(&got), []byte(c))
+			_, err := DecodeInt32(got, []byte(c))
 			if err == nil {
 				t.Fatal("exp an err, got nil")
 			}
@@ -232,7 +231,7 @@ func BenchmarkInt32DecodeUncompressed(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = DecodeInt32(unsafe.Pointer(&dst), buf.Bytes())
+				_, _ = DecodeInt32(dst, buf.Bytes())
 			}
 		})
 	}
@@ -266,12 +265,12 @@ func BenchmarkInt32ReadUncompressed(b *testing.B) {
 		EncodeInt32(src, buf)
 
 		b.Run(fmt.Sprintf("reader_%d", size), func(b *testing.B) {
-			dst := make([]int32, size)
+			dst := make([]uint32, size)
 			b.SetBytes(int64(size * 8))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, _ = ReadInt32(unsafe.Pointer(&dst), bytes.NewBuffer(buf.Bytes()))
+				_, _, _ = ReadInt32(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}
@@ -299,7 +298,7 @@ func BenchmarkInt32DecodePacked(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = DecodeInt32(unsafe.Pointer(&dst), buf.Bytes())
+				_, _ = DecodeInt32(dst, buf.Bytes())
 			}
 		})
 	}
@@ -322,11 +321,11 @@ func BenchmarkInt32ReadPacked(b *testing.B) {
 		EncodeInt32(src, buf)
 
 		b.Run(fmt.Sprintf("reader_%d", size), func(b *testing.B) {
-			dst := make([]int32, size)
+			dst := make([]uint32, size)
 			b.SetBytes(int64(size * 4))
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				_, _ = ReadInt32(unsafe.Pointer(&dst), bytes.NewBuffer(buf.Bytes()))
+				_, _, _ = ReadInt32(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}
@@ -357,7 +356,7 @@ func BenchmarkInt32DecodeRLE(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = DecodeInt32(unsafe.Pointer(&dst), buf.Bytes())
+				_, _ = DecodeInt32(dst, buf.Bytes())
 			}
 		})
 	}
@@ -383,12 +382,12 @@ func BenchmarkInt32ReadRLE(b *testing.B) {
 		EncodeInt32(src, buf)
 
 		b.Run(fmt.Sprintf("reader_%d_delta_%d", bm.n, bm.delta), func(b *testing.B) {
-			dst := make([]int32, bm.n)
+			dst := make([]uint32, bm.n)
 			b.SetBytes(int64(bm.n * 4))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, _ = ReadInt32(unsafe.Pointer(&dst), bytes.NewBuffer(buf.Bytes()))
+				_, _, _ = ReadInt32(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}

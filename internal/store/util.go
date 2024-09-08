@@ -40,3 +40,18 @@ func CommitAndContinue(tx Tx) (Tx, error) {
 	}
 	return db.Begin(iswrite)
 }
+
+func CreateBucket(tx Tx, key []byte, errOnExist error) (Bucket, error) {
+	b, err := tx.Root().CreateBucket(key)
+	if err == nil {
+		return b, nil
+	}
+	if IsError(err, ErrBucketExists) {
+		if errOnExist == nil {
+			return tx.Bucket(key), nil
+		} else {
+			return nil, errOnExist
+		}
+	}
+	return nil, err
+}
