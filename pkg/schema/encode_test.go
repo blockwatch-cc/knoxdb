@@ -74,7 +74,14 @@ type encodeTestStruct struct {
 	I256      num.Int256     `knox:"i256"`
 }
 
+var myEnum *EnumDictionary
+
 func makeTestData(sz int) (res []encodeTestStruct) {
+	if myEnum == nil {
+		myEnum = NewEnumDictionary("enum")
+		myEnum.AddValues("a", "b", "c", "d", "e")
+		RegisterEnum(myEnum)
+	}
 	for i := 1; i <= sz; i++ {
 		res = append(res, encodeTestStruct{
 			Id:        0,
@@ -84,7 +91,7 @@ func makeTestData(sz int) (res []encodeTestStruct) {
 			String:    hex.EncodeToString(randBytes(4)),
 			Stringer:  strings.SplitAfter(hex.EncodeToString(randBytes(32)), "a"),
 			Bool:      true,
-			Enum:      Enum(i%4 + 1),
+			Enum:      myEnum.MustValue(uint16(i%4 + 1)),
 			Int64:     int64(i),
 			Int32:     int32(i),
 			Int16:     int16(i % (1<<16 - 1)),
@@ -110,8 +117,8 @@ func TestEncodeVal(t *testing.T) {
 	vals := makeTestData(1)
 	val := vals[0]
 	enc := NewGenericEncoder[encodeTestStruct]()
-	buf := enc.NewBuffer(1)
-	enc.Encode(buf, val)
+	buf, err := enc.Encode(val, nil)
+	require.NoError(t, err)
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
 }
@@ -120,13 +127,14 @@ func TestEncodeRoundtrip(t *testing.T) {
 	vals := makeTestData(1)
 	val := vals[0]
 	enc := NewGenericEncoder[encodeTestStruct]()
-	buf := enc.NewBuffer(1)
-	enc.Encode(buf, val)
+	buf, err := enc.Encode(val, nil)
+	require.NoError(t, err)
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
 
 	dec := NewGenericDecoder[encodeTestStruct]()
-	val2, err := dec.Decode(buf.Bytes(), nil)
+	t.Log("D", dec.Schema())
+	val2, err := dec.Decode(buf, nil)
 	require.NoError(t, err)
 	require.IsType(t, val, *val2)
 	require.Exactly(t, val, *val2)
@@ -137,12 +145,13 @@ func TestDecoderRead(t *testing.T) {
 	dec := NewGenericDecoder[encodeTestStruct]()
 	t.Log("E", enc.Schema())
 	t.Log("D", dec.Schema())
-	buf := enc.NewBuffer(100)
 	vals := makeTestData(100)
+	buf := enc.NewBuffer(100)
 	for _, val := range vals {
-		enc.Encode(buf, val)
-		require.NotNil(t, buf)
-		require.NotEmpty(t, buf)
+		b, err := enc.Encode(val, buf)
+		require.NoError(t, err)
+		require.NotNil(t, b)
+		require.NotEmpty(t, b)
 	}
 	for i := 0; i < 100; i++ {
 		val, err := dec.Read(buf)
@@ -159,8 +168,8 @@ func TestDecoderRead(t *testing.T) {
 func TestEncodeSlice(t *testing.T) {
 	vals := makeTestData(2)
 	enc := NewGenericEncoder[encodeTestStruct]()
-	buf := enc.NewBuffer(len(vals))
-	enc.EncodeSlice(buf, vals)
+	buf, err := enc.EncodeSlice(vals, nil)
+	require.NoError(t, err)
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
 }
@@ -169,8 +178,8 @@ func TestEncodeValPtr(t *testing.T) {
 	vals := makeTestData(1)
 	val := &vals[0]
 	enc := NewGenericEncoder[encodeTestStruct]()
-	buf := enc.NewBuffer(1)
-	enc.EncodePtr(buf, val)
+	buf, err := enc.EncodePtr(val, nil)
+	require.NoError(t, err)
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
 }
@@ -182,8 +191,8 @@ func TestEncodePtrSlice(t *testing.T) {
 		ptrs[i] = &vals[i]
 	}
 	enc := NewGenericEncoder[encodeTestStruct]()
-	buf := enc.NewBuffer(len(ptrs))
-	enc.EncodePtrSlice(buf, ptrs)
+	buf, err := enc.EncodePtrSlice(ptrs, nil)
+	require.NoError(t, err)
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
 }
@@ -226,6 +235,11 @@ type encodeBenchStruct struct {
 }
 
 func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
+	if myEnum == nil {
+		myEnum = NewEnumDictionary("enum")
+		myEnum.AddValues("a", "b", "c", "d", "e")
+		RegisterEnum(myEnum)
+	}
 	for i := 0; i < sz; i++ {
 		res = append(res, encodeBenchStruct{
 			Id:      0,
@@ -233,7 +247,7 @@ func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
 			Hash:    randBytes(20),
 			String:  hex.EncodeToString(randBytes(4)),
 			Bool:    true,
-			Enum:    Enum(i%4 + 1),
+			Enum:    myEnum.MustValue(uint16(i%4 + 1)),
 			Int64:   int64(i),
 			Int32:   int32(i),
 			Int16:   int16(i % (1<<16 - 1)),
@@ -254,7 +268,7 @@ func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
 	}
 	enc := NewGenericEncoder[encodeBenchStruct]()
 	buf := enc.NewBuffer(sz)
-	enc.EncodeSlice(buf, res)
+	_, _ = enc.EncodeSlice(res, buf)
 	return res, int64(buf.Len())
 }
 
@@ -266,7 +280,7 @@ func BenchmarkEncodeVal(b *testing.B) {
 	b.SetBytes(sz)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		enc.Encode(buf, slice[0])
+		_, _ = enc.Encode(slice[0], buf)
 		buf.Reset()
 	}
 }
@@ -279,7 +293,7 @@ func BenchmarkEncodePtr(b *testing.B) {
 	b.SetBytes(sz)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		enc.EncodePtr(buf, &slice[0])
+		_, _ = enc.EncodePtr(&slice[0], buf)
 		buf.Reset()
 	}
 }
@@ -294,7 +308,7 @@ func BenchmarkEncodeSlice(b *testing.B) {
 			b.SetBytes(sz)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				enc.EncodeSlice(buf, slice)
+				_, _ = enc.EncodeSlice(slice, buf)
 				buf.Reset()
 			}
 		})
@@ -315,7 +329,7 @@ func BenchmarkEncodePtrSlice(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				enc.EncodePtrSlice(buf, ptrslice)
+				_, _ = enc.EncodePtrSlice(ptrslice, buf)
 				buf.Reset()
 			}
 		})
@@ -328,7 +342,7 @@ func BenchmarkMemcopy(b *testing.B) {
 			slice, sz := makeBenchData(n.num)
 			enc := NewGenericEncoder[encodeBenchStruct]()
 			buf := enc.NewBuffer(n.num)
-			enc.EncodeSlice(buf, slice)
+			_, _ = enc.EncodeSlice(slice, buf)
 			dst := make([]byte, buf.Len())
 			b.ReportAllocs()
 			b.SetBytes(sz)
@@ -345,7 +359,7 @@ func BenchmarkDecodeVal(b *testing.B) {
 	enc := NewGenericEncoder[encodeBenchStruct]()
 	dec := NewGenericDecoder[encodeBenchStruct]()
 	buf := enc.NewBuffer(1)
-	enc.Encode(buf, slice[0])
+	_, _ = enc.Encode(slice[0], buf)
 	b.ReportAllocs()
 	b.SetBytes(sz)
 	b.ResetTimer()
@@ -359,7 +373,7 @@ func BenchmarkDecodeTo(b *testing.B) {
 	enc := NewGenericEncoder[encodeBenchStruct]()
 	dec := NewGenericDecoder[encodeBenchStruct]()
 	buf := enc.NewBuffer(1)
-	enc.Encode(buf, slice[0])
+	_, _ = enc.Encode(slice[0], buf)
 	var val encodeBenchStruct
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -376,7 +390,7 @@ func BenchmarkDecodeSlice(b *testing.B) {
 		b.Run(n.name, func(b *testing.B) {
 			slice, sz := makeBenchData(n.num)
 			buf := enc.NewBuffer(n.num)
-			enc.EncodeSlice(buf, slice)
+			_, _ = enc.EncodeSlice(slice, buf)
 			b.ReportAllocs()
 			b.SetBytes(sz)
 			b.ResetTimer()
@@ -394,7 +408,7 @@ func BenchmarkDecodeSliceNoAlloc(b *testing.B) {
 		b.Run(n.name, func(b *testing.B) {
 			slice, sz := makeBenchData(n.num)
 			buf := enc.NewBuffer(n.num)
-			enc.EncodeSlice(buf, slice)
+			_, _ = enc.EncodeSlice(slice, buf)
 			res := make([]encodeBenchStruct, n.num)
 			b.ReportAllocs()
 			b.SetBytes(sz)
@@ -413,7 +427,7 @@ func BenchmarkDecodeSliceRead(b *testing.B) {
 		b.Run(n.name, func(b *testing.B) {
 			slice, sz := makeBenchData(n.num)
 			buf := enc.NewBuffer(n.num)
-			enc.EncodeSlice(buf, slice)
+			_, _ = enc.EncodeSlice(slice, buf)
 			b.ReportAllocs()
 			b.SetBytes(sz)
 			b.ResetTimer()

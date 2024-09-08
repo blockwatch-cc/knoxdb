@@ -7,6 +7,7 @@ import (
 	"encoding"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"unsafe"
 )
@@ -78,7 +79,7 @@ func ReadUint8(buf []byte) (uint8, int) {
 // Type cast while encoding to wire format. This accepts all
 // integer types as source an will convert them to the
 // wire format selected by code.
-func encodeInt(w io.Writer, code OpCode, val any) (err error) {
+func EncodeInt(w io.Writer, code OpCode, val any) (err error) {
 	var u64 uint64
 	switch v := val.(type) {
 	case int:
@@ -117,7 +118,29 @@ func encodeInt(w io.Writer, code OpCode, val any) (err error) {
 	return
 }
 
-func encodeBytes(w io.Writer, val any, fixed uint16) (err error) {
+// Type cast while encoding to wire format. This accepts all
+// float types as source an will convert them to the
+// wire format selected by code.
+func EncodeFloat(w io.Writer, code OpCode, val any) (err error) {
+	var f64 float64
+	switch v := val.(type) {
+	case float64:
+		f64 = v
+	case float32:
+		f64 = float64(v)
+	default:
+		return ErrInvalidValueType
+	}
+	switch code {
+	case OpCodeFloat32:
+		_, err = w.Write(Uint32Bytes(math.Float32bits(float32(f64))))
+	case OpCodeFloat64:
+		_, err = w.Write(Uint64Bytes(math.Float64bits(f64)))
+	}
+	return
+}
+
+func EncodeBytes(w io.Writer, val any, fixed uint16) (err error) {
 	var b []byte
 	// type cast values
 	switch v := val.(type) {
@@ -159,5 +182,14 @@ func encodeBytes(w io.Writer, val any, fixed uint16) (err error) {
 		_, err = w.Write(b)
 	}
 
+	return
+}
+
+func EncodeBool(w io.Writer, b bool) (err error) {
+	if b {
+		_, err = w.Write([]byte{1})
+	} else {
+		_, err = w.Write([]byte{0})
+	}
 	return
 }

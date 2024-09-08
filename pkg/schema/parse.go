@@ -5,9 +5,11 @@ package schema
 
 import (
 	"encoding/hex"
+	"fmt"
 	"strconv"
 	"strings"
 
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"golang.org/x/exp/constraints"
@@ -16,6 +18,53 @@ import (
 type ValueParser interface {
 	ParseValue(string) (any, error)
 	ParseSlice(string) (any, error)
+}
+
+func NewParser(typ types.FieldType, scale uint8) ValueParser {
+	switch typ {
+	case types.FieldTypeDatetime:
+		return TimeParser{}
+	case types.FieldTypeBoolean:
+		return BoolParser{}
+	case types.FieldTypeString:
+		return StringParser{}
+	case types.FieldTypeBytes:
+		return BytesParser{}
+	case types.FieldTypeInt8:
+		return IntParser[int8]{8}
+	case types.FieldTypeInt16:
+		return IntParser[int16]{16}
+	case types.FieldTypeInt32:
+		return IntParser[int32]{32}
+	case types.FieldTypeInt64:
+		return IntParser[int64]{64}
+	case types.FieldTypeUint8:
+		return UintParser[uint8]{8}
+	case types.FieldTypeUint16:
+		return UintParser[uint16]{16}
+	case types.FieldTypeUint32:
+		return UintParser[uint32]{32}
+	case types.FieldTypeUint64:
+		return UintParser[uint64]{64}
+	case types.FieldTypeFloat32:
+		return FloatParser[float32]{32}
+	case types.FieldTypeFloat64:
+		return FloatParser[float64]{64}
+	case types.FieldTypeInt128:
+		return I128Parser{}
+	case types.FieldTypeInt256:
+		return I256Parser{}
+	case types.FieldTypeDecimal32:
+		return D32Parser{scale}
+	case types.FieldTypeDecimal64:
+		return D64Parser{scale}
+	case types.FieldTypeDecimal128:
+		return D128Parser{scale}
+	case types.FieldTypeDecimal256:
+		return D256Parser{scale}
+	default:
+		panic(fmt.Errorf("parser: unsupported field type %s %d", typ, typ))
+	}
 }
 
 // int parser

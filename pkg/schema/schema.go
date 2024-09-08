@@ -5,11 +5,15 @@ package schema
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
+	"io"
+	"sort"
 	"strconv"
 	"strings"
 
 	"blockwatch.cc/knoxdb/internal/hash/fnv"
+	"blockwatch.cc/knoxdb/internal/types"
 )
 
 const (
@@ -51,6 +55,10 @@ func (s *Schema) IsInterface() bool {
 	return s.isInterface
 }
 
+func (s *Schema) IsFixedSize() bool {
+	return s.isFixedSize
+}
+
 func (s *Schema) Name() string {
 	return s.name
 }
@@ -61,7 +69,7 @@ func (s *Schema) Version() uint32 {
 
 func (s *Schema) TypeLabel(vendor string) string {
 	var b strings.Builder
-	if vendor == "" {
+	if vendor != "" {
 		b.WriteString(vendor)
 		b.WriteByte('.')
 	}
@@ -78,9 +86,16 @@ func (s *Schema) WithName(n string) *Schema {
 	return s
 }
 
+func (s *Schema) WithVersion(v uint32) *Schema {
+	if s.version < v {
+		s.version = v
+	}
+	return s
+}
+
 // generate name hash with tag
-func (s *Schema) TaggedHash(tag HashTag) uint64 {
-	return TaggedHash(tag, s.name)
+func (s *Schema) TaggedHash(tag types.HashTag) uint64 {
+	return types.TaggedHash(tag, s.name)
 }
 
 func (s *Schema) Hash() uint64 {
@@ -96,7 +111,6 @@ func (s *Schema) WithField(f Field) *Schema {
 		f.id = uint16(len(s.fields) + 1)
 		s.fields = append(s.fields, f)
 		s.encode, s.decode = nil, nil
-		s.version++
 	}
 	return s
 }
@@ -176,7 +190,7 @@ func (s *Schema) WireSize() int {
 
 func (s *Schema) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Schema: %s minSz=%d maxSz=%d fixed=%t iface=%t enc/dec=%d/%d\n",
+	fmt.Fprintf(&b, "schema: %s minSz=%d maxSz=%d fixed=%t iface=%t enc/dec=%d/%d",
 		s.name,
 		s.minWireSize,
 		s.maxWireSize,
@@ -187,8 +201,9 @@ func (s *Schema) String() string {
 	)
 	for i := range s.fields {
 		f := &s.fields[i]
-		fmt.Fprintf(&b, "  Field #%d: %s %s flags=%08b index=%d fixed=%d scale=%d arr=%t sz=%d/%d iface=%08b enc=%s dec=%s\n",
+		fmt.Fprintf(&b, "\n  Field #%d: id=%d %s %s flags=%08b index=%d fixed=%d scale=%d arr=%t sz=%d/%d iface=%08b enc=%s dec=%s",
 			i,
+			f.id,
 			f.name,
 			f.typ,
 			f.flags,
@@ -266,29 +281,67 @@ func (s *Schema) FieldById(id uint16) (f Field, ok bool) {
 	return
 }
 
-func (s *Schema) Pk() Field {
-	for _, v := range s.fields {
-		if v.flags&FieldFlagPrimary > 0 {
-			return v
+func (s *Schema) FieldByIndex(i int) (f Field, ok bool) {
+	if len(s.fields) < i {
+		return s.fields[i], true
+	}
+	return
+}
+
+func (s *Schema) FieldIndexByName(name string) (idx int, ok bool) {
+	for i, v := range s.fields {
+		if v.name == name {
+			ok = true
+			idx = i
+			break
 		}
 	}
-	return Field{}
+	return
+}
+
+func (s *Schema) FieldIndexById(id uint16) (idx int, ok bool) {
+	for i, v := range s.fields {
+		if v.id == id {
+			ok = true
+			idx = i
+			break
+		}
+	}
+	return
+}
+
+func (s *Schema) Pk() *Field {
+	for _, v := range s.fields {
+		if v.flags&types.FieldFlagPrimary > 0 {
+			return &v
+		}
+	}
+	return &Field{}
 }
 
 func (s *Schema) CompositePk() []Field {
 	res := make([]Field, 0)
 	for _, v := range s.fields {
-		if v.index.Is(IndexKindComposite) {
+		if v.index.Is(types.IndexTypeComposite) {
 			res = append(res, v)
 		}
 	}
 	return res
 }
 
-func (s *Schema) PkIndex() int {
+func (s *Schema) PkId() uint16 {
 	for _, v := range s.fields {
-		if v.flags&FieldFlagPrimary > 0 {
-			return int(v.Id())
+		if v.flags&types.FieldFlagPrimary > 0 {
+			return v.Id()
+		}
+	}
+	return 0
+}
+
+func (s *Schema) PkIndex() int {
+	for i, v := range s.fields {
+		if v.flags&types.FieldFlagPrimary > 0 {
+			return i
 		}
 	}
 	return -1
@@ -296,27 +349,67 @@ func (s *Schema) PkIndex() int {
 
 func (s *Schema) Indexes() (list []Field) {
 	for _, v := range s.fields {
-		if v.flags&FieldFlagIndexed > 0 {
+		if v.flags&types.FieldFlagIndexed > 0 {
 			list = append(list, v)
 		}
 	}
 	return
 }
 
+func (s *Schema) CanMatchFields(names ...string) bool {
+	if len(names) == 0 || len(names) > len(s.fields) {
+		return false
+	}
+	for i, name := range names {
+		if s.fields[i].name != name {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Schema) CanSelect(x *Schema) error {
 	for _, xf := range x.fields {
 		sf, ok := s.FieldByName(xf.name)
 		if !ok {
-			return fmt.Errorf("missing field %s", xf.name)
+			return fmt.Errorf("%w: missing field %s", ErrSchemaMismatch, xf.name)
 		}
 		if xf.typ != sf.typ {
-			return fmt.Errorf("field %s: type mismatch have=%s want=%s", xf.name, sf.typ, xf.typ)
+			return fmt.Errorf("%w on field %s: type mismatch have=%s want=%s",
+				ErrSchemaMismatch, xf.name, sf.typ, xf.typ)
 		}
 	}
 	return nil
 }
 
-func (s *Schema) Select(name string, fields ...string) *Schema {
+func (s *Schema) SelectIds(name string, sorted bool, fieldIds ...uint16) (*Schema, error) {
+	ns := &Schema{
+		fields:      make([]Field, 0, len(fieldIds)),
+		isFixedSize: true,
+		version:     s.version,
+		name:        name,
+	}
+
+	if ns.name == "" {
+		ns.name = s.name + "-select"
+	}
+
+	for _, fid := range fieldIds {
+		f, ok := s.FieldById(fid)
+		if !ok {
+			return nil, fmt.Errorf("%w: missing field id %d in schema %s", ErrInvalidField, fid, s.name)
+		}
+		ns.fields = append(ns.fields, f)
+	}
+
+	if sorted {
+		sort.Slice(ns.fields, func(i, j int) bool { return ns.fields[i].id < ns.fields[j].id })
+	}
+
+	return ns.Complete(), nil
+}
+
+func (s *Schema) SelectNames(name string, sorted bool, fields ...string) (*Schema, error) {
 	ns := &Schema{
 		fields:      make([]Field, 0, len(fields)),
 		isFixedSize: true,
@@ -324,17 +417,23 @@ func (s *Schema) Select(name string, fields ...string) *Schema {
 		name:        name,
 	}
 
-	// choose fields
+	if ns.name == "" {
+		ns.name = s.name + "-select"
+	}
+
 	for _, fname := range fields {
 		f, ok := s.FieldByName(fname)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("%w: missing field name %s in schema %s", ErrInvalidField, fname, s.name)
 		}
 		ns.fields = append(ns.fields, f)
 	}
 
-	// produce mapping to parent fields
-	return ns.Complete()
+	if sorted {
+		sort.Slice(ns.fields, func(i, j int) bool { return ns.fields[i].id < ns.fields[j].id })
+	}
+
+	return ns.Complete(), nil
 }
 
 // Returns a field position mapping for a child schema that maps child schema
@@ -359,13 +458,15 @@ func (s *Schema) MapTo(dst *Schema) ([]int, error) {
 			}
 		}
 
-		if srcField.typ != dstField.typ {
-			return nil, fmt.Errorf("schema %s: field %s type %s mismatch with source type %s",
-				dst.name, dstField.name, dstField.typ, srcField.typ)
-		}
-		if srcField.fixed != dstField.fixed {
-			return nil, fmt.Errorf("schema %s: field %s fixed type mismatch",
-				dst.name, dstField.name)
+		if pos > -1 {
+			if srcField.typ != dstField.typ {
+				return nil, fmt.Errorf("%w on %s: field %s type %s mismatch with source type %s",
+					ErrSchemaMismatch, dst.name, dstField.name, dstField.typ, srcField.typ)
+			}
+			if srcField.fixed != dstField.fixed {
+				return nil, fmt.Errorf("%w on %s: field %s fixed type mismatch",
+					ErrSchemaMismatch, dst.name, dstField.name)
+			}
 		}
 		maps = append(maps, pos)
 	}
@@ -393,7 +494,7 @@ func (s *Schema) Validate() error {
 		}
 
 		// count pk fields
-		if s.fields[i].flags&FieldFlagPrimary > 0 {
+		if s.fields[i].flags&types.FieldFlagPrimary > 0 {
 			npk++
 		}
 
@@ -406,16 +507,6 @@ func (s *Schema) Validate() error {
 		}
 	}
 
-	// require pk field exists
-	if npk == 0 {
-		return fmt.Errorf("schema %s: missing primary key field", s.name)
-	}
-
-	// require single pk field (TODO: allow composite keys)
-	if npk > 1 {
-		return fmt.Errorf("schema %s: multiple primary key fields", s.name)
-	}
-
 	// encode opcodes are defined for all fields
 	if a, b := len(s.fields), len(s.encode); a > b {
 		return fmt.Errorf("schema %s: %d fields without encoder opcodes", s.name, a-b)
@@ -426,5 +517,65 @@ func (s *Schema) Validate() error {
 		return fmt.Errorf("schema %s: %d fields without decoder opcodes", s.name, a-b)
 	}
 
+	return nil
+}
+
+func (s Schema) MarshalBinary() ([]byte, error) {
+	buf := bytes.NewBuffer(make([]byte, 0, 32*len(s.fields)+8+len(s.name)))
+
+	// version: u32
+	binary.Write(buf, LE, s.version)
+
+	// name: string
+	binary.Write(buf, LE, uint32(len(s.name)))
+	buf.WriteString(s.name)
+
+	// fields
+	binary.Write(buf, LE, uint32(len(s.fields)))
+	for i := range s.fields {
+		s.fields[i].WriteTo(buf)
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (s *Schema) UnmarshalBinary(b []byte) (err error) {
+	if len(b) < 12 {
+		return io.ErrShortBuffer
+	}
+	buf := bytes.NewBuffer(b)
+
+	// version: u32
+	err = binary.Read(buf, LE, &s.version)
+	if err != nil {
+		return
+	}
+
+	// name: string
+	var l uint32
+	err = binary.Read(buf, LE, &l)
+	if err != nil {
+		return
+	}
+	s.name = string(buf.Next(int(l)))
+	if len(s.name) != int(l) {
+		return io.ErrShortBuffer
+	}
+
+	// fields
+	err = binary.Read(buf, LE, &l)
+	if err != nil {
+		return
+	}
+	s.fields = make([]Field, l)
+	for i := range s.fields {
+		err = s.fields[i].ReadFrom(buf)
+		if err != nil {
+			return
+		}
+	}
+
+	// fill in computed fields
+	s.Complete()
 	return nil
 }

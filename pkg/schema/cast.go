@@ -11,7 +11,9 @@ import (
 	"reflect"
 	"strconv"
 	"time"
+	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"golang.org/x/exp/constraints"
@@ -35,10 +37,55 @@ func castError(val any, kind string) error {
 	return fmt.Errorf("cast: unexpected value type %T for %s condition", val, kind)
 }
 
-// caster
-type IntCaster[T constraints.Signed] struct {
-	bitsize int
+func NewCaster(typ types.FieldType) ValueCaster {
+	switch typ {
+	case types.FieldTypeDatetime:
+		return TimeCaster{}
+	case types.FieldTypeBoolean:
+		return BoolCaster{}
+	case types.FieldTypeString:
+		return StringCaster{} // MarshalText, stringer, ToString
+	case types.FieldTypeBytes:
+		return BytesCaster{} // MarshalBinary
+	case types.FieldTypeInt8:
+		return IntCaster[int8]{}
+	case types.FieldTypeInt16:
+		return IntCaster[int16]{}
+	case types.FieldTypeInt32:
+		return IntCaster[int32]{}
+	case types.FieldTypeInt64:
+		return IntCaster[int64]{}
+	case types.FieldTypeUint8:
+		return UintCaster[uint8]{}
+	case types.FieldTypeUint16:
+		return UintCaster[uint16]{}
+	case types.FieldTypeUint32:
+		return UintCaster[uint32]{}
+	case types.FieldTypeUint64:
+		return UintCaster[uint64]{}
+	case types.FieldTypeFloat32:
+		return FloatCaster[float32]{}
+	case types.FieldTypeFloat64:
+		return FloatCaster[float64]{}
+	case types.FieldTypeInt128:
+		return I128Caster{}
+	case types.FieldTypeInt256:
+		return I256Caster{}
+	case types.FieldTypeDecimal32:
+		return IntCaster[int32]{}
+	case types.FieldTypeDecimal64:
+		return IntCaster[int64]{}
+	case types.FieldTypeDecimal128:
+		return I128Caster{}
+	case types.FieldTypeDecimal256:
+		return I256Caster{}
+	default:
+		panic(fmt.Errorf("caster: unsupported field type %s %d", typ, typ))
+	}
 }
+
+// caster
+type IntCaster[T constraints.Signed] struct{}
 
 func (c IntCaster[T]) CastValue(val any) (res any, err error) {
 	var ok bool
@@ -91,7 +138,8 @@ func (c IntCaster[T]) CastValue(val any) (res any, err error) {
 		}
 	}
 	if !ok {
-		err = castError(val, "int"+strconv.Itoa(c.bitsize))
+		var t T
+		err = castError(val, "int"+strconv.Itoa(int(unsafe.Sizeof(t)*8)))
 	}
 	return
 }
@@ -225,15 +273,14 @@ func (c IntCaster[T]) CastSlice(val any) (res any, err error) {
 		}
 	}
 	if !ok {
-		err = castError(val, "int"+strconv.Itoa(c.bitsize))
+		var t T
+		err = castError(val, "int"+strconv.Itoa(int(unsafe.Sizeof(t)*8)))
 	}
 	return
 }
 
 // uint caster
-type UintCaster[T constraints.Unsigned] struct {
-	bitsize int
-}
+type UintCaster[T constraints.Unsigned] struct{}
 
 func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 	var ok bool
@@ -286,7 +333,8 @@ func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 		}
 	}
 	if !ok {
-		err = castError(val, "uint"+strconv.Itoa(c.bitsize))
+		var t T
+		err = castError(val, "uint"+strconv.Itoa(int(unsafe.Sizeof(t)*8)))
 	}
 	return
 }
@@ -420,15 +468,14 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 		}
 	}
 	if !ok {
-		err = castError(val, "uint"+strconv.Itoa(c.bitsize))
+		var t T
+		err = castError(val, "uint"+strconv.Itoa(int(unsafe.Sizeof(t)*8)))
 	}
 	return
 }
 
 // float caster
-type FloatCaster[T constraints.Float] struct {
-	bitsize int
-}
+type FloatCaster[T constraints.Float] struct{}
 
 func (c FloatCaster[T]) CastValue(val any) (res any, err error) {
 	var ok bool
@@ -483,7 +530,8 @@ func (c FloatCaster[T]) CastValue(val any) (res any, err error) {
 		}
 	}
 	if !ok {
-		err = castError(val, "float"+strconv.Itoa(c.bitsize))
+		var t T
+		err = castError(val, "float"+strconv.Itoa(int(unsafe.Sizeof(t)*8)))
 	}
 	return
 }
@@ -627,7 +675,8 @@ func (c FloatCaster[T]) CastSlice(val any) (res any, err error) {
 		}
 	}
 	if !ok {
-		err = castError(val, "float"+strconv.Itoa(c.bitsize))
+		var t T
+		err = castError(val, "float"+strconv.Itoa(int(unsafe.Sizeof(t)*8)))
 	}
 	return
 }

@@ -6,6 +6,7 @@ package schema
 import (
 	"bytes"
 	"encoding"
+	"fmt"
 	"io"
 	"reflect"
 	"time"
@@ -236,6 +237,18 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 		case OpCodeDecimal256:
 			(*(*num.Decimal256)(ptr)).Set(num.Int256FromBytes(d.buf.Next(32)))
 			(*(*num.Decimal256)(ptr)).SetScale(field.scale)
+
+		case OpCodeEnum:
+			v, _ := ReadUint16(d.buf.Next(2))
+			lut, err := LookupEnum(field.name)
+			if err != nil {
+				return err
+			}
+			val, ok := lut.Value(v)
+			if !ok {
+				return ErrInvalidValue
+			}
+			*(*string)(ptr) = string(val)
 		}
 
 		if err != nil {
@@ -429,6 +442,18 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte) []byte
 		(*(*num.Decimal256)(ptr)).SetScale(field.scale)
 		buf = buf[32:]
 
+	case OpCodeEnum:
+		u16, n := ReadUint16(buf)
+		buf = buf[n:]
+		lut, err := LookupEnum(field.name)
+		if err != nil {
+			panic(err)
+		}
+		val, ok := lut.Value(u16)
+		if !ok {
+			panic(fmt.Errorf("%s: invalid enum value %d", field.name, u16))
+		}
+		*(*string)(ptr) = string(val)
 	}
 	return buf
 }
