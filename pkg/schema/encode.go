@@ -118,96 +118,27 @@ func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
 }
 
 func (e *Encoder) EncodeSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
+	if slice == nil {
+		return nil, ErrNilValue
+	}
 	rslice := reflect.Indirect(reflect.ValueOf(slice))
-	base := rslice.UnsafePointer()
+	if !rslice.IsValid() || rslice.Kind() != reflect.Slice {
+		return nil, ErrInvalidValue
+	}
 	etyp := rslice.Type().Elem()
+	if etyp.Kind() == reflect.Pointer {
+		return e.EncodePtrSlice(slice, buf)
+	}
 	sz := etyp.Size()
-	isPtr := etyp.Kind() == reflect.Pointer
-	if isPtr {
-		sz = etyp.Elem().Size()
-	}
-	num := rslice.Len()
-	if buf == nil {
-		buf = e.NewBuffer(num)
-	}
-
-	var err error
-	if isPtr {
-		if !e.needsif {
-			for i, l := 0, num; i < l; i++ {
-				base = rslice.Index(i).UnsafePointer()
-				for op, code := range e.schema.encode {
-					field := e.schema.fields[op]
-					ptr := unsafe.Add(base, field.offset)
-					err = writeField(buf, code, field, ptr)
-					if err != nil {
-						return nil, err
-					}
-				}
-			}
-		} else {
-			for i, l := 0, num; i < l; i++ {
-				rval := rslice.Index(i)
-				base = rval.UnsafePointer()
-				for op, code := range e.schema.encode {
-					field := e.schema.fields[op]
-					if !code.NeedsInterface() {
-						ptr := unsafe.Add(base, field.offset)
-						err = writeField(buf, code, field, ptr)
-					} else {
-						err = writeReflectField(buf, code, rval.Elem().FieldByIndex(field.path).Interface())
-					}
-					if err != nil {
-						return nil, err
-					}
-				}
-			}
-		}
-	} else {
-		if !e.needsif {
-			for i, l := 0, num; i < l; i++ {
-				for op, code := range e.schema.encode {
-					field := e.schema.fields[op]
-					ptr := unsafe.Add(base, field.offset)
-					err = writeField(buf, code, field, ptr)
-					if err != nil {
-						return nil, err
-					}
-				}
-				base = unsafe.Add(base, sz)
-			}
-		} else {
-			for i, l := 0, num; i < l; i++ {
-				rval := rslice.Index(i)
-				for op, code := range e.schema.encode {
-					field := e.schema.fields[op]
-					if !code.NeedsInterface() {
-						ptr := unsafe.Add(base, field.offset)
-						err = writeField(buf, code, field, ptr)
-					} else {
-						err = writeReflectField(buf, code, rval.FieldByIndex(field.path).Interface())
-					}
-					if err != nil {
-						return nil, err
-					}
-				}
-				base = unsafe.Add(base, sz)
-			}
-		}
-	}
-	return buf.Bytes(), nil
-}
-
-func (e *Encoder) EncodePtrSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
-	rslice := reflect.Indirect(reflect.ValueOf(slice))
+	base := rslice.UnsafePointer()
 	if buf == nil {
 		buf = e.NewBuffer(rslice.Len())
 	}
+
 	var err error
 	if e.needsif {
 		for i, l := 0, rslice.Len(); i < l; i++ {
-			rval := reflect.Indirect(rslice.Index(i))
-			base := rval.UnsafePointer()
+			rval := rslice.Index(i)
 			for op, code := range e.schema.encode {
 				field := e.schema.fields[op]
 				if !code.NeedsInterface() {
@@ -220,11 +151,58 @@ func (e *Encoder) EncodePtrSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 					return nil, err
 				}
 			}
+			base = unsafe.Add(base, sz)
 		}
 	} else {
 		for i, l := 0, rslice.Len(); i < l; i++ {
-			rval := reflect.Indirect(rslice.Index(i))
+			for op, code := range e.schema.encode {
+				field := e.schema.fields[op]
+				ptr := unsafe.Add(base, field.offset)
+				err = writeField(buf, code, field, ptr)
+				if err != nil {
+					return nil, err
+				}
+			}
+			base = unsafe.Add(base, sz)
+		}
+	}
+	return buf.Bytes(), nil
+}
+
+func (e *Encoder) EncodePtrSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
+	if slice == nil {
+		return nil, ErrNilValue
+	}
+	rslice := reflect.Indirect(reflect.ValueOf(slice))
+	if !rslice.IsValid() ||
+		rslice.Kind() != reflect.Slice ||
+		rslice.Type().Elem().Kind() != reflect.Pointer {
+		return nil, ErrInvalidValue
+	}
+	if buf == nil {
+		buf = e.NewBuffer(rslice.Len())
+	}
+	var err error
+	if e.needsif {
+		for i, l := 0, rslice.Len(); i < l; i++ {
+			rval := rslice.Index(i)
 			base := rval.UnsafePointer()
+			for op, code := range e.schema.encode {
+				field := e.schema.fields[op]
+				if !code.NeedsInterface() {
+					ptr := unsafe.Add(base, field.offset)
+					err = writeField(buf, code, field, ptr)
+				} else {
+					err = writeReflectField(buf, code, rval.Elem().FieldByIndex(field.path).Interface())
+				}
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	} else {
+		for i, l := 0, rslice.Len(); i < l; i++ {
+			base := rslice.Index(i).UnsafePointer()
 			for op, code := range e.schema.encode {
 				field := e.schema.fields[op]
 				ptr := unsafe.Add(base, field.offset)

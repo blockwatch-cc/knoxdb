@@ -34,6 +34,14 @@ func GenericSchema[T any]() (*Schema, error) {
 	return SchemaOf(m)
 }
 
+func MustSchemaOf(m any) *Schema {
+	s, err := SchemaOf(m)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
 func SchemaOf(m any) (*Schema, error) {
 	// interface must not be nil
 	if m == nil {
