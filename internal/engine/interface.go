@@ -40,11 +40,11 @@ type TableEngine interface {
 	Compact(Context) error
 	Truncate(Context) error
 
-	// data ingres
+	// data ingress
 	InsertRows(Context, []byte) (uint64, error) // wire encoded rows
 	UpdateRows(Context, []byte) (uint64, error) // wire encoded rows
 
-	// data egres
+	// data egress
 	Query(Context, QueryPlan) (QueryResult, error)
 	Count(Context, QueryPlan) (uint64, error)
 	Delete(Context, QueryPlan) (uint64, error)
@@ -105,7 +105,7 @@ type IndexEngine interface {
 	Rebuild(Context) error
 	Sync(Context) error
 
-	// data ingres
+	// data ingress
 	Add(ctx Context, prev, val []byte) error // wire encoded rows
 	Del(ctx Context, prev []byte) error      // wire encoded rows
 

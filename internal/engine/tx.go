@@ -69,6 +69,10 @@ func (t *Tx) Engine() *Engine {
 	return t.engine
 }
 
+func (t *Tx) Noop() error {
+	return nil
+}
+
 func (t *Tx) Close() {
 	clear(t.dbTx)
 	clear(t.touched)

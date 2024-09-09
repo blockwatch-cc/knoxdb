@@ -39,8 +39,7 @@ func NewTestDatabaseOptions(t *testing.T, driver string) DatabaseOptions {
 
 func NewTestEngine(opts DatabaseOptions) *Engine {
 	return &Engine{
-		path:      filepath.Join(opts.Path, TEST_DB_NAME),
-		namespace: opts.Namespace,
+		path: filepath.Join(opts.Path, TEST_DB_NAME),
 		cache: CacheManager{
 			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
 			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),

@@ -11,13 +11,13 @@ import (
 const (
 	AllocTime = iota
 	AllocInt64
-	AllocInt32
-	AllocInt16
-	AllocInt8
+	// AllocInt32
+	// AllocInt16
+	// AllocInt8
 	AllocUint64
 	AllocUint32
-	AllocUint16
-	AllocUint8
+	// AllocUint16
+	// AllocUint8
 	AllocFloat64
 	AllocFloat32
 	AllocBytes
@@ -43,25 +43,25 @@ func FreePtr(typ int, ptr unsafe.Pointer) {
 }
 
 type arena struct {
-	alloc [17]Allocator
+	alloc [13]Allocator
 }
 
 func newArena() *arena {
 	return &arena{
-		alloc: [17]Allocator{
-			newAllocator[int64](),   // BlockTime
-			newAllocator[int64](),   // BlockInt64
-			newAllocator[int32](),   // BlockInt32
-			newAllocator[int16](),   // BlockInt16
-			newAllocator[int8](),    // BlockInt8
-			newAllocator[uint64](),  // BlockUint64
-			newAllocator[uint32](),  // BlockUint32
-			newAllocator[uint16](),  // BlockUint16
-			newAllocator[uint8](),   // BlockUint8
-			newAllocator[float64](), // BlockFloat64
-			newAllocator[float32](), // BlockFloat32
-			newAllocator[byte](),    // BlockBytes !! unused in block, used in bitset
-			newAllocator[[]byte](),  // extra: used in dedup
+		alloc: [13]Allocator{
+			newAllocator[int64](),
+			newAllocator[int64](),
+			// newAllocator[int32](),
+			// newAllocator[int16](),
+			// newAllocator[int8](),
+			newAllocator[uint64](),
+			newAllocator[uint32](),
+			// newAllocator[uint16](),
+			// newAllocator[uint8](),
+			newAllocator[float64](),
+			newAllocator[float32](),
+			newAllocator[byte](),
+			newAllocator[[]byte](),
 		},
 	}
 }

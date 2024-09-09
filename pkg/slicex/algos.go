@@ -80,19 +80,19 @@ func index[T Number](s []T, val T, last int, canOptimize bool) (int, bool) {
 	// search for value in slice starting at last index
 	slice := s[last:]
 	l := len(slice)
-	min, max := slice[0], slice[l-1]
-	if val < min {
+	minv, maxv := slice[0], slice[l-1]
+	if val < minv {
 		return 0, false
 	}
-	if val > max {
+	if val > maxv {
 		return l, false
 	}
 
 	// for dense slices (values are continuous) we can compute offset directly
 	// when both unique+nonzero flags are true
 	if canOptimize {
-		if l == int(max-min)+1 {
-			return int(val-min) + last, true
+		if l == int(maxv-minv)+1 {
+			return int(val-minv) + last, true
 		}
 	}
 
@@ -128,27 +128,27 @@ func containsRange[T constraints.Ordered](s []T, from, to T) bool {
 	}
 	// Case B-D
 	// search if lower interval bound is within slice
-	min := sort.Search(n, func(i int) bool {
+	minv := sort.Search(n, func(i int) bool {
 		return s[i] >= from
 	})
 	// exit when from was found (no need to check if min < n)
-	if s[min] == from {
+	if s[minv] == from {
 		return true
 	}
 	// continue search for upper interval bound in the remainder of the slice
-	max := sort.Search(n-min, func(i int) bool {
-		return s[i+min] >= to
+	maxv := sort.Search(n-minv, func(i int) bool {
+		return s[i+minv] >= to
 	})
-	max = max + min
+	maxv = maxv + minv
 
 	// exit when to was found (also solves case C1a)
-	if max < n && s[max] == to {
+	if maxv < n && s[maxv] == to {
 		return true
 	}
 
 	// range is contained iff min < max; note that from/to do not necessarily
 	// have to be members, but some intermediate values are
-	return min < max
+	return minv < maxv
 }
 
 // intersect adds all values to out that are memers in both input slices x and y
@@ -189,13 +189,6 @@ func intersect[T constraints.Ordered](x, y, out []T) []T {
 		}
 	}
 	return out
-}
-
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
 }
 
 func merge[T constraints.Ordered](s []T, unique bool, v ...T) []T {

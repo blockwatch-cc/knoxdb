@@ -96,7 +96,7 @@ var (
 var DefaultDatabaseOptions = DatabaseOptions{
 	Path:      "./db",
 	Driver:    "bolt",
-	PageSize:  4096,
+	PageSize:  1024,
 	PageFill:  0.8,
 	CacheSize: 16 * 1 << 20,
 }
