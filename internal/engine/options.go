@@ -4,14 +4,11 @@
 package engine
 
 import (
-	"time"
-
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
-	bolt "go.etcd.io/bbolt"
 )
 
 type DatabaseOptions struct {
@@ -25,48 +22,6 @@ type DatabaseOptions struct {
 	NoGrowSync bool       // boltdb, skip fsync+alloc on grow
 	ReadOnly   bool       // read-only tx and no schema changes
 	Logger     log.Logger `knox:"-"`
-}
-
-func (o DatabaseOptions) ToDriverOpts() any {
-	switch o.Driver {
-	case "bolt":
-		drvOpts := bolt.Options{
-			// open timeout when file is locked
-			Timeout: time.Second,
-
-			// faster for large databases
-			FreelistType: bolt.FreelistMapType,
-
-			// User-controlled options
-			//
-			// skip fsync (DANGEROUS on crashes, but better performance for bulk load)
-			NoSync: o.NoSync,
-			//
-			// skip fsync+alloc on grow; don't use with ext3/4, good in Docker + XFS
-			NoGrowSync: o.NoGrowSync,
-			//
-			// don't fsync freelist (improves write performance at the cost of full
-			// database scan on start-up)
-			NoFreelistSync: o.NoSync,
-			//
-			// PageSize overrides the default OS page size.
-			PageSize: o.PageSize,
-			//
-			// v1.4 (currently in alpha)
-			// Logger: o.Logger,
-		}
-		o.Logger.Debug("Bolt DB config")
-		o.Logger.Debugf("  Readonly         %t", o.ReadOnly)
-		o.Logger.Debugf("  No-Sync          %t", o.NoSync)
-		o.Logger.Debugf("  No-Grow-Sync     %t", o.NoGrowSync)
-		o.Logger.Debugf("  Pagesize         %d", o.PageSize)
-		if o.NoSync {
-			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
-		}
-		return &drvOpts
-	default:
-		return nil
-	}
 }
 
 func (o DatabaseOptions) Merge(o2 DatabaseOptions) DatabaseOptions {
@@ -112,45 +67,6 @@ type TableOptions struct {
 	Logger       log.Logger `knox:"-"` // custom logger
 }
 
-func (o TableOptions) ToDriverOpts() any {
-	switch o.Driver {
-	case "bolt":
-		drvOpts := bolt.Options{
-			// open timeout when file is locked
-			Timeout: time.Second,
-
-			// faster for large databases
-			FreelistType: bolt.FreelistMapType,
-
-			// User-controlled options
-			//
-			// skip fsync (DANGEROUS on crashes, but better performance for bulk load)
-			NoSync: o.NoSync,
-			//
-			// skip fsync+alloc on grow; don't use with ext3/4, good in Docker + XFS
-			NoGrowSync: o.NoGrowSync,
-			//
-			// don't fsync freelist (improves write performance at the cost of full
-			// database scan on start-up)
-			NoFreelistSync: o.NoSync,
-			//
-			// PageSize overrides the default OS page size.
-			PageSize: o.PageSize,
-		}
-		o.Logger.Debug("Bolt DB config")
-		o.Logger.Debugf("  Readonly         %t", o.ReadOnly)
-		o.Logger.Debugf("  No-Sync          %t", o.NoSync)
-		o.Logger.Debugf("  No-Grow-Sync     %t", o.NoGrowSync)
-		o.Logger.Debugf("  Pagesize         %d", o.PageSize)
-		if o.NoSync {
-			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
-		}
-		return &drvOpts
-	default:
-		return nil
-	}
-}
-
 func (o TableOptions) Merge(o2 TableOptions) TableOptions {
 	o.Engine = util.NonZero(o2.Engine, o.Engine)
 	o.Driver = util.NonZero(o2.Driver, o.Driver)
@@ -190,45 +106,6 @@ type StoreOptions struct {
 	TxMaxSize  int        // maximum write size of low-level dbfile transactions
 	DB         store.DB   `knox:"-"` // shared low-level store implementation
 	Logger     log.Logger `knox:"-"` // custom logger
-}
-
-func (o StoreOptions) ToDriverOpts() any {
-	switch o.Driver {
-	case "bolt":
-		drvOpts := bolt.Options{
-			// open timeout when file is locked
-			Timeout: time.Second,
-
-			// faster for large databases
-			FreelistType: bolt.FreelistMapType,
-
-			// User-controlled options
-			//
-			// skip fsync (DANGEROUS on crashes, but better performance for bulk load)
-			NoSync: o.NoSync,
-			//
-			// skip fsync+alloc on grow; don't use with ext3/4, good in Docker + XFS
-			NoGrowSync: o.NoGrowSync,
-			//
-			// don't fsync freelist (improves write performance at the cost of full
-			// database scan on start-up)
-			NoFreelistSync: o.NoSync,
-			//
-			// PageSize overrides the default OS page size.
-			PageSize: o.PageSize,
-		}
-		o.Logger.Debug("Bolt DB config")
-		o.Logger.Debugf("  Readonly         %t", o.ReadOnly)
-		o.Logger.Debugf("  No-Sync          %t", o.NoSync)
-		o.Logger.Debugf("  No-Grow-Sync     %t", o.NoGrowSync)
-		o.Logger.Debugf("  Pagesize         %d", o.PageSize)
-		if o.NoSync {
-			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
-		}
-		return &drvOpts
-	default:
-		return nil
-	}
 }
 
 func (o StoreOptions) Merge(o2 StoreOptions) StoreOptions {
@@ -273,45 +150,6 @@ type IndexOptions struct {
 	NoGrowSync  bool            // boltdb, skip fsync+alloc on grow
 	DB          store.DB        `knox:"-"` // shared low-level store implementation
 	Logger      log.Logger      `knox:"-"` // custom logger
-}
-
-func (o IndexOptions) ToDriverOpts() any {
-	switch o.Driver {
-	case "bolt":
-		drvOpts := bolt.Options{
-			// open timeout when file is locked
-			Timeout: time.Second,
-
-			// faster for large databases
-			FreelistType: bolt.FreelistMapType,
-
-			// User-controlled options
-			//
-			// skip fsync (DANGEROUS on crashes, but better performance for bulk load)
-			NoSync: o.NoSync,
-			//
-			// skip fsync+alloc on grow; don't use with ext3/4, good in Docker + XFS
-			NoGrowSync: o.NoGrowSync,
-			//
-			// don't fsync freelist (improves write performance at the cost of full
-			// database scan on start-up)
-			NoFreelistSync: o.NoSync,
-			//
-			// PageSize overrides the default OS page size.
-			PageSize: o.PageSize,
-		}
-		o.Logger.Debug("Bolt DB config")
-		o.Logger.Debugf("  Readonly         %t", o.ReadOnly)
-		o.Logger.Debugf("  No-Sync          %t", o.NoSync)
-		o.Logger.Debugf("  No-Grow-Sync     %t", o.NoGrowSync)
-		o.Logger.Debugf("  Pagesize         %d", o.PageSize)
-		if o.NoSync {
-			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
-		}
-		return &drvOpts
-	default:
-		return nil
-	}
 }
 
 func (o IndexOptions) Merge(o2 IndexOptions) IndexOptions {

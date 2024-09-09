@@ -190,11 +190,19 @@ func (e *Engine) CompactTable(ctx context.Context, name string) error {
 		return ErrNoTable
 	}
 
+	// start transaction and amend context
+	ctx, commit, abort := e.WithTransaction(ctx)
+	defer abort()
+
 	// TODO: wait for open transactions to complete
 
 	// TODO: make table unavailable for new transaction
 
-	return t.Compact(ctx)
+	if err := t.Compact(ctx); err != nil {
+		return err
+	}
+
+	return commit()
 }
 
 func (e *Engine) openTables(ctx context.Context) error {

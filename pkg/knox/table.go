@@ -250,6 +250,14 @@ func (t *GenericTable[T]) Stats() TableStats {
 	return t.table.Stats()
 }
 
+func (t *GenericTable[T]) Table() Table {
+	return &TableImpl{
+		table: t.table,
+		db:    t.db,
+		log:   log.Disabled,
+	}
+}
+
 func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
 	enc := schema.NewGenericEncoder[T]()
 	var (

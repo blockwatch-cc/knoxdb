@@ -11,7 +11,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/store"
-	_ "blockwatch.cc/knoxdb/internal/store/bolt"
 	_ "blockwatch.cc/knoxdb/internal/store/mem"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/cache/rclru"
@@ -93,7 +92,7 @@ func TestCatalogCreate(t *testing.T) {
 
 func TestCatalogOpen(t *testing.T) {
 	// create first engine
-	e := NewTestEngine(NewTestDatabaseOptions(t, "bolt"))
+	e := NewTestEngine(NewTestDatabaseOptions(t, "mem"))
 	ctx, commit, _ := e.WithTransaction(context.Background())
 
 	// create catalog (requires write tx)
@@ -222,7 +221,7 @@ func TestCatalogAddTable(t *testing.T) {
 	t.Log("Table", s)
 	opts := TableOptions{
 		Engine:   "pack",
-		Driver:   "bolt",
+		Driver:   "mem",
 		PageSize: 1024,
 	}
 	require.NoError(t, cat.AddTable(tctx, 1, s, opts))
@@ -275,7 +274,7 @@ func TestCatalogAddIndex(t *testing.T) {
 	t.Log("Index", s)
 	opts := IndexOptions{
 		Engine:   "pack",
-		Driver:   "bolt",
+		Driver:   "mem",
 		PageSize: 1024,
 	}
 	require.NoError(t, cat.AddIndex(tctx, 2, 1, s, opts))
@@ -327,7 +326,7 @@ func TestCatalogAddStore(t *testing.T) {
 	s.WithName(s.Name() + "_store")
 	t.Log("Store", s)
 	opts := StoreOptions{
-		Driver:   "bolt",
+		Driver:   "mem",
 		PageSize: 1024,
 	}
 	require.NoError(t, cat.AddStore(tctx, 1, s, opts))
