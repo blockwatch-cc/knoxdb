@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"blockwatch.cc/knoxdb/encoding/bitmap"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/bitmap"
 )
 
 func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResult, error) {

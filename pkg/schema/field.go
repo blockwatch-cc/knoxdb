@@ -12,7 +12,6 @@ import (
 	"reflect"
 	"time"
 
-	"blockwatch.cc/knoxdb/encoding/decimal"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
@@ -221,16 +220,16 @@ func (f Field) WithGoType(typ reflect.Type, path []int, ofs uintptr) Field {
 func (f *Field) Validate() error {
 	// require scale on decimal fields only
 	if f.scale != 0 {
-		minScale, maxScale := 0, 0
+		var minScale, maxScale uint8
 		switch f.typ {
 		case types.FieldTypeDecimal32:
-			maxScale = decimal.MaxDecimal32Precision
+			maxScale = num.MaxDecimal32Precision
 		case types.FieldTypeDecimal64:
-			maxScale = decimal.MaxDecimal64Precision
+			maxScale = num.MaxDecimal64Precision
 		case types.FieldTypeDecimal128:
-			maxScale = decimal.MaxDecimal128Precision
+			maxScale = num.MaxDecimal128Precision
 		case types.FieldTypeDecimal256:
-			maxScale = decimal.MaxDecimal256Precision
+			maxScale = num.MaxDecimal256Precision
 		default:
 			if f.index == types.IndexTypeBloom {
 				minScale, maxScale = 1, 4
@@ -238,7 +237,7 @@ func (f *Field) Validate() error {
 				return fmt.Errorf("scale unsupported on type %s", f.typ)
 			}
 		}
-		if _, err := validateInt("scale", int(f.scale), minScale, maxScale); err != nil {
+		if _, err := validateInt("scale", int(f.scale), int(minScale), int(maxScale)); err != nil {
 			return err
 		}
 	}
@@ -451,25 +450,25 @@ func (f *Field) Encode(w io.Writer, val any) (err error) {
 		}
 
 	case OpCodeDecimal32:
-		v, ok := val.(decimal.Decimal32)
+		v, ok := val.(num.Decimal32)
 		if ok {
 			_, err = w.Write(Uint32Bytes(uint32(v.Int32())))
 		}
 
 	case OpCodeDecimal64:
-		v, ok := val.(decimal.Decimal64)
+		v, ok := val.(num.Decimal64)
 		if ok {
 			_, err = w.Write(Uint64Bytes(uint64(v.Int64())))
 		}
 
 	case OpCodeDecimal128:
-		v, ok := val.(decimal.Decimal128)
+		v, ok := val.(num.Decimal128)
 		if ok {
 			_, err = w.Write(v.Int128().Bytes())
 		}
 
 	case OpCodeDecimal256:
-		v, ok := val.(decimal.Decimal256)
+		v, ok := val.(num.Decimal256)
 		if ok {
 			_, err = w.Write(v.Int256().Bytes())
 		}

@@ -11,7 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/metadata"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // Loads a shared pack for reading, uses block cache to lookup blocks.
