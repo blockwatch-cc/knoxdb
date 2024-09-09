@@ -1,140 +1,44 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package journal
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"math/rand"
-	"reflect"
-	"slices"
 	"sort"
 	"testing"
 
-	"blockwatch.cc/knoxdb/encoding/bitmap"
 	"blockwatch.cc/knoxdb/internal/bitset"
+	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/pkg/bitmap"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/slicex"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
-	journalTestSizes = []int{1 << 8, 1 << 10, 1 << 12}
-
-	packBenchmarkSizes = []packBenchmarkSize{
-		// {"32", 32},
-		// {"1K", 1 * 1024},
+	journalTestSizes = []int{256, 1024, 4096}
+	benchmarkSizes   = []benchmarkSize{
 		{"16K", 16 * 1024},
 		{"32K", 32 * 1024},
 		{"64K", 64 * 1024},
-		// {"128K", 128 * 1024},
 	}
+	testSchema = schema.MustSchemaOf(TestRecord{})
 )
-
-func randUint64Slice(n, u int) []uint64 {
-	s := make([]uint64, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = uint64(rand.Int63())
-	}
-	for i := 0; i < u; i++ {
-		s = append(s, s[:n]...)
-	}
-	return slicex.Unique(s)
-}
 
 const journalRndRuns = 5
 
-type JournalTestType struct {
+type TestRecord struct {
 	Pk uint64 `knox:"I,pk"`
-	N  int    `knox:"n,i32"`
+	N  int    `knox:"n"`
 }
 
-type packBenchmarkSize struct {
+type TestRecords []*TestRecord
+
+type benchmarkSize struct {
 	name string
 	l    int
-}
-
-type ItemList []*JournalTestType
-
-func getPk(val any) uint64 {
-	return reflect.Indirect(reflect.ValueOf(val)).Field(0).Uint()
-}
-
-func setPk(val any, pk uint64) {
-	pkv := reflect.Indirect(reflect.ValueOf(val)).Field(0)
-	pkv.SetUint(pk)
-}
-
-func makeJournalTestData(n int) []*JournalTestType {
-	items := make([]*JournalTestType, n)
-	for i := 0; i < n; i++ {
-		items[i] = &JournalTestType{
-			Pk: 0,
-			N:  i,
-		}
-	}
-	return items
-}
-
-func itemsToJournalEntryList(items ItemList) JournalEntryList {
-	l := make(JournalEntryList, len(items))
-	for i := range items {
-		l[i] = JournalEntry{getPk(items[i]), i}
-	}
-	return l
-}
-
-func makeJournalTestDataWithRandomPk(n int) ItemList {
-	// generate random values
-	values := randUint64Slice(n, 1)
-
-	// strip duplicates and sort
-	values = slicex.Unique(values)
-
-	items := make(ItemList, len(values))
-	for i := range values {
-		items[i] = &JournalTestType{
-			Pk: values[i],
-			N:  i,
-		}
-	}
-	return items
-}
-
-func makeJournalFromPks(pks, del []uint64) *Journal {
-	s, _ := schema.SchemaOf(JournalTestType{})
-	enc := schema.NewEncoder(s)
-	buf := new(bytes.Buffer)
-	j := NewJournal(s, len(pks))
-	for i := range pks {
-		item := &JournalTestType{
-			Pk: pks[i],
-			N:  i,
-		}
-		buf.Reset()
-		enc.Encode(buf, item)
-		j.InsertBatch(buf.Bytes(), pks[i])
-	}
-	x := bitmap.New()
-	for _, v := range del {
-		x.Set(v)
-	}
-	j.DeleteBatch(x)
-	return j
-}
-
-func randJournalData(n, sz int) []ItemList {
-	res := make([]ItemList, n)
-	for i := range res {
-		res[i] = makeJournalTestDataWithRandomPk(sz)
-	}
-	return res
-}
-
-func shuffleItems(items ItemList) ItemList {
-	rand.Shuffle(len(items), func(i, j int) { items[i], items[j] = items[j], items[i] })
-	return items
 }
 
 // generates n unique random numbers between 1..max
@@ -153,214 +57,106 @@ func randN(n, max int) []int {
 	return res
 }
 
-// creates nn slices each containing n unique random numbers between 0..max
-func randNN(nn, n, max int) [][]int {
-	res := make([][]int, nn)
+func makeJournalTestData(n int) TestRecords {
+	recs := make(TestRecords, n)
+	for i := 0; i < n; i++ {
+		recs[i] = &TestRecord{
+			Pk: 0,
+			N:  i,
+		}
+	}
+	return recs
+}
+
+func recsToJournalRecords(recs TestRecords) JournalRecords {
+	l := make(JournalRecords, len(recs))
+	for i := range recs {
+		l[i] = JournalRecord{recs[i].Pk, i}
+	}
+	return l
+}
+
+func makeJournalDataSequential(sz, start int) TestRecords {
+	res := make(TestRecords, sz)
 	for i := range res {
-		res[i] = randN(n, max)
+		res[i] = &TestRecord{
+			Pk: uint64(start + i),
+			N:  rand.Int(),
+		}
 	}
 	return res
 }
 
+func encodeTestData(v []*TestRecord) []byte {
+	enc := schema.NewEncoder(testSchema)
+	buf, err := enc.EncodeSlice(v, nil)
+	if err != nil {
+		panic(err)
+	}
+	return buf
+}
+
+func shuffleItems(recs TestRecords) TestRecords {
+	rand.Shuffle(len(recs), func(i, j int) { recs[i], recs[j] = recs[j], recs[i] })
+	return recs
+}
+
 func checkJournalSizes(t *testing.T, j *Journal, size, tomb, delcount int) {
-	if got, want := j.Len(), size; got != want {
-		t.Errorf("invalid journal size: got=%d want=%d", got, want)
-	}
-	if got, want := j.Data.Len(), size; got != want {
-		t.Errorf("invalid pack size: got=%d want=%d", got, want)
-	}
-	if got, want := len(j.Keys), size; got != want {
-		t.Errorf("invalid keys size: got=%d want=%d", got, want)
-	}
-	if got, want := j.Deleted.Len(), size; got != want {
-		t.Errorf("invalid bitset size: got=%d want=%d", got, want)
-	}
-	if got, want := j.TombLen(), tomb; got != want {
-		t.Errorf("invalid tomb size: got=%d want=%d", got, want)
-	}
-	if got, want := j.Deleted.Count(), delcount; got != want {
-		t.Errorf("invalid bitset count: got=%d want=%d", got, want)
-	}
+	assert.Equal(t, j.Len(), size, "invalid journal size")
+	assert.Equal(t, j.Data.Len(), size, "invalid journal pack size")
+	assert.Len(t, j.Keys, size, "invalid journal keys size")
+	assert.Equal(t, j.Deleted.Len(), size, "invalid tomb bitset size")
+	assert.Equal(t, j.TombLen(), tomb, "invalid tomb size")
+	assert.Equal(t, j.Deleted.Count(), delcount, "invalid tomb bitset size")
 }
 
 func checkJournalCaps(t *testing.T, j *Journal, data, keys, tomb int) {
-	if got, want := j.Data.Cap(), roundSize(data); got != want {
-		t.Errorf("invalid data pack cap: got=%d want=%d", got, want)
-	}
-	if got, want := cap(j.Keys), roundSize(keys); got != want {
-		t.Errorf("invalid keys cap: got=%d want=%d", got, want)
-	}
-	// if got, want := cap(j.tomb), roundSize(tomb); got != want {
-	// 	t.Errorf("invalid tomb cap: got=%d want=%d", got, want)
-	// }
-	if got, want := j.Deleted.Cap(), roundSize(tomb); got != want {
-		t.Errorf("invalid bitset cap: got=%d want=%d", got, want)
-	}
+	assert.Equal(t, j.Data.Cap(), roundSize(data), "invalid journal pack cap")
+	assert.Equal(t, cap(j.Keys), roundSize(keys), "invalid journal keys cap")
+	assert.Equal(t, j.Deleted.Cap(), roundSize(tomb), "invalid tomb bitset cap")
 }
 
-func comparePackWithBatch(t *testing.T, name string, j *Journal, batch ItemList) {
+func comparePackWithBatch(t *testing.T, name string, j *Journal, batch TestRecords) {
 	t.Run(name, func(t *testing.T) {
-		if got, want := j.Data.Len(), len(batch); got != want {
-			t.Errorf("mismatched pack/batch len: got=%d want=%d", got, want)
-			t.FailNow()
-		}
-		res := Result{pkg: j.Data}
-		err := res.ForEach(JournalTestType{}, func(i int, v interface{}) error {
-			val, ok := v.(*JournalTestType)
-			if !ok {
-				t.Errorf("package type mismatch, got=%T want=JournalTestType", v)
-				return io.EOF
-			}
-			cmp := batch[i]
-			// if !ok {
-			// 	t.Errorf("batch type mismatch, got=%T want=*JournalTestType", v)
-			// 	return io.EOF
-			// }
-			if got, want := val.Pk, cmp.Pk; got != want {
-				t.Errorf("mismatched pk at pos %d: got=%d want=%d", i, got, want)
-				return io.EOF
-			}
-			if got, want := val.N, cmp.N; got != want {
-				t.Errorf("mismatched value at pos %d: got=%d want=%d", i, got, want)
-				return io.EOF
-			}
+		require.Equal(t, j.Data.Len(), len(batch), "mismatched pack/batch len")
+		err := pack.ForEach[TestRecord](j.Data, func(i int, val *TestRecord) error {
+			// pks are assigned on insert (assuming start is 1 in all calls below)
+			// require.Equal(t, val.Pk, batch[i].Pk, "mismatched pk")
+			require.Equal(t, val.Pk, uint64(i+1), "mismatched pk")
+			require.Equal(t, val.N, batch[i].N, "mismatched value")
+
 			// ignore deleted entries when cross-checking
 			if val.Pk != 0 {
 				idx, _ := j.PkIndex(val.Pk, 0)
-				if got, want := idx, i; got != want {
-					t.Errorf("mismatched PkIndex for pk %d: got=%d want=%d", val.Pk, got, want)
-					return io.EOF
-				}
+				require.Equal(t, idx, i, "mismatched PkIndex for pk")
 			}
 			return nil
 		})
-		if err != nil {
-			if err == io.EOF {
-				t.FailNow()
-			} else {
-				t.Errorf("unexpected pack walk error: %v", err)
-			}
-		}
+		require.NoError(t, err)
 	})
 }
 
 func TestJournalNew(t *testing.T) {
-	for i, sz := range journalTestSizes {
+	for _, sz := range journalTestSizes {
 		t.Run(fmt.Sprintf("%d_new", sz), func(t *testing.T) {
-			j := NewJournal(uint64(i), sz)
+			j := NewJournal(testSchema, sz)
 			// sizes & caps (note, pack storage is allocated on Init)
 			checkJournalSizes(t, j, 0, 0, 0)
 			checkJournalCaps(t, j, sz, sz, sz)
 
 			// other
-			if got, want := j.maxid, uint64(i); got != want {
-				t.Errorf("invalid max id: got=%d want=%d", got, want)
-			}
-			if got, want := j.lastid, uint64(0); got != want {
-				t.Errorf("invalid last id: got=%d want=%d", got, want)
-			}
-			if got, want := j.sortData, false; got != want {
-				t.Errorf("invalid sortData: got=%t want=%t", got, want)
-			}
-		})
-	}
-}
-
-func TestJournalInit(t *testing.T) {
-	for i, sz := range journalTestSizes {
-		t.Run(fmt.Sprintf("%d_init", sz), func(t *testing.T) {
-			// packs use a default minimum defined in block
-			expDataCap := sz
-
-			// create journal
-			j := NewJournal(uint64(i), sz, "")
-			fields, err := Fields(JournalTestType{})
-			if err != nil {
-				t.Errorf("unexpected fields init error: %v", err)
-			}
-			// regular init
-			if err := j.InitFields(fields); err != nil {
-				t.Errorf("unexpected init error: %v", err)
-			}
-			// sizes & caps (Note: min data block size is 32k)
-			checkJournalSizes(t, j, 0, 0, 0)
-			checkJournalCaps(t, j, expDataCap, sz, sz)
-			// 2nd init
-			if err := j.InitFields(fields); err == nil {
-				t.Errorf("no error on 2nd init")
-			}
-
-			j = NewJournal(uint64(i), sz, "")
-			if err := j.InitType(JournalTestType{}); err != nil {
-				t.Errorf("unexpected init error: %v", err)
-			}
-			// sizes & caps (Note: min data block size is 32k)
-			checkJournalSizes(t, j, 0, 0, 0)
-			checkJournalCaps(t, j, expDataCap, sz, sz)
-			// 2nd init
-			if err := j.InitType(JournalTestType{}); err == nil {
-				t.Errorf("no error on 2nd init")
-			}
-
-			// empty type is not ok
-			j = NewJournal(uint64(i), sz, "")
-			if err := j.InitType(nil); err == nil {
-				t.Errorf("no error when type is nil: %v", err)
-			}
-
-			// empty fields are not ok
-			j = NewJournal(uint64(i), sz, "")
-			if err := j.InitFields([]*Field{}); err == nil {
-				t.Errorf("no error when fields are empty")
-			}
-
-			// nil fields are not OK
-			j = NewJournal(uint64(i), sz, "")
-			if err := j.InitFields(nil); err == nil {
-				t.Errorf("no error when fields are nil")
-			}
-
-			// non-pk type
-			j = NewJournal(uint64(i), sz, "")
-			type noPkType struct {
-				X uint64 `pack:"x"`
-				A []byte `pack:"a"`
-			}
-			if err := j.InitType(noPkType{}); err == nil {
-				t.Errorf("no error when pk field is missing")
-			}
-
-			// empty type
-			j = NewJournal(uint64(i), sz, "")
-			type emptyType struct {
-				X uint64 `pack:"-"`
-				A []byte `pack:"-"`
-			}
-			if err := j.InitType(emptyType{}); err == nil {
-				t.Errorf("no error when all type fields are ignored")
-			}
-
-			// empty type
-			j = NewJournal(uint64(i), sz, "")
-			type privateType struct {
-				x uint64 `pack:"x,pk"`
-				y []byte `pack:"y"`
-			}
-			if err := j.InitType(privateType{}); err == nil {
-				t.Errorf("no error when all type fields are private")
-			}
+			require.Equal(t, j.maxid, uint64(0))
+			require.Equal(t, j.sortData, false)
 		})
 	}
 }
 
 func TestJournalMerge(t *testing.T) {
-	rand.Seed(0)
-	for i, sz := range journalTestSizes {
+	for _, sz := range journalTestSizes {
 		t.Run(fmt.Sprintf("%d_merge", sz), func(t *testing.T) {
-			j := NewJournal(uint64(i), sz, "")
-			j.InitType(JournalTestType{})
-			items := makeJournalTestDataWithRandomPk(sz)
-			keys := itemsToJournalEntryList(items)
+			j := NewJournal(testSchema, sz)
+			recs := makeJournalDataSequential(sz, 1)
+			keys := recsToJournalRecords(recs)
 			rand.Shuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] })
 
 			// 4-step insert
@@ -374,9 +170,7 @@ func TestJournalMerge(t *testing.T) {
 			}
 
 			// check all keys are available
-			if got, want := len(j.Keys), len(keys); got != want {
-				t.Errorf("invalid keys len: got=%d want=%d", got, want)
-			}
+			require.Equal(t, len(j.Keys), len(keys), "invalid keys len")
 
 			// check keys are sorted
 			if !sort.IsSorted(j.Keys) {
@@ -386,396 +180,217 @@ func TestJournalMerge(t *testing.T) {
 				if i == 0 {
 					continue
 				}
-				if j.Keys[i-1].pk > v.pk {
-					t.Errorf("INVARIANT VIOLATION: unsorted keys %d [%d] !< %d [%d]", j.Keys[i-1].pk, i-1, v.pk, i)
-				}
-				if j.Keys[i-1].pk == v.pk {
-					t.Errorf("INVARIANT VIOLATION: duplicate key %d [%d:%d]", v.pk, i-1, i)
-				}
+				require.LessOrEqualf(t, j.Keys[i-1].Pk, v.Pk,
+					"INVARIANT VIOLATION: unsorted keys %d [%d] !< %d [%d]",
+					j.Keys[i-1].Pk, i-1, v.Pk, i,
+				)
+				require.NotEqualf(t, j.Keys[i-1].Pk, v.Pk,
+					"INVARIANT VIOLATION: duplicate key %d [%d:%d]",
+					v.Pk, i-1, i,
+				)
 			}
 		})
 	}
 }
 
 func TestJournalInsert(t *testing.T) {
-	rand.Seed(0)
-	for i, sz := range journalTestSizes {
+	for _, sz := range journalTestSizes {
 		t.Run(fmt.Sprintf("%d_insert", sz), func(t *testing.T) {
-			expDataCap := sz
-			j := NewJournal(uint64(i), sz, "")
-			j.InitType(JournalTestType{})
-			items := makeJournalTestData(4)
+			j := NewJournal(testSchema, sz)
 
 			// 1st insert
 			//
-			err := j.Insert(items[0])
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			// item update
-			if got, want := getPk(items[0]), uint64(i)+1; got != want {
-				t.Errorf("invalid item id: got=%d want=%d", got, want)
-			}
-			// counters and state
-			if got, want := j.maxid, uint64(i)+1; got != want {
-				t.Errorf("invalid max id: got=%d want=%d", got, want)
-			}
-			if got, want := j.lastid, uint64(i)+1; got != want {
-				t.Errorf("invalid last id: got=%d want=%d", got, want)
-			}
-			if got, want := j.sortData, false; got != want {
-				t.Errorf("invalid sortData: got=%t want=%t", got, want)
-			}
+			rec := makeJournalTestData(1)
+			buf := encodeTestData(rec)
+			n, more := j.InsertBatch(buf, 42)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(1))
 			// sizes
-			checkJournalCaps(t, j, expDataCap, sz, sz)
+			checkJournalCaps(t, j, sz, sz, sz)
 			checkJournalSizes(t, j, 1, 0, 0)
+			// rec update
+			require.Equal(t, j.Data.Uint64(0, 0), uint64(42), "invalid rec pk")
+			// counters and state
+			require.Equal(t, j.maxid, uint64(42), "invalid max id")
+			require.Equal(t, j.sortData, false)
 			// invariants
-			if err := j.checkInvariants("insert"); err != nil {
-				t.Error(err)
-			}
+			require.NoError(t, j.checkInvariants("insert"))
 
 			// 2nd insert
 			//
-			err = j.Insert(items[1])
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			// item update
-			if got, want := getPk(items[1]), uint64(i)+2; got != want {
-				t.Errorf("invalid item id: got=%d want=%d", got, want)
-			}
-			// counters and state
-			if got, want := j.maxid, uint64(i)+2; got != want {
-				t.Errorf("invalid max id: got=%d want=%d", got, want)
-			}
-			if got, want := j.lastid, uint64(i)+2; got != want {
-				t.Errorf("invalid last id: got=%d want=%d", got, want)
-			}
-			if got, want := j.sortData, false; got != want {
-				t.Errorf("invalid sortData: got=%t want=%t", got, want)
-			}
+			rec = makeJournalTestData(1)
+			buf = encodeTestData(rec)
+			n, more = j.InsertBatch(buf, 43)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(1))
 			// sizes
-			checkJournalCaps(t, j, expDataCap, sz, sz)
+			checkJournalCaps(t, j, sz, sz, sz)
 			checkJournalSizes(t, j, 2, 0, 0)
-			// invariants
-			if err := j.checkInvariants("insert"); err != nil {
-				t.Error(err)
-			}
-
-			// 3rd insert (with existing pk)
-			//
-			setPk(items[2], uint64(42))
-			err = j.Insert(items[2])
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			// item update
-			if got, want := getPk(items[2]), uint64(42); got != want {
-				t.Errorf("invalid item id: got=%d want=%d", got, want)
-			}
+			// rec update
+			require.Equal(t, j.Data.Uint64(0, 1), uint64(43), "invalid rec pk")
 			// counters and state
-			if got, want := j.maxid, uint64(42); got != want {
-				t.Errorf("invalid max id: got=%d want=%d", got, want)
-			}
-			if got, want := j.lastid, uint64(42); got != want {
-				t.Errorf("invalid last id: got=%d want=%d", got, want)
-			}
-			if got, want := j.sortData, false; got != want {
-				t.Errorf("invalid sortData: got=%t want=%t", got, want)
-			}
-			// sizes
-			checkJournalCaps(t, j, expDataCap, sz, sz)
-			checkJournalSizes(t, j, 3, 0, 0)
+			require.Equal(t, j.maxid, uint64(43), "invalid max id")
+			require.Equal(t, j.sortData, false)
 			// invariants
-			if err := j.checkInvariants("insert"); err != nil {
-				t.Error(err)
-			}
+			require.NoError(t, j.checkInvariants("insert"))
+
+			// 3rd insert (with existing pk, will be overwritten)
+			//
+			rec = makeJournalTestData(1)
+			rec[0].Pk = 42
+			buf = encodeTestData(rec)
+			n, more = j.InsertBatch(buf, 44)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(1))
+			// sizes
+			checkJournalCaps(t, j, sz, sz, sz)
+			checkJournalSizes(t, j, 3, 0, 0)
+			// rec update
+			require.Equal(t, j.Data.Uint64(0, 2), uint64(44), "invalid rec pk")
+			// counters and state
+			require.Equal(t, j.maxid, uint64(44), "invalid max id")
+			require.Equal(t, j.sortData, false)
+			// invariants
+			require.NoError(t, j.checkInvariants("insert"))
 
 			// 4th insert (with existing smaller pk)
 			//
-			setPk(items[3], uint64(41))
-			err = j.Insert(items[3])
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			// item update
-			if got, want := getPk(items[3]), uint64(41); got != want {
-				t.Errorf("invalid item id: got=%d want=%d", got, want)
-			}
-			// counters and state
-			if got, want := j.maxid, uint64(42); got != want {
-				t.Errorf("invalid max id: got=%d want=%d", got, want)
-			}
-			if got, want := j.lastid, uint64(42); got != want {
-				t.Errorf("invalid last id: got=%d want=%d", got, want)
-			}
-			if got, want := j.sortData, true; got != want {
-				t.Errorf("invalid sortData: got=%t want=%t", got, want)
-			}
+			rec = makeJournalTestData(1)
+			rec[0].Pk = 41
+			buf = encodeTestData(rec)
+			n, more = j.InsertBatch(buf, 45)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(1))
 			// sizes
-			checkJournalCaps(t, j, expDataCap, sz, sz)
+			checkJournalCaps(t, j, sz, sz, sz)
 			checkJournalSizes(t, j, 4, 0, 0)
+			// rec update
+			require.Equal(t, j.Data.Uint64(0, 3), uint64(45), "invalid rec pk")
+			// counters and state
+			require.Equal(t, j.maxid, uint64(45), "invalid max id")
+			require.Equal(t, j.sortData, false)
 			// invariants
-			if err := j.checkInvariants("insert"); err != nil {
-				t.Error(err)
-			}
+			require.NoError(t, j.checkInvariants("insert"))
 		})
 	}
 }
 
-func TestJournalInsertBatch(t *testing.T) {
-	rand.Seed(0)
+func TestJournalInsertMulti(t *testing.T) {
 	for _, sz := range journalTestSizes {
-		for k, batch := range randJournalData(journalRndRuns, sz) {
+		for k := 0; k < journalRndRuns; k++ {
+			batch := makeJournalDataSequential(sz, 1)
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				expDataCap := sz
-				j := NewJournal(0, sz, "")
-				j.InitType(JournalTestType{})
-				max := getPk(batch[len(batch)-1])
+				// 1
+				//
+				j := NewJournal(testSchema, sz)
+				buf := encodeTestData(batch)
 
 				// random test data is sorted
-				n, err := j.InsertBatch(reflect.ValueOf(batch))
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				n, more := j.InsertBatch(buf, 1)
+				require.Len(t, more, 0)
+				require.Equal(t, n, uint64(sz))
 
 				// sizes
-				checkJournalCaps(t, j, expDataCap, sz, sz)
+				checkJournalCaps(t, j, sz, sz, sz)
 				checkJournalSizes(t, j, sz, 0, 0)
 
 				// invariants
-				if err := j.checkInvariants("sorted"); err != nil {
-					t.Error(err)
-				}
+				require.NoError(t, j.checkInvariants("insert"))
 
 				// counters and state
-				if got, want := n, len(batch); got != want {
-					t.Errorf("invalid insert count: got=%d want=%d", got, want)
-				}
-				if got, want := j.maxid, max; got != want {
-					t.Errorf("invalid max id: got=%d want=%d", got, want)
-				}
-				if got, want := j.lastid, max; got != want {
-					t.Errorf("invalid last id: got=%d want=%d", got, want)
-				}
-				if got, want := j.sortData, false; got != want {
-					t.Errorf("invalid sortData: got=%t want=%t", got, want)
-				}
+				require.Equal(t, j.maxid, uint64(sz), "invalid max id")
+				require.Equal(t, j.sortData, false)
 
 				// contents
 				comparePackWithBatch(t, "sorted", j, batch)
+				j.Close()
 
+				// 2
+				//
 				// retry with unsorted data (batch will be sorted by Insert!)
+				j = NewJournal(testSchema, sz)
 				batch = shuffleItems(batch)
-				j = NewJournal(0, sz, "")
-				j.InitType(JournalTestType{})
-				n, err = j.InsertBatch(reflect.ValueOf(batch))
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				buf = encodeTestData(batch)
+				n, more = j.InsertBatch(buf, 1)
+				require.Len(t, more, 0)
+				require.Equal(t, n, uint64(sz))
 
 				// sizes
-				checkJournalCaps(t, j, expDataCap, sz, sz)
+				checkJournalCaps(t, j, sz, sz, sz)
 				checkJournalSizes(t, j, sz, 0, 0)
 
 				// invariants
-				if err := j.checkInvariants("rnd"); err != nil {
-					t.Error(err)
-				}
+				require.NoError(t, j.checkInvariants("rnd-insert"))
 
 				// counters and state
-				if got, want := n, len(batch); got != want {
-					t.Errorf("invalid insert count: got=%d want=%d", got, want)
-				}
-				if got, want := j.maxid, max; got != want {
-					t.Errorf("invalid max id: got=%d want=%d", got, want)
-				}
-				if got, want := j.lastid, max; got != want {
-					t.Errorf("invalid last id: got=%d want=%d", got, want)
-				}
-				if got, want := j.sortData, false; got != want {
-					t.Errorf("invalid sortData: got=%t want=%t", got, want)
-				}
+				require.Equal(t, j.maxid, uint64(sz), "invalid max id")
+				require.Equal(t, j.sortData, false)
 
 				// contents
 				comparePackWithBatch(t, "rnd", j, batch)
-
-				// 2 inserts half/half (journal will become unsorted)
-				batch = shuffleItems(batch)
-				j = NewJournal(0, sz, "")
-				j.InitType(JournalTestType{})
-				_, err = j.InsertBatch(reflect.ValueOf(batch[:sz/2]))
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-
-				// sizes
-				checkJournalCaps(t, j, expDataCap, sz, sz)
-				checkJournalSizes(t, j, sz/2, 0, 0)
-
-				_, err = j.InsertBatch(reflect.ValueOf(batch[sz/2:]))
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-
-				// sizes
-				checkJournalCaps(t, j, expDataCap, sz, sz)
-				checkJournalSizes(t, j, sz, 0, 0)
-
-				// invariants
-				if err := j.checkInvariants("1/2"); err != nil {
-					t.Error(err)
-				}
-
-				// counters and state
-				if got, want := n, len(batch); got != want {
-					t.Errorf("invalid insert count: got=%d want=%d", got, want)
-				}
-				if got, want := j.maxid, max; got != want {
-					t.Errorf("invalid max id: got=%d want=%d", got, want)
-				}
-				if got, want := j.lastid, max; got != want {
-					t.Errorf("invalid last id: got=%d want=%d", got, want)
-				}
-				if got, want := j.sortData, true; got != want {
-					t.Errorf("invalid sortData: got=%t want=%t", got, want)
-				}
-
-				// contents
-				comparePackWithBatch(t, "1/2", j, batch)
 			})
 		}
 	}
 }
 
-// add same data twice, second time will update (i.e. upsert)
-func TestJournalUpsertBatch(t *testing.T) {
-	rand.Seed(0)
+func TestJournalInsertFull(t *testing.T) {
 	for _, sz := range journalTestSizes {
-		for k, batch := range randJournalData(journalRndRuns, sz) {
-			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				expDataCap := sz
-				j := NewJournal(0, sz, "")
-				j.InitType(JournalTestType{})
-				max := getPk(batch[sz/2-1])
+		t.Run(fmt.Sprintf("%d_insert", sz), func(t *testing.T) {
+			j := NewJournal(testSchema, sz)
+			rec := makeJournalDataSequential(sz, 1)
+			buf := encodeTestData(rec)
 
-				// random test data is sorted, insert half
-				n, err := j.InsertBatch(reflect.ValueOf(batch[:sz/2]))
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+			// insert all
+			n, more := j.InsertBatch(buf, 1)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(sz))
+			require.True(t, j.IsFull())
 
-				// sizes
-				checkJournalCaps(t, j, expDataCap, sz, sz)
-				checkJournalSizes(t, j, sz/2, 0, 0)
-
-				// invariants
-				if err := j.checkInvariants("first-half"); err != nil {
-					t.Error(err)
-				}
-
-				// counters and state
-				if got, want := n, len(batch)/2; got != want {
-					t.Errorf("invalid upsert count: got=%d want=%d", got, want)
-				}
-				if got, want := j.maxid, max; got != want {
-					t.Errorf("invalid max id: got=%d want=%d", got, want)
-				}
-				if got, want := j.lastid, max; got != want {
-					t.Errorf("invalid last id: got=%d want=%d", got, want)
-				}
-				if got, want := j.sortData, false; got != want {
-					t.Errorf("invalid sortData: got=%t want=%t", got, want)
-				}
-
-				// contents
-				comparePackWithBatch(t, "first-half", j, batch[:sz/2])
-
-				// 2nd insert, same data
-				n, err = j.InsertBatch(reflect.ValueOf(batch[:sz/2]))
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-
-				// sizes
-				checkJournalCaps(t, j, expDataCap, sz, sz)
-				checkJournalSizes(t, j, sz/2, 0, 0)
-
-				// invariants
-				if err := j.checkInvariants("second-half"); err != nil {
-					t.Error(err)
-				}
-
-				// counters and state
-				if got, want := n, len(batch)/2; got != want {
-					t.Errorf("invalid upsert count: got=%d want=%d", got, want)
-				}
-				if got, want := j.maxid, max; got != want {
-					t.Errorf("invalid max id: got=%d want=%d", got, want)
-				}
-				if got, want := j.lastid, max; got != want {
-					t.Errorf("invalid last id: got=%d want=%d", got, want)
-				}
-				if got, want := j.sortData, false; got != want {
-					t.Errorf("invalid sortData: got=%t want=%t", got, want)
-				}
-
-				// contents
-				comparePackWithBatch(t, "second-half", j, batch[:sz/2])
-			})
-		}
+			// try insert more
+			n, more = j.InsertBatch(buf, 1)
+			require.Len(t, more, len(buf))
+			require.Equal(t, n, uint64(0))
+			require.True(t, j.IsFull())
+		})
 	}
 }
-
-func TestJournalInsertPack(t *testing.T) {}
 
 func TestJournalUpdate(t *testing.T) {
-	rand.Seed(0)
 	for _, sz := range journalTestSizes {
-		for k, batch := range randJournalData(journalRndRuns, sz) {
+		for k := 0; k < journalRndRuns; k++ {
+			batch := makeJournalDataSequential(sz, 1)
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				expDataCap := sz
-				j := NewJournal(0, sz, "")
-				j.InitType(JournalTestType{})
-				max := getPk(batch[len(batch)-1])
+				j := NewJournal(testSchema, sz)
+				buf := encodeTestData(batch)
 
-				// random test data is sorted
-				n, err := j.InsertBatch(reflect.ValueOf(batch))
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				// insert all
+				n, more := j.InsertBatch(buf, 1)
+				require.Len(t, more, 0)
+				require.Equal(t, n, uint64(sz))
 
-				// pick a random item from batch, change its value, update and check
+				// pick random recs from batch, update with changed value
 				for i, idx := range randN(100, sz) {
 					t.Run(fmt.Sprintf("rand_%03d", i), func(t *testing.T) {
 						val := batch[idx]
 						val.N++
-						err := j.Update(val)
-						if err != nil {
-							t.Errorf("unexpected error: %v", err)
-						}
+						buf := encodeTestData([]*TestRecord{val})
+
+						n, more, err := j.UpdateBatch(buf)
+						require.NoError(t, err)
+						require.Len(t, more, 0)
+						require.Equal(t, n, uint64(1))
+
 						// sizes
-						checkJournalCaps(t, j, expDataCap, sz, sz)
+						checkJournalCaps(t, j, sz, sz, sz)
 						checkJournalSizes(t, j, sz, 0, 0)
 
 						// invariants
-						if err := j.checkInvariants("post-update"); err != nil {
-							t.Error(err)
-						}
+						require.NoError(t, j.checkInvariants("post-update"))
 
 						// counters and state
-						if got, want := n, len(batch); got != want {
-							t.Errorf("invalid update count: got=%d want=%d", got, want)
-						}
-						if got, want := j.maxid, max; got != want {
-							t.Errorf("invalid max id: got=%d want=%d", got, want)
-						}
-						if got, want := j.lastid, max; got != want {
-							t.Errorf("invalid last id: got=%d want=%d", got, want)
-						}
-						if got, want := j.sortData, false; got != want {
-							t.Errorf("invalid sortData: got=%t want=%t", got, want)
-						}
+						require.Equal(t, j.maxid, uint64(sz), "invalid max id")
+						require.Equal(t, j.sortData, false)
+
 						// contents
 						comparePackWithBatch(t, "post-update", j, batch)
 					})
@@ -785,349 +400,139 @@ func TestJournalUpdate(t *testing.T) {
 	}
 }
 
-func TestJournalInsertUpdateBatch(t *testing.T) {
-	rand.Seed(0)
+func TestJournalUpdateNoPk(t *testing.T) {
 	for _, sz := range journalTestSizes {
-		for k, batch := range randJournalData(journalRndRuns, sz) {
+		for k := 0; k < journalRndRuns; k++ {
+			batch := makeJournalDataSequential(sz, 1)
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				expDataCap := sz
-				j := NewJournal(0, sz, "")
-				j.InitType(JournalTestType{})
-				max := getPk(batch[len(batch)-1])
+				j := NewJournal(testSchema, sz)
+				buf := encodeTestData(batch)
 
-				// random test data is sorted
-				n, err := j.InsertBatch(reflect.ValueOf(batch))
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				// insert all
+				n, more := j.InsertBatch(buf, 1)
+				require.Len(t, more, 0)
+				require.Equal(t, n, uint64(sz))
 
-				// pick a random number of items from batch, change their values,
-				// update and check
-				for l, idxs := range randNN(100, 100, sz) {
-					t.Run(fmt.Sprintf("rand_%03d", l), func(t *testing.T) {
-						// this changes the batch because ItemList contains
-						// pointers to structs
-						newBatch := make(ItemList, len(idxs))
-						for i := range newBatch {
-							val := batch[idxs[i]]
-							val.N += sz
-							newBatch[i] = val
-						}
-						_, err := j.UpdateBatch(reflect.ValueOf(newBatch))
-						if err != nil {
-							t.Errorf("unexpected error: %v", err)
-						}
-						// sizes
-						checkJournalCaps(t, j, expDataCap, sz, sz)
-						checkJournalSizes(t, j, sz, 0, 0)
-
-						// invariants
-						if err := j.checkInvariants("post-update"); err != nil {
-							t.Error(err)
-						}
-
-						// counters and state
-						if got, want := n, len(batch); got != want {
-							t.Errorf("invalid update count: got=%d want=%d", got, want)
-						}
-						if got, want := j.maxid, max; got != want {
-							t.Errorf("invalid max id: got=%d want=%d", got, want)
-						}
-						if got, want := j.lastid, max; got != want {
-							t.Errorf("invalid last id: got=%d want=%d", got, want)
-						}
-						if got, want := j.sortData, false; got != want {
-							t.Errorf("invalid sortData: got=%t want=%t", got, want)
-						}
-						// expected contents is in original batch order, but with
-						// updated contents
-						comparePackWithBatch(t, "post-update", j, batch)
-					})
-				}
+				// pick rec, reset pk
+				batch[0].Pk = 0
+				buf = encodeTestData([]*TestRecord{batch[0]})
+				n, more, err := j.UpdateBatch(buf)
+				require.Error(t, err)
+				require.Len(t, more, len(buf))
+				require.Equal(t, n, uint64(0))
 			})
 		}
 	}
 }
 
-func TestJournalUpdateBatch(t *testing.T) {
-	rand.Seed(0)
+func TestJournalUpdateFull(t *testing.T) {
 	for _, sz := range journalTestSizes {
-		for k, batch := range randJournalData(journalRndRuns, sz) {
-			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				expDataCap := sz
-				j := NewJournal(0, sz, "")
-				j.InitType(JournalTestType{})
+		t.Run(fmt.Sprintf("%d_insert", sz), func(t *testing.T) {
+			j := NewJournal(testSchema, sz)
+			rec := makeJournalDataSequential(sz*2, 1)
+			buf := encodeTestData(rec[:sz])
 
-				// pick a random number of items from batch, change their values,
-				// update and check
-				var mx uint64
-				unique := make(map[uint64]struct{})
-				for l, idxs := range randNN(100, 100, sz) {
-					t.Run(fmt.Sprintf("rand_%03d", l), func(t *testing.T) {
-						// this changes the batch because ItemList contains
-						// pointers to structs
-						newBatch := make(ItemList, len(idxs))
-						for i := range newBatch {
-							val := batch[idxs[i]]
-							val.N += sz
-							newBatch[i] = val
-							mx = max(mx, val.Pk)
-							unique[val.Pk] = struct{}{}
-						}
+			// insert until full
+			n, more := j.InsertBatch(buf, 1)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(sz))
+			require.True(t, j.IsFull())
 
-						_, err := j.UpdateBatch(reflect.ValueOf(newBatch))
-						if err != nil {
-							t.Errorf("unexpected error: %v", err)
-						}
+			// try update more
+			buf = encodeTestData(rec[sz:])
+			n, more, err := j.UpdateBatch(buf)
+			require.NoError(t, err)
+			require.Len(t, more, len(buf))
+			require.Equal(t, n, uint64(0))
+			require.True(t, j.IsFull())
+		})
+	}
+}
 
-						// sizes
-						if l == 0 {
-							checkJournalCaps(t, j, expDataCap, sz, sz)
-							checkJournalSizes(t, j, len(unique), 0, 0)
-						}
+func TestJournalUpdateMulti(t *testing.T) {
+	for _, sz := range journalTestSizes {
+		for k := 0; k < journalRndRuns; k++ {
+			t.Run(fmt.Sprintf("%d_%d", sz, 0), func(t *testing.T) {
+				j := NewJournal(testSchema, sz)
+				batch := makeJournalDataSequential(sz, 1)
+				buf := encodeTestData(batch)
 
-						// invariants
-						if err := j.checkInvariants("post-update"); err != nil {
-							t.Error(err)
-						}
+				// insert all
+				n, more := j.InsertBatch(buf, 1)
+				require.Len(t, more, 0)
+				require.Equal(t, n, uint64(sz))
 
-						// counters and state
-						// if got, want := n, len(batch); got != want {
-						// 	t.Errorf("invalid update count: got=%d want=%d", got, want)
-						// }
-						if got, want := j.maxid, mx; got != want {
-							t.Errorf("invalid max id: got=%d want=%d", got, want)
-						}
-						if got, want := j.lastid, mx; got != want {
-							t.Errorf("invalid last id: got=%d want=%d", got, want)
-						}
-						if got, want := j.sortData, l > 0; got != want {
-							t.Errorf("invalid sortData: got=%t want=%t", got, want)
-						}
-						// cannot compare randomized contents
-						// comparePackWithBatch(t, "post-update", j, batch)
-					})
+				// change random recs from batch
+				for _, idx := range randN(100, sz) {
+					batch[idx].N++
 				}
+
+				// update all
+				buf = encodeTestData(batch)
+				n, more, err := j.UpdateBatch(buf)
+				require.NoError(t, err)
+				require.Len(t, more, 0)
+				require.Equal(t, n, uint64(len(batch)))
+
+				// sizes
+				checkJournalCaps(t, j, sz, sz, sz)
+				checkJournalSizes(t, j, sz, 0, 0)
+
+				// invariants
+				require.NoError(t, j.checkInvariants("post-update"))
+
+				// counters and state
+				require.Equal(t, j.maxid, uint64(sz), "invalid max id")
+				require.Equal(t, j.sortData, false)
+
+				// contents
+				comparePackWithBatch(t, "post-update", j, batch)
 			})
 		}
 	}
 }
+
 func TestJournalDelete(t *testing.T) {
-	rand.Seed(0)
 	for _, sz := range journalTestSizes {
-		for k, batch := range randJournalData(journalRndRuns, sz) {
+		for k := 0; k < journalRndRuns; k++ {
+			batch := makeJournalDataSequential(sz, 1)
 			t.Run(fmt.Sprintf("%d_%d", sz, k), func(T *testing.T) {
-				expDataCap := sz
-				j := NewJournal(0, sz, "")
-				j.InitType(JournalTestType{})
-				max := getPk(batch[len(batch)-1])
+				j := NewJournal(testSchema, sz)
+				buf := encodeTestData(batch)
 
-				// random test data is sorted
-				_, err := j.InsertBatch(reflect.ValueOf(batch))
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				// insert all
+				n, more := j.InsertBatch(buf, 1)
+				require.Len(t, more, 0)
+				require.Equal(t, n, uint64(sz))
 
-				// pick a random item to delete
+				// pick a random rec to delete
 				for i, idx := range randN(sz/8, sz) {
 					T.Run(fmt.Sprintf("rand_%03d", i), func(t *testing.T) {
 						// value to delete
 						val := batch[idx]
-						// pk := val.Pk
-						// remove from batch (so test does not find it)
-						// batch = append(batch[:idx], batch[idx+1:]...)
-						// delete from journal
-						n, err := j.Delete(val.Pk)
-						if err != nil {
-							t.Errorf("unexpected error: %v", err)
-							T.FailNow()
-						}
+						bits := bitmap.NewFromArray([]uint64{val.Pk})
+						require.True(t, bits.IsValid())
+						require.Equal(t, bits.Count(), 1)
+						require.Equal(t, bits.Bitmap.NewIterator().Next(), val.Pk)
+
+						n := j.DeleteBatch(bits)
+						require.Equal(t, n, uint64(1))
+
 						// sizes (journal len stays the same, but tomb grows)
-						checkJournalCaps(t, j, expDataCap, sz, sz)
+						checkJournalCaps(t, j, sz, sz, sz)
 						checkJournalSizes(t, j, sz, i+1, i+1)
 
 						// invariants
-						if err := j.checkInvariants("post-delete"); err != nil {
-							t.Error(err)
-							T.FailNow()
-						}
+						require.NoError(t, j.checkInvariants("post-delete"))
 
 						// counters and state
-						ok, _ := j.IsDeleted(val.Pk, 0)
-						if got, want := ok, true; got != want {
-							t.Errorf("invalid IsDeleted: got=%t want=%t", got, want)
-							T.FailNow()
-						}
-						idx, last := j.PkIndex(val.Pk, 0)
-						if got, dontwant := idx, -1; got == dontwant {
-							t.Errorf("invalid PkIndex: got=%d dontwant=%d", got, dontwant)
-							T.FailNow()
-						}
-						if got, dontwant := last, j.Len(); got == dontwant {
-							t.Errorf("invalid PkIndex last: got=%d dontwant=%d", got, dontwant)
-							T.FailNow()
-						}
-						if got, want := n, 1; got != want {
-							t.Errorf("invalid delete count: got=%d want=%d", got, want)
-							T.FailNow()
-						}
-						if got, want := j.maxid, max; got != want {
-							t.Errorf("invalid max id: got=%d want=%d", got, want)
-							T.FailNow()
-						}
-						if got, want := j.lastid, max; got != want {
-							t.Errorf("invalid last id: got=%d want=%d", got, want)
-							T.FailNow()
-						}
-						if got, want := j.sortData, false; got != want {
-							t.Errorf("invalid sortData: got=%t want=%t", got, want)
-							T.FailNow()
-						}
+						require.True(t, j.IsDeleted(val.Pk), "invalid IsDeleted")
+						require.Equal(t, j.TombLen(), i+1, "invalid tomb len")
+						require.Equal(t, j.maxid, uint64(sz), "invalid max id")
+						require.Equal(t, j.sortData, false)
 
 						// contents
-						val.Pk = 0
-						comparePackWithBatch(t, "post-delete", j, batch)
-					})
-				}
-			})
-		}
-	}
-}
-
-func TestJournalDeleteBatch(t *testing.T) {
-	rand.Seed(0)
-	for _, sz := range journalTestSizes {
-		for k, originalbatch := range randJournalData(journalRndRuns, sz) {
-			t.Run(fmt.Sprintf("%d_%d", sz, k), func(T *testing.T) {
-				expDataCap := sz
-
-				// pick list of a random items to delete
-				for l, idxs := range randNN(10, sz/8, sz) {
-					T.Run(fmt.Sprintf("rand_%03d", l), func(t *testing.T) {
-						// start with a fresh batch
-						batch := make(ItemList, len(originalbatch))
-						for i, v := range originalbatch {
-							// v := v.(*JournalTestType)
-							c := *v
-							batch[i] = &c
-						}
-						// and a fresh journal
-						j := NewJournal(0, sz, "")
-						j.InitType(JournalTestType{})
-						max := getPk(batch[len(batch)-1])
-						_, err := j.InsertBatch(reflect.ValueOf(batch))
-						if err != nil {
-							t.Errorf("unexpected error: %v", err)
-						}
-
-						// prepare values to delete
-						pks := make([]uint64, len(idxs))
-						for i, idx := range idxs {
-							val := batch[idx]
-							pks[i] = val.Pk
-							val.Pk = 0
-						}
-
-						// delete from journal
-						n, err := j.DeleteBatch(pks)
-						if err != nil {
-							t.Errorf("unexpected error: %v", err)
-							T.FailNow()
-						}
-						// sizes (journal size stays the same, tomb grows)
-						checkJournalCaps(t, j, expDataCap, sz, sz)
-						checkJournalSizes(t, j, sz, len(pks), len(pks))
-
-						// invariants
-						if err := j.checkInvariants("post-delete"); err != nil {
-							t.Error(err)
-							T.FailNow()
-						}
-
-						// counters and state
-						for i, pk := range pks {
-							ok, _ := j.IsDeleted(pk, 0)
-							if got, want := ok, true; got != want {
-								t.Errorf("invalid IsDeleted last=0 %d: got=%t want=%t", pk, got, want)
-								T.FailNow()
-							}
-							idx, jlast := j.PkIndex(pk, 0)
-							if got, want := idx, idxs[i]; got != want {
-								t.Errorf("invalid PkIndex: got=%d want=%d", got, want)
-								T.FailNow()
-							}
-							if got, dontwant := jlast, j.Len(); got == dontwant {
-								t.Errorf("invalid PkIndex last: got=%d dontwant=%d", got, dontwant)
-								T.FailNow()
-							}
-						}
-						if got, want := n, len(pks); got != want {
-							t.Errorf("invalid delete count: got=%d want=%d", got, want)
-							T.FailNow()
-						}
-						if got, want := j.maxid, max; got != want {
-							t.Errorf("invalid max id: got=%d want=%d", got, want)
-							T.FailNow()
-						}
-						if got, want := j.lastid, max; got != want {
-							t.Errorf("invalid last id: got=%d want=%d", got, want)
-							T.FailNow()
-						}
-						if got, want := j.sortData, false; got != want {
-							t.Errorf("invalid sortData: got=%t want=%t", got, want)
-							T.FailNow()
-						}
-
-						// check `last` works
-						var (
-							ok   bool
-							last int
-						)
-						slices.Sort(pks)
-						for _, pk := range pks {
-							// use `last` to skip, checks if we got the offsets right
-							ok, last = j.IsDeleted(pk, last)
-							if got, want := ok, true; got != want {
-								t.Errorf("invalid IsDeleted last>=0 %d: got=%t want=%t", pk, got, want)
-								T.FailNow()
-							}
-							if got, dontwant := last, j.TombLen(); got == dontwant {
-								t.Errorf("invalid IsDeleted last for pk %d: got=%d dontwant=%d", pk, got, dontwant)
-								T.FailNow()
-							}
-						}
-
-						// behind end
-						ok, last = j.IsDeleted(pks[len(pks)-1], len(pks))
-						if got, want := last, j.TombLen(); got != want {
-							t.Errorf("invalid IsDeleted last-end: got=%d want=%d", got, want)
-							T.FailNow()
-						}
-
-						// non-match middle (+1 is just a guess because data is random,
-						// but worked for the number of random tests selected)
-						ok, last = j.IsDeleted(getPk(batch[0])+1, 0)
-						if ok {
-							t.Errorf("invalid IsDeleted for not deleted item")
-						}
-						if last != 0 {
-							t.Errorf("invalid IsDeleted last-first: got=%d want=%d", last, 0)
-							T.FailNow()
-						}
-
-						// non-match before end (-1 is just a guess because data
-						// is random, but worked for the number of random tests selected)
-						ok, last = j.IsDeleted(pks[len(pks)-1]-1, 0)
-						if ok {
-							t.Errorf("invalid IsDeleted for not deleted item")
-						}
-						if last != 0 {
-							t.Errorf("invalid IsDeleted last-last: got=%d want=%d", last, 0)
-							T.FailNow()
-						}
-
-						// contents
-						comparePackWithBatch(t, "post-delete", j, batch)
+						val.Pk = 0 // journal marks deleted records with zero pks !
 					})
 				}
 			})
@@ -1145,7 +550,7 @@ type journalE2ETest struct {
 }
 
 var journalE2Etests = []journalE2ETest{
-	journalE2ETest{
+	{
 		name: "SORT-INS(8)-DEL[0:3]-MATCH[0:7]",
 		pks:  []uint64{1, 2, 3, 4, 5, 6, 7, 8}, // sorted journal
 		del:  []uint64{1, 2, 3, 4},             // first 50% marked as deleted
@@ -1153,7 +558,7 @@ var journalE2Etests = []journalE2ETest{
 		idx:  []int{4, 5, 6, 7},                // exp: second half as result
 		pkx:  []uint64{5, 6, 7, 8},             // exp: ordered pks
 	},
-	journalE2ETest{
+	{
 		name: "SORT-INS(8)-DEL[0:3]-MATCH[2:5]",
 		pks:  []uint64{1, 2, 3, 4, 5, 6, 7, 8}, // sorted journal
 		del:  []uint64{1, 2, 3, 4},             // first 50% marked as deleted
@@ -1161,7 +566,7 @@ var journalE2Etests = []journalE2ETest{
 		idx:  []int{4, 5},                      // exp: matching entries (minus deleted)
 		pkx:  []uint64{5, 6},                   // exp: ordered pks
 	},
-	journalE2ETest{
+	{
 		name: "UNSORT-INS(8)-DEL[0:3]-MATCH[0:7]",
 		pks:  []uint64{1, 8, 2, 7, 3, 6, 4, 5}, // unordered journal
 		del:  []uint64{1, 2, 3, 4},             // delete pks at random positions
@@ -1171,23 +576,39 @@ var journalE2Etests = []journalE2ETest{
 	},
 }
 
+func makeJournalFromPks(t *testing.T, pks, del []uint64) *Journal {
+	enc := schema.NewEncoder(testSchema)
+	j := NewJournal(testSchema, len(pks))
+	for i := range pks {
+		rec := &TestRecord{
+			Pk: pks[i],
+			N:  i,
+		}
+		buf, err := enc.Encode(rec, nil)
+		require.NoError(t, err)
+		require.NotNil(t, buf)
+		n, more := j.InsertBatch(buf, pks[i])
+		require.NotZero(t, n)
+		require.Len(t, more, 0)
+	}
+	x := bitmap.New()
+	for _, v := range del {
+		x.Set(v)
+	}
+	n := j.DeleteBatch(x)
+	require.Equal(t, int(n), len(del))
+	return j
+}
+
 func (x journalE2ETest) Run(t *testing.T) {
 	t.Run(x.name, func(t *testing.T) {
-		j := makeJournalFromPks(x.pks, x.del)
+		j := makeJournalFromPks(t, x.pks, x.del)
 		ids, pks := j.SortedIndexes(bitset.NewBitsetFromBytes(x.bit, len(x.bit)*8))
-		if got, want := len(ids), len(x.idx); got != want {
-			t.Errorf("invalid result ids len: got=%d want=%d", got, want)
-		}
-		if got, want := len(pks), len(x.pkx); got != want {
-			t.Errorf("invalid result pks len: got=%d want=%d", got, want)
-		}
+		require.Len(t, ids, len(x.idx), "invalid result ids len")
+		require.Len(t, pks, len(x.pkx), "invalid result pks len")
 		for i := range x.idx {
-			if got, want := ids[i], x.idx[i]; got != want {
-				t.Errorf("invalid ordered result idx %d: got=%d want=%d", i, got, want)
-			}
-			if got, want := pks[i], x.pkx[i]; got != want {
-				t.Errorf("invalid ordered result pk %d: got=%d want=%d", i, got, want)
-			}
+			require.Equal(t, ids[i], x.idx[i], "invalid ordered result idx")
+			require.Equal(t, pks[i], x.pkx[i], "invalid ordered result pk")
 		}
 	})
 }
@@ -1198,116 +619,130 @@ func TestJournalIndexes(t *testing.T) {
 	}
 }
 
-func BenchmarkJournalMergeRandom(B *testing.B) {
-	for _, n := range packBenchmarkSizes {
-		B.Run(n.name, func(B *testing.B) {
-			j := NewJournal(0, n.l+1024, "")
-			j.InitType(JournalTestType{})
-			items := makeJournalTestDataWithRandomPk(n.l + 1024)
-			keys := itemsToJournalEntryList(items)
+func BenchmarkJournalMerge1kRandom(b *testing.B) {
+	for _, n := range benchmarkSizes {
+		b.Run(n.name, func(b *testing.B) {
+			j := NewJournal(testSchema, n.l+1024)
+			rec := makeJournalDataSequential(n.l+1024, 1)
+			keys := recsToJournalRecords(rec)
 			rand.Shuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] })
 			sort.Sort(keys[:n.l]) // sort the keys we will add first
 			sort.Sort(keys[n.l:]) // sort the keys we will add second
-			B.SetBytes(int64(1024 * 16))
-			B.ReportAllocs()
-			B.ResetTimer()
-			for b := 0; b < B.N; b++ {
-				B.StopTimer()
+			b.SetBytes(int64(1024 * 16))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
 				j.Keys = j.Keys[:0]
 				j.mergeKeys(keys[:n.l])
-				B.StartTimer()
+				b.StartTimer()
 				j.mergeKeys(keys[n.l:])
 			}
 		})
 	}
 }
 
-// size means number of items in journal, 1 new item with pk = 0 is added
-func BenchmarkJournalInsertSingle(B *testing.B) {
-	for _, n := range packBenchmarkSizes {
-		B.Run(n.name, func(B *testing.B) {
+// size means number of recs in journal, 1 new rec with pk = 0 is added
+func BenchmarkJournalInsertSingle(b *testing.B) {
+	for _, n := range benchmarkSizes {
+		b.Run(n.name, func(b *testing.B) {
 			batch := makeJournalTestData(n.l)
-			j := NewJournal(0, n.l, "")
-			j.InitType(JournalTestType{})
-			j.InsertBatch(reflect.ValueOf(batch))
-			B.ResetTimer()
-			B.ReportAllocs()
-			B.SetBytes(16) // JournalTestItem = pk + val
-			for b := 0; b < B.N; b++ {
-				j.Insert(&JournalTestType{0, 0xffff})
+			j := NewJournal(testSchema, 100*n.l)
+			buf := encodeTestData(batch[:n.l])
+			buf2 := encodeTestData(batch[n.l:])
+			j.InsertBatch(buf, 1)
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				j.InsertBatch(buf2, uint64(n.l+i))
 			}
 		})
 	}
 }
 
 // size means batch size, all pk = 0
-func BenchmarkJournalInsertBatch(B *testing.B) {
-	for _, n := range packBenchmarkSizes {
-		B.Run(n.name, func(B *testing.B) {
+func BenchmarkJournalInsertBatch(b *testing.B) {
+	for _, n := range benchmarkSizes {
+		b.Run(n.name, func(b *testing.B) {
 			batch := makeJournalTestData(n.l)
-			j := NewJournal(0, n.l, "")
-			j.InitType(JournalTestType{})
-			B.ResetTimer()
-			B.ReportAllocs()
-			B.SetBytes(int64(len(batch) * 16))
-			for b := 0; b < B.N; b++ {
-				j.InsertBatch(reflect.ValueOf(batch))
+			buf := encodeTestData(batch)
+			j := NewJournal(testSchema, n.l)
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				j.Reset()
+				j.InsertBatch(buf, 1)
 			}
 		})
 	}
 }
 
-func BenchmarkJournalInsertBatchPk(B *testing.B) {
-	for _, n := range packBenchmarkSizes {
-		B.Run(n.name, func(B *testing.B) {
-			batch := makeJournalTestDataWithRandomPk(n.l)
-			j := NewJournal(0, n.l, "")
-			j.InitType(JournalTestType{})
-			B.ResetTimer()
-			B.ReportAllocs()
-			B.SetBytes(int64(len(batch) * 16))
-			for b := 0; b < B.N; b++ {
-				j.InsertBatch(reflect.ValueOf(batch))
-			}
-		})
-	}
-}
-
-func BenchmarkJournalUpdateSingle(B *testing.B) {
-	for _, n := range packBenchmarkSizes {
-		B.Run(n.name, func(B *testing.B) {
+func BenchmarkJournalUpdateSingle(b *testing.B) {
+	for _, n := range benchmarkSizes {
+		b.Run(n.name, func(b *testing.B) {
 			batch := makeJournalTestData(n.l)
-			j := NewJournal(0, n.l, "")
-			j.InitType(JournalTestType{})
-			j.InsertBatch(reflect.ValueOf(batch))
-			B.ResetTimer()
-			B.ReportAllocs()
-			B.SetBytes(16) // JournalTestItem = pk + val
-			for b := 0; b < B.N; b++ {
-				j.Update(&JournalTestType{getPk(batch[len(batch)/2]), 0xffff})
+			buf := encodeTestData(batch)
+			buf2 := encodeTestData([]*TestRecord{batch[0]})
+			j := NewJournal(testSchema, n.l)
+			j.InsertBatch(buf, 1)
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				j.UpdateBatch(buf2)
 			}
 		})
 	}
 }
 
-func BenchmarkJournalUpdateBatch(B *testing.B) {
-	for _, n := range packBenchmarkSizes {
-		B.Run(n.name, func(B *testing.B) {
-			batch := makeJournalTestDataWithRandomPk(n.l)
-			j := NewJournal(0, n.l, "")
-			j.InitType(JournalTestType{})
-			j.InsertBatch(reflect.ValueOf(batch))
-			B.ResetTimer()
-			B.ReportAllocs()
-			B.SetBytes(int64(len(batch) * 16))
-			for b := 0; b < B.N; b++ {
-				j.UpdateBatch(reflect.ValueOf(batch))
+func BenchmarkJournalUpdateBatch(b *testing.B) {
+	for _, n := range benchmarkSizes {
+		b.Run(n.name, func(b *testing.B) {
+			batch := makeJournalTestData(n.l)
+			buf := encodeTestData(batch)
+			j := NewJournal(testSchema, n.l)
+			j.InsertBatch(buf, 1)
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				j.UpdateBatch(buf)
 			}
 		})
 	}
-
 }
 
-func BenchmarkJournalDelete(B *testing.B) {
+func BenchmarkJournalDeleteSingle(b *testing.B) {
+	for _, n := range benchmarkSizes {
+		b.Run(n.name, func(b *testing.B) {
+			batch := makeJournalTestData(n.l)
+			buf := encodeTestData(batch)
+			j := NewJournal(testSchema, n.l)
+			j.InsertBatch(buf, 1)
+			bits := bitmap.New()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				bits.Bitmap.Reset()
+				bits.Set(uint64(i%n.l + 1))
+				j.DeleteBatch(bits)
+			}
+		})
+	}
+}
 
+func BenchmarkJournalDeleteBatch(b *testing.B) {
+	for _, n := range benchmarkSizes {
+		b.Run(n.name, func(b *testing.B) {
+			batch := makeJournalDataSequential(n.l, 1)
+			buf := encodeTestData(batch)
+			j := NewJournal(testSchema, n.l)
+			j.InsertBatch(buf, 1)
+			bits := bitmap.New()
+			for i := uint64(1); i < uint64(n.l); i += uint64(n.l) / 256 {
+				bits.Set(i)
+			}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				j.DeleteBatch(bits)
+			}
+		})
+	}
 }

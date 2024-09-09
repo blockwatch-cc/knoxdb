@@ -11,6 +11,7 @@ import (
 	"time"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -443,6 +444,35 @@ func (p *Package) ReadCol(col int) any {
 	return nil
 }
 
+// ForEach walks a pack decoding each row into type T. If T is invalid (not
+// a struct type) or incompatible with the packs schema an error is returned.
+func ForEach[T any](pkg *Package, fn func(i int, v *T) error) error {
+	var t T
+	dst, err := schema.SchemaOf(t)
+	if err != nil {
+		return err
+	}
+	if err := pkg.schema.CanSelect(dst); err != nil {
+		return err
+	}
+	maps, err := pkg.schema.MapTo(dst)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < pkg.nRows; i++ {
+		if err := pkg.ReadStruct(i, &t, dst, maps); err != nil {
+			return err
+		}
+		if err := fn(i, &t); err != nil {
+			if err == engine.EndStream {
+				break
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 func (p *Package) Uint64(col, row int) uint64 {
 	return p.blocks[col].Uint64().Get(row)
 }
@@ -530,69 +560,6 @@ func (p *Package) Decimal32(col, row int) num.Decimal32 {
 	f, _ := p.schema.FieldById(uint16(col))
 	return num.NewDecimal32(p.blocks[col].Int32().Get(row), f.Scale())
 }
-
-// func (p *Package) IsZero(col, row int, zeroIsNull bool) bool {
-// 	f, ok := p.schema.FieldById(uint16(col))
-// 	assert.Always(ok, "invalid field id",
-// 		"id", col,
-// 		"pack", p.key,
-// 		"schema", p.schema.Name(),
-// 		"version", p.schema.Version(),
-// 		"nFields", p.schema.NumFields(),
-// 		"nBlocks", len(p.blocks),
-// 	)
-// 	assert.Always(col >= 0 && col < len(p.blocks), "invalid block id",
-// 		"id", col,
-// 		"pack", p.key,
-// 		"schema", p.schema.Name(),
-// 		"version", p.schema.Version(),
-// 		"nFields", p.schema.NumFields(),
-// 		"nBlocks", len(p.blocks),
-// 	)
-// 	assert.Always(row >= 0 && row < p.nRows, "invalid row",
-// 		"row", row,
-// 		"pack", p.key,
-// 		"schema", p.schema.Name(),
-// 		"version", p.schema.Version(),
-// 	)
-
-// 	switch f.Type() {
-// 	case types.FieldTypeInt256, types.FieldTypeDecimal256:
-// 		return zeroIsNull && p.Int256(col, row).IsZero()
-// 	case types.FieldTypeInt128, types.FieldTypeDecimal128:
-// 		return zeroIsNull && p.Int128(col, row).IsZero()
-// 	case types.FieldTypeInt64, types.FieldTypeDecimal64:
-// 		return zeroIsNull && p.Int64(col, row) == 0
-// 	case types.FieldTypeInt32, types.FieldTypeDecimal32:
-// 		return zeroIsNull && p.Int32(col, row) == 0
-// 	case types.FieldTypeInt16:
-// 		return zeroIsNull && p.Int16(col, row) == 0
-// 	case types.FieldTypeInt8:
-// 		return zeroIsNull && p.Int8(col, row) == 0
-// 	case types.FieldTypeUint64:
-// 		return zeroIsNull && p.Uint64(col, row) == 0
-// 	case types.FieldTypeUint32:
-// 		return zeroIsNull && p.Uint32(col, row) == 0
-// 	case types.FieldTypeUint16:
-// 		return zeroIsNull && p.Uint16(col, row) == 0
-// 	case types.FieldTypeUint8:
-// 		return zeroIsNull && p.Uint8(col, row) == 0
-// 	case types.FieldTypeBoolean:
-// 		return zeroIsNull && !p.Bool(col, row)
-// 	case types.FieldTypeFloat64:
-// 		v := p.Float64(col, row)
-// 		return math.IsNaN(v) || math.IsInf(v, 0) || (zeroIsNull && v == 0.0)
-// 	case types.FieldTypeFloat32:
-// 		v := float64(p.Float32(col, row))
-// 		return math.IsNaN(v) || math.IsInf(v, 0) || (zeroIsNull && v == 0.0)
-// 	case types.FieldTypeString, types.FieldTypeBytes:
-// 		return len(p.Bytes(col, row)) == 0
-// 	case types.FieldTypeDatetime:
-// 		val := p.Int64(col, row)
-// 		return val == 0 || (zeroIsNull && time.Unix(0, val).IsZero())
-// 	}
-// 	return false
-// }
 
 func (p *Package) PkColumn() []uint64 {
 	assert.Always(p.pkIdx >= 0 && p.pkIdx < len(p.blocks), "invalid pk id",

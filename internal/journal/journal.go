@@ -6,6 +6,7 @@ package journal
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -19,6 +20,8 @@ import (
 )
 
 const sizeStep int = 1 << 8 // 256
+
+var ErrNoKey = errors.New("update without primary key")
 
 // RoundSize rounds size up to a multiple of sizeStep
 func roundSize(sz int) int {
@@ -56,27 +59,29 @@ func roundSize(sz int) int {
 // - write all incoming inserts/updates/deletes to a WAL
 // - load and reconstructed journal + tomb from WAL
 type Journal struct {
-	Data *pack.Package    // journal pack storing live data
-	Keys JournalEntryList // 0: pk, 1: index in journal; sorted by pk, always sorted
+	Data *pack.Package  // journal pack storing live data
+	Keys JournalRecords // 0: pk, 1: index in journal; sorted by pk, always sorted
 
 	Tomb    bitmap.Bitmap  // deleted primary keys as xroar bitmap
 	Deleted *bitset.Bitset // tracks which journal positions are in tomb
 
-	maxid    uint64 // the highest primary key in the journal, used for sorting
-	maxsize  int    // max number of entries before flush
-	sortData bool   // true = data pack is unsorted
+	newKeys  JournalRecords // new keys added during insert/update
+	view     *schema.View   // wire data view
+	maxid    uint64         // the highest primary key in the journal, used for sorting
+	maxsize  int            // max number of entries before flush
+	sortData bool           // true = data pack is unsorted
 }
 
-type JournalEntry struct {
+type JournalRecord struct {
 	Pk  uint64
 	Idx int
 }
 
-type JournalEntryList []JournalEntry
+type JournalRecords []JournalRecord
 
-func (l JournalEntryList) Len() int           { return len(l) }
-func (l JournalEntryList) Less(i, j int) bool { return l[i].Pk < l[j].Pk }
-func (l JournalEntryList) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
+func (l JournalRecords) Len() int           { return len(l) }
+func (l JournalRecords) Less(i, j int) bool { return l[i].Pk < l[j].Pk }
+func (l JournalRecords) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 
 type Tombstone struct {
 	Id uint64 `knox:"I,pk"`
@@ -91,9 +96,11 @@ func NewJournal(s *schema.Schema, size int) *Journal {
 	return &Journal{
 		maxsize: size,
 		Data:    pkg,
-		Keys:    make(JournalEntryList, 0, roundSize(size)),
+		Keys:    make(JournalRecords, 0, roundSize(size)),
 		Tomb:    bitmap.New(),
 		Deleted: bitset.NewBitset(roundSize(size)).Resize(0),
+		newKeys: make(JournalRecords, 0, roundSize(size)),
+		view:    schema.NewView(s),
 	}
 }
 
@@ -110,6 +117,8 @@ func (j *Journal) Close() {
 	j.Keys = nil
 	j.Deleted = nil
 	j.maxid = 0
+	j.newKeys = nil
+	j.view = nil
 }
 
 func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bucket []byte) error {
@@ -125,7 +134,7 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bucket []byte) er
 	}
 	j.sortData = false
 	for i, n := range j.Data.PkColumn() {
-		j.Keys = append(j.Keys, JournalEntry{n, i})
+		j.Keys = append(j.Keys, JournalRecord{n, i})
 		j.sortData = j.sortData || n < j.maxid
 		j.maxid = util.Max(j.maxid, n)
 	}
@@ -208,7 +217,7 @@ func (j *Journal) Len() int {
 }
 
 func (j *Journal) TombLen() int {
-	return j.Tomb.Size()
+	return j.Tomb.Count()
 }
 
 func (j *Journal) HeapSize() int {
@@ -236,28 +245,25 @@ func (j *Journal) InsertBatch(buf []byte, nextSeq uint64) (uint64, []byte) {
 		return 0, buf
 	}
 
-	s := j.Data.Schema()
-	newKeys := make(JournalEntryList, 0, len(buf)/s.WireSize())
-	newPks := make([]uint64, 0, len(buf)/s.WireSize())
-
 	// split buf into wire messages
-	view := schema.NewView(s)
-	view, buf, _ = view.Cut(buf)
+	j.view, buf, _ = j.view.Cut(buf)
+	j.newKeys = j.newKeys[:0]
 
 	// process each message independently, assign PK and insert
 	// this cannot produce any errors (assuming messages are well formed)
-	for view.IsValid() {
+	var count uint64
+	for j.view.IsValid() {
 		// assign primary key by writing directly into wire format buffer
 		pk := nextSeq
 		nextSeq++
-		view.SetPk(pk)
+		j.view.SetPk(pk)
+		count++
 
 		// append to data pack
-		j.Data.AppendWire(view.Bytes())
+		j.Data.AppendWire(j.view.Bytes())
 
 		// update keys
-		newKeys = append(newKeys, JournalEntry{pk, j.Data.Len() - 1})
-		newPks = append(newPks, pk)
+		j.newKeys = append(j.newKeys, JournalRecord{pk, j.Data.Len() - 1})
 
 		// set sortData flag
 		j.sortData = j.sortData || pk < j.maxid
@@ -271,92 +277,94 @@ func (j *Journal) InsertBatch(buf []byte, nextSeq uint64) (uint64, []byte) {
 		}
 
 		// process next message, if any
-		view, buf, _ = view.Cut(buf)
+		j.view, buf, _ = j.view.Cut(buf)
 	}
 
 	// merge new keys (sorted) into sorted key list
-	j.mergeKeys(newKeys)
+	j.mergeKeys(j.newKeys)
 	j.Deleted.Resize(len(j.Keys))
+	j.view.Reset(nil)
 
-	return uint64(len(newPks)), buf
+	return count, buf
 }
 
 // Updates multiple records in wire format by inserting or overwriting
 // them in the journal. Returns the number of processed records and
 // the remaining buffer contents in case the journal is full.
+// Wire buffer is not required to contain pk sorted records.
 func (j *Journal) UpdateBatch(buf []byte) (uint64, []byte, error) {
 	// cannot insert into full journal
-	if len(buf) == 0 || j.Data.IsFull() {
+	if len(buf) == 0 {
 		return 0, buf, nil
 	}
 
-	s := j.Data.Schema()
-	pks := make([]uint64, 0, len(buf)/s.WireSize())
-	newKeys := make(JournalEntryList, 0, len(buf)/s.WireSize())
-
 	// split buf into wire messages
 	lastBuf := buf
-	view, buf, _ := schema.NewView(s).Cut(buf)
+	j.view, buf, _ = j.view.Cut(buf)
+	j.newKeys = j.newKeys[:0]
 
 	// process each message independently, assign PK and insert
 	var (
-		err       error
-		idx, last int
-		count     uint64
+		err   error
+		idx   int
+		count uint64
 	)
-	for view.IsValid() {
+	for j.view.IsValid() {
 		// ensure primary key is set
-		pk := view.GetPk()
+		pk := j.view.GetPk()
 		if pk == 0 {
-			err = fmt.Errorf("missing primary key for record %d", count)
+			err = ErrNoKey
 			break
 		}
-		pks = append(pks, pk)
 
 		// identify insert method (append / update)
-		idx, last = j.PkIndex(pk, last)
+		idx, _ = j.PkIndex(pk, 0)
 		if idx < 0 {
+			// stop when journal is full
+			if j.IsFull() {
+				buf = lastBuf
+				break
+			}
+
 			// append to data pack (this record does not yet exist in the journal)
-			j.Data.AppendWire(view.Bytes())
+			j.Data.AppendWire(j.view.Bytes())
 			count++
 
 			// create mapped keys
-			newKeys = append(newKeys, JournalEntry{pk, j.Data.Len() - 1})
+			j.newKeys = append(j.newKeys, JournalRecord{pk, j.Data.Len() - 1})
 
 			// set sortData flag
 			j.sortData = j.sortData || pk < j.maxid
 			j.maxid = max(j.maxid, pk)
 
-			// stop when journal is full
-			if j.Data.IsFull() {
-				break
-			}
-
 		} else {
-			// replace in data pack (this record already exists)
-			j.Data.SetWire(idx, view.Bytes())
+			// undelete and replace in data pack (this record already exists)
+			j.undelete(pk)
+			j.Data.SetWire(idx, j.view.Bytes())
 			count++
 		}
 
 		// process next message, if any
-		view, buf, _ = view.Cut(buf)
+		lastBuf = buf
+		j.view, buf, _ = j.view.Cut(buf)
 	}
 	if err != nil {
+		j.view.Reset(nil)
 		return count, lastBuf, err
 	}
 
 	// undelete if deleted, must call before mergeKeys
-	j.undelete(pks)
 
 	// sort and merge new journal keys
-	sort.Sort(newKeys)
-	j.mergeKeys(newKeys)
+	sort.Sort(j.newKeys)
+	j.mergeKeys(j.newKeys)
 	j.Deleted.Resize(len(j.Keys))
+	j.view.Reset(nil)
 
 	return count, buf, nil
 }
 
-func (j *Journal) mergeKeys(newKeys JournalEntryList) {
+func (j *Journal) mergeKeys(newKeys JournalRecords) {
 	if len(newKeys) == 0 {
 		return
 	}
@@ -368,7 +376,7 @@ func (j *Journal) mergeKeys(newKeys JournalEntryList) {
 
 	// merge newKeys into key list (both lists are sorted)
 	if cap(j.Keys) < len(j.Keys)+len(newKeys) {
-		cp := make(JournalEntryList, len(j.Keys), roundSize(len(j.Keys)+len(newKeys)))
+		cp := make(JournalRecords, len(j.Keys), roundSize(len(j.Keys)+len(newKeys)))
 		copy(cp, j.Keys)
 		j.Keys = cp
 	}
@@ -453,18 +461,18 @@ func (j *Journal) DeleteBatch(pks bitmap.Bitmap) uint64 {
 // tomb and we reconstruct the previous state of the undeleted entry
 // in our data pack (i.e. we restore its primary key) and reset the
 // deleted flag. pks must be storted.
-func (j *Journal) undelete(pks []uint64) {
-	var idx, last int
-	for _, pk := range pks {
-		// reset the deleted bit and restore pk
-		idx, last = j.PkIndex(pks[0], last)
-		if idx > -1 {
-			j.Deleted.Clear(idx)
-			j.Data.SetValue(j.Data.PkIdx(), idx, pk)
-		}
-		// remove from tomb
-		j.Tomb.Remove(pk)
+func (j *Journal) undelete(pk uint64) {
+	if !j.IsDeleted(pk) {
+		return
 	}
+	// reset the deleted bit and restore pk
+	idx, _ := j.PkIndex(pk, 0)
+	if idx > -1 {
+		j.Deleted.Clear(idx)
+		j.Data.SetValue(j.Data.PkIdx(), idx, pk)
+	}
+	// remove from tomb
+	j.Tomb.Remove(pk)
 }
 
 // Efficient check if a pk is in the tomb or not. Use `last` to skip already
@@ -528,11 +536,13 @@ func (j *Journal) checkInvariants(when string) error {
 	sorted := make([]uint64, len(pks))
 	copy(sorted, pks)
 	slices.Sort(sorted)
-	for i, v := range sorted {
-		if i == 0 || v == 0 || sorted[i-1] == 0 {
+	var last uint64
+	for _, v := range sorted {
+		if last == 0 {
+			last = v
 			continue
 		}
-		if have, want := v, sorted[i-1]; have == want {
+		if v == last {
 			return fmt.Errorf("journal %s: INVARIANT VIOLATION: duplicate pk %d in data pack", when, v)
 		}
 	}
