@@ -1,5 +1,7 @@
 // Copyright (c) 2018-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+//go:build ignore
+// +build ignore
 
 // Design concepts
 // - columnar design with type-specific multi-level compression

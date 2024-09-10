@@ -1,5 +1,7 @@
 // Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+//go:build ignore
+// +build ignore
 
 // TODO
 // - support expressions in fields and condition
