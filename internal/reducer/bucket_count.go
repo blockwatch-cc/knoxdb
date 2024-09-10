@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package series
+package reducer
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type CountBucket struct {
@@ -18,8 +19,8 @@ type CountBucket struct {
 	reducers []*CountReducer[int] // combine source stream values into one result per window
 	last     time.Time            // last window start time
 	next     time.Time            // next window start time
-	window   TimeUnit             // aggregation window
-	trange   TimeRange            // series time range
+	window   util.TimeUnit        // aggregation window
+	trange   util.TimeRange       // series time range
 	limit    int                  // value limit
 	fill     FillMode             // fill missing data
 }
@@ -30,7 +31,7 @@ func NewCountBucket() *CountBucket {
 	}
 }
 
-func (b *CountBucket) WithDimensions(r TimeRange, w TimeUnit) Bucket {
+func (b *CountBucket) WithDimensions(r util.TimeRange, w util.TimeUnit) Bucket {
 	b.trange = r
 	b.window = w
 	steps := r.NumSteps(w)

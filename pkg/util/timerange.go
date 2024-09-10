@@ -1,17 +1,13 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package series
+package util
 
 import (
 	"fmt"
 	"strings"
 	"time"
-
-	"blockwatch.cc/knoxdb/pkg/util"
 )
-
-// TODO: consider moving to pkg/util/
 
 // Accepts time ranges of form
 //
@@ -62,11 +58,11 @@ func MustParseTimeRange(s string) TimeRange {
 func ParseTimeRange(s string) (TimeRange, error) {
 	var r TimeRange
 	if a, b, ok := strings.Cut(s, ","); ok {
-		from, err := util.ParseTime(a)
+		from, err := ParseTime(a)
 		if err != nil {
 			return r, err
 		}
-		to, err := util.ParseTime(b)
+		to, err := ParseTime(b)
 		if err != nil {
 			return r, err
 		}
@@ -116,7 +112,7 @@ func ParseTimeRange(s string) (TimeRange, error) {
 			r.IsRelative = true
 		} else {
 			// try parse as time
-			t, err := util.ParseTime(s)
+			t, err := ParseTime(s)
 			if err != nil {
 				return r, err
 			}
@@ -124,6 +120,12 @@ func ParseTimeRange(s string) (TimeRange, error) {
 		}
 	}
 	return r, nil
+}
+
+// Set implements the flags.Value interface for use in command line argument parsing.
+func (r *TimeRange) Set(s string) (err error) {
+	*r, err = ParseTimeRange(s)
+	return
 }
 
 func (r TimeRange) MarshalText() ([]byte, error) {
@@ -186,11 +188,5 @@ func (r TimeRange) Epochs(interval TimeUnit, limit int) (epochs [][2]time.Time) 
 			interval.Add(t).Add(-time.Nanosecond),
 		})
 	}
-	return
-}
-
-// Set implements the flags.Value interface for use in command line argument parsing.
-func (r *TimeRange) Set(s string) (err error) {
-	*r, err = ParseTimeRange(s)
 	return
 }

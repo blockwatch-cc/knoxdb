@@ -8,9 +8,7 @@ import (
 	"math"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -25,6 +23,11 @@ func (t *Table) Compact(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	start := time.Now()
+
+	// merge journal first
+	if err := t.mergeJournal(ctx); err != nil {
+		return err
+	}
 
 	if err := ctx.Err(); err != nil {
 		return err
@@ -64,10 +67,10 @@ func (t *Table) Compact(ctx context.Context) error {
 	// - no out-of-order min/max ranges across sorted pack keys exist
 
 	// open write transaction (or reuse existing tx)
-	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
-	if err != nil {
-		return err
-	}
+	// tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
+	// if err != nil {
+	// 	return err
+	// }
 
 	var (
 		dstPack, srcPack *pack.Package
@@ -75,6 +78,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		dstIndex         int
 		lastMaxPk        uint64
 		isNewPack        bool
+		err              error
 	)
 
 	t.log.Debugf("pack: %s table compacting %d packs / %d rows",
@@ -232,15 +236,15 @@ func (t *Table) Compact(ctx context.Context) error {
 		srcPack = nil
 
 		// commit tx after each N written bytes
-		if pending >= t.opts.TxMaxSize {
-			if tx, err = store.CommitAndContinue(tx); err != nil {
-				return err
-			}
-			pending = 0
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-		}
+		// if pending >= t.opts.TxMaxSize {
+		// 	if tx, err = store.CommitAndContinue(tx); err != nil {
+		// 		return err
+		// 	}
+		// 	pending = 0
+		// 	if err := ctx.Err(); err != nil {
+		// 		return err
+		// 	}
+		// }
 	}
 
 	// store the last dstPack

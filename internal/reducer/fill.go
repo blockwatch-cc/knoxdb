@@ -1,15 +1,13 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package series
+package reducer
 
 import (
 	"fmt"
 	"strings"
 	"time"
 )
-
-var null = []byte(`null`)
 
 type FillMode string
 

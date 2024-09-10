@@ -12,18 +12,20 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/reducer"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type Result struct {
-	buckets  map[string][]Bucket // by group
+	buckets  map[string][]reducer.Bucket // by group
 	groups   []string
 	table    string
 	groupBy  string
 	cols     util.StringList
-	interval TimeRange
-	window   TimeUnit
-	fill     FillMode
+	interval util.TimeRange
+	window   util.TimeUnit
+	fill     reducer.FillMode
 }
 
 func (r Result) Groups() []string {
@@ -140,7 +142,7 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 
 	// create stream manager
 	res := &Result{
-		buckets:  make(map[string][]Bucket),
+		buckets:  make(map[string][]reducer.Bucket),
 		table:    req.Table,
 		cols:     req.Select.Cols(),
 		groupBy:  req.GroupBy,
@@ -148,7 +150,7 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 		window:   req.Interval,
 		fill:     req.Fill,
 	}
-	res.buckets[""] = make([]Bucket, len(req.Select))
+	res.buckets[""] = make([]reducer.Bucket, len(req.Select))
 
 	// create buckets from type info
 	for i, expr := range req.Select {
@@ -161,12 +163,16 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 	}
 
 	// identify groupBy column
-	var groupByIndex int = -1
+	var (
+		groupByIndex int = -1
+		groupByEnum  schema.EnumLUT
+	)
 	if req.GroupBy != "" {
 		groupByIndex, ok = plan.ResultSchema.FieldIndexByName(req.GroupBy)
 		if !ok {
 			return nil, fmt.Errorf("unknown group_by field %q", req.GroupBy)
 		}
+		groupByEnum, _ = schema.LookupEnum(req.GroupBy)
 	} else {
 		res.groups = append(res.groups, "")
 	}
@@ -205,15 +211,22 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 				return err
 			}
 			var groupName string
-			// TODO: support enum type int->string conversion here
-			// use tinfo or field type name
-			groupName = util.ToString(group)
+			// try enum conversion first
+			if groupByEnum != nil {
+				if enum, ok := groupByEnum.Value(group.(uint16)); ok {
+					groupName = string(enum)
+				}
+			}
+			// try any -> string conversion next
+			if len(groupName) == 0 {
+				groupName = util.ToString(group)
+			}
 
 			if groupBuckets, ok := res.buckets[groupName]; ok {
 				buckets = groupBuckets
 			} else {
 				// create new bucket group
-				buckets = make([]Bucket, len(req.Select))
+				buckets = make([]reducer.Bucket, len(req.Select))
 				for i, expr := range req.Select {
 					buckets[i], _ = req.MakeBucket(expr, plan.ResultSchema)
 				}

@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package series
+package reducer
 
 import (
 	"bytes"
@@ -10,10 +10,13 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+var null = []byte(`null`)
+
 type Bucket interface {
-	WithDimensions(TimeRange, TimeUnit) Bucket
+	WithDimensions(util.TimeRange, util.TimeUnit) Bucket
 	WithReducer(ReducerFunc) Bucket
 	WithName(string) Bucket
 	WithIndex(int) Bucket

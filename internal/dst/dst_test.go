@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"math/rand"
 	"os"
 	"strconv"
@@ -35,9 +34,11 @@ import (
 	"testing"
 	"time"
 
-	"blockwatch.cc/knoxdb/pack"
-	"blockwatch.cc/knoxdb/store"
-	"blockwatch.cc/knoxdb/store/mem"
+	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/knox"
+	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/schema"
 
 	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
@@ -134,94 +135,110 @@ func genCommand() command {
 }
 
 type testType struct {
-	Id    uint64 `knox:"id,pk"` // auto-increment serial
-	Val   int64  `knox:"val"`   // some random value
-	Count int64  `knox:"count"` // counting updates
+	Id        uint64         `knox:"id,pk"` // auto-increment serial
+	Val       int64          `knox:"val"`   // some random value
+	Count     int64          `knox:"count"` // counting updates
+	Timestamp time.Time      `knox:"time"`
+	Hash      []byte         `knox:"hash,index=bloom:3"`
+	String    string         `knox:"string"`
+	Bool      bool           `knox:"bool"`
+	MyEnum    schema.Enum    `knox:"my_enum,enum"`
+	Int64     int64          `knox:"int64"`
+	Int32     int32          `knox:"int32"`
+	Int16     int16          `knox:"int16"`
+	Int8      int8           `knox:"int8"`
+	Int_64    int            `knox:"int_as_int64"`
+	Uint64    uint64         `knox:"uint64,index=bloom:2"`
+	Uint32    uint32         `knox:"uint32"`
+	Uint16    uint16         `knox:"uint16"`
+	Uint8     uint8          `knox:"uint8"`
+	Uint_64   uint           `knox:"uint_as_uint64"`
+	Float64   float64        `knox:"float64"`
+	Float32   float32        `knox:"float32"`
+	D32       num.Decimal32  `knox:"decimal32,scale=5"`
+	D64       num.Decimal64  `knox:"decimal64,scale=15"`
+	D128      num.Decimal128 `knox:"decimal128,scale=18"`
+	D256      num.Decimal256 `knox:"decimal256,scale=24"`
+	I128      num.Int128     `knox:"int128"`
+	I256      num.Int256     `knox:"int256"`
 }
 
-var (
-	memopts = &mem.Options{
-		// GetCallback: func(k, v []byte) []byte {
-		// 	log.Infof("GET %x (%s)", k, string(k))
-		// 	return v
-		// },
-		// PutCallback: func(k, v []byte) ([]byte, []byte, error) {
-		// 	log.Infof("PUT %x (%s)", k, string(k))
-		// 	return k, v, nil
-		// },
-		// DeleteCallback: func(k []byte) ([]byte, error) {
-		// 	log.Infof("DEL %x (%s)", k, string(k))
-		// 	return k, nil
-		// },
-	}
-
-	dbopts = pack.Options{
-		PackSizeLog2:    8, // 256 entries
-		JournalSizeLog2: 8, // 256 entries
-		CacheSize:       1,
-		FillLevel:       100,
-		Engine:          pack.TableEnginePack,
-		Driver:          "mem",
-		DriverOpts:      memopts,
-	}
-)
-
-func newPackTable(path string) (pack.Table, error) {
-	fields, err := pack.Fields(testType{})
+func newDB(ctx context.Context, path string) (knox.Database, error) {
+	log.Info("Creating DB")
+	db, err := knox.CreateDatabase(ctx, "dst", knox.DatabaseOptions{
+		Path:      path,
+		Driver:    "mem",
+		Namespace: "cx.bwd.knox.deterministic-simulation-test",
+		CacheSize: 1 << 20 * 16,
+		Logger:    log.Log,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := pack.CreateDatabaseIfNotExists(path, dbName, "*", dbopts)
+	log.Info("Creating Enum")
+	var enum schema.EnumLUT
+	enum, err = db.CreateEnum(ctx, "my_enum")
 	if err != nil {
-		return nil, fmt.Errorf("creating database %q: %v", dbName, err)
+		db.Close(ctx)
+		return nil, err
+	}
+	err = db.ExtendEnum(ctx, "my_enum", "one", "two", "three", "four")
+	if err != nil {
+		db.Close(ctx)
+		return nil, err
+	}
+	schema.RegisterEnum(enum)
+
+	s, err := schema.SchemaOf(&testType{})
+	if err != nil {
+		db.Close(ctx)
+		return nil, err
 	}
 
-	table, err := db.CreateTableIfNotExists(
-		tableName,
-		fields,
-		dbopts,
-	)
+	log.Infof("Creating Table %s", s.Name())
+	_, err = db.CreateTable(ctx, s, knox.TableOptions{
+		Engine:      "pack",
+		Driver:      "mem",
+		PackSize:    1 << 16,
+		JournalSize: 1 << 17,
+		PageFill:    0.9,
+	})
 	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("creating table %q: %v", tableName, err)
+		db.Close(ctx)
+		return nil, err
 	}
 
-	return table, nil
+	return db, nil
 }
 
-func openPackTable(path string) (pack.Table, error) {
-	db, err := pack.OpenDatabase(path, dbName, "*", dbopts)
-	if err != nil {
-		return nil, fmt.Errorf("open database %q: %v", dbName, err)
-	}
-	table, err := db.OpenTable(
-		tableName,
-		dbopts,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("open table %q: %v", tableName, err)
-	}
-	return table, nil
+func openDB(ctx context.Context, path string) (knox.Database, error) {
+	log.Info("Opening DB")
+	return knox.OpenDatabase(ctx, "types", knox.DatabaseOptions{
+		Path:      path,
+		Driver:    "mem",
+		Namespace: "cx.bwd.knox.deterministic-simulation-test",
+		Logger:    log.Log,
+	})
 }
 
-type tableProvider struct {
-	table atomic.Value
+type dbProvider struct {
+	db atomic.Value
 }
 
-func (t *tableProvider) GetTable() pack.Table {
-	return t.table.Load().(pack.Table)
+func (p *dbProvider) GetDB() knox.Database {
+	return p.db.Load().(knox.Database)
 }
 
-func (t *tableProvider) Update(table pack.Table) {
-	t.table.Store(table)
+func (p *dbProvider) Update(db knox.Database) {
+	p.db.Store(db)
 }
 
 func canIgnoreError(err error) bool {
 	switch {
 	case errors.Is(err, context.Canceled):
 		return true
-	case errors.Is(err, pack.ErrDatabaseClosed):
+	case errors.Is(err, engine.ErrDatabaseClosed):
 		return true
 	default:
 		return false
@@ -241,19 +258,20 @@ func runTestDST(t *testing.T) {
 	require.NoError(t, err)
 	random = rand.New(rand.NewSource(int64(seed)))
 
+	ctx := context.Background()
+
 	// create new database and table
 	// storageDir := t.TempDir()
 	storageDir := "mem_test"
-	tp := &tableProvider{}
+	tp := &dbProvider{}
 	{
 		// Separate scope to avoid table pointer misuse.
-		table, err := newPackTable(storageDir)
+		table, err := newDB(ctx, storageDir)
 		require.NoError(t, err)
 		tp.Update(table)
 	}
 
 	t.Logf("DB initialized, running %d commands", numCommands)
-	ctx := context.Background()
 	errg := &errgroup.Group{}
 	errg.SetLimit(32)
 	commandDistribution := make(map[command]int)
@@ -267,11 +285,15 @@ func runTestDST(t *testing.T) {
 			errg.Go(func() error {
 				// This is a hack to ensure some randomized goroutine scheduling.
 				time.Sleep(1 * time.Millisecond)
-				table := tp.GetTable()
-				val := testType{
-					Val: atomic.LoadInt64(&numTuples) + 1,
+				table, err := knox.UseGenericTable[testType]("test_type", tp.GetDB())
+				if err != nil {
+					return err
 				}
-				if err := table.Insert(ctx, &val); err != nil && !canIgnoreError(err) {
+				val := testType{
+					Val:    atomic.LoadInt64(&numTuples) + 1,
+					MyEnum: "one",
+				}
+				if _, err := table.Insert(ctx, &val); err != nil && !canIgnoreError(err) {
 					return fmt.Errorf("insert error: %s", err)
 				}
 				atomic.AddInt64(&numTuples, 1)
@@ -282,10 +304,17 @@ func runTestDST(t *testing.T) {
 			errg.Go(func() error {
 				// This is a hack to ensure some randomized goroutine scheduling.
 				time.Sleep(1 * time.Millisecond)
-				table := tp.GetTable()
+				table, err := tp.GetDB().UseTable("test_type")
+				if err != nil {
+					return err
+				}
 				id = id % uint64(max(atomic.LoadInt64(&numTuples), 1))
 				var val testType
-				err := pack.NewQuery("update").WithTable(table).AndGte("id", id).Execute(ctx, &val)
+				err = knox.NewQuery[testType]().
+					WithKey("update").
+					WithTable(table).
+					AndGte("id", id).
+					Execute(ctx, &val)
 				if err != nil && !canIgnoreError(err) {
 					return fmt.Errorf("update query error: %s", err)
 				}
@@ -294,7 +323,8 @@ func runTestDST(t *testing.T) {
 					return nil
 				}
 				val.Count++
-				if err := table.Update(ctx, &val); err != nil && !canIgnoreError(err) {
+				val.MyEnum = "two"
+				if _, err := table.Update(ctx, &val); err != nil && !canIgnoreError(err) {
 					return fmt.Errorf("update error: %s", err)
 				}
 				return nil
@@ -304,12 +334,19 @@ func runTestDST(t *testing.T) {
 			errg.Go(func() error {
 				// This is a hack to ensure some randomized goroutine scheduling.
 				time.Sleep(1 * time.Millisecond)
-				table := tp.GetTable()
+				table, err := knox.UseGenericTable[testType]("test_type", tp.GetDB())
+				if err != nil {
+					return err
+				}
 				id = id % uint64(max(atomic.LoadInt64(&numTuples), 1))
 
 				// find a value that actually exists
 				var val testType
-				err := pack.NewQuery("delete").WithTable(table).AndGte("id", id).Execute(ctx, &val)
+				err = knox.NewQuery[testType]().
+					WithKey("delete").
+					WithTable(table.Table()).
+					AndGte("id", id).
+					Execute(ctx, &val)
 				if err != nil && !canIgnoreError(err) {
 					return fmt.Errorf("delete query error: %s", err)
 				}
@@ -319,7 +356,13 @@ func runTestDST(t *testing.T) {
 				}
 
 				// delete it
-				if n, err := table.DeletePks(ctx, []uint64{val.Id}); err != nil && !canIgnoreError(err) {
+				n, err := knox.NewQuery[testType]().
+					WithKey("delete").
+					WithTable(table.Table()).
+					AndEqual("id", val.Id).
+					Delete(ctx)
+
+				if err != nil && !canIgnoreError(err) {
 					return fmt.Errorf("delete error: %s", err)
 				} else if n > 0 {
 					atomic.AddInt64(&numTuples, -1)
@@ -331,10 +374,17 @@ func runTestDST(t *testing.T) {
 			errg.Go(func() error {
 				// This is a hack to ensure some randomized goroutine scheduling.
 				time.Sleep(1 * time.Millisecond)
-				table := tp.GetTable()
+				table, err := tp.GetDB().UseTable("test_type")
+				if err != nil {
+					return err
+				}
 				id = id % uint64(max(atomic.LoadInt64(&numTuples), 1))
 				var val testType
-				err := pack.NewQuery("query").WithTable(table).AndGte("id", id).Execute(ctx, &val)
+				err = knox.NewQuery[testType]().
+					WithKey("query").
+					WithTable(table).
+					AndGte("id", id).
+					Execute(ctx, &val)
 				if err != nil && !canIgnoreError(err) {
 					return fmt.Errorf("query error: %s", err)
 				}
@@ -342,39 +392,41 @@ func runTestDST(t *testing.T) {
 			})
 		case stream:
 			action := random.Intn(3)
-			order := pack.OrderType(random.Intn(1))
+			order := knox.OrderType(random.Intn(1))
 			after := random.Int63()
 			errg.Go(func() error {
 				// This is a hack to ensure some randomized goroutine scheduling.
 				time.Sleep(1 * time.Millisecond)
-				ctx2, cancel := context.WithCancel(ctx)
-				table := tp.GetTable()
+				ctx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				table, err := tp.GetDB().UseTable("test_type")
+				if err != nil {
+					return err
+				}
 				after = after % int64(max(atomic.LoadInt64(&numTuples), 1))
-				err := table.
-					Stream(ctx2,
-						pack.NewQuery("query").AndGt("id", 0).WithOrder(order),
-						func(r pack.Row) error {
-							var val testType
-							if err := r.Decode(&val); err != nil {
-								return err
-							}
-							after--
-							if after > 0 {
-								return nil
-							}
-							switch action {
-							case 0:
-								// cancel context
-								cancel()
-								return nil
-							case 1:
-								// skip results
-								return pack.EndStream
-							default:
-								// continue reading results
-								return nil
-							}
-						})
+				err = knox.NewQuery[testType]().
+					WithKey("query").
+					WithTable(table).
+					AndGt("id", 0).
+					WithOrder(order).
+					Stream(ctx, func(v *testType) error {
+						after--
+						if after > 0 {
+							return nil
+						}
+						switch action {
+						case 0:
+							// cancel context
+							cancel()
+							return nil
+						case 1:
+							// skip results
+							return engine.EndStream
+						default:
+							// continue reading results
+							return nil
+						}
+					})
 				if err != nil && !canIgnoreError(err) {
 					return fmt.Errorf("query error: %s", err)
 				}
@@ -382,7 +434,7 @@ func runTestDST(t *testing.T) {
 			})
 		case sync:
 			errg.Go(func() error {
-				err := tp.GetTable().Sync(ctx)
+				err := tp.GetDB().Sync(ctx)
 				if err != nil && !canIgnoreError(err) {
 					return fmt.Errorf("sync error: %s", err)
 				}
@@ -390,37 +442,40 @@ func runTestDST(t *testing.T) {
 			})
 		case compact:
 			errg.Go(func() error {
-				err := tp.GetTable().Compact(ctx)
+				err := tp.GetDB().CompactTable(ctx, "test_type")
 				if err != nil && !canIgnoreError(err) {
 					return fmt.Errorf("compact error: %s", err)
 				}
 				return nil
 			})
-		case snapshot:
-			errg.Go(func() error {
-				err := tp.GetTable().DB().Dump(io.Discard)
-				if err != nil && !canIgnoreError(err) {
-					return fmt.Errorf("snaphsot error: %s", err)
-				}
-				return nil
-			})
+		// case snapshot:
+		// 	errg.Go(func() error {
+		// 		err := tp.GetDB().Snapshot(ctx, io.Discard)
+		// 		if err != nil && !canIgnoreError(err) {
+		// 			return fmt.Errorf("snaphsot error: %s", err)
+		// 		}
+		// 		return nil
+		// 	})
 		case restart:
 			errg.Go(func() error {
 				// This is a hack to ensure some randomized goroutine scheduling.
 				time.Sleep(1 * time.Millisecond)
 
 				// Graceful shutdown.
-				require.NoError(t, tp.GetTable().DB().Close())
+				require.NoError(t, tp.GetDB().Close(ctx))
 				_ = errg.Wait()
 
 				// open again
-				table, err := openPackTable(storageDir)
+				db, err := openDB(ctx, storageDir)
 				require.NoError(t, err)
-				tp.Update(table)
+				tp.Update(db)
 
 				// try insert
-				val := testType{Val: int64(atomic.LoadInt64(&numTuples) + 1)}
-				require.NoError(t, table.Insert(ctx, &val))
+				table, err := knox.UseGenericTable[testType]("test_type", db)
+				require.NoError(t, err)
+				val := testType{Val: int64(atomic.LoadInt64(&numTuples) + 1), MyEnum: "one"}
+				_, err = table.Insert(ctx, &val)
+				require.NoError(t, err)
 
 				return nil
 			})
@@ -435,15 +490,17 @@ func runTestDST(t *testing.T) {
 	t.Log("Sync/merge database.")
 
 	// Merge-flush journal data into table, also updates tuple counter
-	require.NoError(t, tp.GetTable().(*pack.PackTable).Flush(ctx))
+	require.NoError(t, tp.GetDB().CompactTable(ctx, "test_type"))
 
 	// Defer a close here. This is not done at the start of the test because
 	// the test run itself may close the store.
-	defer tp.GetTable().Close()
+	defer tp.GetDB().Close(ctx)
 
 	t.Log("Verifying data integrity.")
-	stats := tp.GetTable().Stats()
-	require.Len(t, stats, 1)
-	require.Equal(t, numTuples, stats[0].TupleCount)
+	table, err := tp.GetDB().UseTable("test_type")
+	require.NoError(t, err)
+	stats := table.Stats()
+	t.Logf("%#v", stats)
+	require.Equal(t, numTuples, stats.TupleCount)
 	t.Log("OK.")
 }

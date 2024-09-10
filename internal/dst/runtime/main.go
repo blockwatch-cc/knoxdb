@@ -197,7 +197,7 @@ func getWazeroVersion() (ret string) {
 }
 
 // strip runtime-related flags from os.Args
-func splitFlags(args []string, flags *flag.FlagSet) ([]string, []string) {
+func splitFlags(_ []string, flags *flag.FlagSet) ([]string, []string) {
 	rtFlags := make([]string, 0)
 	modFlags := []string{module}
 	for i := 1; i < len(os.Args); i++ {

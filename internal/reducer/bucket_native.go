@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package series
+package reducer
 
 import (
 	"bytes"
@@ -13,20 +13,21 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type NativeBucket[T Number] struct {
-	name     string       // name of result column
-	index    int          // block index in result
-	template Reducer[T]   // template reducer to store config
-	reducers []Reducer[T] // combine source stream values into one result per window
-	locked   bool         // disallow reducer and fill changes (used for time buckets)
-	last     time.Time    // last window start time
-	next     time.Time    // next window start time
-	window   TimeUnit     // aggregation window
-	trange   TimeRange    // series time range
-	limit    int          // value limit
-	fill     FillMode     // fill missing data
+	name     string         // name of result column
+	index    int            // block index in result
+	template Reducer[T]     // template reducer to store config
+	reducers []Reducer[T]   // combine source stream values into one result per window
+	locked   bool           // disallow reducer and fill changes (used for time buckets)
+	last     time.Time      // last window start time
+	next     time.Time      // next window start time
+	window   util.TimeUnit  // aggregation window
+	trange   util.TimeRange // series time range
+	limit    int            // value limit
+	fill     FillMode       // fill missing data
 	emit     func(T) string
 }
 
@@ -37,7 +38,7 @@ func NewNativeBucket[T Number]() *NativeBucket[T] {
 	}
 }
 
-func (b *NativeBucket[T]) WithDimensions(r TimeRange, w TimeUnit) Bucket {
+func (b *NativeBucket[T]) WithDimensions(r util.TimeRange, w util.TimeUnit) Bucket {
 	b.trange = r
 	b.window = w
 	steps := r.NumSteps(w)

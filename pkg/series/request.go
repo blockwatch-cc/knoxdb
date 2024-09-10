@@ -9,25 +9,26 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/reducer"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 )
 
-type TypeMap map[string]Aggregatable
+type TypeMap map[string]reducer.Aggregatable
 
 type LimitableRequest interface {
 	ApplyLimits(int, int)
 }
 
 type Request struct {
-	Select   ExprList  `form:"select"`
-	Range    TimeRange `form:"range,default=M"`
-	Interval TimeUnit  `form:"interval,default=d"`
-	Fill     FillMode  `form:"fill,default=none"`
-	Limit    int       `form:"limit,default=100"`
-	GroupBy  string    `form:"group_by"`
-	Table    string    `form:"table"`
+	Select   ExprList         `form:"select"`
+	Range    util.TimeRange   `form:"range,default=M"`
+	Interval util.TimeUnit    `form:"interval,default=d"`
+	Fill     reducer.FillMode `form:"fill,default=none"`
+	Limit    int              `form:"limit,default=100"`
+	GroupBy  string           `form:"group_by"`
+	Table    string           `form:"table"`
 	TypeMap  TypeMap
 	table    engine.TableEngine
 	log      log.Logger
@@ -35,15 +36,15 @@ type Request struct {
 
 func NewRequest() *Request {
 	now := time.Now().UTC()
-	unit := TimeUnit{Value: 1, Unit: 'M'}
+	unit := util.TimeUnit{Value: 1, Unit: 'M'}
 	return &Request{
 		Select: make(ExprList, 0),
-		Range: TimeRange{
+		Range: util.TimeRange{
 			From: unit.Sub(now).UTC(),
 			To:   now,
 		},
 		Interval: unit,
-		Fill:     FillModeNone,
+		Fill:     reducer.FillModeNone,
 		Limit:    100,
 		TypeMap:  make(TypeMap),
 		log:      log.Disabled,
@@ -60,22 +61,22 @@ func (r *Request) WithTable(t engine.TableEngine) *Request {
 	return r
 }
 
-func (r *Request) WithExpr(field string, fn ReducerFunc) *Request {
+func (r *Request) WithExpr(field string, fn reducer.ReducerFunc) *Request {
 	r.Select.AddUnique(field, fn)
 	return r
 }
 
-func (r *Request) WithRange(rng TimeRange) *Request {
+func (r *Request) WithRange(rng util.TimeRange) *Request {
 	r.Range = rng
 	return r
 }
 
-func (r *Request) WithInterval(u TimeUnit) *Request {
+func (r *Request) WithInterval(u util.TimeUnit) *Request {
 	r.Interval = u
 	return r
 }
 
-func (r *Request) WithFill(m FillMode) *Request {
+func (r *Request) WithFill(m reducer.FillMode) *Request {
 	r.Fill = m
 	return r
 }
@@ -90,7 +91,7 @@ func (r *Request) WithGroupBy(g string) *Request {
 	return r
 }
 
-func (r *Request) WithType(name string, agg Aggregatable) *Request {
+func (r *Request) WithType(name string, agg reducer.Aggregatable) *Request {
 	r.TypeMap[name] = agg
 	return r
 }
@@ -105,7 +106,7 @@ func (r *Request) ApplyLimits(def, max int) *Request {
 
 func (r *Request) Sanitize() *Request {
 	// add time column
-	r.Select.AddUniqueFront("time", ReducerFuncFirst)
+	r.Select.AddUniqueFront("time", reducer.ReducerFuncFirst)
 
 	// truncate time ranges to multiples of interval
 	r.Range.From = r.Interval.Truncate(r.Range.From)
@@ -121,10 +122,10 @@ func (r *Request) Sanitize() *Request {
 	return r
 }
 
-func (r *Request) MakeBucket(expr Expr, s *schema.Schema) (Bucket, error) {
+func (r *Request) MakeBucket(expr Expr, s *schema.Schema) (reducer.Bucket, error) {
 	// handle special count(*) expression
-	if expr.Field == "count" || (expr.Reduce == ReducerFuncCount && expr.Field == "*") {
-		return NewCountBucket().
+	if expr.Field == "count" || (expr.Reduce == reducer.ReducerFuncCount && expr.Field == "*") {
+		return reducer.NewCountBucket().
 			WithDimensions(r.Range, r.Interval).
 			WithLimit(r.Limit).
 			WithFill(r.Fill), nil
@@ -133,7 +134,7 @@ func (r *Request) MakeBucket(expr Expr, s *schema.Schema) (Bucket, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown column %q", expr.Field)
 	}
-	b := NewBucket(f.Type())
+	b := reducer.NewBucket(f.Type())
 	if b == nil {
 		return nil, fmt.Errorf("unsupported column type %q", f.Type())
 	}
@@ -150,7 +151,7 @@ func (r *Request) MakeBucket(expr Expr, s *schema.Schema) (Bucket, error) {
 
 type Expr struct {
 	Field  string
-	Reduce ReducerFunc
+	Reduce reducer.ReducerFunc
 }
 
 type ExprList []Expr
@@ -164,7 +165,7 @@ func (l ExprList) Cols() (cols util.StringList) {
 
 func (l ExprList) QueryFields() (cols util.StringList) {
 	for _, v := range l {
-		if v.Field == "count" || (v.Reduce == ReducerFuncCount && v.Field == "*") {
+		if v.Field == "count" || (v.Reduce == reducer.ReducerFuncCount && v.Field == "*") {
 			continue
 		}
 		cols = append(cols, v.Field)
@@ -172,7 +173,7 @@ func (l ExprList) QueryFields() (cols util.StringList) {
 	return
 }
 
-func (l *ExprList) AddUnique(name string, fn ReducerFunc) {
+func (l *ExprList) AddUnique(name string, fn reducer.ReducerFunc) {
 	for _, v := range *l {
 		if v.Field == name {
 			return
@@ -181,7 +182,7 @@ func (l *ExprList) AddUnique(name string, fn ReducerFunc) {
 	*l = append(*l, Expr{name, fn})
 }
 
-func (l *ExprList) AddUniqueFront(name string, fn ReducerFunc) {
+func (l *ExprList) AddUniqueFront(name string, fn reducer.ReducerFunc) {
 	for _, v := range *l {
 		if v.Field == name {
 			return
@@ -195,20 +196,20 @@ func (l *ExprList) AddUniqueFront(name string, fn ReducerFunc) {
 func (l *ExprList) UnmarshalText(src []byte) error {
 	s := string(src)
 	for _, v := range strings.Split(s, ",") {
-		reducer := ReducerFuncSum
+		r := reducer.ReducerFuncSum
 		name := v
 		if fn, n, ok := strings.Cut(name, "("); ok {
 			if !strings.HasSuffix(n, ")") {
 				return fmt.Errorf("missing closing bracket")
 			}
-			if parsed := ParseReducerFunc(fn); !parsed.IsValid() {
+			if parsed := reducer.ParseReducerFunc(fn); !parsed.IsValid() {
 				return fmt.Errorf("unknown reducer %q", fn)
 			} else {
-				reducer = parsed
+				r = parsed
 				name = strings.TrimSuffix(n, ")")
 			}
 		}
-		*l = append(*l, Expr{name, reducer})
+		*l = append(*l, Expr{name, r})
 	}
 	return nil
 }
