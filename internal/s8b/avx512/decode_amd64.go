@@ -7,7 +7,7 @@
 package avx512
 
 import (
-	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 /**************************** AVX512 64bit **************************/

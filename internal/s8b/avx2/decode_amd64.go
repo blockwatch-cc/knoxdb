@@ -11,7 +11,7 @@ import (
 	"errors"
 
 	"blockwatch.cc/knoxdb/internal/s8b/generic"
-	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func init() {

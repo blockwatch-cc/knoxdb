@@ -5,13 +5,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/echa/log"
 
-	"blockwatch.cc/knoxdb/pack"
-	"blockwatch.cc/knoxdb/store"
+	"blockwatch.cc/knoxdb/internal/table/pack"
 )
 
 // reindex drops and re-creates all indexes defined for a given table.
@@ -26,21 +24,15 @@ func rebuildStatistics(args Args) error {
 	defer db.Close()
 	log.Infof("Using database %s", db.Path())
 
-	opts := pack.DefaultOptions.
-		WithEngine(pack.TableEnginePack).
-		WithDriver("bolt").
-		WithDriverOpts(args.bolt).
-		WithReadOnly(true)
-
 	// check table
-	table, err := db.OpenTable(args.table, opts)
+	table, err := db.OpenTable(args.table)
 	if err != nil {
 		return err
 	}
 
 	if !noflush {
 		// make sure source table journals are flushed
-		if err := table.(*pack.PackTable).Flush(context.Background()); err != nil {
+		if err := table.Engine().(*pack.Table).Flush(context.Background()); err != nil {
 			return err
 		}
 	}
@@ -48,24 +40,24 @@ func rebuildStatistics(args Args) error {
 	table.Close()
 
 	log.Infof("Rebuilding metadata for %d rows / %d packs with statistics size %d bytes",
-		stats[0].TupleCount, stats[0].PacksCount, stats[0].MetaSize)
+		stats.TupleCount, stats.PacksCount, stats.MetaSize)
 
-	// Delete table metadata bucket
-	log.Info("Dropping table statistics")
-	err = db.Update(func(dbTx *pack.Tx) error {
-		meta := dbTx.Bucket([]byte(args.table + "_meta"))
-		if meta == nil {
-			return fmt.Errorf("missing table metdata bucket")
-		}
-		err := meta.DeleteBucket([]byte("_packinfo"))
-		if !store.IsError(err, store.ErrBucketNotFound) {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
+	// // Delete table metadata bucket
+	// log.Info("Dropping table statistics")
+	// err = db.Update(func(dbTx *pack.Tx) error {
+	// 	meta := dbTx.Bucket([]byte(args.table + "_meta"))
+	// 	if meta == nil {
+	// 		return fmt.Errorf("missing table metdata bucket")
+	// 	}
+	// 	err := meta.DeleteBucket([]byte("_packinfo"))
+	// 	if !store.IsError(err, store.ErrBucketNotFound) {
+	// 		return err
+	// 	}
+	// 	return nil
+	// })
+	// if err != nil {
+	// 	return err
+	// }
 
 	// Open table, this will automatically rebuild all metadata
 	log.Info("Rebuilding table statistics")

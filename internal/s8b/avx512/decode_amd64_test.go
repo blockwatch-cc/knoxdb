@@ -14,7 +14,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/s8b/avx2"
 	"blockwatch.cc/knoxdb/internal/s8b/generic"
 	"blockwatch.cc/knoxdb/internal/s8b/tests"
-	"blockwatch.cc/knoxdb/util"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/google/go-cmp/cmp"
 )
 

@@ -179,7 +179,7 @@ func run() error {
 	start := time.Now()
 	err = knox.NewQuery[Types]().
 		WithTable(table).
-		WithKey("three_million_records").
+		WithTag("three_million_records").
 		WithLimit(3000000).
 		WithStats(true).
 		Stream(ctx, func(t *Types) error {
@@ -196,7 +196,7 @@ func run() error {
 	var single Types
 	err = knox.NewQuery[Types]().
 		WithTable(table).
-		WithKey("two_conditions_single").
+		WithTag("two_conditions_single").
 		AndGte("int64", 42).
 		AndLt("int64", 1024).
 		WithStats(true).
@@ -211,7 +211,7 @@ func run() error {
 	multi := make([]*Types, 0)
 	err = knox.NewQuery[Types]().
 		WithTable(table).
-		WithKey("no_condition_limit").
+		WithTag("no_condition_limit").
 		WithLimit(10).
 		WithStats(true).
 		Execute(ctx, &multi)
@@ -227,7 +227,7 @@ func run() error {
 	//
 	// delete some records
 	n, err := knox.NewQuery[Types]().
-		WithKey("delete").
+		WithTag("delete").
 		WithTable(table).
 		AndLt("int64", 1024).
 		Delete(ctx)
