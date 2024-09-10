@@ -311,7 +311,7 @@ func runTestDST(t *testing.T) {
 				id = id % uint64(max(atomic.LoadInt64(&numTuples), 1))
 				var val testType
 				err = knox.NewQuery[testType]().
-					WithKey("update").
+					WithTag("update").
 					WithTable(table).
 					AndGte("id", id).
 					Execute(ctx, &val)
@@ -343,7 +343,7 @@ func runTestDST(t *testing.T) {
 				// find a value that actually exists
 				var val testType
 				err = knox.NewQuery[testType]().
-					WithKey("delete").
+					WithTag("delete").
 					WithTable(table.Table()).
 					AndGte("id", id).
 					Execute(ctx, &val)
@@ -357,7 +357,7 @@ func runTestDST(t *testing.T) {
 
 				// delete it
 				n, err := knox.NewQuery[testType]().
-					WithKey("delete").
+					WithTag("delete").
 					WithTable(table.Table()).
 					AndEqual("id", val.Id).
 					Delete(ctx)
@@ -381,7 +381,7 @@ func runTestDST(t *testing.T) {
 				id = id % uint64(max(atomic.LoadInt64(&numTuples), 1))
 				var val testType
 				err = knox.NewQuery[testType]().
-					WithKey("query").
+					WithTag("query").
 					WithTable(table).
 					AndGte("id", id).
 					Execute(ctx, &val)
@@ -405,7 +405,7 @@ func runTestDST(t *testing.T) {
 				}
 				after = after % int64(max(atomic.LoadInt64(&numTuples), 1))
 				err = knox.NewQuery[testType]().
-					WithKey("query").
+					WithTag("stream").
 					WithTable(table).
 					AndGt("id", 0).
 					WithOrder(order).

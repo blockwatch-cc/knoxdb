@@ -95,15 +95,13 @@ type BytesBufferCloser struct {
 
 func (b *BytesBufferCloser) Close() error { return nil }
 
-const DefaultLimit = 1000
-
 // Generic KnoxDB query specialized for result type T
 type Query[T any] struct {
 	schema *schema.Schema // SELECT
 	table  Table          // FROM
 	cond   Condition      // WHERE
 	limit  int            // LIMIT
-	key    string         // TODO: rename to tag (used only in logging -> maybe tag logger not query)
+	tag    string
 	order  OrderType
 	flags  QueryFlags
 	log    log.Logger
@@ -119,7 +117,7 @@ func NewQuery[T any]() Query[T] {
 		schema: schema,
 		table:  newErrorTable("query", fmt.Errorf("missing table, use WithTable()")),
 		order:  OrderAsc,
-		limit:  DefaultLimit,
+		limit:  0,
 		log:    log.New(nil).SetLevel(log.LevelInfo),
 	}
 }
@@ -128,8 +126,8 @@ func (q Query[T]) Stats() QueryStats {
 	return q.stats
 }
 
-func (q Query[T]) WithKey(key string) Query[T] {
-	q.key = key
+func (q Query[T]) WithTag(tag string) Query[T] {
+	q.tag = tag
 	return q
 }
 
@@ -295,7 +293,7 @@ func (q Query[T]) Execute(ctx context.Context, val any) (err error) {
 			return nil
 		})
 	default:
-		err = fmt.Errorf("query %s: %T: %w", q.key, val, schema.ErrInvalidResultType)
+		err = fmt.Errorf("query %s: %T: %w", q.tag, val, schema.ErrInvalidResultType)
 	}
 
 	return
@@ -310,7 +308,7 @@ func (q Query[T]) Stream(ctx context.Context, fn func(*T) error) error {
 		return fn(&t)
 	})
 	if err != nil {
-		return fmt.Errorf("query %s: %v", q.key, err)
+		return fmt.Errorf("query %s: %v", q.tag, err)
 	}
 
 	return nil
@@ -319,7 +317,7 @@ func (q Query[T]) Stream(ctx context.Context, fn func(*T) error) error {
 func (q Query[T]) Delete(ctx context.Context) (uint64, error) {
 	n, err := q.table.Delete(ctx, q)
 	if err != nil {
-		return 0, fmt.Errorf("query %s: %v", q.key, err)
+		return 0, fmt.Errorf("query %s: %v", q.tag, err)
 	}
 	return n, nil
 }
@@ -327,7 +325,7 @@ func (q Query[T]) Delete(ctx context.Context) (uint64, error) {
 func (q Query[T]) Count(ctx context.Context) (uint64, error) {
 	n, err := q.table.Count(ctx, q)
 	if err != nil {
-		return 0, fmt.Errorf("query %s: %v", q.key, err)
+		return 0, fmt.Errorf("query %s: %v", q.tag, err)
 	}
 	return n, nil
 }
@@ -335,7 +333,7 @@ func (q Query[T]) Count(ctx context.Context) (uint64, error) {
 func (q Query[T]) Run(ctx context.Context) ([]T, error) {
 	res, err := q.table.Query(ctx, q)
 	if err != nil {
-		return nil, fmt.Errorf("query %s: %v", q.key, err)
+		return nil, fmt.Errorf("query %s: %v", q.tag, err)
 	}
 	defer res.Close()
 
@@ -346,7 +344,7 @@ func (q Query[T]) Run(ctx context.Context) ([]T, error) {
 		return r.Decode(&vals[i])
 	})
 	if err != nil {
-		return nil, fmt.Errorf("query %s: %v", q.key, err)
+		return nil, fmt.Errorf("query %s: %v", q.tag, err)
 	}
 
 	return vals, nil
@@ -372,7 +370,7 @@ func (q Query[T]) Encode() ([]byte, error) {
 		Limit:  uint32(q.limit),
 		Order:  q.order,
 		Flags:  q.flags,
-		Key:    q.key,
+		Tag:    q.tag,
 	}
 
 	// write header and return full command buffer
@@ -381,7 +379,7 @@ func (q Query[T]) Encode() ([]byte, error) {
 
 func (q Query[T]) MakePlan() (engine.QueryPlan, error) {
 	plan := query.NewQueryPlan().
-		WithKey(q.key).
+		WithTag(q.tag).
 		WithLimit(uint32(q.limit)).
 		WithOrder(q.order).
 		WithFlags(q.flags).

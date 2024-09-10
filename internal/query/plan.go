@@ -49,7 +49,7 @@ var QueryLogMinDuration time.Duration = 500 * time.Millisecond
 // - support groupby
 
 type QueryPlan struct {
-	Key     string
+	Tag     string
 	Filters FilterTreeNode
 	Limit   uint32
 	Offset  uint32 // discouraged
@@ -77,9 +77,9 @@ func NewQueryPlan() *QueryPlan {
 func (p *QueryPlan) Close() {
 	p.Stats.Finalize()
 	if p.Flags.IsStats() || p.Runtime() > QueryLogMinDuration {
-		p.Log.Infof("Q> %s: %s", p.Key, p.Stats)
+		p.Log.Infof("Q> %s: %s", p.Tag, p.Stats)
 	}
-	p.Key = ""
+	p.Tag = ""
 	p.Filters = FilterTreeNode{}
 	p.Table = nil
 	p.Indexes = nil
@@ -97,8 +97,8 @@ func (p *QueryPlan) WithIndex(i engine.IndexEngine) *QueryPlan {
 	return p
 }
 
-func (p *QueryPlan) WithKey(k string) *QueryPlan {
-	p.Key = k
+func (p *QueryPlan) WithTag(tag string) *QueryPlan {
+	p.Tag = tag
 	return p
 }
 
@@ -152,7 +152,7 @@ func (p *QueryPlan) Runtime() time.Duration {
 func (p *QueryPlan) Compile(ctx context.Context) error {
 	// ensure table is defined
 	if p.Table == nil {
-		return fmt.Errorf("query %s: result schema: %v", p.Key, engine.ErrNoTable)
+		return fmt.Errorf("query %s: result schema: %v", p.Tag, engine.ErrNoTable)
 	}
 
 	// log
@@ -168,14 +168,14 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		if filterFields.Len() > 0 {
 			s, err := p.Table.Schema().SelectNames("", true, filterFields.Values...)
 			if err != nil {
-				return fmt.Errorf("query %s: make request schema: %v", p.Key, err)
+				return fmt.Errorf("query %s: make request schema: %v", p.Tag, err)
 			}
 			p.RequestSchema = s
 		} else {
 			p.RequestSchema, _ = p.Table.Schema().SelectIds("pk", false, p.Table.Schema().PkId())
 		}
 	}
-	p.Log.Debugf("Q> %s: request %s", p.Key, p.RequestSchema)
+	p.Log.Debugf("Q> %s: request %s", p.Tag, p.RequestSchema)
 
 	// identify indexes based on request schema fields
 	for _, idx := range p.Table.Indexes() {
@@ -194,20 +194,20 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 	//
 	// result schema must contain pk (required for cursors, pack.LookupIterator)
 	if p.ResultSchema.PkIndex() < 0 {
-		return fmt.Errorf("query %s: result schema: %v", p.Key, engine.ErrNoPk)
+		return fmt.Errorf("query %s: result schema: %v", p.Tag, engine.ErrNoPk)
 	}
-	p.Log.Debugf("Q> %s: result %s", p.Key, p.ResultSchema)
+	p.Log.Debugf("Q> %s: result %s", p.Tag, p.ResultSchema)
 
 	// schemas must match table
 	if err := p.Table.Schema().CanSelect(p.RequestSchema); err != nil {
-		return fmt.Errorf("query %s: request schema: %v", p.Key, err)
+		return fmt.Errorf("query %s: request schema: %v", p.Tag, err)
 	}
 	if err := p.Table.Schema().CanSelect(p.ResultSchema); err != nil {
-		return fmt.Errorf("query %s: result schema: %v", p.Key, err)
+		return fmt.Errorf("query %s: result schema: %v", p.Tag, err)
 	}
 	// filter tree must be valid
 	if err := p.Filters.Validate(""); err != nil {
-		return fmt.Errorf("query %s: %v", p.Key, err)
+		return fmt.Errorf("query %s: %v", p.Tag, err)
 	}
 
 	// optimize plan

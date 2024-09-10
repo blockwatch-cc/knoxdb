@@ -40,7 +40,7 @@ func (n FilterTreeNode) dump(level int, w io.Writer) {
 
 func (q QueryPlan) Dump() string {
 	buf := bytes.NewBuffer(nil)
-	fmt.Fprintf(buf, "Q> %s => SELECT ( %s ) WHERE", q.Key, strings.Join(q.ResultSchema.FieldNames(), ", "))
+	fmt.Fprintf(buf, "Q> %s => SELECT ( %s ) WHERE", q.Tag, strings.Join(q.ResultSchema.FieldNames(), ", "))
 	q.Filters.dump(0, buf)
 	if q.Order != types.OrderAsc {
 		fmt.Fprintf(buf, "ORDER BY ID %s ", strings.ToUpper(q.Order.String()))

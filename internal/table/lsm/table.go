@@ -530,7 +530,7 @@ func (t *Table) doQuery(ctx context.Context, plan *query.QueryPlan, res QueryRes
 			val := bucket.Get(key[:])
 			if val == nil {
 				// warn on indexed but missing pks
-				plan.Log.Warnf("query %s: missing index scan PK %d on table %s", plan.Key, id, t.name())
+				plan.Log.Warnf("query %s: missing index scan PK %d on table %s", plan.Tag, id, t.name())
 				continue
 			}
 
@@ -555,7 +555,7 @@ func (t *Table) doQuery(ctx context.Context, plan *query.QueryPlan, res QueryRes
 			buf := bucket.Get(key[:])
 			if buf == nil {
 				// warn on indexed but missing pks
-				plan.Log.Warnf("query %s: missing index scan PK %d on table %s", plan.Key, id, t.name())
+				plan.Log.Warnf("query %s: missing index scan PK %d on table %s", plan.Tag, id, t.name())
 				continue
 			}
 
@@ -798,7 +798,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 			buf := bucket.Get(key[:])
 			if buf == nil {
 				// warn on indexed but missing pks
-				plan.Log.Warnf("query %s: missing index scan PK %d on table %s", plan.Key, id, t.name())
+				plan.Log.Warnf("query %s: missing index scan PK %d on table %s", plan.Tag, id, t.name())
 				continue
 			}
 
