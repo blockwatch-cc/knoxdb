@@ -1,5 +1,7 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+//go:build wasm
+// +build wasm
 
 package knox
 

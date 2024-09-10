@@ -134,6 +134,14 @@ func (d *DB) ListIndexes(name string) []string {
 	return d.engine.IndexNames(name)
 }
 
+func (d *DB) UseIndex(name string) (Index, error) {
+	i, err := d.engine.UseIndex(name)
+	if err != nil {
+		return nil, err
+	}
+	return &IndexImpl{i, d, d.log}, nil
+}
+
 func (d *DB) CreateIndex(ctx context.Context, name string, table Table, s *schema.Schema, opts IndexOptions) error {
 	_, err := d.engine.CreateIndex(ctx, table.Schema().Name(), s, opts)
 	return err

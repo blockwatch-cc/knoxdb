@@ -13,8 +13,10 @@ import (
 	"strconv"
 	"strings"
 
+	"blockwatch.cc/knoxdb/internal/dst/vfs"
 	"github.com/echa/log"
 	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/experimental/sysfs"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
 )
@@ -120,9 +122,9 @@ func run() error {
 		WithSysNanosleep().
 		WithSysNanotime().
 		WithSysWalltime().
-		WithArgs(modFlags...)
+		WithArgs(modFlags...).
 		// Mount filesystem. This is taken from wazero's CLI implementation.
-		// WithFSConfig(wazero.NewFSConfig().(sysfs.FSConfig).WithSysFSMount(vfs.New("/"), "/")).
+		WithFSConfig(wazero.NewFSConfig().(sysfs.FSConfig).WithSysFSMount(vfs.New("/"), "/"))
 
 	// vfs.MustInstantiate(ctx, r)
 

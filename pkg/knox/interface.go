@@ -25,6 +25,7 @@ type (
 
 	StoreStats = engine.StoreStats
 	TableStats = engine.TableStats
+	IndexStats = engine.IndexStats
 
 	QueryResult = engine.QueryResult
 	QueryRow    = engine.QueryRow
@@ -71,6 +72,12 @@ type Table interface {
 	Stream(context.Context, QueryRequest, func(QueryRow) error) error
 }
 
+type Index interface {
+	Schema() *schema.Schema
+	Stats() IndexStats
+	Engine() engine.IndexEngine
+}
+
 // external user interface
 type Store interface {
 	Schema() *schema.Schema
@@ -104,6 +111,7 @@ type Database interface {
 
 	// indexes
 	ListIndexes(name string) []string
+	UseIndex(name string) (Index, error)
 	CreateIndex(ctx context.Context, name string, table Table, s *schema.Schema, opts IndexOptions) error
 	RebuildIndex(ctx context.Context, name string) error
 	DropIndex(ctx context.Context, name string) error

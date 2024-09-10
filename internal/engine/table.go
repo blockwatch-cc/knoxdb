@@ -230,8 +230,9 @@ func (e *Engine) openTables(ctx context.Context) error {
 
 		table := factory()
 
-		// ensure logger
+		// ensure logger and override flags
 		opts.Logger = e.log
+		opts.ReadOnly = e.opts.ReadOnly
 
 		// open the store
 		if err := table.Open(ctx, s, opts); err != nil {

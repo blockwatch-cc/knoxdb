@@ -156,6 +156,7 @@ func (e *Engine) openStores(ctx context.Context) error {
 
 		// ensure logger
 		opts.Logger = e.log
+		opts.ReadOnly = e.opts.ReadOnly
 
 		// open the store
 		if err := kvstore.Open(ctx, s, opts); err != nil {

@@ -40,6 +40,52 @@ func (o DatabaseOptions) Merge(o2 DatabaseOptions) DatabaseOptions {
 	return o
 }
 
+func (o DatabaseOptions) WithPath(n string) DatabaseOptions {
+	o.Path = n
+	return o
+}
+
+func (o DatabaseOptions) WithNamespace(n string) DatabaseOptions {
+	o.Namespace = n
+	return o
+}
+
+func (o DatabaseOptions) WithDriver(n string) DatabaseOptions {
+	o.Driver = n
+	return o
+}
+
+func (o DatabaseOptions) WithPageSize(n int) DatabaseOptions {
+	o.PageSize = n
+	return o
+}
+
+func (o DatabaseOptions) WithPageFill(n float64) DatabaseOptions {
+	o.PageFill = n
+	return o
+}
+
+func (o DatabaseOptions) WithCacheSize(n int) DatabaseOptions {
+	o.CacheSize = n
+	return o
+}
+
+func (o DatabaseOptions) WithReadOnly() DatabaseOptions {
+	o.ReadOnly = true
+	return o
+}
+
+func (o DatabaseOptions) WithDangerousNoSync() DatabaseOptions {
+	o.NoSync = true
+	o.NoGrowSync = true
+	return o
+}
+
+func (o DatabaseOptions) WithLogger(l log.Logger) DatabaseOptions {
+	o.Logger = l
+	return o
+}
+
 func (o DatabaseOptions) MarshalBinary() ([]byte, error) {
 	enc := schema.NewGenericEncoder[DatabaseOptions]()
 	return enc.Encode(o, nil)

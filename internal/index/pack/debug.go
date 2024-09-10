@@ -5,10 +5,11 @@ package pack
 
 import (
 	"context"
-	"fmt"
 	"io"
 
-	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/metadata"
+	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/pkg/bitmap"
 )
 
 func (idx *Index) ValidateMetadata(w io.Writer) error {
@@ -20,58 +21,51 @@ func (idx *Index) ValidateMetadata(w io.Writer) error {
 	return nil
 }
 
-func (idx *Index) DumpMetadata(w io.Writer, mode types.DumpMode, sorted bool) error {
-	switch mode {
-	case types.DumpModeDec, types.DumpModeHex:
-		fmt.Fprintf(w, "%-3s %-10s %-7s %-7s %-21s %-21s %-10s\n",
-			"#", "Key", "Fields", "Values", "Min", "Max", "Size")
-	}
-	var (
-		i   int
-		err error
-	)
-	for i = 0; i < idx.meta.Len(); i++ {
-		switch mode {
-		case types.DumpModeDec, types.DumpModeHex:
-			fmt.Fprintf(w, "%-3d ", i)
+func (idx *Index) ViewMetadata(i int) *metadata.PackMetadata {
+	switch {
+	case i == int(pack.JournalKeyId):
+		info := &metadata.PackMetadata{
+			Key:      idx.journal.Key(),
+			SchemaId: idx.journal.Schema().Hash(),
+			NValues:  idx.journal.Len(),
+			Blocks:   make([]metadata.BlockMetadata, 0, idx.schema.NumFields()),
+			Dirty:    true,
 		}
-		if sorted {
-			info, _ := idx.meta.GetSorted(i)
-			err = info.Dump(w, mode, 2)
-		} else {
-			info, _ := idx.meta.GetPos(i)
-			err = info.Dump(w, mode, 2)
+		fields := idx.schema.Fields()
+		for i, b := range idx.journal.Blocks() {
+			info.Blocks = append(info.Blocks, metadata.NewBlockMetadata(b, &fields[i]))
 		}
-		if err != nil {
-			return err
-		}
+		return info
+	case i > 0 && i < idx.meta.Len():
+		info, _ := idx.meta.GetSorted(i)
+		return info
+	default:
+		return nil
 	}
-	switch mode {
-	case types.DumpModeDec, types.DumpModeHex:
-		fmt.Fprintf(w, "%-3d ", i)
-		i++
-	}
-	return nil
 }
 
-func (idx *Index) DumpPack(ctx context.Context, w io.Writer, i, p int, mode types.DumpMode) error {
-	if i >= idx.meta.Len() || i < 0 {
-		return fmt.Errorf("pack not found")
+func (idx *Index) ViewPackage(ctx context.Context, i int) *pack.Package {
+	if i == int(pack.JournalKeyId) {
+		return idx.journal
 	}
-	tx, err := idx.db.Begin(false)
-	if err != nil {
-		return err
+	if i == int(pack.TombstoneKeyId) {
+		return idx.tomb
 	}
-	defer tx.Rollback()
-	info, _ := idx.meta.GetPos(i)
+	if i < 0 || i >= idx.meta.Len() {
+		return nil
+	}
+	info, _ := idx.meta.GetSorted(i)
 	pkg, err := idx.loadSharedPack(ctx, info.Key, info.NValues, false)
 	if err != nil {
-		return err
+		return nil
 	}
-	err = pkg.DumpData(w, mode)
-	if err != nil {
-		return err
+	if pkg.IsNil() {
+		pkg.Release()
+		return nil
 	}
-	pkg.Release()
-	return nil
+	return pkg
+}
+
+func (idx *Index) ViewTomb() bitmap.Bitmap {
+	return bitmap.New()
 }

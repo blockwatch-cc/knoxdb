@@ -164,11 +164,10 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 	}
 
 	return commit()
-
 }
 
 func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
-	tag := types.TaggedHash(types.HashTagIndex, table.Schema().Name())
+	tag := types.TaggedHash(types.HashTagTable, table.Schema().Name())
 
 	// filter indexes by table in catalog
 	keys, err := e.cat.ListIndexes(ctx, tag)
@@ -181,17 +180,19 @@ func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
 		if err != nil {
 			return err
 		}
-		opts.Logger = e.log
 		factory, ok := indexEngineRegistry[opts.Engine]
 		if !ok {
 			return ErrNoEngine
 		}
 		idx := factory()
+		opts.Logger = e.log
+		opts.ReadOnly = e.opts.ReadOnly
 		if err := idx.Open(ctx, table, s, opts); err != nil {
 			return err
 		}
 		table.UseIndex(idx)
-		e.indexes[tag] = idx
+		itag := types.TaggedHash(types.HashTagIndex, s.Name())
+		e.indexes[itag] = idx
 	}
 
 	return nil

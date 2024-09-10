@@ -27,8 +27,7 @@ var (
 		New: func() any { return &Package{} },
 	}
 
-	zeroTime = time.Time{}
-
+	zeroTime  = time.Time{}
 	szPackage = int(reflect.TypeOf(Package{}).Size())
 )
 
