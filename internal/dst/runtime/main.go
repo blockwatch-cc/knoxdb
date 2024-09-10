@@ -30,6 +30,7 @@ var (
 	module    string
 	seed      string
 	cachedir  string
+	tracefile string
 	randomize bool
 	runs      int
 	verbose   bool
@@ -45,6 +46,7 @@ func init() {
 	flags.BoolVar(&vtrace, "vvv", false, "enable trace mode")
 	flags.StringVar(&module, "module", "dst.test", "WASM module to run")
 	flags.StringVar(&cachedir, "cachedir", os.TempDir(), "WASM compiler cache directory")
+	flags.StringVar(&tracefile, "tracefile", "", "file activity trace file")
 	flags.StringVar(&seed, "seed", os.Getenv(randomSeedKey), "determinism seed")
 	flags.BoolVar(&randomize, "randomize", false, "randomize seeds")
 	flags.IntVar(&runs, "runs", 1, "execute test with `n` different seeds")
@@ -124,7 +126,8 @@ func run() error {
 		WithSysWalltime().
 		WithArgs(modFlags...).
 		// Mount filesystem. This is taken from wazero's CLI implementation.
-		WithFSConfig(wazero.NewFSConfig().(sysfs.FSConfig).WithSysFSMount(vfs.New("/"), "/"))
+		WithFSConfig(wazero.NewFSConfig().(sysfs.FSConfig).
+			WithSysFSMount(vfs.New("/", tracefile), "/"))
 
 	// vfs.MustInstantiate(ctx, r)
 
