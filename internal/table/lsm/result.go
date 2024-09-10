@@ -56,7 +56,6 @@ type Result struct {
 	offsets []int32
 	sorted  []int32
 	desc    bool
-	buf     []byte
 }
 
 func NewResult(s *schema.Schema, szs ...int) *Result {
@@ -214,15 +213,9 @@ func (r *Result) Append(buf []byte, isZeroCopy bool) error {
 		buf = bytes.Clone(buf)
 	}
 	r.offsets = append(r.offsets, int32(len(r.values)))
-	r.values = append(r.values, r.buf...)
+	r.values = append(r.values, buf...)
 	return nil
 }
-
-// not public
-// func (r *Result) PkColumn() []uint64 {
-// 	// TODO
-// 	return nil
-// }
 
 // not public
 func (r *Result) Column(name string) (any, error) {

@@ -200,7 +200,6 @@ func (a *DictByteArray) WriteTo(w io.Writer) (int64, error) {
 	return int64(count), nil
 }
 
-// TODO
 func (a *DictByteArray) ReadFrom(r io.Reader) (int64, error) {
 	// read len in elements
 	var l uint32

@@ -39,8 +39,6 @@ type Package struct {
 	pkIdx   int            // primary key index (position in schema)
 	schema  *schema.Schema // mapping from fields to blocks in query order
 	blocks  []*block.Block // loaded blocks (in schema order)
-
-	// size  int  // storage size in bytes
 }
 
 func New() *Package {
@@ -90,8 +88,7 @@ func (p Package) IsDirty() bool {
 	return false
 }
 
-// TODO: not a good condition, may use a readonly bool to
-// mark shared packs, then we could use this as assert
+// TODO: do we need a normative way to say packs are readonly (shared data)?
 // func (p Package) IsWriteable() bool {
 // 	return p.key >= ResultKeyId
 // }
@@ -195,10 +192,6 @@ func (p *Package) HeapSize() int {
 	return sz
 }
 
-// func (p Package) DiskSize() int {
-// 	return p.size
-// }
-
 func (p Package) Blocks() []*block.Block {
 	return p.blocks
 }
@@ -207,7 +200,7 @@ func (p Package) Block(i int) *block.Block {
 	return p.blocks[i]
 }
 
-// TODO: where is this required outside of tests?
+// TODO: where is Clear() required outside of tests?
 func (p *Package) Clear() {
 	for _, b := range p.blocks {
 		if b == nil {
@@ -216,7 +209,6 @@ func (p *Package) Clear() {
 		b.Clear()
 	}
 	p.nRows = 0
-	// p.size = 0
 }
 
 func (p *Package) Release() {
@@ -237,7 +229,7 @@ func (p *Package) Release() {
 	packagePool.Put(p)
 }
 
-// inline sort package by primary key, only available for matwerialized/writable packs
+// inline sort package by primary key, only available for materialized/writable packs
 func (p *Package) PkSort() {
 	if !sort.IsSorted(p) {
 		sort.Sort(p)

@@ -232,7 +232,7 @@ func (c array) andArray(other array) []uint16 {
 // TODO: We can do this operation in-place on the src array.
 func (c array) andNotArray(other array, buf []uint16) []uint16 {
 	max := getCardinality(c)
-	out := make([]uint16, int(startIdx)+max+1)
+	out := buf[:int(startIdx)+max+1]
 
 	andRes := array(c.andArray(other)).all()
 	srcVals := array(c).all()
@@ -269,8 +269,6 @@ func (c array) orArray(other array, buf []uint16, runMode int) []uint16 {
 	setCardinality(out, num)
 	return out
 }
-
-var tmp = make([]uint16, 8192)
 
 func (c array) andBitmap(other bitmap) []uint16 {
 	out := make([]uint16, int(startIdx)+getCardinality(c)+2) // some extra space.

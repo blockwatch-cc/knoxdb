@@ -135,9 +135,9 @@ var (
 //
 //	> OR(AND(C,C),C) -> full scan, apply cond tree to each val
 //
-// TODO
-//   - run index scans in blocks & forward results through operator tree,
-//     then consume final aggregate with offset/limit
+// TODO: run LSM index scans in batches & forward through operator tree
+// this prevents accumulating large numbers of potential hits when most
+// are later discarded by offset/limit
 func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*bitmap.Bitmap, bool, error) {
 	node, ok := c.(*query.FilterTreeNode)
 	if !ok {

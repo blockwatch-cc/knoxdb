@@ -19,6 +19,8 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+// TODO: replay wal on load to init journal records
+
 const sizeStep int = 1 << 8 // 256
 
 var ErrNoKey = errors.New("update without primary key")
@@ -54,10 +56,6 @@ func roundSize(sz int) int {
 // in the journal but were never flushed to a table pack. Since the bitset is
 // in storage order we must translate it into pk order for this step to work. This is
 // what SortedIndexes() and SortedIndexesReversed() are for.
-//
-// TODO
-// - write all incoming inserts/updates/deletes to a WAL
-// - load and reconstructed journal + tomb from WAL
 type Journal struct {
 	Data *pack.Package  // journal pack storing live data
 	Keys JournalRecords // 0: pk, 1: index in journal; sorted by pk, always sorted
@@ -103,8 +101,6 @@ func NewJournal(s *schema.Schema, size int) *Journal {
 		view:    schema.NewView(s),
 	}
 }
-
-// TODO: replay wal on load to init journal records
 
 func (j *Journal) Open(ctx context.Context, tx store.Tx, bkey []byte) error {
 	return j.LoadLegacy(ctx, tx, bkey)

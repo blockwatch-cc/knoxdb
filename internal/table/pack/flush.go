@@ -23,7 +23,7 @@ func (t *Table) Flush(ctx context.Context) error {
 	return t.mergeJournal(ctx)
 }
 
-// TODO
+// TODO background merge
 // - make concurrency safe to be called from background writer
 // - allow multiple flushed journals before merge as L0 (packs are L1)
 // - allow step-wise execution (merge some number of records only)

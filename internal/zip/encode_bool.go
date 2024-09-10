@@ -19,8 +19,7 @@ const (
 	// booleanCompressedBitPacked is an bit packed format using 1 bit per boolean
 	booleanCompressedBitPacked = 1
 
-	// TODO
-	// xroar
+	// TODO: xroar
 )
 
 func readByte(r io.Reader) byte {

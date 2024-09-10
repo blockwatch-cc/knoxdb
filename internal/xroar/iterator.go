@@ -116,29 +116,3 @@ func (it *Iterator) Next() uint64 {
 	}
 	return 0
 }
-
-type ManyItr struct {
-	index int
-	arr   []uint64
-}
-
-// TODO: See if this is needed, we should remove this
-func (r *Bitmap) ManyIterator() *ManyItr {
-	return &ManyItr{
-		arr: r.ToArray(),
-	}
-
-}
-
-func (itr *ManyItr) NextMany(buf []uint64) int {
-	count := 0
-	for i := 0; i < len(buf); i++ {
-		if itr.index == len(itr.arr) {
-			break
-		}
-		buf[i] = itr.arr[itr.index]
-		itr.index++
-		count++
-	}
-	return count
-}
