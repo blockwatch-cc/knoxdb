@@ -5,7 +5,7 @@ go 1.22
 require (
 	github.com/RoaringBitmap/roaring v1.2.3
 	github.com/dgraph-io/badger/v4 v4.2.0
-	github.com/echa/log v1.3.1
+	github.com/echa/log v1.3.2
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.6.0
 	github.com/jedib0t/go-pretty/v6 v6.5.9

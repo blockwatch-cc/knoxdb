@@ -24,8 +24,8 @@ github.com/dgryski/go-farm v0.0.0-20190423205320-6a90982ecee2/go.mod h1:SqUrOPUn
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
-github.com/echa/log v1.3.1 h1:ssA04GPQ7EjNW6FQF8Is/JenmngIpkAw3eGKtCVkTm4=
-github.com/echa/log v1.3.1/go.mod h1:x22n4OdhR435c8qCmUzGDvGKOrumN8cPve6j/hz/Us0=
+github.com/echa/log v1.3.2 h1:zlSK0UMtKmI19765uE8LUDCfAfWLxERuDrSaBpy9lfs=
+github.com/echa/log v1.3.2/go.mod h1:x22n4OdhR435c8qCmUzGDvGKOrumN8cPve6j/hz/Us0=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=

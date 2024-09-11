@@ -251,6 +251,7 @@ func PrintMetadata(view MetadataViewer, id int, w io.Writer) error {
 	s := view.Schema()
 	pki := s.PkIndex()
 	t := table.NewWriter()
+	t.SetPageSize(headRepeat)
 	t.SetOutputMirror(w)
 	t.SetTitle("%s - %d fields", s.Name(), s.NumFields())
 	t.AppendHeader(table.Row{"#", "Key", "Blocks", "Records", "MinPk", "MaxPk", "Size"})
@@ -289,8 +290,9 @@ func PrintMetadata(view MetadataViewer, id int, w io.Writer) error {
 func PrintMetadataDetail(view MetadataViewer, id int, w io.Writer) error {
 	s := view.Schema()
 	t := table.NewWriter()
+	fields := s.Exported()
 	t.SetOutputMirror(w)
-	t.AppendHeader(table.Row{"#", "Type", "Cardinality", "Min", "Max", "Size", "Bloom", "Bits"})
+	t.AppendHeader(table.Row{"#", "Name", "Type", "Cardinality", "Min", "Max", "Size", "Bloom", "Bits"})
 	var (
 		i         int
 		stopAfter bool
@@ -322,6 +324,7 @@ func PrintMetadataDetail(view MetadataViewer, id int, w io.Writer) error {
 			}
 			t.AppendRow([]any{
 				id + 1,
+				fields[id].Name,
 				binfo.Type,
 				util.PrettyInt(binfo.Cardinality),
 				util.LimitStringEllipsis(util.ToString(binfo.MinValue), 33),
