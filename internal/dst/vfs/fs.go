@@ -1,10 +1,8 @@
 package vfs
 
 import (
-	"fmt"
 	"io/fs"
-	"strconv"
-	"strings"
+	"time"
 
 	"github.com/echa/log"
 	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
@@ -37,104 +35,89 @@ func New(dir, logfile string) experimentalsys.FS {
 	}
 }
 
-var oFlags = []string{
-	"O_RDONLY",
-	"O_RDWR",
-	"O_WRONLY",
-	"O_APPEND",
-	"O_CREAT",
-	"O_DIRECTORY",
-	"O_DSYNC",
-	"O_EXCL",
-	"O_NOFOLLOW",
-	"O_NONBLOCK",
-	"O_RSYNC",
-	"O_SYNC",
-	"O_TRUNC",
-}
-
-func printOflag(f experimentalsys.Oflag) string {
-	var b strings.Builder
-	for i := 0; i < 13; i++ {
-		if f&experimentalsys.Oflag(i) > 0 {
-			if b.Len() > 0 {
-				b.WriteString("|")
-			}
-			b.WriteString(oFlags[i])
-		}
-	}
-	s := b.String()
-	if s == "" {
-		s = "0"
-	}
-	return s
-}
-
-func extractFd(val any) int {
-	// &{/ 0 0 0x14000058000 4 false false <nil>}
-	s := fmt.Sprintf("%v", val)
-	var fd int
-	if split := strings.Split(s, " "); len(split) > 4 {
-		fd, _ = strconv.Atoi(split[4])
-	}
-	return fd
-}
-
 func (d *dstfs) OpenFile(path string, flag experimentalsys.Oflag, perm fs.FileMode) (experimentalsys.File, experimentalsys.Errno) {
 	f, err := d.internal.OpenFile(path, flag, perm)
 	if err != 0 {
-		d.log.Infof("open(%q, %s, 0%03o) = %d %v", path, printOflag(flag), perm, err, err)
+		d.log.Infof("openat(AT_FDCWD, %q, %s, 0%03o) = %d %v", path, printOflag(flag), perm, err, err)
 		return nil, err
 	}
 	fd := extractFd(f)
-	d.log.Infof("open(%q, %s, 0%03o) = %d", path, printOflag(flag), perm, fd)
+	d.log.Infof("openat(AT_FDCWD, %q, %s, 0%03o) = %d", path, printOflag(flag), perm, fd)
 	return newFile(f, fd, path, d.log), 0
 }
 
 func (d *dstfs) Lstat(path string) (sys.Stat_t, experimentalsys.Errno) {
 	st, errno := d.internal.Lstat(path)
-	d.log.Infof("fstatat(AT_FDCWD, %q, %v) = %d", path, st, errno)
+	d.log.Infof("fstatat(AT_FDCWD, %q, %s) = %d %s", path, printFstat(st), -int(errno), errnos[errno])
 	return st, errno
 }
 
 func (d *dstfs) Stat(path string) (sys.Stat_t, experimentalsys.Errno) {
 	st, errno := d.internal.Stat(path)
-	d.log.Infof("fstat(%q, %v) = %d", path, st, errno)
+	d.log.Infof("fstatat(AT_FDCWD, %s, %v) = %d %s", path, printFstat(st), -int(errno), errnos[errno])
 	return st, errno
 }
 
 func (d *dstfs) Mkdir(path string, perm fs.FileMode) experimentalsys.Errno {
-	return d.internal.Mkdir(path, perm)
+	errno := d.internal.Mkdir(path, perm)
+	d.log.Infof("mkdirat(AT_FDCWD, %q, 0%03o) = %d %s", path, perm, -int(errno), errnos[errno])
+	return errno
 }
 
 func (d *dstfs) Chmod(path string, perm fs.FileMode) experimentalsys.Errno {
-	return d.internal.Chmod(path, perm)
+	errno := d.internal.Chmod(path, perm)
+	d.log.Infof("fchmodat(AT_FDCWD, %q, 0%03o) = %d %s", path, perm, -int(errno), errnos[errno])
+	return errno
 }
 
 func (d *dstfs) Rename(from, to string) experimentalsys.Errno {
-	return d.internal.Rename(from, to)
+	errno := d.internal.Rename(from, to)
+	d.log.Infof("renameat(AT_FDCWD %q, AT_FDCWD, %q) = %d %s", from, to, -int(errno), errnos[errno])
+	return errno
 }
 
 func (d *dstfs) Rmdir(path string) experimentalsys.Errno {
-	return d.internal.Rmdir(path)
+	errno := d.internal.Rmdir(path)
+	d.log.Infof("unlinkat(AT_FDCWD, %q, AT_REMOVEDIR) = %d %s", path, -int(errno), errnos[errno])
+	return errno
 }
 
 func (d *dstfs) Unlink(path string) experimentalsys.Errno {
-	return d.internal.Unlink(path)
+	errno := d.internal.Unlink(path)
+	d.log.Infof("unlinkat(AT_FDCWD, %q, 0) = %d %s", path, -int(errno), errnos[errno])
+	return errno
 }
 
 func (d *dstfs) Link(oldPath, newPath string) experimentalsys.Errno {
-	return d.internal.Link(oldPath, newPath)
+	errno := d.internal.Link(oldPath, newPath)
+	d.log.Infof("linkat(AT_FDCWD, %q, AT_FDCWD, %q, 0) = %d %s",
+		oldPath, newPath, -int(errno), errnos[errno])
+	return errno
 }
 
 func (d *dstfs) Symlink(oldPath, linkName string) experimentalsys.Errno {
-	return d.internal.Symlink(oldPath, linkName)
+	errno := d.internal.Symlink(oldPath, linkName)
+	d.log.Infof("symlinkat(%q, AT_FDCWD, %q, 0) = %d %s",
+		oldPath, linkName, -int(errno), errnos[errno])
+	return errno
 }
 
-func (d *dstfs) Readlink(path string) (string, experimentalsys.Errno) {
-	return d.internal.Readlink(path)
+func (d *dstfs) Readlink(path string) (name string, errno experimentalsys.Errno) {
+	name, errno = d.internal.Readlink(path)
+	if errno == 0 {
+		d.log.Infof("readlinkat(AT_FDCWD, %q, %s, 128) = %d %s", path, name, len(name))
+	} else {
+		d.log.Infof("readlinkat(AT_FDCWD, %q, %s, 128) = %d %s", path, name, -int(errno), errnos[errno])
+	}
+	return
 }
 
 func (d *dstfs) Utimens(path string, atim, mtim int64) experimentalsys.Errno {
-	return d.internal.Utimens(path, atim, mtim)
+	errno := d.internal.Utimens(path, atim, mtim)
+	d.log.Infof("utimesat(AT_FDCWD, [[%d, %d],[%d, %d]], 0) = %d %s",
+		atim/int64(time.Second), atim%int64(time.Second),
+		mtim/int64(time.Second), mtim%int64(time.Second),
+		path, -int(errno), errnos[errno],
+	)
+	return errno
 }

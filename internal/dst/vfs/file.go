@@ -1,6 +1,8 @@
 package vfs
 
 import (
+	"time"
+
 	"github.com/echa/log"
 	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
 	"github.com/tetratelabs/wazero/sys"
@@ -44,20 +46,38 @@ func (f *file) SetAppend(enable bool) experimentalsys.Errno {
 
 func (f *file) Stat() (sys.Stat_t, experimentalsys.Errno) {
 	st, errno := f.internal.Stat()
-	f.log.Infof("fstat(%d, %v) = %d", f.fd, st, errno)
+	f.log.Infof("fstat(%d, %s) = %d %s", f.fd, printFstat(st), -int(errno), errnos[errno])
 	return st, errno
 }
 
 func (f *file) Read(buf []byte) (n int, errno experimentalsys.Errno) {
-	return f.internal.Read(buf)
+	n, errno = f.internal.Read(buf)
+	if errno == 0 {
+		f.log.Infof("read(%d, %s, %d) = %d", f.fd, preview(buf[:n]), len(buf), n)
+	} else {
+		f.log.Infof("read(%d, \"\", %d) = %d %s", f.fd, len(buf), -int(errno), errnos[errno])
+	}
+	return
 }
 
 func (f *file) Pread(buf []byte, off int64) (n int, errno experimentalsys.Errno) {
-	return f.internal.Pread(buf, off)
+	n, errno = f.internal.Pread(buf, off)
+	if errno == 0 {
+		f.log.Infof("read(%d, %s, %d, %d) = %d", f.fd, preview(buf[:n]), len(buf), off, n)
+	} else {
+		f.log.Infof("read(%d, \"\", %d, %d) = %d %s", f.fd, len(buf), off, -int(errno), errnos[errno])
+	}
+	return
 }
 
 func (f *file) Seek(offset int64, whence int) (newOffset int64, errno experimentalsys.Errno) {
-	return f.internal.Seek(offset, whence)
+	newOffset, errno = f.internal.Seek(offset, whence)
+	if errno == 0 {
+		f.log.Infof("lseek(%d, %d, %s) = %d", f.fd, offset, seekFlags[whence], newOffset)
+	} else {
+		f.log.Infof("lseek(%d, %d, %s) = %d %s", f.fd, offset, seekFlags[whence], -int(errno), errnos[errno])
+	}
+	return
 }
 
 func (f *file) Readdir(n int) (dirents []experimentalsys.Dirent, errno experimentalsys.Errno) {
@@ -65,38 +85,57 @@ func (f *file) Readdir(n int) (dirents []experimentalsys.Dirent, errno experimen
 }
 
 func (f *file) Write(buf []byte) (n int, errno experimentalsys.Errno) {
-	return f.internal.Write(buf)
+	n, errno = f.internal.Write(buf)
+	if errno == 0 {
+		f.log.Infof("write(%d, %s, %d) = %d", f.fd, preview(buf), len(buf), len(buf))
+	} else {
+		f.log.Infof("write(%d, \"\", %d) = %d %s", f.fd, len(buf), -int(errno), errnos[errno])
+	}
+	return
 }
 
 func (f *file) Pwrite(buf []byte, off int64) (n int, errno experimentalsys.Errno) {
-	return f.internal.Pwrite(buf, off)
+	n, errno = f.internal.Pwrite(buf, off)
+	if errno == 0 {
+		f.log.Infof("pwrite64(%d, %s, %d, %d) = %d", f.fd, preview(buf), len(buf), off, len(buf))
+	} else {
+		f.log.Infof("pwrite64(%d, \"\", %d, %d) = %d %s", f.fd, len(buf), off, -int(errno), errnos[errno])
+	}
+	return
 }
 
 func (f *file) Truncate(size int64) experimentalsys.Errno {
 	errno := f.internal.Truncate(size)
-	f.log.Infof("trunc(%d, %d) = %d", f.fd, size, errno)
+	f.log.Infof("ftruncate(%d, %d) = %d %s", f.fd, size, -int(errno), errnos[errno])
 	return errno
 }
 
 func (f *file) Sync() experimentalsys.Errno {
 	errno := f.internal.Sync()
-	f.log.Infof("fsync(%d) = %d", f.fd, errno)
+	f.log.Infof("fsync(%d) = %d %s", f.fd, -int(errno), errnos[errno])
 	return errno
 }
 
 func (f *file) Datasync() experimentalsys.Errno {
 	errno := f.internal.Datasync()
-	f.log.Infof("fdatasync(%d) = %d", f.fd, errno)
+	f.log.Infof("fdatasync(%d) = %d %s", f.fd, -int(errno), errnos[errno])
 	return errno
 }
 
 func (f *file) Utimens(atim, mtim int64) experimentalsys.Errno {
-	return f.internal.Utimens(atim, mtim)
+	errno := f.internal.Utimens(atim, mtim)
+	f.log.Infof("futimes(%d, [[%d, %d],[%d, %d]], 0) = %d %s",
+		f.fd,
+		atim/int64(time.Second), atim%int64(time.Second),
+		mtim/int64(time.Second), mtim%int64(time.Second),
+		-int(errno), errno,
+	)
+	return errno
 }
 
 func (f *file) Close() experimentalsys.Errno {
 	errno := f.internal.Close()
-	f.log.Infof("close(%d) = %d", f.fd, errno)
+	f.log.Infof("close(%d) = %d %s", f.fd, -int(errno), errnos[errno])
 	return errno
 
 }
