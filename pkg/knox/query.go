@@ -12,7 +12,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/internal/wire"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/echa/log"
 )
@@ -351,30 +350,31 @@ func (q Query[T]) Run(ctx context.Context) ([]T, error) {
 }
 
 func (q Query[T]) Encode() ([]byte, error) {
-	// table must exist
-	if q.table == nil {
-		return nil, engine.ErrNoTable
-	}
+	// // table must exist
+	// if q.table == nil {
+	// 	return nil, engine.ErrNoTable
+	// }
 
-	// validate T against table schema
-	if tableSchema := q.table.Schema(); tableSchema != nil {
-		if err := tableSchema.CanSelect(q.schema); err != nil {
-			return nil, err
-		}
-	}
+	// // validate T against table schema
+	// if tableSchema := q.table.Schema(); tableSchema != nil {
+	// 	if err := tableSchema.CanSelect(q.schema); err != nil {
+	// 		return nil, err
+	// 	}
+	// }
 
-	// encode query to wire format
-	cmd := wire.QueryCommand{
-		Fields: q.schema.FieldIDs(),
-		Cond:   q.cond,
-		Limit:  uint32(q.limit),
-		Order:  q.order,
-		Flags:  q.flags,
-		Tag:    q.tag,
-	}
+	// // encode query to wire format
+	// cmd := wire.QueryCommand{
+	// 	Fields: q.schema.FieldIDs(),
+	// 	Cond:   q.cond,
+	// 	Limit:  uint32(q.limit),
+	// 	Order:  q.order,
+	// 	Flags:  q.flags,
+	// 	Tag:    q.tag,
+	// }
 
-	// write header and return full command buffer
-	return cmd.Encode(q.table.Schema())
+	// // write header and return full command buffer
+	// return cmd.Encode(q.table.Schema())
+	return nil, ErrNotImplemented
 }
 
 func (q Query[T]) MakePlan() (engine.QueryPlan, error) {
