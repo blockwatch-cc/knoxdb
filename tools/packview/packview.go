@@ -59,10 +59,12 @@ func main() {
 	defer func() {
 		if e := recover(); e != nil {
 			log.Error(e)
+			os.Exit(1)
 		}
 	}()
 	if err := run(); err != nil {
 		log.Error(err)
+		os.Exit(1)
 	}
 }
 
@@ -373,7 +375,6 @@ func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) 
 						return strconv.Itoa(int(val.(uint16)))
 					},
 				})
-
 			}
 		}
 	}
