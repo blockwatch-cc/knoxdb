@@ -65,7 +65,7 @@ func preview(buf []byte) string {
 func printOflag(f experimentalsys.Oflag) string {
 	var b strings.Builder
 	for i := 0; i < 13; i++ {
-		if f&experimentalsys.Oflag(i) > 0 {
+		if f&experimentalsys.Oflag(1<<i) > 0 {
 			if b.Len() > 0 {
 				b.WriteString("|")
 			}
@@ -86,7 +86,7 @@ func printOflag(f experimentalsys.Oflag) string {
 
 func printFstat(s sys.Stat_t) string {
 	return fmt.Sprintf("{st_mode=%s, st_size=%d, st_nlink=%d, st_atime=%s, st_mtime=%s, st_ctime=%s}",
-		printFileMode(s.Mode), s.Size, s.Nlink, time.Unix(s.Atim, 0), time.Unix(s.Mtim, 0), time.Unix(s.Ctim, 0))
+		printFileMode(s.Mode), s.Size, s.Nlink, time.Unix(0, s.Atim), time.Unix(0, s.Mtim), time.Unix(0, s.Ctim))
 }
 
 func printFileMode(m os.FileMode) string {
