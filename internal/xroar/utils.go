@@ -19,7 +19,6 @@ package xroar
 import (
 	"log"
 	"math"
-	"reflect"
 	"unsafe"
 
 	"github.com/pkg/errors"
@@ -61,13 +60,7 @@ func addUint64(a, b uint64) uint64 {
 }
 
 func toByteSlice(b []uint16) []byte {
-	// reference: https://go101.org/article/unsafe.html
-	var bs []byte
-	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&bs))
-	hdr.Len = len(b) * 2
-	hdr.Cap = hdr.Len
-	hdr.Data = uintptr(unsafe.Pointer(&b[0]))
-	return bs
+	return unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(b))), len(b)*2)
 }
 
 // These methods (byteSliceAsUint16Slice,...) do not make copies,
@@ -76,22 +69,12 @@ func toByteSlice(b []uint16) []byte {
 // or modified while you hold the returned slince.
 // //
 func toUint16Slice(b []byte) (result []uint16) {
-	var u16s []uint16
-	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&u16s))
-	hdr.Len = len(b) / 2
-	hdr.Cap = hdr.Len
-	hdr.Data = uintptr(unsafe.Pointer(&b[0]))
-	return u16s
+	return unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b))), len(b)/2)
 }
 
 // BytesToU32Slice converts the given byte slice to uint32 slice
 func toUint64Slice(b []uint16) []uint64 {
-	var u64s []uint64
-	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&u64s))
-	hdr.Len = len(b) / 4
-	hdr.Cap = hdr.Len
-	hdr.Data = uintptr(unsafe.Pointer(&b[0]))
-	return u64s
+	return unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(b))), len(b)/4)
 }
 
 //go:linkname memclrNoHeapPointers runtime.memclrNoHeapPointers

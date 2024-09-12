@@ -57,6 +57,8 @@ func (bm *Bitmap) NewIterator() *Iterator {
 	if bm == nil {
 		return nil
 	}
+	// fmt.Printf("IT len=%d start=%d nkeys=%d\n", len(bm.keys), indexNodeStart, bm.keys.numKeys())
+	// fmt.Printf("%s\n", bm.String())
 	return &Iterator{
 		bm:        bm,
 		keys:      bm.keys[indexNodeStart : indexNodeStart+bm.keys.numKeys()*2],

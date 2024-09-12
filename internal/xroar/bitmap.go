@@ -26,7 +26,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var empty = make([]uint16, 16<<20)
+// var empty = make([]uint16, 16<<20)
 
 const mask = uint64(0xFFFFFFFFFFFF0000)
 
@@ -622,10 +622,13 @@ func (ra *Bitmap) Capacity() int {
 }
 
 func (ra *Bitmap) Reset() {
+	Memclr(ra.data)
+
 	// reset ra.data to size enough for one container and corresponding key.
-	// 2 u64 is needed for header and another 2 u16 for the key 0.
-	ra.data = ra.data[:16+minContainerSize]
+	// NewBitmap allocs 24 extra bytes here
+	ra.data = ra.data[:24+minContainerSize]
 	ra.keys = toUint64Slice(ra.data)
+	ra.keys.setNodeSize(len(ra.data))
 
 	offset := ra.newContainer(minContainerSize)
 	ra.keys.setAt(indexNodeStart+1, offset)
@@ -866,6 +869,13 @@ func And(a, b *Bitmap) *Bitmap {
 			bi++
 		}
 	}
+	return res
+}
+
+func AndNot(a, b *Bitmap) *Bitmap {
+	res := a.Clone()
+	res.AndNot(b)
+	res.Cleanup()
 	return res
 }
 
