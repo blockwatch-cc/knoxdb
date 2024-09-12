@@ -140,6 +140,18 @@ func (o OrderedBytes) ContainsRange(from, to []byte) bool {
 	return containsRangeBytes(o.Values, from, to)
 }
 
+func (o OrderedBytes) Equal(o2 *OrderedBytes) bool {
+	if o.Len() != o2.Len() {
+		return false
+	}
+	for i := range o.Values {
+		if !bytes.Equal(o.Values[i], o2.Values[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 func (o OrderedBytes) Intersect(v *OrderedBytes) *OrderedBytes {
 	if v == nil {
 		return nil
@@ -149,6 +161,20 @@ func (o OrderedBytes) Intersect(v *OrderedBytes) *OrderedBytes {
 		Unique:  o.Unique || v.Unique,
 		Values:  intersectBytes(o.Values, v.Values, make([][]byte, 0)),
 	}
+}
+
+func (o *OrderedBytes) Union(v *OrderedBytes) *OrderedBytes {
+	if v == nil {
+		return o
+	}
+	res := &OrderedBytes{
+		NonZero: o.NonZero && v.NonZero,
+		Unique:  o.Unique && v.Unique,
+		Values:  make([][]byte, len(o.Values)),
+	}
+	copy(res.Values, o.Values)
+	res.Values = mergeBytes(res.Values, v.Unique, v.Values...)
+	return res
 }
 
 func containsBytes(s [][]byte, val []byte) bool {

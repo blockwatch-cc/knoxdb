@@ -9,6 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -31,9 +32,21 @@ func makeMatchFn(m types.FilterMode) func(t types.BlockType, a, b any) bool {
 	}
 }
 
-func Match(m types.FilterMode, t types.BlockType, a, b any) bool {
-	var c int
+func Min(t types.BlockType, a, b any) any {
+	if Cmp(t, a, b) < 0 {
+		return a
+	}
+	return b
+}
 
+func Max(t types.BlockType, a, b any) any {
+	if Cmp(t, a, b) < 0 {
+		return b
+	}
+	return a
+}
+
+func Cmp(t types.BlockType, a, b any) (c int) {
 	// compare by type
 	switch t {
 	case types.BlockInt64, types.BlockTime:
@@ -74,8 +87,13 @@ func Match(m types.FilterMode, t types.BlockType, a, b any) bool {
 	case types.BlockInt256:
 		c = a.(num.Int256).Cmp(b.(num.Int256))
 	default:
-		panic(fmt.Errorf("unsupported block type %s ", t))
+		panic(fmt.Errorf("cmp: unsupported block type %s ", t))
 	}
+	return
+}
+
+func Match(m types.FilterMode, t types.BlockType, a, b any) bool {
+	c := Cmp(t, a, b)
 
 	// check by mode
 	switch m {
@@ -92,6 +110,124 @@ func Match(m types.FilterMode, t types.BlockType, a, b any) bool {
 	case types.FilterModeLe:
 		return c <= 0
 	default:
-		panic(fmt.Errorf("illegal generic filter mode %s ", m))
+		panic(fmt.Errorf("match: illegal generic filter mode %s ", m))
+	}
+}
+
+func Intersect(t types.BlockType, a, b any) any {
+	// compare by type
+	switch t {
+	case types.BlockInt64, types.BlockTime:
+		x := slicex.NewOrderedNumbers[int64](a.([]int64)).SetUnique()
+		y := slicex.NewOrderedNumbers[int64](b.([]int64)).SetUnique()
+		return x.Intersect(y).Values
+	case types.BlockUint64:
+		x := slicex.NewOrderedNumbers[uint64](a.([]uint64)).SetUnique()
+		y := slicex.NewOrderedNumbers[uint64](b.([]uint64)).SetUnique()
+		return x.Intersect(y).Values
+	case types.BlockFloat64:
+		x := slicex.NewOrderedNumbers[float64](a.([]float64)).SetUnique()
+		y := slicex.NewOrderedNumbers[float64](b.([]float64)).SetUnique()
+		return x.Intersect(y).Values
+	case types.BlockString:
+		x := slicex.NewOrderedStrings(a.([]string)).SetUnique()
+		y := slicex.NewOrderedStrings(b.([]string)).SetUnique()
+		return x.Intersect(y).Values
+	case types.BlockBytes:
+		x := slicex.NewOrderedBytes(a.([][]byte)).SetUnique()
+		y := slicex.NewOrderedBytes(b.([][]byte)).SetUnique()
+		return x.Intersect(y).Values
+	case types.BlockInt32:
+		x := slicex.NewOrderedNumbers[int32](a.([]int32)).SetUnique()
+		y := slicex.NewOrderedNumbers[int32](b.([]int32)).SetUnique()
+		return x.Intersect(y).Values
+	case types.BlockInt16:
+		x := slicex.NewOrderedNumbers[int16](a.([]int16)).SetUnique()
+		y := slicex.NewOrderedNumbers[int16](b.([]int16)).SetUnique()
+		return x.Intersect(y).Values
+	case types.BlockInt8:
+		x := slicex.NewOrderedNumbers[int8](a.([]int8)).SetUnique()
+		y := slicex.NewOrderedNumbers[int8](b.([]int8)).SetUnique()
+		return x.Intersect(y).Values
+	case types.BlockUint32:
+		x := slicex.NewOrderedNumbers[uint32](a.([]uint32)).SetUnique()
+		y := slicex.NewOrderedNumbers[uint32](b.([]uint32)).SetUnique()
+		return x.Intersect(y).Values
+	case types.BlockUint16:
+		x := slicex.NewOrderedNumbers[uint16](a.([]uint16)).SetUnique()
+		y := slicex.NewOrderedNumbers[uint16](b.([]uint16)).SetUnique()
+		return x.Intersect(y).Values
+	case types.BlockUint8:
+		x := slicex.NewOrderedNumbers[uint8](a.([]uint8)).SetUnique()
+		y := slicex.NewOrderedNumbers[uint8](b.([]uint8)).SetUnique()
+		return x.Intersect(y).Values
+	case types.BlockFloat32:
+		x := slicex.NewOrderedNumbers[float32](a.([]float32)).SetUnique()
+		y := slicex.NewOrderedNumbers[float32](b.([]float32)).SetUnique()
+		return x.Intersect(y).Values
+	// case types.BlockBool:
+	// case types.BlockInt128:
+	// case types.BlockInt256:
+	default:
+		panic(fmt.Errorf("intersect: unsupported block type %s ", t))
+	}
+}
+
+func Union(t types.BlockType, a, b any) any {
+	// compare by type
+	switch t {
+	case types.BlockInt64, types.BlockTime:
+		x := slicex.NewOrderedNumbers[int64](a.([]int64)).SetUnique()
+		y := slicex.NewOrderedNumbers[int64](b.([]int64)).SetUnique()
+		return x.Union(y).Values
+	case types.BlockUint64:
+		x := slicex.NewOrderedNumbers[uint64](a.([]uint64)).SetUnique()
+		y := slicex.NewOrderedNumbers[uint64](b.([]uint64)).SetUnique()
+		return x.Union(y).Values
+	case types.BlockFloat64:
+		x := slicex.NewOrderedNumbers[float64](a.([]float64)).SetUnique()
+		y := slicex.NewOrderedNumbers[float64](b.([]float64)).SetUnique()
+		return x.Union(y).Values
+	case types.BlockString:
+		x := slicex.NewOrderedStrings(a.([]string)).SetUnique()
+		y := slicex.NewOrderedStrings(b.([]string)).SetUnique()
+		return x.Union(y).Values
+	case types.BlockBytes:
+		x := slicex.NewOrderedBytes(a.([][]byte)).SetUnique()
+		y := slicex.NewOrderedBytes(b.([][]byte)).SetUnique()
+		return x.Union(y).Values
+	case types.BlockInt32:
+		x := slicex.NewOrderedNumbers[int32](a.([]int32)).SetUnique()
+		y := slicex.NewOrderedNumbers[int32](b.([]int32)).SetUnique()
+		return x.Union(y).Values
+	case types.BlockInt16:
+		x := slicex.NewOrderedNumbers[int16](a.([]int16)).SetUnique()
+		y := slicex.NewOrderedNumbers[int16](b.([]int16)).SetUnique()
+		return x.Union(y).Values
+	case types.BlockInt8:
+		x := slicex.NewOrderedNumbers[int8](a.([]int8)).SetUnique()
+		y := slicex.NewOrderedNumbers[int8](b.([]int8)).SetUnique()
+		return x.Union(y).Values
+	case types.BlockUint32:
+		x := slicex.NewOrderedNumbers[uint32](a.([]uint32)).SetUnique()
+		y := slicex.NewOrderedNumbers[uint32](b.([]uint32)).SetUnique()
+		return x.Union(y).Values
+	case types.BlockUint16:
+		x := slicex.NewOrderedNumbers[uint16](a.([]uint16)).SetUnique()
+		y := slicex.NewOrderedNumbers[uint16](b.([]uint16)).SetUnique()
+		return x.Union(y).Values
+	case types.BlockUint8:
+		x := slicex.NewOrderedNumbers[uint8](a.([]uint8)).SetUnique()
+		y := slicex.NewOrderedNumbers[uint8](b.([]uint8)).SetUnique()
+		return x.Union(y).Values
+	case types.BlockFloat32:
+		x := slicex.NewOrderedNumbers[float32](a.([]float32)).SetUnique()
+		y := slicex.NewOrderedNumbers[float32](b.([]float32)).SetUnique()
+		return x.Union(y).Values
+	// case types.BlockBool:
+	// case types.BlockInt128:
+	// case types.BlockInt256:
+	default:
+		panic(fmt.Errorf("union: unsupported block type %s ", t))
 	}
 }

@@ -161,6 +161,18 @@ func (o OrderedStrings) ContainsRange(from, to string) bool {
 	return containsRange(o.Values, from, to)
 }
 
+func (o OrderedStrings) Equal(o2 *OrderedStrings) bool {
+	if o.Len() != o2.Len() {
+		return false
+	}
+	for i := range o.Values {
+		if o.Values[i] != o2.Values[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (o OrderedStrings) Intersect(v *OrderedStrings) *OrderedStrings {
 	if v == nil {
 		return nil
@@ -170,6 +182,20 @@ func (o OrderedStrings) Intersect(v *OrderedStrings) *OrderedStrings {
 		Unique:  o.Unique || v.Unique,
 		Values:  intersect(o.Values, v.Values, make([]string, 0)),
 	}
+}
+
+func (o *OrderedStrings) Union(v *OrderedStrings) *OrderedStrings {
+	if v == nil {
+		return o
+	}
+	res := &OrderedStrings{
+		NonZero: o.NonZero && v.NonZero,
+		Unique:  o.Unique && v.Unique,
+		Values:  make([]string, len(o.Values)),
+	}
+	copy(res.Values, o.Values)
+	res.Values = merge(res.Values, v.Unique, v.Values...)
+	return res
 }
 
 func containsString(s []string, val string) bool {

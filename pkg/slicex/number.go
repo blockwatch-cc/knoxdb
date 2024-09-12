@@ -153,6 +153,18 @@ func (o OrderedNumbers[T]) ContainsAll(val ...T) bool {
 	return true
 }
 
+func (o OrderedNumbers[T]) Equal(o2 *OrderedNumbers[T]) bool {
+	if o.Len() != o2.Len() {
+		return false
+	}
+	for i := range o.Values {
+		if o.Values[i] != o2.Values[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (o OrderedNumbers[T]) ContainsRange(from, to T) bool {
 	return containsRange(o.Values, from, to)
 }
@@ -166,4 +178,18 @@ func (o OrderedNumbers[T]) Intersect(v *OrderedNumbers[T]) *OrderedNumbers[T] {
 		Unique:  o.Unique || v.Unique,
 		Values:  intersect(o.Values, v.Values, make([]T, 0)),
 	}
+}
+
+func (o *OrderedNumbers[T]) Union(v *OrderedNumbers[T]) *OrderedNumbers[T] {
+	if v == nil {
+		return o
+	}
+	res := &OrderedNumbers[T]{
+		NonZero: o.NonZero && v.NonZero,
+		Unique:  o.Unique && v.Unique,
+		Values:  make([]T, len(o.Values)),
+	}
+	copy(res.Values, o.Values)
+	res.Values = merge(res.Values, v.Unique, v.Values...)
+	return res
 }
