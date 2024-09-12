@@ -43,8 +43,13 @@ type i256Matcher struct {
 	val   num.Int256
 }
 
-func (m *i256Matcher) WithValue(v any) {
+func (m *i256Matcher) WithValue(v any) Matcher {
 	m.val = v.(num.Int256)
+	return m
+}
+
+func (m *i256Matcher) Value() any {
+	return m.val
 }
 
 func (m i256Matcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
@@ -145,9 +150,16 @@ type i256RangeMatcher struct {
 
 func (m *i256RangeMatcher) Weight() int { return 2 }
 
-func (m *i256RangeMatcher) WithRange(from, to any) {
-	m.from = from.(num.Int256)
-	m.to = to.(num.Int256)
+func (m *i256RangeMatcher) WithValue(v any) Matcher {
+	val := v.(RangeValue)
+	m.from = val[0].(num.Int256)
+	m.to = val[1].(num.Int256)
+	return m
+}
+
+func (m *i256RangeMatcher) Value() any {
+	val := RangeValue{m.from, m.to}
+	return val
 }
 
 func (m i256RangeMatcher) MatchValue(v any) bool {

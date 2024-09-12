@@ -50,7 +50,7 @@ var QueryLogMinDuration time.Duration = 500 * time.Millisecond
 
 type QueryPlan struct {
 	Tag     string
-	Filters FilterTreeNode
+	Filters *FilterTreeNode
 	Limit   uint32
 	Offset  uint32 // discouraged
 	Order   OrderType
@@ -80,7 +80,7 @@ func (p *QueryPlan) Close() {
 		p.Log.Infof("Q> %s: %s", p.Tag, p.Stats)
 	}
 	p.Tag = ""
-	p.Filters = FilterTreeNode{}
+	p.Filters = nil
 	p.Table = nil
 	p.Indexes = nil
 	p.ResultSchema = nil
@@ -107,7 +107,7 @@ func (p *QueryPlan) WithFlags(f QueryFlags) *QueryPlan {
 	return p
 }
 
-func (p *QueryPlan) WithFilters(node FilterTreeNode) *QueryPlan {
+func (p *QueryPlan) WithFilters(node *FilterTreeNode) *QueryPlan {
 	p.Filters = node
 	return p
 }
@@ -212,7 +212,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 
 	// optimize plan
 	// - [x] reorder filters
-	// - [ ] combine filters
+	// - [x] combine filters
 	// - [ ] remove ineffective filters
 	p.Filters.Optimize()
 
@@ -232,16 +232,9 @@ func (p *QueryPlan) Execute(ctx context.Context) (engine.QueryResult, error) {
 	// bitmap as result
 
 	// query indexes first
-	planChanged, err := p.QueryIndexes(ctx)
+	err := p.QueryIndexes(ctx)
 	if err != nil {
 		return nil, err
-	}
-
-	// add or replace primary key conditions ?
-
-	// optimize plan again
-	if planChanged {
-		p.Filters.Optimize()
 	}
 
 	// query table next
@@ -252,19 +245,113 @@ func (p *QueryPlan) Execute(ctx context.Context) (engine.QueryResult, error) {
 //   - attaches pk bitmaps for every indexed field to relevant filter tree nodes
 //   - pack/old: replaces matching condition with new FilterModeIn condition
 //     or adds IN condition at front if index may have collisions
-func (p *QueryPlan) QueryIndexes(ctx context.Context) (bool, error) {
-	if p.Flags.IsNoIndex() || p.Filters.IsEmpty() {
-		return false, nil
+func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
+	if p.Flags.IsNoIndex() || p.Filters.IsEmpty() || p.Filters.IsProcessed() {
+		return nil
 	}
 
-	// query indexes and aggregate bitmap results
-	n, err := p.queryIndexNode(ctx, &p.Filters)
+	// Step 1: query indexes, attach bitmap results
+	n, err := p.queryIndexNode(ctx, p.Filters)
 	if err != nil {
-		return false, err
+		return err
+	}
+
+	if n > 0 {
+		// Step 2: add IN conditions from aggregate bits at each tree level
+		p.decorateIndexNodes(p.Filters, true)
+
+		// Step 3: optimize the tree by removing skip nodes and
+		// merging / simplifying child nodes
+		p.Filters.Optimize()
+
+		// Step 4: adjust request schema (we may have to check less fields now)
+		filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
+		requestFields := slicex.NewOrderedStrings(p.RequestSchema.FieldNames())
+		if !filterFields.Equal(requestFields) && filterFields.Len() > 0 {
+			s, err := p.Table.Schema().SelectNames("", true, filterFields.Values...)
+			if err != nil {
+				return fmt.Errorf("query %s: remake request schema: %v", p.Tag, err)
+			}
+			p.RequestSchema = s
+		}
 	}
 
 	p.Stats.Tick("index_time")
-	return n > 0, nil
+	return nil
+}
+
+func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, isRoot bool) {
+	// we only handle container nodes here because decoration adds
+	// new conditions into the child list
+
+	// special case: all conditions are processed during index scan
+	// and all indexes are collision free -> aggregate bitsets into root node
+	if isRoot && node.IsProcessed() {
+		node.Bits = bitmap.New()
+		if node.OrKind {
+			for _, child := range node.Children {
+				if child.Bits.IsValid() {
+					node.Bits.Or(child.Bits)
+				}
+			}
+		} else {
+			for _, child := range node.Children {
+				if child.Bits.IsValid() {
+					node.Bits.And(child.Bits)
+				}
+			}
+		}
+		return
+	}
+
+	// common case, add PK IN condition to the current tree level
+	for _, child := range node.Children {
+		// single condition children
+		if child.IsLeaf() {
+			if child.Bits.IsValid() {
+				// add a new primary key IN condition
+				node.Children = append(node.Children, &FilterTreeNode{
+					Filter: &Filter{
+						Name:  child.Filter.Name,
+						Type:  child.Filter.Type,
+						Mode:  FilterModeIn,
+						Index: child.Filter.Index,
+						Matcher: NewFactory(types.FieldTypeUint64).
+							New(FilterModeIn).
+							WithSet(child.Bits.Bitmap),
+						Value: child.Bits,
+					},
+					Empty: child.Bits.Count() == 0,
+				})
+			}
+			continue
+		}
+
+		// composite child conditions attach bits to the common anchestor
+		if child.Bits.IsValid() {
+			// add a new primary key IN condition
+			node.Children = append(node.Children, &FilterTreeNode{
+				Filter: &Filter{
+					Name:  p.RequestSchema.Pk().Name(),
+					Type:  child.Filter.Type,
+					Mode:  FilterModeIn,
+					Index: p.RequestSchema.PkId(),
+					Matcher: NewFactory(types.FieldTypeUint64).
+						New(FilterModeIn).
+						WithSet(child.Bits.Bitmap),
+					Value: child.Bits,
+				},
+				Empty: child.Bits.Count() == 0,
+			})
+			// continue below, we may need to visit unprocessed grandchildren
+		}
+
+		// recurse decorate child containers
+		// (we do this even if we found a composite key index result above
+		// because unrelated condition filters may still be unprocessed
+		// inside the child tree)
+		p.decorateIndexNodes(child, false)
+	}
 }
 
 func (p *QueryPlan) queryIndexNode(ctx context.Context, node *FilterTreeNode) (int, error) {
@@ -276,57 +363,20 @@ func (p *QueryPlan) queryIndexNode(ctx context.Context, node *FilterTreeNode) (i
 }
 
 func (p *QueryPlan) queryIndexOr(ctx context.Context, node *FilterTreeNode) (int, error) {
-	// nested nodes
+	// 1  recurse into children one by one
 	if !node.IsLeaf() {
-		// 1/  recurse into children one by one
-		for i := range node.Children {
-			_, err := p.queryIndexNode(ctx, &node.Children[i])
+		var nHits int
+		for _, child := range node.Children {
+			m, err := p.queryIndexNode(ctx, child)
 			if err != nil {
 				return 0, err
 			}
+			nHits += m
 		}
-
-		// 2/  collect nested child bitmap results
-		var (
-			agg     bitmap.Bitmap
-			canSkip bool = true
-		)
-		for _, child := range node.Children {
-			if !child.Bits.IsValid() {
-				canSkip = false
-				continue
-			}
-			if agg.IsValid() {
-				agg.Or(child.Bits)
-			} else {
-				agg = child.Bits.Clone()
-			}
-			canSkip = canSkip && child.Skip
-		}
-
-		// 3/ store result on node
-		if agg.IsValid() {
-			node.Bits = agg
-			node.Skip = canSkip
-		}
-		return node.Bits.Count(), nil
+		return nHits, nil
 	}
 
-	// leaf nodes
-
-	// convert EQ/IN primary key queries to bitset
-	if p.Table.Schema().PkIndex() == int(node.Filter.Index) {
-		switch node.Filter.Mode {
-		case FilterModeEqual:
-			node.Bits = bitmap.NewFromArray([]uint64{node.Filter.Value.(uint64)})
-			return node.Bits.Count(), nil
-		case FilterModeIn:
-			node.Bits = bitmap.NewFromArray(node.Filter.Value.([]uint64))
-			return node.Bits.Count(), nil
-		}
-	}
-
-	// run index scan
+	// 2  run index scan on leaf nodes
 
 	// find index that matches the filter condition
 	idx, ok := p.findIndex(node)
@@ -352,8 +402,7 @@ func (p *QueryPlan) queryIndexOr(ctx context.Context, node *FilterTreeNode) (int
 func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (int, error) {
 	// pre-process child nodes
 	var nHits int
-	for i := range node.Children {
-		child := &node.Children[i]
+	for _, child := range node.Children {
 
 		// AND nodes may contain nested OR nodes which we need to visit first
 		if child.OrKind {
@@ -362,56 +411,6 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 				return 0, err
 			}
 			nHits += n
-		}
-
-		// convert EQ/IN primary key queries to bitset
-		if child.IsLeaf() {
-			f := child.Filter
-			if p.Table.Schema().PkIndex() == int(f.Index) {
-				switch f.Mode {
-				case FilterModeEqual:
-					child.Bits = bitmap.NewFromArray([]uint64{f.Value.(uint64)})
-					child.Skip = true
-					nHits++
-				case FilterModeIn:
-					pks := f.Value.([]uint64)
-					child.Bits = bitmap.NewFromArray(pks)
-					child.Skip = true
-					nHits += len(pks)
-				}
-			}
-		}
-	}
-
-	// collect and aggregate nested OR child bitmap results
-	if nHits > 0 {
-		var (
-			agg     bitmap.Bitmap
-			canSkip bool = true
-		)
-		for i := range node.Children {
-			child := &node.Children[i]
-			if !child.Bits.IsValid() {
-				canSkip = false
-				continue
-			}
-			if agg.IsValid() {
-				agg.And(child.Bits)
-			} else {
-				agg = child.Bits.Clone()
-			}
-			canSkip = canSkip && child.Skip
-		}
-		if agg.IsValid() {
-			node.Bits = agg
-			node.Skip = canSkip
-			node.Empty = agg.Count() == 0
-
-			// stop early when there were no results on at least one nested index scan
-			// this means that later on we will continue to have no results in AND ops
-			if agg.Count() == 0 {
-				return 0, nil
-			}
 		}
 	}
 
@@ -444,12 +443,12 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 		// stop on first hit
 		node.Bits = *bits
 		node.Skip = !canCollide
+		nHits += bits.Count()
+		break
 	}
 
 	// for all unprocessed child nodes, find a matching index and query independently
-	for i := range node.Children {
-		child := &node.Children[i]
-
+	for _, child := range node.Children {
 		// skip when index already processed this node
 		if child.Skip || child.Bits.IsValid() || !child.IsLeaf() {
 			continue
@@ -473,31 +472,10 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 
 		child.Bits = *bits
 		child.Skip = !canCollide
+		nHits += bits.Count()
 	}
 
-	// Aggregate AND results
-	// we can only skip if all AND conditions are marked
-	var agg bitmap.Bitmap
-	canSkip := true
-	for _, child := range node.Children {
-		if child.Bits.IsValid() {
-			// aggregate results
-			if agg.IsValid() {
-				agg.And(child.Bits)
-			} else {
-				agg = child.Bits
-			}
-		}
-		canSkip = canSkip && child.Skip
-	}
-
-	// store aggregate bitmap in node
-	if agg.IsValid() {
-		node.Bits = agg
-		node.Skip = canSkip
-		node.Empty = agg.Count() == 0
-	}
-	return node.Bits.Count(), nil
+	return nHits, nil
 }
 
 // Find an index compatible with a given filter node. This includes composite indexes.

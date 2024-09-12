@@ -15,10 +15,11 @@ import (
 )
 
 type Matcher interface {
-	WithValue(any)                                                          // use a scalar value to match against
-	WithRange(any, any)                                                     // use range value to match against
-	WithSet(any)                                                            // use slice of values to match against
+	WithValue(any) Matcher                                                  // use a scalar value to match against
+	WithSlice(any) Matcher                                                  // use slice of values to match against
+	WithSet(*xroar.Bitmap) Matcher                                          // use bitmap of integer values to match against
 	Weight() int                                                            // matcher complexity (number of values)
+	Value() any                                                             // access matcher value (depends on type)
 	MatchValue(any) bool                                                    // match a single value
 	MatchRange(any, any) bool                                               // min/max checks in MaybeMatchPack()
 	MatchBloom(*bloom.Filter) bool                                          // bloom filter match in MaybeMatchPack()
@@ -36,7 +37,10 @@ type MatcherFactory interface {
 // Need custom matchers for
 // Time (maybe, currently int64 internally; if we were to introduce time-zones, then yes)
 func NewFactory(ftyp types.FieldType) MatcherFactory {
-	typ := BlockTypes[ftyp]
+	return newFactory(BlockTypes[ftyp])
+}
+
+func newFactory(typ types.BlockType) MatcherFactory {
 	switch typ {
 	case BlockTime, BlockInt64:
 		return NumMatcherFactory[int64]{typ}
@@ -75,13 +79,15 @@ func NewFactory(ftyp types.FieldType) MatcherFactory {
 // e.g. regexp match on numeric fields
 type noopMatcher struct{}
 
-func (m *noopMatcher) WithValue(_ any) {}
+func (m *noopMatcher) WithValue(_ any) Matcher { return m }
 
-func (m *noopMatcher) WithRange(_ any, _ any) {}
+func (m *noopMatcher) WithSlice(_ any) Matcher { return m }
 
-func (m *noopMatcher) WithSet(_ any) {}
+func (m *noopMatcher) WithSet(_ *xroar.Bitmap) Matcher { return m }
 
 func (m *noopMatcher) Weight() int { return 1 } // simplifies reuse in simple matchers
+
+func (m *noopMatcher) Value() any { return nil }
 
 func (m noopMatcher) MatchValue(_ any) bool { return false }
 
@@ -127,12 +133,12 @@ func MaybeMatchTree(n *FilterTreeNode, info *metadata.PackMetadata) bool {
 	for _, v := range n.Children {
 		if n.OrKind {
 			// for OR nodes, stop at the first successful hint
-			if MaybeMatchTree(&v, info) {
+			if MaybeMatchTree(v, info) {
 				return true
 			}
 		} else {
 			// for AND nodes stop at the first non-successful hint
-			if !MaybeMatchTree(&v, info) {
+			if !MaybeMatchTree(v, info) {
 				return false
 			}
 		}
@@ -244,7 +250,7 @@ func MatchTreeAnd(n *FilterTreeNode, pkg *pack.Package, meta *metadata.PackMetad
 		var scratch *bitset.Bitset
 		if !node.IsLeaf() {
 			// recurse into another AND or OR condition subtree
-			scratch = MatchTree(&node, pkg, meta)
+			scratch = MatchTree(node, pkg, meta)
 		} else {
 			f := node.Filter
 			// Quick inclusion check to skip matching when the current condition
@@ -326,7 +332,7 @@ func MatchTreeOr(n *FilterTreeNode, pkg *pack.Package, meta *metadata.PackMetada
 		var scratch *bitset.Bitset
 		if !node.IsLeaf() {
 			// recurse into another AND or OR condition subtree
-			scratch = MatchTree(&node, pkg, meta)
+			scratch = MatchTree(node, pkg, meta)
 		} else {
 			f := node.Filter
 			// Quick inclusion check to skip matching when the current condition

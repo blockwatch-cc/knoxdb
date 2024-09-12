@@ -253,12 +253,13 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		return
 	}
 
-	db, err = knox.CreateDatabase(ctx, "types", knox.DatabaseOptions{
-		Path:      "./db",
-		Namespace: "cx.bwd.knox.types-demo",
-		CacheSize: 1 << 20 * TypesCacheSize,
-		Logger:    log.Log,
-	})
+	opts := knox.DefaultDatabaseOptions.
+		WithPath("./db").
+		WithNamespace("cx.bwd.knox.types-demo").
+		WithCacheSize(1 << 20 * TypesCacheSize).
+		WithLogger(log.Log)
+
+	db, err = knox.CreateDatabase(ctx, "types", opts)
 	if err != nil {
 		if errors.Is(err, engine.ErrDatabaseExists) {
 			return Open(ctx)

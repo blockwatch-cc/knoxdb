@@ -77,13 +77,13 @@ func ParseCondition(key, val string, s *schema.Schema) (c Condition, err error) 
 }
 
 // translate condition to filter operator
-func (c Condition) Compile(s *schema.Schema) (FilterTreeNode, error) {
+func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 	// bind single leaf node condition
 	if c.Name != "" {
 		// lookup field and fill missing values
 		field, ok := s.FieldByName(c.Name)
 		if !ok {
-			return FilterTreeNode{}, fmt.Errorf("unknown column %q", c.Name)
+			return nil, fmt.Errorf("unknown column %q", c.Name)
 		}
 		c.Index = field.Id() - 1
 		c.Type = field.Type()
@@ -105,16 +105,24 @@ func (c Condition) Compile(s *schema.Schema) (FilterTreeNode, error) {
 			if err == nil {
 				to, err = caster.CastValue(c.Value.(RangeValue)[1])
 				if err == nil {
-					matcher.WithRange(from, to)
 					c.Value = RangeValue{from, to}
+					matcher.WithValue(c.Value)
 				}
 			}
 		case FilterModeIn, FilterModeNotIn:
-			var set any
-			set, err = caster.CastSlice(c.Value)
+			switch BlockTypes[c.Type] {
+			case BlockFloat64, BlockFloat32, BlockBool, BlockInt128, BlockInt256:
+				// disallow float, bool, i128, i256
+				return nil, fmt.Errorf(
+					"filter mode %s is unsupported in fields of type %s",
+					c.Mode, c.Type,
+				)
+			}
+			var slice any
+			slice, err = caster.CastSlice(c.Value)
 			if err == nil {
-				matcher.WithSet(set)
-				c.Value = set
+				matcher.WithSlice(slice)
+				c.Value = slice
 			}
 		default:
 			var val any
@@ -125,12 +133,13 @@ func (c Condition) Compile(s *schema.Schema) (FilterTreeNode, error) {
 			}
 		}
 		if err != nil {
-			return FilterTreeNode{}, err
+			return nil, err
 		}
 
-		return FilterTreeNode{
+		return &FilterTreeNode{
 			Filter: &Filter{
 				Name:    c.Name,
+				Type:    BlockTypes[c.Type],
 				Mode:    c.Mode,
 				Index:   c.Index,
 				Value:   c.Value,
@@ -140,14 +149,14 @@ func (c Condition) Compile(s *schema.Schema) (FilterTreeNode, error) {
 	}
 
 	// bind children
-	node := FilterTreeNode{
+	node := &FilterTreeNode{
 		OrKind:   c.OrKind,
-		Children: make([]FilterTreeNode, 0),
+		Children: make([]*FilterTreeNode, 0),
 	}
 	for _, v := range c.Children {
 		cc, err := v.Compile(s)
 		if err != nil {
-			return FilterTreeNode{}, err
+			return nil, err
 		}
 		node.Children = append(node.Children, cc)
 	}

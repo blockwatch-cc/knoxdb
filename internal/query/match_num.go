@@ -4,19 +4,20 @@
 package query
 
 import (
+	"slices"
+
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/slicex"
-	"golang.org/x/exp/constraints"
 
 	"unsafe"
 )
 
 type Number interface {
-	constraints.Integer | constraints.Float
+	int64 | int32 | int16 | int8 | uint64 | uint32 | uint16 | uint8 | float64 | float32
 }
 
 type numMatchFunc[T Number] func(slice []T, val T, bits, mask *bitset.Bitset) *bitset.Bitset
@@ -296,13 +297,19 @@ type numMatcher[T Number] struct {
 	hash  [2]uint32
 }
 
-func (m *numMatcher[T]) WithValue(v any) {
+func (m *numMatcher[T]) WithValue(v any) Matcher {
 	m.val = v.(T)
 	m.hash = bloom.HashAny(v)
+	return m
+}
+
+func (m *numMatcher[T]) Value() any {
+	return m.val
 }
 
 func (m numMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return m.match(unsafe.Slice((*T)(b.Ptr()), b.Len()), m.val, bits, mask)
+	acc := block.NewBlockAccessor[T](b)
+	return m.match(acc.Slice(), m.val, bits, mask)
 }
 
 // EQUAL ---
@@ -412,9 +419,11 @@ type numRangeMatcher[T Number] struct {
 
 func (m *numRangeMatcher[T]) Weight() int { return 2 }
 
-func (m *numRangeMatcher[T]) WithRange(from, to any) {
-	m.from = from.(T)
-	m.to = to.(T)
+func (m *numRangeMatcher[T]) WithValue(v any) Matcher {
+	val := v.(RangeValue)
+	m.from = val[0].(T)
+	m.to = val[1].(T)
+	return m
 }
 
 func (m numRangeMatcher[T]) MatchValue(v any) bool {
@@ -430,29 +439,43 @@ func (m numRangeMatcher[T]) MatchRange(from, to any) bool {
 // In, Contains
 type numInSetMatcher[T Number] struct {
 	noopMatcher
-	set    map[T]struct{} // maybe use slicex.OrderedNumbers or xroar bitset instead
-	slice  *slicex.OrderedNumbers[T]
+	set *xroar.Bitmap
+
+	// TODO: xroar ContainsRange() would make this obsolete
+	slice  slicex.OrderedNumbers[T]
 	hashes [][2]uint32
 }
 
 func (m *numInSetMatcher[T]) Weight() int { return m.slice.Len() }
 
-func (m *numInSetMatcher[T]) WithSet(set any) {
-	// TODO: accept Bitmap (xroar) and []T
-	// convert and use both
-	// xroar FromSortedList
+func (m *numInSetMatcher[T]) Value() any {
+	return m.slice.Values
+}
 
-	m.slice = slicex.NewOrderedNumbers(set.([]T)).SetUnique()
-	m.set = make(map[T]struct{}, len(m.slice.Values))
-	m.hashes = make([][2]uint32, len(m.slice.Values))
-	for i, v := range m.slice.Values {
-		m.set[v] = struct{}{}
-		m.hashes[i] = bloom.HashAny(v)
+func (m *numInSetMatcher[T]) WithSlice(slice any) Matcher {
+	bits := slice.([]T)
+	slices.Sort(bits)
+	m.slice.Values = bits
+	m.set = xroar.NewBitmap()
+	for _, v := range bits {
+		m.set.Set(uint64(v))
 	}
+	m.hashes = bloom.HashAnySlice(bits)
+	return m
+}
+
+func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) Matcher {
+	m.set = set
+	m.slice.Values = make([]T, 0, set.GetCardinality())
+	for _, v := range set.ToArray() {
+		m.slice.Values = append(m.slice.Values, T(v))
+	}
+	m.hashes = bloom.HashAnySlice(m.slice.Values)
+	return m
 }
 
 func (m numInSetMatcher[T]) MatchValue(v any) bool {
-	return m.slice.Contains(v.(T))
+	return m.set.Contains(uint64(v.(T)))
 }
 
 func (m numInSetMatcher[T]) MatchRange(from, to any) bool {
@@ -464,28 +487,24 @@ func (m numInSetMatcher[T]) MatchBloom(flt *bloom.Filter) bool {
 }
 
 func (m numInSetMatcher[T]) MatchBitmap(flt *xroar.Bitmap) bool {
-	for n := range m.set {
-		if flt.Contains(uint64(n)) {
-			return true
-		}
-	}
-	return false
+	return !xroar.And(m.set, flt).IsEmpty()
 }
 
 func (m numInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	acc := block.NewBlockAccessor[T](b)
 	if mask != nil {
 		// skip masked values
-		for i, v := range *(*[]T)(b.Ptr()) {
+		for i, v := range acc.Slice() {
 			if !mask.IsSet(i) {
 				continue
 			}
-			if _, ok := m.set[v]; ok {
+			if m.set.Contains(uint64(v)) {
 				bits.Set(i)
 			}
 		}
 	} else {
-		for i, v := range *(*[]T)(b.Ptr()) {
-			if _, ok := m.set[v]; ok {
+		for i, v := range acc.Slice() {
+			if m.set.Contains(uint64(v)) {
 				bits.Set(i)
 			}
 		}
@@ -497,22 +516,39 @@ func (m numInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset
 
 type numNotInSetMatcher[T Number] struct {
 	noopMatcher
-	set   map[T]struct{} // maybe use slicex.OrderedNumbers or xroar bitset instead
-	slice *slicex.OrderedNumbers[T]
+	set *xroar.Bitmap
+	// TODO: xroar ContainsRange() would make this obsolete
+	slice slicex.OrderedNumbers[T]
 }
 
 func (m *numNotInSetMatcher[T]) Weight() int { return m.slice.Len() }
 
-func (m *numNotInSetMatcher[T]) WithSet(set any) {
-	m.slice = slicex.NewOrderedNumbers(set.([]T)).SetUnique()
-	m.set = make(map[T]struct{}, len(m.slice.Values))
-	for _, v := range m.slice.Values {
-		m.set[v] = struct{}{}
+func (m *numNotInSetMatcher[T]) Value() any {
+	return m.slice.Values
+}
+
+func (m *numNotInSetMatcher[T]) WithSlice(slice any) Matcher {
+	bits := slice.([]T)
+	slices.Sort(bits)
+	m.slice.Values = bits
+	m.set = xroar.NewBitmap()
+	for _, v := range bits {
+		m.set.Set(uint64(v))
 	}
+	return m
+}
+
+func (m *numNotInSetMatcher[T]) WithSet(set *xroar.Bitmap) Matcher {
+	m.set = set
+	m.slice.Values = make([]T, 0, set.GetCardinality())
+	for _, v := range set.ToArray() {
+		m.slice.Values = append(m.slice.Values, T(v))
+	}
+	return m
 }
 
 func (m numNotInSetMatcher[T]) MatchValue(v any) bool {
-	return !m.slice.Contains(v.(T))
+	return !m.set.Contains(uint64(v.(T)))
 }
 
 func (m numNotInSetMatcher[T]) MatchRange(from, to any) bool {
@@ -525,24 +561,24 @@ func (m numNotInSetMatcher[T]) MatchBloom(flt *bloom.Filter) bool {
 }
 
 func (m numNotInSetMatcher[T]) MatchBitmap(flt *xroar.Bitmap) bool {
-	// we don't know generally, so full scan is always required
-	return true
+	return !xroar.AndNot(m.set, flt).IsEmpty()
 }
 
 func (m numNotInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	acc := block.NewBlockAccessor[T](b)
 	if mask != nil {
 		// skip masked values
-		for i, v := range *(*[]T)(b.Ptr()) {
+		for i, v := range acc.Slice() {
 			if !mask.IsSet(i) {
 				continue
 			}
-			if _, ok := m.set[v]; !ok {
+			if !m.set.Contains(uint64(v)) {
 				bits.Set(i)
 			}
 		}
 	} else {
-		for i, v := range *(*[]T)(b.Ptr()) {
-			if _, ok := m.set[v]; !ok {
+		for i, v := range acc.Slice() {
+			if !m.set.Contains(uint64(v)) {
 				bits.Set(i)
 			}
 		}

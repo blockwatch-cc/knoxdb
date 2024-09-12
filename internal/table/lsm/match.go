@@ -39,14 +39,14 @@ func MatchNode(n *query.FilterTreeNode, v *schema.View) bool {
 	// process all children
 	if n.OrKind {
 		for _, c := range n.Children {
-			if MatchNode(&c, v) {
+			if MatchNode(c, v) {
 				return true
 			}
 		}
 		return false
 	} else {
 		for _, c := range n.Children {
-			if !MatchNode(&c, v) {
+			if !MatchNode(c, v) {
 				return false
 			}
 		}

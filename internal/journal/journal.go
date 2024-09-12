@@ -140,6 +140,7 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bucket []byte) er
 	}
 
 	// tomb
+	j.Deleted.Resize(len(j.Keys))
 	var key [4]byte
 	binary.BigEndian.PutUint32(key[:], pack.TombstoneKeyId)
 	if buf := tx.Bucket(bucket).Get(key[:]); buf != nil {
@@ -147,7 +148,6 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bucket []byte) er
 			return err
 		}
 	}
-	j.Deleted.Resize(len(j.Keys))
 	var idx, last int
 	it := j.Tomb.Bitmap.NewIterator()
 	for pk := it.Next(); pk > 0; pk = it.Next() {

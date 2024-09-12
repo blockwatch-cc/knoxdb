@@ -6,7 +6,6 @@ package query
 import (
 	"errors"
 	"fmt"
-	"sort"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
@@ -39,6 +38,7 @@ const (
 
 type Filter struct {
 	Name    string     // schema field name
+	Type    BlockType  // block type (we need for opimizing filter trees)
 	Mode    FilterMode // eq|ne|gt|gte|lt|lte|rg|in|nin|re
 	Index   uint16     // schema field id
 	Matcher Matcher    // encapsulated match data and function
@@ -71,12 +71,12 @@ func (f Filter) Validate() error {
 }
 
 type FilterTreeNode struct {
-	OrKind   bool             // AND|OR
-	Children []FilterTreeNode // sub filter
-	Filter   *Filter          // ptr to condition
-	Bits     bitmap.Bitmap    // index scan result
-	Skip     bool             // sub-tree or leaf filter has been processed already
-	Empty    bool             // index result is empty
+	OrKind   bool              // AND|OR
+	Children []*FilterTreeNode // sub filter
+	Filter   *Filter           // ptr to condition
+	Bits     bitmap.Bitmap     // index scan result
+	Skip     bool              // sub-tree or leaf filter has been processed already
+	Empty    bool              // index result is empty
 }
 
 func (n FilterTreeNode) IsEmpty() bool {
@@ -163,42 +163,6 @@ func (n FilterTreeNode) Fields() []string {
 	return slicex.UniqueStrings(names)
 }
 
-// TODO: optimize (reduce/merge/replace) conditions
-func (n FilterTreeNode) Optimize() error {
-	if n.IsLeaf() {
-		return nil
-	}
-
-	for i := range n.Children {
-		if err := n.Children[i].Optimize(); err != nil {
-			return err
-		}
-	}
-
-	// merge nested intermediate AND nodes
-	if !n.OrKind {
-		for i := range n.Children {
-			node := n.Children[i]
-			if node.IsLeaf() || node.OrKind {
-				continue
-			}
-
-			// remove nested node
-			n.Children = append(n.Children[:i], n.Children[i+1:]...)
-
-			// append nested node's children
-			n.Children = append(n.Children, node.Children...)
-		}
-	}
-
-	// sort by weight
-	sort.Slice(n.Children, func(i, j int) bool {
-		return n.Children[i].Weight() < n.Children[j].Weight()
-	})
-
-	return nil
-}
-
 // Size returns the total number of condition leaf nodes
 func (n FilterTreeNode) Size() int {
 	if n.IsLeaf() {
@@ -253,7 +217,7 @@ func (n FilterTreeNode) Cost(nValues int) int {
 }
 
 func (n *FilterTreeNode) AddAndFilter(c *Filter) {
-	node := FilterTreeNode{
+	node := &FilterTreeNode{
 		OrKind: COND_AND,
 		Filter: c,
 	}
@@ -261,7 +225,7 @@ func (n *FilterTreeNode) AddAndFilter(c *Filter) {
 }
 
 func (n *FilterTreeNode) AddOrFilter(c *Filter) {
-	node := FilterTreeNode{
+	node := &FilterTreeNode{
 		OrKind: COND_OR,
 		Filter: c,
 	}
@@ -272,15 +236,15 @@ func (n *FilterTreeNode) AddOrFilter(c *Filter) {
 // - root is always and AND node
 // - root is never a leaf node
 // - root may be empty
-func (n *FilterTreeNode) AddNode(node FilterTreeNode) {
+func (n *FilterTreeNode) AddNode(node *FilterTreeNode) {
 	if n.IsLeaf() {
-		clone := FilterTreeNode{
+		clone := &FilterTreeNode{
 			OrKind:   n.OrKind,
 			Children: n.Children,
 			Filter:   n.Filter,
 		}
 		n.Filter = nil
-		n.Children = []FilterTreeNode{clone}
+		n.Children = []*FilterTreeNode{clone}
 	}
 
 	// append new condition to this element

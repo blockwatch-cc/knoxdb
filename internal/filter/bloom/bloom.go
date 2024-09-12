@@ -484,6 +484,108 @@ func HashAny(val any) [2]uint32 {
 	}
 }
 
+func HashAnySlice(val any) [][2]uint32 {
+	if val == nil {
+		return nil
+	}
+	var res [][2]uint32
+	switch v := val.(type) {
+	case [][]byte:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = Hash(v[i])
+		}
+	case []string:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = Hash(util.UnsafeGetBytes(v[i]))
+		}
+	case []uint:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = HashUint64(uint64(v[i]))
+		}
+	case []uint64:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = HashUint64(v[i])
+		}
+	case []uint32:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = HashUint32(v[i])
+		}
+	case []uint16:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = HashUint16(v[i])
+		}
+	case []uint8:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = Hash([]byte{v[i]})
+		}
+	case []int:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = HashInt64(int64(v[i]))
+		}
+	case []int64:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = HashInt64(v[i])
+		}
+	case []int32:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = HashInt32(v[i])
+		}
+	case []int16:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = HashInt16(v[i])
+		}
+	case []int8:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = Hash([]byte{uint8(v[i])})
+		}
+	case []float64:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = HashFloat64(v[i])
+		}
+	case []float32:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			res[i] = HashFloat32(v[i])
+		}
+	case []bool:
+		res = make([][2]uint32, len(v))
+		h0, h1 := Hash([]byte{0}), Hash([]byte{1})
+		for i := range res {
+			if v[i] {
+				res[i] = h0
+			} else {
+				res[i] = h1
+			}
+		}
+	case []num.Int256:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			buf := v[i].Bytes32()
+			res[i] = Hash(buf[:])
+		}
+	case []num.Int128:
+		res = make([][2]uint32, len(v))
+		for i := range res {
+			buf := v[i].Bytes16()
+			res[i] = Hash(buf[:])
+		}
+	}
+	return res
+}
+
 // pow2 returns the number that is the next highest power of 2.
 // Returns v if it is a power of 2.
 func pow2(v int) int {

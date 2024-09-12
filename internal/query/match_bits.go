@@ -31,8 +31,13 @@ type bitEqualMatcher struct {
 	val bool
 }
 
-func (m *bitEqualMatcher) WithValue(v any) {
+func (m *bitEqualMatcher) WithValue(v any) Matcher {
 	m.val = v.(bool)
+	return m
+}
+
+func (m *bitEqualMatcher) Value() any {
+	return m.val
 }
 
 func (m bitEqualMatcher) MatchValue(v any) bool {
@@ -60,6 +65,7 @@ type bitNotEqualMatcher struct {
 	bitEqualMatcher
 }
 
-func (m *bitNotEqualMatcher) WithValue(v any) {
+func (m *bitNotEqualMatcher) WithValue(v any) Matcher {
 	m.val = !v.(bool)
+	return m
 }

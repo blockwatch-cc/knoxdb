@@ -28,6 +28,25 @@ const (
 var (
 	blockTypeNames    = "time_int64_int32_int16_int8_uint64_uint32_uint16_uint8_float64_float32_bool_string_bytes_int128_int256"
 	blockTypeNamesOfs = []int{0, 5, 11, 17, 23, 28, 35, 42, 49, 55, 63, 71, 76, 83, 89, 96, 103}
+
+	blockTypeDataSize = [...]int{
+		BlockTime:    8,
+		BlockInt64:   8,
+		BlockInt32:   4,
+		BlockInt16:   2,
+		BlockInt8:    1,
+		BlockUint64:  8,
+		BlockUint32:  4,
+		BlockUint16:  2,
+		BlockUint8:   1,
+		BlockFloat64: 8,
+		BlockFloat32: 4,
+		BlockBool:    1,
+		BlockString:  0,
+		BlockBytes:   0,
+		BlockInt128:  16,
+		BlockInt256:  32,
+	}
 )
 
 func (t BlockType) IsValid() bool {
@@ -39,6 +58,13 @@ func (t BlockType) String() string {
 		return "invalid block type"
 	}
 	return blockTypeNames[blockTypeNamesOfs[t] : blockTypeNamesOfs[t+1]-1]
+}
+
+func (t BlockType) Size() int {
+	if int(t) < len(blockTypeDataSize) {
+		return blockTypeDataSize[t]
+	}
+	return 0
 }
 
 func (t BlockType) IsInt() bool {

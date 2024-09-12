@@ -19,120 +19,6 @@ import (
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 )
 
-// TODO: ensure we conver this functionality above, make use of node.Bits in MatchXXX
-// algos
-// func (p *QueryPlan) queryIndexes(ctx context.Context, node *FilterTreeNode) (int, error) {
-//  // - visit all leafs, run index scan when field is indexed and condition allowed
-//  // - if collission-free, mark condition as processed (don't execute again)
-//  // - add IN cond to front of current tree branch level
-//  //   -> leaf-roots do not exist (invariant)
-//  var hits int
-//  ins := make([]FilterTreeNode, 0)
-//  for i := range node.Children {
-//      child := &node.Children[i]
-//      if child.IsLeaf() {
-//          // if !q.fidx.Contains(v.Cond.Field.Name) {
-//          //  // q.Debugf("query: %s table non-indexed field %s for cond %s, fallback to table scan",
-//          //  //  q.Name, v.Cond.Field.Name, v.Cond.String())
-//          //  continue
-//          // }
-//          idx, ok := p.findIndex(child)
-//          if !ok {
-//              // q.Debugf("query: %s table missing index on field %s for cond %d, fallback to table scan",
-//              //  q.Name, v.Cond.Field.Name, v.Cond.String())
-//              continue
-//          }
-//          if !idx.CanMatch(child) {
-//              // q.Debugf("query: %s index %s cannot match cond %s, fallback to table scan",
-//              //  q.Name, idx.Name, v.Cond.String())
-//              continue
-//          }
-
-//          if p.Flags.IsDebug() {
-//              p.Log.Debugf("query %s: index scan on %s for %s", p.Key, idx.Schema().Name(), child.Filter)
-//          }
-
-//          // lookup matching primary keys from index (result is sorted)
-//          pkbits, err := idx.Query(ctx, child)
-//          if err != nil {
-//              return hits, fmt.Errorf("query %s: index scan: %v", p.Key, err)
-//          }
-//          count := pkbits.Count()
-//          hits += count
-//          p.Stats.Count("index_lookups", count)
-
-//          // mark condition as processed (exclude hash indexes because they may
-//          // have collisions; to protect against this, we continue matching this
-//          // condition against the full result set, which should be much smaller
-//          // now)
-
-//          // FIXME: decide in pack index implementation
-//          // if !idx.kind.MayHaveCollisions() {
-//          //  child.Filter.Skip = true
-//          // }
-//          if p.Flags.IsDebug() {
-//              p.Log.Debugf("query: %s index scan found %d matches", p.Key, count)
-//          }
-
-//          if count == 0 {
-//              child.Filter.Empty = true
-//              continue
-//          }
-
-//          // create new leaf node
-//          matcher := NewFactory(BlockUint64).New(FilterModeIn)
-
-//          // TODO: may use bitmap for high cardinality dense sets
-//          // requires update to numInSetMatcher
-//          matcher.WithSet(pkbits.ToArray())
-//          f := &Filter{
-//              Name:    p.Table.Schema().Pk().Name(),
-//              Mode:    FilterModeIn,
-//              Index:   uint16(p.Table.Schema().PkIndex()),
-//              Matcher: matcher,
-//              // Value:   pkbits,
-//          }
-
-//          // keep for later append
-//          ins = append(ins, FilterTreeNode{Filter: f})
-//      } else {
-//          // recurse into child (use ptr to slice element)
-//          n, err := p.queryIndexes(ctx, child)
-//          if err != nil {
-//              return hits, err
-//          }
-//          hits += n
-//      }
-//  }
-
-//  // add new leafs to front of child list; this assumes the new indexed
-//  // condition (a list of primary keys) has lower execution cost than
-//  // other conditions in the same sub-tree
-//  //
-//  // FIXME: ideally we would keep processed conditions around and just skip
-//  // them in MaybeMatchPack() and MatchPack(); then we could just prepend
-//  // node.Children = append(ins, node.Children...)
-//  if len(ins) > 0 {
-//      for _, v := range node.Children {
-//          // skip processed source conditions unless they led to an empty result
-//          // because we need them to check for nomatch later
-//          if v.IsLeaf() && v.Filter.Skip && !v.Filter.Empty {
-//              if p.Flags.IsDebug() {
-//                  p.Log.Debugf("query: %s replacing condition %s", p.Key, node.Filter)
-//              }
-//              continue
-//          }
-//          ins = append(ins, v)
-//      }
-//      node.Children = ins
-//      if p.Flags.IsDebug() {
-//          p.Log.Debugf("Updated query: %s", p.Dump())
-//      }
-//  }
-
-//  return hits, nil
-// }
-
 // This index supports the following condition types on lookup.
 // - hash: EQ, IN, NI (single or composite EQ)
 // - int:  EQ, IN, NI, LT, LE GT, GE, RG (single condition)
@@ -250,8 +136,7 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 
 	// identify eligible conditions for constructing multi-field lookups
 	eq := make(map[string]*query.FilterTreeNode) // all equal child conditions
-	for i := range node.Children {
-		child := &node.Children[i]
+	for _, child := range node.Children {
 		if child.Filter.Mode == types.FilterModeEqual {
 			eq[child.Filter.Name] = child
 		}

@@ -56,9 +56,14 @@ type bytesEqualMatcher struct {
 	hash [2]uint32
 }
 
-func (m *bytesEqualMatcher) WithValue(v any) {
+func (m *bytesEqualMatcher) WithValue(v any) Matcher {
 	m.val = v.([]byte)
 	m.hash = bloom.Hash(m.val)
+	return m
+}
+
+func (m *bytesEqualMatcher) Value() any {
+	return m.val
 }
 
 func (m bytesEqualMatcher) MatchValue(v any) bool {
@@ -97,8 +102,13 @@ type bytesNotEqualMatcher struct {
 	val []byte
 }
 
-func (m *bytesNotEqualMatcher) WithValue(v any) {
+func (m *bytesNotEqualMatcher) WithValue(v any) Matcher {
 	m.val = v.([]byte)
+	return m
+}
+
+func (m *bytesNotEqualMatcher) Value() any {
+	return m.val
 }
 
 func (m bytesNotEqualMatcher) MatchValue(v any) bool {
@@ -127,8 +137,13 @@ type bytesGtMatcher struct {
 	val []byte
 }
 
-func (m *bytesGtMatcher) WithValue(v any) {
+func (m *bytesGtMatcher) WithValue(v any) Matcher {
 	m.val = v.([]byte)
+	return m
+}
+
+func (m *bytesGtMatcher) Value() any {
+	return m.val
 }
 
 func (m bytesGtMatcher) MatchValue(v any) bool {
@@ -150,8 +165,13 @@ type bytesGeMatcher struct {
 	val []byte
 }
 
-func (m *bytesGeMatcher) WithValue(v any) {
+func (m *bytesGeMatcher) WithValue(v any) Matcher {
 	m.val = v.([]byte)
+	return m
+}
+
+func (m *bytesGeMatcher) Value() any {
+	return m.val
 }
 
 func (m bytesGeMatcher) MatchValue(v any) bool {
@@ -173,8 +193,13 @@ type bytesLtMatcher struct {
 	val []byte
 }
 
-func (m *bytesLtMatcher) WithValue(v any) {
+func (m *bytesLtMatcher) WithValue(v any) Matcher {
 	m.val = v.([]byte)
+	return m
+}
+
+func (m *bytesLtMatcher) Value() any {
+	return m.val
 }
 
 func (m bytesLtMatcher) MatchValue(v any) bool {
@@ -196,8 +221,13 @@ type bytesLeMatcher struct {
 	val []byte
 }
 
-func (m *bytesLeMatcher) WithValue(v any) {
+func (m *bytesLeMatcher) WithValue(v any) Matcher {
 	m.val = v.([]byte)
+	return m
+}
+
+func (m *bytesLeMatcher) Value() any {
+	return m.val
 }
 
 func (m bytesLeMatcher) MatchValue(v any) bool {
@@ -222,9 +252,16 @@ type bytesRangeMatcher struct {
 
 func (m *bytesRangeMatcher) Weight() int { return 2 }
 
-func (m *bytesRangeMatcher) WithRange(from, to any) {
-	m.from = from.([]byte)
-	m.to = to.([]byte)
+func (m *bytesRangeMatcher) WithValue(v any) Matcher {
+	val := v.(RangeValue)
+	m.from = val[0].([]byte)
+	m.to = val[1].([]byte)
+	return m
+}
+
+func (m *bytesRangeMatcher) Value() any {
+	val := RangeValue{m.from, m.to}
+	return val
 }
 
 func (m bytesRangeMatcher) MatchValue(v any) bool {
@@ -266,8 +303,12 @@ type bytesSetMatcher struct {
 
 func (m *bytesSetMatcher) Weight() int { return m.slice.Len() }
 
-func (m *bytesSetMatcher) WithSet(set any) {
-	m.slice = slicex.NewOrderedBytes(set.([][]byte)).SetUnique()
+func (m *bytesSetMatcher) Value() any {
+	return m.slice.Values
+}
+
+func (m *bytesSetMatcher) WithSlice(slice any) Matcher {
+	m.slice = slicex.NewOrderedBytes(slice.([][]byte)).SetUnique()
 	m.hashes = make([][2]uint32, len(m.slice.Values))
 	for i, v := range m.slice.Values {
 		m.hashes[i] = bloom.HashAny(v)
@@ -299,6 +340,7 @@ func (m *bytesSetMatcher) WithSet(set any) {
 			}
 		}
 	}
+	return m
 }
 
 func (m bytesSetMatcher) matchHashMap(val []byte) bool {
@@ -492,8 +534,13 @@ type bytesRegexpMatcher struct {
 	re *regexp.Regexp
 }
 
-func (m *bytesRegexpMatcher) WithValue(v any) {
+func (m *bytesRegexpMatcher) Value() any {
+	return m.re.String()
+}
+
+func (m *bytesRegexpMatcher) WithValue(v any) Matcher {
 	m.re, _ = regexp.Compile(strings.Replace(v.(string), "*", ".*", -1))
+	return m
 }
 
 func (m bytesRegexpMatcher) MatchValue(v any) bool {

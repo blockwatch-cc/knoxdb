@@ -21,6 +21,13 @@ type BlockAccessor[T Number] struct {
 	sz    int
 }
 
+func NewBlockAccessor[T Number](b *Block) BlockAccessor[T] {
+	return BlockAccessor[T]{
+		block: b,
+		sz:    b.typ.Size(),
+	}
+}
+
 func (a BlockAccessor[T]) Get(n int) (t T) {
 	if n >= a.block.len {
 		panic(fmt.Errorf("get: block bounds out of range [:%d] with length %d", n, a.block.len))

@@ -16,8 +16,9 @@ import (
 
 var (
 	// statistics keys
-	PACKS_SCANNED   = "packs_scanned"
-	PACKS_SCHEDULED = "packs_scheduled"
+	PACKS_SCANNED_KEY   = "packs_scanned"
+	PACKS_SCHEDULED_KEY = "packs_scheduled"
+	JOURNAL_TIME_KEY    = "journal_time"
 )
 
 // Iterator is a common interface for walking packs
@@ -59,7 +60,7 @@ func (it *ForwardIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		info, ok := it.table.meta.GetSorted(it.idx)
 		for ok {
 			it.query.Log.Debugf("IT-fwd checking meta for pack=%08x size=%d", info.Key, info.NValues)
-			if query.MaybeMatchTree(&it.query.Filters, info) {
+			if query.MaybeMatchTree(it.query.Filters, info) {
 				break
 			}
 			it.idx++
@@ -77,12 +78,12 @@ func (it *ForwardIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		if err != nil {
 			return nil, nil, err
 		}
-		it.query.Stats.Count(PACKS_SCHEDULED, 1)
+		it.query.Stats.Count(PACKS_SCHEDULED_KEY, 1)
 
 		it.query.Log.Debugf("IT-fwd checking pack=%08x size=%d", info.Key, info.NValues)
 
 		// find actual matches
-		bits := query.MatchTree(&it.query.Filters, it.pack, info)
+		bits := query.MatchTree(it.query.Filters, it.pack, info)
 
 		// handle false positive metadata matches
 		if bits.Count() == 0 {
@@ -95,7 +96,7 @@ func (it *ForwardIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		// handle real matches
 		it.hits = bits.IndexesU32(it.hits)
 		bits.Close()
-		it.query.Stats.Count(PACKS_SCANNED, 1)
+		it.query.Stats.Count(PACKS_SCANNED_KEY, 1)
 
 		// load remaining columns here
 		it.pack, err = it.table.loadSharedPack(ctx, info.Key, info.NValues, it.useCache, it.query.ResultSchema)
@@ -155,7 +156,7 @@ func (it *ReverseIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		it.idx--
 		info, ok := it.table.meta.GetSorted(it.idx)
 		for ok {
-			if query.MaybeMatchTree(&it.query.Filters, info) {
+			if query.MaybeMatchTree(it.query.Filters, info) {
 				break
 			}
 			it.idx--
@@ -173,12 +174,12 @@ func (it *ReverseIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		if err != nil {
 			return nil, nil, err
 		}
-		it.query.Stats.Count(PACKS_SCHEDULED, 1)
+		it.query.Stats.Count(PACKS_SCHEDULED_KEY, 1)
 
 		it.query.Log.Debugf("IT-rev checking pack=%08x size=%d", info.Key, info.NValues)
 
 		// find actual matches
-		bits := query.MatchTree(&it.query.Filters, it.pack, info)
+		bits := query.MatchTree(it.query.Filters, it.pack, info)
 
 		// handle false positive metadata matches
 		if bits.Count() == 0 {
@@ -191,7 +192,7 @@ func (it *ReverseIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		// handle real matches
 		it.hits = bits.IndexesU32(it.hits)
 		bits.Close()
-		it.query.Stats.Count(PACKS_SCANNED, 1)
+		it.query.Stats.Count(PACKS_SCANNED_KEY, 1)
 
 		// load remaining columns here
 		it.pack, err = it.table.loadSharedPack(ctx, info.Key, info.NValues, it.useCache, it.query.ResultSchema)
@@ -290,8 +291,8 @@ func (it *LookupIterator) Next(ctx context.Context) (*pack.Package, uint64, erro
 		if err != nil {
 			return nil, 0, err
 		}
-		it.query.Stats.Count(PACKS_SCHEDULED, 1)
-		it.query.Stats.Count(PACKS_SCANNED, 1)
+		it.query.Stats.Count(PACKS_SCHEDULED_KEY, 1)
+		it.query.Stats.Count(PACKS_SCANNED_KEY, 1)
 
 		return it.pack, maxPk, nil
 	}

@@ -22,7 +22,12 @@ import (
 // rows_matched
 // rows_scanned
 
-var TOTAL_TIME_KEY = "total_time"
+const (
+	TOTAL_TIME_KEY   = "total_time"
+	SCAN_TIME_KEY    = "scan_time"
+	ROWS_SCANNED_KEY = "rows_scanned"
+	ROWS_MATCHED_KEY = "rows_matched"
+)
 
 type QueryStats struct {
 	sections []string

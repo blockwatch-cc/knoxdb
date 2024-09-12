@@ -29,7 +29,6 @@ const (
 	FilterModeRegexp   = types.FilterModeRegexp
 )
 
-// DEPRECATED: this is now done in index.Query() by returning (nil, nil)
 // This index only supports the following condition types on lookup.
 // - complex AND with equal prefix + one extra LT|LE|GT|GE|RG condition
 // - simple prefix match (on first index field) for EQ|LT|LE|GT|GE|RG condition
@@ -209,8 +208,7 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 	// range scans, this helps optimize some index queries
 	eq := make(map[string]*query.FilterTreeNode) // all equal child conditions
 	ex := make(map[string]*query.FilterTreeNode) // all eligible extra child conditions
-	for i := range node.Children {
-		child := &node.Children[i]
+	for _, child := range node.Children {
 		f := child.Filter
 		switch f.Mode {
 		case types.FilterModeEqual:
@@ -307,9 +305,11 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 		// EQ+RG => scan(prefix+from, prefix+to)
 		err = extraField.Encode(buf, extra.Filter.Value.(query.RangeValue)[0])
 		from = append(prefix, buf.Bytes()...)
-		buf.Reset()
-		err = extraField.Encode(buf, extra.Filter.Value.(query.RangeValue)[1])
-		to = store.BytesPrefix(append(prefix, buf.Bytes()...)).Limit
+		if err == nil {
+			buf.Reset()
+			err = extraField.Encode(buf, extra.Filter.Value.(query.RangeValue)[1])
+			to = store.BytesPrefix(append(prefix, buf.Bytes()...)).Limit
+		}
 	}
 	if err != nil {
 		return nil, false, err

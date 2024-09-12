@@ -43,8 +43,13 @@ type i128Matcher struct {
 	val   num.Int128
 }
 
-func (m *i128Matcher) WithValue(v any) {
+func (m *i128Matcher) WithValue(v any) Matcher {
 	m.val = v.(num.Int128)
+	return m
+}
+
+func (m *i128Matcher) Value() any {
+	return m.val
 }
 
 func (m i128Matcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
@@ -145,9 +150,16 @@ type i128RangeMatcher struct {
 
 func (m *i128RangeMatcher) Weight() int { return 2 }
 
-func (m *i128RangeMatcher) WithRange(from, to any) {
-	m.from = from.(num.Int128)
-	m.to = to.(num.Int128)
+func (m *i128RangeMatcher) WithValue(v any) Matcher {
+	val := v.(RangeValue)
+	m.from = val[0].(num.Int128)
+	m.to = val[1].(num.Int128)
+	return m
+}
+
+func (m *i128RangeMatcher) Value() any {
+	val := RangeValue{m.from, m.to}
+	return val
 }
 
 func (m i128RangeMatcher) MatchValue(v any) bool {

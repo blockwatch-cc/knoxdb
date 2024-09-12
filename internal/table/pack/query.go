@@ -22,6 +22,10 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 		return nil, fmt.Errorf("invalid query plan type %T", q)
 	}
 
+	if err := plan.QueryIndexes(ctx); err != nil {
+		return nil, err
+	}
+
 	// prepare result
 	res := NewResult(
 		pack.New().
@@ -58,6 +62,10 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 		return fmt.Errorf("invalid query plan type %T", q)
 	}
 
+	if err := plan.QueryIndexes(ctx); err != nil {
+		return err
+	}
+
 	// prepare result
 	res := NewStreamResult(fn)
 	defer res.Close()
@@ -89,9 +97,13 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 		return 0, fmt.Errorf("invalid query plan type %T", q)
 	}
 
+	if err := plan.QueryIndexes(ctx); err != nil {
+		return 0, err
+	}
+
 	// amend query plan to only output pk field
 	var err error
-	plan.ResultSchema, err = t.schema.SelectIds("delete", false, t.schema.PkId())
+	plan.ResultSchema, err = t.schema.SelectIds("count", false, t.schema.PkId())
 	if err != nil {
 		return 0, err
 	}
@@ -118,6 +130,10 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	plan, ok := q.(*query.QueryPlan)
 	if !ok {
 		return 0, fmt.Errorf("invalid query plan type %T", q)
+	}
+
+	if err := plan.QueryIndexes(ctx); err != nil {
+		return 0, err
 	}
 
 	// amend query plan to only output pk field
@@ -188,9 +204,9 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 
 	// cleanup and log on exit
 	defer func() {
-		plan.Stats.Tick("scan_time")
-		plan.Stats.Count("rows_scanned", int(nRowsScanned))
-		plan.Stats.Count("rows_matched", int(nRowsMatched))
+		plan.Stats.Tick(query.SCAN_TIME_KEY)
+		plan.Stats.Count(query.ROWS_SCANNED_KEY, int(nRowsScanned))
+		plan.Stats.Count(query.ROWS_MATCHED_KEY, int(nRowsMatched))
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(nRowsMatched))
 		if jbits != nil {
 			jbits.Close()
@@ -202,9 +218,9 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 	// run journal query before index query to avoid side-effects of
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
-	jbits = query.MatchTree(&plan.Filters, t.journal.Data, nil)
+	jbits = query.MatchTree(plan.Filters, t.journal.Data, nil)
 	nRowsScanned += uint32(t.journal.Len())
-	plan.Stats.Tick("journal_time")
+	plan.Stats.Tick(JOURNAL_TIME_KEY)
 	// plan.Log.Debugf("Table %s: %d journal results", t.name(), jbits.Count())
 
 	// early return
@@ -330,9 +346,9 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 
 	// cleanup and log on exit
 	defer func() {
-		plan.Stats.Tick("scan_time")
-		plan.Stats.Count("rows_scanned", int(nRowsScanned))
-		plan.Stats.Count("rows_matched", int(nRowsMatched))
+		plan.Stats.Tick(query.SCAN_TIME_KEY)
+		plan.Stats.Count(query.ROWS_SCANNED_KEY, int(nRowsScanned))
+		plan.Stats.Count(query.ROWS_MATCHED_KEY, int(nRowsMatched))
 		atomic.AddInt64(&t.stats.QueriedTuples, int64(nRowsMatched))
 		if jbits != nil {
 			jbits.Close()
@@ -343,7 +359,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
 	// reverse the bitfield order for descending walk
-	jbits = query.MatchTree(&plan.Filters, t.journal.Data, nil)
+	jbits = query.MatchTree(plan.Filters, t.journal.Data, nil)
 	nRowsScanned += uint32(t.journal.Len())
 
 	// early return
@@ -386,7 +402,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 			break
 		}
 	}
-	plan.Stats.Tick("journal_time")
+	plan.Stats.Tick(JOURNAL_TIME_KEY)
 
 	// finalize on limit
 	if plan.Limit > 0 && nRowsMatched >= plan.Limit {
