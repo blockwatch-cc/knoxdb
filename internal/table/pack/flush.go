@@ -77,6 +77,12 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 			if _, err := t.meta.Load(ctx, tx, t.metakey); err != nil {
 				t.log.Errorf("table %s metadata rollback failed: %v", t.name(), err)
 			}
+			if err != nil {
+				panic(err)
+			}
+			if e != nil {
+				panic(fmt.Errorf("Database likely corrupt."))
+			}
 		}
 	}()
 
@@ -212,16 +218,16 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 		// t.log.Debugf("Loop %d: tomb=%d/%d journal=%d/%d", loop, tpos, tlen, jpos, jlen)
 		loop++
 		if loop > 2*maxloop {
-			t.log.Errorf("pack: %s stopping infinite flush loop %d: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d",
-				t.name(), loop, tpos, tlen, jpos, jlen, lastpack, t.meta.Len(), nextid,
+			t.log.Errorf("pack: %s stopping infinite flush loop %d: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d nextpack=%d",
+				t.name(), loop, tpos, tlen, jpos, jlen, lastpack, t.meta.Len(), nextid, nextpack,
 			)
-			panic(fmt.Errorf("pack: %s infinite flush loop. Database is corrupted.", t.name()))
+			return fmt.Errorf("pack: %s infinite flush loop. Database likely corrupt.", t.name())
 		} else if loop == maxloop {
 			lvl := t.log.Level()
 			t.log.SetLevel(logpkg.LevelDebug)
 			defer t.log.SetLevel(lvl)
-			t.log.Debugf("pack: %s circuit breaker activated: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d",
-				t.name(), tpos, tlen, jpos, jlen, lastpack, t.meta.Len(), nextid,
+			t.log.Debugf("pack: %s circuit breaker activated: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d nextpack=%d",
+				t.name(), tpos, tlen, jpos, jlen, lastpack, t.meta.Len(), nextid, nextpack,
 			)
 		}
 
@@ -567,6 +573,8 @@ func (t *Table) findBestPack(pk uint64) (int, uint64, uint64, uint64) {
 	// to the first pack until it's full; returns last pack for values
 	// > global max
 	bestpack, min, max, nextmin, isFull := t.meta.Best(pk)
+	// t.log.Debugf("find: best=%d min=%d max=%d nextmin=%d, isFull=%t opts=%v",
+	// 	bestpack, min, max, nextmin, isFull, t.opts)
 
 	// insert/update placement into an exsting pack's range always stays with this pack
 

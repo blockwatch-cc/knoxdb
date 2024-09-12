@@ -82,6 +82,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	}
 
 	e := engine.GetTransaction(ctx).Engine()
+	opts = DefaultTableOptions.Merge(opts)
 
 	// init names
 	name := s.Name()
@@ -92,13 +93,13 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.schema = s
 	t.tableId = s.TaggedHash(types.HashTagTable)
 	t.pkindex = pki
-	t.opts = DefaultTableOptions.Merge(opts)
+	t.opts = opts
 	t.datakey = append([]byte(name), dataKeySuffix...)
 	t.metakey = append([]byte(name), metaKeySuffix...)
 	t.state.Sequence = 1
 	t.stats.Name = name
-	t.meta = metadata.NewMetadataIndex(pki, opts.PackSize)
-	t.journal = journal.NewJournal(s, opts.JournalSize)
+	t.meta = metadata.NewMetadataIndex(pki, t.opts.PackSize)
+	t.journal = journal.NewJournal(s, t.opts.JournalSize)
 	t.db = opts.DB
 	t.log = opts.Logger
 

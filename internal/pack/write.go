@@ -832,7 +832,7 @@ func (p *Package) ReplacePack(spack *Package, to, from, n int) error {
 	if p.nRows <= to {
 		return fmt.Errorf("replace: invalid dst offset=%d rows=%d", to, p.nRows)
 	}
-	if p.nRows <= to+n {
+	if p.nRows < to+n {
 		return fmt.Errorf("replace: dst overflow to+n=%d rows=%d", to+n, p.nRows)
 	}
 	defer func() {
