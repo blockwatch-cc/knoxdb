@@ -6,7 +6,6 @@ package schema
 import (
 	"bytes"
 	"encoding"
-	"encoding/binary"
 	"fmt"
 	"reflect"
 	"time"
@@ -311,7 +310,7 @@ func writeField(buf *bytes.Buffer, code OpCode, field Field, ptr unsafe.Pointer)
 		if !ok {
 			return fmt.Errorf("%s: invalid enum value %q", field.name, v)
 		}
-		err = binary.Write(buf, LE, code)
+		buf.Write(Uint16Bytes(code))
 	}
 	return err
 }

@@ -6,22 +6,23 @@ package schema
 import (
 	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func (e *EnumDictionary) dump() {
 	fmt.Printf("Values\n%s", hex.Dump(e.values))
 	fmt.Printf("Offsets %v\n", e.offsets)
-	fmt.Printf("Sorted %v\n", e.sorted)
 }
 
 func TestEnumAdd(t *testing.T) {
 	d := NewEnumDictionary("")
 	d.AddValues("a", "b")
 	t.Log("Added 2 values")
-	d.dump()
+	// d.dump()
 	assert.Equal(t, d.Len(), 2)
 
 	t.Log("Lookup values")
@@ -48,7 +49,7 @@ func TestEnumAdd(t *testing.T) {
 
 	t.Log("Adding 1 more value")
 	d.AddValues("c")
-	d.dump()
+	// d.dump()
 	assert.Equal(t, d.Len(), 3)
 	v, ok = d.Value(2)
 	assert.True(t, ok, "val c")
@@ -62,7 +63,7 @@ func TestEnumSort(t *testing.T) {
 	d := NewEnumDictionary("")
 	d.AddValues("b", "a")
 	t.Log("Added 2 values")
-	d.dump()
+	// d.dump()
 	assert.Equal(t, d.Len(), 2)
 
 	t.Log("Lookup values")
@@ -86,4 +87,99 @@ func TestEnumSort(t *testing.T) {
 	assert.False(t, ok, "overflow")
 	_, ok = d.Code("c")
 	assert.False(t, ok, "overflow")
+}
+
+func TestEnumMarshal(t *testing.T) {
+	d := NewEnumDictionary("")
+	d.AddValues("b", "a")
+	t.Log("Added 2 values")
+	assert.Equal(t, d.Len(), 2)
+
+	t.Log("Marshal")
+	buf, err := d.MarshalBinary()
+	require.NoError(t, err)
+	require.NotNil(t, buf)
+
+	t.Log("Unmarshal")
+	d2 := NewEnumDictionary("")
+	err = d2.UnmarshalBinary(buf)
+	require.NoError(t, err)
+
+	t.Log("Lookup values")
+	v, ok := d.Value(0)
+	assert.True(t, ok, "val b")
+	assert.Equal(t, v, Enum("b"))
+	v, ok = d.Value(1)
+	assert.True(t, ok, "val a")
+	assert.Equal(t, v, Enum("a"))
+}
+
+var enumBenchSizes = []struct {
+	name string
+	num  int
+}{
+	{name: "1", num: 1},
+	{name: "16", num: 16},
+	{name: "256", num: 256},
+	{name: "1k", num: 1024},
+	{name: "4k", num: 4096},
+	{name: "64k", num: 1 << 16},
+}
+
+func makeRandStrings(n int) []Enum {
+	vals := []Enum{}
+	for i := 0; i < n; i++ {
+		vals = append(vals, Enum(hex.EncodeToString(Uint64Bytes(uint64(rand.Int63())))))
+	}
+	return vals
+}
+
+func makeEnum(name string, n int) *EnumDictionary {
+	enum := NewEnumDictionary(name)
+	err := enum.AddValues(makeRandStrings(n)...)
+	if err != nil {
+		panic(err)
+	}
+	return enum
+}
+
+func BenchmarkEnumAdd(b *testing.B) {
+	for _, v := range enumBenchSizes {
+		b.Run(v.name, func(b *testing.B) {
+			vals := makeRandStrings(v.num)
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				NewEnumDictionary(v.name).AddValues(vals...)
+			}
+		})
+	}
+}
+
+func BenchmarkEnumValueLookup(b *testing.B) {
+	for _, v := range enumBenchSizes {
+		b.Run(v.name, func(b *testing.B) {
+			enum := makeEnum(v.name, v.num)
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				_, _ = enum.Value(uint16(i % enum.Len()))
+			}
+		})
+	}
+}
+
+func BenchmarkEnumCodeLookup(b *testing.B) {
+	for _, v := range enumBenchSizes {
+		b.Run(v.name, func(b *testing.B) {
+			vals := makeRandStrings(v.num)
+			enum := NewEnumDictionary(v.name)
+			enum.AddValues(vals...)
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				_, _ = enum.Code(vals[i%enum.Len()])
+			}
+		})
+	}
 }

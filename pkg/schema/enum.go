@@ -5,10 +5,11 @@ package schema
 
 import (
 	"fmt"
-	"sort"
 	"sync"
 
+	"blockwatch.cc/knoxdb/internal/hash/fnv"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type Enum string
@@ -20,7 +21,7 @@ const (
 
 type EnumLUT interface {
 	Name() string
-	// Tag() uint64
+	Tag() uint64
 	Len() int
 	Code(Enum) (uint16, bool)
 	Value(uint16) (Enum, bool)
@@ -54,7 +55,7 @@ type EnumDictionary struct {
 	name    string
 	values  []byte
 	offsets []uint32
-	sorted  []uint16
+	codes   map[uint64]uint16
 }
 
 func NewEnumDictionary(name string) *EnumDictionary {
@@ -65,7 +66,7 @@ func NewEnumDictionary(name string) *EnumDictionary {
 		name:    name,
 		values:  make([]byte, 0),
 		offsets: make([]uint32, 0),
-		sorted:  make([]uint16, 0),
+		codes:   make(map[uint64]uint16),
 	}
 }
 
@@ -104,13 +105,8 @@ func (e *EnumDictionary) MustValue(code uint16) Enum {
 }
 
 func (e *EnumDictionary) Code(val Enum) (uint16, bool) {
-	i := sort.Search(e.Len(), func(i int) bool {
-		return e.value(int(e.sorted[i])) >= val
-	})
-	if i == e.Len() || e.value(int(e.sorted[i])) != val {
-		return 0, false
-	}
-	return e.sorted[i], true
+	code, ok := e.codes[fnv.Sum64a([]byte(val))]
+	return code, ok
 }
 
 func (e *EnumDictionary) AddValues(vals ...Enum) error {
@@ -130,12 +126,13 @@ func (e *EnumDictionary) AddValues(vals ...Enum) error {
 		}
 		unique[v] = struct{}{}
 	}
+
+	clear(e.codes)
 	for _, v := range vals {
-		e.sorted = append(e.sorted, uint16(e.Len()))
+		e.codes[fnv.Sum64a([]byte(v))] = uint16(e.Len())
 		e.offsets = append(e.offsets, uint32(len(e.values)))
 		e.values = append(e.values, []byte(v)...)
 	}
-	e.sort()
 	return nil
 }
 
@@ -160,12 +157,11 @@ func (e *EnumDictionary) UnmarshalBinary(buf []byte) error {
 	for len(buf) > 0 {
 		sz := buf[0]
 		buf = buf[1:]
-		e.sorted = append(e.sorted, uint16(len(e.offsets)))
+		e.codes[fnv.Sum64a(buf[:sz])] = uint16(len(e.offsets))
 		e.offsets = append(e.offsets, uint32(len(e.values)))
 		e.values = append(e.values, buf[:sz]...)
 		buf = buf[sz:]
 	}
-	e.sort()
 	return nil
 }
 
@@ -174,26 +170,5 @@ func (e *EnumDictionary) value(i int) Enum {
 	if i < len(e.offsets)-1 {
 		end = int(e.offsets[i+1])
 	}
-	return Enum(e.values[start:end])
-}
-
-func (e *EnumDictionary) sort() {
-	sort.Sort(enumDictionarySorter{e})
-}
-
-// private sort type to implement sort interface without exposing it
-type enumDictionarySorter struct {
-	d *EnumDictionary
-}
-
-func (e enumDictionarySorter) Len() int {
-	return e.d.Len()
-}
-
-func (e enumDictionarySorter) Less(i, j int) bool {
-	return e.d.value(int(e.d.sorted[i])) < e.d.value(int(e.d.sorted[j]))
-}
-
-func (e enumDictionarySorter) Swap(i, j int) {
-	e.d.sorted[i], e.d.sorted[j] = e.d.sorted[j], e.d.sorted[i]
+	return Enum(util.UnsafeGetString(e.values[start:end]))
 }
