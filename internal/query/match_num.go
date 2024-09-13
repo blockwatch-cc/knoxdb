@@ -260,7 +260,6 @@ type NumMatcherFactory[T Number] struct {
 }
 
 func (f NumMatcherFactory[T]) New(m FilterMode) Matcher {
-	var t T
 	switch m {
 	case FilterModeEqual:
 		fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
