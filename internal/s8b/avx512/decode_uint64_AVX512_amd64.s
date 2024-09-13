@@ -2,7 +2,7 @@
 // Author: stefan@blockwatch.cc
 
 #include "textflag.h"
-#include "constants_Uint64_AVX512.h"
+#include "constants_uint64_AVX512.h"
 
 TEXT ·initUint64AVX512(SB), NOSPLIT, $0-0
         LEAQ            ·unpack240Uint64AVX512(SB), DX

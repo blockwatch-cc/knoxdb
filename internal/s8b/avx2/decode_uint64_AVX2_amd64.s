@@ -2,7 +2,7 @@
 // Author: stefan@blockwatch.cc
 
 #include "textflag.h"
-#include "constants_Uint64_AVX2.h"
+#include "constants_uint64_AVX2.h"
 
 // allow buffer overflows due to writung full vector even its not full
 // caller has to care about
