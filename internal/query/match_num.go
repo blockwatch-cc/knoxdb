@@ -260,21 +260,28 @@ type NumMatcherFactory[T Number] struct {
 }
 
 func (f NumMatcherFactory[T]) New(m FilterMode) Matcher {
-	fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
+	var t T
 	switch m {
 	case FilterModeEqual:
+		fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
 		return &numEqualMatcher[T]{numMatcher[T]{match: fn}}
 	case FilterModeNotEqual:
+		fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
 		return &numNotEqualMatcher[T]{numMatcher[T]{match: fn}}
 	case FilterModeGt:
+		fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
 		return &numGtMatcher[T]{numMatcher[T]{match: fn}}
 	case FilterModeGe:
+		fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
 		return &numGeMatcher[T]{numMatcher[T]{match: fn}}
 	case FilterModeLt:
+		fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
 		return &numLtMatcher[T]{numMatcher[T]{match: fn}}
 	case FilterModeLe:
+		fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
 		return &numLeMatcher[T]{numMatcher[T]{match: fn}}
 	case FilterModeRange:
+		fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
 		return &numRangeMatcher[T]{numMatcher: numMatcher[T]{match: fn}}
 	case FilterModeIn:
 		return &numInSetMatcher[T]{}
@@ -417,7 +424,9 @@ type numRangeMatcher[T Number] struct {
 	to   T
 }
 
-func (m *numRangeMatcher[T]) Weight() int { return 2 }
+func (m *numRangeMatcher[T]) Weight() int { return 1 }
+
+func (m *numRangeMatcher[T]) Len() int { return 2 }
 
 func (m *numRangeMatcher[T]) WithValue(v any) Matcher {
 	val := v.(RangeValue)
@@ -446,7 +455,9 @@ type numInSetMatcher[T Number] struct {
 	hashes [][2]uint32
 }
 
-func (m *numInSetMatcher[T]) Weight() int { return m.slice.Len() }
+func (m *numInSetMatcher[T]) Weight() int { return 1 }
+
+func (m *numInSetMatcher[T]) Len() int { return m.slice.Len() }
 
 func (m *numInSetMatcher[T]) Value() any {
 	return m.slice.Values
@@ -521,7 +532,9 @@ type numNotInSetMatcher[T Number] struct {
 	slice slicex.OrderedNumbers[T]
 }
 
-func (m *numNotInSetMatcher[T]) Weight() int { return m.slice.Len() }
+func (m *numNotInSetMatcher[T]) Weight() int { return 1 }
+
+func (m *numNotInSetMatcher[T]) Len() int { return m.slice.Len() }
 
 func (m *numNotInSetMatcher[T]) Value() any {
 	return m.slice.Values

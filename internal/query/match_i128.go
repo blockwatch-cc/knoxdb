@@ -148,7 +148,9 @@ type i128RangeMatcher struct {
 	to   num.Int128
 }
 
-func (m *i128RangeMatcher) Weight() int { return 2 }
+func (m *i128RangeMatcher) Weight() int { return 1 }
+
+func (m *i128RangeMatcher) Len() int { return 2 }
 
 func (m *i128RangeMatcher) WithValue(v any) Matcher {
 	val := v.(RangeValue)

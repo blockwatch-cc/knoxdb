@@ -156,7 +156,7 @@ func simplifyAnyNodes(nodes []*FilterTreeNode) []*FilterTreeNode {
 			ge = node
 		case FilterModeIn:
 			// update inplace
-			if f.Matcher.Weight() == 1 {
+			if f.Matcher.Len() == 1 {
 				f.Mode = FilterModeEqual
 				f.Value = reflectSliceIndex(f.Matcher.Value(), 0)
 				f.Matcher = newFactory(f.Type).
@@ -166,7 +166,7 @@ func simplifyAnyNodes(nodes []*FilterTreeNode) []*FilterTreeNode {
 			continue
 		case FilterModeNotIn:
 			// update inplace
-			if f.Matcher.Weight() == 1 {
+			if f.Matcher.Len() == 1 {
 				f.Mode = FilterModeNotEqual
 				f.Value = reflectSliceIndex(f.Matcher.Value(), 0)
 				f.Matcher = newFactory(f.Type).
@@ -394,4 +394,8 @@ func reflectSliceMake(a, b any) any {
 	slice := reflect.MakeSlice(reflect.TypeOf(a), 0, 2)
 	slice = reflect.Append(slice, reflect.ValueOf(a), reflect.ValueOf(b))
 	return slice.Interface()
+}
+
+func reflectSliceLen(s any) int {
+	return reflect.ValueOf(s).Len()
 }

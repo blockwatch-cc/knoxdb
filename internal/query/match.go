@@ -19,6 +19,7 @@ type Matcher interface {
 	WithSlice(any) Matcher                                                  // use slice of values to match against
 	WithSet(*xroar.Bitmap) Matcher                                          // use bitmap of integer values to match against
 	Weight() int                                                            // matcher complexity (number of values)
+	Len() int                                                               // number of values in matcher, typically 1, more for sets
 	Value() any                                                             // access matcher value (depends on type)
 	MatchValue(any) bool                                                    // match a single value
 	MatchRange(any, any) bool                                               // min/max checks in MaybeMatchPack()
@@ -85,7 +86,9 @@ func (m *noopMatcher) WithSlice(_ any) Matcher { return m }
 
 func (m *noopMatcher) WithSet(_ *xroar.Bitmap) Matcher { return m }
 
-func (m *noopMatcher) Weight() int { return 1 } // simplifies reuse in simple matchers
+func (m *noopMatcher) Weight() int { return 1 }
+
+func (m *noopMatcher) Len() int { return 1 }
 
 func (m *noopMatcher) Value() any { return nil }
 

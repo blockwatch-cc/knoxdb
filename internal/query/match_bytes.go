@@ -250,7 +250,9 @@ type bytesRangeMatcher struct {
 	to   []byte
 }
 
-func (m *bytesRangeMatcher) Weight() int { return 2 }
+func (m *bytesRangeMatcher) Weight() int { return 1 }
+
+func (m *bytesRangeMatcher) Len() int { return 2 }
 
 func (m *bytesRangeMatcher) WithValue(v any) Matcher {
 	val := v.(RangeValue)
@@ -301,7 +303,9 @@ type bytesSetMatcher struct {
 	overflow []hashvalue          // hash collision overflow list
 }
 
-func (m *bytesSetMatcher) Weight() int { return m.slice.Len() }
+func (m *bytesSetMatcher) Weight() int { return 5 } // arbitrary cost for hash map access
+
+func (m *bytesSetMatcher) Len() int { return m.slice.Len() }
 
 func (m *bytesSetMatcher) Value() any {
 	return m.slice.Values
@@ -536,6 +540,10 @@ type bytesRegexpMatcher struct {
 
 func (m *bytesRegexpMatcher) Value() any {
 	return m.re.String()
+}
+
+func (m *bytesRegexpMatcher) Weight() int {
+	return 100
 }
 
 func (m *bytesRegexpMatcher) WithValue(v any) Matcher {

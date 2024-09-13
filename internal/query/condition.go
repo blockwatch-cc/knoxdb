@@ -97,9 +97,53 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 		caster := schema.NewCaster(c.Type)
 
 		// init matcher impl from value(s)
-		var err error
+		var (
+			node *FilterTreeNode
+			err  error
+		)
 		switch c.Mode {
+		case FilterModeIn, FilterModeNotIn:
+			switch BlockTypes[c.Type] {
+			case BlockFloat64, BlockFloat32, BlockBool, BlockInt128, BlockInt256:
+				// special case for unsupported IN/NI block types
+				// we rewrite IN -> OR(EQ) and NIN -> AND(NE) subtrees
+				n := reflectSliceLen(c.Value)
+				node := &FilterTreeNode{
+					OrKind:   c.Mode == FilterModeIn,
+					Children: make([]*FilterTreeNode, n),
+				}
+				mode := FilterModeEqual
+				if c.Mode == FilterModeNotIn {
+					mode = FilterModeNotEqual
+				}
+				for i := 0; i < n; i++ {
+					val := reflectSliceIndex(c.Value, i)
+					val, err = caster.CastValue(val)
+					if err != nil {
+						break
+					}
+					node.Children[i] = &FilterTreeNode{
+						Filter: &Filter{
+							Name:    c.Name,
+							Type:    BlockTypes[c.Type],
+							Mode:    mode,
+							Index:   c.Index,
+							Value:   val,
+							Matcher: NewFactory(c.Type).New(mode).WithValue(val),
+						},
+					}
+				}
+			default:
+				// ensure slice type matches blocks
+				var slice any
+				slice, err = caster.CastSlice(c.Value)
+				if err == nil {
+					matcher.WithSlice(slice)
+					c.Value = slice
+				}
+			}
 		case FilterModeRange:
+			// ensure range type matches blocks
 			var from, to any
 			from, err = caster.CastValue(c.Value.(RangeValue)[0])
 			if err == nil {
@@ -109,22 +153,8 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 					matcher.WithValue(c.Value)
 				}
 			}
-		case FilterModeIn, FilterModeNotIn:
-			switch BlockTypes[c.Type] {
-			case BlockFloat64, BlockFloat32, BlockBool, BlockInt128, BlockInt256:
-				// disallow float, bool, i128, i256
-				return nil, fmt.Errorf(
-					"filter mode %s is unsupported in fields of type %s",
-					c.Mode, c.Type,
-				)
-			}
-			var slice any
-			slice, err = caster.CastSlice(c.Value)
-			if err == nil {
-				matcher.WithSlice(slice)
-				c.Value = slice
-			}
 		default:
+			// ensure value type matches blocks
 			var val any
 			val, err = caster.CastValue(c.Value)
 			if err == nil {
@@ -136,16 +166,22 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 			return nil, err
 		}
 
-		return &FilterTreeNode{
-			Filter: &Filter{
-				Name:    c.Name,
-				Type:    BlockTypes[c.Type],
-				Mode:    c.Mode,
-				Index:   c.Index,
-				Value:   c.Value,
-				Matcher: matcher,
-			},
-		}, nil
+		// use the subtree node from rewrite above or create a new child
+		// node from matcher
+		if node == nil {
+			node = &FilterTreeNode{
+				Filter: &Filter{
+					Name:    c.Name,
+					Type:    BlockTypes[c.Type],
+					Mode:    c.Mode,
+					Index:   c.Index,
+					Value:   c.Value,
+					Matcher: matcher,
+				},
+			}
+		}
+
+		return node, nil
 	}
 
 	// bind children
