@@ -8,6 +8,7 @@ package engine
 import (
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/store/mem"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -48,6 +49,11 @@ func (o DatabaseOptions) ToDriverOpts() any {
 			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
 		}
 		return &drvOpts
+	case "mem":
+		return &mem.Options{
+			ReadOnly: o.ReadOnly,
+			Persist:  !o.NoSync,
+		}
 	default:
 		return nil
 	}
@@ -87,6 +93,11 @@ func (o TableOptions) ToDriverOpts() any {
 			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
 		}
 		return &drvOpts
+	case "mem":
+		return &mem.Options{
+			ReadOnly: o.ReadOnly,
+			Persist:  !o.NoSync,
+		}
 	default:
 		return nil
 	}
@@ -126,6 +137,11 @@ func (o StoreOptions) ToDriverOpts() any {
 			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
 		}
 		return &drvOpts
+	case "mem":
+		return &mem.Options{
+			ReadOnly: o.ReadOnly,
+			Persist:  !o.NoSync,
+		}
 	default:
 		return nil
 	}
@@ -165,6 +181,11 @@ func (o IndexOptions) ToDriverOpts() any {
 			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
 		}
 		return &drvOpts
+	case "mem":
+		return &mem.Options{
+			ReadOnly: o.ReadOnly,
+			Persist:  !o.NoSync,
+		}
 	default:
 		return nil
 	}
