@@ -66,13 +66,14 @@ type QueryPlan interface {
 
 type QueryResult interface {
 	Schema() *schema.Schema
-	Rows() int
+	Len() int
 	Row(n int) QueryRow
 	Record(n int) []byte
 	Close()
 	Bytes() []byte
 	SortBy(name string, order OrderType)
 	ForEach(fn func(r QueryRow) error) error
+	Column(name string) (any, error)
 }
 
 type QueryRow interface {

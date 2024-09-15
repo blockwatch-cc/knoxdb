@@ -231,7 +231,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 	return nil
 }
 
-// Reads a single value at postion col,row. Replaces FieldAt() used in join
+// Reads a single value at postion col,row.
 func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any {
 	// assert.Always(col >= 0 && col < len(p.blocks), "invalid block id", map[string]any{
 	// 	"id":      col,
@@ -297,6 +297,67 @@ func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any 
 	default:
 		// oh, its a type we don't support yet
 		assert.Unreachable("unhandled field type", map[string]any{
+			"field":   col,
+			"typeid":  int(typ),
+			"type":    typ.String(),
+			"pack":    p.key,
+			"schema":  p.schema.Name(),
+			"version": p.schema.Version(),
+		})
+	}
+	return nil
+}
+
+// Reads a single value at postion col, row.
+func (p *Package) ReadData(col, row int, typ types.BlockType) any {
+	// assert.Always(col >= 0 && col < len(p.blocks), "invalid block id", map[string]any{
+	// 	"id":      col,
+	// 	"pack":    p.key,
+	// 	"schema":  p.schema.Name(),
+	// 	"version": p.schema.Version(),
+	// 	"nFields": p.schema.NumFields(),
+	// 	"nBlocks": len(p.blocks),
+	// })
+	// assert.Always(row >= 0 && row < p.nRows, "invalid row", map[string]any{
+	// 	"row":     row,
+	// 	"pack":    p.key,
+	// 	"schema":  p.schema.Name(),
+	// 	"version": p.schema.Version(),
+	// })
+	b := p.blocks[col]
+
+	switch typ {
+	case types.BlockInt64, types.BlockTime:
+		return b.Int64().Get(row)
+	case types.BlockInt32:
+		return b.Int32().Get(row)
+	case types.BlockInt16:
+		return b.Int16().Get(row)
+	case types.BlockInt8:
+		return b.Int8().Get(row)
+	case types.BlockUint64:
+		return b.Uint64().Get(row)
+	case types.BlockUint32:
+		return b.Uint32().Get(row)
+	case types.BlockUint16:
+		return b.Uint16().Get(row)
+	case types.BlockUint8:
+		return b.Uint8().Get(row)
+	case types.BlockFloat64:
+		return b.Float64().Get(row)
+	case types.BlockFloat32:
+		return b.Float32().Get(row)
+	case types.BlockBool:
+		return b.Bool().IsSet(row)
+	case types.BlockBytes, types.BlockString:
+		return b.Bytes().Elem(row)
+	case types.BlockInt256:
+		return b.Int256().Elem(row)
+	case types.BlockInt128:
+		return b.Int128().Elem(row)
+	default:
+		// oh, its a type we don't support yet
+		assert.Unreachable("unhandled block type", map[string]any{
 			"field":   col,
 			"typeid":  int(typ),
 			"type":    typ.String(),

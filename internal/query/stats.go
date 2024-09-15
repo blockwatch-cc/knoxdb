@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 // Stats based on implementations e.g.
@@ -97,4 +99,14 @@ func (s QueryStats) String() string {
 		}
 	}
 	return b.String()
+}
+
+func (s *QueryStats) Merge(x *QueryStats) {
+	s.sections = slicex.UniqueStringsStable(append(s.sections, x.sections...))
+	for n, v := range x.runtime {
+		s.runtime[n] += v
+	}
+	for n, v := range x.counts {
+		s.counts[n] += v
+	}
 }

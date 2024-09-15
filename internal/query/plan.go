@@ -16,6 +16,12 @@ import (
 	"github.com/echa/log"
 )
 
+// TODO
+// - operator nesting/pipelining (filter, transform, aggregate)
+// - schedule execution pipeline along operators (push model)
+// - support aggregators
+// - support group_by
+
 type OrderType = types.OrderType
 
 type QueryFlags byte
@@ -33,20 +39,6 @@ func (f QueryFlags) IsDebug() bool   { return f&QueryFlagDebug > 0 }
 func (f QueryFlags) IsStats() bool   { return f&QueryFlagStats > 0 }
 
 var QueryLogMinDuration time.Duration = 500 * time.Millisecond
-
-// TODO: decide if we want to use bitmaps or replace filters in the tree
-//
-// how to use the Bits field going forward?
-// some AND nodes may not be covered by index scans but when others are
-// we have Bits set on the collection node - how to use index scan
-// results in table scans (update pack table scan algo, review lsm).
-
-// TODO
-// - use nested Operators (Filter, Transform, Aggregate) to express a query
-// - define execution Pipeline along operators
-// - use query planner to tansform the operator tree to minimize cost
-// - support aggregators
-// - support groupby
 
 type QueryPlan struct {
 	Tag     string
@@ -224,6 +216,11 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (p *QueryPlan) EstimateCardinality(ctx context.Context) int64 {
+	// TODO: ask tables
+	return 0
 }
 
 func (p *QueryPlan) Execute(ctx context.Context) (engine.QueryResult, error) {

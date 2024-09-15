@@ -336,7 +336,7 @@ func (q Query[T]) Run(ctx context.Context) ([]T, error) {
 	}
 	defer res.Close()
 
-	vals := make([]T, res.Rows())
+	vals := make([]T, res.Len())
 	i := -1
 	err = res.ForEach(func(r QueryRow) error {
 		i++

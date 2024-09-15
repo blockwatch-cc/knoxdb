@@ -1,10 +1,11 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package lsm
+package query
 
 import (
 	"bytes"
+	"encoding/binary"
 	"strings"
 	"time"
 
@@ -25,6 +26,7 @@ var (
 
 type QueryResultConsumer interface {
 	Append(buf []byte, isZeroCopy bool) error
+	Len() int
 }
 
 type StreamCallback func(engine.QueryRow) error
@@ -223,6 +225,7 @@ func (r *Result) Append(buf []byte, isZeroCopy bool) error {
 	return nil
 }
 
+// not public
 func (r *Result) Column(name string) (any, error) {
 	if !r.IsValid() {
 		return nil, ErrResultClosed
@@ -267,7 +270,7 @@ func (r *Row) Decode(val any) error {
 		return err
 	}
 	if r.conv == nil || r.conv.Schema() != s {
-		r.conv = schema.NewConverter(r.res.schema, s, NE)
+		r.conv = schema.NewConverter(r.res.schema, s, binary.NativeEndian)
 		r.dec = schema.NewDecoder(s)
 	}
 

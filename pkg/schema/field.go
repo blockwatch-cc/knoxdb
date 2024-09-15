@@ -163,13 +163,13 @@ func (f Field) WithCompression(c types.FieldCompression) Field {
 	return f
 }
 
-func (f Field) WithFixed(n int) Field {
-	f.fixed = uint16(n)
+func (f Field) WithFixed(n uint16) Field {
+	f.fixed = n
 	return f
 }
 
-func (f Field) WithScale(n int) Field {
-	f.scale = uint8(n)
+func (f Field) WithScale(n uint8) Field {
+	f.scale = n
 	return f
 }
 

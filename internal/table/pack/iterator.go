@@ -60,7 +60,7 @@ func (it *ForwardIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		info, ok := it.table.meta.GetSorted(it.idx)
 		for ok {
 			it.query.Log.Debugf("IT-fwd checking meta for pack=%08x size=%d", info.Key, info.NValues)
-			if query.MaybeMatchTree(it.query.Filters, info) {
+			if MaybeMatchTree(it.query.Filters, info) {
 				break
 			}
 			it.idx++
@@ -83,7 +83,7 @@ func (it *ForwardIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		it.query.Log.Debugf("IT-fwd checking pack=%08x size=%d", info.Key, info.NValues)
 
 		// find actual matches
-		bits := query.MatchTree(it.query.Filters, it.pack, info)
+		bits := MatchTree(it.query.Filters, it.pack, info)
 
 		// handle false positive metadata matches
 		if bits.Count() == 0 {
@@ -156,7 +156,7 @@ func (it *ReverseIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		it.idx--
 		info, ok := it.table.meta.GetSorted(it.idx)
 		for ok {
-			if query.MaybeMatchTree(it.query.Filters, info) {
+			if MaybeMatchTree(it.query.Filters, info) {
 				break
 			}
 			it.idx--
@@ -179,7 +179,7 @@ func (it *ReverseIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		it.query.Log.Debugf("IT-rev checking pack=%08x size=%d", info.Key, info.NValues)
 
 		// find actual matches
-		bits := query.MatchTree(it.query.Filters, it.pack, info)
+		bits := MatchTree(it.query.Filters, it.pack, info)
 
 		// handle false positive metadata matches
 		if bits.Count() == 0 {

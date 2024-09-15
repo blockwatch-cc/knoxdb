@@ -218,7 +218,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 	// run journal query before index query to avoid side-effects of
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
-	jbits = query.MatchTree(plan.Filters, t.journal.Data, nil)
+	jbits = MatchTree(plan.Filters, t.journal.Data, nil)
 	nRowsScanned += uint32(t.journal.Len())
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
 	// plan.Log.Debugf("Table %s: %d journal results", t.name(), jbits.Count())
@@ -359,7 +359,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	// added pk lookup condition (otherwise only indexed pks are found,
 	// but not new pks that are only in journal)
 	// reverse the bitfield order for descending walk
-	jbits = query.MatchTree(plan.Filters, t.journal.Data, nil)
+	jbits = MatchTree(plan.Filters, t.journal.Data, nil)
 	nRowsScanned += uint32(t.journal.Len())
 
 	// early return

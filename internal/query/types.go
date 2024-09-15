@@ -4,11 +4,27 @@
 package query
 
 import (
-	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/metadata"
-	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
+)
+
+type (
+	FilterMode = types.FilterMode
+	BlockType  = block.BlockType
+)
+
+const (
+	FilterModeInvalid  = types.FilterModeInvalid
+	FilterModeEqual    = types.FilterModeEqual
+	FilterModeNotEqual = types.FilterModeNotEqual
+	FilterModeGt       = types.FilterModeGt
+	FilterModeGe       = types.FilterModeGe
+	FilterModeLt       = types.FilterModeLt
+	FilterModeLe       = types.FilterModeLe
+	FilterModeIn       = types.FilterModeIn
+	FilterModeNotIn    = types.FilterModeNotIn
+	FilterModeRange    = types.FilterModeRange
+	FilterModeRegexp   = types.FilterModeRegexp
 )
 
 const (
@@ -30,15 +46,7 @@ const (
 	BlockInt256  = block.BlockInt256
 )
 
-type (
-	BlockType    = block.BlockType
-	Bitset       = bitset.Bitset
-	Package      = pack.Package
-	PackMetadata = metadata.PackMetadata
-)
-
 var (
-	// translate field type to block type
 	BlockTypes = [...]block.BlockType{
 		types.FieldTypeDatetime:   block.BlockTime,
 		types.FieldTypeBoolean:    block.BlockBool,

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -18,22 +17,6 @@ var (
 	ErrNoMode    = errors.New("invalid filter mode")
 	ErrNoMatcher = errors.New("missing matcher")
 	ErrNoValue   = errors.New("missing value")
-)
-
-type FilterMode = types.FilterMode
-
-const (
-	FilterModeInvalid  = types.FilterModeInvalid
-	FilterModeEqual    = types.FilterModeEqual
-	FilterModeNotEqual = types.FilterModeNotEqual
-	FilterModeGt       = types.FilterModeGt
-	FilterModeGe       = types.FilterModeGe
-	FilterModeLt       = types.FilterModeLt
-	FilterModeLe       = types.FilterModeLe
-	FilterModeIn       = types.FilterModeIn
-	FilterModeNotIn    = types.FilterModeNotIn
-	FilterModeRange    = types.FilterModeRange
-	FilterModeRegexp   = types.FilterModeRegexp
 )
 
 type Filter struct {

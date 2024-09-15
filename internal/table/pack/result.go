@@ -47,17 +47,27 @@ func (r *CountResult) Count() uint64 {
 	return r.n
 }
 
+func (r *CountResult) Len() int {
+	return int(r.n)
+}
+
 type StreamCallback func(engine.QueryRow) error
 
 type StreamResult struct {
 	r  *Result
 	fn StreamCallback
+	n  int
 }
 
 // QueryResultConsumer interface
 func (r *StreamResult) Append(pkg *pack.Package, idx, _ int) error {
 	r.r.pkg = pkg
+	r.n++
 	return r.fn(r.r.Row(idx))
+}
+
+func (r *StreamResult) Len() int {
+	return r.n
 }
 
 func (r *StreamResult) Close() {
@@ -92,7 +102,7 @@ func (r *Result) Schema() *schema.Schema {
 	return r.pkg.Schema()
 }
 
-func (r *Result) Rows() int {
+func (r *Result) Len() int {
 	return r.pkg.Len()
 }
 
@@ -147,7 +157,7 @@ func (r *Result) ForEach(fn func(r engine.QueryRow) error) error {
 	if !r.IsValid() {
 		return ErrResultClosed
 	}
-	for i, l := 0, r.Rows(); i < l; i++ {
+	for i, l := 0, r.Len(); i < l; i++ {
 		if err := fn(r.Row(i)); err != nil {
 			return err
 		}
@@ -165,7 +175,6 @@ func (r *Result) PkColumn() []uint64 {
 	return r.pkg.PkColumn()
 }
 
-// non public
 func (r *Result) Column(name string) (any, error) {
 	if !r.IsValid() {
 		return nil, ErrResultClosed

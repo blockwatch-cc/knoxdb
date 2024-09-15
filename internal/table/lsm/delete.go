@@ -87,7 +87,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 
 			// check conditions
 			nRowsScanned++
-			if !MatchNode(plan.Filters, view.Reset(buf)) {
+			if !query.MatchTree(plan.Filters, view.Reset(buf)) {
 				continue
 			}
 
@@ -113,7 +113,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 
 			// check conditions
 			nRowsScanned++
-			if !MatchNode(plan.Filters, view.Reset(buf)) {
+			if !query.MatchTree(plan.Filters, view.Reset(buf)) {
 				continue
 			}
 

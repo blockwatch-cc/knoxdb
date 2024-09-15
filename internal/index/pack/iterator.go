@@ -11,6 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/metadata"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
+	pt "blockwatch.cc/knoxdb/internal/table/pack"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
@@ -132,7 +133,7 @@ func (it *IndexScanIterator) Next(ctx context.Context) (*pack.Package, []uint32,
 		it.idx++
 		info, ok := it.index.meta.GetSorted(it.idx)
 		for ok {
-			if query.MaybeMatchTree(it.node, info) {
+			if pt.MaybeMatchTree(it.node, info) {
 				break
 			}
 			it.idx++
@@ -152,7 +153,7 @@ func (it *IndexScanIterator) Next(ctx context.Context) (*pack.Package, []uint32,
 		}
 
 		// find actual matches
-		bits := query.MatchTree(it.node, it.pack, info)
+		bits := pt.MatchTree(it.node, it.pack, info)
 
 		// handle false positive metadata matches
 		if bits.Count() == 0 {
