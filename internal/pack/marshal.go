@@ -14,6 +14,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/assert"
 )
 
 // The storage model stores serialized blocks in a storage bucket. Each block is
@@ -179,12 +180,20 @@ func (p *Package) Load(ctx context.Context, tx store.Tx, useCache bool, cacheKey
 }
 
 // store all dirty blocks
-func (p *Package) Store(ctx context.Context, tx store.Tx, cacheKey uint64, bucketKey []byte, fill float64) (int, error) {
+func (p *Package) Store(ctx context.Context, tx store.Tx, cacheKey uint64, bucketKey []byte, fill float64, stats []int) (int, error) {
 	bucket := tx.Bucket(bucketKey)
 	if bucket == nil {
 		return 0, fmt.Errorf("missing bucket %s", string(bucketKey))
 	}
 	bucket.FillPercent(fill)
+
+	// ensure stats length
+	if stats != nil {
+		assert.Always(len(stats) == len(p.blocks), "block stats len mismatch",
+			"nstats", len(stats),
+			"nblocks", len(p.blocks),
+		)
+	}
 
 	// remove updated blocks from cache
 	bcache := engine.GetTransaction(ctx).Engine().BlockCache()
@@ -194,6 +203,7 @@ func (p *Package) Store(ctx context.Context, tx store.Tx, cacheKey uint64, bucke
 	for i, f := range p.schema.Fields() {
 		// skip empty blocks, clean blocks and deleted fields
 		if p.blocks[i] == nil || !p.blocks[i].IsDirty() || f.Is(types.FieldFlagDeleted) {
+			stats[i] = 0
 			continue
 		}
 
@@ -213,8 +223,10 @@ func (p *Package) Store(ctx context.Context, tx store.Tx, cacheKey uint64, bucke
 			return 0, err2
 		}
 
-		// TODO: howto export block size statistics
-		// p.StoredSize[i] = buf.Len()
+		// howto export block size statistics
+		if stats != nil {
+			stats[i] = buf.Len()
+		}
 		n += buf.Len()
 
 		// generate storage key for this block

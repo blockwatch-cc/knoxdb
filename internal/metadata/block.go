@@ -134,7 +134,7 @@ func (m BlockMetadata) canUseBitsets() bool {
 }
 
 func (m BlockMetadata) EncodedSize() int {
-	sz := 1
+	sz := 1 + m.StoredSize
 	switch m.Type {
 	case BlockInt64, BlockTime, BlockUint64, BlockFloat64:
 		sz += 16

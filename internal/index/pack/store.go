@@ -135,11 +135,15 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 	}
 
 	// write to disk
-	n, err := pkg.Store(ctx, tx, idx.indexId, idx.datakey, idx.opts.PageFill)
+	blockSizes := make([]int, len(meta.Blocks))
+	n, err := pkg.Store(ctx, tx, idx.indexId, idx.datakey, idx.opts.PageFill, blockSizes)
 	if err != nil {
 		return 0, err
 	}
 	meta.StoredSize = n
+	for i := range meta.Blocks {
+		meta.Blocks[i].StoredSize = blockSizes[i]
+	}
 
 	// update and store statistics
 	idx.meta.AddOrUpdate(meta)

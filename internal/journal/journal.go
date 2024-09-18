@@ -178,7 +178,7 @@ func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bucket []byte) (
 		}
 		j.Data.SetValue(j.Data.PkIdx(), idx, pk)
 	}
-	n, err := j.Data.Store(ctx, tx, 0, bucket, 0.9)
+	n, err := j.Data.Store(ctx, tx, 0, bucket, 0.9, nil)
 	if err != nil {
 		return 0, 0, err
 	}
