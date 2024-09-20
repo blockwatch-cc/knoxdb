@@ -109,7 +109,7 @@ type Query struct {
 
 func NewQuery() Query {
 	return Query{
-		table: newErrorTable("query", fmt.Errorf("missing table, use WithTable()")),
+		table: newErrorTable("query", ErrNoTable),
 		order: OrderAsc,
 		limit: 0,
 		log:   log.New(nil).SetLevel(log.LevelInfo),

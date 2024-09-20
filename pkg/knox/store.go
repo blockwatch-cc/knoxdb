@@ -15,10 +15,15 @@ import (
 var _ Store = (*StoreImpl)(nil)
 
 type StoreImpl struct {
+	db    Database
 	store engine.StoreEngine
 	dec   *schema.Decoder
 	enc   *schema.Encoder
 	buf   *bytes.Buffer
+}
+
+func (s StoreImpl) DB() Database {
+	return s.db
 }
 
 func (s StoreImpl) Schema() *schema.Schema {
@@ -51,6 +56,7 @@ func (s *StoreImpl) Scan(ctx context.Context, from, to []byte, fn func(ctx conte
 
 // GenericStore[T] implements Store interface for Go struct types an uint64 keys
 type GenericStore[T any] struct {
+	db    Database
 	enc   *schema.GenericEncoder[T]
 	dec   *schema.GenericDecoder[T]
 	buf   *bytes.Buffer
@@ -72,10 +78,15 @@ func UseGenericStore[T any](name string, db Database) (*GenericStore[T], error) 
 		return nil, schema.ErrSchemaMismatch
 	}
 	return &GenericStore[T]{
+		db:    db,
 		enc:   schema.NewGenericEncoder[T](),
 		dec:   schema.NewGenericDecoder[T](),
 		store: store.(*StoreImpl).store,
 	}, nil
+}
+
+func (s *GenericStore[T]) DB() Database {
+	return s.db
 }
 
 func (s *GenericStore[T]) Schema() *schema.Schema {

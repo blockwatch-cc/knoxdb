@@ -33,6 +33,10 @@ func (t TableImpl) Engine() engine.TableEngine {
 	return t.table
 }
 
+func (t TableImpl) DB() Database {
+	return t.db
+}
+
 func (t TableImpl) Insert(ctx context.Context, val any) (uint64, error) {
 	// analyze reflect
 	s, err := schema.SchemaOf(val)
@@ -256,6 +260,9 @@ func (t *GenericTable[T]) Table() Table {
 		db:    t.db,
 		log:   log.Disabled,
 	}
+}
+func (t *GenericTable[T]) DB() Database {
+	return t.db
 }
 
 func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {

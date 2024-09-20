@@ -61,6 +61,7 @@ type QueryRequest interface {
 
 // external user interface
 type Table interface {
+	DB() Database
 	Schema() *schema.Schema
 	Stats() TableStats
 	Engine() engine.TableEngine
@@ -73,6 +74,7 @@ type Table interface {
 }
 
 type Index interface {
+	DB() Database
 	Schema() *schema.Schema
 	Stats() IndexStats
 	Engine() engine.IndexEngine
@@ -80,6 +82,7 @@ type Index interface {
 
 // external user interface
 type Store interface {
+	DB() Database
 	Schema() *schema.Schema
 	Stats() StoreStats
 	Get(ctx context.Context, key []byte) ([]byte, error)

@@ -17,6 +17,10 @@ type IndexImpl struct {
 	log   log.Logger
 }
 
+func (t IndexImpl) DB() Database {
+	return t.db
+}
+
 func (t IndexImpl) Schema() *schema.Schema {
 	return t.index.Schema()
 }

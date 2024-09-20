@@ -135,6 +135,12 @@ func (p *JoinPlan) WithAliases(l, r []string) *JoinPlan {
 	return p
 }
 
+func (p *JoinPlan) WithLimits(l, r uint32) *JoinPlan {
+	p.Left.Limit = l
+	p.Right.Limit = r
+	return p
+}
+
 func (p *JoinPlan) WithOn(f1, f2 *schema.Field, mode FilterMode) *JoinPlan {
 	p.Left.On = f1
 	p.Right.On = f2

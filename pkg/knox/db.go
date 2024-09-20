@@ -122,7 +122,7 @@ func (d *DB) UseStore(name string) (Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &StoreImpl{store: s}, nil
+	return &StoreImpl{db: d, store: s}, nil
 }
 
 func (d *DB) DropStore(ctx context.Context, name string) error {

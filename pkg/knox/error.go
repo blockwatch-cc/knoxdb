@@ -17,6 +17,7 @@ var (
 	ErrNoPointer      = errors.New("expected pointer value")
 
 	ErrNotImplemented = errors.New("not implemented")
+	ErrNoTable        = errors.New("missing table, use WithTable()")
 )
 
 // placeholder for an undefined table, helps delay raising an error
@@ -35,6 +36,7 @@ func newErrorTable(name string, err error) Table {
 
 func (t *errorTable) Name() string                                                 { return t.name }
 func (t *errorTable) Stats() TableStats                                            { return TableStats{} }
+func (t *errorTable) DB() Database                                                 { return nil }
 func (t *errorTable) Schema() *schema.Schema                                       { return &schema.Schema{} }
 func (t *errorTable) Engine() engine.TableEngine                                   { return nil }
 func (t *errorTable) Insert(_ context.Context, _ any) (uint64, error)              { return 0, t.err }
