@@ -14,6 +14,7 @@ import (
 
 var (
 	ErrDatabaseExists = engine.ErrDatabaseExists
+	ErrNoPointer      = errors.New("expected pointer value")
 
 	ErrNotImplemented = errors.New("not implemented")
 )

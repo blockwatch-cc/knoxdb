@@ -369,6 +369,9 @@ func (s *Schema) CanMatchFields(names ...string) bool {
 }
 
 func (s *Schema) CanSelect(x *Schema) error {
+	if x == nil {
+		return ErrNilValue
+	}
 	for _, xf := range x.fields {
 		sf, ok := s.FieldByName(xf.name)
 		if !ok {

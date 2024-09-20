@@ -177,7 +177,7 @@ func run() error {
 	// read records back
 	var count int
 	start := time.Now()
-	err = knox.NewQuery[Types]().
+	err = knox.NewGenericQuery[Types]().
 		WithTable(table).
 		WithTag("three_million_records").
 		WithLimit(3000000).
@@ -194,7 +194,7 @@ func run() error {
 
 	// read a single entry
 	var single Types
-	err = knox.NewQuery[Types]().
+	err = knox.NewGenericQuery[Types]().
 		WithTable(table).
 		WithTag("two_conditions_single").
 		AndGte("int64", 42).
@@ -209,7 +209,7 @@ func run() error {
 
 	// read up to 10 records via query interface
 	multi := make([]*Types, 0)
-	err = knox.NewQuery[Types]().
+	err = knox.NewQuery().
 		WithTable(table).
 		WithTag("no_condition_limit").
 		WithLimit(10).
@@ -226,7 +226,7 @@ func run() error {
 	// Step 3
 	//
 	// delete some records
-	n, err := knox.NewQuery[Types]().
+	n, err := knox.NewQuery().
 		WithTag("delete").
 		WithTable(table).
 		AndLt("int64", 1024).

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
@@ -94,8 +95,7 @@ type BytesBufferCloser struct {
 
 func (b *BytesBufferCloser) Close() error { return nil }
 
-// Generic KnoxDB query specialized for result type T
-type Query[T any] struct {
+type Query struct {
 	schema *schema.Schema // SELECT
 	table  Table          // FROM
 	cond   Condition      // WHERE
@@ -107,40 +107,40 @@ type Query[T any] struct {
 	stats  QueryStats
 }
 
-func NewQuery[T any]() Query[T] {
-	schema, err := schema.GenericSchema[T]()
-	if err != nil {
-		panic(err)
-	}
-	return Query[T]{
-		schema: schema,
-		table:  newErrorTable("query", fmt.Errorf("missing table, use WithTable()")),
-		order:  OrderAsc,
-		limit:  0,
-		log:    log.New(nil).SetLevel(log.LevelInfo),
+func NewQuery() Query {
+	return Query{
+		table: newErrorTable("query", fmt.Errorf("missing table, use WithTable()")),
+		order: OrderAsc,
+		limit: 0,
+		log:   log.New(nil).SetLevel(log.LevelInfo),
 	}
 }
 
-func (q Query[T]) Stats() QueryStats {
+func (q Query) Stats() QueryStats {
 	return q.stats
 }
 
-func (q Query[T]) WithTag(tag string) Query[T] {
+func (q Query) WithSchema(s *schema.Schema) Query {
+	q.schema = s
+	return q
+}
+
+func (q Query) WithTag(tag string) Query {
 	q.tag = tag
 	return q
 }
 
-func (q Query[T]) WithLogger(l log.Logger) Query[T] {
+func (q Query) WithLogger(l log.Logger) Query {
 	q.log = l
 	return q
 }
 
-func (q Query[T]) WithTable(t Table) Query[T] {
+func (q Query) WithTable(t Table) Query {
 	q.table = t
 	return q
 }
 
-func (q Query[T]) WithCache(enable bool) Query[T] {
+func (q Query) WithCache(enable bool) Query {
 	if enable {
 		q.flags &^= QueryFlagNoCache
 	} else {
@@ -149,7 +149,7 @@ func (q Query[T]) WithCache(enable bool) Query[T] {
 	return q
 }
 
-func (q Query[T]) WithIndex(enable bool) Query[T] {
+func (q Query) WithIndex(enable bool) Query {
 	if enable {
 		q.flags &^= QueryFlagNoIndex
 	} else {
@@ -158,7 +158,7 @@ func (q Query[T]) WithIndex(enable bool) Query[T] {
 	return q
 }
 
-func (q Query[T]) WithDebug(enable bool) Query[T] {
+func (q Query) WithDebug(enable bool) Query {
 	if enable {
 		q.flags |= QueryFlagDebug
 	} else {
@@ -167,7 +167,7 @@ func (q Query[T]) WithDebug(enable bool) Query[T] {
 	return q
 }
 
-func (q Query[T]) WithStats(enable bool) Query[T] {
+func (q Query) WithStats(enable bool) Query {
 	if enable {
 		q.flags |= QueryFlagStats
 	} else {
@@ -176,27 +176,27 @@ func (q Query[T]) WithStats(enable bool) Query[T] {
 	return q
 }
 
-func (q Query[T]) WithOrder(o OrderType) Query[T] {
+func (q Query) WithOrder(o OrderType) Query {
 	q.order = o
 	return q
 }
 
-func (q Query[T]) WithDesc() Query[T] {
+func (q Query) WithDesc() Query {
 	q.order = OrderDesc
 	return q
 }
 
-func (q Query[T]) WithAsc() Query[T] {
+func (q Query) WithAsc() Query {
 	q.order = OrderAsc
 	return q
 }
 
-func (q Query[T]) WithLimit(l int) Query[T] {
+func (q Query) WithLimit(l int) Query {
 	q.limit = l
 	return q
 }
 
-func (q Query[T]) AndCondition(conds ...Condition) Query[T] {
+func (q Query) AndCondition(conds ...Condition) Query {
 	if len(conds) == 0 {
 		return q
 	}
@@ -204,7 +204,7 @@ func (q Query[T]) AndCondition(conds ...Condition) Query[T] {
 	return q
 }
 
-func (q Query[T]) OrCondition(conds ...Condition) Query[T] {
+func (q Query) OrCondition(conds ...Condition) Query {
 	if len(conds) == 0 {
 		return q
 	}
@@ -212,58 +212,349 @@ func (q Query[T]) OrCondition(conds ...Condition) Query[T] {
 	return q
 }
 
-func (q Query[T]) And(field string, mode FilterMode, value any) Query[T] {
+func (q Query) And(field string, mode FilterMode, value any) Query {
 	q.cond.And(field, mode, value)
 	return q
 }
 
-func (q Query[T]) Or(field string, mode FilterMode, value any) Query[T] {
+func (q Query) Or(field string, mode FilterMode, value any) Query {
 	q.cond.Or(field, mode, value)
 	return q
 }
 
-func (q Query[T]) AndEqual(field string, value any) Query[T] {
+func (q Query) AndEqual(field string, value any) Query {
 	return q.And(field, FilterModeEqual, value)
 }
 
-func (q Query[T]) AndNotEqual(field string, value any) Query[T] {
+func (q Query) AndNotEqual(field string, value any) Query {
 	return q.And(field, FilterModeNotEqual, value)
 }
 
-func (q Query[T]) AndIn(field string, value any) Query[T] {
+func (q Query) AndIn(field string, value any) Query {
 	return q.And(field, FilterModeIn, value)
 }
 
-func (q Query[T]) AndNotIn(field string, value any) Query[T] {
+func (q Query) AndNotIn(field string, value any) Query {
 	return q.And(field, FilterModeNotIn, value)
 }
 
-func (q Query[T]) AndLt(field string, value any) Query[T] {
+func (q Query) AndLt(field string, value any) Query {
 	return q.And(field, FilterModeLt, value)
 }
 
-func (q Query[T]) AndLte(field string, value any) Query[T] {
+func (q Query) AndLte(field string, value any) Query {
 	return q.And(field, FilterModeLe, value)
 }
 
-func (q Query[T]) AndGt(field string, value any) Query[T] {
+func (q Query) AndGt(field string, value any) Query {
 	return q.And(field, FilterModeGt, value)
 }
 
-func (q Query[T]) AndGte(field string, value any) Query[T] {
+func (q Query) AndGte(field string, value any) Query {
 	return q.And(field, FilterModeGe, value)
 }
 
-func (q Query[T]) AndRegexp(field string, value any) Query[T] {
+func (q Query) AndRegexp(field string, value any) Query {
 	return q.And(field, FilterModeRegexp, value)
 }
 
-func (q Query[T]) AndRange(field string, from, to any) Query[T] {
-	q.cond.AndRange(field, from, to)
+func (q Query) AndRange(field string, from, to any) Query {
+	q.AndRange(field, from, to)
 	return q
 }
 
-func (q Query[T]) Execute(ctx context.Context, val any) (err error) {
+func (q Query) Execute(ctx context.Context, val any) (err error) {
+	// analyze result schema
+	var s *schema.Schema
+	s, err = schema.SchemaOf(val)
+	if err != nil {
+		return
+	}
+
+	// use schema from data if not set, otherwise check compatibility
+	if q.schema == nil {
+		q = q.WithSchema(s)
+	} else {
+
+	}
+
+	rval := reflect.ValueOf(val)
+	if rval.Kind() != reflect.Ptr {
+		return ErrNoPointer
+	}
+	rval = reflect.Indirect(rval)
+
+	switch rval.Kind() {
+	case reflect.Slice:
+		// get slice element type
+		elem := rval.Type().Elem()
+
+		// take limit from slice or user defined value
+		if q.limit == 0 {
+			// reuse existing slice elements
+			q.limit = rval.Len()
+
+			n := -1
+			err = q.table.Stream(ctx, q, func(r QueryRow) error {
+				n++
+				return r.Decode(rval.Index(n).Interface())
+			})
+
+		} else {
+			// allocate new slice elements
+			err = q.table.Stream(ctx, q, func(r QueryRow) error {
+				// create new slice element (may be a pointer to struct)
+				e := reflect.New(elem)
+				ev := e
+
+				// if element is ptr to struct, allocate the underlying struct
+				if e.Elem().Kind() == reflect.Ptr {
+					ev.Elem().Set(reflect.New(e.Elem().Type().Elem()))
+					ev = reflect.Indirect(e)
+				}
+
+				// decode the struct element (re-use our interface-based methods)
+				if err := r.Decode(ev.Interface()); err != nil {
+					return err
+				}
+
+				// append slice element
+				rval.Set(reflect.Append(rval, e.Elem()))
+				return nil
+			})
+		}
+
+	case reflect.Struct:
+		err = q.table.Stream(ctx, q.WithLimit(1), func(r QueryRow) error {
+			return r.Decode(val)
+		})
+	default:
+		err = fmt.Errorf("query %s: %T: %w", q.tag, val, schema.ErrInvalidResultType)
+	}
+	return
+}
+
+func (q Query) Stream(ctx context.Context, fn func(QueryRow) error) error {
+	return q.table.Stream(ctx, q, fn)
+}
+
+func (q Query) Delete(ctx context.Context) (uint64, error) {
+	n, err := q.table.Delete(ctx, q)
+	if err != nil {
+		return 0, fmt.Errorf("query %s: %v", q.tag, err)
+	}
+	return n, nil
+}
+
+func (q Query) Count(ctx context.Context) (uint64, error) {
+	n, err := q.table.Count(ctx, q)
+	if err != nil {
+		return 0, fmt.Errorf("query %s: %v", q.tag, err)
+	}
+	return n, nil
+}
+
+func (q Query) Run(ctx context.Context) (QueryResult, error) {
+	return q.table.Query(ctx, q)
+}
+
+func (q Query) Encode() ([]byte, error) {
+	// // table must exist
+	// if q.Query.table == nil {
+	// 	return nil, engine.ErrNoTable
+	// }
+
+	// // validate T against table schema
+	// if tableSchema := q.Query.table.Schema(); tableSchema != nil {
+	// 	if err := tableSchema.CanSelect(q.Query.schema); err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+
+	// // encode query to wire format
+	// cmd := wire.QueryCommand{
+	// 	Fields: q.schema.FieldIDs(),
+	// 	Cond:   q.cond,
+	// 	Limit:  uint32(q.limit),
+	// 	Order:  q.order,
+	// 	Flags:  q.flags,
+	// 	Tag:    q.tag,
+	// }
+
+	// // write header and return full command buffer
+	// return cmd.Encode(q.table.Schema())
+	return nil, ErrNotImplemented
+}
+
+func (q Query) MakePlan() (engine.QueryPlan, error) {
+	plan := query.NewQueryPlan().
+		WithTag(q.tag).
+		WithLimit(uint32(q.limit)).
+		WithOrder(q.order).
+		WithFlags(q.flags).
+		WithTable(q.table.Engine()).
+		WithLogger(q.log)
+
+	// compile filters from conditions
+	filters, err := q.cond.Compile(q.table.Schema())
+	if err != nil {
+		return nil, err
+	}
+	plan.Filters = filters
+
+	// build request (filter fields) schema
+	ts := q.table.Schema()
+	rs, err := ts.SelectFields("", true, q.cond.Fields()...)
+	if err != nil {
+		return nil, err
+	}
+	plan.RequestSchema = rs
+
+	// validate output schema
+	if q.schema == nil {
+		q.schema = ts
+	} else {
+		if err := ts.CanSelect(q.schema); err != nil {
+			return nil, err
+		}
+	}
+	plan.ResultSchema = q.schema
+
+	return plan, nil
+}
+
+// Generic KnoxDB query specialized for result type T
+type GenericQuery[T any] struct {
+	Query
+}
+
+func NewGenericQuery[T any]() GenericQuery[T] {
+	schema, err := schema.GenericSchema[T]()
+	if err != nil {
+		panic(err)
+	}
+	return GenericQuery[T]{
+		NewQuery().WithSchema(schema),
+	}
+}
+
+func (q GenericQuery[T]) WithTag(tag string) GenericQuery[T] {
+	q.Query = q.Query.WithTag(tag)
+	return q
+}
+
+func (q GenericQuery[T]) WithLogger(l log.Logger) GenericQuery[T] {
+	q.Query = q.Query.WithLogger(l)
+	return q
+}
+
+func (q GenericQuery[T]) WithTable(t Table) GenericQuery[T] {
+	q.Query = q.Query.WithTable(t)
+	return q
+}
+
+func (q GenericQuery[T]) WithCache(enable bool) GenericQuery[T] {
+	q.Query = q.Query.WithCache(enable)
+	return q
+}
+
+func (q GenericQuery[T]) WithIndex(enable bool) GenericQuery[T] {
+	q.Query = q.Query.WithIndex(enable)
+	return q
+}
+
+func (q GenericQuery[T]) WithDebug(enable bool) GenericQuery[T] {
+	q.Query = q.Query.WithDebug(enable)
+	return q
+}
+
+func (q GenericQuery[T]) WithStats(enable bool) GenericQuery[T] {
+	q.Query = q.Query.WithStats(enable)
+	return q
+}
+
+func (q GenericQuery[T]) WithOrder(o OrderType) GenericQuery[T] {
+	q.Query = q.Query.WithOrder(o)
+	return q
+}
+
+func (q GenericQuery[T]) WithDesc() GenericQuery[T] {
+	q.Query = q.Query.WithDesc()
+	return q
+}
+
+func (q GenericQuery[T]) WithAsc() GenericQuery[T] {
+	q.Query = q.Query.WithAsc()
+	return q
+}
+
+func (q GenericQuery[T]) WithLimit(l int) GenericQuery[T] {
+	q.Query = q.Query.WithLimit(l)
+	return q
+}
+
+func (q GenericQuery[T]) AndCondition(conds ...Condition) GenericQuery[T] {
+	q.Query.AndCondition(conds...)
+	return q
+}
+
+func (q GenericQuery[T]) OrCondition(conds ...Condition) GenericQuery[T] {
+	q.Query.OrCondition(conds...)
+	return q
+}
+
+func (q GenericQuery[T]) And(field string, mode FilterMode, value any) GenericQuery[T] {
+	q.Query.And(field, mode, value)
+	return q
+}
+
+func (q GenericQuery[T]) Or(field string, mode FilterMode, value any) GenericQuery[T] {
+	q.Query.Or(field, mode, value)
+	return q
+}
+
+func (q GenericQuery[T]) AndEqual(field string, value any) GenericQuery[T] {
+	return q.And(field, FilterModeEqual, value)
+}
+
+func (q GenericQuery[T]) AndNotEqual(field string, value any) GenericQuery[T] {
+	return q.And(field, FilterModeNotEqual, value)
+}
+
+func (q GenericQuery[T]) AndIn(field string, value any) GenericQuery[T] {
+	return q.And(field, FilterModeIn, value)
+}
+
+func (q GenericQuery[T]) AndNotIn(field string, value any) GenericQuery[T] {
+	return q.And(field, FilterModeNotIn, value)
+}
+
+func (q GenericQuery[T]) AndLt(field string, value any) GenericQuery[T] {
+	return q.And(field, FilterModeLt, value)
+}
+
+func (q GenericQuery[T]) AndLte(field string, value any) GenericQuery[T] {
+	return q.And(field, FilterModeLe, value)
+}
+
+func (q GenericQuery[T]) AndGt(field string, value any) GenericQuery[T] {
+	return q.And(field, FilterModeGt, value)
+}
+
+func (q GenericQuery[T]) AndGte(field string, value any) GenericQuery[T] {
+	return q.And(field, FilterModeGe, value)
+}
+
+func (q GenericQuery[T]) AndRegexp(field string, value any) GenericQuery[T] {
+	return q.And(field, FilterModeRegexp, value)
+}
+
+func (q GenericQuery[T]) AndRange(field string, from, to any) GenericQuery[T] {
+	q.Query.AndRange(field, from, to)
+	return q
+}
+
+func (q GenericQuery[T]) Execute(ctx context.Context, val any) (err error) {
 	// validate val is any of *T, []T or []*T
 	switch res := val.(type) {
 	case *T:
@@ -298,39 +589,26 @@ func (q Query[T]) Execute(ctx context.Context, val any) (err error) {
 	return
 }
 
-func (q Query[T]) Stream(ctx context.Context, fn func(*T) error) error {
-	err := q.table.Stream(ctx, q, func(r QueryRow) error {
+func (q GenericQuery[T]) Stream(ctx context.Context, fn func(*T) error) error {
+	return q.Query.Stream(ctx, func(r QueryRow) error {
 		var t T
 		if err := r.Decode(&t); err != nil {
 			return err
 		}
 		return fn(&t)
 	})
-	if err != nil {
-		return fmt.Errorf("query %s: %v", q.tag, err)
-	}
-
-	return nil
 }
 
-func (q Query[T]) Delete(ctx context.Context) (uint64, error) {
-	n, err := q.table.Delete(ctx, q)
-	if err != nil {
-		return 0, fmt.Errorf("query %s: %v", q.tag, err)
-	}
-	return n, nil
+func (q GenericQuery[T]) Delete(ctx context.Context) (uint64, error) {
+	return q.Query.Delete(ctx)
 }
 
-func (q Query[T]) Count(ctx context.Context) (uint64, error) {
-	n, err := q.table.Count(ctx, q)
-	if err != nil {
-		return 0, fmt.Errorf("query %s: %v", q.tag, err)
-	}
-	return n, nil
+func (q GenericQuery[T]) Count(ctx context.Context) (uint64, error) {
+	return q.Query.Count(ctx)
 }
 
-func (q Query[T]) Run(ctx context.Context) ([]T, error) {
-	res, err := q.table.Query(ctx, q)
+func (q GenericQuery[T]) Run(ctx context.Context) ([]T, error) {
+	res, err := q.Query.Run(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("query %s: %v", q.tag, err)
 	}
@@ -347,61 +625,4 @@ func (q Query[T]) Run(ctx context.Context) ([]T, error) {
 	}
 
 	return vals, nil
-}
-
-func (q Query[T]) Encode() ([]byte, error) {
-	// // table must exist
-	// if q.table == nil {
-	// 	return nil, engine.ErrNoTable
-	// }
-
-	// // validate T against table schema
-	// if tableSchema := q.table.Schema(); tableSchema != nil {
-	// 	if err := tableSchema.CanSelect(q.schema); err != nil {
-	// 		return nil, err
-	// 	}
-	// }
-
-	// // encode query to wire format
-	// cmd := wire.QueryCommand{
-	// 	Fields: q.schema.FieldIDs(),
-	// 	Cond:   q.cond,
-	// 	Limit:  uint32(q.limit),
-	// 	Order:  q.order,
-	// 	Flags:  q.flags,
-	// 	Tag:    q.tag,
-	// }
-
-	// // write header and return full command buffer
-	// return cmd.Encode(q.table.Schema())
-	return nil, ErrNotImplemented
-}
-
-func (q Query[T]) MakePlan() (engine.QueryPlan, error) {
-	plan := query.NewQueryPlan().
-		WithTag(q.tag).
-		WithLimit(uint32(q.limit)).
-		WithOrder(q.order).
-		WithFlags(q.flags).
-		WithTable(q.table.Engine()).
-		WithLogger(q.log)
-
-	// compile filters from conditions
-	filters, err := q.cond.Compile(q.table.Schema())
-	if err != nil {
-		return nil, err
-	}
-	plan.Filters = filters
-
-	// build request (filter fields) schema
-	rs, err := q.table.Schema().SelectFields("", true, q.cond.Fields()...)
-	if err != nil {
-		return nil, err
-	}
-	plan.RequestSchema = rs
-
-	// build result (output) schema from full struct T
-	plan.ResultSchema = q.schema
-
-	return plan, nil
 }
