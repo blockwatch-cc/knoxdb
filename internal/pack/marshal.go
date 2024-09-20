@@ -120,6 +120,7 @@ func (p *Package) Load(ctx context.Context, tx store.Tx, useCache bool, cacheKey
 
 		// alloc block (use actual storage size, arena will round up to power of 2)
 		if p.blocks[i] == nil {
+			// fmt.Printf("Load block %d-%d with size %d:%d\n", p.key, f.Id(), nRows, p.maxRows)
 			p.blocks[i] = block.New(blockTypes[f.Type()], p.maxRows)
 		}
 
@@ -203,7 +204,9 @@ func (p *Package) Store(ctx context.Context, tx store.Tx, cacheKey uint64, bucke
 	for i, f := range p.schema.Fields() {
 		// skip empty blocks, clean blocks and deleted fields
 		if p.blocks[i] == nil || !p.blocks[i].IsDirty() || f.Is(types.FieldFlagDeleted) {
-			stats[i] = 0
+			if stats != nil {
+				stats[i] = 0
+			}
 			continue
 		}
 
@@ -212,6 +215,8 @@ func (p *Package) Store(ctx context.Context, tx store.Tx, cacheKey uint64, bucke
 		buf := bytes.NewBuffer(make([]byte, 0, p.blocks[i].MaxStoredSize()))
 		buf.WriteByte(byte(f.Compress()))
 		enc := NewCompressor(buf, f.Compress())
+
+		// fmt.Printf("Store block %d-%d with size %d:%d\n", p.key, f.Id(), p.blocks[i].Len(), p.blocks[i].Cap())
 
 		// encode block
 		_, err := p.blocks[i].WriteTo(enc)

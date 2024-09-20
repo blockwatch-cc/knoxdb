@@ -271,8 +271,8 @@ func (b *Block) Clone(sz int) *Block {
 		s128 := (*num.Int128Stride)(b.ptr)
 		d128.X0 = append(d128.X0, s128.X0...)
 		d128.X1 = append(d128.X1, s128.X1...)
-		d128.X0 = d128.X0[:sz]
-		d128.X1 = d128.X1[:sz]
+		d128.X0 = d128.X0[:b.len]
+		d128.X1 = d128.X1[:b.len]
 	case BlockInt256:
 		d256 := (*num.Int256Stride)(c.ptr)
 		s256 := (*num.Int256Stride)(b.ptr)
@@ -280,10 +280,10 @@ func (b *Block) Clone(sz int) *Block {
 		d256.X1 = append(d256.X1, s256.X1...)
 		d256.X2 = append(d256.X2, s256.X2...)
 		d256.X3 = append(d256.X3, s256.X3...)
-		d256.X0 = d256.X0[:sz]
-		d256.X1 = d256.X1[:sz]
-		d256.X2 = d256.X2[:sz]
-		d256.X3 = d256.X3[:sz]
+		d256.X0 = d256.X0[:b.len]
+		d256.X1 = d256.X1[:b.len]
+		d256.X2 = d256.X2[:b.len]
+		d256.X3 = d256.X3[:b.len]
 	default:
 		copy(c.buf, b.buf)
 	}

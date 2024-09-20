@@ -135,6 +135,7 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 			meta.Blocks[i] = metadata.NewBlockMetadata(b, &fields[i])
 			meta.Dirty = true
 		}
+		meta.NValues = pkg.Len()
 	}
 
 	// write to disk
