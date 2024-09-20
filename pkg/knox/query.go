@@ -394,7 +394,7 @@ func (q Query[T]) MakePlan() (engine.QueryPlan, error) {
 	plan.Filters = filters
 
 	// build request (filter fields) schema
-	rs, err := q.table.Schema().SelectNames("", true, q.cond.Fields()...)
+	rs, err := q.table.Schema().SelectFields("", true, q.cond.Fields()...)
 	if err != nil {
 		return nil, err
 	}

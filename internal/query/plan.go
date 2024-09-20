@@ -158,13 +158,13 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 	// ensure request schema is set
 	if p.RequestSchema == nil {
 		if filterFields.Len() > 0 {
-			s, err := p.Table.Schema().SelectNames("", true, filterFields.Values...)
+			s, err := p.Table.Schema().SelectFields("", true, filterFields.Values...)
 			if err != nil {
 				return fmt.Errorf("query %s: make request schema: %v", p.Tag, err)
 			}
 			p.RequestSchema = s
 		} else {
-			p.RequestSchema, _ = p.Table.Schema().SelectIds("pk", false, p.Table.Schema().PkId())
+			p.RequestSchema, _ = p.Table.Schema().SelectFieldIds("pk", false, p.Table.Schema().PkId())
 		}
 	}
 	p.Log.Debugf("Q> %s: request %s", p.Tag, p.RequestSchema)
@@ -265,7 +265,7 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 		filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
 		requestFields := slicex.NewOrderedStrings(p.RequestSchema.FieldNames())
 		if !filterFields.Equal(requestFields) && filterFields.Len() > 0 {
-			s, err := p.Table.Schema().SelectNames("", true, filterFields.Values...)
+			s, err := p.Table.Schema().SelectFields("", true, filterFields.Values...)
 			if err != nil {
 				return fmt.Errorf("query %s: remake request schema: %v", p.Tag, err)
 			}

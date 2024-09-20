@@ -103,7 +103,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 
 	// amend query plan to only output pk field
 	var err error
-	plan.ResultSchema, err = t.schema.SelectIds("count", false, t.schema.PkId())
+	plan.ResultSchema, err = t.schema.SelectFieldIds("count", false, t.schema.PkId())
 	if err != nil {
 		return 0, err
 	}
@@ -138,7 +138,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 
 	// amend query plan to only output pk field
 	var err error
-	plan.ResultSchema, err = t.schema.SelectIds("delete", false, t.schema.PkId())
+	plan.ResultSchema, err = t.schema.SelectFieldIds("delete", false, t.schema.PkId())
 	if err != nil {
 		return 0, err
 	}

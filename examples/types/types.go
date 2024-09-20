@@ -293,7 +293,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		return
 	}
 
-	s, err = s.SelectNames("types_hash_index", false, "hash", "id")
+	s, err = s.SelectFields("types_hash_index", false, "hash", "id")
 	if err != nil {
 		return
 	}

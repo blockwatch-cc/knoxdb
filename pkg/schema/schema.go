@@ -382,7 +382,7 @@ func (s *Schema) CanSelect(x *Schema) error {
 	return nil
 }
 
-func (s *Schema) SelectIds(name string, sorted bool, fieldIds ...uint16) (*Schema, error) {
+func (s *Schema) SelectFieldIds(name string, sorted bool, fieldIds ...uint16) (*Schema, error) {
 	ns := &Schema{
 		fields:      make([]Field, 0, len(fieldIds)),
 		isFixedSize: true,
@@ -409,7 +409,7 @@ func (s *Schema) SelectIds(name string, sorted bool, fieldIds ...uint16) (*Schem
 	return ns.Complete(), nil
 }
 
-func (s *Schema) SelectNames(name string, sorted bool, fields ...string) (*Schema, error) {
+func (s *Schema) SelectFields(name string, sorted bool, fields ...string) (*Schema, error) {
 	ns := &Schema{
 		fields:      make([]Field, 0, len(fields)),
 		isFixedSize: true,
