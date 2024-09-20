@@ -404,11 +404,11 @@ func (q Query) MakePlan() (engine.QueryPlan, error) {
 
 	// build request (filter fields) schema
 	ts := q.table.Schema()
-	rs, err := ts.SelectFields("", true, q.cond.Fields()...)
+	rs, err := ts.SelectFields(q.cond.Fields()...)
 	if err != nil {
 		return nil, err
 	}
-	plan.RequestSchema = rs
+	plan.RequestSchema = rs.Sort()
 
 	// validate output schema
 	if q.schema == nil {

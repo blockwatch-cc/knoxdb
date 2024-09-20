@@ -385,16 +385,16 @@ func (s *Schema) CanSelect(x *Schema) error {
 	return nil
 }
 
-func (s *Schema) SelectFieldIds(name string, sorted bool, fieldIds ...uint16) (*Schema, error) {
+func (s *Schema) SelectSchema(x *Schema) (*Schema, error) {
+	return s.SelectFields(x.FieldNames()...)
+}
+
+func (s *Schema) SelectFieldIds(fieldIds ...uint16) (*Schema, error) {
 	ns := &Schema{
 		fields:      make([]Field, 0, len(fieldIds)),
 		isFixedSize: true,
 		version:     s.version,
-		name:        name,
-	}
-
-	if ns.name == "" {
-		ns.name = s.name + "-select"
+		name:        s.name + "-select",
 	}
 
 	for _, fid := range fieldIds {
@@ -405,23 +405,15 @@ func (s *Schema) SelectFieldIds(name string, sorted bool, fieldIds ...uint16) (*
 		ns.fields = append(ns.fields, f)
 	}
 
-	if sorted {
-		sort.Slice(ns.fields, func(i, j int) bool { return ns.fields[i].id < ns.fields[j].id })
-	}
-
 	return ns.Complete(), nil
 }
 
-func (s *Schema) SelectFields(name string, sorted bool, fields ...string) (*Schema, error) {
+func (s *Schema) SelectFields(fields ...string) (*Schema, error) {
 	ns := &Schema{
 		fields:      make([]Field, 0, len(fields)),
 		isFixedSize: true,
 		version:     s.version,
-		name:        name,
-	}
-
-	if ns.name == "" {
-		ns.name = s.name + "-select"
+		name:        s.name + "-select",
 	}
 
 	for _, fname := range fields {
@@ -432,11 +424,15 @@ func (s *Schema) SelectFields(name string, sorted bool, fields ...string) (*Sche
 		ns.fields = append(ns.fields, f)
 	}
 
-	if sorted {
-		sort.Slice(ns.fields, func(i, j int) bool { return ns.fields[i].id < ns.fields[j].id })
-	}
-
 	return ns.Complete(), nil
+}
+
+func (s *Schema) Sort() *Schema {
+	sort.Slice(s.fields, func(i, j int) bool { return s.fields[i].id < s.fields[j].id })
+	s.encode = nil
+	s.decode = nil
+	s.Complete()
+	return s
 }
 
 // Returns a field position mapping for a child schema that maps child schema

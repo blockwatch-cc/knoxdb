@@ -102,11 +102,11 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 	}
 
 	// amend query plan to only output pk field
-	var err error
-	plan.ResultSchema, err = t.schema.SelectFieldIds("count", false, t.schema.PkId())
+	rs, err := t.schema.SelectFieldIds(t.schema.PkId())
 	if err != nil {
 		return 0, err
 	}
+	plan.ResultSchema = rs.WithName("count")
 
 	// use count result
 	res := NewCountResult()
@@ -137,11 +137,11 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	}
 
 	// amend query plan to only output pk field
-	var err error
-	plan.ResultSchema, err = t.schema.SelectFieldIds("delete", false, t.schema.PkId())
+	rs, err := t.schema.SelectFieldIds(t.schema.PkId())
 	if err != nil {
 		return 0, err
 	}
+	plan.ResultSchema = rs.WithName("delete")
 
 	// start a storage write transaction, prevents a conflicting
 	// read-only tx from getting opened in doQuery (tx is reused there)

@@ -293,10 +293,11 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		return
 	}
 
-	s, err = s.SelectFields("types_hash_index", false, "hash", "id")
+	s, err = s.SelectFields("hash", "id")
 	if err != nil {
 		return
 	}
+	s.WithName("types_hash_index")
 	log.Infof("Creating Index %s", s.Name())
 	log.Debugf("Schema %s", s)
 	err = db.CreateIndex(ctx, "types_hash_index", table, s, knox.IndexOptions{
