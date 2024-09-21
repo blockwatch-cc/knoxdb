@@ -59,13 +59,16 @@ type TableEngine interface {
 }
 
 type QueryPlan interface {
-	Compile(ctx context.Context) error
-	Execute(ctx context.Context) (QueryResult, error)
+	Schema() *Schema
+	Validate() error
+	Compile(ctx Context) error
 	Close()
+	Stream(ctx Context, fn func(r QueryRow) error) error
+	Query(ctx Context) (QueryResult, error)
 }
 
 type QueryResult interface {
-	Schema() *schema.Schema
+	Schema() *Schema
 	Len() int
 	Row(n int) QueryRow
 	Record(n int) []byte
@@ -77,7 +80,7 @@ type QueryResult interface {
 }
 
 type QueryRow interface {
-	Schema() *schema.Schema
+	Schema() *Schema
 	Bytes() []byte
 	Decode(any) error
 	Field(string) (any, error)

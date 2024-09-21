@@ -61,8 +61,9 @@ type QueryPlan struct {
 
 func NewQueryPlan() *QueryPlan {
 	return &QueryPlan{
-		Log:   log.Disabled,
-		Stats: NewQueryStats(),
+		Log:     log.Disabled,
+		Filters: &FilterTreeNode{},
+		Stats:   NewQueryStats(),
 	}
 }
 
@@ -133,6 +134,10 @@ func (p *QueryPlan) IsEmptyMatch() bool {
 	return p.Filters.IsEmptyMatch()
 }
 
+func (p *QueryPlan) Schema() *schema.Schema {
+	return p.ResultSchema
+}
+
 func (p *QueryPlan) Runtime() time.Duration {
 	_, ok := p.Stats.runtime[TOTAL_TIME_KEY]
 	if !ok {
@@ -141,19 +146,61 @@ func (p *QueryPlan) Runtime() time.Duration {
 	return p.Stats.runtime[TOTAL_TIME_KEY]
 }
 
-func (p *QueryPlan) Compile(ctx context.Context) error {
-	// ensure table is defined
+func (p *QueryPlan) Validate() error {
+	// ensure table and filters are defined
 	if p.Table == nil {
-		return fmt.Errorf("query %s: result schema: %v", p.Tag, engine.ErrNoTable)
+		return fmt.Errorf("query %s: %v", p.Tag, engine.ErrNoTable)
+	}
+	if p.Filters == nil {
+		return fmt.Errorf("query %s: missing filters", p.Tag)
 	}
 
-	// log
+	// filter tree must be valid
+	if err := p.Filters.Validate(""); err != nil {
+		return fmt.Errorf("query %s: %v", p.Tag, err)
+	}
+
+	// check user-provided request schema
+	if p.RequestSchema != nil {
+		// schemas must match table
+		if err := p.Table.Schema().CanSelect(p.RequestSchema); err != nil {
+			return fmt.Errorf("query %s: request schema: %v", p.Tag, err)
+		}
+	}
+
+	// check user-provided result schema
+	if p.ResultSchema != nil {
+		// result schema must contain pk (required for cursors, pack.LookupIterator)
+		if p.ResultSchema.PkIndex() < 0 {
+			return fmt.Errorf("query %s: result schema: %v", p.Tag, engine.ErrNoPk)
+		}
+		if err := p.Table.Schema().CanSelect(p.ResultSchema); err != nil {
+			return fmt.Errorf("query %s: result schema: %v", p.Tag, err)
+		}
+	}
+
+	return nil
+}
+
+func (p *QueryPlan) Compile(ctx context.Context) error {
+	// validate user data (some empty entries may be filled below)
+	err := p.Validate()
+	if err != nil {
+		return err
+	}
+
+	// log incoming plan before compile
 	if p.Flags.IsDebug() {
 		p.Log.SetLevel(log.LevelDebug)
 		p.Log.Debug(p.Dump())
 	}
 
 	filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
+
+	// ensure result schema is set
+	if p.ResultSchema == nil {
+		p.ResultSchema = p.Table.Schema()
+	}
 
 	// ensure request schema is set
 	if p.RequestSchema == nil {
@@ -186,25 +233,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		p.Indexes = append(p.Indexes, idx)
 	}
 
-	// validate plan
-	//
-	// result schema must contain pk (required for cursors, pack.LookupIterator)
-	if p.ResultSchema.PkIndex() < 0 {
-		return fmt.Errorf("query %s: result schema: %v", p.Tag, engine.ErrNoPk)
-	}
 	p.Log.Debugf("Q> %s: result %s", p.Tag, p.ResultSchema)
-
-	// schemas must match table
-	if err := p.Table.Schema().CanSelect(p.RequestSchema); err != nil {
-		return fmt.Errorf("query %s: request schema: %v", p.Tag, err)
-	}
-	if err := p.Table.Schema().CanSelect(p.ResultSchema); err != nil {
-		return fmt.Errorf("query %s: result schema: %v", p.Tag, err)
-	}
-	// filter tree must be valid
-	if err := p.Filters.Validate(""); err != nil {
-		return fmt.Errorf("query %s: %v", p.Tag, err)
-	}
 
 	// optimize plan
 	// - [x] reorder filters
@@ -227,7 +256,18 @@ func (p *QueryPlan) EstimateCardinality(ctx context.Context) int64 {
 	return 0
 }
 
-func (p *QueryPlan) Execute(ctx context.Context) (engine.QueryResult, error) {
+func (p *QueryPlan) Stream(ctx context.Context, fn func(r engine.QueryRow) error) error {
+	// query indexes first
+	err := p.QueryIndexes(ctx)
+	if err != nil {
+		return err
+	}
+
+	// query table next
+	return p.Table.Stream(ctx, p, fn)
+}
+
+func (p *QueryPlan) Query(ctx context.Context) (engine.QueryResult, error) {
 	// TODO: ideally this becomes a push-based execution pipeline
 	// at some point where index lookups are one step which forwards
 	// bitmap as result
