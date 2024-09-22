@@ -136,10 +136,6 @@ func (b *Block) DecRef() int64 {
 	return val
 }
 
-// func (b Block) Ptr() unsafe.Pointer {
-// 	return b.ptr
-// }
-
 func (b Block) Type() BlockType {
 	return b.typ
 }
@@ -471,17 +467,11 @@ func (b *Block) AppendBlock(src *Block, from, n int) {
 	case BlockInt128:
 		d128 := (*num.Int128Stride)(b.ptr)
 		s128 := (*num.Int128Stride)(src.ptr)
-		// slices.Replace(d128.X0, end, end, s128.X0[from:from+n]...)
-		// slices.Replace(d128.X1, end, end, s128.X1[from:from+n]...)
 		d128.X0 = append(d128.X0, s128.X0[from:from+n]...)
 		d128.X1 = append(d128.X1, s128.X1[from:from+n]...)
 	case BlockInt256:
 		d256 := (*num.Int256Stride)(b.ptr)
 		s256 := (*num.Int256Stride)(src.ptr)
-		// slices.Replace(d256.X0, end, end, s256.X0[from:from+n]...)
-		// slices.Replace(d256.X1, end, end, s256.X1[from:from+n]...)
-		// slices.Replace(d256.X2, end, end, s256.X2[from:from+n]...)
-		// slices.Replace(d256.X3, end, end, s256.X3[from:from+n]...)
 		d256.X0 = append(d256.X0, s256.X0[from:from+n]...)
 		d256.X1 = append(d256.X1, s256.X1[from:from+n]...)
 		d256.X2 = append(d256.X2, s256.X2[from:from+n]...)
@@ -490,7 +480,6 @@ func (b *Block) AppendBlock(src *Block, from, n int) {
 		from *= blockTypeDataSize[b.typ]
 		end *= blockTypeDataSize[b.typ]
 		n *= blockTypeDataSize[b.typ]
-		// slices.Replace(b.buf, end, end, src.buf[from:from+n]...)
 		copy(b.buf[end:], src.buf[from:from+n])
 	}
 	b.dirty = true
