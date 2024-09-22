@@ -43,9 +43,10 @@ type i128Matcher struct {
 	val   num.Int128
 }
 
-func (m *i128Matcher) WithValue(v any) Matcher {
+func (m *i128Matcher) Weight() int { return 2 }
+
+func (m *i128Matcher) WithValue(v any) {
 	m.val = v.(num.Int128)
-	return m
 }
 
 func (m *i128Matcher) Value() any {
@@ -148,15 +149,14 @@ type i128RangeMatcher struct {
 	to   num.Int128
 }
 
-func (m *i128RangeMatcher) Weight() int { return 1 }
+func (m *i128RangeMatcher) Weight() int { return 4 }
 
 func (m *i128RangeMatcher) Len() int { return 2 }
 
-func (m *i128RangeMatcher) WithValue(v any) Matcher {
+func (m *i128RangeMatcher) WithValue(v any) {
 	val := v.(RangeValue)
 	m.from = val[0].(num.Int128)
 	m.to = val[1].(num.Int128)
-	return m
 }
 
 func (m *i128RangeMatcher) Value() any {

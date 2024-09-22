@@ -5,8 +5,8 @@ package query
 
 import (
 	"bytes"
+	"fmt"
 	"regexp"
-	"strings"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
@@ -48,22 +48,31 @@ func (f BytesMatcherFactory) New(m FilterMode) Matcher {
 	}
 }
 
-// EQUAL ---
-
-type bytesEqualMatcher struct {
+type bytesMatcher struct {
 	noopMatcher
 	val  []byte
 	hash [2]uint32
 }
 
-func (m *bytesEqualMatcher) WithValue(v any) Matcher {
+func (m *bytesMatcher) Weight() int { return len(m.val) }
+
+func (m *bytesMatcher) WithValue(v any) {
 	m.val = v.([]byte)
 	m.hash = bloom.Hash(m.val)
-	return m
 }
 
-func (m *bytesEqualMatcher) Value() any {
+func (m *bytesMatcher) Value() any {
 	return m.val
+}
+
+func (m bytesMatcher) MatchBloom(flt *bloom.Filter) bool {
+	return flt.ContainsHash(m.hash)
+}
+
+// EQUAL ---
+
+type bytesEqualMatcher struct {
+	bytesMatcher
 }
 
 func (m bytesEqualMatcher) MatchValue(v any) bool {
@@ -91,24 +100,10 @@ func (m bytesEqualMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset)
 	return b.Bytes().MatchEqual(m.val, bits, mask)
 }
 
-func (m bytesEqualMatcher) MatchBloom(flt *bloom.Filter) bool {
-	return flt.ContainsHash(m.hash)
-}
-
 // NOT EQUAL ---
 
 type bytesNotEqualMatcher struct {
-	noopMatcher
-	val []byte
-}
-
-func (m *bytesNotEqualMatcher) WithValue(v any) Matcher {
-	m.val = v.([]byte)
-	return m
-}
-
-func (m *bytesNotEqualMatcher) Value() any {
-	return m.val
+	bytesMatcher
 }
 
 func (m bytesNotEqualMatcher) MatchValue(v any) bool {
@@ -133,21 +128,11 @@ func (m bytesNotEqualMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bits
 // GT ---
 
 type bytesGtMatcher struct {
-	noopMatcher
-	val []byte
-}
-
-func (m *bytesGtMatcher) WithValue(v any) Matcher {
-	m.val = v.([]byte)
-	return m
-}
-
-func (m *bytesGtMatcher) Value() any {
-	return m.val
+	bytesMatcher
 }
 
 func (m bytesGtMatcher) MatchValue(v any) bool {
-	return bytes.Compare(m.val, v.([]byte)) > 0
+	return bytes.Compare(m.val, v.([]byte)) < 0
 }
 
 func (m bytesGtMatcher) MatchRange(_, to any) bool {
@@ -161,21 +146,11 @@ func (m bytesGtMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *b
 // GE ---
 
 type bytesGeMatcher struct {
-	noopMatcher
-	val []byte
-}
-
-func (m *bytesGeMatcher) WithValue(v any) Matcher {
-	m.val = v.([]byte)
-	return m
-}
-
-func (m *bytesGeMatcher) Value() any {
-	return m.val
+	bytesMatcher
 }
 
 func (m bytesGeMatcher) MatchValue(v any) bool {
-	return bytes.Compare(m.val, v.([]byte)) >= 0
+	return bytes.Compare(m.val, v.([]byte)) <= 0
 }
 
 func (m bytesGeMatcher) MatchRange(_, to any) bool {
@@ -189,21 +164,11 @@ func (m bytesGeMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *b
 // LT ---
 
 type bytesLtMatcher struct {
-	noopMatcher
-	val []byte
-}
-
-func (m *bytesLtMatcher) WithValue(v any) Matcher {
-	m.val = v.([]byte)
-	return m
-}
-
-func (m *bytesLtMatcher) Value() any {
-	return m.val
+	bytesMatcher
 }
 
 func (m bytesLtMatcher) MatchValue(v any) bool {
-	return bytes.Compare(m.val, v.([]byte)) < 0
+	return bytes.Compare(m.val, v.([]byte)) > 0
 }
 
 func (m bytesLtMatcher) MatchRange(from, _ any) bool {
@@ -217,21 +182,11 @@ func (m bytesLtMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *b
 // LE ---
 
 type bytesLeMatcher struct {
-	noopMatcher
-	val []byte
-}
-
-func (m *bytesLeMatcher) WithValue(v any) Matcher {
-	m.val = v.([]byte)
-	return m
-}
-
-func (m *bytesLeMatcher) Value() any {
-	return m.val
+	bytesMatcher
 }
 
 func (m bytesLeMatcher) MatchValue(v any) bool {
-	return bytes.Compare(m.val, v.([]byte)) <= 0
+	return bytes.Compare(m.val, v.([]byte)) >= 0
 }
 
 func (m bytesLeMatcher) MatchRange(from, _ any) bool {
@@ -250,15 +205,14 @@ type bytesRangeMatcher struct {
 	to   []byte
 }
 
-func (m *bytesRangeMatcher) Weight() int { return 1 }
+func (m *bytesRangeMatcher) Weight() int { return len(m.from) + len(m.to) }
 
 func (m *bytesRangeMatcher) Len() int { return 2 }
 
-func (m *bytesRangeMatcher) WithValue(v any) Matcher {
+func (m *bytesRangeMatcher) WithValue(v any) {
 	val := v.(RangeValue)
 	m.from = val[0].([]byte)
 	m.to = val[1].([]byte)
-	return m
 }
 
 func (m *bytesRangeMatcher) Value() any {
@@ -303,7 +257,7 @@ type bytesSetMatcher struct {
 	overflow []hashvalue          // hash collision overflow list
 }
 
-func (m *bytesSetMatcher) Weight() int { return 5 } // arbitrary cost for hash map access
+func (m *bytesSetMatcher) Weight() int { return 10 } // arbitrary cost for hash map access
 
 func (m *bytesSetMatcher) Len() int { return m.slice.Len() }
 
@@ -311,7 +265,7 @@ func (m *bytesSetMatcher) Value() any {
 	return m.slice.Values
 }
 
-func (m *bytesSetMatcher) WithSlice(slice any) Matcher {
+func (m *bytesSetMatcher) WithSlice(slice any) {
 	m.slice = slicex.NewOrderedBytes(slice.([][]byte)).SetUnique()
 	m.hashes = make([][2]uint32, len(m.slice.Values))
 	for i, v := range m.slice.Values {
@@ -344,7 +298,6 @@ func (m *bytesSetMatcher) WithSlice(slice any) Matcher {
 			}
 		}
 	}
-	return m
 }
 
 func (m bytesSetMatcher) matchHashMap(val []byte) bool {
@@ -539,16 +492,29 @@ type bytesRegexpMatcher struct {
 }
 
 func (m *bytesRegexpMatcher) Value() any {
+	if m.re == nil {
+		return ""
+	}
 	return m.re.String()
 }
 
 func (m *bytesRegexpMatcher) Weight() int {
-	return 100
+	return 100 // arbitrary cost
 }
 
-func (m *bytesRegexpMatcher) WithValue(v any) Matcher {
-	m.re, _ = regexp.Compile(strings.Replace(v.(string), "*", ".*", -1))
-	return m
+func (m *bytesRegexpMatcher) WithValue(v any) {
+	var err error
+	switch val := v.(type) {
+	case string:
+		m.re, err = regexp.Compile(val)
+	case *regexp.Regexp:
+		m.re = val
+	default:
+		err = fmt.Errorf("unsupported regexp source type %T", v)
+	}
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (m bytesRegexpMatcher) MatchValue(v any) bool {
@@ -580,7 +546,6 @@ func (m bytesRegexpMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset
 		}
 	} else {
 		b.Bytes().ForEach(func(i int, val []byte) {
-			// skip masked values
 			if m.re.Match(val) {
 				bits.Set(i)
 			}

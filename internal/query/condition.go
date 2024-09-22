@@ -122,6 +122,8 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 					if err != nil {
 						break
 					}
+					matcher := NewFactory(c.Type).New(mode)
+					matcher.WithValue(val)
 					node.Children[i] = &FilterTreeNode{
 						Filter: &Filter{
 							Name:    c.Name,
@@ -129,7 +131,7 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 							Mode:    mode,
 							Index:   c.Index,
 							Value:   val,
-							Matcher: NewFactory(c.Type).New(mode).WithValue(val),
+							Matcher: matcher,
 						},
 					}
 				}

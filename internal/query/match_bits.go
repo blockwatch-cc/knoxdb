@@ -31,9 +31,8 @@ type bitEqualMatcher struct {
 	val bool
 }
 
-func (m *bitEqualMatcher) WithValue(v any) Matcher {
+func (m *bitEqualMatcher) WithValue(v any) {
 	m.val = v.(bool)
-	return m
 }
 
 func (m *bitEqualMatcher) Value() any {
@@ -45,7 +44,7 @@ func (m bitEqualMatcher) MatchValue(v any) bool {
 }
 
 func (m bitEqualMatcher) MatchRange(from, to any) bool {
-	if from == to {
+	if from.(bool) == to.(bool) {
 		return m.val == from.(bool)
 	}
 	return true
@@ -63,9 +62,32 @@ func (m bitEqualMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *
 
 type bitNotEqualMatcher struct {
 	bitEqualMatcher
+	val bool
 }
 
-func (m *bitNotEqualMatcher) WithValue(v any) Matcher {
-	m.val = !v.(bool)
-	return m
+func (m *bitNotEqualMatcher) WithValue(v any) {
+	m.val = v.(bool)
+}
+
+func (m *bitNotEqualMatcher) Value() any {
+	return m.val
+}
+
+func (m bitNotEqualMatcher) MatchValue(v any) bool {
+	return m.val != v.(bool)
+}
+
+func (m bitNotEqualMatcher) MatchRange(from, to any) bool {
+	if from.(bool) == to.(bool) {
+		return m.val != from.(bool)
+	}
+	return true
+}
+
+func (m bitNotEqualMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	if !m.val {
+		return bits.Copy(b.Bool())
+	} else {
+		return bits.Copy(b.Bool()).Neg()
+	}
 }

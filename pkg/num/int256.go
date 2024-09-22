@@ -41,6 +41,12 @@ func Int256From2Int64(in0, in1 int64) Int256 {
 	return Int256FromInt128(z)
 }
 
+func Int256From4Int64(in0, in1, in2, in3 int64) Int256 {
+	var z Int256
+	z[0], z[1], z[2], z[3] = uint64(in0), uint64(in1), uint64(in2), uint64(in3)
+	return z
+}
+
 func Int256FromInt128(in Int128) Int256 {
 	var z Int256
 	z.SetInt128(in)

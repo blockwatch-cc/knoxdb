@@ -57,7 +57,7 @@ func NewJoinPlan() *JoinPlan {
 func (p *JoinPlan) Close() {
 	p.Finalize()
 	if p.Flags.IsStats() || p.Runtime() > QueryLogMinDuration {
-		p.Log.Infof("Q> %s: %s", p.Tag, p.Stats)
+		p.Log.Infof("J> %s: %s", p.Tag, p.Stats)
 	}
 	p.Tag = ""
 	p.Where = nil
@@ -493,7 +493,7 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 
 		// exit when no more rows are found
 		if lRes.Len() == 0 || rRes.Len() == 0 {
-			p.Log.Debugf("Q> %s: FINAL result with %d rows", p.Tag, out.Len())
+			p.Log.Debugf("J> %s: FINAL result with %d rows", p.Tag, out.Len())
 			break
 		}
 
@@ -547,7 +547,7 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 		// POST-PROCESS
 		// ------------------------------------------------------------
 		if p.Where != nil {
-			p.Log.Debugf("Q> %s: post-filter %d result rows with: %s", p.Tag, agg.Len(), p.Where)
+			p.Log.Debugf("J> %s: post-filter %d result rows with: %s", p.Tag, agg.Len(), p.Where)
 
 			// walk result and append
 			var n uint32
@@ -576,7 +576,7 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 			agg.Reset()
 		} else {
 			if p.Limit > 0 && out.Len() >= int(p.Limit) {
-				p.Log.Debugf("Q> %s: FINAL result with limit %d", p.Tag, out.Len())
+				p.Log.Debugf("J> %s: FINAL result with limit %d", p.Tag, out.Len())
 				break
 			}
 		}
@@ -591,7 +591,7 @@ func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes engine.Que
 
 	// 1  query first side of the join
 	if p.Flags.IsDebug() {
-		p.Log.Debugf("Q> %s: %s %s", p.Tag, xname, x.Plan.Dump())
+		p.Log.Debugf("J> %s: %s %s", p.Tag, xname, x.Plan.Dump())
 	}
 
 	// run query
@@ -600,7 +600,7 @@ func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes engine.Que
 		return
 	}
 
-	p.Log.Debugf("Q> %s: %s result %d rows", p.Tag, xname, xRes.Len())
+	p.Log.Debugf("J> %s: %s result %d rows", p.Tag, xname, xRes.Len())
 
 	// update pk cursor on first side
 	var pk any
@@ -628,7 +628,7 @@ func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes engine.Que
 	}
 
 	if p.Flags.IsDebug() {
-		p.Log.Debugf("Q> %s: %s %s", p.Tag, yname, y.Plan.Dump())
+		p.Log.Debugf("J> %s: %s %s", p.Tag, yname, y.Plan.Dump())
 	}
 
 	// run query
@@ -637,7 +637,7 @@ func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes engine.Que
 		return
 	}
 
-	p.Log.Debugf("Q> %s: %s result %d rows", p.Tag, yname, yRes.Len())
+	p.Log.Debugf("J> %s: %s result %d rows", p.Tag, yname, yRes.Len())
 	return
 }
 

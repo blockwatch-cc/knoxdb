@@ -159,9 +159,8 @@ func simplifyAnyNodes(nodes []*FilterTreeNode) []*FilterTreeNode {
 			if f.Matcher.Len() == 1 {
 				f.Mode = FilterModeEqual
 				f.Value = reflectSliceIndex(f.Matcher.Value(), 0)
-				f.Matcher = newFactory(f.Type).
-					New(FilterModeEqual).
-					WithValue(f.Value)
+				f.Matcher = newFactory(f.Type).New(FilterModeEqual)
+				f.Matcher.WithValue(f.Value)
 			}
 			continue
 		case FilterModeNotIn:
@@ -169,9 +168,8 @@ func simplifyAnyNodes(nodes []*FilterTreeNode) []*FilterTreeNode {
 			if f.Matcher.Len() == 1 {
 				f.Mode = FilterModeNotEqual
 				f.Value = reflectSliceIndex(f.Matcher.Value(), 0)
-				f.Matcher = newFactory(f.Type).
-					New(FilterModeNotEqual).
-					WithValue(f.Value)
+				f.Matcher = newFactory(f.Type).New(FilterModeNotEqual)
+				f.Matcher.WithValue(f.Value)
 			}
 			continue
 		}
@@ -186,16 +184,16 @@ func simplifyAnyNodes(nodes []*FilterTreeNode) []*FilterTreeNode {
 				ge.Skip = true
 				val := RangeValue{ge.Filter.Value, le.Filter.Value}
 				f := le.Filter
+				matcher := newFactory(f.Type).New(FilterModeRange)
+				matcher.WithValue(val)
 				nodes = append(nodes, &FilterTreeNode{
 					Filter: &Filter{
-						Name:  f.Name,
-						Type:  f.Type,
-						Mode:  FilterModeRange,
-						Index: f.Index,
-						Matcher: newFactory(f.Type).
-							New(FilterModeRange).
-							WithValue(val),
-						Value: val,
+						Name:    f.Name,
+						Type:    f.Type,
+						Mode:    FilterModeRange,
+						Index:   f.Index,
+						Matcher: matcher,
+						Value:   val,
 					},
 				})
 				le = nil
@@ -341,9 +339,8 @@ func simplifyOrNodes(nodes []*FilterTreeNode) []*FilterTreeNode {
 				// convert eq to in, drop other eq
 				f.Mode = FilterModeIn
 				f.Value = reflectSliceMake(eq.Filter.Value, f.Value)
-				f.Matcher = newFactory(f.Type).
-					New(FilterModeIn).
-					WithValue(f.Value)
+				f.Matcher = newFactory(f.Type).New(FilterModeIn)
+				f.Matcher.WithValue(f.Value)
 				eq.Skip = true
 				needSkip = true
 				eq = nil
@@ -361,9 +358,8 @@ func simplifyOrNodes(nodes []*FilterTreeNode) []*FilterTreeNode {
 				// convert eq to in and add value from other eq
 				f.Mode = FilterModeIn
 				f.Value = reflectSliceMake(eq.Filter.Value, f.Value)
-				f.Matcher = newFactory(f.Type).
-					New(FilterModeIn).
-					WithValue(f.Value)
+				f.Matcher = newFactory(f.Type).New(FilterModeIn)
+				f.Matcher.WithValue(f.Value)
 				eq.Skip = true
 				needSkip = true
 				eq = nil

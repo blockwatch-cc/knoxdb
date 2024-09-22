@@ -17,6 +17,7 @@ import (
 )
 
 // TODO
+// - EstimateCardinality for join planning
 // - operator nesting/pipelining (filter, transform, aggregate)
 // - schedule execution pipeline along operators (push model)
 // - support aggregators
@@ -351,16 +352,16 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, isRoot bool) {
 		if child.IsLeaf() {
 			if child.Bits.IsValid() {
 				// add a new primary key IN condition
+				matcher := NewFactory(types.FieldTypeUint64).New(FilterModeIn)
+				matcher.WithSet(child.Bits.Bitmap)
 				node.Children = append(node.Children, &FilterTreeNode{
 					Filter: &Filter{
-						Name:  child.Filter.Name,
-						Type:  child.Filter.Type,
-						Mode:  FilterModeIn,
-						Index: child.Filter.Index,
-						Matcher: NewFactory(types.FieldTypeUint64).
-							New(FilterModeIn).
-							WithSet(child.Bits.Bitmap),
-						Value: child.Bits,
+						Name:    child.Filter.Name,
+						Type:    child.Filter.Type,
+						Mode:    FilterModeIn,
+						Index:   child.Filter.Index,
+						Matcher: matcher,
+						Value:   child.Bits,
 					},
 					Empty: child.Bits.Count() == 0,
 				})
@@ -371,16 +372,16 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, isRoot bool) {
 		// composite child conditions attach bits to the common anchestor
 		if child.Bits.IsValid() {
 			// add a new primary key IN condition
+			matcher := NewFactory(types.FieldTypeUint64).New(FilterModeIn)
+			matcher.WithSet(child.Bits.Bitmap)
 			node.Children = append(node.Children, &FilterTreeNode{
 				Filter: &Filter{
-					Name:  p.RequestSchema.Pk().Name(),
-					Type:  child.Filter.Type,
-					Mode:  FilterModeIn,
-					Index: p.RequestSchema.PkId(),
-					Matcher: NewFactory(types.FieldTypeUint64).
-						New(FilterModeIn).
-						WithSet(child.Bits.Bitmap),
-					Value: child.Bits,
+					Name:    p.RequestSchema.Pk().Name(),
+					Type:    child.Filter.Type,
+					Mode:    FilterModeIn,
+					Index:   p.RequestSchema.PkId(),
+					Matcher: matcher,
+					Value:   child.Bits,
 				},
 				Empty: child.Bits.Count() == 0,
 			})
@@ -441,11 +442,9 @@ func (p *QueryPlan) queryIndexOr(ctx context.Context, node *FilterTreeNode) (int
 }
 
 func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (int, error) {
-	// pre-process child nodes
+	// AND nodes may contain nested OR nodes which we need to visit first
 	var nHits int
 	for _, child := range node.Children {
-
-		// AND nodes may contain nested OR nodes which we need to visit first
 		if child.OrKind {
 			n, err := p.queryIndexNode(ctx, child)
 			if err != nil {

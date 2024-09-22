@@ -303,10 +303,9 @@ type numMatcher[T Number] struct {
 	hash  [2]uint32
 }
 
-func (m *numMatcher[T]) WithValue(v any) Matcher {
+func (m *numMatcher[T]) WithValue(v any) {
 	m.val = v.(T)
 	m.hash = bloom.HashAny(v)
-	return m
 }
 
 func (m *numMatcher[T]) Value() any {
@@ -316,6 +315,10 @@ func (m *numMatcher[T]) Value() any {
 func (m numMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	acc := block.NewBlockAccessor[T](b)
 	return m.match(acc.Slice(), m.val, bits, mask)
+}
+
+func (m numMatcher[T]) MatchRange(from, to any) bool {
+	return false
 }
 
 // EQUAL ---
@@ -423,15 +426,14 @@ type numRangeMatcher[T Number] struct {
 	to   T
 }
 
-func (m *numRangeMatcher[T]) Weight() int { return 1 }
+func (m *numRangeMatcher[T]) Weight() int { return 2 }
 
 func (m *numRangeMatcher[T]) Len() int { return 2 }
 
-func (m *numRangeMatcher[T]) WithValue(v any) Matcher {
+func (m *numRangeMatcher[T]) WithValue(v any) {
 	val := v.(RangeValue)
 	m.from = val[0].(T)
 	m.to = val[1].(T)
-	return m
 }
 
 func (m numRangeMatcher[T]) MatchValue(v any) bool {
@@ -462,7 +464,7 @@ func (m *numInSetMatcher[T]) Value() any {
 	return m.slice.Values
 }
 
-func (m *numInSetMatcher[T]) WithSlice(slice any) Matcher {
+func (m *numInSetMatcher[T]) WithSlice(slice any) {
 	bits := slice.([]T)
 	slices.Sort(bits)
 	m.slice.Values = bits
@@ -471,17 +473,15 @@ func (m *numInSetMatcher[T]) WithSlice(slice any) Matcher {
 		m.set.Set(uint64(v))
 	}
 	m.hashes = bloom.HashAnySlice(bits)
-	return m
 }
 
-func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) Matcher {
+func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
 	m.set = set
 	m.slice.Values = make([]T, 0, set.GetCardinality())
 	for _, v := range set.ToArray() {
 		m.slice.Values = append(m.slice.Values, T(v))
 	}
 	m.hashes = bloom.HashAnySlice(m.slice.Values)
-	return m
 }
 
 func (m numInSetMatcher[T]) MatchValue(v any) bool {
@@ -539,7 +539,7 @@ func (m *numNotInSetMatcher[T]) Value() any {
 	return m.slice.Values
 }
 
-func (m *numNotInSetMatcher[T]) WithSlice(slice any) Matcher {
+func (m *numNotInSetMatcher[T]) WithSlice(slice any) {
 	bits := slice.([]T)
 	slices.Sort(bits)
 	m.slice.Values = bits
@@ -547,16 +547,14 @@ func (m *numNotInSetMatcher[T]) WithSlice(slice any) Matcher {
 	for _, v := range bits {
 		m.set.Set(uint64(v))
 	}
-	return m
 }
 
-func (m *numNotInSetMatcher[T]) WithSet(set *xroar.Bitmap) Matcher {
+func (m *numNotInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
 	m.set = set
 	m.slice.Values = make([]T, 0, set.GetCardinality())
 	for _, v := range set.ToArray() {
 		m.slice.Values = append(m.slice.Values, T(v))
 	}
-	return m
 }
 
 func (m numNotInSetMatcher[T]) MatchValue(v any) bool {

@@ -64,9 +64,7 @@ func Cmp(t types.BlockType, a, b any) (c int) {
 			y = 1
 		}
 		c = util.Cmp(x, y)
-	case types.BlockString:
-		c = util.Cmp(a.(string), b.(string))
-	case types.BlockBytes:
+	case types.BlockString, types.BlockBytes:
 		c = bytes.Compare(a.([]byte), b.([]byte))
 	case types.BlockInt32:
 		c = util.Cmp(a.(int32), b.(int32))
@@ -102,9 +100,9 @@ func Match(m types.FilterMode, t types.BlockType, a, b any) bool {
 	case types.FilterModeNotEqual:
 		return c != 0
 	case types.FilterModeGt:
-		return c == 1
+		return c > 0
 	case types.FilterModeGe:
-		return c >= 1
+		return c >= 0
 	case types.FilterModeLt:
 		return c < 0
 	case types.FilterModeLe:
@@ -129,11 +127,11 @@ func Intersect(t types.BlockType, a, b any) any {
 		x := slicex.NewOrderedNumbers[float64](a.([]float64)).SetUnique()
 		y := slicex.NewOrderedNumbers[float64](b.([]float64)).SetUnique()
 		return x.Intersect(y).Values
-	case types.BlockString:
-		x := slicex.NewOrderedStrings(a.([]string)).SetUnique()
-		y := slicex.NewOrderedStrings(b.([]string)).SetUnique()
-		return x.Intersect(y).Values
-	case types.BlockBytes:
+	// case types.BlockString:
+	// 	x := slicex.NewOrderedStrings(a.([]string)).SetUnique()
+	// 	y := slicex.NewOrderedStrings(b.([]string)).SetUnique()
+	// 	return x.Intersect(y).Values
+	case types.BlockBytes, types.BlockString:
 		x := slicex.NewOrderedBytes(a.([][]byte)).SetUnique()
 		y := slicex.NewOrderedBytes(b.([][]byte)).SetUnique()
 		return x.Intersect(y).Values
@@ -188,11 +186,11 @@ func Union(t types.BlockType, a, b any) any {
 		x := slicex.NewOrderedNumbers[float64](a.([]float64)).SetUnique()
 		y := slicex.NewOrderedNumbers[float64](b.([]float64)).SetUnique()
 		return x.Union(y).Values
-	case types.BlockString:
-		x := slicex.NewOrderedStrings(a.([]string)).SetUnique()
-		y := slicex.NewOrderedStrings(b.([]string)).SetUnique()
-		return x.Union(y).Values
-	case types.BlockBytes:
+	// case types.BlockString:
+	// 	x := slicex.NewOrderedStrings(a.([]string)).SetUnique()
+	// 	y := slicex.NewOrderedStrings(b.([]string)).SetUnique()
+	// 	return x.Union(y).Values
+	case types.BlockBytes, types.BlockString:
 		x := slicex.NewOrderedBytes(a.([][]byte)).SetUnique()
 		y := slicex.NewOrderedBytes(b.([][]byte)).SetUnique()
 		return x.Union(y).Values
