@@ -61,7 +61,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	// setup store
 	kv.engine = e
 	kv.schema = s
-	kv.storeId = s.TaggedHash(types.HashTagStore)
+	kv.storeId = s.TaggedHash(types.ObjectTagStore)
 	kv.opts = DefaultOptions.Merge(opts)
 	kv.key = []byte(name)
 	kv.stats.Name = name
@@ -120,7 +120,7 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	// setup store
 	kv.engine = e
 	kv.schema = s
-	kv.storeId = s.TaggedHash(types.HashTagStore)
+	kv.storeId = s.TaggedHash(types.ObjectTagStore)
 	kv.opts = DefaultOptions.Merge(opts)
 	kv.key = []byte(name)
 	kv.stats.Name = name

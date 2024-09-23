@@ -82,7 +82,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	// setup store
 	t.engine = e
 	t.schema = s
-	t.tableId = s.TaggedHash(types.HashTagTable)
+	t.tableId = s.TaggedHash(types.ObjectTagTable)
 	t.pkindex = pki
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.key = []byte(name)
@@ -140,7 +140,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	// setup table
 	t.engine = e
 	t.schema = s
-	t.tableId = s.TaggedHash(types.HashTagTable)
+	t.tableId = s.TaggedHash(types.ObjectTagTable)
 	t.pkindex = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.key = []byte(name)
@@ -294,9 +294,9 @@ func (t *Table) UseIndex(idx engine.IndexEngine) {
 }
 
 func (t *Table) UnuseIndex(idx engine.IndexEngine) {
-	idxId := idx.Schema().TaggedHash(types.HashTagIndex)
+	idxId := idx.Schema().TaggedHash(types.ObjectTagIndex)
 	t.indexes = slices.DeleteFunc(t.indexes, func(v engine.IndexEngine) bool {
-		return v.Schema().TaggedHash(types.HashTagIndex) == idxId
+		return v.Schema().TaggedHash(types.ObjectTagIndex) == idxId
 	})
 }
 

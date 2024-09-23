@@ -101,7 +101,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	// setup index
 	idx.engine = e
 	idx.schema = indexSchema
-	idx.indexId = s.TaggedHash(types.HashTagIndex)
+	idx.indexId = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = opts
 	idx.datakey = append([]byte(name), dataKeySuffix...)
 	idx.metakey = append([]byte(name), metaKeySuffix...)
@@ -179,7 +179,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	// setup index
 	idx.engine = e
 	idx.schema = indexSchema
-	idx.indexId = s.TaggedHash(types.HashTagIndex)
+	idx.indexId = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.datakey = append([]byte(name), dataKeySuffix...)
 	idx.metakey = append([]byte(name), metaKeySuffix...)

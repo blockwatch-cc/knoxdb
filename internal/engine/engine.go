@@ -67,7 +67,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		enums:    make(map[uint64]*schema.EnumDictionary),
 		txs:      make(map[uint64]*Tx),
 		nextTxId: 1,
-		dbId:     types.TaggedHash(types.HashTagDatabase, name),
+		dbId:     types.TaggedHash(types.ObjectTagDatabase, name),
 		opts:     opts,
 		cat:      NewCatalog(name),
 		log:      log.Disabled,
@@ -122,7 +122,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		indexes: make(map[uint64]IndexEngine),
 		enums:   make(map[uint64]*schema.EnumDictionary),
 		txs:     make(map[uint64]*Tx),
-		dbId:    types.TaggedHash(types.HashTagDatabase, name),
+		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
 		cat:     NewCatalog(name),
 		log:     log.Disabled,
 	}

@@ -35,7 +35,7 @@ func (e *Engine) NumStores() int {
 }
 
 func (e *Engine) UseStore(name string) (StoreEngine, error) {
-	if s, ok := e.stores[types.TaggedHash(types.HashTagStore, name)]; ok {
+	if s, ok := e.stores[types.TaggedHash(types.ObjectTagStore, name)]; ok {
 		return s, nil
 	}
 	return nil, ErrNoStore
@@ -48,7 +48,7 @@ func (e *Engine) GetStore(hash uint64) (StoreEngine, bool) {
 
 func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOptions) (StoreEngine, error) {
 	// check name is unique
-	tag := s.TaggedHash(types.HashTagStore)
+	tag := s.TaggedHash(types.ObjectTagStore)
 	if _, ok := e.stores[tag]; ok {
 		return nil, ErrStoreExists
 	}
@@ -97,7 +97,7 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 }
 
 func (e *Engine) DropStore(ctx context.Context, name string) error {
-	tag := types.TaggedHash(types.HashTagStore, name)
+	tag := types.TaggedHash(types.ObjectTagStore, name)
 	s, ok := e.stores[tag]
 	if !ok {
 		return ErrNoStore

@@ -49,7 +49,7 @@ func NewTestEngine(opts DatabaseOptions) *Engine {
 		enums:    make(map[uint64]*schema.EnumDictionary),
 		txs:      make(map[uint64]*Tx),
 		nextTxId: 1,
-		dbId:     types.TaggedHash(types.HashTagDatabase, TEST_DB_NAME),
+		dbId:     types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
 		opts:     opts,
 		cat:      NewCatalog(TEST_DB_NAME),
 		log:      opts.Logger,

@@ -75,7 +75,7 @@ func (e *EnumDictionary) Name() string {
 }
 
 func (e *EnumDictionary) Tag() uint64 {
-	return types.TaggedHash(types.HashTagEnum, e.name)
+	return types.TaggedHash(types.ObjectTagEnum, e.name)
 }
 
 func (e *EnumDictionary) Len() int {

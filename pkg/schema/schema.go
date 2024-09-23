@@ -94,7 +94,7 @@ func (s *Schema) WithVersion(v uint32) *Schema {
 }
 
 // generate name hash with tag
-func (s *Schema) TaggedHash(tag types.HashTag) uint64 {
+func (s *Schema) TaggedHash(tag types.ObjectTag) uint64 {
 	return types.TaggedHash(tag, s.name)
 }
 

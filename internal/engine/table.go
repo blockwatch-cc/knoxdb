@@ -35,7 +35,7 @@ func (e *Engine) NumTables() int {
 }
 
 func (e *Engine) UseTable(name string) (TableEngine, error) {
-	if t, ok := e.tables[types.TaggedHash(types.HashTagTable, name)]; ok {
+	if t, ok := e.tables[types.TaggedHash(types.ObjectTagTable, name)]; ok {
 		return t, nil
 	}
 	return nil, ErrNoTable
@@ -48,7 +48,7 @@ func (e *Engine) GetTable(hash uint64) (TableEngine, bool) {
 
 func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOptions) (TableEngine, error) {
 	// check name is unique
-	tag := s.TaggedHash(types.HashTagTable)
+	tag := s.TaggedHash(types.ObjectTagTable)
 	if _, ok := e.tables[tag]; ok {
 		return nil, ErrTableExists
 	}
@@ -123,7 +123,7 @@ func (e *Engine) AlterTable(ctx context.Context, name string, schema *schema.Sch
 }
 
 func (e *Engine) DropTable(ctx context.Context, name string) error {
-	tag := types.TaggedHash(types.HashTagTable, name)
+	tag := types.TaggedHash(types.ObjectTagTable, name)
 	t, ok := e.tables[tag]
 	if !ok {
 		return ErrNoTable
@@ -162,7 +162,7 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 }
 
 func (e *Engine) TruncateTable(ctx context.Context, name string) error {
-	tag := types.TaggedHash(types.HashTagTable, name)
+	tag := types.TaggedHash(types.ObjectTagTable, name)
 	t, ok := e.tables[tag]
 	if !ok {
 		return ErrNoTable
@@ -184,7 +184,7 @@ func (e *Engine) TruncateTable(ctx context.Context, name string) error {
 }
 
 func (e *Engine) CompactTable(ctx context.Context, name string) error {
-	tag := types.TaggedHash(types.HashTagTable, name)
+	tag := types.TaggedHash(types.ObjectTagTable, name)
 	t, ok := e.tables[tag]
 	if !ok {
 		return ErrNoTable

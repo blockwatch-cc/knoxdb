@@ -23,7 +23,7 @@ func (e *Engine) NumEnums() int {
 }
 
 func (e *Engine) UseEnum(name string) (schema.EnumLUT, error) {
-	enum, ok := e.enums[types.TaggedHash(types.HashTagEnum, name)]
+	enum, ok := e.enums[types.TaggedHash(types.ObjectTagEnum, name)]
 	if !ok {
 		return nil, ErrNoEnum
 	}
@@ -37,7 +37,7 @@ func (e *Engine) GetEnum(hash uint64) (schema.EnumLUT, bool) {
 
 func (e *Engine) CreateEnum(ctx context.Context, name string) (schema.EnumLUT, error) {
 	// check name is unique
-	tag := types.TaggedHash(types.HashTagEnum, name)
+	tag := types.TaggedHash(types.ObjectTagEnum, name)
 	if _, ok := e.enums[tag]; ok {
 		return nil, ErrEnumExists
 	}
@@ -65,7 +65,7 @@ func (e *Engine) CreateEnum(ctx context.Context, name string) (schema.EnumLUT, e
 }
 
 func (e *Engine) DropEnum(ctx context.Context, name string) error {
-	tag := types.TaggedHash(types.HashTagEnum, name)
+	tag := types.TaggedHash(types.ObjectTagEnum, name)
 	if _, ok := e.enums[tag]; !ok {
 		return ErrNoEnum
 	}
@@ -84,7 +84,7 @@ func (e *Engine) DropEnum(ctx context.Context, name string) error {
 }
 
 func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...schema.Enum) error {
-	tag := types.TaggedHash(types.HashTagEnum, name)
+	tag := types.TaggedHash(types.ObjectTagEnum, name)
 	enum, ok := e.enums[tag]
 	if !ok {
 		return ErrNoEnum

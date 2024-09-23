@@ -23,7 +23,7 @@ func RegisterIndexFactory(n IndexKind, fn IndexFactory) {
 }
 
 func (e *Engine) IndexNames(tableName string) []string {
-	tag := types.TaggedHash(types.HashTagTable, tableName)
+	tag := types.TaggedHash(types.ObjectTagTable, tableName)
 	table, ok := e.GetTable(tag)
 	if !ok {
 		return nil
@@ -41,7 +41,7 @@ func (e *Engine) NumIndexes() int {
 }
 
 func (e *Engine) NumTableIndexes(tableName string) int {
-	tag := types.TaggedHash(types.HashTagTable, tableName)
+	tag := types.TaggedHash(types.ObjectTagTable, tableName)
 	table, ok := e.GetTable(tag)
 	if !ok {
 		return 0
@@ -50,7 +50,7 @@ func (e *Engine) NumTableIndexes(tableName string) int {
 }
 
 func (e *Engine) UseIndex(name string) (IndexEngine, error) {
-	if idx, ok := e.indexes[types.TaggedHash(types.HashTagIndex, name)]; ok {
+	if idx, ok := e.indexes[types.TaggedHash(types.ObjectTagIndex, name)]; ok {
 		return idx, nil
 	}
 	return nil, ErrNoIndex
@@ -63,14 +63,14 @@ func (e *Engine) GetIndex(key uint64) (IndexEngine, bool) {
 
 func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Schema, opts IndexOptions) (IndexEngine, error) {
 	// lookup table
-	tableTag := types.TaggedHash(types.HashTagTable, tableName)
+	tableTag := types.TaggedHash(types.ObjectTagTable, tableName)
 	table, ok := e.GetTable(tableTag)
 	if !ok {
 		return nil, ErrNoTable
 	}
 
 	// lookup index
-	tag := types.TaggedHash(types.HashTagIndex, s.Name())
+	tag := types.TaggedHash(types.ObjectTagIndex, s.Name())
 	if _, ok := e.indexes[tag]; ok {
 		return nil, ErrIndexExists
 	}
@@ -132,7 +132,7 @@ func (e *Engine) RebuildIndex(ctx context.Context, name string) error {
 }
 
 func (e *Engine) DropIndex(ctx context.Context, name string) error {
-	tag := types.TaggedHash(types.HashTagIndex, name)
+	tag := types.TaggedHash(types.ObjectTagIndex, name)
 	index, ok := e.indexes[tag]
 	if !ok {
 		return ErrNoIndex
@@ -167,7 +167,7 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 }
 
 func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
-	tag := types.TaggedHash(types.HashTagTable, table.Schema().Name())
+	tag := types.TaggedHash(types.ObjectTagTable, table.Schema().Name())
 
 	// filter indexes by table in catalog
 	keys, err := e.cat.ListIndexes(ctx, tag)
@@ -191,7 +191,7 @@ func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
 			return err
 		}
 		table.UseIndex(idx)
-		itag := types.TaggedHash(types.HashTagIndex, s.Name())
+		itag := types.TaggedHash(types.ObjectTagIndex, s.Name())
 		e.indexes[itag] = idx
 	}
 
