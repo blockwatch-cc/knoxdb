@@ -18,6 +18,33 @@ const (
 	ObjectTagSnapshot ObjectTag = 'N'
 )
 
+func (t ObjectTag) IsValid() bool {
+	return t > 0
+}
+
+func (t ObjectTag) String() string {
+	switch t {
+	case ObjectTagDatabase:
+		return "database"
+	case ObjectTagTable:
+		return "table"
+	case ObjectTagIndex:
+		return "index"
+	case ObjectTagView:
+		return "view"
+	case ObjectTagStore:
+		return "store"
+	case ObjectTagEnum:
+		return "enum"
+	case ObjectTagStream:
+		return "stream"
+	case ObjectTagSnapshot:
+		return "snapshot"
+	default:
+		return "UNKNOWN_OBJECT"
+	}
+}
+
 func TaggedHash(tag ObjectTag, name string) uint64 {
 	h := fnv.New64a()
 	h.WriteByte(byte(tag))

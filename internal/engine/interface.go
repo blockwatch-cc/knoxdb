@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
@@ -43,6 +44,7 @@ type TableEngine interface {
 	// data ingress
 	InsertRows(Context, []byte) (uint64, error) // wire encoded rows
 	UpdateRows(Context, []byte) (uint64, error) // wire encoded rows
+	ApplyWalRecord(Context, *wal.Record) error
 
 	// data egress
 	Query(Context, QueryPlan) (QueryResult, error)
@@ -151,4 +153,5 @@ type StoreEngine interface {
 	Del(ctx Context, key []byte) error
 	Range(ctx Context, prefix []byte, fn func(ctx Context, k, v []byte) error) error
 	Scan(ctx Context, from, to []byte, fn func(ctx Context, k, v []byte) error) error
+	ApplyWalRecord(Context, *wal.Record) error
 }

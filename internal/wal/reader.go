@@ -75,6 +75,14 @@ func (r *Reader) WithTxID(v uint64) WalReader {
 	return r
 }
 
+func (r *Reader) Close() error {
+	err := r.seg.Close()
+	r.seg = nil
+	r.wal = nil
+	r.flt = nil
+	return err
+}
+
 func (r *Reader) Seek(lsn LSN) error {
 	// open segment and seek
 	// segid := lsn / r.wal.opts.MaxSegmentSize

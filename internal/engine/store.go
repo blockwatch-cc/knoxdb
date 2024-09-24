@@ -84,16 +84,23 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 		return nil, err
 	}
 
-	// commit
+	// register commit/abort callbacks
+	tx := GetTransaction(ctx)
+	tx.OnCommit(func(ctx context.Context) error {
+		e.stores[tag] = kvstore
+		return nil
+	})
+	tx.OnAbort(func(ctx context.Context) error {
+		// remove store file(s) on error
+		return kvstore.Drop(ctx)
+	})
+
+	// commit (note: noop when called with outside tx)
 	if err := commit(); err != nil {
 		return nil, err
 	}
 
-	// keep reference in engine
-	e.stores[tag] = kvstore
-
 	return kvstore, nil
-
 }
 
 func (e *Engine) DropStore(ctx context.Context, name string) error {

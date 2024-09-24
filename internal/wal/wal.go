@@ -15,6 +15,7 @@ var LE = binary.LittleEndian
 type WalReader interface {
 	Seek(LSN) error
 	Next() (*Record, error)
+	Close() error
 	// NextN([]*Record) error
 
 	WithType(RecordType) WalReader

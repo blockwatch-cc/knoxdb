@@ -10,6 +10,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/cache"
 	"blockwatch.cc/knoxdb/pkg/cache/rclru"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -19,20 +20,22 @@ import (
 
 // Engine is the central instance managing a database
 type Engine struct {
-	mu       sync.RWMutex
-	cat      *Catalog
-	cache    CacheManager
-	tables   map[uint64]TableEngine
-	stores   map[uint64]StoreEngine
-	indexes  map[uint64]IndexEngine
-	enums    map[uint64]*schema.EnumDictionary
-	txs      map[uint64]*Tx
-	opts     DatabaseOptions
-	nextTxId uint64
-	dbId     uint64
-	path     string
-	log      log.Logger
-	// wal      *wal.Wal // one wal for all tables
+	mu      sync.RWMutex
+	cat     *Catalog
+	cache   CacheManager
+	tables  map[uint64]TableEngine
+	stores  map[uint64]StoreEngine
+	indexes map[uint64]IndexEngine
+	enums   map[uint64]*schema.EnumDictionary
+	txs     TxList
+	opts    DatabaseOptions
+	xmin    uint64
+	xnext   uint64
+	dbId    uint64
+	path    string
+	log     log.Logger
+	merger  *MergerService
+	wal     *wal.Wal // one wal for all tables
 }
 
 type CacheKeyType [2]uint64
@@ -61,20 +64,23 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
 			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
 		},
-		tables:   make(map[uint64]TableEngine),
-		stores:   make(map[uint64]StoreEngine),
-		indexes:  make(map[uint64]IndexEngine),
-		enums:    make(map[uint64]*schema.EnumDictionary),
-		txs:      make(map[uint64]*Tx),
-		nextTxId: 1,
-		dbId:     types.TaggedHash(types.ObjectTagDatabase, name),
-		opts:     opts,
-		cat:      NewCatalog(name),
-		log:      log.Disabled,
+		tables:  make(map[uint64]TableEngine),
+		stores:  make(map[uint64]StoreEngine),
+		indexes: make(map[uint64]IndexEngine),
+		enums:   make(map[uint64]*schema.EnumDictionary),
+		txs:     make(TxList, 0),
+		xmin:    0,
+		xnext:   1,
+		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
+		opts:    opts,
+		cat:     NewCatalog(name),
+		log:     log.Disabled,
+		merger:  NewMergerService(),
 	}
 
 	if opts.Logger != nil {
 		e.log = opts.Logger
+		e.merger.WithLogger(opts.Logger)
 	}
 
 	e.log.Debugf("Creating database %s at %s", name, e.path)
@@ -89,6 +95,9 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	ctx, commit, abort := e.WithTransaction(ctx)
 	defer abort()
 
+	// close engine when the tx gets aborted
+	GetTransaction(ctx).OnAbort(e.Close)
+
 	// init catalog
 	if err := e.cat.Create(ctx, opts); err != nil {
 		return nil, err
@@ -100,12 +109,24 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	}
 
 	// init wal
+	wopts := wal.WalOptions{
+		Seed:           e.dbId,
+		Path:           filepath.Join(e.opts.Path, "xlog"),
+		MaxSegmentSize: 128 << 20,
+	}
+	if w, err := wal.Create(wopts); err != nil {
+		return nil, err
+	} else {
+		e.wal = w
+	}
 
 	// commit open tx
 	if err := commit(); err != nil {
-		_ = e.Close(ctx)
 		return nil, err
 	}
+
+	// start services
+	e.merger.Start()
 
 	return e, nil
 }
@@ -121,13 +142,15 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		stores:  make(map[uint64]StoreEngine),
 		indexes: make(map[uint64]IndexEngine),
 		enums:   make(map[uint64]*schema.EnumDictionary),
-		txs:     make(map[uint64]*Tx),
+		txs:     make(TxList, 0),
 		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
 		cat:     NewCatalog(name),
 		log:     log.Disabled,
+		merger:  NewMergerService(),
 	}
 	if opts.Logger != nil {
 		e.log = opts.Logger
+		e.merger.WithLogger(opts.Logger)
 	}
 
 	e.log.Debugf("Opening database %s at %s", name, e.path)
@@ -135,6 +158,9 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	// start read transaction and amend context (required to load from dbs)
 	ctx, commit, abort := e.WithTransaction(ctx)
 	defer abort()
+
+	// close engine when the tx gets aborted
+	GetTransaction(ctx).OnAbort(e.Close)
 
 	// load and validate catalog
 	if err := e.cat.Open(ctx, opts); err != nil {
@@ -156,33 +182,43 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		e.cache.buffers = rclru.New2Q[CacheKeyType, *Buffer](e.opts.CacheSize / 10)
 	}
 
-	// init tx id
-	e.nextTxId, _ = e.Catalog().GetState(e.dbId)
-
 	// open database objects
 	if err := e.openTables(ctx); err != nil {
-		_ = e.Close(ctx)
 		return nil, err
 	}
 
 	if err := e.openStores(ctx); err != nil {
-		_ = e.Close(ctx)
 		return nil, err
 	}
 
 	if err := e.openEnums(ctx); err != nil {
-		_ = e.Close(ctx)
 		return nil, err
 	}
 
-	// TODO: load and validate wal
+	// open and validate wal
+	wopts := wal.WalOptions{
+		Seed:           e.dbId,
+		Path:           filepath.Join(e.opts.Path, "xlog"),
+		MaxSegmentSize: 128 << 20,
+	}
+	if w, err := wal.Open(wopts); err != nil {
+		return nil, err
+	} else {
+		e.wal = w
+	}
 
-	// TODO: replay wal (post-crash and in normal case to fill table journals)
+	// replay wal (post-crash and in normal case to fill table journals)
+	if err := e.recoverWal(ctx); err != nil {
+		return nil, err
+	}
 
 	// commit open tx
 	if err := commit(); err != nil {
 		return nil, err
 	}
+
+	// start services
+	e.merger.Start()
 
 	return e, nil
 }
@@ -193,13 +229,20 @@ func (e *Engine) Close(ctx context.Context) error {
 
 	// abort all pending transactions
 	for _, tx := range e.txs {
-		tx.Abort()
+		tx.Abort(ctx)
 	}
 
-	// TODO: close wal
+	// stop services
+	e.merger.Stop()
 
 	// clear caches
 	e.PurgeCache()
+
+	// close wal
+	if err := e.wal.Close(); err != nil {
+		e.log.Errorf("Closing wal: %v", err)
+	}
+	e.wal = nil
 
 	// close all open indexes
 	for n, idx := range e.indexes {
@@ -236,9 +279,6 @@ func (e *Engine) Close(ctx context.Context) error {
 	if err := e.cat.Close(ctx); err != nil {
 		e.log.Errorf("Closing catalog: %v", err)
 	}
-
-	// close catalog
-	e.cat.Close(ctx)
 	e.cat = nil
 
 	return nil

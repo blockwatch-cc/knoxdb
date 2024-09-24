@@ -29,6 +29,9 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	// upgrade tx for writing and register touched table for later commit
+	engine.GetTransaction(ctx).Touch(t.tableId)
+
 	// try write updated records to journal (may run full, so we must loop)
 	var (
 		count, n uint64
@@ -65,7 +68,6 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 
 	if count > 0 {
 		atomic.AddInt64(&t.stats.UpdatedTuples, int64(count))
-		engine.GetTransaction(ctx).Touch(t.tableId)
 	}
 
 	return uint64(count), nil

@@ -41,6 +41,7 @@ type KVStore struct {
 	opts       engine.StoreOptions // copy of config options
 	db         store.DB            // lower-level KV store (e.g. boltdb or badger)
 	key        []byte              // name of store's data bucket in the db
+	state      KVState             // volatile state, synced with catalog
 	isZeroCopy bool                // storage reads are zero copy (copy to safe references)
 	noClose    bool                // don't close underlying store db on Close
 	stats      engine.StoreStats   // usage statistics
@@ -49,6 +50,22 @@ type KVStore struct {
 
 func NewKVStore() engine.StoreEngine {
 	return &KVStore{}
+}
+
+type KVState struct {
+	Checkpoint uint64 // latest wal checkpoint LSN
+}
+
+func (s *KVState) Init() {
+	s.Checkpoint = 0
+}
+
+func (s *KVState) FromObjectState(o engine.ObjectState) {
+	s.Checkpoint = o[2]
+}
+
+func (s KVState) ToObjectState() engine.ObjectState {
+	return engine.ObjectState{0, 0, s.Checkpoint}
 }
 
 func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.StoreOptions) error {
@@ -64,6 +81,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	kv.storeId = s.TaggedHash(types.ObjectTagStore)
 	kv.opts = DefaultOptions.Merge(opts)
 	kv.key = []byte(name)
+	kv.state.Init()
 	kv.stats.Name = name
 	kv.db = opts.DB
 	kv.noClose = true
@@ -105,6 +123,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	if err != nil {
 		return err
 	}
+	kv.engine.Catalog().SetState(kv.storeId, kv.state.ToObjectState())
 
 	kv.log.Debugf("Created store %s", typ)
 	return nil
@@ -123,6 +142,7 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	kv.storeId = s.TaggedHash(types.ObjectTagStore)
 	kv.opts = DefaultOptions.Merge(opts)
 	kv.key = []byte(name)
+	kv.state.FromObjectState(e.Catalog().GetState(kv.storeId))
 	kv.stats.Name = name
 	kv.db = opts.DB
 	kv.noClose = true

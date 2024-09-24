@@ -58,6 +58,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 		loop, maxloop                        int           // circuit breaker
 	)
 
+	// FIXME: background flush will not run inside a tx
 	// open write transaction (or reuse existing tx)
 	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
 	if err != nil {
@@ -511,15 +512,12 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 	}
 
 	// fix row count which becomes wrong after delete
-	if c := t.meta.Count(); uint64(c) != t.state.Rows {
+	if c := t.meta.Count(); uint64(c) != t.state.NRows {
 		atomic.StoreInt64(&t.stats.TupleCount, int64(c))
-		t.state.Rows = uint64(c)
-		t.engine.Catalog().
-			SetState(
-				t.tableId,
-				t.state.Sequence,
-				t.state.Rows,
-			)
+		t.state.NRows = uint64(c)
+		t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
+
+		// FIXME: background flush will not run inside a tx
 		engine.GetTransaction(ctx).Touch(t.tableId)
 	}
 

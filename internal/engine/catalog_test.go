@@ -43,16 +43,17 @@ func NewTestEngine(opts DatabaseOptions) *Engine {
 			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
 			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
 		},
-		tables:   make(map[uint64]TableEngine),
-		stores:   make(map[uint64]StoreEngine),
-		indexes:  make(map[uint64]IndexEngine),
-		enums:    make(map[uint64]*schema.EnumDictionary),
-		txs:      make(map[uint64]*Tx),
-		nextTxId: 1,
-		dbId:     types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
-		opts:     opts,
-		cat:      NewCatalog(TEST_DB_NAME),
-		log:      opts.Logger,
+		tables:  make(map[uint64]TableEngine),
+		stores:  make(map[uint64]StoreEngine),
+		indexes: make(map[uint64]IndexEngine),
+		enums:   make(map[uint64]*schema.EnumDictionary),
+		txs:     make(TxList, 0),
+		xmin:    0,
+		xnext:   1,
+		dbId:    types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
+		opts:    opts,
+		cat:     NewCatalog(TEST_DB_NAME),
+		log:     opts.Logger,
 	}
 }
 
@@ -153,10 +154,10 @@ func TestCatalogGetSetState(t *testing.T) {
 	_, _, cat, close := WithCatalog(t)
 	defer close()
 
-	cat.SetState(1, 42, 23)
-	seq, rows := cat.GetState(1)
-	require.Equal(t, seq, uint64(42))
-	require.Equal(t, rows, uint64(23))
+	cat.SetState(1, ObjectState{42, 23, 0})
+	state := cat.GetState(1)
+	require.Equal(t, state[0], uint64(42))
+	require.Equal(t, state[1], uint64(23))
 }
 
 func TestCatalogCommitState(t *testing.T) {
@@ -164,7 +165,7 @@ func TestCatalogCommitState(t *testing.T) {
 	defer close()
 	tctx, commit, _ := eng.WithTransaction(ctx)
 	tx := GetTransaction(tctx)
-	cat.SetState(1, 42, 23)
+	cat.SetState(1, ObjectState{42, 23})
 	tx.Touch(1)
 	require.NoError(t, commit())
 
@@ -191,24 +192,24 @@ func TestCatalogRollbackState(t *testing.T) {
 	defer close()
 	tctx, commit, _ := eng.WithTransaction(ctx)
 	tx := GetTransaction(tctx)
-	cat.SetState(1, 42, 23)
+	cat.SetState(1, ObjectState{42, 23})
 	tx.Touch(1)
 	require.NoError(t, commit())
 
 	// second tx
 	tctx, _, abort := eng.WithTransaction(ctx)
 	tx = GetTransaction(tctx)
-	cat.SetState(1, 100, 101)
+	cat.SetState(1, ObjectState{100, 101})
 	tx.Touch(1)
-	seq, rows := cat.GetState(1)
-	require.Equal(t, seq, uint64(100))
-	require.Equal(t, rows, uint64(101))
+	state := cat.GetState(1)
+	require.Equal(t, state[0], uint64(100))
+	require.Equal(t, state[1], uint64(101))
 
 	// after rollback
 	require.NoError(t, abort())
-	seq, rows = cat.GetState(1)
-	require.Equal(t, seq, uint64(42))
-	require.Equal(t, rows, uint64(23))
+	state = cat.GetState(1)
+	require.Equal(t, state[0], uint64(42))
+	require.Equal(t, state[1], uint64(23))
 }
 
 func TestCatalogAddTable(t *testing.T) {

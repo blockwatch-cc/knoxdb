@@ -49,17 +49,21 @@ func (e *Engine) CreateEnum(ctx context.Context, name string) (schema.EnumLUT, e
 	// create
 	enum := schema.NewEnumDictionary(name)
 
+	// register commit callback
+	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+		e.enums[tag] = enum
+		return nil
+	})
+
 	// store in catalog
 	if err := e.cat.AddEnum(ctx, enum); err != nil {
 		return nil, err
 	}
 
-	// commit
+	// commit (note: noop when called with outside tx)
 	if err := commit(); err != nil {
 		return nil, err
 	}
-
-	e.enums[tag] = enum
 
 	return enum, nil
 }

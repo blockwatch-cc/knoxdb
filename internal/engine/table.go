@@ -74,23 +74,32 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	ctx, commit, abort := e.WithTransaction(ctx)
 	defer abort()
 
-	// creata table
-	if err := table.Create(ctx, s, opts); err != nil {
+	// create table
+	err := table.Create(ctx, s, opts)
+	if err != nil {
 		return nil, err
 	}
+
+	// register commit/abort callbacks
+	tx := GetTransaction(ctx)
+	tx.OnCommit(func(ctx context.Context) error {
+		e.tables[tag] = table
+		return nil
+	})
+	tx.OnAbort(func(ctx context.Context) error {
+		// remove table file(s) on error
+		return table.Drop(ctx)
+	})
 
 	// add to catalog
 	if err := e.cat.AddTable(ctx, tag, s, opts); err != nil {
 		return nil, err
 	}
 
-	// commit
+	// commit catalog (note: noop when called with outside tx)
 	if err := commit(); err != nil {
 		return nil, err
 	}
-
-	// keep reference in engine
-	e.tables[tag] = table
 
 	return table, nil
 }

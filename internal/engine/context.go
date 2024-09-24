@@ -14,7 +14,13 @@ func (e *Engine) WithTransaction(ctx context.Context) (context.Context, func() e
 	}
 	tx := e.NewTransaction()
 	ctx = context.WithValue(ctx, TransactionKey{}, tx)
-	return ctx, tx.Commit, tx.Abort
+	return ctx, wrap(ctx, tx.Commit), wrap(ctx, tx.Abort)
+}
+
+func wrap(ctx context.Context, fn func(context.Context) error) func() error {
+	return func() error {
+		return fn(ctx)
+	}
 }
 
 func GetTransaction(ctx context.Context) *Tx {

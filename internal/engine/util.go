@@ -7,7 +7,10 @@ import (
 	"encoding/binary"
 )
 
-var BE = binary.BigEndian
+var (
+	BE = binary.BigEndian
+	LE = binary.LittleEndian
+)
 
 func Key64Bytes(u64 uint64) []byte {
 	var key [8]byte

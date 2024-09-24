@@ -42,8 +42,25 @@ var (
 )
 
 type TableState struct {
-	Sequence uint64 // next free sequence
-	Rows     uint64 // total non-deleted rows
+	Sequence   uint64 // next free sequence
+	NRows      uint64 // total non-deleted rows
+	Checkpoint uint64 // latest wal checkpoint LSN
+}
+
+func (s *TableState) Init() {
+	s.Sequence = 1
+	s.NRows = 0
+	s.Checkpoint = 0
+}
+
+func (s *TableState) FromObjectState(o engine.ObjectState) {
+	s.Sequence = o[0]
+	s.NRows = o[1]
+	s.Checkpoint = o[2]
+}
+
+func (s TableState) ToObjectState() engine.ObjectState {
+	return engine.ObjectState{s.Sequence, s.NRows, s.Checkpoint}
 }
 
 type Table struct {
@@ -86,7 +103,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.pkindex = pki
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.key = []byte(name)
-	t.state.Sequence = 1
+	t.state.Init()
 	t.stats.Name = name
 	t.db = opts.DB
 	t.noClose = true
@@ -124,7 +141,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	}
 
 	// init catalog state
-	t.engine.Catalog().SetState(t.tableId, 1, 0)
+	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
 
 	t.log.Debugf("Created table %s", typ)
 	return nil
@@ -144,9 +161,9 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.pkindex = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.key = []byte(name)
-	t.state.Sequence, t.state.Rows = e.Catalog().GetState(t.tableId)
+	t.state.FromObjectState(e.Catalog().GetState(t.tableId))
 	t.stats.Name = name
-	t.stats.TupleCount = int64(t.state.Rows)
+	t.stats.TupleCount = int64(t.state.NRows)
 	t.db = opts.DB
 	t.noClose = true
 	t.log = opts.Logger
@@ -194,7 +211,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	stats := b.Stats()
 	t.stats.TotalSize = int64(stats.Size) // estimate only
 
-	t.log.Debugf("Table %s opened with %d rows", typ, t.state.Rows)
+	t.log.Debugf("Table %s opened with %d rows", typ, t.state.NRows)
 	return nil
 }
 
@@ -232,7 +249,7 @@ func (t *Table) name() string {
 
 func (t *Table) Stats() engine.TableStats {
 	stats := t.stats
-	stats.TupleCount = int64(t.state.Rows)
+	stats.TupleCount = int64(t.state.NRows)
 	return stats
 }
 
@@ -281,11 +298,10 @@ func (t *Table) Truncate(ctx context.Context) error {
 	if _, err := tx.Root().CreateBucket(t.key); err != nil {
 		return err
 	}
-	t.engine.Catalog().SetState(t.tableId, 1, 0)
-	t.stats.DeletedTuples += int64(t.state.Rows)
+	t.stats.DeletedTuples += int64(t.state.NRows)
 	t.stats.TupleCount = 0
-	t.state.Rows = 0
-	t.state.Sequence = 1
+	t.state.Init()
+	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
 	return nil
 }
 
@@ -324,7 +340,7 @@ func (t *Table) putTx(tx store.Tx, key, val []byte) ([]byte, error) {
 	if buf != nil {
 		prevSize = len(buf) + len(key)
 	} else {
-		t.state.Rows++
+		t.state.NRows++
 	}
 	err := bucket.Put(key, val)
 	if err != nil {
@@ -353,7 +369,7 @@ func (t *Table) delTx(tx store.Tx, key []byte) ([]byte, error) {
 	buf := bucket.Get(key)
 	if buf != nil {
 		prevSize = len(buf)
-		t.state.Rows--
+		t.state.NRows--
 	}
 	err := bucket.Delete(key)
 	if err == nil && prevSize >= 0 {

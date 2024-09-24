@@ -28,11 +28,12 @@ var (
 	ErrDatabaseClosed   = errors.New("knox: database is closed")
 	ErrDatabaseCorrupt  = errors.New("knox: database file corrupt")
 
-	ErrTableExists  = errors.New("knox: table already exists")
-	ErrStoreExists  = errors.New("knox: store already exists")
-	ErrIndexExists  = errors.New("knox: index already exists")
-	ErrEnumExists   = errors.New("knox: enum already exists")
-	ErrResultClosed = errors.New("knox: result already closed")
+	ErrTableExists       = errors.New("knox: table already exists")
+	ErrStoreExists       = errors.New("knox: store already exists")
+	ErrIndexExists       = errors.New("knox: index already exists")
+	ErrEnumExists        = errors.New("knox: enum already exists")
+	ErrResultClosed      = errors.New("knox: result already closed")
+	ErrInvalidObjectType = errors.New("knox: invalid object type")
 
 	EndStream = errors.New("end stream")
 

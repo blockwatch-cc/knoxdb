@@ -162,6 +162,9 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	// upgrade tx for writing and register touched table for later commit
+	engine.GetTransaction(ctx).Touch(t.tableId)
+
 	// run the query
 	err = t.doQueryAsc(ctx, plan, res)
 	if err != nil {
@@ -190,7 +193,6 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	// anyways until flush)
 	if n > 0 {
 		atomic.AddInt64(&t.stats.DeletedTuples, int64(n))
-		engine.GetTransaction(ctx).Touch(t.tableId)
 	}
 
 	return n, nil

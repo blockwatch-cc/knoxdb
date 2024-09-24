@@ -29,6 +29,9 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	// upgrade tx for writing and register touched table for later commit
+	engine.GetTransaction(ctx).Touch(t.tableId)
+
 	// keep a copy of the state
 	firstPk := t.state.Sequence
 	state := t.state
@@ -44,7 +47,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 		count += n
 
 		// update state
-		state.Rows += n
+		state.NRows += n
 		state.Sequence += n
 
 		// write journal data to disk before we continue
@@ -56,7 +59,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 			}
 
 			// sync state with catalog
-			t.engine.Catalog().SetState(t.tableId, state.Sequence, state.Rows)
+			t.engine.Catalog().SetState(t.tableId, state.ToObjectState())
 
 			// flush pack data to storage, will open storage write transaction
 			// TODO: write a new layer pack (fast) and merge in background
@@ -79,12 +82,15 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	// sync state with catalog
 	if count > 0 {
 		// sync state with catalog
-		t.engine.Catalog().SetState(t.tableId, state.Sequence, state.Rows)
-		engine.GetTransaction(ctx).Touch(t.tableId)
+		t.engine.Catalog().SetState(t.tableId, state.ToObjectState())
 
 		// sync state back to table
 		t.state = state
 	}
 
 	return firstPk, nil
+}
+
+func (t *Table) ApplyWalRecord(ctx context.Context, rec *wal.Record) error {
+	return engine.ErrNotImplemented
 }

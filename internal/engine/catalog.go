@@ -93,6 +93,10 @@ var (
 	dataKey   = []byte("data")
 )
 
+// ObjectState stores volatile state of database objects such as
+// tables and stores. Values represent pk sequence, num rows, and checkpoint id.
+type ObjectState [3]uint64
+
 var DefaultDatabaseOptions = DatabaseOptions{
 	Path:      "./db",
 	Driver:    "bolt",
@@ -106,13 +110,13 @@ type Catalog struct {
 	mu     sync.RWMutex
 	db     store.DB
 	name   string
-	states map[uint64][2]uint64
+	states map[uint64]ObjectState
 }
 
 func NewCatalog(name string) *Catalog {
 	return &Catalog{
 		name:   name,
-		states: make(map[uint64][2]uint64),
+		states: make(map[uint64]ObjectState),
 	}
 }
 
@@ -207,18 +211,45 @@ func (c *Catalog) Close(ctx context.Context) error {
 	return nil
 }
 
-func (c *Catalog) GetState(key uint64) (uint64, uint64) {
+func (c *Catalog) GetState(key uint64) ObjectState {
 	c.mu.RLock()
 	s := c.states[key]
 	c.mu.RUnlock()
-	return s[0], s[1]
+	return s
 }
 
-func (c *Catalog) SetState(key, seq, rows uint64) {
+func (c *Catalog) SetState(key uint64, state ObjectState) {
 	c.mu.Lock()
-	c.states[key] = [2]uint64{seq, rows}
+	c.states[key] = state
 	c.mu.Unlock()
 }
+
+// func (c *Catalog) SetCheckpoint(key uint64, lsn wal.LSN) {
+// 	c.mu.Lock()
+// 	s := c.states[key]
+// 	s[2] = uint64(lsn)
+// 	c.states[key] = s
+// 	c.mu.Unlock()
+// }
+
+// func (c *Catalog) GetCheckpoint(key uint64) LSN {
+// 	c.mu.RLock()
+// 	id := LSN(c.states[key][2])
+// 	c.mu.RUnlock()
+// 	return id
+// }
+
+// func (c *Catalog) GetMinimumCheckpoint() (cpt uint64) {
+// 	c.mu.RLock()
+// 	for _, s := range c.states {
+// 		if s[2] == 0 {
+// 			continue
+// 		}
+// 		cpt = min(cpt, s[2])
+// 	}
+// 	c.mu.RUnLock()
+// 	return
+// }
 
 func (c *Catalog) LoadStates(ctx context.Context) error {
 	tx, err := GetTransaction(ctx).CatalogTx(c.db, false)
@@ -230,12 +261,13 @@ func (c *Catalog) LoadStates(ctx context.Context) error {
 		return ErrDatabaseCorrupt
 	}
 	err = bucket.ForEach(func(k, v []byte) error {
-		if len(v) < 16 {
+		if len(v) < 24 {
 			return ErrDatabaseCorrupt
 		}
-		state := [2]uint64{
+		state := ObjectState{
 			BE.Uint64(v[0:]),
 			BE.Uint64(v[8:]),
+			BE.Uint64(v[16:]),
 		}
 		c.states[Key64(k)] = state
 		return nil
@@ -267,9 +299,10 @@ func (c *Catalog) CommitState(tx *Tx) error {
 		if state[0] == 0 && state[1] == 0 {
 			err = bucket.Delete(Key64Bytes(tag))
 		} else {
-			var buf [16]byte
+			var buf [24]byte
 			BE.PutUint64(buf[0:], state[0])
 			BE.PutUint64(buf[8:], state[1])
+			BE.PutUint64(buf[16:], state[2])
 			err = bucket.Put(Key64Bytes(tag), buf[:])
 		}
 		if err != nil {
@@ -299,9 +332,10 @@ func (c *Catalog) RollbackState(tx *Tx) error {
 		if len(buf) < 16 {
 			return ErrDatabaseCorrupt
 		}
-		state := [2]uint64{
+		state := [3]uint64{
 			BE.Uint64(buf[0:]),
 			BE.Uint64(buf[8:]),
+			BE.Uint64(buf[16:]),
 		}
 		c.states[tag] = state
 	}
@@ -512,7 +546,7 @@ func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
 
 	// reset state (schedules state for deletion on commit)
 	c.mu.Lock()
-	c.states[key] = [2]uint64{0, 0}
+	c.states[key] = ObjectState{}
 	c.mu.Unlock()
 
 	return nil
@@ -636,7 +670,7 @@ func (c *Catalog) DropIndex(ctx context.Context, key uint64) error {
 
 	// reset state (schedules state for deletion on commit)
 	c.mu.Lock()
-	c.states[key] = [2]uint64{0, 0}
+	c.states[key] = ObjectState{}
 	c.mu.Unlock()
 
 	return nil
@@ -736,7 +770,7 @@ func (c *Catalog) DropStore(ctx context.Context, key uint64) error {
 
 	// reset state (schedules state for deletion on commit)
 	c.mu.Lock()
-	c.states[key] = [2]uint64{0, 0}
+	c.states[key] = ObjectState{}
 	c.mu.Unlock()
 
 	return nil

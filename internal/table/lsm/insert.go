@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
@@ -71,7 +72,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	}
 
 	// update state in catalog (will commit with main tx)
-	t.engine.Catalog().SetState(t.tableId, t.state.Sequence, t.state.Rows)
+	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
 	state = TableState{}
 
 	// return first primary key assigned
@@ -126,4 +127,8 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	}
 
 	return n, nil
+}
+
+func (t *Table) ApplyWalRecord(ctx context.Context, rec *wal.Record) error {
+	return engine.ErrNotImplemented
 }

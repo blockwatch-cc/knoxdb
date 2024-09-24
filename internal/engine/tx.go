@@ -4,18 +4,27 @@
 package engine
 
 import (
+	"context"
+	"sort"
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 )
 
+type TxHook func(Context) error
+
 type Tx struct {
-	engine  *Engine
-	id      uint64
-	dbTx    map[store.DB]store.Tx
-	catTx   store.Tx
-	touched map[uint64]struct{}
+	engine   *Engine
+	id       uint64
+	dbTx     map[store.DB]store.Tx
+	catTx    store.Tx
+	snap     *Snapshot           // isolation snapshot
+	touched  map[uint64]struct{} // oids we have written to (tables, stores)
+	onCommit []TxHook
+	onAbort  []TxHook
 
 	// TODO: close/drop/truncate/compact/alter integration
 	// - should we close the table before? then reopen private, action and reopen again?
@@ -49,15 +58,34 @@ type Tx struct {
 	//       currently open write tx
 }
 
+// TxList is a list of transactions sorted by txid
+type TxList []*Tx
+
+func (t *TxList) Add(tx *Tx) {
+	txs := *t
+	i := sort.Search(len(txs), func(i int) bool { return txs[i].id > tx.id })
+	txs = append(txs, nil)
+	copy(txs[i+1:], txs[i:])
+	*t = txs
+}
+
+func (t *TxList) Del(tx *Tx) {
+	txs := *t
+	i := sort.Search(len(txs), func(i int) bool { return txs[i].id >= tx.id })
+	copy(txs[i:], txs[i+1:])
+	txs[len(txs)-1] = nil
+	txs = txs[:len(txs)-1]
+	*t = txs
+}
+
 func (e *Engine) NewTransaction() *Tx {
 	e.mu.Lock()
 	tx := &Tx{
-		engine:  e,
-		id:      atomic.AddUint64(&e.nextTxId, 1),
-		dbTx:    make(map[store.DB]store.Tx),
-		touched: make(map[uint64]struct{}),
+		engine: e,
+		id:     0, // read-only tx do not use an id
+		dbTx:   make(map[store.DB]store.Tx),
+		snap:   e.NewSnapshot(),
 	}
-	e.txs[tx.id] = tx
 	e.mu.Unlock()
 	return tx
 }
@@ -74,24 +102,81 @@ func (t *Tx) Noop() error {
 }
 
 func (t *Tx) Close() {
+	if len(t.touched) > 0 {
+		t.engine.mu.Lock()
+		t.engine.txs.Del(t)
+		if len(t.engine.txs) > 0 {
+			t.engine.xmin = t.engine.txs[0].id
+		} else {
+			t.engine.xmin = t.engine.xnext - 1
+		}
+		t.engine.mu.Unlock()
+		clear(t.touched)
+	}
 	clear(t.dbTx)
-	clear(t.touched)
 	clear(t.writes)
 	t.catTx = nil
-	t.engine.mu.Lock()
-	delete(t.engine.txs, t.id)
-	t.engine.mu.Unlock()
+	t.snap = nil
 }
 
 func (t *Tx) Touch(key uint64) {
+	if len(t.touched) == 0 {
+		// generate txid on first write
+		t.touched = make(map[uint64]struct{})
+		t.engine.mu.Lock()
+		t.id = atomic.AddUint64(&t.engine.xnext, 1)
+		t.engine.txs.Add(t)
+		t.engine.mu.Unlock()
+		t.snap.WithId(t.id)
+	}
 	t.touched[key] = struct{}{}
 }
 
-func (t *Tx) Commit() error {
+func (t *Tx) OnCommit(fn TxHook) {
+	if t.onCommit != nil {
+		t.onCommit = append([]TxHook{fn}, t.onCommit...)
+	} else {
+		t.onCommit = []TxHook{fn}
+	}
+}
+
+func (t *Tx) OnAbort(fn TxHook) {
+	if t.onAbort != nil {
+		t.onAbort = append([]TxHook{fn}, t.onAbort...)
+	} else {
+		t.onAbort = []TxHook{fn}
+	}
+}
+
+func (t *Tx) Commit(ctx context.Context) error {
 	if t == nil {
 		return nil
 	}
-	var err error
+	// write commit record to wal
+	_, err := t.engine.wal.Write(&wal.Record{
+		Type:   wal.RecordTypeCommit,
+		Tag:    types.ObjectTagDatabase,
+		Entity: t.engine.dbId,
+		TxID:   t.id,
+	})
+	if err != nil {
+		return err
+	}
+
+	// sync wal
+	if err := t.engine.wal.Sync(); err != nil {
+		return err
+	}
+
+	// run callbacks
+	for _, fn := range t.onCommit {
+		if err := fn(ctx); err != nil {
+			t.engine.log.Errorf("Tx 0x%016x commit: %v", t.id, err)
+		}
+	}
+
+	// TODO: refactor when all stores are journaled
+	// close and write storage tx
 	for _, tx := range t.dbTx {
 		var e error
 		if tx.IsWriteable() {
@@ -121,11 +206,30 @@ func (t *Tx) Commit() error {
 	return err
 }
 
-func (t *Tx) Abort() error {
+func (t *Tx) Abort(ctx context.Context) error {
 	if t == nil {
 		return nil
 	}
-	var err error
+
+	// write abort record to wal (no sync required, tx data is ignored if lost)
+	_, err := t.engine.wal.Write(&wal.Record{
+		Type:   wal.RecordTypeAbort,
+		Tag:    types.ObjectTagDatabase,
+		Entity: t.engine.dbId,
+		TxID:   t.id,
+	})
+	if err != nil {
+		return err
+	}
+
+	// run callbacks
+	for _, fn := range t.onCommit {
+		if err := fn(ctx); err != nil {
+			t.engine.log.Errorf("Tx 0x%016x commit: %v", t.id, err)
+		}
+	}
+
+	// close storage tx
 	for _, tx := range t.dbTx {
 		if e := tx.Rollback(); e != nil && err == nil {
 			err = e
@@ -187,5 +291,18 @@ func (t *Tx) CatalogTx(db store.DB, write bool) (store.Tx, error) {
 		return nil, err
 	}
 	t.catTx = tx
+	return tx, nil
+}
+
+// Commits and reopens a writeable storage tx. This may be used to flush verly large
+// transactions to storage in incremental pieces.
+func (t *Tx) Continue(tx store.Tx) (store.Tx, error) {
+	db := tx.DB()
+	tx, err := store.CommitAndContinue(tx)
+	if err != nil {
+		delete(t.dbTx, db)
+		return nil, err
+	}
+	t.dbTx[db] = tx
 	return tx, nil
 }

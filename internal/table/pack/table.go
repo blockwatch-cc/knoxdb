@@ -43,8 +43,25 @@ var (
 )
 
 type TableState struct {
-	Sequence uint64 // next free sequence
-	Rows     uint64 // total non-deleted rows
+	Sequence   uint64 // next free sequence
+	NRows      uint64 // total non-deleted rows
+	Checkpoint uint64 // latest wal checkpoint LSN
+}
+
+func (s *TableState) Init() {
+	s.Sequence = 1
+	s.NRows = 0
+	s.Checkpoint = 0
+}
+
+func (s *TableState) FromObjectState(o engine.ObjectState) {
+	s.Sequence = o[0]
+	s.NRows = o[1]
+	s.Checkpoint = o[2]
+}
+
+func (s TableState) ToObjectState() engine.ObjectState {
+	return engine.ObjectState{s.Sequence, s.NRows, s.Checkpoint}
 }
 
 var (
@@ -96,7 +113,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.opts = opts
 	t.datakey = append([]byte(name), dataKeySuffix...)
 	t.metakey = append([]byte(name), metaKeySuffix...)
-	t.state.Sequence = 1
+	t.state.Init()
 	t.stats.Name = name
 	t.meta = metadata.NewMetadataIndex(pki, t.opts.PackSize)
 	t.journal = journal.NewJournal(s, t.opts.JournalSize)
@@ -134,6 +151,8 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	if _, err := store.CreateBucket(tx, t.metakey, engine.ErrTableExists); err != nil {
 		return err
 	}
+
+	// TODO: replace with WAL stream
 	jsz, tsz, err := t.journal.StoreLegacy(ctx, tx, t.datakey)
 	if err != nil {
 		return err
@@ -144,7 +163,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.stats.TombstoneTuplesThreshold = int64(opts.JournalSize)
 
 	// init catalog state
-	t.engine.Catalog().SetState(t.tableId, 1, 0)
+	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
 
 	t.log.Debugf("Created table %s", typ)
 	return nil
@@ -165,9 +184,9 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.datakey = append([]byte(name), dataKeySuffix...)
 	t.metakey = append([]byte(name), metaKeySuffix...)
-	t.state.Sequence, t.state.Rows = e.Catalog().GetState(t.tableId)
+	t.state.FromObjectState(e.Catalog().GetState(t.tableId))
 	t.stats.Name = name
-	t.stats.TupleCount = int64(t.state.Rows)
+	t.stats.TupleCount = int64(t.state.NRows)
 	t.meta = metadata.NewMetadataIndex(s.PkIndex(), opts.PackSize)
 	t.journal = journal.NewJournal(s, opts.JournalSize)
 	t.db = opts.DB
@@ -221,7 +240,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 		return err
 	}
 	t.stats.MetaBytesRead += int64(n)
-	t.stats.TupleCount = int64(t.state.Rows)
+	t.stats.TupleCount = int64(t.state.NRows)
 	t.stats.PacksCount = int64(t.meta.Len())
 	t.stats.MetaSize = int64(t.meta.HeapSize())
 	t.stats.TotalSize = int64(t.meta.TableSize())
@@ -233,7 +252,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	}
 
 	t.log.Debugf("Table %s opened with %d rows, %d journal rows, seq=%d",
-		typ, t.state.Rows, t.journal.Len(), t.state.Sequence)
+		typ, t.state.NRows, t.journal.Len(), t.state.Sequence)
 
 	// t.DumpType(os.Stdout)
 	// t.DumpMetadata(os.Stdout, types.DumpModeHex)
@@ -279,7 +298,7 @@ func (t *Table) name() string {
 
 func (t *Table) Stats() engine.TableStats {
 	stats := t.stats
-	stats.TupleCount = int64(t.state.Rows)
+	stats.TupleCount = int64(t.state.NRows)
 	return stats
 }
 
@@ -339,10 +358,9 @@ func (t *Table) Truncate(ctx context.Context) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	t.engine.Catalog().SetState(t.tableId, 1, 0)
-	t.state.Rows = 0
-	t.state.Sequence = 1
-	atomic.AddInt64(&t.stats.DeletedTuples, int64(t.state.Rows))
+	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
+	t.state.Init()
+	atomic.AddInt64(&t.stats.DeletedTuples, int64(t.state.NRows))
 	atomic.StoreInt64(&t.stats.TupleCount, 0)
 	atomic.StoreInt64(&t.stats.MetaSize, 0)
 	atomic.StoreInt64(&t.stats.JournalSize, 0)

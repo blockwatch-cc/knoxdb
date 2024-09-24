@@ -106,19 +106,28 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 		return nil, err
 	}
 
+	// register commit/abort callbacks
+	tx := GetTransaction(ctx)
+	tx.OnCommit(func(ctx context.Context) error {
+		// add to table and engine
+		table.UseIndex(index)
+		e.indexes[tag] = index
+		return nil
+	})
+	tx.OnAbort(func(ctx context.Context) error {
+		// remove index file(s) on error
+		return index.Drop(ctx)
+	})
+
 	// add to catalog
 	if err := e.cat.AddIndex(ctx, tag, tableTag, s, opts); err != nil {
 		return nil, err
 	}
 
-	// commit
+	// commit (note: noop when called with outside tx)
 	if err := commit(); err != nil {
 		return nil, err
 	}
-
-	// add to table and engine
-	table.UseIndex(index)
-	e.indexes[tag] = index
 
 	return index, nil
 }
