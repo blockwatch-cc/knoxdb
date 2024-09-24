@@ -122,7 +122,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	}
 
 	// init catalog state
-	idx.engine.Catalog().SetState(idx.indexId, 0, 0)
+	idx.engine.Catalog().SetState(idx.indexId, engine.ObjectState{})
 
 	idx.log.Debugf("Created index %s", typ)
 	return nil
@@ -146,7 +146,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.noClose = true
 	idx.table = t
 	idx.convert = schema.NewConverter(t.Schema(), s, BE)
-	_, idx.nrows = e.Catalog().GetState(idx.indexId)
+	idx.nrows = e.Catalog().GetState(idx.indexId)[1]
 	idx.log = opts.Logger
 
 	idx.log.Debugf("Opening LSM index %s on %s with driver %s", name, t.Schema().Name(), opts.Driver)
@@ -278,7 +278,7 @@ func (idx *Index) Truncate(ctx context.Context) error {
 	if _, err := tx.Root().CreateBucket(idx.key); err != nil {
 		return err
 	}
-	idx.engine.Catalog().SetState(idx.indexId, 0, 0)
+	idx.engine.Catalog().SetState(idx.indexId, engine.ObjectState{})
 	idx.stats.DeletedTuples += int64(idx.nrows)
 	idx.stats.TupleCount = 0
 	idx.nrows = 0

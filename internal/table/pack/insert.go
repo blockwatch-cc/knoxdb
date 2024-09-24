@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/wal"
 )
 
 func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
