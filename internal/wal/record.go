@@ -8,13 +8,18 @@ import "blockwatch.cc/knoxdb/internal/types"
 type RecordType byte
 
 const (
-	RecordTypeInsert RecordType = iota
+	RecordTypeInvalid RecordType = iota
+	RecordTypeInsert
 	RecordTypeUpdate
 	RecordTypeDelete
 	RecordTypeCommit
 	RecordTypeAbort
 	RecordTypeCheckpoint
 )
+
+func (t RecordType) IsValid() bool {
+	return t != RecordTypeInvalid
+}
 
 // LSN represents a Log Serial Number for WAL records. The LSN is
 // the unique position (offset) of a record in the wal.
@@ -25,7 +30,8 @@ type Record struct {
 	Tag    types.ObjectTag // object kind (db, table, store, enum, etc)
 	TxID   uint64          // unique transaction id this record was belongs to
 	Entity uint64          // object id (tagged hash for db, table, store, enum, etc)
-	Data   []byte
+	Data   []byte          // body
+	Lsn    LSN             //
 }
 
 // RecordHeader is written to
