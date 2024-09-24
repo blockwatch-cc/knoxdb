@@ -35,9 +35,12 @@ func (f *RecordFilter) Match(r *Record) bool {
 	return true
 }
 
+var _ WalReader = (*Reader)(nil)
+
 type Reader struct {
 	flt *RecordFilter
 	seg *segment
+	wal *Wal
 }
 
 func (r *Reader) WithType(t RecordType) WalReader {
@@ -74,11 +77,23 @@ func (r *Reader) WithTxID(v uint64) WalReader {
 
 func (r *Reader) Seek(lsn LSN) error {
 	// open segment and seek
+	// segid := lsn / r.wal.opts.MaxSegmentSize
+	// fielpos := lsn % r.wal.opts.MaxSegmentSize
+
 	return nil
 }
 
 func (r *Reader) Next() (*Record, error) {
-	// read records, check checksum
-	// skip when filter does not match
+	// read protocol
+	// - read large chunks of data (to amortize i/o costs) into a buffer
+	// - then iterate the buffer record by record
+	// - if the remaining data in the buffer is < record header size
+	//   or if the remaining data is < record body len, read more chunks
+	//   until the next full record is assemled
+	// - assembling a very large record may require to work across segement
+	//   files
+	// - after reading each record, check the chained checksum
+	// - then decide whether we should skip based on filter match
+
 	return nil, io.EOF
 }
