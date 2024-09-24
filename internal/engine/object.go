@@ -10,6 +10,7 @@ import (
 	"io"
 
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
@@ -18,12 +19,13 @@ type Object interface {
 	Create(Context) error
 	Drop(Context) error
 	Update(Context) error
-	Decode([]byte) error
-	Encode() ([]byte, error)
+	Decode([]byte, wal.RecordType) error
+	Encode(wal.RecordType) ([]byte, error)
 }
 
 // TableObject
 type TableObject struct {
+	id     uint64
 	engine *Engine
 	schema *schema.Schema
 	opts   TableOptions
@@ -34,8 +36,7 @@ func (o *TableObject) Type() types.ObjectTag {
 }
 
 func (o *TableObject) Create(ctx context.Context) error {
-	id := o.schema.TaggedHash(types.ObjectTagTable)
-	_, ok := o.engine.GetTable(id)
+	_, ok := o.engine.GetTable(o.id)
 	if ok {
 		return nil
 	}
@@ -44,28 +45,32 @@ func (o *TableObject) Create(ctx context.Context) error {
 }
 
 func (o *TableObject) Drop(ctx context.Context) error {
-	id := o.schema.TaggedHash(types.ObjectTagTable)
-	_, ok := o.engine.GetTable(id)
+	t, ok := o.engine.GetTable(o.id)
 	if !ok {
 		return nil
 	}
-	return o.engine.DropTable(ctx, o.schema.Name())
+	return o.engine.DropTable(ctx, t.Schema().Name())
 }
 
 func (o *TableObject) Update(ctx context.Context) error {
-	id := o.schema.TaggedHash(types.ObjectTagTable)
-	_, ok := o.engine.GetTable(id)
+	_, ok := o.engine.GetTable(o.id)
 	if !ok {
 		return ErrNoTable
 	}
 	return o.engine.AlterTable(ctx, o.schema.Name(), o.schema)
 }
 
-func (o *TableObject) Encode() ([]byte, error) {
+func (o *TableObject) Encode(typ wal.RecordType) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 
 	// write tag
 	buf.Write([]byte{byte(types.ObjectTagTable)})
+
+	// delete records use a short encoding
+	if typ == wal.RecordTypeDelete {
+		binary.Write(buf, LE, o.id)
+		return buf.Bytes(), nil
+	}
 
 	// write schema
 	b, err := o.schema.MarshalBinary()
@@ -86,7 +91,7 @@ func (o *TableObject) Encode() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (o *TableObject) Decode(data []byte) error {
+func (o *TableObject) Decode(data []byte, typ wal.RecordType) error {
 	if len(data) < 9 {
 		return io.ErrShortBuffer
 	}
@@ -95,12 +100,19 @@ func (o *TableObject) Decode(data []byte) error {
 	}
 	buf := bytes.NewBuffer(data[1:])
 
+	// delete records use a short encoding
+	if typ == wal.RecordTypeDelete {
+		o.id = LE.Uint64(buf.Next(8))
+		return nil
+	}
+
 	// read schema
 	n := int(LE.Uint32(buf.Next(4)))
 	o.schema = schema.NewSchema()
 	if err := o.schema.UnmarshalBinary(buf.Next(n)); err != nil {
 		return err
 	}
+	o.id = o.schema.TaggedHash(types.ObjectTagTable)
 
 	// read options
 	n = int(LE.Uint32(buf.Next(4)))
@@ -113,6 +125,7 @@ func (o *TableObject) Decode(data []byte) error {
 
 // Store object
 type StoreObject struct {
+	id     uint64
 	engine *Engine
 	schema *schema.Schema
 	opts   StoreOptions
@@ -123,8 +136,7 @@ func (o *StoreObject) Type() types.ObjectTag {
 }
 
 func (o *StoreObject) Create(ctx context.Context) error {
-	id := o.schema.TaggedHash(types.ObjectTagStore)
-	_, ok := o.engine.GetStore(id)
+	_, ok := o.engine.GetStore(o.id)
 	if ok {
 		return nil
 	}
@@ -133,23 +145,28 @@ func (o *StoreObject) Create(ctx context.Context) error {
 }
 
 func (o *StoreObject) Drop(ctx context.Context) error {
-	id := o.schema.TaggedHash(types.ObjectTagStore)
-	_, ok := o.engine.GetStore(id)
+	s, ok := o.engine.GetStore(o.id)
 	if !ok {
 		return nil
 	}
-	return o.engine.DropStore(ctx, o.schema.Name())
+	return o.engine.DropStore(ctx, s.Schema().Name())
 }
 
 func (o *StoreObject) Update(ctx context.Context) error {
 	return ErrNotImplemented
 }
 
-func (o *StoreObject) Encode() ([]byte, error) {
+func (o *StoreObject) Encode(typ wal.RecordType) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 
 	// write tag
 	buf.Write([]byte{byte(types.ObjectTagStore)})
+
+	// delete records use a short encoding
+	if typ == wal.RecordTypeDelete {
+		binary.Write(buf, LE, o.id)
+		return buf.Bytes(), nil
+	}
 
 	// write schema
 	b, err := o.schema.MarshalBinary()
@@ -170,7 +187,7 @@ func (o *StoreObject) Encode() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (o *StoreObject) Decode(data []byte) error {
+func (o *StoreObject) Decode(data []byte, typ wal.RecordType) error {
 	if len(data) < 9 {
 		return io.ErrShortBuffer
 	}
@@ -179,12 +196,19 @@ func (o *StoreObject) Decode(data []byte) error {
 	}
 	buf := bytes.NewBuffer(data[1:])
 
+	// delete records use a short encoding
+	if typ == wal.RecordTypeDelete {
+		o.id = LE.Uint64(buf.Next(8))
+		return nil
+	}
+
 	// read schema
 	n := int(LE.Uint32(buf.Next(4)))
 	o.schema = schema.NewSchema()
 	if err := o.schema.UnmarshalBinary(buf.Next(n)); err != nil {
 		return err
 	}
+	o.id = o.schema.TaggedHash(types.ObjectTagStore)
 
 	// read options
 	n = int(LE.Uint32(buf.Next(4)))
@@ -197,6 +221,7 @@ func (o *StoreObject) Decode(data []byte) error {
 
 // EnumObject
 type EnumObject struct {
+	id     uint64
 	engine *Engine
 	name   string
 	vals   []schema.Enum
@@ -207,18 +232,16 @@ func (o *EnumObject) Type() types.ObjectTag {
 }
 
 func (o *EnumObject) Create(ctx context.Context) error {
-	id := types.TaggedHash(types.ObjectTagEnum, o.name)
-	_, ok := o.engine.GetEnum(id)
+	e, ok := o.engine.GetEnum(o.id)
 	if ok {
 		return nil
 	}
-	_, err := o.engine.CreateEnum(ctx, o.name)
+	_, err := o.engine.CreateEnum(ctx, e.Name())
 	return err
 }
 
 func (o *EnumObject) Drop(ctx context.Context) error {
-	id := types.TaggedHash(types.ObjectTagEnum, o.name)
-	_, ok := o.engine.GetEnum(id)
+	_, ok := o.engine.GetEnum(o.id)
 	if !ok {
 		return nil
 	}
@@ -226,15 +249,14 @@ func (o *EnumObject) Drop(ctx context.Context) error {
 }
 
 func (o *EnumObject) Update(ctx context.Context) error {
-	id := types.TaggedHash(types.ObjectTagEnum, o.name)
-	_, ok := o.engine.GetEnum(id)
+	_, ok := o.engine.GetEnum(o.id)
 	if !ok {
 		return ErrNoEnum
 	}
 	return o.engine.ExtendEnum(ctx, o.name, o.vals...)
 }
 
-func (o *EnumObject) Encode() ([]byte, error) {
+func (o *EnumObject) Encode(typ wal.RecordType) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 
 	// write tag
@@ -243,6 +265,11 @@ func (o *EnumObject) Encode() ([]byte, error) {
 	// write name
 	binary.Write(buf, LE, uint16(len(o.name)))
 	buf.WriteString(o.name)
+
+	// delete records have shorter encoding
+	if typ == wal.RecordTypeDelete {
+		return buf.Bytes(), nil
+	}
 
 	// write values
 	binary.Write(buf, LE, uint16(len(o.vals)))
@@ -254,7 +281,7 @@ func (o *EnumObject) Encode() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (o *EnumObject) Decode(data []byte) error {
+func (o *EnumObject) Decode(data []byte, typ wal.RecordType) error {
 	if len(data) < 5 {
 		return io.ErrShortBuffer
 	}
@@ -266,6 +293,12 @@ func (o *EnumObject) Decode(data []byte) error {
 	// read name
 	n := int(LE.Uint16(buf.Next(2)))
 	o.name = string(buf.Next(n))
+	o.id = types.TaggedHash(types.ObjectTagEnum, o.name)
+
+	// delete records have short encoding
+	if typ == wal.RecordTypeDelete {
+		return nil
+	}
 
 	// read values
 	n = int(LE.Uint16(buf.Next(2)))
@@ -280,6 +313,7 @@ func (o *EnumObject) Decode(data []byte) error {
 
 // IndexObject
 type IndexObject struct {
+	id     uint64
 	engine *Engine
 	table  string
 	schema *schema.Schema
@@ -291,8 +325,7 @@ func (o *IndexObject) Type() types.ObjectTag {
 }
 
 func (o *IndexObject) Create(ctx context.Context) error {
-	id := o.schema.TaggedHash(types.ObjectTagIndex)
-	_, ok := o.engine.GetIndex(id)
+	_, ok := o.engine.GetIndex(o.id)
 	if ok {
 		return nil
 	}
@@ -301,8 +334,7 @@ func (o *IndexObject) Create(ctx context.Context) error {
 }
 
 func (o *IndexObject) Drop(ctx context.Context) error {
-	id := o.schema.TaggedHash(types.ObjectTagIndex)
-	_, ok := o.engine.GetIndex(id)
+	_, ok := o.engine.GetIndex(o.id)
 	if !ok {
 		return nil
 	}
@@ -313,11 +345,17 @@ func (o *IndexObject) Update(ctx context.Context) error {
 	return ErrNotImplemented
 }
 
-func (o *IndexObject) Encode() ([]byte, error) {
+func (o *IndexObject) Encode(typ wal.RecordType) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 
 	// write tag
 	buf.Write([]byte{byte(types.ObjectTagIndex)})
+
+	// delete records use a short encoding
+	if typ == wal.RecordTypeDelete {
+		binary.Write(buf, LE, o.id)
+		return buf.Bytes(), nil
+	}
 
 	// write table name
 	binary.Write(buf, LE, uint16(len(o.table)))
@@ -342,7 +380,7 @@ func (o *IndexObject) Encode() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (o *IndexObject) Decode(data []byte) error {
+func (o *IndexObject) Decode(data []byte, typ wal.RecordType) error {
 	if len(data) < 11 {
 		return io.ErrShortBuffer
 	}
@@ -350,6 +388,12 @@ func (o *IndexObject) Decode(data []byte) error {
 		return ErrInvalidObjectType
 	}
 	buf := bytes.NewBuffer(data[1:])
+
+	// delete records use a short encoding
+	if typ == wal.RecordTypeDelete {
+		o.id = LE.Uint64(buf.Next(8))
+		return nil
+	}
 
 	// read name
 	n := int(LE.Uint16(buf.Next(2)))
@@ -361,6 +405,7 @@ func (o *IndexObject) Decode(data []byte) error {
 	if err := o.schema.UnmarshalBinary(buf.Next(n)); err != nil {
 		return err
 	}
+	o.id = o.schema.TaggedHash(types.ObjectTagIndex)
 
 	// read options
 	n = int(LE.Uint32(buf.Next(4)))

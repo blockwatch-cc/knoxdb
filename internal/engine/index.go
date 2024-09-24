@@ -9,6 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"golang.org/x/exp/slices"
 )
@@ -124,6 +125,12 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 		return nil, err
 	}
 
+	// write wal
+	obj := &IndexObject{id: tag, table: tableName, schema: s, opts: opts}
+	if err := e.writeWalRecord(ctx, wal.RecordTypeInsert, obj); err != nil {
+		return nil, err
+	}
+
 	// commit (note: noop when called with outside tx)
 	if err := commit(); err != nil {
 		return nil, err
@@ -146,28 +153,37 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 	if !ok {
 		return ErrNoIndex
 	}
-	table := index.Table()
-
-	// start transaction and amend context
-	ctx, commit, abort := e.WithTransaction(ctx)
-	defer abort()
 
 	// TODO: wait for open transactions to complete
 
 	// TODO: make index unavailable for new transaction
 
-	// remove index from table
-	table.UnuseIndex(index)
+	// start transaction and amend context
+	ctx, commit, abort := e.WithTransaction(ctx)
+	defer abort()
 
-	// drop index
-	if err := index.Drop(ctx); err != nil {
-		e.log.Errorf("Drop index: %v", err)
-	}
-	if err := index.Close(ctx); err != nil {
-		e.log.Errorf("Close index: %v", err)
-	}
-	delete(e.indexes, tag)
+	// register commit callback
+	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+		// remove index from table
+		index.Table().UnuseIndex(index)
 
+		if err := index.Drop(ctx); err != nil {
+			e.log.Errorf("Drop index: %v", err)
+		}
+		if err := index.Close(ctx); err != nil {
+			e.log.Errorf("Close index: %v", err)
+		}
+		delete(e.indexes, tag)
+		return nil
+	})
+
+	// write wal
+	obj := &IndexObject{id: tag}
+	if err := e.writeWalRecord(ctx, wal.RecordTypeDelete, obj); err != nil {
+		return err
+	}
+
+	// remove index from catalog
 	if err := e.cat.DropIndex(ctx, tag); err != nil {
 		return err
 	}

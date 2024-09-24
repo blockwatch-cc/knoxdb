@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
@@ -60,6 +61,12 @@ func (e *Engine) CreateEnum(ctx context.Context, name string) (schema.EnumLUT, e
 		return nil, err
 	}
 
+	// write wal
+	obj := &EnumObject{id: tag, name: name}
+	if err := e.writeWalRecord(ctx, wal.RecordTypeInsert, obj); err != nil {
+		return nil, err
+	}
+
 	// commit (note: noop when called with outside tx)
 	if err := commit(); err != nil {
 		return nil, err
@@ -78,11 +85,22 @@ func (e *Engine) DropEnum(ctx context.Context, name string) error {
 	ctx, commit, abort := e.WithTransaction(ctx)
 	defer abort()
 
-	if err := e.cat.DropEnum(ctx, tag); err != nil {
+	// register commit callback
+	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+		delete(e.enums, tag)
+		return nil
+	})
+
+	// write wal
+	obj := &EnumObject{id: tag, name: name}
+	if err := e.writeWalRecord(ctx, wal.RecordTypeDelete, obj); err != nil {
 		return err
 	}
 
-	delete(e.enums, tag)
+	// remove enum from catalog
+	if err := e.cat.DropEnum(ctx, tag); err != nil {
+		return err
+	}
 
 	return commit()
 }
@@ -98,8 +116,15 @@ func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...schema.Enu
 	ctx, commit, abort := e.WithTransaction(ctx)
 	defer abort()
 
-	// extend enum
-	if err := enum.AddValues(vals...); err != nil {
+	// register commit callback
+	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+		// extend enum
+		return enum.AddValues(vals...)
+	})
+
+	// write wal
+	obj := &EnumObject{id: tag, name: name, vals: vals}
+	if err := e.writeWalRecord(ctx, wal.RecordTypeUpdate, obj); err != nil {
 		return err
 	}
 
@@ -108,12 +133,7 @@ func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...schema.Enu
 		return err
 	}
 
-	// commit
-	if err := commit(); err != nil {
-		return err
-	}
-
-	return nil
+	return commit()
 }
 
 func (e *Engine) openEnums(ctx context.Context) error {

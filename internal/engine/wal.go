@@ -14,7 +14,7 @@ import (
 )
 
 func (e *Engine) writeWalRecord(ctx context.Context, typ wal.RecordType, o Object) error {
-	buf, err := o.Encode()
+	buf, err := o.Encode(typ)
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func (e *Engine) recoverWal(ctx context.Context) error {
 }
 
 func (e *Engine) applyWalRecord(ctx context.Context, rec *wal.Record) error {
-	obj, err := e.decodeWalRecord(rec.Data)
+	obj, err := e.decodeWalRecord(rec.Data, rec.Type)
 	if err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func (e *Engine) applyWalRecord(ctx context.Context, rec *wal.Record) error {
 	return err
 }
 
-func (e *Engine) decodeWalRecord(buf []byte) (Object, error) {
+func (e *Engine) decodeWalRecord(buf []byte, typ wal.RecordType) (Object, error) {
 	var obj Object
 	switch types.ObjectTag(buf[0]) {
 	case types.ObjectTagTable:
@@ -177,7 +177,7 @@ func (e *Engine) decodeWalRecord(buf []byte) (Object, error) {
 	default:
 		return nil, ErrInvalidObjectType
 	}
-	if err := obj.Decode(buf); err != nil {
+	if err := obj.Decode(buf, typ); err != nil {
 		return nil, err
 	}
 	return obj, nil

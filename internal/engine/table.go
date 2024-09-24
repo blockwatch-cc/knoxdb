@@ -9,6 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"golang.org/x/exp/slices"
 )
@@ -96,6 +97,12 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 		return nil, err
 	}
 
+	// write wal
+	obj := &TableObject{id: tag, schema: s, opts: opts}
+	if err := e.writeWalRecord(ctx, wal.RecordTypeInsert, obj); err != nil {
+		return nil, err
+	}
+
 	// commit catalog (note: noop when called with outside tx)
 	if err := commit(); err != nil {
 		return nil, err
@@ -124,9 +131,31 @@ func (e *Engine) AlterTable(ctx context.Context, name string, schema *schema.Sch
 	//     multiple converters and store schema version with each value
 
 	// start transaction and amend context
-	// ctx = e.WithEngine(ctx)
-	// ctx, commit, abort := e.WithTransaction(ctx, true)
+	// ctx, commit, abort := e.WithTransaction(ctx)
 	// defer abort()
+
+	// // register commit/abort callbacks
+	// tx := GetTransaction(ctx)
+	// tx.OnCommit(func(ctx context.Context) error {
+	// 	// TODO: change table schema, change journal schema
+	// 	return nil
+	// })
+
+	// // update to catalog
+	// if err := e.cat.AlterTable(ctx, tag, s, opts); err != nil {
+	// 	return nil, err
+	// }
+
+	// // write wal
+	// obj := &TableObject{id: tag, schema: s, opts: opts}
+	// if err := e.writeWalRecord(ctx, wal.RecordTypeUpdate, obj); err != nil {
+	// 	return nil, err
+	// }
+
+	// commit catalog (note: noop when called with outside tx)
+	// if err := commit(); err != nil {
+	// 	return nil, err
+	// }
 
 	return ErrNotImplemented
 }
@@ -138,13 +167,13 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 		return ErrNoTable
 	}
 
-	// start transaction and amend context
-	ctx, commit, abort := e.WithTransaction(ctx)
-	defer abort()
-
 	// TODO: wait for open transactions to complete
 
 	// TODO: make table unavailable for new transaction
+
+	// start transaction and amend context
+	ctx, commit, abort := e.WithTransaction(ctx)
+	defer abort()
 
 	// drop indexes and remove them from catalog
 	for _, idx := range t.Indexes() {
@@ -153,14 +182,23 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 		}
 	}
 
-	// drop table
-	if err := t.Drop(ctx); err != nil {
-		e.log.Errorf("Drop table: %v", err)
+	// register commit callback
+	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+		if err := t.Drop(ctx); err != nil {
+			e.log.Errorf("Drop table: %v", err)
+		}
+		if err := t.Close(ctx); err != nil {
+			e.log.Errorf("Close table: %v", err)
+		}
+		delete(e.tables, tag)
+		return nil
+	})
+
+	// write wal
+	obj := &TableObject{id: tag}
+	if err := e.writeWalRecord(ctx, wal.RecordTypeDelete, obj); err != nil {
+		return err
 	}
-	if err := t.Close(ctx); err != nil {
-		e.log.Errorf("Close table: %v", err)
-	}
-	delete(e.tables, tag)
 
 	// remove table from catalog
 	if err := e.cat.DropTable(ctx, tag); err != nil {

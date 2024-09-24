@@ -224,33 +224,6 @@ func (c *Catalog) SetState(key uint64, state ObjectState) {
 	c.mu.Unlock()
 }
 
-// func (c *Catalog) SetCheckpoint(key uint64, lsn wal.LSN) {
-// 	c.mu.Lock()
-// 	s := c.states[key]
-// 	s[2] = uint64(lsn)
-// 	c.states[key] = s
-// 	c.mu.Unlock()
-// }
-
-// func (c *Catalog) GetCheckpoint(key uint64) LSN {
-// 	c.mu.RLock()
-// 	id := LSN(c.states[key][2])
-// 	c.mu.RUnlock()
-// 	return id
-// }
-
-// func (c *Catalog) GetMinimumCheckpoint() (cpt uint64) {
-// 	c.mu.RLock()
-// 	for _, s := range c.states {
-// 		if s[2] == 0 {
-// 			continue
-// 		}
-// 		cpt = min(cpt, s[2])
-// 	}
-// 	c.mu.RUnLock()
-// 	return
-// }
-
 func (c *Catalog) LoadStates(ctx context.Context) error {
 	tx, err := GetTransaction(ctx).CatalogTx(c.db, false)
 	if err != nil {
