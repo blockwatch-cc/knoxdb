@@ -35,7 +35,7 @@ type Engine struct {
 	path    string
 	log     log.Logger
 	merger  *MergerService
-	wal     *wal.Wal // one wal for all tables
+	wal     *wal.Wal
 }
 
 type CacheKeyType [2]uint64
@@ -201,7 +201,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		Path:           filepath.Join(e.opts.Path, "xlog"),
 		MaxSegmentSize: 128 << 20,
 	}
-	if w, err := wal.Open(wopts); err != nil {
+	if w, err := wal.Open(e.maxWalCheckpoint(), wopts); err != nil {
 		return nil, err
 	} else {
 		e.wal = w

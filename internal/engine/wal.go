@@ -29,6 +29,17 @@ func (e *Engine) writeWalRecord(ctx context.Context, typ wal.RecordType, o Objec
 	return err
 }
 
+// find the highest checkpoint across all containers to start reading the WAL on startup
+func (e *Engine) maxWalCheckpoint() (maxLsn wal.LSN) {
+	for _, s := range e.cat.states {
+		if s[2] == 0 {
+			continue
+		}
+		maxLsn = max(maxLsn, wal.LSN(s[2]))
+	}
+	return
+}
+
 func (e *Engine) recoverWal(ctx context.Context) error {
 	// find the minimum non-zero checkpoint across all catalog objects
 	// we directly access catalog state without lock because this function
