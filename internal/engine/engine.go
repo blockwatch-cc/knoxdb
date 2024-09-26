@@ -301,6 +301,10 @@ func (e *Engine) Catalog() *Catalog {
 	return e.cat
 }
 
+func (e *Engine) Wal() *wal.Wal {
+	return e.wal
+}
+
 func (e *Engine) BlockCache() BlockCacheType {
 	return e.cache.blocks
 }

@@ -18,10 +18,10 @@ import (
 
 	"github.com/echa/log"
 
-	pi "blockwatch.cc/knoxdb/internal/index/pack"
-	"blockwatch.cc/knoxdb/internal/metadata"
 	"blockwatch.cc/knoxdb/internal/pack"
-	pt "blockwatch.cc/knoxdb/internal/table/pack"
+	pi "blockwatch.cc/knoxdb/internal/pack/index"
+	"blockwatch.cc/knoxdb/internal/pack/metadata"
+	pt "blockwatch.cc/knoxdb/internal/pack/table"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 	"blockwatch.cc/knoxdb/pkg/knox"

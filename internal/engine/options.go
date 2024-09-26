@@ -98,19 +98,20 @@ func (o *DatabaseOptions) UnmarshalBinary(buf []byte) error {
 }
 
 type TableOptions struct {
-	Engine       TableKind  // pack, lsm, parquet, csv, remote
-	Driver       string     // bolt, badger, mem, ...
-	PackSize     int        // pack engine
-	JournalSize  int        // pack engine
-	PageSize     int        // boltdb
-	PageFill     float64    // boltdb
-	ReadOnly     bool       // read-only tx and no schema changes
-	TxMaxSize    int        // maximum write size of low-level dbfile transactions
-	TrackChanges bool       // enable CDC
-	NoSync       bool       // boltdb, no fsync on transactions (dangerous)
-	NoGrowSync   bool       // boltdb, skip fsync+alloc on grow
-	DB           store.DB   `knox:"-"` // shared low-level store implementation
-	Logger       log.Logger `knox:"-"` // custom logger
+	Engine          TableKind  // pack, lsm, parquet, csv, remote
+	Driver          string     // bolt, badger, mem, ...
+	PackSize        int        // pack engine
+	JournalSize     int        // pack engine
+	JournalSegments int        // pack engine
+	PageSize        int        // boltdb
+	PageFill        float64    // boltdb
+	ReadOnly        bool       // read-only tx and no schema changes
+	TxMaxSize       int        // maximum write size of low-level dbfile transactions
+	TrackChanges    bool       // enable CDC
+	NoSync          bool       // boltdb, no fsync on transactions (dangerous)
+	NoGrowSync      bool       // boltdb, skip fsync+alloc on grow
+	DB              store.DB   `knox:"-"` // shared low-level store implementation
+	Logger          log.Logger `knox:"-"` // custom logger
 }
 
 func (o TableOptions) Merge(o2 TableOptions) TableOptions {
@@ -118,6 +119,7 @@ func (o TableOptions) Merge(o2 TableOptions) TableOptions {
 	o.Driver = util.NonZero(o2.Driver, o.Driver)
 	o.PackSize = util.NonZero(o2.PackSize, o.PackSize)
 	o.JournalSize = util.NonZero(o2.JournalSize, o.JournalSize)
+	o.JournalSegments = util.NonZero(o2.JournalSegments, o.JournalSegments)
 	o.PageSize = util.NonZero(o2.PageSize, o.PageSize)
 	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
 	o.TxMaxSize = util.NonZero(o2.TxMaxSize, o.TxMaxSize)

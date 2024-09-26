@@ -21,7 +21,7 @@ type Tx struct {
 	id       uint64
 	dbTx     map[store.DB]store.Tx
 	catTx    store.Tx
-	snap     *Snapshot           // isolation snapshot
+	snap     *types.Snapshot     // isolation snapshot
 	touched  map[uint64]struct{} // oids we have written to (tables, stores)
 	onCommit []TxHook
 	onAbort  []TxHook
@@ -88,6 +88,14 @@ func (e *Engine) NewTransaction() *Tx {
 	}
 	e.mu.Unlock()
 	return tx
+}
+
+func (t *Tx) Id() uint64 {
+	return t.id
+}
+
+func (t *Tx) Snapshot() *types.Snapshot {
+	return t.snap
 }
 
 func (t *Tx) Engine() *Engine {

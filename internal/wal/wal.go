@@ -43,7 +43,7 @@ func Create(opts WalOptions) (*Wal, error) {
 	return &Wal{}, nil
 }
 
-func Open(opts WalOptions) (*Wal, error) {
+func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	// try open directory
 	// set exclusive lock
 	// open last segment file
