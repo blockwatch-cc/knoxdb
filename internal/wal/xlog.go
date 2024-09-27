@@ -76,6 +76,14 @@ func (f *CommitFrame) Close() {
 	f.dirty = false
 }
 
+func (f *CommitFrame) Xmin() uint64 {
+	return f.xmin
+}
+
+func (f *CommitFrame) Xmax() uint64 {
+	return f.xmin + 1<<CommitFrameShift - 1
+}
+
 func (f *CommitFrame) IsCommitted(xid uint64) bool {
 	return f.bits.IsSet(int(xid - f.xmin))
 }
@@ -292,9 +300,28 @@ func (c *CommitLog) IsCommitted(xid uint64) (bool, error) {
 
 func (c *CommitLog) AppendCommit(rec *Record) error {
 	c.checkpoint = max(c.checkpoint, rec.Lsn)
+
+	// txid is in tail frame
 	if c.tail.Contains(rec.TxID) {
 		c.tail.Append(rec.TxID, rec.Lsn)
+		return nil
 	}
+
+	// txid is after tail frame (create new tail and roll last)
+	if rec.TxID > c.tail.Xmax() {
+		if c.last != nil {
+			if err := c.last.WriteTo(c.fd); err != nil {
+				return err
+			}
+			c.last.Close()
+		}
+		c.last = c.tail
+		c.tail = NewCommitFrame(int(rec.TxID >> CommitFrameShift))
+		c.tail.Append(rec.TxID, rec.Lsn)
+		return nil
+	}
+
+	// txid is before tail frame, check last and potentially load another frame
 	if c.last != nil && !c.last.Contains(rec.TxID) {
 		if err := c.last.WriteTo(c.fd); err != nil {
 			return err
