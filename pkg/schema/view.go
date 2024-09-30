@@ -5,6 +5,7 @@ package schema
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"time"
 
@@ -36,6 +37,9 @@ func NewView(s *Schema) *View {
 	var ofs int
 	for i, f := range s.fields {
 		sz := f.typ.Size()
+		if f.fixed > 0 {
+			sz = int(f.fixed)
+		}
 		if view.pki < 0 && f.flags.Is(types.FieldFlagPrimary) && f.typ == types.FieldTypeUint64 {
 			// remember the first uint64 primary key field
 			view.pki = i
@@ -87,7 +91,7 @@ func (v View) Get(i int) (val any, ok bool) {
 	field := &v.schema.fields[i]
 	switch field.typ {
 	case types.FieldTypeDatetime:
-		val, ok = time.Unix(0, int64(LE.Uint64(v.buf[x:y]))), true
+		val, ok = time.Unix(0, int64(LE.Uint64(v.buf[x:y]))).UTC(), true
 	case types.FieldTypeInt64:
 		val, ok = int64(LE.Uint64(v.buf[x:y])), true
 	case types.FieldTypeUint64:
@@ -141,7 +145,7 @@ func (v View) Append(val any, i int) any {
 		if val == nil {
 			val = make([]time.Time, 0)
 		}
-		val = append(val.([]time.Time), time.Unix(0, int64(LE.Uint64(v.buf[x:y]))))
+		val = append(val.([]time.Time), time.Unix(0, int64(LE.Uint64(v.buf[x:y]))).UTC())
 	case types.FieldTypeInt64:
 		if val == nil {
 			val = make([]int64, 0)
@@ -351,10 +355,12 @@ func (v *View) Reset(buf []byte) *View {
 	var ofs int
 	if !v.fixed {
 		skip := true
-		for i, f := range v.schema.fields {
-			sz := f.typ.Size()
+		for i := range v.schema.fields {
+			f := &v.schema.fields[i]
+			// sz := v.len[i]
 			if f.IsFixedSize() && skip {
-				ofs += sz + int(f.fixed)
+				ofs += v.len[i] + int(f.fixed)
+				fmt.Printf("F#%d fixed=%d len=%d ofs=%d (skip)\n", f.id, f.fixed, v.len[i], ofs)
 				continue
 			}
 			skip = false
@@ -364,17 +370,20 @@ func (v *View) Reset(buf []byte) *View {
 					v.ofs[i] = ofs
 					v.len[i] = int(f.fixed)
 					ofs += int(f.fixed)
+					fmt.Printf("F#%d fixed=%d len=%d ofs=%d\n", f.id, f.fixed, v.len[i], ofs)
 				} else {
 					u32 := LE.Uint32(buf[ofs:])
 					ofs += 4
 					v.ofs[i] = ofs
 					v.len[i] = int(u32)
 					ofs += int(u32)
+					fmt.Printf("F#%d var=%d ofs=%d\n", f.id, v.len[i], ofs)
 				}
 			default:
 				v.ofs[i] = ofs
-				v.len[i] = sz
-				ofs += sz
+				// v.len[i] = sz
+				ofs += v.len[i]
+				fmt.Printf("F#%d other len=%d ofs=%d\n", f.id, v.len[i], ofs)
 			}
 		}
 	} else {
