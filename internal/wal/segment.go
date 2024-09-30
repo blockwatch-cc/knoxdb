@@ -4,29 +4,76 @@
 package wal
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
+)
+
+const (
+	segmentExt = "SEG"
 )
 
 type segment struct {
-	id  int
-	pos int
+	id  int64
+	pos int64
 	fd  *os.File
+	sz  int64
 }
 
-// func newSegement() *segment {
-// 	return &segment{
-// 		hash: xxhash.New(),
-// 	}
-// }
-
-func createSegment(id LSN) (*segment, error) {
-	// use the seed as first checksum
-	return nil, nil
+func createSegment(id LSN, opts WalOptions) (*segment, error) {
+	filename := id.calculateFilename(opts.MaxSegmentSize)
+	name := fmt.Sprintf("%d.%s", filename, segmentExt)
+	f, err := os.OpenFile(filepath.Join(opts.Path, name), os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			f.Close()
+		}
+	}()
+	var dir *os.File
+	dir, err = os.Open(opts.Path)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	if err = dir.Sync(); err != nil {
+		return nil, err
+	}
+	return &segment{
+		pos: 0,
+		id:  filename,
+		fd:  f,
+		sz:  0,
+	}, nil
 }
 
-func openSegment(id LSN) (*segment, error) {
-	// load last record's checksum
-	return nil, nil
+func openSegment(id LSN, opts WalOptions) (*segment, error) {
+	filename := id.calculateFilename(opts.MaxSegmentSize)
+	name := fmt.Sprintf("%d.%s", filename, segmentExt)
+	f, err := os.OpenFile(filepath.Join(opts.Path, name), os.O_RDWR, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+	finfo, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	fileOffset := id.calculateOffset(opts.MaxSegmentSize)
+	fmt.Println("fileOffset - ", fileOffset, filename)
+	return &segment{
+		fd:  f,
+		id:  filename,
+		pos: fileOffset,
+		sz:  finfo.Size(),
+	}, nil
+}
+
+func doesSegmentExist(id int64, opt WalOptions) bool {
+	name := fmt.Sprintf("%d.%s", id, segmentExt)
+	_, err := os.Stat(filepath.Join(opt.Path, name))
+	return err == nil
 }
 
 func (s *segment) Close() error {
@@ -45,8 +92,8 @@ func (s *segment) LastRecord() (*Record, error) {
 	return nil, nil
 }
 
-func (s *segment) Truncate(sz int) error {
-	return s.fd.Truncate(int64(sz))
+func (s *segment) Truncate(sz int64) error {
+	return s.fd.Truncate(sz)
 }
 
 func (s *segment) Write(buf []byte) (int, error) {
@@ -54,51 +101,20 @@ func (s *segment) Write(buf []byte) (int, error) {
 	if err != nil {
 		return n, err
 	}
-	s.pos += n
+	s.pos += int64(n)
+	s.sz += int64(n)
+	return int(s.pos), nil
+}
+
+func (s *segment) Seek(offset int64, whence int) (int64, error) {
+	n, err := s.fd.Seek(offset, whence)
+	if err != nil {
+		return 0, err
+	}
+	s.pos = n
 	return n, nil
 }
 
-// func (s *segment) Write(rec *Record) (lsn LSN, err error) {
-// 	// Note: this is only an example to show how a record can be written
-// 	//
-// 	// create header
-// 	var head [28]byte
-// 	head[0] = byte(rec.Type)
-// 	head[1] = byte(rec.Tag)
-// 	LE.PutUint64(head[2:], rec.Entity)
-// 	LE.PutUint64(head[10:], rec.TxID)
-// 	LE.PutUint32(head[16:], uint32(len(rec.Data)))
-
-// 	// calculate chained checksum
-// 	s.hash.Reset()
-// 	var b [8]byte
-// 	LE.PutUint64(b[:], s.csum)
-// 	s.hash.Write(b[:])
-// 	s.hash.Write(head[:20])
-// 	s.hash.Write(rec.Data)
-// 	s.hash.Sum(head[20:])
-
-// 	// write header
-// 	var n, sz int
-// 	n, err = s.fd.Write(head[:])
-// 	if err != nil {
-// 		return
-// 	}
-// 	sz += n
-
-// 	// write data
-// 	n, err = s.fd.Write(rec.Data)
-// 	if err != nil {
-// 		return
-// 	}
-// 	sz += n
-
-// 	// TODO: mix in the segment id
-// 	lsn = LSN(s.id + s.pos)
-
-// 	// update state
-// 	s.pos += sz
-// 	s.csum = s.hash.Sum64()
-
-// 	return
-// }
+func (s *segment) Size() int64 {
+	return s.sz
+}

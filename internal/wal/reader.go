@@ -38,9 +38,9 @@ func (f *RecordFilter) Match(r *Record) bool {
 var _ WalReader = (*Reader)(nil)
 
 type Reader struct {
-	flt *RecordFilter
-	seg *segment
-	wal *Wal
+	flt            *RecordFilter
+	bufferedReader *bufferedReader
+	prevCsum       uint64
 }
 
 func (r *Reader) WithType(t RecordType) WalReader {
@@ -76,19 +76,13 @@ func (r *Reader) WithTxID(v uint64) WalReader {
 }
 
 func (r *Reader) Close() error {
-	err := r.seg.Close()
-	r.seg = nil
-	r.wal = nil
+	err := r.bufferedReader.Close()
 	r.flt = nil
 	return err
 }
 
 func (r *Reader) Seek(lsn LSN) error {
-	// open segment and seek
-	// segid := lsn / r.wal.opts.MaxSegmentSize
-	// fielpos := lsn % r.wal.opts.MaxSegmentSize
-
-	return nil
+	return r.bufferedReader.Seek(lsn)
 }
 
 func (r *Reader) Next() (*Record, error) {
@@ -103,5 +97,49 @@ func (r *Reader) Next() (*Record, error) {
 	// - after reading each record, check the chained checksum
 	// - then decide whether we should skip based on filter match
 
+	for {
+		record := &Record{}
+		head, err := r.bufferedReader.Read(30)
+		if err != nil {
+			return nil, err
+		}
+		record.Type = RecordType(head[0])
+		record.Tag = types.ObjectTag(head[1])
+		record.Entity = LE.Uint64(head[2:10])
+		record.TxID = LE.Uint64(head[10:18])
+		dataLength := LE.Uint32(head[18:22])
+
+		data, err := r.bufferedReader.Read(int(dataLength))
+		if err != nil {
+			return nil, err
+		}
+		record.Data = data
+
+		// check checksum
+		r.bufferedReader.wal.hash.Reset()
+		var b [8]byte
+		LE.PutUint64(b[:], r.prevCsum)
+		r.bufferedReader.wal.hash.Write(b[:])
+		r.bufferedReader.wal.hash.Write(head[:22])
+		r.bufferedReader.wal.hash.Write(record.Data)
+		calculatedChecksum := r.bufferedReader.wal.hash.Sum64()
+		checksum := LE.Uint64(head[22:])
+
+		if checksum != calculatedChecksum {
+			return nil, ErrChecksum
+		}
+
+		if !r.flt.Match(record) {
+			continue
+		}
+
+		r.prevCsum = checksum
+		return record, nil
+	}
+
 	return nil, io.EOF
+}
+
+func (r *Reader) Checksum() uint64 {
+	return r.prevCsum
 }
