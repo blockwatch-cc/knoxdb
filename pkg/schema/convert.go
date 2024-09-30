@@ -19,8 +19,11 @@ type Converter struct {
 	child   *Schema
 	maps    []int // parent field to child field mapping (-1 when field not in child)
 	offs    []int // child data buffer write offset (-1 when unknown due to variable length)
+	nExtra  int   // guess on extra bytes required to encode a variable target records
 	layout  binary.ByteOrder
 	extract func(*Converter, []byte) []byte
+	parts   [][]byte // pre-allocated byte slices for fixed parts in child order
+	dyn     []int    // position of dynamic parts
 }
 
 func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
@@ -31,17 +34,66 @@ func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
 		offs:    make([]int, child.NumFields()),
 		extract: extractNoop,
 	}
-	if parent != nil && child != nil {
-		if child.isFixedSize {
-			c.extract = extractFixed
-		} else {
-			c.extract = extractVariable
-		}
-	}
-	var err error
-	c.maps, err = child.MapTo(parent)
+	m, err := child.MapTo(parent)
 	if err != nil {
 		panic(fmt.Errorf("mapping schema %s => %s: %v", child.name, parent.name, err))
+	}
+	c.maps = m
+	var (
+		inOrder = true
+		last    int
+	)
+	for _, v := range c.maps {
+		if v < 0 {
+			continue
+		}
+		if last > v {
+			inOrder = false
+			break
+		}
+		last = v
+	}
+
+	// determine converter algorithm
+	switch {
+	case child.isFixedSize:
+		c.extract = extractFixed
+	case inOrder:
+		c.extract = extractVariableInorder
+	default:
+		c.extract = extractVariableReorder
+		c.parts = make([][]byte, len(c.child.fields))
+		// pre-allocate fixed parts
+		for i, field := range c.child.fields {
+			switch field.typ {
+			case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
+				types.FieldTypeFloat64, types.FieldTypeDecimal64:
+				c.parts[i] = make([]byte, 8)
+
+			case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
+				types.FieldTypeDecimal32:
+				c.parts[i] = make([]byte, 4)
+
+			case types.FieldTypeInt16, types.FieldTypeUint16:
+				c.parts[i] = make([]byte, 2)
+
+			case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8:
+				c.parts[i] = make([]byte, 1)
+
+			case types.FieldTypeInt256, types.FieldTypeDecimal256:
+				c.parts[i] = make([]byte, 32)
+
+			case types.FieldTypeInt128, types.FieldTypeDecimal128:
+				c.parts[i] = make([]byte, 16)
+
+			case types.FieldTypeString, types.FieldTypeBytes:
+				if field.fixed > 0 {
+					c.parts[i] = make([]byte, field.fixed)
+				} else {
+					c.dyn = append(c.dyn, i)
+				}
+			}
+		}
 	}
 
 	// calculate child schema field offsets (required for fixed schemas only)
@@ -60,6 +112,15 @@ func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
 					n += f.typ.Size()
 				}
 			}
+		}
+	} else {
+		// determine extra variable bytes required based on number of
+		// variable length fields
+		for _, f := range child.fields {
+			if f.IsFixedSize() {
+				continue
+			}
+			c.nExtra += 32
 		}
 	}
 
@@ -146,12 +207,16 @@ func extractFixed(c *Converter, buf []byte) []byte {
 	return res
 }
 
-func extractVariable(c *Converter, buf []byte) []byte {
+func extractVariableInorder(c *Converter, buf []byte) []byte {
 	if buf == nil {
 		return nil
 	}
-	res := make([][]byte, len(c.child.fields))
-	var cnt int
+	maxSz := c.child.minWireSize + c.nExtra
+	res := bytes.NewBuffer(make([]byte, 0, maxSz))
+	var (
+		cnt int
+		b   [8]byte
+	)
 	for i, field := range c.parent.fields {
 		// init from static size
 		sz := field.typ.Size()
@@ -159,9 +224,12 @@ func extractVariable(c *Converter, buf []byte) []byte {
 		// read dynamic size
 		switch field.typ {
 		case types.FieldTypeString, types.FieldTypeBytes:
-			u, n := ReadUint32(buf)
-			buf = buf[n:] // advance buffer
-			sz = int(u)
+			if field.fixed > 0 {
+				sz = int(field.fixed)
+			} else {
+				u, n := ReadUint32(buf)
+				sz = int(u) + n
+			}
 		}
 
 		pos := c.maps[i]
@@ -176,22 +244,19 @@ func extractVariable(c *Converter, buf []byte) []byte {
 		case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
 			types.FieldTypeFloat64, types.FieldTypeDecimal64:
 			v, _ := ReadUint64(buf)
-			var u64 [8]byte
-			c.layout.PutUint64(u64[:], v)
-			res[pos] = u64[:]
+			c.layout.PutUint64(b[:], v)
+			res.Write(b[:])
 
 		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
 			types.FieldTypeDecimal32:
 			v, _ := ReadUint32(buf)
-			var u32 [4]byte
-			c.layout.PutUint32(u32[:], v)
-			res[pos] = u32[:]
+			c.layout.PutUint32(b[:], v)
+			res.Write(b[:4])
 
 		case types.FieldTypeInt16, types.FieldTypeUint16:
 			v, _ := ReadUint16(buf)
-			var u16 [2]byte
-			c.layout.PutUint16(u16[:], v)
-			res[pos] = u16[:]
+			c.layout.PutUint16(b[:], v)
+			res.Write(b[:2])
 
 		case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8,
 			types.FieldTypeInt256, types.FieldTypeDecimal256,
@@ -199,14 +264,94 @@ func extractVariable(c *Converter, buf []byte) []byte {
 			types.FieldTypeString, types.FieldTypeBytes:
 
 			// reference buffer using pre-determined size
-			res[pos] = buf[:sz]
+			res.Write(buf[:sz])
 		}
 
 		cnt++
-		if len(res) == cnt {
+		if len(c.offs) == cnt {
 			break
 		}
 		buf = buf[sz:]
 	}
-	return bytes.Join(res, nil)
+
+	// update our estimate on extra bytes required and keep the max
+	if res.Len() > maxSz {
+		c.nExtra = res.Len() - c.child.minWireSize
+	}
+
+	return res.Bytes()
+}
+
+func extractVariableReorder(c *Converter, buf []byte) []byte {
+	if buf == nil {
+		return nil
+	}
+	var cnt int
+	for i, field := range c.parent.fields {
+		// init from static size
+		sz := field.typ.Size()
+
+		// read dynamic size
+		switch field.typ {
+		case types.FieldTypeString, types.FieldTypeBytes:
+			if field.fixed > 0 {
+				sz = int(field.fixed)
+			} else {
+				u, n := ReadUint32(buf)
+				sz = int(u) + n
+			}
+		}
+
+		pos := c.maps[i]
+		if pos < 0 {
+			// skip data when not required
+			buf = buf[sz:]
+			continue
+		}
+
+		// reference or convert when field is in child schema
+		switch field.typ {
+		case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
+			types.FieldTypeFloat64, types.FieldTypeDecimal64:
+			v, _ := ReadUint64(buf)
+			c.layout.PutUint64(c.parts[pos], v)
+
+		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
+			types.FieldTypeDecimal32:
+			v, _ := ReadUint32(buf)
+			c.layout.PutUint32(c.parts[pos], v)
+
+		case types.FieldTypeInt16, types.FieldTypeUint16:
+			v, _ := ReadUint16(buf)
+			c.layout.PutUint16(c.parts[pos], v)
+
+		case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8,
+			types.FieldTypeInt256, types.FieldTypeDecimal256,
+			types.FieldTypeInt128, types.FieldTypeDecimal128:
+			copy(c.parts[pos], buf[:sz])
+
+		case types.FieldTypeString, types.FieldTypeBytes:
+			if field.fixed > 0 {
+				copy(c.parts[pos], buf[:sz])
+			} else {
+				// reference buffer using pre-determined size
+				c.parts[pos] = buf[:sz]
+			}
+		}
+
+		cnt++
+		if len(c.parts) == cnt {
+			break
+		}
+		buf = buf[sz:]
+	}
+
+	res := bytes.Join(c.parts, nil)
+
+	// dereference dynamic fields (so GC does not keep buf around)
+	for _, i := range c.dyn {
+		c.parts[i] = nil
+	}
+
+	return res
 }
