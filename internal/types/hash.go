@@ -19,7 +19,19 @@ const (
 )
 
 func (t ObjectTag) IsValid() bool {
-	return t > 0
+	switch t {
+	case ObjectTagDatabase,
+		ObjectTagTable,
+		ObjectTagIndex,
+		ObjectTagView,
+		ObjectTagStore,
+		ObjectTagEnum,
+		ObjectTagStream,
+		ObjectTagSnapshot:
+		return true
+	default:
+		return false
+	}
 }
 
 func (t ObjectTag) String() string {

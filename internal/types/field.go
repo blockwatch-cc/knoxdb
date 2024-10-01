@@ -104,10 +104,7 @@ func ParseFieldType(s string) FieldType {
 }
 
 func (t FieldType) Size() int {
-	if int(t) < len(fieldTypeWireSize) {
-		return fieldTypeWireSize[t]
-	}
-	return 0
+	return fieldTypeWireSize[t]
 }
 
 type FieldFlags byte
