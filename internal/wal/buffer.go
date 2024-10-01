@@ -5,7 +5,12 @@ package wal
 
 import (
 	"bytes"
+	"errors"
 	"io"
+)
+
+var (
+	ErrClosed = errors.New("closed")
 )
 
 const (
@@ -55,6 +60,9 @@ func (b *bufferedReader) Seek(lsn LSN) error {
 }
 
 func (b *bufferedReader) Read(size int) ([]byte, error) {
+	if b.wal == nil {
+		return nil, ErrClosed
+	}
 	// if segment is not set, this is the first read
 	// start read from seed
 	if b.seg == nil {
