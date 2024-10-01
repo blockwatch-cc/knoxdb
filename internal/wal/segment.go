@@ -61,7 +61,6 @@ func openSegment(id LSN, opts WalOptions) (*segment, error) {
 		return nil, err
 	}
 	fileOffset := id.calculateOffset(opts.MaxSegmentSize)
-	fmt.Println("fileOffset - ", fileOffset, filename)
 	return &segment{
 		fd:  f,
 		id:  filename,
