@@ -116,6 +116,9 @@ func (w *Wal) Sync() error {
 }
 
 func (w *Wal) Write(rec *Record) (LSN, error) {
+	if w.active == nil {
+		return 0, ErrClosed
+	}
 	// write record to active segment
 	// create header
 	var head [HeaderSize]byte
