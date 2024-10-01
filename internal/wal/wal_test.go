@@ -12,19 +12,18 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/internal/wal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // createWal creates a new WAL instance with specified options and returns it.
-func createWal(t *testing.T, dir string) *wal.Wal {
+func createWal(t *testing.T, dir string) *Wal {
 	t.Helper()
-	opts := wal.WalOptions{
+	opts := WalOptions{
 		Path:           dir,
 		MaxSegmentSize: 1024,
 	}
-	w, err := wal.Create(opts)
+	w, err := Create(opts)
 	require.NoError(t, err)
 	require.NotNil(t, w)
 	return w
@@ -52,19 +51,19 @@ func TestWalWrite(t *testing.T) {
 	defer w.Close()
 
 	testCases := []struct {
-		recordType wal.RecordType
+		recordType RecordType
 		tag        types.ObjectTag
 		entity     uint64
 		txID       uint64
 		data       string
 	}{
-		{wal.RecordTypeInsert, types.ObjectTag(1), 1, 100, "d1"},
-		{wal.RecordTypeUpdate, types.ObjectTag(2), 2, 200, "d2"},
-		{wal.RecordTypeDelete, types.ObjectTag(3), 3, 300, "d3"},
+		{RecordTypeInsert, types.ObjectTag(1), 1, 100, "d1"},
+		{RecordTypeUpdate, types.ObjectTag(2), 2, 200, "d2"},
+		{RecordTypeDelete, types.ObjectTag(3), 3, 300, "d3"},
 	}
 
 	for _, tc := range testCases {
-		rec := &wal.Record{
+		rec := &Record{
 			Type:   tc.recordType,
 			Tag:    tc.tag,
 			Entity: tc.entity,
@@ -100,12 +99,12 @@ func TestWalWrite(t *testing.T) {
 // TestWalLargeWrite tests the WAL's ability to handle writing and reading large records.
 func TestWalLargeWrite(t *testing.T) {
 	testDir := t.TempDir()
-	opts := wal.WalOptions{
-		Path:           filepath.Join(testDir, "wal.log"),
+	opts := WalOptions{
+		Path:           filepath.Join(testDir, "log"),
 		MaxSegmentSize: 1024,
 		Seed:           1234,
 	}
-	w, err := wal.Create(opts)
+	w, err := Create(opts)
 	require.NoError(t, err)
 	defer w.Close()
 
@@ -113,8 +112,8 @@ func TestWalLargeWrite(t *testing.T) {
 	for i := range largeData {
 		largeData[i] = byte(i % 256)
 	}
-	rec := &wal.Record{
-		Type:   wal.RecordTypeInsert,
+	rec := &Record{
+		Type:   RecordTypeInsert,
 		Tag:    types.ObjectTag(1),
 		Entity: 1,
 		TxID:   1,
@@ -141,19 +140,19 @@ func TestWalLargeWrite(t *testing.T) {
 // TestWalWriteErrors tests the WAL's error handling when writing records under various error conditions.
 func TestWalWriteErrors(t *testing.T) {
 	testDir := t.TempDir()
-	opts := wal.WalOptions{
-		Path:           filepath.Join(testDir, "wal.log"),
+	opts := WalOptions{
+		Path:           filepath.Join(testDir, "log"),
 		MaxSegmentSize: 100,
 		Seed:           12345,
 	}
-	w, err := wal.Create(opts)
+	w, err := Create(opts)
 	require.NoError(t, err)
 	defer w.Close()
 
 	// Write until we're close to segment size
 	for i := 0; i < 9; i++ {
-		rec := &wal.Record{
-			Type: wal.RecordTypeInsert,
+		rec := &Record{
+			Type: RecordTypeInsert,
 			Data: []byte("0123456789"),
 		}
 		_, err := w.Write(rec)
@@ -168,8 +167,8 @@ func TestWalWriteErrors(t *testing.T) {
 	defer os.Chmod(testDir, 0755)
 
 	// Try to write more data, which should trigger a new segment creation and fail
-	rec := &wal.Record{
-		Type: wal.RecordTypeInsert,
+	rec := &Record{
+		Type: RecordTypeInsert,
 		Data: []byte("0123456789"),
 	}
 	_, err = w.Write(rec)
@@ -183,19 +182,19 @@ func TestWalRead(t *testing.T) {
 	defer w.Close()
 
 	testData := []struct {
-		recordType wal.RecordType
+		recordType RecordType
 		tag        types.ObjectTag
 		entity     uint64
 		txID       uint64
 		data       string
 	}{
-		{wal.RecordTypeInsert, types.ObjectTag(1), 1, 100, "data1"},
-		{wal.RecordTypeUpdate, types.ObjectTag(2), 2, 200, "data2"},
-		{wal.RecordTypeDelete, types.ObjectTag(3), 3, 300, "data3"},
+		{RecordTypeInsert, types.ObjectTag(1), 1, 100, "data1"},
+		{RecordTypeUpdate, types.ObjectTag(2), 2, 200, "data2"},
+		{RecordTypeDelete, types.ObjectTag(3), 3, 300, "data3"},
 	}
 
 	for _, td := range testData {
-		rec := &wal.Record{
+		rec := &Record{
 			Type:   td.recordType,
 			Tag:    td.tag,
 			Entity: td.entity,
@@ -234,22 +233,22 @@ func TestWalReaderOperations(t *testing.T) {
 
 	// Write some test records
 	testRecords := []struct {
-		recordType wal.RecordType
+		recordType RecordType
 		tag        types.ObjectTag
 		entity     uint64
 		txID       uint64
 		data       string
 	}{
-		{wal.RecordTypeInsert, types.ObjectTag(1), 1, 100, "data1"},
-		{wal.RecordTypeUpdate, types.ObjectTag(2), 2, 200, "data2"},
-		{wal.RecordTypeDelete, types.ObjectTag(3), 3, 300, "data3"},
-		{wal.RecordTypeInsert, types.ObjectTag(1), 4, 400, "data4"},
-		{wal.RecordTypeUpdate, types.ObjectTag(2), 5, 500, "data5"},
+		{RecordTypeInsert, types.ObjectTag(1), 1, 100, "data1"},
+		{RecordTypeUpdate, types.ObjectTag(2), 2, 200, "data2"},
+		{RecordTypeDelete, types.ObjectTag(3), 3, 300, "data3"},
+		{RecordTypeInsert, types.ObjectTag(1), 4, 400, "data4"},
+		{RecordTypeUpdate, types.ObjectTag(2), 5, 500, "data5"},
 	}
 
-	lsns := make([]wal.LSN, len(testRecords))
+	lsns := make([]LSN, len(testRecords))
 	for i, tr := range testRecords {
-		rec := &wal.Record{
+		rec := &Record{
 			Type:   tr.recordType,
 			Tag:    tr.tag,
 			Entity: tr.entity,
@@ -320,19 +319,19 @@ func TestWalReaderOperations(t *testing.T) {
 // TestWalSegmentRollover tests the behavior when the WAL rolls over to a new segment due to reaching the maximum segment size.
 func TestWalSegmentRollover(t *testing.T) {
 	testDir := t.TempDir()
-	opts := wal.WalOptions{
+	opts := WalOptions{
 		Path:           testDir,
 		MaxSegmentSize: 256,
 	}
-	w, err := wal.Create(opts)
+	w, err := Create(opts)
 	require.NoError(t, err)
 	defer w.Close()
 
 	recordsWritten := 0
 	bytesWritten := 0
 	for i := 0; i < 100; i++ {
-		rec := &wal.Record{
-			Type:   wal.RecordTypeInsert,
+		rec := &Record{
+			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTag(1),
 			Entity: uint64(i),
 			TxID:   uint64(i),
@@ -342,8 +341,8 @@ func TestWalSegmentRollover(t *testing.T) {
 		require.NoError(t, err)
 		t.Logf("Wrote record %d, LSN: %v", i, lsn)
 		recordsWritten++
-		bytesWritten += wal.HeaderSize + len(rec.Data)
-		
+		bytesWritten += HeaderSize + len(rec.Data)
+
 		// Force sync after each write
 		err = w.Sync()
 		require.NoError(t, err)
@@ -385,8 +384,8 @@ func TestWalSegmentRollover(t *testing.T) {
 // 	for i := 0; i < concurrency; i++ {
 // 		go func(id int) {
 // 			for j := 0; j < writesPerGoroutine; j++ {
-// 				rec := &wal.Record{
-// 					Type:   wal.RecordTypeInsert,
+// 				rec := &Record{
+// 					Type:   RecordTypeInsert,
 // 					Entity: uint64(id),
 // 					TxID:   uint64(j),
 // 					Data:   []byte(fmt.Sprintf("data from goroutine %d, write %d", id, j)),
@@ -423,17 +422,17 @@ func TestWalSegmentRollover(t *testing.T) {
 // TestWalRecovery tests the WAL's behavior when it is closed and reopened to ensure data integrity and consistency.
 func TestWalRecovery(t *testing.T) {
 	testDir := t.TempDir()
-	opts := wal.WalOptions{
+	opts := WalOptions{
 		Path:           testDir,
 		MaxSegmentSize: 1024 * 1024,
 	}
-	w, err := wal.Create(opts)
+	w, err := Create(opts)
 	require.NoError(t, err)
 
 	// Write some records
 	for i := 0; i < 100; i++ {
-		rec := &wal.Record{
-			Type:   wal.RecordTypeInsert,
+		rec := &Record{
+			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTag(i % 3),
 			Entity: uint64(i),
 			TxID:   uint64(i * 100),
@@ -448,7 +447,7 @@ func TestWalRecovery(t *testing.T) {
 	require.NoError(t, err)
 
 	// Attempt to reopen the WAL
-	reopenedWal, err := wal.Open(0, opts)
+	reopenedWal, err := Open(0, opts)
 	if err != nil {
 		t.Fatalf("Failed to reopen WAL: %v", err)
 	}
@@ -467,7 +466,7 @@ func TestWalRecovery(t *testing.T) {
 			break
 		}
 		require.NoError(t, err)
-		assert.Equal(t, wal.RecordTypeInsert, rec.Type)
+		assert.Equal(t, RecordTypeInsert, rec.Type)
 		assert.Equal(t, types.ObjectTag(count%3), rec.Tag)
 		assert.Equal(t, uint64(count), rec.Entity)
 		assert.Equal(t, uint64(count*100), rec.TxID)
@@ -484,8 +483,8 @@ func TestWalSyncAndClose(t *testing.T) {
 
 	// Write some records
 	for i := 0; i < 10; i++ {
-		rec := &wal.Record{
-			Type:   wal.RecordTypeInsert,
+		rec := &Record{
+			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTag(i % 3),
 			Entity: uint64(i),
 			TxID:   uint64(i * 100),
@@ -500,8 +499,8 @@ func TestWalSyncAndClose(t *testing.T) {
 	require.NoError(t, err)
 
 	// Attempt to write after close (this should fail)
-	_, err = w.Write(&wal.Record{
-		Type: wal.RecordTypeInsert,
+	_, err = w.Write(&Record{
+		Type: RecordTypeInsert,
 		Data: []byte("test"),
 	})
 	assert.Error(t, err, "Write after close should fail")
@@ -517,8 +516,8 @@ func TestWalSyncAndClose(t *testing.T) {
 // 	defer w.Close()
 
 // 	// Write a record to the WAL.
-// 	rec := &wal.Record{
-// 		Type:   wal.RecordTypeInsert,
+// 	rec := &Record{
+// 		Type:   RecordTypeInsert,
 // 		Entity: 1,
 // 		TxID:   100,
 // 		Data:   []byte("test data"),
@@ -571,8 +570,8 @@ func TestWalSyncAndClose(t *testing.T) {
 // 	defer w.Close()
 
 // 	// Write a record
-// 	rec := &wal.Record{
-// 		Type:   wal.RecordTypeInsert,
+// 	rec := &Record{
+// 		Type:   RecordTypeInsert,
 // 		Entity: 1,
 // 		TxID:   100,
 // 		Data:   []byte("test data"),
@@ -616,8 +615,8 @@ func TestWalInvalidRecords(t *testing.T) {
 	defer w.Close()
 
 	// Try to write a record with an invalid type
-	invalidRec := &wal.Record{
-		Type:   wal.RecordType(255), // Assuming 255 is an invalid type
+	invalidRec := &Record{
+		Type:   RecordType(255), // Assuming 255 is an invalid type
 		Entity: 1,
 		TxID:   100,
 		Data:   []byte("invalid record"),
@@ -626,8 +625,8 @@ func TestWalInvalidRecords(t *testing.T) {
 	assert.Error(t, err, "Expected an error when writing an invalid record type")
 
 	// Try to write a record with an invalid tag
-	invalidTagRec := &wal.Record{
-		Type:   wal.RecordTypeInsert,
+	invalidTagRec := &Record{
+		Type:   RecordTypeInsert,
 		Tag:    types.ObjectTag(255), // Assuming 255 is an invalid tag
 		Entity: 1,
 		TxID:   100,
@@ -644,8 +643,8 @@ func TestWalEmptyRecords(t *testing.T) {
 	defer w.Close()
 
 	// Write an empty record
-	emptyRec := &wal.Record{
-		Type:   wal.RecordTypeInsert,
+	emptyRec := &Record{
+		Type:   RecordTypeInsert,
 		Entity: 1,
 		TxID:   100,
 		Data:   []byte{},
@@ -663,8 +662,8 @@ func TestWalEmptyRecords(t *testing.T) {
 	assert.Empty(t, readRec.Data, "Expected empty data in read record")
 
 	// Write a record with minimal data (1 byte)
-	minimalRec := &wal.Record{
-		Type:   wal.RecordTypeUpdate,
+	minimalRec := &Record{
+		Type:   RecordTypeUpdate,
 		Entity: 2,
 		TxID:   101,
 		Data:   []byte{0},
@@ -690,8 +689,8 @@ func TestWalEmptyRecords(t *testing.T) {
 // 	numRecords := 10
 // 	var lastLSN LSN
 // 	for i := 0; i < numRecords; i++ {
-// 		rec := &wal.Record{
-// 			Type:   wal.RecordTypeInsert,
+// 		rec := &Record{
+// 			Type:   RecordTypeInsert,
 // 			Entity: uint64(i),
 // 			TxID:   uint64(100 + i),
 // 			Data:   []byte(fmt.Sprintf("test data %d", i)),
@@ -718,12 +717,12 @@ func TestWalEmptyRecords(t *testing.T) {
 // 	file.Close()
 
 // 	// Reopen the WAL
-// 	opts := wal.WalOptions{
+// 	opts := WalOptions{
 // 		Path:           testDir,
 // 		MaxSegmentSize: 1024,
 // 		Seed:           12345,
 // 	}
-// 	reopenedWal, err := wal.Open(lastLSN, opts)
+// 	reopenedWal, err := Open(lastLSN, opts)
 // 	require.NoError(t, err, "Failed to reopen WAL")
 // 	defer reopenedWal.Close()
 
