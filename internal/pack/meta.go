@@ -49,6 +49,7 @@ func (m *PackMeta) Alloc(sz int) {
 	m[3] = block.New(block.BlockUint64, sz)
 	m[4] = block.New(block.BlockBool, sz)
 }
+
 func (m *PackMeta) Clone(sz int) *PackMeta {
 	return &PackMeta{
 		m[0].Clone(sz),

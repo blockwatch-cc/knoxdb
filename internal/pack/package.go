@@ -273,6 +273,7 @@ func (p *Package) Release() {
 	p.pkIdx = 0
 	p.schema = nil
 	p.blocks = p.blocks[:0]
+	p.xmeta = nil
 	packagePool.Put(p)
 }
 
