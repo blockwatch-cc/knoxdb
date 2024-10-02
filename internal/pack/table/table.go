@@ -14,7 +14,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack/journal"
-	"blockwatch.cc/knoxdb/internal/pack/metadata"
+	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -42,49 +42,28 @@ var (
 	}
 )
 
-type TableState struct {
-	Sequence   uint64 // next free sequence
-	NRows      uint64 // total non-deleted rows
-	Checkpoint uint64 // latest wal checkpoint LSN
-}
-
-func (s *TableState) Init() {
-	s.Sequence = 1
-	s.NRows = 0
-	s.Checkpoint = 0
-}
-
-func (s *TableState) FromObjectState(o engine.ObjectState) {
-	s.Sequence = o[0]
-	s.NRows = o[1]
-	s.Checkpoint = o[2]
-}
-
-func (s TableState) ToObjectState() engine.ObjectState {
-	return engine.ObjectState{s.Sequence, s.NRows, s.Checkpoint}
-}
-
 var (
-	metaKeySuffix = []byte("_meta")
-	dataKeySuffix = []byte("_data")
+	metaKeySuffix  = []byte("_meta")
+	statsKeySuffix = []byte("_stats")
+	dataKeySuffix  = []byte("_data")
 )
 
 type Table struct {
-	mu      sync.RWMutex            // global table lock (syncs r/w access, single writer)
-	engine  *engine.Engine          // engine access
-	schema  *schema.Schema          // ordered list of table fields as central type info
-	tableId uint64                  // unique tagged name hash
-	pkindex int                     // field index for primary key (if any)
-	opts    engine.TableOptions     // copy of config options
-	db      store.DB                // lower-level storage (e.g. boltdb wrapper)
-	datakey []byte                  // name of table data bucket
-	metakey []byte                  // name of table metadata bucket
-	state   TableState              // volatile state, synced with catalog
-	indexes []engine.IndexEngine    // list of indexes
-	meta    *metadata.MetadataIndex // in-memory list of pack and block info
-	journal *journal.Journal        // in-memory data not yet written to packs
-	stats   engine.TableStats       // usage statistics
-	log     log.Logger
+	mu       sync.RWMutex         // global table lock (syncs r/w access, single writer)
+	engine   *engine.Engine       // engine access
+	schema   *schema.Schema       // ordered list of table fields as central type info
+	tableId  uint64               // unique tagged name hash
+	pkindex  int                  // field index for primary key (if any)
+	opts     engine.TableOptions  // copy of config options
+	db       store.DB             // lower-level storage (e.g. boltdb wrapper)
+	datakey  []byte               // name of table data bucket
+	statskey []byte               // name of table stats bucket
+	state    engine.TableState    // volatile state, synced with catalog
+	indexes  []engine.IndexEngine // list of indexes
+	stats    *stats.StatsIndex    // in-memory list of pack and block info
+	journal  *journal.Journal     // in-memory data not yet written to packs
+	metrics  engine.TableMetrics  // metrics statistics
+	log      log.Logger
 }
 
 func NewTable() engine.TableEngine {
@@ -111,10 +90,10 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.pkindex = pki
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.datakey = append([]byte(name), dataKeySuffix...)
-	t.metakey = append([]byte(name), metaKeySuffix...)
-	t.state.Init()
-	t.stats.Name = name
-	t.meta = metadata.NewMetadataIndex(pki, t.opts.PackSize)
+	t.statskey = append([]byte(name), statsKeySuffix...)
+	t.state = engine.NewTableState()
+	t.metrics = engine.NewTableMetrics(name)
+	t.stats = stats.NewStatsIndex(pki, t.opts.PackSize)
 	t.journal = journal.NewJournal(s, t.opts.JournalSize)
 	t.db = opts.DB
 	t.log = opts.Logger
@@ -147,7 +126,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	if _, err := store.CreateBucket(tx, t.datakey, engine.ErrTableExists); err != nil {
 		return err
 	}
-	if _, err := store.CreateBucket(tx, t.metakey, engine.ErrTableExists); err != nil {
+	if _, err := store.CreateBucket(tx, t.statskey, engine.ErrTableExists); err != nil {
 		return err
 	}
 
@@ -156,10 +135,10 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	if err != nil {
 		return err
 	}
-	t.stats.JournalDiskSize = int64(jsz)
-	t.stats.TombstoneDiskSize = int64(tsz)
-	t.stats.JournalTuplesThreshold = int64(opts.JournalSize)
-	t.stats.TombstoneTuplesThreshold = int64(opts.JournalSize)
+	t.metrics.JournalDiskSize = int64(jsz)
+	t.metrics.TombstoneDiskSize = int64(tsz)
+	t.metrics.JournalTuplesThreshold = int64(opts.JournalSize)
+	t.metrics.TombstoneTuplesThreshold = int64(opts.JournalSize)
 
 	// init catalog state
 	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
@@ -182,11 +161,11 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.pkindex = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.datakey = append([]byte(name), dataKeySuffix...)
-	t.metakey = append([]byte(name), metaKeySuffix...)
+	t.statskey = append([]byte(name), statsKeySuffix...)
 	t.state.FromObjectState(e.Catalog().GetState(t.tableId))
-	t.stats.Name = name
-	t.stats.TupleCount = int64(t.state.NRows)
-	t.meta = metadata.NewMetadataIndex(s.PkIndex(), t.opts.PackSize)
+	t.metrics = engine.NewTableMetrics(name)
+	t.metrics.TupleCount = int64(t.state.NRows)
+	t.stats = stats.NewStatsIndex(s.PkIndex(), t.opts.PackSize)
 	t.journal = journal.NewJournal(s, t.opts.JournalSize)
 	t.db = opts.DB
 	t.log = opts.Logger
@@ -222,7 +201,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	if err != nil {
 		return err
 	}
-	if tx.Bucket(t.datakey) == nil || tx.Bucket(t.metakey) == nil {
+	if tx.Bucket(t.datakey) == nil || tx.Bucket(t.statskey) == nil {
 		t.log.Error("missing table data: %v", engine.ErrNoBucket)
 		tx.Rollback()
 		t.Close(ctx)
@@ -231,18 +210,18 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 
 	// TODO: maybe refactor
 
-	// load metadata
-	t.log.Debugf("Loading package metadata for %s", typ)
-	n, err := t.meta.Load(ctx, tx, t.metakey)
+	// load stats
+	t.log.Debugf("Loading package stats for %s", typ)
+	n, err := t.stats.Load(ctx, tx, t.statskey)
 	if err != nil {
-		// TODO: rebuild corrupt metadata here
+		// TODO: rebuild corrupt stats here
 		return err
 	}
-	t.stats.MetaBytesRead += int64(n)
-	t.stats.TupleCount = int64(t.state.NRows)
-	t.stats.PacksCount = int64(t.meta.Len())
-	t.stats.MetaSize = int64(t.meta.HeapSize())
-	t.stats.TotalSize = int64(t.meta.TableSize())
+	t.metrics.MetaBytesRead += int64(n)
+	t.metrics.TupleCount = int64(t.state.NRows)
+	t.metrics.PacksCount = int64(t.stats.Len())
+	t.metrics.MetaSize = int64(t.stats.HeapSize())
+	t.metrics.TotalSize = int64(t.stats.TableSize())
 
 	// FIXME: reconstruct journal from WAL instead of load in legacy mode
 	err = t.journal.Open(ctx, tx, t.datakey)
@@ -271,13 +250,12 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	t.tableId = 0
 	t.pkindex = 0
 	t.datakey = nil
-	t.metakey = nil
+	t.statskey = nil
 	t.opts = engine.TableOptions{}
-	t.stats = engine.TableStats{}
-	t.state = TableState{}
+	t.metrics = engine.TableMetrics{}
 	t.indexes = nil
-	t.meta.Reset()
-	t.meta = nil
+	t.stats.Reset()
+	t.stats = nil
 	t.journal.Close()
 	t.journal = nil
 	return
@@ -295,10 +273,10 @@ func (t *Table) name() string {
 	return t.schema.Name()
 }
 
-func (t *Table) Stats() engine.TableStats {
-	stats := t.stats
-	stats.TupleCount = int64(t.state.NRows)
-	return stats
+func (t *Table) Metrics() engine.TableMetrics {
+	m := t.metrics
+	m.TupleCount = int64(t.state.NRows)
+	return m
 }
 
 func (t *Table) Drop(ctx context.Context) error {
@@ -307,7 +285,7 @@ func (t *Table) Drop(ctx context.Context) error {
 	t.journal.Close()
 	t.db.Close()
 	t.db = nil
-	t.meta.Reset()
+	t.stats.Reset()
 	t.log.Debugf("dropping table %s with path %s", typ, path)
 	if err := os.Remove(path); err != nil {
 		return err
@@ -327,14 +305,14 @@ func (t *Table) Sync(ctx context.Context) error {
 		return err
 	}
 
-	// store metadata
-	n, err := t.meta.Store(ctx, tx, t.metakey, t.opts.PageFill)
+	// store stats
+	n, err := t.stats.Store(ctx, tx, t.statskey, t.opts.PageFill)
 	if err != nil {
 		return err
 	}
-	atomic.AddInt64(&t.stats.MetaBytesWritten, int64(n))
-	atomic.StoreInt64(&t.stats.PacksCount, int64(t.meta.Len()))
-	atomic.StoreInt64(&t.stats.MetaSize, int64(t.meta.HeapSize()))
+	atomic.AddInt64(&t.metrics.MetaBytesWritten, int64(n))
+	atomic.StoreInt64(&t.metrics.PacksCount, int64(t.stats.Len()))
+	atomic.StoreInt64(&t.metrics.MetaSize, int64(t.stats.HeapSize()))
 
 	return nil
 }
@@ -345,8 +323,8 @@ func (t *Table) Truncate(ctx context.Context) error {
 		return err
 	}
 	t.journal.Reset()
-	t.meta.Reset()
-	for _, key := range [][]byte{t.datakey, t.metakey} {
+	t.stats.Reset()
+	for _, key := range [][]byte{t.datakey, t.statskey} {
 		if err := tx.Root().DeleteBucket(key); err != nil {
 			return err
 		}
@@ -358,13 +336,13 @@ func (t *Table) Truncate(ctx context.Context) error {
 		return err
 	}
 	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
-	t.state.Init()
-	atomic.AddInt64(&t.stats.DeletedTuples, int64(t.state.NRows))
-	atomic.StoreInt64(&t.stats.TupleCount, 0)
-	atomic.StoreInt64(&t.stats.MetaSize, 0)
-	atomic.StoreInt64(&t.stats.JournalSize, 0)
-	atomic.StoreInt64(&t.stats.TombstoneDiskSize, 0)
-	atomic.StoreInt64(&t.stats.PacksCount, 0)
+	t.state.Reset()
+	atomic.AddInt64(&t.metrics.DeletedTuples, int64(t.state.NRows))
+	atomic.StoreInt64(&t.metrics.TupleCount, 0)
+	atomic.StoreInt64(&t.metrics.MetaSize, 0)
+	atomic.StoreInt64(&t.metrics.JournalSize, 0)
+	atomic.StoreInt64(&t.metrics.TombstoneDiskSize, 0)
+	atomic.StoreInt64(&t.metrics.PacksCount, 0)
 	return nil
 }
 

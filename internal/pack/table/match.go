@@ -7,7 +7,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/metadata"
+	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
 )
@@ -16,7 +16,7 @@ import (
 // This helps skip unrelated packs and will only return true if a pack's contens
 // may match. The decision is probabilistic when filters are used, i.e. there
 // are guaranteed no false negatives but there may be false positives.
-func MaybeMatchTree(n *query.FilterTreeNode, info *metadata.PackMetadata) bool {
+func MaybeMatchTree(n *query.FilterTreeNode, info *stats.PackStats) bool {
 	// never visit empty packs
 	if info.NValues == 0 {
 		return false
@@ -57,7 +57,7 @@ func MaybeMatchTree(n *query.FilterTreeNode, info *metadata.PackMetadata) bool {
 // matches the filter. Due to the nature of bloom/fuse filters and min/max
 // range statistics the decision is only probabilistic, but guaranteed to
 // contain no false negatives.
-func MaybeMatchFilter(f *query.Filter, meta *metadata.PackMetadata) bool {
+func MaybeMatchFilter(f *query.Filter, meta *stats.PackStats) bool {
 	block := meta.Blocks[f.Index]
 
 	// matcher is selected and configured during compile stage
@@ -105,7 +105,7 @@ func MatchFilter(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset) 
 }
 
 // MatchTree matches pack contents against a query condition tree (or sub-tree).
-func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, meta *metadata.PackMetadata) *bitset.Bitset {
+func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackStats) *bitset.Bitset {
 	// if root contains a single leaf only, match it
 	if n.IsLeaf() {
 		return MatchFilter(n.Filter, pkg, nil, nil)
@@ -114,8 +114,8 @@ func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, meta *metadata.PackMe
 	// if root is empty and no leaf is defined, return a full match
 	if n.IsEmpty() {
 		// empty matches typically don't load blocks, so we need to get
-		// pack len from either the package or its metadata. Note that
-		// when pkg == journal there is no metadata defined.
+		// pack len from either the package or its stats. Note that
+		// when pkg == journal there is no stats defined.
 		sz := pkg.Len()
 		if sz == 0 && meta != nil {
 			sz = meta.NValues
@@ -140,7 +140,7 @@ func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, meta *metadata.PackMe
 // and does so efficiently by skipping unnecessary matches and aggregations.
 //
 // TODO: concurrent condition matches and cascading bitset merge
-func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, meta *metadata.PackMetadata) *bitset.Bitset {
+func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackStats) *bitset.Bitset {
 	// start with a full bitset
 	bits := bitset.NewBitset(pkg.Len()).One()
 
@@ -222,7 +222,7 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, meta *metadata.Pac
 
 // Return a bit vector containing matching positions in the pack combining
 // multiple OR conditions with efficient skipping and aggregation.
-func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, meta *metadata.PackMetadata) *bitset.Bitset {
+func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackStats) *bitset.Bitset {
 	// start with an empty bitset
 	bits := bitset.NewBitset(pkg.Len())
 

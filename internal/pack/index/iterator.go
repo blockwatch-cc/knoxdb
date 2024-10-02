@@ -9,7 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/metadata"
+	"blockwatch.cc/knoxdb/internal/pack/stats"
 	pt "blockwatch.cc/knoxdb/internal/pack/table"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/pkg/slicex"
@@ -48,14 +48,14 @@ func (it *IndexLookupIterator) Next(ctx context.Context) (*pack.Package, uint64,
 		// find next potential pack match, scan in pk order low to high
 		// (min/max pairs are NOT sorted by min pk, but  indirection is)
 		var (
-			info         *metadata.PackMetadata
+			info         *stats.PackStats
 			ok           bool
 			minPk, maxPk uint64
 		)
 		it.idx++
-		for l := it.index.meta.Len(); it.idx < l && it.pks.Len() > 0; it.idx++ {
+		for l := it.index.stats.Len(); it.idx < l && it.pks.Len() > 0; it.idx++ {
 			// map index to pack position
-			minPk, maxPk = it.index.meta.MinMaxSorted(it.idx)
+			minPk, maxPk = it.index.stats.MinMaxSorted(it.idx)
 
 			// check if we need to visit this pack
 			if !it.pks.ContainsRange(minPk, maxPk) {
@@ -69,8 +69,8 @@ func (it *IndexLookupIterator) Next(ctx context.Context) (*pack.Package, uint64,
 			}
 			it.pks.Values = it.pks.Values[next:]
 
-			// fetch pack metadata from index
-			info, ok = it.index.meta.GetSorted(it.idx)
+			// fetch pack stats from index
+			info, ok = it.index.stats.GetSorted(it.idx)
 			break
 		}
 
@@ -131,13 +131,13 @@ func (it *IndexScanIterator) Next(ctx context.Context) (*pack.Package, []uint32,
 		// find next potential pack match, scan in pk order
 		// (pairs in pack index are sorted by min pk)
 		it.idx++
-		info, ok := it.index.meta.GetSorted(it.idx)
+		info, ok := it.index.stats.GetSorted(it.idx)
 		for ok {
 			if pt.MaybeMatchTree(it.node, info) {
 				break
 			}
 			it.idx++
-			info, ok = it.index.meta.GetSorted(it.idx)
+			info, ok = it.index.stats.GetSorted(it.idx)
 		}
 
 		// no more match, return end condition (nil pack and nil error)
@@ -155,7 +155,7 @@ func (it *IndexScanIterator) Next(ctx context.Context) (*pack.Package, []uint32,
 		// find actual matches
 		bits := pt.MatchTree(it.node, it.pack, info)
 
-		// handle false positive metadata matches
+		// handle false positive stats matches
 		if bits.Count() == 0 {
 			bits.Close()
 			it.pack.Release()
@@ -208,6 +208,6 @@ func (it *IndexScanIterator) Close() {
 //      it.pack.Release()
 //      it.pack = nil
 //  }
-//  key, pmin, pmax, nextmin, _ = it.index.meta.Best(pk)
+//  key, pmin, pmax, nextmin, _ = it.index.stats.Best(pk)
 
 // }

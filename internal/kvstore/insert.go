@@ -18,10 +18,10 @@ func (kv *KVStore) Get(ctx context.Context, key []byte) ([]byte, error) {
 		ckey := engine.NewCacheKey(kv.storeId, engine.Key64(key))
 		buf, ok := kv.engine.BufferCache().Get(ckey)
 		if ok {
-			atomic.AddInt64(&kv.stats.CacheHits, 1)
+			atomic.AddInt64(&kv.metrics.CacheHits, 1)
 			return buf.Bytes(), nil
 		}
-		atomic.AddInt64(&kv.stats.CacheMisses, 1)
+		atomic.AddInt64(&kv.metrics.CacheMisses, 1)
 	}
 
 	tx, err := engine.GetTransaction(ctx).StoreTx(kv.db, false)
@@ -46,8 +46,8 @@ func (kv *KVStore) Get(ctx context.Context, key []byte) ([]byte, error) {
 		ckey := engine.NewCacheKey(kv.storeId, engine.Key64(key))
 		kv.engine.BufferCache().Add(ckey, engine.NewBuffer(buf))
 	}
-	atomic.AddInt64(&kv.stats.QueriedKeys, 1)
-	atomic.AddInt64(&kv.stats.BytesRead, int64(len(buf)))
+	atomic.AddInt64(&kv.metrics.QueriedKeys, 1)
+	atomic.AddInt64(&kv.metrics.BytesRead, int64(len(buf)))
 
 	return buf, nil
 }
@@ -78,21 +78,21 @@ func (kv *KVStore) Put(ctx context.Context, key, val []byte) error {
 	if len(key) == 8 {
 		ckey := engine.NewCacheKey(kv.storeId, engine.Key64(key))
 		kv.engine.BufferCache().Add(ckey, engine.NewBuffer(bytes.Clone(val)))
-		atomic.AddInt64(&kv.stats.CacheInserts, 1)
+		atomic.AddInt64(&kv.metrics.CacheInserts, 1)
 	}
 
 	sz := int64(len(key) + len(val))
 	if prevSize >= 0 {
 		// update
-		atomic.AddInt64(&kv.stats.UpdatedKeys, 1)
-		atomic.AddInt64(&kv.stats.TotalSize, sz-int64(prevSize))
+		atomic.AddInt64(&kv.metrics.UpdatedKeys, 1)
+		atomic.AddInt64(&kv.metrics.TotalSize, sz-int64(prevSize))
 	} else {
 		// insert
-		atomic.AddInt64(&kv.stats.InsertedKeys, 1)
-		atomic.AddInt64(&kv.stats.NumKeys, 1)
-		atomic.AddInt64(&kv.stats.TotalSize, sz)
+		atomic.AddInt64(&kv.metrics.InsertedKeys, 1)
+		atomic.AddInt64(&kv.metrics.NumKeys, 1)
+		atomic.AddInt64(&kv.metrics.TotalSize, sz)
 	}
-	atomic.AddInt64(&kv.stats.BytesWritten, sz)
+	atomic.AddInt64(&kv.metrics.BytesWritten, sz)
 	return nil
 }
 
@@ -122,9 +122,9 @@ func (kv *KVStore) Del(ctx context.Context, key []byte) error {
 	}
 
 	if prevSize >= 0 {
-		atomic.AddInt64(&kv.stats.NumKeys, -1)
-		atomic.AddInt64(&kv.stats.DeletedKeys, 1)
-		atomic.AddInt64(&kv.stats.TotalSize, -int64(prevSize))
+		atomic.AddInt64(&kv.metrics.NumKeys, -1)
+		atomic.AddInt64(&kv.metrics.DeletedKeys, 1)
+		atomic.AddInt64(&kv.metrics.TotalSize, -int64(prevSize))
 	}
 
 	return nil

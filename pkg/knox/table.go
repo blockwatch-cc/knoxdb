@@ -25,8 +25,8 @@ func (t TableImpl) Schema() *schema.Schema {
 	return t.table.Schema()
 }
 
-func (t TableImpl) Stats() TableStats {
-	return t.table.Stats()
+func (t TableImpl) Metrics() TableMetrics {
+	return t.table.Metrics()
 }
 
 func (t TableImpl) Engine() engine.TableEngine {
@@ -250,8 +250,8 @@ func (t *GenericTable[T]) Engine() engine.TableEngine {
 	return t.table
 }
 
-func (t *GenericTable[T]) Stats() TableStats {
-	return t.table.Stats()
+func (t *GenericTable[T]) Metrics() TableMetrics {
+	return t.table.Metrics()
 }
 
 func (t *GenericTable[T]) Table() Table {

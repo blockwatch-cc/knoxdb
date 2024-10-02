@@ -38,9 +38,9 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 		err                                                 error
 	)
 
-	atomic.AddInt64(&t.stats.FlushCalls, 1)
-	atomic.AddInt64(&t.stats.FlushedTuples, int64(t.journal.Len()+t.journal.TombLen()))
-	atomic.StoreInt64(&t.stats.LastFlushTime, start.UnixNano())
+	atomic.AddInt64(&t.metrics.FlushCalls, 1)
+	atomic.AddInt64(&t.metrics.FlushedTuples, int64(t.journal.Len()+t.journal.TombLen()))
+	atomic.StoreInt64(&t.metrics.LastFlushTime, start.UnixNano())
 
 	// use internal journal data slices for faster lookups
 	live := t.journal.Keys
@@ -65,7 +65,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 		return err
 	}
 
-	// on error roll back table metadata to last valid value on storage
+	// on error roll back table statistics to last valid value on storage
 	defer func() {
 		if e := recover(); e != nil || err != nil {
 			if err != nil {
@@ -74,9 +74,9 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 				t.log.Errorf("table %s: catching panic: %v", t.name(), e)
 				t.log.Error(string(debug.Stack()))
 			}
-			t.log.Debugf("table %s: restoring metadata", t.name())
-			if _, err := t.meta.Load(ctx, tx, t.metakey); err != nil {
-				t.log.Errorf("table %s metadata rollback failed: %v", t.name(), err)
+			t.log.Debugf("table %s: restoring statistics", t.name())
+			if _, err := t.stats.Load(ctx, tx, t.statskey); err != nil {
+				t.log.Errorf("table %s statistics rollback failed: %v", t.name(), err)
 			}
 			if err != nil {
 				panic(err)
@@ -89,8 +89,8 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 	// init global max
 	jlen, tlen = len(live), len(dead)
-	_, globalmax = t.meta.GlobalMinMax()
-	maxloop = 2*t.meta.Len() + 2*(tlen+jlen)/t.opts.PackSize + 2
+	_, globalmax = t.stats.GlobalMinMax()
+	maxloop = 2*t.stats.Len() + 2*(tlen+jlen)/t.opts.PackSize + 2
 
 	// This algorithm works like a merge-sort over a sequence of sorted packs.
 	for {
@@ -137,10 +137,10 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 		// find best pack for insert/update/delete
 		// skip when we're already appending to a new pack
-		if lastpack < t.meta.Len() {
+		if lastpack < t.stats.Len() {
 			nextpack, packmin, packmax, nextmin = t.findBestPack(nextid)
 			// t.log.Debugf("%s: selecting next pack %d with range [%d:%d] for next pkid=%d last-pack=%d/%d next-min=%d",
-			// 	t.name(), nextpack, packmin, packmax, nextid, lastpack, t.meta.Len(), nextmin)
+			// 	t.name(), nextpack, packmin, packmax, nextid, lastpack, t.stats.Len(), nextmin)
 		}
 
 		// store last pack when nextpack changes
@@ -182,9 +182,9 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 		// load or create the next pack
 		if pkg == nil {
-			if nextpack < t.meta.Len() {
-				// t.log.Debugf("%s: loading pack %d/%d key=%d len=%d", t.name(), nextpack, t.meta.Len(), t.meta.packs[nextpack].Key, t.meta.packs[nextpack].NValues)
-				info, ok := t.meta.GetPos(nextpack)
+			if nextpack < t.stats.Len() {
+				// t.log.Debugf("%s: loading pack %d/%d key=%d len=%d", t.name(), nextpack, t.stats.Len(), t.stats.packs[nextpack].Key, t.stats.packs[nextpack].NValues)
+				info, ok := t.stats.GetPos(nextpack)
 				if ok {
 					pkg, err = t.loadWritablePack(ctx, info.Key, info.NValues)
 					if err != nil {
@@ -199,16 +199,16 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 			}
 			// start new pack
 			if pkg == nil {
-				nextpack = t.meta.Len()
+				nextpack = t.stats.Len()
 				packmin = 0
 				packmax = 0
 				nextmin = 0
 				pkg = pack.New().
-					WithKey(t.meta.NextKey()).
+					WithKey(t.stats.NextKey()).
 					WithSchema(t.schema).
 					WithMaxRows(t.opts.PackSize).
 					Alloc()
-				// t.log.Debugf("%s: starting new pack %d/%d with key %d", t.name(), nextpack, t.meta.Len(), pkg.key)
+				// t.log.Debugf("%s: starting new pack %d/%d with key %d", t.name(), nextpack, t.stats.Len(), pkg.key)
 			}
 			lastpack = nextpack
 			pAdd = 0
@@ -220,7 +220,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 		loop++
 		if loop > 2*maxloop {
 			t.log.Errorf("pack: %s stopping infinite flush loop %d: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d nextpack=%d",
-				t.name(), loop, tpos, tlen, jpos, jlen, lastpack, t.meta.Len(), nextid, nextpack,
+				t.name(), loop, tpos, tlen, jpos, jlen, lastpack, t.stats.Len(), nextid, nextpack,
 			)
 			return fmt.Errorf("pack: %s infinite flush loop. Database likely corrupt.", t.name())
 		} else if loop == maxloop {
@@ -228,7 +228,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 			t.log.SetLevel(logpkg.LevelDebug)
 			defer t.log.SetLevel(lvl)
 			t.log.Debugf("pack: %s circuit breaker activated: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d nextpack=%d",
-				t.name(), tpos, tlen, jpos, jlen, lastpack, t.meta.Len(), nextid, nextpack,
+				t.name(), tpos, tlen, jpos, jlen, lastpack, t.stats.Len(), nextid, nextpack,
 			)
 		}
 
@@ -303,7 +303,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 				// advance tomb pointer by one less (for-loop adds +1)
 				tpos += n - 1
-				// t.log.Debugf("Deleted %d tombstones from pack %d/%d with key %d", n, lastpack, t.meta.Len(), pkg.key)
+				// t.log.Debugf("Deleted %d tombstones from pack %d/%d with key %d", n, lastpack, t.stats.Len(), pkg.key)
 			}
 		} else {
 			// process journal entries for this pack
@@ -328,7 +328,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 				if nextmin > 0 && key.Pk >= nextmin {
 					// best, min, max, _ := t.findBestPack(key.pk)
 					// t.log.Debugf("Key %d does not fit into pack %d [%d:%d], suggested %d/%d [%d:%d] nextmin=%d",
-					// 	key.pk, lastpack, packmin, packmax, best, t.meta.Len(), min, max, nextmin)
+					// 	key.pk, lastpack, packmin, packmax, best, t.stats.Len(), min, max, nextmin)
 					break
 				}
 
@@ -446,7 +446,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 						needsort = false
 					}
 
-					// store pack, will update t.meta
+					// store pack, will update t.stats
 					// t.log.Debugf("%s: storing pack %d with %d records at key %d", t.name(), lastpack, pkg.Len(), pkg.key)
 					n, err = t.storePack(ctx, pkg)
 					if err != nil {
@@ -499,7 +499,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 	}
 
 	dur := time.Since(start)
-	atomic.StoreInt64(&t.stats.LastFlushDuration, int64(dur))
+	atomic.StoreInt64(&t.metrics.LastFlushDuration, int64(dur))
 	t.log.Debugf("flush: %s table %d packs add=%d del=%d heap=%s stored=%s comp=%.2f%% in %s",
 		t.name(), nParts, nAdd, nDel, util.ByteSize(nHeap), util.ByteSize(nBytes),
 		float64(nBytes)*100/float64(nHeap), dur)
@@ -512,8 +512,8 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 	}
 
 	// fix row count which becomes wrong after delete
-	if c := t.meta.Count(); uint64(c) != t.state.NRows {
-		atomic.StoreInt64(&t.stats.TupleCount, int64(c))
+	if c := t.stats.Count(); uint64(c) != t.state.NRows {
+		atomic.StoreInt64(&t.metrics.TupleCount, int64(c))
 		t.state.NRows = uint64(c)
 		t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
 
@@ -540,14 +540,14 @@ func (t *Table) storeJournal(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	atomic.AddInt64(&t.stats.JournalTuplesFlushed, int64(nTuples))
-	atomic.AddInt64(&t.stats.JournalPacksStored, 1)
-	atomic.AddInt64(&t.stats.JournalBytesWritten, int64(nJournalBytes))
-	atomic.AddInt64(&t.stats.TombstoneTuplesFlushed, int64(nTomb))
-	atomic.AddInt64(&t.stats.TombstonePacksStored, 1)
-	atomic.AddInt64(&t.stats.TombstoneBytesWritten, int64(nTombBytes))
-	atomic.StoreInt64(&t.stats.JournalDiskSize, int64(nJournalBytes))
-	atomic.StoreInt64(&t.stats.TombstoneDiskSize, int64(nTombBytes))
+	atomic.AddInt64(&t.metrics.JournalTuplesFlushed, int64(nTuples))
+	atomic.AddInt64(&t.metrics.JournalPacksStored, 1)
+	atomic.AddInt64(&t.metrics.JournalBytesWritten, int64(nJournalBytes))
+	atomic.AddInt64(&t.metrics.TombstoneTuplesFlushed, int64(nTomb))
+	atomic.AddInt64(&t.metrics.TombstonePacksStored, 1)
+	atomic.AddInt64(&t.metrics.TombstoneBytesWritten, int64(nTombBytes))
+	atomic.StoreInt64(&t.metrics.JournalDiskSize, int64(nJournalBytes))
+	atomic.StoreInt64(&t.metrics.TombstoneDiskSize, int64(nTombBytes))
 
 	return nil
 }
@@ -570,7 +570,7 @@ func (t *Table) findBestPack(pk uint64) (int, uint64, uint64, uint64) {
 	// returns 0 when list is empty, this ensures we initially stick
 	// to the first pack until it's full; returns last pack for values
 	// > global max
-	bestpack, min, max, nextmin, isFull := t.meta.Best(pk)
+	bestpack, min, max, nextmin, isFull := t.stats.Best(pk)
 	// t.log.Debugf("find: best=%d min=%d max=%d nextmin=%d, isFull=%t opts=%v",
 	// 	bestpack, min, max, nextmin, isFull, t.opts)
 
@@ -587,7 +587,7 @@ func (t *Table) findBestPack(pk uint64) (int, uint64, uint64, uint64) {
 	// if pack is full check if there is room in the next pack, but protect
 	// invariant by checking pk against next pack's min value
 	if isFull && nextmin > 0 && pk < nextmin {
-		nextbest, min, max, nextmin, isFull := t.meta.Next(bestpack)
+		nextbest, min, max, nextmin, isFull := t.stats.Next(bestpack)
 		if min+max > 0 && !isFull {
 			// t.log.Debugf("%s: %d is full, but next pack %d exists and is not", t.name(), bestpack, nextbest)
 			return nextbest, min, max, nextmin
@@ -596,5 +596,5 @@ func (t *Table) findBestPack(pk uint64) (int, uint64, uint64, uint64) {
 
 	// trigger new pack creation
 	// t.log.Debugf("%s: Should create new pack for key=%d: isfull=%t min=%d, max=%d nextmin=%d", t.name(), pk, isFull, min, max, nextmin)
-	return t.meta.Len(), 0, 0, 0
+	return t.stats.Len(), 0, 0, 0
 }

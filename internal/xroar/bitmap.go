@@ -79,6 +79,9 @@ func FromBufferWithCopy(src []byte) *Bitmap {
 }
 
 func (ra *Bitmap) Size() int {
+	if ra == nil {
+		return 0
+	}
 	return len(ra.data) * 2
 }
 

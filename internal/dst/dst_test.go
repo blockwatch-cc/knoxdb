@@ -499,8 +499,8 @@ func runTestDST(t *testing.T) {
 	t.Log("Verifying data integrity.")
 	table, err := tp.GetDB().UseTable("test_type")
 	require.NoError(t, err)
-	stats := table.Stats()
-	t.Logf("%#v", stats)
-	require.Equal(t, numTuples, stats.TupleCount)
+	m := table.Metrics()
+	t.Logf("%#v", m)
+	require.Equal(t, numTuples, m.TupleCount)
 	t.Log("OK.")
 }

@@ -35,7 +35,7 @@ type TableEngine interface {
 	Open(Context, *Schema, TableOptions) error
 	Close(Context) error
 	Schema() *Schema
-	Stats() TableStats
+	Metrics() TableMetrics
 	Drop(Context) error
 	Sync(Context) error
 	Compact(Context) error
@@ -105,7 +105,7 @@ type IndexEngine interface {
 	Close(Context) error
 	Schema() *Schema
 	Table() TableEngine
-	Stats() IndexStats
+	Metrics() IndexMetrics
 	Drop(Context) error
 	Truncate(Context) error
 	Rebuild(Context) error
@@ -144,7 +144,7 @@ type StoreEngine interface {
 	Open(Context, *Schema, StoreOptions) error
 	Close(Context) error
 	Schema() *Schema
-	Stats() StoreStats
+	Metrics() StoreMetrics
 	Drop(Context) error
 
 	// data interface

@@ -22,6 +22,12 @@ var (
 	TombstoneKeyId uint32 = 0xFFFFFFFE
 	ResultKeyId    uint32 = 0xFFFFFFFD
 
+	// reserved metadata field ids
+	RecordId   uint16 = 0xFFFC
+	RecordRef  uint16 = 0xFFFD
+	RecordXmin uint16 = 0xFFFE
+	RecordXmax uint16 = 0xFFFF
+
 	// allocation poool
 	packagePool = sync.Pool{
 		New: func() any { return &Package{} },
@@ -32,12 +38,13 @@ var (
 )
 
 type Package struct {
-	key     uint32         // identity
-	nRows   int            // current number or rows
-	maxRows int            // max number of rows (== block allocation size)
-	pkIdx   int            // primary key index (position in schema)
-	schema  *schema.Schema // mapping from fields to blocks in query order
-	blocks  []*block.Block // loaded blocks (in schema order)
+	key     uint32           // identity
+	nRows   int              // current number or rows
+	maxRows int              // max number of rows (== block allocation size)
+	pkIdx   int              // primary key index (position in schema)
+	schema  *schema.Schema   // mapping from fields to blocks in query order
+	blocks  []*block.Block   // loaded blocks (in schema order)
+	xdata   *[4]*block.Block // optional per-record metadata, rid, ref, xmin, xmax
 }
 
 func New() *Package {

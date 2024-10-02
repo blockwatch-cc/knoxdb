@@ -28,17 +28,17 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	atomic.AddInt64(&t.stats.InsertCalls, 1)
+	atomic.AddInt64(&t.metrics.InsertCalls, 1)
 
 	// keep a pre-image of the state
 	firstPk := t.state.Sequence
-	state := t.state
+	state := &t.state
 
 	// cleanup on exit
 	defer func() {
 		// rollback table state to original value
-		if state.Sequence > 0 {
-			t.state = state
+		if state != nil {
+			t.state = *state
 		}
 	}()
 
@@ -73,7 +73,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 
 	// update state in catalog (will commit with main tx)
 	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
-	state = TableState{}
+	state = nil
 
 	// return first primary key assigned
 	return firstPk, nil
@@ -92,7 +92,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	atomic.AddInt64(&t.stats.UpdateCalls, 1)
+	atomic.AddInt64(&t.metrics.UpdateCalls, 1)
 
 	// split buf into wire messages
 	view, buf, _ := schema.NewView(t.schema).Cut(buf)

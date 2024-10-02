@@ -24,8 +24,8 @@ func (kv *KVStore) Range(ctx context.Context, prefix []byte, fn func(ctx context
 	defer c.Close()
 	for ok := c.First(); ok; ok = c.Next() {
 		key, val := c.Key(), c.Value()
-		atomic.AddInt64(&kv.stats.QueriedKeys, 1)
-		atomic.AddInt64(&kv.stats.BytesRead, int64(len(val)))
+		atomic.AddInt64(&kv.metrics.QueriedKeys, 1)
+		atomic.AddInt64(&kv.metrics.BytesRead, int64(len(val)))
 		err = fn(ctx, key, val)
 		if err != nil {
 			break
@@ -50,8 +50,8 @@ func (kv *KVStore) Scan(ctx context.Context, from, to []byte, fn func(ctx contex
 	defer c.Close()
 	for ok := c.Seek(from); ok && bytes.Compare(c.Key(), to) <= 0; ok = c.Next() {
 		key, val := c.Key(), c.Value()
-		atomic.AddInt64(&kv.stats.QueriedKeys, 1)
-		atomic.AddInt64(&kv.stats.BytesRead, int64(len(val)))
+		atomic.AddInt64(&kv.metrics.QueriedKeys, 1)
+		atomic.AddInt64(&kv.metrics.BytesRead, int64(len(val)))
 		err = fn(ctx, key, val)
 		if err != nil {
 			break

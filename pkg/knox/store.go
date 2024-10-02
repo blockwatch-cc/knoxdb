@@ -30,8 +30,8 @@ func (s StoreImpl) Schema() *schema.Schema {
 	return s.store.Schema()
 }
 
-func (s StoreImpl) Stats() StoreStats {
-	return s.store.Stats()
+func (s StoreImpl) Metrics() StoreMetrics {
+	return s.store.Metrics()
 }
 
 func (s *StoreImpl) Get(ctx context.Context, key []byte) ([]byte, error) {
@@ -93,8 +93,8 @@ func (s *GenericStore[T]) Schema() *schema.Schema {
 	return s.enc.Schema()
 }
 
-func (s *GenericStore[T]) Stats() StoreStats {
-	return s.store.Stats()
+func (s *GenericStore[T]) Metrics() StoreMetrics {
+	return s.store.Metrics()
 }
 
 func (s *GenericStore[T]) Get(ctx context.Context, key uint64) (*T, error) {

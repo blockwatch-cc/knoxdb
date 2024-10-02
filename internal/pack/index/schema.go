@@ -43,7 +43,7 @@ func convertSchema(s *schema.Schema, typ types.IndexType) (ixs *schema.Schema, h
 				WithVersion(s.Version()).
 				WithField(schema.NewField(types.FieldTypeUint64).WithName("hash")).
 				WithField(s.Fields()[s.NumFields()-1]).
-				Complete()
+				Finalize()
 		}
 
 	case types.IndexTypeInt:
@@ -66,7 +66,7 @@ func convertSchema(s *schema.Schema, typ types.IndexType) (ixs *schema.Schema, h
 			WithVersion(s.Version()).
 			WithField(schema.NewField(types.FieldTypeUint64).WithName("hash")).
 			WithField(s.Fields()[s.NumFields()-1]).
-			Complete()
+			Finalize()
 
 	default:
 		// unsupported

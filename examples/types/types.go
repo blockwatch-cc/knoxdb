@@ -170,7 +170,7 @@ func run() error {
 	}
 
 	log.Infof("Written %d records", c)
-	log.Infof("Total %d records", table.Stats().TupleCount)
+	log.Infof("Total %d records", table.Metrics().TupleCount)
 
 	// Step 2
 	//
@@ -333,7 +333,7 @@ func Open(ctx context.Context) (db knox.Database, table knox.Table, err error) {
 		return
 	}
 	log.Debugf("Schema %s", table.Schema())
-	log.Infof("%d records", table.Stats().TupleCount)
+	log.Infof("%d records", table.Metrics().TupleCount)
 	return
 }
 

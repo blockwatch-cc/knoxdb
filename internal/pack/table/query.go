@@ -38,7 +38,7 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 	// protect journal access
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	atomic.AddInt64(&t.stats.QueryCalls, 1)
+	atomic.AddInt64(&t.metrics.QueryCalls, 1)
 
 	// execute query
 	var err error
@@ -73,7 +73,7 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 	// protect journal access
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	atomic.AddInt64(&t.stats.StreamCalls, 1)
+	atomic.AddInt64(&t.metrics.StreamCalls, 1)
 
 	// execute query
 	var err error
@@ -114,7 +114,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 	// protect journal read access
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	atomic.AddInt64(&t.stats.StreamCalls, 1)
+	atomic.AddInt64(&t.metrics.StreamCalls, 1)
 
 	// run the query
 	err = t.doQueryAsc(ctx, plan, res)
@@ -149,7 +149,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	if err != nil {
 		return 0, err
 	}
-	atomic.AddInt64(&t.stats.DeleteCalls, 1)
+	atomic.AddInt64(&t.metrics.DeleteCalls, 1)
 
 	// execute the query to find all matching pks
 	bits := bitmap.New()
@@ -192,7 +192,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	// table active row count here or wait until next flush (may be wrong
 	// anyways until flush)
 	if n > 0 {
-		atomic.AddInt64(&t.stats.DeletedTuples, int64(n))
+		atomic.AddInt64(&t.metrics.DeletedTuples, int64(n))
 	}
 
 	return n, nil
@@ -209,7 +209,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 		plan.Stats.Tick(query.SCAN_TIME_KEY)
 		plan.Stats.Count(query.ROWS_SCANNED_KEY, int(nRowsScanned))
 		plan.Stats.Count(query.ROWS_MATCHED_KEY, int(nRowsMatched))
-		atomic.AddInt64(&t.stats.QueriedTuples, int64(nRowsMatched))
+		atomic.AddInt64(&t.metrics.QueriedTuples, int64(nRowsMatched))
 		if jbits != nil {
 			jbits.Close()
 		}
@@ -351,7 +351,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 		plan.Stats.Tick(query.SCAN_TIME_KEY)
 		plan.Stats.Count(query.ROWS_SCANNED_KEY, int(nRowsScanned))
 		plan.Stats.Count(query.ROWS_MATCHED_KEY, int(nRowsMatched))
-		atomic.AddInt64(&t.stats.QueriedTuples, int64(nRowsMatched))
+		atomic.AddInt64(&t.metrics.QueriedTuples, int64(nRowsMatched))
 		if jbits != nil {
 			jbits.Close()
 		}
@@ -372,7 +372,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	// find max pk across all saved packs (we assume any journal entry greater than this max
 	// is new and hasn't been saved before; this assumption breaks when user-defined pk
 	// values are smaller, so a user must flush the journal before query)
-	_, maxStoredPk := t.meta.GlobalMinMax()
+	_, maxStoredPk := t.stats.GlobalMinMax()
 
 	// before table scan, emit 'new' journal-only records (i.e. pk > max) in desc order
 	// Note: deleted journal records are not present in this list

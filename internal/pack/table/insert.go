@@ -28,7 +28,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	if t.opts.ReadOnly {
 		return 0, engine.ErrDatabaseReadOnly
 	}
-	atomic.AddInt64(&t.stats.InsertCalls, 1)
+	atomic.AddInt64(&t.metrics.InsertCalls, 1)
 
 	// protect journal write access
 	t.mu.Lock()
@@ -79,7 +79,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 		return 0, err
 	}
 
-	atomic.AddInt64(&t.stats.InsertedTuples, int64(count))
+	atomic.AddInt64(&t.metrics.InsertedTuples, int64(count))
 
 	// sync state with catalog
 	if count > 0 {

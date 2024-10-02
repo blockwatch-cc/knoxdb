@@ -35,7 +35,7 @@ func newErrorTable(name string, err error) Table {
 }
 
 func (t *errorTable) Name() string                                                 { return t.name }
-func (t *errorTable) Stats() TableStats                                            { return TableStats{} }
+func (t *errorTable) Metrics() TableMetrics                                        { return TableMetrics{} }
 func (t *errorTable) DB() Database                                                 { return nil }
 func (t *errorTable) Schema() *schema.Schema                                       { return &schema.Schema{} }
 func (t *errorTable) Engine() engine.TableEngine                                   { return nil }

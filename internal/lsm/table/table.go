@@ -41,28 +41,6 @@ var (
 	}
 )
 
-type TableState struct {
-	Sequence   uint64 // next free sequence
-	NRows      uint64 // total non-deleted rows
-	Checkpoint uint64 // latest wal checkpoint LSN
-}
-
-func (s *TableState) Init() {
-	s.Sequence = 1
-	s.NRows = 0
-	s.Checkpoint = 0
-}
-
-func (s *TableState) FromObjectState(o engine.ObjectState) {
-	s.Sequence = o[0]
-	s.NRows = o[1]
-	s.Checkpoint = o[2]
-}
-
-func (s TableState) ToObjectState() engine.ObjectState {
-	return engine.ObjectState{s.Sequence, s.NRows, s.Checkpoint}
-}
-
 type Table struct {
 	engine     *engine.Engine       // engine access
 	schema     *schema.Schema       // table schema
@@ -73,9 +51,9 @@ type Table struct {
 	key        []byte               // name of the data bucket
 	isZeroCopy bool                 // storage reads are zero copy (copy to safe references)
 	noClose    bool                 // don't close underlying store db on Close
-	state      TableState           // volatile state, synced with catalog
+	state      engine.TableState    // volatile state, synced with catalog
 	indexes    []engine.IndexEngine // list of indexes
-	stats      engine.TableStats    // usage statistics
+	metrics    engine.TableMetrics  // usage statistics
 	log        log.Logger
 }
 
@@ -103,8 +81,8 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.pkindex = pki
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.key = []byte(name)
-	t.state.Init()
-	t.stats.Name = name
+	t.state = engine.NewTableState()
+	t.metrics = engine.NewTableMetrics(name)
 	t.db = opts.DB
 	t.noClose = true
 	t.log = opts.Logger
@@ -162,8 +140,8 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.key = []byte(name)
 	t.state.FromObjectState(e.Catalog().GetState(t.tableId))
-	t.stats.Name = name
-	t.stats.TupleCount = int64(t.state.NRows)
+	t.metrics = engine.NewTableMetrics(name)
+	t.metrics.TupleCount = int64(t.state.NRows)
 	t.db = opts.DB
 	t.noClose = true
 	t.log = opts.Logger
@@ -209,7 +187,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 		return engine.ErrDatabaseCorrupt
 	}
 	stats := b.Stats()
-	t.stats.TotalSize = int64(stats.Size) // estimate only
+	t.metrics.TotalSize = int64(stats.Size) // estimate only
 
 	t.log.Debugf("Table %s opened with %d rows", typ, t.state.NRows)
 	return nil
@@ -229,8 +207,7 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	t.noClose = false
 	t.isZeroCopy = false
 	t.opts = engine.TableOptions{}
-	t.stats = engine.TableStats{}
-	t.state = TableState{}
+	t.metrics = engine.TableMetrics{}
 	t.indexes = nil
 	return
 }
@@ -247,10 +224,10 @@ func (t *Table) name() string {
 	return t.schema.Name()
 }
 
-func (t *Table) Stats() engine.TableStats {
-	stats := t.stats
-	stats.TupleCount = int64(t.state.NRows)
-	return stats
+func (t *Table) Metrics() engine.TableMetrics {
+	m := t.metrics
+	m.TupleCount = int64(t.state.NRows)
+	return m
 }
 
 func (t *Table) Drop(ctx context.Context) error {
@@ -298,9 +275,9 @@ func (t *Table) Truncate(ctx context.Context) error {
 	if _, err := tx.Root().CreateBucket(t.key); err != nil {
 		return err
 	}
-	t.stats.DeletedTuples += int64(t.state.NRows)
-	t.stats.TupleCount = 0
-	t.state.Init()
+	t.metrics.DeletedTuples += int64(t.state.NRows)
+	t.metrics.TupleCount = 0
+	t.state.Reset()
 	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
 	return nil
 }
@@ -326,7 +303,7 @@ func (t *Table) getTx(tx store.Tx, key []byte) []byte {
 	if buf == nil {
 		return nil
 	}
-	atomic.AddInt64(&t.stats.BytesRead, int64(len(buf)))
+	atomic.AddInt64(&t.metrics.BytesRead, int64(len(buf)))
 	return buf
 }
 
@@ -348,15 +325,15 @@ func (t *Table) putTx(tx store.Tx, key, val []byte) ([]byte, error) {
 	}
 	if prevSize >= 0 {
 		// update
-		atomic.AddInt64(&t.stats.UpdatedTuples, 1)
-		atomic.AddInt64(&t.stats.TotalSize, int64(sz-prevSize))
+		atomic.AddInt64(&t.metrics.UpdatedTuples, 1)
+		atomic.AddInt64(&t.metrics.TotalSize, int64(sz-prevSize))
 	} else {
 		// insert
-		atomic.AddInt64(&t.stats.InsertedTuples, 1)
-		atomic.AddInt64(&t.stats.TupleCount, 1)
-		atomic.AddInt64(&t.stats.TotalSize, int64(sz))
+		atomic.AddInt64(&t.metrics.InsertedTuples, 1)
+		atomic.AddInt64(&t.metrics.TupleCount, 1)
+		atomic.AddInt64(&t.metrics.TotalSize, int64(sz))
 	}
-	atomic.AddInt64(&t.stats.BytesWritten, int64(sz))
+	atomic.AddInt64(&t.metrics.BytesWritten, int64(sz))
 	return buf, nil
 }
 
@@ -373,9 +350,9 @@ func (t *Table) delTx(tx store.Tx, key []byte) ([]byte, error) {
 	}
 	err := bucket.Delete(key)
 	if err == nil && prevSize >= 0 {
-		atomic.AddInt64(&t.stats.TupleCount, -1)
-		atomic.AddInt64(&t.stats.DeletedTuples, 1)
-		atomic.AddInt64(&t.stats.TotalSize, -int64(prevSize))
+		atomic.AddInt64(&t.metrics.TupleCount, -1)
+		atomic.AddInt64(&t.metrics.DeletedTuples, 1)
+		atomic.AddInt64(&t.metrics.TotalSize, -int64(prevSize))
 	}
 	return buf, err
 }

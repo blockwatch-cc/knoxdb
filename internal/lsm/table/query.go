@@ -6,7 +6,6 @@ package table
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"sync/atomic"
 
@@ -84,8 +83,8 @@ func (t *Table) doQuery(ctx context.Context, plan *query.QueryPlan, res QueryRes
 		plan.Stats.Tick(query.SCAN_TIME_KEY)
 		plan.Stats.Count(query.ROWS_SCANNED_KEY, int(nRowsScanned))
 		plan.Stats.Count(query.ROWS_MATCHED_KEY, int(nRowsMatched))
-		atomic.AddInt64(&t.stats.QueryCalls, 1)
-		atomic.AddInt64(&t.stats.QueriedTuples, int64(nRowsMatched))
+		atomic.AddInt64(&t.metrics.QueryCalls, 1)
+		atomic.AddInt64(&t.metrics.QueriedTuples, int64(nRowsMatched))
 		bits.Free()
 	}()
 
@@ -95,7 +94,7 @@ func (t *Table) doQuery(ctx context.Context, plan *query.QueryPlan, res QueryRes
 	}
 
 	// prepare result converter (table schema -> result schema)
-	conv := schema.NewConverter(t.schema, plan.ResultSchema, binary.NativeEndian)
+	conv := schema.NewConverter(t.schema, plan.ResultSchema, NE)
 
 	// handle cases
 	switch {
@@ -259,8 +258,8 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 		plan.Stats.Tick(query.SCAN_TIME_KEY)
 		plan.Stats.Count(query.ROWS_SCANNED_KEY, int(nRowsScanned))
 		plan.Stats.Count(query.ROWS_MATCHED_KEY, int(nRowsMatched))
-		atomic.AddInt64(&t.stats.QueryCalls, 1)
-		atomic.AddInt64(&t.stats.QueriedTuples, int64(nRowsMatched))
+		atomic.AddInt64(&t.metrics.QueryCalls, 1)
+		atomic.AddInt64(&t.metrics.QueriedTuples, int64(nRowsMatched))
 		bits.Free()
 	}()
 
@@ -358,8 +357,8 @@ func (t *Table) doLookup(ctx context.Context, pks []uint64, res QueryResultConsu
 
 	// cleanup on exit
 	defer func() {
-		atomic.AddInt64(&t.stats.QueryCalls, 1)
-		atomic.AddInt64(&t.stats.QueriedTuples, int64(nRowsMatched))
+		atomic.AddInt64(&t.metrics.QueryCalls, 1)
+		atomic.AddInt64(&t.metrics.QueriedTuples, int64(nRowsMatched))
 		tx.Rollback()
 	}()
 

@@ -25,8 +25,8 @@ func (t IndexImpl) Schema() *schema.Schema {
 	return t.index.Schema()
 }
 
-func (t IndexImpl) Stats() IndexStats {
-	return t.index.Stats()
+func (t IndexImpl) Metrics() IndexMetrics {
+	return t.index.Metrics()
 }
 
 func (t IndexImpl) Engine() engine.IndexEngine {

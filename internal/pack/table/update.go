@@ -23,7 +23,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	if t.opts.ReadOnly {
 		return 0, engine.ErrDatabaseReadOnly
 	}
-	atomic.AddInt64(&t.stats.UpdateCalls, 1)
+	atomic.AddInt64(&t.metrics.UpdateCalls, 1)
 
 	// protect journal write access
 	t.mu.Lock()
@@ -67,7 +67,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	}
 
 	if count > 0 {
-		atomic.AddInt64(&t.stats.UpdatedTuples, int64(count))
+		atomic.AddInt64(&t.metrics.UpdatedTuples, int64(count))
 	}
 
 	return uint64(count), nil

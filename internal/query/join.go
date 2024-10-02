@@ -303,7 +303,10 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	}
 
 	// finalize result schema
-	p.schema.Complete()
+	p.schema.Finalize()
+	if err := p.schema.Validate(); err != nil {
+		return err
+	}
 
 	// alloc staging buffer
 	p.buf = bytes.NewBuffer(make([]byte, 0, p.schema.WireSize()))

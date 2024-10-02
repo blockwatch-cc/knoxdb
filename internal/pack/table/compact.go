@@ -34,7 +34,7 @@ func (t *Table) Compact(ctx context.Context) error {
 	}
 
 	// check if compaction is possible
-	if t.meta.Len() <= 1 {
+	if t.stats.Len() <= 1 {
 		return nil
 	}
 
@@ -48,7 +48,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		total, moved, written int64
 		pending               int
 	)
-	srcPacks := t.meta.AllPacks()
+	srcPacks := t.stats.AllPacks()
 	nSrcPacks := len(srcPacks)
 	for i, v := range srcPacks {
 		needCompact = needCompact || v.Key > nextpack                       // sequence gap
@@ -97,7 +97,7 @@ func (t *Table) Compact(ctx context.Context) error {
 	//
 	for {
 		// stop when no more dst packs are found
-		if dstIndex == t.meta.Len() {
+		if dstIndex == t.stats.Len() {
 			break
 		}
 
@@ -114,7 +114,7 @@ func (t *Table) Compact(ctx context.Context) error {
 					continue
 				}
 				// skip out of order packs
-				pmin, pmax := t.meta.MinMax(dstIndex)
+				pmin, pmax := t.stats.MinMax(dstIndex)
 				if pmin < lastMaxPk {
 					// log.Debugf("pack: skipping out-of-order dst pack key=%x", dstKey)
 					dstIndex++
@@ -145,7 +145,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		// - has a larger key than the current destination pack AND
 		// - has the smallest min pk higher than the current destination's max pk
 		if srcPack == nil {
-			minSlice, _ := t.meta.MinMaxSlices()
+			minSlice, _ := t.stats.MinMaxSlices()
 			var startIndex, srcIndex int = dstIndex, -1
 			var lastmin uint64 = math.MaxUint64
 			if isNewPack && startIndex > 0 {
@@ -261,7 +261,7 @@ func (t *Table) Compact(ctx context.Context) error {
 
 	t.log.Debugf("pack: %s table compacted %d(+%d) rows into %d(%d) packs (%s ->> %s) in %s",
 		t.name(), moved, written-moved,
-		t.meta.Len(), nSrcPacks-t.meta.Len(),
+		t.stats.Len(), nSrcPacks-t.stats.Len(),
 		util.ByteSize(srcSize), util.ByteSize(dstSize),
 		time.Since(start),
 	)

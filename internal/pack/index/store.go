@@ -9,7 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/metadata"
+	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -38,7 +38,7 @@ func (idx *Index) loadSharedPack(ctx context.Context, id uint32, nrow int, useCa
 	}
 
 	// count stats
-	atomic.AddInt64(&idx.stats.BytesRead, int64(n))
+	atomic.AddInt64(&idx.metrics.BytesRead, int64(n))
 
 	return pkg, nil
 }
@@ -70,7 +70,7 @@ func (idx *Index) loadWritablePack(ctx context.Context, id uint32, nrow int) (*p
 	return clone, nil
 }
 
-// Stores pack and updates metadata (statistics)
+// Stores pack and updates stats (statistics)
 func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 	// open write transaction (or reuse existing tx)
 	tx, err := engine.GetTransaction(ctx).StoreTx(idx.db, true)
@@ -80,11 +80,11 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 
 	// remove zero length packs
 	if pkg.Len() == 0 {
-		// drop from metadata
-		idx.meta.Remove(pkg.Key())
+		// drop from stats
+		idx.stats.Remove(pkg.Key())
 
-		// store metadata changes
-		m, err := idx.meta.Store(ctx, tx, idx.metakey, idx.opts.PageFill)
+		// store stats changes
+		m, err := idx.stats.Store(ctx, tx, idx.statskey, idx.opts.PageFill)
 		if err != nil {
 			return 0, err
 		}
@@ -95,9 +95,9 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 		}
 
 		// collect stats
-		atomic.AddInt64(&idx.stats.MetaBytesWritten, int64(m))
-		atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.meta.HeapSize()))
-		atomic.StoreInt64(&idx.stats.TotalSize, int64(idx.meta.TableSize()))
+		atomic.AddInt64(&idx.metrics.MetaBytesWritten, int64(m))
+		atomic.StoreInt64(&idx.metrics.MetaSize, int64(idx.stats.HeapSize()))
+		atomic.StoreInt64(&idx.metrics.TotalSize, int64(idx.stats.TableSize()))
 
 		return 0, nil
 	}
@@ -109,19 +109,19 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 
 	// build block statistics first (block dirty flag is reset on save)
 	fields := idx.schema.Fields()
-	meta, ok := idx.meta.GetByKey(pkg.Key())
+	meta, ok := idx.stats.GetByKey(pkg.Key())
 	if !ok {
-		// create new metadata
-		meta = &metadata.PackMetadata{
+		// create new stats
+		meta = &stats.PackStats{
 			Key:      pkg.Key(),
 			SchemaId: pkg.Schema().Hash(),
 			NValues:  pkg.Len(),
-			Blocks:   make([]metadata.BlockMetadata, 0, idx.schema.NumFields()),
+			Blocks:   make([]stats.BlockStats, 0, idx.schema.NumFields()),
 			Dirty:    true,
 		}
 
 		for i, b := range pkg.Blocks() {
-			meta.Blocks = append(meta.Blocks, metadata.NewBlockMetadata(b, &fields[i]))
+			meta.Blocks = append(meta.Blocks, stats.NewBlockStats(b, &fields[i]))
 		}
 	} else {
 		// update statistics for dirty blocks
@@ -129,7 +129,7 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 			if !b.IsDirty() {
 				continue
 			}
-			meta.Blocks[i] = metadata.NewBlockMetadata(b, &fields[i])
+			meta.Blocks[i] = stats.NewBlockStats(b, &fields[i])
 			meta.Dirty = true
 		}
 	}
@@ -146,16 +146,16 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 	}
 
 	// update and store statistics
-	idx.meta.AddOrUpdate(meta)
-	m, err := idx.meta.Store(ctx, tx, idx.metakey, idx.opts.PageFill)
+	idx.stats.AddOrUpdate(meta)
+	m, err := idx.stats.Store(ctx, tx, idx.statskey, idx.opts.PageFill)
 	if err != nil {
 		return n, err
 	}
 
-	atomic.AddInt64(&idx.stats.BytesWritten, int64(n))
-	atomic.AddInt64(&idx.stats.MetaBytesWritten, int64(m))
-	atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.meta.HeapSize()))
-	atomic.StoreInt64(&idx.stats.TotalSize, int64(idx.meta.TableSize()))
+	atomic.AddInt64(&idx.metrics.BytesWritten, int64(n))
+	atomic.AddInt64(&idx.metrics.MetaBytesWritten, int64(m))
+	atomic.StoreInt64(&idx.metrics.MetaSize, int64(idx.stats.HeapSize()))
+	atomic.StoreInt64(&idx.metrics.TotalSize, int64(idx.stats.TableSize()))
 
 	return n + m, nil
 }
@@ -179,7 +179,7 @@ func (idx *Index) splitPack(ctx context.Context, pkg *pack.Package) (int, error)
 		return 0, err
 	}
 
-	// store the source pack (this adds or updates its metadata)
+	// store the source pack (this adds or updates its stats)
 	n, err := idx.storePack(ctx, pkg)
 	if err != nil {
 		return 0, err
@@ -187,7 +187,7 @@ func (idx *Index) splitPack(ctx context.Context, pkg *pack.Package) (int, error)
 
 	// set the new pack's key after storing pack 1, this avoids
 	// using the same pack key when the source pack was not stored before
-	pkg2.WithKey(idx.meta.NextKey())
+	pkg2.WithKey(idx.stats.NextKey())
 
 	// save the new pack
 	m, err := idx.storePack(ctx, pkg2)

@@ -20,7 +20,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/pack"
 	pi "blockwatch.cc/knoxdb/internal/pack/index"
-	"blockwatch.cc/knoxdb/internal/pack/metadata"
+	"blockwatch.cc/knoxdb/internal/pack/stats"
 	pt "blockwatch.cc/knoxdb/internal/pack/table"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
@@ -42,8 +42,8 @@ var (
 var cmdinfo = `
 Available Commands:
   schema       show schema
-  meta         show pack-level metadata
-  detail       show block-level metadata
+  stats        show pack-level statistics
+  detail       show block-level statistics
   content      show pack content
 `
 
@@ -131,10 +131,10 @@ func run() error {
 	switch cmd {
 	case "schema":
 		return PrintSchema(getTableOrIndexSchema(db, desc.Table), out)
-	case "meta":
-		return PrintMetadata(getTableOrIndexMetadataView(db, desc.Table), desc.PackId, out)
+	case "stats":
+		return PrintMetadata(getTableOrIndexStatsView(db, desc.Table), desc.PackId, out)
 	case "detail":
-		return PrintMetadataDetail(getTableOrIndexMetadataView(db, desc.Table), desc.PackId, out)
+		return PrintMetadataDetail(getTableOrIndexStatsView(db, desc.Table), desc.PackId, out)
 	case "content":
 		ctx, _, abort := db.Begin(ctx)
 		defer abort()
@@ -173,12 +173,12 @@ func getTableOrIndexPackView(db knox.Database, name string) ContentViewer {
 	panic(err)
 }
 
-type MetadataViewer interface {
-	ViewMetadata(int) *metadata.PackMetadata
+type StatsViewer interface {
+	ViewStats(int) *stats.PackStats
 	Schema() *schema.Schema
 }
 
-func getTableOrIndexMetadataView(db knox.Database, name string) MetadataViewer {
+func getTableOrIndexStatsView(db knox.Database, name string) StatsViewer {
 	t, err := db.UseTable(name)
 	if err == nil {
 		return t.Engine().(*pt.Table)
@@ -249,7 +249,7 @@ func PrintSchema(s *schema.Schema, w io.Writer) error {
 	return nil
 }
 
-func PrintMetadata(view MetadataViewer, id int, w io.Writer) error {
+func PrintMetadata(view StatsViewer, id int, w io.Writer) error {
 	s := view.Schema()
 	pki := s.PkIndex()
 	t := table.NewWriter()
@@ -266,7 +266,7 @@ func PrintMetadata(view MetadataViewer, id int, w io.Writer) error {
 		stopAfter = true
 	}
 	for {
-		md := view.ViewMetadata(i)
+		md := view.ViewStats(i)
 		if md == nil {
 			break
 		}
@@ -289,7 +289,7 @@ func PrintMetadata(view MetadataViewer, id int, w io.Writer) error {
 	return nil
 }
 
-func PrintMetadataDetail(view MetadataViewer, id int, w io.Writer) error {
+func PrintMetadataDetail(view StatsViewer, id int, w io.Writer) error {
 	s := view.Schema()
 	t := table.NewWriter()
 	fields := s.Exported()
@@ -304,7 +304,7 @@ func PrintMetadataDetail(view MetadataViewer, id int, w io.Writer) error {
 		stopAfter = true
 	}
 	for {
-		md := view.ViewMetadata(i)
+		md := view.ViewStats(i)
 		if md == nil {
 			break
 		}

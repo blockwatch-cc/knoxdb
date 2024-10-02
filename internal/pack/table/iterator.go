@@ -9,7 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/metadata"
+	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
@@ -57,14 +57,14 @@ func (it *ForwardIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		// find next potential pack match, scan in pk order
 		// (pairs in pack index are sorted by min pk)
 		it.idx++
-		info, ok := it.table.meta.GetSorted(it.idx)
+		info, ok := it.table.stats.GetSorted(it.idx)
 		for ok {
-			it.query.Log.Debugf("IT-fwd checking meta for pack=%08x size=%d", info.Key, info.NValues)
+			it.query.Log.Debugf("IT-fwd checking stats for pack=%08x size=%d", info.Key, info.NValues)
 			if MaybeMatchTree(it.query.Filters, info) {
 				break
 			}
 			it.idx++
-			info, ok = it.table.meta.GetSorted(it.idx)
+			info, ok = it.table.stats.GetSorted(it.idx)
 		}
 
 		// no more match, return end condition (nil pack and nil error)
@@ -135,7 +135,7 @@ type ReverseIterator struct {
 func NewReverseIterator(q *query.QueryPlan) *ReverseIterator {
 	t := q.Table.(*Table)
 	return &ReverseIterator{
-		idx:      t.meta.Len(),
+		idx:      t.stats.Len(),
 		query:    q,
 		table:    t,
 		hits:     arena.Alloc(arena.AllocUint32, t.opts.PackSize).([]uint32),
@@ -154,13 +154,13 @@ func (it *ReverseIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		// find next potential pack match, scan in pk order
 		// (pairs in pack index are sorted by min pk)
 		it.idx--
-		info, ok := it.table.meta.GetSorted(it.idx)
+		info, ok := it.table.stats.GetSorted(it.idx)
 		for ok {
 			if MaybeMatchTree(it.query.Filters, info) {
 				break
 			}
 			it.idx--
-			info, ok = it.table.meta.GetSorted(it.idx)
+			info, ok = it.table.stats.GetSorted(it.idx)
 		}
 
 		// no more match, return end condition (nil pack and nil error)
@@ -254,14 +254,14 @@ func (it *LookupIterator) Next(ctx context.Context) (*pack.Package, uint64, erro
 		// find next potential pack match, scan in pk order low to high
 		// (min/max pairs are NOT sorted by min pk, but  indirection is)
 		var (
-			info         *metadata.PackMetadata
+			info         *stats.PackStats
 			ok           bool
 			minPk, maxPk uint64
 		)
 		it.idx++
-		for l := it.table.meta.Len(); it.idx < l && it.pks.Len() > 0; it.idx++ {
+		for l := it.table.stats.Len(); it.idx < l && it.pks.Len() > 0; it.idx++ {
 			// map index to pack position
-			minPk, maxPk = it.table.meta.MinMaxSorted(it.idx)
+			minPk, maxPk = it.table.stats.MinMaxSorted(it.idx)
 
 			// check if we need to visit this pack
 			if !it.pks.ContainsRange(minPk, maxPk) {
@@ -276,7 +276,7 @@ func (it *LookupIterator) Next(ctx context.Context) (*pack.Package, uint64, erro
 			it.pks.Values = it.pks.Values[next:]
 
 			// fetch pack metadata from index
-			info, ok = it.table.meta.GetSorted(it.idx)
+			info, ok = it.table.stats.GetSorted(it.idx)
 			break
 		}
 

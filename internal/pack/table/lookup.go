@@ -30,7 +30,7 @@ func (t *Table) Lookup(ctx context.Context, pks []uint64) (engine.QueryResult, e
 	// protect journal access
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	atomic.AddInt64(&t.stats.QueryCalls, 1)
+	atomic.AddInt64(&t.metrics.QueryCalls, 1)
 
 	// execute query
 	err := t.doLookup(ctx, pks, res)
@@ -53,7 +53,7 @@ func (t *Table) StreamLookup(ctx context.Context, pks []uint64, fn func(engine.Q
 	// protect journal access
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	atomic.AddInt64(&t.stats.StreamCalls, 1)
+	atomic.AddInt64(&t.metrics.StreamCalls, 1)
 
 	// execute query
 	err := t.doLookup(ctx, pks, res)
@@ -75,7 +75,7 @@ func (t *Table) doLookup(ctx context.Context, pks []uint64, res QueryResultConsu
 
 	// cleanup and log on exit
 	defer func() {
-		atomic.AddInt64(&t.stats.QueriedTuples, int64(nRowsMatched))
+		atomic.AddInt64(&t.metrics.QueriedTuples, int64(nRowsMatched))
 	}()
 
 	// remove deleted records

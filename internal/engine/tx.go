@@ -79,14 +79,12 @@ func (t *TxList) Del(tx *Tx) {
 }
 
 func (e *Engine) NewTransaction() *Tx {
-	e.mu.Lock()
 	tx := &Tx{
 		engine: e,
 		id:     0, // read-only tx do not use an id
 		dbTx:   make(map[store.DB]store.Tx),
 		snap:   e.NewSnapshot(),
 	}
-	e.mu.Unlock()
 	return tx
 }
 
@@ -130,12 +128,14 @@ func (t *Tx) Close() {
 func (t *Tx) Touch(key uint64) {
 	if len(t.touched) == 0 {
 		// generate txid on first write
-		t.touched = make(map[uint64]struct{})
 		t.engine.mu.Lock()
 		t.id = atomic.AddUint64(&t.engine.xnext, 1)
 		t.engine.txs.Add(t)
 		t.engine.mu.Unlock()
+
+		// update snapshot
 		t.snap.WithId(t.id)
+		t.touched = make(map[uint64]struct{})
 	}
 	t.touched[key] = struct{}{}
 }

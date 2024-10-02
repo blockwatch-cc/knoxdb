@@ -40,6 +40,9 @@ func (e *Engine) maxWalCheckpoint() (maxLsn wal.LSN) {
 	return
 }
 
+// TODO: make sure all checkpoints for all tables exist
+//   - problem: committed tx are missing from wal because the file was broken/truncated
+//     -> what to do here?
 func (e *Engine) recoverWal(ctx context.Context) error {
 	// find the minimum non-zero checkpoint across all catalog objects
 	// we directly access catalog state without lock because this function

@@ -40,7 +40,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 		plan.Stats.Tick(query.SCAN_TIME_KEY)
 		plan.Stats.Count(query.ROWS_SCANNED_KEY, int(nRowsScanned))
 		plan.Stats.Count(query.ROWS_MATCHED_KEY, int(nRowsMatched))
-		atomic.AddInt64(&t.stats.DeleteCalls, 1)
+		atomic.AddInt64(&t.metrics.DeleteCalls, 1)
 	}()
 
 	bucket := tx.Bucket(t.key)

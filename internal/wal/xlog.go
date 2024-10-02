@@ -34,17 +34,9 @@ const (
 	CommitFrameSize        = CommitFrameHeaderSize + CommitFramePayloadSize
 )
 
-// TODO: roll tail when next xid is beyond (do we even need tail?)
-//
-// - maybe flip tail & last when write goes to the other
-// - write & sync on evict or close
-// - header should use min lsn (first commit in this range) for recovery
-// - header does not need xmin (can calculate from id)
-
 type CommitLog struct {
 	wal        *Wal
 	fd         *os.File
-	nFrames    int
 	checkpoint LSN
 	tail       *CommitFrame
 	last       *CommitFrame
@@ -186,10 +178,10 @@ func (c *CommitLog) Open() error {
 		}
 		stat, _ = c.fd.Stat()
 	}
-	c.nFrames = int(stat.Size() / int64(CommitFrameSize))
+	nFrames := int(stat.Size() / int64(CommitFrameSize))
 
 	// init frames
-	switch c.nFrames {
+	switch nFrames {
 	case 0:
 		// empty file, create a new frame
 		c.tail = NewCommitFrame(0)
@@ -198,9 +190,9 @@ func (c *CommitLog) Open() error {
 		c.tail, err = c.LoadFrame(0)
 	default:
 		// load last two frames
-		c.last, err = c.LoadFrame(c.nFrames - 2)
+		c.last, err = c.LoadFrame(nFrames - 2)
 		if err == nil {
-			c.tail, err = c.LoadFrame(c.nFrames - 1)
+			c.tail, err = c.LoadFrame(nFrames - 1)
 		}
 	}
 
@@ -251,7 +243,6 @@ func (c *CommitLog) Close() error {
 	}
 	c.fd = nil
 	c.wal = nil
-	c.nFrames = 0
 	c.checkpoint = 0
 	if c.tail != nil {
 		c.tail.Close()

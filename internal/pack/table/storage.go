@@ -9,7 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/metadata"
+	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -39,9 +39,9 @@ func (t *Table) loadSharedPack(ctx context.Context, id uint32, nrow int, useCach
 		return nil, err
 	}
 
-	// count stats
-	atomic.AddInt64(&t.stats.PacksLoaded, 1)
-	atomic.AddInt64(&t.stats.BytesRead, int64(n))
+	// count metrics
+	atomic.AddInt64(&t.metrics.PacksLoaded, 1)
+	atomic.AddInt64(&t.metrics.BytesRead, int64(n))
 
 	return pkg, nil
 }
@@ -72,7 +72,7 @@ func (t *Table) loadWritablePack(ctx context.Context, id uint32, nrow int) (*pac
 	return clone, nil
 }
 
-// Stores pack and updates metadata (statistics)
+// Stores pack and updates stats
 func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 	// open write transaction (or reuse existing tx)
 	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
@@ -82,11 +82,11 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 
 	// remove zero length packs
 	if pkg.Len() == 0 {
-		// drop from metadata
-		t.meta.Remove(pkg.Key())
+		// drop from stats
+		t.stats.Remove(pkg.Key())
 
-		// store metadata changes
-		m, err := t.meta.Store(ctx, tx, t.metakey, t.opts.PageFill)
+		// store stats changes
+		m, err := t.stats.Store(ctx, tx, t.statskey, t.opts.PageFill)
 		if err != nil {
 			return 0, err
 		}
@@ -97,10 +97,10 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 		}
 
 		// collect stats
-		atomic.AddInt64(&t.stats.MetaBytesWritten, int64(m))
-		atomic.StoreInt64(&t.stats.PacksCount, int64(t.meta.Len()))
-		atomic.StoreInt64(&t.stats.MetaSize, int64(t.meta.HeapSize()))
-		atomic.StoreInt64(&t.stats.TotalSize, int64(t.meta.TableSize()))
+		atomic.AddInt64(&t.metrics.MetaBytesWritten, int64(m))
+		atomic.StoreInt64(&t.metrics.PacksCount, int64(t.stats.Len()))
+		atomic.StoreInt64(&t.metrics.MetaSize, int64(t.stats.HeapSize()))
+		atomic.StoreInt64(&t.metrics.TotalSize, int64(t.stats.TableSize()))
 
 		return 0, nil
 	}
@@ -112,19 +112,19 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 
 	// build block statistics first (block dirty flag is reset on save)
 	fields := t.schema.Fields()
-	meta, ok := t.meta.GetByKey(pkg.Key())
+	meta, ok := t.stats.GetByKey(pkg.Key())
 	if !ok {
-		// create new metadata
-		meta = &metadata.PackMetadata{
+		// create new stats
+		meta = &stats.PackStats{
 			Key:      pkg.Key(),
 			SchemaId: pkg.Schema().Hash(),
 			NValues:  pkg.Len(),
-			Blocks:   make([]metadata.BlockMetadata, 0, t.schema.NumFields()),
+			Blocks:   make([]stats.BlockStats, 0, t.schema.NumFields()),
 			Dirty:    true,
 		}
 
 		for i, b := range pkg.Blocks() {
-			meta.Blocks = append(meta.Blocks, metadata.NewBlockMetadata(b, &fields[i]))
+			meta.Blocks = append(meta.Blocks, stats.NewBlockStats(b, &fields[i]))
 		}
 	} else {
 		// update statistics for dirty blocks
@@ -132,7 +132,7 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 			if !b.IsDirty() {
 				continue
 			}
-			meta.Blocks[i] = metadata.NewBlockMetadata(b, &fields[i])
+			meta.Blocks[i] = stats.NewBlockStats(b, &fields[i])
 			meta.Dirty = true
 		}
 		meta.NValues = pkg.Len()
@@ -150,18 +150,18 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 	}
 
 	// update and store statistics
-	t.meta.AddOrUpdate(meta)
-	m, err := t.meta.Store(ctx, tx, t.metakey, t.opts.PageFill)
+	t.stats.AddOrUpdate(meta)
+	m, err := t.stats.Store(ctx, tx, t.statskey, t.opts.PageFill)
 	if err != nil {
 		return n, err
 	}
 
-	atomic.AddInt64(&t.stats.PacksStored, 1)
-	atomic.AddInt64(&t.stats.BytesWritten, int64(n))
-	atomic.AddInt64(&t.stats.MetaBytesWritten, int64(m))
-	atomic.StoreInt64(&t.stats.PacksCount, int64(t.meta.Len()))
-	atomic.StoreInt64(&t.stats.MetaSize, int64(t.meta.HeapSize()))
-	atomic.StoreInt64(&t.stats.TotalSize, int64(t.meta.TableSize()))
+	atomic.AddInt64(&t.metrics.PacksStored, 1)
+	atomic.AddInt64(&t.metrics.BytesWritten, int64(n))
+	atomic.AddInt64(&t.metrics.MetaBytesWritten, int64(m))
+	atomic.StoreInt64(&t.metrics.PacksCount, int64(t.stats.Len()))
+	atomic.StoreInt64(&t.metrics.MetaSize, int64(t.stats.HeapSize()))
+	atomic.StoreInt64(&t.metrics.TotalSize, int64(t.stats.TableSize()))
 
 	return n + m, nil
 }
@@ -185,7 +185,7 @@ func (t *Table) splitPack(ctx context.Context, pkg *pack.Package) (int, error) {
 		return 0, err
 	}
 
-	// store the source pack (this adds or updates its metadata)
+	// store the source pack (this adds or updates its stats)
 	n, err := t.storePack(ctx, pkg)
 	if err != nil {
 		return 0, err
@@ -193,7 +193,7 @@ func (t *Table) splitPack(ctx context.Context, pkg *pack.Package) (int, error) {
 
 	// set the new pack's key after storing pack 1, this avoids
 	// using the same pack key when the source pack was not stored before
-	pkg2.WithKey(t.meta.NextKey())
+	pkg2.WithKey(t.stats.NextKey())
 
 	// save the new pack
 	m, err := t.storePack(ctx, pkg2)

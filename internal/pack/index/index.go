@@ -14,7 +14,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/metadata"
+	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -50,28 +50,29 @@ var (
 )
 
 var (
-	metaKeySuffix = []byte("_meta")
-	dataKeySuffix = []byte("_data")
+	metaKeySuffix  = []byte("_meta")
+	statsKeySuffix = []byte("_stats")
+	dataKeySuffix  = []byte("_data")
 )
 
 type Index struct {
-	engine  *engine.Engine          // engine access
-	schema  *schema.Schema          // table schema
-	indexId uint64                  // unique tagged name hash
-	opts    engine.IndexOptions     // copy of config options
-	db      store.DB                // lower-level KV store (e.g. boltdb or badger)
-	datakey []byte                  // name of the data bucket
-	metakey []byte                  // name of the metadata data bucket
-	meta    *metadata.MetadataIndex // in-memory list of pack and block statistics
-	journal *pack.Package           // [2]uint64 in-memory data not yet written to packs
-	tomb    *pack.Package           // [2]uint64 in-memory data not yet written to packs
-	noClose bool                    // don't close underlying store db on Close
-	table   engine.TableEngine      // related table
-	convert *schema.Converter       // table to index schema converter
-	stats   engine.IndexStats       // usage statistics
-	log     log.Logger              // log instance
-	nrows   uint64                  // number of live entries
-	genkey  hashFunc                // key generator function
+	engine   *engine.Engine      // engine access
+	schema   *schema.Schema      // table schema
+	indexId  uint64              // unique tagged name hash
+	opts     engine.IndexOptions // copy of config options
+	db       store.DB            // lower-level KV store (e.g. boltdb or badger)
+	datakey  []byte              // name of the data bucket
+	statskey []byte              // name of the stats data bucket
+	stats    *stats.StatsIndex   // in-memory list of pack and block statistics
+	journal  *pack.Package       // [2]uint64 in-memory data not yet written to packs
+	tomb     *pack.Package       // [2]uint64 in-memory data not yet written to packs
+	noClose  bool                // don't close underlying store db on Close
+	table    engine.TableEngine  // related table
+	convert  *schema.Converter   // table to index schema converter
+	metrics  engine.IndexMetrics // usage statistics
+	log      log.Logger          // log instance
+	nrows    uint64              // number of live entries
+	genkey   hashFunc            // key generator function
 }
 
 func NewIndex() engine.IndexEngine {
@@ -104,9 +105,9 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.indexId = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = opts
 	idx.datakey = append([]byte(name), dataKeySuffix...)
-	idx.metakey = append([]byte(name), metaKeySuffix...)
-	idx.stats.Name = name
-	idx.meta = metadata.NewMetadataIndex(0, opts.PackSize)
+	idx.statskey = append([]byte(name), statsKeySuffix...)
+	idx.metrics = engine.NewIndexMetrics(name)
+	idx.stats = stats.NewStatsIndex(0, opts.PackSize)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
 		WithKey(pack.JournalKeyId).
@@ -120,7 +121,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.db = opts.DB
 	idx.noClose = true
 	idx.table = t
-	idx.convert = schema.NewConverter(t.Schema(), s, LE)
+	idx.convert = schema.NewConverter(t.Schema(), s, LE).WithSkipLen()
 	idx.genkey = keyFn
 	idx.log = opts.Logger
 
@@ -155,7 +156,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	if _, err := store.CreateBucket(tx, idx.datakey, engine.ErrIndexExists); err != nil {
 		return err
 	}
-	if _, err := store.CreateBucket(tx, idx.metakey, engine.ErrIndexExists); err != nil {
+	if _, err := store.CreateBucket(tx, idx.statskey, engine.ErrIndexExists); err != nil {
 		return err
 	}
 
@@ -182,9 +183,9 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.indexId = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.datakey = append([]byte(name), dataKeySuffix...)
-	idx.metakey = append([]byte(name), metaKeySuffix...)
-	idx.stats.Name = name
-	idx.meta = metadata.NewMetadataIndex(0, idx.opts.PackSize)
+	idx.statskey = append([]byte(name), statsKeySuffix...)
+	idx.metrics = engine.NewIndexMetrics(name)
+	idx.stats = stats.NewStatsIndex(0, idx.opts.PackSize)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
 		WithKey(pack.JournalKeyId).
@@ -198,7 +199,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.db = opts.DB
 	idx.noClose = true
 	idx.table = t
-	idx.convert = schema.NewConverter(t.Schema(), s, LE)
+	idx.convert = schema.NewConverter(t.Schema(), s, LE).WithSkipLen()
 	idx.genkey = keyFn
 	idx.log = opts.Logger
 
@@ -237,24 +238,24 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	if err != nil {
 		return err
 	}
-	if tx.Bucket(idx.datakey) == nil || tx.Bucket(idx.metakey) == nil {
+	if tx.Bucket(idx.datakey) == nil || tx.Bucket(idx.statskey) == nil {
 		idx.log.Error("missing index data: %v", engine.ErrNoBucket)
 		tx.Rollback()
 		_ = idx.Close(ctx)
 		return engine.ErrDatabaseCorrupt
 	}
 
-	// load metadata
-	idx.log.Debugf("Loading package metadata for %s", typ)
-	n, err := idx.meta.Load(ctx, tx, idx.metakey)
+	// load stats
+	idx.log.Debugf("Loading package stats for %s", typ)
+	n, err := idx.stats.Load(ctx, tx, idx.statskey)
 	if err != nil {
-		// TODO: rebuild corrupt metadata
+		// TODO: rebuild corrupt stats
 		return err
 	}
-	atomic.AddInt64(&idx.stats.MetaBytesRead, int64(n))
-	// atomic.StoreInt64(&idx.stats.PacksCount, int64(idx.meta.Len()))
-	atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.meta.HeapSize()))
-	atomic.StoreInt64(&idx.stats.TotalSize, int64(idx.meta.TableSize()))
+	atomic.AddInt64(&idx.metrics.MetaBytesRead, int64(n))
+	// atomic.StoreInt64(&idx.metrics.PacksCount, int64(idx.stats.Len()))
+	atomic.StoreInt64(&idx.metrics.MetaSize, int64(idx.stats.HeapSize()))
+	atomic.StoreInt64(&idx.metrics.TotalSize, int64(idx.stats.TableSize()))
 
 	idx.log.Debugf("Index %s opened with %d rows", typ, idx.nrows)
 
@@ -274,12 +275,14 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 	idx.indexId = 0
 	idx.nrows = 0
 	idx.datakey = nil
-	idx.metakey = nil
+	idx.statskey = nil
 	idx.noClose = false
 	idx.opts = engine.IndexOptions{}
-	idx.stats = engine.IndexStats{}
+	idx.metrics = engine.IndexMetrics{}
 	idx.convert = nil
 	idx.genkey = nil
+	idx.stats.Reset()
+	idx.stats = nil
 	idx.journal.Release()
 	idx.tomb.Release()
 	idx.journal = nil
@@ -303,10 +306,10 @@ func (idx *Index) Sync(ctx context.Context) error {
 	return idx.flush(ctx)
 }
 
-func (idx *Index) Stats() engine.IndexStats {
-	stats := idx.stats
-	stats.TupleCount = int64(idx.nrows)
-	return stats
+func (idx *Index) Metrics() engine.IndexMetrics {
+	m := idx.metrics
+	m.TupleCount = int64(idx.nrows)
+	return m
 }
 
 func (idx *Index) Drop(ctx context.Context) error {
@@ -317,8 +320,8 @@ func (idx *Index) Drop(ctx context.Context) error {
 			return err
 		}
 		idx.log.Debugf("Dropping index %s", typ)
-		idx.meta.Reset()
-		for _, key := range [][]byte{idx.datakey, idx.metakey} {
+		idx.stats.Reset()
+		for _, key := range [][]byte{idx.datakey, idx.statskey} {
 			if err := tx.Root().DeleteBucket(key); err != nil {
 				return err
 			}
@@ -343,10 +346,10 @@ func (idx *Index) Truncate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	idx.meta.Reset()
+	idx.stats.Reset()
 	idx.journal.Clear()
 	idx.tomb.Clear()
-	for _, key := range [][]byte{idx.datakey, idx.metakey} {
+	for _, key := range [][]byte{idx.datakey, idx.statskey} {
 		if err := tx.Root().DeleteBucket(key); err != nil {
 			return err
 		}
@@ -354,8 +357,8 @@ func (idx *Index) Truncate(ctx context.Context) error {
 			return err
 		}
 	}
-	idx.stats.DeletedTuples += int64(idx.nrows)
-	idx.stats.TupleCount = 0
+	idx.metrics.DeletedTuples += int64(idx.nrows)
+	idx.metrics.TupleCount = 0
 	idx.nrows = 0
 
 	// GC/commit storage tx

@@ -23,9 +23,9 @@ type (
 	IndexKind = engine.IndexKind
 	IndexType = types.IndexType
 
-	StoreStats = engine.StoreStats
-	TableStats = engine.TableStats
-	IndexStats = engine.IndexStats
+	StoreMetrics = engine.StoreMetrics
+	TableMetrics = engine.TableMetrics
+	IndexMetrics = engine.IndexMetrics
 
 	QueryResult = engine.QueryResult
 	QueryRow    = engine.QueryRow
@@ -63,7 +63,7 @@ type QueryRequest interface {
 type Table interface {
 	DB() Database
 	Schema() *schema.Schema
-	Stats() TableStats
+	Metrics() TableMetrics
 	Engine() engine.TableEngine
 	Insert(context.Context, any) (uint64, error)
 	Update(context.Context, any) (uint64, error)
@@ -76,7 +76,7 @@ type Table interface {
 type Index interface {
 	DB() Database
 	Schema() *schema.Schema
-	Stats() IndexStats
+	Metrics() IndexMetrics
 	Engine() engine.IndexEngine
 }
 
@@ -84,7 +84,7 @@ type Index interface {
 type Store interface {
 	DB() Database
 	Schema() *schema.Schema
-	Stats() StoreStats
+	Metrics() StoreMetrics
 	Get(ctx context.Context, key []byte) ([]byte, error)
 	Put(ctx context.Context, key, val []byte) error
 	Del(ctx context.Context, key []byte) error

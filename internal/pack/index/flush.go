@@ -34,7 +34,7 @@ func (idx *Index) flush(ctx context.Context) error {
 	// defer it.Close()
 
 	// // init global max
-	// _, maxPk := idx.meta.GlobalMinMax()
+	// _, maxPk := idx.stats.GlobalMinMax()
 	// if jlen > 0 {
 	//  maxPk = max(maxPk, jkeys[jlen-1])
 	// }
@@ -167,9 +167,9 @@ func (idx *Index) flush(ctx context.Context) error {
 	// maxloop = 2*idx.packidx.Len() + 2*jlen/packsz + 2 // 2x to consider splits
 
 	// create an initial pack on first insert
-	if idx.meta.Len() == 0 {
+	if idx.stats.Len() == 0 {
 		pkg = pack.New().
-			WithKey(idx.meta.NextKey()).
+			WithKey(idx.stats.NextKey()).
 			WithMaxRows(idx.opts.PackSize).
 			WithSchema(idx.schema).
 			Alloc()
@@ -215,7 +215,7 @@ func (idx *Index) flush(ctx context.Context) error {
 		}
 
 		// find best pack for inserting/deleting next record
-		nextpack, _, packmax, nextmin, _ = idx.meta.Best(nextid)
+		nextpack, _, packmax, nextmin, _ = idx.stats.Best(nextid)
 		// log.Debugf("Next pack %d max=%d nextmin=%d", nextpack, packmax, nextmin)
 
 		// store last pack when nextpack changes
@@ -242,7 +242,7 @@ func (idx *Index) flush(ctx context.Context) error {
 				// 	pending = 0
 				// }
 				// update next values after pack index has changed
-				nextpack, _, packmax, nextmin, _ = idx.meta.Best(nextid)
+				nextpack, _, packmax, nextmin, _ = idx.stats.Best(nextid)
 				// log.Debugf("%s: post-store next pack %d max=%d nextmin=%d",
 				//  idx.name(), nextpack, packmax, nextmin)
 			}
@@ -254,7 +254,7 @@ func (idx *Index) flush(ctx context.Context) error {
 		// load the next pack
 		if pkg == nil {
 			var err error
-			info, _ := idx.meta.GetPos(nextpack)
+			info, _ := idx.stats.GetPos(nextpack)
 			pkg, err = idx.loadWritablePack(ctx, info.Key, info.NValues)
 			if err != nil {
 				return err
@@ -267,13 +267,13 @@ func (idx *Index) flush(ctx context.Context) error {
 		loop++
 		if loop > 2*maxloop {
 			idx.log.Errorf("knox: %s stopping infinite flush loop %d: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d",
-				idx.schema.Name(), loop, tpos, tlen, jpos, jlen, lastpack, idx.meta.Len(), nextid,
+				idx.schema.Name(), loop, tpos, tlen, jpos, jlen, lastpack, idx.stats.Len(), nextid,
 			)
 			return fmt.Errorf("pack: %s infinite flush loop detected. Database is likely corrupted.", idx.schema.Name())
 		} else if loop > maxloop {
 			idx.log.SetLevel(log.LevelDebug)
 			idx.log.Debugf("knox: %s circuit breaker activated at loop %d tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d",
-				idx.schema.Name(), loop, tpos, tlen, jpos, jlen, lastpack, idx.meta.Len(), nextid,
+				idx.schema.Name(), loop, tpos, tlen, jpos, jlen, lastpack, idx.stats.Len(), nextid,
 			)
 		}
 
@@ -425,15 +425,15 @@ func (idx *Index) flush(ctx context.Context) error {
 	}
 
 	// update counters
-	atomic.StoreInt64(&idx.stats.TupleCount, int64(idx.meta.Count()))
-	atomic.StoreInt64(&idx.stats.MetaSize, int64(idx.meta.HeapSize()))
-	atomic.StoreInt64(&idx.stats.TotalSize, int64(idx.meta.TableSize()))
-	atomic.StoreInt64(&idx.stats.LastFlushTime, start.UnixNano())
+	atomic.StoreInt64(&idx.metrics.TupleCount, int64(idx.stats.Count()))
+	atomic.StoreInt64(&idx.metrics.MetaSize, int64(idx.stats.HeapSize()))
+	atomic.StoreInt64(&idx.metrics.TotalSize, int64(idx.stats.TableSize()))
+	atomic.StoreInt64(&idx.metrics.LastFlushTime, start.UnixNano())
+	atomic.StoreInt64(&idx.metrics.LastFlushDuration, int64(time.Since(start)))
 
-	idx.stats.LastFlushDuration = int64(time.Since(start))
 	idx.log.Debugf("pack: %s flushed %d packs add=%d/%d del=%d/%d total_size=%s in %s",
 		idx.schema.Name(), nParts, nAdd, idx.journal.Len(), nDel, idx.tomb.Len(),
-		util.ByteSize(nBytes), time.Duration(idx.stats.LastFlushDuration))
+		util.ByteSize(nBytes), time.Duration(idx.metrics.LastFlushDuration))
 
 	// ignore any remaining records
 	idx.tomb.Clear()

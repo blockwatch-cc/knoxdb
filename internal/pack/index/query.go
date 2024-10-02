@@ -215,7 +215,7 @@ func (idx *Index) queryKeys(ctx context.Context, node *query.FilterTreeNode) (*b
 
 	// cleanup and log on exit
 	defer func() {
-		atomic.AddInt64(&idx.stats.QueriedTuples, int64(bits.Count()))
+		atomic.AddInt64(&idx.metrics.QueriedTuples, int64(bits.Count()))
 		it.Close()
 	}()
 
@@ -267,7 +267,7 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64, mode types.Filt
 
 	// cleanup and log on exit
 	defer func() {
-		atomic.AddInt64(&idx.stats.QueriedTuples, int64(nKeysMatched))
+		atomic.AddInt64(&idx.metrics.QueriedTuples, int64(nKeysMatched))
 		it.Close()
 	}()
 

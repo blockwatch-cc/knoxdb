@@ -42,7 +42,7 @@ type KVStore struct {
 	state      KVState             // volatile state, synced with catalog
 	isZeroCopy bool                // storage reads are zero copy (copy to safe references)
 	noClose    bool                // don't close underlying store db on Close
-	stats      engine.StoreStats   // usage statistics
+	metrics    engine.StoreMetrics // usage statistics
 	log        log.Logger
 }
 
@@ -54,7 +54,7 @@ type KVState struct {
 	Checkpoint uint64 // latest wal checkpoint LSN
 }
 
-func (s *KVState) Init() {
+func (s *KVState) Reset() {
 	s.Checkpoint = 0
 }
 
@@ -79,8 +79,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	kv.storeId = s.TaggedHash(types.ObjectTagStore)
 	kv.opts = DefaultOptions.Merge(opts)
 	kv.key = []byte(name)
-	kv.state.Init()
-	kv.stats.Name = name
+	kv.metrics = engine.NewStoreMetrics(name)
 	kv.db = opts.DB
 	kv.noClose = true
 	kv.log = opts.Logger
@@ -141,7 +140,7 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	kv.opts = DefaultOptions.Merge(opts)
 	kv.key = []byte(name)
 	kv.state.FromObjectState(e.Catalog().GetState(kv.storeId))
-	kv.stats.Name = name
+	kv.metrics = engine.NewStoreMetrics(name)
 	kv.db = opts.DB
 	kv.noClose = true
 	kv.log = opts.Logger
@@ -183,8 +182,8 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 		return engine.ErrNoBucket
 	}
 	stats := bucket.Stats()
-	kv.stats.TotalSize = int64(stats.Size) // estimate only
-	kv.stats.NumKeys = int64(stats.KeyN)
+	kv.metrics.TotalSize = int64(stats.Size) // estimate only
+	kv.metrics.NumKeys = int64(stats.KeyN)
 
 	if err != nil {
 		kv.log.Error("reading store stats: %v", err)
@@ -193,7 +192,7 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 		return engine.ErrDatabaseCorrupt
 	}
 
-	kv.log.Debugf("store %s opened with %d entries", kv.schema.Name(), kv.stats.NumKeys)
+	kv.log.Debugf("store %s opened with %d entries", kv.schema.Name(), kv.metrics.NumKeys)
 	return nil
 }
 
@@ -208,7 +207,8 @@ func (kv *KVStore) Close(ctx context.Context) (err error) {
 	kv.storeId = 0
 	kv.key = nil
 	kv.opts = engine.StoreOptions{}
-	kv.stats = engine.StoreStats{}
+	kv.metrics = engine.StoreMetrics{}
+	kv.state.Reset()
 	kv.noClose = false
 	kv.isZeroCopy = false
 	return
@@ -218,20 +218,20 @@ func (kv *KVStore) Schema() *schema.Schema {
 	return kv.schema
 }
 
-func (kv *KVStore) Stats() engine.StoreStats {
+func (kv *KVStore) Metrics() engine.StoreMetrics {
 	// copy store stats
-	stats := kv.stats
+	m := kv.metrics
 
 	// copy cache stats
 	// cs := s.cache.Stats()
-	// stats.CacheHits = cs.Hits
-	// stats.CacheMisses = cs.Misses
-	// stats.CacheInserts = cs.Inserts
-	// stats.CacheEvictions = cs.Evictions
-	// stats.CacheCount = cs.Count
-	// stats.CacheSize = cs.Size
+	// m.CacheHits = cs.Hits
+	// m.CacheMisses = cs.Misses
+	// m.CacheInserts = cs.Inserts
+	// m.CacheEvictions = cs.Evictions
+	// m.CacheCount = cs.Count
+	// m.CacheSize = cs.Size
 
-	return stats
+	return m
 }
 
 func (kv *KVStore) Drop(ctx context.Context) error {

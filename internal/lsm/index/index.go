@@ -55,7 +55,7 @@ type Index struct {
 	noClose    bool                // don't close underlying store db on Close
 	table      engine.TableEngine  // related table
 	convert    *schema.Converter   // table to index schema converter
-	stats      engine.IndexStats   // usage statistics
+	metrics    engine.IndexMetrics // usage statistics
 	log        log.Logger          // log instance
 	nrows      uint64              // number of live entries
 }
@@ -77,11 +77,11 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.indexId = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.key = []byte(name)
-	idx.stats.Name = name
+	idx.metrics = engine.NewIndexMetrics(name)
 	idx.db = opts.DB
 	idx.noClose = true
 	idx.table = t
-	idx.convert = schema.NewConverter(t.Schema(), s, BE)
+	idx.convert = schema.NewConverter(t.Schema(), s, BE).WithSkipLen()
 	idx.log = opts.Logger
 
 	if idx.opts.Type != types.IndexTypeComposite {
@@ -141,11 +141,11 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.indexId = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.key = []byte(name)
-	idx.stats.Name = name
+	idx.metrics = engine.NewIndexMetrics(name)
 	idx.db = opts.DB
 	idx.noClose = true
 	idx.table = t
-	idx.convert = schema.NewConverter(t.Schema(), s, BE)
+	idx.convert = schema.NewConverter(t.Schema(), s, BE).WithSkipLen()
 	idx.nrows = e.Catalog().GetState(idx.indexId)[1]
 	idx.log = opts.Logger
 
@@ -192,7 +192,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 		return engine.ErrDatabaseCorrupt
 	}
 	stats := b.Stats()
-	idx.stats.TotalSize = int64(stats.Size) // estimate only
+	idx.metrics.TotalSize = int64(stats.Size) // estimate only
 
 	idx.log.Debugf("Index %s opened with %d rows", typ, idx.nrows)
 
@@ -214,7 +214,7 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 	idx.noClose = false
 	idx.isZeroCopy = false
 	idx.opts = engine.IndexOptions{}
-	idx.stats = engine.IndexStats{}
+	idx.metrics = engine.IndexMetrics{}
 	idx.convert = nil
 	return
 }
@@ -235,10 +235,10 @@ func (idx *Index) Sync(_ context.Context) error {
 	return nil
 }
 
-func (idx *Index) Stats() engine.IndexStats {
-	stats := idx.stats
-	stats.TupleCount = int64(idx.nrows)
-	return stats
+func (idx *Index) Metrics() engine.IndexMetrics {
+	m := idx.metrics
+	m.TupleCount = int64(idx.nrows)
+	return m
 }
 
 func (idx *Index) Drop(ctx context.Context) error {
@@ -279,8 +279,8 @@ func (idx *Index) Truncate(ctx context.Context) error {
 		return err
 	}
 	idx.engine.Catalog().SetState(idx.indexId, engine.ObjectState{})
-	idx.stats.DeletedTuples += int64(idx.nrows)
-	idx.stats.TupleCount = 0
+	idx.metrics.DeletedTuples += int64(idx.nrows)
+	idx.metrics.TupleCount = 0
 	idx.nrows = 0
 	return nil
 }
@@ -317,7 +317,7 @@ func (idx *Index) Rebuild(ctx context.Context) error {
 	// table data is encoded little endian wire format containing
 	// only the fields our index requires, but we still need
 	// to convert LE ints to BE (in particular the primary key)
-	conv := schema.NewConverter(idx.schema, idx.schema, BE)
+	conv := schema.NewConverter(idx.schema, idx.schema, BE).WithSkipLen()
 
 	var nBytes int
 	err = idx.table.Stream(ctx, plan, func(row engine.QueryRow) error {
