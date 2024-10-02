@@ -87,15 +87,14 @@ func (s *segment) Sync() error {
 	return s.fd.Sync()
 }
 
-func (s *segment) LastRecord() (*Record, error) {
-	return nil, nil
-}
-
 func (s *segment) Truncate(sz int64) error {
 	return s.fd.Truncate(sz)
 }
 
 func (s *segment) Write(buf []byte) (int, error) {
+	if s.fd == nil {
+		return 0, ErrClosed
+	}
 	n, err := s.fd.Write(buf)
 	if err != nil {
 		return n, err
@@ -106,6 +105,9 @@ func (s *segment) Write(buf []byte) (int, error) {
 }
 
 func (s *segment) Seek(offset int64, whence int) (int64, error) {
+	if s.fd == nil {
+		return 0, ErrClosed
+	}
 	n, err := s.fd.Seek(offset, whence)
 	if err != nil {
 		return 0, err

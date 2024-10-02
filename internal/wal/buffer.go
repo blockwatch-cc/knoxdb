@@ -44,6 +44,9 @@ func (b *bufferedReader) Close() error {
 }
 
 func (b *bufferedReader) Seek(lsn LSN) error {
+	if b.IsClosed() {
+		return ErrClosed
+	}
 	// open segment and seek
 	filepos := lsn.calculateOffset(b.wal.opts.MaxSegmentSize)
 	seg, err := openSegment(lsn, b.wal.opts)
@@ -60,7 +63,7 @@ func (b *bufferedReader) Seek(lsn LSN) error {
 }
 
 func (b *bufferedReader) Read(size int) ([]byte, error) {
-	if b.wal == nil {
+	if b.IsClosed() {
 		return nil, ErrClosed
 	}
 	// if segment is not set, this is the first read
@@ -126,10 +129,30 @@ func (b *bufferedReader) Read(size int) ([]byte, error) {
 }
 
 func (b *bufferedReader) hasNextSegment() bool {
+	if b.IsClosed() {
+		return false
+	}
+	if b.seg == nil {
+		if err := b.Seek(LSN(0)); err != nil {
+			return false
+		}
+	}
 	return doesSegmentExist(b.seg.id+1, b.wal.opts)
 }
 
+func (b *bufferedReader) IsClosed() bool {
+	return b.wal == nil
+}
+
 func (b *bufferedReader) nextSegment() error {
+	if b.IsClosed() {
+		return ErrClosed
+	}
+	if b.seg == nil {
+		if err := b.Seek(LSN(0)); err != nil {
+			return err
+		}
+	}
 	defer b.seg.Close()
 	lsn := NewLSN(b.seg.id+1, int64(b.wal.opts.MaxSegmentSize), 0)
 	seg, err := openSegment(lsn, b.wal.opts)

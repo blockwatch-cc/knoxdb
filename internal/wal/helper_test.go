@@ -3,13 +3,26 @@ package wal
 import (
 	"errors"
 	"io"
+	"math/rand"
 	"testing"
+
+	"blockwatch.cc/knoxdb/internal/types"
 )
 
 type TestCase struct {
 	Name     string
 	DataSize uint64
 	Fn       func(*testing.T, *bufferedReader)
+}
+
+func generateRecord(data []byte) *Record {
+	return &Record{
+		Type:   RecordTypeCommit,
+		Tag:    types.ObjectTagDatabase,
+		Entity: 100,
+		Data:   data,
+		TxID:   rand.Uint64(),
+	}
 }
 
 var bufferReadTestCases = []TestCase{
@@ -48,7 +61,7 @@ var bufferReadTestCases = []TestCase{
 				t.Errorf("failed to read: %v", err)
 			}
 			_, err = b.Read(30)
-			if errors.Is(err, ErrClosed) {
+			if !errors.Is(err, ErrClosed) {
 				t.Errorf("reading closed buffered reader was successful: %v", err)
 			}
 		},
