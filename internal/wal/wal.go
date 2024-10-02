@@ -14,7 +14,11 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
-var LE = binary.LittleEndian
+var (
+	ErrInvalidWalOption = errors.New("invalid wal options ")
+
+	LE = binary.LittleEndian
+)
 
 const (
 	HeaderSize = 30
@@ -40,6 +44,10 @@ type WalOptions struct {
 	MaxSegmentSize int
 }
 
+func (opt WalOptions) IsValid() bool {
+	return len(opt.Path) > 0 && opt.MaxSegmentSize > 0
+}
+
 type Wal struct {
 	opts   WalOptions
 	active *segment
@@ -48,6 +56,9 @@ type Wal struct {
 }
 
 func Create(opts WalOptions) (*Wal, error) {
+	if !opts.IsValid() {
+		return nil, ErrInvalidWalOption
+	}
 	// create directory
 	err := os.MkdirAll(opts.Path, 0750)
 	if err != nil && !errors.Is(err, os.ErrExist) {
@@ -69,6 +80,9 @@ func Create(opts WalOptions) (*Wal, error) {
 }
 
 func Open(id LSN, opts WalOptions) (*Wal, error) {
+	if !opts.IsValid() {
+		return nil, ErrInvalidWalOption
+	}
 	// try open directory
 	// set exclusive lock
 	// open last segment file
