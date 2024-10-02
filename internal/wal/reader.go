@@ -41,6 +41,7 @@ type Reader struct {
 	flt            *RecordFilter
 	bufferedReader *bufferedReader
 	prevCsum       uint64
+	prevTxId       uint64
 }
 
 func (r *Reader) WithType(t RecordType) WalReader {
@@ -129,11 +130,12 @@ func (r *Reader) Next() (*Record, error) {
 			return nil, ErrChecksum
 		}
 
+		r.prevCsum = checksum
+		r.prevTxId = record.TxID
 		if !r.flt.Match(record) {
 			continue
 		}
 
-		r.prevCsum = checksum
 		return record, nil
 	}
 

@@ -4,99 +4,99 @@
 package wal
 
 import (
-    "bytes"
-    "fmt"
-    "io"
-    "math"
-    "os"
-    "path/filepath"
-    "strings"
-    "sync"
-    "testing"
+	"bytes"
+	"fmt"
+	"io"
+	"math"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
 
-    "blockwatch.cc/knoxdb/internal/types"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
+	"blockwatch.cc/knoxdb/internal/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // createWal creates a new WAL instance with specified options and returns it.
 func createWal(t *testing.T, dir string) *Wal {
-    t.Helper()
-    opts := WalOptions{
-        Path:           dir,
-        MaxSegmentSize: 1024,
-    }
-    w, err := Create(opts)
-    require.NoError(t, err)
-    require.NotNil(t, w)
-    return w
+	t.Helper()
+	opts := WalOptions{
+		Path:           dir,
+		MaxSegmentSize: 1024,
+	}
+	w, err := Create(opts)
+	require.NoError(t, err)
+	require.NotNil(t, w)
+	return w
 }
 
 // TestWalCreation tests the creation of a new WAL to ensure it initializes correctly.
 func TestWalCreation(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
-    defer w.Close()
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
+	defer w.Close()
 
-    assert.NotNil(t, w)
-    // Check for the existence of the first segment file
-    files, err := os.ReadDir(testDir)
-    require.NoError(t, err)
-    assert.Equal(t, 1, len(files), "Expected one segment file")
-    assert.True(t, strings.HasSuffix(files[0].Name(), ".SEG"), "Expected segment file with .SEG extension")
+	assert.NotNil(t, w)
+	// Check for the existence of the first segment file
+	files, err := os.ReadDir(testDir)
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(files), "Expected one segment file")
+	assert.True(t, strings.HasSuffix(files[0].Name(), ".SEG"), "Expected segment file with .SEG extension")
 }
 
 // TestWalWrite tests writing multiple records to the WAL to ensure data is written correctly.
 func TestWalWrite(t *testing.T) {
-    t.Log("Starting TestWalWrite")
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
-    defer w.Close()
+	t.Log("Starting TestWalWrite")
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
+	defer w.Close()
 
-    testCases := []struct {
-        recordType RecordType
-        tag        types.ObjectTag
-        entity     uint64
-        txID       uint64
-        data       string
-    }{
-        {RecordTypeInsert, types.ObjectTag(1), 1, 100, "d1"},
-        {RecordTypeUpdate, types.ObjectTag(2), 2, 200, "d2"},
-        {RecordTypeDelete, types.ObjectTag(3), 3, 300, "d3"},
-    }
+	testCases := []struct {
+		recordType RecordType
+		tag        types.ObjectTag
+		entity     uint64
+		txID       uint64
+		data       string
+	}{
+		{RecordTypeInsert, types.ObjectTag(1), 1, 100, "d1"},
+		{RecordTypeUpdate, types.ObjectTag(2), 2, 200, "d2"},
+		{RecordTypeDelete, types.ObjectTag(3), 3, 300, "d3"},
+	}
 
-    for _, tc := range testCases {
-        rec := &Record{
-            Type:   tc.recordType,
-            Tag:    tc.tag,
-            Entity: tc.entity,
-            TxID:   tc.txID,
-            Data:   []byte(tc.data),
-        }
-        _, err := w.Write(rec)
-        require.NoError(t, err)
-    }
+	for _, tc := range testCases {
+		rec := &Record{
+			Type:   tc.recordType,
+			Tag:    tc.tag,
+			Entity: tc.entity,
+			TxID:   tc.txID,
+			Data:   []byte(tc.data),
+		}
+		_, err := w.Write(rec)
+		require.NoError(t, err)
+	}
 
-    // Verify that the records were written
-    reader := w.NewReader()
-    defer reader.Close()
+	// Verify that the records were written
+	reader := w.NewReader()
+	defer reader.Close()
 
-    err := reader.Seek(0)
-    require.NoError(t, err)
+	err := reader.Seek(0)
+	require.NoError(t, err)
 
-    for _, expected := range testCases {
-        readRec, err := reader.Next()
-        require.NoError(t, err)
-        assert.Equal(t, expected.recordType, readRec.Type)
-        assert.Equal(t, expected.tag, readRec.Tag)
-        assert.Equal(t, expected.entity, readRec.Entity)
-        assert.Equal(t, expected.txID, readRec.TxID)
-        assert.Equal(t, []byte(expected.data), readRec.Data)
-    }
+	for _, expected := range testCases {
+		readRec, err := reader.Next()
+		require.NoError(t, err)
+		assert.Equal(t, expected.recordType, readRec.Type)
+		assert.Equal(t, expected.tag, readRec.Tag)
+		assert.Equal(t, expected.entity, readRec.Entity)
+		assert.Equal(t, expected.txID, readRec.TxID)
+		assert.Equal(t, []byte(expected.data), readRec.Data)
+	}
 
-    _, err = reader.Next()
-    assert.Equal(t, io.EOF, err)
-    t.Log("Finished TestWalWrite")
+	_, err = reader.Next()
+	assert.Equal(t, io.EOF, err)
+	t.Log("Finished TestWalWrite")
 }
 
 // TestWalLargeWrite tests the WAL's ability to handle writing and reading large records.
@@ -142,126 +142,126 @@ func TestWalWrite(t *testing.T) {
 
 // TestWalWriteErrors tests the WAL's error handling when writing records under various error conditions.
 func TestWalWriteErrors(t *testing.T) {
-    testDir := t.TempDir()
+	testDir := t.TempDir()
 
-    t.Run("WriteToReadOnlyDir", func(t *testing.T) {
-        readOnlyDir := filepath.Join(testDir, "readonly")
-        require.NoError(t, os.MkdirAll(readOnlyDir, 0755))
-        defer os.RemoveAll(readOnlyDir)
+	t.Run("WriteToReadOnlyDir", func(t *testing.T) {
+		readOnlyDir := filepath.Join(testDir, "readonly")
+		require.NoError(t, os.MkdirAll(readOnlyDir, 0755))
+		defer os.RemoveAll(readOnlyDir)
 
-        // Change permissions before WAL creation
-        require.NoError(t, os.Chmod(readOnlyDir, 0500))
+		// Change permissions before WAL creation
+		require.NoError(t, os.Chmod(readOnlyDir, 0500))
 
-        _, err := Create(WalOptions{
-            Path:           readOnlyDir,
-            MaxSegmentSize: 100,
-            Seed:           12345,
-        })
-        assert.Error(t, err, "Expected an error when creating WAL in a read-only directory")
-        assert.Contains(t, err.Error(), "permission denied", "Expected a permission denied error")
-    })
+		_, err := Create(WalOptions{
+			Path:           readOnlyDir,
+			MaxSegmentSize: 100,
+			Seed:           12345,
+		})
+		assert.Error(t, err, "Expected an error when creating WAL in a read-only directory")
+		assert.Contains(t, err.Error(), "permission denied", "Expected a permission denied error")
+	})
 }
 
 // TestWalRead tests reading records from the WAL to ensure data is read correctly and matches what was written.
 func TestWalRead(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
-    defer w.Close()
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
+	defer w.Close()
 
-    testData := []struct {
-        recordType RecordType
-        tag        types.ObjectTag
-        entity     uint64
-        txID       uint64
-        data       string
-    }{
-        {RecordTypeInsert, types.ObjectTag(1), 1, 100, "data1"},
-        {RecordTypeUpdate, types.ObjectTag(2), 2, 200, "data2"},
-        {RecordTypeDelete, types.ObjectTag(3), 3, 300, "data3"},
-    }
+	testData := []struct {
+		recordType RecordType
+		tag        types.ObjectTag
+		entity     uint64
+		txID       uint64
+		data       string
+	}{
+		{RecordTypeInsert, types.ObjectTag(1), 1, 100, "data1"},
+		{RecordTypeUpdate, types.ObjectTag(2), 2, 200, "data2"},
+		{RecordTypeDelete, types.ObjectTag(3), 3, 300, "data3"},
+	}
 
-    for _, td := range testData {
-        rec := &Record{
-            Type:   td.recordType,
-            Tag:    td.tag,
-            Entity: td.entity,
-            TxID:   td.txID,
-            Data:   []byte(td.data),
-        }
-        _, err := w.Write(rec)
-        require.NoError(t, err)
-    }
+	for _, td := range testData {
+		rec := &Record{
+			Type:   td.recordType,
+			Tag:    td.tag,
+			Entity: td.entity,
+			TxID:   td.txID,
+			Data:   []byte(td.data),
+		}
+		_, err := w.Write(rec)
+		require.NoError(t, err)
+	}
 
-    reader := w.NewReader()
-    defer reader.Close()
+	reader := w.NewReader()
+	defer reader.Close()
 
-    err := reader.Seek(0)
-    require.NoError(t, err)
+	err := reader.Seek(0)
+	require.NoError(t, err)
 
-    for _, expected := range testData {
-        readRec, err := reader.Next()
-        assert.NoError(t, err)
-        assert.Equal(t, expected.recordType, readRec.Type)
-        assert.Equal(t, expected.tag, readRec.Tag)
-        assert.Equal(t, expected.entity, readRec.Entity)
-        assert.Equal(t, expected.txID, readRec.TxID)
-        assert.Equal(t, []byte(expected.data), readRec.Data)
-    }
+	for _, expected := range testData {
+		readRec, err := reader.Next()
+		assert.NoError(t, err)
+		assert.Equal(t, expected.recordType, readRec.Type)
+		assert.Equal(t, expected.tag, readRec.Tag)
+		assert.Equal(t, expected.entity, readRec.Entity)
+		assert.Equal(t, expected.txID, readRec.TxID)
+		assert.Equal(t, []byte(expected.data), readRec.Data)
+	}
 
-    _, err = reader.Next()
-    assert.Equal(t, io.EOF, err)
+	_, err = reader.Next()
+	assert.Equal(t, io.EOF, err)
 }
 
 // / TestWalFilteredReading tests the WAL's ability to read records using various filters,
 // ensuring that only records matching the specified criteria are returned.
 func TestWalFilteredReading(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
-    defer w.Close()
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
+	defer w.Close()
 
-    // Write test records
-    records := []*Record{
-        {Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
-        {Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
-        {Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
-    }
+	// Write test records
+	records := []*Record{
+		{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
+		{Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
+	}
 
-    for _, rec := range records {
-        _, err := w.Write(rec)
-        require.NoError(t, err)
-    }
+	for _, rec := range records {
+		_, err := w.Write(rec)
+		require.NoError(t, err)
+	}
 
-    tests := []struct {
-        name   string
-        filter func(WalReader) WalReader
-        expect *Record
-    }{
-        {"FilterByType", func(r WalReader) WalReader { return r.WithType(RecordTypeInsert) }, records[0]},
-        {"FilterByTag", func(r WalReader) WalReader { return r.WithTag(types.ObjectTag(1)) }, records[0]},
-        {"FilterByEntity", func(r WalReader) WalReader { return r.WithEntity(2) }, records[1]},
-        {"FilterByTxID", func(r WalReader) WalReader { return r.WithTxID(300) }, records[2]},
-        {"CombinedFilters", func(r WalReader) WalReader { return r.WithType(RecordTypeUpdate).WithTag(types.ObjectTag(2)) }, records[1]},
-        {"NoMatchFilter", func(r WalReader) WalReader { return r.WithType(RecordTypeInsert).WithTag(types.ObjectTag(2)) }, nil},
-    }
+	tests := []struct {
+		name   string
+		filter func(WalReader) WalReader
+		expect *Record
+	}{
+		{"FilterByType", func(r WalReader) WalReader { return r.WithType(RecordTypeInsert) }, records[0]},
+		{"FilterByTag", func(r WalReader) WalReader { return r.WithTag(types.ObjectTag(1)) }, records[0]},
+		{"FilterByEntity", func(r WalReader) WalReader { return r.WithEntity(2) }, records[1]},
+		{"FilterByTxID", func(r WalReader) WalReader { return r.WithTxID(300) }, records[2]},
+		{"CombinedFilters", func(r WalReader) WalReader { return r.WithType(RecordTypeUpdate).WithTag(types.ObjectTag(2)) }, records[1]},
+		{"NoMatchFilter", func(r WalReader) WalReader { return r.WithType(RecordTypeInsert).WithTag(types.ObjectTag(2)) }, nil},
+	}
 
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            reader := tt.filter(w.NewReader())
-            rec, err := reader.Next()
-            if tt.expect == nil {
-                assert.Equal(t, io.EOF, err, "Expected EOF when no records match the filter")
-            } else {
-                if assert.NoError(t, err) {
-                    t.Logf("Read record: %+v", rec)
-                    assert.Equal(t, tt.expect.Type, rec.Type, "Record type mismatch")
-                    assert.Equal(t, tt.expect.Tag, rec.Tag, "Record tag mismatch")
-                    assert.Equal(t, tt.expect.Entity, rec.Entity, "Record entity mismatch")
-                    assert.Equal(t, tt.expect.TxID, rec.TxID, "Record TxID mismatch")
-                    assert.Equal(t, tt.expect.Data, rec.Data, "Record data mismatch")
-                }
-            }
-        })
-    }
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := tt.filter(w.NewReader())
+			rec, err := reader.Next()
+			if tt.expect == nil {
+				assert.Equal(t, io.EOF, err, "Expected EOF when no records match the filter")
+			} else {
+				if assert.NoError(t, err) {
+					t.Logf("Read record: %+v", rec)
+					assert.Equal(t, tt.expect.Type, rec.Type, "Record type mismatch")
+					assert.Equal(t, tt.expect.Tag, rec.Tag, "Record tag mismatch")
+					assert.Equal(t, tt.expect.Entity, rec.Entity, "Record entity mismatch")
+					assert.Equal(t, tt.expect.TxID, rec.TxID, "Record TxID mismatch")
+					assert.Equal(t, tt.expect.Data, rec.Data, "Record data mismatch")
+				}
+			}
+		})
+	}
 }
 
 // TestWalReaderOperations tests reading records from the WAL with operations (e.g. Seek, Next, Close) to ensure the WAL reader correctly reads records and handles operations.
@@ -358,127 +358,127 @@ func TestWalFilteredReading(t *testing.T) {
 // TestWalSeek tests the WAL reader's ability to seek to specific positions within the log,
 // verifying that it can accurately locate and read records from different LSNs
 func TestWalSeek(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
-    defer w.Close()
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
+	defer w.Close()
 
-    records := []*Record{
-        {Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
-        {Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
-        {Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
-        {Type: RecordTypeInsert, Tag: types.ObjectTag(4), Entity: 4, TxID: 400, Data: []byte("data4")},
-    }
+	records := []*Record{
+		{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
+		{Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
+		{Type: RecordTypeInsert, Tag: types.ObjectTag(4), Entity: 4, TxID: 400, Data: []byte("data4")},
+	}
 
-    lsns := make([]LSN, len(records))
-    for i, rec := range records {
-        lsn, err := w.Write(rec)
-        require.NoError(t, err)
-        lsns[i] = lsn
-    }
+	lsns := make([]LSN, len(records))
+	for i, rec := range records {
+		lsn, err := w.Write(rec)
+		require.NoError(t, err)
+		lsns[i] = lsn
+	}
 
-    reader := w.NewReader()
-    defer reader.Close()
+	reader := w.NewReader()
+	defer reader.Close()
 
-    for i, lsn := range lsns {
-        t.Logf("Seeking to LSN: %v", lsn)
-        err := reader.Seek(lsn)
-        require.NoError(t, err)
+	for i, lsn := range lsns {
+		t.Logf("Seeking to LSN: %v", lsn)
+		err := reader.Seek(lsn)
+		require.NoError(t, err)
 
-        rec, err := reader.Next()
-        require.NoError(t, err)
-        t.Logf("Read record: %+v", rec)
-        assert.Equal(t, records[i].Type, rec.Type)
-        assert.Equal(t, records[i].Tag, rec.Tag)
-        assert.Equal(t, records[i].Entity, rec.Entity)
-        assert.Equal(t, records[i].TxID, rec.TxID)
-        assert.Equal(t, records[i].Data, rec.Data)
-    }
+		rec, err := reader.Next()
+		require.NoError(t, err)
+		t.Logf("Read record: %+v", rec)
+		assert.Equal(t, records[i].Type, rec.Type)
+		assert.Equal(t, records[i].Tag, rec.Tag)
+		assert.Equal(t, records[i].Entity, rec.Entity)
+		assert.Equal(t, records[i].TxID, rec.TxID)
+		assert.Equal(t, records[i].Data, rec.Data)
+	}
 
-    // Test seeking beyond the end
-    invalidLSN := LSN(uint64(lsns[len(lsns)-1]) + 1000000)
-    err := reader.Seek(invalidLSN)
-    assert.Error(t, err, "Expected error when seeking to invalid LSN")
+	// Test seeking beyond the end
+	invalidLSN := LSN(uint64(lsns[len(lsns)-1]) + 1000000)
+	err := reader.Seek(invalidLSN)
+	assert.Error(t, err, "Expected error when seeking to invalid LSN")
 }
 
 // TestWalNext tests the WAL reader's Next function, ensuring it can correctly
 // iterate through records in the log and handle reaching the end of the log.
 func TestWalNext(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
-    defer w.Close()
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
+	defer w.Close()
 
-    // Write some test records
-    records := []*Record{
-        {Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
-        {Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
-        {Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
-    }
+	// Write some test records
+	records := []*Record{
+		{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
+		{Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
+	}
 
-    for _, rec := range records {
-        _, err := w.Write(rec)
-        require.NoError(t, err)
-    }
+	for _, rec := range records {
+		_, err := w.Write(rec)
+		require.NoError(t, err)
+	}
 
-    reader := w.NewReader()
-    defer reader.Close()
+	reader := w.NewReader()
+	defer reader.Close()
 
-    // Test reading all records
-    for i, expected := range records {
-        rec, err := reader.Next()
-        require.NoError(t, err)
-        assert.Equal(t, expected, rec, "Record %d mismatch", i)
-    }
+	// Test reading all records
+	for i, expected := range records {
+		rec, err := reader.Next()
+		require.NoError(t, err)
+		assert.Equal(t, expected, rec, "Record %d mismatch", i)
+	}
 
-    // Test reading beyond the end
-    _, err := reader.Next()
-    assert.Equal(t, io.EOF, err)
+	// Test reading beyond the end
+	_, err := reader.Next()
+	assert.Equal(t, io.EOF, err)
 }
 
 // TestWalClose tests the WAL's Close function, verifying that it properly closes
 // the log and prevents further operations after closing.
 func TestWalClose(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
 
-    // Write a test record
-    rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")}
-    _, err := w.Write(rec)
-    require.NoError(t, err)
+	// Write a test record
+	rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")}
+	_, err := w.Write(rec)
+	require.NoError(t, err)
 
-    reader := w.NewReader()
-    err = reader.Close()
-    require.NoError(t, err)
+	reader := w.NewReader()
+	err = reader.Close()
+	require.NoError(t, err)
 
-    // Attempt to read after closing
-    _, err = reader.Next()
-    assert.Error(t, err, "Expected error when reading from closed reader")
-    assert.Contains(t, err.Error(), "closed", "Expected 'closed' in error message")
+	// Attempt to read after closing
+	_, err = reader.Next()
+	assert.Error(t, err, "Expected error when reading from closed reader")
+	assert.Contains(t, err.Error(), "closed", "Expected 'closed' in error message")
 
-    // Attempt to seek after closing
-    err = reader.Seek(LSN(0))
-    assert.Error(t, err, "Expected error when seeking with closed reader")
-    assert.Contains(t, err.Error(), "closed", "Expected 'closed' in error message")
+	// Attempt to seek after closing
+	err = reader.Seek(LSN(0))
+	assert.Error(t, err, "Expected error when seeking with closed reader")
+	assert.Contains(t, err.Error(), "closed", "Expected 'closed' in error message")
 
-    // Close the WAL
-    err = w.Close()
-    require.NoError(t, err)
+	// Close the WAL
+	err = w.Close()
+	require.NoError(t, err)
 
-    // Attempt to write after closing
-    _, err = w.Write(rec)
-    assert.Error(t, err, "Expected error when writing to closed WAL")
+	// Attempt to write after closing
+	_, err = w.Write(rec)
+	assert.Error(t, err, "Expected error when writing to closed WAL")
 
-    // Create a new WAL and reader to ensure the WAL is still functional
-    w = createWal(t, testDir)
-    defer w.Close()
-    newReader := w.NewReader()
-    defer newReader.Close()
-    readRec, err := newReader.Next()
-    assert.NoError(t, err, "Should be able to read from a new reader after closing the previous one")
-    assert.Equal(t, rec.Type, readRec.Type)
-    assert.Equal(t, rec.Tag, readRec.Tag)
-    assert.Equal(t, rec.Entity, readRec.Entity)
-    assert.Equal(t, rec.TxID, readRec.TxID)
-    assert.Equal(t, rec.Data, readRec.Data)
+	// Create a new WAL and reader to ensure the WAL is still functional
+	w = createWal(t, testDir)
+	defer w.Close()
+	newReader := w.NewReader()
+	defer newReader.Close()
+	readRec, err := newReader.Next()
+	assert.NoError(t, err, "Should be able to read from a new reader after closing the previous one")
+	assert.Equal(t, rec.Type, readRec.Type)
+	assert.Equal(t, rec.Tag, readRec.Tag)
+	assert.Equal(t, rec.Entity, readRec.Entity)
+	assert.Equal(t, rec.TxID, readRec.TxID)
+	assert.Equal(t, rec.Data, readRec.Data)
 }
 
 // TestWalSeekPerformance evaluates the performance of the WAL's seek operations,
@@ -572,196 +572,196 @@ func TestWalClose(t *testing.T) {
 // TestWalCrashRecovery simulates a crash scenario and tests the WAL's ability
 // to recover and maintain data integrity after an unexpected shutdown.
 func TestWalCrashRecovery(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
 
-    // Write some records
-    records := []*Record{
-        {Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
-        {Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
-        {Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
-    }
+	// Write some records
+	records := []*Record{
+		{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
+		{Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
+	}
 
-    for _, rec := range records {
-        _, err := w.Write(rec)
-        require.NoError(t, err)
-    }
+	for _, rec := range records {
+		_, err := w.Write(rec)
+		require.NoError(t, err)
+	}
 
-    // Simulate crash by forcefully closing without proper shutdown
-    w.active.fd.Close()
+	// Simulate crash by forcefully closing without proper shutdown
+	w.active.fd.Close()
 
-    // Attempt to recover
-    recoveredWal, err := Open(0, w.opts)
-    require.NoError(t, err)
-    defer recoveredWal.Close()
+	// Attempt to recover
+	recoveredWal, err := Open(0, w.opts)
+	require.NoError(t, err)
+	defer recoveredWal.Close()
 
-    // Verify recovered data
-    reader := recoveredWal.NewReader()
-    defer reader.Close()
+	// Verify recovered data
+	reader := recoveredWal.NewReader()
+	defer reader.Close()
 
-    for i, expected := range records {
-        rec, err := reader.Next()
-        require.NoError(t, err)
-        assert.Equal(t, expected, rec, "Record %d mismatch after recovery", i)
-    }
+	for i, expected := range records {
+		rec, err := reader.Next()
+		require.NoError(t, err)
+		assert.Equal(t, expected, rec, "Record %d mismatch after recovery", i)
+	}
 
-    // Ensure we've read all records
-    _, err = reader.Next()
-    assert.Equal(t, io.EOF, err)
+	// Ensure we've read all records
+	_, err = reader.Next()
+	assert.Equal(t, io.EOF, err)
 }
 
 // TestWalConfiguration tests various configuration options of the WAL,
 // ensuring that the WAL behaves correctly with different settings.
 func TestWalConfiguration(t *testing.T) {
-    t.Run("DefaultConfiguration", func(t *testing.T) {
-        testDir := t.TempDir()
-        w, err := Create(WalOptions{Path: testDir})
-        require.NoError(t, err)
-        defer w.Close()
+	t.Run("DefaultConfiguration", func(t *testing.T) {
+		testDir := t.TempDir()
+		w, err := Create(WalOptions{Path: testDir})
+		require.NoError(t, err)
+		defer w.Close()
 
-        // Verify default values
-        assert.NotZero(t, w.opts.Seed, "Seed should have a non-zero default value")
-        assert.NotZero(t, w.opts.MaxSegmentSize, "MaxSegmentSize should have a non-zero default value")
-    })
+		// Verify default values
+		assert.NotZero(t, w.opts.Seed, "Seed should have a non-zero default value")
+		assert.NotZero(t, w.opts.MaxSegmentSize, "MaxSegmentSize should have a non-zero default value")
+	})
 
-    t.Run("CustomConfiguration", func(t *testing.T) {
-        testDir := t.TempDir()
-        customOpts := WalOptions{
-            Path:           testDir,
-            Seed:           12345,
-            MaxSegmentSize: 1024 * 1024, // 1MB
-        }
-        w, err := Create(customOpts)
-        require.NoError(t, err)
-        defer w.Close()
+	t.Run("CustomConfiguration", func(t *testing.T) {
+		testDir := t.TempDir()
+		customOpts := WalOptions{
+			Path:           testDir,
+			Seed:           12345,
+			MaxSegmentSize: 1024 * 1024, // 1MB
+		}
+		w, err := Create(customOpts)
+		require.NoError(t, err)
+		defer w.Close()
 
-        assert.Equal(t, customOpts.Seed, w.opts.Seed, "Custom Seed not set correctly")
-        assert.Equal(t, customOpts.MaxSegmentSize, w.opts.MaxSegmentSize, "Custom MaxSegmentSize not set correctly")
-    })
+		assert.Equal(t, customOpts.Seed, w.opts.Seed, "Custom Seed not set correctly")
+		assert.Equal(t, customOpts.MaxSegmentSize, w.opts.MaxSegmentSize, "Custom MaxSegmentSize not set correctly")
+	})
 
-    t.Run("ExtremeValues", func(t *testing.T) {
-        testDir := t.TempDir()
-        extremeOpts := WalOptions{
-            Path:           testDir,
-            Seed:           0,
-            MaxSegmentSize: 1, // Extremely small segment size
-        }
-        _, err := Create(extremeOpts)
-        assert.Error(t, err, "Should error with extremely small MaxSegmentSize")
+	t.Run("ExtremeValues", func(t *testing.T) {
+		testDir := t.TempDir()
+		extremeOpts := WalOptions{
+			Path:           testDir,
+			Seed:           0,
+			MaxSegmentSize: 1, // Extremely small segment size
+		}
+		_, err := Create(extremeOpts)
+		assert.Error(t, err, "Should error with extremely small MaxSegmentSize")
 
-        extremeOpts.MaxSegmentSize = 1024 * 1024 * 1024 * 10 // 10GB
-        w, err := Create(extremeOpts)
-        require.NoError(t, err)
-        defer w.Close()
+		extremeOpts.MaxSegmentSize = 1024 * 1024 * 1024 * 10 // 10GB
+		w, err := Create(extremeOpts)
+		require.NoError(t, err)
+		defer w.Close()
 
-        // Write a record larger than normal segment size
-        largeRec := &Record{
-            Type: RecordTypeInsert,
-            Data: bytes.Repeat([]byte("a"), 1024*1024*2), // 2MB data
-        }
-        _, err = w.Write(largeRec)
-        require.NoError(t, err, "Should handle writing large records with large MaxSegmentSize")
-    })
+		// Write a record larger than normal segment size
+		largeRec := &Record{
+			Type: RecordTypeInsert,
+			Data: bytes.Repeat([]byte("a"), 1024*1024*2), // 2MB data
+		}
+		_, err = w.Write(largeRec)
+		require.NoError(t, err, "Should handle writing large records with large MaxSegmentSize")
+	})
 
-    t.Run("InvalidConfiguration", func(t *testing.T) {
-        testDir := t.TempDir()
-        invalidOpts := []struct {
-            name string
-            opts WalOptions
-        }{
-            {"EmptyPath", WalOptions{Path: "", MaxSegmentSize: 1024}},
-            {"NegativeSegmentSize", WalOptions{Path: testDir, MaxSegmentSize: -1}},
-            {"ZeroSegmentSize", WalOptions{Path: testDir, MaxSegmentSize: 0}},
-        }
+	t.Run("InvalidConfiguration", func(t *testing.T) {
+		testDir := t.TempDir()
+		invalidOpts := []struct {
+			name string
+			opts WalOptions
+		}{
+			{"EmptyPath", WalOptions{Path: "", MaxSegmentSize: 1024}},
+			{"NegativeSegmentSize", WalOptions{Path: testDir, MaxSegmentSize: -1}},
+			{"ZeroSegmentSize", WalOptions{Path: testDir, MaxSegmentSize: 0}},
+		}
 
-        for _, tc := range invalidOpts {
-            t.Run(tc.name, func(t *testing.T) {
-                _, err := Create(tc.opts)
-                assert.Error(t, err, "Should error with invalid configuration")
-            })
-        }
-    })
+		for _, tc := range invalidOpts {
+			t.Run(tc.name, func(t *testing.T) {
+				_, err := Create(tc.opts)
+				assert.Error(t, err, "Should error with invalid configuration")
+			})
+		}
+	})
 
-    t.Run("ConfigurationImpact", func(t *testing.T) {
-        testDir := t.TempDir()
-        smallSegmentOpts := WalOptions{
-            Path:           testDir,
-            MaxSegmentSize: 1024, // 1KB segments
-        }
-        w, err := Create(smallSegmentOpts)
-        require.NoError(t, err)
-        defer w.Close()
+	t.Run("ConfigurationImpact", func(t *testing.T) {
+		testDir := t.TempDir()
+		smallSegmentOpts := WalOptions{
+			Path:           testDir,
+			MaxSegmentSize: 1024, // 1KB segments
+		}
+		w, err := Create(smallSegmentOpts)
+		require.NoError(t, err)
+		defer w.Close()
 
-        // Write records to force multiple segment creation
-        for i := 0; i < 100; i++ {
-            rec := &Record{
-                Type: RecordTypeInsert,
-                Data: bytes.Repeat([]byte("a"), 100), // 100 byte records
-            }
-            _, err = w.Write(rec)
-            require.NoError(t, err)
-        }
+		// Write records to force multiple segment creation
+		for i := 0; i < 100; i++ {
+			rec := &Record{
+				Type: RecordTypeInsert,
+				Data: bytes.Repeat([]byte("a"), 100), // 100 byte records
+			}
+			_, err = w.Write(rec)
+			require.NoError(t, err)
+		}
 
-        // Verify multiple segments were created
-        files, err := os.ReadDir(testDir)
-        require.NoError(t, err)
-        assert.Greater(t, len(files), 1, "Multiple segments should have been created with small MaxSegmentSize")
-    })
+		// Verify multiple segments were created
+		files, err := os.ReadDir(testDir)
+		require.NoError(t, err)
+		assert.Greater(t, len(files), 1, "Multiple segments should have been created with small MaxSegmentSize")
+	})
 }
 
 // TestWalSegmentRollover tests the behavior when the WAL rolls over to a new segment due to reaching the maximum segment size.
 func TestWalSegmentRollover(t *testing.T) {
-    testDir := t.TempDir()
-    opts := WalOptions{
-        Path:           testDir,
-        MaxSegmentSize: 256,
-    }
-    w, err := Create(opts)
-    require.NoError(t, err)
-    defer w.Close()
+	testDir := t.TempDir()
+	opts := WalOptions{
+		Path:           testDir,
+		MaxSegmentSize: 256,
+	}
+	w, err := Create(opts)
+	require.NoError(t, err)
+	defer w.Close()
 
-    recordsWritten := 0
-    bytesWritten := 0
-    for i := 0; i < 100; i++ {
-        rec := &Record{
-            Type:   RecordTypeInsert,
-            Tag:    types.ObjectTag(1),
-            Entity: uint64(i),
-            TxID:   uint64(i),
-            Data:   []byte(strings.Repeat("a", 50)),
-        }
-        lsn, err := w.Write(rec)
-        require.NoError(t, err)
-        t.Logf("Wrote record %d, LSN: %v", i, lsn)
-        recordsWritten++
-        bytesWritten += HeaderSize + len(rec.Data)
+	recordsWritten := 0
+	bytesWritten := 0
+	for i := 0; i < 100; i++ {
+		rec := &Record{
+			Type:   RecordTypeInsert,
+			Tag:    types.ObjectTag(1),
+			Entity: uint64(i),
+			TxID:   uint64(i),
+			Data:   []byte(strings.Repeat("a", 50)),
+		}
+		lsn, err := w.Write(rec)
+		require.NoError(t, err)
+		t.Logf("Wrote record %d, LSN: %v", i, lsn)
+		recordsWritten++
+		bytesWritten += HeaderSize + len(rec.Data)
 
-        // Force sync after each write
-        err = w.Sync()
-        require.NoError(t, err)
-    }
-    t.Logf("Wrote %d records, total bytes: %d", recordsWritten, bytesWritten)
+		// Force sync after each write
+		err = w.Sync()
+		require.NoError(t, err)
+	}
+	t.Logf("Wrote %d records, total bytes: %d", recordsWritten, bytesWritten)
 
-    expectedSegments := (bytesWritten + int(opts.MaxSegmentSize) - 1) / int(opts.MaxSegmentSize)
-    t.Logf("Expected segments: %d", expectedSegments)
+	expectedSegments := (bytesWritten + int(opts.MaxSegmentSize) - 1) / int(opts.MaxSegmentSize)
+	t.Logf("Expected segments: %d", expectedSegments)
 
-    // Check for multiple segment files
-    files, err := os.ReadDir(testDir)
-    require.NoError(t, err)
-    segmentCount := 0
-    for _, file := range files {
-        if strings.HasSuffix(file.Name(), ".SEG") {
-            segmentCount++
-            fileInfo, err := os.Stat(filepath.Join(testDir, file.Name()))
-            if err != nil {
-                t.Logf("Error getting file info for %s: %v", file.Name(), err)
-                continue
-            }
-            t.Logf("Segment file: %s, size: %d", file.Name(), fileInfo.Size())
-        }
-    }
-    t.Logf("Found %d segment files", segmentCount)
-    assert.Equal(t, expectedSegments, segmentCount, "Unexpected number of segment files")
+	// Check for multiple segment files
+	files, err := os.ReadDir(testDir)
+	require.NoError(t, err)
+	segmentCount := 0
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), ".SEG") {
+			segmentCount++
+			fileInfo, err := os.Stat(filepath.Join(testDir, file.Name()))
+			if err != nil {
+				t.Logf("Error getting file info for %s: %v", file.Name(), err)
+				continue
+			}
+			t.Logf("Segment file: %s, size: %d", file.Name(), fileInfo.Size())
+		}
+	}
+	t.Logf("Found %d segment files", segmentCount)
+	assert.Equal(t, expectedSegments, segmentCount, "Unexpected number of segment files")
 }
 
 // TestWalBoundaryConditions tests the WAL's behavior under various edge cases
@@ -1121,281 +1121,281 @@ func TestWalSegmentRollover(t *testing.T) {
 // }
 
 func TestWalRecovery(t *testing.T) {
-    testDir := t.TempDir()
-    opts := WalOptions{
-        Path:           testDir,
-        MaxSegmentSize: 1024 * 1024, // 1MB segments
-        Seed:           12345,
-    }
+	testDir := t.TempDir()
+	opts := WalOptions{
+		Path:           testDir,
+		MaxSegmentSize: 1024 * 1024, // 1MB segments
+		Seed:           12345,
+	}
 
-    t.Run("NormalRecovery", func(t *testing.T) {
-        // Create and populate WAL
-        w, err := Create(opts)
-        require.NoError(t, err)
+	t.Run("NormalRecovery", func(t *testing.T) {
+		// Create and populate WAL
+		w, err := Create(opts)
+		require.NoError(t, err)
 
-        records := []*Record{
-            {Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
-            {Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
-            {Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
-        }
+		records := []*Record{
+			{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
+			{Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
+			{Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
+		}
 
-        for _, rec := range records {
-            _, err := w.Write(rec)
-            require.NoError(t, err)
-        }
+		for _, rec := range records {
+			_, err := w.Write(rec)
+			require.NoError(t, err)
+		}
 
-        err = w.Close()
-        require.NoError(t, err)
+		err = w.Close()
+		require.NoError(t, err)
 
-        // Recover WAL
-        recoveredWal, err := Open(0, opts)
-        require.NoError(t, err)
-        defer recoveredWal.Close()
+		// Recover WAL
+		recoveredWal, err := Open(0, opts)
+		require.NoError(t, err)
+		defer recoveredWal.Close()
 
-        // Verify recovered data
-        reader := recoveredWal.NewReader()
-        defer reader.Close()
+		// Verify recovered data
+		reader := recoveredWal.NewReader()
+		defer reader.Close()
 
-        for i, expected := range records {
-            rec, err := reader.Next()
-            require.NoError(t, err)
-            assert.Equal(t, expected, rec, "Record %d mismatch after recovery", i)
-        }
+		for i, expected := range records {
+			rec, err := reader.Next()
+			require.NoError(t, err)
+			assert.Equal(t, expected, rec, "Record %d mismatch after recovery", i)
+		}
 
-        _, err = reader.Next()
-        assert.Equal(t, io.EOF, err)
-    })
+		_, err = reader.Next()
+		assert.Equal(t, io.EOF, err)
+	})
 
-    t.Run("PartialWriteRecovery", func(t *testing.T) {
-        w, err := Create(opts)
-        require.NoError(t, err)
+	t.Run("PartialWriteRecovery", func(t *testing.T) {
+		w, err := Create(opts)
+		require.NoError(t, err)
 
-        // Write some records
-        for i := 0; i < 5; i++ {
-            rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTag(i), Entity: uint64(i), TxID: uint64(i * 100), Data: []byte(fmt.Sprintf("data%d", i))}
-            _, err := w.Write(rec)
-            require.NoError(t, err)
-        }
+		// Write some records
+		for i := 0; i < 5; i++ {
+			rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTag(i), Entity: uint64(i), TxID: uint64(i * 100), Data: []byte(fmt.Sprintf("data%d", i))}
+			_, err := w.Write(rec)
+			require.NoError(t, err)
+		}
 
-        // Simulate a crash by forcefully closing the file
-        w.active.fd.Close()
+		// Simulate a crash by forcefully closing the file
+		w.active.fd.Close()
 
-        // Attempt to recover
-        recoveredWal, err := Open(0, opts)
-        require.NoError(t, err)
-        defer recoveredWal.Close()
+		// Attempt to recover
+		recoveredWal, err := Open(0, opts)
+		require.NoError(t, err)
+		defer recoveredWal.Close()
 
-        // Verify recovered data
-        reader := recoveredWal.NewReader()
-        defer reader.Close()
+		// Verify recovered data
+		reader := recoveredWal.NewReader()
+		defer reader.Close()
 
-        recoveredCount := 0
-        for {
-            _, err := reader.Next()
-            if err == io.EOF {
-                break
-            }
-            require.NoError(t, err)
-            recoveredCount++
-        }
+		recoveredCount := 0
+		for {
+			_, err := reader.Next()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+			recoveredCount++
+		}
 
-        assert.True(t, recoveredCount > 0 && recoveredCount <= 5, "Should recover some but possibly not all records")
-    })
+		assert.True(t, recoveredCount > 0 && recoveredCount <= 5, "Should recover some but possibly not all records")
+	})
 
-    t.Run("CorruptedSegmentRecovery", func(t *testing.T) {
-        w, err := Create(opts)
-        require.NoError(t, err)
+	t.Run("CorruptedSegmentRecovery", func(t *testing.T) {
+		w, err := Create(opts)
+		require.NoError(t, err)
 
-        // Write some records
-        for i := 0; i < 10; i++ {
-            rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTag(i), Entity: uint64(i), TxID: uint64(i * 100), Data: []byte(fmt.Sprintf("data%d", i))}
-            _, err := w.Write(rec)
-            require.NoError(t, err)
-        }
+		// Write some records
+		for i := 0; i < 10; i++ {
+			rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTag(i), Entity: uint64(i), TxID: uint64(i * 100), Data: []byte(fmt.Sprintf("data%d", i))}
+			_, err := w.Write(rec)
+			require.NoError(t, err)
+		}
 
-        w.Close()
+		w.Close()
 
-        // Corrupt the last segment
-        files, err := os.ReadDir(testDir)
-        require.NoError(t, err)
-        var lastSegment string
-        for _, file := range files {
-            if strings.HasSuffix(file.Name(), ".SEG") {
-                lastSegment = filepath.Join(testDir, file.Name())
-            }
-        }
-        require.NotEmpty(t, lastSegment, "No segment file found")
+		// Corrupt the last segment
+		files, err := os.ReadDir(testDir)
+		require.NoError(t, err)
+		var lastSegment string
+		for _, file := range files {
+			if strings.HasSuffix(file.Name(), ".SEG") {
+				lastSegment = filepath.Join(testDir, file.Name())
+			}
+		}
+		require.NotEmpty(t, lastSegment, "No segment file found")
 
-        f, err := os.OpenFile(lastSegment, os.O_RDWR, 0644)
-        require.NoError(t, err)
-        _, err = f.WriteAt([]byte("CORRUPT"), 100)
-        require.NoError(t, err)
-        f.Close()
+		f, err := os.OpenFile(lastSegment, os.O_RDWR, 0644)
+		require.NoError(t, err)
+		_, err = f.WriteAt([]byte("CORRUPT"), 100)
+		require.NoError(t, err)
+		f.Close()
 
-        // Attempt to recover
-        recoveredWal, err := Open(0, opts)
-        require.NoError(t, err)
-        defer recoveredWal.Close()
+		// Attempt to recover
+		recoveredWal, err := Open(0, opts)
+		require.NoError(t, err)
+		defer recoveredWal.Close()
 
-        // Verify recovered data
-        reader := recoveredWal.NewReader()
-        defer reader.Close()
+		// Verify recovered data
+		reader := recoveredWal.NewReader()
+		defer reader.Close()
 
-        recoveredCount := 0
-        var lastError error
-        for {
-            _, err := reader.Next()
-            if err == io.EOF {
-                break
-            }
-            if err != nil {
-                lastError = err
-                break
-            }
-            recoveredCount++
-        }
+		recoveredCount := 0
+		var lastError error
+		for {
+			_, err := reader.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				lastError = err
+				break
+			}
+			recoveredCount++
+		}
 
-        assert.True(t, recoveredCount > 0, "Should recover some records")
-        assert.Error(t, lastError, "Should encounter an error due to corruption")
-    })
+		assert.True(t, recoveredCount > 0, "Should recover some records")
+		assert.Error(t, lastError, "Should encounter an error due to corruption")
+	})
 }
 
 func TestWalRecoveryWithPartialRecords(t *testing.T) {
-    testDir := t.TempDir()
-    opts := WalOptions{
-        Path:           testDir,
-        MaxSegmentSize: 1024, // Small segment size to force multiple segments
-        Seed:           12345,
-    }
+	testDir := t.TempDir()
+	opts := WalOptions{
+		Path:           testDir,
+		MaxSegmentSize: 1024, // Small segment size to force multiple segments
+		Seed:           12345,
+	}
 
-    // Create and populate the WAL
-    w, err := Create(opts)
-    require.NoError(t, err)
+	// Create and populate the WAL
+	w, err := Create(opts)
+	require.NoError(t, err)
 
-    // Write some complete records
-    completeRecords := 10
-    for i := 0; i < completeRecords; i++ {
-        rec := &Record{
-            Type:   RecordTypeInsert,
-            Tag:    types.ObjectTag(i),
-            Entity: uint64(i),
-            TxID:   uint64(i * 100),
-            Data:   []byte(fmt.Sprintf("complete data %d", i)),
-        }
-        _, err := w.Write(rec)
-        require.NoError(t, err)
-    }
+	// Write some complete records
+	completeRecords := 10
+	for i := 0; i < completeRecords; i++ {
+		rec := &Record{
+			Type:   RecordTypeInsert,
+			Tag:    types.ObjectTag(i),
+			Entity: uint64(i),
+			TxID:   uint64(i * 100),
+			Data:   []byte(fmt.Sprintf("complete data %d", i)),
+		}
+		_, err := w.Write(rec)
+		require.NoError(t, err)
+	}
 
-    // Write a partial record
-    partialRec := &Record{
-        Type:   RecordTypeUpdate,
-        Tag:    types.ObjectTag(completeRecords),
-        Entity: uint64(completeRecords),
-        TxID:   uint64(completeRecords * 100),
-        Data:   bytes.Repeat([]byte("partial data "), 50), // Large data to ensure it spans multiple writes
-    }
+	// Write a partial record
+	partialRec := &Record{
+		Type:   RecordTypeUpdate,
+		Tag:    types.ObjectTag(completeRecords),
+		Entity: uint64(completeRecords),
+		TxID:   uint64(completeRecords * 100),
+		Data:   bytes.Repeat([]byte("partial data "), 50), // Large data to ensure it spans multiple writes
+	}
 
-    // Start writing the partial record
-    lsn, err := w.Write(partialRec)
-    require.NoError(t, err)
+	// Start writing the partial record
+	lsn, err := w.Write(partialRec)
+	require.NoError(t, err)
 
-    // Simulate a crash by forcefully closing the file
-    w.active.fd.Close()
+	// Simulate a crash by forcefully closing the file
+	w.active.fd.Close()
 
-    // Corrupt the last part of the file to simulate incomplete write
-    segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
-    f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
-    require.NoError(t, err)
+	// Corrupt the last part of the file to simulate incomplete write
+	segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+	f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
+	require.NoError(t, err)
 
-    info, err := f.Stat()
-    require.NoError(t, err)
+	info, err := f.Stat()
+	require.NoError(t, err)
 
-    // Truncate the file to simulate partial write
-    err = f.Truncate(info.Size() - 100) // Remove last 100 bytes
-    require.NoError(t, err)
-    f.Close()
+	// Truncate the file to simulate partial write
+	err = f.Truncate(info.Size() - 100) // Remove last 100 bytes
+	require.NoError(t, err)
+	f.Close()
 
-    // Attempt to recover
-    recoveredWal, err := Open(0, opts)
-    require.NoError(t, err)
-    defer recoveredWal.Close()
+	// Attempt to recover
+	recoveredWal, err := Open(0, opts)
+	require.NoError(t, err)
+	defer recoveredWal.Close()
 
-    // Read and verify recovered records
-    reader := recoveredWal.NewReader()
-    defer reader.Close()
+	// Read and verify recovered records
+	reader := recoveredWal.NewReader()
+	defer reader.Close()
 
-    recoveredCount := 0
-    for {
-        rec, err := reader.Next()
-        if err == io.EOF {
-            break
-        }
-        require.NoError(t, err)
+	recoveredCount := 0
+	for {
+		rec, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
 
-        assert.Equal(t, RecordTypeInsert, rec.Type)
-        assert.Equal(t, types.ObjectTag(recoveredCount), rec.Tag)
-        assert.Equal(t, uint64(recoveredCount), rec.Entity)
-        assert.Equal(t, uint64(recoveredCount*100), rec.TxID)
-        assert.Equal(t, []byte(fmt.Sprintf("complete data %d", recoveredCount)), rec.Data)
+		assert.Equal(t, RecordTypeInsert, rec.Type)
+		assert.Equal(t, types.ObjectTag(recoveredCount), rec.Tag)
+		assert.Equal(t, uint64(recoveredCount), rec.Entity)
+		assert.Equal(t, uint64(recoveredCount*100), rec.TxID)
+		assert.Equal(t, []byte(fmt.Sprintf("complete data %d", recoveredCount)), rec.Data)
 
-        recoveredCount++
-    }
+		recoveredCount++
+	}
 
-    // Verify that only the complete records were recovered
-    assert.Equal(t, completeRecords, recoveredCount, "Should recover only complete records")
+	// Verify that only the complete records were recovered
+	assert.Equal(t, completeRecords, recoveredCount, "Should recover only complete records")
 
-    // Verify that writing new records after recovery works
-    newRec := &Record{
-        Type:   RecordTypeInsert,
-        Tag:    types.ObjectTag(completeRecords + 1),
-        Entity: uint64(completeRecords + 1),
-        TxID:   uint64((completeRecords + 1) * 100),
-        Data:   []byte("new record after recovery"),
-    }
-    _, err = recoveredWal.Write(newRec)
-    require.NoError(t, err)
+	// Verify that writing new records after recovery works
+	newRec := &Record{
+		Type:   RecordTypeInsert,
+		Tag:    types.ObjectTag(completeRecords + 1),
+		Entity: uint64(completeRecords + 1),
+		TxID:   uint64((completeRecords + 1) * 100),
+		Data:   []byte("new record after recovery"),
+	}
+	_, err = recoveredWal.Write(newRec)
+	require.NoError(t, err)
 
-    // Verify the new record
-    err = reader.Seek(0) // Reset reader to beginning
-    require.NoError(t, err)
+	// Verify the new record
+	err = reader.Seek(0) // Reset reader to beginning
+	require.NoError(t, err)
 
-    for i := 0; i <= completeRecords; i++ {
-        rec, err := reader.Next()
-        require.NoError(t, err)
-        if i == completeRecords {
-            assert.Equal(t, newRec.Data, rec.Data, "New record should be readable after recovery")
-        }
-    }
+	for i := 0; i <= completeRecords; i++ {
+		rec, err := reader.Next()
+		require.NoError(t, err)
+		if i == completeRecords {
+			assert.Equal(t, newRec.Data, rec.Data, "New record should be readable after recovery")
+		}
+	}
 }
 
 // TestWalSyncAndClose tests the WAL's behavior when sync and close operations are performed to ensure data integrity and consistency.
 func TestWalSyncAndClose(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
 
-    // Write some records
-    for i := 0; i < 10; i++ {
-        rec := &Record{
-            Type:   RecordTypeInsert,
-            Tag:    types.ObjectTag(i % 3),
-            Entity: uint64(i),
-            TxID:   uint64(i * 100),
-            Data:   []byte(fmt.Sprintf("data%d", i)),
-        }
-        _, err := w.Write(rec)
-        require.NoError(t, err)
-    }
-    err := w.Sync()
-    require.NoError(t, err)
-    err = w.Close()
-    require.NoError(t, err)
+	// Write some records
+	for i := 0; i < 10; i++ {
+		rec := &Record{
+			Type:   RecordTypeInsert,
+			Tag:    types.ObjectTag(i % 3),
+			Entity: uint64(i),
+			TxID:   uint64(i * 100),
+			Data:   []byte(fmt.Sprintf("data%d", i)),
+		}
+		_, err := w.Write(rec)
+		require.NoError(t, err)
+	}
+	err := w.Sync()
+	require.NoError(t, err)
+	err = w.Close()
+	require.NoError(t, err)
 
-    // Attempt to write after close (this should fail)
-    _, err = w.Write(&Record{
-        Type: RecordTypeInsert,
-        Data: []byte("test"),
-    })
-    assert.Error(t, err, "Write after close should fail")
+	// Attempt to write after close (this should fail)
+	_, err = w.Write(&Record{
+		Type: RecordTypeInsert,
+		Data: []byte("test"),
+	})
+	assert.Error(t, err, "Write after close should fail")
 }
 
 // func TestWalStress(t *testing.T) {
@@ -1718,74 +1718,74 @@ func TestWalSyncAndClose(t *testing.T) {
 
 // TestWalInvalidRecords tests the WAL's behavior when attempting to write records with invalid types or tags.
 func TestWalInvalidRecords(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
-    defer w.Close()
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
+	defer w.Close()
 
-    // Try to write a record with an invalid type
-    invalidRec := &Record{
-        Type:   RecordType(255), // Assuming 255 is an invalid type
-        Entity: 1,
-        TxID:   100,
-        Data:   []byte("invalid record"),
-    }
-    _, err := w.Write(invalidRec)
-    assert.Error(t, err, "Expected an error when writing an invalid record type")
+	// Try to write a record with an invalid type
+	invalidRec := &Record{
+		Type:   RecordType(255), // Assuming 255 is an invalid type
+		Entity: 1,
+		TxID:   100,
+		Data:   []byte("invalid record"),
+	}
+	_, err := w.Write(invalidRec)
+	assert.Error(t, err, "Expected an error when writing an invalid record type")
 
-    // Try to write a record with an invalid tag
-    invalidTagRec := &Record{
-        Type:   RecordTypeInsert,
-        Tag:    types.ObjectTag(255), // Assuming 255 is an invalid tag
-        Entity: 1,
-        TxID:   100,
-        Data:   []byte("invalid tag record"),
-    }
-    _, err = w.Write(invalidTagRec)
-    assert.Error(t, err, "Expected an error when writing an invalid record tag")
+	// Try to write a record with an invalid tag
+	invalidTagRec := &Record{
+		Type:   RecordTypeInsert,
+		Tag:    types.ObjectTag(255), // Assuming 255 is an invalid tag
+		Entity: 1,
+		TxID:   100,
+		Data:   []byte("invalid tag record"),
+	}
+	_, err = w.Write(invalidTagRec)
+	assert.Error(t, err, "Expected an error when writing an invalid record tag")
 }
 
 // TestWalEmptyRecords tests the WAL's ability to handle writing and reading empty or minimal-sized records.
 func TestWalEmptyRecords(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
-    defer w.Close()
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
+	defer w.Close()
 
-    // Write an empty record
-    emptyRec := &Record{
-        Type:   RecordTypeInsert,
-        Entity: 1,
-        TxID:   100,
-        Data:   []byte{},
-    }
-    lsn, err := w.Write(emptyRec)
-    require.NoError(t, err, "Failed to write empty record")
+	// Write an empty record
+	emptyRec := &Record{
+		Type:   RecordTypeInsert,
+		Entity: 1,
+		TxID:   100,
+		Data:   []byte{},
+	}
+	lsn, err := w.Write(emptyRec)
+	require.NoError(t, err, "Failed to write empty record")
 
-    // Read the empty record back
-    reader := w.NewReader()
-    err = reader.Seek(lsn)
-    require.NoError(t, err, "Failed to seek to empty record")
+	// Read the empty record back
+	reader := w.NewReader()
+	err = reader.Seek(lsn)
+	require.NoError(t, err, "Failed to seek to empty record")
 
-    readRec, err := reader.Next()
-    require.NoError(t, err, "Failed to read empty record")
-    assert.Empty(t, readRec.Data, "Expected empty data in read record")
+	readRec, err := reader.Next()
+	require.NoError(t, err, "Failed to read empty record")
+	assert.Empty(t, readRec.Data, "Expected empty data in read record")
 
-    // Write a record with minimal data (1 byte)
-    minimalRec := &Record{
-        Type:   RecordTypeUpdate,
-        Entity: 2,
-        TxID:   101,
-        Data:   []byte{0},
-    }
-    lsn, err = w.Write(minimalRec)
-    require.NoError(t, err, "Failed to write minimal record")
+	// Write a record with minimal data (1 byte)
+	minimalRec := &Record{
+		Type:   RecordTypeUpdate,
+		Entity: 2,
+		TxID:   101,
+		Data:   []byte{0},
+	}
+	lsn, err = w.Write(minimalRec)
+	require.NoError(t, err, "Failed to write minimal record")
 
-    // Read the minimal record back
-    err = reader.Seek(lsn)
-    require.NoError(t, err, "Failed to seek to minimal record")
+	// Read the minimal record back
+	err = reader.Seek(lsn)
+	require.NoError(t, err, "Failed to seek to minimal record")
 
-    readRec, err = reader.Next()
-    require.NoError(t, err, "Failed to read minimal record")
-    assert.Equal(t, minimalRec.Data, readRec.Data, "Minimal record data mismatch")
+	readRec, err = reader.Next()
+	require.NoError(t, err, "Failed to read minimal record")
+	assert.Equal(t, minimalRec.Data, readRec.Data, "Minimal record data mismatch")
 }
 
 // func TestWalTruncateOnPartialWrite(t *testing.T) {
@@ -1853,498 +1853,498 @@ func TestWalEmptyRecords(t *testing.T) {
 // TestTwoSimultaneousReaders verifies that the WAL can handle multiple readers
 // simultaneously, ensuring that they can read records independently and correctly.
 func TestTwoSimultaneousReaders(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
-    defer w.Close()
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
+	defer w.Close()
 
-    // Write some records
-    numRecords := 100
-    for i := 0; i < numRecords; i++ {
-        rec := &Record{
-            Type:   RecordType(i % 3),
-            Tag:    types.ObjectTag(i % 5),
-            Entity: uint64(i),
-            TxID:   uint64(i * 100),
-            Data:   []byte(fmt.Sprintf("data%d", i)),
-        }
-        _, err := w.Write(rec)
-        require.NoError(t, err)
-    }
+	// Write some records
+	numRecords := 100
+	for i := 0; i < numRecords; i++ {
+		rec := &Record{
+			Type:   RecordType(i % 3),
+			Tag:    types.ObjectTag(i % 5),
+			Entity: uint64(i),
+			TxID:   uint64(i * 100),
+			Data:   []byte(fmt.Sprintf("data%d", i)),
+		}
+		_, err := w.Write(rec)
+		require.NoError(t, err)
+	}
 
-    // Create two readers
-    reader1 := w.NewReader()
-    reader2 := w.NewReader()
-    defer reader1.Close()
-    defer reader2.Close()
+	// Create two readers
+	reader1 := w.NewReader()
+	reader2 := w.NewReader()
+	defer reader1.Close()
+	defer reader2.Close()
 
-    // Read alternately from both readers
-    for i := 0; i < numRecords; i++ {
-        var rec *Record
-        var err error
+	// Read alternately from both readers
+	for i := 0; i < numRecords; i++ {
+		var rec *Record
+		var err error
 
-        if i%2 == 0 {
-            rec, err = reader1.Next()
-        } else {
-            rec, err = reader2.Next()
-        }
+		if i%2 == 0 {
+			rec, err = reader1.Next()
+		} else {
+			rec, err = reader2.Next()
+		}
 
-        require.NoError(t, err)
-        assert.Equal(t, RecordType(i%3), rec.Type)
-        assert.Equal(t, types.ObjectTag(i%5), rec.Tag)
-        assert.Equal(t, uint64(i), rec.Entity)
-        assert.Equal(t, uint64(i*100), rec.TxID)
-        assert.Equal(t, []byte(fmt.Sprintf("data%d", i)), rec.Data)
-    }
+		require.NoError(t, err)
+		assert.Equal(t, RecordType(i%3), rec.Type)
+		assert.Equal(t, types.ObjectTag(i%5), rec.Tag)
+		assert.Equal(t, uint64(i), rec.Entity)
+		assert.Equal(t, uint64(i*100), rec.TxID)
+		assert.Equal(t, []byte(fmt.Sprintf("data%d", i)), rec.Data)
+	}
 
-    // Both readers should be at EOF now
-    _, err := reader1.Next()
-    assert.Equal(t, io.EOF, err)
-    _, err = reader2.Next()
-    assert.Equal(t, io.EOF, err)
+	// Both readers should be at EOF now
+	_, err := reader1.Next()
+	assert.Equal(t, io.EOF, err)
+	_, err = reader2.Next()
+	assert.Equal(t, io.EOF, err)
 }
 
 // TestConcurrentReadersLargeDataset tests the WAL's performance and correctness
 // when multiple readers are concurrently accessing a large dataset.
 func TestConcurrentReadersLargeDataset(t *testing.T) {
-    testDir := t.TempDir()
-    w := createWal(t, testDir)
-    defer w.Close()
+	testDir := t.TempDir()
+	w := createWal(t, testDir)
+	defer w.Close()
 
-    // Write a large number of records
-    numRecords := 100000
-    for i := 0; i < numRecords; i++ {
-        rec := &Record{
-            Type:   RecordType(i % 3),
-            Tag:    types.ObjectTag(i % 5),
-            Entity: uint64(i),
-            TxID:   uint64(i * 100),
-            Data:   []byte(fmt.Sprintf("data%d", i)),
-        }
-        _, err := w.Write(rec)
-        require.NoError(t, err)
-    }
+	// Write a large number of records
+	numRecords := 100000
+	for i := 0; i < numRecords; i++ {
+		rec := &Record{
+			Type:   RecordType(i % 3),
+			Tag:    types.ObjectTag(i % 5),
+			Entity: uint64(i),
+			TxID:   uint64(i * 100),
+			Data:   []byte(fmt.Sprintf("data%d", i)),
+		}
+		_, err := w.Write(rec)
+		require.NoError(t, err)
+	}
 
-    // Create multiple concurrent readers
-    numReaders := 10
-    var wg sync.WaitGroup
-    errors := make(chan error, numReaders)
+	// Create multiple concurrent readers
+	numReaders := 10
+	var wg sync.WaitGroup
+	errors := make(chan error, numReaders)
 
-    for r := 0; r < numReaders; r++ {
-        wg.Add(1)
-        go func(readerID int) {
-            defer wg.Done()
-            reader := w.NewReader()
-            defer reader.Close()
+	for r := 0; r < numReaders; r++ {
+		wg.Add(1)
+		go func(readerID int) {
+			defer wg.Done()
+			reader := w.NewReader()
+			defer reader.Close()
 
-            count := 0
-            for {
-                rec, err := reader.Next()
-                if err == io.EOF {
-                    break
-                }
-                if err != nil {
-                    errors <- fmt.Errorf("reader %d error: %v", readerID, err)
-                    return
-                }
+			count := 0
+			for {
+				rec, err := reader.Next()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					errors <- fmt.Errorf("reader %d error: %v", readerID, err)
+					return
+				}
 
-                expectedI := count
-                assert.Equal(t, RecordType(expectedI%3), rec.Type)
-                assert.Equal(t, types.ObjectTag(expectedI%5), rec.Tag)
-                assert.Equal(t, uint64(expectedI), rec.Entity)
-                assert.Equal(t, uint64(expectedI*100), rec.TxID)
-                assert.Equal(t, []byte(fmt.Sprintf("data%d", expectedI)), rec.Data)
+				expectedI := count
+				assert.Equal(t, RecordType(expectedI%3), rec.Type)
+				assert.Equal(t, types.ObjectTag(expectedI%5), rec.Tag)
+				assert.Equal(t, uint64(expectedI), rec.Entity)
+				assert.Equal(t, uint64(expectedI*100), rec.TxID)
+				assert.Equal(t, []byte(fmt.Sprintf("data%d", expectedI)), rec.Data)
 
-                count++
-            }
+				count++
+			}
 
-            if count != numRecords {
-                errors <- fmt.Errorf("reader %d read %d records, expected %d", readerID, count, numRecords)
-            }
-        }(r)
-    }
+			if count != numRecords {
+				errors <- fmt.Errorf("reader %d read %d records, expected %d", readerID, count, numRecords)
+			}
+		}(r)
+	}
 
-    wg.Wait()
-    close(errors)
+	wg.Wait()
+	close(errors)
 
-    for err := range errors {
-        t.Error(err)
-    }
+	for err := range errors {
+		t.Error(err)
+	}
 }
 
 // TestWalInvalidLSN tests the WAL's behavior when attempting to seek to or read
 // from invalid LSNs, ensuring proper error handling and system stability.
 func TestWalInvalidLSN(t *testing.T) {
-    testDir := t.TempDir()
-    opts := WalOptions{
-        Path:           testDir,
-        MaxSegmentSize: 1024,
-        Seed:           12345,
-    }
+	testDir := t.TempDir()
+	opts := WalOptions{
+		Path:           testDir,
+		MaxSegmentSize: 1024,
+		Seed:           12345,
+	}
 
-    w, err := Create(opts)
-    require.NoError(t, err, "Failed to create WAL")
-    defer w.Close()
+	w, err := Create(opts)
+	require.NoError(t, err, "Failed to create WAL")
+	defer w.Close()
 
-    // Write a valid record to ensure the WAL is initialized
-    validRec := &Record{
-        Type: RecordTypeInsert,
-        Tag:  types.ObjectTag(0),
-        Data: []byte("valid data"),
-    }
-    validLSN, err := w.Write(validRec)
-    require.NoError(t, err, "Failed to write valid record")
-    t.Logf("Valid LSN: %v", validLSN)
+	// Write a valid record to ensure the WAL is initialized
+	validRec := &Record{
+		Type: RecordTypeInsert,
+		Tag:  types.ObjectTag(0),
+		Data: []byte("valid data"),
+	}
+	validLSN, err := w.Write(validRec)
+	require.NoError(t, err, "Failed to write valid record")
+	t.Logf("Valid LSN: %v", validLSN)
 
-    // Define invalid LSN scenarios
-    invalidLSNs := []struct {
-        name string
-        lsn  LSN
-    }{
-        {"NegativeSegment", NewLSN(-1, 0, 0)},
-        {"NegativeOffset", NewLSN(0, -1, 0)},
-        {"OutOfBoundsSegment", NewLSN(100, 0, 0)},
-        {"OutOfBoundsOffset", NewLSN(0, int64(opts.MaxSegmentSize)+1, 0)},
-        {"MaxInt64Segment", NewLSN(math.MaxInt64, 0, 0)},
-        {"MaxInt64Offset", NewLSN(0, math.MaxInt64, 0)},
-    }
+	// Define invalid LSN scenarios
+	invalidLSNs := []struct {
+		name string
+		lsn  LSN
+	}{
+		{"NegativeSegment", NewLSN(-1, 0, 0)},
+		{"NegativeOffset", NewLSN(0, -1, 0)},
+		{"OutOfBoundsSegment", NewLSN(100, 0, 0)},
+		{"OutOfBoundsOffset", NewLSN(0, int64(opts.MaxSegmentSize)+1, 0)},
+		{"MaxInt64Segment", NewLSN(math.MaxInt64, 0, 0)},
+		{"MaxInt64Offset", NewLSN(0, math.MaxInt64, 0)},
+	}
 
-    for _, tc := range invalidLSNs {
-        t.Run(tc.name, func(t *testing.T) {
-            reader := w.NewReader()
-            defer reader.Close()
+	for _, tc := range invalidLSNs {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := w.NewReader()
+			defer reader.Close()
 
-            // Seek to invalid LSN
-            err := reader.Seek(tc.lsn)
-            require.NoError(t, err, "Seek to invalid LSN %v should not return an error", tc.lsn)
+			// Seek to invalid LSN
+			err := reader.Seek(tc.lsn)
+			require.NoError(t, err, "Seek to invalid LSN %v should not return an error", tc.lsn)
 
-            // Attempt to read after seeking to invalid LSN
-            rec, err := reader.Next()
-            require.Error(t, err, "Expected error when reading after seeking to invalid LSN %v", tc.lsn)
-            require.Nil(t, rec, "Expected nil record when reading after seeking to invalid LSN %v", tc.lsn)
-            require.Contains(t, err.Error(), "checksum mismatch", "Expected checksum mismatch error for invalid LSN %v", tc.lsn)
-        })
-    }
+			// Attempt to read after seeking to invalid LSN
+			rec, err := reader.Next()
+			require.Error(t, err, "Expected error when reading after seeking to invalid LSN %v", tc.lsn)
+			require.Nil(t, rec, "Expected nil record when reading after seeking to invalid LSN %v", tc.lsn)
+			require.Contains(t, err.Error(), "checksum mismatch", "Expected checksum mismatch error for invalid LSN %v", tc.lsn)
+		})
+	}
 
-    // Test seeking to a valid LSN after invalid attempts
-    t.Run("SeekToValidLSNAfterInvalid", func(t *testing.T) {
-        reader := w.NewReader()
-        defer reader.Close()
+	// Test seeking to a valid LSN after invalid attempts
+	t.Run("SeekToValidLSNAfterInvalid", func(t *testing.T) {
+		reader := w.NewReader()
+		defer reader.Close()
 
-        // First, try an invalid seek
-        err := reader.Seek(NewLSN(-1, 0, 0))
-        require.NoError(t, err, "Seek to invalid LSN should not return an error")
+		// First, try an invalid seek
+		err := reader.Seek(NewLSN(-1, 0, 0))
+		require.NoError(t, err, "Seek to invalid LSN should not return an error")
 
-        // Now, seek to the valid LSN
-        err = reader.Seek(validLSN)
-        require.NoError(t, err, "Failed to seek to valid LSN after invalid attempt")
+		// Now, seek to the valid LSN
+		err = reader.Seek(validLSN)
+		require.NoError(t, err, "Failed to seek to valid LSN after invalid attempt")
 
-        // Try to read the valid record
-        readRec, err := reader.Next()
-        require.NoError(t, err, "Failed to read valid record after invalid LSN attempts")
-        require.Equal(t, validRec.Data, readRec.Data, "Read record data doesn't match written data")
-    })
+		// Try to read the valid record
+		readRec, err := reader.Next()
+		require.NoError(t, err, "Failed to read valid record after invalid LSN attempts")
+		require.Equal(t, validRec.Data, readRec.Data, "Read record data doesn't match written data")
+	})
 }
 
 func verifySegmentExists(t *testing.T, dir string, lsn LSN, maxSegmentSize int) {
-    segmentFile := filepath.Join(dir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(maxSegmentSize)))
-    _, err := os.Stat(segmentFile)
-    require.NoError(t, err, "Segment file should exist: %s", segmentFile)
+	segmentFile := filepath.Join(dir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(maxSegmentSize)))
+	_, err := os.Stat(segmentFile)
+	require.NoError(t, err, "Segment file should exist: %s", segmentFile)
 }
 
 // TestWalFaultInjection simulates various fault scenarios to test the WAL's
 // resilience and error handling capabilities under adverse conditions.
 func TestWalFaultInjection(t *testing.T) {
-    testDir := t.TempDir()
-    opts := WalOptions{
-        Path:           testDir,
-        MaxSegmentSize: 1024 * 1024, // 1MB segments
-        Seed:           12345,
-    }
+	testDir := t.TempDir()
+	opts := WalOptions{
+		Path:           testDir,
+		MaxSegmentSize: 1024 * 1024, // 1MB segments
+		Seed:           12345,
+	}
 
-    t.Run("WriteFailure", func(t *testing.T) {
-        w, err := Create(opts)
-        require.NoError(t, err)
-        defer w.Close()
+	t.Run("WriteFailure", func(t *testing.T) {
+		w, err := Create(opts)
+		require.NoError(t, err)
+		defer w.Close()
 
-        // Simulate a write failure by making the directory read-only
-        require.NoError(t, os.Chmod(testDir, 0555))
-        defer os.Chmod(testDir, 0755)
+		// Simulate a write failure by making the directory read-only
+		require.NoError(t, os.Chmod(testDir, 0555))
+		defer os.Chmod(testDir, 0755)
 
-        // Try to create a new segment file
-        rec := &Record{
-            Type: RecordTypeInsert,
-            Tag:  types.ObjectTag(1),
-            Data: bytes.Repeat([]byte("a"), int(opts.MaxSegmentSize)+1), // Force new segment creation
-        }
-        _, err = w.Write(rec)
-        assert.Error(t, err, "Expected an error when writing to a read-only directory")
-    })
+		// Try to create a new segment file
+		rec := &Record{
+			Type: RecordTypeInsert,
+			Tag:  types.ObjectTag(1),
+			Data: bytes.Repeat([]byte("a"), int(opts.MaxSegmentSize)+1), // Force new segment creation
+		}
+		_, err = w.Write(rec)
+		assert.Error(t, err, "Expected an error when writing to a read-only directory")
+	})
 
-    t.Run("CorruptChecksum", func(t *testing.T) {
-        w, err := Create(opts)
-        require.NoError(t, err)
-        defer w.Close()
+	t.Run("CorruptChecksum", func(t *testing.T) {
+		w, err := Create(opts)
+		require.NoError(t, err)
+		defer w.Close()
 
-        rec := &Record{
-            Type: RecordTypeInsert,
-            Tag:  types.ObjectTag(1),
-            Data: []byte("test data"),
-        }
-        lsn, err := w.Write(rec)
-        require.NoError(t, err)
+		rec := &Record{
+			Type: RecordTypeInsert,
+			Tag:  types.ObjectTag(1),
+			Data: []byte("test data"),
+		}
+		lsn, err := w.Write(rec)
+		require.NoError(t, err)
 
-        // Corrupt the checksum
-        segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
-        f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
-        require.NoError(t, err)
-        defer f.Close()
+		// Corrupt the checksum
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
+		require.NoError(t, err)
+		defer f.Close()
 
-        _, err = f.Seek(int64(lsn.calculateOffset(w.opts.MaxSegmentSize))+HeaderSize-8, io.SeekStart)
-        require.NoError(t, err)
+		_, err = f.Seek(int64(lsn.calculateOffset(w.opts.MaxSegmentSize))+HeaderSize-8, io.SeekStart)
+		require.NoError(t, err)
 
-        _, err = f.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0}) // Overwrite checksum with zeros
-        require.NoError(t, err)
+		_, err = f.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0}) // Overwrite checksum with zeros
+		require.NoError(t, err)
 
-        // Try to read the corrupted record
-        reader := w.NewReader()
-        defer reader.Close()
-        err = reader.Seek(lsn)
-        require.NoError(t, err)
+		// Try to read the corrupted record
+		reader := w.NewReader()
+		defer reader.Close()
+		err = reader.Seek(lsn)
+		require.NoError(t, err)
 
-        _, err = reader.Next()
-        assert.Error(t, err, "Expected an error due to checksum mismatch")
-    })
+		_, err = reader.Next()
+		assert.Error(t, err, "Expected an error due to checksum mismatch")
+	})
 
-    t.Run("PartialWrite", func(t *testing.T) {
-        w, err := Create(opts)
-        require.NoError(t, err)
-        defer w.Close()
+	t.Run("PartialWrite", func(t *testing.T) {
+		w, err := Create(opts)
+		require.NoError(t, err)
+		defer w.Close()
 
-        rec := &Record{
-            Type: RecordTypeInsert,
-            Tag:  types.ObjectTag(1),
-            Data: bytes.Repeat([]byte("a"), 1000),
-        }
-        lsn, err := w.Write(rec)
-        require.NoError(t, err)
+		rec := &Record{
+			Type: RecordTypeInsert,
+			Tag:  types.ObjectTag(1),
+			Data: bytes.Repeat([]byte("a"), 1000),
+		}
+		lsn, err := w.Write(rec)
+		require.NoError(t, err)
 
-        // Simulate a partial write by truncating the file
-        segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
-        f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
-        require.NoError(t, err)
-        defer f.Close()
+		// Simulate a partial write by truncating the file
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
+		require.NoError(t, err)
+		defer f.Close()
 
-        info, err := f.Stat()
-        require.NoError(t, err)
+		info, err := f.Stat()
+		require.NoError(t, err)
 
-        err = f.Truncate(info.Size() - 500) // Remove last 500 bytes
-        require.NoError(t, err)
+		err = f.Truncate(info.Size() - 500) // Remove last 500 bytes
+		require.NoError(t, err)
 
-        // Try to read the partially written record
-        reader := w.NewReader()
-        defer reader.Close()
-        err = reader.Seek(lsn)
-        require.NoError(t, err)
+		// Try to read the partially written record
+		reader := w.NewReader()
+		defer reader.Close()
+		err = reader.Seek(lsn)
+		require.NoError(t, err)
 
-        _, err = reader.Next()
-        assert.Error(t, err, "Expected an error when reading a partially written record")
-    })
+		_, err = reader.Next()
+		assert.Error(t, err, "Expected an error when reading a partially written record")
+	})
 
-    t.Run("RecoveryAfterCrash", func(t *testing.T) {
-        w, err := Create(opts)
-        require.NoError(t, err)
+	t.Run("RecoveryAfterCrash", func(t *testing.T) {
+		w, err := Create(opts)
+		require.NoError(t, err)
 
-        // Write some records
-        var lastLSN LSN
-        for i := 0; i < 10; i++ {
-            rec := &Record{
-                Type: RecordTypeInsert,
-                Tag:  types.ObjectTag(i),
-                Data: []byte(fmt.Sprintf("data %d", i)),
-            }
-            lastLSN, err = w.Write(rec)
-            require.NoError(t, err)
-        }
+		// Write some records
+		var lastLSN LSN
+		for i := 0; i < 10; i++ {
+			rec := &Record{
+				Type: RecordTypeInsert,
+				Tag:  types.ObjectTag(i),
+				Data: []byte(fmt.Sprintf("data %d", i)),
+			}
+			lastLSN, err = w.Write(rec)
+			require.NoError(t, err)
+		}
 
-        // Verify segment file exists
-        verifySegmentExists(t, testDir, lastLSN, opts.MaxSegmentSize)
+		// Verify segment file exists
+		verifySegmentExists(t, testDir, lastLSN, opts.MaxSegmentSize)
 
-        // Simulate a crash by forcefully closing without proper shutdown
-        w.active.Close()
+		// Simulate a crash by forcefully closing without proper shutdown
+		w.active.Close()
 
-        // Reopen the WAL
-        reopenedWal, err := Open(NewLSN(0, int64(opts.MaxSegmentSize), 0), opts)
-        require.NoError(t, err)
-        defer reopenedWal.Close()
+		// Reopen the WAL
+		reopenedWal, err := Open(NewLSN(0, int64(opts.MaxSegmentSize), 0), opts)
+		require.NoError(t, err)
+		defer reopenedWal.Close()
 
-        // Verify that we can read all the records
-        reader := reopenedWal.NewReader()
-        defer reader.Close()
+		// Verify that we can read all the records
+		reader := reopenedWal.NewReader()
+		defer reader.Close()
 
-        count := 0
-        for {
-            _, err := reader.Next()
-            if err == io.EOF {
-                break
-            }
-            require.NoError(t, err)
-            count++
-        }
+		count := 0
+		for {
+			_, err := reader.Next()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+			count++
+		}
 
-        assert.Equal(t, 10, count, "Expected to read all 10 records after recovery")
-    })
+		assert.Equal(t, 10, count, "Expected to read all 10 records after recovery")
+	})
 
-    t.Run("CorruptHeader", func(t *testing.T) {
-        w, err := Create(opts)
-        require.NoError(t, err)
-        defer w.Close()
+	t.Run("CorruptHeader", func(t *testing.T) {
+		w, err := Create(opts)
+		require.NoError(t, err)
+		defer w.Close()
 
-        rec := &Record{
-            Type: RecordTypeInsert,
-            Tag:  types.ObjectTag(1),
-            Data: []byte("test data"),
-        }
-        lsn, err := w.Write(rec)
-        require.NoError(t, err)
+		rec := &Record{
+			Type: RecordTypeInsert,
+			Tag:  types.ObjectTag(1),
+			Data: []byte("test data"),
+		}
+		lsn, err := w.Write(rec)
+		require.NoError(t, err)
 
-        // Corrupt the header
-        segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
-        f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
-        require.NoError(t, err)
-        defer f.Close()
+		// Corrupt the header
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
+		require.NoError(t, err)
+		defer f.Close()
 
-        _, err = f.Seek(int64(lsn.calculateOffset(w.opts.MaxSegmentSize)), io.SeekStart)
-        require.NoError(t, err)
+		_, err = f.Seek(int64(lsn.calculateOffset(w.opts.MaxSegmentSize)), io.SeekStart)
+		require.NoError(t, err)
 
-        corruptHeader := make([]byte, HeaderSize)
-        _, err = f.Write(corruptHeader) // Overwrite header with zeros
-        require.NoError(t, err)
+		corruptHeader := make([]byte, HeaderSize)
+		_, err = f.Write(corruptHeader) // Overwrite header with zeros
+		require.NoError(t, err)
 
-        // Try to read the corrupted record
-        reader := w.NewReader()
-        defer reader.Close()
-        err = reader.Seek(lsn)
-        require.NoError(t, err)
+		// Try to read the corrupted record
+		reader := w.NewReader()
+		defer reader.Close()
+		err = reader.Seek(lsn)
+		require.NoError(t, err)
 
-        _, err = reader.Next()
-        assert.Error(t, err, "Reading record with corrupted header should fail")
-    })
+		_, err = reader.Next()
+		assert.Error(t, err, "Reading record with corrupted header should fail")
+	})
 
-    t.Run("IncompleteRecord", func(t *testing.T) {
-        w, err := Create(opts)
-        require.NoError(t, err)
-        defer w.Close()
+	t.Run("IncompleteRecord", func(t *testing.T) {
+		w, err := Create(opts)
+		require.NoError(t, err)
+		defer w.Close()
 
-        rec := &Record{
-            Type: RecordTypeInsert,
-            Tag:  types.ObjectTag(1),
-            Data: bytes.Repeat([]byte("a"), 1000),
-        }
-        lsn, err := w.Write(rec)
-        require.NoError(t, err)
+		rec := &Record{
+			Type: RecordTypeInsert,
+			Tag:  types.ObjectTag(1),
+			Data: bytes.Repeat([]byte("a"), 1000),
+		}
+		lsn, err := w.Write(rec)
+		require.NoError(t, err)
 
-        // Truncate the file to create an incomplete record
-        segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
-        f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
-        require.NoError(t, err)
-        defer f.Close()
+		// Truncate the file to create an incomplete record
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
+		require.NoError(t, err)
+		defer f.Close()
 
-        info, err := f.Stat()
-        require.NoError(t, err)
+		info, err := f.Stat()
+		require.NoError(t, err)
 
-        err = f.Truncate(info.Size() - 100) // Remove last 100 bytes
-        require.NoError(t, err)
+		err = f.Truncate(info.Size() - 100) // Remove last 100 bytes
+		require.NoError(t, err)
 
-        // Try to read the incomplete record
-        reader := w.NewReader()
-        defer reader.Close()
-        err = reader.Seek(lsn)
-        require.NoError(t, err)
+		// Try to read the incomplete record
+		reader := w.NewReader()
+		defer reader.Close()
+		err = reader.Seek(lsn)
+		require.NoError(t, err)
 
-        _, err = reader.Next()
-        assert.Error(t, err, "Reading incomplete record should fail")
-    })
+		_, err = reader.Next()
+		assert.Error(t, err, "Reading incomplete record should fail")
+	})
 
-    t.Run("CorruptedRecordType", func(t *testing.T) {
-        w, err := Create(opts)
-        require.NoError(t, err)
-        defer w.Close()
+	t.Run("CorruptedRecordType", func(t *testing.T) {
+		w, err := Create(opts)
+		require.NoError(t, err)
+		defer w.Close()
 
-        rec := &Record{
-            Type: RecordTypeInsert,
-            Tag:  types.ObjectTag(1),
-            Data: []byte("test data"),
-        }
-        lsn, err := w.Write(rec)
-        require.NoError(t, err)
+		rec := &Record{
+			Type: RecordTypeInsert,
+			Tag:  types.ObjectTag(1),
+			Data: []byte("test data"),
+		}
+		lsn, err := w.Write(rec)
+		require.NoError(t, err)
 
-        // Corrupt the record type
-        segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
-        f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
-        require.NoError(t, err)
-        defer f.Close()
+		// Corrupt the record type
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
+		require.NoError(t, err)
+		defer f.Close()
 
-        _, err = f.Seek(int64(lsn.calculateOffset(w.opts.MaxSegmentSize))+1, io.SeekStart) // Seek to record type position
-        require.NoError(t, err)
+		_, err = f.Seek(int64(lsn.calculateOffset(w.opts.MaxSegmentSize))+1, io.SeekStart) // Seek to record type position
+		require.NoError(t, err)
 
-        _, err = f.Write([]byte{255}) // Write invalid record type
-        require.NoError(t, err)
+		_, err = f.Write([]byte{255}) // Write invalid record type
+		require.NoError(t, err)
 
-        // Try to read the record with corrupted type
-        reader := w.NewReader()
-        defer reader.Close()
-        err = reader.Seek(lsn)
-        require.NoError(t, err)
+		// Try to read the record with corrupted type
+		reader := w.NewReader()
+		defer reader.Close()
+		err = reader.Seek(lsn)
+		require.NoError(t, err)
 
-        _, err = reader.Next()
-        assert.Error(t, err, "Reading record with corrupted type should fail")
-    })
+		_, err = reader.Next()
+		assert.Error(t, err, "Reading record with corrupted type should fail")
+	})
 
-    t.Run("CorruptedSegmentBoundary", func(t *testing.T) {
-        w, err := Create(opts)
-        require.NoError(t, err)
-        defer w.Close()
+	t.Run("CorruptedSegmentBoundary", func(t *testing.T) {
+		w, err := Create(opts)
+		require.NoError(t, err)
+		defer w.Close()
 
-        // Write records until close to segment boundary
-        var lastLSN LSN
-        for i := 0; i < 1000; i++ {
-            rec := &Record{
-                Type: RecordTypeInsert,
-                Tag:  types.ObjectTag(i),
-                Data: bytes.Repeat([]byte("a"), 900),
-            }
-            lsn, err := w.Write(rec)
-            require.NoError(t, err)
-            lastLSN = lsn
-        }
+		// Write records until close to segment boundary
+		var lastLSN LSN
+		for i := 0; i < 1000; i++ {
+			rec := &Record{
+				Type: RecordTypeInsert,
+				Tag:  types.ObjectTag(i),
+				Data: bytes.Repeat([]byte("a"), 900),
+			}
+			lsn, err := w.Write(rec)
+			require.NoError(t, err)
+			lastLSN = lsn
+		}
 
-        // Corrupt the segment boundary
-        segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lastLSN.calculateFilename(w.opts.MaxSegmentSize)))
-        f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
-        require.NoError(t, err)
-        defer f.Close()
+		// Corrupt the segment boundary
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016x.SEG", lastLSN.calculateFilename(w.opts.MaxSegmentSize)))
+		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
+		require.NoError(t, err)
+		defer f.Close()
 
-        info, err := f.Stat()
-        require.NoError(t, err)
+		info, err := f.Stat()
+		require.NoError(t, err)
 
-        _, err = f.Seek(info.Size()-10, io.SeekStart)
-        require.NoError(t, err)
+		_, err = f.Seek(info.Size()-10, io.SeekStart)
+		require.NoError(t, err)
 
-        _, err = f.Write(bytes.Repeat([]byte{0}, 20)) // Overwrite segment boundary
-        require.NoError(t, err)
+		_, err = f.Write(bytes.Repeat([]byte{0}, 20)) // Overwrite segment boundary
+		require.NoError(t, err)
 
-        // Try to read past the corrupted segment boundary
-        reader := w.NewReader()
-        defer reader.Close()
-        err = reader.Seek(lastLSN)
-        require.NoError(t, err)
+		// Try to read past the corrupted segment boundary
+		reader := w.NewReader()
+		defer reader.Close()
+		err = reader.Seek(lastLSN)
+		require.NoError(t, err)
 
-        for i := 0; i < 5; i++ {
-            _, err = reader.Next()
-            if err != nil {
-                break
-            }
-        }
-        assert.Error(t, err, "Reading past corrupted segment boundary should fail")
-    })
+		for i := 0; i < 5; i++ {
+			_, err = reader.Next()
+			if err != nil {
+				break
+			}
+		}
+		assert.Error(t, err, "Reading past corrupted segment boundary should fail")
+	})
 }
