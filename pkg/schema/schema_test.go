@@ -887,6 +887,7 @@ func TestSchemaDetect(t *testing.T) {
 				return
 			} else {
 				require.NoError(t, err)
+				require.NoError(t, s.Validate())
 			}
 			// schema name
 			require.Equal(t, s.name, c.name, "schema name")

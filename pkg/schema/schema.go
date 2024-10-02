@@ -19,7 +19,7 @@ import (
 const (
 	MAX_FIXED = uint16(1<<16 - 1)
 
-	defaultVarFieldSize = 64 // variable number of bytes for strings and byte slices
+	defaultVarFieldSize = 32 // variable number of bytes for strings and byte slices
 )
 
 type Schema struct {
@@ -41,6 +41,29 @@ func NewSchema() *Schema {
 		fields:      make([]Field, 0),
 		isFixedSize: true,
 	}
+}
+
+func (s *Schema) WithName(n string) *Schema {
+	if len(n) > 0 {
+		s.name = n
+	}
+	return s
+}
+
+func (s *Schema) WithVersion(v uint32) *Schema {
+	if s.version < v {
+		s.version = v
+	}
+	return s
+}
+
+func (s *Schema) WithField(f Field) *Schema {
+	if f.IsValid() {
+		f.id = uint16(len(s.fields) + 1)
+		s.fields = append(s.fields, f)
+		s.encode, s.decode = nil, nil
+	}
+	return s
 }
 
 func (s *Schema) NewBuffer(sz int) *bytes.Buffer {
@@ -79,21 +102,6 @@ func (s *Schema) TypeLabel(vendor string) string {
 	return b.String()
 }
 
-func (s *Schema) WithName(n string) *Schema {
-	if len(n) > 0 {
-		s.name = n
-	}
-	return s
-}
-
-func (s *Schema) WithVersion(v uint32) *Schema {
-	if s.version < v {
-		s.version = v
-	}
-	return s
-}
-
-// generate name hash with tag
 func (s *Schema) TaggedHash(tag types.ObjectTag) uint64 {
 	return types.TaggedHash(tag, s.name)
 }
@@ -106,119 +114,8 @@ func (s *Schema) EqualHash(x uint64) bool {
 	return x == 0 || s.schemaHash == x
 }
 
-func (s *Schema) WithField(f Field) *Schema {
-	if f.IsValid() {
-		f.id = uint16(len(s.fields) + 1)
-		s.fields = append(s.fields, f)
-		s.encode, s.decode = nil, nil
-	}
-	return s
-}
-
-// TODO: prevent changing typ, id, fixed, scale, primary flag
-func (s *Schema) UpdateField(id uint16, f Field) *Schema {
-	if f.IsValid() {
-		for i := range s.fields {
-			if s.fields[i].id != id {
-				continue
-			}
-			f.id = id
-			s.fields[i] = f
-			s.encode, s.decode = nil, nil
-			s.version++
-			break
-		}
-	}
-	return s
-}
-
-func (s *Schema) Complete() *Schema {
-	if len(s.encode) > 0 {
-		return s
-	}
-	s.minWireSize = 0
-	s.maxWireSize = 0
-	s.isFixedSize = true
-	s.isInterface = false
-	s.schemaHash = 0
-
-	// generate schema hash
-	h := fnv.New64a()
-	h.Write(Uint32Bytes(uint32(s.version)))
-
-	// collect sizes
-	for i := range s.fields {
-		sz := s.fields[i].WireSize()
-		s.minWireSize += sz
-		s.maxWireSize += sz
-		s.isInterface = s.isInterface || s.fields[i].IsInterface()
-		if !s.fields[i].IsFixedSize() {
-			s.isFixedSize = false
-			s.maxWireSize += defaultVarFieldSize
-		}
-		h.Write(Uint16Bytes(s.fields[i].id))
-		h.Write([]byte{byte(s.fields[i].typ)})
-	}
-	s.schemaHash = h.Sum64()
-	s.encode, s.decode = compileCodecs(s)
-
-	s.exports = make([]*ExportedField, len(s.fields))
-	for i := range s.fields {
-		s.exports[i] = &ExportedField{
-			Name:      s.fields[i].name,
-			Id:        s.fields[i].id,
-			Type:      s.fields[i].typ,
-			Flags:     s.fields[i].flags,
-			Compress:  s.fields[i].compress,
-			Index:     s.fields[i].index,
-			IsVisible: s.fields[i].IsVisible(),
-			IsArray:   s.fields[i].isArray,
-			Iface:     s.fields[i].iface,
-			Scale:     s.fields[i].scale,
-			Fixed:     s.fields[i].fixed,
-			Offset:    s.fields[i].offset,
-			path:      s.fields[i].path,
-		}
-	}
-
-	return s
-}
-
 func (s *Schema) WireSize() int {
 	return s.minWireSize
-}
-
-func (s *Schema) String() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "schema: %s minSz=%d maxSz=%d fixed=%t iface=%t enc/dec=%d/%d",
-		s.name,
-		s.minWireSize,
-		s.maxWireSize,
-		s.isFixedSize,
-		s.isInterface,
-		len(s.encode),
-		len(s.decode),
-	)
-	for i := range s.fields {
-		f := &s.fields[i]
-		fmt.Fprintf(&b, "\n  Field #%d: id=%d %s %s flags=%08b index=%d fixed=%d scale=%d arr=%t sz=%d/%d iface=%08b enc=%s dec=%s",
-			i,
-			f.id,
-			f.name,
-			f.typ,
-			f.flags,
-			f.index,
-			f.fixed,
-			f.scale,
-			f.isArray,
-			f.dataSize,
-			f.wireSize,
-			f.iface,
-			s.encode[i],
-			s.decode[i],
-		)
-	}
-	return b.String()
 }
 
 func (s *Schema) NumFields() int {
@@ -405,7 +302,7 @@ func (s *Schema) SelectFieldIds(fieldIds ...uint16) (*Schema, error) {
 		ns.fields = append(ns.fields, f)
 	}
 
-	return ns.Complete(), nil
+	return ns.Finalize(), nil
 }
 
 func (s *Schema) SelectFields(fields ...string) (*Schema, error) {
@@ -424,14 +321,14 @@ func (s *Schema) SelectFields(fields ...string) (*Schema, error) {
 		ns.fields = append(ns.fields, f)
 	}
 
-	return ns.Complete(), nil
+	return ns.Finalize(), nil
 }
 
 func (s *Schema) Sort() *Schema {
 	sort.Slice(s.fields, func(i, j int) bool { return s.fields[i].id < s.fields[j].id })
 	s.encode = nil
 	s.decode = nil
-	s.Complete()
+	s.Finalize()
 	return s
 }
 
@@ -484,17 +381,11 @@ func (s *Schema) Validate() error {
 
 	// count special fields, require no duplicate names
 	unique := make(map[string]struct{})
-	var npk int
 
 	for i := range s.fields {
 		// fields must validate
 		if err := s.fields[i].Validate(); err != nil {
 			return fmt.Errorf("schema %s: field %s: %v", s.name, s.fields[i].name, err)
-		}
-
-		// count pk fields
-		if s.fields[i].flags&types.FieldFlagPrimary > 0 {
-			npk++
 		}
 
 		// check name uniqueness
@@ -575,6 +466,91 @@ func (s *Schema) UnmarshalBinary(b []byte) (err error) {
 	}
 
 	// fill in computed fields
-	s.Complete()
+	s.Finalize()
 	return nil
+}
+
+func (s *Schema) Finalize() *Schema {
+	if len(s.encode) > 0 {
+		return s
+	}
+	s.minWireSize = 0
+	s.maxWireSize = 0
+	s.isFixedSize = true
+	s.isInterface = false
+	s.schemaHash = 0
+
+	// generate schema hash
+	h := fnv.New64a()
+	h.Write(Uint32Bytes(uint32(s.version)))
+
+	// collect sizes
+	for i := range s.fields {
+		sz := s.fields[i].WireSize()
+		s.minWireSize += sz
+		s.maxWireSize += sz
+		s.isInterface = s.isInterface || s.fields[i].IsInterface()
+		if !s.fields[i].IsFixedSize() {
+			s.isFixedSize = false
+			s.maxWireSize += defaultVarFieldSize
+		}
+		h.Write(Uint16Bytes(s.fields[i].id))
+		h.Write([]byte{byte(s.fields[i].typ)})
+	}
+	s.schemaHash = h.Sum64()
+	s.encode, s.decode = compileCodecs(s)
+
+	s.exports = make([]*ExportedField, len(s.fields))
+	for i := range s.fields {
+		s.exports[i] = &ExportedField{
+			Name:      s.fields[i].name,
+			Id:        s.fields[i].id,
+			Type:      s.fields[i].typ,
+			Flags:     s.fields[i].flags,
+			Compress:  s.fields[i].compress,
+			Index:     s.fields[i].index,
+			IsVisible: s.fields[i].IsVisible(),
+			IsArray:   s.fields[i].isArray,
+			Iface:     s.fields[i].iface,
+			Scale:     s.fields[i].scale,
+			Fixed:     s.fields[i].fixed,
+			Offset:    s.fields[i].offset,
+			path:      s.fields[i].path,
+		}
+	}
+
+	return s
+}
+
+func (s *Schema) String() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "schema: %s minSz=%d maxSz=%d fixed=%t iface=%t enc/dec=%d/%d",
+		s.name,
+		s.minWireSize,
+		s.maxWireSize,
+		s.isFixedSize,
+		s.isInterface,
+		len(s.encode),
+		len(s.decode),
+	)
+	for i := range s.fields {
+		f := &s.fields[i]
+		fmt.Fprintf(&b, "\n  Field #%d: id=%d %s %s flags=%08b index=%d fixed=%d scale=%d arr=%t sz=%d/%d iface=%08b enc=%s dec=%s",
+			i,
+			f.id,
+			f.name,
+			f.typ,
+			f.flags,
+			f.index,
+			f.fixed,
+			f.scale,
+			f.isArray,
+			f.dataSize,
+			f.wireSize,
+			f.iface,
+			s.encode[i],
+			s.decode[i],
+		)
+	}
+	return b.String()
 }

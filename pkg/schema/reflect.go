@@ -118,7 +118,7 @@ func SchemaOf(m any) (*Schema, error) {
 	}
 
 	// compile encoder/decoder opcodes, calculate wire size
-	s.Complete()
+	s.Finalize()
 
 	// validate schema conformance
 	if err := s.Validate(); err != nil {
@@ -480,6 +480,8 @@ func (f *Field) ParseTag(tag string) error {
 			default:
 				return fmt.Errorf("unsupported enum type %s", f.typ)
 			}
+		case "internal":
+			flags |= types.FieldFlagInternal
 		default:
 			return fmt.Errorf("unsupported struct tag '%s'", key)
 		}

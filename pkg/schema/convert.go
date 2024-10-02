@@ -12,8 +12,8 @@ import (
 )
 
 // Extracts wire encoded messages into raw byte strings. Useful for search
-// and hash indexes on a defined list/order of columns. Does not produce legal
-// wire format as strings/bytes are encoded without length.
+// and hash indexes on a defined list/order of columns. Produce legal
+// wire format where variable length strings/bytes are length prefixed.
 type Converter struct {
 	parent  *Schema
 	child   *Schema
@@ -24,6 +24,7 @@ type Converter struct {
 	extract func(*Converter, []byte) []byte
 	parts   [][]byte // pre-allocated byte slices for fixed parts in child order
 	dyn     []int    // position of dynamic parts
+	skipLen bool     // skip encoding variable length for strings/bytes (use in indexes)
 }
 
 func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
@@ -120,10 +121,15 @@ func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
 			if f.IsFixedSize() {
 				continue
 			}
-			c.nExtra += 32
+			c.nExtra += defaultVarFieldSize
 		}
 	}
 
+	return c
+}
+
+func (c *Converter) WithSkipLen() *Converter {
+	c.skipLen = true
 	return c
 }
 
@@ -228,7 +234,12 @@ func extractVariableInorder(c *Converter, buf []byte) []byte {
 				sz = int(field.fixed)
 			} else {
 				u, n := ReadUint32(buf)
-				sz = int(u) + n
+				if c.skipLen {
+					sz = int(u)
+					buf = buf[n:]
+				} else {
+					sz = int(u) + n
+				}
 			}
 		}
 
@@ -298,7 +309,12 @@ func extractVariableReorder(c *Converter, buf []byte) []byte {
 				sz = int(field.fixed)
 			} else {
 				u, n := ReadUint32(buf)
-				sz = int(u) + n
+				if c.skipLen {
+					sz = int(u)
+					buf = buf[n:]
+				} else {
+					sz = int(u) + n
+				}
 			}
 		}
 
