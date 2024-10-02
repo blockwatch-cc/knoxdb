@@ -111,7 +111,7 @@ func (j *Journal) Reset() {
 	j.Deleted.Reset()
 }
 
-func (j *Journal) Open(ctx context.Context, tx store.Tx, bkey []byte) error {
+func (j *Journal) Open(ctx context.Context, tx store.Tx, bkey string) error {
 	return j.LoadLegacy(ctx, tx, bkey)
 }
 
@@ -126,7 +126,7 @@ func (j *Journal) Close() {
 	j.view = nil
 }
 
-func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bucket []byte) error {
+func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bkey string) error {
 	// we need to alloc a new data pack without blocks for load to fill from disk
 	s := j.Data.Schema()
 	j.Data.Release()
@@ -134,7 +134,7 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bucket []byte) er
 		WithMaxRows(j.maxsize).
 		WithKey(pack.JournalKeyId).
 		WithSchema(s)
-	if _, err := j.Data.Load(ctx, tx, false, 0, bucket, nil, 0); err != nil {
+	if _, err := j.Data.Load(ctx, tx, false, 0, bkey, nil, 0); err != nil {
 		return err
 	}
 	j.sortData = false
@@ -152,7 +152,7 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bucket []byte) er
 	j.Deleted.Resize(len(j.Keys))
 	var key [4]byte
 	binary.BigEndian.PutUint32(key[:], pack.TombstoneKeyId)
-	if buf := tx.Bucket(bucket).Get(key[:]); buf != nil {
+	if buf := tx.Bucket([]byte(bkey + "_data")).Get(key[:]); buf != nil {
 		if err := j.Tomb.UnmarshalBinary(buf); err != nil {
 			return err
 		}
@@ -173,7 +173,7 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bucket []byte) er
 	return nil
 }
 
-func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bucket []byte) (int, int, error) {
+func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bkey string) (int, int, error) {
 	// reconstructed deleted pks from key list
 	var idx, last int
 	it := j.Tomb.Bitmap.NewIterator()
@@ -187,7 +187,7 @@ func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bucket []byte) (
 		}
 		j.Data.SetValue(j.Data.PkIdx(), idx, pk)
 	}
-	n, err := j.Data.Store(ctx, tx, 0, bucket, 0.9, nil)
+	n, err := j.Data.Store(ctx, tx, 0, bkey, 0.9, nil)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -198,7 +198,7 @@ func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bucket []byte) (
 	if err != nil {
 		return 0, 0, err
 	}
-	tx.Bucket(bucket).Put(key[:], buf)
+	tx.Bucket([]byte(bkey+"_data")).Put(key[:], buf)
 	m := len(buf)
 
 	// reset deleted pks to zero

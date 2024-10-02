@@ -14,7 +14,9 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-var storeEngineRegistry = make(map[StoreKind]StoreFactory)
+var (
+	storeEngineRegistry = make(map[StoreKind]StoreFactory)
+)
 
 func RegisterStoreFactory(n StoreKind, fn StoreFactory) {
 	if _, ok := storeEngineRegistry[n]; ok {

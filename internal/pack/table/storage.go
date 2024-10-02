@@ -33,7 +33,7 @@ func (t *Table) loadSharedPack(ctx context.Context, id uint32, nrow int, useCach
 		WithMaxRows(util.NonZero(nrow, t.opts.PackSize))
 
 	// load from table data bucket or cache using tableid as cache tag
-	n, err := pkg.Load(ctx, tx, useCache, t.tableId, t.datakey, fids, nrow)
+	n, err := pkg.Load(ctx, tx, useCache, t.tableId, t.schema.Name(), fids, nrow)
 	if err != nil {
 		pkg.Release()
 		return nil, err
@@ -86,13 +86,13 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 		t.stats.Remove(pkg.Key())
 
 		// store stats changes
-		m, err := t.stats.Store(ctx, tx, t.statskey, t.opts.PageFill)
+		m, err := t.stats.Store(ctx, tx, t.schema.Name(), t.opts.PageFill)
 		if err != nil {
 			return 0, err
 		}
 
 		// remove from storage and block caches
-		if err := pkg.Remove(ctx, tx, t.tableId, t.datakey); err != nil {
+		if err := pkg.Remove(ctx, tx, t.tableId, t.schema.Name()); err != nil {
 			return 0, err
 		}
 
@@ -140,7 +140,7 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 
 	// write to disk
 	blockSizes := make([]int, len(meta.Blocks))
-	n, err := pkg.Store(ctx, tx, t.tableId, t.datakey, t.opts.PageFill, blockSizes)
+	n, err := pkg.Store(ctx, tx, t.tableId, t.schema.Name(), t.opts.PageFill, blockSizes)
 	if err != nil {
 		return 0, err
 	}
@@ -151,7 +151,7 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 
 	// update and store statistics
 	t.stats.AddOrUpdate(meta)
-	m, err := t.stats.Store(ctx, tx, t.statskey, t.opts.PageFill)
+	m, err := t.stats.Store(ctx, tx, t.schema.Name(), t.opts.PageFill)
 	if err != nil {
 		return n, err
 	}

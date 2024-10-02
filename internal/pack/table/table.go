@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/journal"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/store"
@@ -42,28 +43,20 @@ var (
 	}
 )
 
-var (
-	metaKeySuffix  = []byte("_meta")
-	statsKeySuffix = []byte("_stats")
-	dataKeySuffix  = []byte("_data")
-)
-
 type Table struct {
-	mu       sync.RWMutex         // global table lock (syncs r/w access, single writer)
-	engine   *engine.Engine       // engine access
-	schema   *schema.Schema       // ordered list of table fields as central type info
-	tableId  uint64               // unique tagged name hash
-	pkindex  int                  // field index for primary key (if any)
-	opts     engine.TableOptions  // copy of config options
-	db       store.DB             // lower-level storage (e.g. boltdb wrapper)
-	datakey  []byte               // name of table data bucket
-	statskey []byte               // name of table stats bucket
-	state    engine.TableState    // volatile state, synced with catalog
-	indexes  []engine.IndexEngine // list of indexes
-	stats    *stats.StatsIndex    // in-memory list of pack and block info
-	journal  *journal.Journal     // in-memory data not yet written to packs
-	metrics  engine.TableMetrics  // metrics statistics
-	log      log.Logger
+	mu      sync.RWMutex         // global table lock (syncs r/w access, single writer)
+	engine  *engine.Engine       // engine access
+	schema  *schema.Schema       // ordered list of table fields as central type info
+	tableId uint64               // unique tagged name hash
+	pkindex int                  // field index for primary key (if any)
+	opts    engine.TableOptions  // copy of config options
+	db      store.DB             // lower-level storage (e.g. boltdb wrapper)
+	state   engine.TableState    // volatile state, synced with catalog
+	indexes []engine.IndexEngine // list of indexes
+	stats   *stats.StatsIndex    // in-memory list of pack and block info
+	journal *journal.Journal     // in-memory data not yet written to packs
+	metrics engine.TableMetrics  // metrics statistics
+	log     log.Logger
 }
 
 func NewTable() engine.TableEngine {
@@ -89,8 +82,6 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.tableId = s.TaggedHash(types.ObjectTagTable)
 	t.pkindex = pki
 	t.opts = DefaultTableOptions.Merge(opts)
-	t.datakey = append([]byte(name), dataKeySuffix...)
-	t.statskey = append([]byte(name), statsKeySuffix...)
 	t.state = engine.NewTableState()
 	t.metrics = engine.NewTableMetrics(name)
 	t.stats = stats.NewStatsIndex(pki, t.opts.PackSize)
@@ -123,15 +114,19 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	if err != nil {
 		return err
 	}
-	if _, err := store.CreateBucket(tx, t.datakey, engine.ErrTableExists); err != nil {
-		return err
-	}
-	if _, err := store.CreateBucket(tx, t.statskey, engine.ErrTableExists); err != nil {
-		return err
+	for _, v := range [][]byte{
+		pack.DataKeySuffix,
+		pack.MetaKeySuffix,
+		pack.StatsKeySuffix,
+	} {
+		key := append([]byte(name), v...)
+		if _, err := store.CreateBucket(tx, key, engine.ErrTableExists); err != nil {
+			return err
+		}
 	}
 
 	// TODO: replace with WAL stream
-	jsz, tsz, err := t.journal.StoreLegacy(ctx, tx, t.datakey)
+	jsz, tsz, err := t.journal.StoreLegacy(ctx, tx, t.schema.Name())
 	if err != nil {
 		return err
 	}
@@ -160,8 +155,6 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.tableId = s.TaggedHash(types.ObjectTagTable)
 	t.pkindex = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
-	t.datakey = append([]byte(name), dataKeySuffix...)
-	t.statskey = append([]byte(name), statsKeySuffix...)
 	t.state.FromObjectState(e.Catalog().GetState(t.tableId))
 	t.metrics = engine.NewTableMetrics(name)
 	t.metrics.TupleCount = int64(t.state.NRows)
@@ -201,18 +194,24 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	if err != nil {
 		return err
 	}
-	if tx.Bucket(t.datakey) == nil || tx.Bucket(t.statskey) == nil {
-		t.log.Error("missing table data: %v", engine.ErrNoBucket)
-		tx.Rollback()
-		t.Close(ctx)
-		return engine.ErrDatabaseCorrupt
+	for _, v := range [][]byte{
+		pack.DataKeySuffix,
+		pack.MetaKeySuffix,
+		pack.StatsKeySuffix,
+	} {
+		if tx.Bucket(append([]byte(name), v...)) == nil {
+			t.log.Error("missing table data: %v", engine.ErrNoBucket)
+			tx.Rollback()
+			t.Close(ctx)
+			return engine.ErrDatabaseCorrupt
+		}
 	}
 
 	// TODO: maybe refactor
 
 	// load stats
 	t.log.Debugf("Loading package stats for %s", typ)
-	n, err := t.stats.Load(ctx, tx, t.statskey)
+	n, err := t.stats.Load(ctx, tx, t.schema.Name())
 	if err != nil {
 		// TODO: rebuild corrupt stats here
 		return err
@@ -224,7 +223,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.metrics.TotalSize = int64(t.stats.TableSize())
 
 	// FIXME: reconstruct journal from WAL instead of load in legacy mode
-	err = t.journal.Open(ctx, tx, t.datakey)
+	err = t.journal.Open(ctx, tx, t.schema.Name())
 	if err != nil {
 		return fmt.Errorf("Open journal for table %s: %v", typ, err)
 	}
@@ -249,8 +248,6 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	t.schema = nil
 	t.tableId = 0
 	t.pkindex = 0
-	t.datakey = nil
-	t.statskey = nil
 	t.opts = engine.TableOptions{}
 	t.metrics = engine.TableMetrics{}
 	t.indexes = nil
@@ -267,10 +264,6 @@ func (t *Table) Schema() *schema.Schema {
 
 func (t *Table) Indexes() []engine.IndexEngine {
 	return t.indexes
-}
-
-func (t *Table) name() string {
-	return t.schema.Name()
 }
 
 func (t *Table) Metrics() engine.TableMetrics {
@@ -306,7 +299,7 @@ func (t *Table) Sync(ctx context.Context) error {
 	}
 
 	// store stats
-	n, err := t.stats.Store(ctx, tx, t.statskey, t.opts.PageFill)
+	n, err := t.stats.Store(ctx, tx, t.schema.Name(), t.opts.PageFill)
 	if err != nil {
 		return err
 	}
@@ -324,7 +317,12 @@ func (t *Table) Truncate(ctx context.Context) error {
 	}
 	t.journal.Reset()
 	t.stats.Reset()
-	for _, key := range [][]byte{t.datakey, t.statskey} {
+	for _, v := range [][]byte{
+		pack.DataKeySuffix,
+		pack.MetaKeySuffix,
+		pack.StatsKeySuffix,
+	} {
+		key := append([]byte(t.schema.Name()), v...)
 		if err := tx.Root().DeleteBucket(key); err != nil {
 			return err
 		}

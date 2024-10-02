@@ -4,21 +4,20 @@
 package engine
 
 import (
-	"sync/atomic"
-
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
-func (e *Engine) NewSnapshot() *types.Snapshot {
-	e.mu.RLock()
+// Must be called holding the engine lock
+func (e *Engine) NewSnapshot(id uint64) *types.Snapshot {
 	s := &types.Snapshot{
+		Xown: id,
 		Xmin: e.xmin,
-		Xmax: atomic.LoadUint64(&e.xnext),
+		Xmax: id,
+		Safe: len(e.txs) == 0,
 	}
 	for _, x := range e.txs {
 		s.Xact |= 1 << (x.id - e.xmin)
 	}
-	e.mu.RUnlock()
 	return s
 }
 

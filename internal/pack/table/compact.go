@@ -59,7 +59,7 @@ func (t *Table) Compact(ctx context.Context) error {
 	}
 	if !needCompact {
 		t.log.Debugf("pack: %s table %d packs / %d rows already compact",
-			t.name(), nSrcPacks, total)
+			t.schema.Name(), nSrcPacks, total)
 		return nil
 	}
 
@@ -82,7 +82,7 @@ func (t *Table) Compact(ctx context.Context) error {
 	)
 
 	t.log.Debugf("pack: %s table compacting %d packs / %d rows",
-		t.name(), nSrcPacks, total)
+		t.schema.Name(), nSrcPacks, total)
 	// t.DumpPackInfoDetail(os.Stdout, DumpModeDec, false)
 
 	// This algorithm walks the table's pack list in pack key order and
@@ -260,7 +260,7 @@ func (t *Table) Compact(ctx context.Context) error {
 	}
 
 	t.log.Debugf("pack: %s table compacted %d(+%d) rows into %d(%d) packs (%s ->> %s) in %s",
-		t.name(), moved, written-moved,
+		t.schema.Name(), moved, written-moved,
 		t.stats.Len(), nSrcPacks-t.stats.Len(),
 		util.ByteSize(srcSize), util.ByteSize(dstSize),
 		time.Since(start),

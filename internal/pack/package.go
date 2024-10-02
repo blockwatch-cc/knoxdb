@@ -16,19 +16,15 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
-var (
+const (
 	// reserved package keys
 	JournalKeyId   uint32 = 0xFFFFFFFF
 	TombstoneKeyId uint32 = 0xFFFFFFFE
 	ResultKeyId    uint32 = 0xFFFFFFFD
+)
 
-	// reserved metadata field ids
-	RecordId   uint16 = 0xFFFC
-	RecordRef  uint16 = 0xFFFD
-	RecordXmin uint16 = 0xFFFE
-	RecordXmax uint16 = 0xFFFF
-
-	// allocation poool
+var (
+	// allocation pool
 	packagePool = sync.Pool{
 		New: func() any { return &Package{} },
 	}
@@ -38,13 +34,13 @@ var (
 )
 
 type Package struct {
-	key     uint32           // identity
-	nRows   int              // current number or rows
-	maxRows int              // max number of rows (== block allocation size)
-	pkIdx   int              // primary key index (position in schema)
-	schema  *schema.Schema   // mapping from fields to blocks in query order
-	blocks  []*block.Block   // loaded blocks (in schema order)
-	xdata   *[4]*block.Block // optional per-record metadata, rid, ref, xmin, xmax
+	key     uint32         // identity
+	nRows   int            // current number or rows
+	maxRows int            // max number of rows (== block allocation size)
+	pkIdx   int            // primary key index (position in schema)
+	schema  *schema.Schema // mapping from fields to blocks in query order
+	blocks  []*block.Block // loaded blocks (in schema order)
+	xmeta   *PackMeta      // optional per-record metadata, rid, ref, xmin, xmax
 }
 
 func New() *Package {
@@ -91,6 +87,16 @@ func (p Package) IsDirty() bool {
 			return true
 		}
 	}
+	if p.xmeta != nil {
+		for _, b := range p.xmeta {
+			if b == nil {
+				continue
+			}
+			if b.IsDirty() {
+				return true
+			}
+		}
+	}
 	return false
 }
 
@@ -124,6 +130,11 @@ func (p *Package) WithSchema(s *schema.Schema) *Package {
 	return p
 }
 
+func (p *Package) WithMeta() *Package {
+	p.xmeta = NewMeta()
+	return p
+}
+
 func (p *Package) Alloc() *Package {
 	if p.maxRows == 0 || p.schema == nil {
 		return p
@@ -145,6 +156,11 @@ func (p *Package) Alloc() *Package {
 		p.blocks[i] = block.New(blockTypes[field.Type()], p.maxRows)
 	}
 
+	// alloc tx metadata (optional)
+	if p.xmeta != nil {
+		p.xmeta.Alloc(p.maxRows)
+	}
+
 	return p
 }
 
@@ -163,6 +179,9 @@ func (p *Package) Clone(sz int) *Package {
 		}
 		// alloc sz capacity and copy len block data
 		clone.blocks[i] = b.Clone(sz)
+	}
+	if p.xmeta != nil {
+		clone.xmeta = p.xmeta.Clone(sz)
 	}
 	return clone
 }
@@ -195,6 +214,11 @@ func (p *Package) HeapSize() int {
 	for _, v := range p.blocks {
 		sz += v.HeapSize()
 	}
+	if p.xmeta != nil {
+		for _, v := range p.xmeta {
+			sz += v.HeapSize()
+		}
+	}
 	return sz
 }
 
@@ -214,6 +238,14 @@ func (p *Package) Clear() {
 		}
 		b.Clear()
 	}
+	if p.xmeta != nil {
+		for _, b := range p.xmeta {
+			if b == nil {
+				continue
+			}
+			b.Clear()
+		}
+	}
 	p.nRows = 0
 }
 
@@ -225,6 +257,15 @@ func (p *Package) Release() {
 		}
 		p.blocks[i].DecRef()
 		p.blocks[i] = nil
+	}
+	if p.xmeta != nil {
+		for i := range p.xmeta {
+			if p.xmeta[i] == nil {
+				continue
+			}
+			p.xmeta[i].DecRef()
+			p.xmeta[i] = nil
+		}
 	}
 	p.key = 0
 	p.nRows = 0
@@ -252,6 +293,14 @@ func (p *Package) Swap(i, j int) {
 		if b == nil {
 			continue
 		}
-		p.blocks[i].Swap(i, j)
+		b.Swap(i, j)
+	}
+	if p.xmeta != nil {
+		for _, b := range p.xmeta {
+			if b == nil {
+				continue
+			}
+			b.Swap(i, j)
+		}
 	}
 }

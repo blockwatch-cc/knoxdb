@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"sort"
 
+	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/store"
 )
 
-func (s *StatsIndex) Load(ctx context.Context, tx store.Tx, bucket []byte) (int, error) {
-	packs, n, err := LoadStats(ctx, tx, bucket)
+func (s *StatsIndex) Load(ctx context.Context, tx store.Tx, name string) (int, error) {
+	key := append([]byte(name), pack.StatsKeySuffix...)
+	packs, n, err := LoadStats(ctx, tx, key)
 	if err != nil {
 		return 0, err
 	}
@@ -30,13 +32,13 @@ func (s *StatsIndex) Load(ctx context.Context, tx store.Tx, bucket []byte) (int,
 	return n, nil
 }
 
-func LoadStats(ctx context.Context, tx store.Tx, bucket []byte) (PackStatsList, int, error) {
-	meta := tx.Bucket(bucket)
-	if meta == nil {
-		return nil, 0, fmt.Errorf("missing statistics bucket %q", string(bucket))
+func LoadStats(ctx context.Context, tx store.Tx, key []byte) (PackStatsList, int, error) {
+	bucket := tx.Bucket(key)
+	if bucket == nil {
+		return nil, 0, fmt.Errorf("missing statistics bucket %q", string(key))
 	}
 	packs := make(PackStatsList, 0)
-	c := meta.Cursor()
+	c := bucket.Cursor()
 	defer c.Close()
 	var (
 		n   int
@@ -53,7 +55,7 @@ func LoadStats(ctx context.Context, tx store.Tx, bucket []byte) (PackStatsList, 
 		packs = append(packs, stats)
 	}
 	if err != nil {
-		return nil, n, fmt.Errorf("meta decode pack 0x%08x: %v", c.Key(), err)
+		return nil, n, fmt.Errorf("pack 0x%08x statistics decode: %v", c.Key(), err)
 	}
 	return packs, n, nil
 }
@@ -89,18 +91,19 @@ func LoadStats(ctx context.Context, tx store.Tx, bucket []byte) (PackStatsList, 
 // 	return nil
 // }
 
-func (s *StatsIndex) Store(ctx context.Context, tx store.Tx, bucket []byte, fill float64) (int, error) {
-	meta := tx.Bucket(bucket)
-	if meta == nil {
-		return 0, fmt.Errorf("missing statistics bucket %q", string(bucket))
+func (s *StatsIndex) Store(ctx context.Context, tx store.Tx, name string, fill float64) (int, error) {
+	key := append([]byte(name), pack.StatsKeySuffix...)
+	bucket := tx.Bucket(key)
+	if bucket == nil {
+		return 0, fmt.Errorf("missing statistics bucket %q", string(key))
 	}
-	meta.FillPercent(fill)
+	bucket.FillPercent(fill)
 
 	// remove statistics for deleted packs, if any
 	for _, v := range s.removed.Values {
 		var k [4]byte
 		BE.PutUint32(k[:], v)
-		meta.Delete(k[:])
+		bucket.Delete(k[:])
 	}
 	s.removed.Values = s.removed.Values[:0]
 
@@ -114,7 +117,7 @@ func (s *StatsIndex) Store(ctx context.Context, tx store.Tx, bucket []byte, fill
 		if err != nil {
 			return n, err
 		}
-		if err := meta.Put(s.packs[i].KeyBytes(), buf); err != nil {
+		if err := bucket.Put(s.packs[i].KeyBytes(), buf); err != nil {
 			return n, err
 		}
 		n += len(buf)

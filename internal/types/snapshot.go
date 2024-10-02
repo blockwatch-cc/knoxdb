@@ -8,38 +8,23 @@ type Snapshot struct {
 	Xmin uint64 // minimum active transaction id
 	Xmax uint64 // next tx id (not yet assigned)
 	Xact uint64 // bitset with active tx ids (max 64): xmin+63 ... xmin
+	Safe bool   // snapshot is safe (xact = 0 || only readonly tx)
 }
-
-func (s *Snapshot) WithId(id uint64) *Snapshot {
-	s.Xown = id
-	return s
-}
-
-// TODO: rething the snapshot process
-// - create read snapshot without own id
-// - set own id later on first write attempt
-//
-// Issues
-// - we need an xmax to hide data from future tx ids
-// - xown may be larger than xmax when assigned later !
 
 // IsVisible returns true when records updated by this xid
 // are visible to the snapshot.
 func (s *Snapshot) IsVisible(xid uint64) bool {
 	// records from aborted tx have xid = 0
-	if xid == 0 {
+	if s.Safe || xid == 0 {
 		return false
 	}
-
-	// FIXME: when we create/assign xown later it may be >xmax (other tx have
-	// upgraded to writable meanwhile)
 
 	// records from future tx are invisible
 	if xid > s.Xmax {
 		return false
 	}
 
-	// read-write tx can see anything they created
+	// read-write txs can see anything they created
 	if s.Xown > 0 && xid == s.Xown {
 		return true
 	}

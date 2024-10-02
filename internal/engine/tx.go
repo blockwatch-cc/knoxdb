@@ -14,6 +14,20 @@ import (
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 )
 
+type TxFlags byte
+
+const (
+	TxFlagsReadOnly     TxFlags = 1 << iota
+	TxFlagsSerializable         // use serializable snapshot isolation level (TODO)
+	TxFlagsDeferred             // wait for safe snapshot (TODO)
+	TxFlagsConflict             // conflict detected, abort on commit
+)
+
+func (f TxFlags) IsReadOnly() bool     { return f&TxFlagsReadOnly > 0 }
+func (f TxFlags) IsSerializable() bool { return f&TxFlagsSerializable > 0 }
+func (f TxFlags) IsDeferred() bool     { return f&TxFlagsDeferred > 0 }
+func (f TxFlags) IsConflict() bool     { return f&TxFlagsConflict > 0 }
+
 type TxHook func(Context) error
 
 type Tx struct {
@@ -56,6 +70,9 @@ type Tx struct {
 	//     and abort the caller
 	//     - could use a map in engine that holds all dbs (interface ptr) with
 	//       currently open write tx
+
+	// flags
+	flags TxFlags
 }
 
 // TxList is a list of transactions sorted by txid
@@ -78,12 +95,33 @@ func (t *TxList) Del(tx *Tx) {
 	*t = txs
 }
 
-func (e *Engine) NewTransaction() *Tx {
+func mergeFlags(x []TxFlags) (f TxFlags) {
+	for _, v := range x {
+		f |= v
+	}
+	return
+}
+
+func (e *Engine) NewTransaction(flags ...TxFlags) *Tx {
 	tx := &Tx{
 		engine: e,
 		id:     0, // read-only tx do not use an id
 		dbTx:   make(map[store.DB]store.Tx),
-		snap:   e.NewSnapshot(),
+		flags:  mergeFlags(flags),
+	}
+
+	if tx.flags.IsReadOnly() {
+		// only create snapshot for read transactions (don't pollute id space)
+		e.mu.RLock()
+		tx.snap = e.NewSnapshot(0)
+		e.mu.RUnlock()
+	} else {
+		// generate txid for write transactions and store in global tx list
+		e.mu.Lock()
+		tx.id = atomic.AddUint64(&e.xnext, 1)
+		tx.snap = e.NewSnapshot(tx.id)
+		e.txs.Add(tx)
+		e.mu.Unlock()
 	}
 	return tx
 }
@@ -108,7 +146,8 @@ func (t *Tx) Noop() error {
 }
 
 func (t *Tx) Close() {
-	if len(t.touched) > 0 {
+	// remove from global tx list (read-only tx run without id)
+	if t.id > 0 {
 		t.engine.mu.Lock()
 		t.engine.txs.Del(t)
 		if len(t.engine.txs) > 0 {
@@ -117,24 +156,19 @@ func (t *Tx) Close() {
 			t.engine.xmin = t.engine.xnext - 1
 		}
 		t.engine.mu.Unlock()
-		clear(t.touched)
 	}
+
+	// cleanup
+	clear(t.touched)
 	clear(t.dbTx)
 	clear(t.writes)
 	t.catTx = nil
 	t.snap = nil
+	t.flags = 0
 }
 
 func (t *Tx) Touch(key uint64) {
 	if len(t.touched) == 0 {
-		// generate txid on first write
-		t.engine.mu.Lock()
-		t.id = atomic.AddUint64(&t.engine.xnext, 1)
-		t.engine.txs.Add(t)
-		t.engine.mu.Unlock()
-
-		// update snapshot
-		t.snap.WithId(t.id)
 		t.touched = make(map[uint64]struct{})
 	}
 	t.touched[key] = struct{}{}
