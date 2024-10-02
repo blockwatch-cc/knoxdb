@@ -52,7 +52,11 @@ func createSegment(id LSN, opts WalOptions) (*segment, error) {
 func openSegment(id LSN, opts WalOptions) (*segment, error) {
 	filename := id.calculateFilename(opts.MaxSegmentSize)
 	name := fmt.Sprintf("%d.%s", filename, segmentExt)
-	f, err := os.OpenFile(filepath.Join(opts.Path, name), os.O_RDWR, os.ModePerm)
+	fileFlag := os.O_RDWR
+	if opts.ReadOnly {
+		fileFlag = os.O_RDONLY
+	}
+	f, err := os.OpenFile(filepath.Join(opts.Path, name), fileFlag, os.ModePerm)
 	if err != nil {
 		return nil, err
 	}

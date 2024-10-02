@@ -116,13 +116,13 @@ func (r *Reader) Next() (*Record, error) {
 		record.Data = data
 
 		// check checksum
-		r.bufferedReader.wal.hash.Reset()
+		r.bufferedReader.hash.Reset()
 		var b [8]byte
 		LE.PutUint64(b[:], r.prevCsum)
-		r.bufferedReader.wal.hash.Write(b[:])
-		r.bufferedReader.wal.hash.Write(head[:22])
-		r.bufferedReader.wal.hash.Write(record.Data)
-		calculatedChecksum := r.bufferedReader.wal.hash.Sum64()
+		r.bufferedReader.hash.Write(b[:])
+		r.bufferedReader.hash.Write(head[:22])
+		r.bufferedReader.hash.Write(record.Data)
+		calculatedChecksum := r.bufferedReader.hash.Sum64()
 		checksum := LE.Uint64(head[22:])
 
 		if checksum != calculatedChecksum {

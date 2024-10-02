@@ -6,7 +6,10 @@ package wal
 import (
 	"bytes"
 	"errors"
+	"hash"
 	"io"
+
+	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 )
 
 var (
@@ -19,14 +22,18 @@ const (
 
 type bufferedReader struct {
 	seg         *segment
-	wal         *Wal
+	hash        hash.Hash64
 	buf         *bytes.Buffer
+	opts        WalOptions
 	lastReadPos int64
 }
 
 func newBufferedReader(wal *Wal) *bufferedReader {
+	opts := wal.opts
+	opts.ReadOnly = true
 	return &bufferedReader{
-		wal:         wal,
+		opts:        opts,
+		hash:        xxhash.New(),
 		buf:         bytes.NewBuffer(make([]byte, 0, ChunkSize)),
 		lastReadPos: 0,
 	}
@@ -39,7 +46,7 @@ func (b *bufferedReader) Close() error {
 		b.seg = nil
 
 	}
-	b.wal = nil
+	b.hash = nil
 	return err
 }
 
@@ -48,8 +55,8 @@ func (b *bufferedReader) Seek(lsn LSN) error {
 		return ErrClosed
 	}
 	// open segment and seek
-	filepos := lsn.calculateOffset(b.wal.opts.MaxSegmentSize)
-	seg, err := openSegment(lsn, b.wal.opts)
+	filepos := lsn.calculateOffset(b.opts.MaxSegmentSize)
+	seg, err := openSegment(lsn, b.opts)
 	if err != nil {
 		return err
 	}
@@ -137,11 +144,11 @@ func (b *bufferedReader) hasNextSegment() bool {
 			return false
 		}
 	}
-	return doesSegmentExist(b.seg.id+1, b.wal.opts)
+	return doesSegmentExist(b.seg.id+1, b.opts)
 }
 
 func (b *bufferedReader) IsClosed() bool {
-	return b.wal == nil
+	return b.hash == nil
 }
 
 func (b *bufferedReader) nextSegment() error {
@@ -154,8 +161,8 @@ func (b *bufferedReader) nextSegment() error {
 		}
 	}
 	defer b.seg.Close()
-	lsn := NewLSN(b.seg.id+1, int64(b.wal.opts.MaxSegmentSize), 0)
-	seg, err := openSegment(lsn, b.wal.opts)
+	lsn := NewLSN(b.seg.id+1, int64(b.opts.MaxSegmentSize), 0)
+	seg, err := openSegment(lsn, b.opts)
 	if err != nil {
 		return err
 	}
