@@ -1,3 +1,6 @@
+// Copyright (c) 2024 Blockwatch Data Inc.
+// Author: abdul@blockwatch.cc
+
 package wal
 
 import (
