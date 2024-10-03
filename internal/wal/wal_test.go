@@ -24,7 +24,7 @@ func createWal(tb testing.TB, dir string, segmentSize ...int) *Wal {
 	tb.Helper()
 	opts := WalOptions{
 		Path:           dir,
-		MaxSegmentSize: 1024, // Default segment size
+		MaxSegmentSize: 1024,
 		Seed:           12345,
 	}
 	if len(segmentSize) > 0 {
@@ -2211,67 +2211,59 @@ func BenchmarkWalWriteSync(b *testing.B) {
 			name = "WithSync"
 		}
 		b.Run(name, func(b *testing.B) {
-			benchmarkWalWriteSync(b, 1024, withSync)
+			testDir := b.TempDir()
+			w := createWal(b, testDir, 1024*1024) // 1 MB segments
+			defer w.Close()
+
+			size := 1024
+			data := make([]byte, size)
+			b.SetBytes(int64(size))
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				rec := &Record{
+					Type:   RecordTypeInsert,
+					Tag:    types.ObjectTagDatabase,
+					Entity: uint64(i),
+					TxID:   uint64(i),
+					Data:   data,
+				}
+				_, err := w.Write(rec)
+				require.NoError(b, err)
+				if withSync {
+					err = w.Sync()
+					require.NoError(b, err)
+				}
+			}
 		})
-	}
-}
-
-// benchmarkWalWriteSync is a helper function for BenchmarkWalWriteSync
-func benchmarkWalWriteSync(b *testing.B, size int, withSync bool) {
-	testDir := b.TempDir()
-	w := createWal(b, testDir, 1024*1024) // 1 MB segments
-	defer w.Close()
-
-	data := make([]byte, size)
-	b.SetBytes(int64(size))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		rec := &Record{
-			Type:   RecordTypeInsert,
-			Tag:    types.ObjectTagDatabase,
-			Entity: uint64(i),
-			TxID:   uint64(i),
-			Data:   data,
-		}
-		_, err := w.Write(rec)
-		require.NoError(b, err)
-		if withSync {
-			err = w.Sync()
-			require.NoError(b, err)
-		}
 	}
 }
 
 // BenchmarkWalWriteVaryingSegmentSize tests writing with different segment sizes
 func BenchmarkWalWriteVaryingSegmentSize(b *testing.B) {
 	segmentSizes := []int{1024, 4096, 16384, 65536, 262144, 1048576}
-	for _, size := range segmentSizes {
-		b.Run(fmt.Sprintf("SegmentSize-%d", size), func(b *testing.B) {
-			benchmarkWalWriteWithSegmentSize(b, 1024, size)
+	for _, segmentSize := range segmentSizes {
+		b.Run(fmt.Sprintf("SegmentSize-%d", segmentSize), func(b *testing.B) {
+			testDir := b.TempDir()
+			w := createWal(b, testDir, segmentSize)
+			defer w.Close()
+
+			recordSize := 1024
+			data := make([]byte, recordSize)
+			b.SetBytes(int64(recordSize))
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				rec := &Record{
+					Type:   RecordTypeInsert,
+					Tag:    types.ObjectTagDatabase,
+					Entity: uint64(i),
+					TxID:   uint64(i),
+					Data:   data,
+				}
+				_, err := w.Write(rec)
+				require.NoError(b, err)
+			}
 		})
-	}
-}
-
-// benchmarkWalWriteWithSegmentSize is a helper function for BenchmarkWalWriteVaryingSegmentSize
-func benchmarkWalWriteWithSegmentSize(b *testing.B, recordSize, segmentSize int) {
-	testDir := b.TempDir()
-	w := createWal(b, testDir, segmentSize)
-	defer w.Close()
-
-	data := make([]byte, recordSize)
-	b.SetBytes(int64(recordSize))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		rec := &Record{
-			Type:   RecordTypeInsert,
-			Tag:    types.ObjectTagDatabase,
-			Entity: uint64(i),
-			TxID:   uint64(i),
-			Data:   data,
-		}
-		_, err := w.Write(rec)
-		require.NoError(b, err)
 	}
 }
