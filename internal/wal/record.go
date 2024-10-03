@@ -29,7 +29,7 @@ var (
 )
 
 func (t RecordType) IsValid() bool {
-	return t != RecordTypeInvalid
+	return t != RecordTypeInvalid && t <= RecordTypeCheckpoint
 }
 
 func (t RecordType) String() string {

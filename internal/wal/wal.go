@@ -182,6 +182,9 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 	if w.active == nil {
 		return 0, ErrClosed
 	}
+	if !rec.IsValid() {
+		return 0, ErrInvalidRecord
+	}
 	// write record to active segment
 	// create header
 	var head [HeaderSize]byte

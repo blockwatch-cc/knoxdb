@@ -60,9 +60,9 @@ func TestWalWrite(t *testing.T) {
 		txID       uint64
 		data       string
 	}{
-		{RecordTypeInsert, types.ObjectTag(1), 1, 100, "d1"},
-		{RecordTypeUpdate, types.ObjectTag(2), 2, 200, "d2"},
-		{RecordTypeDelete, types.ObjectTag(3), 3, 300, "d3"},
+		{RecordTypeInsert, types.ObjectTagDatabase, 1, 100, "d1"},
+		{RecordTypeUpdate, types.ObjectTagDatabase, 2, 200, "d2"},
+		{RecordTypeDelete, types.ObjectTagDatabase, 3, 300, "d3"},
 	}
 
 	for _, tc := range testCases {
@@ -117,7 +117,7 @@ func TestWalWrite(t *testing.T) {
 //  }
 //  rec := &Record{
 //      Type:   RecordTypeInsert,
-//      Tag:    types.ObjectTag(1),
+//      Tag:    types.ObjectTagDatabase,
 //      Entity: 1,
 //      TxID:   1,
 //      Data:   largeData,
@@ -175,9 +175,9 @@ func TestWalRead(t *testing.T) {
 		txID       uint64
 		data       string
 	}{
-		{RecordTypeInsert, types.ObjectTag(1), 1, 100, "data1"},
-		{RecordTypeUpdate, types.ObjectTag(2), 2, 200, "data2"},
-		{RecordTypeDelete, types.ObjectTag(3), 3, 300, "data3"},
+		{RecordTypeInsert, types.ObjectTagDatabase, 1, 100, "data1"},
+		{RecordTypeUpdate, types.ObjectTagDatabase, 2, 200, "data2"},
+		{RecordTypeDelete, types.ObjectTagDatabase, 3, 300, "data3"},
 	}
 
 	for _, td := range testData {
@@ -221,9 +221,9 @@ func TestWalFilteredReading(t *testing.T) {
 
 	// Write test records
 	records := []*Record{
-		{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
-		{Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
-		{Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
+		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: []byte("data1")},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTagStore, Entity: 2, TxID: 200, Data: []byte("data2")},
+		{Type: RecordTypeDelete, Tag: types.ObjectTagStream, Entity: 3, TxID: 300, Data: []byte("data3")},
 	}
 
 	for _, rec := range records {
@@ -237,11 +237,11 @@ func TestWalFilteredReading(t *testing.T) {
 		expect *Record
 	}{
 		{"FilterByType", func(r WalReader) WalReader { return r.WithType(RecordTypeInsert) }, records[0]},
-		{"FilterByTag", func(r WalReader) WalReader { return r.WithTag(types.ObjectTag(1)) }, records[0]},
+		{"FilterByTag", func(r WalReader) WalReader { return r.WithTag(types.ObjectTagDatabase) }, records[0]},
 		{"FilterByEntity", func(r WalReader) WalReader { return r.WithEntity(2) }, records[1]},
 		{"FilterByTxID", func(r WalReader) WalReader { return r.WithTxID(300) }, records[2]},
-		{"CombinedFilters", func(r WalReader) WalReader { return r.WithType(RecordTypeUpdate).WithTag(types.ObjectTag(2)) }, records[1]},
-		{"NoMatchFilter", func(r WalReader) WalReader { return r.WithType(RecordTypeInsert).WithTag(types.ObjectTag(2)) }, nil},
+		{"CombinedFilters", func(r WalReader) WalReader { return r.WithType(RecordTypeUpdate).WithTag(types.ObjectTagStore) }, records[1]},
+		{"NoMatchFilter", func(r WalReader) WalReader { return r.WithType(RecordTypeInsert).WithTag(types.ObjectTagStore) }, nil},
 	}
 
 	for _, tt := range tests {
@@ -278,11 +278,11 @@ func TestWalFilteredReading(t *testing.T) {
 //      txID       uint64
 //      data       string
 //  }{
-//      {RecordTypeInsert, types.ObjectTag(1), 1, 100, "data1"},
-//      {RecordTypeUpdate, types.ObjectTag(2), 2, 200, "data2"},
-//      {RecordTypeDelete, types.ObjectTag(3), 3, 300, "data3"},
-//      {RecordTypeInsert, types.ObjectTag(1), 4, 400, "data4"},
-//      {RecordTypeUpdate, types.ObjectTag(2), 5, 500, "data5"},
+//      {RecordTypeInsert, types.ObjectTagDatabase, 1, 100, "data1"},
+//      {RecordTypeUpdate, types.ObjectTagDatabase, 2, 200, "data2"},
+//      {RecordTypeDelete, types.ObjectTagDatabase, 3, 300, "data3"},
+//      {RecordTypeInsert, types.ObjectTagDatabase, 4, 400, "data4"},
+//      {RecordTypeUpdate, types.ObjectTagDatabase, 5, 500, "data5"},
 //  }
 
 //  lsns := make([]LSN, len(testRecords))
@@ -363,10 +363,10 @@ func TestWalSeek(t *testing.T) {
 	defer w.Close()
 
 	records := []*Record{
-		{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
-		{Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
-		{Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
-		{Type: RecordTypeInsert, Tag: types.ObjectTag(4), Entity: 4, TxID: 400, Data: []byte("data4")},
+		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: []byte("data1")},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTagDatabase, Entity: 2, TxID: 200, Data: []byte("data2")},
+		{Type: RecordTypeDelete, Tag: types.ObjectTagDatabase, Entity: 3, TxID: 300, Data: []byte("data3")},
+		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 4, TxID: 400, Data: []byte("data4")},
 	}
 
 	lsns := make([]LSN, len(records))
@@ -409,9 +409,9 @@ func TestWalNext(t *testing.T) {
 
 	// Write some test records
 	records := []*Record{
-		{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
-		{Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
-		{Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
+		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: []byte("data1")},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTagDatabase, Entity: 2, TxID: 200, Data: []byte("data2")},
+		{Type: RecordTypeDelete, Tag: types.ObjectTagDatabase, Entity: 3, TxID: 300, Data: []byte("data3")},
 	}
 
 	for _, rec := range records {
@@ -441,7 +441,7 @@ func TestWalClose(t *testing.T) {
 	w := createWal(t, testDir)
 
 	// Write a test record
-	rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")}
+	rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: []byte("data1")}
 	_, err := w.Write(rec)
 	require.NoError(t, err)
 
@@ -498,7 +498,7 @@ func TestWalClose(t *testing.T) {
 //  for i := 0; i < numRecords; i++ {
 //      rec := &Record{
 //          Type:   RecordTypeInsert,
-//          Tag:    types.ObjectTag(i % 100),
+//          Tag:    types.ObjectTagDatabase% 100),
 //          Entity: uint64(i),
 //          TxID:   uint64(i),
 //          Data:   []byte(fmt.Sprintf("data-%d", i)),
@@ -577,9 +577,9 @@ func TestWalCrashRecovery(t *testing.T) {
 
 	// Write some records
 	records := []*Record{
-		{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
-		{Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
-		{Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
+		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: []byte("data1")},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTagDatabase, Entity: 2, TxID: 200, Data: []byte("data2")},
+		{Type: RecordTypeDelete, Tag: types.ObjectTagDatabase, Entity: 3, TxID: 300, Data: []byte("data3")},
 	}
 
 	for _, rec := range records {
@@ -697,6 +697,7 @@ func TestWalConfiguration(t *testing.T) {
 		// Write records to force multiple segment creation
 		for i := 0; i < 100; i++ {
 			rec := &Record{
+				Tag:  types.ObjectTagDatabase,
 				Type: RecordTypeInsert,
 				Data: bytes.Repeat([]byte("a"), 100), // 100 byte records
 			}
@@ -727,7 +728,7 @@ func TestWalSegmentRollover(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		rec := &Record{
 			Type:   RecordTypeInsert,
-			Tag:    types.ObjectTag(1),
+			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   uint64(i),
 			Data:   []byte(strings.Repeat("a", 50)),
@@ -786,7 +787,7 @@ func TestWalSegmentRollover(t *testing.T) {
 //      for bytesWritten < opts.MaxSegmentSize-100 { // Leave some space for the last record
 //          rec := &Record{
 //              Type:   RecordTypeInsert,
-//              Tag:    types.ObjectTag(1),
+//              Tag:    types.ObjectTagDatabase,
 //              Entity: uint64(bytesWritten),
 //              TxID:   uint64(bytesWritten),
 //              Data:   []byte("test data"),
@@ -800,7 +801,7 @@ func TestWalSegmentRollover(t *testing.T) {
 //      // Write a record that spans the segment boundary
 //      spanningRec := &Record{
 //          Type:   RecordTypeInsert,
-//          Tag:    types.ObjectTag(2),
+//          Tag:    types.ObjectTagDatabase,
 //          Entity: uint64(bytesWritten),
 //          TxID:   uint64(bytesWritten),
 //          Data:   bytes.Repeat([]byte("a"), opts.MaxSegmentSize-bytesWritten+100), // Ensure it spans
@@ -827,7 +828,7 @@ func TestWalSegmentRollover(t *testing.T) {
 //      // Write a record that spans multiple segments
 //      largeRec := &Record{
 //          Type:   RecordTypeInsert,
-//          Tag:    types.ObjectTag(3),
+//          Tag:    types.ObjectTagDatabase,
 //          Entity: 1000,
 //          TxID:   1000,
 //          Data:   bytes.Repeat([]byte("b"), opts.MaxSegmentSize*3), // Span at least 3 segments
@@ -854,7 +855,7 @@ func TestWalSegmentRollover(t *testing.T) {
 //      for i := 0; i < opts.MaxSegmentSize/100+1; i++ {
 //          rec := &Record{
 //              Type:   RecordTypeInsert,
-//              Tag:    types.ObjectTag(4),
+//              Tag:    types.ObjectTagDatabase,
 //              Entity: uint64(i),
 //              TxID:   uint64(i),
 //              Data:   bytes.Repeat([]byte("c"), 90), // 90 bytes of data + header should ensure rollover
@@ -892,7 +893,7 @@ func TestWalSegmentRollover(t *testing.T) {
 //      for i := 0; i < opts.MaxSegmentSize/50+1; i++ {
 //          rec := &Record{
 //              Type:   RecordTypeInsert,
-//              Tag:    types.ObjectTag(5),
+//              Tag:    types.ObjectTagDatabase,
 //              Entity: uint64(i),
 //              TxID:   uint64(i),
 //              Data:   bytes.Repeat([]byte("d"), 40),
@@ -1042,7 +1043,7 @@ func TestWalSegmentRollover(t *testing.T) {
 //          for j := 0; j < operationsPerGoroutine; j++ {
 //              rec := &Record{
 //                  Type:   RecordTypeInsert,
-//                  Tag:    types.ObjectTag(writerID),
+//                  Tag:    types.ObjectTagDatabaseiterID),
 //                  Entity: uint64(j),
 //                  TxID:   uint64(writerID*operationsPerGoroutine + j),
 //                  Data:   []byte(fmt.Sprintf("data from writer %d, op %d", writerID, j)),
@@ -1136,9 +1137,9 @@ func TestWalRecovery(t *testing.T) {
 		require.NoError(t, err)
 
 		records := []*Record{
-			{Type: RecordTypeInsert, Tag: types.ObjectTag(1), Entity: 1, TxID: 100, Data: []byte("data1")},
-			{Type: RecordTypeUpdate, Tag: types.ObjectTag(2), Entity: 2, TxID: 200, Data: []byte("data2")},
-			{Type: RecordTypeDelete, Tag: types.ObjectTag(3), Entity: 3, TxID: 300, Data: []byte("data3")},
+			{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: []byte("data1")},
+			{Type: RecordTypeUpdate, Tag: types.ObjectTagDatabase, Entity: 2, TxID: 200, Data: []byte("data2")},
+			{Type: RecordTypeDelete, Tag: types.ObjectTagDatabase, Entity: 3, TxID: 300, Data: []byte("data3")},
 		}
 
 		for _, rec := range records {
@@ -1174,7 +1175,7 @@ func TestWalRecovery(t *testing.T) {
 
 		// Write some records
 		for i := 0; i < 5; i++ {
-			rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTag(i), Entity: uint64(i), TxID: uint64(i * 100), Data: []byte(fmt.Sprintf("data%d", i))}
+			rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: uint64(i), TxID: uint64(i * 100), Data: []byte(fmt.Sprintf("data%d", i))}
 			_, err := w.Write(rec)
 			require.NoError(t, err)
 		}
@@ -1211,7 +1212,7 @@ func TestWalRecovery(t *testing.T) {
 
 		// Write some records
 		for i := 0; i < 10; i++ {
-			rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTag(i), Entity: uint64(i), TxID: uint64(i * 100), Data: []byte(fmt.Sprintf("data%d", i))}
+			rec := &Record{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: uint64(i), TxID: uint64(i * 100), Data: []byte(fmt.Sprintf("data%d", i))}
 			_, err := w.Write(rec)
 			require.NoError(t, err)
 		}
@@ -1281,7 +1282,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 	for i := 0; i < completeRecords; i++ {
 		rec := &Record{
 			Type:   RecordTypeInsert,
-			Tag:    types.ObjectTag(i),
+			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   uint64(i * 100),
 			Data:   []byte(fmt.Sprintf("complete data %d", i)),
@@ -1293,7 +1294,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 	// Write a partial record
 	partialRec := &Record{
 		Type:   RecordTypeUpdate,
-		Tag:    types.ObjectTag(completeRecords),
+		Tag:    types.ObjectTagDatabase,
 		Entity: uint64(completeRecords),
 		TxID:   uint64(completeRecords * 100),
 		Data:   bytes.Repeat([]byte("partial data "), 50), // Large data to ensure it spans multiple writes
@@ -1337,7 +1338,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, RecordTypeInsert, rec.Type)
-		assert.Equal(t, types.ObjectTag(recoveredCount), rec.Tag)
+		assert.Equal(t, types.ObjectTagDatabase, rec.Tag)
 		assert.Equal(t, uint64(recoveredCount), rec.Entity)
 		assert.Equal(t, uint64(recoveredCount*100), rec.TxID)
 		assert.Equal(t, []byte(fmt.Sprintf("complete data %d", recoveredCount)), rec.Data)
@@ -1351,7 +1352,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 	// Verify that writing new records after recovery works
 	newRec := &Record{
 		Type:   RecordTypeInsert,
-		Tag:    types.ObjectTag(completeRecords + 1),
+		Tag:    types.ObjectTagDatabase,
 		Entity: uint64(completeRecords + 1),
 		TxID:   uint64((completeRecords + 1) * 100),
 		Data:   []byte("new record after recovery"),
@@ -1381,7 +1382,7 @@ func TestWalSyncAndClose(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		rec := &Record{
 			Type:   RecordTypeInsert,
-			Tag:    types.ObjectTag(i % 3),
+			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   uint64(i * 100),
 			Data:   []byte(fmt.Sprintf("data%d", i)),
@@ -1437,7 +1438,7 @@ func TestWalSyncAndClose(t *testing.T) {
 //              default:
 //                  rec := &Record{
 //                      Type:   RecordType(rand.Intn(3)), // Random record type
-//                      Tag:    types.ObjectTag(rand.Intn(100)),
+//                      Tag:    types.ObjectTagDatabasend.Intn(100)),
 //                      Entity: uint64(rand.Int63()),
 //                      TxID:   uint64(rand.Int63()),
 //                      Data:   make([]byte, recordSize),
@@ -1651,7 +1652,7 @@ func TestWalSyncAndClose(t *testing.T) {
 //  // Write a record
 //  rec := &Record{
 //      Type:   RecordTypeInsert,
-//      Tag:    types.ObjectTag(1),
+//      Tag:    types.ObjectTagDatabase,
 //      Entity: 1,
 //      TxID:   100,
 //      Data:   []byte("test data"),
@@ -1690,7 +1691,7 @@ func TestWalSyncAndClose(t *testing.T) {
 //  // Test checksum for large record
 //  largeRec := &Record{
 //      Type:   RecordTypeInsert,
-//      Tag:    types.ObjectTag(2),
+//      Tag:    types.ObjectTagDatabase,
 //      Entity: 2,
 //      TxID:   200,
 //      Data:   bytes.Repeat([]byte("large data "), 1000000), // 10MB data
@@ -1722,7 +1723,6 @@ func TestWalSyncAndClose(t *testing.T) {
 
 // TestWalInvalidRecords tests the WAL's behavior when attempting to write records with invalid types or tags.
 func TestWalInvalidRecords(t *testing.T) {
-	t.Skip()
 	testDir := t.TempDir()
 	w := createWal(t, testDir)
 	defer w.Close()
@@ -1758,6 +1758,7 @@ func TestWalEmptyRecords(t *testing.T) {
 	// Write an empty record
 	emptyRec := &Record{
 		Type:   RecordTypeInsert,
+		Tag:    types.ObjectTagDatabase,
 		Entity: 1,
 		TxID:   100,
 		Data:   []byte{},
@@ -1777,6 +1778,7 @@ func TestWalEmptyRecords(t *testing.T) {
 	// Write a record with minimal data (1 byte)
 	minimalRec := &Record{
 		Type:   RecordTypeUpdate,
+		Tag:    types.ObjectTagDatabase,
 		Entity: 2,
 		TxID:   101,
 		Data:   []byte{0},
@@ -1866,8 +1868,8 @@ func TestTwoSimultaneousReaders(t *testing.T) {
 	numRecords := 100
 	for i := 0; i < numRecords; i++ {
 		rec := &Record{
-			Type:   RecordType(i % 3),
-			Tag:    types.ObjectTag(i % 5),
+			Type:   RecordTypeInsert,
+			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   uint64(i * 100),
 			Data:   []byte(fmt.Sprintf("data%d", i)),
@@ -1891,8 +1893,8 @@ func TestTwoSimultaneousReaders(t *testing.T) {
 			var err error
 			rec, err = r.Next()
 			require.NoError(t, err)
-			assert.Equal(t, RecordType(i%3), rec.Type)
-			assert.Equal(t, types.ObjectTag(i%5), rec.Tag)
+			assert.Equal(t, RecordTypeInsert, rec.Type)
+			assert.Equal(t, types.ObjectTagDatabase, rec.Tag)
 			assert.Equal(t, uint64(i), rec.Entity)
 			assert.Equal(t, uint64(i*100), rec.TxID)
 			assert.Equal(t, []byte(fmt.Sprintf("data%d", i)), rec.Data)
@@ -1925,7 +1927,7 @@ func TestConcurrentReadersLargeDataset(t *testing.T) {
 	for i := 0; i < numRecords; i++ {
 		rec := &Record{
 			Type:   RecordType(i % 3),
-			Tag:    types.ObjectTag(i % 5),
+			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   uint64(i * 100),
 			Data:   []byte(fmt.Sprintf("data%d", i)),
@@ -1959,7 +1961,7 @@ func TestConcurrentReadersLargeDataset(t *testing.T) {
 
 				expectedI := count
 				assert.Equal(t, RecordType(expectedI%3), rec.Type)
-				assert.Equal(t, types.ObjectTag(expectedI%5), rec.Tag)
+				assert.Equal(t, types.ObjectTagDatabase, rec.Tag)
 				assert.Equal(t, uint64(expectedI), rec.Entity)
 				assert.Equal(t, uint64(expectedI*100), rec.TxID)
 				assert.Equal(t, []byte(fmt.Sprintf("data%d", expectedI)), rec.Data)
@@ -1999,7 +2001,7 @@ func TestWalInvalidLSN(t *testing.T) {
 	// Write a valid record to ensure the WAL is initialized
 	validRec := &Record{
 		Type: RecordTypeInsert,
-		Tag:  types.ObjectTag(0),
+		Tag:  types.ObjectTagDatabase,
 		Data: []byte("valid data"),
 	}
 	validLSN, err := w.Write(validRec)
@@ -2084,7 +2086,7 @@ func TestWalFaultInjection(t *testing.T) {
 		// Try to create a new segment file
 		rec := &Record{
 			Type: RecordTypeInsert,
-			Tag:  types.ObjectTag(1),
+			Tag:  types.ObjectTagDatabase,
 			Data: bytes.Repeat([]byte("a"), int(opts.MaxSegmentSize)+1), // Force new segment creation
 		}
 		_, err = w.Write(rec)
@@ -2098,7 +2100,7 @@ func TestWalFaultInjection(t *testing.T) {
 
 		rec := &Record{
 			Type: RecordTypeInsert,
-			Tag:  types.ObjectTag(1),
+			Tag:  types.ObjectTagDatabase,
 			Data: []byte("test data"),
 		}
 		lsn, err := w.Write(rec)
@@ -2138,7 +2140,7 @@ func TestWalFaultInjection(t *testing.T) {
 
 		rec := &Record{
 			Type: RecordTypeInsert,
-			Tag:  types.ObjectTag(1),
+			Tag:  types.ObjectTagDatabase,
 			Data: bytes.Repeat([]byte("a"), 1000),
 		}
 		lsn, err := w.Write(rec)
@@ -2181,7 +2183,7 @@ func TestWalFaultInjection(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			rec := &Record{
 				Type: RecordTypeInsert,
-				Tag:  types.ObjectTag(i),
+				Tag:  types.ObjectTagDatabase,
 				Data: []byte(fmt.Sprintf("data %d", i)),
 			}
 			lastLSN, err = w.Write(rec)
@@ -2223,7 +2225,7 @@ func TestWalFaultInjection(t *testing.T) {
 
 		rec := &Record{
 			Type: RecordTypeInsert,
-			Tag:  types.ObjectTag(1),
+			Tag:  types.ObjectTagDatabase,
 			Data: []byte("test data"),
 		}
 		lsn, err := w.Write(rec)
@@ -2264,7 +2266,7 @@ func TestWalFaultInjection(t *testing.T) {
 
 		rec := &Record{
 			Type: RecordTypeInsert,
-			Tag:  types.ObjectTag(1),
+			Tag:  types.ObjectTagDatabase,
 			Data: bytes.Repeat([]byte("a"), 1000),
 		}
 		lsn, err := w.Write(rec)
@@ -2299,7 +2301,7 @@ func TestWalFaultInjection(t *testing.T) {
 
 		rec := &Record{
 			Type: RecordTypeInsert,
-			Tag:  types.ObjectTag(1),
+			Tag:  types.ObjectTagDatabase,
 			Data: []byte("test data"),
 		}
 		lsn, err := w.Write(rec)
@@ -2337,7 +2339,7 @@ func TestWalFaultInjection(t *testing.T) {
 		for i := 0; i < 1000; i++ {
 			rec := &Record{
 				Type: RecordTypeInsert,
-				Tag:  types.ObjectTag(i),
+				Tag:  types.ObjectTagDatabase,
 				Data: bytes.Repeat([]byte("a"), 900),
 			}
 			lsn, err := w.Write(rec)
