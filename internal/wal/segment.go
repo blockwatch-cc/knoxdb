@@ -53,7 +53,7 @@ func openSegment(id LSN, opts WalOptions) (*segment, error) {
 	filename := id.calculateFilename(opts.MaxSegmentSize)
 	name := generateFilename(filename)
 	fileFlag := os.O_RDWR
-	if opts.ReadOnly {
+	if opts.readOnly {
 		fileFlag = os.O_RDONLY
 	}
 	f, err := os.OpenFile(filepath.Join(opts.Path, name), fileFlag, os.ModePerm)

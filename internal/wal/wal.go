@@ -44,7 +44,7 @@ type WalOptions struct {
 	Seed           uint64
 	Path           string
 	MaxSegmentSize int
-	ReadOnly       bool
+	readOnly       bool
 }
 
 func (opt WalOptions) IsValid() bool {

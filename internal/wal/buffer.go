@@ -26,7 +26,7 @@ type bufferedReader struct {
 
 func newBufferedReader(wal *Wal) *bufferedReader {
 	opts := wal.opts
-	opts.ReadOnly = true
+	opts.readOnly = true
 	return &bufferedReader{
 		opts:               opts,
 		hash:               xxhash.New(),
