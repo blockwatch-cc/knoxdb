@@ -121,7 +121,7 @@ func Open(id LSN, opts WalOptions) (*Wal, error) {
 					return nil, err
 				}
 				defer f.Close()
-				err = f.Truncate(r.ReadPosition() - HeaderSize + int64(len(record.Data)))
+				err = f.Truncate(r.ReadPosition())
 				if err != nil {
 					return nil, err
 				}

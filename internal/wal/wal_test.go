@@ -1206,7 +1206,6 @@ func TestWalRecovery(t *testing.T) {
 	})
 
 	t.Run("CorruptedSegmentRecovery", func(t *testing.T) {
-		t.Skip()
 		w, err := Create(opts)
 		require.NoError(t, err)
 
@@ -1234,7 +1233,7 @@ func TestWalRecovery(t *testing.T) {
 		require.NoError(t, err)
 		_, err = f.WriteAt([]byte("CORRUPT"), 100)
 		require.NoError(t, err)
-		f.Close()
+		defer f.Close()
 
 		// Attempt to recover
 		recoveredWal, err := Open(0, opts)
