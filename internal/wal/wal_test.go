@@ -1,5 +1,5 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
-// Author: oliver@blockwatch.cc
+// Author: oliver@blockwatch.cc, abdul@blockwatch.cc
 
 package wal
 
@@ -2116,8 +2116,6 @@ func TestWalFaultInjection(t *testing.T) {
 //
 // `go test -v blockwatch.cc/knoxdb/internal/wal -run=^$ -bench .`
 //
-// BenchmarkWalSequentialWrite tests the performance of writing records sequentially to the WAL.
-// BenchmarkWalWrite tests writing records of various sizes to the WAL
 // BenchmarkWalWrite tests writing records of various sizes to the WAL
 func BenchmarkWalWrite(b *testing.B) {
 	sizes := []int{256, 512, 1024, 2 * 1024, 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024, 64 * 1024, 128 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024}
