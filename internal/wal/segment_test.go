@@ -19,7 +19,7 @@ func TestSegmentCreate(t *testing.T) {
 		t.Errorf("failed to create segment: %v", err)
 	}
 	defer s.Close()
-	f, err := os.Stat(filepath.Join(opts.Path, "0.SEG"))
+	f, err := os.Stat(filepath.Join(opts.Path, generateFilename(0)))
 	if err != nil {
 		t.Errorf("segment file was not created: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestSegmentOpen(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to close segment: %v", err)
 	}
-	_, err = os.Stat(filepath.Join(opts.Path, "0.SEG"))
+	_, err = os.Stat(filepath.Join(opts.Path, generateFilename(0)))
 	if err != nil {
 		t.Errorf("segment file was not created: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestSegmentWrite(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to write to segment")
 	}
-	f, err := os.Stat(filepath.Join(opts.Path, "0.SEG"))
+	f, err := os.Stat(filepath.Join(opts.Path, generateFilename(0)))
 	if err != nil {
 		t.Errorf("segment file was not created: %v", err)
 	}

@@ -5,15 +5,10 @@ package wal
 
 import (
 	"bytes"
-	"errors"
 	"hash"
 	"io"
 
 	"blockwatch.cc/knoxdb/internal/hash/xxhash"
-)
-
-var (
-	ErrClosed = errors.New("closed")
 )
 
 const (
@@ -21,21 +16,23 @@ const (
 )
 
 type bufferedReader struct {
-	seg         *segment
-	hash        hash.Hash64
-	buf         *bytes.Buffer
-	opts        WalOptions
-	lastReadPos int64
+	seg                *segment
+	hash               hash.Hash64
+	buf                *bytes.Buffer
+	opts               WalOptions
+	lastReadPos        int64
+	lastSegmentReadPos int64
 }
 
 func newBufferedReader(wal *Wal) *bufferedReader {
 	opts := wal.opts
 	opts.ReadOnly = true
 	return &bufferedReader{
-		opts:        opts,
-		hash:        xxhash.New(),
-		buf:         bytes.NewBuffer(make([]byte, 0, ChunkSize)),
-		lastReadPos: 0,
+		opts:               opts,
+		hash:               xxhash.New(),
+		buf:                bytes.NewBuffer(make([]byte, 0, ChunkSize)),
+		lastReadPos:        0,
+		lastSegmentReadPos: 0,
 	}
 }
 
@@ -65,6 +62,7 @@ func (b *bufferedReader) Seek(lsn LSN) error {
 		return err
 	}
 	b.lastReadPos = filepos
+	b.lastSegmentReadPos = filepos
 	b.seg = seg
 	return nil
 }
@@ -90,8 +88,10 @@ func (b *bufferedReader) Read(size int) ([]byte, error) {
 		blen := b.buf.Len()
 		if size <= blen {
 			if len(extraData) == 0 {
+				b.lastSegmentReadPos += int64(size)
 				return b.buf.Next(size), nil
 			} else {
+				b.lastSegmentReadPos += int64(size + len(extraData))
 				result := append(extraData, b.buf.Next(size)...)
 				extraData = nil
 				return result, nil
@@ -167,6 +167,11 @@ func (b *bufferedReader) nextSegment() error {
 		return err
 	}
 	b.lastReadPos = 0
+	b.lastSegmentReadPos = 0
 	b.seg = seg
 	return nil
+}
+
+func (b *bufferedReader) ReadPosition() int64 {
+	return b.lastSegmentReadPos
 }

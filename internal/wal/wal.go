@@ -1,5 +1,5 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
-// Author: alex@blockwatch.cc
+// Author: alex@blockwatch.cc, abdul@blockwatch.cc
 
 package wal
 
@@ -9,19 +9,19 @@ import (
 	"hash"
 	"io"
 	"os"
+	"path/filepath"
 
 	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
 var (
-	ErrInvalidWalOption = errors.New("invalid wal options ")
-
 	LE = binary.LittleEndian
 )
 
 const (
-	HeaderSize = 30
+	HeaderSize     = 30
+	MinSegmentSize = 8 << 10
 )
 
 type WalReader interface {
@@ -31,6 +31,8 @@ type WalReader interface {
 	// NextN([]*Record) error
 
 	Checksum() uint64
+	ReadSegmentId() uint64
+	ReadPosition() int64
 
 	WithType(RecordType) WalReader
 	WithTag(types.ObjectTag) WalReader
@@ -54,6 +56,7 @@ type Wal struct {
 	active *segment
 	csum   uint64
 	hash   hash.Hash64
+	sz     int64
 }
 
 func Create(opts WalOptions) (*Wal, error) {
@@ -93,11 +96,15 @@ func Open(id LSN, opts WalOptions) (*Wal, error) {
 		return nil, err
 	}
 
+	// if we have been able to load the segment LSN
+	// we can assume we the minimum size
+	// of the wal is LSN - 1
 	wal := &Wal{
 		opts:   opts,
 		active: seg,
 		hash:   xxhash.New(),
 		csum:   opts.Seed,
+		sz:     int64(id) - 1,
 	}
 	var record *Record
 	r := wal.NewReader()
@@ -105,10 +112,51 @@ func Open(id LSN, opts WalOptions) (*Wal, error) {
 	for {
 		record, err = r.Next()
 		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				_ = wal.active.Truncate(wal.active.pos)
-				// TODO(): truncate all segments after?
-			} else {
+			switch {
+			case errors.Is(err, ErrChecksum):
+				name := generateFilename(int64(r.ReadSegmentId()))
+				filename := filepath.Join(opts.Path, name)
+				f, err := os.OpenFile(filename, os.O_RDWR, 0666)
+				if err != nil {
+					return nil, err
+				}
+				defer f.Close()
+				err = f.Truncate(r.ReadPosition() - HeaderSize + int64(len(record.Data)))
+				if err != nil {
+					return nil, err
+				}
+				// removing all segments after
+				// truncated file as they are possibly corrupted
+				dirEntries, err := os.ReadDir(opts.Path)
+				if err != nil {
+					return nil, err
+				}
+				seen := false
+				for _, entry := range dirEntries {
+					if !seen {
+						entryName := entry.Name()
+						if entryName == filename {
+							seen = true
+						}
+						continue
+					}
+					err = os.Remove(entry.Name())
+					if err != nil {
+						return nil, err
+					}
+
+				}
+				var dir *os.File
+				dir, err = os.Open(opts.Path)
+				if err != nil {
+					return nil, err
+				}
+				defer dir.Close()
+				if err = dir.Sync(); err != nil {
+					return nil, err
+				}
+				fallthrough
+			case errors.Is(err, io.EOF):
 				err = nil
 			}
 			break
@@ -175,10 +223,11 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 		if sizeOfRemainingDataToWrite > spaceLeft {
 			sizeOfDataToWriteToCurrentFile = spaceLeft
 		}
-		_, err := w.writeData(data[dataPos : dataPos+sizeOfDataToWriteToCurrentFile])
+		n, err := w.writeData(data[dataPos : dataPos+sizeOfDataToWriteToCurrentFile])
 		if err != nil {
 			return 0, err
 		}
+		w.sz += int64(n)
 		sizeOfRemainingDataToWrite -= sizeOfDataToWriteToCurrentFile
 		dataPos += sizeOfDataToWriteToCurrentFile
 
@@ -204,6 +253,7 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 func (w *Wal) NewReader() WalReader {
 	return &Reader{
 		bufferedReader: newBufferedReader(w),
+		prevCsum:       w.opts.Seed,
 	}
 }
 

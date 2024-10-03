@@ -1,5 +1,5 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
-// Author: alex@blockwatch.cc
+// Author: alex@blockwatch.cc, abdul@blockwatch.cc
 
 package wal
 
@@ -19,6 +19,8 @@ const (
 	RecordTypeCommit
 	RecordTypeAbort
 	RecordTypeCheckpoint
+
+	MinimumTxIDDistance = 10 << 10
 )
 
 var (
@@ -63,4 +65,18 @@ func (r Record) String() string {
 	return fmt.Sprintf("wal: LSN=0x%016x xid=0x%016x  typ=%s tag=%s entity=0x%016x len=%d",
 		r.Lsn, r.TxID, r.Type, r.Tag, r.Entity, len(r.Data),
 	)
+}
+
+func (r Record) IsValid() bool {
+	return r.Type.IsValid() && r.Tag.IsValid()
+}
+
+func (r Record) IsTxIDValid(prevTxId uint64) bool {
+	diff := uint64(0)
+	if r.TxID > prevTxId {
+		diff = r.TxID - prevTxId
+	} else {
+		diff = prevTxId - r.TxID
+	}
+	return diff <= MinimumTxIDDistance
 }

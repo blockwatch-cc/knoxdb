@@ -1,9 +1,11 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
-// Author: alex@blockwatch.cc
+// Author: alex@blockwatch.cc, abdul@blockwatch.cc
 
 package wal
 
 import (
+	"errors"
+	"fmt"
 	"io"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -114,6 +116,12 @@ func (r *Reader) Next() (*Record, error) {
 		if err != nil {
 			return nil, err
 		}
+		if int(dataLength) != len(data) {
+			return nil, errors.Join(ErrInvalidRecord, fmt.Errorf("record data has mismatch size"))
+		}
+		if !record.IsTxIDValid(r.prevTxId) {
+			return nil, errors.Join(ErrInvalidRecord, fmt.Errorf("invalid record tx id"))
+		}
 		record.Data = data
 
 		// check checksum
@@ -144,4 +152,12 @@ func (r *Reader) Next() (*Record, error) {
 
 func (r *Reader) Checksum() uint64 {
 	return r.prevCsum
+}
+
+func (r *Reader) ReadSegmentId() uint64 {
+	return uint64(r.bufferedReader.seg.id)
+}
+
+func (r *Reader) ReadPosition() int64 {
+	return r.bufferedReader.ReadPosition()
 }

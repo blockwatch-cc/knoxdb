@@ -1,5 +1,5 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
-// Author: alex@blockwatch.cc
+// Author: alex@blockwatch.cc, abdul@blockwatch.cc
 
 package wal
 
@@ -22,7 +22,7 @@ type segment struct {
 
 func createSegment(id LSN, opts WalOptions) (*segment, error) {
 	filename := id.calculateFilename(opts.MaxSegmentSize)
-	name := fmt.Sprintf("%d.%s", filename, segmentExt)
+	name := generateFilename(filename)
 	f, err := os.OpenFile(filepath.Join(opts.Path, name), os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func createSegment(id LSN, opts WalOptions) (*segment, error) {
 
 func openSegment(id LSN, opts WalOptions) (*segment, error) {
 	filename := id.calculateFilename(opts.MaxSegmentSize)
-	name := fmt.Sprintf("%d.%s", filename, segmentExt)
+	name := generateFilename(filename)
 	fileFlag := os.O_RDWR
 	if opts.ReadOnly {
 		fileFlag = os.O_RDONLY
@@ -74,7 +74,7 @@ func openSegment(id LSN, opts WalOptions) (*segment, error) {
 }
 
 func doesSegmentExist(id int64, opt WalOptions) bool {
-	name := fmt.Sprintf("%d.%s", id, segmentExt)
+	name := generateFilename(id)
 	_, err := os.Stat(filepath.Join(opt.Path, name))
 	return err == nil
 }
@@ -122,4 +122,8 @@ func (s *segment) Seek(offset int64, whence int) (int64, error) {
 
 func (s *segment) Size() int64 {
 	return s.sz
+}
+
+func generateFilename(id int64) string {
+	return fmt.Sprintf("%16d.%s", id, segmentExt)
 }
