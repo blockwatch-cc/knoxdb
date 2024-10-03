@@ -865,7 +865,7 @@ func TestWalSegmentRollover(t *testing.T) {
 //          lastLSN = lsn
 //      }
 
-//      segmentFile := filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lastLSN.calculateFilename(w.opts.MaxSegmentSize)))
+//      segmentFile := filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lastLSN.calculateFilename(w.opts.MaxSegmentSize)))
 
 //      // Verify we can read all records across segment boundaries
 //      reader := w.NewReader()
@@ -1307,7 +1307,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 	w.active.fd.Close()
 
 	// Corrupt the last part of the file to simulate incomplete write
-	segmentFile := filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+	segmentFile := filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
 	f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
 	require.NoError(t, err)
 
@@ -1559,7 +1559,7 @@ func TestWalSyncAndClose(t *testing.T) {
 //  require.NoError(t, err, "Failed to write record")
 
 //  // Construct the segment file name based on the returned LSN.
-//  segmentFile := filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+//  segmentFile := filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
 
 //  // Open the segment file for reading and writing.
 //  file, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
@@ -1622,7 +1622,7 @@ func TestWalSyncAndClose(t *testing.T) {
 //  assert.Equal(t, rec.Data, readRec.Data, "Record data mismatch")
 
 //  // Corrupt the checksum
-//  file, err := os.OpenFile(filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lsn.SegmentID())), os.O_RDWR, 0644)
+//  file, err := os.OpenFile(filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lsn.SegmentID())), os.O_RDWR, 0644)
 //  require.NoError(t, err, "Failed to open segment file")
 //  defer file.Close()
 
@@ -1669,7 +1669,7 @@ func TestWalSyncAndClose(t *testing.T) {
 //  assert.Equal(t, rec.Data, readRec.Data, "Record data mismatch")
 
 //  // Corrupt the checksum
-//  segmentFile := filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+//  segmentFile := filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
 //  require.NoError(t, err, "Failed to open segment file")
 //  defer file.Close()
 
@@ -1818,7 +1818,7 @@ func TestWalEmptyRecords(t *testing.T) {
 //  w.Close()
 
 //  // Corrupt the last record
-//  segmentFile := filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lastLSN.SegmentID()))
+//  segmentFile := filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lastLSN.SegmentID()))
 //  file, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
 //  require.NoError(t, err, "Failed to open segment file")
 
@@ -2058,7 +2058,7 @@ func TestWalInvalidLSN(t *testing.T) {
 }
 
 func verifySegmentExists(t *testing.T, dir string, lsn LSN, maxSegmentSize int) {
-	segmentFile := filepath.Join(dir, fmt.Sprintf("%16d.SEG", lsn.calculateFilename(maxSegmentSize)))
+	segmentFile := filepath.Join(dir, fmt.Sprintf("%016d.SEG", lsn.calculateFilename(maxSegmentSize)))
 	_, err := os.Stat(segmentFile)
 	require.NoError(t, err, "Segment file should exist: %s", segmentFile)
 }
@@ -2106,7 +2106,7 @@ func TestWalFaultInjection(t *testing.T) {
 		require.NoError(t, err)
 
 		// Corrupt the checksum
-		segmentFile := filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
 		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
 		require.NoError(t, err)
 		defer f.Close()
@@ -2146,7 +2146,7 @@ func TestWalFaultInjection(t *testing.T) {
 		require.NoError(t, err)
 
 		// Simulate a partial write by truncating the file
-		segmentFile := filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
 		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
 		require.NoError(t, err)
 		defer f.Close()
@@ -2231,7 +2231,7 @@ func TestWalFaultInjection(t *testing.T) {
 		require.NoError(t, err)
 
 		// Corrupt the header
-		segmentFile := filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
 		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
 		require.NoError(t, err)
 		defer f.Close()
@@ -2272,7 +2272,7 @@ func TestWalFaultInjection(t *testing.T) {
 		require.NoError(t, err)
 
 		// Truncate the file to create an incomplete record
-		segmentFile := filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
 		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
 		require.NoError(t, err)
 		defer f.Close()
@@ -2307,7 +2307,7 @@ func TestWalFaultInjection(t *testing.T) {
 		require.NoError(t, err)
 
 		// Corrupt the record type
-		segmentFile := filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lsn.calculateFilename(w.opts.MaxSegmentSize)))
 		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
 		require.NoError(t, err)
 		defer f.Close()
@@ -2347,7 +2347,7 @@ func TestWalFaultInjection(t *testing.T) {
 		}
 
 		// Corrupt the segment boundary
-		segmentFile := filepath.Join(testDir, fmt.Sprintf("%16d.SEG", lastLSN.calculateFilename(w.opts.MaxSegmentSize)))
+		segmentFile := filepath.Join(testDir, fmt.Sprintf("%016d.SEG", lastLSN.calculateFilename(w.opts.MaxSegmentSize)))
 		f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
 		require.NoError(t, err)
 		defer f.Close()

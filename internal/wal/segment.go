@@ -125,5 +125,5 @@ func (s *segment) Size() int64 {
 }
 
 func generateFilename(id int64) string {
-	return fmt.Sprintf("%16d.%s", id, segmentExt)
+	return fmt.Sprintf("%016d.%s", id, segmentExt)
 }

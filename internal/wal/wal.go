@@ -287,5 +287,6 @@ func (w *Wal) writeData(data []byte) (int, error) {
 		_ = w.active.Truncate(w.active.pos)
 		return 0, err
 	}
+	w.sz += int64(len(data))
 	return pos, err
 }

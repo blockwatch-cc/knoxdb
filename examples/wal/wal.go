@@ -30,7 +30,7 @@ func init() {
 	flags.BoolVar(&debug, "vv", false, "enable debug mode")
 	flags.BoolVar(&trace, "vvv", false, "enable trace mode")
 	flags.BoolVar(&profile, "profile", false, "enable CPU profiling")
-	flags.StringVar(&walPath, "waldir", "", "wal")
+	flags.StringVar(&walPath, "waldir", "./waldata", "wal")
 	flags.StringVar(&cmd, "cmd", "write", "action")
 }
 
