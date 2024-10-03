@@ -1529,6 +1529,7 @@ func TestWalEmptyRecords(t *testing.T) {
 	assert.Equal(t, minimalRec.Data, readRec.Data, "Minimal record data mismatch")
 }
 
+// TestWalTruncateOnPartialWrite tests the WAL's behavior when encountering a partially written (truncated) record.
 func TestWalTruncateOnPartialWrite(t *testing.T) {
 	testDir := t.TempDir()
 	w := createWal(t, testDir)
