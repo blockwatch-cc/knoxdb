@@ -52,11 +52,19 @@ func (b *bufferedReader) Seek(lsn LSN) error {
 		return ErrClosed
 	}
 	// open segment and seek
-	filepos := lsn.calculateOffset(b.opts.MaxSegmentSize)
+	fileId := lsn.calculateFilename(b.opts.MaxSegmentSize)
+	var seg *segment
+	if b.seg != nil && fileId != b.seg.id {
+		err := b.seg.Close()
+		if err != nil {
+			return err
+		}
+	}
 	seg, err := openSegment(lsn, b.opts)
 	if err != nil {
 		return err
 	}
+	filepos := lsn.calculateOffset(b.opts.MaxSegmentSize)
 	_, err = seg.Seek(int64(filepos), 0)
 	if err != nil {
 		return err
@@ -64,7 +72,14 @@ func (b *bufferedReader) Seek(lsn LSN) error {
 	b.lastBufferReadPos = filepos
 	b.lastSegmentReadPos = filepos
 	b.seg = seg
+	b.buf.Reset()
 	return nil
+}
+
+func (b *bufferedReader) Reset() {
+	b.buf.Reset()
+	b.lastBufferReadPos = 0
+	b.lastSegmentReadPos = 0
 }
 
 func (b *bufferedReader) Read(size int) ([]byte, error) {

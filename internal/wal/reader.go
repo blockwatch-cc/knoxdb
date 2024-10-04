@@ -85,7 +85,33 @@ func (r *Reader) Close() error {
 }
 
 func (r *Reader) Seek(lsn LSN) error {
-	return r.bufferedReader.Seek(lsn)
+	// TODO(abdul): find performant solution that can also read the previous csum without having to read all segments
+	// ? append the record size for each record and walk backwards
+	r.prevCsum = r.bufferedReader.opts.Seed
+	r.bufferedReader.Reset()
+	err := r.bufferedReader.Seek(0)
+	if err != nil {
+		return err
+	}
+	r.prevCsum = r.bufferedReader.opts.Seed
+	if lsn == 0 {
+		return nil
+	}
+	nextLsn := LSN(0)
+	for {
+		record, err := r.Next()
+		if err != nil {
+			return err
+		}
+		nextLsn += 30 + LSN(len(record.Data))
+		if nextLsn == lsn {
+			break
+		}
+		if nextLsn > lsn {
+			return io.EOF
+		}
+	}
+	return nil
 }
 
 func (r *Reader) Next() (*Record, error) {

@@ -1016,8 +1016,6 @@ func TestWalTruncateOnPartialWrite(t *testing.T) {
 
 	// Attempt to seek to the new LSN and read the record, expecting an error
 	err = reader.Seek(newLSN)
-	require.NoError(t, err, "Seeking to new LSN should not fail")
-	_, err = reader.Next()
 	assert.Error(t, err, "Expected an error when reading the record written after truncation")
 	assert.Contains(t, err.Error(), "checksum mismatch", "Error should indicate checksum mismatch")
 }
@@ -1182,7 +1180,7 @@ func TestWalInvalidLSN(t *testing.T) {
 		{"OutOfBoundsOffset", NewLSN(0, int64(opts.MaxSegmentSize), int64(opts.MaxSegmentSize+100))},
 	}
 
-	for _, tc := range invalidLSNs[:3] {
+	for _, tc := range invalidLSNs {
 		t.Run(tc.name, func(t *testing.T) {
 			reader := w.NewReader()
 			defer reader.Close()
@@ -1190,24 +1188,6 @@ func TestWalInvalidLSN(t *testing.T) {
 			// Seek to invalid LSN
 			err := reader.Seek(tc.lsn)
 			require.Error(t, err, "Expected error when reading after seeking to invalid LSN %v", tc.lsn)
-		})
-	}
-
-	fmt.Println(invalidLSNs[3:][0].name)
-	for _, tc := range invalidLSNs[3:] {
-		t.Run(tc.name, func(t *testing.T) {
-			reader := w.NewReader()
-			defer reader.Close()
-
-			// Seek to invalid LSN
-			err := reader.Seek(tc.lsn)
-			require.NoError(t, err, "Seek to invalid LSN %v should not return an error", tc.lsn)
-
-			// Attempt to read after seeking to invalid LSN
-			rec, err := reader.Next()
-			require.Error(t, err, "Expected error when reading after seeking to invalid LSN %v", tc.lsn)
-			require.Nil(t, rec, "Expected nil record when reading after seeking to invalid LSN %v", tc.lsn)
-			require.Contains(t, err.Error(), "short buffer", "Expected checksum mismatch error for invalid LSN %v", tc.lsn)
 		})
 	}
 
