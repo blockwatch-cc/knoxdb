@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	ChunkSize = 10 << 10
+	ChunkSize = 16384
 )
 
 type bufferedReader struct {
