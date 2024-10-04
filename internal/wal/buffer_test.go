@@ -13,7 +13,7 @@ import (
 func TestBufferRead(t *testing.T) {
 	for _, tc := range bufferReadTestCases {
 		var wal, err = Create(WalOptions{
-			MaxSegmentSize: 100,
+			MaxSegmentSize: MinSegmentSize,
 			Path:           t.TempDir(),
 		})
 		if err != nil {
@@ -36,7 +36,7 @@ func TestBufferRead(t *testing.T) {
 				return
 			}
 
-			_, err = bufferReader.Read(30)
+			_, err = bufferReader.Read(HeaderSize)
 			if err != nil {
 				t.Errorf("failed to read: %v", err)
 			}
@@ -57,7 +57,7 @@ func TestBufferRead(t *testing.T) {
 
 func TestBufferHasNextSegment(t *testing.T) {
 	var wal, err = Create(WalOptions{
-		MaxSegmentSize: 100,
+		MaxSegmentSize: MinSegmentSize,
 		Path:           t.TempDir(),
 	})
 	if err != nil {
@@ -86,7 +86,9 @@ func TestBufferHasNextSegment(t *testing.T) {
 		t.Error("buffered reader should not have more segment because the record wrote less than its max size")
 	}
 
-	data = make([]byte, 500)
+	data = make([]byte, MinSegmentSize)
+	rand.Read(data)
+
 	record = generateRecord(data)
 	_, err = wal.Write(record)
 	if err != nil {
@@ -100,7 +102,7 @@ func TestBufferHasNextSegment(t *testing.T) {
 
 func TestBufferNextSegment(t *testing.T) {
 	var wal, err = Create(WalOptions{
-		MaxSegmentSize: 100,
+		MaxSegmentSize: MinSegmentSize,
 		Path:           t.TempDir(),
 	})
 	if err != nil {
@@ -110,7 +112,7 @@ func TestBufferNextSegment(t *testing.T) {
 
 	bufferReader := newBufferedReader(wal)
 
-	data := make([]byte, 50)
+	data := make([]byte, MinSegmentSize)
 	rand.Read(data)
 
 	record := generateRecord(data)
@@ -142,7 +144,7 @@ func TestBufferNextSegment(t *testing.T) {
 
 func TestBufferSeek(t *testing.T) {
 	var wal, err = Create(WalOptions{
-		MaxSegmentSize: 100,
+		MaxSegmentSize: MinSegmentSize,
 		Path:           t.TempDir(),
 	})
 	if err != nil {
@@ -177,7 +179,7 @@ func TestBufferSeek(t *testing.T) {
 
 func TestBufferSeekClosed(t *testing.T) {
 	var wal, err = Create(WalOptions{
-		MaxSegmentSize: 100,
+		MaxSegmentSize: MinSegmentSize,
 		Path:           t.TempDir(),
 	})
 	if err != nil {

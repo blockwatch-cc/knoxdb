@@ -100,12 +100,25 @@ func (r *Reader) Next() (*Record, error) {
 	// - after reading each record, check the chained checksum
 	// - then decide whether we should skip based on filter match
 
+	if r.bufferedReader.IsClosed() {
+		return nil, ErrClosed
+	}
+
 	for {
 		record := &Record{}
-		head, err := r.bufferedReader.Read(30)
+		// check checksum
+		r.bufferedReader.hash.Reset()
+
+		var b [8]byte
+		LE.PutUint64(b[:], r.prevCsum)
+		r.bufferedReader.hash.Write(b[:])
+
+		head, err := r.bufferedReader.Read(HeaderSize)
 		if err != nil {
 			return nil, err
 		}
+		checksum := LE.Uint64(head[22:])
+		r.bufferedReader.hash.Write(head[:22])
 		record.Type = RecordType(head[0])
 		record.Tag = types.ObjectTag(head[1])
 		record.Entity = LE.Uint64(head[2:10])
@@ -123,16 +136,8 @@ func (r *Reader) Next() (*Record, error) {
 			return nil, errors.Join(ErrInvalidRecord, fmt.Errorf("invalid record tx id"))
 		}
 		record.Data = data
-
-		// check checksum
-		r.bufferedReader.hash.Reset()
-		var b [8]byte
-		LE.PutUint64(b[:], r.prevCsum)
-		r.bufferedReader.hash.Write(b[:])
-		r.bufferedReader.hash.Write(head[:22])
 		r.bufferedReader.hash.Write(record.Data)
 		calculatedChecksum := r.bufferedReader.hash.Sum64()
-		checksum := LE.Uint64(head[22:])
 
 		if checksum != calculatedChecksum {
 			return nil, ErrChecksum

@@ -23,7 +23,7 @@ type segment struct {
 func createSegment(id LSN, opts WalOptions) (*segment, error) {
 	filename := id.calculateFilename(opts.MaxSegmentSize)
 	name := generateFilename(filename)
-	f, err := os.OpenFile(filepath.Join(opts.Path, name), os.O_CREATE|os.O_RDWR, 0666)
+	f, err := os.OpenFile(filepath.Join(opts.Path, name), os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,11 @@ func (s *segment) Sync() error {
 }
 
 func (s *segment) Truncate(sz int64) error {
-	return s.fd.Truncate(sz)
+	err := s.fd.Truncate(sz)
+	if err == nil {
+		s.sz -= sz
+	}
+	return err
 }
 
 func (s *segment) Write(buf []byte) (int, error) {

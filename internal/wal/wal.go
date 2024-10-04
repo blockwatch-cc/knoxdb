@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -48,7 +49,7 @@ type WalOptions struct {
 }
 
 func (opt WalOptions) IsValid() bool {
-	return len(opt.Path) > 0 && opt.MaxSegmentSize > 0
+	return len(opt.Path) > 0 && opt.MaxSegmentSize >= MinSegmentSize
 }
 
 type Wal struct {
@@ -57,6 +58,7 @@ type Wal struct {
 	csum   uint64
 	hash   hash.Hash64
 	sz     int64
+	lock   sync.Mutex
 }
 
 func Create(opts WalOptions) (*Wal, error) {
@@ -106,17 +108,18 @@ func Open(id LSN, opts WalOptions) (*Wal, error) {
 		csum:   opts.Seed,
 		sz:     int64(id) - 1,
 	}
-	var record *Record
+	var lastValidRecord, record *Record
 	r := wal.NewReader()
 	defer r.Close()
 	for {
 		record, err = r.Next()
 		if err != nil {
+			var f *os.File
 			switch {
 			case errors.Is(err, ErrChecksum):
 				name := generateFilename(int64(r.ReadSegmentId()))
 				filename := filepath.Join(opts.Path, name)
-				f, err := os.OpenFile(filename, os.O_RDWR, 0666)
+				f, err = os.OpenFile(filename, os.O_RDWR, 0600)
 				if err != nil {
 					return nil, err
 				}
@@ -161,8 +164,9 @@ func Open(id LSN, opts WalOptions) (*Wal, error) {
 			}
 			break
 		}
+		lastValidRecord = record
 	}
-	if record != nil {
+	if lastValidRecord != nil {
 		wal.csum = r.Checksum()
 	}
 	return wal, err
@@ -282,6 +286,8 @@ func (w *Wal) nextSegment() error {
 }
 
 func (w *Wal) writeData(data []byte) (int, error) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	pos, err := w.active.Write(data)
 	if err != nil {
 		_ = w.active.Truncate(w.active.pos)

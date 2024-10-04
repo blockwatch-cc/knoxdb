@@ -68,7 +68,7 @@ func (r Record) String() string {
 }
 
 func (r Record) IsValid() bool {
-	return r.Type.IsValid() && r.Tag.IsValid()
+	return r.Type.IsValid() && r.Tag.IsValid() && (r.TxID > 0 || (r.Type == RecordTypeCheckpoint && r.TxID == 0))
 }
 
 func (r Record) IsTxIDValid(prevTxId uint64) bool {

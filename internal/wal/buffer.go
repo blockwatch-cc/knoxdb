@@ -20,7 +20,7 @@ type bufferedReader struct {
 	hash               hash.Hash64
 	buf                *bytes.Buffer
 	opts               WalOptions
-	lastReadPos        int64
+	lastBufferReadPos  int64
 	lastSegmentReadPos int64
 }
 
@@ -31,7 +31,7 @@ func newBufferedReader(wal *Wal) *bufferedReader {
 		opts:               opts,
 		hash:               xxhash.New(),
 		buf:                bytes.NewBuffer(make([]byte, 0, ChunkSize)),
-		lastReadPos:        0,
+		lastBufferReadPos:  0,
 		lastSegmentReadPos: 0,
 	}
 }
@@ -61,7 +61,7 @@ func (b *bufferedReader) Seek(lsn LSN) error {
 	if err != nil {
 		return err
 	}
-	b.lastReadPos = filepos
+	b.lastBufferReadPos = filepos
 	b.lastSegmentReadPos = filepos
 	b.seg = seg
 	return nil
@@ -109,13 +109,13 @@ func (b *bufferedReader) Read(size int) ([]byte, error) {
 			break
 		}
 
-		r := io.NewSectionReader(b.seg.fd, b.lastReadPos, ChunkSize)
+		r := io.NewSectionReader(b.seg.fd, b.lastBufferReadPos, ChunkSize)
 		b.buf.Reset()
 		n, err := b.buf.ReadFrom(r)
 		if err != nil {
 			return nil, err
 		}
-		b.lastReadPos += int64(n)
+		b.lastBufferReadPos += int64(n)
 		if n < ChunkSize {
 			if b.hasNextSegment() {
 				err = b.nextSegment()
@@ -166,7 +166,7 @@ func (b *bufferedReader) nextSegment() error {
 	if err != nil {
 		return err
 	}
-	b.lastReadPos = 0
+	b.lastBufferReadPos = 0
 	b.lastSegmentReadPos = 0
 	b.seg = seg
 	return nil

@@ -49,7 +49,7 @@ var bufferReadTestCases = []TestCase{
 			if err != nil {
 				t.Errorf("failed to read: %v", err)
 			}
-			_, err = b.Read(30)
+			_, err = b.Read(HeaderSize)
 			if !errors.Is(err, io.EOF) {
 				t.Errorf("reading end of segment should return EOF: %v", err)
 			}
@@ -63,7 +63,7 @@ var bufferReadTestCases = []TestCase{
 			if err != nil {
 				t.Errorf("failed to read: %v", err)
 			}
-			_, err = b.Read(30)
+			_, err = b.Read(HeaderSize)
 			if !errors.Is(err, ErrClosed) {
 				t.Errorf("reading closed buffered reader was successful: %v", err)
 			}
