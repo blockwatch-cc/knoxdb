@@ -136,15 +136,14 @@ func printHeader(header []byte) {
 }
 
 // generateValidHeader creates a valid header for testing.
-func generateValidHeader(recordType RecordType, tag types.ObjectTag, entity, txID uint64, dataLen uint32, data []byte) []byte {
-    header := make([]byte, HeaderSize)
+func generateValidHeader(recordType RecordType, tag types.ObjectTag, entity, txID uint64, dataLen uint32) [HeaderSize]byte {
+    var header [HeaderSize]byte
     header[TypeField.offset] = byte(recordType)
     header[TagField.offset] = byte(tag)
     binary.LittleEndian.PutUint64(header[EntityField.offset:], entity)
     binary.LittleEndian.PutUint64(header[TxIDField.offset:], txID)
     binary.LittleEndian.PutUint32(header[DataLenField.offset:], dataLen)
-    checksum := calculateChecksum(header[:ChecksumField.offset], data)
-    binary.LittleEndian.PutUint64(header[ChecksumField.offset:], checksum)
+    binary.LittleEndian.PutUint64(header[ChecksumField.offset:], 0)
     return header
 }
 
@@ -330,24 +329,17 @@ func TestHeader(t *testing.T) {
 }
 
 func FuzzHeaderCheck(f *testing.F) {
-    f.Add(generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000, make([]byte, 1000)), make([]byte, 1000), uint64(50), LSN(1000), int64(1024*1024))
+    // Add seed inputs based on existing tests
+    f.Add(generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000), make([]byte, 1000), uint64(50), uint64(1000), int64(1024*1024))
+    f.Add(generateValidHeader(RecordTypeCheckpoint, types.ObjectTagDatabase, 1, 0, 1000), make([]byte, 1000), uint64(50), uint64(1000), int64(1024*1024))
+    f.Add(generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1048546), make([]byte, 1048546), uint64(50), uint64(0), int64(1048576))
 
-    f.Fuzz(func(t *testing.T, header []byte, data []byte, lastTxID uint64, currentLSN LSN, maxWalSize int64) {
-        if len(header) != HeaderSize {
-            return // Invalid input, skip
-        }
-
-        err := checkHeader(header, lastTxID, currentLSN, maxWalSize, data)
-
-        // Log all cases for analysis
-        t.Logf("Header: %v", header)
-        t.Logf("Data length: %d", len(data))
-        t.Logf("LastTxID: %d, CurrentLSN: %d, MaxWalSize: %d", lastTxID, currentLSN, maxWalSize)
+    f.Fuzz(func(t *testing.T, header [HeaderSize]byte, data []byte, lastTxID uint64, currentLSNValue uint64, maxWalSize int64) {
+        currentLSN := LSN(currentLSNValue)
+        err := checkHeader(header[:], lastTxID, currentLSN, maxWalSize, data)
         if err != nil {
             t.Logf("Error: %v", err)
-        } else {
-            t.Logf("Valid header")
+            t.Fail()
         }
-        t.Logf("---")
     })
 }
