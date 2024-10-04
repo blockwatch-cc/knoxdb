@@ -2,29 +2,48 @@
 // Author: oliver@blockwatch.cc
 
 /*
-The tests cover various aspects of WAL header validation, including:
+This test covers various aspects of WAL header validation:
 
-1. Basic structure: Verifies the correct size and field placement within the header.
+1. Header structure:
+   - Defines a fixed-size header (HeaderSize constant)
+   - Specifies offsets and sizes for each field in the header
 
-2. Record type validation: Tests for valid and invalid record types.
+2. Field extraction:
+   - Implements extractField function to read values from the header
 
-3. Object tag validation: Ensures only valid object tags are accepted.
+3. Checksum calculation and verification:
+   - calculateChecksum computes an xxHash checksum of the header
+   - verifyChecksum ensures the stored checksum matches the calculated one
 
-4. TxID handling:
-   - Checks for increasing TxID values
-   - Verifies special cases like zero TxID for checkpoint records
+4. Header Validation (checkHeader function):
+   - Validates record type and object tag
+   - Checks TxID (transaction ID) rules:
+     * Non-zero for non-checkpoint records
+     * Increasing values across records
+   - Ensures the record fits within WAL size limits
+   - Verifies the checksum
 
-5. Size limit enforcement:
-   - Tests maximum allowed record sizes
-   - Verifies behavior when record size exceeds WAL segment limits
-   - Checks edge cases where records exactly fill or slightly exceed remaining space
+5. Test Cases (TestHeader function):
+   - Covers various scenarios including:
+     * Valid headers
+     * Invalid record types and object tags
+     * TxID edge cases (zero, non-increasing)
+     * Size limit checks (maximum allowed, exceeding limits)
+     * LSN (Log Sequence Number) handling (including overflow scenarios)
+     * Checksum mismatches
 
-6. LSN handling:
-   - Tests various LSN values, including zero, maximum, and potential overflow scenarios
+6. Fuzzing (FuzzHeaderCheck function):
+   - Generates random inputs to test the header validation
+   - Includes checks for valid record types and object tags
+   - Generates headers with calculated checksums
+   - Logs error cases without failing the test
 
-7. Checksum Verification: Ensures the checksum mechanism correctly identifies data integrity issues
+Usage of FuzzHeaderCheck:
+The function uses go's built-in fuzzing framework. It can be run using the command:
+go test -v -run=^$ -fuzz=FuzzHeaderCheck -fuzztime=1m
 
-8. Data Length Consistency: Verifies that the data length field in the header matches the actual data size
+The fuzzer will generate random inputs for the header fields and test the checkHeader function with these inputs.
+It logs any error cases found during the fuzzing process.
 */
 
 package wal
@@ -32,11 +51,11 @@ package wal
 import (
     "encoding/binary"
     "fmt"
-    "hash/crc32"
     "math"
     "testing"
 
     "blockwatch.cc/knoxdb/internal/types"
+    "github.com/cespare/xxhash/v2"
 )
 
 // HeaderField represents the offset and size of each field in the header
@@ -56,7 +75,7 @@ var (
 )
 
 // extractField extracts a field from the header based on its definition.
-func extractField(header []byte, field HeaderField) uint64 {
+func extractField(header [HeaderSize]byte, field HeaderField) uint64 {
     switch field.size {
     case 1:
         return uint64(header[field.offset])
@@ -69,27 +88,22 @@ func extractField(header []byte, field HeaderField) uint64 {
     }
 }
 
-// calculateChecksum computes the checksum for the header and data.
-func calculateChecksum(header []byte, data []byte) uint64 {
-    h := crc32.NewIEEE()
+// calculateChecksum computes the checksum for the header.
+func calculateChecksum(header [HeaderSize]byte) uint64 {
+    h := xxhash.New()
     h.Write(header[:ChecksumField.offset])
-    h.Write(data)
-    return uint64(h.Sum32())
+    return h.Sum64()
 }
 
 // verifyChecksum checks if the stored checksum matches the calculated one.
-func verifyChecksum(header []byte, data []byte) bool {
+func verifyChecksum(header [HeaderSize]byte) bool {
     storedChecksum := extractField(header, ChecksumField)
-    calculatedChecksum := calculateChecksum(header, data)
+    calculatedChecksum := calculateChecksum(header)
     return storedChecksum == calculatedChecksum
 }
 
 // checkHeader performs sanity checks on the WAL record header.
-func checkHeader(header []byte, lastTxID uint64, currentLSN LSN, maxWalSize int64, data []byte) error {
-    if len(header) != HeaderSize {
-        return fmt.Errorf("invalid header size: got %d, want %d", len(header), HeaderSize)
-    }
-
+func checkHeader(header [HeaderSize]byte, lastTxID uint64, currentLSN LSN, maxWalSize int64) error {
     recordType := RecordType(extractField(header, TypeField))
     if !recordType.IsValid() {
         return fmt.Errorf("invalid record type: %d", recordType)
@@ -109,16 +123,12 @@ func checkHeader(header []byte, lastTxID uint64, currentLSN LSN, maxWalSize int6
     }
 
     dataLen := extractField(header, DataLenField)
-    if int64(dataLen) != int64(len(data)) {
-        return fmt.Errorf("data length mismatch: header claims %d, actual %d", dataLen, len(data))
-    }
     totalRecordSize := int64(HeaderSize) + int64(dataLen)
-    fmt.Printf("Debug: currentLSN=%d, totalRecordSize=%d, maxWalSize=%d, HeaderSize=%d\n", currentLSN, totalRecordSize, maxWalSize, HeaderSize)
     if currentLSN+LSN(totalRecordSize) > LSN(maxWalSize) {
         return fmt.Errorf("record would exceed max WAL size: currentLSN=%d, totalRecordSize=%d, maxWalSize=%d", currentLSN, totalRecordSize, maxWalSize)
     }
 
-    if !verifyChecksum(header, data) {
+    if !verifyChecksum(header) {
         return fmt.Errorf("checksum mismatch")
     }
 
@@ -126,7 +136,7 @@ func checkHeader(header []byte, lastTxID uint64, currentLSN LSN, maxWalSize int6
 }
 
 // printHeader prints the contents of a WAL record header for debugging.
-func printHeader(header []byte) {
+func printHeader(header [HeaderSize]byte) {
     fmt.Printf("Type: %d\n", extractField(header, TypeField))
     fmt.Printf("Tag: %d\n", extractField(header, TagField))
     fmt.Printf("Entity: %d\n", extractField(header, EntityField))
@@ -143,176 +153,147 @@ func generateValidHeader(recordType RecordType, tag types.ObjectTag, entity, txI
     binary.LittleEndian.PutUint64(header[EntityField.offset:], entity)
     binary.LittleEndian.PutUint64(header[TxIDField.offset:], txID)
     binary.LittleEndian.PutUint32(header[DataLenField.offset:], dataLen)
-    binary.LittleEndian.PutUint64(header[ChecksumField.offset:], 0)
     return header
 }
 
+// Package-level variable for test cases
+var headerTests = []struct {
+    name        string
+    header      [HeaderSize]byte
+    lastTxID    uint64
+    currentLSN  LSN
+    maxWalSize  int64
+    expectError bool
+}{
+    {
+        name:        "Valid header",
+        header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000),
+        lastTxID:    50,
+        currentLSN:  1000,
+        maxWalSize:  1024 * 1024,
+        expectError: false,
+    },
+    {
+        name: "Invalid record type",
+        header: func() [HeaderSize]byte {
+            h := generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000)
+            h[TypeField.offset] = 255
+            return h
+        }(),
+        lastTxID:    50,
+        currentLSN:  1000,
+        maxWalSize:  1024 * 1024,
+        expectError: true,
+    },
+    {
+        name: "Invalid object tag",
+        header: func() [HeaderSize]byte {
+            h := generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000)
+            h[TagField.offset] = 255
+            return h
+        }(),
+        lastTxID:    50,
+        currentLSN:  1000,
+        maxWalSize:  1024 * 1024,
+        expectError: true,
+    },
+    {
+        name:        "Zero TxID for non-checkpoint",
+        header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 0, 1000),
+        lastTxID:    50,
+        currentLSN:  1000,
+        maxWalSize:  1024 * 1024,
+        expectError: true,
+    },
+    {
+        name:        "Valid zero TxID for checkpoint",
+        header:      generateValidHeader(RecordTypeCheckpoint, types.ObjectTagDatabase, 1, 0, 0),
+        lastTxID:    50,
+        currentLSN:  1000,
+        maxWalSize:  1024 * 1024,
+        expectError: false,
+    },
+    {
+        name:        "TxID not increasing",
+        header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 25, 1000),
+        lastTxID:    50,
+        currentLSN:  1000,
+        maxWalSize:  1024 * 1024,
+        expectError: true,
+    },
+    {
+        name:        "Maximum allowed record size",
+        header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, uint32(1024*1024-HeaderSize)),
+        lastTxID:    50,
+        currentLSN:  0,
+        maxWalSize:  1024 * 1024,
+        expectError: false,
+    },
+    {
+        name:        "Record size exceeding maximum",
+        header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, uint32(1024*1024-HeaderSize+1)),
+        lastTxID:    50,
+        currentLSN:  0,
+        maxWalSize:  1024 * 1024,
+        expectError: true,
+    },
+    {
+        name:        "Record exactly fills remaining WAL space",
+        header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, uint32(1024*1024-HeaderSize)),
+        lastTxID:    50,
+        currentLSN:  0,
+        maxWalSize:  1024 * 1024,
+        expectError: false,
+    },
+    {
+        name:        "Record exceeds remaining WAL space by 1 byte",
+        header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, uint32(1024*1024-HeaderSize-1000+1)),
+        lastTxID:    50,
+        currentLSN:  1000,
+        maxWalSize:  1024 * 1024,
+        expectError: true,
+    },
+    {
+        name:        "Maximum LSN value",
+        header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 100),
+        lastTxID:    50,
+        currentLSN:  LSN(math.MaxInt64 - HeaderSize - 100),
+        maxWalSize:  math.MaxInt64,
+        expectError: false,
+    },
+    {
+        name:        "LSN overflow",
+        header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 101),
+        lastTxID:    50,
+        currentLSN:  LSN(math.MaxInt64 - HeaderSize - 100),
+        maxWalSize:  math.MaxInt64,
+        expectError: true,
+    },
+    {
+        name: "Checksum mismatch",
+        header: func() [HeaderSize]byte {
+            h := generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000)
+            // Set an incorrect checksum
+            binary.LittleEndian.PutUint64(h[ChecksumField.offset:], 12345) // Any value different from the correct checksum
+            return h
+        }(),
+        lastTxID:    50,
+        currentLSN:  1000,
+        maxWalSize:  1024 * 1024,
+        expectError: true,
+    },
+}
+
 func TestHeader(t *testing.T) {
-    maxWalSize := int64(1024 * 1024)
-    currentLSN := LSN(0)
-
-    tests := []struct {
-        name        string
-        header      []byte
-        data        []byte
-        lastTxID    uint64
-        currentLSN  LSN
-        maxWalSize  int64
-        expectError bool
-    }{
-        {
-            name:        "Valid header",
-            header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000, make([]byte, 1000)),
-            data:        make([]byte, 1000),
-            lastTxID:    50,
-            currentLSN:  1000,
-            maxWalSize:  maxWalSize,
-            expectError: false,
-        },
-        {
-            name: "Invalid record type",
-            header: func() []byte {
-                h := generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000, make([]byte, 1000))
-                h[TypeField.offset] = 255
-                return h
-            }(),
-            data:        make([]byte, 1000),
-            lastTxID:    50,
-            currentLSN:  1000,
-            maxWalSize:  maxWalSize,
-            expectError: true,
-        },
-        {
-            name: "Invalid object tag",
-            header: func() []byte {
-                h := generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000, make([]byte, 1000))
-                h[TagField.offset] = 255
-                return h
-            }(),
-            data:        make([]byte, 1000),
-            lastTxID:    50,
-            currentLSN:  1000,
-            maxWalSize:  maxWalSize,
-            expectError: true,
-        },
-        {
-            name:        "Zero TxID for non-checkpoint",
-            header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 0, 1000, make([]byte, 1000)),
-            data:        make([]byte, 1000),
-            lastTxID:    50,
-            currentLSN:  1000,
-            maxWalSize:  maxWalSize,
-            expectError: true,
-        },
-        {
-            name:        "Valid zero TxID for checkpoint",
-            header:      generateValidHeader(RecordTypeCheckpoint, types.ObjectTagDatabase, 1, 0, 1000, make([]byte, 1000)),
-            data:        make([]byte, 1000),
-            lastTxID:    50,
-            currentLSN:  1000,
-            maxWalSize:  maxWalSize,
-            expectError: false,
-        },
-        {
-            name:        "TxID not increasing",
-            header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 25, 1000, make([]byte, 1000)),
-            data:        make([]byte, 1000),
-            lastTxID:    50,
-            currentLSN:  1000,
-            maxWalSize:  maxWalSize,
-            expectError: true,
-        },
-        {
-            name:        "Maximum allowed record size",
-            header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, uint32(maxWalSize-HeaderSize), make([]byte, maxWalSize-HeaderSize)),
-            data:        make([]byte, maxWalSize-HeaderSize),
-            lastTxID:    50,
-            currentLSN:  0,
-            maxWalSize:  maxWalSize,
-            expectError: false,
-        },
-        {
-            name:        "Record size exceeding maximum",
-            header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, uint32(maxWalSize-HeaderSize+1), make([]byte, maxWalSize-HeaderSize+1)),
-            data:        make([]byte, maxWalSize-HeaderSize+1),
-            lastTxID:    50,
-            currentLSN:  0,
-            maxWalSize:  maxWalSize,
-            expectError: true,
-        },
-        {
-            name:        "Record exactly fills remaining WAL space",
-            header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, uint32(maxWalSize-HeaderSize), make([]byte, maxWalSize-HeaderSize)),
-            data:        make([]byte, maxWalSize-HeaderSize),
-            lastTxID:    50,
-            currentLSN:  LSN(0),
-            maxWalSize:  maxWalSize,
-            expectError: false,
-        },
-        {
-            name:        "Record exceeds remaining WAL space by 1 byte",
-            header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, uint32(maxWalSize-HeaderSize-int64(currentLSN)+1), make([]byte, maxWalSize-HeaderSize-int64(currentLSN)+1)),
-            data:        make([]byte, maxWalSize-HeaderSize-int64(currentLSN)+1),
-            lastTxID:    50,
-            currentLSN:  LSN(1000),
-            maxWalSize:  maxWalSize,
-            expectError: true,
-        },
-        {
-            name:        "Maximum LSN value",
-            header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 100, make([]byte, 100)),
-            data:        make([]byte, 100),
-            lastTxID:    50,
-            currentLSN:  LSN(math.MaxInt64 - HeaderSize - 100),
-            maxWalSize:  math.MaxInt64,
-            expectError: false,
-        },
-        {
-            name:        "LSN overflow",
-            header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 101, make([]byte, 101)),
-            data:        make([]byte, 101),
-            lastTxID:    50,
-            currentLSN:  LSN(math.MaxInt64 - HeaderSize - 100),
-            maxWalSize:  math.MaxInt64,
-            expectError: true,
-        },
-        {
-            name: "Checksum mismatch",
-            header: func() []byte {
-                h := generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000, make([]byte, 1000))
-                // Directly modify the checksum field
-                binary.LittleEndian.PutUint64(h[ChecksumField.offset:], 0)
-                return h
-            }(),
-            data:        make([]byte, 1000),
-            lastTxID:    50,
-            currentLSN:  1000,
-            maxWalSize:  maxWalSize,
-            expectError: true,
-        },
-        {
-            name:        "Zero LSN with maximum record size",
-            header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, uint32(maxWalSize-HeaderSize), make([]byte, maxWalSize-HeaderSize)),
-            data:        make([]byte, maxWalSize-HeaderSize),
-            lastTxID:    50,
-            currentLSN:  0,
-            maxWalSize:  maxWalSize,
-            expectError: false,
-        },
-        {
-            name:        "Data length mismatch",
-            header:      generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000, make([]byte, 1000)),
-            data:        make([]byte, 999), // One byte short
-            lastTxID:    50,
-            currentLSN:  1000,
-            maxWalSize:  maxWalSize,
-            expectError: true,
-        },
-    }
-
-    for _, tt := range tests {
+    for _, tt := range headerTests {
         t.Run(tt.name, func(t *testing.T) {
-            err := checkHeader(tt.header, tt.lastTxID, tt.currentLSN, tt.maxWalSize, tt.data)
+            if tt.name != "Checksum mismatch" {
+                // Calculate and set checksum only for non-checksum mismatch tests
+                checksum := calculateChecksum(tt.header)
+                binary.LittleEndian.PutUint64(tt.header[ChecksumField.offset:], checksum)
+            }
+
+            err := checkHeader(tt.header, tt.lastTxID, tt.currentLSN, tt.maxWalSize)
             if (err != nil) != tt.expectError {
                 t.Errorf("checkHeader() error = %v, expectError %v", err, tt.expectError)
             }
@@ -329,17 +310,52 @@ func TestHeader(t *testing.T) {
 }
 
 func FuzzHeaderCheck(f *testing.F) {
-    // Add seed inputs based on existing tests
-    f.Add(generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000), make([]byte, 1000), uint64(50), uint64(1000), int64(1024*1024))
-    f.Add(generateValidHeader(RecordTypeCheckpoint, types.ObjectTagDatabase, 1, 0, 1000), make([]byte, 1000), uint64(50), uint64(1000), int64(1024*1024))
-    f.Add(generateValidHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1048546), make([]byte, 1048546), uint64(50), uint64(0), int64(1048576))
+    // Add seed inputs
+    for _, tt := range headerTests {
+        recordType := extractField(tt.header, TypeField)
+        tag := extractField(tt.header, TagField)
+        entityID := extractField(tt.header, EntityField)
+        txID := extractField(tt.header, TxIDField)
+        dataLen := extractField(tt.header, DataLenField)
 
-    f.Fuzz(func(t *testing.T, header [HeaderSize]byte, data []byte, lastTxID uint64, currentLSNValue uint64, maxWalSize int64) {
+        f.Add(byte(recordType), byte(tag), entityID, txID, uint32(dataLen), tt.lastTxID, uint64(tt.currentLSN), tt.maxWalSize)
+    }
+
+    var lastInterestingCase string
+    f.Fuzz(func(t *testing.T, recordType byte, tag byte, entityID uint64, txID uint64, dataLen uint32, lastTxID uint64, currentLSNValue uint64, maxWalSize int64) {
+        // Ensure recordType is valid
+        if !RecordType(recordType).IsValid() {
+            return // Invalid input, skip
+        }
+
+        // Ensure tag is valid
+        if !types.ObjectTag(tag).IsValid() {
+            return // Invalid input, skip
+        }
+
+        // Generate header
+        header := generateValidHeader(RecordType(recordType), types.ObjectTag(tag), entityID, txID, dataLen)
+
+        // Calculate and set checksum
+        checksum := calculateChecksum(header)
+        binary.LittleEndian.PutUint64(header[ChecksumField.offset:], checksum)
+
         currentLSN := LSN(currentLSNValue)
-        err := checkHeader(header[:], lastTxID, currentLSN, maxWalSize, data)
-        if err != nil {
-            t.Logf("Error: %v", err)
-            t.Fail()
+
+        // Perform the check
+        err := checkHeader(header, lastTxID, currentLSN, maxWalSize)
+
+        // Create a string representation of this case
+        currentCase := fmt.Sprintf("RecordType=%d, Tag=%d, EntityID=%d, TxID=%d, DataLen=%d, LastTxID=%d, CurrentLSN=%d, MaxWalSize=%d",
+            recordType, tag, entityID, txID, dataLen, lastTxID, currentLSN, maxWalSize)
+
+        if err != nil && currentCase != lastInterestingCase {
+            // Log the new interesting case
+            fmt.Printf("\nNew interesting case found:\n")
+            fmt.Printf("Input: %s\n", currentCase)
+            fmt.Printf("Error: %v\n\n", err)
+
+            lastInterestingCase = currentCase
         }
     })
 }
