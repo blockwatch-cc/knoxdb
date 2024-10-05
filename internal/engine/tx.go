@@ -40,9 +40,18 @@ type Tx struct {
 	onCommit []TxHook
 	onAbort  []TxHook
 
+	// TODO: concurrency control config option: optimistic/deterministic
+	// single writer: rollback sequences -> determinism
+	// multi writer: don't roll back
+
 	// TODO: close/drop/truncate/compact/alter integration
-	// - should we close the table before? then reopen private, action and reopen again?
-	// - or should we lock the table? then the lock must be checked on each access
+	// - need lock manager, table ops take a lock (granularity table)
+	//   - scope: db, table, pk range, row
+	//   - owner: txid
+	//   - entity u64
+	//   - data [2]u64
+	// - can wait on lock release (use sync.Cond)
+	// - deterministic tx can lock the entire db (or table?)
 
 	// TODO tx isolation
 	// - keep private tx-scoped journal per table?
@@ -83,6 +92,7 @@ func (t *TxList) Add(tx *Tx) {
 	i := sort.Search(len(txs), func(i int) bool { return txs[i].id > tx.id })
 	txs = append(txs, nil)
 	copy(txs[i+1:], txs[i:])
+	txs[i] = tx
 	*t = txs
 }
 
@@ -109,7 +119,6 @@ func (e *Engine) NewTransaction(flags ...TxFlags) *Tx {
 		dbTx:   make(map[store.DB]store.Tx),
 		flags:  mergeFlags(flags),
 	}
-
 	if tx.flags.IsReadOnly() {
 		// only create snapshot for read transactions (don't pollute id space)
 		e.mu.RLock()
@@ -123,6 +132,8 @@ func (e *Engine) NewTransaction(flags ...TxFlags) *Tx {
 		e.txs.Add(tx)
 		e.mu.Unlock()
 	}
+	e.log.Debugf("New tx %d", tx.id)
+
 	return tx
 }
 
@@ -145,6 +156,10 @@ func (t *Tx) Noop() error {
 	return nil
 }
 
+func (t *Tx) IsClosed() bool {
+	return t.engine == nil
+}
+
 func (t *Tx) Close() {
 	// remove from global tx list (read-only tx run without id)
 	if t.id > 0 {
@@ -165,6 +180,15 @@ func (t *Tx) Close() {
 	t.catTx = nil
 	t.snap = nil
 	t.flags = 0
+	t.id = 0
+	t.engine = nil
+
+	// reset all (TODO: implement tx reuse/pooling)
+	t.dbTx = nil
+	t.touched = nil
+	t.onCommit = nil
+	t.onAbort = nil
+	t.writes = nil
 }
 
 func (t *Tx) Touch(key uint64) {
@@ -194,6 +218,9 @@ func (t *Tx) Commit(ctx context.Context) error {
 	if t == nil {
 		return nil
 	}
+
+	t.engine.log.Debugf("Commit tx %d", t.id)
+
 	// write commit record to wal
 	_, err := t.engine.wal.Write(&wal.Record{
 		Type:   wal.RecordTypeCommit,
@@ -230,9 +257,9 @@ func (t *Tx) Commit(ctx context.Context) error {
 			err = e
 		}
 	}
-	if err := t.engine.cat.CommitState(t); err != nil {
-		return err
-	}
+	// if err := t.engine.cat.CommitState(t); err != nil {
+	// 	return err
+	// }
 	if t.catTx != nil {
 		var e error
 		if t.catTx.IsWriteable() {
@@ -249,42 +276,48 @@ func (t *Tx) Commit(ctx context.Context) error {
 }
 
 func (t *Tx) Abort(ctx context.Context) error {
-	if t == nil {
+	if t == nil || t.IsClosed() {
 		return nil
 	}
 
-	// write abort record to wal (no sync required, tx data is ignored if lost)
-	_, err := t.engine.wal.Write(&wal.Record{
-		Type:   wal.RecordTypeAbort,
-		Tag:    types.ObjectTagDatabase,
-		Entity: t.engine.dbId,
-		TxID:   t.id,
-	})
-	if err != nil {
-		return err
-	}
-
-	// run callbacks
-	for _, fn := range t.onCommit {
-		if err := fn(ctx); err != nil {
-			t.engine.log.Errorf("Tx 0x%016x commit: %v", t.id, err)
+	// don't log read only tx
+	if t.id != 0 && t.engine.wal != nil {
+		// write abort record to wal (no sync required, tx data is ignored if lost)
+		_, err := t.engine.wal.Write(&wal.Record{
+			Type:   wal.RecordTypeAbort,
+			Tag:    types.ObjectTagDatabase,
+			Entity: t.engine.dbId,
+			TxID:   t.id,
+		})
+		if err != nil {
+			return err
 		}
 	}
 
 	// close storage tx
+	var err error
 	for _, tx := range t.dbTx {
 		if e := tx.Rollback(); e != nil && err == nil {
 			err = e
 		}
 	}
-	if err := t.engine.cat.RollbackState(t); err != nil {
-		return err
-	}
+	// if err := t.engine.cat.RollbackState(t); err != nil {
+	// 	return err
+	// }
 	if t.catTx != nil {
-		if err := t.catTx.Rollback(); err != nil {
-			return err
+		if e := t.catTx.Rollback(); e != nil && err == nil {
+			err = e
 		}
 	}
+
+	// run callbacks
+	for _, fn := range t.onAbort {
+		if err := fn(ctx); err != nil {
+			t.engine.log.Errorf("Tx 0x%016x abort: %v", t.id, err)
+		}
+	}
+
+	// cleanup tx
 	t.Close()
 	return err
 }

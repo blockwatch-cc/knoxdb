@@ -112,10 +112,10 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 
 	// build block statistics first (block dirty flag is reset on save)
 	fields := t.schema.Fields()
-	meta, ok := t.stats.GetByKey(pkg.Key())
+	pstats, ok := t.stats.GetByKey(pkg.Key())
 	if !ok {
 		// create new stats
-		meta = &stats.PackStats{
+		pstats = &stats.PackStats{
 			Key:      pkg.Key(),
 			SchemaId: pkg.Schema().Hash(),
 			NValues:  pkg.Len(),
@@ -124,7 +124,7 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 		}
 
 		for i, b := range pkg.Blocks() {
-			meta.Blocks = append(meta.Blocks, stats.NewBlockStats(b, &fields[i]))
+			pstats.Blocks = append(pstats.Blocks, stats.NewBlockStats(b, &fields[i]))
 		}
 	} else {
 		// update statistics for dirty blocks
@@ -132,25 +132,25 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 			if !b.IsDirty() {
 				continue
 			}
-			meta.Blocks[i] = stats.NewBlockStats(b, &fields[i])
-			meta.Dirty = true
+			pstats.Blocks[i] = stats.NewBlockStats(b, &fields[i])
+			pstats.Dirty = true
 		}
-		meta.NValues = pkg.Len()
+		pstats.NValues = pkg.Len()
 	}
 
 	// write to disk
-	blockSizes := make([]int, len(meta.Blocks))
+	blockSizes := make([]int, len(pstats.Blocks))
 	n, err := pkg.Store(ctx, tx, t.tableId, t.schema.Name(), t.opts.PageFill, blockSizes)
 	if err != nil {
 		return 0, err
 	}
-	meta.StoredSize = n
-	for i := range meta.Blocks {
-		meta.Blocks[i].StoredSize = blockSizes[i]
+	pstats.StoredSize = n
+	for i := range pstats.Blocks {
+		pstats.Blocks[i].StoredSize = blockSizes[i]
 	}
 
 	// update and store statistics
-	t.stats.AddOrUpdate(meta)
+	t.stats.AddOrUpdate(pstats)
 	m, err := t.stats.Store(ctx, tx, t.schema.Name(), t.opts.PageFill)
 	if err != nil {
 		return n, err

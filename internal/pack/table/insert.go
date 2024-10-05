@@ -36,7 +36,6 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 
 	// keep a copy of the state
 	firstPk := t.state.Sequence
-	state := t.state
 
 	// try insert data into the journal (may run full, so we must loop)
 	var (
@@ -45,12 +44,15 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	)
 	for len(buf) > 0 {
 		// insert messages into journal
-		n, buf = t.journal.InsertBatch(buf, state.Sequence)
+		n, buf = t.journal.InsertBatch(buf, t.state.Sequence)
 		count += n
 
+		// sync state with catalog
+		engine.GetTransaction(ctx).Touch(t.tableId)
+
 		// update state
-		state.NRows += n
-		state.Sequence += n
+		t.state.NRows += n
+		t.state.Sequence += n
 
 		// write journal data to disk before we continue
 		if t.journal.IsFull() {
@@ -60,18 +62,12 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 				break
 			}
 
-			// sync state with catalog
-			t.engine.Catalog().SetState(t.tableId, state.ToObjectState())
-
 			// flush pack data to storage, will open storage write transaction
 			// TODO: write a new layer pack (fast) and merge in background
 			err = t.mergeJournal(ctx)
 			if err != nil {
 				break
 			}
-
-			// sync state back to table
-			t.state = state
 		}
 	}
 	if err != nil {
@@ -81,15 +77,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 
 	atomic.AddInt64(&t.metrics.InsertedTuples, int64(count))
 
-	// sync state with catalog
 	if count > 0 {
-		// sync state with catalog
-		t.engine.Catalog().SetState(t.tableId, state.ToObjectState())
-		engine.GetTransaction(ctx).Touch(t.tableId)
-
-		// sync state back to table
-		t.state = state
-
 		return firstPk, nil
 	}
 

@@ -35,6 +35,7 @@ type TableEngine interface {
 	Open(Context, *Schema, TableOptions) error
 	Close(Context) error
 	Schema() *Schema
+	State() ObjectState
 	Metrics() TableMetrics
 	Drop(Context) error
 	Sync(Context) error
@@ -144,6 +145,7 @@ type StoreEngine interface {
 	Open(Context, *Schema, StoreOptions) error
 	Close(Context) error
 	Schema() *Schema
+	State() ObjectState
 	Metrics() StoreMetrics
 	Drop(Context) error
 

@@ -17,7 +17,6 @@ import (
 
 	"github.com/echa/log"
 
-	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -144,9 +143,17 @@ func run() error {
 
 	ctx := context.Background()
 
-	db, table, err := Create(ctx)
+	db, table, err := Open(ctx)
 	if err != nil {
-		return err
+		if errors.Is(err, knox.ErrNoDatabase) {
+			var err2 error
+			db, table, err2 = Create(ctx)
+			if err2 != nil {
+				return err2
+			}
+		} else {
+			return err
+		}
 	}
 	defer db.Close(ctx)
 
@@ -261,9 +268,6 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 
 	db, err = knox.CreateDatabase(ctx, "types", opts)
 	if err != nil {
-		if errors.Is(err, engine.ErrDatabaseExists) {
-			return Open(ctx)
-		}
 		return
 	}
 	log.Info("Creating DB")

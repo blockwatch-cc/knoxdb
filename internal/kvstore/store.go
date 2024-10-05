@@ -39,7 +39,7 @@ type KVStore struct {
 	opts       engine.StoreOptions // copy of config options
 	db         store.DB            // lower-level KV store (e.g. boltdb or badger)
 	key        []byte              // name of store's data bucket in the db
-	state      KVState             // volatile state, synced with catalog
+	state      engine.ObjectState  // volatile state
 	isZeroCopy bool                // storage reads are zero copy (copy to safe references)
 	noClose    bool                // don't close underlying store db on Close
 	metrics    engine.StoreMetrics // usage statistics
@@ -48,22 +48,6 @@ type KVStore struct {
 
 func NewKVStore() engine.StoreEngine {
 	return &KVStore{}
-}
-
-type KVState struct {
-	Checkpoint uint64 // latest wal checkpoint LSN
-}
-
-func (s *KVState) Reset() {
-	s.Checkpoint = 0
-}
-
-func (s *KVState) FromObjectState(o engine.ObjectState) {
-	s.Checkpoint = o[2]
-}
-
-func (s KVState) ToObjectState() engine.ObjectState {
-	return engine.ObjectState{0, 0, s.Checkpoint}
 }
 
 func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.StoreOptions) error {
@@ -76,6 +60,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	// setup store
 	kv.engine = e
 	kv.schema = s
+	kv.state = engine.NewObjectState()
 	kv.storeId = s.TaggedHash(types.ObjectTagStore)
 	kv.opts = DefaultOptions.Merge(opts)
 	kv.key = []byte(name)
@@ -120,7 +105,11 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	if err != nil {
 		return err
 	}
-	kv.engine.Catalog().SetState(kv.storeId, kv.state.ToObjectState())
+
+	// init state storage
+	if err := kv.state.Store(ctx, tx, name); err != nil {
+		return err
+	}
 
 	kv.log.Debugf("Created store %s", typ)
 	return nil
@@ -139,7 +128,6 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	kv.storeId = s.TaggedHash(types.ObjectTagStore)
 	kv.opts = DefaultOptions.Merge(opts)
 	kv.key = []byte(name)
-	kv.state.FromObjectState(e.Catalog().GetState(kv.storeId))
 	kv.metrics = engine.NewStoreMetrics(name)
 	kv.db = opts.DB
 	kv.noClose = true
@@ -177,6 +165,16 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	if err != nil {
 		return err
 	}
+
+	// load state
+	if err := kv.state.Load(ctx, tx, kv.schema.Name()); err != nil {
+		kv.log.Error("missing table state: %v", err)
+		tx.Rollback()
+		kv.Close(ctx)
+		return engine.ErrDatabaseCorrupt
+	}
+
+	// init metrics
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
 		return engine.ErrNoBucket
@@ -216,6 +214,10 @@ func (kv *KVStore) Close(ctx context.Context) (err error) {
 
 func (kv *KVStore) Schema() *schema.Schema {
 	return kv.schema
+}
+
+func (kv *KVStore) State() engine.ObjectState {
+	return kv.state
 }
 
 func (kv *KVStore) Metrics() engine.StoreMetrics {

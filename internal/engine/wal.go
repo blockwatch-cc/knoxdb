@@ -31,13 +31,60 @@ func (e *Engine) writeWalRecord(ctx context.Context, typ wal.RecordType, o Objec
 
 // find the highest checkpoint across all containers to start reading the WAL on startup
 func (e *Engine) maxWalCheckpoint() (maxLsn wal.LSN) {
-	for _, s := range e.cat.states {
-		if s[2] == 0 {
+	for _, v := range e.tables {
+		lsn := v.State().Checkpoint
+		if lsn == 0 {
 			continue
 		}
-		maxLsn = max(maxLsn, wal.LSN(s[2]))
+		maxLsn = max(maxLsn, lsn)
+	}
+	for _, v := range e.stores {
+		lsn := v.State().Checkpoint
+		if lsn == 0 {
+			continue
+		}
+		maxLsn = max(maxLsn, lsn)
 	}
 	return
+}
+
+// find the lowest checkpoint across all containers to start reading the WAL on startup
+func (e *Engine) minWalCheckpoint() (minLsn wal.LSN) {
+	for _, v := range e.tables {
+		lsn := v.State().Checkpoint
+		if lsn == 0 {
+			continue
+		}
+		if minLsn == 0 {
+			minLsn = lsn
+		} else {
+			minLsn = max(minLsn, lsn)
+		}
+	}
+	for _, v := range e.stores {
+		lsn := v.State().Checkpoint
+		if lsn == 0 {
+			continue
+		}
+		if minLsn == 0 {
+			minLsn = lsn
+		} else {
+			minLsn = max(minLsn, lsn)
+		}
+	}
+	return
+}
+
+func (e *Engine) getWalCheckpoint(entity uint64) (lsn wal.LSN) {
+	t, ok := e.tables[entity]
+	if ok {
+		return t.State().Checkpoint
+	}
+	s, ok := e.stores[entity]
+	if ok {
+		return s.State().Checkpoint
+	}
+	return 0
 }
 
 // TODO: make sure all checkpoints for all tables exist
@@ -47,17 +94,7 @@ func (e *Engine) recoverWal(ctx context.Context) error {
 	// find the minimum non-zero checkpoint across all catalog objects
 	// we directly access catalog state without lock because this function
 	// runs non-concurrent on engine init
-	var minLsn wal.LSN
-	for _, s := range e.cat.states {
-		if s[2] == 0 {
-			continue
-		}
-		if minLsn == 0 {
-			minLsn = wal.LSN(s[2])
-		} else {
-			minLsn = min(minLsn, wal.LSN(s[2]))
-		}
-	}
+	minLsn := e.minWalCheckpoint()
 
 	// 1st pass - read committed tx ids
 	r := e.wal.NewReader().WithType(wal.RecordTypeCommit)
@@ -109,7 +146,7 @@ func (e *Engine) recoverWal(ctx context.Context) error {
 		}
 
 		// skip already checkpointed data (containers have their own checkpoints)
-		if rec.Lsn < wal.LSN(e.cat.states[rec.Entity][2]) {
+		if rec.Lsn < e.getWalCheckpoint(rec.Entity) {
 			continue
 		}
 

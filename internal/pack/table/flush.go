@@ -515,10 +515,14 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 	if c := t.stats.Count(); uint64(c) != t.state.NRows {
 		atomic.StoreInt64(&t.metrics.TupleCount, int64(c))
 		t.state.NRows = uint64(c)
-		t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
 
 		// FIXME: background flush will not run inside a tx
 		engine.GetTransaction(ctx).Touch(t.tableId)
+	}
+
+	// store state
+	if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
+		t.log.Errorf("storing state: %v", err)
 	}
 
 	// clear journal and tombstone

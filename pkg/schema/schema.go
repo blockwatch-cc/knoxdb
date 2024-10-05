@@ -118,6 +118,10 @@ func (s *Schema) WireSize() int {
 	return s.minWireSize
 }
 
+func (s *Schema) AverageSize() int {
+	return s.maxWireSize
+}
+
 func (s *Schema) NumFields() int {
 	return len(s.fields)
 }

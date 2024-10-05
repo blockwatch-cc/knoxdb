@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/store"
-	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
@@ -25,7 +24,6 @@ import (
 // buckets
 // - options: key=name_hash, val=options
 // - schemas: key=name_hash:schema_hash, val=schema
-// - states: key=name_hash, val=[16]byte (seq + numRows/numKeys)
 // - database
 //   - name
 //   - createdAt
@@ -76,7 +74,6 @@ var (
 	databaseKey  = []byte("database")  // name, created_at, last_txid
 	schemasKey   = []byte("schemas")   // tag:schema => serialized schema
 	optionsKey   = []byte("options")   // tag => serialized options (db, table, store, view, ..)
-	statesKey    = []byte("states")    // tag => serialized state
 	tablesKey    = []byte("tables")    // tag => name=str, schema=u64
 	indexesKey   = []byte("indexes")   // tag => name=str, schema=u64, table=u64, status=u8
 	viewsKey     = []byte("views")     // key => name=str, schema=u64, data=query
@@ -93,10 +90,6 @@ var (
 	dataKey   = []byte("data")
 )
 
-// ObjectState stores volatile state of database objects such as
-// tables and stores. Values represent pk sequence, num rows, and checkpoint id.
-type ObjectState [3]uint64
-
 var DefaultDatabaseOptions = DatabaseOptions{
 	Path:      "./db",
 	Driver:    "bolt",
@@ -107,16 +100,14 @@ var DefaultDatabaseOptions = DatabaseOptions{
 
 // knoxdb.schemas.catalog.v1
 type Catalog struct {
-	mu     sync.RWMutex
-	db     store.DB
-	name   string
-	states map[uint64]ObjectState
+	mu   sync.RWMutex
+	db   store.DB
+	name string
 }
 
 func NewCatalog(name string) *Catalog {
 	return &Catalog{
-		name:   name,
-		states: make(map[uint64]ObjectState),
+		name: name,
 	}
 }
 
@@ -152,7 +143,6 @@ func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 		databaseKey,
 		schemasKey,
 		optionsKey,
-		statesKey,
 		tablesKey,
 		indexesKey,
 		viewsKey,
@@ -176,6 +166,9 @@ func (c *Catalog) Open(ctx context.Context, opts DatabaseOptions) error {
 	opts.Logger.Debugf("Opening catalog at %s", path)
 	db, err := store.Open(opts.Driver, path, opts.ToDriverOpts())
 	if err != nil {
+		if store.IsError(err, store.ErrDbDoesNotExist) {
+			return ErrNoDatabase
+		}
 		opts.Logger.Errorf("opening catalog %s: %v", c.name, err)
 		return ErrDatabaseCorrupt
 	}
@@ -192,7 +185,7 @@ func (c *Catalog) Open(ctx context.Context, opts DatabaseOptions) error {
 	}
 	c.db = db
 
-	return c.LoadStates(ctx)
+	return nil
 }
 
 func (c *Catalog) Close(ctx context.Context) error {
@@ -206,112 +199,6 @@ func (c *Catalog) Close(ctx context.Context) error {
 		return err
 	}
 	c.db = nil
-	clear(c.states)
-	c.states = nil
-	return nil
-}
-
-func (c *Catalog) GetState(key uint64) ObjectState {
-	c.mu.RLock()
-	s := c.states[key]
-	c.mu.RUnlock()
-	return s
-}
-
-func (c *Catalog) SetState(key uint64, state ObjectState) {
-	c.mu.Lock()
-	c.states[key] = state
-	c.mu.Unlock()
-}
-
-func (c *Catalog) LoadStates(ctx context.Context) error {
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, false)
-	if err != nil {
-		return err
-	}
-	bucket := tx.Bucket(statesKey)
-	if bucket == nil {
-		return ErrDatabaseCorrupt
-	}
-	err = bucket.ForEach(func(k, v []byte) error {
-		if len(v) < 24 {
-			return ErrDatabaseCorrupt
-		}
-		state := ObjectState{
-			BE.Uint64(v[0:]),
-			BE.Uint64(v[8:]),
-			BE.Uint64(v[16:]),
-		}
-		c.states[Key64(k)] = state
-		return nil
-	})
-	return err
-}
-
-// On tx commit save states of all touched objects to db file.
-func (c *Catalog) CommitState(tx *Tx) error {
-	if len(tx.touched) == 0 {
-		return nil
-	}
-	stx, err := tx.CatalogTx(c.db, true)
-	if err != nil {
-		return err
-	}
-	bucket := stx.Bucket(statesKey)
-	if bucket == nil {
-		return ErrDatabaseCorrupt
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for tag := range tx.touched {
-		state, ok := c.states[tag]
-		if !ok {
-			assert.Unreachable("tx touched object should have state entry")
-			continue
-		}
-		if state[0] == 0 && state[1] == 0 {
-			err = bucket.Delete(Key64Bytes(tag))
-		} else {
-			var buf [24]byte
-			BE.PutUint64(buf[0:], state[0])
-			BE.PutUint64(buf[8:], state[1])
-			BE.PutUint64(buf[16:], state[2])
-			err = bucket.Put(Key64Bytes(tag), buf[:])
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// On tx rollback read stored states for touched objects from db file.
-func (c *Catalog) RollbackState(tx *Tx) error {
-	if len(tx.touched) == 0 {
-		return nil
-	}
-	stx, err := tx.CatalogTx(c.db, false)
-	if err != nil {
-		return err
-	}
-	bucket := stx.Bucket(statesKey)
-	if bucket == nil {
-		return ErrDatabaseCorrupt
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for tag := range tx.touched {
-		buf := bucket.Get(Key64Bytes(tag))
-		if len(buf) < 16 {
-			return ErrDatabaseCorrupt
-		}
-		state := [3]uint64{
-			BE.Uint64(buf[0:]),
-			BE.Uint64(buf[8:]),
-			BE.Uint64(buf[16:]),
-		}
-		c.states[tag] = state
-	}
 	return nil
 }
 
@@ -517,11 +404,6 @@ func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
 		return err
 	}
 
-	// reset state (schedules state for deletion on commit)
-	c.mu.Lock()
-	c.states[key] = ObjectState{}
-	c.mu.Unlock()
-
 	return nil
 }
 
@@ -641,11 +523,6 @@ func (c *Catalog) DropIndex(ctx context.Context, key uint64) error {
 		return err
 	}
 
-	// reset state (schedules state for deletion on commit)
-	c.mu.Lock()
-	c.states[key] = ObjectState{}
-	c.mu.Unlock()
-
 	return nil
 }
 
@@ -740,11 +617,6 @@ func (c *Catalog) DropStore(ctx context.Context, key uint64) error {
 	if err := c.DelSchema(ctx, Key64(skey)); err != nil {
 		return err
 	}
-
-	// reset state (schedules state for deletion on commit)
-	c.mu.Lock()
-	c.states[key] = ObjectState{}
-	c.mu.Unlock()
 
 	return nil
 }

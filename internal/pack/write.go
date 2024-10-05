@@ -18,6 +18,30 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+// func TestSetRow(t *testing.T) {
+// 	for _, v := range testStructs {
+// 		t.Run(fmt.Sprintf("%T", v), func(t *testing.T) {
+// 			pkg := makeTypedPackage(v, 1, 1)
+// 			err := pkg.SetRow(0, v)
+// 			require.NoError(t, err)
+// 		})
+// 	}
+// }
+
+// func BenchmarkSetRow(b *testing.B) {
+// 	for _, v := range testStructs {
+// 		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
+// 		b.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(b *testing.B) {
+// 			b.ReportAllocs()
+// 			for n := 0; n < b.N; n++ {
+// 				for i := 0; i < PACK_SIZE; i++ {
+// 					pkg.SetRow(i, v)
+// 				}
+// 			}
+// 		})
+// 	}
+// }
+
 // AppendWire appends a new row of values from a wire protocol message. The caller must
 // ensure the message matches the currrent package schema.
 func (p *Package) AppendWire(buf []byte) {

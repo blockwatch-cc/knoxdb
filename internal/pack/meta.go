@@ -64,6 +64,10 @@ func (p *Package) HasMeta() bool {
 	return p.xmeta != nil
 }
 
+func (p *Package) MetaBlocks() PackMeta {
+	return *p.xmeta
+}
+
 func (p *Package) ReadMeta(row int) (m Meta) {
 	if p.xmeta != nil {
 		m.Rid = p.xmeta[0].Uint64().Get(row)

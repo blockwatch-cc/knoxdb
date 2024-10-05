@@ -4,232 +4,26 @@
 package pack
 
 import (
-	"bytes"
 	"fmt"
 	"reflect"
 	"strings"
-	"testing"
 	"time"
 
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"github.com/stretchr/testify/require"
 )
 
 const PACK_SIZE = 1 << 16
 
-// const PACK_SIZE = 1
-
 var testStructs = []Encodable{
-	// &scalarStruct{},
-	// &byteStruct{},
-	// &byteUnmarshalStruct{},
-	// &smallStruct{},
-	// &largeStruct{},
-	// &tradeStruct{},
-	// &specialStruct{},
+	&scalarStruct{},
+	&byteStruct{},
+	&byteUnmarshalStruct{},
+	&smallStruct{},
+	&largeStruct{},
+	&tradeStruct{},
+	&specialStruct{},
 	&encodeTestStruct{},
-}
-
-// func TestSetRow(t *testing.T) {
-// 	for _, v := range testStructs {
-// 		t.Run(fmt.Sprintf("%T", v), func(t *testing.T) {
-// 			pkg := makeTypedPackage(v, 1, 1)
-// 			err := pkg.SetRow(0, v)
-// 			require.NoError(t, err)
-// 		})
-// 	}
-// }
-
-// func BenchmarkSetRow(b *testing.B) {
-// 	for _, v := range testStructs {
-// 		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
-// 		b.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(b *testing.B) {
-// 			b.ReportAllocs()
-// 			for n := 0; n < b.N; n++ {
-// 				for i := 0; i < PACK_SIZE; i++ {
-// 					pkg.SetRow(i, v)
-// 				}
-// 			}
-// 		})
-// 	}
-// }
-
-func TestAppend(t *testing.T) {
-	for _, v := range testStructs {
-		t.Run(fmt.Sprintf("%T", v), func(t *testing.T) {
-			pkg := makeTypedPackage(v, 1, 0)
-			err := pkg.AppendStruct(v)
-			require.NoError(t, err)
-		})
-	}
-}
-
-func BenchmarkAppend(b *testing.B) {
-	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, 0)
-		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
-			b.ReportAllocs()
-			for n := 0; n < b.N; n++ {
-				for i := 0; i < PACK_SIZE; i++ {
-					pkg.AppendStruct(v)
-				}
-				pkg.Clear()
-			}
-		})
-	}
-}
-
-func TestAppendSlice(t *testing.T) {
-	for _, v := range testStructs {
-		t.Run(fmt.Sprintf("%T", v), func(t *testing.T) {
-			pkg := makeTypedPackage(v, PACK_SIZE, 0)
-			rslice := makeZeroSlice(v, PACK_SIZE)
-			err := pkg.AppendSlice(rslice)
-			require.NoError(t, err)
-			require.Equal(t, PACK_SIZE, pkg.Len())
-		})
-	}
-}
-
-func BenchmarkAppendSlice(b *testing.B) {
-	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, 0)
-		rslice := makeZeroSlice(v, PACK_SIZE)
-		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
-			b.ReportAllocs()
-			for n := 0; n < b.N; n++ {
-				pkg.AppendSlice(rslice)
-				pkg.Clear()
-			}
-		})
-	}
-}
-
-func BenchmarkAppendWire(b *testing.B) {
-	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, 0)
-		s := makeZeroStruct(v)
-		buf := s.(Encodable).Encode()
-		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
-			b.ReportAllocs()
-			for n := 0; n < b.N; n++ {
-				for i := 0; i < PACK_SIZE; i++ {
-					pkg.AppendWire(buf)
-				}
-				pkg.Clear()
-			}
-		})
-	}
-}
-
-func BenchmarkAppendWireE2E(b *testing.B) {
-	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, 0)
-		z := makeZeroStruct(v)
-		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
-			b.ReportAllocs()
-			for n := 0; n < b.N; n++ {
-				for i := 0; i < PACK_SIZE; i++ {
-					pkg.AppendWire(z.(Encodable).Encode())
-				}
-				pkg.Clear()
-			}
-		})
-	}
-}
-
-func TestReadStruct(t *testing.T) {
-	for _, v := range testStructs {
-		t.Run(fmt.Sprintf("%T", v), func(t *testing.T) {
-			pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
-			s, err := schema.SchemaOf(v)
-			require.NoError(t, err)
-			maps, err := s.MapTo(s)
-			require.NoError(t, err)
-			for i := 0; i < PACK_SIZE; i++ {
-				err := pkg.ReadStruct(i, v, s, maps)
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestReadChildStruct(t *testing.T) {
-	pkg := makeTypedPackage(&encodeTestStruct{}, PACK_SIZE, PACK_SIZE)
-	dst := &encodeTestSubStruct{}
-	dstSchema, err := schema.SchemaOf(dst)
-	require.NoError(t, err)
-	maps, err := pkg.schema.MapTo(dstSchema)
-	require.NoError(t, err)
-	for i := 0; i < PACK_SIZE; i++ {
-		err := pkg.ReadStruct(i, dst, dstSchema, maps)
-		require.NoError(t, err)
-	}
-}
-
-func BenchmarkReadStruct(b *testing.B) {
-	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
-		s, _ := schema.SchemaOf(v)
-		maps, _ := s.MapTo(s)
-		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				for k := 0; k < PACK_SIZE; k++ {
-					_ = pkg.ReadStruct(k, v, s, maps)
-				}
-			}
-		})
-	}
-}
-
-func BenchmarkReadRow(b *testing.B) {
-	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
-		dst := make([]any, pkg.Cols())
-		b.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(b *testing.B) {
-			b.ReportAllocs()
-			for n := 0; n < b.N; n++ {
-				for i := 0; i < PACK_SIZE; i++ {
-					dst = pkg.ReadRow(i, dst)
-				}
-			}
-		})
-	}
-}
-
-func BenchmarkReadWire(b *testing.B) {
-	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
-		buf := bytes.NewBuffer(make([]byte, 0, pkg.schema.WireSize()+128))
-		b.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(b *testing.B) {
-			b.ReportAllocs()
-			for n := 0; n < b.N; n++ {
-				for i := 0; i < PACK_SIZE; i++ {
-					buf.Reset()
-					_ = pkg.ReadWireBuffer(buf, i)
-				}
-			}
-		})
-	}
-}
-
-func BenchmarkReadWireE2E(b *testing.B) {
-	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
-		buf := bytes.NewBuffer(make([]byte, 0, pkg.schema.WireSize()+128))
-		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
-			b.ReportAllocs()
-			for n := 0; n < b.N; n++ {
-				for i := 0; i < PACK_SIZE; i++ {
-					buf.Reset()
-					_ = pkg.ReadWireBuffer(buf, i)
-					_ = v.Decode(buf.Bytes())
-				}
-			}
-		})
-	}
 }
 
 func makeTypedPackage(typ any, sz, fill int) *Package {

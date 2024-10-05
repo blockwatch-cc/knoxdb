@@ -70,7 +70,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		enums:   make(map[uint64]*schema.EnumDictionary),
 		txs:     make(TxList, 0),
 		xmin:    0,
-		xnext:   1,
+		xnext:   0,
 		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
 		opts:    opts,
 		cat:     NewCatalog(name),
@@ -91,8 +91,21 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		e.cache.buffers = rclru.New2Q[CacheKeyType, *Buffer](opts.CacheSize / 10)
 	}
 
+	// init wal
+	wopts := wal.WalOptions{
+		Seed:           e.dbId,
+		Path:           filepath.Join(e.path, "wal"),
+		MaxSegmentSize: 128 << 20,
+		Logger:         e.log,
+	}
+	if w, err := wal.Create(wopts); err != nil {
+		return nil, err
+	} else {
+		e.wal = w
+	}
+
 	// start transaction and amend context (required to store catalog db)
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, commit, abort := e.WithTransaction(ctx, TxFlagsReadOnly)
 	defer abort()
 
 	// close engine when the tx gets aborted
@@ -106,18 +119,6 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	// write db options to catalog
 	if err := e.cat.PutOptions(ctx, e.dbId, &opts); err != nil {
 		return nil, err
-	}
-
-	// init wal
-	wopts := wal.WalOptions{
-		Seed:           e.dbId,
-		Path:           filepath.Join(e.opts.Path, "xlog"),
-		MaxSegmentSize: 128 << 20,
-	}
-	if w, err := wal.Create(wopts); err != nil {
-		return nil, err
-	} else {
-		e.wal = w
 	}
 
 	// commit open tx
@@ -155,17 +156,14 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 
 	e.log.Debugf("Opening database %s at %s", name, e.path)
 
-	// start read transaction and amend context (required to load from dbs)
-	ctx, commit, abort := e.WithTransaction(ctx)
-	defer abort()
-
-	// close engine when the tx gets aborted
-	GetTransaction(ctx).OnAbort(e.Close)
-
 	// load and validate catalog
 	if err := e.cat.Open(ctx, opts); err != nil {
 		return nil, err
 	}
+
+	// start read transaction and amend context (required to load from dbs)
+	ctx, commit, abort := e.WithTransaction(ctx, TxFlagsReadOnly)
+	defer abort()
 
 	// load stored database options
 	var sopts DatabaseOptions
@@ -181,6 +179,9 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		e.cache.blocks = rclru.New2Q[CacheKeyType, *block.Block](e.opts.CacheSize * 90 / 10)
 		e.cache.buffers = rclru.New2Q[CacheKeyType, *Buffer](e.opts.CacheSize / 10)
 	}
+
+	// close engine when the tx gets aborted
+	GetTransaction(ctx).OnAbort(e.Close)
 
 	// open database objects
 	if err := e.openTables(ctx); err != nil {
@@ -198,9 +199,11 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	// open and validate wal
 	wopts := wal.WalOptions{
 		Seed:           e.dbId,
-		Path:           filepath.Join(e.opts.Path, "xlog"),
+		Path:           filepath.Join(e.path, "wal"),
 		MaxSegmentSize: 128 << 20,
+		Logger:         e.log,
 	}
+	e.log.Debugf("Opening wal at %s", wopts.Path)
 	if w, err := wal.Open(e.maxWalCheckpoint(), wopts); err != nil {
 		return nil, err
 	} else {
@@ -239,10 +242,12 @@ func (e *Engine) Close(ctx context.Context) error {
 	e.PurgeCache()
 
 	// close wal
-	if err := e.wal.Close(); err != nil {
-		e.log.Errorf("Closing wal: %v", err)
+	if e.wal != nil {
+		if err := e.wal.Close(); err != nil {
+			e.log.Errorf("Closing wal: %v", err)
+		}
+		e.wal = nil
 	}
-	e.wal = nil
 
 	// close all open indexes
 	for n, idx := range e.indexes {

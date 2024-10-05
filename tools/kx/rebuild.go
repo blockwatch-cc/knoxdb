@@ -1,5 +1,7 @@
 // Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+//go:build ignore
+// +build ignore
 
 package main
 
@@ -8,8 +10,6 @@ import (
 	"time"
 
 	"github.com/echa/log"
-
-	"blockwatch.cc/knoxdb/internal/table/pack"
 )
 
 // reindex drops and re-creates all indexes defined for a given table.
