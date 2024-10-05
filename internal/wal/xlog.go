@@ -153,7 +153,7 @@ func (f *CommitFrame) WriteTo(fd *os.File) error {
 func NewCommitLog(wal *Wal) *CommitLog {
 	return &CommitLog{
 		wal: wal,
-		log: log.Log, // TODO: init from wal
+		log: wal.log,
 	}
 }
 
@@ -289,7 +289,7 @@ func (c *CommitLog) IsCommitted(xid uint64) (bool, error) {
 	return c.last.IsCommitted(xid), nil
 }
 
-func (c *CommitLog) AppendCommit(rec *Record) error {
+func (c *CommitLog) Append(rec *Record) error {
 	c.checkpoint = max(c.checkpoint, rec.Lsn)
 
 	// txid is in tail frame
@@ -354,7 +354,7 @@ func (c *CommitLog) Recover(lsn LSN) error {
 		if err != nil {
 			break
 		}
-		err = c.AppendCommit(rec)
+		err = c.Append(rec)
 		if err != nil {
 			break
 		}

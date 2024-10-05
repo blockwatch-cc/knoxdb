@@ -4,101 +4,173 @@
 package wal
 
 import (
+	"fmt"
+	"io"
 	"os"
+	"path/filepath"
+)
+
+const (
+	SEG_FILE_SUFFIX  = ".seg"
+	SEG_FILE_PATTERN = "%016d.seg"
+	SEG_FILE_MODE    = 0644
+	SEG_FILE_MINSIZE = 1 << 10 // 1k
+	SEG_FILE_MAXSIZE = 1 << 34 // 4G
+)
+
+var (
+	createFlags = os.O_CREATE | os.O_EXCL | os.O_WRONLY | os.O_APPEND
+	writeFlags  = os.O_WRONLY | os.O_APPEND
+	readFlags   = os.O_RDONLY
 )
 
 type segment struct {
 	id  int
-	pos int
 	fd  *os.File
+	sz  int
+	max int
+	ro  bool
 }
 
-// func newSegement() *segment {
-// 	return &segment{
-// 		hash: xxhash.New(),
-// 	}
-// }
-
-func createSegment(id LSN) (*segment, error) {
-	// use the seed as first checksum
-	return nil, nil
+func (w *Wal) segmentName(id int) string {
+	return filepath.Join(w.opts.Path, fmt.Sprintf(SEG_FILE_PATTERN, id))
 }
 
-func openSegment(id LSN) (*segment, error) {
-	// load last record's checksum
-	return nil, nil
+// must call with lock held
+func (w *Wal) createSegment(id int) (*segment, error) {
+	name := w.segmentName(id)
+	w.log.Debugf("wal: create segment %s", name)
+	fd, err := os.OpenFile(name, createFlags, SEG_FILE_MODE)
+	if err != nil {
+		return nil, err
+	}
+	dir, err := os.Open(w.opts.Path)
+	if err != nil {
+		fd.Close()
+		return nil, err
+	}
+	defer dir.Close()
+	if err = dir.Sync(); err != nil {
+		fd.Close()
+		return nil, err
+	}
+	s := &segment{
+		id:  id,
+		fd:  fd,
+		sz:  0,
+		max: w.opts.MaxSegmentSize,
+		ro:  false,
+	}
+	return s, nil
 }
 
-func (s *segment) Close() error {
-	err := s.fd.Close()
-	s.fd = nil
+// must call with lock held
+func (w *Wal) openSegment(id int, active bool) (*segment, error) {
+	// check before we attempt opening a file
+	if !w.hasSegment(id) {
+		return nil, io.EOF
+	}
+
+	// we expect the segment file to exists
+	name := w.segmentName(id)
+	flags := readFlags
+	if active {
+		flags = writeFlags
+	}
+	w.log.Debugf("wal: open segment %s active=%t", name, active)
+	fd, err := os.OpenFile(name, flags, SEG_FILE_MODE)
+	if err != nil {
+		return nil, err
+	}
+	stat, err := fd.Stat()
+	if err != nil {
+		fd.Close()
+		return nil, err
+	}
+	s := &segment{
+		id:  id,
+		fd:  fd,
+		sz:  int(stat.Size()),
+		max: w.opts.MaxSegmentSize,
+		ro:  false,
+	}
+	return s, nil
+}
+
+func (w *Wal) hasSegment(id int) bool {
+	return id == 0 || LSN(id*w.opts.MaxSegmentSize) < w.lsn
+}
+
+func (s *segment) Close() (err error) {
+	if s.fd != nil {
+		if !s.ro {
+			if err = s.fd.Sync(); err != nil {
+				return err
+			}
+		}
+		err = s.fd.Close()
+		s.fd = nil
+	}
 	s.id = 0
-	s.pos = 0
+	s.sz = 0
+	s.max = 0
+	s.ro = false
 	return err
 }
 
+func (s *segment) Id() int {
+	return s.id
+}
+
+func (s *segment) Len() int {
+	return s.sz
+}
+
+func (s *segment) Cap() int {
+	return s.max - s.sz
+}
+
 func (s *segment) Sync() error {
+	if s.ro {
+		return nil
+	}
+	if s.fd == nil {
+		return ErrSegmentClosed
+	}
 	return s.fd.Sync()
 }
 
-func (s *segment) LastRecord() (*Record, error) {
-	return nil, nil
-}
-
-func (s *segment) Truncate(sz int) error {
-	return s.fd.Truncate(int64(sz))
+func (s *segment) Seek(n int64, _ int) (int64, error) {
+	if !s.ro {
+		return 0, ErrSegmentActive
+	}
+	if s.fd == nil {
+		return 0, ErrSegmentClosed
+	}
+	return s.fd.Seek(n, 0)
 }
 
 func (s *segment) Write(buf []byte) (int, error) {
-	n, err := s.fd.Write(buf)
-	if err != nil {
-		return n, err
+	if s.ro {
+		return 0, ErrSegmentReadOnly
 	}
-	s.pos += n
-	return n, nil
+	if s.fd == nil {
+		return 0, ErrSegmentClosed
+	}
+	if len(buf) == 0 {
+		return 0, nil
+	}
+	if s.Cap() < len(buf) {
+		return 0, ErrSegmentOverflow
+	}
+	n, err := s.fd.Write(buf)
+	s.sz += n
+	return n, err
 }
 
-// func (s *segment) Write(rec *Record) (lsn LSN, err error) {
-// 	// Note: this is only an example to show how a record can be written
-// 	//
-// 	// create header
-// 	var head [28]byte
-// 	head[0] = byte(rec.Type)
-// 	head[1] = byte(rec.Tag)
-// 	LE.PutUint64(head[2:], rec.Entity)
-// 	LE.PutUint64(head[10:], rec.TxID)
-// 	LE.PutUint32(head[16:], uint32(len(rec.Data)))
-
-// 	// calculate chained checksum
-// 	s.hash.Reset()
-// 	var b [8]byte
-// 	LE.PutUint64(b[:], s.csum)
-// 	s.hash.Write(b[:])
-// 	s.hash.Write(head[:20])
-// 	s.hash.Write(rec.Data)
-// 	s.hash.Sum(head[20:])
-
-// 	// write header
-// 	var n, sz int
-// 	n, err = s.fd.Write(head[:])
-// 	if err != nil {
-// 		return
-// 	}
-// 	sz += n
-
-// 	// write data
-// 	n, err = s.fd.Write(rec.Data)
-// 	if err != nil {
-// 		return
-// 	}
-// 	sz += n
-
-// 	// TODO: mix in the segment id
-// 	lsn = LSN(s.id + s.pos)
-
-// 	// update state
-// 	s.pos += sz
-// 	s.csum = s.hash.Sum64()
-
-// 	return
-// }
+func (s *segment) Read(buf []byte) (int, error) {
+	if s.fd == nil {
+		return 0, ErrSegmentClosed
+	}
+	return s.fd.Read(buf)
+}

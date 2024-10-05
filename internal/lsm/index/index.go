@@ -57,7 +57,7 @@ type Index struct {
 	convert    *schema.Converter   // table to index schema converter
 	metrics    engine.IndexMetrics // usage statistics
 	log        log.Logger          // log instance
-	nrows      uint64              // number of live entries
+	// state      engine.ObjectState              // number of live entries
 }
 
 func NewIndex() engine.IndexEngine {
@@ -121,9 +121,6 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		return err
 	}
 
-	// init catalog state
-	idx.engine.Catalog().SetState(idx.indexId, engine.ObjectState{})
-
 	idx.log.Debugf("Created index %s", typ)
 	return nil
 }
@@ -146,7 +143,6 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.noClose = true
 	idx.table = t
 	idx.convert = schema.NewConverter(t.Schema(), s, BE).WithSkipLen()
-	idx.nrows = e.Catalog().GetState(idx.indexId)[1]
 	idx.log = opts.Logger
 
 	idx.log.Debugf("Opening LSM index %s on %s with driver %s", name, t.Schema().Name(), idx.opts.Driver)
@@ -194,7 +190,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	stats := b.Stats()
 	idx.metrics.TotalSize = int64(stats.Size) // estimate only
 
-	idx.log.Debugf("Index %s opened with %d rows", typ, idx.nrows)
+	idx.log.Debugf("Index %s opened", typ)
 
 	return nil
 }
@@ -209,7 +205,6 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 	idx.schema = nil
 	idx.table = nil
 	idx.indexId = 0
-	idx.nrows = 0
 	idx.key = nil
 	idx.noClose = false
 	idx.isZeroCopy = false
@@ -237,7 +232,7 @@ func (idx *Index) Sync(_ context.Context) error {
 
 func (idx *Index) Metrics() engine.IndexMetrics {
 	m := idx.metrics
-	m.TupleCount = int64(idx.nrows)
+	// m.TupleCount = int64(idx.nrows)
 	return m
 }
 
@@ -278,10 +273,9 @@ func (idx *Index) Truncate(ctx context.Context) error {
 	if _, err := tx.Root().CreateBucket(idx.key); err != nil {
 		return err
 	}
-	idx.engine.Catalog().SetState(idx.indexId, engine.ObjectState{})
-	idx.metrics.DeletedTuples += int64(idx.nrows)
+	// idx.metrics.DeletedTuples += int64(idx.nrows)
 	idx.metrics.TupleCount = 0
-	idx.nrows = 0
+	// idx.nrows = 0
 	return nil
 }
 

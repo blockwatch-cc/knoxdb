@@ -51,7 +51,7 @@ type Table struct {
 	key        []byte               // name of the data bucket
 	isZeroCopy bool                 // storage reads are zero copy (copy to safe references)
 	noClose    bool                 // don't close underlying store db on Close
-	state      engine.TableState    // volatile state, synced with catalog
+	state      engine.ObjectState   // volatile state, synced with catalog
 	indexes    []engine.IndexEngine // list of indexes
 	metrics    engine.TableMetrics  // usage statistics
 	log        log.Logger
@@ -81,7 +81,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.pkindex = pki
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.key = []byte(name)
-	t.state = engine.NewTableState()
+	t.state = engine.NewObjectState()
 	t.metrics = engine.NewTableMetrics(name)
 	t.db = opts.DB
 	t.noClose = true
@@ -118,8 +118,10 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 		return err
 	}
 
-	// init catalog state
-	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
+	// init state storage
+	if err := t.state.Store(ctx, tx, name); err != nil {
+		return err
+	}
 
 	t.log.Debugf("Created table %s", typ)
 	return nil
@@ -139,7 +141,6 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.pkindex = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.key = []byte(name)
-	t.state.FromObjectState(e.Catalog().GetState(t.tableId))
 	t.metrics = engine.NewTableMetrics(name)
 	t.metrics.TupleCount = int64(t.state.NRows)
 	t.db = opts.DB
@@ -189,6 +190,14 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	stats := b.Stats()
 	t.metrics.TotalSize = int64(stats.Size) // estimate only
 
+	// load state
+	if err := t.state.Load(ctx, tx, t.schema.Name()); err != nil {
+		t.log.Error("missing table state: %v", err)
+		tx.Rollback()
+		t.Close(ctx)
+		return engine.ErrDatabaseCorrupt
+	}
+
 	t.log.Debugf("Table %s opened with %d rows", typ, t.state.NRows)
 	return nil
 }
@@ -214,6 +223,10 @@ func (t *Table) Close(ctx context.Context) (err error) {
 
 func (t *Table) Schema() *schema.Schema {
 	return t.schema
+}
+
+func (t *Table) State() engine.ObjectState {
+	return t.state
 }
 
 func (t *Table) Indexes() []engine.IndexEngine {
@@ -275,10 +288,15 @@ func (t *Table) Truncate(ctx context.Context) error {
 	if _, err := tx.Root().CreateBucket(t.key); err != nil {
 		return err
 	}
+	t.state.Reset()
+	if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
 	t.metrics.DeletedTuples += int64(t.state.NRows)
 	t.metrics.TupleCount = 0
-	t.state.Reset()
-	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
 	return nil
 }
 

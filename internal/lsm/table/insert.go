@@ -72,7 +72,9 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	}
 
 	// update state in catalog (will commit with main tx)
-	t.engine.Catalog().SetState(t.tableId, t.state.ToObjectState())
+	if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
+		return 0, err
+	}
 	state = nil
 
 	// return first primary key assigned
