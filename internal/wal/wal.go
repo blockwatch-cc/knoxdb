@@ -234,11 +234,14 @@ func (w *Wal) Sync() error {
 }
 
 func (w *Wal) Write(rec *Record) (LSN, error) {
-	if rec == nil || !rec.IsValid() {
-		return 0, ErrInvalidRecord
-	}
 	if w.IsClosed() {
 		return 0, ErrWalClosed
+	}
+	if rec == nil {
+		return 0, ErrInvalidRecord
+	}
+	if err := rec.Validate(); err != nil {
+		return 0, err
 	}
 
 	w.mu.Lock()

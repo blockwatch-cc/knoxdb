@@ -283,16 +283,27 @@ func TestWalEmptyRecords(t *testing.T) {
 		Data:   []byte{},
 	}
 	_, err := w.Write(emptyRec)
-	require.NoError(t, err, "Failed to write empty record")
+	require.Error(t, err, "Accepted empty record")
+
+	// Write a correct empty record
+	emptyRec = &Record{
+		Type:   RecordTypeCommit,
+		Tag:    types.ObjectTagDatabase,
+		Entity: 1,
+		TxID:   100,
+		Data:   nil,
+	}
+	_, err = w.Write(emptyRec)
+	require.NoError(t, err, "Failed commit record")
 
 	// Read the empty record back (works because LSN is zero)
 	reader := w.NewReader()
 	err = reader.Seek(0)
-	require.NoError(t, err, "Failed to seek to empty record")
+	require.NoError(t, err, "Failed to seek to first record")
 
 	readRec, err := reader.Next()
-	require.NoError(t, err, "Failed to read empty record")
-	assert.Empty(t, readRec.Data, "Expected empty data in read record")
+	require.NoError(t, err, "Failed to read first record")
+	assert.Equal(t, emptyRec, readRec, "Expected data in read record")
 
 	// Write a checkpoint record with no data
 	checkpointRec := &Record{

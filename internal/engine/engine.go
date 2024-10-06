@@ -105,7 +105,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	}
 
 	// start transaction and amend context (required to store catalog db)
-	ctx, commit, abort := e.WithTransaction(ctx, TxFlagsReadOnly)
+	ctx, commit, abort := e.WithTransaction(ctx)
 	defer abort()
 
 	// close engine when the tx gets aborted

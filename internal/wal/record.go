@@ -69,6 +69,36 @@ func (r Record) IsValid() bool {
 	return r.Type.IsValid() && r.Tag.IsValid() && (r.TxID > 0 || (r.Type == RecordTypeCheckpoint && r.TxID == 0))
 }
 
+func (r Record) Validate() error {
+	if !r.Type.IsValid() {
+		return ErrInvalidRecordType
+	}
+	if !r.Tag.IsValid() {
+		return ErrInvalidObjectTag
+	}
+	switch r.Type {
+	case RecordTypeCheckpoint:
+		if r.TxID > 0 {
+			return ErrInvalidTxId
+		}
+		if len(r.Data) > 0 {
+			return ErrInvalidBodySize
+		}
+	case RecordTypeCommit, RecordTypeAbort:
+		if r.TxID == 0 {
+			return ErrInvalidTxId
+		}
+	default:
+		if r.TxID == 0 {
+			return ErrInvalidTxId
+		}
+		if len(r.Data) == 0 {
+			return ErrInvalidBodySize
+		}
+	}
+	return nil
+}
+
 func (r *Record) Header() (h RecordHeader) {
 	h.SetType(r.Type)
 	h.SetTag(r.Tag)
