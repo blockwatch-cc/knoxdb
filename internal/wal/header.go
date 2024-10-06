@@ -56,7 +56,7 @@ func (h RecordHeader) Validate(lastXid uint64, lsn, maxLsn LSN) error {
 		if xid == 0 || (lastXid > 0 && absDiff(xid, lastXid) > MaxTxIdGap) {
 			return ErrInvalidTxId
 		}
-		if lsn.Add(h.BodySize()) > maxLsn {
+		if maxLsn > 0 && lsn.Add(h.BodySize()) > maxLsn {
 			return ErrInvalidBodySize
 		}
 	}

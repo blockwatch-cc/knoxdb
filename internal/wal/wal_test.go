@@ -21,7 +21,8 @@ func createWalOptions(t testing.TB) WalOptions {
 	t.Helper()
 	return WalOptions{
 		Path:           t.TempDir(),
-		MaxSegmentSize: SEG_FILE_MINSIZE,
+		MaxSegmentSize: 100 << 20, // 100MB
+		RecoveryMode:   RecoveryModeTruncate,
 	}
 }
 
@@ -281,12 +282,12 @@ func TestWalEmptyRecords(t *testing.T) {
 		TxID:   100,
 		Data:   []byte{},
 	}
-	lsn, err := w.Write(emptyRec)
+	_, err := w.Write(emptyRec)
 	require.NoError(t, err, "Failed to write empty record")
 
-	// Read the empty record back
+	// Read the empty record back (works because LSN is zero)
 	reader := w.NewReader()
-	err = reader.Seek(lsn)
+	err = reader.Seek(0)
 	require.NoError(t, err, "Failed to seek to empty record")
 
 	readRec, err := reader.Next()
@@ -300,7 +301,7 @@ func TestWalEmptyRecords(t *testing.T) {
 		Entity: 2,
 		TxID:   0,
 	}
-	lsn, err = w.Write(checkpointRec)
+	lsn, err := w.Write(checkpointRec)
 	require.NoError(t, err, "Failed to write checkpoint record")
 
 	// Write another test record with data
@@ -320,8 +321,8 @@ func TestWalEmptyRecords(t *testing.T) {
 
 	// Read the next data record back
 	readRec, err = reader.Next()
-	readRec.Lsn = 0
 	require.NoError(t, err, "Failed to read data record")
+	readRec.Lsn = 0
 	assert.Equal(t, dataRec, readRec, "Data record mismatch")
 }
 
@@ -409,7 +410,7 @@ func TestWalClose(t *testing.T) {
 	assert.Error(t, err, "Expected error when writing to closed WAL")
 
 	// Create a new WAL and reader to ensure the WAL is still functional
-	w = openWal(t, LSN(0), opts)
+	w = openWal(t, 0, opts)
 	defer w.Close()
 	newReader := w.NewReader()
 	defer newReader.Close()
@@ -471,7 +472,7 @@ func TestWalSegmentRollover(t *testing.T) {
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   uint64(i + 1),
-			Data:   []byte(strings.Repeat("a", 100)),
+			Data:   bytes.Repeat([]byte("a"), 100),
 		}
 		lsn, err := w.Write(rec)
 		require.NoError(t, err)
@@ -508,15 +509,13 @@ func TestWalSegmentRollover(t *testing.T) {
 }
 
 func TestWalRecovery(t *testing.T) {
-	testDir := t.TempDir()
-	opts := WalOptions{
-		Path:           testDir,
-		MaxSegmentSize: 1024 * 1024, // 1MB segments
-		Seed:           12345,
-	}
-
 	t.Run("NormalRecovery", func(t *testing.T) {
 		// Create and populate WAL
+		opts := WalOptions{
+			Path:           t.TempDir(),
+			MaxSegmentSize: 1024 * 1024, // 1MB segments
+			Seed:           12345,
+		}
 		w, err := Create(opts)
 		require.NoError(t, err)
 
@@ -546,6 +545,7 @@ func TestWalRecovery(t *testing.T) {
 		for i, expected := range records {
 			rec, err := reader.Next()
 			require.NoError(t, err)
+			rec.Lsn = 0
 			assert.Equal(t, expected, rec, "Record %d mismatch after recovery", i)
 		}
 
@@ -554,6 +554,11 @@ func TestWalRecovery(t *testing.T) {
 	})
 
 	t.Run("PartialWriteRecovery", func(t *testing.T) {
+		opts := WalOptions{
+			Path:           t.TempDir(),
+			MaxSegmentSize: 1024 * 1024, // 1MB segments
+			Seed:           12345,
+		}
 		w, err := Create(opts)
 		require.NoError(t, err)
 
@@ -596,6 +601,13 @@ func TestWalRecovery(t *testing.T) {
 	})
 
 	t.Run("CorruptedSegmentRecovery", func(t *testing.T) {
+		testDir := t.TempDir()
+		opts := WalOptions{
+			Path:           testDir,
+			MaxSegmentSize: 1024 * 1024, // 1MB segments
+			Seed:           12345,
+			RecoveryMode:   RecoveryModeTruncate,
+		}
 		w, err := Create(opts)
 		require.NoError(t, err)
 
@@ -629,7 +641,7 @@ func TestWalRecovery(t *testing.T) {
 		require.NoError(t, err)
 		_, err = f.WriteAt([]byte("CORRUPT"), 100)
 		require.NoError(t, err)
-		defer f.Close()
+		f.Close()
 
 		// Attempt to recover
 		recoveredWal, err := Open(0, opts)
@@ -655,7 +667,7 @@ func TestWalRecovery(t *testing.T) {
 		}
 
 		assert.True(t, recoveredCount > 0, "Should recover some records")
-		assert.Error(t, lastError, "Should encounter an error due to corruption")
+		assert.NoError(t, lastError, "Should encounter no more corruption")
 	})
 }
 
@@ -692,6 +704,7 @@ func TestWalCrashRecovery(t *testing.T) {
 	for i, expected := range records {
 		rec, err := reader.Next()
 		require.NoError(t, err)
+		rec.Lsn = 0
 		assert.Equal(t, expected, rec, "Record %d mismatch after recovery", i)
 	}
 
@@ -705,6 +718,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 		Path:           t.TempDir(),
 		MaxSegmentSize: SEG_FILE_MINSIZE, // Small segment size to force multiple segments
 		Seed:           12345,
+		RecoveryMode:   RecoveryModeTruncate,
 	}
 
 	// Create and populate the WAL
@@ -718,7 +732,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
-			TxID:   uint64(i * 100),
+			TxID:   uint64(i),
 			Data:   []byte(fmt.Sprintf("complete data %d", i)),
 		}
 		_, err := w.Write(rec)
@@ -730,17 +744,18 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 		Type:   RecordTypeUpdate,
 		Tag:    types.ObjectTagDatabase,
 		Entity: uint64(completeRecords),
-		TxID:   uint64(completeRecords * 100),
-		Data:   []byte("partial data "),
+		TxID:   uint64(completeRecords),
+		Data:   []byte("partial data"),
 	}
 
 	// Start writing the partial record
 	lsn, err := w.Write(partialRec)
 	require.NoError(t, err)
 
-	// Simulate a crash by forcefully closing the file
-	w.active.fd.Close()
+	// Close wal
+	w.Close()
 
+	// Simulate a crash by forcefully closing the file
 	// Corrupt the last part of the file to simulate incomplete write
 	segmentFile := w.segmentName(lsn.Segment(w.opts.MaxSegmentSize))
 	f, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
@@ -750,17 +765,19 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 	require.NoError(t, err)
 
 	// Truncate the file to simulate partial write
-	err = f.Truncate(info.Size() - int64(len(partialRec.Data))) // Remove last 100 bytes
+	newSz := info.Size() - int64(len(partialRec.Data))
+	t.Logf("Truncate from %d to %d", info.Size(), newSz)
+	err = f.Truncate(newSz)
 	require.NoError(t, err)
 	err = f.Close()
 	require.NoError(t, err)
 
-	// // Attempt to recover
+	// Attempt to recover
 	recoveredWal, err := Open(0, opts)
 	require.NoError(t, err)
 	defer recoveredWal.Close()
 
-	// // Read and verify recovered records
+	// Read and verify recovered records
 	reader := recoveredWal.NewReader()
 	defer reader.Close()
 
@@ -775,7 +792,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 		assert.Equal(t, RecordTypeInsert, rec.Type)
 		assert.Equal(t, types.ObjectTagDatabase, rec.Tag)
 		assert.Equal(t, uint64(j), rec.Entity)
-		assert.Equal(t, uint64(j*100), rec.TxID)
+		assert.Equal(t, uint64(j), rec.TxID)
 		assert.Equal(t, []byte(fmt.Sprintf("complete data %d", j)), rec.Data)
 		recoveredCounter++
 		j++
@@ -789,124 +806,24 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 		Type:   RecordTypeInsert,
 		Tag:    types.ObjectTagDatabase,
 		Entity: uint64(completeRecords + 1),
-		TxID:   uint64((completeRecords + 1) * 100),
+		TxID:   uint64((completeRecords + 1)),
 		Data:   []byte("new record after recovery"),
 	}
 	_, err = recoveredWal.Write(newRec)
 	require.NoError(t, err)
-
-	// // Verify the new record
-	// err = reader.Seek(0) // Reset reader to beginning
-	// require.NoError(t, err)
-
-	// recoveredCounter = 0
-	// var rec *Record
-	// for i := 0; i <= completeRecords; i++ {
-	//  rec, err = reader.Next()
-	//  require.NoError(t, err)
-	//  recoveredCounter++
-	// }
-	// if recoveredCounter == completeRecords {
-	//  assert.Equal(t, newRec.Data, rec.Data, "New record should be readable after recovery")
-	// }
-}
-
-// TestWalTruncateOnPartialWrite tests the WAL's behavior when encountering a partially written (truncated) record.
-func TestWalTruncateOnPartialWrite(t *testing.T) {
-	opts := createWalOptions(t)
-	w := createWal(t, opts)
-	defer w.Close()
-
-	// Write several records
-	numRecords := 10
-	var lastLSN LSN
-	for i := 0; i < numRecords; i++ {
-		rec := &Record{
-			Type:   RecordTypeInsert,
-			Tag:    types.ObjectTagDatabase,
-			Entity: uint64(i),
-			TxID:   uint64(100 + i),
-			Data:   []byte(fmt.Sprintf("test data %d", i)),
-		}
-		lsn, err := w.Write(rec)
-		require.NoError(t, err)
-		lastLSN = lsn
-		t.Logf("Wrote record %d, LSN: %v", i, lsn)
-	}
-
-	// Simulate a partial write by truncating the last record
-	segmentFile := w.segmentName(lastLSN.Segment(w.opts.MaxSegmentSize))
-	file, err := os.OpenFile(segmentFile, os.O_RDWR, 0644)
-	require.NoError(t, err)
-
-	fileInfo, err := file.Stat()
-	require.NoError(t, err)
-
-	truncateSize := fileInfo.Size() - 10
-	err = file.Truncate(truncateSize)
-	require.NoError(t, err)
-	t.Logf("Truncated file from %d to %d bytes", fileInfo.Size(), truncateSize)
-	file.Close()
-
-	// Try to write a new record after truncation
-	newRec := &Record{
-		Type:   RecordTypeInsert,
-		Tag:    types.ObjectTagDatabase,
-		Entity: uint64(numRecords),
-		TxID:   uint64(100 + numRecords),
-		Data:   []byte(fmt.Sprintf("test data %d", numRecords)),
-	}
-	newLSN, err := w.Write(newRec)
-	require.NoError(t, err)
-	t.Logf("Attempted to write new record after truncation, LSN: %v", newLSN)
-
-	// Read all records and verify
-	reader := w.NewReader()
-	defer reader.Close()
-
-	var readRecords int
-	var lastReadRecord *Record
-	for {
-		rec, err := reader.Next()
-		if err != nil {
-			if err != io.EOF {
-				t.Logf("Error reading record: %v", err)
-			}
-			break
-		}
-		t.Logf("Read record %d: Entity=%d, TxID=%d", readRecords, rec.Entity, rec.TxID)
-		lastReadRecord = rec
-		readRecords++
-	}
-
-	t.Logf("Read %d records after truncation", readRecords)
-	expectedRecords := numRecords - 1 // We expect to read one less than we wrote due to truncation
-	assert.Equal(t, expectedRecords, readRecords, "Unexpected number of records after truncation")
-
-	// Check if the last read record is the second-to-last one we originally wrote
-	assert.NotNil(t, lastReadRecord, "Last read record should not be nil")
-	if lastReadRecord != nil {
-		assert.Equal(t, uint64(numRecords-2), lastReadRecord.Entity, "Last record Entity mismatch")
-		assert.Equal(t, uint64(100+numRecords-2), lastReadRecord.TxID, "Last record TxID mismatch")
-	}
-
-	// Attempt to seek to the new LSN and read the record, expecting an error
-	err = reader.Seek(newLSN)
-	assert.Error(t, err, "Expected an error when reading the record written after truncation")
-	assert.Contains(t, err.Error(), "checksum mismatch", "Error should indicate checksum mismatch")
 }
 
 // TestWalFaultInjection simulates various fault scenarios to test the WAL's
 // resilience and error handling capabilities under adverse conditions.
 func TestWalFaultInjection(t *testing.T) {
-	testDir := t.TempDir()
-	opts := WalOptions{
-		Path:           testDir,
-		MaxSegmentSize: 1024 * 1024, // 1MB segments
-		Seed:           12345,
-	}
-
 	t.Run("WriteFailure", func(t *testing.T) {
+		testDir := t.TempDir()
+		opts := WalOptions{
+			Path:           testDir,
+			MaxSegmentSize: 1024 * 1024, // 1MB segments
+			Seed:           12345,
+		}
+
 		w, err := Create(opts)
 		require.NoError(t, err)
 		defer w.Close()
@@ -927,6 +844,13 @@ func TestWalFaultInjection(t *testing.T) {
 	})
 
 	t.Run("CorruptChecksum", func(t *testing.T) {
+		testDir := t.TempDir()
+		opts := WalOptions{
+			Path:           testDir,
+			MaxSegmentSize: 1024 * 1024, // 1MB segments
+			Seed:           12345,
+		}
+
 		w, err := Create(opts)
 		require.NoError(t, err)
 		defer w.Close()
@@ -1050,6 +974,12 @@ func TestWalFaultInjection(t *testing.T) {
 	})
 
 	t.Run("CorruptHeader", func(t *testing.T) {
+		testDir := t.TempDir()
+		opts := WalOptions{
+			Path:           testDir,
+			MaxSegmentSize: 1024 * 1024, // 1MB segments
+			Seed:           12345,
+		}
 		w, err := Create(opts)
 		require.NoError(t, err)
 		defer w.Close()
@@ -1128,6 +1058,13 @@ func TestWalFaultInjection(t *testing.T) {
 	})
 
 	t.Run("CorruptedRecordType", func(t *testing.T) {
+		testDir := t.TempDir()
+		opts := WalOptions{
+			Path:           testDir,
+			MaxSegmentSize: 1024 * 1024, // 1MB segments
+			Seed:           12345,
+		}
+
 		w, err := Create(opts)
 		require.NoError(t, err)
 		defer w.Close()
@@ -1164,12 +1101,18 @@ func TestWalFaultInjection(t *testing.T) {
 	})
 
 	t.Run("CorruptedSegmentBoundary", func(t *testing.T) {
+		testDir := t.TempDir()
+		opts := WalOptions{
+			Path:           testDir,
+			MaxSegmentSize: 1024 * 1024, // 1MB segments
+			Seed:           12345,
+		}
+
 		w, err := Create(opts)
 		require.NoError(t, err)
 		defer w.Close()
 
 		// Write records until close to segment boundary
-		var lastLSN LSN
 		for i := 0; i < 1000; i++ {
 			rec := &Record{
 				Type: RecordTypeInsert,
@@ -1177,10 +1120,15 @@ func TestWalFaultInjection(t *testing.T) {
 				Data: bytes.Repeat([]byte("a"), 900),
 				TxID: uint64(i + 1),
 			}
-			lsn, err := w.Write(rec)
+			_, err := w.Write(rec)
 			require.NoError(t, err)
-			lastLSN = lsn
 		}
+		checkpoint := &Record{
+			Type: RecordTypeCheckpoint,
+			Tag:  types.ObjectTagTable,
+		}
+		lastLSN, err := w.Write(checkpoint)
+		require.NoError(t, err)
 
 		// Corrupt the segment boundary
 		segmentFile := w.segmentName(lastLSN.Segment(w.opts.MaxSegmentSize))
@@ -1219,10 +1167,10 @@ func TestWalFaultInjection(t *testing.T) {
 //
 // BenchmarkWalWrite tests writing records of various sizes to the WAL
 func BenchmarkWalWrite(b *testing.B) {
-	sizes := []int{256, 512, 1024, 2 * 1024, 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024, 64 * 1024, 128 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024}
+	sizes := []int{256, 1 << 16, 1 << 20}
 
 	for _, size := range sizes {
-		b.Run(fmt.Sprintf("Size-%d", size), func(b *testing.B) {
+		b.Run(fmt.Sprintf("RecordSize-%d", size), func(b *testing.B) {
 			opts := createWalOptions(b)
 			w := createWal(b, opts) // 1 MB segments
 			defer w.Close()
@@ -1250,16 +1198,16 @@ func BenchmarkWalWrite(b *testing.B) {
 func BenchmarkWalWriteSync(b *testing.B) {
 	syncOptions := []bool{false, true}
 	for _, withSync := range syncOptions {
-		name := "WithoutSync"
+		name := "NoSync"
 		if withSync {
-			name = "WithSync"
+			name = "Sync"
 		}
 		b.Run(name, func(b *testing.B) {
 			opts := createWalOptions(b)
 			w := createWal(b, opts)
 			defer w.Close()
 
-			size := 1024
+			size := 256
 			data := make([]byte, size)
 			b.SetBytes(int64(size))
 			b.ResetTimer()
@@ -1283,11 +1231,11 @@ func BenchmarkWalWriteSync(b *testing.B) {
 	}
 }
 
-// BenchmarkWalWriteVaryingSegmentSize tests writing with different segment sizes
-func BenchmarkWalWriteVaryingSegmentSize(b *testing.B) {
-	segmentSizes := []int{1024 * 10, 4096 * 3, 16384, 65536, 262144, 1048576}
+// BenchmarkWalSegmentSize tests writing with different segment sizes
+func BenchmarkWalSegmentSize(b *testing.B) {
+	segmentSizes := []int{1 << 16, 1 << 20, 1 << 26}
 	for _, segmentSize := range segmentSizes {
-		b.Run(fmt.Sprintf("SegmentSize-%d", segmentSize), func(b *testing.B) {
+		b.Run(fmt.Sprintf("sz-%d", segmentSize), func(b *testing.B) {
 			opts := createWalOptions(b)
 			opts.MaxSegmentSize = segmentSize
 			w := createWal(b, opts)

@@ -25,16 +25,27 @@ const (
 	WAL_DIR_MODE  = 0755
 )
 
+type RecoveryMode byte
+
+const (
+	RecoveryModeFail = iota
+	RecoveryModeSkip
+	RecoveryModeTruncate
+	RecoveryModeIgnore
+)
+
 type WalOptions struct {
 	Seed           uint64
 	Path           string
 	MaxSegmentSize int
+	RecoveryMode   RecoveryMode
 	Logger         log.Logger
 }
 
 var DefaultOptions = WalOptions{
 	Path:           "",
 	MaxSegmentSize: 1 << 20, // 1MB
+	RecoveryMode:   RecoveryModeFail,
 	Logger:         log.Disabled,
 }
 
@@ -45,6 +56,7 @@ func (o WalOptions) IsValid() bool {
 func (o WalOptions) Merge(o2 WalOptions) WalOptions {
 	o.Path = util.NonZero(o2.Path, o.Path)
 	o.MaxSegmentSize = util.NonZero(o2.MaxSegmentSize, o.MaxSegmentSize)
+	o.RecoveryMode = util.NonZero(o2.RecoveryMode, o.RecoveryMode)
 	o.Seed = o2.Seed
 	if o2.Logger != nil {
 		o.Logger = o2.Logger
@@ -146,34 +158,36 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	r := wal.NewReader()
 	defer r.Close()
 
-	// validate wal contents starting at LSN (must be a checkpoint)
+	// validate wal contents starting at LSN (must be start or a checkpoint)
 	if err = r.Seek(lsn); err != nil {
 		return nil, err
 	}
 
-	// init first good lsn (following the checkpoint)
-	wal.lsn = r.Lsn()
-
 	// walk all records after the checkpoint and validate checksums
+scan:
 	for {
 		var rec *Record
 		rec, err = r.Next()
-		if err != nil {
-			if err != io.EOF {
-				wal.log.Errorf("wal: init: %v", err)
-
-				// truncate to last good LSN
-				if err := wal.truncate(wal.lsn); err != nil {
-					wal.log.Errorf("wal: truncate: %v", err)
-					return nil, err
-				}
-
-				return nil, err
+		switch {
+		case err == nil:
+			// next record
+		case err == io.EOF:
+			break scan
+		case err == ErrInvalidChecksum:
+			if err2 := wal.tryRecover(lsn, err); err2 != nil {
+				return nil, err2
 			}
-			break
+			break scan
+		default:
+			return nil, err
 		}
-		wal.lsn = wal.lsn.Add(HeaderSize + len(rec.Data))
+
+		// keep last good lsn
+		lsn = lsn.Add(HeaderSize + len(rec.Data))
 	}
+
+	// after successful init check (or truncate)
+	wal.lsn = lsn
 	wal.csum = r.Checksum()
 	wal.log.Debugf("wal: last record LSN %d", wal.lsn)
 
@@ -210,7 +224,7 @@ func (w *Wal) Close() error {
 }
 
 func (w *Wal) IsClosed() bool {
-	return w.active == nil
+	return w.hash == nil
 }
 
 func (w *Wal) Sync() error {
@@ -281,13 +295,18 @@ func (w *Wal) write(buf []byte) (int, error) {
 
 	// split and roll when active segment has not enough space
 	var count int
-	for len(buf) > 0 {
+	for {
 		n, err := w.active.Write(buf[:min(space, len(buf))])
 		if err != nil {
 			return count, err
 		}
 		buf = buf[n:]
 		count += n
+
+		// stop when
+		if len(buf) == 0 {
+			break
+		}
 
 		// open next segment
 		next, err := w.createSegment(w.active.Id() + 1)
@@ -383,4 +402,24 @@ func (w *Wal) truncate(lsn LSN) error {
 	}
 
 	return nil
+}
+
+// handle corruption
+func (w *Wal) tryRecover(lsn LSN, err error) error {
+	w.log.Errorf("wal: try recover: %v", err)
+	switch w.opts.RecoveryMode {
+	case RecoveryModeTruncate:
+		// truncate to last good LSN
+		err := w.truncate(lsn)
+		if err != nil {
+			w.log.Errorf("wal: truncate: %v", err)
+		}
+		return err
+	case RecoveryModeFail:
+		return err
+	case RecoveryModeSkip, RecoveryModeIgnore:
+		return nil
+	default:
+		return err
+	}
 }

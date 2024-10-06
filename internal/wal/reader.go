@@ -218,8 +218,9 @@ func (r *Reader) Seek(lsn LSN) error {
 	// init checksum from this record
 	r.csum = head.Checksum()
 
-	// init next lsn
+	// init next lsn and reinit max lsn
 	r.lsn = lsn.Add(HeaderSize)
+	r.maxLsn = r.wal.lsn
 
 	return nil
 }
@@ -241,7 +242,7 @@ func (r *Reader) Next() (*Record, error) {
 		}
 
 		// validate header
-		if err := head.Validate(r.xid, r.lsn, r.wal.lsn); err != nil {
+		if err := head.Validate(r.xid, r.lsn, r.maxLsn); err != nil {
 			return nil, err
 		}
 
@@ -249,6 +250,10 @@ func (r *Reader) Next() (*Record, error) {
 		rec := head.NewRecord()
 		if head.BodySize() > 0 {
 			if err := r.read(rec.Data); err != nil {
+				// convert EOF into checksum error on short tail read
+				if err == io.EOF {
+					return nil, ErrInvalidChecksum
+				}
 				return nil, err
 			}
 		}
