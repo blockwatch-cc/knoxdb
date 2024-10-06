@@ -15,6 +15,9 @@ var (
 	ErrInvalidTxId       = errors.New("wal: invalid tx id")
 	ErrInvalidBodySize   = errors.New("wal: invalid body size")
 
+	ErrReaderClosed = errors.New("wal: reader closed")
+	ErrWalClosed    = errors.New("wal: closed")
+
 	ErrSegmentClosed   = errors.New("wal: segment closed")
 	ErrSegmentReadOnly = errors.New("wal: segment read-only")
 	ErrSegmentActive   = errors.New("wal: segment is active")

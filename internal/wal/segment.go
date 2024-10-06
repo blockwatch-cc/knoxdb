@@ -92,7 +92,7 @@ func (w *Wal) openSegment(id int, active bool) (*segment, error) {
 		fd:  fd,
 		sz:  int(stat.Size()),
 		max: w.opts.MaxSegmentSize,
-		ro:  false,
+		ro:  !active,
 	}
 	return s, nil
 }
@@ -141,11 +141,11 @@ func (s *segment) Sync() error {
 }
 
 func (s *segment) Seek(n int64, _ int) (int64, error) {
-	if !s.ro {
-		return 0, ErrSegmentActive
-	}
 	if s.fd == nil {
 		return 0, ErrSegmentClosed
+	}
+	if !s.ro {
+		return 0, ErrSegmentActive
 	}
 	return s.fd.Seek(n, 0)
 }

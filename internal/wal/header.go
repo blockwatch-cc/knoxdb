@@ -19,12 +19,12 @@ func (h RecordHeader) Entity() uint64       { return LE.Uint64(h[10:18]) }
 func (h RecordHeader) BodySize() int        { return int(LE.Uint32(h[18:22])) }
 func (h RecordHeader) Checksum() uint64     { return LE.Uint64(h[22:30]) }
 
-func (h RecordHeader) SetType(v RecordType)     { h[0] = byte(v) }
-func (h RecordHeader) SetTag(v types.ObjectTag) { h[1] = byte(v) }
-func (h RecordHeader) SetTxId(v uint64)         { LE.PutUint64(h[2:10], v) }
-func (h RecordHeader) SetEntity(v uint64)       { LE.PutUint64(h[10:18], v) }
-func (h RecordHeader) SetBodySize(v int)        { LE.PutUint32(h[18:22], uint32(v)) }
-func (h RecordHeader) SetChecksum(v uint64)     { LE.PutUint64(h[22:30], v) }
+func (h *RecordHeader) SetType(v RecordType)     { h[0] = byte(v) }
+func (h *RecordHeader) SetTag(v types.ObjectTag) { h[1] = byte(v) }
+func (h *RecordHeader) SetTxId(v uint64)         { LE.PutUint64(h[2:10], v) }
+func (h *RecordHeader) SetEntity(v uint64)       { LE.PutUint64(h[10:18], v) }
+func (h *RecordHeader) SetBodySize(v int)        { LE.PutUint32(h[18:22], uint32(v)) }
+func (h *RecordHeader) SetChecksum(v uint64)     { LE.PutUint64(h[22:30], v) }
 
 func (h RecordHeader) NewRecord() *Record {
 	return &Record{
@@ -47,6 +47,9 @@ func (h RecordHeader) Validate(lastXid uint64, lsn, maxLsn LSN) error {
 	case RecordTypeCheckpoint:
 		if h.TxId() != 0 {
 			return ErrInvalidTxId
+		}
+		if h.BodySize() != 0 {
+			return ErrInvalidBodySize
 		}
 	default:
 		xid := h.TxId()

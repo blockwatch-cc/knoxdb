@@ -78,6 +78,9 @@ type Reader struct {
 }
 
 func (w *Wal) NewReader() WalReader {
+	if w.IsClosed() {
+		return &Reader{}
+	}
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return &Reader{
@@ -130,6 +133,10 @@ func (r *Reader) WithTxID(v uint64) WalReader {
 	return r
 }
 
+func (r *Reader) IsClosed() bool {
+	return r.wal == nil
+}
+
 func (r *Reader) Close() (err error) {
 	if r.seg != nil {
 		r.rd.Reset(nil)
@@ -157,6 +164,10 @@ func (r *Reader) Checksum() uint64 {
 }
 
 func (r *Reader) Seek(lsn LSN) error {
+	if r.IsClosed() {
+		return ErrReaderClosed
+	}
+
 	sid := lsn.Segment(r.maxSeg)
 
 	// try current segment
@@ -214,6 +225,14 @@ func (r *Reader) Seek(lsn LSN) error {
 }
 
 func (r *Reader) Next() (*Record, error) {
+	if r.IsClosed() {
+		return nil, ErrReaderClosed
+	}
+	if r.seg == nil {
+		if err := r.Seek(0); err != nil {
+			return nil, err
+		}
+	}
 	for {
 		// read header, will return io.EOF at end of last segment
 		var head RecordHeader

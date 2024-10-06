@@ -33,7 +33,7 @@ type WalOptions struct {
 }
 
 var DefaultOptions = WalOptions{
-	Path:           "./wal",
+	Path:           "",
 	MaxSegmentSize: 1 << 20, // 1MB
 	Logger:         log.Disabled,
 }
@@ -209,6 +209,10 @@ func (w *Wal) Close() error {
 	return err
 }
 
+func (w *Wal) IsClosed() bool {
+	return w.active == nil
+}
+
 func (w *Wal) Sync() error {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -216,6 +220,13 @@ func (w *Wal) Sync() error {
 }
 
 func (w *Wal) Write(rec *Record) (LSN, error) {
+	if rec == nil || !rec.IsValid() {
+		return 0, ErrInvalidRecord
+	}
+	if w.IsClosed() {
+		return 0, ErrWalClosed
+	}
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -271,7 +282,7 @@ func (w *Wal) write(buf []byte) (int, error) {
 	// split and roll when active segment has not enough space
 	var count int
 	for len(buf) > 0 {
-		n, err := w.active.Write(buf[:space])
+		n, err := w.active.Write(buf[:min(space, len(buf))])
 		if err != nil {
 			return count, err
 		}
