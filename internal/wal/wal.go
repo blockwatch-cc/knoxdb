@@ -5,6 +5,7 @@ package wal
 
 import (
 	"encoding/binary"
+	"fmt"
 	"hash"
 	"io"
 	"os"
@@ -28,11 +29,41 @@ const (
 type RecoveryMode byte
 
 const (
-	RecoveryModeFail = iota
+	RecoveryModeFail RecoveryMode = iota
 	RecoveryModeSkip
 	RecoveryModeTruncate
 	RecoveryModeIgnore
 )
+
+var (
+	recoveryModeNames    = "fail_skip_truncate_ignore"
+	recoveryModeNamesOfs = [...]int{0, 5, 10, 19, 26}
+)
+
+func (m RecoveryMode) IsValid() bool {
+	return m <= RecoveryModeIgnore
+}
+
+func (m RecoveryMode) String() string {
+	return recoveryModeNames[recoveryModeNamesOfs[m] : recoveryModeNamesOfs[m+1]-1]
+}
+
+func ParseRecoveryMode(s string) (RecoveryMode, error) {
+	for m := RecoveryModeFail; m <= RecoveryModeIgnore; m++ {
+		if s == m.String() {
+			return m, nil
+		}
+	}
+	return 0, fmt.Errorf("invalid recovery mode %q", s)
+}
+
+func (t *RecoveryMode) Set(s string) error {
+	m, err := ParseRecoveryMode(s)
+	if err == nil {
+		*t = m
+	}
+	return err
+}
 
 type WalOptions struct {
 	Seed           uint64
@@ -227,6 +258,10 @@ func (w *Wal) IsClosed() bool {
 	return w.hash == nil
 }
 
+func (w *Wal) Len() int64 {
+	return int64(w.lsn)
+}
+
 func (w *Wal) Sync() error {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -246,6 +281,8 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	w.log.Trace(rec.Trace)
 
 	// create header
 	head := rec.Header()
