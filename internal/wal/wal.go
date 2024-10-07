@@ -5,6 +5,7 @@ package wal
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -204,7 +205,7 @@ scan:
 			// next record
 		case err == io.EOF:
 			break scan
-		case err == ErrInvalidChecksum:
+		case errors.Is(err, ErrInvalidRecord):
 			if err2 := wal.tryRecover(lsn, err); err2 != nil {
 				return nil, err2
 			}

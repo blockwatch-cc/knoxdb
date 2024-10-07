@@ -6,22 +6,25 @@ package engine
 import (
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 )
 
 type DatabaseOptions struct {
-	Path       string     // local filesystem
-	Namespace  string     // unique db identifier
-	Driver     string     // bolt, badger, mem, ...
-	PageSize   int        // boltdb
-	PageFill   float64    // boltdb
-	CacheSize  int        // in bytes
-	NoSync     bool       // boltdb, no fsync on transactions (dangerous)
-	NoGrowSync bool       // boltdb, skip fsync+alloc on grow
-	ReadOnly   bool       // read-only tx and no schema changes
-	Logger     log.Logger `knox:"-"`
+	Path            string           // local filesystem
+	Namespace       string           // unique db identifier
+	Driver          string           // bolt, badger, mem, ...
+	PageSize        int              // boltdb
+	PageFill        float64          // boltdb
+	CacheSize       int              // in bytes
+	WalSegmentSize  int              // wal file size
+	WalRecoveryMode wal.RecoveryMode // howto recover from wal damage
+	NoSync          bool             // boltdb, no fsync on transactions (dangerous)
+	NoGrowSync      bool             // boltdb, skip fsync+alloc on grow
+	ReadOnly        bool             // read-only tx and no schema changes
+	Logger          log.Logger       `knox:"-"`
 }
 
 func (o DatabaseOptions) Merge(o2 DatabaseOptions) DatabaseOptions {
@@ -31,6 +34,8 @@ func (o DatabaseOptions) Merge(o2 DatabaseOptions) DatabaseOptions {
 	o.PageSize = util.NonZero(o2.PageSize, o.PageSize)
 	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
 	o.CacheSize = util.NonZero(o2.CacheSize, o.CacheSize)
+	o.WalSegmentSize = util.NonZero(o2.WalSegmentSize, o.WalSegmentSize)
+	o.WalRecoveryMode = util.NonZero(o2.WalRecoveryMode, o.WalRecoveryMode)
 	o.ReadOnly = o2.ReadOnly
 	o.NoSync = o2.NoSync
 	o.NoGrowSync = o2.NoGrowSync
@@ -83,6 +88,16 @@ func (o DatabaseOptions) WithDangerousNoSync() DatabaseOptions {
 
 func (o DatabaseOptions) WithLogger(l log.Logger) DatabaseOptions {
 	o.Logger = l
+	return o
+}
+
+func (o DatabaseOptions) WithWalSegmentSize(sz int) DatabaseOptions {
+	o.WalSegmentSize = sz
+	return o
+}
+
+func (o DatabaseOptions) WithWalRecoveryMode(mode wal.RecoveryMode) DatabaseOptions {
+	o.WalRecoveryMode = mode
 	return o
 }
 

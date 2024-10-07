@@ -3,7 +3,11 @@
 
 package wal
 
-import "blockwatch.cc/knoxdb/internal/types"
+import (
+	"fmt"
+
+	"blockwatch.cc/knoxdb/internal/types"
+)
 
 const (
 	HeaderSize = 30
@@ -65,6 +69,12 @@ func (h RecordHeader) Validate(lastXid uint64, lsn, maxLsn LSN) error {
 		}
 	}
 	return nil
+}
+
+func (h RecordHeader) String() string {
+	return fmt.Sprintf("typ=%s tag=%s xid=0x%016x entity=0x%016x len=%d csum=0x%016x",
+		h.Type(), h.Tag(), h.TxId(), h.Entity(), h.BodySize(), h.Checksum(),
+	)
 }
 
 func absDiff(a, b uint64) uint64 {

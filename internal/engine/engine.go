@@ -58,6 +58,7 @@ type CacheManager struct {
 }
 
 func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, error) {
+	opts = DefaultDatabaseOptions.Merge(opts)
 	e := &Engine{
 		path: filepath.Join(opts.Path, name),
 		cache: CacheManager{
@@ -95,7 +96,8 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	wopts := wal.WalOptions{
 		Seed:           e.dbId,
 		Path:           filepath.Join(e.path, "wal"),
-		MaxSegmentSize: 128 << 20,
+		MaxSegmentSize: e.opts.WalSegmentSize,
+		RecoveryMode:   e.opts.WalRecoveryMode,
 		Logger:         e.log,
 	}
 	if w, err := wal.Create(wopts); err != nil {
@@ -200,7 +202,8 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	wopts := wal.WalOptions{
 		Seed:           e.dbId,
 		Path:           filepath.Join(e.path, "wal"),
-		MaxSegmentSize: 128 << 20,
+		MaxSegmentSize: e.opts.WalSegmentSize,
+		RecoveryMode:   e.opts.WalRecoveryMode,
 		Logger:         e.log,
 	}
 	e.log.Debugf("Opening wal at %s", wopts.Path)

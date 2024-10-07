@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
@@ -91,11 +92,13 @@ var (
 )
 
 var DefaultDatabaseOptions = DatabaseOptions{
-	Path:      "./db",
-	Driver:    "bolt",
-	PageSize:  1024,
-	PageFill:  0.8,
-	CacheSize: 16 * 1 << 20,
+	Path:            "./db",
+	Driver:          "bolt",
+	PageSize:        1024,
+	PageFill:        0.8,
+	CacheSize:       16 * 1 << 20,
+	WalSegmentSize:  128 << 20,
+	WalRecoveryMode: wal.RecoveryModeTruncate,
 }
 
 // knoxdb.schemas.catalog.v1
@@ -112,9 +115,7 @@ func NewCatalog(name string) *Catalog {
 }
 
 func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
-	opts = DefaultDatabaseOptions.Merge(opts)
 	path := filepath.Join(opts.Path, c.name, CATALOG_NAME)
-
 	opts.Logger.Debugf("Creating catalog at %s", path)
 	db, err := store.Create(opts.Driver, path, opts.ToDriverOpts())
 	if err != nil {
@@ -341,7 +342,6 @@ func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *schema.Schema, o
 }
 
 func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o TableOptions) error {
-	// check table does not exist
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -362,7 +362,7 @@ func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o 
 	if bucket == nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket, err = bucket.CreateBucket(Key64Bytes(key))
+	bucket, err = bucket.CreateBucketIfNotExists(Key64Bytes(key))
 	if err != nil {
 		return err
 	}

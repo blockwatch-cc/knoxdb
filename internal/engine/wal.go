@@ -96,6 +96,8 @@ func (e *Engine) recoverWal(ctx context.Context) error {
 	// runs non-concurrent on engine init
 	minLsn := e.minWalCheckpoint()
 
+	e.log.Infof("recover journals from wal lsn %d", minLsn)
+
 	// 1st pass - read committed tx ids
 	r := e.wal.NewReader().WithType(wal.RecordTypeCommit)
 	defer r.Close()
@@ -111,6 +113,7 @@ func (e *Engine) recoverWal(ctx context.Context) error {
 			}
 			return err
 		}
+		e.log.Debugf("Committed tx %d", rec.TxID)
 		committed.Set(rec.TxID)
 	}
 	r.Close()
@@ -151,6 +154,7 @@ func (e *Engine) recoverWal(ctx context.Context) error {
 		}
 
 		// TODO: handle catalog object creation, update and deletion
+		e.log.Debugf("Record %s", rec)
 
 		// dispatch records to receivers
 		switch rec.Tag {

@@ -61,13 +61,13 @@ type Record struct {
 }
 
 func (r Record) String() string {
-	return fmt.Sprintf("wal: typ=%s tag=%s xid=0x%016x entity=0x%016x len=%d lsn=0x%016x",
+	return fmt.Sprintf("typ=%s tag=%s xid=0x%016x entity=0x%016x len=%d lsn=0x%016x",
 		r.Type, r.Tag, r.TxID, r.Entity, len(r.Data), r.Lsn,
 	)
 }
 
 func (r Record) Trace() string {
-	return fmt.Sprintf("wal: typ=%s tag=%s xid=0x%016x entity=0x%016x lsn=0x%016x len=%d\n%s",
+	return fmt.Sprintf("typ=%s tag=%s xid=0x%016x entity=0x%016x lsn=0x%016x len=%d\n%s",
 		r.Type, r.Tag, r.TxID, r.Entity, r.Lsn, len(r.Data), hex.Dump(r.Data),
 	)
 }

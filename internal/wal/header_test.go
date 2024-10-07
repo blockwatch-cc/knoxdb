@@ -113,7 +113,6 @@ func FuzzHeaderCheck(f *testing.F) {
 	// Add seed inputs
 	for _, tt := range headerTests {
 		f.Add(tt.header[:])
-
 	}
 
 	f.Fuzz(func(t *testing.T, buf []byte) {

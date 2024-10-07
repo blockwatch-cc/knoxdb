@@ -86,10 +86,10 @@ func (e *Engine) DropEnum(ctx context.Context, name string) error {
 	defer abort()
 
 	// register commit callback
-	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
-		delete(e.enums, tag)
-		return nil
-	})
+	// GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+	//  ???
+	// 	return nil
+	// })
 
 	// write wal
 	obj := &EnumObject{id: tag, name: name}
@@ -101,6 +101,8 @@ func (e *Engine) DropEnum(ctx context.Context, name string) error {
 	if err := e.cat.DropEnum(ctx, tag); err != nil {
 		return err
 	}
+
+	delete(e.enums, tag)
 
 	return commit()
 }
@@ -116,15 +118,14 @@ func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...schema.Enu
 	ctx, commit, abort := e.WithTransaction(ctx)
 	defer abort()
 
-	// register commit callback
-	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
-		// extend enum
-		return enum.AddValues(vals...)
-	})
-
 	// write wal
 	obj := &EnumObject{id: tag, name: name, vals: vals}
 	if err := e.writeWalRecord(ctx, wal.RecordTypeUpdate, obj); err != nil {
+		return err
+	}
+
+	// extend enum
+	if err := enum.AddValues(vals...); err != nil {
 		return err
 	}
 

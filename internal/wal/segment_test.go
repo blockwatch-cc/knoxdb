@@ -133,7 +133,7 @@ func TestSegmentSeek(t *testing.T) {
 
 	// active segment is append only
 	_, err = s.Seek(0, 0)
-	require.ErrorIs(t, err, ErrSegmentActive)
+	require.ErrorIs(t, err, ErrSegmentAppendOnly)
 	err = s.Close()
 	require.NoError(t, err, "segment close")
 

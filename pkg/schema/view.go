@@ -5,7 +5,6 @@ package schema
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"time"
 
@@ -357,10 +356,8 @@ func (v *View) Reset(buf []byte) *View {
 		skip := true
 		for i := range v.schema.fields {
 			f := &v.schema.fields[i]
-			// sz := v.len[i]
 			if f.IsFixedSize() && skip {
 				ofs += v.len[i] + int(f.fixed)
-				fmt.Printf("F#%d fixed=%d len=%d ofs=%d (skip)\n", f.id, f.fixed, v.len[i], ofs)
 				continue
 			}
 			skip = false
@@ -370,20 +367,16 @@ func (v *View) Reset(buf []byte) *View {
 					v.ofs[i] = ofs
 					v.len[i] = int(f.fixed)
 					ofs += int(f.fixed)
-					fmt.Printf("F#%d fixed=%d len=%d ofs=%d\n", f.id, f.fixed, v.len[i], ofs)
 				} else {
 					u32 := LE.Uint32(buf[ofs:])
 					ofs += 4
 					v.ofs[i] = ofs
 					v.len[i] = int(u32)
 					ofs += int(u32)
-					fmt.Printf("F#%d var=%d ofs=%d\n", f.id, v.len[i], ofs)
 				}
 			default:
 				v.ofs[i] = ofs
-				// v.len[i] = sz
 				ofs += v.len[i]
-				fmt.Printf("F#%d other len=%d ofs=%d\n", f.id, v.len[i], ofs)
 			}
 		}
 	} else {

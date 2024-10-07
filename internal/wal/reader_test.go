@@ -349,9 +349,7 @@ func BenchmarkWalRead(b *testing.B) {
 	// Write records
 	numRecords := 10000
 	recordSize := 1024
-	lsns := make([]LSN, numRecords)
 	data := make([]byte, recordSize)
-
 	for i := 1; i < numRecords; i++ {
 		rec := &Record{
 			Type:   RecordTypeInsert,
@@ -360,39 +358,17 @@ func BenchmarkWalRead(b *testing.B) {
 			TxID:   uint64(i),
 			Data:   data,
 		}
-		lsn, err := w.Write(rec)
+		_, err := w.Write(rec)
 		require.NoError(b, err)
-		lsns[i] = lsn
 	}
-
 	reader := w.NewReader()
 	defer reader.Close()
-
-	b.SetBytes(int64(recordSize))
-
-	patterns := []struct {
-		name   string
-		random bool
-	}{
-		{"Sequential", false},
-		{"Random", true},
-	}
-
-	for _, pattern := range patterns {
-		b.Run(pattern.name, func(b *testing.B) {
-			b.ResetTimer()
-			for i := 1; i < b.N; i++ {
-				var lsn LSN
-				if pattern.random {
-					lsn = lsns[i%numRecords]
-				} else {
-					lsn = lsns[(i/recordSize)%numRecords]
-				}
-				err := reader.Seek(lsn)
-				require.NoError(b, err)
-				_, err = reader.Next()
-				require.NoError(b, err)
-			}
-		})
+	b.SetBytes(int64(recordSize + HeaderSize))
+	b.ResetTimer()
+	for i := 1; i < b.N; i++ {
+		err := reader.Seek(0)
+		require.NoError(b, err)
+		_, err = reader.Next()
+		require.NoError(b, err)
 	}
 }

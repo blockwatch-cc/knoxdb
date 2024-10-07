@@ -427,11 +427,8 @@ func TestWalClose(t *testing.T) {
 	defer newReader.Close()
 	readRec, err := newReader.Next()
 	assert.NoError(t, err, "Should be able to read from a new reader after closing the previous one")
-	assert.Equal(t, rec.Type, readRec.Type)
-	assert.Equal(t, rec.Tag, readRec.Tag)
-	assert.Equal(t, rec.Entity, readRec.Entity)
-	assert.Equal(t, rec.TxID, readRec.TxID)
-	assert.Equal(t, rec.Data, readRec.Data)
+	readRec.Lsn = 0
+	assert.Equal(t, rec, readRec)
 }
 
 // TestWalSyncAndClose tests the WAL's behavior when sync and close operations are performed to ensure data integrity and consistency.

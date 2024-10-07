@@ -102,7 +102,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	ctx, commit, abort := e.WithTransaction(ctx)
 	defer abort()
 
-	// creata table
+	// creata index
 	if err := index.Create(ctx, table, s, opts); err != nil {
 		return nil, err
 	}

@@ -145,7 +145,7 @@ func (s *segment) Seek(n int64, _ int) (int64, error) {
 		return 0, ErrSegmentClosed
 	}
 	if !s.ro {
-		return 0, ErrSegmentActive
+		return 0, ErrSegmentAppendOnly
 	}
 	return s.fd.Seek(n, 0)
 }

@@ -73,8 +73,9 @@ type Reader struct {
 	csum   uint64
 	xid    uint64
 	lsn    LSN
-	maxSeg int
+	maxSz  int
 	maxLsn LSN
+	rcmode RecoveryMode
 }
 
 func (w *Wal) NewReader() WalReader {
@@ -88,8 +89,9 @@ func (w *Wal) NewReader() WalReader {
 		rd:     bufio.NewReaderSize(nil, BufferSize),
 		hash:   xxhash.New(),
 		csum:   w.opts.Seed,
-		maxSeg: w.opts.MaxSegmentSize,
+		maxSz:  w.opts.MaxSegmentSize,
 		maxLsn: w.lsn,
+		rcmode: w.opts.RecoveryMode,
 	}
 }
 
@@ -150,8 +152,9 @@ func (r *Reader) Close() (err error) {
 	r.csum = 0
 	r.xid = 0
 	r.lsn = 0
-	r.maxSeg = 0
+	r.maxSz = 0
 	r.maxLsn = 0
+	r.rcmode = 0
 	return
 }
 
@@ -168,7 +171,7 @@ func (r *Reader) Seek(lsn LSN) error {
 		return ErrReaderClosed
 	}
 
-	sid := lsn.Segment(r.maxSeg)
+	sid := lsn.Segment(r.maxSz)
 
 	// try current segment
 	if r.seg != nil && r.seg.Id() != sid {
@@ -190,12 +193,17 @@ func (r *Reader) Seek(lsn LSN) error {
 
 	// special case lsn = 0
 	if lsn == 0 {
+		if _, err := r.seg.Seek(0, 0); err != nil {
+			return err
+		}
 		r.csum = r.wal.opts.Seed
+		r.maxLsn = r.wal.lsn
+		r.lsn = 0
 		return nil
 	}
 
 	// seek to lsn offset
-	if _, err := r.seg.Seek(lsn.Offset(r.maxSeg), 0); err != nil {
+	if _, err := r.seg.Seek(lsn.Offset(r.maxSz), 0); err != nil {
 		return err
 	}
 
@@ -207,12 +215,12 @@ func (r *Reader) Seek(lsn LSN) error {
 
 	// ensure this header looks correct
 	if err := head.Validate(head.TxId(), lsn, r.maxLsn); err != nil {
-		return err
+		return fmt.Errorf("wal: %w on seek: header %s: %v", ErrInvalidRecord, head, err)
 	}
 
 	// ensure this is a checkpoint record
-	if head.Type() != RecordTypeCheckpoint {
-		return fmt.Errorf("seek to non-checkpoint LSN")
+	if head.Type() != RecordTypeCheckpoint && head.Type() != RecordTypeCommit {
+		return ErrInvalidLSN
 	}
 
 	// init checksum from this record
@@ -243,33 +251,44 @@ func (r *Reader) Next() (*Record, error) {
 
 		// validate header
 		if err := head.Validate(r.xid, r.lsn, r.maxLsn); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("wal: %w: header %s: %v", ErrInvalidRecord, head, err)
 		}
 
 		// read body
 		rec := head.NewRecord()
 		if head.BodySize() > 0 {
 			if err := r.read(rec.Data); err != nil {
-				// convert EOF into checksum error on short tail read
+				// convert EOF error on short tail read
 				if err == io.EOF {
-					return nil, ErrInvalidChecksum
+					return nil, fmt.Errorf("wal: %w: header %s: %v", ErrInvalidRecord, head, ErrInvalidBodySize)
 				}
 				return nil, err
 			}
 		}
 
 		// compare checksum
+		var skipRecord bool
 		csum := checksum(r.hash, r.csum, &head, rec.Data)
 		if csum != head.Checksum() {
-			return nil, ErrInvalidChecksum
+			switch r.rcmode {
+			case RecoveryModeIgnore:
+				// continue
+			case RecoveryModeSkip:
+				skipRecord = true
+			default:
+				return nil, fmt.Errorf("wal: %w: %v", ErrInvalidRecord, ErrInvalidChecksum)
+			}
 		}
 		rec.Lsn = r.Lsn()
 
 		// update reader state
 		r.csum = csum
 		r.lsn = r.lsn.Add(HeaderSize + len(rec.Data))
-		if xid := head.TxId(); xid > 0 {
-			r.xid = xid
+		r.xid = max(r.xid, head.TxId())
+
+		// skip on broken checksum
+		if skipRecord {
+			continue
 		}
 
 		// check filters and return on match
@@ -296,11 +315,11 @@ func (r *Reader) read(buf []byte) error {
 			// open another segment if available
 			r.wal.mu.RLock()
 			s, err := r.wal.openSegment(sid+1, false)
+			r.maxLsn = r.wal.lsn
 			r.wal.mu.RUnlock()
 			if err != nil {
 				return err
 			}
-			r.maxLsn = r.wal.lsn
 			r.seg = s
 			r.rd.Reset(r.seg)
 		}

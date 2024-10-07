@@ -172,7 +172,7 @@ func (c *CommitLog) Open() error {
 	}
 
 	if extra := stat.Size() % int64(CommitFrameSize); extra != 0 {
-		c.log.Errorf("wal: broken xlog file size, %s bytes extra", extra)
+		c.log.Errorf("xlog: broken file size, %s bytes extra", extra)
 		if err := c.fd.Truncate(stat.Size() - extra); err != nil {
 			return err
 		}
@@ -202,7 +202,7 @@ func (c *CommitLog) Open() error {
 		if !errors.Is(err, ErrChecksum) && !errors.Is(err, ErrShortFrame) {
 			return err
 		}
-		c.log.Errorf("wal: %v, recovering", err)
+		c.log.Errorf("xlog: recovering after %v", err)
 		if err := c.fd.Truncate(0); err != nil {
 			return err
 		}
@@ -235,11 +235,11 @@ func (c *CommitLog) Open() error {
 func (c *CommitLog) Close() error {
 	err := c.Sync()
 	if err != nil {
-		c.log.Errorf("wal: sync on close: %v", err)
+		c.log.Errorf("xlog: sync on close: %v", err)
 	}
 	err = c.fd.Close()
 	if err != nil {
-		c.log.Errorf("wal: close: %v", err)
+		c.log.Errorf("xlog: close: %v", err)
 	}
 	c.fd = nil
 	c.wal = nil
@@ -343,6 +343,7 @@ func (c *CommitLog) LoadFrame(id int) (*CommitFrame, error) {
 
 func (c *CommitLog) Recover(lsn LSN) error {
 	// read wal starting at last checkpoint and add all commits
+	c.log.Debugf("xlog: replay from lsn %d", lsn)
 	r := c.wal.NewReader().WithType(RecordTypeCommit)
 	err := r.Seek(lsn)
 	if err != nil {
@@ -359,8 +360,8 @@ func (c *CommitLog) Recover(lsn LSN) error {
 			break
 		}
 	}
-	if err != nil && err != io.EOF {
-		return err
+	if err == io.EOF {
+		err = nil
 	}
-	return nil
+	return err
 }

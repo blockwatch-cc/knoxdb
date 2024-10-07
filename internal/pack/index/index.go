@@ -151,9 +151,6 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		if _, err := store.CreateBucket(tx, key, engine.ErrIndexExists); err != nil {
 			return err
 		}
-		if _, err := store.CreateBucket(tx, key, engine.ErrIndexExists); err != nil {
-			return err
-		}
 	}
 
 	idx.log.Debugf("Created index %s", typ)
