@@ -195,6 +195,7 @@ func TestWalWrite(t *testing.T) {
 		_, err := w.Write(rec)
 		require.NoError(t, err)
 	}
+	require.NoError(t, w.Sync())
 
 	// Verify that the records were written
 	reader := w.NewReader()
@@ -295,6 +296,7 @@ func TestWalEmptyRecords(t *testing.T) {
 	}
 	_, err = w.Write(emptyRec)
 	require.NoError(t, err, "Failed commit record")
+	require.NoError(t, w.Sync())
 
 	// Read the empty record back (works because LSN is zero)
 	reader := w.NewReader()
@@ -314,6 +316,7 @@ func TestWalEmptyRecords(t *testing.T) {
 	}
 	lsn, err := w.Write(checkpointRec)
 	require.NoError(t, err, "Failed to write checkpoint record")
+	require.NoError(t, w.Sync())
 
 	// Write another test record with data
 	dataRec := &Record{
@@ -325,6 +328,7 @@ func TestWalEmptyRecords(t *testing.T) {
 	}
 	_, err = w.Write(dataRec)
 	require.NoError(t, err, "Failed to write data record")
+	require.NoError(t, w.Sync())
 
 	// Seek to the checkpoint record
 	err = reader.Seek(lsn)
@@ -366,6 +370,7 @@ func TestWalRead(t *testing.T) {
 		_, err := w.Write(rec)
 		require.NoError(t, err)
 	}
+	require.NoError(t, w.Sync())
 
 	reader := w.NewReader()
 	defer reader.Close()
@@ -582,6 +587,7 @@ func TestWalRecovery(t *testing.T) {
 			_, err := w.Write(rec)
 			require.NoError(t, err)
 		}
+		require.NoError(t, w.Sync())
 
 		// Simulate a crash by forcefully closing the file
 		w.active.fd.Close()
@@ -696,6 +702,7 @@ func TestWalCrashRecovery(t *testing.T) {
 		_, err := w.Write(rec)
 		require.NoError(t, err)
 	}
+	require.NoError(t, w.Sync())
 
 	// Simulate crash by forcefully closing without proper shutdown
 	w.active.fd.Close()
@@ -912,6 +919,7 @@ func TestWalFaultInjection(t *testing.T) {
 		}
 		lsn, err := w.Write(rec)
 		require.NoError(t, err)
+		require.NoError(t, w.Sync())
 
 		// Simulate a partial write by truncating the file
 		segmentFile := w.segmentName(lsn.Segment(w.opts.MaxSegmentSize))
@@ -952,6 +960,7 @@ func TestWalFaultInjection(t *testing.T) {
 			lastLSN, err = w.Write(rec)
 			require.NoError(t, err)
 		}
+		require.NoError(t, w.Sync())
 
 		// Verify segment file exists
 		verifySegmentExists(t, opts.Path, lastLSN, opts.MaxSegmentSize)
@@ -1042,6 +1051,7 @@ func TestWalFaultInjection(t *testing.T) {
 		}
 		lsn, err := w.Write(rec)
 		require.NoError(t, err)
+		require.NoError(t, w.Sync())
 
 		// Truncate the file to create an incomplete record
 		segmentFile := w.segmentName(lsn.Segment(w.opts.MaxSegmentSize))
@@ -1137,6 +1147,7 @@ func TestWalFaultInjection(t *testing.T) {
 		}
 		lastLSN, err := w.Write(checkpoint)
 		require.NoError(t, err)
+		require.NoError(t, w.Sync())
 
 		// Corrupt the segment boundary
 		segmentFile := w.segmentName(lastLSN.Segment(w.opts.MaxSegmentSize))

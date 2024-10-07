@@ -123,12 +123,12 @@ func run() error {
 		count++
 		t.AppendRow([]any{
 			count,
-			strconv.FormatUint(uint64(rec.Lsn), 16),
+			"0x" + strconv.FormatUint(uint64(rec.Lsn), 16),
 			rec.Type,
 			rec.Tag,
-			strconv.FormatUint(rec.TxID, 16),
-			strconv.FormatUint(rec.Entity, 16),
-			hex.EncodeToString(rec.Data[:min(len(rec.Data), 64)]),
+			strconv.FormatUint(rec.TxID, 10),
+			"0x" + strconv.FormatUint(rec.Entity, 16),
+			LimitHexEllipsis(rec.Data, 64),
 		})
 		if limit > 0 && limit == count {
 			break
@@ -136,4 +136,13 @@ func run() error {
 	}
 	t.Render()
 	return nil
+}
+
+func LimitHexEllipsis(buf []byte, sz int) string {
+	if len(buf) > sz {
+		left := hex.EncodeToString(buf[:sz/2])
+		right := hex.EncodeToString(buf[len(buf)-sz/2:])
+		return left + "..." + right
+	}
+	return hex.EncodeToString(buf)
 }

@@ -32,6 +32,7 @@ func TestReaderFilter(t *testing.T) {
 		_, err := w.Write(rec)
 		require.NoError(t, err)
 	}
+	require.NoError(t, w.Sync())
 
 	tests := []struct {
 		name   string
@@ -91,6 +92,7 @@ func TestReaderSeek(t *testing.T) {
 		require.NoError(t, err)
 		lsns[i] = lsn
 	}
+	require.NoError(t, w.Sync())
 
 	reader := w.NewReader()
 	defer reader.Close()
@@ -139,6 +141,7 @@ func TestReaderSeekInvalidLSN(t *testing.T) {
 	validLSN, err := w.Write(validRec)
 	require.NoError(t, err, "Failed to write valid record")
 	t.Logf("Valid LSN: %v", validLSN)
+	require.NoError(t, w.Sync())
 
 	// Define invalid LSN scenarios
 	invalidLSNs := []struct {
@@ -198,6 +201,7 @@ func TestReaderNext(t *testing.T) {
 		_, err := w.Write(rec)
 		require.NoError(t, err)
 	}
+	require.NoError(t, w.Sync())
 
 	reader := w.NewReader()
 	defer reader.Close()
@@ -235,6 +239,7 @@ func TestTwoSimultaneousReaders(t *testing.T) {
 		_, err := w.Write(rec)
 		require.NoError(t, err)
 	}
+	require.NoError(t, w.Sync())
 
 	// Create two readers
 	reader1 := w.NewReader()
@@ -292,6 +297,7 @@ func TestConcurrentReadersLargeDataset(t *testing.T) {
 		_, err := w.Write(rec)
 		require.NoError(t, err)
 	}
+	require.NoError(t, w.Sync())
 
 	// Create multiple concurrent readers
 	numReaders := 1
@@ -361,6 +367,7 @@ func BenchmarkWalRead(b *testing.B) {
 		_, err := w.Write(rec)
 		require.NoError(b, err)
 	}
+	require.NoError(b, w.Sync())
 	reader := w.NewReader()
 	defer reader.Close()
 	b.SetBytes(int64(recordSize + HeaderSize))

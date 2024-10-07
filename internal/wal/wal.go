@@ -4,6 +4,7 @@
 package wal
 
 import (
+	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -101,6 +102,7 @@ type Wal struct {
 	lock   *flock.Flock
 	opts   WalOptions
 	active *segment
+	wr     *bufio.Writer
 	xlog   *CommitLog
 	csum   uint64
 	hash   hash.Hash64
@@ -136,6 +138,7 @@ func Create(opts WalOptions) (*Wal, error) {
 	wal := &Wal{
 		lock: lock,
 		opts: opts,
+		wr:   bufio.NewWriterSize(nil, BufferSize),
 		hash: xxhash.New(),
 		csum: opts.Seed,
 		lsn:  0,
@@ -147,6 +150,7 @@ func Create(opts WalOptions) (*Wal, error) {
 	if err != nil {
 		return nil, err
 	}
+	wal.wr.Reset(wal.active)
 
 	// init xlog
 	wal.xlog = NewCommitLog(wal)
@@ -181,6 +185,7 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	wal := &Wal{
 		lock: lock,
 		opts: opts,
+		wr:   bufio.NewWriterSize(nil, BufferSize),
 		hash: xxhash.New(),
 		csum: opts.Seed,
 		log:  opts.Logger,
@@ -228,6 +233,7 @@ scan:
 	if err != nil {
 		return nil, err
 	}
+	wal.wr.Reset(wal.active)
 
 	// init xlog
 	wal.log.Debugf("wal: open xlog")
@@ -243,7 +249,11 @@ scan:
 func (w *Wal) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	err := w.active.Close()
+	err := w.wr.Flush()
+	err2 := w.active.Close()
+	if err == nil {
+		err = err2
+	}
 	w.active = nil
 	w.xlog.Close()
 	w.xlog = nil
@@ -266,6 +276,9 @@ func (w *Wal) Len() int64 {
 func (w *Wal) Sync() error {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
+	if err := w.wr.Flush(); err != nil {
+		return err
+	}
 	return w.active.Sync()
 }
 
@@ -329,15 +342,15 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 
 // must hold exclusive lock
 func (w *Wal) write(buf []byte) (int, error) {
-	space := w.active.Cap()
+	space := w.active.Cap() - (BufferSize - w.wr.Available())
 	if space >= len(buf) {
-		return w.active.Write(buf)
+		return w.wr.Write(buf)
 	}
 
 	// split and roll when active segment has not enough space
 	var count int
 	for {
-		n, err := w.active.Write(buf[:min(space, len(buf))])
+		n, err := w.wr.Write(buf[:min(space, len(buf))])
 		if err != nil {
 			return count, err
 		}
@@ -356,14 +369,19 @@ func (w *Wal) write(buf []byte) (int, error) {
 		}
 
 		// close active
+		err = w.wr.Flush()
+		if err != nil {
+			return count, err
+		}
 		err = w.active.Close()
 		if err != nil {
 			return count, err
 		}
-		w.active = next
 
-		// reinit capacity
-		space = w.active.Cap()
+		// reinit writer and capacity
+		w.active = next
+		w.wr.Reset(next)
+		space = next.Cap()
 	}
 
 	return count, nil
@@ -376,6 +394,10 @@ func (w *Wal) truncate(lsn LSN) error {
 	// close active segment
 	var reloadActive bool
 	if w.active != nil {
+		if err := w.wr.Flush(); err != nil {
+			return err
+		}
+		w.wr.Reset(nil)
 		if err := w.active.Close(); err != nil {
 			return err
 		}
@@ -440,6 +462,7 @@ func (w *Wal) truncate(lsn LSN) error {
 		if err != nil {
 			return err
 		}
+		w.wr.Reset(w.active)
 	}
 
 	return nil
