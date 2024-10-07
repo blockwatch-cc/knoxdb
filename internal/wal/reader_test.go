@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestReaderFilteredReading tests the WAL's ability to read records using various filters,
+// TestReaderFilter tests the WAL's ability to read records using various filters,
 // ensuring that only records matching the specified criteria are returned.
 func TestReaderFilter(t *testing.T) {
 	opts := createWalOptions(t)
