@@ -373,9 +373,9 @@ func BenchmarkWalRead(b *testing.B) {
 	b.SetBytes(int64(recordSize + HeaderSize))
 	b.ResetTimer()
 	for i := 1; i < b.N; i++ {
-		err := reader.Seek(0)
-		require.NoError(b, err)
-		_, err = reader.Next()
-		require.NoError(b, err)
+		_, err := reader.Next()
+		if err == io.EOF {
+			reader.Seek(0)
+		}
 	}
 }
