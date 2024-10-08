@@ -51,7 +51,7 @@ type CommitFrame struct {
 	dirty      bool           // content changed, must flush to disk
 }
 
-func NewCommitFrame(id int) *CommitFrame {
+func NewCommitFrame(id int64) *CommitFrame {
 	return &CommitFrame{
 		offset: int64(id) * CommitFrameSize,
 		xmin:   uint64(id) << CommitFrameShift,
@@ -178,7 +178,7 @@ func (c *CommitLog) Open() error {
 		}
 		stat, _ = c.fd.Stat()
 	}
-	nFrames := int(stat.Size() / int64(CommitFrameSize))
+	nFrames := stat.Size() / int64(CommitFrameSize)
 
 	// init frames
 	switch nFrames {
@@ -280,7 +280,7 @@ func (c *CommitLog) IsCommitted(xid uint64) (bool, error) {
 		c.last = nil
 	}
 	if c.last == nil {
-		frame, err := c.LoadFrame(int(xid >> CommitFrameShift))
+		frame, err := c.LoadFrame(int64(xid >> CommitFrameShift))
 		if err != nil {
 			return false, err
 		}
@@ -307,7 +307,7 @@ func (c *CommitLog) Append(rec *Record) error {
 			c.last.Close()
 		}
 		c.last = c.tail
-		c.tail = NewCommitFrame(int(rec.TxID >> CommitFrameShift))
+		c.tail = NewCommitFrame(int64(rec.TxID >> CommitFrameShift))
 		c.tail.Append(rec.TxID, rec.Lsn)
 		return nil
 	}
@@ -321,7 +321,7 @@ func (c *CommitLog) Append(rec *Record) error {
 		c.last = nil
 	}
 	if c.last == nil {
-		frame, err := c.LoadFrame(int(rec.TxID >> CommitFrameShift))
+		frame, err := c.LoadFrame(int64(rec.TxID >> CommitFrameShift))
 		if err != nil {
 			return err
 		}
@@ -331,7 +331,7 @@ func (c *CommitLog) Append(rec *Record) error {
 	return nil
 }
 
-func (c *CommitLog) LoadFrame(id int) (*CommitFrame, error) {
+func (c *CommitLog) LoadFrame(id int64) (*CommitFrame, error) {
 	f := NewCommitFrame(id)
 	err := f.ReadFrom(c.fd)
 	if err != nil {
