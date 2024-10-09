@@ -209,7 +209,7 @@ func TestCommitFrameReadFrom(t *testing.T) {
 		require.NoError(t, err, "failed to read frame")
 	})
 
-	t.Run("fails to read corrupted data from frame", func(t *testing.T) {
+	t.Run("read corrupted data from frame", func(t *testing.T) {
 		// test setup
 		dir := t.TempDir()
 		commitFrameFile, err := makeCommitFrameFile(dir)
