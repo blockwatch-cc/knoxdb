@@ -1,6 +1,8 @@
 package wal
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,6 +14,15 @@ func xmin(id int) uint64 {
 
 func xmax(id int) uint64 {
 	return xmin(id) + 1<<CommitFrameShift - 1
+}
+
+func makeCommitFrameFile(dirPath string) (*os.File, error) {
+	name := filepath.Join(dirPath, CommitLogName)
+	fd, err := os.OpenFile(name, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+	}
+	return fd, nil
 }
 
 func TestCommitFrameXmin(t *testing.T) {
@@ -147,8 +158,82 @@ func TestCommitFrameContains(t *testing.T) {
 	})
 }
 
-// TestCommitFrameReadFrom
-// TestCommitFrameWriteTo
+func TestCommitFrameWriteTo(t *testing.T) {
+	t.Run("write data to frame", func(t *testing.T) {
+		dir := t.TempDir()
+		commitFrameFile, err := makeCommitFrameFile(dir)
+		require.NoError(t, err)
+
+		// get size of file
+		statBefore, err := commitFrameFile.Stat()
+		require.NoError(t, err, "failed to check file stat")
+
+		cm := NewCommitFrame(0)
+		cm.Append(0, LSN(0))
+		cm.Append(2, LSN(10))
+		cm.Append(4, LSN(20))
+		err = cm.WriteTo(commitFrameFile)
+		require.NoError(t, err)
+
+		// check file exists
+		f, err := os.Open(filepath.Join(dir, CommitLogName))
+		require.NoError(t, err, "failed to open file")
+
+		// check file size should be same after append
+		statAfter, err := f.Stat()
+		require.NoError(t, err, "fail to check file stats")
+		require.Falsef(t, statAfter.Size() == statBefore.Size(), "file size should not be the same")
+
+	})
+}
+
+func TestCommitFrameReadFrom(t *testing.T) {
+
+	t.Run("read data from frame", func(t *testing.T) {
+		// test setup
+		dir := t.TempDir()
+		commitFrameFile, err := makeCommitFrameFile(dir)
+		require.NoError(t, err)
+
+		cm := NewCommitFrame(0)
+		cm.Append(0, LSN(0))
+		cm.Append(2, LSN(10))
+		cm.Append(4, LSN(20))
+		err = cm.WriteTo(commitFrameFile)
+		require.NoError(t, err)
+		cm.Close()
+
+		// read from frame
+		readCm := NewCommitFrame(0)
+		err = readCm.ReadFrom(commitFrameFile)
+		require.NoError(t, err, "failed to read frame")
+	})
+
+	t.Run("fails to read corrupted data from frame", func(t *testing.T) {
+		// test setup
+		dir := t.TempDir()
+		commitFrameFile, err := makeCommitFrameFile(dir)
+		require.NoError(t, err)
+
+		cm := NewCommitFrame(0)
+		cm.Append(0, LSN(0))
+		cm.Append(2, LSN(10))
+		cm.Append(4, LSN(20))
+		err = cm.WriteTo(commitFrameFile)
+		require.NoError(t, err)
+		cm.Close()
+
+		// write data to head/body
+		_, err = commitFrameFile.WriteAt([]byte("data"), 10)
+		require.NoError(t, err, "write shouldnt fail")
+
+		// read from file
+		readCm := NewCommitFrame(0)
+		err = readCm.ReadFrom(commitFrameFile)
+		require.Error(t, err, "failed to read frame")
+		require.ErrorIs(t, err, ErrChecksum, "error should be checksum error")
+	})
+}
 
 // TestCommitLogOpen
 // TestCommitLogClose
