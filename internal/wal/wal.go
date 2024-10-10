@@ -10,8 +10,11 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/echa/log"
@@ -162,15 +165,48 @@ func Create(opts WalOptions) (*Wal, error) {
 	return wal, nil
 }
 
+func possibleMaxLsn(opts WalOptions) (maxLsn LSN, err error) {
+	opts.Logger.Debugf("wal: walking %s for possible highest segment file", opts.Path)
+	var lastSegmentEntry fs.FileInfo
+	err = filepath.Walk(opts.Path, func(path string, d fs.FileInfo, err error) error {
+		if filepath.Ext(d.Name()) == SEG_FILE_SUFFIX {
+			lastSegmentEntry = d
+		}
+		if d.IsDir() && opts.Path != path {
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if err != nil {
+		return
+	}
+	if lastSegmentEntry != nil {
+		id, err := strconv.ParseInt(strings.TrimSuffix(lastSegmentEntry.Name(), filepath.Ext(lastSegmentEntry.Name())), 10, 0)
+		if err != nil {
+			return 0, err
+		}
+		maxLsn = LSN(int(id)*opts.MaxSegmentSize + opts.MaxSegmentSize)
+	}
+	return maxLsn, nil
+}
+
 func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	opts = DefaultOptions.Merge(opts)
 	if !opts.IsValid() {
 		return nil, ErrInvalidWalOption
 	}
 
+	// guess possible max lsn based on segment names
+	// used for only validating checksum
+	// actual max lsn will be set after
+	maxLsn, err := possibleMaxLsn(opts)
+	if err != nil {
+		return nil, err
+	}
+
 	// set exclusive directory lock
 	lock := flock.New(filepath.Join(opts.Path, WAL_LOCK_NAME))
-	_, err := lock.TryLock()
+	_, err = lock.TryLock()
 	if err != nil {
 		return nil, err
 	}
@@ -188,6 +224,7 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 		wr:   bufio.NewWriterSize(nil, BufferSize),
 		hash: xxhash.New(),
 		csum: opts.Seed,
+		lsn:  maxLsn,
 		log:  opts.Logger,
 	}
 	wal.log.Debugf("wal: verifying from LSN %d", lsn)
