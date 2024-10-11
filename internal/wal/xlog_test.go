@@ -1,10 +1,12 @@
 package wal
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,6 +25,37 @@ func makeCommitFrameFile(dirPath string) (*os.File, error) {
 		return nil, err
 	}
 	return fd, nil
+}
+
+func makeCommitLog(t *testing.T) *CommitLog {
+	wal := makeWal(t)
+	wal.createSegment(0)
+	commitLog := NewCommitLog(wal)
+	return commitLog
+}
+
+func makeRecords(sz int) []*Record {
+	recs := make([]*Record, 0, sz)
+	for i := range sz {
+		walTxId := i
+		walBody := bytes.Repeat([]byte("data"), i)
+		walTyp := RecordTypeInsert
+		if i%10 == 0 {
+			walTyp = RecordTypeCheckpoint
+			walTxId = 0
+			walBody = nil
+		} else if i%15 == 0 {
+			walTyp = RecordTypeCommit
+		}
+		recs = append(recs, &Record{
+			Type:   walTyp,
+			Tag:    types.ObjectTagDatabase,
+			TxID:   uint64(walTxId),
+			Entity: 10,
+			Data:   walBody,
+		})
+	}
+	return recs
 }
 
 func TestCommitFrameXmin(t *testing.T) {
@@ -235,10 +268,57 @@ func TestCommitFrameReadFrom(t *testing.T) {
 	})
 }
 
-// TestCommitLogOpen
-// TestCommitLogClose
-// TestCommitLogSync
-// TestCommitLogIsCommitted
-// TestCommitLogAppend
-// TestCommitLogLoadFrame
-// TestCommitLogRecover
+func TestCommitLogOpen(t *testing.T) {
+	t.Run("commit logger creates file on open", func(t *testing.T) {
+		commitLog := makeCommitLog(t)
+		err := commitLog.Open()
+		require.NoError(t, err, "opening commit log should not return err")
+
+		// check if file is created
+		f, err := os.Stat(filepath.Join(commitLog.wal.opts.Path, CommitLogName))
+		require.NoError(t, err, "commit  should exist")
+
+		// check if file is dir
+		require.Falsef(t, f.IsDir(), "file should not be a directory")
+
+		require.NoError(t, commitLog.Close(), "closing should not fail")
+	})
+}
+
+func TestCommitLogAppend(t *testing.T) {
+	t.Run("append records to logger", func(t *testing.T) {
+		commitLog := makeCommitLog(t)
+		err := commitLog.Open()
+		defer commitLog.Close()
+		require.NoError(t, err, "opening commit log should not return err")
+
+		recs := makeRecords(1 << 16)
+		for _, rec := range recs {
+			err := commitLog.Append(rec)
+			require.NoError(t, err, "appending rec should not fail")
+		}
+
+		p := filepath.Join(commitLog.wal.opts.Path, CommitLogName)
+		f, err := os.OpenFile(p, os.O_APPEND|os.O_RDWR, 0600)
+		require.NoError(t, err, "commit logger should exist")
+
+		finfo, err := f.Stat()
+		require.NoError(t, err, "error file information")
+
+		_, err = f.Write([]byte("datanewdata"))
+		require.NoError(t, err, "write extra data ")
+
+		// try reopen commitlogger
+		newCommitLogger := NewCommitLog(commitLog.wal)
+		err = newCommitLogger.Open()
+		require.NoError(t, err, "opening commit log should not return err")
+
+		fdinfo, err := os.Stat(p)
+		require.NoError(t, err, "error file information ")
+
+		// check file size is the same as after the records were wrriten
+		// corrupted data written was truncated
+		require.Truef(t, finfo.Size() == fdinfo.Size(), "extra data written would be truncated")
+
+	})
+}
