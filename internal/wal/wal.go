@@ -128,15 +128,17 @@ func Create(opts WalOptions) (*Wal, error) {
 	lock := flock.New(filepath.Join(opts.Path, WAL_LOCK_NAME))
 	_, err := lock.TryLock()
 	if err != nil {
-		return nil, err
-	}
-
-	// cleanup lock file on error
-	defer func() {
-		if err != nil {
-			lock.Unlock()
+		if !errors.Is(err, errors.ErrUnsupported) {
+			return nil, err
 		}
-	}()
+	} else {
+		// cleanup lock file on error
+		defer func() {
+			if err != nil {
+				lock.Unlock()
+			}
+		}()
+	}
 
 	wal := &Wal{
 		lock: lock,
@@ -208,15 +210,17 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	lock := flock.New(filepath.Join(opts.Path, WAL_LOCK_NAME))
 	_, err = lock.TryLock()
 	if err != nil {
-		return nil, err
-	}
-
-	// cleanup lock file on error
-	defer func() {
-		if err != nil {
-			lock.Unlock()
+		if !errors.Is(err, errors.ErrUnsupported) {
+			return nil, err
 		}
-	}()
+	} else {
+		// cleanup lock file on error
+		defer func() {
+			if err != nil {
+				lock.Unlock()
+			}
+		}()
+	}
 
 	wal := &Wal{
 		lock: lock,
@@ -294,8 +298,10 @@ func (w *Wal) Close() error {
 	w.active = nil
 	w.xlog.Close()
 	w.xlog = nil
-	w.lock.Close()
-	w.lock = nil
+	if w.lock != nil {
+		w.lock.Close()
+		w.lock = nil
+	}
 	w.csum = 0
 	w.hash = nil
 	w.lsn = 0
