@@ -52,15 +52,18 @@ func verifySegmentExists(t *testing.T, dir string, lsn LSN, maxSegmentSize int) 
 // ensuring that the WAL behaves correctly with different settings.
 func TestWalOptions(t *testing.T) {
 	t.Run("DefaultConfiguration", func(t *testing.T) {
-		t.Skip()
 		testDir := t.TempDir()
 		w, err := Create(WalOptions{Path: testDir})
 		require.NoError(t, err)
 		defer w.Close()
 
 		// Verify default values
-		assert.NotZero(t, w.opts.Seed, "Seed should have a non-zero default value")
+		assert.Zero(t, w.opts.Seed, "Seed should be a zero value")
+		assert.Equalf(t, w.opts.Path, testDir, "Wal Path should the test path provided: %s", testDir)
+		assert.Equalf(t, w.opts.RecoveryMode, RecoveryModeFail, "Default RecoveryMode should be, %s", DefaultOptions.RecoveryMode)
+		assert.NotNil(t, w.opts.Logger, "Default logger is not nil")
 		assert.NotZero(t, w.opts.MaxSegmentSize, "MaxSegmentSize should have a non-zero default value")
+		assert.Equalf(t, w.opts.MaxSegmentSize, DefaultOptions.MaxSegmentSize, "Default MaxSegmentSize should be: %v", DefaultOptions.MaxSegmentSize)
 	})
 
 	t.Run("CustomConfiguration", func(t *testing.T) {
@@ -79,7 +82,6 @@ func TestWalOptions(t *testing.T) {
 	})
 
 	t.Run("ExtremeValues", func(t *testing.T) {
-		t.Skip()
 		testDir := t.TempDir()
 		extremeOpts := WalOptions{
 			Path:           testDir,
@@ -92,15 +94,8 @@ func TestWalOptions(t *testing.T) {
 		extremeOpts.MaxSegmentSize = 1024 * 1024 * 1024 * 10 // 10GB
 		w, err := Create(extremeOpts)
 		require.NoError(t, err)
-		defer w.Close()
-
-		// Write a record larger than normal segment size
-		largeRec := &Record{
-			Type: RecordTypeInsert,
-			Data: bytes.Repeat([]byte("a"), 1024*1024*2), // 2MB data
-		}
-		_, err = w.Write(largeRec)
-		require.NoError(t, err, "Should handle writing large records with large MaxSegmentSize")
+		err = w.Close()
+		require.NoError(t, err, "")
 	})
 
 	t.Run("InvalidConfiguration", func(t *testing.T) {
@@ -221,9 +216,8 @@ func TestWalWrite(t *testing.T) {
 
 // TestWalWriteErrors tests the WAL's error handling when writing records under various error conditions.
 func TestWalWriteErrors(t *testing.T) {
-	testDir := t.TempDir()
-
 	t.Run("WriteToReadOnlyDir", func(t *testing.T) {
+		testDir := t.TempDir()
 		readOnlyDir := filepath.Join(testDir, "readonly")
 		require.NoError(t, os.MkdirAll(readOnlyDir, 0755))
 		defer os.RemoveAll(readOnlyDir)
@@ -238,6 +232,22 @@ func TestWalWriteErrors(t *testing.T) {
 		})
 		assert.Error(t, err, "Expected an error when creating WAL in a read-only directory")
 		assert.Contains(t, err.Error(), "permission denied", "Expected a permission denied error")
+	})
+
+	t.Run("WriteLargeRecord", func(t *testing.T) {
+		w, err := Create(WalOptions{Path: t.TempDir()})
+		require.NoError(t, err)
+		defer w.Close()
+
+		// Write a record larger than normal segment size
+		largeRec := &Record{
+			TxID: 1,
+			Type: RecordTypeInsert,
+			Tag:  types.ObjectTagDatabase,
+			Data: bytes.Repeat([]byte("a"), 1024*1024*2), // 2MB data
+		}
+		_, err = w.Write(largeRec)
+		require.NoError(t, err, "Should handle writing large records with large MaxSegmentSize")
 	})
 }
 

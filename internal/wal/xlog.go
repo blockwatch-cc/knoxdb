@@ -49,14 +49,20 @@ type CommitFrame struct {
 	xmin       uint64         // min xid (calculated)
 	bits       *bitset.Bitset // commit bits
 	dirty      bool           // content changed, must flush to disk
+	log        log.Logger     // logger
 }
 
-func NewCommitFrame(id int) *CommitFrame {
+func NewCommitFrame(id int64) *CommitFrame {
 	return &CommitFrame{
 		offset: int64(id) * CommitFrameSize,
 		xmin:   uint64(id) << CommitFrameShift,
 		bits:   bitset.NewBitset(CommitFramePayloadSize << 3),
 	}
+}
+
+func (f *CommitFrame) WithLogger(log log.Logger) *CommitFrame {
+	f.log = log
+	return f
 }
 
 func (f *CommitFrame) Close() {
@@ -81,6 +87,10 @@ func (f *CommitFrame) IsCommitted(xid uint64) bool {
 }
 
 func (f *CommitFrame) Append(xid uint64, lsn LSN) {
+	if f.bits == nil {
+		log.Debugf("xlog: appending xid: %d lsn: %d to closed frame", xid, lsn)
+	}
+	f.dirty = true
 	f.bits.Set(int(xid - f.xmin))
 	f.checkpoint = max(f.checkpoint, lsn)
 }
@@ -90,6 +100,9 @@ func (f *CommitFrame) Contains(xid uint64) bool {
 }
 
 func (f *CommitFrame) ReadFrom(fd *os.File) error {
+	if f.bits == nil {
+		log.Debug("xlog: reading from closed frame")
+	}
 	// read header
 	var head [CommitFrameHeaderSize]byte
 	n, err := fd.ReadAt(head[:], f.offset)
@@ -124,6 +137,10 @@ func (f *CommitFrame) ReadFrom(fd *os.File) error {
 func (f *CommitFrame) WriteTo(fd *os.File) error {
 	if f == nil || !f.dirty {
 		return nil
+	}
+
+	if f.bits == nil {
+		log.Debug("xlog: writing to closed frame")
 	}
 
 	// prepare header
@@ -178,13 +195,13 @@ func (c *CommitLog) Open() error {
 		}
 		stat, _ = c.fd.Stat()
 	}
-	nFrames := int(stat.Size() / int64(CommitFrameSize))
+	nFrames := stat.Size() / int64(CommitFrameSize)
 
 	// init frames
 	switch nFrames {
 	case 0:
 		// empty file, create a new frame
-		c.tail = NewCommitFrame(0)
+		c.tail = NewCommitFrame(0).WithLogger(c.log)
 	case 1:
 		// load tail frame
 		c.tail, err = c.LoadFrame(0)
@@ -208,7 +225,7 @@ func (c *CommitLog) Open() error {
 		}
 		if c.tail != nil {
 			c.tail.Close()
-			c.tail = NewCommitFrame(0)
+			c.tail = NewCommitFrame(0).WithLogger(c.log)
 		}
 		if c.last != nil {
 			c.last.Close()
@@ -280,7 +297,7 @@ func (c *CommitLog) IsCommitted(xid uint64) (bool, error) {
 		c.last = nil
 	}
 	if c.last == nil {
-		frame, err := c.LoadFrame(int(xid >> CommitFrameShift))
+		frame, err := c.LoadFrame(int64(xid >> CommitFrameShift))
 		if err != nil {
 			return false, err
 		}
@@ -307,7 +324,7 @@ func (c *CommitLog) Append(rec *Record) error {
 			c.last.Close()
 		}
 		c.last = c.tail
-		c.tail = NewCommitFrame(int(rec.TxID >> CommitFrameShift))
+		c.tail = NewCommitFrame(int64(rec.TxID >> CommitFrameShift)).WithLogger(c.log)
 		c.tail.Append(rec.TxID, rec.Lsn)
 		return nil
 	}
@@ -321,7 +338,7 @@ func (c *CommitLog) Append(rec *Record) error {
 		c.last = nil
 	}
 	if c.last == nil {
-		frame, err := c.LoadFrame(int(rec.TxID >> CommitFrameShift))
+		frame, err := c.LoadFrame(int64(rec.TxID >> CommitFrameShift))
 		if err != nil {
 			return err
 		}
@@ -331,8 +348,8 @@ func (c *CommitLog) Append(rec *Record) error {
 	return nil
 }
 
-func (c *CommitLog) LoadFrame(id int) (*CommitFrame, error) {
-	f := NewCommitFrame(id)
+func (c *CommitLog) LoadFrame(id int64) (*CommitFrame, error) {
+	f := NewCommitFrame(id).WithLogger(c.log)
 	err := f.ReadFrom(c.fd)
 	if err != nil {
 		f.Close()
