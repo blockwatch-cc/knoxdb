@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"sync"
 
@@ -15,12 +16,18 @@ import (
 	"blockwatch.cc/knoxdb/pkg/cache/rclru"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/echa/log"
+	"github.com/gofrs/flock"
 	"golang.org/x/sync/errgroup"
+)
+
+const (
+	ENGINE_LOCK_NAME = "LOCK"
 )
 
 // Engine is the central instance managing a database
 type Engine struct {
 	mu      sync.RWMutex
+	lock    *flock.Flock
 	cat     *Catalog
 	cache   CacheManager
 	tables  map[uint64]TableEngine
@@ -36,6 +43,7 @@ type Engine struct {
 	log     log.Logger
 	merger  *MergerService
 	wal     *wal.Wal
+	xlog    *wal.CommitLog
 }
 
 type CacheKeyType [2]uint64
@@ -86,11 +94,26 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 
 	e.log.Debugf("Creating database %s at %s", name, e.path)
 
-	// init caches
-	if opts.CacheSize > 0 {
-		e.cache.blocks = rclru.New2Q[CacheKeyType, *block.Block](opts.CacheSize * 90 / 10)
-		e.cache.buffers = rclru.New2Q[CacheKeyType, *Buffer](opts.CacheSize / 10)
+	// set exclusive directory lock
+	lock := flock.New(filepath.Join(opts.Path, ENGINE_LOCK_NAME))
+	_, err := lock.TryLock()
+	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
+		return nil, err
+	} else {
+		e.lock = lock
 	}
+
+	// start transaction and amend context (required to store catalog db)
+	ctx, commit, abort := e.WithTransaction(ctx)
+
+	// cleanup on any errors
+	defer func() {
+		if err == nil {
+			return
+		}
+		abort()
+		e.Close(ctx)
+	}()
 
 	// init wal
 	wopts := wal.WalOptions{
@@ -106,25 +129,32 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		e.wal = w
 	}
 
-	// start transaction and amend context (required to store catalog db)
-	ctx, commit, abort := e.WithTransaction(ctx)
-	defer abort()
+	// init xlog
+	xlog := wal.NewCommitLog().WithLogger(e.log)
+	if err = xlog.Open(e.path, e.wal); err != nil {
+		e.log.Errorf("xlog: %v", err)
+	} else {
+		e.xlog = xlog
+	}
 
-	// close engine when the tx gets aborted
-	GetTransaction(ctx).OnAbort(e.Close)
+	// init caches
+	if opts.CacheSize > 0 {
+		e.cache.blocks = rclru.New2Q[CacheKeyType, *block.Block](opts.CacheSize * 90 / 10)
+		e.cache.buffers = rclru.New2Q[CacheKeyType, *Buffer](opts.CacheSize / 10)
+	}
 
 	// init catalog
-	if err := e.cat.Create(ctx, opts); err != nil {
+	if err = e.cat.Create(ctx, opts); err != nil {
 		return nil, err
 	}
 
 	// write db options to catalog
-	if err := e.cat.PutOptions(ctx, e.dbId, &opts); err != nil {
+	if err = e.cat.PutOptions(ctx, e.dbId, &opts); err != nil {
 		return nil, err
 	}
 
 	// commit open tx
-	if err := commit(); err != nil {
+	if err = commit(); err != nil {
 		return nil, err
 	}
 
@@ -149,27 +179,46 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
 		cat:     NewCatalog(name),
 		log:     log.Disabled,
+		xlog:    wal.NewCommitLog(),
 		merger:  NewMergerService(),
 	}
 	if opts.Logger != nil {
 		e.log = opts.Logger
+		e.xlog.WithLogger(opts.Logger)
 		e.merger.WithLogger(opts.Logger)
 	}
 
 	e.log.Debugf("Opening database %s at %s", name, e.path)
+
+	// set exclusive directory lock
+	lock := flock.New(filepath.Join(opts.Path, ENGINE_LOCK_NAME))
+	_, err := lock.TryLock()
+	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
+		return nil, err
+	} else {
+		e.lock = lock
+	}
+
+	// start read transaction and amend context (required to load from dbs)
+	ctx, commit, abort := e.WithTransaction(ctx, TxFlagsReadOnly)
+
+	// cleanup on error
+	defer func() {
+		if err == nil {
+			return
+		}
+		abort()
+		e.Close(ctx)
+	}()
 
 	// load and validate catalog
 	if err := e.cat.Open(ctx, opts); err != nil {
 		return nil, err
 	}
 
-	// start read transaction and amend context (required to load from dbs)
-	ctx, commit, abort := e.WithTransaction(ctx, TxFlagsReadOnly)
-	defer abort()
-
 	// load stored database options
 	var sopts DatabaseOptions
-	err := e.cat.GetOptions(ctx, e.dbId, &sopts)
+	err = e.cat.GetOptions(ctx, e.dbId, &sopts)
 	if err != nil {
 		return nil, err
 	}
@@ -182,19 +231,16 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		e.cache.buffers = rclru.New2Q[CacheKeyType, *Buffer](e.opts.CacheSize / 10)
 	}
 
-	// close engine when the tx gets aborted
-	GetTransaction(ctx).OnAbort(e.Close)
-
 	// open database objects
-	if err := e.openTables(ctx); err != nil {
+	if err = e.openTables(ctx); err != nil {
 		return nil, err
 	}
 
-	if err := e.openStores(ctx); err != nil {
+	if err = e.openStores(ctx); err != nil {
 		return nil, err
 	}
 
-	if err := e.openEnums(ctx); err != nil {
+	if err = e.openEnums(ctx); err != nil {
 		return nil, err
 	}
 
@@ -207,19 +253,23 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		Logger:         e.log,
 	}
 	e.log.Debugf("Opening wal at %s", wopts.Path)
-	if w, err := wal.Open(e.maxWalCheckpoint(), wopts); err != nil {
+	if e.wal, err = wal.Open(e.maxWalCheckpoint(), wopts); err != nil {
 		return nil, err
-	} else {
-		e.wal = w
+	}
+
+	// open xlog (optional)
+	e.log.Debugf("Opening xlog")
+	if err = e.xlog.Open(e.path, e.wal); err != nil {
+		e.log.Errorf("Open xlog: %v", err)
 	}
 
 	// replay wal (post-crash and in normal case to fill table journals)
-	if err := e.recoverWal(ctx); err != nil {
+	if err = e.recoverWal(ctx); err != nil {
 		return nil, err
 	}
 
 	// commit open tx
-	if err := commit(); err != nil {
+	if err = commit(); err != nil {
 		return nil, err
 	}
 
@@ -245,6 +295,10 @@ func (e *Engine) Close(ctx context.Context) error {
 	e.PurgeCache()
 
 	// close wal
+	if e.xlog != nil {
+		e.xlog.Close()
+		e.xlog = nil
+	}
 	if e.wal != nil {
 		if err := e.wal.Close(); err != nil {
 			e.log.Errorf("Closing wal: %v", err)
@@ -284,10 +338,18 @@ func (e *Engine) Close(ctx context.Context) error {
 	}
 
 	// close catalog
-	if err := e.cat.Close(ctx); err != nil {
-		e.log.Errorf("Closing catalog: %v", err)
+	if e.cat != nil {
+		if err := e.cat.Close(ctx); err != nil {
+			e.log.Errorf("Closing catalog: %v", err)
+		}
+		e.cat = nil
 	}
-	e.cat = nil
+
+	// release directory lock
+	if e.lock != nil {
+		e.lock.Close()
+		e.lock = nil
+	}
 
 	return nil
 }

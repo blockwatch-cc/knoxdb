@@ -156,7 +156,7 @@ func TestWalCreate(t *testing.T) {
 	// Check for the existence of the first segment file
 	files, err := os.ReadDir(opts.Path)
 	require.NoError(t, err)
-	assert.Equal(t, 3, len(files), "Expected one segment file, one lock file, one xlog file")
+	assert.Equal(t, 1, len(files), "Expected one segment file")
 	assert.True(t, strings.HasSuffix(files[0].Name(), SEG_FILE_SUFFIX), "Expected segment file with .seg extension")
 }
 

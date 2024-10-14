@@ -10,7 +10,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
-	"blockwatch.cc/knoxdb/internal/xroar"
 )
 
 func (e *Engine) writeWalRecord(ctx context.Context, typ wal.RecordType, o Object) error {
@@ -95,31 +94,10 @@ func (e *Engine) recoverWal(ctx context.Context) error {
 	// we directly access catalog state without lock because this function
 	// runs non-concurrent on engine init
 	minLsn := e.minWalCheckpoint()
-
 	e.log.Infof("recover journals from wal lsn %d", minLsn)
 
-	// 1st pass - read committed tx ids
-	r := e.wal.NewReader().WithType(wal.RecordTypeCommit)
-	defer r.Close()
-	if err := r.Seek(minLsn); err != nil {
-		return err
-	}
-	committed := xroar.NewBitmap()
-	for {
-		rec, err := r.Next()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-		}
-		e.log.Debugf("Committed tx %d", rec.TxID)
-		committed.Set(rec.TxID)
-	}
-	r.Close()
-
-	// 2nd pass - read records skipping records with uncommitted or aborted data
-	r = e.wal.NewReader()
+	// read records skipping records with uncommitted or aborted data
+	r := e.wal.NewReader().WithCommitted(e.xlog)
 	defer r.Close()
 	if err := r.Seek(minLsn); err != nil {
 		return err
@@ -135,11 +113,6 @@ func (e *Engine) recoverWal(ctx context.Context) error {
 				break
 			}
 			return err
-		}
-
-		// skip uncommitted data
-		if !committed.Contains(rec.TxID) {
-			continue
 		}
 
 		// skip commit records (we implicitly treat all recovered data as commited)

@@ -18,7 +18,6 @@ import (
 	"sync"
 
 	"github.com/echa/log"
-	"github.com/gofrs/flock"
 
 	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -27,8 +26,7 @@ import (
 var LE = binary.LittleEndian
 
 const (
-	WAL_LOCK_NAME = "wal.lock"
-	WAL_DIR_MODE  = 0755
+	WAL_DIR_MODE = 0755
 )
 
 type RecoveryMode byte
@@ -102,11 +100,9 @@ func (o WalOptions) Merge(o2 WalOptions) WalOptions {
 
 type Wal struct {
 	mu     sync.RWMutex
-	lock   *flock.Flock
 	opts   WalOptions
 	active *segment
 	wr     *bufio.Writer
-	xlog   *CommitLog
 	csum   uint64
 	hash   hash.Hash64
 	lsn    LSN
@@ -120,28 +116,12 @@ func Create(opts WalOptions) (*Wal, error) {
 	}
 
 	// create directory
-	if err := os.MkdirAll(opts.Path, WAL_DIR_MODE); err != nil {
+	err := os.MkdirAll(opts.Path, WAL_DIR_MODE)
+	if err != nil {
 		return nil, err
 	}
 
-	// set exclusive directory lock
-	lock := flock.New(filepath.Join(opts.Path, WAL_LOCK_NAME))
-	_, err := lock.TryLock()
-	if err != nil {
-		if !errors.Is(err, errors.ErrUnsupported) {
-			return nil, err
-		}
-	} else {
-		// cleanup lock file on error
-		defer func() {
-			if err != nil {
-				lock.Unlock()
-			}
-		}()
-	}
-
 	wal := &Wal{
-		lock: lock,
 		opts: opts,
 		wr:   bufio.NewWriterSize(nil, BufferSize),
 		hash: xxhash.New(),
@@ -156,13 +136,6 @@ func Create(opts WalOptions) (*Wal, error) {
 		return nil, err
 	}
 	wal.wr.Reset(wal.active)
-
-	// init xlog
-	wal.xlog = NewCommitLog(wal)
-	if err = wal.xlog.Open(); err != nil {
-		wal.Close()
-		return nil, err
-	}
 
 	return wal, nil
 }
@@ -206,24 +179,7 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 		return nil, err
 	}
 
-	// set exclusive directory lock
-	lock := flock.New(filepath.Join(opts.Path, WAL_LOCK_NAME))
-	_, err = lock.TryLock()
-	if err != nil {
-		if !errors.Is(err, errors.ErrUnsupported) {
-			return nil, err
-		}
-	} else {
-		// cleanup lock file on error
-		defer func() {
-			if err != nil {
-				lock.Unlock()
-			}
-		}()
-	}
-
 	wal := &Wal{
-		lock: lock,
 		opts: opts,
 		wr:   bufio.NewWriterSize(nil, BufferSize),
 		hash: xxhash.New(),
@@ -276,14 +232,6 @@ scan:
 	}
 	wal.wr.Reset(wal.active)
 
-	// init xlog
-	wal.log.Debugf("wal: open xlog")
-	wal.xlog = NewCommitLog(wal)
-	if err = wal.xlog.Open(); err != nil {
-		wal.Close()
-		return nil, err
-	}
-
 	return wal, nil
 }
 
@@ -296,12 +244,6 @@ func (w *Wal) Close() error {
 		err = err2
 	}
 	w.active = nil
-	w.xlog.Close()
-	w.xlog = nil
-	if w.lock != nil {
-		w.lock.Close()
-		w.lock = nil
-	}
 	w.csum = 0
 	w.hash = nil
 	w.lsn = 0
@@ -372,13 +314,6 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 	// all ok, update csum and next lsn
 	w.csum = csum
 	w.lsn = lsn.Add(HeaderSize + len(rec.Data))
-
-	// write xlog on commits
-	if rec.Type == RecordTypeCommit {
-		if err := w.xlog.Append(rec); err != nil {
-			w.log.Errorf("wal: xlog: %v", err)
-		}
-	}
 
 	return lsn, nil
 }

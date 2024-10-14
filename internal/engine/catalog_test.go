@@ -13,6 +13,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/store"
 	_ "blockwatch.cc/knoxdb/internal/store/mem"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/cache/rclru"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/echa/log"
@@ -37,8 +38,9 @@ func NewTestDatabaseOptions(t *testing.T, driver string) DatabaseOptions {
 }
 
 func NewTestEngine(opts DatabaseOptions) *Engine {
-	return &Engine{
-		path: filepath.Join(opts.Path, TEST_DB_NAME),
+	path := filepath.Join(opts.Path, TEST_DB_NAME)
+	e := &Engine{
+		path: path,
 		cache: CacheManager{
 			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
 			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
@@ -55,6 +57,63 @@ func NewTestEngine(opts DatabaseOptions) *Engine {
 		cat:     NewCatalog(TEST_DB_NAME),
 		log:     opts.Logger,
 	}
+	var err error
+	e.wal, err = wal.Create(wal.WalOptions{
+		Seed:           0,
+		Path:           path,
+		MaxSegmentSize: 1024,
+		RecoveryMode:   wal.RecoveryModeTruncate,
+		Logger:         opts.Logger,
+	})
+	if err != nil {
+		panic(err)
+	}
+	e.xlog = wal.NewCommitLog().WithLogger(opts.Logger)
+	err = e.xlog.Open(path, e.wal)
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
+func OpenTestEngine(opts DatabaseOptions) *Engine {
+	path := filepath.Join(opts.Path, TEST_DB_NAME)
+	e := &Engine{
+		path: path,
+		cache: CacheManager{
+			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
+			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
+		},
+		tables:  make(map[uint64]TableEngine),
+		stores:  make(map[uint64]StoreEngine),
+		indexes: make(map[uint64]IndexEngine),
+		enums:   make(map[uint64]*schema.EnumDictionary),
+		txs:     make(TxList, 0),
+		xmin:    0,
+		xnext:   1,
+		dbId:    types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
+		opts:    opts,
+		cat:     NewCatalog(TEST_DB_NAME),
+		log:     opts.Logger,
+	}
+
+	var err error
+	e.wal, err = wal.Open(0, wal.WalOptions{
+		Seed:           0,
+		Path:           path,
+		MaxSegmentSize: 1024,
+		RecoveryMode:   wal.RecoveryModeTruncate,
+		Logger:         opts.Logger,
+	})
+	if err != nil {
+		panic(err)
+	}
+	e.xlog = wal.NewCommitLog().WithLogger(opts.Logger)
+	err = e.xlog.Open(path, e.wal)
+	if err != nil {
+		panic(err)
+	}
+	return e
 }
 
 func TestCatalogCreate(t *testing.T) {
@@ -70,7 +129,6 @@ func TestCatalogCreate(t *testing.T) {
 				databaseKey,
 				schemasKey,
 				optionsKey,
-				statesKey,
 				tablesKey,
 				indexesKey,
 				viewsKey,
@@ -102,7 +160,7 @@ func TestCatalogOpen(t *testing.T) {
 	require.NoError(t, e.cat.Close(context.Background()))
 
 	// create new engine
-	e = NewTestEngine(e.opts)
+	e = OpenTestEngine(e.opts)
 	ctx, _, abort := e.WithTransaction(context.Background())
 	require.NoError(t, e.cat.Open(ctx, e.opts))
 
@@ -113,7 +171,6 @@ func TestCatalogOpen(t *testing.T) {
 				databaseKey,
 				schemasKey,
 				optionsKey,
-				statesKey,
 				tablesKey,
 				indexesKey,
 				viewsKey,
@@ -150,66 +207,9 @@ func WithCatalog(t *testing.T) (context.Context, *Engine, *Catalog, func() error
 	return ctx, e, e.cat, func() error { return e.cat.Close(ctx) }
 }
 
-func TestCatalogGetSetState(t *testing.T) {
-	_, _, cat, close := WithCatalog(t)
-	defer close()
-
-	cat.SetState(1, ObjectState{42, 23, 0})
-	state := cat.GetState(1)
-	require.Equal(t, state[0], uint64(42))
-	require.Equal(t, state[1], uint64(23))
-}
-
-func TestCatalogCommitState(t *testing.T) {
-	ctx, eng, cat, close := WithCatalog(t)
-	defer close()
-	tctx, commit, _ := eng.WithTransaction(ctx)
-	tx := GetTransaction(tctx)
-	cat.SetState(1, ObjectState{42, 23})
-	tx.Touch(1)
-	require.NoError(t, commit())
-
-	// now state should be durable
-	err := cat.db.View(func(tx store.Tx) error {
-		bucket := tx.Bucket(statesKey)
-		require.NotNil(t, bucket)
-		buf := bucket.Get(Key64Bytes(1))
-		require.NotNil(t, buf)
-		require.Equal(t, BE.Uint64(buf[0:]), uint64(42))
-		require.Equal(t, BE.Uint64(buf[8:]), uint64(23))
-		return nil
-	})
-	require.NoError(t, err)
-}
-
 type TestTable struct {
 	Id uint64 `knox:"id,pk"`
 	F1 int    `knox:"f1"`
-}
-
-func TestCatalogRollbackState(t *testing.T) {
-	ctx, eng, cat, close := WithCatalog(t)
-	defer close()
-	tctx, commit, _ := eng.WithTransaction(ctx)
-	tx := GetTransaction(tctx)
-	cat.SetState(1, ObjectState{42, 23})
-	tx.Touch(1)
-	require.NoError(t, commit())
-
-	// second tx
-	tctx, _, abort := eng.WithTransaction(ctx)
-	tx = GetTransaction(tctx)
-	cat.SetState(1, ObjectState{100, 101})
-	tx.Touch(1)
-	state := cat.GetState(1)
-	require.Equal(t, state[0], uint64(100))
-	require.Equal(t, state[1], uint64(101))
-
-	// after rollback
-	require.NoError(t, abort())
-	state = cat.GetState(1)
-	require.Equal(t, state[0], uint64(42))
-	require.Equal(t, state[1], uint64(23))
 }
 
 func TestCatalogAddTable(t *testing.T) {

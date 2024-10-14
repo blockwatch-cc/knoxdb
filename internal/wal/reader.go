@@ -26,7 +26,7 @@ type WalReader interface {
 	WithTag(types.ObjectTag) WalReader
 	WithEntity(uint64) WalReader
 	WithTxID(uint64) WalReader
-	WithCommitted() WalReader
+	WithCommitted(*CommitLog) WalReader
 }
 
 type RecordFilter struct {
@@ -95,11 +95,11 @@ func (w *Wal) NewReader() WalReader {
 	}
 }
 
-func (r *Reader) WithCommitted() WalReader {
+func (r *Reader) WithCommitted(xlog *CommitLog) WalReader {
 	if r.flt == nil {
 		r.flt = &RecordFilter{}
 	}
-	r.flt.xlog = r.wal.xlog
+	r.flt.xlog = xlog
 	return r
 }
 

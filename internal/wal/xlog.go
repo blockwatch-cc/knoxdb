@@ -35,7 +35,6 @@ const (
 )
 
 type CommitLog struct {
-	wal        *Wal
 	fd         *os.File
 	checkpoint LSN
 	tail       *CommitFrame
@@ -89,7 +88,7 @@ func (f *CommitFrame) IsCommitted(xid uint64) bool {
 
 func (f *CommitFrame) Append(xid uint64, lsn LSN) {
 	if f.bits == nil {
-		f.log.Debugf("xlog: appending xid: %d lsn: %d to closed frame", xid, lsn)
+		f.log.Debugf("appending xid: %d lsn: %d to closed frame", xid, lsn)
 	}
 	f.dirty = true
 	f.bits.Set(int(xid - f.xmin))
@@ -102,7 +101,7 @@ func (f *CommitFrame) Contains(xid uint64) bool {
 
 func (f *CommitFrame) ReadFrom(fd *os.File) error {
 	if f.bits == nil {
-		f.log.Debug("xlog: reading from closed frame")
+		f.log.Debug("reading from closed frame")
 	}
 	// read header
 	var head [CommitFrameHeaderSize]byte
@@ -141,7 +140,7 @@ func (f *CommitFrame) WriteTo(fd *os.File) error {
 	}
 
 	if f.bits == nil {
-		f.log.Debug("xlog: writing to closed frame")
+		f.log.Debug("writing to closed frame")
 	}
 
 	// prepare header
@@ -168,15 +167,20 @@ func (f *CommitFrame) WriteTo(fd *os.File) error {
 	return nil
 }
 
-func NewCommitLog(wal *Wal) *CommitLog {
+func NewCommitLog() *CommitLog {
 	return &CommitLog{
-		wal: wal,
-		log: wal.log,
+		log: log.Disabled,
 	}
 }
 
-func (c *CommitLog) Open() error {
-	name := filepath.Join(c.wal.opts.Path, CommitLogName)
+func (c *CommitLog) WithLogger(l log.Logger) *CommitLog {
+	c.log = l.Clone().WithTag("xlog:")
+	return c
+}
+
+func (c *CommitLog) Open(path string, wal *Wal) error {
+	name := filepath.Join(path, CommitLogName)
+	c.log.Debugf("using file %s", name)
 	fd, err := os.OpenFile(name, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return err
@@ -190,7 +194,7 @@ func (c *CommitLog) Open() error {
 	}
 
 	if extra := stat.Size() % int64(CommitFrameSize); extra != 0 {
-		c.log.Errorf("xlog: broken file size, %s bytes extra", extra)
+		c.log.Errorf("broken file size, %s bytes extra", extra)
 		if err := c.fd.Truncate(stat.Size() - extra); err != nil {
 			return err
 		}
@@ -220,7 +224,7 @@ func (c *CommitLog) Open() error {
 		if !errors.Is(err, ErrChecksum) && !errors.Is(err, ErrShortFrame) {
 			return err
 		}
-		c.log.Errorf("xlog: recovering after %v", err)
+		c.log.Errorf("recovering after %v", err)
 		if err := c.fd.Truncate(0); err != nil {
 			return err
 		}
@@ -243,7 +247,7 @@ func (c *CommitLog) Open() error {
 	}
 
 	// recover from last known checkpoint
-	if err := c.Recover(c.checkpoint); err != nil {
+	if err := c.Recover(c.checkpoint, wal); err != nil {
 		return err
 	}
 
@@ -253,14 +257,13 @@ func (c *CommitLog) Open() error {
 func (c *CommitLog) Close() error {
 	err := c.Sync()
 	if err != nil {
-		c.log.Errorf("xlog: sync on close: %v", err)
+		c.log.Errorf("sync on close: %v", err)
 	}
 	err = c.fd.Close()
 	if err != nil {
-		c.log.Errorf("xlog: close: %v", err)
+		c.log.Errorf("close: %v", err)
 	}
 	c.fd = nil
-	c.wal = nil
 	c.checkpoint = 0
 	if c.tail != nil {
 		c.tail.Close()
@@ -307,17 +310,17 @@ func (c *CommitLog) IsCommitted(xid uint64) (bool, error) {
 	return c.last.IsCommitted(xid), nil
 }
 
-func (c *CommitLog) Append(rec *Record) error {
-	c.checkpoint = max(c.checkpoint, rec.Lsn)
+func (c *CommitLog) Append(xid uint64, lsn LSN) error {
+	c.checkpoint = max(c.checkpoint, lsn)
 
 	// txid is in tail frame
-	if c.tail.Contains(rec.TxID) {
-		c.tail.Append(rec.TxID, rec.Lsn)
+	if c.tail.Contains(xid) {
+		c.tail.Append(xid, lsn)
 		return nil
 	}
 
 	// txid is after tail frame (create new tail and roll last)
-	if rec.TxID > c.tail.Xmax() {
+	if xid > c.tail.Xmax() {
 		if c.last != nil {
 			if err := c.last.WriteTo(c.fd); err != nil {
 				return err
@@ -325,13 +328,13 @@ func (c *CommitLog) Append(rec *Record) error {
 			c.last.Close()
 		}
 		c.last = c.tail
-		c.tail = NewCommitFrame(int64(rec.TxID >> CommitFrameShift)).WithLogger(c.log)
-		c.tail.Append(rec.TxID, rec.Lsn)
+		c.tail = NewCommitFrame(int64(xid >> CommitFrameShift)).WithLogger(c.log)
+		c.tail.Append(xid, lsn)
 		return nil
 	}
 
 	// txid is before tail frame, check last and potentially load another frame
-	if c.last != nil && !c.last.Contains(rec.TxID) {
+	if c.last != nil && !c.last.Contains(xid) {
 		if err := c.last.WriteTo(c.fd); err != nil {
 			return err
 		}
@@ -339,13 +342,13 @@ func (c *CommitLog) Append(rec *Record) error {
 		c.last = nil
 	}
 	if c.last == nil {
-		frame, err := c.LoadFrame(int64(rec.TxID >> CommitFrameShift))
+		frame, err := c.LoadFrame(int64(xid >> CommitFrameShift))
 		if err != nil {
 			return err
 		}
 		c.last = frame
 	}
-	c.last.Append(rec.TxID, rec.Lsn)
+	c.last.Append(xid, lsn)
 	return nil
 }
 
@@ -359,10 +362,10 @@ func (c *CommitLog) LoadFrame(id int64) (*CommitFrame, error) {
 	return f, nil
 }
 
-func (c *CommitLog) Recover(lsn LSN) error {
+func (c *CommitLog) Recover(lsn LSN, wal *Wal) error {
 	// read wal starting at last checkpoint and add all commits
-	c.log.Debugf("xlog: replay from lsn %d", lsn)
-	r := c.wal.NewReader().WithType(RecordTypeCommit)
+	c.log.Debugf("replay from lsn %d", lsn)
+	r := wal.NewReader().WithType(RecordTypeCommit)
 	err := r.Seek(lsn)
 	if err != nil {
 		return err
@@ -373,7 +376,7 @@ func (c *CommitLog) Recover(lsn LSN) error {
 		if err != nil {
 			break
 		}
-		err = c.Append(rec)
+		err = c.Append(rec.TxID, rec.Lsn)
 		if err != nil {
 			break
 		}

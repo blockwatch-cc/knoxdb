@@ -27,11 +27,11 @@ func makeCommitFrameFile(dirPath string) (*os.File, error) {
 	return fd, nil
 }
 
-func makeCommitLog(t *testing.T) *CommitLog {
+func makeCommitLog(t *testing.T) (*Wal, *CommitLog) {
 	wal := makeWal(t)
 	wal.createSegment(0)
-	commitLog := NewCommitLog(wal)
-	return commitLog
+	commitLog := NewCommitLog()
+	return wal, commitLog
 }
 
 func makeRecords(sz int) []*Record {
@@ -270,12 +270,13 @@ func TestCommitFrameReadFrom(t *testing.T) {
 
 func TestCommitLogOpen(t *testing.T) {
 	t.Run("commit logger creates file on open", func(t *testing.T) {
-		commitLog := makeCommitLog(t)
-		err := commitLog.Open()
+		dir := t.TempDir()
+		wal, commitLog := makeCommitLog(t)
+		err := commitLog.Open(dir, wal)
 		require.NoError(t, err, "opening commit log should not return err")
 
 		// check if file is created
-		f, err := os.Stat(filepath.Join(commitLog.wal.opts.Path, CommitLogName))
+		f, err := os.Stat(filepath.Join(dir, CommitLogName))
 		require.NoError(t, err, "commit  should exist")
 
 		// check if file is dir
@@ -287,18 +288,19 @@ func TestCommitLogOpen(t *testing.T) {
 
 func TestCommitLogAppend(t *testing.T) {
 	t.Run("append records to logger", func(t *testing.T) {
-		commitLog := makeCommitLog(t)
-		err := commitLog.Open()
+		dir := t.TempDir()
+		wal, commitLog := makeCommitLog(t)
+		err := commitLog.Open(dir, wal)
 		defer commitLog.Close()
 		require.NoError(t, err, "opening commit log should not return err")
 
 		recs := makeRecords(1 << 16)
 		for _, rec := range recs {
-			err := commitLog.Append(rec)
+			err := commitLog.Append(rec.TxID, rec.Lsn)
 			require.NoError(t, err, "appending rec should not fail")
 		}
 
-		p := filepath.Join(commitLog.wal.opts.Path, CommitLogName)
+		p := filepath.Join(dir, CommitLogName)
 		f, err := os.OpenFile(p, os.O_APPEND|os.O_RDWR, 0600)
 		require.NoError(t, err, "commit logger should exist")
 
@@ -309,8 +311,8 @@ func TestCommitLogAppend(t *testing.T) {
 		require.NoError(t, err, "write extra data ")
 
 		// try reopen commitlogger
-		newCommitLogger := NewCommitLog(commitLog.wal)
-		err = newCommitLogger.Open()
+		newCommitLogger := NewCommitLog()
+		err = newCommitLogger.Open(dir, wal)
 		require.NoError(t, err, "opening commit log should not return err")
 
 		fdinfo, err := os.Stat(p)

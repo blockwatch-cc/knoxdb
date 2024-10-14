@@ -222,7 +222,7 @@ func (t *Tx) Commit(ctx context.Context) error {
 	t.engine.log.Debugf("Commit tx %d", t.id)
 
 	// write commit record to wal
-	_, err := t.engine.wal.Write(&wal.Record{
+	lsn, err := t.engine.wal.Write(&wal.Record{
 		Type:   wal.RecordTypeCommit,
 		Tag:    types.ObjectTagDatabase,
 		Entity: t.engine.dbId,
@@ -235,6 +235,13 @@ func (t *Tx) Commit(ctx context.Context) error {
 	// sync wal
 	if err := t.engine.wal.Sync(); err != nil {
 		return err
+	}
+
+	// write xlog bit
+	if t.engine.xlog != nil {
+		if err := t.engine.xlog.Append(t.id, lsn); err != nil {
+			t.engine.log.Errorf("write xlog: %v", err)
+		}
 	}
 
 	// run callbacks
