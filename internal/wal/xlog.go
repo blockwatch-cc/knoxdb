@@ -57,6 +57,7 @@ func NewCommitFrame(id int64) *CommitFrame {
 		offset: int64(id) * CommitFrameSize,
 		xmin:   uint64(id) << CommitFrameShift,
 		bits:   bitset.NewBitset(CommitFramePayloadSize << 3),
+		log:    log.Disabled,
 	}
 }
 
@@ -88,7 +89,7 @@ func (f *CommitFrame) IsCommitted(xid uint64) bool {
 
 func (f *CommitFrame) Append(xid uint64, lsn LSN) {
 	if f.bits == nil {
-		log.Debugf("xlog: appending xid: %d lsn: %d to closed frame", xid, lsn)
+		f.log.Debugf("xlog: appending xid: %d lsn: %d to closed frame", xid, lsn)
 	}
 	f.dirty = true
 	f.bits.Set(int(xid - f.xmin))
@@ -101,7 +102,7 @@ func (f *CommitFrame) Contains(xid uint64) bool {
 
 func (f *CommitFrame) ReadFrom(fd *os.File) error {
 	if f.bits == nil {
-		log.Debug("xlog: reading from closed frame")
+		f.log.Debug("xlog: reading from closed frame")
 	}
 	// read header
 	var head [CommitFrameHeaderSize]byte
@@ -140,7 +141,7 @@ func (f *CommitFrame) WriteTo(fd *os.File) error {
 	}
 
 	if f.bits == nil {
-		log.Debug("xlog: writing to closed frame")
+		f.log.Debug("xlog: writing to closed frame")
 	}
 
 	// prepare header
