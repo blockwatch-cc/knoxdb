@@ -100,7 +100,8 @@ func (v View) Get(i int) (val any, ok bool) {
 	case types.FieldTypeBoolean:
 		val, ok = v.buf[x] > 0, true
 	case types.FieldTypeString:
-		val, ok = util.UnsafeGetString(v.buf[x:y]), true
+		strLen := int(LE.Uint32(v.buf[x-4 : x]))
+		val, ok = string(v.buf[x:x+strLen]), true
 	case types.FieldTypeBytes:
 		val, ok = v.buf[x:y], true
 	case types.FieldTypeInt32:
@@ -257,19 +258,47 @@ func (v View) GetPk() uint64 {
 	return 0
 }
 
-func (v View) Set(i int, val any) {
-	if i < 0 || i > len(v.ofs) || !v.IsValid() {
-		return
+func (v View) Set(i int, val any) error {
+	if i < 0 || i >= len(v.ofs) || !v.IsValid() {
+		return ErrInvalidField
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
 	field := &v.schema.fields[i]
 	switch field.typ {
+	case types.FieldTypeString:
+		if s, ok := val.(string); ok {
+			maxLen := y - x
+			newLen := len(s)
+			if newLen <= maxLen {
+				LE.PutUint32(v.buf[x-4:x], uint32(newLen))
+				copy(v.buf[x:], s)
+				for i := x + newLen; i < y; i++ {
+					v.buf[i] = 0
+				}
+			} else {
+				return ErrShortBuffer
+			}
+		} else {
+			return ErrInvalidValueType
+		}
 	case types.FieldTypeUint64:
 		if u64, ok := val.(uint64); ok {
 			LE.PutUint64(v.buf[x:y], u64)
+		} else {
+			return ErrInvalidValueType
 		}
-	case types.FieldTypeString, types.FieldTypeBytes:
-		// unsupported, may alter length
+	case types.FieldTypeBytes:
+		if b, ok := val.([]byte); ok {
+			currentLen := int(LE.Uint32(v.buf[x-4 : x]))
+			newLen := len(b)
+			if newLen <= currentLen {
+				LE.PutUint32(v.buf[x-4:x], uint32(newLen))
+				copy(v.buf[x:x+newLen], b)
+				for i := x + newLen; i < y; i++ {
+					v.buf[i] = 0
+				}
+			}
+		}
 	case types.FieldTypeDatetime:
 		if tm, ok := val.(time.Time); ok {
 			LE.PutUint64(v.buf[x:y], uint64(tm.UnixNano()))
@@ -342,7 +371,10 @@ func (v View) Set(i int, val any) {
 		if d32, ok := val.(num.Decimal32); ok {
 			LE.PutUint32(v.buf[x:y], uint32(d32.Int64()))
 		}
+	default:
+		return ErrNotImplemented
 	}
+	return nil
 }
 
 func (v *View) Reset(buf []byte) *View {
