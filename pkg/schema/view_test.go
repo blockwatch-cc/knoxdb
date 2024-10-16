@@ -115,3 +115,71 @@ func BenchmarkViewCut(b *testing.B) {
 		view.Cut(buf.Bytes())
 	}
 }
+
+func TestViewSet(t *testing.T) {
+	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
+	baseSchema := MustSchemaOf(AllTypes{})
+	baseEnc := NewEncoder(baseSchema)
+	buf, err := baseEnc.Encode(&base, nil)
+	require.NoError(t, err)
+	view := NewView(baseSchema).Reset(buf)
+
+	// Check the original string value
+	originalString, ok := view.Get(21)
+	require.True(t, ok)
+	// t.Logf("Original string: %v", originalString)
+
+	// Test setting a shorter string
+	shortString := "Hello"
+	err = view.Set(21, shortString)
+	require.NoError(t, err)
+	val, ok := view.Get(21)
+	require.True(t, ok)
+	require.Equal(t, shortString, val, "Short string should have been set correctly")
+
+	// Test setting a string of the same length as the original
+	sameLength := "0123456789abcdef"
+	err = view.Set(21, sameLength)
+	require.NoError(t, err)
+	val, ok = view.Get(21)
+	require.True(t, ok)
+	require.Equal(t, sameLength, val, "Same length string should have been set correctly")
+
+	// Test setting the original string value back
+	err = view.Set(21, originalString.(string))
+	require.NoError(t, err)
+	val, ok = view.Get(21)
+	require.True(t, ok)
+	require.Equal(t, originalString, val, "Original string should have been set correctly")
+
+	// Test setting a longer string (this should not change the value)
+	longString := sameLength + "extra"
+	err = view.Set(21, longString)
+	require.Error(t, err, "Setting a longer string should return an error")
+	val, ok = view.Get(21)
+	require.True(t, ok)
+	require.NotEqual(t, longString, val, "Long string should not have been set")
+	require.Equal(t, originalString, val, "Value should remain unchanged for too long strings")
+
+	// Test setting invalid index
+	err = view.Set(-1, 42)
+	require.Error(t, err, "Setting an invalid index should return an error")
+	err = view.Set(len(baseSchema.fields), 42)
+	require.Error(t, err, "Setting an out-of-bounds index should return an error")
+
+	// Test setting incompatible type
+	originalId := base.Id
+	err = view.Set(0, "not a uint64")
+	require.Error(t, err, "Setting an incompatible type should return an error")
+	val, ok = view.Get(0)
+	require.True(t, ok)
+	require.Equal(t, originalId, val, "Value should not have changed when setting incompatible type")
+
+	// Test setting uint64 field
+	newId := uint64(12345)
+	err = view.Set(0, newId)
+	require.NoError(t, err)
+	val, ok = view.Get(0)
+	require.True(t, ok)
+	require.Equal(t, newId, val, "Uint64 field should have been updated")
+}
