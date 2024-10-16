@@ -70,6 +70,22 @@ var headerTests = []struct {
 		expectError: false,
 	},
 	{
+		name:        "Non zero TxID for checkpoint",
+		header:      genHeader(RecordTypeCheckpoint, types.ObjectTagDatabase, 1, 2, 0),
+		lastTxID:    50,
+		currentLSN:  1000,
+		maxWalLSN:   1024 * 1024,
+		expectError: true,
+	},
+	{
+		name:        "Invalid body size for checkpoint",
+		header:      genHeader(RecordTypeCheckpoint, types.ObjectTagDatabase, 1, 0, 10),
+		lastTxID:    50,
+		currentLSN:  1000,
+		maxWalLSN:   1024 * 1024,
+		expectError: true,
+	},
+	{
 		name:        "Maximum allowed record size",
 		header:      genHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1024*1024-HeaderSize),
 		lastTxID:    50,
