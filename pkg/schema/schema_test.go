@@ -962,3 +962,153 @@ func TestSchemaMarshal(t *testing.T) {
 	assert.Equal(t, s.PkId(), r.PkId())
 	assert.Equal(t, s.PkIndex(), r.PkIndex())
 }
+
+// TestSchemaIsValid checks if the Schema.IsValid() method correctly identifies
+// valid and invalid schema configurations.
+func TestSchemaIsValid(t *testing.T) {
+	s := NewSchema().WithName("test")
+	require.False(t, s.IsValid())
+
+	s.WithField(Field{name: "field1", typ: types.FieldTypeInt64})
+	require.False(t, s.IsValid())
+
+	s.Finalize()
+	require.True(t, s.IsValid())
+}
+
+// TestSchemaNewBuffer verifies that Schema.NewBuffer() creates a buffer with
+// the correct capacity based on the schema's maxWireSize.
+func TestSchemaNewBuffer(t *testing.T) {
+	s := NewSchema().WithName("test").
+		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		Finalize()
+
+	buf := s.NewBuffer(10)
+	require.NotNil(t, buf)
+	require.Equal(t, 10*s.maxWireSize, buf.Cap())
+}
+
+// TestSchemaNumFields ensures that Schema.NumFields() returns the correct
+// number of fields in the schema.
+func TestSchemaNumFields(t *testing.T) {
+	s := NewSchema().WithName("test").
+		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		WithField(Field{name: "field2", typ: types.FieldTypeString}).
+		Finalize()
+
+	require.Equal(t, 2, s.NumFields())
+}
+
+// TestSchemaNumVisibleFields checks if Schema.NumVisibleFields() correctly
+// counts only the visible fields, excluding hidden ones.
+func TestSchemaNumVisibleFields(t *testing.T) {
+	s := NewSchema().WithName("test").
+		WithField(Field{
+			name: "field1",
+			typ:  types.FieldTypeInt64,
+		}).
+		WithField(Field{
+			name:  "field2",
+			typ:   types.FieldTypeString,
+			flags: types.FieldFlagInternal, // This makes the field hidden
+		}).
+		Finalize()
+
+	require.Equal(t, 1, s.NumVisibleFields())
+}
+
+// TestSchemaFieldNames verifies that Schema.FieldNames() returns a slice
+// containing all field names in the correct order.
+func TestSchemaFieldNames(t *testing.T) {
+	s := NewSchema().WithName("test").
+		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		WithField(Field{name: "field2", typ: types.FieldTypeString}).
+		Finalize()
+
+	names := s.FieldNames()
+	require.Equal(t, []string{"field1", "field2"}, names)
+}
+
+// TestSchemaFieldIDs ensures that Schema.FieldIDs() returns a slice
+// containing all field IDs in the correct order.
+func TestSchemaFieldIDs(t *testing.T) {
+	s := NewSchema().WithName("test").
+		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		WithField(Field{name: "field2", typ: types.FieldTypeString}).
+		Finalize()
+
+	ids := s.FieldIDs()
+	require.Equal(t, []uint16{1, 2}, ids)
+}
+
+// TestSchemaCanMatchFields checks if Schema.CanMatchFields() correctly
+// identifies when a set of field names matches the schema.
+func TestSchemaCanMatchFields(t *testing.T) {
+	s := NewSchema().WithName("test").
+		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		WithField(Field{name: "field2", typ: types.FieldTypeString}).
+		Finalize()
+
+	require.True(t, s.CanMatchFields("field1", "field2"))
+	require.False(t, s.CanMatchFields("field1", "field3"))
+	require.False(t, s.CanMatchFields("field1", "field2", "field3"))
+}
+
+// TestSchemaCanSelect verifies that Schema.CanSelect() correctly determines
+// if one schema can be selected from another.
+func TestSchemaCanSelect(t *testing.T) {
+	s1 := NewSchema().WithName("test1").
+		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		WithField(Field{name: "field2", typ: types.FieldTypeString}).
+		Finalize()
+
+	s2 := NewSchema().WithName("test2").
+		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		Finalize()
+
+	require.NoError(t, s1.CanSelect(s2))
+
+	s3 := NewSchema().WithName("test3").
+		WithField(Field{name: "field3", typ: types.FieldTypeInt64}).
+		Finalize()
+
+	require.Error(t, s1.CanSelect(s3))
+}
+
+// TestSchemaSort checks if Schema.Sort() correctly sorts the fields
+// of the schema alphabetically by name.
+func TestSchemaSort(t *testing.T) {
+	s := NewSchema().WithName("test").
+		WithField(Field{name: "field2", typ: types.FieldTypeString}).
+		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		Finalize()
+
+	// The fields should already be sorted by ID after Finalize()
+	require.Equal(t, "field2", s.fields[0].name, "First field should be 'field2' (id=1)")
+	require.Equal(t, "field1", s.fields[1].name, "Second field should be 'field1' (id=2)")
+
+	// Calling Sort() shouldn't change the order
+	s.Sort()
+
+	require.Equal(t, "field2", s.fields[0].name, "First field should still be 'field2' (id=1) after sorting")
+	require.Equal(t, "field1", s.fields[1].name, "Second field should still be 'field1' (id=2) after sorting")
+}
+
+// TestSchemaMapTo verifies that Schema.MapTo() correctly maps fields
+// from one schema to another, even if the field order is different.
+func TestSchemaMapTo(t *testing.T) {
+	s1 := NewSchema().WithName("test1").
+		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		WithField(Field{name: "field2", typ: types.FieldTypeString}).
+		Finalize()
+
+	s2 := NewSchema().WithName("test2").
+		WithField(Field{name: "field2", typ: types.FieldTypeString}).
+		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		Finalize()
+
+	mapping, err := s1.MapTo(s2)
+	require.NoError(t, err)
+	require.Equal(t, []int{1, 0}, mapping)
+}
+
