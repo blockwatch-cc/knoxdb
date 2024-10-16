@@ -170,7 +170,7 @@ func TestReaderSeekInvalidLSN(t *testing.T) {
 
 		// First, try an invalid seek
 		err := reader.Seek(LSN(1<<64 - 1))
-		require.ErrorIs(t, io.EOF, err, "Seek to out-of-bound LSN should return an error")
+		require.ErrorIs(t, ErrInvalidLSN, err, "Seek to out-of-bound LSN should return an error")
 
 		// Now, seek to the valid LSN
 		err = reader.Seek(validLSN)

@@ -170,6 +170,9 @@ func (r *Reader) Seek(lsn LSN) error {
 	if r.IsClosed() {
 		return ErrReaderClosed
 	}
+	if lsn > r.maxLsn {
+		return ErrInvalidLSN
+	}
 
 	sid := lsn.Segment(r.maxSz)
 
