@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	ErrShortFrame = errors.New("short frame")
-	ErrChecksum   = errors.New("checksum mismatch")
+	ErrShortFrame   = errors.New("short frame")
+	ErrTxIdTooLarge = errors.New("tx id too large")
+	ErrChecksum     = errors.New("checksum mismatch")
 
 	castagnoliTable *crc32.Table
 )
@@ -321,6 +322,10 @@ func (c *CommitLog) Append(xid uint64, lsn LSN) error {
 
 	// txid is after tail frame (create new tail and roll last)
 	if xid > c.tail.Xmax() {
+		// prevent gaps in the frame sequence
+		if xid-c.tail.Xmax() > CommitFramePayloadSize<<3 {
+			return ErrTxIdTooLarge
+		}
 		if c.last != nil {
 			if err := c.last.WriteTo(c.fd); err != nil {
 				return err

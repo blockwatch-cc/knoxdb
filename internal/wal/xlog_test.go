@@ -8,6 +8,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/rand"
 )
 
 func xmin(id int) uint64 {
@@ -27,11 +28,10 @@ func makeCommitFrameFile(dirPath string) (*os.File, error) {
 	return fd, nil
 }
 
-func makeCommitLog(t *testing.T) (*Wal, *CommitLog) {
-	wal := makeWal(t)
+func makeCommitLog(t *testing.T, wal *Wal) *CommitLog {
 	wal.createSegment(0)
 	commitLog := NewCommitLog()
-	return wal, commitLog
+	return commitLog
 }
 
 func makeRecords(sz int) []*Record {
@@ -271,7 +271,8 @@ func TestCommitFrameReadFrom(t *testing.T) {
 func TestCommitLogOpen(t *testing.T) {
 	t.Run("commit logger creates file on open", func(t *testing.T) {
 		dir := t.TempDir()
-		wal, commitLog := makeCommitLog(t)
+		wal := makeWal(t)
+		commitLog := makeCommitLog(t, wal)
 		err := commitLog.Open(dir, wal)
 		require.NoError(t, err, "opening commit log should not return err")
 
@@ -289,7 +290,8 @@ func TestCommitLogOpen(t *testing.T) {
 func TestCommitLogAppend(t *testing.T) {
 	t.Run("append records to logger", func(t *testing.T) {
 		dir := t.TempDir()
-		wal, commitLog := makeCommitLog(t)
+		wal := makeWal(t)
+		commitLog := makeCommitLog(t, wal)
 		err := commitLog.Open(dir, wal)
 		defer commitLog.Close()
 		require.NoError(t, err, "opening commit log should not return err")
@@ -323,4 +325,83 @@ func TestCommitLogAppend(t *testing.T) {
 		require.Truef(t, finfo.Size() == fdinfo.Size(), "extra data written would be truncated")
 
 	})
+
+	for i := 0; i < 100; i++ {
+		t.Run("check random records are committed after write", func(t *testing.T) {
+			commitLogAppendHelper(t, i)
+		})
+	}
+
+}
+
+func commitLogAppendHelper(t *testing.T, i int) {
+	t.Helper()
+	recs := []*Record{
+		{
+			Type:   RecordTypeCommit,
+			Tag:    types.ObjectTagDatabase,
+			TxID:   5,
+			Lsn:    0,
+			Entity: 10,
+			Data:   []byte("data"),
+		},
+		{
+			Type:   RecordTypeCommit,
+			Tag:    types.ObjectTagDatabase,
+			TxID:   1 << 19,
+			Lsn:    34 << 14,
+			Entity: 10,
+			Data:   []byte("data"),
+		},
+		{
+			Type:   RecordTypeCommit,
+			Tag:    types.ObjectTagDatabase,
+			TxID:   2 << 19,
+			Lsn:    34 << 15,
+			Entity: 10,
+			Data:   []byte("data"),
+		},
+		{
+			Type:   RecordTypeCommit,
+			Tag:    types.ObjectTagDatabase,
+			TxID:   3 << 19,
+			Lsn:    34 << 16,
+			Entity: 10,
+			Data:   []byte("data"),
+		},
+	}
+
+	dir := t.TempDir()
+	wal := makeWal(t)
+
+	commitLog := makeCommitLog(t, wal)
+	err := commitLog.Open(dir, wal)
+	require.NoError(t, err, "opening commit log should not return err")
+
+	// write to each frame first
+	for _, rec := range recs {
+		err := commitLog.Append(rec.TxID+1, rec.Lsn+HeaderSize+4)
+		require.NoError(t, err, "appending record should not fail")
+	}
+
+	random := rand.New(rand.NewSource(uint64(i)))
+	t.Logf("testing for seed: %d", i)
+	random.Shuffle(len(recs), func(i, j int) {
+		recs[i], recs[j] = recs[j], recs[i]
+	})
+
+	for _, rec := range recs {
+		err := commitLog.Append(rec.TxID, rec.Lsn)
+		require.NoError(t, err, "appending record should not fail")
+	}
+
+	// check all records in frames are committed
+	for _, rec := range recs {
+		isCommitted, err := commitLog.IsCommitted(rec.TxID)
+		require.NoError(t, err)
+		require.True(t, isCommitted)
+	}
+
+	err = commitLog.Close()
+	require.NoError(t, err, "closing logger should not fail")
 }
