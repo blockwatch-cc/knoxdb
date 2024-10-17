@@ -6,7 +6,9 @@ package schema
 import (
 	"bytes"
 	"testing"
+	"time"
 
+	"blockwatch.cc/knoxdb/pkg/num"
 	"github.com/stretchr/testify/require"
 )
 
@@ -80,42 +82,6 @@ func TestViewGet(t *testing.T) {
 	testViewGetVal(t, view, 21, base.String)
 }
 
-// TODO
-// func TestViewSet(t *testing.T) {}
-// func TestViewAppend(t *testing.T) {}
-
-func BenchmarkViewSetPk(b *testing.B) {
-	baseSchema := MustSchemaOf(AllTypes{})
-	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
-	baseEnc := NewEncoder(baseSchema)
-	view := NewView(baseSchema)
-	buf, err := baseEnc.Encode(&base, nil)
-	require.NoError(b, err)
-
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		view.Reset(buf)
-		view.SetPk(1)
-	}
-}
-
-func BenchmarkViewCut(b *testing.B) {
-	baseSchema := MustSchemaOf(AllTypes{})
-	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
-	baseEnc := NewEncoder(baseSchema)
-	buf := bytes.NewBuffer(nil)
-	_, err := baseEnc.Encode(&base, buf)
-	require.NoError(b, err)
-	_, err = baseEnc.Encode(&base, buf)
-	require.NoError(b, err)
-	view := NewView(baseSchema)
-
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		view.Cut(buf.Bytes())
-	}
-}
-
 // TestViewSet tests the Set method of the View struct, verifying correct behavior
 // when setting values of various types and lengths, including edge cases and error conditions.
 func TestViewSet(t *testing.T) {
@@ -184,4 +150,171 @@ func TestViewSet(t *testing.T) {
 	val, ok = view.Get(0)
 	require.True(t, ok)
 	require.Equal(t, newId, val, "Uint64 field should have been updated")
+}
+
+// TestViewAppend tests the Append method of the View struct, verifying correct behavior
+// when appending values of various types, including edge cases and error conditions.
+func TestViewAppend(t *testing.T) {
+	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
+	baseSchema := MustSchemaOf(AllTypes{})
+	baseEnc := NewEncoder(baseSchema)
+	buf, err := baseEnc.Encode(&base, nil)
+	require.NoError(t, err)
+	view := NewView(baseSchema).Reset(buf)
+
+	tests := []struct {
+		name     string
+		fieldIdx int
+		expected interface{}
+	}{
+		{"Datetime", 18, []time.Time{base.Time}},
+		{"Int64", 1, []int64{base.Int64}},
+		{"Int32", 2, []int32{base.Int32}},
+		{"Int16", 3, []int16{base.Int16}},
+		{"Int8", 4, []int8{base.Int8}},
+		{"Uint64", 5, []uint64{base.Uint64}},
+		{"Uint32", 6, []uint32{base.Uint32}},
+		{"Uint16", 7, []uint16{base.Uint16}},
+		{"Uint8", 8, []uint8{base.Uint8}},
+		{"Float64", 9, []float64{base.Float64}},
+		{"Float32", 10, []float32{base.Float32}},
+		{"Boolean", 17, []bool{base.Bool}},
+		{"String", 21, []string{base.String}},
+		{"Bytes", 19, [][]byte{base.Hash}},
+		{"Int256", 16, []num.Int256{base.I256}},
+		{"Int128", 15, []num.Int128{base.I128}},
+		{"Decimal256", 14, []num.Decimal256{base.D256}},
+		{"Decimal128", 13, []num.Decimal128{base.D128}},
+		{"Decimal64", 12, []num.Decimal64{base.D64}},
+		{"Decimal32", 11, []num.Decimal32{base.D32}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := view.Append(nil, tt.fieldIdx)
+			switch tt.name {
+			case "Float64":
+				require.IsType(t, []float64{}, result)
+				require.InDelta(t, tt.expected.([]float64)[0], result.([]float64)[0], 1e-6)
+			case "Float32":
+				require.IsType(t, []float32{}, result)
+				require.InDelta(t, tt.expected.([]float32)[0], result.([]float32)[0], 1e-6)
+			default:
+				require.Equal(t, tt.expected, result, "Appending to nil should create a new slice with one element")
+			}
+
+			result = view.Append(result, tt.fieldIdx)
+			require.Len(t, result, 2, "Appending to existing slice should add one element")
+
+			// Verify the appended values
+			switch v := result.(type) {
+			case []time.Time:
+				require.Equal(t, base.Time, v[0])
+				require.Equal(t, base.Time, v[1])
+			case []int64:
+				require.Equal(t, base.Int64, v[0])
+				require.Equal(t, base.Int64, v[1])
+			case []int32:
+				require.Equal(t, base.Int32, v[0])
+				require.Equal(t, base.Int32, v[1])
+			case []int16:
+				require.Equal(t, base.Int16, v[0])
+				require.Equal(t, base.Int16, v[1])
+			case []int8:
+				require.Equal(t, base.Int8, v[0])
+				require.Equal(t, base.Int8, v[1])
+			case []uint64:
+				require.Equal(t, base.Uint64, v[0])
+				require.Equal(t, base.Uint64, v[1])
+			case []uint32:
+				require.Equal(t, base.Uint32, v[0])
+				require.Equal(t, base.Uint32, v[1])
+			case []uint16:
+				require.Equal(t, base.Uint16, v[0])
+				require.Equal(t, base.Uint16, v[1])
+			case []uint8:
+				require.Equal(t, base.Uint8, v[0])
+				require.Equal(t, base.Uint8, v[1])
+			case []float64:
+				require.Equal(t, base.Float64, v[0])
+				require.Equal(t, base.Float64, v[1])
+			case []float32:
+				require.Equal(t, base.Float32, v[0])
+				require.Equal(t, base.Float32, v[1])
+			case []bool:
+				require.Equal(t, base.Bool, v[0])
+				require.Equal(t, base.Bool, v[1])
+			case []string:
+				require.Equal(t, base.String, v[0])
+				require.Equal(t, base.String, v[1])
+			case [][]byte:
+				require.Equal(t, base.Hash, v[0])
+				require.Equal(t, base.Hash, v[1])
+			case []num.Int256:
+				require.Equal(t, base.I256, v[0])
+				require.Equal(t, base.I256, v[1])
+			case []num.Int128:
+				require.Equal(t, base.I128, v[0])
+				require.Equal(t, base.I128, v[1])
+			case []num.Decimal256:
+				require.Equal(t, base.D256, v[0])
+				require.Equal(t, base.D256, v[1])
+			case []num.Decimal128:
+				require.Equal(t, base.D128, v[0])
+				require.Equal(t, base.D128, v[1])
+			case []num.Decimal64:
+				require.Equal(t, base.D64, v[0])
+				require.Equal(t, base.D64, v[1])
+			case []num.Decimal32:
+				require.Equal(t, base.D32, v[0])
+				require.Equal(t, base.D32, v[1])
+			default:
+				t.Fatalf("Unexpected type: %T", result)
+			}
+		})
+	}
+
+	// Test appending with invalid index
+	result := view.Append(nil, -1)
+	require.Nil(t, result, "Appending with negative index should return nil")
+
+	result = view.Append(nil, len(baseSchema.fields))
+	require.Nil(t, result, "Appending with out-of-bounds index should return nil")
+
+	// Test appending to invalid view
+	invalidView := NewView(baseSchema)
+	result = invalidView.Append(nil, 0)
+	require.Nil(t, result, "Appending to invalid view should return nil")
+}
+
+func BenchmarkViewSetPk(b *testing.B) {
+	baseSchema := MustSchemaOf(AllTypes{})
+	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
+	baseEnc := NewEncoder(baseSchema)
+	view := NewView(baseSchema)
+	buf, err := baseEnc.Encode(&base, nil)
+	require.NoError(b, err)
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		view.Reset(buf)
+		view.SetPk(1)
+	}
+}
+
+func BenchmarkViewCut(b *testing.B) {
+	baseSchema := MustSchemaOf(AllTypes{})
+	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
+	baseEnc := NewEncoder(baseSchema)
+	buf := bytes.NewBuffer(nil)
+	_, err := baseEnc.Encode(&base, buf)
+	require.NoError(b, err)
+	_, err = baseEnc.Encode(&base, buf)
+	require.NoError(b, err)
+	view := NewView(baseSchema)
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		view.Cut(buf.Bytes())
+	}
 }
