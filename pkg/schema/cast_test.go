@@ -10,6 +10,8 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
+// TestCastNewCaster tests the NewCaster function to ensure it returns the correct
+// caster type for each FieldType.
 func TestCastNewCaster(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -46,6 +48,8 @@ func TestCastNewCaster(t *testing.T) {
 	}
 }
 
+// TestCastIntCaster tests the IntCaster's ability to cast various input types
+// to int32, including edge cases and error scenarios.
 func TestCastIntCaster(t *testing.T) {
 	caster := IntCaster[int32]{}
 
@@ -90,6 +94,8 @@ func TestCastIntCaster(t *testing.T) {
 	})
 }
 
+// TestCastUintCaster tests the UintCaster's ability to cast various input types
+// to uint32, including edge cases and error scenarios.
 func TestCastUintCaster(t *testing.T) {
 	caster := UintCaster[uint32]{}
 
@@ -133,6 +139,8 @@ func TestCastUintCaster(t *testing.T) {
 	})
 }
 
+// TestCastFloatCaster tests the FloatCaster's ability to cast various input types
+// to float32, including edge cases and error scenarios.
 func TestCastFloatCaster(t *testing.T) {
 	caster := FloatCaster[float32]{}
 
@@ -182,6 +190,8 @@ func (c CustomBinaryMarshaler) MarshalBinary() ([]byte, error) {
 	return c.data, nil
 }
 
+// TestCastBytesCaster tests the BytesCaster's ability to cast various input types
+// to []byte, including custom types implementing MarshalBinary.
 func TestCastBytesCaster(t *testing.T) {
 	caster := BytesCaster{}
 

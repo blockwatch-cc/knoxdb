@@ -116,6 +116,8 @@ func BenchmarkViewCut(b *testing.B) {
 	}
 }
 
+// TestViewSet tests the Set method of the View struct, verifying correct behavior
+// when setting values of various types and lengths, including edge cases and error conditions.
 func TestViewSet(t *testing.T) {
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseSchema := MustSchemaOf(AllTypes{})
