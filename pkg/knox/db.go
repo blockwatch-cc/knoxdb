@@ -160,7 +160,11 @@ func (d *DB) ListEnums() []string {
 	return d.engine.EnumNames()
 }
 
-func (d *DB) UseEnum(name string) (schema.EnumLUT, error) {
+func (d *DB) Enums() schema.EnumRegistry {
+	return d.engine.Enums()
+}
+
+func (d *DB) UseEnum(name string) (*schema.EnumDictionary, error) {
 	enum, err := d.engine.UseEnum(name)
 	if err != nil {
 		return nil, err
@@ -168,11 +172,11 @@ func (d *DB) UseEnum(name string) (schema.EnumLUT, error) {
 	return enum, nil
 }
 
-func (d *DB) CreateEnum(ctx context.Context, name string) (schema.EnumLUT, error) {
+func (d *DB) CreateEnum(ctx context.Context, name string) (*schema.EnumDictionary, error) {
 	return d.engine.CreateEnum(ctx, name)
 }
 
-func (d *DB) ExtendEnum(ctx context.Context, name string, vals ...schema.Enum) error {
+func (d *DB) ExtendEnum(ctx context.Context, name string, vals ...string) error {
 	return d.engine.ExtendEnum(ctx, name, vals...)
 }
 

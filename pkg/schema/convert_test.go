@@ -45,7 +45,7 @@ func TestSchemaMapping(t *testing.T) {
 	b2s, err := subSchema.MapTo(baseSchema)
 	require.NoError(t, err)
 	require.Len(t, b2s, baseSchema.NumFields())
-	require.Equal(t, []int{0, 1, -1, -1, -1, -1, 2, -1, -1, 3, -1, -1, -1, -1, -1, -1, -1, 4, 5, 6, -1, 7}, b2s)
+	require.Equal(t, []int{0, 1, -1, -1, -1, -1, 2, -1, -1, 3, -1, -1, -1, -1, -1, -1, -1, 4, 5, 6, -1, 7, -1}, b2s)
 
 	b2r, err := reorderSchema.MapTo(baseSchema)
 	require.NoError(t, err)

@@ -266,7 +266,7 @@ func (t *GenericTable[T]) DB() Database {
 }
 
 func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
-	enc := schema.NewGenericEncoder[T]()
+	enc := schema.NewGenericEncoder[T]().WithEnumsFrom(t.db.Enums())
 	var (
 		buf []byte
 		err error
@@ -320,7 +320,7 @@ func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
 }
 
 func (t *GenericTable[T]) Update(ctx context.Context, val any) (uint64, error) {
-	enc := schema.NewGenericEncoder[T]()
+	enc := schema.NewGenericEncoder[T]().WithEnumsFrom(t.db.Enums())
 	var (
 		buf []byte
 		err error

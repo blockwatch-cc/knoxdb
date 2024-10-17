@@ -117,7 +117,7 @@ func SchemaOf(m any) (*Schema, error) {
 		s.fields = append(s.fields, field)
 	}
 
-	// compile encoder/decoder opcodes, calculate wire size
+	// compile encoder/decoder opcodes, calculate wire size, lookup enums
 	s.Finalize()
 
 	// validate schema conformance

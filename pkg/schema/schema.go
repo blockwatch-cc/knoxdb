@@ -34,6 +34,7 @@ type Schema struct {
 	version     uint32
 	encode      []OpCode
 	decode      []OpCode
+	enums       EnumRegistry
 }
 
 func NewSchema() *Schema {
@@ -62,6 +63,37 @@ func (s *Schema) WithField(f Field) *Schema {
 		f.id = uint16(len(s.fields) + 1)
 		s.fields = append(s.fields, f)
 		s.encode, s.decode = nil, nil
+	}
+	return s
+}
+
+func (s *Schema) WithEnum(e *EnumDictionary) *Schema {
+	if e != nil {
+		for i, f := range s.fields {
+			if !f.Is(types.FieldFlagEnum) {
+				continue
+			}
+			if e.Name() != f.name {
+				continue
+			}
+			s.fields[i].enum = e
+			s.enums.Register(e)
+		}
+	}
+	return s
+}
+
+func (s *Schema) WithEnumsFrom(r EnumRegistry) *Schema {
+	for i, f := range s.fields {
+		if !f.Is(types.FieldFlagEnum) {
+			continue
+		}
+		e, ok := r.Lookup(f.name)
+		if !ok {
+			continue
+		}
+		s.fields[i].enum = e
+		s.enums.Register(e)
 	}
 	return s
 }
@@ -500,6 +532,11 @@ func (s *Schema) Finalize() *Schema {
 		}
 		h.Write(Uint16Bytes(s.fields[i].id))
 		h.Write([]byte{byte(s.fields[i].typ)})
+
+		// try lookup enum from global registry using tag '0'
+		if s.fields[i].Is(types.FieldFlagEnum) && s.fields[i].enum == nil {
+			s.fields[i].enum, _ = LookupEnum(0, s.fields[i].name)
+		}
 	}
 	s.schemaHash = h.Sum64()
 	s.encode, s.decode = compileCodecs(s)

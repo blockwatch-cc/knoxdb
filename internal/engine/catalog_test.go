@@ -375,7 +375,7 @@ func TestCatalogAddEnum(t *testing.T) {
 	tctx, commit, abort := eng.WithTransaction(ctx)
 	defer abort()
 	enum := schema.NewEnumDictionary("enum")
-	enum.AddValues("a", "b", "c")
+	enum.Append("a", "b", "c")
 	require.NoError(t, cat.AddEnum(tctx, enum))
 	require.NoError(t, commit())
 

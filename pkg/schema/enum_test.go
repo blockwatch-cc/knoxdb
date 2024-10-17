@@ -20,7 +20,7 @@ func (e *EnumDictionary) dump() {
 
 func TestEnumAdd(t *testing.T) {
 	d := NewEnumDictionary("")
-	d.AddValues("a", "b")
+	d.Append("a", "b")
 	t.Log("Added 2 values")
 	// d.dump()
 	assert.Equal(t, d.Len(), 2)
@@ -28,10 +28,10 @@ func TestEnumAdd(t *testing.T) {
 	t.Log("Lookup values")
 	v, ok := d.Value(0)
 	assert.True(t, ok, "val a")
-	assert.Equal(t, v, Enum("a"))
+	assert.Equal(t, v, "a")
 	v, ok = d.Value(1)
 	assert.True(t, ok, "val b")
-	assert.Equal(t, v, Enum("b"))
+	assert.Equal(t, v, "b")
 
 	t.Log("Lookup codes")
 	c, ok := d.Code("a")
@@ -48,12 +48,12 @@ func TestEnumAdd(t *testing.T) {
 	assert.False(t, ok, "overflow")
 
 	t.Log("Adding 1 more value")
-	d.AddValues("c")
+	d.Append("c")
 	// d.dump()
 	assert.Equal(t, d.Len(), 3)
 	v, ok = d.Value(2)
 	assert.True(t, ok, "val c")
-	assert.Equal(t, v, Enum("c"))
+	assert.Equal(t, v, "c")
 	c, ok = d.Code("c")
 	assert.True(t, ok, "code c")
 	assert.Equal(t, c, uint16(2), "code c")
@@ -61,7 +61,7 @@ func TestEnumAdd(t *testing.T) {
 
 func TestEnumSort(t *testing.T) {
 	d := NewEnumDictionary("")
-	d.AddValues("b", "a")
+	d.Append("b", "a")
 	t.Log("Added 2 values")
 	// d.dump()
 	assert.Equal(t, d.Len(), 2)
@@ -69,10 +69,10 @@ func TestEnumSort(t *testing.T) {
 	t.Log("Lookup values")
 	v, ok := d.Value(0)
 	assert.True(t, ok, "val b")
-	assert.Equal(t, v, Enum("b"))
+	assert.Equal(t, v, "b")
 	v, ok = d.Value(1)
 	assert.True(t, ok, "val a")
-	assert.Equal(t, v, Enum("a"))
+	assert.Equal(t, v, "a")
 
 	t.Log("Lookup codes")
 	c, ok := d.Code("a")
@@ -91,7 +91,7 @@ func TestEnumSort(t *testing.T) {
 
 func TestEnumMarshal(t *testing.T) {
 	d := NewEnumDictionary("")
-	d.AddValues("b", "a")
+	d.Append("b", "a")
 	t.Log("Added 2 values")
 	assert.Equal(t, d.Len(), 2)
 
@@ -108,10 +108,10 @@ func TestEnumMarshal(t *testing.T) {
 	t.Log("Lookup values")
 	v, ok := d.Value(0)
 	assert.True(t, ok, "val b")
-	assert.Equal(t, v, Enum("b"))
+	assert.Equal(t, v, "b")
 	v, ok = d.Value(1)
 	assert.True(t, ok, "val a")
-	assert.Equal(t, v, Enum("a"))
+	assert.Equal(t, v, "a")
 }
 
 var enumBenchSizes = []struct {
@@ -126,17 +126,17 @@ var enumBenchSizes = []struct {
 	{name: "64k", num: 1 << 16},
 }
 
-func makeRandStrings(n int) []Enum {
-	vals := []Enum{}
+func makeRandStrings(n int) []string {
+	vals := []string{}
 	for i := 0; i < n; i++ {
-		vals = append(vals, Enum(hex.EncodeToString(Uint64Bytes(uint64(rand.Int63())))))
+		vals = append(vals, hex.EncodeToString(Uint64Bytes(uint64(rand.Int63()))))
 	}
 	return vals
 }
 
 func makeEnum(name string, n int) *EnumDictionary {
 	enum := NewEnumDictionary(name)
-	err := enum.AddValues(makeRandStrings(n)...)
+	err := enum.Append(makeRandStrings(n)...)
 	if err != nil {
 		panic(err)
 	}
@@ -150,7 +150,7 @@ func BenchmarkEnumAdd(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				NewEnumDictionary(v.name).AddValues(vals...)
+				NewEnumDictionary(v.name).Append(vals...)
 			}
 		})
 	}
@@ -174,7 +174,7 @@ func BenchmarkEnumCodeLookup(b *testing.B) {
 		b.Run(v.name, func(b *testing.B) {
 			vals := makeRandStrings(v.num)
 			enum := NewEnumDictionary(v.name)
-			enum.AddValues(vals...)
+			enum.Append(vals...)
 			b.ResetTimer()
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {

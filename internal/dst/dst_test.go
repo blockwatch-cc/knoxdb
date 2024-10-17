@@ -134,6 +134,8 @@ func genCommand() command {
 	return insert
 }
 
+type MyEnum string
+
 type testType struct {
 	Id        uint64         `knox:"id,pk"` // auto-increment serial
 	Val       int64          `knox:"val"`   // some random value
@@ -142,7 +144,7 @@ type testType struct {
 	Hash      []byte         `knox:"hash,index=bloom:3"`
 	String    string         `knox:"string"`
 	Bool      bool           `knox:"bool"`
-	MyEnum    schema.Enum    `knox:"my_enum,enum"`
+	MyEnum    MyEnum         `knox:"my_enum,enum"`
 	Int64     int64          `knox:"int64"`
 	Int32     int32          `knox:"int32"`
 	Int16     int16          `knox:"int16"`
@@ -177,8 +179,7 @@ func newDB(ctx context.Context, path string) (knox.Database, error) {
 	}
 
 	log.Info("Creating Enum")
-	var enum schema.EnumLUT
-	enum, err = db.CreateEnum(ctx, "my_enum")
+	_, err = db.CreateEnum(ctx, "my_enum")
 	if err != nil {
 		db.Close(ctx)
 		return nil, err
@@ -188,7 +189,6 @@ func newDB(ctx context.Context, path string) (knox.Database, error) {
 		db.Close(ctx)
 		return nil, err
 	}
-	schema.RegisterEnum(enum)
 
 	s, err := schema.SchemaOf(&testType{})
 	if err != nil {

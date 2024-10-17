@@ -33,14 +33,16 @@ func (s *Stringer) UnmarshalText(b []byte) error {
 	return nil
 }
 
+type MyEnum string
+
 const (
-	MyEnumOne   schema.Enum = "one"
-	MyEnumTwo   schema.Enum = "two"
-	MyEnumThree schema.Enum = "three"
-	MyEnumFour  schema.Enum = "four"
+	MyEnumOne   = "one"
+	MyEnumTwo   = "two"
+	MyEnumThree = "three"
+	MyEnumFour  = "four"
 )
 
-var myEnums = []schema.Enum{MyEnumOne, MyEnumTwo, MyEnumThree, MyEnumFour}
+var myEnums = []string{MyEnumOne, MyEnumTwo, MyEnumThree, MyEnumFour}
 
 type Types struct {
 	Id        uint64         `knox:"id,pk"`
@@ -49,7 +51,7 @@ type Types struct {
 	String    string         `knox:"string"`
 	Stringer  Stringer       `knox:"string_list"`
 	Bool      bool           `knox:"bool"`
-	MyEnum    schema.Enum    `knox:"my_enum,enum"`
+	MyEnum    MyEnum         `knox:"my_enum,enum"`
 	Int64     int64          `knox:"int64"`
 	Int32     int32          `knox:"int32"`
 	Int16     int16          `knox:"int16"`
@@ -266,15 +268,14 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		WithCacheSize(1 << 20 * TypesCacheSize).
 		WithLogger(log.Log)
 
+	log.Info("Creating DB")
 	db, err = knox.CreateDatabase(ctx, "types", opts)
 	if err != nil {
 		return
 	}
-	log.Info("Creating DB")
 
 	log.Info("Creating Enum")
-	var enum schema.EnumLUT
-	enum, err = db.CreateEnum(ctx, "my_enum")
+	_, err = db.CreateEnum(ctx, "my_enum")
 	if err != nil {
 		return
 	}
@@ -282,7 +283,6 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 	if err != nil {
 		return
 	}
-	schema.RegisterEnum(enum)
 
 	log.Infof("Creating Table %s", s.Name())
 	log.Debugf("Schema %s", s)
@@ -355,7 +355,7 @@ func NewRandomTypes(i int) *Types {
 		String:    hex.EncodeToString(rnd(4)),
 		Stringer:  strings.SplitAfter(hex.EncodeToString(rnd(4)), "a"),
 		Bool:      true,
-		MyEnum:    myEnums[i%4],
+		MyEnum:    MyEnum(myEnums[i%4]),
 		// typed ints
 		Int64: int64(i),
 		Int32: int32(i),

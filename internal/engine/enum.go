@@ -11,6 +11,10 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
+func (e *Engine) Enums() schema.EnumRegistry {
+	return e.enums
+}
+
 func (e *Engine) EnumNames() []string {
 	names := make([]string, 0, len(e.enums))
 	for _, v := range e.enums {
@@ -23,7 +27,7 @@ func (e *Engine) NumEnums() int {
 	return len(e.enums)
 }
 
-func (e *Engine) UseEnum(name string) (schema.EnumLUT, error) {
+func (e *Engine) UseEnum(name string) (*schema.EnumDictionary, error) {
 	enum, ok := e.enums[types.TaggedHash(types.ObjectTagEnum, name)]
 	if !ok {
 		return nil, ErrNoEnum
@@ -31,12 +35,12 @@ func (e *Engine) UseEnum(name string) (schema.EnumLUT, error) {
 	return enum, nil
 }
 
-func (e *Engine) GetEnum(hash uint64) (schema.EnumLUT, bool) {
+func (e *Engine) GetEnum(hash uint64) (*schema.EnumDictionary, bool) {
 	enum, ok := e.enums[hash]
 	return enum, ok
 }
 
-func (e *Engine) CreateEnum(ctx context.Context, name string) (schema.EnumLUT, error) {
+func (e *Engine) CreateEnum(ctx context.Context, name string) (*schema.EnumDictionary, error) {
 	// check name is unique
 	tag := types.TaggedHash(types.ObjectTagEnum, name)
 	if _, ok := e.enums[tag]; ok {
@@ -107,7 +111,7 @@ func (e *Engine) DropEnum(ctx context.Context, name string) error {
 	return commit()
 }
 
-func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...schema.Enum) error {
+func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...string) error {
 	tag := types.TaggedHash(types.ObjectTagEnum, name)
 	enum, ok := e.enums[tag]
 	if !ok {
@@ -125,7 +129,7 @@ func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...schema.Enu
 	}
 
 	// extend enum
-	if err := enum.AddValues(vals...); err != nil {
+	if err := enum.Append(vals...); err != nil {
 		return err
 	}
 
@@ -150,7 +154,6 @@ func (e *Engine) openEnums(ctx context.Context) error {
 			return err
 		}
 		e.enums[key] = enum
-		schema.RegisterEnum(enum)
 	}
 
 	return nil

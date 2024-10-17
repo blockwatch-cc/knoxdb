@@ -92,11 +92,6 @@ type Store interface {
 	Scan(ctx context.Context, from, to []byte, fn func(ctx context.Context, k, v []byte) error) error
 }
 
-// type Tx interface {
-// 	Commit(ctx context.Context) error
-// 	Abort(ctx context.Context) error
-// }
-
 type Database interface {
 	// db global
 	Sync(ctx context.Context) error
@@ -126,9 +121,10 @@ type Database interface {
 	DropStore(ctx context.Context, name string) error
 
 	// enums
+	Enums() schema.EnumRegistry
 	ListEnums() []string
-	UseEnum(name string) (schema.EnumLUT, error)
-	CreateEnum(ctx context.Context, name string) (schema.EnumLUT, error)
-	ExtendEnum(ctx context.Context, name string, vals ...schema.Enum) error
+	UseEnum(name string) (*schema.EnumDictionary, error)
+	CreateEnum(ctx context.Context, name string) (*schema.EnumDictionary, error)
+	ExtendEnum(ctx context.Context, name string, vals ...string) error
 	DropEnum(ctx context.Context, name string) error
 }

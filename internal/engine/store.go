@@ -56,6 +56,9 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 		return nil, ErrStoreExists
 	}
 
+	// resolve schema enums
+	s.WithEnumsFrom(e.enums)
+
 	// check driver
 	factory, ok := storeEngineRegistry[StoreKindKV]
 	if !ok {
@@ -182,6 +185,9 @@ func (e *Engine) openStores(ctx context.Context) error {
 		// ensure logger
 		opts.Logger = e.log
 		opts.ReadOnly = e.opts.ReadOnly
+
+		// resolve schema enums
+		s.WithEnumsFrom(e.enums)
 
 		// open the store
 		if err := kvstore.Open(ctx, s, opts); err != nil {

@@ -54,6 +54,9 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 		return nil, ErrTableExists
 	}
 
+	// resolve schema enums
+	s.WithEnumsFrom(e.enums)
+
 	// check engine and driver
 	factory, ok := tableEngineRegistry[opts.Engine]
 	if !ok {
@@ -280,6 +283,9 @@ func (e *Engine) openTables(ctx context.Context) error {
 		// ensure logger and override flags
 		opts.Logger = e.log
 		opts.ReadOnly = e.opts.ReadOnly
+
+		// resolve schema enums
+		s.WithEnumsFrom(e.enums)
 
 		// open the store
 		if err := table.Open(ctx, s, opts); err != nil {

@@ -33,7 +33,7 @@ type Engine struct {
 	tables  map[uint64]TableEngine
 	stores  map[uint64]StoreEngine
 	indexes map[uint64]IndexEngine
-	enums   map[uint64]*schema.EnumDictionary
+	enums   schema.EnumRegistry
 	txs     TxList
 	opts    DatabaseOptions
 	xmin    uint64
@@ -76,7 +76,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		tables:  make(map[uint64]TableEngine),
 		stores:  make(map[uint64]StoreEngine),
 		indexes: make(map[uint64]IndexEngine),
-		enums:   make(map[uint64]*schema.EnumDictionary),
+		enums:   make(schema.EnumRegistry),
 		txs:     make(TxList, 0),
 		xmin:    0,
 		xnext:   0,
@@ -333,7 +333,7 @@ func (e *Engine) Close(ctx context.Context) error {
 
 	// close enums
 	for n, enum := range e.enums {
-		schema.UnregisterEnum(enum)
+		schema.UnregisterEnum(e.dbId, enum)
 		delete(e.enums, n)
 	}
 

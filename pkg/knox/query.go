@@ -271,11 +271,9 @@ func (q Query) Execute(ctx context.Context, val any) (err error) {
 		return
 	}
 
-	// use schema from data if not set, otherwise check compatibility
+	// use schema from data if not set
 	if q.schema == nil {
 		q = q.WithSchema(s)
-	} else {
-
 	}
 
 	rval := reflect.ValueOf(val)
@@ -418,6 +416,7 @@ func (q Query) MakePlan() (engine.QueryPlan, error) {
 			return nil, err
 		}
 	}
+	q.schema.WithEnumsFrom(q.table.DB().Enums())
 	plan.ResultSchema = q.schema
 
 	return plan, nil

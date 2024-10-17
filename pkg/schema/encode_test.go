@@ -55,7 +55,7 @@ type encodeTestStruct struct {
 	String    string         `knox:"str"`
 	Stringer  Stringer       `knox:"strlist"`
 	Bool      bool           `knox:"bool"`
-	Enum      Enum           `knox:"enum"`
+	Enum      MyEnum         `knox:"enum,enum"`
 	Int64     int64          `knox:"i64"`
 	Int32     int32          `knox:"i32"`
 	Int16     int16          `knox:"i16"`
@@ -74,14 +74,17 @@ type encodeTestStruct struct {
 	I256      num.Int256     `knox:"i256"`
 }
 
+type MyEnum string
+
 var myEnum *EnumDictionary
 
+func TestMain(m *testing.M) {
+	myEnum = NewEnumDictionary("enum")
+	myEnum.Append("a", "b", "c", "d", "e")
+	RegisterEnum(0, myEnum)
+}
+
 func makeTestData(sz int) (res []encodeTestStruct) {
-	if myEnum == nil {
-		myEnum = NewEnumDictionary("enum")
-		myEnum.AddValues("a", "b", "c", "d", "e")
-		RegisterEnum(myEnum)
-	}
 	for i := 1; i <= sz; i++ {
 		res = append(res, encodeTestStruct{
 			Id:        0,
@@ -91,7 +94,7 @@ func makeTestData(sz int) (res []encodeTestStruct) {
 			String:    hex.EncodeToString(randBytes(4)),
 			Stringer:  strings.SplitAfter(hex.EncodeToString(randBytes(32)), "a"),
 			Bool:      true,
-			Enum:      myEnum.MustValue(uint16(i%4 + 1)),
+			Enum:      MyEnum(myEnum.MustValue(uint16(i%4 + 1))),
 			Int64:     int64(i),
 			Int32:     int32(i),
 			Int16:     int16(i % (1<<16 - 1)),
@@ -215,7 +218,7 @@ type encodeBenchStruct struct {
 	Hash    []byte         `knox:"hash,fixed=20,index=bloom=3"`
 	String  string         `knox:"str"`
 	Bool    bool           `knox:"bool"`
-	Enum    Enum           `knox:"enum"`
+	Enum    MyEnum         `knox:"enum,enum"`
 	Int64   int64          `knox:"i64"`
 	Int32   int32          `knox:"i32"`
 	Int16   int16          `knox:"i16"`
@@ -235,11 +238,6 @@ type encodeBenchStruct struct {
 }
 
 func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
-	if myEnum == nil {
-		myEnum = NewEnumDictionary("enum")
-		myEnum.AddValues("a", "b", "c", "d", "e")
-		RegisterEnum(myEnum)
-	}
 	for i := 0; i < sz; i++ {
 		res = append(res, encodeBenchStruct{
 			Id:      0,
@@ -247,7 +245,7 @@ func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
 			Hash:    randBytes(20),
 			String:  hex.EncodeToString(randBytes(4)),
 			Bool:    true,
-			Enum:    myEnum.MustValue(uint16(i%4 + 1)),
+			Enum:    MyEnum(myEnum.MustValue(uint16(i%4 + 1))),
 			Int64:   int64(i),
 			Int32:   int32(i),
 			Int16:   int16(i % (1<<16 - 1)),

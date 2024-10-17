@@ -32,6 +32,11 @@ func (e *GenericEncoder[T]) Schema() *Schema {
 	return e.enc.schema
 }
 
+func (e *GenericEncoder[T]) WithEnumsFrom(r EnumRegistry) *GenericEncoder[T] {
+	e.enc.schema.WithEnumsFrom(r)
+	return e
+}
+
 func (e *GenericEncoder[T]) NewBuffer(sz int) *bytes.Buffer {
 	return e.enc.schema.NewBuffer(sz)
 }
@@ -300,13 +305,11 @@ func writeField(buf *bytes.Buffer, code OpCode, field Field, ptr unsafe.Pointer)
 		_, err = buf.Write(v.Int256().Bytes())
 
 	case OpCodeEnum:
-		v := *(*Enum)(ptr)
-		var lut EnumLUT
-		lut, err = LookupEnum(field.name)
-		if err != nil {
-			return fmt.Errorf("%s: %v", field.name, err)
+		if field.enum == nil {
+			return ErrEnumUndefined
 		}
-		code, ok := lut.Code(v)
+		v := *(*string)(ptr)
+		code, ok := field.enum.Code(v)
 		if !ok {
 			return fmt.Errorf("%s: invalid enum value %q", field.name, v)
 		}

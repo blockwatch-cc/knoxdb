@@ -224,7 +224,7 @@ type EnumObject struct {
 	id     uint64
 	engine *Engine
 	name   string
-	vals   []schema.Enum
+	vals   []string
 }
 
 func (o *EnumObject) Type() types.ObjectTag {
@@ -302,10 +302,10 @@ func (o *EnumObject) Decode(data []byte, typ wal.RecordType) error {
 
 	// read values
 	n = int(LE.Uint16(buf.Next(2)))
-	o.vals = make([]schema.Enum, n)
+	o.vals = make([]string, n)
 	for i := range o.vals {
 		n = int(LE.Uint16(buf.Next(2)))
-		o.vals[i] = schema.Enum(buf.Next(n))
+		o.vals[i] = string(buf.Next(n))
 	}
 
 	return nil

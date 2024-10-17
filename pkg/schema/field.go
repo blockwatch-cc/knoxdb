@@ -34,6 +34,7 @@ type Field struct {
 	dataSize uint16           // struct field size in bytes
 	wireSize uint16           // wire encoding field size in bytes, min size for []byte & string
 	iface    types.IfaceFlags // Go encoder default interfaces
+	enum     *EnumDictionary  // dynamic enum data
 }
 
 // ExportedField is a performance improved version of Field
@@ -474,17 +475,15 @@ func (f *Field) Encode(w io.Writer, val any) (err error) {
 		}
 
 	case OpCodeEnum:
-		v, ok := val.(Enum)
+		v, ok := val.(string)
 		if !ok {
 			err = ErrInvalidValueType
 			return
 		}
-		var lut EnumLUT
-		lut, err = LookupEnum(f.name)
-		if err != nil {
-			return
+		if f.enum == nil {
+			return ErrEnumUndefined
 		}
-		code, ok := lut.Code(v)
+		code, ok := f.enum.Code(v)
 		if !ok {
 			return ErrInvalidValue
 		}
@@ -540,15 +539,15 @@ func (f *Field) Decode(r io.Reader) (val any, err error) {
 		_, err = r.Read(buf[:2])
 		u16, _ := ReadUint16(buf[:2])
 		if f.flags.Is(types.FieldFlagEnum) {
-			var lut EnumLUT
-			lut, err = LookupEnum(f.name)
-			if err == nil {
-				enum, ok := lut.Value(u16)
+			if f.enum != nil {
+				enum, ok := f.enum.Value(u16)
 				if ok {
 					val = enum
 				} else {
 					err = ErrInvalidValue
 				}
+			} else {
+				err = ErrEnumUndefined
 			}
 		} else {
 			val = u16

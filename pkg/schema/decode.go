@@ -33,6 +33,11 @@ func (d *GenericDecoder[T]) Schema() *Schema {
 	return d.dec.schema
 }
 
+func (d *GenericDecoder[T]) WithEnumsFrom(r EnumRegistry) *GenericDecoder[T] {
+	d.dec.schema.WithEnumsFrom(r)
+	return d
+}
+
 // Read reads wire encoded data from r and decodes into val based on
 // the schema for T.
 //
@@ -239,16 +244,16 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 			(*(*num.Decimal256)(ptr)).SetScale(field.scale)
 
 		case OpCodeEnum:
-			v, _ := ReadUint16(d.buf.Next(2))
-			lut, err := LookupEnum(field.name)
-			if err != nil {
-				return err
+			u16, _ := ReadUint16(d.buf.Next(2))
+			if field.enum != nil {
+				val, ok := field.enum.Value(u16)
+				if !ok {
+					err = fmt.Errorf("%s: invalid enum value %d", field.name, u16)
+				}
+				*(*string)(ptr) = string(val)
+			} else {
+				err = fmt.Errorf("translation for enum %q not registered", field.name)
 			}
-			val, ok := lut.Value(v)
-			if !ok {
-				return ErrInvalidValue
-			}
-			*(*string)(ptr) = string(val)
 		}
 
 		if err != nil {
@@ -445,11 +450,10 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte) []byte
 	case OpCodeEnum:
 		u16, n := ReadUint16(buf)
 		buf = buf[n:]
-		lut, err := LookupEnum(field.name)
-		if err != nil {
-			panic(err)
+		if field.enum == nil {
+			panic(fmt.Errorf("translation for enum %q not registered", field.name))
 		}
-		val, ok := lut.Value(u16)
+		val, ok := field.enum.Value(u16)
 		if !ok {
 			panic(fmt.Errorf("%s: invalid enum value %d", field.name, u16))
 		}

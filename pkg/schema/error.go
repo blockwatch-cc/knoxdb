@@ -12,6 +12,7 @@ var (
 	ErrNilValue          = errors.New("nil value")
 	ErrNameTooLong       = errors.New("name too long")
 	ErrEnumFull          = errors.New("enum capacity exhausted")
+	ErrEnumUndefined     = errors.New("enum translation not registered")
 	ErrDuplicateName     = errors.New("duplicate name")
 	ErrInvalidValue      = errors.New("invalid value")
 	ErrInvalidValueType  = errors.New("invalid value type")

@@ -12,43 +12,47 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-type Enum string
-
 const (
 	EnumMaxSize   = 1<<8 - 1 // 255
 	EnumMaxValues = 1 << 16  // 65536 (0 .. 0xFFFF)
 )
 
-type EnumLUT interface {
-	Name() string
-	Tag() uint64
-	Len() int
-	Code(Enum) (uint16, bool)
-	Value(uint16) (Enum, bool)
+type EnumRegistry map[uint64]*EnumDictionary
+
+var (
+	enumRegistry     EnumRegistry = make(map[uint64]*EnumDictionary)
+	enumRegistryLock sync.RWMutex
+)
+
+func RegisterEnum(tag uint64, e *EnumDictionary) {
+	enumRegistryLock.Lock()
+	defer enumRegistryLock.Unlock()
+	enumRegistry[e.Tag()+tag] = e
 }
 
-var _ EnumLUT = (*EnumDictionary)(nil)
-
-var enumRegistry sync.Map
-
-func RegisterEnum(e EnumLUT) {
-	if e != nil {
-		enumRegistry.Store(e.Name(), e)
-	}
+func UnregisterEnum(tag uint64, e *EnumDictionary) {
+	enumRegistryLock.Lock()
+	defer enumRegistryLock.Unlock()
+	delete(enumRegistry, e.Tag()+tag)
 }
 
-func UnregisterEnum(e EnumLUT) {
-	if e != nil {
-		enumRegistry.Delete(e.Name())
-	}
+func LookupEnum(tag uint64, name string) (*EnumDictionary, bool) {
+	enumRegistryLock.RLock()
+	defer enumRegistryLock.RUnlock()
+	e, ok := enumRegistry[types.TaggedHash(types.ObjectTagEnum, name)+tag]
+	return e, ok
 }
 
-func LookupEnum(name string) (EnumLUT, error) {
-	v, ok := enumRegistry.Load(name)
-	if !ok {
-		return nil, fmt.Errorf("translation for enum %q not registered", name)
+func (r *EnumRegistry) Register(e *EnumDictionary) {
+	if *r == nil {
+		*r = make(map[uint64]*EnumDictionary)
 	}
-	return v.(EnumLUT), nil
+	(*r)[e.Tag()] = e
+}
+
+func (r EnumRegistry) Lookup(name string) (*EnumDictionary, bool) {
+	e, ok := r[types.TaggedHash(types.ObjectTagEnum, name)]
+	return e, ok
 }
 
 type EnumDictionary struct {
@@ -82,38 +86,38 @@ func (e *EnumDictionary) Len() int {
 	return len(e.offsets)
 }
 
-func (e *EnumDictionary) Values() []Enum {
-	vals := make([]Enum, len(e.offsets))
+func (e *EnumDictionary) Values() []string {
+	vals := make([]string, len(e.offsets))
 	for i := range vals {
 		vals[i] = e.value(i)
 	}
 	return vals
 }
 
-func (e *EnumDictionary) Value(code uint16) (Enum, bool) {
+func (e *EnumDictionary) Value(code uint16) (string, bool) {
 	if int(code) >= len(e.offsets) {
 		return "", false
 	}
 	return e.value(int(code)), true
 }
 
-func (e *EnumDictionary) MustValue(code uint16) Enum {
+func (e *EnumDictionary) MustValue(code uint16) string {
 	if int(code) >= len(e.offsets) {
 		panic(ErrInvalidValue)
 	}
 	return e.value(int(code))
 }
 
-func (e *EnumDictionary) Code(val Enum) (uint16, bool) {
+func (e *EnumDictionary) Code(val string) (uint16, bool) {
 	code, ok := e.codes[fnv.Sum64a([]byte(val))]
 	return code, ok
 }
 
-func (e *EnumDictionary) AddValues(vals ...Enum) error {
+func (e *EnumDictionary) Append(vals ...string) error {
 	if e.Len()+len(vals) > EnumMaxValues {
 		return ErrEnumFull
 	}
-	unique := make(map[Enum]struct{})
+	unique := make(map[string]struct{})
 	for _, v := range vals {
 		if len(v) > EnumMaxSize {
 			return fmt.Errorf("enum: %s %q: %w", e.name, v, ErrNameTooLong)
@@ -165,10 +169,10 @@ func (e *EnumDictionary) UnmarshalBinary(buf []byte) error {
 	return nil
 }
 
-func (e *EnumDictionary) value(i int) Enum {
+func (e *EnumDictionary) value(i int) string {
 	start, end := int(e.offsets[i]), len(e.values)
 	if i < len(e.offsets)-1 {
 		end = int(e.offsets[i+1])
 	}
-	return Enum(util.UnsafeGetString(e.values[start:end]))
+	return util.UnsafeGetString(e.values[start:end])
 }
