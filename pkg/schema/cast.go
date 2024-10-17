@@ -310,7 +310,11 @@ func (c IntCaster[T]) CastSlice(val any) (res any, err error) {
 				if ok {
 					res = cp
 				}
+			default:
+				ok = false
 			}
+		} else {
+			ok = false
 		}
 	}
 	if !ok {
@@ -380,7 +384,7 @@ func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 }
 
 func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
-	var ok bool
+	ok := true
 	width := unsafe.Sizeof(T(0)) * 8
 	res = val
 	switch v := val.(type) {
@@ -549,7 +553,11 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 				if ok {
 					res = cp
 				}
+			default:
+				ok = false
 			}
+		} else {
+			ok = false
 		}
 	}
 	if !ok {
