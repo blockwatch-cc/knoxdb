@@ -41,6 +41,10 @@ func Int128From2Int64(in0, in1 int64) Int128 {
 	return z
 }
 
+func Int128FromUint64(v uint64) Int128 {
+    return Int128{0, v}
+}
+
 func Int128FromBytes(in []byte) Int128 {
 	_ = in[15] // bounds check hint to compiler; see golang.org/issue/14808
 	var x Int128
