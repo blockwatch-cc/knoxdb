@@ -89,52 +89,52 @@ type IntCaster[T constraints.Signed] struct{}
 
 func (c IntCaster[T]) CastValue(val any) (res any, err error) {
 	var ok bool
-	res = val
+	width := unsafe.Sizeof(T(0)) * 8
 	switch v := val.(type) {
 	case int:
-		res, ok = T(v), true
+		res, ok = T(v), v>>width == 0
 	case int64:
-		res, ok = T(v), true
+		res, ok = T(v), v>>width == 0
 	case int32:
-		res, ok = T(v), true
+		res, ok = T(v), v>>width == 0
 	case int16:
-		res, ok = T(v), true
+		res, ok = T(v), v>>width == 0
 	case int8:
 		res, ok = T(v), true
 	case uint:
-		res, ok = T(v), true
+		res, ok = T(v), v>>(width-1) == 0
 	case uint64:
-		res, ok = T(v), true
+		res, ok = T(v), v>>(width-1) == 0
 	case uint32:
-		res, ok = T(v), true
+		res, ok = T(v), v>>(width-1) == 0
 	case uint16:
-		res, ok = T(v), true
+		res, ok = T(v), v>>(width-1) == 0
 	case uint8:
-		res, ok = T(v), true
+		res, ok = T(v), v>>(width-1) == 0
 	case float32:
-		res, ok = T(v), true
+		res, ok = T(v), math.Round(float64(v)) == float64(v) && uint32(v)>>(width-1) == 0
 	case float64:
-		res, ok = T(v), true
+		res, ok = T(v), math.Round(v) == v && uint64(v)>>(width-1) == 0
 	case num.Decimal32:
-		res, ok = T(v.Int64()), true
+		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int32()>>width == 0
 	case num.Decimal64:
-		res, ok = T(v.Int64()), true
+		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int64()>>width == 0
 	case num.Decimal128:
-		res, ok = T(v.Int64()), true
+		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int128().IsInt64() && v.Int64()>>width == 0
 	case num.Decimal256:
-		res, ok = T(v.Int64()), true
+		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int256().IsInt64() && v.Int64()>>width == 0
 	case num.Int128:
-		res, ok = T(v.Int64()), true
+		res, ok = T(v.Int64()), v.IsInt64() && v.Int64()>>width == 0
 	case num.Int256:
-		res, ok = T(v.Int64()), true
+		res, ok = T(v.Int64()), v.IsInt64() && v.Int64()>>width == 0
 	default:
 		// type aliases
 		vv := reflect.Indirect(reflect.ValueOf(val))
 		switch vv.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			res, ok = T(vv.Int()), true
+			res, ok = T(vv.Int()), vv.Int()>>width == 0
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			res, ok = T(vv.Uint()), true
+			res, ok = T(vv.Uint()), vv.Uint()>>(width-1) == 0
 		}
 	}
 	if !ok {
@@ -145,29 +145,41 @@ func (c IntCaster[T]) CastValue(val any) (res any, err error) {
 }
 
 func (c IntCaster[T]) CastSlice(val any) (res any, err error) {
-	var ok bool
-	res = val
+	ok := true
+	width := unsafe.Sizeof(T(0)) * 8
 	switch v := val.(type) {
 	case []int:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i])
+			cp[i], ok = T(v[i]), ok && v[i]>>width == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []int64:
-		res, ok = val, true
+		cp := make([]T, len(v))
+		for i := range v {
+			cp[i], ok = T(v[i]), ok && v[i]>>width == 0
+		}
+		if ok {
+			res = cp
+		}
 	case []int32:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i])
+			cp[i], ok = T(v[i]), ok && v[i]>>width == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []int16:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i])
+			cp[i], ok = T(v[i]), ok && v[i]>>width == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []int8:
 		cp := make([]T, len(v))
 		for i := range v {
@@ -177,81 +189,107 @@ func (c IntCaster[T]) CastSlice(val any) (res any, err error) {
 	case []uint:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i])
+			cp[i], ok = T(v[i]), ok && v[i]>>(width-1) == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []uint64:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i])
+			cp[i], ok = T(v[i]), ok && v[i]>>(width-1) == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []uint32:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i])
+			cp[i], ok = T(v[i]), ok && v[i]>>(width-1) == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []uint16:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i])
+			cp[i], ok = T(v[i]), ok && v[i]>>(width-1) == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []uint8:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i])
+			cp[i], ok = T(v[i]), ok && v[i]>>(width-1) == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []float32:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i])
+			cp[i], ok = T(v[i]), ok && math.Round(float64(v[i])) == float64(v[i]) && uint32(v[i])>>(width-1) == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []float64:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i])
+			cp[i], ok = T(v[i]), ok && math.Round(v[i]) == v[i] && uint64(v[i])>>(width-1) == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []num.Decimal32:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i].Int64())
+			cp[i], ok = T(v[i].Int64()), ok && v[i].Scale() == 0 && v[i].Int32()>>width == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []num.Decimal64:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i].Int64())
+			cp[i], ok = T(v[i].Int64()), ok && v[i].Scale() == 0 && v[i].Int64()>>width == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []num.Decimal128:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i].Int64())
+			cp[i], ok = T(v[i].Int64()), ok && v[i].Scale() == 0 && v[i].Int128().IsInt64() && v[i].Int64()>>width == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []num.Decimal256:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i].Int64())
+			cp[i], ok = T(v[i].Int64()), ok && v[i].Scale() == 0 && v[i].Int256().IsInt64() && v[i].Int64()>>width == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []num.Int128:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i].Int64())
+			cp[i], ok = T(v[i].Int64()), ok && v[i].IsInt64() && v[i].Int64()>>width == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	case []num.Int256:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i] = T(v[i].Int64())
+			cp[i], ok = T(v[i].Int64()), ok && v[i].IsInt64() && v[i].Int64()>>width == 0
 		}
-		res, ok = cp, true
+		if ok {
+			res = cp
+		}
 	default:
 		// convert enum types
 		vv := reflect.Indirect(reflect.ValueOf(val))
@@ -260,15 +298,19 @@ func (c IntCaster[T]) CastSlice(val any) (res any, err error) {
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				cp := make([]T, vv.Len())
 				for i, l := 0, vv.Len(); i < l; i++ {
-					cp[i] = T(vv.Index(i).Int())
+					cp[i], ok = T(vv.Index(i).Int()), ok && vv.Index(i).Int()>>width == 0
 				}
-				res, ok = cp, true
+				if ok {
+					res = cp
+				}
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				cp := make([]T, vv.Len())
 				for i, l := 0, vv.Len(); i < l; i++ {
-					cp[i] = T(vv.Index(i).Uint())
+					cp[i], ok = T(vv.Index(i).Uint()), ok && vv.Index(i).Uint()>>(width-1) == 0
 				}
-				res, ok = cp, true
+				if ok {
+					res = cp
+				}
 			}
 		}
 	}
@@ -287,7 +329,7 @@ func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 	res = val
 	switch v := val.(type) {
 	case int:
-		res, ok = T(v), true
+		res, ok = T(v), true // v>>(width-1) == 0
 	case int64:
 		res, ok = T(v), true
 	case int32:
@@ -297,7 +339,7 @@ func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 	case int8:
 		res, ok = T(v), true
 	case uint:
-		res, ok = T(v), true
+		res, ok = T(v), true // v>>width == 0
 	case uint64:
 		res, ok = T(v), true
 	case uint32:
@@ -307,11 +349,11 @@ func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 	case uint8:
 		res, ok = T(v), true
 	case float32:
-		res, ok = T(v), true
+		res, ok = T(v), true // !math.Signbit(v) && ..
 	case float64:
-		res, ok = T(v), true
+		res, ok = T(v), true // !math.Signbit(v) && ..
 	case num.Decimal32:
-		res, ok = T(v.Int64()), true
+		res, ok = T(v.Int64()), true // width - 1 !! because v can be negative!
 	case num.Decimal64:
 		res, ok = T(v.Int64()), true
 	case num.Decimal128:
@@ -950,12 +992,12 @@ func (c I128Caster) CastValue(val any) (res any, err error) {
 		res, ok = num.Int128FromInt64(int64(v)), true
 	case float32:
 		var i128 num.Int128
-		i128.SetFloat64(float64(v))
-		res, ok = i128, true
+		acc := i128.SetFloat64(float64(v))
+		res, ok = i128, acc == num.Exact
 	case float64:
 		var i128 num.Int128
-		i128.SetFloat64(v)
-		res, ok = i128, true
+		acc := i128.SetFloat64(v)
+		res, ok = i128, acc == num.Exact
 	case num.Decimal32:
 		res, ok = num.Int128FromInt64(v.Int64()), true
 	case num.Decimal64:
@@ -963,11 +1005,11 @@ func (c I128Caster) CastValue(val any) (res any, err error) {
 	case num.Decimal128:
 		res, ok = v.Int128(), true
 	case num.Decimal256:
-		res, ok = v.Int256(), true
+		res, ok = v.Int256(), v.Int256().IsInt128()
 	case num.Int128:
 		res, ok = v, true
 	case num.Int256:
-		res, ok = v.Int128(), true
+		res, ok = v.Int128(), v.IsInt128()
 	}
 	if !ok {
 		err = castError(val, "int128")

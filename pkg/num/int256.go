@@ -83,6 +83,10 @@ func (x Int256) IsInt64() bool {
 	return (x[0]|x[1]|x[2]|x[3]>>63) == 0 || (^x[0]|^x[1]|^x[2]) == 0
 }
 
+func (x Int256) IsInt128() bool {
+	return (x[0]|x[1]|x[2]>>63) == 0 || (^x[0]|^x[1]) == 0
+}
+
 // IsZero returns true if x == 0
 func (x Int256) IsZero() bool {
 	return (x[0] | x[1] | x[2] | x[3]) == 0
