@@ -499,7 +499,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	case []num.Decimal128:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i], ok = T(v[i].Int64()), v[i].Scale() == 0 && v[i].Int128().IsInt64() && v[i].Int64()>>(width-1) == 0
+			cp[i], ok = T(v[i].Int64()), ok && v[i].Scale() == 0 && v[i].Int128().IsInt64() && v[i].Int64()>>(width-1) == 0
 		}
 		if ok {
 			res = cp
@@ -507,7 +507,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	case []num.Decimal256:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i], ok = T(v[i].Int64()), v[i].Scale() == 0 && v[i].Int256().IsInt64() && v[i].Int64()>>(width-1) == 0
+			cp[i], ok = T(v[i].Int64()), ok && v[i].Scale() == 0 && v[i].Int256().IsInt64() && v[i].Int64()>>(width-1) == 0
 		}
 		if ok {
 			res = cp
@@ -515,7 +515,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	case []num.Int128:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i], ok = T(v[i].Int64()), v[i].IsInt64() && v[i].Int64()>>(width-1) == 0
+			cp[i], ok = T(v[i].Int64()), ok && v[i].IsInt64() && v[i].Int64()>>(width-1) == 0
 		}
 		if ok {
 			res = cp
@@ -523,7 +523,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	case []num.Int256:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i], ok = T(v[i].Int64()), v[i].IsInt64() && v[i].Int64()>>(width-1) == 0
+			cp[i], ok = T(v[i].Int64()), ok && v[i].IsInt64() && v[i].Int64()>>(width-1) == 0
 		}
 		if ok {
 			res = cp
@@ -536,7 +536,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				cp := make([]T, vv.Len())
 				for i, l := 0, vv.Len(); i < l; i++ {
-					cp[i], ok = T(vv.Index(i).Int()), vv.Int()>>(width-1) == 0
+					cp[i], ok = T(vv.Index(i).Int()), ok && vv.Int()>>(width-1) == 0
 				}
 				if ok {
 					res = cp
@@ -544,7 +544,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				cp := make([]T, vv.Len())
 				for i, l := 0, vv.Len(); i < l; i++ {
-					cp[i], ok = T(vv.Index(i).Uint()), vv.Int()>>(width-1) == 0
+					cp[i], ok = T(vv.Index(i).Uint()), ok && vv.Int()>>(width-1) == 0
 				}
 				if ok {
 					res = cp
