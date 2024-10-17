@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestNewField tests the creation of new Field instances with different types,
+// verifying that the resulting fields have the correct properties.
 func TestNewField(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -50,6 +52,8 @@ func TestNewField(t *testing.T) {
 	}
 }
 
+// TestFieldMethods tests various methods of the Field struct, including
+// WithName, WithFlags, WithCompression, WithFixed, WithScale, and WithIndex.
 func TestFieldMethods(t *testing.T) {
 	base := NewField(types.FieldTypeInt32)
 
@@ -86,6 +90,8 @@ func TestFieldMethods(t *testing.T) {
 	})
 }
 
+// TestFieldGoType tests the WithGoType method of Field, ensuring it correctly
+// sets the field's path, offset, and sizes based on the Go type information.
 func TestFieldGoType(t *testing.T) {
 	type TestStruct struct {
 		IntField    int32
@@ -113,6 +119,8 @@ func TestFieldGoType(t *testing.T) {
 	})
 }
 
+// TestFieldValidate tests the Validate method of Field, checking various
+// valid and invalid field configurations.
 func TestFieldValidate(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -173,6 +181,8 @@ func TestFieldValidate(t *testing.T) {
 	}
 }
 
+// TestFieldCodec tests the Codec method of Field, ensuring it returns the
+// correct OpCode for each field type.
 func TestFieldCodec(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -208,6 +218,8 @@ func TestFieldCodec(t *testing.T) {
 	}
 }
 
+// TestFieldGenericCodec tests the encoding and decoding of a struct using
+// generic encoder and decoder, verifying that the process is reversible.
 func TestFieldGenericCodec(t *testing.T) {
 	type TestStruct struct {
 		IntField    int32   `knox:"int_field"`
@@ -237,6 +249,8 @@ func TestFieldGenericCodec(t *testing.T) {
 	assert.Equal(t, testData, *decoded)
 }
 
+// TestFieldStructValue tests the StructValue method of Field, ensuring it
+// correctly retrieves values from struct fields, including pointer fields.
 func TestFieldStructValue(t *testing.T) {
 	type TestStruct struct {
 		IntField    int32
@@ -286,6 +300,8 @@ func TestFieldStructValue(t *testing.T) {
 	}
 }
 
+// TestExportedField tests the StructValue method of ExportedField, verifying
+// that it correctly retrieves values from exported struct fields.
 func TestExportedField(t *testing.T) {
 	type TestStruct struct {
 		IntField    int32
