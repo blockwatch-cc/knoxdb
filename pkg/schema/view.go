@@ -135,10 +135,13 @@ func (v View) Get(i int) (val any, ok bool) {
 }
 
 func (v View) Append(val any, i int) any {
-	if i < 0 || i > len(v.ofs) || !v.IsValid() {
-		return val
+	if i < 0 || i >= len(v.ofs) || !v.IsValid() {
+		return nil
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
+	if y > len(v.buf) {
+		return nil
+	}
 	field := &v.schema.fields[i]
 	switch field.typ {
 	case types.FieldTypeDatetime:
