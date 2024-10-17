@@ -37,6 +37,7 @@ func castError(val any, kind string) error {
 	return fmt.Errorf("cast: unexpected value type %T for %s condition", val, kind)
 }
 
+// NewCaster creates and returns a ValueCaster for the given field type.
 func NewCaster(typ types.FieldType) ValueCaster {
 	switch typ {
 	case types.FieldTypeDatetime:
@@ -84,9 +85,10 @@ func NewCaster(typ types.FieldType) ValueCaster {
 	}
 }
 
-// caster
+// IntCaster handles casting to signed integer types.
 type IntCaster[T constraints.Signed] struct{}
 
+// CastValue converts a single value to the target signed integer type.
 func (c IntCaster[T]) CastValue(val any) (res any, err error) {
 	var ok bool
 	width := unsafe.Sizeof(T(0)) * 8
@@ -143,6 +145,7 @@ func (c IntCaster[T]) CastValue(val any) (res any, err error) {
 	return
 }
 
+// CastSlice converts a slice of values to the target signed integer type.
 func (c IntCaster[T]) CastSlice(val any) (res any, err error) {
 	ok := true
 	width := unsafe.Sizeof(T(0)) * 8
@@ -325,9 +328,10 @@ func (c IntCaster[T]) CastSlice(val any) (res any, err error) {
 	return
 }
 
-// uint caster
+// UintCaster handles casting to unsigned integer types.
 type UintCaster[T constraints.Unsigned] struct{}
 
+// CastValue converts a single value to the target unsigned integer type.
 func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 	var ok bool
 	width := unsafe.Sizeof(T(0)) * 8
@@ -385,6 +389,7 @@ func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 	return
 }
 
+// CastSlice converts a slice of values to the target unsigned integer type.
 func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	ok := true
 	width := unsafe.Sizeof(T(0)) * 8
@@ -568,9 +573,10 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	return
 }
 
-// float caster
+// FloatCaster handles casting to floating-point types.
 type FloatCaster[T constraints.Float] struct{}
 
+// CastValue converts a single value to the target floating-point type.
 func (c FloatCaster[T]) CastValue(val any) (res any, err error) {
 	var ok bool
 	res = val
@@ -630,6 +636,7 @@ func (c FloatCaster[T]) CastValue(val any) (res any, err error) {
 	return
 }
 
+// CastSlice converts a slice of values to the target floating-point type.
 func (c FloatCaster[T]) CastSlice(val any) (res any, err error) {
 	var ok bool
 	res = val
@@ -775,9 +782,10 @@ func (c FloatCaster[T]) CastSlice(val any) (res any, err error) {
 	return
 }
 
-// time caster
+// TimeCaster handles casting to time.Time values.
 type TimeCaster struct{}
 
+// CastValue converts a single value to a Unix timestamp (int64).
 func (c TimeCaster) CastValue(val any) (res any, err error) {
 	v, ok := val.(time.Time)
 	if !ok {
@@ -788,6 +796,7 @@ func (c TimeCaster) CastValue(val any) (res any, err error) {
 	return
 }
 
+// CastSlice converts a slice of time.Time values to Unix timestamps ([]int64).
 func (c TimeCaster) CastSlice(val any) (res any, err error) {
 	v, ok := val.([]time.Time)
 	if !ok {
@@ -802,9 +811,10 @@ func (c TimeCaster) CastSlice(val any) (res any, err error) {
 	return
 }
 
-// bool caster
+// BoolCaster handles casting to boolean values.
 type BoolCaster struct{}
 
+// CastValue converts a single value to a boolean.
 func (c BoolCaster) CastValue(val any) (res any, err error) {
 	var ok bool
 	res = val
@@ -820,6 +830,7 @@ func (c BoolCaster) CastValue(val any) (res any, err error) {
 	return
 }
 
+// CastSlice converts a slice of values to booleans.
 func (c BoolCaster) CastSlice(val any) (res any, err error) {
 	var ok bool
 	res = val
@@ -839,9 +850,10 @@ func (c BoolCaster) CastSlice(val any) (res any, err error) {
 	return
 }
 
-// string caster
+// StringCaster handles casting to string values.
 type StringCaster struct{}
 
+// CastValue converts a single value to a string.
 func (c StringCaster) CastValue(val any) (res any, err error) {
 	var ok bool
 	switch v := val.(type) {
@@ -858,6 +870,7 @@ func (c StringCaster) CastValue(val any) (res any, err error) {
 	return
 }
 
+// CastSlice converts a slice of values to strings.
 func (c StringCaster) CastSlice(val any) (res any, err error) {
 	var ok bool
 	res = val
@@ -886,9 +899,10 @@ func (c StringCaster) CastSlice(val any) (res any, err error) {
 	return
 }
 
-// bytes caster
+// BytesCaster handles casting to byte slice values.
 type BytesCaster struct{}
 
+// CastValue converts a single value to a byte slice.
 func (c BytesCaster) CastValue(val any) (res any, err error) {
 	var (
 		ok bool
@@ -997,6 +1011,7 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 	return
 }
 
+// CastSlice converts a slice of values to byte slices.
 func (c BytesCaster) CastSlice(val any) (res any, err error) {
 	switch v := val.(type) {
 	case [][]byte:
@@ -1009,9 +1024,10 @@ func (c BytesCaster) CastSlice(val any) (res any, err error) {
 	return nil, castError(val, "[]byte")
 }
 
-// int128 caster
+// I128Caster handles casting to Int128 values.
 type I128Caster struct{}
 
+// CastValue converts a single value to an Int128.
 func (c I128Caster) CastValue(val any) (res any, err error) {
 	var ok bool
 	res = val
@@ -1063,6 +1079,7 @@ func (c I128Caster) CastValue(val any) (res any, err error) {
 	return
 }
 
+// CastSlice converts a slice of values to Int128 values.
 func (c I128Caster) CastSlice(val any) (res any, err error) {
 	switch v := val.(type) {
 	case []int64:
@@ -1071,15 +1088,55 @@ func (c I128Caster) CastSlice(val any) (res any, err error) {
 			cp[i] = num.Int128FromInt64(x)
 		}
 		return cp, nil
-		// ... other cases ...
+	case []int32:
+		cp := make([]num.Int128, len(v))
+		for i, x := range v {
+			cp[i] = num.Int128FromInt64(int64(x))
+		}
+		return cp, nil
+	case []int:
+		cp := make([]num.Int128, len(v))
+		for i, x := range v {
+			cp[i] = num.Int128FromInt64(int64(x))
+		}
+		return cp, nil
+	case []uint64:
+		cp := make([]num.Int128, len(v))
+		for i, x := range v {
+			cp[i] = num.Int128FromUint64(x)
+		}
+		return cp, nil
+	case []uint32:
+		cp := make([]num.Int128, len(v))
+		for i, x := range v {
+			cp[i] = num.Int128FromUint64(uint64(x))
+		}
+		return cp, nil
+	case []float64:
+		cp := make([]num.Int128, len(v))
+		for i, x := range v {
+			cp[i].SetFloat64(x)
+		}
+		return cp, nil
+	case []num.Int128:
+		return v, nil
+	case []num.Int256:
+		cp := make([]num.Int128, len(v))
+		for i, x := range v {
+			if !x.IsInt128() {
+				return nil, fmt.Errorf("cast: value at index %d out of range for int128", i)
+			}
+			cp[i] = x.Int128()
+		}
+		return cp, nil
 	}
-	// If we reach here, it means we couldn't cast the value
 	return nil, castError(val, "[]int128")
 }
 
-// int256 caster
+// I256Caster handles casting to Int256 values.
 type I256Caster struct{}
 
+// CastValue converts a single value to an Int256.
 func (c I256Caster) CastValue(val any) (res any, err error) {
 	var ok bool
 	res = val
@@ -1131,6 +1188,7 @@ func (c I256Caster) CastValue(val any) (res any, err error) {
 	return
 }
 
+// CastSlice converts a slice of values to Int256 values.
 func (c I256Caster) CastSlice(val any) (res any, err error) {
 	switch v := val.(type) {
 	case []int64:
@@ -1139,8 +1197,44 @@ func (c I256Caster) CastSlice(val any) (res any, err error) {
 			cp[i] = num.Int256FromInt64(x)
 		}
 		return cp, nil
-		// ... other cases ...
+	case []int32:
+		cp := make([]num.Int256, len(v))
+		for i, x := range v {
+			cp[i] = num.Int256FromInt64(int64(x))
+		}
+		return cp, nil
+	case []int:
+		cp := make([]num.Int256, len(v))
+		for i, x := range v {
+			cp[i] = num.Int256FromInt64(int64(x))
+		}
+		return cp, nil
+	case []uint64:
+		cp := make([]num.Int256, len(v))
+		for i, x := range v {
+			cp[i] = num.Int256FromUint64(x)
+		}
+		return cp, nil
+	case []uint32:
+		cp := make([]num.Int256, len(v))
+		for i, x := range v {
+			cp[i] = num.Int256FromUint64(uint64(x))
+		}
+		return cp, nil
+	case []float64:
+		cp := make([]num.Int256, len(v))
+		for i, x := range v {
+			cp[i].SetFloat64(x)
+		}
+		return cp, nil
+	case []num.Int128:
+		cp := make([]num.Int256, len(v))
+		for i, x := range v {
+			cp[i] = x.Int256()
+		}
+		return cp, nil
+	case []num.Int256:
+		return v, nil
 	}
-	// If we reach here, it means we couldn't cast the value
 	return nil, castError(val, "[]int256")
 }

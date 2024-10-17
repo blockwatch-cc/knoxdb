@@ -78,6 +78,10 @@ func (x Int256) Bytes() []byte {
 	return b32[:]
 }
 
+func Int256FromUint64(v uint64) Int256 {
+    return Int256{0, 0, 0, v}
+}
+
 // IsInt64 reports whether x can be represented as a int64.
 func (x Int256) IsInt64() bool {
 	return (x[0]|x[1]|x[2]|x[3]>>63) == 0 || (^x[0]|^x[1]|^x[2]) == 0
