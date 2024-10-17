@@ -352,23 +352,23 @@ func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 	case float64:
 		res, ok = T(v), !math.Signbit(v) && uint64(v)>>width == 0
 	case num.Decimal32:
-		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int32()>>width-1 == 0
+		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int32()>>(width-1) == 0
 	case num.Decimal64:
-		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int64()>>width-1 == 0
+		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int64()>>(width-1) == 0
 	case num.Decimal128:
-		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int128().IsInt64() && v.Int64()>>width-1 == 0
+		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int128().IsInt64() && v.Int64()>>(width-1) == 0
 	case num.Decimal256:
-		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int256().IsInt64() && v.Int64()>>width-1 == 0
+		res, ok = T(v.Int64()), v.Scale() == 0 && v.Int256().IsInt64() && v.Int64()>>(width-1) == 0
 	case num.Int128:
-		res, ok = T(v.Int64()), v.IsInt64() && v.Int64()>>width-1 == 0
+		res, ok = T(v.Int64()), v.IsInt64() && v.Int64()>>(width-1) == 0
 	case num.Int256:
-		res, ok = T(v.Int64()), v.IsInt64() && v.Int64()>>width-1 == 0
+		res, ok = T(v.Int64()), v.IsInt64() && v.Int64()>>(width-1) == 0
 	default:
 		// type aliases
 		vv := reflect.Indirect(reflect.ValueOf(val))
 		switch vv.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			res, ok = T(vv.Int()), vv.Int()>>width-1 == 0
+			res, ok = T(vv.Int()), vv.Int()>>(width-1) == 0
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			res, ok = T(vv.Uint()), vv.Uint()>>width == 0
 		}
@@ -475,7 +475,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	case []float64:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i], ok = T(v[i]), ok && !math.Signbit(float64(v[i])) && uint32(v[i])>>width == 0
+			cp[i], ok = T(v[i]), ok && !math.Signbit(float64(v[i])) && uint64(v[i])>>width == 0
 		}
 		if ok {
 			res = cp
@@ -483,7 +483,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	case []num.Decimal32:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i], ok = T(v[i].Int64()), ok && v[i].Scale() == 0 && v[i].Int32()>>width-1 == 0
+			cp[i], ok = T(v[i].Int64()), ok && v[i].Scale() == 0 && v[i].Int32()>>(width-1) == 0
 		}
 		if ok {
 			res = cp
@@ -491,7 +491,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	case []num.Decimal64:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i], ok = T(v[i].Int64()), ok && v[i].Scale() == 0 && v[i].Int64()>>width-1 == 0
+			cp[i], ok = T(v[i].Int64()), ok && v[i].Scale() == 0 && v[i].Int64()>>(width-1) == 0
 		}
 		if ok {
 			res = cp
@@ -499,7 +499,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	case []num.Decimal128:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i], ok = T(v[i].Int64()), v[i].Scale() == 0 && v[i].Int128().IsInt64() && v[i].Int64()>>width-1 == 0
+			cp[i], ok = T(v[i].Int64()), v[i].Scale() == 0 && v[i].Int128().IsInt64() && v[i].Int64()>>(width-1) == 0
 		}
 		if ok {
 			res = cp
@@ -507,7 +507,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	case []num.Decimal256:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i], ok = T(v[i].Int64()), v[i].Scale() == 0 && v[i].Int256().IsInt64() && v[i].Int64()>>width-1 == 0
+			cp[i], ok = T(v[i].Int64()), v[i].Scale() == 0 && v[i].Int256().IsInt64() && v[i].Int64()>>(width-1) == 0
 		}
 		if ok {
 			res = cp
@@ -515,7 +515,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	case []num.Int128:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i], ok = T(v[i].Int64()), v[i].IsInt64() && v[i].Int64()>>width-1 == 0
+			cp[i], ok = T(v[i].Int64()), v[i].IsInt64() && v[i].Int64()>>(width-1) == 0
 		}
 		if ok {
 			res = cp
@@ -523,7 +523,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	case []num.Int256:
 		cp := make([]T, len(v))
 		for i := range v {
-			cp[i], ok = T(v[i].Int64()), v[i].IsInt64() && v[i].Int64()>>width-1 == 0
+			cp[i], ok = T(v[i].Int64()), v[i].IsInt64() && v[i].Int64()>>(width-1) == 0
 		}
 		if ok {
 			res = cp
@@ -536,7 +536,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				cp := make([]T, vv.Len())
 				for i, l := 0, vv.Len(); i < l; i++ {
-					cp[i], ok = T(vv.Index(i).Int()), vv.Int()>>width-1 == 0
+					cp[i], ok = T(vv.Index(i).Int()), vv.Int()>>(width-1) == 0
 				}
 				if ok {
 					res = cp
@@ -544,7 +544,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				cp := make([]T, vv.Len())
 				for i, l := 0, vv.Len(); i < l; i++ {
-					cp[i], ok = T(vv.Index(i).Uint()), vv.Int()>>width-1 == 0
+					cp[i], ok = T(vv.Index(i).Uint()), vv.Int()>>(width-1) == 0
 				}
 				if ok {
 					res = cp
