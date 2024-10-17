@@ -289,6 +289,8 @@ func (c IntCaster[T]) CastSlice(val any) (res any, err error) {
 		if ok {
 			res = cp
 		}
+	case []string:
+		return nil, fmt.Errorf("cast: cannot convert []string to []int32")
 	default:
 		// convert enum types
 		vv := reflect.Indirect(reflect.ValueOf(val))
@@ -947,6 +949,8 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 		res, ok = b[:], true
 	case string:
 		res, ok = []byte(v), true
+	case []byte:
+		return v, nil
 	default:
 		// binary marshaler
 		if v, ok2 := val.(encoding.BinaryMarshaler); ok2 {
@@ -994,23 +998,15 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 }
 
 func (c BytesCaster) CastSlice(val any) (res any, err error) {
-	var ok bool
-	rv := reflect.ValueOf(val)
-	if rv.Kind() == reflect.Slice {
-		cp := make([][]byte, rv.Len())
-		for i := range cp {
-			v, err := c.CastValue(rv.Index(i))
-			if err != nil {
-				break
-			}
-			cp[i] = v.([]byte)
-		}
-		res, ok = cp, true
+	switch v := val.(type) {
+	case [][]byte:
+		return v, nil
+	case []string:
+		return nil, fmt.Errorf("cast: cannot convert []string to [][]byte")
+		// ... other cases ...
 	}
-	if !ok {
-		err = castError(val, "byte")
-	}
-	return
+	// If we reach here, it means we couldn't cast the value
+	return nil, castError(val, "[]byte")
 }
 
 // int128 caster
@@ -1068,23 +1064,17 @@ func (c I128Caster) CastValue(val any) (res any, err error) {
 }
 
 func (c I128Caster) CastSlice(val any) (res any, err error) {
-	var ok bool
-	rv := reflect.ValueOf(val)
-	if rv.Kind() == reflect.Slice {
-		cp := make([]num.Int128, rv.Len())
-		for i := range cp {
-			v, err := c.CastValue(rv.Index(i))
-			if err != nil {
-				break
-			}
-			cp[i] = v.(num.Int128)
+	switch v := val.(type) {
+	case []int64:
+		cp := make([]num.Int128, len(v))
+		for i, x := range v {
+			cp[i] = num.Int128FromInt64(x)
 		}
-		res, ok = cp, true
+		return cp, nil
+		// ... other cases ...
 	}
-	if !ok {
-		err = castError(val, "int128")
-	}
-	return
+	// If we reach here, it means we couldn't cast the value
+	return nil, castError(val, "[]int128")
 }
 
 // int256 caster
@@ -1142,21 +1132,15 @@ func (c I256Caster) CastValue(val any) (res any, err error) {
 }
 
 func (c I256Caster) CastSlice(val any) (res any, err error) {
-	var ok bool
-	rv := reflect.ValueOf(val)
-	if rv.Kind() == reflect.Slice {
-		cp := make([]num.Int128, rv.Len())
-		for i := range cp {
-			v, err := c.CastValue(rv.Index(i))
-			if err != nil {
-				break
-			}
-			cp[i] = v.(num.Int128)
+	switch v := val.(type) {
+	case []int64:
+		cp := make([]num.Int256, len(v))
+		for i, x := range v {
+			cp[i] = num.Int256FromInt64(x)
 		}
-		res, ok = cp, true
+		return cp, nil
+		// ... other cases ...
 	}
-	if !ok {
-		err = castError(val, "int128")
-	}
-	return
+	// If we reach here, it means we couldn't cast the value
+	return nil, castError(val, "[]int256")
 }

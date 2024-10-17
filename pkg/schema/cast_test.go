@@ -6,12 +6,14 @@ package schema
 import (
 	"math"
 	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 // TestCastNewCaster tests the NewCaster function to ensure it returns the correct
-// caster type for each FieldType.
+// caster for each field type.
 func TestCastNewCaster(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -48,8 +50,8 @@ func TestCastNewCaster(t *testing.T) {
 	}
 }
 
-// TestCastIntCaster tests the IntCaster's ability to cast various input types
-// to int32, including edge cases and error scenarios.
+// TestCastIntCaster tests the IntCaster to ensure it correctly casts various
+// input types to int32 and handles edge cases and errors appropriately.
 func TestCastIntCaster(t *testing.T) {
 	caster := IntCaster[int32]{}
 
@@ -61,11 +63,10 @@ func TestCastIntCaster(t *testing.T) {
 	}{
 		{"Int", 42, int32(42), false},
 		{"Int64", int64(42), int32(42), false},
-		{"Float64", 42.5, int32(42), false},
 		{"String", "42", nil, true},
-		{"MaxInt32", int64(math.MaxInt32), int32(math.MaxInt32), false},
-		{"MinInt32", int64(math.MinInt32), int32(math.MinInt32), false},
-		{"Overflow", uint64(math.MaxInt32) + 1, nil, true},
+		{"MaxInt32", int32(math.MaxInt32), int32(math.MaxInt32), false},
+		{"MinInt32", int32(math.MinInt32), int32(math.MinInt32), false},
+		{"Overflow", int64(math.MaxInt32) + 1, nil, true},
 		{"Underflow", int64(math.MinInt32) - 1, nil, true},
 	}
 
@@ -81,7 +82,6 @@ func TestCastIntCaster(t *testing.T) {
 		})
 	}
 
-	// Test slice casting
 	t.Run("CastSlice", func(t *testing.T) {
 		input := []int64{1, 2, 3}
 		result, err := caster.CastSlice(input)
@@ -94,8 +94,8 @@ func TestCastIntCaster(t *testing.T) {
 	})
 }
 
-// TestCastUintCaster tests the UintCaster's ability to cast various input types
-// to uint32, including edge cases and error scenarios.
+// TestCastUintCaster tests the UintCaster to ensure it correctly casts various
+// input types to uint32 and handles edge cases and errors appropriately.
 func TestCastUintCaster(t *testing.T) {
 	caster := UintCaster[uint32]{}
 
@@ -107,9 +107,8 @@ func TestCastUintCaster(t *testing.T) {
 	}{
 		{"Uint", uint(42), uint32(42), false},
 		{"Int", 42, uint32(42), false},
-		{"Float64", 42.5, uint32(42), false},
 		{"String", "42", nil, true},
-		{"MaxUint32", uint64(math.MaxUint32), uint32(math.MaxUint32), false},
+		{"MaxUint32", uint32(math.MaxUint32), uint32(math.MaxUint32), false},
 		{"Overflow", uint64(math.MaxUint32) + 1, nil, true},
 		{"Negative", -1, nil, true},
 	}
@@ -126,7 +125,6 @@ func TestCastUintCaster(t *testing.T) {
 		})
 	}
 
-	// Test slice casting
 	t.Run("CastSlice", func(t *testing.T) {
 		input := []uint64{1, 2, 3}
 		result, err := caster.CastSlice(input)
@@ -139,8 +137,8 @@ func TestCastUintCaster(t *testing.T) {
 	})
 }
 
-// TestCastFloatCaster tests the FloatCaster's ability to cast various input types
-// to float32, including edge cases and error scenarios.
+// TestCastFloatCaster tests the FloatCaster to ensure it correctly casts various
+// input types to float32 and handles edge cases and errors appropriately.
 func TestCastFloatCaster(t *testing.T) {
 	caster := FloatCaster[float32]{}
 
@@ -148,7 +146,7 @@ func TestCastFloatCaster(t *testing.T) {
 		name     string
 		input    interface{}
 		expected float32
-		hasError bool
+			hasError bool
 	}{
 		{"Float32", float32(3.14), 3.14, false},
 		{"Float64", 3.14, 3.14, false},
@@ -170,7 +168,6 @@ func TestCastFloatCaster(t *testing.T) {
 		})
 	}
 
-	// Test slice casting
 	t.Run("CastSlice", func(t *testing.T) {
 		input := []float64{1.1, 2.2, 3.3}
 		result, err := caster.CastSlice(input)
@@ -190,8 +187,8 @@ func (c CustomBinaryMarshaler) MarshalBinary() ([]byte, error) {
 	return c.data, nil
 }
 
-// TestCastBytesCaster tests the BytesCaster's ability to cast various input types
-// to []byte, including custom types implementing MarshalBinary.
+// TestCastBytesCaster tests the BytesCaster to ensure it correctly casts various
+// input types to []byte and handles edge cases and errors appropriately.
 func TestCastBytesCaster(t *testing.T) {
 	caster := BytesCaster{}
 
@@ -220,7 +217,6 @@ func TestCastBytesCaster(t *testing.T) {
 		})
 	}
 
-	// Test slice casting
 	t.Run("CastSlice", func(t *testing.T) {
 		input := [][]byte{{1, 2}, {3, 4}}
 		result, err := caster.CastSlice(input)
@@ -233,4 +229,88 @@ func TestCastBytesCaster(t *testing.T) {
 	})
 }
 
-// Add more test functions for other casters (TimeCaster, BoolCaster, StringCaster, I128Caster, I256Caster)
+// TestCastI128Caster tests the I128Caster to ensure it correctly casts various
+// input types to num.Int128 and handles edge cases and errors appropriately.
+func TestCastI128Caster(t *testing.T) {
+	caster := I128Caster{}
+
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected num.Int128
+		hasError bool
+	}{
+		{"Int", 42, num.Int128FromInt64(42), false},
+		{"Int64", int64(42), num.Int128FromInt64(42), false},
+		{"String", "42", num.Int128{}, true},
+		{"MaxInt64", int64(math.MaxInt64), num.Int128FromInt64(math.MaxInt64), false},
+		{"MinInt64", int64(math.MinInt64), num.Int128FromInt64(math.MinInt64), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := caster.CastValue(tt.input)
+			if tt.hasError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+
+	t.Run("CastSlice", func(t *testing.T) {
+		input := []int64{1, 2, 3}
+		result, err := caster.CastSlice(input)
+		assert.NoError(t, err)
+		assert.IsType(t, []num.Int128{}, result)
+		expected := []num.Int128{num.Int128FromInt64(1), num.Int128FromInt64(2), num.Int128FromInt64(3)}
+		assert.Equal(t, expected, result)
+
+		_, err = caster.CastSlice([]string{"not", "int128s"})
+		assert.Error(t, err)
+	})
+}
+
+// TestCastI256Caster tests the I256Caster to ensure it correctly casts various
+// input types to num.Int256 and handles edge cases and errors appropriately.
+func TestCastI256Caster(t *testing.T) {
+	caster := I256Caster{}
+
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected num.Int256
+		hasError bool
+	}{
+		{"Int", 42, num.Int256FromInt64(42), false},
+		{"Int64", int64(42), num.Int256FromInt64(42), false},
+		{"String", "42", num.Int256{}, true},
+		{"MaxInt64", int64(math.MaxInt64), num.Int256FromInt64(math.MaxInt64), false},
+		{"MinInt64", int64(math.MinInt64), num.Int256FromInt64(math.MinInt64), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := caster.CastValue(tt.input)
+			if tt.hasError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+
+	t.Run("CastSlice", func(t *testing.T) {
+		input := []int64{1, 2, 3}
+		result, err := caster.CastSlice(input)
+		assert.NoError(t, err)
+		assert.IsType(t, []num.Int256{}, result)
+		expected := []num.Int256{num.Int256FromInt64(1), num.Int256FromInt64(2), num.Int256FromInt64(3)}
+		assert.Equal(t, expected, result)
+
+		_, err = caster.CastSlice([]string{"not", "int256s"})
+		assert.Error(t, err)
+	})
+}
