@@ -138,8 +138,7 @@ func (c IntCaster[T]) CastValue(val any) (res any, err error) {
 		}
 	}
 	if !ok {
-		var t T
-		err = castError(val, "int"+strconv.Itoa(int(unsafe.Sizeof(t)*8)))
+		err = castError(val, "int"+strconv.Itoa(int(width)))
 	}
 	return
 }
@@ -315,8 +314,7 @@ func (c IntCaster[T]) CastSlice(val any) (res any, err error) {
 		}
 	}
 	if !ok {
-		var t T
-		err = castError(val, "int"+strconv.Itoa(int(unsafe.Sizeof(t)*8)))
+		err = castError(val, "int"+strconv.Itoa(int(width)))
 	}
 	return
 }
