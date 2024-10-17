@@ -22,6 +22,7 @@ func TestParsers(t *testing.T) {
 	t.Run("EdgeCases", testEdgeCases)
 }
 
+// testSingleValueParsing tests parsing of single values for various field types.
 func testSingleValueParsing(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -69,6 +70,7 @@ func testSingleValueParsing(t *testing.T) {
 	}
 }
 
+// testSliceParsing tests parsing of slice values for various field types.
 func testSliceParsing(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -97,6 +99,7 @@ func testSliceParsing(t *testing.T) {
 	}
 }
 
+// testErrorHandling tests error handling for invalid input values.
 func testErrorHandling(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -120,6 +123,8 @@ func testErrorHandling(t *testing.T) {
 	}
 }
 
+// testEdgeCases tests parsing of edge cases like empty strings, unicode strings,
+// and extreme numerical values.
 func testEdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -162,16 +167,7 @@ func testEdgeCases(t *testing.T) {
 	})
 }
 
-func BenchmarkParsing(b *testing.B) {
-	parser := NewParser(types.FieldTypeInt64, 0)
-	input := "1234567890"
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = parser.ParseValue(input)
-	}
-}
-
+// TestIntegerParsing tests parsing of integer types, including empty and single-element slices.
 func TestIntegerParsing(t *testing.T) {
 	integerTests := []struct {
 		name      string
