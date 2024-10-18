@@ -154,7 +154,7 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 		switch code {
 		default:
 			// int, uint, float, bool
-			_, err = d.buf.Read(unsafe.Slice((*byte)(ptr), field.dataSize))
+			_, err = d.buf.Read(unsafe.Slice((*byte)(ptr), field.wireSize))
 
 		case OpCodeFixedArray:
 			_, err = d.buf.Read(unsafe.Slice((*byte)(ptr), field.fixed))

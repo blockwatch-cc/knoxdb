@@ -182,7 +182,6 @@ func reflectStructField(f reflect.StructField) (field Field, err error) {
 	// fill en/decoder info
 	field.path = f.Index
 	field.offset = f.Offset
-	field.dataSize = uint16(f.Type.Size()) // uintptr
 	field.wireSize = uint16(field.WireSize())
 
 	return
