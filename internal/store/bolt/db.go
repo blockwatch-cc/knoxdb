@@ -305,6 +305,17 @@ func (db *db) close() error {
 	return nil
 }
 
+func (db *db) Sync() error {
+	db.closeLock.Lock()
+	defer db.closeLock.Unlock()
+
+	if db.closed {
+		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+	}
+
+	return db.store.Sync()
+}
+
 // filesExists reports whether the named file or directory exists.
 func fileExists(name string) bool {
 	if _, err := os.Stat(name); err != nil {

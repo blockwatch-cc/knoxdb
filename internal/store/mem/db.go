@@ -331,6 +331,11 @@ func (db *db) close() error {
 	return nil
 }
 
+func (db *db) Sync() error {
+	// noop
+	return nil
+}
+
 // initDB creates the initial buckets and values used by the package.  This is
 // mainly in a separate function for testing purposes.
 func initDB(db *db) error {
