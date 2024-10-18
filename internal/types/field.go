@@ -36,30 +36,6 @@ var (
 	fieldTypeIdx     = [...]int{0, 2, 11, 17, 24, 32, 40, 47, 53, 59, 65, 70, 77, 84, 90, 98, 105, 112, 123, 134, 144, 154}
 	fieldTypeReverse = map[string]FieldType{}
 
-	fieldTypeDataSize = [...]int{
-		FieldTypeInvalid:    0,
-		FieldTypeDatetime:   8,
-		FieldTypeInt64:      8,
-		FieldTypeUint64:     8,
-		FieldTypeFloat64:    8,
-		FieldTypeBoolean:    1,
-		FieldTypeString:     16,
-		FieldTypeBytes:      24,
-		FieldTypeInt32:      4,
-		FieldTypeInt16:      2,
-		FieldTypeInt8:       1,
-		FieldTypeUint32:     4,
-		FieldTypeUint16:     2,
-		FieldTypeUint8:      1,
-		FieldTypeFloat32:    4,
-		FieldTypeInt256:     32,
-		FieldTypeInt128:     16,
-		FieldTypeDecimal256: 32,
-		FieldTypeDecimal128: 16,
-		FieldTypeDecimal64:  8,
-		FieldTypeDecimal32:  4,
-	}
-
 	fieldTypeWireSize = [...]int{
 		FieldTypeInvalid:    0,
 		FieldTypeDatetime:   8,

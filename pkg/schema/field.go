@@ -31,7 +31,6 @@ type Field struct {
 	isArray  bool             // field is a fixed size array
 	path     []int            // reflect struct nested positions
 	offset   uintptr          // struct field offset from reflect
-	dataSize uint16           // struct field size in bytes
 	wireSize uint16           // wire encoding field size in bytes, min size for []byte & string
 	iface    types.IfaceFlags // Go encoder default interfaces
 	enum     *EnumDictionary  // dynamic enum data
@@ -59,7 +58,6 @@ type ExportedField struct {
 func NewField(typ types.FieldType) Field {
 	return Field{
 		typ:      typ,
-		dataSize: uint16(typ.Size()),
 		wireSize: uint16(typ.Size()),
 	}
 }
@@ -202,11 +200,9 @@ func (f Field) WithGoType(typ reflect.Type, path []int, ofs uintptr) Field {
 	if typ.Implements(stringerType) {
 		iface |= types.IfaceStringer
 	}
-	f.dataSize = uint16(typ.Size())
 	f.wireSize = uint16(typ.Size())
 	if typ.Kind() == reflect.Array && typ.Elem().Kind() == reflect.Uint8 {
 		f.isArray = true
-		f.dataSize = uint16(typ.Len())
 		f.wireSize = uint16(typ.Len())
 	}
 	if f.flags.Is(types.FieldFlagEnum) {

@@ -576,7 +576,7 @@ func (s *Schema) String() string {
 	)
 	for i := range s.fields {
 		f := &s.fields[i]
-		fmt.Fprintf(&b, "\n  Field #%d: id=%d %s %s flags=%08b index=%d fixed=%d scale=%d arr=%t sz=%d/%d iface=%08b enc=%s dec=%s",
+		fmt.Fprintf(&b, "\n  Field #%d: id=%d %s %s flags=%08b index=%d fixed=%d scale=%d arr=%t sz=%d iface=%08b enc=%s dec=%s",
 			i,
 			f.id,
 			f.name,
@@ -586,7 +586,6 @@ func (s *Schema) String() string {
 			f.fixed,
 			f.scale,
 			f.isArray,
-			f.dataSize,
 			f.wireSize,
 			f.iface,
 			s.encode[i],
