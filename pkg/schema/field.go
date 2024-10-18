@@ -110,6 +110,10 @@ func (f *Field) Fixed() uint16 {
 	return f.fixed
 }
 
+func (f *Field) Enum() *EnumDictionary {
+	return f.enum
+}
+
 func (f *Field) IsValid() bool {
 	return len(f.name) > 0 && f.typ.IsValid()
 }
@@ -169,6 +173,11 @@ func (f Field) WithFixed(n uint16) Field {
 
 func (f Field) WithScale(n uint8) Field {
 	f.scale = n
+	return f
+}
+
+func (f Field) WithEnum(d *EnumDictionary) Field {
+	f.enum = d
 	return f
 }
 

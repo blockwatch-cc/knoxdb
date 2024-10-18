@@ -101,10 +101,11 @@ func (r Request) Query(key string) (*query.QueryPlan, error) {
 	}
 
 	// derive query schema from table schema
-	s, err := r.table.Schema().SelectNames(key, false, cols...)
+	s, err := r.table.Schema().SelectFields(cols...)
 	if err != nil {
 		return nil, err
 	}
+	s.WithName(key)
 
 	filters, err := query.Range("time", r.Range.From, r.Range.To).
 		Compile(r.table.Schema())
@@ -165,14 +166,18 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 	// identify groupBy column
 	var (
 		groupByIndex int = -1
-		groupByEnum  schema.EnumLUT
+		groupByEnum  *schema.EnumDictionary
 	)
 	if req.GroupBy != "" {
 		groupByIndex, ok = plan.ResultSchema.FieldIndexByName(req.GroupBy)
 		if !ok {
 			return nil, fmt.Errorf("unknown group_by field %q", req.GroupBy)
 		}
-		groupByEnum, _ = schema.LookupEnum(req.GroupBy)
+		f, ok := plan.ResultSchema.FieldByName(req.GroupBy)
+		if !ok {
+			return nil, fmt.Errorf("unknown group_by field %q", req.GroupBy)
+		}
+		groupByEnum = f.Enum()
 	} else {
 		res.groups = append(res.groups, "")
 	}
