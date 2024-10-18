@@ -78,7 +78,7 @@ type MyEnum string
 
 var myEnum *EnumDictionary
 
-func TestMain(m *testing.M) {
+func TestMainStart(m *testing.T) {
 	myEnum = NewEnumDictionary("enum")
 	myEnum.Append("a", "b", "c", "d", "e")
 	RegisterEnum(0, myEnum)
