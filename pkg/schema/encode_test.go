@@ -74,16 +74,6 @@ type encodeTestStruct struct {
 	I256      num.Int256     `knox:"i256"`
 }
 
-type MyEnum string
-
-var myEnum *EnumDictionary
-
-func TestMain(m *testing.M) {
-	myEnum = NewEnumDictionary("enum")
-	myEnum.Append("a", "b", "c", "d", "e")
-	RegisterEnum(0, myEnum)
-}
-
 func makeTestData(sz int) (res []encodeTestStruct) {
 	for i := 1; i <= sz; i++ {
 		res = append(res, encodeTestStruct{

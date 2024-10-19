@@ -13,6 +13,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Register a global emun and dictionary for all schema tests
+type MyEnum string
+
+var myEnum *EnumDictionary
+
+func TestMain(m *testing.M) {
+	myEnum = NewEnumDictionary("my_enum")
+	myEnum.Append("a", "b", "c", "d", "e")
+	RegisterEnum(0, myEnum)
+	m.Run()
+}
+
 func (e *EnumDictionary) dump() {
 	fmt.Printf("Values\n%s", hex.Dump(e.values))
 	fmt.Printf("Offsets %v\n", e.offsets)

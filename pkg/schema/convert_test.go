@@ -50,11 +50,11 @@ func TestSchemaMapping(t *testing.T) {
 	b2r, err := reorderSchema.MapTo(baseSchema)
 	require.NoError(t, err)
 	require.Len(t, b2r, baseSchema.NumFields())
-	require.Equal(t, []int{2, 1, -1, -1, -1, -1, 0, -1, -1, 3, -1, -1, -1, -1, -1, -1, -1, 7, 4, 6, -1, 5}, b2r)
+	require.Equal(t, []int{2, 1, -1, -1, -1, -1, 0, -1, -1, 3, -1, -1, -1, -1, -1, -1, -1, 7, 4, 6, -1, 5, -1}, b2r)
 }
 
 func TestSchemaConvert(t *testing.T) {
-	baseSchema := MustSchemaOf(AllTypes{})
+	baseSchema := MustSchemaOf(AllTypes{}).WithEnum(myEnum)
 	baseEnc := NewEncoder(baseSchema)
 
 	// sub schema, same order

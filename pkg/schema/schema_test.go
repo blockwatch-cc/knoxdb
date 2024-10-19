@@ -160,7 +160,7 @@ func NewAllTypes(i int64) AllTypes {
 		Hash:    Uint64Bytes(uint64(i)),
 		Array:   [2]byte{byte(i >> 8 & 0xf), byte(i & 0xf)},
 		String:  hex.EncodeToString(Uint64Bytes(uint64(i))),
-		MyEnum:  MyEnum("one"),
+		MyEnum:  MyEnum("a"),
 	}
 }
 
@@ -550,7 +550,7 @@ var schemaTestCases = []schemaTest{
 	{
 		name:    "all_types",
 		build:   GenericSchema[AllTypes],
-		fields:  "id,i64,i32,i16,i8,u64,u32,u16,u8,f64,f32,d32,d64,d128,d256,i128,i256,bool,time,bytes,array[2],string,u16",
+		fields:  "id,i64,i32,i16,i8,u64,u32,u16,u8,f64,f32,d32,d64,d128,d256,i128,i256,bool,time,bytes,array[2],string,my_enum",
 		typs:    []types.FieldType{FT_U64, FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8, FT_F64, FT_F32, FT_D32, FT_D64, FT_D128, FT_D256, FT_I128, FT_I256, FT_BOOL, FT_TIME, FT_BYTES, FT_BYTES, FT_STRING, FT_U16},
 		flags:   []types.FieldFlags{types.FieldFlagPrimary, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, types.FieldFlagEnum},
 		scales:  []uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 15, 18, 24, 0, 0, 0, 0, 0, 0, 0, 0},
