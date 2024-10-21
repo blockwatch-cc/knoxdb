@@ -145,8 +145,10 @@ func (f *Field) WireSize() int {
 		if f.fixed > 0 {
 			return int(f.fixed)
 		}
+		return 4 // uint32 for size on the wire
+	default:
+		return f.typ.Size()
 	}
-	return f.typ.Size()
 }
 
 // WithXXX methods do not use pointer receivers and always return a
@@ -742,4 +744,13 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 	binary.Read(buf, LE, &f.scale)
 
 	return f.Validate()
+}
+
+func (f Field) DataSize() int {
+	switch f.typ {
+	case types.FieldTypeString, types.FieldTypeBytes:
+		return 16
+	default:
+		return f.typ.Size()
+	}
 }
