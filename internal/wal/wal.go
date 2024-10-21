@@ -142,10 +142,10 @@ func Create(opts WalOptions) (*Wal, error) {
 
 func possibleMaxLsn(opts WalOptions) (maxLsn LSN, err error) {
 	opts.Logger.Debugf("wal: walking %s for possible highest segment file", opts.Path)
-	var lastSegmentEntry fs.FileInfo
+	var last fs.FileInfo
 	err = filepath.Walk(opts.Path, func(path string, d fs.FileInfo, err error) error {
 		if filepath.Ext(d.Name()) == SEG_FILE_SUFFIX {
-			lastSegmentEntry = d
+			last = d
 		}
 		if d.IsDir() && opts.Path != path {
 			return filepath.SkipDir
@@ -155,12 +155,14 @@ func possibleMaxLsn(opts WalOptions) (maxLsn LSN, err error) {
 	if err != nil {
 		return
 	}
-	if lastSegmentEntry != nil {
-		id, err := strconv.ParseInt(strings.TrimSuffix(lastSegmentEntry.Name(), filepath.Ext(lastSegmentEntry.Name())), 10, 0)
+	if last != nil {
+		name := last.Name()
+		name = strings.TrimSuffix(name, filepath.Ext(name))
+		id, err := strconv.ParseInt(name, 10, 0)
 		if err != nil {
 			return 0, err
 		}
-		maxLsn = LSN(int(id)*opts.MaxSegmentSize + opts.MaxSegmentSize)
+		maxLsn = LSN(id*int64(opts.MaxSegmentSize) + last.Size())
 	}
 	return maxLsn, nil
 }
@@ -258,16 +260,37 @@ func (w *Wal) Len() int64 {
 	return int64(w.lsn)
 }
 
+func (w *Wal) Write(rec *Record) (LSN, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.write(rec)
+}
+
+func (w *Wal) WriteAndSync(rec *Record) (LSN, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	lsn, err := w.write(rec)
+	if err != nil {
+		return 0, err
+	}
+	err = w.sync()
+	return lsn, err
+}
+
 func (w *Wal) Sync() error {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.sync()
+}
+
+func (w *Wal) sync() error {
 	if err := w.wr.Flush(); err != nil {
 		return err
 	}
 	return w.active.Sync()
 }
 
-func (w *Wal) Write(rec *Record) (LSN, error) {
+func (w *Wal) write(rec *Record) (LSN, error) {
 	if w.IsClosed() {
 		return 0, ErrWalClosed
 	}
@@ -277,9 +300,6 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 	if err := rec.Validate(); err != nil {
 		return 0, err
 	}
-
-	w.mu.Lock()
-	defer w.mu.Unlock()
 
 	w.log.Trace(rec.Trace)
 
@@ -294,7 +314,7 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 	lsn := w.lsn
 
 	// write header
-	_, err := w.write(head[:])
+	_, err := w.writeBuffer(head[:])
 	if err != nil {
 		if err2 := w.truncate(lsn); err2 != nil {
 			return 0, err2
@@ -303,7 +323,7 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 	}
 
 	// write body
-	_, err = w.write(rec.Data)
+	_, err = w.writeBuffer(rec.Data)
 	if err != nil {
 		if err2 := w.truncate(lsn); err2 != nil {
 			return 0, err2
@@ -319,7 +339,7 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 }
 
 // must hold exclusive lock
-func (w *Wal) write(buf []byte) (int, error) {
+func (w *Wal) writeBuffer(buf []byte) (int, error) {
 	space := w.active.Cap() - (BufferSize - w.wr.Available())
 	if space >= len(buf) {
 		return w.wr.Write(buf)

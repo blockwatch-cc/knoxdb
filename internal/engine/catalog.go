@@ -6,10 +6,12 @@ package engine
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
@@ -26,9 +28,7 @@ import (
 // - options: key=name_hash, val=options
 // - schemas: key=name_hash:schema_hash, val=schema
 // - database
-//   - name
-//   - createdAt
-//   - lastTxId -> state
+//   - checkpoint
 // - tables
 //   - name_hash
 //     - name
@@ -72,7 +72,7 @@ const (
 
 var (
 	// buckets
-	databaseKey  = []byte("database")  // name, created_at, last_txid
+	databaseKey  = []byte("database")  // unused
 	schemasKey   = []byte("schemas")   // tag:schema => serialized schema
 	optionsKey   = []byte("options")   // tag => serialized options (db, table, store, view, ..)
 	tablesKey    = []byte("tables")    // tag => name=str, schema=u64
@@ -84,11 +84,12 @@ var (
 	streamsKey   = []byte("streams")   // key => serialized stream config
 
 	// keys
-	schemaKey = []byte("schema")
-	tableKey  = []byte("table")
-	nameKey   = []byte("name")
-	statusKey = []byte("status")
-	dataKey   = []byte("data")
+	schemaKey     = []byte("schema")
+	tableKey      = []byte("table")
+	nameKey       = []byte("name")
+	statusKey     = []byte("status")
+	dataKey       = []byte("data")
+	checkpointKey = []byte("checkpoint")
 )
 
 var DefaultDatabaseOptions = DatabaseOptions{
@@ -96,22 +97,34 @@ var DefaultDatabaseOptions = DatabaseOptions{
 	Driver:          "bolt",
 	PageSize:        1024,
 	PageFill:        0.8,
-	CacheSize:       16 * 1 << 20,
+	CacheSize:       16 << 20,
 	WalSegmentSize:  128 << 20,
 	WalRecoveryMode: wal.RecoveryModeTruncate,
 }
 
 // knoxdb.schemas.catalog.v1
 type Catalog struct {
-	mu   sync.RWMutex
-	db   store.DB
-	name string
+	mu         sync.RWMutex        // guard write access to catalog internals
+	db         store.DB            // catalog database file
+	path       string              // database path, used for object file cleanup
+	name       string              // database name
+	id         uint64              // database tag
+	wal        *wal.Wal            // copy of wal managed by engine
+	checkpoint wal.LSN             // latest wal checkpoint that is safe in db
+	pending    map[uint64][]Object // active txids pending updates waiting for commit/abort
 }
 
 func NewCatalog(name string) *Catalog {
 	return &Catalog{
-		name: name,
+		name:    name,
+		id:      types.TaggedHash(types.ObjectTagDatabase, name),
+		pending: make(map[uint64][]Object),
 	}
+}
+
+func (c *Catalog) WithWal(w *wal.Wal) *Catalog {
+	c.wal = w
+	return c
 }
 
 func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
@@ -133,6 +146,7 @@ func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 		_ = db.Close()
 		return err
 	}
+	c.path = filepath.Join(opts.Path, c.name)
 	c.db = db
 
 	// init table storage
@@ -157,6 +171,21 @@ func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 		}
 	}
 
+	// // init wal
+	// dbid := types.TaggedHash(types.ObjectTagDatabase, c.name)
+	// c.wal, err = redolog.Create(redolog.Options{
+	// 	Seed:         dbid,
+	// 	Path:         filepath.Join(opts.Path, c.name, "wal"),
+	// 	Entity:       dbid,
+	// 	SegmentId:    0, // catalog uses single segment only
+	// 	RecoveryMode: opts.WalRecoveryMode,
+	// 	Logger:       opts.Logger,
+	// })
+	// if err != nil {
+	// 	_ = db.Close()
+	// 	return err
+	// }
+
 	return nil
 }
 
@@ -177,13 +206,44 @@ func (c *Catalog) Open(ctx context.Context, opts DatabaseOptions) error {
 	mft, err := db.Manifest()
 	if err != nil {
 		opts.Logger.Errorf("missing manifest: %v", err)
+		db.Close()
 		return ErrDatabaseCorrupt
 	}
 	err = mft.Validate(c.name, "*", CATALOG_TYPE, CATALOG_VERSION)
 	if err != nil {
 		opts.Logger.Errorf("schema mismatch: %v", err)
+		db.Close()
 		return schema.ErrSchemaMismatch
 	}
+	c.path = filepath.Join(opts.Path, c.name)
+
+	// // open wal
+	// dbid := types.TaggedHash(types.ObjectTagDatabase, c.name)
+	// c.wal, err = redolog.Open(redolog.Options{
+	// 	Seed:         dbid,
+	// 	Path:         filepath.Join(opts.Path, c.name, "wal"),
+	// 	Entity:       dbid,
+	// 	SegmentId:    0, // catalog uses single segment only
+	// 	RecoveryMode: opts.WalRecoveryMode,
+	// 	Logger:       opts.Logger,
+	// })
+	// if err != nil {
+	// 	_ = db.Close()
+	// 	return err
+	// }
+
+	// return c.recover(ctx)
+
+	// load checkpoint
+	err = db.View(func(tx store.Tx) error {
+		c.checkpoint = wal.LSN(BE.Uint64(tx.Bucket(databaseKey).Get(checkpointKey)))
+		return nil
+	})
+	if err != nil {
+		db.Close()
+		return err
+	}
+
 	c.db = db
 
 	return nil
@@ -195,12 +255,55 @@ func (c *Catalog) Close(ctx context.Context) error {
 	if c.db == nil {
 		return nil
 	}
-	err := c.db.Close()
+	clear(c.pending)
+
+	// store checkpoint record in wal and write checkpoint
+	err := c.doCheckpoint(ctx)
 	if err != nil {
 		return err
 	}
+
+	err2 := c.db.Close()
+	c.wal = nil
 	c.db = nil
-	return nil
+
+	if err != nil {
+		return err
+	}
+	return err2
+}
+
+func (c *Catalog) Checkpoint() wal.LSN {
+	return c.checkpoint
+}
+
+func (c *Catalog) PutCheckpoint(ctx context.Context, lsn wal.LSN) error {
+	writeCheckpoint := func(tx store.Tx) error {
+		bucket := tx.Bucket(databaseKey)
+		if bucket == nil {
+			return ErrDatabaseCorrupt
+		}
+		var b [8]byte
+		BE.PutUint64(b[:], uint64(lsn))
+		err := bucket.Put(checkpointKey, b[:])
+		if err != nil {
+			return err
+		}
+		c.checkpoint = lsn
+		return nil
+	}
+
+	// when run with a managed tx we reuse it here, otherwise we open
+	// a separate storage tx
+	if etx := GetTransaction(ctx); etx != nil {
+		tx, err := etx.CatalogTx(c.db, true)
+		if err != nil {
+			return err
+		}
+		return writeCheckpoint(tx)
+	} else {
+		return c.db.Update(writeCheckpoint)
+	}
 }
 
 func (c *Catalog) GetSchema(ctx context.Context, key uint64) (*schema.Schema, error) {
@@ -276,6 +379,9 @@ func (c *Catalog) GetOptions(ctx context.Context, key uint64, opts any) error {
 }
 
 func (c *Catalog) PutOptions(ctx context.Context, key uint64, opts any) error {
+	if opts == nil {
+		return nil
+	}
 	s, err := schema.SchemaOf(opts)
 	if err != nil {
 		return err
@@ -342,9 +448,6 @@ func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *schema.Schema, o
 }
 
 func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o TableOptions) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if err := c.PutSchema(ctx, s); err != nil {
 		return err
 	}
@@ -733,4 +836,257 @@ func (c *Catalog) listKeys(ctx context.Context, bucketKey []byte) ([]uint64, err
 		return nil, err
 	}
 	return res, nil
+}
+
+func (c *Catalog) append(ctx context.Context, o Object) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// fetch tx and append with index flag (to forward commit call)
+	tx := GetTransaction(ctx).WithFlags(TxFlagsCatalog)
+
+	// write wal record
+	buf, err := o.Encode()
+	if err != nil {
+		return err
+	}
+
+	_, err = c.wal.Write(&wal.Record{
+		Type:   o.Action(),
+		Tag:    types.ObjectTagDatabase,
+		Entity: c.id,
+		TxID:   tx.id,
+		Data:   buf,
+	})
+	if err != nil {
+		return err
+	}
+
+	// keep for commit/abort
+	c.pending[tx.id] = append(c.pending[tx.id], o)
+
+	return nil
+}
+
+func (c *Catalog) CommitTx(ctx context.Context, xid uint64) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// check if this txn has any pending actions
+	pending, ok := c.pending[xid]
+	if !ok {
+		return nil
+	}
+
+	// execute actions
+	err := c.runCommitActions(ctx, pending)
+	if err != nil {
+		return err
+	}
+
+	// remove actions
+	delete(c.pending, xid)
+
+	// db store commit and checkpoint
+	return c.doCheckpoint(ctx)
+}
+
+func (c *Catalog) AbortTx(ctx context.Context, xid uint64) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	pending, ok := c.pending[xid]
+	if !ok {
+		return nil
+	}
+
+	// execute actions
+	err := c.runAbortActions(ctx, pending)
+	if err != nil {
+		return err
+	}
+
+	// remove actions
+	delete(c.pending, xid)
+
+	return nil
+}
+
+// make catalog changes permanent and write checkpoint
+func (c *Catalog) doCheckpoint(ctx context.Context) error {
+	// must have no more pending txn
+	if len(c.pending) > 0 {
+		return nil
+	}
+
+	// write checkpoint record to wal
+	lsn, err := c.wal.Write(&wal.Record{
+		Type:   wal.RecordTypeCheckpoint,
+		Tag:    types.ObjectTagDatabase,
+		Entity: c.id,
+	})
+	if err != nil {
+		return err
+	}
+
+	// store checkpoint in catalog db (without managed tx this writes
+	// directly to catalog db storage)
+	if err = c.PutCheckpoint(ctx, lsn); err != nil {
+		return err
+	}
+
+	// ensure changes are safe in catalog db
+	tx := GetTransaction(ctx)
+	if tx != nil && tx.catTx != nil && tx.catTx.IsWriteable() {
+		// until this commit succeeds changes are not durable,
+		// but when it does the previous wal checkpoint will be
+		// referenced at next startup
+		err := tx.catTx.Commit()
+		if err != nil {
+			return err
+		}
+		tx.catTx = nil
+	}
+
+	return nil
+}
+
+func (c *Catalog) runAbortActions(ctx context.Context, pending []Object) error {
+	for _, obj := range pending {
+		var err error
+		switch obj.Action() {
+		case wal.RecordTypeInsert:
+			err = obj.Drop(ctx)
+		case wal.RecordTypeUpdate:
+			// ignore
+		case wal.RecordTypeDelete:
+			// ignore
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Catalog) runCommitActions(ctx context.Context, pending []Object) error {
+	for _, obj := range pending {
+		var err error
+		switch obj.Action() {
+		case wal.RecordTypeInsert:
+			err = obj.Create(ctx)
+		case wal.RecordTypeUpdate:
+			err = obj.Update(ctx)
+		case wal.RecordTypeDelete:
+			err = obj.Drop(ctx)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// requires transaction in context
+func (c *Catalog) Recover(ctx context.Context) error {
+	// read all wal records, of any record exists it must be rolled back
+	// unless its txid is committed
+	r := c.wal.NewReader()
+	defer r.Close()
+	defer clear(c.pending)
+
+	// setup reader
+	r.WithTag(types.ObjectTagDatabase)
+	err := r.Seek(c.checkpoint)
+	if err != nil {
+		return err
+	}
+
+	// we may have data from multiple txn in the wal and each txn may
+	// have created, updated or removed multiple objects. some txn
+	// may have committed, some may have aborted, some may have neither
+	// during a crash. we assume object actions are idempotent (they check
+	// state and skip when any update has already happened). Hence
+	// we can safely replay any committed txn in wal order at commit time
+	// (or abort it and clean up side effects like created files).
+	for {
+		rec, err := r.Next()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+
+		// handle catalog object creation, update and deletion on commit,
+		// or rollback on abort
+		// e.log.Debugf("Record %s", rec)
+
+		// reconstruct and execute pending object actions
+		switch rec.Type {
+		case wal.RecordTypeCommit:
+			err = c.runCommitActions(ctx, c.pending[rec.TxID])
+			delete(c.pending, rec.TxID)
+
+		case wal.RecordTypeAbort:
+			err = c.runAbortActions(ctx, c.pending[rec.TxID])
+			delete(c.pending, rec.TxID)
+
+		case wal.RecordTypeInsert,
+			wal.RecordTypeUpdate,
+			wal.RecordTypeDelete:
+			var obj Object
+			obj, err = c.decodeWalRecord(ctx, rec)
+			if obj != nil {
+				c.pending[rec.TxID] = append(c.pending[rec.TxID], obj)
+			}
+
+		case wal.RecordTypeCheckpoint:
+			// unlikely, but in case wal write succeeded and subsequent
+			// catalog db store tx failed
+			err = c.PutCheckpoint(ctx, rec.Lsn)
+
+		default:
+			err = fmt.Errorf("unexpected wal record: %s", rec)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	// abort any pending object actions
+	for xid := range c.pending {
+		err = c.runAbortActions(ctx, c.pending[xid])
+		delete(c.pending, xid)
+		if err != nil {
+			return err
+		}
+	}
+
+	return c.doCheckpoint(ctx)
+}
+
+func (c *Catalog) decodeWalRecord(ctx context.Context, rec *wal.Record) (Object, error) {
+	var obj Object
+	switch types.ObjectTag(rec.Data[0]) {
+	case types.ObjectTagTable:
+		obj = &TableObject{cat: c}
+	case types.ObjectTagStore:
+		obj = &StoreObject{cat: c}
+	case types.ObjectTagEnum:
+		obj = &EnumObject{cat: c}
+	case types.ObjectTagIndex:
+		obj = &IndexObject{cat: c}
+	// case types.ObjectTagView:
+	// 	obj = &ViewObject{cat: c}
+	// case types.ObjectTagStream:
+	// 	obj = &StreamObject{cat: c}
+	// case types.ObjectTagSnapshot:
+	// 	obj = &SnapshotObject{cat: c}
+	default:
+		return nil, ErrInvalidObjectType
+	}
+	if err := obj.Decode(ctx, rec); err != nil {
+		return nil, err
+	}
+	return obj, nil
 }

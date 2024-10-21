@@ -10,6 +10,7 @@ type TransactionKey struct{}
 func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context.Context, func() error, func() error) {
 	// prevent duplicates, return noops because an outer call frame controls
 	if tx := GetTransaction(ctx); tx != nil {
+		tx.WithFlags(flags...)
 		return ctx, tx.Noop, tx.Noop
 	}
 	tx := e.NewTransaction(flags...)

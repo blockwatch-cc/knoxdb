@@ -230,7 +230,7 @@ func (p Package) Block(i int) *block.Block {
 	return p.blocks[i]
 }
 
-// TODO: where is Clear() required outside of tests?
+// used in journals and tests
 func (p *Package) Clear() {
 	for _, b := range p.blocks {
 		if b == nil {

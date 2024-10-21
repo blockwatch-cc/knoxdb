@@ -9,7 +9,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"golang.org/x/exp/slices"
 )
@@ -86,31 +85,24 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 	}
 
 	// register commit/abort callbacks
-	tx := GetTransaction(ctx)
-	tx.OnCommit(func(ctx context.Context) error {
-		e.stores[tag] = kvstore
-		return nil
-	})
-	tx.OnAbort(func(ctx context.Context) error {
+	GetTransaction(ctx).OnAbort(func(ctx context.Context) error {
 		// remove store file(s) on error
+		delete(e.stores, tag)
 		return kvstore.Drop(ctx)
 	})
 
-	// add to catalog
-	if err := e.cat.AddStore(ctx, tag, s, opts); err != nil {
+	// schedule create
+	if err := e.cat.AppendStoreCmd(ctx, CREATE, s, opts); err != nil {
 		return nil, err
 	}
 
-	// write wal
-	obj := &StoreObject{id: tag, schema: s, opts: opts}
-	if err := e.writeWalRecord(ctx, wal.RecordTypeInsert, obj); err != nil {
-		return nil, err
-	}
-
-	// commit (note: noop when called with outside tx)
+	// commit and update to catalog
 	if err := commit(); err != nil {
 		return nil, err
 	}
+
+	// make available on engine API
+	e.stores[tag] = kvstore
 
 	return kvstore, nil
 }
@@ -142,17 +134,12 @@ func (e *Engine) DropStore(ctx context.Context, name string) error {
 		return nil
 	})
 
-	// write wal
-	obj := &StoreObject{id: tag}
-	if err := e.writeWalRecord(ctx, wal.RecordTypeDelete, obj); err != nil {
+	// schedule drop
+	if err := e.cat.AppendStoreCmd(ctx, DROP, s.Schema(), StoreOptions{}); err != nil {
 		return err
 	}
 
-	// remove from catalog
-	if err := e.cat.DropStore(ctx, tag); err != nil {
-		return err
-	}
-
+	// write catalog and run post-drop hooks
 	return commit()
 }
 

@@ -18,12 +18,14 @@ type TxFlags byte
 
 const (
 	TxFlagsReadOnly     TxFlags = 1 << iota
+	TxFlagsCatalog              // catalog related txn
 	TxFlagsSerializable         // use serializable snapshot isolation level (TODO)
 	TxFlagsDeferred             // wait for safe snapshot (TODO)
 	TxFlagsConflict             // conflict detected, abort on commit
 )
 
 func (f TxFlags) IsReadOnly() bool     { return f&TxFlagsReadOnly > 0 }
+func (f TxFlags) IsCatalog() bool      { return f&TxFlagsCatalog > 0 }
 func (f TxFlags) IsSerializable() bool { return f&TxFlagsSerializable > 0 }
 func (f TxFlags) IsDeferred() bool     { return f&TxFlagsDeferred > 0 }
 func (f TxFlags) IsConflict() bool     { return f&TxFlagsConflict > 0 }
@@ -137,6 +139,13 @@ func (e *Engine) NewTransaction(flags ...TxFlags) *Tx {
 	return tx
 }
 
+func (t *Tx) WithFlags(flags ...TxFlags) *Tx {
+	for _, f := range flags {
+		t.flags |= f
+	}
+	return t
+}
+
 func (t *Tx) Id() uint64 {
 	return t.id
 }
@@ -221,8 +230,8 @@ func (t *Tx) Commit(ctx context.Context) error {
 
 	t.engine.log.Debugf("Commit tx %d", t.id)
 
-	// write commit record to wal
-	lsn, err := t.engine.wal.Write(&wal.Record{
+	// write wal record
+	_, err := t.engine.wal.WriteAndSync(&wal.Record{
 		Type:   wal.RecordTypeCommit,
 		Tag:    types.ObjectTagDatabase,
 		Entity: t.engine.dbId,
@@ -232,15 +241,20 @@ func (t *Tx) Commit(ctx context.Context) error {
 		return err
 	}
 
-	// sync wal
-	if err := t.engine.wal.Sync(); err != nil {
-		return err
+	// commit to all touched objects; write wal commit records, sync wals
+	// update journal segments
+	for oid, _ := range t.touched {
+		err := t.engine.CommitTx(ctx, oid, t.id)
+		if err != nil {
+			return err
+		}
 	}
 
-	// write xlog bit
-	if t.engine.xlog != nil {
-		if err := t.engine.xlog.Append(t.id, lsn); err != nil {
-			t.engine.log.Errorf("write xlog: %v", err)
+	// commit and update catalog wal
+	if t.flags.IsCatalog() {
+		err := t.engine.cat.CommitTx(ctx, t.id)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -251,35 +265,50 @@ func (t *Tx) Commit(ctx context.Context) error {
 		}
 	}
 
-	// TODO: refactor when all stores are journaled
-	// close and write storage tx
+	// close and write storage tx (even with background flush we have open
+	// storage write txn on catalog changes and potentially on wal recover)
 	for _, tx := range t.dbTx {
-		var e error
+		var err error
 		if tx.IsWriteable() {
-			e = tx.Commit()
+			err = tx.Commit()
 		} else {
-			e = tx.Rollback()
+			err = tx.Rollback()
 		}
-		if e != nil && err == nil {
-			err = e
+		if err != nil {
+			return err
 		}
 	}
-	// if err := t.engine.cat.CommitState(t); err != nil {
-	// 	return err
-	// }
+
+	// handle catalog updates
 	if t.catTx != nil {
-		var e error
+		var err error
 		if t.catTx.IsWriteable() {
-			e = t.catTx.Commit()
+			// // write db checkpoint record to wal
+			// lsn, err := t.engine.wal.Write(&wal.Record{
+			// 	Type:   wal.RecordTypeCheckpoint,
+			// 	Tag:    types.ObjectTagDatabase,
+			// 	Entity: t.engine.dbId,
+			// })
+			// if err != nil {
+			// 	return err
+			// }
+			// // write catalog checkpoint
+			// t.engine.log.Debugf("DB checkpoint 0x%016x", lsn)
+			// e = t.engine.cat.PutCheckpoint(ctx, t.catTx, lsn)
+			// if e == nil {
+			err = t.catTx.Commit()
+			// } else {
+			// 	t.catTx.Rollback()
+			// }
 		} else {
-			e = t.catTx.Rollback()
+			err = t.catTx.Rollback()
 		}
-		if e != nil && err == nil {
-			err = e
+		if err != nil {
+			return err
 		}
 	}
 	t.Close()
-	return err
+	return nil
 }
 
 func (t *Tx) Abort(ctx context.Context) error {
@@ -299,6 +328,23 @@ func (t *Tx) Abort(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
+		// send abort to all touched objects; write wal abort records,
+		// update journal segments
+		for oid, _ := range t.touched {
+			err := t.engine.AbortTx(ctx, oid, t.id)
+			if err != nil {
+				return err
+			}
+		}
+
+		// abort and update catalog wal
+		if t.flags.IsCatalog() {
+			err := t.engine.cat.AbortTx(ctx, t.id)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	// close storage tx
@@ -308,9 +354,8 @@ func (t *Tx) Abort(ctx context.Context) error {
 			err = e
 		}
 	}
-	// if err := t.engine.cat.RollbackState(t); err != nil {
-	// 	return err
-	// }
+
+	// close catalog tx
 	if t.catTx != nil {
 		if e := t.catTx.Rollback(); e != nil && err == nil {
 			err = e
@@ -373,6 +418,7 @@ func (t *Tx) CatalogTx(db store.DB, write bool) (store.Tx, error) {
 		return nil, err
 	}
 	t.catTx = tx
+	t.flags |= TxFlagsCatalog
 	return tx, nil
 }
 

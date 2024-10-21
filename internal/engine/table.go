@@ -9,7 +9,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"golang.org/x/exp/slices"
 )
@@ -84,32 +83,25 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 		return nil, err
 	}
 
-	// register commit/abort callbacks
-	tx := GetTransaction(ctx)
-	tx.OnCommit(func(ctx context.Context) error {
-		e.tables[tag] = table
-		return nil
-	})
-	tx.OnAbort(func(ctx context.Context) error {
+	// register abort callbacks
+	GetTransaction(ctx).OnAbort(func(ctx context.Context) error {
 		// remove table file(s) on error
+		delete(e.tables, tag)
 		return table.Drop(ctx)
 	})
 
-	// add to catalog
-	if err := e.cat.AddTable(ctx, tag, s, opts); err != nil {
+	// schedule create
+	if err := e.cat.AppendTableCmd(ctx, CREATE, s, opts); err != nil {
 		return nil, err
 	}
 
-	// write wal
-	obj := &TableObject{id: tag, schema: s, opts: opts}
-	if err := e.writeWalRecord(ctx, wal.RecordTypeInsert, obj); err != nil {
-		return nil, err
-	}
-
-	// commit catalog (note: noop when called with outside tx)
+	// commit and update to catalog (may be noop when user controls tx)
 	if err := commit(); err != nil {
 		return nil, err
 	}
+
+	// make available on engine API
+	e.tables[tag] = table
 
 	return table, nil
 }
@@ -144,14 +136,8 @@ func (e *Engine) AlterTable(ctx context.Context, name string, schema *schema.Sch
 	// 	return nil
 	// })
 
-	// // update to catalog
-	// if err := e.cat.AlterTable(ctx, tag, s, opts); err != nil {
-	// 	return nil, err
-	// }
-
-	// // write wal
-	// obj := &TableObject{id: tag, schema: s, opts: opts}
-	// if err := e.writeWalRecord(ctx, wal.RecordTypeUpdate, obj); err != nil {
+	// update to catalog
+	// if err := e.cat.AppendTableCmd(ctx, ALTER, s, nil); err != nil {
 	// 	return nil, err
 	// }
 
@@ -197,17 +183,12 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 		return nil
 	})
 
-	// write wal
-	obj := &TableObject{id: tag}
-	if err := e.writeWalRecord(ctx, wal.RecordTypeDelete, obj); err != nil {
+	// schedule drop
+	if err := e.cat.AppendTableCmd(ctx, DROP, t.Schema(), TableOptions{}); err != nil {
 		return err
 	}
 
-	// remove table from catalog
-	if err := e.cat.DropTable(ctx, tag); err != nil {
-		return err
-	}
-
+	// write catalog and run post-drop hooks
 	return commit()
 }
 
@@ -287,10 +268,14 @@ func (e *Engine) openTables(ctx context.Context) error {
 		// resolve schema enums
 		s.WithEnumsFrom(e.enums)
 
+		e.log.Debugf("Table %s", s)
+		e.log.Debugf("Resolve enums from %#v", e.enums)
+
 		// open the store
 		if err := table.Open(ctx, s, opts); err != nil {
 			return err
 		}
+		e.log.Debugf("Loaded table %s", s.Name())
 
 		// open indexes
 		if err := e.openIndexes(ctx, table); err != nil {

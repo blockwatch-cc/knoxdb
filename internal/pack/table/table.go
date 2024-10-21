@@ -380,3 +380,11 @@ func (t *Table) UnuseIndex(idx engine.IndexEngine) {
 		return v.Schema().TaggedHash(types.ObjectTagIndex) == idxId
 	})
 }
+
+func (t *Table) CommitTx(_ context.Context, _ uint64) error {
+	return nil
+}
+
+func (t *Table) AbortTx(_ context.Context, _ uint64) error {
+	return nil
+}

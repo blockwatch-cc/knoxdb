@@ -5,6 +5,7 @@ package schema
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/hash/fnv"
@@ -84,6 +85,19 @@ func (e *EnumDictionary) Tag() uint64 {
 
 func (e *EnumDictionary) Len() int {
 	return len(e.offsets)
+}
+
+func (e *EnumDictionary) Clone() *EnumDictionary {
+	clone := &EnumDictionary{
+		name:    e.name,
+		values:  slices.Clone(e.values),
+		offsets: slices.Clone(e.offsets),
+		codes:   make(map[uint64]uint16, len(e.codes)),
+	}
+	for c := range e.codes {
+		clone.codes[c] = e.codes[c]
+	}
+	return clone
 }
 
 func (e *EnumDictionary) Values() []string {

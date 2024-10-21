@@ -263,13 +263,21 @@ func (t *Table) Drop(ctx context.Context) error {
 	t.db.Close()
 	t.db = nil
 	t.log.Debugf("dropping table %s with path %s", typ, path)
-	if err := os.Remove(path); err != nil {
+	if err := os.RemoveAll(path); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (t *Table) Sync(_ context.Context) error {
+	return nil
+}
+
+func (t *Table) CommitTx(_ context.Context, _ uint64) error {
+	return nil
+}
+
+func (t *Table) AbortTx(_ context.Context, _ uint64) error {
 	return nil
 }
 

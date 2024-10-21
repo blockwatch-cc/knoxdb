@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
@@ -51,67 +50,32 @@ func (e *Engine) CreateEnum(ctx context.Context, name string) (*schema.EnumDicti
 	ctx, commit, abort := e.WithTransaction(ctx)
 	defer abort()
 
-	// create
+	// create object
 	enum := schema.NewEnumDictionary(name)
 
 	// register commit callback
-	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
-		e.enums[tag] = enum
+	GetTransaction(ctx).OnAbort(func(ctx context.Context) error {
+		delete(e.enums, tag)
 		return nil
 	})
 
-	// store in catalog
-	if err := e.cat.AddEnum(ctx, enum); err != nil {
+	// schedule create
+	if err := e.cat.AppendEnumCmd(ctx, CREATE, enum); err != nil {
 		return nil, err
 	}
 
-	// write wal
-	obj := &EnumObject{id: tag, name: name}
-	if err := e.writeWalRecord(ctx, wal.RecordTypeInsert, obj); err != nil {
-		return nil, err
-	}
-
-	// commit (note: noop when called with outside tx)
+	// commit and update to catalog (may be noop when user controls tx)
 	if err := commit(); err != nil {
 		return nil, err
 	}
+
+	// make visible
+	e.enums[tag] = enum
 
 	return enum, nil
 }
 
 func (e *Engine) DropEnum(ctx context.Context, name string) error {
-	tag := types.TaggedHash(types.ObjectTagEnum, name)
-	if _, ok := e.enums[tag]; !ok {
-		return ErrNoEnum
-	}
-
-	// open transaction
-	ctx, commit, abort := e.WithTransaction(ctx)
-	defer abort()
-
-	// register commit callback
-	// GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
-	//  ???
-	// 	return nil
-	// })
-
-	// write wal
-	obj := &EnumObject{id: tag, name: name}
-	if err := e.writeWalRecord(ctx, wal.RecordTypeDelete, obj); err != nil {
-		return err
-	}
-
-	// remove enum from catalog
-	if err := e.cat.DropEnum(ctx, tag); err != nil {
-		return err
-	}
-
-	delete(e.enums, tag)
-
-	return commit()
-}
-
-func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...string) error {
 	tag := types.TaggedHash(types.ObjectTagEnum, name)
 	enum, ok := e.enums[tag]
 	if !ok {
@@ -122,22 +86,52 @@ func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...string) er
 	ctx, commit, abort := e.WithTransaction(ctx)
 	defer abort()
 
-	// write wal
-	obj := &EnumObject{id: tag, name: name, vals: vals}
-	if err := e.writeWalRecord(ctx, wal.RecordTypeUpdate, obj); err != nil {
+	// register commit callback
+	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+		delete(e.enums, tag)
+		return nil
+	})
+
+	// schedule drop
+	if err := e.cat.AppendEnumCmd(ctx, DROP, enum); err != nil {
 		return err
 	}
 
-	// extend enum
+	// commit will remove enum from catalog
+	return commit()
+}
+
+func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...string) error {
+	tag := types.TaggedHash(types.ObjectTagEnum, name)
+	enum, ok := e.enums[tag]
+	if !ok {
+		return ErrNoEnum
+	}
+
+	// create a copy in case we rollback
+	clone := enum.Clone()
+
+	// tentatively extend enum
 	if err := enum.Append(vals...); err != nil {
 		return err
 	}
 
-	// store enum data
-	if err := e.cat.PutEnum(ctx, enum); err != nil {
+	// open transaction
+	ctx, commit, abort := e.WithTransaction(ctx)
+	defer abort()
+
+	// register abort callback
+	GetTransaction(ctx).OnAbort(func(ctx context.Context) error {
+		e.enums[tag] = clone
+		return nil
+	})
+
+	// schedule update
+	if err := e.cat.AppendEnumCmd(ctx, ALTER, enum); err != nil {
 		return err
 	}
 
+	// commit will store updated enum data
 	return commit()
 }
 
@@ -153,6 +147,7 @@ func (e *Engine) openEnums(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		e.log.Debugf("Loaded enum %s [0x%016x] [0x%016x]", enum.Name(), key, enum.Tag())
 		e.enums[key] = enum
 	}
 

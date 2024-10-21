@@ -9,7 +9,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"golang.org/x/exp/slices"
 )
@@ -108,30 +107,23 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	}
 
 	// register commit/abort callbacks
-	tx := GetTransaction(ctx)
-	tx.OnCommit(func(ctx context.Context) error {
+	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
 		// add to table and engine
 		table.UseIndex(index)
 		e.indexes[tag] = index
+
+		// TODO: rebuild in background
+		// index.Rebuild(ctx)
+
 		return nil
 	})
-	tx.OnAbort(func(ctx context.Context) error {
-		// remove index file(s) on error
-		return index.Drop(ctx)
-	})
 
-	// add to catalog
-	if err := e.cat.AddIndex(ctx, tag, tableTag, s, opts); err != nil {
+	// schedule create
+	if err := e.cat.AppendIndexCmd(ctx, CREATE, s, opts, tableName); err != nil {
 		return nil, err
 	}
 
-	// write wal
-	obj := &IndexObject{id: tag, table: tableName, schema: s, opts: opts}
-	if err := e.writeWalRecord(ctx, wal.RecordTypeInsert, obj); err != nil {
-		return nil, err
-	}
-
-	// commit (note: noop when called with outside tx)
+	// commit and update catalog
 	if err := commit(); err != nil {
 		return nil, err
 	}
@@ -177,17 +169,12 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 		return nil
 	})
 
-	// write wal
-	obj := &IndexObject{id: tag}
-	if err := e.writeWalRecord(ctx, wal.RecordTypeDelete, obj); err != nil {
+	// write wal and schedule drop on commit
+	if err := e.cat.AppendIndexCmd(ctx, CREATE, index.Schema(), IndexOptions{}, ""); err != nil {
 		return err
 	}
 
-	// remove index from catalog
-	if err := e.cat.DropIndex(ctx, tag); err != nil {
-		return err
-	}
-
+	// write catalog and run post-drop hooks
 	return commit()
 }
 
@@ -218,6 +205,7 @@ func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
 		table.UseIndex(idx)
 		itag := types.TaggedHash(types.ObjectTagIndex, s.Name())
 		e.indexes[itag] = idx
+		e.log.Debugf("Loaded index %s", s.Name())
 	}
 
 	return nil
