@@ -47,6 +47,8 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, error) {
 	if !t.table.Schema().EqualHash(s.Hash()) {
 		return 0, schema.ErrSchemaMismatch
 	}
+	// merge enums
+	s.WithEnumsFrom(t.db.Enums())
 
 	// encode wire (single or slice) - schema is guaranteed the same
 	enc := schema.NewEncoder(s)
@@ -83,6 +85,8 @@ func (t TableImpl) Update(ctx context.Context, val any) (uint64, error) {
 	if !t.table.Schema().EqualHash(s.Hash()) {
 		return 0, schema.ErrSchemaMismatch
 	}
+	// merge enums
+	s.WithEnumsFrom(t.db.Enums())
 
 	// encode wire (single or slice) - schema is guaranteed the same
 	enc := schema.NewEncoder(s)
@@ -232,7 +236,7 @@ func UseGenericTable[T any](name string, db Database) (*GenericTable[T], error) 
 		return nil, schema.ErrSchemaMismatch
 	}
 	return &GenericTable[T]{
-		schema: table.Schema(),
+		schema: s.WithEnumsFrom(db.Enums()),
 		table:  table.(*TableImpl).table,
 		db:     db,
 	}, nil
