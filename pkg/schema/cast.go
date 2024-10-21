@@ -92,13 +92,13 @@ func (c IntCaster[T]) CastValue(val any) (res any, err error) {
 	width := unsafe.Sizeof(T(0)) * 8
 	switch v := val.(type) {
 	case int:
-		res, ok = T(v), v>>width == 0
+		res, ok = T(v), v>>width == 0 || v>>(width-1) == -1
 	case int64:
-		res, ok = T(v), v>>width == 0
+		res, ok = T(v), v>>width == 0 || v>>(width-1) == -1
 	case int32:
-		res, ok = T(v), v>>width == 0
+		res, ok = T(v), v>>width == 0 || v>>(width-1) == -1
 	case int16:
-		res, ok = T(v), v>>width == 0
+		res, ok = T(v), v>>width == 0 || v>>(width-1) == -1
 	case int8:
 		res, ok = T(v), true
 	case uint:
@@ -540,7 +540,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				cp := make([]T, vv.Len())
 				for i, l := 0, vv.Len(); i < l; i++ {
-					cp[i], ok = T(vv.Index(i).Int()), ok && vv.Int()>>(width-1) == 0
+					cp[i], ok = T(vv.Index(i).Int()), ok && vv.Index(i).Int()>>(width-1) == 0
 				}
 				if ok {
 					res = cp
@@ -548,7 +548,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				cp := make([]T, vv.Len())
 				for i, l := 0, vv.Len(); i < l; i++ {
-					cp[i], ok = T(vv.Index(i).Uint()), ok && vv.Int()>>(width-1) == 0
+					cp[i], ok = T(vv.Index(i).Uint()), ok && vv.Index(i).Uint()>>width == 0
 				}
 				if ok {
 					res = cp
