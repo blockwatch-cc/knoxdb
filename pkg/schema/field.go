@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"reflect"
+	"strings"
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -170,6 +171,9 @@ func (f Field) WithCompression(c types.FieldCompression) Field {
 
 func (f Field) WithFixed(n uint16) Field {
 	f.fixed = n
+	if f.typ == types.FieldTypeString || f.typ == types.FieldTypeBytes {
+		f.wireSize = n
+	}
 	return f
 }
 
@@ -218,6 +222,10 @@ func (f Field) WithGoType(typ reflect.Type, path []int, ofs uintptr) Field {
 	}
 	if f.flags.Is(types.FieldFlagEnum) {
 		f.wireSize = 2
+	} else if f.typ == types.FieldTypeString || f.typ == types.FieldTypeBytes {
+		if f.fixed > 0 {
+			f.wireSize = f.fixed
+		}
 	}
 	f.path = path
 	f.offset = ofs
@@ -295,6 +303,17 @@ func (f *Field) Validate() error {
 	// require uint16 for enum types
 	if f.flags.Is(types.FieldFlagEnum) && f.typ != types.FieldTypeUint16 {
 		return fmt.Errorf("invalid type %s for enum, requires uint16", f.typ)
+	}
+
+	if f.typ == types.FieldTypeString || f.typ == types.FieldTypeBytes {
+		if f.fixed > 0 && f.wireSize != f.fixed {
+			return NewFieldError(f.name, f.typ.String(), 
+				fmt.Errorf("%w: wireSize %d != fixed %d", ErrFixedSizeMismatch, f.wireSize, f.fixed))
+		}
+	}
+
+	if f.isArray && f.typ != types.FieldTypeBytes {
+		return NewFieldError(f.name, f.typ.String(), ErrUnsupportedArray)
 	}
 
 	return nil
@@ -388,272 +407,332 @@ func (f *Field) Codec() OpCode {
 	}
 }
 
+// Add this helper function at the top of the file
+func isOverflow(value, min, max int64) bool {
+	return value < min || value > max
+}
+
 // Simple per field encoder used to wire-encode individual typed values
 // found in query conditions.
-func (f *Field) Encode(w io.Writer, val any) (err error) {
-	if val == nil {
-		return ErrNilValue
+func (f *Field) Encode(w io.Writer, val any) error {
+	if f.isArray {
+		return f.encodeArray(w, val)
 	}
+	return f.encodeValue(w, val)
+}
 
-	// init error, will be overwritten by write branches below
-	err = ErrInvalidValueType
+func (f *Field) encodeArray(w io.Writer, val any) error {
+	v := reflect.ValueOf(val)
+	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
+		return fmt.Errorf("expected slice or array, got %T", val)
+	}
+	if err := binary.Write(w, binary.LittleEndian, uint32(v.Len())); err != nil {
+		return err
+	}
+	for i := 0; i < v.Len(); i++ {
+		if err := f.encodeValue(w, v.Index(i).Interface()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	switch code := f.Codec(); code {
-	default:
-		err = EncodeInt(w, code, val)
-
-	case OpCodeFixedArray,
-		OpCodeFixedString,
-		OpCodeFixedBytes,
-		OpCodeString,
-		OpCodeStringer,
-		OpCodeBytes,
-		OpCodeMarshalBinary,
-		OpCodeMarshalText:
-
-		err = EncodeBytes(w, val, f.fixed)
-
-	case OpCodeBool:
-		b, ok := val.(bool)
-		if ok {
-			if b {
-				_, err = w.Write([]byte{1})
+func (f *Field) encodeValue(w io.Writer, val any) error {
+	switch f.typ {
+	case types.FieldTypeInt8:
+		v, err := convertToInt(val, 8)
+		if err != nil {
+			return err
+		}
+		return binary.Write(w, binary.LittleEndian, int8(v))
+	case types.FieldTypeInt16:
+		v, err := convertToInt(val, 16)
+		if err != nil {
+			return err
+		}
+		return binary.Write(w, binary.LittleEndian, int16(v))
+	case types.FieldTypeInt32:
+		v, err := convertToInt(val, 32)
+		if err != nil {
+			return err
+		}
+		return binary.Write(w, binary.LittleEndian, int32(v))
+	case types.FieldTypeInt64:
+		v, err := convertToInt(val, 64)
+		if err != nil {
+			return err
+		}
+		return binary.Write(w, binary.LittleEndian, v)
+	case types.FieldTypeUint8:
+		v, err := convertToUint(val, 8)
+		if err != nil {
+			return err
+		}
+		return binary.Write(w, binary.LittleEndian, uint8(v))
+	case types.FieldTypeUint16:
+		v, err := convertToUint(val, 16)
+		if err != nil {
+			return err
+		}
+		return binary.Write(w, binary.LittleEndian, uint16(v))
+	case types.FieldTypeUint32:
+		v, err := convertToUint(val, 32)
+		if err != nil {
+			return err
+		}
+		return binary.Write(w, binary.LittleEndian, uint32(v))
+	case types.FieldTypeUint64:
+		v, err := convertToUint(val, 64)
+		if err != nil {
+			return err
+		}
+		return binary.Write(w, binary.LittleEndian, v)
+	case types.FieldTypeFloat32:
+		return binary.Write(w, binary.LittleEndian, val.(float32))
+	case types.FieldTypeFloat64:
+		return binary.Write(w, binary.LittleEndian, val.(float64))
+	case types.FieldTypeBoolean:
+		return binary.Write(w, binary.LittleEndian, val.(bool))
+	case types.FieldTypeString:
+		s := val.(string)
+		if f.fixed > 0 {
+			if len(s) > int(f.fixed) {
+				s = s[:f.fixed]
 			} else {
-				_, err = w.Write([]byte{0})
+				s = s + strings.Repeat("\x00", int(f.fixed)-len(s))
 			}
+			_, err := w.Write([]byte(s))
+			return err
 		}
-
-	case OpCodeDateTime:
-		tv, ok := val.(time.Time)
-		if ok {
-			_, err = w.Write(Uint64Bytes(uint64(tv.UnixNano())))
+		if err := binary.Write(w, binary.LittleEndian, uint32(len(s))); err != nil {
+			return err
 		}
-
-	case OpCodeFloat32:
-		switch v := val.(type) {
-		case float32:
-			_, err = w.Write(Uint32Bytes(math.Float32bits(v)))
-		case float64:
-			_, err = w.Write(Uint32Bytes(math.Float32bits(float32(v))))
+		_, err := w.Write([]byte(s))
+		return err
+	case types.FieldTypeBytes:
+		b := val.([]byte)
+		if f.fixed > 0 {
+			if len(b) > int(f.fixed) {
+				b = b[:f.fixed]
+			} else {
+				b = append(b, make([]byte, int(f.fixed)-len(b))...)
+			}
+			_, err := w.Write(b)
+			return err
 		}
-
-	case OpCodeFloat64:
-		switch v := val.(type) {
-		case float32:
-			_, err = w.Write(Uint64Bytes(math.Float64bits(float64(v))))
-		case float64:
-			_, err = w.Write(Uint64Bytes(math.Float64bits(v)))
+		if err := binary.Write(w, binary.LittleEndian, uint32(len(b))); err != nil {
+			return err
 		}
-
-	case OpCodeInt128:
-		v, ok := val.(num.Int128)
-		if ok {
-			_, err = w.Write(v.Bytes())
-		}
-
-	case OpCodeInt256:
-		v, ok := val.(num.Int256)
-		if ok {
-			_, err = w.Write(v.Bytes())
-		}
-
-	case OpCodeDecimal32:
-		v, ok := val.(num.Decimal32)
-		if ok {
-			_, err = w.Write(Uint32Bytes(uint32(v.Int32())))
-		}
-
-	case OpCodeDecimal64:
-		v, ok := val.(num.Decimal64)
-		if ok {
-			_, err = w.Write(Uint64Bytes(uint64(v.Int64())))
-		}
-
-	case OpCodeDecimal128:
-		v, ok := val.(num.Decimal128)
-		if ok {
-			_, err = w.Write(v.Int128().Bytes())
-		}
-
-	case OpCodeDecimal256:
-		v, ok := val.(num.Decimal256)
-		if ok {
-			_, err = w.Write(v.Int256().Bytes())
-		}
-
-	case OpCodeEnum:
-		v, ok := val.(string)
+		_, err := w.Write(b)
+		return err
+	case types.FieldTypeDatetime:
+		t, ok := val.(time.Time)
 		if !ok {
-			err = ErrInvalidValueType
-			return
+			return fmt.Errorf("expected time.Time, got %T", val)
 		}
-		if f.enum == nil {
-			return ErrEnumUndefined
-		}
-		code, ok := f.enum.Code(v)
-		if !ok {
-			return ErrInvalidValue
-		}
-		err = EncodeInt(w, OpCodeUint16, code)
+		// Convert to UTC before encoding
+		return binary.Write(w, binary.LittleEndian, t.UTC().UnixNano())
 	}
-	return
+	return fmt.Errorf("unsupported type for encoding: %v", f.typ)
+}
+
+// Helper functions for type conversion and overflow checking
+func convertToInt(val interface{}, bitSize int) (int64, error) {
+	v := reflect.ValueOf(val)
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		i := v.Int()
+		if bitSize < 64 && (i < math.MinInt64>>uint(64-bitSize) || i > math.MaxInt64>>uint(64-bitSize)) {
+			return 0, fmt.Errorf("value %d out of range for int%d", i, bitSize)
+		}
+		return i, nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		u := v.Uint()
+		if u > uint64(math.MaxInt64>>uint(64-bitSize)) {
+			return 0, fmt.Errorf("value %d out of range for int%d", u, bitSize)
+		}
+		return int64(u), nil
+	default:
+		return 0, fmt.Errorf("cannot convert %T to int%d", val, bitSize)
+	}
+}
+
+func convertToUint(val interface{}, bitSize int) (uint64, error) {
+	v := reflect.ValueOf(val)
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		i := v.Int()
+		if i < 0 || uint64(i) > math.MaxUint64>>uint(64-bitSize) {
+			return 0, fmt.Errorf("value %d out of range for uint%d", i, bitSize)
+		}
+		return uint64(i), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		u := v.Uint()
+		if u > math.MaxUint64>>uint(64-bitSize) {
+			return 0, fmt.Errorf("value %d out of range for uint%d", u, bitSize)
+		}
+		return u, nil
+	default:
+		return 0, fmt.Errorf("cannot convert %T to uint%d", val, bitSize)
+	}
 }
 
 // Simple per field decoder used to wire-decode individual typed values
 // found in query conditions.
-func (f *Field) Decode(r io.Reader) (val any, err error) {
-	var (
-		buf [32]byte
-		n   int
-	)
-	switch f.typ {
-	case types.FieldTypeDatetime:
-		_, err = r.Read(buf[:8])
-		i64, _ := ReadInt64(buf[:8])
-		val = time.Unix(0, i64).UTC()
+func (f *Field) Decode(r io.Reader) (any, error) {
+	if f.isArray {
+		return f.decodeArray(r)
+	}
+	return f.decodeValue(r)
+}
 
-	case types.FieldTypeInt64:
-		_, err = r.Read(buf[:8])
-		i64, _ := ReadInt64(buf[:8])
-		val = i64
+func (f *Field) decodeArray(r io.Reader) (any, error) {
+	var length uint32
+	if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
+		return nil, err
+	}
 
-	case types.FieldTypeInt32:
-		_, err = r.Read(buf[:4])
-		i32, _ := ReadInt32(buf[:4])
-		val = i32
+	sliceType := f.sliceType()
+	slice := reflect.MakeSlice(sliceType, int(length), int(length))
 
-	case types.FieldTypeInt16:
-		_, err = r.Read(buf[:2])
-		i16, _ := ReadInt16(buf[:2])
-		val = i16
-
-	case types.FieldTypeInt8:
-		_, err = r.Read(buf[:1])
-		i8, _ := ReadInt8(buf[:1])
-		val = i8
-
-	case types.FieldTypeUint64:
-		_, err = r.Read(buf[:8])
-		u64, _ := ReadUint64(buf[:8])
-		val = u64
-
-	case types.FieldTypeUint32:
-		_, err = r.Read(buf[:4])
-		u32, _ := ReadUint32(buf[:4])
-		val = u32
-
-	case types.FieldTypeUint16:
-		_, err = r.Read(buf[:2])
-		u16, _ := ReadUint16(buf[:2])
-		if f.flags.Is(types.FieldFlagEnum) {
-			if f.enum != nil {
-				enum, ok := f.enum.Value(u16)
-				if ok {
-					val = enum
-				} else {
-					err = ErrInvalidValue
-				}
-			} else {
-				err = ErrEnumUndefined
-			}
-		} else {
-			val = u16
+	for i := 0; i < int(length); i++ {
+		val, err := f.decodeValue(r)
+		if err != nil {
+			return nil, err
 		}
+		slice.Index(i).Set(reflect.ValueOf(val))
+	}
 
+	return slice.Interface(), nil
+}
+
+func (f *Field) sliceType() reflect.Type {
+	var elemType reflect.Type
+	switch f.typ {
+	case types.FieldTypeInt8:
+		elemType = reflect.TypeOf(int8(0))
+	case types.FieldTypeInt16:
+		elemType = reflect.TypeOf(int16(0))
+	case types.FieldTypeInt32:
+		elemType = reflect.TypeOf(int32(0))
+	case types.FieldTypeInt64:
+		elemType = reflect.TypeOf(int64(0))
 	case types.FieldTypeUint8:
-		_, err = r.Read(buf[:1])
-		u8, _ := ReadUint8(buf[:1])
-		val = u8
-
-	case types.FieldTypeFloat64:
-		_, err = r.Read(buf[:8])
-		u64, _ := ReadUint64(buf[:8])
-		val = math.Float64frombits(u64)
-
+		elemType = reflect.TypeOf(uint8(0))
+	case types.FieldTypeUint16:
+		elemType = reflect.TypeOf(uint16(0))
+	case types.FieldTypeUint32:
+		elemType = reflect.TypeOf(uint32(0))
+	case types.FieldTypeUint64:
+		elemType = reflect.TypeOf(uint64(0))
 	case types.FieldTypeFloat32:
-		_, err = r.Read(buf[:4])
-		u32, _ := ReadUint32(buf[:4])
-		val = math.Float32frombits(u32)
-
+		elemType = reflect.TypeOf(float32(0))
+	case types.FieldTypeFloat64:
+		elemType = reflect.TypeOf(float64(0))
 	case types.FieldTypeBoolean:
-		_, err = r.Read(buf[:1])
-		b := buf[0] > 0
-		val = b
+		elemType = reflect.TypeOf(bool(false))
+	case types.FieldTypeString:
+		elemType = reflect.TypeOf("")
+	case types.FieldTypeBytes:
+		elemType = reflect.TypeOf([]byte{})
+	case types.FieldTypeDatetime:
+		elemType = reflect.TypeOf(time.Time{})
+	default:
+		panic(fmt.Sprintf("unsupported type for array: %v", f.typ))
+	}
+	return reflect.SliceOf(elemType)
+}
 
+func (f *Field) decodeValue(r io.Reader) (any, error) {
+	switch f.typ {
+	case types.FieldTypeInt8:
+		var v int8
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
+	case types.FieldTypeInt16:
+		var v int16
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
+	case types.FieldTypeInt32:
+		var v int32
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
+	case types.FieldTypeInt64:
+		var v int64
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
+	case types.FieldTypeUint8:
+		var v uint8
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
+	case types.FieldTypeUint16:
+		var v uint16
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
+	case types.FieldTypeUint32:
+		var v uint32
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
+	case types.FieldTypeUint64:
+		var v uint64
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
+	case types.FieldTypeFloat32:
+		var v float32
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
+	case types.FieldTypeFloat64:
+		var v float64
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
+	case types.FieldTypeBoolean:
+		var v bool
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
 	case types.FieldTypeString:
 		if f.fixed > 0 {
 			b := make([]byte, f.fixed)
-			n, err = r.Read(b)
-			if n < int(f.fixed) {
-				return nil, ErrShortBuffer
+			if _, err := io.ReadFull(r, b); err != nil {
+				return nil, err
 			}
-			val = string(b[:n])
-		} else {
-			_, err = r.Read(buf[:4])
-			if err != nil {
-				return
-			}
-			u32, _ := ReadUint32(buf[:4])
-			b := make([]byte, int(u32))
-			n, err = r.Read(b)
-			val = string(b[:n])
+			return strings.TrimRight(string(b), "\x00"), nil
 		}
-
+		var length uint32
+		if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
+			return nil, err
+		}
+		b := make([]byte, length)
+		if _, err := io.ReadFull(r, b); err != nil {
+			return nil, err
+		}
+		return string(b), nil
 	case types.FieldTypeBytes:
 		if f.fixed > 0 {
 			b := make([]byte, f.fixed)
-			n, err = r.Read(b)
-			if n < int(f.fixed) {
-				return nil, ErrShortBuffer
+			if _, err := io.ReadFull(r, b); err != nil {
+				return nil, err
 			}
-			val = string(b[:n])
-		} else {
-			_, err = r.Read(buf[:4])
-			if err != nil {
-				return
-			}
-			u32, _ := ReadUint32(buf[:4])
-			b := make([]byte, int(u32))
-			n, err = r.Read(b)
-			val = b[:n]
+			return b, nil
 		}
-
-	case types.FieldTypeInt256:
-		_, err = r.Read(buf[:32])
-		i256 := num.Int256FromBytes(buf[:32])
-		val = i256
-
-	case types.FieldTypeInt128:
-		_, err = r.Read(buf[:16])
-		i128 := num.Int128FromBytes(buf[:16])
-		val = i128
-
-	case types.FieldTypeDecimal256:
-		_, err = r.Read(buf[:32])
-		d256 := num.NewDecimal256(num.Int256FromBytes(buf[:32]), f.scale)
-		val = d256
-
-	case types.FieldTypeDecimal128:
-		_, err = r.Read(buf[:16])
-		d128 := num.NewDecimal128(num.Int128FromBytes(buf[:16]), f.scale)
-		val = d128
-
-	case types.FieldTypeDecimal64:
-		_, err = r.Read(buf[:8])
-		i64, _ := ReadInt64(buf[:8])
-		d64 := num.NewDecimal64(i64, f.scale)
-		val = d64
-
-	case types.FieldTypeDecimal32:
-		_, err = r.Read(buf[:4])
-		i32, _ := ReadInt32(buf[:4])
-		d32 := num.NewDecimal32(i32, f.scale)
-		val = d32
-
-	default:
-		err = ErrInvalidField
+		var length uint32
+		if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
+			return nil, err
+		}
+		b := make([]byte, length)
+		if _, err := io.ReadFull(r, b); err != nil {
+			return nil, err
+		}
+		return b, nil
+	case types.FieldTypeDatetime:
+		var nanos int64
+		err := binary.Read(r, binary.LittleEndian, &nanos)
+		if err != nil {
+			return nil, err
+		}
+		// Return the time in UTC
+		return time.Unix(0, nanos).UTC(), nil
 	}
-	return
+	return nil, fmt.Errorf("unsupported type for decoding: %v", f.typ)
 }
 
 // StructValue resolves a struct field from a struct. When the field
@@ -703,6 +782,9 @@ func (f Field) WriteTo(w *bytes.Buffer) error {
 	// scale: u8
 	binary.Write(w, LE, f.scale)
 
+	// wireSize: u16
+	binary.Write(w, LE, f.wireSize)
+
 	return nil
 }
 
@@ -743,6 +825,12 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 	// scale: u8
 	binary.Read(buf, LE, &f.scale)
 
+	// wireSize: u16
+	err = binary.Read(buf, LE, &f.wireSize)
+	if err != nil {
+		return
+	}
+
 	return f.Validate()
 }
 
@@ -754,3 +842,4 @@ func (f Field) DataSize() int {
 		return f.typ.Size()
 	}
 }
+

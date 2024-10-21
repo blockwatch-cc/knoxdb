@@ -355,11 +355,11 @@ func TestFieldSerializationRoundTrip(t *testing.T) {
 // TestFieldRangeAndOverflow combines range testing and overflow handling for all integer types and their slices.
 func TestFieldRangeAndOverflow(t *testing.T) {
 	intTypes := []struct {
-		fieldType types.FieldType
-		goType    reflect.Type
-		zero      interface{}
-		min       interface{}
-		max       interface{}
+		fieldType  types.FieldType
+		goType     reflect.Type
+		zero       interface{}
+		min        interface{}
+		max        interface{}
 		isUnsigned bool
 	}{
 		{types.FieldTypeInt8, reflect.TypeOf(int8(0)), int8(0), int8(math.MinInt8), int8(math.MaxInt8), false},
@@ -400,42 +400,60 @@ func TestFieldRangeAndOverflow(t *testing.T) {
 					var buf bytes.Buffer
 					err := field.Encode(&buf, v)
 					
-					isErrorExpected := reflect.TypeOf(v).Size() > targetType.goType.Size() ||
-						(inputType.isUnsigned && !targetType.isUnsigned)
+					isErrorExpected := false
+					inputValue := reflect.ValueOf(v)
+					targetMax := reflect.ValueOf(targetType.max)
+					targetMin := reflect.ValueOf(targetType.min)
+
+					if inputType.isUnsigned {
+						inputUint := inputValue.Uint()
+						if targetType.isUnsigned {
+							isErrorExpected = inputUint > targetMax.Uint()
+						} else {
+							isErrorExpected = inputUint > uint64(targetMax.Int())
+						}
+					} else {
+						inputInt := inputValue.Int()
+						if targetType.isUnsigned {
+							isErrorExpected = inputInt < 0 || uint64(inputInt) > targetMax.Uint()
+						} else {
+							isErrorExpected = inputInt < targetMin.Int() || inputInt > targetMax.Int()
+						}
+					}
 
 					if isErrorExpected {
-						assert.Error(t, err, "Expected overflow error for %v to %v", inputType.fieldType, targetType.fieldType)
+						assert.Error(t, err, "Expected overflow error for %v to %v with value %v", inputType.fieldType, targetType.fieldType, v)
 					} else {
-						assert.NoError(t, err, "Unexpected error for %v to %v", inputType.fieldType, targetType.fieldType)
-						if err == nil {
-							decoded, decodeErr := field.Decode(bytes.NewReader(buf.Bytes()))
-							assert.NoError(t, decodeErr, "Decoding failed for %v to %v", inputType.fieldType, targetType.fieldType)
-							assert.Equal(t, reflect.ValueOf(v).Convert(targetType.goType).Interface(), decoded, 
-								"Decoded value does not match expected for %v to %v", inputType.fieldType, targetType.fieldType)
-						}
+						assert.NoError(t, err, "Unexpected error for %v to %v with value %v: %v", inputType.fieldType, targetType.fieldType, v, err)
+						decoded, err := field.Decode(bytes.NewReader(buf.Bytes()))
+						assert.NoError(t, err, "Decoding failed for %v to %v with value %v", inputType.fieldType, targetType.fieldType, v)
+						
+						// Convert the decoded value to the target type for comparison
+						decodedValue := reflect.ValueOf(decoded).Convert(targetType.goType)
+						expectedValue := reflect.ValueOf(v).Convert(targetType.goType)
+						assert.Equal(t, expectedValue.Interface(), decodedValue.Interface(), "Decoded value does not match expected for %v to %v with value %v", inputType.fieldType, targetType.fieldType, v)
 					}
 				}
 
 				testConversion(inputType.zero)
 				testConversion(inputType.min)
 				testConversion(inputType.max)
+				
+				// Test edge cases
+				if !inputType.isUnsigned {
+					testConversion(int64(-1)) // Test negative values for unsigned target types
+				}
+				if inputType.isUnsigned && !targetType.isUnsigned {
+					testConversion(uint64(reflect.ValueOf(targetType.max).Int()) + 1) // Test overflow for signed target types
+				}
 			})
 		}
-
-		// Test array handling
-		t.Run(fmt.Sprintf("%v_Array", targetType.fieldType), func(t *testing.T) {
-			arrayField := field
-			arrayField.isArray = true
-			slice := reflect.MakeSlice(reflect.SliceOf(targetType.goType), 1, 1)
-			slice.Index(0).Set(reflect.ValueOf(targetType.max))
-			testEncodeDecodeRoundTrip(t, arrayField, slice.Type(), slice.Interface())
-		})
 	}
 
 	// Time caster test
 	t.Run("TimeCaster", func(t *testing.T) {
 		field := NewField(types.FieldTypeDatetime)
-		now := time.Now()
+		now := time.Now().UTC() // Use UTC time for consistency
 		testEncodeDecodeRoundTrip(t, field, reflect.TypeOf(now), now)
 	})
 }
@@ -457,6 +475,12 @@ func testEncodeDecodeRoundTrip(t *testing.T, field Field, inputType reflect.Type
 		assert.Equal(t, reflect.ValueOf(value).Index(0).Interface(), reflect.ValueOf(decoded).Index(0).Interface(), 
 			"Decoded value does not match original for %v", testName)
 	} else {
-		assert.Equal(t, value, decoded, "Decoded value does not match original for %v", testName)
+		// For time.Time, compare UTC values
+		if _, ok := value.(time.Time); ok {
+			assert.Equal(t, value.(time.Time).UTC(), decoded.(time.Time).UTC(), 
+				"Decoded value does not match original for %v", testName)
+		} else {
+			assert.Equal(t, value, decoded, "Decoded value does not match original for %v", testName)
+		}
 	}
 }

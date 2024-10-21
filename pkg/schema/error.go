@@ -5,6 +5,7 @@ package schema
 
 import (
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -22,4 +23,31 @@ var (
 	ErrShortBuffer       = io.ErrShortBuffer
 	ErrNotImplemented    = errors.New("not implemented")
 	ErrSchemaMismatch    = errors.New("schema mismatch")
+	ErrOverflow          = errors.New("value overflow")
+	ErrFixedSizeMismatch = errors.New("fixed size mismatch")
+	ErrUnsupportedArray  = errors.New("unsupported array type")
 )
+
+// FieldError wraps field-specific errors
+type FieldError struct {
+	FieldName string
+	FieldType string
+	Err       error
+}
+
+func (e *FieldError) Error() string {
+	return fmt.Sprintf("field error (%s, %s): %v", e.FieldName, e.FieldType, e.Err)
+}
+
+func (e *FieldError) Unwrap() error {
+	return e.Err
+}
+
+// NewFieldError creates a new FieldError
+func NewFieldError(fieldName, fieldType string, err error) error {
+	return &FieldError{
+		FieldName: fieldName,
+		FieldType: fieldType,
+		Err:       err,
+	}
+}
