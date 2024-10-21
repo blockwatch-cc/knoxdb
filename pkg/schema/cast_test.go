@@ -5,12 +5,197 @@ package schema
 
 import (
 	"math"
+	"reflect"
 	"testing"
+	"unsafe"
 
-	"github.com/stretchr/testify/assert"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+type (
+	intEnum8  int8
+	uintEnum8 uint8
+)
+
+var (
+	intZeroCases = []any{
+		int(0),
+		int64(0),
+		int32(0),
+		int16(0),
+		int8(0),
+		uint(0),
+		uint64(0),
+		uint32(0),
+		uint16(0),
+		uint8(0),
+		float32(0),
+		float64(0),
+		num.Decimal32Zero,
+		num.Decimal64Zero,
+		num.Decimal128Zero,
+		num.Decimal256Zero,
+		num.ZeroInt128,
+		num.ZeroInt256,
+		intEnum8(0),
+		uintEnum8(0),
+	}
+
+	intMaxCases = []any{
+		int(^uint(0) >> 1),
+		int64(^uint64(0) >> 1),
+		int32(^uint32(0) >> 1),
+		int16(^uint16(0) >> 1),
+		int8(^uint8(0) >> 1),
+		^uint(0),
+		^uint64(0),
+		^uint32(0),
+		^uint16(0),
+		^uint8(0),
+		// math.MaxFloat32,
+		// math.MaxFloat64,
+		// num.NewDecimal32(int(^uint(0)>>1), 0),
+		// num.NewDecimal64(int64(^uint64(0)>>1), 0),
+		// num.NewDecimal128(num.MaxInt128, 0),
+		// num.NewDecimal256(num.MaxInt256, 0),
+		// num.MaxInt128,
+		// num.MaxInt256,
+		intEnum8(0x7f),
+		uintEnum8(0xff),
+	}
+
+	intZeroSliceCases = []any{
+		[]int{0},
+		[]int64{0},
+		[]int32{0},
+		[]int16{0},
+		[]int8{0},
+		[]uint{0},
+		[]uint64{0},
+		[]uint32{0},
+		[]uint16{0},
+		[]uint8{0},
+		[]float32{0},
+		[]float64{0},
+		[]num.Decimal32{num.Decimal32Zero},
+		[]num.Decimal64{num.Decimal64Zero},
+		[]num.Decimal128{num.Decimal128Zero},
+		[]num.Decimal256{num.Decimal256Zero},
+		[]num.Int128{num.ZeroInt128},
+		[]num.Int256{num.ZeroInt256},
+		[]intEnum8{intEnum8(0)},
+		[]uintEnum8{uintEnum8(0)},
+	}
+
+	intMaxSliceCases = []any{
+		[]int{int(^uint(0) >> 1)},
+		[]int64{int64(^uint64(0) >> 1)},
+		[]int32{int32(^uint32(0) >> 1)},
+		[]int16{int16(^uint16(0) >> 1)},
+		[]int8{int8(^uint8(0) >> 1)},
+		[]uint{^uint(0)},
+		[]uint64{^uint64(0)},
+		[]uint32{^uint32(0)},
+		[]uint16{^uint16(0)},
+		[]uint8{^uint8(0)},
+		// []float32{math.MaxFloat32},
+		// math.MaxFloat64,
+		// num.NewDecimal32(int(^uint(0)>>1), 0),
+		// num.NewDecimal64(int64(^uint64(0)>>1), 0),
+		// num.NewDecimal128(num.MaxInt128, 0),
+		// num.NewDecimal256(num.MaxInt256, 0),
+		// num.MaxInt128,
+		// num.MaxInt256,
+		[]intEnum8{intEnum8(0x7f)},
+		[]uintEnum8{uintEnum8(0xff)},
+	}
+)
+
+func IsInt(v any) bool {
+	switch reflect.Indirect(reflect.ValueOf(v)).Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsUint(v any) bool {
+	switch reflect.Indirect(reflect.ValueOf(v)).Kind() {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsFloat(v any) bool {
+	switch reflect.Indirect(reflect.ValueOf(v)).Kind() {
+	case reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsUintOverFlowIntCaster(v any, width uintptr) bool {
+	vv := reflect.Indirect(reflect.ValueOf(v))
+	switch vv.Kind() {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return vv.Uint()>>(width-1) != 0
+	default:
+		return false
+	}
+}
+
+func IsUintOverFlowUintCaster(v any, width uintptr) bool {
+	vv := reflect.Indirect(reflect.ValueOf(v))
+	switch vv.Kind() {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return vv.Uint()>>width != 0
+	default:
+		return false
+	}
+}
+
+func ValueSize(v any) uintptr {
+	switch v.(type) {
+	case int8:
+		return 8
+	case int16:
+		return 16
+	case int32:
+		return 32
+	case int64:
+		return 64
+	case int:
+		return 32 << (^uint(0) >> 63) // 32 or 64
+	case uint8:
+		return 8
+	case uint16:
+		return 16
+	case uint32:
+		return 32
+	case uint64:
+		return 64
+	case uint:
+		return 32 << (^uint(0) >> 63) // 32 or 64
+	case float32:
+		return unsafe.Sizeof(math.MaxFloat32) * 8
+	case float64:
+		return unsafe.Sizeof(math.MaxFloat64) * 8
+	default:
+		return 0
+	}
+}
+
+func IsInt128(v any) bool {
+	_, ok := v.(num.Int128)
+	return ok
+}
 
 // TestCastNewCaster tests the NewCaster function to ensure it returns the correct
 // caster for each field type.
@@ -53,129 +238,287 @@ func TestCastNewCaster(t *testing.T) {
 // TestCastIntCaster tests the IntCaster to ensure it correctly casts various
 // input types to int32 and handles edge cases and errors appropriately.
 func TestCastIntCaster(t *testing.T) {
-	caster := IntCaster[int32]{}
-
 	tests := []struct {
-		name     string
-		input    interface{}
-		expected interface{}
-		hasError bool
+		name   string
+		caster ValueCaster
+		size   uintptr
 	}{
-		{"Int", 42, int32(42), false},
-		{"Int64", int64(42), int32(42), false},
-		{"String", "42", nil, true},
-		{"MaxInt32", int32(math.MaxInt32), int32(math.MaxInt32), false},
-		{"MinInt32", int32(math.MinInt32), int32(math.MinInt32), false},
-		{"Overflow", int64(math.MaxInt32) + 1, nil, true},
-		{"Underflow", int64(math.MinInt32) - 1, nil, true},
+		{"Int", IntCaster[int]{}, unsafe.Sizeof(int(0)) * 8},
+		{"Int8", IntCaster[int8]{}, unsafe.Sizeof(int8(0)) * 8},
+		{"Int16", IntCaster[int16]{}, unsafe.Sizeof(int16(0)) * 8},
+		{"Int32", IntCaster[int32]{}, unsafe.Sizeof(int32(0)) * 8},
+		{"Int64", IntCaster[int64]{}, unsafe.Sizeof(int64(0)) * 8},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := caster.CastValue(tt.input)
-			if tt.hasError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
-			}
+	// zero cases
+	t.Run("ZeroCases", func(t *testing.T) {
+		for _, testCase := range tests {
+			t.Run(testCase.name, func(t *testing.T) {
+				for _, z := range intZeroCases {
+					_, err := testCase.caster.CastValue(z)
+					require.NoError(t, err)
+				}
+			})
+		}
+	})
+
+	// max cases
+	t.Run("MaxCases", func(t *testing.T) {
+		for _, testCase := range tests {
+			t.Run(testCase.name, func(t *testing.T) {
+				for _, v := range intMaxCases {
+					isErrorExpected := testCase.size < ValueSize(v) || (IsUint(v) && IsUintOverFlowIntCaster(v, testCase.size))
+					_, err := testCase.caster.CastValue(v)
+					if isErrorExpected {
+						require.Error(t, err)
+					} else {
+						require.NoError(t, err)
+					}
+				}
+			})
+		}
+	})
+
+	// zero slice cases
+	t.Run("ZeroSliceCases", func(t *testing.T) {
+		for _, testCase := range tests {
+			t.Run(testCase.name, func(t *testing.T) {
+				for _, v := range intZeroSliceCases {
+					_, err := testCase.caster.CastSlice(v)
+					require.NoError(t, err)
+				}
+			})
+		}
+	})
+
+	// max slice cases
+	t.Run("MaxSliceCases", func(t *testing.T) {
+		for _, testCase := range tests {
+			t.Run(testCase.name, func(t *testing.T) {
+				for _, v := range intMaxSliceCases {
+					val := reflect.ValueOf(v)
+					switch val.Kind() {
+					case reflect.Array, reflect.Slice:
+						idxZeroVal := val.Index(0).Interface()
+						isErrorExpected := testCase.size < ValueSize(idxZeroVal) || (IsUint(idxZeroVal) && IsUintOverFlowIntCaster(idxZeroVal, testCase.size))
+						_, err := testCase.caster.CastSlice(v)
+						if isErrorExpected {
+							require.Error(t, err)
+						} else {
+							require.NoError(t, err)
+						}
+					default:
+						t.Errorf("value is not supported: %v", v)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("Int32", func(t *testing.T) {
+		caster := IntCaster[int32]{}
+		tests := []struct {
+			name     string
+			input    interface{}
+			expected interface{}
+			hasError bool
+		}{
+			{"Int", 42, int32(42), false},
+			{"Int64", int64(42), int32(42), false},
+			{"String", "42", nil, true},
+			{"MaxInt32", int32(math.MaxInt32), int32(math.MaxInt32), false},
+			{"MinInt32", int(math.MinInt32), int32(math.MinInt32), false},
+			{"Overflow", int(math.MaxInt32) << 2, nil, true},
+			{"Underflow", int64(math.MinInt32) << 2, nil, true},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := caster.CastValue(tt.input)
+				if tt.hasError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+					assert.Equal(t, tt.expected, result)
+				}
+			})
+		}
+
+		t.Run("CastSlice", func(t *testing.T) {
+			input := []int64{1, 2, 3}
+			result, err := caster.CastSlice(input)
+			assert.NoError(t, err)
+			assert.IsType(t, []int32{}, result)
+			assert.Equal(t, []int32{1, 2, 3}, result)
+
+			_, err = caster.CastSlice([]string{"not", "ints"})
+			assert.Error(t, err)
 		})
-	}
 
-	t.Run("CastSlice", func(t *testing.T) {
-		input := []int64{1, 2, 3}
-		result, err := caster.CastSlice(input)
-		assert.NoError(t, err)
-		assert.IsType(t, []int32{}, result)
-		assert.Equal(t, []int32{1, 2, 3}, result)
-
-		_, err = caster.CastSlice([]string{"not", "ints"})
-		assert.Error(t, err)
 	})
 }
 
 // TestCastUintCaster tests the UintCaster to ensure it correctly casts various
 // input types to uint32 and handles edge cases and errors appropriately.
 func TestCastUintCaster(t *testing.T) {
-	caster := UintCaster[uint32]{}
-
 	tests := []struct {
-		name     string
-		input    interface{}
-		expected interface{}
-		hasError bool
+		name   string
+		caster ValueCaster
+		size   uintptr
 	}{
-		{"Uint", uint(42), uint32(42), false},
-		{"Int", 42, uint32(42), false},
-		{"String", "42", nil, true},
-		{"MaxUint32", uint32(math.MaxUint32), uint32(math.MaxUint32), false},
-		{"Overflow", uint64(math.MaxUint32) + 1, nil, true},
-		{"Negative", -1, nil, true},
+		{"Uint", UintCaster[uint]{}, unsafe.Sizeof(uint(0)) * 8},
+		{"Uint8", UintCaster[uint8]{}, unsafe.Sizeof(uint8(0)) * 8},
+		{"Uint16", UintCaster[uint16]{}, unsafe.Sizeof(uint16(0)) * 8},
+		{"Uint32", UintCaster[uint32]{}, unsafe.Sizeof(uint32(0)) * 8},
+		{"Uint64", UintCaster[uint64]{}, unsafe.Sizeof(uint64(0)) * 8},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := caster.CastValue(tt.input)
-			if tt.hasError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
-			}
+	// zero cases
+	t.Run("ZeroCases", func(t *testing.T) {
+		for _, testCase := range tests {
+			t.Run(testCase.name, func(t *testing.T) {
+				for _, z := range intZeroCases {
+					_, err := testCase.caster.CastValue(z)
+					require.NoError(t, err)
+				}
+			})
+		}
+	})
+
+	// max cases
+	t.Run("MaxCases", func(t *testing.T) {
+		for _, testCase := range tests {
+			t.Run(testCase.name, func(t *testing.T) {
+				for _, v := range intMaxCases {
+					isErrorExpected := testCase.size < ValueSize(v) || (IsUint(v) && IsUintOverFlowUintCaster(v, testCase.size))
+					_, err := testCase.caster.CastValue(v)
+					if isErrorExpected {
+						require.Error(t, err)
+					} else {
+						require.NoError(t, err)
+					}
+				}
+			})
+		}
+	})
+
+	// zero slice cases
+	t.Run("ZeroSliceCases", func(t *testing.T) {
+		for _, testCase := range tests {
+			t.Run(testCase.name, func(t *testing.T) {
+				for _, v := range intZeroSliceCases {
+					_, err := testCase.caster.CastSlice(v)
+					require.NoError(t, err)
+				}
+			})
+		}
+	})
+
+	// max slice cases
+	t.Run("MaxSliceCases", func(t *testing.T) {
+		for _, testCase := range tests {
+			t.Run(testCase.name, func(t *testing.T) {
+				for _, v := range intMaxSliceCases {
+					val := reflect.ValueOf(v)
+					switch val.Kind() {
+					case reflect.Array, reflect.Slice:
+						idxZeroVal := val.Index(0).Interface()
+						isErrorExpected := testCase.size < ValueSize(idxZeroVal) || (IsUint(idxZeroVal) && IsUintOverFlowUintCaster(idxZeroVal, testCase.size))
+						_, err := testCase.caster.CastSlice(v)
+						if isErrorExpected {
+							require.Error(t, err)
+						} else {
+							require.NoError(t, err)
+						}
+					default:
+						t.Errorf("value is not supported: %v", v)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("Uint32", func(t *testing.T) {
+		caster := UintCaster[uint32]{}
+		tests := []struct {
+			name     string
+			input    interface{}
+			expected interface{}
+			hasError bool
+		}{
+			{"Uint", uint(42), uint32(42), false},
+			{"Int", 42, uint32(42), false},
+			{"String", "42", nil, true},
+			{"MaxUint32", uint32(math.MaxUint32), uint32(math.MaxUint32), false},
+			{"Overflow", math.MaxUint32 << 2, nil, true},
+			{"Negative", -1, nil, true},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := caster.CastValue(tt.input)
+				if tt.hasError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+					assert.Equal(t, tt.expected, result)
+				}
+			})
+		}
+
+		t.Run("CastSlice", func(t *testing.T) {
+			input := []uint64{1, 2, 3}
+			result, err := caster.CastSlice(input)
+			assert.NoError(t, err)
+			assert.IsType(t, []uint32{}, result)
+			assert.Equal(t, []uint32{1, 2, 3}, result)
+			_, err = caster.CastSlice([]string{"not", "uints"})
+			assert.Error(t, err)
 		})
-	}
-
-	t.Run("CastSlice", func(t *testing.T) {
-		input := []uint64{1, 2, 3}
-		result, err := caster.CastSlice(input)
-		assert.NoError(t, err)
-		assert.IsType(t, []uint32{}, result)
-		assert.Equal(t, []uint32{1, 2, 3}, result)
-
-		_, err = caster.CastSlice([]string{"not", "uints"})
-		assert.Error(t, err)
 	})
 }
 
 // TestCastFloatCaster tests the FloatCaster to ensure it correctly casts various
 // input types to float32 and handles edge cases and errors appropriately.
 func TestCastFloatCaster(t *testing.T) {
-	caster := FloatCaster[float32]{}
+	t.Run("Float32", func(t *testing.T) {
+		caster := FloatCaster[float32]{}
 
-	tests := []struct {
-		name     string
-		input    interface{}
-		expected float32
+		tests := []struct {
+			name     string
+			input    interface{}
+			expected float32
 			hasError bool
-	}{
-		{"Float32", float32(3.14), 3.14, false},
-		{"Float64", 3.14, 3.14, false},
-		{"Int", 42, 42.0, false},
-		{"String", "3.14", 0, true},
-		{"MaxFloat32", float64(math.MaxFloat32), math.MaxFloat32, false},
-		{"Overflow", float64(math.MaxFloat32) * 2, float32(math.Inf(1)), false},
-	}
+		}{
+			{"Float32", float32(3.14), 3.14, false},
+			{"Float64", 3.14, 3.14, false},
+			{"Int", 42, 42.0, false},
+			{"String", "3.14", 0, true},
+			{"MaxFloat32", float64(math.MaxFloat32), math.MaxFloat32, false},
+			{"Overflow", float64(math.MaxFloat32) * 2, float32(math.Inf(1)), false},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := caster.CastValue(tt.input)
-			if tt.hasError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
-			}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := caster.CastValue(tt.input)
+				if tt.hasError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+					assert.Equal(t, tt.expected, result)
+				}
+			})
+		}
+
+		t.Run("CastSlice", func(t *testing.T) {
+			input := []float64{1.1, 2.2, 3.3}
+			result, err := caster.CastSlice(input)
+			assert.NoError(t, err)
+			assert.Equal(t, []float32{1.1, 2.2, 3.3}, result)
+
+			_, err = caster.CastSlice([]string{"not", "floats"})
+			assert.Error(t, err)
 		})
-	}
-
-	t.Run("CastSlice", func(t *testing.T) {
-		input := []float64{1.1, 2.2, 3.3}
-		result, err := caster.CastSlice(input)
-		assert.NoError(t, err)
-		assert.Equal(t, []float32{1.1, 2.2, 3.3}, result)
-
-		_, err = caster.CastSlice([]string{"not", "floats"})
-		assert.Error(t, err)
 	})
 }
 
