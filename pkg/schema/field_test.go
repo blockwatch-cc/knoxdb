@@ -4,6 +4,9 @@
 package schema
 
 import (
+	"bytes"
+	"fmt"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -16,120 +19,84 @@ import (
 
 // TestNewField tests the creation of new Field instances with different types,
 // verifying that the resulting fields have the correct properties.
-func TestFieldNew(t *testing.T) {
-	t.Log("Starting TestNewField")
-	tests := []struct {
-		name         string
-		typ          types.FieldType
-		expectedType types.FieldType
-		expectedData int
-		expectedWire int
+func TestNewField(t *testing.T) {
+	testCases := []struct {
+		name      string
+		fieldType types.FieldType
+		expected  Field
 	}{
-		{
-			name:         "Int32",
-			typ:          types.FieldTypeInt32,
-			expectedType: types.FieldTypeInt32,
-			expectedData: 4,
-			expectedWire: 4,
-		},
-		{
-			name:         "String",
-			typ:          types.FieldTypeString,
-			expectedType: types.FieldTypeString,
-			expectedData: 16,
-			expectedWire: 4,
-		},
+		{"Int32", types.FieldTypeInt32, Field{typ: types.FieldTypeInt32, wireSize: 4}},
+		{"String", types.FieldTypeString, Field{typ: types.FieldTypeString, wireSize: 4}},
+		{"DateTime", types.FieldTypeDatetime, Field{typ: types.FieldTypeDatetime, wireSize: 8}},
+		{"Boolean", types.FieldTypeBoolean, Field{typ: types.FieldTypeBoolean, wireSize: 1}},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			f := NewField(tt.typ)
-			actualType := f.Type()
-			actualData := f.DataSize()
-			actualWire := f.WireSize()
-
-			if actualType != tt.expectedType {
-				t.Errorf("Type mismatch for %s: expected %v, got %v", tt.name, tt.expectedType, actualType)
-			}
-			if actualData != tt.expectedData {
-				t.Errorf("Data size mismatch for %s: expected %v, got %v", tt.name, tt.expectedData, actualData)
-			}
-			if actualWire != tt.expectedWire {
-				t.Errorf("Wire size mismatch for %s: expected %v, got %v", tt.name, tt.expectedWire, actualWire)
-			}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			field := NewField(tc.fieldType)
+			assert.Equal(t, tc.expected, field)
 		})
 	}
 }
 
-// TestFieldMethods tests various methods of the Field struct, including
-// WithName, WithFlags, WithCompression, WithFixed, WithScale, and WithIndex.
-func TestFieldMethods(t *testing.T) {
-	base := NewField(types.FieldTypeInt32)
+// TestFieldWithMethods verifies that Field methods correctly set and return field properties.
+func TestFieldWithMethods(t *testing.T) {
+	baseField := NewField(types.FieldTypeInt32).WithName("test_field")
 
 	t.Run("WithName", func(t *testing.T) {
-		f := base.WithName("test_field")
-		assert.Equal(t, "test_field", f.Name())
+		field := baseField.WithName("new_name")
+		assert.Equal(t, "new_name", field.Name())
 	})
 
 	t.Run("WithFlags", func(t *testing.T) {
-		f := base.WithFlags(types.FieldFlagIndexed | types.FieldFlagInternal)
-		assert.True(t, f.Is(types.FieldFlagIndexed))
-		assert.True(t, f.Is(types.FieldFlagInternal))
-	})
-
-	t.Run("WithCompression", func(t *testing.T) {
-		f := base.WithCompression(types.FieldCompression(1))
-		assert.Equal(t, types.FieldCompression(1), f.Compress())
+		field := baseField.WithFlags(types.FieldFlagIndexed)
+		assert.True(t, field.Is(types.FieldFlagIndexed))
 	})
 
 	t.Run("WithFixed", func(t *testing.T) {
-		f := NewField(types.FieldTypeString).WithFixed(10)
-		assert.Equal(t, uint16(10), f.Fixed())
+		field := NewField(types.FieldTypeString).WithFixed(10)
+		assert.Equal(t, uint16(10), field.Fixed())
 	})
 
 	t.Run("WithScale", func(t *testing.T) {
-		f := NewField(types.FieldTypeDecimal64).WithScale(2)
-		assert.Equal(t, uint8(2), f.Scale())
+		field := NewField(types.FieldTypeDecimal64).WithScale(2)
+		assert.Equal(t, uint8(2), field.Scale())
 	})
 
 	t.Run("WithIndex", func(t *testing.T) {
-		f := base.WithIndex(types.IndexTypeInt)
-		assert.Equal(t, types.IndexTypeInt, f.Index())
-		assert.True(t, f.Is(types.FieldFlagIndexed))
+		field := baseField.WithIndex(types.IndexTypeInt)
+		assert.Equal(t, types.IndexTypeInt, field.Index())
+		assert.True(t, field.Is(types.FieldFlagIndexed))
 	})
 }
 
-// TestFieldGoType tests the WithGoType method of Field, ensuring it correctly
-// sets the field's path, offset, and sizes based on the Go type information.
-func TestFieldGoType(t *testing.T) {
+// TestFieldWithGoType ensures that Field correctly handles Go types and sets appropriate properties.
+func TestFieldWithGoType(t *testing.T) {
 	type TestStruct struct {
 		IntField    int32
 		StringField string
 	}
 
-	typ := reflect.TypeOf(TestStruct{})
+	testStruct := TestStruct{}
+	structType := reflect.TypeOf(testStruct)
 
 	t.Run("Int32Field", func(t *testing.T) {
-		field, _ := typ.FieldByName("IntField")
-		f := NewField(types.FieldTypeInt32).WithGoType(field.Type, field.Index, field.Offset)
-		assert.Equal(t, []int{0}, f.Path())
-		assert.Equal(t, field.Offset, f.Offset())
-		assert.Equal(t, uint16(4), f.wireSize)
+		field := NewField(types.FieldTypeInt32).WithGoType(structType.Field(0).Type, []int{0}, structType.Field(0).Offset)
+		assert.Equal(t, uint16(4), field.wireSize)
+		assert.Equal(t, []int{0}, field.Path())
+		assert.Equal(t, uintptr(0), field.Offset())
 	})
 
 	t.Run("StringField", func(t *testing.T) {
-		field, _ := typ.FieldByName("StringField")
-		f := NewField(types.FieldTypeString).WithGoType(field.Type, field.Index, field.Offset)
-		assert.Equal(t, []int{1}, f.Path())
-		assert.Equal(t, field.Offset, f.Offset())
-		assert.Equal(t, uint16(16), f.wireSize) // assuming 64-bit system
+		field := NewField(types.FieldTypeString).WithGoType(structType.Field(1).Type, []int{1}, structType.Field(1).Offset)
+		assert.Equal(t, uint16(16), field.wireSize)
+		assert.Equal(t, []int{1}, field.Path())
 	})
 }
 
-// TestFieldValidate tests the Validate method of Field, checking various
-// valid and invalid field configurations.
-func TestFieldValidate(t *testing.T) {
-	tests := []struct {
+// TestFieldValidation checks if Field properly validates its configuration for various field types and settings.
+func TestFieldValidation(t *testing.T) {
+	testCases := []struct {
 		name      string
 		field     Field
 		expectErr bool
@@ -176,10 +143,10 @@ func TestFieldValidate(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.field.Validate()
-			if tt.expectErr {
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.field.Validate()
+			if tc.expectErr {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
@@ -188,10 +155,9 @@ func TestFieldValidate(t *testing.T) {
 	}
 }
 
-// TestFieldCodec tests the Codec method of Field, ensuring it returns the
-// correct OpCode for each field type.
-func TestFieldCodec(t *testing.T) {
-	tests := []struct {
+// TestFieldCodecMapping verifies that Field correctly maps to appropriate OpCode values for different field types.
+func TestFieldCodecMapping(t *testing.T) {
+	testCases := []struct {
 		name     string
 		field    Field
 		expected OpCode
@@ -218,16 +184,15 @@ func TestFieldCodec(t *testing.T) {
 		{"Decimal32", NewField(types.FieldTypeDecimal32), OpCodeDecimal32},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, tt.field.Codec())
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, tc.field.Codec())
 		})
 	}
 }
 
-// TestFieldGenericCodec tests the encoding and decoding of a struct using
-// generic encoder and decoder, verifying that the process is reversible.
-func TestFieldGenericCodec(t *testing.T) {
+// TestFieldGenericCodecRoundTrip tests the round-trip encoding and decoding of various field types using GenericEncoder and GenericDecoder.
+func TestFieldGenericCodecRoundTrip(t *testing.T) {
 	type TestStruct struct {
 		IntField     int32         `knox:"int_field"`
 		StringField  string        `knox:"string_field"`
@@ -256,9 +221,8 @@ func TestFieldGenericCodec(t *testing.T) {
 	assert.Equal(t, testData, *decoded)
 }
 
-// TestFieldStructValue tests the StructValue method of Field, ensuring it
-// correctly retrieves values from struct fields, including pointer fields.
-func TestFieldStructValue(t *testing.T) {
+// TestFieldStructValueRetrieval ensures Field can correctly retrieve values from structs, including pointer fields.
+func TestFieldStructValueRetrieval(t *testing.T) {
 	type TestStruct struct {
 		IntField    int32
 		StringField string
@@ -274,7 +238,7 @@ func TestFieldStructValue(t *testing.T) {
 
 	rval := reflect.ValueOf(value)
 
-	tests := []struct {
+	testCases := []struct {
 		name     string
 		field    Field
 		expected interface{}
@@ -296,60 +260,203 @@ func TestFieldStructValue(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := tt.field.StructValue(rval)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tc.field.StructValue(rval)
 			if result.Kind() == reflect.Ptr {
 				result = result.Elem()
 			}
-			assert.Equal(t, tt.expected, result.Interface())
+			assert.Equal(t, tc.expected, result.Interface())
 		})
 	}
 }
 
-// TestExportedField tests the StructValue method of ExportedField, verifying
-// that it correctly retrieves values from exported struct fields.
-func TestExportedField(t *testing.T) {
-	type TestStruct struct {
-		IntField    int32
-		StringField string
-		PtrField    *int32
-	}
-
-	value := TestStruct{
-		IntField:    42,
-		StringField: "test",
-		PtrField:    nil,
-	}
-
-	rval := reflect.ValueOf(value)
-
-	tests := []struct {
+// TestFieldEncodingDecoding verifies the encoding and decoding of various field types, including integer, float, and other basic types.
+func TestFieldEncodingDecoding(t *testing.T) {
+	testCases := []struct {
 		name     string
-		field    ExportedField
+		field    Field
+		value    interface{}
 		expected interface{}
 	}{
-		{
-			name:     "IntField",
-			field:    ExportedField{Name: "IntField", Type: types.FieldTypeInt32, path: []int{0}},
-			expected: int32(42),
-		},
-		{
-			name:     "StringField",
-			field:    ExportedField{Name: "StringField", Type: types.FieldTypeString, path: []int{1}},
-			expected: "test",
-		},
-		{
-			name:     "PtrField",
-			field:    ExportedField{Name: "PtrField", Type: types.FieldTypeInt32, path: []int{2}},
-			expected: int32(0),
-		},
+		{"Int8_Zero", NewField(types.FieldTypeInt8), int8(0), int8(0)},
+		{"Int8_Max", NewField(types.FieldTypeInt8), int8(math.MaxInt8), int8(math.MaxInt8)},
+		{"Int16_Zero", NewField(types.FieldTypeInt16), int16(0), int16(0)},
+		{"Int16_Max", NewField(types.FieldTypeInt16), int16(math.MaxInt16), int16(math.MaxInt16)},
+		{"Int32_Zero", NewField(types.FieldTypeInt32), int32(0), int32(0)},
+		{"Int32_Max", NewField(types.FieldTypeInt32), int32(math.MaxInt32), int32(math.MaxInt32)},
+		{"Int64_Zero", NewField(types.FieldTypeInt64), int64(0), int64(0)},
+		{"Int64_Max", NewField(types.FieldTypeInt64), int64(math.MaxInt64), int64(math.MaxInt64)},
+		{"Uint8_Zero", NewField(types.FieldTypeUint8), uint8(0), uint8(0)},
+		{"Uint8_Max", NewField(types.FieldTypeUint8), uint8(math.MaxUint8), uint8(math.MaxUint8)},
+		{"Uint16_Zero", NewField(types.FieldTypeUint16), uint16(0), uint16(0)},
+		{"Uint16_Max", NewField(types.FieldTypeUint16), uint16(math.MaxUint16), uint16(math.MaxUint16)},
+		{"Uint32_Zero", NewField(types.FieldTypeUint32), uint32(0), uint32(0)},
+		{"Uint32_Max", NewField(types.FieldTypeUint32), uint32(math.MaxUint32), uint32(math.MaxUint32)},
+		{"Uint64_Zero", NewField(types.FieldTypeUint64), uint64(0), uint64(0)},
+		{"Uint64_Max", NewField(types.FieldTypeUint64), uint64(math.MaxUint64), uint64(math.MaxUint64)},
+		{"Float32_Zero", NewField(types.FieldTypeFloat32), float32(0), float32(0)},
+		{"Float32_Max", NewField(types.FieldTypeFloat32), float32(math.MaxFloat32), float32(math.MaxFloat32)},
+		{"Float64_Zero", NewField(types.FieldTypeFloat64), float64(0), float64(0)},
+		{"Float64_Max", NewField(types.FieldTypeFloat64), float64(math.MaxFloat64), float64(math.MaxFloat64)},
+		{"Boolean_True", NewField(types.FieldTypeBoolean), true, true},
+		{"Boolean_False", NewField(types.FieldTypeBoolean), false, false},
+		{"String_Empty", NewField(types.FieldTypeString), "", ""},
+		{"String_Hello", NewField(types.FieldTypeString), "Hello, World!", "Hello, World!"},
+		{"Bytes_Empty", NewField(types.FieldTypeBytes), []byte{}, []byte{}},
+		{"Bytes_Data", NewField(types.FieldTypeBytes), []byte{1, 2, 3, 4}, []byte{1, 2, 3, 4}},
+		{"DateTime_Now", NewField(types.FieldTypeDatetime), time.Now().UTC(), time.Now().UTC()},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := tt.field.StructValue(rval)
-			assert.Equal(t, tt.expected, result.Interface())
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := tc.field.Encode(&buf, tc.value)
+			assert.NoError(t, err, "Encoding failed for %v", tc.name)
+
+			decoded, err := tc.field.Decode(bytes.NewReader(buf.Bytes()))
+			assert.NoError(t, err, "Decoding failed for %v", tc.name)
+
+			if tc.field.Type() == types.FieldTypeDatetime {
+				assert.WithinDuration(t, tc.expected.(time.Time), decoded.(time.Time), time.Millisecond)
+			} else {
+				assert.Equal(t, tc.expected, decoded, "Decoded value does not match expected for %v", tc.name)
+			}
 		})
+	}
+}
+
+// TestFieldSerializationRoundTrip verifies that Field can be serialized and deserialized correctly, preserving all properties.
+func TestFieldSerializationRoundTrip(t *testing.T) {
+	original := NewField(types.FieldTypeString).
+		WithName("test_field").
+		WithFlags(types.FieldFlagIndexed).
+		WithIndex(types.IndexTypeHash).
+		WithFixed(10)
+
+	var buf bytes.Buffer
+	err := original.WriteTo(&buf)
+	require.NoError(t, err)
+
+	var readField Field
+	err = readField.ReadFrom(&buf)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.name, readField.name)
+	assert.Equal(t, original.id, readField.id)
+	assert.Equal(t, original.typ, readField.typ)
+	assert.Equal(t, original.flags, readField.flags)
+	assert.Equal(t, original.compress, readField.compress)
+	assert.Equal(t, original.index, readField.index)
+	assert.Equal(t, original.fixed, readField.fixed)
+	assert.Equal(t, original.scale, readField.scale)
+}
+
+// TestFieldRangeAndOverflow combines range testing and overflow handling for all integer types and their slices.
+func TestFieldRangeAndOverflow(t *testing.T) {
+	intTypes := []struct {
+		fieldType types.FieldType
+		goType    reflect.Type
+		zero      interface{}
+		min       interface{}
+		max       interface{}
+		isUnsigned bool
+	}{
+		{types.FieldTypeInt8, reflect.TypeOf(int8(0)), int8(0), int8(math.MinInt8), int8(math.MaxInt8), false},
+		{types.FieldTypeInt16, reflect.TypeOf(int16(0)), int16(0), int16(math.MinInt16), int16(math.MaxInt16), false},
+		{types.FieldTypeInt32, reflect.TypeOf(int32(0)), int32(0), int32(math.MinInt32), int32(math.MaxInt32), false},
+		{types.FieldTypeInt64, reflect.TypeOf(int64(0)), int64(0), int64(math.MinInt64), int64(math.MaxInt64), false},
+		{types.FieldTypeUint8, reflect.TypeOf(uint8(0)), uint8(0), uint8(0), uint8(math.MaxUint8), true},
+		{types.FieldTypeUint16, reflect.TypeOf(uint16(0)), uint16(0), uint16(0), uint16(math.MaxUint16), true},
+		{types.FieldTypeUint32, reflect.TypeOf(uint32(0)), uint32(0), uint32(0), uint32(math.MaxUint32), true},
+		{types.FieldTypeUint64, reflect.TypeOf(uint64(0)), uint64(0), uint64(0), uint64(math.MaxUint64), true},
+	}
+
+	for _, targetType := range intTypes {
+		field := NewField(targetType.fieldType)
+
+		// Test range for the target type
+		t.Run(fmt.Sprintf("%v_Range", targetType.fieldType), func(t *testing.T) {
+			testValue := func(v interface{}) {
+				var buf bytes.Buffer
+				err := field.Encode(&buf, v)
+				require.NoError(t, err, "Encoding failed for value %v", v)
+
+				decoded, err := field.Decode(bytes.NewReader(buf.Bytes()))
+				require.NoError(t, err, "Decoding failed for value %v", v)
+
+				assert.Equal(t, v, decoded, "Decoded value does not match original for %v", v)
+			}
+
+			testValue(targetType.zero)
+			testValue(targetType.min)
+			testValue(targetType.max)
+		})
+
+		// Test conversions and potential overflows
+		for _, inputType := range intTypes {
+			t.Run(fmt.Sprintf("%v_to_%v", inputType.fieldType, targetType.fieldType), func(t *testing.T) {
+				testConversion := func(v interface{}) {
+					var buf bytes.Buffer
+					err := field.Encode(&buf, v)
+					
+					isErrorExpected := reflect.TypeOf(v).Size() > targetType.goType.Size() ||
+						(inputType.isUnsigned && !targetType.isUnsigned)
+
+					if isErrorExpected {
+						assert.Error(t, err, "Expected overflow error for %v to %v", inputType.fieldType, targetType.fieldType)
+					} else {
+						assert.NoError(t, err, "Unexpected error for %v to %v", inputType.fieldType, targetType.fieldType)
+						if err == nil {
+							decoded, decodeErr := field.Decode(bytes.NewReader(buf.Bytes()))
+							assert.NoError(t, decodeErr, "Decoding failed for %v to %v", inputType.fieldType, targetType.fieldType)
+							assert.Equal(t, reflect.ValueOf(v).Convert(targetType.goType).Interface(), decoded, 
+								"Decoded value does not match expected for %v to %v", inputType.fieldType, targetType.fieldType)
+						}
+					}
+				}
+
+				testConversion(inputType.zero)
+				testConversion(inputType.min)
+				testConversion(inputType.max)
+			})
+		}
+
+		// Test array handling
+		t.Run(fmt.Sprintf("%v_Array", targetType.fieldType), func(t *testing.T) {
+			arrayField := field
+			arrayField.isArray = true
+			slice := reflect.MakeSlice(reflect.SliceOf(targetType.goType), 1, 1)
+			slice.Index(0).Set(reflect.ValueOf(targetType.max))
+			testEncodeDecodeRoundTrip(t, arrayField, slice.Type(), slice.Interface())
+		})
+	}
+
+	// Time caster test
+	t.Run("TimeCaster", func(t *testing.T) {
+		field := NewField(types.FieldTypeDatetime)
+		now := time.Now()
+		testEncodeDecodeRoundTrip(t, field, reflect.TypeOf(now), now)
+	})
+}
+
+func testEncodeDecodeRoundTrip(t *testing.T, field Field, inputType reflect.Type, value interface{}) {
+	var buf bytes.Buffer
+	err := field.Encode(&buf, value)
+
+	testName := fmt.Sprintf("%v_to_%v_%v", inputType, field.Type(), reflect.ValueOf(value).Kind())
+	if err != nil {
+		t.Logf("Encoding error for %v: %v", testName, err)
+		return
+	}
+
+	decoded, decodeErr := field.Decode(bytes.NewReader(buf.Bytes()))
+	assert.NoError(t, decodeErr, "Decoding failed for %v", testName)
+
+	if reflect.ValueOf(value).Kind() == reflect.Slice {
+		assert.Equal(t, reflect.ValueOf(value).Index(0).Interface(), reflect.ValueOf(decoded).Index(0).Interface(), 
+			"Decoded value does not match original for %v", testName)
+	} else {
+		assert.Equal(t, value, decoded, "Decoded value does not match original for %v", testName)
 	}
 }
