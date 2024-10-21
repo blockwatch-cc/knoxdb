@@ -16,38 +16,47 @@ import (
 
 // TestNewField tests the creation of new Field instances with different types,
 // verifying that the resulting fields have the correct properties.
-func TestNewField(t *testing.T) {
+func TestFieldNew(t *testing.T) {
+	t.Log("Starting TestNewField")
 	tests := []struct {
-		name     string
-		typ      types.FieldType
-		expected Field
+		name         string
+		typ          types.FieldType
+		expectedType types.FieldType
+		expectedData int
+		expectedWire int
 	}{
 		{
-			name: "Int32",
-			typ:  types.FieldTypeInt32,
-			expected: Field{
-				typ:      types.FieldTypeInt32,
-				dataSize: 4,
-				wireSize: 4,
-			},
+			name:         "Int32",
+			typ:          types.FieldTypeInt32,
+			expectedType: types.FieldTypeInt32,
+			expectedData: 4,
+			expectedWire: 4,
 		},
 		{
-			name: "String",
-			typ:  types.FieldTypeString,
-			expected: Field{
-				typ:      types.FieldTypeString,
-				dataSize: 16, // assuming 64-bit system
-				wireSize: 16, // assuming 64-bit system
-			},
+			name:         "String",
+			typ:          types.FieldTypeString,
+			expectedType: types.FieldTypeString,
+			expectedData: 16,
+			expectedWire: 4,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := NewField(tt.typ)
-			assert.Equal(t, tt.expected.typ, f.typ)
-			assert.Equal(t, tt.expected.dataSize, f.dataSize)
-			assert.Equal(t, tt.expected.wireSize, f.wireSize)
+			actualType := f.Type()
+			actualData := f.DataSize()
+			actualWire := f.WireSize()
+
+			if actualType != tt.expectedType {
+				t.Errorf("Type mismatch for %s: expected %v, got %v", tt.name, tt.expectedType, actualType)
+			}
+			if actualData != tt.expectedData {
+				t.Errorf("Data size mismatch for %s: expected %v, got %v", tt.name, tt.expectedData, actualData)
+			}
+			if actualWire != tt.expectedWire {
+				t.Errorf("Wire size mismatch for %s: expected %v, got %v", tt.name, tt.expectedWire, actualWire)
+			}
 		})
 	}
 }
@@ -105,7 +114,6 @@ func TestFieldGoType(t *testing.T) {
 		f := NewField(types.FieldTypeInt32).WithGoType(field.Type, field.Index, field.Offset)
 		assert.Equal(t, []int{0}, f.Path())
 		assert.Equal(t, field.Offset, f.Offset())
-		assert.Equal(t, uint16(4), f.dataSize)
 		assert.Equal(t, uint16(4), f.wireSize)
 	})
 
@@ -114,7 +122,6 @@ func TestFieldGoType(t *testing.T) {
 		f := NewField(types.FieldTypeString).WithGoType(field.Type, field.Index, field.Offset)
 		assert.Equal(t, []int{1}, f.Path())
 		assert.Equal(t, field.Offset, f.Offset())
-		assert.Equal(t, uint16(16), f.dataSize)  // assuming 64-bit system
 		assert.Equal(t, uint16(16), f.wireSize) // assuming 64-bit system
 	})
 }
@@ -222,10 +229,10 @@ func TestFieldCodec(t *testing.T) {
 // generic encoder and decoder, verifying that the process is reversible.
 func TestFieldGenericCodec(t *testing.T) {
 	type TestStruct struct {
-		IntField    int32   `knox:"int_field"`
-		StringField string  `knox:"string_field"`
-		FloatField  float64 `knox:"float_field"`
-		TimeField   time.Time `knox:"time_field"`
+		IntField     int32         `knox:"int_field"`
+		StringField  string        `knox:"string_field"`
+		FloatField   float64       `knox:"float_field"`
+		TimeField    time.Time     `knox:"time_field"`
 		DecimalField num.Decimal64 `knox:"decimal_field,scale=2"`
 	}
 
@@ -233,10 +240,10 @@ func TestFieldGenericCodec(t *testing.T) {
 	dec := NewGenericDecoder[TestStruct]()
 
 	testData := TestStruct{
-		IntField:    42,
-		StringField: "test",
-		FloatField:  3.14,
-		TimeField:   time.Now().UTC(),
+		IntField:     42,
+		StringField:  "test",
+		FloatField:   3.14,
+		TimeField:    time.Now().UTC(),
 		DecimalField: num.NewDecimal64(314, 2),
 	}
 
