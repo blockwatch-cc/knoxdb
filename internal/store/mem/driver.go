@@ -107,6 +107,10 @@ func createDBDriver(args ...any) (store.DB, error) {
 	return openDB(dbPath, opts, true)
 }
 
+func dropDBDriver(path string) error {
+	return nil
+}
+
 // useLogger is the callback provided during driver registration that sets the
 // current logger to the provided one.
 func useLogger(logger logpkg.Logger) {
@@ -119,6 +123,7 @@ func init() {
 		DbType:    dbType,
 		Create:    createDBDriver,
 		Open:      openDBDriver,
+		Drop:      dropDBDriver,
 		UseLogger: useLogger,
 	}
 	if err := store.RegisterDriver(driver); err != nil {

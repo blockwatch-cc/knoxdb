@@ -26,6 +26,10 @@ type Driver struct {
 	// ErrDbDoesNotExist if the database has not already been created.
 	Open func(args ...interface{}) (DB, error)
 
+	// Drop is the function that will remove any database files belonging
+	// to the database at path.
+	Drop func(path string) error
+
 	// UseLogger uses a specified Logger to output package logging info.
 	UseLogger func(logger logpkg.Logger)
 }
@@ -57,18 +61,25 @@ func SupportedDrivers() []string {
 	return supportedDBs
 }
 
+func lookupDriver(dbType string) (*Driver, error) {
+	drv, exists := drivers[dbType]
+	if !exists {
+		str := fmt.Sprintf("driver %q is not registered", dbType)
+		return nil, makeError(ErrDbUnknownType, str, nil)
+	}
+	return drv, nil
+}
+
 // Create initializes and opens a database for the specified type.  The
 // arguments are specific to the database type driver.  See the documentation
 // for the database driver for further details.
 //
 // ErrDbUnknownType will be returned if the the database type is not registered.
 func Create(dbType string, args ...interface{}) (DB, error) {
-	drv, exists := drivers[dbType]
-	if !exists {
-		str := fmt.Sprintf("driver %q is not registered", dbType)
-		return nil, makeError(ErrDbUnknownType, str, nil)
+	drv, err := lookupDriver(dbType)
+	if err != nil {
+		return nil, err
 	}
-
 	return drv.Create(args...)
 }
 
@@ -78,11 +89,17 @@ func Create(dbType string, args ...interface{}) (DB, error) {
 //
 // ErrDbUnknownType will be returned if the the database type is not registered.
 func Open(dbType string, args ...interface{}) (DB, error) {
-	drv, exists := drivers[dbType]
-	if !exists {
-		str := fmt.Sprintf("driver %q is not registered", dbType)
-		return nil, makeError(ErrDbUnknownType, str, nil)
+	drv, err := lookupDriver(dbType)
+	if err != nil {
+		return nil, err
 	}
-
 	return drv.Open(args...)
+}
+
+func Drop(dbType string, path string) error {
+	drv, err := lookupDriver(dbType)
+	if err != nil {
+		return err
+	}
+	return drv.Drop(path)
 }

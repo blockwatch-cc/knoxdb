@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"os"
 
 	"blockwatch.cc/knoxdb/internal/store"
 	"github.com/dgraph-io/badger/v4"
@@ -134,12 +135,17 @@ func createDBDriver(args ...interface{}) (store.DB, error) {
 	return openDB(dbPath, true)
 }
 
+func dropDBDriver(path string) error {
+	return os.RemoveAll(path + ".db")
+}
+
 func init() {
 	// Register the driver.
 	driver := store.Driver{
 		DbType:    dbType,
 		Create:    createDBDriver,
 		Open:      openDBDriver,
+		Drop:      dropDBDriver,
 		UseLogger: useLogger,
 	}
 	if err := store.RegisterDriver(driver); err != nil {
