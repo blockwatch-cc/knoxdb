@@ -13,6 +13,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
+// TestConditionParse tests the ParseCondition function with various input scenarios.
 func TestConditionParse(t *testing.T) {
 	s := createTestSchema()
 
@@ -47,6 +48,7 @@ func TestConditionParse(t *testing.T) {
 	}
 }
 
+// TestConditionCompile tests the Compile method of Condition with different condition types.
 func TestConditionCompile(t *testing.T) {
 	s := createTestSchema()
 
@@ -84,6 +86,7 @@ func TestConditionCompile(t *testing.T) {
 	}
 }
 
+// TestConditionFields tests the Fields method of Condition for various condition structures.
 func TestConditionFields(t *testing.T) {
 	tests := []struct {
 		name string
@@ -131,6 +134,7 @@ func TestConditionFields(t *testing.T) {
 	}
 }
 
+// TestConditionAdd tests the Add method of Condition for different addition scenarios.
 func TestConditionAdd(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -169,6 +173,7 @@ func TestConditionAdd(t *testing.T) {
 	}
 }
 
+// equalStringSlices compares two string slices for equality.
 func equalStringSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -181,6 +186,7 @@ func equalStringSlices(a, b []string) bool {
 	return true
 }
 
+// createTestSchema creates a test schema with predefined fields and an enum.
 func createTestSchema() *schema.Schema {
 	statusEnum := schema.NewEnumDictionary("status")
 	statusEnum.Append("active", "pending", "inactive")
@@ -196,6 +202,7 @@ func createTestSchema() *schema.Schema {
 			Finalize()
 }
 
+// conditionEqual compares two Condition structs for deep equality.
 func conditionEqual(a, b Condition) bool {
 	if a.Name != b.Name || a.Type != b.Type || a.Index != b.Index || a.Mode != b.Mode || a.OrKind != b.OrKind {
 		return false
@@ -218,7 +225,7 @@ func conditionEqual(a, b Condition) bool {
 	return true
 }
 
-// Add this new helper function to convert a Condition to a string representation
+// conditionToString converts a Condition to its string representation.
 func conditionToString(c Condition) string {
 	if len(c.Children) > 0 {
 		childStrings := make([]string, len(c.Children))
