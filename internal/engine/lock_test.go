@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -247,7 +248,6 @@ func TestLockContextCancel(t *testing.T) {
 	x1 := withTx(ctx, 1)
 	m := NewLockManager()
 	cancel()
-	// require.ErrorIs(t, ctx.Err(), context.Canceled)
 
 	ok1, err := m.Lock(x1, LockModeExclusive)
 	require.False(t, ok1)
@@ -259,4 +259,39 @@ func TestLockContextCancel(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, 0, m.Len())
 
+}
+
+func BenchmarkLockObject(b *testing.B) {
+	ctx := context.Background()
+	for _, n := range []int{1, 2, 8, 32} {
+		// open locks for N resources (actually N+1 due to shared global lock)
+		m := NewLockManager()
+		b.Run(strconv.Itoa(n), func(b *testing.B) {
+			b.RunParallel(func(pb *testing.PB) {
+				xid := 1
+				for pb.Next() {
+					x := withTx(ctx, xid)
+					for i := 0; i < n; i++ {
+						_, _ = m.LockObject(x, LockModeShared, uint64(i))
+					}
+					m.Done(uint64(xid))
+					xid++
+				}
+			})
+		})
+	}
+}
+
+func BenchmarkLockGlobal(b *testing.B) {
+	ctx := context.Background()
+	m := NewLockManager()
+	b.RunParallel(func(pb *testing.PB) {
+		xid := 1
+		for pb.Next() {
+			x := withTx(ctx, xid)
+			_, _ = m.Lock(x, LockModeShared)
+			m.Done(uint64(xid))
+			xid++
+		}
+	})
 }
