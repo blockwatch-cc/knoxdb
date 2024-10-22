@@ -533,42 +533,55 @@ func (c CustomBinaryMarshaler) MarshalBinary() ([]byte, error) {
 // TestCastBytesCaster tests the BytesCaster to ensure it correctly casts various
 // input types to []byte and handles edge cases and errors appropriately.
 func TestCastBytesCaster(t *testing.T) {
-	caster := BytesCaster{}
+	caster := NewCaster(types.FieldTypeBytes)
 
-	tests := []struct {
-		name     string
-		input    interface{}
-		expected []byte
-		hasError bool
-	}{
-		{"String", "hello", []byte("hello"), false},
-		{"Bytes", []byte{1, 2, 3}, []byte{1, 2, 3}, false},
-		{"Int", int32(42), []byte{0, 0, 0, 42}, false},
-		{"CustomBinaryMarshaler", CustomBinaryMarshaler{[]byte{4, 5, 6}}, []byte{4, 5, 6}, false},
-		{"InvalidType", struct{}{}, nil, true},
-	}
+	t.Run("CastValue", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			input    interface{}
+			expected any
+			hasError bool
+		}{
+			{"String", "hello", []byte("hello"), false},
+			{"Bytes", byte(10), []byte{byte(10)}, false},
+			{"BytesArray", []byte{1, 2, 3}, []byte{1, 2, 3}, true},
+			{"Int", int32(42), []byte{0, 0, 0, 42}, false},
+			{"CustomBinaryMarshaler", CustomBinaryMarshaler{[]byte{4, 5, 6}}, []byte{4, 5, 6}, false},
+			{"InvalidType", struct{}{}, nil, true},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := caster.CastValue(tt.input)
-			if tt.hasError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
-			}
-		})
-	}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := caster.CastValue(tt.input)
+				if tt.hasError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+					assert.Equal(t, tt.expected, result)
+				}
+			})
+		}
+	})
 
 	t.Run("CastSlice", func(t *testing.T) {
-		input := [][]byte{{1, 2}, {3, 4}}
-		result, err := caster.CastSlice(input)
-		assert.NoError(t, err)
-		assert.IsType(t, [][]byte{}, result)
-		assert.Equal(t, input, result)
+		tests := []struct {
+			name     string
+			input    interface{}
+			expected any
+			hasError bool
+		}{
+			{"String", []string{"hello"}, [][]byte{[]byte("hello")}, false},
+			{"BytesArray", []byte{1, 2, 3}, [][]byte{{1}, {2}, {3}}, false},
+		}
 
-		_, err = caster.CastSlice([]string{"not", "bytes"})
-		assert.Error(t, err)
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				result, err := caster.CastSlice(test.input)
+				assert.NoError(t, err)
+				assert.IsType(t, [][]byte{}, result)
+				assert.Equal(t, test.expected, result)
+			})
+		}
 	})
 }
 
