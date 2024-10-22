@@ -164,3 +164,8 @@ type StoreEngine interface {
 	CommitTx(Context, uint64) error
 	AbortTx(Context, uint64) error
 }
+
+type ConditionMatcher interface {
+	MatchView(*schema.View) bool
+	Overlaps(ConditionMatcher) bool
+}

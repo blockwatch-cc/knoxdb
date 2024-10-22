@@ -68,11 +68,6 @@ func NewTestEngine(opts DatabaseOptions) *Engine {
 	if err != nil {
 		panic(err)
 	}
-	e.xlog = wal.NewCommitLog().WithLogger(opts.Logger)
-	err = e.xlog.Open(path, e.wal)
-	if err != nil {
-		panic(err)
-	}
 	return e
 }
 
@@ -105,11 +100,6 @@ func OpenTestEngine(opts DatabaseOptions) *Engine {
 		RecoveryMode:   wal.RecoveryModeTruncate,
 		Logger:         opts.Logger,
 	})
-	if err != nil {
-		panic(err)
-	}
-	e.xlog = wal.NewCommitLog().WithLogger(opts.Logger)
-	err = e.xlog.Open(path, e.wal)
 	if err != nil {
 		panic(err)
 	}

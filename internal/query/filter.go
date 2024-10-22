@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -236,4 +238,18 @@ func (n *FilterTreeNode) AddNode(node *FilterTreeNode) {
 	} else {
 		n.Children = append(n.Children, node)
 	}
+}
+
+// engine matcher interface
+func (n *FilterTreeNode) MatchView(v *schema.View) bool {
+	return MatchTree(n, v)
+}
+
+func (n *FilterTreeNode) Overlaps(v engine.ConditionMatcher) bool {
+	_, ok := v.(*FilterTreeNode)
+	if !ok {
+		return false
+	}
+	// TODO
+	return false
 }
