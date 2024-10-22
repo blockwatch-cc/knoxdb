@@ -68,6 +68,7 @@ func NewTestEngine(opts DatabaseOptions) *Engine {
 	if err != nil {
 		panic(err)
 	}
+	e.cat.WithWal(e.wal)
 	return e
 }
 
@@ -179,12 +180,6 @@ func TestCatalogOpen(t *testing.T) {
 	}, time.Second/4, time.Second/8)
 
 	require.NoError(t, abort())
-	require.NoError(t, e.cat.Close(context.Background()))
-}
-
-func TestCatalogMissingTx(t *testing.T) {
-	e := NewTestEngine(NewTestDatabaseOptions(t, "mem"))
-	require.Error(t, e.cat.Create(context.Background(), e.opts))
 	require.NoError(t, e.cat.Close(context.Background()))
 }
 

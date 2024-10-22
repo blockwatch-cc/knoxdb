@@ -147,44 +147,33 @@ func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 		return err
 	}
 	c.path = filepath.Join(opts.Path, c.name)
-	c.db = db
 
 	// init table storage
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	err = db.Update(func(tx store.Tx) error {
+		for _, key := range [][]byte{
+			databaseKey,
+			schemasKey,
+			optionsKey,
+			tablesKey,
+			indexesKey,
+			viewsKey,
+			enumsKey,
+			storesKey,
+			snapshotsKey,
+			streamsKey,
+		} {
+			if _, err := tx.Root().CreateBucket(key); err != nil {
+				return err
+			}
+		}
+		var b [8]byte
+		return tx.Bucket(databaseKey).Put(checkpointKey, b[:])
+	})
 	if err != nil {
+		_ = db.Close()
 		return err
 	}
-	for _, key := range [][]byte{
-		databaseKey,
-		schemasKey,
-		optionsKey,
-		tablesKey,
-		indexesKey,
-		viewsKey,
-		enumsKey,
-		storesKey,
-		snapshotsKey,
-		streamsKey,
-	} {
-		if _, err := tx.Root().CreateBucket(key); err != nil {
-			return err
-		}
-	}
-
-	// // init wal
-	// dbid := types.TaggedHash(types.ObjectTagDatabase, c.name)
-	// c.wal, err = redolog.Create(redolog.Options{
-	// 	Seed:         dbid,
-	// 	Path:         filepath.Join(opts.Path, c.name, "wal"),
-	// 	Entity:       dbid,
-	// 	SegmentId:    0, // catalog uses single segment only
-	// 	RecoveryMode: opts.WalRecoveryMode,
-	// 	Logger:       opts.Logger,
-	// })
-	// if err != nil {
-	// 	_ = db.Close()
-	// 	return err
-	// }
+	c.db = db
 
 	return nil
 }
@@ -217,23 +206,6 @@ func (c *Catalog) Open(ctx context.Context, opts DatabaseOptions) error {
 	}
 	c.path = filepath.Join(opts.Path, c.name)
 
-	// // open wal
-	// dbid := types.TaggedHash(types.ObjectTagDatabase, c.name)
-	// c.wal, err = redolog.Open(redolog.Options{
-	// 	Seed:         dbid,
-	// 	Path:         filepath.Join(opts.Path, c.name, "wal"),
-	// 	Entity:       dbid,
-	// 	SegmentId:    0, // catalog uses single segment only
-	// 	RecoveryMode: opts.WalRecoveryMode,
-	// 	Logger:       opts.Logger,
-	// })
-	// if err != nil {
-	// 	_ = db.Close()
-	// 	return err
-	// }
-
-	// return c.recover(ctx)
-
 	// load checkpoint
 	err = db.View(func(tx store.Tx) error {
 		c.checkpoint = wal.LSN(BE.Uint64(tx.Bucket(databaseKey).Get(checkpointKey)))
@@ -258,19 +230,20 @@ func (c *Catalog) Close(ctx context.Context) error {
 	clear(c.pending)
 
 	// store checkpoint record in wal and write checkpoint
-	err := c.doCheckpoint(ctx)
-	if err != nil {
-		return err
+	var err error
+	if c.wal != nil {
+		err = c.doCheckpoint(ctx)
+		if err != nil {
+			return err
+		}
+		c.wal = nil
 	}
 
-	err2 := c.db.Close()
-	c.wal = nil
+	if err2 := c.db.Close(); err2 != nil && err == nil {
+		err = err2
+	}
 	c.db = nil
-
-	if err != nil {
-		return err
-	}
-	return err2
+	return err
 }
 
 func (c *Catalog) Checkpoint() wal.LSN {
