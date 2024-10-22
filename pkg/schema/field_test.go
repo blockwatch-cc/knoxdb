@@ -752,24 +752,3 @@ func TestFieldExported(t *testing.T) {
 		assert.Equal(t, testStruct, result.Interface()) // Compare with the whole struct
 	})
 }
-
-// Helper function for encoding and decoding round-trip tests
-func testEncodeDecodeRoundTrip(t *testing.T, field Field, value interface{}) {
-	var buf bytes.Buffer
-	err := field.Encode(&buf, value)
-	require.NoError(t, err, "Encoding failed")
-
-	decoded, err := field.Decode(bytes.NewReader(buf.Bytes()))
-	require.NoError(t, err, "Decoding failed")
-
-	if reflect.TypeOf(value).Kind() == reflect.Slice {
-		assert.Equal(t, reflect.ValueOf(value).Interface(), reflect.ValueOf(decoded).Interface(),
-			"Decoded slice does not match original")
-	} else if _, ok := value.(time.Time); ok {
-		assert.Equal(t, value.(time.Time).UTC(), decoded.(time.Time).UTC(),
-			"Decoded time does not match original")
-	} else {
-		assert.Equal(t, value, decoded, "Decoded value does not match original")
-	}
-}
-
