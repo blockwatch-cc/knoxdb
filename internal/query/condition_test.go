@@ -4,10 +4,9 @@
 package query
 
 import (
-	"fmt"
 	"reflect"
-	"strings"
 	"testing"
+	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -32,6 +31,9 @@ func TestConditionParse(t *testing.T) {
 		{"Enum In (String Values)", "status.in", "active,pending", Condition{}, true},
 		{"Invalid Field", "nonexistent", "value", Condition{}, true},
 		{"Invalid Mode", "id.invalid", "123", Condition{}, true},
+		{"Empty String", "name", "", Condition{Name: "name", Type: types.FieldTypeString, Index: 2, Mode: FilterModeEqual, Value: ""}, false},
+		{"Null Value", "score", "null", Condition{}, true},
+		{"Boolean Value", "is_active", "true", Condition{Name: "is_active", Type: types.FieldTypeBoolean, Index: 5, Mode: FilterModeEqual, Value: true}, false},
 	}
 
 	for _, tt := range tests {
@@ -60,27 +62,66 @@ func TestConditionCompile(t *testing.T) {
 		{
 			name: "Simple Equal",
 			c:    Condition{Name: "id", Mode: FilterModeEqual, Value: int64(123)},
+			wantErr: false,
 		},
 		{
 			name: "Range Condition",
 			c:    Condition{Name: "score", Mode: FilterModeRange, Value: RangeValue{3.5, 4.5}},
+			wantErr: false,
 		},
 		{
 			name: "Enum In",
 			c:    Condition{Name: "status", Mode: FilterModeIn, Value: []uint16{1, 2}},
+			wantErr: false,
 		},
 		{
 			name:    "Invalid Field",
 			c:       Condition{Name: "invalid", Mode: FilterModeEqual, Value: 123},
-			wantErr: true,
+				wantErr: true,
+		},
+		{
+			name: "Complex AND Condition",
+			c: And(
+				Equal("id", 1),
+				Gt("score", 4.5),
+				Regexp("name", "Block.*"),
+			),
+			wantErr: false,
+		},
+		{
+			name: "Complex OR Condition",
+			c: Or(
+				Equal("id", 1),
+				Equal("id", 2),
+				Equal("id", 3),
+			),
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.c.Compile(s)
+			got, err := tt.c.Compile(s)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Condition.Compile() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr {
+				if got == nil {
+					t.Errorf("Condition.Compile() returned nil FilterTreeNode")
+					return
+				}
+				// Add more specific checks based on the expected structure
+				// For example:
+				if got.Filter != nil {
+					if got.Filter.Name != tt.c.Name {
+						t.Errorf("Compiled Filter Name = %v, want %v", got.Filter.Name, tt.c.Name)
+					}
+					if got.Filter.Mode != tt.c.Mode {
+						t.Errorf("Compiled Filter Mode = %v, want %v", got.Filter.Mode, tt.c.Mode)
+					}
+					// Add more checks as needed
+				}
 			}
 		})
 	}
@@ -122,6 +163,15 @@ func TestConditionFields(t *testing.T) {
 			c:    Condition{},
 			want: nil,
 		},
+		{
+			name: "Duplicate Fields",
+			c: And(
+				Equal("id", 1),
+				Equal("id", 2),
+				Equal("name", "Blockwatch"),
+			),
+			want: []string{"id", "name"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -146,13 +196,13 @@ func TestConditionAdd(t *testing.T) {
 			name:     "Add AND Condition",
 			initial:  Equal("id", 1),
 			add:      Equal("name", "Blockwatch"),
-			expected: "id = 1\nname = Blockwatch",
+			expected: "id = 1 AND name = Blockwatch",
 		},
 		{
 			name:     "Add OR Condition",
 			initial:  Or(Equal("id", 1), Equal("name", "Blockwatch")),
 			add:      Gt("age", 6),
-			expected: "id = 1\nname = Blockwatch\nage > 6",
+			expected: "(id = 1 OR name = Blockwatch) AND age > 6",
 		},
 		{
 			name:     "Add to Empty Condition",
@@ -160,20 +210,287 @@ func TestConditionAdd(t *testing.T) {
 			add:      Equal("id", 123),
 			expected: "id = 123",
 		},
+		{
+			name:     "Add Empty Condition",
+			initial:  Equal("id", 1),
+			add:      Condition{},
+			expected: "id = 1",
+		},
+		{
+			name:     "Add Complex Nested Condition",
+			initial:  Equal("id", 1),
+			add:      And(Equal("name", "Blockwatch"), Or(Gt("age", 18), Lt("age", 65))),
+			expected: "id = 1 AND name = Blockwatch AND (age > 18 OR age < 65)",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.initial.Add(tt.add)
-			result := conditionToString(tt.initial)
-			if result != tt.expected {
-				t.Errorf("After Add(), condition = %v, want %v", result, tt.expected)
+			if got := tt.initial.String(); got != tt.expected {
+				t.Errorf("After Add(), condition = %v, want %v", got, tt.expected)
 			}
 		})
 	}
 }
 
-// equalStringSlices compares two string slices for equality.
+// TestConditionClear tests the Clear method of Condition.
+func TestConditionClear(t *testing.T) {
+	tests := []struct {
+		name    string
+		initial Condition
+	}{
+		{
+			name:    "Clear Simple Condition",
+			initial: Equal("id", 1),
+		},
+		{
+			name: "Clear Complex Condition",
+			initial: And(
+				Equal("id", 1),
+				Or(
+					Equal("name", "Blockwatch"),
+					Gt("age", 18),
+				),
+			),
+		},
+		{
+			name:    "Clear Empty Condition",
+			initial: Condition{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.initial.Clear()
+			if !tt.initial.IsEmpty() {
+				t.Errorf("Condition.Clear() did not result in an empty condition: %v", tt.initial)
+			}
+		})
+	}
+}
+
+// TestConditionIsEmpty tests the IsEmpty method of Condition.
+func TestConditionIsEmpty(t *testing.T) {
+	tests := []struct {
+		name      string
+		condition Condition
+		want      bool
+	}{
+		{
+			name:      "Empty Condition",
+			condition: Condition{},
+			want:      true,
+		},
+		{
+			name:      "Non-Empty Simple Condition",
+			condition: Equal("id", 1),
+			want:      false,
+		},
+		{
+			name: "Non-Empty Complex Condition",
+			condition: And(
+				Equal("id", 1),
+				Equal("name", "Blockwatch"),
+			),
+			want: false,
+		},
+		{
+			name:      "Condition with Invalid Mode",
+			condition: Condition{Name: "id", Mode: FilterModeInvalid},
+			want:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.condition.IsEmpty(); got != tt.want {
+				t.Errorf("Condition.IsEmpty() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestConditionIsLeaf tests the IsLeaf method of Condition.
+func TestConditionIsLeaf(t *testing.T) {
+	tests := []struct {
+		name      string
+		condition Condition
+		want      bool
+	}{
+		{
+			name:      "Leaf Condition",
+			condition: Equal("id", 1),
+			want:      true,
+		},
+		{
+			name: "Non-Leaf Condition",
+			condition: And(
+				Equal("id", 1),
+				Equal("name", "Blockwatch"),
+			),
+			want: false,
+		},
+		{
+			name:      "Empty Condition",
+			condition: Condition{},
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.condition.IsLeaf(); got != tt.want {
+				t.Errorf("Condition.IsLeaf() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestConditionString tests the String method of Condition.
+func TestConditionString(t *testing.T) {
+	tests := []struct {
+		name      string
+		condition Condition
+		want      string
+	}{
+		{
+			name:      "Simple Equal Condition",
+			condition: Equal("id", 1),
+			want:      "id = 1",
+		},
+		{
+			name:      "Range Condition",
+			condition: Range("score", 3.5, 4.5),
+			want:      "score RANGE [3.5, 4.5]",
+		},
+		{
+			name:      "In Condition with Many Values",
+			condition: In("status", []uint16{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}),
+			want:      "status IN [17 values]",
+		},
+		{
+			name: "Complex AND Condition",
+			condition: And(
+				Equal("id", 1),
+				Gt("score", 4.5),
+				Regexp("name", "Block.*"),
+			),
+			want: "id = 1 AND score > 4.5 AND name REGEXP Block.*",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.condition.String(); got != tt.want {
+				t.Errorf("Condition.String() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestHelperFunctions tests the helper functions for creating conditions.
+func TestHelperFunctions(t *testing.T) {
+	tests := []struct {
+		name     string
+		condition Condition
+		expected string
+	}{
+		{"Equal", Equal("id", 1), "id = 1"},
+		{"NotEqual", NotEqual("id", 1), "id != 1"},
+		{"In", In("status", []uint16{1, 2}), "status IN [1 2]"},
+		{"NotIn", NotIn("status", []uint16{1, 2}), "status NOT IN [1 2]"},
+		{"Lt", Lt("score", 4.5), "score < 4.5"},
+		{"Le", Le("score", 4.5), "score <= 4.5"},
+		{"Gt", Gt("score", 4.5), "score > 4.5"},
+		{"Ge", Ge("score", 4.5), "score >= 4.5"},
+		{"Regexp", Regexp("name", "Block.*"), "name REGEXP Block.*"},
+		{"Range", Range("score", 3.5, 4.5), "score RANGE [3.5, 4.5]"},
+		{"And", And(Equal("id", 1), Equal("name", "Blockwatch")), "id = 1\nname = Blockwatch"},
+		{"Or", Or(Equal("id", 1), Equal("id", 2)), "id = 1\nid = 2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.condition.String(); got != tt.expected {
+				t.Errorf("%s() = %v, want %v", tt.name, got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestConditionWithDifferentTypes tests the behavior of conditions with different data types.
+func TestConditionWithDifferentTypes(t *testing.T) {
+	s := createTestSchema()
+
+	tests := []struct {
+		name  string
+		c     Condition
+		want  string
+	}{
+		{"Integer", Equal("id", 123), "id = 123"},
+		{"Float", Gt("score", 4.5), "score > 4.5"},
+		{"String", Equal("name", []byte("Blockwatch")), "name = Blockwatch"},
+		{"Boolean", Equal("is_active", true), "is_active = true"},
+		{"Datetime", Ge("created", time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)), "created >= 2023-01-01 00:00:00 +0000 UTC"},
+		{"Enum", In("status", []uint16{1, 2}), "status IN [1 2]"},
+		{"Range", Range("score", 3.5, 4.5), "score RANGE [3.5, 4.5]"},
+		{"Regexp", Regexp("name", "Block.*"), "name REGEXP Block.*"},
+		{"Complex AND", And(Equal("id", 1), Gt("score", 4.5)), "id = 1 AND score > 4.5"},
+		{"Complex OR", Or(Equal("id", 1), Equal("id", 2)), "id = 1 OR id = 2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.c.Compile(s)
+			if err != nil {
+				t.Errorf("Condition.Compile() error = %v", err)
+				return
+			}
+			if got := tt.c.String(); got != tt.want {
+				t.Errorf("Condition.String() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// Benchmark functions for performance-critical operations
+
+func BenchmarkConditionParse(b *testing.B) {
+	s := createTestSchema()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ParseCondition("id", "123", s)
+	}
+}
+
+func BenchmarkConditionCompile(b *testing.B) {
+	s := createTestSchema()
+	c := Equal("id", 123)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.Compile(s)
+	}
+}
+
+func BenchmarkComplexConditionCompile(b *testing.B) {
+	s := createTestSchema()
+	c := And(
+		Equal("id", 1),
+		Or(
+			Gt("score", 4.5),
+					Regexp("name", "Block.*"),
+		),
+		In("status", []uint16{1, 2}),
+	)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.Compile(s)
+	}
+}
+
+// Helper functions
+
 func equalStringSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -186,7 +503,6 @@ func equalStringSlices(a, b []string) bool {
 	return true
 }
 
-// createTestSchema creates a test schema with predefined fields and an enum.
 func createTestSchema() *schema.Schema {
 	statusEnum := schema.NewEnumDictionary("status")
 	statusEnum.Append("active", "pending", "inactive")
@@ -194,15 +510,15 @@ func createTestSchema() *schema.Schema {
 	return schema.NewSchema().
 		WithName("test").
 		WithField(schema.NewField(types.FieldTypeInt64).WithName("id").WithFlags(types.FieldFlagPrimary)).
-			WithField(schema.NewField(types.FieldTypeFloat64).WithName("score")).
-			WithField(schema.NewField(types.FieldTypeString).WithName("name")).
-			WithField(schema.NewField(types.FieldTypeDatetime).WithName("created")).
-			WithField(schema.NewField(types.FieldTypeUint16).WithName("status").WithFlags(types.FieldFlagEnum)).
-			WithEnum(statusEnum).
-			Finalize()
+		WithField(schema.NewField(types.FieldTypeFloat64).WithName("score")).
+		WithField(schema.NewField(types.FieldTypeString).WithName("name")).
+		WithField(schema.NewField(types.FieldTypeDatetime).WithName("created")).
+		WithField(schema.NewField(types.FieldTypeUint16).WithName("status").WithFlags(types.FieldFlagEnum)).
+		WithField(schema.NewField(types.FieldTypeBoolean).WithName("is_active")).
+		WithEnum(statusEnum).
+		Finalize()
 }
 
-// conditionEqual compares two Condition structs for deep equality.
 func conditionEqual(a, b Condition) bool {
 	if a.Name != b.Name || a.Type != b.Type || a.Index != b.Index || a.Mode != b.Mode || a.OrKind != b.OrKind {
 		return false
@@ -223,17 +539,4 @@ func conditionEqual(a, b Condition) bool {
 	}
 
 	return true
-}
-
-// conditionToString converts a Condition to its string representation.
-func conditionToString(c Condition) string {
-	if len(c.Children) > 0 {
-		childStrings := make([]string, len(c.Children))
-		for i, child := range c.Children {
-			childStrings[i] = conditionToString(child)
-		}
-		return strings.Join(childStrings, "\n")
-	}
-
-	return fmt.Sprintf("%s %s %v", c.Name, c.Mode.Symbol(), c.Value)
 }
