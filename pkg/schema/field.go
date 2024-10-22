@@ -58,8 +58,7 @@ type ExportedField struct {
 
 func NewField(typ types.FieldType) Field {
 	return Field{
-		typ:      typ,
-		wireSize: uint16(typ.Size()),
+		typ: typ,
 	}
 }
 
@@ -116,6 +115,9 @@ func (f *Field) Enum() *EnumDictionary {
 }
 
 func (f *Field) IsValid() bool {
+	if f.isArray {
+		return len(f.name) > 0 && f.typ == types.FieldTypeBytes && f.wireSize > 0
+	}
 	return len(f.name) > 0 && f.typ.IsValid()
 }
 
@@ -137,7 +139,7 @@ func (f *Field) IsInterface() bool {
 }
 
 func (f *Field) IsArray() bool {
-	return f.isArray
+	return f.isArray || (f.typ == types.FieldTypeBytes && f.fixed > 0)
 }
 
 func (f *Field) WireSize() int {
@@ -216,9 +218,15 @@ func (f Field) WithGoType(typ reflect.Type, path []int, ofs uintptr) Field {
 		iface |= types.IfaceStringer
 	}
 	f.wireSize = uint16(typ.Size())
-	if typ.Kind() == reflect.Array && typ.Elem().Kind() == reflect.Uint8 {
+	switch typ.Kind() {
+	case reflect.Array, reflect.Slice:
 		f.isArray = true
-		f.wireSize = uint16(typ.Len())
+		if typ.Kind() == reflect.Array {
+			f.fixed = uint16(typ.Len())
+		}
+		if typ.Elem().Kind() == reflect.Uint8 {
+			f.typ = types.FieldTypeBytes
+		}
 	}
 	if f.flags.Is(types.FieldFlagEnum) {
 		f.wireSize = 2
