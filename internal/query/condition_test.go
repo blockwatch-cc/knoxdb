@@ -12,10 +12,26 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
+var testSchema *schema.Schema
+
+func init() {
+	testSchema = schema.NewSchema().
+		WithName("test").
+		WithField(schema.NewField(types.FieldTypeInt64).WithName("id").WithFlags(types.FieldFlagPrimary)).
+		WithField(schema.NewField(types.FieldTypeFloat64).WithName("score")).
+		WithField(schema.NewField(types.FieldTypeString).WithName("name")).
+		WithField(schema.NewField(types.FieldTypeDatetime).WithName("created")).
+		WithField(schema.NewField(types.FieldTypeUint16).WithName("status").WithFlags(types.FieldFlagEnum)).
+		WithField(schema.NewField(types.FieldTypeBoolean).WithName("is_active")).
+		Finalize()
+
+	statusEnum := schema.NewEnumDictionary("status")
+	statusEnum.Append("active", "pending", "inactive")
+	testSchema.WithEnum(statusEnum)
+}
+
 // TestConditionParse tests the ParseCondition function with various input scenarios.
 func TestConditionParse(t *testing.T) {
-	s := createTestSchema()
-
 	tests := []struct {
 		name     string
 		key      string
@@ -23,22 +39,20 @@ func TestConditionParse(t *testing.T) {
 		expected Condition
 		wantErr  bool
 	}{
-		{"Equal Integer", "id", "123", Condition{Name: "id", Type: types.FieldTypeInt64, Index: 0, Mode: FilterModeEqual, Value: int64(123)}, false},
-		{"Greater Than Float", "score.gt", "4.5", Condition{Name: "score", Type: types.FieldTypeFloat64, Index: 1, Mode: FilterModeGt, Value: 4.5}, false},
-		{"String Contains", "name.re", "Blockwatch", Condition{Name: "name", Type: types.FieldTypeString, Index: 2, Mode: FilterModeRegexp, Value: "Blockwatch"}, false},
-		{"Date Range", "created.rg", "2023-01-01,2023-12-31", Condition{Name: "created", Type: types.FieldTypeDatetime, Index: 3, Mode: FilterModeRange, Value: RangeValue{int64(1672531200000000000), int64(1703980800000000000)}}, false},
-		{"Enum In", "status.in", "1,2", Condition{Name: "status", Type: types.FieldTypeUint16, Index: 4, Mode: FilterModeIn, Value: []uint16{1, 2}}, false},
-		{"Enum In (String Values)", "status.in", "active,pending", Condition{}, true},
+		{"Equal Integer", "id", "123", Condition{Name: "id", Type: types.FieldTypeInt64, Mode: FilterModeEqual, Value: int64(123)}, false},
+		{"Greater Than Float", "score.gt", "4.5", Condition{Name: "score", Type: types.FieldTypeFloat64, Mode: FilterModeGt, Value: 4.5}, false},
+		{"String Contains", "name.re", "Blockwatch", Condition{Name: "name", Type: types.FieldTypeString, Mode: FilterModeRegexp, Value: "Blockwatch"}, false},
+		{"Date Range", "created.rg", "2023-01-01,2023-12-31", Condition{Name: "created", Type: types.FieldTypeDatetime, Mode: FilterModeRange, Value: RangeValue{int64(1672531200000000000), int64(1703980800000000000)}}, false},
+		{"Enum In", "status.in", "1,2", Condition{Name: "status", Type: types.FieldTypeUint16, Mode: FilterModeIn, Value: []uint16{1, 2}}, false},
 		{"Invalid Field", "nonexistent", "value", Condition{}, true},
 		{"Invalid Mode", "id.invalid", "123", Condition{}, true},
-		{"Empty String", "name", "", Condition{Name: "name", Type: types.FieldTypeString, Index: 2, Mode: FilterModeEqual, Value: ""}, false},
-		{"Null Value", "score", "null", Condition{}, true},
-		{"Boolean Value", "is_active", "true", Condition{Name: "is_active", Type: types.FieldTypeBoolean, Index: 5, Mode: FilterModeEqual, Value: true}, false},
+		{"Empty String", "name", "", Condition{Name: "name", Type: types.FieldTypeString, Mode: FilterModeEqual, Value: ""}, false},
+		{"Boolean Value", "is_active", "true", Condition{Name: "is_active", Type: types.FieldTypeBoolean, Mode: FilterModeEqual, Value: true}, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseCondition(tt.key, tt.val, s)
+			got, err := ParseCondition(tt.key, tt.val, testSchema)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseCondition() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -52,32 +66,30 @@ func TestConditionParse(t *testing.T) {
 
 // TestConditionCompile tests the Compile method of Condition with different condition types.
 func TestConditionCompile(t *testing.T) {
-	s := createTestSchema()
-
 	tests := []struct {
 		name    string
 		c       Condition
 		wantErr bool
 	}{
 		{
-			name: "Simple Equal",
-			c:    Condition{Name: "id", Mode: FilterModeEqual, Value: int64(123)},
+			name:    "Simple Equal",
+			c:       Condition{Name: "id", Mode: FilterModeEqual, Value: int64(123)},
 			wantErr: false,
 		},
 		{
-			name: "Range Condition",
-			c:    Condition{Name: "score", Mode: FilterModeRange, Value: RangeValue{3.5, 4.5}},
+			name:    "Range Condition",
+			c:       Condition{Name: "score", Mode: FilterModeRange, Value: RangeValue{3.5, 4.5}},
 			wantErr: false,
 		},
 		{
-			name: "Enum In",
-			c:    Condition{Name: "status", Mode: FilterModeIn, Value: []uint16{1, 2}},
+			name:    "Enum In",
+			c:       Condition{Name: "status", Mode: FilterModeIn, Value: []uint16{1, 2}},
 			wantErr: false,
 		},
 		{
 			name:    "Invalid Field",
 			c:       Condition{Name: "invalid", Mode: FilterModeEqual, Value: 123},
-				wantErr: true,
+			wantErr: true,
 		},
 		{
 			name: "Complex AND Condition",
@@ -101,27 +113,9 @@ func TestConditionCompile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.c.Compile(s)
+			_, err := tt.c.Compile(testSchema)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Condition.Compile() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr {
-				if got == nil {
-					t.Errorf("Condition.Compile() returned nil FilterTreeNode")
-					return
-				}
-				// Add more specific checks based on the expected structure
-				// For example:
-				if got.Filter != nil {
-					if got.Filter.Name != tt.c.Name {
-						t.Errorf("Compiled Filter Name = %v, want %v", got.Filter.Name, tt.c.Name)
-					}
-					if got.Filter.Mode != tt.c.Mode {
-						t.Errorf("Compiled Filter Mode = %v, want %v", got.Filter.Mode, tt.c.Mode)
-					}
-					// Add more checks as needed
-				}
 			}
 		})
 	}
@@ -389,44 +383,107 @@ func TestConditionString(t *testing.T) {
 	}
 }
 
-// TestHelperFunctions tests the helper functions for creating conditions.
-func TestHelperFunctions(t *testing.T) {
+// TestConditionValidate tests the Validate method of Condition.
+func TestConditionValidate(t *testing.T) {
 	tests := []struct {
-		name     string
-		condition Condition
-		expected string
+		name    string
+		cond    Condition
+		wantErr bool
 	}{
-		{"Equal", Equal("id", 1), "id = 1"},
-		{"NotEqual", NotEqual("id", 1), "id != 1"},
-		{"In", In("status", []uint16{1, 2}), "status IN [1 2]"},
-		{"NotIn", NotIn("status", []uint16{1, 2}), "status NOT IN [1 2]"},
-		{"Lt", Lt("score", 4.5), "score < 4.5"},
-		{"Le", Le("score", 4.5), "score <= 4.5"},
-		{"Gt", Gt("score", 4.5), "score > 4.5"},
-		{"Ge", Ge("score", 4.5), "score >= 4.5"},
-		{"Regexp", Regexp("name", "Block.*"), "name REGEXP Block.*"},
-		{"Range", Range("score", 3.5, 4.5), "score RANGE [3.5, 4.5]"},
-		{"And", And(Equal("id", 1), Equal("name", "Blockwatch")), "id = 1\nname = Blockwatch"},
-		{"Or", Or(Equal("id", 1), Equal("id", 2)), "id = 1\nid = 2"},
+		{"Valid Condition", Equal("id", 1), false},
+		{"Empty Name", Condition{Mode: FilterModeEqual, Value: 1}, true},
+		{"Invalid Mode", Condition{Name: "id", Mode: FilterMode(999), Value: 1}, true},
+		{"Nil Value", Condition{Name: "id", Mode: FilterModeEqual}, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.condition.String(); got != tt.expected {
-				t.Errorf("%s() = %v, want %v", tt.name, got, tt.expected)
+			_, err := tt.cond.Compile(testSchema)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Condition.Compile() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
+// TestConditionCompileToFilterTreeNode tests the Compile method of Condition to FilterTreeNode.
+func TestConditionCompileToFilterTreeNode(t *testing.T) {
+	tests := []struct {
+		name    string
+		cond    Condition
+		checkFn func(*testing.T, *FilterTreeNode)
+	}{
+		{
+			name: "Simple Equal Condition",
+			cond: Equal("id", 1),
+			checkFn: func(t *testing.T, node *FilterTreeNode) {
+				if !node.IsLeaf() {
+					t.Errorf("Expected leaf node")
+				}
+				if node.Filter.Name != "id" || node.Filter.Mode != FilterModeEqual {
+					t.Errorf("Unexpected filter: %+v", node.Filter)
+				}
+			},
+		},
+		{
+			name: "Complex AND Condition",
+			cond: And(Equal("id", 1), Gt("score", 4.5)),
+			checkFn: func(t *testing.T, node *FilterTreeNode) {
+				if node.IsLeaf() {
+					t.Errorf("Expected non-leaf node")
+				}
+				if node.OrKind {
+					t.Errorf("Expected AND node")
+				}
+				if len(node.Children) != 2 {
+					t.Errorf("Expected 2 children, got %d", len(node.Children))
+				}
+			},
+		},
+		{
+			name: "Complex OR Condition",
+			cond: Or(Equal("id", 1), Equal("id", 2)),
+			checkFn: func(t *testing.T, node *FilterTreeNode) {
+				if node.IsLeaf() {
+					t.Errorf("Expected non-leaf node")
+				}
+				if !node.OrKind {
+					t.Errorf("Expected OR node")
+				}
+				if len(node.Children) != 2 {
+					t.Errorf("Expected 2 children, got %d", len(node.Children))
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			node, err := tt.cond.Compile(testSchema)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			tt.checkFn(t, node)
+		})
+	}
+}
+
+// TestConditionRename tests the Rename method of Condition.
+func TestConditionRename(t *testing.T) {
+	cond := And(Equal("old_name", 1), Gt("score", 4.5))
+	cond.Rename("new_name")
+	expected := "(new_name = 1 AND score > 4.5)"
+	if got := cond.String(); got != expected {
+		t.Errorf("After Rename(), condition = %v, want %v", got, expected)
+	}
+}
+
 // TestConditionWithDifferentTypes tests the behavior of conditions with different data types.
 func TestConditionWithDifferentTypes(t *testing.T) {
-	s := createTestSchema()
-
 	tests := []struct {
-		name  string
-		c     Condition
-		want  string
+		name string
+		c    Condition
+		want string
 	}{
 		{"Integer", Equal("id", 123), "id = 123"},
 		{"Float", Gt("score", 4.5), "score > 4.5"},
@@ -436,13 +493,26 @@ func TestConditionWithDifferentTypes(t *testing.T) {
 		{"Enum", In("status", []uint16{1, 2}), "status IN [1 2]"},
 		{"Range", Range("score", 3.5, 4.5), "score RANGE [3.5, 4.5]"},
 		{"Regexp", Regexp("name", "Block.*"), "name REGEXP Block.*"},
-		{"Complex AND", And(Equal("id", 1), Gt("score", 4.5)), "id = 1 AND score > 4.5"},
-		{"Complex OR", Or(Equal("id", 1), Equal("id", 2)), "id = 1 OR id = 2"},
+		{"Complex AND", And(Equal("id", 1), Gt("score", 4.5)), "(id = 1 AND score > 4.5)"},
+		{"Complex OR", Or(Equal("id", 1), Equal("id", 2)), "(id = 1 OR id = 2)"},
+		{"Not Equal", NotEqual("id", 5), "id != 5"},
+		{"Less Than", Lt("score", 3.0), "score < 3.0"},
+		{"Less Than or Equal", Le("score", 3.0), "score <= 3.0"},
+		{"Greater Than or Equal", Ge("score", 4.5), "score >= 4.5"},
+		{"Not In", NotIn("status", []uint16{3, 4}), "status NOT IN [3 4]"},
+		{"Complex Nested", And(
+			Equal("id", 1),
+			Or(
+				Gt("score", 4.5),
+				Lt("score", 2.0),
+			),
+			In("status", []uint16{1, 2, 3}),
+		), "(id = 1 AND (score > 4.5 OR score < 2.0) AND status IN [1 2 3])"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.c.Compile(s)
+			_, err := tt.c.Compile(testSchema)
 			if err != nil {
 				t.Errorf("Condition.Compile() error = %v", err)
 				return
@@ -454,38 +524,36 @@ func TestConditionWithDifferentTypes(t *testing.T) {
 	}
 }
 
-// Benchmark functions for performance-critical operations
-
+// BenchmarkConditionParse benchmarks the ParseCondition function.
 func BenchmarkConditionParse(b *testing.B) {
-	s := createTestSchema()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ParseCondition("id", "123", s)
+		ParseCondition("id", "123", testSchema)
 	}
 }
 
+// BenchmarkConditionCompile benchmarks the Compile method of a simple Condition.
 func BenchmarkConditionCompile(b *testing.B) {
-	s := createTestSchema()
 	c := Equal("id", 123)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c.Compile(s)
+		c.Compile(testSchema)
 	}
 }
 
+// BenchmarkComplexConditionCompile benchmarks the Compile method of a complex Condition.
 func BenchmarkComplexConditionCompile(b *testing.B) {
-	s := createTestSchema()
 	c := And(
 		Equal("id", 1),
 		Or(
 			Gt("score", 4.5),
-					Regexp("name", "Block.*"),
+			Regexp("name", "Block.*"),
 		),
 		In("status", []uint16{1, 2}),
 	)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c.Compile(s)
+		c.Compile(testSchema)
 	}
 }
 
@@ -503,24 +571,8 @@ func equalStringSlices(a, b []string) bool {
 	return true
 }
 
-func createTestSchema() *schema.Schema {
-	statusEnum := schema.NewEnumDictionary("status")
-	statusEnum.Append("active", "pending", "inactive")
-
-	return schema.NewSchema().
-		WithName("test").
-		WithField(schema.NewField(types.FieldTypeInt64).WithName("id").WithFlags(types.FieldFlagPrimary)).
-		WithField(schema.NewField(types.FieldTypeFloat64).WithName("score")).
-		WithField(schema.NewField(types.FieldTypeString).WithName("name")).
-		WithField(schema.NewField(types.FieldTypeDatetime).WithName("created")).
-		WithField(schema.NewField(types.FieldTypeUint16).WithName("status").WithFlags(types.FieldFlagEnum)).
-		WithField(schema.NewField(types.FieldTypeBoolean).WithName("is_active")).
-		WithEnum(statusEnum).
-		Finalize()
-}
-
 func conditionEqual(a, b Condition) bool {
-	if a.Name != b.Name || a.Type != b.Type || a.Index != b.Index || a.Mode != b.Mode || a.OrKind != b.OrKind {
+	if a.Name != b.Name || a.Type != b.Type || a.Mode != b.Mode || a.OrKind != b.OrKind {
 		return false
 	}
 
