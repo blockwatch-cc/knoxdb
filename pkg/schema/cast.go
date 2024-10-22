@@ -906,7 +906,7 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 		binary.BigEndian.PutUint16(b[:], uint16(v))
 		res, ok = b[:2], true
 	case int8:
-		res, ok = byte(v), true
+		res, ok = []byte{byte(v)}, true
 	case uint:
 		binary.BigEndian.PutUint64(b[:], uint64(v))
 		res, ok = b[:], true
@@ -920,7 +920,7 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 		binary.BigEndian.PutUint16(b[:], uint16(v))
 		res, ok = b[:2], true
 	case uint8:
-		res, ok = byte(v), true
+		res, ok = []byte{byte(v)}, true
 	case float64:
 		binary.BigEndian.PutUint64(b[:], math.Float64bits(v))
 		res, ok = b[:], true
@@ -954,7 +954,10 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 			ok = err == nil
 		} else {
 			// type aliases
-			vv := reflect.Indirect(reflect.ValueOf(val))
+			var vv reflect.Value
+			if vv, ok = val.(reflect.Value); !ok {
+				vv = reflect.Indirect(reflect.ValueOf(val))
+			}
 			switch vv.Kind() {
 			case reflect.Float32:
 				binary.BigEndian.PutUint32(b[:], math.Float32bits(float32(vv.Float())))
@@ -972,7 +975,7 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 				binary.BigEndian.PutUint16(b[:], uint16(vv.Int()))
 				res, ok = b[:2], true
 			case reflect.Int8:
-				res, ok = byte(vv.Int()), true
+				res, ok = []byte{byte(vv.Int())}, true
 			case reflect.Uint, reflect.Uint64:
 				binary.BigEndian.PutUint64(b[:], uint64(vv.Uint()))
 				res, ok = b[:], true
@@ -983,7 +986,11 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 				binary.BigEndian.PutUint16(b[:], uint16(vv.Uint()))
 				res, ok = b[:2], true
 			case reflect.Uint8:
-				res, ok = byte(vv.Uint()), true
+				res, ok = []byte{byte(vv.Uint())}, true
+			case reflect.String:
+				res, ok = []byte(vv.String()), true
+			default:
+				ok = false
 			}
 		}
 	}
