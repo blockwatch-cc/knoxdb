@@ -1002,17 +1002,18 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 
 func (c BytesCaster) CastSlice(val any) (res any, err error) {
 	var ok bool
+	var v any
 	rv := reflect.ValueOf(val)
 	if rv.Kind() == reflect.Slice {
 		cp := make([][]byte, rv.Len())
 		for i := range cp {
-			v, err := c.CastValue(rv.Index(i))
+			v, err = c.CastValue(rv.Index(i))
 			if err != nil {
 				break
 			}
 			cp[i] = v.([]byte)
 		}
-		res, ok = cp, true
+		res, ok = cp, err == nil
 	}
 	if !ok {
 		err = castError(val, "byte")
@@ -1076,17 +1077,18 @@ func (c I128Caster) CastValue(val any) (res any, err error) {
 
 func (c I128Caster) CastSlice(val any) (res any, err error) {
 	var ok bool
+	var v any
 	rv := reflect.ValueOf(val)
 	if rv.Kind() == reflect.Slice {
 		cp := make([]num.Int128, rv.Len())
 		for i := range cp {
-			v, err := c.CastValue(rv.Index(i))
+			v, err = c.CastValue(rv.Index(i).Interface())
 			if err != nil {
 				break
 			}
 			cp[i] = v.(num.Int128)
 		}
-		res, ok = cp, true
+		res, ok = cp, err == nil
 	}
 	if !ok {
 		err = castError(val, "int128")
@@ -1176,7 +1178,7 @@ func (c I256Caster) CastSlice(val any) (res any, err error) {
 	if rv.Kind() == reflect.Slice {
 		cp := make([]num.Int256, rv.Len())
 		for i := range cp {
-			v, err = c.CastValue(rv.Index(i))
+			v, err = c.CastValue(rv.Index(i).Interface())
 			if err != nil {
 				break
 			}
