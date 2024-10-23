@@ -631,42 +631,56 @@ func TestCastI128Caster(t *testing.T) {
 // TestCastI256Caster tests the I256Caster to ensure it correctly casts various
 // input types to num.Int256 and handles edge cases and errors appropriately.
 func TestCastI256Caster(t *testing.T) {
-	caster := I256Caster{}
+	caster := NewCaster(types.FieldTypeInt256)
 
-	tests := []struct {
-		name     string
-		input    interface{}
-		expected num.Int256
-		hasError bool
-	}{
-		{"Int", 42, num.Int256FromInt64(42), false},
-		{"Int64", int64(42), num.Int256FromInt64(42), false},
-		{"String", "42", num.Int256{}, true},
-		{"MaxInt64", int64(math.MaxInt64), num.Int256FromInt64(math.MaxInt64), false},
-		{"MinInt64", int64(math.MinInt64), num.Int256FromInt64(math.MinInt64), false},
-	}
+	t.Run("CastValue", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			input    interface{}
+			expected num.Int256
+			hasError bool
+		}{
+			{"Int", 42, num.Int256FromInt64(42), false},
+			{"Int64", int64(42), num.Int256FromInt64(42), false},
+			{"String", "42", num.Int256{}, true},
+			{"MaxInt64", int64(math.MaxInt64), num.Int256FromInt64(math.MaxInt64), false},
+			{"MinInt64", int64(math.MinInt64), num.Int256FromInt64(math.MinInt64), false},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := caster.CastValue(tt.input)
-			if tt.hasError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
-			}
-		})
-	}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := caster.CastValue(tt.input)
+				if tt.hasError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+					assert.Equal(t, tt.expected, result)
+				}
+			})
+		}
+	})
 
 	t.Run("CastSlice", func(t *testing.T) {
-		input := []int64{1, 2, 3}
-		result, err := caster.CastSlice(input)
-		assert.NoError(t, err)
-		assert.IsType(t, []num.Int256{}, result)
-		expected := []num.Int256{num.Int256FromInt64(1), num.Int256FromInt64(2), num.Int256FromInt64(3)}
-		assert.Equal(t, expected, result)
+		tests := []struct {
+			name     string
+			input    interface{}
+			expected []num.Int256
+			hasError bool
+		}{
+			{"Int64", []int64{1, 2, 3}, []num.Int256{num.Int256FromInt64(1), num.Int256FromInt64(2), num.Int256FromInt64(3)}, false},
+			{"String", []string{"42"}, nil, true},
+		}
 
-		_, err = caster.CastSlice([]string{"not", "int256s"})
-		assert.Error(t, err)
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := caster.CastSlice(tt.input)
+				if tt.hasError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+					assert.Equal(t, tt.expected, result)
+				}
+			})
+		}
 	})
 }
