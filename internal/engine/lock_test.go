@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"math/rand"
 	"strconv"
 	"testing"
 	"time"
@@ -110,8 +111,26 @@ func TestLockExclusive(t *testing.T) {
 	require.NoError(t, g.Wait())
 }
 
-func TestLockTimeout(t *testing.T) {
-
+func TestLockConcurrent(t *testing.T) {
+	m := NewLockManager()
+	g, ctx := errgroup.WithContext(context.Background())
+	n := 64
+	g.SetLimit(n)
+	for i := 1; i <= n; i++ {
+		k := i
+		g.Go(func() error {
+			for j := 4 * k; j <= 4*k+4; j++ {
+				_, err := m.Lock(withTx(ctx, j), LockModeExclusive)
+				if err != nil {
+					return err
+				}
+				time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
+				m.Done(uint64(j))
+			}
+			return nil
+		})
+	}
+	require.NoError(t, g.Wait())
 }
 
 func TestLockObjectShared(t *testing.T) {
@@ -144,7 +163,6 @@ func TestLockObjectShared(t *testing.T) {
 	m.Done(uint64(2))
 	m.Done(uint64(3))
 	require.Equal(t, 0, m.Len())
-
 }
 
 func TestLockObjectExclusive(t *testing.T) {
@@ -224,18 +242,21 @@ func TestLockDeadlock(t *testing.T) {
 
 	g.Go(func() error {
 		// blocks
+		t.Log("Locking X1->R2")
 		_, err := m.LockObject(x1, LockModeExclusive, r2)
 		return err
 	})
 	time.Sleep(10 * time.Millisecond)
 	g.Go(func() error {
 		// blocks
+		t.Log("Locking X2->R3")
 		_, err := m.LockObject(x2, LockModeExclusive, r3)
 		return err
 	})
 	time.Sleep(10 * time.Millisecond)
 	g.Go(func() error {
 		// deadlock
+		t.Log("Locking X3->R1")
 		_, err := m.LockObject(x3, LockModeExclusive, r1)
 		return err
 	})
@@ -265,8 +286,9 @@ func BenchmarkLockObject(b *testing.B) {
 	ctx := context.Background()
 	for _, n := range []int{1, 2, 8, 32} {
 		// open locks for N resources (actually N+1 due to shared global lock)
-		m := NewLockManager()
+		m := NewLockManager().WithTimeout(0)
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
+			b.ReportAllocs()
 			b.RunParallel(func(pb *testing.PB) {
 				xid := 1
 				for pb.Next() {
@@ -284,7 +306,8 @@ func BenchmarkLockObject(b *testing.B) {
 
 func BenchmarkLockGlobal(b *testing.B) {
 	ctx := context.Background()
-	m := NewLockManager()
+	m := NewLockManager().WithTimeout(0)
+	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		xid := 1
 		for pb.Next() {

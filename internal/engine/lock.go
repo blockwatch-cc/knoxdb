@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -78,25 +79,50 @@ func (m *LockManager) Len() int {
 // xid is the next in order. When multiple goroutines attempt to acquire the same
 // resource lock under the same xid, the Go scheduler determines order.
 type lock struct {
-	typ       LockType // global, object or predicate
-	exclusive bool     // flag indicating if this lock is exclusive or shared
-	entity    uint64   // container id when type is object or predicate
-	count     int      // shared lock reference counter
-	waiting   []uint64 // xids waiting to inherit or replace the lock (in request order)
+	typ       LockType                 // global, object or predicate
+	exclusive bool                     // flag indicating if this lock is exclusive or shared
+	entity    uint64                   // container id when type is object or predicate
+	count     int                      // shared lock reference counter
+	waiting   []uint64                 // xids waiting to inherit or replace the lock (in request order)
+	waiters   map[uint64]chan struct{} //wait channels per xid
 }
 
 func (l *lock) isNext(xid uint64) bool {
 	return len(l.waiting) == 0 || l.waiting[0] == xid
 }
 
-func (l *lock) popNext() {
+func (l *lock) pop() {
 	if len(l.waiting) > 0 {
+		delete(l.waiters, l.waiting[0])
 		l.waiting = l.waiting[1:]
 	}
 }
 
-func (l *lock) wait(xid uint64) {
+func (l *lock) yield() {
+	if len(l.waiting) > 0 {
+		close(l.waiters[l.waiting[0]])
+	}
+}
+
+func (l *lock) wait(xid uint64) chan struct{} {
 	l.waiting = append(l.waiting, xid)
+	ch := make(chan struct{}, 1)
+	if l.waiters == nil {
+		l.waiters = make(map[uint64]chan struct{})
+	}
+	l.waiters[xid] = ch
+	return ch
+}
+
+func (l *lock) drop(xid uint64) {
+	l.waiting = slices.DeleteFunc(l.waiting, func(i uint64) bool {
+		return i == xid
+	})
+	delete(l.waiters, xid)
+}
+
+var lockPool = sync.Pool{
+	New: func() any { return new(lock) },
 }
 
 // Lock obtains a global database lock in shared or exclusive mode.
@@ -105,6 +131,14 @@ func (m *LockManager) Lock(ctx context.Context, mode LockMode) (bool, error) {
 	if tx == nil {
 		return false, ErrNoTx
 	}
+
+	// add timeout to context
+	if m.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, m.timeout)
+		defer cancel()
+	}
+
 	return m.acquire(ctx, tx.id, mode, LockTypeGlobal, 0, nil)
 }
 
@@ -114,6 +148,13 @@ func (m *LockManager) LockObject(ctx context.Context, mode LockMode, oid uint64)
 	tx := GetTransaction(ctx)
 	if tx == nil {
 		return false, ErrNoTx
+	}
+
+	// add timeout to context
+	if m.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, m.timeout)
+		defer cancel()
 	}
 
 	// first obtain a shared global lock
@@ -141,12 +182,17 @@ func (m *LockManager) Done(xid uint64) {
 	// release all locks owned by xid
 	for _, l := range m.granted[xid] {
 		l.count--
+		l.yield()
 	}
 	delete(m.granted, xid)
 
 	// cleanup unused locks and return state to channel
 	locks = slices.DeleteFunc(locks, func(l *lock) bool {
-		return l.count == 0 && len(l.waiting) == 0
+		if l.count == 0 && len(l.waiting) == 0 {
+			lockPool.Put(l)
+			return true
+		}
+		return false
 	})
 	atomic.StoreInt64(&m.nlocks, int64(len(locks)))
 	m.locks <- locks
@@ -157,7 +203,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 		return false, ErrNotImplemented
 	}
 
-	// check early context cancellation
+	// check for early cancel
 	select {
 	case <-ctx.Done():
 		return false, ctx.Err()
@@ -165,35 +211,40 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 	}
 
 	var (
-		timeout                                 = m.timeout
 		isNew, isWaiting, isGranted, isDeadlock bool
 		l                                       *lock
+		wait                                    chan struct{}
 	)
 	for {
-		start := time.Now()
-		var locks []*lock
-		// wait for next state update or
-		select {
-		case <-ctx.Done():
-			if isWaiting {
-				l.waiting = slices.DeleteFunc(l.waiting, func(i uint64) bool {
-					return i == xid
-				})
+		if isWaiting {
+			// passive wait for next state change or abort
+			select {
+			case <-ctx.Done():
+				// remove self from lock waitlist (l is initialized here)
+				locks := <-m.locks
+				l.drop(xid)
+				m.locks <- locks
+
+				// translate timeout error
+				if ctx.Err() == context.DeadlineExceeded {
+					return false, ErrLockTimeout
+				}
+
+				return false, ctx.Err()
+
+			case <-wait:
 			}
-			return false, ctx.Err()
-		case <-time.After(timeout):
-			if isWaiting {
-				l.waiting = slices.DeleteFunc(l.waiting, func(i uint64) bool {
-					return i == xid
-				})
-			}
-			return false, ErrLockTimeout
-		case locks = <-m.locks:
 		}
-		timeout -= time.Since(start)
+
+		// sync state access
+		locks := <-m.locks
 
 		// find existing lock for this resource or create new lock object
-		l, isNew = getOrCreateLock(locks, typ, entity, mode == LockModeExclusive)
+		if l == nil {
+			l, isNew = getOrCreateLock(locks, typ, entity, mode == LockModeExclusive)
+		} else {
+			isNew = false
+		}
 
 		// TODO: handle predicate locks
 		// for predicate locks, determine overlap on exclusive locks
@@ -219,8 +270,8 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 					// we already hold the max priority lock
 					isGranted = true
 				case l.count == 1 && l.isNext(xid):
-					// wait until we're the last shared holder and upgrade to exclusive
-					l.popNext()
+					// wait until we're the only shared holder and upgrade to exclusive
+					l.pop()
 					l.exclusive = true // reset from shared
 					isGranted = true
 				case !isWaiting:
@@ -229,7 +280,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 						isDeadlock = true
 					} else {
 						// wait until we're the only holder or we're next in line
-						l.wait(xid)
+						wait = l.wait(xid)
 						isWaiting = true
 					}
 				}
@@ -245,7 +296,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 				switch {
 				case l.count == 0 && l.isNext(xid):
 					// lock is available right now and we are only or next in line
-					l.popNext()
+					l.pop()
 					l.exclusive = true // potentially reset from shared
 					l.count = 1
 					isGranted = true
@@ -256,7 +307,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 						isDeadlock = true
 					} else {
 						// wait for the lock to become available
-						l.wait(xid)
+						wait = l.wait(xid)
 						isWaiting = true
 					}
 				}
@@ -265,13 +316,13 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 				switch {
 				case !l.exclusive && l.isNext(xid):
 					// lock is shared and nobody else is waiting for exclusive access or we are next
-					l.popNext()
+					l.pop()
 					l.count++
 					isGranted = true
 
 				case l.exclusive && l.count == 0 && l.isNext(xid):
 					// exclusive lock was just released and we are only or next in line
-					l.popNext()
+					l.pop()
 					l.count++
 					l.exclusive = false // reset to shared
 					isGranted = true
@@ -281,8 +332,8 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 					if m.detectDeadlock(l, xid) {
 						isDeadlock = true
 					} else {
-						// wait after exclusive lock requests
-						l.wait(xid)
+						// wait behind potential exclusive lock requests
+						wait = l.wait(xid)
 						isWaiting = true
 					}
 				}
@@ -326,9 +377,14 @@ func (m *LockManager) drop(xid uint64, mode LockMode, typ LockType, entity uint6
 
 		// reduce ref and remove from lock manager if last ref was dropped
 		l.count--
+		l.yield()
 		if l.count == 0 && len(l.waiting) == 0 {
 			locks = slices.DeleteFunc(locks, func(l2 *lock) bool {
-				return l2 == l
+				if l2 == l {
+					lockPool.Put(l)
+					return true
+				}
+				return false
 			})
 			atomic.AddInt64(&m.nlocks, -1)
 		}
@@ -345,12 +401,11 @@ func getOrCreateLock(locks []*lock, typ LockType, entity uint64, exclusive bool)
 		}
 		return l, false
 	}
-	l := &lock{
-		typ:       typ,
-		entity:    entity,
-		count:     1,
-		exclusive: exclusive,
-	}
+	l := lockPool.Get().(*lock)
+	l.typ = typ
+	l.entity = entity
+	l.count = 1
+	l.exclusive = exclusive
 	return l, true
 }
 
