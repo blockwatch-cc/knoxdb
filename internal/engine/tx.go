@@ -18,7 +18,7 @@ type TxFlags byte
 
 const (
 	TxFlagsReadOnly     TxFlags = 1 << iota
-	TxFlagsCatalog              // catalog related txn
+	TxFlagsCatalog              // txn made changes to catalog
 	TxFlagsSerializable         // use serializable snapshot isolation level (TODO)
 	TxFlagsDeferred             // wait for safe snapshot (TODO)
 	TxFlagsConflict             // conflict detected, abort on commit
@@ -33,14 +33,16 @@ func (f TxFlags) IsConflict() bool     { return f&TxFlagsConflict > 0 }
 type TxHook func(Context) error
 
 type Tx struct {
-	engine   *Engine
 	id       uint64
+	engine   *Engine
 	dbTx     map[store.DB]store.Tx
 	catTx    store.Tx
 	snap     *types.Snapshot     // isolation snapshot
 	touched  map[uint64]struct{} // oids we have written to (tables, stores)
 	onCommit []TxHook
 	onAbort  []TxHook
+	ctx      context.Context
+	cancel   context.CancelCauseFunc
 
 	// TODO: concurrency control config option: optimistic/deterministic
 	// single writer: rollback sequences -> determinism
@@ -116,10 +118,12 @@ func mergeFlags(x []TxFlags) (f TxFlags) {
 
 func (e *Engine) NewTransaction(flags ...TxFlags) *Tx {
 	tx := &Tx{
-		engine: e,
 		id:     0, // read-only tx do not use an id
+		engine: e,
 		dbTx:   make(map[store.DB]store.Tx),
 		flags:  mergeFlags(flags),
+		ctx:    context.Background(),
+		cancel: func(error) {},
 	}
 	if tx.flags.IsReadOnly() {
 		// only create snapshot for read transactions (don't pollute id space)
@@ -137,6 +141,11 @@ func (e *Engine) NewTransaction(flags ...TxFlags) *Tx {
 	e.log.Debugf("New tx %d", tx.id)
 
 	return tx
+}
+
+func (t *Tx) WithContext(ctx context.Context) *Tx {
+	t.ctx, t.cancel = context.WithCancelCause(ctx)
+	return t
 }
 
 func (t *Tx) WithFlags(flags ...TxFlags) *Tx {
@@ -161,12 +170,11 @@ func (t *Tx) Engine() *Engine {
 	return t.engine
 }
 
-func (t *Tx) Noop() error {
-	return nil
-}
-
-func (t *Tx) IsClosed() bool {
-	return t.engine == nil
+func (t *Tx) Err() error {
+	if t == nil {
+		return ErrNoTx
+	}
+	return context.Cause(t.ctx)
 }
 
 func (t *Tx) Close() {
@@ -198,6 +206,7 @@ func (t *Tx) Close() {
 	t.onCommit = nil
 	t.onAbort = nil
 	t.writes = nil
+	t.cancel(ErrTxClosed)
 }
 
 func (t *Tx) Touch(key uint64) {
@@ -223,9 +232,12 @@ func (t *Tx) OnAbort(fn TxHook) {
 	}
 }
 
-func (t *Tx) Commit(ctx context.Context) error {
+func (t *Tx) Commit() error {
 	if t == nil {
-		return nil
+		return ErrNoTx
+	}
+	if err := t.Err(); err != nil {
+		return err
 	}
 
 	t.engine.log.Debugf("Commit tx %d", t.id)
@@ -244,7 +256,7 @@ func (t *Tx) Commit(ctx context.Context) error {
 	// commit to all touched objects; write wal commit records, sync wals
 	// update journal segments
 	for oid, _ := range t.touched {
-		err := t.engine.CommitTx(ctx, oid, t.id)
+		err := t.engine.CommitTx(t.ctx, oid, t.id)
 		if err != nil {
 			return err
 		}
@@ -252,7 +264,7 @@ func (t *Tx) Commit(ctx context.Context) error {
 
 	// commit and update catalog wal
 	if t.flags.IsCatalog() {
-		err := t.engine.cat.CommitTx(ctx, t.id)
+		err := t.engine.cat.CommitTx(t.ctx, t.id)
 		if err != nil {
 			return err
 		}
@@ -260,7 +272,7 @@ func (t *Tx) Commit(ctx context.Context) error {
 
 	// run callbacks
 	for _, fn := range t.onCommit {
-		if err := fn(ctx); err != nil {
+		if err := fn(t.ctx); err != nil {
 			t.engine.log.Errorf("Tx 0x%016x commit: %v", t.id, err)
 		}
 	}
@@ -311,9 +323,13 @@ func (t *Tx) Commit(ctx context.Context) error {
 	return nil
 }
 
-func (t *Tx) Abort(ctx context.Context) error {
-	if t == nil || t.IsClosed() {
-		return nil
+func (t *Tx) Abort() error {
+	if t == nil {
+		return ErrNoTx
+	}
+
+	if err := t.Err(); err != nil {
+		return err
 	}
 
 	// don't log read only tx
@@ -332,7 +348,7 @@ func (t *Tx) Abort(ctx context.Context) error {
 		// send abort to all touched objects; write wal abort records,
 		// update journal segments
 		for oid, _ := range t.touched {
-			err := t.engine.AbortTx(ctx, oid, t.id)
+			err := t.engine.AbortTx(t.ctx, oid, t.id)
 			if err != nil {
 				return err
 			}
@@ -340,7 +356,7 @@ func (t *Tx) Abort(ctx context.Context) error {
 
 		// abort and update catalog wal
 		if t.flags.IsCatalog() {
-			err := t.engine.cat.AbortTx(ctx, t.id)
+			err := t.engine.cat.AbortTx(t.ctx, t.id)
 			if err != nil {
 				return err
 			}
@@ -364,7 +380,7 @@ func (t *Tx) Abort(ctx context.Context) error {
 
 	// run callbacks
 	for _, fn := range t.onAbort {
-		if err := fn(ctx); err != nil {
+		if err := fn(t.ctx); err != nil {
 			t.engine.log.Errorf("Tx 0x%016x abort: %v", t.id, err)
 		}
 	}
@@ -374,9 +390,30 @@ func (t *Tx) Abort(ctx context.Context) error {
 	return err
 }
 
+func (t *Tx) kill() {
+	// TODO
+	// - like abort() but called from another goroutine on engine shutdown
+	// - should prevent race conditions with other code altering tx data
+	// - write wal record
+	// - run abort callbacks
+	// - free locks
+	// - abort storage txn
+	// - prevent running commit/abort functions
+	//
+	// scenarios
+	// - tx owner goroutine is waiting or executing database code
+	//   -> needs context cancel with cause
+	// - tx owner goroutine is in user code
+	//   -> needs flag & check on each entry to a tx func (return error ErrTxKilled)
+	t.cancel(ErrDatabaseShutdown)
+}
+
 func (t *Tx) StoreTx(db store.DB, write bool) (store.Tx, error) {
 	if t == nil {
 		return nil, ErrNoTx
+	}
+	if err := t.Err(); err != nil {
+		return nil, err
 	}
 	tx, ok := t.dbTx[db]
 	if ok {
@@ -402,6 +439,9 @@ func (t *Tx) CatalogTx(db store.DB, write bool) (store.Tx, error) {
 	if t == nil {
 		return nil, ErrNoTx
 	}
+	if err := t.Err(); err != nil {
+		return nil, err
+	}
 	if t.catTx != nil {
 		if write && !t.catTx.IsWriteable() {
 			// cancel and upgrade tx
@@ -425,6 +465,9 @@ func (t *Tx) CatalogTx(db store.DB, write bool) (store.Tx, error) {
 // Commits and reopens a writeable storage tx. This may be used to flush verly large
 // transactions to storage in incremental pieces.
 func (t *Tx) Continue(tx store.Tx) (store.Tx, error) {
+	if err := t.Err(); err != nil {
+		return nil, err
+	}
 	db := tx.DB()
 	tx, err := store.CommitAndContinue(tx)
 	if err != nil {

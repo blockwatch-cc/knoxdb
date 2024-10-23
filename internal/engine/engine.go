@@ -8,6 +8,7 @@ import (
 	"errors"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -26,23 +27,25 @@ const (
 
 // Engine is the central instance managing a database
 type Engine struct {
-	mu      sync.RWMutex
-	lock    *flock.Flock
-	cat     *Catalog
-	cache   CacheManager
-	tables  map[uint64]TableEngine
-	stores  map[uint64]StoreEngine
-	indexes map[uint64]IndexEngine
-	enums   schema.EnumRegistry
-	txs     TxList
-	opts    DatabaseOptions
-	xmin    uint64
-	xnext   uint64
-	dbId    uint64
-	path    string
-	log     log.Logger
-	merger  *MergerService
-	wal     *wal.Wal
+	mu       sync.RWMutex
+	shutdown atomic.Value
+	flock    *flock.Flock
+	cat      *Catalog
+	cache    CacheManager
+	tables   map[uint64]TableEngine
+	stores   map[uint64]StoreEngine
+	indexes  map[uint64]IndexEngine
+	enums    schema.EnumRegistry
+	txs      TxList
+	opts     DatabaseOptions
+	xmin     uint64
+	xnext    uint64
+	dbId     uint64
+	path     string
+	log      log.Logger
+	merger   *MergerService
+	wal      *wal.Wal
+	lm       *LockManager
 }
 
 type CacheKeyType [2]uint64
@@ -84,7 +87,9 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		cat:     NewCatalog(name),
 		log:     log.Disabled,
 		merger:  NewMergerService(),
+		lm:      NewLockManager().WithTimeout(opts.LockTimeout),
 	}
+	e.shutdown.Store(false)
 
 	if opts.Logger != nil {
 		e.log = opts.Logger
@@ -99,7 +104,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
 		return nil, err
 	} else {
-		e.lock = lock
+		e.flock = lock
 	}
 
 	// start transaction and amend context (required to store catalog db)
@@ -171,7 +176,9 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		cat:     NewCatalog(name),
 		log:     log.Disabled,
 		merger:  NewMergerService(),
+		lm:      NewLockManager(),
 	}
+	e.shutdown.Store(false)
 	if opts.Logger != nil {
 		e.log = opts.Logger
 		e.merger.WithLogger(opts.Logger)
@@ -185,7 +192,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
 		return nil, err
 	} else {
-		e.lock = lock
+		e.flock = lock
 	}
 
 	// start transaction (for wal recovery we may need a write tx)
@@ -217,6 +224,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	}
 	// merge options
 	e.opts = sopts.Merge(opts)
+	e.lm.WithTimeout(e.opts.LockTimeout)
 
 	// open and validate wal (recovery happens individually at catalog and table level)
 	wopts := wal.WalOptions{
@@ -272,15 +280,20 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 func (e *Engine) Close(ctx context.Context) error {
 	e.log.Debugf("Closing database %s at %s", e.cat.name, e.path)
 
-	// TODO: set shutdown flag to prevent new transactions
+	// set shutdown flag to prevent new transactions
+	e.shutdown.Store(true)
 
-	// abort all pending transactions
+	// kill all pending transactions
 	for _, tx := range e.txs {
-		tx.Abort(ctx)
+		tx.kill()
 	}
 
 	// stop services
 	e.merger.Stop()
+
+	// wait for transactions and services to release all locks
+	e.lm.Wait()
+	e.lm = nil
 
 	// clear caches
 	e.PurgeCache()
@@ -333,9 +346,9 @@ func (e *Engine) Close(ctx context.Context) error {
 	}
 
 	// release directory lock
-	if e.lock != nil {
-		e.lock.Close()
-		e.lock = nil
+	if e.flock != nil {
+		e.flock.Close()
+		e.flock = nil
 	}
 
 	return nil

@@ -11,17 +11,26 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 	// prevent duplicates, return noops because an outer call frame controls
 	if tx := GetTransaction(ctx); tx != nil {
 		tx.WithFlags(flags...)
-		return ctx, tx.Noop, tx.Noop
+		return ctx, noop, noop
 	}
 	tx := e.NewTransaction(flags...)
+
+	// check engine shutdown state and return a defunct transaction object
+	if sd := e.shutdown.Load(); sd != nil && sd.(bool) {
+		tx.kill()
+	}
+
+	// link tx to context
 	ctx = context.WithValue(ctx, TransactionKey{}, tx)
-	return ctx, wrap(ctx, tx.Commit), wrap(ctx, tx.Abort)
+
+	// use ctx in tx (will make cancelable and forward to commit/abort callbacks)
+	tx.WithContext(ctx)
+
+	return ctx, tx.Commit, tx.Abort
 }
 
-func wrap(ctx context.Context, fn func(context.Context) error) func() error {
-	return func() error {
-		return fn(ctx)
-	}
+func noop() error {
+	return nil
 }
 
 func GetTransaction(ctx context.Context) *Tx {

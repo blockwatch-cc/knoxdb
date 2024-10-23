@@ -27,6 +27,7 @@ var (
 	ErrDatabaseReadOnly = errors.New("knox: database is read-only")
 	ErrDatabaseClosed   = errors.New("knox: database is closed")
 	ErrDatabaseCorrupt  = errors.New("knox: database file corrupt")
+	ErrDatabaseShutdown = errors.New("knox: database is shutting down")
 
 	ErrTableExists       = errors.New("knox: table already exists")
 	ErrStoreExists       = errors.New("knox: store already exists")
@@ -37,8 +38,9 @@ var (
 
 	EndStream = errors.New("end stream")
 
-	ErrShortMessage   = errors.New("short message buffer")
 	ErrTxConflict     = errors.New("transaction conflict")
 	ErrTxReadonly     = errors.New("transaction is read-only")
+	ErrTxClosed       = errors.New("transaction is closed")
+	ErrShortMessage   = errors.New("short message buffer")
 	ErrNotImplemented = errors.New("feature not implemented")
 )

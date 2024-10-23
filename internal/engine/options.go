@@ -4,6 +4,8 @@
 package engine
 
 import (
+	"time"
+
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
@@ -21,6 +23,7 @@ type DatabaseOptions struct {
 	CacheSize       int              // in bytes
 	WalSegmentSize  int              // wal file size
 	WalRecoveryMode wal.RecoveryMode // howto recover from wal damage
+	LockTimeout     time.Duration    // lock manager timeout
 	NoSync          bool             // boltdb, no fsync on transactions (dangerous)
 	NoGrowSync      bool             // boltdb, skip fsync+alloc on grow
 	ReadOnly        bool             // read-only tx and no schema changes
@@ -36,6 +39,7 @@ func (o DatabaseOptions) Merge(o2 DatabaseOptions) DatabaseOptions {
 	o.CacheSize = util.NonZero(o2.CacheSize, o.CacheSize)
 	o.WalSegmentSize = util.NonZero(o2.WalSegmentSize, o.WalSegmentSize)
 	o.WalRecoveryMode = util.NonZero(o2.WalRecoveryMode, o.WalRecoveryMode)
+	o.LockTimeout = util.NonZero(o2.LockTimeout, o.LockTimeout)
 	o.ReadOnly = o2.ReadOnly
 	o.NoSync = o2.NoSync
 	o.NoGrowSync = o2.NoGrowSync
@@ -98,6 +102,11 @@ func (o DatabaseOptions) WithWalSegmentSize(sz int) DatabaseOptions {
 
 func (o DatabaseOptions) WithWalRecoveryMode(mode wal.RecoveryMode) DatabaseOptions {
 	o.WalRecoveryMode = mode
+	return o
+}
+
+func (o DatabaseOptions) WithLockTimeout(to time.Duration) DatabaseOptions {
+	o.LockTimeout = to
 	return o
 }
 
