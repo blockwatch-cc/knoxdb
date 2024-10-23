@@ -590,41 +590,70 @@ func TestCastBytesCaster(t *testing.T) {
 func TestCastI128Caster(t *testing.T) {
 	caster := I128Caster{}
 
-	tests := []struct {
-		name     string
-		input    interface{}
-		expected num.Int128
-		hasError bool
-	}{
-		{"Int", 42, num.Int128FromInt64(42), false},
-		{"Int64", int64(42), num.Int128FromInt64(42), false},
-		{"String", "42", num.Int128{}, true},
-		{"MaxInt64", int64(math.MaxInt64), num.Int128FromInt64(math.MaxInt64), false},
-		{"MinInt64", int64(math.MinInt64), num.Int128FromInt64(math.MinInt64), false},
-	}
+	t.Run("CastValue", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			input    interface{}
+			expected num.Int128
+			hasError bool
+		}{
+			{"Int", 42, num.Int128FromInt64(42), false},
+			{"Int64", int64(42), num.Int128FromInt64(42), false},
+			{"Int32", int32(1000), num.Int128FromInt64(1000), false},
+			{"Int16", int16(-500), num.Int128FromInt64(-500), false},
+			{"Int8", int16(-120), num.Int128FromInt64(-120), false},
+			{"Uint", uint(42), num.Int128FromInt64(42), false},
+			{"Uint64", uint64(42), num.Int128FromInt64(42), false},
+			{"Uint32", uint32(1000), num.Int128FromInt64(1000), false},
+			{"Uint16", uint16(500), num.Int128FromInt64(500), false},
+			{"Uint8", uint16(120), num.Int128FromInt64(120), false},
+			{"String", "42", num.Int128{}, true},
+			{"MaxInt64", int64(math.MaxInt64), num.Int128FromInt64(math.MaxInt64), false},
+			{"MinInt64", int64(math.MinInt64), num.Int128FromInt64(math.MinInt64), false},
+			{"Float32", float32(120.222), num.Int128FromInt64(120), false},
+			{"Float64", -2.102002, num.Int128FromInt64(-2), false},
+			{"Decimal32", num.NewDecimal32(10, 0), num.Int128FromInt64(10), false},
+			{"Decimal64", num.NewDecimal64(100, 0), num.Int128FromInt64(100), false},
+			{"Decimal64", num.NewDecimal64(100, 0), num.Int128FromInt64(100), false},
+			{"Decimal128", num.NewDecimal128(num.Int128FromInt64(100), 0), num.Int128FromInt64(100), false},
+			{"Decimal256", num.NewDecimal256(num.MaxInt256, 0), num.Int128{}, true},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := caster.CastValue(tt.input)
-			if tt.hasError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
-			}
-		})
-	}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := caster.CastValue(tt.input)
+				if tt.hasError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+					assert.Equal(t, tt.expected, result)
+				}
+			})
+		}
+	})
 
 	t.Run("CastSlice", func(t *testing.T) {
-		input := []int64{1, 2, 3}
-		result, err := caster.CastSlice(input)
-		assert.NoError(t, err)
-		assert.IsType(t, []num.Int128{}, result)
-		expected := []num.Int128{num.Int128FromInt64(1), num.Int128FromInt64(2), num.Int128FromInt64(3)}
-		assert.Equal(t, expected, result)
+		tests := []struct {
+			name     string
+			input    interface{}
+			expected []num.Int128
+			hasError bool
+		}{
+			{"Int64", []int64{42}, []num.Int128{num.Int128FromInt64(42)}, false},
+			{"String", []string{"42"}, nil, true},
+		}
 
-		_, err = caster.CastSlice([]string{"not", "int128s"})
-		assert.Error(t, err)
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := caster.CastSlice(tt.input)
+				if tt.hasError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+					assert.Equal(t, tt.expected, result)
+				}
+			})
+		}
 	})
 }
 
@@ -642,9 +671,24 @@ func TestCastI256Caster(t *testing.T) {
 		}{
 			{"Int", 42, num.Int256FromInt64(42), false},
 			{"Int64", int64(42), num.Int256FromInt64(42), false},
+			{"Int32", int32(1000), num.Int256FromInt64(1000), false},
+			{"Int16", int16(-500), num.Int256FromInt64(-500), false},
+			{"Int8", int16(-120), num.Int256FromInt64(-120), false},
+			{"Uint", uint(42), num.Int256FromInt64(42), false},
+			{"Uint64", uint64(42), num.Int256FromInt64(42), false},
+			{"Uint32", uint32(1000), num.Int256FromInt64(1000), false},
+			{"Uint16", uint16(500), num.Int256FromInt64(500), false},
+			{"Uint8", uint16(120), num.Int256FromInt64(120), false},
 			{"String", "42", num.Int256{}, true},
 			{"MaxInt64", int64(math.MaxInt64), num.Int256FromInt64(math.MaxInt64), false},
 			{"MinInt64", int64(math.MinInt64), num.Int256FromInt64(math.MinInt64), false},
+			{"Float32", float32(120.222), num.Int256FromInt64(120), false},
+			{"Float64", -2.102002, num.Int256FromInt64(-2), false},
+			{"Decimal32", num.NewDecimal32(10, 0), num.Int256FromInt64(10), false},
+			{"Decimal64", num.NewDecimal64(100, 0), num.Int256FromInt64(100), false},
+			{"Decimal64", num.NewDecimal64(100, 0), num.Int256FromInt64(100), false},
+			{"Decimal128", num.NewDecimal128(num.Int128FromInt64(100), 0), num.Int256FromInt64(100), false},
+			{"Decimal256", num.NewDecimal256(num.MaxInt256, 0), num.Int256FromBytes(num.MaxInt256.Bytes()), false},
 		}
 
 		for _, tt := range tests {
