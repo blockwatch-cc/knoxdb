@@ -6,6 +6,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -17,9 +18,8 @@ import (
 // - see query.FilterTreeNode.Overlaps() // unimplemneted
 
 var (
-	ErrLockTimeout  = errors.New("canceled due to lock timeout")
-	ErrDeadlock     = errors.New("deadlock detected")
-	ErrLockConflict = errors.New("conflict when upgrading a lock")
+	ErrLockTimeout = errors.New("canceled due to lock timeout")
+	ErrDeadlock    = errors.New("deadlock detected")
 )
 
 type LockMode byte
@@ -29,26 +29,26 @@ const (
 	LockModeExclusive
 )
 
-// LockType defines a hierarchy of scopes starting at the widest "global" scope
-// (the entire database), down to individual rows (identified by row id range)
+// LockType defines the scope of a lock. Scopes may express nested or overlap.
+// in which case a txn may hold multiple locks on the same resource (i.e.
+// a table lock and multiple row locks identified by row id ranges).
 type LockType byte
 
 const (
-	LockTypeGlobal LockType = iota // entire database across all objects
-	LockTypeObject                 // single container object (table, store, index)
-	// LockTypePredicate           // query condition (may be used for row id or key ranges)
+	LockTypeObject    LockType = iota // single container object (table, store, index)
+	LockTypePredicate                 // query condition (may be used for row id or key ranges)
 )
 
 // invariants
 // - at most one lock per type & resource combination exists (either shared or exclusive state)
-// - no locks with count = 0 and waiting ==0 exist
+// - no locks with count == 0 and waiting == 0 exist
 // - a shared lock has waiting > 0 only if exclusive lock is requested
 // - an exclusive lock has waiting > 0 if subsequent exclusive or shared locks are requested
 type LockManager struct {
 	timeout time.Duration
 	locks   chan []*lock       // all granted locks, use chan for exclusive access
 	granted map[uint64][]*lock // map of tx id to locks granted
-	nlocks  int64
+	nlocks  int64              // total number of locks currently in existence
 }
 
 func NewLockManager() *LockManager {
@@ -70,6 +70,13 @@ func (m *LockManager) Len() int {
 	return int(atomic.LoadInt64(&m.nlocks))
 }
 
+// waits for all locks to be released
+func (m *LockManager) Wait() {
+	for m.Len() > 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // Lock represents a lock on a unique database resource. Each resource has at most
 // one lock assigned. During its lifecycle, the lock may change state between shared
 // and exclusive multiple times, as request order requires. To save memory we only
@@ -81,14 +88,14 @@ func (m *LockManager) Len() int {
 type lock struct {
 	typ       LockType                 // global, object or predicate
 	exclusive bool                     // flag indicating if this lock is exclusive or shared
-	entity    uint64                   // container id when type is object or predicate
+	oid       uint64                   // container id when type is object or predicate
 	count     int                      // shared lock reference counter
 	waiting   []uint64                 // xids waiting to inherit or replace the lock (in request order)
 	waiters   map[uint64]chan struct{} //wait channels per xid
 }
 
-func (l *lock) isNext(xid uint64) bool {
-	return len(l.waiting) == 0 || l.waiting[0] == xid
+func (l *lock) empty() bool {
+	return len(l.waiting) == 0
 }
 
 func (l *lock) pop() {
@@ -118,60 +125,60 @@ func (l *lock) drop(xid uint64) {
 	l.waiting = slices.DeleteFunc(l.waiting, func(i uint64) bool {
 		return i == xid
 	})
-	delete(l.waiters, xid)
+	if ch, ok := l.waiters[xid]; ok {
+		close(ch)
+		delete(l.waiters, xid)
+	}
 }
 
 var lockPool = sync.Pool{
 	New: func() any { return new(lock) },
 }
 
-// Lock obtains a global database lock in shared or exclusive mode.
-func (m *LockManager) Lock(ctx context.Context, mode LockMode) (bool, error) {
+// Lock obtains a lock on a specific object.
+func (m *LockManager) Lock(ctx context.Context, mode LockMode, oid uint64) (bool, error) {
 	tx := GetTransaction(ctx)
-	if tx == nil {
-		return false, ErrNoTx
+
+	// check tx status
+	if err := tx.Err(); err != nil {
+		return false, err
 	}
 
-	// add timeout to context
+	// upgrade context with timeout
 	if m.timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, m.timeout)
 		defer cancel()
 	}
 
-	return m.acquire(ctx, tx.id, mode, LockTypeGlobal, 0, nil)
+	return m.acquire(ctx, tx.id, mode, LockTypeObject, oid, nil)
 }
 
-// LockObject obtains lock on a specific object. First it also takes a shared global
-// lock to preserve lock nesting requirements.
-func (m *LockManager) LockObject(ctx context.Context, mode LockMode, oid uint64) (bool, error) {
+// TODO: not yet supported
+func (m *LockManager) LockPredicate(ctx context.Context, mode LockMode, oid uint64, pred ConditionMatcher) (bool, error) {
 	tx := GetTransaction(ctx)
-	if tx == nil {
-		return false, ErrNoTx
-	}
 
-	// add timeout to context
-	if m.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, m.timeout)
-		defer cancel()
-	}
-
-	// first obtain a shared global lock
-	_, err := m.acquire(ctx, tx.id, LockModeShared, LockTypeGlobal, 0, nil)
-	if err != nil {
+	// check tx status
+	if err := tx.Err(); err != nil {
 		return false, err
 	}
 
-	// obtain object lock
-	_, err = m.acquire(ctx, tx.id, mode, LockTypeObject, oid, nil)
-	if err != nil {
-		// rollback global lock on error (timeout, context canceled)
-		m.drop(tx.id, LockModeShared, LockTypeGlobal, 0, nil)
-		return false, err
-	}
+	// upgrade context with timeout
+	// if m.timeout > 0 {
+	// 	var cancel context.CancelFunc
+	// 	ctx, cancel = context.WithTimeout(ctx, m.timeout)
+	// 	defer cancel()
+	// }
 
-	return true, nil
+	//  //  obtain a nested shared object lock
+	//  ok, err = m.acquire(ctx, tx.id, LockModeShared, LockTypeObject, oid, nil)
+	//  if err != nil {
+	//      return false, err
+	//  }
+
+	// // then obtain the predicate lock
+	// return m.acquire(ctx, tx.id, LockModeShared, LockTypePredicate, oid, pred)
+	return false, ErrNotImplemented
 }
 
 // Done releases all locks acquired by the given transaction xid.
@@ -198,177 +205,178 @@ func (m *LockManager) Done(xid uint64) {
 	m.locks <- locks
 }
 
-func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, typ LockType, entity uint64, pred ConditionMatcher) (bool, error) {
-	if pred != nil {
-		return false, ErrNotImplemented
-	}
+func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, typ LockType, oid uint64, pred ConditionMatcher) (bool, error) {
+	// sync state access
+	locks := <-m.locks
 
-	// check for early cancel
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	default:
-	}
+	// find existing lock for this resource or create new lock object
+	l, isNew := getOrCreateLock(locks, typ, oid, mode == LockModeExclusive)
+
+	// TODO: handle predicate locks
+	// for predicate locks, determine overlap on exclusive locks
+	// (exclusive locks require disjunct predicates)
+	// if mode == LockModeExclusive && typ == LockTypePredicate {
+	// }
 
 	var (
-		isNew, isWaiting, isGranted, isDeadlock bool
-		l                                       *lock
-		wait                                    chan struct{}
+		isGranted, wasGranted, isDeadlock bool
+		wait                              chan struct{}
 	)
-	for {
-		if isWaiting {
-			// passive wait for next state change or abort
-			select {
-			case <-ctx.Done():
-				// remove self from lock waitlist (l is initialized here)
-				locks := <-m.locks
-				l.drop(xid)
-				m.locks <- locks
 
-				// translate timeout error
-				if ctx.Err() == context.DeadlineExceeded {
-					return false, ErrLockTimeout
+	switch {
+	case isNew:
+		// new shared or exclusive lock, add to state and grant
+		locks = append(locks, l)
+		atomic.AddInt64(&m.nlocks, 1)
+		isGranted = true
+		m.granted[xid] = append(m.granted[xid], l)
+
+	case slices.Contains(m.granted[xid], l):
+		// the xid already holds a lock to this resource
+		wasGranted = true
+		switch mode {
+		case LockModeExclusive:
+			// try upgrade shared to exclusive when possible
+			switch {
+			case l.exclusive:
+				// we already hold the max priority lock
+				isGranted = true
+			case l.count == 1 && l.empty():
+				// we're the only shared holder, upgrade to exclusive
+				l.exclusive = true // reset from shared
+				isGranted = true
+			default:
+				// others are waiting
+				// detect deadlock situation before we start wait
+				if m.detectDeadlock(l, xid) {
+					isDeadlock = true
+				} else {
+					// wait until we're the only holder or we're next in line
+					wait = l.wait(xid)
 				}
+			}
+		case LockModeShared:
+			// always true
+			isGranted = true
+		}
 
-				return false, ctx.Err()
+	default:
+		// first time this xid touches the lock
+		switch mode {
+		case LockModeExclusive:
+			switch {
+			case l.count == 0 && l.empty():
+				// lock is free right now
+				l.exclusive = true // potentially reset from shared
+				l.count = 1
+				isGranted = true
 
-			case <-wait:
+			default:
+				// lock is occupied or others are waiting
+				// detect deadlock situation before we start wait
+				if m.detectDeadlock(l, xid) {
+					isDeadlock = true
+				} else {
+					// wait for the lock to become available
+					wait = l.wait(xid)
+				}
+			}
+
+		case LockModeShared:
+			switch {
+			case !l.exclusive && l.empty():
+				// lock is shared and nobody else is waiting for exclusive access
+				l.count++
+				isGranted = true
+
+			case l.exclusive && l.count == 0 && l.empty():
+				// exclusive lock was just released and we are alone
+				l.count++
+				l.exclusive = false // reset to shared
+				isGranted = true
+
+			case !l.empty():
+				// wait behind others
+				// detect deadlock situation before we start wait
+				if m.detectDeadlock(l, xid) {
+					isDeadlock = true
+				} else {
+					// wait behind potential exclusive lock requests
+					wait = l.wait(xid)
+				}
+			default:
+				panic(fmt.Errorf("Unhandled shaed case lock=%#v %v %v %v", l, xid, mode, typ))
 			}
 		}
 
-		// sync state access
+		// keep list of granted locks for bulk release at txn close
+		if isGranted {
+			m.granted[xid] = append(m.granted[xid], l)
+		}
+	}
+
+	// return state to channel
+	m.locks <- locks
+
+	// return success
+	if isGranted {
+		return true, nil
+	}
+
+	// return error
+	if isDeadlock {
+		return false, ErrDeadlock
+	}
+
+	// passive wait for next state change or abort
+	select {
+	case <-ctx.Done():
+		// remove self from lock waitlist (l is initialized here)
+		locks := <-m.locks
+		l.drop(xid)
+		m.locks <- locks
+
+		// translate timeout error
+		if ctx.Err() == context.DeadlineExceeded {
+			return false, ErrLockTimeout
+		}
+
+		return false, ctx.Err()
+
+	case <-wait:
+		// lock is granted to us now
+
+		// sync access
 		locks := <-m.locks
 
-		// find existing lock for this resource or create new lock object
-		if l == nil {
-			l, isNew = getOrCreateLock(locks, typ, entity, mode == LockModeExclusive)
+		// update lock state
+		l.pop()
+		l.exclusive = mode == LockModeExclusive
+		if l.exclusive {
+			l.count = 1
 		} else {
-			isNew = false
+			l.count++
 		}
-
-		// TODO: handle predicate locks
-		// for predicate locks, determine overlap on exclusive locks
-		// (exclusive locks require disjunct predicates)
-		// if mode == LockModeExclusive && typ == LockTypePredicate {
-		// }
-
-		switch {
-		case isNew:
-			// new shared or exclusive lock, add to state and grant
-			locks = append(locks, l)
-			atomic.AddInt64(&m.nlocks, 1)
-			isGranted = true
+		if !wasGranted {
 			m.granted[xid] = append(m.granted[xid], l)
-
-		case slices.Contains(m.granted[xid], l):
-			// the xid already holds a lock to this resource
-			switch mode {
-			case LockModeExclusive:
-				// try upgrade shared to exclusive when possible
-				switch {
-				case l.exclusive:
-					// we already hold the max priority lock
-					isGranted = true
-				case l.count == 1 && l.isNext(xid):
-					// wait until we're the only shared holder and upgrade to exclusive
-					l.pop()
-					l.exclusive = true // reset from shared
-					isGranted = true
-				case !isWaiting:
-					// detect deadlock situation before we start wait
-					if m.detectDeadlock(l, xid) {
-						isDeadlock = true
-					} else {
-						// wait until we're the only holder or we're next in line
-						wait = l.wait(xid)
-						isWaiting = true
-					}
-				}
-			case LockModeShared:
-				// always true
-				isGranted = true
-			}
-
-		default:
-			// first time this xid touches the lock
-			switch mode {
-			case LockModeExclusive:
-				switch {
-				case l.count == 0 && l.isNext(xid):
-					// lock is available right now and we are only or next in line
-					l.pop()
-					l.exclusive = true // potentially reset from shared
-					l.count = 1
-					isGranted = true
-
-				case l.count > 0 && !isWaiting:
-					// detect deadlock situation before we start wait
-					if m.detectDeadlock(l, xid) {
-						isDeadlock = true
-					} else {
-						// wait for the lock to become available
-						wait = l.wait(xid)
-						isWaiting = true
-					}
-				}
-
-			case LockModeShared:
-				switch {
-				case !l.exclusive && l.isNext(xid):
-					// lock is shared and nobody else is waiting for exclusive access or we are next
-					l.pop()
-					l.count++
-					isGranted = true
-
-				case l.exclusive && l.count == 0 && l.isNext(xid):
-					// exclusive lock was just released and we are only or next in line
-					l.pop()
-					l.count++
-					l.exclusive = false // reset to shared
-					isGranted = true
-
-				case len(l.waiting) > 0 && !isWaiting:
-					// detect deadlock situation before we start wait
-					if m.detectDeadlock(l, xid) {
-						isDeadlock = true
-					} else {
-						// wait behind potential exclusive lock requests
-						wait = l.wait(xid)
-						isWaiting = true
-					}
-				}
-			}
-
-			// keep list of granted locks for bulk release at txn close
-			if isGranted {
-				m.granted[xid] = append(m.granted[xid], l)
-			}
 		}
 
 		// return state to channel
 		m.locks <- locks
 
-		// return success
-		if isGranted {
-			return true, nil
-		}
-
-		// return error
-		if isDeadlock {
-			return false, ErrDeadlock
-		}
+		return true, nil
 	}
 }
 
 // Drop releases a single lock after it has been granted. its required to roll back
 // high level locks in case a lower level lock fails.
-func (m *LockManager) drop(xid uint64, mode LockMode, typ LockType, entity uint64, pred ConditionMatcher) {
+func (m *LockManager) drop(xid uint64, mode LockMode, typ LockType, oid uint64, pred ConditionMatcher) {
 	// exclusive access
 	locks := <-m.locks
 
 	// release the specific lock
 	for i, l := range m.granted[xid] {
-		if l.typ != typ || l.entity != entity {
+		if l.typ != typ || l.oid != oid {
 			continue
 		}
 
@@ -394,16 +402,16 @@ func (m *LockManager) drop(xid uint64, mode LockMode, typ LockType, entity uint6
 	m.locks <- locks
 }
 
-func getOrCreateLock(locks []*lock, typ LockType, entity uint64, exclusive bool) (*lock, bool) {
+func getOrCreateLock(locks []*lock, typ LockType, oid uint64, exclusive bool) (*lock, bool) {
 	for _, l := range locks {
-		if l.typ != typ || l.entity != entity {
+		if l.typ != typ || l.oid != oid {
 			continue
 		}
 		return l, false
 	}
 	l := lockPool.Get().(*lock)
 	l.typ = typ
-	l.entity = entity
+	l.oid = oid
 	l.count = 1
 	l.exclusive = exclusive
 	return l, true
@@ -433,26 +441,3 @@ func (m *LockManager) hasLoopTo(locks []*lock, next *lock, self uint64) bool {
 	}
 	return false
 }
-
-// TODO: not yet supported
-// func (m *LockManager) LockPredicate(ctx context.Context, mode LockMode, odi uint64, pred ConditionMatcher) (bool, error) {
-//  tx := GetTransaction(ctx)
-//  if tx == nil {
-//      return false, ErrNoTx
-//  }
-
-//  // first obtain a shared global lock
-//  ok, err := m.acquire(ctx, tx.id, LockModeShared, LockTypeGlobal, 0, nil)
-//  if err != nil {
-//      return false, err
-//  }
-
-//  // then obtain a nested shared object lock
-//  ok, err = m.acquire(ctx, tx.id, LockModeShared, LockTypeObject, oid, nil)
-//  if err != nil {
-//      return false, err
-//  }
-
-//  // then obtain the predicate lock
-//  return m.acquire(ctx, tx.id, LockModeShared, LockTypePredicate, oid, pred)
-// }

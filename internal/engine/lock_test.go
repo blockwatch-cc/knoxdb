@@ -7,6 +7,7 @@ import (
 	"context"
 	"math/rand"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 )
 
 func withTx(ctx context.Context, id int) context.Context {
-	return context.WithValue(ctx, TransactionKey{}, &Tx{id: uint64(id)})
+	return context.WithValue(ctx, TransactionKey{}, &Tx{id: uint64(id), ctx: ctx})
 }
 
 func makeTxCtx(id int) context.Context {
@@ -26,13 +27,13 @@ func TestLockShared(t *testing.T) {
 	m := NewLockManager()
 
 	// first shared lock
-	ok1, err := m.Lock(makeTxCtx(1), LockModeShared)
+	ok1, err := m.Lock(makeTxCtx(1), LockModeShared, 1)
 	require.True(t, ok1)
 	require.NoError(t, err)
 	require.Equal(t, 1, m.Len())
 
 	// second shared lock
-	ok2, err := m.Lock(makeTxCtx(2), LockModeShared)
+	ok2, err := m.Lock(makeTxCtx(2), LockModeShared, 1)
 	require.True(t, ok2)
 	require.NoError(t, err)
 	require.Equal(t, 1, m.Len())
@@ -42,7 +43,7 @@ func TestLockShared(t *testing.T) {
 	require.Equal(t, 1, m.Len())
 
 	// third shared lock
-	ok3, err := m.Lock(makeTxCtx(3), LockModeShared)
+	ok3, err := m.Lock(makeTxCtx(3), LockModeShared, 1)
 	require.True(t, ok3)
 	require.NoError(t, err)
 	require.Equal(t, 1, m.Len())
@@ -57,13 +58,13 @@ func TestLockExclusive(t *testing.T) {
 	m := NewLockManager().WithTimeout(10 * time.Millisecond)
 
 	// first exclusive lock
-	ok1, err := m.Lock(makeTxCtx(1), LockModeExclusive)
+	ok1, err := m.Lock(makeTxCtx(1), LockModeExclusive, 1)
 	require.True(t, ok1)
 	require.NoError(t, err)
 	require.Equal(t, 1, m.Len())
 
 	// second exclusive lock (will timeout)
-	ok2, err := m.Lock(makeTxCtx(2), LockModeExclusive)
+	ok2, err := m.Lock(makeTxCtx(2), LockModeExclusive, 1)
 	require.False(t, ok2)
 	require.ErrorIs(t, err, ErrLockTimeout)
 	require.Equal(t, 1, m.Len()) // still first lock exists
@@ -73,7 +74,7 @@ func TestLockExclusive(t *testing.T) {
 	require.Equal(t, 0, m.Len()) // no more lock
 
 	// third exclusive lock
-	ok3, err := m.Lock(makeTxCtx(3), LockModeExclusive)
+	ok3, err := m.Lock(makeTxCtx(3), LockModeExclusive, 1)
 	require.True(t, ok3)
 	require.NoError(t, err)
 	require.Equal(t, 1, m.Len())
@@ -87,7 +88,7 @@ func TestLockExclusive(t *testing.T) {
 	g, ctx := errgroup.WithContext(context.Background())
 	g.Go(func() error {
 		time.Sleep(10 * time.Millisecond)
-		ok, err := m.Lock(withTx(ctx, 1), LockModeExclusive)
+		ok, err := m.Lock(withTx(ctx, 1), LockModeExclusive, 1)
 		if err != nil {
 			return err
 		}
@@ -98,7 +99,7 @@ func TestLockExclusive(t *testing.T) {
 	})
 	g.Go(func() error {
 		time.Sleep(100 * time.Millisecond)
-		ok, err := m.Lock(withTx(ctx, 2), LockModeExclusive)
+		ok, err := m.Lock(withTx(ctx, 2), LockModeExclusive, 1)
 		if err != nil {
 			return err
 		}
@@ -112,7 +113,7 @@ func TestLockExclusive(t *testing.T) {
 }
 
 func TestLockConcurrent(t *testing.T) {
-	m := NewLockManager()
+	m := NewLockManager().WithTimeout(10 * time.Second)
 	g, ctx := errgroup.WithContext(context.Background())
 	n := 64
 	g.SetLimit(n)
@@ -120,7 +121,7 @@ func TestLockConcurrent(t *testing.T) {
 		k := i
 		g.Go(func() error {
 			for j := 4 * k; j <= 4*k+4; j++ {
-				_, err := m.Lock(withTx(ctx, j), LockModeExclusive)
+				_, err := m.Lock(withTx(ctx, j), LockModeExclusive, 1)
 				if err != nil {
 					return err
 				}
@@ -133,72 +134,9 @@ func TestLockConcurrent(t *testing.T) {
 	require.NoError(t, g.Wait())
 }
 
-func TestLockObjectShared(t *testing.T) {
-	var r1 uint64 = 1 // resource oids
-	m := NewLockManager()
-
-	// first shared lock
-	ok1, err := m.LockObject(makeTxCtx(1), LockModeShared, r1)
-	require.True(t, ok1)
-	require.NoError(t, err)
-	require.Equal(t, 2, m.Len()) // global + object
-
-	// second shared lock
-	ok2, err := m.LockObject(makeTxCtx(2), LockModeShared, r1)
-	require.True(t, ok2)
-	require.NoError(t, err)
-	require.Equal(t, 2, m.Len())
-
-	// release first locker
-	m.Done(uint64(1))
-	require.Equal(t, 2, m.Len())
-
-	// third shared lock
-	ok3, err := m.LockObject(makeTxCtx(3), LockModeShared, r1)
-	require.True(t, ok3)
-	require.NoError(t, err)
-	require.Equal(t, 2, m.Len())
-
-	// release all locks
-	m.Done(uint64(2))
-	m.Done(uint64(3))
-	require.Equal(t, 0, m.Len())
-}
-
-func TestLockObjectExclusive(t *testing.T) {
-	var r1 uint64 = 1 // resource oids
-	m := NewLockManager().WithTimeout(10 * time.Millisecond)
-
-	// first exclusive lock
-	ok1, err := m.LockObject(makeTxCtx(1), LockModeExclusive, r1)
-	require.True(t, ok1)
-	require.NoError(t, err)
-	require.Equal(t, 2, m.Len()) // global + object
-
-	// second exclusive lock (will timeout)
-	ok2, err := m.LockObject(makeTxCtx(2), LockModeExclusive, r1)
-	require.False(t, ok2)
-	require.ErrorIs(t, err, ErrLockTimeout)
-	require.Equal(t, 2, m.Len()) // still first lock exists
-
-	// release first locker
-	m.Done(uint64(1))
-	require.Equal(t, 0, m.Len()) // no more lock
-
-	// third exclusive lock
-	ok3, err := m.LockObject(makeTxCtx(3), LockModeExclusive, r1)
-	require.True(t, ok3)
-	require.NoError(t, err)
-	require.Equal(t, 2, m.Len())
-
-	// release all locks
-	m.Done(uint64(3))
-	require.Equal(t, 0, m.Len())
-}
-
 func TestLockNoTx(t *testing.T) {
 	m := NewLockManager()
-	ok, err := m.Lock(context.Background(), LockModeShared)
+	ok, err := m.Lock(context.Background(), LockModeShared, 1)
 	require.False(t, ok)
 	require.ErrorIs(t, err, ErrNoTx)
 }
@@ -220,44 +158,43 @@ func TestLockDeadlock(t *testing.T) {
 	//     │           ┌────┐            │
 	//     └─granted───▶ R3 ◀────waiting─┘
 	//                 └────┘
-	var r1, r2, r3 uint64 = 1, 2, 3 // resource oids
 	g, ctx := errgroup.WithContext(context.Background())
 	x1, x2, x3 := withTx(ctx, 1), withTx(ctx, 2), withTx(ctx, 3)
 	m := NewLockManager()
 
-	ok1, err := m.LockObject(x1, LockModeExclusive, r1)
+	ok1, err := m.Lock(x1, LockModeExclusive, 1)
 	require.True(t, ok1)
+	require.NoError(t, err)
+	require.Equal(t, 1, m.Len()) // global + object
+
+	ok2, err := m.Lock(x2, LockModeExclusive, 2)
+	require.True(t, ok2)
 	require.NoError(t, err)
 	require.Equal(t, 2, m.Len()) // global + object
 
-	ok2, err := m.LockObject(x2, LockModeExclusive, r2)
-	require.True(t, ok2)
-	require.NoError(t, err)
-	require.Equal(t, 3, m.Len()) // global + object
-
-	ok3, err := m.LockObject(x3, LockModeExclusive, r3)
+	ok3, err := m.Lock(x3, LockModeExclusive, 3)
 	require.True(t, ok3)
 	require.NoError(t, err)
-	require.Equal(t, 4, m.Len()) // global + object
+	require.Equal(t, 3, m.Len()) // global + object
 
 	g.Go(func() error {
 		// blocks
 		t.Log("Locking X1->R2")
-		_, err := m.LockObject(x1, LockModeExclusive, r2)
+		_, err := m.Lock(x1, LockModeExclusive, 2)
 		return err
 	})
 	time.Sleep(10 * time.Millisecond)
 	g.Go(func() error {
 		// blocks
 		t.Log("Locking X2->R3")
-		_, err := m.LockObject(x2, LockModeExclusive, r3)
+		_, err := m.Lock(x2, LockModeExclusive, 3)
 		return err
 	})
 	time.Sleep(10 * time.Millisecond)
 	g.Go(func() error {
 		// deadlock
 		t.Log("Locking X3->R1")
-		_, err := m.LockObject(x3, LockModeExclusive, r1)
+		_, err := m.Lock(x3, LockModeExclusive, 1)
 		return err
 	})
 
@@ -270,22 +207,22 @@ func TestLockContextCancel(t *testing.T) {
 	m := NewLockManager()
 	cancel()
 
-	ok1, err := m.Lock(x1, LockModeExclusive)
+	ok1, err := m.Lock(x1, LockModeExclusive, 1)
 	require.False(t, ok1)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, 0, m.Len())
 
-	ok2, err := m.Lock(withTx(ctx, 2), LockModeExclusive)
+	ok2, err := m.Lock(withTx(ctx, 2), LockModeExclusive, 1)
 	require.False(t, ok2)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, 0, m.Len())
 
 }
 
-func BenchmarkLockObject(b *testing.B) {
+func BenchmarkLockShared(b *testing.B) {
 	ctx := context.Background()
 	for _, n := range []int{1, 2, 8, 32} {
-		// open locks for N resources (actually N+1 due to shared global lock)
+		// open locks for N resources
 		m := NewLockManager().WithTimeout(0)
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
 			b.ReportAllocs()
@@ -294,7 +231,7 @@ func BenchmarkLockObject(b *testing.B) {
 				for pb.Next() {
 					x := withTx(ctx, xid)
 					for i := 0; i < n; i++ {
-						_, _ = m.LockObject(x, LockModeShared, uint64(i))
+						_, _ = m.Lock(x, LockModeShared, uint64(i))
 					}
 					m.Done(uint64(xid))
 					xid++
@@ -304,17 +241,17 @@ func BenchmarkLockObject(b *testing.B) {
 	}
 }
 
-func BenchmarkLockGlobal(b *testing.B) {
+func BenchmarkLockExclusive(b *testing.B) {
 	ctx := context.Background()
 	m := NewLockManager().WithTimeout(0)
 	b.ReportAllocs()
+	var id int64 = 1
 	b.RunParallel(func(pb *testing.PB) {
-		xid := 1
 		for pb.Next() {
-			x := withTx(ctx, xid)
-			_, _ = m.Lock(x, LockModeShared)
+			xid := atomic.AddInt64(&id, 1)
+			x := withTx(ctx, int(xid))
+			_, _ = m.Lock(x, LockModeExclusive, 1)
 			m.Done(uint64(xid))
-			xid++
 		}
 	})
 }
