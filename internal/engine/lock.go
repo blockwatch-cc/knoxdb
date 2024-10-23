@@ -45,8 +45,9 @@ const (
 // - a shared lock has waiting > 0 only if exclusive lock is requested
 // - an exclusive lock has waiting > 0 if subsequent exclusive or shared locks are requested
 type LockManager struct {
+	mu      sync.Mutex
 	timeout time.Duration
-	locks   chan []*lock       // all granted locks, use chan for exclusive access
+	locks   []*lock       // all granted locks, use chan for exclusive access
 	granted map[uint64][]*lock // map of tx id to locks granted
 	nlocks  int64              // total number of locks currently in existence
 }
@@ -54,10 +55,9 @@ type LockManager struct {
 func NewLockManager() *LockManager {
 	m := &LockManager{
 		timeout: 10 * time.Second,
-		locks:   make(chan []*lock, 1),
+		locks:   make([]*lock, 0),
 		granted: make(map[uint64][]*lock),
 	}
-	m.locks <- make([]*lock, 0)
 	return m
 }
 
@@ -184,7 +184,8 @@ func (m *LockManager) LockPredicate(ctx context.Context, mode LockMode, oid uint
 // Done releases all locks acquired by the given transaction xid.
 func (m *LockManager) Done(xid uint64) {
 	// exclusive access
-	locks := <-m.locks
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	// release all locks owned by xid
 	for _, l := range m.granted[xid] {
@@ -194,23 +195,22 @@ func (m *LockManager) Done(xid uint64) {
 	delete(m.granted, xid)
 
 	// cleanup unused locks and return state to channel
-	locks = slices.DeleteFunc(locks, func(l *lock) bool {
+	m.locks = slices.DeleteFunc(m.locks, func(l *lock) bool {
 		if l.count == 0 && len(l.waiting) == 0 {
 			lockPool.Put(l)
 			return true
 		}
 		return false
 	})
-	atomic.StoreInt64(&m.nlocks, int64(len(locks)))
-	m.locks <- locks
+	atomic.StoreInt64(&m.nlocks, int64(len(m.locks)))
 }
 
 func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, typ LockType, oid uint64, pred ConditionMatcher) (bool, error) {
 	// sync state access
-	locks := <-m.locks
+	m.mu.Lock()
 
 	// find existing lock for this resource or create new lock object
-	l, isNew := getOrCreateLock(locks, typ, oid, mode == LockModeExclusive)
+	l, isNew := getOrCreateLock(m.locks, typ, oid, mode == LockModeExclusive)
 
 	// TODO: handle predicate locks
 	// for predicate locks, determine overlap on exclusive locks
@@ -226,7 +226,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 	switch {
 	case isNew:
 		// new shared or exclusive lock, add to state and grant
-		locks = append(locks, l)
+		m.locks = append(m.locks, l)
 		atomic.AddInt64(&m.nlocks, 1)
 		isGranted = true
 		m.granted[xid] = append(m.granted[xid], l)
@@ -316,7 +316,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 	}
 
 	// return state to channel
-	m.locks <- locks
+	m.mu.Unlock()
 
 	// return success
 	if isGranted {
@@ -332,9 +332,9 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 	select {
 	case <-ctx.Done():
 		// remove self from lock waitlist (l is initialized here)
-		locks := <-m.locks
+		m.mu.Lock()
 		l.drop(xid)
-		m.locks <- locks
+		m.mu.Unlock()
 
 		// translate timeout error
 		if ctx.Err() == context.DeadlineExceeded {
@@ -345,9 +345,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 
 	case <-wait:
 		// lock is granted to us now
-
-		// sync access
-		locks := <-m.locks
+		m.mu.Lock()
 
 		// update lock state
 		l.pop()
@@ -361,8 +359,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 			m.granted[xid] = append(m.granted[xid], l)
 		}
 
-		// return state to channel
-		m.locks <- locks
+		m.mu.Unlock()
 
 		return true, nil
 	}
@@ -372,7 +369,8 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 // high level locks in case a lower level lock fails.
 func (m *LockManager) drop(xid uint64, mode LockMode, typ LockType, oid uint64, pred ConditionMatcher) {
 	// exclusive access
-	locks := <-m.locks
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	// release the specific lock
 	for i, l := range m.granted[xid] {
@@ -387,7 +385,7 @@ func (m *LockManager) drop(xid uint64, mode LockMode, typ LockType, oid uint64, 
 		l.count--
 		l.yield()
 		if l.count == 0 && len(l.waiting) == 0 {
-			locks = slices.DeleteFunc(locks, func(l2 *lock) bool {
+			m.locks = slices.DeleteFunc(m.locks, func(l2 *lock) bool {
 				if l2 == l {
 					lockPool.Put(l)
 					return true
@@ -398,8 +396,6 @@ func (m *LockManager) drop(xid uint64, mode LockMode, typ LockType, oid uint64, 
 		}
 		break
 	}
-
-	m.locks <- locks
 }
 
 func getOrCreateLock(locks []*lock, typ LockType, oid uint64, exclusive bool) (*lock, bool) {
