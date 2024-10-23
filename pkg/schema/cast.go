@@ -1141,6 +1141,27 @@ func (c I256Caster) CastValue(val any) (res any, err error) {
 		res, ok = v.Int256(), true
 	case num.Int256:
 		res, ok = v, true
+	default:
+		var vv reflect.Value
+		if vv, ok = val.(reflect.Value); !ok {
+			vv = reflect.Indirect(reflect.ValueOf(val))
+		}
+		switch vv.Kind() {
+		case reflect.Float32:
+			var i256 num.Int256
+			i256.SetFloat64(float64(vv.Float()))
+			res, ok = i256, true
+		case reflect.Float64:
+			var i256 num.Int256
+			i256.SetFloat64(vv.Float())
+			res, ok = i256, true
+		case reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
+			res, ok = num.Int256FromInt64(int64(vv.Int())), true
+		case reflect.Uint, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8:
+			res, ok = num.Int256FromInt64(int64(vv.Uint())), true
+		default:
+			ok = false
+		}
 	}
 	if !ok {
 		err = castError(val, "int256")
@@ -1150,20 +1171,21 @@ func (c I256Caster) CastValue(val any) (res any, err error) {
 
 func (c I256Caster) CastSlice(val any) (res any, err error) {
 	var ok bool
+	var v any
 	rv := reflect.ValueOf(val)
 	if rv.Kind() == reflect.Slice {
-		cp := make([]num.Int128, rv.Len())
+		cp := make([]num.Int256, rv.Len())
 		for i := range cp {
-			v, err := c.CastValue(rv.Index(i))
+			v, err = c.CastValue(rv.Index(i))
 			if err != nil {
 				break
 			}
-			cp[i] = v.(num.Int128)
+			cp[i] = v.(num.Int256)
 		}
-		res, ok = cp, true
+		res, ok = cp, err == nil
 	}
 	if !ok {
-		err = castError(val, "int128")
+		err = castError(val, "int256")
 	}
 	return
 }
