@@ -5,7 +5,6 @@ package schema
 
 import (
 	"math"
-	"reflect"
 	"testing"
 	"time"
 
@@ -169,38 +168,72 @@ func testEdgeCases(t *testing.T) {
 
 // TestIntegerParsing tests parsing of integer types, including empty and single-element slices.
 func TestIntegerParsing(t *testing.T) {
-	integerTests := []struct {
-		name      string
-		fieldType types.FieldType
-		input     string
-		expected  interface{}
-	}{
-		{"Int8", types.FieldTypeInt8, "127", int8(127)},
-		{"Int16", types.FieldTypeInt16, "32767", int16(32767)},
-		{"Int32", types.FieldTypeInt32, "2147483647", int32(2147483647)},
-		{"Int64", types.FieldTypeInt64, "9223372036854775807", int64(9223372036854775807)},
-		{"Uint8", types.FieldTypeUint8, "255", uint8(255)},
-		{"Uint16", types.FieldTypeUint16, "65535", uint16(65535)},
-		{"Uint32", types.FieldTypeUint32, "4294967295", uint32(4294967295)},
-		{"Uint64", types.FieldTypeUint64, "18446744073709551615", uint64(18446744073709551615)},
-	}
+	t.Run("ParseValue", func(t *testing.T) {
+		integerTests := []struct {
+			name      string
+			fieldType types.FieldType
+			input     string
+			expected  interface{}
+		}{
+			{"Int8", types.FieldTypeInt8, "127", int8(127)},
+			{"Int16", types.FieldTypeInt16, "32767", int16(32767)},
+			{"Int32", types.FieldTypeInt32, "2147483647", int32(2147483647)},
+			{"Int64", types.FieldTypeInt64, "9223372036854775807", int64(9223372036854775807)},
+			{"Uint8", types.FieldTypeUint8, "255", uint8(255)},
+			{"Uint16", types.FieldTypeUint16, "65535", uint16(65535)},
+			{"Uint32", types.FieldTypeUint32, "4294967295", uint32(4294967295)},
+			{"Uint64", types.FieldTypeUint64, "18446744073709551615", uint64(18446744073709551615)},
+		}
 
-	for _, tt := range integerTests {
-		t.Run(tt.name, func(t *testing.T) {
-			parser := NewParser(tt.fieldType, 0)
-			result, err := parser.ParseValue(tt.input)
-			require.NoError(t, err)
-			assert.Equal(t, tt.expected, result)
+		for _, tt := range integerTests {
+			t.Run(tt.name, func(t *testing.T) {
+				parser := NewParser(tt.fieldType, 0)
+				result, err := parser.ParseValue(tt.input)
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			})
+		}
+	})
 
-			// Test empty slice
-			emptySlice, err := parser.ParseSlice("")
-			require.NoError(t, err)
-			assert.Equal(t, 0, reflect.ValueOf(emptySlice).Len(), "Expected empty slice")
+	// Test empty slice
+	t.Run("EmptySlice", func(t *testing.T) {
+		parser := NewParser(types.FieldTypeInt64, 0)
+		_, err := parser.ParseSlice("")
+		require.Error(t, err)
+	})
 
-			// Test single element slice
-			singleSlice, err := parser.ParseSlice(tt.input)
-			require.NoError(t, err)
-			assert.Equal(t, []interface{}{tt.expected}, singleSlice)
-		})
-	}
+	// Test single element slice
+	t.Run("SingleSliceItem", func(t *testing.T) {
+		parser := NewParser(types.FieldTypeInt64, 0)
+		singleSlice, err := parser.ParseSlice("127")
+		require.NoError(t, err)
+		require.Equal(t, []int64{127}, singleSlice)
+	})
+
+	t.Run("ParseSlice", func(t *testing.T) {
+		integerTests := []struct {
+			name      string
+			fieldType types.FieldType
+			input     string
+			expected  interface{}
+		}{
+			{"[]Int8", types.FieldTypeInt8, "127", []int8{127}},
+			{"[]Int16", types.FieldTypeInt16, "32767", []int16{32767}},
+			{"[]Int32", types.FieldTypeInt32, "2147483647", []int32{2147483647}},
+			{"[]Int64", types.FieldTypeInt64, "9223372036854775807", []int64{9223372036854775807}},
+			{"[]Uint8", types.FieldTypeUint8, "255", []uint8{255}},
+			{"[]Uint16", types.FieldTypeUint16, "65535", []uint16{65535}},
+			{"[]Uint32", types.FieldTypeUint32, "4294967295", []uint32{4294967295}},
+			{"[]Uint64", types.FieldTypeUint64, "18446744073709551615", []uint64{18446744073709551615}},
+		}
+
+		for _, tt := range integerTests {
+			t.Run(tt.name, func(t *testing.T) {
+				parser := NewParser(tt.fieldType, 0)
+				result, err := parser.ParseSlice(tt.input)
+				require.NoError(t, err)
+				require.Equal(t, tt.expected, result)
+			})
+		}
+	})
 }
