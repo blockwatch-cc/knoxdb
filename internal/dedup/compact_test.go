@@ -2,18 +2,51 @@ package dedup
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"math/rand"
 	"testing"
 )
 
+var _ io.Writer = (*FaultyWriter)(nil)
+
+type FaultyWriter struct {
+	size      int
+	failAfter int
+}
+
+func (f *FaultyWriter) Write(p []byte) (n int, err error) {
+	f.size += len(p)
+	if f.size > f.failAfter {
+		return f.size, fmt.Errorf("FaultyWriter: failed to write data")
+	}
+	return f.size, nil
+}
+
+func makeDupmap(sz int) []int {
+	dup := make([]int, sz)
+	for i := range sz {
+		dup[i] = -1
+	}
+	return dup
+}
+
+func makeCompactByteArrayReader(sz int) io.Reader {
+	data := makeRandData(sz, sz)
+	dup := makeDupmap(sz)
+	c := makeCompactByteArray(sz, sz, data, dup)
+
+	buf := bytes.NewBuffer(nil)
+	c.WriteTo(buf)
+	return buf
+}
+
 func TestCompactElem(t *testing.T) {
 	rand.Seed(99)
 	data := makeRandData(10, 10)
-	dup := make([]int, 10)
-	for i := range 10 {
-		dup[i] = -1
-	}
+	dup := makeDupmap(10)
 	c := makeCompactByteArray(10, 10, data, dup)
+
 	if got, expected := c.Len(), 10; got != expected {
 		t.Errorf("TestCompactElem: Len expected=%d but got=%d", expected, got)
 	}
@@ -26,9 +59,139 @@ func TestCompactElem(t *testing.T) {
 		}
 	}
 }
+func TestCompactWriteTo(t *testing.T) {
+	rand.Seed(99)
 
-// TestCompactWriteTo
+	t.Run("With Empty Data", func(t *testing.T) {
+		data := makeRandData(0, 0)
+		dup := makeDupmap(0)
+		c := makeCompactByteArray(0, 0, data, dup)
+
+		buf := bytes.NewBuffer(nil)
+		n, err := c.WriteTo(buf)
+		if err != nil {
+			t.Errorf("TestCompactWriteTo: writing to buffer should not fail")
+		}
+		// 1 format, 4 actual offset size, 4 compressed offset size, ** compressed offset data, 4 compressed size, ** compressed size data, 4 raw data size, 10 raw data
+		expectedSize := 1 + 4 + 4 + 0 + 4 + 0 + 4
+		if int64(expectedSize) != n {
+			t.Errorf("TestCompactWriteTo: data expected to write %d but wrote %d", expectedSize, n)
+		}
+	})
+
+	t.Run("With Data", func(t *testing.T) {
+		data := makeRandData(10, 10)
+		dup := makeDupmap(10)
+		c := makeCompactByteArray(10, 10, data, dup)
+
+		buf := bytes.NewBuffer(nil)
+		n, err := c.WriteTo(buf)
+		if err != nil {
+			t.Errorf("TestCompactWriteTo: writing to buffer should not fail")
+		}
+
+		expectedSize := 139
+		if int64(expectedSize) != n {
+			t.Errorf("TestCompactWriteTo: data expected to write %d but wrote %d", expectedSize, n)
+		}
+	})
+
+	t.Run("With Large Data", func(t *testing.T) {
+		sz := 10000
+		data := makeRandData(sz, sz)
+		dup := makeDupmap(sz)
+		c := makeCompactByteArray(sz, sz, data, dup)
+
+		buf := bytes.NewBuffer(nil)
+		n, err := c.WriteTo(buf)
+		if err != nil {
+			t.Errorf("TestCompactWriteTo: writing to buffer should not fail")
+		}
+
+		expectedSize := 100000043
+		if int64(expectedSize) != n {
+			t.Errorf("TestCompactWriteTo: data expected to write %d but wrote %d", expectedSize, n)
+		}
+	})
+
+	t.Run("Faulty Writer", func(t *testing.T) {
+		data := makeRandData(0, 0)
+		dup := makeDupmap(0)
+		c := makeCompactByteArray(0, 0, data, dup)
+
+		failAfter := 5
+		buf := &FaultyWriter{failAfter: failAfter}
+		n, err := c.WriteTo(buf)
+		if err == nil {
+			t.Errorf("TestCompactWriteTo: writing to buffer should fail")
+		}
+
+		if int64(failAfter) != n {
+			t.Errorf("TestCompactWriteTo: data expected to write less than %d but wrote %d", failAfter, n)
+		}
+	})
+}
+
 // TestCompactReadFrom
+func TestCompactReadFrom(t *testing.T) {
+	type TestCase struct {
+		Name            string
+		Reader          io.Reader
+		ReadSize        int
+		IsErrorExpected bool
+	}
+	testCases := []TestCase{
+		{
+			Name:            "Empty reader",
+			Reader:          bytes.NewReader(nil),
+			ReadSize:        0,
+			IsErrorExpected: true,
+		},
+		{
+			Name:            "Reader with only format",
+			Reader:          bytes.NewReader([]byte{bytesCompactFormat << 4}),
+			ReadSize:        0,
+			IsErrorExpected: true,
+		},
+		{
+			Name:            "Reader with data",
+			Reader:          makeCompactByteArrayReader(0),
+			ReadSize:        16,
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "Reader with large data",
+			Reader:          makeCompactByteArrayReader(10000),
+			ReadSize:        100000042,
+			IsErrorExpected: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			c := newCompactByteArray(0, 0)
+
+			// read format off
+			r := testCase.Reader
+			var b [1]byte
+			_, err := r.Read(b[:])
+			if !testCase.IsErrorExpected && err != nil {
+				t.Errorf("TestCompactReadFrom: %v", err)
+			}
+
+			n, err := c.ReadFrom(testCase.Reader)
+			if testCase.IsErrorExpected {
+				if err == nil {
+					t.Errorf("TestCompactReadFrom: %v", err)
+				}
+			} else {
+				if n != int64(testCase.ReadSize) {
+					t.Errorf("TestCompactReadFrom: reader: %d expected: %d", n, testCase.ReadSize)
+				}
+			}
+		})
+	}
+}
 
 func TestCompactUnsupported(t *testing.T) {
 	handler := func(name string) {

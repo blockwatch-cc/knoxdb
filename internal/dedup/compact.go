@@ -138,11 +138,18 @@ func (a *CompactByteArray) MinMax() ([]byte, []byte) {
 }
 
 func (a *CompactByteArray) WriteTo(w io.Writer) (int64, error) {
-	w.Write([]byte{bytesCompactFormat << 4})
-	count := 1
+	var count int64
+	n, err := w.Write([]byte{bytesCompactFormat << 4})
+	count += int64(n)
+	if err != nil {
+		return 0, fmt.Errorf("compact: writing format: %w", err)
+	}
 
 	// write len in elements
-	binary.Write(w, binary.LittleEndian, uint32(len(a.offs)))
+	err = binary.Write(w, binary.LittleEndian, uint32(len(a.offs)))
+	if err != nil {
+		return int64(count), fmt.Errorf("compact: writing offset len: %w", err)
+	}
 	count += 4
 
 	// use scratch buffer
@@ -157,12 +164,18 @@ func (a *CompactByteArray) WriteTo(w io.Writer) (int64, error) {
 	}
 
 	// write compressed offset len
-	binary.Write(w, binary.LittleEndian, uint32(olen))
+	err = binary.Write(w, binary.LittleEndian, uint32(olen))
+	if err != nil {
+		return int64(count), fmt.Errorf("compact: writing compressed offset len: %w", err)
+	}
 	count += 4
 
 	// write compressed offset data
-	w.Write(buf.Bytes())
-	count += olen
+	n, err = w.Write(buf.Bytes())
+	count += int64(n) // n == olen
+	if err != nil {
+		return int64(count), fmt.Errorf("compact: writing bytes: %w", err)
+	}
 
 	// prepare and write sizes
 	buf.Reset()
@@ -172,19 +185,32 @@ func (a *CompactByteArray) WriteTo(w io.Writer) (int64, error) {
 	}
 
 	// write compressed sizes
-	binary.Write(w, binary.LittleEndian, uint32(slen))
+	err = binary.Write(w, binary.LittleEndian, uint32(slen))
+	if err != nil {
+		return int64(count), fmt.Errorf("compact: writing compressed size: %w", err)
+	}
 	count += 4
 
 	// write compressed sizes data
-	w.Write(buf.Bytes())
-	count += slen
+	n, err = w.Write(buf.Bytes())
+	count += int64(n) // n == slen
+	if err != nil {
+		return int64(count), fmt.Errorf("compact: writing compressed size data: %w", err)
+	}
 	buf.Reset()
 
 	// write raw data with leading size
-	binary.Write(w, binary.LittleEndian, uint32(len(a.buf)))
+	err = binary.Write(w, binary.LittleEndian, uint32(len(a.buf)))
+	if err != nil {
+		return int64(count), fmt.Errorf("compact: writing raw data size: %w", err)
+	}
 	count += 4
-	w.Write(a.buf)
-	count += len(a.buf)
+
+	n, err = w.Write(a.buf)
+	count += int64(n) // len(a.buf) == n
+	if err != nil {
+		return int64(count), fmt.Errorf("compact: writing raw data: %w", err)
+	}
 
 	return int64(count), nil
 }
