@@ -51,7 +51,10 @@ func (e *Engine) GetStore(hash uint64) (StoreEngine, bool) {
 func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOptions) (StoreEngine, error) {
 	// check name is unique
 	tag := s.TaggedHash(types.ObjectTagStore)
-	if _, ok := e.stores[tag]; ok {
+	e.mu.RLock()
+	_, ok := e.stores[tag]
+	e.mu.RUnlock()
+	if ok {
 		return nil, ErrStoreExists
 	}
 
@@ -76,18 +79,29 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 	}
 
 	// start transaction and amend context
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return nil, err
+	}
 	defer abort()
 
-	// creata store
+	// create store
 	if err := kvstore.Create(ctx, s, opts); err != nil {
 		return nil, err
 	}
 
+	// lock object access, unlocks on commit/abort
+	err = tx.Lock(ctx, tag)
+	if err != nil {
+		return nil, err
+	}
+
 	// register commit/abort callbacks
-	GetTransaction(ctx).OnAbort(func(ctx context.Context) error {
+	tx.OnAbort(func(ctx context.Context) error {
 		// remove store file(s) on error
+		e.mu.Lock()
 		delete(e.stores, tag)
+		e.mu.Unlock()
 		return kvstore.Drop(ctx)
 	})
 
@@ -102,35 +116,46 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 	}
 
 	// make available on engine API
+	e.mu.Lock()
 	e.stores[tag] = kvstore
+	e.mu.Unlock()
 
 	return kvstore, nil
 }
 
 func (e *Engine) DropStore(ctx context.Context, name string) error {
 	tag := types.TaggedHash(types.ObjectTagStore, name)
+	e.mu.RLock()
 	s, ok := e.stores[tag]
+	e.mu.RUnlock()
 	if !ok {
 		return ErrNoStore
 	}
 
-	// TODO: wait for open transactions to complete
-
-	// TODO: make store unavailable for new transaction
-
 	// start transaction and amend context
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return err
+	}
 	defer abort()
 
+	// lock object access, unlocks on commit/abort
+	err = tx.Lock(ctx, tag)
+	if err != nil {
+		return err
+	}
+
 	// register commit callback
-	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+	tx.OnCommit(func(ctx context.Context) error {
 		if err := s.Drop(ctx); err != nil {
 			e.log.Errorf("Drop store: %v", err)
 		}
 		if err := s.Close(ctx); err != nil {
 			e.log.Errorf("Close store: %v", err)
 		}
+		e.mu.Lock()
 		delete(e.stores, tag)
+		e.mu.Unlock()
 		return nil
 	})
 

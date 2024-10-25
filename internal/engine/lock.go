@@ -47,7 +47,7 @@ const (
 type LockManager struct {
 	mu      sync.Mutex
 	timeout time.Duration
-	locks   []*lock       // all granted locks, use chan for exclusive access
+	locks   []*lock            // all granted locks, use chan for exclusive access
 	granted map[uint64][]*lock // map of tx id to locks granted
 	nlocks  int64              // total number of locks currently in existence
 }
@@ -136,14 +136,7 @@ var lockPool = sync.Pool{
 }
 
 // Lock obtains a lock on a specific object.
-func (m *LockManager) Lock(ctx context.Context, mode LockMode, oid uint64) (bool, error) {
-	tx := GetTransaction(ctx)
-
-	// check tx status
-	if err := tx.Err(); err != nil {
-		return false, err
-	}
-
+func (m *LockManager) Lock(ctx context.Context, xid uint64, mode LockMode, oid uint64) error {
 	// upgrade context with timeout
 	if m.timeout > 0 {
 		var cancel context.CancelFunc
@@ -151,16 +144,16 @@ func (m *LockManager) Lock(ctx context.Context, mode LockMode, oid uint64) (bool
 		defer cancel()
 	}
 
-	return m.acquire(ctx, tx.id, mode, LockTypeObject, oid, nil)
+	return m.acquire(ctx, xid, mode, LockTypeObject, oid, nil)
 }
 
 // TODO: not yet supported
-func (m *LockManager) LockPredicate(ctx context.Context, mode LockMode, oid uint64, pred ConditionMatcher) (bool, error) {
+func (m *LockManager) LockPredicate(ctx context.Context, xid uint64, mode LockMode, oid uint64, pred ConditionMatcher) error {
 	tx := GetTransaction(ctx)
 
 	// check tx status
 	if err := tx.Err(); err != nil {
-		return false, err
+		return err
 	}
 
 	// upgrade context with timeout
@@ -178,7 +171,7 @@ func (m *LockManager) LockPredicate(ctx context.Context, mode LockMode, oid uint
 
 	// // then obtain the predicate lock
 	// return m.acquire(ctx, tx.id, LockModeShared, LockTypePredicate, oid, pred)
-	return false, ErrNotImplemented
+	return ErrNotImplemented
 }
 
 // Done releases all locks acquired by the given transaction xid.
@@ -205,7 +198,7 @@ func (m *LockManager) Done(xid uint64) {
 	atomic.StoreInt64(&m.nlocks, int64(len(m.locks)))
 }
 
-func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, typ LockType, oid uint64, pred ConditionMatcher) (bool, error) {
+func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, typ LockType, oid uint64, pred ConditionMatcher) error {
 	// sync state access
 	m.mu.Lock()
 
@@ -320,12 +313,12 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 
 	// return success
 	if isGranted {
-		return true, nil
+		return nil
 	}
 
 	// return error
 	if isDeadlock {
-		return false, ErrDeadlock
+		return ErrDeadlock
 	}
 
 	// passive wait for next state change or abort
@@ -338,10 +331,10 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 
 		// translate timeout error
 		if ctx.Err() == context.DeadlineExceeded {
-			return false, ErrLockTimeout
+			return ErrLockTimeout
 		}
 
-		return false, ctx.Err()
+		return ctx.Err()
 
 	case <-wait:
 		// lock is granted to us now
@@ -361,7 +354,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 
 		m.mu.Unlock()
 
-		return true, nil
+		return nil
 	}
 }
 

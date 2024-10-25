@@ -58,7 +58,10 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, error) {
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer abort()
 
 	// call backend
@@ -96,7 +99,10 @@ func (t TableImpl) Update(ctx context.Context, val any) (uint64, error) {
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer abort()
 
 	// call backend
@@ -123,7 +129,10 @@ func (t TableImpl) Delete(ctx context.Context, q QueryRequest) (uint64, error) {
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer abort()
 
 	n, err := t.table.Delete(ctx, plan)
@@ -149,7 +158,10 @@ func (t TableImpl) Count(ctx context.Context, q QueryRequest) (uint64, error) {
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer abort()
 
 	n, err := t.table.Count(ctx, plan)
@@ -175,7 +187,10 @@ func (t TableImpl) Query(ctx context.Context, q QueryRequest) (QueryResult, erro
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
 	defer abort()
 
 	res, err := t.table.Query(ctx, plan)
@@ -202,7 +217,10 @@ func (t TableImpl) Stream(ctx context.Context, q QueryRequest, fn func(QueryRow)
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
 	defer abort()
 
 	if err := t.table.Stream(ctx, plan, fn); err != nil {
@@ -290,7 +308,10 @@ func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer abort()
 
 	// call backend
@@ -344,7 +365,10 @@ func (t *GenericTable[T]) Update(ctx context.Context, val any) (uint64, error) {
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer abort()
 
 	// call backend
@@ -367,7 +391,10 @@ func (t *GenericTable[T]) Delete(ctx context.Context, q QueryRequest) (uint64, e
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer abort()
 
 	n, err := t.table.Delete(ctx, plan)
@@ -389,7 +416,10 @@ func (t *GenericTable[T]) Count(ctx context.Context, q QueryRequest) (uint64, er
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer abort()
 
 	n, err := t.table.Count(ctx, plan)
@@ -411,7 +441,10 @@ func (t *GenericTable[T]) Query(ctx context.Context, q QueryRequest) (QueryResul
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
 	defer abort()
 
 	res, err := t.table.Query(ctx, plan)
@@ -433,7 +466,10 @@ func (t *GenericTable[T]) Stream(ctx context.Context, q QueryRequest, fn func(Qu
 	}
 
 	// use or open tx
-	ctx, commit, abort := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
 	defer abort()
 
 	if err := t.table.Stream(ctx, plan, fn); err != nil {

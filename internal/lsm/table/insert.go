@@ -23,8 +23,15 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 		return 0, engine.ErrShortMessage
 	}
 
+	// obtain shared table lock
+	etx := engine.GetTransaction(ctx)
+	err := etx.RLock(ctx, t.tableId)
+	if err != nil {
+		return 0, err
+	}
+
 	// open write transaction
-	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
+	tx, err := etx.StoreTx(t.db, true)
 	if err != nil {
 		return 0, err
 	}
@@ -89,8 +96,15 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 		return 0, engine.ErrShortMessage
 	}
 
+	// obtain shared table lock
+	etx := engine.GetTransaction(ctx)
+	err := etx.RLock(ctx, t.tableId)
+	if err != nil {
+		return 0, err
+	}
+
 	// open write transaction
-	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
+	tx, err := etx.StoreTx(t.db, true)
 	if err != nil {
 		return 0, err
 	}

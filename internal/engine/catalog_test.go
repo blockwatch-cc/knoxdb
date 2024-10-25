@@ -56,6 +56,7 @@ func NewTestEngine(opts DatabaseOptions) *Engine {
 		opts:    opts,
 		cat:     NewCatalog(TEST_DB_NAME),
 		log:     opts.Logger,
+		lm:      NewLockManager(),
 	}
 	var err error
 	e.wal, err = wal.Create(wal.WalOptions{
@@ -91,6 +92,7 @@ func OpenTestEngine(opts DatabaseOptions) *Engine {
 		opts:    opts,
 		cat:     NewCatalog(TEST_DB_NAME),
 		log:     opts.Logger,
+		lm:      NewLockManager(),
 	}
 
 	var err error
@@ -109,7 +111,8 @@ func OpenTestEngine(opts DatabaseOptions) *Engine {
 
 func TestCatalogCreate(t *testing.T) {
 	e := NewTestEngine(NewTestDatabaseOptions(t, "mem"))
-	ctx, commit, _ := e.WithTransaction(context.Background())
+	ctx, _, commit, _, err := e.WithTransaction(context.Background())
+	require.NoError(t, err)
 	require.NoError(t, e.cat.Create(ctx, e.opts))
 	require.NoError(t, commit())
 
@@ -143,7 +146,8 @@ func TestCatalogCreate(t *testing.T) {
 func TestCatalogOpen(t *testing.T) {
 	// create first engine
 	e := NewTestEngine(NewTestDatabaseOptions(t, "mem"))
-	ctx, commit, _ := e.WithTransaction(context.Background())
+	ctx, _, commit, _, err := e.WithTransaction(context.Background())
+	require.NoError(t, err)
 
 	// create catalog (requires write tx)
 	require.NoError(t, e.cat.Create(ctx, e.opts))
@@ -152,7 +156,8 @@ func TestCatalogOpen(t *testing.T) {
 
 	// create new engine
 	e = OpenTestEngine(e.opts)
-	ctx, _, abort := e.WithTransaction(context.Background())
+	ctx, _, _, abort, err := e.WithTransaction(context.Background())
+	require.NoError(t, err)
 	require.NoError(t, e.cat.Open(ctx, e.opts))
 
 	// worst case we get a tx deadlock, so we check using Eventually()
@@ -186,7 +191,8 @@ func TestCatalogOpen(t *testing.T) {
 func WithCatalog(t *testing.T) (context.Context, *Engine, *Catalog, func() error) {
 	ctx := context.Background()
 	e := NewTestEngine(NewTestDatabaseOptions(t, "mem"))
-	tctx, commit, _ := e.WithTransaction(ctx)
+	tctx, _, commit, _, err := e.WithTransaction(ctx)
+	require.NoError(t, err)
 	require.NoError(t, e.cat.Create(tctx, e.opts))
 	require.NoError(t, commit())
 	return ctx, e, e.cat, func() error { return e.cat.Close(ctx) }
@@ -200,7 +206,8 @@ type TestTable struct {
 func TestCatalogAddTable(t *testing.T) {
 	ctx, eng, cat, close := WithCatalog(t)
 	defer close()
-	tctx, commit, abort := eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err := eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	s, err := schema.SchemaOf(&TestTable{})
 	require.NoError(t, err)
@@ -214,7 +221,8 @@ func TestCatalogAddTable(t *testing.T) {
 	require.NoError(t, commit())
 
 	// list tables
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	keys, err := cat.ListTables(tctx)
 	require.NoError(t, err)
@@ -231,12 +239,14 @@ func TestCatalogAddTable(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop table
-	tctx, commit, abort = eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	require.NoError(t, cat.DropTable(tctx, 1))
 	require.NoError(t, commit())
 
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	keys, err = cat.ListTables(tctx)
 	require.NoError(t, err)
@@ -244,7 +254,8 @@ func TestCatalogAddTable(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop unknown table
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	require.Error(t, cat.DropTable(tctx, 1))
 }
@@ -252,7 +263,8 @@ func TestCatalogAddTable(t *testing.T) {
 func TestCatalogAddIndex(t *testing.T) {
 	ctx, eng, cat, close := WithCatalog(t)
 	defer close()
-	tctx, commit, abort := eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err := eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	s, err := schema.SchemaOf(&TestTable{})
 	require.NoError(t, err)
@@ -267,7 +279,8 @@ func TestCatalogAddIndex(t *testing.T) {
 	require.NoError(t, commit())
 
 	// list indexes
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	keys, err := cat.ListIndexes(tctx, 1)
 	require.NoError(t, err)
@@ -284,12 +297,14 @@ func TestCatalogAddIndex(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop index
-	tctx, commit, abort = eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	require.NoError(t, cat.DropIndex(tctx, 2))
 	require.NoError(t, commit())
 
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	keys, err = cat.ListIndexes(tctx, 1)
 	require.NoError(t, err)
@@ -297,7 +312,8 @@ func TestCatalogAddIndex(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop unknown index
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	require.Error(t, cat.DropIndex(tctx, 1))
 }
@@ -305,7 +321,8 @@ func TestCatalogAddIndex(t *testing.T) {
 func TestCatalogAddStore(t *testing.T) {
 	ctx, eng, cat, close := WithCatalog(t)
 	defer close()
-	tctx, commit, abort := eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err := eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	s, err := schema.SchemaOf(&TestTable{})
 	require.NoError(t, err)
@@ -319,7 +336,8 @@ func TestCatalogAddStore(t *testing.T) {
 	require.NoError(t, commit())
 
 	// list stores
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	keys, err := cat.ListStores(tctx)
 	require.NoError(t, err)
@@ -336,12 +354,14 @@ func TestCatalogAddStore(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop store
-	tctx, commit, abort = eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	require.NoError(t, cat.DropStore(tctx, 1))
 	require.NoError(t, commit())
 
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	keys, err = cat.ListStores(tctx)
 	require.NoError(t, err)
@@ -349,7 +369,8 @@ func TestCatalogAddStore(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop unknown store
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	require.Error(t, cat.DropStore(tctx, 1))
 }
@@ -357,7 +378,8 @@ func TestCatalogAddStore(t *testing.T) {
 func TestCatalogAddEnum(t *testing.T) {
 	ctx, eng, cat, close := WithCatalog(t)
 	defer close()
-	tctx, commit, abort := eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err := eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	enum := schema.NewEnumDictionary("enum")
 	enum.Append("a", "b", "c")
@@ -365,7 +387,8 @@ func TestCatalogAddEnum(t *testing.T) {
 	require.NoError(t, commit())
 
 	// list enums
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	keys, err := cat.ListEnums(tctx)
 	require.NoError(t, err)
@@ -382,12 +405,14 @@ func TestCatalogAddEnum(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop enum
-	tctx, commit, abort = eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	require.NoError(t, cat.DropEnum(tctx, enum.Tag()))
 	require.NoError(t, commit())
 
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	keys, err = cat.ListEnums(tctx)
 	require.NoError(t, err)
@@ -395,7 +420,8 @@ func TestCatalogAddEnum(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop unknown enum
-	tctx, _, abort = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	require.NoError(t, err)
 	defer abort()
 	require.Error(t, cat.DropEnum(tctx, 1))
 }

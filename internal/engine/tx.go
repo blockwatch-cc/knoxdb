@@ -155,6 +155,10 @@ func (t *Tx) WithFlags(flags ...TxFlags) *Tx {
 	return t
 }
 
+func (t *Tx) IsReadOnly() bool {
+	return t.flags.IsReadOnly()
+}
+
 func (t *Tx) Id() uint64 {
 	return t.id
 }
@@ -190,6 +194,9 @@ func (t *Tx) Close() {
 		t.engine.mu.Unlock()
 	}
 
+	// release all locks
+	t.engine.lm.Done(t.id)
+
 	// cleanup
 	clear(t.touched)
 	clear(t.dbTx)
@@ -207,6 +214,26 @@ func (t *Tx) Close() {
 	t.onAbort = nil
 	t.writes = nil
 	t.cancel(ErrTxClosed)
+}
+
+func (t *Tx) Lock(ctx context.Context, oid uint64) error {
+	if t == nil {
+		return ErrNoTx
+	}
+	if err := t.Err(); err != nil {
+		return err
+	}
+	return t.engine.lm.Lock(ctx, t.id, LockModeExclusive, oid)
+}
+
+func (t *Tx) RLock(ctx context.Context, oid uint64) error {
+	if t == nil {
+		return ErrNoTx
+	}
+	if err := t.Err(); err != nil {
+		return err
+	}
+	return t.engine.lm.Lock(ctx, t.id, LockModeShared, oid)
 }
 
 func (t *Tx) Touch(key uint64) {
@@ -253,8 +280,10 @@ func (t *Tx) Commit() error {
 		return err
 	}
 
-	// commit to all touched objects; write wal commit records, sync wals
-	// update journal segments
+	// commit all touched objects, this will:
+	// - write wal commit records
+	// - sync wals
+	// - update journal segments
 	for oid, _ := range t.touched {
 		err := t.engine.CommitTx(t.ctx, oid, t.id)
 		if err != nil {
@@ -262,7 +291,7 @@ func (t *Tx) Commit() error {
 		}
 	}
 
-	// commit and update catalog wal
+	// commit catalog
 	if t.flags.IsCatalog() {
 		err := t.engine.cat.CommitTx(t.ctx, t.id)
 		if err != nil {
@@ -277,8 +306,7 @@ func (t *Tx) Commit() error {
 		}
 	}
 
-	// close and write storage tx (even with background flush we have open
-	// storage write txn on catalog changes and potentially on wal recover)
+	// close and write storage tx
 	for _, tx := range t.dbTx {
 		var err error
 		if tx.IsWriteable() {
@@ -295,23 +323,7 @@ func (t *Tx) Commit() error {
 	if t.catTx != nil {
 		var err error
 		if t.catTx.IsWriteable() {
-			// // write db checkpoint record to wal
-			// lsn, err := t.engine.wal.Write(&wal.Record{
-			// 	Type:   wal.RecordTypeCheckpoint,
-			// 	Tag:    types.ObjectTagDatabase,
-			// 	Entity: t.engine.dbId,
-			// })
-			// if err != nil {
-			// 	return err
-			// }
-			// // write catalog checkpoint
-			// t.engine.log.Debugf("DB checkpoint 0x%016x", lsn)
-			// e = t.engine.cat.PutCheckpoint(ctx, t.catTx, lsn)
-			// if e == nil {
 			err = t.catTx.Commit()
-			// } else {
-			// 	t.catTx.Rollback()
-			// }
 		} else {
 			err = t.catTx.Rollback()
 		}

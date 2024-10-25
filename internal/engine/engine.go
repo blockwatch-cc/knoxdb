@@ -108,7 +108,10 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	}
 
 	// start transaction and amend context (required to store catalog db)
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, _, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	// cleanup on any errors
 	defer func() {
@@ -196,7 +199,11 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	}
 
 	// start transaction (for wal recovery we may need a write tx)
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, _, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		e.Close(ctx)
+		return nil, err
+	}
 
 	// cleanup on error
 	defer func() {
@@ -266,6 +273,9 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		return nil, err
 	}
 
+	// TODO: recover xmin/xnext from catalog&tables (we no longer read wal in a
+	// single loop, hence we must assemble this info from wal users)
+
 	// close tx
 	if err = commit(); err != nil {
 		return nil, err
@@ -283,7 +293,13 @@ func (e *Engine) Close(ctx context.Context) error {
 	// set shutdown flag to prevent new transactions
 	e.shutdown.Store(true)
 
+	// TODO: shutdown user sessions (close wire protocol server)
+	// - should cancel contexts
+
 	// kill all pending transactions
+	// FIXME: only write tx are stored, howto cancel read tx?
+	// TODO: find another way, maybe cancel session contexts + define an explicit
+	// session for sdk usage
 	for _, tx := range e.txs {
 		tx.kill()
 	}
@@ -391,12 +407,16 @@ func (e *Engine) Sync(ctx context.Context) error {
 	// TODO: in wal mode this becomes unnecessary unless we offer a custom config option
 
 	// without wal tables write their journal here which requires a tx
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, _, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return err
+	}
 	defer abort()
 
-	// sync tables
 	errg := &errgroup.Group{}
 	errg.SetLimit(len(e.tables))
+
+	// sync tables
 	for _, t := range e.tables {
 		errg.Go(func() error { return t.Sync(ctx) })
 	}

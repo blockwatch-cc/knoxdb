@@ -35,6 +35,7 @@ var (
 	ErrEnumExists        = errors.New("knox: enum already exists")
 	ErrResultClosed      = errors.New("knox: result already closed")
 	ErrInvalidObjectType = errors.New("knox: invalid object type")
+	ErrTableDropWithRefs = errors.New("knox: table is referenced")
 
 	EndStream = errors.New("end stream")
 

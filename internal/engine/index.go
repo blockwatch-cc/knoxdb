@@ -23,8 +23,10 @@ func RegisterIndexFactory(n IndexKind, fn IndexFactory) {
 }
 
 func (e *Engine) IndexNames(tableName string) []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	tag := types.TaggedHash(types.ObjectTagTable, tableName)
-	table, ok := e.GetTable(tag)
+	table, ok := e.tables[tag]
 	if !ok {
 		return nil
 	}
@@ -37,12 +39,16 @@ func (e *Engine) IndexNames(tableName string) []string {
 }
 
 func (e *Engine) NumIndexes() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return len(e.indexes)
 }
 
 func (e *Engine) NumTableIndexes(tableName string) int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	tag := types.TaggedHash(types.ObjectTagTable, tableName)
-	table, ok := e.GetTable(tag)
+	table, ok := e.tables[tag]
 	if !ok {
 		return 0
 	}
@@ -50,6 +56,8 @@ func (e *Engine) NumTableIndexes(tableName string) int {
 }
 
 func (e *Engine) UseIndex(name string) (IndexEngine, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	if idx, ok := e.indexes[types.TaggedHash(types.ObjectTagIndex, name)]; ok {
 		return idx, nil
 	}
@@ -57,6 +65,8 @@ func (e *Engine) UseIndex(name string) (IndexEngine, error) {
 }
 
 func (e *Engine) GetIndex(key uint64) (IndexEngine, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	index, ok := e.indexes[key]
 	return index, ok
 }
@@ -64,15 +74,13 @@ func (e *Engine) GetIndex(key uint64) (IndexEngine, bool) {
 func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Schema, opts IndexOptions) (IndexEngine, error) {
 	// lookup table
 	tableTag := types.TaggedHash(types.ObjectTagTable, tableName)
-	table, ok := e.GetTable(tableTag)
+
+	// lookup
+	e.mu.RLock()
+	table, ok := e.tables[tableTag]
+	e.mu.RUnlock()
 	if !ok {
 		return nil, ErrNoTable
-	}
-
-	// lookup index
-	tag := types.TaggedHash(types.ObjectTagIndex, s.Name())
-	if _, ok := e.indexes[tag]; ok {
-		return nil, ErrIndexExists
 	}
 
 	// schema must be a child of table schema
@@ -89,6 +97,15 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 		return nil, ErrNoDriver
 	}
 
+	// lookup index
+	tag := types.TaggedHash(types.ObjectTagIndex, s.Name())
+	e.mu.RLock()
+	_, ok = e.indexes[tag]
+	e.mu.RUnlock()
+	if ok {
+		return nil, ErrIndexExists
+	}
+
 	// create index engine
 	index := factory()
 
@@ -97,9 +114,23 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 		opts.Logger = e.log
 	}
 
-	// start transaction and amend context
-	ctx, commit, abort := e.WithTransaction(ctx)
+	// start (or use) transaction and amend context
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return nil, err
+	}
 	defer abort()
+
+	// lock table access
+	err = tx.RLock(ctx, tableTag)
+	if err != nil {
+		return nil, err
+	}
+
+	// schedule create
+	if err := e.cat.AppendIndexCmd(ctx, CREATE, s, opts, tableName); err != nil {
+		return nil, err
+	}
 
 	// creata index
 	if err := index.Create(ctx, table, s, opts); err != nil {
@@ -110,18 +141,17 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
 		// add to table and engine
 		table.UseIndex(index)
+
+		// register
+		e.mu.Lock()
 		e.indexes[tag] = index
+		e.mu.Unlock()
 
 		// TODO: rebuild in background
 		// index.Rebuild(ctx)
 
 		return nil
 	})
-
-	// schedule create
-	if err := e.cat.AppendIndexCmd(ctx, CREATE, s, opts, tableName); err != nil {
-		return nil, err
-	}
 
 	// commit and update catalog
 	if err := commit(); err != nil {
@@ -140,19 +170,33 @@ func (e *Engine) RebuildIndex(ctx context.Context, name string) error {
 }
 
 func (e *Engine) DropIndex(ctx context.Context, name string) error {
+	// lookup index
 	tag := types.TaggedHash(types.ObjectTagIndex, name)
+	e.mu.RLock()
 	index, ok := e.indexes[tag]
+	e.mu.RUnlock()
 	if !ok {
 		return ErrNoIndex
 	}
 
-	// TODO: wait for open transactions to complete
-
-	// TODO: make index unavailable for new transaction
-
 	// start transaction and amend context
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return err
+	}
 	defer abort()
+
+	// lock table access
+	tableTag := index.Table().Schema().TaggedHash(types.ObjectTagTable)
+	err = tx.Lock(ctx, tableTag)
+	if err != nil {
+		return err
+	}
+
+	// write wal and schedule drop on commit
+	if err := e.cat.AppendIndexCmd(ctx, DROP, index.Schema(), IndexOptions{}, ""); err != nil {
+		return err
+	}
 
 	// register commit callback
 	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
@@ -165,14 +209,13 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 		if err := index.Close(ctx); err != nil {
 			e.log.Errorf("Close index: %v", err)
 		}
+
+		e.mu.Lock()
 		delete(e.indexes, tag)
+		e.mu.Unlock()
+
 		return nil
 	})
-
-	// write wal and schedule drop on commit
-	if err := e.cat.AppendIndexCmd(ctx, CREATE, index.Schema(), IndexOptions{}, ""); err != nil {
-		return err
-	}
 
 	// write catalog and run post-drop hooks
 	return commit()

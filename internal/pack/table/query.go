@@ -22,6 +22,12 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 		return nil, fmt.Errorf("invalid query plan type %T", q)
 	}
 
+	// obtain shared table lock
+	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := plan.QueryIndexes(ctx); err != nil {
 		return nil, err
 	}
@@ -41,7 +47,6 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 	atomic.AddInt64(&t.metrics.QueryCalls, 1)
 
 	// execute query
-	var err error
 	switch plan.Order {
 	case types.OrderDesc, types.OrderDescCaseInsensitive:
 		err = t.doQueryDesc(ctx, plan, res)
@@ -62,6 +67,12 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 		return fmt.Errorf("invalid query plan type %T", q)
 	}
 
+	// obtain shared table lock
+	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	if err != nil {
+		return err
+	}
+
 	if err := plan.QueryIndexes(ctx); err != nil {
 		return err
 	}
@@ -76,7 +87,6 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 	atomic.AddInt64(&t.metrics.StreamCalls, 1)
 
 	// execute query
-	var err error
 	switch plan.Order {
 	case types.OrderDesc, types.OrderDescCaseInsensitive:
 		err = t.doQueryDesc(ctx, plan, res)
@@ -95,6 +105,12 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 	plan, ok := q.(*query.QueryPlan)
 	if !ok {
 		return 0, fmt.Errorf("invalid query plan type %T", q)
+	}
+
+	// obtain shared table lock
+	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	if err != nil {
+		return 0, err
 	}
 
 	if err := plan.QueryIndexes(ctx); err != nil {
@@ -130,6 +146,12 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	plan, ok := q.(*query.QueryPlan)
 	if !ok {
 		return 0, fmt.Errorf("invalid query plan type %T", q)
+	}
+
+	// obtain shared table lock
+	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	if err != nil {
+		return 0, err
 	}
 
 	if err := plan.QueryIndexes(ctx); err != nil {

@@ -159,7 +159,10 @@ func (j Join) Execute(ctx context.Context, val any) error {
 	}
 
 	// use or open tx
-	ctx, _, abort := j.left.Table.DB().Begin(ctx)
+	ctx, _, abort, err := j.left.Table.DB().Begin(ctx)
+	if err != nil {
+		return err
+	}
 	defer abort()
 
 	// may query indexes
@@ -238,7 +241,10 @@ func (j Join) Stream(ctx context.Context, fn func(QueryRow) error) error {
 	}
 
 	// use or open tx
-	ctx, _, abort := j.left.Table.DB().Begin(ctx)
+	ctx, _, abort, err := j.left.Table.DB().Begin(ctx)
+	if err != nil {
+		return err
+	}
 	defer abort()
 
 	err = plan.Compile(ctx)
@@ -256,7 +262,10 @@ func (j Join) Run(ctx context.Context) (QueryResult, error) {
 	}
 
 	// use or open tx
-	ctx, _, abort := j.left.Table.DB().Begin(ctx)
+	ctx, _, abort, err := j.left.Table.DB().Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
 	defer abort()
 
 	err = plan.Compile(ctx)

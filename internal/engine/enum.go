@@ -11,10 +11,18 @@ import (
 )
 
 func (e *Engine) Enums() schema.EnumRegistry {
-	return e.enums
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	clone := make(schema.EnumRegistry)
+	for n, v := range e.enums {
+		clone[n] = v
+	}
+	return clone
 }
 
 func (e *Engine) EnumNames() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	names := make([]string, 0, len(e.enums))
 	for _, v := range e.enums {
 		names = append(names, v.Name())
@@ -23,10 +31,14 @@ func (e *Engine) EnumNames() []string {
 }
 
 func (e *Engine) NumEnums() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return len(e.enums)
 }
 
 func (e *Engine) UseEnum(name string) (*schema.EnumDictionary, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	enum, ok := e.enums[types.TaggedHash(types.ObjectTagEnum, name)]
 	if !ok {
 		return nil, ErrNoEnum
@@ -35,6 +47,8 @@ func (e *Engine) UseEnum(name string) (*schema.EnumDictionary, error) {
 }
 
 func (e *Engine) GetEnum(hash uint64) (*schema.EnumDictionary, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	enum, ok := e.enums[hash]
 	return enum, ok
 }
@@ -42,19 +56,25 @@ func (e *Engine) GetEnum(hash uint64) (*schema.EnumDictionary, bool) {
 func (e *Engine) CreateEnum(ctx context.Context, name string) (*schema.EnumDictionary, error) {
 	// check name is unique
 	tag := types.TaggedHash(types.ObjectTagEnum, name)
-	if _, ok := e.enums[tag]; ok {
+	e.mu.RLock()
+	_, ok := e.enums[tag]
+	e.mu.RUnlock()
+	if ok {
 		return nil, ErrEnumExists
 	}
 
 	// open write transaction
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return nil, err
+	}
 	defer abort()
 
 	// create object
 	enum := schema.NewEnumDictionary(name)
 
 	// register commit callback
-	GetTransaction(ctx).OnAbort(func(ctx context.Context) error {
+	tx.OnAbort(func(ctx context.Context) error {
 		delete(e.enums, tag)
 		return nil
 	})
@@ -70,25 +90,40 @@ func (e *Engine) CreateEnum(ctx context.Context, name string) (*schema.EnumDicti
 	}
 
 	// make visible
+	e.mu.Lock()
 	e.enums[tag] = enum
+	e.mu.Unlock()
 
 	return enum, nil
 }
 
 func (e *Engine) DropEnum(ctx context.Context, name string) error {
 	tag := types.TaggedHash(types.ObjectTagEnum, name)
+	e.mu.RLock()
 	enum, ok := e.enums[tag]
+	e.mu.RUnlock()
 	if !ok {
 		return ErrNoEnum
 	}
 
 	// open transaction
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return err
+	}
 	defer abort()
 
+	// lock object access, unlocks on commit/abort
+	err = tx.Lock(ctx, tag)
+	if err != nil {
+		return err
+	}
+
 	// register commit callback
-	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+	tx.OnCommit(func(ctx context.Context) error {
+		e.mu.Lock()
 		delete(e.enums, tag)
+		e.mu.Unlock()
 		return nil
 	})
 
@@ -103,9 +138,24 @@ func (e *Engine) DropEnum(ctx context.Context, name string) error {
 
 func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...string) error {
 	tag := types.TaggedHash(types.ObjectTagEnum, name)
+	e.mu.RLock()
 	enum, ok := e.enums[tag]
+	e.mu.RUnlock()
 	if !ok {
 		return ErrNoEnum
+	}
+
+	// open transaction
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return err
+	}
+	defer abort()
+
+	// lock object access, unlocks on commit/abort
+	err = tx.Lock(ctx, tag)
+	if err != nil {
+		return err
 	}
 
 	// create a copy in case we rollback
@@ -116,13 +166,11 @@ func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...string) er
 		return err
 	}
 
-	// open transaction
-	ctx, commit, abort := e.WithTransaction(ctx)
-	defer abort()
-
 	// register abort callback
-	GetTransaction(ctx).OnAbort(func(ctx context.Context) error {
+	tx.OnAbort(func(ctx context.Context) error {
+		e.mu.Lock()
 		e.enums[tag] = clone
+		e.mu.Unlock()
 		return nil
 	})
 

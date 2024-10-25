@@ -23,6 +23,13 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	if t.opts.ReadOnly {
 		return 0, engine.ErrDatabaseReadOnly
 	}
+
+	// obtain shared table lock
+	tx := engine.GetTransaction(ctx)
+	err := tx.RLock(ctx, t.tableId)
+	if err != nil {
+		return 0, err
+	}
 	atomic.AddInt64(&t.metrics.UpdateCalls, 1)
 
 	// protect journal write access
@@ -33,10 +40,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	engine.GetTransaction(ctx).Touch(t.tableId)
 
 	// try write updated records to journal (may run full, so we must loop)
-	var (
-		count, n uint64
-		err      error
-	)
+	var count, n uint64
 	for len(buf) > 0 {
 		// insert messages into journal, may fail when pk = 0
 		n, buf, err = t.journal.UpdateBatch(buf)

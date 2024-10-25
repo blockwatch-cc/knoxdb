@@ -63,8 +63,9 @@ func (d *DB) Sync(ctx context.Context) error {
 }
 
 // Transaction
-func (d *DB) Begin(ctx context.Context) (context.Context, func() error, func() error) {
-	return d.engine.WithTransaction(ctx)
+func (d *DB) Begin(ctx context.Context) (context.Context, func() error, func() error, error) {
+	ctx, _, commit, abort, err := d.engine.WithTransaction(ctx)
+	return ctx, commit, abort, err
 }
 
 // Table

@@ -28,27 +28,32 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	if t.opts.ReadOnly {
 		return 0, engine.ErrDatabaseReadOnly
 	}
-	atomic.AddInt64(&t.metrics.InsertCalls, 1)
+
+	// obtain shared table lock
+	tx := engine.GetTransaction(ctx)
+	err := tx.RLock(ctx, t.tableId)
+	if err != nil {
+		return 0, err
+	}
 
 	// protect journal write access
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	atomic.AddInt64(&t.metrics.InsertCalls, 1)
+
 	// keep a copy of the state
 	firstPk := t.state.Sequence
 
 	// try insert data into the journal (may run full, so we must loop)
-	var (
-		count, n uint64
-		err      error
-	)
+	var count, n uint64
 	for len(buf) > 0 {
 		// insert messages into journal
 		n, buf = t.journal.InsertBatch(buf, t.state.Sequence)
 		count += n
 
 		// sync state with catalog
-		engine.GetTransaction(ctx).Touch(t.tableId)
+		tx.Touch(t.tableId)
 
 		// update state
 		t.state.NRows += n

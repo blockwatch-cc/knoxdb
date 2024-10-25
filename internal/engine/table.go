@@ -23,6 +23,8 @@ func RegisterTableFactory(n TableKind, fn TableFactory) {
 }
 
 func (e *Engine) TableNames() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	names := make([]string, 0, len(e.tables))
 	for _, v := range e.tables {
 		names = append(names, v.Schema().Name())
@@ -31,10 +33,14 @@ func (e *Engine) TableNames() []string {
 }
 
 func (e *Engine) NumTables() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return len(e.tables)
 }
 
 func (e *Engine) UseTable(name string) (TableEngine, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	if t, ok := e.tables[types.TaggedHash(types.ObjectTagTable, name)]; ok {
 		return t, nil
 	}
@@ -42,6 +48,8 @@ func (e *Engine) UseTable(name string) (TableEngine, error) {
 }
 
 func (e *Engine) GetTable(hash uint64) (TableEngine, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	t, ok := e.tables[hash]
 	return t, ok
 }
@@ -49,12 +57,17 @@ func (e *Engine) GetTable(hash uint64) (TableEngine, bool) {
 func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOptions) (TableEngine, error) {
 	// check name is unique
 	tag := s.TaggedHash(types.ObjectTagTable)
-	if _, ok := e.tables[tag]; ok {
+	e.mu.RLock()
+	_, ok := e.tables[tag]
+	e.mu.RUnlock()
+	if ok {
 		return nil, ErrTableExists
 	}
 
 	// resolve schema enums
+	e.mu.RLock()
 	s.WithEnumsFrom(e.enums)
+	e.mu.RUnlock()
 
 	// check engine and driver
 	factory, ok := tableEngineRegistry[opts.Engine]
@@ -74,26 +87,37 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	}
 
 	// start transaction and amend context
-	ctx, commit, abort := e.WithTransaction(ctx)
-	defer abort()
-
-	// create table
-	err := table.Create(ctx, s, opts)
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	// register abort callbacks
-	GetTransaction(ctx).OnAbort(func(ctx context.Context) error {
-		// remove table file(s) on error
-		delete(e.tables, tag)
-		return table.Drop(ctx)
-	})
+	defer abort()
 
 	// schedule create
 	if err := e.cat.AppendTableCmd(ctx, CREATE, s, opts); err != nil {
 		return nil, err
 	}
+
+	// lock object access, unlocks on commit/abort
+	err = tx.Lock(ctx, tag)
+	if err != nil {
+		return nil, err
+	}
+
+	// create table
+	err = table.Create(ctx, s, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	// register abort callbacks
+	tx.OnAbort(func(ctx context.Context) error {
+		// remove table file(s) on error
+		e.mu.Lock()
+		delete(e.tables, tag)
+		e.mu.Unlock()
+		return table.Drop(ctx)
+	})
 
 	// commit and update to catalog (may be noop when user controls tx)
 	if err := commit(); err != nil {
@@ -101,7 +125,9 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	}
 
 	// make available on engine API
+	e.mu.Lock()
 	e.tables[tag] = table
+	e.mu.Unlock()
 
 	return table, nil
 }
@@ -126,8 +152,17 @@ func (e *Engine) AlterTable(ctx context.Context, name string, schema *schema.Sch
 	//     multiple converters and store schema version with each value
 
 	// start transaction and amend context
-	// ctx, commit, abort := e.WithTransaction(ctx)
+	// ctx, commit, abort, err := e.WithTransaction(ctx)
+	// if err != nil {
+	//   return err
+	// }
 	// defer abort()
+
+	// // lock object access, unlocks on commit/abort
+	// _, err = e.lm.Lock(ctx, LockModeExclusive, tag)
+	// if err != nil {
+	// 	return err
+	// }
 
 	// // register commit/abort callbacks
 	// tx := GetTransaction(ctx)
@@ -151,24 +186,36 @@ func (e *Engine) AlterTable(ctx context.Context, name string, schema *schema.Sch
 
 func (e *Engine) DropTable(ctx context.Context, name string) error {
 	tag := types.TaggedHash(types.ObjectTagTable, name)
+	e.mu.RLock()
 	t, ok := e.tables[tag]
+	e.mu.RUnlock()
 	if !ok {
 		return ErrNoTable
 	}
 
-	// TODO: wait for open transactions to complete
-
-	// TODO: make table unavailable for new transaction
+	// must drop indexes first
+	if len(t.Indexes()) > 0 {
+		return ErrTableDropWithRefs
+	}
 
 	// start transaction and amend context
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return err
+	}
 	defer abort()
 
-	// drop indexes and remove them from catalog
-	for _, idx := range t.Indexes() {
-		if err := e.DropIndex(ctx, idx.Schema().Name()); err != nil {
-			return err
-		}
+	// lock object access, unlocks on commit/abort, this
+	// - wait for open transactions to complete
+	// - makes table unavailable for new transaction
+	err = tx.Lock(ctx, tag)
+	if err != nil {
+		return err
+	}
+
+	// schedule drop
+	if err := e.cat.AppendTableCmd(ctx, DROP, t.Schema(), TableOptions{}); err != nil {
+		return err
 	}
 
 	// register commit callback
@@ -179,14 +226,11 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 		if err := t.Close(ctx); err != nil {
 			e.log.Errorf("Close table: %v", err)
 		}
+		e.mu.Lock()
 		delete(e.tables, tag)
+		e.mu.Unlock()
 		return nil
 	})
-
-	// schedule drop
-	if err := e.cat.AppendTableCmd(ctx, DROP, t.Schema(), TableOptions{}); err != nil {
-		return err
-	}
 
 	// write catalog and run post-drop hooks
 	return commit()
@@ -194,18 +238,27 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 
 func (e *Engine) TruncateTable(ctx context.Context, name string) error {
 	tag := types.TaggedHash(types.ObjectTagTable, name)
+	e.mu.RLock()
 	t, ok := e.tables[tag]
+	e.mu.RUnlock()
 	if !ok {
 		return ErrNoTable
 	}
 
 	// start transaction and amend context
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return err
+	}
 	defer abort()
 
-	// TODO: wait for open transactions to complete
-
-	// TODO: make table unavailable for new transaction
+	// lock object access, unlocks on commit/abort, this
+	// - wait for open transactions to complete
+	// - makes table unavailable for new transaction
+	err = tx.Lock(ctx, tag)
+	if err != nil {
+		return err
+	}
 
 	if err := t.Truncate(ctx); err != nil {
 		return err
@@ -216,18 +269,27 @@ func (e *Engine) TruncateTable(ctx context.Context, name string) error {
 
 func (e *Engine) CompactTable(ctx context.Context, name string) error {
 	tag := types.TaggedHash(types.ObjectTagTable, name)
+	e.mu.RLock()
 	t, ok := e.tables[tag]
+	e.mu.RUnlock()
 	if !ok {
 		return ErrNoTable
 	}
 
 	// start transaction and amend context
-	ctx, commit, abort := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return err
+	}
 	defer abort()
 
-	// TODO: wait for open transactions to complete
-
-	// TODO: make table unavailable for new transaction
+	// lock object access, unlocks on commit/abort, this
+	// - wait for open transactions to complete
+	// - make table unavailable for new transaction
+	err = tx.Lock(ctx, tag)
+	if err != nil {
+		return err
+	}
 
 	if err := t.Compact(ctx); err != nil {
 		return err

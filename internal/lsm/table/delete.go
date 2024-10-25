@@ -25,6 +25,12 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 		return 0, fmt.Errorf("invalid query plan type %T", q)
 	}
 
+	// obtain shared table lock
+	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	if err != nil {
+		return 0, err
+	}
+
 	if err := plan.QueryIndexes(ctx); err != nil {
 		return 0, err
 	}

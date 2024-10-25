@@ -31,13 +31,19 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 		return nil, fmt.Errorf("invalid query plan type %T", q)
 	}
 
+	// obtain shared table lock
+	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := plan.QueryIndexes(ctx); err != nil {
 		return nil, err
 	}
 
 	res := NewResult(plan.ResultSchema, int(plan.Limit))
 
-	err := t.doQuery(ctx, plan, res)
+	err = t.doQuery(ctx, plan, res)
 	if err != nil {
 		return nil, err
 	}
