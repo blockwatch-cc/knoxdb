@@ -156,13 +156,22 @@ func TestFixedWriteTo(t *testing.T) {
 	data := makeRandData(sz, innerSz)
 	f := makeFixedByteArray(sz, data)
 
-	buf := bytes.NewBuffer(nil)
-	n, err := f.WriteTo(buf)
-	require.NoError(t, err)
-	require.Greater(t, n, int64(0))
+	t.Run("Write Data", func(t *testing.T) {
+		buf := bytes.NewBuffer(nil)
+		n, err := f.WriteTo(buf)
+		require.NoError(t, err)
+		require.Greater(t, n, int64(0))
 
-	headerSz := 9 // format 1, size 4, data size 4 (sz*innerSz)
-	require.Equal(t, n, int64(sz*innerSz+headerSz))
+		headerSz := 9 // format 1, size 4, data size 4 (sz*innerSz)
+		require.Equal(t, n, int64(sz*innerSz+headerSz))
+	})
+
+	t.Run("Faulty Writer", func(t *testing.T) {
+		buf := &FaultyWriter{failAfter: 5}
+		n, err := f.WriteTo(buf)
+		require.Error(t, err)
+		require.Equal(t, n, int64(5))
+	})
 }
 
 func TestFixedReadFrom(t *testing.T) {

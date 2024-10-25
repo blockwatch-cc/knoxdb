@@ -161,21 +161,34 @@ func (a *FixedByteArray) ReadFrom(r io.Reader) (int64, error) {
 }
 
 func (a *FixedByteArray) WriteTo(w io.Writer) (int64, error) {
-	count := 1
-	w.Write([]byte{bytesFixedFormat << 4})
+	var count int64
+	n, err := w.Write([]byte{bytesFixedFormat << 4})
+	count += int64(n)
+	if err != nil {
+		return count, fmt.Errorf("fixed: writing header: %w", err)
+	}
 
 	// write element count
-	binary.Write(w, binary.LittleEndian, uint32(a.n))
+	err = binary.Write(w, binary.LittleEndian, uint32(a.n))
+	if err != nil {
+		return count, fmt.Errorf("fixed: writing element size: %w", err)
+	}
 	count += 4
 
 	// write buffer len
-	binary.Write(w, binary.LittleEndian, uint32(len(a.buf)))
+	err = binary.Write(w, binary.LittleEndian, uint32(len(a.buf)))
+	if err != nil {
+		return count, fmt.Errorf("fixed: writing buffer len: %w", err)
+	}
 	count += 4
 
 	// write data
-	w.Write(a.buf)
-	count += len(a.buf)
-	return int64(count), nil
+	n, err = w.Write(a.buf)
+	count += int64(n)
+	if err != nil {
+		return count, fmt.Errorf("fixed: writing data: %w", err)
+	}
+	return count, nil
 }
 
 func (a *FixedByteArray) Decode(buf []byte) error {
