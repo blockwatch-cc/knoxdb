@@ -24,6 +24,8 @@ const (
 	TxFlagsConflict             // conflict detected, abort on commit
 )
 
+const ReadTxOffset uint64 = 1 << 63
+
 func (f TxFlags) IsReadOnly() bool     { return f&TxFlagsReadOnly > 0 }
 func (f TxFlags) IsCatalog() bool      { return f&TxFlagsCatalog > 0 }
 func (f TxFlags) IsSerializable() bool { return f&TxFlagsSerializable > 0 }
@@ -93,19 +95,37 @@ type TxList []*Tx
 
 func (t *TxList) Add(tx *Tx) {
 	txs := *t
-	i := sort.Search(len(txs), func(i int) bool { return txs[i].id > tx.id })
-	txs = append(txs, nil)
-	copy(txs[i+1:], txs[i:])
-	txs[i] = tx
+	switch l := len(txs); l {
+	case 0:
+		txs = append(txs, tx)
+	default:
+		if txs[l-1].id < tx.id {
+			txs = append(txs, tx)
+		} else {
+			i := sort.Search(len(txs), func(i int) bool { return txs[i].id > tx.id })
+			txs = append(txs, nil)
+			copy(txs[i+1:], txs[i:])
+			txs[i] = tx
+		}
+	}
 	*t = txs
 }
 
 func (t *TxList) Del(tx *Tx) {
 	txs := *t
-	i := sort.Search(len(txs), func(i int) bool { return txs[i].id >= tx.id })
-	copy(txs[i:], txs[i+1:])
-	txs[len(txs)-1] = nil
-	txs = txs[:len(txs)-1]
+	switch l := len(txs); l {
+	case 1:
+		txs = txs[:0]
+	default:
+		if txs[l-1].id == tx.id {
+			txs = txs[:l-1]
+		} else {
+			i := sort.Search(len(txs), func(i int) bool { return txs[i].id >= tx.id })
+			copy(txs[i:], txs[i+1:])
+			txs[l-1] = nil
+			txs = txs[:l-1]
+		}
+	}
 	*t = txs
 }
 
@@ -126,10 +146,12 @@ func (e *Engine) NewTransaction(flags ...TxFlags) *Tx {
 		cancel: func(error) {},
 	}
 	if tx.flags.IsReadOnly() {
-		// only create snapshot for read transactions (don't pollute id space)
-		e.mu.RLock()
+		// create snapshot for read transactions (don't pollute xid space, use virtual id)
+		e.mu.Lock()
+		tx.id = atomic.AddUint64(&e.vnext, 1)
 		tx.snap = e.NewSnapshot(0)
-		e.mu.RUnlock()
+		e.txs.Add(tx)
+		e.mu.Unlock()
 	} else {
 		// generate txid for write transactions and store in global tx list
 		e.mu.Lock()
@@ -182,17 +204,23 @@ func (t *Tx) Err() error {
 }
 
 func (t *Tx) Close() {
-	// remove from global tx list (read-only tx run without id)
-	if t.id > 0 {
-		t.engine.mu.Lock()
-		t.engine.txs.Del(t)
-		if len(t.engine.txs) > 0 {
-			t.engine.xmin = t.engine.txs[0].id
-		} else {
-			t.engine.xmin = t.engine.xnext - 1
+	// remove from global tx list
+	t.engine.mu.Lock()
+	t.engine.txs.Del(t)
+
+	// update xmin, without active tx we use xnext (horion: anything smaller is final)
+	t.engine.xmin = t.engine.xnext
+
+	// use first active read/write xid if any
+	if len(t.engine.txs) > 0 {
+		for _, tx := range t.engine.txs {
+			if !tx.IsReadOnly() {
+				t.engine.xmin = tx.id
+			}
+			break
 		}
-		t.engine.mu.Unlock()
 	}
+	t.engine.mu.Unlock()
 
 	// release all locks
 	t.engine.lm.Done(t.id)
@@ -223,6 +251,9 @@ func (t *Tx) Lock(ctx context.Context, oid uint64) error {
 	if err := t.Err(); err != nil {
 		return err
 	}
+
+	// TODO: need unique id for read-only tx
+
 	return t.engine.lm.Lock(ctx, t.id, LockModeExclusive, oid)
 }
 
@@ -233,6 +264,9 @@ func (t *Tx) RLock(ctx context.Context, oid uint64) error {
 	if err := t.Err(); err != nil {
 		return err
 	}
+
+	// TODO: need unique id for read-only tx
+
 	return t.engine.lm.Lock(ctx, t.id, LockModeShared, oid)
 }
 

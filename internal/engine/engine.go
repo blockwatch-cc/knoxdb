@@ -38,10 +38,11 @@ type Engine struct {
 	enums    schema.EnumRegistry
 	txs      TxList
 	opts     DatabaseOptions
-	xmin     uint64
-	xnext    uint64
-	dbId     uint64
-	path     string
+	xmin     uint64 // xid horizon (minimum active xid)
+	xnext    uint64 // next txid for read/write tx
+	vnext    uint64 // virtual xid for read-only tx
+	dbId     uint64 // unique database tag
+	path     string // full db base path (from opts + name)
 	log      log.Logger
 	merger   *MergerService
 	wal      *wal.Wal
@@ -82,6 +83,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		txs:     make(TxList, 0),
 		xmin:    0,
 		xnext:   0,
+		vnext:   0 + ReadTxOffset,
 		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
 		opts:    opts,
 		cat:     NewCatalog(name),
@@ -275,6 +277,9 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 
 	// TODO: recover xmin/xnext from catalog&tables (we no longer read wal in a
 	// single loop, hence we must assemble this info from wal users)
+	e.xmin = 1
+	e.xnext = 1
+	e.vnext = e.xnext + ReadTxOffset
 
 	// close tx
 	if err = commit(); err != nil {
