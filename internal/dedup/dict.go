@@ -150,19 +150,32 @@ func (a *DictByteArray) HeapSize() int {
 }
 
 func (a *DictByteArray) WriteTo(w io.Writer) (int64, error) {
-	w.Write([]byte{bytesDictFormat << 4})
-	count := 1
+	var count int64
+	n, err := w.Write([]byte{bytesDictFormat << 4})
+	count += int64(n)
+	if err != nil {
+		return count, fmt.Errorf("dict: writing format %w", err)
+	}
 
 	// write len in elements
-	binary.Write(w, binary.LittleEndian, uint32(a.n))
+	err = binary.Write(w, binary.LittleEndian, uint32(a.n))
+	if err != nil {
+		return count, fmt.Errorf("dict: writing length elements %w", err)
+	}
 	count += 4
 
 	// write log2
-	w.Write([]byte{byte(a.log2)})
-	count += 1
+	n, err = w.Write([]byte{byte(a.log2)})
+	count += int64(n)
+	if err != nil {
+		return count, fmt.Errorf("dict: writing log2 %w", err)
+	}
 
 	// write dict len in elements
-	binary.Write(w, binary.LittleEndian, uint32(len(a.offs)))
+	err = binary.Write(w, binary.LittleEndian, uint32(len(a.offs)))
+	if err != nil {
+		return count, fmt.Errorf("dict: writing dict length elements %w", err)
+	}
 	count += 4
 
 	// use scratch buffer
@@ -177,25 +190,44 @@ func (a *DictByteArray) WriteTo(w io.Writer) (int64, error) {
 	}
 
 	// write compressed offset len
-	binary.Write(w, binary.LittleEndian, uint32(olen))
+	err = binary.Write(w, binary.LittleEndian, uint32(olen))
+	if err != nil {
+		return count, fmt.Errorf("dict: writing compressed offset len: %w", err)
+	}
 	count += 4
 
 	// write compressed offset data
-	w.Write(buf.Bytes())
-	count += olen
+	n, err = w.Write(buf.Bytes())
+	count += int64(n)
+	if err != nil {
+		return count, fmt.Errorf("dict: writing compressed offset data %w", err)
+	}
 
 	// write dict
-	binary.Write(w, binary.LittleEndian, uint32(len(a.dict)))
+	err = binary.Write(w, binary.LittleEndian, uint32(len(a.dict)))
+	if err != nil {
+		return count, fmt.Errorf("dict: writing length dict %w", err)
+	}
 	count += 4
-	w.Write(a.dict)
-	count += len(a.dict)
+
+	n, err = w.Write(a.dict)
+	count += int64(n)
+	if err != nil {
+		return count, fmt.Errorf("dict: writing dict %w", err)
+	}
 
 	// write ptr
-	binary.Write(w, binary.LittleEndian, uint32(len(a.ptr)))
+	err = binary.Write(w, binary.LittleEndian, uint32(len(a.ptr)))
+	if err != nil {
+		return count, fmt.Errorf("dict: writing length ptr %w", err)
+	}
 	count += 4
 
-	w.Write(a.ptr)
-	count += len(a.ptr)
+	n, err = w.Write(a.ptr)
+	count += int64(n)
+	if err != nil {
+		return count, fmt.Errorf("dict: writing ptr %w", err)
+	}
 
 	return int64(count), nil
 }
@@ -260,8 +292,10 @@ func (a *DictByteArray) ReadFrom(r io.Reader) (int64, error) {
 	a.offs = a.offs[:n]
 
 	// reconstruct sizes
-	for i, v := range a.offs[1:] {
-		a.size[i] = a.offs[i+1] - v
+	if len(a.offs) > 1 {
+		for i, v := range a.offs[1:] {
+			a.size[i] = a.offs[i+1] - v
+		}
 	}
 
 	// read dict size
@@ -278,7 +312,9 @@ func (a *DictByteArray) ReadFrom(r io.Reader) (int64, error) {
 	a.dict = a.dict[:int(l)]
 
 	// calculate last size val
-	a.size[len(a.size)-1] = int32(l) - a.offs[len(a.size)-1]
+	if len(a.size) > 0 && len(a.offs) > 0 {
+		a.size[len(a.size)-1] = int32(l) - a.offs[len(a.size)-1]
+	}
 
 	// read dict data
 	n, err = io.ReadFull(r, a.dict)

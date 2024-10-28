@@ -15,12 +15,13 @@ type FaultyWriter struct {
 	failAfter int
 }
 
-func (f *FaultyWriter) Write(p []byte) (n int, err error) {
-	f.size += len(p)
-	if f.size > f.failAfter {
-		return f.size, fmt.Errorf("FaultyWriter: failed to write data")
+func (f *FaultyWriter) Write(p []byte) (int, error) {
+	if f.size >= f.failAfter {
+		return 0, fmt.Errorf("FaultyWriter: failed to write data")
 	}
-	return f.size, nil
+	sz := len(p)
+	f.size += sz
+	return sz, nil
 }
 
 func makeDupmap(sz int) []int {
