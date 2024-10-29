@@ -92,13 +92,13 @@ func (c IntCaster[T]) CastValue(val any) (res any, err error) {
 	width := unsafe.Sizeof(T(0)) * 8
 	switch v := val.(type) {
 	case int:
-		res, ok = T(v), v>>width == 0
+		res, ok = T(v), v>>width == 0 || v>>(width-1) == -1
 	case int64:
-		res, ok = T(v), v>>width == 0
+		res, ok = T(v), v>>width == 0 || v>>(width-1) == -1
 	case int32:
-		res, ok = T(v), v>>width == 0
+		res, ok = T(v), v>>width == 0 || v>>(width-1) == -1
 	case int16:
-		res, ok = T(v), v>>width == 0
+		res, ok = T(v), v>>width == 0 || v>>(width-1) == -1
 	case int8:
 		res, ok = T(v), true
 	case uint:
@@ -540,7 +540,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				cp := make([]T, vv.Len())
 				for i, l := 0, vv.Len(); i < l; i++ {
-					cp[i], ok = T(vv.Index(i).Int()), ok && vv.Int()>>(width-1) == 0
+					cp[i], ok = T(vv.Index(i).Int()), ok && vv.Index(i).Int()>>(width-1) == 0
 				}
 				if ok {
 					res = cp
@@ -548,7 +548,7 @@ func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				cp := make([]T, vv.Len())
 				for i, l := 0, vv.Len(); i < l; i++ {
-					cp[i], ok = T(vv.Index(i).Uint()), ok && vv.Int()>>(width-1) == 0
+					cp[i], ok = T(vv.Index(i).Uint()), ok && vv.Index(i).Uint()>>width == 0
 				}
 				if ok {
 					res = cp
@@ -906,7 +906,7 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 		binary.BigEndian.PutUint16(b[:], uint16(v))
 		res, ok = b[:2], true
 	case int8:
-		res, ok = byte(v), true
+		res, ok = []byte{byte(v)}, true
 	case uint:
 		binary.BigEndian.PutUint64(b[:], uint64(v))
 		res, ok = b[:], true
@@ -920,7 +920,7 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 		binary.BigEndian.PutUint16(b[:], uint16(v))
 		res, ok = b[:2], true
 	case uint8:
-		res, ok = byte(v), true
+		res, ok = []byte{byte(v)}, true
 	case float64:
 		binary.BigEndian.PutUint64(b[:], math.Float64bits(v))
 		res, ok = b[:], true
@@ -954,7 +954,10 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 			ok = err == nil
 		} else {
 			// type aliases
-			vv := reflect.Indirect(reflect.ValueOf(val))
+			var vv reflect.Value
+			if vv, ok = val.(reflect.Value); !ok {
+				vv = reflect.Indirect(reflect.ValueOf(val))
+			}
 			switch vv.Kind() {
 			case reflect.Float32:
 				binary.BigEndian.PutUint32(b[:], math.Float32bits(float32(vv.Float())))
@@ -972,7 +975,7 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 				binary.BigEndian.PutUint16(b[:], uint16(vv.Int()))
 				res, ok = b[:2], true
 			case reflect.Int8:
-				res, ok = byte(vv.Int()), true
+				res, ok = []byte{byte(vv.Int())}, true
 			case reflect.Uint, reflect.Uint64:
 				binary.BigEndian.PutUint64(b[:], uint64(vv.Uint()))
 				res, ok = b[:], true
@@ -983,7 +986,11 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 				binary.BigEndian.PutUint16(b[:], uint16(vv.Uint()))
 				res, ok = b[:2], true
 			case reflect.Uint8:
-				res, ok = byte(vv.Uint()), true
+				res, ok = []byte{byte(vv.Uint())}, true
+			case reflect.String:
+				res, ok = []byte(vv.String()), true
+			default:
+				ok = false
 			}
 		}
 	}
@@ -995,17 +1002,18 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 
 func (c BytesCaster) CastSlice(val any) (res any, err error) {
 	var ok bool
+	var v any
 	rv := reflect.ValueOf(val)
 	if rv.Kind() == reflect.Slice {
 		cp := make([][]byte, rv.Len())
 		for i := range cp {
-			v, err := c.CastValue(rv.Index(i))
+			v, err = c.CastValue(rv.Index(i))
 			if err != nil {
 				break
 			}
 			cp[i] = v.([]byte)
 		}
-		res, ok = cp, true
+		res, ok = cp, err == nil
 	}
 	if !ok {
 		err = castError(val, "byte")
@@ -1069,17 +1077,18 @@ func (c I128Caster) CastValue(val any) (res any, err error) {
 
 func (c I128Caster) CastSlice(val any) (res any, err error) {
 	var ok bool
+	var v any
 	rv := reflect.ValueOf(val)
 	if rv.Kind() == reflect.Slice {
 		cp := make([]num.Int128, rv.Len())
 		for i := range cp {
-			v, err := c.CastValue(rv.Index(i))
+			v, err = c.CastValue(rv.Index(i).Interface())
 			if err != nil {
 				break
 			}
 			cp[i] = v.(num.Int128)
 		}
-		res, ok = cp, true
+		res, ok = cp, err == nil
 	}
 	if !ok {
 		err = castError(val, "int128")
@@ -1134,6 +1143,27 @@ func (c I256Caster) CastValue(val any) (res any, err error) {
 		res, ok = v.Int256(), true
 	case num.Int256:
 		res, ok = v, true
+	default:
+		var vv reflect.Value
+		if vv, ok = val.(reflect.Value); !ok {
+			vv = reflect.Indirect(reflect.ValueOf(val))
+		}
+		switch vv.Kind() {
+		case reflect.Float32:
+			var i256 num.Int256
+			i256.SetFloat64(float64(vv.Float()))
+			res, ok = i256, true
+		case reflect.Float64:
+			var i256 num.Int256
+			i256.SetFloat64(vv.Float())
+			res, ok = i256, true
+		case reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
+			res, ok = num.Int256FromInt64(int64(vv.Int())), true
+		case reflect.Uint, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8:
+			res, ok = num.Int256FromInt64(int64(vv.Uint())), true
+		default:
+			ok = false
+		}
 	}
 	if !ok {
 		err = castError(val, "int256")
@@ -1143,20 +1173,21 @@ func (c I256Caster) CastValue(val any) (res any, err error) {
 
 func (c I256Caster) CastSlice(val any) (res any, err error) {
 	var ok bool
+	var v any
 	rv := reflect.ValueOf(val)
 	if rv.Kind() == reflect.Slice {
-		cp := make([]num.Int128, rv.Len())
+		cp := make([]num.Int256, rv.Len())
 		for i := range cp {
-			v, err := c.CastValue(rv.Index(i))
+			v, err = c.CastValue(rv.Index(i).Interface())
 			if err != nil {
 				break
 			}
-			cp[i] = v.(num.Int128)
+			cp[i] = v.(num.Int256)
 		}
-		res, ok = cp, true
+		res, ok = cp, err == nil
 	}
 	if !ok {
-		err = castError(val, "int128")
+		err = castError(val, "int256")
 	}
 	return
 }
