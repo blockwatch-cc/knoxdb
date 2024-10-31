@@ -55,7 +55,7 @@ type encodeTestStruct struct {
 	String    string         `knox:"str"`
 	Stringer  Stringer       `knox:"strlist"`
 	Bool      bool           `knox:"bool"`
-	Enum      MyEnum         `knox:"enum,enum"`
+	Enum      MyEnum         `knox:"my_enum,enum"`
 	Int64     int64          `knox:"i64"`
 	Int32     int32          `knox:"i32"`
 	Int16     int16          `knox:"i16"`
