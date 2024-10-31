@@ -54,7 +54,7 @@ func TestSchemaMapping(t *testing.T) {
 }
 
 func TestSchemaConvert(t *testing.T) {
-	baseSchema := MustSchemaOf(AllTypes{}).WithEnum(myEnum)
+	baseSchema := MustSchemaOf(AllTypes{})
 	baseEnc := NewEncoder(baseSchema)
 
 	// sub schema, same order
