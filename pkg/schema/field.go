@@ -191,37 +191,38 @@ func (f Field) WithIndex(kind types.IndexType) Field {
 	return f
 }
 
-func (f Field) WithGoType(typ reflect.Type, path []int, ofs uintptr) Field {
-	var iface types.IfaceFlags
-	// detect marshaler types
-	if typ.Implements(binaryMarshalerType) {
-		iface |= types.IfaceBinaryMarshaler
-	}
-	if reflect.PointerTo(typ).Implements(binaryUnmarshalerType) {
-		iface |= types.IfaceBinaryUnmarshaler
-	}
-	if typ.Implements(textMarshalerType) {
-		iface |= types.IfaceTextMarshaler
-	}
-	if reflect.PointerTo(typ).Implements(textUnmarshalerType) {
-		iface |= types.IfaceTextUnmarshaler
-	}
-	if typ.Implements(stringerType) {
-		iface |= types.IfaceStringer
-	}
-	f.wireSize = uint16(typ.Size())
-	if typ.Kind() == reflect.Array && typ.Elem().Kind() == reflect.Uint8 {
-		f.isArray = true
-		f.wireSize = uint16(typ.Len())
-	}
-	if f.flags.Is(types.FieldFlagEnum) {
-		f.wireSize = 2
-	}
-	f.path = path
-	f.offset = ofs
-	f.iface = iface
-	return f
-}
+// @deprecated
+// func (f Field) WithGoType(typ reflect.Type, path []int, ofs uintptr) Field {
+// 	var iface types.IfaceFlags
+// 	// detect marshaler types
+// 	if typ.Implements(binaryMarshalerType) {
+// 		iface |= types.IfaceBinaryMarshaler
+// 	}
+// 	if reflect.PointerTo(typ).Implements(binaryUnmarshalerType) {
+// 		iface |= types.IfaceBinaryUnmarshaler
+// 	}
+// 	if typ.Implements(textMarshalerType) {
+// 		iface |= types.IfaceTextMarshaler
+// 	}
+// 	if reflect.PointerTo(typ).Implements(textUnmarshalerType) {
+// 		iface |= types.IfaceTextUnmarshaler
+// 	}
+// 	if typ.Implements(stringerType) {
+// 		iface |= types.IfaceStringer
+// 	}
+// 	f.wireSize = uint16(typ.Size())
+// 	if typ.Kind() == reflect.Array && typ.Elem().Kind() == reflect.Uint8 {
+// 		f.isArray = true
+// 		f.wireSize = uint16(typ.Len())
+// 	}
+// 	if f.flags.Is(types.FieldFlagEnum) {
+// 		f.wireSize = 2
+// 	}
+// 	f.path = path
+// 	f.offset = ofs
+// 	f.iface = iface
+// 	return f
+// }
 
 func (f *Field) Validate() error {
 	// require scale on decimal fields only
