@@ -2,13 +2,13 @@ package wal
 
 import (
 	"bytes"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/rand"
 )
 
 func xmin(id int) uint64 {
@@ -384,9 +384,7 @@ func commitLogAppendHelper(t *testing.T, i int) {
 		require.NoError(t, err, "appending record should not fail")
 	}
 
-	random := rand.New(rand.NewSource(uint64(i)))
-	t.Logf("testing for seed: %d", i)
-	random.Shuffle(len(recs), func(i, j int) {
+	rand.Shuffle(len(recs), func(i, j int) {
 		recs[i], recs[j] = recs[j], recs[i]
 	})
 
