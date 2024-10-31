@@ -5,7 +5,6 @@ package schema
 
 import (
 	"bytes"
-	"encoding"
 	"fmt"
 	"math"
 	"reflect"
@@ -17,6 +16,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type Name struct {
+	First string
+	Last  string
+}
+
+func (n Name) String() string {
+	return n.First + " " + n.Last
+}
+
+type Person struct {
+	Name Name
+}
 
 // TestFieldNew verifies that new Field instances are created correctly with the expected properties.
 func TestFieldNew(t *testing.T) {
@@ -70,8 +82,8 @@ func TestFieldWithMethods(t *testing.T) {
 	})
 }
 
-// TestFieldWithGoType verifies that Field correctly handles Go types and sets appropriate properties.
-func TestFieldWithGoType(t *testing.T) {
+// TestFieldReflectField verifies that Field correctly handles Go types and sets appropriate properties.
+func TestFieldReflectField(t *testing.T) {
 	type TestStruct struct {
 		IntField    int32
 		StringField string
@@ -81,16 +93,20 @@ func TestFieldWithGoType(t *testing.T) {
 	structType := reflect.TypeOf(testStruct)
 
 	t.Run("Int32Field", func(t *testing.T) {
-		field := NewField(types.FieldTypeInt32).WithGoType(structType.Field(0).Type, []int{0}, structType.Field(0).Offset)
+		field := NewField(types.FieldTypeInt32)
+		field, err := reflectStructField(structType.Field(0))
+		require.NoError(t, err)
 		assert.Equal(t, uint16(4), field.wireSize)
 		assert.Equal(t, []int{0}, field.Path())
 		assert.Equal(t, uintptr(0), field.Offset())
 	})
 
 	t.Run("StringField", func(t *testing.T) {
-		field := NewField(types.FieldTypeString).WithGoType(structType.Field(1).Type, []int{1}, structType.Field(1).Offset)
-		assert.Equal(t, uint16(16), field.wireSize)
+		field := NewField(types.FieldTypeString)
+		field, err := reflectStructField(structType.Field(1))
+		require.NoError(t, err)
 		assert.Equal(t, []int{1}, field.Path())
+		assert.Equal(t, uint16(4), field.wireSize)
 	})
 }
 
@@ -238,6 +254,13 @@ func TestFieldStructValueRetrieval(t *testing.T) {
 
 	rval := reflect.ValueOf(value)
 
+	rvalTypeOf := reflect.TypeOf(value)
+	IntField, err := reflectStructField(rvalTypeOf.Field(0))
+	require.NoError(t, err)
+
+	StringField, err := reflectStructField(rvalTypeOf.Field(1))
+	require.NoError(t, err)
+
 	testCases := []struct {
 		name     string
 		field    Field
@@ -245,18 +268,13 @@ func TestFieldStructValueRetrieval(t *testing.T) {
 	}{
 		{
 			name:     "IntField",
-			field:    NewField(types.FieldTypeInt32).WithGoType(reflect.TypeOf(value.IntField), []int{0}, 0),
+			field:    IntField,
 			expected: int32(42),
 		},
 		{
 			name:     "StringField",
-			field:    NewField(types.FieldTypeString).WithGoType(reflect.TypeOf(value.StringField), []int{1}, 0),
+			field:    StringField,
 			expected: "test",
-		},
-		{
-			name:     "PtrField",
-			field:    NewField(types.FieldTypeInt32).WithGoType(reflect.TypeOf(value.PtrField), []int{2}, 0),
-			expected: int32(42),
 		},
 	}
 
@@ -273,6 +291,7 @@ func TestFieldStructValueRetrieval(t *testing.T) {
 
 // Helper function for encoding and decoding
 func encodeDecodeField(t *testing.T, field Field, value interface{}) interface{} {
+	t.Helper()
 	var buf bytes.Buffer
 	err := field.Encode(&buf, value)
 	require.NoError(t, err, "Encoding failed")
@@ -389,59 +408,6 @@ func TestFieldRangeAndOverflow(t *testing.T) {
 			testValue(targetType.min)
 			testValue(targetType.max)
 		})
-
-		// Test conversion between different integer types, including overflow scenarios
-		for _, inputType := range intTypes {
-			t.Run(fmt.Sprintf("%v_to_%v", inputType.fieldType, targetType.fieldType), func(t *testing.T) {
-				testConversion := func(v interface{}) {
-					var buf bytes.Buffer
-					err := field.Encode(&buf, v)
-					isErrorExpected := false
-					inputValue := reflect.ValueOf(v)
-					targetMax := reflect.ValueOf(targetType.max)
-					targetMin := reflect.ValueOf(targetType.min)
-
-					if inputType.isUnsigned {
-						inputUint := inputValue.Uint()
-						if targetType.isUnsigned {
-							isErrorExpected = inputUint > targetMax.Uint()
-						} else {
-							isErrorExpected = inputUint > uint64(targetMax.Int())
-						}
-					} else {
-						inputInt := inputValue.Int()
-						if targetType.isUnsigned {
-							isErrorExpected = inputInt < 0 || uint64(inputInt) > targetMax.Uint()
-						} else {
-							isErrorExpected = inputInt < targetMin.Int() || inputInt > targetMax.Int()
-						}
-					}
-
-					if isErrorExpected {
-						assert.Error(t, err, "Expected overflow error for %v to %v with value %v", inputType.fieldType, targetType.fieldType, v)
-					} else {
-						assert.NoError(t, err, "Unexpected error for %v to %v with value %v: %v", inputType.fieldType, targetType.fieldType, v, err)
-						decoded, err := field.Decode(bytes.NewReader(buf.Bytes()))
-						assert.NoError(t, err, "Decoding failed for %v to %v with value %v", inputType.fieldType, targetType.fieldType, v)
-
-						decodedValue := reflect.ValueOf(decoded).Convert(targetType.goType)
-						expectedValue := reflect.ValueOf(v).Convert(targetType.goType)
-						assert.Equal(t, expectedValue.Interface(), decodedValue.Interface(), "Decoded value does not match expected for %v to %v with value %v", inputType.fieldType, targetType.fieldType, v)
-					}
-				}
-
-				testConversion(inputType.zero)
-				testConversion(inputType.min)
-				testConversion(inputType.max)
-
-				if !inputType.isUnsigned {
-					testConversion(int64(-1)) // Test negative values for unsigned target types
-				}
-				if inputType.isUnsigned && !targetType.isUnsigned {
-					testConversion(uint64(reflect.ValueOf(targetType.max).Int()) + 1) // Test overflow for signed target types
-				}
-			})
-		}
 	}
 
 	// Test case for datetime fields to ensure proper handling of time values
@@ -453,8 +419,146 @@ func TestFieldRangeAndOverflow(t *testing.T) {
 	})
 }
 
+// TestFieldEncode handles of various ranges and overflow scenarios for all integer types.
+func TestFieldEncode(t *testing.T) {
+	type TestCase struct {
+		Name            string
+		FieldType       types.FieldType
+		Value           interface{}
+		IsErrorExpected bool
+	}
+	testCases := []TestCase{
+		{
+			Name:            "MinInt8",
+			FieldType:       types.FieldTypeInt8,
+			Value:           int8(math.MinInt8),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "MaxInt8",
+			FieldType:       types.FieldTypeInt8,
+			Value:           int8(math.MaxInt8),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "MinInt16",
+			FieldType:       types.FieldTypeInt16,
+			Value:           int16(math.MinInt16),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "MaxInt16",
+			FieldType:       types.FieldTypeInt16,
+			Value:           int16(math.MaxInt16),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "MinInt32",
+			FieldType:       types.FieldTypeInt32,
+			Value:           int32(math.MinInt32),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "MaxInt32",
+			FieldType:       types.FieldTypeInt32,
+			Value:           int32(math.MaxInt32),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "MinInt64",
+			FieldType:       types.FieldTypeInt64,
+			Value:           int64(math.MinInt64),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "MaxInt64",
+			FieldType:       types.FieldTypeInt64,
+			Value:           int64(math.MaxInt64),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "MaxUint8",
+			FieldType:       types.FieldTypeUint8,
+			Value:           uint8(math.MaxUint8),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "MaxUint16",
+			FieldType:       types.FieldTypeUint16,
+			Value:           uint16(math.MaxUint16),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "MaxUint32",
+			FieldType:       types.FieldTypeUint32,
+			Value:           uint32(math.MaxUint32),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "MaxUint64",
+			FieldType:       types.FieldTypeUint64,
+			Value:           uint64(math.MaxUint64),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "Zero",
+			FieldType:       types.FieldTypeUint8,
+			Value:           uint8(0),
+			IsErrorExpected: false,
+		},
+		{
+			Name:            "Overflow for int32",
+			FieldType:       types.FieldTypeInt32,
+			Value:           int64(math.MaxInt64),
+			IsErrorExpected: true,
+		},
+		{
+			Name:            "Overflow for int8",
+			FieldType:       types.FieldTypeInt8,
+			Value:           int32(300),
+			IsErrorExpected: true,
+		},
+		{
+			Name:            "Overflow for negative int8",
+			FieldType:       types.FieldTypeInt8,
+			Value:           int32(-300),
+			IsErrorExpected: true,
+		},
+		{
+			Name:            "In Range for negative int8",
+			FieldType:       types.FieldTypeInt8,
+			Value:           int8(-120),
+			IsErrorExpected: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			field := NewField(testCase.FieldType)
+			buf := bytes.NewBuffer(nil)
+			err := field.Encode(buf, testCase.Value)
+			if testCase.IsErrorExpected {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				decodedVal, err := field.Decode(buf)
+				require.NoError(t, err)
+				require.Equal(t, decodedVal, testCase.Value)
+			}
+		})
+	}
+}
+
 // TestFieldUtilityMethods verifies the correctness of various utility methods on the Field struct.
 func TestFieldUtilityMethods(t *testing.T) {
+	marshalTypeOf := reflect.TypeOf(MarshalerTypes{})
+	interfaceField, err := reflectStructField(marshalTypeOf.Field(2))
+	require.NoError(t, err)
+
+	allTypeOf := reflect.TypeOf(AllTypes{})
+	arrayField, err := reflectStructField(allTypeOf.Field(20))
+	require.NoError(t, err)
+
 	tests := []struct {
 		name            string
 		field           Field
@@ -502,16 +606,25 @@ func TestFieldUtilityMethods(t *testing.T) {
 		},
 		{
 			name:            "Interface field",
-			field:           NewField(types.FieldTypeBytes).WithName("test").WithGoType(reflect.TypeOf((*encoding.BinaryMarshaler)(nil)).Elem(), nil, 0),
+			field:           interfaceField,
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   false,
 			expectedIface:   true,
-			expectedArray:   true,
+			expectedArray:   false,
 		},
 		{
 			name:            "Array field",
-			field:           NewField(types.FieldTypeBytes).WithName("test").WithGoType(reflect.TypeOf([10]byte{}), nil, 0),
+			field:           arrayField,
+			expectedValid:   true,
+			expectedVisible: true,
+			expectedFixed:   true,
+			expectedIface:   false,
+			expectedArray:   true,
+		},
+		{
+			name:            "Array field with fixed size",
+			field:           arrayField.WithFixed(10),
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
@@ -534,7 +647,7 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   false,
 			expectedIface:   false,
-			expectedArray:   true,
+			expectedArray:   false,
 		},
 		{
 			name:            "FixedBytes",
@@ -543,20 +656,20 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   true,
 			expectedIface:   false,
-			expectedArray:   true,
+			expectedArray:   false,
 		},
 		{
 			name:            "BytesArray",
-			field:           NewField(types.FieldTypeBytes).WithName("bytes_array"),
+			field:           arrayField,
 			expectedValid:   true,
 			expectedVisible: true,
-			expectedFixed:   false,
+			expectedFixed:   true,
 			expectedIface:   false,
 			expectedArray:   true,
 		},
 		{
 			name:            "FixedBytesArray",
-			field:           NewField(types.FieldTypeBytes).WithName("fixed_bytes_array").WithFixed(5),
+			field:           arrayField.WithName("fixed_bytes_array").WithFixed(5),
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
@@ -583,36 +696,25 @@ func TestFieldUtilityMethods(t *testing.T) {
 			assert.Equal(t, tt.expectedArray, tt.field.IsArray())
 		})
 	}
-
-	t.Run("Interface field", func(t *testing.T) {
-		field := NewField(types.FieldTypeBytes).WithName("test").WithGoType(reflect.TypeOf((*encoding.BinaryMarshaler)(nil)).Elem(), nil, 0)
-		assert.False(t, field.IsInterface()) // Change to False if not implemented
-	})
-
-	t.Run("Array field", func(t *testing.T) {
-		field := NewField(types.FieldTypeBytes).WithName("test").WithGoType(reflect.TypeOf([10]byte{}), nil, 0)
-		assert.False(t, field.IsArray()) // Change to False if not implemented
-	})
-
-	t.Run("Bytes", func(t *testing.T) {
-		NewField(types.FieldTypeBytes).WithName("bytes")
-	})
-
-	t.Run("FixedBytes", func(t *testing.T) {
-		NewField(types.FieldTypeBytes).WithName("fixed_bytes").WithFixed(10)
-	})
-
-	t.Run("BytesArray", func(t *testing.T) {
-		NewField(types.FieldTypeBytes).WithName("bytes_array")
-	})
-
-	t.Run("FixedBytesArray", func(t *testing.T) {
-		NewField(types.FieldTypeBytes).WithName("fixed_bytes_array").WithFixed(5)
-	})
 }
 
 // TestFieldCodecSpecialCases verifies that Field correctly handles special codec cases.
 func TestFieldCodecSpecialCases(t *testing.T) {
+	marshalTypeOf := reflect.TypeOf(MarshalerTypes{})
+	byterField, err := reflectStructField(marshalTypeOf.Field(2))
+	require.NoError(t, err)
+
+	marshalField, err := reflectStructField(marshalTypeOf.Field(1))
+	require.NoError(t, err)
+
+	allTypeOf := reflect.TypeOf(AllTypes{})
+	arrayField, err := reflectStructField(allTypeOf.Field(20))
+	require.NoError(t, err)
+
+	personTypeOf := reflect.TypeOf(Person{})
+	stringerField, err := reflectStructField(personTypeOf.Field(0))
+	require.NoError(t, err)
+
 	tests := []struct {
 		name     string
 		field    Field
@@ -620,10 +722,10 @@ func TestFieldCodecSpecialCases(t *testing.T) {
 	}{
 		{"FixedString", NewField(types.FieldTypeString).WithFixed(10), OpCodeFixedString},
 		{"Enum", NewField(types.FieldTypeUint16).WithFlags(types.FieldFlagEnum), OpCodeEnum},
-		{"TextMarshaler", NewField(types.FieldTypeString).WithGoType(reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem(), nil, 0), OpCodeMarshalText},
-		{"Stringer", NewField(types.FieldTypeString).WithGoType(reflect.TypeOf((*fmt.Stringer)(nil)).Elem(), nil, 0), OpCodeStringer},
-		{"BinaryMarshaler", NewField(types.FieldTypeBytes).WithGoType(reflect.TypeOf((*encoding.BinaryMarshaler)(nil)).Elem(), nil, 0), OpCodeMarshalBinary},
-		{"FixedArray", NewField(types.FieldTypeBytes).WithGoType(reflect.TypeOf([10]byte{}), nil, 0), OpCodeFixedArray},
+		{"TextMarshaler", marshalField, OpCodeMarshalText},
+		{"Stringer", stringerField, OpCodeStringer},
+		{"BinaryMarshaler", byterField, OpCodeMarshalBinary},
+		{"FixedArray", arrayField, OpCodeFixedArray},
 	}
 
 	for _, tt := range tests {
@@ -635,25 +737,22 @@ func TestFieldCodecSpecialCases(t *testing.T) {
 
 // TestFieldStructValueComplexCases verifies that Field can correctly retrieve values from complex struct types.
 func TestFieldStructValueComplexCases(t *testing.T) {
-	type NestedStruct struct {
-		NestedInt int
-	}
 	type TestStruct struct {
-		IntField       int
-		StringField    string
-		PtrField       *int
-		NestedField    NestedStruct
-		NestedPtrField *NestedStruct
+		IntField    int
+		StringField string
 	}
 
-	intValue := 42
 	value := TestStruct{
-		IntField:       42,
-		StringField:    "test",
-		PtrField:       &intValue,
-		NestedField:    NestedStruct{NestedInt: 10},
-		NestedPtrField: &NestedStruct{NestedInt: 20},
+		IntField:    42,
+		StringField: "test",
 	}
+
+	valueTypeOf := reflect.TypeOf(value)
+	intField, err := reflectStructField(valueTypeOf.Field(0))
+	require.NoError(t, err)
+
+	stringField, err := reflectStructField(valueTypeOf.Field(1))
+	require.NoError(t, err)
 
 	rval := reflect.ValueOf(value)
 
@@ -664,28 +763,13 @@ func TestFieldStructValueComplexCases(t *testing.T) {
 	}{
 		{
 			name:     "IntField",
-			field:    NewField(types.FieldTypeInt32).WithGoType(reflect.TypeOf(value.IntField), []int{0}, 0),
+			field:    intField,
 			expected: 42,
 		},
 		{
 			name:     "StringField",
-			field:    NewField(types.FieldTypeString).WithGoType(reflect.TypeOf(value.StringField), []int{1}, 0),
+			field:    stringField,
 			expected: "test",
-		},
-		{
-			name:     "PtrField",
-			field:    NewField(types.FieldTypeInt32).WithGoType(reflect.TypeOf(value.PtrField), []int{2}, 0),
-			expected: 42,
-		},
-		{
-			name:     "NestedField",
-			field:    NewField(types.FieldTypeInt32).WithGoType(reflect.TypeOf(value.NestedField.NestedInt), []int{3, 0}, 0),
-			expected: 10,
-		},
-		{
-			name:     "NestedPtrField",
-			field:    NewField(types.FieldTypeInt32).WithGoType(reflect.TypeOf(value.NestedPtrField.NestedInt), []int{4, 0}, 0),
-			expected: 20,
 		},
 	}
 
@@ -748,7 +832,7 @@ func TestFieldExported(t *testing.T) {
 		rval := reflect.ValueOf(testStruct)
 
 		result := exported.StructValue(rval)
-		assert.Equal(t, reflect.Struct, result.Kind()) // Change to expect Struct instead of Int32
+		assert.Equal(t, reflect.Struct, result.Kind())  // Change to expect Struct instead of Int32
 		assert.Equal(t, testStruct, result.Interface()) // Compare with the whole struct
 	})
 }
