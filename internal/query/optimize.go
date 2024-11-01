@@ -38,8 +38,8 @@ import (
 //   - RG from>to
 //   - disjunct IN+IN
 //   - disjunct IN+EQ
-//   - RG(A,B)+EQ(C) => C outside [A,B]
-//   - and-only: RG(A,B)+EQ(C) => EQ(C) (applies omly if A<=C<=B)
+//   - RG(A,B) + EQ(C) => C outside [A,B]
+//   - and-only: RG(A,B) + EQ(C) => EQ(C) (applies omly if A<=C<=B)
 //   - or-only: IN(A) + NE(B) => true if B is in A
 //   - or-only: RG(A,B) + NE(C) => true if C is inside [A,B]
 
