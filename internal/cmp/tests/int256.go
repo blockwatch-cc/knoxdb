@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"math/rand"
 
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"golang.org/x/exp/slices"
 )
 
@@ -27,16 +27,13 @@ var (
 	ZeroInt256       = num.ZeroInt256
 )
 
-func RandInt256Slice(n, u int) Int256Slice {
-	s := make([]Int256, n*u)
+func RandInt256Slice(n int) Int256Slice {
+	s := make([]Int256, n)
 	for i := 0; i < n; i++ {
-		s[i][0] = rand.Uint64()
-		s[i][1] = rand.Uint64()
-		s[i][2] = rand.Uint64()
-		s[i][3] = rand.Uint64()
-	}
-	for i := 1; i < u; i++ {
-		copy(s[i*n:], s[:n])
+		s[i][0] = util.RandUint64()
+		s[i][1] = util.RandUint64()
+		s[i][2] = util.RandUint64()
+		s[i][3] = util.RandUint64()
 	}
 	return s
 }

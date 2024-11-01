@@ -7,7 +7,6 @@ package bitset
 import (
 	"bytes"
 	"encoding/binary"
-	"math/rand"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/bitset/tests"
@@ -361,7 +360,7 @@ func randBits(n int) []byte {
 	c := (n + 7) / 8
 	out := make([]byte, c+3)
 	for i := 0; i < (c+3)/4; i++ {
-		binary.BigEndian.PutUint32(out[4*i:4*i+4], uint32(rand.Int31()))
+		binary.BigEndian.PutUint32(out[4*i:4*i+4], util.RandUint32())
 	}
 	return out[:c]
 }
@@ -375,7 +374,6 @@ func randBitsets(n, sz int) []*Bitset {
 }
 
 func TestBitsetSlice(T *testing.T) {
-	rand.Seed(0)
 	for _, sz := range bitsetSizes {
 		for i, b := range randBitsets(100, sz) {
 			T.Run(f("%d_%d", sz, i), func(t *testing.T) {
@@ -396,12 +394,11 @@ func TestBitsetSlice(T *testing.T) {
 }
 
 func TestBitsetSubSlice(T *testing.T) {
-	rand.Seed(0)
 	for _, sz := range bitsetSizes {
 		for i, b := range randBitsets(100, sz) {
 			T.Run(f("%d_%d", sz, i), func(t *testing.T) {
-				start := int(rand.Int31n(int32(b.Len())))
-				n := int(rand.Int31n(int32(b.Len() - start)))
+				start := int(util.RandInt32n(int32(b.Len())))
+				n := int(util.RandInt32n(int32(b.Len() - start)))
 				slice := b.SubSlice(start, n)
 				if got, want := len(slice), n; got != want {
 					T.Errorf("unexpected length %d, expected %d", got, want)
@@ -419,7 +416,6 @@ func TestBitsetSubSlice(T *testing.T) {
 }
 
 func TestBitsetFromSlice(T *testing.T) {
-	rand.Seed(0)
 	for _, sz := range bitsetSizes {
 		for i, b := range randBitsets(100, sz) {
 			T.Run(f("%d_%d", sz, i), func(t *testing.T) {
@@ -451,16 +447,15 @@ func TestBitsetFromSlice(T *testing.T) {
 // - srcPos + srcLen > size
 func TestBitsetInsert(T *testing.T) {
 	var fast, fasthead, slow int
-	rand.Seed(0)
 	for _, sz := range bitsetSizes {
 		for i, src := range randBitsets(100, sz) {
 			dst := NewBitset(1024)
 			for _, pat := range bitsetPatterns {
 				T.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
 					dst.Fill(pat)
-					srcPos := int(rand.Int31n(int32(src.Len())))
-					srcLen := int(rand.Int31n(int32(src.Len() - srcPos)))
-					dstPos := int(rand.Int31n(int32(dst.Len())))
+					srcPos := int(util.RandInt32n(int32(src.Len())))
+					srcLen := int(util.RandInt32n(int32(src.Len() - srcPos)))
+					dstPos := int(util.RandInt32n(int32(dst.Len())))
 
 					if dstPos&0x7+srcLen&0x7 == 0 {
 						fasthead++
@@ -474,7 +469,7 @@ func TestBitsetInsert(T *testing.T) {
 
 					lbefore := dst.Len()
 					cbefore := dst.Count()
-					dst.Insert(src, srcPos, srcLen, dstPos)
+					dst.InsertFrom(src, srcPos, srcLen, dstPos)
 
 					dstSlice := dst.SubSlice(dstPos, srcLen)
 					srcSlice := src.SubSlice(srcPos, srcLen)
@@ -521,17 +516,15 @@ func TestBitsetInsert(T *testing.T) {
 // TODO: edge cases
 func TestBitsetReplace(T *testing.T) {
 	var fast, slow int
-	rand.Seed(0)
 	for _, sz := range bitsetSizes {
 		for i, src := range randBitsets(100, sz) {
 			dst := NewBitset(sz)
 			for _, pat := range bitsetPatterns {
 				T.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
 					dst.Fill(pat)
-					srcPos := int(rand.Int31n(int32(src.Len())))
-					srcLen := int(rand.Int31n(int32(src.Len() - srcPos)))
-					// dstPos := int(rand.Int31n(int32(dst.Len() - srcLen)))
-					dstPos := int(rand.Int31n(int32(dst.Len())))
+					srcPos := int(util.RandInt32n(int32(src.Len())))
+					srcLen := int(util.RandInt32n(int32(src.Len() - srcPos)))
+					dstPos := int(util.RandInt32n(int32(dst.Len())))
 
 					if srcPos&0x7+dstPos&0x7+srcLen&0x7 == 0 {
 						fast++
@@ -540,7 +533,7 @@ func TestBitsetReplace(T *testing.T) {
 					}
 
 					lbefore := dst.Len()
-					dst.Replace(src, srcPos, srcLen, dstPos)
+					dst.ReplaceFrom(src, srcPos, srcLen, dstPos)
 
 					dstSlice := dst.SubSlice(dstPos, srcLen)
 					srcSlice := src.SubSlice(srcPos, util.Min(srcLen, dst.Len()-dstPos))
@@ -571,15 +564,14 @@ func TestBitsetReplace(T *testing.T) {
 
 func TestBitsetAppend(T *testing.T) {
 	var fast, slow int
-	rand.Seed(0)
 	for _, sz := range bitsetSizes {
 		for i, src := range randBitsets(100, sz) {
 			dst := NewBitset(sz)
 			for _, pat := range bitsetPatterns {
 				T.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
 					dst.Fill(pat)
-					srcPos := int(rand.Int31n(int32(src.Len())))
-					srcLen := int(rand.Int31n(int32(src.Len() - srcPos)))
+					srcPos := int(util.RandInt32n(int32(src.Len())))
+					srcLen := int(util.RandInt32n(int32(src.Len() - srcPos)))
 
 					if dst.size&0x7+srcPos&0x7+srcLen&0x7 == 0 {
 						fast++
@@ -589,7 +581,7 @@ func TestBitsetAppend(T *testing.T) {
 
 					lbefore := dst.Len()
 					cbefore := dst.Count()
-					dst.Append(src, srcPos, srcLen)
+					dst.AppendFrom(src, srcPos, srcLen)
 
 					dstSlice := dst.SubSlice(lbefore, srcLen)
 					srcSlice := src.SubSlice(srcPos, srcLen)
@@ -635,7 +627,6 @@ func TestBitsetAppend(T *testing.T) {
 
 func TestBitsetDelete(T *testing.T) {
 	var fast, slow int
-	rand.Seed(0)
 	for _, sz := range bitsetSizes {
 		for i, src := range randBitsets(100, sz) {
 			dst := NewBitset(sz)
@@ -647,9 +638,9 @@ func TestBitsetDelete(T *testing.T) {
 					// - delete the inserted data
 					// - check original poison is unchanged
 					dst.Fill(pat)
-					srcPos := int(rand.Int31n(int32(src.Len())))
-					srcLen := int(rand.Int31n(int32(src.Len() - srcPos)))
-					dstPos := int(rand.Int31n(int32(dst.Len())))
+					srcPos := int(util.RandInt32n(int32(src.Len())))
+					srcLen := int(util.RandInt32n(int32(src.Len() - srcPos)))
+					dstPos := int(util.RandInt32n(int32(dst.Len())))
 
 					if dstPos&0x7+srcLen&0x7 == 0 {
 						fast++
@@ -658,7 +649,7 @@ func TestBitsetDelete(T *testing.T) {
 					}
 
 					before := dst.Clone()
-					dst.Insert(src, srcPos, srcLen, dstPos)
+					dst.InsertFrom(src, srcPos, srcLen, dstPos)
 					dst.Delete(dstPos, srcLen)
 
 					T.Logf("BEFORE(%d/%d)=%x AFTER(%d/%d)=%x delPos=%d n=%d fast=%t\n",
@@ -698,12 +689,11 @@ func TestBitsetDelete(T *testing.T) {
 }
 
 func TestBitsetSwap(T *testing.T) {
-	rand.Seed(0)
 	for _, sz := range bitsetSizes {
 		for i, src := range randBitsets(100, sz) {
 			T.Run(f("%d_%d", sz, i), func(t *testing.T) {
-				i := int(rand.Int31n(int32(src.Len())))
-				j := int(rand.Int31n(int32(src.Len())))
+				i := int(util.RandInt32n(int32(src.Len())))
+				j := int(util.RandInt32n(int32(src.Len())))
 
 				ibefore := src.IsSet(i)
 				jbefore := src.IsSet(j)

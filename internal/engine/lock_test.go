@@ -5,12 +5,12 @@ package engine
 
 import (
 	"context"
-	"math/rand"
 	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -103,7 +103,7 @@ func TestLockConcurrent(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
+				time.Sleep(time.Duration(util.RandIntn(10)) * time.Millisecond)
 				m.Done(uint64(j))
 			}
 			return nil

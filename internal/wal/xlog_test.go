@@ -2,12 +2,12 @@ package wal
 
 import (
 	"bytes"
-	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -384,7 +384,7 @@ func commitLogAppendHelper(t *testing.T, i int) {
 		require.NoError(t, err, "appending record should not fail")
 	}
 
-	rand.Shuffle(len(recs), func(i, j int) {
+	util.RandShuffle(len(recs), func(i, j int) {
 		recs[i], recs[j] = recs[j], recs[i]
 	})
 

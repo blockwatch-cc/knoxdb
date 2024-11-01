@@ -57,7 +57,7 @@ func TestMatchInt256Equal(T *testing.T) {
 // Equal benchmarks
 func BenchmarkMatchInt256Equal(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L, 1))
+		a := Int256Optimize(randInt256Slice(n.L))
 		mask := fillBitset(nil, a.Len(), 0xff)
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.Name, func(B *testing.B) {
@@ -92,7 +92,7 @@ func TestMatchInt256NotEqual(T *testing.T) {
 // Not Equal benchmarks
 func BenchmarkMatchInt256NotEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L, 1))
+		a := Int256Optimize(randInt256Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int256Size))
@@ -126,7 +126,7 @@ func TestMatchInt256Less(T *testing.T) {
 // Less benchmarks
 func BenchmarkMatchInt256Less(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L, 1))
+		a := Int256Optimize(randInt256Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int256Size))
@@ -160,7 +160,7 @@ func TestMatchInt256LessEqual(T *testing.T) {
 // Less equal benchmarks
 func BenchmarkMatchInt256LessEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L, 1))
+		a := Int256Optimize(randInt256Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int256Size))
@@ -194,7 +194,7 @@ func TestMatchInt256Greater(T *testing.T) {
 // Greater benchmarks
 func BenchmarkMatchInt256Greater(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L, 1))
+		a := Int256Optimize(randInt256Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int256Size))
@@ -228,7 +228,7 @@ func TestMatchInt256GreaterEqual(T *testing.T) {
 // Greater equal benchmarks
 func BenchmarkMatchInt256GreaterEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L, 1))
+		a := Int256Optimize(randInt256Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int256Size))
@@ -262,7 +262,7 @@ func TestMatchInt256Between(T *testing.T) {
 // Between benchmarks
 func BenchmarkMatchInt256Between(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L, 1))
+		a := Int256Optimize(randInt256Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int256Size))

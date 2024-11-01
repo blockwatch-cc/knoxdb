@@ -5,7 +5,6 @@ package query
 
 import (
 	"fmt"
-	"math/rand"
 	"reflect"
 	"regexp"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,35 +50,33 @@ var (
 func makeRandomValue(typ BlockType) any {
 	switch typ {
 	case BlockTime, BlockInt64:
-		return rand.Int63()
+		return util.RandInt64()
 	case BlockInt32:
-		return rand.Int31()
+		return util.RandInt32()
 	case BlockInt16:
-		return int16(rand.Int31())
+		return int16(util.RandInt32())
 	case BlockInt8:
-		return int8(rand.Int31())
+		return int8(util.RandInt32())
 	case BlockUint64:
-		return rand.Uint64()
+		return util.RandUint64()
 	case BlockUint32:
-		return rand.Uint32()
+		return util.RandUint32()
 	case BlockUint16:
-		return uint16(rand.Uint32())
+		return uint16(util.RandUint32())
 	case BlockUint8:
-		return uint8(rand.Uint32())
+		return uint8(util.RandUint32())
 	case BlockFloat64:
-		return rand.Float64()
+		return util.RandFloat64()
 	case BlockFloat32:
-		return rand.Float32()
+		return util.RandFloat32()
 	case BlockBool:
-		return rand.Intn(2) == 1
+		return util.RandIntn(2) == 1
 	case BlockString, BlockBytes:
-		k := make([]byte, 8)
-		rand.Read(k)
-		return k
+		return util.RandBytes(8)
 	case BlockInt128:
-		return num.Int128From2Int64(rand.Int63(), rand.Int63())
+		return num.Int128From2Int64(util.RandInt64(), util.RandInt64())
 	case BlockInt256:
-		return num.Int256From4Int64(rand.Int63(), rand.Int63(), rand.Int63(), rand.Int63())
+		return num.Int256From4Int64(util.RandInt64(), util.RandInt64(), util.RandInt64(), util.RandInt64())
 	default:
 		return nil
 	}
@@ -89,37 +87,35 @@ func makeRandomBlock(typ BlockType, sz int) *block.Block {
 	for i := 0; i < sz; i++ {
 		switch typ {
 		case BlockTime, BlockInt64:
-			b.Int64().Append(rand.Int63())
+			b.Int64().Append(util.RandInt64())
 		case BlockInt32:
-			b.Int32().Append(rand.Int31())
+			b.Int32().Append(util.RandInt32())
 		case BlockInt16:
-			b.Int16().Append(int16(rand.Int31()))
+			b.Int16().Append(int16(util.RandInt32()))
 		case BlockInt8:
-			b.Int8().Append(int8(rand.Int31()))
+			b.Int8().Append(int8(util.RandInt32()))
 		case BlockUint64:
-			b.Uint64().Append(rand.Uint64())
+			b.Uint64().Append(util.RandUint64())
 		case BlockUint32:
-			b.Uint32().Append(rand.Uint32())
+			b.Uint32().Append(util.RandUint32())
 		case BlockUint16:
-			b.Uint16().Append(uint16(rand.Uint32()))
+			b.Uint16().Append(uint16(util.RandUint32()))
 		case BlockUint8:
-			b.Uint8().Append(uint8(rand.Uint32()))
+			b.Uint8().Append(uint8(util.RandUint32()))
 		case BlockFloat64:
-			b.Float64().Append(rand.Float64())
+			b.Float64().Append(util.RandFloat64())
 		case BlockFloat32:
-			b.Float32().Append(rand.Float32())
+			b.Float32().Append(util.RandFloat32())
 		case BlockBool:
-			if rand.Intn(2) == 1 {
+			if util.RandIntn(2) == 1 {
 				b.Bool().Set(i)
 			}
 		case BlockString, BlockBytes:
-			k := make([]byte, 8)
-			rand.Read(k)
-			b.Bytes().Append(k)
+			b.Bytes().Append(util.RandBytes(8))
 		case BlockInt128:
-			b.Int128().Append(num.Int128From2Int64(rand.Int63(), rand.Int63()))
+			b.Int128().Append(num.Int128From2Int64(util.RandInt64(), util.RandInt64()))
 		case BlockInt256:
-			b.Int256().Append(num.Int256From4Int64(rand.Int63(), rand.Int63(), rand.Int63(), rand.Int63()))
+			b.Int256().Append(num.Int256From4Int64(util.RandInt64(), util.RandInt64(), util.RandInt64(), util.RandInt64()))
 		}
 	}
 	return b

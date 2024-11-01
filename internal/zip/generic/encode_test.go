@@ -18,10 +18,10 @@ var (
 	zzDeltaEncodeUint8Cases  = tests.ZzDeltaEncodeUint8Cases
 
 	benchmarkSizes = tests.BenchmarkSizes
-	randInt64Slice = tests.RandInt64Slice
-	randInt32Slice = tests.RandInt32Slice
-	randInt16Slice = tests.RandInt16Slice
-	randInt8Slice  = tests.RandInt8Slice
+	randInt64Slice = util.RandInts[int64]
+	randInt32Slice = util.RandInts[int32]
+	randInt16Slice = util.RandInts[int16]
+	randInt8Slice  = util.RandInts[int8]
 	Int64Size      = tests.Int64Size
 	Int32Size      = tests.Int32Size
 	Int16Size      = tests.Int16Size

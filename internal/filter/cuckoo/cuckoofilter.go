@@ -2,12 +2,11 @@ package cuckoo
 
 import (
 	"fmt"
-	"math/rand"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const maxCuckooCount = 500
-
-var randsrc = rand.NewSource(1)
 
 // Filter is a probabalistic counter
 type Filter struct {
@@ -46,7 +45,7 @@ func (cf *Filter) Reset() {
 
 func randi(i1, i2 uint) uint {
 	// much faster than rand.Intn(2)
-	if randsrc.Int63()&0x100000000 == 0 {
+	if util.RandUint()&0x100000000 == 0 {
 		return i1
 	}
 	return i2
@@ -79,7 +78,7 @@ func (cf *Filter) insert(fp byte, i uint) bool {
 
 func (cf *Filter) reinsert(fp byte, i uint) bool {
 	for k := 0; k < maxCuckooCount; k++ {
-		j := rand.Intn(bucketSize)
+		j := util.RandIntn(bucketSize)
 		oldfp := fp
 		fp = cf.buckets[i][j]
 		cf.buckets[i][j] = oldfp

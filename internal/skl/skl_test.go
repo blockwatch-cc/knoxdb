@@ -17,15 +17,13 @@
 package skl
 
 import (
-	"encoding/binary"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -446,13 +444,8 @@ func TestIteratorSeek(t *testing.T) {
 	require.EqualValues(t, "01990", v.Value)
 }
 
-func randomKey(rng *rand.Rand) []byte {
-	b := make([]byte, 8)
-	key := rng.Uint32()
-	key2 := rng.Uint32()
-	binary.LittleEndian.PutUint32(b, key)
-	binary.LittleEndian.PutUint32(b[4:], key2)
-	return keyWithTs(b, 0)
+func randomKey() []byte {
+	return keyWithTs(util.RandBytes(8), 0)
 }
 
 // Standard test. Some fraction is read. Some fraction is write. Writes have
@@ -467,15 +460,14 @@ func BenchmarkReadWrite(b *testing.B) {
 			b.ResetTimer()
 			var count int
 			b.RunParallel(func(pb *testing.PB) {
-				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 				for pb.Next() {
-					if rng.Float32() < readFrac {
-						v := l.Get(randomKey(rng))
+					if util.RandFloat32() < readFrac {
+						v := l.Get(randomKey())
 						if v.Value != nil {
 							count++
 						}
 					} else {
-						l.Put(randomKey(rng), ValueStruct{Value: value, Meta: 0, UserMeta: 0})
+						l.Put(randomKey(), ValueStruct{Value: value, Meta: 0, UserMeta: 0})
 					}
 				}
 			})
@@ -495,18 +487,17 @@ func BenchmarkReadWriteMap(b *testing.B) {
 			b.ResetTimer()
 			var count int
 			b.RunParallel(func(pb *testing.PB) {
-				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 				for pb.Next() {
-					if rng.Float32() < readFrac {
+					if util.RandFloat32() < readFrac {
 						mutex.RLock()
-						_, ok := m[string(randomKey(rng))]
+						_, ok := m[string(randomKey())]
 						mutex.RUnlock()
 						if ok {
 							count++
 						}
 					} else {
 						mutex.Lock()
-						m[string(randomKey(rng))] = value
+						m[string(randomKey())] = value
 						mutex.Unlock()
 					}
 				}
@@ -521,9 +512,8 @@ func BenchmarkWrite(b *testing.B) {
 	defer l.DecrRef()
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
-		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 		for pb.Next() {
-			l.Put(randomKey(rng), ValueStruct{Value: value, Meta: 0, UserMeta: 0})
+			l.Put(randomKey(), ValueStruct{Value: value, Meta: 0, UserMeta: 0})
 		}
 	})
 }

@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	AsInt128Stride = num.AsInt128Stride
+	AsInt128Stride = num.Int128Optimize
 	Int128Size     = 16
 	MaxInt128      = num.MaxInt128
 
@@ -39,11 +39,12 @@ func TestMatchInt128EqualAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.Slice))
 		bits := make([]byte, l+32)
+		mask := bytes.Repeat([]byte{0xff}, l)
 		for i := 0; i < 32; i++ {
 			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := MatchInt128Equal(AsInt128Stride(c.Slice), c.Match, bits)
+		cnt := MatchInt128Equal(AsInt128Stride(c.Slice), c.Match, bits, mask)
 		if got, want := len(bits), len(c.Result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
@@ -67,12 +68,13 @@ func BenchmarkMatchInt128EqualAVX2(B *testing.B) {
 	}
 	for _, n := range benchmarkSizes {
 
-		a := AsInt128Stride(randInt128Slice(n.L, 1))
+		a := AsInt128Stride(randInt128Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
+		mask := bytes.Repeat([]byte{0xff}, n.L>>3)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int128Size))
 			for i := 0; i < B.N; i++ {
-				MatchInt128Equal(a, MaxInt128.Rsh(1), bits)
+				MatchInt128Equal(a, MaxInt128.Rsh(1), bits, mask)
 			}
 		})
 	}
@@ -90,11 +92,12 @@ func TestMatchInt128NotEqualAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.Slice))
 		bits := make([]byte, l+32)
+		mask := bytes.Repeat([]byte{0xff}, l)
 		for i := 0; i < 32; i++ {
 			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := MatchInt128NotEqual(AsInt128Stride(c.Slice), c.Match, bits)
+		cnt := MatchInt128NotEqual(AsInt128Stride(c.Slice), c.Match, bits, mask)
 		if got, want := len(bits), len(c.Result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
@@ -119,12 +122,13 @@ func BenchmarkMatchInt128NotEqualAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := AsInt128Stride(randInt128Slice(n.L, 1))
+		a := AsInt128Stride(randInt128Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
+		mask := bytes.Repeat([]byte{0xff}, n.L>>3)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int128Size))
 			for i := 0; i < B.N; i++ {
-				MatchInt128NotEqual(a, MaxInt128.Rsh(1), bits)
+				MatchInt128NotEqual(a, MaxInt128.Rsh(1), bits, mask)
 			}
 		})
 	}
@@ -142,11 +146,12 @@ func TestMatchInt128LessAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.Slice))
 		bits := make([]byte, l+32)
+		mask := bytes.Repeat([]byte{0xff}, l)
 		for i := 0; i < 32; i++ {
 			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := MatchInt128Less(AsInt128Stride(c.Slice), c.Match, bits)
+		cnt := MatchInt128Less(AsInt128Stride(c.Slice), c.Match, bits, mask)
 		if got, want := len(bits), len(c.Result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
@@ -171,12 +176,13 @@ func BenchmarkMatchInt128LessAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := AsInt128Stride(randInt128Slice(n.L, 1))
+		a := AsInt128Stride(randInt128Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
+		mask := bytes.Repeat([]byte{0xff}, n.L>>3)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int128Size))
 			for i := 0; i < B.N; i++ {
-				MatchInt128Less(a, MaxInt128.Rsh(1), bits)
+				MatchInt128Less(a, MaxInt128.Rsh(1), bits, mask)
 			}
 		})
 	}
@@ -194,11 +200,12 @@ func TestMatchInt128LessEqualAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.Slice))
 		bits := make([]byte, l+32)
+		mask := bytes.Repeat([]byte{0xff}, l)
 		for i := 0; i < 32; i++ {
 			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := MatchInt128LessEqual(AsInt128Stride(c.Slice), c.Match, bits)
+		cnt := MatchInt128LessEqual(AsInt128Stride(c.Slice), c.Match, bits, mask)
 		if got, want := len(bits), len(c.Result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
@@ -221,12 +228,13 @@ func BenchmarkMatchInt128LessEqualAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := AsInt128Stride(randInt128Slice(n.L, 1))
+		a := AsInt128Stride(randInt128Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
+		mask := bytes.Repeat([]byte{0xff}, n.L>>3)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int128Size))
 			for i := 0; i < B.N; i++ {
-				MatchInt128LessEqual(a, MaxInt128.Rsh(1), bits)
+				MatchInt128LessEqual(a, MaxInt128.Rsh(1), bits, mask)
 			}
 		})
 	}
@@ -242,11 +250,12 @@ func TestMatchInt128GreaterAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.Slice))
 		bits := make([]byte, l+32)
+		mask := bytes.Repeat([]byte{0xff}, l)
 		for i := 0; i < 32; i++ {
 			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := MatchInt128Greater(AsInt128Stride(c.Slice), c.Match, bits)
+		cnt := MatchInt128Greater(AsInt128Stride(c.Slice), c.Match, bits, mask)
 		if got, want := len(bits), len(c.Result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
@@ -269,12 +278,13 @@ func BenchmarkMatchInt128GreaterAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := AsInt128Stride(randInt128Slice(n.L, 1))
+		a := AsInt128Stride(randInt128Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
+		mask := bytes.Repeat([]byte{0xff}, n.L>>3)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int128Size))
 			for i := 0; i < B.N; i++ {
-				MatchInt128Greater(a, MaxInt128.Rsh(1), bits)
+				MatchInt128Greater(a, MaxInt128.Rsh(1), bits, mask)
 			}
 		})
 	}
@@ -292,11 +302,12 @@ func TestMatchInt128GreaterEqualAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.Slice))
 		bits := make([]byte, l+32)
+		mask := bytes.Repeat([]byte{0xff}, l)
 		for i := 0; i < 32; i++ {
 			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := MatchInt128GreaterEqual(AsInt128Stride(c.Slice), c.Match, bits)
+		cnt := MatchInt128GreaterEqual(AsInt128Stride(c.Slice), c.Match, bits, mask)
 		if got, want := len(bits), len(c.Result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
@@ -319,12 +330,13 @@ func BenchmarkMatchInt128GreaterEqualAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := AsInt128Stride(randInt128Slice(n.L, 1))
+		a := AsInt128Stride(randInt128Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
+		mask := bytes.Repeat([]byte{0xff}, n.L>>3)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int128Size))
 			for i := 0; i < B.N; i++ {
-				MatchInt128GreaterEqual(a, MaxInt128.Rsh(1), bits)
+				MatchInt128GreaterEqual(a, MaxInt128.Rsh(1), bits, mask)
 			}
 		})
 	}
@@ -342,11 +354,12 @@ func TestMatchInt128BetweenAVX2(T *testing.T) {
 		// pre-allocate the result slice and fill with poison
 		l := bitFieldLen(len(c.Slice))
 		bits := make([]byte, l+32)
+		mask := bytes.Repeat([]byte{0xff}, l)
 		for i := 0; i < 32; i++ {
 			bits[l+i] = 0xfa
 		}
 		bits = bits[:l]
-		cnt := MatchInt128Between(AsInt128Stride(c.Slice), c.Match, c.Match2, bits)
+		cnt := MatchInt128Between(AsInt128Stride(c.Slice), c.Match, c.Match2, bits, mask)
 		if got, want := len(bits), len(c.Result); got != want {
 			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
@@ -371,12 +384,13 @@ func BenchmarkMatchInt128BetweenAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := AsInt128Stride(randInt128Slice(n.L, 1))
+		a := AsInt128Stride(randInt128Slice(n.L))
 		bits := make([]byte, bitFieldLen(a.Len()))
+		mask := bytes.Repeat([]byte{0xff}, n.L>>3)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int128Size))
 			for i := 0; i < B.N; i++ {
-				MatchInt128Between(a, MaxInt128.Rsh(2), MaxInt128.Rsh(1), bits)
+				MatchInt128Between(a, MaxInt128.Rsh(2), MaxInt128.Rsh(1), bits, mask)
 			}
 		})
 	}

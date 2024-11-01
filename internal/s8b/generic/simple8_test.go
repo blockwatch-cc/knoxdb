@@ -2,7 +2,6 @@
 package generic
 
 import (
-	"math/rand"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/s8b/tests"
@@ -30,8 +29,6 @@ func Test_Encode_NoValues(t *testing.T) {
 // TestEncode ensures 100% test coverage of simple8b.Encode and
 // verifies all output by comparing the original input with the output of simple8b.Decode
 func TestEncode(t *testing.T) {
-	rand.Seed(0)
-
 	for _, test := range s8bTestsUint64 {
 		t.Run(test.Name, func(t *testing.T) {
 			if test.Fn != nil {

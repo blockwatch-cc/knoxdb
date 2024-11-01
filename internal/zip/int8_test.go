@@ -7,12 +7,12 @@ import (
 	"bytes"
 	"fmt"
 
-	"math/rand"
 	"reflect"
 	"sort"
 	"testing"
 	"testing/quick"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -20,7 +20,7 @@ func TestEncodeInt8_Compare(t *testing.T) {
 	// generate random values (should use simple8b)
 	input := make([]int8, 1000)
 	for i := 0; i < len(input); i++ {
-		input[i] = int8(rand.Int63n(1<<7 - 1))
+		input[i] = int8(util.RandInt64n(1<<7 - 1))
 	}
 	sort.Slice(input, func(i int, j int) bool { return input[i] < input[j] })
 	testEncodeInt8_Compare(t, input, intCompressedPacked)
@@ -33,7 +33,7 @@ func TestEncodeInt8_Compare(t *testing.T) {
 
 	// generate random values that are unsorted (should use simple8b with zigzag)
 	for i := 0; i < len(input); i++ {
-		input[i] = int8(rand.Int63n(1<<14 - 1))
+		input[i] = int8(util.RandInt64n(1<<14 - 1))
 	}
 	testEncodeInt8_Compare(t, input, intCompressedPacked)
 }
@@ -154,7 +154,7 @@ func BenchmarkEncodeInt8stamps(b *testing.B) {
 		b.Run(fmt.Sprintf("%d_ran", n), func(b *testing.B) {
 			src := make([]int8, n)
 			for i := 0; i < n; i++ {
-				src[i] = int8(rand.Uint32())
+				src[i] = int8(util.RandUint32())
 			}
 			sort.Slice(src, func(i int, j int) bool { return src[i] < src[j] })
 
@@ -193,11 +193,9 @@ func BenchmarkInt8DecodePacked(b *testing.B) {
 		1 << 8,
 	}
 	for _, size := range benchmarks {
-		rand.Seed(int64(size * 1e3))
-
 		src := make([]int8, size)
 		for i := 0; i < size; i++ {
-			src[i] = int8(i*1000) + int8(rand.Intn(10))
+			src[i] = int8(i*1000) + int8(util.RandIntn(10))
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt8(src, buf)
@@ -221,11 +219,9 @@ func BenchmarkInt8ReadPacked(b *testing.B) {
 		1 << 8,
 	}
 	for _, size := range benchmarks {
-		rand.Seed(int64(size * 1e3))
-
 		src := make([]int8, size)
 		for i := 0; i < size; i++ {
-			src[i] = int8(i*1000) + int8(rand.Intn(10))
+			src[i] = int8(i*1000) + int8(util.RandIntn(10))
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt8(src, buf)

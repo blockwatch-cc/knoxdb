@@ -7,21 +7,9 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"math/rand"
 
 	"golang.org/x/exp/slices"
 )
-
-func RandInt16Slice(n, u int) []int16 {
-	s := make([]int16, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = int16(rand.Intn(math.MaxInt16 + 1))
-	}
-	for i := 1; i < u; i++ {
-		copy(s[i*n:], s[:n])
-	}
-	return s
-}
 
 type Int16MatchTest struct {
 	Name   string

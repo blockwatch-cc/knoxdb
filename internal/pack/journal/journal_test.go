@@ -5,7 +5,6 @@ package journal
 
 import (
 	"fmt"
-	"math/rand"
 	"sort"
 	"testing"
 
@@ -13,6 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,12 +42,12 @@ type benchmarkSize struct {
 }
 
 // generates n unique random numbers between 1..max
-func randN(n, max int) []int {
+func uniqueRandN(n, max int) []int {
 	res := make([]int, n)
 	m := make(map[int]struct{})
 	for i := range res {
 		for {
-			res[i] = rand.Intn(max-1) + 1
+			res[i] = util.RandIntn(max-1) + 1
 			if _, ok := m[res[i]]; !ok {
 				m[res[i]] = struct{}{}
 				break
@@ -81,7 +81,7 @@ func makeJournalDataSequential(sz, start int) TestRecords {
 	for i := range res {
 		res[i] = &TestRecord{
 			Pk: uint64(start + i),
-			N:  rand.Int(),
+			N:  util.RandInt(),
 		}
 	}
 	return res
@@ -97,7 +97,7 @@ func encodeTestData(v []*TestRecord) []byte {
 }
 
 func shuffleItems(recs TestRecords) TestRecords {
-	rand.Shuffle(len(recs), func(i, j int) { recs[i], recs[j] = recs[j], recs[i] })
+	util.RandShuffle(len(recs), func(i, j int) { recs[i], recs[j] = recs[j], recs[i] })
 	return recs
 }
 
@@ -157,7 +157,7 @@ func TestJournalMerge(t *testing.T) {
 			j := NewJournal(testSchema, sz)
 			recs := makeJournalDataSequential(sz, 1)
 			keys := recsToJournalRecords(recs)
-			rand.Shuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] })
+			util.RandShuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] })
 
 			// 4-step insert
 			step := len(keys) / 4
@@ -369,7 +369,7 @@ func TestJournalUpdate(t *testing.T) {
 				require.Equal(t, n, uint64(sz))
 
 				// pick random recs from batch, update with changed value
-				for i, idx := range randN(100, sz) {
+				for i, idx := range uniqueRandN(100, sz) {
 					t.Run(fmt.Sprintf("rand_%03d", i), func(t *testing.T) {
 						val := batch[idx]
 						val.N++
@@ -463,7 +463,7 @@ func TestJournalUpdateMulti(t *testing.T) {
 				require.Equal(t, n, uint64(sz))
 
 				// change random recs from batch
-				for _, idx := range randN(100, sz) {
+				for _, idx := range uniqueRandN(100, sz) {
 					batch[idx].N++
 				}
 
@@ -506,7 +506,7 @@ func TestJournalDelete(t *testing.T) {
 				require.Equal(t, n, uint64(sz))
 
 				// pick a random rec to delete
-				for i, idx := range randN(sz/8, sz) {
+				for i, idx := range uniqueRandN(sz/8, sz) {
 					T.Run(fmt.Sprintf("rand_%03d", i), func(t *testing.T) {
 						// value to delete
 						val := batch[idx]
@@ -625,7 +625,7 @@ func BenchmarkJournalMerge1kRandom(b *testing.B) {
 			j := NewJournal(testSchema, n.l+1024)
 			rec := makeJournalDataSequential(n.l+1024, 1)
 			keys := recsToJournalRecords(rec)
-			rand.Shuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] })
+			util.RandShuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] })
 			sort.Sort(keys[:n.l]) // sort the keys we will add first
 			sort.Sort(keys[n.l:]) // sort the keys we will add second
 			b.SetBytes(int64(1024 * 16))

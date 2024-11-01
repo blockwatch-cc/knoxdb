@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	randInt32Slice         = tests.RandInt32Slice
+	randInt32Slice         = util.RandInts[int32]
 	int32EqualCases        = tests.Int32EqualCases
 	int32NotEqualCases     = tests.Int32NotEqualCases
 	int32LessCases         = tests.Int32LessCases
@@ -66,7 +66,7 @@ func BenchmarkMatchInt32EqualAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := randInt32Slice(n.L, 1)
+		a := randInt32Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int32Size))
@@ -118,7 +118,7 @@ func BenchmarkMatchInt32NotEqualAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := randInt32Slice(n.L, 1)
+		a := randInt32Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int32Size))
@@ -170,7 +170,7 @@ func BenchmarkMatchInt32LessAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := randInt32Slice(n.L, 1)
+		a := randInt32Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int32Size))
@@ -222,7 +222,7 @@ func BenchmarkMatchInt32LessEqualAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := randInt32Slice(n.L, 1)
+		a := randInt32Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int32Size))
@@ -274,7 +274,7 @@ func BenchmarkMatchInt32GreaterAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := randInt32Slice(n.L, 1)
+		a := randInt32Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int32Size))
@@ -324,7 +324,7 @@ func BenchmarkMatchInt32GreaterEqualAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := randInt32Slice(n.L, 1)
+		a := randInt32Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int32Size))
@@ -374,7 +374,7 @@ func BenchmarkMatchInt32BetweenAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := randInt32Slice(n.L, 1)
+		a := randInt32Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int32Size))

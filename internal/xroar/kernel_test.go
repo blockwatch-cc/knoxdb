@@ -3,8 +3,9 @@
 package xroar
 
 import (
-	"math/rand"
 	"testing"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func createBitmapTestSlices() ([]uint16, []uint16, []uint16) {
@@ -12,8 +13,8 @@ func createBitmapTestSlices() ([]uint16, []uint16, []uint16) {
 	bb := make([]uint16, 4096)
 	a2 := make([]uint16, 4096)
 	for i := 0; i < 4096; i++ {
-		aa[i] = uint16(rand.Intn(1 << 16))
-		bb[i] = uint16(rand.Intn(1 << 16))
+		aa[i] = uint16(util.RandIntn(1 << 16))
+		bb[i] = uint16(util.RandIntn(1 << 16))
 	}
 	copy(a2, aa)
 	return aa, a2, bb

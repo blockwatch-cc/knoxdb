@@ -7,12 +7,12 @@ import (
 	"bytes"
 	"fmt"
 
-	"math/rand"
 	"reflect"
 	"sort"
 	"testing"
 	"testing/quick"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -20,7 +20,7 @@ func TestEncodeInt16_Compare(t *testing.T) {
 	// generate random values (should use simple8b)
 	input := make([]int16, 1000)
 	for i := 0; i < len(input); i++ {
-		input[i] = int16(rand.Int63n(1<<14 - 1))
+		input[i] = int16(util.RandInt64n(1<<14 - 1))
 	}
 	sort.Slice(input, func(i int, j int) bool { return input[i] < input[j] })
 	testEncodeInt16_Compare(t, input, intCompressedPacked)
@@ -38,14 +38,14 @@ func TestEncodeInt16_Compare(t *testing.T) {
 
 	// generate random values that are unsorted (should use simple8b with zigzag)
 	for i := 0; i < len(input); i++ {
-		input[i] = int16(rand.Int63n(1<<14 - 1))
+		input[i] = int16(util.RandInt64n(1<<14 - 1))
 	}
 	testEncodeInt16_Compare(t, input, intCompressedPacked)
 
 	// Generate large random values that are not sorted. The deltas will be large
 	// and the values should be stored uncompressed.
 	for i := 0; i < len(input); i++ {
-		input[i] = int16(rand.Uint32())
+		input[i] = int16(util.RandUint32())
 	}
 	testEncodeInt16_Compare(t, input, intUncompressed16)
 }
@@ -166,7 +166,7 @@ func BenchmarkEncodeInt16stamps(b *testing.B) {
 		b.Run(fmt.Sprintf("%d_ran", n), func(b *testing.B) {
 			src := make([]int16, n)
 			for i := 0; i < n; i++ {
-				src[i] = int16(rand.Uint32())
+				src[i] = int16(util.RandUint32())
 			}
 			sort.Slice(src, func(i int, j int) bool { return src[i] < src[j] })
 
@@ -217,10 +217,9 @@ func BenchmarkInt16DecodeUncompressed(b *testing.B) {
 	}
 
 	for _, size := range benchmarks {
-		rand.Seed(int64(size * 1e3))
 		src := make([]int16, size)
 		for i := 0; i < size; i++ {
-			src[i] = values[rand.Int()%len(values)]
+			src[i] = values[util.RandInt()%len(values)]
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt16(src, buf)
@@ -256,10 +255,9 @@ func BenchmarkInt16ReadUncompressed(b *testing.B) {
 	}
 
 	for _, size := range benchmarks {
-		rand.Seed(int64(size * 1e3))
 		src := make([]int16, size)
 		for i := 0; i < size; i++ {
-			src[i] = values[rand.Int()%len(values)]
+			src[i] = values[util.RandInt()%len(values)]
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt16(src, buf)
@@ -283,11 +281,9 @@ func BenchmarkInt16DecodePacked(b *testing.B) {
 		1 << 16,
 	}
 	for _, size := range benchmarks {
-		rand.Seed(int64(size * 1e3))
-
 		src := make([]int16, size)
 		for i := 0; i < size; i++ {
-			src[i] = int16(i*1000) + int16(rand.Intn(10))
+			src[i] = int16(i*1000) + int16(util.RandIntn(10))
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt16(src, buf)
@@ -311,11 +307,9 @@ func BenchmarkInt16ReadPacked(b *testing.B) {
 		1 << 16,
 	}
 	for _, size := range benchmarks {
-		rand.Seed(int64(size * 1e3))
-
 		src := make([]int16, size)
 		for i := 0; i < size; i++ {
-			src[i] = int16(i*1000) + int16(rand.Intn(10))
+			src[i] = int16(i*1000) + int16(util.RandIntn(10))
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt16(src, buf)

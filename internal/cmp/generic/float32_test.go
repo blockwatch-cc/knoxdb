@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/cmp/tests"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var (
-	randFloat32Slice         = tests.RandFloat32Slice
+	randFloat32Slice         = util.RandFloats[float32]
 	float32EqualCases        = tests.Float32EqualCases
 	float32NotEqualCases     = tests.Float32NotEqualCases
 	float32LessCases         = tests.Float32LessCases
@@ -55,7 +56,7 @@ func TestMatchFloat32Equal(T *testing.T) {
 func BenchmarkMatchFloat32Equal(B *testing.B) {
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -88,7 +89,7 @@ func TestMatchFloat32NotEqual(T *testing.T) {
 func BenchmarkMatchFloat32NotEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -121,7 +122,7 @@ func TestMatchFloat32Less(T *testing.T) {
 func BenchmarkMatchFloat32Less(B *testing.B) {
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -154,7 +155,7 @@ func TestMatchFloat32LessEqual(T *testing.T) {
 func BenchmarkMatchFloat32LessEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -187,7 +188,7 @@ func TestMatchFloat32Greater(T *testing.T) {
 func BenchmarkMatchFloat32Greater(B *testing.B) {
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -220,7 +221,7 @@ func TestMatchFloat32GreaterEqual(T *testing.T) {
 func BenchmarkMatchFloat32GreaterEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -253,7 +254,7 @@ func TestMatchFloat32Between(T *testing.T) {
 func BenchmarkMatchFloat32Between(B *testing.B) {
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))

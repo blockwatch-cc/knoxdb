@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/cmp/tests"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var (
 	benchmarkSizes = tests.BenchmarkSizes
 
-	randFloat64Slice         = tests.RandFloat64Slice
+	randFloat64Slice         = util.RandFloats[float64]
 	float64EqualCases        = tests.Float64EqualCases
 	float64NotEqualCases     = tests.Float64NotEqualCases
 	float64LessCases         = tests.Float64LessCases
@@ -55,7 +56,7 @@ func TestMatchFloat64Equal(T *testing.T) {
 // Equal benchmarks
 func BenchmarkMatchFloat64Equal(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randFloat64Slice(n.L, 1)
+		a := randFloat64Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Float64Size))
@@ -89,7 +90,7 @@ func TestMatchFloat64NotEqual(T *testing.T) {
 // Not Equal benchmarks
 func BenchmarkMatchFloat64NotEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randFloat64Slice(n.L, 1)
+		a := randFloat64Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Float64Size))
@@ -124,7 +125,7 @@ func TestMatchFloat64Less(T *testing.T) {
 // Less benchmarks
 func BenchmarkMatchFloat64Less(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randFloat64Slice(n.L, 1)
+		a := randFloat64Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Float64Size))
@@ -158,7 +159,7 @@ func TestMatchFloat64LessEqual(T *testing.T) {
 // Less equal benchmarks
 func BenchmarkMatchFloat64LessEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randFloat64Slice(n.L, 1)
+		a := randFloat64Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Float64Size))
@@ -192,7 +193,7 @@ func TestMatchFloat64Greater(T *testing.T) {
 // Greater benchmarks
 func BenchmarkMatchFloat64Greater(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randFloat64Slice(n.L, 1)
+		a := randFloat64Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Float64Size))
@@ -226,7 +227,7 @@ func TestMatchFloat64GreaterEqual(T *testing.T) {
 // Greater equal benchmarks
 func BenchmarkMatchFloat64GreaterEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randFloat64Slice(n.L, 1)
+		a := randFloat64Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Float64Size))
@@ -260,7 +261,7 @@ func TestMatchFloat64Between(T *testing.T) {
 // Between benchmarks
 func BenchmarkMatchFloat64Between(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randFloat64Slice(n.L, 1)
+		a := randFloat64Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Float64Size))

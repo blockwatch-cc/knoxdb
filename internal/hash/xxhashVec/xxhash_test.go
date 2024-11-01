@@ -5,9 +5,10 @@ package xxhashVec
 
 import (
 	"encoding/binary"
-	"math/rand"
 	"reflect"
 	"testing"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type hashBenchmarkSize struct {
@@ -23,38 +24,6 @@ var hashBenchmarkSizes = []hashBenchmarkSize{
 	{"128K", 128 * 1024},
 	{"1M", 1024 * 1024},
 	{"128M", 128 * 1024 * 1024},
-}
-
-func randUint32Slice(n int) []uint32 {
-	s := make([]uint32, n)
-	for i := range s {
-		s[i] = rand.Uint32()
-	}
-	return s
-}
-
-func randInt32Slice(n int) []int32 {
-	s := make([]int32, n)
-	for i := range s {
-		s[i] = rand.Int31()
-	}
-	return s
-}
-
-func randUint64Slice(n int) []uint64 {
-	s := make([]uint64, n)
-	for i := range s {
-		s[i] = rand.Uint64()
-	}
-	return s
-}
-
-func randInt64Slice(n int) []int64 {
-	s := make([]int64, n)
-	for i := range s {
-		s[i] = rand.Int63()
-	}
-	return s
 }
 
 type XXHash32Uint32Test struct {
@@ -134,10 +103,10 @@ var (
 
 // creates an XXHash32 test case for uint32 input date from the given slice
 // Parameters:
-//  - name: desired name of the test case
-//  - slice: the slice for constructing the test case
-//  - result: result for the given slice
-//  - len: desired length of the test case
+//   - name: desired name of the test case
+//   - slice: the slice for constructing the test case
+//   - result: result for the given slice
+//   - len: desired length of the test case
 func CreateXXHash32Uint32TestCase(name string, input [][]byte, result []uint32, length int) XXHash32Uint32Test {
 	if len(result) != len(input) {
 		panic("CreateXXHash32Uint32TestCase: length of slice and length of result does not match")
@@ -175,10 +144,10 @@ func CreateXXHash32Uint32TestCase(name string, input [][]byte, result []uint32, 
 
 // creates an XXHash32 test case for int32 input date from the given slice
 // Parameters:
-//  - name: desired name of the test case
-//  - slice: the slice for constructing the test case
-//  - result: result for the given slice
-//  - len: desired length of the test case
+//   - name: desired name of the test case
+//   - slice: the slice for constructing the test case
+//   - result: result for the given slice
+//   - len: desired length of the test case
 func CreateXXHash32Int32TestCase(name string, input [][]byte, result []uint32, length int) XXHash32Int32Test {
 	if len(result) != len(input) {
 		panic("CreateXXHash32Int32TestCase: length of slice and length of result does not match")
@@ -216,10 +185,10 @@ func CreateXXHash32Int32TestCase(name string, input [][]byte, result []uint32, l
 
 // creates an XXHash32 test case for uint64 input date from the given slice
 // Parameters:
-//  - name: desired name of the test case
-//  - slice: the slice for constructing the test case
-//  - result: result for the given slice
-//  - len: desired length of the test case
+//   - name: desired name of the test case
+//   - slice: the slice for constructing the test case
+//   - result: result for the given slice
+//   - len: desired length of the test case
 func CreateXXHash32Uint64TestCase(name string, input [][]byte, result []uint32, length int) XXHash32Uint64Test {
 	if len(result) != len(input) {
 		panic("CreateXXHash32Uint64TestCase: length of slice and length of result does not match")
@@ -257,10 +226,10 @@ func CreateXXHash32Uint64TestCase(name string, input [][]byte, result []uint32, 
 
 // creates an XXHash32 test case for int64 input date from the given slice
 // Parameters:
-//  - name: desired name of the test case
-//  - slice: the slice for constructing the test case
-//  - result: result for the given slice
-//  - len: desired length of the test case
+//   - name: desired name of the test case
+//   - slice: the slice for constructing the test case
+//   - result: result for the given slice
+//   - len: desired length of the test case
 func CreateXXHash32Int64TestCase(name string, input [][]byte, result []uint32, length int) XXHash32Int64Test {
 	if len(result) != len(input) {
 		panic("CreateXXHash32Int64TestCase: length of slice and length of result does not match")
@@ -298,10 +267,10 @@ func CreateXXHash32Int64TestCase(name string, input [][]byte, result []uint32, l
 
 // creates an XXHash64 test case for uint32 input date from the given slice
 // Parameters:
-//  - name: desired name of the test case
-//  - slice: the slice for constructing the test case
-//  - result: result for the given slice
-//  - len: desired length of the test case
+//   - name: desired name of the test case
+//   - slice: the slice for constructing the test case
+//   - result: result for the given slice
+//   - len: desired length of the test case
 func CreateXXHash64Uint32TestCase(name string, input [][]byte, result []uint64, length int) XXHash64Uint32Test {
 	if len(result) != len(input) {
 		panic("CreateXXHash64Uint32TestCase: length of slice and length of result does not match")
@@ -339,10 +308,10 @@ func CreateXXHash64Uint32TestCase(name string, input [][]byte, result []uint64, 
 
 // creates an XXHash64 test case for uint64 input date from the given slice
 // Parameters:
-//  - name: desired name of the test case
-//  - slice: the slice for constructing the test case
-//  - result: result for the given slice
-//  - len: desired length of the test case
+//   - name: desired name of the test case
+//   - slice: the slice for constructing the test case
+//   - result: result for the given slice
+//   - len: desired length of the test case
 func CreateXXHash64Uint64TestCase(name string, input [][]byte, result []uint64, length int) XXHash64Uint64Test {
 	if len(result) != len(input) {
 		panic("CreateXXHash64Uint64TestCase: length of slice and length of result does not match")
@@ -422,7 +391,7 @@ func TestXXHash32Uint32SliceGeneric(T *testing.T) {
 
 func BenchmarkXXHash32Uint32SliceGeneric(B *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := randUint32Slice(n.l)
+		a := util.RandUints[uint32](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * 4))
@@ -477,7 +446,7 @@ func TestXXHash32Int32SliceGeneric(T *testing.T) {
 
 func BenchmarkXXHash32Int32SliceGeneric(B *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := randInt32Slice(n.l)
+		a := util.RandInts[int32](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * 4))
@@ -532,7 +501,7 @@ func TestXXHash32Uint64SliceGeneric(T *testing.T) {
 
 func BenchmarkXXHash32Uint64SliceGeneric(B *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := randUint64Slice(n.l)
+		a := util.RandUints[uint64](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))
@@ -587,7 +556,7 @@ func TestXXHash32Int64SliceGeneric(T *testing.T) {
 
 func BenchmarkXXHash32Int64SliceGeneric(B *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := randInt64Slice(n.l)
+		a := util.RandInts[int64](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * 4))
@@ -642,7 +611,7 @@ func TestXXHash64Uint32SliceGeneric(T *testing.T) {
 
 func BenchmarkXXHash64Uint32SliceGeneric(B *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := randUint32Slice(n.l)
+		a := util.RandUints[uint32](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(4 * int64(n.l))
@@ -697,7 +666,7 @@ func TestXXHash64Uint64SliceGeneric(T *testing.T) {
 
 func BenchmarkXXHash64Uint64SliceGeneric(B *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := randUint64Slice(n.l)
+		a := util.RandUints[uint64](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))
@@ -752,7 +721,7 @@ func TestXXH3Uint32SliceGeneric(T *testing.T) {
 
 func BenchmarkXXH3Uint32SliceGeneric(B *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := randUint32Slice(n.l)
+		a := util.RandUints[uint32](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(4 * int64(n.l))
@@ -809,7 +778,7 @@ func TestXXH3Uint64SliceGeneric(T *testing.T) {
 
 func BenchmarkXXH3Uint64SliceGeneric(B *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := randUint64Slice(n.l)
+		a := util.RandUints[uint64](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))

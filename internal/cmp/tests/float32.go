@@ -7,21 +7,9 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"math/rand"
 
 	"golang.org/x/exp/slices"
 )
-
-func RandFloat32Slice(n, u int) []float32 {
-	s := make([]float32, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = rand.Float32()
-	}
-	for i := 1; i < u; i++ {
-		copy(s[i*n:], s[:n])
-	}
-	return s
-}
 
 type Float32MatchTest struct {
 	Name   string

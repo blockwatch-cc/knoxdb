@@ -5,26 +5,19 @@ package stats
 
 import (
 	"fmt"
-	"math/rand"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/slicex"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func randUint64Slice(n, u int) []uint64 {
-	s := make([]uint64, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = uint64(rand.Int63())
-	}
-	for i := 0; i < u; i++ {
-		s = append(s, s[:n]...)
-	}
-	return slicex.Unique(s)
+func randUint64Slice(n int) []uint64 {
+	return slicex.Unique(util.RandUints[uint64](n))
 }
 
 func makeSortedPackStatsList(n int) PackStatsList {
 	// generate random values, strip duplicates and sort
-	values := randUint64Slice(n, 1)
+	values := randUint64Slice(n)
 
 	// generate pack packers
 	packs := make(PackStatsList, 0)
@@ -50,13 +43,13 @@ func makeSortedPackStatsList(n int) PackStatsList {
 
 func makeUnsortedPackStatsList(n int) PackStatsList {
 	// generate random values, strip duplicates and sort
-	values := randUint64Slice(n, 1)
+	values := randUint64Slice(n)
 
 	maxvalues := make([]uint64, len(values))
 	minvalues := make([]uint64, len(values))
 
 	// shuffle but keep original max values
-	for i, v := range rand.Perm(len(values)) {
+	for i, v := range util.RandPerm(len(values)) {
 		max := uint64(values[v] + 1000)
 		if v < len(values)-1 {
 			max = values[v+1] - 1
@@ -619,7 +612,7 @@ func BenchmarkPackIndexBestSorted(B *testing.B) {
 			max := v2.packs[v2.pos[len(v2.pos)-1]].Blocks[v2.pki].MaxValue.(uint64)
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				v2.Best(uint64(rand.Int63n(int64(max)) + 1))
+				v2.Best(uint64(util.RandInt64n(int64(max)) + 1))
 			}
 		})
 	}
@@ -635,7 +628,7 @@ func BenchmarkPackIndexBestUnsorted(B *testing.B) {
 			max := v2.packs[v2.pos[len(v2.pos)-1]].Blocks[v2.pki].MaxValue.(uint64)
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				v2.Best(uint64(rand.Int63n(int64(max)) + 1))
+				v2.Best(uint64(util.RandInt64n(int64(max)) + 1))
 			}
 		})
 	}

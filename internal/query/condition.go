@@ -108,7 +108,7 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 				// special case for unsupported IN/NI block types
 				// we rewrite IN -> OR(EQ) and NIN -> AND(NE) subtrees
 				n := reflectSliceLen(c.Value)
-				node := &FilterTreeNode{
+				node = &FilterTreeNode{
 					OrKind:   c.Mode == FilterModeIn,
 					Children: make([]*FilterTreeNode, n),
 				}
