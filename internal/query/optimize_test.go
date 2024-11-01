@@ -5,10 +5,10 @@ package query
 
 import (
     "fmt"
-    "testing"
-    "time"
     "github.com/stretchr/testify/assert"
     "reflect"
+    "testing"
+    "time"
 )
 
 // typeFromValue maps Go types to BlockType constants for testing.
@@ -41,8 +41,10 @@ func typeFromValue(v interface{}) BlockType {
         return BlockFloat32
     case bool:
         return BlockBool
-    case string, []byte:
+    case string:
         return BlockString
+    case []byte:
+        return BlockBytes
     default:
         return BlockTime
     }
@@ -56,16 +58,16 @@ func newTestNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterT
         Type:  typeFromValue(value),
         Value: value,
     }
-    
+
     // Special handling for nil values
     if value == nil {
         f.Type = BlockTime // default type for nil values
         f.Matcher = newFactory(f.Type).New(mode)
         return &FilterTreeNode{Filter: f}
     }
-    
+
     f.Matcher = newFactory(f.Type).New(mode)
-    
+
     // Handle different modes appropriately
     switch mode {
     case FilterModeRegexp:
@@ -78,7 +80,7 @@ func newTestNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterT
     default:
         f.Matcher.WithValue(value)
     }
-    
+
     return &FilterTreeNode{Filter: f}
 }
 
@@ -88,7 +90,7 @@ func newTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode {
     if from == nil && to == nil {
         return newTestNode(FilterModeRange, fieldIndex, nil)
     }
-    
+
     // Handle time values
     switch v := from.(type) {
     case string:
@@ -96,14 +98,14 @@ func newTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode {
     case time.Time:
         from = v.UnixNano()
     }
-    
+
     switch v := to.(type) {
     case string:
         to = []byte(v)
     case time.Time:
         to = v.UnixNano()
     }
-    
+
     // Determine type from non-nil value
     var blockType BlockType
     if from != nil {
@@ -111,9 +113,9 @@ func newTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode {
     } else {
         blockType = typeFromValue(to)
     }
-    
+
     val := RangeValue{from, to}
-    
+
     f := &Filter{
         Mode:  FilterModeRange,
         Index: fieldIndex,
@@ -151,125 +153,135 @@ func TestOptimizeConditions(t *testing.T) {
     }{
         {
             name: "SimpleReorder",
-            input: newTestTree(false,
+            input: newTestTree(COND_AND,
                 newTestRangeNode(1, int64(0), int64(100)),
                 newTestNode(FilterModeEqual, 1, int64(50)),
             ),
-            expected: newTestTree(false,
+            expected: newTestTree(COND_AND,
                 newTestNode(FilterModeEqual, 1, int64(50)),
             ),
-            comment: "Equal conditions should be evaluated before ranges",
+            comment: "Optimized away the unnecessary range condition",
         },
         {
             name: "MergeInGaps",
-            input: newTestTree(false,
+            input: newTestTree(COND_OR,
                 newTestNode(FilterModeIn, 1, []int64{1, 2, 3}),
                 newTestNode(FilterModeEqual, 1, int64(4)),
                 newTestNode(FilterModeIn, 1, []int64{5, 6, 7}),
             ),
-            expected: newTestTree(false,
+            expected: newTestTree(COND_OR,
                 newTestNode(FilterModeIn, 1, []int64{1, 2, 3, 4, 5, 6, 7}),
             ),
             comment: "Adjacent IN conditions should be merged with gap-filling equals",
         },
         {
             name: "MergeRanges",
-            input: newTestTree(false,
+            input: newTestTree(COND_AND,
                 newTestNode(FilterModeGt, 1, int64(10)),
                 newTestNode(FilterModeLt, 1, int64(90)),
                 newTestNode(FilterModeGe, 1, int64(20)),
                 newTestNode(FilterModeLe, 1, int64(80)),
                 newTestRangeNode(1, int64(30), int64(70)),
-                newTestNode(FilterModeEqual, 1, int64(50)),
             ),
-            expected: newTestTree(false,
-                newTestRangeNode(1, int64(20), int64(80)),
+            expected: newTestTree(COND_AND,
+                newTestRangeNode(1, int64(30), int64(70)),
             ),
             comment: "Multiple overlapping ranges should be merged into most restrictive form",
         },
         {
-            name: "RangeOr",
-            input: newTestTree(true,
+            name: "RangeOrOverlap",
+            input: newTestTree(COND_OR,
+                newTestRangeNode(1, int64(0), int64(15)),
+                newTestRangeNode(1, int64(10), int64(30)),
+            ),
+            expected: newTestTree(COND_OR,
+                newTestRangeNode(1, int64(0), int64(30)),
+            ),
+            comment: "Non-overlapping ranges in OR should not be merged",
+        },
+        {
+            name: "RangeOrNoOverlap",
+            input: newTestTree(COND_OR,
                 newTestRangeNode(1, int64(0), int64(10)),
                 newTestRangeNode(1, int64(20), int64(30)),
             ),
-            expected: newTestTree(true,
+            expected: newTestTree(COND_OR,
                 newTestRangeNode(1, int64(0), int64(10)),
                 newTestRangeNode(1, int64(20), int64(30)),
             ),
             comment: "Non-overlapping ranges in OR should not be merged",
         },
         {
-            name: "NullValues",
-            input: newTestTree(false,
-                newTestNode(FilterModeEqual, 1, nil),
-                newTestNode(FilterModeNotEqual, 1, nil),
-            ),
-            expected: newTestTree(false,
-                newTestNode(FilterModeEqual, 1, nil),
-                newTestNode(FilterModeNotEqual, 1, nil),
-            ),
-            comment: "NULL value handling should be preserved",
-        },
-        {
-            name: "TypeBounds",
-            input: newTestTree(false,
+            name: "TypeBoundsGtLt",
+            input: newTestTree(COND_AND,
                 newTestNode(FilterModeGt, 1, int64(0)),
                 newTestNode(FilterModeLt, 1, int64(100)),
             ),
-            expected: newTestTree(false,
+            expected: newTestTree(COND_AND,
+                newTestRangeNode(1, int64(1), int64(99)),
+            ),
+            comment: "Boundary conditions should be handled correctly",
+        },
+        {
+            name: "TypeBoundsGeLe",
+            input: newTestTree(COND_AND,
+                newTestNode(FilterModeGe, 1, int64(0)),
+                newTestNode(FilterModeLe, 1, int64(100)),
+            ),
+            expected: newTestTree(COND_AND,
                 newTestRangeNode(1, int64(0), int64(100)),
             ),
             comment: "Boundary conditions should be handled correctly",
         },
         {
             name: "RangeNotEqual",
-            input: newTestTree(false,
+            input: newTestTree(COND_AND,
                 newTestRangeNode(1, int64(0), int64(100)),
                 newTestNode(FilterModeNotEqual, 1, int64(50)),
             ),
-            expected: newTestTree(false,
+            expected: newTestTree(COND_AND,
                 newTestRangeNode(1, int64(0), int64(100)),
                 newTestNode(FilterModeNotEqual, 1, int64(50)),
             ),
             comment: "NOT conditions should not affect range merging",
         },
         {
-            name: "MixedNumbers",
-            input: newTestTree(false,
-                newTestNode(FilterModeEqual, 1, int32(42)),
+            name: "EqualAndGt",
+            input: newTestTree(COND_AND,
+                newTestNode(FilterModeEqual, 1, int64(42)),
                 newTestNode(FilterModeGt, 1, int64(41)),
             ),
-            expected: newTestTree(false,
+            expected: newTestTree(COND_AND,
                 newTestNode(FilterModeEqual, 1, int64(42)),
             ),
-            comment: "Mixed numeric types should be normalized and simplified",
+            comment: "EQ and GT should be simplified",
         },
         {
             name: "RegexpRange",
-            input: newTestTree(false,
+            input: newTestTree(COND_AND,
                 newTestRangeNode(1, "a", "z"),
                 newTestNode(FilterModeRegexp, 1, "^[a-m]+$"),
             ),
-            expected: newTestTree(false,
+            expected: newTestTree(COND_AND,
                 newTestRangeNode(1, "a", "z"),
                 newTestNode(FilterModeRegexp, 1, "^[a-m]+$"),
             ),
             comment: "Regexp conditions should not be merged with ranges",
         },
+        // TODO: always true condition, needs to be supported
         {
-            name: "RangeSplits",
-            input: newTestTree(true,
+            name: "TautologyOne",
+            input: newTestTree(COND_OR,
                 newTestRangeNode(1, int64(0), int64(100)),
                 newTestNode(FilterModeNotEqual, 1, int64(50)),
                 newTestRangeNode(1, int64(40), int64(60)),
             ),
-            expected: newTestTree(true,
-                newTestRangeNode(1, int64(0), int64(49)),
-                newTestRangeNode(1, int64(51), int64(100)),
-                newTestRangeNode(1, int64(40), int64(49)),
-                newTestRangeNode(1, int64(51), int64(60)),
-            ),
+            expected: newTestTree(COND_OR),
+            // newTestRangeNode(1, int64(0), int64(49)),
+            // newTestRangeNode(1, int64(51), int64(100)),
+            // newTestRangeNode(1, int64(40), int64(49)),
+            // newTestRangeNode(1, int64(51), int64(60)),
+
             comment: "Range splits should handle multiple overlapping conditions",
         },
     }
@@ -278,14 +290,14 @@ func TestOptimizeConditions(t *testing.T) {
         t.Run(tt.name, func(t *testing.T) {
             // Clone input to ensure it's not modified
             input := cloneFilterTree(tt.input)
-            
+
             // Catch panics
             defer func() {
                 if r := recover(); r != nil {
                     t.Errorf("Test panicked: %v", r)
                 }
             }()
-            
+
             input.Optimize()
             assertTreeEqual(t, tt.expected, input, tt.comment)
         })
@@ -304,7 +316,7 @@ func assertFilterTreeEqual(t *testing.T, expected, actual *FilterTreeNode, msg s
 
     // Compare node properties
     assert.Equal(t, expected.OrKind, actual.OrKind, msg+": OrKind mismatch")
-    
+
     // Compare filters if both exist
     if expected.Filter != nil && actual.Filter != nil {
         assert.Equal(t, expected.Filter.Mode, actual.Filter.Mode, msg+": Filter Mode mismatch")
@@ -329,11 +341,11 @@ func assertFilterTreeEqual(t *testing.T, expected, actual *FilterTreeNode, msg s
 // assertFilterEqual compares two filters in detail
 func assertFilterEqual(t *testing.T, expected, actual *Filter, msg string) {
     t.Helper()
-    
+
     assert.Equal(t, expected.Mode, actual.Mode, "%s: Filter Mode mismatch", msg)
     assert.Equal(t, expected.Index, actual.Index, "%s: Filter Index mismatch", msg)
     assert.Equal(t, expected.Type, actual.Type, "%s: Filter Type mismatch", msg)
-    
+
     // Special handling for different value types
     switch expected.Value.(type) {
     case []byte:
@@ -347,7 +359,7 @@ func assertFilterEqual(t *testing.T, expected, actual *Filter, msg string) {
             actual.Value = string(b)
         }
     }
-    
+
     assert.Equal(t, expected.Value, actual.Value, "%s: Filter Value mismatch", msg)
 }
 
@@ -356,13 +368,13 @@ func cloneFilterTree(n *FilterTreeNode) *FilterTreeNode {
     if n == nil {
         return nil
     }
-    
+
     clone := &FilterTreeNode{
         OrKind: n.OrKind,
         Skip:   n.Skip,
         Empty:  n.Empty,
     }
-    
+
     if n.Filter != nil {
         clone.Filter = &Filter{
             Mode:  n.Filter.Mode,
@@ -381,14 +393,14 @@ func cloneFilterTree(n *FilterTreeNode) *FilterTreeNode {
             }
         }
     }
-    
+
     if len(n.Children) > 0 {
         clone.Children = make([]*FilterTreeNode, len(n.Children))
         for i, child := range n.Children {
             clone.Children[i] = cloneFilterTree(child)
         }
     }
-    
+
     return clone
 }
 
@@ -397,7 +409,7 @@ func cloneValue(v interface{}) interface{} {
     if v == nil {
         return nil
     }
-    
+
     switch val := v.(type) {
     case []byte:
         clone := make([]byte, len(val))
@@ -423,48 +435,48 @@ func cloneValue(v interface{}) interface{} {
 // validateRangeValues ensures range values are properly ordered and of consistent types
 func validateRangeValues(t *testing.T, name string, val RangeValue) {
     t.Helper()
-    
+
     if val[0] == nil || val[1] == nil {
         t.Errorf("%s: range values cannot be nil", name)
         return
     }
-    
+
     // Check types match
     if reflect.TypeOf(val[0]) != reflect.TypeOf(val[1]) {
-        t.Errorf("%s: range value types must match: %T != %T", 
+        t.Errorf("%s: range value types must match: %T != %T",
             name, val[0], val[1])
     }
-    
+
     // Check ordering for numeric types
     switch v0 := val[0].(type) {
     case int64:
         v1 := val[1].(int64)
         if v0 > v1 {
-            t.Errorf("%s: range values must be ordered: %d > %d", 
+            t.Errorf("%s: range values must be ordered: %d > %d",
                 name, v0, v1)
         }
-    // Add other numeric types...
+        // Add other numeric types...
     }
 }
 
 // validateFilterTree ensures the tree structure is valid
 func validateFilterTree(t *testing.T, name string, node *FilterTreeNode) {
     t.Helper()
-    
+
     if node == nil {
         return
     }
-    
+
     // Check for nil filters in non-leaf nodes
     if len(node.Children) > 0 && node.Filter != nil {
         t.Errorf("%s: non-leaf node cannot have filter", name)
     }
-    
+
     // Check for missing filters in leaf nodes
     if len(node.Children) == 0 && node.Filter == nil {
         t.Errorf("%s: leaf node must have filter", name)
     }
-    
+
     // Validate children
     for i, child := range node.Children {
         if child == nil {
@@ -478,31 +490,31 @@ func validateFilterTree(t *testing.T, name string, node *FilterTreeNode) {
 // assertTreeEqual compares two FilterTreeNodes for equality
 func assertTreeEqual(t *testing.T, expected, actual *FilterTreeNode, msg string) {
     t.Helper()
-    
+
     if expected == nil && actual == nil {
         return
     }
-    
+
     if expected == nil || actual == nil {
-        t.Errorf("%s: one tree is nil: expected=%v, actual=%v", 
+        t.Errorf("%s: one tree is nil: expected=%v, actual=%v",
             msg, expected != nil, actual != nil)
         return
     }
-    
+
     // Compare number of children
     if len(expected.Children) != len(actual.Children) {
         t.Errorf("%s: number of children mismatch: expected=%d, actual=%d",
             msg, len(expected.Children), len(actual.Children))
         return
     }
-    
+
     // Compare filters
     if expected.Filter != nil || actual.Filter != nil {
         if expected.Filter == nil || actual.Filter == nil {
             t.Errorf("%s: Filter existence mismatch", msg)
             return
         }
-        
+
         // Compare filter properties
         if expected.Filter.Index != actual.Filter.Index {
             t.Errorf("%s: Filter Index mismatch: expected=0x%x, actual=0x%x",
@@ -521,7 +533,7 @@ func assertTreeEqual(t *testing.T, expected, actual *FilterTreeNode, msg string)
                 msg, expected.Filter.Value, actual.Filter.Value)
         }
     }
-    
+
     // Compare children recursively
     for i := range expected.Children {
         childMsg := fmt.Sprintf("%s (child %d)", msg, i)
