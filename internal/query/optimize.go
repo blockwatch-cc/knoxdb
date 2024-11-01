@@ -31,11 +31,18 @@ import (
 //   - or-only: IN(A) + IN(A) => IN(A) -- union
 //   - or-only: EQ(A) + EQ(A) => IN(A)
 //   - or-only: NE(A) + NE(A) => NI(A)
-//
+
 // - TODO: mark illogical conditions empty
 //   - LT|LE(uint, 0)
 //   - empty IN
 //   - RG from>to
+//   - disjunct IN+IN
+//   - disjunct IN+EQ
+//   - RG(A,B)+EQ(C) => C outside [A,B]
+//   - and-only: RG(A,B)+EQ(C) => EQ(C) (applies omly if A<=C<=B)
+//   - or-only: IN(A) + NE(B) => true if B is in A
+//   - or-only: RG(A,B) + NE(C) => true if C is inside [A,B]
+
 func (n *FilterTreeNode) Optimize() {
 	// stop at leaf nodes
 	if n.IsLeaf() {
