@@ -96,7 +96,10 @@ func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
 	var err error
 	if e.needsif {
 		for op, code := range e.schema.encode {
-			field := e.schema.fields[op]
+			if code == OpCodeSkip {
+				continue
+			}
+			field := &e.schema.fields[op]
 			if code.NeedsInterface() {
 				err = writeReflectField(buf, code, rval.FieldByIndex(field.path).Interface())
 			} else {
@@ -110,7 +113,10 @@ func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
 
 	} else {
 		for op, code := range e.schema.encode {
-			field := e.schema.fields[op]
+			if code == OpCodeSkip {
+				continue
+			}
+			field := &e.schema.fields[op]
 			ptr := unsafe.Add(base, field.offset)
 			err = writeField(buf, code, field, ptr)
 			if err != nil {
@@ -144,7 +150,10 @@ func (e *Encoder) EncodeSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 		for i, l := 0, rslice.Len(); i < l; i++ {
 			rval := rslice.Index(i)
 			for op, code := range e.schema.encode {
-				field := e.schema.fields[op]
+				if code == OpCodeSkip {
+					continue
+				}
+				field := &e.schema.fields[op]
 				if !code.NeedsInterface() {
 					ptr := unsafe.Add(base, field.offset)
 					err = writeField(buf, code, field, ptr)
@@ -160,7 +169,10 @@ func (e *Encoder) EncodeSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 	} else {
 		for i, l := 0, rslice.Len(); i < l; i++ {
 			for op, code := range e.schema.encode {
-				field := e.schema.fields[op]
+				if code == OpCodeSkip {
+					continue
+				}
+				field := &e.schema.fields[op]
 				ptr := unsafe.Add(base, field.offset)
 				err = writeField(buf, code, field, ptr)
 				if err != nil {
@@ -192,7 +204,10 @@ func (e *Encoder) EncodePtrSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 			rval := rslice.Index(i)
 			base := rval.UnsafePointer()
 			for op, code := range e.schema.encode {
-				field := e.schema.fields[op]
+				if code == OpCodeSkip {
+					continue
+				}
+				field := &e.schema.fields[op]
 				if !code.NeedsInterface() {
 					ptr := unsafe.Add(base, field.offset)
 					err = writeField(buf, code, field, ptr)
@@ -208,7 +223,10 @@ func (e *Encoder) EncodePtrSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 		for i, l := 0, rslice.Len(); i < l; i++ {
 			base := rslice.Index(i).UnsafePointer()
 			for op, code := range e.schema.encode {
-				field := e.schema.fields[op]
+				if code == OpCodeSkip {
+					continue
+				}
+				field := &e.schema.fields[op]
 				ptr := unsafe.Add(base, field.offset)
 				err = writeField(buf, code, field, ptr)
 				if err != nil {
@@ -250,7 +268,7 @@ func writeReflectField(buf *bytes.Buffer, code OpCode, rval any) error {
 	return err
 }
 
-func writeField(buf *bytes.Buffer, code OpCode, field Field, ptr unsafe.Pointer) error {
+func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer) error {
 	var err error
 	switch code {
 	default:
@@ -313,7 +331,7 @@ func writeField(buf *bytes.Buffer, code OpCode, field Field, ptr unsafe.Pointer)
 		if !ok {
 			return fmt.Errorf("%s: invalid enum value %q", field.name, v)
 		}
-		buf.Write(Uint16Bytes(code))
+		_, err = buf.Write(Uint16Bytes(code))
 	}
 	return err
 }

@@ -44,9 +44,16 @@ func TestViewDynamic(t *testing.T) {
 }
 
 func testViewGetVal(t *testing.T, view *View, pos int, cmp any) {
+	t.Helper()
 	val, ok := view.Get(pos)
 	require.True(t, ok)
 	require.Equal(t, cmp, val)
+}
+
+func testViewGetFail(t *testing.T, view *View, pos int) {
+	t.Helper()
+	_, ok := view.Get(pos)
+	require.False(t, ok)
 }
 
 func TestViewGet(t *testing.T) {
@@ -82,6 +89,45 @@ func TestViewGet(t *testing.T) {
 	testViewGetVal(t, view, 21, base.String)
 }
 
+func TestViewGetWithVisibility(t *testing.T) {
+	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
+	baseSchema := MustSchemaOf(AllTypes{})
+	visSchema, err := baseSchema.DeleteField(2)
+	require.NoError(t, err)
+	visSchema, err = visSchema.DeleteField(4)
+	require.NoError(t, err)
+	visSchema, err = visSchema.DeleteField(5)
+	require.NoError(t, err)
+	visEnc := NewEncoder(visSchema)
+	buf, err := visEnc.Encode(&base, nil)
+	require.NoError(t, err)
+	view := NewView(visSchema).Reset(buf)
+
+	require.Equal(t, base.Id, view.GetPk())
+	testViewGetVal(t, view, 0, base.Id)
+	testViewGetFail(t, view, 1)
+	testViewGetVal(t, view, 2, base.Int32)
+	testViewGetFail(t, view, 3)
+	testViewGetFail(t, view, 4)
+	testViewGetVal(t, view, 5, base.Uint64)
+	testViewGetVal(t, view, 6, base.Uint32)
+	testViewGetVal(t, view, 7, base.Uint16)
+	testViewGetVal(t, view, 8, base.Uint8)
+	testViewGetVal(t, view, 9, base.Float64)
+	testViewGetVal(t, view, 10, base.Float32)
+	testViewGetVal(t, view, 11, base.D32)
+	testViewGetVal(t, view, 12, base.D64)
+	testViewGetVal(t, view, 13, base.D128)
+	testViewGetVal(t, view, 14, base.D256)
+	testViewGetVal(t, view, 15, base.I128)
+	testViewGetVal(t, view, 16, base.I256)
+	testViewGetVal(t, view, 17, base.Bool)
+	testViewGetVal(t, view, 18, base.Time)
+	testViewGetVal(t, view, 19, base.Hash)
+	testViewGetVal(t, view, 20, base.Array[:]) // return type is []byte
+	testViewGetVal(t, view, 21, base.String)
+}
+
 // TestViewSet tests the Set method of the View struct
 func TestViewSet(t *testing.T) {
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
@@ -91,17 +137,22 @@ func TestViewSet(t *testing.T) {
 	require.NoError(t, err)
 	view := NewView(baseSchema).Reset(buf)
 
-	// Check the original string value
+	// Test setting uint64 field
+	newId := uint64(12345)
+	safeSet(t, view, 0, newId)
+	val, ok := view.Get(0)
+	require.True(t, ok)
+	require.Equal(t, newId, val, "Uint64 field should have been updated")
+
+	// Read the original string value
 	originalString, ok := view.Get(21)
 	require.True(t, ok)
-	t.Logf("Original string value: %v", originalString)
 
 	// Test setting a shorter string
 	shortString := "Hello"
 	safeSet(t, view, 21, shortString)
-	val, ok := view.Get(21)
+	val, ok = view.Get(21)
 	require.True(t, ok)
-	t.Logf("After setting shorter string: %v", val)
 	require.Equal(t, originalString, val, "String value should not have changed when setting a shorter string")
 
 	// Test setting a string of the same length as the original
@@ -109,7 +160,6 @@ func TestViewSet(t *testing.T) {
 	safeSet(t, view, 21, sameLength)
 	val, ok = view.Get(21)
 	require.True(t, ok)
-	t.Logf("After setting same-length string: %v", val)
 	require.Equal(t, originalString, val, "String value should not have changed when setting a same-length string")
 
 	// Test setting a longer string
@@ -117,7 +167,6 @@ func TestViewSet(t *testing.T) {
 	safeSet(t, view, 21, longString)
 	val, ok = view.Get(21)
 	require.True(t, ok)
-	t.Logf("After setting longer string: %v", val)
 	require.Equal(t, originalString, val, "String value should not have changed when setting a longer string")
 
 	// Test setting invalid index
@@ -125,27 +174,19 @@ func TestViewSet(t *testing.T) {
 	safeSet(t, view, len(baseSchema.fields), 42)
 
 	// Test setting incompatible type
-	originalId := base.Id
+	originalId, ok := view.Get(0)
+	require.True(t, ok)
 	safeSet(t, view, 0, "not a uint64")
 	val, ok = view.Get(0)
 	require.True(t, ok)
-	t.Logf("After setting incompatible type: %v", val)
 	require.Equal(t, originalId, val, "Value should not have changed when setting incompatible type")
-
-	// Test setting uint64 field
-	newId := uint64(12345)
-	safeSet(t, view, 0, newId)
-	val, ok = view.Get(0)
-	require.True(t, ok)
-	t.Logf("After setting uint64 field: %v", val)
-	require.Equal(t, newId, val, "Uint64 field should have been updated")
 }
 
 // safeSet is a helper function to safely call Set and log any panics
 func safeSet(t *testing.T, view *View, index int, value interface{}) {
 	defer func() {
 		if r := recover(); r != nil {
-			t.Logf("Panic occurred when setting index %d with value %v: %v", index, value, r)
+			t.Errorf("Panic occurred when setting index %d with value %v: %v", index, value, r)
 		}
 	}()
 	view.Set(index, value)
@@ -333,6 +374,28 @@ func BenchmarkViewCut(b *testing.B) {
 	baseEnc := NewEncoder(baseSchema)
 	buf := bytes.NewBuffer(nil)
 	_, err := baseEnc.Encode(&base, buf)
+	require.NoError(b, err)
+	_, err = baseEnc.Encode(&base, buf)
+	require.NoError(b, err)
+	view := NewView(baseSchema)
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		view.Cut(buf.Bytes())
+	}
+}
+
+func BenchmarkViewCutSkip(b *testing.B) {
+	var err error
+	baseSchema := MustSchemaOf(AllTypes{})
+	baseSchema, err = baseSchema.DeleteField(1)
+	require.NoError(b, err)
+	baseSchema, err = baseSchema.DeleteField(10)
+	require.NoError(b, err)
+	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
+	baseEnc := NewEncoder(baseSchema)
+	buf := bytes.NewBuffer(nil)
+	_, err = baseEnc.Encode(&base, buf)
 	require.NoError(b, err)
 	_, err = baseEnc.Encode(&base, buf)
 	require.NoError(b, err)

@@ -20,6 +20,8 @@ var (
 	ErrInvalidField      = errors.New("invalid field")
 	ErrShortValue        = errors.New("value too short")
 	ErrShortBuffer       = io.ErrShortBuffer
-	ErrNotImplemented    = errors.New("not implemented")
 	ErrSchemaMismatch    = errors.New("schema mismatch")
+	ErrDeletePrimary     = errors.New("cannot delete primary key field")
+	ErrDeleteIndexed     = errors.New("cannot delete indexed field")
+	ErrRenameEnum        = errors.New("cannot rename enum field")
 )

@@ -112,8 +112,10 @@ func SchemaOf(m any) (*Schema, error) {
 				field.typ, field.name, exist.name)
 		}
 
-		// assign id starting at 1
-		field.id = uint16(len(s.fields)) + 1
+		// assign id starting at 1, allow pre-assigned ids
+		if field.id == 0 {
+			field.id = uint16(len(s.fields)) + 1
+		}
 		s.fields = append(s.fields, field)
 	}
 
@@ -429,12 +431,6 @@ func (f *Field) ParseTag(tag string) error {
 			default:
 				return fmt.Errorf("unsupported compression type %q", val)
 			}
-		case "lz4":
-			compress = types.FieldCompressLZ4
-		case "snappy":
-			compress = types.FieldCompressSnappy
-		case "zstd":
-			compress = types.FieldCompressZstd
 		case "fixed":
 			switch f.typ {
 			case types.FieldTypeBytes, types.FieldTypeString:
@@ -481,6 +477,12 @@ func (f *Field) ParseTag(tag string) error {
 			}
 		case "internal":
 			flags |= types.FieldFlagInternal
+		case "id":
+			num, err := strconv.ParseUint(val, 0, 16)
+			if err != nil {
+				return fmt.Errorf("invalid field id %q: %v", val, err)
+			}
+			f.id = uint16(num)
 		default:
 			return fmt.Errorf("unsupported struct tag '%s'", key)
 		}
@@ -620,6 +622,10 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 
 		case types.FieldTypeDecimal32:
 			dc, ec = OpCodeDecimal32, OpCodeDecimal32
+		}
+
+		if !f.IsVisible() {
+			ec, dc = OpCodeSkip, OpCodeSkip
 		}
 
 		enc = append(enc, ec)

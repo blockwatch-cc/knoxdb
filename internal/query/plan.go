@@ -227,7 +227,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		// this will select all single-field indexes and all
 		// composite indexes where the first index field is used as
 		// query condition (they may use prefix key matches)
-		idxFields := idx.Schema().FieldNames()
+		idxFields := idx.Schema().AllFieldNames()
 		if !filterFields.Contains(idxFields[0]) {
 			continue
 		}
@@ -308,7 +308,7 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 
 		// Step 4: adjust request schema (we may have to check less fields now)
 		filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
-		requestFields := slicex.NewOrderedStrings(p.RequestSchema.FieldNames())
+		requestFields := slicex.NewOrderedStrings(p.RequestSchema.ActiveFieldNames())
 		if !filterFields.Equal(requestFields) && filterFields.Len() > 0 {
 			s, err := p.Table.Schema().SelectFields(filterFields.Values...)
 			if err != nil {

@@ -161,6 +161,9 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 			// int, uint, float, bool
 			_, err = d.buf.Read(unsafe.Slice((*byte)(ptr), field.wireSize))
 
+		case OpCodeSkip:
+			// noop
+
 		case OpCodeFixedArray:
 			_, err = d.buf.Read(unsafe.Slice((*byte)(ptr), field.fixed))
 
@@ -271,6 +274,9 @@ func (d *Decoder) Decode(buf []byte, val any) error {
 	base := rval.Addr().UnsafePointer()
 	if d.needsif {
 		for op, code := range d.schema.decode {
+			if code == OpCodeSkip {
+				continue
+			}
 			field := &d.schema.fields[op]
 			if code.NeedsInterface() {
 				dst := field.StructValue(rval)
@@ -282,6 +288,9 @@ func (d *Decoder) Decode(buf []byte, val any) error {
 		}
 	} else {
 		for op, code := range d.schema.decode {
+			if code == OpCodeSkip {
+				continue
+			}
 			field := &d.schema.fields[op]
 			ptr := unsafe.Add(base, field.offset)
 			buf = readField(code, field, ptr, buf)
@@ -305,6 +314,9 @@ func (d *Decoder) DecodeSlice(buf []byte, slice any) (int, error) {
 		for i = 0; i < num && len(buf) > 0; i++ {
 			rval := rslice.Index(i)
 			for op, code := range ops {
+				if code == OpCodeSkip {
+					continue
+				}
 				field := &d.schema.fields[op]
 				if code.NeedsInterface() {
 					dst := field.StructValue(rval)
@@ -319,6 +331,9 @@ func (d *Decoder) DecodeSlice(buf []byte, slice any) (int, error) {
 	} else {
 		for i = 0; i < num && len(buf) > 0; i++ {
 			for op, code := range ops {
+				if code == OpCodeSkip {
+					continue
+				}
 				field := &d.schema.fields[op]
 				ptr := unsafe.Add(base, field.offset)
 				buf = readField(code, field, ptr, buf)

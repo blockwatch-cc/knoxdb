@@ -38,10 +38,11 @@ const (
 	OpCodeUnmarshalBinary               // 0x1B 27
 	OpCodeUnmarshalText                 // 0x1C 28
 	OpCodeEnum                          // 0x1D 29
+	OpCodeSkip                          // 0x1E 30
 )
 
 var (
-	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixarr_fixstr_fixbyte_str_byte_dtime_i128_i256_d32_d64_d128_d256_mshbin_mshtxt_mshstr_ushbin_ushtxt_enum"
+	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixarr_fixstr_fixbyte_str_byte_dtime_i128_i256_d32_d64_d128_d256_mshbin_mshtxt_mshstr_ushbin_ushtxt_enum_skip"
 	opCodeIdx     = [...]int{
 		0,                           // invalid
 		2, 5, 9, 13, 17, 20, 24, 28, // int/uint
@@ -55,7 +56,8 @@ var (
 		110, 117, 124, // marshalers
 		131, 138, // unmarshalers
 		145, // enum
-		150, // end-of-string
+		150, // skip
+		155, // end-of-string
 	}
 )
 

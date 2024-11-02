@@ -122,6 +122,26 @@ func (f *Field) IsVisible() bool {
 	return f.flags&(types.FieldFlagDeleted|types.FieldFlagInternal) == 0
 }
 
+func (f *Field) IsActive() bool {
+	return !f.flags.Is(types.FieldFlagDeleted)
+}
+
+func (f *Field) IsInternal() bool {
+	return f.flags.Is(types.FieldFlagInternal)
+}
+
+func (f *Field) IsPrimary() bool {
+	return f.flags.Is(types.FieldFlagPrimary)
+}
+
+func (f *Field) IsIndexed() bool {
+	return f.flags.Is(types.FieldFlagIndexed)
+}
+
+func (f *Field) IsEnum() bool {
+	return f.flags.Is(types.FieldFlagEnum)
+}
+
 func (f *Field) IsFixedSize() bool {
 	switch f.typ {
 	case types.FieldTypeString, types.FieldTypeBytes:
@@ -300,6 +320,10 @@ func (f *Field) Validate() error {
 }
 
 func (f *Field) Codec() OpCode {
+	if !f.IsVisible() {
+		return OpCodeSkip
+	}
+
 	switch f.typ {
 	case types.FieldTypeDatetime:
 		return OpCodeDateTime

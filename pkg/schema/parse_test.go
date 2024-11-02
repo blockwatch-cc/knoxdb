@@ -14,15 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParsers(t *testing.T) {
-	t.Run("SingleValueParsing", testSingleValueParsing)
-	t.Run("SliceParsing", testSliceParsing)
-	t.Run("ErrorHandling", testErrorHandling)
-	t.Run("EdgeCases", testEdgeCases)
-}
-
-// testSingleValueParsing tests parsing of single values for various field types.
-func testSingleValueParsing(t *testing.T) {
+// TestSingleValueParsing tests parsing of single values for various field types.
+func TestSingleValueParsing(t *testing.T) {
 	tests := []struct {
 		name     string
 		parser   ValueParser
@@ -69,8 +62,8 @@ func testSingleValueParsing(t *testing.T) {
 	}
 }
 
-// testSliceParsing tests parsing of slice values for various field types.
-func testSliceParsing(t *testing.T) {
+// TestSliceParsing tests parsing of slice values for various field types.
+func TestSliceParsing(t *testing.T) {
 	tests := []struct {
 		name     string
 		parser   ValueParser
@@ -98,8 +91,8 @@ func testSliceParsing(t *testing.T) {
 	}
 }
 
-// testErrorHandling tests error handling for invalid input values.
-func testErrorHandling(t *testing.T) {
+// TestErrorHandling tests error handling for invalid input values.
+func TestErrorHandling(t *testing.T) {
 	tests := []struct {
 		name   string
 		parser ValueParser
@@ -122,9 +115,9 @@ func testErrorHandling(t *testing.T) {
 	}
 }
 
-// testEdgeCases tests parsing of edge cases like empty strings, unicode strings,
+// TestEdgeCases tests parsing of edge cases like empty strings, unicode strings,
 // and extreme numerical values.
-func testEdgeCases(t *testing.T) {
+func TestEdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
 		parser   ValueParser

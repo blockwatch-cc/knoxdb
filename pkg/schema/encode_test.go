@@ -106,11 +106,48 @@ func makeTestData(sz int) (res []encodeTestStruct) {
 	return
 }
 
+type visibilityTestStruct struct {
+	Id               uint64 `knox:"id,pk"`
+	FDeleted         uint64 `knox:"f_deleted"`
+	FInternal        uint64 `knox:"f_internal,internal"`
+	FInternalDeleted uint64 `knox:"f_internal_deleted,internal"`
+	HashFixed        Hash   `knox:"hash_fixed"`
+}
+
+func makeVisibilityTestData(sz int) (res []visibilityTestStruct) {
+	for i := 1; i <= sz; i++ {
+		res = append(res, visibilityTestStruct{
+			Id:               0,
+			FDeleted:         0xfafafafafafafafa,
+			FInternal:        0xfbfbfbfbfbfbfbfb,
+			FInternalDeleted: 0xfcfcfcfcfcfcfcfc,
+			HashFixed:        randFixed[Hash](),
+		})
+	}
+	return
+}
+
 func TestEncodeVal(t *testing.T) {
 	vals := makeTestData(1)
 	val := vals[0]
 	enc := NewGenericEncoder[encodeTestStruct]()
 	buf, err := enc.Encode(val, nil)
+	require.NoError(t, err)
+	require.NotNil(t, buf)
+	require.NotEmpty(t, buf)
+}
+
+func TestEncodeValWithVisibility(t *testing.T) {
+	// visibility tests (internal & deleted fields)
+	s, err := SchemaOf(visibilityTestStruct{})
+	val := makeVisibilityTestData(1)[0]
+	require.NoError(t, err)
+	s, err = s.DeleteField(2)
+	require.NoError(t, err)
+	s, err = s.DeleteField(3)
+	require.NoError(t, err)
+	enc := NewEncoder(s)
+	buf, err := enc.Encode(&val, nil)
 	require.NoError(t, err)
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
@@ -126,18 +163,44 @@ func TestEncodeRoundtrip(t *testing.T) {
 	require.NotEmpty(t, buf)
 
 	dec := NewGenericDecoder[encodeTestStruct]()
-	t.Log("D", dec.Schema())
 	val2, err := dec.Decode(buf, nil)
 	require.NoError(t, err)
 	require.IsType(t, val, *val2)
 	require.Exactly(t, val, *val2)
 }
 
+func TestEncodeRoundtripWithVisibility(t *testing.T) {
+	// visibility tests (internal & deleted fields)
+	s, err := SchemaOf(visibilityTestStruct{})
+	require.NoError(t, err)
+	s, err = s.DeleteField(2)
+	require.NoError(t, err)
+	s, err = s.DeleteField(4)
+	require.NoError(t, err)
+	val := makeVisibilityTestData(1)[0]
+	enc := NewEncoder(s)
+	buf, err := enc.Encode(&val, nil)
+	require.NoError(t, err)
+	require.NotNil(t, buf)
+	require.NotEmpty(t, buf)
+	require.Len(t, buf, s.WireSize())
+
+	dec := NewDecoder(s)
+	var val2 visibilityTestStruct
+	err = dec.Decode(buf, &val2)
+	require.NoError(t, err)
+	require.Equal(t, val.Id, val2.Id)
+	require.Equal(t, val.HashFixed, val2.HashFixed, "hash_fixed")
+	require.Equal(t, uint64(0), val2.FInternal, "internal")
+	require.Equal(t, uint64(0), val2.FDeleted, "deleted")
+	require.Equal(t, uint64(0), val2.FInternalDeleted, "internal_deleted")
+}
+
 func TestDecoderRead(t *testing.T) {
 	enc := NewGenericEncoder[encodeTestStruct]()
 	dec := NewGenericDecoder[encodeTestStruct]()
-	t.Log("E", enc.Schema())
-	t.Log("D", dec.Schema())
+	// t.Log("E", enc.Schema())
+	// t.Log("D", dec.Schema())
 	vals := makeTestData(100)
 	buf := enc.NewBuffer(100)
 	for _, val := range vals {
@@ -208,7 +271,7 @@ type encodeBenchStruct struct {
 	Hash    []byte         `knox:"hash,fixed=20,index=bloom=3"`
 	String  string         `knox:"str"`
 	Bool    bool           `knox:"bool"`
-	Enum    MyEnum         `knox:"enum,enum"`
+	Enum    MyEnum         `knox:"my_enum,enum"`
 	Int64   int64          `knox:"i64"`
 	Int32   int32          `knox:"i32"`
 	Int16   int16          `knox:"i16"`
@@ -263,6 +326,24 @@ func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
 func BenchmarkEncodeVal(b *testing.B) {
 	slice, sz := makeBenchData(1)
 	enc := NewGenericEncoder[encodeBenchStruct]()
+	buf := enc.NewBuffer(1)
+	b.ReportAllocs()
+	b.SetBytes(sz)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = enc.Encode(slice[0], buf)
+		buf.Reset()
+	}
+}
+
+func BenchmarkEncodeValSkip(b *testing.B) {
+	slice, sz := makeBenchData(1)
+	enc := NewGenericEncoder[encodeBenchStruct]()
+	s, err := enc.enc.schema.DeleteField(1)
+	require.NoError(b, err)
+	s, err = s.DeleteField(2)
+	require.NoError(b, err)
+	enc.enc.schema = s
 	buf := enc.NewBuffer(1)
 	b.ReportAllocs()
 	b.SetBytes(sz)
@@ -330,7 +411,8 @@ func BenchmarkMemcopy(b *testing.B) {
 			slice, sz := makeBenchData(n.num)
 			enc := NewGenericEncoder[encodeBenchStruct]()
 			buf := enc.NewBuffer(n.num)
-			_, _ = enc.EncodeSlice(slice, buf)
+			_, err := enc.EncodeSlice(slice, buf)
+			require.NoError(b, err)
 			dst := make([]byte, buf.Len())
 			b.ReportAllocs()
 			b.SetBytes(sz)
@@ -347,7 +429,8 @@ func BenchmarkDecodeVal(b *testing.B) {
 	enc := NewGenericEncoder[encodeBenchStruct]()
 	dec := NewGenericDecoder[encodeBenchStruct]()
 	buf := enc.NewBuffer(1)
-	_, _ = enc.Encode(slice[0], buf)
+	_, err := enc.Encode(slice[0], buf)
+	require.NoError(b, err)
 	b.ReportAllocs()
 	b.SetBytes(sz)
 	b.ResetTimer()
@@ -361,7 +444,8 @@ func BenchmarkDecodeTo(b *testing.B) {
 	enc := NewGenericEncoder[encodeBenchStruct]()
 	dec := NewGenericDecoder[encodeBenchStruct]()
 	buf := enc.NewBuffer(1)
-	_, _ = enc.Encode(slice[0], buf)
+	_, err := enc.Encode(slice[0], buf)
+	require.NoError(b, err)
 	var val encodeBenchStruct
 	b.ResetTimer()
 	b.ReportAllocs()

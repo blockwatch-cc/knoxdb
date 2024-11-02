@@ -81,8 +81,10 @@ func ReadUint8(buf []byte) (uint8, int) {
 // integer types as source an will convert them to the
 // wire format selected by code.
 func EncodeInt(w io.Writer, code OpCode, val any) (err error) {
-	var u64 uint64
-	var width int
+	var (
+		u64   uint64
+		width int
+	)
 	switch v := val.(type) {
 	case int:
 		u64, width = uint64(v), bits.UintSize
@@ -107,27 +109,24 @@ func EncodeInt(w io.Writer, code OpCode, val any) (err error) {
 	default:
 		return ErrInvalidValueType
 	}
+	err = ErrInvalidValueType
 	switch code {
 	case OpCodeInt8, OpCodeUint8:
-		if width != 8 {
-			return ErrInvalidValueType
+		if width == 8 {
+			_, err = w.Write(Uint8Bytes(uint8(u64)))
 		}
-		_, err = w.Write(Uint8Bytes(uint8(u64)))
 	case OpCodeInt16, OpCodeUint16:
-		if width != 16 {
-			return ErrInvalidValueType
+		if width == 16 {
+			_, err = w.Write(Uint16Bytes(uint16(u64)))
 		}
-		_, err = w.Write(Uint16Bytes(uint16(u64)))
 	case OpCodeInt32, OpCodeUint32:
-		if width != 32 {
-			return ErrInvalidValueType
+		if width == 32 {
+			_, err = w.Write(Uint32Bytes(uint32(u64)))
 		}
-		_, err = w.Write(Uint32Bytes(uint32(u64)))
 	case OpCodeInt64, OpCodeUint64:
-		if width != 64 {
-			return ErrInvalidValueType
+		if width == 64 {
+			_, err = w.Write(Uint64Bytes(u64))
 		}
-		_, err = w.Write(Uint64Bytes(u64))
 	}
 	return
 }

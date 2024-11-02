@@ -15,11 +15,11 @@ import (
 // and hash indexes on a defined list/order of columns. Produce legal
 // wire format where variable length strings/bytes are length prefixed.
 type Converter struct {
-	parent  *Schema
-	child   *Schema
-	maps    []int // parent field to child field mapping (-1 when field not in child)
-	offs    []int // child data buffer write offset (-1 when unknown due to variable length)
-	nExtra  int   // guess on extra bytes required to encode a variable target records
+	parent  *Schema // input data schema
+	child   *Schema // output data schema
+	maps    []int   // parent field to child field mapping (-1 when field not in child)
+	offs    []int   // child data buffer write offset (-1 when unknown due to variable length)
+	nExtra  int     // guess on extra bytes required to encode a variable target records
 	layout  binary.ByteOrder
 	extract func(*Converter, []byte) []byte
 	parts   [][]byte // pre-allocated byte slices for fixed parts in child order
@@ -59,37 +59,49 @@ func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
 	switch {
 	case child.isFixedSize:
 		c.extract = extractFixed
+
 	case inOrder:
 		c.extract = extractVariableInorder
+
 	default:
 		c.extract = extractVariableReorder
 		c.parts = make([][]byte, len(c.child.fields))
+
 		// pre-allocate fixed parts
-		for i, field := range c.child.fields {
+		for i := range c.child.fields {
+			field := &c.child.fields[i]
+
+			// skip invisible fields
+			if !field.IsVisible() {
+				c.parts[i] = make([]byte, 0, 0)
+				continue
+			}
+
+			// allocate exact number of bytes
 			switch field.typ {
 			case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
 				types.FieldTypeFloat64, types.FieldTypeDecimal64:
-				c.parts[i] = make([]byte, 8)
+				c.parts[i] = make([]byte, 8, 8)
 
 			case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
 				types.FieldTypeDecimal32:
-				c.parts[i] = make([]byte, 4)
+				c.parts[i] = make([]byte, 4, 4)
 
 			case types.FieldTypeInt16, types.FieldTypeUint16:
-				c.parts[i] = make([]byte, 2)
+				c.parts[i] = make([]byte, 2, 2)
 
 			case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8:
-				c.parts[i] = make([]byte, 1)
+				c.parts[i] = make([]byte, 1, 1)
 
 			case types.FieldTypeInt256, types.FieldTypeDecimal256:
-				c.parts[i] = make([]byte, 32)
+				c.parts[i] = make([]byte, 32, 32)
 
 			case types.FieldTypeInt128, types.FieldTypeDecimal128:
-				c.parts[i] = make([]byte, 16)
+				c.parts[i] = make([]byte, 16, 16)
 
 			case types.FieldTypeString, types.FieldTypeBytes:
 				if field.fixed > 0 {
-					c.parts[i] = make([]byte, field.fixed)
+					c.parts[i] = make([]byte, field.fixed, field.fixed)
 				} else {
 					c.dyn = append(c.dyn, i)
 				}
@@ -101,7 +113,12 @@ func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
 	if child.isFixedSize {
 		var n int
 		ok := true
-		for i, f := range child.fields {
+		for i := range child.fields {
+			f := &child.fields[i]
+			if !f.IsVisible() {
+				c.offs[i] = -1
+				continue
+			}
 			c.offs[i] = n
 			if !ok || !f.IsFixedSize() {
 				ok = false
@@ -117,8 +134,9 @@ func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
 	} else {
 		// determine extra variable bytes required based on number of
 		// variable length fields
-		for _, f := range child.fields {
-			if f.IsFixedSize() {
+		for i := range child.fields {
+			f := &child.fields[i]
+			if !f.IsVisible() || f.IsFixedSize() {
 				continue
 			}
 			c.nExtra += defaultVarFieldSize
@@ -154,25 +172,37 @@ func extractFixed(c *Converter, buf []byte) []byte {
 	}
 	res := make([]byte, c.child.minWireSize)
 	for i := range c.parent.fields {
-		typ, fixed := c.parent.fields[i].typ, c.parent.fields[i].fixed
-		sz := typ.Size()
-		if fixed > 0 {
-			sz = int(fixed)
+		field := &c.parent.fields[i]
+
+		// calculated output buffer offset
+		var ofs int
+		if pos := c.maps[i]; pos >= 0 {
+			ofs = c.offs[pos]
 		}
 
-		// determine target field position in output
-		pos := c.maps[i]
-		if pos < 0 {
-			// skip non-selected fields
+		// determine wire size
+		sz := field.typ.Size()
+		if field.fixed > 0 {
+			sz = int(field.fixed)
+		}
+
+		// handle hidden fields
+		if !field.IsVisible() {
+			// insert zero data when required but missing from input
+			if c.maps[i] >= 0 {
+				clear(res[ofs : ofs+sz])
+			}
+			continue
+		}
+
+		// skip non-selected fields
+		if c.maps[i] < 0 {
 			buf = buf[sz:]
 			continue
 		}
 
-		// calculate output buffer offset
-		ofs := c.offs[i]
-
 		// copy data to output
-		switch typ {
+		switch field.typ {
 		case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
 			types.FieldTypeFloat64, types.FieldTypeDecimal64:
 			v, n := ReadUint64(buf)
@@ -206,12 +236,14 @@ func extractFixed(c *Converter, buf []byte) []byte {
 
 		case types.FieldTypeString, types.FieldTypeBytes:
 			// only fixed length string/byte data here
-			copy(res[ofs:], buf[:fixed])
-			buf = buf[fixed:]
+			copy(res[ofs:], buf[:field.fixed])
+			buf = buf[field.fixed:]
 		}
 	}
 	return res
 }
+
+var zeros [32]byte
 
 func extractVariableInorder(c *Converter, buf []byte) []byte {
 	if buf == nil {
@@ -223,16 +255,38 @@ func extractVariableInorder(c *Converter, buf []byte) []byte {
 		cnt int
 		b   [8]byte
 	)
-	for i, field := range c.parent.fields {
+	for i := range c.parent.fields {
+		field := &c.parent.fields[i]
+
 		// init from static size
 		sz := field.typ.Size()
+		if field.fixed > 0 {
+			sz = int(field.fixed)
+		}
 
-		// read dynamic size
+		// handle hidden fields
+		if !field.IsVisible() {
+			// insert zero data when required but missing from input
+			if c.maps[i] >= 0 {
+				if sz <= 32 {
+					res.Write(zeros[:sz])
+				} else {
+					res.Write(bytes.Repeat([]byte{0}, sz))
+				}
+
+				// are we done?
+				cnt++
+				if len(c.offs) == cnt {
+					break
+				}
+			}
+			continue
+		}
+
+		// read dynamic size when field is present in wire encoding
 		switch field.typ {
 		case types.FieldTypeString, types.FieldTypeBytes:
-			if field.fixed > 0 {
-				sz = int(field.fixed)
-			} else {
+			if field.fixed == 0 {
 				u, n := ReadUint32(buf)
 				if c.skipLen {
 					sz = int(u)
@@ -243,9 +297,8 @@ func extractVariableInorder(c *Converter, buf []byte) []byte {
 			}
 		}
 
-		pos := c.maps[i]
-		if pos < 0 {
-			// skip data when not required
+		// skip data when not required
+		if c.maps[i] < 0 {
 			buf = buf[sz:]
 			continue
 		}
@@ -298,16 +351,39 @@ func extractVariableReorder(c *Converter, buf []byte) []byte {
 		return nil
 	}
 	var cnt int
-	for i, field := range c.parent.fields {
+	for i := range c.parent.fields {
+		field := &c.parent.fields[i]
+		pos := c.maps[i]
+
 		// init from static size
 		sz := field.typ.Size()
+		if field.fixed > 0 {
+			sz = int(field.fixed)
+		}
 
-		// read dynamic size
+		// skip invisible fields from input schema as they have no wire encoding
+		if !field.IsVisible() {
+			// insert zero data when required but missing from input
+			if pos >= 0 {
+				if field.IsFixedSize() {
+					clear(c.parts[pos])
+				} else {
+					c.parts[pos] = zeros[:4]
+				}
+
+				// are we done?
+				cnt++
+				if len(c.parts) == cnt {
+					break
+				}
+			}
+			continue
+		}
+
+		// read dynamic size when field is present in wire encoding
 		switch field.typ {
 		case types.FieldTypeString, types.FieldTypeBytes:
-			if field.fixed > 0 {
-				sz = int(field.fixed)
-			} else {
+			if field.fixed == 0 {
 				u, n := ReadUint32(buf)
 				if c.skipLen {
 					sz = int(u)
@@ -317,8 +393,6 @@ func extractVariableReorder(c *Converter, buf []byte) []byte {
 				}
 			}
 		}
-
-		pos := c.maps[i]
 		if pos < 0 {
 			// skip data when not required
 			buf = buf[sz:]

@@ -35,6 +35,9 @@ func NewView(s *Schema) *View {
 	}
 	var ofs int
 	for i, f := range s.fields {
+		if !f.IsVisible() {
+			continue
+		}
 		sz := f.typ.Size()
 		if f.fixed > 0 {
 			sz = int(f.fixed)
@@ -88,6 +91,9 @@ func (v View) Get(i int) (val any, ok bool) {
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
 	field := &v.schema.fields[i]
+	if !field.IsVisible() {
+		return nil, false
+	}
 	switch field.typ {
 	case types.FieldTypeDatetime:
 		val, ok = time.Unix(0, int64(LE.Uint64(v.buf[x:y]))).UTC(), true
@@ -139,6 +145,9 @@ func (v View) Append(val any, i int) any {
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
 	field := &v.schema.fields[i]
+	if !field.IsVisible() {
+		return val
+	}
 	switch field.typ {
 	case types.FieldTypeDatetime:
 		if val == nil {
@@ -258,11 +267,14 @@ func (v View) GetPk() uint64 {
 }
 
 func (v View) Set(i int, val any) {
-	if i < 0 || i > len(v.ofs) || !v.IsValid() {
+	if i < 0 || i >= len(v.ofs) || !v.IsValid() {
 		return
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
 	field := &v.schema.fields[i]
+	if !field.IsVisible() {
+		return
+	}
 	switch field.typ {
 	case types.FieldTypeUint64:
 		if u64, ok := val.(uint64); ok {
@@ -356,6 +368,9 @@ func (v *View) Reset(buf []byte) *View {
 		skip := true
 		for i := range v.schema.fields {
 			f := &v.schema.fields[i]
+			if !f.IsVisible() {
+				continue
+			}
 			if f.IsFixedSize() && skip {
 				ofs += v.len[i] + int(f.fixed)
 				continue

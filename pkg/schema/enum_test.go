@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Register a global emun and dictionary for all schema tests
+// Register a global enum and dictionary for all schema tests
 type MyEnum string
 
 var myEnum *EnumDictionary

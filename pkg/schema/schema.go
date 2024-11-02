@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -60,11 +61,25 @@ func (s *Schema) WithVersion(v uint32) *Schema {
 
 func (s *Schema) WithField(f Field) *Schema {
 	if f.IsValid() {
-		f.id = uint16(len(s.fields) + 1)
+		f.id = s.nextFieldId()
 		s.fields = append(s.fields, f)
 		s.encode, s.decode = nil, nil
 	}
 	return s
+}
+
+func (s *Schema) nextFieldId() uint16 {
+	id := uint16(len(s.fields) + 1)
+	if id == 1<<16-1 {
+		return 0
+	}
+	for {
+		_, ok := s.FieldById(id)
+		if !ok {
+			return id
+		}
+		id++
+	}
 }
 
 func (s *Schema) WithEnum(e *EnumDictionary) *Schema {
@@ -158,6 +173,16 @@ func (s *Schema) NumFields() int {
 	return len(s.fields)
 }
 
+func (s *Schema) NumActiveFields() int {
+	var n int
+	for i := range s.fields {
+		if s.fields[i].IsActive() {
+			n++
+		}
+	}
+	return n
+}
+
 func (s *Schema) NumVisibleFields() int {
 	var n int
 	for i := range s.fields {
@@ -168,7 +193,17 @@ func (s *Schema) NumVisibleFields() int {
 	return n
 }
 
-func (s *Schema) FieldNames() []string {
+func (s *Schema) NumInternalFields() int {
+	var n int
+	for i := range s.fields {
+		if s.fields[i].IsInternal() && s.fields[i].IsActive() {
+			n++
+		}
+	}
+	return n
+}
+
+func (s *Schema) AllFieldNames() []string {
 	list := make([]string, len(s.fields))
 	for i := range s.fields {
 		list[i] = s.fields[i].name
@@ -176,10 +211,70 @@ func (s *Schema) FieldNames() []string {
 	return list
 }
 
-func (s *Schema) FieldIDs() []uint16 {
+func (s *Schema) ActiveFieldNames() []string {
+	list := make([]string, 0, len(s.fields))
+	for i := range s.fields {
+		if s.fields[i].IsActive() {
+			list = append(list, s.fields[i].name)
+		}
+	}
+	return list
+}
+
+func (s *Schema) VisibleFieldNames() []string {
+	list := make([]string, 0, len(s.fields))
+	for i := range s.fields {
+		if s.fields[i].IsVisible() {
+			list = append(list, s.fields[i].name)
+		}
+	}
+	return list
+}
+
+func (s *Schema) InternalFieldNames() []string {
+	list := make([]string, 0, len(s.fields))
+	for i := range s.fields {
+		if s.fields[i].Is(types.FieldFlagInternal) && s.fields[i].IsActive() {
+			list = append(list, s.fields[i].name)
+		}
+	}
+	return list
+}
+
+func (s *Schema) AllFieldIds() []uint16 {
 	list := make([]uint16, len(s.fields))
 	for i := range s.fields {
 		list[i] = s.fields[i].id
+	}
+	return list
+}
+
+func (s *Schema) ActiveFieldIds() []uint16 {
+	list := make([]uint16, 0, len(s.fields))
+	for i := range s.fields {
+		if s.fields[i].IsActive() {
+			list = append(list, s.fields[i].id)
+		}
+	}
+	return list
+}
+
+func (s *Schema) VisibleFieldIds() []uint16 {
+	list := make([]uint16, 0, len(s.fields))
+	for i := range s.fields {
+		if s.fields[i].IsVisible() {
+			list = append(list, s.fields[i].id)
+		}
+	}
+	return list
+}
+
+func (s *Schema) InternalFieldIds() []uint16 {
+	list := make([]uint16, 0, len(s.fields))
+	for i := range s.fields {
+		if s.fields[i].Is(types.FieldFlagInternal) && s.fields[i].IsActive() {
+			list = append(list, s.fields[i].id)
+		}
 	}
 	return list
 }
@@ -194,7 +289,7 @@ func (s *Schema) Exported() []*ExportedField {
 
 func (s *Schema) FieldByName(name string) (f Field, ok bool) {
 	for _, v := range s.fields {
-		if v.name == name {
+		if v.name == name && v.IsActive() {
 			ok = true
 			f = v
 			break
@@ -223,7 +318,7 @@ func (s *Schema) FieldByIndex(i int) (f Field, ok bool) {
 
 func (s *Schema) FieldIndexByName(name string) (idx int, ok bool) {
 	for i, v := range s.fields {
-		if v.name == name {
+		if v.name == name && v.IsActive() {
 			ok = true
 			idx = i
 			break
@@ -245,7 +340,7 @@ func (s *Schema) FieldIndexById(id uint16) (idx int, ok bool) {
 
 func (s *Schema) Pk() *Field {
 	for _, v := range s.fields {
-		if v.flags&types.FieldFlagPrimary > 0 {
+		if v.flags&types.FieldFlagPrimary > 0 && v.IsActive() {
 			return &v
 		}
 	}
@@ -255,7 +350,7 @@ func (s *Schema) Pk() *Field {
 func (s *Schema) CompositePk() []Field {
 	res := make([]Field, 0)
 	for _, v := range s.fields {
-		if v.index.Is(types.IndexTypeComposite) {
+		if v.index.Is(types.IndexTypeComposite) && v.IsActive() {
 			res = append(res, v)
 		}
 	}
@@ -264,7 +359,7 @@ func (s *Schema) CompositePk() []Field {
 
 func (s *Schema) PkId() uint16 {
 	for _, v := range s.fields {
-		if v.flags&types.FieldFlagPrimary > 0 {
+		if v.flags&types.FieldFlagPrimary > 0 && v.IsActive() {
 			return v.Id()
 		}
 	}
@@ -273,7 +368,7 @@ func (s *Schema) PkId() uint16 {
 
 func (s *Schema) PkIndex() int {
 	for i, v := range s.fields {
-		if v.flags&types.FieldFlagPrimary > 0 {
+		if v.flags&types.FieldFlagPrimary > 0 && v.IsActive() {
 			return i
 		}
 	}
@@ -282,19 +377,119 @@ func (s *Schema) PkIndex() int {
 
 func (s *Schema) Indexes() (list []Field) {
 	for _, v := range s.fields {
-		if v.flags&types.FieldFlagIndexed > 0 {
+		if v.flags&types.FieldFlagIndexed > 0 && v.IsActive() {
 			list = append(list, v)
 		}
 	}
 	return
 }
 
+func (s *Schema) Clone() *Schema {
+	return &Schema{
+		name:    s.name,
+		fields:  slices.Clone(s.fields),
+		version: s.version,
+		enums:   s.enums,
+	}
+}
+
+func (s *Schema) AddField(f Field) (*Schema, error) {
+	if err := f.Validate(); err != nil {
+		return nil, err
+	}
+	// ensure field is unique
+	if _, ok := s.FieldByName(f.name); ok {
+		return nil, ErrDuplicateName
+	}
+	clone := s.Clone()
+	f.id = clone.nextFieldId()
+	clone.fields = append(clone.fields, f)
+	clone.version++
+	return clone.Finalize(), nil
+}
+
+func (s *Schema) DeleteField(id uint16) (*Schema, error) {
+	for i, v := range s.fields {
+		if v.id != id {
+			continue
+		}
+		if !v.IsActive() {
+			return nil, ErrInvalidField
+		}
+		if v.IsPrimary() {
+			return nil, ErrDeletePrimary
+		}
+		if v.IsIndexed() {
+			return nil, ErrDeleteIndexed
+		}
+		// delete changes schema version
+		clone := s.Clone()
+		clone.fields[i].flags |= types.FieldFlagDeleted
+		clone.version++
+		return clone.Finalize(), nil
+	}
+	return nil, ErrInvalidField
+}
+
+func (s *Schema) RenameField(id uint16, name string) (*Schema, error) {
+	// check pre-conditions
+	var pos int = -1
+	for i, v := range s.fields {
+		// ensure name is unique
+		if v.name == name {
+			return nil, ErrDuplicateName
+		}
+		if v.id == id {
+			// cannot rename deleted fields
+			if !v.IsActive() {
+				return nil, ErrInvalidField
+			}
+			// enums are connected to named dictionaries and cannot be changed
+			if v.IsEnum() {
+				return nil, ErrRenameEnum
+			}
+			pos = i
+		}
+	}
+	if pos < 0 {
+		return nil, ErrInvalidField
+	}
+
+	// clone but don't update version & hash
+	clone := s.Clone()
+	clone.fields[pos].name = name
+	return clone.Finalize(), nil
+}
+
+func (s *Schema) MarkIndexField(id uint16, typ types.IndexType) (*Schema, error) {
+	for i, v := range s.fields {
+		if v.id != id {
+			continue
+		}
+		if !v.IsActive() {
+			return nil, ErrInvalidField
+		}
+		// clone but don't update version & hash
+		clone := s.Clone()
+		clone.fields[i] = clone.fields[i].WithIndex(typ)
+		return clone.Finalize(), nil
+	}
+	return nil, ErrInvalidField
+}
+
 func (s *Schema) CanMatchFields(names ...string) bool {
 	if len(names) == 0 || len(names) > len(s.fields) {
 		return false
 	}
-	for i, name := range names {
-		if s.fields[i].name != name {
+	for _, name := range names {
+		var ok bool
+		for i := range s.fields {
+			if s.fields[i].name == name && s.fields[i].IsActive() {
+				ok = true
+				break
+			}
+		}
+		if !ok {
 			return false
 		}
 	}
@@ -319,7 +514,7 @@ func (s *Schema) CanSelect(x *Schema) error {
 }
 
 func (s *Schema) SelectSchema(x *Schema) (*Schema, error) {
-	return s.SelectFields(x.FieldNames()...)
+	return s.SelectFields(x.ActiveFieldNames()...)
 }
 
 func (s *Schema) SelectFieldIds(fieldIds ...uint16) (*Schema, error) {
@@ -332,7 +527,7 @@ func (s *Schema) SelectFieldIds(fieldIds ...uint16) (*Schema, error) {
 
 	for _, fid := range fieldIds {
 		f, ok := s.FieldById(fid)
-		if !ok {
+		if !ok || !f.IsActive() {
 			return nil, fmt.Errorf("%w: missing field id %d in schema %s", ErrInvalidField, fid, s.name)
 		}
 		ns.fields = append(ns.fields, f)
@@ -373,8 +568,8 @@ func (s *Schema) Sort() *Schema {
 // using this mapping yields the order in which source schema data is encoded or
 // layed out in storage containers (i.e. packages of blocks/vectors),
 func (s *Schema) MapTo(dst *Schema) ([]int, error) {
-	maps := make([]int, 0, dst.NumFields())
-	for _, dstField := range dst.Fields() {
+	maps := make([]int, 0, len(dst.fields))
+	for _, dstField := range dst.fields {
 		var (
 			srcField Field
 			pos      int = -1
@@ -415,8 +610,9 @@ func (s *Schema) Validate() error {
 		return fmt.Errorf("empty schema, no supported fields found")
 	}
 
-	// count special fields, require no duplicate names
-	unique := make(map[string]struct{})
+	// count special fields, require no duplicate names and ids
+	uniqueNames := make(map[string]struct{})
+	uniqueIds := make(map[uint16]struct{})
 
 	for i := range s.fields {
 		// fields must validate
@@ -426,10 +622,18 @@ func (s *Schema) Validate() error {
 
 		// check name uniqueness
 		n := s.fields[i].name
-		if _, ok := unique[n]; ok {
+		if _, ok := uniqueNames[n]; ok {
 			return fmt.Errorf("schema %s: duplicate field name %s", s.name, n)
 		} else {
-			unique[n] = struct{}{}
+			uniqueNames[n] = struct{}{}
+		}
+
+		// check id uniqueness
+		id := s.fields[i].id
+		if _, ok := uniqueIds[id]; ok {
+			return fmt.Errorf("schema %s: duplicate field id %d", s.name, id)
+		} else {
+			uniqueIds[id] = struct{}{}
 		}
 	}
 
@@ -516,31 +720,44 @@ func (s *Schema) Finalize() *Schema {
 	s.isInterface = false
 	s.schemaHash = 0
 
-	// generate schema hash
+	// generate schema hash from visible fields
 	h := fnv.New64a()
 	h.Write(Uint32Bytes(uint32(s.version)))
 
-	// collect sizes
 	for i := range s.fields {
-		sz := s.fields[i].WireSize()
-		s.minWireSize += sz
-		s.maxWireSize += sz
-		s.isInterface = s.isInterface || s.fields[i].IsInterface()
-		if !s.fields[i].IsFixedSize() {
-			s.isFixedSize = false
-			s.maxWireSize += defaultVarFieldSize
-		}
-		h.Write(Uint16Bytes(s.fields[i].id))
-		h.Write([]byte{byte(s.fields[i].typ)})
+		// collect sizes from visible fields
+		if s.fields[i].IsVisible() {
+			sz := s.fields[i].WireSize()
+			s.minWireSize += sz
+			s.maxWireSize += sz
+			if !s.fields[i].IsFixedSize() {
+				s.isFixedSize = false
+				s.maxWireSize += defaultVarFieldSize
+			}
 
-		// try lookup enum from global registry using tag '0'
-		if s.fields[i].Is(types.FieldFlagEnum) && s.fields[i].enum == nil {
-			s.fields[i].enum, _ = LookupEnum(0, s.fields[i].name)
+			// hash id, type
+			h.Write(Uint16Bytes(s.fields[i].id))
+			h.Write([]byte{byte(s.fields[i].typ)})
+
+			// cache whether we need interface access
+			s.isInterface = s.isInterface || s.fields[i].IsInterface()
+		}
+
+		// try lookup enum from global registry using tag '0' or generate new enum
+		if s.fields[i].Is(types.FieldFlagEnum) {
+			if s.fields[i].enum == nil {
+				s.fields[i].enum, _ = LookupEnum(0, s.fields[i].name)
+			}
+			if s.fields[i].enum == nil {
+				s.fields[i].enum = NewEnumDictionary(s.fields[i].name)
+			}
+			s.enums.Register(s.fields[i].enum)
 		}
 	}
 	s.schemaHash = h.Sum64()
 	s.encode, s.decode = compileCodecs(s)
 
+	// export all fields
 	s.exports = make([]*ExportedField, len(s.fields))
 	for i := range s.fields {
 		s.exports[i] = &ExportedField{
