@@ -9,7 +9,8 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"math/rand"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func Popcount(buf []byte) int {
@@ -62,7 +63,7 @@ func FillBitsetRand(buf []byte, size int, dense float64) []byte {
 	}
 	appbitcount := int(math.Ceil(dense * float64(size)))
 	for ccount := 0; ccount < appbitcount; {
-		bit := rand.Intn(size)
+		bit := util.RandIntn(size)
 		bef := buf[bit/8]
 		aft := bef | 0x01<<(bit%8)
 		if bef != aft {
