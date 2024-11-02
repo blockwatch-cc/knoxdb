@@ -474,7 +474,7 @@ func TestBitsetInsert(T *testing.T) {
 
 					lbefore := dst.Len()
 					cbefore := dst.Count()
-					dst.Insert(src, srcPos, srcLen, dstPos)
+					dst.InsertFrom(src, srcPos, srcLen, dstPos)
 
 					dstSlice := dst.SubSlice(dstPos, srcLen)
 					srcSlice := src.SubSlice(srcPos, srcLen)
@@ -540,7 +540,7 @@ func TestBitsetReplace(T *testing.T) {
 					}
 
 					lbefore := dst.Len()
-					dst.Replace(src, srcPos, srcLen, dstPos)
+					dst.ReplaceFrom(src, srcPos, srcLen, dstPos)
 
 					dstSlice := dst.SubSlice(dstPos, srcLen)
 					srcSlice := src.SubSlice(srcPos, util.Min(srcLen, dst.Len()-dstPos))
@@ -589,7 +589,7 @@ func TestBitsetAppend(T *testing.T) {
 
 					lbefore := dst.Len()
 					cbefore := dst.Count()
-					dst.Append(src, srcPos, srcLen)
+					dst.AppendFrom(src, srcPos, srcLen)
 
 					dstSlice := dst.SubSlice(lbefore, srcLen)
 					srcSlice := src.SubSlice(srcPos, srcLen)
@@ -658,7 +658,7 @@ func TestBitsetDelete(T *testing.T) {
 					}
 
 					before := dst.Clone()
-					dst.Insert(src, srcPos, srcLen, dstPos)
+					dst.InsertFrom(src, srcPos, srcLen, dstPos)
 					dst.Delete(dstPos, srcLen)
 
 					T.Logf("BEFORE(%d/%d)=%x AFTER(%d/%d)=%x delPos=%d n=%d fast=%t\n",

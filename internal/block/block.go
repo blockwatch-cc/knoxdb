@@ -261,7 +261,7 @@ func (b *Block) Clone(sz int) *Block {
 	case BlockString, BlockBytes:
 		(*(*dedup.ByteArray)(c.ptr)).AppendFrom((*(*dedup.ByteArray)(b.ptr)))
 	case BlockBool:
-		((*bitset.Bitset)(c.ptr)).Append(((*bitset.Bitset)(b.ptr)), 0, b.Len())
+		((*bitset.Bitset)(c.ptr)).AppendFrom(((*bitset.Bitset)(b.ptr)), 0, b.Len())
 	case BlockInt128:
 		d128 := (*num.Int128Stride)(c.ptr)
 		s128 := (*num.Int128Stride)(b.ptr)
@@ -425,7 +425,7 @@ func (b *Block) ReplaceBlock(src *Block, from, to, n int) {
 	case BlockString, BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Copy((*(*dedup.ByteArray)(src.ptr)), to, from, n)
 	case BlockBool:
-		((*bitset.Bitset)(b.ptr)).Replace(((*bitset.Bitset)(src.ptr)), from, n, to)
+		((*bitset.Bitset)(b.ptr)).ReplaceFrom(((*bitset.Bitset)(src.ptr)), from, n, to)
 	case BlockInt128:
 		d128 := (*num.Int128Stride)(b.ptr)
 		s128 := (*num.Int128Stride)(src.ptr)
@@ -463,7 +463,7 @@ func (b *Block) AppendBlock(src *Block, from, n int) {
 			(*(*dedup.ByteArray)(b.ptr)).Append(src.Bytes().Subslice(from, from+n)...)
 		}
 	case BlockBool:
-		((*bitset.Bitset)(b.ptr)).Append(((*bitset.Bitset)(src.ptr)), from, n)
+		((*bitset.Bitset)(b.ptr)).AppendFrom(((*bitset.Bitset)(src.ptr)), from, n)
 	case BlockInt128:
 		d128 := (*num.Int128Stride)(b.ptr)
 		s128 := (*num.Int128Stride)(src.ptr)
@@ -495,7 +495,7 @@ func (b *Block) InsertBlock(src *Block, from, to, n int) {
 	case BlockString, BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Insert(to, src.Bytes().Subslice(from, from+n)...)
 	case BlockBool:
-		((*bitset.Bitset)(b.ptr)).Insert(((*bitset.Bitset)(src.ptr)), from, n, to)
+		((*bitset.Bitset)(b.ptr)).InsertFrom(((*bitset.Bitset)(src.ptr)), from, n, to)
 	case BlockInt128:
 		d128 := (*num.Int128Stride)(b.ptr)
 		s128 := (*num.Int128Stride)(src.ptr)

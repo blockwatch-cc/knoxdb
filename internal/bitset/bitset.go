@@ -414,10 +414,19 @@ func (s *Bitset) IsSet(i int) bool {
 	return (s.buf[i>>3] & mask) > 0
 }
 
-// Insert inserts srcLen values from position srcPos in bitset src into the
+// Append grows bitset by 1 and sets the trailing bit to val
+func (s *Bitset) Append(val bool) *Bitset {
+	s.Grow(1)
+	if val {
+		s.setbit(s.size - 1)
+	}
+	return s
+}
+
+// InsertFrom inserts srcLen values from position srcPos in bitset src into the
 // bitset at position dstPos and moves all values following dstPos behind the
 // newly inserted bits
-func (s *Bitset) Insert(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
+func (s *Bitset) InsertFrom(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
 	if srcLen <= 0 {
 		return s
 	}
@@ -489,9 +498,9 @@ func (s *Bitset) Insert(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
 	return s
 }
 
-// Replace replaces srcLen values at position dstPos with values from src
+// ReplaceFrom replaces srcLen values at position dstPos with values from src
 // bewteen position srcPos and srcPos + srcLen.
-func (s *Bitset) Replace(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
+func (s *Bitset) ReplaceFrom(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
 	// skip when arguments are out of range
 	if srcLen <= 0 || srcPos < 0 || dstPos < 0 || dstPos > s.size {
 		return s
@@ -527,9 +536,9 @@ func (s *Bitset) Replace(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
 	return s
 }
 
-// Append grows the bitset by srcLen and appends srcLen values from
+// AppendFrom grows the bitset by srcLen and appends srcLen values from
 // src starting at position srcPos.
-func (s *Bitset) Append(src *Bitset, srcPos, srcLen int) *Bitset {
+func (s *Bitset) AppendFrom(src *Bitset, srcPos, srcLen int) *Bitset {
 	if srcLen <= 0 {
 		return s
 	}

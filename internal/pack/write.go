@@ -81,10 +81,7 @@ func (p *Package) AppendWire(buf []byte) {
 			buf = buf[1:]
 
 		case types.FieldTypeBoolean:
-			b.Bool().Grow(1)
-			if *(*bool)(unsafe.Pointer(&buf[0])) {
-				b.Bool().Set(p.nRows)
-			}
+			b.Bool().Append(*(*bool)(unsafe.Pointer(&buf[0])))
 			buf = buf[1:]
 
 		case types.FieldTypeString, types.FieldTypeBytes:
@@ -189,11 +186,8 @@ func (p *Package) AppendSlice(val reflect.Value) error {
 			}
 
 		case types.FieldTypeBoolean:
-			b.Bool().Grow(n)
 			for i := 0; i < n; i++ {
-				if *(*bool)(fptr) {
-					b.Bool().Set(p.nRows + i)
-				}
+				b.Bool().Append(*(*bool)(fptr))
 				fptr = unsafe.Add(fptr, sz)
 			}
 
@@ -359,10 +353,7 @@ func (p *Package) AppendStruct(val any) error {
 			b.Int64().Append((*(*time.Time)(fptr)).UnixNano())
 
 		case types.FieldTypeBoolean:
-			b.Bool().Grow(1)
-			if *(*bool)(fptr) {
-				b.Bool().Set(p.nRows)
-			}
+			b.Bool().Append(*(*bool)(fptr))
 
 		case types.FieldTypeBytes:
 			switch {
