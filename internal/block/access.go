@@ -42,6 +42,7 @@ func (a BlockAccessor[T]) Set(n int, v T) {
 	}
 	ptr := unsafe.Add(a.block.ptr, n*a.sz)
 	*(*T)(ptr) = v
+	a.block.dirty = true
 }
 
 func (a BlockAccessor[T]) Append(v T) {
@@ -51,6 +52,7 @@ func (a BlockAccessor[T]) Append(v T) {
 	ptr := unsafe.Add(a.block.ptr, a.block.len*a.sz)
 	*(*T)(ptr) = v
 	a.block.len++
+	a.block.dirty = true
 }
 
 func (a BlockAccessor[T]) Less(i, j int) bool {
@@ -77,6 +79,7 @@ func (a BlockAccessor[T]) Swap(i, j int) {
 	iptr := unsafe.Add(a.block.ptr, ipos)
 	jptr := unsafe.Add(a.block.ptr, jpos)
 	*(*T)(iptr), *(*T)(jptr) = *(*T)(jptr), *(*T)(iptr)
+	a.block.dirty = true
 }
 
 func (a BlockAccessor[T]) Cmp(i, j int) int {
