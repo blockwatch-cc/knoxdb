@@ -388,7 +388,7 @@ func BenchmarkViewCut(b *testing.B) {
 func BenchmarkViewCutSkip(b *testing.B) {
 	var err error
 	baseSchema := MustSchemaOf(AllTypes{})
-	baseSchema, err = baseSchema.DeleteField(1)
+	baseSchema, err = baseSchema.DeleteField(2)
 	require.NoError(b, err)
 	baseSchema, err = baseSchema.DeleteField(10)
 	require.NoError(b, err)

@@ -339,9 +339,9 @@ func BenchmarkEncodeVal(b *testing.B) {
 func BenchmarkEncodeValSkip(b *testing.B) {
 	slice, sz := makeBenchData(1)
 	enc := NewGenericEncoder[encodeBenchStruct]()
-	s, err := enc.enc.schema.DeleteField(1)
+	s, err := enc.enc.schema.DeleteField(2)
 	require.NoError(b, err)
-	s, err = s.DeleteField(2)
+	s, err = s.DeleteField(4)
 	require.NoError(b, err)
 	enc.enc.schema = s
 	buf := enc.NewBuffer(1)
