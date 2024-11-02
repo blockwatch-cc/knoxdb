@@ -10,9 +10,28 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
+	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
+
+func (t *Table) dataBucket(tx store.Tx) store.Bucket {
+	key := append([]byte(t.schema.Name()), pack.DataKeySuffix...)
+	b := tx.Bucket(key)
+	if b != nil {
+		b.FillPercent(t.opts.PageFill)
+	}
+	return b
+}
+
+func (t *Table) statsBucket(tx store.Tx) store.Bucket {
+	key := append([]byte(t.schema.Name()), pack.StatsKeySuffix...)
+	b := tx.Bucket(key)
+	if b != nil {
+		b.FillPercent(t.opts.PageFill)
+	}
+	return b
+}
 
 // Loads a shared pack for reading, uses block cache to lookup blocks.
 // Stores loaded blocks unless useCache is false.
@@ -24,7 +43,7 @@ func (t *Table) loadSharedPack(ctx context.Context, id uint32, nrow int, useCach
 	}
 
 	// list of fields to load
-	fids := s.FieldIDs()
+	fids := s.ActiveFieldIds()
 
 	// prepare a pack without block storage
 	pkg := pack.New().
@@ -33,7 +52,7 @@ func (t *Table) loadSharedPack(ctx context.Context, id uint32, nrow int, useCach
 		WithMaxRows(util.NonZero(nrow, t.opts.PackSize))
 
 	// load from table data bucket or cache using tableid as cache tag
-	n, err := pkg.Load(ctx, tx, useCache, t.tableId, t.schema.Name(), fids, nrow)
+	n, err := pkg.Load(ctx, t.dataBucket(tx), useCache, t.tableId, fids, nrow)
 	if err != nil {
 		pkg.Release()
 		return nil, err
@@ -86,13 +105,13 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 		t.stats.Remove(pkg.Key())
 
 		// store stats changes
-		m, err := t.stats.Store(ctx, tx, t.schema.Name(), t.opts.PageFill)
+		m, err := t.stats.Store(ctx, t.statsBucket(tx))
 		if err != nil {
 			return 0, err
 		}
 
 		// remove from storage and block caches
-		if err := pkg.Remove(ctx, tx, t.tableId, t.schema.Name()); err != nil {
+		if err := pkg.Remove(ctx, t.dataBucket(tx), t.tableId); err != nil {
 			return 0, err
 		}
 
@@ -140,7 +159,7 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 
 	// write to disk
 	blockSizes := make([]int, len(pstats.Blocks))
-	n, err := pkg.Store(ctx, tx, t.tableId, t.schema.Name(), t.opts.PageFill, blockSizes)
+	n, err := pkg.Store(ctx, t.dataBucket(tx), t.tableId, blockSizes)
 	if err != nil {
 		return 0, err
 	}
@@ -151,7 +170,7 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 
 	// update and store statistics
 	t.stats.AddOrUpdate(pstats)
-	m, err := t.stats.Store(ctx, tx, t.schema.Name(), t.opts.PageFill)
+	m, err := t.stats.Store(ctx, t.statsBucket(tx))
 	if err != nil {
 		return n, err
 	}

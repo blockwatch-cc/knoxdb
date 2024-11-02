@@ -116,7 +116,6 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	}
 	for _, v := range [][]byte{
 		pack.DataKeySuffix,
-		pack.MetaKeySuffix,
 		pack.StatsKeySuffix,
 		engine.StateKeySuffix,
 	} {
@@ -146,7 +145,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 }
 
 func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOptions) error {
-	e := engine.GetTransaction(ctx).Engine()
+	e := engine.GetEngine(ctx)
 
 	// init names
 	name := s.Name()
@@ -198,7 +197,6 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	}
 	for _, v := range [][]byte{
 		pack.DataKeySuffix,
-		pack.MetaKeySuffix,
 		pack.StatsKeySuffix,
 		engine.StateKeySuffix,
 	} {
@@ -222,7 +220,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 
 	// load stats
 	t.log.Debugf("Loading package stats for %s", typ)
-	n, err := t.stats.Load(ctx, tx, t.schema.Name())
+	n, err := t.stats.Load(ctx, t.statsBucket(tx))
 	if err != nil {
 		// TODO: rebuild corrupt stats here
 		tx.Rollback()
@@ -265,8 +263,10 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	t.pkindex = 0
 	t.opts = engine.TableOptions{}
 	t.metrics = engine.TableMetrics{}
+	t.state = engine.ObjectState{}
 	t.indexes = nil
 	t.stats.Reset()
+	t.stats = nil
 	t.journal.Close()
 	t.journal = nil
 	return
@@ -322,7 +322,7 @@ func (t *Table) Sync(ctx context.Context) error {
 	}
 
 	// store stats
-	n, err := t.stats.Store(ctx, tx, t.schema.Name(), t.opts.PageFill)
+	n, err := t.stats.Store(ctx, t.statsBucket(tx))
 	if err != nil {
 		return err
 	}
@@ -342,7 +342,6 @@ func (t *Table) Truncate(ctx context.Context) error {
 	t.stats.Reset()
 	for _, v := range [][]byte{
 		pack.DataKeySuffix,
-		pack.MetaKeySuffix,
 		pack.StatsKeySuffix,
 		engine.StateKeySuffix,
 	} {

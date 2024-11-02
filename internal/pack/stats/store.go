@@ -8,13 +8,12 @@ import (
 	"fmt"
 	"sort"
 
-	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/store"
 )
 
-func (s *StatsIndex) Load(ctx context.Context, tx store.Tx, name string) (int, error) {
-	key := append([]byte(name), pack.StatsKeySuffix...)
-	packs, n, err := LoadStats(ctx, tx, key)
+func (s *StatsIndex) Load(ctx context.Context, bucket store.Bucket) (int, error) {
+	packs, n, err := LoadStats(ctx, bucket)
 	if err != nil {
 		return 0, err
 	}
@@ -32,10 +31,9 @@ func (s *StatsIndex) Load(ctx context.Context, tx store.Tx, name string) (int, e
 	return n, nil
 }
 
-func LoadStats(ctx context.Context, tx store.Tx, key []byte) (PackStatsList, int, error) {
-	bucket := tx.Bucket(key)
+func LoadStats(ctx context.Context, bucket store.Bucket) (PackStatsList, int, error) {
 	if bucket == nil {
-		return nil, 0, fmt.Errorf("missing statistics bucket %q", string(key))
+		return nil, 0, engine.ErrNoBucket
 	}
 	packs := make(PackStatsList, 0)
 	c := bucket.Cursor()
@@ -91,13 +89,10 @@ func LoadStats(ctx context.Context, tx store.Tx, key []byte) (PackStatsList, int
 // 	return nil
 // }
 
-func (s *StatsIndex) Store(ctx context.Context, tx store.Tx, name string, fill float64) (int, error) {
-	key := append([]byte(name), pack.StatsKeySuffix...)
-	bucket := tx.Bucket(key)
+func (s *StatsIndex) Store(ctx context.Context, bucket store.Bucket) (int, error) {
 	if bucket == nil {
-		return 0, fmt.Errorf("missing statistics bucket %q", string(key))
+		return 0, engine.ErrNoBucket
 	}
-	bucket.FillPercent(fill)
 
 	// remove statistics for deleted packs, if any
 	for _, v := range s.removed.Values {

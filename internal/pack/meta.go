@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/engine"
@@ -17,24 +18,13 @@ import (
 )
 
 const (
-	// reserved metadata field ids
-	RecordId   uint16 = 0xFFFF
-	RecordRef  uint16 = 0xFFFE
-	RecordXmin uint16 = 0xFFFD
-	RecordXmax uint16 = 0xFFFC
-	RecordDead uint16 = 0xFFFB
+	// meta block positions
+	MetaRidPos  = iota // 0
+	MetaRefPos         // 1
+	MetaXminPos        // 2
+	MetaXmaxPos        // 3
+	MetaLivePos        // 4
 )
-
-// Internal schema fields for transaction metadata
-type Meta struct {
-	Rid    uint64 `knox:"$rid,internal"`  // unique row id (not unique pk)
-	Ref    uint64 `knox:"$ref,internal"`  // previous version, ref == rid on first insert
-	Xmin   uint64 `knox:"$xmin,internal"` // txid where this row was created
-	Xmax   uint64 `knox:"$xmax,internal"` // txid where this row was deleted
-	IsDead bool   `knox:"$dead,internal"` // record is deleted
-}
-
-var MetaSchema = schema.MustSchemaOf(Meta{})
 
 type PackMeta [5]*block.Block
 
@@ -43,20 +33,20 @@ func NewMeta() *PackMeta {
 }
 
 func (m *PackMeta) Alloc(sz int) {
-	m[0] = block.New(block.BlockUint64, sz)
-	m[1] = block.New(block.BlockUint64, sz)
-	m[2] = block.New(block.BlockUint64, sz)
-	m[3] = block.New(block.BlockUint64, sz)
-	m[4] = block.New(block.BlockBool, sz)
+	m[MetaRidPos] = block.New(block.BlockUint64, sz)
+	m[MetaRefPos] = block.New(block.BlockUint64, sz)
+	m[MetaXminPos] = block.New(block.BlockUint64, sz)
+	m[MetaXmaxPos] = block.New(block.BlockUint64, sz)
+	m[MetaLivePos] = block.New(block.BlockBool, sz)
 }
 
 func (m *PackMeta) Clone(sz int) *PackMeta {
 	return &PackMeta{
-		m[0].Clone(sz),
-		m[1].Clone(sz),
-		m[2].Clone(sz),
-		m[3].Clone(sz),
-		m[4].Clone(sz),
+		m[MetaRidPos].Clone(sz),
+		m[MetaRefPos].Clone(sz),
+		m[MetaXminPos].Clone(sz),
+		m[MetaXmaxPos].Clone(sz),
+		m[MetaLivePos].Clone(sz),
 	}
 }
 
@@ -64,31 +54,40 @@ func (p *Package) HasMeta() bool {
 	return p.xmeta != nil
 }
 
-func (p *Package) MetaBlocks() PackMeta {
+func (p *Package) Meta() PackMeta {
 	return *p.xmeta
 }
 
-func (p *Package) ReadMeta(row int) (m Meta) {
+func (p *Package) ReadMeta(row int) (m schema.Meta) {
 	if p.xmeta != nil {
-		m.Rid = p.xmeta[0].Uint64().Get(row)
-		m.Ref = p.xmeta[1].Uint64().Get(row)
-		m.Xmin = p.xmeta[2].Uint64().Get(row)
-		m.Xmax = p.xmeta[3].Uint64().Get(row)
-		m.IsDead = p.xmeta[4].Bool().IsSet(row)
+		m.Rid = p.xmeta[MetaRidPos].Uint64().Get(row)
+		m.Ref = p.xmeta[MetaRefPos].Uint64().Get(row)
+		m.Xmin = p.xmeta[MetaXminPos].Uint64().Get(row)
+		m.Xmax = p.xmeta[MetaXmaxPos].Uint64().Get(row)
+		m.IsLive = p.xmeta[MetaLivePos].Bool().IsSet(row)
+	}
+	return
+}
+
+func (p *Package) AppendMeta(m schema.Meta) {
+	if p.xmeta != nil {
+		p.xmeta[MetaRidPos].Uint64().Append(m.Rid)
+		p.xmeta[MetaRefPos].Uint64().Append(m.Ref)
+		p.xmeta[MetaXminPos].Uint64().Append(m.Xmin)
+		p.xmeta[MetaXmaxPos].Uint64().Append(m.Xmax)
+		p.xmeta[MetaLivePos].Bool().Append(m.IsLive)
 	}
 	return
 }
 
 // Loads xmeta blocks from disk, blocks are read-only
-func (p *Package) LoadMeta(ctx context.Context, tx store.Tx, useCache bool, cacheKey uint64, name string, nRows int) (int, error) {
-	key := append([]byte(name), MetaKeySuffix...)
-	bucket := tx.Bucket(key)
+func (p *Package) LoadMeta(ctx context.Context, bucket store.Bucket, useCache bool, cacheKey uint64, fids []uint16, nRows int) (int, error) {
 	if bucket == nil {
-		return 0, fmt.Errorf("missing xmeta bucket %s", string(key))
+		return 0, engine.ErrNoBucket
 	}
 
 	// use block cache to lookup
-	bcache := engine.GetTransaction(ctx).Engine().BlockCache()
+	bcache := engine.GetEngine(ctx).BlockCache()
 	ckey := engine.CacheKeyType{cacheKey, 0}
 
 	// alloc meta blocks if missing
@@ -102,7 +101,13 @@ func (p *Package) LoadMeta(ctx context.Context, tx store.Tx, useCache bool, cach
 		if p.xmeta[i] != nil {
 			continue
 		}
-		id := RecordId - uint16(i)
+
+		id := schema.MetaRid - uint16(i)
+
+		// skip excluded blocks, load full schema when fids is nil
+		if fids != nil && !slices.Contains(fids, id) {
+			continue
+		}
 
 		// try cache lookup first, will inc refcount
 		ckey[1] = blockKey(p.key, id)
@@ -112,7 +117,7 @@ func (p *Package) LoadMeta(ctx context.Context, tx store.Tx, useCache bool, cach
 		}
 
 		// generate storage key for this block
-		bkey := encodeBlockKey(p.key, id)
+		bkey := EncodeBlockKey(p.key, id)
 
 		// load block data
 		buf := bucket.Get(bkey)
@@ -140,8 +145,7 @@ func (p *Package) LoadMeta(ctx context.Context, tx store.Tx, useCache bool, cach
 
 		// fast-path, decode from buffer
 		if err := p.xmeta[i].Decode(buf); err != nil {
-			return n, fmt.Errorf("loading xmeta block 0x%08x:%02d from bucket %s: %v",
-				p.key, i, string(key), err)
+			return n, fmt.Errorf("loading xmeta block 0x%08x:%02d: %v", p.key, i, err)
 		}
 
 		// cache loaded block, will inc refcount
@@ -176,13 +180,10 @@ func (p *Package) LoadMeta(ctx context.Context, tx store.Tx, useCache bool, cach
 }
 
 // store all dirty xmeta blocks
-func (p *Package) StoreMeta(ctx context.Context, tx store.Tx, cacheKey uint64, name string, fill float64, stats []int) (int, error) {
-	key := append([]byte(name), MetaKeySuffix...)
-	bucket := tx.Bucket(key)
+func (p *Package) StoreMeta(ctx context.Context, bucket store.Bucket, cacheKey uint64, stats []int) (int, error) {
 	if bucket == nil {
-		return 0, fmt.Errorf("missing xmeta bucket %s", string(key))
+		return 0, engine.ErrNoBucket
 	}
-	bucket.FillPercent(fill)
 
 	// ensure stats length
 	if stats != nil {
@@ -193,7 +194,7 @@ func (p *Package) StoreMeta(ctx context.Context, tx store.Tx, cacheKey uint64, n
 	}
 
 	// remove updated blocks from cache
-	bcache := engine.GetTransaction(ctx).Engine().BlockCache()
+	bcache := engine.GetEngine(ctx).BlockCache()
 	ckey := engine.CacheKeyType{cacheKey, 0}
 
 	var n int
@@ -225,13 +226,13 @@ func (p *Package) StoreMeta(ctx context.Context, tx store.Tx, cacheKey uint64, n
 		n += buf.Len()
 
 		// generate storage key for this block
-		id := RecordId - uint16(i)
-		bkey := encodeBlockKey(p.key, id)
+		id := schema.MetaRid - uint16(i)
+		bkey := EncodeBlockKey(p.key, id)
 
 		// write to store
 		if err := bucket.Put(bkey, buf.Bytes()); err != nil {
-			return n, fmt.Errorf("storing xmeta block 0x%08x:%02d in bucket %s: %v",
-				p.key, i, string(key), err)
+			return n, fmt.Errorf("storing xmeta block 0x%08x:%02d: %v",
+				p.key, i, err)
 		}
 		p.xmeta[i].SetClean()
 
@@ -244,23 +245,20 @@ func (p *Package) StoreMeta(ctx context.Context, tx store.Tx, cacheKey uint64, n
 }
 
 // delete all xmeta blocks from storage and cache
-func (p *Package) RemoveMeta(ctx context.Context, tx store.Tx, cacheKey uint64, name string) error {
-	key := append([]byte(name), MetaKeySuffix...)
-	bucket := tx.Bucket(key)
+func (p *Package) RemoveMeta(ctx context.Context, bucket store.Bucket, cacheKey uint64) error {
 	if bucket == nil {
-		return fmt.Errorf("missing xmeta bucket %s", string(key))
+		return engine.ErrNoBucket
 	}
 
 	// remove blocks from cache
-	bcache := engine.GetTransaction(ctx).Engine().BlockCache()
+	bcache := engine.GetEngine(ctx).BlockCache()
 	ckey := engine.CacheKeyType{cacheKey, 0}
 
-	for i := RecordId; i >= RecordDead; i-- {
+	for i := schema.MetaRid; i >= schema.MetaLive; i-- {
 		// don't check if key exists
-		bkey := encodeBlockKey(p.key, i)
+		bkey := EncodeBlockKey(p.key, i)
 		if err := bucket.Delete(bkey); err != nil {
-			return fmt.Errorf("removing xmeta block 0x%016x:%02d from bucket %s: %v",
-				p.key, i, string(key), err)
+			return fmt.Errorf("removing xmeta block 0x%016x:%02d: %v", p.key, i, err)
 		}
 
 		// drop cached blocks

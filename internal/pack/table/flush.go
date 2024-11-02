@@ -75,7 +75,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 				t.log.Error(string(debug.Stack()))
 			}
 			t.log.Debugf("table %s: restoring statistics", t.schema.Name())
-			if _, err := t.stats.Load(ctx, tx, t.schema.Name()); err != nil {
+			if _, err := t.stats.Load(ctx, t.statsBucket(tx)); err != nil {
 				t.log.Errorf("table %s statistics rollback failed: %v", t.schema.Name(), err)
 			}
 			if err != nil {

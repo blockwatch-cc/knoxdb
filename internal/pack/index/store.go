@@ -10,8 +10,27 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
+	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
+
+func (idx *Index) dataBucket(tx store.Tx) store.Bucket {
+	key := append([]byte(idx.schema.Name()), pack.DataKeySuffix...)
+	b := tx.Bucket(key)
+	if b != nil {
+		b.FillPercent(idx.opts.PageFill)
+	}
+	return b
+}
+
+func (idx *Index) statsBucket(tx store.Tx) store.Bucket {
+	key := append([]byte(idx.schema.Name()), pack.StatsKeySuffix...)
+	b := tx.Bucket(key)
+	if b != nil {
+		b.FillPercent(idx.opts.PageFill)
+	}
+	return b
+}
 
 // Loads a shared pack for reading, uses block cache to lookup blocks.
 // Stores loaded blocks unless useCache is false.
@@ -31,7 +50,7 @@ func (idx *Index) loadSharedPack(ctx context.Context, id uint32, nrow int, useCa
 		WithMaxRows(util.NonZero(nrow, idx.opts.PackSize))
 
 	// load from table data bucket or cache using tableid as cache tag
-	n, err := pkg.Load(ctx, tx, useCache, idx.indexId, idx.schema.Name(), nil, nrow)
+	n, err := pkg.Load(ctx, idx.dataBucket(tx), useCache, idx.indexId, nil, nrow)
 	if err != nil {
 		pkg.Release()
 		return nil, err
@@ -84,13 +103,13 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 		idx.stats.Remove(pkg.Key())
 
 		// store stats changes
-		m, err := idx.stats.Store(ctx, tx, idx.schema.Name(), idx.opts.PageFill)
+		m, err := idx.stats.Store(ctx, idx.statsBucket(tx))
 		if err != nil {
 			return 0, err
 		}
 
 		// remove from storage and block caches
-		if err := pkg.Remove(ctx, tx, idx.indexId, idx.schema.Name()); err != nil {
+		if err := pkg.Remove(ctx, idx.dataBucket(tx), idx.indexId); err != nil {
 			return 0, err
 		}
 
@@ -136,7 +155,7 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 
 	// write to disk
 	blockSizes := make([]int, len(meta.Blocks))
-	n, err := pkg.Store(ctx, tx, idx.indexId, idx.schema.Name(), idx.opts.PageFill, blockSizes)
+	n, err := pkg.Store(ctx, idx.dataBucket(tx), idx.indexId, blockSizes)
 	if err != nil {
 		return 0, err
 	}
@@ -147,7 +166,7 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 
 	// update and store statistics
 	idx.stats.AddOrUpdate(meta)
-	m, err := idx.stats.Store(ctx, tx, idx.schema.Name(), idx.opts.PageFill)
+	m, err := idx.stats.Store(ctx, idx.statsBucket(tx))
 	if err != nil {
 		return n, err
 	}

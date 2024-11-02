@@ -55,38 +55,37 @@ var (
 		types.FieldTypeFloat64:    block.BlockFloat64,
 	}
 
-	MetaKeySuffix  = []byte("_meta")
-	StatsKeySuffix = []byte("_stats")
-	DataKeySuffix  = []byte("_data")
+	// MetaKeySuffix    = []byte("_meta")
+	StatsKeySuffix   = []byte("_stats")
+	DataKeySuffix    = []byte("_data")
+	JournalKeySuffix = []byte("_journal")
 )
 
 func blockKey(packkey uint32, blockId uint16) uint64 {
 	return uint64(packkey)<<32 | uint64(blockId)
 }
 
-func encodeBlockKey(packkey uint32, blockId uint16) []byte {
+func EncodeBlockKey(packkey uint32, blockId uint16) []byte {
 	var b [8]byte
 	BE.PutUint32(b[:], packkey)
 	BE.PutUint16(b[6:], blockId)
 	return b[:]
 }
 
-func decodeBlockKey(buf []byte) (packkey uint32, blockId uint16) {
+func DecodeBlockKey(buf []byte) (packkey uint32, blockId uint16) {
 	packkey = BE.Uint32(buf)
 	blockId = BE.Uint16(buf[6:])
 	return
 }
 
 // Loads missing blocks from disk, blocks are read-only
-func (p *Package) Load(ctx context.Context, tx store.Tx, useCache bool, cacheKey uint64, name string, fids []uint16, nRows int) (int, error) {
-	key := append([]byte(name), DataKeySuffix...)
-	bucket := tx.Bucket(key)
+func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, cacheKey uint64, fids []uint16, nRows int) (int, error) {
 	if bucket == nil {
-		return 0, fmt.Errorf("missing data bucket %s", string(key))
+		return 0, engine.ErrNoBucket
 	}
 
 	// use block cache to lookup
-	bcache := engine.GetTransaction(ctx).Engine().BlockCache()
+	bcache := engine.GetEngine(ctx).BlockCache()
 	ckey := engine.CacheKeyType{cacheKey, 0}
 
 	var n int
@@ -109,7 +108,7 @@ func (p *Package) Load(ctx context.Context, tx store.Tx, useCache bool, cacheKey
 		}
 
 		// generate storage key for this block
-		bkey := encodeBlockKey(p.key, f.Id())
+		bkey := EncodeBlockKey(p.key, f.Id())
 
 		// load block data
 		buf := bucket.Get(bkey)
@@ -154,8 +153,8 @@ func (p *Package) Load(ctx context.Context, tx store.Tx, useCache bool, cacheKey
 			err = p.blocks[i].Decode(buf)
 		}
 		if err != nil {
-			return n, fmt.Errorf("loading block 0x%08x:%02d from bucket %s: %v",
-				p.key, f.Id(), string(key), err)
+			return n, fmt.Errorf("loading block 0x%08x:%02d: %v",
+				p.key, f.Id(), err)
 		}
 
 		// cache loaded block, will inc refcount
@@ -178,8 +177,7 @@ func (p *Package) Load(ctx context.Context, tx store.Tx, useCache bool, cacheKey
 		}
 		// all subsequent blocks must have same len
 		if nRows != b.Len() {
-			return n, fmt.Errorf("loading pack 0x%08x: block %02d len %d mismatch %d",
-				p.key, i, nRows, b.Len())
+			return n, fmt.Errorf("loading block 0x%08x:%02d len %d mismatch %d", p.key, i, nRows, b.Len())
 		}
 	}
 
@@ -190,13 +188,10 @@ func (p *Package) Load(ctx context.Context, tx store.Tx, useCache bool, cacheKey
 }
 
 // store all dirty blocks
-func (p *Package) Store(ctx context.Context, tx store.Tx, cacheKey uint64, name string, fill float64, stats []int) (int, error) {
-	key := append([]byte(name), DataKeySuffix...)
-	bucket := tx.Bucket(key)
+func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint64, stats []int) (int, error) {
 	if bucket == nil {
-		return 0, fmt.Errorf("missing data bucket %s", string(key))
+		return 0, engine.ErrNoBucket
 	}
-	bucket.FillPercent(fill)
 
 	// ensure stats length
 	if stats != nil {
@@ -207,7 +202,7 @@ func (p *Package) Store(ctx context.Context, tx store.Tx, cacheKey uint64, name 
 	}
 
 	// remove updated blocks from cache
-	bcache := engine.GetTransaction(ctx).Engine().BlockCache()
+	bcache := engine.GetEngine(ctx).BlockCache()
 	ckey := engine.CacheKeyType{cacheKey, 0}
 
 	var n int
@@ -245,14 +240,13 @@ func (p *Package) Store(ctx context.Context, tx store.Tx, cacheKey uint64, name 
 		n += buf.Len()
 
 		// generate storage key for this block
-		bkey := encodeBlockKey(p.key, f.Id())
+		bkey := EncodeBlockKey(p.key, f.Id())
 		// fmt.Printf("Store block %d with comp %d\n", f.Id(), f.Compress())
 		// fmt.Printf("Data %d\n%s", buf.Len(), hex.Dump(buf.Bytes()))
 
 		// write to store
 		if err := bucket.Put(bkey, buf.Bytes()); err != nil {
-			return n, fmt.Errorf("storing block 0x%08x:%02d in bucket %s: %v",
-				p.key, f.Id(), string(key), err)
+			return n, fmt.Errorf("storing block 0x%08x:%02d: %v", p.key, f.Id(), err)
 		}
 		p.blocks[i].SetClean()
 
@@ -265,28 +259,34 @@ func (p *Package) Store(ctx context.Context, tx store.Tx, cacheKey uint64, name 
 }
 
 // delete all blocks from storage and cache
-func (p *Package) Remove(ctx context.Context, tx store.Tx, cacheKey uint64, name string) error {
-	key := append([]byte(name), DataKeySuffix...)
-	bucket := tx.Bucket(key)
+func (p *Package) Remove(ctx context.Context, bucket store.Bucket, cacheKey uint64) error {
 	if bucket == nil {
-		return fmt.Errorf("missing data bucket %s", string(key))
+		return engine.ErrNoBucket
 	}
 
 	// remove blocks from cache
-	bcache := engine.GetTransaction(ctx).Engine().BlockCache()
+	bcache := engine.GetEngine(ctx).BlockCache()
 	ckey := engine.CacheKeyType{cacheKey, 0}
 
 	for _, f := range p.schema.Fields() {
 		// don't check if key exists
-		bkey := encodeBlockKey(p.key, f.Id())
+		bkey := EncodeBlockKey(p.key, f.Id())
 		if err := bucket.Delete(bkey); err != nil {
-			return fmt.Errorf("removing block 0x%016x:%02d from bucket %s: %v",
-				p.key, f.Id(), string(key), err)
+			return fmt.Errorf("removing block 0x%016x:%02d: %v", p.key, f.Id(), err)
 		}
 
 		// drop cached blocks
 		ckey[1] = blockKey(p.key, f.Id())
 		bcache.Remove(ckey)
 	}
+
+	// remove meta if defined
+	if p.HasMeta() {
+		err := p.RemoveMeta(ctx, bucket, cacheKey)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

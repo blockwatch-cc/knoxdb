@@ -243,7 +243,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 
 	// load stats
 	idx.log.Debugf("Loading package stats for %s", typ)
-	n, err := idx.stats.Load(ctx, tx, idx.schema.Name())
+	n, err := idx.stats.Load(ctx, idx.statsBucket(tx))
 	if err != nil {
 		// TODO: rebuild corrupt stats
 		return err

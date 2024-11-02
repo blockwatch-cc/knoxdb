@@ -134,7 +134,8 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bkey string) erro
 		WithMaxRows(j.maxsize).
 		WithKey(pack.JournalKeyId).
 		WithSchema(s)
-	if _, err := j.Data.Load(ctx, tx, false, 0, bkey, nil, 0); err != nil {
+	bucket := tx.Bucket(append([]byte(bkey), pack.DataKeySuffix...))
+	if _, err := j.Data.Load(ctx, bucket, false, 0, nil, 0); err != nil {
 		return err
 	}
 	j.sortData = false
@@ -152,7 +153,7 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bkey string) erro
 	j.Deleted.Resize(len(j.Keys))
 	var key [4]byte
 	binary.BigEndian.PutUint32(key[:], pack.TombstoneKeyId)
-	if buf := tx.Bucket([]byte(bkey + "_data")).Get(key[:]); buf != nil {
+	if buf := bucket.Get(key[:]); buf != nil {
 		if err := j.Tomb.UnmarshalBinary(buf); err != nil {
 			return err
 		}
@@ -187,7 +188,9 @@ func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bkey string) (in
 		}
 		j.Data.SetValue(j.Data.PkIdx(), idx, pk)
 	}
-	n, err := j.Data.Store(ctx, tx, 0, bkey, 0.9, nil)
+	bucket := tx.Bucket(append([]byte(bkey), pack.DataKeySuffix...))
+	bucket.FillPercent(0.9)
+	n, err := j.Data.Store(ctx, bucket, 0, nil)
 	if err != nil {
 		return 0, 0, err
 	}
