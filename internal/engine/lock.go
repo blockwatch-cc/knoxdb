@@ -86,7 +86,7 @@ func (m *LockManager) Wait() {
 // xid is the next in order. When multiple goroutines attempt to acquire the same
 // resource lock under the same xid, the Go scheduler determines order.
 type lock struct {
-	typ       LockType                 // global, object or predicate
+	typ       LockType                 // object or predicate
 	exclusive bool                     // flag indicating if this lock is exclusive or shared
 	oid       uint64                   // container id when type is object or predicate
 	count     int                      // shared lock reference counter

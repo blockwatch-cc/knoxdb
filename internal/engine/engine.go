@@ -177,6 +177,8 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		indexes: make(map[uint64]IndexEngine),
 		enums:   make(map[uint64]*schema.EnumDictionary),
 		txs:     make(TxList, 0),
+		xmin:    0,
+		xnext:   1,
 		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
 		cat:     NewCatalog(name),
 		log:     log.Disabled,
@@ -275,13 +277,10 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		return nil, err
 	}
 
-	// TODO: recover xmin/xnext from catalog&tables (we no longer read wal in a
-	// single loop, hence we must assemble this info from wal users)
-	e.xmin = 1
-	e.xnext = 1
+	// init virtual xid for read-only
 	e.vnext = e.xnext + ReadTxOffset
 
-	// close tx
+	// close tx (we commit here because crash recovery may have rewritten journals and state)
 	if err = commit(); err != nil {
 		return nil, err
 	}
@@ -301,8 +300,7 @@ func (e *Engine) Close(ctx context.Context) error {
 	// TODO: shutdown user sessions (close wire protocol server)
 	// - should cancel contexts
 
-	// kill all pending transactions
-	// FIXME: only write tx are stored, howto cancel read tx?
+	// cancel all pending transactions
 	// TODO: find another way, maybe cancel session contexts + define an explicit
 	// session for sdk usage
 	for _, tx := range e.txs {
@@ -440,25 +438,42 @@ func (e *Engine) Sync(ctx context.Context) error {
 }
 
 func (e *Engine) CommitTx(ctx context.Context, oid, xid uint64) error {
-	t, ok := e.tables[oid]
-	if ok {
-		return t.CommitTx(ctx, xid)
+	var (
+		t  TxTracker
+		ok bool
+	)
+	e.mu.RLock()
+	t, ok = e.tables[oid]
+	if !ok {
+		t, ok = e.stores[oid]
 	}
-	s, ok := e.stores[oid]
-	if ok {
-		return s.CommitTx(ctx, xid)
+	e.mu.RUnlock()
+	if !ok {
+		return nil
 	}
-	return nil
+	return t.CommitTx(ctx, xid)
 }
 
 func (e *Engine) AbortTx(ctx context.Context, oid, xid uint64) error {
-	t, ok := e.tables[oid]
-	if ok {
-		return t.AbortTx(ctx, xid)
+	var (
+		t  TxTracker
+		ok bool
+	)
+	e.mu.RLock()
+	t, ok = e.tables[oid]
+	if !ok {
+		t, ok = e.stores[oid]
 	}
-	s, ok := e.stores[oid]
-	if ok {
-		return s.AbortTx(ctx, xid)
+	e.mu.RUnlock()
+	if !ok {
+		return nil
 	}
-	return nil
+	return t.AbortTx(ctx, xid)
+}
+
+func (e *Engine) UpdateTxHorizon(xid uint64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.xmin = max(e.xmin, xid)
+	e.xnext = e.xmin + 1
 }

@@ -61,3 +61,11 @@ func GetTxId(ctx context.Context) uint64 {
 	}
 	return val.(*Tx).id
 }
+
+func GetEngine(ctx context.Context) *Engine {
+	val := ctx.Value(TransactionKey{})
+	if val == nil {
+		return nil
+	}
+	return val.(*Tx).engine
+}

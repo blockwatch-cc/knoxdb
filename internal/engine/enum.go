@@ -75,7 +75,9 @@ func (e *Engine) CreateEnum(ctx context.Context, name string) (*schema.EnumDicti
 
 	// register commit callback
 	tx.OnAbort(func(ctx context.Context) error {
+		e.mu.Lock()
 		delete(e.enums, tag)
+		e.mu.Unlock()
 		return nil
 	})
 

@@ -974,6 +974,9 @@ func (c *Catalog) Recover(ctx context.Context) error {
 		return err
 	}
 
+	// track max committed/aborted xid seen
+	var xmax uint64
+
 	// we may have data from multiple txn in the wal and each txn may
 	// have created, updated or removed multiple objects. some txn
 	// may have committed, some may have aborted, some may have neither
@@ -999,10 +1002,12 @@ func (c *Catalog) Recover(ctx context.Context) error {
 		case wal.RecordTypeCommit:
 			err = c.runCommitActions(ctx, c.pending[rec.TxID])
 			delete(c.pending, rec.TxID)
+			xmax = max(xmax, rec.TxID)
 
 		case wal.RecordTypeAbort:
 			err = c.runAbortActions(ctx, c.pending[rec.TxID])
 			delete(c.pending, rec.TxID)
+			xmax = max(xmax, rec.TxID)
 
 		case wal.RecordTypeInsert,
 			wal.RecordTypeUpdate,
@@ -1034,6 +1039,9 @@ func (c *Catalog) Recover(ctx context.Context) error {
 			return err
 		}
 	}
+
+	// update engine horizon
+	GetEngine(ctx).UpdateTxHorizon(xmax)
 
 	return c.doCheckpoint(ctx)
 }

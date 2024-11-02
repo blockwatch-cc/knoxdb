@@ -251,9 +251,6 @@ func (t *Tx) Lock(ctx context.Context, oid uint64) error {
 	if err := t.Err(); err != nil {
 		return err
 	}
-
-	// TODO: need unique id for read-only tx
-
 	return t.engine.lm.Lock(ctx, t.id, LockModeExclusive, oid)
 }
 
@@ -264,9 +261,6 @@ func (t *Tx) RLock(ctx context.Context, oid uint64) error {
 	if err := t.Err(); err != nil {
 		return err
 	}
-
-	// TODO: need unique id for read-only tx
-
 	return t.engine.lm.Lock(ctx, t.id, LockModeShared, oid)
 }
 
@@ -318,7 +312,7 @@ func (t *Tx) Commit() error {
 	// - write wal commit records
 	// - sync wals
 	// - update journal segments
-	for oid, _ := range t.touched {
+	for oid := range t.touched {
 		err := t.engine.CommitTx(t.ctx, oid, t.id)
 		if err != nil {
 			return err
@@ -393,7 +387,7 @@ func (t *Tx) Abort() error {
 
 		// send abort to all touched objects; write wal abort records,
 		// update journal segments
-		for oid, _ := range t.touched {
+		for oid := range t.touched {
 			err := t.engine.AbortTx(t.ctx, oid, t.id)
 			if err != nil {
 				return err

@@ -147,6 +147,8 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 		e.indexes[tag] = index
 		e.mu.Unlock()
 
+		// TODO: update table schema (set indexed flag) and store in catalog
+
 		// TODO: rebuild in background
 		// index.Rebuild(ctx)
 
@@ -210,9 +212,19 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 			e.log.Errorf("Close index: %v", err)
 		}
 
+		// TODO: update table schema (remove indexed flag) and store in catalog
+
 		e.mu.Lock()
 		delete(e.indexes, tag)
 		e.mu.Unlock()
+
+		// clear caches
+		for _, k := range e.cache.blocks.Keys() {
+			if k[0] != tag {
+				continue
+			}
+			e.cache.blocks.Remove(k)
+		}
 
 		return nil
 	})

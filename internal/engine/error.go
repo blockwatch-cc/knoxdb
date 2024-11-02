@@ -36,6 +36,7 @@ var (
 	ErrResultClosed      = errors.New("knox: result already closed")
 	ErrInvalidObjectType = errors.New("knox: invalid object type")
 	ErrTableDropWithRefs = errors.New("knox: table is referenced")
+	ErrTableReadOnly     = errors.New("knox: table is read-only")
 
 	EndStream = errors.New("end stream")
 

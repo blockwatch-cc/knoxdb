@@ -24,6 +24,7 @@ type TableKind string
 const (
 	TableKindPack = "pack"
 	TableKindLSM  = "lsm"
+	TableKindCDC  = "cdc"
 )
 
 type TableFactory func() TableEngine
@@ -60,8 +61,8 @@ type TableEngine interface {
 	Indexes() []IndexEngine
 
 	// Tx Management
-	CommitTx(Context, uint64) error
-	AbortTx(Context, uint64) error
+	CommitTx(ctx Context, xid uint64) error
+	AbortTx(ctx Context, xid uint64) error
 }
 
 type QueryPlan interface {
@@ -158,14 +159,19 @@ type StoreEngine interface {
 	Del(ctx Context, key []byte) error
 	Range(ctx Context, prefix []byte, fn func(ctx Context, k, v []byte) error) error
 	Scan(ctx Context, from, to []byte, fn func(ctx Context, k, v []byte) error) error
-	// ApplyWalRecord(Context, *wal.Record) error
 
 	// Tx Management
-	CommitTx(Context, uint64) error
-	AbortTx(Context, uint64) error
+	CommitTx(ctx Context, xid uint64) error
+	AbortTx(ctx Context, xid uint64) error
 }
 
 type ConditionMatcher interface {
 	MatchView(*schema.View) bool
 	Overlaps(ConditionMatcher) bool
+}
+
+// all objects that support tracking tx info
+type TxTracker interface {
+	CommitTx(ctx Context, xid uint64) error
+	AbortTx(ctx Context, xid uint64) error
 }

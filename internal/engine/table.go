@@ -229,6 +229,15 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 		e.mu.Lock()
 		delete(e.tables, tag)
 		e.mu.Unlock()
+
+		// clear caches
+		for _, k := range e.cache.blocks.Keys() {
+			if k[0] != tag {
+				continue
+			}
+			e.cache.blocks.Remove(k)
+		}
+
 		return nil
 	})
 
@@ -264,6 +273,14 @@ func (e *Engine) TruncateTable(ctx context.Context, name string) error {
 		return err
 	}
 
+	// clear caches
+	for _, k := range e.cache.blocks.Keys() {
+		if k[0] != tag {
+			continue
+		}
+		e.cache.blocks.Remove(k)
+	}
+
 	return commit()
 }
 
@@ -293,6 +310,14 @@ func (e *Engine) CompactTable(ctx context.Context, name string) error {
 
 	if err := t.Compact(ctx); err != nil {
 		return err
+	}
+
+	// clear caches
+	for _, k := range e.cache.blocks.Keys() {
+		if k[0] != tag {
+			continue
+		}
+		e.cache.blocks.Remove(k)
 	}
 
 	return commit()
@@ -333,7 +358,7 @@ func (e *Engine) openTables(ctx context.Context) error {
 		e.log.Debugf("Table %s", s)
 		e.log.Debugf("Resolve enums from %#v", e.enums)
 
-		// open the store
+		// open the table, load journals, replay wal after crash
 		if err := table.Open(ctx, s, opts); err != nil {
 			return err
 		}
