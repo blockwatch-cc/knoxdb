@@ -20,25 +20,23 @@ func bytemask(size int) byte {
 func matchEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
-	mbuf := mask.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
+		mbuf := mask.Bytes()
+		for i, k := 0, a.Len(); i < k; i++ {
 			bit := bitmask(i)
 			if (mbuf[i>>3] & bit) == 0 {
 				continue
 			}
-			if !bytes.Equal(v, val) {
+			if !bytes.Equal(a.Elem(i), val) {
 				continue
 			}
 			bbuf[i>>3] |= bit
 			cnt++
 		}
 	} else {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
-			if !bytes.Equal(v, val) {
+		for i, k := 0, a.Len(); i < k; i++ {
+			if !bytes.Equal(a.Elem(i), val) {
 				continue
 			}
 			bbuf[i>>3] |= bitmask(i)
@@ -52,25 +50,23 @@ func matchEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bits
 func matchNotEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
-	mbuf := mask.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
+		mbuf := mask.Bytes()
+		for i, k := 0, a.Len(); i < k; i++ {
 			bit := bitmask(i)
-			if mask != nil && (mbuf[i>>3]&bit) == 0 {
+			if (mbuf[i>>3] & bit) == 0 {
 				continue
 			}
-			if bytes.Equal(v, val) {
+			if bytes.Equal(a.Elem(i), val) {
 				continue
 			}
 			bbuf[i>>3] |= bit
 			cnt++
 		}
 	} else {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
-			if bytes.Equal(v, val) {
+		for i, k := 0, a.Len(); i < k; i++ {
+			if bytes.Equal(a.Elem(i), val) {
 				continue
 			}
 			bbuf[i>>3] |= bitmask(i)
@@ -84,25 +80,23 @@ func matchNotEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.B
 func matchLess(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
-	mbuf := mask.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
+		mbuf := mask.Bytes()
+		for i, k := 0, a.Len(); i < k; i++ {
 			bit := bitmask(i)
-			if mask != nil && (mbuf[i>>3]&bit) == 0 {
+			if (mbuf[i>>3] & bit) == 0 {
 				continue
 			}
-			if bytes.Compare(v, val) >= 0 {
+			if bytes.Compare(a.Elem(i), val) >= 0 {
 				continue
 			}
 			bbuf[i>>3] |= bit
 			cnt++
 		}
 	} else {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
-			if bytes.Compare(v, val) >= 0 {
+		for i, k := 0, a.Len(); i < k; i++ {
+			if bytes.Compare(a.Elem(i), val) >= 0 {
 				continue
 			}
 			bbuf[i>>3] |= bitmask(i)
@@ -116,25 +110,23 @@ func matchLess(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitse
 func matchLessEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
-	mbuf := mask.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
+		mbuf := mask.Bytes()
+		for i, k := 0, a.Len(); i < k; i++ {
 			bit := bitmask(i)
-			if mask != nil && (mbuf[i>>3]&bit) == 0 {
+			if (mbuf[i>>3] & bit) == 0 {
 				continue
 			}
-			if bytes.Compare(v, val) > 0 {
+			if bytes.Compare(a.Elem(i), val) > 0 {
 				continue
 			}
 			bbuf[i>>3] |= bit
 			cnt++
 		}
 	} else {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
-			if bytes.Compare(v, val) > 0 {
+		for i, k := 0, a.Len(); i < k; i++ {
+			if bytes.Compare(a.Elem(i), val) > 0 {
 				continue
 			}
 			bbuf[i>>3] |= bitmask(i)
@@ -148,25 +140,23 @@ func matchLessEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.
 func matchGreater(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
-	mbuf := mask.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
+		mbuf := mask.Bytes()
+		for i, k := 0, a.Len(); i < k; i++ {
 			bit := bitmask(i)
-			if mask != nil && (mbuf[i>>3]&bit) == 0 {
+			if (mbuf[i>>3] & bit) == 0 {
 				continue
 			}
-			if bytes.Compare(v, val) <= 0 {
+			if bytes.Compare(a.Elem(i), val) <= 0 {
 				continue
 			}
 			bbuf[i>>3] |= bit
 			cnt++
 		}
 	} else {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
-			if bytes.Compare(v, val) <= 0 {
+		for i, k := 0, a.Len(); i < k; i++ {
+			if bytes.Compare(a.Elem(i), val) <= 0 {
 				continue
 			}
 			bbuf[i>>3] |= bitmask(i)
@@ -180,25 +170,23 @@ func matchGreater(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bi
 func matchGreaterEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
-	mbuf := mask.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
+		mbuf := mask.Bytes()
+		for i, k := 0, a.Len(); i < k; i++ {
 			bit := bitmask(i)
-			if mask != nil && (mbuf[i>>3]&bit) == 0 {
+			if (mbuf[i>>3] & bit) == 0 {
 				continue
 			}
-			if bytes.Compare(v, val) < 0 {
+			if bytes.Compare(a.Elem(i), val) < 0 {
 				continue
 			}
 			bbuf[i>>3] |= bit
 			cnt++
 		}
 	} else {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
-			if bytes.Compare(v, val) < 0 {
+		for i, k := 0, a.Len(); i < k; i++ {
+			if bytes.Compare(a.Elem(i), val) < 0 {
 				continue
 			}
 			bbuf[i>>3] |= bitmask(i)
@@ -212,11 +200,10 @@ func matchGreaterEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bits
 func matchBetween(a ByteArray, from, to []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
-	mbuf := mask.Bytes()
 	// short-cut for empty min
 	if a.Len() == 0 {
 		if mask != nil {
-			copy(bbuf, mbuf)
+			copy(bbuf, mask.Bytes())
 			bits.ResetCount()
 		} else {
 			bbuf[0] = 0xff
@@ -238,12 +225,13 @@ func matchBetween(a ByteArray, from, to []byte, bits, mask *bitset.Bitset) *bits
 
 	var cnt int
 	if mask != nil {
-		for i := 0; i < a.Len(); i++ {
-			v := a.Elem(i)
+		mbuf := mask.Bytes()
+		for i, k := 0, a.Len(); i < k; i++ {
 			bit := bitmask(i)
-			if mask != nil && (mbuf[i>>3]&bit) == 0 {
+			if (mbuf[i>>3] & bit) == 0 {
 				continue
 			}
+			v := a.Elem(i)
 			if bytes.Compare(v, from) < 0 {
 				continue
 			}
@@ -254,7 +242,7 @@ func matchBetween(a ByteArray, from, to []byte, bits, mask *bitset.Bitset) *bits
 			cnt++
 		}
 	} else {
-		for i := 0; i < a.Len(); i++ {
+		for i, k := 0, a.Len(); i < k; i++ {
 			v := a.Elem(i)
 			if bytes.Compare(v, from) < 0 {
 				continue
