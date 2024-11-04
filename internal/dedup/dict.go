@@ -388,7 +388,7 @@ func (a *DictByteArray) Decode(buf []byte) error {
 	if len(buf) < 4 {
 		return fmt.Errorf("dict: reading offset len: %w", errShortBuffer)
 	}
-	olen := int(binary.BigEndian.Uint32(buf))
+	olen := int(binary.LittleEndian.Uint32(buf))
 	buf = buf[4:]
 
 	// unpack offsets and reconstruct sizes (offsets are guaranteed to be
@@ -402,8 +402,11 @@ func (a *DictByteArray) Decode(buf []byte) error {
 		return fmt.Errorf("dict: decoding offsets: %w", err)
 	}
 	a.offs = a.offs[:n]
-	for i, v := range a.offs[1:] {
-		a.size[i] = a.offs[i+1] - v
+
+	if len(a.offs) > 0 {
+		for i, v := range a.offs[1:] {
+			a.size[i] = a.offs[i+1] - v
+		}
 	}
 	buf = buf[olen:]
 
@@ -423,7 +426,9 @@ func (a *DictByteArray) Decode(buf []byte) error {
 	copy(a.dict, buf)
 	buf = buf[l:]
 	// set last size val
-	a.size[len(a.size)-1] = int32(l) - a.offs[len(a.size)-1]
+	if len(a.size) > 0 && len(a.offs) > 0 {
+		a.size[len(a.size)-1] = int32(l) - a.offs[len(a.size)-1]
+	}
 
 	// read ptr size and ptr slice
 	if len(buf) < 4 {
