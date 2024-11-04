@@ -9,6 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func makeFixedReaderData(n, l int) (io.Reader, ByteArray) {
+	data := makeRandData(n, l)
+	f := makeFixedByteArray(n, data)
+	buf := bytes.NewBuffer(nil)
+	_, err := f.WriteTo(buf)
+	if err != nil {
+		return nil, nil
+	}
+	return buf, f
+}
+
 func TestFixedLen(t *testing.T) {
 	type TestCase struct {
 		Name        string
@@ -183,16 +194,7 @@ func TestFixedReadFrom(t *testing.T) {
 		IsErrorExpected bool
 	}
 
-	makeReaderData := func(n, l int) io.Reader {
-		data := makeRandData(n, l)
-		f := makeFixedByteArray(n, data)
-		buf := bytes.NewBuffer(nil)
-		_, err := f.WriteTo(buf)
-		if err != nil {
-			return nil
-		}
-		return buf
-	}
+	fixedReaderData, _ := makeFixedReaderData(10, 10)
 
 	testCases := []TestCase{
 		{
@@ -206,7 +208,7 @@ func TestFixedReadFrom(t *testing.T) {
 			Name:            "Reader with valid data",
 			Size:            10,
 			N:               10,
-			Reader:          makeReaderData(10, 10),
+			Reader:          fixedReaderData,
 			IsErrorExpected: false,
 		},
 	}

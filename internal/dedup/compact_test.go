@@ -32,14 +32,14 @@ func makeDupmap(sz int) []int {
 	return dup
 }
 
-func makeCompactByteArrayReader(sz int) io.Reader {
+func makeCompactByteArrayReader(sz int) (io.Reader, ByteArray) {
 	data := makeRandData(sz, sz)
 	dup := makeDupmap(sz)
 	c := makeCompactByteArray(sz, sz, data, dup)
 
 	buf := bytes.NewBuffer(nil)
 	c.WriteTo(buf)
-	return buf
+	return buf, c
 }
 
 func TestCompactElem(t *testing.T) {
@@ -141,6 +141,10 @@ func TestCompactReadFrom(t *testing.T) {
 		ReadSize        int
 		IsErrorExpected bool
 	}
+
+	c0Reader, _ := makeCompactByteArrayReader(0)
+	c10000Reader, _ := makeCompactByteArrayReader(10_000)
+
 	testCases := []TestCase{
 		{
 			Name:            "Empty reader",
@@ -156,13 +160,13 @@ func TestCompactReadFrom(t *testing.T) {
 		},
 		{
 			Name:            "Reader with data",
-			Reader:          makeCompactByteArrayReader(0),
+			Reader:          c0Reader,
 			ReadSize:        16,
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "Reader with large data",
-			Reader:          makeCompactByteArrayReader(10000),
+			Reader:          c10000Reader,
 			ReadSize:        100000042,
 			IsErrorExpected: false,
 		},

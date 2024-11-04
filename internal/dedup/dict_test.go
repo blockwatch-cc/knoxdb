@@ -8,14 +8,14 @@ import (
 	"testing"
 )
 
-func makeDictByteArrayReader(sz int) io.Reader {
+func makeDictByteArrayReader(sz int) (io.Reader, ByteArray) {
 	data := makeRandData(sz, sz)
 	dup := makeDupmap(sz)
-	c := makeDictByteArray(sz, sz, data, dup)
+	d := makeDictByteArray(sz, sz, data, dup)
 
 	buf := bytes.NewBuffer(nil)
-	c.WriteTo(buf)
-	return buf
+	d.WriteTo(buf)
+	return buf, d
 }
 
 func TestDictElem(t *testing.T) {
@@ -270,6 +270,9 @@ func TestDictReadFrom(t *testing.T) {
 		ReadSize        int
 		IsErrorExpected bool
 	}
+	dictRead0, _ := makeDictByteArrayReader(0)
+	dictRead10000, _ := makeDictByteArrayReader(10_000)
+
 	testCases := []TestCase{
 		{
 			Name:            "Empty reader",
@@ -285,13 +288,13 @@ func TestDictReadFrom(t *testing.T) {
 		},
 		{
 			Name:            "Reader with data",
-			Reader:          makeDictByteArrayReader(0),
+			Reader:          dictRead0,
 			ReadSize:        22,
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "Reader with large data",
-			Reader:          makeDictByteArrayReader(10000),
+			Reader:          dictRead10000,
 			ReadSize:        100017536,
 			IsErrorExpected: false,
 		},
