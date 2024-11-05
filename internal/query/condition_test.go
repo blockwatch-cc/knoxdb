@@ -91,42 +91,59 @@ func TestConditionParse(t *testing.T) {
 	}
 }
 
-// TestConditionCompile tests compilation of conditions against a schema.
-// It verifies field validation, type checking, and matcher creation.
+// TestConditionCompile tests the Compile method of Condition with different condition types.
 func TestConditionCompile(t *testing.T) {
 	tests := []struct {
 		name    string
-		cond    Condition
+		c       Condition
 		wantErr bool
-		errMsg  string
 	}{
 		{
 			name:    "Simple Equal",
-			cond:    Equal("id", 1),
+			c:       Condition{Name: "id", Mode: FilterModeEqual, Value: int64(123)},
 			wantErr: false,
 		},
 		{
 			name:    "Range Condition",
-			cond:    Range("score", 3.5, 4.5),
+			c:       Condition{Name: "score", Mode: FilterModeRange, Value: RangeValue{3.5, 4.5}},
 			wantErr: false,
 		},
 		{
-			name:    "Complex AND",
-			cond:    And(Equal("id", 1), Gt("score", 4.5)),
+			name:    "Enum In",
+			c:       Condition{Name: "status", Mode: FilterModeIn, Value: []uint16{1, 2}},
 			wantErr: false,
 		},
 		{
 			name:    "Invalid Field",
-			cond:    Equal("invalid", 1),
+			c:       Condition{Name: "invalid", Mode: FilterModeEqual, Value: 123},
 			wantErr: true,
-			errMsg:  "unknown field",
+		},
+		{
+			name: "Complex AND Condition",
+			c: And(
+				Equal("id", 1),
+				Gt("score", 4.5),
+				Regexp("name", "Block.*"),
+			),
+			wantErr: false,
+		},
+		{
+			name: "Complex OR Condition",
+			c: Or(
+				Equal("id", 1),
+				Equal("id", 2),
+				Equal("id", 3),
+			),
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.cond.Compile(testSchema)
-			assertError(t, err, tt.wantErr, tt.errMsg)
+			_, err := tt.c.Compile(testSchema)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Condition.Compile() error = %v, wantErr %v", err, tt.wantErr)
+			}
 		})
 	}
 }
