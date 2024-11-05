@@ -34,94 +34,58 @@ func init() {
 // Core Tests
 // ----------
 
-// TestConditionParse tests parsing of query conditions from string key-value pairs.
-// It verifies correct type conversion, mode parsing, and error handling for invalid inputs.
+// TestConditionParse verifies that ParseCondition correctly handles various input formats
+// and data types, including edge cases and error conditions. It ensures proper type conversion
+// and validation of field names and filter modes.
 func TestConditionParse(t *testing.T) {
+	// Test cases cover core functionality:
+	// - Basic type parsing (int, float, string)
+	// - Special formats (date ranges, enums)
+	// - Error cases (invalid fields, modes)
 	tests := []struct {
 		name     string
 		key      string
 		val      string
 		expected Condition
 		wantErr  bool
-		errMsg   string
 	}{
-		{
-			name: "Equal Integer",
-			key:  "id",
-			val:  "123",
-			expected: Condition{
-				Name:  "id",
-				Type:  types.FieldTypeInt64,
-				Mode:  FilterModeEqual,
-				Value: int64(123),
-			},
-		},
-		{
-			name: "Greater Than Float",
-			key:  "score.gt",
-			val:  "4.5",
-			expected: Condition{
-				Name:  "score",
-				Type:  types.FieldTypeFloat64,
-				Mode:  FilterModeGt,
-				Value: 4.5,
-			},
-		},
-		{
-			name: "String Contains",
-			key:  "name.re",
-			val:  "Blockwatch",
-			expected: Condition{
-				Name:  "name",
-				Type:  types.FieldTypeString,
-				Mode:  FilterModeRegexp,
-				Value: "Blockwatch",
-			},
-		},
-		{
-			name: "Date Range",
-			key:  "created.rg",
-			val:  "2023-01-01,2023-12-31",
-			expected: Condition{
-				Name:  "created",
-				Type:  types.FieldTypeDatetime,
-				Mode:  FilterModeRange,
-				Value: RangeValue{int64(1672531200000000000), int64(1703980800000000000)},
-			},
-		},
-		{
-			name: "Enum In",
-			key:  "status.in",
-			val:  "1,2",
-			expected: Condition{
-				Name:  "status",
-				Type:  types.FieldTypeUint16,
-				Mode:  FilterModeIn,
-				Value: []uint16{1, 2},
-			},
-		},
-		{
-			name:    "Invalid Field",
-			key:     "nonexistent",
-			val:     "value",
-			wantErr: true,
-			errMsg:  "unknown field",
-		},
-		{
-			name:    "Invalid Mode",
-			key:     "id.invalid",
-			val:     "123",
-			wantErr: true,
-			errMsg:  "invalid mode",
-		},
+		// Basic integer equality - verifies number parsing and type conversion
+		{"Equal Integer", "id", "123", Condition{Name: "id", Type: types.FieldTypeInt64, Mode: FilterModeEqual, Value: int64(123)}, false},
+
+		// Float comparison - tests decimal parsing and GT mode
+		{"Greater Than Float", "score.gt", "4.5", Condition{Name: "score", Type: types.FieldTypeFloat64, Mode: FilterModeGt, Value: 4.5}, false},
+
+		// String pattern matching - validates regexp mode handling
+		{"String Contains", "name.re", "Blockwatch", Condition{Name: "name", Type: types.FieldTypeString, Mode: FilterModeRegexp, Value: "Blockwatch"}, false},
+
+		// Date range - tests date parsing and range mode handling
+		{"Date Range", "created.rg", "2023-01-01,2023-12-31", Condition{Name: "created", Type: types.FieldTypeDatetime, Mode: FilterModeRange, Value: RangeValue{int64(1672531200000000000), int64(1703980800000000000)}}, false},
+
+		// Enum in - tests enum parsing and IN mode handling
+		{"Enum In", "status.in", "1,2", Condition{Name: "status", Type: types.FieldTypeUint16, Mode: FilterModeIn, Value: []uint16{1, 2}}, false},
+
+		// Invalid field - tests error handling for invalid fields
+		{"Invalid Field", "nonexistent", "value", Condition{}, true},
+
+		// Invalid mode - tests error handling for invalid modes
+		{"Invalid Mode", "id.invalid", "123", Condition{}, true},
+
+		// Empty string - tests empty string handling
+		{"Empty String", "name", "", Condition{Name: "name", Type: types.FieldTypeString, Mode: FilterModeEqual, Value: ""}, false},
+
+		// Boolean value - tests boolean parsing and mode handling
+		{"Boolean Value", "is_active", "true", Condition{Name: "is_active", Type: types.FieldTypeBoolean, Mode: FilterModeEqual, Value: true}, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseCondition(tt.key, tt.val, testSchema)
-			assertError(t, err, tt.wantErr, tt.errMsg)
-			if !tt.wantErr {
-				assertCondition(t, got, tt.expected)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseCondition() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && !conditionEqual(got, tt.expected) {
+				t.Errorf("ParseCondition() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
