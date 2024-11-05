@@ -268,10 +268,9 @@ func extractVariableInorder(c *Converter, buf []byte) []byte {
 		if !field.IsVisible() {
 			// insert zero data when required but missing from input
 			if c.maps[i] >= 0 {
-				if sz <= 32 {
-					res.Write(zeros[:sz])
-				} else {
-					res.Write(bytes.Repeat([]byte{0}, sz))
+				for sz > 0 {
+					res.Write(zeros[:min(sz, 32)])
+					sz -= 32
 				}
 
 				// are we done?

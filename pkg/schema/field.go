@@ -39,20 +39,21 @@ type Field struct {
 // ExportedField is a performance improved version of Field
 // containing exported fields for direct access in other packages
 type ExportedField struct {
-	Name      string
-	Id        uint16
-	Type      types.FieldType
-	Flags     types.FieldFlags
-	Compress  types.FieldCompression
-	Index     types.IndexType
-	IsVisible bool
-	IsArray   bool
-	Iface     types.IfaceFlags
-	Scale     uint8
-	Fixed     uint16
-	Offset    uintptr
-	path      []int
-	_         [4]byte // padding
+	Name       string
+	Id         uint16
+	Type       types.FieldType
+	Flags      types.FieldFlags
+	Compress   types.FieldCompression
+	Index      types.IndexType
+	IsVisible  bool
+	IsInternal bool
+	IsArray    bool
+	Iface      types.IfaceFlags
+	Scale      uint8
+	Fixed      uint16
+	Offset     uintptr
+	path       []int
+	_          [3]byte // padding
 }
 
 func NewField(typ types.FieldType) Field {
@@ -160,12 +161,12 @@ func (f *Field) IsArray() bool {
 }
 
 func (f *Field) WireSize() int {
-	switch f.typ {
-	case types.FieldTypeString, types.FieldTypeBytes:
-		if f.fixed > 0 {
-			return int(f.fixed)
-		}
+	// switch f.typ {
+	// case types.FieldTypeString, types.FieldTypeBytes:
+	if f.fixed > 0 {
+		return int(f.fixed)
 	}
+	// }
 	return f.typ.Size()
 }
 
@@ -702,6 +703,16 @@ func (f *ExportedField) StructValue(rval reflect.Value) reflect.Value {
 		dst = dst.Elem()
 	}
 	return dst
+}
+
+func (f *ExportedField) WireSize() int {
+	// switch f.Type {
+	// case types.FieldTypeString, types.FieldTypeBytes:
+	if f.Fixed > 0 {
+		return int(f.Fixed)
+	}
+	// }
+	return f.Type.Size()
 }
 
 func (f Field) WriteTo(w *bytes.Buffer) error {

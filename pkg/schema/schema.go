@@ -234,7 +234,7 @@ func (s *Schema) VisibleFieldNames() []string {
 func (s *Schema) InternalFieldNames() []string {
 	list := make([]string, 0, len(s.fields))
 	for i := range s.fields {
-		if s.fields[i].Is(types.FieldFlagInternal) && s.fields[i].IsActive() {
+		if s.fields[i].IsInternal() && s.fields[i].IsActive() {
 			list = append(list, s.fields[i].name)
 		}
 	}
@@ -272,7 +272,7 @@ func (s *Schema) VisibleFieldIds() []uint16 {
 func (s *Schema) InternalFieldIds() []uint16 {
 	list := make([]uint16, 0, len(s.fields))
 	for i := range s.fields {
-		if s.fields[i].Is(types.FieldFlagInternal) && s.fields[i].IsActive() {
+		if s.fields[i].IsInternal() && s.fields[i].IsActive() {
 			list = append(list, s.fields[i].id)
 		}
 	}
@@ -340,7 +340,7 @@ func (s *Schema) FieldIndexById(id uint16) (idx int, ok bool) {
 
 func (s *Schema) Pk() *Field {
 	for _, v := range s.fields {
-		if v.flags&types.FieldFlagPrimary > 0 && v.IsActive() {
+		if v.IsPrimary() && v.IsActive() {
 			return &v
 		}
 	}
@@ -359,7 +359,7 @@ func (s *Schema) CompositePk() []Field {
 
 func (s *Schema) PkId() uint16 {
 	for _, v := range s.fields {
-		if v.flags&types.FieldFlagPrimary > 0 && v.IsActive() {
+		if v.IsPrimary() && v.IsActive() {
 			return v.Id()
 		}
 	}
@@ -368,7 +368,16 @@ func (s *Schema) PkId() uint16 {
 
 func (s *Schema) PkIndex() int {
 	for i, v := range s.fields {
-		if v.flags&types.FieldFlagPrimary > 0 && v.IsActive() {
+		if v.IsPrimary() && v.IsActive() {
+			return i
+		}
+	}
+	return -1
+}
+
+func (s *Schema) RowIdIndex() int {
+	for i, v := range s.fields {
+		if v.id == MetaRid && v.IsInternal() && v.IsActive() {
 			return i
 		}
 	}
@@ -377,7 +386,7 @@ func (s *Schema) PkIndex() int {
 
 func (s *Schema) Indexes() (list []Field) {
 	for _, v := range s.fields {
-		if v.flags&types.FieldFlagIndexed > 0 && v.IsActive() {
+		if v.IsIndexed() && v.IsActive() {
 			list = append(list, v)
 		}
 	}
@@ -761,19 +770,20 @@ func (s *Schema) Finalize() *Schema {
 	s.exports = make([]*ExportedField, len(s.fields))
 	for i := range s.fields {
 		s.exports[i] = &ExportedField{
-			Name:      s.fields[i].name,
-			Id:        s.fields[i].id,
-			Type:      s.fields[i].typ,
-			Flags:     s.fields[i].flags,
-			Compress:  s.fields[i].compress,
-			Index:     s.fields[i].index,
-			IsVisible: s.fields[i].IsVisible(),
-			IsArray:   s.fields[i].isArray,
-			Iface:     s.fields[i].iface,
-			Scale:     s.fields[i].scale,
-			Fixed:     s.fields[i].fixed,
-			Offset:    s.fields[i].offset,
-			path:      s.fields[i].path,
+			Name:       s.fields[i].name,
+			Id:         s.fields[i].id,
+			Type:       s.fields[i].typ,
+			Flags:      s.fields[i].flags,
+			Compress:   s.fields[i].compress,
+			Index:      s.fields[i].index,
+			IsVisible:  s.fields[i].IsVisible(),
+			IsInternal: s.fields[i].IsInternal(),
+			IsArray:    s.fields[i].isArray,
+			Iface:      s.fields[i].iface,
+			Scale:      s.fields[i].scale,
+			Fixed:      s.fields[i].fixed,
+			Offset:     s.fields[i].offset,
+			path:       s.fields[i].path,
 		}
 	}
 
