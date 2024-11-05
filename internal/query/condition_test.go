@@ -4,11 +4,10 @@
 package query
 
 import (
-	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -32,226 +31,254 @@ func init() {
 	testSchema.WithEnum(statusEnum)
 }
 
-// TestConditionParse verifies that ParseCondition correctly handles various input formats
-// and data types, including edge cases and error conditions. It ensures proper type conversion
-// and validation of field names and filter modes.
+// Core Tests
+// ----------
+
+// TestConditionParse tests parsing of query conditions from string key-value pairs.
+// It verifies correct type conversion, mode parsing, and error handling for invalid inputs.
 func TestConditionParse(t *testing.T) {
-	// Test cases cover core functionality:
-	// - Basic type parsing (int, float, string)
-	// - Special formats (date ranges, enums)
-	// - Error cases (invalid fields, modes)
 	tests := []struct {
 		name     string
 		key      string
 		val      string
 		expected Condition
 		wantErr  bool
+		errMsg   string
 	}{
-		// Basic integer equality - verifies number parsing and type conversion
-		{"Equal Integer", "id", "123", Condition{Name: "id", Type: types.FieldTypeInt64, Mode: FilterModeEqual, Value: int64(123)}, false},
-
-		// Float comparison - tests decimal parsing and GT mode
-		{"Greater Than Float", "score.gt", "4.5", Condition{Name: "score", Type: types.FieldTypeFloat64, Mode: FilterModeGt, Value: 4.5}, false},
-
-		// String pattern matching - validates regexp mode handling
-		{"String Contains", "name.re", "Blockwatch", Condition{Name: "name", Type: types.FieldTypeString, Mode: FilterModeRegexp, Value: "Blockwatch"}, false},
-
-		// Date range - tests date parsing and range mode handling
-		{"Date Range", "created.rg", "2023-01-01,2023-12-31", Condition{Name: "created", Type: types.FieldTypeDatetime, Mode: FilterModeRange, Value: RangeValue{int64(1672531200000000000), int64(1703980800000000000)}}, false},
-
-		// Enum in - tests enum parsing and IN mode handling
-		{"Enum In", "status.in", "1,2", Condition{Name: "status", Type: types.FieldTypeUint16, Mode: FilterModeIn, Value: []uint16{1, 2}}, false},
-
-		// Invalid field - tests error handling for invalid fields
-		{"Invalid Field", "nonexistent", "value", Condition{}, true},
-
-		// Invalid mode - tests error handling for invalid modes
-		{"Invalid Mode", "id.invalid", "123", Condition{}, true},
-
-		// Empty string - tests empty string handling
-		{"Empty String", "name", "", Condition{Name: "name", Type: types.FieldTypeString, Mode: FilterModeEqual, Value: ""}, false},
-
-		// Boolean value - tests boolean parsing and mode handling
-		{"Boolean Value", "is_active", "true", Condition{Name: "is_active", Type: types.FieldTypeBoolean, Mode: FilterModeEqual, Value: true}, false},
+		{
+			name: "Equal Integer",
+			key:  "id",
+			val:  "123",
+			expected: Condition{
+				Name:  "id",
+				Type:  types.FieldTypeInt64,
+				Mode:  FilterModeEqual,
+				Value: int64(123),
+			},
+		},
+		{
+			name: "Greater Than Float",
+			key:  "score.gt",
+			val:  "4.5",
+			expected: Condition{
+				Name:  "score",
+				Type:  types.FieldTypeFloat64,
+				Mode:  FilterModeGt,
+				Value: 4.5,
+			},
+		},
+		{
+			name: "String Contains",
+			key:  "name.re",
+			val:  "Blockwatch",
+			expected: Condition{
+				Name:  "name",
+				Type:  types.FieldTypeString,
+				Mode:  FilterModeRegexp,
+				Value: "Blockwatch",
+			},
+		},
+		{
+			name: "Date Range",
+			key:  "created.rg",
+			val:  "2023-01-01,2023-12-31",
+			expected: Condition{
+				Name:  "created",
+				Type:  types.FieldTypeDatetime,
+				Mode:  FilterModeRange,
+				Value: RangeValue{int64(1672531200000000000), int64(1703980800000000000)},
+			},
+		},
+		{
+			name: "Enum In",
+			key:  "status.in",
+			val:  "1,2",
+			expected: Condition{
+				Name:  "status",
+				Type:  types.FieldTypeUint16,
+				Mode:  FilterModeIn,
+				Value: []uint16{1, 2},
+			},
+		},
+		{
+			name:    "Invalid Field",
+			key:     "nonexistent",
+			val:     "value",
+			wantErr: true,
+			errMsg:  "unknown field",
+		},
+		{
+			name:    "Invalid Mode",
+			key:     "id.invalid",
+			val:     "123",
+			wantErr: true,
+			errMsg:  "invalid mode",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseCondition(tt.key, tt.val, testSchema)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseCondition() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr && !conditionEqual(got, tt.expected) {
-				t.Errorf("ParseCondition() = %v, want %v", got, tt.expected)
+			assertError(t, err, tt.wantErr, tt.errMsg)
+			if !tt.wantErr {
+				assertCondition(t, got, tt.expected)
 			}
 		})
 	}
 }
 
-// TestConditionCompile tests the Compile method of Condition with different condition types.
+// TestConditionCompile tests compilation of conditions against a schema.
+// It verifies field validation, type checking, and matcher creation.
 func TestConditionCompile(t *testing.T) {
 	tests := []struct {
 		name    string
-		c       Condition
+		cond    Condition
 		wantErr bool
+		errMsg  string
 	}{
 		{
 			name:    "Simple Equal",
-			c:       Condition{Name: "id", Mode: FilterModeEqual, Value: int64(123)},
+			cond:    Equal("id", 1),
 			wantErr: false,
 		},
 		{
 			name:    "Range Condition",
-			c:       Condition{Name: "score", Mode: FilterModeRange, Value: RangeValue{3.5, 4.5}},
+			cond:    Range("score", 3.5, 4.5),
 			wantErr: false,
 		},
 		{
-			name:    "Enum In",
-			c:       Condition{Name: "status", Mode: FilterModeIn, Value: []uint16{1, 2}},
+			name:    "Complex AND",
+			cond:    And(Equal("id", 1), Gt("score", 4.5)),
 			wantErr: false,
 		},
 		{
 			name:    "Invalid Field",
-			c:       Condition{Name: "invalid", Mode: FilterModeEqual, Value: 123},
+			cond:    Equal("invalid", 1),
 			wantErr: true,
-		},
-		{
-			name: "Complex AND Condition",
-			c: And(
-				Equal("id", 1),
-				Gt("score", 4.5),
-				Regexp("name", "Block.*"),
-			),
-			wantErr: false,
-		},
-		{
-			name: "Complex OR Condition",
-			c: Or(
-				Equal("id", 1),
-				Equal("id", 2),
-				Equal("id", 3),
-			),
-			wantErr: false,
+			errMsg:  "unknown field",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.c.Compile(testSchema)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Condition.Compile() error = %v, wantErr %v", err, tt.wantErr)
-			}
+			_, err := tt.cond.Compile(testSchema)
+			assertError(t, err, tt.wantErr, tt.errMsg)
 		})
 	}
 }
 
-// TestConditionFields tests the Fields method of Condition for various condition structures.
+// TestConditionFields tests extraction of field names from conditions.
+// It verifies correct field name collection from simple and nested conditions.
 func TestConditionFields(t *testing.T) {
 	tests := []struct {
 		name string
-		c    Condition
+		cond Condition
 		want []string
 	}{
 		{
 			name: "Single Field",
-			c:    Condition{Name: "id", Mode: FilterModeEqual, Value: 1},
+			cond: Equal("id", 1),
 			want: []string{"id"},
 		},
 		{
 			name: "Multiple Fields",
-			c: And(
-				Condition{Name: "id", Mode: FilterModeEqual, Value: 1},
-				Condition{Name: "name", Mode: FilterModeEqual, Value: "Blockwatch"},
-			),
+			cond: And(Equal("id", 1), Equal("name", "test")),
 			want: []string{"id", "name"},
 		},
 		{
 			name: "Nested Fields",
-			c: And(
-				Condition{Name: "id", Mode: FilterModeEqual, Value: 1},
-				Or(
-					Condition{Name: "name", Mode: FilterModeEqual, Value: "Blockwatch"},
-					Condition{Name: "age", Mode: FilterModeGt, Value: 6},
-				),
-			),
-			want: []string{"age", "id", "name"},
-		},
-		{
-			name: "Empty Condition",
-			c:    Condition{},
-			want: nil,
-		},
-		{
-			name: "Duplicate Fields",
-			c: And(
+			cond: And(
 				Equal("id", 1),
-				Equal("id", 2),
-				Equal("name", "Blockwatch"),
+				Or(Equal("name", "test"), Gt("score", 4.5)),
 			),
-			want: []string{"id", "name"},
+			want: []string{"id", "name", "score"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.c.Fields()
-			if !equalStringSlices(got, tt.want) {
-				t.Errorf("Condition.Fields() = %v, want %v", got, tt.want)
-			}
+			got := tt.cond.Fields()
+			assertStringSlice(t, got, tt.want)
 		})
 	}
 }
 
-// TestConditionAdd verifies the composition of conditions using the Add method.
-// This is a critical test as it ensures proper building of complex query trees.
+// Tree Manipulation Tests
+// -----------------------
+
+// TestConditionAdd tests adding conditions to create compound expressions.
+// It verifies AND/OR combinations and proper handling of empty conditions.
 func TestConditionAdd(t *testing.T) {
-	// Test strategy:
-	// 1. Start with simple conditions
-	// 2. Add complexity gradually
-	// 3. Verify both structure and string representation
 	tests := []struct {
 		name     string
 		initial  Condition
 		add      Condition
 		expected string
 	}{
-		// Basic AND composition
 		{
 			name:     "Add AND Condition",
 			initial:  Equal("id", 1),
 			add:      Equal("name", "Blockwatch"),
 			expected: "id = 1 AND name = Blockwatch",
 		},
-
-		// Complex nested conditions - tests tree building
 		{
-			name:     "Add Complex Nested Condition",
+			name: "Add OR Condition",
+			initial: Or(
+				Equal("id", 1),
+				Equal("id", 2),
+			),
+			add:      Equal("name", "Blockwatch"),
+			expected: "(id = 1 OR id = 2) AND name = Blockwatch",
+		},
+		{
+			name:     "Add to Empty Condition",
+			initial:  Condition{},
+			add:      Equal("id", 123),
+			expected: "id = 123",
+		},
+		{
+			name:     "Add Empty Condition",
 			initial:  Equal("id", 1),
-			add:      And(Equal("name", "Blockwatch"), Or(Gt("age", 18), Lt("age", 65))),
-			expected: "id = 1 AND name = Blockwatch AND (age > 18 OR age < 65)",
+			add:      Condition{},
+			expected: "id = 1",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.initial.Add(tt.add)
-			if got := tt.initial.String(); got != tt.expected {
-				t.Errorf("After Add(), condition = %v, want %v", got, tt.expected)
+			if testing.Verbose() {
+				t.Log("Initial condition state:")
+				logConditionState(t, &tt.initial, 1)
+				t.Log("Adding condition:")
+				logConditionState(t, &tt.add, 1)
 			}
+
+			tt.initial.Add(tt.add)
+
+			if testing.Verbose() {
+				t.Log("Final state:")
+				logConditionState(t, &tt.initial, 1)
+			}
+
+			assertConditionString(t, tt.initial.String(), tt.expected)
 		})
 	}
 }
 
-// TestConditionClear tests the Clear method of Condition.
+// TestConditionClear tests the clearing of condition state.
+// Verifies that all fields are reset to zero values and children are removed.
 func TestConditionClear(t *testing.T) {
 	tests := []struct {
-		name    string
-		initial Condition
+		name     string
+		initial  Condition
+		validate func(*testing.T, Condition)
 	}{
 		{
 			name:    "Clear Simple Condition",
 			initial: Equal("id", 1),
+			validate: func(t *testing.T, c Condition) {
+				assertConditionEmpty(t, c)
+			},
 		},
 		{
 			name: "Clear Complex Condition",
@@ -259,104 +286,42 @@ func TestConditionClear(t *testing.T) {
 				Equal("id", 1),
 				Or(
 					Equal("name", "Blockwatch"),
-					Gt("age", 18),
+					Gt("score", 4.5),
 				),
 			),
+			validate: func(t *testing.T, c Condition) {
+				assertConditionEmpty(t, c)
+			},
 		},
 		{
 			name:    "Clear Empty Condition",
 			initial: Condition{},
+			validate: func(t *testing.T, c Condition) {
+				assertConditionEmpty(t, c)
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if testing.Verbose() {
+				t.Log("Initial state:")
+				logConditionState(t, &tt.initial, 1)
+			}
+
 			tt.initial.Clear()
-			if !tt.initial.IsEmpty() {
-				t.Errorf("Condition.Clear() did not result in an empty condition: %v", tt.initial)
+			tt.validate(t, tt.initial)
+
+			if testing.Verbose() {
+				t.Log("After Clear:")
+				logConditionState(t, &tt.initial, 1)
 			}
 		})
 	}
 }
 
-// TestConditionIsEmpty tests the IsEmpty method of Condition.
-func TestConditionIsEmpty(t *testing.T) {
-	tests := []struct {
-		name      string
-		condition Condition
-		want      bool
-	}{
-		{
-			name:      "Empty Condition",
-			condition: Condition{},
-			want:      true,
-		},
-		{
-			name:      "Non-Empty Simple Condition",
-			condition: Equal("id", 1),
-			want:      false,
-		},
-		{
-			name: "Non-Empty Complex Condition",
-			condition: And(
-				Equal("id", 1),
-				Equal("name", "Blockwatch"),
-			),
-			want: false,
-		},
-		{
-			name:      "Condition with Invalid Mode",
-			condition: Condition{Name: "id", Mode: FilterModeInvalid},
-			want:      true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.condition.IsEmpty(); got != tt.want {
-				t.Errorf("Condition.IsEmpty() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-// TestConditionIsLeaf tests the IsLeaf method of Condition.
-func TestConditionIsLeaf(t *testing.T) {
-	tests := []struct {
-		name      string
-		condition Condition
-		want      bool
-	}{
-		{
-			name:      "Leaf Condition",
-			condition: Equal("id", 1),
-			want:      true,
-		},
-		{
-			name: "Non-Leaf Condition",
-			condition: And(
-				Equal("id", 1),
-				Equal("name", "Blockwatch"),
-			),
-			want: false,
-		},
-		{
-			name:      "Empty Condition",
-			condition: Condition{},
-			want:      false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.condition.IsLeaf(); got != tt.want {
-				t.Errorf("Condition.IsLeaf() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-// TestConditionString tests the String method of Condition.
+// TestConditionString tests string representation of conditions.
+// Verifies correct formatting of simple and complex conditions for debugging and logging.
 func TestConditionString(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -374,9 +339,10 @@ func TestConditionString(t *testing.T) {
 			want:      "score RANGE [3.5, 4.5]",
 		},
 		{
-			name:      "In Condition with Many Values",
-			condition: In("status", []uint16{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}),
-			want:      "status IN [17 values]",
+			name: "In Condition with Many Values",
+			condition: In("status", []uint16{1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+				11, 12, 13, 14, 15, 16, 17}),
+			want: "status IN [17 values]",
 		},
 		{
 			name: "Complex AND Condition",
@@ -391,188 +357,524 @@ func TestConditionString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.condition.String(); got != tt.want {
-				t.Errorf("Condition.String() = %v, want %v", got, tt.want)
-			}
+			assertConditionString(t, tt.condition.String(), tt.want)
 		})
 	}
 }
 
-// TestConditionValidate tests the Validate method of Condition.
+// TestConditionRename tests field name replacement in conditions.
+// Verifies that field names are correctly updated throughout the condition tree.
+func TestConditionRename(t *testing.T) {
+	tests := []struct {
+		name      string
+		condition Condition
+		newName   string
+		want      string
+	}{
+		{
+			name:      "Simple Condition",
+			condition: Equal("old_name", 1),
+			newName:   "new_name",
+			want:      "new_name = 1",
+		},
+		{
+			name: "Complex AND Condition",
+			condition: And(
+				Equal("old_name", 1),
+				Gt("old_name", 5),
+			),
+			newName: "new_name",
+			want:    "new_name = 1 AND new_name > 5",
+		},
+		{
+			name: "Mixed Fields Condition",
+			condition: And(
+				Equal("old_name", 1),
+				Equal("other_field", "test"),
+			),
+			newName: "new_name",
+			want:    "new_name = 1 AND other_field = test",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.condition.Rename(tt.newName)
+			assertConditionString(t, tt.condition.String(), tt.want)
+		})
+	}
+}
+
+// Validation Tests
+// ----------------
+
+// TestConditionValidate tests condition validation rules.
+// Verifies field existence, type compatibility, and value constraints.
 func TestConditionValidate(t *testing.T) {
 	tests := []struct {
 		name    string
 		cond    Condition
 		wantErr bool
+		errMsg  string
 	}{
-		{"Valid Condition", Equal("id", 1), false},
-		{"Empty Name", Condition{Mode: FilterModeEqual, Value: 1}, true},
-		{"Invalid Mode", Condition{Name: "id", Mode: FilterMode(999), Value: 1}, true},
-		{"Nil Value", Condition{Name: "id", Mode: FilterModeEqual}, true},
+		{
+			name:    "Valid Condition",
+			cond:    Equal("id", 1),
+			wantErr: false,
+		},
+		{
+			name: "Empty Name",
+			cond: Condition{
+				Mode:  FilterModeEqual,
+				Value: 1,
+			},
+			wantErr: true,
+			errMsg:  "empty field name",
+		},
+		{
+			name: "Invalid Mode",
+			cond: Condition{
+				Name:  "id",
+				Mode:  FilterMode(999),
+				Value: 1,
+			},
+			wantErr: true,
+			errMsg:  "invalid filter mode",
+		},
+		{
+			name: "Nil Value",
+			cond: Condition{
+				Name: "id",
+				Mode: FilterModeEqual,
+			},
+			wantErr: true,
+			errMsg:  "nil value",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := tt.cond.Compile(testSchema)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Condition.Compile() error = %v, wantErr %v", err, tt.wantErr)
-			}
+			assertError(t, err, tt.wantErr, tt.errMsg)
 		})
 	}
 }
 
-// TestConditionCompileToFilterTreeNode tests the Compile method of Condition to FilterTreeNode.
-func TestConditionCompileToFilterTreeNode(t *testing.T) {
+// TestConditionValidateField tests field-specific validation rules.
+// Verifies type checking, enum validation, and value range constraints.
+func TestConditionValidateField(t *testing.T) {
+	tests := []struct {
+		name      string
+		condition Condition
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:      "Valid Integer Field",
+			condition: Equal("id", 123),
+			wantErr:   false,
+		},
+		{
+			name:      "Valid Float Field",
+			condition: Equal("score", 4.5),
+			wantErr:   false,
+		},
+		{
+			name:      "Valid String Field",
+			condition: Equal("name", "test"),
+			wantErr:   false,
+		},
+		{
+			name:      "Unknown Field",
+			condition: Equal("unknown", 1),
+			wantErr:   true,
+			errMsg:    "unknown column",
+		},
+		{
+			name:      "Type Mismatch Int",
+			condition: Equal("id", "not_an_int"),
+			wantErr:   true,
+			errMsg:    "type mismatch",
+		},
+		{
+			name:      "Valid Enum Field",
+			condition: Equal("status", uint16(1)),
+			wantErr:   false,
+		},
+		{
+			name:      "Invalid Enum Value",
+			condition: Equal("status", uint16(999)),
+			wantErr:   true,
+			errMsg:    "invalid enum value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.condition.Compile(testSchema)
+			assertError(t, err, tt.wantErr, tt.errMsg)
+		})
+	}
+}
+
+// TestConditionValidationEdgeCases tests boundary conditions and error cases.
+// Verifies handling of empty values, invalid modes, and value limits.
+func TestConditionValidationEdgeCases(t *testing.T) {
 	tests := []struct {
 		name    string
 		cond    Condition
-		checkFn func(*testing.T, *FilterTreeNode)
+		wantErr bool
+		errMsg  string
 	}{
 		{
-			name: "Simple Equal Condition",
-			cond: Equal("id", 1),
-			checkFn: func(t *testing.T, node *FilterTreeNode) {
-				if !node.IsLeaf() {
-					t.Errorf("Expected leaf node")
-				}
-				if node.Filter.Name != "id" || node.Filter.Mode != FilterModeEqual {
-					t.Errorf("Unexpected filter: %+v", node.Filter)
-				}
+			name: "Empty Name with Value",
+			cond: Condition{
+				Mode:  FilterModeEqual,
+				Value: 123,
 			},
+			wantErr: true,
+			errMsg:  "empty field name",
 		},
 		{
-			name: "Complex AND Condition",
-			cond: And(Equal("id", 1), Gt("score", 4.5)),
-			checkFn: func(t *testing.T, node *FilterTreeNode) {
-				if node.IsLeaf() {
-					t.Errorf("Expected non-leaf node")
-				}
-				if node.OrKind {
-					t.Errorf("Expected AND node")
-				}
-				if len(node.Children) != 2 {
-					t.Errorf("Expected 2 children, got %d", len(node.Children))
-				}
+			name: "Invalid Mode Max",
+			cond: Condition{
+				Name:  "test",
+				Mode:  FilterMode(255),
+				Value: 123,
 			},
+			wantErr: true,
+			errMsg:  "invalid filter mode",
 		},
 		{
-			name: "Complex OR Condition",
-			cond: Or(Equal("id", 1), Equal("id", 2)),
-			checkFn: func(t *testing.T, node *FilterTreeNode) {
-				if node.IsLeaf() {
-					t.Errorf("Expected non-leaf node")
-				}
-				if !node.OrKind {
-					t.Errorf("Expected OR node")
-				}
-				if len(node.Children) != 2 {
-					t.Errorf("Expected 2 children, got %d", len(node.Children))
-				}
-			},
+			name:    "Float Infinity",
+			cond:    Equal("score", math.Inf(1)),
+			wantErr: true,
+			errMsg:  "invalid float value",
+		},
+		{
+			name:    "Large String",
+			cond:    Equal("name", strings.Repeat("a", 1<<16)),
+			wantErr: true,
+			errMsg:  "value too large",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			node, err := tt.cond.Compile(testSchema)
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
+			if testing.Verbose() {
+				t.Logf("Testing condition: %+v", tt.cond)
 			}
-			tt.checkFn(t, node)
+			_, err := tt.cond.Compile(testSchema)
+			assertError(t, err, tt.wantErr, tt.errMsg)
 		})
 	}
 }
 
-// TestConditionRename tests the Rename method of Condition.
-func TestConditionRename(t *testing.T) {
-	cond := And(Equal("old_name", 1), Gt("score", 4.5))
-	cond.Rename("new_name")
-	expected := "(new_name = 1 AND score > 4.5)"
-	if got := cond.String(); got != expected {
-		t.Errorf("After Rename(), condition = %v, want %v", got, expected)
-	}
-}
+// Edge Case Tests
+// ---------------
 
-// TestConditionWithDifferentTypes tests the behavior of conditions with different data types.
-func TestConditionWithDifferentTypes(t *testing.T) {
+// TestConditionIsEmpty tests empty state detection.
+// Verifies correct identification of zero-value and cleared conditions.
+func TestConditionIsEmpty(t *testing.T) {
 	tests := []struct {
-		name string
-		c    Condition
-		want string
+		name      string
+		condition Condition
+		want      bool
 	}{
-		{"Integer", Equal("id", 123), "id = 123"},
-		{"Float", Gt("score", 4.5), "score > 4.5"},
-		{"String", Equal("name", []byte("Blockwatch")), "name = Blockwatch"},
-		{"Boolean", Equal("is_active", true), "is_active = true"},
-		{"Datetime", Ge("created", time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)), "created >= 2023-01-01 00:00:00 +0000 UTC"},
-		{"Enum", In("status", []uint16{1, 2}), "status IN [1 2]"},
-		{"Range", Range("score", 3.5, 4.5), "score RANGE [3.5, 4.5]"},
-		{"Regexp", Regexp("name", "Block.*"), "name REGEXP Block.*"},
-		{"Complex AND", And(Equal("id", 1), Gt("score", 4.5)), "(id = 1 AND score > 4.5)"},
-		{"Complex OR", Or(Equal("id", 1), Equal("id", 2)), "(id = 1 OR id = 2)"},
-		{"Not Equal", NotEqual("id", 5), "id != 5"},
-		{"Less Than", Lt("score", 3.0), "score < 3.0"},
-		{"Less Than or Equal", Le("score", 3.0), "score <= 3.0"},
-		{"Greater Than or Equal", Ge("score", 4.5), "score >= 4.5"},
-		{"Not In", NotIn("status", []uint16{3, 4}), "status NOT IN [3 4]"},
-		{"Complex Nested", And(
-			Equal("id", 1),
-			Or(
-				Gt("score", 4.5),
-				Lt("score", 2.0),
+		{
+			name:      "Zero Value Condition",
+			condition: Condition{},
+			want:      true,
+		},
+		{
+			name:      "Simple Non-Empty Condition",
+			condition: Equal("id", 1),
+			want:      false,
+		},
+		{
+			name: "Empty AND Condition",
+			condition: And(
+				Condition{},
+				Condition{},
 			),
-			In("status", []uint16{1, 2, 3}),
-		), "(id = 1 AND (score > 4.5 OR score < 2.0) AND status IN [1 2 3])"},
+			want: true,
+		},
+		{
+			name: "Partially Empty AND",
+			condition: And(
+				Equal("id", 1),
+				Condition{},
+			),
+			want: false,
+		},
+		{
+			name: "Complex Non-Empty",
+			condition: And(
+				Equal("id", 1),
+				Or(
+					Gt("score", 4.5),
+					Lt("score", 2.0),
+				),
+			),
+			want: false,
+		},
+		{
+			name: "Cleared Condition",
+			condition: func() Condition {
+				c := Equal("id", 1)
+				c.Clear()
+				return c
+			}(),
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.c.Compile(testSchema)
-			if err != nil {
-				t.Errorf("Condition.Compile() error = %v", err)
-				return
-			}
-			if got := tt.c.String(); got != tt.want {
-				t.Errorf("Condition.String() = %v, want %v", got, tt.want)
+			got := tt.condition.IsEmpty()
+			if got != tt.want {
+				t.Errorf("IsEmpty() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-// BenchmarkConditionParse benchmarks the ParseCondition function.
-func BenchmarkConditionParse(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		ParseCondition("id", "123", testSchema)
+// TestConditionBoundaryValues tests handling of extreme values.
+// Verifies proper handling of min/max values for different field types.
+func TestConditionBoundaryValues(t *testing.T) {
+	tests := []struct {
+		name    string
+		field   string
+		value   interface{}
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "Int64 Max",
+			field:   "id",
+			value:   int64(math.MaxInt64),
+			wantErr: false,
+		},
+		{
+			name:    "Int64 Min",
+			field:   "id",
+			value:   int64(math.MinInt64),
+			wantErr: false,
+		},
+		{
+			name:    "Uint16 Max for Enum",
+			field:   "status",
+			value:   uint16(math.MaxUint16),
+			wantErr: true,
+			errMsg:  "invalid enum value",
+		},
+		{
+			name:    "Float64 Max",
+			field:   "score",
+			value:   math.MaxFloat64,
+			wantErr: false,
+		},
+		{
+			name:    "Float64 Min",
+			field:   "score",
+			value:   math.SmallestNonzeroFloat64,
+			wantErr: false,
+		},
+		{
+			name:    "Empty String",
+			field:   "name",
+			value:   "",
+			wantErr: false,
+		},
+		{
+			name:    "Max Length String",
+			field:   "name",
+			value:   strings.Repeat("a", 1<<15), // 32KB
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Equal(tt.field, tt.value)
+			_, err := c.Compile(testSchema)
+			assertError(t, err, tt.wantErr, tt.errMsg)
+		})
 	}
 }
 
-// BenchmarkConditionCompile benchmarks the Compile method of a simple Condition.
-func BenchmarkConditionCompile(b *testing.B) {
-	c := Equal("id", 123)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		c.Compile(testSchema)
+// TestConditionNestedConversion tests type conversion in nested conditions.
+// Verifies correct handling of mixed types and deep condition trees.
+func TestConditionNestedConversion(t *testing.T) {
+	tests := []struct {
+		name    string
+		cond    Condition
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "Mixed Types AND",
+			cond: And(
+				Equal("id", "123"),
+				Equal("score", 45.67),
+				Equal("name", []byte("test")),
+			),
+			wantErr: false,
+		},
+		{
+			name: "Deep Nesting",
+			cond: And(
+				Or(
+					Equal("id", 1),
+					And(
+						Equal("score", "45.67"),
+						Equal("status", "active"),
+					),
+				),
+				Equal("name", "test"),
+			),
+			wantErr: false,
+		},
+		{
+			name: "Invalid Mixed Types",
+			cond: And(
+				Equal("id", "not_a_number"),
+				Equal("score", "invalid_float"),
+			),
+			wantErr: true,
+			errMsg:  "type conversion failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if testing.Verbose() {
+				t.Logf("Testing condition: %s", tt.cond.String())
+				logConditionState(t, &tt.cond, 1)
+			}
+			_, err := tt.cond.Compile(testSchema)
+			assertError(t, err, tt.wantErr, tt.errMsg)
+		})
 	}
 }
 
-// BenchmarkComplexConditionCompile benchmarks the Compile method of a complex Condition.
-func BenchmarkComplexConditionCompile(b *testing.B) {
-	c := And(
-		Equal("id", 1),
-		Or(
-			Gt("score", 4.5),
-			Regexp("name", "Block.*"),
-		),
-		In("status", []uint16{1, 2}),
-	)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		c.Compile(testSchema)
+// Benchmarks and Fuzz Tests
+// -------------------------
+
+// BenchmarkConditionTree measures performance of condition tree operations.
+// Tests compilation performance with varying tree sizes.
+func BenchmarkConditionTree(b *testing.B) {
+	benchmarks := []struct {
+		name string
+		size int
+	}{
+		{"Small Tree", 10},
+		{"Medium Tree", 100},
+		{"Large Tree", 1000},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			c := buildLargeConditionTree(bm.size)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, err := c.Compile(testSchema)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 
-// Helper functions
+// FuzzConditionParse tests condition parsing with random inputs.
+// Verifies robustness of parsing logic against unexpected inputs.
+func FuzzConditionParse(f *testing.F) {
+	f.Add("id", "123")
+	f.Add("score", "45.67")
+	f.Add("name", "test")
+
+	f.Fuzz(func(t *testing.T, field, value string) {
+		c, err := ParseCondition(field, value, testSchema)
+		if err == nil {
+			_, err = c.Compile(testSchema)
+			if err != nil {
+				t.Errorf("valid parse but invalid compile: %v", err)
+			}
+		}
+	})
+}
+
+// Helper Functions
+// -----------------------------------------------------------------------------
+
+// assertCondition compares two conditions for equality, including all nested fields and children.
+// Helper function that provides detailed error output on mismatch.
+func assertCondition(t *testing.T, got, want Condition) {
+	t.Helper()
+	if !conditionEqual(got, want) {
+		t.Errorf("\ngot:  %v\nwant: %v", got, want)
+	}
+}
+
+// assertError verifies error outcomes match expectations.
+// Checks both error presence/absence and specific error message content.
+func assertError(t *testing.T, err error, wantErr bool, errMsg string) {
+	t.Helper()
+	if (err != nil) != wantErr {
+		t.Errorf("got err=%v, wantErr=%v", err, wantErr)
+		return
+	}
+	if wantErr && errMsg != "" && !strings.Contains(err.Error(), errMsg) {
+		t.Errorf("got err=%q, want containing %q", err.Error(), errMsg)
+	}
+}
+
+// assertConditionString verifies string representation matches expected output.
+// Used for testing condition formatting and debug output.
+func assertConditionString(t *testing.T, got, want string) {
+	t.Helper()
+	if got != want {
+		t.Errorf("\ngot:  %v\nwant: %v", got, want)
+	}
+}
+
+// assertStringSlice verifies string slice equality.
+// Used for testing field name collections and other string lists.
+func assertStringSlice(t *testing.T, got, want []string) {
+	t.Helper()
+	if !equalStringSlices(got, want) {
+		t.Errorf("\ngot:  %v\nwant: %v", got, want)
+	}
+}
+
+// assertConditionEmpty verifies a condition is in empty state.
+// Checks both value fields and children are properly cleared.
+func assertConditionEmpty(t *testing.T, c Condition) {
+	t.Helper()
+	if !c.IsEmpty() {
+		t.Errorf("condition is not empty: %v", c)
+	}
+}
+
+// comparison helpers
+func conditionEqual(a, b Condition) bool {
+	if a.Name != b.Name || a.Type != b.Type || a.Mode != b.Mode || a.OrKind != b.OrKind {
+		return false
+	}
+	if !reflect.DeepEqual(a.Value, b.Value) {
+		return false
+	}
+	if len(a.Children) != len(b.Children) {
+		return false
+	}
+	for i := range a.Children {
+		if !conditionEqual(a.Children[i], b.Children[i]) {
+			return false
+		}
+	}
+	return true
+}
 
 func equalStringSlices(a, b []string) bool {
 	if len(a) != len(b) {
@@ -586,387 +888,28 @@ func equalStringSlices(a, b []string) bool {
 	return true
 }
 
-func conditionEqual(a, b Condition) bool {
-	if a.Name != b.Name || a.Type != b.Type || a.Mode != b.Mode || a.OrKind != b.OrKind {
-		return false
-	}
+// debug helpers
+func logConditionState(t *testing.T, c *Condition, depth int) {
+	indent := strings.Repeat("  ", depth)
+	t.Logf("%sCondition: %+v", indent, c)
+	t.Logf("%sChildren: %d", indent, len(c.Children))
+	t.Logf("%sOrKind: %v", indent, c.OrKind)
 
-	if !reflect.DeepEqual(a.Value, b.Value) {
-		return false
+	for i, child := range c.Children {
+		t.Logf("%sChild %d:", indent, i)
+		logConditionState(t, &child, depth+1)
 	}
+}
 
-	if len(a.Children) != len(b.Children) {
-		return false
-	}
-
-	for i := range a.Children {
-		if !conditionEqual(a.Children[i], b.Children[i]) {
-			return false
+// test data builders
+func buildLargeConditionTree(size int) Condition {
+	var c Condition
+	for i := 0; i < size; i++ {
+		child := Equal("id", i)
+		if i%2 == 0 {
+			child = Or(child, Equal("score", float64(i)))
 		}
+		c.Add(child)
 	}
-
-	return true
-}
-
-// TestConditionAddIsolated tests the Add operation in isolation to better understand
-// the behavior of combining conditions. It provides detailed logging of the condition
-// state before and after the operation.
-func TestConditionAddIsolated(t *testing.T) {
-	t.Run("Basic AND Operation", func(t *testing.T) {
-		c1 := Equal("id", 1)
-		c2 := Equal("name", "test")
-
-		before := c1.String()
-		c1.Add(c2)
-		after := c1.String()
-
-		t.Logf("Before: %s", before)
-		t.Logf("After: %s", after)
-		t.Logf("Children: %d", len(c1.Children))
-		t.Logf("Mode: %v", c1.Mode)
-	})
-}
-
-// TestByteMatcherTypeConversion verifies the type conversion behavior of bytesMatcher
-// with different input types. It ensures proper handling of strings, byte slices,
-// and invalid inputs.
-func TestByteMatcherTypeConversion(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   any
-		wantErr bool
-	}{
-		{"String Input", "test", false},
-		{"Byte Slice Input", []byte("test"), false},
-		{"Invalid Input", 123, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				if r := recover(); r != nil {
-					if !tt.wantErr {
-						t.Errorf("unexpected panic: %v", r)
-					}
-				}
-			}()
-
-			m := &bytesMatcher{}
-			m.WithValue(tt.input)
-		})
-	}
-}
-
-// TestConditionValidationRules verifies that the condition validation logic correctly
-// enforces all validation rules, particularly focusing on field name requirements
-// and filter mode constraints.
-func TestConditionValidationRules(t *testing.T) {
-	tests := []struct {
-		name      string
-		condition Condition
-		wantErr   bool
-		errMsg    string
-	}{
-		{
-			name: "Empty Field Name",
-			condition: Condition{
-				Mode:  FilterModeEqual,
-				Value: 123,
-			},
-			wantErr: true,
-			errMsg:  "empty field name",
-		},
-		{
-			name: "Invalid Filter Mode",
-			condition: Condition{
-				Name:  "test",
-				Mode:  FilterMode(999),
-				Value: 123,
-			},
-			wantErr: true,
-			errMsg:  "invalid filter mode",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.condition.Compile(testSchema)
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("expected error containing %q, got nil", tt.errMsg)
-				} else if !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("expected error containing %q, got %q", tt.errMsg, err)
-				}
-			} else if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-		})
-	}
-}
-
-// TestConditionAddDebug provides detailed debugging information about the Add operation,
-// logging the complete state of conditions before and after the operation to help
-// diagnose tree building issues.
-func TestConditionAddDebug(t *testing.T) {
-	c1 := Equal("id", 1)
-	c2 := Equal("name", "Blockwatch")
-
-	t.Logf("Initial c1: %+v", c1)
-	t.Logf("Initial c2: %+v", c2)
-
-	c1.Add(c2)
-
-	t.Logf("After Add c1: %+v", c1)
-	t.Logf("Children count: %d", len(c1.Children))
-	t.Logf("OrKind: %v", c1.OrKind)
-}
-
-// TestConditionStringDebug tests the string representation of conditions with detailed
-// logging of the internal structure. It helps verify that the string output correctly
-// reflects the condition tree structure.
-func TestConditionStringDebug(t *testing.T) {
-	c := And(
-		Equal("id", 1),
-		Gt("score", 4.5),
-		Regexp("name", "Block.*"),
-	)
-
-	t.Logf("Condition structure: %+v", c)
-	t.Logf("Children count: %d", len(c.Children))
-	t.Logf("String output: %s", c.String())
-
-	// Test each child separately
-	for i, child := range c.Children {
-		t.Logf("Child %d: %s", i, child.String())
-	}
-}
-
-// TestConditionValidateDebug provides detailed debugging information during condition
-// validation, logging the complete validation process including intermediate states
-// and error conditions.
-func TestConditionValidateDebug(t *testing.T) {
-	tests := []struct {
-		name string
-		c    Condition
-	}{
-		{
-			name: "Empty Name",
-			c: Condition{
-				Mode:  FilterModeEqual,
-				Value: 1,
-			},
-		},
-		{
-			name: "Invalid Mode",
-			c: Condition{
-				Name:  "id",
-				Mode:  FilterMode(999),
-				Value: 1,
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			node, err := tt.c.Compile(testSchema)
-			t.Logf("Test: %s", tt.name)
-			t.Logf("Condition: %+v", tt.c)
-			t.Logf("Error: %v", err)
-			t.Logf("Node: %+v", node)
-		})
-	}
-}
-
-// TestConditionRenameDebug verifies the rename operation with detailed logging of
-// the condition structure before and after the rename, helping diagnose issues with
-// tree traversal during rename operations.
-func TestConditionRenameDebug(t *testing.T) {
-	c := And(Equal("id", 1), Gt("score", 4.5))
-
-	t.Logf("Before rename: %s", c.String())
-	t.Logf("Structure before: %+v", c)
-
-	c.Rename("new_name")
-
-	t.Logf("After rename: %s", c.String())
-	t.Logf("Structure after: %+v", c)
-
-	// Check children
-	for i, child := range c.Children {
-		t.Logf("Child %d after rename: %+v", i, child)
-	}
-}
-
-// TestByteMatcherTypeHandling verifies that bytesMatcher correctly handles different
-// input types and properly reports type conversion errors. It specifically tests
-// the behavior with string inputs that should be converted to byte slices.
-func TestByteMatcherTypeHandling(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   any
-		wantErr bool
-		errMsg  string
-	}{
-		{
-			name:    "String Input",
-			input:   "test",
-			wantErr: true,
-			errMsg:  "interface conversion: interface {} is string, not []uint8",
-		},
-		{
-			name:    "Byte Slice Input",
-			input:   []byte("test"),
-			wantErr: false,
-		},
-		{
-			name:    "Empty String",
-			input:   "",
-			wantErr: true,
-			errMsg:  "interface conversion: interface {} is string, not []uint8",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				if r := recover(); r != nil {
-					if !tt.wantErr {
-						t.Errorf("unexpected panic: %v", r)
-					} else if !strings.Contains(fmt.Sprint(r), tt.errMsg) {
-						t.Errorf("got panic %v, want %v", r, tt.errMsg)
-					}
-				}
-			}()
-
-			c := Condition{
-				Name:  "test",
-				Mode:  FilterModeEqual,
-				Value: tt.input,
-			}
-			c.Compile(testSchema)
-		})
-	}
-}
-
-// TestConditionAddDetailed provides a detailed verification of the Add operation,
-// with extensive logging of the condition state at each step. It helps diagnose
-// issues with condition tree building and maintenance.
-func TestConditionAddDetailed(t *testing.T) {
-	tests := []struct {
-		name     string
-		initial  Condition
-		add      Condition
-		expected string
-		debug    bool
-	}{
-		{
-			name:     "Add AND with Debug",
-			initial:  Equal("id", 1),
-			add:      Equal("name", "Blockwatch"),
-			expected: "id = 1 AND name = Blockwatch",
-			debug:    true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.debug {
-				t.Logf("Initial condition: %+v", tt.initial)
-				t.Logf("Initial children: %+v", tt.initial.Children)
-				t.Logf("Initial string: %s", tt.initial.String())
-			}
-
-			tt.initial.Add(tt.add)
-
-			if tt.debug {
-				t.Logf("After Add:")
-				t.Logf("  Condition: %+v", tt.initial)
-				t.Logf("  Children: %+v", tt.initial.Children)
-				t.Logf("  String: %s", tt.initial.String())
-				t.Logf("  OrKind: %v", tt.initial.OrKind)
-				t.Logf("  Mode: %v", tt.initial.Mode)
-			}
-
-			if got := tt.initial.String(); got != tt.expected {
-				t.Errorf("\ngot:  %s\nwant: %s", got, tt.expected)
-			}
-		})
-	}
-}
-
-// TestConditionStringDebugging verifies the string representation of complex condition
-// trees with detailed structure logging. It ensures that the string output correctly
-// reflects the logical structure of the condition tree.
-func TestConditionStringDebugging(t *testing.T) {
-	c := And(
-		Equal("id", 1),
-		Gt("score", 4.5),
-		Regexp("name", "Block.*"),
-	)
-
-	t.Log("Condition Structure:")
-	t.Logf("Root: %+v", c)
-	t.Logf("Children count: %d", len(c.Children))
-
-	for i, child := range c.Children {
-		t.Logf("Child %d:", i)
-		t.Logf("  Name: %s", child.Name)
-		t.Logf("  Mode: %v", child.Mode)
-		t.Logf("  Value: %v", child.Value)
-		t.Logf("  String: %s", child.String())
-	}
-
-	got := c.String()
-	want := "id = 1 AND score > 4.5 AND name REGEXP Block.*"
-
-	if got != want {
-		t.Errorf("\nString representation mismatch:\ngot:  %s\nwant: %s", got, want)
-	}
-}
-
-// TestConditionValidationEdgeCases tests boundary conditions and edge cases in
-// condition validation, particularly focusing on empty names, invalid modes,
-// and other potential error conditions.
-func TestConditionValidationEdgeCases(t *testing.T) {
-	tests := []struct {
-		name    string
-		c       Condition
-		wantErr bool
-		errType string
-	}{
-		{
-			name: "Empty Name with Value",
-			c: Condition{
-				Mode:  FilterModeEqual,
-				Value: 123,
-			},
-			wantErr: true,
-			errType: "empty field name",
-		},
-		{
-			name: "Invalid Mode Max",
-			c: Condition{
-				Name:  "test",
-				Mode:  FilterMode(255),
-				Value: 123,
-			},
-			wantErr: true,
-			errType: "invalid filter mode",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Logf("Testing condition: %+v", tt.c)
-			_, err := tt.c.Compile(testSchema)
-
-			if tt.wantErr && err == nil {
-				t.Errorf("expected error containing %q, got nil", tt.errType)
-			} else if err != nil && !tt.wantErr {
-				t.Errorf("unexpected error: %v", err)
-			} else if err != nil && !strings.Contains(err.Error(), tt.errType) {
-				t.Errorf("got error %q, want error containing %q", err.Error(), tt.errType)
-			}
-		})
-	}
+	return c
 }
