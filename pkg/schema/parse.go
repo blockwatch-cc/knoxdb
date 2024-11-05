@@ -20,7 +20,7 @@ type ValueParser interface {
 	ParseSlice(string) (any, error)
 }
 
-func NewParser(typ types.FieldType, scale uint8) ValueParser {
+func NewParser(typ types.FieldType, scale uint8, enum *EnumDictionary) ValueParser {
 	switch typ {
 	case types.FieldTypeDatetime:
 		return TimeParser{}
@@ -41,7 +41,11 @@ func NewParser(typ types.FieldType, scale uint8) ValueParser {
 	case types.FieldTypeUint8:
 		return UintParser[uint8]{8}
 	case types.FieldTypeUint16:
-		return UintParser[uint16]{16}
+		if enum == nil {
+			return UintParser[uint16]{16}
+		} else {
+			return enum
+		}
 	case types.FieldTypeUint32:
 		return UintParser[uint32]{32}
 	case types.FieldTypeUint64:

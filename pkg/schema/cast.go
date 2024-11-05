@@ -37,7 +37,7 @@ func castError(val any, kind string) error {
 	return fmt.Errorf("cast: unexpected value type %T for %s condition", val, kind)
 }
 
-func NewCaster(typ types.FieldType) ValueCaster {
+func NewCaster(typ types.FieldType, enum *EnumDictionary) ValueCaster {
 	switch typ {
 	case types.FieldTypeDatetime:
 		return TimeCaster{}
@@ -58,7 +58,11 @@ func NewCaster(typ types.FieldType) ValueCaster {
 	case types.FieldTypeUint8:
 		return UintCaster[uint8]{}
 	case types.FieldTypeUint16:
-		return UintCaster[uint16]{}
+		if enum == nil {
+			return UintCaster[uint16]{}
+		} else {
+			return enum
+		}
 	case types.FieldTypeUint32:
 		return UintCaster[uint32]{}
 	case types.FieldTypeUint64:

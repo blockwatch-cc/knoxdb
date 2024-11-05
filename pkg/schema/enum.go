@@ -6,6 +6,7 @@ package schema
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/hash/fnv"
@@ -189,4 +190,90 @@ func (e *EnumDictionary) value(i int) string {
 		end = int(e.offsets[i+1])
 	}
 	return util.UnsafeGetString(e.values[start:end])
+}
+
+var (
+	_ ValueCaster = (*EnumDictionary)(nil)
+	_ ValueParser = (*EnumDictionary)(nil)
+)
+
+// ValueParser interface
+func (e *EnumDictionary) ParseValue(s string) (any, error) {
+	code, ok := e.Code(s)
+	if !ok {
+		return nil, fmt.Errorf("invalid enum value %q", s)
+	}
+	return code, nil
+}
+
+func (e *EnumDictionary) ParseSlice(s string) (any, error) {
+	vals := strings.Split(s, ",")
+	codes := make([]uint16, len(vals))
+	var ok bool
+	for i, v := range vals {
+		codes[i], ok = e.Code(v)
+		if !ok {
+			return nil, fmt.Errorf("invalid enum value %q", v)
+		}
+	}
+	return codes, nil
+}
+
+// ValueCaster interface
+func (e *EnumDictionary) CastValue(val any) (any, error) {
+	switch v := val.(type) {
+	case string:
+		code, ok := e.Code(v)
+		if !ok {
+			return nil, fmt.Errorf("invalid enum value %q", v)
+		}
+		return code, nil
+	case []byte:
+		code, ok := e.Code(string(v))
+		if !ok {
+			return nil, fmt.Errorf("invalid enum value %q", string(v))
+		}
+		return code, nil
+	case uint16:
+		if int(v) >= len(e.offsets) {
+			return nil, fmt.Errorf("invalid enum code %d", v)
+		}
+		return v, nil
+	default:
+		return nil, castError(val, "enum")
+	}
+}
+
+func (e *EnumDictionary) CastSlice(val any) (any, error) {
+	switch v := val.(type) {
+	case []string:
+		codes := make([]uint16, len(v))
+		for i, vv := range v {
+			code, ok := e.Code(vv)
+			if !ok {
+				return nil, fmt.Errorf("invalid enum value %q", vv)
+			}
+			codes[i] = code
+		}
+		return codes, nil
+	case [][]byte:
+		codes := make([]uint16, len(v))
+		for i, vv := range v {
+			code, ok := e.Code(string(vv))
+			if !ok {
+				return nil, fmt.Errorf("invalid enum value %q", string(vv))
+			}
+			codes[i] = code
+		}
+		return codes, nil
+	case []uint16:
+		for _, vv := range v {
+			if int(vv) >= len(e.offsets) {
+				return nil, fmt.Errorf("invalid enum code %d", vv)
+			}
+		}
+		return v, nil
+	default:
+		return nil, castError(val, "enum")
+	}
 }
