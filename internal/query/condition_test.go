@@ -206,6 +206,10 @@ func TestConditionFields(t *testing.T) {
 // Tree Manipulation Tests
 // -----------------------
 
+// TODO: start with an existing AND condititon (use top level function),
+// add an OR condition to it
+// and the other way around
+
 // TestConditionAdd tests adding conditions to create compound expressions.
 // It verifies AND/OR combinations and proper handling of empty conditions.
 func TestConditionAdd(t *testing.T) {
@@ -267,6 +271,7 @@ func TestConditionAdd(t *testing.T) {
 
 // TestConditionClear tests the clearing of condition state.
 // Verifies that all fields are reset to zero values and children are removed.
+// TODO: consider new fields Type, Index; currently not being cleared
 func TestConditionClear(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -517,6 +522,9 @@ func TestConditionValidateField(t *testing.T) {
 	}
 }
 
+// Edge Case Tests
+// ---------------
+
 // TestConditionValidationEdgeCases tests boundary conditions and error cases.
 // Verifies handling of empty values, invalid modes, and value limits.
 func TestConditionValidationEdgeCases(t *testing.T) {
@@ -569,9 +577,6 @@ func TestConditionValidationEdgeCases(t *testing.T) {
 		})
 	}
 }
-
-// Edge Case Tests
-// ---------------
 
 // TestConditionIsEmpty tests empty state detection.
 // Verifies correct identification of zero-value and cleared conditions.
