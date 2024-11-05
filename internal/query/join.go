@@ -594,7 +594,7 @@ func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes engine.Que
 
 	// 1  query first side of the join
 	if p.Flags.IsDebug() {
-		p.Log.Debugf("J> %s: %s %s", p.Tag, xname, x.Plan.Dump())
+		p.Log.Debugf("J> %s: %s %s", p.Tag, xname, x.Plan)
 	}
 
 	// run query
@@ -631,7 +631,7 @@ func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes engine.Que
 	}
 
 	if p.Flags.IsDebug() {
-		p.Log.Debugf("J> %s: %s %s", p.Tag, yname, y.Plan.Dump())
+		p.Log.Debugf("J> %s: %s %s", p.Tag, yname, y.Plan)
 	}
 
 	// run query

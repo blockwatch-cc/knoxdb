@@ -5,13 +5,11 @@ package query
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/slicex"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
@@ -32,6 +30,40 @@ type Condition struct {
 	Children []Condition     // child conditions
 }
 
+func (c *Condition) Clear() {
+	*c = Condition{}
+}
+
+func (c Condition) IsEmpty() bool {
+	return len(c.Children) == 0 && !c.Mode.IsValid()
+}
+
+func (c Condition) IsLeaf() bool {
+	return len(c.Children) == 0
+}
+
+// returns unique list of fields
+func (c Condition) Fields() []string {
+	if c.IsEmpty() {
+		return nil
+	}
+	if c.IsLeaf() {
+		return []string{c.Name}
+	}
+	names := make([]string, 0)
+	for _, v := range c.Children {
+		names = append(names, v.Fields()...)
+	}
+	return slicex.UniqueStrings(names)
+}
+
+func (c Condition) Rename(name string) Condition {
+	if name != "" {
+		c.Name = name
+	}
+	return c
+}
+
 func ParseCondition(key, val string, s *schema.Schema) (c Condition, err error) {
 	name, mode, ok := strings.Cut(key, ".")
 	if !ok {
@@ -50,7 +82,7 @@ func ParseCondition(key, val string, s *schema.Schema) (c Condition, err error) 
 		err = fmt.Errorf("invalid filter mode '%s'", mode)
 		return
 	}
-	parser := schema.NewParser(c.Type, field.Scale())
+	parser := schema.NewParser(c.Type, field.Scale(), field.Enum())
 	switch c.Mode {
 	case FilterModeRange:
 		v1, v2, ok := strings.Cut(val, ",")
@@ -76,16 +108,47 @@ func ParseCondition(key, val string, s *schema.Schema) (c Condition, err error) 
 	return
 }
 
+func (c Condition) Validate() error {
+	if c.IsLeaf() {
+		if c.Name == "" {
+			return fmt.Errorf("empty field name")
+		}
+		if !c.Mode.IsValid() {
+			return fmt.Errorf("invalid filter mode")
+		}
+		if c.Value == nil {
+			return fmt.Errorf("nil filter value")
+		}
+	} else {
+		for _, c := range c.Children {
+			if err := c.Validate(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // translate condition to filter operator
 func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
-	// bind single leaf node condition
-	if c.Name != "" {
+	// validate condition field invariants
+	err := c.Validate()
+	if err != nil {
+		return nil, err
+	}
+
+	// bind leaf node condition
+	if c.IsLeaf() {
 		// lookup field and fill missing values
 		field, ok := s.FieldByName(c.Name)
 		if !ok {
 			return nil, fmt.Errorf("unknown column %q", c.Name)
 		}
-		c.Index = field.Id() - 1
+		fid, ok := s.FieldIndexById(field.Id())
+		if !ok {
+			return nil, fmt.Errorf("unknown column %q", c.Name)
+		}
+		c.Index = uint16(fid)
 		c.Type = field.Type()
 
 		// Use matcher factory to generate matcher impl for type and mode
@@ -94,7 +157,7 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 		// Cast types of condition values since we allow external use.
 		// The wire format code path is safe because data encoding follows
 		// schema field types.
-		caster := schema.NewCaster(c.Type)
+		caster := schema.NewCaster(c.Type, field.Enum())
 
 		// init matcher impl from value(s)
 		var (
@@ -201,65 +264,6 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 	return node, nil
 }
 
-// returns unique list of fields
-func (c Condition) Fields() []string {
-	if c.IsEmpty() {
-		return nil
-	}
-	if c.IsLeaf() {
-		return []string{c.Name}
-	}
-	names := make([]string, 0)
-	for _, v := range c.Children {
-		names = append(names, v.Fields()...)
-	}
-	return slicex.UniqueStrings(names)
-}
-
-func (c Condition) Rename(name string) Condition {
-	if name != "" {
-		c.Name = name
-	}
-	return c
-}
-
-func (c *Condition) Clear() {
-	c.Name = ""
-	c.Mode = 0
-	c.Value = nil
-	c.OrKind = false
-	c.Children = nil
-}
-
-func (c Condition) IsEmpty() bool {
-	return len(c.Children) == 0 && !c.Mode.IsValid()
-}
-
-func (c Condition) IsLeaf() bool {
-	return c.Name != ""
-}
-
-func (c Condition) String() string {
-	switch c.Mode {
-	case FilterModeRange:
-		return fmt.Sprintf("%s %s [%s, %s]",
-			c.Name,
-			c.Mode.Symbol(),
-			util.ToString(c.Value.(RangeValue)[0]),
-			util.ToString(c.Value.(RangeValue)[1]),
-		)
-	case FilterModeIn, FilterModeNotIn:
-		size := reflect.ValueOf(c.Value).Len()
-		if size > 16 {
-			return fmt.Sprintf("%s %s [%d values]", c.Name, c.Mode.Symbol(), size)
-		} else {
-			return fmt.Sprintf("%s %s [%#v]", c.Name, c.Mode.Symbol(), c.Value)
-		}
-	default:
-		return fmt.Sprintf("%s %s %s", c.Name, c.Mode.Symbol(), util.ToString(c.Value))
-	}
-}
-
 func (c *Condition) And(col string, mode FilterMode, value any) {
 	c.Add(Condition{
 		Name:   col,
@@ -300,22 +304,32 @@ func (c *Condition) Add(a Condition) {
 	if a.IsEmpty() {
 		return
 	}
-	if c.IsLeaf() {
-		clone := Condition{
-			Name:     c.Name,
-			Mode:     c.Mode,
-			Value:    c.Value,
-			OrKind:   c.OrKind,
-			Children: c.Children,
-		}
+	if c.IsEmpty() {
+		*c = a
+		return
+	}
+
+	// determine OR kind polarity change
+	if c.OrKind != a.OrKind {
+		// push down leaf/branch on flip
+		clone := *c
+		c.Clear()
+		c.OrKind = a.OrKind
+		c.Children = []Condition{clone}
+	} else if c.IsLeaf() {
+		// convert leaf to branch node
+		kind := c.OrKind
+		clone := *c
+		c.Clear()
+		c.OrKind = kind
 		c.Children = []Condition{clone}
 	}
 
-	// append new condition to this element
-	if c.OrKind == a.OrKind && !a.IsLeaf() {
-		c.Children = append(c.Children, a.Children...)
-	} else {
+	// append new condition to this node
+	if a.IsLeaf() {
 		c.Children = append(c.Children, a)
+	} else {
+		c.Children = append(c.Children, a.Children...)
 	}
 }
 

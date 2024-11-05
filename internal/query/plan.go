@@ -193,7 +193,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 	// log incoming plan before compile
 	if p.Flags.IsDebug() {
 		p.Log.SetLevel(log.LevelDebug)
-		p.Log.Debug(p.Dump())
+		p.Log.Debug(p)
 	}
 
 	filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
@@ -246,7 +246,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 
 	// wrap expensive call
 	if p.Flags.IsDebug() {
-		p.Log.Debug(p.Dump())
+		p.Log.Debug(p)
 	}
 
 	return nil

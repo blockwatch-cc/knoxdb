@@ -4,21 +4,68 @@
 package query
 
 import (
-	"bytes"
 	"fmt"
-	"io"
+	"reflect"
 	"strings"
 
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func (n FilterTreeNode) Dump() string {
-	buf := bytes.NewBuffer(nil)
-	n.dump(0, buf)
-	return string(buf.Bytes())
+func (c Condition) String() string {
+	var b strings.Builder
+	c.dump(0, &b)
+	return b.String()
 }
 
-func (n FilterTreeNode) dump(level int, w io.Writer) {
+func (c Condition) dump(level int, w *strings.Builder) {
+	if c.IsLeaf() {
+		fmt.Fprint(w, c.FilterString())
+	}
+	kind := " AND "
+	if c.OrKind {
+		kind = " OR "
+	}
+	if level > 0 && len(c.Children) > 0 {
+		fmt.Fprint(w, "(")
+		defer fmt.Fprint(w, ")")
+	}
+	for i, v := range c.Children {
+		if i > 0 {
+			fmt.Fprint(w, kind)
+		}
+		v.dump(level+1, w)
+	}
+}
+
+func (c Condition) FilterString() string {
+	switch c.Mode {
+	case FilterModeRange:
+		return fmt.Sprintf("%s %s [%s, %s]",
+			c.Name,
+			c.Mode.Symbol(),
+			util.ToString(c.Value.(RangeValue)[0]),
+			util.ToString(c.Value.(RangeValue)[1]),
+		)
+	case FilterModeIn, FilterModeNotIn:
+		size := reflect.ValueOf(c.Value).Len()
+		if size > 16 {
+			return fmt.Sprintf("%s %s [%d values]", c.Name, c.Mode.Symbol(), size)
+		} else {
+			return fmt.Sprintf("%s %s [%#v]", c.Name, c.Mode.Symbol(), c.Value)
+		}
+	default:
+		return fmt.Sprintf("%s %s %s", c.Name, c.Mode.Symbol(), util.ToString(c.Value))
+	}
+}
+
+func (n FilterTreeNode) String() string {
+	var b strings.Builder
+	n.dump(0, &b)
+	return b.String()
+}
+
+func (n FilterTreeNode) dump(level int, w *strings.Builder) {
 	if n.IsLeaf() {
 		fmt.Fprint(w, n.Filter.String())
 	}
@@ -38,22 +85,22 @@ func (n FilterTreeNode) dump(level int, w io.Writer) {
 	}
 }
 
-func (q QueryPlan) Dump() string {
-	buf := bytes.NewBuffer(nil)
-	fmt.Fprintf(buf, "Q> %s => SELECT ( %s ) WHERE", q.Tag, strings.Join(q.ResultSchema.AllFieldNames(), ", "))
-	q.Filters.dump(0, buf)
+func (q QueryPlan) String() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Q> %s => SELECT ( %s ) WHERE", q.Tag, strings.Join(q.ResultSchema.AllFieldNames(), ", "))
+	q.Filters.dump(0, &b)
 	if q.Order != types.OrderAsc {
-		fmt.Fprintf(buf, "ORDER BY ID %s ", strings.ToUpper(q.Order.String()))
+		fmt.Fprintf(&b, "ORDER BY ID %s ", strings.ToUpper(q.Order.String()))
 	}
 	if q.Limit > 0 {
-		fmt.Fprintf(buf, "LIMIT %d", q.Limit)
+		fmt.Fprintf(&b, "LIMIT %d", q.Limit)
 	}
 	for i, n := range []string{"NOCACHE", "NOINDEX", "DEBUG", "STATS"} {
 		if q.Flags&(1<<i) > 0 {
-			fmt.Fprintf(buf, " %s", n)
+			fmt.Fprintf(&b, " %s", n)
 		}
 	}
-	return string(buf.Bytes())
+	return b.String()
 }
 
 // func (j Join) Dump() string {

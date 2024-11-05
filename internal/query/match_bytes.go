@@ -505,6 +505,8 @@ func (m *bytesRegexpMatcher) Weight() int {
 func (m *bytesRegexpMatcher) WithValue(v any) {
 	var err error
 	switch val := v.(type) {
+	case []byte:
+		m.re, err = regexp.Compile(string(val))
 	case string:
 		m.re, err = regexp.Compile(val)
 	case *regexp.Regexp:
