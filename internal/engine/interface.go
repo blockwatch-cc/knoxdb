@@ -45,15 +45,14 @@ type TableEngine interface {
 	// data ingress
 	InsertRows(Context, []byte) (uint64, error) // wire encoded rows
 	UpdateRows(Context, []byte) (uint64, error) // wire encoded rows
-	// ApplyWalRecord(Context, *wal.Record) error
 
 	// data egress
 	Query(Context, QueryPlan) (QueryResult, error)
 	Count(Context, QueryPlan) (uint64, error)
 	Delete(Context, QueryPlan) (uint64, error)
 	Stream(Context, QueryPlan, func(QueryRow) error) error
-	Lookup(Context, []uint64) (QueryResult, error)
-	StreamLookup(Context, []uint64, func(QueryRow) error) error
+	// Lookup(Context, []uint64) (QueryResult, error)
+	// StreamLookup(Context, []uint64, func(QueryRow) error) error
 
 	// index management
 	UseIndex(IndexEngine)

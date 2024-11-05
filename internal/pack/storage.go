@@ -280,13 +280,5 @@ func (p *Package) Remove(ctx context.Context, bucket store.Bucket, cacheKey uint
 		bcache.Remove(ckey)
 	}
 
-	// remove meta if defined
-	if p.HasMeta() {
-		err := p.RemoveMeta(ctx, bucket, cacheKey)
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }

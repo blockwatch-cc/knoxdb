@@ -393,7 +393,7 @@ func (idx *Index) Rebuild(ctx context.Context) error {
 		key := idx.genkey(row.Bytes())
 
 		// append to journal
-		idx.journal.AppendWire(key)
+		idx.journal.AppendWire(key, nil)
 
 		// flush journal when full
 		if idx.journal.IsFull() {
@@ -417,11 +417,11 @@ func (idx *Index) Add(ctx context.Context, prev, val []byte) error {
 	sameKey := bytes.Equal(pkey, vkey)
 	if pkey != nil && !sameKey {
 		pkey = idx.genkey(pkey)
-		idx.tomb.AppendWire(pkey)
+		idx.tomb.AppendWire(pkey, nil)
 	}
 	if vkey != nil && !sameKey {
 		vkey = idx.genkey(vkey)
-		idx.journal.AppendWire(vkey)
+		idx.journal.AppendWire(vkey, nil)
 	}
 	if idx.journal.IsFull() || idx.tomb.IsFull() {
 		return idx.flush(ctx)
@@ -435,7 +435,7 @@ func (idx *Index) Del(ctx context.Context, prev []byte) error {
 		return nil
 	}
 	pkey = idx.genkey(pkey)
-	idx.tomb.AppendWire(pkey)
+	idx.tomb.AppendWire(pkey, nil)
 	if idx.journal.IsFull() || idx.tomb.IsFull() {
 		return idx.flush(ctx)
 	}

@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-var Decimal256Zero = Decimal256{ZeroInt256, 0}
+var ZeroDecimal256 = Decimal256{ZeroInt256, 0}
 
 // 76 digits
 type Decimal256 struct {

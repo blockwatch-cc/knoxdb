@@ -18,33 +18,9 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// func TestSetRow(t *testing.T) {
-// 	for _, v := range testStructs {
-// 		t.Run(fmt.Sprintf("%T", v), func(t *testing.T) {
-// 			pkg := makeTypedPackage(v, 1, 1)
-// 			err := pkg.SetRow(0, v)
-// 			require.NoError(t, err)
-// 		})
-// 	}
-// }
-
-// func BenchmarkSetRow(b *testing.B) {
-// 	for _, v := range testStructs {
-// 		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
-// 		b.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(b *testing.B) {
-// 			b.ReportAllocs()
-// 			for n := 0; n < b.N; n++ {
-// 				for i := 0; i < PACK_SIZE; i++ {
-// 					pkg.SetRow(i, v)
-// 				}
-// 			}
-// 		})
-// 	}
-// }
-
 // AppendWire appends a new row of values from a wire protocol message. The caller must
 // ensure the message matches the currrent package schema.
-func (p *Package) AppendWire(buf []byte) {
+func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 	assert.Always(p.CanGrow(1), "pack: overflow on wire append",
 		"pack", p.key,
 		"len", p.nRows,
@@ -55,11 +31,39 @@ func (p *Package) AppendWire(buf []byte) {
 		if !field.IsVisible {
 			continue
 		}
-		// skipped and new blocks in old packages are missing
+
+		// skip missing blocks (e.g. after schema change)
 		b := p.blocks[i]
 		if b == nil {
 			continue
 		}
+
+		// fill internal fields from metadata
+		if field.IsInternal {
+			if meta != nil {
+				switch field.Id {
+				case schema.MetaRid:
+					b.Uint64().Append(meta.Rid)
+				case schema.MetaRef:
+					b.Uint64().Append(meta.Ref)
+				case schema.MetaXmin:
+					b.Uint64().Append(meta.Xmin)
+				case schema.MetaXmax:
+					b.Uint64().Append(meta.Xmax)
+				case schema.MetaLive:
+					b.Bool().Append(meta.Xmax == 0)
+				}
+			} else {
+				switch field.Type {
+				case types.FieldTypeUint64:
+					b.Uint64().Append(0)
+				case types.FieldTypeBoolean:
+					b.Bool().Append(false)
+				}
+			}
+			continue
+		}
+
 		switch field.Type {
 		case types.FieldTypeUint64, types.FieldTypeInt64,
 			types.FieldTypeDatetime, types.FieldTypeFloat64,
@@ -116,312 +120,6 @@ func (p *Package) AppendWire(buf []byte) {
 		b.SetDirty()
 	}
 	p.nRows++
-}
-
-// vector load data from a slice
-func (p *Package) AppendSlice(val reflect.Value) error {
-	assert.Always(val.Kind() == reflect.Slice, "pack: invalid relect type in append",
-		"rtyp", val.Type().String(),
-		"rkind", val.Kind().String(),
-	)
-
-	base := val.UnsafePointer()    // ptr to first slice element
-	n := val.Len()                 // number of elements
-	sz := val.Type().Elem().Size() // size of elements
-
-	assert.Always(p.CanGrow(n), "pack: overflow on slice append",
-		"n", n,
-		"pack", p.key,
-		"len", p.nRows,
-		"cap", p.maxRows,
-	)
-
-	for i, field := range p.schema.Exported() {
-		// deleted and internal fields are invisible
-		if !field.IsVisible {
-			continue
-		}
-
-		// skipped and new blocks in old packages are missing
-		b := p.blocks[i]
-		if b == nil {
-			continue
-		}
-
-		// pointer to first struct
-		fptr := unsafe.Add(base, field.Offset)
-
-		// walk all structs and append in column order
-		// TODO: SIMD gather
-
-		switch field.Type {
-		case types.FieldTypeInt64, types.FieldTypeUint64, types.FieldTypeFloat64:
-			for i := 0; i < n; i++ {
-				b.Uint64().Append(*(*uint64)(fptr))
-				fptr = unsafe.Add(fptr, sz)
-			}
-
-		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32:
-			for i := 0; i < n; i++ {
-				b.Uint32().Append(*(*uint32)(fptr))
-				fptr = unsafe.Add(fptr, sz)
-			}
-
-		case types.FieldTypeInt16, types.FieldTypeUint16:
-			for i := 0; i < n; i++ {
-				b.Uint16().Append(*(*uint16)(fptr))
-				fptr = unsafe.Add(fptr, sz)
-			}
-
-		case types.FieldTypeInt8, types.FieldTypeUint8:
-			for i := 0; i < n; i++ {
-				b.Uint8().Append(*(*uint8)(fptr))
-				fptr = unsafe.Add(fptr, sz)
-			}
-
-		case types.FieldTypeDatetime:
-			for i := 0; i < n; i++ {
-				b.Int64().Append((*(*time.Time)(fptr)).UnixNano())
-				fptr = unsafe.Add(fptr, sz)
-			}
-
-		case types.FieldTypeBoolean:
-			for i := 0; i < n; i++ {
-				b.Bool().Append(*(*bool)(fptr))
-				fptr = unsafe.Add(fptr, sz)
-			}
-
-		case types.FieldTypeBytes:
-			switch {
-			case field.Iface&types.IfaceBinaryMarshaler > 0:
-				for i := 0; i < n; i++ {
-					rval := val.Index(i)
-					rfield := field.StructValue(rval)
-					buf, err := rfield.Interface().(encoding.BinaryMarshaler).MarshalBinary()
-					if err != nil {
-						return err
-					}
-					b.Bytes().AppendZeroCopy(buf)
-				}
-			case field.IsArray:
-				for i := 0; i < n; i++ {
-					b.Bytes().Append(unsafe.Slice((*byte)(fptr), field.Fixed))
-					fptr = unsafe.Add(fptr, sz)
-				}
-			default:
-				for i := 0; i < n; i++ {
-					b.Bytes().Append(*(*[]byte)(fptr))
-					fptr = unsafe.Add(fptr, sz)
-				}
-			}
-
-		case types.FieldTypeString:
-			switch {
-			case field.Iface&types.IfaceTextMarshaler > 0:
-				for i := 0; i < n; i++ {
-					rval := val.Index(i)
-					rfield := field.StructValue(rval)
-					buf, err := rfield.Interface().(encoding.TextMarshaler).MarshalText()
-					if err != nil {
-						return err
-					}
-					b.Bytes().AppendZeroCopy(buf)
-				}
-			case field.Iface&types.IfaceStringer > 0:
-				for i := 0; i < n; i++ {
-					rval := val.Index(i)
-					rfield := field.StructValue(rval)
-					s := rfield.Interface().(fmt.Stringer).String()
-					b.Bytes().AppendZeroCopy(util.UnsafeGetBytes(s))
-				}
-			default:
-				for i := 0; i < n; i++ {
-					s := *(*string)(fptr)
-					b.Bytes().Append(util.UnsafeGetBytes(s))
-					fptr = unsafe.Add(fptr, sz)
-				}
-			}
-
-		case types.FieldTypeInt256:
-			for i := 0; i < n; i++ {
-				b.Int256().Append((*(*num.Int256)(fptr)))
-				fptr = unsafe.Add(fptr, sz)
-			}
-		case types.FieldTypeInt128:
-			for i := 0; i < n; i++ {
-				b.Int128().Append((*(*num.Int128)(fptr)))
-				fptr = unsafe.Add(fptr, sz)
-			}
-
-		case types.FieldTypeDecimal256:
-			for i := 0; i < n; i++ {
-				b.Int256().Append((*(*num.Decimal256)(fptr)).Quantize(field.Scale).Int256())
-				fptr = unsafe.Add(fptr, sz)
-			}
-
-		case types.FieldTypeDecimal128:
-			for i := 0; i < n; i++ {
-				b.Int128().Append((*(*num.Decimal128)(fptr)).Quantize(field.Scale).Int128())
-				fptr = unsafe.Add(fptr, sz)
-			}
-
-		case types.FieldTypeDecimal64:
-			for i := 0; i < n; i++ {
-				b.Int64().Append((*(*num.Decimal64)(fptr)).Quantize(field.Scale).Int64())
-				fptr = unsafe.Add(fptr, sz)
-			}
-
-		case types.FieldTypeDecimal32:
-			for i := 0; i < n; i++ {
-				b.Int32().Append((*(*num.Decimal32)(fptr)).Quantize(field.Scale).Int32())
-				fptr = unsafe.Add(fptr, sz)
-			}
-
-		default:
-			// oh, its a type we don't support yet
-			assert.Unreachable("unhandled value type",
-				// "rtype":   rfield.Type().String(),
-				// "rkind":   rfield.Kind().String(),
-				"field", field.Name,
-				"type", field.Type.String(),
-				"pack", p.key,
-				"schema", p.schema.Name(),
-				"version", p.schema.Version(),
-			)
-		}
-
-		b.SetDirty()
-	}
-	p.nRows += n
-	return nil
-}
-
-// AppendStruct appends a new row of values from a Go struct. The caller must
-// ensure strict type match as no additional check, cast or conversion is done.
-//
-// Column mapping uses the default struct tag `knox`.
-// Only flat structs are supported (no anonymous nesting)
-func (p *Package) AppendStruct(val any) error {
-	assert.Always(p.CanGrow(1), "pack: overflow on struct append",
-		"pack", p.key,
-		"len", p.nRows,
-		"cap", p.maxRows,
-	)
-
-	// TODO: move all sanity checks to higher layer that deals with user input, e.g. journal
-	// if p.schema.IsInterface() {
-	rval := reflect.Indirect(reflect.ValueOf(val))
-	if !rval.IsValid() || rval.Kind() != reflect.Struct {
-		return fmt.Errorf("push: pushed invalid %s value of type %T", rval.Kind(), val)
-	}
-	// expensive check and val's Go type may not yet be known
-	// if s, ok := schema.LookupSchema(rval.Type()); ok {
-	// 	if p.schema.Hash() != s.Hash() {
-	// 		return fmt.Errorf("push: incompatible value %T for schema %s", val, p.schema.Name())
-	// 	}
-	// }
-	base := rval.Addr().UnsafePointer()
-	for i, field := range p.schema.Exported() {
-		// deleted and internal fields are invisible
-		if !field.IsVisible {
-			continue
-		}
-
-		// skipped and new blocks in old packages are missing
-		b := p.blocks[i]
-		if b == nil {
-			continue
-		}
-
-		// use unsafe.Add instead of reflect (except marshal types)
-		fptr := unsafe.Add(base, field.Offset)
-
-		switch field.Type {
-		case types.FieldTypeInt64, types.FieldTypeUint64, types.FieldTypeFloat64:
-			b.Uint64().Append(*(*uint64)(fptr))
-
-		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32:
-			b.Uint32().Append(*(*uint32)(fptr))
-
-		case types.FieldTypeInt16, types.FieldTypeUint16:
-			b.Uint16().Append(*(*uint16)(fptr))
-
-		case types.FieldTypeInt8, types.FieldTypeUint8:
-			b.Uint8().Append(*(*uint8)(fptr))
-
-		case types.FieldTypeDatetime:
-			b.Int64().Append((*(*time.Time)(fptr)).UnixNano())
-
-		case types.FieldTypeBoolean:
-			b.Bool().Append(*(*bool)(fptr))
-
-		case types.FieldTypeBytes:
-			switch {
-			case field.Iface&types.IfaceBinaryMarshaler > 0:
-				rfield := field.StructValue(rval)
-				buf, err := rfield.Interface().(encoding.BinaryMarshaler).MarshalBinary()
-				if err != nil {
-					return err
-				}
-				b.Bytes().AppendZeroCopy(buf)
-			case field.IsArray:
-				b.Bytes().Append(unsafe.Slice((*byte)(fptr), field.Fixed))
-			default:
-				b.Bytes().Append(*(*[]byte)(fptr))
-			}
-
-		case types.FieldTypeString:
-			switch {
-			case field.Iface&types.IfaceTextMarshaler > 0:
-				rfield := field.StructValue(rval)
-				buf, err := rfield.Interface().(encoding.TextMarshaler).MarshalText()
-				if err != nil {
-					return err
-				}
-				b.Bytes().AppendZeroCopy(buf)
-			case field.Iface&types.IfaceStringer > 0:
-				rfield := field.StructValue(rval)
-				s := rfield.Interface().(fmt.Stringer).String()
-				b.Bytes().AppendZeroCopy(util.UnsafeGetBytes(s))
-			default:
-				s := *(*string)(fptr)
-				b.Bytes().Append(util.UnsafeGetBytes(s))
-			}
-
-		case types.FieldTypeInt256:
-			b.Int256().Append((*(*num.Int256)(fptr)))
-
-		case types.FieldTypeInt128:
-			b.Int128().Append((*(*num.Int128)(fptr)))
-
-		case types.FieldTypeDecimal256:
-			b.Int256().Append((*(*num.Decimal256)(fptr)).Quantize(field.Scale).Int256())
-
-		case types.FieldTypeDecimal128:
-			b.Int128().Append((*(*num.Decimal128)(fptr)).Quantize(field.Scale).Int128())
-
-		case types.FieldTypeDecimal64:
-			b.Int64().Append((*(*num.Decimal64)(fptr)).Quantize(field.Scale).Int64())
-
-		case types.FieldTypeDecimal32:
-			b.Int32().Append((*(*num.Decimal32)(fptr)).Quantize(field.Scale).Int32())
-
-		default:
-			// oh, its a type we don't support yet
-			assert.Unreachable("unhandled value type",
-				// "rtype":   rfield.Type().String(),
-				// "rkind":   rfield.Kind().String(),
-				"field", field.Name,
-				"type", field.Type.String(),
-				"pack", p.key,
-				"schema", p.schema.Name(),
-				"version", p.schema.Version(),
-			)
-		}
-		b.SetDirty()
-	}
-	p.nRows++
-	return nil
 }
 
 // SetValue overwrites a single value at a given col/row offset. The caller must
@@ -662,174 +360,6 @@ func (p *Package) SetWire(row int, buf []byte) {
 		b.SetDirty()
 	}
 }
-
-// SetRow overwrites an entire row at a given offset. The caller must
-// ensure strict type match as no additional check, cast or conversion is done.
-// Column mapping uses the default struct tag `knox`.
-//
-// Replaces for ReplaceAt() used in journal
-// func (p *Package) SetRow(row int, val any) error {
-// 	assert.Always(p.nRows < row, "set: invalid row",
-// 		"pack", p.key,
-// 		"row", row,
-// 		"len", p.nRows,
-// 		"cap", p.maxRows,
-// 	)
-// 	rval := reflect.Indirect(reflect.ValueOf(val))
-
-// 	if !rval.IsValid() || rval.Kind() != reflect.Struct {
-// 		return fmt.Errorf("set: pushed invalid %s value of type %T", rval.Kind(), val)
-// 	}
-
-// 	// expensive check and val's Go type may not yet be known
-// 	if s, ok := schema.LookupSchema(rval.Type()); ok {
-// 		if p.schema.Hash() != s.Hash() {
-// 			return fmt.Errorf("push: incompatible value %T for schema %s", val, p.schema.Name())
-// 		}
-// 	}
-
-// 	for i, field := range p.schema.Exported() {
-// 		// deleted and internal fields are invisible
-// 		if !field.IsVisible {
-// 			continue
-// 		}
-// 		// skipped and new blocks in old packages are missing
-// 		b := p.blocks[i]
-// 		if b == nil {
-// 			continue
-// 		}
-// 		// lookup struct field
-// 		rfield := field.StructValue(rval)
-
-// 		// try direct types first
-// 		switch rfield.Kind() {
-// 		case reflect.Int, reflect.Int64:
-// 			b.Int64().Set(row, rfield.Int())
-// 		case reflect.Int32:
-// 			b.Int32().Set(row, int32(rfield.Int()))
-// 		case reflect.Int16:
-// 			b.Int16().Set(row, int16(rfield.Int()))
-// 		case reflect.Int8:
-// 			b.Int8().Set(row, int8(rfield.Int()))
-// 		case reflect.Uint64, reflect.Uint:
-// 			b.Uint64().Set(row, rfield.Uint())
-// 		case reflect.Uint32:
-// 			b.Uint32().Set(row, uint32(rfield.Uint()))
-// 		case reflect.Uint16:
-// 			b.Uint16().Set(row, uint16(rfield.Uint()))
-// 		case reflect.Uint8:
-// 			b.Uint8().Set(row, uint8(rfield.Uint()))
-// 		case reflect.Float64:
-// 			b.Float64().Set(row, rfield.Float())
-// 		case reflect.Float32:
-// 			b.Float32().Set(row, float32(rfield.Float()))
-// 		case reflect.Bool:
-// 			if rfield.Bool() {
-// 				b.Bool().Set(row)
-// 			} else {
-// 				b.Bool().Clear(row)
-// 			}
-// 		case reflect.String:
-// 			b.Bytes().Set(row, UnsafeGetBytes(rfield.String()))
-// 		case reflect.Slice:
-// 			switch {
-// 			case field.Iface&types.IfaceBinaryMarshaler > 0:
-// 				buf, err := rfield.Interface().(encoding.BinaryMarshaler).MarshalBinary()
-// 				if err != nil {
-// 					return fmt.Errorf("set_value: marshal failed on %s field %s: %v",
-// 						rfield.Type(), field.Name, err)
-// 				}
-// 				b.Bytes().SetZeroCopy(row, buf)
-// 			case field.Iface&types.IfaceTextMarshaler > 0:
-// 				buf, err := rfield.Interface().(encoding.TextMarshaler).MarshalText()
-// 				if err != nil {
-// 					return fmt.Errorf("set_value: marshal failed on %s field %s: %v",
-// 						field.Type, field.Name, err)
-// 				}
-// 				b.Bytes().SetZeroCopy(row, buf)
-// 			default:
-// 				b.Bytes().Set(row, rfield.Bytes())
-// 			}
-
-// 		case reflect.Array:
-// 			switch rfield.Type().String() {
-// 			case "num.Int256":
-// 				b.Int256().Set(row, *(*num.Int256)(rfield.Addr().UnsafePointer()))
-// 			case "num.Int128":
-// 				b.Int128().Set(row, *(*num.Int128)(rfield.Addr().UnsafePointer()))
-// 			default:
-// 				switch {
-// 				case field.Iface&types.IfaceBinaryMarshaler > 0:
-// 					buf, err := rfield.Interface().(encoding.BinaryMarshaler).MarshalBinary()
-// 					if err != nil {
-// 						return fmt.Errorf("set_value: marshal failed on %s field %s: %v",
-// 							field.Type, field.Name, err)
-// 					}
-// 					b.Bytes().SetZeroCopy(row, buf)
-// 				case field.Iface&types.IfaceTextMarshaler > 0:
-// 					buf, err := rfield.Interface().(encoding.TextMarshaler).MarshalText()
-// 					if err != nil {
-// 						return fmt.Errorf("set_value: marshal failed on %s field %s: %v",
-// 							field.Type, field.Name, err)
-// 					}
-// 					b.Bytes().SetZeroCopy(row, buf)
-// 				case rfield.Type().Elem().Kind() == reflect.Uint8:
-// 					b.Bytes().Set(row, rfield.Bytes())
-// 				default:
-// 					// oh, its a type we don't support yet
-// 					assert.Unreachable("unhandled array type",
-// 						"rtype", rfield.Type().String(),
-// 						"rkind", rfield.Kind().String(),
-// 						"field", field.Name,
-// 						"type", field.Type.String(),
-// 						"pack", p.key,
-// 						"schema", p.schema.Name(),
-// 						"version", p.schema.Version(),
-// 					)
-// 				}
-// 			}
-
-// 		case reflect.Struct:
-// 			switch rfield.Type().String() {
-// 			case "time.Time":
-// 				if tm := *(*time.Time)(rfield.Addr().UnsafePointer()); tm.IsZero() {
-// 					b.Int64().Set(row, 0)
-// 				} else {
-// 					b.Int64().Set(row, tm.UnixNano())
-// 				}
-// 			case "num.Decimal256":
-// 				b.Int256().Set(row, (*(*num.Decimal256)(rfield.Addr().UnsafePointer())).Quantize(field.Scale).Int256())
-// 			case "num.Decimal128":
-// 				b.Int128().Set(row, (*(*num.Decimal128)(rfield.Addr().UnsafePointer())).Quantize(field.Scale).Int128())
-// 			case "num.Decimal64":
-// 				b.Int64().Set(row, (*(*num.Decimal64)(rfield.Addr().UnsafePointer())).Quantize(field.Scale).Int64())
-// 			case "num.Decimal32":
-// 				b.Int32().Set(row, (*(*num.Decimal32)(rfield.Addr().UnsafePointer())).Quantize(field.Scale).Int32())
-// 			default:
-// 				if field.Iface&types.IfaceBinaryMarshaler > 0 {
-// 					buf, err := rfield.Interface().(encoding.BinaryMarshaler).MarshalBinary()
-// 					if err != nil {
-// 						return fmt.Errorf("set_value: marshal failed on %s field %s: %v",
-// 							field.Type, field.Name, err)
-// 					}
-// 					b.Bytes().SetZeroCopy(row, buf)
-// 				} else {
-// 					// oh, its a type we don't support yet
-// 					assert.Unreachable("unhandled struct type",
-// 						"rtype", rfield.Type().String(),
-// 						"rkind", rfield.Kind().String(),
-// 						"field", field.Name,
-// 						"type", field.Type.String(),
-// 						"pack", p.key,
-// 						"schema", p.schema.Name(),
-// 						"version", p.schema.Version(),
-// 					)
-// 				}
-// 			}
-// 		}
-// 	}
-// 	return nil
-// }
 
 // ReplacePack replaces at most n rows in the current package starting at
 // offset `to` with rows from `spack` starting at offset `from`.

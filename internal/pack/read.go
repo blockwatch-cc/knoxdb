@@ -19,26 +19,6 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func (p *Package) CanRead(col, row int, typ types.FieldType) bool {
-	if col < 0 || len(p.blocks) <= col {
-		return false
-	}
-	if row < 0 || p.nRows <= row {
-		return false
-	}
-	f, ok := p.schema.FieldById(uint16(col))
-	if !ok {
-		return false
-	}
-	if f.Type() != typ {
-		return false
-	}
-	if p.blocks[col].Type() != blockTypes[f.Type()] {
-		return false
-	}
-	return true
-}
-
 func (p *Package) ReadWire(row int) ([]byte, error) {
 	buf := bytes.NewBuffer(make([]byte, 0, p.schema.WireSize()+128))
 	err := p.ReadWireBuffer(buf, row)
@@ -48,28 +28,36 @@ func (p *Package) ReadWire(row int) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+var zeros [32]byte
+
 func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 	assert.Always(row >= 0 && row < p.nRows, "invalid row",
 		"row", row,
 		"pack", p.key,
-		// "schema", p.schema.Name(),
-		// "version", p.schema.Version(),
+		"schema", p.schema.Name(),
+		"version", p.schema.Version(),
 	)
 
 	for i, field := range p.schema.Exported() {
-		// skipped and new blocks in old packages are missing
-		b := p.blocks[i]
-		if b == nil {
-			continue
-		}
-
-		// deleted and internal fields are invisible
+		// skip deleted and internal fields
 		if !field.IsVisible {
 			continue
 		}
 
-		// encoding is based on field type
+		// insert zero value when block is not available (e.g. after schema change)
 		var err error
+		b := p.blocks[i]
+		if b == nil {
+			for sz := field.WireSize(); sz > 0 && err == nil; sz -= 32 {
+				_, err = buf.Write(zeros[:min(sz, 32)])
+			}
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		// encoding is based on field type
 		switch field.Type {
 		case types.FieldTypeInt64, types.FieldTypeDatetime, types.FieldTypeDecimal64,
 			types.FieldTypeUint64, types.FieldTypeFloat64:
@@ -138,14 +126,23 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			continue
 		}
 
-		// skip missing blocks (e.g. in old package versions)
-		b := p.blocks[srcId]
-		if b == nil {
-			continue
-		}
-
 		// use unsafe.Add instead of reflect (except marshal types)
 		fptr := unsafe.Add(base, field.Offset)
+
+		// insert zero value when block is not available (e.g. after schema change)
+		b := p.blocks[srcId]
+		if b == nil {
+			sz := field.WireSize()
+			buf := unsafe.Slice((*byte)(fptr), sz)
+
+			// loop copy 32 zeros (some fixed types may be larger)
+			for sz > 0 {
+				copy(buf, zeros[:])
+				buf = buf[min(sz, 32):]
+				sz -= 32
+			}
+			continue
+		}
 
 		switch field.Type {
 		case types.FieldTypeInt64, types.FieldTypeUint64, types.FieldTypeFloat64:
@@ -231,185 +228,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 	return nil
 }
 
-// Reads a single value at postion col,row.
-func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any {
-	// assert.Always(col >= 0 && col < len(p.blocks), "invalid block id", map[string]any{
-	// 	"id":      col,
-	// 	"pack":    p.key,
-	// 	"schema":  p.schema.Name(),
-	// 	"version": p.schema.Version(),
-	// 	"nFields": p.schema.NumFields(),
-	// 	"nBlocks": len(p.blocks),
-	// })
-	// assert.Always(row >= 0 && row < p.nRows, "invalid row", map[string]any{
-	// 	"row":     row,
-	// 	"pack":    p.key,
-	// 	"schema":  p.schema.Name(),
-	// 	"version": p.schema.Version(),
-	// })
-	b := p.blocks[col]
-
-	switch typ {
-	case types.FieldTypeInt64:
-		return b.Int64().Get(row)
-	case types.FieldTypeInt32:
-		return b.Int32().Get(row)
-	case types.FieldTypeInt16:
-		return b.Int16().Get(row)
-	case types.FieldTypeInt8:
-		return b.Int8().Get(row)
-	case types.FieldTypeUint64:
-		return b.Uint64().Get(row)
-	case types.FieldTypeUint32:
-		return b.Uint32().Get(row)
-	case types.FieldTypeUint16:
-		return b.Uint16().Get(row)
-	case types.FieldTypeUint8:
-		return b.Uint8().Get(row)
-	case types.FieldTypeFloat64:
-		return b.Float64().Get(row)
-	case types.FieldTypeFloat32:
-		return b.Float32().Get(row)
-	case types.FieldTypeDatetime:
-		if ts := b.Int64().Get(row); ts > 0 {
-			return time.Unix(0, ts).UTC()
-		} else {
-			return zeroTime
-		}
-	case types.FieldTypeBoolean:
-		return b.Bool().IsSet(row)
-	case types.FieldTypeBytes:
-		return b.Bytes().Elem(row)
-	case types.FieldTypeString:
-		return util.UnsafeGetString(b.Bytes().Elem(row))
-	case types.FieldTypeInt256:
-		return b.Int256().Elem(row)
-	case types.FieldTypeInt128:
-		return b.Int128().Elem(row)
-	case types.FieldTypeDecimal256:
-		return num.NewDecimal256(b.Int256().Elem(row), scale)
-	case types.FieldTypeDecimal128:
-		return num.NewDecimal128(b.Int128().Elem(row), scale)
-	case types.FieldTypeDecimal64:
-		return num.NewDecimal64(b.Int64().Get(row), scale)
-	case types.FieldTypeDecimal32:
-		return num.NewDecimal32(b.Int32().Get(row), scale)
-	default:
-		// oh, its a type we don't support yet
-		assert.Unreachable("unhandled field type", map[string]any{
-			"field":   col,
-			"typeid":  int(typ),
-			"type":    typ.String(),
-			"pack":    p.key,
-			"schema":  p.schema.Name(),
-			"version": p.schema.Version(),
-		})
-	}
-	return nil
-}
-
-// Reads a single value at postion col, row.
-func (p *Package) ReadData(col, row int, typ types.BlockType) any {
-	// assert.Always(col >= 0 && col < len(p.blocks), "invalid block id", map[string]any{
-	// 	"id":      col,
-	// 	"pack":    p.key,
-	// 	"schema":  p.schema.Name(),
-	// 	"version": p.schema.Version(),
-	// 	"nFields": p.schema.NumFields(),
-	// 	"nBlocks": len(p.blocks),
-	// })
-	// assert.Always(row >= 0 && row < p.nRows, "invalid row", map[string]any{
-	// 	"row":     row,
-	// 	"pack":    p.key,
-	// 	"schema":  p.schema.Name(),
-	// 	"version": p.schema.Version(),
-	// })
-	b := p.blocks[col]
-
-	switch typ {
-	case types.BlockInt64, types.BlockTime:
-		return b.Int64().Get(row)
-	case types.BlockInt32:
-		return b.Int32().Get(row)
-	case types.BlockInt16:
-		return b.Int16().Get(row)
-	case types.BlockInt8:
-		return b.Int8().Get(row)
-	case types.BlockUint64:
-		return b.Uint64().Get(row)
-	case types.BlockUint32:
-		return b.Uint32().Get(row)
-	case types.BlockUint16:
-		return b.Uint16().Get(row)
-	case types.BlockUint8:
-		return b.Uint8().Get(row)
-	case types.BlockFloat64:
-		return b.Float64().Get(row)
-	case types.BlockFloat32:
-		return b.Float32().Get(row)
-	case types.BlockBool:
-		return b.Bool().IsSet(row)
-	case types.BlockBytes, types.BlockString:
-		return b.Bytes().Elem(row)
-	case types.BlockInt256:
-		return b.Int256().Elem(row)
-	case types.BlockInt128:
-		return b.Int128().Elem(row)
-	default:
-		// oh, its a type we don't support yet
-		assert.Unreachable("unhandled block type", map[string]any{
-			"field":   col,
-			"typeid":  int(typ),
-			"type":    typ.String(),
-			"pack":    p.key,
-			"schema":  p.schema.Name(),
-			"version": p.schema.Version(),
-		})
-	}
-	return nil
-}
-
-// Reads a single row into a slice of interfaces.
-// Replaces RowAt() used for debug only.
-func (p *Package) ReadRow(row int, dst []any) []any {
-	assert.Always(row >= 0 && row < p.nRows, "invalid row",
-		"row", row,
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-	)
-	assert.Always(len(p.blocks) == p.schema.NumFields(), "block mismatch",
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-		"nFields", p.schema.NumFields(),
-		"nBlocks", len(p.blocks),
-	)
-	// copy one full row of values
-	maxFields := p.schema.NumFields()
-	if cap(dst) < maxFields {
-		dst = make([]any, 0, maxFields)
-	} else {
-		dst = dst[:maxFields]
-	}
-	for i, field := range p.schema.Exported() {
-		// skip blocks when not selected or missing (e.g. old package versions)
-		b := p.blocks[i]
-		if b == nil {
-			continue
-		}
-		// deleted and internal fields are invisible
-		if !field.IsVisible {
-			continue
-		}
-		// add to result
-		dst = append(dst, p.ReadValue(i, row, field.Type, field.Scale))
-	}
-	return dst
-}
-
 // Returns a single materialized column as typed slice.
-// Replaces Column()
 func (p *Package) ReadCol(col int) any {
 	f, ok := p.schema.FieldById(uint16(col))
 	assert.Always(ok, "invalid field id",
@@ -428,13 +247,15 @@ func (p *Package) ReadCol(col int) any {
 		"nFields", p.schema.NumFields(),
 		"nBlocks", len(p.blocks),
 	)
-	// skipped and new blocks in old packages are missing
-	b := p.blocks[col]
-	if b == nil {
-		return nil
-	}
+
 	// deleted and internal fields are invisible
 	if !f.IsVisible() {
+		return nil
+	}
+
+	// TODO: when block is not loaded (or does not exist) return null slice
+	b := p.blocks[col]
+	if b == nil {
 		return nil
 	}
 
@@ -623,22 +444,22 @@ func (p *Package) Decimal32(col, row int) num.Decimal32 {
 }
 
 func (p *Package) PkColumn() []uint64 {
-	assert.Always(p.pkIdx >= 0 && p.pkIdx < len(p.blocks), "invalid pk id",
-		"pkIdx", p.pkIdx,
+	assert.Always(p.px >= 0 && p.px < len(p.blocks), "invalid pk id",
+		"px", p.px,
 		"pack", p.key,
 		"schema", p.schema.Name(),
 		"version", p.schema.Version(),
 		"nFields", p.schema.NumFields(),
 		"nBlocks", len(p.blocks),
 	)
-	return p.blocks[p.pkIdx].Uint64().Slice()
+	return p.blocks[p.px].Uint64().Slice()
 }
 
 // Searches id in primary key column and returns pos or -1 when not found.
 // This function is only safe to use when pack is sorted by pk (gaps allowed)!
 func (p *Package) FindPk(id uint64, last int) (int, int) {
-	assert.Always(p.pkIdx >= 0 && p.pkIdx < len(p.blocks), "invalid pk id",
-		"pkIdx", p.pkIdx,
+	assert.Always(p.px >= 0 && p.px < len(p.blocks), "invalid pk id",
+		"px", p.px,
 		"pack", p.key,
 		"schema", p.schema.Name(),
 		"version", p.schema.Version(),
@@ -647,14 +468,14 @@ func (p *Package) FindPk(id uint64, last int) (int, int) {
 	)
 
 	// primary key field required
-	// if p.pkIdx < 0 || last >= p.nRows {
+	// if p.px < 0 || last >= p.nRows {
 	if last >= p.nRows {
 		return -1, p.nRows
 	}
 
 	// search for id value in pk block (always an uint64) starting at last index
 	// this helps limiting search space when ids are pre-sorted
-	slice := p.blocks[p.pkIdx].Uint64().Slice()[last:]
+	slice := p.blocks[p.px].Uint64().Slice()[last:]
 	l := len(slice)
 
 	// for sparse pk spaces, use binary search on sorted slices
@@ -670,8 +491,8 @@ func (p *Package) FindPk(id uint64, last int) (int, int) {
 // This function slower than FindPkSorted, but can be used of pack is unsorted, e.g.
 // when updates/inserts are out of order.
 func (p *Package) FindPkUnsorted(id uint64, last int) int {
-	assert.Always(p.pkIdx >= 0 && p.pkIdx < len(p.blocks), "invalid pk id",
-		"pkIdx", p.pkIdx,
+	assert.Always(p.px >= 0 && p.px < len(p.blocks), "invalid pk id",
+		"px", p.px,
 		"pack", p.key,
 		"schema", p.schema.Name(),
 		"version", p.schema.Version(),
@@ -680,14 +501,14 @@ func (p *Package) FindPkUnsorted(id uint64, last int) int {
 	)
 
 	// primary key field required
-	// if p.pkIdx < 0 || p.nRows <= last {
+	// if p.px < 0 || p.nRows <= last {
 	if p.nRows <= last {
 		return -1
 	}
 
 	// search for id value in pk block (always an uint64) starting at last index
 	// this helps limiting search space when ids are pre-sorted
-	slice := p.blocks[p.pkIdx].Uint64().Slice()[last:]
+	slice := p.blocks[p.px].Uint64().Slice()[last:]
 
 	// run full scan on unsorted slices
 	for i, v := range slice {

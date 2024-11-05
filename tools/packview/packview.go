@@ -136,7 +136,10 @@ func run() error {
 	case "detail":
 		return PrintMetadataDetail(getTableOrIndexStatsView(db, desc.Table), desc.PackId, out)
 	case "content":
-		ctx, _, abort := db.Begin(ctx)
+		ctx, _, abort, err := db.Begin(ctx)
+		if err != nil {
+			return err
+		}
 		defer abort()
 		return PrintContent(ctx, getTableOrIndexPackView(db, desc.Table), desc.PackId, out)
 
@@ -364,7 +367,7 @@ func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) 
 			})
 		}
 		if field.Type == types.FieldTypeUint16 && field.Flags.Is(types.FieldFlagEnum) {
-			if lut, err := schema.LookupEnum(field.Name); err == nil {
+			if lut, ok := schema.LookupEnum(0, field.Name); ok {
 				cfgs = append(cfgs, table.ColumnConfig{
 					Name: field.Name,
 					Transformer: func(val any) string {
@@ -388,7 +391,7 @@ func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) 
 		pkg := view.ViewPackage(ctx, id)
 		tomb := view.ViewTomb()
 		pki := s.PkIndex()
-		t.AppendHeader(append(table.Row{"DEL"}, util.StringList(s.FieldNames()).AsInterface()...))
+		t.AppendHeader(append(table.Row{"DEL"}, util.StringList(s.AllFieldNames()).AsInterface()...))
 		for r := 0; r < pkg.Len(); r++ {
 			res = pkg.ReadRow(r, res)
 			var live string
@@ -412,7 +415,7 @@ func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) 
 		i = id
 		stopAfter = true
 	}
-	t.AppendHeader(util.StringList(s.FieldNames()).AsInterface())
+	t.AppendHeader(util.StringList(s.AllFieldNames()).AsInterface())
 	for {
 		pkg := view.ViewPackage(ctx, i)
 		if pkg == nil {

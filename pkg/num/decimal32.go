@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-var Decimal32Zero = Decimal32{0, 0}
+var ZeroDecimal32 = Decimal32{0, 0}
 
 // 9 digits
 type Decimal32 struct {

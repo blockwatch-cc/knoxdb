@@ -3,7 +3,12 @@
 
 package types
 
-import "strings"
+import (
+	"strings"
+	"time"
+
+	"blockwatch.cc/knoxdb/pkg/num"
+)
 
 type FieldType byte
 
@@ -73,6 +78,54 @@ func (t FieldType) IsValid() bool {
 
 func (t FieldType) String() string {
 	return fieldTypeString[fieldTypeIdx[t] : fieldTypeIdx[t+1]-1]
+}
+
+func (t FieldType) Null() any {
+	switch t {
+	case FieldTypeDatetime:
+		var t time.Time
+		return t.UTC()
+	case FieldTypeInt64:
+		return int64(0)
+	case FieldTypeUint64:
+		return uint64(0)
+	case FieldTypeFloat64:
+		return float64(0)
+	case FieldTypeBoolean:
+		return false
+	case FieldTypeString:
+		return ""
+	case FieldTypeBytes:
+		return []byte{}
+	case FieldTypeInt32:
+		return int32(0)
+	case FieldTypeInt16:
+		return int16(0)
+	case FieldTypeInt8:
+		return int8(0)
+	case FieldTypeUint32:
+		return uint32(0)
+	case FieldTypeUint16:
+		return uint16(0)
+	case FieldTypeUint8:
+		return uint8(0)
+	case FieldTypeFloat32:
+		return float32(0)
+	case FieldTypeInt256:
+		return num.ZeroInt256
+	case FieldTypeInt128:
+		return num.ZeroInt128
+	case FieldTypeDecimal256:
+		return num.ZeroDecimal256
+	case FieldTypeDecimal128:
+		return num.ZeroDecimal128
+	case FieldTypeDecimal64:
+		return num.ZeroDecimal64
+	case FieldTypeDecimal32:
+		return num.ZeroDecimal32
+	default:
+		return nil
+	}
 }
 
 func ParseFieldType(s string) FieldType {

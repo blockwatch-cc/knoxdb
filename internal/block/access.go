@@ -29,6 +29,9 @@ func NewBlockAccessor[T Number](b *Block) BlockAccessor[T] {
 }
 
 func (a BlockAccessor[T]) Get(n int) (t T) {
+	if a.block == nil {
+		return
+	}
 	if n >= a.block.len {
 		panic(fmt.Errorf("get: block bounds out of range [:%d] with length %d", n, a.block.len))
 	}
@@ -37,6 +40,9 @@ func (a BlockAccessor[T]) Get(n int) (t T) {
 }
 
 func (a BlockAccessor[T]) Set(n int, v T) {
+	if a.block == nil {
+		return
+	}
 	if n >= a.block.len {
 		panic(fmt.Errorf("set: block bounds out of range [:%d] with length %d", n, a.block.len))
 	}
@@ -46,6 +52,9 @@ func (a BlockAccessor[T]) Set(n int, v T) {
 }
 
 func (a BlockAccessor[T]) Append(v T) {
+	if a.block == nil {
+		return
+	}
 	if a.block.len == a.block.cap {
 		panic(fmt.Errorf("append: block capacity exhausted [:%d:%d]", a.block.len, a.block.cap))
 	}
@@ -56,6 +65,9 @@ func (a BlockAccessor[T]) Append(v T) {
 }
 
 func (a BlockAccessor[T]) Less(i, j int) bool {
+	if a.block == nil {
+		return false
+	}
 	if i >= a.block.len {
 		panic(fmt.Errorf("get: block bounds out of range [:%d] with length %d", i, a.block.len))
 	}
@@ -69,6 +81,9 @@ func (a BlockAccessor[T]) Less(i, j int) bool {
 }
 
 func (a BlockAccessor[T]) Swap(i, j int) {
+	if a.block == nil {
+		return
+	}
 	if i >= a.block.len {
 		panic(fmt.Errorf("get: block bounds out of range [:%d] with length %d", i, a.block.len))
 	}
@@ -83,6 +98,9 @@ func (a BlockAccessor[T]) Swap(i, j int) {
 }
 
 func (a BlockAccessor[T]) Cmp(i, j int) int {
+	if a.block == nil {
+		return 0
+	}
 	if i >= a.block.len {
 		panic(fmt.Errorf("get: block bounds out of range [:%d] with length %d", i, a.block.len))
 	}
@@ -102,10 +120,16 @@ func (a BlockAccessor[T]) Cmp(i, j int) int {
 }
 
 func (a BlockAccessor[T]) Slice() []T {
+	if a.block == nil {
+		return make([]T, 0)
+	}
 	return unsafe.Slice((*T)(a.block.ptr), a.block.len)
 }
 
 func (a BlockAccessor[T]) FullSlice() []T {
+	if a.block == nil {
+		return make([]T, 0)
+	}
 	return unsafe.Slice((*T)(a.block.ptr), a.block.cap)
 }
 

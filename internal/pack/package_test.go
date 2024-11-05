@@ -4,7 +4,6 @@
 package pack
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 	"time"
@@ -32,10 +31,13 @@ func makeTypedPackage(typ any, sz, fill int) *Package {
 		panic(err)
 	}
 	pkg := New().WithMaxRows(sz).WithSchema(s)
+	enc := schema.NewEncoder(s)
+	buf, err := enc.Encode(makeZeroStruct(typ), nil)
+	if err != nil {
+		panic(err)
+	}
 	for i := 0; i < fill; i++ {
-		if err := pkg.AppendStruct(makeZeroStruct(typ)); err != nil {
-			panic(err)
-		}
+		pkg.AppendWire(buf, nil)
 	}
 	return pkg
 }
@@ -62,79 +64,11 @@ func makeZeroStruct(v any) any {
 			dst = dst.Elem()
 		}
 		dst.Set(reflect.Zero(typ.Field(i).Type))
-
 	}
 	return ptr.Interface()
 }
 
-func makeScanners(val any) (cols []int, vals []any) {
-	s, _ := schema.SchemaOf(val)
-	v := reflect.Indirect(reflect.ValueOf(val))
-	cols = make([]int, s.NumFields())
-	vals = make([]any, s.NumFields())
-	for i, field := range s.Fields() {
-		cols[i] = i
-		vals[i] = v.FieldByIndex(field.Path()).Addr().Interface()
-	}
-	return
-}
-
 type Enum uint16
-
-const (
-	EnumInvalid Enum = iota // 0
-	EnumOne                 // 1 (success)
-	EnumTwo
-	EnumThree
-	EnumFour
-)
-
-func (t Enum) IsValid() bool {
-	return t != EnumInvalid
-}
-
-func (t *Enum) UnmarshalText(data []byte) error {
-	v := ParseEnum(string(data))
-	if !v.IsValid() {
-		return fmt.Errorf("invalid enum '%s'", string(data))
-	}
-	*t = v
-	return nil
-}
-
-func (t Enum) MarshalText() ([]byte, error) {
-	return []byte(t.String()), nil
-}
-
-func ParseEnum(s string) Enum {
-	switch s {
-	case "1", "one":
-		return EnumOne
-	case "2", "two":
-		return EnumTwo
-	case "3", "three":
-		return EnumThree
-	case "4", "four":
-		return EnumFour
-	default:
-		return EnumInvalid
-	}
-}
-
-func (t Enum) String() string {
-	switch t {
-	case EnumOne:
-		return "one"
-	case EnumTwo:
-		return "two"
-	case EnumThree:
-		return "three"
-	case EnumFour:
-		return "four"
-	default:
-		return ""
-	}
-}
 
 type Stringer []string
 

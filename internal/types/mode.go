@@ -78,7 +78,7 @@ func ParseFilterMode(s string) FilterMode {
 }
 
 func (m FilterMode) IsValid() bool {
-	return m != FilterModeInvalid
+	return m > FilterModeInvalid && m <= FilterModeRegexp
 }
 
 func (m FilterMode) Symbol() string {

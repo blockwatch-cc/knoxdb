@@ -55,6 +55,11 @@ func (e *Engine) GetTable(hash uint64) (TableEngine, bool) {
 }
 
 func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOptions) (TableEngine, error) {
+	// require primary key
+	if s.PkIndex() < 0 {
+		return nil, ErrNoPk
+	}
+
 	// check name is unique
 	tag := s.TaggedHash(types.ObjectTagTable)
 	e.mu.RLock()

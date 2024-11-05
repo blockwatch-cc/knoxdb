@@ -268,7 +268,7 @@ func (j *Journal) InsertBatch(buf []byte, nextSeq uint64) (uint64, []byte) {
 		count++
 
 		// append to data pack
-		j.Data.AppendWire(j.view.Bytes())
+		j.Data.AppendWire(j.view.Bytes(), nil)
 
 		// update keys
 		j.newKeys = append(j.newKeys, JournalRecord{pk, j.Data.Len() - 1})
@@ -335,7 +335,7 @@ func (j *Journal) UpdateBatch(buf []byte) (uint64, []byte, error) {
 			}
 
 			// append to data pack (this record does not yet exist in the journal)
-			j.Data.AppendWire(j.view.Bytes())
+			j.Data.AppendWire(j.view.Bytes(), nil)
 			count++
 
 			// create mapped keys

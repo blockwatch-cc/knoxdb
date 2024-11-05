@@ -4,7 +4,6 @@
 package pack
 
 import (
-	"encoding/binary"
 	"reflect"
 	"sort"
 	"sync"
@@ -37,10 +36,10 @@ type Package struct {
 	key     uint32         // identity
 	nRows   int            // current number or rows
 	maxRows int            // max number of rows (== block allocation size)
-	pkIdx   int            // primary key index (position in schema)
+	px      int            // primary key index (position in schema)
+	rx      int            // row id index (position in schema)
 	schema  *schema.Schema // mapping from fields to blocks in query order
 	blocks  []*block.Block // loaded blocks (in schema order)
-	xmeta   *PackMeta      // optional per-record metadata, rid, ref, xmin, xmax
 }
 
 func New() *Package {
@@ -49,7 +48,7 @@ func New() *Package {
 
 func (p *Package) KeyBytes() []byte {
 	var buf [4]byte
-	binary.BigEndian.PutUint32(buf[:], p.key)
+	BE.PutUint32(buf[:], p.key)
 	return buf[:]
 }
 
@@ -87,16 +86,6 @@ func (p Package) IsDirty() bool {
 			return true
 		}
 	}
-	if p.xmeta != nil {
-		for _, b := range p.xmeta {
-			if b == nil {
-				continue
-			}
-			if b.IsDirty() {
-				return true
-			}
-		}
-	}
 	return false
 }
 
@@ -106,7 +95,7 @@ func (p Package) IsDirty() bool {
 // }
 
 func (p Package) PkIdx() int {
-	return p.pkIdx
+	return p.px
 }
 
 func (p Package) Schema() *schema.Schema {
@@ -125,13 +114,9 @@ func (p *Package) WithMaxRows(sz int) *Package {
 
 func (p *Package) WithSchema(s *schema.Schema) *Package {
 	p.blocks = make([]*block.Block, s.NumFields())
-	p.pkIdx = s.PkIndex()
+	p.px = s.PkIndex()
+	p.rx = s.RowIdIndex()
 	p.schema = s
-	return p
-}
-
-func (p *Package) WithMeta() *Package {
-	p.xmeta = NewMeta()
 	return p
 }
 
@@ -156,11 +141,6 @@ func (p *Package) Alloc() *Package {
 		p.blocks[i] = block.New(blockTypes[field.Type()], p.maxRows)
 	}
 
-	// alloc tx metadata (optional)
-	if p.xmeta != nil {
-		p.xmeta.Alloc(p.maxRows)
-	}
-
 	return p
 }
 
@@ -179,9 +159,6 @@ func (p *Package) Clone(sz int) *Package {
 		}
 		// alloc sz capacity and copy len block data
 		clone.blocks[i] = b.Clone(sz)
-	}
-	if p.xmeta != nil {
-		clone.xmeta = p.xmeta.Clone(sz)
 	}
 	return clone
 }
@@ -214,11 +191,6 @@ func (p *Package) HeapSize() int {
 	for _, v := range p.blocks {
 		sz += v.HeapSize()
 	}
-	if p.xmeta != nil {
-		for _, v := range p.xmeta {
-			sz += v.HeapSize()
-		}
-	}
 	return sz
 }
 
@@ -238,14 +210,6 @@ func (p *Package) Clear() {
 		}
 		b.Clear()
 	}
-	if p.xmeta != nil {
-		for _, b := range p.xmeta {
-			if b == nil {
-				continue
-			}
-			b.Clear()
-		}
-	}
 	p.nRows = 0
 }
 
@@ -258,22 +222,13 @@ func (p *Package) Release() {
 		p.blocks[i].DecRef()
 		p.blocks[i] = nil
 	}
-	if p.xmeta != nil {
-		for i := range p.xmeta {
-			if p.xmeta[i] == nil {
-				continue
-			}
-			p.xmeta[i].DecRef()
-			p.xmeta[i] = nil
-		}
-	}
 	p.key = 0
 	p.nRows = 0
 	p.maxRows = 0
-	p.pkIdx = 0
+	p.px = 0
+	p.rx = 0
 	p.schema = nil
 	p.blocks = p.blocks[:0]
-	p.xmeta = nil
 	packagePool.Put(p)
 }
 
@@ -285,8 +240,9 @@ func (p *Package) PkSort() {
 }
 
 func (p *Package) Less(i, j int) bool {
-	assert.Always(p.pkIdx >= 0, "pksort requires primary key column")
-	return p.blocks[p.pkIdx].Uint64().Less(i, j)
+	assert.Always(p.px >= 0, "pksort requires primary key")
+	assert.Always(p.blocks[p.px] != nil, "pksort with nil primary key")
+	return p.blocks[p.px].Uint64().Less(i, j)
 }
 
 func (p *Package) Swap(i, j int) {
@@ -295,13 +251,5 @@ func (p *Package) Swap(i, j int) {
 			continue
 		}
 		b.Swap(i, j)
-	}
-	if p.xmeta != nil {
-		for _, b := range p.xmeta {
-			if b == nil {
-				continue
-			}
-			b.Swap(i, j)
-		}
 	}
 }

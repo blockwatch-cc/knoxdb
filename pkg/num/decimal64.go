@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-var Decimal64Zero = Decimal64{0, 0}
+var ZeroDecimal64 = Decimal64{0, 0}
 
 // 18 digits
 type Decimal64 struct {
