@@ -5,7 +5,6 @@ package dedup
 
 import (
 	"bytes"
-	"math/rand"
 	"testing"
 )
 
@@ -65,7 +64,6 @@ var optTests = []optimizeTest{
 }
 
 func TestOptimize(t *testing.T) {
-	rand.Seed(1337)
 	for _, test := range optTests {
 		t.Run(test.Name, func(t *testing.T) {
 			data := test.New(1024)
@@ -145,7 +143,6 @@ func TestOptimize(t *testing.T) {
 }
 
 // func TestNormalize(t *testing.T) {
-//     rand.Seed(1337)
 //     for i := 0; i < 100; i++ {
 //         t.Run(strconv.Itoa(i), func(t *testing.T) {
 //             data := makeRandData(DefaultMaxPointsPerBlock, nativeBufLen)

@@ -1,13 +1,12 @@
 // Copyright (c) 2022 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
-//go:build go1.7 && amd64 && !gccgo && !appengine
-// +build go1.7,amd64,!gccgo,!appengine
+//go:build amd64 && !gccgo && !appengine
+// +build amd64,!gccgo,!appengine
 
 package avx2
 
 import (
-	"math/rand"
 	"reflect"
 	"testing"
 
@@ -24,10 +23,10 @@ var (
 	zzDeltaEncodeUint8Cases  = tests.ZzDeltaEncodeUint8Cases
 
 	benchmarkSizes = tests.BenchmarkSizes
-	randInt64Slice = tests.RandInt64Slice
-	randInt32Slice = tests.RandInt32Slice
-	randInt16Slice = tests.RandInt16Slice
-	randInt8Slice  = tests.RandInt8Slice
+	randInt64Slice = util.RandInts[int64]
+	randInt32Slice = util.RandInts[int32]
+	randInt16Slice = util.RandInts[int16]
+	randInt8Slice  = util.RandInts[int8]
 	Int64Size      = tests.Int64Size
 	Int32Size      = tests.Int32Size
 	Int16Size      = tests.Int16Size
@@ -57,7 +56,7 @@ func BenchmarkZzDeltaDecodeInt64AVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := randInt64Slice(n.L, 1)
+		a := randInt64Slice(n.L)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int64Size))
 			for i := 0; i < B.N; i++ {
@@ -90,7 +89,7 @@ func BenchmarkZzDeltaDecodeInt32AVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := randInt32Slice(n.L, 1)
+		a := randInt32Slice(n.L)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int32Size))
 			for i := 0; i < B.N; i++ {
@@ -123,7 +122,7 @@ func BenchmarkZzDeltaDecodeInt16AVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := randInt16Slice(n.L, 1)
+		a := randInt16Slice(n.L)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int16Size))
 			for i := 0; i < B.N; i++ {
@@ -156,7 +155,7 @@ func BenchmarkZzDeltaDecodeInt8AVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
-		a := randInt8Slice(n.L, 1)
+		a := randInt8Slice(n.L)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int8Size))
 			for i := 0; i < B.N; i++ {
@@ -176,7 +175,7 @@ func BenchmarkDeltaDecodeTimeAVX2(B *testing.B) {
 	for _, n := range benchmarkSizes {
 		a := make([]uint64, n.L)
 		for i := 0; i < n.L; i++ {
-			a[i] = uint64(rand.Intn(10000))
+			a[i] = util.RandUint64n(10000)
 		}
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int64Size))
@@ -197,7 +196,7 @@ func BenchmarkZzDeltaDecodeTimeAVX2(B *testing.B) {
 	for _, n := range benchmarkSizes {
 		a := make([]uint64, n.L)
 		for i := 0; i < n.L; i++ {
-			a[i] = uint64(rand.Intn(10000))
+			a[i] = util.RandUint64n(10000)
 		}
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int64Size))

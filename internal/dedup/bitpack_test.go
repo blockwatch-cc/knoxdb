@@ -4,9 +4,10 @@
 package dedup
 
 import (
-	"math/rand"
 	"strconv"
 	"testing"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const bitpackBufSize = 32768
@@ -27,13 +28,12 @@ func makeBitpackBufPoison(n int) []byte {
 }
 
 func TestBitPack(t *testing.T) {
-	rand.Seed(1337)
 	for i := 4; i < 25; i++ {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			buf := makeBitpackBuf(bitpackBufSize)
 			vals := make([]int, bitpackBufSize*8/i)
 			for k := 0; k < bitpackBufSize*8/i; k++ {
-				val := int(rand.Int31n((1 << i) - 1))
+				val := int(util.RandInt32n((1 << i) - 1))
 				pack(buf, k, val, i)
 				vals[k] = val
 			}
@@ -49,7 +49,6 @@ func TestBitPack(t *testing.T) {
 }
 
 func TestBitPackMsb(t *testing.T) {
-	rand.Seed(1337)
 	for i := 4; i < 25; i++ {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			buf := makeBitpackBuf(bitpackBufSize)

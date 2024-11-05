@@ -27,7 +27,7 @@ func TestZzDeltaDecodeInt64Generic(T *testing.T) {
 
 func BenchmarkZzDeltaDecodeInt64Generic(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randInt64Slice(n.L, 1)
+		a := randInt64Slice(n.L)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int64Size))
 			for i := 0; i < B.N; i++ {
@@ -54,7 +54,7 @@ func TestZzDeltaDecodeInt32Generic(T *testing.T) {
 
 func BenchmarkZzDeltaDecodeInt32Generic(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randInt32Slice(n.L, 1)
+		a := randInt32Slice(n.L)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int32Size))
 			for i := 0; i < B.N; i++ {
@@ -81,7 +81,7 @@ func TestZzDeltaDecodeInt16Generic(T *testing.T) {
 
 func BenchmarkZzDeltaDecodeInt16Generic(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randInt16Slice(n.L, 1)
+		a := randInt16Slice(n.L)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int16Size))
 			for i := 0; i < B.N; i++ {
@@ -108,7 +108,7 @@ func TestZzDeltaDecodeInt8Generic(T *testing.T) {
 
 func BenchmarkZzDeltaDecodeInt8Generic(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randInt8Slice(n.L, 1)
+		a := randInt8Slice(n.L)
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int8Size))
 			for i := 0; i < B.N; i++ {

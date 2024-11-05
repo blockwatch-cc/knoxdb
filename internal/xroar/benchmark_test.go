@@ -17,10 +17,10 @@
 package xroar
 
 import (
-	"math/rand"
 	"runtime"
 	"testing"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/RoaringBitmap/roaring/roaring64"
 )
 
@@ -51,19 +51,18 @@ func BenchmarkMemoryUsage(b *testing.B) {
 // go test -bench BenchmarkIntersection -run -
 func BenchmarkIntersectionRoaring(b *testing.B) {
 	b.StopTimer()
-	r := rand.New(rand.NewSource(0))
 	s1 := NewBitmap()
 	sz := int64(150000)
 	initsize := 65000
 	for i := 0; i < initsize; i++ {
-		s1.Set(uint64(r.Int63n(sz)))
+		s1.Set(uint64(util.RandInt64n(sz)))
 	}
 
 	s2 := NewBitmap()
 	sz = int64(100000000)
 	initsize = 65000
 	for i := 0; i < initsize; i++ {
-		s2.Set(uint64(r.Int63n((sz))))
+		s2.Set(uint64(util.RandInt64n((sz))))
 	}
 	b.StartTimer()
 
@@ -78,12 +77,11 @@ func BenchmarkIntersectionRoaring(b *testing.B) {
 // go test -bench BenchmarkSet -run -
 func BenchmarkSetRoaring(b *testing.B) {
 	b.StopTimer()
-	r := rand.New(rand.NewSource(0))
-	sz := int64(1000000)
+	sz := uint64(1000000)
 	s := NewBitmap()
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		s.Set(uint64(r.Int63n(sz)))
+		s.Set(util.RandUint64n(sz))
 	}
 }
 
@@ -92,7 +90,7 @@ func BenchmarkMerge10K(b *testing.B) {
 	for i := 0; i < 10000; i++ {
 		bm := NewBitmap()
 		for j := 0; j < 1000; j++ {
-			x := rand.Uint64() % 1e8 // 10M.
+			x := util.RandUint64() % 1e8 // 10M.
 			bm.Set(x)
 		}
 		bitmaps = append(bitmaps, bm)

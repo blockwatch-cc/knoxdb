@@ -6,24 +6,16 @@ package dedup
 import (
 	"bytes"
 	"encoding/binary"
-	"math/rand"
 	"strconv"
 	"testing"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
 	nativeBufLen             = 4
 	defaultMaxPointsPerBlock = 1 << 16
 )
-
-func makeRandData(n, l int) [][]byte {
-	b := make([][]byte, n, n)
-	for i := range b {
-		b[i] = make([]byte, l)
-		rand.Read(b[i])
-	}
-	return b
-}
 
 func makeNumberedData(n int) [][]byte {
 	b := make([][]byte, n, n)
@@ -44,7 +36,6 @@ func cloneData(b [][]byte) [][]byte {
 }
 
 func TestNativeElem(t *testing.T) {
-	rand.Seed(1337)
 	data := makeNumberedData(defaultMaxPointsPerBlock)
 	arr := newNativeByteArrayFromBytes(data)
 	if got, want := arr.Len(), defaultMaxPointsPerBlock; got != want {
@@ -61,10 +52,9 @@ func TestNativeElem(t *testing.T) {
 }
 
 func TestNativeAppend(t *testing.T) {
-	rand.Seed(1337)
 	for i := 0; i < 100; i++ {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			data := makeRandData(defaultMaxPointsPerBlock, nativeBufLen)
+			data := util.RandByteSlices(defaultMaxPointsPerBlock, nativeBufLen)
 			arr := newNativeByteArray(defaultMaxPointsPerBlock)
 			if got, want := arr.Len(), 0; got != want {
 				t.Errorf("Len mismatch got=%d want=%d", got, want)
@@ -83,8 +73,7 @@ func TestNativeAppend(t *testing.T) {
 }
 
 func TestNativeAppendFrom(t *testing.T) {
-	rand.Seed(1337)
-	data := makeRandData(defaultMaxPointsPerBlock, nativeBufLen)
+	data := util.RandByteSlices(defaultMaxPointsPerBlock, nativeBufLen)
 	clone := cloneData(data)
 	src := newNativeByteArrayFromBytes(data)
 	dst := newNativeByteArray(defaultMaxPointsPerBlock)

@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/cmp/tests"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var (
-	randInt8Slice         = tests.RandInt8Slice
+	randInt8Slice         = util.RandInts[int8]
 	int8EqualCases        = tests.Int8EqualCases
 	int8NotEqualCases     = tests.Int8NotEqualCases
 	int8LessCases         = tests.Int8LessCases
@@ -56,7 +57,7 @@ func TestMatchInt8Equal(T *testing.T) {
 // Equal benchmarks
 func BenchmarkMatchInt8Equal(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randInt8Slice(n.L, 1)
+		a := randInt8Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int8Size))
@@ -90,7 +91,7 @@ func TestMatchInt8NotEqual(T *testing.T) {
 // Not Equal benchmarks
 func BenchmarkMatchInt8NotEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randInt8Slice(n.L, 1)
+		a := randInt8Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int8Size))
@@ -124,7 +125,7 @@ func TestMatchInt8Less(T *testing.T) {
 // Less benchmarks
 func BenchmarkMatchInt8Less(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randInt8Slice(n.L, 1)
+		a := randInt8Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int8Size))
@@ -158,7 +159,7 @@ func TestMatchInt8LessEqual(T *testing.T) {
 // Less equal benchmarks
 func BenchmarkMatchInt8LessEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randInt8Slice(n.L, 1)
+		a := randInt8Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int8Size))
@@ -192,7 +193,7 @@ func TestMatchInt8Greater(T *testing.T) {
 // Greater benchmarks
 func BenchmarkMatchInt8Greater(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randInt8Slice(n.L, 1)
+		a := randInt8Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int8Size))
@@ -226,7 +227,7 @@ func TestMatchInt8GreaterEqual(T *testing.T) {
 // Greater equal benchmarks
 func BenchmarkMatchInt8GreaterEqual(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randInt8Slice(n.L, 1)
+		a := randInt8Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int8Size))
@@ -260,7 +261,7 @@ func TestMatchInt8Between(T *testing.T) {
 // Between benchmarks
 func BenchmarkMatchInt8Between(B *testing.B) {
 	for _, n := range benchmarkSizes {
-		a := randInt8Slice(n.L, 1)
+		a := randInt8Slice(n.L)
 		bits := make([]byte, bitFieldLen(len(a)))
 		B.Run(n.Name, func(B *testing.B) {
 			B.SetBytes(int64(n.L * Int8Size))

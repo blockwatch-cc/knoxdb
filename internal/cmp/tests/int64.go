@@ -7,21 +7,9 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"math/rand"
 
 	"golang.org/x/exp/slices"
 )
-
-func RandInt64Slice(n, u int) []int64 {
-	s := make([]int64, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = rand.Int63()
-	}
-	for i := 1; i < u; i++ {
-		copy(s[i*n:], s[:n])
-	}
-	return s
-}
 
 type Int64MatchTest struct {
 	Name   string

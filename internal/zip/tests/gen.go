@@ -5,8 +5,6 @@ package tests
 
 import (
 	"golang.org/x/exp/slices"
-	"math"
-	"math/rand"
 )
 
 const Int64Size = 8
@@ -182,48 +180,4 @@ func CreateInt8TestCase(name string, slice, result []int8, length int) Int8Test 
 		Slice:  slices.Clone(slice)[:length],
 		Result: slices.Clone(result)[:length],
 	}
-}
-
-func RandInt64Slice(n, u int) []int64 {
-	s := make([]int64, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = rand.Int63()
-	}
-	for i := 1; i < u; i++ {
-		copy(s[i*n:], s[:n])
-	}
-	return s
-}
-
-func RandInt32Slice(n, u int) []int32 {
-	s := make([]int32, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = rand.Int31()
-	}
-	for i := 1; i < u; i++ {
-		copy(s[i*n:], s[:n])
-	}
-	return s
-}
-
-func RandInt16Slice(n, u int) []int16 {
-	s := make([]int16, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = int16(rand.Intn(math.MaxInt16 + 1))
-	}
-	for i := 1; i < u; i++ {
-		copy(s[i*n:], s[:n])
-	}
-	return s
-}
-
-func RandInt8Slice(n, u int) []int8 {
-	s := make([]int8, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = int8(rand.Intn(math.MaxInt8 + 1))
-	}
-	for i := 1; i < u; i++ {
-		copy(s[i*n:], s[:n])
-	}
-	return s
 }

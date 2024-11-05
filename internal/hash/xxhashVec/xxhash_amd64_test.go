@@ -49,7 +49,7 @@ func BenchmarkXXHash32Uint32SliceAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint32Slice(n.l)
+		a := util.RandUints[uint32](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * 4))
@@ -65,7 +65,7 @@ func BenchmarkXXHash32Uint32SliceAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint32Slice(n.l)
+		a := util.RandUints[uint32](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * 4))
@@ -117,7 +117,7 @@ func BenchmarkXXHash32Int32SliceAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randInt32Slice(n.l)
+		a := util.RandInts[int32](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * 4))
@@ -133,7 +133,7 @@ func BenchmarkXXHash32Int32SliceAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randInt32Slice(n.l)
+		a := util.RandInts[int32](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * 4))
@@ -185,7 +185,7 @@ func BenchmarkXXHash32Uint64SliceAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint64Slice(n.l)
+		a := util.RandUints[uint64](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))
@@ -201,7 +201,7 @@ func BenchmarkXXHash32Uint64SliceAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint64Slice(n.l)
+		a := util.RandUints[uint64](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))
@@ -253,7 +253,7 @@ func BenchmarkXXHash32Int64SliceAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randInt64Slice(n.l)
+		a := util.RandInts[int64](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * 4))
@@ -269,7 +269,7 @@ func BenchmarkXXHash32Int64SliceAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randInt64Slice(n.l)
+		a := util.RandInts[int64](n.l)
 		res := make([]uint32, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(int64(n.l * 4))
@@ -321,7 +321,7 @@ func BenchmarkXXHash64Uint32SliceAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint32Slice(n.l)
+		a := util.RandUints[uint32](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(4 * int64(n.l))
@@ -337,7 +337,7 @@ func BenchmarkXXHash64Uint32SliceAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint32Slice(n.l)
+		a := util.RandUints[uint32](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(4 * int64(n.l))
@@ -389,7 +389,7 @@ func BenchmarkXXHash64Uint64SliceAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint64Slice(n.l)
+		a := util.RandUints[uint64](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))
@@ -405,7 +405,7 @@ func BenchmarkXXHash64Uint64SliceAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint64Slice(n.l)
+		a := util.RandUints[uint64](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))
@@ -457,7 +457,7 @@ func BenchmarkXXH3Uint32SliceAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint32Slice(n.l)
+		a := util.RandUints[uint32](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(4 * int64(n.l))
@@ -473,7 +473,7 @@ func BenchmarkXXH3Uint32SliceAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint32Slice(n.l)
+		a := util.RandUints[uint32](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(4 * int64(n.l))
@@ -525,7 +525,7 @@ func BenchmarkXXH3Uint64SliceAVX2(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint64Slice(n.l)
+		a := util.RandUints[uint64](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))
@@ -541,7 +541,7 @@ func BenchmarkXXH3Uint64SliceAVX512(B *testing.B) {
 		B.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
-		a := randUint64Slice(n.l)
+		a := util.RandUints[uint64](n.l)
 		res := make([]uint64, n.l)
 		B.Run(n.name, func(B *testing.B) {
 			B.SetBytes(8 * int64(n.l))

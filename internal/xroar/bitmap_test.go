@@ -2,10 +2,10 @@ package xroar
 
 import (
 	"math"
-	"math/rand"
 	"testing"
 	"time"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -142,7 +142,7 @@ func TestBulkAdd(t *testing.T) {
 				break
 			}
 		}
-		x := uint64(rand.Int63n(max))
+		x := uint64(util.RandInt64n(max))
 
 		if _, has := m[x]; has {
 			if !ra.Contains(x) {
@@ -254,7 +254,7 @@ func TestBitmapOps(t *testing.T) {
 		bigMap := make(map[uint64]struct{})
 
 		for i := 0; i < N; i++ {
-			smallx := uint64(rand.Int63n(M))
+			smallx := uint64(util.RandInt64n(M))
 
 			_, has := smallMap[smallx]
 			added := small.Set(smallx)
@@ -263,7 +263,7 @@ func TestBitmapOps(t *testing.T) {
 			}
 			smallMap[smallx] = struct{}{}
 
-			bigx := uint64(rand.Int63n(M * f))
+			bigx := uint64(util.RandInt64n(M * f))
 			_, has = bigMap[bigx]
 			added = big.Set(bigx)
 			if has {
@@ -655,7 +655,7 @@ func TestClone(t *testing.T) {
 	N := int(1e5)
 
 	for i := 0; i < N; i++ {
-		a.Set(uint64(rand.Int63n(math.MaxInt64)))
+		a.Set(uint64(util.RandInt64n(math.MaxInt64)))
 	}
 	b := a.Clone()
 	require.Equal(t, a.GetCardinality(), b.GetCardinality())

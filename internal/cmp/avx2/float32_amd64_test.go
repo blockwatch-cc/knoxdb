@@ -15,7 +15,7 @@ import (
 var (
 	benchmarkSizes = tests.BenchmarkSizes
 
-	randFloat32Slice         = tests.RandFloat32Slice
+	randFloat32Slice         = util.RandFloats[float32]
 	float32EqualCases        = tests.Float32EqualCases
 	float32NotEqualCases     = tests.Float32NotEqualCases
 	float32LessCases         = tests.Float32LessCases
@@ -67,7 +67,7 @@ func BenchmarkMatchFloat32EqualAVX2(B *testing.B) {
 	}
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -116,7 +116,7 @@ func BenchmarkMatchFloat32NotEqualAVX2(B *testing.B) {
 	}
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -165,7 +165,7 @@ func BenchmarkMatchFloat32LessAVX2(B *testing.B) {
 	}
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -214,7 +214,7 @@ func BenchmarkMatchFloat32LessEqualAVX2(B *testing.B) {
 	}
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -263,7 +263,7 @@ func BenchmarkMatchFloat32GreaterAVX2(B *testing.B) {
 	}
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -312,7 +312,7 @@ func BenchmarkMatchFloat32GreaterEqualAVX2(B *testing.B) {
 	}
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))
@@ -361,7 +361,7 @@ func BenchmarkMatchFloat32BetweenAVX2(B *testing.B) {
 	}
 	for _, n := range benchmarkSizes {
 		B.Run(n.Name, func(B *testing.B) {
-			a := randFloat32Slice(n.L, 1)
+			a := randFloat32Slice(n.L)
 			bits := make([]byte, bitFieldLen(len(a)))
 			B.ResetTimer()
 			B.SetBytes(int64(n.L * Float32Size))

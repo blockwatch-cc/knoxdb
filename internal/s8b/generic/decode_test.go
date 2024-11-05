@@ -2,7 +2,6 @@ package generic
 
 import (
 	"encoding/binary"
-	"math/rand"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/s8b/tests"
@@ -19,8 +18,6 @@ var (
 // TestEncode ensures 100% test coverage of EncodeUint64 and
 // verifies all output by comparing the original input with the output of Decode
 func TestEncodeUint64Generic(t *testing.T) {
-	rand.Seed(0)
-
 	for _, test := range s8bTestsUint64 {
 		t.Run(test.Name, func(t *testing.T) {
 			if test.Fn != nil {
@@ -64,8 +61,6 @@ func TestEncodeUint64Generic(t *testing.T) {
 }
 
 func TestEncodeUint32Generic(t *testing.T) {
-	rand.Seed(0)
-
 	for _, test := range s8bTestsUint32 {
 		t.Run(test.Name, func(t *testing.T) {
 			if test.Fn != nil {
@@ -113,8 +108,6 @@ func TestEncodeUint32Generic(t *testing.T) {
 }
 
 func TestEncodeUint16Generic(t *testing.T) {
-	rand.Seed(0)
-
 	for _, test := range s8bTestsUint16 {
 		t.Run(test.Name, func(t *testing.T) {
 			if test.Fn != nil {
@@ -162,8 +155,6 @@ func TestEncodeUint16Generic(t *testing.T) {
 }
 
 func TestEncodeUint8Generic(t *testing.T) {
-	rand.Seed(0)
-
 	for _, test := range s8bTestsUint8 {
 		t.Run(test.Name, func(t *testing.T) {
 			if test.Fn != nil {

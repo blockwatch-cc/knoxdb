@@ -1,10 +1,10 @@
 package cuckoo
 
 import (
-	"crypto/rand"
 	"fmt"
-	"io"
 	"testing"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func TestIndexAndFP(t *testing.T) {
@@ -30,7 +30,7 @@ func TestInsert(t *testing.T) {
 	filter := NewFilter(cap)
 
 	var hash [32]byte
-	io.ReadFull(rand.Reader, hash[:])
+	copy(hash[:], util.RandBytes(32))
 
 	for i := 0; i < 100; i++ {
 		filter.Add(hash[:])
@@ -47,7 +47,7 @@ func TestFilter_Lookup(t *testing.T) {
 	var m = make(map[[32]byte]struct{})
 
 	for i := 0; i < cap; i++ {
-		io.ReadFull(rand.Reader, hash[:])
+		copy(hash[:], util.RandBytes(32))
 		m[hash] = struct{}{}
 		filter.Add(hash[:])
 	}
@@ -74,7 +74,7 @@ func TestReset(t *testing.T) {
 	var fail int
 
 	for i := 0; i < 10*cap; i++ {
-		io.ReadFull(rand.Reader, hash[:])
+		copy(hash[:], util.RandBytes(32))
 
 		if filter.Add(hash[:]) {
 			insertSuccess++
@@ -108,7 +108,7 @@ func BenchmarkFilter_Insert(b *testing.B) {
 
 	var hash [32]byte
 	for i := 0; i < b.N; i++ {
-		io.ReadFull(rand.Reader, hash[:])
+		copy(hash[:], util.RandBytes(32))
 		filter.Add(hash[:])
 	}
 }

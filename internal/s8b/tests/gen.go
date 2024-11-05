@@ -1,7 +1,7 @@
 package tests
 
 import (
-	"math/rand"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func ones(n int) func() []uint64 {
@@ -122,7 +122,7 @@ func bits(n, bits int) func() []uint64 {
 		maxVal := uint64(1 << uint8(bits))
 		for i := range out {
 			topBit := uint64((i & 1) << uint8(bits-1))
-			out[i] = uint64(rand.Int63n(int64(maxVal))) | topBit
+			out[i] = uint64(util.RandInt64n(int64(maxVal))) | topBit
 			if out[i] >= maxVal {
 				panic("max")
 			}
@@ -137,7 +137,7 @@ func bits32(n, bits int) func() []uint32 {
 		maxVal := uint64(1 << uint8(bits))
 		for i := range out {
 			topBit := uint32((i & 1) << uint8(bits-1))
-			out[i] = uint32(rand.Int63n(int64(maxVal))) | topBit
+			out[i] = uint32(util.RandInt64n(int64(maxVal))) | topBit
 			if uint64(out[i]) >= maxVal {
 				panic("max")
 			}
@@ -152,7 +152,7 @@ func bits16(n, bits int) func() []uint16 {
 		maxVal := uint64(1 << uint8(bits))
 		for i := range out {
 			topBit := uint16((i & 1) << uint8(bits-1))
-			out[i] = uint16(rand.Int63n(int64(maxVal))) | topBit
+			out[i] = uint16(util.RandInt64n(int64(maxVal))) | topBit
 			if uint64(out[i]) >= maxVal {
 				panic("max")
 			}
@@ -167,7 +167,7 @@ func bits8(n, bits int) func() []uint8 {
 		maxVal := uint64(1 << uint8(bits))
 		for i := range out {
 			topBit := uint8((i & 1) << uint8(bits-1))
-			out[i] = uint8(rand.Int63n(int64(maxVal))) | topBit
+			out[i] = uint8(util.RandInt64n(int64(maxVal))) | topBit
 			if uint64(out[i]) >= maxVal {
 				panic("max")
 			}

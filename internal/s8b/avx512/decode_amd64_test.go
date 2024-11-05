@@ -1,14 +1,13 @@
 // Copyright (c) 2022 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
-//go:build go1.7 && amd64 && !gccgo && !appengine
-// +build go1.7,amd64,!gccgo,!appengine
+//go:build amd64 && !gccgo && !appengine
+// +build amd64,!gccgo,!appengine
 
 package avx512
 
 import (
 	"encoding/binary"
-	"math/rand"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/s8b/avx2"
@@ -33,7 +32,6 @@ func TestEncodeUint64AVX512(t *testing.T) {
 		t.Skip()
 	}
 
-	rand.Seed(0)
 	for _, test := range s8bTestsUint64 {
 		t.Run(test.Name, func(t *testing.T) {
 			if test.Fn != nil {

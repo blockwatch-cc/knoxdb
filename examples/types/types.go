@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -20,6 +19,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type Stringer []string
@@ -341,19 +341,13 @@ func Open(ctx context.Context) (db knox.Database, table knox.Table, err error) {
 	return
 }
 
-func rnd(sz int) []byte {
-	k := make([]byte, sz)
-	rand.Read(k)
-	return k
-}
-
 func NewRandomTypes(i int) *Types {
 	return &Types{
 		Id:        0, // empty, will be set by insert
 		Timestamp: time.Now().UTC(),
-		Hash:      rnd(20),
-		String:    hex.EncodeToString(rnd(4)),
-		Stringer:  strings.SplitAfter(hex.EncodeToString(rnd(4)), "a"),
+		Hash:      util.RandBytes(20),
+		String:    hex.EncodeToString(util.RandBytes(4)),
+		Stringer:  strings.SplitAfter(hex.EncodeToString(util.RandBytes(4)), "a"),
 		Bool:      true,
 		MyEnum:    MyEnum(myEnums[i%4]),
 		// typed ints

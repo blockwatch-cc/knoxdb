@@ -1,6 +1,6 @@
 module blockwatch.cc/knoxdb
 
-go 1.22
+go 1.23
 
 require (
 	github.com/RoaringBitmap/roaring v1.2.3

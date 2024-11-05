@@ -6,7 +6,6 @@ package loglogbeta
 import (
 	"fmt"
 	"math"
-	"math/rand"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -16,15 +15,13 @@ func TestCardinalityManyUint32AVX2(t *testing.T) {
 	if !util.UseAVX2 {
 		t.SkipNow()
 	}
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[uint32]bool{}
 	slice := make([]uint32, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		// val := uint32(rand.Intn(i + step))
-		val := uint32(rand.Intn(i + step))
+		val := uint32(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -47,14 +44,13 @@ func TestCardinalityManyUint32AVX512(t *testing.T) {
 	if !util.UseAVX512_CD {
 		t.SkipNow()
 	}
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[uint32]bool{}
 	slice := make([]uint32, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		val := uint32(rand.Intn(i + step))
+		val := uint32(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -77,14 +73,13 @@ func TestCardinalityManyInt32AVX2(t *testing.T) {
 	if !util.UseAVX2 {
 		t.SkipNow()
 	}
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[int32]bool{}
 	slice := make([]int32, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		val := int32(rand.Intn(i + step))
+		val := int32(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -107,14 +102,13 @@ func TestCardinalityManyInt32AVX512(t *testing.T) {
 	if !util.UseAVX512_CD {
 		t.SkipNow()
 	}
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[int32]bool{}
 	slice := make([]int32, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		val := int32(rand.Intn(i + step))
+		val := int32(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -137,14 +131,13 @@ func TestCardinalityManyUint64AVX2(t *testing.T) {
 	if !util.UseAVX2 {
 		t.SkipNow()
 	}
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[uint64]bool{}
 	slice := make([]uint64, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		val := uint64(rand.Intn(i + step))
+		val := uint64(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -167,14 +160,13 @@ func TestCardinalityManyUint64AVX512(t *testing.T) {
 	if !util.UseAVX512_CD {
 		t.SkipNow()
 	}
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[uint64]bool{}
 	slice := make([]uint64, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		val := uint64(rand.Intn(i + step))
+		val := uint64(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -197,14 +189,13 @@ func TestCardinalityManyInt64AVX2(t *testing.T) {
 	if !util.UseAVX2 {
 		t.SkipNow()
 	}
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[int64]bool{}
 	slice := make([]int64, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		val := int64(rand.Intn(i + step))
+		val := int64(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -227,14 +218,13 @@ func TestCardinalityManyInt64AVX512(t *testing.T) {
 	if !util.UseAVX512_CD {
 		t.SkipNow()
 	}
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[int64]bool{}
 	slice := make([]int64, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		val := int64(rand.Intn(i + step))
+		val := int64(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -263,11 +253,11 @@ func TestMergeAVX2(t *testing.T) {
 	unique := map[uint64]bool{}
 
 	for i := 1; i <= 300000; i++ {
-		val := rand.Uint64()
+		val := util.RandUint64()
 		llb1.AddUint64(val)
 		unique[val] = true
 
-		val = rand.Uint64()
+		val = util.RandUint64()
 		llb2.AddUint64(val)
 		unique[val] = true
 	}

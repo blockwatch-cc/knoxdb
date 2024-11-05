@@ -1,8 +1,8 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-//go:build go1.7 && amd64 && !gccgo && !appengine
-// +build go1.7,amd64,!gccgo,!appengine
+//go:build amd64 && !gccgo && !appengine
+// +build amd64,!gccgo,!appengine
 
 package util
 

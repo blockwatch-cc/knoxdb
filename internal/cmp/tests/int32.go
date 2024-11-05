@@ -7,21 +7,9 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"math/rand"
 
 	"golang.org/x/exp/slices"
 )
-
-func RandInt32Slice(n, u int) []int32 {
-	s := make([]int32, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = rand.Int31()
-	}
-	for i := 1; i < u; i++ {
-		copy(s[i*n:], s[:n])
-	}
-	return s
-}
 
 type Int32MatchTest struct {
 	Name   string

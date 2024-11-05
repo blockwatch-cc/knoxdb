@@ -7,21 +7,9 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"math/rand"
 
 	"golang.org/x/exp/slices"
 )
-
-func RandUint8Slice(n, u int) []uint8 {
-	s := make([]uint8, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = uint8(rand.Intn(math.MaxUint8 + 1))
-	}
-	for i := 1; i < u; i++ {
-		copy(s[i*n:], s[:n])
-	}
-	return s
-}
 
 type Uint8MatchTest struct {
 	Name   string

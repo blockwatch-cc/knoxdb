@@ -1,7 +1,7 @@
 // Copyright (c) 2022-2024 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
-// +build go1.7,amd64,!gccgo,!appengine
+// +build amd64,!gccgo,!appengine
 
 #include "textflag.h"
 

@@ -8,11 +8,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
-	"math/rand"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/hash/xxhashVec"
 	"blockwatch.cc/knoxdb/pkg/slicex"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func estimateError(got, exp uint64) float64 {
@@ -29,7 +29,7 @@ func TestZeros(t *testing.T) {
 	registers := [m]uint8{}
 	exp := 0.0
 	for i := range registers {
-		val := uint8(rand.Intn(32))
+		val := uint8(util.RandIntn(32))
 		if val == 0 {
 			exp++
 		}
@@ -44,7 +44,7 @@ func TestZeros(t *testing.T) {
 func RandUint64(n int) []uint64 {
 	b := make([]uint64, n)
 	for i := 0; i < n; i++ {
-		b[i] = uint64(rand.Int31())
+		b[i] = uint64(util.RandInt32())
 	}
 	return b
 }
@@ -52,27 +52,18 @@ func RandUint64(n int) []uint64 {
 func RandUint32(n int) []uint32 {
 	b := make([]uint32, n)
 	for i := 0; i < n; i++ {
-		b[i] = uint32(rand.Int31())
+		b[i] = uint32(util.RandInt32())
 	}
 	return b
 }
 
-/*
-	func RandStringBytesMaskImprSrc(n uint32) string {
-		b := make([]byte, n)
-		for i := uint32(0); i < n; i++ {
-			b[i] = letterBytes[rand.Int()%len(letterBytes)]
-		}
-		return string(b)
-	}
-*/
 func TestCardinality(t *testing.T) {
 	llb := NewFilter()
 	step := 10000
 	unique := map[uint64]bool{}
 
 	for i := 1; len(unique) <= 100000; i++ {
-		val := rand.Uint64()
+		val := util.RandUint64()
 		llb.AddUint64(val)
 		unique[val] = true
 
@@ -90,15 +81,14 @@ func TestCardinality(t *testing.T) {
 }
 
 func TestCardinalityManyUint32Generic(t *testing.T) {
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[uint32]bool{}
 	slice := make([]uint32, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		// val := uint32(rand.Intn(i + step))
-		val := uint32(rand.Intn(i + step))
+		// val := uint32(util.RandIntn(i + step))
+		val := uint32(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -118,14 +108,13 @@ func TestCardinalityManyUint32Generic(t *testing.T) {
 }
 
 func TestCardinalityManyInt32Generic(t *testing.T) {
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[int32]bool{}
 	slice := make([]int32, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		val := int32(rand.Intn(i + step))
+		val := int32(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -145,14 +134,13 @@ func TestCardinalityManyInt32Generic(t *testing.T) {
 }
 
 func TestCardinalityManyUint64Generic(t *testing.T) {
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[uint64]bool{}
 	slice := make([]uint64, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		val := uint64(rand.Intn(i + step))
+		val := uint64(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -172,14 +160,13 @@ func TestCardinalityManyUint64Generic(t *testing.T) {
 }
 
 func TestCardinalityManyInt64Generic(t *testing.T) {
-	rand.Seed(0)
 	llb := NewFilter()
 	step := 10000
 	unique := map[int64]bool{}
 	slice := make([]int64, step)
 	var j int
 	for i := 0; i < 100000; i++ {
-		val := int64(rand.Intn(i + step))
+		val := int64(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
 		j++
@@ -205,11 +192,11 @@ func TestMergeGeneric(t *testing.T) {
 	unique := map[uint64]bool{}
 
 	for i := 1; i <= 300000; i++ {
-		val := rand.Uint64()
+		val := util.RandUint64()
 		llb1.AddUint64(val)
 		unique[val] = true
 
-		val = rand.Uint64()
+		val = util.RandUint64()
 		llb2.AddUint64(val)
 		unique[val] = true
 	}
@@ -239,7 +226,7 @@ func TestMarshal(t *testing.T) {
 	unique := map[uint64]bool{}
 
 	for i := 1; len(unique) <= 100000; i++ {
-		val := rand.Uint64()
+		val := util.RandUint64()
 		llb.AddUint64(val)
 		unique[val] = true
 	}
