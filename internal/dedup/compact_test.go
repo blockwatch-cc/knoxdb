@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"math/rand"
 	"testing"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var _ io.Writer = (*FaultyWriter)(nil)
@@ -33,7 +34,7 @@ func makeDupmap(sz int) []int {
 }
 
 func makeCompactByteArrayReader(sz int) (io.Reader, ByteArray) {
-	data := makeRandData(sz, sz)
+	data := util.RandByteSlices(sz, sz)
 	dup := makeDupmap(sz)
 	c := makeCompactByteArray(sz, sz, data, dup)
 
@@ -43,8 +44,7 @@ func makeCompactByteArrayReader(sz int) (io.Reader, ByteArray) {
 }
 
 func TestCompactElem(t *testing.T) {
-	rand.Seed(99)
-	data := makeRandData(10, 10)
+	data := util.RandByteSlices(10, 10)
 	dup := makeDupmap(10)
 	c := makeCompactByteArray(10, 10, data, dup)
 
@@ -61,10 +61,8 @@ func TestCompactElem(t *testing.T) {
 	}
 }
 func TestCompactWriteTo(t *testing.T) {
-	rand.Seed(99)
-
 	t.Run("With Empty Data", func(t *testing.T) {
-		data := makeRandData(0, 0)
+		data := util.RandByteSlices(0, 0)
 		dup := makeDupmap(0)
 		c := makeCompactByteArray(0, 0, data, dup)
 
@@ -81,7 +79,7 @@ func TestCompactWriteTo(t *testing.T) {
 	})
 
 	t.Run("With Data", func(t *testing.T) {
-		data := makeRandData(10, 10)
+		data := util.RandByteSlices(10, 10)
 		dup := makeDupmap(10)
 		c := makeCompactByteArray(10, 10, data, dup)
 
@@ -99,7 +97,7 @@ func TestCompactWriteTo(t *testing.T) {
 
 	t.Run("With Large Data", func(t *testing.T) {
 		sz := 10000
-		data := makeRandData(sz, sz)
+		data := util.RandByteSlices(sz, sz)
 		dup := makeDupmap(sz)
 		c := makeCompactByteArray(sz, sz, data, dup)
 
@@ -116,7 +114,7 @@ func TestCompactWriteTo(t *testing.T) {
 	})
 
 	t.Run("Faulty Writer", func(t *testing.T) {
-		data := makeRandData(0, 0)
+		data := util.RandByteSlices(0, 0)
 		dup := makeDupmap(0)
 		c := makeCompactByteArray(0, 0, data, dup)
 

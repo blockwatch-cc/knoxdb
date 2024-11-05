@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"math/rand"
 	"testing"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func makeDictByteArrayReader(sz int) (io.Reader, ByteArray) {
-	data := makeRandData(sz, sz)
+	data := util.RandByteSlices(sz, sz)
 	dup := makeDupmap(sz)
 	d := makeDictByteArray(sz, sz, data, dup)
 
@@ -19,8 +20,7 @@ func makeDictByteArrayReader(sz int) (io.Reader, ByteArray) {
 }
 
 func TestDictElem(t *testing.T) {
-	rand.Seed(199)
-	data := makeRandData(10, 10)
+	data := util.RandByteSlices(10, 10)
 	dup := makeDupmap(10)
 	d := makeDictByteArray(10, 10, data, dup)
 
@@ -38,8 +38,7 @@ func TestDictElem(t *testing.T) {
 }
 
 func TestDictClear(t *testing.T) {
-	rand.Seed(199)
-	data := makeRandData(10, 10)
+	data := util.RandByteSlices(10, 10)
 	dup := makeDupmap(10)
 	d := makeDictByteArray(10, 10, data, dup)
 
@@ -86,8 +85,7 @@ func TestDictClear(t *testing.T) {
 }
 
 func TestDictRelease(t *testing.T) {
-	rand.Seed(199)
-	data := makeRandData(10, 10)
+	data := util.RandByteSlices(10, 10)
 	dup := makeDupmap(10)
 	d := makeDictByteArray(10, 10, data, dup)
 
@@ -190,10 +188,8 @@ func TestDictUnsupported(t *testing.T) {
 }
 
 func TestDictWriteTo(t *testing.T) {
-	rand.Seed(199)
-
 	t.Run("With Empty Data", func(t *testing.T) {
-		data := makeRandData(0, 0)
+		data := util.RandByteSlices(0, 0)
 		dup := makeDupmap(0)
 		d := makeDictByteArray(0, 0, data, dup)
 
@@ -210,7 +206,7 @@ func TestDictWriteTo(t *testing.T) {
 	})
 
 	t.Run("With Data", func(t *testing.T) {
-		data := makeRandData(10, 10)
+		data := util.RandByteSlices(10, 10)
 		dup := makeDupmap(10)
 		d := makeDictByteArray(10, 10, data, dup)
 
@@ -228,7 +224,7 @@ func TestDictWriteTo(t *testing.T) {
 
 	t.Run("With Large Data", func(t *testing.T) {
 		sz := 10000
-		data := makeRandData(sz, sz)
+		data := util.RandByteSlices(sz, sz)
 		dup := makeDupmap(sz)
 		d := makeDictByteArray(sz, sz, data, dup)
 
@@ -245,7 +241,7 @@ func TestDictWriteTo(t *testing.T) {
 	})
 
 	t.Run("Faulty Writer", func(t *testing.T) {
-		data := makeRandData(0, 0)
+		data := util.RandByteSlices(0, 0)
 		dup := makeDupmap(0)
 		d := makeDictByteArray(0, 0, data, dup)
 

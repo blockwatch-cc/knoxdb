@@ -3,14 +3,14 @@ package dedup
 import (
 	"bytes"
 	"io"
-	"math/rand"
 	"testing"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
 func makeFixedReaderData(n, l int) (io.Reader, ByteArray) {
-	data := makeRandData(n, l)
+	data := util.RandByteSlices(n, l)
 	f := makeFixedByteArray(n, data)
 	buf := bytes.NewBuffer(nil)
 	_, err := f.WriteTo(buf)
@@ -89,8 +89,7 @@ func TestFixedCap(t *testing.T) {
 }
 
 func TestFixedElem(t *testing.T) {
-	rand.Seed(10)
-	data := makeRandData(10, 10)
+	data := util.RandByteSlices(10, 10)
 	f := makeFixedByteArray(10, data)
 	for i := range data {
 		if got, expected := f.Elem(i), data[i]; !bytes.Equal(got, expected) {
@@ -164,7 +163,7 @@ func TestFixedUnsupported(t *testing.T) {
 func TestFixedWriteTo(t *testing.T) {
 	sz := 10
 	innerSz := 10
-	data := makeRandData(sz, innerSz)
+	data := util.RandByteSlices(sz, innerSz)
 	f := makeFixedByteArray(sz, data)
 
 	t.Run("Write Data", func(t *testing.T) {
