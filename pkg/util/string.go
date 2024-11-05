@@ -24,19 +24,23 @@ func ToString(s any) string {
 	if s == nil {
 		return ""
 	}
-	if v, ok := s.(encoding.TextMarshaler); ok {
-		if vv, err := v.MarshalText(); err == nil {
-			return string(vv)
+	switch v := s.(type) {
+	case string:
+		return v
+	case encoding.TextMarshaler:
+		buf, err := v.MarshalText()
+		if err == nil {
+			return string(buf)
 		}
 		return ""
-	}
-	if v, ok := s.(fmt.Stringer); ok {
+	case fmt.Stringer:
 		return v.String()
+	default:
+		if v, err := ToRawString(s); err == nil {
+			return v
+		}
+		return fmt.Sprintf("%v", s)
 	}
-	if v, err := ToRawString(s); err == nil {
-		return v
-	}
-	return fmt.Sprintf("%v", s)
 }
 
 func IsBase64(s string) bool {

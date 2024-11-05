@@ -844,11 +844,23 @@ func (c StringCaster) CastValue(val any) (res any, err error) {
 	var ok bool
 	switch v := val.(type) {
 	case string:
-		res, ok = v, true
-	case []byte:
-		res, ok = string(v), true
+		res, ok = []byte(v), true
+	case encoding.TextMarshaler:
+		buf, err := v.MarshalText()
+		if err != nil {
+			return nil, err
+		}
+		res, ok = buf, true
+	case fmt.Stringer:
+		res, ok = []byte(v.String()), true
+	case encoding.BinaryMarshaler:
+		buf, err := v.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		res, ok = buf, true
 	default:
-		res, ok = util.ToString(val), true
+		res, ok = []byte(util.ToString(val)), true
 	}
 	if !ok {
 		err = castError(val, "string")
@@ -861,19 +873,17 @@ func (c StringCaster) CastSlice(val any) (res any, err error) {
 	res = val
 	switch v := val.(type) {
 	case []string:
-		res, ok = v, true
-	case [][]byte:
-		cp := make([]string, len(v))
+		cp := make([][]byte, len(v))
 		for i := range v {
-			cp[i] = string(v[i])
+			cp[i] = []byte(v[i])
 		}
 		res, ok = cp, true
 	default:
 		rv := reflect.ValueOf(val)
 		if rv.Kind() == reflect.Slice {
-			cp := make([]string, rv.Len())
+			cp := make([][]byte, rv.Len())
 			for i := range cp {
-				cp[i] = util.ToString(rv.Index(i))
+				cp[i] = []byte(util.ToString(rv.Index(i)))
 			}
 			res, ok = cp, true
 		}
