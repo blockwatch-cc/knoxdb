@@ -216,10 +216,7 @@ func matchBetween(a ByteArray, from, to []byte, bits, mask *bitset.Bitset) *bits
 		return bits
 	}
 
-	// make sure min/max are in correct order
-	if d := bytes.Compare(from, to); d > 0 {
-		to, from = from, to
-	} else if d == 0 {
+	if bytes.Equal(from, to) {
 		return matchEqual(a, from, bits, mask)
 	}
 
