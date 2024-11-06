@@ -186,7 +186,7 @@ func (a *DictByteArray) WriteTo(w io.Writer) (int64, error) {
 	// prepare and write offsets (sizes can be reconstructed)
 	olen, err := zip.EncodeInt32(a.offs, buf)
 	if err != nil {
-		return int64(count), err
+		return count, err
 	}
 
 	// write compressed offset len
@@ -229,7 +229,7 @@ func (a *DictByteArray) WriteTo(w io.Writer) (int64, error) {
 		return count, fmt.Errorf("dict: writing ptr %w", err)
 	}
 
-	return int64(count), nil
+	return count, nil
 }
 
 func (a *DictByteArray) ReadFrom(r io.Reader) (int64, error) {
