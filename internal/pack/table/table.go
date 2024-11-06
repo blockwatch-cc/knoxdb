@@ -44,18 +44,18 @@ var (
 )
 
 type Table struct {
-	mu      sync.RWMutex         // global table lock (syncs r/w access, single writer)
-	engine  *engine.Engine       // engine access
-	schema  *schema.Schema       // ordered list of table fields as central type info
-	tableId uint64               // unique tagged name hash
-	pkindex int                  // field index for primary key (if any)
-	opts    engine.TableOptions  // copy of config options
-	db      store.DB             // lower-level storage (e.g. boltdb wrapper)
-	state   engine.ObjectState   // volatile state
-	indexes []engine.IndexEngine // list of indexes
-	stats   *stats.StatsIndex    // in-memory list of pack and block info
-	journal *journal.Journal     // in-memory data not yet written to packs
-	metrics engine.TableMetrics  // metrics statistics
+	mu      sync.RWMutex            // global table lock (syncs r/w access, single writer)
+	engine  *engine.Engine          // engine access
+	schema  *schema.Schema          // ordered list of table fields as central type info
+	tableId uint64                  // unique tagged name hash
+	px      int                     // field index for primary key (if any)
+	opts    engine.TableOptions     // copy of config options
+	db      store.DB                // lower-level storage (e.g. boltdb wrapper)
+	state   engine.ObjectState      // volatile state
+	indexes []engine.QueryableIndex // list of indexes
+	stats   *stats.StatsIndex       // in-memory list of pack and block info
+	journal *journal.Journal        // in-memory data not yet written to packs
+	metrics engine.TableMetrics     // metrics statistics
 	log     log.Logger
 }
 
@@ -64,12 +64,6 @@ func NewTable() engine.TableEngine {
 }
 
 func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableOptions) error {
-	// require primary key
-	pki := s.PkIndex()
-	if pki < 0 {
-		return engine.ErrNoPk
-	}
-
 	e := engine.GetTransaction(ctx).Engine()
 
 	// init names
@@ -80,11 +74,11 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.engine = e
 	t.schema = s
 	t.tableId = s.TaggedHash(types.ObjectTagTable)
-	t.pkindex = pki
+	t.px = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.state = engine.NewObjectState()
 	t.metrics = engine.NewTableMetrics(name)
-	t.stats = stats.NewStatsIndex(pki, t.opts.PackSize)
+	t.stats = stats.NewStatsIndex(t.px, t.opts.PackSize)
 	t.journal = journal.NewJournal(s, t.opts.JournalSize)
 	t.db = opts.DB
 	t.log = opts.Logger
@@ -155,7 +149,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.engine = e
 	t.schema = s
 	t.tableId = s.TaggedHash(types.ObjectTagTable)
-	t.pkindex = s.PkIndex()
+	t.px = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.metrics = engine.NewTableMetrics(name)
 	t.metrics.TupleCount = int64(t.state.NRows)
@@ -260,7 +254,7 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	t.engine = nil
 	t.schema = nil
 	t.tableId = 0
-	t.pkindex = 0
+	t.px = 0
 	t.opts = engine.TableOptions{}
 	t.metrics = engine.TableMetrics{}
 	t.state = engine.ObjectState{}
@@ -280,7 +274,7 @@ func (t *Table) State() engine.ObjectState {
 	return t.state
 }
 
-func (t *Table) Indexes() []engine.IndexEngine {
+func (t *Table) Indexes() []engine.QueryableIndex {
 	return t.indexes
 }
 
@@ -369,13 +363,13 @@ func (t *Table) Truncate(ctx context.Context) error {
 	return nil
 }
 
-func (t *Table) UseIndex(idx engine.IndexEngine) {
+func (t *Table) UseIndex(idx engine.QueryableIndex) {
 	t.indexes = append(t.indexes, idx)
 }
 
-func (t *Table) UnuseIndex(idx engine.IndexEngine) {
+func (t *Table) UnuseIndex(idx engine.QueryableIndex) {
 	idxId := idx.Schema().TaggedHash(types.ObjectTagIndex)
-	t.indexes = slices.DeleteFunc(t.indexes, func(v engine.IndexEngine) bool {
+	t.indexes = slices.DeleteFunc(t.indexes, func(v engine.QueryableIndex) bool {
 		return v.Schema().TaggedHash(types.ObjectTagIndex) == idxId
 	})
 }

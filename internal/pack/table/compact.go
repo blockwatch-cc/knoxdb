@@ -197,7 +197,7 @@ func (t *Table) Compact(ctx context.Context) error {
 			return err
 		}
 		total += int64(cp)
-		lastMaxPk = dstPack.Uint64(t.pkindex, dstPack.Len()-1)
+		lastMaxPk = dstPack.Uint64(t.px, dstPack.Len()-1)
 		if err != nil {
 			return err
 		}

@@ -50,7 +50,7 @@ func (idx *Index) loadSharedPack(ctx context.Context, id uint32, nrow int, useCa
 		WithMaxRows(util.NonZero(nrow, idx.opts.PackSize))
 
 	// load from table data bucket or cache using tableid as cache tag
-	n, err := pkg.Load(ctx, idx.dataBucket(tx), useCache, idx.indexId, nil, nrow)
+	n, err := pkg.Load(ctx, idx.dataBucket(tx), useCache, idx.id, nil, nrow)
 	if err != nil {
 		pkg.Release()
 		return nil, err
@@ -109,7 +109,7 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 		}
 
 		// remove from storage and block caches
-		if err := pkg.Remove(ctx, idx.dataBucket(tx), idx.indexId); err != nil {
+		if err := pkg.Remove(ctx, idx.dataBucket(tx), idx.id); err != nil {
 			return 0, err
 		}
 
@@ -155,7 +155,7 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 
 	// write to disk
 	blockSizes := make([]int, len(meta.Blocks))
-	n, err := pkg.Store(ctx, idx.dataBucket(tx), idx.indexId, blockSizes)
+	n, err := pkg.Store(ctx, idx.dataBucket(tx), idx.id, blockSizes)
 	if err != nil {
 		return 0, err
 	}

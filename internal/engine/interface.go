@@ -55,9 +55,9 @@ type TableEngine interface {
 	// StreamLookup(Context, []uint64, func(QueryRow) error) error
 
 	// index management
-	UseIndex(IndexEngine)
-	UnuseIndex(IndexEngine)
-	Indexes() []IndexEngine
+	UseIndex(QueryableIndex)
+	UnuseIndex(QueryableIndex)
+	Indexes() []QueryableIndex
 
 	// Tx Management
 	CommitTx(ctx Context, xid uint64) error
@@ -71,6 +71,29 @@ type QueryPlan interface {
 	Close()
 	Stream(ctx Context, fn func(r QueryRow) error) error
 	Query(ctx Context) (QueryResult, error)
+}
+
+type QueryCondition interface {
+	IsLeaf() bool
+	IsEmpty() bool
+	IsEmptyMatch() bool
+	IsProcessed() bool
+	Fields() []string
+}
+
+type QueryableIndex interface {
+	Schema() *Schema
+	IsComposite() bool
+	CanMatch(QueryCondition) bool
+	Query(Context, QueryCondition) (*Bitmap, bool, error)
+	QueryComposite(Context, QueryCondition) (*Bitmap, bool, error)
+}
+
+type QueryableTable interface {
+	Schema() *Schema
+	Indexes() []QueryableIndex
+	Query(Context, QueryPlan) (QueryResult, error)
+	Stream(Context, QueryPlan, func(QueryRow) error) error
 }
 
 type QueryResult interface {
@@ -124,14 +147,6 @@ type IndexEngine interface {
 	CanMatch(QueryCondition) bool // static: based to index engine type
 	Query(Context, QueryCondition) (*Bitmap, bool, error)
 	QueryComposite(Context, QueryCondition) (*Bitmap, bool, error)
-}
-
-type QueryCondition interface {
-	IsLeaf() bool
-	IsEmpty() bool
-	IsEmptyMatch() bool
-	IsProcessed() bool
-	Fields() []string
 }
 
 type StoreKind string

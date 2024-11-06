@@ -32,7 +32,7 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 	}
 
 	// obtain shared table lock
-	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	err := engine.GetTransaction(ctx).RLock(ctx, t.id)
 	if err != nil {
 		return nil, err
 	}

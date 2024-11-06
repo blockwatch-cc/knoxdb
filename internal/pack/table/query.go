@@ -176,7 +176,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	// execute the query to find all matching pks
 	bits := bitmap.New()
 	res := NewStreamResult(func(row engine.QueryRow) error {
-		bits.Set(row.(*Row).Uint64(t.pkindex))
+		bits.Set(row.(*Row).Uint64(t.px))
 		return nil
 	})
 
@@ -288,7 +288,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 				src := pkg
 
 				// skip broken records (invalid pk)
-				pk := pkg.Uint64(t.pkindex, index)
+				pk := pkg.Uint64(t.px, index)
 				if pk == 0 {
 					continue
 				}
@@ -475,7 +475,7 @@ packloop:
 			src := pkg
 
 			// skip broken records (invalid pk)
-			pk := pkg.Uint64(t.pkindex, index)
+			pk := pkg.Uint64(t.px, index)
 			if pk == 0 {
 				continue
 			}

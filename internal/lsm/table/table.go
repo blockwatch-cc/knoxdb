@@ -42,18 +42,17 @@ var (
 )
 
 type Table struct {
-	engine     *engine.Engine       // engine access
-	schema     *schema.Schema       // table schema
-	tableId    uint64               // unique tagged name hash
-	pkindex    int                  // field index for primary key (if any)
-	opts       engine.TableOptions  // copy of config options
-	db         store.DB             // lower-level KV store (e.g. boltdb or badger)
-	key        []byte               // name of the data bucket
-	isZeroCopy bool                 // storage reads are zero copy (copy to safe references)
-	noClose    bool                 // don't close underlying store db on Close
-	state      engine.ObjectState   // volatile state, synced with catalog
-	indexes    []engine.IndexEngine // list of indexes
-	metrics    engine.TableMetrics  // usage statistics
+	engine     *engine.Engine          // engine access
+	schema     *schema.Schema          // table schema
+	id         uint64                  // unique tagged name hash
+	opts       engine.TableOptions     // copy of config options
+	db         store.DB                // lower-level KV store (e.g. boltdb or badger)
+	key        []byte                  // name of the data bucket
+	isZeroCopy bool                    // storage reads are zero copy (copy to safe references)
+	noClose    bool                    // don't close underlying store db on Close
+	state      engine.ObjectState      // volatile state, synced with catalog
+	indexes    []engine.QueryableIndex // list of indexes
+	metrics    engine.TableMetrics     // usage statistics
 	log        log.Logger
 }
 
@@ -62,12 +61,6 @@ func NewTable() engine.TableEngine {
 }
 
 func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableOptions) error {
-	// require primary key
-	pki := s.PkIndex()
-	if pki < 0 {
-		return engine.ErrNoPk
-	}
-
 	e := engine.GetTransaction(ctx).Engine()
 
 	// init names
@@ -77,8 +70,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	// setup store
 	t.engine = e
 	t.schema = s
-	t.tableId = s.TaggedHash(types.ObjectTagTable)
-	t.pkindex = pki
+	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.key = []byte(name)
 	t.state = engine.NewObjectState()
@@ -137,8 +129,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	// setup table
 	t.engine = e
 	t.schema = s
-	t.tableId = s.TaggedHash(types.ObjectTagTable)
-	t.pkindex = s.PkIndex()
+	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.key = []byte(name)
 	t.metrics = engine.NewTableMetrics(name)
@@ -210,8 +201,7 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	}
 	t.engine = nil
 	t.schema = nil
-	t.tableId = 0
-	t.pkindex = 0
+	t.id = 0
 	t.key = nil
 	t.noClose = false
 	t.isZeroCopy = false
@@ -229,7 +219,7 @@ func (t *Table) State() engine.ObjectState {
 	return t.state
 }
 
-func (t *Table) Indexes() []engine.IndexEngine {
+func (t *Table) Indexes() []engine.QueryableIndex {
 	return t.indexes
 }
 
@@ -308,13 +298,13 @@ func (t *Table) Truncate(ctx context.Context) error {
 	return nil
 }
 
-func (t *Table) UseIndex(idx engine.IndexEngine) {
+func (t *Table) UseIndex(idx engine.QueryableIndex) {
 	t.indexes = append(t.indexes, idx)
 }
 
-func (t *Table) UnuseIndex(idx engine.IndexEngine) {
+func (t *Table) UnuseIndex(idx engine.QueryableIndex) {
 	idxId := idx.Schema().TaggedHash(types.ObjectTagIndex)
-	t.indexes = slices.DeleteFunc(t.indexes, func(v engine.IndexEngine) bool {
+	t.indexes = slices.DeleteFunc(t.indexes, func(v engine.QueryableIndex) bool {
 		return v.Schema().TaggedHash(types.ObjectTagIndex) == idxId
 	})
 }

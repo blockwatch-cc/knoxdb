@@ -50,10 +50,10 @@ type QueryPlan struct {
 	Flags   QueryFlags
 
 	// table and index refererences
-	Table         engine.TableEngine   // table to query
-	Indexes       []engine.IndexEngine // indexes to query
-	RequestSchema *schema.Schema       // request schema (filter fields)
-	ResultSchema  *schema.Schema       // result schema (output fields)
+	Table         engine.QueryableTable   // table to query
+	Indexes       []engine.QueryableIndex // indexes to query
+	RequestSchema *schema.Schema          // request schema (filter fields)
+	ResultSchema  *schema.Schema          // result schema (output fields)
 
 	// metrics and logging
 	Log   log.Logger
@@ -81,12 +81,12 @@ func (p *QueryPlan) Close() {
 	p.ResultSchema = nil
 }
 
-func (p *QueryPlan) WithTable(t engine.TableEngine) *QueryPlan {
+func (p *QueryPlan) WithTable(t engine.QueryableTable) *QueryPlan {
 	p.Table = t
 	return p
 }
 
-func (p *QueryPlan) WithIndex(i engine.IndexEngine) *QueryPlan {
+func (p *QueryPlan) WithIndex(i engine.QueryableIndex) *QueryPlan {
 	p.Indexes = append(p.Indexes, i)
 	return p
 }
@@ -521,7 +521,7 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 // Find an index compatible with a given filter node. This includes composite indexes.
 // - index supports filter mode (EQ is ok, some cannot do LT/GT or IN style filters)
 // - single field and composite key indexes must start with the filter field
-func (p *QueryPlan) findIndex(node *FilterTreeNode) (engine.IndexEngine, bool) {
+func (p *QueryPlan) findIndex(node *FilterTreeNode) (engine.QueryableIndex, bool) {
 	for _, v := range p.Indexes {
 		if !v.CanMatch(node) {
 			continue

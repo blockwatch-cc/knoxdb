@@ -25,7 +25,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 
 	// obtain shared table lock
 	etx := engine.GetTransaction(ctx)
-	err := etx.RLock(ctx, t.tableId)
+	err := etx.RLock(ctx, t.id)
 	if err != nil {
 		return 0, err
 	}
@@ -68,7 +68,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 		// update indexes, note indexes may be hosted in different
 		// db files and engines, so store.Tx may not be relevant
 		for _, idx := range t.indexes {
-			idx.Add(ctx, prev, view.Bytes())
+			idx.(engine.IndexEngine).Add(ctx, prev, view.Bytes())
 		}
 
 		// process next message, if any
@@ -98,7 +98,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 
 	// obtain shared table lock
 	etx := engine.GetTransaction(ctx)
-	err := etx.RLock(ctx, t.tableId)
+	err := etx.RLock(ctx, t.id)
 	if err != nil {
 		return 0, err
 	}
@@ -134,7 +134,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 		// update indexes, note indexes may be hosted in different
 		// db files and engines, so store.Tx may not be relevant
 		for _, idx := range t.indexes {
-			idx.Add(ctx, prev, view.Bytes())
+			idx.(engine.IndexEngine).Add(ctx, prev, view.Bytes())
 		}
 
 		// process next message, if any

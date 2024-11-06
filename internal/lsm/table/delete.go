@@ -26,7 +26,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	}
 
 	// obtain shared table lock
-	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	err := engine.GetTransaction(ctx).RLock(ctx, t.id)
 	if err != nil {
 		return 0, err
 	}
@@ -76,7 +76,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 
 			// update indexes
 			for _, idx := range t.indexes {
-				idx.Del(ctx, prev)
+				idx.(engine.IndexEngine).Del(ctx, prev)
 			}
 		}
 
@@ -106,7 +106,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 
 			// update indexes
 			for _, idx := range t.indexes {
-				idx.Del(ctx, prev)
+				idx.(engine.IndexEngine).Del(ctx, prev)
 			}
 		}
 	default:
@@ -132,7 +132,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 
 			// update indexes
 			for _, idx := range t.indexes {
-				idx.Del(ctx, prev)
+				idx.(engine.IndexEngine).Del(ctx, prev)
 			}
 		}
 	}

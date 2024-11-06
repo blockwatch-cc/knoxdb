@@ -111,7 +111,7 @@ func (p *JoinPlan) WithOrder(o JoinOrder) *JoinPlan {
 	return p
 }
 
-func (p *JoinPlan) WithTables(l, r engine.TableEngine) *JoinPlan {
+func (p *JoinPlan) WithTables(l, r engine.QueryableTable) *JoinPlan {
 	p.Left.Table = l
 	p.Right.Table = r
 	return p
@@ -149,7 +149,7 @@ func (p *JoinPlan) WithOn(f1, f2 *schema.Field, mode FilterMode) *JoinPlan {
 }
 
 type JoinTable struct {
-	Table  engine.TableEngine
+	Table  engine.QueryableTable
 	Where  *FilterTreeNode // optional filter conditions for each table
 	Select *schema.Schema  // target output schema (fields from each table)
 	On     *schema.Field   // predicate

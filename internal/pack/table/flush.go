@@ -275,7 +275,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 					for i := 0; i < n; i++ {
 						prev, _ := pkg.ReadWire(ppos + i)
 						for _, idx := range t.indexes {
-							if err = idx.Del(ctx, prev); err != nil {
+							if err = idx.(engine.IndexEngine).Del(ctx, prev); err != nil {
 								return err
 							}
 						}
@@ -348,7 +348,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 						prev, _ := pkg.ReadWire(offs)
 						next, _ := jpack.ReadWire(key.Idx)
 						for _, idx := range t.indexes {
-							if err = idx.Add(ctx, prev, next); err != nil {
+							if err = idx.(engine.IndexEngine).Add(ctx, prev, next); err != nil {
 								return err
 							}
 						}
@@ -429,7 +429,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 					if len(t.indexes) > 0 {
 						next, _ := jpack.ReadWire(key.Idx)
 						for _, idx := range t.indexes {
-							if err = idx.Add(ctx, nil, next); err != nil {
+							if err = idx.(engine.IndexEngine).Add(ctx, nil, next); err != nil {
 								return err
 							}
 						}
@@ -506,7 +506,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 	// flush indexes
 	for _, idx := range t.indexes {
-		if err = idx.Sync(ctx); err != nil {
+		if err = idx.(engine.IndexEngine).Sync(ctx); err != nil {
 			return err
 		}
 	}

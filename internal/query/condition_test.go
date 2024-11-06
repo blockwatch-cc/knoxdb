@@ -5,29 +5,62 @@ package query
 
 import (
 	"testing"
+	"time"
 
-	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-var testSchema *schema.Schema
+var (
+	testSchema      *schema.Schema
+	testIndexSchema *schema.Schema
+)
 
 func init() {
-	testSchema = schema.NewSchema().
-		WithName("test").
-		WithField(schema.NewField(types.FieldTypeInt64).WithName("id").WithFlags(types.FieldFlagPrimary)).
-		WithField(schema.NewField(types.FieldTypeFloat64).WithName("score")).
-		WithField(schema.NewField(types.FieldTypeString).WithName("name")).
-		WithField(schema.NewField(types.FieldTypeDatetime).WithName("created")).
-		WithField(schema.NewField(types.FieldTypeUint16).WithName("status").WithFlags(types.FieldFlagEnum)).
-		WithField(schema.NewField(types.FieldTypeBoolean).WithName("is_active")).
-		Finalize()
+	var err error
+	testSchema, err = schema.SchemaOf(testStruct{})
+	if err != nil {
+		panic(err)
+	}
+	testIndexSchema, err = testSchema.SelectFields("name", "id")
+	if err != nil {
+		panic(err)
+	}
 
 	statusEnum := schema.NewEnumDictionary("status")
 	statusEnum.Append("active", "pending", "inactive")
 	testSchema.WithEnum(statusEnum)
+}
+
+type testStruct struct {
+	Id       uint64    `knox:"id,pk"`
+	Score    float64   `knox:"score"`
+	Name     string    `knox:"name,index=hash"`
+	Created  time.Time `knox:"created"`
+	Status   string    `knox:"status,enum"`
+	IsActive bool      `knox:"is_active"`
+}
+
+func makeTestStruct(id int) *testStruct {
+	return &testStruct{
+		Id:       uint64(id),
+		Score:    util.RandFloat64(),
+		Name:     util.RandString(4),
+		Created:  time.Now().UTC(),
+		Status:   "active",
+		IsActive: true,
+	}
+}
+
+func makeEncodedTestStruct(id int) []byte {
+	enc := schema.NewEncoder(testSchema)
+	buf, err := enc.Encode(makeTestStruct(id), nil)
+	if err != nil {
+		panic(err)
+	}
+	return buf
 }
 
 // Core Tests
@@ -49,10 +82,10 @@ func TestConditionParse(t *testing.T) {
 		wantErr  bool
 	}{
 		// Basic integer equality - verifies number parsing and type conversion
-		{"Equal Integer", "id", "123", Condition{Name: "id", Mode: FilterModeEqual, Value: int64(123)}, false},
+		{"Equal Integer", "id", "123", Condition{Name: "id", Mode: FilterModeEqual, Value: uint64(123)}, false},
 
 		// Hex integer equality - verifies number parsing and type conversion
-		{"Equal Integer", "id", "0xff", Condition{Name: "id", Mode: FilterModeEqual, Value: int64(255)}, false},
+		{"Equal Integer", "id", "0xff", Condition{Name: "id", Mode: FilterModeEqual, Value: uint64(255)}, false},
 
 		// Float comparison - tests decimal parsing and GT mode
 		{"Greater Than Float", "score.gt", "4.5", Condition{Name: "score", Mode: FilterModeGt, Value: 4.5}, false},

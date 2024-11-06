@@ -47,7 +47,7 @@ var (
 type Index struct {
 	engine     *engine.Engine      // engine access
 	schema     *schema.Schema      // table schema
-	indexId    uint64              // unique tagged name hash
+	id         uint64              // unique tagged name hash
 	opts       engine.IndexOptions // copy of config options
 	db         store.DB            // lower-level KV store (e.g. boltdb or badger)
 	key        []byte              // name of the data bucket
@@ -74,7 +74,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	// setup index
 	idx.engine = e
 	idx.schema = s
-	idx.indexId = s.TaggedHash(types.ObjectTagIndex)
+	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.key = []byte(name)
 	idx.metrics = engine.NewIndexMetrics(name)
@@ -135,7 +135,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	// setup index
 	idx.engine = e
 	idx.schema = s
-	idx.indexId = s.TaggedHash(types.ObjectTagIndex)
+	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.key = []byte(name)
 	idx.metrics = engine.NewIndexMetrics(name)
@@ -204,7 +204,7 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 	idx.engine = nil
 	idx.schema = nil
 	idx.table = nil
-	idx.indexId = 0
+	idx.id = 0
 	idx.key = nil
 	idx.noClose = false
 	idx.isZeroCopy = false
