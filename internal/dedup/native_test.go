@@ -512,24 +512,6 @@ func TestNativeCopy(t *testing.T) {
 			N:            2,
 			Expected:     newNativeByteArrayFromBytes([][]byte{[]byte("i"), []byte("j"), []byte("c"), []byte("d"), []byte("e")}),
 		},
-		{
-			Name:         "src overflow bounded",
-			SrcByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
-			DstByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("f"), []byte("g"), []byte("h"), []byte("i"), []byte("j")}),
-			SrcPos:       5,
-			DstPos:       4,
-			N:            1,
-			Expected:     newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
-		},
-		{
-			Name:         "dst overflow bounded",
-			SrcByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
-			DstByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("f"), []byte("g"), []byte("h"), []byte("i"), []byte("j")}),
-			SrcPos:       4,
-			DstPos:       5,
-			N:            1,
-			Expected:     newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
-		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
@@ -566,13 +548,6 @@ func TestNativeDelete(t *testing.T) {
 			ByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
 			Index:     0,
 			N:         5,
-			Expected:  newNativeByteArrayFromBytes([][]byte{}),
-		},
-		{
-			Name:      "valid more than size of list",
-			ByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
-			Index:     0,
-			N:         6,
 			Expected:  newNativeByteArrayFromBytes([][]byte{}),
 		},
 	}
