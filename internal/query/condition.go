@@ -21,13 +21,11 @@ type RangeValue [2]any
 
 // Condition represents a tree of user-defined query filters
 type Condition struct {
-	Name     string          // schema field name
-	Type     types.FieldType // schema field type
-	Index    uint16          // schema field id
-	Mode     FilterMode      // eq|ne|gt|ge|lt|le|in|ni|rg|re
-	Value    any             // typed value ([2]any for range)
-	OrKind   bool            // true to represent all children are ORed
-	Children []Condition     // child conditions
+	Name     string      // schema field name
+	Mode     FilterMode  // eq|ne|gt|ge|lt|le|in|ni|rg|re
+	Value    any         // typed value ([2]any for range)
+	OrKind   bool        // true to represent all children are ORed
+	Children []Condition // child conditions
 }
 
 func (c *Condition) Clear() {
@@ -48,6 +46,9 @@ func (c Condition) Fields() []string {
 		return nil
 	}
 	if c.IsLeaf() {
+		if c.Name == "" {
+			return nil
+		}
 		return []string{c.Name}
 	}
 	names := make([]string, 0)
@@ -74,15 +75,13 @@ func ParseCondition(key, val string, s *schema.Schema) (c Condition, err error) 
 		err = fmt.Errorf("unknown column %q", name)
 		return
 	}
-	c.Name = field.Name()
-	c.Type = field.Type()
-	c.Index = field.Id() - 1
 	c.Mode = types.ParseFilterMode(mode)
 	if !c.Mode.IsValid() {
 		err = fmt.Errorf("invalid filter mode '%s'", mode)
 		return
 	}
-	parser := schema.NewParser(c.Type, field.Scale(), field.Enum())
+	c.Name = field.Name()
+	parser := schema.NewParser(field.Type(), field.Scale(), field.Enum())
 	switch c.Mode {
 	case FilterModeRange:
 		v1, v2, ok := strings.Cut(val, ",")
@@ -148,16 +147,15 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 		if !ok {
 			return nil, fmt.Errorf("unknown column %q", c.Name)
 		}
-		c.Index = uint16(fid)
-		c.Type = field.Type()
+		typ := field.Type()
 
 		// Use matcher factory to generate matcher impl for type and mode
-		matcher := NewFactory(c.Type).New(c.Mode)
+		matcher := NewFactory(typ).New(c.Mode)
 
 		// Cast types of condition values since we allow external use.
 		// The wire format code path is safe because data encoding follows
 		// schema field types.
-		caster := schema.NewCaster(c.Type, field.Enum())
+		caster := schema.NewCaster(typ, field.Enum())
 
 		// init matcher impl from value(s)
 		var (
@@ -166,7 +164,7 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 		)
 		switch c.Mode {
 		case FilterModeIn, FilterModeNotIn:
-			switch BlockTypes[c.Type] {
+			switch BlockTypes[typ] {
 			case BlockFloat64, BlockFloat32, BlockBool, BlockInt128, BlockInt256:
 				// special case for unsupported IN/NI block types
 				// we rewrite IN -> OR(EQ) and NIN -> AND(NE) subtrees
@@ -185,14 +183,14 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 					if err != nil {
 						break
 					}
-					matcher := NewFactory(c.Type).New(mode)
+					matcher := NewFactory(typ).New(mode)
 					matcher.WithValue(val)
 					node.Children[i] = &FilterTreeNode{
 						Filter: &Filter{
 							Name:    c.Name,
-							Type:    BlockTypes[c.Type],
+							Type:    BlockTypes[typ],
 							Mode:    mode,
-							Index:   c.Index,
+							Index:   uint16(fid),
 							Value:   val,
 							Matcher: matcher,
 						},
@@ -237,9 +235,9 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 			node = &FilterTreeNode{
 				Filter: &Filter{
 					Name:    c.Name,
-					Type:    BlockTypes[c.Type],
+					Type:    BlockTypes[typ],
 					Mode:    c.Mode,
-					Index:   c.Index,
+					Index:   uint16(fid),
 					Value:   c.Value,
 					Matcher: matcher,
 				},
