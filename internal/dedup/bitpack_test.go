@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/stretchr/testify/assert"
 )
 
 const bitpackBufSize = 32768
@@ -39,10 +40,7 @@ func TestBitPack(t *testing.T) {
 			}
 			for k := 0; k < bitpackBufSize*8/i; k++ {
 				uval := unpack(buf, k, i)
-				if vals[k] != uval {
-					t.Errorf("Mismatch: %d, %08b -> %d, %08b", vals[k], vals[k], uval, uval)
-					t.FailNow()
-				}
+				assert.Equalf(t, vals[k], uval, "Mismatch: %d, %08b -> %d, %08b", vals[k], vals[k], uval, uval)
 			}
 		})
 	}
@@ -58,10 +56,7 @@ func TestBitPackMsb(t *testing.T) {
 			}
 			for k := 0; k < bitpackBufSize*8/i; k++ {
 				uval := unpack(buf, k, i)
-				if val != uval {
-					t.Errorf("Mismatch: %d, %08b -> %d, %08b", val, val, uval, uval)
-					t.FailNow()
-				}
+				assert.Equalf(t, val, uval, "Mismatch: %d, %08b -> %d, %08b", val, val, uval, uval)
 			}
 		})
 	}

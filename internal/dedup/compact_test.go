@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var _ io.Writer = (*FaultyWriter)(nil)
@@ -48,18 +50,15 @@ func TestCompactElem(t *testing.T) {
 	dup := makeDupmap(10)
 	c := makeCompactByteArray(10, 10, data, dup)
 
-	if got, expected := c.Len(), 10; got != expected {
-		t.Errorf("TestCompactElem: Len expected=%d but got=%d", expected, got)
-	}
-	if got, expected := c.Cap(), 10; got != expected {
-		t.Errorf("TestCompactElem: Cap expected=%d but got=%d", expected, got)
-	}
+	assert.Equalf(t, 10, c.Len(), "TestCompactElem: Len expected=%d but got=%d", 10, c.Len())
+	assert.Equalf(t, 10, c.Cap(), "TestCompactElem: Cap expected=%d but got=%d", 10, c.Len())
 	for i := range data {
+		assert.Equalf(t, data[i], c.Elem(i), "TestCompactElem: expected=%x to be same as got=%x", data[i], c.Len())
 		if got, expected := c.Elem(i), data[i]; !bytes.Equal(got, expected) {
-			t.Errorf("TestCompactElem: expected=%x to be same got=%x", expected, got)
 		}
 	}
 }
+
 func TestCompactWriteTo(t *testing.T) {
 	t.Run("With Empty Data", func(t *testing.T) {
 		data := util.RandByteSlices(0, 0)
@@ -68,14 +67,10 @@ func TestCompactWriteTo(t *testing.T) {
 
 		buf := bytes.NewBuffer(nil)
 		n, err := c.WriteTo(buf)
-		if err != nil {
-			t.Errorf("TestCompactWriteTo: writing to buffer should not fail")
-		}
+		require.NoError(t, err, "TestCompactWriteTo: writing to buffer should not fail")
 		// 1 format, 4 actual offset size, 4 compressed offset size, ** compressed offset data, 4 compressed size, ** compressed size data, 4 raw data size, 10 raw data
-		expectedSize := 1 + 4 + 4 + 0 + 4 + 0 + 4
-		if int64(expectedSize) != n {
-			t.Errorf("TestCompactWriteTo: data expected to write %d but wrote %d", expectedSize, n)
-		}
+		var expectedSize int64 = 1 + 4 + 4 + 0 + 4 + 0 + 4
+		assert.Equalf(t, expectedSize, n, "TestCompactWriteTo: data expected to write %d but wrote %d", expectedSize, n)
 	})
 
 	t.Run("With Data", func(t *testing.T) {
@@ -85,14 +80,10 @@ func TestCompactWriteTo(t *testing.T) {
 
 		buf := bytes.NewBuffer(nil)
 		n, err := c.WriteTo(buf)
-		if err != nil {
-			t.Errorf("TestCompactWriteTo: writing to buffer should not fail")
-		}
+		require.NoError(t, err, "TestCompactWriteTo: writing to buffer should not fail")
 
-		expectedSize := 139
-		if int64(expectedSize) != n {
-			t.Errorf("TestCompactWriteTo: data expected to write %d but wrote %d", expectedSize, n)
-		}
+		var expectedSize int64 = 139
+		assert.Equalf(t, expectedSize, n, "TestCompactWriteTo: data expected to write %d but wrote %d", expectedSize, n)
 	})
 
 	t.Run("With Large Data", func(t *testing.T) {
@@ -103,14 +94,10 @@ func TestCompactWriteTo(t *testing.T) {
 
 		buf := bytes.NewBuffer(nil)
 		n, err := c.WriteTo(buf)
-		if err != nil {
-			t.Errorf("TestCompactWriteTo: writing to buffer should not fail")
-		}
+		require.NoError(t, err, "TestCompactWriteTo: writing to buffer should not fail")
 
-		expectedSize := 100000043
-		if int64(expectedSize) != n {
-			t.Errorf("TestCompactWriteTo: data expected to write %d but wrote %d", expectedSize, n)
-		}
+		var expectedSize int64 = 100000043
+		assert.Equalf(t, expectedSize, n, "TestCompactWriteTo: data expected to write %d but wrote %d", expectedSize, n)
 	})
 
 	t.Run("Faulty Writer", func(t *testing.T) {
@@ -121,13 +108,9 @@ func TestCompactWriteTo(t *testing.T) {
 		failAfter := 5
 		buf := &FaultyWriter{failAfter: failAfter}
 		n, err := c.WriteTo(buf)
-		if err == nil {
-			t.Errorf("TestCompactWriteTo: writing to buffer should fail")
-		}
+		require.Errorf(t, err, "TestCompactWriteTo: writing to buffer should fail")
 
-		if int64(failAfter) != n {
-			t.Errorf("TestCompactWriteTo: data expected to write less than %d but wrote %d", failAfter, n)
-		}
+		assert.Equal(t, int64(failAfter), n, "TestCompactWriteTo: data expected to write less than %d but wrote %d", failAfter, n)
 	})
 }
 
@@ -178,19 +161,15 @@ func TestCompactReadFrom(t *testing.T) {
 			r := testCase.Reader
 			var b [1]byte
 			_, err := r.Read(b[:])
-			if !testCase.IsErrorExpected && err != nil {
-				t.Errorf("TestCompactReadFrom: %v", err)
+			if !testCase.IsErrorExpected {
+				require.NoErrorf(t, err, "TestCompactReadFrom: %v", err)
 			}
 
 			n, err := c.ReadFrom(testCase.Reader)
 			if testCase.IsErrorExpected {
-				if err == nil {
-					t.Errorf("TestCompactReadFrom: %v", err)
-				}
+				assert.Errorf(t, err, "TestCompactReadFrom: %v", err)
 			} else {
-				if n != int64(testCase.ReadSize) {
-					t.Errorf("TestCompactReadFrom: reader: %d expected: %d", n, testCase.ReadSize)
-				}
+				assert.Equalf(t, int64(testCase.ReadSize), n, "TestCompactReadFrom: reader: %d expected: %d", n, testCase.ReadSize)
 			}
 		})
 	}
@@ -198,9 +177,8 @@ func TestCompactReadFrom(t *testing.T) {
 
 func TestCompactUnsupported(t *testing.T) {
 	handler := func(name string) {
-		if err := recover(); err == nil {
-			t.Errorf("TestCompactUnsupported: unsupported member function %q didn't panic", name)
-		}
+		err := recover()
+		require.NotNilf(t, err, "TestCompactUnsupported: unsupported member function %q didn't panic", name)
 	}
 
 	c := makeCompactByteArray(0, 0, [][]byte{}, []int{})

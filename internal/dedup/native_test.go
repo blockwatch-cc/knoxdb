@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,16 +50,10 @@ func cloneData(b [][]byte) [][]byte {
 func TestNativeElem(t *testing.T) {
 	data := makeNumberedData(defaultMaxPointsPerBlock)
 	arr := newNativeByteArrayFromBytes(data)
-	if got, want := arr.Len(), defaultMaxPointsPerBlock; got != want {
-		t.Errorf("Len mismatch got=%d want=%d", got, want)
-	}
-	if got, want := arr.Cap(), defaultMaxPointsPerBlock; got != want {
-		t.Errorf("Cap mismatch got=%d want=%d", got, want)
-	}
+	assert.Equalf(t, defaultMaxPointsPerBlock, arr.Len(), "Len mismatch got=%d expected=%d", arr.Len(), defaultMaxPointsPerBlock)
+	assert.Equalf(t, defaultMaxPointsPerBlock, arr.Cap(), "Cap mismatch got=%d expected=%d", arr.Cap(), defaultMaxPointsPerBlock)
 	for i := range data {
-		if got, want := arr.Elem(i), data[i]; !bytes.Equal(got, want) {
-			t.Errorf("Elem %d mismatch got=%x want=%x", i, got, want)
-		}
+		assert.Equalf(t, data[i], arr.Elem(i), "Elem data[%d] mismatch got=%x expected=%x", i, arr.Elem(i), data[i])
 	}
 }
 
@@ -67,17 +62,11 @@ func TestNativeAppend(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			data := util.RandByteSlices(defaultMaxPointsPerBlock, nativeBufLen)
 			arr := newNativeByteArray(defaultMaxPointsPerBlock)
-			if got, want := arr.Len(), 0; got != want {
-				t.Errorf("Len mismatch got=%d want=%d", got, want)
-			}
-			if got, want := arr.Cap(), defaultMaxPointsPerBlock; got != want {
-				t.Errorf("Cap mismatch got=%d want=%d", got, want)
-			}
+			assert.Equalf(t, 0, arr.Len(), "Len mismatch got=%d expected=%d", arr.Len(), 0)
+			assert.Equalf(t, defaultMaxPointsPerBlock, arr.Cap(), "Cap mismatch got=%d expected=%d", arr.Cap(), defaultMaxPointsPerBlock)
 			for i := range data {
 				arr.Append(data[i])
-				if got, want := arr.Elem(i), data[i]; !bytes.Equal(got, want) {
-					t.Errorf("Elem %d mismatch got=%x want=%x", i, got, want)
-				}
+				assert.Equalf(t, data[i], arr.Elem(i), "Elem data[%d] mismatch got=%x expected=%x", i, arr.Elem(i), data[i])
 			}
 		})
 	}
@@ -88,17 +77,11 @@ func TestNativeAppendZero(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			data := util.RandByteSlices(defaultMaxPointsPerBlock, nativeBufLen)
 			arr := newNativeByteArray(defaultMaxPointsPerBlock)
-			if got, want := arr.Len(), 0; got != want {
-				t.Errorf("Len mismatch got=%d want=%d", got, want)
-			}
-			if got, want := arr.Cap(), defaultMaxPointsPerBlock; got != want {
-				t.Errorf("Cap mismatch got=%d want=%d", got, want)
-			}
+			assert.Equalf(t, 0, arr.Len(), "Len mismatch got=%d expected=%d", arr.Len(), 0)
+			assert.Equalf(t, defaultMaxPointsPerBlock, arr.Cap(), "Cap mismatch got=%d expected=%d", arr.Cap(), defaultMaxPointsPerBlock)
 			for i := range data {
 				arr.AppendZeroCopy(data[i])
-				if got, want := arr.Elem(i), data[i]; !bytes.Equal(got, want) {
-					t.Errorf("Elem %d mismatch got=%x want=%x", i, got, want)
-				}
+				assert.Equalf(t, data[i], arr.Elem(i), "Elem data[%d] mismatch got=%x expected=%x", i, arr.Elem(i), data[i])
 			}
 		})
 	}
@@ -110,14 +93,10 @@ func TestNativeAppendFrom(t *testing.T) {
 	src := newNativeByteArrayFromBytes(data)
 	dst := newNativeByteArray(defaultMaxPointsPerBlock)
 	dst.AppendFrom(src)
-	if got, want := dst.Len(), src.Len(); got != want {
-		t.Errorf("Len mismatch got=%d want=%d", got, want)
-	}
+	assert.Equalf(t, src.Len(), dst.Len(), "Len mismatch got=%d expected=%d", dst.Len(), src.Len())
 	src.Clear()
 	for i := range clone {
-		if got, want := dst.Elem(i), clone[i]; !bytes.Equal(got, want) {
-			t.Errorf("Elem %d mismatch got=%x want=%x", i, got, want)
-		}
+		assert.Equalf(t, clone[i], dst.Elem(i), "Elem data[%d] mismatch got=%x expected=%x", i, dst.Elem(i), data[i])
 	}
 }
 
@@ -403,19 +382,16 @@ func TestNativeReadFrom(t *testing.T) {
 			r := testCase.Reader
 			var b [1]byte
 			_, err := r.Read(b[:])
-			if !testCase.IsErrorExpected && err != nil {
-				t.Errorf("TestNativeReadFrom: %v", err)
+			if !testCase.IsErrorExpected {
+				assert.NoError(t, err, "TestNativeReadFrom: %v", err)
 			}
 
 			n, err := c.ReadFrom(testCase.Reader)
 			if testCase.IsErrorExpected {
-				if err == nil {
-					t.Errorf("TestNativeReadFrom: %v", err)
-				}
+				assert.Errorf(t, err, "TestNativeReadFrom: %v", err)
 			} else {
-				if n != int64(testCase.ReadSize) {
-					t.Errorf("TestNativeReadFrom: reader: %d expected: %d", n, testCase.ReadSize)
-				}
+				assert.NoError(t, err)
+				assert.Equalf(t, int64(testCase.ReadSize), n, "TestNativeReadFrom: reader: %d expected: %d", n, testCase.ReadSize)
 			}
 		})
 	}
@@ -427,14 +403,10 @@ func TestNativeWriteTo(t *testing.T) {
 
 		buf := bytes.NewBuffer(nil)
 		n, err := b.WriteTo(buf)
-		if err != nil {
-			t.Errorf("TestNativeWriteTo: writing to buffer should not fail")
-		}
+		require.NoError(t, err, "TestNativeWriteTo: writing to buffer should not fail")
 		// 1 format, 4 elements size, ** elements data
-		expectedSize := 1 + 4
-		if int64(expectedSize) != n {
-			t.Errorf("TestNativeWriteTo: data expected to write %d but wrote %d", expectedSize, n)
-		}
+		var expectedSize int64 = 1 + 4
+		assert.Equalf(t, expectedSize, n, "TestNativeWriteTo: data expected to write %d but wrote %d", expectedSize, n)
 	})
 
 	t.Run("With Data", func(t *testing.T) {
@@ -443,14 +415,10 @@ func TestNativeWriteTo(t *testing.T) {
 
 		buf := bytes.NewBuffer(nil)
 		n, err := b.WriteTo(buf)
-		if err != nil {
-			t.Errorf("TestNativeWriteTo: writing to buffer should not fail")
-		}
+		require.NoError(t, err, "TestNativeWriteTo: writing to buffer should not fail")
 
-		expectedSize := 5 + len(data)*12 // 4 len, 8 item size
-		if int64(expectedSize) != n {
-			t.Errorf("TestNativeWriteTo: data expected to write %d but wrote %d", expectedSize, n)
-		}
+		var expectedSize int64 = int64(5 + len(data)*12) // 4 len, 8 item size
+		assert.Equalf(t, expectedSize, n, "TestNativeWriteTo: data expected to write %d but wrote %d", expectedSize, n)
 	})
 
 	t.Run("With Large Data", func(t *testing.T) {
@@ -459,14 +427,10 @@ func TestNativeWriteTo(t *testing.T) {
 
 		buf := bytes.NewBuffer(nil)
 		n, err := b.WriteTo(buf)
-		if err != nil {
-			t.Errorf("TestNativeWriteTo: writing to buffer should not fail")
-		}
+		require.NoError(t, err, "TestNativeWriteTo: writing to buffer should not fail")
 
-		expectedSize := 5 + len(data)*12 // 4 len, 8 item size
-		if int64(expectedSize) != n {
-			t.Errorf("TestNativeWriteTo: data expected to write %d but wrote %d", expectedSize, n)
-		}
+		var expectedSize int64 = int64(5 + len(data)*12) // 4 len, 8 item size
+		assert.Equalf(t, expectedSize, n, "TestNativeWriteTo: data expected to write %d but wrote %d", expectedSize, n)
 	})
 
 	t.Run("Faulty Writer", func(t *testing.T) {
@@ -476,13 +440,9 @@ func TestNativeWriteTo(t *testing.T) {
 		failAfter := 5
 		buf := &FaultyWriter{failAfter: failAfter}
 		n, err := b.WriteTo(buf)
-		if err == nil {
-			t.Errorf("TestNativeWriteTo: writing to buffer should fail")
-		}
+		assert.Error(t, err, "TestNativeWriteTo: writing to buffer should fail")
 
-		if int64(failAfter) != n {
-			t.Errorf("TestNativeWriteTo: data expected to write less than %d but wrote %d", failAfter, n)
-		}
+		assert.Equalf(t, int64(failAfter), n, "TestNativeWriteTo: data expected to write less than %d but wrote %d", failAfter, n)
 	})
 }
 

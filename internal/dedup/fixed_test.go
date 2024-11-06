@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,17 +93,14 @@ func TestFixedElem(t *testing.T) {
 	data := util.RandByteSlices(10, 10)
 	f := makeFixedByteArray(10, data)
 	for i := range data {
-		if got, expected := f.Elem(i), data[i]; !bytes.Equal(got, expected) {
-			t.Errorf("TestFixedElem: expected=%x to be same got=%x", expected, got)
-		}
+		assert.Equalf(t, data[i], f.Elem(i), "TestFixedElem: expected=%x to be same got=%x", data[i], f.Elem(i))
 	}
 }
 
 func TestFixedUnsupported(t *testing.T) {
 	handler := func(name string) {
-		if err := recover(); err == nil {
-			t.Errorf("TestFixedUnsupported: unsupported member function %q didn't panic", name)
-		}
+		err := recover()
+		require.NotNilf(t, err, "TestFixedUnsupported: unsupported member function %q didn't panic", name)
 	}
 
 	f := makeFixedByteArray(0, [][]byte{})

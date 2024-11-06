@@ -2,11 +2,12 @@ package dedup
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func makeDictByteArrayReader(sz int) (io.Reader, ByteArray) {
@@ -24,16 +25,11 @@ func TestDictElem(t *testing.T) {
 	dup := makeDupmap(10)
 	d := makeDictByteArray(10, 10, data, dup)
 
-	if got, expected := d.Len(), 10; got != expected {
-		t.Errorf("TestDictElem: Len expected=%d but got=%d", expected, got)
-	}
-	if got, expected := d.Cap(), 12; got != expected {
-		t.Errorf("TestDictElem: Cap expected=%d but got=%d", expected, got)
-	}
+	assert.Equalf(t, 10, d.Len(), "TestDictElem: Len expected=%d but got=%d", 10, d.Len())
+	assert.Equalf(t, 12, d.Cap(), "TestDictElem: Cap expected=%d but got=%d", 12, d.Cap())
+
 	for i := range data {
-		if got, expected := d.Elem(i), data[i]; !bytes.Equal(got, expected) {
-			t.Errorf("TestDictElem: expected=%x to be same got=%x", expected, got)
-		}
+		assert.Equalf(t, data[i], d.Elem(i), "TestDictElem: expected=%x to be same as got=%x", data[i], d.Elem(i))
 	}
 }
 
@@ -42,46 +38,22 @@ func TestDictClear(t *testing.T) {
 	dup := makeDupmap(10)
 	d := makeDictByteArray(10, 10, data, dup)
 
-	if len(d.dict) == 0 {
-		t.Errorf("TestDictClear: dict parameter should not be %d", len(d.dict))
-	}
-	if len(d.offs) == 0 {
-		t.Errorf("TestDictClear: offs parameter should not be %d", len(d.offs))
-	}
-	if len(d.size) == 0 {
-		t.Errorf("TestDictClear: size parameter should not be %d", len(d.size))
-	}
-	if len(d.ptr) == 0 {
-		t.Errorf("TestDictClear: ptr parameter should not be %d", len(d.ptr))
-	}
-	if d.log2 == 0 {
-		t.Errorf("TestDictClear: log2 parameter should not be %d", d.log2)
-	}
-	if d.n == 0 {
-		t.Errorf("TestDictClear: n parameter should not be %d", d.n)
-	}
+	assert.NotZerof(t, len(d.dict), "TestDictClear: dict parameter should not be %d", len(d.dict))
+	assert.NotZerof(t, len(d.offs), "TestDictClear: offs parameter should not be %d", len(d.offs))
+	assert.NotZerof(t, len(d.size), "TestDictClear: size parameter should not be %d", len(d.size))
+	assert.NotZerof(t, len(d.ptr), "TestDictClear: ptr parameter should not be %d", len(d.ptr))
+	assert.NotZerof(t, d.log2, "TestDictClear: log2 parameter should not be %d", d.log2)
+	assert.NotZerof(t, d.n, "TestDictClear: n parameter should not be %d", d.n)
 
 	// clear DictByteArray
 	d.Clear()
 
-	if len(d.dict) != 0 {
-		t.Errorf("TestDictClear: dict parameter should be 0, got: %d", len(d.dict))
-	}
-	if len(d.offs) != 0 {
-		t.Errorf("TestDictClear: offs parameter should be 0, got: %d", len(d.offs))
-	}
-	if len(d.size) != 0 {
-		t.Errorf("TestDictClear: size parameter should be 0, got: %d", len(d.size))
-	}
-	if len(d.ptr) != 0 {
-		t.Errorf("TestDictClear: ptr parameter should be 0, got: %d", len(d.ptr))
-	}
-	if d.log2 != 0 {
-		t.Errorf("TestDictClear: log2 parameter should be 0, got: %d", d.log2)
-	}
-	if d.n != 0 {
-		t.Errorf("TestDictClear: n parameter should be 0, got: %d", d.n)
-	}
+	assert.Zerof(t, len(d.dict), "TestDictClear: dict parameter should not be %d", len(d.dict))
+	assert.Zerof(t, len(d.offs), "TestDictClear: offs parameter should not be %d", len(d.offs))
+	assert.Zerof(t, len(d.size), "TestDictClear: size parameter should not be %d", len(d.size))
+	assert.Zerof(t, len(d.ptr), "TestDictClear: ptr parameter should not be %d", len(d.ptr))
+	assert.Zerof(t, d.log2, "TestDictClear: log2 parameter should not be %d", d.log2)
+	assert.Zerof(t, d.n, "TestDictClear: n parameter should not be %d", d.n)
 }
 
 func TestDictRelease(t *testing.T) {
@@ -89,47 +61,28 @@ func TestDictRelease(t *testing.T) {
 	dup := makeDupmap(10)
 	d := makeDictByteArray(10, 10, data, dup)
 
-	if len(d.dict) == 0 {
-		t.Errorf("TestDictRelease: dict parameter should not be %d", len(d.dict))
-	}
-	if len(d.offs) == 0 {
-		t.Errorf("TestDictRelease: offs parameter should not be %d", len(d.offs))
-	}
-	if len(d.size) == 0 {
-		t.Errorf("TestDictRelease: size parameter should not be %d", len(d.size))
-	}
-	if len(d.ptr) == 0 {
-		t.Errorf("TestDictRelease: ptr parameter should not be %d", len(d.ptr))
-	}
-	if d.log2 == 0 {
-		t.Errorf("TestDictRelease: log2 parameter should not be %d", d.log2)
-	}
-	if d.n == 0 {
-		t.Errorf("TestDictRelease: n parameter should not be %d", d.n)
-	}
+	assert.NotZerof(t, len(d.dict), "TestDictRelease: dict parameter should not be %d", len(d.dict))
+	assert.NotZerof(t, len(d.offs), "TestDictRelease: offs parameter should not be %d", len(d.offs))
+	assert.NotZerof(t, len(d.size), "TestDictRelease: size parameter should not be %d", len(d.size))
+	assert.NotZerof(t, len(d.ptr), "TestDictRelease: ptr parameter should not be %d", len(d.ptr))
+	assert.NotZerof(t, d.log2, "TestDictRelease: log2 parameter should not be %d", d.log2)
+	assert.NotZerof(t, d.n, "TestDictRelease: n parameter should not be %d", d.n)
 
 	// release DictByteArray
 	d.Release()
 
-	if d.dict != nil {
-		t.Errorf("TestDictRelease: dict parameter should be nil, got: %v", d.dict)
-	}
-	if d.offs != nil {
-		t.Errorf("TestDictRelease: offs parameter should be nil, got: %v", d.offs)
-	}
-	if d.size != nil {
-		t.Errorf("TestDictRelease: size parameter should be nil, got: %v", d.size)
-	}
-	if d.ptr != nil {
-		t.Errorf("TestDictRelease: ptr parameter should be nil, got: %v", d.ptr)
-	}
+	assert.Zerof(t, len(d.dict), "TestDictRelease: dict parameter should not be %d", len(d.dict))
+	assert.Zerof(t, len(d.offs), "TestDictRelease: offs parameter should not be %d", len(d.offs))
+	assert.Zerof(t, len(d.size), "TestDictRelease: size parameter should not be %d", len(d.size))
+	assert.Zerof(t, len(d.ptr), "TestDictRelease: ptr parameter should not be %d", len(d.ptr))
+	assert.Zerof(t, d.log2, "TestDictRelease: log2 parameter should not be %d", d.log2)
+	assert.Zerof(t, d.n, "TestDictRelease: n parameter should not be %d", d.n)
 }
 
 func TestDictUnsupported(t *testing.T) {
 	handler := func(name string) {
-		if err := recover(); err == nil {
-			t.Errorf("TestDictUnsupported: unsupported member function %q didn't panic", name)
-		}
+		err := recover()
+		require.NotNilf(t, err, "TestDictUnsupported: unsupported member function %q didn't panic", name)
 	}
 
 	d := makeDictByteArray(0, 0, [][]byte{}, []int{})
@@ -195,14 +148,10 @@ func TestDictWriteTo(t *testing.T) {
 
 		buf := bytes.NewBuffer(nil)
 		n, err := d.WriteTo(buf)
-		if err != nil {
-			t.Errorf("TestDictWriteTo: writing to buffer should not fail")
-		}
+		require.NoError(t, err, "TestDictWriteTo: writing to buffer should not fail")
 		// 1 format, 4 len elements, 1 log2, 4 dict len elements offset size, 4 compressed offset size, ** compressed offset data, 4 dict size, ** dict data, 4 ptr size, ** ptr data (1)
 		expectedSize := 1 + 4 + 1 + 4 + 4 + 0 + 4 + 0 + 4 + 1
-		if int64(expectedSize) != n {
-			t.Errorf("TestDictWriteTo: data expected to write %d but wrote %d", expectedSize, n)
-		}
+		assert.Equal(t, int64(expectedSize), n, "TestDictWriteTo: data expected to write %d but wrote %d", expectedSize, n)
 	})
 
 	t.Run("With Data", func(t *testing.T) {
@@ -212,14 +161,10 @@ func TestDictWriteTo(t *testing.T) {
 
 		buf := bytes.NewBuffer(nil)
 		n, err := d.WriteTo(buf)
-		if err != nil {
-			t.Errorf("TestDictWriteTo: writing to buffer should not fail")
-		}
+		require.NoError(t, err, "TestDictWriteTo: writing to buffer should not fail")
 
-		expectedSize := 139
-		if int64(expectedSize) != n {
-			t.Errorf("TestDictWriteTo: data expected to write %d but wrote %d", expectedSize, n)
-		}
+		var expectedSize int64 = 139
+		assert.Equalf(t, expectedSize, n, "TestDictWriteTo: data expected to write %d but wrote %d", expectedSize, n)
 	})
 
 	t.Run("With Large Data", func(t *testing.T) {
@@ -230,14 +175,10 @@ func TestDictWriteTo(t *testing.T) {
 
 		buf := bytes.NewBuffer(nil)
 		n, err := d.WriteTo(buf)
-		if err != nil {
-			t.Errorf("TestDictWriteTo: writing to buffer should not fail")
-		}
+		require.NoError(t, err, "TestDictWriteTo: writing to buffer should not fail")
 
-		expectedSize := 100017537
-		if int64(expectedSize) != n {
-			t.Errorf("TestDictWriteTo: data expected to write %d but wrote %d", expectedSize, n)
-		}
+		var expectedSize int64 = 100017537
+		assert.Equalf(t, expectedSize, n, "TestDictWriteTo: data expected to write %d but wrote %d", expectedSize, n)
 	})
 
 	t.Run("Faulty Writer", func(t *testing.T) {
@@ -248,14 +189,8 @@ func TestDictWriteTo(t *testing.T) {
 		failAfter := 6
 		buf := &FaultyWriter{failAfter: failAfter}
 		z, err := d.WriteTo(buf)
-		if err == nil {
-			t.Errorf("TestDictWriteTo: writing to buffer should fail")
-		}
-
-		fmt.Println("faultyWriteTo - ", z, err)
-		if int64(failAfter) != z {
-			t.Errorf("TestDictWriteTo: data expected to write greater than or equal to %d but wrote %d", failAfter, z)
-		}
+		require.Error(t, err, "TestDictWriteTo: writing to buffer should not fail")
+		assert.Equalf(t, int64(failAfter), z, "TestDictWriteTo: data expected to write greater than or equal to %d but wrote %d", failAfter, z)
 	})
 }
 
@@ -304,19 +239,18 @@ func TestDictReadFrom(t *testing.T) {
 			r := testCase.Reader
 			var b [1]byte
 			_, err := r.Read(b[:])
-			if !testCase.IsErrorExpected && err != nil {
-				t.Errorf("TestDictReadFrom: %v", err)
+			if !testCase.IsErrorExpected {
+				require.NoErrorf(t, err, "TestDictReadFrom: %v", err)
 			}
 
 			n, err := d.ReadFrom(testCase.Reader)
 			if testCase.IsErrorExpected {
 				if err == nil {
-					t.Errorf("TestDictReadFrom: %v", err)
+					assert.Errorf(t, err, "TestDictReadFrom: %v", err)
+
 				}
 			} else {
-				if n != int64(testCase.ReadSize) {
-					t.Errorf("TestDictReadFrom: reader: %d expected: %d", n, testCase.ReadSize)
-				}
+				assert.Equalf(t, int64(testCase.ReadSize), n, "TestDictReadFrom: reader: %d expected: %d", n, testCase.ReadSize)
 			}
 		})
 	}
