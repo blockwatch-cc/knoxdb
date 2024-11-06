@@ -224,8 +224,6 @@ func TestNativeSetZeroCopy(t *testing.T) {
 }
 
 func TestNativeInsert(t *testing.T) {
-	data := [][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}
-	nativeByteArray := newNativeByteArrayFromBytes(data)
 	testCases := []struct {
 		Index    int
 		CValue   []byte
@@ -266,6 +264,9 @@ func TestNativeInsert(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Insert Index=%d with %q", tc.Index, tc.Value), func(t *testing.T) {
+			data := [][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}
+			nativeByteArray := newNativeByteArrayFromBytes(data)
+
 			require.Equal(t, tc.CValue, nativeByteArray.Elem(tc.Index))
 			nativeByteArray.Insert(tc.Index, tc.Value)
 			require.Equal(t, tc.Expected, nativeByteArray.Elem(tc.Index))
@@ -274,8 +275,6 @@ func TestNativeInsert(t *testing.T) {
 }
 
 func TestNativeInsertFrom(t *testing.T) {
-	data := [][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}
-	nativeByteArray := newNativeByteArrayFromBytes(data)
 	testCases := []struct {
 		Index    int
 		CValue   []byte
@@ -316,6 +315,9 @@ func TestNativeInsertFrom(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("InsertFrom Index=%d with %v", tc.Index, tc.Value.Slice()), func(t *testing.T) {
+			data := [][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}
+			nativeByteArray := newNativeByteArrayFromBytes(data)
+
 			require.Equal(t, tc.CValue, nativeByteArray.Elem(tc.Index))
 			nativeByteArray.InsertFrom(tc.Index, tc.Value)
 			require.Equal(t, tc.Expected, nativeByteArray.Elem(tc.Index))
