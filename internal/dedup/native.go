@@ -203,16 +203,30 @@ func (a NativeByteArray) HeapSize() int {
 }
 
 func (a NativeByteArray) WriteTo(w io.Writer) (int64, error) {
-	w.Write([]byte{bytesNativeFormat << 4})
-	count := 1
-	binary.Write(w, binary.LittleEndian, uint32(len(a.bufs)))
+	var count int64
+	n, err := w.Write([]byte{bytesNativeFormat << 4})
+	count += int64(n)
+	if err != nil {
+		return count, err
+	}
+	err = binary.Write(w, binary.LittleEndian, uint32(len(a.bufs)))
+	if err != nil {
+		return count, err
+	}
 	count += 4
 	for i := range a.bufs {
-		binary.Write(w, binary.LittleEndian, uint32(len(a.bufs[i])))
-		w.Write(a.bufs[i])
-		count += 4 + len(a.bufs[i])
+		err = binary.Write(w, binary.LittleEndian, uint32(len(a.bufs[i])))
+		if err != nil {
+			return count, err
+		}
+		count += 4
+		n, err := w.Write(a.bufs[i])
+		count += int64(n)
+		if err != nil {
+			return count, err
+		}
 	}
-	return int64(count), nil
+	return count, nil
 }
 
 func (a *NativeByteArray) ReadFrom(r io.Reader) (int64, error) {
@@ -243,6 +257,7 @@ func (a *NativeByteArray) ReadFrom(r io.Reader) (int64, error) {
 			}
 			return c, fmt.Errorf("native: reading element len: %w", err)
 		}
+		c += 4
 		// alloc or dimension element slice
 		if cap(a.bufs[j]) < int(l) {
 			a.bufs[j] = make([]byte, int(l))
