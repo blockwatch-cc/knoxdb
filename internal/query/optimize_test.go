@@ -26,116 +26,116 @@ func TestOptimize(t *testing.T) {
 	}{
 		{
 			name: "SimpleReorder",
-			input: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(0), int64(100)),
-				newTestNode(FilterModeEqual, 1, int64(50)),
+			input: makeAndTree(
+				makeRangeNode(0, 100),
+				makeEqualNode(50),
 			),
-			expected: newTestTree(COND_AND,
-				newTestNode(FilterModeEqual, 1, int64(50)),
+			expected: makeAndTree(
+				makeEqualNode(50),
 			),
 			comment: "Optimized away the unnecessary range condition",
 		},
 		{
 			name: "MergeInGaps",
-			input: newTestTree(COND_OR,
-				newTestNode(FilterModeIn, 1, []int64{1, 2, 3}),
-				newTestNode(FilterModeEqual, 1, int64(4)),
-				newTestNode(FilterModeIn, 1, []int64{5, 6, 7}),
+			input: makeOrTree(
+				makeInNode(1, 2, 3),
+				makeEqualNode(4),
+				makeInNode(5, 6, 7),
 			),
-			expected: newTestTree(COND_OR,
-				newTestNode(FilterModeIn, 1, []int64{1, 2, 3, 4, 5, 6, 7}),
+			expected: makeOrTree(
+				makeInNode(1, 2, 3, 4, 5, 6, 7),
 			),
 			comment: "Adjacent IN conditions should be merged with gap-filling equals",
 		},
 		{
 			name: "MergeRanges",
-			input: newTestTree(COND_AND,
-				newTestNode(FilterModeGt, 1, int64(10)),
-				newTestNode(FilterModeLt, 1, int64(90)),
-				newTestNode(FilterModeGe, 1, int64(20)),
-				newTestNode(FilterModeLe, 1, int64(80)),
-				newTestRangeNode(1, int64(30), int64(70)),
+			input: makeAndTree(
+				makeGtNode(10),
+				makeLtNode(90),
+				makeGeNode(20),
+				makeLeNode(80),
+				makeRangeNode(30, 70),
 			),
-			expected: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(30), int64(70)),
+			expected: makeAndTree(
+				makeRangeNode(30, 70),
 			),
 			comment: "Multiple overlapping ranges should be merged into most restrictive form",
 		},
 		{
 			name: "RangeOrOverlap",
-			input: newTestTree(COND_OR,
-				newTestRangeNode(1, int64(0), int64(15)),
-				newTestRangeNode(1, int64(10), int64(30)),
+			input: makeOrTree(
+				makeRangeNode(0, 15),
+				makeRangeNode(10, 30),
 			),
-			expected: newTestTree(COND_OR,
-				newTestRangeNode(1, int64(0), int64(30)),
+			expected: makeOrTree(
+				makeRangeNode(0, 30),
 			),
 			comment: "Non-overlapping ranges in OR should not be merged",
 		},
 		{
 			name: "RangeOrNoOverlap",
-			input: newTestTree(COND_OR,
-				newTestRangeNode(1, int64(0), int64(10)),
-				newTestRangeNode(1, int64(20), int64(30)),
+			input: makeOrTree(
+				makeRangeNode(0, 10),
+				makeRangeNode(20, 30),
 			),
-			expected: newTestTree(COND_OR,
-				newTestRangeNode(1, int64(0), int64(10)),
-				newTestRangeNode(1, int64(20), int64(30)),
+			expected: makeOrTree(
+				makeRangeNode(0, 10),
+				makeRangeNode(20, 30),
 			),
 			comment: "Non-overlapping ranges in OR should not be merged",
 		},
 		{
 			name: "TypeBoundsGtLt",
-			input: newTestTree(COND_AND,
-				newTestNode(FilterModeGt, 1, int64(0)),
-				newTestNode(FilterModeLt, 1, int64(100)),
+			input: makeAndTree(
+				makeGtNode(0),
+				makeLtNode(100),
 			),
-			expected: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(1), int64(99)),
+			expected: makeAndTree(
+				makeRangeNode(1, 99),
 			),
 			comment: "Boundary conditions should be handled correctly",
 		},
 		{
 			name: "TypeBoundsGeLe",
-			input: newTestTree(COND_AND,
-				newTestNode(FilterModeGe, 1, int64(0)),
-				newTestNode(FilterModeLe, 1, int64(100)),
+			input: makeAndTree(
+				makeGeNode(0),
+				makeLeNode(100),
 			),
-			expected: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(0), int64(100)),
+			expected: makeAndTree(
+				makeRangeNode(0, 100),
 			),
 			comment: "Boundary conditions should be handled correctly",
 		},
 		{
 			name: "RangeNotEqual",
-			input: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(0), int64(100)),
-				newTestNode(FilterModeNotEqual, 1, int64(50)),
+			input: makeAndTree(
+				makeRangeNode(0, 100),
+				makeNotEqualNode(50),
 			),
-			expected: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(0), int64(100)),
-				newTestNode(FilterModeNotEqual, 1, int64(50)),
+			expected: makeAndTree(
+				makeRangeNode(0, 100),
+				makeNotEqualNode(50),
 			),
 			comment: "NOT conditions should not affect range merging",
 		},
 		{
 			name: "EqualAndGt",
-			input: newTestTree(COND_AND,
-				newTestNode(FilterModeEqual, 1, int64(42)),
-				newTestNode(FilterModeGt, 1, int64(41)),
+			input: makeAndTree(
+				makeEqualNode(42),
+				makeGtNode(41),
 			),
-			expected: newTestTree(COND_AND,
-				newTestNode(FilterModeEqual, 1, int64(42)),
+			expected: makeAndTree(
+				makeEqualNode(42),
 			),
 			comment: "EQ and GT should be simplified",
 		},
 		{
 			name: "RegexpRange",
-			input: newTestTree(COND_AND,
+			input: makeAndTree(
 				newTestRangeNode(1, "a", "z"),
 				newTestNode(FilterModeRegexp, 1, "^[a-m]+$"),
 			),
-			expected: newTestTree(COND_AND,
+			expected: makeAndTree(
 				newTestRangeNode(1, "a", "z"),
 				newTestNode(FilterModeRegexp, 1, "^[a-m]+$"),
 			),
@@ -144,18 +144,13 @@ func TestOptimize(t *testing.T) {
 		// TODO: always true condition, needs to be supported
 		{
 			name: "TautologyOne",
-			input: newTestTree(COND_OR,
-				newTestRangeNode(1, int64(0), int64(100)),
-				newTestNode(FilterModeNotEqual, 1, int64(50)),
-				newTestRangeNode(1, int64(40), int64(60)),
+			input: makeOrTree(
+				makeRangeNode(0, 100),
+				makeNotEqualNode(50),
+				makeRangeNode(40, 60),
 			),
-			expected: newTestTree(COND_OR),
-			// newTestRangeNode(1, int64(0), int64(49)),
-			// newTestRangeNode(1, int64(51), int64(100)),
-			// newTestRangeNode(1, int64(40), int64(49)),
-			// newTestRangeNode(1, int64(51), int64(60)),
-
-			comment: "Range splits should handle multiple overlapping conditions",
+			expected: makeOrTree(),
+			comment:  "Range splits should handle multiple overlapping conditions",
 		},
 	}
 
