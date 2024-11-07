@@ -25,135 +25,69 @@ func TestOptimize(t *testing.T) {
 		comment  string
 	}{
 		{
-			name: "SimpleReorder",
-			input: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(0), int64(100)),
-				newTestNode(FilterModeEqual, 1, int64(50)),
-			),
-			expected: newTestTree(COND_AND,
-				newTestNode(FilterModeEqual, 1, int64(50)),
-			),
-			comment: "Optimized away the unnecessary range condition",
+			name:     "SimpleReorder",
+			input:    makeAndTree(makeRangeNode(0, 100), makeEqualNode(50)),
+			expected: makeAndTree(makeEqualNode(50)),
+			comment:  "Optimized away the unnecessary range condition",
 		},
 		{
-			name: "MergeInGaps",
-			input: newTestTree(COND_OR,
-				newTestNode(FilterModeIn, 1, []int64{1, 2, 3}),
-				newTestNode(FilterModeEqual, 1, int64(4)),
-				newTestNode(FilterModeIn, 1, []int64{5, 6, 7}),
-			),
-			expected: newTestTree(COND_OR,
-				newTestNode(FilterModeIn, 1, []int64{1, 2, 3, 4, 5, 6, 7}),
-			),
-			comment: "Adjacent IN conditions should be merged with gap-filling equals",
+			name:     "MergeInGaps",
+			input:    makeOrTree(makeInNode(1, 2, 3), makeEqualNode(4), makeInNode(5, 6, 7)),
+			expected: makeOrTree(makeInNode(1, 2, 3, 4, 5, 6, 7)),
+			comment:  "Adjacent IN conditions should be merged with gap-filling equals",
 		},
 		{
-			name: "MergeRanges",
-			input: newTestTree(COND_AND,
-				newTestNode(FilterModeGt, 1, int64(10)),
-				newTestNode(FilterModeLt, 1, int64(90)),
-				newTestNode(FilterModeGe, 1, int64(20)),
-				newTestNode(FilterModeLe, 1, int64(80)),
-				newTestRangeNode(1, int64(30), int64(70)),
-			),
-			expected: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(30), int64(70)),
-			),
-			comment: "Multiple overlapping ranges should be merged into most restrictive form",
+			name:     "MergeRanges",
+			input:    makeAndTree(makeGtNode(10), makeLtNode(90), makeGeNode(20), makeLeNode(80), makeRangeNode(30, 70)),
+			expected: makeAndTree(makeRangeNode(30, 70)),
+			comment:  "Multiple overlapping ranges should be merged into most restrictive form",
 		},
 		{
-			name: "RangeOrOverlap",
-			input: newTestTree(COND_OR,
-				newTestRangeNode(1, int64(0), int64(15)),
-				newTestRangeNode(1, int64(10), int64(30)),
-			),
-			expected: newTestTree(COND_OR,
-				newTestRangeNode(1, int64(0), int64(30)),
-			),
-			comment: "Non-overlapping ranges in OR should not be merged",
+			name:     "RangeOrOverlap",
+			input:    makeOrTree(makeRangeNode(0, 15), makeRangeNode(10, 30)),
+			expected: makeOrTree(makeRangeNode(0, 30)),
+			comment:  "Non-overlapping ranges in OR should not be merged",
 		},
 		{
-			name: "RangeOrNoOverlap",
-			input: newTestTree(COND_OR,
-				newTestRangeNode(1, int64(0), int64(10)),
-				newTestRangeNode(1, int64(20), int64(30)),
-			),
-			expected: newTestTree(COND_OR,
-				newTestRangeNode(1, int64(0), int64(10)),
-				newTestRangeNode(1, int64(20), int64(30)),
-			),
-			comment: "Non-overlapping ranges in OR should not be merged",
+			name:     "RangeOrNoOverlap",
+			input:    makeOrTree(makeRangeNode(0, 10), makeRangeNode(20, 30)),
+			expected: makeOrTree(makeRangeNode(0, 10), makeRangeNode(20, 30)),
+			comment:  "Non-overlapping ranges in OR should not be merged",
 		},
 		{
-			name: "TypeBoundsGtLt",
-			input: newTestTree(COND_AND,
-				newTestNode(FilterModeGt, 1, int64(0)),
-				newTestNode(FilterModeLt, 1, int64(100)),
-			),
-			expected: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(1), int64(99)),
-			),
-			comment: "Boundary conditions should be handled correctly",
+			name:     "TypeBoundsGtLt",
+			input:    makeAndTree(makeGtNode(0), makeLtNode(100)),
+			expected: makeAndTree(makeRangeNode(1, 99)),
+			comment:  "Boundary conditions should be handled correctly",
 		},
 		{
-			name: "TypeBoundsGeLe",
-			input: newTestTree(COND_AND,
-				newTestNode(FilterModeGe, 1, int64(0)),
-				newTestNode(FilterModeLe, 1, int64(100)),
-			),
-			expected: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(0), int64(100)),
-			),
-			comment: "Boundary conditions should be handled correctly",
+			name:     "TypeBoundsGeLe",
+			input:    makeAndTree(makeGeNode(0), makeLeNode(100)),
+			expected: makeAndTree(makeRangeNode(0, 100)),
+			comment:  "Boundary conditions should be handled correctly",
 		},
 		{
-			name: "RangeNotEqual",
-			input: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(0), int64(100)),
-				newTestNode(FilterModeNotEqual, 1, int64(50)),
-			),
-			expected: newTestTree(COND_AND,
-				newTestNode(FilterModeNotEqual, 1, int64(50)),
-				newTestRangeNode(1, int64(0), int64(100)),
-			),
-			comment: "NOT conditions should not affect range merging",
+			name:     "RangeNotEqual",
+			input:    makeAndTree(makeRangeNode(0, 100), makeNotEqualNode(50)),
+			expected: makeAndTree(makeNotEqualNode(50), makeRangeNode(0, 100)),
+			comment:  "NOT conditions should not affect range merging",
 		},
 		{
-			name: "EqualAndGt",
-			input: newTestTree(COND_AND,
-				newTestNode(FilterModeEqual, 1, int64(42)),
-				newTestNode(FilterModeGt, 1, int64(41)),
-			),
-			expected: newTestTree(COND_AND,
-				newTestNode(FilterModeEqual, 1, int64(42)),
-			),
-			comment: "EQ and GT should be simplified",
+			name:     "EqualAndGt",
+			input:    makeAndTree(makeEqualNode(42), makeGtNode(41)),
+			expected: makeAndTree(makeEqualNode(42)),
+			comment:  "EQ and GT should be simplified",
 		},
 		{
-			name: "RegexpRange",
-			input: newTestTree(COND_AND,
-				newTestRangeNode(1, "a", "z"),
-				newTestNode(FilterModeRegexp, 1, "^[a-m]+$"),
-			),
-			expected: newTestTree(COND_AND,
-				newTestRangeNode(1, "a", "z"),
-				newTestNode(FilterModeRegexp, 1, "^[a-m]+$"),
-			),
-			comment: "Regexp conditions should not be merged with ranges",
+			name:     "RegexpRange",
+			input:    makeAndTree(newTestRangeNode(1, "a", "z"), newTestNode(FilterModeRegexp, 1, "^[a-m]+$")),
+			expected: makeAndTree(newTestRangeNode(1, "a", "z"), newTestNode(FilterModeRegexp, 1, "^[a-m]+$")),
+			comment:  "Regexp conditions should not be merged with ranges",
 		},
-		// TODO: always true condition, needs to be supported
 		{
-			name: "TautologyOne",
-			input: newTestTree(COND_OR,
-				newTestRangeNode(1, int64(0), int64(100)),
-				newTestNode(FilterModeNotEqual, 1, int64(50)),
-				newTestRangeNode(1, int64(40), int64(60)),
-			),
-			expected: newTestTree(COND_OR,
-				newTestNode(FilterModeNotEqual, 1, int64(50)),
-				newTestRangeNode(1, int64(0), int64(100)),
-			),
-			comment: "Range splits should handle multiple overlapping conditions",
+			name:     "TautologyOne",
+			input:    makeOrTree(makeRangeNode(0, 100), makeNotEqualNode(50), makeRangeNode(40, 60)),
+			expected: makeOrTree(makeNotEqualNode(50), makeRangeNode(0, 100)),
 		},
 	}
 
@@ -165,9 +99,8 @@ func TestOptimize(t *testing.T) {
 	}
 }
 
-// typeFromValue maps Go types to BlockType constants for testing.
-// This is used to create Filter nodes with the correct type information.
-// Note: defaults to BlockTime for unknown types to test type handling edge cases.
+// typeFromValue maps Go types to corresponding BlockType constants.
+// Defaults to BlockTime for unknown or nil types, ensuring robust type handling in tests.
 func typeFromValue(v interface{}) BlockType {
 	if v == nil {
 		return BlockTime
@@ -204,7 +137,8 @@ func typeFromValue(v interface{}) BlockType {
 	}
 }
 
-// newTestNode creates a FilterTreeNode with a single condition
+// newTestNode constructs a FilterTreeNode for a given filter mode, field index, and value,
+// initializing the appropriate matcher based on the filter mode.
 func newTestNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterTreeNode {
 	f := &Filter{
 		Mode:  mode,
@@ -238,7 +172,8 @@ func newTestNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterT
 	return &FilterTreeNode{Filter: f}
 }
 
-// newTestRangeNode creates a FilterTreeNode with a range condition
+// newTestRangeNode constructs a FilterTreeNode for a range condition,
+// handling conversion of string and time values to byte slices and Unix timestamps.
 func newTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode {
 	// Handle nil range bounds
 	if from == nil && to == nil {
@@ -281,7 +216,7 @@ func newTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode {
 	return &FilterTreeNode{Filter: f}
 }
 
-// newTestTree creates a FilterTreeNode with the specified children
+// newTestTree constructs a FilterTreeNode representing a logical tree (AND/OR) with specified child nodes.
 func newTestTree(orKind bool, children ...*FilterTreeNode) *FilterTreeNode {
 	if len(children) == 0 {
 		return &FilterTreeNode{}
@@ -290,4 +225,58 @@ func newTestTree(orKind bool, children ...*FilterTreeNode) *FilterTreeNode {
 		OrKind:   orKind,
 		Children: children,
 	}
+}
+
+// makeAndTree constructs a logical AND tree from the provided child nodes.
+func makeAndTree(children ...*FilterTreeNode) *FilterTreeNode {
+	return newTestTree(COND_AND, children...)
+}
+
+// makeOrTree constructs a logical OR tree from the provided child nodes.
+func makeOrTree(children ...*FilterTreeNode) *FilterTreeNode {
+	return newTestTree(COND_OR, children...)
+}
+
+// makeEqualNode constructs a FilterTreeNode for an equality condition with a specified integer value.
+func makeEqualNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeEqual, 1, int64(val))
+}
+
+// makeRangeNode constructs a FilterTreeNode for a range condition between two integer values.
+func makeRangeNode(from, to int) *FilterTreeNode {
+	return newTestRangeNode(1, int64(from), int64(to))
+}
+
+// makeInNode constructs a FilterTreeNode for an IN condition with a list of integer values.
+func makeInNode(vals ...int) *FilterTreeNode {
+	cval := make([]int64, len(vals))
+	for i, v := range vals {
+		cval[i] = int64(v)
+	}
+	return newTestNode(FilterModeIn, 1, cval)
+}
+
+// makeNotEqualNode constructs a FilterTreeNode for a not-equal condition with a specified integer value.
+func makeNotEqualNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeNotEqual, 1, int64(val))
+}
+
+// makeGtNode constructs a FilterTreeNode for a greater-than condition with a specified integer value.
+func makeGtNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeGt, 1, int64(val))
+}
+
+// makeLtNode constructs a FilterTreeNode for a less-than condition with a specified integer value.
+func makeLtNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeLt, 1, int64(val))
+}
+
+// makeGeNode constructs a FilterTreeNode for a greater-than-or-equal condition with a specified integer value.
+func makeGeNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeGe, 1, int64(val))
+}
+
+// makeLeNode constructs a FilterTreeNode for a less-than-or-equal condition with a specified integer value.
+func makeLeNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeLe, 1, int64(val))
 }
