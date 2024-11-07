@@ -100,9 +100,8 @@ func TestOptimize(t *testing.T) {
 	}
 }
 
-// typeFromValue maps Go types to BlockType constants for testing.
-// This is used to create Filter nodes with the correct type information.
-// Note: defaults to BlockTime for unknown types to test type handling edge cases.
+// typeFromValue maps Go types to corresponding BlockType constants.
+// Defaults to BlockTime for unknown or nil types, ensuring robust type handling in tests.
 func typeFromValue(v interface{}) BlockType {
 	if v == nil {
 		return BlockTime
@@ -139,7 +138,8 @@ func typeFromValue(v interface{}) BlockType {
 	}
 }
 
-// newTestNode creates a FilterTreeNode with a single condition
+// newTestNode constructs a FilterTreeNode for a given filter mode, field index, and value,
+// initializing the appropriate matcher based on the filter mode.
 func newTestNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterTreeNode {
 	f := &Filter{
 		Mode:  mode,
@@ -173,7 +173,8 @@ func newTestNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterT
 	return &FilterTreeNode{Filter: f}
 }
 
-// newTestRangeNode creates a FilterTreeNode with a range condition
+// newTestRangeNode constructs a FilterTreeNode for a range condition,
+// handling conversion of string and time values to byte slices and Unix timestamps.
 func newTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode {
 	// Handle nil range bounds
 	if from == nil && to == nil {
@@ -216,7 +217,7 @@ func newTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode {
 	return &FilterTreeNode{Filter: f}
 }
 
-// newTestTree creates a FilterTreeNode with the specified children
+// newTestTree constructs a FilterTreeNode representing a logical tree (AND/OR) with specified child nodes.
 func newTestTree(orKind bool, children ...*FilterTreeNode) *FilterTreeNode {
 	if len(children) == 0 {
 		return &FilterTreeNode{}
@@ -227,27 +228,27 @@ func newTestTree(orKind bool, children ...*FilterTreeNode) *FilterTreeNode {
 	}
 }
 
-// Helper function to create an AND tree
+// makeAndTree constructs a logical AND tree from the provided child nodes.
 func makeAndTree(children ...*FilterTreeNode) *FilterTreeNode {
 	return newTestTree(COND_AND, children...)
 }
 
-// Helper function to create an OR tree
+// makeOrTree constructs a logical OR tree from the provided child nodes.
 func makeOrTree(children ...*FilterTreeNode) *FilterTreeNode {
 	return newTestTree(COND_OR, children...)
 }
 
-// Helper function to create an Equal node
+// makeEqualNode constructs a FilterTreeNode for an equality condition with a specified integer value.
 func makeEqualNode(val int) *FilterTreeNode {
 	return newTestNode(FilterModeEqual, 1, int64(val))
 }
 
-// Helper function to create a Range node
+// makeRangeNode constructs a FilterTreeNode for a range condition between two integer values.
 func makeRangeNode(from, to int) *FilterTreeNode {
 	return newTestRangeNode(1, int64(from), int64(to))
 }
 
-// Helper function to create an In node
+// makeInNode constructs a FilterTreeNode for an IN condition with a list of integer values.
 func makeInNode(vals ...int) *FilterTreeNode {
 	cval := make([]int64, len(vals))
 	for i, v := range vals {
@@ -256,27 +257,27 @@ func makeInNode(vals ...int) *FilterTreeNode {
 	return newTestNode(FilterModeIn, 1, cval)
 }
 
-// Helper function to create a NotEqual node
+// makeNotEqualNode constructs a FilterTreeNode for a not-equal condition with a specified integer value.
 func makeNotEqualNode(val int) *FilterTreeNode {
 	return newTestNode(FilterModeNotEqual, 1, int64(val))
 }
 
-// Helper function to create a GreaterThan node
+// makeGtNode constructs a FilterTreeNode for a greater-than condition with a specified integer value.
 func makeGtNode(val int) *FilterTreeNode {
 	return newTestNode(FilterModeGt, 1, int64(val))
 }
 
-// Helper function to create a LessThan node
+// makeLtNode constructs a FilterTreeNode for a less-than condition with a specified integer value.
 func makeLtNode(val int) *FilterTreeNode {
 	return newTestNode(FilterModeLt, 1, int64(val))
 }
 
-// Helper function to create a GreaterThanOrEqual node
+// makeGeNode constructs a FilterTreeNode for a greater-than-or-equal condition with a specified integer value.
 func makeGeNode(val int) *FilterTreeNode {
 	return newTestNode(FilterModeGe, 1, int64(val))
 }
 
-// Helper function to create a LessThanOrEqual node
+// makeLeNode constructs a FilterTreeNode for a less-than-or-equal condition with a specified integer value.
 func makeLeNode(val int) *FilterTreeNode {
 	return newTestNode(FilterModeLe, 1, int64(val))
 }
