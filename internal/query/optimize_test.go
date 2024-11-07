@@ -293,3 +293,57 @@ func newTestTree(orKind bool, children ...*FilterTreeNode) *FilterTreeNode {
 		Children: children,
 	}
 }
+
+// Helper function to create an AND tree
+func makeAndTree(children ...*FilterTreeNode) *FilterTreeNode {
+	return newTestTree(COND_AND, children...)
+}
+
+// Helper function to create an OR tree
+func makeOrTree(children ...*FilterTreeNode) *FilterTreeNode {
+	return newTestTree(COND_OR, children...)
+}
+
+// Helper function to create an Equal node
+func makeEqualNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeEqual, 1, int64(val))
+}
+
+// Helper function to create a Range node
+func makeRangeNode(from, to int) *FilterTreeNode {
+	return newTestRangeNode(1, int64(from), int64(to))
+}
+
+// Helper function to create an In node
+func makeInNode(vals ...int) *FilterTreeNode {
+	cval := make([]int64, len(vals))
+	for i, v := range vals {
+		cval[i] = int64(v)
+	}
+	return newTestNode(FilterModeIn, 1, cval)
+}
+
+// Helper function to create a NotEqual node
+func makeNotEqualNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeNotEqual, 1, int64(val))
+}
+
+// Helper function to create a GreaterThan node
+func makeGtNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeGt, 1, int64(val))
+}
+
+// Helper function to create a LessThan node
+func makeLtNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeLt, 1, int64(val))
+}
+
+// Helper function to create a GreaterThanOrEqual node
+func makeGeNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeGe, 1, int64(val))
+}
+
+// Helper function to create a LessThanOrEqual node
+func makeLeNode(val int) *FilterTreeNode {
+	return newTestNode(FilterModeLe, 1, int64(val))
+}
