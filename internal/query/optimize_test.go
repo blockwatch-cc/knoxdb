@@ -80,8 +80,8 @@ func TestOptimize(t *testing.T) {
 		},
 		{
 			name:     "RegexpRange",
-			input:    makeAndTree(newTestRangeNode(1, "a", "z"), newTestNode(FilterModeRegexp, 1, "^[a-m]+$")),
-			expected: makeAndTree(newTestRangeNode(1, "a", "z"), newTestNode(FilterModeRegexp, 1, "^[a-m]+$")),
+			input:    makeAndTree(newTestRangeNode(1, "a", "z"), makeRegexNode("^[a-m]+$")),
+			expected: makeAndTree(newTestRangeNode(1, "a", "z"), makeRegexNode("^[a-m]+$")),
 			comment:  "Regexp conditions should not be merged with ranges",
 		},
 		{
@@ -245,6 +245,11 @@ func makeEqualNode(val int) *FilterTreeNode {
 // makeRangeNode constructs a FilterTreeNode for a range condition between two integer values.
 func makeRangeNode(from, to int) *FilterTreeNode {
 	return newTestRangeNode(1, int64(from), int64(to))
+}
+
+// makeRegexNode constructs a FilterTreeNode for a regexp conditions.
+func makeRegexNode(s string) *FilterTreeNode {
+	return newTestNode(FilterModeRegexp, 1, s)
 }
 
 // makeInNode constructs a FilterTreeNode for an IN condition with a list of integer values.

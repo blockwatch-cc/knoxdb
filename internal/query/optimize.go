@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package query
@@ -434,6 +434,17 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		plus, minus func(BlockType, any, any) any
 	)
 
+	postProcess := func() {
+		// produce zero or one combined filter from sets
+		if flt := makeSetFilterFrom(f, ins, nis); flt != nil {
+			res = append(res, &FilterTreeNode{
+				Empty:  flt.Mode == FilterModeFalse,
+				Skip:   flt.Mode == FilterModeTrue && !isOrNode,
+				Filter: flt,
+			})
+		}
+	}
+
 	// stop early on empty node list
 	if len(nodes) == 0 {
 		return nodes
@@ -452,14 +463,7 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 
 		// reset when field id changes
 		if lastId != f.Index {
-			// produce zero or one combined filter from sets
-			if flt := makeSetFilterFrom(f, ins, nis); flt != nil {
-				res = append(res, &FilterTreeNode{
-					Empty:  flt.Mode == FilterModeFalse,
-					Skip:   flt.Mode == FilterModeTrue && !isOrNode,
-					Filter: flt,
-				})
-			}
+			postProcess()
 
 			// reset state
 			lastId = f.Index
@@ -499,13 +503,7 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 	}
 
 	// handle last round
-	if flt := makeSetFilterFrom(f, ins, nis); flt != nil {
-		res = append(res, &FilterTreeNode{
-			Empty:  flt.Mode == FilterModeFalse,
-			Skip:   flt.Mode == FilterModeTrue,
-			Filter: flt,
-		})
-	}
+	postProcess()
 
 	return res
 }
