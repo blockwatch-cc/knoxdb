@@ -426,6 +426,8 @@ type numRangeMatcher[T Number] struct {
 	to   T
 }
 
+func (m *numRangeMatcher[T]) Value() any { return RangeValue{m.from, m.to} }
+
 func (m *numRangeMatcher[T]) Weight() int { return 2 }
 
 func (m *numRangeMatcher[T]) Len() int { return 2 }
@@ -462,6 +464,10 @@ func (m *numInSetMatcher[T]) Len() int { return m.slice.Len() }
 
 func (m *numInSetMatcher[T]) Value() any {
 	return m.slice.Values
+}
+
+func (m *numInSetMatcher[T]) WithValue(val any) {
+	m.WithSlice(val)
 }
 
 func (m *numInSetMatcher[T]) WithSlice(slice any) {
@@ -537,6 +543,10 @@ func (m *numNotInSetMatcher[T]) Len() int { return m.slice.Len() }
 
 func (m *numNotInSetMatcher[T]) Value() any {
 	return m.slice.Values
+}
+
+func (m *numNotInSetMatcher[T]) WithValue(val any) {
+	m.WithSlice(val)
 }
 
 func (m *numNotInSetMatcher[T]) WithSlice(slice any) {

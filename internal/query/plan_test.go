@@ -43,6 +43,7 @@ func (idx *MockIndex) CanMatch(_ engine.QueryCondition) bool {
 }
 
 func (idx *MockIndex) Query(_ context.Context, _ engine.QueryCondition) (*bitmap.Bitmap, bool, error) {
+	// return &idx.result, true, nil
 	return &idx.result, false, nil
 }
 

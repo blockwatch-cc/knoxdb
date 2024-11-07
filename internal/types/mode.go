@@ -21,6 +21,8 @@ const (
 	FilterModeNotIn
 	FilterModeRange
 	FilterModeRegexp
+	FilterModeTrue
+	FilterModeFalse
 )
 
 var filterModeOperators = [...]string{
@@ -35,6 +37,8 @@ var filterModeOperators = [...]string{
 	FilterModeNotIn:    "ni",
 	FilterModeRange:    "rg",
 	FilterModeRegexp:   "re",
+	FilterModeTrue:     "++",
+	FilterModeFalse:    "--",
 }
 
 var filterModeSymbols = [...]string{
@@ -48,6 +52,8 @@ var filterModeSymbols = [...]string{
 	FilterModeNotIn:    "NOT IN",
 	FilterModeRange:    "RANGE",
 	FilterModeRegexp:   "~=",
+	FilterModeTrue:     "TRUE",
+	FilterModeFalse:    "FALSE",
 }
 
 func ParseFilterMode(s string) FilterMode {
@@ -78,7 +84,7 @@ func ParseFilterMode(s string) FilterMode {
 }
 
 func (m FilterMode) IsValid() bool {
-	return m > FilterModeInvalid && m <= FilterModeRegexp
+	return m > FilterModeInvalid && m <= FilterModeFalse
 }
 
 func (m FilterMode) Symbol() string {

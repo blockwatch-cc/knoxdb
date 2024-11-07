@@ -113,8 +113,8 @@ func TestOptimize(t *testing.T) {
 				newTestNode(FilterModeNotEqual, 1, int64(50)),
 			),
 			expected: newTestTree(COND_AND,
-				newTestRangeNode(1, int64(0), int64(100)),
 				newTestNode(FilterModeNotEqual, 1, int64(50)),
+				newTestRangeNode(1, int64(0), int64(100)),
 			),
 			comment: "NOT conditions should not affect range merging",
 		},
@@ -149,12 +149,10 @@ func TestOptimize(t *testing.T) {
 				newTestNode(FilterModeNotEqual, 1, int64(50)),
 				newTestRangeNode(1, int64(40), int64(60)),
 			),
-			expected: newTestTree(COND_OR),
-			// newTestRangeNode(1, int64(0), int64(49)),
-			// newTestRangeNode(1, int64(51), int64(100)),
-			// newTestRangeNode(1, int64(40), int64(49)),
-			// newTestRangeNode(1, int64(51), int64(60)),
-
+			expected: newTestTree(COND_OR,
+				newTestNode(FilterModeNotEqual, 1, int64(50)),
+				newTestRangeNode(1, int64(0), int64(100)),
+			),
 			comment: "Range splits should handle multiple overlapping conditions",
 		},
 	}
@@ -162,7 +160,7 @@ func TestOptimize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			require.NotPanics(t, tt.input.Optimize)
-			assert.Equal(t, tt.expected, tt.input, tt.comment)
+			assert.Equal(t, tt.expected.String(), tt.input.String(), tt.comment)
 		})
 	}
 }

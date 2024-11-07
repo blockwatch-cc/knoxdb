@@ -5,6 +5,7 @@ package query
 
 import (
 	"reflect"
+	"slices"
 	"sort"
 
 	"blockwatch.cc/knoxdb/internal/cmp"
@@ -14,28 +15,59 @@ import (
 // Optimize filter conditions by removing or replacing them with semantically
 // equal but less costly to check conditions
 //
+// - mark contradicting (always false) conditions (set empty)
+// - mark tautological (always true) conditions (set skip)
+// - reduce AND/OR branches when always true/false conds are present
+//   - and: always true node => remove unless it is last child
+//   - and: always false node => replace subtree with always false leaf
+//   - or: always true node => replace subtree with always true leaf
+//   - or: always false node => remove unless its last child
+//
 // - remove skip nodes
 // - lift/merge single child nodes
 // - lift/merge nested nodes of same kind
 //   - OR ( OR (A, B), C) ) => OR (A, B, C)
 //   - AND ( AND (A, B), C) => AND (A, B, C)
 //
-// - replace/simplify
-//   - any: LE(A) + GE(A) => RG(A)
+// - replace/simplify sets
 //   - any: IN(single A) => EQ(A)
 //   - any: NI(single A) => NE(A)
-//   - and-only: LT|LE(A) + LT|LE(A) => LT|LE(A) -- minimum
-//   - and-only: GT|GE(A) + GT|GE(A) => GT|GE(A) -- maximum
-//   - and-only: IN(A) + IN(A) => IN(A) -- intersect (handle empty case)
-//   - and-only: NI(A) + NI(A) => NI(A) -- union! (does work for OR!!!)
-//   - or-only: IN(A) + IN(A) => IN(A) -- union
-//   - or-only: EQ(A) + EQ(A) => IN(A)
-//   - or-only: NE(A) + NE(A) => NI(A)
+//   - any: EQ(A) + EQ(A) => EQ(A) -- same value, duplicate
+//   - any: empty IN => false
+//   - any: empty NIN => true
+//   - and: EQ(A) + EQ(B) => false iff A != B
+//   - and: IN(A) + IN(B) => IN(A-B) -- intersect (handle empty case)
+//   - and: NI(A) + NI(B) => NI(A+B) -- union! (does work for OR!!!)
+//   - and: EQ(A) + NE(A) => false
+//   - and: disjunct IN + IN => false
+//   - and: disjunct IN + EQ => false
+//   - or: IN(A) + IN(B) => IN(A+B) -- union
+//   - or: IN(A) + EQ(B) => IN(A+B)
+//   - or: EQ(A) + EQ(B) => IN(A+B)
+//   - or: NI(A) + NI(B) => NI(A/B), true iff A / B = ø
+//   - or: NE(A) + NE(B) => true iff A != B
+//   - or: IN(A) + NE(B) => true iff B in [A] (set + antiset covers all universe)
 //
-// - TODO: mark illogical conditions empty
-//   - LT|LE(uint, 0)
-//   - empty IN
-//   - RG from>to
+// - replace/simplify ranges
+//   - any: LT(uint, 0), LT(int, min) => false
+//   - any: RG(uint: 0, uint_max) => true
+//   - any: RG(int: int_min, int_max) = true
+//   - any: RG(A,B) => false iff A > B
+//   - and: LT|LE(A) + LT|LE(A) => LT|LE(A) -- minimum
+//   - and: GT|GE(A) + GT|GE(A) => GT|GE(A) -- maximum
+//   - and: RG(A,B) + RG(C,D) => RG(B,C) iff C ≤ B
+//   - and: RG(A,B) + EQ(C) => EQ(C) iff A ≤ C ≤ B
+//   - and: GE(A) + LE(B) => RG(A,B) iff A ≤ B
+//   - and: GT(A) + LT(B) => RG(A+1,B-1) iff A ≤ B
+//   - and: RG(A,B) + EQ(C) => EQ(C) iff A ≤ C ≤ B -- replace weaker with stronger
+//   - and: RG(A,B) + EQ(C) => false iff C ¢ [A,B]
+//   - and: GE(uint, 0), LE(uint, uint_max) => true
+//   - and: GE(int, int_min), LE(int, int_max) => true
+//   - or: RG(A,B) + RG(C,D) => RG(A,D) iff C ≤ B
+//   - or: RG(A,B) + EQ(C) => RG(A,B) iff A ≤ C ≤ B -- replace weaker with stronger
+//
+// TODO: range and set type modes
+//   - or: RG(A,B) + NE(C) => true iff C ¢ [A,B]
 func (n *FilterTreeNode) Optimize() {
 	// stop at leaf nodes
 	if n.IsLeaf() {
@@ -51,7 +83,7 @@ func (n *FilterTreeNode) Optimize() {
 
 	// remove or lift child nodes
 	for _, child := range n.Children {
-		// skip processed nodes
+		// skip discardable nodes
 		if child.Skip {
 			continue
 		}
@@ -59,6 +91,7 @@ func (n *FilterTreeNode) Optimize() {
 		// keep leaf nodes
 		if child.IsLeaf() {
 			newChilds = append(newChilds, child)
+			continue
 		}
 
 		// skip empty children
@@ -94,9 +127,9 @@ func (n *FilterTreeNode) Optimize() {
 	n.Children = newChilds
 }
 
-func simplifyNodes(nodes []*FilterTreeNode, orKind bool) []*FilterTreeNode {
+func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 	// split leafs from nested nodes
-	nested, leafs, ok := slicex.CutFunc(nodes, func(n *FilterTreeNode) bool {
+	branches, leafs, ok := slicex.CutFunc(nodes, func(n *FilterTreeNode) bool {
 		return !n.IsLeaf()
 	})
 
@@ -110,288 +143,645 @@ func simplifyNodes(nodes []*FilterTreeNode, orKind bool) []*FilterTreeNode {
 		return leafs[i].Filter.Index < leafs[j].Filter.Index
 	})
 
-	// first apply simplifications that apply to any kind
-	leafs = simplifyAnyNodes(leafs)
+	// first apply simplifications for single nodes
+	leafs = simplifySingle(leafs, isOrNode)
 
-	// next apply special simplifications that depend on the aggregation type
-	if orKind {
-		leafs = simplifyOrNodes(leafs)
+	// then merge ranges (LT, LE, GT, GE, RG, EQ)
+	leafs = simplifyRanges(leafs, isOrNode)
+
+	// then merge sets (EQ, NE, IN, NI)
+	leafs = simplifySets(leafs, isOrNode)
+
+	// recombine optimized leafs with nested branch nodes
+	nodes = append(leafs, branches...)
+
+	// simplify AND/OR when always true/false conds are present
+	if isOrNode {
+		// one node true => everything true
+		var trueNode *FilterTreeNode
+		for _, n := range nodes {
+			if n.IsLeaf() && n.Filter.Mode == FilterModeTrue {
+				trueNode = n
+				break
+			}
+		}
+		if trueNode != nil {
+			return []*FilterTreeNode{trueNode}
+		}
+		// remove empty and always false nodes unless its last
+		if len(nodes) > 1 {
+			nodes = slices.DeleteFunc(nodes, func(n *FilterTreeNode) bool {
+				return n.Empty || (n.IsLeaf() && n.Filter.Mode == FilterModeFalse)
+			})
+		}
 	} else {
-		leafs = simplifyAndNodes(leafs)
+		// one node false => everyting false
+		var falseNode *FilterTreeNode
+		for _, n := range nodes {
+			if n.IsLeaf() && n.Filter.Mode == FilterModeFalse {
+				falseNode = n
+				break
+			}
+		}
+		if falseNode != nil {
+			return []*FilterTreeNode{falseNode}
+		}
+		// remove always true nodes unless its last
+		if len(nodes) > 1 {
+			nodes = slices.DeleteFunc(nodes, func(n *FilterTreeNode) bool {
+				return n.IsLeaf() && n.Filter.Mode == FilterModeTrue
+			})
+		}
 	}
 
-	// TODO: mark illogical conditions empty
-	//   - LT|LE(uint, 0)
-	//   - empty IN
-	//   - RG from>to
-
 	// return the optimized leafs combined with nested nodes
-	return append(leafs, nested...)
+	return nodes
 }
 
 // Simplifications for any kind (and|or)
-//   - any: LE(A) + GE(A) => RG(A)
 //   - any: IN(single A) => EQ(A)
 //   - any: NI(single A) => NE(A)
-func simplifyAnyNodes(nodes []*FilterTreeNode) []*FilterTreeNode {
-	var (
-		le, ge   *FilterTreeNode
-		lastId   uint16
-		needSkip bool
-	)
+//   - any: empty IN => false
+//   - any: empty NIN => true
+func simplifySingle(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
+	var res []*FilterTreeNode
+
 	for _, node := range nodes {
 		f := node.Filter
-
-		// reset when field id changes
-		if lastId != f.Index {
-			lastId = f.Index
-			le, ge = nil, nil
-		}
 
 		// we decide based on filter mode
 		switch f.Mode {
-		case FilterModeLe:
-			le = node
-		case FilterModeGe:
-			ge = node
 		case FilterModeIn:
-			// update inplace
-			if f.Matcher.Len() == 1 {
-				f.Mode = FilterModeEqual
-				f.Value = reflectSliceIndex(f.Matcher.Value(), 0)
-				f.Matcher = newFactory(f.Type).New(FilterModeEqual)
-				f.Matcher.WithValue(f.Value)
-			}
-			continue
-		case FilterModeNotIn:
-			// update inplace
-			if f.Matcher.Len() == 1 {
-				f.Mode = FilterModeNotEqual
-				f.Value = reflectSliceIndex(f.Matcher.Value(), 0)
-				f.Matcher = newFactory(f.Type).New(FilterModeNotEqual)
-				f.Matcher.WithValue(f.Value)
-			}
-			continue
-		}
-
-		// combine ranges if possible; based on our selection method
-		// above this depends on how same-field conditions are ordered
-		// for the sake of limited complexity we support simple cases only
-		if le != nil && ge != nil {
-			// LE+GE can only form a range when LE.value >= GE.value
-			if cmp.GE(le.Filter.Type, le.Filter.Value, ge.Filter.Value) {
-				le.Skip = true
-				ge.Skip = true
-				val := RangeValue{ge.Filter.Value, le.Filter.Value}
-				f := le.Filter
-				matcher := newFactory(f.Type).New(FilterModeRange)
-				matcher.WithValue(val)
-				nodes = append(nodes, &FilterTreeNode{
-					Filter: &Filter{
-						Name:    f.Name,
-						Type:    f.Type,
-						Mode:    FilterModeRange,
-						Index:   f.Index,
-						Matcher: matcher,
-						Value:   val,
-					},
+			switch f.Matcher.Len() {
+			case 0:
+				res = append(res, &FilterTreeNode{
+					Empty:  true,
+					Filter: makeFalseFilterFrom(f),
 				})
-				le = nil
-				ge = nil
-				needSkip = true
+			case 1:
+				res = append(res, &FilterTreeNode{
+					Filter: makeFilterFrom(f, FilterModeEqual, reflectSliceIndex(f.Value, 0)),
+				})
+			default:
+				res = append(res, node)
 			}
-		}
-	}
 
-	// filter out all replaced nodes
-	if needSkip {
-		nodes, _, _ = slicex.CutFunc(nodes, func(n *FilterTreeNode) bool {
-			return !n.Skip
-		})
-	}
-
-	return nodes
-}
-
-// Simplifications that apply to AND nodes only
-//   - and-only: LT|LE(A) + LT|LE(A) => LT|LE(A) -- minimum
-//   - and-only: GT|GE(A) + GT|GE(A) => GT|GE(A) -- maximum
-//   - and-only: IN(A) + IN(A) => IN(A) -- intersect (handle empty case)
-//   - and-only: NI(A) + NI(A) => NI(A) -- union! (does not work for OR!!!)
-func simplifyAndNodes(nodes []*FilterTreeNode) []*FilterTreeNode {
-	var (
-		le, ge, lt, gt, in, ni *FilterTreeNode
-		lastId                 uint16
-		needSkip               bool
-	)
-	for _, node := range nodes {
-		f := node.Filter
-
-		// reset when field id changes
-		if lastId != f.Index {
-			lastId = f.Index
-			le, ge, lt, gt, in, ni = nil, nil, nil, nil, nil, nil
-		}
-
-		// rewrite node filter and skip second node on match,
-		// aggregates multiple occurences of same type filters
-		// as long as they are for the same field
-		switch f.Mode {
-		case FilterModeLe:
-			if le != nil {
-				f.Value = cmp.Min(f.Type, f.Value, le.Filter.Value)
-				f.Matcher.WithValue(f.Value)
-				le.Skip = true
-				needSkip = true
-			}
-			le = node
-		case FilterModeLt:
-			if lt != nil {
-				f.Value = cmp.Min(f.Type, f.Value, lt.Filter.Value)
-				f.Matcher.WithValue(f.Value)
-				lt.Skip = true
-				needSkip = true
-			}
-			lt = node
-		case FilterModeGe:
-			if ge != nil {
-				f.Value = cmp.Max(f.Type, f.Value, ge.Filter.Value)
-				f.Matcher.WithValue(f.Value)
-				ge.Skip = true
-				needSkip = true
-			}
-			ge = node
-		case FilterModeGt:
-			if gt != nil {
-				f.Value = cmp.Max(f.Type, f.Value, gt.Filter.Value)
-				f.Matcher.WithValue(f.Value)
-				gt.Skip = true
-				needSkip = true
-			}
-			gt = node
-		case FilterModeIn:
-			if in != nil {
-				f.Value = cmp.Intersect(f.Type, f.Value, in.Filter.Value)
-				f.Matcher.WithSlice(f.Value)
-				in.Skip = true
-				needSkip = true
-			}
-			in = node
 		case FilterModeNotIn:
-			if ni != nil {
-				f.Value = cmp.Union(f.Type, f.Value, ni.Filter.Value)
-				f.Matcher.WithSlice(f.Value)
-				ni.Skip = true
-				needSkip = true
+			switch f.Matcher.Len() {
+			case 0:
+				res = append(res, &FilterTreeNode{
+					Skip:   !isOrNode,
+					Filter: makeTrueFilterFrom(f),
+				})
+			case 1:
+				res = append(res, &FilterTreeNode{
+					Filter: makeFilterFrom(f, FilterModeNotEqual, reflectSliceIndex(f.Value, 0)),
+				})
+			default:
+				res = append(res, node)
+
 			}
-			ni = node
+		default:
+			res = append(res, node)
 		}
 	}
 
-	// filter out all replaced nodes
-	if needSkip {
-		nodes, _, _ = slicex.CutFunc(nodes, func(n *FilterTreeNode) bool {
-			return !n.Skip
-		})
-	}
-
-	return nodes
+	return res
 }
 
-// Simplifications that apply to OR nodes only
-//   - or-only: IN(A) + IN(A) => IN(A) -- union
-//   - or-only: IN(A) + EQ(A) => IN(A)
-//   - or-only: EQ(A) + EQ(A) => IN(A)
-func simplifyOrNodes(nodes []*FilterTreeNode) []*FilterTreeNode {
+// Simplifications for ranges that apply to AND or OR nodes
+func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 	var (
-		eq, in   *FilterTreeNode
-		lastId   uint16
-		needSkip bool
+		resultNodes  []*FilterTreeNode
+		sameIdNodes  []*FilterTreeNode
+		sameIdRanges []RangeValue
+		lastId       uint16
+		f            *Filter
 	)
+
+	postProcess := func() {
+		// try merge multiple ranges
+		if len(sameIdNodes) > 1 {
+			var mergedRanges []RangeValue
+			if isOrNode {
+				mergedRanges = mergeRangesOr(f.Type, sameIdRanges)
+			} else {
+				mergedRanges = mergeRangesAnd(f.Type, sameIdRanges)
+			}
+
+			// convert merged ranges back to filters; cases:
+			// - len(merged) == len(nodes) => keep originals (no merge possible)
+			// - len(merged) == 0 => always false (no intersection)
+			// - len(merged) == 1 && min == MinVal && max == MaxVal => always true
+			// - min == MinVal => LE(max)
+			// - max == MaxVal => GE(min)
+			// - min == max => EQ(min)
+			// - other => RG(min, max)
+			switch {
+			case len(mergedRanges) == len(sameIdNodes):
+				// keep originals
+				resultNodes = append(resultNodes, sameIdNodes...)
+			case len(mergedRanges) == 0:
+				// replace with always false node
+				resultNodes = append(resultNodes, &FilterTreeNode{
+					Skip:   true,
+					Empty:  true,
+					Filter: makeFalseFilterFrom(f),
+				})
+			case len(mergedRanges) == 1 && isFullRange(f.Type, mergedRanges[0]):
+				// replace with always true node
+				resultNodes = append(resultNodes, &FilterTreeNode{
+					Skip:   true,
+					Filter: makeTrueFilterFrom(f),
+				})
+			default:
+				// generate nodes
+				for _, rg := range mergedRanges {
+					resultNodes = append(resultNodes, &FilterTreeNode{
+						Filter: makeRangeFilterFrom(f, rg),
+					})
+				}
+			}
+
+		} else {
+			// keep original when only a single range-like condition exists
+			resultNodes = append(resultNodes, sameIdNodes...)
+		}
+	}
+
 	for _, node := range nodes {
-		f := node.Filter
+		f = node.Filter
+
+		// try optimize when field id changes
+		if lastId != f.Index {
+			postProcess()
+
+			// prepare next round
+			lastId = f.Index
+			if sameIdNodes != nil {
+				sameIdNodes = sameIdNodes[:0]
+			}
+			if sameIdRanges != nil {
+				sameIdRanges = sameIdRanges[:0]
+			}
+		}
+
+		// skip non-numeric types
+		switch f.Type {
+		case BlockBool, BlockBytes, BlockString:
+			resultNodes = append(resultNodes, node)
+			continue
+		}
+
+		// construct ranges for numeric types from numeric conditions
+		switch f.Mode {
+		case FilterModeEqual:
+			sameIdNodes = append(sameIdNodes, node)
+			sameIdRanges = append(sameIdRanges, RangeValue{
+				f.Value,
+				f.Value,
+			})
+
+		case FilterModeRange:
+			// check contradiction
+			rg := f.Value.(RangeValue)
+			if cmp.Cmp(f.Type, rg[0], rg[1]) > 0 {
+				resultNodes = append(resultNodes, &FilterTreeNode{
+					Skip:   true,
+					Empty:  true,
+					Filter: makeFalseFilterFrom(f),
+				})
+				continue
+			}
+			sameIdNodes = append(sameIdNodes, node)
+			sameIdRanges = append(sameIdRanges, rg)
+
+		case FilterModeLt:
+			// check contradiction
+			if cmp.Cmp(f.Type, f.Value, cmp.MinNumericVal(f.Type)) == 0 {
+				resultNodes = append(resultNodes, &FilterTreeNode{
+					Skip:   true,
+					Empty:  true,
+					Filter: makeFalseFilterFrom(f),
+				})
+				continue
+			}
+
+			sameIdNodes = append(sameIdNodes, node)
+			sameIdRanges = append(sameIdRanges, RangeValue{
+				cmp.MinNumericVal(f.Type),
+				typedSub(f.Type, f.Value, 1),
+			})
+
+		case FilterModeLe:
+			sameIdNodes = append(sameIdNodes, node)
+			sameIdRanges = append(sameIdRanges, RangeValue{
+				cmp.MinNumericVal(f.Type),
+				f.Value,
+			})
+
+		case FilterModeGt:
+			sameIdNodes = append(sameIdNodes, node)
+			sameIdRanges = append(sameIdRanges, RangeValue{
+				typedAdd(f.Type, f.Value, 1),
+				cmp.MaxNumericVal(f.Type),
+			})
+
+		case FilterModeGe:
+			sameIdNodes = append(sameIdNodes, node)
+			sameIdRanges = append(sameIdRanges, RangeValue{
+				f.Value,
+				cmp.MaxNumericVal(f.Type),
+			})
+
+		default:
+			// skip NE, IN, NI, RE
+			resultNodes = append(resultNodes, node)
+		}
+	}
+
+	// handle last round
+	postProcess()
+
+	return resultNodes
+}
+
+// Simplifications for sets that apply to AND or OR nodes
+// - and: IN(A) + IN(A) => IN(A) -- intersect (handle empty case)
+// - and: NI(A) + NI(A) => NI(A) -- union! (does not work for OR!!!)
+// - and: EQ(A) + EQ(B) => false iff A != B
+// - and: IN(A) + NI(B) => IN(A-B) -- A and not B, false when empty
+// - and: EQ(A) + NE(A) => false
+// - and: NE(A) + NE(B) => NI(A,B) -- union
+// - and: NI(A) + NE(B) => NI(A,B) -- union
+// - and: disjunct IN + IN => false
+// - and: disjunct IN + EQ => false
+// - or: IN(A) + IN(B) => IN(A+B) -- union
+// - or: IN(A) + EQ(B) => IN(A+B)
+// - or: EQ(A) + EQ(B) => IN(A+B)
+// - or: NE(A) + NE(B) => true
+// - or: NI(A) + NI(B) => NI(A/B), true iff A / B = ø
+// - or: NE(A) + NE(B) => true iff A != B
+// - or: IN(A) + NE(B) => true iff B in [A] (set + antiset covers all universe)
+// - any: EQ(A) + EQ(A) => EQ(A) -- same value, duplicate
+// - any: NE(A) + NE(A) => NE(A) -- same value, duplicate
+func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
+	var (
+		ins, nis    any
+		lastId      uint16
+		res         []*FilterTreeNode
+		f           *Filter
+		plus, minus func(BlockType, any, any) any
+	)
+
+	// stop early on empty node list
+	if len(nodes) == 0 {
+		return nodes
+	}
+
+	// set aggregation functions
+	if isOrNode {
+		plus, minus = cmp.Intersect, cmp.Union
+	} else {
+		plus, minus = cmp.Union, cmp.Intersect
+	}
+
+	// walk all nodes
+	for _, node := range nodes {
+		f = node.Filter
 
 		// reset when field id changes
 		if lastId != f.Index {
+			// produce zero or one combined filter from sets
+			if flt := makeSetFilterFrom(f, ins, nis); flt != nil {
+				res = append(res, &FilterTreeNode{
+					Empty:  flt.Mode == FilterModeFalse,
+					Skip:   flt.Mode == FilterModeTrue && !isOrNode,
+					Filter: flt,
+				})
+			}
+
+			// reset state
 			lastId = f.Index
-			eq, in = nil, nil
+			ins, nis = nil, nil
 		}
 
-		// rewrite node filter and skip second node on match,
-		// aggregates multiple occurences of same type filters
-		// as long as they are for the same field
+		// construct eq & ne sets
 		switch f.Mode {
-		case FilterModeIn:
-			switch {
-			case in != nil:
-				f.Value = cmp.Union(f.Type, f.Value, in.Filter.Value)
-				f.Matcher.WithSlice(f.Value)
-				in.Skip = true
-				needSkip = true
-				in = node
-			case eq != nil && in != nil:
-				// append to existing in condition
-				in.Filter.Value = reflectSliceAppend(in.Filter.Value, f.Value)
-				in.Filter.Matcher.WithSlice(in.Filter.Value)
-				node.Skip = true
-				needSkip = true
-			case eq != nil && in == nil:
-				// convert eq to in, drop other eq
-				f.Mode = FilterModeIn
-				f.Value = reflectSliceMake(eq.Filter.Value, f.Value)
-				f.Matcher = newFactory(f.Type).New(FilterModeIn)
-				f.Matcher.WithValue(f.Value)
-				eq.Skip = true
-				needSkip = true
-				eq = nil
-				in = node
-			}
 		case FilterModeEqual:
-			switch {
-			case in != nil:
-				// append to existing in condition
-				in.Filter.Value = reflectSliceAppend(in.Filter.Value, f.Value)
-				in.Filter.Matcher.WithSlice(in.Filter.Value)
-				node.Skip = true
-				needSkip = true
-			case eq != nil:
-				// convert eq to in and add value from other eq
-				f.Mode = FilterModeIn
-				f.Value = reflectSliceMake(eq.Filter.Value, f.Value)
-				f.Matcher = newFactory(f.Type).New(FilterModeIn)
-				f.Matcher.WithValue(f.Value)
-				eq.Skip = true
-				needSkip = true
-				eq = nil
-				in = node
+			if ins == nil {
+				ins = makeReflectSlice(f.Value)
+			} else {
+				ins = minus(f.Type, ins, makeReflectSlice(f.Value))
 			}
+		case FilterModeIn:
+			if ins == nil {
+				ins = f.Value
+			} else {
+				ins = minus(f.Type, ins, f.Value)
+			}
+		case FilterModeNotEqual:
+			if nis == nil {
+				nis = makeReflectSlice(f.Value)
+			} else {
+				nis = plus(f.Type, nis, makeReflectSlice(f.Value))
+			}
+		case FilterModeNotIn:
+			if nis == nil {
+				nis = f.Value
+			} else {
+				nis = plus(f.Type, nis, f.Value)
+			}
+		default:
+			// pass thorugh non-set filter modes
+			res = append(res, node)
 		}
 	}
 
-	// filter out all replaced nodes
-	if needSkip {
-		nodes, _, _ = slicex.CutFunc(nodes, func(n *FilterTreeNode) bool {
-			return !n.Skip
+	// handle last round
+	if flt := makeSetFilterFrom(f, ins, nis); flt != nil {
+		res = append(res, &FilterTreeNode{
+			Empty:  flt.Mode == FilterModeFalse,
+			Skip:   flt.Mode == FilterModeTrue,
+			Filter: flt,
 		})
 	}
 
-	return nodes
+	return res
+}
+
+func reflectSliceLen(s any) int {
+	return reflect.ValueOf(s).Len()
 }
 
 func reflectSliceIndex(slice any, index int) any {
 	return reflect.ValueOf(slice).Index(index).Interface()
 }
 
-func reflectSliceAppend(a, b any) any {
+func appendReflectValue(a, b any) any {
 	return reflect.Append(reflect.ValueOf(a), reflect.ValueOf(b)).Interface()
 }
 
-func reflectSliceMake(a, b any) any {
-	slice := reflect.MakeSlice(reflect.TypeOf(a), 0, 2)
-	slice = reflect.Append(slice, reflect.ValueOf(a), reflect.ValueOf(b))
+func appendReflectSlice(a, b any) any {
+	return reflect.AppendSlice(reflect.ValueOf(a), reflect.ValueOf(b)).Interface()
+}
+
+func makeReflectSlice(vals ...any) any {
+	if len(vals) == 0 {
+		return nil
+	}
+	slice := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(vals[0])), 0, len(vals))
+	for _, v := range vals {
+		slice = reflect.Append(slice, reflect.ValueOf(v))
+	}
 	return slice.Interface()
 }
 
-func reflectSliceLen(s any) int {
-	return reflect.ValueOf(s).Len()
+func typedAdd(typ BlockType, v any, o int) any {
+	switch typ {
+	case BlockUint64:
+		return v.(uint64) + uint64(o)
+	case BlockUint32:
+		return v.(uint32) + uint32(o)
+	case BlockUint16:
+		return v.(uint16) + uint16(o)
+	case BlockUint8:
+		return v.(uint8) + uint8(o)
+	case BlockInt64:
+		return v.(int64) + int64(o)
+	case BlockInt32:
+		return v.(int32) + int32(o)
+	case BlockInt16:
+		return v.(int16) + int16(o)
+	case BlockInt8:
+		return v.(int8) + int8(o)
+	default:
+		return v
+	}
+}
+
+func typedSub(typ BlockType, v any, o int) any {
+	switch typ {
+	case BlockUint64:
+		return v.(uint64) - uint64(o)
+	case BlockUint32:
+		return v.(uint32) - uint32(o)
+	case BlockUint16:
+		return v.(uint16) - uint16(o)
+	case BlockUint8:
+		return v.(uint8) - uint8(o)
+	case BlockInt64:
+		return v.(int64) - int64(o)
+	case BlockInt32:
+		return v.(int32) - int32(o)
+	case BlockInt16:
+		return v.(int16) - int16(o)
+	case BlockInt8:
+		return v.(int8) - int8(o)
+	default:
+		return v
+	}
+}
+
+func sortRanges(typ BlockType, vals []RangeValue) {
+	// sort by lower and upper range bound, replacing nil with math min/max
+	sort.Slice(vals, func(i, j int) bool {
+		// sort by lows
+		c := cmp.Cmp(typ, vals[i][0], vals[j][0])
+		if c != 0 {
+			return c < 0
+		}
+		// on equal lows, sort by highs
+		return cmp.Cmp(typ, vals[i][1], vals[j][1]) < 0
+	})
+}
+
+// intersect multiple ranges (len must be >= 1), result can at most be a single range or none
+func mergeRangesAnd(typ BlockType, vals []RangeValue) []RangeValue {
+	// pre-sort ranges
+	sortRanges(typ, vals)
+
+	// start at the first range
+	merged := vals[0]
+
+	// intersect ranges
+	for i := 1; i < len(vals); i++ {
+		// check if the next value intersects at all (next.min <= merged.max)
+		if cmp.Cmp(typ, merged[1], vals[i][0]) < 0 {
+			return nil
+		}
+
+		// update result range minimum (because vals is sorted we can take the equal
+		// or higer minimum from the current element)
+		merged[0] = vals[i][0]
+
+		// update result range maximum to the minimum of both
+		merged[1] = cmp.Min(typ, merged[1], vals[i][1])
+	}
+
+	return []RangeValue{merged}
+}
+
+// merge overlapping ranges, vals must have length > 1
+func mergeRangesOr(typ BlockType, vals []RangeValue) []RangeValue {
+	// pre-sort ranges
+	sortRanges(typ, vals)
+
+	// combine overlaps
+	j := 0
+	for i := 1; i < len(vals); i++ {
+		if cmp.Cmp(typ, vals[j][1], vals[i][0]) >= 0 {
+			if cmp.Cmp(typ, vals[j][1], vals[i][1]) < 0 {
+				vals[j][1] = vals[i][1]
+			}
+		} else {
+			j++
+			vals[j] = vals[i]
+		}
+	}
+
+	return vals[:j+1]
+}
+
+// - min == max => EQ(min)
+// - min == MinVal => LE(max)
+// - max == MaxVal => GE(min)
+// - other => RG(min, max)
+func makeRangeFilterFrom(f *Filter, rg RangeValue) *Filter {
+	switch {
+	case cmp.Cmp(f.Type, rg[0], rg[1]) == 0:
+		// equal min == max => EQ(min)
+		m := newFactory(f.Type).New(FilterModeEqual)
+		m.WithValue(rg[0])
+		return &Filter{
+			Name:    f.Name,
+			Type:    f.Type,
+			Mode:    FilterModeEqual,
+			Index:   f.Index,
+			Matcher: m,
+			Value:   rg[0],
+		}
+
+	case cmp.Cmp(f.Type, rg[0], cmp.MinNumericVal(f.Type)) == 0:
+		// range start is min val => LE(max)
+		m := newFactory(f.Type).New(FilterModeLe)
+		m.WithValue(rg[1])
+		return &Filter{
+			Name:    f.Name,
+			Type:    f.Type,
+			Mode:    FilterModeLe,
+			Index:   f.Index,
+			Matcher: m,
+			Value:   rg[1],
+		}
+
+	case cmp.Cmp(f.Type, rg[0], cmp.MaxNumericVal(f.Type)) == 0:
+		// range end is max val => GE(min)
+		m := newFactory(f.Type).New(FilterModeGe)
+		m.WithValue(rg[0])
+		return &Filter{
+			Name:    f.Name,
+			Type:    f.Type,
+			Mode:    FilterModeGe,
+			Index:   f.Index,
+			Matcher: m,
+			Value:   rg[0],
+		}
+
+	default:
+		// some other range => RG(min, max)
+		m := newFactory(f.Type).New(FilterModeRange)
+		m.WithValue(rg)
+		return &Filter{
+			Name:    f.Name,
+			Type:    f.Type,
+			Mode:    FilterModeRange,
+			Index:   f.Index,
+			Matcher: m,
+			Value:   rg,
+		}
+	}
+}
+
+func makeSetFilterFrom(f *Filter, ins, nis any) *Filter {
+	// aggreagate sets into new nodes
+	switch {
+	case ins != nil && nis != nil:
+		// both IN and NI conditions exist, make filter from set difference
+		set := cmp.Difference(f.Type, ins, nis)
+		switch reflectSliceLen(set) {
+		case 0:
+			return makeFalseFilterFrom(f) // contradiction
+		case 1:
+			return makeFilterFrom(f, FilterModeEqual, reflectSliceIndex(set, 0))
+		default:
+			return makeFilterFrom(f, FilterModeIn, set)
+		}
+	case ins != nil:
+		// only IN (or EQ) conditions exist
+		switch reflectSliceLen(ins) {
+		case 0:
+			return makeFalseFilterFrom(f) // contradiction
+		case 1:
+			return makeFilterFrom(f, FilterModeEqual, reflectSliceIndex(ins, 0))
+		default:
+			return makeFilterFrom(f, FilterModeIn, ins)
+		}
+	case nis != nil:
+		// only NI (or NE) conditions exist
+		switch reflectSliceLen(nis) {
+		case 0:
+			return makeTrueFilterFrom(f) // tautology
+		case 1:
+			return makeFilterFrom(f, FilterModeNotEqual, reflectSliceIndex(nis, 0))
+		default:
+			return makeFilterFrom(f, FilterModeNotIn, nis)
+		}
+	default:
+		return nil
+	}
+}
+
+func makeFalseFilterFrom(f *Filter) *Filter {
+	return &Filter{
+		Name:    f.Name,
+		Type:    f.Type,
+		Mode:    FilterModeFalse,
+		Index:   f.Index,
+		Matcher: &noopMatcher{},
+		Value:   nil,
+	}
+}
+
+func makeTrueFilterFrom(f *Filter) *Filter {
+	return &Filter{
+		Name:    f.Name,
+		Type:    f.Type,
+		Mode:    FilterModeTrue,
+		Index:   f.Index,
+		Matcher: &noopMatcher{},
+		Value:   nil,
+	}
+}
+
+func makeFilterFrom(f *Filter, mode FilterMode, val any) *Filter {
+	m := newFactory(f.Type).New(mode)
+	m.WithValue(val)
+	return &Filter{
+		Name:    f.Name,
+		Type:    f.Type,
+		Mode:    mode,
+		Index:   f.Index,
+		Matcher: m,
+		Value:   val,
+	}
+}
+
+func isFullRange(typ BlockType, rg RangeValue) bool {
+	isMin := cmp.Cmp(typ, rg[0], cmp.MinNumericVal(typ)) == 0
+	if !isMin {
+		return false
+	}
+	isMax := cmp.Cmp(typ, rg[0], cmp.MaxNumericVal(typ)) == 0
+	return isMax
 }

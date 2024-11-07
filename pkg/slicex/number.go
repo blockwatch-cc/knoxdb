@@ -193,3 +193,16 @@ func (o *OrderedNumbers[T]) Union(v *OrderedNumbers[T]) *OrderedNumbers[T] {
 	res.Values = merge(res.Values, v.Unique, v.Values...)
 	return res
 }
+
+func (o *OrderedNumbers[T]) Difference(v *OrderedNumbers[T]) *OrderedNumbers[T] {
+	if v == nil {
+		return o
+	}
+	res := &OrderedNumbers[T]{
+		NonZero: o.NonZero && v.NonZero,
+		Unique:  o.Unique && v.Unique,
+		Values:  make([]T, len(o.Values)),
+	}
+	copy(res.Values, o.Values)
+	return res.Remove(v.Values...)
+}

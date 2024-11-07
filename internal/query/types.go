@@ -14,17 +14,19 @@ type (
 )
 
 const (
-	FilterModeInvalid  = types.FilterModeInvalid
-	FilterModeEqual    = types.FilterModeEqual
-	FilterModeNotEqual = types.FilterModeNotEqual
-	FilterModeGt       = types.FilterModeGt
-	FilterModeGe       = types.FilterModeGe
-	FilterModeLt       = types.FilterModeLt
-	FilterModeLe       = types.FilterModeLe
-	FilterModeIn       = types.FilterModeIn
-	FilterModeNotIn    = types.FilterModeNotIn
-	FilterModeRange    = types.FilterModeRange
-	FilterModeRegexp   = types.FilterModeRegexp
+	FilterModeInvalid  = types.FilterModeInvalid  // 0
+	FilterModeEqual    = types.FilterModeEqual    // 1
+	FilterModeNotEqual = types.FilterModeNotEqual // 2
+	FilterModeGt       = types.FilterModeGt       // 3
+	FilterModeGe       = types.FilterModeGe       // 4
+	FilterModeLt       = types.FilterModeLt       // 5
+	FilterModeLe       = types.FilterModeLe       // 6
+	FilterModeIn       = types.FilterModeIn       // 7
+	FilterModeNotIn    = types.FilterModeNotIn    // 8
+	FilterModeRange    = types.FilterModeRange    // 9
+	FilterModeRegexp   = types.FilterModeRegexp   // 10
+	FilterModeTrue     = types.FilterModeTrue     // 11
+	FilterModeFalse    = types.FilterModeFalse    // 12
 )
 
 const (

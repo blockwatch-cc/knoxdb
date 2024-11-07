@@ -177,6 +177,19 @@ func (o *OrderedBytes) Union(v *OrderedBytes) *OrderedBytes {
 	return res
 }
 
+func (o *OrderedBytes) Difference(v *OrderedBytes) *OrderedBytes {
+	if v == nil {
+		return o
+	}
+	res := &OrderedBytes{
+		NonZero: o.NonZero && v.NonZero,
+		Unique:  o.Unique && v.Unique,
+		Values:  make([][]byte, len(o.Values)),
+	}
+	copy(res.Values, o.Values)
+	return res.Remove(v.Values...)
+}
+
 func containsBytes(s [][]byte, val []byte) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {

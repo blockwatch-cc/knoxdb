@@ -198,6 +198,19 @@ func (o *OrderedStrings) Union(v *OrderedStrings) *OrderedStrings {
 	return res
 }
 
+func (o *OrderedStrings) Difference(v *OrderedStrings) *OrderedStrings {
+	if v == nil {
+		return o
+	}
+	res := &OrderedStrings{
+		NonZero: o.NonZero && v.NonZero,
+		Unique:  o.Unique && v.Unique,
+		Values:  make([]string, len(o.Values)),
+	}
+	copy(res.Values, o.Values)
+	return res.Remove(v.Values...)
+}
+
 func containsString(s []string, val string) bool {
 	// empty s cannot contain values
 	if len(s) == 0 {
