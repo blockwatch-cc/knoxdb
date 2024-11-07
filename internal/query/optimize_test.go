@@ -25,130 +25,68 @@ func TestOptimize(t *testing.T) {
 		comment  string
 	}{
 		{
-			name: "SimpleReorder",
-			input: makeAndTree(
-				makeRangeNode(0, 100),
-				makeEqualNode(50),
-			),
-			expected: makeAndTree(
-				makeEqualNode(50),
-			),
-			comment: "Optimized away the unnecessary range condition",
+			name:     "SimpleReorder",
+			input:    makeAndTree(makeRangeNode(0, 100), makeEqualNode(50)),
+			expected: makeAndTree(makeEqualNode(50)),
+			comment:  "Optimized away the unnecessary range condition",
 		},
 		{
-			name: "MergeInGaps",
-			input: makeOrTree(
-				makeInNode(1, 2, 3),
-				makeEqualNode(4),
-				makeInNode(5, 6, 7),
-			),
-			expected: makeOrTree(
-				makeInNode(1, 2, 3, 4, 5, 6, 7),
-			),
-			comment: "Adjacent IN conditions should be merged with gap-filling equals",
+			name:     "MergeInGaps",
+			input:    makeOrTree(makeInNode(1, 2, 3), makeEqualNode(4), makeInNode(5, 6, 7)),
+			expected: makeOrTree(makeInNode(1, 2, 3, 4, 5, 6, 7)),
+			comment:  "Adjacent IN conditions should be merged with gap-filling equals",
 		},
 		{
-			name: "MergeRanges",
-			input: makeAndTree(
-				makeGtNode(10),
-				makeLtNode(90),
-				makeGeNode(20),
-				makeLeNode(80),
-				makeRangeNode(30, 70),
-			),
-			expected: makeAndTree(
-				makeRangeNode(30, 70),
-			),
-			comment: "Multiple overlapping ranges should be merged into most restrictive form",
+			name:     "MergeRanges",
+			input:    makeAndTree(makeGtNode(10), makeLtNode(90), makeGeNode(20), makeLeNode(80), makeRangeNode(30, 70)),
+			expected: makeAndTree(makeRangeNode(30, 70)),
+			comment:  "Multiple overlapping ranges should be merged into most restrictive form",
 		},
 		{
-			name: "RangeOrOverlap",
-			input: makeOrTree(
-				makeRangeNode(0, 15),
-				makeRangeNode(10, 30),
-			),
-			expected: makeOrTree(
-				makeRangeNode(0, 30),
-			),
-			comment: "Non-overlapping ranges in OR should not be merged",
+			name:     "RangeOrOverlap",
+			input:    makeOrTree(makeRangeNode(0, 15), makeRangeNode(10, 30)),
+			expected: makeOrTree(makeRangeNode(0, 30)),
+			comment:  "Non-overlapping ranges in OR should not be merged",
 		},
 		{
-			name: "RangeOrNoOverlap",
-			input: makeOrTree(
-				makeRangeNode(0, 10),
-				makeRangeNode(20, 30),
-			),
-			expected: makeOrTree(
-				makeRangeNode(0, 10),
-				makeRangeNode(20, 30),
-			),
-			comment: "Non-overlapping ranges in OR should not be merged",
+			name:     "RangeOrNoOverlap",
+			input:    makeOrTree(makeRangeNode(0, 10), makeRangeNode(20, 30)),
+			expected: makeOrTree(makeRangeNode(0, 10), makeRangeNode(20, 30)),
+			comment:  "Non-overlapping ranges in OR should not be merged",
 		},
 		{
-			name: "TypeBoundsGtLt",
-			input: makeAndTree(
-				makeGtNode(0),
-				makeLtNode(100),
-			),
-			expected: makeAndTree(
-				makeRangeNode(1, 99),
-			),
-			comment: "Boundary conditions should be handled correctly",
+			name:     "TypeBoundsGtLt",
+			input:    makeAndTree(makeGtNode(0), makeLtNode(100)),
+			expected: makeAndTree(makeRangeNode(1, 99)),
+			comment:  "Boundary conditions should be handled correctly",
 		},
 		{
-			name: "TypeBoundsGeLe",
-			input: makeAndTree(
-				makeGeNode(0),
-				makeLeNode(100),
-			),
-			expected: makeAndTree(
-				makeRangeNode(0, 100),
-			),
-			comment: "Boundary conditions should be handled correctly",
+			name:     "TypeBoundsGeLe",
+			input:    makeAndTree(makeGeNode(0), makeLeNode(100)),
+			expected: makeAndTree(makeRangeNode(0, 100)),
+			comment:  "Boundary conditions should be handled correctly",
 		},
 		{
-			name: "RangeNotEqual",
-			input: makeAndTree(
-				makeRangeNode(0, 100),
-				makeNotEqualNode(50),
-			),
-			expected: makeAndTree(
-				makeRangeNode(0, 100),
-				makeNotEqualNode(50),
-			),
-			comment: "NOT conditions should not affect range merging",
+			name:     "RangeNotEqual",
+			input:    makeAndTree(makeRangeNode(0, 100), makeNotEqualNode(50)),
+			expected: makeAndTree(makeRangeNode(0, 100), makeNotEqualNode(50)),
+			comment:  "NOT conditions should not affect range merging",
 		},
 		{
-			name: "EqualAndGt",
-			input: makeAndTree(
-				makeEqualNode(42),
-				makeGtNode(41),
-			),
-			expected: makeAndTree(
-				makeEqualNode(42),
-			),
-			comment: "EQ and GT should be simplified",
+			name:     "EqualAndGt",
+			input:    makeAndTree(makeEqualNode(42), makeGtNode(41)),
+			expected: makeAndTree(makeEqualNode(42)),
+			comment:  "EQ and GT should be simplified",
 		},
 		{
-			name: "RegexpRange",
-			input: makeAndTree(
-				newTestRangeNode(1, "a", "z"),
-				newTestNode(FilterModeRegexp, 1, "^[a-m]+$"),
-			),
-			expected: makeAndTree(
-				newTestRangeNode(1, "a", "z"),
-				newTestNode(FilterModeRegexp, 1, "^[a-m]+$"),
-			),
-			comment: "Regexp conditions should not be merged with ranges",
+			name:     "RegexpRange",
+			input:    makeAndTree(newTestRangeNode(1, "a", "z"), newTestNode(FilterModeRegexp, 1, "^[a-m]+$")),
+			expected: makeAndTree(newTestRangeNode(1, "a", "z"), newTestNode(FilterModeRegexp, 1, "^[a-m]+$")),
+			comment:  "Regexp conditions should not be merged with ranges",
 		},
-		// TODO: always true condition, needs to be supported
 		{
-			name: "TautologyOne",
-			input: makeOrTree(
-				makeRangeNode(0, 100),
-				makeNotEqualNode(50),
-				makeRangeNode(40, 60),
-			),
+			name:     "TautologyOne",
+			input:    makeOrTree(makeRangeNode(0, 100), makeNotEqualNode(50), makeRangeNode(40, 60)),
 			expected: makeOrTree(),
 			comment:  "Range splits should handle multiple overlapping conditions",
 		},
