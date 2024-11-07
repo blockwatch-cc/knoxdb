@@ -119,8 +119,8 @@ func (c Condition) Validate() error {
 			return fmt.Errorf("nil filter value")
 		}
 	} else {
-		for _, c := range c.Children {
-			if err := c.Validate(); err != nil {
+		for i := range c.Children {
+			if err := c.Children[i].Validate(); err != nil {
 				return err
 			}
 		}
@@ -252,8 +252,8 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 		OrKind:   c.OrKind,
 		Children: make([]*FilterTreeNode, 0),
 	}
-	for _, v := range c.Children {
-		cc, err := v.Compile(s)
+	for i := range c.Children {
+		cc, err := c.Children[i].Compile(s)
 		if err != nil {
 			return nil, err
 		}

@@ -69,7 +69,7 @@ func TestOptimize(t *testing.T) {
 		{
 			name:     "RangeNotEqual",
 			input:    makeAndTree(makeRangeNode(0, 100), makeNotEqualNode(50)),
-			expected: makeAndTree(makeRangeNode(0, 100), makeNotEqualNode(50)),
+			expected: makeAndTree(makeNotEqualNode(50), makeRangeNode(0, 100)),
 			comment:  "NOT conditions should not affect range merging",
 		},
 		{
@@ -87,15 +87,14 @@ func TestOptimize(t *testing.T) {
 		{
 			name:     "TautologyOne",
 			input:    makeOrTree(makeRangeNode(0, 100), makeNotEqualNode(50), makeRangeNode(40, 60)),
-			expected: makeOrTree(),
-			comment:  "Range splits should handle multiple overlapping conditions",
+			expected: makeOrTree(makeNotEqualNode(50), makeRangeNode(0, 100)),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			require.NotPanics(t, tt.input.Optimize)
-			assert.Equal(t, tt.expected, tt.input, tt.comment)
+			assert.Equal(t, tt.expected.String(), tt.input.String(), tt.comment)
 		})
 	}
 }

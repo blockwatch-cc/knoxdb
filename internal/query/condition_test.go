@@ -607,6 +607,7 @@ func BenchmarkConditionTree(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			c := buildLargeConditionTree(bm.size)
 			b.ResetTimer()
+			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				_, err := c.Compile(testSchema)
 				if err != nil {
