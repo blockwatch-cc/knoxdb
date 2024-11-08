@@ -5,6 +5,7 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/engine"
@@ -280,7 +281,6 @@ func TestPlanComplexValidation(t *testing.T) {
 			ExpectedLen:     4,
 			ExpectedData:    []byte{1, 2, 3, 4},
 		},
-		// Additional test cases...
 	}
 
 	for _, tc := range testCases {
@@ -290,9 +290,11 @@ func TestPlanComplexValidation(t *testing.T) {
 			switch tc.Name {
 			case "Complex AND Combination":
 				flt, err = And(Equal("id", 1), Gt("score", 2.5)).Compile(planTestSchema)
+				fmt.Printf("Debug: Filter for %s: %+v\n", tc.Name, flt)
 				require.NoError(t, err)
 			case "Complex OR Combination":
 				flt, err = Or(Equal("id", 1), Equal("id", 2), Equal("id", 3), Equal("id", 4)).Compile(planTestSchema)
+				fmt.Printf("Debug: Filter for %s: %+v\n", tc.Name, flt)
 				require.NoError(t, err)
 			}
 
@@ -324,8 +326,10 @@ func TestPlanComplexValidation(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+				fmt.Printf("Debug: Result length for %s: %d\n", tc.Name, res.Len())
 				assert.Equal(t, tc.ExpectedLen, res.Len())
 				if tc.ExpectedData != nil {
+					fmt.Printf("Debug: Result data for %s: %v\n", tc.Name, res)
 					assert.Equal(t, tc.ExpectedData, []byte{1, 3}) // Adjust as needed
 				}
 			}
@@ -391,8 +395,10 @@ func TestPlanStreamingBehavior(t *testing.T) {
 			switch tc.Name {
 			case "Stream with Matching Condition":
 				flt, err = Or(Equal("id", 1), Equal("id", 3)).Compile(planTestSchema)
+				fmt.Printf("Debug: Filter for %s: %+v\n", tc.Name, flt)
 			case "Stream with No Match":
 				flt, err = Equal("id", 999).Compile(planTestSchema)
+				fmt.Printf("Debug: Filter for %s: %+v\n", tc.Name, flt)
 			}
 
 			require.NoError(t, err, "Failed to compile filter")
@@ -423,6 +429,8 @@ func TestPlanStreamingBehavior(t *testing.T) {
 				streamCount++
 				return nil
 			})
+
+			fmt.Printf("Debug: Stream count for %s: %d\n", tc.Name, streamCount)
 
 			if tc.IsErrorExpected {
 				assert.Error(t, err, "Expected an error during streaming")
