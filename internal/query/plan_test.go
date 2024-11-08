@@ -266,3 +266,39 @@ func TestPlanValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestPlanQueryIndexProcessing(t *testing.T) {
+	testCases := []PlanTestCase{
+		{
+			Name:            "Index Query Test",
+			IsErrorExpected: false,
+			ExpectedLen:     2,
+			ExpectedData:    []byte{1, 2},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			res := NewResult(planTestSchema)
+			require.NoError(t, res.Append(makeTestEncodedStruct(1), false))
+			require.NoError(t, res.Append(makeTestEncodedStruct(2), false))
+
+			idx := NewMockIndex(testIndexSchema, bitmap.NewFromArray([]uint64{1, 2}))
+			tbl := NewMockTable(planTestSchema, []engine.IndexEngine{idx}, res)
+
+			plan := NewQueryPlan().
+				WithTable(tbl).
+				WithSchema(planTestSchema)
+			defer plan.Close()
+
+			err := plan.QueryIndexes(context.Background())
+			if tc.IsErrorExpected {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.ExpectedLen, res.Len())
+				// Add more assertions to check internal state
+			}
+		})
+	}
+}
