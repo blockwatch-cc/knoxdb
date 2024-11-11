@@ -259,6 +259,11 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		f            *Filter
 	)
 
+	// stop early on empty node list
+	if len(nodes) == 0 {
+		return nodes
+	}
+
 	postProcess := func() {
 		// try merge multiple ranges
 		if len(sameIdNodes) > 1 {
@@ -310,14 +315,12 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 	}
 
 	for _, node := range nodes {
-		f = node.Filter
-
 		// try optimize when field id changes
-		if lastId != f.Index {
+		if lastId != node.Filter.Index {
 			postProcess()
 
 			// prepare next round
-			lastId = f.Index
+			lastId = node.Filter.Index
 			if sameIdNodes != nil {
 				sameIdNodes = sameIdNodes[:0]
 			}
@@ -325,6 +328,9 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 				sameIdRanges = sameIdRanges[:0]
 			}
 		}
+
+		// keep this node's filter around for potential use in post-process
+		f = node.Filter
 
 		// skip non-numeric types
 		switch f.Type {
@@ -459,16 +465,17 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 
 	// walk all nodes
 	for _, node := range nodes {
-		f = node.Filter
-
 		// reset when field id changes
-		if lastId != f.Index {
+		if lastId != node.Filter.Index {
 			postProcess()
 
 			// reset state
-			lastId = f.Index
+			lastId = node.Filter.Index
 			ins, nis = nil, nil
 		}
+
+		// keep this node's filter around for potential use in post-process
+		f = node.Filter
 
 		// construct eq & ne sets
 		switch f.Mode {

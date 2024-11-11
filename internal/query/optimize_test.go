@@ -25,7 +25,7 @@ func TestOptimize(t *testing.T) {
 		comment  string
 	}{
 		{
-			name:     "SimpleReorder",
+			name:     "Specialized",
 			input:    makeAndTree(makeRangeNode(0, 100), makeEqualNode(50)),
 			expected: makeAndTree(makeEqualNode(50)),
 			comment:  "Optimized away the unnecessary range condition",
@@ -80,14 +80,19 @@ func TestOptimize(t *testing.T) {
 		},
 		{
 			name:     "RegexpRange",
-			input:    makeAndTree(newTestRangeNode(1, "a", "z"), makeRegexNode("^[a-m]+$")),
-			expected: makeAndTree(newTestRangeNode(1, "a", "z"), makeRegexNode("^[a-m]+$")),
+			input:    makeAndTree(makeTestRangeNode(1, "a", "z"), makeRegexNode("^[a-m]+$")),
+			expected: makeAndTree(makeTestRangeNode(1, "a", "z"), makeRegexNode("^[a-m]+$")),
 			comment:  "Regexp conditions should not be merged with ranges",
 		},
 		{
 			name:     "TautologyOne",
 			input:    makeOrTree(makeRangeNode(0, 100), makeNotEqualNode(50), makeRangeNode(40, 60)),
 			expected: makeOrTree(makeNotEqualNode(50), makeRangeNode(0, 100)),
+		},
+		{
+			name:     "Independent Fields",
+			input:    makeAndTree(makeNode(FilterModeEqual, 1, int64(1)), makeNode(FilterModeEqual, 2, []byte("hi"))),
+			expected: makeAndTree(makeNode(FilterModeEqual, 1, int64(1)), makeNode(FilterModeEqual, 2, []byte("hi"))),
 		},
 	}
 
@@ -137,9 +142,9 @@ func typeFromValue(v interface{}) BlockType {
 	}
 }
 
-// newTestNode constructs a FilterTreeNode for a given filter mode, field index, and value,
+// makeNode constructs a FilterTreeNode for a given filter mode, field index, and value,
 // initializing the appropriate matcher based on the filter mode.
-func newTestNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterTreeNode {
+func makeNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterTreeNode {
 	f := &Filter{
 		Mode:  mode,
 		Index: fieldIndex,
@@ -172,12 +177,12 @@ func newTestNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterT
 	return &FilterTreeNode{Filter: f}
 }
 
-// newTestRangeNode constructs a FilterTreeNode for a range condition,
+// makeTestRangeNode constructs a FilterTreeNode for a range condition,
 // handling conversion of string and time values to byte slices and Unix timestamps.
-func newTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode {
+func makeTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode {
 	// Handle nil range bounds
 	if from == nil && to == nil {
-		return newTestNode(FilterModeRange, fieldIndex, nil)
+		return makeNode(FilterModeRange, fieldIndex, nil)
 	}
 
 	// Handle time values
@@ -239,17 +244,17 @@ func makeOrTree(children ...*FilterTreeNode) *FilterTreeNode {
 
 // makeEqualNode constructs a FilterTreeNode for an equality condition with a specified integer value.
 func makeEqualNode(val int) *FilterTreeNode {
-	return newTestNode(FilterModeEqual, 1, int64(val))
+	return makeNode(FilterModeEqual, 1, int64(val))
 }
 
 // makeRangeNode constructs a FilterTreeNode for a range condition between two integer values.
 func makeRangeNode(from, to int) *FilterTreeNode {
-	return newTestRangeNode(1, int64(from), int64(to))
+	return makeTestRangeNode(1, int64(from), int64(to))
 }
 
 // makeRegexNode constructs a FilterTreeNode for a regexp conditions.
 func makeRegexNode(s string) *FilterTreeNode {
-	return newTestNode(FilterModeRegexp, 1, s)
+	return makeNode(FilterModeRegexp, 1, s)
 }
 
 // makeInNode constructs a FilterTreeNode for an IN condition with a list of integer values.
@@ -258,30 +263,30 @@ func makeInNode(vals ...int) *FilterTreeNode {
 	for i, v := range vals {
 		cval[i] = int64(v)
 	}
-	return newTestNode(FilterModeIn, 1, cval)
+	return makeNode(FilterModeIn, 1, cval)
 }
 
 // makeNotEqualNode constructs a FilterTreeNode for a not-equal condition with a specified integer value.
 func makeNotEqualNode(val int) *FilterTreeNode {
-	return newTestNode(FilterModeNotEqual, 1, int64(val))
+	return makeNode(FilterModeNotEqual, 1, int64(val))
 }
 
 // makeGtNode constructs a FilterTreeNode for a greater-than condition with a specified integer value.
 func makeGtNode(val int) *FilterTreeNode {
-	return newTestNode(FilterModeGt, 1, int64(val))
+	return makeNode(FilterModeGt, 1, int64(val))
 }
 
 // makeLtNode constructs a FilterTreeNode for a less-than condition with a specified integer value.
 func makeLtNode(val int) *FilterTreeNode {
-	return newTestNode(FilterModeLt, 1, int64(val))
+	return makeNode(FilterModeLt, 1, int64(val))
 }
 
 // makeGeNode constructs a FilterTreeNode for a greater-than-or-equal condition with a specified integer value.
 func makeGeNode(val int) *FilterTreeNode {
-	return newTestNode(FilterModeGe, 1, int64(val))
+	return makeNode(FilterModeGe, 1, int64(val))
 }
 
 // makeLeNode constructs a FilterTreeNode for a less-than-or-equal condition with a specified integer value.
 func makeLeNode(val int) *FilterTreeNode {
-	return newTestNode(FilterModeLe, 1, int64(val))
+	return makeNode(FilterModeLe, 1, int64(val))
 }
