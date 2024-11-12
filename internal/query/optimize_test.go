@@ -44,9 +44,7 @@ var queryConditions = []FilterMode{
 	FilterModeRegexp,
 }
 
-// TestOptimizeExtended tests the optimizer with all combinations of types and conditions.
-// It verifies that the optimizer does not panic, that the resulting trees are not nil,
-// and that certain conditions are simplified or removed as expected.
+// TestOptimizeExtended verifies the optimizer's behavior with various data types and conditions, ensuring correct tree structures.
 func TestOptimizeExtended(t *testing.T) {
 	// Iterate over all data types and query conditions
 	for typ, val := range allTypesSchema {
@@ -88,8 +86,7 @@ func TestOptimizeExtended(t *testing.T) {
 	}
 }
 
-// typeFromValue maps Go types to corresponding BlockType constants.
-// Defaults to BlockTime for unknown or nil types, ensuring robust type handling in tests.
+// typeFromValue returns the BlockType corresponding to the given Go type, defaulting to BlockTime for unknown or nil types.
 func typeFromValue(v interface{}) BlockType {
 	if v == nil {
 		return BlockTime
@@ -126,8 +123,7 @@ func typeFromValue(v interface{}) BlockType {
 	}
 }
 
-// makeNode constructs a FilterTreeNode for a given filter mode, field index, and value,
-// initializing the appropriate matcher based on the filter mode.
+// makeNode constructs a FilterTreeNode with a specified filter mode, field index, and value, setting up the appropriate matcher.
 func makeNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterTreeNode {
 	// Log the initial value and its type
 	log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
@@ -212,8 +208,7 @@ func makeNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterTree
 	return &FilterTreeNode{Filter: f}
 }
 
-// makeTestRangeNode constructs a FilterTreeNode for a range condition,
-// handling conversion of string and time values to byte slices and Unix timestamps.
+// makeTestRangeNode constructs a FilterTreeNode for a range condition, converting string and time values to byte slices and Unix timestamps.
 func makeTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode {
 	// Handle nil range bounds
 	if from == nil && to == nil {
@@ -256,7 +251,7 @@ func makeTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode 
 	return &FilterTreeNode{Filter: f}
 }
 
-// newTestTree constructs a FilterTreeNode representing a logical tree (AND/OR) with specified child nodes.
+// newTestTree constructs a logical tree (AND/OR) FilterTreeNode with specified child nodes.
 func newTestTree(orKind bool, children ...*FilterTreeNode) *FilterTreeNode {
 	if len(children) == 0 {
 		return &FilterTreeNode{}
@@ -287,7 +282,7 @@ func makeRangeNode(from, to int) *FilterTreeNode {
 	return makeTestRangeNode(1, int64(from), int64(to))
 }
 
-// makeRegexNode constructs a FilterTreeNode for a regexp conditions.
+// makeRegexNode constructs a FilterTreeNode for a regular expression condition with a specified string.
 func makeRegexNode(s string) *FilterTreeNode {
 	return makeNode(FilterModeRegexp, 1, s)
 }
