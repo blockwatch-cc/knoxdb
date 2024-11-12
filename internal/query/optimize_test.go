@@ -26,7 +26,7 @@ var allTypesSchema = map[BlockType]interface{}{
 	BlockFloat64: float64(42.0),
 	BlockFloat32: float32(42.0),
 	BlockBool:    true,
-	BlockString:  "test",
+	BlockString:  []byte("test"), // sic
 	BlockBytes:   []byte("test"),
 }
 
