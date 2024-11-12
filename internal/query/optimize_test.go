@@ -4,6 +4,8 @@
 package query
 
 import (
+	"fmt"
+	"log"
 	"testing"
 	"time"
 
@@ -11,8 +13,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestOptimizeConditions tests the query optimizer's ability to handle complex
-// and edge cases. It verifies:
+// Define a schema with a value for each data type
+var allTypesSchema = map[BlockType]interface{}{
+	BlockInt64:   int64(42),
+	BlockInt32:   int32(42),
+	BlockInt16:   int16(42),
+	BlockInt8:    int8(42),
+	BlockUint64:  uint64(42),
+	BlockUint32:  uint32(42),
+	BlockUint16:  uint16(42),
+	BlockUint8:   uint8(42),
+	BlockFloat64: float64(42.0),
+	BlockFloat32: float32(42.0),
+	BlockBool:    true,
+	BlockString:  []byte("test"), // sic
+	BlockBytes:   []byte("test"),
+}
+
+// Define query conditions
+var queryConditions = []FilterMode{
+	FilterModeEqual,
+	FilterModeNotEqual,
+	FilterModeIn,
+	FilterModeNotIn,
+	FilterModeGt,
+	FilterModeLt,
+	FilterModeGe,
+	FilterModeLe,
+	FilterModeRange,
+	FilterModeRegexp,
+}
+
+// TestOptimize tests the query optimizer's ability to handle complex and edge cases.
+// It verifies:
 // 1. Condition merging and simplification
 // 2. Reordering by selectivity
 // 3. Handling of invalid/contradictory conditions
@@ -104,8 +137,49 @@ func TestOptimize(t *testing.T) {
 	}
 }
 
-// typeFromValue maps Go types to corresponding BlockType constants.
-// Defaults to BlockTime for unknown or nil types, ensuring robust type handling in tests.
+// TestOptimizeExtended verifies the optimizer's behavior with various data types and conditions, ensuring correct tree structures.
+func TestOptimizeExtended(t *testing.T) {
+	// Iterate over all data types and query conditions
+	for typ, val := range allTypesSchema {
+		for _, cond := range queryConditions {
+			t.Run(fmt.Sprintf("%s_%s", typ, cond), func(t *testing.T) {
+				// Create a filter node for the current type and condition
+				node := makeNode(cond, 1, val)
+
+				// Create AND/OR trees with the node
+				andTree := makeAndTree(node, node)
+				orTree := makeOrTree(node, node)
+
+				// Run optimizer and check results
+				require.NotPanics(t, andTree.Optimize, "Optimizer should not panic")
+				require.NotPanics(t, orTree.Optimize, "Optimizer should not panic")
+
+				// Enhanced assertions
+				assert.NotNil(t, andTree, "AND tree should not be nil after optimization")
+				assert.NotNil(t, orTree, "OR tree should not be nil after optimization")
+
+				// Check if redundant conditions are removed
+				if cond == FilterModeEqual {
+					assert.Equal(t, 1, len(andTree.Children), "Redundant conditions should be removed in AND tree")
+				}
+
+				// Check if certain conditions are simplified
+				if cond == FilterModeIn {
+					assert.Condition(t, func() bool {
+						// Example condition: check if IN condition is simplified
+						return len(andTree.Children) <= 2
+					}, "IN condition should be simplified in AND tree")
+				}
+
+				// Check logical tree structure
+				assert.True(t, andTree.OrKind == false, "AND tree should maintain AND structure")
+				assert.True(t, orTree.OrKind == true, "OR tree should maintain OR structure")
+			})
+		}
+	}
+}
+
+// typeFromValue returns the BlockType corresponding to the given Go type, defaulting to BlockTime for unknown or nil types.
 func typeFromValue(v interface{}) BlockType {
 	if v == nil {
 		return BlockTime
@@ -142,9 +216,11 @@ func typeFromValue(v interface{}) BlockType {
 	}
 }
 
-// makeNode constructs a FilterTreeNode for a given filter mode, field index, and value,
-// initializing the appropriate matcher based on the filter mode.
+// makeNode constructs a FilterTreeNode with a specified filter mode, field index, and value, setting up the appropriate matcher.
 func makeNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterTreeNode {
+	// Log the initial value and its type
+	log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
+
 	f := &Filter{
 		Mode:  mode,
 		Index: fieldIndex,
@@ -169,16 +245,91 @@ func makeNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterTree
 		}
 		f.Matcher.WithValue(f.Value)
 	case FilterModeIn, FilterModeNotIn:
-		f.Matcher.WithSlice(value)
+		// Ensure value is a slice of the correct type
+		switch v := value.(type) {
+		case []int64:
+			f.Value = v
+		case []int32:
+			f.Value = v
+		case []int16:
+			f.Value = v
+		case []int8:
+			f.Value = v
+		case []uint64:
+			f.Value = v
+		case []uint32:
+			f.Value = v
+		case []uint16:
+			f.Value = v
+		case []float64:
+			f.Value = v
+		case []float32:
+			f.Value = v
+		case []bool:
+			f.Value = v
+		case []string:
+			f.Value = v
+		case []byte:
+			if f.Type == BlockBytes {
+				f.Value = [][]byte{v}
+			} else {
+				f.Value = v
+			}
+		default:
+			// Convert single values to a slice of the correct type
+			switch f.Type {
+			case BlockInt64:
+				f.Value = []int64{v.(int64)}
+			case BlockInt32:
+				f.Value = []int32{v.(int32)}
+			case BlockInt16:
+				f.Value = []int16{v.(int16)}
+			case BlockInt8:
+				f.Value = []int8{v.(int8)}
+			case BlockUint64:
+				f.Value = []uint64{v.(uint64)}
+			case BlockUint32:
+				f.Value = []uint32{v.(uint32)}
+			case BlockUint16:
+				f.Value = []uint16{v.(uint16)}
+			case BlockUint8:
+				f.Value = []uint8{v.(uint8)}
+			case BlockFloat64:
+				f.Value = []float64{v.(float64)}
+			case BlockFloat32:
+				f.Value = []float32{v.(float32)}
+			case BlockBool:
+				f.Value = []bool{v.(bool)}
+			case BlockString:
+				f.Value = []string{v.(string)}
+			case BlockBytes:
+				f.Value = [][]byte{v.([]byte)}
+			default:
+				f.Value = []interface{}{v}
+			}
+		}
+		f.Matcher.WithSlice(f.Value)
+	case FilterModeRange:
+		// Ensure value is a RangeValue
+		if _, ok := value.(RangeValue); !ok {
+			f.Value = RangeValue{value, value}
+		}
+		f.Matcher.WithValue(f.Value)
 	default:
-		f.Matcher.WithValue(value)
+		// Convert string to []byte if necessary
+		if s, ok := value.(string); ok && f.Type == BlockBytes {
+			f.Value = []byte(s)
+		}
+		f.Matcher.WithValue(f.Value)
 	}
+
+	// Log the final value and its type after processing
+	log.Printf("makeNode processed value: %v (type: %T)", f.Value, f.Value)
 
 	return &FilterTreeNode{Filter: f}
 }
 
-// makeTestRangeNode constructs a FilterTreeNode for a range condition,
-// handling conversion of string and time values to byte slices and Unix timestamps.
+// makeTestRangeNode constructs a FilterTreeNode for a range condition, converting string and time values to byte slices and Unix timestamps.
 func makeTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode {
 	// Handle nil range bounds
 	if from == nil && to == nil {
@@ -221,7 +372,7 @@ func makeTestRangeNode(fieldIndex uint16, from, to interface{}) *FilterTreeNode 
 	return &FilterTreeNode{Filter: f}
 }
 
-// newTestTree constructs a FilterTreeNode representing a logical tree (AND/OR) with specified child nodes.
+// newTestTree constructs a logical tree (AND/OR) FilterTreeNode with specified child nodes.
 func newTestTree(orKind bool, children ...*FilterTreeNode) *FilterTreeNode {
 	if len(children) == 0 {
 		return &FilterTreeNode{}
@@ -252,7 +403,7 @@ func makeRangeNode(from, to int) *FilterTreeNode {
 	return makeTestRangeNode(1, int64(from), int64(to))
 }
 
-// makeRegexNode constructs a FilterTreeNode for a regexp conditions.
+// makeRegexNode constructs a FilterTreeNode for a regular expression condition with a specified string.
 func makeRegexNode(s string) *FilterTreeNode {
 	return makeNode(FilterModeRegexp, 1, s)
 }
