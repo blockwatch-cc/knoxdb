@@ -44,6 +44,99 @@ var queryConditions = []FilterMode{
 	FilterModeRegexp,
 }
 
+// TestOptimize tests the query optimizer's ability to handle complex and edge cases.
+// It verifies:
+// 1. Condition merging and simplification
+// 2. Reordering by selectivity
+// 3. Handling of invalid/contradictory conditions
+// 4. Type safety and mixed type handling
+func TestOptimize(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    *FilterTreeNode
+		expected *FilterTreeNode
+		comment  string
+	}{
+		{
+			name:     "Specialized",
+			input:    makeAndTree(makeRangeNode(0, 100), makeEqualNode(50)),
+			expected: makeAndTree(makeEqualNode(50)),
+			comment:  "Optimized away the unnecessary range condition",
+		},
+		{
+			name:     "MergeInGaps",
+			input:    makeOrTree(makeInNode(1, 2, 3), makeEqualNode(4), makeInNode(5, 6, 7)),
+			expected: makeOrTree(makeInNode(1, 2, 3, 4, 5, 6, 7)),
+			comment:  "Adjacent IN conditions should be merged with gap-filling equals",
+		},
+		{
+			name:     "MergeRanges",
+			input:    makeAndTree(makeGtNode(10), makeLtNode(90), makeGeNode(20), makeLeNode(80), makeRangeNode(30, 70)),
+			expected: makeAndTree(makeRangeNode(30, 70)),
+			comment:  "Multiple overlapping ranges should be merged into most restrictive form",
+		},
+		{
+			name:     "RangeOrOverlap",
+			input:    makeOrTree(makeRangeNode(0, 15), makeRangeNode(10, 30)),
+			expected: makeOrTree(makeRangeNode(0, 30)),
+			comment:  "Non-overlapping ranges in OR should not be merged",
+		},
+		{
+			name:     "RangeOrNoOverlap",
+			input:    makeOrTree(makeRangeNode(0, 10), makeRangeNode(20, 30)),
+			expected: makeOrTree(makeRangeNode(0, 10), makeRangeNode(20, 30)),
+			comment:  "Non-overlapping ranges in OR should not be merged",
+		},
+		{
+			name:     "TypeBoundsGtLt",
+			input:    makeAndTree(makeGtNode(0), makeLtNode(100)),
+			expected: makeAndTree(makeRangeNode(1, 99)),
+			comment:  "Boundary conditions should be handled correctly",
+		},
+		{
+			name:     "TypeBoundsGeLe",
+			input:    makeAndTree(makeGeNode(0), makeLeNode(100)),
+			expected: makeAndTree(makeRangeNode(0, 100)),
+			comment:  "Boundary conditions should be handled correctly",
+		},
+		{
+			name:     "RangeNotEqual",
+			input:    makeAndTree(makeRangeNode(0, 100), makeNotEqualNode(50)),
+			expected: makeAndTree(makeNotEqualNode(50), makeRangeNode(0, 100)),
+			comment:  "NOT conditions should not affect range merging",
+		},
+		{
+			name:     "EqualAndGt",
+			input:    makeAndTree(makeEqualNode(42), makeGtNode(41)),
+			expected: makeAndTree(makeEqualNode(42)),
+			comment:  "EQ and GT should be simplified",
+		},
+		{
+			name:     "RegexpRange",
+			input:    makeAndTree(makeTestRangeNode(1, "a", "z"), makeRegexNode("^[a-m]+$")),
+			expected: makeAndTree(makeTestRangeNode(1, "a", "z"), makeRegexNode("^[a-m]+$")),
+			comment:  "Regexp conditions should not be merged with ranges",
+		},
+		{
+			name:     "TautologyOne",
+			input:    makeOrTree(makeRangeNode(0, 100), makeNotEqualNode(50), makeRangeNode(40, 60)),
+			expected: makeOrTree(makeNotEqualNode(50), makeRangeNode(0, 100)),
+		},
+		{
+			name:     "Independent Fields",
+			input:    makeAndTree(makeNode(FilterModeEqual, 1, int64(1)), makeNode(FilterModeEqual, 2, []byte("hi"))),
+			expected: makeAndTree(makeNode(FilterModeEqual, 1, int64(1)), makeNode(FilterModeEqual, 2, []byte("hi"))),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.NotPanics(t, tt.input.Optimize)
+			assert.Equal(t, tt.expected.String(), tt.input.String(), tt.comment)
+		})
+	}
+}
+
 // TestOptimizeExtended verifies the optimizer's behavior with various data types and conditions, ensuring correct tree structures.
 func TestOptimizeExtended(t *testing.T) {
 	// Iterate over all data types and query conditions
@@ -154,38 +247,64 @@ func makeNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterTree
 	case FilterModeIn, FilterModeNotIn:
 		// Ensure value is a slice of the correct type
 		switch v := value.(type) {
-		case int64:
-			f.Value = []int64{v}
-		case int32:
-			f.Value = []int32{v}
-		case int16:
-			f.Value = []int16{v}
-		case int8:
-			f.Value = []int8{v}
-		case uint64:
-			f.Value = []uint64{v}
-		case uint32:
-			f.Value = []uint32{v}
-		case uint16:
-			f.Value = []uint16{v}
-		case uint8:
-			f.Value = []uint8{v}
-		case float64:
-			f.Value = []float64{v}
-		case float32:
-			f.Value = []float32{v}
-		case bool:
-			f.Value = []bool{v}
-		case string:
-			if f.Type == BlockBytes {
-				f.Value = [][]byte{[]byte(v)}
-			} else {
-				f.Value = []string{v}
-			}
-		case []byte:
-			f.Value = [][]byte{v}
+		case []int64:
+			f.Value = v
+		case []int32:
+			f.Value = v
+		case []int16:
+			f.Value = v
+		case []int8:
+			f.Value = v
+		case []uint64:
+			f.Value = v
+		case []uint32:
+			f.Value = v
+		case []uint16:
+			f.Value = v
+		case []uint8:
+			f.Value = v
+		case []float64:
+			f.Value = v
+		case []float32:
+			f.Value = v
+		case []bool:
+			f.Value = v
+		case []string:
+			f.Value = v
+		case [][]byte:
+			f.Value = v
 		default:
-			f.Value = []interface{}{v}
+			// Convert single values to a slice of the correct type
+			switch f.Type {
+			case BlockInt64:
+				f.Value = []int64{v.(int64)}
+			case BlockInt32:
+				f.Value = []int32{v.(int32)}
+			case BlockInt16:
+				f.Value = []int16{v.(int16)}
+			case BlockInt8:
+				f.Value = []int8{v.(int8)}
+			case BlockUint64:
+				f.Value = []uint64{v.(uint64)}
+			case BlockUint32:
+				f.Value = []uint32{v.(uint32)}
+			case BlockUint16:
+				f.Value = []uint16{v.(uint16)}
+			case BlockUint8:
+				f.Value = []uint8{v.(uint8)}
+			case BlockFloat64:
+				f.Value = []float64{v.(float64)}
+			case BlockFloat32:
+				f.Value = []float32{v.(float32)}
+			case BlockBool:
+				f.Value = []bool{v.(bool)}
+			case BlockString:
+				f.Value = []string{v.(string)}
+			case BlockBytes:
+				f.Value = [][]byte{v.([]byte)}
+			default:
+				f.Value = []interface{}{v}
+			}
 		}
 		f.Matcher.WithSlice(f.Value)
 	case FilterModeRange:
