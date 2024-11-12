@@ -261,8 +261,6 @@ func makeNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterTree
 			f.Value = v
 		case []uint16:
 			f.Value = v
-		case []uint8:
-			f.Value = v
 		case []float64:
 			f.Value = v
 		case []float32:
@@ -271,8 +269,12 @@ func makeNode(mode FilterMode, fieldIndex uint16, value interface{}) *FilterTree
 			f.Value = v
 		case []string:
 			f.Value = v
-		case [][]byte:
-			f.Value = v
+		case []byte:
+			if f.Type == BlockBytes {
+				f.Value = [][]byte{v}
+			} else {
+				f.Value = v
+			}
 		default:
 			// Convert single values to a slice of the correct type
 			switch f.Type {
