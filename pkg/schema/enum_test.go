@@ -195,3 +195,25 @@ func BenchmarkEnumCodeLookup(b *testing.B) {
 		})
 	}
 }
+
+func TestEnumStringToUintConversion(t *testing.T) {
+	d := NewEnumDictionary("")
+	d.Append("a", "b", "c")
+	t.Log("Added 3 values")
+
+	// Positive test: Convert string to uint16 using ParseValue
+	t.Log("Positive test: ParseValue for string to uint16")
+	val, err := d.ParseValue("b")
+	assert.NoError(t, err, "ParseValue should succeed for 'b'")
+	assert.Equal(t, uint16(1), val, "code for 'b' should be 1")
+
+	// Negative test: ParseValue for unregistered string
+	t.Log("Negative test: ParseValue for unregistered string")
+	_, err = d.ParseValue("d")
+	assert.Error(t, err, "ParseValue should fail for unregistered value 'd'")
+
+	// Negative test: Attempt to cast non-uint16 type using CastValue
+	t.Log("Negative test: CastValue for non-uint16 type")
+	_, err = d.CastValue(123) // Pass an integer instead of a string
+	assert.Error(t, err, "CastValue should fail for non-string type")
+}
