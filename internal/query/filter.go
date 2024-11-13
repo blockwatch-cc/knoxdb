@@ -25,9 +25,9 @@ type Filter struct {
 	Name    string     // schema field name
 	Type    BlockType  // block type (we need for opimizing filter trees)
 	Mode    FilterMode // eq|ne|gt|gte|lt|lte|rg|in|nin|re
-	Index   uint16     // schema field id
+	Index   uint16     // field index (NOT field id, index = id - 1!!; compat with pack.Package.Block() and schema.View.Get())
 	Matcher Matcher    // encapsulated match data and function
-	Value   any        // direct val for eq|ne|gt|ge|lt|le, [2]any for rg, nil for in|nin|re
+	Value   any        // direct val for eq|ne|gt|ge|lt|le, [2]any for rg, slice for in|nin, string re
 }
 
 func (f Filter) Weight() int {
