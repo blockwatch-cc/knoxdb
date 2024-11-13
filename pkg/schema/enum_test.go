@@ -196,24 +196,67 @@ func BenchmarkEnumCodeLookup(b *testing.B) {
 	}
 }
 
+// TestEnumConversionScenarios tests the conversion methods of EnumDictionary,
+// including positive tests for valid conversions and negative tests for
+// handling unregistered values, as well as type mismatches.
 func TestEnumConversionScenarios(t *testing.T) {
 	d := NewEnumDictionary("")
 	d.Append("a", "b", "c")
 	t.Log("Added 3 values")
 
-	// Positive test: Convert string to uint16 using ParseValue
+	// Positive tests
 	t.Log("Positive test: ParseValue for string to uint16")
 	val, err := d.ParseValue("b")
 	assert.NoError(t, err, "ParseValue should succeed for 'b'")
 	assert.Equal(t, uint16(1), val, "code for 'b' should be 1")
 
-	// Negative test: ParseValue for unregistered string
+	t.Log("Positive test: CastValue for valid uint16")
+	castVal, err := d.CastValue(uint16(1))
+	assert.NoError(t, err, "CastValue should succeed for uint16(1)")
+	assert.Equal(t, uint16(1), castVal, "code for uint16(1) should be 1")
+
+	t.Log("Positive test: CastValue for valid string")
+	castVal, err = d.CastValue("b")
+	assert.NoError(t, err, "CastValue should succeed for 'b'")
+	assert.Equal(t, uint16(1), castVal, "code for 'b' should be 1")
+
+	t.Log("Positive test: ParseSlice for strings to uint16 slice")
+	vals, err := d.ParseSlice("a,b,c")
+	assert.NoError(t, err, "ParseSlice should succeed for 'a,b,c'")
+	assert.Equal(t, []uint16{0, 1, 2}, vals, "codes for 'a,b,c' should be [0, 1, 2]")
+
+	t.Log("Positive test: CastSlice for valid strings")
+	castVals, err := d.CastSlice([]string{"a", "b", "c"})
+	assert.NoError(t, err, "CastSlice should succeed for ['a', 'b', 'c']")
+	assert.Equal(t, []uint16{0, 1, 2}, castVals, "codes for ['a', 'b', 'c'] should be [0, 1, 2]")
+
+	// Negative tests
 	t.Log("Negative test: ParseValue for unregistered string")
 	_, err = d.ParseValue("d")
 	assert.Error(t, err, "ParseValue should fail for unregistered value 'd'")
 
-	// Negative test: Attempt to cast non-uint16 type using CastValue
-	t.Log("Negative test: CastValue for non-uint16 type")
+	t.Log("Negative test: CastValue for out-of-range uint16")
+	_, err = d.CastValue(uint16(3)) // Assuming only 0, 1, 2 are valid
+	assert.Error(t, err, "CastValue should fail for out-of-range uint16")
+
+	t.Log("Negative test: CastValue for unregistered string")
+	_, err = d.CastValue("d")
+	assert.Error(t, err, "CastValue should fail for unregistered value 'd'")
+
+	t.Log("Negative test: ParseSlice for unregistered string")
+	_, err = d.ParseSlice("a,b,d")
+	assert.Error(t, err, "ParseSlice should fail for unregistered value 'd'")
+
+	t.Log("Negative test: CastSlice for unregistered string")
+	_, err = d.CastSlice([]string{"a", "b", "d"})
+	assert.Error(t, err, "CastSlice should fail for unregistered value 'd'")
+
+	// Type mismatch tests
+	t.Log("Type mismatch test: CastValue for non-string type")
 	_, err = d.CastValue(123) // Pass an integer instead of a string
 	assert.Error(t, err, "CastValue should fail for non-string type")
+
+	t.Log("Type mismatch test: CastSlice for non-string slice")
+	_, err = d.CastSlice([]int{1, 2, 3}) // Pass a slice of integers
+	assert.Error(t, err, "CastSlice should fail for non-string slice")
 }
