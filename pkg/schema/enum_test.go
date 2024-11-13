@@ -196,7 +196,7 @@ func BenchmarkEnumCodeLookup(b *testing.B) {
 	}
 }
 
-func TestEnumStringToUintConversion(t *testing.T) {
+func TestEnumConversionScenarios(t *testing.T) {
 	d := NewEnumDictionary("")
 	d.Append("a", "b", "c")
 	t.Log("Added 3 values")
