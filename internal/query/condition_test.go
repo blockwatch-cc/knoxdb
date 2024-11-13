@@ -54,9 +54,9 @@ func makeTestStruct(id int) *testStruct {
 	}
 }
 
-func makeEncodedTestStruct(id int) []byte {
-	enc := schema.NewEncoder(testSchema)
-	buf, err := enc.Encode(makeTestStruct(id), nil)
+func makeEncodedTestStruct(valSchema *schema.Schema, val any) []byte {
+	enc := schema.NewEncoder(valSchema)
+	buf, err := enc.Encode(val, nil)
 	if err != nil {
 		panic(err)
 	}
