@@ -48,7 +48,7 @@ var queryConditions = []FilterMode{
 
 func tryUnwrapAnySlice(s any) any {
 	val := reflect.ValueOf(s)
-	if val.Type().Kind() != reflect.Slice || val.Index(0).Kind() != reflect.Interface {
+	if val.Type().Kind() != reflect.Slice || val.Len() == 0 || val.Index(0).Kind() != reflect.Interface {
 		return s
 	}
 	etyp := val.Index(0).Elem().Type()
@@ -219,7 +219,7 @@ func fieldTypeFromValue(v interface{}) types.FieldType {
 		return types.FieldTypeInt16
 	case int8:
 		return types.FieldTypeInt8
-	case uint, uint64:
+	case uint, uint64, []uint64:
 		return types.FieldTypeUint64
 	case uint32:
 		return types.FieldTypeUint32
@@ -259,6 +259,7 @@ func fieldTypeFromValue(v interface{}) types.FieldType {
 
 // makeNode constructs a FilterTreeNode with a specified filter mode, field index, and value, setting up the appropriate matcher.
 func makeNode(name string, mode FilterMode, fieldIndex uint16, value any) *FilterTreeNode {
+	tree := &FilterTreeNode{}
 	// Log the initial value and its type
 	log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
 
@@ -287,6 +288,12 @@ func makeNode(name string, mode FilterMode, fieldIndex uint16, value any) *Filte
 
 	// Handle different modes appropriately
 	switch mode {
+	case FilterModeFalse:
+		f.Value = nil
+		tree.Empty = true
+	case FilterModeTrue:
+		f.Value = nil
+		tree.Skip = true
 	case FilterModeIn, FilterModeNotIn:
 		if reflect.ValueOf(value).Kind() != reflect.Slice {
 			value = makeReflectSlice(value)
@@ -327,7 +334,8 @@ func makeNode(name string, mode FilterMode, fieldIndex uint16, value any) *Filte
 	// Log the final value and its type after processing
 	log.Printf("makeNode processed value: %v (type: %T)", f.Value, f.Value)
 
-	return &FilterTreeNode{Filter: f}
+	tree.Filter = f
+	return tree
 }
 
 // newTestTree constructs a logical tree (AND/OR) FilterTreeNode with specified child nodes.
@@ -400,4 +408,14 @@ func makeGeNode(name string, idx uint16, val any) *FilterTreeNode {
 // makeLeNode constructs a FilterTreeNode for a less-than-or-equal condition with a specified integer value.
 func makeLeNode(name string, idx uint16, val any) *FilterTreeNode {
 	return makeNode(name, FilterModeLe, idx, val)
+}
+
+// makeFalseNode constructs a FilterTreeNode for a false condition.
+func makeFalseNode(name string, idx uint16, val any) *FilterTreeNode {
+	return makeNode(name, FilterModeFalse, idx, val)
+}
+
+// makeTrueNode constructs a FilterTreeNode for a true condition.
+func makeTrueNode(name string, idx uint16, val any) *FilterTreeNode {
+	return makeNode(name, FilterModeTrue, idx, val)
 }

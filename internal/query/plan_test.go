@@ -6,6 +6,7 @@ package query
 import (
 	"bytes"
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -192,289 +193,549 @@ func makeStructResultsData(data ...any) [][]byte {
 	return res
 }
 
-func makeMockTable(schema *schema.Schema, results []IndexResult, res engine.QueryResult) engine.QueryableTable {
+func makeQueryableIndex(results []IndexResult) []engine.QueryableIndex {
 	queryableIndexes := make([]engine.QueryableIndex, 0)
 	for _, q := range results {
 		queryableIndexes = append(queryableIndexes, makeMockIndex(q.IndexSchema, bitmap.NewFromArray(q.Result)))
 	}
-	return NewMockTable(
-		schema,
-		// list of indexes derived from table
-		queryableIndexes,
-		res,
-	)
+	return queryableIndexes
+	// return NewMockTable(
+	// 	schema,
+	// 	// list of indexes derived from table
+	// 	queryableIndexes,
+	// 	res,
+	// )
 }
 
 func TestPlanCompile(t *testing.T) {
 	// define and compile initial filter conditions; the result, a tree of
 	// FilterTreeNode nodes will get optimized and changed during query
 	// execution steps
+	type ParentTestCase struct {
+		Name     string
+		HasIndex bool
+	}
+
 	type TestCase struct {
-		Name         string
-		Condition    Condition
-		Schema       *schema.Schema
-		ResultsData  [][]byte
-		IndexResults []IndexResult
-		ExpectedTree *FilterTreeNode
+		Name                 string
+		Condition            Condition
+		Schema               *schema.Schema
+		ResultsData          [][]byte
+		IndexResults         []IndexResult
+		ExpectedToSkip       bool
+		ExpectedIndexTree    *FilterTreeNode
+		ExpectedNonIndexTree *FilterTreeNode
+	}
+
+	parentTestCase := []ParentTestCase{
+		{
+			Name:     "With Index",
+			HasIndex: true,
+		},
+		{
+			Name:     "Without Index",
+			HasIndex: false,
+		},
 	}
 
 	testCases := []TestCase{
 		// single condition + single index
 		{
-			Name:         "EQ Condition",
-			Condition:    Equal("id", 1),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			Name:                 "EQ Condition",
+			Condition:            Equal("id", 1),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
 		},
 		{
-			Name:         "NE Condition",
-			Condition:    NotEqual("id", 1),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeAndTree(makeNotEqualNode("id", 0, uint64(1))),
+			Name:                 "NE Condition",
+			Condition:            NotEqual("id", 1),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
+			ExpectedIndexTree:    makeAndTree(makeNotEqualNode("id", 0, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeNotEqualNode("id", 0, uint64(1))),
 		},
 		{
-			Name:         "In Condition",
-			Condition:    In("id", []uint64{1, 2, 3}),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeAndTree(makeInNode("id", 0, []uint64{1, 2, 3})),
+			Name:                 "In Condition",
+			Condition:            In("id", []uint64{1, 2, 3}),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
+			ExpectedIndexTree:    makeAndTree(makeInNode("id", 0, []uint64{1, 2, 3})),
+			ExpectedNonIndexTree: makeAndTree(makeInNode("id", 0, []uint64{1, 2, 3})),
 		},
 		{
-			Name:         "In Condition Single Element",
-			Condition:    In("id", []uint64{1}),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			Name:                 "In Condition Single Element",
+			Condition:            In("id", []uint64{1}),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
 		},
 		{
-			Name:         "NI Condition",
-			Condition:    NotIn("id", []uint64{2, 3, 4}),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeAndTree(makeNotInNode("id", 0, []uint64{2, 3, 4})),
+			Name:                 "NI Condition",
+			Condition:            NotIn("id", []uint64{2, 3, 4}),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
+			ExpectedIndexTree:    makeAndTree(makeNotInNode("id", 0, []uint64{2, 3, 4})),
+			ExpectedNonIndexTree: makeAndTree(makeNotInNode("id", 0, []uint64{2, 3, 4})),
 		},
 		{
-			Name:         "LT Condition",
-			Condition:    Lt("id", 1),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeAndTree(makeLtNode("id", 0, uint64(1))),
+			Name:                 "LT Condition",
+			Condition:            Lt("id", 1),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
+			ExpectedIndexTree:    makeAndTree(makeLtNode("id", 0, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeLtNode("id", 0, uint64(1))),
 		},
 		{
-			Name:         "Le Condition",
-			Condition:    Le("id", 2),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeAndTree(makeLeNode("id", 0, uint64(2))),
+			Name:                 "Le Condition",
+			Condition:            Le("id", 2),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
+			ExpectedIndexTree:    makeAndTree(makeLeNode("id", 0, uint64(2))),
+			ExpectedNonIndexTree: makeAndTree(makeLeNode("id", 0, uint64(2))),
 		},
 		{
-			Name:         "GT Condition",
-			Condition:    Gt("id", 1),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeAndTree(makeGtNode("id", 0, uint64(1))),
+			Name:                 "GT Condition",
+			Condition:            Gt("id", 1),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
+			ExpectedIndexTree:    makeAndTree(makeGtNode("id", 0, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeGtNode("id", 0, uint64(1))),
 		},
 		{
-			Name:         "Ge Condition",
-			Condition:    Ge("id", 1),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeAndTree(makeGeNode("id", 0, uint64(1))),
+			Name:                 "Ge Condition",
+			Condition:            Ge("id", 1),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
+			ExpectedIndexTree:    makeAndTree(makeGeNode("id", 0, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeGeNode("id", 0, uint64(1))),
 		},
 		{
-			Name:         "Regexp Condition",
-			Condition:    Regexp("name", "zack"),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeAndTree(makeRegexNode("name", 2, "zack")),
+			Name:                 "Regexp Condition",
+			Condition:            Regexp("name", "zack"),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeRegexNode("name", 2, "zack")),
+			ExpectedNonIndexTree: makeAndTree(makeRegexNode("name", 2, "zack")),
 		},
 		{
-			Name:         "Range Condition",
-			Condition:    Range("id", 1, 10),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeAndTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
+			Name:                 "Range Condition",
+			Condition:            Range("id", 1, 10),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
+			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
 		},
 
 		// And Condition + 2 or more conditions + single index
 		{
-			Name:         "And(NotEqual(2), Range(1,10)) Condition",
-			Condition:    And(NotEqual("id", 2), Range("id", 1, 10)),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2, 3, 4),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedTree: makeAndTree(makeNotEqualNode("id", 0, uint64(2)), makeRangeNode("id", 0, uint64(1), uint64(10))),
+			Name:                 "And(NotEqual(2), Range(1,10)) Condition",
+			Condition:            And(NotEqual("id", 2), Range("id", 1, 10)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
+			ExpectedIndexTree:    makeAndTree(makeNotEqualNode("id", 0, uint64(2)), makeRangeNode("id", 0, uint64(1), uint64(10))),
+			ExpectedNonIndexTree: makeAndTree(makeNotEqualNode("id", 0, uint64(2)), makeRangeNode("id", 0, uint64(1), uint64(10))),
 		},
 		{
-			Name:         "And(Le(score, 4.5), Range(id(0,10))) Condition",
-			Condition:    And(Le("score", 4.5), Range("id", 0, 10)),
-			Schema:       testSchema,
-			ResultsData:  testData,
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2, 3}}},
-			ExpectedTree: makeAndTree(makeLeNode("score", 1, float64(4.5)), makeRangeNode("id", 0, uint64(0), uint64(10))),
+			Name:                 "And(Le(8), Range(6,10)) Condition",
+			Condition:            And(Le("id", 8), Range("id", 6, 10)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
+			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(6), uint64(8))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(6), uint64(8))),
 		},
 		{
-			Name:         "And(Le(8), Range(6,10)) Condition",
-			Condition:    And(Le("id", 8), Range("id", 6, 10)),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2, 3, 4),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedTree: makeAndTree(makeRangeNode("id", 0, uint64(6), uint64(8))),
+			Name:                 "And(RG(1,10), EQ(1))",
+			Condition:            And(Range("id", 1, 10), Equal("id", 1)),
+			Schema:               testSchema,
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
+			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
 		},
 		{
-			Name:         "And(RG(1,10), EQ(1))",
-			Condition:    And(Range("id", 1, 10), Equal("id", 1)),
-			Schema:       testSchema,
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			Name:                 "AND(RG(1,10), RG(5,10)) Condition",
+			Condition:            And(Range("id", 1, 10), Range("id", 5, 10)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
+			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(5), uint64(10))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(5), uint64(10))),
 		},
 		{
-			Name:         "AND(RG(1,10), RG(5,10)) Condition",
-			Condition:    And(Range("id", 1, 10), Range("id", 5, 10)),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeAndTree(makeRangeNode("id", 0, uint64(5), uint64(10))),
+			Name:                 "AND(EQ(5), RG(0,10)) Condition",
+			Condition:            And(Equal("id", 5), Range("id", 0, 10)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
+			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(5))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(5))),
 		},
 		{
-			Name:         "AND(EQ(5), RG(0,10)) Condition",
-			Condition:    And(Equal("id", 5), Range("id", 0, 10)),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2, 3, 4),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedTree: makeAndTree(makeEqualNode("id", 0, uint64(5))),
-		},
-		{
-			Name:         "And(EQ(id, 1), EQ(name, hi)) Condition",
-			Condition:    And(Equal("id", 1), Equal("name", "hi")),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeAndTree(makeEqualNode("id", 0, uint64(1)), makeEqualNode("name", 2, "hi")),
+			Name:                 "And(EQ(id, 1), EQ(name, hi)) Condition",
+			Condition:            And(Equal("id", 1), Equal("name", "hi")),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
+			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1)), makeEqualNode("name", 2, "hi")),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1)), makeEqualNode("name", 2, "hi")),
 		},
 
 		// Or Condition + 2 or more conditions + single index
 		{
-			Name:         "Or(Le(8), Range(6,10)) Condition",
-			Condition:    Or(Le("id", 8), Range("id", 6, 10)),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2, 3, 4),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedTree: makeOrTree(makeLeNode("id", 0, uint64(10))),
+			Name:                 "Or(Le(8), Range(6,10)) Condition",
+			Condition:            Or(Le("id", 8), Range("id", 6, 10)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
+			ExpectedIndexTree:    makeOrTree(makeLeNode("id", 0, uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeLeNode("id", 0, uint64(10))),
 		},
 		{
-			Name:         "OR(EQ(id, 1), EQ(name, hi)) Condition",
-			Condition:    Or(Equal("id", 1), Equal("name", "hi")),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeOrTree(makeEqualNode("id", 0, uint64(1)), makeEqualNode("name", 2, "hi")),
+			Name:                 "OR(EQ(id, 1), EQ(name, hi)) Condition",
+			Condition:            Or(Equal("id", 1), Equal("name", "hi")),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
+			ExpectedIndexTree:    makeOrTree(makeEqualNode("id", 0, uint64(1)), makeEqualNode("name", 2, "hi")),
+			ExpectedNonIndexTree: makeOrTree(makeEqualNode("id", 0, uint64(1)), makeEqualNode("name", 2, "hi")),
 		},
 		{
-			Name:         "OR(EQ, EQ) Condition",
-			Condition:    Or(Equal("id", 1), Equal("id", 2)),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2})),
+			Name:                 "OR(EQ, EQ) Condition",
+			Condition:            Or(Equal("id", 1), Equal("id", 2)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
+			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{1, 2})),
+			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2})),
 		},
 		{
-			Name:         "OR(RG, EQ) Condition",
-			Condition:    Or(Range("id", 1, 10), Equal("id", 10)),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
+			Name:                 "OR(RG, EQ) Condition",
+			Condition:            Or(Range("id", 1, 10), Equal("id", 10)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
+			ExpectedIndexTree:    makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
 		},
 		{
-			Name:         "OR(RG, RG, EQ) Condition",
-			Condition:    Or(Range("id", 1, 10), Range("id", 5, 10), Equal("id", 2)),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
+			Name:                 "OR(RG, RG, EQ) Condition",
+			Condition:            Or(Range("id", 1, 10), Range("id", 5, 10), Equal("id", 2)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
+			ExpectedIndexTree:    makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
 		},
 		{
-			Name:         "OR(In(1,2), RG(6,10)) (In) Out of Range Condition",
-			Condition:    Or(In("id", []int{1, 2}), Range("id", 6, 10)),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2, 3, 4),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			// ExpectedTree: makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
-			ExpectedTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2}), makeRangeNode("id", 0, uint64(6), uint64(10))),
+			Name:                 "OR(In(1,2), RG(6,10)) (In) Out of Range Condition",
+			Condition:            Or(In("id", []int{1, 2}), Range("id", 6, 10)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
+			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{1, 2}), makeRangeNode("id", 0, uint64(6), uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2}), makeRangeNode("id", 0, uint64(6), uint64(10))),
 		},
 		{
-			Name:         "OR(In(6,7), RG(6,10)) In Range Condition",
-			Condition:    Or(In("id", []int{6, 7}), Range("id", 6, 10)),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2, 3, 4),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			// ExpectedTree: makeOrTree(, makeRangeNode("id", 0, uint64(6), uint64(10))),
-			ExpectedTree: makeOrTree(makeInNode("id", 0, []uint64{6, 7}), makeRangeNode("id", 0, uint64(6), uint64(10))),
+			Name:                 "OR(In(6,7), RG(6,10)) In Range Condition",
+			Condition:            Or(In("id", []int{6, 7}), Range("id", 6, 10)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
+			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{6, 7}), makeRangeNode("id", 0, uint64(6), uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{6, 7}), makeRangeNode("id", 0, uint64(6), uint64(10))),
 		},
 		{
-			Name:         "Or(Le(10), Range(1,5)) Condition",
-			Condition:    Or(Le("id", 10), Range("id", 1, 5)),
-			Schema:       testSchema,
-			ResultsData:  makeRandomResultsData(1, 2, 3, 4),
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedTree: makeOrTree(makeLeNode("id", 0, uint64(10))),
+			Name:                 "Or(Le(10), Range(1,5)) Condition",
+			Condition:            Or(Le("id", 10), Range("id", 1, 5)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
+			ExpectedIndexTree:    makeOrTree(makeLeNode("id", 0, uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeLeNode("id", 0, uint64(10))),
 		},
 		{
-			Name:         "Or(Le(id, 4.5), Range(id,(0,10))) Condition",
-			Condition:    Or(Le("score", 4.5), Range("id", 0, 10)),
-			Schema:       testSchema,
-			ResultsData:  testData,
-			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2, 3}}},
-			ExpectedTree: makeOrTree(makeLeNode("score", 1, float64(4.5)), makeRangeNode("id", 0, uint64(0), uint64(10))),
+			Name:                 "Or(Le(id, 4.5), Range(id,(0,10))) Condition",
+			Condition:            Or(Le("score", 4.5), Range("id", 0, 10)),
+			Schema:               testSchema,
+			ResultsData:          testData,
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3}}},
+			ExpectedIndexTree:    makeOrTree(makeLeNode("score", 1, float64(4.5)), makeRangeNode("id", 0, uint64(0), uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeLeNode("score", 1, float64(4.5)), makeRangeNode("id", 0, uint64(0), uint64(10))),
+		},
+
+		// CAT: merge nested nodes
+		{
+			Name:                 "OR ( OR (A, B), C) ) => OR (A, B, C)",
+			Condition:            Or(Or(Equal("id", 1), Range("id", 2, 5)), Gt("id", 6)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3}}},
+			ExpectedIndexTree:    makeOrTree(makeGtNode("id", 0, uint64(6)), makeEqualNode("id", 0, uint64(1)), makeRangeNode("id", 0, uint64(2), uint64(5))),
+			ExpectedNonIndexTree: makeOrTree(makeGtNode("id", 0, uint64(6)), makeEqualNode("id", 0, uint64(1)), makeRangeNode("id", 0, uint64(2), uint64(5))),
+		},
+		{
+			Name:                 "AND ( AND (A, B), C) => AND (A, B, C)",
+			Condition:            And(And(Range("id", 1, 10), Range("id", 2, 5)), Range("id", 4, 5)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3}}},
+			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(4), uint64(5))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(4), uint64(5))),
+		},
+		// CAT: replace/simplify sets
+		{
+			Name:                 "IN(single A) => EQ(A)",
+			Condition:            In("id", []uint64{1}),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
+		},
+		{
+			Name:                 "NI(single A) => NE(A)",
+			Condition:            NotIn("id", []uint64{1}),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeNotEqualNode("id", 0, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeNotEqualNode("id", 0, uint64(1))),
+		},
+		{
+			Name:                 "And: EQ(A) + EQ(A) => EQ(A)",
+			Condition:            And(Equal("id", 1), Equal("id", 1)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
+		},
+		{
+			Name:                 "Or: EQ(A) + EQ(A) => EQ(A)",
+			Condition:            Or(Equal("id", 1), Equal("id", 1)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeOrTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedNonIndexTree: makeOrTree(makeEqualNode("id", 0, uint64(1))),
+		},
+		{
+			Name:                 "Empty IN => false",
+			Condition:            In("id", []uint64{}),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeFalseNode("id", 0, []uint64{})),
+			ExpectedNonIndexTree: makeAndTree(makeFalseNode("id", 0, []uint64{})),
+		}, {
+			Name:                 "Empty NIN => true",
+			Condition:            NotIn("id", []uint64{}),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeTrueNode("id", 0, []uint64{})),
+			ExpectedNonIndexTree: makeAndTree(makeTrueNode("id", 0, []uint64{})),
+		}, {
+			Name:                 "and: IN(A) + IN(B) => IN(A-B)",
+			Condition:            And(In("id", []uint64{1, 2, 3}), In("id", []uint64{2, 3, 4})),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeInNode("id", 0, []uint64{2, 3})),
+			ExpectedNonIndexTree: makeAndTree(makeInNode("id", 0, []uint64{2, 3})),
+		},
+		{
+			Name:                 "or: IN(A) + IN(B) => IN(A+B)",
+			Condition:            Or(In("id", []uint64{1, 2, 3}), In("id", []uint64{2, 3, 4})),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{1, 2, 3, 4})),
+			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2, 3, 4})),
+		},
+		{
+			Name:                 "and: NI(A) + NI(B) => NI(A+B)",
+			Condition:            And(NotIn("id", []uint64{1, 2, 3}), NotIn("id", []uint64{2, 3, 4})),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeNotInNode("id", 0, []uint64{1, 2, 3, 4})),
+			ExpectedNonIndexTree: makeAndTree(makeNotInNode("id", 0, []uint64{1, 2, 3, 4})),
+		},
+		{
+			Name:                 "or: NI(A) + NI(B) => NI(A+B)",
+			Condition:            Or(NotIn("id", []uint64{1, 2, 3}), NotIn("id", []uint64{2, 3, 4})),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeOrTree(makeNotInNode("id", 0, []uint64{1, 2, 3, 4})),
+			ExpectedNonIndexTree: makeOrTree(makeNotInNode("id", 0, []uint64{1, 2, 3, 4})),
+		},
+		{
+			Name:                 "or: IN(A) + EQ(B) => IN(A+B)",
+			Condition:            Or(In("id", []uint64{1, 2, 3}), Equal("id", 4)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{1, 2, 3, 4})),
+			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2, 3, 4})),
+		},
+		{
+			Name:                 "or: EQ(A) + EQ(B) => IN(A+B)",
+			Condition:            Or(Equal("id", 1), Equal("id", 2)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{1, 2})),
+			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2})),
+		},
+		// CAT: replace/simplify ranges
+		{
+			Name:                 "and: LT|LE(A) + LT|LE(A) => LT|LE(A)", // and: LT(A) + LT(A-5) => LE(A-1)
+			Condition:            And(Lt("id", 10), Lt("id", 5)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeLeNode("id", 0, uint64(4))),
+			ExpectedNonIndexTree: makeAndTree(makeLeNode("id", 0, uint64(4))),
+		},
+		{
+			Name:                 "and: LE(0)",
+			Condition:            And(Le("id", 0)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeLeNode("id", 0, uint64(0))),
+			ExpectedNonIndexTree: makeAndTree(makeLeNode("id", 0, uint64(0))),
+		},
+		{
+			Name:                 "and: GT|GE(A) + GT|GE(A) => GT|GE(A)", // and: GT|GE(A) + GT|GE(A) => RG(A+1, max)
+			Condition:            And(Gt("id", 2), Gt("id", 5)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(6), uint64(math.MaxUint64))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(6), uint64(math.MaxUint64))),
+		},
+		{
+			Name:                 "and: RG(A,B) + RG(C,D) => RG(B,C) iff C ≤ B",
+			Condition:            And(Range("id", 1, 5), Range("id", 3, 10)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(3), uint64(5))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(3), uint64(5))),
+		},
+		{
+			Name:                 "and: RG(A,B) + RG(B,D) => EQ(B)",
+			Condition:            And(Range("id", 1, 5), Range("id", 5, 10)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(5))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(5))),
+		},
+		{
+			Name:                 "and: RG(A,B) + EQ(C) => EQ(C) iff A ≤ C ≤ B",
+			Condition:            And(Range("id", 1, 5), Equal("id", 3)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(3))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(3))),
+		},
+		{
+			Name:                 "and: GE(A) + LE(B) => RG(A,B) iff A ≤ B",
+			Condition:            And(Ge("id", 1), Le("id", 5)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(1), uint64(5))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(1), uint64(5))),
+		},
+		{
+			Name:                 "and: GT(A) + LT(B) => RG(A+1,B-1) iff A ≤ B",
+			Condition:            And(Gt("id", 1), Lt("id", 5)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(2), uint64(4))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(2), uint64(4))),
+		},
+		{
+			Name:                 "or: RG(A,B) + EQ(C) => EQ(C) iff A ≤ C ≤ B",
+			Condition:            Or(Range("id", 1, 5), Equal("id", 3)),
+			Schema:               testSchema,
+			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
+			ExpectedIndexTree:    makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(5))),
+			ExpectedNonIndexTree: makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(5))),
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.Name, func(t *testing.T) {
-			flt, err := tc.Condition.Compile(tc.Schema)
-			require.NoError(t, err)
+	for _, ptc := range parentTestCase {
+		t.Run(ptc.Name, func(t *testing.T) {
+			for _, tc := range testCases {
+				t.Run(tc.Name, func(t *testing.T) {
+					flt, err := tc.Condition.Compile(tc.Schema)
+					require.NoError(t, err)
 
-			// construct a mock result and append some data
-			res := NewResult(testSchema)
-			for _, rd := range tc.ResultsData {
-				require.NoError(t, res.Append(rd, false))
-			}
+					// construct a mock result and append some data
+					res := NewResult(testSchema)
+					for _, rd := range tc.ResultsData {
+						require.NoError(t, res.Append(rd, false))
+					}
 
-			// construct a query plan for testing
+					// construct a query plan for testing
+					var queryableIndexes []engine.QueryableIndex
+					var results engine.QueryResult
+					if ptc.HasIndex {
+						queryableIndexes = makeQueryableIndex(tc.IndexResults)
+					}
 
-			plan := NewQueryPlan().
-				WithTag(tc.Name).
-				WithTable(makeMockTable(tc.Schema, tc.IndexResults, res)).
-				// WithFlags(QueryFlagNoIndex).
-				// WithLogger(log.Log).
-				// WithOrder(OrderDesc).
-				// WithLimit(1).
-				WithFilters(flt).
-				WithSchema(testSchema)
-			defer plan.Close()
+					mockTable := NewMockTable(tc.Schema, queryableIndexes, results)
 
-			require.NoError(t, plan.Validate())
+					plan := NewQueryPlan().
+						WithTag(tc.Name).
+						WithTable(mockTable).
+						// WithFlags(QueryFlagNoIndex).
+						// WithLogger(log.Log).
+						// WithOrder(OrderDesc).
+						// WithLimit(1).
+						WithFilters(flt).
+						WithSchema(testSchema)
+					defer plan.Close()
 
-			require.NoError(t, plan.Compile(context.TODO()))
-			isEqual := IsFilterEqual(tc.ExpectedTree, plan.Filters)
-			assert.True(t, isEqual)
-			if !isEqual {
-				assert.Equal(t, tc.ExpectedTree, plan.Filters)
+					require.NoError(t, plan.Validate())
+
+					require.NoError(t, plan.Compile(context.TODO()))
+					expectedTree := tc.ExpectedNonIndexTree
+					if ptc.HasIndex {
+						expectedTree = tc.ExpectedIndexTree
+					}
+					isEqual := IsFilterEqual(expectedTree, plan.Filters)
+					assert.True(t, isEqual)
+					if !isEqual {
+						assert.Equal(t, expectedTree, plan.Filters)
+					}
+				})
 			}
 		})
+
 	}
 }
