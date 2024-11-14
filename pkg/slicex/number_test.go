@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func randIntSlice(n, u int) []int {
@@ -69,6 +71,183 @@ func TestOrderedNumbersContains(T *testing.T) {
 	// n-element slice negative after
 	if NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(14) {
 		T.Errorf("N-element after slice value wrong match")
+	}
+}
+
+func TestOrderedNumbersUnique(t *testing.T) {
+	var tests = []struct {
+		n string
+		a *OrderedNumbers[int]
+		b *OrderedNumbers[int]
+		r *OrderedNumbers[int]
+	}{
+		{
+			n: "empty",
+			a: NewOrderedNumbers[int](nil).SetUnique(),
+			b: NewOrderedNumbers[int](nil).SetUnique(),
+			r: NewOrderedNumbers[int](nil).SetUnique(),
+		},
+		{
+			n: "empty a",
+			a: NewOrderedNumbers[int](nil).SetUnique(),
+			b: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			r: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+		},
+		{
+			n: "empty b",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers[int](nil).SetUnique(),
+			r: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+		},
+		{
+			n: "distinct unique",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers([]int{3, 4}).SetUnique(),
+			r: NewOrderedNumbers([]int{1, 2, 3, 4}).SetUnique(),
+		},
+		{
+			n: "distinct unique gap",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers([]int{4, 5}).SetUnique(),
+			r: NewOrderedNumbers([]int{1, 2, 4, 5}).SetUnique(),
+		},
+		{
+			n: "overlap duplicates",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers([]int{2, 3}).SetUnique(),
+			r: NewOrderedNumbers([]int{1, 2, 3}).SetUnique(),
+		},
+		{
+			n: "overlap duplicates not unique",
+			a: NewOrderedNumbers([]int{1, 2}),
+			b: NewOrderedNumbers([]int{2, 3}),
+			r: NewOrderedNumbers([]int{1, 2, 2, 3}),
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.n, func(t *testing.T) {
+			res := c.a.Union(c.b)
+			assert.Equal(t, c.r, res)
+		})
+	}
+}
+
+func TestOrderedNumbersIntersect(t *testing.T) {
+	var tests = []struct {
+		n string
+		a *OrderedNumbers[int]
+		b *OrderedNumbers[int]
+		r *OrderedNumbers[int]
+	}{
+		{
+			n: "empty",
+			a: NewOrderedNumbers[int](nil).SetUnique(),
+			b: NewOrderedNumbers[int](nil).SetUnique(),
+			r: NewOrderedNumbers[int](nil).SetUnique(),
+		},
+		{
+			n: "empty a",
+			a: NewOrderedNumbers[int](nil).SetUnique(),
+			b: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			r: NewOrderedNumbers([]int{}).SetUnique(),
+		},
+		{
+			n: "empty b",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers[int](nil).SetUnique(),
+			r: NewOrderedNumbers([]int{}).SetUnique(),
+		},
+		{
+			n: "distinct unique",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers([]int{3, 4}).SetUnique(),
+			r: NewOrderedNumbers([]int{}).SetUnique(),
+		},
+		{
+			n: "distinct unique gap",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers([]int{4, 5}).SetUnique(),
+			r: NewOrderedNumbers([]int{}).SetUnique(),
+		},
+		{
+			n: "overlap duplicates",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers([]int{2, 3}).SetUnique(),
+			r: NewOrderedNumbers([]int{2}).SetUnique(),
+		},
+		{
+			n: "overlap duplicates not unique",
+			a: NewOrderedNumbers([]int{1, 2}),
+			b: NewOrderedNumbers([]int{2, 3}),
+			r: NewOrderedNumbers([]int{2}),
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.n, func(t *testing.T) {
+			res := c.a.Intersect(c.b)
+			assert.Equal(t, c.r, res)
+		})
+	}
+}
+
+func TestOrderedNumbersDifference(t *testing.T) {
+	var tests = []struct {
+		n string
+		a *OrderedNumbers[int]
+		b *OrderedNumbers[int]
+		r *OrderedNumbers[int]
+	}{
+		{
+			n: "empty",
+			a: NewOrderedNumbers[int](nil).SetUnique(),
+			b: NewOrderedNumbers[int](nil).SetUnique(),
+			r: NewOrderedNumbers[int](nil).SetUnique(),
+		},
+		{
+			n: "empty a",
+			a: NewOrderedNumbers[int](nil).SetUnique(),
+			b: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			r: NewOrderedNumbers([]int{}).SetUnique(),
+		},
+		{
+			n: "empty b",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers[int](nil).SetUnique(),
+			r: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+		},
+		{
+			n: "distinct unique",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers([]int{3, 4}).SetUnique(),
+			r: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+		},
+		{
+			n: "distinct unique gap",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers([]int{4, 5}).SetUnique(),
+			r: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+		},
+		{
+			n: "overlap duplicates",
+			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			b: NewOrderedNumbers([]int{2, 3}).SetUnique(),
+			r: NewOrderedNumbers([]int{1}).SetUnique(),
+		},
+		{
+			n: "overlap duplicates not unique",
+			a: NewOrderedNumbers([]int{1, 2}),
+			b: NewOrderedNumbers([]int{2, 3}),
+			r: NewOrderedNumbers([]int{1}),
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.n, func(t *testing.T) {
+			res := c.a.Difference(c.b)
+			assert.Equal(t, c.r, res)
+		})
 	}
 }
 

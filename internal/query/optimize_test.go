@@ -127,6 +127,12 @@ func TestOptimize(t *testing.T) {
 			input:    makeAndTree(makeNode(FilterModeEqual, 1, int64(1)), makeNode(FilterModeEqual, 2, []byte("hi"))),
 			expected: makeAndTree(makeNode(FilterModeEqual, 1, int64(1)), makeNode(FilterModeEqual, 2, []byte("hi"))),
 		},
+		{
+			name:     "OR_IN",
+			input:    makeOrTree(makeInNode(1, 2, 3), makeInNode(2, 3, 4)),
+			expected: makeOrTree(makeInNode(1, 2, 3, 4)),
+			comment:  "Overlapping IN conditions should be merged",
+		},
 	}
 
 	for _, tt := range tests {

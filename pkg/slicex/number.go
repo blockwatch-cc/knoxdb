@@ -187,10 +187,10 @@ func (o *OrderedNumbers[T]) Union(v *OrderedNumbers[T]) *OrderedNumbers[T] {
 	res := &OrderedNumbers[T]{
 		NonZero: o.NonZero && v.NonZero,
 		Unique:  o.Unique && v.Unique,
-		Values:  make([]T, len(o.Values)),
+		Values:  make([]T, len(o.Values), len(o.Values)+len(v.Values)),
 	}
 	copy(res.Values, o.Values)
-	res.Values = merge(res.Values, v.Unique, v.Values...)
+	res.Values = merge(res.Values, res.Unique, v.Values...)
 	return res
 }
 
