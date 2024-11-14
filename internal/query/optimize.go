@@ -199,10 +199,14 @@ func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 }
 
 // Simplifications for any kind (and|or)
-//   - any: IN(single A) => EQ(A)
-//   - any: NI(single A) => NE(A)
-//   - any: empty IN => false
-//   - any: empty NIN => true
+// - any: IN(single A) => EQ(A)
+// - any: NI(single A) => NE(A)
+// - any: empty IN => false
+// - any: empty NIN => true
+// - any: LT(min) => false
+// - any: GT(max) => false
+// - any: RG(from>to) => false
+// - any: RG(min,max) => true
 func simplifySingle(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 	var res []*FilterTreeNode
 
@@ -240,6 +244,36 @@ func simplifySingle(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			default:
 				res = append(res, node)
 
+			}
+		case FilterModeLt:
+			if cmp.Cmp(f.Type, f.Value, cmp.MinNumericVal(f.Type)) == 0 {
+				res = append(res, &FilterTreeNode{
+					Filter: makeFalseFilterFrom(f),
+				})
+			} else {
+				res = append(res, node)
+			}
+		case FilterModeGt:
+			if cmp.Cmp(f.Type, f.Value, cmp.MaxNumericVal(f.Type)) == 0 {
+				res = append(res, &FilterTreeNode{
+					Filter: makeFalseFilterFrom(f),
+				})
+			} else {
+				res = append(res, node)
+			}
+		case FilterModeRange:
+			rg := f.Value.(RangeValue)
+			switch {
+			case cmp.Cmp(f.Type, rg[0], rg[1]) > 0:
+				res = append(res, &FilterTreeNode{
+					Filter: makeFalseFilterFrom(f),
+				})
+			case isFullRange(f.Type, rg):
+				res = append(res, &FilterTreeNode{
+					Filter: makeTrueFilterFrom(f),
+				})
+			default:
+				res = append(res, node)
 			}
 		default:
 			res = append(res, node)
