@@ -226,7 +226,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  makeRandomResultsData(1),
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedTree: makeEqualNode("id", 0, uint64(1)),
+			ExpectedTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
 		},
 		{
 			Name:         "NE Condition",
@@ -234,7 +234,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  makeRandomResultsData(1, 2),
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeNotEqualNode("id", 0, uint64(1)),
+			ExpectedTree: makeAndTree(makeNotEqualNode("id", 0, uint64(1))),
 		},
 		{
 			Name:         "In Condition",
@@ -242,7 +242,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  makeRandomResultsData(1),
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeInNode("id", 0, []uint64{1, 2, 3}),
+			ExpectedTree: makeAndTree(makeInNode("id", 0, []uint64{1, 2, 3})),
 		},
 		{
 			Name:         "In Condition Single Element",
@@ -250,7 +250,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  makeRandomResultsData(1),
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedTree: makeEqualNode("id", 0, uint64(1)),
+			ExpectedTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
 		},
 		{
 			Name:         "NI Condition",
@@ -258,7 +258,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  makeRandomResultsData(1),
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeNotInNode("id", 0, []uint64{2, 3, 4}),
+			ExpectedTree: makeAndTree(makeNotInNode("id", 0, []uint64{2, 3, 4})),
 		},
 		{
 			Name:         "LT Condition",
@@ -266,7 +266,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  makeRandomResultsData(1),
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeLtNode("id", 0, uint64(1)),
+			ExpectedTree: makeAndTree(makeLtNode("id", 0, uint64(1))),
 		},
 		{
 			Name:         "Le Condition",
@@ -274,7 +274,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  makeRandomResultsData(1),
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedTree: makeLeNode("id", 0, uint64(2)),
+			ExpectedTree: makeAndTree(makeLeNode("id", 0, uint64(2))),
 		},
 		{
 			Name:         "GT Condition",
@@ -282,7 +282,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  makeRandomResultsData(1),
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeGtNode("id", 0, uint64(1)),
+			ExpectedTree: makeAndTree(makeGtNode("id", 0, uint64(1))),
 		},
 		{
 			Name:         "Ge Condition",
@@ -290,7 +290,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  makeRandomResultsData(1),
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeGeNode("id", 0, uint64(1)),
+			ExpectedTree: makeAndTree(makeGeNode("id", 0, uint64(1))),
 		},
 		{
 			Name:         "Regexp Condition",
@@ -298,7 +298,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  makeRandomResultsData(1),
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeRegexNode("name", 2, "zack"),
+			ExpectedTree: makeAndTree(makeRegexNode("name", 2, "zack")),
 		},
 		{
 			Name:         "Range Condition",
@@ -306,7 +306,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  makeRandomResultsData(1),
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedTree: makeRangeNode("id", 0, uint64(1), uint64(10)),
+			ExpectedTree: makeAndTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
 		},
 
 		// And Condition + 2 or more conditions + single index
@@ -324,7 +324,7 @@ func TestPlanCompile(t *testing.T) {
 			Schema:       testSchema,
 			ResultsData:  testData,
 			IndexResults: []IndexResult{{testIndexSchema, []uint64{1, 2, 3}}},
-			ExpectedTree: makeAndTree(makeLeNode("score", 0, float64(4.5)), makeRangeNode("id", 0, uint64(1), uint64(10))),
+			ExpectedTree: makeAndTree(makeLeNode("score", 1, float64(4.5)), makeRangeNode("id", 0, uint64(0), uint64(10))),
 		},
 		{
 			Name:         "And(Le(8), Range(6,10)) Condition",

@@ -8,7 +8,6 @@ import (
 	"log"
 	"reflect"
 	"testing"
-	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -47,8 +46,11 @@ var queryConditions = []FilterMode{
 	FilterModeRegexp,
 }
 
-func unwrapAnySlice(s any) any {
+func tryUnwrapAnySlice(s any) any {
 	val := reflect.ValueOf(s)
+	if val.Type().Kind() != reflect.Slice || val.Index(0).Kind() != reflect.Interface {
+		return s
+	}
 	etyp := val.Index(0).Elem().Type()
 	switch etyp.Kind() {
 	case reflect.Slice:
@@ -83,8 +85,8 @@ func TestOptimize(t *testing.T) {
 		},
 		{
 			name:     "MergeInGaps",
-			input:    makeOrTree(makeInNode("id", 1, 2, 3), makeEqualNode("id", 1, 4), makeInNode("id", 5, 6, 7)),
-			expected: makeOrTree(makeInNode("id", 1, 2, 3, 4, 5, 6, 7)),
+			input:    makeOrTree(makeInNode("id", 1, []int64{2, 3}), makeEqualNode("id", 1, 4), makeInNode("id", 1, []int64{5, 6, 7})),
+			expected: makeOrTree(makeInNode("id", 1, []int64{2, 3, 4, 5, 6, 7})),
 			comment:  "Adjacent IN conditions should be merged with gap-filling equals",
 		},
 		{
@@ -120,7 +122,7 @@ func TestOptimize(t *testing.T) {
 		{
 			name:     "RangeNotEqual",
 			input:    makeAndTree(makeRangeNode("id", 0, 1, 100), makeNotEqualNode("id", 1, 50)),
-			expected: makeAndTree(makeNotEqualNode("id", 1, 50), makeRangeNode("id", 1, 0, 100)),
+			expected: makeAndTree(makeNotEqualNode("id", 1, 50), makeRangeNode("id", 0, 1, 100)),
 			comment:  "NOT conditions should not affect range merging",
 		},
 		{
@@ -131,8 +133,8 @@ func TestOptimize(t *testing.T) {
 		},
 		{
 			name:     "RegexpRange",
-			input:    makeAndTree(makeTestRangeNode("name", 1, "a", "z"), makeRegexNode("name", 1, "^[a-m]+$")),
-			expected: makeAndTree(makeTestRangeNode("name", 1, "a", "z"), makeRegexNode("name", 1, "^[a-m]+$")),
+			input:    makeAndTree(makeRangeNode("name", 1, "a", "z"), makeRegexNode("name", 1, "^[a-m]+$")),
+			expected: makeAndTree(makeRangeNode("name", 1, "a", "z"), makeRegexNode("name", 1, "^[a-m]+$")),
 			comment:  "Regexp conditions should not be merged with ranges",
 		},
 		{
@@ -206,10 +208,10 @@ func TestOptimizeExtended(t *testing.T) {
 // fieldTypeFromValue returns the BlockType corresponding to the given Go type, defaulting to BlockTime for unknown or nil types.
 func fieldTypeFromValue(v interface{}) types.FieldType {
 	if v == nil {
-		return types.FieldTypeDatetime
+		panic(fmt.Errorf("unsupported test nil value"))
 	}
-	switch v.(type) {
-	case int64:
+	switch val := v.(type) {
+	case int, int64:
 		return types.FieldTypeInt64
 	case int32:
 		return types.FieldTypeInt32
@@ -217,7 +219,7 @@ func fieldTypeFromValue(v interface{}) types.FieldType {
 		return types.FieldTypeInt16
 	case int8:
 		return types.FieldTypeInt8
-	case uint64:
+	case uint, uint64:
 		return types.FieldTypeUint64
 	case uint32:
 		return types.FieldTypeUint32
@@ -235,17 +237,23 @@ func fieldTypeFromValue(v interface{}) types.FieldType {
 		return types.FieldTypeString
 	case []byte:
 		return types.FieldTypeBytes
+	case RangeValue:
+		if val[0] == nil {
+			return fieldTypeFromValue(val[1])
+		} else {
+			return fieldTypeFromValue(val[0])
+		}
 	default:
 		value := reflect.ValueOf(v)
 		if value.Kind() == reflect.Slice && reflectSliceLen(v) > 0 {
 			switch value.Index(0).Interface().(type) {
-			case []uint64:
+			case uint, uint64:
 				return types.FieldTypeUint64
-			case []int64:
+			case int, int64:
 				return types.FieldTypeInt64
 			}
 		}
-		return types.FieldTypeDatetime
+		panic(fmt.Errorf("unsupported test value type %s [%s]", value.Type(), value.Type().Kind()))
 	}
 }
 
@@ -253,6 +261,9 @@ func fieldTypeFromValue(v interface{}) types.FieldType {
 func makeNode(name string, mode FilterMode, fieldIndex uint16, value any) *FilterTreeNode {
 	// Log the initial value and its type
 	log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
+
+	// unwrap the []any interface from Go variadic function args
+	value = tryUnwrapAnySlice(value)
 
 	f := &Filter{
 		Name:  name,
@@ -276,79 +287,46 @@ func makeNode(name string, mode FilterMode, fieldIndex uint16, value any) *Filte
 
 	// Handle different modes appropriately
 	switch mode {
-	case FilterModeRegexp, FilterModeEqual:
+	case FilterModeIn, FilterModeNotIn:
+		if reflect.ValueOf(value).Kind() != reflect.Slice {
+			value = makeReflectSlice(value)
+		}
+		v, err := caster.CastSlice(value)
+		if err != nil {
+			panic(err)
+		}
+		f.Value = v
+		f.Matcher.WithSlice(f.Value)
+	case FilterModeRange:
+		rg, ok := value.(RangeValue)
+		if !ok {
+			// make a range out of a single value
+			rg[0] = value
+			rg[1] = typedAdd(f.Type, value, 1)
+		}
+		var err error
+		rg[0], err = caster.CastValue(rg[0])
+		if err != nil {
+			panic(err)
+		}
+		rg[1], err = caster.CastValue(rg[1])
+		if err != nil {
+			panic(err)
+		}
+		f.Value = rg
+		f.Matcher.WithValue(f.Value)
+	default:
 		v, err := caster.CastValue(value)
 		if err != nil {
 			panic(err)
 		}
 		f.Value = v
 		f.Matcher.WithValue(f.Value)
-	case FilterModeIn, FilterModeNotIn:
-		val := unwrapAnySlice(value)
-		v, _ := caster.CastSlice(val)
-		f.Value = v
-		f.Matcher.WithSlice(f.Value)
-	case FilterModeRange:
-		// Ensure value is a RangeValue
-		if _, ok := value.(RangeValue); !ok {
-			f.Value = RangeValue{value, value}
-		}
-		f.Matcher.WithValue(f.Value)
-	default:
-		// Convert string to []byte if necessary
-		if s, ok := value.(string); ok && f.Type == BlockBytes {
-			f.Value = []byte(s)
-		}
-		f.Matcher.WithValue(f.Value)
 	}
 
 	// Log the final value and its type after processing
 	log.Printf("makeNode processed value: %v (type: %T)", f.Value, f.Value)
 
-	return &FilterTreeNode{Filter: f}
-}
-
-// makeTestRangeNode constructs a FilterTreeNode for a range condition, converting string and time values to byte slices and Unix timestamps.
-func makeTestRangeNode(name string, fieldIndex uint16, from, to interface{}) *FilterTreeNode {
-	// Handle nil range bounds
-	if from == nil && to == nil {
-		return makeNode(name, FilterModeRange, fieldIndex, nil)
-	}
-
-	// Handle time values
-	switch v := from.(type) {
-	case string:
-		from = []byte(v)
-	case time.Time:
-		from = v.UnixNano()
-	}
-
-	switch v := to.(type) {
-	case string:
-		to = []byte(v)
-	case time.Time:
-		to = v.UnixNano()
-	}
-
-	// Determine type from non-nil value
-	var blockType BlockType
-	if from != nil {
-		blockType = BlockTypes[fieldTypeFromValue(from)]
-	} else {
-		blockType = BlockTypes[fieldTypeFromValue(to)]
-	}
-
-	val := RangeValue{from, to}
-
-	f := &Filter{
-		Name:  name,
-		Mode:  FilterModeRange,
-		Index: fieldIndex,
-		Type:  blockType,
-		Value: val,
-	}
-	f.Matcher = newFactory(f.Type).New(FilterModeRange)
-	f.Matcher.WithValue(val)
 	return &FilterTreeNode{Filter: f}
 }
 
@@ -380,7 +358,7 @@ func makeEqualNode(name string, idx uint16, val any) *FilterTreeNode {
 
 // makeRangeNode constructs a FilterTreeNode for a range condition between two integer values.
 func makeRangeNode(name string, idx uint16, from, to any) *FilterTreeNode {
-	return makeTestRangeNode(name, idx, from, to)
+	return makeNode(name, FilterModeRange, idx, RangeValue{from, to})
 }
 
 // makeRegexNode constructs a FilterTreeNode for a regular expression condition with a specified string.
