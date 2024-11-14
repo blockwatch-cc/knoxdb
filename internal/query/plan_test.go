@@ -583,8 +583,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeOrTree(makeNotInNode("id", 0, []uint64{1, 2, 3, 4})),
-			ExpectedNonIndexTree: makeOrTree(makeNotInNode("id", 0, []uint64{1, 2, 3, 4})),
+			ExpectedIndexTree:    makeOrTree(makeNotInNode("id", 0, []uint64{2, 3})),
+			ExpectedNonIndexTree: makeOrTree(makeNotInNode("id", 0, []uint64{2, 3})),
 		},
 		{
 			Name:                 "or: IN(A) + EQ(B) => IN(A+B)",
