@@ -5,7 +5,6 @@ package query
 
 import (
 	"fmt"
-	"log"
 	"reflect"
 	"testing"
 
@@ -261,7 +260,7 @@ func fieldTypeFromValue(v interface{}) types.FieldType {
 func makeNode(name string, mode FilterMode, fieldIndex uint16, value any) *FilterTreeNode {
 	tree := &FilterTreeNode{}
 	// Log the initial value and its type
-	log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
+	// log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
 
 	// unwrap the []any interface from Go variadic function args
 	value = tryUnwrapAnySlice(value)
@@ -332,7 +331,7 @@ func makeNode(name string, mode FilterMode, fieldIndex uint16, value any) *Filte
 	}
 
 	// Log the final value and its type after processing
-	log.Printf("makeNode processed value: %v (type: %T)", f.Value, f.Value)
+	// log.Printf("makeNode processed value: %v (type: %T)", f.Value, f.Value)
 
 	tree.Filter = f
 	return tree
