@@ -443,6 +443,10 @@ func (p *Package) Decimal32(col, row int) num.Decimal32 {
 	return num.NewDecimal32(p.blocks[col].Int32().Get(row), f.Scale())
 }
 
+func (p *Package) Pk(row int) uint64 {
+	return p.blocks[p.px].Uint64().Get(row)
+}
+
 func (p *Package) PkColumn() []uint64 {
 	assert.Always(p.px >= 0 && p.px < len(p.blocks), "invalid pk id",
 		"px", p.px,

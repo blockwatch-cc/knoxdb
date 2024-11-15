@@ -32,5 +32,12 @@ func (s *Snapshot) IsVisible(xid uint64) bool {
 	// otherwise records are visible iff the record's tx
 	// - has committed before (< global xmin horizon)
 	// - was not active when the snapshot was made
-	return xid < s.Xmin || s.Xact&(1<<xid-s.Xmin) == 0
+	return xid < s.Xmin || s.Xact&(1<<(xid-s.Xmin)) == 0
+}
+
+func (s *Snapshot) IsConflict(xid uint64) bool {
+	if xid < s.Xmin || xid == s.Xown {
+		return false
+	}
+	return s.Xact&(1<<(xid-s.Xmin)) > 0
 }
