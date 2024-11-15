@@ -4,6 +4,7 @@
 package schema
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"strconv"
@@ -276,11 +277,11 @@ func (p D256Parser) ParseSlice(s string) (any, error) {
 type StringParser struct{}
 
 func (_ StringParser) ParseValue(s string) (any, error) {
-	return s, nil
+	return []byte(s), nil
 }
 
 func (p StringParser) ParseSlice(s string) (any, error) {
-	return strings.Split(s, ","), nil
+	return bytes.Split([]byte(s), []byte(",")), nil
 }
 
 // bytes parser

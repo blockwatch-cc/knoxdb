@@ -33,7 +33,7 @@ func TestSingleValueParsing(t *testing.T) {
 		{"Float32", NewParser(types.FieldTypeFloat32, 0, nil), "3.4028235e+38", float32(3.4028235e+38)},
 		{"Float64", NewParser(types.FieldTypeFloat64, 0, nil), "1.7976931348623157e+308", float64(1.7976931348623157e+308)},
 		{"Bool", NewParser(types.FieldTypeBoolean, 0, nil), "true", true},
-		{"String", NewParser(types.FieldTypeString, 0, nil), "hello world", "hello world"},
+		{"String", NewParser(types.FieldTypeString, 0, nil), "hello world", []byte("hello world")},
 		{"Bytes", NewParser(types.FieldTypeBytes, 0, nil), "0x68656c6c6f", []byte("hello")},
 		{"Time", NewParser(types.FieldTypeDatetime, 0, nil), "2023-05-17T12:34:56Z", time.Date(2023, 5, 17, 12, 34, 56, 0, time.UTC).UnixNano()},
 		{"Int128", NewParser(types.FieldTypeInt128, 0, nil), "170141183460469231731687303715884105727", func() num.Int128 { i, _ := num.ParseInt128("170141183460469231731687303715884105727"); return i }()},
@@ -73,7 +73,7 @@ func TestSliceParsing(t *testing.T) {
 		{"Int64Slice", NewParser(types.FieldTypeInt64, 0, nil), "-9223372036854775808,0,9223372036854775807", []int64{math.MinInt64, 0, math.MaxInt64}},
 		{"Float64Slice", NewParser(types.FieldTypeFloat64, 0, nil), "-1.7976931348623157e+308,0,1.7976931348623157e+308", []float64{-math.MaxFloat64, 0, math.MaxFloat64}},
 		{"BoolSlice", NewParser(types.FieldTypeBoolean, 0, nil), "true,false,true", []bool{true, false, true}},
-		{"StringSlice", NewParser(types.FieldTypeString, 0, nil), "a,b,c", []string{"a", "b", "c"}},
+		{"StringSlice", NewParser(types.FieldTypeString, 0, nil), "a,b,c", [][]byte{[]byte("a"), []byte("b"), []byte("c")}},
 		{"BytesSlice", NewParser(types.FieldTypeBytes, 0, nil), "0x68,0x65,0x6c", [][]byte{{0x68}, {0x65}, {0x6c}}},
 		{"TimeSlice", NewParser(types.FieldTypeDatetime, 0, nil), "2023-05-17T12:34:56Z,2023-05-18T12:34:56Z", []int64{
 			time.Date(2023, 5, 17, 12, 34, 56, 0, time.UTC).UnixNano(),
@@ -124,8 +124,8 @@ func TestEdgeCases(t *testing.T) {
 		input    string
 		expected interface{}
 	}{
-		{"EmptyString", NewParser(types.FieldTypeString, 0, nil), "", ""},
-		{"UnicodeString", NewParser(types.FieldTypeString, 0, nil), "ビットコイン", "ビットコイン"},
+		{"EmptyString", NewParser(types.FieldTypeString, 0, nil), "", []byte("")},
+		{"UnicodeString", NewParser(types.FieldTypeString, 0, nil), "ビットコイン", []byte("ビットコイン")},
 		{"MinInt64", NewParser(types.FieldTypeInt64, 0, nil), "-9223372036854775808", int64(-9223372036854775808)},
 		{"MaxUint64", NewParser(types.FieldTypeUint64, 0, nil), "18446744073709551615", uint64(18446744073709551615)},
 		{"SmallFloat", NewParser(types.FieldTypeFloat64, 0, nil), "1.1754943508222875e-38", 1.1754943508222875e-38},
