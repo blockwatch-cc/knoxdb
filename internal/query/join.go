@@ -384,7 +384,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 		Matcher: matcher, // zero
 		Value:   matcher.Value(),
 	}
-	x.Where.AddNode(&FilterTreeNode{Filter: x.Filter})
+	x.Where.Children = append(x.Where.Children, &FilterTreeNode{Filter: x.Filter})
 
 	// add limit to large side
 	x.Plan.WithLimit(p.Limit)
@@ -402,7 +402,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 			Matcher: matcher, // updated during processing
 			Value:   nil,     // updated during processing
 		}
-		y.Where.AddNode(&FilterTreeNode{Filter: y.Filter})
+		y.Where.Children = append(y.Where.Children, &FilterTreeNode{Filter: y.Filter})
 	}
 
 	return nil

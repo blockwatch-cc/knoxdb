@@ -55,6 +55,10 @@ func (f Filter) Validate() error {
 	return nil
 }
 
+// Invariants
+// - root is always and AND node
+// - root is never a leaf node
+// - root may be empty
 type FilterTreeNode struct {
 	OrKind   bool              // AND|OR
 	Children []*FilterTreeNode // sub filter
@@ -69,7 +73,7 @@ func (n FilterTreeNode) IsEmpty() bool {
 }
 
 func (n FilterTreeNode) IsLeaf() bool {
-	return n.Filter != nil
+	return n.Filter != nil && len(n.Children) == 0
 }
 
 func (n FilterTreeNode) IsProcessed() bool {
@@ -116,15 +120,19 @@ func (n FilterTreeNode) IsEmptyMatch() bool {
 }
 
 func (n FilterTreeNode) Validate(pos string) error {
+	// Check if node is invalid (no children and no filter)
+	if len(n.Children) == 0 && n.Filter == nil {
+		return fmt.Errorf("[%s] invalid leaf node: missing filter", pos)
+	}
+
+	// Validate leaf node filter
 	if n.IsLeaf() {
-		if n.Filter == nil {
-			return fmt.Errorf("[%s] missing filter on leaf", pos)
-		}
 		if err := n.Filter.Validate(); err != nil {
 			return fmt.Errorf("[%s] %s: %v", pos, n.Filter.Name, err)
 		}
 	}
 
+	// Validate children nodes recursively
 	for i, child := range n.Children {
 		if err := child.Validate(fmt.Sprintf("%s/%d", pos, i)); err != nil {
 			return err
@@ -201,45 +209,6 @@ func (n FilterTreeNode) Cost(nValues int) int {
 	return n.Weight() * nValues
 }
 
-func (n *FilterTreeNode) AddAndFilter(c *Filter) {
-	node := &FilterTreeNode{
-		OrKind: COND_AND,
-		Filter: c,
-	}
-	n.AddNode(node)
-}
-
-func (n *FilterTreeNode) AddOrFilter(c *Filter) {
-	node := &FilterTreeNode{
-		OrKind: COND_OR,
-		Filter: c,
-	}
-	n.AddNode(node)
-}
-
-// Invariants
-// - root is always and AND node
-// - root is never a leaf node
-// - root may be empty
-func (n *FilterTreeNode) AddNode(node *FilterTreeNode) {
-	if n.IsLeaf() {
-		clone := &FilterTreeNode{
-			OrKind:   n.OrKind,
-			Children: n.Children,
-			Filter:   n.Filter,
-		}
-		n.Filter = nil
-		n.Children = []*FilterTreeNode{clone}
-	}
-
-	// append new condition to this element
-	if n.OrKind == node.OrKind && !node.IsLeaf() {
-		n.Children = append(n.Children, node.Children...)
-	} else {
-		n.Children = append(n.Children, node)
-	}
-}
-
 // engine matcher interface
 func (n *FilterTreeNode) MatchView(v *schema.View) bool {
 	return MatchTree(n, v)
@@ -250,6 +219,6 @@ func (n *FilterTreeNode) Overlaps(v engine.ConditionMatcher) bool {
 	if !ok {
 		return false
 	}
-	// TODO
+	// TODO: required for LockManager predicate locks
 	return false
 }
