@@ -75,6 +75,8 @@ func MinNumericVal(t types.BlockType) any {
 		return num.MinInt128
 	case types.BlockInt256:
 		return num.MinInt256
+	case types.BlockString, types.BlockBytes:
+		return []byte{}
 	default:
 		return nil
 	}
@@ -108,6 +110,8 @@ func MaxNumericVal(t types.BlockType) any {
 		return num.MaxInt128
 	case types.BlockInt256:
 		return num.MaxInt256
+	case types.BlockString, types.BlockBytes:
+		return nil
 	default:
 		return nil
 	}
@@ -132,6 +136,14 @@ func Cmp(t types.BlockType, a, b any) (c int) {
 		}
 		c = util.Cmp(x, y)
 	case types.BlockString, types.BlockBytes:
+		switch {
+		case a == nil && b == nil:
+			return 0
+		case a == nil:
+			return -1
+		case b == nil:
+			return 1
+		}
 		c = bytes.Compare(a.([]byte), b.([]byte))
 	case types.BlockInt32:
 		c = util.Cmp(a.(int32), b.(int32))

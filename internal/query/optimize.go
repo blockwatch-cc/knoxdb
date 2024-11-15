@@ -101,7 +101,7 @@ func (n *FilterTreeNode) Optimize() {
 
 		// lift nested single-child node's child
 		if len(child.Children) == 1 {
-			newChilds = append(newChilds, child.Children[1])
+			newChilds = append(newChilds, child.Children[0])
 			continue
 		}
 

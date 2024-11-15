@@ -832,7 +832,7 @@ func (c BoolCaster) CastSlice(val any) (res any, err error) {
 			cp[i] = v[i] > 0
 		}
 		res, ok = cp, true
-	case bool:
+	case []bool:
 		ok = true
 	}
 	if !ok {
@@ -961,6 +961,8 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 		res, ok = b[:], true
 	case string:
 		res, ok = []byte(v), true
+	case []byte:
+		res, ok = v, true
 	default:
 		// binary marshaler
 		if v, ok2 := val.(encoding.BinaryMarshaler); ok2 {

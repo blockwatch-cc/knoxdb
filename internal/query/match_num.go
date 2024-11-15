@@ -471,14 +471,14 @@ func (m *numInSetMatcher[T]) WithValue(val any) {
 }
 
 func (m *numInSetMatcher[T]) WithSlice(slice any) {
-	bits := slice.([]T)
-	slices.Sort(bits)
-	m.slice.Values = bits
+	data := slice.([]T)
+	slices.Sort(data)
+	m.slice.Values = data
 	m.set = xroar.NewBitmap()
-	for _, v := range bits {
+	for _, v := range data {
 		m.set.Set(uint64(v))
 	}
-	m.hashes = bloom.HashAnySlice(bits)
+	m.hashes = bloom.HashAnySlice(data)
 }
 
 func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) {

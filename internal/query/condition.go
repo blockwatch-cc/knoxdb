@@ -233,13 +233,17 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 		// node from matcher
 		if node == nil {
 			node = &FilterTreeNode{
-				Filter: &Filter{
-					Name:    c.Name,
-					Type:    BlockTypes[typ],
-					Mode:    c.Mode,
-					Index:   uint16(fid),
-					Value:   c.Value,
-					Matcher: matcher,
+				Children: []*FilterTreeNode{
+					&FilterTreeNode{
+						Filter: &Filter{
+							Name:    c.Name,
+							Type:    BlockTypes[typ],
+							Mode:    c.Mode,
+							Index:   uint16(fid),
+							Value:   c.Value,
+							Matcher: matcher,
+						},
+					},
 				},
 			}
 		}
