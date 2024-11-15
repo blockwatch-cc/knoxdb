@@ -544,7 +544,7 @@ func TestCastBytesCaster(t *testing.T) {
 		}{
 			{"String", "hello", []byte("hello"), false},
 			{"Bytes", byte(10), []byte{byte(10)}, false},
-			{"BytesArray", []byte{1, 2, 3}, []byte{1, 2, 3}, true},
+			{"BytesArray", []byte{1, 2, 3}, []byte{1, 2, 3}, false},
 			{"Int", int32(42), []byte{0, 0, 0, 42}, false},
 			{"CustomBinaryMarshaler", CustomBinaryMarshaler{[]byte{4, 5, 6}}, []byte{4, 5, 6}, false},
 			{"InvalidType", struct{}{}, nil, true},
