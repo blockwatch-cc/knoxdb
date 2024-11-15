@@ -31,9 +31,9 @@ func (h *RecordHeader) SetBodySize(v int)        { LE.PutUint32(h[18:22], uint32
 func (h *RecordHeader) SetChecksum(v uint64)     { LE.PutUint64(h[22:30], v) }
 
 func (h RecordHeader) NewRecord() *Record {
-	var body []byte
+	var body [][]byte
 	if l := h.BodySize(); l > 0 {
-		body = make([]byte, l)
+		body = [][]byte{make([]byte, l)}
 	}
 	return &Record{
 		Type:   h.Type(),

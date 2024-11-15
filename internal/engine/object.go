@@ -115,13 +115,13 @@ func (o *TableObject) Encode() ([]byte, error) {
 }
 
 func (o *TableObject) Decode(ctx context.Context, rec *wal.Record) error {
-	if len(rec.Data) < 9 {
+	buf := bytes.NewBuffer(rec.Data[0])
+	if buf.Len() < 9 {
 		return io.ErrShortBuffer
 	}
-	if rec.Data[0] != byte(types.ObjectTagTable) {
+	if buf.Next(1)[0] != byte(types.ObjectTagTable) {
 		return ErrInvalidObjectType
 	}
-	buf := bytes.NewBuffer(rec.Data[1:])
 	o.action = rec.Type
 
 	// delete records use a short encoding
@@ -231,13 +231,13 @@ func (o *StoreObject) Encode() ([]byte, error) {
 }
 
 func (o *StoreObject) Decode(ctx context.Context, rec *wal.Record) error {
-	if len(rec.Data) < 9 {
+	buf := bytes.NewBuffer(rec.Data[0])
+	if buf.Len() < 9 {
 		return io.ErrShortBuffer
 	}
-	if rec.Data[0] != byte(types.ObjectTagStore) {
+	if buf.Next(1)[0] != byte(types.ObjectTagStore) {
 		return ErrInvalidObjectType
 	}
-	buf := bytes.NewBuffer(rec.Data[1:])
 	o.action = rec.Type
 
 	// delete records use a short encoding
@@ -341,13 +341,13 @@ func (o *EnumObject) Encode() ([]byte, error) {
 }
 
 func (o *EnumObject) Decode(ctx context.Context, rec *wal.Record) error {
-	if len(rec.Data) < 5 {
+	buf := bytes.NewBuffer(rec.Data[0])
+	if buf.Len() < 5 {
 		return io.ErrShortBuffer
 	}
-	if rec.Data[0] != byte(types.ObjectTagEnum) {
+	if buf.Next(1)[0] != byte(types.ObjectTagEnum) {
 		return ErrInvalidObjectType
 	}
-	buf := bytes.NewBuffer(rec.Data[1:])
 	o.action = rec.Type
 
 	// read name
@@ -458,13 +458,13 @@ func (o *IndexObject) Encode() ([]byte, error) {
 }
 
 func (o *IndexObject) Decode(ctx context.Context, rec *wal.Record) error {
-	if len(rec.Data) < 11 {
+	buf := bytes.NewBuffer(rec.Data[0])
+	if buf.Len() < 11 {
 		return io.ErrShortBuffer
 	}
-	if rec.Data[0] != byte(types.ObjectTagIndex) {
+	if buf.Next(1)[0] != byte(types.ObjectTagIndex) {
 		return ErrInvalidObjectType
 	}
-	buf := bytes.NewBuffer(rec.Data[1:])
 	o.action = rec.Type
 
 	// delete records use a short encoding

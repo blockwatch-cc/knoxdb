@@ -57,3 +57,7 @@ func Uint8AsInt8Slice(src []uint8) []int8 {
 func Uint64SliceAsByteSlice(x []uint64) []byte {
 	return unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(x))), len(x)*8)
 }
+
+func ByteSliceSliceAsUint64Slice(x []byte) []uint64 {
+	return unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(x))), len(x)/8)
+}

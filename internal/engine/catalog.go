@@ -829,7 +829,7 @@ func (c *Catalog) append(ctx context.Context, o Object) error {
 		Tag:    types.ObjectTagDatabase,
 		Entity: c.id,
 		TxID:   tx.id,
-		Data:   buf,
+		Data:   [][]byte{buf},
 	})
 	if err != nil {
 		return err
@@ -1048,7 +1048,7 @@ func (c *Catalog) Recover(ctx context.Context) error {
 
 func (c *Catalog) decodeWalRecord(ctx context.Context, rec *wal.Record) (Object, error) {
 	var obj Object
-	switch types.ObjectTag(rec.Data[0]) {
+	switch types.ObjectTag(rec.Data[0][0]) {
 	case types.ObjectTagTable:
 		obj = &TableObject{cat: c}
 	case types.ObjectTagStore:

@@ -56,8 +56,15 @@ type Record struct {
 	Tag    types.ObjectTag // object kind (db, table, store, enum, etc)
 	TxID   uint64          // unique transaction id this record was belongs to
 	Entity uint64          // object id (tagged hash for db, table, store, enum, etc)
-	Data   []byte          // body with encoded data, may be empty
+	Data   [][]byte        // iovec body with encoded data, may be empty
 	Lsn    LSN             // the record's byte offset in the WAL
+}
+
+func (r Record) BodySize() (sz int) {
+	for _, v := range r.Data {
+		sz += len(v)
+	}
+	return
 }
 
 func (r Record) String() string {
@@ -67,8 +74,12 @@ func (r Record) String() string {
 }
 
 func (r Record) Trace() string {
+	var dump string
+	if r.BodySize() > 0 {
+		dump = hex.Dump(r.Data[0])
+	}
 	return fmt.Sprintf("typ=%s tag=%s xid=0x%016x entity=0x%016x lsn=0x%016x len=%d\n%s",
-		r.Type, r.Tag, r.TxID, r.Entity, r.Lsn, len(r.Data), hex.Dump(r.Data),
+		r.Type, r.Tag, r.TxID, r.Entity, r.Lsn, len(r.Data), dump,
 	)
 }
 
@@ -111,6 +122,6 @@ func (r *Record) Header() (h RecordHeader) {
 	h.SetTag(r.Tag)
 	h.SetTxId(r.TxID)
 	h.SetEntity(r.Entity)
-	h.SetBodySize(len(r.Data))
+	h.SetBodySize(r.BodySize())
 	return
 }

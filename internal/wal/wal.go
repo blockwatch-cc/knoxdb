@@ -219,7 +219,7 @@ scan:
 		}
 
 		// keep last good lsn
-		lsn = lsn.Add(HeaderSize + len(rec.Data))
+		lsn = lsn.Add(HeaderSize + rec.BodySize())
 	}
 
 	// after successful init check (or truncate)
@@ -323,17 +323,19 @@ func (w *Wal) write(rec *Record) (LSN, error) {
 	}
 
 	// write body
-	_, err = w.writeBuffer(rec.Data)
-	if err != nil {
-		if err2 := w.truncate(lsn); err2 != nil {
-			return 0, err2
+	for _, v := range rec.Data {
+		_, err = w.writeBuffer(v)
+		if err != nil {
+			if err2 := w.truncate(lsn); err2 != nil {
+				return 0, err2
+			}
+			return 0, err
 		}
-		return 0, err
 	}
 
 	// all ok, update csum and next lsn
 	w.csum = csum
-	w.lsn = lsn.Add(HeaderSize + len(rec.Data))
+	w.lsn = lsn.Add(HeaderSize + rec.BodySize())
 
 	return lsn, nil
 }

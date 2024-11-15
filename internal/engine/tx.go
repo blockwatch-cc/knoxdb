@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"sync/atomic"
 
@@ -35,37 +36,26 @@ func (f TxFlags) IsConflict() bool     { return f&TxFlagsConflict > 0 }
 type TxHook func(Context) error
 
 type Tx struct {
-	id       uint64
-	engine   *Engine
-	dbTx     map[store.DB]store.Tx
-	catTx    store.Tx
-	snap     *types.Snapshot     // isolation snapshot
-	touched  map[uint64]struct{} // oids we have written to (tables, stores)
-	onCommit []TxHook
-	onAbort  []TxHook
-	ctx      context.Context
-	cancel   context.CancelCauseFunc
+	id       uint64                  // unique tx id (read-only txn use alternative range)
+	engine   *Engine                 // reference to engine
+	dbTx     map[store.DB]store.Tx   // storage tx for table dbs
+	catTx    store.Tx                // separate storage tx for catalog db
+	snap     *types.Snapshot         // isolation snapshot
+	touched  map[uint64]struct{}     // oids we have written to (tables, stores)
+	onCommit []TxHook                // list of callbacks to execute before storage sync
+	onAbort  []TxHook                // list of callbacks to execute before storage sync
+	ctx      context.Context         // derived context so tx is cancellable
+	cancel   context.CancelCauseFunc // cancel tx with this function
 
 	// TODO: concurrency control config option: optimistic/deterministic
 	// single writer: rollback sequences -> determinism
 	// multi writer: don't roll back
 
 	// TODO: close/drop/truncate/compact/alter integration
-	// - need lock manager, table ops take a lock (granularity table)
-	//   - scope: db, table, pk range, row
-	//   - owner: txid
-	//   - entity u64
-	//   - data [2]u64
-	// - can wait on lock release (use sync.Cond)
-	// - deterministic tx can lock the entire db (or table?)
+	// - use lock manager
+	// - should deterministic tx exclusive lock the entire db (or table?)
 
 	// TODO tx isolation
-	// - keep private tx-scoped journal per table?
-	// - write hidden txid col to journal and skip read when txid > self? last committed?
-	// - write to wal only, on commit apply wal to journal (!! violates read own writes)
-	// - journal insert: lock sequence access (or lock table) because num rows unknown
-	//   - or make nrows known in wire format and pre-reserve sequence space
-	//   - if insert fails sequences may be lost (!! determinism)
 
 	// TODO tx conflict detection
 	// - keep list of written PKs per table in tx (how to know, journal?)
@@ -76,15 +66,6 @@ type Tx struct {
 	//   - if in local and global: -> second update/undelete/etc -> allow
 	// - on tx close (commit or abort) AND NOT engine list with local list clearing touched pks
 	writes map[uint64]bitmap.Bitmap
-
-	// TODO tx deadlock detection (on writable tx)
-	// - live tx are registered with engine
-	// - A prevent multiple tx from opening storage db tx (or take any locks)
-	//     in a pre-defined order (e.g. by mem address)
-	// - B actively check in StoreTx if any other live tx has as open write tx
-	//     and abort the caller
-	//     - could use a map in engine that holds all dbs (interface ptr) with
-	//       currently open write tx
 
 	// flags
 	flags TxFlags
@@ -347,7 +328,7 @@ func (t *Tx) Commit() error {
 		}
 	}
 
-	// handle catalog updates
+	// close and write catalog updates
 	if t.catTx != nil {
 		var err error
 		if t.catTx.IsWriteable() {
@@ -359,6 +340,8 @@ func (t *Tx) Commit() error {
 			return err
 		}
 	}
+
+	// cleanup
 	t.Close()
 	return nil
 }
@@ -403,6 +386,13 @@ func (t *Tx) Abort() error {
 		}
 	}
 
+	// run callbacks
+	for _, fn := range t.onAbort {
+		if err := fn(t.ctx); err != nil {
+			t.engine.log.Errorf("Tx 0x%016x abort: %v", t.id, err)
+		}
+	}
+
 	// close storage tx
 	var err error
 	for _, tx := range t.dbTx {
@@ -418,16 +408,16 @@ func (t *Tx) Abort() error {
 		}
 	}
 
-	// run callbacks
-	for _, fn := range t.onAbort {
-		if err := fn(t.ctx); err != nil {
-			t.engine.log.Errorf("Tx 0x%016x abort: %v", t.id, err)
-		}
-	}
-
 	// cleanup tx
 	t.Close()
 	return err
+}
+
+func (t *Tx) Fail(err error) {
+	if errors.Is(err, ErrTxConflict) {
+		t.flags |= TxFlagsConflict
+	}
+	t.cancel(err)
 }
 
 func (t *Tx) kill() {

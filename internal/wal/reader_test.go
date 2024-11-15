@@ -23,9 +23,9 @@ func TestReaderFilter(t *testing.T) {
 
 	// Write test records
 	records := []*Record{
-		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: []byte("data1")},
-		{Type: RecordTypeUpdate, Tag: types.ObjectTagStore, Entity: 2, TxID: 200, Data: []byte("data2")},
-		{Type: RecordTypeDelete, Tag: types.ObjectTagStream, Entity: 3, TxID: 300, Data: []byte("data3")},
+		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: [][]byte{[]byte("data1")}},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTagStore, Entity: 2, TxID: 200, Data: [][]byte{[]byte("data2")}},
+		{Type: RecordTypeDelete, Tag: types.ObjectTagStream, Entity: 3, TxID: 300, Data: [][]byte{[]byte("data3")}},
 	}
 
 	for _, rec := range records {
@@ -75,15 +75,15 @@ func TestReaderSeek(t *testing.T) {
 	defer w.Close()
 
 	records := []*Record{
-		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: []byte("data1")},
+		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: [][]byte{[]byte("data1")}},
 		{Type: RecordTypeCheckpoint, Tag: types.ObjectTagDatabase},
-		{Type: RecordTypeUpdate, Tag: types.ObjectTagDatabase, Entity: 2, TxID: 200, Data: []byte("data2")},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTagDatabase, Entity: 2, TxID: 200, Data: [][]byte{[]byte("data2")}},
 		{Type: RecordTypeCheckpoint, Tag: types.ObjectTagDatabase},
-		{Type: RecordTypeDelete, Tag: types.ObjectTagDatabase, Entity: 3, TxID: 300, Data: []byte("data3")},
+		{Type: RecordTypeDelete, Tag: types.ObjectTagDatabase, Entity: 3, TxID: 300, Data: [][]byte{[]byte("data3")}},
 		{Type: RecordTypeCheckpoint, Tag: types.ObjectTagDatabase},
-		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 4, TxID: 400, Data: []byte("data4")},
+		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 4, TxID: 400, Data: [][]byte{[]byte("data4")}},
 		{Type: RecordTypeCheckpoint, Tag: types.ObjectTagDatabase},
-		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 4, TxID: 400, Data: []byte("data4")},
+		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 4, TxID: 400, Data: [][]byte{[]byte("data4")}},
 	}
 
 	lsns := make([]LSN, len(records))
@@ -179,7 +179,7 @@ func TestReaderSeekInvalidLSN(t *testing.T) {
 		// Try to read the valid record
 		readRec, err := reader.Next()
 		require.NoError(t, err, "Failed to read valid record after invalid LSN attempts")
-		require.Equal(t, []byte(nil), readRec.Data, "Read record data doesn't match written data")
+		require.Equal(t, [][]byte(nil), readRec.Data, "Read record data doesn't match written data")
 	})
 }
 
@@ -192,9 +192,9 @@ func TestReaderNext(t *testing.T) {
 
 	// Write some test records
 	records := []*Record{
-		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: []byte("data1")},
-		{Type: RecordTypeUpdate, Tag: types.ObjectTagDatabase, Entity: 2, TxID: 200, Data: []byte("data2")},
-		{Type: RecordTypeDelete, Tag: types.ObjectTagDatabase, Entity: 3, TxID: 300, Data: []byte("data3")},
+		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: [][]byte{[]byte("data1")}},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTagDatabase, Entity: 2, TxID: 200, Data: [][]byte{[]byte("data2")}},
+		{Type: RecordTypeDelete, Tag: types.ObjectTagDatabase, Entity: 3, TxID: 300, Data: [][]byte{[]byte("data3")}},
 	}
 
 	for _, rec := range records {
@@ -234,7 +234,7 @@ func TestTwoSimultaneousReaders(t *testing.T) {
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   uint64(i * 100),
-			Data:   []byte(fmt.Sprintf("data%d", i)),
+			Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
 		}
 		_, err := w.Write(rec)
 		require.NoError(t, err)
@@ -260,7 +260,7 @@ func TestTwoSimultaneousReaders(t *testing.T) {
 			assert.Equal(t, types.ObjectTagDatabase, rec.Tag)
 			assert.Equal(t, uint64(i), rec.Entity)
 			assert.Equal(t, uint64(i*100), rec.TxID)
-			assert.Equal(t, []byte(fmt.Sprintf("data%d", i)), rec.Data)
+			assert.Equal(t, [][]byte{[]byte(fmt.Sprintf("data%d", i))}, rec.Data)
 		}
 	}
 
@@ -292,7 +292,7 @@ func TestConcurrentReadersLargeDataset(t *testing.T) {
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   uint64(i * 100),
-			Data:   []byte(fmt.Sprintf("data%d", i)),
+			Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
 		}
 		_, err := w.Write(rec)
 		require.NoError(t, err)
@@ -327,7 +327,7 @@ func TestConcurrentReadersLargeDataset(t *testing.T) {
 				assert.Equal(t, types.ObjectTagDatabase, rec.Tag)
 				assert.Equal(t, uint64(expectedI), rec.Entity)
 				assert.Equal(t, uint64(expectedI*100), rec.TxID)
-				assert.Equal(t, []byte(fmt.Sprintf("data%d", expectedI)), rec.Data)
+				assert.Equal(t, [][]byte{[]byte(fmt.Sprintf("data%d", expectedI))}, rec.Data)
 
 				count++
 			}
@@ -362,7 +362,7 @@ func BenchmarkWalRead(b *testing.B) {
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   uint64(i),
-			Data:   data,
+			Data:   [][]byte{data},
 		}
 		_, err := w.Write(rec)
 		require.NoError(b, err)

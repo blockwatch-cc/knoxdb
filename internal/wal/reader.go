@@ -260,7 +260,7 @@ func (r *Reader) Next() (*Record, error) {
 		// read body
 		rec := head.NewRecord()
 		if head.BodySize() > 0 {
-			if err := r.read(rec.Data); err != nil {
+			if err := r.read(rec.Data[0]); err != nil {
 				// convert EOF error on short tail read
 				if err == io.EOF {
 					return nil, fmt.Errorf("wal: %w: header %s: %v", ErrInvalidRecord, head, ErrInvalidBodySize)
@@ -286,7 +286,7 @@ func (r *Reader) Next() (*Record, error) {
 
 		// update reader state
 		r.csum = csum
-		r.lsn = r.lsn.Add(HeaderSize + len(rec.Data))
+		r.lsn = r.lsn.Add(HeaderSize + rec.BodySize())
 		r.xid = max(r.xid, head.TxId())
 
 		// skip on broken checksum
@@ -334,12 +334,14 @@ func (r *Reader) read(buf []byte) error {
 	return nil
 }
 
-func checksum(h hash.Hash64, seed uint64, head *RecordHeader, body []byte) uint64 {
+func checksum(h hash.Hash64, seed uint64, head *RecordHeader, body [][]byte) uint64 {
 	h.Reset()
 	var b [8]byte
 	LE.PutUint64(b[:], seed)
 	h.Write(b[:])
 	h.Write(head[:22])
-	h.Write(body)
+	for _, v := range body {
+		h.Write(v)
+	}
 	return h.Sum64()
 }

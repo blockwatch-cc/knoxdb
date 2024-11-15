@@ -52,7 +52,7 @@ func makeRecords(sz int) []*Record {
 			Tag:    types.ObjectTagDatabase,
 			TxID:   uint64(walTxId),
 			Entity: 10,
-			Data:   walBody,
+			Data:   [][]byte{walBody},
 		})
 	}
 	return recs
@@ -343,7 +343,7 @@ func commitLogAppendHelper(t *testing.T, i int) {
 			TxID:   5,
 			Lsn:    0,
 			Entity: 10,
-			Data:   []byte("data"),
+			Data:   [][]byte{[]byte("data")},
 		},
 		{
 			Type:   RecordTypeCommit,
@@ -351,7 +351,7 @@ func commitLogAppendHelper(t *testing.T, i int) {
 			TxID:   1 << 19,
 			Lsn:    34 << 14,
 			Entity: 10,
-			Data:   []byte("data"),
+			Data:   [][]byte{[]byte("data")},
 		},
 		{
 			Type:   RecordTypeCommit,
@@ -359,7 +359,7 @@ func commitLogAppendHelper(t *testing.T, i int) {
 			TxID:   2 << 19,
 			Lsn:    34 << 15,
 			Entity: 10,
-			Data:   []byte("data"),
+			Data:   [][]byte{[]byte("data")},
 		},
 		{
 			Type:   RecordTypeCommit,
@@ -367,7 +367,7 @@ func commitLogAppendHelper(t *testing.T, i int) {
 			TxID:   3 << 19,
 			Lsn:    34 << 16,
 			Entity: 10,
-			Data:   []byte("data"),
+			Data:   [][]byte{[]byte("data")},
 		},
 	}
 
