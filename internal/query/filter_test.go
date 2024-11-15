@@ -123,3 +123,27 @@ func TestFilterWeightCalculation(t *testing.T) {
 	filter := makeRandomFilter("test_field", FilterModeEqual, 42)
 	assert.Equal(t, 1, filter.Matcher.Weight())
 }
+
+// TestFilterTreeNodeDynamicModification validates the behavior of dynamic tree modifications,
+// specifically testing the addition of AND/OR filters to a FilterTreeNode. It ensures that
+// the tree's size and depth are updated correctly after each modification and verifies
+// the processed state of the tree remains unchanged.
+func TestFilterTreeNodeDynamicModification(t *testing.T) {
+	// Create an initial tree with depth and size
+	root := makeRandomTree(2, 4)
+	assert.Equal(t, 6, root.Size())  // Initial size of tree
+	assert.Equal(t, 2, root.Depth()) // Initial depth of tree
+
+	// Add an AND filter and check size and depth
+	root.AddAndFilter(makeRandomFilter("extra", FilterModeGt, 10))
+	assert.Equal(t, 7, root.Size())  // Expect size to increase
+	assert.Equal(t, 2, root.Depth()) // Depth remains unchanged
+
+	// Add an OR filter and verify size and depth again
+	root.AddOrFilter(makeRandomFilter("optional", FilterModeLt, 5))
+	assert.Equal(t, 8, root.Size())  // Expect size to increase further
+	assert.Equal(t, 2, root.Depth()) // Depth remains unchanged
+
+	// Test IsProcessed state
+	assert.False(t, root.IsProcessed()) // Tree should not be processed
+}
