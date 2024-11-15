@@ -148,7 +148,7 @@ func TestOptimize(t *testing.T) {
 		},
 		{
 			name:     "OR_IN",
-			input:    makeOrTree(makeInNode("id", 1, []int64{1, 2, 3}), makeInNode("id", 0, []int64{2, 3, 4})),
+			input:    makeOrTree(makeInNode("id", 1, []int64{1, 2, 3}), makeInNode("id", 1, []int64{2, 3, 4})),
 			expected: makeOrTree(makeInNode("id", 1, []int64{1, 2, 3, 4})),
 			comment:  "Overlapping IN conditions should be merged",
 		},
