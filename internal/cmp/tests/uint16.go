@@ -11,15 +11,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-type Uint16MatchTest struct {
-	Name   string
-	Slice  []uint16
-	Match  uint16 // used for every test
-	Match2 uint16 // used for between tests
-	Result []byte
-	Count  int64
-}
-
 var (
 	u16_s0 = []uint16{
 		0, 5, 3, 5, // Y1
@@ -128,7 +119,7 @@ var (
 //   - match, match2: are only copied to the resulting test case
 //   - result: result for the given slice
 //   - len: desired length of the test case
-func mku16(name string, src []uint16, match, match2 uint16, result []byte, length int) Uint16MatchTest {
+func mku16(name string, src []uint16, match, match2 uint16, result []byte, length int) MatchTest[uint16] {
 	if len(src)%8 != 0 {
 		panic(fmt.Errorf("f64 %s: length of slice has to be a multiple of 8", name))
 	}
@@ -162,7 +153,7 @@ func mku16(name string, src []uint16, match, match2 uint16, result []byte, lengt
 	for _, v := range result {
 		cnt += bits.OnesCount8(v)
 	}
-	return Uint16MatchTest{
+	return MatchTest[uint16]{
 		Name:   name,
 		Slice:  src,
 		Match:  match,
@@ -174,7 +165,7 @@ func mku16(name string, src []uint16, match, match2 uint16, result []byte, lengt
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-var Uint16EqualCases = []Uint16MatchTest{
+var Uint16EqualCases = []MatchTest[uint16]{
 	{"l0", make([]uint16, 0), u16_eq_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u16_eq_mat_1, 0, []byte{}, 0},
 	mku16("vec1", u16_s0, u16_eq_mat_0, 0, u16_eq_res_0, 32),
@@ -199,7 +190,7 @@ var Uint16EqualCases = []Uint16MatchTest{
 
 // -----------------------------------------------------------------------------
 // NotEqual Testcases
-var Uint16NotEqualCases = []Uint16MatchTest{
+var Uint16NotEqualCases = []MatchTest[uint16]{
 	{"l0", make([]uint16, 0), u16_ne_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u16_ne_mat_1, 0, []byte{}, 0},
 	mku16("vec1", u16_s0, u16_ne_mat_0, 0, u16_ne_res_0, 32),
@@ -224,7 +215,7 @@ var Uint16NotEqualCases = []Uint16MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-var Uint16LessCases = []Uint16MatchTest{
+var Uint16LessCases = []MatchTest[uint16]{
 	{"l0", make([]uint16, 0), u16_lt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u16_lt_mat_1, 0, []byte{}, 0},
 	mku16("vec1", u16_s0, u16_lt_mat_0, 0, u16_lt_res_0, 32),
@@ -249,7 +240,7 @@ var Uint16LessCases = []Uint16MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-var Uint16LessEqualCases = []Uint16MatchTest{
+var Uint16LessEqualCases = []MatchTest[uint16]{
 	{"l0", make([]uint16, 0), u16_le_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u16_le_mat_1, 0, []byte{}, 0},
 	mku16("vec1", u16_s0, u16_le_mat_0, 0, u16_le_res_0, 32),
@@ -274,7 +265,7 @@ var Uint16LessEqualCases = []Uint16MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-var Uint16GreaterCases = []Uint16MatchTest{
+var Uint16GreaterCases = []MatchTest[uint16]{
 	{"l0", make([]uint16, 0), u16_gt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u16_gt_mat_1, 0, []byte{}, 0},
 	mku16("vec1", u16_s0, u16_gt_mat_0, 0, u16_gt_res_0, 32),
@@ -299,7 +290,7 @@ var Uint16GreaterCases = []Uint16MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-var Uint16GreaterEqualCases = []Uint16MatchTest{
+var Uint16GreaterEqualCases = []MatchTest[uint16]{
 	{"l0", make([]uint16, 0), u16_ge_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u16_ge_mat_1, 0, []byte{}, 0},
 	mku16("vec1", u16_s0, u16_ge_mat_0, 0, u16_ge_res_0, 32),
@@ -324,7 +315,7 @@ var Uint16GreaterEqualCases = []Uint16MatchTest{
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-var Uint16BetweenCases = []Uint16MatchTest{
+var Uint16BetweenCases = []MatchTest[uint16]{
 	{"l0", make([]uint16, 0), u16_bw_mat_1a, u16_bw_mat_1b, []byte{}, 0},
 	{"nil", nil, u16_bw_mat_1a, u16_bw_mat_1b, []byte{}, 0},
 	mku16("vec1", u16_s0, u16_bw_mat_0a, u16_bw_mat_0b, u16_bw_res_0, 32),

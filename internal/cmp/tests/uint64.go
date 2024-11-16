@@ -11,15 +11,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-type Uint64MatchTest struct {
-	Name   string
-	Slice  []uint64
-	Match  uint64 // used for every test
-	Match2 uint64 // used for between tests
-	Result []byte
-	Count  int64
-}
-
 var (
 	u64_s0 = []uint64{
 		0, 5, 3, 5, // Y1
@@ -128,7 +119,7 @@ var (
 //   - match, match2: are only copied to the resulting test case
 //   - result: result for the given slice
 //   - len: desired length of the test case
-func mkU64(name string, src []uint64, match, match2 uint64, result []byte, length int) Uint64MatchTest {
+func mkU64(name string, src []uint64, match, match2 uint64, result []byte, length int) MatchTest[uint64] {
 	if len(src)%8 != 0 {
 		panic(fmt.Errorf("f64 %s: length of slice has to be a multiple of 8", name))
 	}
@@ -162,7 +153,7 @@ func mkU64(name string, src []uint64, match, match2 uint64, result []byte, lengt
 	for _, v := range result {
 		cnt += bits.OnesCount8(v)
 	}
-	return Uint64MatchTest{
+	return MatchTest[uint64]{
 		Name:   name,
 		Slice:  src,
 		Match:  match,
@@ -174,7 +165,7 @@ func mkU64(name string, src []uint64, match, match2 uint64, result []byte, lengt
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-var Uint64EqualCases = []Uint64MatchTest{
+var Uint64EqualCases = []MatchTest[uint64]{
 	{"l0", make([]uint64, 0), u64_eq_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u64_eq_mat_1, 0, []byte{}, 0},
 	mkU64("vec1", u64_s0, u64_eq_mat_0, 0, u64_eq_res_0, 32),
@@ -195,7 +186,7 @@ var Uint64EqualCases = []Uint64MatchTest{
 
 // -----------------------------------------------------------------------------
 // NotEqual Testcases
-var Uint64NotEqualCases = []Uint64MatchTest{
+var Uint64NotEqualCases = []MatchTest[uint64]{
 	{"l0", make([]uint64, 0), u64_ne_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u64_ne_mat_1, 0, []byte{}, 0},
 	mkU64("vec1", u64_s0, u64_ne_mat_0, 0, u64_ne_res_0, 32),
@@ -216,7 +207,7 @@ var Uint64NotEqualCases = []Uint64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-var Uint64LessCases = []Uint64MatchTest{
+var Uint64LessCases = []MatchTest[uint64]{
 	{"l0", make([]uint64, 0), u64_lt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u64_lt_mat_1, 0, []byte{}, 0},
 	mkU64("vec1", u64_s0, u64_lt_mat_0, 0, u64_lt_res_0, 32),
@@ -237,7 +228,7 @@ var Uint64LessCases = []Uint64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-var Uint64LessEqualCases = []Uint64MatchTest{
+var Uint64LessEqualCases = []MatchTest[uint64]{
 	{"l0", make([]uint64, 0), u64_le_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u64_le_mat_1, 0, []byte{}, 0},
 	mkU64("vec1", u64_s0, u64_le_mat_0, 0, u64_le_res_0, 32),
@@ -258,7 +249,7 @@ var Uint64LessEqualCases = []Uint64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-var Uint64GreaterCases = []Uint64MatchTest{
+var Uint64GreaterCases = []MatchTest[uint64]{
 	{"l0", make([]uint64, 0), u64_gt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u64_gt_mat_1, 0, []byte{}, 0},
 	mkU64("vec1", u64_s0, u64_gt_mat_0, 0, u64_gt_res_0, 32),
@@ -279,7 +270,7 @@ var Uint64GreaterCases = []Uint64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-var Uint64GreaterEqualCases = []Uint64MatchTest{
+var Uint64GreaterEqualCases = []MatchTest[uint64]{
 	{"l0", make([]uint64, 0), u64_ge_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u64_ge_mat_1, 0, []byte{}, 0},
 	mkU64("vec1", u64_s0, u64_ge_mat_0, 0, u64_ge_res_0, 32),
@@ -300,7 +291,7 @@ var Uint64GreaterEqualCases = []Uint64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-var Uint64BetweenCases = []Uint64MatchTest{
+var Uint64BetweenCases = []MatchTest[uint64]{
 	{"l0", make([]uint64, 0), u64_bw_mat_1a, u64_bw_mat_1b, []byte{}, 0},
 	{"nil", nil, u64_bw_mat_1a, u64_bw_mat_1b, []byte{}, 0},
 	mkU64("vec1", u64_s0, u64_bw_mat_0a, u64_bw_mat_0b, u64_bw_res_0, 32),

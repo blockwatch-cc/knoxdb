@@ -11,15 +11,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-type Uint32MatchTest struct {
-	Name   string
-	Slice  []uint32
-	Match  uint32 // used for every test
-	Match2 uint32 // used for between tests
-	Result []byte
-	Count  int64
-}
-
 var (
 	u32_s0 = []uint32{
 		0, 5, 3, 5, // Y1
@@ -128,7 +119,7 @@ var (
 //   - match, match2: are only copied to the resulting test case
 //   - result: result for the given slice
 //   - len: desired length of the test case
-func mkU32(name string, src []uint32, match, match2 uint32, result []byte, length int) Uint32MatchTest {
+func mkU32(name string, src []uint32, match, match2 uint32, result []byte, length int) MatchTest[uint32] {
 	if len(src)%8 != 0 {
 		panic(fmt.Errorf("f64 %s: length of slice has to be a multiple of 8", name))
 	}
@@ -162,7 +153,7 @@ func mkU32(name string, src []uint32, match, match2 uint32, result []byte, lengt
 	for _, v := range result {
 		cnt += bits.OnesCount8(v)
 	}
-	return Uint32MatchTest{
+	return MatchTest[uint32]{
 		Name:   name,
 		Slice:  src,
 		Match:  match,
@@ -174,7 +165,7 @@ func mkU32(name string, src []uint32, match, match2 uint32, result []byte, lengt
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-var Uint32EqualCases = []Uint32MatchTest{
+var Uint32EqualCases = []MatchTest[uint32]{
 	{"l0", make([]uint32, 0), u32_eq_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u32_eq_mat_1, 0, []byte{}, 0},
 	mkU32("vec1", u32_s0, u32_eq_mat_0, 0, u32_eq_res_0, 32),
@@ -197,7 +188,7 @@ var Uint32EqualCases = []Uint32MatchTest{
 
 // -----------------------------------------------------------------------------
 // NotEqual Testcases
-var Uint32NotEqualCases = []Uint32MatchTest{
+var Uint32NotEqualCases = []MatchTest[uint32]{
 	{"l0", make([]uint32, 0), u32_ne_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u32_ne_mat_1, 0, []byte{}, 0},
 	mkU32("vec1", u32_s0, u32_ne_mat_0, 0, u32_ne_res_0, 32),
@@ -220,7 +211,7 @@ var Uint32NotEqualCases = []Uint32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-var Uint32LessCases = []Uint32MatchTest{
+var Uint32LessCases = []MatchTest[uint32]{
 	{"l0", make([]uint32, 0), u32_lt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u32_lt_mat_1, 0, []byte{}, 0},
 	mkU32("vec1", u32_s0, u32_lt_mat_0, 0, u32_lt_res_0, 32),
@@ -243,7 +234,7 @@ var Uint32LessCases = []Uint32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-var Uint32LessEqualCases = []Uint32MatchTest{
+var Uint32LessEqualCases = []MatchTest[uint32]{
 	{"l0", make([]uint32, 0), u32_le_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u32_le_mat_1, 0, []byte{}, 0},
 	mkU32("vec1", u32_s0, u32_le_mat_0, 0, u32_le_res_0, 32),
@@ -266,7 +257,7 @@ var Uint32LessEqualCases = []Uint32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-var Uint32GreaterCases = []Uint32MatchTest{
+var Uint32GreaterCases = []MatchTest[uint32]{
 	{"l0", make([]uint32, 0), u32_gt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u32_gt_mat_1, 0, []byte{}, 0},
 	mkU32("vec1", u32_s0, u32_gt_mat_0, 0, u32_gt_res_0, 32),
@@ -289,7 +280,7 @@ var Uint32GreaterCases = []Uint32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-var Uint32GreaterEqualCases = []Uint32MatchTest{
+var Uint32GreaterEqualCases = []MatchTest[uint32]{
 	{"l0", make([]uint32, 0), u32_ge_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u32_ge_mat_1, 0, []byte{}, 0},
 	mkU32("vec1", u32_s0, u32_ge_mat_0, 0, u32_ge_res_0, 32),
@@ -312,7 +303,7 @@ var Uint32GreaterEqualCases = []Uint32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-var Uint32BetweenCases = []Uint32MatchTest{
+var Uint32BetweenCases = []MatchTest[uint32]{
 	{"l0", make([]uint32, 0), u32_bw_mat_1a, u32_bw_mat_1ab, []byte{}, 0},
 	{"nil", nil, u32_bw_mat_1a, u32_bw_mat_1ab, []byte{}, 0},
 	mkU32("vec1", u32_s0, u32_bw_mat_0a, u32_bw_mat_0ab, u32_bw_res_0, 32),

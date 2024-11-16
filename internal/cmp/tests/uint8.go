@@ -11,15 +11,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-type Uint8MatchTest struct {
-	Name   string
-	Slice  []uint8
-	Match  uint8 // used for every test
-	Match2 uint8 // used for between tests
-	Result []byte
-	Count  int64
-}
-
 var (
 	u8_s0 = []uint8{
 		0, 5, 3, 5, // Y1
@@ -128,7 +119,7 @@ var (
 //   - match, match2: are only copied to the resulting test case
 //   - result: result for the given slice
 //   - len: desired length of the test case
-func mkU8(name string, src []uint8, match, match2 uint8, result []byte, length int) Uint8MatchTest {
+func mkU8(name string, src []uint8, match, match2 uint8, result []byte, length int) MatchTest[uint8] {
 	if len(src)%8 != 0 {
 		panic(fmt.Errorf("f64 %s: length of slice has to be a multiple of 8", name))
 	}
@@ -162,7 +153,7 @@ func mkU8(name string, src []uint8, match, match2 uint8, result []byte, length i
 	for _, v := range result {
 		cnt += bits.OnesCount8(v)
 	}
-	return Uint8MatchTest{
+	return MatchTest[uint8]{
 		Name:   name,
 		Slice:  src,
 		Match:  match,
@@ -174,7 +165,7 @@ func mkU8(name string, src []uint8, match, match2 uint8, result []byte, length i
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-var Uint8EqualCases = []Uint8MatchTest{
+var Uint8EqualCases = []MatchTest[uint8]{
 	{"l0", make([]uint8, 0), u8_eq_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u8_eq_mat_1, 0, []byte{}, 0},
 	mkU8("vec1", u8_s0, u8_eq_mat_0, 0, u8_eq_res_0, 32),
@@ -201,7 +192,7 @@ var Uint8EqualCases = []Uint8MatchTest{
 
 // -----------------------------------------------------------------------------
 // NotEqual Testcases
-var Uint8NotEqualCases = []Uint8MatchTest{
+var Uint8NotEqualCases = []MatchTest[uint8]{
 	{"l0", make([]uint8, 0), u8_ne_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u8_ne_mat_1, 0, []byte{}, 0},
 	mkU8("vec1", u8_s0, u8_ne_mat_0, 0, u8_ne_res_0, 32),
@@ -228,7 +219,7 @@ var Uint8NotEqualCases = []Uint8MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-var Uint8LessCases = []Uint8MatchTest{
+var Uint8LessCases = []MatchTest[uint8]{
 	{"l0", make([]uint8, 0), u8_lt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u8_lt_mat_1, 0, []byte{}, 0},
 	mkU8("vec1", u8_s0, u8_lt_mat_0, 0, u8_lt_res_0, 32),
@@ -255,7 +246,7 @@ var Uint8LessCases = []Uint8MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-var Uint8LessEqualCases = []Uint8MatchTest{
+var Uint8LessEqualCases = []MatchTest[uint8]{
 	{"l0", make([]uint8, 0), u8_le_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u8_le_mat_1, 0, []byte{}, 0},
 	mkU8("vec1", u8_s0, u8_le_mat_0, 0, u8_le_res_0, 32),
@@ -282,7 +273,7 @@ var Uint8LessEqualCases = []Uint8MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-var Uint8GreaterCases = []Uint8MatchTest{
+var Uint8GreaterCases = []MatchTest[uint8]{
 	{"l0", make([]uint8, 0), u8_gt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u8_gt_mat_1, 0, []byte{}, 0},
 	mkU8("vec1", u8_s0, u8_gt_mat_0, 0, u8_gt_res_0, 32),
@@ -309,7 +300,7 @@ var Uint8GreaterCases = []Uint8MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-var Uint8GreaterEqualCases = []Uint8MatchTest{
+var Uint8GreaterEqualCases = []MatchTest[uint8]{
 	{"l0", make([]uint8, 0), u8_ge_mat_1, 0, []byte{}, 0},
 	{"nil", nil, u8_ge_mat_1, 0, []byte{}, 0},
 	mkU8("vec1", u8_s0, u8_ge_mat_0, 0, u8_ge_res_0, 32),
@@ -336,7 +327,7 @@ var Uint8GreaterEqualCases = []Uint8MatchTest{
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-var Uint8BetweenCases = []Uint8MatchTest{
+var Uint8BetweenCases = []MatchTest[uint8]{
 	{"l0", make([]uint8, 0), u8_bw_mat_1a, u8_bw_mat_1b, []byte{}, 0},
 	{"nil", nil, u8_bw_mat_1a, u8_bw_mat_1b, []byte{}, 0},
 	mkU8("vec1", u8_s0, u8_bw_mat_0a, u8_bw_mat_0b, u8_bw_res_0, 32),

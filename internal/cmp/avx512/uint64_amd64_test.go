@@ -4,359 +4,105 @@
 package avx512
 
 import (
-	"bytes"
-	"math"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/cmp/tests"
-	"blockwatch.cc/knoxdb/pkg/util"
-)
-
-var (
-	randUint64Slice         = util.RandUints[uint64]
-	uint64EqualCases        = tests.Uint64EqualCases
-	uint64NotEqualCases     = tests.Uint64NotEqualCases
-	uint64LessCases         = tests.Uint64LessCases
-	uint64LessEqualCases    = tests.Uint64LessEqualCases
-	uint64GreaterCases      = tests.Uint64GreaterCases
-	uint64GreaterEqualCases = tests.Uint64GreaterEqualCases
-	uint64BetweenCases      = tests.Uint64BetweenCases
-
-	Uint64Size = 8
 )
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-func TestMatchUint64EqualAVX512(T *testing.T) {
-	if !util.UseAVX512_F {
-		T.SkipNow()
-	}
-	for _, c := range uint64EqualCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.Slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		cnt := MatchUint64Equal(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.Name, bits[l:l+32])
-		}
-	}
+func TestMatchUint64EqualAVX2(t *testing.T) {
+	requireAvx512F(t)
+	tests.TestCases[uint64](t, tests.Uint64EqualCases, MatchUint64Equal)
 }
 
 // -----------------------------------------------------------------------------
 // Equal benchmarks
-func BenchmarkMatchUint64EqualAVX512(B *testing.B) {
-	if !util.UseAVX512_F {
-		B.SkipNow()
-	}
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				MatchUint64Equal(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64EqualAVX2(b *testing.B) {
+	requireAvx512F(b)
+	tests.BenchCases[uint64](b, MatchUint64Equal)
 }
 
 // -----------------------------------------------------------------------------
-// NotEqual Testcases
-func TestMatchUint64NotEqualAVX512(T *testing.T) {
-	if !util.UseAVX512_F {
-		T.SkipNow()
-	}
-	for _, c := range uint64NotEqualCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.Slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		cnt := MatchUint64NotEqual(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.Name, bits[l:l+32])
-		}
-	}
+// Not Equal Testcases
+func TestMatchUint64NotEqualAVX2(t *testing.T) {
+	requireAvx512F(t)
+	tests.TestCases[uint64](t, tests.Uint64NotEqualCases, MatchUint64NotEqual)
 }
 
 // -----------------------------------------------------------------------------
-// NotEqual benchmarks
-func BenchmarkMatchUint64NotEqualAVX512(B *testing.B) {
-	if !util.UseAVX512_F {
-		B.SkipNow()
-	}
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				MatchUint64NotEqual(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+// Not Equal benchmarks
+func BenchmarkMatchUint64NotEqualAVX2(b *testing.B) {
+	requireAvx512F(b)
+	tests.BenchCases[uint64](b, MatchUint64NotEqual)
 }
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-func TestMatchUint64LessAVX512(T *testing.T) {
-	if !util.UseAVX512_F {
-		T.SkipNow()
-	}
-	for _, c := range uint64LessCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.Slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		cnt := MatchUint64Less(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.Name, bits[l:l+32])
-		}
-	}
+func TestMatchUint64LessAVX2(t *testing.T) {
+	requireAvx512F(t)
+	tests.TestCases[uint64](t, tests.Uint64LessCases, MatchUint64Less)
 }
 
 // -----------------------------------------------------------------------------
 // Less benchmarks
-func BenchmarkMatchUint64LessAVX512(B *testing.B) {
-	if !util.UseAVX512_F {
-		B.SkipNow()
-	}
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				MatchUint64Less(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64LessAVX2(b *testing.B) {
+	requireAvx512F(b)
+	tests.BenchCases[uint64](b, MatchUint64Less)
 }
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-func TestMatchUint64LessEqualAVX512(T *testing.T) {
-	if !util.UseAVX512_F {
-		T.SkipNow()
-	}
-	for _, c := range uint64LessEqualCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.Slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		cnt := MatchUint64LessEqual(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.Name, bits[l:l+32])
-		}
-	}
+func TestMatchUint64LessEqualAVX2(t *testing.T) {
+	requireAvx512F(t)
+	tests.TestCases[uint64](t, tests.Uint64LessEqualCases, MatchUint64LessEqual)
 }
 
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
-func BenchmarkMatchUint64LessEqualAVX512(B *testing.B) {
-	if !util.UseAVX512_F {
-		B.SkipNow()
-	}
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				MatchUint64LessEqual(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64LessEqualAVX2(b *testing.B) {
+	requireAvx512F(b)
+	tests.BenchCases[uint64](b, MatchUint64LessEqual)
 }
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-func TestMatchUint64GreaterAVX512(T *testing.T) {
-	if !util.UseAVX512_F {
-		T.SkipNow()
-	}
-	for _, c := range uint64GreaterCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.Slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		cnt := MatchUint64Greater(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.Name, bits[l:l+32])
-		}
-	}
+func TestMatchUint64GreaterAVX2(t *testing.T) {
+	requireAvx512F(t)
+	tests.TestCases[uint64](t, tests.Uint64GreaterCases, MatchUint64Greater)
 }
 
 // -----------------------------------------------------------------------------
 // Greater benchmarks
-func BenchmarkMatchUint64GreaterAVX512(B *testing.B) {
-	if !util.UseAVX512_F {
-		B.SkipNow()
-	}
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				MatchUint64Greater(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64GreaterAVX2(b *testing.B) {
+	requireAvx512F(b)
+	tests.BenchCases[uint64](b, MatchUint64Greater)
 }
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-func TestMatchUint64GreaterEqualAVX512(T *testing.T) {
-	if !util.UseAVX512_F {
-		T.SkipNow()
-	}
-	for _, c := range uint64GreaterEqualCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.Slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		cnt := MatchUint64GreaterEqual(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.Name, bits[l:l+32])
-		}
-	}
+func TestMatchUint64GreaterEqualAVX2(t *testing.T) {
+	requireAvx512F(t)
+	tests.TestCases[uint64](t, tests.Uint64GreaterEqualCases, MatchUint64GreaterEqual)
 }
 
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
-func BenchmarkMatchUint64GreaterEqualAVX512(B *testing.B) {
-	if !util.UseAVX512_F {
-		B.SkipNow()
-	}
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				MatchUint64GreaterEqual(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64GreaterEqualAVX2(b *testing.B) {
+	requireAvx512F(b)
+	tests.BenchCases[uint64](b, MatchUint64GreaterEqual)
 }
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-func TestMatchUint64BetweenAVX512(T *testing.T) {
-	if !util.UseAVX512_F {
-		T.SkipNow()
-	}
-	for _, c := range uint64BetweenCases {
-		// pre-allocate the result slice and fill with poison
-		l := bitFieldLen(len(c.Slice))
-		bits := make([]byte, l+32)
-		for i, _ := range bits {
-			bits[i] = 0xfa
-		}
-		bits = bits[:l]
-		cnt := MatchUint64Between(c.Slice, c.Match, c.Match2, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-		if bytes.Compare(bits[l:l+32], bytes.Repeat([]byte{0xfa}, 32)) != 0 {
-			T.Errorf("%s: result boundary violation %x", c.Name, bits[l:l+32])
-		}
-	}
+func TestMatchUint64BetweenAVX2(t *testing.T) {
+	requireAvx512F(t)
+	tests.TestCases2[uint64](t, tests.Uint64BetweenCases, MatchUint64Between)
 }
 
 // -----------------------------------------------------------------------------
 // Between benchmarks
-func BenchmarkMatchUint64BetweenAVX512(B *testing.B) {
-	if !util.UseAVX512_F {
-		B.SkipNow()
-	}
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				MatchUint64Between(a, math.MaxUint64/4, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64BetweenAVX2(b *testing.B) {
+	requireAvx512F(b)
+	tests.BenchCases2[uint64](b, MatchUint64Between)
 }

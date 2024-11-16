@@ -11,15 +11,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-type Int64MatchTest struct {
-	Name   string
-	Slice  []int64
-	Match  int64 // used for every test
-	Match2 int64 // used for between tests
-	Result []byte
-	Count  int64
-}
-
 var (
 	i64_s0 = []int64{
 		0, 5, 3, 5, // Y1
@@ -168,7 +159,7 @@ var (
 //   - match, match2: are only copied to the resulting test case
 //   - result: result for the given slice
 //   - len: desired length of the test case
-func mkI64(name string, src []int64, match, match2 int64, result []byte, length int) Int64MatchTest {
+func mkI64(name string, src []int64, match, match2 int64, result []byte, length int) MatchTest[int64] {
 	if len(src)%8 != 0 {
 		panic(fmt.Errorf("i64 %s: length of slice has to be a multiple of 8", name))
 	}
@@ -202,7 +193,7 @@ func mkI64(name string, src []int64, match, match2 int64, result []byte, length 
 	for _, v := range result {
 		cnt += bits.OnesCount8(v)
 	}
-	return Int64MatchTest{
+	return MatchTest[int64]{
 		Name:   name,
 		Slice:  src,
 		Match:  match,
@@ -214,7 +205,7 @@ func mkI64(name string, src []int64, match, match2 int64, result []byte, length 
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-var Int64EqualCases = []Int64MatchTest{
+var Int64EqualCases = []MatchTest[int64]{
 	{"l0", make([]int64, 0), i64_eq_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i64_eq_mat_1, 0, []byte{}, 0},
 	mkI64("vec1", i64_s0, i64_eq_mat_0, 0, i64_eq_res_0, 32),
@@ -238,7 +229,7 @@ var Int64EqualCases = []Int64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Not Equal Testcases
-var Int64NotEqualCases = []Int64MatchTest{
+var Int64NotEqualCases = []MatchTest[int64]{
 	{"l0", make([]int64, 0), i64_ne_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i64_ne_mat_1, 0, []byte{}, 0},
 	mkI64("vec1", i64_s0, i64_ne_mat_0, 0, i64_ne_res_0, 32),
@@ -262,7 +253,7 @@ var Int64NotEqualCases = []Int64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-var Int64LessCases = []Int64MatchTest{
+var Int64LessCases = []MatchTest[int64]{
 	{"l0", make([]int64, 0), i64_lt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i64_lt_mat_1, 0, []byte{}, 0},
 	mkI64("vec1", i64_s0, i64_lt_mat_0, 0, i64_lt_res_0, 32),
@@ -286,7 +277,7 @@ var Int64LessCases = []Int64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-var Int64LessEqualCases = []Int64MatchTest{
+var Int64LessEqualCases = []MatchTest[int64]{
 	{"l0", make([]int64, 0), i64_le_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i64_le_mat_1, 0, []byte{}, 0},
 	mkI64("vec1", i64_s0, i64_le_mat_0, 0, i64_le_res_0, 32),
@@ -310,7 +301,7 @@ var Int64LessEqualCases = []Int64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-var Int64GreaterCases = []Int64MatchTest{
+var Int64GreaterCases = []MatchTest[int64]{
 	{"l0", make([]int64, 0), i64_gt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i64_gt_mat_1, 0, []byte{}, 0},
 	mkI64("vec1", i64_s0, i64_gt_mat_0, 0, i64_gt_res_0, 32),
@@ -334,7 +325,7 @@ var Int64GreaterCases = []Int64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-var Int64GreaterEqualCases = []Int64MatchTest{
+var Int64GreaterEqualCases = []MatchTest[int64]{
 	{"l0", make([]int64, 0), i64_ge_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i64_ge_mat_1, 0, []byte{}, 0},
 	mkI64("vec1", i64_s0, i64_ge_mat_0, 0, i64_ge_res_0, 32),
@@ -358,7 +349,7 @@ var Int64GreaterEqualCases = []Int64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-var Int64BetweenCases = []Int64MatchTest{
+var Int64BetweenCases = []MatchTest[int64]{
 	{"l0", make([]int64, 0), i64_bw_mat_1a, i64_bw_mat_1b, []byte{}, 0},
 	{"nil", nil, i64_bw_mat_1a, i64_bw_mat_1b, []byte{}, 0},
 	mkI64("vec1", i64_s0, i64_bw_mat_0a, i64_bw_mat_0b, i64_bw_res_0, 32),

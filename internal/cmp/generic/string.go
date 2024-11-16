@@ -11,7 +11,7 @@ func MatchStringsEqual(src []string, val string, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -26,7 +26,7 @@ func MatchStringsEqual(src []string, val string, bits, mask []byte) int64 {
 			if strings.Compare(v, val) != 0 {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -37,7 +37,7 @@ func MatchStringsNotEqual(src []string, val string, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -52,7 +52,7 @@ func MatchStringsNotEqual(src []string, val string, bits, mask []byte) int64 {
 			if strings.Compare(v, val) == 0 {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -63,7 +63,7 @@ func MatchStringsLess(src []string, val string, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -78,7 +78,7 @@ func MatchStringsLess(src []string, val string, bits, mask []byte) int64 {
 			if strings.Compare(v, val) >= 0 {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -89,7 +89,7 @@ func MatchStringsLessEqual(src []string, val string, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -104,7 +104,7 @@ func MatchStringsLessEqual(src []string, val string, bits, mask []byte) int64 {
 			if strings.Compare(v, val) > 0 {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -115,7 +115,7 @@ func MatchStringsGreater(src []string, val string, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -130,7 +130,7 @@ func MatchStringsGreater(src []string, val string, bits, mask []byte) int64 {
 			if strings.Compare(v, val) <= 0 {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -141,7 +141,7 @@ func MatchStringsGreaterEqual(src []string, val string, bits, mask []byte) int64
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -156,7 +156,7 @@ func MatchStringsGreaterEqual(src []string, val string, bits, mask []byte) int64
 			if strings.Compare(v, val) < 0 {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -188,7 +188,7 @@ func MatchStringsBetween(src []string, a, b string, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
 		for i, v := range src {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -209,7 +209,7 @@ func MatchStringsBetween(src []string, a, b string, bits, mask []byte) int64 {
 			if strings.Compare(v, b) > 0 {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}

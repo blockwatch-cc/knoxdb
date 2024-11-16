@@ -9,7 +9,7 @@ func MatchInt128Equal(src num.Int128Stride, val num.Int128, bits, mask []byte) i
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -24,7 +24,7 @@ func MatchInt128Equal(src num.Int128Stride, val num.Int128, bits, mask []byte) i
 			if uint64(src.X0[i]) != val[0] || src.X1[i] != val[1] {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -35,7 +35,7 @@ func MatchInt128NotEqual(src num.Int128Stride, val num.Int128, bits, mask []byte
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -47,7 +47,7 @@ func MatchInt128NotEqual(src num.Int128Stride, val num.Int128, bits, mask []byte
 	} else {
 		for i := range src.X0 {
 			if uint64(src.X0[i]) != val[0] || src.X1[i] != val[1] {
-				bits[i>>3] |= bitmask(i)
+				bits[i>>3] |= byte(0x1) << uint(i&0x7)
 				cnt++
 			}
 		}
@@ -59,7 +59,7 @@ func MatchInt128Less(src num.Int128Stride, val num.Int128, bits, mask []byte) in
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -71,7 +71,7 @@ func MatchInt128Less(src num.Int128Stride, val num.Int128, bits, mask []byte) in
 	} else {
 		for i := range src.X0 {
 			if val.Gt(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= bitmask(i)
+				bits[i>>3] |= byte(0x1) << uint(i&0x7)
 				cnt++
 			}
 		}
@@ -83,7 +83,7 @@ func MatchInt128LessEqual(src num.Int128Stride, val num.Int128, bits, mask []byt
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -95,7 +95,7 @@ func MatchInt128LessEqual(src num.Int128Stride, val num.Int128, bits, mask []byt
 	} else {
 		for i := range src.X0 {
 			if val.Gte(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= bitmask(i)
+				bits[i>>3] |= byte(0x1) << uint(i&0x7)
 				cnt++
 			}
 		}
@@ -107,7 +107,7 @@ func MatchInt128Greater(src num.Int128Stride, val num.Int128, bits, mask []byte)
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -119,7 +119,7 @@ func MatchInt128Greater(src num.Int128Stride, val num.Int128, bits, mask []byte)
 	} else {
 		for i := range src.X0 {
 			if val.Lt(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= bitmask(i)
+				bits[i>>3] |= byte(0x1) << uint(i&0x7)
 				cnt++
 			}
 		}
@@ -131,7 +131,7 @@ func MatchInt128GreaterEqual(src num.Int128Stride, val num.Int128, bits, mask []
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -143,7 +143,7 @@ func MatchInt128GreaterEqual(src num.Int128Stride, val num.Int128, bits, mask []
 	} else {
 		for i := range src.X0 {
 			if val.Lte(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= bitmask(i)
+				bits[i>>3] |= byte(0x1) << uint(i&0x7)
 				cnt++
 			}
 		}
@@ -155,7 +155,7 @@ func MatchInt128Between(src num.Int128Stride, a, b num.Int128, bits, mask []byte
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -169,7 +169,7 @@ func MatchInt128Between(src num.Int128Stride, a, b num.Int128, bits, mask []byte
 		for i := range src.X0 {
 			v := num.Int128{uint64(src.X0[i]), src.X1[i]}
 			if a.Lte(v) && b.Gte(v) {
-				bits[i>>3] |= bitmask(i)
+				bits[i>>3] |= byte(0x1) << uint(i&0x7)
 				cnt++
 			}
 		}

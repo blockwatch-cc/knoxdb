@@ -4,271 +4,91 @@
 package generic
 
 import (
-	"bytes"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/cmp/tests"
-	"blockwatch.cc/knoxdb/pkg/num"
 )
 
-var (
-	randInt256Slice         = tests.RandInt256Slice
-	Int256EqualCases        = tests.Int256EqualCases
-	Int256NotEqualCases     = tests.Int256NotEqualCases
-	Int256LessCases         = tests.Int256LessCases
-	Int256LessEqualCases    = tests.Int256LessEqualCases
-	Int256GreaterCases      = tests.Int256GreaterCases
-	Int256GreaterEqualCases = tests.Int256GreaterEqualCases
-	Int256BetweenCases      = tests.Int256BetweenCases
-
-	matchInt256Equal        = MatchInt256Equal
-	matchInt256NotEqual     = MatchInt256NotEqual
-	matchInt256Less         = MatchInt256Less
-	matchInt256LessEqual    = MatchInt256LessEqual
-	matchInt256Greater      = MatchInt256Greater
-	matchInt256GreaterEqual = MatchInt256GreaterEqual
-	matchInt256Between      = MatchInt256Between
-
-	MaxInt256      = num.MaxInt256
-	Int256Optimize = num.Int256Optimize
-)
-
-const Int256Size = 32
-
+// -----------------------------------------------------------------------------
 // Equal Testcases
-func TestMatchInt256Equal(T *testing.T) {
-	for _, c := range Int256EqualCases {
-		// pre-allocate the result slice and fill with poison
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchInt256Equal(Int256Optimize(c.Slice), c.Match, bits, nil)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchInt256Equal(t *testing.T) {
+	tests.TestInt256Cases(t, tests.Int256EqualCases, MatchInt256Equal)
 }
 
 // -----------------------------------------------------------------------------
 // Equal benchmarks
-func BenchmarkMatchInt256Equal(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L))
-		mask := fillBitset(nil, a.Len(), 0xff)
-		bits := make([]byte, bitFieldLen(a.Len()))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Int256Size))
-			for i := 0; i < B.N; i++ {
-				matchInt256Equal(a, MaxInt256.Rsh(1), bits, mask)
-			}
-		})
-	}
+func BenchmarkMatchInt256Equal(b *testing.B) {
+	tests.BenchInt256Cases(b, MatchInt256Equal)
 }
 
 // -----------------------------------------------------------------------------
 // Not Equal Testcases
-func TestMatchInt256NotEqual(T *testing.T) {
-	for _, c := range Int256NotEqualCases {
-		// pre-allocate the result slice and fill with poison
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchInt256NotEqual(Int256Optimize(c.Slice), c.Match, bits, nil)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchInt256NotEqual(t *testing.T) {
+	tests.TestInt256Cases(t, tests.Int256NotEqualCases, MatchInt256NotEqual)
 }
 
 // -----------------------------------------------------------------------------
 // Not Equal benchmarks
-func BenchmarkMatchInt256NotEqual(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L))
-		bits := make([]byte, bitFieldLen(a.Len()))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Int256Size))
-			for i := 0; i < B.N; i++ {
-				matchInt256NotEqual(a, MaxInt256.Rsh(1), bits, nil)
-			}
-		})
-	}
+func BenchmarkMatchInt256NotEqual(b *testing.B) {
+	tests.BenchInt256Cases(b, MatchInt256NotEqual)
 }
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-func TestMatchInt256Less(T *testing.T) {
-	for _, c := range Int256LessCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchInt256Less(Int256Optimize(c.Slice), c.Match, bits, nil)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchInt256Less(t *testing.T) {
+	tests.TestInt256Cases(t, tests.Int256LessCases, MatchInt256Less)
 }
 
 // -----------------------------------------------------------------------------
 // Less benchmarks
-func BenchmarkMatchInt256Less(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L))
-		bits := make([]byte, bitFieldLen(a.Len()))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Int256Size))
-			for i := 0; i < B.N; i++ {
-				matchInt256Less(a, MaxInt256.Rsh(1), bits, nil)
-			}
-		})
-	}
+func BenchmarkMatchInt256Less(b *testing.B) {
+	tests.BenchInt256Cases(b, MatchInt256Less)
 }
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-func TestMatchInt256LessEqual(T *testing.T) {
-	for _, c := range Int256LessEqualCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchInt256LessEqual(Int256Optimize(c.Slice), c.Match, bits, nil)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchInt256LessEqual(t *testing.T) {
+	tests.TestInt256Cases(t, tests.Int256LessEqualCases, MatchInt256LessEqual)
 }
 
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
-func BenchmarkMatchInt256LessEqual(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L))
-		bits := make([]byte, bitFieldLen(a.Len()))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Int256Size))
-			for i := 0; i < B.N; i++ {
-				matchInt256LessEqual(a, MaxInt256.Rsh(1), bits, nil)
-			}
-		})
-	}
+func BenchmarkMatchInt256LessEqual(b *testing.B) {
+	tests.BenchInt256Cases(b, MatchInt256LessEqual)
 }
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-func TestMatchInt256Greater(T *testing.T) {
-	for _, c := range Int256GreaterCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchInt256Greater(Int256Optimize(c.Slice), c.Match, bits, nil)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchInt256Greater(t *testing.T) {
+	tests.TestInt256Cases(t, tests.Int256GreaterCases, MatchInt256Greater)
 }
 
 // -----------------------------------------------------------------------------
 // Greater benchmarks
-func BenchmarkMatchInt256Greater(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L))
-		bits := make([]byte, bitFieldLen(a.Len()))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Int256Size))
-			for i := 0; i < B.N; i++ {
-				matchInt256Greater(a, MaxInt256.Rsh(1), bits, nil)
-			}
-		})
-	}
+func BenchmarkMatchInt256Greater(b *testing.B) {
+	tests.BenchInt256Cases(b, MatchInt256Greater)
 }
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-func TestMatchInt256GreaterEqual(T *testing.T) {
-	for _, c := range Int256GreaterEqualCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchInt256GreaterEqual(Int256Optimize(c.Slice), c.Match, bits, nil)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchInt256GreaterEqual(t *testing.T) {
+	tests.TestInt256Cases(t, tests.Int256GreaterEqualCases, MatchInt256GreaterEqual)
 }
 
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
-func BenchmarkMatchInt256GreaterEqual(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L))
-		bits := make([]byte, bitFieldLen(a.Len()))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Int256Size))
-			for i := 0; i < B.N; i++ {
-				matchInt256GreaterEqual(a, MaxInt256.Rsh(1), bits, nil)
-			}
-		})
-	}
+func BenchmarkMatchInt256GreaterEqual(b *testing.B) {
+	tests.BenchInt256Cases(b, MatchInt256GreaterEqual)
 }
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-func TestMatchInt256Between(T *testing.T) {
-	for _, c := range Int256BetweenCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchInt256Between(Int256Optimize(c.Slice), c.Match, c.Match2, bits, nil)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchInt256Between(t *testing.T) {
+	tests.TestInt256Cases2(t, tests.Int256BetweenCases, MatchInt256Between)
 }
 
 // -----------------------------------------------------------------------------
 // Between benchmarks
-func BenchmarkMatchInt256Between(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := Int256Optimize(randInt256Slice(n.L))
-		bits := make([]byte, bitFieldLen(a.Len()))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Int256Size))
-			for i := 0; i < B.N; i++ {
-				matchInt256Between(a, MaxInt256.Rsh(2), MaxInt256.Rsh(1), bits, nil)
-			}
-		})
-	}
+func BenchmarkMatchInt256Between(b *testing.B) {
+	tests.BenchInt256Cases2(b, MatchInt256Between)
 }

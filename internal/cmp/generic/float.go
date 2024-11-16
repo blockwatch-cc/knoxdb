@@ -11,7 +11,7 @@ type Float interface {
 	constraints.Float
 }
 
-func MatchEqualFloat[T Float](src []T, val T, bits []byte) int64 {
+func MatchFloatEqual[T Float](src []T, val T, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v == val {
@@ -22,7 +22,7 @@ func MatchEqualFloat[T Float](src []T, val T, bits []byte) int64 {
 	return cnt
 }
 
-func MatchNotEqualFloat[T Float](src []T, val T, bits []byte) int64 {
+func MatchFloatNotEqual[T Float](src []T, val T, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v != val {
@@ -33,7 +33,7 @@ func MatchNotEqualFloat[T Float](src []T, val T, bits []byte) int64 {
 	return cnt
 }
 
-func MatchLessFloat[T Float](src []T, val T, bits []byte) int64 {
+func MatchFloatLess[T Float](src []T, val T, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v < val {
@@ -44,7 +44,7 @@ func MatchLessFloat[T Float](src []T, val T, bits []byte) int64 {
 	return cnt
 }
 
-func MatchLessEqualFloat[T Float](src []T, val T, bits []byte) int64 {
+func MatchFloatLessEqual[T Float](src []T, val T, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v <= val {
@@ -55,7 +55,7 @@ func MatchLessEqualFloat[T Float](src []T, val T, bits []byte) int64 {
 	return cnt
 }
 
-func MatchGreaterFloat[T Float](src []T, val T, bits []byte) int64 {
+func MatchFloatGreater[T Float](src []T, val T, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v > val {
@@ -66,7 +66,7 @@ func MatchGreaterFloat[T Float](src []T, val T, bits []byte) int64 {
 	return cnt
 }
 
-func MatchGreaterEqualFloat[T Float](src []T, val T, bits []byte) int64 {
+func MatchFloatGreaterEqual[T Float](src []T, val T, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if v >= val {
@@ -77,7 +77,7 @@ func MatchGreaterEqualFloat[T Float](src []T, val T, bits []byte) int64 {
 	return cnt
 }
 
-func MatchBetweenFloat[T Float](src []T, a, b T, bits []byte) int64 {
+func MatchFloatBetween[T Float](src []T, a, b T, bits []byte) int64 {
 	var cnt int64
 	for i, v := range src {
 		if a <= v && v <= b {

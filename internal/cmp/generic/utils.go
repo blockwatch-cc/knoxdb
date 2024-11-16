@@ -3,10 +3,6 @@
 
 package generic
 
-func bitmask(i int) byte {
-	return byte(1 << uint(i&0x7))
-}
-
 func bytemask(size int) byte {
 	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
 }

@@ -1,273 +1,94 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package generic
 
 import (
-	"bytes"
-	"math"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/cmp/tests"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
-
-var (
-	randUint64Slice         = util.RandUints[uint64]
-	uint64EqualCases        = tests.Uint64EqualCases
-	uint64NotEqualCases     = tests.Uint64NotEqualCases
-	uint64LessCases         = tests.Uint64LessCases
-	uint64LessEqualCases    = tests.Uint64LessEqualCases
-	uint64GreaterCases      = tests.Uint64GreaterCases
-	uint64GreaterEqualCases = tests.Uint64GreaterEqualCases
-	uint64BetweenCases      = tests.Uint64BetweenCases
-
-	// instantiate
-	matchUint64Equal        = MatchEqual[uint64]
-	matchUint64NotEqual     = MatchNotEqual[uint64]
-	matchUint64Less         = MatchLess[uint64]
-	matchUint64LessEqual    = MatchLessEqual[uint64]
-	matchUint64Greater      = MatchGreater[uint64]
-	matchUint64GreaterEqual = MatchGreaterEqual[uint64]
-	matchUint64Between      = MatchBetween[uint64]
-)
-
-const Uint64Size = 8
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-func TestMatchUint64Equal(T *testing.T) {
-	for _, c := range uint64EqualCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchUint64Equal(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchUint64Equal(t *testing.T) {
+	tests.TestCases[uint64](t, tests.Uint64EqualCases, MatchEqual[uint64])
 }
 
 // -----------------------------------------------------------------------------
 // Equal benchmarks
-func BenchmarkMatchUint64Equal(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				matchUint64Equal(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64Equal(b *testing.B) {
+	tests.BenchCases[uint64](b, MatchEqual[uint64])
 }
 
 // -----------------------------------------------------------------------------
-// NotEqual Testcases
-func TestMatchUint64NotEqual(T *testing.T) {
-	for _, c := range uint64NotEqualCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchUint64NotEqual(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+// Not Equal Testcases
+func TestMatchUint64NotEqual(t *testing.T) {
+	tests.TestCases[uint64](t, tests.Uint64NotEqualCases, MatchNotEqual[uint64])
 }
 
 // -----------------------------------------------------------------------------
-// NotEqual benchmarks
-func BenchmarkMatchUint64NotEqual(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				matchUint64NotEqual(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+// Not Equal benchmarks
+func BenchmarkMatchUint64NotEqual(b *testing.B) {
+	tests.BenchCases[uint64](b, MatchNotEqual[uint64])
 }
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-func TestMatchUint64Less(T *testing.T) {
-	for _, c := range uint64LessCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchUint64Less(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchUint64Less(t *testing.T) {
+	tests.TestCases[uint64](t, tests.Uint64LessCases, MatchLess[uint64])
 }
 
 // -----------------------------------------------------------------------------
 // Less benchmarks
-func BenchmarkMatchUint64Less(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				matchUint64Less(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64Less(b *testing.B) {
+	tests.BenchCases[uint64](b, MatchLess[uint64])
 }
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-func TestMatchUint64LessEqual(T *testing.T) {
-	for _, c := range uint64LessEqualCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchUint64LessEqual(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchUint64LessEqual(t *testing.T) {
+	tests.TestCases[uint64](t, tests.Uint64LessEqualCases, MatchLessEqual[uint64])
 }
 
 // -----------------------------------------------------------------------------
 // Less equal benchmarks
-func BenchmarkMatchUint64LessEqual(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				matchUint64LessEqual(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64LessEqual(b *testing.B) {
+	tests.BenchCases[uint64](b, MatchLessEqual[uint64])
 }
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-func TestMatchUint64Greater(T *testing.T) {
-	for _, c := range uint64GreaterCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchUint64Greater(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchUint64Greater(t *testing.T) {
+	tests.TestCases[uint64](t, tests.Uint64GreaterCases, MatchGreater[uint64])
 }
 
 // -----------------------------------------------------------------------------
 // Greater benchmarks
-func BenchmarkMatchUint64Greater(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				matchUint64Greater(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64Greater(b *testing.B) {
+	tests.BenchCases[uint64](b, MatchGreater[uint64])
 }
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-func TestMatchUint64GreaterEqual(T *testing.T) {
-	for _, c := range uint64GreaterEqualCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchUint64GreaterEqual(c.Slice, c.Match, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchUint64GreaterEqual(t *testing.T) {
+	tests.TestCases[uint64](t, tests.Uint64GreaterEqualCases, MatchGreaterEqual[uint64])
 }
 
 // -----------------------------------------------------------------------------
 // Greater equal benchmarks
-func BenchmarkMatchUint64GreaterEqual(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				matchUint64GreaterEqual(a, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64GreaterEqual(b *testing.B) {
+	tests.BenchCases[uint64](b, MatchGreaterEqual[uint64])
 }
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-func TestMatchUint64Between(T *testing.T) {
-	for _, c := range uint64BetweenCases {
-		// pre-allocate the result slice
-		bits := make([]byte, bitFieldLen(len(c.Slice)))
-		cnt := matchUint64Between(c.Slice, c.Match, c.Match2, bits)
-		if got, want := len(bits), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := cnt, c.Count; got != want {
-			T.Errorf("%s: unexpected result bit count %d, expected %d", c.Name, got, want)
-		}
-		if bytes.Compare(bits, c.Result) != 0 {
-			T.Errorf("%s: unexpected result %x, expected %x", c.Name, bits, c.Result)
-		}
-	}
+func TestMatchUint64Between(t *testing.T) {
+	tests.TestCases2[uint64](t, tests.Uint64BetweenCases, MatchBetween[uint64])
 }
 
 // -----------------------------------------------------------------------------
 // Between benchmarks
-func BenchmarkMatchUint64Between(B *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := randUint64Slice(n.L)
-		bits := make([]byte, bitFieldLen(len(a)))
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Uint64Size))
-			for i := 0; i < B.N; i++ {
-				matchUint64Between(a, math.MaxUint64/4, math.MaxUint64/2, bits)
-			}
-		})
-	}
+func BenchmarkMatchUint64Between(b *testing.B) {
+	tests.BenchCases2[uint64](b, MatchBetween[uint64])
 }

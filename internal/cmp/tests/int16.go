@@ -11,15 +11,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-type Int16MatchTest struct {
-	Name   string
-	Slice  []int16
-	Match  int16 // used for every test
-	Match2 int16 // used for between tests
-	Result []byte
-	Count  int64
-}
-
 var (
 	i16_s0 = []int16{
 		0, 5, 3, 5, // Y1
@@ -169,7 +160,7 @@ var (
 //   - match, match2: are only copied to the resulting test case
 //   - result: result for the given slice
 //   - len: desired length of the test case
-func mkI16(name string, src []int16, match, match2 int16, result []byte, length int) Int16MatchTest {
+func mkI16(name string, src []int16, match, match2 int16, result []byte, length int) MatchTest[int16] {
 	if len(src)%8 != 0 {
 		panic(fmt.Errorf("i16 %s: length of slice has to be a multiple of 8", name))
 	}
@@ -203,7 +194,7 @@ func mkI16(name string, src []int16, match, match2 int16, result []byte, length 
 	for _, v := range result {
 		cnt += bits.OnesCount8(v)
 	}
-	return Int16MatchTest{
+	return MatchTest[int16]{
 		Name:   name,
 		Slice:  src,
 		Match:  match,
@@ -215,7 +206,7 @@ func mkI16(name string, src []int16, match, match2 int16, result []byte, length 
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-var Int16EqualCases = []Int16MatchTest{
+var Int16EqualCases = []MatchTest[int16]{
 	{"l0", make([]int16, 0), i16_eq_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i16_eq_mat_1, 0, []byte{}, 0},
 	mkI16("vec1", i16_s0, i16_eq_mat_0, 0, i16_eq_res_0, 32),
@@ -243,7 +234,7 @@ var Int16EqualCases = []Int16MatchTest{
 
 // -----------------------------------------------------------------------------
 // Not Equal Testcases
-var Int16NotEqualCases = []Int16MatchTest{
+var Int16NotEqualCases = []MatchTest[int16]{
 	{"l0", make([]int16, 0), i16_ne_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i16_ne_mat_1, 0, []byte{}, 0},
 	mkI16("vec1", i16_s0, i16_ne_mat_0, 0, i16_ne_res_0, 32),
@@ -271,7 +262,7 @@ var Int16NotEqualCases = []Int16MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-var Int16LessCases = []Int16MatchTest{
+var Int16LessCases = []MatchTest[int16]{
 	{"l0", make([]int16, 0), i16_lt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i16_lt_mat_1, 0, []byte{}, 0},
 	mkI16("vec1", i16_s0, i16_lt_mat_0, 0, i16_lt_res_0, 32),
@@ -299,7 +290,7 @@ var Int16LessCases = []Int16MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-var Int16LessEqualCases = []Int16MatchTest{
+var Int16LessEqualCases = []MatchTest[int16]{
 	{"l0", make([]int16, 0), i16_le_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i16_le_mat_1, 0, []byte{}, 0},
 	mkI16("vec1", i16_s0, i16_le_mat_0, 0, i16_le_res_0, 32),
@@ -327,7 +318,7 @@ var Int16LessEqualCases = []Int16MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-var Int16GreaterCases = []Int16MatchTest{
+var Int16GreaterCases = []MatchTest[int16]{
 	{"l0", make([]int16, 0), i16_gt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i16_gt_mat_1, 0, []byte{}, 0},
 	mkI16("vec1", i16_s0, i16_gt_mat_0, 0, i16_gt_res_0, 32),
@@ -355,7 +346,7 @@ var Int16GreaterCases = []Int16MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-var Int16GreaterEqualCases = []Int16MatchTest{
+var Int16GreaterEqualCases = []MatchTest[int16]{
 	{"l0", make([]int16, 0), i16_ge_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i16_ge_mat_1, 0, []byte{}, 0},
 	mkI16("vec1", i16_s0, i16_ge_mat_0, 0, i16_ge_res_0, 32),
@@ -383,7 +374,7 @@ var Int16GreaterEqualCases = []Int16MatchTest{
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-var Int16BetweenCases = []Int16MatchTest{
+var Int16BetweenCases = []MatchTest[int16]{
 	{"l0", make([]int16, 0), i16_bw_mat_1a, i16_bw_mat_1b, []byte{}, 0},
 	{"nil", nil, i16_bw_mat_1a, i16_bw_mat_1b, []byte{}, 0},
 	mkI16("vec1", i16_s0, i16_bw_mat_0a, i16_bw_mat_0b, i16_bw_res_0, 32),

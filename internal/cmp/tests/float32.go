@@ -11,15 +11,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-type Float32MatchTest struct {
-	Name   string
-	Slice  []float32
-	Match  float32
-	Match2 float32
-	Result []byte
-	Count  int64
-}
-
 var (
 	f32_s0 = []float32{
 		0, 5, 3, 5, // Y1
@@ -209,7 +200,7 @@ var (
 //   - match, match2: are only copied to the resulting test case
 //   - result: result for the given slice
 //   - len: desired length of the test case
-func mkF32(name string, src []float32, match, match2 float32, result []byte, length int) Float32MatchTest {
+func mkF32(name string, src []float32, match, match2 float32, result []byte, length int) MatchTest[float32] {
 	if len(src)%8 != 0 {
 		panic(fmt.Errorf("f64 %s: length of slice has to be a multiple of 8", name))
 	}
@@ -242,7 +233,7 @@ func mkF32(name string, src []float32, match, match2 float32, result []byte, len
 	for _, v := range result {
 		cnt += bits.OnesCount8(v)
 	}
-	return Float32MatchTest{
+	return MatchTest[float32]{
 		Name:   name,
 		Slice:  src,
 		Match:  match,
@@ -254,7 +245,7 @@ func mkF32(name string, src []float32, match, match2 float32, result []byte, len
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-var Float32EqualCases = []Float32MatchTest{
+var Float32EqualCases = []MatchTest[float32]{
 	{"l0", make([]float32, 0), f32_eq_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f32_eq_mat_1, 0, []byte{}, 0},
 	mkF32("vec1", f32_s0, f32_eq_mat_0, 0, f32_eq_res_0, 32),
@@ -283,7 +274,7 @@ var Float32EqualCases = []Float32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Not Equal Testcases
-var Float32NotEqualCases = []Float32MatchTest{
+var Float32NotEqualCases = []MatchTest[float32]{
 	{"l0", make([]float32, 0), f32_ne_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f32_ne_mat_1, 0, []byte{}, 0},
 	mkF32("vec1", f32_s0, f32_ne_mat_0, 0, f32_ne_res_0, 32),
@@ -312,7 +303,7 @@ var Float32NotEqualCases = []Float32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-var Float32LessCases = []Float32MatchTest{
+var Float32LessCases = []MatchTest[float32]{
 	{"l0", make([]float32, 0), f32_lt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f32_lt_mat_1, 0, []byte{}, 0},
 	mkF32("vec1", f32_s0, f32_lt_mat_0, 0, f32_lt_res_0, 32),
@@ -341,7 +332,7 @@ var Float32LessCases = []Float32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-var Float32LessEqualCases = []Float32MatchTest{
+var Float32LessEqualCases = []MatchTest[float32]{
 	{"l0", make([]float32, 0), f32_le_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f32_le_mat_1, 0, []byte{}, 0},
 	mkF32("vec1", f32_s0, f32_le_mat_0, 0, f32_le_res_0, 32),
@@ -370,7 +361,7 @@ var Float32LessEqualCases = []Float32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-var Float32GreaterCases = []Float32MatchTest{
+var Float32GreaterCases = []MatchTest[float32]{
 	{"l0", make([]float32, 0), f32_gt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f32_gt_mat_1, 0, []byte{}, 0},
 	mkF32("vec1", f32_s0, f32_gt_mat_0, 0, f32_gt_res_0, 32),
@@ -399,7 +390,7 @@ var Float32GreaterCases = []Float32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-var Float32GreaterEqualCases = []Float32MatchTest{
+var Float32GreaterEqualCases = []MatchTest[float32]{
 	{"l0", make([]float32, 0), f32_ge_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f32_ge_mat_1, 0, []byte{}, 0},
 	mkF32("vec1", f32_s0, f32_ge_mat_0, 0, f32_ge_res_0, 32),
@@ -428,7 +419,7 @@ var Float32GreaterEqualCases = []Float32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-var Float32BetweenCases = []Float32MatchTest{
+var Float32BetweenCases = []MatchTest[float32]{
 	{"l0", make([]float32, 0), f32_bw_mat_1a, f32_bw_mat_1b, []byte{}, 0},
 	{"nil", nil, f32_bw_mat_1a, f32_bw_mat_1b, []byte{}, 0},
 	mkF32("vec1", f32_s0, f32_bw_mat_0a, f32_bw_mat_0b, f32_bw_res_0, 32),

@@ -3,6 +3,12 @@
 
 package avx512
 
+import (
+	"testing"
+
+	"blockwatch.cc/knoxdb/pkg/util"
+)
+
 func bitmask(i int) byte {
 	return byte(1 << uint(i&0x7))
 }
@@ -17,4 +23,16 @@ func bitFieldLen(n int) int {
 
 func roundUpPow2(n int, pow2 int) int {
 	return (n + (pow2 - 1)) & ^(pow2 - 1)
+}
+
+func requireAvx512F(t testing.TB) {
+	if !util.UseAVX512_F {
+		t.Skip("AVX512F not available.")
+	}
+}
+
+func requireAvx512BW(t testing.TB) {
+	if !util.UseAVX512_BW {
+		t.Skip("AVX512BW not available.")
+	}
 }

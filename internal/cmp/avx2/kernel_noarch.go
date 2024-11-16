@@ -84,22 +84,22 @@ var (
 	MatchInt64Between      = generic.MatchBetween[int64]
 
 	// float32
-	MatchFloat32Equal        = generic.MatchEqualFloat[float32]
-	MatchFloat32NotEqual     = generic.MatchNotEqualFloat[float32]
-	MatchFloat32Less         = generic.MatchLessFloat[float32]
-	MatchFloat32LessEqual    = generic.MatchLessEqualFloat[float32]
-	MatchFloat32Greater      = generic.MatchGreaterFloat[float32]
-	MatchFloat32GreaterEqual = generic.MatchGreaterEqualFloat[float32]
-	MatchFloat32Between      = generic.MatchBetweenFloat[float32]
+	MatchFloat32Equal        = generic.MatchFloatEqual[float32]
+	MatchFloat32NotEqual     = generic.MatchFloatNotEqual[float32]
+	MatchFloat32Less         = generic.MatchFloatLess[float32]
+	MatchFloat32LessEqual    = generic.MatchFloatLessEqual[float32]
+	MatchFloat32Greater      = generic.MatchFloatGreater[float32]
+	MatchFloat32GreaterEqual = generic.MatchFloatGreaterEqual[float32]
+	MatchFloat32Between      = generic.MatchFloatBetween[float32]
 
 	// float64
-	MatchFloat64Equal        = generic.MatchEqualFloat[float64]
-	MatchFloat64NotEqual     = generic.MatchNotEqualFloat[float64]
-	MatchFloat64Less         = generic.MatchLessFloat[float64]
-	MatchFloat64LessEqual    = generic.MatchLessEqualFloat[float64]
-	MatchFloat64Greater      = generic.MatchGreaterFloat[float64]
-	MatchFloat64GreaterEqual = generic.MatchGreaterEqualFloat[float64]
-	MatchFloat64Between      = generic.MatchBetweenFloat[float64]
+	MatchFloat64Equal        = generic.MatchFloatEqual[float64]
+	MatchFloat64NotEqual     = generic.MatchFloatNotEqual[float64]
+	MatchFloat64Less         = generic.MatchFloatLess[float64]
+	MatchFloat64LessEqual    = generic.MatchFloatLessEqual[float64]
+	MatchFloat64Greater      = generic.MatchFloatGreater[float64]
+	MatchFloat64GreaterEqual = generic.MatchFloatGreaterEqual[float64]
+	MatchFloat64Between      = generic.MatchFloatBetween[float64]
 
 	// time
 	// MatchTimeEqual            = generic.MatchTimeEqual

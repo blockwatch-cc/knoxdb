@@ -9,7 +9,7 @@ func MatchInt256Equal(src num.Int256Stride, val num.Int256, bits, mask []byte) i
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -24,7 +24,7 @@ func MatchInt256Equal(src num.Int256Stride, val num.Int256, bits, mask []byte) i
 			if src.Elem(i) != val {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -35,7 +35,7 @@ func MatchInt256NotEqual(src num.Int256Stride, val num.Int256, bits, mask []byte
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -50,7 +50,7 @@ func MatchInt256NotEqual(src num.Int256Stride, val num.Int256, bits, mask []byte
 			if src.Elem(i) == val {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -61,7 +61,7 @@ func MatchInt256Less(src num.Int256Stride, val num.Int256, bits, mask []byte) in
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -76,7 +76,7 @@ func MatchInt256Less(src num.Int256Stride, val num.Int256, bits, mask []byte) in
 			if src.Elem(i).Gte(val) {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -87,7 +87,7 @@ func MatchInt256LessEqual(src num.Int256Stride, val num.Int256, bits, mask []byt
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -102,7 +102,7 @@ func MatchInt256LessEqual(src num.Int256Stride, val num.Int256, bits, mask []byt
 			if src.Elem(i).Gt(val) {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -113,7 +113,7 @@ func MatchInt256Greater(src num.Int256Stride, val num.Int256, bits, mask []byte)
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -128,7 +128,7 @@ func MatchInt256Greater(src num.Int256Stride, val num.Int256, bits, mask []byte)
 			if src.Elem(i).Lte(val) {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -139,7 +139,7 @@ func MatchInt256GreaterEqual(src num.Int256Stride, val num.Int256, bits, mask []
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -154,7 +154,7 @@ func MatchInt256GreaterEqual(src num.Int256Stride, val num.Int256, bits, mask []
 			if src.Elem(i).Lt(val) {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}
@@ -166,7 +166,7 @@ func MatchInt256Between(src num.Int256Stride, a, b num.Int256, bits, mask []byte
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := bitmask(i)
+			bit := byte(0x1) << uint(i&0x7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -181,7 +181,7 @@ func MatchInt256Between(src num.Int256Stride, a, b num.Int256, bits, mask []byte
 			if src.Elem(i).Sub(a).Uint256().Gte(diff) {
 				continue
 			}
-			bits[i>>3] |= bitmask(i)
+			bits[i>>3] |= byte(0x1) << uint(i&0x7)
 			cnt++
 		}
 	}

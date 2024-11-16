@@ -11,15 +11,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-type Float64MatchTest struct {
-	Name   string
-	Slice  []float64
-	Match  float64
-	Match2 float64
-	Result []byte
-	Count  int64
-}
-
 var (
 	f64_s0 = []float64{
 		0, 5, 3, 5, // Y1
@@ -209,7 +200,7 @@ var (
 //   - match, match2: are only copied to the resulting test case
 //   - result: result for the given slice
 //   - len: desired length of the test case
-func mkF64(name string, src []float64, match, match2 float64, result []byte, length int) Float64MatchTest {
+func mkF64(name string, src []float64, match, match2 float64, result []byte, length int) MatchTest[float64] {
 	if len(src)%8 != 0 {
 		panic(fmt.Errorf("f64 %s: length of slice has to be a multiple of 8", name))
 	}
@@ -243,7 +234,7 @@ func mkF64(name string, src []float64, match, match2 float64, result []byte, len
 	for _, v := range result {
 		cnt += bits.OnesCount8(v)
 	}
-	return Float64MatchTest{
+	return MatchTest[float64]{
 		Name:   name,
 		Slice:  src,
 		Match:  match,
@@ -255,7 +246,7 @@ func mkF64(name string, src []float64, match, match2 float64, result []byte, len
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-var Float64EqualCases = []Float64MatchTest{
+var Float64EqualCases = []MatchTest[float64]{
 	{"l0", make([]float64, 0), f64_eq_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f64_eq_mat_1, 0, []byte{}, 0},
 	mkF64("vec1", f64_s0, f64_eq_m0, 0, f64_eq_res_0, 32),
@@ -280,7 +271,7 @@ var Float64EqualCases = []Float64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Not Equal Testcases
-var Float64NotEqualCases = []Float64MatchTest{
+var Float64NotEqualCases = []MatchTest[float64]{
 	{"l0", make([]float64, 0), f64_ne_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f64_ne_mat_1, 0, []byte{}, 0},
 	mkF64("vec1", f64_s0, f64_ne_m0, 0, f64_ne_res_0, 32),
@@ -307,7 +298,7 @@ var Float64NotEqualCases = []Float64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-var Float64LessCases = []Float64MatchTest{
+var Float64LessCases = []MatchTest[float64]{
 	{"l0", make([]float64, 0), f64_lt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f64_lt_mat_1, 0, []byte{}, 0},
 	mkF64("vec1", f64_s0, f64_lt_mat_0, 0, f64_lt_res_0, 32),
@@ -334,7 +325,7 @@ var Float64LessCases = []Float64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-var Float64LessEqualCases = []Float64MatchTest{
+var Float64LessEqualCases = []MatchTest[float64]{
 	{"l0", make([]float64, 0), f64_le_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f64_le_mat_1, 0, []byte{}, 0},
 	mkF64("vec1", f64_s0, f64_le_mat_0, 0, f64_le_res_0, 32),
@@ -361,7 +352,7 @@ var Float64LessEqualCases = []Float64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-var Float64GreaterCases = []Float64MatchTest{
+var Float64GreaterCases = []MatchTest[float64]{
 	{"l0", make([]float64, 0), f64_gt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f64_gt_mat_1, 0, []byte{}, 0},
 	mkF64("vec1", f64_s0, f64_gt_mat_0, 0, f64_gt_res_0, 32),
@@ -388,7 +379,7 @@ var Float64GreaterCases = []Float64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-var Float64GreaterEqualCases = []Float64MatchTest{
+var Float64GreaterEqualCases = []MatchTest[float64]{
 	{"l0", make([]float64, 0), f64_ge_mat_1, 0, []byte{}, 0},
 	{"nil", nil, f64_ge_mat_1, 0, []byte{}, 0},
 	mkF64("vec1", f64_s0, f64_ge_mat_0, 0, f64_ge_res_0, 32),
@@ -415,7 +406,7 @@ var Float64GreaterEqualCases = []Float64MatchTest{
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-var Float64BetweenCases = []Float64MatchTest{
+var Float64BetweenCases = []MatchTest[float64]{
 	{"l0", make([]float64, 0), f64_bw_mat_1a, 0, []byte{}, 0},
 	{"nil", nil, f64_bw_mat_1a, 0, []byte{}, 0},
 	mkF64("vec1", f64_s0, f64_bw_mat_0a, f64_bw_mat_0b, f64_bw_res_0, 32),

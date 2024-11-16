@@ -11,15 +11,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-type Int32MatchTest struct {
-	Name   string
-	Slice  []int32
-	Match  int32 // used for every test
-	Match2 int32 // used for between tests
-	Result []byte
-	Count  int64
-}
-
 var (
 	i32_s0 = []int32{
 		0, 5, 3, 5, // Y1
@@ -168,7 +159,7 @@ var (
 //   - match, match2: are only copied to the resulting test case
 //   - result: result for the given slice
 //   - len: desired length of the test case
-func mkI32(name string, src []int32, match, match2 int32, result []byte, length int) Int32MatchTest {
+func mkI32(name string, src []int32, match, match2 int32, result []byte, length int) MatchTest[int32] {
 	if len(src)%8 != 0 {
 		panic(fmt.Errorf("f64 %s: length of slice has to be a multiple of 8", name))
 	}
@@ -202,7 +193,7 @@ func mkI32(name string, src []int32, match, match2 int32, result []byte, length 
 	for _, v := range result {
 		cnt += bits.OnesCount8(v)
 	}
-	return Int32MatchTest{
+	return MatchTest[int32]{
 		Name:   name,
 		Slice:  src,
 		Match:  match,
@@ -214,7 +205,7 @@ func mkI32(name string, src []int32, match, match2 int32, result []byte, length 
 
 // -----------------------------------------------------------------------------
 // Equal Testcases
-var Int32EqualCases = []Int32MatchTest{
+var Int32EqualCases = []MatchTest[int32]{
 	{"l0", make([]int32, 0), i32_eq_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i32_eq_mat_1, 0, []byte{}, 0},
 	mkI32("vec1", i32_s0, i32_eq_mat_0, 0, i32_eq_res_0, 32),
@@ -240,7 +231,7 @@ var Int32EqualCases = []Int32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Not Equal Testcases
-var Int32NotEqualCases = []Int32MatchTest{
+var Int32NotEqualCases = []MatchTest[int32]{
 	{"l0", make([]int32, 0), i32_ne_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i32_ne_mat_1, 0, []byte{}, 0},
 	mkI32("vec1", i32_s0, i32_ne_mat_0, 0, i32_ne_res_0, 32),
@@ -266,7 +257,7 @@ var Int32NotEqualCases = []Int32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Testcases
-var Int32LessCases = []Int32MatchTest{
+var Int32LessCases = []MatchTest[int32]{
 	{"l0", make([]int32, 0), i32_lt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i32_lt_mat_1, 0, []byte{}, 0},
 	mkI32("vec1", i32_s0, i32_lt_mat_0, 0, i32_lt_res_0, 32),
@@ -292,7 +283,7 @@ var Int32LessCases = []Int32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Less Equal Testcases
-var Int32LessEqualCases = []Int32MatchTest{
+var Int32LessEqualCases = []MatchTest[int32]{
 	{"l0", make([]int32, 0), i32_le_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i32_le_mat_1, 0, []byte{}, 0},
 	mkI32("vec1", i32_s0, i32_le_mat_0, 0, i32_le_res_0, 32),
@@ -318,7 +309,7 @@ var Int32LessEqualCases = []Int32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Testcases
-var Int32GreaterCases = []Int32MatchTest{
+var Int32GreaterCases = []MatchTest[int32]{
 	{"l0", make([]int32, 0), i32_gt_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i32_gt_mat_1, 0, []byte{}, 0},
 	mkI32("vec1", i32_s0, i32_gt_mat_0, 0, i32_gt_res_0, 32),
@@ -344,7 +335,7 @@ var Int32GreaterCases = []Int32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Greater Equal Testcases
-var Int32GreaterEqualCases = []Int32MatchTest{
+var Int32GreaterEqualCases = []MatchTest[int32]{
 	{"l0", make([]int32, 0), i32_ge_mat_1, 0, []byte{}, 0},
 	{"nil", nil, i32_ge_mat_1, 0, []byte{}, 0},
 	mkI32("vec1", i32_s0, i32_ge_mat_0, 0, i32_ge_res_0, 32),
@@ -370,7 +361,7 @@ var Int32GreaterEqualCases = []Int32MatchTest{
 
 // -----------------------------------------------------------------------------
 // Between Testcases
-var Int32BetweenCases = []Int32MatchTest{
+var Int32BetweenCases = []MatchTest[int32]{
 	{"l0", make([]int32, 0), i32_bw_mat_1a, i32_bw_mat_1b, []byte{}, 0},
 	{"nil", nil, i32_bw_mat_1a, i32_bw_mat_1b, []byte{}, 0},
 	mkI32("vec1", i32_s0, i32_bw_mat_0a, i32_bw_mat_0b, i32_bw_res_0, 32),
