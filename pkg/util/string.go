@@ -376,3 +376,9 @@ func (u U64String) MarshalText() ([]byte, error) {
 	binary.BigEndian.PutUint64(tmp[:], uint64(u))
 	return []byte(hex.EncodeToString(tmp[:])), nil
 }
+
+func Uint64Bytes(v uint64) []byte {
+	var buf [8]byte
+	binary.LittleEndian.PutUint64(buf[:], v)
+	return buf[:]
+}
