@@ -308,7 +308,9 @@ func (e *Engine) Close(ctx context.Context) error {
 	}
 
 	// stop services
-	e.merger.Stop()
+	if e.merger != nil {
+		e.merger.Stop()
+	}
 
 	// wait for transactions and services to release all locks
 	e.lm.Wait()
