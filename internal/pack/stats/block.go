@@ -38,7 +38,7 @@ type BlockStats struct {
 	MaxValue    any           // vector max
 	Cardinality int           // unique items in vector
 	Bloom       *bloom.Filter // optimized bloom filter for high cardinality data
-	Bits        *xroar.Bitmap // sparse id list for low cardinality data
+	Bits        *xroar.Bitmap // sparse id list for low cardinality integer data
 	StoredSize  int           // block size on disk
 	dirty       bool          // update required
 }

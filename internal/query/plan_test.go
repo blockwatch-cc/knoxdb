@@ -69,9 +69,6 @@ func IsFilterEqual(a, b *FilterTreeNode) bool {
 	if !bytes.Equal(a.Bits.Bytes(), b.Bits.Bytes()) {
 		return false
 	}
-	if a.IsEmpty() != b.IsEmpty() {
-		return false
-	}
 
 	if a.IsLeaf() != b.IsLeaf() {
 		return false

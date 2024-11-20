@@ -150,17 +150,22 @@ func (m noopMatcher) MatchBlock(_ *block.Block, bits, mask *bitset.Bitset) *bits
 }
 
 func MatchTree(n *FilterTreeNode, v *schema.View) bool {
-	// if root is empty and no leaf is defined, return a full match
-	if n.IsEmpty() {
+	// handle always true conditions
+	if n.IsAnyMatch() {
 		return true
 	}
 
-	// if root contains a single leaf only, match it
+	// handle always false conditions
+	if n.IsNoMatch() {
+		return false
+	}
+
+	// match leaf filter
 	if n.IsLeaf() {
 		return MatchFilter(n.Filter, v)
 	}
 
-	// process all children
+	// match and aggregate all children
 	if n.OrKind {
 		for _, c := range n.Children {
 			if MatchTree(c, v) {

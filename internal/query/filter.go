@@ -46,30 +46,40 @@ func (f Filter) Validate() error {
 	if !f.Mode.IsValid() {
 		return ErrNoMode
 	}
-	if f.Matcher == nil {
-		return ErrNoMatcher
-	}
-	if f.Value == nil {
-		return ErrNoValue
+	switch f.Mode {
+	case FilterModeTrue, FilterModeFalse:
+		// empty matcher or value ok
+	default:
+		if f.Matcher == nil {
+			return ErrNoMatcher
+		}
+		if f.Value == nil {
+			return ErrNoValue
+		}
 	}
 	return nil
 }
 
+// type FilterFlags byte
+
+// const (
+// 	FilterFlagOr    FilterFlags = 1 << iota // or kind
+// 	FilterFlagSkip                          // processed, may skip
+// 	FilterFlagIndex                         // index scan result
+// )
+
 // Invariants
 // - root is always an AND node
 // - root is never a leaf node
-// - root may be empty (no children, no filter) -> means match all
+// - root may not be empty (no children, no filter)
 type FilterTreeNode struct {
-	OrKind   bool              // AND|OR
 	Children []*FilterTreeNode // sub filter
 	Filter   *Filter           // ptr to condition
 	Bits     bitmap.Bitmap     // index scan result
+	OrKind   bool              // AND|OR
 	Skip     bool              // sub-tree or leaf filter has been processed already
-	Empty    bool              // index result is empty
-}
 
-func (n FilterTreeNode) IsEmpty() bool {
-	return len(n.Children) == 0 && n.Filter == nil && !n.Bits.IsValid()
+	// Flags FilterFlags // lifecycle flags
 }
 
 func (n FilterTreeNode) IsLeaf() bool {
@@ -77,10 +87,9 @@ func (n FilterTreeNode) IsLeaf() bool {
 }
 
 func (n FilterTreeNode) IsProcessed() bool {
-	if n.IsLeaf() {
-		return n.Skip
+	if n.Skip {
+		return true
 	}
-
 	for _, v := range n.Children {
 		if !v.IsProcessed() {
 			return false
@@ -89,34 +98,14 @@ func (n FilterTreeNode) IsProcessed() bool {
 	return true
 }
 
+// filter tree is a tautology, i.e. all possible values match
+func (n FilterTreeNode) IsAnyMatch() bool {
+	return n.IsLeaf() && n.Filter.Mode == FilterModeTrue
+}
+
+// filter tree is a contradiction (i.e. also when index match was found)
 func (n FilterTreeNode) IsNoMatch() bool {
-	if n.IsEmpty() {
-		return false
-	}
-
-	if n.IsLeaf() {
-		return n.Empty
-	}
-
-	if n.Bits.IsValid() {
-		return n.Bits.Count() == 0
-	}
-
-	if n.OrKind {
-		for _, v := range n.Children {
-			if !v.IsNoMatch() {
-				return false
-			}
-		}
-		return true
-	} else {
-		for _, v := range n.Children {
-			if v.IsNoMatch() {
-				return true
-			}
-		}
-		return false
-	}
+	return n.IsLeaf() && n.Filter.Mode == FilterModeFalse
 }
 
 func (n FilterTreeNode) Validate(pos string) error {
@@ -143,9 +132,9 @@ func (n FilterTreeNode) Validate(pos string) error {
 }
 
 func (n FilterTreeNode) Fields() []string {
-	if n.IsEmpty() {
-		return nil
-	}
+	// if n.IsEmpty() {
+	// 	return nil
+	// }
 	if n.IsLeaf() {
 		return []string{n.Filter.Name}
 	}
@@ -174,13 +163,13 @@ func (n FilterTreeNode) Depth() int {
 }
 
 func (n FilterTreeNode) depth(level int) int {
-	if n.IsEmpty() {
+	// if n.IsEmpty() {
+	// 	return level
+	// }
+	if n.IsLeaf() {
 		return level
 	}
-	if n.IsLeaf() {
-		return level + 1
-	}
-	d := level + 1
+	d := level
 	for _, v := range n.Children {
 		d = util.Max(d, v.depth(level+1))
 	}

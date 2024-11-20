@@ -289,7 +289,6 @@ func makeNode(name string, mode FilterMode, fieldIndex uint16, value any) *Filte
 	switch mode {
 	case FilterModeFalse:
 		f.Value = nil
-		tree.Empty = true
 	case FilterModeTrue:
 		f.Value = nil
 		tree.Skip = true

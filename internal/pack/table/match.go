@@ -21,9 +21,13 @@ func MaybeMatchTree(n *query.FilterTreeNode, info *stats.PackStats) bool {
 	if info.NValues == 0 {
 		return false
 	}
-	// always match empty condition nodes
-	if n.IsEmpty() {
+	// always match?
+	if n.IsAnyMatch() {
 		return true
+	}
+	// no match?
+	if n.IsNoMatch() {
+		return false
 	}
 	// match single leafs
 	if n.IsLeaf() {
@@ -104,26 +108,12 @@ func MatchFilter(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset) 
 	return f.Matcher.MatchBlock(pkg.Block(int(f.Index)), bits, mask)
 }
 
-// MatchTree matches pack contents against a query condition tree (or sub-tree).
+// MatchTree matches pack contents against a query condition (sub)tree.
 func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackStats) *bitset.Bitset {
-	// if root contains a single leaf only, match it
 	if n.IsLeaf() {
 		return MatchFilter(n.Filter, pkg, nil, nil)
 	}
 
-	// if root is empty and no leaf is defined, return a full match
-	if n.IsEmpty() {
-		// empty matches typically don't load blocks, so we need to get
-		// pack len from either the package or its stats. Note that
-		// when pkg == journal there is no stats defined.
-		sz := pkg.Len()
-		if sz == 0 && meta != nil {
-			sz = meta.NValues
-		}
-		return bitset.NewBitset(sz).One()
-	}
-
-	// process all children
 	if n.OrKind {
 		return MatchTreeOr(n, pkg, meta)
 	} else {
@@ -131,11 +121,7 @@ func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackStats
 	}
 }
 
-// TODO
-// - integrate node.Skip and node.Bits
-// - disable Skip on journal pack (not covered by index)
-
-// MatchTreeAnd matches children the same (sub)tree in a query condition.
+// MatchTreeAnd matches siblings from the same level in a filter tree.
 // It return a bit vector from combining child matches with a logical AND
 // and does so efficiently by skipping unnecessary matches and aggregations.
 //
@@ -144,9 +130,14 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackSt
 	// start with a full bitset
 	bits := bitset.NewBitset(pkg.Len()).One()
 
-	// match conditions and merge bit vectors, always match empty condition list
-	// and stop early when result contains all zeros
+	// match conditions and merge bit vectors, empty condition lists or always true
+	// filters result in a full match; stop early when result contains all zeros
 	for _, node := range n.Children {
+		// skip always true nodes (AND branches may contain a single always true filter)
+		if node.IsAnyMatch() {
+			continue
+		}
+
 		var scratch *bitset.Bitset
 		if !node.IsLeaf() {
 			// recurse into another AND or OR condition subtree
@@ -177,8 +168,8 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackSt
 					}
 				case types.FilterModeRange:
 					// condition is always true iff pack range <= condition range
-					if cmp.LE(typ, f.Value.(query.RangeValue)[0], min) &&
-						cmp.GE(typ, f.Value.(query.RangeValue)[1], max) {
+					rg := f.Value.(query.RangeValue)
+					if cmp.LE(typ, rg[0], min) && cmp.GE(typ, rg[1], max) {
 						continue
 					}
 				case types.FilterModeGt:
@@ -226,8 +217,8 @@ func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackSta
 	// start with an empty bitset
 	bits := bitset.NewBitset(pkg.Len())
 
-	// match conditions and merge bit vectors
-	// stop early when result contains all ones (assuming OR relation)
+	// match conditions and merge bit vectors, always true/false conditions
+	// are optimized away at this point, stop early when result contains all ones
 	for i, node := range n.Children {
 		var scratch *bitset.Bitset
 		if !node.IsLeaf() {
@@ -251,47 +242,32 @@ func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackSta
 				switch f.Mode {
 				case types.FilterModeEqual:
 					// condition is always true iff min == max == f.Value
-					// if c.Field.Type.Equal(min, f.Value) && c.Field.Type.Equal(max, f.Value) {
-					if cmp.EQ(typ, min, f.Value) && cmp.EQ(typ, max, f.Value) {
-						skipEarly = true
-					}
+					skipEarly = cmp.EQ(typ, min, f.Value) && cmp.EQ(typ, max, f.Value)
+
 				case types.FilterModeNotEqual:
 					// condition is always true iff f.Value < min || f.Value > max
-					// if c.Field.Type.Lt(f.Value, min) || c.Field.Type.Gt(f.Value, max) {
-					if cmp.LT(typ, f.Value, min) || cmp.GT(typ, f.Value, max) {
-						skipEarly = true
-					}
+					skipEarly = cmp.LT(typ, f.Value, min) || cmp.GT(typ, f.Value, max)
+
 				case types.FilterModeRange:
 					// condition is always true iff pack range <= condition range
-					// if c.Field.Type.Lte(c.From, min) && c.Field.Type.Gte(c.To, max) {
-					if cmp.LE(typ, f.Value.(query.RangeValue)[0], min) &&
-						cmp.GE(typ, f.Value.(query.RangeValue)[1], max) {
-						skipEarly = true
-					}
+					rg := f.Value.(query.RangeValue)
+					skipEarly = cmp.LE(typ, rg[0], min) && cmp.GE(typ, rg[1], max)
+
 				case types.FilterModeGt:
 					// condition is always true iff min > f.Value
-					// if c.Field.Type.Gt(min, f.Value) {
-					if cmp.GT(typ, min, f.Value) {
-						skipEarly = true
-					}
+					skipEarly = cmp.GT(typ, min, f.Value)
+
 				case types.FilterModeGe:
 					// condition is always true iff min >= f.Value
-					// if c.Field.Type.Gte(min, f.Value) {
-					if cmp.GE(typ, min, f.Value) {
-						skipEarly = true
-					}
+					skipEarly = cmp.GE(typ, min, f.Value)
+
 				case types.FilterModeLt:
 					// condition is always true iff max < f.Value
-					// if c.Field.Type.Lt(max, f.Value) {
-					if cmp.LT(typ, max, f.Value) {
-						skipEarly = true
-					}
+					skipEarly = cmp.LT(typ, max, f.Value)
+
 				case types.FilterModeLe:
 					// condition is always true iff max <= f.Value
-					// if c.Field.Type.Lte(max, f.Value) {
-					if cmp.LE(typ, max, f.Value) {
-						skipEarly = true
-					}
+					skipEarly = cmp.LE(typ, max, f.Value)
 				}
 				if skipEarly {
 					bits.Close()

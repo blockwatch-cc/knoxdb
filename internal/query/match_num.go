@@ -4,14 +4,11 @@
 package query
 
 import (
-	"slices"
-
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/xroar"
-	"blockwatch.cc/knoxdb/pkg/slicex"
 
 	"unsafe"
 )
@@ -283,9 +280,20 @@ func (f NumMatcherFactory[T]) New(m FilterMode) Matcher {
 		fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
 		return &numRangeMatcher[T]{numMatcher: numMatcher[T]{match: fn}}
 	case FilterModeIn:
-		return &numInSetMatcher[T]{}
+		switch f.typ {
+		case BlockFloat32, BlockFloat64:
+			return &floatInSetMatcher[T]{}
+		default:
+			return &numInSetMatcher[T]{}
+		}
+
 	case FilterModeNotIn:
-		return &numNotInSetMatcher[T]{}
+		switch f.typ {
+		case BlockFloat32, BlockFloat64:
+			return &floatNotInSetMatcher[T]{}
+		default:
+			return &numNotInSetMatcher[T]{}
+		}
 	default:
 		// unsupported
 		// FilterModeRegexp
@@ -451,19 +459,23 @@ func (m numRangeMatcher[T]) MatchRange(from, to any) bool {
 // In, Contains
 type numInSetMatcher[T Number] struct {
 	noopMatcher
-	set *xroar.Bitmap
-
-	// TODO: xroar ContainsRange() would make this obsolete
-	slice  slicex.OrderedNumbers[T]
+	set    *xroar.Bitmap
 	hashes [][2]uint32
 }
 
 func (m *numInSetMatcher[T]) Weight() int { return 1 }
 
-func (m *numInSetMatcher[T]) Len() int { return m.slice.Len() }
+func (m *numInSetMatcher[T]) Len() int { return m.set.GetCardinality() }
 
 func (m *numInSetMatcher[T]) Value() any {
-	return m.slice.Values
+	// FIXME: support bitmap in optimizer
+	card := m.set.GetCardinality()
+	it := m.set.NewIterator()
+	vals := make([]T, card)
+	for i := 0; i < card; i++ {
+		vals[i] = T(it.Next())
+	}
+	return vals
 }
 
 func (m *numInSetMatcher[T]) WithValue(val any) {
@@ -471,23 +483,21 @@ func (m *numInSetMatcher[T]) WithValue(val any) {
 }
 
 func (m *numInSetMatcher[T]) WithSlice(slice any) {
-	data := slice.([]T)
-	slices.Sort(data)
-	m.slice.Values = data
 	m.set = xroar.NewBitmap()
-	for _, v := range data {
+	for _, v := range slice.([]T) {
 		m.set.Set(uint64(v))
 	}
-	m.hashes = bloom.HashAnySlice(data)
+	m.hashes = bloom.HashAnySlice(slice.([]T))
 }
 
 func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
 	m.set = set
-	m.slice.Values = make([]T, 0, set.GetCardinality())
-	for _, v := range set.ToArray() {
-		m.slice.Values = append(m.slice.Values, T(v))
+	card := set.GetCardinality()
+	it := m.set.NewIterator()
+	m.hashes = make([][2]uint32, card)
+	for i := 0; i < card; i++ {
+		m.hashes[i] = bloom.HashUint64(it.Next())
 	}
-	m.hashes = bloom.HashAnySlice(m.slice.Values)
 }
 
 func (m numInSetMatcher[T]) MatchValue(v any) bool {
@@ -495,7 +505,7 @@ func (m numInSetMatcher[T]) MatchValue(v any) bool {
 }
 
 func (m numInSetMatcher[T]) MatchRange(from, to any) bool {
-	return m.slice.ContainsRange(from.(T), to.(T))
+	return m.set.ContainsRange(uint64(from.(T)), uint64(to.(T)))
 }
 
 func (m numInSetMatcher[T]) MatchBloom(flt *bloom.Filter) bool {
@@ -533,16 +543,21 @@ func (m numInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset
 type numNotInSetMatcher[T Number] struct {
 	noopMatcher
 	set *xroar.Bitmap
-	// TODO: xroar ContainsRange() would make this obsolete
-	slice slicex.OrderedNumbers[T]
 }
 
 func (m *numNotInSetMatcher[T]) Weight() int { return 1 }
 
-func (m *numNotInSetMatcher[T]) Len() int { return m.slice.Len() }
+func (m *numNotInSetMatcher[T]) Len() int { return m.set.GetCardinality() }
 
 func (m *numNotInSetMatcher[T]) Value() any {
-	return m.slice.Values
+	// FIXME: support bitmap in optimizer
+	card := m.set.GetCardinality()
+	it := m.set.NewIterator()
+	vals := make([]T, card)
+	for i := 0; i < card; i++ {
+		vals[i] = T(it.Next())
+	}
+	return vals
 }
 
 func (m *numNotInSetMatcher[T]) WithValue(val any) {
@@ -550,21 +565,14 @@ func (m *numNotInSetMatcher[T]) WithValue(val any) {
 }
 
 func (m *numNotInSetMatcher[T]) WithSlice(slice any) {
-	bits := slice.([]T)
-	slices.Sort(bits)
-	m.slice.Values = bits
 	m.set = xroar.NewBitmap()
-	for _, v := range bits {
+	for _, v := range slice.([]T) {
 		m.set.Set(uint64(v))
 	}
 }
 
 func (m *numNotInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
 	m.set = set
-	m.slice.Values = make([]T, 0, set.GetCardinality())
-	for _, v := range set.ToArray() {
-		m.slice.Values = append(m.slice.Values, T(v))
-	}
 }
 
 func (m numNotInSetMatcher[T]) MatchValue(v any) bool {
@@ -572,7 +580,7 @@ func (m numNotInSetMatcher[T]) MatchValue(v any) bool {
 }
 
 func (m numNotInSetMatcher[T]) MatchRange(from, to any) bool {
-	return !m.slice.ContainsRange(from.(T), to.(T))
+	return !m.set.ContainsRange(uint64(from.(T)), uint64(to.(T)))
 }
 
 func (m numNotInSetMatcher[T]) MatchBloom(flt *bloom.Filter) bool {
