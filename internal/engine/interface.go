@@ -76,8 +76,8 @@ type QueryPlan interface {
 type QueryCondition interface {
 	IsLeaf() bool
 	IsEmpty() bool
-	IsEmptyMatch() bool
 	IsProcessed() bool
+	IsNoMatch() bool
 	Fields() []string
 }
 

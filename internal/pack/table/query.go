@@ -248,7 +248,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 	// plan.Log.Debugf("Table %s: %d journal results", t.name(), jbits.Count())
 
 	// early return
-	if jbits.Count() == 0 && plan.IsEmptyMatch() {
+	if jbits.Count() == 0 && plan.IsNoMatch() {
 		return nil
 	}
 
@@ -259,7 +259,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 	// - scan iff
 	//   (a) index match is non-empty or
 	//   (b) no index exists
-	if !plan.IsEmptyMatch() {
+	if !plan.IsNoMatch() {
 		// pack iterator manages selection, load and scan of packs
 		it := NewForwardIterator(plan)
 		defer it.Close()
@@ -387,7 +387,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	nRowsScanned += uint32(t.journal.Len())
 
 	// early return
-	if jbits.Count() == 0 && plan.IsEmptyMatch() {
+	if jbits.Count() == 0 && plan.IsNoMatch() {
 		return nil
 	}
 
@@ -434,7 +434,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	}
 
 	// second return point (match was journal only)
-	if plan.IsEmptyMatch() {
+	if plan.IsNoMatch() {
 		return nil
 	}
 
