@@ -7,26 +7,10 @@ package slicex
 import (
 	"bytes"
 	"fmt"
-	"math/rand"
 	"testing"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
-
-// generates n slices of length u
-func randByteSlice(n, u int) [][]byte {
-	s := make([][]byte, n)
-	for i := 0; i < n; i++ {
-		s[i] = randBytes(u)
-	}
-	return s
-}
-
-func randBytes(n int) []byte {
-	v := make([]byte, n)
-	for i := range v {
-		v[i] = byte(rand.Intn(256))
-	}
-	return v
-}
 
 // -----------------------------------------------------------------------
 // Byte Slice
@@ -87,10 +71,10 @@ func BenchmarkByteSliceContains(B *testing.B) {
 	cases := []int{10, 1000, 1000000}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-neg", n), func(B *testing.B) {
-			a := NewOrderedBytes(randByteSlice(n, 32))
+			a := NewOrderedBytes(util.RandByteSlices(n, 32))
 			check := make([][]byte, 1024)
 			for i := range check {
-				check[i] = randBytes(32)
+				check[i] = util.RandBytes(32)
 			}
 			B.ResetTimer()
 			B.ReportAllocs()
@@ -101,11 +85,11 @@ func BenchmarkByteSliceContains(B *testing.B) {
 	}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-pos", n), func(B *testing.B) {
-			a := NewOrderedBytes(randByteSlice(n, 32))
+			a := NewOrderedBytes(util.RandByteSlices(n, 32))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
-				a.Contains(a.Values[rand.Intn(len(a.Values))])
+				a.Contains(a.Values[util.RandIntn(len(a.Values))])
 			}
 		})
 	}
@@ -218,10 +202,10 @@ func TestByteSliceContainsRange(T *testing.T) {
 func BenchmarkByteSlice32ContainsRange(B *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := NewOrderedBytes(randByteSlice(n, 32))
+			a := NewOrderedBytes(util.RandByteSlices(n, 32))
 			ranges := make([][2][]byte, 1024)
 			for i := range ranges {
-				min, max := randBytes(32), randBytes(32)
+				min, max := util.RandBytes(32), util.RandBytes(32)
 				if bytes.Compare(min, max) > 0 {
 					min, max = max, min
 				}

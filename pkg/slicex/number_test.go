@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -378,10 +379,10 @@ func TestOrderedNumbersContainsRange(T *testing.T) {
 func BenchmarkOrderedNumbersContainsRange(B *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := NewOrderedNumbers(randIntSlice(n, 1))
+			a := NewOrderedNumbers(util.RandUints[uint64](n))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
-				min, max := rand.Int(), rand.Int()
+				min, max := util.RandUint64(), util.RandUint64()
 				if min > max {
 					min, max = max, min
 				}
