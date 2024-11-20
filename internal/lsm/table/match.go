@@ -22,7 +22,7 @@ const (
 // aggregated. If no primary key condition exists [MinPk, MaxPk] is returned.
 func PkRange(n *query.FilterTreeNode, s *schema.Schema) (uint64, uint64) {
 	// if root is empty and no leaf is defined, return full range
-	if n.IsEmpty() {
+	if n.IsAnyMatch() {
 		return MinPk, MaxPk
 	}
 

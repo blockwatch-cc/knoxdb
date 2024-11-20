@@ -104,7 +104,7 @@ func (t *Table) doQuery(ctx context.Context, plan *query.QueryPlan, res QueryRes
 
 	// handle cases
 	switch {
-	case plan.Filters.IsEmpty():
+	case plan.Filters.IsAnyMatch():
 		// No conds: walk entire table
 		c := bucket.Cursor(store.ForwardCursor)
 		defer c.Close()
@@ -276,7 +276,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 
 	// handle cases
 	switch {
-	case plan.Filters.IsEmpty():
+	case plan.Filters.IsAnyMatch():
 		// No conds: walk entire table
 		c := bucket.Cursor(store.IndexCursor)
 		defer c.Close()

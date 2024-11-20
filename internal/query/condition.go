@@ -108,6 +108,15 @@ func ParseCondition(key, val string, s *schema.Schema) (c Condition, err error) 
 }
 
 func (c Condition) Validate() error {
+	return c.validate(true)
+}
+
+func (c Condition) validate(isRoot bool) error {
+	// empty root is ok, but empty branch/child is not
+	if !isRoot && c.IsEmpty() {
+		return fmt.Errorf("empty non-root condition")
+	}
+
 	if c.IsLeaf() {
 		if c.Name == "" {
 			return fmt.Errorf("empty field name")
@@ -120,7 +129,7 @@ func (c Condition) Validate() error {
 		}
 	} else {
 		for i := range c.Children {
-			if err := c.Children[i].Validate(); err != nil {
+			if err := c.Children[i].validate(false); err != nil {
 				return err
 			}
 		}
@@ -131,9 +140,27 @@ func (c Condition) Validate() error {
 // translate condition to filter operator
 func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 	// validate condition field invariants
-	err := c.Validate()
-	if err != nil {
+	if err := c.Validate(); err != nil {
 		return nil, err
+	}
+
+	// empty root condition produces an always true match
+	if c.IsEmpty() {
+		node := &FilterTreeNode{
+			Children: []*FilterTreeNode{
+				{
+					Filter: &Filter{
+						Name:    s.Pk().Name(),
+						Type:    BlockTypes[s.Pk().Type()],
+						Mode:    FilterModeTrue,
+						Index:   uint16(s.PkIndex()),
+						Value:   nil,
+						Matcher: &noopMatcher{},
+					},
+				},
+			},
+		}
+		return node, nil
 	}
 
 	// bind leaf node condition

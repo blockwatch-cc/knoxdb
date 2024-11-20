@@ -69,15 +69,15 @@ type QueryPlan interface {
 	Validate() error
 	Compile(ctx Context) error
 	Close()
-	Stream(ctx Context, fn func(r QueryRow) error) error
-	Query(ctx Context) (QueryResult, error)
+	// Stream(ctx Context, fn func(r QueryRow) error) error
+	// Query(ctx Context) (QueryResult, error)
 }
 
 type QueryCondition interface {
 	IsLeaf() bool
-	IsEmpty() bool
 	IsProcessed() bool
 	IsNoMatch() bool
+	IsAnyMatch() bool
 	Fields() []string
 }
 

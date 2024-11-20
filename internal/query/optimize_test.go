@@ -195,7 +195,6 @@ func makeNode(field schema.Field, mode FilterMode, value any) *FilterTreeNode {
 	switch mode {
 	case FilterModeFalse:
 		f.Value = nil
-		tree.Empty = true
 	case FilterModeTrue:
 		f.Value = nil
 		tree.Skip = true

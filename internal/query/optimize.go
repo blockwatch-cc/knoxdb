@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
@@ -168,10 +169,10 @@ func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		if trueNode != nil {
 			return []*FilterTreeNode{trueNode}
 		}
-		// remove empty and always false nodes unless its last
+		// remove always false nodes unless its last
 		if len(nodes) > 1 {
 			nodes = slices.DeleteFunc(nodes, func(n *FilterTreeNode) bool {
-				return n.Empty || (n.IsLeaf() && n.Filter.Mode == FilterModeFalse)
+				return n.IsLeaf() && n.Filter.Mode == FilterModeFalse
 			})
 		}
 	} else {
@@ -219,7 +220,6 @@ func simplifySingle(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			switch f.Matcher.Len() {
 			case 0:
 				res = append(res, &FilterTreeNode{
-					Empty:  true,
 					Filter: makeFalseFilterFrom(f),
 				})
 			case 1:
@@ -323,8 +323,6 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			case len(mergedRanges) == 0:
 				// replace with always false node
 				resultNodes = append(resultNodes, &FilterTreeNode{
-					Skip:   true,
-					Empty:  true,
 					Filter: makeFalseFilterFrom(f),
 				})
 			case len(mergedRanges) == 1 && isFullRange(f.Type, mergedRanges[0]):
@@ -387,8 +385,6 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			rg := f.Value.(RangeValue)
 			if cmp.Cmp(f.Type, rg[0], rg[1]) > 0 {
 				resultNodes = append(resultNodes, &FilterTreeNode{
-					Skip:   true,
-					Empty:  true,
 					Filter: makeFalseFilterFrom(f),
 				})
 				continue
@@ -400,8 +396,6 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			// check contradiction
 			if cmp.Cmp(f.Type, f.Value, cmp.MinNumericVal(f.Type)) == 0 {
 				resultNodes = append(resultNodes, &FilterTreeNode{
-					Skip:   true,
-					Empty:  true,
 					Filter: makeFalseFilterFrom(f),
 				})
 				continue
@@ -478,7 +472,6 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		// produce zero or one combined filter from sets
 		if flt := makeSetFilterFrom(f, ins, nis); flt != nil {
 			res = append(res, &FilterTreeNode{
-				Empty:  flt.Mode == FilterModeFalse,
 				Skip:   flt.Mode == FilterModeTrue && !isOrNode,
 				Filter: flt,
 			})
@@ -813,6 +806,19 @@ func makeFilterFrom(f *Filter, mode FilterMode, val any) *Filter {
 		Index:   f.Index,
 		Matcher: m,
 		Value:   val,
+	}
+}
+
+func makeFilterFromSet(f *Filter, set *xroar.Bitmap) *Filter {
+	m := newFactory(f.Type).New(FilterModeIn)
+	m.WithSet(set)
+	return &Filter{
+		Name:    f.Name,
+		Type:    f.Type,
+		Mode:    FilterModeIn,
+		Index:   f.Index,
+		Matcher: m,
+		Value:   m.Value(), // FIXME: optimizer expects []T
 	}
 }
 

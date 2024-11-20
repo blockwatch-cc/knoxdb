@@ -16,12 +16,21 @@ import (
 	"github.com/echa/log"
 )
 
+// Query Pipeline
+// - simple filter & projection pipeline
+// - uses index queries
+// - optimizes filter conditions
+// - no sort, join, aggregation handling
+//
 // TODO
+// - optimize very large index matches (make optimizer use bitmap instead of []uint64)
+// - ideally this becomes a push-based pipeline
+// - optimize operator execution plan
 // - EstimateCardinality for join planning
-// - operator nesting/pipelining (filter, transform, aggregate)
-// - schedule execution pipeline along operators (push model)
-// - support aggregators
-// - support group_by
+// - sort operators
+// - join operators
+// - aggregation operators
+// - group_by operators
 
 type OrderType = types.OrderType
 
@@ -237,14 +246,14 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 	p.Log.Debugf("Q> %s: result %s", p.Tag, p.ResultSchema)
 
 	// optimize plan
-	// - [x] reorder filters
-	// - [x] combine filters
-	// - [ ] remove ineffective filters
+	// - reorder filters
+	// - combine filters
+	// - remove ineffective filters
 	p.Filters.Optimize()
 
 	p.Stats.Tick("compile_time")
 
-	// wrap expensive call
+	// log optimized plan
 	if p.Flags.IsDebug() {
 		p.Log.Debug(p)
 	}
@@ -252,43 +261,12 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 	return nil
 }
 
-func (p *QueryPlan) EstimateCardinality(ctx context.Context) int64 {
-	// TODO: ask tables
-	return 0
-}
-
-func (p *QueryPlan) Stream(ctx context.Context, fn func(r engine.QueryRow) error) error {
-	// query indexes first
-	err := p.QueryIndexes(ctx)
-	if err != nil {
-		return err
-	}
-
-	// query table next
-	return p.Table.Stream(ctx, p, fn)
-}
-
-func (p *QueryPlan) Query(ctx context.Context) (engine.QueryResult, error) {
-	// TODO: ideally this becomes a push-based execution pipeline
-	// at some point where index lookups are one step which forwards
-	// bitmap as result
-
-	// query indexes first
-	err := p.QueryIndexes(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// query table next
-	return p.Table.Query(ctx, p)
-}
-
 // INDEX QUERY: use index lookup for indexed fields
 //   - attaches pk bitmaps for every indexed field to relevant filter tree nodes
 //   - pack/old: replaces matching condition with new FilterModeIn condition
 //     or adds IN condition at front if index may have collisions
 func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
-	if p.Flags.IsNoIndex() || p.Filters.IsEmpty() || p.Filters.IsProcessed() {
+	if p.Flags.IsNoIndex() || p.Filters.IsProcessed() {
 		return nil
 	}
 
@@ -299,11 +277,17 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	}
 
 	if n > 0 {
-		// Step 2: add IN conditions from aggregate bits at each tree level
-		p.decorateIndexNodes(p.Filters, true)
+		// pk field filter template
+		tmpl := &Filter{
+			Name:  p.RequestSchema.Pk().Name(),
+			Type:  BlockTypes[p.RequestSchema.Pk().Type()],
+			Index: uint16(p.RequestSchema.PkIndex()),
+		}
 
-		// Step 3: optimize the tree by removing skip nodes and
-		// merging / simplifying child nodes
+		// Step 2: add IN conditions from aggregate bits at each tree level
+		p.decorateIndexNodes(p.Filters, tmpl, true)
+
+		// Step 3: optimize by removing skip nodes and merge / simplify others
 		p.Filters.Optimize()
 
 		// Step 4: adjust request schema (we may have to check less fields now)
@@ -322,27 +306,42 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	return nil
 }
 
-func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, isRoot bool) {
+func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, tmpl *Filter, isRoot bool) {
 	// we only handle container nodes here because decoration adds
 	// new conditions into the child list
 
 	// special case: all conditions are processed during index scan
-	// and all indexes are collision free -> aggregate bitsets into root node
+	// and all indexes are collision free
 	if isRoot && node.IsProcessed() {
-		node.Bits = bitmap.New()
+		// aggregate bitsets
+		bits := bitmap.New()
 		if node.OrKind {
 			for _, child := range node.Children {
 				if child.Bits.IsValid() {
-					node.Bits.Or(child.Bits)
+					bits.Or(child.Bits)
 				}
 			}
 		} else {
 			for _, child := range node.Children {
 				if child.Bits.IsValid() {
-					node.Bits.And(child.Bits)
+					bits.And(child.Bits)
 				}
 			}
 		}
+
+		// add a new primary key IN condition to root
+		if bits.Count() == 0 {
+			node.Children = append(node.Children, &FilterTreeNode{
+				Filter: makeFalseFilterFrom(tmpl),
+			})
+		} else {
+			node.Children = append(node.Children, &FilterTreeNode{
+				Filter: makeFilterFromSet(tmpl, bits.Bitmap),
+			})
+		}
+
+		// keep bits in root (for LSM tree query/scan logic)
+		node.Bits = bits
 		return
 	}
 
@@ -351,40 +350,30 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, isRoot bool) {
 		// single condition children
 		if child.IsLeaf() {
 			if child.Bits.IsValid() {
-				// add a new primary key IN condition
-				matcher := NewFactory(types.FieldTypeUint64).New(FilterModeIn)
-				matcher.WithSet(child.Bits.Bitmap)
-				node.Children = append(node.Children, &FilterTreeNode{
-					Filter: &Filter{
-						Name:    child.Filter.Name,
-						Type:    child.Filter.Type,
-						Mode:    FilterModeIn,
-						Index:   child.Filter.Index,
-						Matcher: matcher,
-						Value:   child.Bits,
-					},
-					Empty: child.Bits.Count() == 0,
-				})
+				if child.Bits.Count() == 0 {
+					node.Children = append(node.Children, &FilterTreeNode{
+						Filter: makeFalseFilterFrom(tmpl),
+					})
+				} else {
+					node.Children = append(node.Children, &FilterTreeNode{
+						Filter: makeFilterFromSet(tmpl, child.Bits.Bitmap),
+					})
+				}
 			}
 			continue
 		}
 
 		// composite child conditions attach bits to the common anchestor
 		if child.Bits.IsValid() {
-			// add a new primary key IN condition
-			matcher := NewFactory(types.FieldTypeUint64).New(FilterModeIn)
-			matcher.WithSet(child.Bits.Bitmap)
-			node.Children = append(node.Children, &FilterTreeNode{
-				Filter: &Filter{
-					Name:    p.RequestSchema.Pk().Name(),
-					Type:    child.Filter.Type,
-					Mode:    FilterModeIn,
-					Index:   p.RequestSchema.PkId(),
-					Matcher: matcher,
-					Value:   child.Bits,
-				},
-				Empty: child.Bits.Count() == 0,
-			})
+			if child.Bits.Count() == 0 {
+				node.Children = append(node.Children, &FilterTreeNode{
+					Filter: makeFalseFilterFrom(tmpl),
+				})
+			} else {
+				node.Children = append(node.Children, &FilterTreeNode{
+					Filter: makeFilterFromSet(tmpl, child.Bits.Bitmap),
+				})
+			}
 			// continue below, we may need to visit unprocessed grandchildren
 		}
 
@@ -392,7 +381,7 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, isRoot bool) {
 		// (we do this even if we found a composite key index result above
 		// because unrelated condition filters may still be unprocessed
 		// inside the child tree)
-		p.decorateIndexNodes(child, false)
+		p.decorateIndexNodes(child, tmpl, false)
 	}
 }
 
@@ -529,4 +518,9 @@ func (p *QueryPlan) findIndex(node *FilterTreeNode) (engine.QueryableIndex, bool
 		return v, true
 	}
 	return nil, false
+}
+
+func (p *QueryPlan) EstimateCardinality(ctx context.Context) int64 {
+	// TODO: ask tables
+	return 0
 }

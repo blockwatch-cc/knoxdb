@@ -56,7 +56,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 
 	// handle cases
 	switch {
-	case plan.Filters.IsEmpty():
+	case plan.Filters.IsNoMatch():
 		// nothing to delete
 		return 0, nil
 
