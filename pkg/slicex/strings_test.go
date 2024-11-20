@@ -6,45 +6,10 @@ package slicex
 
 import (
 	"fmt"
-	"math/rand"
 	"testing"
-	"time"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
-
-const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-const (
-	letterIdxBits = 6                    // 6 bits to represent a letter index
-	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
-	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
-)
-
-var randsrc = rand.NewSource(time.Now().UnixNano())
-
-func randString(n int) string {
-	b := make([]byte, n)
-	// A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
-	for i, cache, remain := n-1, randsrc.Int63(), letterIdxMax; i >= 0; {
-		if remain == 0 {
-			cache, remain = randsrc.Int63(), letterIdxMax
-		}
-		if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
-			b[i] = letterBytes[idx]
-			i--
-		}
-		cache >>= letterIdxBits
-		remain--
-	}
-
-	return string(b)
-}
-
-func randStringSlice(n, u int) []string {
-	s := make([]string, n)
-	for i := 0; i < n; i++ {
-		s[i] = randString(u)
-	}
-	return s
-}
 
 // -----------------------------------------------------------------------
 // Strings
@@ -105,10 +70,10 @@ func BenchmarkStringSlice32Contains(B *testing.B) {
 	cases := []int{10, 1000, 1000000}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-neg", n), func(B *testing.B) {
-			a := NewOrderedStrings(randStringSlice(n, 32))
+			a := NewOrderedStrings(util.RandStringSlices(n, 32))
 			check := make([]string, 1024)
 			for i := range check {
-				check[i] = randString(32)
+				check[i] = util.RandString(32)
 			}
 			B.ResetTimer()
 			B.ReportAllocs()
@@ -119,11 +84,11 @@ func BenchmarkStringSlice32Contains(B *testing.B) {
 	}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-pos", n), func(B *testing.B) {
-			a := NewOrderedStrings(randStringSlice(n, 32))
+			a := NewOrderedStrings(util.RandStringSlices(n, 32))
 			B.ResetTimer()
 			B.ReportAllocs()
 			for i := 0; i < B.N; i++ {
-				a.Contains(a.Values[rand.Intn(len(a.Values))])
+				a.Contains(a.Values[util.RandIntn(len(a.Values))])
 			}
 		})
 	}
@@ -234,10 +199,10 @@ func TestStringContainsRange(T *testing.T) {
 func BenchmarkStringSlice32ContainsRange(B *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
-			a := NewOrderedStrings(randStringSlice(n, 32))
+			a := NewOrderedStrings(util.RandStringSlices(n, 32))
 			ranges := make([][2]string, 1024)
 			for i := range ranges {
-				min, max := randString(32), randString(32)
+				min, max := util.RandString(32), util.RandString(32)
 				if min > max {
 					min, max = max, min
 				}

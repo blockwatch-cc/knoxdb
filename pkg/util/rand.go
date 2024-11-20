@@ -78,13 +78,38 @@ func RandByteSlices(n, u int) [][]byte {
 	return s
 }
 
+const (
+	letters       = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	letterIdxBits = 6                    // 6 bits to represent a letter index
+	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
+	letterIdxMax  = 64 / letterIdxBits   // # of letter indices fitting in 63 bits
+)
+
 func RandString(sz int) string {
-	letters := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	str := make([]byte, sz)
-	for i := range str {
-		str[i] = letters[RandIntn(len(letters))]
+	b := make([]byte, sz)
+
+	// A src.Uint64() generates 64 random bits, enough for letterIdxMax characters!
+	for i, cache, remain := sz-1, RandUint64(), letterIdxMax; i >= 0; {
+		if remain == 0 {
+			cache, remain = RandUint64(), letterIdxMax
+		}
+		if idx := int(cache & letterIdxMask); idx < len(letters) {
+			b[i] = letters[idx]
+			i--
+		}
+		cache >>= letterIdxBits
+		remain--
 	}
-	return string(str)
+
+	return string(b)
+}
+
+func RandStringSlices(n, u int) []string {
+	s := make([]string, n)
+	for i := 0; i < n; i++ {
+		s[i] = RandString(u)
+	}
+	return s
 }
 
 func RandInts[T constraints.Signed](sz int) []T {
