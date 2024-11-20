@@ -56,9 +56,9 @@ func (f Filter) Validate() error {
 }
 
 // Invariants
-// - root is always and AND node
+// - root is always an AND node
 // - root is never a leaf node
-// - root may be empty
+// - root may be empty (no children, no filter) -> means match all
 type FilterTreeNode struct {
 	OrKind   bool              // AND|OR
 	Children []*FilterTreeNode // sub filter
@@ -89,7 +89,7 @@ func (n FilterTreeNode) IsProcessed() bool {
 	return true
 }
 
-func (n FilterTreeNode) IsEmptyMatch() bool {
+func (n FilterTreeNode) IsNoMatch() bool {
 	if n.IsEmpty() {
 		return false
 	}
@@ -104,14 +104,14 @@ func (n FilterTreeNode) IsEmptyMatch() bool {
 
 	if n.OrKind {
 		for _, v := range n.Children {
-			if !v.IsEmptyMatch() {
+			if !v.IsNoMatch() {
 				return false
 			}
 		}
 		return true
 	} else {
 		for _, v := range n.Children {
-			if v.IsEmptyMatch() {
+			if v.IsNoMatch() {
 				return true
 			}
 		}

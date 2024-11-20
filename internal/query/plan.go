@@ -131,8 +131,8 @@ func (p *QueryPlan) WithLogger(l log.Logger) *QueryPlan {
 	return p
 }
 
-func (p *QueryPlan) IsEmptyMatch() bool {
-	return p.Filters.IsEmptyMatch()
+func (p *QueryPlan) IsNoMatch() bool {
+	return p.Filters.IsNoMatch()
 }
 
 func (p *QueryPlan) Schema() *schema.Schema {
