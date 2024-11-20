@@ -556,6 +556,114 @@ func (ra *Bitmap) Remove(x uint64) bool {
 	return true
 }
 
+// returns true if any bit is set within range (boundaries inclusive)
+func (ra *Bitmap) ContainsRange(lo, hi uint64) bool {
+	if lo > hi {
+		panic("lo should not be more than hi")
+	}
+
+	if ra.IsEmpty() {
+		return false
+	}
+
+	if lo == hi {
+		return ra.Contains(lo)
+	}
+
+	// hi < first value
+	if hi < ra.keys.key(0) {
+		return false
+	}
+
+	// lo > last value
+	if lo > ra.keys.key(ra.keys.numKeys()-1)+^mask {
+		return false
+	}
+
+	// visit all containers starting at first container
+	// that may contain a value >= lo
+	for idx := ra.keys.search(lo & mask); idx < ra.keys.numKeys(); idx++ {
+		// stop when container range is beyond hi value
+		if ra.keys.key(idx) > hi {
+			break
+		}
+
+		// get container value range (translate to u64)
+		key := ra.keys.key(idx)
+		c := ra.getContainer(ra.keys.val(idx))
+
+		// check if the lower container boundary is inside range
+		var minVal, maxVal uint64
+		switch c[indexType] {
+		case typeArray:
+			minVal = key + uint64(array(c).minimum())
+			maxVal = key + uint64(array(c).maximum())
+		case typeBitmap:
+			minVal = key + uint64(bitmap(c).minimum())
+			maxVal = key + uint64(bitmap(c).maximum())
+		}
+
+		// stop when all container values are outside range
+		if minVal > hi || maxVal < lo {
+			break
+		}
+
+		// smallest value is in range
+		if minVal >= lo && minVal <= hi {
+			return true
+		}
+
+		// largest value is in range
+		if maxVal >= lo && maxVal <= hi {
+			return true
+		}
+
+		// inner range (lo,hi) may be contained in container; this check
+		// is more expensive because we have to look at individual values
+		// in a bitmap which depends on container type
+		if lo > minVal && hi < maxVal {
+			switch c[indexType] {
+			case typeArray:
+				t := array(c)
+
+				// full arrays always match
+				if t.isFull() {
+					return true
+				}
+
+				// find smallest container value >= lo
+				idx := t.find(uint16(lo))
+				if idx == getCardinality(c) {
+					// should not happen, the outside check above should catch this case
+					break
+				}
+
+				// some value lo <= v <= hi exists
+				if key+uint64(dataAt(c, idx)) <= hi {
+					return true
+				}
+
+			case typeBitmap:
+				t := bitmap(c)
+				if t.isFull() {
+					return true
+				}
+				for i := lo + 1; i < hi; i++ {
+					if t.has(uint16(i)) {
+						return true
+					}
+				}
+			}
+
+			// no intersection exists
+			break
+		}
+	}
+
+	// no intersection found
+	return false
+}
+
 // Remove range removes [lo, hi) from the bitmap.
 func (ra *Bitmap) RemoveRange(lo, hi uint64) {
 	if lo > hi {
