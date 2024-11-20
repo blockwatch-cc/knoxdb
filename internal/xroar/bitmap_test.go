@@ -1,7 +1,9 @@
 package xroar
 
 import (
+	"fmt"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -878,4 +880,124 @@ func TestSplit(t *testing.T) {
 	run(11)
 	run(1e3)
 	run(1e6)
+}
+
+func TestContainsRange(T *testing.T) {
+	type TestRange struct {
+		Name  string
+		From  uint64
+		To    uint64
+		Match bool
+	}
+
+	type Testcase struct {
+		Slice  []uint64
+		Ranges []TestRange
+	}
+
+	var tests = []Testcase{
+		// nil slice
+		{
+			Slice: nil,
+			Ranges: []TestRange{
+				{Name: "X", From: 0, To: 2, Match: false},
+			},
+		},
+		// empty slice
+		{
+			Slice: []uint64{},
+			Ranges: []TestRange{
+				{Name: "X", From: 0, To: 2, Match: false},
+			},
+		},
+		// 1-element slice
+		{
+			Slice: []uint64{3},
+			Ranges: []TestRange{
+				{Name: "A", From: 0, To: 2, Match: false},   // Case A
+				{Name: "B1", From: 1, To: 3, Match: true},   // Case B.1, D1
+				{Name: "B3", From: 3, To: 4, Match: true},   // Case B.3, D3
+				{Name: "E", From: 15, To: 16, Match: false}, // Case E
+				{Name: "F", From: 1, To: 4, Match: true},    // Case F
+			},
+		},
+		// 1-element slice, from == to
+		{
+			Slice: []uint64{3},
+			Ranges: []TestRange{
+				{Name: "BCD", From: 3, To: 3, Match: true}, // Case B.3, C.1, D.1
+			},
+		},
+		// N-element slice
+		{
+			Slice: []uint64{3, 5, 7, 11, 13},
+			Ranges: []TestRange{
+				{Name: "A", From: 0, To: 2, Match: false},    // Case A
+				{Name: "B1a", From: 1, To: 3, Match: true},   // Case B.1
+				{Name: "B1b", From: 3, To: 3, Match: true},   // Case B.1
+				{Name: "B2a", From: 1, To: 4, Match: true},   // Case B.2
+				{Name: "B2b", From: 1, To: 5, Match: true},   // Case B.2
+				{Name: "B3a", From: 3, To: 4, Match: true},   // Case B.3
+				{Name: "B3b", From: 3, To: 5, Match: true},   // Case B.3
+				{Name: "C1a", From: 4, To: 5, Match: true},   // Case C.1
+				{Name: "C1b", From: 4, To: 6, Match: true},   // Case C.1
+				{Name: "C1c", From: 4, To: 7, Match: true},   // Case C.1
+				{Name: "C1d", From: 5, To: 5, Match: true},   // Case C.1
+				{Name: "C2a", From: 8, To: 8, Match: false},  // Case C.2
+				{Name: "C2b", From: 8, To: 10, Match: false}, // Case C.2
+				{Name: "D1a", From: 11, To: 13, Match: true}, // Case D.1
+				{Name: "D1b", From: 12, To: 13, Match: true}, // Case D.1
+				{Name: "D2", From: 12, To: 14, Match: true},  // Case D.2
+				{Name: "D3a", From: 13, To: 13, Match: true}, // Case D.3
+				{Name: "D3b", From: 13, To: 14, Match: true}, // Case D.3
+				{Name: "E", From: 15, To: 16, Match: false},  // Case E
+				{Name: "Fa", From: 0, To: 16, Match: true},   // Case F
+				{Name: "Fb", From: 0, To: 13, Match: true},   // Case F
+				{Name: "Fc", From: 3, To: 13, Match: true},   // Case F
+			},
+		},
+		// real-word testcase
+		{
+			Slice: []uint64{
+				699421, 1374016, 1692360, 1797909, 1809339,
+				2552208, 2649552, 2740915, 2769610, 3043393,
+			},
+			Ranges: []TestRange{
+				{Name: "1", From: 2785281, To: 2818048, Match: false},
+				{Name: "2", From: 2818049, To: 2850816, Match: false},
+				{Name: "3", From: 2850817, To: 2883584, Match: false},
+				{Name: "4", From: 2883585, To: 2916352, Match: false},
+				{Name: "5", From: 2916353, To: 2949120, Match: false},
+				{Name: "6", From: 2949121, To: 2981888, Match: false},
+				{Name: "7", From: 2981889, To: 3014656, Match: false},
+				{Name: "8", From: 3014657, To: 3047424, Match: true},
+			},
+		},
+	}
+
+	for i, v := range tests {
+		for _, r := range v.Ranges {
+			if want, got := r.Match, FromSortedList(v.Slice).ContainsRange(r.From, r.To); want != got {
+				T.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
+			}
+		}
+	}
+}
+
+func BenchmarkContainsRange(B *testing.B) {
+	for _, n := range []int{10, 1000, 1000000} {
+		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+			nums := util.RandUints[uint64](n)
+			slices.Sort(nums)
+			a := FromSortedList(nums)
+			B.ResetTimer()
+			for i := 0; i < B.N; i++ {
+				min, max := util.RandUint64(), util.RandUint64()
+				if min > max {
+					min, max = max, min
+				}
+				a.ContainsRange(min, max)
+			}
+		})
+	}
 }
