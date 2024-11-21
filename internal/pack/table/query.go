@@ -28,10 +28,6 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 		return nil, err
 	}
 
-	// if err := plan.QueryIndexes(ctx); err != nil {
-	// 	return nil, err
-	// }
-
 	// prepare result
 	res := NewResult(
 		pack.New().
@@ -73,10 +69,6 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 		return err
 	}
 
-	// if err := plan.QueryIndexes(ctx); err != nil {
-	// 	return err
-	// }
-
 	// prepare result
 	res := NewStreamResult(fn)
 	defer res.Close()
@@ -112,10 +104,6 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-
-	// if err := plan.QueryIndexes(ctx); err != nil {
-	// 	return 0, err
-	// }
 
 	// amend query plan to only output pk field
 	rs, err := t.schema.SelectFieldIds(t.schema.PkId())
@@ -153,10 +141,6 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	if err != nil {
 		return 0, err
 	}
-
-	// if err := plan.QueryIndexes(ctx); err != nil {
-	// 	return 0, err
-	// }
 
 	// amend query plan to only output pk field
 	rs, err := t.schema.SelectFieldIds(t.schema.PkId())
@@ -237,8 +221,8 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 		}
 	}()
 
-	// first query journal to avoid side-effects of added pk lookup condition.
-	// otherwise only indexed pks are found, but not new pks that are in journal only
+	// first query journal to avoid side-effects of added pk lookup condition(s),
+	// otherwise recent records that are only in journal are missing
 	jbits = MatchTree(plan.Filters, t.journal.Data, nil)
 	nRowsScanned += uint32(t.journal.Len())
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
@@ -381,12 +365,12 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 		}
 	}()
 
-	// first query journal to avoid side-effects of added pk lookup condition.
-	// otherwise only indexed pks are found, but not new pks that are in journal only
+	// first query journal to avoid side-effects of added pk lookup condition(s),
+	// otherwise recent records that are only in journal are missing
 	jbits = MatchTree(plan.Filters, t.journal.Data, nil)
 	nRowsScanned += uint32(t.journal.Len())
 
-	// now query indexes, this may change query plan
+	// query indexes, this may change query plan
 	if err := plan.QueryIndexes(ctx); err != nil {
 		return err
 	}
