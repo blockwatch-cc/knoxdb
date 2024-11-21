@@ -132,9 +132,6 @@ func (n FilterTreeNode) Validate(pos string) error {
 }
 
 func (n FilterTreeNode) Fields() []string {
-	// if n.IsEmpty() {
-	// 	return nil
-	// }
 	if n.IsLeaf() {
 		return []string{n.Filter.Name}
 	}
@@ -163,9 +160,6 @@ func (n FilterTreeNode) Depth() int {
 }
 
 func (n FilterTreeNode) depth(level int) int {
-	// if n.IsEmpty() {
-	// 	return level
-	// }
 	if n.IsLeaf() {
 		return level
 	}

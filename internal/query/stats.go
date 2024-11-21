@@ -47,22 +47,30 @@ func NewQueryStats() QueryStats {
 	}
 }
 
-func (s *QueryStats) Tick(name string) {
+func (s *QueryStats) GetCount(key string) int {
+	return s.counts[key]
+}
+
+func (s *QueryStats) GetRuntime(key string) time.Duration {
+	return s.runtime[key]
+}
+
+func (s *QueryStats) Tick(key string) {
 	now := time.Now()
-	_, ok := s.runtime[name]
+	_, ok := s.runtime[key]
 	if !ok {
-		s.sections = append(s.sections, name)
+		s.sections = append(s.sections, key)
 	}
-	s.runtime[name] += now.Sub(s.last)
+	s.runtime[key] += now.Sub(s.last)
 	s.last = now
 }
 
-func (s *QueryStats) Count(name string, num int) {
-	_, ok := s.counts[name]
+func (s *QueryStats) Count(key string, num int) {
+	_, ok := s.counts[key]
 	if !ok {
-		s.sections = append(s.sections, name)
+		s.sections = append(s.sections, key)
 	}
-	s.counts[name] += num
+	s.counts[key] += num
 }
 
 func (s *QueryStats) Finalize() {
