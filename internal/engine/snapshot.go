@@ -9,14 +9,12 @@ import (
 
 // Must be called holding the engine lock
 func (e *Engine) NewSnapshot(id uint64) *types.Snapshot {
-	s := &types.Snapshot{
-		Xown: id,
-		Xmin: e.xmin,
-		Xmax: id,
-		Safe: len(e.txs) == 0,
-	}
+	s := types.NewSnapshot(id, e.xmin)
 	for _, x := range e.txs {
-		s.Xact |= 1 << (x.id - e.xmin)
+		if x.IsReadOnly() {
+			continue
+		}
+		s.AddActive(x.id)
 	}
 	return s
 }
