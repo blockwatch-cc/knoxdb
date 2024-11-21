@@ -91,7 +91,7 @@ func TestConditionParse(t *testing.T) {
 		{"Greater Than Float", "score.gt", "4.5", Condition{Name: "score", Mode: FilterModeGt, Value: 4.5}, false},
 
 		// String pattern matching - validates regexp mode handling
-		{"String Contains", "name.re", "Blockwatch", Condition{Name: "name", Mode: FilterModeRegexp, Value: "Blockwatch"}, false},
+		{"String Contains", "name.re", "Blockwatch", Condition{Name: "name", Mode: FilterModeRegexp, Value: []byte("Blockwatch")}, false},
 
 		// Date range - tests date parsing and range mode handling
 		{"Date Range", "created.rg", "2023-01-01,2023-12-31", Condition{Name: "created", Mode: FilterModeRange, Value: RangeValue{int64(1672531200000000000), int64(1703980800000000000)}}, false},
@@ -106,7 +106,7 @@ func TestConditionParse(t *testing.T) {
 		{"Invalid Mode", "id.invalid", "123", Condition{}, true},
 
 		// Empty string - tests empty string handling
-		{"Empty String", "name", "", Condition{Name: "name", Mode: FilterModeEqual, Value: ""}, false},
+		{"Empty String", "name", "", Condition{Name: "name", Mode: FilterModeEqual, Value: []byte("")}, false},
 
 		// Boolean value - tests boolean parsing and mode handling
 		{"Boolean Value", "is_active", "true", Condition{Name: "is_active", Mode: FilterModeEqual, Value: true}, false},
