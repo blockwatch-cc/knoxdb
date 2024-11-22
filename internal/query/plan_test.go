@@ -238,6 +238,10 @@ func TestPlanCompile(t *testing.T) {
 		},
 	}
 
+	f1, _ := testSchema.FieldByName("id")
+	f2, _ := testSchema.FieldByName("name")
+	f3, _ := testSchema.FieldByName("score")
+
 	testCases := []TestCase{
 		// single condition + single index
 		{
@@ -246,8 +250,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1))),
-			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedIndexTree:    makeAndTree(makeEqualNode(f1, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode(f1, uint64(1))),
 		},
 		{
 			Name:                 "NE Condition",
@@ -255,8 +259,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedIndexTree:    makeAndTree(makeNotEqualNode("id", 0, uint64(1))),
-			ExpectedNonIndexTree: makeAndTree(makeNotEqualNode("id", 0, uint64(1))),
+			ExpectedIndexTree:    makeAndTree(makeNotEqualNode(f1, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeNotEqualNode(f1, uint64(1))),
 		},
 		{
 			Name:                 "In Condition",
@@ -264,8 +268,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedIndexTree:    makeAndTree(makeInNode("id", 0, []uint64{1, 2, 3})),
-			ExpectedNonIndexTree: makeAndTree(makeInNode("id", 0, []uint64{1, 2, 3})),
+			ExpectedIndexTree:    makeAndTree(makeInNode(f1, []uint64{1, 2, 3})),
+			ExpectedNonIndexTree: makeAndTree(makeInNode(f1, []uint64{1, 2, 3})),
 		},
 		{
 			Name:                 "In Condition Single Element",
@@ -273,8 +277,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1))),
-			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedIndexTree:    makeAndTree(makeEqualNode(f1, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode(f1, uint64(1))),
 		},
 		{
 			Name:                 "NI Condition",
@@ -282,8 +286,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedIndexTree:    makeAndTree(makeNotInNode("id", 0, []uint64{2, 3, 4})),
-			ExpectedNonIndexTree: makeAndTree(makeNotInNode("id", 0, []uint64{2, 3, 4})),
+			ExpectedIndexTree:    makeAndTree(makeNotInNode(f1, []uint64{2, 3, 4})),
+			ExpectedNonIndexTree: makeAndTree(makeNotInNode(f1, []uint64{2, 3, 4})),
 		},
 		{
 			Name:                 "LT Condition",
@@ -291,8 +295,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedIndexTree:    makeAndTree(makeLtNode("id", 0, uint64(1))),
-			ExpectedNonIndexTree: makeAndTree(makeLtNode("id", 0, uint64(1))),
+			ExpectedIndexTree:    makeAndTree(makeLtNode(f1, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeLtNode(f1, uint64(1))),
 		},
 		{
 			Name:                 "Le Condition",
@@ -300,8 +304,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedIndexTree:    makeAndTree(makeLeNode("id", 0, uint64(2))),
-			ExpectedNonIndexTree: makeAndTree(makeLeNode("id", 0, uint64(2))),
+			ExpectedIndexTree:    makeAndTree(makeLeNode(f1, uint64(2))),
+			ExpectedNonIndexTree: makeAndTree(makeLeNode(f1, uint64(2))),
 		},
 		{
 			Name:                 "GT Condition",
@@ -309,8 +313,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedIndexTree:    makeAndTree(makeGtNode("id", 0, uint64(1))),
-			ExpectedNonIndexTree: makeAndTree(makeGtNode("id", 0, uint64(1))),
+			ExpectedIndexTree:    makeAndTree(makeGtNode(f1, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeGtNode(f1, uint64(1))),
 		},
 		{
 			Name:                 "Ge Condition",
@@ -318,8 +322,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedIndexTree:    makeAndTree(makeGeNode("id", 0, uint64(1))),
-			ExpectedNonIndexTree: makeAndTree(makeGeNode("id", 0, uint64(1))),
+			ExpectedIndexTree:    makeAndTree(makeGeNode(f1, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeGeNode(f1, uint64(1))),
 		},
 		{
 			Name:                 "Regexp Condition",
@@ -327,8 +331,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeRegexNode("name", 2, "zack")),
-			ExpectedNonIndexTree: makeAndTree(makeRegexNode("name", 2, "zack")),
+			ExpectedIndexTree:    makeAndTree(makeRegexNode(f2, "zack")),
+			ExpectedNonIndexTree: makeAndTree(makeRegexNode(f2, "zack")),
 		},
 		{
 			Name:                 "Range Condition",
@@ -336,8 +340,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
-			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
+			ExpectedIndexTree:    makeAndTree(makeRangeNode(f1, uint64(1), uint64(10))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode(f1, uint64(1), uint64(10))),
 		},
 
 		// And Condition + 2 or more conditions + single index
@@ -347,8 +351,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedIndexTree:    makeAndTree(makeNotEqualNode("id", 0, uint64(2)), makeRangeNode("id", 0, uint64(1), uint64(10))),
-			ExpectedNonIndexTree: makeAndTree(makeNotEqualNode("id", 0, uint64(2)), makeRangeNode("id", 0, uint64(1), uint64(10))),
+			ExpectedIndexTree:    makeAndTree(makeNotEqualNode(f1, uint64(2)), makeRangeNode(f1, uint64(1), uint64(10))),
+			ExpectedNonIndexTree: makeAndTree(makeNotEqualNode(f1, uint64(2)), makeRangeNode(f1, uint64(1), uint64(10))),
 		},
 		{
 			Name:                 "And(Le(8), Range(6,10)) Condition",
@@ -356,16 +360,16 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(6), uint64(8))),
-			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(6), uint64(8))),
+			ExpectedIndexTree:    makeAndTree(makeRangeNode(f1, uint64(6), uint64(8))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode(f1, uint64(6), uint64(8))),
 		},
 		{
 			Name:                 "And(RG(1,10), EQ(1))",
 			Condition:            And(Range("id", 1, 10), Equal("id", 1)),
 			Schema:               testSchema,
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{2}}},
-			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1))),
-			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedIndexTree:    makeAndTree(makeEqualNode(f1, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode(f1, uint64(1))),
 		},
 		{
 			Name:                 "AND(RG(1,10), RG(5,10)) Condition",
@@ -373,8 +377,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(5), uint64(10))),
-			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(5), uint64(10))),
+			ExpectedIndexTree:    makeAndTree(makeRangeNode(f1, uint64(5), uint64(10))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode(f1, uint64(5), uint64(10))),
 		},
 		{
 			Name:                 "AND(EQ(5), RG(0,10)) Condition",
@@ -382,8 +386,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(5))),
-			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(5))),
+			ExpectedIndexTree:    makeAndTree(makeEqualNode(f1, uint64(5))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode(f1, uint64(5))),
 		},
 		{
 			Name:                 "And(EQ(id, 1), EQ(name, hi)) Condition",
@@ -391,8 +395,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1)), makeEqualNode("name", 2, "hi")),
-			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1)), makeEqualNode("name", 2, "hi")),
+			ExpectedIndexTree:    makeAndTree(makeEqualNode(f1, uint64(1)), makeEqualNode(f2, "hi")),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode(f1, uint64(1)), makeEqualNode(f2, "hi")),
 		},
 
 		// Or Condition + 2 or more conditions + single index
@@ -402,8 +406,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedIndexTree:    makeOrTree(makeLeNode("id", 0, uint64(10))),
-			ExpectedNonIndexTree: makeOrTree(makeLeNode("id", 0, uint64(10))),
+			ExpectedIndexTree:    makeOrTree(makeLeNode(f1, uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeLeNode(f1, uint64(10))),
 		},
 		{
 			Name:                 "OR(EQ(id, 1), EQ(name, hi)) Condition",
@@ -411,8 +415,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedIndexTree:    makeOrTree(makeEqualNode("id", 0, uint64(1)), makeEqualNode("name", 2, "hi")),
-			ExpectedNonIndexTree: makeOrTree(makeEqualNode("id", 0, uint64(1)), makeEqualNode("name", 2, "hi")),
+			ExpectedIndexTree:    makeOrTree(makeEqualNode(f1, uint64(1)), makeEqualNode(f2, "hi")),
+			ExpectedNonIndexTree: makeOrTree(makeEqualNode(f1, uint64(1)), makeEqualNode(f2, "hi")),
 		},
 		{
 			Name:                 "OR(EQ, EQ) Condition",
@@ -420,8 +424,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{1, 2})),
-			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2})),
+			ExpectedIndexTree:    makeOrTree(makeInNode(f1, []uint64{1, 2})),
+			ExpectedNonIndexTree: makeOrTree(makeInNode(f1, []uint64{1, 2})),
 		},
 		{
 			Name:                 "OR(RG, EQ) Condition",
@@ -429,8 +433,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedIndexTree:    makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
-			ExpectedNonIndexTree: makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
+			ExpectedIndexTree:    makeOrTree(makeRangeNode(f1, uint64(1), uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeRangeNode(f1, uint64(1), uint64(10))),
 		},
 		{
 			Name:                 "OR(RG, RG, EQ) Condition",
@@ -438,8 +442,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2}}},
-			ExpectedIndexTree:    makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
-			ExpectedNonIndexTree: makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(10))),
+			ExpectedIndexTree:    makeOrTree(makeRangeNode(f1, uint64(1), uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeRangeNode(f1, uint64(1), uint64(10))),
 		},
 		{
 			Name:                 "OR(In(1,2), RG(6,10)) (In) Out of Range Condition",
@@ -447,8 +451,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{1, 2}), makeRangeNode("id", 0, uint64(6), uint64(10))),
-			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2}), makeRangeNode("id", 0, uint64(6), uint64(10))),
+			ExpectedIndexTree:    makeOrTree(makeInNode(f1, []uint64{1, 2}), makeRangeNode(f1, uint64(6), uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeInNode(f1, []uint64{1, 2}), makeRangeNode(f1, uint64(6), uint64(10))),
 		},
 		{
 			Name:                 "OR(In(6,7), RG(6,10)) In Range Condition",
@@ -456,8 +460,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{6, 7}), makeRangeNode("id", 0, uint64(6), uint64(10))),
-			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{6, 7}), makeRangeNode("id", 0, uint64(6), uint64(10))),
+			ExpectedIndexTree:    makeOrTree(makeInNode(f1, []uint64{6, 7}), makeRangeNode(f1, uint64(6), uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeInNode(f1, []uint64{6, 7}), makeRangeNode(f1, uint64(6), uint64(10))),
 		},
 		{
 			Name:                 "Or(Le(10), Range(1,5)) Condition",
@@ -465,8 +469,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3, 4}}},
-			ExpectedIndexTree:    makeOrTree(makeLeNode("id", 0, uint64(10))),
-			ExpectedNonIndexTree: makeOrTree(makeLeNode("id", 0, uint64(10))),
+			ExpectedIndexTree:    makeOrTree(makeLeNode(f1, uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeLeNode(f1, uint64(10))),
 		},
 		{
 			Name:                 "Or(Le(id, 4.5), Range(id,(0,10))) Condition",
@@ -474,8 +478,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          testData,
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3}}},
-			ExpectedIndexTree:    makeOrTree(makeLeNode("score", 1, float64(4.5)), makeRangeNode("id", 0, uint64(0), uint64(10))),
-			ExpectedNonIndexTree: makeOrTree(makeLeNode("score", 1, float64(4.5)), makeRangeNode("id", 0, uint64(0), uint64(10))),
+			ExpectedIndexTree:    makeOrTree(makeLeNode(f3, float64(4.5)), makeRangeNode(f1, uint64(0), uint64(10))),
+			ExpectedNonIndexTree: makeOrTree(makeLeNode(f3, float64(4.5)), makeRangeNode(f1, uint64(0), uint64(10))),
 		},
 
 		// CAT: merge nested nodes
@@ -485,8 +489,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3}}},
-			ExpectedIndexTree:    makeOrTree(makeGtNode("id", 0, uint64(6)), makeEqualNode("id", 0, uint64(1)), makeRangeNode("id", 0, uint64(2), uint64(5))),
-			ExpectedNonIndexTree: makeOrTree(makeGtNode("id", 0, uint64(6)), makeEqualNode("id", 0, uint64(1)), makeRangeNode("id", 0, uint64(2), uint64(5))),
+			ExpectedIndexTree:    makeOrTree(makeGtNode(f1, uint64(6)), makeEqualNode(f1, uint64(1)), makeRangeNode(f1, uint64(2), uint64(5))),
+			ExpectedNonIndexTree: makeOrTree(makeGtNode(f1, uint64(6)), makeEqualNode(f1, uint64(1)), makeRangeNode(f1, uint64(2), uint64(5))),
 		},
 		{
 			Name:                 "AND ( AND (A, B), C) => AND (A, B, C)",
@@ -494,8 +498,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1, 2, 3}}},
-			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(4), uint64(5))),
-			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(4), uint64(5))),
+			ExpectedIndexTree:    makeAndTree(makeRangeNode(f1, uint64(4), uint64(5))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode(f1, uint64(4), uint64(5))),
 		},
 		// CAT: replace/simplify sets
 		{
@@ -504,8 +508,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1))),
-			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedIndexTree:    makeAndTree(makeEqualNode(f1, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode(f1, uint64(1))),
 		},
 		{
 			Name:                 "NI(single A) => NE(A)",
@@ -513,8 +517,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeNotEqualNode("id", 0, uint64(1))),
-			ExpectedNonIndexTree: makeAndTree(makeNotEqualNode("id", 0, uint64(1))),
+			ExpectedIndexTree:    makeAndTree(makeNotEqualNode(f1, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeNotEqualNode(f1, uint64(1))),
 		},
 		{
 			Name:                 "And: EQ(A) + EQ(A) => EQ(A)",
@@ -522,8 +526,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(1))),
-			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedIndexTree:    makeAndTree(makeEqualNode(f1, uint64(1))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode(f1, uint64(1))),
 		},
 		{
 			Name:                 "Or: EQ(A) + EQ(A) => EQ(A)",
@@ -531,8 +535,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeOrTree(makeEqualNode("id", 0, uint64(1))),
-			ExpectedNonIndexTree: makeOrTree(makeEqualNode("id", 0, uint64(1))),
+			ExpectedIndexTree:    makeOrTree(makeEqualNode(f1, uint64(1))),
+			ExpectedNonIndexTree: makeOrTree(makeEqualNode(f1, uint64(1))),
 		},
 		{
 			Name:                 "Empty IN => false",
@@ -540,24 +544,24 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeFalseNode("id", 0, []uint64{})),
-			ExpectedNonIndexTree: makeAndTree(makeFalseNode("id", 0, []uint64{})),
+			ExpectedIndexTree:    makeAndTree(makeFalseNode(f1, []uint64{})),
+			ExpectedNonIndexTree: makeAndTree(makeFalseNode(f1, []uint64{})),
 		}, {
 			Name:                 "Empty NIN => true",
 			Condition:            NotIn("id", []uint64{}),
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeTrueNode("id", 0, []uint64{})),
-			ExpectedNonIndexTree: makeAndTree(makeTrueNode("id", 0, []uint64{})),
+			ExpectedIndexTree:    makeAndTree(makeTrueNode(f1, []uint64{})),
+			ExpectedNonIndexTree: makeAndTree(makeTrueNode(f1, []uint64{})),
 		}, {
 			Name:                 "and: IN(A) + IN(B) => IN(A-B)",
 			Condition:            And(In("id", []uint64{1, 2, 3}), In("id", []uint64{2, 3, 4})),
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeInNode("id", 0, []uint64{2, 3})),
-			ExpectedNonIndexTree: makeAndTree(makeInNode("id", 0, []uint64{2, 3})),
+			ExpectedIndexTree:    makeAndTree(makeInNode(f1, []uint64{2, 3})),
+			ExpectedNonIndexTree: makeAndTree(makeInNode(f1, []uint64{2, 3})),
 		},
 		{
 			Name:                 "or: IN(A) + IN(B) => IN(A+B)",
@@ -565,8 +569,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{1, 2, 3, 4})),
-			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2, 3, 4})),
+			ExpectedIndexTree:    makeOrTree(makeInNode(f1, []uint64{1, 2, 3, 4})),
+			ExpectedNonIndexTree: makeOrTree(makeInNode(f1, []uint64{1, 2, 3, 4})),
 		},
 		{
 			Name:                 "and: NI(A) + NI(B) => NI(A+B)",
@@ -574,8 +578,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeNotInNode("id", 0, []uint64{1, 2, 3, 4})),
-			ExpectedNonIndexTree: makeAndTree(makeNotInNode("id", 0, []uint64{1, 2, 3, 4})),
+			ExpectedIndexTree:    makeAndTree(makeNotInNode(f1, []uint64{1, 2, 3, 4})),
+			ExpectedNonIndexTree: makeAndTree(makeNotInNode(f1, []uint64{1, 2, 3, 4})),
 		},
 		{
 			Name:                 "or: NI(A) + NI(B) => NI(A+B)",
@@ -583,8 +587,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeOrTree(makeNotInNode("id", 0, []uint64{2, 3})),
-			ExpectedNonIndexTree: makeOrTree(makeNotInNode("id", 0, []uint64{2, 3})),
+			ExpectedIndexTree:    makeOrTree(makeNotInNode(f1, []uint64{2, 3})),
+			ExpectedNonIndexTree: makeOrTree(makeNotInNode(f1, []uint64{2, 3})),
 		},
 		{
 			Name:                 "or: IN(A) + EQ(B) => IN(A+B)",
@@ -592,8 +596,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{1, 2, 3, 4})),
-			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2, 3, 4})),
+			ExpectedIndexTree:    makeOrTree(makeInNode(f1, []uint64{1, 2, 3, 4})),
+			ExpectedNonIndexTree: makeOrTree(makeInNode(f1, []uint64{1, 2, 3, 4})),
 		},
 		{
 			Name:                 "or: EQ(A) + EQ(B) => IN(A+B)",
@@ -601,8 +605,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeOrTree(makeInNode("id", 0, []uint64{1, 2})),
-			ExpectedNonIndexTree: makeOrTree(makeInNode("id", 0, []uint64{1, 2})),
+			ExpectedIndexTree:    makeOrTree(makeInNode(f1, []uint64{1, 2})),
+			ExpectedNonIndexTree: makeOrTree(makeInNode(f1, []uint64{1, 2})),
 		},
 		// CAT: replace/simplify ranges
 		{
@@ -611,8 +615,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeLeNode("id", 0, uint64(4))),
-			ExpectedNonIndexTree: makeAndTree(makeLeNode("id", 0, uint64(4))),
+			ExpectedIndexTree:    makeAndTree(makeLeNode(f1, uint64(4))),
+			ExpectedNonIndexTree: makeAndTree(makeLeNode(f1, uint64(4))),
 		},
 		{
 			Name:                 "and: LE(0)",
@@ -620,8 +624,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeLeNode("id", 0, uint64(0))),
-			ExpectedNonIndexTree: makeAndTree(makeLeNode("id", 0, uint64(0))),
+			ExpectedIndexTree:    makeAndTree(makeLeNode(f1, uint64(0))),
+			ExpectedNonIndexTree: makeAndTree(makeLeNode(f1, uint64(0))),
 		},
 		{
 			Name:                 "and: GT|GE(A) + GT|GE(A) => GT|GE(A)", // and: GT|GE(A) + GT|GE(A) => RG(A+1, max)
@@ -629,8 +633,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(6), uint64(math.MaxUint64))),
-			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(6), uint64(math.MaxUint64))),
+			ExpectedIndexTree:    makeAndTree(makeRangeNode(f1, uint64(6), uint64(math.MaxUint64))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode(f1, uint64(6), uint64(math.MaxUint64))),
 		},
 		{
 			Name:                 "and: RG(A,B) + RG(C,D) => RG(B,C) iff C ≤ B",
@@ -638,8 +642,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(3), uint64(5))),
-			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(3), uint64(5))),
+			ExpectedIndexTree:    makeAndTree(makeRangeNode(f1, uint64(3), uint64(5))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode(f1, uint64(3), uint64(5))),
 		},
 		{
 			Name:                 "and: RG(A,B) + RG(B,D) => EQ(B)",
@@ -647,8 +651,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(5))),
-			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(5))),
+			ExpectedIndexTree:    makeAndTree(makeEqualNode(f1, uint64(5))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode(f1, uint64(5))),
 		},
 		{
 			Name:                 "and: RG(A,B) + EQ(C) => EQ(C) iff A ≤ C ≤ B",
@@ -656,8 +660,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeEqualNode("id", 0, uint64(3))),
-			ExpectedNonIndexTree: makeAndTree(makeEqualNode("id", 0, uint64(3))),
+			ExpectedIndexTree:    makeAndTree(makeEqualNode(f1, uint64(3))),
+			ExpectedNonIndexTree: makeAndTree(makeEqualNode(f1, uint64(3))),
 		},
 		{
 			Name:                 "and: GE(A) + LE(B) => RG(A,B) iff A ≤ B",
@@ -665,8 +669,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(1), uint64(5))),
-			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(1), uint64(5))),
+			ExpectedIndexTree:    makeAndTree(makeRangeNode(f1, uint64(1), uint64(5))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode(f1, uint64(1), uint64(5))),
 		},
 		{
 			Name:                 "and: GT(A) + LT(B) => RG(A+1,B-1) iff A ≤ B",
@@ -674,8 +678,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeAndTree(makeRangeNode("id", 0, uint64(2), uint64(4))),
-			ExpectedNonIndexTree: makeAndTree(makeRangeNode("id", 0, uint64(2), uint64(4))),
+			ExpectedIndexTree:    makeAndTree(makeRangeNode(f1, uint64(2), uint64(4))),
+			ExpectedNonIndexTree: makeAndTree(makeRangeNode(f1, uint64(2), uint64(4))),
 		},
 		{
 			Name:                 "or: RG(A,B) + EQ(C) => EQ(C) iff A ≤ C ≤ B",
@@ -683,8 +687,8 @@ func TestPlanCompile(t *testing.T) {
 			Schema:               testSchema,
 			ResultsData:          makeRandomResultsData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
 			IndexResults:         []IndexResult{{testIndexSchema, []uint64{1}}},
-			ExpectedIndexTree:    makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(5))),
-			ExpectedNonIndexTree: makeOrTree(makeRangeNode("id", 0, uint64(1), uint64(5))),
+			ExpectedIndexTree:    makeOrTree(makeRangeNode(f1, uint64(1), uint64(5))),
+			ExpectedNonIndexTree: makeOrTree(makeRangeNode(f1, uint64(1), uint64(5))),
 		},
 	}
 

@@ -7,9 +7,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"reflect"
 
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/util"
 	"golang.org/x/exp/constraints"
 )
 
@@ -32,6 +33,8 @@ var Generators = []Generator{
 }
 
 type Generator interface {
+	Name() string
+	Type() types.BlockType
 	MakeValue(int) any
 	MakeSlice(...int) any
 }
@@ -40,6 +43,35 @@ type Generator interface {
 var _ Generator = (*NumGenerator[int])(nil)
 
 type NumGenerator[T constraints.Integer] struct{}
+
+func (_ NumGenerator[T]) Type() types.BlockType {
+	var t T
+	switch reflect.TypeOf(t).Kind() {
+	case reflect.Int64:
+		return types.BlockInt64
+	case reflect.Int32:
+		return types.BlockInt32
+	case reflect.Int16:
+		return types.BlockInt16
+	case reflect.Int8:
+		return types.BlockInt8
+	case reflect.Uint64:
+		return types.BlockUint64
+	case reflect.Uint32:
+		return types.BlockUint32
+	case reflect.Uint16:
+		return types.BlockUint16
+	case reflect.Uint8:
+		return types.BlockUint8
+	default:
+		return 0
+	}
+}
+
+func (_ NumGenerator[T]) Name() string {
+	var t T
+	return reflect.ValueOf(t).Type().String()
+}
 
 func (_ NumGenerator[T]) MakeValue(n int) any {
 	return T(n)
@@ -58,14 +90,31 @@ var _ Generator = (*FloatGenerator[float64])(nil)
 
 type FloatGenerator[T constraints.Float] struct{}
 
+func (_ FloatGenerator[T]) Type() types.BlockType {
+	var t T
+	switch reflect.TypeOf(t).Kind() {
+	case reflect.Float64:
+		return types.BlockFloat64
+	case reflect.Float32:
+		return types.BlockFloat32
+	default:
+		return 0
+	}
+}
+
+func (_ FloatGenerator[T]) Name() string {
+	var t T
+	return reflect.ValueOf(t).Type().String()
+}
+
 func (_ FloatGenerator[T]) MakeValue(n int) any {
-	return T(n) + T(util.RandFloat64())
+	return T(n) + T(0.5) // util.RandFloat64())
 }
 
 func (_ FloatGenerator[T]) MakeSlice(n ...int) any {
 	s := make([]T, len(n))
 	for i := range n {
-		s[i] = T(n[i]) + T(util.RandFloat64())
+		s[i] = T(n[i]) + T(0.5) // util.RandFloat64())
 	}
 	return s
 }
@@ -74,6 +123,14 @@ func (_ FloatGenerator[T]) MakeSlice(n ...int) any {
 var _ Generator = (*BytesGenerator)(nil)
 
 type BytesGenerator struct{}
+
+func (_ BytesGenerator) Type() types.BlockType {
+	return types.BlockBytes
+}
+
+func (_ BytesGenerator) Name() string {
+	return "bytes"
+}
 
 func (_ BytesGenerator) MakeValue(n int) any {
 	var b [8]byte
@@ -96,6 +153,14 @@ var _ Generator = (*StringsGenerator)(nil)
 
 type StringsGenerator struct{}
 
+func (_ StringsGenerator) Type() types.BlockType {
+	return types.BlockString
+}
+
+func (_ StringsGenerator) Name() string {
+	return "string"
+}
+
 func (_ StringsGenerator) MakeValue(n int) any {
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], uint64(n))
@@ -117,14 +182,22 @@ var _ Generator = (*BoolsGenerator)(nil)
 
 type BoolsGenerator struct{}
 
+func (_ BoolsGenerator) Type() types.BlockType {
+	return types.BlockBool
+}
+
+func (_ BoolsGenerator) Name() string {
+	return "bool"
+}
+
 func (_ BoolsGenerator) MakeValue(n int) any {
-	return n > 0
+	return n%2 == 0
 }
 
 func (_ BoolsGenerator) MakeSlice(n ...int) any {
 	s := make([]bool, len(n))
 	for i := range n {
-		s[i] = n[i] > 0
+		s[i] = n[i]%2 == 0
 	}
 	return s
 }
@@ -133,6 +206,14 @@ func (_ BoolsGenerator) MakeSlice(n ...int) any {
 var _ Generator = (*Int128Generator)(nil)
 
 type Int128Generator struct{}
+
+func (_ Int128Generator) Type() types.BlockType {
+	return types.BlockInt128
+}
+
+func (_ Int128Generator) Name() string {
+	return "i128"
+}
 
 func (_ Int128Generator) MakeValue(n int) any {
 	return num.Int128FromInt64(int64(n))
@@ -150,6 +231,14 @@ func (_ Int128Generator) MakeSlice(n ...int) any {
 var _ Generator = (*Int256Generator)(nil)
 
 type Int256Generator struct{}
+
+func (_ Int256Generator) Type() types.BlockType {
+	return types.BlockInt256
+}
+
+func (_ Int256Generator) Name() string {
+	return "i256"
+}
 
 func (_ Int256Generator) MakeValue(n int) any {
 	return num.Int256FromInt64(int64(n))
