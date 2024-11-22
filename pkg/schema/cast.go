@@ -1023,7 +1023,7 @@ func (c BytesCaster) CastSlice(val any) (res any, err error) {
 	if rv.Kind() == reflect.Slice {
 		cp := make([][]byte, rv.Len())
 		for i := range cp {
-			v, err = c.CastValue(rv.Index(i))
+			v, err = c.CastValue(rv.Index(i).Interface())
 			if err != nil {
 				break
 			}
