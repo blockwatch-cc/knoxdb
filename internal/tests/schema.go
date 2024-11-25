@@ -74,3 +74,21 @@ func NewAllTypes(i int64) AllTypes {
 		MyEnum:  MyEnum("a"),
 	}
 }
+
+type Security struct {
+	Id             uint64         `knox:"id,pk"`
+	Ticker         []byte         `knox:"name"`
+	LastClosePrice num.Decimal256 `knox:"last_close_price"`
+	CreatedAt      time.Time      `knox:"created_at"`
+	UpdatedAt      time.Time      `knox:"updated_at"`
+}
+
+func NewSecurity(i int64) Security {
+	return Security{
+		Id:             uint64(i),
+		Ticker:         util.RandBytes(5),
+		LastClosePrice: num.NewDecimal256(num.Int256FromInt64(int64(i)), 24),
+		CreatedAt:      time.Unix(0, int64(i)).UTC(),
+		UpdatedAt:      time.Unix(0, int64(i)).UTC(),
+	}
+}
