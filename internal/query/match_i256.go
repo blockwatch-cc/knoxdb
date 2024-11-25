@@ -7,6 +7,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
@@ -30,9 +31,13 @@ func (f I256MatcherFactory) New(m FilterMode) Matcher {
 		return &i256LeMatcher{i256Matcher{match: cmp.MatchInt256LessEqual}}
 	case FilterModeRange:
 		return &i256RangeMatcher{}
+	case FilterModeIn:
+		return &i256InSetMatcher{}
+	case FilterModeNotIn:
+		return &i256NotInSetMatcher{}
 	default:
 		// unsupported
-		// FilterModeIn, FilterModeNotIn, FilterModeRegexp:
+		// FilterModeRegexp:
 		return &noopMatcher{}
 	}
 }
@@ -174,4 +179,122 @@ func (m i256RangeMatcher) MatchRange(from, to any) bool {
 
 func (m i256RangeMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return cmp.MatchInt256Between(*b.Int256(), m.from, m.to, bits, mask)
+}
+
+// IN ---
+
+// In, Contains
+type i256InSetMatcher struct {
+	noopMatcher
+	slice  []num.Int256
+	hashes [][2]uint32
+}
+
+func (m *i256InSetMatcher) Weight() int { return len(m.slice) }
+
+func (m *i256InSetMatcher) Len() int { return len(m.slice) }
+
+func (m *i256InSetMatcher) Value() any {
+	return m.slice
+}
+
+func (m *i256InSetMatcher) WithValue(val any) {
+	m.WithSlice(val)
+}
+
+func (m *i256InSetMatcher) WithSlice(slice any) {
+	m.slice = num.Int256Sort(slice.([]num.Int256))
+	m.hashes = bloom.HashAnySlice(m.slice)
+}
+
+func (m i256InSetMatcher) MatchValue(v any) bool {
+	return num.Int256Contains(m.slice, v.(num.Int256))
+}
+
+func (m i256InSetMatcher) MatchRange(from, to any) bool {
+	return num.Int256ContainsRange(m.slice, from.(num.Int256), to.(num.Int256))
+}
+
+func (m i256InSetMatcher) MatchBloom(flt *bloom.Filter) bool {
+	return flt.ContainsAnyHash(m.hashes)
+}
+
+func (m i256InSetMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	stride := b.Int256()
+	if mask != nil {
+		// skip masked values
+		for i, l := 0, stride.Len(); i < l; i++ {
+			if !mask.IsSet(i) {
+				continue
+			}
+			if num.Int256Contains(m.slice, stride.Elem(i)) {
+				bits.Set(i)
+			}
+		}
+	} else {
+		for i, l := 0, stride.Len(); i < l; i++ {
+			if num.Int256Contains(m.slice, stride.Elem(i)) {
+				bits.Set(i)
+			}
+		}
+	}
+	return bits
+}
+
+// NOT IN ---
+
+type i256NotInSetMatcher struct {
+	noopMatcher
+	slice []num.Int256
+}
+
+func (m *i256NotInSetMatcher) Weight() int { return len(m.slice) }
+
+func (m *i256NotInSetMatcher) Len() int { return len(m.slice) }
+
+func (m *i256NotInSetMatcher) Value() any {
+	return m.slice
+}
+
+func (m *i256NotInSetMatcher) WithValue(val any) {
+	m.WithSlice(val)
+}
+
+func (m *i256NotInSetMatcher) WithSlice(slice any) {
+	m.slice = num.Int256Sort(slice.([]num.Int256))
+}
+
+func (m i256NotInSetMatcher) MatchValue(v any) bool {
+	return !num.Int256Contains(m.slice, v.(num.Int256))
+}
+
+func (m i256NotInSetMatcher) MatchRange(from, to any) bool {
+	return !num.Int256ContainsRange(m.slice, from.(num.Int256), to.(num.Int256))
+}
+
+func (m i256NotInSetMatcher) MatchBloom(flt *bloom.Filter) bool {
+	// we don't know generally, so full scan is always required
+	return true
+}
+
+func (m i256NotInSetMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	stride := b.Int256()
+	if mask != nil {
+		// skip masked values
+		for i, l := 0, stride.Len(); i < l; i++ {
+			if !mask.IsSet(i) {
+				continue
+			}
+			if !num.Int256Contains(m.slice, stride.Elem(i)) {
+				bits.Set(i)
+			}
+		}
+	} else {
+		for i, l := 0, stride.Len(); i < l; i++ {
+			if !num.Int256Contains(m.slice, stride.Elem(i)) {
+				bits.Set(i)
+			}
+		}
+	}
+	return bits
 }

@@ -170,7 +170,7 @@ func (o *OrderedBytes) Union(v *OrderedBytes) *OrderedBytes {
 	res := &OrderedBytes{
 		NonZero: o.NonZero && v.NonZero,
 		Unique:  o.Unique && v.Unique,
-		Values:  make([][]byte, len(o.Values)),
+		Values:  make([][]byte, len(o.Values), len(o.Values)+len(v.Values)),
 	}
 	copy(res.Values, o.Values)
 	res.Values = mergeBytes(res.Values, v.Unique, v.Values...)

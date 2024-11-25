@@ -12,8 +12,6 @@ import (
 	"math/bits"
 	"strconv"
 	"strings"
-
-	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 var (
@@ -734,70 +732,4 @@ func (x Uint256) Int256() Int256 {
 
 func (x Uint256) Gte(y Uint256) bool {
 	return !x.Int256().ult(y.Int256())
-}
-
-func Int256Intersect(a, b []Int256) []Int256 {
-	if a == nil || b == nil {
-		return nil
-	}
-	x := slicex.NewOrderedBytes(nil).SetUnique()
-	y := slicex.NewOrderedBytes(nil).SetUnique()
-	for _, v := range a {
-		x.Insert(v.Bytes())
-	}
-	for _, v := range b {
-		y.Insert(v.Bytes())
-	}
-	z := x.Intersect(y)
-	res := make([]Int256, z.Len())
-	for i, v := range z.Values {
-		res[i] = Int256FromBytes(v)
-	}
-	return res
-}
-
-func Int256Union(a, b []Int256) []Int256 {
-	if a == nil {
-		return b
-	}
-	if b == nil {
-		return a
-	}
-	x := slicex.NewOrderedBytes(nil).SetUnique()
-	y := slicex.NewOrderedBytes(nil).SetUnique()
-	for _, v := range a {
-		x.Insert(v.Bytes())
-	}
-	for _, v := range b {
-		y.Insert(v.Bytes())
-	}
-	z := x.Union(y)
-	res := make([]Int256, z.Len())
-	for i, v := range z.Values {
-		res[i] = Int256FromBytes(v)
-	}
-	return res
-}
-
-func Int256Difference(a, b []Int256) []Int256 {
-	if b == nil {
-		return a
-	}
-	if a == nil {
-		return nil
-	}
-	x := slicex.NewOrderedBytes(nil).SetUnique()
-	y := slicex.NewOrderedBytes(nil).SetUnique()
-	for _, v := range a {
-		x.Insert(v.Bytes())
-	}
-	for _, v := range b {
-		y.Insert(v.Bytes())
-	}
-	z := x.Difference(y)
-	res := make([]Int256, z.Len())
-	for i, v := range z.Values {
-		res[i] = Int256FromBytes(v)
-	}
-	return res
 }
