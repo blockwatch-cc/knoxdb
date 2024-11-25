@@ -16,7 +16,7 @@ import (
 )
 
 func (t *Table) dataBucket(tx store.Tx) store.Bucket {
-	key := append([]byte(t.schema.Name()), pack.DataKeySuffix...)
+	key := append([]byte(t.schema.Name()), engine.DataKeySuffix...)
 	b := tx.Bucket(key)
 	if b != nil {
 		b.FillPercent(t.opts.PageFill)
@@ -25,7 +25,7 @@ func (t *Table) dataBucket(tx store.Tx) store.Bucket {
 }
 
 func (t *Table) statsBucket(tx store.Tx) store.Bucket {
-	key := append([]byte(t.schema.Name()), pack.StatsKeySuffix...)
+	key := append([]byte(t.schema.Name()), engine.StatsKeySuffix...)
 	b := tx.Bucket(key)
 	if b != nil {
 		b.FillPercent(t.opts.PageFill)

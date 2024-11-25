@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
@@ -134,7 +135,7 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bkey string) erro
 		WithMaxRows(j.maxsize).
 		WithKey(pack.JournalKeyId).
 		WithSchema(s)
-	bucket := tx.Bucket(append([]byte(bkey), pack.DataKeySuffix...))
+	bucket := tx.Bucket(append([]byte(bkey), engine.DataKeySuffix...))
 	if _, err := j.Data.Load(ctx, bucket, false, 0, nil, 0); err != nil {
 		return err
 	}
@@ -188,7 +189,7 @@ func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bkey string) (in
 		}
 		j.Data.SetValue(j.Data.PkIdx(), idx, pk)
 	}
-	bucket := tx.Bucket(append([]byte(bkey), pack.DataKeySuffix...))
+	bucket := tx.Bucket(append([]byte(bkey), engine.DataKeySuffix...))
 	bucket.FillPercent(0.9)
 	n, err := j.Data.Store(ctx, bucket, 0, nil)
 	if err != nil {

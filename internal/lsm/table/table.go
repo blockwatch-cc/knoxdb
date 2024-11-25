@@ -47,7 +47,6 @@ type Table struct {
 	id         uint64                  // unique tagged name hash
 	opts       engine.TableOptions     // copy of config options
 	db         store.DB                // lower-level KV store (e.g. boltdb or badger)
-	key        []byte                  // name of the data bucket
 	isZeroCopy bool                    // storage reads are zero copy (copy to safe references)
 	noClose    bool                    // don't close underlying store db on Close
 	state      engine.ObjectState      // volatile state, synced with catalog
@@ -72,7 +71,6 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.schema = s
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.opts = DefaultTableOptions.Merge(opts)
-	t.key = []byte(name)
 	t.state = engine.NewObjectState()
 	t.metrics = engine.NewTableMetrics(name)
 	t.db = opts.DB
@@ -106,8 +104,14 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	if err != nil {
 		return err
 	}
-	if _, err := store.CreateBucket(tx, t.key, engine.ErrTableExists); err != nil {
-		return err
+	for _, v := range [][]byte{
+		engine.DataKeySuffix,
+		engine.StateKeySuffix,
+	} {
+		key := append([]byte(name), v...)
+		if _, err := store.CreateBucket(tx, key, engine.ErrTableExists); err != nil {
+			return err
+		}
 	}
 
 	// init state storage
@@ -131,7 +135,6 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.schema = s
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.opts = DefaultTableOptions.Merge(opts)
-	t.key = []byte(name)
 	t.metrics = engine.NewTableMetrics(name)
 	t.metrics.TupleCount = int64(t.state.NRows)
 	t.db = opts.DB
@@ -171,14 +174,20 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	if err != nil {
 		return err
 	}
-	b := tx.Bucket(t.key)
-	if b == nil {
-		t.log.Error("missing table data: %v", engine.ErrNoBucket)
-		tx.Rollback()
-		_ = t.Close(ctx)
-		return engine.ErrDatabaseCorrupt
+	for _, v := range [][]byte{
+		engine.DataKeySuffix,
+		engine.StateKeySuffix,
+	} {
+		if tx.Bucket(append([]byte(name), v...)) == nil {
+			t.log.Error("missing table data: %v", engine.ErrNoBucket)
+			tx.Rollback()
+			t.Close(ctx)
+			return engine.ErrDatabaseCorrupt
+		}
 	}
-	stats := b.Stats()
+
+	// TODO: refactor to use statistics similar to pack table
+	stats := tx.Bucket(engine.DataKeySuffix).Stats()
 	t.metrics.TotalSize = int64(stats.Size) // estimate only
 
 	// load state
@@ -202,7 +211,6 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	t.engine = nil
 	t.schema = nil
 	t.id = 0
-	t.key = nil
 	t.noClose = false
 	t.isZeroCopy = false
 	t.opts = engine.TableOptions{}
@@ -241,8 +249,14 @@ func (t *Table) Drop(ctx context.Context) error {
 			return err
 		}
 		t.log.Debugf("dropping table %s", typ)
-		if err := tx.Root().DeleteBucket(t.key); err != nil {
-			return err
+		for _, v := range [][]byte{
+			engine.DataKeySuffix,
+			engine.StateKeySuffix,
+		} {
+			err := tx.Root().DeleteBucket(append([]byte(t.schema.Name()), v...))
+			if err != nil {
+				return err
+			}
 		}
 		if err := tx.Commit(); err != nil {
 			return err
@@ -280,11 +294,17 @@ func (t *Table) Truncate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := tx.Root().DeleteBucket(t.key); err != nil {
-		return err
-	}
-	if _, err := tx.Root().CreateBucket(t.key); err != nil {
-		return err
+	for _, v := range [][]byte{
+		engine.DataKeySuffix,
+		engine.StateKeySuffix,
+	} {
+		key := append([]byte(t.schema.Name()), v...)
+		if err := tx.Root().DeleteBucket(key); err != nil {
+			return err
+		}
+		if _, err := tx.Root().CreateBucket(key); err != nil {
+			return err
+		}
 	}
 	t.state.Reset()
 	if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
@@ -311,7 +331,7 @@ func (t *Table) UnuseIndex(idx engine.QueryableIndex) {
 
 // low-level interface for KV storage access
 func (t *Table) getTx(tx store.Tx, key []byte) []byte {
-	bucket := tx.Bucket(t.key)
+	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
 		return nil
 	}
@@ -325,7 +345,7 @@ func (t *Table) getTx(tx store.Tx, key []byte) []byte {
 
 func (t *Table) putTx(tx store.Tx, key, val []byte) ([]byte, error) {
 	prevSize, sz := -1, len(key)+len(val)
-	bucket := tx.Bucket(t.key)
+	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
 		return nil, engine.ErrNoBucket
 	}
@@ -355,7 +375,7 @@ func (t *Table) putTx(tx store.Tx, key, val []byte) ([]byte, error) {
 
 func (t *Table) delTx(tx store.Tx, key []byte) ([]byte, error) {
 	prevSize := -1
-	bucket := tx.Bucket(t.key)
+	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
 		return nil, engine.ErrNoBucket
 	}
