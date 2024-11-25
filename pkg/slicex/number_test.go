@@ -12,17 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func randIntSlice(n, u int) []int {
-	s := make([]int, n*u)
-	for i := 0; i < n; i++ {
-		s[i] = rand.Int()
-	}
-	for i := 1; i < u; i++ {
-		copy(s[i*n:], s[:n])
-	}
-	return s
-}
-
 func TestOrderedNumbersContains(T *testing.T) {
 	// nil slice
 	if NewOrderedNumbers[int](nil).Contains(1) {
@@ -256,7 +245,7 @@ func BenchmarkOrderedNumbersContains(B *testing.B) {
 	cases := []int{10, 1000, 1000000}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-neg", n), func(B *testing.B) {
-			a := NewOrderedNumbers(randIntSlice(n, 1))
+			a := NewOrderedNumbers(util.RandInts[int](n))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
 				a.Contains(rand.Int())
@@ -265,7 +254,7 @@ func BenchmarkOrderedNumbersContains(B *testing.B) {
 	}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-pos", n), func(B *testing.B) {
-			a := NewOrderedNumbers(randIntSlice(n, 1))
+			a := NewOrderedNumbers(util.RandInts[int](n))
 			B.ResetTimer()
 			for i := 0; i < B.N; i++ {
 				a.Contains(a.Values[rand.Intn(len(a.Values))])

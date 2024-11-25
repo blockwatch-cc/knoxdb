@@ -737,6 +737,9 @@ func (x Uint256) Gte(y Uint256) bool {
 }
 
 func Int256Intersect(a, b []Int256) []Int256 {
+	if a == nil || b == nil {
+		return nil
+	}
 	x := slicex.NewOrderedBytes(nil).SetUnique()
 	y := slicex.NewOrderedBytes(nil).SetUnique()
 	for _, v := range a {
@@ -754,6 +757,12 @@ func Int256Intersect(a, b []Int256) []Int256 {
 }
 
 func Int256Union(a, b []Int256) []Int256 {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
 	x := slicex.NewOrderedBytes(nil).SetUnique()
 	y := slicex.NewOrderedBytes(nil).SetUnique()
 	for _, v := range a {
@@ -771,6 +780,12 @@ func Int256Union(a, b []Int256) []Int256 {
 }
 
 func Int256Difference(a, b []Int256) []Int256 {
+	if b == nil {
+		return a
+	}
+	if a == nil {
+		return nil
+	}
 	x := slicex.NewOrderedBytes(nil).SetUnique()
 	y := slicex.NewOrderedBytes(nil).SetUnique()
 	for _, v := range a {

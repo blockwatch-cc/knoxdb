@@ -539,6 +539,9 @@ func Max128(x, y Int128) Int128 {
 }
 
 func Int128Intersect(a, b []Int128) []Int128 {
+	if a == nil || b == nil {
+		return nil
+	}
 	x := slicex.NewOrderedBytes(nil).SetUnique()
 	y := slicex.NewOrderedBytes(nil).SetUnique()
 	for _, v := range a {
@@ -556,6 +559,12 @@ func Int128Intersect(a, b []Int128) []Int128 {
 }
 
 func Int128Union(a, b []Int128) []Int128 {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
 	x := slicex.NewOrderedBytes(nil).SetUnique()
 	y := slicex.NewOrderedBytes(nil).SetUnique()
 	for _, v := range a {
@@ -573,6 +582,12 @@ func Int128Union(a, b []Int128) []Int128 {
 }
 
 func Int128Difference(a, b []Int128) []Int128 {
+	if b == nil {
+		return a
+	}
+	if a == nil {
+		return nil
+	}
 	x := slicex.NewOrderedBytes(nil).SetUnique()
 	y := slicex.NewOrderedBytes(nil).SetUnique()
 	for _, v := range a {

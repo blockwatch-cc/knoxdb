@@ -6,10 +6,12 @@ package slicex
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/stretchr/testify/assert"
 )
 
 // -----------------------------------------------------------------------
@@ -216,6 +218,193 @@ func BenchmarkByteSlice32ContainsRange(B *testing.B) {
 			for i := 0; i < B.N; i++ {
 				a.ContainsRange(ranges[i%1024][0], ranges[i%1024][1])
 			}
+		})
+	}
+}
+
+func bs(n ...int) [][]byte {
+	b := make([][]byte, len(n))
+	for i, v := range n {
+		var buf [8]byte
+		binary.BigEndian.PutUint64(buf[:], uint64(v))
+		b[i] = bytes.Clone(buf[:])
+	}
+	return b
+}
+
+func TestByteSliceUnique(t *testing.T) {
+	var tests = []struct {
+		n string
+		a *OrderedBytes
+		b *OrderedBytes
+		r *OrderedBytes
+	}{
+		{
+			n: "empty",
+			a: NewOrderedBytes(nil).SetUnique(),
+			b: NewOrderedBytes(nil).SetUnique(),
+			r: NewOrderedBytes(nil).SetUnique(),
+		},
+		{
+			n: "empty a",
+			a: NewOrderedBytes(nil).SetUnique(),
+			b: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			r: NewOrderedBytes(bs(1, 2)).SetUnique(),
+		},
+		{
+			n: "empty b",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(nil).SetUnique(),
+			r: NewOrderedBytes(bs(1, 2)).SetUnique(),
+		},
+		{
+			n: "distinct unique",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(bs(3, 4)).SetUnique(),
+			r: NewOrderedBytes(bs(1, 2, 3, 4)).SetUnique(),
+		},
+		{
+			n: "distinct unique gap",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(bs(4, 5)).SetUnique(),
+			r: NewOrderedBytes(bs(1, 2, 4, 5)).SetUnique(),
+		},
+		{
+			n: "overlap duplicates",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(bs(2, 3)).SetUnique(),
+			r: NewOrderedBytes(bs(1, 2, 3)).SetUnique(),
+		},
+		{
+			n: "overlap duplicates not unique",
+			a: NewOrderedBytes(bs(1, 2)),
+			b: NewOrderedBytes(bs(2, 3)),
+			r: NewOrderedBytes(bs(1, 2, 2, 3)),
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.n, func(t *testing.T) {
+			res := c.a.Union(c.b)
+			assert.Equal(t, c.r, res)
+		})
+	}
+}
+
+func TestByteSliceIntersect(t *testing.T) {
+	var tests = []struct {
+		n string
+		a *OrderedBytes
+		b *OrderedBytes
+		r *OrderedBytes
+	}{
+		{
+			n: "empty",
+			a: NewOrderedBytes(nil).SetUnique(),
+			b: NewOrderedBytes(nil).SetUnique(),
+			r: NewOrderedBytes(nil).SetUnique(),
+		},
+		{
+			n: "empty a",
+			a: NewOrderedBytes(nil).SetUnique(),
+			b: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			r: NewOrderedBytes(bs()).SetUnique(),
+		},
+		{
+			n: "empty b",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(nil).SetUnique(),
+			r: NewOrderedBytes(bs()).SetUnique(),
+		},
+		{
+			n: "distinct unique",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(bs(3, 4)).SetUnique(),
+			r: NewOrderedBytes(bs()).SetUnique(),
+		},
+		{
+			n: "distinct unique gap",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(bs(4, 5)).SetUnique(),
+			r: NewOrderedBytes(bs()).SetUnique(),
+		},
+		{
+			n: "overlap duplicates",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(bs(2, 3)).SetUnique(),
+			r: NewOrderedBytes(bs(2)).SetUnique(),
+		},
+		{
+			n: "overlap duplicates not unique",
+			a: NewOrderedBytes(bs(1, 2)),
+			b: NewOrderedBytes(bs(2, 3)),
+			r: NewOrderedBytes(bs(2)),
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.n, func(t *testing.T) {
+			res := c.a.Intersect(c.b)
+			assert.Equal(t, c.r, res)
+		})
+	}
+}
+
+func TestByteSliceDifference(t *testing.T) {
+	var tests = []struct {
+		n string
+		a *OrderedBytes
+		b *OrderedBytes
+		r *OrderedBytes
+	}{
+		{
+			n: "empty",
+			a: NewOrderedBytes(nil).SetUnique(),
+			b: NewOrderedBytes(nil).SetUnique(),
+			r: NewOrderedBytes(nil).SetUnique(),
+		},
+		{
+			n: "empty a",
+			a: NewOrderedBytes(nil).SetUnique(),
+			b: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			r: NewOrderedBytes(bs()).SetUnique(),
+		},
+		{
+			n: "empty b",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(nil).SetUnique(),
+			r: NewOrderedBytes(bs(1, 2)).SetUnique(),
+		},
+		{
+			n: "distinct unique",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(bs(3, 4)).SetUnique(),
+			r: NewOrderedBytes(bs(1, 2)).SetUnique(),
+		},
+		{
+			n: "distinct unique gap",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(bs(4, 5)).SetUnique(),
+			r: NewOrderedBytes(bs(1, 2)).SetUnique(),
+		},
+		{
+			n: "overlap duplicates",
+			a: NewOrderedBytes(bs(1, 2)).SetUnique(),
+			b: NewOrderedBytes(bs(2, 3)).SetUnique(),
+			r: NewOrderedBytes(bs(1)).SetUnique(),
+		},
+		{
+			n: "overlap duplicates not unique",
+			a: NewOrderedBytes(bs(1, 2)),
+			b: NewOrderedBytes(bs(2, 3)),
+			r: NewOrderedBytes(bs(1)),
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.n, func(t *testing.T) {
+			res := c.a.Difference(c.b)
+			assert.Equal(t, c.r, res)
 		})
 	}
 }

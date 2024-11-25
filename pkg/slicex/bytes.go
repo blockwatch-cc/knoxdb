@@ -282,8 +282,8 @@ func mergeBytes(s [][]byte, unique bool, v ...[]byte) [][]byte {
 	// merge backward
 	if unique {
 		// skip duplicate values (note: v does not contain duplicates at this point!)
-		out := ls + lv - 1
-		for in1, in2 := ls-1, lv-1; in2 >= 0; {
+		in1, in2, out := ls-1, lv-1, ls+lv-1
+		for in2 >= 0 {
 			// insert new vals as long as they are larger or all old vals have been
 			// copied (i.e. every new val is smaller than the first old val)
 			for in2 >= 0 && (in1 < 0 || bytes.Compare(s[in1], v[in2]) < 0) {
@@ -305,11 +305,13 @@ func mergeBytes(s [][]byte, unique bool, v ...[]byte) [][]byte {
 			}
 		}
 
-		// when duplicates were dropped, we must close the gap at slice front
-		if out > 0 {
-			copy(s[out:], s[0:])
-			s = s[:ls+lv-out]
+		// when duplicates were dropped, close the gap at slice front
+		for in1 >= 0 {
+			s[out] = s[in1]
+			in1--
+			out--
 		}
+		s = s[out+1:]
 
 	} else {
 		// copy all values in order
@@ -341,11 +343,12 @@ func intersectBytes(x, y, out [][]byte) [][]byte {
 	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {
-		if bytes.Compare(x[i], y[j]) < 0 {
+		c := bytes.Compare(x[i], y[j])
+		if c < 0 {
 			i++
 			continue
 		}
-		if bytes.Compare(x[i], y[j]) > 0 {
+		if c > 0 {
 			j++
 			continue
 		}

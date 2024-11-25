@@ -140,9 +140,9 @@ func Cmp(t types.BlockType, a, b any) (c int) {
 		case a == nil && b == nil:
 			return 0
 		case a == nil:
-			return -1
+			return 1 // max is nil
 		case b == nil:
-			return 1
+			return -1 // max is nil
 		}
 		c = bytes.Compare(a.([]byte), b.([]byte))
 	case types.BlockInt32:
@@ -391,6 +391,6 @@ func Difference(t types.BlockType, a, b any) any {
 	case types.BlockInt256:
 		return num.Int256Difference(a.([]num.Int256), b.([]num.Int256))
 	default:
-		panic(fmt.Errorf("union: unsupported block type %s ", t))
+		panic(fmt.Errorf("difference: unsupported block type %s ", t))
 	}
 }
