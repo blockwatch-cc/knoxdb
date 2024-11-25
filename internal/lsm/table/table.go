@@ -187,7 +187,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	}
 
 	// TODO: refactor to use statistics similar to pack table
-	stats := tx.Bucket(engine.DataKeySuffix).Stats()
+	stats := tx.Bucket(append([]byte(name), engine.DataKeySuffix...)).Stats()
 	t.metrics.TotalSize = int64(stats.Size) // estimate only
 
 	// load state
