@@ -296,6 +296,7 @@ func QueryTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts
 	plan := query.NewQueryPlan().
 		WithFilters(flt).
 		WithSchema(s).
+		WithLimit(10).
 		WithTable(tab)
 	defer plan.Close()
 	require.NoError(t, plan.Validate())
@@ -328,6 +329,7 @@ func CountTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts
 	plan := query.NewQueryPlan().
 		WithFilters(flt).
 		WithSchema(s).
+		WithLimit(10).
 		WithTable(tab)
 	defer plan.Close()
 	require.NoError(t, plan.Validate())
@@ -360,6 +362,7 @@ func DeleteTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opt
 	plan := query.NewQueryPlan().
 		WithFilters(flt).
 		WithSchema(s).
+		WithLimit(10).
 		WithTable(tab)
 	defer plan.Close()
 	require.NoError(t, plan.Validate())
@@ -392,6 +395,7 @@ func StreamTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opt
 	plan := query.NewQueryPlan().
 		WithFilters(flt).
 		WithSchema(s).
+		WithLimit(10).
 		WithTable(tab)
 	defer plan.Close()
 	require.NoError(t, plan.Validate())
