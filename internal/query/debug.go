@@ -73,7 +73,7 @@ func (n FilterTreeNode) dump(level int, w *strings.Builder) {
 	if n.OrKind {
 		kind = " OR "
 	}
-	if len(n.Children) > 0 {
+	if level > 0 && len(n.Children) > 0 {
 		fmt.Fprint(w, " ( ")
 		defer fmt.Fprint(w, " ) ")
 	}

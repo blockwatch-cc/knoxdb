@@ -4,13 +4,43 @@
 package num
 
 import (
-	"fmt"
 	"sort"
 )
 
-func Int128Sort(a []Int128) []Int128 {
-	sort.Slice(a, func(i, j int) bool { return a[i].Lt(a[j]) })
-	return a
+func Int128Sort(s []Int128) []Int128 {
+	sort.Slice(s, func(i, j int) bool { return s[i].Lt(s[j]) })
+	return s
+}
+
+func Int128MinMax(s []Int128) (Int128, Int128) {
+	switch l := len(s); l {
+	case 0:
+		return ZeroInt128, ZeroInt128
+	case 1:
+		return s[0], s[0]
+	default:
+		return s[0], s[l-1]
+	}
+}
+
+func Int128Unique(s []Int128) []Int128 {
+	if len(s) == 0 {
+		return s
+	}
+	sort.Slice(s, func(i, j int) bool { return s[i].Lt(s[j]) })
+
+	j := 0
+	for i := 1; i < len(s); i++ {
+		if s[j].Eq(s[i]) {
+			continue
+		}
+		j++
+		// preserve the original data
+		// in[i], in[j] = in[j], in[i]
+		// only set what is required
+		s[j] = s[i]
+	}
+	return s[:j+1]
 }
 
 func Int128Contains(s []Int128, val Int128) bool {
@@ -143,7 +173,6 @@ func Int128Union(a, b []Int128) []Int128 {
 	// skip duplicate values (note: v does not contain duplicates at this point!)
 	in1, in2, out := la-1, lb-1, la+lb-1
 	for in2 >= 0 {
-		fmt.Printf("in1=%d in2=%d out=%d\n", in1, in2, out)
 		// insert new vals as long as they are larger or all old vals have been
 		// copied (i.e. every new val is smaller than the first old val)
 		for in2 >= 0 && (in1 < 0 || s[in1].Cmp(b[in2]) < 0) {

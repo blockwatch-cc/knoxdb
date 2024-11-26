@@ -6,8 +6,10 @@ package query
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/slicex"
@@ -35,8 +37,34 @@ func (f Filter) Weight() int {
 }
 
 func (f Filter) String() string {
+	var sval string
+	if f.Type == BlockString {
+		switch f.Mode {
+		case FilterModeTrue, types.FilterModeFalse:
+			// empty
+		case FilterModeIn, types.FilterModeNotIn:
+			var b strings.Builder
+			for i, v := range f.Value.([][]byte) {
+				if i > 0 {
+					b.WriteByte(',')
+				}
+				b.WriteString(util.UnsafeGetString(v))
+			}
+			sval = b.String()
+		case FilterModeRange:
+			rg := f.Value.(RangeValue)
+			sval = fmt.Sprintf("[%s, %s]",
+				util.UnsafeGetString(rg[0].([]byte)),
+				util.UnsafeGetString(rg[1].([]byte)),
+			)
+		default:
+			sval = string(f.Value.([]byte))
+		}
+	} else {
+		sval = util.ToString(f.Value)
+	}
 	return fmt.Sprintf("%s[%d] %s %s",
-		f.Name, f.Index, f.Mode.Symbol(), util.ToString(f.Value))
+		f.Name, f.Index, f.Mode.Symbol(), sval)
 }
 
 func (f Filter) Validate() error {

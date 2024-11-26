@@ -9,9 +9,11 @@ import (
 	"math"
 
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
+	"golang.org/x/exp/constraints"
 )
 
 var (
@@ -191,6 +193,41 @@ func Match(m types.FilterMode, t types.BlockType, a, b any) bool {
 	}
 }
 
+func Unique(t types.BlockType, a any) any {
+	switch t {
+	case types.BlockInt64, types.BlockTime:
+		return slicex.Unique(a.([]int64))
+	case types.BlockUint64:
+		return slicex.Unique(a.([]uint64))
+	case types.BlockFloat64:
+		return slicex.Unique(a.([]float64))
+	case types.BlockBytes, types.BlockString:
+		return slicex.UniqueBytes(a.([][]byte))
+	case types.BlockInt32:
+		return slicex.Unique(a.([]int32))
+	case types.BlockInt16:
+		return slicex.Unique(a.([]int16))
+	case types.BlockInt8:
+		return slicex.Unique(a.([]int8))
+	case types.BlockUint32:
+		return slicex.Unique(a.([]uint32))
+	case types.BlockUint16:
+		return slicex.Unique(a.([]uint16))
+	case types.BlockUint8:
+		return slicex.Unique(a.([]uint8))
+	case types.BlockFloat32:
+		return slicex.Unique(a.([]float32))
+	case types.BlockBool:
+		return slicex.UniqueBools(a.([]bool))
+	case types.BlockInt128:
+		return num.Int128Unique(a.([]num.Int128))
+	case types.BlockInt256:
+		return num.Int256Unique(a.([]num.Int256))
+	default:
+		panic(fmt.Errorf("unique: unsupported block type %s ", t))
+	}
+}
+
 func Intersect(t types.BlockType, a, b any) any {
 	// compare by type
 	switch t {
@@ -239,41 +276,14 @@ func Intersect(t types.BlockType, a, b any) any {
 		y := slicex.NewOrderedNumbers[float32](b.([]float32)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockBool:
-		x, y := toBoolBits(a.([]bool)...), toBoolBits(b.([]bool)...)
-		return fromBoolBits(x & y)
+		x, y := slicex.ToBoolBits(a.([]bool)...), slicex.ToBoolBits(b.([]bool)...)
+		return slicex.FromBoolBits(x & y)
 	case types.BlockInt128:
 		return num.Int128Intersect(a.([]num.Int128), b.([]num.Int128))
 	case types.BlockInt256:
 		return num.Int256Intersect(a.([]num.Int256), b.([]num.Int256))
 	default:
 		panic(fmt.Errorf("intersect: unsupported block type %s ", t))
-	}
-}
-
-func toBoolBits(b ...bool) (r byte) {
-	for _, v := range b {
-		if r == 3 {
-			break
-		}
-		if v {
-			r |= 0x2
-		} else {
-			r |= 0x1
-		}
-	}
-	return
-}
-
-func fromBoolBits(r byte) []bool {
-	switch r {
-	default:
-		return []bool{}
-	case 1:
-		return []bool{false}
-	case 2:
-		return []bool{true}
-	case 3:
-		return []bool{false, true}
 	}
 }
 
@@ -325,8 +335,8 @@ func Union(t types.BlockType, a, b any) any {
 		y := slicex.NewOrderedNumbers[float32](b.([]float32)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockBool:
-		x, y := toBoolBits(a.([]bool)...), toBoolBits(b.([]bool)...)
-		return fromBoolBits(x | y)
+		x, y := slicex.ToBoolBits(a.([]bool)...), slicex.ToBoolBits(b.([]bool)...)
+		return slicex.FromBoolBits(x | y)
 	case types.BlockInt128:
 		return num.Int128Union(a.([]num.Int128), b.([]num.Int128))
 	case types.BlockInt256:
@@ -384,13 +394,246 @@ func Difference(t types.BlockType, a, b any) any {
 		y := slicex.NewOrderedNumbers[float32](b.([]float32)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockBool:
-		x, y := toBoolBits(a.([]bool)...), toBoolBits(b.([]bool)...)
-		return fromBoolBits(x &^ y)
+		x, y := slicex.ToBoolBits(a.([]bool)...), slicex.ToBoolBits(b.([]bool)...)
+		return slicex.FromBoolBits(x &^ y)
 	case types.BlockInt128:
 		return num.Int128Difference(a.([]num.Int128), b.([]num.Int128))
 	case types.BlockInt256:
 		return num.Int256Difference(a.([]num.Int256), b.([]num.Int256))
 	default:
 		panic(fmt.Errorf("difference: unsupported block type %s ", t))
+	}
+}
+
+// Range retruns min, max of an integer set and whether all values between min and
+// max are present, i.e. the set is full.
+func Range(t types.BlockType, set any) (minv any, maxv any, full bool) {
+	if bs, ok := set.(*xroar.Bitmap); ok {
+		minU64 := bs.Minimum()
+		maxU64 := bs.Maximum()
+		full = maxU64-minU64+1 == uint64(bs.GetCardinality())
+		minv, _ = Cast(t, minU64)
+		maxv, _ = Cast(t, maxU64)
+		return
+	}
+	switch t {
+	case types.BlockInt64, types.BlockTime:
+		x := slicex.NewOrderedNumbers[int64](set.([]int64))
+		minv, maxv = x.MinMax()
+		full = x.IsFull()
+	case types.BlockInt32:
+		x := slicex.NewOrderedNumbers[int32](set.([]int32))
+		minv, maxv = x.MinMax()
+		full = x.IsFull()
+	case types.BlockInt16:
+		x := slicex.NewOrderedNumbers[int16](set.([]int16))
+		minv, maxv = x.MinMax()
+		full = x.IsFull()
+	case types.BlockInt8:
+		x := slicex.NewOrderedNumbers[int8](set.([]int8))
+		minv, maxv = x.MinMax()
+		full = x.IsFull()
+	case types.BlockUint64:
+		x := slicex.NewOrderedNumbers[uint64](set.([]uint64))
+		minv, maxv = x.MinMax()
+		full = x.IsFull()
+	case types.BlockUint32:
+		x := slicex.NewOrderedNumbers[uint32](set.([]uint32))
+		minv, maxv = x.MinMax()
+		full = x.IsFull()
+	case types.BlockUint16:
+		x := slicex.NewOrderedNumbers[uint16](set.([]uint16))
+		minv, maxv = x.MinMax()
+		full = x.IsFull()
+	case types.BlockUint8:
+		x := slicex.NewOrderedNumbers[uint8](set.([]uint8))
+		minv, maxv = x.MinMax()
+		full = x.IsFull()
+	case types.BlockInt128:
+		i128s := set.([]num.Int128)
+		mini, maxi := num.Int128MinMax(num.Int128Sort(i128s))
+		minv, maxv = mini, maxi
+		full = int(maxi.Sub(mini).Int64()+1) == len(i128s)
+	case types.BlockInt256:
+		i256s := set.([]num.Int256)
+		mini, maxi := num.Int256MinMax(num.Int256Sort(i256s))
+		minv, maxv = mini, maxi
+		full = int(maxi.Sub(mini).Int64()+1) == len(i256s)
+	case types.BlockFloat64:
+		x := slicex.NewOrderedNumbers(set.([]float64))
+		minv, maxv = x.MinMax()
+		full = false
+	case types.BlockFloat32:
+		x := slicex.NewOrderedNumbers(set.([]float32))
+		minv, maxv = x.MinMax()
+		full = false
+	case types.BlockBool:
+		switch slicex.ToBoolBits(set.([]bool)...) {
+		case 0:
+			minv, maxv, full = false, false, false
+		case 1:
+			minv, maxv, full = false, false, false
+		case 2:
+			minv, maxv, full = true, true, false
+		case 3:
+			minv, maxv, full = false, true, true
+		}
+	case types.BlockString, types.BlockBytes:
+		x := slicex.NewOrderedBytes(set.([][]byte))
+		minv, maxv = x.MinMax()
+		full = false
+	default:
+		panic(fmt.Errorf("range: unsupported block type %s ", t))
+	}
+	return
+}
+
+// Cast casts any Go integer type into a compatible type
+// for a block.
+func Cast(t types.BlockType, val any) (res any, ok bool) {
+	switch t {
+	case types.BlockInt64, types.BlockTime:
+		res, ok = cast[int64](val)
+	case types.BlockInt32:
+		res, ok = cast[int32](val)
+	case types.BlockInt16:
+		res, ok = cast[int16](val)
+	case types.BlockInt8:
+		res, ok = cast[int8](val)
+	case types.BlockUint64:
+		res, ok = cast[uint64](val)
+	case types.BlockUint32:
+		res, ok = cast[uint32](val)
+	case types.BlockUint16:
+		res, ok = cast[uint16](val)
+	case types.BlockUint8:
+		res, ok = cast[uint8](val)
+	default:
+		ok = false
+	}
+	return
+}
+
+func cast[T constraints.Integer](val any) (t T, ok bool) {
+	ok = true
+	switch v := val.(type) {
+	case int:
+		t = T(v)
+	case int64:
+		t = T(v)
+	case int32:
+		t = T(v)
+	case int16:
+		t = T(v)
+	case int8:
+		t = T(v)
+	case uint:
+		t = T(v)
+	case uint64:
+		t = T(v)
+	case uint32:
+		t = T(v)
+	case uint16:
+		t = T(v)
+	case uint8:
+		t = T(v)
+	default:
+		ok = false
+	}
+	return
+}
+
+func Inc(typ types.BlockType, v any) any {
+	switch typ {
+	case types.BlockUint64:
+		return v.(uint64) + 1
+	case types.BlockUint32:
+		return v.(uint32) + 1
+	case types.BlockUint16:
+		return v.(uint16) + 1
+	case types.BlockUint8:
+		return v.(uint8) + 1
+	case types.BlockInt64:
+		return v.(int64) + 1
+	case types.BlockInt32:
+		return v.(int32) + 1
+	case types.BlockInt16:
+		return v.(int16) + 1
+	case types.BlockInt8:
+		return v.(int8) + 1
+	case types.BlockInt128:
+		return v.(num.Int128).Add64(1)
+	case types.BlockInt256:
+		return v.(num.Int256).Add64(1)
+	case types.BlockBool:
+		return true
+	case types.BlockFloat64:
+		return math.Nextafter(v.(float64), MaxNumericVal(typ).(float64))
+	case types.BlockFloat32:
+		return math.Nextafter32(v.(float32), MaxNumericVal(typ).(float32))
+	case types.BlockString, types.BlockBytes:
+		c := bytes.Clone(v.([]byte))
+		var ok bool
+		for i := len(c) - 1; i >= 0; i-- {
+			if c[i] < 0xff {
+				c[i] += 1
+				ok = true
+				break
+			}
+			c[i] = 0
+		}
+		if !ok {
+			c = append([]byte{1}, c...)
+		}
+		return c
+	default:
+		panic(fmt.Errorf("inc: unsupported block type %s ", typ))
+	}
+}
+
+func Dec(typ types.BlockType, v any) any {
+	switch typ {
+	case types.BlockUint64:
+		return v.(uint64) - 1
+	case types.BlockUint32:
+		return v.(uint32) - 1
+	case types.BlockUint16:
+		return v.(uint16) - 1
+	case types.BlockUint8:
+		return v.(uint8) - 1
+	case types.BlockInt64:
+		return v.(int64) - 1
+	case types.BlockInt32:
+		return v.(int32) - 1
+	case types.BlockInt16:
+		return v.(int16) - 1
+	case types.BlockInt8:
+		return v.(int8) - 1
+	case types.BlockInt128:
+		return v.(num.Int128).Sub64(1)
+	case types.BlockInt256:
+		return v.(num.Int256).Sub64(1)
+	case types.BlockBool:
+		return false
+	case types.BlockFloat64:
+		return math.Nextafter(v.(float64), MinNumericVal(typ).(float64))
+	case types.BlockFloat32:
+		return math.Nextafter32(v.(float32), MinNumericVal(typ).(float32))
+	case types.BlockString, types.BlockBytes:
+		c := bytes.Clone(v.([]byte))
+		var ok bool
+		for i := len(c) - 1; i >= 0; i-- {
+			if c[i] > 0 {
+				c[i] -= 1
+				ok = true
+				break
+			}
+		}
+		if !ok && len(c) > 0 {
+			c = c[:len(c)-1]
+		}
+		return c
+	default:
+		panic(fmt.Errorf("dec: unsupported block type %s ", typ))
 	}
 }

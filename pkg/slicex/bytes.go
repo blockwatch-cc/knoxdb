@@ -25,6 +25,11 @@ func NewOrderedBytes(s [][]byte) *OrderedBytes {
 	}
 }
 
+func UniqueBytes(s [][]byte) [][]byte {
+	bytesSorter(s).Sort()
+	return removeDuplicateBytes(s)
+}
+
 func (o *OrderedBytes) SetNonZero() *OrderedBytes {
 	// remove zero values
 	o.Values, _ = removeZeroBytes(o.Values)

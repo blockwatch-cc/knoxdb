@@ -6,7 +6,6 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"reflect"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -148,10 +147,12 @@ func (_ BytesGenerator) MakeSlice(n ...int) any {
 	return s
 }
 
-// string
+// string (also returns byte slices)
 var _ Generator = (*StringsGenerator)(nil)
 
-type StringsGenerator struct{}
+type StringsGenerator struct {
+	BytesGenerator
+}
 
 func (_ StringsGenerator) Type() types.BlockType {
 	return types.BlockString
@@ -164,15 +165,15 @@ func (_ StringsGenerator) Name() string {
 func (_ StringsGenerator) MakeValue(n int) any {
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], uint64(n))
-	return hex.EncodeToString(b[:])
+	return b[:]
 }
 
 func (_ StringsGenerator) MakeSlice(n ...int) any {
-	s := make([]string, len(n))
+	s := make([][]byte, len(n))
 	for i := range n {
 		var b [8]byte
 		binary.BigEndian.PutUint64(b[:], uint64(n[i]))
-		s[i] = hex.EncodeToString(b[:])
+		s[i] = bytes.Clone(b[:])
 	}
 	return s
 }

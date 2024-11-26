@@ -71,6 +71,11 @@ func (o OrderedNumbers[T]) MinMax() (T, T) {
 	}
 }
 
+func (o OrderedNumbers[T]) IsFull() bool {
+	a, b := o.MinMax()
+	return int(b-a)+1 == len(o.Values)
+}
+
 func (o *OrderedNumbers[T]) Insert(val ...T) *OrderedNumbers[T] {
 	// remove incoming zeros
 	if o.NonZero {

@@ -325,10 +325,6 @@ func (m numMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bi
 	return m.match(acc.Slice(), m.val, bits, mask)
 }
 
-func (m numMatcher[T]) MatchRange(from, to any) bool {
-	return false
-}
-
 // EQUAL ---
 
 type numEqualMatcher[T Number] struct {
@@ -390,7 +386,7 @@ func (m numGeMatcher[T]) MatchValue(v any) bool {
 	return m.val <= v.(T)
 }
 
-func (m numGeMatcher[T]) MatchRange(from, to any) bool {
+func (m numGeMatcher[T]) MatchRange(_, to any) bool {
 	// return m.val <= from.(T) || m.val <= to.(T)
 	return m.val <= to.(T)
 }
@@ -405,7 +401,7 @@ func (m numLtMatcher[T]) MatchValue(v any) bool {
 	return m.val > v.(T)
 }
 
-func (m numLtMatcher[T]) MatchRange(from, to any) bool {
+func (m numLtMatcher[T]) MatchRange(from, _ any) bool {
 	// return m.val > from.(T) || m.val > to.(T)
 	return m.val > from.(T)
 }
@@ -420,7 +416,7 @@ func (m numLeMatcher[T]) MatchValue(v any) bool {
 	return m.val >= v.(T)
 }
 
-func (m numLeMatcher[T]) MatchRange(from, to any) bool {
+func (m numLeMatcher[T]) MatchRange(from, _ any) bool {
 	// return m.val >= from.(T) || m.val >= to.(T)
 	return m.val >= from.(T)
 }
@@ -429,9 +425,9 @@ func (m numLeMatcher[T]) MatchRange(from, to any) bool {
 
 // InBetween, ContainsRange
 type numRangeMatcher[T Number] struct {
-	numMatcher[T]
-	from T
-	to   T
+	numMatcher[T] // required or MatchBlock
+	from          T
+	to            T
 }
 
 func (m *numRangeMatcher[T]) Value() any { return RangeValue{m.from, m.to} }
