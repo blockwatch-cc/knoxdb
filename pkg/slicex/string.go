@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package slicex
@@ -159,6 +159,22 @@ func (o OrderedStrings) ContainsAll(val ...string) bool {
 
 func (o OrderedStrings) ContainsRange(from, to string) bool {
 	return containsRange(o.Values, from, to)
+}
+
+func (o OrderedStrings) RemoveRange(from, to string) *OrderedStrings {
+	return &OrderedStrings{
+		NonZero: o.NonZero,
+		Unique:  o.Unique,
+		Values:  removeRange(o.Values, from, to, make([]string, 0)),
+	}
+}
+
+func (o OrderedStrings) IntersectRange(from, to string) *OrderedStrings {
+	return &OrderedStrings{
+		NonZero: o.NonZero,
+		Unique:  o.Unique,
+		Values:  intersectRange(o.Values, from, to, make([]string, 0)),
+	}
 }
 
 func (o OrderedStrings) Equal(o2 *OrderedStrings) bool {

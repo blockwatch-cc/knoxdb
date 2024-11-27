@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package slicex
@@ -172,6 +172,22 @@ func (o OrderedNumbers[T]) Equal(o2 *OrderedNumbers[T]) bool {
 
 func (o OrderedNumbers[T]) ContainsRange(from, to T) bool {
 	return containsRange(o.Values, from, to)
+}
+
+func (o OrderedNumbers[T]) RemoveRange(from, to T) *OrderedNumbers[T] {
+	return &OrderedNumbers[T]{
+		NonZero: o.NonZero,
+		Unique:  o.Unique,
+		Values:  removeRange(o.Values, from, to, make([]T, 0)),
+	}
+}
+
+func (o OrderedNumbers[T]) IntersectRange(from, to T) *OrderedNumbers[T] {
+	return &OrderedNumbers[T]{
+		NonZero: o.NonZero,
+		Unique:  o.Unique,
+		Values:  intersectRange(o.Values, from, to, make([]T, 0)),
+	}
 }
 
 func (o OrderedNumbers[T]) Intersect(v *OrderedNumbers[T]) *OrderedNumbers[T] {
