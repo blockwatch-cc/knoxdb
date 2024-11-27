@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"blockwatch.cc/knoxdb/internal/dst/vfs"
+	"blockwatch.cc/knoxdb/internal/tests/dst/vfs"
 	"github.com/echa/log"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/experimental/sysfs"
