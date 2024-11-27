@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: oliver@blockwatch.cc
 //
-// Simulates a banking system with debit and credit operations.
+// Workload3 simulates a banking system with debit and credit operations.
 // Ensures:
 // - transactions are atomic (no partial updates).
 // - total balance consistency is maintained across accounts.
@@ -12,10 +12,10 @@ import (
 	"context"
 	"testing"
 
+	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/stretchr/testify/require"
 )
 
-// TestWorkload3 simulates atomic banking transactions
 func TestWorkload3(t *testing.T) {
 	_, table, cleanup := SetupDatabase(t)
 	defer cleanup()
@@ -25,43 +25,48 @@ func TestWorkload3(t *testing.T) {
 	const txnCount = 20
 	const initialBalance = 100
 
-	// Initialize accounts with balances
+	// Step 1: Initialize accounts with balances
 	data := make([]*Types, accountCount)
 	for i := 0; i < accountCount; i++ {
 		data[i] = &Types{
-			Id:    uint64(i + 1),
-			Int64: initialBalance,
+			Int64: initialBalance, // Set initial balance, omit setting ID
 		}
 	}
 	_, err := table.Insert(ctx, data)
 	require.NoError(t, err, "Failed to initialize accounts")
 
-	// Perform debit and credit operations
+	// Step 2: Perform debit and credit operations
 	for i := 0; i < txnCount; i++ {
 		from := i % accountCount
 		to := (i + 1) % accountCount
 
 		var fromAccount, toAccount Types
+
+		// Load the "from" account and validate
 		err := knox.NewGenericQuery[Types]().
 			WithTable(table).
 			AndEqual("id", uint64(from+1)).
 			Execute(ctx, &fromAccount)
-		require.NoError(t, err)
+		require.NoError(t, err, "Failed to load 'from' account")
+		require.Equal(t, uint64(from+1), fromAccount.Id)
 
+		// Load the "to" account and validate
 		err = knox.NewGenericQuery[Types]().
 			WithTable(table).
 			AndEqual("id", uint64(to+1)).
 			Execute(ctx, &toAccount)
-		require.NoError(t, err)
+		require.NoError(t, err, "Failed to load 'to' account")
+		require.Equal(t, uint64(to+1), toAccount.Id)
 
+		// Perform the debit and credit
 		fromAccount.Int64 -= 50
 		toAccount.Int64 += 50
 
 		_, err = table.Update(ctx, []*Types{&fromAccount, &toAccount})
-		require.NoError(t, err)
+		require.NoError(t, err, "Failed to update accounts")
 	}
 
-	// Validate total balance consistency
+	// Step 3: Validate total balance consistency
 	totalBalance := int64(0)
 	err = knox.NewGenericQuery[Types]().
 		WithTable(table).
@@ -69,6 +74,6 @@ func TestWorkload3(t *testing.T) {
 			totalBalance += res.Int64
 			return nil
 		})
-	require.NoError(t, err)
+	require.NoError(t, err, "Failed to stream data")
 	require.Equal(t, int64(accountCount*initialBalance), totalBalance, "Total balance mismatch")
 }

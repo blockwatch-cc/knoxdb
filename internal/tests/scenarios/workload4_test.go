@@ -1,11 +1,11 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: oliver@blockwatch.cc
-
-// Simulates interleaved operations across multiple threads.
+//
+// Workload4 simulates interleaved operations across multiple threads.
 // Ensures:
 // - thread safety and data isolation during concurrent access.
 // - data consistency and correctness across all operations.
-// - no deadlocks or livelocks occur.
+// - potential deadlocks are detected using `require.Eventually`.
 
 package scenarios
 
@@ -13,11 +13,12 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
+	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/stretchr/testify/require"
 )
 
-// TestWorkload4 tests interleaved operations for isolation
 func TestWorkload4(t *testing.T) {
 	_, table, cleanup := SetupDatabase(t)
 	defer cleanup()
@@ -36,13 +37,19 @@ func TestWorkload4(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < txnSize; i++ {
 				record := NewRandomTypes(threadID*txnSize + i)
-				_, err := table.Insert(ctx, []*Types{record})
+				pk, err := table.Insert(ctx, []*Types{record})
 				require.NoError(t, err, "Failed to insert data")
+				record.Id = pk
 				insertedData.Store(record.Id, record)
 			}
 		}(threadID)
 	}
-	wg.Wait()
+
+	// Wait for threads to finish, checking for potential deadlocks
+	require.Eventually(t, func() bool {
+		wg.Wait()
+		return true
+	}, 10*time.Second, 100*time.Millisecond, "Deadlock detected: threads did not complete")
 
 	// Validate all interleaved operations are consistent
 	count := 0
@@ -57,6 +64,6 @@ func TestWorkload4(t *testing.T) {
 			count++
 			return nil
 		})
-	require.NoError(t, err)
+	require.NoError(t, err, "Failed to stream data")
 	require.Equal(t, txnSize*numThreads, count, "Row count mismatch")
 }

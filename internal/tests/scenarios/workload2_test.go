@@ -5,6 +5,7 @@
 // Ensures:
 // - no data loss or corruption across threads.
 // - total row count and content correctness are verified post-insertion.
+// - potential deadlocks are detected using `require.Eventually`.
 
 package scenarios
 
@@ -12,11 +13,13 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
+	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/stretchr/testify/require"
 )
 
-// TestWorkload2 tests concurrent transactions
+// TestWorkload2 tests concurrent transactions.
 func TestWorkload2(t *testing.T) {
 	_, table, cleanup := SetupDatabase(t)
 	defer cleanup()
@@ -28,22 +31,28 @@ func TestWorkload2(t *testing.T) {
 	var wg sync.WaitGroup
 	insertedData := sync.Map{}
 
-	// Concurrent inserts
+	// Concurrent inserts.
 	for threadID := 0; threadID < numThreads; threadID++ {
 		wg.Add(1)
 		go func(threadID int) {
 			defer wg.Done()
 			for i := 0; i < txnSize; i++ {
 				record := NewRandomTypes(threadID*txnSize + i)
-				_, err := table.Insert(ctx, []*Types{record})
+				pk, err := table.Insert(ctx, []*Types{record})
 				require.NoError(t, err, "Failed to insert data")
+				record.Id = pk
 				insertedData.Store(record.Id, record)
 			}
 		}(threadID)
 	}
-	wg.Wait()
 
-	// Validate all rows are inserted correctly
+	// Wait for threads to finish, checking for potential deadlocks.
+	require.Eventually(t, func() bool {
+		wg.Wait()
+		return true
+	}, 10*time.Second, 100*time.Millisecond, "Deadlock detected: threads did not complete")
+
+	// Validate all rows are inserted correctly.
 	count := 0
 	err := knox.NewGenericQuery[Types]().
 		WithTable(table).
