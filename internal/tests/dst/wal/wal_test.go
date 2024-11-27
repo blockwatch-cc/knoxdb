@@ -58,7 +58,7 @@ func GenerateRecords(sz int) []*wal.Record {
 	recs := make([]*wal.Record, 0, sz)
 	for i := range sz {
 		walTxId := i
-		walBody := bytes.Repeat([]byte("data"), i)
+		walBody := [][]byte{bytes.Repeat([]byte("data"), i)}
 		walTyp := wal.RecordTypeInsert
 		if i%10 == 0 {
 			walTyp = wal.RecordTypeCheckpoint
