@@ -267,6 +267,8 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 //     or adds IN condition at front if index may have collisions
 func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	if p.Flags.IsNoIndex() || p.Filters.IsProcessed() {
+		p.Log.Debug("Index disabled or all filters processed")
+		p.Log.Debugf("%#v %s", p.Filters, p.Filters)
 		return nil
 	}
 
@@ -275,13 +277,15 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	p.Log.Debugf("%d index results", n)
 
 	if n > 0 {
 		// pk field filter template
+		ts := p.Table.Schema()
 		tmpl := &Filter{
-			Name:  p.RequestSchema.Pk().Name(),
-			Type:  BlockTypes[p.RequestSchema.Pk().Type()],
-			Index: uint16(p.RequestSchema.PkIndex()),
+			Name:  ts.Pk().Name(),
+			Type:  BlockTypes[ts.Pk().Type()],
+			Index: uint16(ts.PkIndex()),
 		}
 
 		// Step 2: add IN conditions from aggregate bits at each tree level
@@ -289,14 +293,17 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 
 		// Step 3: optimize by removing skip nodes and merge / simplify others
 		p.Filters.Optimize()
+		p.Log.Debugf("Optimized %#v %s", p.Filters, p.Filters)
 
 		// Step 4: adjust request schema (we may have to check less fields now)
 		filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
 		requestFields := slicex.NewOrderedStrings(p.RequestSchema.ActiveFieldNames())
+		p.Log.Debugf("filter fields: %v", filterFields.Values)
+		p.Log.Debugf("request fields: %v", requestFields.Values)
 		if !filterFields.Equal(requestFields) && filterFields.Len() > 0 {
 			s, err := p.Table.Schema().SelectFields(filterFields.Values...)
 			if err != nil {
-				return fmt.Errorf("query %s: remake request schema: %v", p.Tag, err)
+				return fmt.Errorf("Q> %s: remake request schema: %v", p.Tag, err)
 			}
 			p.RequestSchema = s.Sort()
 		}
