@@ -229,7 +229,7 @@ func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 // - any: RG(N,max) => GE(N)
 // - any: RG(N,N) => EQ(N)
 // - any: IN(A,B,C) => RG(A,C)
-func simplifySingle(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
+func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 	var res []*FilterTreeNode
 
 	for _, node := range nodes {
@@ -238,7 +238,7 @@ func simplifySingle(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		// we decide based on filter mode
 		switch f.Mode {
 		case FilterModeIn:
-			// fmt.Printf("Simple IN len=%d %#v\n", f.Matcher.Len(), f.Value)
+			// fmt.Printf("Simple IN %#v %#v\n", f.Matcher, f.Value)
 			switch f.Matcher.Len() {
 			case 0:
 				res = append(res, &FilterTreeNode{
@@ -901,7 +901,7 @@ func makeFilterFromSet(f *Filter, set *xroar.Bitmap) *Filter {
 		Mode:    FilterModeIn,
 		Index:   f.Index,
 		Matcher: m,
-		Value:   m.Value(), // FIXME: optimizer expects []T
+		Value:   m.Value(), // FIXME: optimizer expects []T which is expensive
 	}
 }
 

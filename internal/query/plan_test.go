@@ -96,8 +96,12 @@ func (idx *MockIndex) IsComposite() bool {
 	return false
 }
 
-func (idx *MockIndex) CanMatch(_ engine.QueryCondition) bool {
-	return true
+func (idx *MockIndex) CanMatch(node engine.QueryCondition) bool {
+	f, ok := idx.schema.FieldByIndex(0)
+	if !ok {
+		return false
+	}
+	return f.Name() == node.Fields()[0]
 }
 
 func (idx *MockIndex) Query(_ context.Context, _ engine.QueryCondition) (*bitmap.Bitmap, bool, error) {
@@ -173,8 +177,12 @@ func IsFilterEqual(a, b *FilterTreeNode) bool {
 	if a.OrKind != b.OrKind {
 		return false
 	}
-	if !bytes.Equal(a.Bits.Bytes(), b.Bits.Bytes()) {
-		return false
+
+	// ignore bits unless expected
+	if a.Bits.IsValid() {
+		if !bytes.Equal(a.Bits.Bytes(), b.Bits.Bytes()) {
+			return false
+		}
 	}
 
 	if a.IsLeaf() != b.IsLeaf() {
@@ -531,11 +539,15 @@ func TestPlanCompile(t *testing.T) {
 				WithSchema(testSchema)
 			defer plan.Close()
 
+			if testing.Verbose() {
+				plan.WithLogger(log.Log).WithFlags(QueryFlagDebug)
+			}
+
 			// validate
-			require.NoError(t, plan.Validate())
-			require.NoError(t, plan.Compile(context.TODO()))
+			require.NoError(t, plan.Validate(), "validation failed")
+			require.NoError(t, plan.Compile(context.TODO()), "compile failed")
 			isEqual := IsFilterEqual(tc.Expected, plan.Filters)
-			assert.True(t, isEqual, "%s", plan.Filters)
+			assert.True(t, isEqual, "unexpected filters %s", plan.Filters)
 			if !isEqual {
 				assert.Equal(t, tc.Expected, plan.Filters)
 			}
@@ -558,16 +570,47 @@ func TestPlanQueryIndexes(t *testing.T) {
 	testCases := []TestCase{
 		// single condition + single index
 		{
-			Name:      "EQ Condition",
+			Name:      "EQ Single",
 			Condition: Equal("name", "a"),
 			Index:     makeIndex(1),
 			Expected:  makeAndTree(makeEqualNode(f1, uint64(1))),
 		},
 		{
-			Name:      "EQ Duplicate",
+			Name:      "IN",
+			Condition: In("name", []string{"a", "b", "c"}),
+			Index:     makeIndex(1, 4, 5),
+			Expected:  makeAndTree(makeInNode(f1, []uint64{1, 4, 5})),
+		},
+		{
+			Name:      "EQ Double",
 			Condition: Equal("name", "a"),
 			Index:     makeIndex(1, 2),
 			Expected:  makeAndTree(makeRangeNode(f1, uint64(1), uint64(2))),
+		},
+		{
+			Name:      "EQ Triple",
+			Condition: Equal("name", "a"),
+			Index:     makeIndex(1, 2, 4),
+			Expected:  makeAndTree(makeInNode(f1, []uint64{1, 2, 4})),
+		},
+		{
+			Name:      "Empty index",
+			Condition: Equal("name", "a"),
+			Index:     makeIndex(),
+			Expected:  makeAndTree(makeFalseNode(f1)),
+		},
+		// multi condition
+		{
+			Name:      "AND EQ",
+			Condition: And(Equal("name", "a"), In("id", []uint64{1, 2})),
+			Index:     makeIndex(1),
+			Expected:  makeAndTree(makeEqualNode(f1, uint64(1))),
+		},
+		{
+			Name:      "AND IN",
+			Condition: And(In("name", []string{"a", "b", "c"}), Gt("id", uint64(4))),
+			Index:     makeIndex(1, 4, 5),
+			Expected:  makeAndTree(makeEqualNode(f1, uint64(5))),
 		},
 	}
 	for _, tc := range testCases {
@@ -588,19 +631,26 @@ func TestPlanQueryIndexes(t *testing.T) {
 				WithTag(tc.Name).
 				WithTable(mockTable).
 				WithFilters(flt).
-				WithSchema(testSchema).
-				WithLogger(log.Log).
-				WithFlags(QueryFlagDebug)
+				WithSchema(testSchema)
 			defer plan.Close()
+
+			if testing.Verbose() {
+				plan.WithLogger(log.Log).WithFlags(QueryFlagDebug)
+			}
 
 			// validate, compile and run index query
 			require.NoError(t, plan.Validate())
 			require.NoError(t, plan.Compile(context.TODO()))
 			require.NoError(t, plan.QueryIndexes(context.TODO()))
 
+			// fully processed trees should habe a top level bitmap
+			if plan.Filters.IsProcessed() {
+				require.True(t, plan.Filters.Bits.IsValid(), "missing bits for %s", plan.Filters)
+			}
+
 			// check
 			isEqual := IsFilterEqual(tc.Expected, plan.Filters)
-			assert.True(t, isEqual, "%s", plan.Filters)
+			assert.True(t, isEqual, "unexpected filter %s, want %s", plan.Filters, tc.Expected)
 			if !isEqual {
 				assert.Equal(t, tc.Expected, plan.Filters)
 			}

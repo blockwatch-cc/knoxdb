@@ -310,7 +310,7 @@ func (s *Schema) FieldById(id uint16) (f Field, ok bool) {
 }
 
 func (s *Schema) FieldByIndex(i int) (f Field, ok bool) {
-	if len(s.fields) < i {
+	if i < len(s.fields) {
 		return s.fields[i], true
 	}
 	return
