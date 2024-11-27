@@ -33,7 +33,7 @@ func NewTestTableOptions(t *testing.T, driver string) engine.TableOptions {
 	return engine.TableOptions{
 		Driver:     driver,
 		PageSize:   4096,
-		PageFill:   1.0,
+		PageFill:   0.9,
 		NoSync:     false,
 		NoGrowSync: false,
 		ReadOnly:   false,
