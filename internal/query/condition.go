@@ -113,7 +113,10 @@ func (c Condition) Validate() error {
 
 func (c Condition) validate(isRoot bool) error {
 	// empty root is ok, but empty branch/child is not
-	if !isRoot && c.IsEmpty() {
+	if c.IsEmpty() {
+		if isRoot {
+			return nil
+		}
 		return fmt.Errorf("empty non-root condition")
 	}
 

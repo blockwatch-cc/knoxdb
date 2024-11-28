@@ -217,6 +217,7 @@ func (r *Row) Decode(val any) error {
 		if err != nil {
 			return err
 		}
+		s.WithEnumsFrom(r.res.pkg.Schema().Enums())
 		r.maps = maps
 		r.schema = s
 	}

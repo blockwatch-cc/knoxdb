@@ -472,7 +472,7 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte) []byte
 		if !ok {
 			panic(fmt.Errorf("%s: invalid enum value %d", field.name, u16))
 		}
-		*(*string)(ptr) = string(val)
+		*(*string)(ptr) = string(val) // FIXME: may break when enum dict grows
 	}
 	return buf
 }
