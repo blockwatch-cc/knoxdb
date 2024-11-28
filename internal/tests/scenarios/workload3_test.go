@@ -25,6 +25,7 @@ func TestWorkload3(t *testing.T) {
 	const accountCount = 10
 	const txnCount = 20
 	const initialBalance = 100
+	const transferAmount = 50
 
 	// Initialize accounts with balances
 	data := make([]*Types, accountCount)
@@ -34,12 +35,12 @@ func TestWorkload3(t *testing.T) {
 			MyEnum: myEnums[i%len(myEnums)],
 		}
 	}
-	pk, err := table.Insert(ctx, data)
+	startPK, err := table.Insert(ctx, data)
 	require.NoError(t, err, "Failed to initialize accounts")
 
 	// Update IDs for accounts
 	for i := range data {
-		data[i].Id = pk + uint64(i)
+		data[i].Id = startPK + uint64(i)
 	}
 
 	// Perform debit and credit operations
@@ -54,23 +55,23 @@ func TestWorkload3(t *testing.T) {
 			WithTable(table).
 			AndEqual("id", data[from].Id).
 			Execute(ctx, &fromAccount)
-		require.NoError(t, err, "Failed to load 'from' account")
-		require.Equal(t, data[from].Id, fromAccount.Id, "Loaded account ID mismatch")
+		require.NoError(t, err, "Failed to load 'from' account with ID: %d", data[from].Id)
+		require.Equal(t, data[from].Id, fromAccount.Id, "Loaded 'from' account ID mismatch")
 
 		// Load the "to" account
 		err = knox.NewGenericQuery[Types]().
 			WithTable(table).
 			AndEqual("id", data[to].Id).
 			Execute(ctx, &toAccount)
-		require.NoError(t, err, "Failed to load 'to' account")
-		require.Equal(t, data[to].Id, toAccount.Id, "Loaded account ID mismatch")
+		require.NoError(t, err, "Failed to load 'to' account with ID: %d", data[to].Id)
+		require.Equal(t, data[to].Id, toAccount.Id, "Loaded 'to' account ID mismatch")
 
 		// Perform debit and credit
-		fromAccount.Int64 -= 50
-		toAccount.Int64 += 50
+		fromAccount.Int64 -= transferAmount
+		toAccount.Int64 += transferAmount
 
 		_, err = table.Update(ctx, []*Types{&fromAccount, &toAccount})
-		require.NoError(t, err, "Failed to update accounts")
+		require.NoError(t, err, "Failed to update accounts during transaction")
 
 		time.Sleep(1 * time.Millisecond) // Simulate real-world delay
 	}
@@ -83,6 +84,18 @@ func TestWorkload3(t *testing.T) {
 			totalBalance += res.Int64
 			return nil
 		})
-	require.NoError(t, err, "Failed to stream data")
+	require.NoError(t, err, "Failed to stream data for total balance validation")
 	require.Equal(t, int64(accountCount*initialBalance), totalBalance, "Total balance mismatch")
+
+	// Validate final balances for each account
+	expectedBalanceAdjustments := txnCount / accountCount * transferAmount
+	for i, account := range data {
+		err := knox.NewGenericQuery[Types]().
+			WithTable(table).
+			AndEqual("id", account.Id).
+			Execute(ctx, &account)
+		require.NoError(t, err, "Failed to load account with ID: %d", account.Id)
+		expectedBalance := initialBalance + int64(expectedBalanceAdjustments)
+		require.Equal(t, expectedBalance, account.Int64, "Final balance mismatch for account ID: %d", account.Id)
+	}
 }
