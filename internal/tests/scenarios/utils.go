@@ -36,7 +36,7 @@ type Types struct {
 // NewRandomTypes generates a random instance of Types
 func NewRandomTypes(i int) *Types {
 	return &Types{
-		Id:        0,
+		Id:        0, // Primary key will be assigned post-insertion
 		Timestamp: time.Now().UTC(),
 		String:    hex.EncodeToString(util.RandBytes(4)),
 		Int64:     int64(i),
@@ -95,11 +95,7 @@ func SetupDatabase(t *testing.T) (knox.Database, knox.Table, func()) {
 	// Extend the enum with values
 	log.Infof("Extending enum 'my_enum' with values: %+v", myEnums)
 	err = db.ExtendEnum(ctx, "my_enum", myEnums...)
-	if err != nil {
-		log.Errorf("Failed to extend enum 'my_enum': %v", err)
-		require.NoError(t, err, "Failed to extend enum 'my_enum'")
-	}
-	log.Infof("Successfully extended enum 'my_enum' with values: %+v", myEnums)
+	require.NoError(t, err, "Failed to extend enum 'my_enum'")
 
 	// Validate that the enum exists
 	enums := db.ListEnums()

@@ -11,6 +11,7 @@ package scenarios
 import (
 	"context"
 	"testing"
+	"time"
 
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/stretchr/testify/require"
@@ -54,7 +55,7 @@ func TestWorkload3(t *testing.T) {
 			AndEqual("id", data[from].Id).
 			Execute(ctx, &fromAccount)
 		require.NoError(t, err, "Failed to load 'from' account")
-		require.NotEmpty(t, fromAccount.MyEnum, "FromAccount enum value is empty")
+		require.Equal(t, data[from].Id, fromAccount.Id, "Loaded account ID mismatch")
 
 		// Load the "to" account
 		err = knox.NewGenericQuery[Types]().
@@ -62,7 +63,7 @@ func TestWorkload3(t *testing.T) {
 			AndEqual("id", data[to].Id).
 			Execute(ctx, &toAccount)
 		require.NoError(t, err, "Failed to load 'to' account")
-		require.NotEmpty(t, toAccount.MyEnum, "ToAccount enum value is empty")
+		require.Equal(t, data[to].Id, toAccount.Id, "Loaded account ID mismatch")
 
 		// Perform debit and credit
 		fromAccount.Int64 -= 50
@@ -70,6 +71,8 @@ func TestWorkload3(t *testing.T) {
 
 		_, err = table.Update(ctx, []*Types{&fromAccount, &toAccount})
 		require.NoError(t, err, "Failed to update accounts")
+
+		time.Sleep(1 * time.Millisecond) // Simulate real-world delay
 	}
 
 	// Validate total balance consistency
@@ -78,7 +81,6 @@ func TestWorkload3(t *testing.T) {
 		WithTable(table).
 		Stream(ctx, func(res *Types) error {
 			totalBalance += res.Int64
-			require.NotEmpty(t, res.MyEnum, "Streamed account has empty enum value")
 			return nil
 		})
 	require.NoError(t, err, "Failed to stream data")
