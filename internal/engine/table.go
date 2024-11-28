@@ -64,13 +64,26 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	tag := s.TaggedHash(types.ObjectTagTable)
 	e.mu.RLock()
 	_, ok := e.tables[tag]
-	e.mu.RUnlock()
 	if ok {
+		e.mu.RUnlock()
 		return nil, ErrTableExists
 	}
 
-	// resolve schema enums
-	e.mu.RLock()
+	// check enums exist
+	var err error
+	for _, n := range s.EnumFieldNames() {
+		_, ok = e.enums.Lookup(n)
+		if !ok {
+			err = fmt.Errorf("missing enum %q", n)
+			break
+		}
+	}
+	if err != nil {
+		e.mu.RUnlock()
+		return nil, err
+	}
+
+	// link enums into schema
 	s.WithEnumsFrom(e.enums)
 	e.mu.RUnlock()
 

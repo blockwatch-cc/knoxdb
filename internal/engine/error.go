@@ -33,6 +33,7 @@ var (
 	ErrStoreExists       = errors.New("knox: store already exists")
 	ErrIndexExists       = errors.New("knox: index already exists")
 	ErrEnumExists        = errors.New("knox: enum already exists")
+	ErrEnumInUse         = errors.New("knox: enum is referenced")
 	ErrResultClosed      = errors.New("knox: result already closed")
 	ErrInvalidObjectType = errors.New("knox: invalid object type")
 	ErrTableDropWithRefs = errors.New("knox: table is referenced")

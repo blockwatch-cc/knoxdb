@@ -251,6 +251,16 @@ func (s *Schema) InternalFieldNames() []string {
 	return list
 }
 
+func (s *Schema) EnumFieldNames() []string {
+	list := make([]string, 0)
+	for i := range s.fields {
+		if s.fields[i].IsEnum() {
+			list = append(list, s.fields[i].name)
+		}
+	}
+	return list
+}
+
 func (s *Schema) AllFieldIds() []uint16 {
 	list := make([]uint16, len(s.fields))
 	for i := range s.fields {
