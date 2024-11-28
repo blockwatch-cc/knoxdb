@@ -42,7 +42,12 @@ func TestWorkload2(t *testing.T) {
 			for i := 0; i < txnSize; i++ {
 				time.Sleep(1 * time.Millisecond) // Simulate delay for each insert
 				record := NewRandomTypes(threadID*txnSize + i)
+
+				// Synchronize EnumRegistry access to prevent concurrent writes
+				enumMutex.Lock()
 				pk, err := table.Insert(ctx, []*Types{record})
+				enumMutex.Unlock()
+
 				require.NoError(t, err, "Failed to insert data")
 				record.Id = pk
 				insertedData.Store(record.Id, record)

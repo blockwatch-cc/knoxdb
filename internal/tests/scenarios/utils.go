@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,7 +23,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var myEnums = []string{"one", "two", "three", "four"}
+var (
+	myEnums   = []string{"one", "two", "three", "four"}
+	enumMutex sync.Mutex // Mutex for synchronizing EnumRegistry access
+)
 
 // Types defines the schema for our workload tests
 type Types struct {
@@ -107,9 +111,9 @@ func SetupDatabase(t *testing.T) (knox.Database, knox.Table, func()) {
 	require.NoError(t, err, "Failed to generate schema for Types")
 	log.Infof("Generated schema with fields:")
 
-	// Use the `Fields` method as a slice or iterable
-	for _, field := range s.Fields() { // Assuming `Fields` returns a slice or similar collection
-		log.Infof("  - Field: Name=%s, Type=%s", field.Name, field.Type)
+	// Iterate over schema fields and log them
+	for _, field := range s.Fields() {
+		log.Infof("  - Field: Name=%s, Type=%s", field.Name(), field.Type())
 	}
 
 	// Create new table
