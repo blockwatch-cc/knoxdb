@@ -23,6 +23,11 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 		return 0, engine.ErrShortMessage
 	}
 
+	// check table state
+	if t.opts.ReadOnly {
+		return 0, engine.ErrDatabaseReadOnly
+	}
+
 	// obtain shared table lock
 	etx := engine.GetTransaction(ctx)
 	err := etx.RLock(ctx, t.id)
@@ -94,6 +99,11 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	}
 	if len(buf) < t.schema.WireSize() {
 		return 0, engine.ErrShortMessage
+	}
+
+	// check table state
+	if t.opts.ReadOnly {
+		return 0, engine.ErrDatabaseReadOnly
 	}
 
 	// obtain shared table lock

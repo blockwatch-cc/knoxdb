@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Blockwatch Data Inc.
+// Copyright (c) 2020-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 //
 
@@ -6,7 +6,6 @@ package slicex
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"testing"
 
@@ -16,7 +15,7 @@ import (
 
 // -----------------------------------------------------------------------
 // Byte Slice
-func TestByteSliceContains(T *testing.T) {
+func TestBytesContains(T *testing.T) {
 	// nil slice
 	if NewOrderedBytes(nil).Contains([]byte{1}) {
 		T.Errorf("nil slice cannot contain value")
@@ -69,7 +68,7 @@ func TestByteSliceContains(T *testing.T) {
 	}
 }
 
-func BenchmarkByteSliceContains(B *testing.B) {
+func BenchmarkBytesContains(B *testing.B) {
 	cases := []int{10, 1000, 1000000}
 	for _, n := range cases {
 		B.Run(fmt.Sprintf("%d-neg", n), func(B *testing.B) {
@@ -97,7 +96,7 @@ func BenchmarkByteSliceContains(B *testing.B) {
 	}
 }
 
-func TestByteSliceContainsRange(T *testing.T) {
+func TestBytesContainsRange(T *testing.T) {
 	type TestRange struct {
 		Name  string
 		From  []byte
@@ -120,14 +119,14 @@ func TestByteSliceContainsRange(T *testing.T) {
 		},
 		// empty slice
 		{
-			Slice: [][]byte{},
+			Slice: bs(),
 			Ranges: []TestRange{
 				{Name: "X", From: []byte{0}, To: []byte{2}, Match: false},
 			},
 		},
 		// 1-element slice
 		{
-			Slice: [][]byte{{3}},
+			Slice: bs(3),
 			Ranges: []TestRange{
 				{Name: "A", From: []byte{0}, To: []byte{2}, Match: false},   // Case A
 				{Name: "B1", From: []byte{1}, To: []byte{3}, Match: true},   // Case B.1, D1
@@ -138,14 +137,14 @@ func TestByteSliceContainsRange(T *testing.T) {
 		},
 		// 1-element slice, from == to
 		{
-			Slice: [][]byte{{3}},
+			Slice: bs(3),
 			Ranges: []TestRange{
 				{Name: "BCD", From: []byte{3}, To: []byte{3}, Match: true}, // Case B.3, C.1, D.1
 			},
 		},
 		// N-element slice (odd element count)
 		{
-			Slice: [][]byte{{3}, {5}, {7}, {11}, {13}},
+			Slice: bs(3, 5, 7, 11, 13),
 			Ranges: []TestRange{
 				{Name: "A", From: []byte{0}, To: []byte{2}, Match: false},    // Case A
 				{Name: "B1a", From: []byte{1}, To: []byte{3}, Match: true},   // Case B.1
@@ -201,7 +200,7 @@ func TestByteSliceContainsRange(T *testing.T) {
 	}
 }
 
-func BenchmarkByteSlice32ContainsRange(B *testing.B) {
+func BenchmarkBytes32ContainsRange(B *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
 		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
 			a := NewOrderedBytes(util.RandByteSlices(n, 32))
@@ -225,14 +224,12 @@ func BenchmarkByteSlice32ContainsRange(B *testing.B) {
 func bs(n ...int) [][]byte {
 	b := make([][]byte, len(n))
 	for i, v := range n {
-		var buf [8]byte
-		binary.BigEndian.PutUint64(buf[:], uint64(v))
-		b[i] = bytes.Clone(buf[:])
+		b[i] = []byte{byte(v)}
 	}
 	return b
 }
 
-func TestByteSliceUnique(t *testing.T) {
+func TestBytesUnique(t *testing.T) {
 	var tests = []struct {
 		n string
 		a *OrderedBytes
@@ -291,7 +288,7 @@ func TestByteSliceUnique(t *testing.T) {
 	}
 }
 
-func TestByteSliceIntersect(t *testing.T) {
+func TestBytesIntersect(t *testing.T) {
 	var tests = []struct {
 		n string
 		a *OrderedBytes
@@ -350,7 +347,7 @@ func TestByteSliceIntersect(t *testing.T) {
 	}
 }
 
-func TestByteSliceDifference(t *testing.T) {
+func TestBytesDifference(t *testing.T) {
 	var tests = []struct {
 		n string
 		a *OrderedBytes
@@ -406,5 +403,177 @@ func TestByteSliceDifference(t *testing.T) {
 			res := c.a.Difference(c.b)
 			assert.Equal(t, c.r, res)
 		})
+	}
+}
+
+func TestBytesRemoveRange(t *testing.T) {
+	type TestRange struct {
+		Name     string
+		From     byte
+		To       byte
+		Expected [][]byte
+	}
+
+	type Testcase struct {
+		Slice  [][]byte
+		Ranges []TestRange
+	}
+
+	var tests = []Testcase{
+		// nil slice
+		{
+			Slice: nil,
+			Ranges: []TestRange{
+				{Name: "NIL", From: 0, To: 2, Expected: bs()},
+			},
+		},
+		// empty slice
+		{
+			Slice: bs(),
+			Ranges: []TestRange{
+				{Name: "EMPTY", From: 0, To: 2, Expected: bs()},
+			},
+		},
+		// 1-element slice
+		{
+			Slice: bs(3),
+			Ranges: []TestRange{
+				{Name: "A", From: 0, To: 2, Expected: bs(3)},   // Case A
+				{Name: "B1", From: 1, To: 3, Expected: bs()},   // Case B.1, D1
+				{Name: "B3", From: 3, To: 4, Expected: bs()},   // Case B.3, D3
+				{Name: "E", From: 15, To: 16, Expected: bs(3)}, // Case E
+				{Name: "F", From: 1, To: 4, Expected: bs()},    // Case F
+			},
+		},
+		// 1-element slice, from == to
+		{
+			Slice: bs(3),
+			Ranges: []TestRange{
+				{Name: "BCD", From: 3, To: 3, Expected: bs()}, // Case B.3, C.1, D.1
+			},
+		},
+		// N-element slice
+		{
+			Slice: bs(3, 5, 7, 11, 13),
+			Ranges: []TestRange{
+				{Name: "A", From: 0, To: 2, Expected: bs(3, 5, 7, 11, 13)},    // Case A
+				{Name: "B1a", From: 1, To: 3, Expected: bs(5, 7, 11, 13)},     // Case B.1
+				{Name: "B1b", From: 3, To: 3, Expected: bs(5, 7, 11, 13)},     // Case B.1
+				{Name: "B2a", From: 1, To: 4, Expected: bs(5, 7, 11, 13)},     // Case B.2
+				{Name: "B2b", From: 1, To: 5, Expected: bs(7, 11, 13)},        // Case B.2
+				{Name: "B3a", From: 3, To: 4, Expected: bs(5, 7, 11, 13)},     // Case B.3
+				{Name: "B3b", From: 3, To: 5, Expected: bs(7, 11, 13)},        // Case B.3
+				{Name: "C1a", From: 4, To: 5, Expected: bs(3, 7, 11, 13)},     // Case C.1
+				{Name: "C1b", From: 4, To: 6, Expected: bs(3, 7, 11, 13)},     // Case C.1
+				{Name: "C1c", From: 4, To: 7, Expected: bs(3, 11, 13)},        // Case C.1
+				{Name: "C1d", From: 5, To: 5, Expected: bs(3, 7, 11, 13)},     // Case C.1
+				{Name: "C2a", From: 8, To: 8, Expected: bs(3, 5, 7, 11, 13)},  // Case C.2
+				{Name: "C2b", From: 8, To: 10, Expected: bs(3, 5, 7, 11, 13)}, // Case C.2
+				{Name: "D1a", From: 11, To: 13, Expected: bs(3, 5, 7)},        // Case D.1
+				{Name: "D1b", From: 12, To: 13, Expected: bs(3, 5, 7, 11)},    // Case D.1
+				{Name: "D2", From: 12, To: 14, Expected: bs(3, 5, 7, 11)},     // Case D.2
+				{Name: "D3a", From: 13, To: 13, Expected: bs(3, 5, 7, 11)},    // Case D.3
+				{Name: "D3b", From: 13, To: 14, Expected: bs(3, 5, 7, 11)},    // Case D.3
+				{Name: "E", From: 15, To: 16, Expected: bs(3, 5, 7, 11, 13)},  // Case E
+				{Name: "Fa", From: 0, To: 16, Expected: bs()},                 // Case F
+				{Name: "Fb", From: 0, To: 13, Expected: bs()},                 // Case F
+				{Name: "Fc", From: 3, To: 13, Expected: bs()},                 // Case F
+			},
+		},
+	}
+
+	for _, v := range tests {
+		for _, r := range v.Ranges {
+			t.Run(r.Name, func(t *testing.T) {
+				a, b := []byte{r.From}, []byte{r.To}
+				assert.Equal(t, r.Expected, NewOrderedBytes(v.Slice).RemoveRange(a, b).Values)
+			})
+		}
+	}
+}
+
+func TestOrderedBytesIntersectRange(t *testing.T) {
+	type TestRange struct {
+		Name     string
+		From     byte
+		To       byte
+		Expected [][]byte
+	}
+
+	type Testcase struct {
+		Slice  [][]byte
+		Ranges []TestRange
+	}
+
+	var tests = []Testcase{
+		// nil slice
+		{
+			Slice: nil,
+			Ranges: []TestRange{
+				{Name: "NIL", From: 0, To: 2, Expected: bs()},
+			},
+		},
+		// empty slice
+		{
+			Slice: bs(),
+			Ranges: []TestRange{
+				{Name: "EMPTY", From: 0, To: 2, Expected: bs()},
+			},
+		},
+		// 1-element slice
+		{
+			Slice: bs(3),
+			Ranges: []TestRange{
+				{Name: "A", From: 0, To: 2, Expected: bs()},   // Case A
+				{Name: "B1", From: 1, To: 3, Expected: bs(3)}, // Case B.1, D1
+				{Name: "B3", From: 3, To: 4, Expected: bs(3)}, // Case B.3, D3
+				{Name: "E", From: 15, To: 16, Expected: bs()}, // Case E
+				{Name: "F", From: 1, To: 4, Expected: bs(3)},  // Case F
+			},
+		},
+		// 1-element slice, from == to
+		{
+			Slice: bs(3),
+			Ranges: []TestRange{
+				{Name: "BCD", From: 3, To: 3, Expected: bs(3)}, // Case B.3, C.1, D.1
+			},
+		},
+		// N-element slice
+		{
+			Slice: bs(3, 5, 7, 11, 13),
+			Ranges: []TestRange{
+				{Name: "A", From: 0, To: 2, Expected: bs()},                  // Case A
+				{Name: "B1a", From: 1, To: 3, Expected: bs(3)},               // Case B.1
+				{Name: "B1b", From: 3, To: 3, Expected: bs(3)},               // Case B.1
+				{Name: "B2a", From: 1, To: 4, Expected: bs(3)},               // Case B.2
+				{Name: "B2b", From: 1, To: 5, Expected: bs(3, 5)},            // Case B.2
+				{Name: "B3a", From: 3, To: 4, Expected: bs(3)},               // Case B.3
+				{Name: "B3b", From: 3, To: 5, Expected: bs(3, 5)},            // Case B.3
+				{Name: "C1a", From: 4, To: 5, Expected: bs(5)},               // Case C.1
+				{Name: "C1b", From: 4, To: 6, Expected: bs(5)},               // Case C.1
+				{Name: "C1c", From: 4, To: 7, Expected: bs(5, 7)},            // Case C.1
+				{Name: "C1d", From: 5, To: 5, Expected: bs(5)},               // Case C.1
+				{Name: "C2a", From: 8, To: 8, Expected: bs()},                // Case C.2
+				{Name: "C2b", From: 8, To: 10, Expected: bs()},               // Case C.2
+				{Name: "D1a", From: 11, To: 13, Expected: bs(11, 13)},        // Case D.1
+				{Name: "D1b", From: 12, To: 13, Expected: bs(13)},            // Case D.1
+				{Name: "D2", From: 12, To: 14, Expected: bs(13)},             // Case D.2
+				{Name: "D3a", From: 13, To: 13, Expected: bs(13)},            // Case D.3
+				{Name: "D3b", From: 13, To: 14, Expected: bs(13)},            // Case D.3
+				{Name: "E", From: 15, To: 16, Expected: bs()},                // Case E
+				{Name: "Fa", From: 0, To: 16, Expected: bs(3, 5, 7, 11, 13)}, // Case F
+				{Name: "Fb", From: 0, To: 13, Expected: bs(3, 5, 7, 11, 13)}, // Case F
+				{Name: "Fc", From: 3, To: 13, Expected: bs(3, 5, 7, 11, 13)}, // Case F
+			},
+		},
+	}
+
+	for _, v := range tests {
+		for _, r := range v.Ranges {
+			t.Run(r.Name, func(t *testing.T) {
+				a, b := []byte{r.From}, []byte{r.To}
+				assert.Equal(t, r.Expected, NewOrderedBytes(v.Slice).IntersectRange(a, b).Values)
+			})
+		}
 	}
 }

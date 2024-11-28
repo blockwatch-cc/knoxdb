@@ -82,11 +82,11 @@ func (n FilterTreeNode) IsLeaf() bool {
 }
 
 func (n FilterTreeNode) IsProcessed() bool {
-	if n.Skip {
+	if n.Skip || n.Bits.IsValid() {
 		return true
 	}
 	if n.IsLeaf() {
-		return n.Skip
+		return n.Skip || n.Bits.IsValid()
 	}
 	for _, v := range n.Children {
 		if !v.IsProcessed() {

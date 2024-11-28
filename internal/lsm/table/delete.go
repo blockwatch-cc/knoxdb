@@ -113,6 +113,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 		// 3: partial index query & root = OR: walk full table and check each value
 		// 4: no index query: walk full table and check each value
 		c := bucket.Cursor(store.ForwardCursor)
+		defer c.Close()
 		view := schema.NewView(t.schema)
 		for ok := c.First(); ok; ok = c.Next() {
 			buf := c.Value()

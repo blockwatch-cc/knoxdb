@@ -265,6 +265,10 @@ func (m *bytesSetMatcher) Value() any {
 	return m.slice.Values
 }
 
+func (m *bytesSetMatcher) WithValue(val any) {
+	m.WithSlice(val)
+}
+
 func (m *bytesSetMatcher) WithSlice(slice any) {
 	m.slice = slicex.NewOrderedBytes(slice.([][]byte)).SetUnique()
 	m.hashes = make([][2]uint32, len(m.slice.Values))

@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package slicex
@@ -143,6 +143,22 @@ func (o OrderedBytes) ContainsAll(val ...[]byte) bool {
 
 func (o OrderedBytes) ContainsRange(from, to []byte) bool {
 	return containsRangeBytes(o.Values, from, to)
+}
+
+func (o OrderedBytes) RemoveRange(from, to []byte) *OrderedBytes {
+	return &OrderedBytes{
+		NonZero: o.NonZero,
+		Unique:  o.Unique,
+		Values:  removeRangeBytes(o.Values, from, to, make([][]byte, 0)),
+	}
+}
+
+func (o OrderedBytes) IntersectRange(from, to []byte) *OrderedBytes {
+	return &OrderedBytes{
+		NonZero: o.NonZero,
+		Unique:  o.Unique,
+		Values:  intersectRangeBytes(o.Values, from, to, make([][]byte, 0)),
+	}
 }
 
 func (o OrderedBytes) Equal(o2 *OrderedBytes) bool {
@@ -431,6 +447,56 @@ func containsRangeBytes(s [][]byte, from, to []byte) bool {
 	// range is contained iff min < max; note that from/to do not necessarily
 	// have to be members, but some intermediate values are
 	return min < max
+}
+
+func removeRangeBytes(s [][]byte, from, to []byte, out [][]byte) [][]byte {
+	n := len(s)
+	start := sort.Search(n, func(i int) bool {
+		return bytes.Compare(s[i], from) >= 0
+	})
+	if start == n {
+		if cap(out) < n {
+			out = make([][]byte, n)
+		}
+		out = out[:n]
+		copy(out, s)
+		return out
+	}
+	end := sort.Search(n-start, func(i int) bool {
+		return bytes.Compare(s[i+start], to) >= 0
+	})
+	if start+end < n && bytes.Equal(s[start+end], to) {
+		end++
+	}
+	if out == nil || cap(out) < n-end {
+		out = make([][]byte, n-end)
+	}
+	out = out[:n-end]
+	copy(out, s[:start])
+	copy(out[start:], s[start+end:])
+	return out
+}
+
+func intersectRangeBytes(s [][]byte, from, to []byte, out [][]byte) [][]byte {
+	n := len(s)
+	start := sort.Search(n, func(i int) bool {
+		return bytes.Compare(s[i], from) >= 0
+	})
+	if start == n {
+		return out
+	}
+	end := sort.Search(n-start, func(i int) bool {
+		return bytes.Compare(s[i+start], to) >= 0
+	})
+	if start+end < n && bytes.Equal(s[start+end], to) {
+		end++
+	}
+	if out == nil || cap(out) < end {
+		out = make([][]byte, end)
+	}
+	out = out[:end]
+	copy(out, s[start:start+end])
+	return out
 }
 
 type bytesSorter [][]byte
