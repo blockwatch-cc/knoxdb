@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
-	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/journal"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/store"
@@ -109,8 +108,8 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 		return err
 	}
 	for _, v := range [][]byte{
-		pack.DataKeySuffix,
-		pack.StatsKeySuffix,
+		engine.DataKeySuffix,
+		engine.StatsKeySuffix,
 		engine.StateKeySuffix,
 	} {
 		key := append([]byte(name), v...)
@@ -190,8 +189,8 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 		return err
 	}
 	for _, v := range [][]byte{
-		pack.DataKeySuffix,
-		pack.StatsKeySuffix,
+		engine.DataKeySuffix,
+		engine.StatsKeySuffix,
 		engine.StateKeySuffix,
 	} {
 		if tx.Bucket(append([]byte(name), v...)) == nil {
@@ -335,8 +334,8 @@ func (t *Table) Truncate(ctx context.Context) error {
 	t.journal.Reset()
 	t.stats.Reset()
 	for _, v := range [][]byte{
-		pack.DataKeySuffix,
-		pack.StatsKeySuffix,
+		engine.DataKeySuffix,
+		engine.StatsKeySuffix,
 		engine.StateKeySuffix,
 	} {
 		key := append([]byte(t.schema.Name()), v...)

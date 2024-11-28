@@ -54,11 +54,6 @@ var (
 		types.FieldTypeFloat32:    block.BlockFloat32,
 		types.FieldTypeFloat64:    block.BlockFloat64,
 	}
-
-	// MetaKeySuffix    = []byte("_meta")
-	StatsKeySuffix   = []byte("_stats")
-	DataKeySuffix    = []byte("_data")
-	JournalKeySuffix = []byte("_journal")
 )
 
 func blockKey(packkey uint32, blockId uint16) uint64 {

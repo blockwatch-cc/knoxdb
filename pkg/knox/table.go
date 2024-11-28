@@ -47,11 +47,9 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, error) {
 	if !t.table.Schema().EqualHash(s.Hash()) {
 		return 0, schema.ErrSchemaMismatch
 	}
-	// merge enums
-	s.WithEnumsFrom(t.db.Enums())
 
 	// encode wire (single or slice) - schema is guaranteed the same
-	enc := schema.NewEncoder(s)
+	enc := schema.NewEncoder(t.table.Schema())
 	buf, err := enc.Encode(val, nil)
 	if err != nil {
 		return 0, err
@@ -88,11 +86,9 @@ func (t TableImpl) Update(ctx context.Context, val any) (uint64, error) {
 	if !t.table.Schema().EqualHash(s.Hash()) {
 		return 0, schema.ErrSchemaMismatch
 	}
-	// merge enums
-	s.WithEnumsFrom(t.db.Enums())
 
 	// encode wire (single or slice) - schema is guaranteed the same
-	enc := schema.NewEncoder(s)
+	enc := schema.NewEncoder(t.table.Schema())
 	buf, err := enc.Encode(val, nil)
 	if err != nil {
 		return 0, err

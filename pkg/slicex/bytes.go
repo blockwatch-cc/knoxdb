@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package slicex
@@ -23,6 +23,11 @@ func NewOrderedBytes(s [][]byte) *OrderedBytes {
 	return &OrderedBytes{
 		Values: s,
 	}
+}
+
+func UniqueBytes(s [][]byte) [][]byte {
+	bytesSorter(s).Sort()
+	return removeDuplicateBytes(s)
 }
 
 func (o *OrderedBytes) SetNonZero() *OrderedBytes {
@@ -140,6 +145,22 @@ func (o OrderedBytes) ContainsRange(from, to []byte) bool {
 	return containsRangeBytes(o.Values, from, to)
 }
 
+func (o OrderedBytes) RemoveRange(from, to []byte) *OrderedBytes {
+	return &OrderedBytes{
+		NonZero: o.NonZero,
+		Unique:  o.Unique,
+		Values:  removeRangeBytes(o.Values, from, to, make([][]byte, 0)),
+	}
+}
+
+func (o OrderedBytes) IntersectRange(from, to []byte) *OrderedBytes {
+	return &OrderedBytes{
+		NonZero: o.NonZero,
+		Unique:  o.Unique,
+		Values:  intersectRangeBytes(o.Values, from, to, make([][]byte, 0)),
+	}
+}
+
 func (o OrderedBytes) Equal(o2 *OrderedBytes) bool {
 	if o.Len() != o2.Len() {
 		return false
@@ -170,7 +191,7 @@ func (o *OrderedBytes) Union(v *OrderedBytes) *OrderedBytes {
 	res := &OrderedBytes{
 		NonZero: o.NonZero && v.NonZero,
 		Unique:  o.Unique && v.Unique,
-		Values:  make([][]byte, len(o.Values)),
+		Values:  make([][]byte, len(o.Values), len(o.Values)+len(v.Values)),
 	}
 	copy(res.Values, o.Values)
 	res.Values = mergeBytes(res.Values, v.Unique, v.Values...)
@@ -282,8 +303,8 @@ func mergeBytes(s [][]byte, unique bool, v ...[]byte) [][]byte {
 	// merge backward
 	if unique {
 		// skip duplicate values (note: v does not contain duplicates at this point!)
-		out := ls + lv - 1
-		for in1, in2 := ls-1, lv-1; in2 >= 0; {
+		in1, in2, out := ls-1, lv-1, ls+lv-1
+		for in2 >= 0 {
 			// insert new vals as long as they are larger or all old vals have been
 			// copied (i.e. every new val is smaller than the first old val)
 			for in2 >= 0 && (in1 < 0 || bytes.Compare(s[in1], v[in2]) < 0) {
@@ -305,11 +326,13 @@ func mergeBytes(s [][]byte, unique bool, v ...[]byte) [][]byte {
 			}
 		}
 
-		// when duplicates were dropped, we must close the gap at slice front
-		if out > 0 {
-			copy(s[out:], s[0:])
-			s = s[:ls+lv-out]
+		// when duplicates were dropped, close the gap at slice front
+		for in1 >= 0 {
+			s[out] = s[in1]
+			in1--
+			out--
 		}
+		s = s[out+1:]
 
 	} else {
 		// copy all values in order
@@ -341,11 +364,12 @@ func intersectBytes(x, y, out [][]byte) [][]byte {
 	}
 	count := 0
 	for i, j, il, jl := 0, 0, len(x), len(y); i < il && j < jl; {
-		if bytes.Compare(x[i], y[j]) < 0 {
+		c := bytes.Compare(x[i], y[j])
+		if c < 0 {
 			i++
 			continue
 		}
-		if bytes.Compare(x[i], y[j]) > 0 {
+		if c > 0 {
 			j++
 			continue
 		}
@@ -423,6 +447,56 @@ func containsRangeBytes(s [][]byte, from, to []byte) bool {
 	// range is contained iff min < max; note that from/to do not necessarily
 	// have to be members, but some intermediate values are
 	return min < max
+}
+
+func removeRangeBytes(s [][]byte, from, to []byte, out [][]byte) [][]byte {
+	n := len(s)
+	start := sort.Search(n, func(i int) bool {
+		return bytes.Compare(s[i], from) >= 0
+	})
+	if start == n {
+		if cap(out) < n {
+			out = make([][]byte, n)
+		}
+		out = out[:n]
+		copy(out, s)
+		return out
+	}
+	end := sort.Search(n-start, func(i int) bool {
+		return bytes.Compare(s[i+start], to) >= 0
+	})
+	if start+end < n && bytes.Equal(s[start+end], to) {
+		end++
+	}
+	if out == nil || cap(out) < n-end {
+		out = make([][]byte, n-end)
+	}
+	out = out[:n-end]
+	copy(out, s[:start])
+	copy(out[start:], s[start+end:])
+	return out
+}
+
+func intersectRangeBytes(s [][]byte, from, to []byte, out [][]byte) [][]byte {
+	n := len(s)
+	start := sort.Search(n, func(i int) bool {
+		return bytes.Compare(s[i], from) >= 0
+	})
+	if start == n {
+		return out
+	}
+	end := sort.Search(n-start, func(i int) bool {
+		return bytes.Compare(s[i+start], to) >= 0
+	})
+	if start+end < n && bytes.Equal(s[start+end], to) {
+		end++
+	}
+	if out == nil || cap(out) < end {
+		out = make([][]byte, end)
+	}
+	out = out[:end]
+	copy(out, s[start:start+end])
+	return out
 }
 
 type bytesSorter [][]byte

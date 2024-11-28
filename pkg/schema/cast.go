@@ -887,7 +887,26 @@ func (c StringCaster) CastSlice(val any) (res any, err error) {
 		if rv.Kind() == reflect.Slice {
 			cp := make([][]byte, rv.Len())
 			for i := range cp {
-				cp[i] = []byte(util.ToString(rv.Index(i)))
+				e := rv.Index(i)
+
+				switch vv := e.Interface().(type) {
+				case encoding.TextMarshaler:
+					buf, err := vv.MarshalText()
+					if err != nil {
+						return nil, err
+					}
+					cp[i] = buf
+				case fmt.Stringer:
+					cp[i] = []byte(vv.String())
+				case encoding.BinaryMarshaler:
+					buf, err := vv.MarshalBinary()
+					if err != nil {
+						return nil, err
+					}
+					cp[i] = buf
+				default:
+					cp[i] = []byte(util.ToString(vv))
+				}
 			}
 			res, ok = cp, true
 		}
@@ -1023,7 +1042,7 @@ func (c BytesCaster) CastSlice(val any) (res any, err error) {
 	if rv.Kind() == reflect.Slice {
 		cp := make([][]byte, rv.Len())
 		for i := range cp {
-			v, err = c.CastValue(rv.Index(i))
+			v, err = c.CastValue(rv.Index(i).Interface())
 			if err != nil {
 				break
 			}

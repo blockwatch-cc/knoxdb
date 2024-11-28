@@ -94,7 +94,7 @@ func (t *Table) doQuery(ctx context.Context, plan *query.QueryPlan, res QueryRes
 		bits.Free()
 	}()
 
-	bucket := tx.Bucket(t.key)
+	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
 		return engine.ErrNoBucket
 	}
@@ -269,7 +269,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 		bits.Free()
 	}()
 
-	bucket := tx.Bucket(t.key)
+	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
 		return 0, engine.ErrNoBucket
 	}
@@ -314,6 +314,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 		// 3: partial index query & root = OR: walk full table and check each value
 		// 4: no index query: walk full table and check each value
 		c := bucket.Cursor(store.ForwardCursor)
+		defer c.Close()
 		view := schema.NewView(t.schema)
 		for ok := c.First(); ok; ok = c.Next() {
 			buf := c.Value()
@@ -368,7 +369,7 @@ func (t *Table) doLookup(ctx context.Context, pks []uint64, res QueryResultConsu
 		tx.Rollback()
 	}()
 
-	bucket := tx.Bucket(t.key)
+	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
 		return engine.ErrNoBucket
 	}

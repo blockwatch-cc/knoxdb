@@ -7,6 +7,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
@@ -30,9 +31,13 @@ func (f I128MatcherFactory) New(m FilterMode) Matcher {
 		return &i128LeMatcher{i128Matcher{match: cmp.MatchInt128LessEqual}}
 	case FilterModeRange:
 		return &i128RangeMatcher{}
+	case FilterModeIn:
+		return &i128InSetMatcher{}
+	case FilterModeNotIn:
+		return &i128NotInSetMatcher{}
 	default:
 		// unsupported
-		// FilterModeIn, FilterModeNotIn, FilterModeRegexp:
+		// FilterModeRegexp:
 		return &noopMatcher{}
 	}
 }
@@ -174,4 +179,122 @@ func (m i128RangeMatcher) MatchRange(from, to any) bool {
 
 func (m i128RangeMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return cmp.MatchInt128Between(*b.Int128(), m.from, m.to, bits, mask)
+}
+
+// IN ---
+
+// In, Contains
+type i128InSetMatcher struct {
+	noopMatcher
+	slice  []num.Int128
+	hashes [][2]uint32
+}
+
+func (m *i128InSetMatcher) Weight() int { return len(m.slice) }
+
+func (m *i128InSetMatcher) Len() int { return len(m.slice) }
+
+func (m *i128InSetMatcher) Value() any {
+	return m.slice
+}
+
+func (m *i128InSetMatcher) WithValue(val any) {
+	m.WithSlice(val)
+}
+
+func (m *i128InSetMatcher) WithSlice(slice any) {
+	m.slice = num.Int128Sort(slice.([]num.Int128))
+	m.hashes = bloom.HashAnySlice(m.slice)
+}
+
+func (m i128InSetMatcher) MatchValue(v any) bool {
+	return num.Int128Contains(m.slice, v.(num.Int128))
+}
+
+func (m i128InSetMatcher) MatchRange(from, to any) bool {
+	return num.Int128ContainsRange(m.slice, from.(num.Int128), to.(num.Int128))
+}
+
+func (m i128InSetMatcher) MatchBloom(flt *bloom.Filter) bool {
+	return flt.ContainsAnyHash(m.hashes)
+}
+
+func (m i128InSetMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	stride := b.Int128()
+	if mask != nil {
+		// skip masked values
+		for i, l := 0, stride.Len(); i < l; i++ {
+			if !mask.IsSet(i) {
+				continue
+			}
+			if num.Int128Contains(m.slice, stride.Elem(i)) {
+				bits.Set(i)
+			}
+		}
+	} else {
+		for i, l := 0, stride.Len(); i < l; i++ {
+			if num.Int128Contains(m.slice, stride.Elem(i)) {
+				bits.Set(i)
+			}
+		}
+	}
+	return bits
+}
+
+// NOT IN ---
+
+type i128NotInSetMatcher struct {
+	noopMatcher
+	slice []num.Int128
+}
+
+func (m *i128NotInSetMatcher) Weight() int { return len(m.slice) }
+
+func (m *i128NotInSetMatcher) Len() int { return len(m.slice) }
+
+func (m *i128NotInSetMatcher) Value() any {
+	return m.slice
+}
+
+func (m *i128NotInSetMatcher) WithValue(val any) {
+	m.WithSlice(val)
+}
+
+func (m *i128NotInSetMatcher) WithSlice(slice any) {
+	m.slice = num.Int128Sort(slice.([]num.Int128))
+}
+
+func (m i128NotInSetMatcher) MatchValue(v any) bool {
+	return !num.Int128Contains(m.slice, v.(num.Int128))
+}
+
+func (m i128NotInSetMatcher) MatchRange(from, to any) bool {
+	return !num.Int128ContainsRange(m.slice, from.(num.Int128), to.(num.Int128))
+}
+
+func (m i128NotInSetMatcher) MatchBloom(flt *bloom.Filter) bool {
+	// we don't know generally, so full scan is always required
+	return true
+}
+
+func (m i128NotInSetMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	stride := b.Int128()
+	if mask != nil {
+		// skip masked values
+		for i, l := 0, stride.Len(); i < l; i++ {
+			if !mask.IsSet(i) {
+				continue
+			}
+			if !num.Int128Contains(m.slice, stride.Elem(i)) {
+				bits.Set(i)
+			}
+		}
+	} else {
+		for i, l := 0, stride.Len(); i < l; i++ {
+			if !num.Int128Contains(m.slice, stride.Elem(i)) {
+				bits.Set(i)
+			}
+		}
+	}
+	return bits
 }

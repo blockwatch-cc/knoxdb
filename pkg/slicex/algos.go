@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package slicex
@@ -263,4 +263,44 @@ func merge[T constraints.Ordered](s []T, unique bool, v ...T) []T {
 	}
 
 	return s
+}
+
+func removeRange[T constraints.Ordered](s []T, from, to T, out []T) []T {
+	start, _ := slices.BinarySearch(s, from)
+	if start == len(s) {
+		if cap(out) < len(s) {
+			out = make([]T, len(s))
+		}
+		out = out[:len(s)]
+		copy(out, s)
+		return out
+	}
+	end, ok := slices.BinarySearch(s[start:], to)
+	if ok {
+		end++
+	}
+	if out == nil || cap(out) < len(s)-end {
+		out = make([]T, len(s)-end)
+	}
+	out = out[:len(s)-end]
+	copy(out, s[:start])
+	copy(out[start:], s[start+end:])
+	return out
+}
+
+func intersectRange[T constraints.Ordered](s []T, from, to T, out []T) []T {
+	start, _ := slices.BinarySearch(s, from)
+	if start == len(s) {
+		return out
+	}
+	end, ok := slices.BinarySearch(s[start:], to)
+	if ok {
+		end++
+	}
+	if out == nil || cap(out) < end {
+		out = make([]T, end)
+	}
+	out = out[:end]
+	copy(out, s[start:start+end])
+	return out
 }

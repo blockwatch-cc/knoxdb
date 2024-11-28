@@ -34,11 +34,6 @@ func (f Filter) Weight() int {
 	return f.Matcher.Weight()
 }
 
-func (f Filter) String() string {
-	return fmt.Sprintf("%s[%d] %s %s",
-		f.Name, f.Index, f.Mode.Symbol(), util.ToString(f.Value))
-}
-
 func (f Filter) Validate() error {
 	if f.Name == "" {
 		return ErrNoName
@@ -87,8 +82,11 @@ func (n FilterTreeNode) IsLeaf() bool {
 }
 
 func (n FilterTreeNode) IsProcessed() bool {
-	if n.Skip {
+	if n.Skip || n.Bits.IsValid() {
 		return true
+	}
+	if n.IsLeaf() {
+		return n.Skip || n.Bits.IsValid()
 	}
 	for _, v := range n.Children {
 		if !v.IsProcessed() {

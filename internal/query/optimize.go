@@ -36,6 +36,7 @@ import (
 //   - any: EQ(A) + EQ(A) => EQ(A) -- same value, duplicate
 //   - any: empty IN => false
 //   - any: empty NIN => true
+//   - any: IN(A,B,C) => RG(A,C)
 //   - and: EQ(A) + EQ(B) => false iff A != B
 //   - and: IN(A) + IN(B) => IN(A-B) -- intersect (handle empty case)
 //   - and: NI(A) + NI(B) => NI(A+B) -- union! (does work for OR!!!)
@@ -50,10 +51,17 @@ import (
 //   - or: IN(A) + NE(B) => true iff B in [A] (set + antiset covers all universe)
 //
 // - replace/simplify ranges
-//   - any: LT(uint, 0), LT(int, min) => false
-//   - any: RG(uint: 0, uint_max) => true
-//   - any: RG(int: int_min, int_max) = true
+//   - any: LT(min) => false
+//   - any: GT(max) => false
+//   - any: LE(max) => true
+//   - any: GE(min) => true
+//   - any: GE(max) => EQ(max)
+//   - any: LE(min) => EQ(min)
+//   - any: RG(min,max) => true
 //   - any: RG(A,B) => false iff A > B
+//   - any: RG(min,N) => LE(N)
+//   - any: RG(N,max) => GE(N)
+//   - any: RG(N,N) => EQ(N)
 //   - and: LT|LE(A) + LT|LE(A) => LT|LE(A) -- minimum
 //   - and: GT|GE(A) + GT|GE(A) => GT|GE(A) -- maximum
 //   - and: RG(A,B) + RG(C,D) => RG(B,C) iff C ≤ B
@@ -176,7 +184,7 @@ func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			})
 		}
 	} else {
-		// one node false => everyting false
+		// one node false => everything false
 		var falseNode *FilterTreeNode
 		for _, n := range nodes {
 			if n.IsLeaf() && n.Filter.Mode == FilterModeFalse {
@@ -206,9 +214,17 @@ func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 // - any: empty NIN => true
 // - any: LT(min) => false
 // - any: GT(max) => false
+// - any: LE(max) => true
+// - any: GE(min) => true
+// - any: GE(max) => EQ(max)
+// - any: LE(min) => EQ(min)
 // - any: RG(from>to) => false
 // - any: RG(min,max) => true
-func simplifySingle(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
+// - any: RG(min,N) => LE(N)
+// - any: RG(N,max) => GE(N)
+// - any: RG(N,N) => EQ(N)
+// - any: IN(A,B,C) => RG(A,C)
+func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 	var res []*FilterTreeNode
 
 	for _, node := range nodes {
@@ -227,14 +243,28 @@ func simplifySingle(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 					Filter: makeFilterFrom(f, FilterModeEqual, reflectSliceIndex(f.Value, 0)),
 				})
 			default:
-				res = append(res, node)
+				// convert full set to range for integer types
+				minv, maxv, isFull := cmp.Range(f.Type, f.Value)
+				if isFull && minv != nil {
+					rg := RangeValue{minv, maxv}
+					if isFullDomain(f.Type, rg) {
+						res = append(res, &FilterTreeNode{
+							Filter: makeTrueFilterFrom(f),
+						})
+					} else {
+						res = append(res, &FilterTreeNode{
+							Filter: makeFilterFrom(f, FilterModeRange, rg),
+						})
+					}
+				} else {
+					res = append(res, node)
+				}
 			}
 
 		case FilterModeNotIn:
 			switch f.Matcher.Len() {
 			case 0:
 				res = append(res, &FilterTreeNode{
-					Skip:   !isOrNode,
 					Filter: makeTrueFilterFrom(f),
 				})
 			case 1:
@@ -261,16 +291,55 @@ func simplifySingle(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			} else {
 				res = append(res, node)
 			}
+		case FilterModeLe:
+			switch {
+			case cmp.Cmp(f.Type, f.Value, cmp.MaxNumericVal(f.Type)) == 0:
+				res = append(res, &FilterTreeNode{
+					Filter: makeTrueFilterFrom(f),
+				})
+			case cmp.Cmp(f.Type, f.Value, cmp.MinNumericVal(f.Type)) == 0:
+				res = append(res, &FilterTreeNode{
+					Filter: makeFilterFrom(f, FilterModeEqual, f.Value),
+				})
+			default:
+				res = append(res, node)
+			}
+		case FilterModeGe:
+			switch {
+			case cmp.Cmp(f.Type, f.Value, cmp.MinNumericVal(f.Type)) == 0:
+				res = append(res, &FilterTreeNode{
+					Filter: makeTrueFilterFrom(f),
+				})
+			case cmp.Cmp(f.Type, f.Value, cmp.MaxNumericVal(f.Type)) == 0:
+				res = append(res, &FilterTreeNode{
+					Filter: makeFilterFrom(f, FilterModeEqual, f.Value),
+				})
+			default:
+				res = append(res, node)
+			}
 		case FilterModeRange:
 			rg := f.Value.(RangeValue)
+			c := cmp.Cmp(f.Type, rg[0], rg[1])
 			switch {
-			case cmp.Cmp(f.Type, rg[0], rg[1]) > 0:
+			case c > 0:
 				res = append(res, &FilterTreeNode{
 					Filter: makeFalseFilterFrom(f),
 				})
-			case isFullRange(f.Type, rg):
+			case c == 0:
+				res = append(res, &FilterTreeNode{
+					Filter: makeFilterFrom(f, FilterModeEqual, rg[0]),
+				})
+			case isFullDomain(f.Type, rg):
 				res = append(res, &FilterTreeNode{
 					Filter: makeTrueFilterFrom(f),
+				})
+			case cmp.Cmp(f.Type, rg[0], cmp.MinNumericVal(f.Type)) == 0:
+				res = append(res, &FilterTreeNode{
+					Filter: makeFilterFrom(f, FilterModeLe, rg[1]),
+				})
+			case cmp.Cmp(f.Type, rg[1], cmp.MaxNumericVal(f.Type)) == 0:
+				res = append(res, &FilterTreeNode{
+					Filter: makeFilterFrom(f, FilterModeGe, rg[0]),
 				})
 			default:
 				res = append(res, node)
@@ -290,6 +359,7 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		sameIdNodes  []*FilterTreeNode
 		sameIdRanges []RangeValue
 		lastId       uint16
+		eqMode       byte // bit flags: 1 = LE/GE/EQ/RG, 2 = LT/GT, 3 = both
 		f            *Filter
 	)
 
@@ -325,17 +395,16 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 				resultNodes = append(resultNodes, &FilterTreeNode{
 					Filter: makeFalseFilterFrom(f),
 				})
-			case len(mergedRanges) == 1 && isFullRange(f.Type, mergedRanges[0]):
+			case len(mergedRanges) == 1 && isFullDomain(f.Type, mergedRanges[0]):
 				// replace with always true node
 				resultNodes = append(resultNodes, &FilterTreeNode{
-					Skip:   true,
 					Filter: makeTrueFilterFrom(f),
 				})
 			default:
 				// generate nodes
 				for _, rg := range mergedRanges {
 					resultNodes = append(resultNodes, &FilterTreeNode{
-						Filter: makeRangeFilterFrom(f, rg),
+						Filter: makeRangeFilterFrom(f, rg, eqMode),
 					})
 				}
 			}
@@ -353,6 +422,7 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 
 			// prepare next round
 			lastId = node.Filter.Index
+			eqMode = 0
 			if sameIdNodes != nil {
 				sameIdNodes = sameIdNodes[:0]
 			}
@@ -364,14 +434,7 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		// keep this node's filter around for potential use in post-process
 		f = node.Filter
 
-		// skip non-numeric types
-		switch f.Type {
-		case BlockBool, BlockBytes, BlockString:
-			resultNodes = append(resultNodes, node)
-			continue
-		}
-
-		// construct ranges for numeric types from numeric conditions
+		// construct ranges for ordered types from numeric conditions
 		switch f.Mode {
 		case FilterModeEqual:
 			sameIdNodes = append(sameIdNodes, node)
@@ -379,6 +442,7 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 				f.Value,
 				f.Value,
 			})
+			eqMode |= 1
 
 		case FilterModeRange:
 			// check contradiction
@@ -391,9 +455,10 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			}
 			sameIdNodes = append(sameIdNodes, node)
 			sameIdRanges = append(sameIdRanges, rg)
+			eqMode |= 1
 
 		case FilterModeLt:
-			// check contradiction
+			// check contradiction (this also happens in simplifySingle)
 			if cmp.Cmp(f.Type, f.Value, cmp.MinNumericVal(f.Type)) == 0 {
 				resultNodes = append(resultNodes, &FilterTreeNode{
 					Filter: makeFalseFilterFrom(f),
@@ -404,8 +469,9 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			sameIdNodes = append(sameIdNodes, node)
 			sameIdRanges = append(sameIdRanges, RangeValue{
 				cmp.MinNumericVal(f.Type),
-				typedSub(f.Type, f.Value, 1),
+				cmp.Dec(f.Type, f.Value),
 			})
+			eqMode |= 2
 
 		case FilterModeLe:
 			sameIdNodes = append(sameIdNodes, node)
@@ -413,13 +479,23 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 				cmp.MinNumericVal(f.Type),
 				f.Value,
 			})
+			eqMode |= 1
 
 		case FilterModeGt:
+			// check contradiction (this also happens in simplifySingle)
+			if cmp.Cmp(f.Type, f.Value, cmp.MaxNumericVal(f.Type)) == 0 {
+				resultNodes = append(resultNodes, &FilterTreeNode{
+					Filter: makeFalseFilterFrom(f),
+				})
+				continue
+			}
+
 			sameIdNodes = append(sameIdNodes, node)
 			sameIdRanges = append(sameIdRanges, RangeValue{
-				typedAdd(f.Type, f.Value, 1),
+				cmp.Inc(f.Type, f.Value),
 				cmp.MaxNumericVal(f.Type),
 			})
+			eqMode |= 2
 
 		case FilterModeGe:
 			sameIdNodes = append(sameIdNodes, node)
@@ -427,9 +503,28 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 				f.Value,
 				cmp.MaxNumericVal(f.Type),
 			})
+			eqMode |= 1
 
 		default:
 			// skip NE, IN, NI, RE
+
+			// TODO: merge set + range in OR conditions
+			//
+			// - goal: eliminate sets or reduce set size
+			// - pre-checks (as this strategy is expensive)
+			//   - a range-like condition exists
+			//   - set overlaps with any range (only then it may become smaller)
+			//   - set is smaller than a limit (counted in elements or clusters?)
+			// - strategy:
+			//   - split set into range clusters (single values form independent cluster)
+			//   - optimize together with other ranges and output as RG + EQ list
+			//   - a later stage will re-combine EQ filters into IN again
+			// case FilterModeIn:
+			// if isOrNode {
+			// } else {
+			// 	resultNodes = append(resultNodes, node)
+			// }
+
 			resultNodes = append(resultNodes, node)
 		}
 	}
@@ -450,6 +545,7 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 // - and: NI(A) + NE(B) => NI(A,B) -- union
 // - and: disjunct IN + IN => false
 // - and: disjunct IN + EQ => false
+// - and: IN(1,4,5) + GT(4) => EQ(5) -- intersect set with range
 // - or: IN(A) + IN(B) => IN(A+B) -- union
 // - or: IN(A) + EQ(B) => IN(A+B)
 // - or: EQ(A) + EQ(B) => IN(A+B)
@@ -468,11 +564,28 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		plus, minus func(BlockType, any, any) any
 	)
 
+	// order nodes by field index and move sets first
+	sort.Slice(nodes, func(i, j int) bool {
+		ix, jx := nodes[i].Filter.Index, nodes[j].Filter.Index
+		if ix != jx {
+			return ix < jx
+		}
+		var is, js uint16
+		switch nodes[i].Filter.Mode {
+		case FilterModeIn, FilterModeNotIn:
+			is++
+		}
+		switch nodes[j].Filter.Mode {
+		case FilterModeIn, FilterModeNotIn:
+			js++
+		}
+		return is > js
+	})
+
 	postProcess := func() {
 		// produce zero or one combined filter from sets
-		if flt := makeSetFilterFrom(f, ins, nis); flt != nil {
+		if flt := makeSetFilterFrom(f, ins, nis, isOrNode); flt != nil {
 			res = append(res, &FilterTreeNode{
-				Skip:   flt.Mode == FilterModeTrue && !isOrNode,
 				Filter: flt,
 			})
 		}
@@ -530,8 +643,31 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			} else {
 				nis = plus(f.Type, nis, f.Value)
 			}
+		case FilterModeGt, FilterModeGe, FilterModeLt, FilterModeLe, FilterModeRange:
+			if !isOrNode && ins != nil {
+				// intersect set with range (must be AND node and have a set)
+				// this drops the original range filter and alters the IN set
+				minv, maxv := cmp.MinNumericVal(f.Type), cmp.MaxNumericVal(f.Type)
+				switch f.Mode {
+				case FilterModeGt:
+					minv = cmp.Inc(f.Type, f.Value)
+				case FilterModeGe:
+					minv = f.Value
+				case FilterModeLt:
+					maxv = cmp.Dec(f.Type, f.Value)
+				case FilterModeLe:
+					maxv = f.Value
+				case FilterModeRange:
+					rg := f.Value.(RangeValue)
+					minv, maxv = rg[0], rg[1]
+				}
+				ins = cmp.IntersectRange(f.Type, ins, minv, maxv)
+			} else {
+				res = append(res, node)
+			}
+
 		default:
-			// pass thorugh non-set filter modes
+			// pass through non-set filter modes
 			res = append(res, node)
 		}
 	}
@@ -567,52 +703,6 @@ func makeReflectSlice(vals ...any) any {
 		slice = reflect.Append(slice, reflect.ValueOf(v))
 	}
 	return slice.Interface()
-}
-
-func typedAdd(typ BlockType, v any, o int) any {
-	switch typ {
-	case BlockUint64:
-		return v.(uint64) + uint64(o)
-	case BlockUint32:
-		return v.(uint32) + uint32(o)
-	case BlockUint16:
-		return v.(uint16) + uint16(o)
-	case BlockUint8:
-		return v.(uint8) + uint8(o)
-	case BlockInt64:
-		return v.(int64) + int64(o)
-	case BlockInt32:
-		return v.(int32) + int32(o)
-	case BlockInt16:
-		return v.(int16) + int16(o)
-	case BlockInt8:
-		return v.(int8) + int8(o)
-	default:
-		return v
-	}
-}
-
-func typedSub(typ BlockType, v any, o int) any {
-	switch typ {
-	case BlockUint64:
-		return v.(uint64) - uint64(o)
-	case BlockUint32:
-		return v.(uint32) - uint32(o)
-	case BlockUint16:
-		return v.(uint16) - uint16(o)
-	case BlockUint8:
-		return v.(uint8) - uint8(o)
-	case BlockInt64:
-		return v.(int64) - int64(o)
-	case BlockInt32:
-		return v.(int32) - int32(o)
-	case BlockInt16:
-		return v.(int16) - int16(o)
-	case BlockInt8:
-		return v.(int8) - int8(o)
-	default:
-		return v
-	}
 }
 
 func sortRanges(typ BlockType, vals []RangeValue) {
@@ -659,10 +749,10 @@ func mergeRangesOr(typ BlockType, vals []RangeValue) []RangeValue {
 	// pre-sort ranges
 	sortRanges(typ, vals)
 
-	// combine overlaps
+	// combine overlaps and adjacent ranges
 	j := 0
 	for i := 1; i < len(vals); i++ {
-		if cmp.Cmp(typ, vals[j][1], vals[i][0]) >= 0 {
+		if cmp.Cmp(typ, vals[j][1], cmp.Dec(typ, vals[i][0])) >= 0 {
 			if cmp.Cmp(typ, vals[j][1], vals[i][1]) < 0 {
 				vals[j][1] = vals[i][1]
 			}
@@ -679,7 +769,7 @@ func mergeRangesOr(typ BlockType, vals []RangeValue) []RangeValue {
 // - min == MinVal => LE(max)
 // - max == MaxVal => GE(min)
 // - other => RG(min, max)
-func makeRangeFilterFrom(f *Filter, rg RangeValue) *Filter {
+func makeRangeFilterFrom(f *Filter, rg RangeValue, eqMode byte) *Filter {
 	switch {
 	case cmp.Cmp(f.Type, rg[0], rg[1]) == 0:
 		// equal min == max => EQ(min)
@@ -695,31 +785,58 @@ func makeRangeFilterFrom(f *Filter, rg RangeValue) *Filter {
 		}
 
 	case cmp.Cmp(f.Type, rg[0], cmp.MinNumericVal(f.Type)) == 0:
-		// range start is min val => LE(max)
-		m := newFactory(f.Type).New(FilterModeLe)
-		m.WithValue(rg[1])
-		return &Filter{
-			Name:    f.Name,
-			Type:    f.Type,
-			Mode:    FilterModeLe,
-			Index:   f.Index,
-			Matcher: m,
-			Value:   rg[1],
+		// range start is min val => LE(max) or LT(max+1)
+		if eqMode&1 > 0 {
+			m := newFactory(f.Type).New(FilterModeLe)
+			m.WithValue(rg[1])
+			return &Filter{
+				Name:    f.Name,
+				Type:    f.Type,
+				Mode:    FilterModeLe,
+				Index:   f.Index,
+				Matcher: m,
+				Value:   rg[1],
+			}
+		} else {
+			m := newFactory(f.Type).New(FilterModeLt)
+			val := cmp.Inc(f.Type, rg[1])
+			m.WithValue(val)
+			return &Filter{
+				Name:    f.Name,
+				Type:    f.Type,
+				Mode:    FilterModeLt,
+				Index:   f.Index,
+				Matcher: m,
+				Value:   val,
+			}
 		}
 
-	case cmp.Cmp(f.Type, rg[0], cmp.MaxNumericVal(f.Type)) == 0:
-		// range end is max val => GE(min)
-		m := newFactory(f.Type).New(FilterModeGe)
-		m.WithValue(rg[0])
-		return &Filter{
-			Name:    f.Name,
-			Type:    f.Type,
-			Mode:    FilterModeGe,
-			Index:   f.Index,
-			Matcher: m,
-			Value:   rg[0],
+	case cmp.Cmp(f.Type, rg[1], cmp.MaxNumericVal(f.Type)) == 0:
+		// range end is max val => GE(min) or GT(min-1)
+		if eqMode&1 > 0 {
+			m := newFactory(f.Type).New(FilterModeGe)
+			m.WithValue(rg[0])
+			return &Filter{
+				Name:    f.Name,
+				Type:    f.Type,
+				Mode:    FilterModeGe,
+				Index:   f.Index,
+				Matcher: m,
+				Value:   rg[0],
+			}
+		} else {
+			m := newFactory(f.Type).New(FilterModeGt)
+			val := cmp.Dec(f.Type, rg[0])
+			m.WithValue(val)
+			return &Filter{
+				Name:    f.Name,
+				Type:    f.Type,
+				Mode:    FilterModeGt,
+				Index:   f.Index,
+				Matcher: m,
+				Value:   val,
+			}
 		}
-
 	default:
 		// some other range => RG(min, max)
 		m := newFactory(f.Type).New(FilterModeRange)
@@ -735,19 +852,37 @@ func makeRangeFilterFrom(f *Filter, rg RangeValue) *Filter {
 	}
 }
 
-func makeSetFilterFrom(f *Filter, ins, nis any) *Filter {
-	// aggreagate sets into new nodes
+func makeSetFilterFrom(f *Filter, ins, nis any, isOrNode bool) *Filter {
+	// aggregate sets into new nodes
 	switch {
 	case ins != nil && nis != nil:
 		// both IN and NI conditions exist, make filter from set difference
-		set := cmp.Difference(f.Type, ins, nis)
+		// direction of set difference is defined by AND/OR type
+		var set any
+		if isOrNode {
+			set = cmp.Difference(f.Type, nis, ins)
+		} else {
+			set = cmp.Difference(f.Type, ins, nis)
+		}
 		switch reflectSliceLen(set) {
 		case 0:
-			return makeFalseFilterFrom(f) // contradiction
+			if isOrNode {
+				return makeTrueFilterFrom(f) // tautology
+			} else {
+				return makeFalseFilterFrom(f) // contradiction
+			}
 		case 1:
-			return makeFilterFrom(f, FilterModeEqual, reflectSliceIndex(set, 0))
+			if isOrNode {
+				return makeFilterFrom(f, FilterModeNotEqual, reflectSliceIndex(set, 0))
+			} else {
+				return makeFilterFrom(f, FilterModeEqual, reflectSliceIndex(set, 0))
+			}
 		default:
-			return makeFilterFrom(f, FilterModeIn, set)
+			if isOrNode {
+				return makeFilterFrom(f, FilterModeNotIn, set)
+			} else {
+				return makeFilterFrom(f, FilterModeIn, set)
+			}
 		}
 	case ins != nil:
 		// only IN (or EQ) conditions exist
@@ -818,15 +953,19 @@ func makeFilterFromSet(f *Filter, set *xroar.Bitmap) *Filter {
 		Mode:    FilterModeIn,
 		Index:   f.Index,
 		Matcher: m,
-		Value:   m.Value(), // FIXME: optimizer expects []T
+		Value:   m.Value(), // FIXME: optimizer expects []T which is expensive
 	}
 }
 
-func isFullRange(typ BlockType, rg RangeValue) bool {
+func isFullDomain(typ BlockType, rg RangeValue) bool {
+	switch typ {
+	case BlockString, BlockBytes:
+		return false
+	}
 	isMin := cmp.Cmp(typ, rg[0], cmp.MinNumericVal(typ)) == 0
 	if !isMin {
 		return false
 	}
-	isMax := cmp.Cmp(typ, rg[0], cmp.MaxNumericVal(typ)) == 0
+	isMax := cmp.Cmp(typ, rg[1], cmp.MaxNumericVal(typ)) == 0
 	return isMax
 }

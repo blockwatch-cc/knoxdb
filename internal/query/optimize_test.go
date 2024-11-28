@@ -6,29 +6,230 @@ package query
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/cmp"
+	tests "blockwatch.cc/knoxdb/internal/tests/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// Define a schema with a value for each data type
-var allTypesSchema = map[BlockType]interface{}{
-	BlockInt64:   int64(42),
-	BlockInt32:   int32(42),
-	BlockInt16:   int16(42),
-	BlockInt8:    int8(42),
-	BlockUint64:  uint64(42),
-	BlockUint32:  uint32(42),
-	BlockUint16:  uint16(42),
-	BlockUint8:   uint8(42),
-	BlockFloat64: float64(42.0),
-	BlockFloat32: float32(42.0),
-	BlockBool:    true,
-	BlockString:  []byte("test"), // sic
-	BlockBytes:   []byte("test"),
+// TestOptimize tests the query optimizer's ability to handle complex and edge cases.
+// It verifies:
+// 1. Condition merging and simplification
+// 2. Reordering by selectivity
+// 3. Handling of invalid/contradictory conditions
+// 4. Type safety and mixed type handling
+func TestOptimize(t *testing.T) {
+	for _, gen := range tests.Generators {
+		typ := gen.Type()
+		v := gen.MakeValue
+		s := gen.MakeSlice
+		sm := schema.NewSchema().
+			WithField(schema.NewField(tests.FieldTypes[gen.Type()]).WithName("f1")).
+			WithField(schema.NewField(tests.FieldTypes[gen.Type()]).WithName("f2"))
+		f1, _ := sm.FieldByName("f1")
+		f2, _ := sm.FieldByName("f2")
+		tests := []struct {
+			name      string
+			input     *FilterTreeNode
+			expected  *FilterTreeNode
+			comment   string
+			skipTypes []BlockType
+			onlyTypes []BlockType
+		}{
+			{
+				name:      "IN(2,3) OR EQ(4) OR IN(5,6,7)",
+				input:     makeOrTree(makeInNode(f1, s(2, 3)), makeEqualNode(f1, v(4)), makeInNode(f1, s(5, 6, 7))),
+				expected:  makeOrTree(makeRangeNode(f1, v(2), v(7))),
+				comment:   "Adjacent IN conditions should be merged with gap-filling equals",
+				skipTypes: []BlockType{BlockString, BlockBytes, BlockBool, BlockFloat32, BlockFloat64},
+			},
+			{
+				name:      "bool IN(2,3) OR EQ(4) OR IN(5,6,7)",
+				input:     makeOrTree(makeInNode(f1, s(2, 3)), makeEqualNode(f1, v(4)), makeInNode(f1, s(5, 6, 7))),
+				expected:  makeOrTree(makeTrueNode(f1)),
+				comment:   "Adjacent bool IN conditions should translate into tautology",
+				onlyTypes: []BlockType{BlockBool}, // tautology
+			},
+			{
+				name:      "IN(1,2,3) OR IN(2,3,4)",
+				input:     makeOrTree(makeInNode(f1, s(1, 2, 3)), makeInNode(f1, s(2, 3, 4))),
+				expected:  makeOrTree(makeRangeNode(f1, v(1), v(4))),
+				comment:   "Overlapping IN conditions should be merged",
+				skipTypes: []BlockType{BlockString, BlockBytes, BlockBool, BlockFloat32, BlockFloat64},
+			},
+			{
+				name:      "bool IN(2,3) OR EQ(4) OR IN(5,6,7)",
+				input:     makeOrTree(makeInNode(f1, s(2, 3)), makeEqualNode(f1, v(4)), makeInNode(f1, s(5, 6, 7))),
+				expected:  makeOrTree(makeTrueNode(f1)),
+				comment:   "Overlapping bool IN conditions should translate into tautology",
+				onlyTypes: []BlockType{BlockBool}, // tautology
+			},
+			{
+				name:      "IN(1,2,3)",
+				input:     makeAndTree(makeInNode(f1, s(1, 2, 3))),
+				expected:  makeAndTree(makeRangeNode(f1, v(1), v(3))),
+				comment:   "Full sets should translate to range node",
+				skipTypes: []BlockType{BlockString, BlockBytes, BlockBool, BlockFloat64, BlockFloat32},
+			},
+			{
+				name:      "IN(false,true)",
+				input:     makeAndTree(makeInNode(f1, s(0, 1))),
+				expected:  makeAndTree(makeTrueNode(f1)),
+				comment:   "Full bool sets should translate to tautology",
+				onlyTypes: []BlockType{BlockBool},
+			},
+			{
+				name:     "RG(0,100) AND EQ(50)",
+				input:    makeAndTree(makeRangeNode(f1, v(0), v(100)), makeEqualNode(f1, v(50))),
+				expected: makeAndTree(makeEqualNode(f1, v(50))),
+				comment:  "Optimized away the unnecessary range condition",
+			},
+			{
+				name:      "GT(10) AND LT(90) AND GE(20) AND LE(80) AND RG(30,70)",
+				input:     makeAndTree(makeGtNode(f1, v(10)), makeLtNode(f1, v(90)), makeGeNode(f1, v(20)), makeLeNode(f1, v(80)), makeRangeNode(f1, v(30), v(70))),
+				expected:  makeAndTree(makeRangeNode(f1, v(30), v(70))),
+				comment:   "Multiple overlapping ranges should be merged into most restrictive form",
+				skipTypes: []BlockType{BlockBool}, // contradiction due to limited domain range
+			},
+			{
+				name:      "bool GT(10) AND LT(90) AND GE(20) AND LE(80) AND RG(30,70)",
+				input:     makeAndTree(makeGtNode(f1, v(10)), makeLtNode(f1, v(90)), makeGeNode(f1, v(20)), makeLeNode(f1, v(80)), makeRangeNode(f1, v(30), v(70))),
+				expected:  makeAndTree(makeFalseNode(f1)),
+				comment:   "Multiple overlapping ranges should be merged into most restrictive form",
+				onlyTypes: []BlockType{BlockBool}, // contradiction due to limited domain range
+			},
+			{
+				name:      "RG(0,15) OR RG(10,30)",
+				input:     makeOrTree(makeRangeNode(f1, v(0), v(15)), makeRangeNode(f1, v(10), v(30))),
+				expected:  makeOrTree(makeRangeNode(f1, v(0), v(30))),
+				comment:   "Overlapping ranges in OR should get merged",
+				skipTypes: []BlockType{BlockBool, BlockUint64, BlockUint32, BlockUint16, BlockUint8},
+			},
+			{
+				name:      "uint RG(0,15) OR RG(10,30)",
+				input:     makeOrTree(makeRangeNode(f1, v(0), v(15)), makeRangeNode(f1, v(10), v(30))),
+				expected:  makeOrTree(makeLeNode(f1, v(30))),
+				comment:   "Overlapping ranges in OR should get merged and min boundary should translate to <=",
+				onlyTypes: []BlockType{BlockUint64, BlockUint32, BlockUint16, BlockUint8},
+			},
+			{
+				name:      "bool RG(0,15) OR RG(10,30)",
+				input:     makeOrTree(makeRangeNode(f1, v(0), v(15)), makeRangeNode(f1, v(10), v(30))),
+				expected:  makeOrTree(makeEqualNode(f1, v(0))),
+				comment:   "Bool range merge RG(true,false) => FALSE OR RG(true,true) => EQ(true) due to limited domain range",
+				onlyTypes: []BlockType{BlockBool}, // tautology due to limited domain range
+			},
+			{
+				name:      "RG(0,10) OR RG(20,30)",
+				input:     makeOrTree(makeRangeNode(f1, v(0), v(10)), makeRangeNode(f1, v(20), v(30))),
+				expected:  makeOrTree(makeRangeNode(f1, v(0), v(10)), makeRangeNode(f1, v(20), v(30))),
+				comment:   "Non-overlapping ranges in OR should not be merged",
+				skipTypes: []BlockType{BlockBool, BlockUint64, BlockUint32, BlockUint16, BlockUint8}, // tautology due to limited domain range
+			},
+			{
+				name:      "uint RG(0,10) OR RG(20,30)",
+				input:     makeOrTree(makeRangeNode(f1, v(0), v(10)), makeRangeNode(f1, v(20), v(30))),
+				expected:  makeOrTree(makeLeNode(f1, v(10)), makeRangeNode(f1, v(20), v(30))),
+				comment:   "Non-overlapping ranges in OR should not be merged and uint min should translate to <=",
+				onlyTypes: []BlockType{BlockUint64, BlockUint32, BlockUint16, BlockUint8}, // tautology due to limited domain range
+			},
+			{
+				name:      "bool RG(1,10) OR RG(20,30)",
+				input:     makeOrTree(makeRangeNode(f1, v(1), v(10)), makeRangeNode(f1, v(20), v(30))),
+				expected:  makeOrTree(makeTrueNode(f1)),
+				comment:   "Bool range merged tautology",
+				onlyTypes: []BlockType{BlockBool}, // tautology due to limited domain range
+			},
+			{
+				name:      "GT(0) AND LT(100)",
+				input:     makeAndTree(makeGtNode(f1, v(0)), makeLtNode(f1, v(100))),
+				expected:  makeAndTree(makeRangeNode(f1, cmp.Inc(typ, v(0)), cmp.Dec(typ, v(100)))),
+				comment:   "> AND < should get merged into range",
+				skipTypes: []BlockType{BlockBool}, // contradiction due to limited domain range
+			},
+			{
+				name:      "GE(0) AND LE(100)",
+				input:     makeAndTree(makeGeNode(f1, v(0)), makeLeNode(f1, v(100))),
+				expected:  makeAndTree(makeRangeNode(f1, v(0), v(100))),
+				comment:   ">= AND <= should get merged into range",
+				skipTypes: []BlockType{BlockBool, BlockUint64, BlockUint32, BlockUint16, BlockUint8}, // different optimization for bool
+			},
+			{
+				name:      "uint GE(0) AND LE(100)",
+				input:     makeAndTree(makeGeNode(f1, v(0)), makeLeNode(f1, v(100))),
+				expected:  makeAndTree(makeLeNode(f1, v(100))),
+				comment:   ">= min AND <= M should get transalted into <= M",
+				onlyTypes: []BlockType{BlockUint64, BlockUint32, BlockUint16, BlockUint8}, // different optimization for bool
+			},
+			{
+				name:      "bool GE(true) AND LE(true)",
+				input:     makeAndTree(makeGeNode(f1, v(0)), makeLeNode(f1, v(100))),
+				expected:  makeAndTree(makeEqualNode(f1, v(0))),
+				comment:   "Bool >= AND <= should get merged into EQ",
+				onlyTypes: []BlockType{BlockBool}, // bool only
+			},
+			{
+				name:      "RG(1,100) AND EQ(50)",
+				input:     makeAndTree(makeRangeNode(f1, v(1), v(100)), makeNotEqualNode(f1, v(50))),
+				expected:  makeAndTree(makeNotEqualNode(f1, v(50)), makeRangeNode(f1, v(1), v(100))),
+				comment:   "NOT conditions should not affect range merging",
+				skipTypes: []BlockType{BlockBool}, // different optimization for bool
+			},
+			{
+				name:      "bool RG(1,100) AND EQ(50)",
+				input:     makeAndTree(makeRangeNode(f1, v(1), v(100)), makeNotEqualNode(f1, v(50))),
+				expected:  makeAndTree(makeNotEqualNode(f1, v(50))),
+				comment:   "NOT conditions on bool range merging",
+				onlyTypes: []BlockType{BlockBool}, // different optimization for bool
+			},
+			{
+				name:     "EQ(42) AND GT(41)",
+				input:    makeAndTree(makeEqualNode(f1, v(42)), makeGtNode(f1, v(41))),
+				expected: makeAndTree(makeEqualNode(f1, v(42))),
+				comment:  "EQ and GT should be simplified",
+			},
+			{
+				name:      "RG(0,100) OR NE(50) OR RG(40,60) - Tautology",
+				input:     makeOrTree(makeRangeNode(f1, v(0), v(100)), makeNotEqualNode(f1, v(50)), makeRangeNode(f1, v(40), v(60))),
+				expected:  makeOrTree(makeNotEqualNode(f1, v(50)), makeRangeNode(f1, v(0), v(100))),
+				skipTypes: []BlockType{BlockBool, BlockUint64, BlockUint32, BlockUint16, BlockUint8}, // tautology
+			},
+			{
+				name:      "uint RG(0,100) OR NE(50) OR RG(40,60) - Tautology",
+				input:     makeOrTree(makeRangeNode(f1, v(0), v(100)), makeNotEqualNode(f1, v(50)), makeRangeNode(f1, v(40), v(60))),
+				expected:  makeOrTree(makeLeNode(f1, v(100)), makeNotEqualNode(f1, v(50))),
+				onlyTypes: []BlockType{BlockUint64, BlockUint32, BlockUint16, BlockUint8}, // tautology
+			},
+			{
+				name:      "bool RG(true,true) OR NE(true) OR RG(true,true) - Tautology",
+				input:     makeOrTree(makeRangeNode(f1, v(0), v(100)), makeNotEqualNode(f1, v(50)), makeRangeNode(f1, v(40), v(60))),
+				expected:  makeOrTree(makeTrueNode(f1)),
+				onlyTypes: []BlockType{BlockBool}, // tautology
+			},
+			{
+				name:     "Independent Fields",
+				input:    makeAndTree(makeNode(f1, FilterModeEqual, v(1)), makeNode(f2, FilterModeEqual, v(2))),
+				expected: makeAndTree(makeNode(f1, FilterModeEqual, v(1)), makeNode(f2, FilterModeEqual, v(2))),
+			},
+		}
+
+		for _, tt := range tests {
+			if slices.Contains(tt.skipTypes, gen.Type()) {
+				continue
+			}
+			if len(tt.onlyTypes) > 0 && !slices.Contains(tt.onlyTypes, gen.Type()) {
+				continue
+			}
+			t.Run(gen.Name()+"/"+tt.name, func(t *testing.T) {
+				require.NotPanics(t, tt.input.Optimize)
+				assert.Equal(t, tt.expected.String(), tt.input.String(), tt.comment)
+			})
+		}
+	}
 }
 
 // Define query conditions
@@ -45,131 +246,15 @@ var queryConditions = []FilterMode{
 	FilterModeRegexp,
 }
 
-func tryUnwrapAnySlice(s any) any {
-	val := reflect.ValueOf(s)
-	if val.Type().Kind() != reflect.Slice || val.Len() == 0 || val.Index(0).Kind() != reflect.Interface {
-		return s
-	}
-	etyp := val.Index(0).Elem().Type()
-	switch etyp.Kind() {
-	case reflect.Slice:
-		return val.Index(0).Elem().Interface()
-	default:
-		slice := reflect.MakeSlice(reflect.SliceOf(val.Index(0).Elem().Type()), 0, val.Len())
-		for i := 0; i < val.Len(); i++ {
-			slice = reflect.Append(slice, val.Index(i).Elem())
-		}
-		return slice.Interface()
-	}
-}
-
-// TestOptimize tests the query optimizer's ability to handle complex and edge cases.
-// It verifies:
-// 1. Condition merging and simplification
-// 2. Reordering by selectivity
-// 3. Handling of invalid/contradictory conditions
-// 4. Type safety and mixed type handling
-func TestOptimize(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    *FilterTreeNode
-		expected *FilterTreeNode
-		comment  string
-	}{
-		{
-			name:     "Specialized",
-			input:    makeAndTree(makeRangeNode("id", 1, 0, 100), makeEqualNode("id", 1, 50)),
-			expected: makeAndTree(makeEqualNode("id", 1, 50)),
-			comment:  "Optimized away the unnecessary range condition",
-		},
-		{
-			name:     "MergeInGaps",
-			input:    makeOrTree(makeInNode("id", 1, []int64{2, 3}), makeEqualNode("id", 1, 4), makeInNode("id", 1, []int64{5, 6, 7})),
-			expected: makeOrTree(makeInNode("id", 1, []int64{2, 3, 4, 5, 6, 7})),
-			comment:  "Adjacent IN conditions should be merged with gap-filling equals",
-		},
-		{
-			name:     "MergeRanges",
-			input:    makeAndTree(makeGtNode("id", 1, 10), makeLtNode("id", 1, 90), makeGeNode("id", 1, 20), makeLeNode("id", 1, 80), makeRangeNode("id", 1, 30, 70)),
-			expected: makeAndTree(makeRangeNode("id", 1, 30, 70)),
-			comment:  "Multiple overlapping ranges should be merged into most restrictive form",
-		},
-		{
-			name:     "RangeOrOverlap",
-			input:    makeOrTree(makeRangeNode("id", 1, 0, 15), makeRangeNode("id", 1, 10, 30)),
-			expected: makeOrTree(makeRangeNode("id", 1, 0, 30)),
-			comment:  "Non-overlapping ranges in OR should not be merged",
-		},
-		{
-			name:     "RangeOrNoOverlap",
-			input:    makeOrTree(makeRangeNode("id", 1, 0, 10), makeRangeNode("id", 1, 20, 30)),
-			expected: makeOrTree(makeRangeNode("id", 1, 0, 10), makeRangeNode("id", 1, 20, 30)),
-			comment:  "Non-overlapping ranges in OR should not be merged",
-		},
-		{
-			name:     "TypeBoundsGtLt",
-			input:    makeAndTree(makeGtNode("id", 1, 0), makeLtNode("id", 1, 100)),
-			expected: makeAndTree(makeRangeNode("id", 1, 1, 99)),
-			comment:  "Boundary conditions should be handled correctly",
-		},
-		{
-			name:     "TypeBoundsGeLe",
-			input:    makeAndTree(makeGeNode("id", 1, 0), makeLeNode("id", 1, 100)),
-			expected: makeAndTree(makeRangeNode("id", 1, 0, 100)),
-			comment:  "Boundary conditions should be handled correctly",
-		},
-		{
-			name:     "RangeNotEqual",
-			input:    makeAndTree(makeRangeNode("id", 0, 1, 100), makeNotEqualNode("id", 1, 50)),
-			expected: makeAndTree(makeNotEqualNode("id", 1, 50), makeRangeNode("id", 0, 1, 100)),
-			comment:  "NOT conditions should not affect range merging",
-		},
-		{
-			name:     "EqualAndGt",
-			input:    makeAndTree(makeEqualNode("id", 1, 42), makeGtNode("id", 1, 41)),
-			expected: makeAndTree(makeEqualNode("id", 1, 42)),
-			comment:  "EQ and GT should be simplified",
-		},
-		{
-			name:     "RegexpRange",
-			input:    makeAndTree(makeRangeNode("name", 1, "a", "z"), makeRegexNode("name", 1, "^[a-m]+$")),
-			expected: makeAndTree(makeRangeNode("name", 1, "a", "z"), makeRegexNode("name", 1, "^[a-m]+$")),
-			comment:  "Regexp conditions should not be merged with ranges",
-		},
-		{
-			name:     "TautologyOne",
-			input:    makeOrTree(makeRangeNode("id", 1, 0, 100), makeNotEqualNode("id", 1, 50), makeRangeNode("id", 1, 40, 60)),
-			expected: makeOrTree(makeNotEqualNode("id", 1, 50), makeRangeNode("id", 1, 0, 100)),
-		},
-		{
-			name:     "Independent Fields",
-			input:    makeAndTree(makeNode("id", FilterModeEqual, 1, int64(1)), makeNode("name", FilterModeEqual, 2, []byte("hi"))),
-			expected: makeAndTree(makeNode("id", FilterModeEqual, 1, int64(1)), makeNode("name", FilterModeEqual, 2, []byte("hi"))),
-		},
-		{
-			name:     "OR_IN",
-			input:    makeOrTree(makeInNode("id", 1, []int64{1, 2, 3}), makeInNode("id", 1, []int64{2, 3, 4})),
-			expected: makeOrTree(makeInNode("id", 1, []int64{1, 2, 3, 4})),
-			comment:  "Overlapping IN conditions should be merged",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			require.NotPanics(t, tt.input.Optimize)
-			assert.Equal(t, tt.expected.String(), tt.input.String(), tt.comment)
-		})
-	}
-}
-
-// TestOptimizeExtended verifies the optimizer's behavior with various data types and conditions, ensuring correct tree structures.
+// // TestOptimizeExtended verifies the optimizer's behavior with various data types and conditions, ensuring correct tree structures.
 func TestOptimizeExtended(t *testing.T) {
 	// Iterate over all data types and query conditions
-	for typ, val := range allTypesSchema {
+	for _, gen := range tests.Generators {
 		for _, cond := range queryConditions {
-			t.Run(fmt.Sprintf("%s_%s", typ, cond), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s_%s", gen.Name(), cond), func(t *testing.T) {
 				// Create a filter node for the current type and condition
-				node := makeNode("id", cond, 1, val)
+				field := schema.NewField(tests.FieldTypes[gen.Type()]).WithName("f1")
+				node := makeNode(field, cond, gen.MakeValue(42))
 
 				// Create AND/OR trees with the node
 				andTree := makeAndTree(node, node)
@@ -204,94 +289,28 @@ func TestOptimizeExtended(t *testing.T) {
 	}
 }
 
-// fieldTypeFromValue returns the BlockType corresponding to the given Go type, defaulting to BlockTime for unknown or nil types.
-func fieldTypeFromValue(v interface{}) types.FieldType {
-	if v == nil {
-		panic(fmt.Errorf("unsupported test nil value"))
-	}
-	switch val := v.(type) {
-	case int, int64:
-		return types.FieldTypeInt64
-	case int32:
-		return types.FieldTypeInt32
-	case int16:
-		return types.FieldTypeInt16
-	case int8:
-		return types.FieldTypeInt8
-	case uint, uint64, []uint64:
-		return types.FieldTypeUint64
-	case uint32:
-		return types.FieldTypeUint32
-	case uint16:
-		return types.FieldTypeUint16
-	case uint8:
-		return types.FieldTypeUint8
-	case float64:
-		return types.FieldTypeFloat64
-	case float32:
-		return types.FieldTypeFloat32
-	case bool:
-		return types.FieldTypeBoolean
-	case string:
-		return types.FieldTypeString
-	case []byte:
-		return types.FieldTypeBytes
-	case RangeValue:
-		if val[0] == nil {
-			return fieldTypeFromValue(val[1])
-		} else {
-			return fieldTypeFromValue(val[0])
-		}
-	default:
-		value := reflect.ValueOf(v)
-		if value.Kind() == reflect.Slice && reflectSliceLen(v) > 0 {
-			switch value.Index(0).Interface().(type) {
-			case uint, uint64:
-				return types.FieldTypeUint64
-			case int, int64:
-				return types.FieldTypeInt64
-			}
-		}
-		panic(fmt.Errorf("unsupported test value type %s [%s]", value.Type(), value.Type().Kind()))
-	}
-}
-
 // makeNode constructs a FilterTreeNode with a specified filter mode, field index, and value, setting up the appropriate matcher.
-func makeNode(name string, mode FilterMode, fieldIndex uint16, value any) *FilterTreeNode {
+func makeNode(field schema.Field, mode FilterMode, value any) *FilterTreeNode {
 	tree := &FilterTreeNode{}
 	// Log the initial value and its type
 	// log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
 
-	// unwrap the []any interface from Go variadic function args
-	value = tryUnwrapAnySlice(value)
-
+	blockType := BlockTypes[field.Type()]
 	f := &Filter{
-		Name:  name,
-		Mode:  mode,
-		Index: fieldIndex,
-		Type:  BlockTypes[fieldTypeFromValue(value)],
-		Value: value,
+		Name:    field.Name(),
+		Mode:    mode,
+		Index:   field.Id() - 1,
+		Type:    blockType,
+		Value:   value,
+		Matcher: newFactory(blockType).New(mode),
 	}
 
-	// Special handling for nil values
-	if value == nil {
-		f.Type = BlockTime // default type for nil values
-		f.Matcher = newFactory(f.Type).New(mode)
-		return &FilterTreeNode{Filter: f}
-	}
-
-	f.Matcher = newFactory(f.Type).New(mode)
-
-	fieldType := fieldTypeFromValue(value)
-	caster := schema.NewCaster(fieldType, nil)
+	caster := schema.NewCaster(field.Type(), nil)
 
 	// Handle different modes appropriately
 	switch mode {
-	case FilterModeFalse:
-		f.Value = nil
-	case FilterModeTrue:
-		f.Value = nil
-		tree.Skip = true
+	case FilterModeTrue, FilterModeFalse:
+		// nothing to do
 	case FilterModeIn, FilterModeNotIn:
 		if reflect.ValueOf(value).Kind() != reflect.Slice {
 			value = makeReflectSlice(value)
@@ -300,14 +319,14 @@ func makeNode(name string, mode FilterMode, fieldIndex uint16, value any) *Filte
 		if err != nil {
 			panic(err)
 		}
-		f.Value = v
+		f.Value = cmp.Unique(blockType, v)
 		f.Matcher.WithSlice(f.Value)
 	case FilterModeRange:
 		rg, ok := value.(RangeValue)
 		if !ok {
 			// make a range out of a single value
 			rg[0] = value
-			rg[1] = typedAdd(f.Type, value, 1)
+			rg[1] = value
 		}
 		var err error
 		rg[0], err = caster.CastValue(rg[0])
@@ -358,62 +377,62 @@ func makeOrTree(children ...*FilterTreeNode) *FilterTreeNode {
 }
 
 // makeEqualNode constructs a FilterTreeNode for an equality condition with a specified integer value.
-func makeEqualNode(name string, idx uint16, val any) *FilterTreeNode {
-	return makeNode(name, FilterModeEqual, idx, val)
+func makeEqualNode(field schema.Field, val any) *FilterTreeNode {
+	return makeNode(field, FilterModeEqual, val)
 }
 
 // makeRangeNode constructs a FilterTreeNode for a range condition between two integer values.
-func makeRangeNode(name string, idx uint16, from, to any) *FilterTreeNode {
-	return makeNode(name, FilterModeRange, idx, RangeValue{from, to})
+func makeRangeNode(field schema.Field, from, to any) *FilterTreeNode {
+	return makeNode(field, FilterModeRange, RangeValue{from, to})
 }
 
 // makeRegexNode constructs a FilterTreeNode for a regular expression condition with a specified string.
 // makeRegexNode constructs a FilterTreeNode for a regexp conditions.
-func makeRegexNode(name string, idx uint16, s string) *FilterTreeNode {
-	return makeNode(name, FilterModeRegexp, idx, s)
+func makeRegexNode(field schema.Field, s string) *FilterTreeNode {
+	return makeNode(field, FilterModeRegexp, s)
 }
 
 // makeInNode constructs a FilterTreeNode for an IN condition with a list of integer values.
-func makeInNode(name string, idx uint16, vals ...any) *FilterTreeNode {
-	return makeNode(name, FilterModeIn, idx, vals)
+func makeInNode(field schema.Field, vals any) *FilterTreeNode {
+	return makeNode(field, FilterModeIn, vals)
 }
 
 // makeNiNode constructs a FilterTreeNode for an Not IN condition with a list of integer values.
-func makeNotInNode(name string, idx uint16, vals ...any) *FilterTreeNode {
-	return makeNode(name, FilterModeNotIn, idx, vals)
+func makeNotInNode(field schema.Field, vals any) *FilterTreeNode {
+	return makeNode(field, FilterModeNotIn, vals)
 }
 
 // makeNotEqualNode constructs a FilterTreeNode for a not-equal condition with a specified integer value.
-func makeNotEqualNode(name string, idx uint16, val any) *FilterTreeNode {
-	return makeNode(name, FilterModeNotEqual, idx, val)
+func makeNotEqualNode(field schema.Field, val any) *FilterTreeNode {
+	return makeNode(field, FilterModeNotEqual, val)
 }
 
 // makeGtNode constructs a FilterTreeNode for a greater-than condition with a specified integer value.
-func makeGtNode(name string, idx uint16, val any) *FilterTreeNode {
-	return makeNode(name, FilterModeGt, idx, val)
+func makeGtNode(field schema.Field, val any) *FilterTreeNode {
+	return makeNode(field, FilterModeGt, val)
 }
 
 // makeLtNode constructs a FilterTreeNode for a less-than condition with a specified integer value.
-func makeLtNode(name string, idx uint16, val any) *FilterTreeNode {
-	return makeNode(name, FilterModeLt, idx, val)
+func makeLtNode(field schema.Field, val any) *FilterTreeNode {
+	return makeNode(field, FilterModeLt, val)
 }
 
 // makeGeNode constructs a FilterTreeNode for a greater-than-or-equal condition with a specified integer value.
-func makeGeNode(name string, idx uint16, val any) *FilterTreeNode {
-	return makeNode(name, FilterModeGe, idx, val)
+func makeGeNode(field schema.Field, val any) *FilterTreeNode {
+	return makeNode(field, FilterModeGe, val)
 }
 
 // makeLeNode constructs a FilterTreeNode for a less-than-or-equal condition with a specified integer value.
-func makeLeNode(name string, idx uint16, val any) *FilterTreeNode {
-	return makeNode(name, FilterModeLe, idx, val)
+func makeLeNode(field schema.Field, val any) *FilterTreeNode {
+	return makeNode(field, FilterModeLe, val)
 }
 
 // makeFalseNode constructs a FilterTreeNode for a false condition.
-func makeFalseNode(name string, idx uint16, val any) *FilterTreeNode {
-	return makeNode(name, FilterModeFalse, idx, val)
+func makeFalseNode(field schema.Field) *FilterTreeNode {
+	return makeNode(field, FilterModeFalse, nil)
 }
 
 // makeTrueNode constructs a FilterTreeNode for a true condition.
-func makeTrueNode(name string, idx uint16, val any) *FilterTreeNode {
-	return makeNode(name, FilterModeTrue, idx, val)
+func makeTrueNode(field schema.Field) *FilterTreeNode {
+	return makeNode(field, FilterModeTrue, nil)
 }

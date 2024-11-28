@@ -12,8 +12,11 @@ import (
 )
 
 var (
-	StateKeySuffix = []byte("_state")
-	StateKey       = []byte("state")
+	StatsKeySuffix   = []byte("_stats")
+	DataKeySuffix    = []byte("_data")
+	JournalKeySuffix = []byte("_journal")
+	StateKeySuffix   = []byte("_state")
+	StateKey         = []byte("state")
 )
 
 // ObjectState stores volatile state of database objects such as

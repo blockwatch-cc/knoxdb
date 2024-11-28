@@ -8,6 +8,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"golang.org/x/exp/slices"
 )
 
 func (e *Engine) Enums() schema.EnumRegistry {
@@ -103,10 +104,20 @@ func (e *Engine) DropEnum(ctx context.Context, name string) error {
 	tag := types.TaggedHash(types.ObjectTagEnum, name)
 	e.mu.RLock()
 	enum, ok := e.enums[tag]
-	e.mu.RUnlock()
 	if !ok {
+		e.mu.RUnlock()
 		return ErrNoEnum
 	}
+
+	// check enum is unused
+	for _, t := range e.tables {
+		if slices.Contains(t.Schema().EnumFieldNames(), enum.Name()) {
+			e.mu.RUnlock()
+			return ErrEnumInUse
+		}
+	}
+
+	e.mu.RUnlock()
 
 	// open transaction
 	ctx, tx, commit, abort, err := e.WithTransaction(ctx)

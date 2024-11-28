@@ -144,8 +144,8 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		return err
 	}
 	for _, v := range [][]byte{
-		pack.DataKeySuffix,
-		pack.StatsKeySuffix,
+		engine.DataKeySuffix,
+		engine.StatsKeySuffix,
 	} {
 		key := append([]byte(name), v...)
 		if _, err := store.CreateBucket(tx, key, engine.ErrIndexExists); err != nil {
@@ -230,8 +230,8 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 		return err
 	}
 	for _, v := range [][]byte{
-		pack.DataKeySuffix,
-		pack.StatsKeySuffix,
+		engine.DataKeySuffix,
+		engine.StatsKeySuffix,
 	} {
 		if tx.Bucket(append([]byte(name), v...)) == nil {
 			idx.log.Error("missing index data: %v", engine.ErrNoBucket)
@@ -316,8 +316,8 @@ func (idx *Index) Drop(ctx context.Context) error {
 		idx.log.Debugf("Dropping index %s", typ)
 		idx.stats.Reset()
 		for _, v := range [][]byte{
-			pack.DataKeySuffix,
-			pack.StatsKeySuffix,
+			engine.DataKeySuffix,
+			engine.StatsKeySuffix,
 		} {
 			key := append([]byte(idx.schema.Name()), v...)
 			if err := tx.Root().DeleteBucket(key); err != nil {
@@ -348,8 +348,8 @@ func (idx *Index) Truncate(ctx context.Context) error {
 	idx.journal.Clear()
 	idx.tomb.Clear()
 	for _, v := range [][]byte{
-		pack.DataKeySuffix,
-		pack.StatsKeySuffix,
+		engine.DataKeySuffix,
+		engine.StatsKeySuffix,
 	} {
 		key := append([]byte(idx.schema.Name()), v...)
 		if err := tx.Root().DeleteBucket(key); err != nil {

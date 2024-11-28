@@ -13,8 +13,6 @@ import (
 	"math/bits"
 	"strconv"
 	"strings"
-
-	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 var (
@@ -536,55 +534,4 @@ func Max128(x, y Int128) Int128 {
 		return x
 	}
 	return y
-}
-
-func Int128Intersect(a, b []Int128) []Int128 {
-	x := slicex.NewOrderedBytes(nil).SetUnique()
-	y := slicex.NewOrderedBytes(nil).SetUnique()
-	for _, v := range a {
-		x.Insert(v.Bytes())
-	}
-	for _, v := range b {
-		y.Insert(v.Bytes())
-	}
-	z := x.Intersect(y)
-	res := make([]Int128, z.Len())
-	for i, v := range z.Values {
-		res[i] = Int128FromBytes(v)
-	}
-	return res
-}
-
-func Int128Union(a, b []Int128) []Int128 {
-	x := slicex.NewOrderedBytes(nil).SetUnique()
-	y := slicex.NewOrderedBytes(nil).SetUnique()
-	for _, v := range a {
-		x.Insert(v.Bytes())
-	}
-	for _, v := range b {
-		y.Insert(v.Bytes())
-	}
-	z := x.Union(y)
-	res := make([]Int128, z.Len())
-	for i, v := range z.Values {
-		res[i] = Int128FromBytes(v)
-	}
-	return res
-}
-
-func Int128Difference(a, b []Int128) []Int128 {
-	x := slicex.NewOrderedBytes(nil).SetUnique()
-	y := slicex.NewOrderedBytes(nil).SetUnique()
-	for _, v := range a {
-		x.Insert(v.Bytes())
-	}
-	for _, v := range b {
-		y.Insert(v.Bytes())
-	}
-	z := x.Difference(y)
-	res := make([]Int128, z.Len())
-	for i, v := range z.Values {
-		res[i] = Int128FromBytes(v)
-	}
-	return res
 }

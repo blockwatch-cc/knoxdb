@@ -59,6 +59,37 @@ func (c Condition) FilterString() string {
 	}
 }
 
+func (f Filter) String() string {
+	var sval string
+	if f.Type == BlockString {
+		switch f.Mode {
+		case FilterModeTrue, types.FilterModeFalse:
+			// empty
+		case FilterModeIn, types.FilterModeNotIn:
+			var b strings.Builder
+			for i, v := range f.Value.([][]byte) {
+				if i > 0 {
+					b.WriteByte(',')
+				}
+				b.WriteString(util.UnsafeGetString(v))
+			}
+			sval = b.String()
+		case FilterModeRange:
+			rg := f.Value.(RangeValue)
+			sval = fmt.Sprintf("[%s, %s]",
+				util.UnsafeGetString(rg[0].([]byte)),
+				util.UnsafeGetString(rg[1].([]byte)),
+			)
+		default:
+			sval = string(f.Value.([]byte))
+		}
+	} else {
+		sval = util.ToString(f.Value)
+	}
+	return fmt.Sprintf("%s[%d] %s %s",
+		f.Name, f.Index, f.Mode.Symbol(), sval)
+}
+
 func (n FilterTreeNode) String() string {
 	var b strings.Builder
 	n.dump(0, &b)
@@ -68,12 +99,15 @@ func (n FilterTreeNode) String() string {
 func (n FilterTreeNode) dump(level int, w *strings.Builder) {
 	if n.IsLeaf() {
 		fmt.Fprint(w, n.Filter.String())
+		if n.Skip {
+			fmt.Fprint(w, " [SKIP] ")
+		}
 	}
 	kind := " AND "
 	if n.OrKind {
 		kind = " OR "
 	}
-	if len(n.Children) > 0 {
+	if level > 0 && len(n.Children) > 0 {
 		fmt.Fprint(w, " ( ")
 		defer fmt.Fprint(w, " ) ")
 	}
@@ -87,7 +121,7 @@ func (n FilterTreeNode) dump(level int, w *strings.Builder) {
 
 func (q QueryPlan) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Q> %s => SELECT ( %s ) WHERE", q.Tag, strings.Join(q.ResultSchema.AllFieldNames(), ", "))
+	fmt.Fprintf(&b, "Q> %s => SELECT ( %s ) WHERE ", q.Tag, strings.Join(q.ResultSchema.AllFieldNames(), ", "))
 	q.Filters.dump(0, &b)
 	if q.Order != types.OrderAsc {
 		fmt.Fprintf(&b, "ORDER BY ID %s ", strings.ToUpper(q.Order.String()))

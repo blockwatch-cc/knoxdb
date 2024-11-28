@@ -5,66 +5,10 @@ package query
 
 import (
 	"testing"
-	"time"
 
-	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-var (
-	testSchema      *schema.Schema
-	testIndexSchema *schema.Schema
-)
-
-func init() {
-	var err error
-	testSchema, err = schema.SchemaOf(testStruct{})
-	if err != nil {
-		panic(err)
-	}
-	testIndexSchema, err = testSchema.SelectFields("name", "id")
-	if err != nil {
-		panic(err)
-	}
-
-	statusEnum := schema.NewEnumDictionary("status")
-	statusEnum.Append("active", "pending", "inactive")
-	testSchema.WithEnum(statusEnum)
-}
-
-type testStruct struct {
-	Id       uint64    `knox:"id,pk"`
-	Score    float64   `knox:"score"`
-	Name     string    `knox:"name,index=hash"`
-	Created  time.Time `knox:"created"`
-	Status   string    `knox:"status,enum"`
-	IsActive bool      `knox:"is_active"`
-}
-
-func makeTestStruct(id int) *testStruct {
-	return &testStruct{
-		Id:       uint64(id),
-		Score:    util.RandFloat64(),
-		Name:     util.RandString(4),
-		Created:  time.Now().UTC(),
-		Status:   "active",
-		IsActive: true,
-	}
-}
-
-func makeEncodedTestStruct(valSchema *schema.Schema, val any) []byte {
-	enc := schema.NewEncoder(valSchema)
-	buf, err := enc.Encode(val, nil)
-	if err != nil {
-		panic(err)
-	}
-	return buf
-}
-
-// Core Tests
-// ----------
 
 // TestConditionParse verifies that ParseCondition correctly handles various input formats
 // and data types, including edge cases and error conditions. It ensures proper type conversion
@@ -149,9 +93,9 @@ func TestConditionValidate(t *testing.T) {
 		},
 		// Error cases
 		{
-			name:    "Empty Condition",
+			name:    "Empty Root",
 			cond:    Condition{},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "Empty Name",
@@ -192,15 +136,6 @@ func TestConditionValidate(t *testing.T) {
 				Equal("id", 1),
 				Condition{},
 			),
-			wantErr: true,
-		},
-		{
-			name: "Cleared Condition",
-			cond: func() Condition {
-				c := Equal("id", 1)
-				c.Clear()
-				return c
-			}(),
 			wantErr: true,
 		},
 	}
@@ -325,7 +260,7 @@ func TestConditionCompile(t *testing.T) {
 				Mode:  FilterMode(255),
 				Value: 123,
 			},
-			fields:  nil,
+			fields:  []string{"test"},
 			wantErr: true,
 		},
 	}

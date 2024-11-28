@@ -52,8 +52,8 @@ type ExportedField struct {
 	Scale      uint8
 	Fixed      uint16
 	Offset     uintptr
+	Enum       *EnumDictionary
 	path       []int
-	_          [3]byte // padding
 }
 
 func NewField(typ types.FieldType) Field {
@@ -161,12 +161,12 @@ func (f *Field) IsArray() bool {
 }
 
 func (f *Field) WireSize() int {
-	// switch f.typ {
-	// case types.FieldTypeString, types.FieldTypeBytes:
-	if f.fixed > 0 {
-		return int(f.fixed)
+	switch f.typ {
+	case types.FieldTypeString, types.FieldTypeBytes:
+		if f.fixed > 0 {
+			return int(f.fixed)
+		}
 	}
-	// }
 	return f.typ.Size()
 }
 

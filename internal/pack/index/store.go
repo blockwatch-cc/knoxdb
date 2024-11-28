@@ -15,7 +15,7 @@ import (
 )
 
 func (idx *Index) dataBucket(tx store.Tx) store.Bucket {
-	key := append([]byte(idx.schema.Name()), pack.DataKeySuffix...)
+	key := append([]byte(idx.schema.Name()), engine.DataKeySuffix...)
 	b := tx.Bucket(key)
 	if b != nil {
 		b.FillPercent(idx.opts.PageFill)
@@ -24,7 +24,7 @@ func (idx *Index) dataBucket(tx store.Tx) store.Bucket {
 }
 
 func (idx *Index) statsBucket(tx store.Tx) store.Bucket {
-	key := append([]byte(idx.schema.Name()), pack.StatsKeySuffix...)
+	key := append([]byte(idx.schema.Name()), engine.StatsKeySuffix...)
 	b := tx.Bucket(key)
 	if b != nil {
 		b.FillPercent(idx.opts.PageFill)

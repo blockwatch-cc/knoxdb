@@ -136,7 +136,7 @@ func (p *QueryPlan) WithSchema(s *schema.Schema) *QueryPlan {
 }
 
 func (p *QueryPlan) WithLogger(l log.Logger) *QueryPlan {
-	p.Log = l.Clone()
+	p.Log = l.Clone().WithTag(p.Tag)
 	return p
 }
 
@@ -156,25 +156,38 @@ func (p *QueryPlan) Runtime() time.Duration {
 	return p.Stats.runtime[TOTAL_TIME_KEY]
 }
 
+func (p *QueryPlan) Errorf(s string, vals ...any) error {
+	return fmt.Errorf("query "+p.Tag+": ", vals...)
+}
+
+func (p *QueryPlan) Error(err any) error {
+	switch val := err.(type) {
+	case string:
+		return p.Errorf(val)
+	default:
+		return p.Errorf("%v", err)
+	}
+}
+
 func (p *QueryPlan) Validate() error {
 	// ensure table and filters are defined
 	if p.Table == nil {
-		return fmt.Errorf("query %s: %v", p.Tag, engine.ErrNoTable)
+		return p.Error(engine.ErrNoTable)
 	}
 	if p.Filters == nil {
-		return fmt.Errorf("query %s: missing filters", p.Tag)
+		return p.Error("missing filters")
 	}
 
 	// filter tree must be valid
 	if err := p.Filters.Validate(""); err != nil {
-		return fmt.Errorf("query %s: %v", p.Tag, err)
+		return p.Error(err)
 	}
 
 	// check user-provided request schema
 	if p.RequestSchema != nil {
 		// schemas must match table
 		if err := p.Table.Schema().CanSelect(p.RequestSchema); err != nil {
-			return fmt.Errorf("query %s: request schema: %v", p.Tag, err)
+			return p.Errorf("request schema: %v", err)
 		}
 	}
 
@@ -182,10 +195,10 @@ func (p *QueryPlan) Validate() error {
 	if p.ResultSchema != nil {
 		// result schema must contain pk (required for cursors, pack.LookupIterator)
 		if p.ResultSchema.PkIndex() < 0 {
-			return fmt.Errorf("query %s: result schema: %v", p.Tag, engine.ErrNoPk)
+			return p.Errorf("result schema: %v", engine.ErrNoPk)
 		}
 		if err := p.Table.Schema().CanSelect(p.ResultSchema); err != nil {
-			return fmt.Errorf("query %s: result schema: %v", p.Tag, err)
+			return p.Errorf("result schema: %v", err)
 		}
 	}
 
@@ -217,18 +230,18 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		if filterFields.Len() > 0 {
 			s, err := p.Table.Schema().SelectFields(filterFields.Values...)
 			if err != nil {
-				return fmt.Errorf("query %s: make request schema: %v", p.Tag, err)
+				return p.Errorf("make request schema: %v", err)
 			}
 			p.RequestSchema = s.Sort()
 		} else {
 			s, err := p.Table.Schema().SelectFieldIds(p.Table.Schema().PkId())
 			if err != nil {
-				return fmt.Errorf("query %s: make request schema: %v", p.Tag, err)
+				return p.Errorf("make request schema: %v", err)
 			}
 			p.RequestSchema = s.WithName("pk")
 		}
 	}
-	p.Log.Debugf("Q> %s: request %s", p.Tag, p.RequestSchema)
+	p.Log.Debugf("request %s", p.RequestSchema)
 
 	// identify indexes based on request schema fields
 	for _, idx := range p.Table.Indexes() {
@@ -243,7 +256,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		p.Indexes = append(p.Indexes, idx)
 	}
 
-	p.Log.Debugf("Q> %s: result %s", p.Tag, p.ResultSchema)
+	p.Log.Debugf("result %s", p.ResultSchema)
 
 	// optimize plan
 	// - reorder filters
@@ -275,31 +288,34 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	p.Log.Debugf("%d index results", n)
 
-	if n > 0 {
-		// pk field filter template
-		tmpl := &Filter{
-			Name:  p.RequestSchema.Pk().Name(),
-			Type:  BlockTypes[p.RequestSchema.Pk().Type()],
-			Index: uint16(p.RequestSchema.PkIndex()),
+	// prepare pk field filter template
+	ts := p.Table.Schema()
+	tmpl := &Filter{
+		Name:  ts.Pk().Name(),
+		Type:  BlockTypes[ts.Pk().Type()],
+		Index: uint16(ts.PkIndex()),
+	}
+
+	// Step 2: add IN conditions from aggregate bits at each tree level
+	// without index match this adds an always false condition for the pk field
+	p.decorateIndexNodes(p.Filters, tmpl, true)
+	p.Log.Debugf("Decorated %s", p.Filters)
+
+	// Step 3: optimize by removing skip nodes and merge / simplify others
+	p.Filters.Optimize()
+	p.Log.Debugf("Optimized %s", p.Filters)
+
+	// Step 4: adjust request schema (we may have to check less fields now)
+	filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
+	requestFields := slicex.NewOrderedStrings(p.RequestSchema.ActiveFieldNames())
+	if !filterFields.Equal(requestFields) && filterFields.Len() > 0 {
+		s, err := p.Table.Schema().SelectFields(filterFields.Values...)
+		if err != nil {
+			return p.Errorf("update request schema: %v", err)
 		}
-
-		// Step 2: add IN conditions from aggregate bits at each tree level
-		p.decorateIndexNodes(p.Filters, tmpl, true)
-
-		// Step 3: optimize by removing skip nodes and merge / simplify others
-		p.Filters.Optimize()
-
-		// Step 4: adjust request schema (we may have to check less fields now)
-		filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
-		requestFields := slicex.NewOrderedStrings(p.RequestSchema.ActiveFieldNames())
-		if !filterFields.Equal(requestFields) && filterFields.Len() > 0 {
-			s, err := p.Table.Schema().SelectFields(filterFields.Values...)
-			if err != nil {
-				return fmt.Errorf("query %s: remake request schema: %v", p.Tag, err)
-			}
-			p.RequestSchema = s.Sort()
-		}
+		p.RequestSchema = s.Sort()
 	}
 
 	p.Stats.Tick("index_time")
@@ -314,16 +330,26 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, tmpl *Filter, isRoo
 	// and all indexes are collision free
 	if isRoot && node.IsProcessed() {
 		// aggregate bitsets
-		bits := bitmap.New()
+		var bits bitmap.Bitmap
 		if node.OrKind {
 			for _, child := range node.Children {
-				if child.Bits.IsValid() {
+				if !child.Bits.IsValid() {
+					continue
+				}
+				if !bits.IsValid() {
+					bits = child.Bits
+				} else {
 					bits.Or(child.Bits)
 				}
 			}
 		} else {
 			for _, child := range node.Children {
-				if child.Bits.IsValid() {
+				if !child.Bits.IsValid() {
+					continue
+				}
+				if !bits.IsValid() {
+					bits = child.Bits
+				} else {
 					bits.And(child.Bits)
 				}
 			}
@@ -458,13 +484,14 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 			continue
 		}
 
-		// try query index, we expect the index sets Skip on all used child nodes
+		// try query index, we expect the index will sets node.Skip on visited nodes
 		bits, canCollide, err := idx.QueryComposite(ctx, node)
 		if err != nil {
 			return 0, err
 		}
 
 		// indexes may return nil without error when they cannot match the query
+		// but will return a non-nil (empty) bitset when no match was found
 		if bits == nil {
 			continue
 		}
@@ -476,7 +503,21 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 		break
 	}
 
+	// TODO: push down extra pk conditions to index query
+	// identify extra pk conditions for push down
+	// var pkNodes []*FilterTreeNode
+	// pki := p.Table.Schema().PkIndex()
+	// for _, child := range node.Children {
+	// 	if child.Skip || child.Bits.IsValid() || !child.IsLeaf() {
+	// 		continue
+	// 	}
+	// 	if child.Filter.Index == uint16(pki) {
+	// 		pkNodes = append(pkNodes, child)
+	// 	}
+	// }
+
 	// for all unprocessed child nodes, find a matching index and query independently
+	// push down extra pk field conditions
 	for _, child := range node.Children {
 		// skip when index already processed this node
 		if child.Skip || child.Bits.IsValid() || !child.IsLeaf() {
