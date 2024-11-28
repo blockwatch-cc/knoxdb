@@ -44,9 +44,7 @@ func TestWorkload4(t *testing.T) {
 				record := NewRandomTypes(threadID*txnSize + i)
 
 				// Synchronize EnumRegistry access to prevent concurrent writes
-				enumMutex.Lock()
 				pk, err := table.Insert(ctx, []*Types{record})
-				enumMutex.Unlock()
 
 				require.NoError(t, err, "Failed to insert data")
 				require.NotEmpty(t, record.MyEnum, "Enum field is empty for record")

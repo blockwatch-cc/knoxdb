@@ -41,9 +41,7 @@ func TestWorkload2(t *testing.T) {
 			}()
 			for i := 0; i < txnSize; i++ {
 				record := NewRandomTypes(threadID*txnSize + i)
-				enumMutex.Lock()
 				pk, err := table.Insert(ctx, []*Types{record})
-				enumMutex.Unlock()
 				require.NoError(t, err, "Failed to insert data")
 				record.Id = pk
 				insertedData.Store(record.Id, record)

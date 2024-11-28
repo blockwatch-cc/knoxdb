@@ -34,9 +34,7 @@ func TestWorkload3(t *testing.T) {
 			MyEnum: myEnums[i%len(myEnums)],
 		}
 	}
-	enumMutex.Lock()
 	startPK, err := table.Insert(ctx, data)
-	enumMutex.Unlock()
 	require.NoError(t, err, "Failed to initialize accounts")
 
 	// Update IDs for accounts
@@ -71,9 +69,7 @@ func TestWorkload3(t *testing.T) {
 		fromAccount.Int64 -= transferAmount
 		toAccount.Int64 += transferAmount
 
-		enumMutex.Lock()
 		_, err = table.Update(ctx, []*Types{&fromAccount, &toAccount})
-		enumMutex.Unlock()
 		require.NoError(t, err, "Failed to update accounts during transaction")
 	}
 

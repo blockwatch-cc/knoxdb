@@ -43,8 +43,8 @@ func TestWorkload1(t *testing.T) {
 		WithTable(table).
 		WithDebug(true). // Enable detailed query logging
 		Stream(ctx, func(res *Types) error {
-			require.NotEmpty(t, res.MyEnum, "Unexpected empty enum value")
-			log.Infof("Streamed record: ID=%d, MyEnum=%s", res.Id, res.MyEnum)
+			require.NotEmpty(t, res.MyEnum, "Unexpected empty enum value %#v", res)
+			log.Infof("Streamed record: ID=%d, Int64=%d, MyEnum=%s", res.Id, res.Int64, res.MyEnum)
 			require.Equal(t, data[count].Id, res.Id, "Record ID mismatch")
 			require.Equal(t, data[count].Int64, res.Int64, "Int64 mismatch")
 			require.Equal(t, data[count].MyEnum, res.MyEnum, "Enum mismatch")
@@ -53,4 +53,15 @@ func TestWorkload1(t *testing.T) {
 		})
 	require.NoError(t, err, "Failed to stream data")
 	require.Equal(t, txnSize, count, "Row count mismatch")
+
+	for _, v := range data {
+		var res Types
+		err := knox.NewGenericQuery[Types]().
+			WithTable(table).
+			AndEqual("int64", v.Int64).
+			Execute(ctx, &res)
+		require.NoError(t, err)
+		require.Greater(t, v.Id, uint64(0))
+		require.Equal(t, v.Int64, res.Int64)
+	}
 }

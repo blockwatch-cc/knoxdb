@@ -12,7 +12,6 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -24,8 +23,7 @@ import (
 )
 
 var (
-	myEnums   = []string{"one", "two", "three", "four"}
-	enumMutex sync.Mutex // Mutex for synchronizing EnumRegistry access
+	myEnums = []string{"one", "two", "three", "four"}
 )
 
 // Types defines the schema for our workload tests
@@ -72,7 +70,7 @@ func ensureDBDir(path string) error {
 
 func SetupDatabase(t *testing.T) (knox.Database, knox.Table, func()) {
 	ctx := context.Background()
-	dbPath := "./db"
+	dbPath := t.TempDir()
 
 	// Clean up any leftover state
 	require.NoError(t, cleanDBDir(dbPath), "Failed to clean up database directory")
@@ -88,7 +86,6 @@ func SetupDatabase(t *testing.T) (knox.Database, knox.Table, func()) {
 
 	// Create enum
 	log.Infof("Creating enum 'my_enum'")
-	enumMutex.Lock() // Ensure thread safety for enum creation
 	enum, err := db.CreateEnum(ctx, "my_enum")
 	if err != nil {
 		log.Warnf("Enum 'my_enum' may already exist: %v", err)
@@ -96,13 +93,10 @@ func SetupDatabase(t *testing.T) (knox.Database, knox.Table, func()) {
 	if enum != nil {
 		log.Infof("Enum created: %v", enum)
 	}
-	enumMutex.Unlock()
 
 	// Extend the enum with values
 	log.Infof("Extending enum 'my_enum' with values: %+v", myEnums)
-	enumMutex.Lock()
 	err = db.ExtendEnum(ctx, "my_enum", myEnums...)
-	enumMutex.Unlock()
 	require.NoErrorf(t, err, "Failed to extend enum 'my_enum': %v", err)
 
 	// Validate that the enum exists
