@@ -34,8 +34,13 @@ func TestWorkload4(t *testing.T) {
 	for threadID := 0; threadID < numThreads; threadID++ {
 		wg.Add(1)
 		go func(threadID int) {
-			defer wg.Done()
+			start := time.Now() // Measure start time for the goroutine
+			defer func() {
+				log.Infof("Goroutine %d completed in %s", threadID, time.Since(start))
+				wg.Done()
+			}()
 			for i := 0; i < txnSize; i++ {
+				time.Sleep(1 * time.Millisecond) // Simulate delay for each operation
 				record := NewRandomTypes(threadID*txnSize + i)
 				pk, err := table.Insert(ctx, []*Types{record})
 				require.NoError(t, err, "Failed to insert data")
