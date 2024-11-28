@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/pkg/knox"
+	"github.com/echa/log" // Fix: Added missing import
 	"github.com/stretchr/testify/require"
 )
 

@@ -89,7 +89,7 @@ func TestWorkload3(t *testing.T) {
 
 	// Validate final balances for each account
 	expectedBalanceAdjustments := txnCount / accountCount * transferAmount
-	for i, account := range data {
+	for _, account := range data {
 		err := knox.NewGenericQuery[Types]().
 			WithTable(table).
 			AndEqual("id", account.Id).
