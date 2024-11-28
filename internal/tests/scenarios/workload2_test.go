@@ -5,7 +5,6 @@
 // Ensures:
 // - no data loss or corruption across threads.
 // - total row count and content correctness are verified post-insertion.
-// - potential deadlocks are detected using `require.Eventually`.
 
 package scenarios
 
@@ -19,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestWorkload2 tests concurrent transactions.
 func TestWorkload2(t *testing.T) {
 	_, table, cleanup := SetupDatabase(t)
 	defer cleanup()
@@ -31,7 +29,7 @@ func TestWorkload2(t *testing.T) {
 	var wg sync.WaitGroup
 	insertedData := sync.Map{}
 
-	// Concurrent inserts.
+	// Concurrent inserts
 	for threadID := 0; threadID < numThreads; threadID++ {
 		wg.Add(1)
 		go func(threadID int) {
@@ -46,13 +44,13 @@ func TestWorkload2(t *testing.T) {
 		}(threadID)
 	}
 
-	// Wait for threads to finish, checking for potential deadlocks.
+	// Wait for threads to finish
 	require.Eventually(t, func() bool {
 		wg.Wait()
 		return true
 	}, 10*time.Second, 100*time.Millisecond, "Deadlock detected: threads did not complete")
 
-	// Validate all rows are inserted correctly.
+	// Validate all rows are inserted correctly
 	count := 0
 	err := knox.NewGenericQuery[Types]().
 		WithTable(table).

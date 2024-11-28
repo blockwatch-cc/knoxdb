@@ -1,11 +1,11 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: oliver@blockwatch.cc
 //
-// Workload4 simulates interleaved operations across multiple threads.
+// Workload4 tests interleaved operations for isolation and concurrency.
 // Ensures:
 // - thread safety and data isolation during concurrent access.
 // - data consistency and correctness across all operations.
-// - potential deadlocks are detected using `require.Eventually`.
+// - no deadlocks or livelocks occur.
 
 package scenarios
 
@@ -45,13 +45,13 @@ func TestWorkload4(t *testing.T) {
 		}(threadID)
 	}
 
-	// Wait for threads to finish, checking for potential deadlocks
+	// Wait for threads to finish
 	require.Eventually(t, func() bool {
 		wg.Wait()
 		return true
 	}, 10*time.Second, 100*time.Millisecond, "Deadlock detected: threads did not complete")
 
-	// Validate all interleaved operations are consistent
+	// Validate inserted records
 	count := 0
 	err := knox.NewGenericQuery[Types]().
 		WithTable(table).

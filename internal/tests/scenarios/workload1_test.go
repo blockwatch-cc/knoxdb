@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestWorkload1 simulates a single-threaded large transaction, ensuring atomicity and durability.
 func TestWorkload1(t *testing.T) {
 	_, table, cleanup := SetupDatabase(t)
 	defer cleanup()
@@ -24,23 +23,27 @@ func TestWorkload1(t *testing.T) {
 	ctx := context.Background()
 	const txnSize = 100
 
-	// Step 1: Insert a large number of records in a single transaction.
+	// Insert a large number of records in a single transaction
 	data := make([]*Types, txnSize)
 	for i := 0; i < txnSize; i++ {
 		data[i] = NewRandomTypes(i)
 	}
-	_, err := table.Insert(ctx, data)
+	startPK, err := table.Insert(ctx, data)
 	require.NoError(t, err, "Failed to insert data")
 
-	// Placeholder: Inject fault before committing the transaction.
+	// Assign primary keys to records
+	for i := range data {
+		data[i].Id = startPK + uint64(i)
+	}
 
-	// Step 2: Validate that all rows are correctly inserted.
+	// Validate all rows are correctly inserted
 	count := 0
 	err = knox.NewGenericQuery[Types]().
 		WithTable(table).
 		Stream(ctx, func(res *Types) error {
-			require.Equal(t, data[count].Int64, res.Int64, "Mismatch in Int64 field")
-			require.Equal(t, uint64(count+1), res.Id, "Mismatch in Id field")
+			require.Equal(t, data[count].Id, res.Id, "Record ID mismatch")
+			require.Equal(t, data[count].Int64, res.Int64, "Int64 mismatch")
+			require.Equal(t, data[count].MyEnum, res.MyEnum, "Enum mismatch")
 			count++
 			return nil
 		})

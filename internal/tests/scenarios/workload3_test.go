@@ -25,40 +25,43 @@ func TestWorkload3(t *testing.T) {
 	const txnCount = 20
 	const initialBalance = 100
 
-	// Step 1: Initialize accounts with balances
+	// Initialize accounts with balances
 	data := make([]*Types, accountCount)
 	for i := 0; i < accountCount; i++ {
 		data[i] = &Types{
-			Int64: initialBalance, // Set initial balance, omit setting ID
+			Int64: initialBalance,
 		}
 	}
-	_, err := table.Insert(ctx, data)
+	pk, err := table.Insert(ctx, data)
 	require.NoError(t, err, "Failed to initialize accounts")
 
-	// Step 2: Perform debit and credit operations
+	// Update IDs for accounts
+	for i := range data {
+		data[i].Id = pk + uint64(i)
+	}
+
+	// Perform debit and credit operations
 	for i := 0; i < txnCount; i++ {
 		from := i % accountCount
 		to := (i + 1) % accountCount
 
 		var fromAccount, toAccount Types
 
-		// Load the "from" account and validate
+		// Load the "from" account
 		err := knox.NewGenericQuery[Types]().
 			WithTable(table).
-			AndEqual("id", uint64(from+1)).
+			AndEqual("id", data[from].Id).
 			Execute(ctx, &fromAccount)
 		require.NoError(t, err, "Failed to load 'from' account")
-		require.Equal(t, uint64(from+1), fromAccount.Id)
 
-		// Load the "to" account and validate
+		// Load the "to" account
 		err = knox.NewGenericQuery[Types]().
 			WithTable(table).
-			AndEqual("id", uint64(to+1)).
+			AndEqual("id", data[to].Id).
 			Execute(ctx, &toAccount)
 		require.NoError(t, err, "Failed to load 'to' account")
-		require.Equal(t, uint64(to+1), toAccount.Id)
 
-		// Perform the debit and credit
+		// Perform debit and credit
 		fromAccount.Int64 -= 50
 		toAccount.Int64 += 50
 
@@ -66,7 +69,7 @@ func TestWorkload3(t *testing.T) {
 		require.NoError(t, err, "Failed to update accounts")
 	}
 
-	// Step 3: Validate total balance consistency
+	// Validate total balance consistency
 	totalBalance := int64(0)
 	err = knox.NewGenericQuery[Types]().
 		WithTable(table).
