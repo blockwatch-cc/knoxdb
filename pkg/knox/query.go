@@ -14,6 +14,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 )
 
@@ -161,6 +162,9 @@ func (q Query) WithIndex(enable bool) Query {
 func (q Query) WithDebug(enable bool) Query {
 	if enable {
 		q.flags |= QueryFlagDebug
+		if q.tag == "" {
+			q.tag = util.RandString(8)
+		}
 	} else {
 		q.flags &^= QueryFlagDebug
 	}
@@ -170,6 +174,9 @@ func (q Query) WithDebug(enable bool) Query {
 func (q Query) WithStats(enable bool) Query {
 	if enable {
 		q.flags |= QueryFlagStats
+		if q.tag == "" {
+			q.tag = util.RandString(8)
+		}
 	} else {
 		q.flags &^= QueryFlagStats
 	}
@@ -493,22 +500,22 @@ func (q GenericQuery[T]) WithLimit(l int) GenericQuery[T] {
 }
 
 func (q GenericQuery[T]) AndCondition(conds ...Condition) GenericQuery[T] {
-	q.Query.AndCondition(conds...)
+	q.Query = q.Query.AndCondition(conds...)
 	return q
 }
 
 func (q GenericQuery[T]) OrCondition(conds ...Condition) GenericQuery[T] {
-	q.Query.OrCondition(conds...)
+	q.Query = q.Query.OrCondition(conds...)
 	return q
 }
 
 func (q GenericQuery[T]) And(field string, mode FilterMode, value any) GenericQuery[T] {
-	q.Query.And(field, mode, value)
+	q.Query = q.Query.And(field, mode, value)
 	return q
 }
 
 func (q GenericQuery[T]) Or(field string, mode FilterMode, value any) GenericQuery[T] {
-	q.Query.Or(field, mode, value)
+	q.Query = q.Query.Or(field, mode, value)
 	return q
 }
 
