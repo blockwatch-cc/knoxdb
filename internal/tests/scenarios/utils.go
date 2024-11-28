@@ -84,9 +84,12 @@ func SetupDatabase(t *testing.T) (knox.Database, knox.Table, func()) {
 
 	// Create enum
 	log.Infof("Creating enum 'my_enum'")
-	_, err = db.CreateEnum(ctx, "my_enum")
+	enum, err := db.CreateEnum(ctx, "my_enum")
 	if err != nil {
 		log.Warnf("Enum 'my_enum' may already exist: %v", err)
+	}
+	if enum != nil {
+		log.Infof("Enum created: %v", enum)
 	}
 
 	// Extend the enum with values

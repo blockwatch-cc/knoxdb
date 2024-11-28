@@ -29,7 +29,8 @@ func TestWorkload3(t *testing.T) {
 	data := make([]*Types, accountCount)
 	for i := 0; i < accountCount; i++ {
 		data[i] = &Types{
-			Int64: initialBalance,
+			Int64:  initialBalance,
+			MyEnum: myEnums[i%len(myEnums)],
 		}
 	}
 	pk, err := table.Insert(ctx, data)
@@ -53,6 +54,7 @@ func TestWorkload3(t *testing.T) {
 			AndEqual("id", data[from].Id).
 			Execute(ctx, &fromAccount)
 		require.NoError(t, err, "Failed to load 'from' account")
+		require.NotEmpty(t, fromAccount.MyEnum, "FromAccount enum value is empty")
 
 		// Load the "to" account
 		err = knox.NewGenericQuery[Types]().
@@ -60,6 +62,7 @@ func TestWorkload3(t *testing.T) {
 			AndEqual("id", data[to].Id).
 			Execute(ctx, &toAccount)
 		require.NoError(t, err, "Failed to load 'to' account")
+		require.NotEmpty(t, toAccount.MyEnum, "ToAccount enum value is empty")
 
 		// Perform debit and credit
 		fromAccount.Int64 -= 50
@@ -75,6 +78,7 @@ func TestWorkload3(t *testing.T) {
 		WithTable(table).
 		Stream(ctx, func(res *Types) error {
 			totalBalance += res.Int64
+			require.NotEmpty(t, res.MyEnum, "Streamed account has empty enum value")
 			return nil
 		})
 	require.NoError(t, err, "Failed to stream data")

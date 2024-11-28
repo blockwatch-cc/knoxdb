@@ -40,7 +40,9 @@ func TestWorkload1(t *testing.T) {
 	count := 0
 	err = knox.NewGenericQuery[Types]().
 		WithTable(table).
+		WithDebug(true). // Enable detailed query logging
 		Stream(ctx, func(res *Types) error {
+			require.NotEmpty(t, res.MyEnum, "Unexpected empty enum value")
 			require.Equal(t, data[count].Id, res.Id, "Record ID mismatch")
 			require.Equal(t, data[count].Int64, res.Int64, "Int64 mismatch")
 			require.Equal(t, data[count].MyEnum, res.MyEnum, "Enum mismatch")
