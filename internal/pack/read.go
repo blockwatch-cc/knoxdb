@@ -6,6 +6,7 @@ package pack
 import (
 	"bytes"
 	"encoding"
+	"fmt"
 	"reflect"
 	"sort"
 	"time"
@@ -132,14 +133,16 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 		// insert zero value when block is not available (e.g. after schema change)
 		b := p.blocks[srcId]
 		if b == nil {
-			sz := field.WireSize()
-			buf := unsafe.Slice((*byte)(fptr), sz)
+			if !field.Flags.Is(types.FieldFlagEnum) {
+				sz := field.WireSize()
+				buf := unsafe.Slice((*byte)(fptr), sz)
 
-			// loop copy 32 zeros (some fixed types may be larger)
-			for sz > 0 {
-				copy(buf, zeros[:])
-				buf = buf[min(sz, 32):]
-				sz -= 32
+				// loop copy 32 zeros (some fixed types may be larger)
+				for sz > 0 {
+					copy(buf, zeros[:])
+					buf = buf[min(sz, 32):]
+					sz -= 32
+				}
 			}
 			continue
 		}
@@ -151,8 +154,20 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32:
 			*(*uint32)(fptr) = b.Uint32().Get(row)
 
-		case types.FieldTypeInt16, types.FieldTypeUint16:
-			*(*uint16)(fptr) = b.Uint16().Get(row)
+		case types.FieldTypeInt16:
+			*(*int16)(fptr) = b.Int16().Get(row)
+
+		case types.FieldTypeUint16:
+			if field.Enum != nil {
+				u16 := b.Uint16().Get(row)
+				val, ok := field.Enum.Value(u16)
+				if !ok {
+					return fmt.Errorf("%s: invalid enum value %d", field.Name, u16)
+				}
+				*(*string)(fptr) = val // FIXME: may break when enum dict grows
+			} else {
+				*(*uint16)(fptr) = b.Uint16().Get(row)
+			}
 
 		case types.FieldTypeInt8, types.FieldTypeUint8:
 			*(*uint8)(fptr) = b.Uint8().Get(row)
