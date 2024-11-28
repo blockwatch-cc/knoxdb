@@ -471,13 +471,14 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 			continue
 		}
 
-		// try query index, we expect the index sets Skip on all used child nodes
+		// try query index, we expect the index will sets node.Skip on visited nodes
 		bits, canCollide, err := idx.QueryComposite(ctx, node)
 		if err != nil {
 			return 0, err
 		}
 
 		// indexes may return nil without error when they cannot match the query
+		// but will return a non-nil (empty) bitset when no match was found
 		if bits == nil {
 			continue
 		}
@@ -489,7 +490,20 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 		break
 	}
 
+	// identify extra pk conditions for push down
+	// var pkNodes []*FilterTreeNode
+	// pki := p.Table.Schema().PkIndex()
+	// for _, child := range node.Children {
+	// 	if child.Skip || child.Bits.IsValid() || !child.IsLeaf() {
+	// 		continue
+	// 	}
+	// 	if child.Filter.Index == uint16(pki) {
+	// 		pkNodes = append(pkNodes, child)
+	// 	}
+	// }
+
 	// for all unprocessed child nodes, find a matching index and query independently
+	// push down extra pk field conditions
 	for _, child := range node.Children {
 		// skip when index already processed this node
 		if child.Skip || child.Bits.IsValid() || !child.IsLeaf() {

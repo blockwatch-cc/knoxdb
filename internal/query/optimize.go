@@ -514,6 +514,24 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 
 		default:
 			// skip NE, IN, NI, RE
+
+			// TODO: merge set + range in OR conditions
+			//
+			// - goal: eliminate sets or reduce set size
+			// - pre-checks (as this strategy is expensive)
+			//   - a range-like condition exists
+			//   - set overlaps with any range (only then it may become smaller)
+			//   - set is smaller than a limit (counted in elements or clusters?)
+			// - strategy:
+			//   - split set into range clusters (single values form independent cluster)
+			//   - optimize together with other ranges and output as RG + EQ list
+			//   - a later stage will re-combine EQ filters into IN again
+			// case FilterModeIn:
+			// if isOrNode {
+			// } else {
+			// 	resultNodes = append(resultNodes, node)
+			// }
+
 			resultNodes = append(resultNodes, node)
 		}
 	}
@@ -534,6 +552,7 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 // - and: NI(A) + NE(B) => NI(A,B) -- union
 // - and: disjunct IN + IN => false
 // - and: disjunct IN + EQ => false
+// - and: IN(1,4,5) + GT(4) => EQ(5) -- intersect set with range
 // - or: IN(A) + IN(B) => IN(A+B) -- union
 // - or: IN(A) + EQ(B) => IN(A+B)
 // - or: EQ(A) + EQ(B) => IN(A+B)
@@ -551,6 +570,24 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		f           *Filter
 		plus, minus func(BlockType, any, any) any
 	)
+
+	// order nodes by field index and move sets first
+	sort.Slice(nodes, func(i, j int) bool {
+		ix, jx := nodes[i].Filter.Index, nodes[j].Filter.Index
+		if ix != jx {
+			return ix < jx
+		}
+		var is, js uint16
+		switch nodes[i].Filter.Mode {
+		case FilterModeIn, FilterModeNotIn:
+			is++
+		}
+		switch nodes[j].Filter.Mode {
+		case FilterModeIn, FilterModeNotIn:
+			js++
+		}
+		return is > js
+	})
 
 	postProcess := func() {
 		// fmt.Printf("Finalize: in=%#v nin=%#v\n", ins, nis)
@@ -614,8 +651,31 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			} else {
 				nis = plus(f.Type, nis, f.Value)
 			}
+		case FilterModeGt, FilterModeGe, FilterModeLt, FilterModeLe, FilterModeRange:
+			if !isOrNode && ins != nil {
+				// intersect set with range (must be AND node and have a set)
+				// this drops the original range filter and alters the IN set
+				minv, maxv := cmp.MinNumericVal(f.Type), cmp.MaxNumericVal(f.Type)
+				switch f.Mode {
+				case FilterModeGt:
+					minv = cmp.Inc(f.Type, f.Value)
+				case FilterModeGe:
+					minv = f.Value
+				case FilterModeLt:
+					maxv = cmp.Dec(f.Type, f.Value)
+				case FilterModeLe:
+					maxv = f.Value
+				case FilterModeRange:
+					rg := f.Value.(RangeValue)
+					minv, maxv = rg[0], rg[1]
+				}
+				ins = cmp.IntersectRange(f.Type, ins, minv, maxv)
+			} else {
+				res = append(res, node)
+			}
+
 		default:
-			// pass thorugh non-set filter modes
+			// pass through non-set filter modes
 			res = append(res, node)
 		}
 	}

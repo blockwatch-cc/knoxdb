@@ -576,12 +576,6 @@ func TestPlanQueryIndexes(t *testing.T) {
 			Expected:  makeAndTree(makeEqualNode(f1, uint64(1))),
 		},
 		{
-			Name:      "IN",
-			Condition: In("name", []string{"a", "b", "c"}),
-			Index:     makeIndex(1, 4, 5),
-			Expected:  makeAndTree(makeInNode(f1, []uint64{1, 4, 5})),
-		},
-		{
 			Name:      "EQ Double",
 			Condition: Equal("name", "a"),
 			Index:     makeIndex(1, 2),
@@ -594,20 +588,26 @@ func TestPlanQueryIndexes(t *testing.T) {
 			Expected:  makeAndTree(makeInNode(f1, []uint64{1, 2, 4})),
 		},
 		{
-			Name:      "Empty index",
+			Name:      "IN",
+			Condition: In("name", []string{"a", "b", "c"}),
+			Index:     makeIndex(1, 4, 5),
+			Expected:  makeAndTree(makeInNode(f1, []uint64{1, 4, 5})),
+		},
+		{
+			Name:      "Empty",
 			Condition: Equal("name", "a"),
 			Index:     makeIndex(),
 			Expected:  makeAndTree(makeFalseNode(f1)),
 		},
-		// multi condition
+		// extra pk condition
 		{
-			Name:      "AND EQ",
+			Name:      "EQ(INDEX) AND IN(PK)",
 			Condition: And(Equal("name", "a"), In("id", []uint64{1, 2})),
 			Index:     makeIndex(1),
 			Expected:  makeAndTree(makeEqualNode(f1, uint64(1))),
 		},
 		{
-			Name:      "AND IN",
+			Name:      "IN(INDEX) AND GT(PK)",
 			Condition: And(In("name", []string{"a", "b", "c"}), Gt("id", uint64(4))),
 			Index:     makeIndex(1, 4, 5),
 			Expected:  makeAndTree(makeEqualNode(f1, uint64(5))),

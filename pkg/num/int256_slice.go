@@ -4,6 +4,7 @@
 package num
 
 import (
+	"slices"
 	"sort"
 )
 
@@ -224,4 +225,46 @@ func Int256Difference(a, b []Int256) []Int256 {
 		j++
 	}
 	return out[:j]
+}
+
+func Int256RemoveRange(s []Int256, from, to Int256) []Int256 {
+	n := len(s)
+	start := sort.Search(n, func(i int) bool {
+		return s[i].Cmp(from) >= 0
+	})
+	if start == n {
+		return slices.Clone(s)
+	}
+	end := sort.Search(n-start, func(i int) bool {
+		return s[i+start].Cmp(to) >= 0
+	})
+	if start+end < n && s[start+end].Eq(to) {
+		end++
+	}
+	out := make([]Int256, n-end)
+	copy(out, s[:start])
+	copy(out[start:], s[start+end:])
+	return out
+}
+
+func Int256IntersectRange(s []Int256, from, to Int256) []Int256 {
+	if s == nil {
+		return nil
+	}
+	n := len(s)
+	start := sort.Search(n, func(i int) bool {
+		return s[i].Cmp(from) >= 0
+	})
+	if start == n {
+		return []Int256{}
+	}
+	end := sort.Search(n-start, func(i int) bool {
+		return s[i+start].Cmp(to) >= 0
+	})
+	if start+end < n && s[start+end].Eq(to) {
+		end++
+	}
+	out := make([]Int256, end)
+	copy(out, s[start:start+end])
+	return out
 }

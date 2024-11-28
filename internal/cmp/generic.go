@@ -29,28 +29,28 @@ var (
 	RE = makeMatchFn(types.FilterModeRegexp)
 )
 
-func makeMatchFn(m types.FilterMode) func(t types.BlockType, a, b any) bool {
-	return func(t types.BlockType, a, b any) bool {
-		return Match(m, t, a, b)
+func makeMatchFn(mode types.FilterMode) func(typ types.BlockType, a, b any) bool {
+	return func(typ types.BlockType, a, b any) bool {
+		return Match(mode, typ, a, b)
 	}
 }
 
-func Min(t types.BlockType, a, b any) any {
-	if Cmp(t, a, b) < 0 {
+func Min(typ types.BlockType, a, b any) any {
+	if Cmp(typ, a, b) < 0 {
 		return a
 	}
 	return b
 }
 
-func Max(t types.BlockType, a, b any) any {
-	if Cmp(t, a, b) < 0 {
+func Max(typ types.BlockType, a, b any) any {
+	if Cmp(typ, a, b) < 0 {
 		return b
 	}
 	return a
 }
 
-func MinNumericVal(t types.BlockType) any {
-	switch t {
+func MinNumericVal(typ types.BlockType) any {
+	switch typ {
 	case types.BlockInt64, types.BlockTime:
 		return int64(math.MinInt64)
 	case types.BlockInt32:
@@ -84,8 +84,8 @@ func MinNumericVal(t types.BlockType) any {
 	}
 }
 
-func MaxNumericVal(t types.BlockType) any {
-	switch t {
+func MaxNumericVal(typ types.BlockType) any {
+	switch typ {
 	case types.BlockInt64, types.BlockTime:
 		return int64(math.MaxInt64)
 	case types.BlockInt32:
@@ -119,9 +119,8 @@ func MaxNumericVal(t types.BlockType) any {
 	}
 }
 
-func Cmp(t types.BlockType, a, b any) (c int) {
-	// compare by type
-	switch t {
+func Cmp(typ types.BlockType, a, b any) (c int) {
+	switch typ {
 	case types.BlockInt64, types.BlockTime:
 		c = util.Cmp(a.(int64), b.(int64))
 	case types.BlockUint64:
@@ -166,16 +165,14 @@ func Cmp(t types.BlockType, a, b any) (c int) {
 	case types.BlockInt256:
 		c = a.(num.Int256).Cmp(b.(num.Int256))
 	default:
-		panic(fmt.Errorf("cmp: unsupported block type %s ", t))
+		panic(fmt.Errorf("cmp: unsupported block type %s ", typ))
 	}
 	return
 }
 
-func Match(m types.FilterMode, t types.BlockType, a, b any) bool {
-	c := Cmp(t, a, b)
-
-	// check by mode
-	switch m {
+func Match(mode types.FilterMode, typ types.BlockType, a, b any) bool {
+	c := Cmp(typ, a, b)
+	switch mode {
 	case types.FilterModeEqual:
 		return c == 0
 	case types.FilterModeNotEqual:
@@ -189,12 +186,12 @@ func Match(m types.FilterMode, t types.BlockType, a, b any) bool {
 	case types.FilterModeLe:
 		return c <= 0
 	default:
-		panic(fmt.Errorf("match: illegal generic filter mode %s ", m))
+		panic(fmt.Errorf("match: illegal generic filter mode %s ", mode))
 	}
 }
 
-func Unique(t types.BlockType, a any) any {
-	switch t {
+func Unique(typ types.BlockType, a any) any {
+	switch typ {
 	case types.BlockInt64, types.BlockTime:
 		return slicex.Unique(a.([]int64))
 	case types.BlockUint64:
@@ -224,13 +221,12 @@ func Unique(t types.BlockType, a any) any {
 	case types.BlockInt256:
 		return num.Int256Unique(a.([]num.Int256))
 	default:
-		panic(fmt.Errorf("unique: unsupported block type %s ", t))
+		panic(fmt.Errorf("unique: unsupported block type %s ", typ))
 	}
 }
 
-func Intersect(t types.BlockType, a, b any) any {
-	// compare by type
-	switch t {
+func Intersect(typ types.BlockType, a, b any) any {
+	switch typ {
 	case types.BlockInt64, types.BlockTime:
 		x := slicex.NewOrderedNumbers[int64](a.([]int64)).SetUnique()
 		y := slicex.NewOrderedNumbers[int64](b.([]int64)).SetUnique()
@@ -283,13 +279,12 @@ func Intersect(t types.BlockType, a, b any) any {
 	case types.BlockInt256:
 		return num.Int256Intersect(a.([]num.Int256), b.([]num.Int256))
 	default:
-		panic(fmt.Errorf("intersect: unsupported block type %s ", t))
+		panic(fmt.Errorf("intersect: unsupported block type %s ", typ))
 	}
 }
 
-func Union(t types.BlockType, a, b any) any {
-	// compare by type
-	switch t {
+func Union(typ types.BlockType, a, b any) any {
+	switch typ {
 	case types.BlockInt64, types.BlockTime:
 		x := slicex.NewOrderedNumbers[int64](a.([]int64)).SetUnique()
 		y := slicex.NewOrderedNumbers[int64](b.([]int64)).SetUnique()
@@ -342,13 +337,12 @@ func Union(t types.BlockType, a, b any) any {
 	case types.BlockInt256:
 		return num.Int256Union(a.([]num.Int256), b.([]num.Int256))
 	default:
-		panic(fmt.Errorf("union: unsupported block type %s ", t))
+		panic(fmt.Errorf("union: unsupported block type %s ", typ))
 	}
 }
 
-func Difference(t types.BlockType, a, b any) any {
-	// compare by type
-	switch t {
+func Difference(typ types.BlockType, a, b any) any {
+	switch typ {
 	case types.BlockInt64, types.BlockTime:
 		x := slicex.NewOrderedNumbers[int64](a.([]int64)).SetUnique()
 		y := slicex.NewOrderedNumbers[int64](b.([]int64)).SetUnique()
@@ -401,97 +395,97 @@ func Difference(t types.BlockType, a, b any) any {
 	case types.BlockInt256:
 		return num.Int256Difference(a.([]num.Int256), b.([]num.Int256))
 	default:
-		panic(fmt.Errorf("difference: unsupported block type %s ", t))
+		panic(fmt.Errorf("difference: unsupported block type %s ", typ))
 	}
 }
 
-// Range retruns min, max of an integer set and whether all values between min and
-// max are present, i.e. the set is full.
-func Range(t types.BlockType, set any) (minv any, maxv any, full bool) {
+// Range returns min, max of a set and whether all values between min and
+// max are present, i.e. the set is complete.
+func Range(typ types.BlockType, set any) (minv any, maxv any, isComplete bool) {
 	if bs, ok := set.(*xroar.Bitmap); ok {
 		minU64 := bs.Minimum()
 		maxU64 := bs.Maximum()
-		full = maxU64-minU64+1 == uint64(bs.GetCardinality())
-		minv, _ = Cast(t, minU64)
-		maxv, _ = Cast(t, maxU64)
+		isComplete = maxU64-minU64+1 == uint64(bs.GetCardinality())
+		minv, _ = Cast(typ, minU64)
+		maxv, _ = Cast(typ, maxU64)
 		return
 	}
-	switch t {
+	switch typ {
 	case types.BlockInt64, types.BlockTime:
 		x := slicex.NewOrderedNumbers[int64](set.([]int64))
 		minv, maxv = x.MinMax()
-		full = x.IsFull()
+		isComplete = x.IsFull()
 	case types.BlockInt32:
 		x := slicex.NewOrderedNumbers[int32](set.([]int32))
 		minv, maxv = x.MinMax()
-		full = x.IsFull()
+		isComplete = x.IsFull()
 	case types.BlockInt16:
 		x := slicex.NewOrderedNumbers[int16](set.([]int16))
 		minv, maxv = x.MinMax()
-		full = x.IsFull()
+		isComplete = x.IsFull()
 	case types.BlockInt8:
 		x := slicex.NewOrderedNumbers[int8](set.([]int8))
 		minv, maxv = x.MinMax()
-		full = x.IsFull()
+		isComplete = x.IsFull()
 	case types.BlockUint64:
 		x := slicex.NewOrderedNumbers[uint64](set.([]uint64))
 		minv, maxv = x.MinMax()
-		full = x.IsFull()
+		isComplete = x.IsFull()
 	case types.BlockUint32:
 		x := slicex.NewOrderedNumbers[uint32](set.([]uint32))
 		minv, maxv = x.MinMax()
-		full = x.IsFull()
+		isComplete = x.IsFull()
 	case types.BlockUint16:
 		x := slicex.NewOrderedNumbers[uint16](set.([]uint16))
 		minv, maxv = x.MinMax()
-		full = x.IsFull()
+		isComplete = x.IsFull()
 	case types.BlockUint8:
 		x := slicex.NewOrderedNumbers[uint8](set.([]uint8))
 		minv, maxv = x.MinMax()
-		full = x.IsFull()
+		isComplete = x.IsFull()
 	case types.BlockInt128:
 		i128s := set.([]num.Int128)
 		mini, maxi := num.Int128MinMax(num.Int128Sort(i128s))
 		minv, maxv = mini, maxi
-		full = int(maxi.Sub(mini).Int64()+1) == len(i128s)
+		isComplete = int(maxi.Sub(mini).Int64()+1) == len(i128s)
 	case types.BlockInt256:
 		i256s := set.([]num.Int256)
 		mini, maxi := num.Int256MinMax(num.Int256Sort(i256s))
 		minv, maxv = mini, maxi
-		full = int(maxi.Sub(mini).Int64()+1) == len(i256s)
+		isComplete = int(maxi.Sub(mini).Int64()+1) == len(i256s)
 	case types.BlockFloat64:
 		x := slicex.NewOrderedNumbers(set.([]float64))
 		minv, maxv = x.MinMax()
-		full = false
+		isComplete = false
 	case types.BlockFloat32:
 		x := slicex.NewOrderedNumbers(set.([]float32))
 		minv, maxv = x.MinMax()
-		full = false
+		isComplete = false
 	case types.BlockBool:
 		switch slicex.ToBoolBits(set.([]bool)...) {
 		case 0:
-			minv, maxv, full = false, false, false
+			minv, maxv, isComplete = false, false, false
 		case 1:
-			minv, maxv, full = false, false, false
+			minv, maxv, isComplete = false, false, false
 		case 2:
-			minv, maxv, full = true, true, false
+			minv, maxv, isComplete = true, true, false
 		case 3:
-			minv, maxv, full = false, true, true
+			minv, maxv, isComplete = false, true, true
 		}
 	case types.BlockString, types.BlockBytes:
 		x := slicex.NewOrderedBytes(set.([][]byte))
 		minv, maxv = x.MinMax()
-		full = false
+		isComplete = false
 	default:
-		panic(fmt.Errorf("range: unsupported block type %s ", t))
+		panic(fmt.Errorf("range: unsupported block type %s ", typ))
 	}
 	return
 }
 
 // Cast casts any Go integer type into a compatible type
 // for a block.
-func Cast(t types.BlockType, val any) (res any, ok bool) {
-	switch t {
+func Cast(typ types.BlockType, val any) (res any, ok bool) {
+	switch typ {
 	case types.BlockInt64, types.BlockTime:
 		res, ok = cast[int64](val)
 	case types.BlockInt32:
@@ -635,5 +629,103 @@ func Dec(typ types.BlockType, v any) any {
 		return c
 	default:
 		panic(fmt.Errorf("dec: unsupported block type %s ", typ))
+	}
+}
+
+func RemoveRange(typ types.BlockType, s, from, to any) any {
+	switch typ {
+	case types.BlockInt64, types.BlockTime:
+		return slicex.NewOrderedNumbers[int64](s.([]int64)).
+			RemoveRange(from.(int64), to.(int64)).Values
+	case types.BlockUint64:
+		return slicex.NewOrderedNumbers[uint64](s.([]uint64)).
+			RemoveRange(from.(uint64), to.(uint64)).Values
+	case types.BlockFloat64:
+		return slicex.NewOrderedNumbers[float64](s.([]float64)).
+			RemoveRange(from.(float64), to.(float64)).Values
+	case types.BlockBytes, types.BlockString:
+		return slicex.NewOrderedBytes(s.([][]byte)).
+			RemoveRange(from.([]byte), to.([]byte)).Values
+	case types.BlockInt32:
+		return slicex.NewOrderedNumbers[int32](s.([]int32)).
+			RemoveRange(from.(int32), to.(int32)).Values
+	case types.BlockInt16:
+		return slicex.NewOrderedNumbers[int16](s.([]int16)).
+			RemoveRange(from.(int16), to.(int16)).Values
+	case types.BlockInt8:
+		return slicex.NewOrderedNumbers[int8](s.([]int8)).
+			RemoveRange(from.(int8), to.(int8)).Values
+	case types.BlockUint32:
+		return slicex.NewOrderedNumbers[uint32](s.([]uint32)).
+			RemoveRange(from.(uint32), to.(uint32)).Values
+	case types.BlockUint16:
+		return slicex.NewOrderedNumbers[uint16](s.([]uint16)).
+			RemoveRange(from.(uint16), to.(uint16)).Values
+	case types.BlockUint8:
+		return slicex.NewOrderedNumbers[uint8](s.([]uint8)).
+			RemoveRange(from.(uint8), to.(uint8)).Values
+	case types.BlockFloat32:
+		return slicex.NewOrderedNumbers[float32](s.([]float32)).
+			RemoveRange(from.(float32), to.(float32)).Values
+	case types.BlockBool:
+		x := slicex.ToBoolBits(s.([]bool)...)
+		x &^= slicex.ToBoolBits(from.(bool))
+		x &^= slicex.ToBoolBits(to.(bool))
+		return slicex.FromBoolBits(x)
+	case types.BlockInt128:
+		return num.Int128RemoveRange(s.([]num.Int128), from.(num.Int128), to.(num.Int128))
+	case types.BlockInt256:
+		return num.Int256RemoveRange(s.([]num.Int256), from.(num.Int256), to.(num.Int256))
+	default:
+		panic(fmt.Errorf("remove range: unsupported block type %s ", typ))
+	}
+}
+
+func IntersectRange(typ types.BlockType, s, from, to any) any {
+	switch typ {
+	case types.BlockInt64, types.BlockTime:
+		return slicex.NewOrderedNumbers[int64](s.([]int64)).
+			IntersectRange(from.(int64), to.(int64)).Values
+	case types.BlockUint64:
+		return slicex.NewOrderedNumbers[uint64](s.([]uint64)).
+			IntersectRange(from.(uint64), to.(uint64)).Values
+	case types.BlockFloat64:
+		return slicex.NewOrderedNumbers[float64](s.([]float64)).
+			IntersectRange(from.(float64), to.(float64)).Values
+	case types.BlockBytes, types.BlockString:
+		return slicex.NewOrderedBytes(s.([][]byte)).
+			IntersectRange(from.([]byte), to.([]byte)).Values
+	case types.BlockInt32:
+		return slicex.NewOrderedNumbers[int32](s.([]int32)).
+			IntersectRange(from.(int32), to.(int32)).Values
+	case types.BlockInt16:
+		return slicex.NewOrderedNumbers[int16](s.([]int16)).
+			IntersectRange(from.(int16), to.(int16)).Values
+	case types.BlockInt8:
+		return slicex.NewOrderedNumbers[int8](s.([]int8)).
+			IntersectRange(from.(int8), to.(int8)).Values
+	case types.BlockUint32:
+		return slicex.NewOrderedNumbers[uint32](s.([]uint32)).
+			IntersectRange(from.(uint32), to.(uint32)).Values
+	case types.BlockUint16:
+		return slicex.NewOrderedNumbers[uint16](s.([]uint16)).
+			IntersectRange(from.(uint16), to.(uint16)).Values
+	case types.BlockUint8:
+		return slicex.NewOrderedNumbers[uint8](s.([]uint8)).
+			IntersectRange(from.(uint8), to.(uint8)).Values
+	case types.BlockFloat32:
+		return slicex.NewOrderedNumbers[float32](s.([]float32)).
+			IntersectRange(from.(float32), to.(float32)).Values
+	case types.BlockBool:
+		x := slicex.ToBoolBits(s.([]bool)...)
+		x &= slicex.ToBoolBits(from.(bool))
+		x &= slicex.ToBoolBits(to.(bool))
+		return slicex.FromBoolBits(x)
+	case types.BlockInt128:
+		return num.Int128IntersectRange(s.([]num.Int128), from.(num.Int128), to.(num.Int128))
+	case types.BlockInt256:
+		return num.Int256IntersectRange(s.([]num.Int256), from.(num.Int256), to.(num.Int256))
+	default:
+		panic(fmt.Errorf("intersect range: unsupported block type %s ", typ))
 	}
 }
