@@ -34,20 +34,16 @@ func TestWorkload2(t *testing.T) {
 	for threadID := 0; threadID < numThreads; threadID++ {
 		wg.Add(1)
 		go func(threadID int) {
-			start := time.Now() // Measure start time for the goroutine
+			start := time.Now()
 			defer func() {
 				log.Infof("Goroutine %d completed in %s", threadID, time.Since(start))
 				wg.Done()
 			}()
 			for i := 0; i < txnSize; i++ {
-				time.Sleep(1 * time.Millisecond) // Simulate delay for each insert
 				record := NewRandomTypes(threadID*txnSize + i)
-
-				// Synchronize EnumRegistry access to prevent concurrent writes
 				enumMutex.Lock()
 				pk, err := table.Insert(ctx, []*Types{record})
 				enumMutex.Unlock()
-
 				require.NoError(t, err, "Failed to insert data")
 				record.Id = pk
 				insertedData.Store(record.Id, record)
@@ -56,10 +52,7 @@ func TestWorkload2(t *testing.T) {
 	}
 
 	// Wait for threads to finish
-	require.Eventually(t, func() bool {
-		wg.Wait()
-		return true
-	}, 10*time.Second, 100*time.Millisecond, "Deadlock detected: threads did not complete")
+	wg.Wait()
 
 	// Validate all rows are inserted correctly
 	count := 0

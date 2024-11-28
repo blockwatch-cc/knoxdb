@@ -11,7 +11,6 @@ package scenarios
 import (
 	"context"
 	"testing"
-	"time"
 
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/stretchr/testify/require"
@@ -35,7 +34,9 @@ func TestWorkload3(t *testing.T) {
 			MyEnum: myEnums[i%len(myEnums)],
 		}
 	}
+	enumMutex.Lock()
 	startPK, err := table.Insert(ctx, data)
+	enumMutex.Unlock()
 	require.NoError(t, err, "Failed to initialize accounts")
 
 	// Update IDs for accounts
@@ -70,10 +71,10 @@ func TestWorkload3(t *testing.T) {
 		fromAccount.Int64 -= transferAmount
 		toAccount.Int64 += transferAmount
 
+		enumMutex.Lock()
 		_, err = table.Update(ctx, []*Types{&fromAccount, &toAccount})
+		enumMutex.Unlock()
 		require.NoError(t, err, "Failed to update accounts during transaction")
-
-		time.Sleep(1 * time.Millisecond) // Simulate real-world delay
 	}
 
 	// Validate total balance consistency

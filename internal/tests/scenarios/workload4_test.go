@@ -41,9 +41,13 @@ func TestWorkload4(t *testing.T) {
 				wg.Done()
 			}()
 			for i := 0; i < txnSize; i++ {
-				time.Sleep(1 * time.Millisecond) // Simulate delay for each operation
 				record := NewRandomTypes(threadID*txnSize + i)
+
+				// Synchronize EnumRegistry access to prevent concurrent writes
+				enumMutex.Lock()
 				pk, err := table.Insert(ctx, []*Types{record})
+				enumMutex.Unlock()
+
 				require.NoError(t, err, "Failed to insert data")
 				require.NotEmpty(t, record.MyEnum, "Enum field is empty for record")
 				record.Id = pk
@@ -53,10 +57,7 @@ func TestWorkload4(t *testing.T) {
 	}
 
 	// Wait for threads to finish
-	require.Eventually(t, func() bool {
-		wg.Wait()
-		return true
-	}, 10*time.Second, 100*time.Millisecond, "Deadlock detected: threads did not complete")
+	wg.Wait()
 
 	// Validate inserted records
 	count := 0

@@ -88,6 +88,7 @@ func SetupDatabase(t *testing.T) (knox.Database, knox.Table, func()) {
 
 	// Create enum
 	log.Infof("Creating enum 'my_enum'")
+	enumMutex.Lock() // Ensure thread safety for enum creation
 	enum, err := db.CreateEnum(ctx, "my_enum")
 	if err != nil {
 		log.Warnf("Enum 'my_enum' may already exist: %v", err)
@@ -95,10 +96,13 @@ func SetupDatabase(t *testing.T) (knox.Database, knox.Table, func()) {
 	if enum != nil {
 		log.Infof("Enum created: %v", enum)
 	}
+	enumMutex.Unlock()
 
 	// Extend the enum with values
 	log.Infof("Extending enum 'my_enum' with values: %+v", myEnums)
+	enumMutex.Lock()
 	err = db.ExtendEnum(ctx, "my_enum", myEnums...)
+	enumMutex.Unlock()
 	require.NoErrorf(t, err, "Failed to extend enum 'my_enum': %v", err)
 
 	// Validate that the enum exists
@@ -110,8 +114,6 @@ func SetupDatabase(t *testing.T) (knox.Database, knox.Table, func()) {
 	s, err := schema.SchemaOf(&Types{})
 	require.NoError(t, err, "Failed to generate schema for Types")
 	log.Infof("Generated schema with fields:")
-
-	// Iterate over schema fields and log them
 	for _, field := range s.Fields() {
 		log.Infof("  - Field: Name=%s, Type=%s", field.Name(), field.Type())
 	}
