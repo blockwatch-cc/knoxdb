@@ -1,7 +1,5 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//go:build ignore
-// +build ignore
 
 package pack
 
@@ -15,7 +13,6 @@ import (
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/encoding/bitmap"
-	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/store"
 )
 
@@ -279,10 +276,6 @@ func (_ *KeyValueTable) Engine() TableEngine {
 
 func (t *KeyValueTable) Fields() FieldList {
 	return t.fields
-}
-
-func (t *KeyValueTable) Schema() *schema.Schema {
-	return fieldsToSchema(t.name, t.fields, nil)
 }
 
 func (t *KeyValueTable) DB() *DB {

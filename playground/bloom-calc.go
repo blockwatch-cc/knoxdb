@@ -1,9 +1,6 @@
 // Copyright (c) 2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 // Author: stefan@blockwatch.cc
-//go:build ignore
-// +build ignore
-
 package main
 
 import (

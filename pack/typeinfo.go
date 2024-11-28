@@ -1,7 +1,5 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//go:build ignore
-// +build ignore
 
 package pack
 
@@ -64,7 +62,6 @@ func (t *typeInfo) Clone() *typeInfo {
 // fieldInfo holds details for the representation of a single field.
 type fieldInfo struct {
 	idx       []int
-	offset    uintptr
 	name      string
 	alias     string
 	flags     FieldFlags
@@ -158,10 +155,9 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 				if err != nil {
 					return nil, err
 				}
-				for _, fi := range inner.fields {
-					finfo := fi.Clone()
+				for _, f := range inner.fields {
+					finfo := f.Clone()
 					finfo.idx = append([]int{i}, finfo.idx...)
-					finfo.offset = f.Offset + finfo.offset
 					if err := addFieldInfo(typ, tinfo, finfo); err != nil {
 						return nil, err
 					}
@@ -203,7 +199,7 @@ func getReflectTypeInfo(typ reflect.Type) (*typeInfo, error) {
 
 // structFieldInfo builds and returns a fieldInfo for f.
 func structFieldInfo(f *reflect.StructField) (*fieldInfo, error) {
-	finfo := &fieldInfo{idx: f.Index, offset: f.Offset, typ: f.Type}
+	finfo := &fieldInfo{idx: f.Index, typ: f.Type}
 	tag := f.Tag.Get(tagName)
 	kind := f.Type.Kind()
 
