@@ -45,6 +45,7 @@ func TestWorkload4(t *testing.T) {
 				record := NewRandomTypes(threadID*txnSize + i)
 				pk, err := table.Insert(ctx, []*Types{record})
 				require.NoError(t, err, "Failed to insert data")
+				require.NotEmpty(t, record.MyEnum, "Enum field is empty for record")
 				record.Id = pk
 				insertedData.Store(record.Id, record)
 			}
@@ -64,6 +65,8 @@ func TestWorkload4(t *testing.T) {
 		Stream(ctx, func(res *Types) error {
 			val, ok := insertedData.Load(res.Id)
 			require.True(t, ok, "Missing record for Id: %d", res.Id)
+			require.NotEmpty(t, res.MyEnum, "Streamed record has empty MyEnum field")
+			log.Infof("Streamed record: ID=%d, MyEnum=%s", res.Id, res.MyEnum)
 			expected := val.(*Types)
 			require.Equal(t, expected.Int64, res.Int64)
 			require.Equal(t, expected.MyEnum, res.MyEnum)

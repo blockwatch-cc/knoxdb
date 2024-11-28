@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/knox"
+	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,6 +44,7 @@ func TestWorkload1(t *testing.T) {
 		WithDebug(true). // Enable detailed query logging
 		Stream(ctx, func(res *Types) error {
 			require.NotEmpty(t, res.MyEnum, "Unexpected empty enum value")
+			log.Infof("Streamed record: ID=%d, MyEnum=%s", res.Id, res.MyEnum)
 			require.Equal(t, data[count].Id, res.Id, "Record ID mismatch")
 			require.Equal(t, data[count].Int64, res.Int64, "Int64 mismatch")
 			require.Equal(t, data[count].MyEnum, res.MyEnum, "Enum mismatch")
