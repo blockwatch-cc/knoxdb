@@ -161,12 +161,12 @@ func (f *Field) IsArray() bool {
 }
 
 func (f *Field) WireSize() int {
-	// switch f.typ {
-	// case types.FieldTypeString, types.FieldTypeBytes:
-	if f.fixed > 0 {
-		return int(f.fixed)
+	switch f.typ {
+	case types.FieldTypeString, types.FieldTypeBytes:
+		if f.fixed > 0 {
+			return int(f.fixed)
+		}
 	}
-	// }
 	return f.typ.Size()
 }
 

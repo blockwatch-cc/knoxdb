@@ -33,7 +33,7 @@ func (c *Condition) Clear() {
 }
 
 func (c Condition) IsEmpty() bool {
-	return len(c.Children) == 0 && !c.Mode.IsValid()
+	return len(c.Children) == 0 && c.Value == nil && c.Name == ""
 }
 
 func (c Condition) IsLeaf() bool {

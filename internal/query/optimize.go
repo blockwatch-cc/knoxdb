@@ -125,9 +125,7 @@ func (n *FilterTreeNode) Optimize() {
 	}
 
 	// merge/simplify child nodes
-	// fmt.Printf("Simplify %s\n", &FilterTreeNode{OrKind: n.OrKind, Children: newChilds})
 	newChilds = simplifyNodes(newChilds, n.OrKind)
-	// fmt.Printf("> %s\n", &FilterTreeNode{OrKind: n.OrKind, Children: newChilds})
 
 	// sort by weight
 	sort.Slice(newChilds, func(i, j int) bool {
@@ -156,15 +154,12 @@ func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 
 	// first apply simplifications for single nodes
 	leafs = simplifySingle(leafs, isOrNode)
-	// fmt.Printf("Single %s\n", &FilterTreeNode{OrKind: isOrNode, Children: leafs})
 
 	// then merge ranges (LT, LE, GT, GE, RG, EQ)
 	leafs = simplifyRanges(leafs, isOrNode)
-	// fmt.Printf("Ranges %s\n", &FilterTreeNode{OrKind: isOrNode, Children: leafs})
 
 	// then merge sets (EQ, NE, IN, NI)
 	leafs = simplifySets(leafs, isOrNode)
-	// fmt.Printf("Sets %s\n", &FilterTreeNode{OrKind: isOrNode, Children: leafs})
 
 	// recombine optimized leafs with nested branch nodes
 	nodes = append(leafs, branches...)
@@ -238,7 +233,6 @@ func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 		// we decide based on filter mode
 		switch f.Mode {
 		case FilterModeIn:
-			// fmt.Printf("Simple IN %#v %#v\n", f.Matcher, f.Value)
 			switch f.Matcher.Len() {
 			case 0:
 				res = append(res, &FilterTreeNode{
@@ -251,7 +245,6 @@ func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 			default:
 				// convert full set to range for integer types
 				minv, maxv, isFull := cmp.Range(f.Type, f.Value)
-				// fmt.Printf("minv=%v maxv=%v isFull=%t\n", minv, maxv, isFull)
 				if isFull && minv != nil {
 					rg := RangeValue{minv, maxv}
 					if isFullDomain(f.Type, rg) {
@@ -590,7 +583,6 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 	})
 
 	postProcess := func() {
-		// fmt.Printf("Finalize: in=%#v nin=%#v\n", ins, nis)
 		// produce zero or one combined filter from sets
 		if flt := makeSetFilterFrom(f, ins, nis, isOrNode); flt != nil {
 			res = append(res, &FilterTreeNode{

@@ -136,7 +136,7 @@ func (p *QueryPlan) WithSchema(s *schema.Schema) *QueryPlan {
 }
 
 func (p *QueryPlan) WithLogger(l log.Logger) *QueryPlan {
-	p.Log = l.Clone()
+	p.Log = l.Clone().WithTag(p.Tag)
 	return p
 }
 
@@ -156,25 +156,38 @@ func (p *QueryPlan) Runtime() time.Duration {
 	return p.Stats.runtime[TOTAL_TIME_KEY]
 }
 
+func (p *QueryPlan) Errorf(s string, vals ...any) error {
+	return fmt.Errorf("query "+p.Tag+": ", vals...)
+}
+
+func (p *QueryPlan) Error(err any) error {
+	switch val := err.(type) {
+	case string:
+		return p.Errorf(val)
+	default:
+		return p.Errorf("%v", err)
+	}
+}
+
 func (p *QueryPlan) Validate() error {
 	// ensure table and filters are defined
 	if p.Table == nil {
-		return fmt.Errorf("query %s: %v", p.Tag, engine.ErrNoTable)
+		return p.Error(engine.ErrNoTable)
 	}
 	if p.Filters == nil {
-		return fmt.Errorf("query %s: missing filters", p.Tag)
+		return p.Error("missing filters")
 	}
 
 	// filter tree must be valid
 	if err := p.Filters.Validate(""); err != nil {
-		return fmt.Errorf("query %s: %v", p.Tag, err)
+		return p.Error(err)
 	}
 
 	// check user-provided request schema
 	if p.RequestSchema != nil {
 		// schemas must match table
 		if err := p.Table.Schema().CanSelect(p.RequestSchema); err != nil {
-			return fmt.Errorf("query %s: request schema: %v", p.Tag, err)
+			return p.Errorf("request schema: %v", err)
 		}
 	}
 
@@ -182,10 +195,10 @@ func (p *QueryPlan) Validate() error {
 	if p.ResultSchema != nil {
 		// result schema must contain pk (required for cursors, pack.LookupIterator)
 		if p.ResultSchema.PkIndex() < 0 {
-			return fmt.Errorf("query %s: result schema: %v", p.Tag, engine.ErrNoPk)
+			return p.Errorf("result schema: %v", engine.ErrNoPk)
 		}
 		if err := p.Table.Schema().CanSelect(p.ResultSchema); err != nil {
-			return fmt.Errorf("query %s: result schema: %v", p.Tag, err)
+			return p.Errorf("result schema: %v", err)
 		}
 	}
 
@@ -217,18 +230,18 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		if filterFields.Len() > 0 {
 			s, err := p.Table.Schema().SelectFields(filterFields.Values...)
 			if err != nil {
-				return fmt.Errorf("query %s: make request schema: %v", p.Tag, err)
+				return p.Errorf("make request schema: %v", err)
 			}
 			p.RequestSchema = s.Sort()
 		} else {
 			s, err := p.Table.Schema().SelectFieldIds(p.Table.Schema().PkId())
 			if err != nil {
-				return fmt.Errorf("query %s: make request schema: %v", p.Tag, err)
+				return p.Errorf("make request schema: %v", err)
 			}
 			p.RequestSchema = s.WithName("pk")
 		}
 	}
-	p.Log.Debugf("Q> %s: request %s", p.Tag, p.RequestSchema)
+	p.Log.Debugf("request %s", p.RequestSchema)
 
 	// identify indexes based on request schema fields
 	for _, idx := range p.Table.Indexes() {
@@ -243,7 +256,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		p.Indexes = append(p.Indexes, idx)
 	}
 
-	p.Log.Debugf("Q> %s: result %s", p.Tag, p.ResultSchema)
+	p.Log.Debugf("result %s", p.ResultSchema)
 
 	// optimize plan
 	// - reorder filters
@@ -275,7 +288,7 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	p.Log.Debugf("%d index results: %s", n, p.Filters)
+	p.Log.Debugf("%d index results", n)
 
 	// prepare pk field filter template
 	ts := p.Table.Schema()
@@ -300,7 +313,7 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	if !filterFields.Equal(requestFields) && filterFields.Len() > 0 {
 		s, err := p.Table.Schema().SelectFields(filterFields.Values...)
 		if err != nil {
-			return fmt.Errorf("Q> %s: update request schema: %v", p.Tag, err)
+			return p.Errorf("update request schema: %v", err)
 		}
 		p.RequestSchema = s.Sort()
 	}
@@ -490,6 +503,7 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 		break
 	}
 
+	// TODO: push down extra pk conditions to index query
 	// identify extra pk conditions for push down
 	// var pkNodes []*FilterTreeNode
 	// pki := p.Table.Schema().PkIndex()

@@ -93,9 +93,9 @@ func TestConditionValidate(t *testing.T) {
 		},
 		// Error cases
 		{
-			name:    "Empty Condition",
+			name:    "Empty Root",
 			cond:    Condition{},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "Empty Name",
@@ -136,15 +136,6 @@ func TestConditionValidate(t *testing.T) {
 				Equal("id", 1),
 				Condition{},
 			),
-			wantErr: true,
-		},
-		{
-			name: "Cleared Condition",
-			cond: func() Condition {
-				c := Equal("id", 1)
-				c.Clear()
-				return c
-			}(),
 			wantErr: true,
 		},
 	}
@@ -269,7 +260,7 @@ func TestConditionCompile(t *testing.T) {
 				Mode:  FilterMode(255),
 				Value: 123,
 			},
-			fields:  nil,
+			fields:  []string{"test"},
 			wantErr: true,
 		},
 	}
