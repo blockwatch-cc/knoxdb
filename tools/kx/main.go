@@ -15,8 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/echa/log"
+
+	"blockwatch.cc/knoxdb/pack"
+	_ "blockwatch.cc/knoxdb/store/bolt"
 )
 
 func main() {
@@ -72,30 +74,25 @@ func run() error {
 	}
 }
 
-func openTable(args Args) (knox.Table, error) {
-	// db, err := openDatabase(args)
-	// if err != nil {
-	// 	return nil, nil, err
-	// }
-	// opts := pack.DefaultOptions.
-	// 	WithEngine(pack.TableEnginePack).
-	// 	WithDriver("bolt").
-	// 	WithDriverOpts(args.bolt).
-	// 	WithReadOnly(true)
-
-	table, err := db.UseTable(args.table)
+func openTable(args Args) (*pack.DB, pack.Table, error) {
+	db, err := openDatabase(args)
+	if err != nil {
+		return nil, nil, err
+	}
+	table, err := db.OpenTable(pack.TableEnginePack, args.table, pack.NoOptions)
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening table '%s': %v", args.table, err)
 	}
-	return table, nil
+	return db, table, nil
 }
 
-func openDatabase(args Args) (knox.Database, error) {
-	opts := knox.ReadonlyDatabaseOptions
-	db, err := knox.OpenDatabase(
+func openDatabase(args Args) (*pack.DB, error) {
+	db, err := pack.OpenDatabase(
+		"bolt",
 		filepath.Dir(args.db),
 		strings.TrimSuffix(filepath.Base(args.db), ".db"),
-		opts,
+		"*",
+		args.bolt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %v", err)

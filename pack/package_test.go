@@ -1,7 +1,5 @@
 // Copyright (c) 2018-2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//go:build ignore
-// +build ignore
 
 package pack
 
@@ -14,7 +12,6 @@ import (
 )
 
 var packBenchmarkReadWriteSizes = []packBenchmarkSize{
-	{"1", 1},
 	{"1K", 1 * 1024},
 	{"16K", 16 * 1024},
 	{"32K", 32 * 1024},

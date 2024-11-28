@@ -1,16 +1,12 @@
 // Copyright (c) 2018-2022 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//go:build ignore
-// +build ignore
 
 package pack
 
 import (
 	"fmt"
 
-	"blockwatch.cc/knoxdb/store"
 	"blockwatch.cc/knoxdb/util"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -25,57 +21,19 @@ var (
 		JournalSizeLog2: 17,                  // 128k entries
 		CacheSize:       defaultCacheSize,    // in packs
 		FillLevel:       90,                  // boltdb fill level to limit reallocations
-		Engine:          TableEnginePack,
-		Driver:          "bolt",
-		Readonly:        false,
 	}
 	NoOptions = Options{}
 )
 
 type Options struct {
-	PackSizeLog2    int         `json:"pack_size_log2,omitempty"`
-	JournalSizeLog2 int         `json:"journal_size_log2,omitempty"`
-	CacheSize       int         `json:"cache_size,omitempty"`
-	FillLevel       int         `json:"fill_level,omitempty"`
-	Engine          TableEngine `json:"engine,omitempty"`
-	Driver          string      `json:"driver,omitempty"`
-	DriverOpts      any         `json:"-"`
-	Readonly        bool        `json:"-"`
-}
-
-func NewOptions() Options {
-	return Options{}
+	PackSizeLog2    int `json:"pack_size_log2,omitempty"`
+	JournalSizeLog2 int `json:"journal_size_log2,omitempty"`
+	CacheSize       int `json:"cache_size,omitempty"`
+	FillLevel       int `json:"fill_level,omitempty"`
 }
 
 func (o Options) IsValid() bool {
-	return o.PackSizeLog2 > 0 && o.Driver != "" &&
-		(o.Engine == TableEnginePack || o.Engine == TableEngineKV)
-}
-
-func (o Options) WithReadOnly(ro bool) Options {
-	if o.Readonly != ro {
-		o.Readonly = ro
-	}
-	return o
-}
-
-func (o Options) WithDriver(d string) Options {
-	if d != "" {
-		o.Driver = d
-	}
-	return o
-}
-
-func (o Options) WithDriverOpts(v any) Options {
-	o.DriverOpts = v
-	return o
-}
-
-func (o Options) WithEngine(e TableEngine) Options {
-	if e != "" {
-		o.Engine = e
-	}
-	return o
+	return o.PackSizeLog2 > 0
 }
 
 func (o Options) PackSize() int {
@@ -92,14 +50,6 @@ func (o Options) Merge(o2 Options) Options {
 	o.JournalSizeLog2 = util.NonZero(o2.JournalSizeLog2, o.JournalSizeLog2)
 	o.FillLevel = util.NonZero(o2.FillLevel, o.FillLevel)
 	o.CacheSize = o2.CacheSize
-	if o2.Engine != "" {
-		o.Engine = o2.Engine
-	}
-	o.Driver = util.NonEmptyString(o2.Driver, o.Driver)
-	if o2.DriverOpts != nil {
-		o.DriverOpts = o2.DriverOpts
-	}
-	o.Readonly = o2.Readonly
 	return o
 }
 
@@ -120,15 +70,6 @@ func (o Options) Check() error {
 	}
 	if o.FillLevel < 10 || o.FillLevel > 100 {
 		return fmt.Errorf("FillLevel %d out of range [10, 100]", o.FillLevel)
-	}
-	switch o.Engine {
-	case TableEnginePack, TableEngineKV:
-		// OK
-	default:
-		return fmt.Errorf("Unsupported Engine %q", o.Engine)
-	}
-	if !slices.Contains(store.SupportedDrivers(), o.Driver) {
-		return fmt.Errorf("Unsupported storage driver %q", o.Driver)
 	}
 	return nil
 }
