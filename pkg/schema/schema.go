@@ -92,6 +92,9 @@ func (s *Schema) WithEnum(e *EnumDictionary) *Schema {
 				continue
 			}
 			s.fields[i].enum = e
+			if s.exports != nil {
+				s.exports[i].Enum = e
+			}
 			s.enums.Register(e)
 		}
 	}
@@ -108,6 +111,9 @@ func (s *Schema) WithEnumsFrom(r EnumRegistry) *Schema {
 			continue
 		}
 		s.fields[i].enum = e
+		if s.exports != nil {
+			s.exports[i].Enum = e
+		}
 		s.enums.Register(e)
 	}
 	return s
@@ -147,6 +153,10 @@ func (s *Schema) TypeLabel(vendor string) string {
 	b.WriteString(".v")
 	b.WriteString(strconv.Itoa(int(s.version)))
 	return b.String()
+}
+
+func (s *Schema) Enums() EnumRegistry {
+	return s.enums
 }
 
 func (s *Schema) TaggedHash(tag types.ObjectTag) uint64 {
@@ -783,6 +793,7 @@ func (s *Schema) Finalize() *Schema {
 			Scale:      s.fields[i].scale,
 			Fixed:      s.fields[i].fixed,
 			Offset:     s.fields[i].offset,
+			Enum:       s.fields[i].enum,
 			path:       s.fields[i].path,
 		}
 	}

@@ -52,8 +52,8 @@ type ExportedField struct {
 	Scale      uint8
 	Fixed      uint16
 	Offset     uintptr
+	Enum       *EnumDictionary
 	path       []int
-	_          [3]byte // padding
 }
 
 func NewField(typ types.FieldType) Field {
