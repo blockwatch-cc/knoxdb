@@ -95,17 +95,22 @@ func SetupDatabase(t *testing.T) (knox.Database, knox.Table, func()) {
 	// Extend the enum with values
 	log.Infof("Extending enum 'my_enum' with values: %+v", myEnums)
 	err = db.ExtendEnum(ctx, "my_enum", myEnums...)
-	require.NoError(t, err, "Failed to extend enum 'my_enum'")
+	require.NoErrorf(t, err, "Failed to extend enum 'my_enum': %v", err)
 
 	// Validate that the enum exists
 	enums := db.ListEnums()
-	log.Infof("Existing enums after extending: %+v", enums)
+	log.Infof("Registered Enums: %+v", enums)
 	require.Contains(t, enums, "my_enum", "Enum 'my_enum' is not registered")
 
 	// Create schema for Types
 	s, err := schema.SchemaOf(&Types{})
 	require.NoError(t, err, "Failed to generate schema for Types")
-	log.Infof("Generated schema: %+v", s)
+	log.Infof("Generated schema with fields:")
+
+	// Use the `Fields` method as a slice or iterable
+	for _, field := range s.Fields() { // Assuming `Fields` returns a slice or similar collection
+		log.Infof("  - Field: Name=%s, Type=%s", field.Name, field.Type)
+	}
 
 	// Create new table
 	table, err := db.CreateTable(ctx, s, knox.TableOptions{
