@@ -1,5 +1,7 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+//go:build ignore
+// +build ignore
 
 package pack
 
@@ -7,6 +9,7 @@ import (
 	"context"
 
 	"blockwatch.cc/knoxdb/encoding/bitmap"
+	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 // Marshaler interface, a more performant alternative to type based
@@ -35,6 +38,7 @@ type Table interface {
 	Options() Options
 	IsClosed() bool
 	Fields() FieldList
+	Schema() *schema.Schema
 	Stats() []TableStats
 	PurgeCache()
 	Close() error

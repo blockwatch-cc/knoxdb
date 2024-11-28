@@ -22,5 +22,8 @@ db/
 
 # OSX specific files
 .DS_Store
+
+# generated / private files and directories
 playground/
 vendor/
+go.work*

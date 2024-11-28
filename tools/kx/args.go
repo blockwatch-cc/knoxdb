@@ -10,13 +10,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/echa/log"
-	bolt "go.etcd.io/bbolt"
-
-	"blockwatch.cc/knoxdb/pack"
-	"blockwatch.cc/knoxdb/store"
 )
 
 var (
@@ -58,7 +53,6 @@ type Args struct {
 	table string
 	id1   int
 	id2   int
-	bolt  *bolt.Options
 }
 
 func parseArgs() (args Args, err error) {
@@ -81,8 +75,6 @@ func parseArgs() (args Args, err error) {
 		lvl = log.LevelInfo
 	}
 	log.SetLevel(lvl)
-	pack.UseLogger(log.Log)
-	store.UseLogger(log.Log)
 
 	if flags.NArg() < 2 {
 		err = fmt.Errorf("Missing argument. Need command and database file!")
@@ -159,12 +151,6 @@ func parseArgs() (args Args, err error) {
 		log.Debug("id2=", args.id2)
 	}
 
-	args.bolt = &bolt.Options{
-		Timeout:      time.Second, // open timeout when file is locked
-		NoGrowSync:   true,        // assuming Docker + XFS
-		NoSync:       true,        // skip fsync (DANGEROUS on crashes)
-		FreelistType: bolt.FreelistMapType,
-	}
 	return
 }
 

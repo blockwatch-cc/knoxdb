@@ -1,5 +1,7 @@
 // Copyright (c) 2018-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+//go:build ignore
+// +build ignore
 
 package pack
 
@@ -64,8 +66,8 @@ type Tx struct {
 	pending int
 }
 
-func CreateDatabase(engine, path, name, label string, opts any) (*DB, error) {
-	db, err := store.Create(engine, filepath.Join(path, name+".db"), opts)
+func CreateDatabase(path, name, label string, opts Options) (*DB, error) {
+	db, err := store.Create(opts.Driver, filepath.Join(path, name+".db"), opts.DriverOpts)
 	if err != nil {
 		return nil, fmt.Errorf("pack: creating database: %v", err)
 	}
@@ -85,19 +87,19 @@ func CreateDatabase(engine, path, name, label string, opts any) (*DB, error) {
 	}, nil
 }
 
-func CreateDatabaseIfNotExists(engine, path, name, label string, opts any) (*DB, error) {
-	db, err := OpenDatabase(engine, path, name, label, opts)
+func CreateDatabaseIfNotExists(path, name, label string, opts Options) (*DB, error) {
+	db, err := OpenDatabase(path, name, label, opts)
 	if err == nil {
 		return db, nil
 	}
 	if err != nil && !store.IsError(err, store.ErrDbDoesNotExist) {
 		return nil, err
 	}
-	return CreateDatabase(engine, path, name, label, opts)
+	return CreateDatabase(path, name, label, opts)
 }
 
-func OpenDatabase(engine, path, name, label string, opts any) (*DB, error) {
-	db, err := store.Open(engine, filepath.Join(path, name+".db"), opts)
+func OpenDatabase(path, name, label string, opts Options) (*DB, error) {
+	db, err := store.Open(opts.Driver, filepath.Join(path, name+".db"), opts.DriverOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -136,8 +138,8 @@ func (d *DB) UpdateManifest(name, label string) error {
 	return d.db.SetManifest(mft)
 }
 
-func (d *DB) CreateTable(engine TableEngine, name string, fields FieldList, opts Options) (Table, error) {
-	switch engine {
+func (d *DB) CreateTable(name string, fields FieldList, opts Options) (Table, error) {
+	switch opts.Engine {
 	case TableEnginePack:
 		t, err := CreatePackTable(d, name, fields, opts)
 		if err != nil {
@@ -157,13 +159,13 @@ func (d *DB) CreateTable(engine TableEngine, name string, fields FieldList, opts
 	}
 }
 
-func (d *DB) CreateTableIfNotExists(engine TableEngine, name string, fields FieldList, opts Options) (Table, error) {
-	t, err := d.CreateTable(engine, name, fields, opts)
+func (d *DB) CreateTableIfNotExists(name string, fields FieldList, opts Options) (Table, error) {
+	t, err := d.CreateTable(name, fields, opts)
 	if err != nil {
 		if err != ErrTableExists {
 			return nil, err
 		}
-		t, err = d.OpenTable(engine, name, opts)
+		t, err = d.OpenTable(name, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -171,11 +173,11 @@ func (d *DB) CreateTableIfNotExists(engine TableEngine, name string, fields Fiel
 	return t, nil
 }
 
-func (d *DB) OpenTable(engine TableEngine, name string, opts Options) (Table, error) {
+func (d *DB) OpenTable(name string, opts Options) (Table, error) {
 	if t, ok := d.tables[name]; ok {
 		return t, nil
 	}
-	switch engine {
+	switch opts.Engine {
 	case TableEnginePack:
 		t, err := OpenPackTable(d, name, opts)
 		if err != nil {
