@@ -28,18 +28,6 @@ var (
 	enumMutex sync.Mutex // Mutex for synchronizing EnumRegistry access
 )
 
-// UnifiedRow defines the schema for meta and work rows combined.
-type UnifiedRow struct {
-	Id        uint64    `knox:"id,pk"`
-	RowType   string    `knox:"row_type"`    // "meta" or "work"
-	ThreadID  int       `knox:"thread_id"`   // For meta rows
-	Timestamp time.Time `knox:"timestamp"`   // For meta rows
-	Operation string    `knox:"operation"`   // For meta rows
-	MetaRowID uint64    `knox:"meta_row_id"` // For work rows
-	Value     string    `knox:"value"`       // For work rows
-	Updated   bool      `knox:"updated"`     // For work rows
-}
-
 // Types defines the schema for Workload1 and Workload2.
 type Types struct {
 	Id        uint64    `knox:"id,pk"`
