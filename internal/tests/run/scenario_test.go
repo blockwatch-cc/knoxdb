@@ -21,7 +21,7 @@ func buildScenariosTests(t *testing.T, dirPath string) {
 	goarch := os.Getenv("GOARCH")
 	os.Setenv("GOOS", "wasip1")
 	os.Setenv("GOARCH", "wasm")
-	cmdScenarios := exec.Command("go", "test", "-c", "../scenarios", "-o", "path", dirPath)
+	cmdScenarios := exec.Command("go", "test", "-c", "../scenarios", "-o", dirPath)
 	out, err := cmdScenarios.CombinedOutput()
 	require.NoError(t, err)
 	require.Equal(t, "", string(out))
