@@ -70,6 +70,19 @@ func TestWorkload3(t *testing.T) {
 		fromAccount.Int64 -= transferAmount
 		toAccount.Int64 += transferAmount
 
+		data[from].Int64 -= transferAmount
+		data[to].Int64 += transferAmount
+
+		t.Logf("Send %d from %d to %d => [%d]=%d [%d]=%d",
+			transferAmount,
+			data[from].Id,
+			data[to].Id,
+			data[from].Id,
+			data[from].Int64,
+			data[to].Id,
+			data[to].Int64,
+		)
+
 		_, err = table.Update(ctx, []*Types{&fromAccount, &toAccount})
 		require.NoError(t, err, "Failed to update accounts during transaction")
 	}
@@ -86,14 +99,16 @@ func TestWorkload3(t *testing.T) {
 	require.Equal(t, int64(accountCount*initialBalance), totalBalance, "Total balance mismatch")
 
 	// Validate final balances for each account
-	expectedBalanceAdjustments := txnCount / accountCount * transferAmount
-	for _, account := range data {
+	// expectedBalanceAdjustments := txnCount / accountCount * transferAmount
+	for _, a := range data {
+		var account Types
 		err := knox.NewGenericQuery[Types]().
 			WithTable(table).
-			AndEqual("id", account.Id).
+			AndEqual("id", a.Id).
 			Execute(ctx, &account)
-		require.NoError(t, err, "Failed to load account with ID: %d", account.Id)
-		expectedBalance := initialBalance + int64(expectedBalanceAdjustments)
+		require.NoError(t, err, "Failed to load account with ID: %d", a.Id)
+		require.Equal(t, a.Id, account.Id, "Account id mismatch")
+		expectedBalance := int64(initialBalance) //+ int64(expectedBalanceAdjustments)
 		require.Equal(t, expectedBalance, account.Int64, "Final balance mismatch for account ID: %d", account.Id)
 	}
 }
