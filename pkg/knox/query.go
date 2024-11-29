@@ -556,7 +556,7 @@ func (q GenericQuery[T]) AndRegexp(field string, value any) GenericQuery[T] {
 }
 
 func (q GenericQuery[T]) AndRange(field string, from, to any) GenericQuery[T] {
-	q.Query.AndRange(field, from, to)
+	q.Query = q.Query.AndRange(field, from, to)
 	return q
 }
 
