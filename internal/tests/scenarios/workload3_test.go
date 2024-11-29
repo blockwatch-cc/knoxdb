@@ -1,10 +1,11 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: oliver@blockwatch.cc
 //
-// Workload3 simulates a banking system with debit and credit operations.
+// TestWorkload3 simulates a banking system with debit and credit operations, where accounts are initialized
+// with a balance and operations are performed atomically.
 // Ensures:
 // - transactions are atomic (no partial updates).
-// - total balance consistency is maintained across accounts.
+// - total balance consistency is maintained across accounts, with correct enum field handling.
 
 package scenarios
 

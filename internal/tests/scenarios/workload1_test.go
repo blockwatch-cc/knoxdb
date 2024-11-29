@@ -1,10 +1,10 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: oliver@blockwatch.cc
 //
-// Workload1 tests KnoxDB's handling of large transactions in a single-threaded environment.
+// TestWorkload1 tests KnoxDB's handling of large transactions in a single-threaded environment.
 // Ensures:
 // - all rows are inserted in a single transaction.
-// - data integrity is verified post-commit.
+// - data integrity is verified post-commit by streaming and comparing inserted records.
 
 package scenarios
 

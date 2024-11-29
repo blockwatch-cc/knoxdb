@@ -1,9 +1,9 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: oliver@blockwatch.cc
 //
-// Workload2 tests KnoxDB's handling of parallel transactions across multiple threads.
+// TestWorkload2 tests KnoxDB's handling of parallel transactions across multiple threads.
 // Ensures:
-// - no data loss or corruption across threads.
+// - no data loss, corruption, or race conditions across threads.
 // - total row count and content correctness are verified post-insertion.
 
 package scenarios
