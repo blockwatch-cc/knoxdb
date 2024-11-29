@@ -171,7 +171,7 @@ func SetupDatabase(t *testing.T) (knox.Database, knox.Table, func()) {
 // SetupDatabaseWithSchema sets up a fresh database and table with a provided schema model.
 func SetupDatabaseWithSchema(t *testing.T, model interface{}) (knox.Database, knox.Table, func()) {
 	ctx := context.Background()
-	dbPath := "./db"
+	dbPath := t.TempDir()
 
 	require.NoError(t, cleanDBDir(dbPath), "Failed to clean up database directory")
 	require.NoError(t, ensureDBDir(dbPath), "Failed to ensure database directory")
