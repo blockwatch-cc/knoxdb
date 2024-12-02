@@ -17,22 +17,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Ledger defines a simple banking account ledger.
+type Ledger struct {
+	Id      uint64 `knox:"id,pk"`
+	Balance int64  `knox:"balance"`
+}
+
 func TestWorkload3(t *testing.T) {
-	_, table, cleanup := SetupDatabase(t)
+	db, table, cleanup := SetupDatabase(t, &Ledger{})
 	defer cleanup()
 
 	ctx := context.Background()
-	const accountCount = 10
-	const txnCount = 20
-	const initialBalance = 100
-	const transferAmount = 50
+	const numAccounts = 100
+	const numTransfersPerTx = 10
+	const initialBalance int64 = 100
 
 	// Initialize accounts with balances
-	data := make([]*Types, accountCount)
-	for i := 0; i < accountCount; i++ {
-		data[i] = &Types{
-			Int64:  initialBalance,
-			MyEnum: myEnums[i%len(myEnums)],
+	data := make([]*Ledger, numAccounts)
+	for i := 0; i < numAccounts; i++ {
+		data[i] = &Ledger{
+			Balance: initialBalance,
 		}
 	}
 	startPK, err := table.Insert(ctx, data)
@@ -44,71 +48,86 @@ func TestWorkload3(t *testing.T) {
 	}
 
 	// Perform debit and credit operations
-	for i := 0; i < txnCount; i++ {
-		from := i % accountCount
-		to := (i + 1) % accountCount
+	for i := 0; i < numAccounts/(numTransfersPerTx*2); i++ {
+		func(txId int) {
+			ctx, commit, abort, err := db.Begin(ctx)
+			require.NoError(t, err, "Begin tx failed")
+			defer abort()
+			for k := 0; k < numTransfersPerTx; k++ {
+				from := txId*numTransfersPerTx*2 + 2*k
+				to := txId*numTransfersPerTx*2 + 2*k + 1
 
-		var fromAccount, toAccount Types
+				var fromAccount, toAccount Ledger
 
-		// Load the "from" account
-		err := knox.NewGenericQuery[Types]().
-			WithTable(table).
-			AndEqual("id", data[from].Id).
-			Execute(ctx, &fromAccount)
-		require.NoError(t, err, "Failed to load 'from' account with ID: %d", data[from].Id)
-		require.Equal(t, data[from].Id, fromAccount.Id, "Loaded 'from' account ID mismatch")
+				// Load the "from" account
+				err := knox.NewGenericQuery[Ledger]().
+					WithTable(table).
+					AndEqual("id", data[from].Id).
+					Execute(ctx, &fromAccount)
+				require.NoError(t, err, "Failed to load 'from' account with ID: %d", data[from].Id)
+				require.Equal(t, data[from].Id, fromAccount.Id, "Loaded 'from' account ID mismatch")
 
-		// Load the "to" account
-		err = knox.NewGenericQuery[Types]().
-			WithTable(table).
-			AndEqual("id", data[to].Id).
-			Execute(ctx, &toAccount)
-		require.NoError(t, err, "Failed to load 'to' account with ID: %d", data[to].Id)
-		require.Equal(t, data[to].Id, toAccount.Id, "Loaded 'to' account ID mismatch")
+				// Load the "to" account
+				err = knox.NewGenericQuery[Ledger]().
+					WithTable(table).
+					AndEqual("id", data[to].Id).
+					Execute(ctx, &toAccount)
+				require.NoError(t, err, "Failed to load 'to' account with ID: %d", data[to].Id)
+				require.Equal(t, data[to].Id, toAccount.Id, "Loaded 'to' account ID mismatch")
 
-		// Perform debit and credit
-		fromAccount.Int64 -= transferAmount
-		toAccount.Int64 += transferAmount
+				// Perform debit and credit
+				amount := fromAccount.Balance / 2
+				fromAccount.Balance -= amount
+				toAccount.Balance += amount
 
-		data[from].Int64 -= transferAmount
-		data[to].Int64 += transferAmount
+				t.Logf("Send %d from %d to %d => [%d]=%d [%d]=%d",
+					amount,
+					fromAccount.Id,
+					toAccount.Id,
+					fromAccount.Id,
+					fromAccount.Balance,
+					toAccount.Id,
+					toAccount.Balance,
+				)
 
-		t.Logf("Send %d from %d to %d => [%d]=%d [%d]=%d",
-			transferAmount,
-			data[from].Id,
-			data[to].Id,
-			data[from].Id,
-			data[from].Int64,
-			data[to].Id,
-			data[to].Int64,
-		)
-
-		_, err = table.Update(ctx, []*Types{&fromAccount, &toAccount})
-		require.NoError(t, err, "Failed to update accounts during transaction")
+				_, err = table.Update(ctx, []*Ledger{&fromAccount, &toAccount})
+				require.NoError(t, err, "Failed to update accounts during transaction")
+			}
+			require.NoError(t, commit())
+		}(i)
 	}
 
-	// Validate total balance consistency
+	// Validate total balance consistency and individual account
 	totalBalance := int64(0)
-	err = knox.NewGenericQuery[Types]().
+	err = knox.NewGenericQuery[Ledger]().
 		WithTable(table).
-		Stream(ctx, func(res *Types) error {
-			totalBalance += res.Int64
+		Stream(ctx, func(res *Ledger) error {
+			if res.Id%2 == 1 {
+				// sender
+				require.Equal(t, initialBalance/2, res.Balance, "sender account balance mismatch")
+			} else {
+				// receiver
+				require.Equal(t, initialBalance+initialBalance/2, res.Balance, "receiver account balance mismatch")
+			}
+			totalBalance += res.Balance
 			return nil
 		})
 	require.NoError(t, err, "Failed to stream data for total balance validation")
-	require.Equal(t, int64(accountCount*initialBalance), totalBalance, "Total balance mismatch")
+	require.Equal(t, int64(numAccounts*initialBalance), totalBalance, "Total balance mismatch")
 
-	// Validate final balances for each account
-	// expectedBalanceAdjustments := txnCount / accountCount * transferAmount
+	// Validate point access
 	for _, a := range data {
-		var account Types
-		err := knox.NewGenericQuery[Types]().
+		var account Ledger
+		err := knox.NewGenericQuery[Ledger]().
 			WithTable(table).
 			AndEqual("id", a.Id).
 			Execute(ctx, &account)
 		require.NoError(t, err, "Failed to load account with ID: %d", a.Id)
 		require.Equal(t, a.Id, account.Id, "Account id mismatch")
-		expectedBalance := int64(initialBalance) //+ int64(expectedBalanceAdjustments)
-		require.Equal(t, expectedBalance, account.Int64, "Final balance mismatch for account ID: %d", account.Id)
+		if a.Id%2 == 1 {
+			require.Equal(t, initialBalance/2, account.Balance, "sender account balance mismatch")
+		} else {
+			require.Equal(t, initialBalance+initialBalance/2, account.Balance, "receiver account balance mismatch")
+		}
 	}
 }

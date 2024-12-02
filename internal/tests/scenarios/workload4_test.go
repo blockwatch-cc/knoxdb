@@ -43,7 +43,7 @@ type UnifiedRow struct {
 
 func TestWorkload4(t *testing.T) {
 	// Setup the unified database
-	db, unifiedTable, cleanup := SetupUnifiedDatabase(t)
+	db, unifiedTable, cleanup := SetupDatabase(t, &UnifiedRow{})
 	defer cleanup()
 
 	ctx := context.Background()

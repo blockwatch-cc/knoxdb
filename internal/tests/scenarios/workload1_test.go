@@ -18,7 +18,7 @@ import (
 )
 
 func TestWorkload1(t *testing.T) {
-	_, table, cleanup := SetupDatabase(t)
+	_, table, cleanup := SetupDatabase(t, &Types{})
 	defer cleanup()
 
 	ctx := context.Background()
