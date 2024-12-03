@@ -77,6 +77,28 @@ func (m *LockManager) Wait() {
 	}
 }
 
+// drops any outstanding locks (call after cancelling tx contexts)
+func (m *LockManager) Clear() {
+	// exclusive access
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// unblock waiters (acquire() may have already unblocked them when
+	// tx contexts were canceled so this may be a noop), still cleaning up
+	// references
+	for _, lock := range m.locks {
+		for _, v := range lock.waiters {
+			close(v)
+			clear(lock.waiters)
+			clear(lock.waiting)
+		}
+		lock.count = 0
+	}
+	clear(m.locks)
+	clear(m.granted)
+	m.nlocks = 0
+}
+
 // Lock represents a lock on a unique database resource. Each resource has at most
 // one lock assigned. During its lifecycle, the lock may change state between shared
 // and exclusive multiple times, as request order requires. To save memory we only
@@ -298,7 +320,8 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 					wait = l.wait(xid)
 				}
 			default:
-				panic(fmt.Errorf("Unhandled shaed case lock=%#v %v %v %v", l, xid, mode, typ))
+				m.mu.Unlock()
+				panic(fmt.Errorf("Unhandled shared case lock=%#v %v %v %v", l, xid, mode, typ))
 			}
 		}
 

@@ -26,7 +26,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 
 	// obtain shared table lock
 	tx := engine.GetTransaction(ctx)
-	err := tx.RLock(ctx, t.tableId)
+	err := tx.RLock(ctx, t.id)
 	if err != nil {
 		return 0, err
 	}
@@ -37,7 +37,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	defer t.mu.Unlock()
 
 	// upgrade tx for writing and register touched table for later commit
-	engine.GetTransaction(ctx).Touch(t.tableId)
+	engine.GetTransaction(ctx).Touch(t.id)
 
 	// try write updated records to journal (may run full, so we must loop)
 	var count, n uint64

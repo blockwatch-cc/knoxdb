@@ -438,6 +438,25 @@ func (t *Tx) kill() {
 	t.cancel(ErrDatabaseShutdown)
 }
 
+func (t *Tx) forceClose() error {
+	// close storage tx
+	var err error
+	for _, tx := range t.dbTx {
+		if e := tx.Rollback(); e != nil && err == nil {
+			err = e
+		}
+	}
+
+	// close catalog tx
+	if t.catTx != nil {
+		if e := t.catTx.Rollback(); e != nil && err == nil {
+			err = e
+		}
+	}
+
+	return err
+}
+
 func (t *Tx) StoreTx(db store.DB, write bool) (store.Tx, error) {
 	if t == nil {
 		return nil, ErrNoTx

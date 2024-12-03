@@ -128,7 +128,7 @@ func run() error {
 			rec.Tag,
 			strconv.FormatUint(rec.TxID, 10),
 			"0x" + strconv.FormatUint(rec.Entity, 16),
-			LimitHexEllipsis(rec.Data, 64),
+			LimitHexEllipsis(rec.Data[0], 64),
 		})
 		if limit > 0 && limit == count {
 			break

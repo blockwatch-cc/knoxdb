@@ -31,7 +31,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 
 	// obtain shared table lock
 	tx := engine.GetTransaction(ctx)
-	err := tx.RLock(ctx, t.tableId)
+	err := tx.RLock(ctx, t.id)
 	if err != nil {
 		return 0, err
 	}
@@ -53,7 +53,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 		count += n
 
 		// sync state with catalog
-		tx.Touch(t.tableId)
+		tx.Touch(t.id)
 
 		// update state
 		t.state.NRows += n

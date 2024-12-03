@@ -46,7 +46,7 @@ type Table struct {
 	mu      sync.RWMutex            // global table lock (syncs r/w access, single writer)
 	engine  *engine.Engine          // engine access
 	schema  *schema.Schema          // ordered list of table fields as central type info
-	tableId uint64                  // unique tagged name hash
+	id      uint64                  // unique tagged name hash
 	px      int                     // field index for primary key (if any)
 	opts    engine.TableOptions     // copy of config options
 	db      store.DB                // lower-level storage (e.g. boltdb wrapper)
@@ -72,7 +72,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	// setup store
 	t.engine = e
 	t.schema = s
-	t.tableId = s.TaggedHash(types.ObjectTagTable)
+	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.state = engine.NewObjectState()
@@ -147,7 +147,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	// setup table
 	t.engine = e
 	t.schema = s
-	t.tableId = s.TaggedHash(types.ObjectTagTable)
+	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.metrics = engine.NewTableMetrics(name)
@@ -252,7 +252,7 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	}
 	t.engine = nil
 	t.schema = nil
-	t.tableId = 0
+	t.id = 0
 	t.px = 0
 	t.opts = engine.TableOptions{}
 	t.metrics = engine.TableMetrics{}

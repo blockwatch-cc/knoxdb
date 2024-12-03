@@ -105,17 +105,21 @@ func (s *segment) Close() (err error) {
 	if s.fd != nil {
 		if !s.ro {
 			if err = s.fd.Sync(); err != nil {
-				return err
+				return
 			}
 		}
 		err = s.fd.Close()
-		s.fd = nil
 	}
-	s.id = 0
-	s.sz = 0
-	s.max = 0
-	s.ro = false
-	return err
+	*s = segment{}
+	return
+}
+
+func (s *segment) ForceClose() (err error) {
+	if s.fd != nil {
+		err = s.fd.Close()
+	}
+	*s = segment{}
+	return
 }
 
 func (s *segment) Id() int {

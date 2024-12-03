@@ -246,6 +246,18 @@ func (c *Catalog) Close(ctx context.Context) error {
 	return err
 }
 
+func (c *Catalog) ForceClose() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.db == nil {
+		return nil
+	}
+	clear(c.pending)
+	err := c.db.Close()
+	c.db = nil
+	return err
+}
+
 func (c *Catalog) Checkpoint() wal.LSN {
 	return c.checkpoint
 }

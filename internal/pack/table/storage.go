@@ -52,7 +52,7 @@ func (t *Table) loadSharedPack(ctx context.Context, id uint32, nrow int, useCach
 		WithMaxRows(util.NonZero(nrow, t.opts.PackSize))
 
 	// load from table data bucket or cache using tableid as cache tag
-	n, err := pkg.Load(ctx, t.dataBucket(tx), useCache, t.tableId, fids, nrow)
+	n, err := pkg.Load(ctx, t.dataBucket(tx), useCache, t.id, fids, nrow)
 	if err != nil {
 		pkg.Release()
 		return nil, err
@@ -111,7 +111,7 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 		}
 
 		// remove from storage and block caches
-		if err := pkg.Remove(ctx, t.dataBucket(tx), t.tableId); err != nil {
+		if err := pkg.Remove(ctx, t.dataBucket(tx), t.id); err != nil {
 			return 0, err
 		}
 
@@ -159,7 +159,7 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 
 	// write to disk
 	blockSizes := make([]int, len(pstats.Blocks))
-	n, err := pkg.Store(ctx, t.dataBucket(tx), t.tableId, blockSizes)
+	n, err := pkg.Store(ctx, t.dataBucket(tx), t.id, blockSizes)
 	if err != nil {
 		return 0, err
 	}

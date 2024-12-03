@@ -322,24 +322,36 @@ func (e *Engine) Close(ctx context.Context) error {
 	// close all open indexes
 	for n, idx := range e.indexes {
 		idx.Table().UnuseIndex(idx)
+		name := idx.Schema().Name()
+		if err := idx.Sync(ctx); err != nil {
+			e.log.Errorf("Syncing index %s: %v", name, err)
+		}
 		if err := idx.Close(ctx); err != nil {
-			e.log.Errorf("Closing table %s: %v", idx.Schema().Name(), err)
+			e.log.Errorf("Closing index %s: %v", name, err)
 		}
 		delete(e.indexes, n)
 	}
 
 	// close all open tables (set checkpoints)
 	for n, t := range e.tables {
+		name := t.Schema().Name()
+		if err := t.Sync(ctx); err != nil {
+			e.log.Errorf("Syncing table %s: %v", name, err)
+		}
 		if err := t.Close(ctx); err != nil {
-			e.log.Errorf("Closing table %s: %v", t.Schema().Name(), err)
+			e.log.Errorf("Closing table %s: %v", name, err)
 		}
 		delete(e.tables, n)
 	}
 
 	// close all open stores (set checkpoints)
 	for n, s := range e.stores {
+		name := s.Schema().Name()
+		if err := s.Sync(ctx); err != nil {
+			e.log.Errorf("Syncing store %s: %v", name, err)
+		}
 		if err := s.Close(ctx); err != nil {
-			e.log.Errorf("Closing store %s: %v", s.Schema().Name(), err)
+			e.log.Errorf("Closing store %s: %v", name, err)
 		}
 		delete(e.stores, n)
 	}
@@ -364,6 +376,88 @@ func (e *Engine) Close(ctx context.Context) error {
 			e.log.Errorf("Closing wal: %v", err)
 		}
 		e.wal = nil
+	}
+
+	// release directory lock
+	if e.flock != nil {
+		e.flock.Close()
+		e.flock = nil
+	}
+
+	return nil
+}
+
+func (e *Engine) ForceShutdown() error {
+	e.log.Debugf("Force shutdown database %s at %s", e.cat.name, e.path)
+
+	// set shutdown flag to prevent new transactions
+	e.shutdown.Store(true)
+
+	// TODO: shutdown user sessions (close wire protocol server)
+	// - should cancel contexts
+
+	// abort all pending transactions
+	// TODO: find another way, maybe cancel session contexts + define an explicit
+	// session for sdk usage
+	for _, tx := range e.txs {
+		tx.Fail(ErrDatabaseShutdown)
+	}
+
+	// abort storage backend transactions
+	for _, tx := range e.txs {
+		tx.forceClose()
+	}
+
+	// stop services
+	if e.merger != nil {
+		e.merger.Kill()
+	}
+
+	// release/cleanup locks
+	e.lm.Clear()
+	e.lm = nil
+
+	// clear caches
+	e.PurgeCache()
+
+	// close wal without flush&sync
+	if err := e.wal.ForceClose(); err != nil {
+		e.log.Errorf("close wal: %v", err)
+	}
+	e.wal = nil
+
+	// close catalog without checkpointing
+	if err := e.cat.ForceClose(); err != nil {
+		e.log.Errorf("close catalog: %v", err)
+	}
+	e.cat = nil
+
+	ctx := context.Background()
+
+	// close engine storage backend files without journal flush and checkpointing
+	for n, idx := range e.indexes {
+		idx.Table().UnuseIndex(idx)
+		name := idx.Schema().Name()
+		if err := idx.Close(ctx); err != nil {
+			e.log.Errorf("Closing index %s: %v", name, err)
+		}
+		delete(e.indexes, n)
+	}
+
+	// close all open tables (set checkpoints)
+	for n, t := range e.tables {
+		if err := t.Close(ctx); err != nil {
+			e.log.Errorf("Closing table %s: %v", t.Schema().Name(), err)
+		}
+		delete(e.tables, n)
+	}
+
+	// close all open stores (set checkpoints)
+	for n, s := range e.stores {
+		if err := s.Close(ctx); err != nil {
+			e.log.Errorf("Closing store %s: %v", s.Schema().Name(), err)
+		}
+		delete(e.stores, n)
 	}
 
 	// release directory lock

@@ -166,6 +166,7 @@ type StoreEngine interface {
 	State() ObjectState
 	Metrics() StoreMetrics
 	Drop(Context) error
+	Sync(Context) error
 
 	// data interface
 	Get(ctx Context, key []byte) ([]byte, error)
