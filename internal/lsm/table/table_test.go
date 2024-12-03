@@ -15,5 +15,5 @@ func TestMain(m *testing.M) {
 }
 
 func TestTable(t *testing.T) {
-	tests.TestTableEngine[Table, *Table](t, "badger")
+	tests.TestTableEngine[Table, *Table](t, "badger", "lsm")
 }
