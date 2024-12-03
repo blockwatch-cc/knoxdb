@@ -70,7 +70,7 @@ func setup() (func(*testing.T, string), func(string) ([]byte, error)) {
 }
 
 func TestScenarios(t *testing.T) {
-	require.NotEmpty(t, path, "environment vairable path 'LOGS_PATH' should not be empty")
+	require.NotEmpty(t, path, "environment vairable 'LOGS_PATH' should not be empty")
 
 	ctx := context.Background()
 	dirPath := t.TempDir()
