@@ -1,10 +1,10 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: oliver@blockwatch.cc
 //
-// Workload1 tests KnoxDB's handling of large transactions in a single-threaded environment.
+// TestWorkload1 tests KnoxDB's handling of large transactions in a single-threaded environment.
 // Ensures:
 // - all rows are inserted in a single transaction.
-// - data integrity is verified post-commit.
+// - data integrity is verified post-commit by streaming and comparing inserted records.
 
 package scenarios
 
@@ -12,22 +12,26 @@ import (
 	"context"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWorkload1(t *testing.T) {
-	_, table, cleanup := SetupDatabase(t)
+	eng, cleanup := tests.NewDatabase(t, &tests.Types{})
 	defer cleanup()
+	db := knox.WrapEngine(eng)
+	table, err := db.UseTable("types")
+	require.NoError(t, err, "Missing table")
 
 	ctx := context.Background()
 	const txnSize = 100
 
 	// Insert a large number of records in a single transaction
-	data := make([]*Types, txnSize)
+	data := make([]*tests.Types, txnSize)
 	for i := 0; i < txnSize; i++ {
-		data[i] = NewRandomTypes(i)
+		data[i] = tests.NewRandomTypes(i)
 	}
 	startPK, err := table.Insert(ctx, data)
 	require.NoError(t, err, "Failed to insert data")
@@ -39,10 +43,10 @@ func TestWorkload1(t *testing.T) {
 
 	// Validate all rows are correctly inserted
 	count := 0
-	err = knox.NewGenericQuery[Types]().
+	err = knox.NewGenericQuery[tests.Types]().
 		WithTable(table).
 		WithDebug(true). // Enable detailed query logging
-		Stream(ctx, func(res *Types) error {
+		Stream(ctx, func(res *tests.Types) error {
 			require.NotEmpty(t, res.MyEnum, "Unexpected empty enum value %#v", res)
 			log.Infof("Streamed record: ID=%d, Int64=%d, MyEnum=%s", res.Id, res.Int64, res.MyEnum)
 			require.Equal(t, data[count].Id, res.Id, "Record ID mismatch")
@@ -55,8 +59,8 @@ func TestWorkload1(t *testing.T) {
 	require.Equal(t, txnSize, count, "Row count mismatch")
 
 	for _, v := range data {
-		var res Types
-		err := knox.NewGenericQuery[Types]().
+		var res tests.Types
+		err := knox.NewGenericQuery[tests.Types]().
 			WithTable(table).
 			AndEqual("int64", v.Int64).
 			Execute(ctx, &res)
