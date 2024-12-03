@@ -29,9 +29,10 @@ func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions 
 	}
 }
 
-func NewTestTableOptions(t *testing.T, driver string) engine.TableOptions {
+func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
 	return engine.TableOptions{
 		Driver:     driver,
+		Engine:     engine.TableKind(eng),
 		PageSize:   4096,
 		PageFill:   0.9,
 		NoSync:     false,

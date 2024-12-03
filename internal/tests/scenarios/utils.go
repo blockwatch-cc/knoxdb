@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -51,11 +53,12 @@ func NewRandomTypes(i int) *Types {
 }
 
 // SetupDatabase sets up a fresh database for Workload1 and Workload2.
-func SetupDatabase(t *testing.T, typ any) (knox.Database, knox.Table, func()) {
+func SetupDatabase(t *testing.T, typ any, driver, eng string) (knox.Database, knox.Table, func()) {
 	ctx := context.Background()
+
 	dbPath := t.TempDir()
 
-	db, err := knox.CreateDatabase(ctx, "db", knox.DefaultDatabaseOptions.
+	db, err := knox.CreateDatabase(ctx, "db", tests.NewTestDatabaseOptions(t, driver).
 		WithPath(dbPath).
 		WithNamespace("cx.bwd.knox.scenarios").
 		WithCacheSize(128*(1<<20)).
@@ -75,8 +78,8 @@ func SetupDatabase(t *testing.T, typ any) (knox.Database, knox.Table, func()) {
 	require.NoError(t, err, "Failed to generate schema for type %T", typ)
 
 	table, err := db.CreateTable(ctx, s, knox.TableOptions{
-		Engine:      "pack",
-		Driver:      "bolt",
+		Engine:      engine.TableKind(eng),
+		Driver:      driver,
 		PackSize:    1 << 11,
 		JournalSize: 1 << 10,
 		PageFill:    1.0,

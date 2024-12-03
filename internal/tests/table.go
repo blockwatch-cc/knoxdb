@@ -80,7 +80,7 @@ var TestCases = []TestCase{
 	},
 }
 
-func TestTableEngine[T any, B U[T]](t *testing.T, driver string) {
+func TestTableEngine[T any, B U[T]](t *testing.T, driver, eng string) {
 	for _, c := range TestCases {
 		t.Run(c.Name, func(t *testing.T) {
 			ctx := context.Background()
@@ -89,7 +89,7 @@ func TestTableEngine[T any, B U[T]](t *testing.T, driver string) {
 			defer e.Close(ctx)
 
 			var tab B = new(T)
-			topts := NewTestTableOptions(t, driver)
+			topts := NewTestTableOptions(t, driver, eng)
 			c.Run(e, t, tab, topts)
 		})
 	}

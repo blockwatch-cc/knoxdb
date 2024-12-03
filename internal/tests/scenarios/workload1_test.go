@@ -10,6 +10,7 @@ package scenarios
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/knox"
@@ -17,8 +18,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	eng, driver string
+)
+
+func init() {
+	eng = os.Getenv("WORKFLOW_ENGINE")
+	driver = os.Getenv("WORKFLOW_DRIVER")
+}
+
 func TestWorkload1(t *testing.T) {
-	_, table, cleanup := SetupDatabase(t, &Types{})
+	_, table, cleanup := SetupDatabase(t, &Types{}, driver, eng)
 	defer cleanup()
 
 	ctx := context.Background()

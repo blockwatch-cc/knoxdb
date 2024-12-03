@@ -24,7 +24,7 @@ type Ledger struct {
 }
 
 func TestWorkload3(t *testing.T) {
-	db, table, cleanup := SetupDatabase(t, &Ledger{})
+	db, table, cleanup := SetupDatabase(t, &Ledger{}, driver, eng)
 	defer cleanup()
 
 	ctx := context.Background()
