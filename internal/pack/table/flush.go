@@ -517,7 +517,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 		t.state.NRows = uint64(c)
 
 		// FIXME: background flush will not run inside a tx
-		engine.GetTransaction(ctx).Touch(t.tableId)
+		engine.GetTransaction(ctx).Touch(t.id)
 	}
 
 	// store state

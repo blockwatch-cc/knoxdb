@@ -246,9 +246,24 @@ func (w *Wal) Close() error {
 		err = err2
 	}
 	w.active = nil
+	w.wr = nil
 	w.csum = 0
 	w.hash = nil
 	w.lsn = 0
+	w.log = nil
+	return err
+}
+
+func (w *Wal) ForceClose() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	err := w.active.ForceClose()
+	w.active = nil
+	w.wr = nil
+	w.csum = 0
+	w.hash = nil
+	w.lsn = 0
+	w.log = nil
 	return err
 }
 

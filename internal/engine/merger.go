@@ -65,6 +65,10 @@ func (m *MergerService) Stop() {
 	m.wg.Wait()
 }
 
+func (m *MergerService) Kill() {
+	m.cancel()
+}
+
 func (m *MergerService) loop() {
 	defer m.wg.Done()
 	for {

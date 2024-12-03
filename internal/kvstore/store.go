@@ -212,6 +212,10 @@ func (kv *KVStore) Close(ctx context.Context) (err error) {
 	return
 }
 
+func (kv *KVStore) Sync(_ context.Context) error {
+	return kv.db.Sync()
+}
+
 func (kv *KVStore) Schema() *schema.Schema {
 	return kv.schema
 }

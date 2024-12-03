@@ -72,7 +72,7 @@ func GenerateRecords(sz int) []*wal.Record {
 			Tag:    types.ObjectTagDatabase,
 			TxID:   uint64(walTxId),
 			Entity: 10,
-			Data:   walBody,
+			Data:   [][]byte{walBody},
 		})
 	}
 	return recs

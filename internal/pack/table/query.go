@@ -23,7 +23,7 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 	}
 
 	// obtain shared table lock
-	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	err := engine.GetTransaction(ctx).RLock(ctx, t.id)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 	}
 
 	// obtain shared table lock
-	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	err := engine.GetTransaction(ctx).RLock(ctx, t.id)
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 	}
 
 	// obtain shared table lock
-	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	err := engine.GetTransaction(ctx).RLock(ctx, t.id)
 	if err != nil {
 		return 0, err
 	}
@@ -137,7 +137,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	}
 
 	// obtain shared table lock
-	err := engine.GetTransaction(ctx).RLock(ctx, t.tableId)
+	err := engine.GetTransaction(ctx).RLock(ctx, t.id)
 	if err != nil {
 		return 0, err
 	}
@@ -169,7 +169,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	defer t.mu.Unlock()
 
 	// upgrade tx for writing and register touched table for later commit
-	engine.GetTransaction(ctx).Touch(t.tableId)
+	engine.GetTransaction(ctx).Touch(t.id)
 
 	// run the query
 	err = t.doQueryAsc(ctx, plan, res)
