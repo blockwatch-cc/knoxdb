@@ -85,7 +85,7 @@ func TestTableEngine[T any, B U[T]](t *testing.T, driver, eng string) {
 		t.Run(c.Name, func(t *testing.T) {
 			ctx := context.Background()
 			dopts := NewTestDatabaseOptions(t, driver)
-			e := NewTestEngine(t, ctx, dopts)
+			e := NewTestEngine(t, dopts)
 			defer e.Close(ctx)
 
 			var tab B = new(T)

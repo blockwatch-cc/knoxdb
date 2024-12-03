@@ -19,8 +19,9 @@ import (
 )
 
 func TestWorkload1(t *testing.T) {
-	db, cleanup := tests.NewDatabase(t, &tests.Types{})
+	eng, cleanup := tests.NewDatabase(t, &tests.Types{})
 	defer cleanup()
+	db := knox.WrapEngine(eng)
 	table, err := db.UseTable("types")
 	require.NoError(t, err, "Missing table")
 

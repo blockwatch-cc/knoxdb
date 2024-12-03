@@ -9,14 +9,13 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/engine"
-	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
 
-const TEST_DB_NAME = "test"
+const TEST_DB_NAME = "testdb"
 
 func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions {
 	return engine.DatabaseOptions{
@@ -35,46 +34,42 @@ func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions 
 
 func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
 	return engine.TableOptions{
-		Driver:     driver,
-		Engine:     engine.TableKind(eng),
-		PageSize:   4096,
-		PageFill:   0.9,
-		NoSync:     false,
-		NoGrowSync: false,
-		ReadOnly:   false,
-		Logger:     log.Log,
+		Driver:      driver,
+		Engine:      engine.TableKind(eng),
+		PageSize:    4096,
+		PageFill:    0.9,
+		PackSize:    1 << 11,
+		JournalSize: 1 << 10,
+		NoSync:      false,
+		NoGrowSync:  false,
+		ReadOnly:    false,
+		Logger:      log.Log,
 	}
 }
 
-func NewTestEngine(t *testing.T, ctx context.Context, opts engine.DatabaseOptions) *engine.Engine {
-	eng, err := engine.Create(context.Background(), "test-engine", opts)
-	require.NoError(t, err)
+func NewTestEngine(t *testing.T, opts engine.DatabaseOptions) *engine.Engine {
+	eng, err := engine.Create(context.Background(), TEST_DB_NAME, opts)
+	require.NoError(t, err, "Failed to create database")
 	return eng
 }
 
 func OpenTestEngine(t *testing.T, opts engine.DatabaseOptions) *engine.Engine {
-	eng, err := engine.Open(context.Background(), "test-engine", opts)
-	require.NoError(t, err)
+	eng, err := engine.Open(context.Background(), TEST_DB_NAME, opts)
+	require.NoError(t, err, "Failed to open database")
 	return eng
 }
 
 // NewDatabase sets up a fresh database and creates tables from struct types.
-func NewDatabase(t *testing.T, typs ...any) (knox.Database, func()) {
+func NewDatabase(t *testing.T, typs ...any) (*engine.Engine, func()) {
 	ctx := context.Background()
 
-	dbPath := t.TempDir()
 	eng := util.NonEmptyString(os.Getenv("WORKFLOW_ENGINE"), "pack")
 	driver := util.NonEmptyString(os.Getenv("WORKFLOW_DRIVER"), "bolt")
 
-	db, err := knox.CreateDatabase(ctx, "db", NewTestDatabaseOptions(t, driver).
-		WithPath(dbPath).
-		WithNamespace("cx.bwd.knox.scenarios").
-		WithCacheSize(16*(1<<20)).
-		WithLogger(log.Log))
-	require.NoError(t, err, "Failed to create database")
+	db := NewTestEngine(t, NewTestDatabaseOptions(t, driver))
 
 	log.Infof("Creating enum 'my_enum'")
-	_, err = db.CreateEnum(ctx, "my_enum")
+	_, err := db.CreateEnum(ctx, "my_enum")
 	require.NoError(t, err, "Failed to create enum")
 
 	log.Infof("Extending enum 'my_enum' with values: %+v", myEnums)
@@ -85,13 +80,7 @@ func NewDatabase(t *testing.T, typs ...any) (knox.Database, func()) {
 	for _, typ := range typs {
 		s, err := schema.SchemaOf(typ)
 		require.NoError(t, err, "Failed to generate schema for type %T", typ)
-		_, err = db.CreateTable(ctx, s, knox.TableOptions{
-			Engine:      engine.TableKind(eng),
-			Driver:      driver,
-			PackSize:    1 << 11,
-			JournalSize: 1 << 10,
-			PageFill:    1.0,
-		})
+		_, err = db.CreateTable(ctx, s, NewTestTableOptions(t, driver, eng))
 		require.NoError(t, err, "Failed to create table for Types")
 	}
 

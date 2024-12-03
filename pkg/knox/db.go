@@ -27,6 +27,10 @@ type DB struct {
 // 	return c, nil
 // }
 
+func WrapEngine(e *engine.Engine) Database {
+	return &DB{engine: e, log: log.Log}
+}
+
 // local
 func CreateDatabase(ctx context.Context, name string, opts DatabaseOptions) (Database, error) {
 	eng, err := engine.Create(ctx, name, opts)
