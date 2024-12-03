@@ -14,14 +14,17 @@ import (
 	"testing"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWorkload2(t *testing.T) {
-	_, table, cleanup := SetupDatabase(t, &Types{}, driver, eng)
+	db, cleanup := tests.NewDatabase(t, &tests.Types{})
 	defer cleanup()
+	table, err := db.UseTable("types")
+	require.NoError(t, err, "Missing table")
 
 	ctx := context.Background()
 	const txnSize = 50
@@ -40,8 +43,8 @@ func TestWorkload2(t *testing.T) {
 				wg.Done()
 			}()
 			for i := 0; i < txnSize; i++ {
-				record := NewRandomTypes(threadID*txnSize + i)
-				pk, err := table.Insert(ctx, []*Types{record})
+				record := tests.NewRandomTypes(threadID*txnSize + i)
+				pk, err := table.Insert(ctx, []*tests.Types{record})
 				require.NoError(t, err, "Failed to insert data")
 				record.Id = pk
 				insertedData.Store(record.Id, record)
@@ -54,12 +57,12 @@ func TestWorkload2(t *testing.T) {
 
 	// Validate all rows are inserted correctly
 	count := 0
-	err := knox.NewGenericQuery[Types]().
+	err = knox.NewGenericQuery[tests.Types]().
 		WithTable(table).
-		Stream(ctx, func(res *Types) error {
+		Stream(ctx, func(res *tests.Types) error {
 			val, ok := insertedData.Load(res.Id)
 			require.True(t, ok, "Missing record for Id: %d", res.Id)
-			expected := val.(*Types)
+			expected := val.(*tests.Types)
 			require.Equal(t, expected.Int64, res.Int64)
 			require.Equal(t, expected.MyEnum, res.MyEnum)
 			count++

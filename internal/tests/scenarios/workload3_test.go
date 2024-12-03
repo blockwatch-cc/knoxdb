@@ -13,6 +13,7 @@ import (
 	"context"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/stretchr/testify/require"
 )
@@ -24,8 +25,10 @@ type Ledger struct {
 }
 
 func TestWorkload3(t *testing.T) {
-	db, table, cleanup := SetupDatabase(t, &Ledger{}, driver, eng)
+	db, cleanup := tests.NewDatabase(t, &Ledger{})
 	defer cleanup()
+	table, err := db.UseTable("ledger")
+	require.NoError(t, err, "Missing table")
 
 	ctx := context.Background()
 	const numAccounts = 100

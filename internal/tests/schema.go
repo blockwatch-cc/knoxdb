@@ -12,13 +12,39 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-type MyEnum string
+var myEnums = []string{"one", "two", "three", "four"}
 
 // call this from TestMain() in any package that uses AllTypes
 func RegisterEnum() {
 	myEnum := schema.NewEnumDictionary("my_enum")
-	myEnum.Append("a", "b", "c", "d", "e")
+	myEnum.Append(myEnums...)
 	schema.RegisterEnum(0, myEnum)
+}
+
+// Types defines the schema for Workload1 and Workload2.
+type Types struct {
+	Id        uint64    `knox:"id,pk"`
+	Timestamp time.Time `knox:"time"`
+	String    string    `knox:"string"`
+	Int64     int64     `knox:"int64"`
+	MyEnum    string    `knox:"my_enum,enum"`
+}
+
+// NewRandomData generates random data for UnifiedRow and Types.
+func NewRandomData() string {
+	bytes := util.RandBytes(8) // Generates 8 random bytes
+	return hex.EncodeToString(bytes)
+}
+
+// NewRandomTypes generates random instances of Types for workloads.
+func NewRandomTypes(i int) *Types {
+	return &Types{
+		Id:        0, // Primary key will be assigned post-insertion
+		Timestamp: time.Now().UTC(),
+		String:    hex.EncodeToString(util.RandBytes(4)),
+		Int64:     int64(i),
+		MyEnum:    myEnums[i%len(myEnums)],
+	}
 }
 
 type AllTypes struct {
@@ -44,10 +70,10 @@ type AllTypes struct {
 	Hash    []byte         `knox:"bytes"`
 	Array   [2]byte        `knox:"array[2]"`
 	String  string         `knox:"string"`
-	MyEnum  MyEnum         `knox:"my_enum,enum"` // must register with schema
+	MyEnum  string         `knox:"my_enum,enum"` // must register with schema
 }
 
-func NewAllTypes(i int64) AllTypes {
+func NewAllTypes(i int) AllTypes {
 	return AllTypes{
 		Id:      uint64(i),
 		Int64:   int64(i),
@@ -71,7 +97,7 @@ func NewAllTypes(i int64) AllTypes {
 		Hash:    util.Uint64Bytes(uint64(i)),
 		Array:   [2]byte{byte(i >> 8 & 0xf), byte(i & 0xf)},
 		String:  hex.EncodeToString(util.Uint64Bytes(uint64(i))),
-		MyEnum:  MyEnum("a"),
+		MyEnum:  myEnums[i%len(myEnums)],
 	}
 }
 
@@ -83,7 +109,7 @@ type Security struct {
 	UpdatedAt      time.Time      `knox:"updated_at"`
 }
 
-func NewSecurity(i int64) Security {
+func NewSecurity(i int) Security {
 	return Security{
 		Id:             uint64(i),
 		Ticker:         util.RandBytes(5),

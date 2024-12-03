@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
@@ -43,8 +44,10 @@ type UnifiedRow struct {
 
 func TestWorkload4(t *testing.T) {
 	// Setup the unified database
-	db, unifiedTable, cleanup := SetupDatabase(t, &UnifiedRow{}, driver, eng)
+	db, cleanup := tests.NewDatabase(t, &UnifiedRow{})
 	defer cleanup()
+	table, err := db.UseTable("unified_row")
+	require.NoError(t, err, "Missing table")
 
 	ctx := context.Background()
 	const txnSize = 20
@@ -65,7 +68,7 @@ func TestWorkload4(t *testing.T) {
 		}
 		initRows = append(initRows, row)
 	}
-	_, err := unifiedTable.Insert(ctx, initRows)
+	_, err = table.Insert(ctx, initRows)
 	require.NoError(t, err, "Failed to insert work rows")
 
 	// Multi-threaded interleaved operations
@@ -104,7 +107,7 @@ func TestWorkload4(t *testing.T) {
 
 					log.Debugf("Thread %d: Updating work rows %d and %d in tx %d", threadID, workRowID1, workRowID2, txId)
 
-					_, err = unifiedTable.Update(ctx, []*UnifiedRow{workRow1, workRow2})
+					_, err = table.Update(ctx, []*UnifiedRow{workRow1, workRow2})
 					require.NoError(t, err, "Failed to update work rows")
 
 					// Create a meta row recording both updated work-row keys
@@ -118,7 +121,7 @@ func TestWorkload4(t *testing.T) {
 					}
 
 					t.Logf("Writing meta row TH-%d-TXN-%d", metaRow.ThreadID, metaRow.TxId)
-					_, err = unifiedTable.Insert(ctx, []*UnifiedRow{metaRow})
+					_, err = table.Insert(ctx, []*UnifiedRow{metaRow})
 					require.NoError(t, err, "Failed to insert meta row")
 
 					require.NoError(t, commit(), "Commit failed")
@@ -137,7 +140,7 @@ func TestWorkload4(t *testing.T) {
 	// 1 Validate number of work rows
 	var workRows []*UnifiedRow
 	err = knox.NewGenericQuery[UnifiedRow]().
-		WithTable(unifiedTable).
+		WithTable(table).
 		AndEqual("row_type", RowTypeWork).
 		Execute(ctx, &workRows)
 	require.NoError(t, err, "Failed to validate work rows")
@@ -147,7 +150,7 @@ func TestWorkload4(t *testing.T) {
 	for _, r := range workRows {
 		var row UnifiedRow
 		err = knox.NewGenericQuery[UnifiedRow]().
-			WithTable(unifiedTable).
+			WithTable(table).
 			AndEqual("id", r.Id).
 			Execute(ctx, &row)
 		require.NoError(t, err, "Failed to load work row")
@@ -166,7 +169,7 @@ func TestWorkload4(t *testing.T) {
 
 	var metaRows []*UnifiedRow
 	err = knox.NewGenericQuery[UnifiedRow]().
-		WithTable(unifiedTable).
+		WithTable(table).
 		AndEqual("row_type", RowTypeMeta).
 		WithDebug(true).
 		WithLogger(log.Log).
@@ -186,7 +189,7 @@ func TestWorkload4(t *testing.T) {
 		t.Logf("Looking for meta row TH-%d-TXN-%d", r.ThreadID, r.TxId)
 		var metarow UnifiedRow
 		err = knox.NewGenericQuery[UnifiedRow]().
-			WithTable(unifiedTable).
+			WithTable(table).
 			AndEqual("row_type", RowTypeMeta).
 			AndEqual("thread_id", r.ThreadID).
 			AndEqual("tx_id", r.TxId).

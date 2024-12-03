@@ -6,6 +6,7 @@ require (
 	github.com/RoaringBitmap/roaring v1.2.3
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dgraph-io/ristretto v0.1.1
+	github.com/echa/config v1.1.2
 	github.com/echa/log v1.3.3
 	github.com/gofrs/flock v0.12.1
 	github.com/google/btree v1.1.2
@@ -13,6 +14,7 @@ require (
 	github.com/jedib0t/go-pretty/v6 v6.5.9
 	github.com/klauspost/compress v1.17.11
 	github.com/klauspost/cpuid/v2 v2.2.8
+	github.com/minio/minio-go/v7 v7.0.81
 	github.com/pierrec/lz4 v2.6.1+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.9.0
@@ -28,7 +30,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/echa/config v1.1.2 // indirect
 	github.com/fatih/color v1.17.0 // indirect
 	github.com/frankban/quicktest v1.14.5 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
@@ -44,7 +45,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
-	github.com/minio/minio-go/v7 v7.0.81 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect

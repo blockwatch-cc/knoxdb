@@ -121,7 +121,7 @@ func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts en
 func InsertData(t *testing.T, ctx context.Context, tab engine.TableEngine, s *engine.Schema) {
 	allTypes := make([]*AllTypes, 10)
 	for i := range allTypes {
-		a := NewAllTypes(int64(i))
+		a := NewAllTypes(i)
 		allTypes[i] = &a
 	}
 
@@ -235,7 +235,7 @@ func InsertRowsReadOnlyTableTest(e *engine.Engine, t *testing.T, tab engine.Tabl
 	require.NoError(t, err)
 
 	enc := schema.NewEncoder(s)
-	a := NewAllTypes(int64(10))
+	a := NewAllTypes(10)
 	buf, err := enc.Encode(&a, nil)
 	require.NoError(t, err)
 
@@ -263,7 +263,7 @@ func UpdateRowsTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine,
 	enc := schema.NewEncoder(s)
 	allTypes := make([]AllTypes, 0, 10)
 	for i := range allTypes {
-		allTypes = append(allTypes, NewAllTypes(int64(i)))
+		allTypes = append(allTypes, NewAllTypes(i))
 	}
 	buf, err := enc.Encode(allTypes, nil)
 	require.NoError(t, err)
