@@ -1,10 +1,10 @@
 package run
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,17 +50,21 @@ func buildTestInWasm(t *testing.T, dirPath string) {
 	os.Setenv("GOARCH", goarch)
 }
 
-func runTestInWasm(dirPath string) ([]byte, error) {
+func runTestInWasm(dirPath string, w io.Writer) error {
 	cmdRuntime := exec.Command("go", "run", "../dst/runtime", "-vvv", "-module", filepath.Join(dirPath, "scenarios.test"))
-	return cmdRuntime.CombinedOutput()
+	cmdRuntime.Stderr = w
+	cmdRuntime.Stdout = w
+	return cmdRuntime.Run()
 }
 
-func runTestInNative(dirPath string) ([]byte, error) {
+func runTestInNative(dirPath string, w io.Writer) error {
 	cmdRuntime := exec.Command(filepath.Join(dirPath, "scenarios.test"))
-	return cmdRuntime.CombinedOutput()
+	cmdRuntime.Stderr = w
+	cmdRuntime.Stdout = w
+	return cmdRuntime.Run()
 }
 
-func setup() (func(*testing.T, string), func(string) ([]byte, error)) {
+func setup() (func(*testing.T, string), func(string, io.Writer) error) {
 	switch sys {
 	case "wasm":
 		return buildTestInWasm, runTestInWasm
@@ -70,10 +74,11 @@ func setup() (func(*testing.T, string), func(string) ([]byte, error)) {
 }
 
 func TestScenarios(t *testing.T) {
+	dirPath := t.TempDir()
+	path = util.NonEmptyString(os.Getenv("LOGS_PATH"), dirPath)
 	require.NotEmpty(t, path, "environment vairable 'LOGS_PATH' should not be empty")
 
 	ctx := context.Background()
-	dirPath := t.TempDir()
 
 	t.Log("Loading s3 client")
 	s3, err := LoadStorage()
@@ -102,44 +107,21 @@ func TestScenarios(t *testing.T) {
 		err := os.Setenv(randomEnvKey, strconv.FormatUint(rnd, 10))
 		require.NoError(t, err)
 
-		shouldStop := false
-		res, err := run(dirPath)
+		// create file
+		errname := fmt.Sprintf("%d_%d.log", rnd, time.Now().Unix())
+		errpath := filepath.Join(path, errname)
+		f, err := os.Create(errpath)
+		require.NoError(t, err)
+
+		err = run(dirPath, f)
 		if err != nil {
-			shouldStop = true
-		}
-		t.Log(endInfo)
-
-		if bytes.Contains(res, []byte("FAIL:")) {
-			// buffer
-			buf := bytes.NewBuffer(nil)
-			_, err2 := buf.WriteString(startInfo)
-			require.NoError(t, err2)
-			_, err2 = buf.Write(res)
-			require.NoError(t, err2)
-			_, err2 = buf.WriteString(endInfo)
-			require.NoError(t, err2)
-
-			// store to file
-			errname := fmt.Sprintf("%d_%d.log", rnd, time.Now().Unix())
-			errpath := filepath.Join(path, errname)
-			err2 = os.WriteFile(errpath, buf.Bytes(), 0644)
-			require.NoError(t, err2)
-
 			// upload
 			if !skipUpload {
-				_, err2 = s3.FPutObject(ctx, s3bucket, errname, errpath, minio.PutObjectOptions{})
-				require.NoError(t, err2)
+				_, err = s3.FPutObject(ctx, s3bucket, errname, errpath, minio.PutObjectOptions{})
+				require.NoError(t, err)
 			}
-
-			t.Log(string(res))
 		}
 
-		if shouldStop {
-			require.NoError(t, err)
-			break
-		}
+		t.Log(endInfo)
 	}
-
-	// reset
-	os.Setenv(randomEnvKey, "")
 }
