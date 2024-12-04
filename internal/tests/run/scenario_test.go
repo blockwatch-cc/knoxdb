@@ -20,11 +20,15 @@ import (
 var (
 	randomEnvKey = "GORANDSEED"
 
-	sys string // wasm, native
+	sys          string // wasm, native
+	maxError     uint64
+	maxErrorFreq float64
 )
 
 func init() {
 	flag.StringVar(&sys, "system", "wasm", "set os. wasm/native")
+	flag.Uint64Var(&maxError, "max-errors", 0, "stop the test runner after N total observed errors")
+	flag.Float64Var(&maxErrorFreq, "max-error-freq", 0, "stops the test runner when the rate of errors observed per second is greater than N (inclusive)")
 }
 
 func buildTest(t *testing.T, dirPath string) {
@@ -89,7 +93,16 @@ func TestScenarios(t *testing.T) {
 	t.Log("Building scenarios test cases")
 	build(t, dirPath)
 
+	var f *os.File
+	defer func() {
+		if f != nil {
+			f.Close()
+		}
+	}()
+
 	i := 0
+	errsNum := uint64(0)
+	now := time.Now()
 	for {
 		// generate random seed and run multiple iterations from 0...n
 		var rnd uint64
@@ -102,7 +115,6 @@ func TestScenarios(t *testing.T) {
 
 		startInfo := fmt.Sprintf("starting scenario iteration i = %d, using %s=%d \n", i, randomEnvKey, rnd)
 		endInfo := fmt.Sprintf("completed scenario iteration i = %d, using %s=%d \n", i, randomEnvKey, rnd)
-		t.Log(startInfo)
 
 		err := os.Setenv(randomEnvKey, strconv.FormatUint(rnd, 10))
 		require.NoError(t, err)
@@ -110,11 +122,22 @@ func TestScenarios(t *testing.T) {
 		// create file
 		errname := fmt.Sprintf("%d_%d.log", rnd, time.Now().Unix())
 		errpath := filepath.Join(path, errname)
-		f, err := os.Create(errpath)
+		f, err = os.Create(errpath)
+		require.NoError(t, err)
+
+		_, err = f.WriteString(startInfo)
 		require.NoError(t, err)
 
 		err = run(dirPath, f)
 		if err != nil {
+			errsNum++
+			_, err = f.WriteString(endInfo)
+			require.NoError(t, err)
+
+			err = f.Close()
+			require.NoError(t, err)
+			f = nil
+
 			// upload
 			if !skipUpload {
 				_, err = s3.FPutObject(ctx, s3bucket, errname, errpath, minio.PutObjectOptions{})
@@ -122,6 +145,22 @@ func TestScenarios(t *testing.T) {
 			}
 		}
 
-		t.Log(endInfo)
+		if f != nil {
+			err = f.Close()
+			require.NoError(t, err)
+			f = nil
+		}
+
+		err = os.Remove(errpath)
+		require.NoError(t, err)
+
+		if maxError > 0 && errsNum >= maxError {
+			break
+		}
+
+		errFreq := float64(errsNum) / time.Since(now).Seconds()
+		if maxErrorFreq > 0 && errFreq >= maxErrorFreq {
+			break
+		}
 	}
 }
