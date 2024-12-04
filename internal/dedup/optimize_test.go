@@ -83,7 +83,7 @@ func TestOptimize(t *testing.T) {
 
 			// optimize
 			opt := src.Optimize()
-			t.Logf("Optimized to %T\n", opt)
+			// t.Logf("Optimized to %T\n", opt)
 
 			// check target
 			if got, want := opt.Len(), len(data); got != want {
@@ -112,7 +112,7 @@ func TestOptimize(t *testing.T) {
 
 			// materialize again
 			mat := opt.Materialize()
-			t.Logf("Materialized to %T\n", mat)
+			// t.Logf("Materialized to %T\n", mat)
 
 			// check target
 			if got, want := mat.Len(), len(data); got != want {

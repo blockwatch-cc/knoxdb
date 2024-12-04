@@ -84,15 +84,15 @@ func TestWorkload3(t *testing.T) {
 				fromAccount.Balance -= amount
 				toAccount.Balance += amount
 
-				t.Logf("Send %d from %d to %d => [%d]=%d [%d]=%d",
-					amount,
-					fromAccount.Id,
-					toAccount.Id,
-					fromAccount.Id,
-					fromAccount.Balance,
-					toAccount.Id,
-					toAccount.Balance,
-				)
+				// t.Logf("Send %d from %d to %d => [%d]=%d [%d]=%d",
+				// 	amount,
+				// 	fromAccount.Id,
+				// 	toAccount.Id,
+				// 	fromAccount.Id,
+				// 	fromAccount.Balance,
+				// 	toAccount.Id,
+				// 	toAccount.Balance,
+				// )
 
 				_, err = table.Update(ctx, []*Ledger{&fromAccount, &toAccount})
 				require.NoError(t, err, "Failed to update accounts during transaction")
@@ -117,7 +117,7 @@ func TestWorkload3(t *testing.T) {
 			return nil
 		})
 	require.NoError(t, err, "Failed to stream data for total balance validation")
-	require.Equal(t, int64(numAccounts*initialBalance), totalBalance, "Total balance mismatch")
+	require.Equal(t, numAccounts*initialBalance, totalBalance, "Total balance mismatch")
 
 	// Validate point access
 	for _, a := range data {

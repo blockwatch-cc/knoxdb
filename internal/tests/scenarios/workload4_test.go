@@ -106,7 +106,7 @@ func TestWorkload4(t *testing.T) {
 						TxId:     txId,
 					}
 
-					log.Debugf("Thread %d: Updating work rows %d and %d in tx %d", threadID, workRowID1, workRowID2, txId)
+					// log.Debugf("Thread %d: Updating work rows %d and %d in tx %d", threadID, workRowID1, workRowID2, txId)
 
 					_, err = table.Update(ctx, []*UnifiedRow{workRow1, workRow2})
 					require.NoError(t, err, "Failed to update work rows")
@@ -121,7 +121,7 @@ func TestWorkload4(t *testing.T) {
 						WorkRow2:  workRowID2,
 					}
 
-					t.Logf("Writing meta row TH-%d-TXN-%d", metaRow.ThreadID, metaRow.TxId)
+					// t.Logf("Writing meta row TH-%d-TXN-%d", metaRow.ThreadID, metaRow.TxId)
 					_, err = table.Insert(ctx, []*UnifiedRow{metaRow})
 					require.NoError(t, err, "Failed to insert meta row")
 
@@ -176,9 +176,9 @@ func TestWorkload4(t *testing.T) {
 		WithLogger(log.Log).
 		Execute(ctx, &metaRows)
 	require.NoError(t, err, "Failed to validate work rows")
-	for _, r := range metaRows {
-		t.Logf("Found row id=%d TH-%d-TX-%d w1=%d w2=%d", r.Id, r.ThreadID, r.TxId, r.WorkRow1, r.WorkRow2)
-	}
+	// for _, r := range metaRows {
+	// 	t.Logf("Found row id=%d TH-%d-TX-%d w1=%d w2=%d", r.Id, r.ThreadID, r.TxId, r.WorkRow1, r.WorkRow2)
+	// }
 
 	// 3 work rows match meta rows (i.e. the last update to a row was written by the correct
 	// thread in the correct tx)
@@ -187,7 +187,7 @@ func TestWorkload4(t *testing.T) {
 		if r.ThreadID == 0 {
 			continue
 		}
-		t.Logf("Looking for meta row TH-%d-TXN-%d", r.ThreadID, r.TxId)
+		// t.Logf("Looking for meta row TH-%d-TXN-%d", r.ThreadID, r.TxId)
 		var metarow UnifiedRow
 		err = knox.NewGenericQuery[UnifiedRow]().
 			WithTable(table).
@@ -205,6 +205,4 @@ func TestWorkload4(t *testing.T) {
 	// TODO
 	// - remember fault injection timestamp and check tranactions that committed before
 	//   are durable, txn that did not commit are not visible
-
-	log.Infof("Validation of work rows completed.")
 }

@@ -62,7 +62,7 @@ steps:
       WORKFLOW_ENGINE: pack
     commands:
       - apk add --no-cache git
-      - go test -v $(go list ./... | grep -v /internal/tests/run$)
+      - go test $(go list ./... | grep -v /internal/tests/run$)
       - go test -v ./internal/tests/run -timeout 1h -system wasm
 
 ---
@@ -94,7 +94,7 @@ steps:
       WORKFLOW_ENGINE: pack
     commands:
       - apk add --no-cache git
-      - go test -v $(go list ./... | grep -v /internal/tests/run$)
+      - go test $(go list ./... | grep -v /internal/tests/run$)
       - go test -v ./internal/tests/run -timeout 1h -system native
 
 ---
@@ -126,5 +126,5 @@ steps:
       WORKFLOW_ENGINE: lsm
     commands:
       - apk add --no-cache git
-      - go test -v $(go list ./... | grep -v /internal/tests/run$)
+      - go test $(go list ./... | grep -v /internal/tests/run$)
       - go test -v ./internal/tests/run -timeout 1h -system native

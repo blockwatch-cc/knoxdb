@@ -92,7 +92,7 @@ func TestKey(t *testing.T) {
 
 	// Create 10 containers
 	for i := 0; i < 10; i++ {
-		t.Logf("Creating a new container: %d\n", i)
+		// t.Logf("Creating a new container: %d\n", i)
 		ra.Set(uint64(i)<<16 + 1)
 	}
 
@@ -140,7 +140,7 @@ func TestBulkAdd(t *testing.T) {
 			start = time.Now()
 			// t.Logf("Bitmap:\n%s\n", ra)
 			if cnt == 3 {
-				t.Logf("Breaking out of the loop\n")
+				// t.Logf("Breaking out of the loop\n")
 				break
 			}
 		}
@@ -148,22 +148,22 @@ func TestBulkAdd(t *testing.T) {
 
 		if _, has := m[x]; has {
 			if !ra.Contains(x) {
-				t.Logf("x should be present: %d %#x. Bitmap: %s\n", x, x, ra)
+				// t.Logf("x should be present: %d %#x. Bitmap: %s\n", x, x, ra)
 				off, found := ra.keys.getValue(x & mask)
 				assert(found)
 				c := ra.getContainer(off)
 				lo := uint16(x)
-				t.Logf("x: %#x lo: %#x. offset: %d\n", x, lo, off)
+				// t.Logf("x: %#x lo: %#x. offset: %d\n", x, lo, off)
 				switch c[indexType] {
 				case typeArray:
 				case typeBitmap:
 					idx := lo / 16
 					pos := lo % 16
-					t.Logf("At idx: %d. Pos: %d val: %#b\n", idx, pos, c[startIdx+idx])
+					// t.Logf("At idx: %d. Pos: %d val: %#b\n", idx, pos, c[startIdx+idx])
 				}
 
-				t.Logf("Added: %d %#x. Added: %v\n", x, x, ra.Set(x))
-				t.Logf("After add. has: %v\n", ra.Contains(x))
+				// t.Logf("Added: %d %#x. Added: %v\n", x, x, ra.Set(x))
+				// t.Logf("After add. has: %v\n", ra.Contains(x))
 
 				// 				t.Logf("Hex dump of container at offset: %d\n%s\n", off, hex.Dump(toByteSlice(c)))
 				t.FailNow()
@@ -173,8 +173,8 @@ func TestBulkAdd(t *testing.T) {
 		m[x] = struct{}{}
 		// fmt.Printf("Setting x: %#x\n", x)
 		if added := ra.Set(x); !added {
-			t.Logf("Unable to set: %d %#x\n", x, x)
-			t.Logf("ra.Has(x): %v\n", ra.Contains(x))
+			// t.Logf("Unable to set: %d %#x\n", x, x)
+			// t.Logf("ra.Has(x): %v\n", ra.Contains(x))
 			t.FailNow()
 		}
 		// for x := range m {
@@ -186,7 +186,7 @@ func TestBulkAdd(t *testing.T) {
 		// }
 		// require.Truef(t, ra.Set(x), "Unable to set x: %d %#x\n", x, x)
 	}
-	t.Logf("Card: %d\n", len(m))
+	// t.Logf("Card: %d\n", len(m))
 	require.Equalf(t, len(m), ra.GetCardinality(), "Bitmap:\n%s\n", ra)
 	for x := range m {
 		require.True(t, ra.Contains(x))
@@ -199,7 +199,7 @@ func TestBulkAdd(t *testing.T) {
 	// }
 	// t.Logf("Data size: %d\n", len(ra.data))
 
-	t.Logf("Copying data. Size: %d\n", len(ra.data))
+	// t.Logf("Copying data. Size: %d\n", len(ra.data))
 	dup := make([]uint16, len(ra.data))
 	copy(dup, ra.data)
 
@@ -249,7 +249,7 @@ func TestBitmapOps(t *testing.T) {
 	N := 10000
 
 	for _, f := range F {
-		t.Logf("Using N: %d M: %d F: %d\n", N, M, f)
+		// t.Logf("Using N: %d M: %d F: %d\n", N, M, f)
 		small, big := NewBitmap(), NewBitmap()
 		occ := make(map[uint64]int)
 		smallMap := make(map[uint64]struct{})
@@ -282,9 +282,9 @@ func TestBitmapOps(t *testing.T) {
 		bitOr := Or(small, big)
 		bitAnd := And(small, big)
 
-		t.Logf("Sizes. small: %d big: %d, bitOr: %d bitAnd: %d\n",
-			small.GetCardinality(), big.GetCardinality(),
-			bitOr.GetCardinality(), bitAnd.GetCardinality())
+		// t.Logf("Sizes. small: %d big: %d, bitOr: %d bitAnd: %d\n",
+		// small.GetCardinality(), big.GetCardinality(),
+		// bitOr.GetCardinality(), bitAnd.GetCardinality())
 
 		cntOr, cntAnd := 0, 0
 		for x, freq := range occ {
@@ -319,7 +319,7 @@ func TestBitmapOps(t *testing.T) {
 		}
 		if cntAnd != bitAnd.GetCardinality() {
 			uids := bitAnd.ToArray()
-			t.Logf("Len Uids: %d Card: %d cntAnd: %d. Occ: %d\n", len(uids), bitAnd.GetCardinality(), cntAnd, len(occ))
+			// t.Logf("Len Uids: %d Card: %d cntAnd: %d. Occ: %d\n", len(uids), bitAnd.GetCardinality(), cntAnd, len(occ))
 
 			uidMap := make(map[uint64]struct{})
 			for _, u := range uids {
@@ -328,9 +328,9 @@ func TestBitmapOps(t *testing.T) {
 			for u := range occ {
 				delete(uidMap, u)
 			}
-			for x := range uidMap {
-				t.Logf("Remaining uids in UidMap: %d %#b\n", x, x)
-			}
+			// for x := range uidMap {
+			// t.Logf("Remaining uids in UidMap: %d %#b\n", x, x)
+			// }
 			require.FailNow(t, "Cardinality isn't matching")
 		}
 		require.Equal(t, cntOr, bitOr.GetCardinality())
@@ -341,7 +341,7 @@ func TestBitmapOps(t *testing.T) {
 func TestUint16(t *testing.T) {
 	a := uint16(0xfeff)
 	b := uint16(0x100)
-	t.Logf("a & b: %#x", a&b)
+	// t.Logf("a & b: %#x", a&b)
 	var x uint16
 	for i := 0; i < 100000; i++ {
 		prev := x

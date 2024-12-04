@@ -16,32 +16,32 @@ var (
 )
 
 // Bitset high-level benchmarks
-func BenchmarkBitsetSwap(B *testing.B) {
+func BenchmarkBitsetSwap(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		bits := fillBitset(nil, n.L, 0xfa)
 		bs := NewBitsetFromBytes(bits, n.L)
-		B.Run(n.Name, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(bitFieldLen(n.L)))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(bitFieldLen(n.L)))
+			for i := 0; i < b.N; i++ {
 				bs.Swap(i, n.L-i)
 			}
 		})
 	}
 }
 
-func BenchmarkBitsetIndexNative(B *testing.B) {
+func BenchmarkBitsetIndexNative(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		for _, d := range benchmarkDensities {
 			buf := fillBitsetRand(nil, n.L, d.D)
-			cnt := int(popcount(buf))
+			cnt := popcount(buf)
 			slice := make([]int, cnt, n.L)
 			bits := NewBitsetFromBytes(buf, n.L)
-			B.Run(n.Name+"-"+d.Name, func(B *testing.B) {
+			b.Run(n.Name+"-"+d.Name, func(b *testing.B) {
 				// we count hits in a bitset instead of raw throughput
-				B.SetBytes(int64(cnt))
-				B.ResetTimer()
-				for i := 0; i < B.N; i++ {
+				b.SetBytes(int64(cnt))
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
 					_ = bits.Indexes(slice)
 				}
 			})
@@ -49,18 +49,18 @@ func BenchmarkBitsetIndexNative(B *testing.B) {
 	}
 }
 
-func BenchmarkBitsetIndexOpt(B *testing.B) {
+func BenchmarkBitsetIndexOpt(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		for _, d := range benchmarkDensities {
 			buf := fillBitsetRand(nil, n.L, d.D)
-			cnt := int(popcount(buf))
+			cnt := popcount(buf)
 			slice := make([]uint32, cnt, n.L)
 			bits := NewBitsetFromBytes(buf, n.L)
-			B.Run(n.Name+"-"+d.Name, func(B *testing.B) {
+			b.Run(n.Name+"-"+d.Name, func(b *testing.B) {
 				// we count hits in a bitset instead of raw throughput
-				B.SetBytes(int64(cnt))
-				B.ResetTimer()
-				for i := 0; i < B.N; i++ {
+				b.SetBytes(int64(cnt))
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
 					_ = bits.IndexesU32(slice)
 				}
 			})

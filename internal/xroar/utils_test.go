@@ -29,7 +29,6 @@ func TestMemclr(t *testing.T) {
 		5: 10000 + 3,
 		6: 10000 + 4,
 	}
-	t.Logf("%x", b)
 	Memclr(b[:])
 	for _, ui := range b {
 		require.Equal(t, uint16(0), ui)

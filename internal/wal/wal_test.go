@@ -334,7 +334,7 @@ func TestWalEmptyRecords(t *testing.T) {
 		Tag:    types.ObjectTagTable,
 		Entity: 2,
 		TxID:   121,
-		Data:   [][]byte{[]byte{1}},
+		Data:   [][]byte{{1}},
 	}
 	_, err = w.Write(dataRec)
 	require.NoError(t, err, "Failed to write data record")
@@ -497,9 +497,9 @@ func TestWalSegmentRollover(t *testing.T) {
 			TxID:   uint64(i + 1),
 			Data:   [][]byte{bytes.Repeat([]byte("a"), 100)},
 		}
-		lsn, err := w.Write(rec)
+		_, err := w.Write(rec)
 		require.NoError(t, err)
-		t.Logf("Wrote record %d, LSN: %v", i, lsn)
+		// t.Logf("Wrote record %d, LSN: %v", i, lsn)
 		recordsWritten++
 		bytesWritten += HeaderSize + rec.BodySize()
 
@@ -507,10 +507,10 @@ func TestWalSegmentRollover(t *testing.T) {
 		err = w.Sync()
 		require.NoError(t, err)
 	}
-	t.Logf("Wrote %d records, total bytes: %d", recordsWritten, bytesWritten)
+	// t.Logf("Wrote %d records, total bytes: %d", recordsWritten, bytesWritten)
 
 	expectedSegments := (bytesWritten + int(opts.MaxSegmentSize) - 1) / int(opts.MaxSegmentSize)
-	t.Logf("Expected segments: %d", expectedSegments)
+	// t.Logf("Expected segments: %d", expectedSegments)
 
 	// Check for multiple segment files
 	files, err := os.ReadDir(testDir)
@@ -519,15 +519,15 @@ func TestWalSegmentRollover(t *testing.T) {
 	for _, file := range files {
 		if strings.HasSuffix(file.Name(), SEG_FILE_SUFFIX) {
 			segmentCount++
-			fileInfo, err := os.Stat(filepath.Join(testDir, file.Name()))
+			_, err := os.Stat(filepath.Join(testDir, file.Name()))
 			if err != nil {
 				t.Logf("Error getting file info for %s: %v", file.Name(), err)
 				continue
 			}
-			t.Logf("Segment file: %s, size: %d", file.Name(), fileInfo.Size())
+			// t.Logf("Segment file: %s, size: %d", file.Name(), fileInfo.Size())
 		}
 	}
-	t.Logf("Found %d segment files", segmentCount)
+	// t.Logf("Found %d segment files", segmentCount)
 	assert.Equal(t, expectedSegments, segmentCount, "Unexpected number of segment files")
 }
 
@@ -791,7 +791,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 
 	// Truncate the file to simulate partial write
 	newSz := info.Size() - int64(len(partialRec.Data))
-	t.Logf("Truncate from %d to %d", info.Size(), newSz)
+	// t.Logf("Truncate from %d to %d", info.Size(), newSz)
 	err = f.Truncate(newSz)
 	require.NoError(t, err)
 	err = f.Close()
@@ -862,7 +862,7 @@ func TestWalFaultInjection(t *testing.T) {
 			Type: RecordTypeInsert,
 			TxID: 1,
 			Tag:  types.ObjectTagDatabase,
-			Data: [][]byte{bytes.Repeat([]byte("a"), int(opts.MaxSegmentSize)+1)}, // Force new segment creation
+			Data: [][]byte{bytes.Repeat([]byte("a"), opts.MaxSegmentSize+1)}, // Force new segment creation
 		}
 		_, err = w.Write(rec)
 		assert.Error(t, err, "Expected an error when writing to a read-only directory")
@@ -895,7 +895,7 @@ func TestWalFaultInjection(t *testing.T) {
 		require.NoError(t, err)
 		defer f.Close()
 
-		_, err = f.Seek(int64(lsn.Offset(w.opts.MaxSegmentSize))+HeaderSize-8, io.SeekStart)
+		_, err = f.Seek(lsn.Offset(w.opts.MaxSegmentSize)+HeaderSize-8, io.SeekStart)
 		require.NoError(t, err)
 
 		_, err = f.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0}) // Overwrite checksum with zeros
