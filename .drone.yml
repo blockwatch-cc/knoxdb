@@ -15,23 +15,23 @@ environment:
   CGO_ENABLED: 0
 
 steps:
-- name: run linter
-  image: golangci/golangci-lint:1.62.0-go1.23.3
-  commands:
-    - golangci-lint run
+  - name: run linter
+    image: golangci/golangci-lint:1.62.0-go1.23.3
+    commands:
+      - golangci-lint run
 
-- name: scan the files
-  image: aquasec/trivy:0.57.1
-  commands:
-    - trivy fs --exit-code 1 --scanners vuln,config ./
-    - trivy config --exit-code 1 ./
+  - name: scan the files
+    image: aquasec/trivy:0.57.1
+    commands:
+      - trivy fs --exit-code 1 --scanners vuln,config ./
+      - trivy config --exit-code 1 ./
 
-- name: go test
-  image: golang:1.23.3-alpine
-  commands:
-    - apk add --no-cache git
-    - go vet ./...
-    - go test -v $(go list ./... | grep -v /internal/tests/run$)
+  - name: go test
+    image: golang:1.23.3-alpine
+    commands:
+      - apk add --no-cache git
+      - go vet ./...
+      - go test -v $(go list ./... | grep -v /internal/tests/run$)
 
 ---
 kind: pipeline
@@ -55,15 +55,15 @@ environment:
   CGO_ENABLED: 0
 
 steps:
-- name: go test
-  image: golang:1.23.3-alpine
-  environment:
-    WORKFLOW_DRIVER=mem
-    WORKFLOW_ENGINE=pack
-  commands:
-    - apk add --no-cache git
-    - go vet ./...
-    - go test -v ./internal/tests/run -timeout 1h -system wasm
+  - name: go test
+    image: golang:1.23.3-alpine
+    environment:
+      WORKFLOW_DRIVER: mem
+      WORKFLOW_ENGINE: pack
+    commands:
+      - apk add --no-cache git
+      - go vet ./...
+      - go test -v ./internal/tests/run -timeout 1h -system wasm
 
 ---
 kind: pipeline
@@ -87,15 +87,15 @@ environment:
   CGO_ENABLED: 0
 
 steps:
-- name: go test
-  image: golang:1.23.3-alpine
-  environment:
-    WORKFLOW_DRIVER=bolt
-    WORKFLOW_ENGINE=pack
-  commands:
-    - apk add --no-cache git
-    - go vet ./...
-    - go test -v ./internal/tests/run -timeout 1h -system native
+  - name: go test
+    image: golang:1.23.3-alpine
+    environment:
+      WORKFLOW_DRIVER: bolt
+      WORKFLOW_ENGINE: pack
+    commands:
+      - apk add --no-cache git
+      - go vet ./...
+      - go test -v ./internal/tests/run -timeout 1h -system native
 
 ---
 kind: pipeline
@@ -119,12 +119,12 @@ environment:
   CGO_ENABLED: 0
 
 steps:
-- name: go test
-  image: golang:1.23.3-alpine
-  environment:
-    WORKFLOW_DRIVER=badger
-    WORKFLOW_ENGINE=lsm
-  commands:
-    - apk add --no-cache git
-    - go vet ./...
-    - go test -v ./internal/tests/run -timeout 1h -system native
+  - name: go test
+    image: golang:1.23.3-alpine
+    environment:
+      WORKFLOW_DRIVER: badger
+      WORKFLOW_ENGINE: lsm
+    commands:
+      - apk add --no-cache git
+      - go vet ./...
+      - go test -v ./internal/tests/run -timeout 1h -system native
