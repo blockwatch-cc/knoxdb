@@ -59,6 +59,7 @@ func TestWorkload4(t *testing.T) {
 	const numWorkRows = 16
 
 	var wg sync.WaitGroup
+	threadMaps := make([]sync.Map, numThreads)
 
 	log.Infof("Starting TestWorkload4 with %d threads and %d transactions per thread", numThreads, txnSize)
 
@@ -77,8 +78,9 @@ func TestWorkload4(t *testing.T) {
 
 	// Multi-threaded interleaved operations
 	for threadID := 1; threadID <= numThreads; threadID++ {
+		threadMap := &threadMaps[threadID-1]
 		wg.Add(1)
-		go func(threadID int) {
+		go func(threadID int, thMap *sync.Map) {
 			start := time.Now()
 			defer func() {
 				log.Infof("Thread %d completed in %s", threadID, time.Since(start))
@@ -124,16 +126,16 @@ func TestWorkload4(t *testing.T) {
 						WorkRow2:  workRowID2,
 					}
 
-					// t.Logf("Writing meta row TH-%d-TXN-%d", metaRow.ThreadID, metaRow.TxId)
+					t.Logf("Writing meta row TH-%d-TXN-%d", metaRow.ThreadID, metaRow.TxId)
 					_, err = table.Insert(ctx, []*UnifiedRow{metaRow})
 					require.NoError(t, err, "Failed to insert meta row")
 
 					require.NoError(t, commit(), "Commit failed")
 
-					// TODO: maybe keep after commit timestamp
+					thMap.Store(metaRow.Id, time.Now().UTC())
 				}(i)
 			}
-		}(threadID)
+		}(threadID, threadMap)
 	}
 
 	// Wait for all threads to complete
@@ -208,4 +210,44 @@ func TestWorkload4(t *testing.T) {
 	// TODO
 	// - remember fault injection timestamp and check tranactions that committed before
 	//   are durable, txn that did not commit are not visible
+
+	// 4 check multiple row with each transaction
+	// eg. the work rows and meta rows
+	for txId := 1; txId <= txnSize; txId++ {
+		for thId := 1; thId <= numThreads; thId++ {
+			var txMetaRow UnifiedRow
+			err = knox.NewGenericQuery[UnifiedRow]().
+				WithTable(table).
+				AndEqual("row_type", RowTypeMeta).
+				AndEqual("tx_id", txId).
+				AndEqual("thread_id", thId).
+				Execute(ctx, &txMetaRow)
+			require.NoError(t, err)
+			require.NotEqual(t, txMetaRow.Id, uint64(0))
+
+			var txWorkRow1 UnifiedRow
+			err = knox.NewGenericQuery[UnifiedRow]().
+				WithTable(table).
+				AndEqual("row_type", RowTypeWork).
+				AndEqual("tx_id", txId).
+				AndEqual("thread_id", thId).
+				AndEqual("work_row_1", txMetaRow.WorkRow1).
+				Execute(ctx, &txWorkRow1)
+			require.NoError(t, err)
+			require.NotEqual(t, uint(0), txWorkRow1.Id)
+
+			var txWorkRow2 UnifiedRow
+			err = knox.NewGenericQuery[UnifiedRow]().
+				WithTable(table).
+				AndEqual("row_type", RowTypeWork).
+				AndEqual("tx_id", txId).
+				AndEqual("thread_id", thId).
+				AndEqual("work_row_2", txMetaRow.WorkRow2).
+				Execute(ctx, &txWorkRow2)
+			require.NoError(t, err)
+			require.NotEqual(t, uint(0), txWorkRow2.Id)
+		}
+	}
+
+	log.Infof("Validation of work rows completed.")
 }

@@ -108,6 +108,7 @@ func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*bitmap.B
 		bits, err = idx.lookupKeys(ctx, keys, node.Filter.Mode)
 
 	case types.IndexTypeInt:
+
 		// execute the condition directly (like on table scans)
 		bits, err = idx.queryKeys(ctx, node)
 	}
