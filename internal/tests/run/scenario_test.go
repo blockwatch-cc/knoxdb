@@ -131,6 +131,13 @@ func TestScenarios(t *testing.T) {
 		err = run(dirPath, f)
 		if err != nil {
 			errsNum++
+
+			errInfo := fmt.Sprintf("failed to run scenario: %v", err)
+			t.Log(errInfo)
+
+			_, err = f.WriteString(errInfo)
+			require.NoError(t, err)
+
 			_, err = f.WriteString(endInfo)
 			require.NoError(t, err)
 
