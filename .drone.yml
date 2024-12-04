@@ -53,13 +53,14 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
+  WORKFLOW_DRIVER: mem
+  WORKFLOW_ENGINE: pack
+  MINIO_BUCKET: scenarios
+  MINIO_URL: h3.bwd.cx
 
 steps:
   - name: go test
     image: golang:1.23-alpine
-    environment:
-      WORKFLOW_DRIVER: mem
-      WORKFLOW_ENGINE: pack
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$)
@@ -85,13 +86,14 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
+  WORKFLOW_DRIVER: mem
+  WORKFLOW_ENGINE: pack
+  MINIO_BUCKET: scenarios
+  MINIO_URL: h3.bwd.cx
 
 steps:
   - name: go test
     image: golang:1.23-alpine
-    environment:
-      WORKFLOW_DRIVER: bolt
-      WORKFLOW_ENGINE: pack
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$)
@@ -117,13 +119,14 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
+  WORKFLOW_DRIVER: mem
+  WORKFLOW_ENGINE: pack
+  MINIO_BUCKET: scenarios
+  MINIO_URL: h3.bwd.cx
 
 steps:
   - name: go test
     image: golang:1.23-alpine
-    environment:
-      WORKFLOW_DRIVER: badger
-      WORKFLOW_ENGINE: lsm
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$)
