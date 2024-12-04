@@ -16,18 +16,18 @@ environment:
 
 steps:
   - name: run linter
-    image: golangci/golangci-lint:1.62.0-go1.23.3
+    image: golangci/golangci-lint:v1.62.2-alpine
     commands:
       - golangci-lint run
 
   - name: scan the files
-    image: aquasec/trivy:0.57.1
+    image: aquasec/trivy:0.58.0
     commands:
       - trivy fs --exit-code 1 --scanners vuln,config ./
       - trivy config --exit-code 1 ./
 
   - name: go test
-    image: golang:1.23.3-alpine
+    image: golang:1.23-alpine
     commands:
       - apk add --no-cache git
       - go vet ./...
@@ -56,7 +56,7 @@ environment:
 
 steps:
   - name: go test
-    image: golang:1.23.3-alpine
+    image: golang:1.23-alpine
     environment:
       WORKFLOW_DRIVER: mem
       WORKFLOW_ENGINE: pack
@@ -88,7 +88,7 @@ environment:
 
 steps:
   - name: go test
-    image: golang:1.23.3-alpine
+    image: golang:1.23-alpine
     environment:
       WORKFLOW_DRIVER: bolt
       WORKFLOW_ENGINE: pack
@@ -120,7 +120,7 @@ environment:
 
 steps:
   - name: go test
-    image: golang:1.23.3-alpine
+    image: golang:1.23-alpine
     environment:
       WORKFLOW_DRIVER: badger
       WORKFLOW_ENGINE: lsm
