@@ -15,6 +15,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/minio/minio-go/v7"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 )
 
 var (
@@ -102,7 +103,7 @@ func TestScenarios(t *testing.T) {
 
 	i := 0
 	errsNum := uint64(0)
-	now := time.Now()
+	l := rate.NewLimiter(rate.Limit(maxErrorFreq), int(maxErrorFreq)*60)
 	for {
 		// generate random seed and run multiple iterations from 0...n
 		var rnd uint64
@@ -162,11 +163,12 @@ func TestScenarios(t *testing.T) {
 		require.NoError(t, err)
 
 		if maxError > 0 && errsNum >= maxError {
+			t.Log("Stopping due to too many errors")
 			break
 		}
 
-		errFreq := float64(errsNum) / time.Since(now).Seconds()
-		if maxErrorFreq > 0 && errFreq >= maxErrorFreq {
+		if !l.Allow() {
+			t.Log("Stopping due to too many errors")
 			break
 		}
 	}
