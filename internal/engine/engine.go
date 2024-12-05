@@ -495,6 +495,10 @@ func (e *Engine) Wal() *wal.Wal {
 	return e.wal
 }
 
+func (e *Engine) Options() DatabaseOptions {
+	return e.opts
+}
+
 func (e *Engine) BlockCache() BlockCacheType {
 	return e.cache.blocks
 }

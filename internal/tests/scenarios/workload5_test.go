@@ -369,7 +369,8 @@ func TestWorkload5(t *testing.T) {
 			_ = errg.Wait()
 
 			// reopen
-			db.Update(tests.OpenTestEngine(t, tests.NewTestDatabaseOptions(t, "")))
+			dbo := tests.NewTestDatabaseOptions(t, "").WithPath(db.Get().Options().Path)
+			db.Update(tests.OpenTestEngine(t, dbo))
 			cmdCh <- cmd
 
 		case crash:
@@ -378,7 +379,8 @@ func TestWorkload5(t *testing.T) {
 			_ = errg.Wait()
 
 			// reopen
-			db.Update(tests.OpenTestEngine(t, tests.NewTestDatabaseOptions(t, "")))
+			dbo := tests.NewTestDatabaseOptions(t, "").WithPath(db.Get().Options().Path)
+			db.Update(tests.OpenTestEngine(t, dbo))
 			cmdCh <- cmd
 		}
 	}
