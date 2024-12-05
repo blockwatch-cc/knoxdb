@@ -1,10 +1,10 @@
 package run
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,16 +15,21 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/minio/minio-go/v7"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 )
 
 var (
 	randomEnvKey = "GORANDSEED"
 
-	sys string // wasm, native
+	sys          string // wasm, native
+	maxError     uint64
+	maxErrorFreq float64
 )
 
 func init() {
 	flag.StringVar(&sys, "system", "wasm", "set os. wasm/native")
+	flag.Uint64Var(&maxError, "max-errors", 0, "stop the test runner after N total observed errors")
+	flag.Float64Var(&maxErrorFreq, "max-error-freq", 0, "stops the test runner when the rate of errors observed per second is greater than N (inclusive)")
 }
 
 func buildTest(t *testing.T, dirPath string) {
@@ -50,17 +55,21 @@ func buildTestInWasm(t *testing.T, dirPath string) {
 	os.Setenv("GOARCH", goarch)
 }
 
-func runTestInWasm(dirPath string) ([]byte, error) {
+func runTestInWasm(dirPath string, w io.Writer) error {
 	cmdRuntime := exec.Command("go", "run", "../dst/runtime", "-vvv", "-module", filepath.Join(dirPath, "scenarios.test"))
-	return cmdRuntime.CombinedOutput()
+	cmdRuntime.Stderr = w
+	cmdRuntime.Stdout = w
+	return cmdRuntime.Run()
 }
 
-func runTestInNative(dirPath string) ([]byte, error) {
+func runTestInNative(dirPath string, w io.Writer) error {
 	cmdRuntime := exec.Command(filepath.Join(dirPath, "scenarios.test"))
-	return cmdRuntime.CombinedOutput()
+	cmdRuntime.Stderr = w
+	cmdRuntime.Stdout = w
+	return cmdRuntime.Run()
 }
 
-func setup() (func(*testing.T, string), func(string) ([]byte, error)) {
+func setup() (func(*testing.T, string), func(string, io.Writer) error) {
 	switch sys {
 	case "wasm":
 		return buildTestInWasm, runTestInWasm
@@ -70,10 +79,11 @@ func setup() (func(*testing.T, string), func(string) ([]byte, error)) {
 }
 
 func TestScenarios(t *testing.T) {
+	dirPath := t.TempDir()
+	path = util.NonEmptyString(os.Getenv("LOGS_PATH"), dirPath)
 	require.NotEmpty(t, path, "environment vairable 'LOGS_PATH' should not be empty")
 
 	ctx := context.Background()
-	dirPath := t.TempDir()
 
 	t.Log("Loading s3 client")
 	s3, err := LoadStorage()
@@ -84,7 +94,16 @@ func TestScenarios(t *testing.T) {
 	t.Log("Building scenarios test cases")
 	build(t, dirPath)
 
+	var f *os.File
+	defer func() {
+		if f != nil {
+			f.Close()
+		}
+	}()
+
 	i := 0
+	errsNum := uint64(0)
+	l := rate.NewLimiter(rate.Limit(maxErrorFreq), int(maxErrorFreq)*60)
 	for {
 		// generate random seed and run multiple iterations from 0...n
 		var rnd uint64
@@ -97,49 +116,60 @@ func TestScenarios(t *testing.T) {
 
 		startInfo := fmt.Sprintf("starting scenario iteration i = %d, using %s=%d \n", i, randomEnvKey, rnd)
 		endInfo := fmt.Sprintf("completed scenario iteration i = %d, using %s=%d \n", i, randomEnvKey, rnd)
-		t.Log(startInfo)
 
 		err := os.Setenv(randomEnvKey, strconv.FormatUint(rnd, 10))
 		require.NoError(t, err)
 
-		shouldStop := false
-		res, err := run(dirPath)
+		// create file
+		errname := fmt.Sprintf("%d_%d.log", rnd, time.Now().Unix())
+		errpath := filepath.Join(path, errname)
+		f, err = os.Create(errpath)
+		require.NoError(t, err)
+
+		_, err = f.WriteString(startInfo)
+		require.NoError(t, err)
+
+		err = run(dirPath, f)
 		if err != nil {
-			shouldStop = true
-		}
-		t.Log(endInfo)
+			errsNum++
 
-		if bytes.Contains(res, []byte("FAIL:")) {
-			// buffer
-			buf := bytes.NewBuffer(nil)
-			_, err2 := buf.WriteString(startInfo)
-			require.NoError(t, err2)
-			_, err2 = buf.Write(res)
-			require.NoError(t, err2)
-			_, err2 = buf.WriteString(endInfo)
-			require.NoError(t, err2)
+			errInfo := fmt.Sprintf("failed to run scenario: %v", err)
+			t.Log(errInfo)
 
-			// store to file
-			errname := fmt.Sprintf("%d_%d.log", rnd, time.Now().Unix())
-			errpath := filepath.Join(path, errname)
-			err2 = os.WriteFile(errpath, buf.Bytes(), 0644)
-			require.NoError(t, err2)
+			_, err = f.WriteString(errInfo)
+			require.NoError(t, err)
+
+			_, err = f.WriteString(endInfo)
+			require.NoError(t, err)
+
+			err = f.Close()
+			require.NoError(t, err)
+			f = nil
 
 			// upload
 			if !skipUpload {
-				_, err2 = s3.FPutObject(ctx, s3bucket, errname, errpath, minio.PutObjectOptions{})
-				require.NoError(t, err2)
+				_, err = s3.FPutObject(ctx, s3bucket, errname, errpath, minio.PutObjectOptions{})
+				require.NoError(t, err)
 			}
-
-			t.Log(string(res))
 		}
 
-		if shouldStop {
+		if f != nil {
+			err = f.Close()
 			require.NoError(t, err)
+			f = nil
+		}
+
+		err = os.Remove(errpath)
+		require.NoError(t, err)
+
+		if maxError > 0 && errsNum >= maxError {
+			t.Log("Stopping due to too many errors")
+			break
+		}
+
+		if !l.Allow() {
+			t.Log("Stopping due to too many errors")
 			break
 		}
 	}
-
-	// reset
-	os.Setenv(randomEnvKey, "")
 }
