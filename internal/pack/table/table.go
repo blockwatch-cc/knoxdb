@@ -299,34 +299,38 @@ func (t *Table) Drop(ctx context.Context) error {
 
 func (t *Table) Sync(ctx context.Context) error {
 	// FIXME: refactor legacy
-	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
-	if err != nil {
-		return err
-	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
-	// store journal
-	if err := t.storeJournal(ctx); err != nil {
-		return err
-	}
+	// use db write transaction
+	return t.db.Update(func(tx store.Tx) error {
+		// store journal
+		if err := t.storeJournal(ctx, tx); err != nil {
+			return err
+		}
 
-	// store state
-	if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
-		return err
-	}
+		// store state
+		if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
+			return err
+		}
 
-	// store stats
-	n, err := t.stats.Store(ctx, t.statsBucket(tx))
-	if err != nil {
-		return err
-	}
-	atomic.AddInt64(&t.metrics.MetaBytesWritten, int64(n))
-	atomic.StoreInt64(&t.metrics.PacksCount, int64(t.stats.Len()))
-	atomic.StoreInt64(&t.metrics.MetaSize, int64(t.stats.HeapSize()))
+		// store stats
+		n, err := t.stats.Store(ctx, t.statsBucket(tx))
+		if err != nil {
+			return err
+		}
 
-	return nil
+		atomic.AddInt64(&t.metrics.MetaBytesWritten, int64(n))
+		atomic.StoreInt64(&t.metrics.PacksCount, int64(t.stats.Len()))
+		atomic.StoreInt64(&t.metrics.MetaSize, int64(t.stats.HeapSize()))
+
+		return nil
+	})
 }
 
 func (t *Table) Truncate(ctx context.Context) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
 	if err != nil {
 		return err

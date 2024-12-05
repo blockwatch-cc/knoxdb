@@ -13,6 +13,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 	logpkg "github.com/echa/log"
 )
@@ -529,25 +530,18 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 	t.journal.Reset()
 
 	// save (now empty) journal and tombstone
-	return t.storeJournal(ctx)
+	return t.storeJournal(ctx, tx)
 }
 
-func (t *Table) storeJournal(ctx context.Context) error {
-	// use write transaction
-	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
-	if err != nil {
-		return err
-	}
-
-	nTuples, nTomb := t.journal.Len(), t.journal.TombLen()
+func (t *Table) storeJournal(ctx context.Context, tx store.Tx) error {
 	nJournalBytes, nTombBytes, err := t.journal.StoreLegacy(ctx, tx, t.schema.Name())
 	if err != nil {
 		return err
 	}
-	atomic.AddInt64(&t.metrics.JournalTuplesFlushed, int64(nTuples))
+	atomic.AddInt64(&t.metrics.JournalTuplesFlushed, int64(t.journal.Len()))
 	atomic.AddInt64(&t.metrics.JournalPacksStored, 1)
 	atomic.AddInt64(&t.metrics.JournalBytesWritten, int64(nJournalBytes))
-	atomic.AddInt64(&t.metrics.TombstoneTuplesFlushed, int64(nTomb))
+	atomic.AddInt64(&t.metrics.TombstoneTuplesFlushed, int64(t.journal.TombLen()))
 	atomic.AddInt64(&t.metrics.TombstonePacksStored, 1)
 	atomic.AddInt64(&t.metrics.TombstoneBytesWritten, int64(nTombBytes))
 	atomic.StoreInt64(&t.metrics.JournalDiskSize, int64(nJournalBytes))

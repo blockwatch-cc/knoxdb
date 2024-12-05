@@ -80,8 +80,14 @@ func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, 
 	}
 
 	// use block cache to lookup
-	bcache := engine.GetEngine(ctx).BlockCache()
-	ckey := engine.CacheKeyType{cacheKey, 0}
+	var (
+		bcache engine.BlockCacheType
+		ckey   engine.CacheKeyType
+	)
+	if useCache {
+		bcache = engine.GetEngine(ctx).BlockCache()
+		ckey = engine.CacheKeyType{cacheKey, 0}
+	}
 
 	var n int
 	for i, f := range p.schema.Fields() {
@@ -197,8 +203,14 @@ func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint6
 	}
 
 	// remove updated blocks from cache
-	bcache := engine.GetEngine(ctx).BlockCache()
-	ckey := engine.CacheKeyType{cacheKey, 0}
+	var (
+		bcache engine.BlockCacheType
+		ckey   engine.CacheKeyType
+	)
+	if cacheKey > 0 {
+		bcache = engine.GetEngine(ctx).BlockCache()
+		ckey = engine.CacheKeyType{cacheKey, 0}
+	}
 
 	var n int
 	for i, f := range p.schema.Fields() {
@@ -246,8 +258,10 @@ func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint6
 		p.blocks[i].SetClean()
 
 		// drop cached blocks
-		ckey[1] = blockKey(p.key, f.Id())
-		bcache.Remove(ckey)
+		if bcache != nil {
+			ckey[1] = blockKey(p.key, f.Id())
+			bcache.Remove(ckey)
+		}
 	}
 
 	return n, nil
@@ -259,9 +273,15 @@ func (p *Package) Remove(ctx context.Context, bucket store.Bucket, cacheKey uint
 		return engine.ErrNoBucket
 	}
 
-	// remove blocks from cache
-	bcache := engine.GetEngine(ctx).BlockCache()
-	ckey := engine.CacheKeyType{cacheKey, 0}
+	// remove updated blocks from cache
+	var (
+		bcache engine.BlockCacheType
+		ckey   engine.CacheKeyType
+	)
+	if cacheKey > 0 {
+		bcache = engine.GetEngine(ctx).BlockCache()
+		ckey = engine.CacheKeyType{cacheKey, 0}
+	}
 
 	for _, f := range p.schema.Fields() {
 		// don't check if key exists
@@ -271,8 +291,10 @@ func (p *Package) Remove(ctx context.Context, bucket store.Bucket, cacheKey uint
 		}
 
 		// drop cached blocks
-		ckey[1] = blockKey(p.key, f.Id())
-		bcache.Remove(ckey)
+		if bcache != nil {
+			ckey[1] = blockKey(p.key, f.Id())
+			bcache.Remove(ckey)
+		}
 	}
 
 	return nil

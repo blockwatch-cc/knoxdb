@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -293,6 +294,8 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 
 func (e *Engine) Close(ctx context.Context) error {
 	e.log.Debugf("Closing database %s at %s", e.cat.name, e.path)
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	// set shutdown flag to prevent new transactions
 	e.shutdown.Store(true)
@@ -389,6 +392,8 @@ func (e *Engine) Close(ctx context.Context) error {
 
 func (e *Engine) ForceShutdown() error {
 	e.log.Debugf("Force shutdown database %s at %s", e.cat.name, e.path)
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	// set shutdown flag to prevent new transactions
 	e.shutdown.Store(true)
@@ -503,17 +508,11 @@ func (e *Engine) Log() log.Logger {
 }
 
 func (e *Engine) Sync(ctx context.Context) error {
-	// TODO: in wal mode this becomes unnecessary unless we offer a custom config option
-
-	// without wal tables write their journal here which requires a tx
-	ctx, _, commit, abort, err := e.WithTransaction(ctx)
-	if err != nil {
-		return err
-	}
-	defer abort()
+	// write explicit checkpoints for all storage backends
+	// legacy tables without wal write their journal here
 
 	errg := &errgroup.Group{}
-	errg.SetLimit(len(e.tables))
+	errg.SetLimit(runtime.NumCPU())
 
 	// sync tables
 	for _, t := range e.tables {
@@ -525,12 +524,7 @@ func (e *Engine) Sync(ctx context.Context) error {
 	// 	errg.Go(func() error { return s.Sync(ctx) })
 	// }
 
-	if err := errg.Wait(); err != nil {
-		return err
-	}
-
-	// commit open tx
-	return commit()
+	return errg.Wait()
 }
 
 func (e *Engine) CommitTx(ctx context.Context, oid, xid uint64) error {

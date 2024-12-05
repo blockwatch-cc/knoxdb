@@ -3,7 +3,9 @@
 
 package engine
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+)
 
 type DatabaseMetrics struct {
 	CacheCapacity int64
