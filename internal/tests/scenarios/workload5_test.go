@@ -50,7 +50,7 @@ const (
 
 var (
 	cmdNames = "insert_update_delete_query_stream_sync_compact_snapshot_restart_crash"
-	cmdOfs   = []int{0, 7, 14, 21, 27, 34, 39, 47, 56, 64, 69}
+	cmdOfs   = []int{0, 7, 14, 21, 27, 34, 39, 47, 56, 64, 70}
 	cumProbs []float64
 	commands = []command{
 		insert,
@@ -384,7 +384,7 @@ func TestWorkload5(t *testing.T) {
 	}
 
 	// Wait for all requests to complete.
-	require.NoError(t, errg.Wait())
+	require.NoError(t, errg.Wait(), "command error")
 
 	// close statistics channel
 	close(cmdCh)
@@ -398,10 +398,10 @@ func TestWorkload5(t *testing.T) {
 
 	t.Log("Verifying data integrity.")
 	table, err := db.Get().UseTable(tableName)
-	require.NoError(t, err)
+	require.NoError(t, err, "use table")
 	m := table.Metrics()
-	t.Logf("%#v", m)
-	require.Equal(t, numTuples, m.TupleCount)
+	t.Logf("Metrics: %s", util.ToString(m))
+	require.Equal(t, numTuples, m.TupleCount, "tuple count")
 	t.Log("OK.")
 	require.NoError(t, db.Get().Close(ctx))
 }

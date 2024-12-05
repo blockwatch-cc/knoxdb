@@ -1,6 +1,7 @@
 package run
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/echa/config"
@@ -9,19 +10,26 @@ import (
 )
 
 var (
-	s3endpoint, s3user, s3secret, s3bucket, path string
-	skipUpload                                   bool
-	defaultIter                                  []uint64
+	s3endpoint, s3user, s3secret, s3bucket string
+	skipUpload                             bool
+	defaultIter                            []uint64
 )
 
 func init() {
 	defaultIter = config.GetUint64Slice("DEFAULT_ITERS")
 	skipUpload = config.GetBool(os.Getenv("SKIP_UPLOAD"))
-	path = os.Getenv("LOGS_PATH")
-	s3user = os.Getenv("MINIO_USER")
-	s3bucket = os.Getenv("MINIO_BUCKET")
-	s3secret = os.Getenv("MINIO_SECRET")
-	s3endpoint = os.Getenv("MINIO_URL")
+	s3user = requireEnv("MINIO_USER")
+	s3bucket = requireEnv("MINIO_BUCKET")
+	s3secret = requireEnv("MINIO_SECRET")
+	s3endpoint = requireEnv("MINIO_URL")
+}
+
+func requireEnv(name string) string {
+	s := os.Getenv(name)
+	if s == "" {
+		panic(fmt.Errorf("Missing env var %s", name))
+	}
+	return s
 }
 
 func LoadStorage() (*minio.Client, error) {

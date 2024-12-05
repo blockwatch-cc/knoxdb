@@ -56,7 +56,7 @@ func buildTestInWasm(t *testing.T, dirPath string) {
 }
 
 func runTestInWasm(dirPath string, w io.Writer) error {
-	cmdRuntime := exec.Command("go", "run", "../dst/runtime", "-vvv", "-module", filepath.Join(dirPath, "scenarios.test"))
+	cmdRuntime := exec.Command("go", "run", "../wasm/runtime", "-vvv", "-module", filepath.Join(dirPath, "scenarios.test"))
 	cmdRuntime.Stderr = w
 	cmdRuntime.Stdout = w
 	return cmdRuntime.Run()
@@ -80,7 +80,7 @@ func setup() (func(*testing.T, string), func(string, io.Writer) error) {
 
 func TestScenarios(t *testing.T) {
 	dirPath := t.TempDir()
-	path = util.NonEmptyString(os.Getenv("LOGS_PATH"), dirPath)
+	path := util.NonEmptyString(os.Getenv("LOGS_PATH"), dirPath)
 	require.NotEmpty(t, path, "environment vairable 'LOGS_PATH' should not be empty")
 
 	ctx := context.Background()

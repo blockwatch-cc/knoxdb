@@ -18,7 +18,7 @@ import (
 	"unicode/utf8"
 )
 
-var stringerType = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
+// var stringerType = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
 
 func ToString(s any) string {
 	if s == nil {
@@ -85,8 +85,18 @@ func ToRawString(t interface{}) (string, error) {
 		// []byte
 		b := val.Bytes()
 		return hex.EncodeToString(b), nil
+	case reflect.Struct:
+		var b strings.Builder
+		for i, l := 0, val.NumField(); i < l; i++ {
+			f := val.Field(i)
+			b.WriteString(typ.Field(i).Name)
+			b.WriteByte(':')
+			b.WriteString(ToString(f.Interface()))
+			b.WriteByte(' ')
+		}
+		return b.String(), nil
 	}
-	return "", fmt.Errorf("no method for converting type %s (%v) to string", typ.String(), val.Kind())
+	return "", fmt.Errorf("no method for converting type %s (%v) to string", typ, val.Kind())
 }
 
 type StringList []string
@@ -119,14 +129,14 @@ func (l *StringList) AddFront(r string) StringList {
 }
 
 func (l *StringList) AddUnique(r string) StringList {
-	if !(*l).Contains(r) {
+	if !l.Contains(r) {
 		l.Add(r)
 	}
 	return *l
 }
 
 func (l *StringList) AddUniqueFront(r string) StringList {
-	if !(*l).Contains(r) {
+	if !l.Contains(r) {
 		l.AddFront(r)
 	}
 	return *l
@@ -254,17 +264,17 @@ func FromCamelCase(src, sep string) string {
 			offs = len(src) - idx
 		}
 		chunks = append(chunks, strings.ToLower(src[idx:idx+offs]))
-		idx = idx + offs
+		idx += offs
 	}
 	return strings.Join(chunks, sep)
 }
 
 func EscapeWhitespace(s string) string {
-	return strings.Replace(s, " ", "%20", -1)
+	return strings.ReplaceAll(s, " ", "%20")
 }
 
 func UnescapeWhitespace(s string) string {
-	return strings.Replace(s, "%20", " ", -1)
+	return strings.ReplaceAll(s, "%20", " ")
 }
 
 func TrimAllSpace(str string) string {
