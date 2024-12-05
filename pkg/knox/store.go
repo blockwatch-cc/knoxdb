@@ -17,9 +17,6 @@ var _ Store = (*StoreImpl)(nil)
 type StoreImpl struct {
 	db    Database
 	store engine.StoreEngine
-	dec   *schema.Decoder
-	enc   *schema.Encoder
-	buf   *bytes.Buffer
 }
 
 func (s StoreImpl) DB() Database {
@@ -79,8 +76,8 @@ func UseGenericStore[T any](name string, db Database) (*GenericStore[T], error) 
 	}
 	return &GenericStore[T]{
 		db:    db,
-		enc:   schema.NewGenericEncoder[T]().WithEnumsFrom(db.Enums()),
-		dec:   schema.NewGenericDecoder[T]().WithEnumsFrom(db.Enums()),
+		enc:   schema.NewGenericEncoder[T]().WithEnumsFrom(store.Schema().Enums()),
+		dec:   schema.NewGenericDecoder[T]().WithEnumsFrom(store.Schema().Enums()),
 		store: store.(*StoreImpl).store,
 	}, nil
 }

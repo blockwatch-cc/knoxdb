@@ -101,6 +101,18 @@ func (s *Schema) WithEnum(e *EnumDictionary) *Schema {
 	return s
 }
 
+func (s *Schema) NeedsEnums() bool {
+	if s.enums != nil {
+		return false
+	}
+	for _, f := range s.fields {
+		if f.Is(types.FieldFlagEnum) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Schema) WithEnumsFrom(r EnumRegistry) *Schema {
 	for i, f := range s.fields {
 		if !f.Is(types.FieldFlagEnum) {

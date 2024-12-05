@@ -422,8 +422,10 @@ func (q Query) MakePlan() (engine.QueryPlan, error) {
 		if err := ts.CanSelect(q.schema); err != nil {
 			return nil, err
 		}
+		if q.schema.NeedsEnums() {
+			q.schema.WithEnumsFrom(q.table.DB().Enums())
+		}
 	}
-	q.schema.WithEnumsFrom(q.table.DB().Enums())
 	plan.ResultSchema = q.schema
 
 	return plan, nil

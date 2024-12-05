@@ -231,6 +231,7 @@ var _ Table = (*GenericTable[int])(nil)
 // GenericTable[T] implements Table interface for Go struct types
 type GenericTable[T any] struct {
 	schema *schema.Schema
+	enc    *schema.GenericEncoder[T]
 	table  engine.TableEngine
 	db     Database
 }
@@ -250,7 +251,8 @@ func UseGenericTable[T any](name string, db Database) (*GenericTable[T], error) 
 		return nil, schema.ErrSchemaMismatch
 	}
 	return &GenericTable[T]{
-		schema: s.WithEnumsFrom(db.Enums()),
+		schema: table.Schema(),
+		enc:    schema.NewGenericEncoder[T]().WithEnumsFrom(table.Schema().Enums()),
 		table:  table.(*TableImpl).table,
 		db:     db,
 	}, nil
@@ -284,18 +286,17 @@ func (t *GenericTable[T]) DB() Database {
 }
 
 func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
-	enc := schema.NewGenericEncoder[T]().WithEnumsFrom(t.db.Enums())
 	var (
 		buf []byte
 		err error
 	)
 	switch v := val.(type) {
 	case *T:
-		buf, err = enc.EncodePtr(v, nil)
+		buf, err = t.enc.EncodePtr(v, nil)
 	case []T:
-		buf, err = enc.EncodeSlice(v, nil)
+		buf, err = t.enc.EncodeSlice(v, nil)
 	case []*T:
-		buf, err = enc.EncodePtrSlice(v, nil)
+		buf, err = t.enc.EncodePtrSlice(v, nil)
 	default:
 		return 0, fmt.Errorf("insert: %T %w", val, schema.ErrInvalidValueType)
 	}
@@ -341,18 +342,17 @@ func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
 }
 
 func (t *GenericTable[T]) Update(ctx context.Context, val any) (uint64, error) {
-	enc := schema.NewGenericEncoder[T]().WithEnumsFrom(t.db.Enums())
 	var (
 		buf []byte
 		err error
 	)
 	switch v := val.(type) {
 	case *T:
-		buf, err = enc.EncodePtr(v, nil)
+		buf, err = t.enc.EncodePtr(v, nil)
 	case []T:
-		buf, err = enc.EncodeSlice(v, nil)
+		buf, err = t.enc.EncodeSlice(v, nil)
 	case []*T:
-		buf, err = enc.EncodePtrSlice(v, nil)
+		buf, err = t.enc.EncodePtrSlice(v, nil)
 	default:
 		return 0, fmt.Errorf("update: %T %w", val, schema.ErrInvalidValueType)
 	}
