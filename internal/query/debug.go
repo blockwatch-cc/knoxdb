@@ -121,7 +121,7 @@ func (n FilterTreeNode) dump(level int, w *strings.Builder) {
 
 func (q QueryPlan) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Q> %s => SELECT ( %s ) WHERE ", q.Tag, strings.Join(q.ResultSchema.AllFieldNames(), ", "))
+	fmt.Fprintf(&b, "SELECT ( %s ) WHERE ", strings.Join(q.ResultSchema.AllFieldNames(), ", "))
 	q.Filters.dump(0, &b)
 	if q.Order != types.OrderAsc {
 		fmt.Fprintf(&b, "ORDER BY ID %s ", strings.ToUpper(q.Order.String()))

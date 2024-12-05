@@ -80,7 +80,7 @@ func NewQueryPlan() *QueryPlan {
 func (p *QueryPlan) Close() {
 	p.Stats.Finalize()
 	if p.Flags.IsStats() || p.Runtime() > QueryLogMinDuration {
-		p.Log.Infof("Q> %s: %s", p.Tag, p.Stats)
+		p.Log.Info(p.Stats)
 	}
 	p.Tag = ""
 	p.Filters = nil
@@ -136,7 +136,7 @@ func (p *QueryPlan) WithSchema(s *schema.Schema) *QueryPlan {
 }
 
 func (p *QueryPlan) WithLogger(l log.Logger) *QueryPlan {
-	p.Log = l.Clone().WithTag(p.Tag)
+	p.Log = l.Clone().WithTag(p.Tag + " Q>")
 	return p
 }
 

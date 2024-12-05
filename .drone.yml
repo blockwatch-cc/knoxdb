@@ -53,8 +53,8 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
-  WORKFLOW_DRIVER: mem
-  WORKFLOW_ENGINE: pack
+  KNOX_DRIVER: mem
+  KNOX_ENGINE: pack
   MINIO_BUCKET: scenarios
   MINIO_URL: h3.bwd.cx
 
@@ -86,8 +86,8 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
-  WORKFLOW_DRIVER: mem
-  WORKFLOW_ENGINE: pack
+  KNOX_DRIVER: mem
+  KNOX_ENGINE: pack
   MINIO_BUCKET: scenarios
   MINIO_URL: h3.bwd.cx
 
@@ -119,8 +119,8 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
-  WORKFLOW_DRIVER: mem
-  WORKFLOW_ENGINE: pack
+  KNOX_DRIVER: mem
+  KNOX_ENGINE: pack
   MINIO_BUCKET: scenarios
   MINIO_URL: h3.bwd.cx
 

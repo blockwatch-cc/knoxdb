@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,28 +21,33 @@ import (
 
 var (
 	randomEnvKey = "GORANDSEED"
+	timeFmt      = "2006-01-02T15:04:05"
 
 	sys          string // wasm, native
-	maxError     uint64
+	maxErrors    int
 	maxErrorFreq float64
 )
 
 func init() {
 	flag.StringVar(&sys, "system", "wasm", "set os. wasm/native")
-	flag.Uint64Var(&maxError, "max-errors", 0, "stop the test runner after N total observed errors")
-	flag.Float64Var(&maxErrorFreq, "max-error-freq", 0, "stops the test runner when the rate of errors observed per second is greater than N (inclusive)")
+	flag.IntVar(&maxErrors, "max-errors", 1, "stop the test runner after N total observed errors")
+	flag.Float64Var(&maxErrorFreq, "max-error-freq", math.Inf(0), "stops the test runner when the rate of errors observed per second is greater than N (inclusive)")
 }
 
 func buildTest(t *testing.T, dirPath string) {
+	t.Helper()
+	t.Logf("Building test for %s/%s", os.Getenv("GOOS"), os.Getenv("GOARCH"))
 	cmdScenarios := exec.Command("go", "test", "-c", "../scenarios", "-o", dirPath)
 	out, err := cmdScenarios.CombinedOutput()
-	t.Logf("build output\n%s", out)
-	require.NoError(t, err)
-	require.Equal(t, "", string(out))
+	if err != nil {
+		t.Logf("Error: %v", err)
+		t.Fatal(out)
+	}
 }
 
 // buildTestInWasm
 func buildTestInWasm(t *testing.T, dirPath string) {
+	t.Helper()
 	// set wasm
 	goos := os.Getenv("GOOS")
 	goarch := os.Getenv("GOARCH")
@@ -55,45 +61,95 @@ func buildTestInWasm(t *testing.T, dirPath string) {
 	os.Setenv("GOARCH", goarch)
 }
 
-func runTestInWasm(dirPath string, w io.Writer) error {
-	cmdRuntime := exec.Command("go", "run", "../wasm/runtime", "-vvv", "-module", filepath.Join(dirPath, "scenarios.test"))
+func runTestInWasm(t *testing.T, dirPath string, w io.Writer) error {
+	t.Helper()
+	cmdRuntime := exec.Command("go", "run", "../wasm/runtime", "-vvv", "-module", filepath.Join(dirPath, "scenarios.test"), "-test.v")
 	cmdRuntime.Stderr = w
 	cmdRuntime.Stdout = w
 	return cmdRuntime.Run()
 }
 
-func runTestInNative(dirPath string, w io.Writer) error {
-	cmdRuntime := exec.Command(filepath.Join(dirPath, "scenarios.test"))
+func runTestInNative(t *testing.T, dirPath string, w io.Writer) error {
+	t.Helper()
+	cmdRuntime := exec.Command(filepath.Join(dirPath, "scenarios.test"), "-v", "-count=1")
 	cmdRuntime.Stderr = w
 	cmdRuntime.Stdout = w
 	return cmdRuntime.Run()
 }
 
-func setup() (func(*testing.T, string), func(string, io.Writer) error) {
+func setup(t *testing.T) (func(*testing.T, string), func(*testing.T, string, io.Writer) error) {
 	switch sys {
 	case "wasm":
+		t.Log("Running as WASM module...")
 		return buildTestInWasm, runTestInWasm
 	default:
+		t.Log("Running as native executable...")
 		return buildTest, runTestInNative
 	}
 }
 
+func getEnv(n string) string {
+	s := os.Getenv(n)
+	if s == "" {
+		s = "none"
+	}
+	return s
+}
+
+func LogBuildInfo(t *testing.T) {
+	t.Helper()
+	var hint string
+	switch getEnv("DRONE_BUILD_EVENT") {
+	case "pull_request":
+		hint = fmt.Sprintf("%s/pull/%s", getEnv("DRONE_REPO_LINK"), getEnv("DRONE_PULL_REQUEST"))
+	case "tag":
+		hint = fmt.Sprintf("%s#%s", getEnv("DRONE_REPO_LINK"), getEnv("DRONE_TAG"))
+	case "unknown":
+		// non-drone execution
+	default:
+		hint = fmt.Sprintf("%s/commit/%s", getEnv("DRONE_REPO_LINK"), getEnv("DRONE_COMMIT"))
+	}
+
+	ts, _ := strconv.Atoi(getEnv("DRONE_BUILD_STARTED"))
+	if ts == 0 {
+		ts = int(time.Now().Unix())
+	}
+
+	t.Logf("Build ID      #%s %s", getEnv("DRONE_BUILD_NUMBER"), getEnv("DRONE_BUILD_LINK"))
+	t.Logf("Build Date    %s", time.Unix(int64(ts), 0).UTC().Format(time.DateTime))
+	t.Logf("Build System  %s", getEnv("DRONE_SYSTEM_HOST"))
+	t.Logf("Build Target  %s/%s", getEnv("DRONE_STAGE_OS"), getEnv("DRONE_STAGE_ARCH"))
+	t.Logf("Build Repo    %s %s", getEnv("DRONE_REPO"), hint)
+	t.Logf("Build Branch  %s", getEnv("DRONE_REPO_BRANCH"))
+	t.Logf("Build Commit  %s", getEnv("DRONE_COMMIT"))
+	if len(defaultSeeds) > 0 {
+		t.Logf("Build Seeds   %s", getEnv("DST_SEEDS"))
+	}
+	if !skipUpload {
+		ref := getEnv("DRONE_COMMIT")
+		t.Logf("Build Upload  %s/%s/%s", s3endpoint, s3bucket, ref[:min(len(ref), 6)])
+	}
+	t.Logf("Build Errors  max=%d max-rate=%f", maxErrors, maxErrorFreq)
+}
+
 func TestScenarios(t *testing.T) {
-	dirPath := t.TempDir()
-	path := util.NonEmptyString(os.Getenv("LOGS_PATH"), dirPath)
-	require.NotEmpty(t, path, "environment vairable 'LOGS_PATH' should not be empty")
+	buildPath := t.TempDir()
+	logPath := util.NonEmptyString(os.Getenv("LOGS_PATH"), buildPath)
 
 	ctx := context.Background()
 
-	t.Log("Loading s3 client")
-	s3, err := LoadStorage()
+	// init s3
+	s3, err := InitStorage(t)
 	require.NoError(t, err)
 
-	build, run := setup()
+	// log some repo and build identity info
+	LogBuildInfo(t)
 
-	t.Log("Building scenarios test cases")
-	build(t, dirPath)
+	// build test
+	build, run := setup(t)
+	build(t, buildPath)
 
+	// cleanup on panic/exit
 	var f *os.File
 	defer func() {
 		if f != nil {
@@ -101,75 +157,81 @@ func TestScenarios(t *testing.T) {
 		}
 	}()
 
-	i := 0
-	errsNum := uint64(0)
-	l := rate.NewLimiter(rate.Limit(maxErrorFreq), int(maxErrorFreq)*60)
+	var (
+		round, numErrors int
+		errLimit         = rate.NewLimiter(rate.Limit(maxErrorFreq), 60)
+	)
 	for {
 		// generate random seed and run multiple iterations from 0...n
-		var rnd uint64
-		if sz := len(defaultIter); sz > 0 && sz != i {
-			rnd = defaultIter[i]
-		} else {
-			rnd = util.RandUint64n(1 << 20)
+		rnd := util.RandUint64n(1 << 20)
+		if len(defaultSeeds) > 0 {
+			rnd = defaultSeeds[0]
+			defaultSeeds = defaultSeeds[1:]
 		}
-		i++
-
-		startInfo := fmt.Sprintf("starting scenario iteration i = %d, using %s=%d \n", i, randomEnvKey, rnd)
-		endInfo := fmt.Sprintf("completed scenario iteration i = %d, using %s=%d \n", i, randomEnvKey, rnd)
+		round++
 
 		err := os.Setenv(randomEnvKey, strconv.FormatUint(rnd, 10))
 		require.NoError(t, err)
 
 		// create file
-		errname := fmt.Sprintf("%d_%d.log", rnd, time.Now().Unix())
-		errpath := filepath.Join(path, errname)
-		f, err = os.Create(errpath)
+		logFileName := fmt.Sprintf("%s_0x%016x.log", time.Now().UTC().Format(timeFmt), rnd)
+		logFilePath := filepath.Join(logPath, logFileName)
+		f, err = os.Create(logFilePath)
 		require.NoError(t, err)
 
-		_, err = f.WriteString(startInfo)
+		_, err = f.WriteString(fmt.Sprintf("--- Scenario #%d with %s=0x%016x\n", round, randomEnvKey, rnd))
 		require.NoError(t, err)
 
-		err = run(dirPath, f)
+		// run test in child process
+		err = run(t, buildPath, f)
+
 		if err != nil {
-			errsNum++
-
-			errInfo := fmt.Sprintf("failed to run scenario: %v", err)
-			t.Log(errInfo)
-
-			_, err = f.WriteString(errInfo)
+			_, err := f.WriteString(fmt.Sprintf("--- FAILED Scenario #%d with %s=0x%016x err=%v\n", round, randomEnvKey, rnd, err))
 			require.NoError(t, err)
-
-			_, err = f.WriteString(endInfo)
+		} else {
+			_, err := f.WriteString(fmt.Sprintf("--- DONE Scenario #%d with %s=0x%016x\n", round, randomEnvKey, rnd))
 			require.NoError(t, err)
+		}
 
-			err = f.Close()
-			require.NoError(t, err)
-			f = nil
+		// close output file
+		require.NoError(t, f.Close())
+		f = nil
+
+		// handle error
+		if err != nil {
+			if !errLimit.Allow() {
+				t.Log("Stopping due to too high error frequency")
+				break
+			}
+
+			t.Logf("FAIL Scenario #%d %s=0x%016x with %v", round, randomEnvKey, rnd, err)
 
 			// upload
 			if !skipUpload {
-				_, err = s3.FPutObject(ctx, s3bucket, errname, errpath, minio.PutObjectOptions{})
+				ref := getEnv("DRONE_COMMIT")
+				logFileTarget := ref[:(min(len(ref), 6))] + "/" + logFileName
+				t.Logf("Uploading %s/%s/%s", s3endpoint, s3bucket, logFileTarget)
+				_, err := s3.FPutObject(ctx, s3bucket, logFileTarget, logFilePath, minio.PutObjectOptions{})
 				require.NoError(t, err)
+			} else {
+				if f, err = os.Open(logFilePath); err == nil {
+					io.Copy(os.Stdout, f)
+					f.Close()
+				}
+			}
+
+			// stop when max errors was reached
+			numErrors++
+			if maxErrors > 0 && numErrors >= maxErrors {
+				t.Log("Max error limit reached, stopping.")
+				break
 			}
 		}
 
-		if f != nil {
-			err = f.Close()
-			require.NoError(t, err)
-			f = nil
-		}
-
-		err = os.Remove(errpath)
-		require.NoError(t, err)
-
-		if maxError > 0 && errsNum >= maxError {
-			t.Log("Stopping due to too many errors")
-			break
-		}
-
-		if !l.Allow() {
-			t.Log("Stopping due to too many errors")
-			break
-		}
+		// cleanup
+		require.NoError(t, os.Remove(logFilePath))
+	}
+	if numErrors > 0 {
+		t.Fail()
 	}
 }

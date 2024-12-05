@@ -103,9 +103,11 @@ func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, 
 
 		// try cache lookup first, will inc refcount
 		ckey[1] = blockKey(p.key, f.Id())
-		if block, ok := bcache.Get(ckey); ok {
-			p.blocks[i] = block
-			continue
+		if useCache {
+			if block, ok := bcache.Get(ckey); ok {
+				p.blocks[i] = block
+				continue
+			}
 		}
 
 		// generate storage key for this block

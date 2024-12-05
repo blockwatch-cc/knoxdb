@@ -19,7 +19,7 @@ const TEST_DB_NAME = "testdb"
 
 func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions {
 	t.Helper()
-	driver = util.NonEmptyString(driver, os.Getenv("WORKFLOW_DRIVER"), "bolt")
+	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
 	return engine.DatabaseOptions{
 		Path:       t.TempDir(),
 		Namespace:  "cx.bwd.knoxdb.testdb",
@@ -36,8 +36,8 @@ func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions 
 
 func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
 	t.Helper()
-	driver = util.NonEmptyString(driver, os.Getenv("WORKFLOW_DRIVER"), "bolt")
-	eng = util.NonEmptyString(eng, os.Getenv("WORKFLOW_ENGINE"), "pack")
+	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
+	eng = util.NonEmptyString(eng, os.Getenv("KNOX_ENGINE"), "pack")
 	return engine.TableOptions{
 		Driver:      driver,
 		Engine:      engine.TableKind(eng),
@@ -70,8 +70,8 @@ func OpenTestEngine(t *testing.T, opts engine.DatabaseOptions) *engine.Engine {
 func NewDatabase(t *testing.T, typs ...any) (*engine.Engine, func()) {
 	t.Helper()
 	dbo := NewTestDatabaseOptions(t, "")
-	db := NewTestEngine(t, dbo)
 	t.Logf("NEW DB catalog driver=%s at %s", dbo.Driver, dbo.Path)
+	db := NewTestEngine(t, dbo)
 
 	ctx := context.Background()
 	_, err := db.CreateEnum(ctx, "my_enum")

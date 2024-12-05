@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -91,8 +92,9 @@ func run() error {
 	plog := log.NewProgressLogger(log.Log).SetEvent("test")
 
 	// init pseudo-random generator from main seed
-	u64seed, _ := strconv.ParseInt(os.Getenv(randomSeedKey), 0, 64)
-	random = rand.New(rand.NewSource(u64seed))
+	u64seed, _ := strconv.ParseUint(seed, 0, 64)
+	random = rand.New(rand.NewSource(int64(u64seed)))
+	seed = fmt.Sprintf("0x%016x", u64seed)
 
 	log.Infof("WASM runtime wazero/%s %s %s/%s",
 		getWazeroVersion(), runtime.Version(), runtime.GOOS, runtime.GOARCH)
@@ -130,7 +132,17 @@ func run() error {
 		WithFSConfig(wazero.NewFSConfig().(sysfs.FSConfig).
 			WithSysFSMount(vfs.New("/", tracefile), "/"))
 
-	// vfs.MustInstantiate(ctx, r)
+	log.Warnf("Exporting all env vars to wasm module, this is unsafe")
+	env := os.Environ()
+	slices.Sort(env)
+	for _, e := range env {
+		k, v, _ := strings.Cut(e, "=")
+		if k == "PWD" {
+			continue
+		}
+		config = config.WithEnv(k, v)
+		log.Debugf("ENV %s=%s", k, sanitizeEnvVar(k, v))
+	}
 
 	log.Infof("Using module %s", module)
 	buf, err := os.ReadFile(module)
@@ -153,10 +165,11 @@ func run() error {
 	// Instantiate the guest Wasm into the same runtime.
 	for i := 0; i < runs; i++ {
 		if randomize {
-			seed = strconv.FormatUint(random.Uint64(), 16)
+			seed = fmt.Sprintf("0x%016x", random.Uint64())
 		}
-		log.Debugf("Using random seed 0x%s", seed)
-		config = config.WithEnv(randomSeedKey, "0x"+seed)
+		log.Debugf("Using random seed %s", seed)
+		config = config.WithEnv(randomSeedKey, seed)
+
 		mod, err := r.InstantiateModule(ctx, compiledModule, config)
 		if err != nil {
 			if exitErr, ok := err.(*sys.ExitError); ok {
@@ -168,16 +181,6 @@ func run() error {
 			}
 			return fmt.Errorf("instantiating module: %w", err)
 		}
-
-		// log.Infof("Exported functions")
-		// for n, d := range mod.ExportedFunctionDefinitions() {
-		// 	log.Infof("%s: %s(%v) %v", n, d.Name(), d.ParamNames(), d.ResultNames())
-		// }
-		// log.Infof("Exported memory")
-		// for n, d := range mod.ExportedMemoryDefinitions() {
-		// 	m, _ := d.Max()
-		// 	log.Infof("%s: %d %v pages=%d/%d", n, d.Index(), d.ExportNames(), d.Min(), m)
-		// }
 
 		if err := mod.Close(ctx); err != nil {
 			return fmt.Errorf("close module: %w", err)
@@ -191,7 +194,7 @@ func getWazeroVersion() (ret string) {
 	info, ok := debug.ReadBuildInfo()
 	if ok {
 		for _, dep := range info.Deps {
-			// Note: here's the assumption that wazero is imported as github.com/tetratelabs/wazero.
+			// Note: we assume wazero is imported as github.com/tetratelabs/wazero.
 			if strings.Contains(dep.Path, "github.com/tetratelabs/wazero") {
 				ret = dep.Version
 			}
@@ -230,4 +233,20 @@ func splitFlags(_ []string, flags *flag.FlagSet) ([]string, []string) {
 		}
 	}
 	return rtFlags, modFlags
+}
+
+func containsAny(s string, vals ...string) bool {
+	for _, v := range vals {
+		if strings.Contains(s, v) {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeEnvVar(k, v string) string {
+	if containsAny(strings.ToUpper(k), "SECRET", "KEY", "PASS") {
+		v = strings.Repeat("*", len(v))
+	}
+	return v
 }
