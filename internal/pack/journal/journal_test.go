@@ -76,11 +76,11 @@ func recsToJournalRecords(recs TestRecords) JournalRecords {
 	return l
 }
 
-func makeJournalDataSequential(sz, start int) TestRecords {
+func makeJournalDataSequential(sz, _ int) TestRecords {
 	res := make(TestRecords, sz)
 	for i := range res {
 		res[i] = &TestRecord{
-			Pk: uint64(start + i),
+			Pk: uint64(1 + i),
 			N:  util.RandInt(),
 		}
 	}

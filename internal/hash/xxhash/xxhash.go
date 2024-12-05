@@ -24,10 +24,10 @@ const (
 // result overflows a uint64).
 var (
 	prime1v = prime1
-	prime2v = prime2
-	prime3v = prime3
-	prime4v = prime4
-	prime5v = prime5
+	// prime2v = prime2
+	// prime3v = prime3
+	// prime4v = prime4
+	// prime5v = prime5
 )
 
 // Digest implements hash.Hash64.

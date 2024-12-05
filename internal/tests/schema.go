@@ -73,8 +73,8 @@ type AllTypes struct {
 	MyEnum  string         `knox:"my_enum,enum"` // must register with schema
 }
 
-func NewAllTypes(i int) AllTypes {
-	return AllTypes{
+func NewAllTypes(i int) *AllTypes {
+	return &AllTypes{
 		Id:      uint64(i),
 		Int64:   int64(i),
 		Int32:   int32(i),

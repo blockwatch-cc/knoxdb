@@ -56,11 +56,11 @@ type XXHash64Uint32Test struct {
 	result []uint64
 }
 
-type XXHash64Int32Test struct {
-	name   string
-	slice  []int32
-	result []uint64
-}
+// type XXHash64Int32Test struct {
+// 	name   string
+// 	slice  []int32
+// 	result []uint64
+// }
 
 type XXHash64Uint64Test struct {
 	name   string
@@ -68,11 +68,11 @@ type XXHash64Uint64Test struct {
 	result []uint64
 }
 
-type XXHash64Int64Test struct {
-	name   string
-	slice  []int64
-	result []uint64
-}
+// type XXHash64Int64Test struct {
+// 	name   string
+// 	slice  []int64
+// 	result []uint64
+// }
 
 var (
 	xxhashInput = [][]byte{
@@ -349,10 +349,10 @@ func CreateXXHash64Uint64TestCase(name string, input [][]byte, result []uint64, 
 
 /*************** xxhash32Uint32 *******************************************************/
 
-func TestXXHash32Uint32(T *testing.T) {
+func TestXXHash32Uint32(t *testing.T) {
 	for i, c := range xxhashInput {
 		if got, want := XXHash32Uint32(binary.LittleEndian.Uint32(c[0:4]), 0), xxhash32Uint32Result[i]; got != want {
-			T.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
+			t.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
 		}
 	}
 }
@@ -375,27 +375,27 @@ var xxhash32Uint32Cases = []XXHash32Uint32Test{
 	CreateXXHash32Uint32TestCase("l32", xxhashInput, xxhash32Uint32Result, 32),
 }
 
-func TestXXHash32Uint32SliceGeneric(T *testing.T) {
+func TestXXHash32Uint32SliceGeneric(t *testing.T) {
 	for _, c := range xxhash32Uint32Cases {
 		// pre-allocate the result slice
 		res := make([]uint32, len(c.slice))
 		xxhash32Uint32SliceGeneric(c.slice, res, 0)
 		if got, want := len(res), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
 		if !reflect.DeepEqual(res, c.result) {
-			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+			t.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
 		}
 	}
 }
 
-func BenchmarkXXHash32Uint32SliceGeneric(B *testing.B) {
+func BenchmarkXXHash32Uint32SliceGeneric(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
 		a := util.RandUints[uint32](n.l)
 		res := make([]uint32, n.l)
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * 4))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.name, func(b *testing.B) {
+			b.SetBytes(int64(n.l * 4))
+			for i := 0; i < b.N; i++ {
 				xxhash32Uint32SliceGeneric(a, res, 0)
 			}
 		})
@@ -404,10 +404,10 @@ func BenchmarkXXHash32Uint32SliceGeneric(B *testing.B) {
 
 /*************** xxhash32Int32 *******************************************************/
 
-func TestXXHash32Int32(T *testing.T) {
+func TestXXHash32Int32(t *testing.T) {
 	for i, c := range xxhashInput {
 		if got, want := XXHash32Int32(int32(binary.LittleEndian.Uint32(c[0:4])), 0), xxhash32Uint32Result[i]; got != want {
-			T.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
+			t.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
 		}
 	}
 }
@@ -430,27 +430,27 @@ var xxhash32Int32Cases = []XXHash32Int32Test{
 	CreateXXHash32Int32TestCase("l32", xxhashInput, xxhash32Uint32Result, 32),
 }
 
-func TestXXHash32Int32SliceGeneric(T *testing.T) {
+func TestXXHash32Int32SliceGeneric(t *testing.T) {
 	for _, c := range xxhash32Int32Cases {
 		// pre-allocate the result slice
 		res := make([]uint32, len(c.slice))
 		xxhash32Int32SliceGeneric(c.slice, res, 0)
 		if got, want := len(res), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
 		if !reflect.DeepEqual(res, c.result) {
-			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+			t.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
 		}
 	}
 }
 
-func BenchmarkXXHash32Int32SliceGeneric(B *testing.B) {
+func BenchmarkXXHash32Int32SliceGeneric(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
 		a := util.RandInts[int32](n.l)
 		res := make([]uint32, n.l)
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * 4))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.name, func(b *testing.B) {
+			b.SetBytes(int64(n.l * 4))
+			for i := 0; i < b.N; i++ {
 				xxhash32Int32SliceGeneric(a, res, 0)
 			}
 		})
@@ -459,10 +459,10 @@ func BenchmarkXXHash32Int32SliceGeneric(B *testing.B) {
 
 /*************** xxhash32Uint64 *******************************************************/
 
-func TestXXHash32Uint64(T *testing.T) {
+func TestXXHash32Uint64(t *testing.T) {
 	for i, c := range xxhashInput {
 		if got, want := XXHash32Uint64(binary.LittleEndian.Uint64(c[0:8]), 0), xxhash32Uint64Result[i]; got != want {
-			T.Errorf("%v: unexpected result %v expected %v", c[0:8], got, want)
+			t.Errorf("%v: unexpected result %v expected %v", c[0:8], got, want)
 		}
 	}
 }
@@ -485,27 +485,27 @@ var xxhash32Uint64Cases = []XXHash32Uint64Test{
 	CreateXXHash32Uint64TestCase("l32", xxhashInput, xxhash32Uint64Result, 32),
 }
 
-func TestXXHash32Uint64SliceGeneric(T *testing.T) {
+func TestXXHash32Uint64SliceGeneric(t *testing.T) {
 	for _, c := range xxhash32Uint64Cases {
 		// pre-allocate the result slice
 		res := make([]uint32, len(c.slice))
 		xxhash32Uint64SliceGeneric(c.slice, res, 0)
 		if got, want := len(res), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
 		if !reflect.DeepEqual(res, c.result) {
-			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+			t.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
 		}
 	}
 }
 
-func BenchmarkXXHash32Uint64SliceGeneric(B *testing.B) {
+func BenchmarkXXHash32Uint64SliceGeneric(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
 		a := util.RandUints[uint64](n.l)
 		res := make([]uint32, n.l)
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(8 * int64(n.l))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.name, func(b *testing.B) {
+			b.SetBytes(8 * int64(n.l))
+			for i := 0; i < b.N; i++ {
 				xxhash32Uint64SliceGeneric(a, res, 0)
 			}
 		})
@@ -514,10 +514,10 @@ func BenchmarkXXHash32Uint64SliceGeneric(B *testing.B) {
 
 /*************** xxhash32Int64 *******************************************************/
 
-func TestXXHash32Int64(T *testing.T) {
+func TestXXHash32Int64(t *testing.T) {
 	for i, c := range xxhashInput {
 		if got, want := XXHash32Int64(int64(binary.LittleEndian.Uint64(c[0:8])), 0), xxhash32Uint64Result[i]; got != want {
-			T.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
+			t.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
 		}
 	}
 }
@@ -540,27 +540,27 @@ var xxhash32Int64Cases = []XXHash32Int64Test{
 	CreateXXHash32Int64TestCase("l32", xxhashInput, xxhash32Uint64Result, 32),
 }
 
-func TestXXHash32Int64SliceGeneric(T *testing.T) {
+func TestXXHash32Int64SliceGeneric(t *testing.T) {
 	for _, c := range xxhash32Int64Cases {
 		// pre-allocate the result slice
 		res := make([]uint32, len(c.slice))
 		xxhash32Int64SliceGeneric(c.slice, res, 0)
 		if got, want := len(res), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
 		if !reflect.DeepEqual(res, c.result) {
-			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+			t.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
 		}
 	}
 }
 
-func BenchmarkXXHash32Int64SliceGeneric(B *testing.B) {
+func BenchmarkXXHash32Int64SliceGeneric(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
 		a := util.RandInts[int64](n.l)
 		res := make([]uint32, n.l)
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(int64(n.l * 4))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.name, func(b *testing.B) {
+			b.SetBytes(int64(n.l * 4))
+			for i := 0; i < b.N; i++ {
 				xxhash32Int64SliceGeneric(a, res, 0)
 			}
 		})
@@ -569,10 +569,10 @@ func BenchmarkXXHash32Int64SliceGeneric(B *testing.B) {
 
 /*************** xxhash64Uint32 *******************************************************/
 
-func TestXXHash64Uint32(T *testing.T) {
+func TestXXHash64Uint32(t *testing.T) {
 	for i, c := range xxhashInput {
 		if got, want := XXHash64Uint32(binary.LittleEndian.Uint32(c[0:4])), xxhash64Uint32Result[i]; got != want {
-			T.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
+			t.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
 		}
 	}
 }
@@ -595,27 +595,27 @@ var xxhash64Uint32Cases = []XXHash64Uint32Test{
 	CreateXXHash64Uint32TestCase("l16", xxhashInput, xxhash64Uint32Result, 16),
 }
 
-func TestXXHash64Uint32SliceGeneric(T *testing.T) {
+func TestXXHash64Uint32SliceGeneric(t *testing.T) {
 	for _, c := range xxhash64Uint32Cases {
 		// pre-allocate the result slice
 		res := make([]uint64, len(c.slice))
 		xxhash64Uint32SliceGeneric(c.slice, res)
 		if got, want := len(res), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
 		if !reflect.DeepEqual(res, c.result) {
-			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+			t.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
 		}
 	}
 }
 
-func BenchmarkXXHash64Uint32SliceGeneric(B *testing.B) {
+func BenchmarkXXHash64Uint32SliceGeneric(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
 		a := util.RandUints[uint32](n.l)
 		res := make([]uint64, n.l)
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(4 * int64(n.l))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.name, func(b *testing.B) {
+			b.SetBytes(4 * int64(n.l))
+			for i := 0; i < b.N; i++ {
 				xxhash64Uint32SliceGeneric(a, res)
 			}
 		})
@@ -624,10 +624,10 @@ func BenchmarkXXHash64Uint32SliceGeneric(B *testing.B) {
 
 /*************** xxhash64Uint64 *******************************************************/
 
-func TestXXHash64Uint64(T *testing.T) {
+func TestXXHash64Uint64(t *testing.T) {
 	for i, c := range xxhashInput {
 		if got, want := XXHash64Uint64(binary.LittleEndian.Uint64(c[0:8])), xxhash64Uint64Result[i]; got != want {
-			T.Errorf("%v: unexpected result %v expected %v", c[0:8], got, want)
+			t.Errorf("%v: unexpected result %v expected %v", c[0:8], got, want)
 		}
 	}
 }
@@ -650,27 +650,27 @@ var xxhash64Uint64Cases = []XXHash64Uint64Test{
 	CreateXXHash64Uint64TestCase("l16", xxhashInput, xxhash64Uint64Result, 16),
 }
 
-func TestXXHash64Uint64SliceGeneric(T *testing.T) {
+func TestXXHash64Uint64SliceGeneric(t *testing.T) {
 	for _, c := range xxhash64Uint64Cases {
 		// pre-allocate the result slice
 		res := make([]uint64, len(c.slice))
 		xxhash64Uint64SliceGeneric(c.slice, res)
 		if got, want := len(res), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
 		if !reflect.DeepEqual(res, c.result) {
-			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+			t.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
 		}
 	}
 }
 
-func BenchmarkXXHash64Uint64SliceGeneric(B *testing.B) {
+func BenchmarkXXHash64Uint64SliceGeneric(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
 		a := util.RandUints[uint64](n.l)
 		res := make([]uint64, n.l)
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(8 * int64(n.l))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.name, func(b *testing.B) {
+			b.SetBytes(8 * int64(n.l))
+			for i := 0; i < b.N; i++ {
 				xxhash64Uint64SliceGeneric(a, res)
 			}
 		})
@@ -679,10 +679,10 @@ func BenchmarkXXHash64Uint64SliceGeneric(B *testing.B) {
 
 /*************** xxh3Uint32 *******************************************************/
 
-func TestXXH3Uint32(T *testing.T) {
+func TestXXH3Uint32(t *testing.T) {
 	for i, c := range xxhashInput {
 		if got, want := XXH3Uint32(binary.LittleEndian.Uint32(c[0:4])), xxh3Uint32Result[i]; got != want {
-			T.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
+			t.Errorf("%v: unexpected result %v expected %v", c[0:4], got, want)
 		}
 	}
 }
@@ -705,27 +705,27 @@ var xxh3Uint32Cases = []XXHash64Uint32Test{
 	CreateXXHash64Uint32TestCase("l16", xxhashInput, xxh3Uint32Result, 16),
 }
 
-func TestXXH3Uint32SliceGeneric(T *testing.T) {
+func TestXXH3Uint32SliceGeneric(t *testing.T) {
 	for _, c := range xxh3Uint32Cases {
 		// pre-allocate the result slice
 		res := make([]uint64, len(c.slice))
 		xxh3Uint32SliceGeneric(c.slice, res)
 		if got, want := len(res), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
 		if !reflect.DeepEqual(res, c.result) {
-			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+			t.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
 		}
 	}
 }
 
-func BenchmarkXXH3Uint32SliceGeneric(B *testing.B) {
+func BenchmarkXXH3Uint32SliceGeneric(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
 		a := util.RandUints[uint32](n.l)
 		res := make([]uint64, n.l)
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(4 * int64(n.l))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.name, func(b *testing.B) {
+			b.SetBytes(4 * int64(n.l))
+			for i := 0; i < b.N; i++ {
 				xxh3Uint32SliceGeneric(a, res)
 			}
 		})
@@ -734,10 +734,10 @@ func BenchmarkXXH3Uint32SliceGeneric(B *testing.B) {
 
 /*************** xxh3Uint64 *******************************************************/
 
-func TestXXH3Uint64(T *testing.T) {
+func TestXXH3Uint64(t *testing.T) {
 	for i, c := range xxhashInput {
 		if got, want := XXH3Uint64(binary.LittleEndian.Uint64(c[0:8])), xxh3Uint64Result[i]; got != want {
-			T.Errorf("%v: unexpected result %v expected %v", c[0:8], got, want)
+			t.Errorf("%v: unexpected result %v expected %v", c[0:8], got, want)
 		}
 	}
 }
@@ -762,27 +762,27 @@ var xxh3Uint64Cases = []XXHash64Uint64Test{
 	CreateXXHash64Uint64TestCase("l32", xxhashInput, xxh3Uint64Result, 32),
 }
 
-func TestXXH3Uint64SliceGeneric(T *testing.T) {
+func TestXXH3Uint64SliceGeneric(t *testing.T) {
 	for _, c := range xxh3Uint64Cases {
 		// pre-allocate the result slice
 		res := make([]uint64, len(c.slice))
 		xxh3Uint64SliceGeneric(c.slice, res)
 		if got, want := len(res), len(c.result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.name, got, want)
 		}
 		if !reflect.DeepEqual(res, c.result) {
-			T.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
+			t.Errorf("%s: unexpected result %d, expected %d", c.name, res, c.result)
 		}
 	}
 }
 
-func BenchmarkXXH3Uint64SliceGeneric(B *testing.B) {
+func BenchmarkXXH3Uint64SliceGeneric(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
 		a := util.RandUints[uint64](n.l)
 		res := make([]uint64, n.l)
-		B.Run(n.name, func(B *testing.B) {
-			B.SetBytes(8 * int64(n.l))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.name, func(b *testing.B) {
+			b.SetBytes(8 * int64(n.l))
+			for i := 0; i < b.N; i++ {
 				xxh3Uint64SliceGeneric(a, res)
 			}
 		})

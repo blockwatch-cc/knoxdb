@@ -29,14 +29,12 @@ var optTests = []optimizeTest{
 	{
 		Name: "native->fixed(zero-len)",
 		New: func(n int) [][]byte {
-			return [][]byte{[]byte{}, []byte{}}
+			return [][]byte{{}, {}}
 		},
 	},
 	{
 		Name: "native->fixed",
-		New: func(n int) [][]byte {
-			return makeNumberedData(n)
-		},
+		New:  makeNumberedData,
 	},
 	{
 		Name: "native->compact(nil)",

@@ -15,7 +15,7 @@ import (
 func TestReadStruct(t *testing.T) {
 	for _, v := range testStructs {
 		t.Run(fmt.Sprintf("%T", v), func(t *testing.T) {
-			pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
+			pkg := makeTypedPackage(v, PACK_SIZE)
 			s, err := schema.SchemaOf(v)
 			require.NoError(t, err)
 			maps, err := s.MapTo(s)
@@ -29,7 +29,7 @@ func TestReadStruct(t *testing.T) {
 }
 
 func TestReadChildStruct(t *testing.T) {
-	pkg := makeTypedPackage(&encodeTestStruct{}, PACK_SIZE, PACK_SIZE)
+	pkg := makeTypedPackage(&encodeTestStruct{}, PACK_SIZE)
 	dst := &encodeTestSubStruct{}
 	dstSchema, err := schema.SchemaOf(dst)
 	require.NoError(t, err)
@@ -43,7 +43,7 @@ func TestReadChildStruct(t *testing.T) {
 
 func BenchmarkReadStruct(b *testing.B) {
 	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
+		pkg := makeTypedPackage(v, PACK_SIZE)
 		s, _ := schema.SchemaOf(v)
 		maps, _ := s.MapTo(s)
 		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
@@ -59,7 +59,7 @@ func BenchmarkReadStruct(b *testing.B) {
 
 func BenchmarkReadRow(b *testing.B) {
 	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
+		pkg := makeTypedPackage(v, PACK_SIZE)
 		dst := make([]any, pkg.Cols())
 		b.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(b *testing.B) {
 			b.ReportAllocs()
@@ -74,7 +74,7 @@ func BenchmarkReadRow(b *testing.B) {
 
 func BenchmarkReadWire(b *testing.B) {
 	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
+		pkg := makeTypedPackage(v, PACK_SIZE)
 		buf := bytes.NewBuffer(make([]byte, 0, pkg.schema.WireSize()+128))
 		b.Run(fmt.Sprintf("%T/%d", v, pkg.Len()), func(b *testing.B) {
 			b.ReportAllocs()
@@ -90,7 +90,7 @@ func BenchmarkReadWire(b *testing.B) {
 
 func BenchmarkReadWireE2E(b *testing.B) {
 	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, PACK_SIZE)
+		pkg := makeTypedPackage(v, PACK_SIZE)
 		buf := bytes.NewBuffer(make([]byte, 0, pkg.schema.WireSize()+128))
 		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
 			b.ReportAllocs()

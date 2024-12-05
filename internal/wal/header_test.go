@@ -31,7 +31,7 @@ var headerTests = []struct {
 }{
 	{
 		name:        "Valid header",
-		header:      genHeader(RecordTypeInsert, types.ObjectTagDatabase, 1, 100, 1000),
+		header:      genHeader(RecordTypeInsert, types.ObjectTagDatabase, 2, 100, 1000),
 		lastTxID:    50,
 		currentLSN:  1000,
 		maxWalLSN:   1024 * 1024,

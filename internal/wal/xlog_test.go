@@ -28,7 +28,7 @@ func makeCommitFrameFile(dirPath string) (*os.File, error) {
 	return fd, nil
 }
 
-func makeCommitLog(t *testing.T, wal *Wal) *CommitLog {
+func makeCommitLog(wal *Wal) *CommitLog {
 	wal.createSegment(0)
 	commitLog := NewCommitLog()
 	return commitLog
@@ -272,7 +272,7 @@ func TestCommitLogOpen(t *testing.T) {
 	t.Run("commit logger creates file on open", func(t *testing.T) {
 		dir := t.TempDir()
 		wal := makeWal(t)
-		commitLog := makeCommitLog(t, wal)
+		commitLog := makeCommitLog(wal)
 		err := commitLog.Open(dir, wal)
 		require.NoError(t, err, "opening commit log should not return err")
 
@@ -291,7 +291,7 @@ func TestCommitLogAppend(t *testing.T) {
 	t.Run("append records to logger", func(t *testing.T) {
 		dir := t.TempDir()
 		wal := makeWal(t)
-		commitLog := makeCommitLog(t, wal)
+		commitLog := makeCommitLog(wal)
 		err := commitLog.Open(dir, wal)
 		defer commitLog.Close()
 		require.NoError(t, err, "opening commit log should not return err")
@@ -328,13 +328,13 @@ func TestCommitLogAppend(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		t.Run("check random records are committed after write", func(t *testing.T) {
-			commitLogAppendHelper(t, i)
+			commitLogAppendHelper(t)
 		})
 	}
 
 }
 
-func commitLogAppendHelper(t *testing.T, i int) {
+func commitLogAppendHelper(t *testing.T) {
 	t.Helper()
 	recs := []*Record{
 		{
@@ -374,7 +374,7 @@ func commitLogAppendHelper(t *testing.T, i int) {
 	dir := t.TempDir()
 	wal := makeWal(t)
 
-	commitLog := makeCommitLog(t, wal)
+	commitLog := makeCommitLog(wal)
 	err := commitLog.Open(dir, wal)
 	require.NoError(t, err, "opening commit log should not return err")
 

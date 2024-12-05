@@ -53,15 +53,13 @@ func TestReaderFilter(t *testing.T) {
 			rec, err := reader.Next()
 			if tt.expect == nil {
 				assert.Equal(t, io.EOF, err, "Expected EOF when no records match the filter")
-			} else {
-				if assert.NoError(t, err) {
-					t.Logf("Read record: %+v", rec)
-					assert.Equal(t, tt.expect.Type, rec.Type, "Record type mismatch")
-					assert.Equal(t, tt.expect.Tag, rec.Tag, "Record tag mismatch")
-					assert.Equal(t, tt.expect.Entity, rec.Entity, "Record entity mismatch")
-					assert.Equal(t, tt.expect.TxID, rec.TxID, "Record TxID mismatch")
-					assert.Equal(t, tt.expect.Data, rec.Data, "Record data mismatch")
-				}
+			} else if assert.NoError(t, err) {
+				t.Logf("Read record: %+v", rec)
+				assert.Equal(t, tt.expect.Type, rec.Type, "Record type mismatch")
+				assert.Equal(t, tt.expect.Tag, rec.Tag, "Record tag mismatch")
+				assert.Equal(t, tt.expect.Entity, rec.Entity, "Record entity mismatch")
+				assert.Equal(t, tt.expect.TxID, rec.TxID, "Record TxID mismatch")
+				assert.Equal(t, tt.expect.Data, rec.Data, "Record data mismatch")
 			}
 		})
 	}

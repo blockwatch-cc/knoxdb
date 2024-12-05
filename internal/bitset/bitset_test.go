@@ -71,7 +71,7 @@ func TestBitsetFromBytes(t *testing.T) {
 			if got, want := bits.Count(), c.Count; got != want {
 				t.Errorf("unexpected count %d, expected %d", got, want)
 			}
-			if bytes.Compare(bits.Bytes(), c.Result) != 0 {
+			if !bytes.Equal(bits.Bytes(), c.Result) {
 				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), c.Source)
 			}
 		})
@@ -94,7 +94,7 @@ func TestBitsetOne(t *testing.T) {
 			}
 			buf := bytes.Repeat([]byte{0xff}, bitFieldLen(sz)-1)
 			buf = append(buf, byte(0xff>>((8-uint(sz)&0x7)&0x7)&0xff))
-			if bytes.Compare(bits.Bytes(), buf) != 0 {
+			if !bytes.Equal(bits.Bytes(), buf) {
 				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), buf)
 			}
 		})
@@ -116,7 +116,7 @@ func TestBitsetZero(t *testing.T) {
 				t.Errorf("unexpected count %d, expected %d", got, want)
 			}
 			buf := bytes.Repeat([]byte{0}, bitFieldLen(c.Size))
-			if bytes.Compare(bits.Bytes(), buf) != 0 {
+			if !bytes.Equal(bits.Bytes(), buf) {
 				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), buf)
 			}
 		})
@@ -154,7 +154,7 @@ func TestBitsetResize(t *testing.T) {
 				if diff < 0 {
 					buf = append(buf, bytes.Repeat([]byte{0x0}, -diff)...)
 				}
-				if bytes.Compare(bits.Bytes(), buf) != 0 {
+				if !bytes.Equal(bits.Bytes(), buf) {
 					t.Errorf("unexpected result %x, expected %x", bits.Bytes(), buf)
 					t.FailNow()
 				}
@@ -228,7 +228,7 @@ func TestBitsetFill(t *testing.T) {
 				if got, want := bits.Count(), popcount(cmp); got != want {
 					t.Errorf("unexpected count %d, expected %d", got, want)
 				}
-				if bytes.Compare(bits.Bytes(), cmp) != 0 {
+				if !bytes.Equal(bits.Bytes(), cmp) {
 					t.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
 				}
 			})
@@ -251,7 +251,7 @@ func TestBitsetSet(t *testing.T) {
 			if !bits.IsSet(0) {
 				t.Errorf("unexpected IsSet=false")
 			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
+			if !bytes.Equal(bits.Bytes(), cmp) {
 				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
 			}
 
@@ -264,7 +264,7 @@ func TestBitsetSet(t *testing.T) {
 			if !bits.IsSet(sz - 1) {
 				t.Errorf("unexpected IsSet=false")
 			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
+			if !bytes.Equal(bits.Bytes(), cmp) {
 				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
 			}
 
@@ -276,7 +276,7 @@ func TestBitsetSet(t *testing.T) {
 			if bits.IsSet(-1) {
 				t.Errorf("unexpected IsSet=true")
 			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
+			if !bytes.Equal(bits.Bytes(), cmp) {
 				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
 			}
 
@@ -287,7 +287,7 @@ func TestBitsetSet(t *testing.T) {
 			if bits.IsSet(sz) {
 				t.Errorf("unexpected IsSet=true")
 			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
+			if !bytes.Equal(bits.Bytes(), cmp) {
 				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
 			}
 			checkCleanTail(t, bits.Bytes())
@@ -311,7 +311,7 @@ func TestBitsetClear(t *testing.T) {
 			if bits.IsSet(0) {
 				t.Errorf("unexpected IsSet=true")
 			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
+			if !bytes.Equal(bits.Bytes(), cmp) {
 				t.Errorf("first: unexpected result %x, expected %x", bits.Bytes(), cmp)
 			}
 
@@ -324,7 +324,7 @@ func TestBitsetClear(t *testing.T) {
 			if bits.IsSet(sz - 1) {
 				t.Errorf("unexpected IsSet=true")
 			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
+			if !bytes.Equal(bits.Bytes(), cmp) {
 				t.Errorf("last: unexpected result %x, expected %x", bits.Bytes(), cmp)
 			}
 
@@ -336,7 +336,7 @@ func TestBitsetClear(t *testing.T) {
 			if bits.IsSet(-1) {
 				t.Errorf("unexpected IsSet=true")
 			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
+			if !bytes.Equal(bits.Bytes(), cmp) {
 				t.Errorf("invalid-: unexpected result %x, expected %x", bits.Bytes(), cmp)
 			}
 
@@ -347,7 +347,7 @@ func TestBitsetClear(t *testing.T) {
 			if bits.IsSet(sz) {
 				t.Errorf("unexpected IsSet=true")
 			}
-			if bytes.Compare(bits.Bytes(), cmp) != 0 {
+			if !bytes.Equal(bits.Bytes(), cmp) {
 				t.Errorf("invalid+: unexpected result %x, expected %x", bits.Bytes(), cmp)
 			}
 		})
@@ -365,8 +365,8 @@ func randBits(n int) []byte {
 	return out[:c]
 }
 
-func randBitsets(n, sz int) []*Bitset {
-	res := make([]*Bitset, n)
+func randBitsets(sz int) []*Bitset {
+	res := make([]*Bitset, 100)
 	for i := range res {
 		res[i] = NewBitsetFromBytes(randBits(sz), sz)
 	}
@@ -375,7 +375,7 @@ func randBitsets(n, sz int) []*Bitset {
 
 func TestBitsetSlice(t *testing.T) {
 	for _, sz := range bitsetSizes {
-		for i, b := range randBitsets(100, sz) {
+		for i, b := range randBitsets(sz) {
 			t.Run(f("%d_%d", sz, i), func(t *testing.T) {
 				slice := b.Slice()
 				if got, want := len(slice), sz; got != want {
@@ -395,7 +395,7 @@ func TestBitsetSlice(t *testing.T) {
 
 func TestBitsetSubSlice(t *testing.T) {
 	for _, sz := range bitsetSizes {
-		for i, b := range randBitsets(100, sz) {
+		for i, b := range randBitsets(sz) {
 			t.Run(f("%d_%d", sz, i), func(t *testing.T) {
 				start := int(util.RandInt32n(int32(b.Len())))
 				n := int(util.RandInt32n(int32(b.Len() - start)))
@@ -417,7 +417,7 @@ func TestBitsetSubSlice(t *testing.T) {
 
 func TestBitsetFromSlice(t *testing.T) {
 	for _, sz := range bitsetSizes {
-		for i, b := range randBitsets(100, sz) {
+		for i, b := range randBitsets(sz) {
 			t.Run(f("%d_%d", sz, i), func(t *testing.T) {
 				slice := b.Slice()
 				bits := NewBitsetFromSlice(slice)
@@ -448,7 +448,7 @@ func TestBitsetFromSlice(t *testing.T) {
 func TestBitsetInsert(t *testing.T) {
 	var fast, fasthead, slow int
 	for _, sz := range bitsetSizes {
-		for i, src := range randBitsets(100, sz) {
+		for i, src := range randBitsets(sz) {
 			dst := NewBitset(1024)
 			for _, pat := range bitsetPatterns {
 				t.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
@@ -517,7 +517,7 @@ func TestBitsetInsert(t *testing.T) {
 func TestBitsetReplace(t *testing.T) {
 	var fast, slow int
 	for _, sz := range bitsetSizes {
-		for i, src := range randBitsets(100, sz) {
+		for i, src := range randBitsets(sz) {
 			dst := NewBitset(sz)
 			for _, pat := range bitsetPatterns {
 				t.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
@@ -565,7 +565,7 @@ func TestBitsetReplace(t *testing.T) {
 func TestBitsetAppend(t *testing.T) {
 	var fast, slow int
 	for _, sz := range bitsetSizes {
-		for i, src := range randBitsets(100, sz) {
+		for i, src := range randBitsets(sz) {
 			dst := NewBitset(sz)
 			for _, pat := range bitsetPatterns {
 				t.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
@@ -628,7 +628,7 @@ func TestBitsetAppend(t *testing.T) {
 func TestBitsetDelete(t *testing.T) {
 	var fast, slow int
 	for _, sz := range bitsetSizes {
-		for i, src := range randBitsets(100, sz) {
+		for i, src := range randBitsets(sz) {
 			dst := NewBitset(sz)
 			for _, pat := range bitsetPatterns {
 				t.Run(f("%d_%d_%x", sz, i, pat), func(t *testing.T) {
@@ -690,7 +690,7 @@ func TestBitsetDelete(t *testing.T) {
 
 func TestBitsetSwap(t *testing.T) {
 	for _, sz := range bitsetSizes {
-		for i, src := range randBitsets(100, sz) {
+		for i, src := range randBitsets(sz) {
 			t.Run(f("%d_%d", sz, i), func(t *testing.T) {
 				i := int(util.RandInt32n(int32(src.Len())))
 				j := int(util.RandInt32n(int32(src.Len())))

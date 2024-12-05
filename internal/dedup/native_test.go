@@ -30,10 +30,10 @@ func makeNativeByteArrayReader(sz int) io.Reader {
 }
 
 func makeNumberedData(n int) [][]byte {
-	b := make([][]byte, n, n)
+	b := make([][]byte, n)
 	for i := range b {
 		b[i] = make([]byte, 8)
-		binary.BigEndian.PutUint64(b[i][:], uint64(i))
+		binary.BigEndian.PutUint64(b[i], uint64(i))
 	}
 	return b
 }
@@ -42,7 +42,7 @@ func cloneData(b [][]byte) [][]byte {
 	c := make([][]byte, len(b))
 	for i, v := range b {
 		c[i] = make([]byte, len(v))
-		copy(c[i][:], v)
+		copy(c[i], v)
 	}
 	return c
 }

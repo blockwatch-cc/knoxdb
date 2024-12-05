@@ -38,61 +38,61 @@ func makeUint64Result[T int8 | int16 | int32 | int64](s []T) []uint64 {
 
 // ---------------- zzDeltaEncodeUint64 -------------------------------------------------------------
 
-func TestZzDeltaEncodeUint64Generic(T *testing.T) {
+func TestZzDeltaEncodeUint64Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint64Cases {
 		slice := make([]uint64, len(c.Slice))
 		ZzDeltaEncodeUint64(slice, util.Int64AsUint64Slice(c.Slice))
 		if got, want := len(slice), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
 		if !reflect.DeepEqual(slice, makeUint64Result(c.Result)) {
-			T.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
+			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
 		}
 	}
 }
 
 // ---------------- zzDeltaEncodeUint32 -------------------------------------------------------------
 
-func TestZzDeltaEncodeUint32Generic(T *testing.T) {
+func TestZzDeltaEncodeUint32Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint32Cases {
 		slice := make([]uint64, len(c.Slice))
 		ZzDeltaEncodeUint32(slice, util.Int32AsUint32Slice(c.Slice))
 		if got, want := len(slice), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
 		if !reflect.DeepEqual(slice, makeUint64Result(c.Result)) {
-			T.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
+			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
 		}
 	}
 }
 
 // ---------------- zzDeltaEncodeUint16 -------------------------------------------------------------
 
-func TestZzDeltaEncodeUint16Generic(T *testing.T) {
+func TestZzDeltaEncodeUint16Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint16Cases {
 		slice := make([]uint64, len(c.Slice))
 		ZzDeltaEncodeUint16(slice, util.Int16AsUint16Slice(c.Slice))
 		if got, want := len(slice), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
 		// result is uint64
 		if !reflect.DeepEqual(slice, makeUint64Result(c.Result)) {
-			T.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
+			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
 		}
 	}
 }
 
 // ---------------- zzDeltaEncodeUint8 -------------------------------------------------------------
 
-func TestZzDeltaEncodeUint8Generic(T *testing.T) {
+func TestZzDeltaEncodeUint8Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint8Cases {
 		slice := make([]uint64, len(c.Slice))
 		ZzDeltaEncodeUint8(slice, util.Int8AsUint8Slice(c.Slice))
 		if got, want := len(slice), len(c.Result); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
 		if !reflect.DeepEqual(slice, makeUint64Result(c.Result)) {
-			T.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
+			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
 		}
 	}
 }

@@ -30,7 +30,7 @@ func makeFixedByteArray(sz int, data [][]byte) *FixedByteArray {
 	a := &FixedByteArray{
 		sz:  sz,
 		n:   len(data),
-		buf: make([]byte, sz*len(data), sz*len(data)),
+		buf: make([]byte, sz*len(data)),
 	}
 	for i, v := range data {
 		copy(a.buf[i*sz:(i+1)*sz], v)

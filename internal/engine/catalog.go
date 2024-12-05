@@ -84,10 +84,10 @@ var (
 	streamsKey   = []byte("streams")   // key => serialized stream config
 
 	// keys
-	schemaKey     = []byte("schema")
-	tableKey      = []byte("table")
-	nameKey       = []byte("name")
-	statusKey     = []byte("status")
+	schemaKey = []byte("schema")
+	tableKey  = []byte("table")
+	nameKey   = []byte("name")
+	// statusKey     = []byte("status")
 	dataKey       = []byte("data")
 	checkpointKey = []byte("checkpoint")
 )

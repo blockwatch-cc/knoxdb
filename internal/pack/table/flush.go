@@ -116,7 +116,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 		// init on each iteration, either from journal or tombstone
 		var nextid uint64
-		switch true {
+		switch {
 		case jpos < jlen && tpos < tlen:
 			nextid = min(live[jpos].Pk, dead[tpos])
 			// if nextid == live[jpos].pk {

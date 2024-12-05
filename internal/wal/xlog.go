@@ -54,7 +54,7 @@ type CommitFrame struct {
 
 func NewCommitFrame(id int64) *CommitFrame {
 	return &CommitFrame{
-		offset: int64(id) * CommitFrameSize,
+		offset: id * CommitFrameSize,
 		xmin:   uint64(id) << CommitFrameShift,
 		bits:   bitset.NewBitset(CommitFramePayloadSize << 3),
 		log:    log.Disabled,

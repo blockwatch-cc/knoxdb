@@ -111,24 +111,23 @@ func (b *bucket) CreateBucket(key []byte) (store.Bucket, error) {
 	// Ensure the transaction is writable.
 	if !b.tx.writable {
 		str := "create bucket requires a writable database transaction"
-		return nil, makeDbErr(store.ErrTxNotWritable, str, nil)
+		return nil, makeDbErr(store.ErrTxNotWritable, str)
 	}
 
 	// Ensure a key was provided.
 	if len(key) == 0 {
 		str := "create bucket requires a key"
-		return nil, makeDbErr(store.ErrBucketNameRequired, str, nil)
+		return nil, makeDbErr(store.ErrBucketNameRequired, str)
 	}
 
 	// Ensure bucket does not already exist.
 	bidxKey := bucketizedKey(metadataBucketID, bucketIndexKey(b.id, key))
 	if b.tx.hasKey(bidxKey) {
 		str := "bucket already exists"
-		return nil, makeDbErr(store.ErrBucketExists, str, nil)
+		return nil, makeDbErr(store.ErrBucketExists, str)
 	}
 
 	// Find the appropriate next bucket ID to use for the new bucket.
-	var err error
 	childID, err := b.tx.nextBucketID()
 	if err != nil {
 		return nil, err
@@ -163,7 +162,7 @@ func (b *bucket) CreateBucketIfNotExists(key []byte) (store.Bucket, error) {
 	// Ensure the transaction is writable.
 	if !b.tx.writable {
 		str := "create bucket requires a writable database transaction"
-		return nil, makeDbErr(store.ErrTxNotWritable, str, nil)
+		return nil, makeDbErr(store.ErrTxNotWritable, str)
 	}
 
 	// Return existing bucket if it already exists, otherwise create it.
@@ -190,7 +189,7 @@ func (b *bucket) DeleteBucket(key []byte) error {
 	// Ensure the transaction is writable.
 	if !b.tx.writable {
 		str := "delete bucket requires a writable database transaction"
-		return makeDbErr(store.ErrTxNotWritable, str, nil)
+		return makeDbErr(store.ErrTxNotWritable, str)
 	}
 
 	// Attempt to fetch the ID for the child bucket.  The bucket does not
@@ -200,7 +199,7 @@ func (b *bucket) DeleteBucket(key []byte) error {
 	childID, _ := b.tx.fetchKey(bidxKey)
 	if childID == nil {
 		str := fmt.Sprintf("bucket %q does not exist", key)
-		return makeDbErr(store.ErrBucketNotFound, str, nil)
+		return makeDbErr(store.ErrBucketNotFound, str)
 	}
 
 	b.tx.db.log.Debugf("Deleting bucket %s with id 0x%x", string(key), childID)
@@ -411,13 +410,13 @@ func (b *bucket) Put(key, value []byte) error {
 	// Ensure the transaction is writable.
 	if !b.tx.writable {
 		str := "setting a key requires a writable database transaction"
-		return makeDbErr(store.ErrTxNotWritable, str, nil)
+		return makeDbErr(store.ErrTxNotWritable, str)
 	}
 
 	// Ensure a key was provided.
 	if len(key) == 0 {
 		str := "put requires a key"
-		return makeDbErr(store.ErrKeyRequired, str, nil)
+		return makeDbErr(store.ErrKeyRequired, str)
 	}
 	if err := b.tx.putKey(bucketizedKey(b.id, key), value); err != nil {
 		return convertErr("put", err)
@@ -468,7 +467,7 @@ func (b *bucket) Delete(key []byte) error {
 	// Ensure the transaction is writable.
 	if !b.tx.writable {
 		str := "deleting a value requires a writable database transaction"
-		return makeDbErr(store.ErrTxNotWritable, str, nil)
+		return makeDbErr(store.ErrTxNotWritable, str)
 	}
 
 	// Nothing to do if there is no key.
@@ -491,7 +490,7 @@ func (b *bucket) NextSequence() (uint64, error) {
 	// Ensure the transaction is writable.
 	if !b.tx.writable {
 		str := "deleting a value requires a writable database transaction"
-		return 0, makeDbErr(store.ErrTxNotWritable, str, nil)
+		return 0, makeDbErr(store.ErrTxNotWritable, str)
 	}
 
 	if b.seq == nil {

@@ -5,7 +5,6 @@ package query
 
 import (
 	"fmt"
-	"reflect"
 	"regexp"
 	"testing"
 
@@ -121,23 +120,23 @@ func makeRandomBlock(typ BlockType, sz int) *block.Block {
 	return b
 }
 
-func makeRandomSlice(typ BlockType, sz int) (slice any, in any, notin any) {
-	if sz == 0 {
-		sz = 1
-	}
-	v1 := makeRandomValue(typ)
-	rslice := reflect.MakeSlice(reflect.TypeOf(v1), sz, sz)
-	for rslice.Len() < sz {
-		v1 = makeRandomValue(typ)
-		rv1 := reflect.ValueOf(v1)
-		if rv1.IsZero() {
-			continue
-		}
-		rslice = reflect.AppendSlice(rslice, rv1)
-	}
-	rv2 := reflect.Indirect(reflect.New(reflect.TypeOf(v1)))
-	return rslice.Interface(), rslice.Index(0).Interface(), rv2.Interface()
-}
+// func makeRandomSlice(typ BlockType, sz int) (slice any, in any, notin any) {
+// 	if sz == 0 {
+// 		sz = 1
+// 	}
+// 	v1 := makeRandomValue(typ)
+// 	rslice := reflect.MakeSlice(reflect.TypeOf(v1), sz, sz)
+// 	for rslice.Len() < sz {
+// 		v1 = makeRandomValue(typ)
+// 		rv1 := reflect.ValueOf(v1)
+// 		if rv1.IsZero() {
+// 			continue
+// 		}
+// 		rslice = reflect.AppendSlice(rslice, rv1)
+// 	}
+// 	rv2 := reflect.Indirect(reflect.New(reflect.TypeOf(v1)))
+// 	return rslice.Interface(), rslice.Index(0).Interface(), rv2.Interface()
+// }
 
 func TestMatchValue(t *testing.T) {
 	for _, typ := range testMatchBlockTypes {

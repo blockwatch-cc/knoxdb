@@ -148,24 +148,24 @@ func TestBulkAdd(t *testing.T) {
 
 		if _, has := m[x]; has {
 			if !ra.Contains(x) {
-				// t.Logf("x should be present: %d %#x. Bitmap: %s\n", x, x, ra)
+				t.Logf("x should be present: %d %#x. Bitmap: %s\n", x, x, ra)
 				off, found := ra.keys.getValue(x & mask)
 				assert(found)
 				c := ra.getContainer(off)
 				lo := uint16(x)
-				// t.Logf("x: %#x lo: %#x. offset: %d\n", x, lo, off)
+				t.Logf("x: %#x lo: %#x. offset: %d\n", x, lo, off)
 				switch c[indexType] {
 				case typeArray:
 				case typeBitmap:
 					idx := lo / 16
 					pos := lo % 16
-					// t.Logf("At idx: %d. Pos: %d val: %#b\n", idx, pos, c[startIdx+idx])
+					t.Logf("At idx: %d. Pos: %d val: %#b\n", idx, pos, c[startIdx+idx])
 				}
 
 				// t.Logf("Added: %d %#x. Added: %v\n", x, x, ra.Set(x))
 				// t.Logf("After add. has: %v\n", ra.Contains(x))
 
-				// 				t.Logf("Hex dump of container at offset: %d\n%s\n", off, hex.Dump(toByteSlice(c)))
+				// t.Logf("Hex dump of container at offset: %d\n%s\n", off, hex.Dump(toByteSlice(c)))
 				t.FailNow()
 			}
 			continue
@@ -288,9 +288,10 @@ func TestBitmapOps(t *testing.T) {
 
 		cntOr, cntAnd := 0, 0
 		for x, freq := range occ {
-			if freq == 0x00 {
+			switch freq {
+			case 0x00:
 				require.Failf(t, "Failed", "Value of freq can't be zero. Found: %#x\n", freq)
-			} else if freq == 0x01 {
+			case 0x01:
 				_, has := smallMap[x]
 				require.True(t, has)
 				require.True(t, small.Contains(x))
@@ -298,7 +299,7 @@ func TestBitmapOps(t *testing.T) {
 					x, x, freq)
 				cntOr++
 
-			} else if freq == 0x02 {
+			case 0x02:
 				// one of them has it.
 				_, has := bigMap[x]
 				require.True(t, has)
@@ -307,13 +308,13 @@ func TestBitmapOps(t *testing.T) {
 					x, x, freq)
 				cntOr++
 
-			} else if freq == 0x03 {
+			case 0x03:
 				require.True(t, small.Contains(x))
 				require.True(t, big.Contains(x))
 				require.Truef(t, bitAnd.Contains(x), "x: %#x\n", x)
 				cntOr++
 				cntAnd++
-			} else {
+			default:
 				require.Failf(t, "Failed", "Value of freq can't exceed 0x03. Found: %#x\n", freq)
 			}
 		}
@@ -339,8 +340,8 @@ func TestBitmapOps(t *testing.T) {
 }
 
 func TestUint16(t *testing.T) {
-	a := uint16(0xfeff)
-	b := uint16(0x100)
+	// a := uint16(0xfeff)
+	// b := uint16(0x100)
 	// t.Logf("a & b: %#x", a&b)
 	var x uint16
 	for i := 0; i < 100000; i++ {
@@ -348,7 +349,7 @@ func TestUint16(t *testing.T) {
 		x++
 		if x <= prev {
 			// This triggers when prev = 0xFFFF.
-			// require.Failf(t, "x<=prev", "x %d <= prev %d", x, prev)
+			require.Failf(t, "x<=prev", "x %d <= prev %d", x, prev)
 		}
 	}
 }
@@ -830,11 +831,12 @@ func TestRank(t *testing.T) {
 	// Check ranks after removing an element.
 	a.Remove(100)
 	for i := 0; i < n; i++ {
-		if i < 100 {
+		switch {
+		case i < 100:
 			require.Equal(t, i, a.Rank(uint64(i)))
-		} else if i == 100 {
+		case i == 100:
 			require.Equal(t, -1, a.Rank(uint64(i)))
-		} else {
+		default:
 			require.Equal(t, i-1, a.Rank(uint64(i)))
 		}
 	}
@@ -882,7 +884,7 @@ func TestSplit(t *testing.T) {
 	run(1e6)
 }
 
-func TestContainsRange(T *testing.T) {
+func TestContainsRange(t *testing.T) {
 	type TestRange struct {
 		Name  string
 		From  uint64
@@ -978,20 +980,20 @@ func TestContainsRange(T *testing.T) {
 	for i, v := range tests {
 		for _, r := range v.Ranges {
 			if want, got := r.Match, FromSortedList(v.Slice).ContainsRange(r.From, r.To); want != got {
-				T.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
+				t.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
 			}
 		}
 	}
 }
 
-func BenchmarkContainsRange(B *testing.B) {
+func BenchmarkContainsRange(b *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			nums := util.RandUints[uint64](n)
 			slices.Sort(nums)
 			a := FromSortedList(nums)
-			B.ResetTimer()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				min, max := util.RandUint64(), util.RandUint64()
 				if min > max {
 					min, max = max, min

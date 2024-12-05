@@ -113,7 +113,7 @@ type lock struct {
 	oid       uint64                   // container id when type is object or predicate
 	count     int                      // shared lock reference counter
 	waiting   []uint64                 // xids waiting to inherit or replace the lock (in request order)
-	waiters   map[uint64]chan struct{} //wait channels per xid
+	waiters   map[uint64]chan struct{} // wait channels per xid
 }
 
 func (l *lock) empty() bool {
@@ -209,7 +209,7 @@ func (m *LockManager) Done(xid uint64) {
 	}
 	delete(m.granted, xid)
 
-	// cleanup unused locks and return state to channel
+	// cleanup unused locks
 	m.locks = slices.DeleteFunc(m.locks, func(l *lock) bool {
 		if l.count == 0 && len(l.waiting) == 0 {
 			lockPool.Put(l)
@@ -220,7 +220,7 @@ func (m *LockManager) Done(xid uint64) {
 	atomic.StoreInt64(&m.nlocks, int64(len(m.locks)))
 }
 
-func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, typ LockType, oid uint64, pred ConditionMatcher) error {
+func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, typ LockType, oid uint64, _ ConditionMatcher) error {
 	// sync state access
 	m.mu.Lock()
 
@@ -310,7 +310,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 				l.exclusive = false // reset to shared
 				isGranted = true
 
-			case !l.empty():
+			case !l.empty() || (l.exclusive && l.count > 0):
 				// wait behind others
 				// detect deadlock situation before we start wait
 				if m.detectDeadlock(l, xid) {
@@ -383,36 +383,36 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 
 // Drop releases a single lock after it has been granted. its required to roll back
 // high level locks in case a lower level lock fails.
-func (m *LockManager) drop(xid uint64, mode LockMode, typ LockType, oid uint64, pred ConditionMatcher) {
-	// exclusive access
-	m.mu.Lock()
-	defer m.mu.Unlock()
+// func (m *LockManager) drop(xid uint64, _ LockMode, typ LockType, oid uint64, _ ConditionMatcher) {
+// 	// exclusive access
+// 	m.mu.Lock()
+// 	defer m.mu.Unlock()
 
-	// release the specific lock
-	for i, l := range m.granted[xid] {
-		if l.typ != typ || l.oid != oid {
-			continue
-		}
+// 	// release the specific lock
+// 	for i, l := range m.granted[xid] {
+// 		if l.typ != typ || l.oid != oid {
+// 			continue
+// 		}
 
-		// remove from xid's own granted list
-		m.granted[xid] = append(m.granted[xid][:i], m.granted[xid][i+1:]...)
+// 		// remove from xid's own granted list
+// 		m.granted[xid] = append(m.granted[xid][:i], m.granted[xid][i+1:]...)
 
-		// reduce ref and remove from lock manager if last ref was dropped
-		l.count--
-		l.yield()
-		if l.count == 0 && len(l.waiting) == 0 {
-			m.locks = slices.DeleteFunc(m.locks, func(l2 *lock) bool {
-				if l2 == l {
-					lockPool.Put(l)
-					return true
-				}
-				return false
-			})
-			atomic.AddInt64(&m.nlocks, -1)
-		}
-		break
-	}
-}
+// 		// reduce ref and remove from lock manager if last ref was dropped
+// 		l.count--
+// 		l.yield()
+// 		if l.count == 0 && len(l.waiting) == 0 {
+// 			m.locks = slices.DeleteFunc(m.locks, func(l2 *lock) bool {
+// 				if l2 == l {
+// 					lockPool.Put(l)
+// 					return true
+// 				}
+// 				return false
+// 			})
+// 			atomic.AddInt64(&m.nlocks, -1)
+// 		}
+// 		break
+// 	}
+// }
 
 func getOrCreateLock(locks []*lock, typ LockType, oid uint64, exclusive bool) (*lock, bool) {
 	for _, l := range locks {

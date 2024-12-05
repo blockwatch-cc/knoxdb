@@ -35,7 +35,6 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -118,7 +117,7 @@ func init() {
 		cumulativeProbabilities = append(cumulativeProbabilities, sum)
 	}
 	log.SetLevel(log.LevelInfo)
-	store.UseLogger(log.Log)
+	// store.UseLogger(log.Log)
 }
 
 func genCommand() command {
@@ -308,7 +307,7 @@ func runTestDST(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				id = id % uint64(max(atomic.LoadInt64(&numTuples), 1))
+				id %= uint64(max(atomic.LoadInt64(&numTuples), 1))
 				var val testType
 				err = knox.NewGenericQuery[testType]().
 					WithTag("update").
@@ -338,7 +337,7 @@ func runTestDST(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				id = id % uint64(max(atomic.LoadInt64(&numTuples), 1))
+				id %= uint64(max(atomic.LoadInt64(&numTuples), 1))
 
 				// find a value that actually exists
 				var val testType
@@ -378,7 +377,7 @@ func runTestDST(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				id = id % uint64(max(atomic.LoadInt64(&numTuples), 1))
+				id %= uint64(max(atomic.LoadInt64(&numTuples), 1))
 				var val testType
 				err = knox.NewGenericQuery[testType]().
 					WithTag("query").
@@ -392,7 +391,7 @@ func runTestDST(t *testing.T) {
 			})
 		case stream:
 			action := random.Intn(3)
-			order := knox.OrderType(random.Intn(1))
+			order := knox.OrderType(random.Intn(2))
 			after := random.Int63()
 			errg.Go(func() error {
 				// This is a hack to ensure some randomized goroutine scheduling.
@@ -403,7 +402,7 @@ func runTestDST(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				after = after % int64(max(atomic.LoadInt64(&numTuples), 1))
+				after %= max(atomic.LoadInt64(&numTuples), 1)
 				err = knox.NewGenericQuery[testType]().
 					WithTag("stream").
 					WithTable(table).
@@ -473,7 +472,7 @@ func runTestDST(t *testing.T) {
 				// try insert
 				table, err := knox.UseGenericTable[testType]("test_type", db)
 				require.NoError(t, err)
-				val := testType{Val: int64(atomic.LoadInt64(&numTuples) + 1), MyEnum: "one"}
+				val := testType{Val: atomic.LoadInt64(&numTuples) + 1, MyEnum: "one"}
 				_, err = table.Insert(ctx, &val)
 				require.NoError(t, err)
 

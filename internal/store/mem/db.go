@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
@@ -103,7 +102,7 @@ func (db *db) SetManifest(manifest store.Manifest) error {
 	db.writeLock.Lock()
 	defer db.writeLock.Unlock()
 	if db.closed {
-		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 	}
 	// we only allow some fields to be overwritten
 	db.manifest.Name = manifest.Name
@@ -155,7 +154,7 @@ func (db *db) begin(writable bool) (*transaction, error) {
 		// cross-check the db was not closed while waiting for the lock.
 		if db.closed {
 			db.writeLock.Unlock()
-			return nil, makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+			return nil, makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 		}
 	} else {
 		// Readers must also acquire a lock to make writes atomic.
@@ -164,7 +163,7 @@ func (db *db) begin(writable bool) (*transaction, error) {
 		// cross-check the db was not closed while waiting for the lock.
 		if db.closed {
 			db.writeLock.RUnlock()
-			return nil, makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+			return nil, makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 		}
 	}
 
@@ -297,16 +296,17 @@ func (db *db) Close() error {
 	defer db.writeLock.Unlock()
 
 	if db.closed {
-		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 	}
 
-	return db.close()
+	db.close()
+	return nil
 }
 
-func (db *db) close() error {
+func (db *db) close() {
 	// don't clear when persist flag is set
 	if db.opts.Persist {
-		return nil
+		return
 	}
 
 	// drop all sequences and buckets
@@ -321,14 +321,13 @@ func (db *db) close() error {
 	db.store.Clear(false)
 
 	if db.manifest.Name != "" {
-		log.Debugf("%s database closed successfully.", strings.Title(db.manifest.Name))
+		log.Debugf("%s database closed successfully.", db.manifest.Name)
 	} else {
 		log.Debugf("Database closed successfully.")
 	}
 	db.closed = true
 	db.store = nil
 	db.opts = nil
-	return nil
 }
 
 func (db *db) Sync() error {
@@ -338,7 +337,7 @@ func (db *db) Sync() error {
 
 // initDB creates the initial buckets and values used by the package.  This is
 // mainly in a separate function for testing purposes.
-func initDB(db *db) error {
+func initDB(db *db) {
 	// init manifest
 	now := time.Now().UTC()
 	db.manifest = store.Manifest{
@@ -347,8 +346,6 @@ func initDB(db *db) error {
 
 	// init buckets
 	db.bucketIds["root"] = [bucketIdLen]byte{}
-
-	return nil
 }
 
 // openDB opens the database at the provided path.  store.ErrDbDoesNotExist
@@ -357,7 +354,7 @@ func openDB(dbPath string, opts *Options, create bool) (store.DB, error) {
 	val, ok := registry.Load(dbPath)
 	if !ok && !create {
 		str := fmt.Sprintf("database %q does not exist", dbPath)
-		return nil, makeDbErr(store.ErrDbDoesNotExist, str, nil)
+		return nil, makeDbErr(store.ErrDbDoesNotExist, str)
 	}
 	if val != nil {
 		return val.(*db), nil
@@ -372,11 +369,7 @@ func openDB(dbPath string, opts *Options, create bool) (store.DB, error) {
 	}
 
 	log.Debug("Initializing database...")
-	if err := initDB(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-
+	initDB(db)
 	registry.Store(dbPath, db)
 
 	return db, nil
@@ -406,35 +399,35 @@ func (_ *db) GC(_ context.Context, _ float64) error {
 // walkFunc is the type of the function called for keys (buckets and "normal"
 // values) discovered by Walk. keys is the list of keys to descend to the bucket
 // owning the discovered key/value pair k/v.
-type walkFunc func(keys [][]byte, k, v []byte, seq uint64) error
+// type walkFunc func(keys [][]byte, k, v []byte, seq uint64) error
 
-// walk walks recursively the bolt database db, calling walkFn for each key it finds.
-func walk(db *db, walkFn walkFunc) error {
-	return db.View(func(tx store.Tx) error {
-		return tx.Root().ForEachBucket(func(name []byte, b store.Bucket) error {
-			return walkBucket(b, nil, name, nil, 0, walkFn)
-		})
-	})
-}
+// // walk walks recursively the bolt database db, calling walkFn for each key it finds.
+// func walk(db *db, walkFn walkFunc) error {
+// 	return db.View(func(tx store.Tx) error {
+// 		return tx.Root().ForEachBucket(func(name []byte, b store.Bucket) error {
+// 			return walkBucket(b, nil, name, nil, 0, walkFn)
+// 		})
+// 	})
+// }
 
-func walkBucket(b store.Bucket, keypath [][]byte, k, v []byte, seq uint64, fn walkFunc) error {
-	// Execute callback.
-	if err := fn(keypath, k, v, seq); err != nil {
-		return err
-	}
+// func walkBucket(b store.Bucket, keypath [][]byte, k, v []byte, seq uint64, fn walkFunc) error {
+// 	// Execute callback.
+// 	if err := fn(keypath, k, v, seq); err != nil {
+// 		return err
+// 	}
 
-	// If this is not a bucket then stop.
-	if v != nil {
-		return nil
-	}
+// 	// If this is not a bucket then stop.
+// 	if v != nil {
+// 		return nil
+// 	}
 
-	// Iterate over each child key/value.
-	keypath = append(keypath, k)
-	return b.ForEach(func(k, v []byte) error {
-		if v == nil {
-			bkt := b.Bucket(k)
-			return walkBucket(bkt, keypath, k, nil, 0, fn)
-		}
-		return walkBucket(b, keypath, k, v, 0, fn)
-	})
-}
+// 	// Iterate over each child key/value.
+// 	keypath = append(keypath, k)
+// 	return b.ForEach(func(k, v []byte) error {
+// 		if v == nil {
+// 			bkt := b.Bucket(k)
+// 			return walkBucket(bkt, keypath, k, nil, 0, fn)
+// 		}
+// 		return walkBucket(b, keypath, k, v, 0, fn)
+// 	})
+// }

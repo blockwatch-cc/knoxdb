@@ -28,8 +28,8 @@ func makeWal(t *testing.T) *Wal {
 func TestSegmentCreate(t *testing.T) {
 	w := makeWal(t)
 	s, err := w.createSegment(42)
-	defer s.Close()
 	require.NoError(t, err, "segment create")
+	defer s.Close()
 	require.Equal(t, 42, s.Id(), "segment id")
 	_, err = os.Stat(w.segmentName(0))
 	require.Error(t, err, "invalid segment file")
@@ -44,8 +44,8 @@ func TestSegmentCreate(t *testing.T) {
 func TestSegmentOpen(t *testing.T) {
 	w := makeWal(t)
 	s, err := w.createSegment(0)
-	defer s.Close()
 	require.NoError(t, err, "segment create")
+	defer s.Close()
 	err = s.Close()
 	require.NoError(t, err, "segment close")
 	_, err = os.Stat(w.segmentName(0))
@@ -59,8 +59,8 @@ func TestSegmentOpen(t *testing.T) {
 func TestSegmentDoubleClose(t *testing.T) {
 	w := makeWal(t)
 	s, err := w.createSegment(0)
-	defer s.Close()
 	require.NoError(t, err, "segment create")
+	defer s.Close()
 	err = s.Close()
 	require.NoError(t, err, "segment close")
 	err = s.Close()
@@ -70,8 +70,8 @@ func TestSegmentDoubleClose(t *testing.T) {
 func TestSegmentWrite(t *testing.T) {
 	w := makeWal(t)
 	s, err := w.createSegment(0)
-	defer s.Close()
 	require.NoError(t, err, "segment create")
+	defer s.Close()
 	n, err := s.Write([]byte("data"))
 	require.NoError(t, err, "segment write")
 	require.Equal(t, 4, n, "write size")
@@ -91,8 +91,8 @@ func TestSegmentWrite(t *testing.T) {
 
 	// re-open for read
 	s, err = w.openSegment(0, false)
-	defer s.Close()
 	require.NoError(t, err, "segment reopen")
+	defer s.Close()
 	var buf [5]byte
 	n, err = s.Read(buf[:])
 	require.NoError(t, err, "segment read")
@@ -105,8 +105,8 @@ func TestSegmentWrite(t *testing.T) {
 func TestSegmentWriteReadOnly(t *testing.T) {
 	w := makeWal(t)
 	s, err := w.createSegment(0)
-	defer s.Close()
 	require.NoError(t, err, "segment create")
+	defer s.Close()
 	n, err := s.Write([]byte("data"))
 	require.NoError(t, err, "segment write")
 	require.Equal(t, 4, n, "write size")
@@ -117,8 +117,8 @@ func TestSegmentWriteReadOnly(t *testing.T) {
 
 	// reopen for read
 	s, err = w.openSegment(0, false)
-	defer s.Close()
 	require.NoError(t, err, "segment reopen")
+	defer s.Close()
 	_, err = s.Write([]byte("more"))
 	require.ErrorIs(t, err, ErrSegmentReadOnly)
 }
@@ -126,8 +126,8 @@ func TestSegmentWriteReadOnly(t *testing.T) {
 func TestSegmentSeek(t *testing.T) {
 	w := makeWal(t)
 	s, err := w.createSegment(0)
-	defer s.Close()
 	require.NoError(t, err, "segment create")
+	defer s.Close()
 	_, err = s.Write([]byte("data"))
 	require.NoError(t, err, "segment write")
 
@@ -139,8 +139,8 @@ func TestSegmentSeek(t *testing.T) {
 
 	// reopen for read
 	s, err = w.openSegment(0, false)
-	defer s.Close()
 	require.NoError(t, err, "segment reopen")
+	defer s.Close()
 	_, err = s.Seek(2, 0)
 	require.NoError(t, err, "segment seek 2")
 

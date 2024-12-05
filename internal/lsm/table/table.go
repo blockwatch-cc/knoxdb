@@ -330,18 +330,18 @@ func (t *Table) UnuseIndex(idx engine.QueryableIndex) {
 }
 
 // low-level interface for KV storage access
-func (t *Table) getTx(tx store.Tx, key []byte) []byte {
-	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
-	if bucket == nil {
-		return nil
-	}
-	buf := bucket.Get(key)
-	if buf == nil {
-		return nil
-	}
-	atomic.AddInt64(&t.metrics.BytesRead, int64(len(buf)))
-	return buf
-}
+// func (t *Table) getTx(tx store.Tx, key []byte) []byte {
+// 	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
+// 	if bucket == nil {
+// 		return nil
+// 	}
+// 	buf := bucket.Get(key)
+// 	if buf == nil {
+// 		return nil
+// 	}
+// 	atomic.AddInt64(&t.metrics.BytesRead, int64(len(buf)))
+// 	return buf
+// }
 
 func (t *Table) putTx(tx store.Tx, key, val []byte) ([]byte, error) {
 	prevSize, sz := -1, len(key)+len(val)

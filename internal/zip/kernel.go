@@ -22,7 +22,7 @@ var (
 	zzDeltaDecodeInt16 = generic.ZzDeltaDecodeInt16
 	zzDeltaDecodeInt8  = generic.ZzDeltaDecodeInt8
 	zzDeltaDecodeTime  = generic.ZzDeltaDecodeTime
-	deltaDecodeTime    = generic.DeltaDecodeTime
+	// deltaDecodeTime    = generic.DeltaDecodeTime
 
 	// bit packing
 	packBytes8Bit    = generic.PackBytes8Bit
@@ -64,7 +64,7 @@ func init() {
 		zzDeltaDecodeInt16 = avx2.ZzDeltaDecodeInt16
 		zzDeltaDecodeInt8 = avx2.ZzDeltaDecodeInt8
 		zzDeltaDecodeTime = avx2.ZzDeltaDecodeTime
-		deltaDecodeTime = avx2.DeltaDecodeTime
+		// deltaDecodeTime = avx2.DeltaDecodeTime
 		packBytes16Bit = avx2.PackBytes16Bit
 		packBytes32Bit = avx2.PackBytes32Bit
 		unpackBytes16Bit = avx2.UnpackBytes16Bit

@@ -56,13 +56,13 @@ func (c *cursor) Delete() error {
 	// Ensure the transaction is writable.
 	if !c.bucket.tx.writable {
 		str := "create bucket requires a writable database transaction"
-		return makeDbErr(store.ErrTxNotWritable, str, nil)
+		return makeDbErr(store.ErrTxNotWritable, str)
 	}
 
 	// Error if the cursor is exhausted.
 	if c.current == nil {
 		str := "cursor is exhausted"
-		return makeDbErr(store.ErrIncompatibleValue, str, nil)
+		return makeDbErr(store.ErrIncompatibleValue, str)
 	}
 
 	// mark for deletion

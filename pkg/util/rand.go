@@ -56,7 +56,13 @@ func init() {
 		RandFloat64 = rnd.Float64
 		RandShuffle = rnd.Shuffle
 		RandPerm = rnd.Perm
+	} else {
+
 	}
+}
+
+func RandSeed() string {
+	return NonEmptyString(os.Getenv(randomSeedKey), "dynamic")
 }
 
 func RandBytes(sz int) []byte {

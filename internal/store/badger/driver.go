@@ -5,7 +5,6 @@ package badger
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"os"
 
@@ -24,7 +23,7 @@ var (
 	// byteOrder is the preferred byte order used through the store.
 	// Sometimes big endian will be used to allow ordered byte
 	// sortable integer values.
-	byteOrder = binary.LittleEndian
+	// byteOrder = binary.LittleEndian
 
 	// bucketIndexPrefix is the prefix used for all entries in the bucket
 	// index.
@@ -58,8 +57,8 @@ const (
 )
 
 // makeDbErr creates a store.Error given a set of arguments.
-func makeDbErr(c store.ErrorCode, desc string, err error) store.Error {
-	return store.Error{ErrorCode: c, Description: desc, Err: err}
+func makeDbErr(c store.ErrorCode, desc string) store.Error {
+	return store.Error{ErrorCode: c, Description: desc, Err: nil}
 }
 
 // convertErr converts the passed badger error into a database error with an

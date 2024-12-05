@@ -162,7 +162,9 @@ func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 	leafs = simplifySets(leafs, isOrNode)
 
 	// recombine optimized leafs with nested branch nodes
-	nodes = append(leafs, branches...)
+	nodes = nodes[:0]
+	nodes = append(nodes, leafs...)
+	nodes = append(nodes, branches...)
 
 	// simplify AND/OR when always true/false conds are present
 	if isOrNode {
@@ -686,13 +688,13 @@ func reflectSliceIndex(slice any, index int) any {
 	return reflect.ValueOf(slice).Index(index).Interface()
 }
 
-func appendReflectValue(a, b any) any {
-	return reflect.Append(reflect.ValueOf(a), reflect.ValueOf(b)).Interface()
-}
+// func appendReflectValue(a, b any) any {
+// 	return reflect.Append(reflect.ValueOf(a), reflect.ValueOf(b)).Interface()
+// }
 
-func appendReflectSlice(a, b any) any {
-	return reflect.AppendSlice(reflect.ValueOf(a), reflect.ValueOf(b)).Interface()
-}
+// func appendReflectSlice(a, b any) any {
+// 	return reflect.AppendSlice(reflect.ValueOf(a), reflect.ValueOf(b)).Interface()
+// }
 
 func makeReflectSlice(vals ...any) any {
 	if len(vals) == 0 {

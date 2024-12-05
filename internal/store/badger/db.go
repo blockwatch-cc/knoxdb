@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -67,7 +66,7 @@ func (db *db) Path() string {
 // This function is part of the store.DB interface implementation.
 func (db *db) Manifest() (store.Manifest, error) {
 	if db.closed {
-		return store.Manifest{}, makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+		return store.Manifest{}, makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 	}
 	return getManifest(db.store)
 }
@@ -77,7 +76,7 @@ func (db *db) Manifest() (store.Manifest, error) {
 // This function is part of the store.DB interface implementation.
 func (db *db) SetManifest(manifest store.Manifest) error {
 	if db.closed {
-		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 	}
 	mft, err := getManifest(db.store)
 	if err != nil {
@@ -163,7 +162,7 @@ func (db *db) begin(writable bool) (*transaction, error) {
 	db.closeLock.RLock()
 	if db.closed {
 		db.closeLock.RUnlock()
-		return nil, makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+		return nil, makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 	}
 
 	// The metadata and block index buckets are internal-only buckets, so
@@ -298,7 +297,7 @@ func (db *db) Close() error {
 	defer db.closeLock.Unlock()
 
 	if db.closed {
-		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 	}
 
 	// write manifest
@@ -306,7 +305,7 @@ func (db *db) Close() error {
 	if err != nil {
 		return err
 	}
-	db.log.Infof("Closing database %s (this may take a while)...", strings.Title(mft.Name))
+	db.log.Infof("Closing database %s (this may take a while)...", mft.Name)
 
 	// close all sequences
 	for _, v := range db.sequences {
@@ -322,7 +321,7 @@ func (db *db) Close() error {
 		return convertErr("close", err)
 	}
 	if mft.Name != "" {
-		db.log.Infof("Database %s closed successfully.", strings.Title(mft.Name))
+		db.log.Infof("Database %s closed successfully.", mft.Name)
 	} else {
 		db.log.Debugf("Database closed successfully.")
 	}
@@ -337,7 +336,7 @@ func (db *db) Sync() error {
 	defer db.closeLock.Unlock()
 
 	if db.closed {
-		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 	}
 
 	return db.store.Sync()
@@ -390,7 +389,7 @@ func openDB(dbPath string, create bool) (store.DB, error) {
 
 	if !create && !dbExists {
 		str := fmt.Sprintf("database %q does not exist", dbPath)
-		return nil, makeDbErr(store.ErrDbDoesNotExist, str, nil)
+		return nil, makeDbErr(store.ErrDbDoesNotExist, str)
 	}
 
 	// Ensure the full path to the database exists.
@@ -462,7 +461,7 @@ func openDB(dbPath string, create bool) (store.DB, error) {
 			return nil, err
 		}
 		if mft.Name != "" {
-			log.Infof("%s database opened successfully.", strings.Title(mft.Name))
+			log.Infof("%s database opened successfully.", mft.Name)
 		} else {
 			log.Info("Database opened successfully.")
 		}
@@ -477,7 +476,7 @@ func (db *db) Dump(w io.Writer) error {
 	db.closeLock.RLock()
 	defer db.closeLock.RUnlock()
 	if db.closed {
-		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 	}
 
 	// let new write transactions wait until backup is finished
@@ -498,7 +497,7 @@ func (db *db) Restore(r io.Reader) error {
 	db.closeLock.RLock()
 	defer db.closeLock.RUnlock()
 	if db.closed {
-		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 	}
 
 	// let new write transactions wait until backup is finished
@@ -517,7 +516,7 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 	db.closeLock.RLock()
 	defer db.closeLock.RUnlock()
 	if db.closed {
-		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr, nil)
+		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
 	}
 
 	// let new write transactions wait until backup is finished

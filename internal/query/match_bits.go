@@ -11,8 +11,6 @@ import (
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
-type bitsetMatchFunc func(src *bitset.Bitset, val bool, bits, mask *bitset.Bitset) *bitset.Bitset
-
 type BitMatcherFactory struct{}
 
 func (f BitMatcherFactory) New(m FilterMode) Matcher {

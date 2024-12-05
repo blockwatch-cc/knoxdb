@@ -6,7 +6,7 @@ package bitset
 // alloc without arena for very small sized bitsets
 func makeBitset(size int) *Bitset {
 	return &Bitset{
-		buf:  make([]byte, bitFieldLen(size), bitFieldLen(size)),
+		buf:  make([]byte, bitFieldLen(size)),
 		cnt:  0,
 		size: size,
 	}

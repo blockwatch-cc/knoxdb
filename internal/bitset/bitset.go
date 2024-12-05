@@ -56,6 +56,15 @@ func NewBitsetFromBytes(buf []byte, size int) *Bitset {
 	return s
 }
 
+// NewBitsetFromRef references a pre-allocated byte slice.
+func NewBitsetFromRef(buf []byte) *Bitset {
+	return &Bitset{
+		buf:  buf,
+		cnt:  -1,
+		size: len(buf) << 3,
+	}
+}
+
 // NewBitsetFromString allocates a new bitset and initializes it from decoding
 // a hex string. If s is empty or not a valid hex string, the bitset is initially
 // empty.
@@ -611,7 +620,7 @@ func (s *Bitset) Swap(i, j int) {
 	n_j := j >> 3
 	b_i := (s.buf[n_i] & m_i) > 0
 	b_j := (s.buf[n_j] & m_j) > 0
-	switch true {
+	switch {
 	case b_i == b_j:
 		return
 	case b_i:

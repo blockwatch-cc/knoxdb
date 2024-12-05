@@ -264,7 +264,7 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 		if node == nil {
 			node = &FilterTreeNode{
 				Children: []*FilterTreeNode{
-					&FilterTreeNode{
+					{
 						Filter: &Filter{
 							Name:    c.Name,
 							Type:    BlockTypes[typ],

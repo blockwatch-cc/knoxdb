@@ -454,7 +454,6 @@ func (m numRangeMatcher[T]) MatchRange(from, to any) bool {
 
 // In, Contains
 type numInSetMatcher[T Number] struct {
-	noopMatcher
 	set    *xroar.Bitmap
 	hashes [][2]uint32
 }
@@ -537,7 +536,6 @@ func (m numInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset
 // NOT IN ---
 
 type numNotInSetMatcher[T Number] struct {
-	noopMatcher
 	set *xroar.Bitmap
 }
 

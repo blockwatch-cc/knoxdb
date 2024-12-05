@@ -56,15 +56,15 @@ func NewCompressor(w io.Writer, c types.FieldCompression) io.WriteCloser {
 	case types.FieldCompressSnappy:
 		enc := snappyWriterPool.Get().(*s2.Writer)
 		enc.Reset(w)
-		return pooledWriteCloser{pool: snappyWriterPool, w: enc}
+		return &pooledWriteCloser{pool: snappyWriterPool, w: enc}
 	case types.FieldCompressLZ4:
 		enc := lz4WriterPool.Get().(*lz4.Writer)
 		enc.Reset(w)
-		return pooledWriteCloser{pool: lz4WriterPool, w: enc}
+		return &pooledWriteCloser{pool: lz4WriterPool, w: enc}
 	case types.FieldCompressZstd:
 		enc := zstdWriterPool.Get().(*zstd.Encoder)
 		enc.Reset(w)
-		return pooledWriteCloser{pool: zstdWriterPool, w: enc}
+		return &pooledWriteCloser{pool: zstdWriterPool, w: enc}
 	default:
 		return nopWriteCloser{w}
 	}
@@ -75,15 +75,15 @@ func NewDecompressor(r io.Reader, c types.FieldCompression) io.ReadCloser {
 	case types.FieldCompressSnappy:
 		dec := snappyReaderPool.Get().(*s2.Reader)
 		dec.Reset(r)
-		return pooledReadCloser{pool: snappyReaderPool, r: dec}
+		return &pooledReadCloser{pool: snappyReaderPool, r: dec}
 	case types.FieldCompressLZ4:
 		dec := lz4ReaderPool.Get().(*lz4.Reader)
 		dec.Reset(r)
-		return pooledReadCloser{pool: lz4WriterPool, r: dec}
+		return &pooledReadCloser{pool: lz4WriterPool, r: dec}
 	case types.FieldCompressZstd:
 		dec := zstdReaderPool.Get().(*zstd.Decoder)
 		dec.Reset(r)
-		return pooledReadCloser{pool: zstdWriterPool, r: dec}
+		return &pooledReadCloser{pool: zstdWriterPool, r: dec}
 	default:
 		return io.NopCloser(r)
 	}
@@ -94,7 +94,7 @@ type pooledWriteCloser struct {
 	w    io.WriteCloser
 }
 
-func (c pooledWriteCloser) Close() error {
+func (c *pooledWriteCloser) Close() error {
 	err := c.w.Close()
 	c.pool.Put(c.w)
 	c.pool = nil
@@ -111,7 +111,7 @@ type pooledReadCloser struct {
 	r    io.Reader
 }
 
-func (c pooledReadCloser) Close() error {
+func (c *pooledReadCloser) Close() error {
 	c.pool.Put(c.r)
 	c.pool = nil
 	c.r = nil

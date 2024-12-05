@@ -5,7 +5,6 @@ package bolt
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"os"
 
@@ -29,7 +28,7 @@ var (
 	// byteOrder is the preferred byte order used through the database.
 	// Sometimes big endian will be used to allow ordered byte
 	// sortable integer values.
-	byteOrder = binary.LittleEndian
+	// byteOrder = binary.LittleEndian
 
 	// max size of compact transactions
 	compactTxSize int64 = 1048576
@@ -47,7 +46,7 @@ const (
 
 	// errDbReadOnlyStr is the text to use for the store.ErrDbTxNotWriteable
 	// error code.
-	errDbReadOnlyStr = "database is in read-only mode"
+	// errDbReadOnlyStr = "database is in read-only mode"
 
 	// errTxClosedStr is the text to use for the store.ErrTxClosed error
 	// code.

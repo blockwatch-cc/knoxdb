@@ -28,7 +28,7 @@ var _ store.Tx = (*transaction)(nil)
 func (tx *transaction) checkClosed() error {
 	// The transaction is no longer valid if it has been closed.
 	if tx.closed {
-		return makeDbErr(store.ErrTxClosed, errTxClosedStr, nil)
+		return makeDbErr(store.ErrTxClosed, errTxClosedStr)
 	}
 	return nil
 }
@@ -36,7 +36,7 @@ func (tx *transaction) checkClosed() error {
 // checkWriteable returns an error if the the database or transaction is closed.
 func (tx *transaction) checkWriteable() error {
 	if !tx.writable {
-		return makeDbErr(store.ErrTxNotWritable, "tx is not writeable", nil)
+		return makeDbErr(store.ErrTxNotWritable, "tx is not writeable")
 	}
 	return nil
 }
@@ -48,7 +48,7 @@ func (tx *transaction) checkWriteable() error {
 func (tx *transaction) nextBucketID() ([bucketIdLen]byte, error) {
 	nextId := len(tx.db.bucketIds) + 1
 	if nextId > 1<<uint(8*bucketIdLen) {
-		return [bucketIdLen]byte{}, makeDbErr(store.ErrTxConflict, "bucket sequence overflow", nil)
+		return [bucketIdLen]byte{}, makeDbErr(store.ErrTxConflict, "bucket sequence overflow")
 	}
 	buf := make([]byte, 8)
 	binary.BigEndian.PutUint64(buf, uint64(nextId))
@@ -151,7 +151,7 @@ func (tx *transaction) Commit() error {
 	// Ensure the transaction is writable.
 	if !tx.writable {
 		str := "Commit requires a writable database transaction"
-		return makeDbErr(store.ErrTxNotWritable, str, nil)
+		return makeDbErr(store.ErrTxNotWritable, str)
 	}
 
 	// Write (merge) pending updates and deletes.

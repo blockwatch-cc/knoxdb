@@ -334,7 +334,7 @@ func (o *EnumObject) Encode() ([]byte, error) {
 	binary.Write(buf, LE, uint16(len(o.vals)))
 	for _, v := range o.vals {
 		binary.Write(buf, LE, uint16(len(v)))
-		buf.WriteString(string(v))
+		buf.WriteString(v)
 	}
 
 	return buf.Bytes(), nil

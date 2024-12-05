@@ -10,7 +10,7 @@ import (
 
 func BenchmarkAppendWire(b *testing.B) {
 	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, 0)
+		pkg := makeTypedPackage(v, 0)
 		s := makeZeroStruct(v)
 		buf := s.(Encodable).Encode()
 		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
@@ -27,7 +27,7 @@ func BenchmarkAppendWire(b *testing.B) {
 
 func BenchmarkAppendWireE2E(b *testing.B) {
 	for _, v := range testStructs {
-		pkg := makeTypedPackage(v, PACK_SIZE, 0)
+		pkg := makeTypedPackage(v, 0)
 		z := makeZeroStruct(v)
 		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
 			b.ReportAllocs()

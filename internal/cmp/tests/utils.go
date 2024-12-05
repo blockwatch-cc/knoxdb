@@ -9,13 +9,13 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func bitmask(i int) byte {
-	return byte(1 << uint(i&0x7))
-}
+// func bitmask(i int) byte {
+// 	return byte(1 << uint(i&0x7))
+// }
 
-func bytemask(size int) byte {
-	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
-}
+// func bytemask(size int) byte {
+// 	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
+// }
 
 func bitFieldLen(n int) int {
 	return roundUpPow2(n, 8) >> 3

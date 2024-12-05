@@ -11,9 +11,9 @@ import (
 )
 
 type dstfs struct {
-	internal  experimentalsys.FS // underlying file system to delegate to
-	log       log.Logger
-	openFiles map[int]string
+	internal experimentalsys.FS // underlying file system to delegate to
+	log      log.Logger
+	// openFiles map[int]string
 }
 
 var _ experimentalsys.FS = (*dstfs)(nil)

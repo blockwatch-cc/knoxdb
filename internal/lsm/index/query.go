@@ -231,7 +231,7 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 		node, ok := eq[name]
 		if !ok {
 			// before stopping, check if we can append an extra range condition
-			extra, _ = ex[name]
+			extra = ex[name]
 			break
 		}
 		err := field.Encode(buf, node.Filter.Value)
@@ -277,7 +277,8 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 		// EQ+LT => scan(prefix, prefix+to)
 		err = extraField.Encode(buf, extra.Filter.Value)
 		from = prefix
-		to = append(prefix, buf.Bytes()...)
+		prefix = append(prefix, buf.Bytes()...)
+		to = prefix
 
 	case FilterModeLe:
 		// LE    => scan(0x, to)
@@ -297,14 +298,16 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 		// GE    => scan(from, FF)
 		// EQ+GE => scan(prefix+from, prefix+FF)
 		err = extraField.Encode(buf, extra.Filter.Value)
-		from = append(prefix, buf.Bytes()...)
+		prefix = append(prefix, buf.Bytes()...)
+		from = prefix
 		to = bytes.Repeat(FF, len(prefix)+buf.Len())
 
 	case FilterModeRange:
 		// RG    => scan(from, to)
 		// EQ+RG => scan(prefix+from, prefix+to)
 		err = extraField.Encode(buf, extra.Filter.Value.(query.RangeValue)[0])
-		from = append(prefix, buf.Bytes()...)
+		prefix = append(prefix, buf.Bytes()...)
+		from = prefix
 		if err == nil {
 			buf.Reset()
 			err = extraField.Encode(buf, extra.Filter.Value.(query.RangeValue)[1])

@@ -93,7 +93,7 @@ func optimize(slice [][]byte) ByteArray {
 		return newFixedByteArray(0, 0)
 	}
 	an := analyze(slice)
-	switch true {
+	switch {
 	case an.nEmpty == l:
 		// all zeros
 		// fmt.Printf("dedup: zeros len=%d empty=%d\n", l, an.nEmpty)
@@ -101,15 +101,16 @@ func optimize(slice [][]byte) ByteArray {
 	default:
 		// analyze content for duplicates
 		dm, card, sz := dedup(slice)
-		if an.isFixed && an.nEmpty == 0 && card == l {
+		switch {
+		case an.isFixed && an.nEmpty == 0 && card == l:
 			// all fixed and unique
 			// fmt.Printf("dedup: fixed len=%d empty=%d esz=%d\n", l, an.nEmpty, an.fixedSize)
 			return makeFixedByteArray(an.fixedSize, slice)
-		} else if card < l/2 {
+		case card < l/2:
 			// many duplicates
 			// fmt.Printf("dedup: dict len=%d size=%d empty=%d card=%d\n", l, sz, an.nEmpty, card)
 			return makeDictByteArray(sz, card, slice, dm)
-		} else {
+		default:
 			// some duplicates
 			// fmt.Printf("dedup: compact len=%d size=%d empty=%d card=%d\n", l, sz, an.nEmpty, card)
 			return makeCompactByteArray(sz, card, slice, dm)

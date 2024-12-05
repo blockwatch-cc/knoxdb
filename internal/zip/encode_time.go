@@ -95,7 +95,7 @@ func EncodeTime(s []int64, w io.Writer) (int, error) {
 				// detect ordering
 				ordered = ordered && deltas[i-1] <= deltas[i]
 				// delta-encode
-				deltas[i] = deltas[i] - deltas[i-1]
+				deltas[i] -= deltas[i-1]
 				if deltas[i] > maxdelta {
 					maxdelta = deltas[i]
 				}
@@ -104,7 +104,7 @@ func EncodeTime(s []int64, w io.Writer) (int, error) {
 			// the scaled value just yet because RLE encoding relies on unaltered
 			// initial values
 			ordered = ordered && deltas[0]/div <= deltas[1]
-			deltas[1] = deltas[1] - deltas[0]/div
+			deltas[1] -= deltas[0] / div
 			if deltas[1] > maxdelta {
 				maxdelta = deltas[1]
 			}

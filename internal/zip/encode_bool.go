@@ -14,7 +14,7 @@ import (
 const (
 	// booleanUncompressed is an uncompressed boolean format.
 	// Invalid: Not implemented.
-	booleanUncompressed = 0
+	// booleanUncompressed = 0
 
 	// booleanCompressedBitPacked is an bit packed format using 1 bit per boolean
 	booleanCompressedBitPacked = 1
@@ -50,7 +50,10 @@ func EncodeBitset(src *bitset.Bitset, w io.Writer) (int, error) {
 // It efficiently reads data into the target memory.
 func ReadBitset(dst *bitset.Bitset, r io.Reader) (int64, error) {
 	// read, but ignore type
-	_ = readByte(r)
+	typ := readByte(r)
+	if typ != booleanCompressedBitPacked {
+		return 0, fmt.Errorf("zip: bitset decode: invalid type id %d", typ)
+	}
 
 	var sz uint32
 	err := binary.Read(r, binary.LittleEndian, &sz)

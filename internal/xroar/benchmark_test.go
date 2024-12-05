@@ -41,6 +41,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 
 		bitmaps = append(bitmaps, rb)
 	}
+	_ = bitmaps[:0]
 
 	var stats runtime.MemStats
 	runtime.ReadMemStats(&stats)
@@ -69,7 +70,7 @@ func BenchmarkIntersectionRoaring(b *testing.B) {
 	card := 0
 	for j := 0; j < b.N; j++ {
 		s3 := And(s1, s2)
-		card = card + s3.GetCardinality()
+		card += s3.GetCardinality()
 	}
 	b.Logf("card: %d\n", card)
 }
@@ -140,12 +141,12 @@ func BenchmarkRemoveRange(b *testing.B) {
 	bm := NewBitmap()
 	N := uint64(1e5)
 	for i := uint64(0); i < N; i++ {
-		bm.Set(uint64(i))
+		bm.Set(i)
 	}
 
 	bench := func(b *testing.B, factor uint64) {
-		sz := uint64(N / factor)
-		cnt := uint64(N / sz)
+		sz := N / factor
+		cnt := N / sz
 		for j := 0; j < b.N; j++ {
 			b.StopTimer()
 			bm2 := bm.Clone()
@@ -173,12 +174,12 @@ func BenchmarkRemoveRangeRoaring64(b *testing.B) {
 	bm := roaring64.NewBitmap()
 	N := uint64(1e5)
 	for i := uint64(0); i < N; i++ {
-		bm.Add(uint64(i))
+		bm.Add(i)
 	}
 
 	bench := func(b *testing.B, factor uint64) {
-		sz := uint64(N / factor)
-		cnt := uint64(N / sz)
+		sz := N / factor
+		cnt := N / sz
 		for j := 0; j < b.N; j++ {
 			b.StopTimer()
 			bm2 := bm.Clone()
@@ -206,7 +207,7 @@ func BenchmarkSelectSroar(b *testing.B) {
 	bm := NewBitmap()
 	N := uint64(1e5)
 	for i := uint64(0); i < N; i++ {
-		bm.Set(uint64(i))
+		bm.Set(i)
 	}
 
 	b.ResetTimer()
@@ -221,7 +222,7 @@ func BenchmarkSelectRoaring64(b *testing.B) {
 	bm := roaring64.NewBitmap()
 	N := uint64(1e5)
 	for i := uint64(0); i < N; i++ {
-		bm.Add(uint64(i))
+		bm.Add(i)
 	}
 
 	b.ResetTimer()

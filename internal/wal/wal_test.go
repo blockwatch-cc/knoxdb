@@ -509,7 +509,7 @@ func TestWalSegmentRollover(t *testing.T) {
 	}
 	// t.Logf("Wrote %d records, total bytes: %d", recordsWritten, bytesWritten)
 
-	expectedSegments := (bytesWritten + int(opts.MaxSegmentSize) - 1) / int(opts.MaxSegmentSize)
+	expectedSegments := (bytesWritten + opts.MaxSegmentSize - 1) / opts.MaxSegmentSize
 	// t.Logf("Expected segments: %d", expectedSegments)
 
 	// Check for multiple segment files
@@ -1026,7 +1026,7 @@ func TestWalFaultInjection(t *testing.T) {
 		require.NoError(t, err)
 		defer f.Close()
 
-		_, err = f.Seek(int64(lsn.Offset(w.opts.MaxSegmentSize)), io.SeekStart)
+		_, err = f.Seek(lsn.Offset(w.opts.MaxSegmentSize), io.SeekStart)
 		require.NoError(t, err)
 
 		corruptHeader := make([]byte, HeaderSize)
@@ -1112,7 +1112,7 @@ func TestWalFaultInjection(t *testing.T) {
 		require.NoError(t, err)
 		defer f.Close()
 
-		_, err = f.Seek(int64(lsn.Offset(w.opts.MaxSegmentSize))+1, io.SeekStart) // Seek to record type position
+		_, err = f.Seek(lsn.Offset(w.opts.MaxSegmentSize)+1, io.SeekStart) // Seek to record type position
 		require.NoError(t, err)
 
 		_, err = f.Write([]byte{255}) // Write invalid record type

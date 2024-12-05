@@ -6,7 +6,7 @@ package types
 type DumpMode int
 
 const (
-    DumpModeDec DumpMode = iota
-    DumpModeHex
-    DumpModeCSV
+	DumpModeDec DumpMode = iota
+	DumpModeHex
+	DumpModeCSV
 )

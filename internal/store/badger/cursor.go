@@ -14,7 +14,7 @@ import (
 // PrefetchSize:   100,
 // Reverse:        false,
 // AllVersions:    false,
-var defaultIteratorOpts = badger.DefaultIteratorOptions
+// var defaultIteratorOpts = badger.DefaultIteratorOptions
 
 // cursor is an internal type used to represent a cursor over key/value pairs
 // and nested buckets of a bucket and implements the store.Cursor interface.
@@ -65,14 +65,14 @@ func (c *cursor) Delete() error {
 	// Error if the cursor is exhausted.
 	if !c.currentIter.Valid() {
 		str := "cursor is exhausted"
-		return makeDbErr(store.ErrIncompatibleValue, str, nil)
+		return makeDbErr(store.ErrIncompatibleValue, str)
 	}
 
 	// Do not allow buckets to be deleted via the cursor.
 	key := c.currentIter.Item().Key()
 	if bytes.HasPrefix(key, bucketIndexPrefix) {
 		str := "buckets may not be deleted from a cursor"
-		return makeDbErr(store.ErrIncompatibleValue, str, nil)
+		return makeDbErr(store.ErrIncompatibleValue, str)
 	}
 
 	c.bucket.tx.deleteKey(copySlice(key))

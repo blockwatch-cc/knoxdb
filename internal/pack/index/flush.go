@@ -202,7 +202,7 @@ func (idx *Index) flush(ctx context.Context) error {
 		}
 
 		// init on each iteration, either from journal or tombstone
-		switch true {
+		switch {
 		case jpos < jlen && tpos < tlen:
 			nextid = min(pk[jpos], dead[tpos])
 		case jpos < jlen && tpos >= tlen:

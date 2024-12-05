@@ -451,12 +451,12 @@ packloop:
 		if err != nil {
 			return err
 		}
-		nRowsScanned += uint32(pkg.Len())
 
 		// finish when no more packs are found
 		if pkg == nil {
 			break
 		}
+		nRowsScanned += uint32(pkg.Len())
 
 		// walk hits in reverse pk order
 		for k := len(hits) - 1; k >= 0; k-- {

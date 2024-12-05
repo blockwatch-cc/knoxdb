@@ -195,9 +195,10 @@ func (t *Tx) Close() {
 	// use first active read/write xid if any
 	if len(t.engine.txs) > 0 {
 		for _, tx := range t.engine.txs {
-			if !tx.IsReadOnly() {
-				t.engine.xmin = tx.id
+			if tx.IsReadOnly() {
+				continue
 			}
+			t.engine.xmin = tx.id
 			break
 		}
 	}

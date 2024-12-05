@@ -4,7 +4,6 @@
 package stats
 
 import (
-	"fmt"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/slicex"
@@ -22,7 +21,7 @@ func makeSortedPackStatsList(n int) PackStatsList {
 	// generate pack packers
 	packs := make(PackStatsList, 0)
 	for i, v := range values {
-		max := uint64(v + 1000)
+		max := v + 1000
 		if i < len(values)-1 {
 			max = values[i+1] - 1
 		}
@@ -31,7 +30,7 @@ func makeSortedPackStatsList(n int) PackStatsList {
 			NValues: 1,
 			Blocks: []BlockStats{
 				{
-					MinValue: uint64(v),
+					MinValue: v,
 					MaxValue: max,
 				},
 			},
@@ -50,7 +49,7 @@ func makeUnsortedPackStatsList(n int) PackStatsList {
 
 	// shuffle but keep original max values
 	for i, v := range util.RandPerm(len(values)) {
-		max := uint64(values[v] + 1000)
+		max := values[v] + 1000
 		if v < len(values)-1 {
 			max = values[v+1] - 1
 		}
@@ -602,41 +601,41 @@ var bestPackBenchmarkSizes = []benchmarkSize{
 	{"64k", 64 * 1024},
 }
 
-func BenchmarkPackIndexBestSorted(B *testing.B) {
+func BenchmarkPackIndexBestSorted(b *testing.B) {
 	for _, n := range bestPackBenchmarkSizes {
-		B.Run(fmt.Sprintf("%s", n.name), func(B *testing.B) {
+		b.Run(n.name, func(b *testing.B) {
 			v2 := NewStatsIndex(0, 1)
 			for _, v := range makeSortedPackStatsList(n.l) {
 				v2.AddOrUpdate(v)
 			}
 			max := v2.packs[v2.pos[len(v2.pos)-1]].Blocks[v2.pki].MaxValue.(uint64)
-			B.ResetTimer()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				v2.Best(uint64(util.RandInt64n(int64(max)) + 1))
 			}
 		})
 	}
 }
 
-func BenchmarkPackIndexBestUnsorted(B *testing.B) {
+func BenchmarkPackIndexBestUnsorted(b *testing.B) {
 	for _, n := range bestPackBenchmarkSizes {
-		B.Run(fmt.Sprintf("%s", n.name), func(B *testing.B) {
+		b.Run(n.name, func(b *testing.B) {
 			v2 := NewStatsIndex(0, 1)
 			for _, v := range makeUnsortedPackStatsList(n.l) {
 				v2.AddOrUpdate(v)
 			}
 			max := v2.packs[v2.pos[len(v2.pos)-1]].Blocks[v2.pki].MaxValue.(uint64)
-			B.ResetTimer()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				v2.Best(uint64(util.RandInt64n(int64(max)) + 1))
 			}
 		})
 	}
 }
 
-func BenchmarkPackIndexAppend(B *testing.B) {
+func BenchmarkPackIndexAppend(b *testing.B) {
 	for _, n := range bestPackBenchmarkSizes {
-		B.Run(fmt.Sprintf("%s", n.name), func(B *testing.B) {
+		b.Run(n.name, func(b *testing.B) {
 			v2 := NewStatsIndex(0, 1)
 			for _, v := range makeSortedPackStatsList(n.l) {
 				v2.AddOrUpdate(v)
@@ -644,8 +643,8 @@ func BenchmarkPackIndexAppend(B *testing.B) {
 			l := v2.Len()
 			_, max := v2.MinMax(l - 1)
 			// pack := buildPackHeaderInt(l, max+1, max+1000)
-			B.ResetTimer()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				// append to end of list
 				v2.AddOrUpdate(buildPackHeaderInt(i+l, max+1, max+1000))
 				max += 1000
@@ -654,9 +653,9 @@ func BenchmarkPackIndexAppend(B *testing.B) {
 	}
 }
 
-func BenchmarkPackIndexAdd(B *testing.B) {
+func BenchmarkPackIndexAdd(b *testing.B) {
 	for _, n := range bestPackBenchmarkSizes {
-		B.Run(fmt.Sprintf("%s", n.name), func(B *testing.B) {
+		b.Run(n.name, func(b *testing.B) {
 			v2 := NewStatsIndex(0, 1)
 			for _, v := range makeSortedPackStatsList(n.l) {
 				v2.AddOrUpdate(v)
@@ -664,8 +663,8 @@ func BenchmarkPackIndexAdd(B *testing.B) {
 			l := v2.Len() / 2
 			min, max := v2.MinMax(l)
 			pack := buildPackHeaderInt(l, min, max)
-			B.ResetTimer()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				// remove and re-append an existing packer
 				v2.Remove(pack.Key)
 				v2.AddOrUpdate(pack)
@@ -674,17 +673,17 @@ func BenchmarkPackIndexAdd(B *testing.B) {
 	}
 }
 
-func BenchmarkPackIndexUpdate(B *testing.B) {
+func BenchmarkPackIndexUpdate(b *testing.B) {
 	for _, n := range bestPackBenchmarkSizes {
-		B.Run(fmt.Sprintf("%s", n.name), func(B *testing.B) {
+		b.Run(n.name, func(b *testing.B) {
 			v2 := NewStatsIndex(0, 1)
 			for _, v := range makeSortedPackStatsList(n.l) {
 				v2.AddOrUpdate(v)
 			}
 			pos := v2.Len() / 2
 			min, max := v2.MinMax(pos)
-			B.ResetTimer()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				// replace the middle pack, toggle min between min and min+1
 				// to force updates
 				setmin := min

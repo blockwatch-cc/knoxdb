@@ -54,8 +54,6 @@ func TestCompactElem(t *testing.T) {
 	assert.Equalf(t, 10, c.Cap(), "TestCompactElem: Cap expected=%d but got=%d", 10, c.Len())
 	for i := range data {
 		assert.Equalf(t, data[i], c.Elem(i), "TestCompactElem: expected=%x to be same as got=%x", data[i], c.Len())
-		if got, expected := c.Elem(i), data[i]; !bytes.Equal(got, expected) {
-		}
 	}
 }
 

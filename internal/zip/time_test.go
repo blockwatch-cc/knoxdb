@@ -21,30 +21,30 @@ import (
 )
 
 var (
-	bufResult       []byte
+	// bufResult       []byte
 	bufResultBuffer = &bytes.Buffer{}
 )
 
-func dumpBufs(a, b []byte) {
-	longest := len(a)
-	if len(b) > longest {
-		longest = len(b)
-	}
+// func dumpBufs(a, b []byte) {
+// 	longest := len(a)
+// 	if len(b) > longest {
+// 		longest = len(b)
+// 	}
 
-	for i := 0; i < longest; i++ {
-		var as, bs string
-		if i < len(a) {
-			as = fmt.Sprintf("%08[1]b (%[1]d)", a[i])
-		}
-		if i < len(b) {
-			bs = fmt.Sprintf("%08[1]b (%[1]d)", b[i])
-		}
+// 	for i := 0; i < longest; i++ {
+// 		var as, bs string
+// 		if i < len(a) {
+// 			as = fmt.Sprintf("%08[1]b (%[1]d)", a[i])
+// 		}
+// 		if i < len(b) {
+// 			bs = fmt.Sprintf("%08[1]b (%[1]d)", b[i])
+// 		}
 
-		same := as == bs
-		fmt.Printf("%d (%d) %s - %s :: %v\n", i, i*8, as, bs, same)
-	}
-	fmt.Println()
-}
+// 		same := as == bs
+// 		fmt.Printf("%d (%d) %s - %s :: %v\n", i, i*8, as, bs, same)
+// 	}
+// 	fmt.Println()
+// }
 
 func TestEncodeTime_Compare(t *testing.T) {
 	// generate random values (should use simple8b)

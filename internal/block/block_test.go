@@ -13,19 +13,6 @@ import (
 )
 
 var (
-	blockTypeTests = []BlockType{
-		BlockInt64,
-		BlockUint64,
-		BlockFloat64,
-		BlockInt32,
-		BlockInt16,
-		BlockInt8,
-		BlockUint32,
-		BlockUint16,
-		BlockUint8,
-		BlockFloat32,
-	}
-
 	// little endian
 	maxIntBytes = []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f}
 )

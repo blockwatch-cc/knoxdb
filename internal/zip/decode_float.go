@@ -149,12 +149,13 @@ func decodeFloat64(dst []float64, b []byte) (int, error) {
 	)
 
 	// Refill brCachedVal, reading up to 8 bytes from b
-	if len(b) >= 8 {
+	switch {
+	case len(b) >= 8:
 		// fast path reads 8 bytes directly
 		brCachedVal = binary.BigEndian.Uint64(b)
 		brValidBits = 64
 		b = b[8:]
-	} else if len(b) > 0 {
+	case len(b) > 0:
 		brCachedVal = 0
 		brValidBits = uint8(len(b) * 8)
 		for i := range b {
@@ -162,7 +163,7 @@ func decodeFloat64(dst []float64, b []byte) (int, error) {
 		}
 		brCachedVal = bits.RotateLeft64(brCachedVal, -int(brValidBits))
 		b = b[:0]
-	} else {
+	default:
 		goto ERROR
 	}
 
@@ -184,11 +185,12 @@ func decodeFloat64(dst []float64, b []byte) (int, error) {
 		}
 
 		// Refill brCachedVal, reading up to 8 bytes from b
-		if len(b) >= 8 {
+		switch {
+		case len(b) >= 8:
 			brCachedVal = binary.BigEndian.Uint64(b)
 			brValidBits = 64
 			b = b[8:]
-		} else if len(b) > 0 {
+		case len(b) > 0:
 			brCachedVal = 0
 			brValidBits = uint8(len(b) * 8)
 			for i := range b {
@@ -196,7 +198,7 @@ func decodeFloat64(dst []float64, b []byte) (int, error) {
 			}
 			brCachedVal = bits.RotateLeft64(brCachedVal, -int(brValidBits))
 			b = b[:0]
-		} else {
+		default:
 			goto ERROR
 		}
 
@@ -210,11 +212,12 @@ func decodeFloat64(dst []float64, b []byte) (int, error) {
 			}
 
 			// Refill brCachedVal, reading up to 8 bytes from b
-			if len(b) >= 8 {
+			switch {
+			case len(b) >= 8:
 				brCachedVal = binary.BigEndian.Uint64(b)
 				brValidBits = 64
 				b = b[8:]
-			} else if len(b) > 0 {
+			case len(b) > 0:
 				brCachedVal = 0
 				brValidBits = uint8(len(b) * 8)
 				for i := range b {
@@ -222,7 +225,7 @@ func decodeFloat64(dst []float64, b []byte) (int, error) {
 				}
 				brCachedVal = bits.RotateLeft64(brCachedVal, -int(brValidBits))
 				b = b[:0]
-			} else {
+			default:
 				goto ERROR
 			}
 
@@ -247,11 +250,12 @@ func decodeFloat64(dst []float64, b []byte) (int, error) {
 					}
 
 					// Refill brCachedVal, reading up to 8 bytes from b
-					if len(b) >= 8 {
+					switch {
+					case len(b) >= 8:
 						brCachedVal = binary.BigEndian.Uint64(b)
 						brValidBits = 64
 						b = b[8:]
-					} else if len(b) > 0 {
+					case len(b) > 0:
 						brCachedVal = 0
 						brValidBits = uint8(len(b) * 8)
 						for i := range b {
@@ -259,7 +263,7 @@ func decodeFloat64(dst []float64, b []byte) (int, error) {
 						}
 						brCachedVal = bits.RotateLeft64(brCachedVal, -int(brValidBits))
 						b = b[:0]
-					} else {
+					default:
 						goto ERROR
 					}
 					brCachedVal = bits.RotateLeft64(brCachedVal, int(bits01))
@@ -294,11 +298,12 @@ func decodeFloat64(dst []float64, b []byte) (int, error) {
 				}
 
 				// Refill brCachedVal, reading up to 8 bytes from b
-				if len(b) >= 8 {
+				switch {
+				case len(b) >= 8:
 					brCachedVal = binary.BigEndian.Uint64(b)
 					brValidBits = 64
 					b = b[8:]
-				} else if len(b) > 0 {
+				case len(b) > 0:
 					brCachedVal = 0
 					brValidBits = uint8(len(b) * 8)
 					for i := range b {
@@ -306,7 +311,7 @@ func decodeFloat64(dst []float64, b []byte) (int, error) {
 					}
 					brCachedVal = bits.RotateLeft64(brCachedVal, -int(brValidBits))
 					b = b[:0]
-				} else {
+				default:
 					goto ERROR
 				}
 				brCachedVal = bits.RotateLeft64(brCachedVal, int(mBits))

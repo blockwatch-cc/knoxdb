@@ -29,27 +29,28 @@ func assert(b bool) {
 		log.Fatalf("%+v", errors.Errorf("Assertion failure"))
 	}
 }
-func check(err error) {
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-}
-func check2(_ interface{}, err error) {
-	check(err)
-}
 
-func min16(a, b uint16) uint16 {
-	if a < b {
-		return a
-	}
-	return b
-}
-func max16(a, b uint16) uint16 {
-	if a > b {
-		return a
-	}
-	return b
-}
+// func check(err error) {
+// 	if err != nil {
+// 		log.Fatalf("%+v", err)
+// 	}
+// }
+// func check2(_ interface{}, err error) {
+// 	check(err)
+// }
+
+// func min16(a, b uint16) uint16 {
+// 	if a < b {
+// 		return a
+// 	}
+// 	return b
+// }
+// func max16(a, b uint16) uint16 {
+// 	if a > b {
+// 		return a
+// 	}
+// 	return b
+// }
 
 // Returns sum of a and b. If the result overflows uint64, it returns math.MaxUint64.
 func addUint64(a, b uint64) uint64 {

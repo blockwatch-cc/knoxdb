@@ -19,8 +19,8 @@ const (
 var (
 	errUnexpectedFormat = fmt.Errorf("unexpected format")
 	errInvalidLength    = fmt.Errorf("invalid encoded length")
-	errLengthOverflow   = fmt.Errorf("length overflow")
-	errShortBuffer      = fmt.Errorf("short buffer")
+	// errLengthOverflow   = fmt.Errorf("length overflow")
+	errShortBuffer = fmt.Errorf("short buffer")
 )
 
 var (

@@ -48,12 +48,8 @@ func MaybeMatchTree(n *query.FilterTreeNode, info *stats.PackStats) bool {
 		}
 	}
 
-	// no OR nodes match
-	if n.OrKind {
-		return false
-	}
-	// all AND nodes match
-	return true
+	// no OR nodes match, all AND nodes match
+	return !n.OrKind
 }
 
 // MaybeMatchFilter checks an individual condition in a query condition tree

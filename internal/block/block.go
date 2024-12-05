@@ -4,7 +4,6 @@
 package block
 
 import (
-	"encoding/binary"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -26,8 +25,6 @@ var (
 	blockPool = &sync.Pool{
 		New: func() any { return &Block{} },
 	}
-
-	bigEndian = binary.BigEndian
 
 	BlockSz = int(reflect.TypeOf(Block{}).Size())
 

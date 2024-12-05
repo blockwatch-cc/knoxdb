@@ -6,19 +6,19 @@ package generic
 // ZigZagEncodeInt64 converts a int64 to a uint64 by zig zagging negative and positive values
 // across even and odd numbers.  Eg. [0,-1,1,-2] becomes [0, 1, 2, 3].
 func ZigZagEncodeInt64(x int64) uint64 {
-	return uint64(uint64(x<<1) ^ uint64((int64(x) >> 63)))
+	return uint64(x<<1) ^ uint64((x >> 63))
 }
 
 func ZigZagEncodeInt32(x int32) uint32 {
-	return uint32(uint32(x<<1) ^ uint32((int32(x) >> 31)))
+	return uint32(x<<1) ^ uint32((x >> 31))
 }
 
 func ZigZagEncodeInt16(x int16) uint16 {
-	return uint16(uint16(x<<1) ^ uint16((int16(x) >> 15)))
+	return uint16(x<<1) ^ uint16((x >> 15))
 }
 
 func ZigZagEncodeInt8(x int8) uint8 {
-	return uint8(uint8(x<<1) ^ uint8((int8(x) >> 7)))
+	return uint8(x<<1) ^ uint8((x >> 7))
 }
 
 // ZigZagDecodeUint64 converts a previously zigzag encoded uint64 back to a int64.

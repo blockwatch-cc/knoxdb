@@ -329,7 +329,7 @@ func (w *Wal) write(rec *Record) (LSN, error) {
 	lsn := w.lsn
 
 	// write header
-	_, err := w.writeBuffer(head[:])
+	sz, err := w.writeBuffer(head[:])
 	if err != nil {
 		if err2 := w.truncate(lsn); err2 != nil {
 			return 0, err2
@@ -339,18 +339,19 @@ func (w *Wal) write(rec *Record) (LSN, error) {
 
 	// write body
 	for _, v := range rec.Data {
-		_, err = w.writeBuffer(v)
+		n, err := w.writeBuffer(v)
 		if err != nil {
 			if err2 := w.truncate(lsn); err2 != nil {
 				return 0, err2
 			}
 			return 0, err
 		}
+		sz += n
 	}
 
 	// all ok, update csum and next lsn
 	w.csum = csum
-	w.lsn = lsn.Add(HeaderSize + rec.BodySize())
+	w.lsn = lsn.Add(sz)
 
 	return lsn, nil
 }

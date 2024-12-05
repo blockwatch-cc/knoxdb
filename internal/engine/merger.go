@@ -33,7 +33,7 @@ func NewMergerService() *MergerService {
 	return &MergerService{
 		ctx:    ctx,
 		cancel: cancel,
-		tasks:  make(chan Task, 0),
+		tasks:  make(chan Task),
 		log:    log.Disabled,
 	}
 }

@@ -18,7 +18,7 @@ import (
 const (
 	// floatUncompressed is an uncompressed format using 8 bytes per value.
 	// Not yet implemented.
-	floatUncompressed = 0
+	// floatUncompressed = 0
 
 	// floatCompressedGorilla is a compressed format using the gorilla paper encoding
 	floatCompressedGorilla = 1
@@ -65,12 +65,13 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 
 	var first float64
 	var finished bool
-	if len(src) > 0 && math.IsNaN(src[0]) {
+	switch {
+	case len(src) > 0 && math.IsNaN(src[0]):
 		return 0, fmt.Errorf("compress: unsupported float value: NaN")
-	} else if len(src) == 0 {
+	case len(src) == 0:
 		first = math.NaN() // Write sentinal value to terminate batch.
 		finished = true
-	} else {
+	default:
 		first = src[0]
 		src = src[1:]
 	}
@@ -141,7 +142,7 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 
 				// Write the l least significant bits of vDelta to b, most significant
 				// bit first.
-				l := uint64(64 - prevLeading - prevTrailing)
+				l := 64 - prevLeading - prevTrailing
 				for (n+l)>>3 >= uint64(len(b)) { // Keep growing b until we can fit all bits in.
 					b = append(b, byte(0))
 				}

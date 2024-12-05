@@ -25,7 +25,7 @@ var _ store.Sequence = (*sequence)(nil)
 func (s *sequence) Next() (uint64, error) {
 	if s.closed {
 		str := "sequence is closed"
-		return 0, makeDbErr(store.ErrTxClosed, str, nil)
+		return 0, makeDbErr(store.ErrTxClosed, str)
 	}
 	val, err := s.seq.Next()
 	if err != nil {

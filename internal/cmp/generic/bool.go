@@ -42,7 +42,7 @@ func MatchBoolLessEqual(src []bool, val bool, bits []byte) int64 {
 			bits[i] = 0xff
 		}
 		for i := 0; i < len(src)%8; i++ {
-			bits[len(bits)] |= 0x1 << uint(i&0x7)
+			bits[len(bits)-1] |= 0x1 << uint(i&0x7)
 		}
 		return int64(len(src))
 	}
@@ -73,7 +73,7 @@ func MatchBoolGreaterEqual(src []bool, val bool, bits []byte) int64 {
 		bits[i] = 0xff
 	}
 	for i := 0; i < len(src)%8; i++ {
-		bits[len(bits)] |= 0x1 << uint(i&0x7)
+		bits[len(bits)-1] |= 0x1 << uint(i&0x7)
 	}
 	return int64(len(src))
 }
@@ -86,7 +86,7 @@ func MatchBoolBetween(src []bool, a, b bool, bits []byte) int64 {
 			bits[i] = 0xff
 		}
 		for i := 0; i < len(src)%8; i++ {
-			bits[len(bits)] |= 0x1 << uint(i&0x7)
+			bits[len(bits)-1] |= 0x1 << uint(i&0x7)
 		}
 		return int64(len(src))
 	}

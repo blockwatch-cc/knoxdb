@@ -51,7 +51,7 @@ func TestInlining(t *testing.T) {
 		delete(funcs, strings.TrimSpace(parts[1]))
 	}
 
-	var failed []string
+	failed := make([]string, 0)
 	for fn := range funcs {
 		failed = append(failed, fn)
 	}

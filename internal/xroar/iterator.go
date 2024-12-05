@@ -48,7 +48,7 @@ func (bm *Bitmap) NewRangeIterators(numRanges int) []*Iterator {
 			n = width + 1
 		}
 		iters[i].keys = iters[i].keys[cnt : cnt+2*n]
-		cnt = cnt + 2*n
+		cnt += 2 * n
 	}
 	return iters
 }

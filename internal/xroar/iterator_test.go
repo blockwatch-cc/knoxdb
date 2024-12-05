@@ -28,7 +28,7 @@ func TestIteratorBasic(t *testing.T) {
 	n := uint64(1e5)
 	bm := NewBitmap()
 	for i := uint64(1); i <= n; i++ {
-		bm.Set(uint64(i))
+		bm.Set(i)
 	}
 
 	it := bm.NewIterator()
@@ -44,7 +44,7 @@ func TestIteratorRanges(t *testing.T) {
 	n := uint64(1e5)
 	bm := NewBitmap()
 	for i := uint64(1); i <= n; i++ {
-		bm.Set(uint64(i))
+		bm.Set(i)
 	}
 
 	iters := bm.NewRangeIterators(8)
@@ -73,7 +73,7 @@ func TestIteratorRandom(t *testing.T) {
 		}
 		mp[v] = struct{}{}
 		arr = append(arr, v)
-		bm.Set(uint64(v))
+		bm.Set(v)
 	}
 
 	sort.Slice(arr, func(i, j int) bool {

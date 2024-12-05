@@ -109,7 +109,7 @@ func (m BlockStats) canUseBitsets() bool {
 		minVal, maxVal = uint64(m.MinValue.(int16)), uint64(m.MaxValue.(int16))
 
 	case BlockUint64:
-		minVal, maxVal = uint64(m.MinValue.(uint64)), uint64(m.MaxValue.(uint64))
+		minVal, maxVal = m.MinValue.(uint64), m.MaxValue.(uint64)
 
 	case BlockUint32:
 		minVal, maxVal = uint64(m.MinValue.(uint32)), uint64(m.MaxValue.(uint32))
@@ -202,7 +202,7 @@ func (m BlockStats) HeapSize() int {
 	return sz
 }
 
-func (m BlockStats) Encode(buf *bytes.Buffer) error {
+func (m *BlockStats) Encode(buf *bytes.Buffer) error {
 	// type encoding
 	// 8                         7 6          5 4 3 2 1
 	// ext header flag (unused)  filter type  block type
@@ -390,11 +390,11 @@ func (m *BlockStats) Decode(buf *bytes.Buffer, version byte) error {
 
 	case BlockUint16:
 		v := buf.Next(4)
-		m.MinValue, m.MaxValue = uint16(BE.Uint16(v[0:])), uint16(BE.Uint16(v[2:]))
+		m.MinValue, m.MaxValue = BE.Uint16(v[0:]), BE.Uint16(v[2:])
 
 	case BlockUint8:
 		v := buf.Next(2)
-		m.MinValue, m.MaxValue = uint8(v[0]), uint8(v[1])
+		m.MinValue, m.MaxValue = v[0], v[1]
 
 	case BlockFloat64:
 		v := buf.Next(16)

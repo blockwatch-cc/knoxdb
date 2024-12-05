@@ -74,5 +74,5 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 		atomic.AddInt64(&t.metrics.UpdatedTuples, int64(count))
 	}
 
-	return uint64(count), nil
+	return count, nil
 }

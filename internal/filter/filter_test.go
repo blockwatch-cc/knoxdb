@@ -18,14 +18,14 @@ import (
 
 var filterTestSizes = []int{10000}
 
-func BenchmarkUint64MapFromSorted(B *testing.B) {
+func BenchmarkUint64MapFromSorted(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandUints[uint64](n)
 			slices.Sort(a)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				m := make(map[uint64]struct{}, len(a))
 				for _, v := range a {
 					m[v] = struct{}{}
@@ -36,13 +36,13 @@ func BenchmarkUint64MapFromSorted(B *testing.B) {
 }
 
 // Bytes(32) in hash map
-func BenchmarkBytes32HashMap(B *testing.B) {
+func BenchmarkBytes32HashMap(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandByteSlices(n, 32)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				m := make(map[uint64]struct{}, len(a))
 				for _, v := range a {
 					h := fnv.New64a()
@@ -50,7 +50,7 @@ func BenchmarkBytes32HashMap(B *testing.B) {
 					m[h.Sum64()] = struct{}{}
 				}
 				if got, want := len(m), len(a); got != want {
-					B.Errorf("hash collision got=%d want=%d", got, want)
+					b.Errorf("hash collision got=%d want=%d", got, want)
 				}
 			}
 		})
@@ -58,17 +58,17 @@ func BenchmarkBytes32HashMap(B *testing.B) {
 }
 
 // Bloom filter on uint64
-const maxFilterError float64 = 0.02
+// const maxFilterError float64 = 0.02
+// const bloomFillFactor = 1
 const cuckooFillFactor = 0.75
-const bloomFillFactor = 1
 
-func BenchmarkUint64BloomFromUnsortedLE(B *testing.B) {
+func BenchmarkUint64BloomFromUnsortedLE(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandUints[uint64](n)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				filter := bloom.NewFilter(n * 4)
 				for _, v := range a {
 					var buf [8]byte
@@ -80,14 +80,14 @@ func BenchmarkUint64BloomFromUnsortedLE(B *testing.B) {
 	}
 }
 
-func BenchmarkUint64BloomFromSortedLE(B *testing.B) {
+func BenchmarkUint64BloomFromSortedLE(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandUints[uint64](n)
 			slices.Sort(a)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				filter := bloom.NewFilter(n * 4)
 				for _, v := range a {
 					var buf [8]byte
@@ -99,13 +99,13 @@ func BenchmarkUint64BloomFromSortedLE(B *testing.B) {
 	}
 }
 
-func BenchmarkUint64BloomFromUnsortedBE(B *testing.B) {
+func BenchmarkUint64BloomFromUnsortedBE(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandUints[uint64](n)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				filter := bloom.NewFilter(n * 4)
 				for _, v := range a {
 					var buf [8]byte
@@ -117,14 +117,14 @@ func BenchmarkUint64BloomFromUnsortedBE(B *testing.B) {
 	}
 }
 
-func BenchmarkUint64BloomFromSortedBE(B *testing.B) {
+func BenchmarkUint64BloomFromSortedBE(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandUints[uint64](n)
 			slices.Sort(a)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				filter := bloom.NewFilter(n * 4)
 				for _, v := range a {
 					var buf [8]byte
@@ -136,13 +136,13 @@ func BenchmarkUint64BloomFromSortedBE(B *testing.B) {
 	}
 }
 
-func BenchmarkBytes32Bloom(B *testing.B) {
+func BenchmarkBytes32Bloom(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandByteSlices(n, 32)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				filter := bloom.NewFilter(n * 4)
 				for _, v := range a {
 					filter.Add(v)
@@ -155,13 +155,13 @@ func BenchmarkBytes32Bloom(B *testing.B) {
 // Cuckoo filter on uint64
 //
 
-func BenchmarkUint64CuckooFromUnsortedLE(B *testing.B) {
+func BenchmarkUint64CuckooFromUnsortedLE(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandUints[uint64](n)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				filter := cuckoo.NewFilter(uint(float64(len(a)) / cuckooFillFactor))
 				for _, v := range a {
 					var buf [8]byte
@@ -173,14 +173,14 @@ func BenchmarkUint64CuckooFromUnsortedLE(B *testing.B) {
 	}
 }
 
-func BenchmarkUint64CuckooFromSortedLE(B *testing.B) {
+func BenchmarkUint64CuckooFromSortedLE(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandUints[uint64](n)
 			slices.Sort(a)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				filter := cuckoo.NewFilter(uint(float64(len(a)) / cuckooFillFactor))
 				for _, v := range a {
 					var buf [8]byte
@@ -192,13 +192,13 @@ func BenchmarkUint64CuckooFromSortedLE(B *testing.B) {
 	}
 }
 
-func BenchmarkUint64CuckooFromUnsortedBE(B *testing.B) {
+func BenchmarkUint64CuckooFromUnsortedBE(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandUints[uint64](n)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				filter := cuckoo.NewFilter(uint(float64(len(a)) / cuckooFillFactor))
 				for _, v := range a {
 					var buf [8]byte
@@ -210,14 +210,14 @@ func BenchmarkUint64CuckooFromUnsortedBE(B *testing.B) {
 	}
 }
 
-func BenchmarkUint64CuckooFromSortedBE(B *testing.B) {
+func BenchmarkUint64CuckooFromSortedBE(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandUints[uint64](n)
 			slices.Sort(a)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				filter := cuckoo.NewFilter(uint(float64(len(a)) / cuckooFillFactor))
 				for _, v := range a {
 					var buf [8]byte
@@ -229,13 +229,13 @@ func BenchmarkUint64CuckooFromSortedBE(B *testing.B) {
 	}
 }
 
-func BenchmarkBytes32Cuckoo(B *testing.B) {
+func BenchmarkBytes32Cuckoo(b *testing.B) {
 	for _, n := range filterTestSizes {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := util.RandByteSlices(n, 32)
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				filter := cuckoo.NewFilter(uint(float64(len(a)) / cuckooFillFactor))
 				for _, v := range a {
 					filter.Add(v)

@@ -128,12 +128,12 @@ func NewBitmapWith(numKeys int) *Bitmap {
 	return ra
 }
 
-func (ra *Bitmap) initSpaceForKeys(N int) {
-	if N == 0 {
+func (ra *Bitmap) initSpaceForKeys(n int) {
+	if n == 0 {
 		return
 	}
 	curSize := uint64(len(ra.keys) * 4) // U64 -> U16
-	bySize := uint64(N * 8)             // 2xU64 (key, value) -> 2x4xU16
+	bySize := uint64(n * 8)             // 2xU64 (key, value) -> 2x4xU16
 
 	// The following code is borrowed from setKey.
 	ra.scootRight(curSize, bySize)
@@ -144,7 +144,7 @@ func (ra *Bitmap) initSpaceForKeys(N int) {
 	// The containers have moved to the right bySize. So, update their offsets.
 	// Currently, there's only one container.
 	val := ra.keys.val(0)
-	ra.keys.setAt(valOffset(0), val+uint64(bySize))
+	ra.keys.setAt(valOffset(0), val+bySize)
 }
 
 // setKey sets a key and container offset.
@@ -175,7 +175,7 @@ func (ra *Bitmap) setKey(k uint64, offset uint64) uint64 {
 	for i := 0; i < n.maxKeys(); i++ {
 		val := n.val(i)
 		if val > 0 {
-			n.setAt(valOffset(i), val+uint64(bySize))
+			n.setAt(valOffset(i), val+bySize)
 		}
 	}
 	return offset + bySize
@@ -216,7 +216,7 @@ func (ra *Bitmap) scootRight(offset uint64, bySize uint64) {
 	n := copy(right, left) // Move data right.
 	ra.memMoved += n
 
-	Memclr(ra.data[offset : offset+uint64(bySize)]) // Zero out the space in the middle.
+	Memclr(ra.data[offset : offset+bySize]) // Zero out the space in the middle.
 }
 
 // scootLeft removes size number of uint16s starting from the given offset.
@@ -245,7 +245,7 @@ func (ra *Bitmap) expandContainer(offset uint64) {
 	if sz == 0 {
 		panic("Container size should NOT be zero")
 	}
-	bySize := uint16(sz)
+	bySize := sz
 	if sz >= 2048 {
 		// Size is in uint16. Half of max allowed size. If we're expanding the container by more
 		// than 2048, we should just cap it to max size of 4096.
@@ -414,7 +414,7 @@ func (ra *Bitmap) Set(x uint64) bool {
 }
 
 func FromSortedList(vals []uint64) *Bitmap {
-	var arr []uint16
+	arr := make([]uint16, 0)
 	var hi, lastHi, off uint64
 
 	ra := NewBitmap()
@@ -461,7 +461,6 @@ func FromSortedList(vals []uint64) *Bitmap {
 			}
 		}
 		ra.setKey(key, off)
-		return
 	}
 
 	lastHi = 0
@@ -910,7 +909,8 @@ func (ra *Bitmap) And(bm *Bitmap) {
 	for ai < an && bi < bn {
 		ak := a.keys.key(ai)
 		bk := b.keys.key(bi)
-		if ak == bk {
+		switch {
+		case ak == bk:
 			off := a.keys.val(ai)
 			ac := a.getContainer(off)
 
@@ -931,11 +931,11 @@ func (ra *Bitmap) And(bm *Bitmap) {
 			a.setKey(ak, offset)
 			ai++
 			bi++
-		} else if ak < bk {
+		case ak < bk:
 			off := a.keys.val(ai)
 			zeroOutContainer(a.getContainer(off))
 			ai++
-		} else {
+		default:
 			bi++
 		}
 	}
@@ -954,7 +954,8 @@ func And(a, b *Bitmap) *Bitmap {
 	for ai < an && bi < bn {
 		ak := a.keys.key(ai)
 		bk := b.keys.key(bi)
-		if ak == bk {
+		switch {
+		case ak == bk:
 			// Do the intersection.
 			off := a.keys.val(ai)
 			ac := a.getContainer(off)
@@ -974,9 +975,9 @@ func And(a, b *Bitmap) *Bitmap {
 			}
 			ai++
 			bi++
-		} else if ak < bk {
+		case ak < bk:
 			ai++
-		} else {
+		default:
 			bi++
 		}
 	}
@@ -1079,7 +1080,8 @@ func Or(a, b *Bitmap) *Bitmap {
 		bk := b.keys.key(bi)
 		bc := b.getContainer(b.keys.val(bi))
 
-		if ak == bk {
+		switch {
+		case ak == bk:
 			// Do the union.
 			outc := containerOr(ac, bc, buf, 0)
 			offset := res.newContainer(uint16(len(outc)))
@@ -1087,12 +1089,12 @@ func Or(a, b *Bitmap) *Bitmap {
 			res.setKey(ak, offset)
 			ai++
 			bi++
-		} else if ak < bk {
+		case ak < bk:
 			off := res.newContainer(uint16(len(ac)))
 			copy(res.getContainer(off), ac)
 			res.setKey(ak, off)
 			ai++
-		} else {
+		default:
 			off := res.newContainer(uint16(len(bc)))
 			copy(res.getContainer(off), bc)
 			res.setKey(bk, off)

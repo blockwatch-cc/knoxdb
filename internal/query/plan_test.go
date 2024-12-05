@@ -52,16 +52,16 @@ type testStruct struct {
 	IsActive bool      `knox:"is_active"`
 }
 
-func makeTestStruct(id int) *testStruct {
-	return &testStruct{
-		Id:       uint64(id),
-		Score:    util.RandFloat64(),
-		Name:     util.RandString(4),
-		Created:  time.Now().UTC(),
-		Status:   "active",
-		IsActive: id%2 == 0,
-	}
-}
+// func makeTestStruct(id int) *testStruct {
+// 	return &testStruct{
+// 		Id:       uint64(id),
+// 		Score:    util.RandFloat64(),
+// 		Name:     util.RandString(4),
+// 		Created:  time.Now().UTC(),
+// 		Status:   "active",
+// 		IsActive: id%2 == 0,
+// 	}
+// }
 
 func (t *testStruct) Encode() []byte {
 	enc := schema.NewEncoder(testSchema)

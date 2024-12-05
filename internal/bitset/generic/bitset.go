@@ -6,6 +6,8 @@ package generic
 import (
 	"encoding/binary"
 	"math/bits"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func And(dst, src []byte, size int) {
@@ -88,10 +90,11 @@ func PopCount(src []byte, size int) int64 {
 	if len(src) == 0 {
 		return 0
 	}
+
 	var cnt int64
+
 	// process 8 bytes per loop, byte order doesn't matter (Intel maybe faster)
-	for i := 0; i < (len(src)-1)/8; i++ {
-		v := binary.LittleEndian.Uint64(src[i*8 : i*8+8])
+	for _, v := range util.ByteSliceSliceAsUint64Slice(src[:(size-1)>>3]) {
 		cnt += int64(bits.OnesCount64(v))
 	}
 

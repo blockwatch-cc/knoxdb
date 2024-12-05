@@ -1,10 +1,5 @@
 package xroar
 
-import (
-	"fmt"
-	"strings"
-)
-
 var (
 	indexNodeSize  = 0
 	indexNumKeys   = 1
@@ -20,27 +15,28 @@ type node []uint64
 func keyOffset(i int) int { return indexNodeStart + 2*i }
 func valOffset(i int) int { return indexNodeStart + 2*i + 1 }
 
-func (n node) numKeys() int        { return int(n[indexNumKeys]) }
-func (n node) size() int           { return int(n[indexNodeSize]) }
-func (n node) maxKeys() int        { return (len(n) - indexNodeStart) / 2 }
-func (n node) key(i int) uint64    { return n[keyOffset(i)] }
-func (n node) val(i int) uint64    { return n[valOffset(i)] }
-func (n node) data(i int) []uint64 { return n[keyOffset(i):keyOffset(i+1)] }
+func (n node) numKeys() int     { return int(n[indexNumKeys]) }
+func (n node) size() int        { return int(n[indexNodeSize]) }
+func (n node) maxKeys() int     { return (len(n) - indexNodeStart) / 2 }
+func (n node) key(i int) uint64 { return n[keyOffset(i)] }
+func (n node) val(i int) uint64 { return n[valOffset(i)] }
 
-func (n node) uint64(idx int) uint64   { return n[idx] }
+// func (n node) data(i int) []uint64 { return n[keyOffset(i):keyOffset(i+1)] }
+
+// func (n node) uint64(idx int) uint64   { return n[idx] }
 func (n node) setAt(idx int, k uint64) { n[idx] = k }
 
 func (n node) setNumKeys(num int) { n[indexNumKeys] = uint64(num) }
 func (n node) setNodeSize(sz int) { n[indexNodeSize] = uint64(sz) }
 
-func (n node) maxKey() uint64 {
-	idx := n.numKeys()
-	// numKeys == index of the max key, because 0th index is being used for meta information.
-	if idx == 0 {
-		return 0
-	}
-	return n.key(idx)
-}
+// func (n node) maxKey() uint64 {
+// 	idx := n.numKeys()
+// 	// numKeys == index of the max key, because 0th index is being used for meta information.
+// 	if idx == 0 {
+// 		return 0
+// 	}
+// 	return n.key(idx)
+// }
 
 func (n node) moveRight(lo int) {
 	hi := n.numKeys()
@@ -64,12 +60,13 @@ func (n node) search(k uint64) int {
 		ki := n.key(mid)
 		// fmt.Printf("lo: %d mid: %d hi: %d. ki: %#x k: %#x\n", lo, mid, hi, ki, k)
 
-		if ki < k {
+		switch {
+		case ki < k:
 			lo = mid + 1
-		} else if ki > k {
+		case ki > k:
 			hi = mid
 			// We should keep it equal, and not -1, because we'll take the first greater entry.
-		} else {
+		default:
 			// fmt.Printf("returning mid: %d\n", mid)
 			return mid
 		}
@@ -89,40 +86,40 @@ func (n node) search(k uint64) int {
 	// return int(simd.Search(n[keyOffset(0):keyOffset(N)], k))
 }
 
-func zeroOut(data []uint64) {
-	for i := 0; i < len(data); i++ {
-		data[i] = 0
-	}
-}
+// func zeroOut(data []uint64) {
+// 	for i := 0; i < len(data); i++ {
+// 		data[i] = 0
+// 	}
+// }
 
 // compacts the node i.e., remove all the kvs with value < lo. It returns the remaining number of
 // keys.
-func (n node) compact(lo uint64) int {
-	N := n.numKeys()
-	mk := n.maxKey()
-	var left, right int
-	for right = 0; right < N; right++ {
-		if n.val(right) < lo && n.key(right) < mk {
-			// Skip over this key. Don't copy it.
-			continue
-		}
-		// Valid data. Copy it from right to left. Advance left.
-		if left != right {
-			copy(n.data(left), n.data(right))
-		}
-		left++
-	}
-	// zero out rest of the kv pairs.
-	zeroOut(n[keyOffset(left):keyOffset(right)])
-	n.setNumKeys(left)
+// func (n node) compact(lo uint64) int {
+// 	N := n.numKeys()
+// 	mk := n.maxKey()
+// 	var left, right int
+// 	for right = 0; right < N; right++ {
+// 		if n.val(right) < lo && n.key(right) < mk {
+// 			// Skip over this key. Don't copy it.
+// 			continue
+// 		}
+// 		// Valid data. Copy it from right to left. Advance left.
+// 		if left != right {
+// 			copy(n.data(left), n.data(right))
+// 		}
+// 		left++
+// 	}
+// 	// zero out rest of the kv pairs.
+// 	zeroOut(n[keyOffset(left):keyOffset(right)])
+// 	n.setNumKeys(left)
 
-	// If the only key we have is the max key, and its value is less than lo, then we can indicate
-	// to the caller by returning a zero that it's OK to drop the node.
-	if left == 1 && n.key(0) == mk && n.val(0) < lo {
-		return 0
-	}
-	return left
-}
+// 	// If the only key we have is the max key, and its value is less than lo, then we can indicate
+// 	// to the caller by returning a zero that it's OK to drop the node.
+// 	if left == 1 && n.key(0) == mk && n.val(0) < lo {
+// 		return 0
+// 	}
+// 	return left
+// }
 
 // getValue returns the value corresponding to the key if found.
 func (n node) getValue(k uint64) (uint64, bool) {
@@ -184,25 +181,25 @@ func (n node) updateOffsets(beyond, by uint64, add bool) {
 	}
 }
 
-func (n node) iterate(fn func(node, int)) {
-	for i := 0; i < n.maxKeys(); i++ {
-		if k := n.key(i); k > 0 {
-			fn(n, i)
-		} else {
-			break
-		}
-	}
-}
+// func (n node) iterate(fn func(node, int)) {
+// 	for i := 0; i < n.maxKeys(); i++ {
+// 		if k := n.key(i); k > 0 {
+// 			fn(n, i)
+// 		} else {
+// 			break
+// 		}
+// 	}
+// }
 
-func (n node) print(parentID uint64) {
-	var keys []string
-	n.iterate(func(n node, i int) {
-		keys = append(keys, fmt.Sprintf("%d", n.key(i)))
-	})
-	if len(keys) > 8 {
-		copy(keys[4:], keys[len(keys)-4:])
-		keys[3] = "..."
-		keys = keys[:8]
-	}
-	fmt.Printf("num keys: %d keys: %s\n", n.numKeys(), strings.Join(keys, " "))
-}
+// func (n node) print(parentID uint64) {
+// 	var keys []string
+// 	n.iterate(func(n node, i int) {
+// 		keys = append(keys, fmt.Sprintf("%d", n.key(i)))
+// 	})
+// 	if len(keys) > 8 {
+// 		copy(keys[4:], keys[len(keys)-4:])
+// 		keys[3] = "..."
+// 		keys = keys[:8]
+// 	}
+// 	fmt.Printf("num keys: %d keys: %s\n", n.numKeys(), strings.Join(keys, " "))
+// }

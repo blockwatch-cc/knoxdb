@@ -50,7 +50,7 @@ var (
 )
 
 func (t BlockType) IsValid() bool {
-	return t >= 0 && t <= BlockInt256
+	return t <= BlockInt256
 }
 
 func (t BlockType) String() string {

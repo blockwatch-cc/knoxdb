@@ -5,7 +5,6 @@ package mem
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 
 	"blockwatch.cc/knoxdb/internal/store"
@@ -21,16 +20,16 @@ const (
 	bucketIdLen int = 1
 )
 
-var (
-	// byteOrder is the preferred byte order used through the database.
-	// Sometimes big endian will be used to allow ordered byte
-	// sortable integer values.
-	byteOrder = binary.LittleEndian
+// var (
+// byteOrder is the preferred byte order used through the database.
+// Sometimes big endian will be used to allow ordered byte
+// sortable integer values.
+// byteOrder = binary.LittleEndian
 
-	// bucketIndexPrefix is the prefix used for all entries in the bucket
-	// index.
-	bucketIndexPrefix = []byte("bidx")
-)
+// bucketIndexPrefix is the prefix used for all entries in the bucket
+// index.
+// bucketIndexPrefix = []byte("bidx")
+// )
 
 // Common error strings.
 const (
@@ -40,7 +39,7 @@ const (
 
 	// errDbReadOnlyStr is the text to use for the store.ErrDbTxNotWriteable
 	// error code.
-	errDbReadOnlyStr = "database is in read-only mode"
+	// errDbReadOnlyStr = "database is in read-only mode"
 
 	// errTxClosedStr is the text to use for the store.ErrTxClosed error
 	// code.
@@ -48,8 +47,8 @@ const (
 )
 
 // makeDbErr creates a store.Error given a set of arguments.
-func makeDbErr(c store.ErrorCode, desc string, err error) store.Error {
-	return store.Error{ErrorCode: c, Description: desc, Err: err}
+func makeDbErr(c store.ErrorCode, desc string) store.Error {
+	return store.Error{ErrorCode: c, Description: desc, Err: nil}
 }
 
 // copySlice returns a copy of the passed slice.  This is mostly used to copy

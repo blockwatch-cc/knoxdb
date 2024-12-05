@@ -420,9 +420,9 @@ type DB interface {
 	// back or committed).
 	Close() error
 
- 	// Sync calls fdatasync to make changes to the database durable. It
- 	// is not necessary with normal options, however if you open the
- 	// database with NoSync then it allows you to execute sync when
- 	// convenient.
+	// Sync calls fdatasync to make changes to the database durable. It
+	// is not necessary with normal options, however if you open the
+	// database with NoSync then it allows you to execute sync when
+	// convenient.
 	Sync() error
 }

@@ -577,11 +577,9 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 				break
 			}
 			agg.Reset()
-		} else {
-			if p.Limit > 0 && out.Len() >= int(p.Limit) {
-				p.Log.Debugf("J> %s: FINAL result with limit %d", p.Tag, out.Len())
-				break
-			}
+		} else if p.Limit > 0 && out.Len() >= int(p.Limit) {
+			p.Log.Debugf("J> %s: FINAL result with limit %d", p.Tag, out.Len())
+			break
 		}
 	}
 
@@ -793,13 +791,13 @@ func mergeJoinInner(p *JoinPlan, left, right engine.QueryResult, out QueryResult
 }
 
 // equi-joins only, |l| << >> |r| (widely different set sizes)
-func hashJoinInner(p *JoinPlan, left, right engine.QueryResult, out QueryResultConsumer) error {
-	p.Log.Debugf("J> %s: inner hash join on %d/%d rows", p.Tag, left.Len(), right.Len())
-	return engine.ErrNotImplemented
-}
+// func hashJoinInner(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
+// 	p.Log.Debugf("J> %s: inner hash join on %d/%d rows", p.Tag, left.Len(), right.Len())
+// 	return engine.ErrNotImplemented
+// }
 
 // TODO: never match NULL values (i.e. pkg.IsZeroAt(index,pos) == true)
-func loopJoinLeft(p *JoinPlan, left, right engine.QueryResult, out QueryResultConsumer) error {
+func loopJoinLeft(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
 	p.Log.Debugf("J> %s: left loop join on %d/%d rows", p.Tag, left.Len(), right.Len())
 	return engine.ErrNotImplemented
 }
@@ -905,25 +903,25 @@ func mergeJoinLeft(p *JoinPlan, left, right engine.QueryResult, out QueryResultC
 
 // TODO: need hash table to remember whether a row was joined already
 // process inner join first, then add missing left, then missing right rows
-func loopJoinRight(p *JoinPlan, left, right engine.QueryResult, out QueryResultConsumer) error {
+func loopJoinRight(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
 	p.Log.Debugf("J> %s: right loop join on %d/%d rows", p.Tag, left.Len(), right.Len())
 	return engine.ErrNotImplemented
 }
 
-func mergeJoinRight(p *JoinPlan, left, right engine.QueryResult, out QueryResultConsumer) error {
+func mergeJoinRight(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
 	p.Log.Debugf("J> %s: right merge join on %d/%d rows", p.Tag, left.Len(), right.Len())
 	return engine.ErrNotImplemented
 }
 
-func loopJoinFull(p *JoinPlan, left, right engine.QueryResult, out QueryResultConsumer) error {
-	p.Log.Debugf("J> %s: full loop join on %d/%d rows", p.Tag, left.Len(), right.Len())
-	return engine.ErrNotImplemented
-}
+// func loopJoinFull(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
+// 	p.Log.Debugf("J> %s: full loop join on %d/%d rows", p.Tag, left.Len(), right.Len())
+// 	return engine.ErrNotImplemented
+// }
 
-func mergeJoinFull(p *JoinPlan, left, right engine.QueryResult, out QueryResultConsumer) error {
-	p.Log.Debugf("J> %s: full join on %d/%d rows using merge", p.Tag, left.Len(), right.Len())
-	return engine.ErrNotImplemented
-}
+// func mergeJoinFull(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
+// 	p.Log.Debugf("J> %s: full join on %d/%d rows using merge", p.Tag, left.Len(), right.Len())
+// 	return engine.ErrNotImplemented
+// }
 
 func loopJoinCross(p *JoinPlan, left, right engine.QueryResult, out QueryResultConsumer) error {
 	p.Log.Debugf("J> %s: cross loop join on %d/%d rows", p.Tag, left.Len(), right.Len())

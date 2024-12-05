@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -23,14 +22,14 @@ import (
 // db wraps a boltdb instance and implements the store.DB interface.
 // All database access is performed through transactions which are managed.
 type db struct {
-	seqLock   sync.RWMutex   // Guard access to sequences.
-	closeLock sync.RWMutex   // Make database close block while txns active.
-	txLock    sync.Mutex     // block creating new tx during backup/restore.
-	activeTx  sync.WaitGroup // count active tx (needed for backup/restore).
-	closed    bool           // Is the database closed?
-	store     *bolt.DB       // the database
-	opts      *bolt.Options
-	dbPath    string
+	// seqLock   sync.RWMutex   // Guard access to sequences.
+	closeLock sync.RWMutex // Make database close block while txns active.
+	// txLock    sync.Mutex     // block creating new tx during backup/restore.
+	activeTx sync.WaitGroup // count active tx (needed for backup/restore).
+	closed   bool           // Is the database closed?
+	store    *bolt.DB       // the database
+	opts     *bolt.Options
+	dbPath   string
 }
 
 // Enforce db implements the store.DB interface.
@@ -295,7 +294,7 @@ func (db *db) close() error {
 		return convertErr("close", err)
 	}
 	if mft.Name != "" {
-		log.Debugf("%s database closed successfully.", strings.Title(mft.Name))
+		log.Debugf("%s database closed successfully.", mft.Name)
 	} else {
 		log.Debugf("Database closed successfully.")
 	}
@@ -395,7 +394,7 @@ func openDB(dbPath string, opts *bolt.Options, create bool) (store.DB, error) {
 			return nil, err
 		}
 		if mft.Name != "" {
-			log.Debugf("%s database opened successfully.", strings.Title(mft.Name))
+			log.Debugf("%s database opened successfully.", mft.Name)
 		} else {
 			log.Debug("Database opened successfully.")
 		}

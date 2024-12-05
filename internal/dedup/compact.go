@@ -20,9 +20,9 @@ type CompactByteArray struct {
 	size []int32
 }
 
-func newCompactByteArray(sz, n int) *CompactByteArray {
+func newCompactByteArray(_, n int) *CompactByteArray {
 	return &CompactByteArray{
-		buf:  make([]byte, 0, sz),
+		buf:  make([]byte, 0),
 		offs: make([]int32, 0, n),
 		size: make([]int32, 0, n),
 	}

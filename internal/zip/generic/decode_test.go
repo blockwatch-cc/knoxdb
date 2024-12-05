@@ -12,25 +12,25 @@ import (
 
 // --------------- zzDeltaDecodeInt64 --------------------------------------------------------------
 
-func TestZzDeltaDecodeInt64Generic(T *testing.T) {
+func TestZzDeltaDecodeInt64Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint64Cases {
 		slice := slices.Clone(c.Result)
 		ZzDeltaDecodeInt64(slice)
 		if got, want := len(slice), len(c.Slice); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
 		if !reflect.DeepEqual(slice, c.Slice) {
-			T.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
+			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
 		}
 	}
 }
 
-func BenchmarkZzDeltaDecodeInt64Generic(B *testing.B) {
+func BenchmarkZzDeltaDecodeInt64Generic(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		a := randInt64Slice(n.L)
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Int64Size))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.SetBytes(int64(n.L * Int64Size))
+			for i := 0; i < b.N; i++ {
 				ZzDeltaDecodeInt64(a)
 			}
 		})
@@ -39,25 +39,25 @@ func BenchmarkZzDeltaDecodeInt64Generic(B *testing.B) {
 
 // --------------- zzDeltaDecodeInt32 --------------------------------------------------------------
 
-func TestZzDeltaDecodeInt32Generic(T *testing.T) {
+func TestZzDeltaDecodeInt32Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint32Cases {
 		slice := slices.Clone(c.Result)
 		ZzDeltaDecodeInt32(slice)
 		if got, want := len(slice), len(c.Slice); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
 		if !reflect.DeepEqual(slice, c.Slice) {
-			T.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
+			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
 		}
 	}
 }
 
-func BenchmarkZzDeltaDecodeInt32Generic(B *testing.B) {
+func BenchmarkZzDeltaDecodeInt32Generic(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		a := randInt32Slice(n.L)
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Int32Size))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.SetBytes(int64(n.L * Int32Size))
+			for i := 0; i < b.N; i++ {
 				ZzDeltaDecodeInt32(a)
 			}
 		})
@@ -66,25 +66,25 @@ func BenchmarkZzDeltaDecodeInt32Generic(B *testing.B) {
 
 // --------------- zzDeltaDecodeInt16 --------------------------------------------------------------
 
-func TestZzDeltaDecodeInt16Generic(T *testing.T) {
+func TestZzDeltaDecodeInt16Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint16Cases {
 		slice := slices.Clone(c.Result)
 		ZzDeltaDecodeInt16(slice)
 		if got, want := len(slice), len(c.Slice); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
 		if !reflect.DeepEqual(slice, c.Slice) {
-			T.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
+			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
 		}
 	}
 }
 
-func BenchmarkZzDeltaDecodeInt16Generic(B *testing.B) {
+func BenchmarkZzDeltaDecodeInt16Generic(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		a := randInt16Slice(n.L)
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Int16Size))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.SetBytes(int64(n.L * Int16Size))
+			for i := 0; i < b.N; i++ {
 				ZzDeltaDecodeInt16(a)
 			}
 		})
@@ -93,25 +93,25 @@ func BenchmarkZzDeltaDecodeInt16Generic(B *testing.B) {
 
 // --------------- zzDeltaDecodeInt8 --------------------------------------------------------------
 
-func TestZzDeltaDecodeInt8Generic(T *testing.T) {
+func TestZzDeltaDecodeInt8Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint8Cases {
 		slice := slices.Clone(c.Result)
 		ZzDeltaDecodeInt8(slice)
 		if got, want := len(slice), len(c.Slice); got != want {
-			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
+			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
 		if !reflect.DeepEqual(slice, c.Slice) {
-			T.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
+			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
 		}
 	}
 }
 
-func BenchmarkZzDeltaDecodeInt8Generic(B *testing.B) {
+func BenchmarkZzDeltaDecodeInt8Generic(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		a := randInt8Slice(n.L)
-		B.Run(n.Name, func(B *testing.B) {
-			B.SetBytes(int64(n.L * Int8Size))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.SetBytes(int64(n.L * Int8Size))
+			for i := 0; i < b.N; i++ {
 				ZzDeltaDecodeInt8(a)
 			}
 		})
@@ -120,7 +120,7 @@ func BenchmarkZzDeltaDecodeInt8Generic(B *testing.B) {
 
 // --------------- zzDecodeInt64 --------------------------------------------------------------
 
-// func TestZzDecodeInt64Generic(T *testing.T) {
+// func TestZzDecodeInt64Generic(t *testing.T) {
 // 	for _, c := range []Int64Test{
 // 		{
 // 			name:   "l0",
@@ -136,20 +136,20 @@ func BenchmarkZzDeltaDecodeInt8Generic(B *testing.B) {
 // 		copy(slice, c.Slice)
 // 		ZzDecodeInt64(slice)
 // 		if got, want := len(slice), len(c.Result); got != want {
-// 			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
+// 			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 // 		}
 // 		if !reflect.DeepEqual(slice, c.Result) {
-// 			T.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
+// 			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
 // 		}
 // 	}
 // }
 
-// func BenchmarkZzDecodeInt64Generic(B *testing.B) {
+// func BenchmarkZzDecodeInt64Generic(b *testing.B) {
 // 	for _, n := range benchmarkSizes {
 // 		a := randInt64Slice(n.L, 1)
-// 		B.Run(n.Name, func(B *testing.B) {
-// 			B.SetBytes(int64(n.L * Int64Size))
-// 			for i := 0; i < B.N; i++ {
+// 		b.Run(n.Name, func(b *testing.B) {
+// 			b.SetBytes(int64(n.L * Int64Size))
+// 			for i := 0; i < b.N; i++ {
 // 				ZzDecodeInt64(a)
 // 			}
 // 		})
@@ -158,7 +158,7 @@ func BenchmarkZzDeltaDecodeInt8Generic(B *testing.B) {
 
 // ----------------- deltaDecodeInt64 ------------------------------------------------------------
 
-// func TestDeltaDecodeInt64Generic(T *testing.T) {
+// func TestDeltaDecodeInt64Generic(t *testing.T) {
 // 	for _, c := range []Int64Test{
 // 		{
 // 			name:   "l0",
@@ -174,20 +174,20 @@ func BenchmarkZzDeltaDecodeInt8Generic(B *testing.B) {
 // 		copy(slice, c.Slice)
 // 		DeltaDecodeInt64(slice)
 // 		if got, want := len(slice), len(c.Result); got != want {
-// 			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
+// 			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 // 		}
 // 		if !reflect.DeepEqual(slice, c.Result) {
-// 			T.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
+// 			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
 // 		}
 // 	}
 // }
 
-// func BenchmarkDeltaDecodeInt64Generic(B *testing.B) {
+// func BenchmarkDeltaDecodeInt64Generic(b *testing.B) {
 // 	for _, n := range benchmarkSizes {
 // 		a := randInt64Slice(n.L, 1)
-// 		B.Run(n.Name, func(B *testing.B) {
-// 			B.SetBytes(int64(n.L * Int64Size))
-// 			for i := 0; i < B.N; i++ {
+// 		b.Run(n.Name, func(b *testing.B) {
+// 			b.SetBytes(int64(n.L * Int64Size))
+// 			for i := 0; i < b.N; i++ {
 // 				DeltaDecodeInt64(a)
 // 			}
 // 		})
@@ -196,7 +196,7 @@ func BenchmarkZzDeltaDecodeInt8Generic(B *testing.B) {
 
 // ----------------- deltaDecodeInt32 ------------------------------------------------------------
 
-// func TestDeltaDecodeInt32Generic(T *testing.T) {
+// func TestDeltaDecodeInt32Generic(t *testing.T) {
 // 	for _, c := range []Int32Test{
 // 		{
 // 			name:   "l0",
@@ -212,20 +212,20 @@ func BenchmarkZzDeltaDecodeInt8Generic(B *testing.B) {
 // 		copy(slice, c.Slice)
 // 		DeltaDecodeInt32(slice)
 // 		if got, want := len(slice), len(c.Result); got != want {
-// 			T.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
+// 			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 // 		}
 // 		if !reflect.DeepEqual(slice, c.Result) {
-// 			T.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
+// 			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
 // 		}
 // 	}
 // }
 
-// func BenchmarkDeltaDecodeInt32Generic(B *testing.B) {
+// func BenchmarkDeltaDecodeInt32Generic(b *testing.B) {
 // 	for _, n := range benchmarkSizes {
 // 		a := randInt32Slice(n.L, 1)
-// 		B.Run(n.Name, func(B *testing.B) {
-// 			B.SetBytes(int64(n.L * Int32Size))
-// 			for i := 0; i < B.N; i++ {
+// 		b.Run(n.Name, func(b *testing.B) {
+// 			b.SetBytes(int64(n.L * Int32Size))
+// 			for i := 0; i < b.N; i++ {
 // 				DeltaDecodeInt32(a)
 // 			}
 // 		})

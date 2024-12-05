@@ -62,6 +62,8 @@ func (a *allocator[T]) Free(val any) {
 		return
 	}
 	idx := class - minAllocClass
+
+	// nolint:staticcheck
 	a.pools[idx].Put(slice[:0])
 }
 
@@ -75,9 +77,9 @@ func (a *allocator[T]) FreePtr(ptr unsafe.Pointer) {
 	a.Free(v)
 }
 
-type nullAllocator struct{}
+// type nullAllocator struct{}
 
-func (_ nullAllocator) Alloc(_ int) any               { return nil }
-func (_ nullAllocator) AllocPtr(_ int) unsafe.Pointer { return nil }
-func (_ nullAllocator) Free(_ any)                    {}
-func (_ nullAllocator) FreePtr(_ unsafe.Pointer)      {}
+// func (_ nullAllocator) Alloc(_ int) any               { return nil }
+// func (_ nullAllocator) AllocPtr(_ int) unsafe.Pointer { return nil }
+// func (_ nullAllocator) Free(_ any)                    {}
+// func (_ nullAllocator) FreePtr(_ unsafe.Pointer)      {}

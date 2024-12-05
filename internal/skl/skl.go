@@ -39,7 +39,6 @@ import (
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/pkg/assert"
-	"github.com/dgraph-io/ristretto/z"
 )
 
 const (
@@ -161,14 +160,14 @@ func (s *node) casNextOffset(h int, old, val uint32) bool {
 
 // Returns true if key is strictly > n.key.
 // If n is nil, this is an "end" marker and we return false.
-//func (s *Skiplist) keyIsAfterNode(key []byte, n *node) bool {
+// func (s *Skiplist) keyIsAfterNode(key []byte, n *node) bool {
 //	y.AssertTrue(n != s.head)
 //	return n != nil && y.CompareKeys(key, n.key) > 0
-//}
+// }
 
 func (s *Skiplist) randomHeight() int {
 	h := 1
-	for h < maxHeight && z.FastRand() <= heightIncrease {
+	for h < maxHeight && FastRand() <= heightIncrease {
 		h++
 	}
 	return h

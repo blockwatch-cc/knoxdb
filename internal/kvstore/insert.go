@@ -66,7 +66,7 @@ func (kv *KVStore) Put(ctx context.Context, key, val []byte) error {
 	buf := bucket.Get(key)
 	if buf != nil {
 		prevSize = len(buf)
-	} else {
+		// } else {
 		// s.meta.Rows++
 	}
 	err = bucket.Put(key, val)

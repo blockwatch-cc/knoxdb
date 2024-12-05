@@ -25,12 +25,12 @@ var testStructs = []Encodable{
 	&encodeTestStruct{},
 }
 
-func makeTypedPackage(typ any, sz, fill int) *Package {
+func makeTypedPackage(typ any, fill int) *Package {
 	s, err := schema.SchemaOf(typ)
 	if err != nil {
 		panic(err)
 	}
-	pkg := New().WithMaxRows(sz).WithSchema(s)
+	pkg := New().WithMaxRows(PACK_SIZE).WithSchema(s)
 	enc := schema.NewEncoder(s)
 	buf, err := enc.Encode(makeZeroStruct(typ), nil)
 	if err != nil {
@@ -42,14 +42,14 @@ func makeTypedPackage(typ any, sz, fill int) *Package {
 	return pkg
 }
 
-func makeZeroSlice(v any, n int) reflect.Value {
-	rtyp := reflect.TypeOf(v).Elem()
-	rslice := reflect.MakeSlice(reflect.SliceOf(rtyp), 0, n)
-	for i := 0; i < n; i++ {
-		rslice = reflect.Append(rslice, reflect.Zero(rtyp))
-	}
-	return rslice
-}
+// func makeZeroSlice(v any, n int) reflect.Value {
+// 	rtyp := reflect.TypeOf(v).Elem()
+// 	rslice := reflect.MakeSlice(reflect.SliceOf(rtyp), 0, n)
+// 	for i := 0; i < n; i++ {
+// 		rslice = reflect.Append(rslice, reflect.Zero(rtyp))
+// 	}
+// 	return rslice
+// }
 
 func makeZeroStruct(v any) any {
 	typ := reflect.TypeOf(v).Elem()

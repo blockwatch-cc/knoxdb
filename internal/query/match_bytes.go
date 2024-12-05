@@ -10,14 +10,11 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/dedup"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/hash/xxHash32"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"github.com/echa/log"
 )
-
-type bytesMatchFunc func(src dedup.ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
 
 type BytesMatcherFactory struct{}
 
@@ -90,10 +87,7 @@ func (m bytesEqualMatcher) MatchRange(from, to any) bool {
 	case -1:
 		return false
 	}
-	if bytes.Compare(m.val, toBytes) > 0 {
-		return false
-	}
-	return true
+	return bytes.Compare(m.val, toBytes) <= 0
 }
 
 func (m bytesEqualMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {

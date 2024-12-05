@@ -5,7 +5,6 @@ go 1.23
 require (
 	github.com/RoaringBitmap/roaring v1.2.3
 	github.com/dgraph-io/badger/v4 v4.2.0
-	github.com/dgraph-io/ristretto v0.1.1
 	github.com/echa/config v1.1.2
 	github.com/echa/log v1.3.3
 	github.com/gofrs/flock v0.12.1
@@ -30,6 +29,7 @@ require (
 	github.com/bits-and-blooms/bitset v1.7.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.17.0 // indirect
 	github.com/frankban/quicktest v1.14.5 // indirect

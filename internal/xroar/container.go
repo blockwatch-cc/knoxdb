@@ -21,6 +21,8 @@ import (
 	"math"
 	"math/bits"
 	"strings"
+
+	"blockwatch.cc/knoxdb/internal/bitset"
 )
 
 // container uses extra 4 []uint16 in the front as header.
@@ -114,11 +116,11 @@ type array []uint16
 func (c array) find(x uint16) int {
 	N := getCardinality(c)
 	for i := int(startIdx); i < int(startIdx)+N; i++ {
-		if len(c) <= int(i) {
+		if len(c) <= i {
 			panic(fmt.Sprintf("find: %d len(c) %d <= i %d\n", x, len(c), i))
 		}
 		if c[i] >= x {
-			return int(i - int(startIdx))
+			return i - int(startIdx)
 		}
 	}
 	return N
@@ -148,7 +150,7 @@ func (c array) add(x uint16) bool {
 	offset := int(startIdx) + idx
 	// fmt.Printf("Add: idx=%d card=%d offset=%d\n", idx, N, offset)
 
-	if int(idx) < N {
+	if idx < N {
 		if c[offset] == x {
 			return false
 		}
@@ -165,7 +167,7 @@ func (c array) remove(x uint16) bool {
 	N := getCardinality(c)
 	offset := int(startIdx) + idx
 
-	if int(idx) < N {
+	if idx < N {
 		if c[offset] != x {
 			return false
 		}
@@ -235,7 +237,7 @@ func (c array) andNotArray(other array, buf []uint16) []uint16 {
 	out := buf[:int(startIdx)+max+1]
 
 	andRes := array(c.andArray(other)).all()
-	srcVals := array(c).all()
+	srcVals := c.all()
 	num := uint16(difference(srcVals, andRes, out[startIdx:]))
 
 	// Truncate out to how many values were found.
@@ -451,10 +453,7 @@ func (b bitmap) rank(x uint16) int {
 		return -1
 	}
 
-	var rank int
-	for i := 0; i < int(idx); i++ {
-		rank += bits.OnesCount16(b[int(startIdx)+i])
-	}
+	rank := bitset.NewBitsetFromRef(toByteSlice(b[int(startIdx):int(startIdx+idx)])).Count()
 	for p := uint16(0); p <= pos; p++ {
 		if b[startIdx+idx]&bitmapMask[p] > 0 {
 			rank++

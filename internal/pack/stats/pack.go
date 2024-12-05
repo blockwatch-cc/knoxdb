@@ -53,7 +53,7 @@ func (m *PackStats) UnmarshalBinary(data []byte) error {
 func (m PackStats) Encode(buf *bytes.Buffer) error {
 	buf.WriteByte(packStatsVersion)
 	var b [8]byte
-	BE.PutUint32(b[:], uint32(m.Key))
+	BE.PutUint32(b[:], m.Key)
 	buf.Write(b[:4])
 	BE.PutUint64(b[:], m.SchemaId)
 	buf.Write(b[:])
