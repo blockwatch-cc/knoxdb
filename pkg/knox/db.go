@@ -82,7 +82,7 @@ func (d *DB) CreateTable(ctx context.Context, s *schema.Schema, opts TableOption
 	if err != nil {
 		return nil, err
 	}
-	return &TableImpl{t, d, d.log}, nil
+	return &TableImpl{d, t, nil, d.log}, nil
 }
 
 func (d *DB) UseTable(name string) (Table, error) {
@@ -90,7 +90,7 @@ func (d *DB) UseTable(name string) (Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TableImpl{t, d, d.log}, nil
+	return &TableImpl{d, t, nil, d.log}, nil
 }
 
 func (d *DB) DropTable(ctx context.Context, name string) error {

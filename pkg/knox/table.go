@@ -16,8 +16,9 @@ import (
 var _ Table = (*TableImpl)(nil)
 
 type TableImpl struct {
-	table engine.TableEngine
 	db    Database
+	table engine.TableEngine
+	enc   *schema.Encoder
 	log   log.Logger
 }
 
@@ -49,8 +50,11 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, error) {
 	}
 
 	// encode wire (single or slice) - schema is guaranteed the same
-	enc := schema.NewEncoder(t.table.Schema())
-	buf, err := enc.Encode(val, nil)
+	// but we must use the one derived from Go type for struct read
+	if t.enc == nil {
+		t.enc = schema.NewEncoder(s).WithEnums(t.db.Enums())
+	}
+	buf, err := t.enc.Encode(val, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -88,8 +92,11 @@ func (t TableImpl) Update(ctx context.Context, val any) (uint64, error) {
 	}
 
 	// encode wire (single or slice) - schema is guaranteed the same
-	enc := schema.NewEncoder(t.table.Schema())
-	buf, err := enc.Encode(val, nil)
+	// but we must use the one derived from Go type for struct read
+	if t.enc == nil {
+		t.enc = schema.NewEncoder(s).WithEnums(t.db.Enums())
+	}
+	buf, err := t.enc.Encode(val, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -251,8 +258,7 @@ func UseGenericTable[T any](name string, db Database) (*GenericTable[T], error) 
 		return nil, schema.ErrSchemaMismatch
 	}
 	return &GenericTable[T]{
-		schema: table.Schema(),
-		enc:    schema.NewGenericEncoder[T]().WithEnumsFrom(table.Schema().Enums()),
+		schema: s,
 		table:  table.(*TableImpl).table,
 		db:     db,
 	}, nil
@@ -290,6 +296,9 @@ func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
 		buf []byte
 		err error
 	)
+	if t.enc == nil {
+		t.enc = schema.NewGenericEncoder[T]().WithEnums(t.db.Enums())
+	}
 	switch v := val.(type) {
 	case *T:
 		buf, err = t.enc.EncodePtr(v, nil)
@@ -346,6 +355,9 @@ func (t *GenericTable[T]) Update(ctx context.Context, val any) (uint64, error) {
 		buf []byte
 		err error
 	)
+	if t.enc == nil {
+		t.enc = schema.NewGenericEncoder[T]().WithEnums(t.db.Enums())
+	}
 	switch v := val.(type) {
 	case *T:
 		buf, err = t.enc.EncodePtr(v, nil)

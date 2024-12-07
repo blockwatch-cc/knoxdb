@@ -789,8 +789,7 @@ func TestFieldExported(t *testing.T) {
 	originalField := NewField(types.FieldTypeUint16).
 		WithName("test_field").
 		WithFlags(types.FieldFlagIndexed | types.FieldFlagEnum).
-		WithIndex(types.IndexTypeHash).
-		WithEnum(NewEnumDictionary("test_enum"))
+		WithIndex(types.IndexTypeHash)
 
 	exported := ExportedField{
 		Name:      originalField.Name(),

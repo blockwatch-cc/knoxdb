@@ -32,8 +32,8 @@ func (e *GenericEncoder[T]) Schema() *Schema {
 	return e.enc.schema
 }
 
-func (e *GenericEncoder[T]) WithEnumsFrom(r EnumRegistry) *GenericEncoder[T] {
-	e.enc.schema.WithEnumsFrom(r)
+func (e *GenericEncoder[T]) WithEnums(reg EnumRegistry) *GenericEncoder[T] {
+	e.enc.WithEnums(reg)
 	return e
 }
 
@@ -59,6 +59,7 @@ func (e *GenericEncoder[T]) EncodePtrSlice(slice []*T, buf *bytes.Buffer) ([]byt
 
 type Encoder struct {
 	schema  *Schema
+	enums   EnumRegistry
 	needsif bool
 }
 
@@ -72,8 +73,14 @@ func NewEncoder(s *Schema) *Encoder {
 	}
 	return &Encoder{
 		schema:  s,
+		enums:   enumRegistry,
 		needsif: needsif,
 	}
+}
+
+func (e *Encoder) WithEnums(reg EnumRegistry) *Encoder {
+	e.enums = reg
+	return e
 }
 
 func (e *Encoder) Schema() *Schema {
@@ -104,7 +111,7 @@ func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
 				err = writeReflectField(buf, code, rval.FieldByIndex(field.path).Interface())
 			} else {
 				ptr := unsafe.Add(base, field.offset)
-				err = writeField(buf, code, field, ptr)
+				err = writeField(buf, code, field, ptr, e.enums)
 			}
 			if err != nil {
 				return nil, err
@@ -118,7 +125,7 @@ func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
 			}
 			field := &e.schema.fields[op]
 			ptr := unsafe.Add(base, field.offset)
-			err = writeField(buf, code, field, ptr)
+			err = writeField(buf, code, field, ptr, e.enums)
 			if err != nil {
 				return nil, err
 			}
@@ -156,7 +163,7 @@ func (e *Encoder) EncodeSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 				field := &e.schema.fields[op]
 				if !code.NeedsInterface() {
 					ptr := unsafe.Add(base, field.offset)
-					err = writeField(buf, code, field, ptr)
+					err = writeField(buf, code, field, ptr, e.enums)
 				} else {
 					err = writeReflectField(buf, code, rval.FieldByIndex(field.path).Interface())
 				}
@@ -174,7 +181,7 @@ func (e *Encoder) EncodeSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 				}
 				field := &e.schema.fields[op]
 				ptr := unsafe.Add(base, field.offset)
-				err = writeField(buf, code, field, ptr)
+				err = writeField(buf, code, field, ptr, e.enums)
 				if err != nil {
 					return nil, err
 				}
@@ -210,7 +217,7 @@ func (e *Encoder) EncodePtrSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 				field := &e.schema.fields[op]
 				if !code.NeedsInterface() {
 					ptr := unsafe.Add(base, field.offset)
-					err = writeField(buf, code, field, ptr)
+					err = writeField(buf, code, field, ptr, e.enums)
 				} else {
 					err = writeReflectField(buf, code, rval.Elem().FieldByIndex(field.path).Interface())
 				}
@@ -228,7 +235,7 @@ func (e *Encoder) EncodePtrSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 				}
 				field := &e.schema.fields[op]
 				ptr := unsafe.Add(base, field.offset)
-				err = writeField(buf, code, field, ptr)
+				err = writeField(buf, code, field, ptr, e.enums)
 				if err != nil {
 					return nil, err
 				}
@@ -268,7 +275,7 @@ func writeReflectField(buf *bytes.Buffer, code OpCode, rval any) error {
 	return err
 }
 
-func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer) error {
+func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer, enums EnumRegistry) error {
 	var err error
 	switch code {
 	default:
@@ -323,11 +330,12 @@ func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer
 		_, err = buf.Write(v.Int256().Bytes())
 
 	case OpCodeEnum:
-		if field.enum == nil {
+		enum, ok := enums.Lookup(field.name)
+		if !ok {
 			return ErrEnumUndefined
 		}
 		v := *(*string)(ptr)
-		code, ok := field.enum.Code(v)
+		code, ok := enum.Code(v)
 		if !ok {
 			return fmt.Errorf("%s: invalid enum value %q", field.name, v)
 		}

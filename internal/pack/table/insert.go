@@ -11,10 +11,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/wal"
 )
 
-const (
-	TODO_ROWID uint64 = 0
-)
-
 func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	// check message
 	if len(buf) == 0 {

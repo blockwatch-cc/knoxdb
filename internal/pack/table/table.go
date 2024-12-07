@@ -245,23 +245,25 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 }
 
 func (t *Table) Close(ctx context.Context) (err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.db != nil {
 		t.log.Debugf("Closing table %s", t.schema.TypeLabel(t.engine.Namespace()))
 		err = t.db.Close()
 		t.db = nil
 	}
 	t.engine = nil
-	t.schema = nil
-	t.id = 0
-	t.px = 0
-	t.opts = engine.TableOptions{}
-	t.metrics = engine.TableMetrics{}
-	t.state = engine.ObjectState{}
-	t.indexes = nil
+	// t.schema = nil
+	// t.id = 0
+	// t.px = 0
+	// t.opts = engine.TableOptions{}
+	// t.metrics = engine.TableMetrics{}
+	// t.state = engine.ObjectState{}
+	// t.indexes = nil
 	t.stats.Reset()
-	t.stats = nil
+	// t.stats = nil
 	t.journal.Close()
-	t.journal = nil
+	// t.journal = nil
 	return
 }
 
@@ -298,7 +300,9 @@ func (t *Table) Drop(ctx context.Context) error {
 }
 
 func (t *Table) Sync(ctx context.Context) error {
-	// FIXME: refactor legacy
+	// FIXME: refactor legacy journal
+
+	// lock table journal
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

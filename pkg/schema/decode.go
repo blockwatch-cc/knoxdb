@@ -33,8 +33,8 @@ func (d *GenericDecoder[T]) Schema() *Schema {
 	return d.dec.schema
 }
 
-func (d *GenericDecoder[T]) WithEnumsFrom(r EnumRegistry) *GenericDecoder[T] {
-	d.dec.schema.WithEnumsFrom(r)
+func (d *GenericDecoder[T]) WithEnums(reg EnumRegistry) *GenericDecoder[T] {
+	d.dec.WithEnums(reg)
 	return d
 }
 
@@ -87,6 +87,7 @@ func (d *GenericDecoder[T]) DecodeSlice(buf []byte, res []T) ([]T, error) {
 
 type Decoder struct {
 	schema  *Schema
+	enums   EnumRegistry
 	needsif bool
 	buf     *bytes.Buffer
 }
@@ -102,12 +103,18 @@ func NewDecoder(s *Schema) *Decoder {
 	return &Decoder{
 		schema:  s,
 		needsif: needsif,
+		enums:   enumRegistry,
 		buf:     bytes.NewBuffer(make([]byte, 0, s.maxWireSize)),
 	}
 }
 
 func (d *Decoder) Schema() *Schema {
 	return d.schema
+}
+
+func (d *Decoder) WithEnums(reg EnumRegistry) *Decoder {
+	d.enums = reg
+	return d
 }
 
 // Read reads wire encoded data from r and decodes into val based on
@@ -248,8 +255,8 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 
 		case OpCodeEnum:
 			u16, _ := ReadUint16(d.buf.Next(2))
-			if field.enum != nil {
-				val, ok := field.enum.Value(u16)
+			if enum, ok := d.enums.Lookup(field.name); ok {
+				val, ok := enum.Value(u16)
 				if !ok {
 					err = fmt.Errorf("%s: invalid enum value %d", field.name, u16)
 				}
@@ -283,7 +290,7 @@ func (d *Decoder) Decode(buf []byte, val any) error {
 				buf = readReflectField(code, dst.Addr().Interface(), buf)
 			} else {
 				ptr := unsafe.Add(base, field.offset)
-				buf = readField(code, field, ptr, buf)
+				buf = readField(code, field, ptr, buf, d.enums)
 			}
 		}
 	} else {
@@ -293,7 +300,7 @@ func (d *Decoder) Decode(buf []byte, val any) error {
 			}
 			field := &d.schema.fields[op]
 			ptr := unsafe.Add(base, field.offset)
-			buf = readField(code, field, ptr, buf)
+			buf = readField(code, field, ptr, buf, d.enums)
 		}
 	}
 	return nil
@@ -323,7 +330,7 @@ func (d *Decoder) DecodeSlice(buf []byte, slice any) (int, error) {
 					buf = readReflectField(code, dst.Addr().Interface(), buf)
 				} else {
 					ptr := unsafe.Add(base, field.offset)
-					buf = readField(code, field, ptr, buf)
+					buf = readField(code, field, ptr, buf, d.enums)
 				}
 			}
 			base = unsafe.Add(base, sz)
@@ -336,7 +343,7 @@ func (d *Decoder) DecodeSlice(buf []byte, slice any) (int, error) {
 				}
 				field := &d.schema.fields[op]
 				ptr := unsafe.Add(base, field.offset)
-				buf = readField(code, field, ptr, buf)
+				buf = readField(code, field, ptr, buf, d.enums)
 			}
 			base = unsafe.Add(base, sz)
 		}
@@ -367,7 +374,7 @@ func readReflectField(code OpCode, rval any, buf []byte) []byte {
 	return buf
 }
 
-func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte) []byte {
+func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums EnumRegistry) []byte {
 	switch code {
 
 	case OpCodeInt64, OpCodeUint64, OpCodeFloat64:
@@ -465,10 +472,11 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte) []byte
 	case OpCodeEnum:
 		u16, n := ReadUint16(buf)
 		buf = buf[n:]
-		if field.enum == nil {
+		enum, ok := enums.Lookup(field.name)
+		if !ok {
 			panic(fmt.Errorf("translation for enum %q not registered", field.name))
 		}
-		val, ok := field.enum.Value(u16)
+		val, ok := enum.Value(u16)
 		if !ok {
 			panic(fmt.Errorf("%s: invalid enum value %d", field.name, u16))
 		}

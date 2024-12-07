@@ -25,6 +25,7 @@ func (t *Table) Lookup(ctx context.Context, pks []uint64) (engine.QueryResult, e
 			WithMaxRows(len(pks)).
 			WithSchema(t.schema).
 			Alloc(),
+		engine.GetEngine(ctx).Enums(),
 	)
 
 	// protect journal access
@@ -47,7 +48,7 @@ func (t *Table) StreamLookup(ctx context.Context, pks []uint64, fn func(engine.Q
 	pks = slicex.RemoveZeros(slicex.Unique(pks))
 
 	// prepare result
-	res := NewStreamResult(fn)
+	res := NewStreamResult(engine.GetEngine(ctx).Enums(), fn)
 	defer res.Close()
 
 	// protect journal access

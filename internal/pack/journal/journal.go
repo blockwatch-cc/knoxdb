@@ -202,7 +202,10 @@ func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bkey string) (in
 	if err != nil {
 		return 0, 0, err
 	}
-	tx.Bucket([]byte(bkey+"_data")).Put(key[:], buf)
+	err = bucket.Put(key[:], buf)
+	if err != nil {
+		return n, 0, err
+	}
 	m := len(buf)
 
 	// reset deleted pks to zero

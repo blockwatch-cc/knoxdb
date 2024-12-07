@@ -75,22 +75,24 @@ func (r *StreamResult) Close() {
 	r.fn = nil
 }
 
-func NewStreamResult(fn StreamCallback) *StreamResult {
+func NewStreamResult(enums schema.EnumRegistry, fn StreamCallback) *StreamResult {
 	sr := &StreamResult{
-		r:  NewResult(nil),
+		r:  NewResult(nil, enums),
 		fn: fn,
 	}
 	return sr
 }
 
 type Result struct {
-	pkg *pack.Package
-	row *Row // row cache
+	pkg   *pack.Package
+	enums schema.EnumRegistry
+	row   *Row // row cache
 }
 
-func NewResult(pkg *pack.Package) *Result {
+func NewResult(pkg *pack.Package, enums schema.EnumRegistry) *Result {
 	return &Result{
-		pkg: pkg,
+		pkg:   pkg,
+		enums: enums,
 	}
 }
 
@@ -217,12 +219,11 @@ func (r *Row) Decode(val any) error {
 		if err != nil {
 			return err
 		}
-		s.WithEnumsFrom(r.res.pkg.Schema().Enums())
 		r.maps = maps
 		r.schema = s
 	}
 
-	return r.res.pkg.ReadStruct(r.row, val, r.schema, r.maps)
+	return r.res.pkg.ReadStruct(r.row, val, r.schema, r.res.enums, r.maps)
 }
 
 func (r *Row) Field(name string) (any, error) {
@@ -326,4 +327,17 @@ func (r *Row) Bool(col int) bool {
 
 func (r *Row) Time(col int) time.Time {
 	return r.res.pkg.Time(col, r.row)
+}
+
+func (r *Row) Enum(col int) string {
+	f, ok := r.res.pkg.Schema().FieldByIndex(col)
+	if !ok {
+		return ""
+	}
+	enum, ok := r.res.enums.Lookup(f.Name())
+	if !ok {
+		return ""
+	}
+	val, _ := enum.Value(r.res.pkg.Uint16(col, r.row))
+	return val
 }

@@ -296,15 +296,16 @@ func (q Query) Execute(ctx context.Context, val any) (err error) {
 
 		// take limit from slice or user defined value
 		if q.limit == 0 {
-			// reuse existing slice elements
 			q.limit = rval.Len()
+		}
 
+		// reuse existing slice elements
+		if rval.Len() > 0 {
 			n := -1
 			err = q.table.Stream(ctx, q, func(r QueryRow) error {
 				n++
 				return r.Decode(rval.Index(n).Interface())
 			})
-
 		} else {
 			// allocate new slice elements
 			err = q.table.Stream(ctx, q, func(r QueryRow) error {
@@ -401,7 +402,7 @@ func (q Query) MakePlan() (engine.QueryPlan, error) {
 		WithLogger(q.log)
 
 	// compile filters from conditions
-	filters, err := q.cond.Compile(q.table.Schema())
+	filters, err := q.cond.Compile(q.table.Schema(), q.table.DB().Enums())
 	if err != nil {
 		return nil, err
 	}
@@ -421,9 +422,6 @@ func (q Query) MakePlan() (engine.QueryPlan, error) {
 	} else {
 		if err := ts.CanSelect(q.schema); err != nil {
 			return nil, err
-		}
-		if q.schema.NeedsEnums() {
-			q.schema.WithEnumsFrom(q.table.DB().Enums())
 		}
 	}
 	plan.ResultSchema = q.schema

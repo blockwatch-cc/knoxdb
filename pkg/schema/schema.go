@@ -32,10 +32,10 @@ type Schema struct {
 	maxWireSize int
 	isFixedSize bool
 	isInterface bool
+	isEnum      bool
 	version     uint32
 	encode      []OpCode
 	decode      []OpCode
-	enums       EnumRegistry
 }
 
 func NewSchema() *Schema {
@@ -82,53 +82,8 @@ func (s *Schema) nextFieldId() uint16 {
 	}
 }
 
-func (s *Schema) WithEnum(e *EnumDictionary) *Schema {
-	if e != nil {
-		for i, f := range s.fields {
-			if !f.Is(types.FieldFlagEnum) {
-				continue
-			}
-			if e.Name() != f.name {
-				continue
-			}
-			s.fields[i].enum = e
-			if s.exports != nil {
-				s.exports[i].Enum = e
-			}
-			s.enums.Register(e)
-		}
-	}
-	return s
-}
-
-func (s *Schema) NeedsEnums() bool {
-	if s.enums != nil {
-		return false
-	}
-	for _, f := range s.fields {
-		if f.Is(types.FieldFlagEnum) {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *Schema) WithEnumsFrom(r EnumRegistry) *Schema {
-	for i, f := range s.fields {
-		if !f.Is(types.FieldFlagEnum) {
-			continue
-		}
-		e, ok := r.Lookup(f.name)
-		if !ok {
-			continue
-		}
-		s.fields[i].enum = e
-		if s.exports != nil {
-			s.exports[i].Enum = e
-		}
-		s.enums.Register(e)
-	}
-	return s
+func (s *Schema) HasEnums() bool {
+	return s.isEnum
 }
 
 func (s *Schema) NewBuffer(sz int) *bytes.Buffer {
@@ -165,10 +120,6 @@ func (s *Schema) TypeLabel(vendor string) string {
 	b.WriteString(".v")
 	b.WriteString(strconv.Itoa(int(s.version)))
 	return b.String()
-}
-
-func (s *Schema) Enums() EnumRegistry {
-	return s.enums
 }
 
 func (s *Schema) TaggedHash(tag types.ObjectTag) uint64 {
@@ -430,7 +381,6 @@ func (s *Schema) Clone() *Schema {
 		name:    s.name,
 		fields:  slices.Clone(s.fields),
 		version: s.version,
-		enums:   s.enums,
 	}
 }
 
@@ -763,7 +713,7 @@ func (s *Schema) Finalize() *Schema {
 
 	// generate schema hash from visible fields
 	h := fnv.New64a()
-	h.Write(Uint32Bytes(uint32(s.version)))
+	h.Write(Uint32Bytes(s.version))
 
 	for i := range s.fields {
 		// collect sizes from visible fields
@@ -786,13 +736,10 @@ func (s *Schema) Finalize() *Schema {
 
 		// try lookup enum from global registry using tag '0' or generate new enum
 		if s.fields[i].Is(types.FieldFlagEnum) {
-			if s.fields[i].enum == nil {
-				s.fields[i].enum, _ = LookupEnum(0, s.fields[i].name)
+			if _, ok := LookupEnum(0, s.fields[i].name); !ok {
+				RegisterEnum(0, NewEnumDictionary(s.fields[i].name))
 			}
-			if s.fields[i].enum == nil {
-				s.fields[i].enum = NewEnumDictionary(s.fields[i].name)
-			}
-			s.enums.Register(s.fields[i].enum)
+			s.isEnum = true
 		}
 	}
 	s.schemaHash = h.Sum64()
@@ -811,11 +758,11 @@ func (s *Schema) Finalize() *Schema {
 			IsVisible:  s.fields[i].IsVisible(),
 			IsInternal: s.fields[i].IsInternal(),
 			IsArray:    s.fields[i].isArray,
+			IsEnum:     s.fields[i].IsEnum(),
 			Iface:      s.fields[i].iface,
 			Scale:      s.fields[i].scale,
 			Fixed:      s.fields[i].fixed,
 			Offset:     s.fields[i].offset,
-			Enum:       s.fields[i].enum,
 			path:       s.fields[i].path,
 		}
 	}

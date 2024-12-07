@@ -35,11 +35,13 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 			WithMaxRows(int(plan.Limit)).
 			WithSchema(plan.ResultSchema).
 			Alloc(),
+		engine.GetEngine(ctx).Enums(),
 	)
 
 	// protect journal access
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+
 	atomic.AddInt64(&t.metrics.QueryCalls, 1)
 
 	// execute query
@@ -70,7 +72,7 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 	}
 
 	// prepare result
-	res := NewStreamResult(fn)
+	res := NewStreamResult(engine.GetEngine(ctx).Enums(), fn)
 	defer res.Close()
 
 	// protect journal access
@@ -149,27 +151,32 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	}
 	plan.ResultSchema = rs.WithName("delete")
 
+	// execute the query to find all matching pks
+	bits := bitmap.New()
+	res := NewStreamResult(
+		engine.GetEngine(ctx).Enums(),
+		func(row engine.QueryRow) error {
+			bits.Set(row.(*Row).Uint64(t.px))
+			return nil
+		},
+	)
+
+	// upgrade tx for writing and register touched table for later commit
+	engine.GetTransaction(ctx).Touch(t.id)
+	atomic.AddInt64(&t.metrics.DeleteCalls, 1)
+
+	// protect journal write access (query is read only, but later update will write)
+	// we must take this lock before starting a storage backend tx to avoid a deadlock
+	// with backend write transactions (sync, flush, etc.) that take this table lock too
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	// start a storage write transaction, prevents a conflicting
 	// read-only tx from getting opened in doQuery (tx is reused there)
 	_, err = engine.GetTransaction(ctx).StoreTx(t.db, true)
 	if err != nil {
 		return 0, err
 	}
-	atomic.AddInt64(&t.metrics.DeleteCalls, 1)
-
-	// execute the query to find all matching pks
-	bits := bitmap.New()
-	res := NewStreamResult(func(row engine.QueryRow) error {
-		bits.Set(row.(*Row).Uint64(t.px))
-		return nil
-	})
-
-	// protect journal write access (query is read only, but later update will write)
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	// upgrade tx for writing and register touched table for later commit
-	engine.GetTransaction(ctx).Touch(t.id)
 
 	// run the query
 	err = t.doQueryAsc(ctx, plan, res)
@@ -199,6 +206,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	// anyways until flush)
 	if n > 0 {
 		atomic.AddInt64(&t.metrics.DeletedTuples, int64(n))
+		t.state.NRows -= n
 	}
 
 	return n, nil

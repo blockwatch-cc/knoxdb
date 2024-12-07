@@ -76,8 +76,8 @@ func UseGenericStore[T any](name string, db Database) (*GenericStore[T], error) 
 	}
 	return &GenericStore[T]{
 		db:    db,
-		enc:   schema.NewGenericEncoder[T]().WithEnumsFrom(store.Schema().Enums()),
-		dec:   schema.NewGenericDecoder[T]().WithEnumsFrom(store.Schema().Enums()),
+		enc:   schema.NewGenericEncoder[T]().WithEnums(store.DB().Enums()),
+		dec:   schema.NewGenericDecoder[T]().WithEnums(store.DB().Enums()),
 		store: store.(*StoreImpl).store,
 	}, nil
 }

@@ -33,7 +33,6 @@ type Field struct {
 	offset   uintptr          // struct field offset from reflect
 	wireSize uint16           // wire encoding field size in bytes, min size for []byte & string
 	iface    types.IfaceFlags // Go encoder default interfaces
-	enum     *EnumDictionary  // dynamic enum data
 }
 
 // ExportedField is a performance improved version of Field
@@ -48,11 +47,11 @@ type ExportedField struct {
 	IsVisible  bool
 	IsInternal bool
 	IsArray    bool
+	IsEnum     bool
 	Iface      types.IfaceFlags
 	Scale      uint8
 	Fixed      uint16
 	Offset     uintptr
-	Enum       *EnumDictionary
 	path       []int
 }
 
@@ -109,10 +108,6 @@ func (f *Field) Scale() uint8 {
 
 func (f *Field) Fixed() uint16 {
 	return f.fixed
-}
-
-func (f *Field) Enum() *EnumDictionary {
-	return f.enum
 }
 
 func (f *Field) IsValid() bool {
@@ -197,11 +192,6 @@ func (f Field) WithScale(n uint8) Field {
 	return f
 }
 
-func (f Field) WithEnum(d *EnumDictionary) Field {
-	f.enum = d
-	return f
-}
-
 func (f Field) WithIndex(kind types.IndexType) Field {
 	f.index = kind
 	if kind != types.IndexTypeNone {
@@ -211,39 +201,6 @@ func (f Field) WithIndex(kind types.IndexType) Field {
 	}
 	return f
 }
-
-// @deprecated
-// func (f Field) WithGoType(typ reflect.Type, path []int, ofs uintptr) Field {
-// 	var iface types.IfaceFlags
-// 	// detect marshaler types
-// 	if typ.Implements(binaryMarshalerType) {
-// 		iface |= types.IfaceBinaryMarshaler
-// 	}
-// 	if reflect.PointerTo(typ).Implements(binaryUnmarshalerType) {
-// 		iface |= types.IfaceBinaryUnmarshaler
-// 	}
-// 	if typ.Implements(textMarshalerType) {
-// 		iface |= types.IfaceTextMarshaler
-// 	}
-// 	if reflect.PointerTo(typ).Implements(textUnmarshalerType) {
-// 		iface |= types.IfaceTextUnmarshaler
-// 	}
-// 	if typ.Implements(stringerType) {
-// 		iface |= types.IfaceStringer
-// 	}
-// 	f.wireSize = uint16(typ.Size())
-// 	if typ.Kind() == reflect.Array && typ.Elem().Kind() == reflect.Uint8 {
-// 		f.isArray = true
-// 		f.wireSize = uint16(typ.Len())
-// 	}
-// 	if f.flags.Is(types.FieldFlagEnum) {
-// 		f.wireSize = 2
-// 	}
-// 	f.path = path
-// 	f.offset = ofs
-// 	f.iface = iface
-// 	return f
-// }
 
 func (f *Field) Validate() error {
 	// require scale on decimal fields only
@@ -506,19 +463,20 @@ func (f *Field) Encode(w io.Writer, val any) (err error) {
 		}
 
 	case OpCodeEnum:
-		v, ok := val.(string)
-		if !ok {
-			err = ErrInvalidValueType
-			return
-		}
-		if f.enum == nil {
-			return ErrEnumUndefined
-		}
-		code, ok := f.enum.Code(v)
-		if !ok {
-			return ErrInvalidValue
-		}
-		err = EncodeInt(w, OpCodeUint16, code)
+		// v, ok := val.(string)
+		// if !ok {
+		// 	err = ErrInvalidValueType
+		// 	return
+		// }
+		// if f.enum == nil {
+		// 	return ErrEnumUndefined
+		// }
+		// code, ok := f.enum.Code(v)
+		// if !ok {
+		// 	return ErrInvalidValue
+		// }
+		// err = EncodeInt(w, OpCodeUint16, code)
+		err = EncodeInt(w, OpCodeUint16, val.(uint16))
 	}
 	return
 }
@@ -569,20 +527,21 @@ func (f *Field) Decode(r io.Reader) (val any, err error) {
 	case types.FieldTypeUint16:
 		_, err = r.Read(buf[:2])
 		u16, _ := ReadUint16(buf[:2])
-		if f.flags.Is(types.FieldFlagEnum) {
-			if f.enum != nil {
-				enum, ok := f.enum.Value(u16)
-				if ok {
-					val = enum
-				} else {
-					err = ErrInvalidValue
-				}
-			} else {
-				err = ErrEnumUndefined
-			}
-		} else {
-			val = u16
-		}
+		val = u16
+		// if f.flags.Is(types.FieldFlagEnum) {
+		// 	if f.enum != nil {
+		// 		enum, ok := f.enum.Value(u16)
+		// 		if ok {
+		// 			val = enum
+		// 		} else {
+		// 			err = ErrInvalidValue
+		// 		}
+		// 	} else {
+		// 		err = ErrEnumUndefined
+		// 	}
+		// } else {
+		// 	val = u16
+		// }
 
 	case types.FieldTypeUint8:
 		_, err = r.Read(buf[:1])

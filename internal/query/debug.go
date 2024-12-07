@@ -124,10 +124,10 @@ func (q QueryPlan) String() string {
 	fmt.Fprintf(&b, "SELECT ( %s ) WHERE ", strings.Join(q.ResultSchema.AllFieldNames(), ", "))
 	q.Filters.dump(0, &b)
 	if q.Order != types.OrderAsc {
-		fmt.Fprintf(&b, "ORDER BY ID %s ", strings.ToUpper(q.Order.String()))
+		fmt.Fprintf(&b, " ORDER BY ID %s", strings.ToUpper(q.Order.String()))
 	}
 	if q.Limit > 0 {
-		fmt.Fprintf(&b, "LIMIT %d", q.Limit)
+		fmt.Fprintf(&b, " LIMIT %d", q.Limit)
 	}
 	for i, n := range []string{"NOCACHE", "NOINDEX", "DEBUG", "STATS"} {
 		if q.Flags&(1<<i) > 0 {
