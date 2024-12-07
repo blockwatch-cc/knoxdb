@@ -76,6 +76,7 @@ func (e *ErrAssert) Error() string {
 	fmt.Fprintf(&b, "%s assertion failed [0x%016x, %s]: ", e.kind, id, e.loc)
 	b.WriteString(e.msg)
 	if len(e.details) > 0 {
+		b.WriteByte(' ')
 		isEven := len(e.details)%2 == 0
 		for i := 0; i < len(e.details); i += 2 {
 			if i > 0 {

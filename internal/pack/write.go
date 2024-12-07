@@ -383,9 +383,9 @@ func (p *Package) ReplacePack(spack *Package, to, from, n int) error {
 	defer func() {
 		if e := recover(); e != nil {
 			fmt.Printf("Replace: %v\n", e)
-			fmt.Printf("SRC: id=%d vals=%d pklen=%d\n", spack.key, spack.nRows, len(spack.PkColumn()))
-			fmt.Printf("DST: id=%d vals=%d pklen=%d\n", p.key, p.nRows, len(p.PkColumn()))
-			fmt.Printf("REQ: dst-to=%d src-from=%d slen=%d\n", to, from, n)
+			fmt.Printf("SRC: id=%d rows=%d pklen=%d\n", spack.key, spack.nRows, len(spack.PkColumn()))
+			fmt.Printf("DST: id=%d rows=%d pklen=%d\n", p.key, p.nRows, len(p.PkColumn()))
+			fmt.Printf("REQ: dst:to=%d src:from=%d n=%d\n", to, from, n)
 			fmt.Printf("%s\n", string(debug.Stack()))
 			panic(e)
 		}
@@ -421,9 +421,9 @@ func (p *Package) AppendPack(spack *Package, from, n int) error {
 	defer func() {
 		if e := recover(); e != nil {
 			fmt.Printf("Append: %v\n", e)
-			fmt.Printf("SRC: id=%d vals=%d pklen=%d\n", spack.key, spack.nRows, len(spack.PkColumn()))
-			fmt.Printf("DST: id=%d vals=%d pklen=%d\n", p.key, p.nRows, len(p.PkColumn()))
-			fmt.Printf("REQ: src-from=%d slen=%d\n", from, n)
+			fmt.Printf("SRC: id=%d rows=%d pklen=%d\n", spack.key, spack.nRows, len(spack.PkColumn()))
+			fmt.Printf("DST: id=%d rows=%d pklen=%d\n", p.key, p.nRows, len(p.PkColumn()))
+			fmt.Printf("REQ: src:from=%d n=%d\n", from, n)
 			fmt.Printf("%s\n", string(debug.Stack()))
 			panic(e)
 		}
@@ -459,9 +459,9 @@ func (p *Package) InsertPack(spack *Package, to, from, n int) error {
 	defer func() {
 		if e := recover(); e != nil {
 			fmt.Printf("Insert: %v\n", e)
-			fmt.Printf("SRC: id=%d vals=%d pklen=%d\n", spack.key, spack.nRows, len(spack.PkColumn()))
-			fmt.Printf("DST: id=%d vals=%d pklen=%d\n", p.key, p.nRows, len(p.PkColumn()))
-			fmt.Printf("REQ: dst-to=%d src-from=%d slen=%d\n", to, from, n)
+			fmt.Printf("SRC: id=%d rows=%d pklen=%d\n", spack.key, spack.nRows, len(spack.PkColumn()))
+			fmt.Printf("DST: id=%d rows=%d pklen=%d\n", p.key, p.nRows, len(p.PkColumn()))
+			fmt.Printf("REQ: dst:to=%d src:from=%d n=%d\n", to, from, n)
 			fmt.Printf("%s\n", string(debug.Stack()))
 			panic(e)
 		}

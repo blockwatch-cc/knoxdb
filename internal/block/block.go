@@ -113,6 +113,7 @@ func New(typ BlockType, sz int) *Block {
 	return b
 }
 
+// only applicable to managed memory blocks, not byte, i128, i258, bool
 func (b *Block) data() []byte {
 	return b.buf[:b.len*blockTypeDataSize[b.typ]]
 }
@@ -253,7 +254,6 @@ func (b *Block) Clone(sz int) *Block {
 	assert.Always(b.Len() <= sz, "clone size smaller than block size")
 	c := New(b.typ, sz)
 	c.dirty = true
-	c.len = b.len
 	switch b.typ {
 	case BlockString, BlockBytes:
 		(*(*dedup.ByteArray)(c.ptr)).AppendFrom((*(*dedup.ByteArray)(b.ptr)))
@@ -278,6 +278,7 @@ func (b *Block) Clone(sz int) *Block {
 		d256.X2 = d256.X2[:b.len]
 		d256.X3 = d256.X3[:b.len]
 	default:
+		c.len = b.len
 		copy(c.buf, b.buf)
 	}
 	return c
@@ -318,33 +319,33 @@ func (b *Block) Grow(n int) {
 	b.dirty = true
 }
 
-// Delete removes n elements starting at position i (i.e. [i:start+n])
-// and decreases the blocks size, but not its capacity. Delete is O(len(s)-(start+n))
+// Delete removes n elements starting at position i (i.e. [i:from+n])
+// and decreases the blocks size, but not its capacity. Delete is O(len(s)-(from+n))
 // as it mem-moves trailing items to overwrite the deleted range.
-func (b *Block) Delete(start, n int) {
+func (b *Block) Delete(from, n int) {
 	assert.Always(b != nil, "nil block, potential use after free")
 	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	assert.Always(b.len <= start+n, "out of bounds delete")
-	b.len -= n
+	assert.Always(b.Len() <= from+n, "out of bounds", "dst.len", b.Len(), "from", from, "n", n)
 	switch b.typ {
 	case BlockString, BlockBytes:
-		(*(*dedup.ByteArray)(b.ptr)).Delete(start, n)
+		(*(*dedup.ByteArray)(b.ptr)).Delete(from, n)
 	case BlockBool:
-		(*bitset.Bitset)(b.ptr).Delete(start, n)
+		(*bitset.Bitset)(b.ptr).Delete(from, n)
 	case BlockInt128:
 		i128 := (*num.Int128Stride)(b.ptr)
-		i128.X0 = slices.Delete(i128.X0, start, start+n)
-		i128.X1 = slices.Delete(i128.X1, start, start+n)
+		i128.X0 = slices.Delete(i128.X0, from, from+n)
+		i128.X1 = slices.Delete(i128.X1, from, from+n)
 	case BlockInt256:
 		i256 := (*num.Int256Stride)(b.ptr)
-		i256.X0 = slices.Delete(i256.X0, start, start+n)
-		i256.X1 = slices.Delete(i256.X1, start, start+n)
-		i256.X2 = slices.Delete(i256.X2, start, start+n)
-		i256.X3 = slices.Delete(i256.X3, start, start+n)
+		i256.X0 = slices.Delete(i256.X0, from, from+n)
+		i256.X1 = slices.Delete(i256.X1, from, from+n)
+		i256.X2 = slices.Delete(i256.X2, from, from+n)
+		i256.X3 = slices.Delete(i256.X3, from, from+n)
 	default:
-		start *= blockTypeDataSize[b.typ]
+		b.len -= n
+		from *= blockTypeDataSize[b.typ]
 		n *= blockTypeDataSize[b.typ]
-		slices.Delete(b.buf, start, start+n)
+		slices.Delete(b.buf, from, from+n)
 	}
 	b.dirty = true
 }
@@ -416,8 +417,9 @@ func (b *Block) free() {
 func (b *Block) ReplaceBlock(src *Block, from, to, n int) {
 	assert.Always(b != nil, "nil block, potential use after free")
 	assert.Always(src != nil, "nil source block, potential use after free")
-	assert.Always(b.typ == src.typ, "block type mismatch")
-	assert.Always(to+n < b.len, "out of bounds replace")
+	assert.Always(b.typ == src.typ, "block type mismatch", b.typ, src.typ)
+	assert.Always(to+n <= b.Len(), "dst out of bounds", "to", to, "n", n, "dst.len", b.Len())
+	assert.Always(from+n <= src.Len(), "src out of bounds", "from", from, "n", n, "src.len", src.Len())
 	switch b.typ {
 	case BlockString, BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Copy((*(*dedup.ByteArray)(src.ptr)), to, from, n)
@@ -447,11 +449,9 @@ func (b *Block) ReplaceBlock(src *Block, from, to, n int) {
 func (b *Block) AppendBlock(src *Block, from, n int) {
 	assert.Always(b != nil, "nil block, potential use after free")
 	assert.Always(src != nil, "nil source block, potential use after free")
-	assert.Always(b.typ == src.typ, "block type mismatch")
-	assert.Always(b.len+n < b.cap, "out of bounds append")
-	assert.Always(src.len+n < src.cap, "out of bounds src append")
-	end := b.len
-	b.len += n
+	assert.Always(b.typ == src.typ, "block type mismatch", b.typ, src.typ)
+	assert.Always(b.Len()+n <= b.Cap(), "dst out of bounds", "dst.len", b.Len(), "dst.cap", b.Cap())
+	assert.Always(from+n <= src.Len(), "src out of bounds", "src.len", src.Len(), "from", from)
 	switch b.typ {
 	case BlockString, BlockBytes:
 		if n == 1 {
@@ -474,6 +474,8 @@ func (b *Block) AppendBlock(src *Block, from, n int) {
 		d256.X2 = append(d256.X2, s256.X2[from:from+n]...)
 		d256.X3 = append(d256.X3, s256.X3[from:from+n]...)
 	default:
+		end := b.len
+		b.len += n
 		from *= blockTypeDataSize[b.typ]
 		end *= blockTypeDataSize[b.typ]
 		n *= blockTypeDataSize[b.typ]
@@ -485,9 +487,9 @@ func (b *Block) AppendBlock(src *Block, from, n int) {
 func (b *Block) InsertBlock(src *Block, from, to, n int) {
 	assert.Always(b != nil, "nil block, potential use after free")
 	assert.Always(src != nil, "nil source block, potential use after free")
-	assert.Always(b.typ == src.typ, "block type mismatch")
-	assert.Always(b.len+n < b.cap, "out of bounds insert")
-	b.len += n
+	assert.Always(b.typ == src.typ, "block type mismatch", b.typ, src.typ)
+	assert.Always(b.Len()+n <= b.Cap(), "dst out of bounds", "dst.len", b.Len(), "n", n, "dst.cap", b.Cap())
+	assert.Always(from+n <= src.Len(), "src out of bounds", "src.len", src.Len(), "from", from)
 	switch b.typ {
 	case BlockString, BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Insert(to, src.Bytes().Subslice(from, from+n)...)
@@ -506,6 +508,7 @@ func (b *Block) InsertBlock(src *Block, from, to, n int) {
 		slices.Insert(d256.X2, to, s256.X2[from:from+n]...)
 		slices.Insert(d256.X3, to, s256.X3[from:from+n]...)
 	default:
+		b.len += n
 		from *= blockTypeDataSize[b.typ]
 		to *= blockTypeDataSize[b.typ]
 		n *= blockTypeDataSize[b.typ]
