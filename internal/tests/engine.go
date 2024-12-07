@@ -5,8 +5,12 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -15,7 +19,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const TEST_DB_NAME = "testdb"
+const (
+	TEST_DB_NAME = "testdb"
+	SAVE_PATH    = "./data"
+)
 
 func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions {
 	t.Helper()
@@ -91,4 +98,23 @@ func NewDatabase(t *testing.T, typs ...any) (*engine.Engine, func()) {
 	}
 
 	return db, func() { db.Close(ctx) }
+}
+
+func SaveDatabaseFiles(t *testing.T, e *engine.Engine) {
+	t.Helper()
+
+	// skip on successful tests or when running in wasm
+	if !t.Failed() || runtime.GOARCH == "wasm" {
+		return
+	}
+
+	srcPath := e.Options().Path
+	dstPath, _ := filepath.Abs(SAVE_PATH)
+	dstPath = filepath.Join(dstPath, fmt.Sprintf("db-%s-%s", t.Name(), time.Now().UTC().Format("2006-01-02_15-04-05")))
+	err := os.CopyFS(dstPath, os.DirFS(srcPath))
+	if err != nil {
+		t.Logf("Error saving database files: %v", err)
+	} else {
+		t.Logf("Saved database files to %s", dstPath)
+	}
 }

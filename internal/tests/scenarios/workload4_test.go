@@ -45,7 +45,10 @@ type UnifiedRow struct {
 func TestWorkload4(t *testing.T) {
 	// Setup the unified database
 	eng, cleanup := tests.NewDatabase(t, &UnifiedRow{})
-	defer cleanup()
+	t.Cleanup(func() {
+		cleanup()
+		tests.SaveDatabaseFiles(t, eng)
+	})
 	db := knox.WrapEngine(eng)
 	table, err := db.UseTable("unified_row")
 	require.NoError(t, err, "Missing table")

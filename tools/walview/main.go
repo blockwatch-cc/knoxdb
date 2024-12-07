@@ -7,6 +7,7 @@ package main
 
 import (
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -47,15 +48,18 @@ func init() {
 }
 
 func main() {
+	var err error
 	defer func() {
 		if e := recover(); e != nil {
 			log.Error(e)
+			err = errors.New("")
+		}
+		if err != nil {
 			os.Exit(1)
 		}
 	}()
-	if err := run(); err != nil {
+	if err = run(); err != nil {
 		log.Error(err)
-		os.Exit(1)
 	}
 }
 
@@ -76,7 +80,7 @@ func run() error {
 		return err
 	}
 	lvl := log.LevelInfo
-	switch true {
+	switch {
 	case trace:
 		lvl = log.LevelTrace
 	case debug:
@@ -128,7 +132,7 @@ func run() error {
 			rec.Tag,
 			strconv.FormatUint(rec.TxID, 10),
 			"0x" + strconv.FormatUint(rec.Entity, 16),
-			LimitHexEllipsis(rec.Data[0], 64),
+			LimitHexEllipsis(rec.Data, 64),
 		})
 		if limit > 0 && limit == count {
 			break
@@ -138,11 +142,14 @@ func run() error {
 	return nil
 }
 
-func LimitHexEllipsis(buf []byte, sz int) string {
-	if len(buf) > sz {
-		left := hex.EncodeToString(buf[:sz/2])
-		right := hex.EncodeToString(buf[len(buf)-sz/2:])
+func LimitHexEllipsis(buf [][]byte, sz int) string {
+	if len(buf) == 0 {
+		return ""
+	}
+	if len(buf[0]) > sz {
+		left := hex.EncodeToString(buf[0][:sz/2])
+		right := hex.EncodeToString(buf[0][len(buf[0])-sz/2:])
 		return left + "..." + right
 	}
-	return hex.EncodeToString(buf)
+	return hex.EncodeToString(buf[0])
 }

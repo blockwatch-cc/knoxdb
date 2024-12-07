@@ -26,7 +26,10 @@ type Ledger struct {
 
 func TestWorkload3(t *testing.T) {
 	eng, cleanup := tests.NewDatabase(t, &Ledger{})
-	defer cleanup()
+	t.Cleanup(func() {
+		cleanup()
+		tests.SaveDatabaseFiles(t, eng)
+	})
 	db := knox.WrapEngine(eng)
 	table, err := db.UseTable("ledger")
 	require.NoError(t, err, "Missing table")

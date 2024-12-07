@@ -21,7 +21,7 @@ import (
 
 var (
 	randomEnvKey = "GORANDSEED"
-	timeFmt      = "2006-01-02T15:04:05"
+	timeFmt      = "2006-01-02_15-04-05"
 
 	sys          string // wasm, native
 	maxErrors    int
@@ -174,7 +174,8 @@ func TestScenarios(t *testing.T) {
 		require.NoError(t, err)
 
 		// create file
-		logFileName := fmt.Sprintf("%s_0x%016x.log", time.Now().UTC().Format(timeFmt), rnd)
+		now := time.Now().UTC()
+		logFileName := fmt.Sprintf("%s_0x%016x.log", now.Format(timeFmt), rnd)
 		logFilePath := filepath.Join(logPath, logFileName)
 		f, err = os.Create(logFilePath)
 		require.NoError(t, err)
@@ -208,8 +209,7 @@ func TestScenarios(t *testing.T) {
 
 			// upload
 			if !skipUpload {
-				ref := getEnv("DRONE_COMMIT")
-				logFileTarget := ref[:(min(len(ref), 6))] + "/" + logFileName
+				logFileTarget := fmt.Sprintf("%s/%s", now.Format(time.DateOnly), logFileName)
 				t.Logf("Uploading %s/%s/%s", s3endpoint, s3bucket, logFileTarget)
 				_, err := s3.FPutObject(ctx, s3bucket, logFileTarget, logFilePath, minio.PutObjectOptions{})
 				require.NoError(t, err)

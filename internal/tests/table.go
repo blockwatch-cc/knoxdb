@@ -286,9 +286,9 @@ func QueryTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts
 	require.NoError(t, err)
 	InsertData(t, ctx, tab, s)
 
-	condition, err := query.ParseCondition("id.eq", "5", s)
+	condition, err := query.ParseCondition("id.eq", "5", s, e.Enums())
 	require.NoError(t, err)
-	flt, err := condition.Compile(s)
+	flt, err := condition.Compile(s, e.Enums())
 	require.NoError(t, err)
 
 	plan := query.NewQueryPlan().
@@ -319,9 +319,9 @@ func CountTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts
 	require.NoError(t, err)
 	InsertData(t, ctx, tab, s)
 
-	condition, err := query.ParseCondition("id.lt", "5", s)
+	condition, err := query.ParseCondition("id.lt", "5", s, e.Enums())
 	require.NoError(t, err)
-	flt, err := condition.Compile(s)
+	flt, err := condition.Compile(s, e.Enums())
 	require.NoError(t, err)
 
 	plan := query.NewQueryPlan().
@@ -352,9 +352,9 @@ func DeleteTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opt
 	require.NoError(t, err)
 	InsertData(t, ctx, tab, s)
 
-	condition, err := query.ParseCondition("id.gte", "5", s)
+	condition, err := query.ParseCondition("id.gte", "5", s, e.Enums())
 	require.NoError(t, err)
-	flt, err := condition.Compile(s)
+	flt, err := condition.Compile(s, e.Enums())
 	require.NoError(t, err)
 
 	plan := query.NewQueryPlan().
@@ -385,9 +385,9 @@ func StreamTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opt
 	require.NoError(t, err)
 	InsertData(t, ctx, tab, s)
 
-	condition, err := query.ParseCondition("id.lt", "5", s)
+	condition, err := query.ParseCondition("id.lt", "5", s, e.Enums())
 	require.NoError(t, err)
-	flt, err := condition.Compile(s)
+	flt, err := condition.Compile(s, e.Enums())
 	require.NoError(t, err)
 
 	plan := query.NewQueryPlan().
