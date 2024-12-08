@@ -38,6 +38,9 @@ func (e *Engine) NumEnums() int {
 }
 
 func (e *Engine) UseEnum(name string) (*schema.EnumDictionary, error) {
+	if e.IsShutdown() {
+		return nil, ErrDatabaseShutdown
+	}
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	enum, ok := e.enums[types.TaggedHash(types.ObjectTagEnum, name)]

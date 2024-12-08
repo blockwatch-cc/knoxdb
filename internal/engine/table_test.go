@@ -17,6 +17,7 @@ import (
 func TestMain(m *testing.M) {
 	// must register enum type with global schema registry
 	tests.RegisterEnum()
+	m.Run()
 }
 
 func TestTableCreate(t *testing.T) {

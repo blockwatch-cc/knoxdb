@@ -141,7 +141,7 @@ func (e *Engine) NewTransaction(flags ...TxFlags) *Tx {
 		e.txs.Add(tx)
 		e.mu.Unlock()
 	}
-	e.log.Debugf("New tx %d", tx.id)
+	e.log.Tracef("New tx %d", tx.id)
 
 	return tx
 }
@@ -160,6 +160,14 @@ func (t *Tx) WithFlags(flags ...TxFlags) *Tx {
 
 func (t *Tx) IsReadOnly() bool {
 	return t.flags.IsReadOnly()
+}
+
+func (t *Tx) IsClosed() bool {
+	return t.engine == nil
+}
+
+func (t *Tx) HasWritten() bool {
+	return len(t.touched) > 0 || t.flags.IsCatalog()
 }
 
 func (t *Tx) Id() uint64 {
@@ -185,8 +193,18 @@ func (t *Tx) Err() error {
 }
 
 func (t *Tx) Close() {
-	// remove from global tx list
+	if t.IsClosed() {
+		return
+	}
+
+	// FIXME: avoid lock, maybe use channel to signal to engine that tx
+	// can be removed and xmin update should happen
+
+	// lock engine
 	t.engine.mu.Lock()
+	defer t.engine.mu.Unlock()
+
+	// remove from global tx list
 	t.engine.txs.Del(t)
 
 	// update xmin, without active tx we use xnext (horion: anything smaller is final)
@@ -202,9 +220,9 @@ func (t *Tx) Close() {
 			break
 		}
 	}
-	t.engine.mu.Unlock()
 
 	// release all locks
+	t.engine.log.Tracef("Unlock tx %d", t.id)
 	t.engine.lm.Done(t.id)
 
 	// cleanup
@@ -233,7 +251,16 @@ func (t *Tx) Lock(ctx context.Context, oid uint64) error {
 	if err := t.Err(); err != nil {
 		return err
 	}
+	t.engine.log.Tracef("Lock tx %d", t.id)
 	return t.engine.lm.Lock(ctx, t.id, LockModeExclusive, oid)
+}
+
+func (t *Tx) Unlock() {
+	if t == nil {
+		return
+	}
+	t.engine.log.Tracef("Unlock tx %d", t.id)
+	t.engine.lm.Done(t.id)
 }
 
 func (t *Tx) RLock(ctx context.Context, oid uint64) error {
@@ -243,6 +270,7 @@ func (t *Tx) RLock(ctx context.Context, oid uint64) error {
 	if err := t.Err(); err != nil {
 		return err
 	}
+	t.engine.log.Tracef("Rlock tx %d", t.id)
 	return t.engine.lm.Lock(ctx, t.id, LockModeShared, oid)
 }
 
@@ -273,31 +301,33 @@ func (t *Tx) Commit() error {
 	if t == nil {
 		return ErrNoTx
 	}
-	if err := t.Err(); err != nil {
-		return err
+
+	if t.IsClosed() {
+		return nil
 	}
 
-	t.engine.log.Debugf("Commit tx %d", t.id)
+	defer t.Close()
 
-	// write wal record
-	_, err := t.engine.wal.WriteAndSync(&wal.Record{
-		Type:   wal.RecordTypeCommit,
-		Tag:    types.ObjectTagDatabase,
-		Entity: t.engine.dbId,
-		TxID:   t.id,
-	})
-	if err != nil {
-		return err
+	t.engine.log.Tracef("Commit tx %d", t.id)
+
+	// don't log read only tx or tx without activity
+	if t.HasWritten() && t.engine.wal != nil {
+		_, err := t.engine.wal.WriteAndSync(&wal.Record{
+			Type:   wal.RecordTypeCommit,
+			Tag:    types.ObjectTagDatabase,
+			Entity: t.engine.dbId,
+			TxID:   t.id,
+		})
+		if err != nil {
+			t.Fail(err)
+		}
 	}
 
-	// commit all touched objects, this will:
-	// - write wal commit records
-	// - sync wals
-	// - update journal segments
+	// commit all touched objects, this will update journal segments
 	for oid := range t.touched {
 		err := t.engine.CommitTx(t.ctx, oid, t.id)
 		if err != nil {
-			return err
+			t.Fail(err)
 		}
 	}
 
@@ -305,7 +335,7 @@ func (t *Tx) Commit() error {
 	if t.flags.IsCatalog() {
 		err := t.engine.cat.CommitTx(t.ctx, t.id)
 		if err != nil {
-			return err
+			t.Fail(err)
 		}
 	}
 
@@ -325,9 +355,10 @@ func (t *Tx) Commit() error {
 			err = tx.Rollback()
 		}
 		if err != nil {
-			return err
+			t.Fail(err)
 		}
 	}
+	clear(t.dbTx)
 
 	// close and write catalog updates
 	if t.catTx != nil {
@@ -338,13 +369,12 @@ func (t *Tx) Commit() error {
 			err = t.catTx.Rollback()
 		}
 		if err != nil {
-			return err
+			t.Fail(err)
 		}
+		t.catTx = nil
 	}
 
-	// cleanup
-	t.Close()
-	return nil
+	return t.Err()
 }
 
 func (t *Tx) Abort() error {
@@ -352,12 +382,16 @@ func (t *Tx) Abort() error {
 		return ErrNoTx
 	}
 
-	if err := t.Err(); err != nil {
-		return err
+	if t.IsClosed() {
+		return nil
 	}
 
-	// don't log read only tx
-	if t.id != 0 && t.engine.wal != nil {
+	defer t.Close()
+
+	t.engine.log.Tracef("Abort tx %d", t.id)
+
+	// don't log read only tx, tx without activity
+	if t.HasWritten() && t.engine.wal != nil {
 		// write abort record to wal (no sync required, tx data is ignored if lost)
 		_, err := t.engine.wal.Write(&wal.Record{
 			Type:   wal.RecordTypeAbort,
@@ -366,24 +400,24 @@ func (t *Tx) Abort() error {
 			TxID:   t.id,
 		})
 		if err != nil {
-			return err
+			t.Fail(err)
 		}
+	}
 
-		// send abort to all touched objects; write wal abort records,
-		// update journal segments
-		for oid := range t.touched {
-			err := t.engine.AbortTx(t.ctx, oid, t.id)
-			if err != nil {
-				return err
-			}
+	// send abort to all touched objects; write wal abort records,
+	// update journal segments
+	for oid := range t.touched {
+		err := t.engine.AbortTx(t.ctx, oid, t.id)
+		if err != nil {
+			t.Fail(err)
 		}
+	}
 
-		// abort and update catalog wal
-		if t.flags.IsCatalog() {
-			err := t.engine.cat.AbortTx(t.ctx, t.id)
-			if err != nil {
-				return err
-			}
+	// abort and update catalog wal
+	if t.flags.IsCatalog() {
+		err := t.engine.cat.AbortTx(t.ctx, t.id)
+		if err != nil {
+			t.Fail(err)
 		}
 	}
 
@@ -395,23 +429,23 @@ func (t *Tx) Abort() error {
 	}
 
 	// close storage tx
-	var err error
 	for _, tx := range t.dbTx {
-		if e := tx.Rollback(); e != nil && err == nil {
-			err = e
+		if err := tx.Rollback(); err != nil {
+			t.Fail(err)
 		}
 	}
+	clear(t.dbTx)
 
 	// close catalog tx
 	if t.catTx != nil {
-		if e := t.catTx.Rollback(); e != nil && err == nil {
-			err = e
+		if err := t.catTx.Rollback(); err != nil {
+			t.Fail(err)
 		}
+		t.catTx = nil
 	}
 
-	// cleanup tx
-	t.Close()
-	return err
+	// return the first error or nil if everything when ok
+	return t.Err()
 }
 
 func (t *Tx) Fail(err error) {
@@ -421,27 +455,30 @@ func (t *Tx) Fail(err error) {
 	t.cancel(err)
 }
 
-func (t *Tx) kill() {
-	// TODO
-	// - like abort() but called from another goroutine on engine shutdown
-	// - should prevent race conditions with other code altering tx data
-	// - write wal record
-	// - run abort callbacks
-	// - free locks
-	// - abort storage txn
-	// - prevent running commit/abort functions
-	//
-	// scenarios
-	// - tx owner goroutine is waiting or executing database code
-	//   -> needs context cancel with cause
-	// - tx owner goroutine is in user code
-	//   -> needs flag & check on each entry to a tx func (return error ErrTxKilled)
-	t.cancel(ErrDatabaseShutdown)
-}
+// func (t *Tx) kill() {
+// 	// TODO
+// 	// - like abort() but called from another goroutine on engine shutdown
+// 	// - should prevent race conditions with other code altering tx data
+// 	// - write wal record
+// 	// - run abort callbacks
+// 	// - free locks
+// 	// - abort storage txn
+// 	// - prevent running commit/abort functions
+// 	//
+// 	// scenarios
+// 	// - tx owner goroutine is waiting or executing database code
+// 	//   -> needs context cancel with cause
+// 	// - tx owner goroutine is in user code
+// 	//   -> needs flag & check on each entry to a tx func (return error ErrTxKilled)
+// 	t.cancel(ErrDatabaseShutdown)
+// }
 
-func (t *Tx) forceClose() error {
+func (t *Tx) Kill(err error) error {
+	// cancel context
+	t.cancel(err)
+	err = nil
+
 	// close storage tx
-	var err error
 	for _, tx := range t.dbTx {
 		if e := tx.Rollback(); e != nil && err == nil {
 			err = e
@@ -454,6 +491,19 @@ func (t *Tx) forceClose() error {
 			err = e
 		}
 	}
+
+	// release locks
+	t.engine.lm.Done(t.id)
+
+	// remove from tx list (requires Kill is called under lock)
+	t.engine.txs.Del(t)
+
+	// clear data
+	clear(t.touched)
+	clear(t.dbTx)
+	clear(t.writes)
+	t.catTx = nil
+	t.engine = nil
 
 	return err
 }

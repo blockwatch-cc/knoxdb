@@ -69,6 +69,48 @@ type CacheManager struct {
 	buffers BufferCacheType
 }
 
+func (e *Engine) PurgeCache() {
+	e.cache.blocks.Purge()
+	e.cache.buffers.Purge()
+}
+
+func (e *Engine) RootPath() string {
+	return e.path
+}
+
+func (e *Engine) Namespace() string {
+	return e.opts.Namespace
+}
+
+func (e *Engine) Catalog() *Catalog {
+	return e.cat
+}
+
+func (e *Engine) Wal() *wal.Wal {
+	return e.wal
+}
+
+func (e *Engine) Options() DatabaseOptions {
+	return e.opts
+}
+
+func (e *Engine) BlockCache() BlockCacheType {
+	return e.cache.blocks
+}
+
+func (e *Engine) BufferCache() BufferCacheType {
+	return e.cache.buffers
+}
+
+func (e *Engine) Log() log.Logger {
+	return e.log
+}
+
+func (e *Engine) IsShutdown() bool {
+	sd := e.shutdown.Load()
+	return sd != nil && sd.(bool)
+}
+
 func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, error) {
 	opts = DefaultDatabaseOptions.Merge(opts)
 	e := &Engine{
@@ -294,11 +336,13 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 
 func (e *Engine) Close(ctx context.Context) error {
 	e.log.Debugf("Closing database %s at %s", e.cat.name, e.path)
-	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	// set shutdown flag to prevent new transactions
 	e.shutdown.Store(true)
+
+	// lock engine
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	// TODO: shutdown user sessions (close wire protocol server)
 	// - should cancel contexts
@@ -307,22 +351,28 @@ func (e *Engine) Close(ctx context.Context) error {
 	// TODO: find another way, maybe cancel session contexts + define an explicit
 	// session for sdk usage
 	for _, tx := range e.txs {
-		tx.kill()
+		e.log.Tracef("Kill tx id %d", tx.id)
+		tx.Kill(ErrDatabaseShutdown)
 	}
 
 	// stop services
+	e.log.Trace("Stop services")
 	if e.merger != nil {
 		e.merger.Stop()
+		e.merger = nil
 	}
 
 	// wait for transactions and services to release all locks
+	e.log.Trace("Wait LM")
 	e.lm.Wait()
 	e.lm = nil
 
 	// clear caches
+	e.log.Trace("Purge caches")
 	e.PurgeCache()
 
 	// close all open indexes
+	e.log.Trace("Close indexes")
 	for n, idx := range e.indexes {
 		idx.Table().UnuseIndex(idx)
 		name := idx.Schema().Name()
@@ -336,6 +386,7 @@ func (e *Engine) Close(ctx context.Context) error {
 	}
 
 	// close all open tables (set checkpoints)
+	e.log.Trace("Close tables")
 	for n, t := range e.tables {
 		name := t.Schema().Name()
 		if err := t.Sync(ctx); err != nil {
@@ -348,6 +399,7 @@ func (e *Engine) Close(ctx context.Context) error {
 	}
 
 	// close all open stores (set checkpoints)
+	e.log.Trace("Close stores")
 	for n, s := range e.stores {
 		name := s.Schema().Name()
 		if err := s.Sync(ctx); err != nil {
@@ -360,13 +412,15 @@ func (e *Engine) Close(ctx context.Context) error {
 	}
 
 	// close enums
-	for n, enum := range e.enums {
+	e.log.Trace("Close enums")
+	for _, enum := range e.enums {
 		schema.UnregisterEnum(e.dbId, enum)
-		delete(e.enums, n)
 	}
+	clear(e.enums)
 
 	// close catalog (set checkpoint)
 	if e.cat != nil {
+		e.log.Trace("Close catalog")
 		if err := e.cat.Close(ctx); err != nil {
 			e.log.Errorf("Closing catalog: %v", err)
 		}
@@ -375,6 +429,7 @@ func (e *Engine) Close(ctx context.Context) error {
 
 	// close and sync wal
 	if e.wal != nil {
+		e.log.Trace("Close wal")
 		if err := e.wal.Close(); err != nil {
 			e.log.Errorf("Closing wal: %v", err)
 		}
@@ -383,6 +438,7 @@ func (e *Engine) Close(ctx context.Context) error {
 
 	// release directory lock
 	if e.flock != nil {
+		e.log.Trace("Free flock")
 		e.flock.Close()
 		e.flock = nil
 	}
@@ -392,11 +448,13 @@ func (e *Engine) Close(ctx context.Context) error {
 
 func (e *Engine) ForceShutdown() error {
 	e.log.Debugf("Force shutdown database %s at %s", e.cat.name, e.path)
-	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	// set shutdown flag to prevent new transactions
 	e.shutdown.Store(true)
+
+	// lock engine
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	// TODO: shutdown user sessions (close wire protocol server)
 	// - should cancel contexts
@@ -404,42 +462,58 @@ func (e *Engine) ForceShutdown() error {
 	// abort all pending transactions
 	// TODO: find another way, maybe cancel session contexts + define an explicit
 	// session for sdk usage
-	for _, tx := range e.txs {
-		tx.Fail(ErrDatabaseShutdown)
-	}
+	// for _, tx := range e.txs {
+	// 	e.log.Tracef("Kill tx id %d", tx.id)
+	// 	tx.Fail(ErrDatabaseShutdown)
+	// }
 
 	// abort storage backend transactions
 	for _, tx := range e.txs {
-		tx.forceClose()
+		e.log.Tracef("Kill tx id %d", tx.id)
+		tx.Kill(ErrDatabaseShutdown)
 	}
 
 	// stop services
+	e.log.Trace("Stop services")
 	if e.merger != nil {
 		e.merger.Kill()
+		e.merger = nil
 	}
 
 	// release/cleanup locks
+	e.log.Trace("Clear LM")
 	e.lm.Clear()
 	e.lm = nil
 
 	// clear caches
+	e.log.Trace("Purge caches")
 	e.PurgeCache()
 
 	// close wal without flush&sync
+	e.log.Trace("Close wal")
 	if err := e.wal.ForceClose(); err != nil {
 		e.log.Errorf("close wal: %v", err)
 	}
 	e.wal = nil
 
 	// close catalog without checkpointing
+	e.log.Trace("Close catalog")
 	if err := e.cat.ForceClose(); err != nil {
 		e.log.Errorf("close catalog: %v", err)
 	}
 	e.cat = nil
 
+	// close enums
+	e.log.Trace("Close enums")
+	for _, enum := range e.enums {
+		schema.UnregisterEnum(e.dbId, enum)
+	}
+	clear(e.enums)
+
 	ctx := context.Background()
 
 	// close engine storage backend files without journal flush and checkpointing
+	e.log.Trace("Close indexes")
 	for n, idx := range e.indexes {
 		idx.Table().UnuseIndex(idx)
 		name := idx.Schema().Name()
@@ -449,7 +523,8 @@ func (e *Engine) ForceShutdown() error {
 		delete(e.indexes, n)
 	}
 
-	// close all open tables (set checkpoints)
+	// close all open tables (without checkpoints)
+	e.log.Trace("Close tables")
 	for n, t := range e.tables {
 		if err := t.Close(ctx); err != nil {
 			e.log.Errorf("Closing table %s: %v", t.Schema().Name(), err)
@@ -457,7 +532,8 @@ func (e *Engine) ForceShutdown() error {
 		delete(e.tables, n)
 	}
 
-	// close all open stores (set checkpoints)
+	// close all open stores (without checkpoints)
+	e.log.Trace("Close stores")
 	for n, s := range e.stores {
 		if err := s.Close(ctx); err != nil {
 			e.log.Errorf("Closing store %s: %v", s.Schema().Name(), err)
@@ -467,6 +543,7 @@ func (e *Engine) ForceShutdown() error {
 
 	// release directory lock
 	if e.flock != nil {
+		e.log.Trace("Free flock")
 		e.flock.Close()
 		e.flock = nil
 	}
@@ -474,54 +551,18 @@ func (e *Engine) ForceShutdown() error {
 	return nil
 }
 
-func (e *Engine) PurgeCache() {
-	e.cache.blocks.Purge()
-	e.cache.buffers.Purge()
-}
-
-func (e *Engine) RootPath() string {
-	return e.path
-}
-
-func (e *Engine) Namespace() string {
-	return e.opts.Namespace
-}
-
-func (e *Engine) Catalog() *Catalog {
-	return e.cat
-}
-
-func (e *Engine) Wal() *wal.Wal {
-	return e.wal
-}
-
-func (e *Engine) Options() DatabaseOptions {
-	return e.opts
-}
-
-func (e *Engine) BlockCache() BlockCacheType {
-	return e.cache.blocks
-}
-
-func (e *Engine) BufferCache() BufferCacheType {
-	return e.cache.buffers
-}
-
-func (e *Engine) Log() log.Logger {
-	return e.log
-}
-
 func (e *Engine) Sync(ctx context.Context) error {
 	// write explicit checkpoints for all storage backends
 	// legacy tables without wal write their journal here
-
 	errg := &errgroup.Group{}
 	errg.SetLimit(runtime.NumCPU())
 
 	// sync tables
+	// e.mu.RLock()
 	for _, t := range e.tables {
 		errg.Go(func() error { return t.Sync(ctx) })
 	}
+	// e.mu.RUnlock()
 
 	// sync stores (unsupported)
 	// for _, s := range e.stores {

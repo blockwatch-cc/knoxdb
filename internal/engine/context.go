@@ -29,7 +29,7 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 	tx := e.NewTransaction(flags...)
 
 	// check engine shutdown state
-	if sd := e.shutdown.Load(); sd != nil && sd.(bool) {
+	if e.IsShutdown() {
 		return ctx, tx, noop, noop, ErrDatabaseShutdown
 	}
 

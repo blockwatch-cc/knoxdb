@@ -41,6 +41,9 @@ func (e *Engine) NumTables() int {
 func (e *Engine) UseTable(name string) (TableEngine, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+	if e.IsShutdown() {
+		return nil, ErrDatabaseShutdown
+	}
 	if t, ok := e.tables[types.TaggedHash(types.ObjectTagTable, name)]; ok {
 		return t, nil
 	}
@@ -78,14 +81,10 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 			break
 		}
 	}
+	e.mu.RUnlock()
 	if err != nil {
-		e.mu.RUnlock()
 		return nil, err
 	}
-
-	// link enums into schema
-	s.WithEnumsFrom(e.enums)
-	e.mu.RUnlock()
 
 	// check engine and driver
 	factory, ok := tableEngineRegistry[opts.Engine]
@@ -321,8 +320,7 @@ func (e *Engine) CompactTable(ctx context.Context, name string) error {
 	// lock object access, unlocks on commit/abort, this
 	// - wait for open transactions to complete
 	// - make table unavailable for new transaction
-	err = tx.Lock(ctx, tag)
-	if err != nil {
+	if err := tx.Lock(ctx, tag); err != nil {
 		return err
 	}
 
@@ -369,9 +367,6 @@ func (e *Engine) openTables(ctx context.Context) error {
 		// ensure logger and override flags
 		opts.Logger = e.log
 		opts.ReadOnly = e.opts.ReadOnly
-
-		// resolve schema enums
-		s.WithEnumsFrom(e.enums)
 
 		e.log.Debugf("Table %s", s)
 		e.log.Debugf("Resolve enums from %#v", e.enums)

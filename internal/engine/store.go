@@ -25,6 +25,8 @@ func RegisterStoreFactory(n StoreKind, fn StoreFactory) {
 }
 
 func (e *Engine) StoreNames() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	names := make([]string, 0, len(e.stores))
 	for _, v := range e.stores {
 		names = append(names, v.Schema().Name())
@@ -33,10 +35,17 @@ func (e *Engine) StoreNames() []string {
 }
 
 func (e *Engine) NumStores() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return len(e.stores)
 }
 
 func (e *Engine) UseStore(name string) (StoreEngine, error) {
+	if e.IsShutdown() {
+		return nil, ErrDatabaseShutdown
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	if s, ok := e.stores[types.TaggedHash(types.ObjectTagStore, name)]; ok {
 		return s, nil
 	}
@@ -44,6 +53,8 @@ func (e *Engine) UseStore(name string) (StoreEngine, error) {
 }
 
 func (e *Engine) GetStore(hash uint64) (StoreEngine, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	store, ok := e.stores[hash]
 	return store, ok
 }
@@ -57,9 +68,6 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 	if ok {
 		return nil, ErrStoreExists
 	}
-
-	// resolve schema enums
-	s.WithEnumsFrom(e.enums)
 
 	// check driver
 	factory, ok := storeEngineRegistry[StoreKindKV]
@@ -197,9 +205,6 @@ func (e *Engine) openStores(ctx context.Context) error {
 		// ensure logger
 		opts.Logger = e.log
 		opts.ReadOnly = e.opts.ReadOnly
-
-		// resolve schema enums
-		s.WithEnumsFrom(e.enums)
 
 		// open the store
 		if err := kvstore.Open(ctx, s, opts); err != nil {
