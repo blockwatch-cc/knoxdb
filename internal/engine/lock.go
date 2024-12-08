@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"blockwatch.cc/knoxdb/pkg/assert"
 )
 
 // TODO
@@ -87,74 +89,182 @@ func (m *LockManager) Clear() {
 	// tx contexts were canceled so this may be a noop), still cleaning up
 	// references
 	for _, lock := range m.locks {
-		for _, v := range lock.waiters {
-			close(v)
-			clear(lock.waiters)
-			clear(lock.waiting)
+		w := lock.front
+		for w != nil {
+			next := w.next
+			if w.ch != nil {
+				close(w.ch)
+				w.ch = nil
+			}
+			w.next = nil
+			waiterPool.Put(w)
+			w = next
 		}
 		lock.count = 0
+		lock.front = nil
+		lock.back = nil
 	}
 	clear(m.locks)
 	clear(m.granted)
-	m.nlocks = 0
+	atomic.StoreInt64(&m.nlocks, 0)
 }
 
-// Lock represents a lock on a unique database resource. Each resource has at most
-// one lock assigned. During its lifecycle, the lock may change state between shared
-// and exclusive multiple times, as request order requires. To save memory we only
-// store the waiting transaction id for pending lock requests. Other arguments
-// are available in the stack frame of the goroutine that called acquire(). This
-// goroutine is able to identify itself and continues to take the lock once its
-// xid is the next in order. When multiple goroutines attempt to acquire the same
-// resource lock under the same xid, the Go scheduler determines order.
+// lock represents a lock on a unique database resource. Each resource has at most
+// one lock assigned. During its lifecycle, a lock may change state between shared
+// and exclusive as request order requires. We store info about each waiting
+// transaction as FIFO queue (linked list). This queue may contain a mix of shared
+// and exclusive lock waiter transactions. We uses a per transaction channel
+// and select to wait for a lock to become available. In this case the signalling channel
+// is closed in yield(). Yield either unblocks a single exclusive lock request or
+// multiple share lock requests at once. It is up to the acquire() func to pop()
+// the waiter struct from the FIFO queue to confirms the lock has been consumed.
+// The order in which pop removes FIFO entries for multiple shared locks is not
+// important, only that the correct number of pop() operations happen.
+// When a transaction completes (commit/abort) it eventually calls Done() to return
+// the lock which yields to the next waiter(s). Should a goroutine that waits for
+// a lock exit on early on context cancellation (i.e. a lock timeout or other
+// cancellation reason), then the corresponding FIFO entry will be dropped.
 type lock struct {
-	typ       LockType                 // object or predicate
-	exclusive bool                     // flag indicating if this lock is exclusive or shared
-	oid       uint64                   // container id when type is object or predicate
-	count     int                      // shared lock reference counter
-	waiting   []uint64                 // xids waiting to inherit or replace the lock (in request order)
-	waiters   map[uint64]chan struct{} // wait channels per xid
+	typ       LockType // object or predicate
+	exclusive bool     // flag indicating if this lock is exclusive or shared
+	oid       uint64   // container id when type is object or predicate
+	count     int      // shared lock reference counter
+	front     *waiter  // next waiter in queue or nil
+	back      *waiter  // last waiter in queue or nil
 }
+
+var (
+	waiterPool = sync.Pool{
+		New: func() any { return new(waiter) },
+	}
+
+	lockPool = sync.Pool{
+		New: func() any { return new(lock) },
+	}
+)
+
+// waiter represents a single transaction waiting on a lock to be released. Waiters
+// form a fifo queue (linked list)
+type waiter struct {
+	next *waiter
+	xid  uint64
+	ch   chan struct{}
+	excl bool
+}
+
+// func (l *lock) numWaiters() int {
+// 	var n int
+// 	for w := l.front; w != nil; n, w = n+1, w.next {
+// 	}
+// 	return n
+// }
+
+// func (l *lock) listWaiters() []uint64 {
+// 	n := make([]uint64, 0)
+// 	for w := l.front; w != nil; w = w.next {
+// 		n = append(n, w.xid)
+// 	}
+// 	return n
+// }
 
 func (l *lock) empty() bool {
-	return len(l.waiting) == 0
+	return l.front == nil
 }
 
 func (l *lock) pop() {
-	if len(l.waiting) > 0 {
-		delete(l.waiters, l.waiting[0])
-		l.waiting = l.waiting[1:]
+	if l.front != nil {
+		// pop first queue element
+		w := l.front
+		l.front = l.front.next
+		if l.front == nil {
+			l.back = nil
+		}
+
+		// clear and return to pool
+		w.next = nil
+		if w.ch != nil {
+			close(w.ch)
+			w.ch = nil
+		}
+		waiterPool.Put(w)
 	}
 }
 
 func (l *lock) yield() {
-	if len(l.waiting) > 0 {
-		close(l.waiters[l.waiting[0]])
+	// skip on empty waiters or when we have already yielded to the next
+	if l.front == nil || l.front.ch == nil {
+		return
+	}
+
+	if l.front.excl {
+		// exclusive lock: yield once
+		close(l.front.ch)
+		l.front.ch = nil
+	} else {
+		// shared lock: yield to all shared waiters in line up until an
+		// exlusive lock waiter is encountered
+		for w := l.front; w != nil && !w.excl; w = w.next {
+			close(w.ch)
+			w.ch = nil
+		}
 	}
 }
 
-func (l *lock) wait(xid uint64) chan struct{} {
-	l.waiting = append(l.waiting, xid)
-	ch := make(chan struct{}, 1)
-	if l.waiters == nil {
-		l.waiters = make(map[uint64]chan struct{})
+func (l *lock) wait(xid uint64, isExcl bool) chan struct{} {
+	w := waiterPool.Get().(*waiter)
+	w.next = nil
+	w.xid = xid
+	w.ch = make(chan struct{}, 1)
+	w.excl = isExcl
+	if l.back == nil {
+		l.front = w
+	} else {
+		l.back.next = w
 	}
-	l.waiters[xid] = ch
-	return ch
+	l.back = w
+	return w.ch
 }
 
 func (l *lock) drop(xid uint64) {
-	l.waiting = slices.DeleteFunc(l.waiting, func(i uint64) bool {
-		return i == xid
-	})
-	if ch, ok := l.waiters[xid]; ok {
-		close(ch)
-		delete(l.waiters, xid)
+	if l.front == nil {
+		return
 	}
-}
 
-var lockPool = sync.Pool{
-	New: func() any { return new(lock) },
+	// drop first element
+	if l.front.xid == xid {
+		w := l.front
+		l.front = w.next
+		if w.ch != nil {
+			close(w.ch)
+			w.ch = nil
+		}
+		w.next = nil
+		waiterPool.Put(w)
+		if l.back == w {
+			l.back = l.front
+		}
+		return
+	}
+
+	// drop 2nd+ element
+	for prev, w := l.front, l.front.next; w != nil; prev, w = w, w.next {
+		if w.xid != xid {
+			continue
+		}
+		prev.next = w.next
+		if w.ch != nil {
+			close(w.ch)
+			w.ch = nil
+		}
+		w.next = nil
+		waiterPool.Put(w)
+
+		// in case we dropped the last element
+		if l.back == w {
+			l.back = prev
+		}
+		break
+	}
 }
 
 // Lock obtains a lock on a specific object.
@@ -205,13 +315,22 @@ func (m *LockManager) Done(xid uint64) {
 	// release all locks owned by xid
 	for _, l := range m.granted[xid] {
 		l.count--
-		l.yield()
+		// fmt.Printf("Unlock for xid=%d cnt=%d wait=%d\n", xid, l.count, len(l.waiting))
+		// yield to the next waiter when count drops to zero
+		// - shared: all current shared holders have unlocked
+		// - exclusive: the single exclusive holder has unlocked
+		if l.count == 0 && !l.empty() {
+			// fmt.Printf("yield lock from xid=%d on oid=%d cnt=%d to xid=%d waiters=%v\n",
+			// 	xid, l.oid, l.count, l.front.xid, l.listWaiters())
+			l.yield()
+		}
+		assert.Always(l.count >= 0, "negative lock count", l)
 	}
 	delete(m.granted, xid)
 
 	// cleanup unused locks
 	m.locks = slices.DeleteFunc(m.locks, func(l *lock) bool {
-		if l.count == 0 && len(l.waiting) == 0 {
+		if l.count == 0 && l.empty() {
 			lockPool.Put(l)
 			return true
 		}
@@ -267,7 +386,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 					isDeadlock = true
 				} else {
 					// wait until we're the only holder or we're next in line
-					wait = l.wait(xid)
+					wait = l.wait(xid, mode == LockModeExclusive)
 				}
 			}
 		case LockModeShared:
@@ -293,7 +412,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 					isDeadlock = true
 				} else {
 					// wait for the lock to become available
-					wait = l.wait(xid)
+					wait = l.wait(xid, mode == LockModeExclusive)
 				}
 			}
 
@@ -317,7 +436,7 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 					isDeadlock = true
 				} else {
 					// wait behind potential exclusive lock requests
-					wait = l.wait(xid)
+					wait = l.wait(xid, mode == LockModeExclusive)
 				}
 			default:
 				m.mu.Unlock()
@@ -331,11 +450,12 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 		}
 	}
 
-	// return state to channel
+	// release mutex after shared access region
 	m.mu.Unlock()
 
 	// return success
 	if isGranted {
+		// fmt.Printf("Lock for xid=%d cnt=%d wait=%d waiters=%v\n", xid, l.count, l.numWaiters(), l.listWaiters())
 		return nil
 	}
 
@@ -374,11 +494,54 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 		if !wasGranted {
 			m.granted[xid] = append(m.granted[xid], l)
 		}
+		// fmt.Printf("Lock for xid=%d cnt=%d wait=%d\n", xid, l.count, l.numWaiters())
 
 		m.mu.Unlock()
 
 		return nil
 	}
+}
+
+func getOrCreateLock(locks []*lock, typ LockType, oid uint64, exclusive bool) (*lock, bool) {
+	for _, l := range locks {
+		if l.typ != typ || l.oid != oid {
+			continue
+		}
+		return l, false
+	}
+	l := lockPool.Get().(*lock)
+	l.typ = typ
+	l.oid = oid
+	l.count = 1
+	l.exclusive = exclusive
+	l.front = nil
+	l.back = nil
+	return l, true
+}
+
+// Find cycle in dependency graph, starting at current xid. We are not yet waiting
+// on the next lock, but of lock is found in any of our dependecies granted lists
+// then we are about to get a deadlock.
+func (m *LockManager) detectDeadlock(next *lock, xid uint64) bool {
+	return m.hasLoopTo(m.granted[xid], next, xid)
+}
+
+// detect a potential loop in granted locks and waiters
+func (m *LockManager) hasLoopTo(locks []*lock, next *lock, self uint64) bool {
+	for _, l := range locks {
+		if l == next {
+			return true
+		}
+		for w := l.front; w != nil; w = w.next {
+			if w.xid == self {
+				continue
+			}
+			if m.hasLoopTo(m.granted[w.xid], next, self) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Drop releases a single lock after it has been granted. its required to roll back
@@ -413,43 +576,3 @@ func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, ty
 // 		break
 // 	}
 // }
-
-func getOrCreateLock(locks []*lock, typ LockType, oid uint64, exclusive bool) (*lock, bool) {
-	for _, l := range locks {
-		if l.typ != typ || l.oid != oid {
-			continue
-		}
-		return l, false
-	}
-	l := lockPool.Get().(*lock)
-	l.typ = typ
-	l.oid = oid
-	l.count = 1
-	l.exclusive = exclusive
-	return l, true
-}
-
-// Find cycle in dependency graph, starting at current xid. We are not yet waiting
-// on the next lock, but of lock is found in any of our dependecies granted lists
-// then we are about to get a deadlock.
-func (m *LockManager) detectDeadlock(next *lock, xid uint64) bool {
-	return m.hasLoopTo(m.granted[xid], next, xid)
-}
-
-// detect a potential loop in granted locks and waiters
-func (m *LockManager) hasLoopTo(locks []*lock, next *lock, self uint64) bool {
-	for _, l := range locks {
-		if l == next {
-			return true
-		}
-		for _, waiter := range l.waiting {
-			if waiter == self {
-				continue
-			}
-			if m.hasLoopTo(m.granted[waiter], next, self) {
-				return true
-			}
-		}
-	}
-	return false
-}
