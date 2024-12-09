@@ -355,20 +355,20 @@ func (x Int128) Not() Int128 {
 }
 
 func (x Int128) Or(y Int128) Int128 {
-	x[0] = x[0] | y[0]
-	x[1] = x[1] | y[1]
+	x[0] |= y[0]
+	x[1] |= y[1]
 	return x
 }
 
 func (x Int128) And(y Int128) Int128 {
-	x[0] = x[0] & y[0]
-	x[1] = x[1] & y[1]
+	x[0] &= y[0]
+	x[1] &= y[1]
 	return x
 }
 
 func (x Int128) Xor(y Int128) Int128 {
-	x[0] = x[0] ^ y[0]
-	x[1] = x[1] ^ y[1]
+	x[0] ^= y[0]
+	x[1] ^= y[1]
 	return x
 }
 
@@ -379,7 +379,7 @@ func (x Int128) Lsh(n uint) Int128 {
 		x[1] = 0
 	} else {
 		x[0] = x[0]<<n | x[1]>>(64-n)
-		x[1] = x[1] << n
+		x[1] <<= n
 	}
 	return x
 }
@@ -391,7 +391,7 @@ func (x Int128) Rsh(n uint) Int128 {
 		x[0] = 0
 	} else {
 		x[1] = x[1]>>n | x[0]<<(64-n)
-		x[0] = x[0] >> n
+		x[0] >>= n
 	}
 	return x
 }
@@ -489,11 +489,12 @@ func (x Int128) Sub64(y uint64) Int128 {
 }
 
 func (x Int128) Cmp(y Int128) int {
-	if x == y {
+	switch {
+	case x == y:
 		return 0
-	} else if x.Lt(y) {
+	case x.Lt(y):
 		return -1
-	} else {
+	default:
 		return 1
 	}
 }

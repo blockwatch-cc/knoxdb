@@ -73,6 +73,8 @@ func (r *StreamResult) Len() int {
 func (r *StreamResult) Close() {
 	r.r.pkg = nil
 	r.fn = nil
+	r.r.Close()
+	r.r = nil
 }
 
 func NewStreamResult(enums schema.EnumRegistry, fn StreamCallback) *StreamResult {
@@ -131,6 +133,8 @@ func (r *Result) Close() {
 		r.pkg.Release()
 	}
 	r.pkg = nil
+	r.row = nil
+	r.enums = nil
 }
 
 func (r *Result) Bytes() []byte {
@@ -222,7 +226,6 @@ func (r *Row) Decode(val any) error {
 		r.maps = maps
 		r.schema = s
 	}
-
 	return r.res.pkg.ReadStruct(r.row, val, r.schema, r.res.enums, r.maps)
 }
 

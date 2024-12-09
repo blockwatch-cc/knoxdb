@@ -52,11 +52,11 @@ func NewSubTypes(i int64) SubTypes {
 		BaseModel: BaseModel{
 			Id: uint64(i),
 		},
-		Int64:   int64(i),
+		Int64:   i,
 		Uint32:  uint32(i),
 		Float64: float64(i),
 		Bool:    i%2 == 1,
-		Time:    time.Unix(0, int64(i)).UTC(),
+		Time:    time.Unix(0, i).UTC(),
 		Hash:    Uint64Bytes(uint64(i)),
 		String:  hex.EncodeToString(Uint64Bytes(uint64(i))),
 	}

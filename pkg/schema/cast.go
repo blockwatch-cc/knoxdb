@@ -944,16 +944,16 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 		binary.BigEndian.PutUint64(b[:], uint64(v))
 		res, ok = b[:], true
 	case uint64:
-		binary.BigEndian.PutUint64(b[:], uint64(v))
+		binary.BigEndian.PutUint64(b[:], v)
 		res, ok = b[:], true
 	case uint32:
-		binary.BigEndian.PutUint32(b[:], uint32(v))
+		binary.BigEndian.PutUint32(b[:], v)
 		res, ok = b[:4], true
 	case uint16:
-		binary.BigEndian.PutUint16(b[:], uint16(v))
+		binary.BigEndian.PutUint16(b[:], v)
 		res, ok = b[:2], true
 	case uint8:
-		res, ok = []byte{byte(v)}, true
+		res, ok = []byte{v}, true
 	case float64:
 		binary.BigEndian.PutUint64(b[:], math.Float64bits(v))
 		res, ok = b[:], true
@@ -1012,7 +1012,7 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 			case reflect.Int8:
 				res, ok = []byte{byte(vv.Int())}, true
 			case reflect.Uint, reflect.Uint64:
-				binary.BigEndian.PutUint64(b[:], uint64(vv.Uint()))
+				binary.BigEndian.PutUint64(b[:], vv.Uint())
 				res, ok = b[:], true
 			case reflect.Uint32:
 				binary.BigEndian.PutUint32(b[:], uint32(vv.Uint()))
@@ -1193,7 +1193,7 @@ func (c I256Caster) CastValue(val any) (res any, err error) {
 			i256.SetFloat64(vv.Float())
 			res, ok = i256, true
 		case reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
-			res, ok = num.Int256FromInt64(int64(vv.Int())), true
+			res, ok = num.Int256FromInt64(vv.Int()), true
 		case reflect.Uint, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8:
 			res, ok = num.Int256FromInt64(int64(vv.Uint())), true
 		default:

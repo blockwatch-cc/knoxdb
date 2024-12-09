@@ -37,9 +37,6 @@ func (d Decimal32) IsZero() bool {
 }
 
 func (d Decimal32) Check() (bool, error) {
-	if d.scale < 0 {
-		return false, ErrScaleUnderflow
-	}
 	if d.scale > MaxDecimal32Precision {
 		return false, ErrScaleOverflow
 	}
@@ -245,7 +242,8 @@ func (d *Decimal32) UnmarshalText(buf []byte) error {
 
 loop:
 	for ; i < len(buf); i++ {
-		switch c := buf[i]; true {
+		c := buf[i]
+		switch {
 		case c == '.':
 			if sawdot {
 				break loop
@@ -308,7 +306,7 @@ func ParseDecimal32(s string) (Decimal32, error) {
 }
 
 func EqualScaleDecimal32(a, b Decimal32) (Decimal32, Decimal32) {
-	switch true {
+	switch {
 	case a.scale == b.scale:
 		return a, b
 	case a.scale < b.scale:
@@ -344,7 +342,7 @@ func (a Decimal32) Lte(b Decimal32) bool {
 }
 
 func (a Decimal32) Cmp(b Decimal32) int {
-	switch true {
+	switch {
 	case a.Lt(b):
 		return -1
 	case a.Eq(b):

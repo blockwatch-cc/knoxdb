@@ -26,7 +26,7 @@ func (d Duration) String() string {
 func ParseDuration(d string) (Duration, error) {
 	d = strings.ToLower(d)
 	multiplier := time.Second
-	switch true {
+	switch {
 	case strings.HasSuffix(d, "d"):
 		multiplier = 24 * time.Hour
 		d = d[:len(d)-1]

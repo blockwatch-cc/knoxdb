@@ -236,7 +236,7 @@ func (c *TwoQueueCache[K, V]) ensureSpace() (evicted bool) {
 			c.recentEvict.Add(k, null)
 		} else {
 			// Remove from the frequent list otherwise
-			k, v, e = c.frequent.RemoveOldest()
+			_, v, e = c.frequent.RemoveOldest()
 		}
 		if e {
 			c.stats.Rem(v.HeapSize())

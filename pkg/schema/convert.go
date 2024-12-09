@@ -73,7 +73,7 @@ func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
 
 			// skip invisible fields
 			if !field.IsVisible() {
-				c.parts[i] = make([]byte, 0, 0)
+				c.parts[i] = make([]byte, 0)
 				continue
 			}
 
@@ -81,27 +81,33 @@ func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
 			switch field.typ {
 			case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
 				types.FieldTypeFloat64, types.FieldTypeDecimal64:
-				c.parts[i] = make([]byte, 8, 8)
+				var b [8]byte
+				c.parts[i] = b[:]
 
 			case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
 				types.FieldTypeDecimal32:
-				c.parts[i] = make([]byte, 4, 4)
+				var b [4]byte
+				c.parts[i] = b[:]
 
 			case types.FieldTypeInt16, types.FieldTypeUint16:
-				c.parts[i] = make([]byte, 2, 2)
+				var b [2]byte
+				c.parts[i] = b[:]
 
 			case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8:
-				c.parts[i] = make([]byte, 1, 1)
+				var b [1]byte
+				c.parts[i] = b[:]
 
 			case types.FieldTypeInt256, types.FieldTypeDecimal256:
-				c.parts[i] = make([]byte, 32, 32)
+				var b [32]byte
+				c.parts[i] = b[:]
 
 			case types.FieldTypeInt128, types.FieldTypeDecimal128:
-				c.parts[i] = make([]byte, 16, 16)
+				var b [16]byte
+				c.parts[i] = b[:]
 
 			case types.FieldTypeString, types.FieldTypeBytes:
 				if field.fixed > 0 {
-					c.parts[i] = make([]byte, field.fixed, field.fixed)
+					c.parts[i] = make([]byte, field.fixed)
 				} else {
 					c.dyn = append(c.dyn, i)
 				}

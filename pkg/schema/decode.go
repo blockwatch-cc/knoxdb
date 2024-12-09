@@ -260,7 +260,7 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 				if !ok {
 					err = fmt.Errorf("%s: invalid enum value %d", field.name, u16)
 				}
-				*(*string)(ptr) = string(val)
+				*(*string)(ptr) = val
 			} else {
 				err = fmt.Errorf("translation for enum %q not registered", field.name)
 			}
@@ -480,7 +480,7 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 		if !ok {
 			panic(fmt.Errorf("%s: invalid enum value %d", field.name, u16))
 		}
-		*(*string)(ptr) = string(val) // FIXME: may break when enum dict grows
+		*(*string)(ptr) = val // FIXME: may break when enum dict grows
 	}
 	return buf
 }

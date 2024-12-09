@@ -34,7 +34,7 @@ type Join struct {
 	limit uint32
 	log   log.Logger
 	flags QueryFlags
-	stats QueryStats
+	// stats QueryStats
 }
 
 type JoinTable struct {

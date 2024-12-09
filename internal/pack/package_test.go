@@ -6,13 +6,21 @@ package pack
 import (
 	"reflect"
 	"strings"
+	"testing"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 const PACK_SIZE = 1 << 16
+
+func TestMain(m *testing.M) {
+	// must register enum type with global schema registry
+	tests.RegisterEnum()
+	m.Run()
+}
 
 var testStructs = []Encodable{
 	&scalarStruct{},
@@ -31,7 +39,7 @@ func makeTypedPackage(typ any, fill int) *Package {
 		panic(err)
 	}
 	pkg := New().WithMaxRows(PACK_SIZE).WithSchema(s)
-	enc := schema.NewEncoder(s)
+	enc := schema.NewEncoder(s).WithEnums(schema.GlobalRegistry)
 	buf, err := enc.Encode(makeZeroStruct(typ), nil)
 	if err != nil {
 		panic(err)
@@ -64,6 +72,10 @@ func makeZeroStruct(v any) any {
 			dst = dst.Elem()
 		}
 		dst.Set(reflect.Zero(typ.Field(i).Type))
+		// fake enum
+		if dst.Kind() == reflect.String {
+			dst.SetString("one")
+		}
 	}
 	return ptr.Interface()
 }
@@ -337,7 +349,7 @@ type encodeTestStruct struct {
 	String   string         `knox:"str"`
 	Stringer Stringer       `knox:"strlist"`
 	Bool     bool           `knox:"bool"`
-	Enum     Enum           `knox:"enum"`
+	Enum     string         `knox:"my_enum,enum"`
 	Int64    int64          `knox:"i64"`
 	Int32    int32          `knox:"i32"`
 	Int16    int16          `knox:"i16"`

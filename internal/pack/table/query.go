@@ -35,7 +35,7 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 			WithMaxRows(int(plan.Limit)).
 			WithSchema(plan.ResultSchema).
 			Alloc(),
-		engine.GetEngine(ctx).Enums(),
+		t.Enums(),
 	)
 
 	// protect journal access
@@ -72,7 +72,8 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 	}
 
 	// prepare result
-	res := NewStreamResult(engine.GetEngine(ctx).Enums(), fn)
+	enums := t.Enums()
+	res := NewStreamResult(enums, fn)
 	defer res.Close()
 
 	// protect journal access
@@ -154,7 +155,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	// execute the query to find all matching pks
 	bits := bitmap.New()
 	res := NewStreamResult(
-		engine.GetEngine(ctx).Enums(),
+		t.Enums(),
 		func(row engine.QueryRow) error {
 			bits.Set(row.(*Row).Uint64(t.px))
 			return nil

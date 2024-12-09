@@ -139,7 +139,7 @@ func containsRange[T constraints.Ordered](s []T, from, to T) bool {
 	maxv := sort.Search(n-minv, func(i int) bool {
 		return s[i+minv] >= to
 	})
-	maxv = maxv + minv
+	maxv += minv
 
 	// exit when to was found (also solves case C1a)
 	if maxv < n && s[maxv] == to {

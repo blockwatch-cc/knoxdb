@@ -231,7 +231,8 @@ func (d *Decimal64) UnmarshalText(buf []byte) error {
 
 loop:
 	for ; i < len(buf); i++ {
-		switch c := buf[i]; true {
+		c := buf[i]
+		switch {
 		case c == '.':
 			if sawdot {
 				break loop
@@ -294,7 +295,7 @@ func ParseDecimal64(s string) (Decimal64, error) {
 }
 
 func EqualScaleDecimal64(a, b Decimal64) (Decimal64, Decimal64) {
-	switch true {
+	switch {
 	case a.scale == b.scale:
 		return a, b
 	case a.scale < b.scale:
@@ -330,7 +331,7 @@ func (a Decimal64) Lte(b Decimal64) bool {
 }
 
 func (a Decimal64) Cmp(b Decimal64) int {
-	switch true {
+	switch {
 	case a.Lt(b):
 		return -1
 	case a.Eq(b):

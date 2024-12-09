@@ -387,26 +387,26 @@ func (x Int256) Not() Int256 {
 }
 
 func (x Int256) Or(y Int256) Int256 {
-	x[0] = x[0] | y[0]
-	x[1] = x[1] | y[1]
-	x[2] = x[2] | y[2]
-	x[3] = x[3] | y[3]
+	x[0] |= y[0]
+	x[1] |= y[1]
+	x[2] |= y[2]
+	x[3] |= y[3]
 	return x
 }
 
 func (x Int256) And(y Int256) Int256 {
-	x[0] = x[0] & y[0]
-	x[1] = x[1] & y[1]
-	x[2] = x[2] & y[2]
-	x[3] = x[3] & y[3]
+	x[0] &= y[0]
+	x[1] &= y[1]
+	x[2] &= y[2]
+	x[3] &= y[3]
 	return x
 }
 
 func (x Int256) Xor(y Int256) Int256 {
-	x[0] = x[0] ^ y[0]
-	x[1] = x[1] ^ y[1]
-	x[2] = x[2] ^ y[2]
-	x[3] = x[3] ^ y[3]
+	x[0] ^= y[0]
+	x[1] ^= y[1]
+	x[2] ^= y[2]
+	x[3] ^= y[3]
 	return x
 }
 
@@ -451,7 +451,7 @@ func (x Int256) Lsh(n uint) Int256 {
 
 	// remaining shifts
 	a = x[3] >> (64 - n)
-	x[3] = x[3] << n
+	x[3] <<= n
 
 sh64:
 	b = x[2] >> (64 - n)
@@ -541,17 +541,17 @@ func (x Int256) lsh192() Int256 {
 	return x
 }
 func (x Int256) rsh64() Int256 {
-	sign := uint64(x[0] >> 63)
+	sign := x[0] >> 63
 	x[0], x[1], x[2], x[3] = sign, x[0], x[1], x[2]
 	return x
 }
 func (x Int256) rsh128() Int256 {
-	sign := uint64(x[0] >> 63)
+	sign := x[0] >> 63
 	x[0], x[1], x[2], x[3] = sign, sign, x[0], x[1]
 	return x
 }
 func (x Int256) rsh192() Int256 {
-	sign := uint64(x[0] >> 63)
+	sign := x[0] >> 63
 	x[0], x[1], x[2], x[3] = sign, sign, sign, x[0]
 	return x
 }
@@ -645,11 +645,12 @@ func (x Int256) Sub64(y uint64) Int256 {
 }
 
 func (x Int256) Cmp(y Int256) int {
-	if x == y {
+	switch {
+	case x == y:
 		return 0
-	} else if x.Lt(y) {
+	case x.Lt(y):
 		return -1
-	} else {
+	default:
 		return 1
 	}
 }

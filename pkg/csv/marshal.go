@@ -86,11 +86,11 @@ func (e *Encoder) Write(p []byte) (n int, err error) {
 // CSV header field names are taken from struct field tags of each attribute and
 // when missing from the attribute name as specified in the Go type.
 //
-//     // CSV field "name" will be assigned to struct field "Field".
-//     Field int64 `csv:"name"`
+//	// CSV field "name" will be assigned to struct field "Field".
+//	Field int64 `csv:"name"`
 //
-//     // Field is ignored by this package.
-//     Field int `csv:"-"`
+//	// Field is ignored by this package.
+//	Field int `csv:"-"`
 //
 // Marshal only supports strings, integers, floats, booleans, []byte slices
 // and [N]byte arrays as well as pointers to these types. Slices of other
@@ -194,7 +194,7 @@ func (e *Encoder) output(fields []string) error {
 		}
 		fields[i] = strings.Join([]string{Wrapper, v, Wrapper}, "")
 	}
-	line := strings.Join(fields, string(e.sep))
+	line := strings.Join(fields, e.sep)
 	if _, err := e.w.Write([]byte(line)); err != nil {
 		return fmt.Errorf("csv: %v", err)
 	}

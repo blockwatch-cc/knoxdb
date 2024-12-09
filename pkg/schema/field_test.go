@@ -93,7 +93,7 @@ func TestFieldReflectField(t *testing.T) {
 	structType := reflect.TypeOf(testStruct)
 
 	t.Run("Int32Field", func(t *testing.T) {
-		field := NewField(types.FieldTypeInt32)
+		// field := NewField(types.FieldTypeInt32)
 		field, err := reflectStructField(structType.Field(0))
 		require.NoError(t, err)
 		assert.Equal(t, uint16(4), field.wireSize)
@@ -102,7 +102,7 @@ func TestFieldReflectField(t *testing.T) {
 	})
 
 	t.Run("StringField", func(t *testing.T) {
-		field := NewField(types.FieldTypeString)
+		// field := NewField(types.FieldTypeString)
 		field, err := reflectStructField(structType.Field(1))
 		require.NoError(t, err)
 		assert.Equal(t, []int{1}, field.Path())

@@ -12,55 +12,55 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestOrderedNumbersContains(T *testing.T) {
+func TestOrderedNumbersContains(t *testing.T) {
 	// nil slice
 	if NewOrderedNumbers[int](nil).Contains(1) {
-		T.Errorf("nil slice cannot contain value")
+		t.Errorf("nil slice cannot contain value")
 	}
 
 	// empty slice
 	if NewOrderedNumbers([]int{}).Contains(1) {
-		T.Errorf("empty slice cannot contain value")
+		t.Errorf("empty slice cannot contain value")
 	}
 
 	// 1-element slice positive
 	if !NewOrderedNumbers([]int{1}).Contains(1) {
-		T.Errorf("1-element slice value not found")
+		t.Errorf("1-element slice value not found")
 	}
 
 	// 1-element slice negative
 	if NewOrderedNumbers([]int{1}).Contains(2) {
-		T.Errorf("1-element slice found wrong match")
+		t.Errorf("1-element slice found wrong match")
 	}
 
 	// n-element slice positive first element
 	if !NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(1) {
-		T.Errorf("N-element first slice value not found")
+		t.Errorf("N-element first slice value not found")
 	}
 
 	// n-element slice positive middle element
 	if !NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(5) {
-		T.Errorf("N-element middle slice value not found")
+		t.Errorf("N-element middle slice value not found")
 	}
 
 	// n-element slice positive last element
 	if !NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(13) {
-		T.Errorf("N-element last slice value not found")
+		t.Errorf("N-element last slice value not found")
 	}
 
 	// n-element slice negative before
 	if NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(0) {
-		T.Errorf("N-element before slice value wrong match")
+		t.Errorf("N-element before slice value wrong match")
 	}
 
 	// n-element slice negative middle
 	if NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(2) {
-		T.Errorf("N-element middle slice value wrong match")
+		t.Errorf("N-element middle slice value wrong match")
 	}
 
 	// n-element slice negative after
 	if NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(14) {
-		T.Errorf("N-element after slice value wrong match")
+		t.Errorf("N-element after slice value wrong match")
 	}
 }
 
@@ -241,29 +241,29 @@ func TestOrderedNumbersDifference(t *testing.T) {
 	}
 }
 
-func BenchmarkOrderedNumbersContains(B *testing.B) {
+func BenchmarkOrderedNumbersContains(b *testing.B) {
 	cases := []int{10, 1000, 1000000}
 	for _, n := range cases {
-		B.Run(fmt.Sprintf("%d-neg", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d-neg", n), func(b *testing.B) {
 			a := NewOrderedNumbers(util.RandInts[int](n))
-			B.ResetTimer()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				a.Contains(rand.Int())
 			}
 		})
 	}
 	for _, n := range cases {
-		B.Run(fmt.Sprintf("%d-pos", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d-pos", n), func(b *testing.B) {
 			a := NewOrderedNumbers(util.RandInts[int](n))
-			B.ResetTimer()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				a.Contains(a.Values[rand.Intn(len(a.Values))])
 			}
 		})
 	}
 }
 
-func TestOrderedNumbersContainsRange(T *testing.T) {
+func TestOrderedNumbersContainsRange(t *testing.T) {
 	type TestRange struct {
 		Name  string
 		From  int
@@ -359,18 +359,18 @@ func TestOrderedNumbersContainsRange(T *testing.T) {
 	for i, v := range tests {
 		for _, r := range v.Ranges {
 			if want, got := r.Match, NewOrderedNumbers(v.Slice).ContainsRange(r.From, r.To); want != got {
-				T.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
+				t.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
 			}
 		}
 	}
 }
 
-func BenchmarkOrderedNumbersContainsRange(B *testing.B) {
+func BenchmarkOrderedNumbersContainsRange(b *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := NewOrderedNumbers(util.RandUints[uint64](n))
-			B.ResetTimer()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				min, max := util.RandUint64(), util.RandUint64()
 				if min > max {
 					min, max = max, min

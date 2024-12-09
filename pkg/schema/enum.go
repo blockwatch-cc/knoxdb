@@ -24,6 +24,7 @@ type EnumRegistry map[uint64]*EnumDictionary
 var (
 	enumRegistry     EnumRegistry = make(map[uint64]*EnumDictionary)
 	enumRegistryLock sync.RWMutex
+	GlobalRegistry   = enumRegistry
 )
 
 func RegisterEnum(tag uint64, e *EnumDictionary) {

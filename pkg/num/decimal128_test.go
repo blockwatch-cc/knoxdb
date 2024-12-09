@@ -53,8 +53,8 @@ func TestDecimal128Numbers(t *testing.T) {
 		{name: "23.51", in: n128(2351), scale: 2, prec: 4},
 		{name: "-23.51", in: n128(-2351), scale: 2, prec: 4},
 		// invalid
-		{name: "+scale", in: n128(1234567891234567891), scale: 39, prec: 40, err: ErrScaleOverflow},
-		{name: "+scale-", in: n128(-1234567891234567891), scale: 39, prec: 40, err: ErrScaleOverflow},
+		{name: "+scale", in: n128(1234567891234567891, 0), scale: 39, prec: 40, err: ErrScaleOverflow},
+		{name: "+scale-", in: n128(-1234567891234567891, 0), scale: 39, prec: 40, err: ErrScaleOverflow},
 		{name: "-scale", in: n128(1), scale: 255, prec: 2, err: ErrScaleOverflow},
 		// extremes
 		{name: "MAX", in: MaxInt128, scale: 38, prec: 39},
@@ -380,7 +380,7 @@ func TestDecimal128SetFloat(t *testing.T) {
 	}{
 		// regular
 		{name: "0", in: 0.0, out: n128(0), scale: 0, prec: 0},
-		{name: "-0", in: -0.0, out: n128(0), scale: 0, prec: 0},
+		{name: "-0", in: -1 * 0.0, out: n128(0), scale: 0, prec: 0},
 		{name: "1234.56789", in: 1234.56789, out: n128(123456789), scale: 5, prec: 9},
 		{name: "-1234.56789", in: -1234.56789, out: n128(-123456789), scale: 5, prec: 9},
 		{name: "+1234.56789", in: 1234.56789, out: n128(123456789), scale: 5, prec: 9},
@@ -493,7 +493,7 @@ func TestDecimal128Quantize(t *testing.T) {
 			if got, want := res.Int128(), test.out; got != want {
 				t.Errorf("value error exp %d, got %d\n", want, got)
 			}
-			switch true {
+			switch {
 			case test.isover:
 				if got, want := res.Scale(), MaxDecimal128Precision; got != want {
 					t.Errorf("scale error exp %d, got %d\n", want, got)
@@ -655,26 +655,26 @@ var marshal128Benchmarks = []struct {
 	{f: 0.000000001, s: 9},
 }
 
-func BenchmarkParseDecimal128(B *testing.B) {
+func BenchmarkParseDecimal128(b *testing.B) {
 	for _, v := range parse128Benchmarks {
-		B.Run(v, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(len(v)))
-			for i := 0; i < B.N; i++ {
+		b.Run(v, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(len(v)))
+			for i := 0; i < b.N; i++ {
 				_, _ = ParseDecimal128(v)
 			}
 		})
 	}
 }
 
-func BenchmarkMarshalDecimal128(B *testing.B) {
+func BenchmarkMarshalDecimal128(b *testing.B) {
 	for _, v := range marshal128Benchmarks {
-		B.Run(strconv.FormatFloat(v.f, 'f', -1, 64), func(B *testing.B) {
+		b.Run(strconv.FormatFloat(v.f, 'f', -1, 64), func(b *testing.B) {
 			var dec Decimal128
 			dec.SetFloat64(v.f, v.s)
-			B.ResetTimer()
-			B.SetBytes(8)
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.SetBytes(8)
+			for i := 0; i < b.N; i++ {
 				_ = dec.String()
 			}
 		})

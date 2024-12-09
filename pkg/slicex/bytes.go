@@ -32,7 +32,7 @@ func UniqueBytes(s [][]byte) [][]byte {
 
 func (o *OrderedBytes) SetNonZero() *OrderedBytes {
 	// remove zero values
-	o.Values, _ = removeZeroBytes(o.Values)
+	o.Values = removeZeroBytes(o.Values)
 	o.NonZero = true
 	return o
 }
@@ -62,7 +62,7 @@ func (o OrderedBytes) MinMax() ([]byte, []byte) {
 func (o *OrderedBytes) Insert(val ...[]byte) *OrderedBytes {
 	// remove incoming zeros
 	if o.NonZero {
-		val, _ = removeZeroBytes(val)
+		val = removeZeroBytes(val)
 	}
 	// sort incoming slice
 	bytesSorter(val).Sort()
@@ -252,7 +252,7 @@ func indexBytes(s [][]byte, val []byte, last int) (int, bool) {
 	return idx + last, idx < l && bytes.Equal(s[idx], val)
 }
 
-func removeZeroBytes(s [][]byte) ([][]byte, int) {
+func removeZeroBytes(s [][]byte) [][]byte {
 	var n int
 	for i, v := range s {
 		if len(v) == 0 {
@@ -262,7 +262,7 @@ func removeZeroBytes(s [][]byte) ([][]byte, int) {
 		n++
 	}
 	s = s[:n]
-	return s, n
+	return s
 }
 
 // assumes s is already sorted
@@ -430,14 +430,14 @@ func containsRangeBytes(s [][]byte, from, to []byte) bool {
 		return bytes.Compare(s[i], from) >= 0
 	})
 	// exit when from was found (no need to check if min < n)
-	if bytes.Compare(s[min], from) == 0 {
+	if bytes.Equal(s[min], from) {
 		return true
 	}
 	// continue search for upper interval bound in the remainder of the slice
 	max := sort.Search(n-min, func(i int) bool {
 		return bytes.Compare(s[i+min], to) >= 0
 	})
-	max = max + min
+	max += min
 
 	// exit when to was found (also solves case C1a)
 	if max < n && bytes.Equal(s[max], to) {

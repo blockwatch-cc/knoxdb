@@ -252,7 +252,7 @@ func TestDecimal64SetFloat(t *testing.T) {
 	}{
 		// regular
 		{name: "0", in: 0.0, out: 0, scale: 0, prec: 0},
-		{name: "-0", in: -0.0, out: 0, scale: 0, prec: 0},
+		{name: "-0", in: -1 * 0.0, out: 0, scale: 0, prec: 0},
 		{name: "1234.56789", in: 1234.56789, out: 123456789, scale: 5, prec: 9},
 		{name: "-1234.56789", in: -1234.56789, out: -123456789, scale: 5, prec: 9},
 		{name: "+1234.56789", in: 1234.56789, out: 123456789, scale: 5, prec: 9},
@@ -357,7 +357,7 @@ func TestDecimal64Quantize(t *testing.T) {
 			if got, want := res.Int64(), test.out; got != want {
 				t.Errorf("value error exp %d, got %d\n", want, got)
 			}
-			switch true {
+			switch {
 			case test.isover:
 				if got, want := res.Scale(), MaxDecimal64Precision; got != want {
 					t.Errorf("scale error exp %d, got %d\n", want, got)
@@ -518,26 +518,26 @@ var marshal64Benchmarks = []struct {
 	{f: 0.000000001, s: 9},
 }
 
-func BenchmarkParseDecimal64(B *testing.B) {
+func BenchmarkParseDecimal64(b *testing.B) {
 	for _, v := range parse64Benchmarks {
-		B.Run(v, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(len(v)))
-			for i := 0; i < B.N; i++ {
+		b.Run(v, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(len(v)))
+			for i := 0; i < b.N; i++ {
 				_, _ = ParseDecimal64(v)
 			}
 		})
 	}
 }
 
-func BenchmarkMarshalDecimal64(B *testing.B) {
+func BenchmarkMarshalDecimal64(b *testing.B) {
 	for _, v := range marshal64Benchmarks {
-		B.Run(strconv.FormatFloat(v.f, 'f', -1, 64), func(B *testing.B) {
+		b.Run(strconv.FormatFloat(v.f, 'f', -1, 64), func(b *testing.B) {
 			var dec Decimal64
 			dec.SetFloat64(v.f, v.s)
-			B.ResetTimer()
-			B.SetBytes(8)
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.SetBytes(8)
+			for i := 0; i < b.N; i++ {
 				_ = dec.String()
 			}
 		})

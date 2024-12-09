@@ -156,8 +156,8 @@ func (r TimeRange) Sanitize(now time.Time) TimeRange {
 }
 
 func (r TimeRange) Truncate(d time.Duration) TimeRange {
-	r.From.Truncate(d)
-	r.To.Truncate(d)
+	r.From = r.From.Truncate(d)
+	r.To = r.To.Truncate(d)
 	return r
 }
 

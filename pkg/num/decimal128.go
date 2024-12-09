@@ -91,9 +91,6 @@ func (d Decimal128) Quantize(scale uint8) Decimal128 {
 	if scale > MaxDecimal128Precision {
 		scale = MaxDecimal128Precision
 	}
-	if scale < 0 {
-		scale = 0
-	}
 	if d.IsZero() {
 		return Decimal128{ZeroInt128, scale}
 	}
@@ -291,7 +288,8 @@ func (d *Decimal128) UnmarshalText(buf []byte) error {
 
 loop:
 	for ; i < l; i++ {
-		switch c := buf[i]; true {
+		c := buf[i]
+		switch {
 		case c == '.':
 			if sawdot {
 				break loop
@@ -348,7 +346,7 @@ loop:
 		val = val.Neg()
 	}
 
-	d.scale = uint8(scale)
+	d.scale = scale
 	d.val = val
 	return nil
 }
@@ -360,7 +358,7 @@ func ParseDecimal128(s string) (Decimal128, error) {
 }
 
 func EqualScaleDecimal128(a, b Decimal128) (Decimal128, Decimal128) {
-	switch true {
+	switch {
 	case a.scale == b.scale:
 		return a, b
 	case a.scale < b.scale:

@@ -251,7 +251,10 @@ func ContainsString(s string, list []string) bool {
 func ToCamelCase(src, sep string) string {
 	chunks := strings.Split(src, sep)
 	for idx, val := range chunks {
-		chunks[idx] = strings.Title(val)
+		if len(val) > 0 {
+			val = strings.ToUpper(string(val[0])) + val[1:]
+		}
+		chunks[idx] = val
 	}
 	return strings.Join(chunks, "")
 }

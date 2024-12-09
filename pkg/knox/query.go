@@ -266,8 +266,7 @@ func (q Query) AndRegexp(field string, value any) Query {
 }
 
 func (q Query) AndRange(field string, from, to any) Query {
-	q.AndRange(field, from, to)
-	return q
+	return q.And(field, FilterModeRange, RangeValue{from, to})
 }
 
 func (q Query) Execute(ctx context.Context, val any) (err error) {

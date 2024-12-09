@@ -145,13 +145,13 @@ func (dst Int256Stride) Copy(src Int256Stride, dstPos, srcPos, n int) {
 }
 
 func (s *Int256Stride) Insert(k int, vs Int256Stride) {
-	if n := (*s).Len() + vs.Len(); n <= (*s).Cap() {
-		(*s) = (*s).Subslice(0, n)
-		(*s).Copy(*s, k+vs.Len(), k, vs.Len()-k)
-		(*s).Copy(vs, k, 0, vs.Len())
+	if n := s.Len() + vs.Len(); n <= s.Cap() {
+		(*s) = s.Subslice(0, n)
+		s.Copy(*s, k+vs.Len(), k, vs.Len()-k)
+		s.Copy(vs, k, 0, vs.Len())
 		return
 	}
-	s2 := MakeInt256Stride((*s).Len() + vs.Len())
+	s2 := MakeInt256Stride(s.Len() + vs.Len())
 	s2.Copy(*s, 0, 0, k)
 	s2.Copy(vs, k, 0, vs.Len())
 	s2.Copy(*s, k+vs.Len(), k, vs.Len()-k)

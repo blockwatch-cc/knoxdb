@@ -41,19 +41,17 @@ func NewAlignedTicker(d time.Duration) *AlignedTicker {
 		c: c,
 	}
 	go func() {
+		now := <-time.After(wait)
+		// prevent panic on early Stop (i.e. before wait is over)
 		select {
-		case now := <-time.After(wait):
-			// prevent panic on early Stop (i.e. before wait is over)
-			select {
-			case c <- now:
-			default:
-				return
-			}
-			t.Lock()
-			defer t.Unlock()
-			t.t = time.NewTicker(d)
-			t.C = t.t.C
+		case c <- now:
+		default:
+			return
 		}
+		t.Lock()
+		defer t.Unlock()
+		t.t = time.NewTicker(d)
+		t.C = t.t.C
 	}()
 	return t
 }

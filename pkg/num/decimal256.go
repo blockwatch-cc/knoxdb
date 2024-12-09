@@ -96,9 +96,6 @@ func (d Decimal256) Quantize(scale uint8) Decimal256 {
 	if scale > MaxDecimal256Precision {
 		scale = MaxDecimal256Precision
 	}
-	if scale < 0 {
-		scale = 0
-	}
 	if d.IsZero() {
 		return Decimal256{ZeroInt256, scale}
 	}
@@ -316,7 +313,8 @@ func (d *Decimal256) UnmarshalText(buf []byte) error {
 
 loop:
 	for ; i < len(buf); i++ {
-		switch c := buf[i]; true {
+		c := buf[i]
+		switch {
 		case c == '.':
 			if sawdot {
 				break loop
@@ -387,7 +385,7 @@ func ParseDecimal256(s string) (Decimal256, error) {
 }
 
 func EqualScaleDecimal256(a, b Decimal256) (Decimal256, Decimal256) {
-	switch true {
+	switch {
 	case a.scale == b.scale:
 		return a, b
 	case a.scale < b.scale:

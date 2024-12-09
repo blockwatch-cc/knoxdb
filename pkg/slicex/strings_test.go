@@ -16,88 +16,88 @@ import (
 
 // -----------------------------------------------------------------------
 // Strings
-func TestStringSliceContains(T *testing.T) {
+func TestStringSliceContains(t *testing.T) {
 	// nil slice
 	if NewOrderedStrings(nil).Contains("1") {
-		T.Errorf("nil slice cannot contain value")
+		t.Errorf("nil slice cannot contain value")
 	}
 
 	// empty slice
 	if NewOrderedStrings([]string{}).Contains("1") {
-		T.Errorf("empty slice cannot contain value")
+		t.Errorf("empty slice cannot contain value")
 	}
 
 	// 1-element slice positive
 	if !NewOrderedStrings([]string{"1"}).Contains("1") {
-		T.Errorf("1-element slice value not found")
+		t.Errorf("1-element slice value not found")
 	}
 
 	// 1-element slice negative
 	if NewOrderedStrings([]string{"1"}).Contains("2") {
-		T.Errorf("1-element slice found wrong match")
+		t.Errorf("1-element slice found wrong match")
 	}
 
 	// n-element slice positive first element (ASCII numbers < ASCI letters)
 	nelem := []string{"1", "3", "5", "7", "B", "D"}
 	if !NewOrderedStrings(nelem).Contains("1") {
-		T.Errorf("N-element first slice value not found")
+		t.Errorf("N-element first slice value not found")
 	}
 
 	// n-element slice positive middle element
 	if !NewOrderedStrings(nelem).Contains("5") {
-		T.Errorf("N-element middle slice value not found")
+		t.Errorf("N-element middle slice value not found")
 	}
 
 	// n-element slice positive last element
 	if !NewOrderedStrings(nelem).Contains("D") {
-		T.Errorf("N-element last slice value not found")
+		t.Errorf("N-element last slice value not found")
 	}
 
 	// n-element slice negative before
 	if NewOrderedStrings(nelem).Contains("0") {
-		T.Errorf("N-element before slice value wrong match")
+		t.Errorf("N-element before slice value wrong match")
 	}
 
 	// n-element slice negative middle
 	if NewOrderedStrings(nelem).Contains("2") {
-		T.Errorf("N-element middle slice value wrong match")
+		t.Errorf("N-element middle slice value wrong match")
 	}
 
 	// n-element slice negative after
 	if NewOrderedStrings(nelem).Contains("E") {
-		T.Errorf("N-element after slice value wrong match")
+		t.Errorf("N-element after slice value wrong match")
 	}
 }
 
-func BenchmarkStringSlice32Contains(B *testing.B) {
+func BenchmarkStringSlice32Contains(b *testing.B) {
 	cases := []int{10, 1000, 1000000}
 	for _, n := range cases {
-		B.Run(fmt.Sprintf("%d-neg", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d-neg", n), func(b *testing.B) {
 			a := NewOrderedStrings(util.RandStringSlices(n, 32))
 			check := make([]string, 1024)
 			for i := range check {
 				check[i] = util.RandString(32)
 			}
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				a.Contains(check[i%1024])
 			}
 		})
 	}
 	for _, n := range cases {
-		B.Run(fmt.Sprintf("%d-pos", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d-pos", n), func(b *testing.B) {
 			a := NewOrderedStrings(util.RandStringSlices(n, 32))
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				a.Contains(a.Values[util.RandIntn(len(a.Values))])
 			}
 		})
 	}
 }
 
-func TestStringContainsRange(T *testing.T) {
+func TestStringContainsRange(t *testing.T) {
 	type TestRange struct {
 		Name  string
 		From  string
@@ -193,15 +193,15 @@ func TestStringContainsRange(T *testing.T) {
 	for i, v := range tests {
 		for _, r := range v.Ranges {
 			if want, got := r.Match, NewOrderedStrings(v.Slice).ContainsRange(r.From, r.To); want != got {
-				T.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
+				t.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
 			}
 		}
 	}
 }
 
-func BenchmarkStringSlice32ContainsRange(B *testing.B) {
+func BenchmarkStringSlice32ContainsRange(b *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
-		B.Run(fmt.Sprintf("%d", n), func(B *testing.B) {
+		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			a := NewOrderedStrings(util.RandStringSlices(n, 32))
 			ranges := make([][2]string, 1024)
 			for i := range ranges {
@@ -211,9 +211,9 @@ func BenchmarkStringSlice32ContainsRange(B *testing.B) {
 				}
 				ranges[i] = [2]string{min, max}
 			}
-			B.ResetTimer()
-			B.ReportAllocs()
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
 				a.ContainsRange(ranges[i%1024][0], ranges[i%1024][1])
 			}
 		})

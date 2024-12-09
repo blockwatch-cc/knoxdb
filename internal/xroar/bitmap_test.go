@@ -339,20 +339,20 @@ func TestBitmapOps(t *testing.T) {
 	}
 }
 
-func TestUint16(t *testing.T) {
-	// a := uint16(0xfeff)
-	// b := uint16(0x100)
-	// t.Logf("a & b: %#x", a&b)
-	var x uint16
-	for i := 0; i < 100000; i++ {
-		prev := x
-		x++
-		if x <= prev {
-			// This triggers when prev = 0xFFFF.
-			require.Failf(t, "x<=prev", "x %d <= prev %d", x, prev)
-		}
-	}
-}
+// func TestUint16(t *testing.T) {
+// 	// a := uint16(0xfeff)
+// 	// b := uint16(0x100)
+// 	// t.Logf("a & b: %#x", a&b)
+// 	var x uint16
+// 	for i := 0; i < 100000; i++ {
+// 		prev := x
+// 		x++
+// 		if x <= prev {
+// 			// This triggers when prev = 0xFFFF.
+// 			require.Failf(t, "x<=prev", "x %d <= prev %d", x, prev)
+// 		}
+// 	}
+// }
 
 func TestSetGet(t *testing.T) {
 	bm := NewBitmap()

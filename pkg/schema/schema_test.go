@@ -103,7 +103,7 @@ func (_ ModelName) Key() string { return "model_name" }
 
 type NoModelPrivate struct {
 	NoModelTagName         // anon embed will promote fields
-	a              string  // non exported
+	_              string  // non exported
 	B              string  `knox:"-"` // exported but skipped
 	_              [2]byte // padding
 }
@@ -139,7 +139,7 @@ func NewAllTypes(i int64) AllTypes {
 		BaseModel: BaseModel{
 			Id: uint64(i),
 		},
-		Int64:   int64(i),
+		Int64:   i,
 		Int32:   int32(i),
 		Int16:   int16(i),
 		Int8:    int8(i),
@@ -150,13 +150,13 @@ func NewAllTypes(i int64) AllTypes {
 		Float64: float64(i),
 		Float32: float32(i),
 		D32:     num.NewDecimal32(int32(i), 5),
-		D64:     num.NewDecimal64(int64(i), 15),
-		D128:    num.NewDecimal128(num.Int128FromInt64(int64(i)), 18),
-		D256:    num.NewDecimal256(num.Int256FromInt64(int64(i)), 24),
-		I128:    num.Int128FromInt64(int64(i)),
-		I256:    num.Int256FromInt64(int64(i)),
+		D64:     num.NewDecimal64(i, 15),
+		D128:    num.NewDecimal128(num.Int128FromInt64(i), 18),
+		D256:    num.NewDecimal256(num.Int256FromInt64(i), 24),
+		I128:    num.Int128FromInt64(i),
+		I256:    num.Int256FromInt64(i),
 		Bool:    i%2 == 1,
-		Time:    time.Unix(0, int64(i)).UTC(),
+		Time:    time.Unix(0, i).UTC(),
 		Hash:    Uint64Bytes(uint64(i)),
 		Array:   [2]byte{byte(i >> 8 & 0xf), byte(i & 0xf)},
 		String:  hex.EncodeToString(Uint64Bytes(uint64(i))),

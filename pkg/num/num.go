@@ -5,7 +5,6 @@ package num
 
 import (
 	"errors"
-	"regexp"
 )
 
 var (
@@ -37,7 +36,7 @@ func (a Accuracy) String() string {
 	}
 }
 
-var decimalRegexp = regexp.MustCompile("^[+-]?([0-9]*[.])?[0-9]+$")
+// var decimalRegexp = regexp.MustCompile("^[+-]?([0-9]*[.])?[0-9]+$")
 
 const (
 	MinDecimal32Precision  uint8 = 1

@@ -21,7 +21,7 @@ func TestReadStruct(t *testing.T) {
 			maps, err := s.MapTo(s)
 			require.NoError(t, err)
 			for i := 0; i < PACK_SIZE; i++ {
-				err := pkg.ReadStruct(i, v, s, maps)
+				err := pkg.ReadStruct(i, v, s, schema.GlobalRegistry, maps)
 				require.NoError(t, err)
 			}
 		})
@@ -36,7 +36,7 @@ func TestReadChildStruct(t *testing.T) {
 	maps, err := pkg.schema.MapTo(dstSchema)
 	require.NoError(t, err)
 	for i := 0; i < PACK_SIZE; i++ {
-		err := pkg.ReadStruct(i, dst, dstSchema, maps)
+		err := pkg.ReadStruct(i, dst, dstSchema, schema.GlobalRegistry, maps)
 		require.NoError(t, err)
 	}
 }
@@ -50,7 +50,7 @@ func BenchmarkReadStruct(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				for k := 0; k < PACK_SIZE; k++ {
-					_ = pkg.ReadStruct(k, v, s, maps)
+					_ = pkg.ReadStruct(k, v, s, schema.GlobalRegistry, maps)
 				}
 			}
 		})

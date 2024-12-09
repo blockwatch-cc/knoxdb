@@ -419,10 +419,8 @@ func Test2Q_Peek(t *testing.T) {
 	}
 	if v, ok := l.Peek(1); !ok || v.key != 1 {
 		t.Errorf("1 should be set to 1: %v, %v", v, ok)
-	} else {
-		if v.refCount != 2 {
-			t.Errorf("RefCount of 1 should be 2: %v", v)
-		}
+	} else if v.refCount != 2 {
+		t.Errorf("RefCount of 1 should be 2: %v", v)
 	}
 
 	l.Add(3, NewTestPackage(0, 0))

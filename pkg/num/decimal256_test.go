@@ -62,8 +62,8 @@ func TestDecimal256Numbers(t *testing.T) {
 		{name: "23.51", in: n256(2351), scale: 2, prec: 4},
 		{name: "-23.51", in: n256(-2351), scale: 2, prec: 4},
 		// invalid
-		{name: "+scale", in: n256(1234567891234567891), scale: 77, prec: 78, err: ErrScaleOverflow},
-		{name: "+scale-", in: n256(-1234567891234567891), scale: 77, prec: 78, err: ErrScaleOverflow},
+		{name: "+scale", in: n256(1234567891234567891, 0), scale: 77, prec: 78, err: ErrScaleOverflow},
+		{name: "+scale-", in: n256(-1234567891234567891, 0), scale: 77, prec: 78, err: ErrScaleOverflow},
 		{name: "-scale", in: n256(1), scale: 255, prec: 2, err: ErrScaleOverflow},
 		// // extremes
 		{name: "MAX", in: MaxInt256, scale: 76, prec: 77},
@@ -178,7 +178,7 @@ func TestDecimal256Parse(t *testing.T) {
 	// unusual
 	tests = append(tests, makePrecisionTest256(38, "0.", "", func(i int) Int256 { return ZeroInt256 }, func(i int) int { return i }, func(i int) int { return 0 })...)
 	// precision 0.000
-	tests = append(tests, makePrecisionTest256(38, "1.", "", func(i int) Int256 { return e256(i) }, func(i int) int { return i }, func(i int) int { return i + 1 })...)
+	tests = append(tests, makePrecisionTest256(38, "1.", "", e256, func(i int) int { return i }, func(i int) int { return i + 1 })...)
 	// precision 1000.0
 	tests = append(tests, makePrecisionTest256(37, "1", ".0", func(i int) Int256 { return e256(i + 1) }, func(i int) int { return 1 }, func(i int) int { return i + 2 })...)
 	// precision 0.00001
@@ -234,7 +234,7 @@ func TestDecimal256SetFloat(t *testing.T) {
 	}{
 		// regular
 		{name: "0", in: 0.0, out: n256(0), scale: 0, prec: 0},
-		{name: "-0", in: -0.0, out: n256(0), scale: 0, prec: 0},
+		{name: "-0", in: -1 * 0.0, out: n256(0), scale: 0, prec: 0},
 		{name: "1234.56789", in: 1234.56789, out: n256(123456789), scale: 5, prec: 9},
 		{name: "-1234.56789", in: -1234.56789, out: n256(-123456789), scale: 5, prec: 9},
 		{name: "+1234.56789", in: 1234.56789, out: n256(123456789), scale: 5, prec: 9},
@@ -349,7 +349,7 @@ func TestDecimal256Quantize(t *testing.T) {
 			if got, want := res.Int256(), test.out; got != want {
 				t.Errorf("value error exp %x, got %x\n", want.Bytes32(), got.Bytes32())
 			}
-			switch true {
+			switch {
 			case test.isover:
 				if got, want := res.Scale(), MaxDecimal256Precision; got != want {
 					t.Errorf("scale error exp %d, got %d\n", want, got)
@@ -511,26 +511,26 @@ var marshal256Benchmarks = []struct {
 	{f: 0.000000001, s: 9},
 }
 
-func BenchmarkParseDecimal256(B *testing.B) {
+func BenchmarkParseDecimal256(b *testing.B) {
 	for _, v := range parse256Benchmarks {
-		B.Run(v, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(len(v)))
-			for i := 0; i < B.N; i++ {
+		b.Run(v, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(len(v)))
+			for i := 0; i < b.N; i++ {
 				_, _ = ParseDecimal256(v)
 			}
 		})
 	}
 }
 
-func BenchmarkMarshalDecimal256(B *testing.B) {
+func BenchmarkMarshalDecimal256(b *testing.B) {
 	for _, v := range marshal256Benchmarks {
-		B.Run(strconv.FormatFloat(v.f, 'f', -1, 64), func(B *testing.B) {
+		b.Run(strconv.FormatFloat(v.f, 'f', -1, 64), func(b *testing.B) {
 			var dec Decimal256
 			dec.SetFloat64(v.f, v.s)
-			B.ResetTimer()
-			B.SetBytes(8)
-			for i := 0; i < B.N; i++ {
+			b.ResetTimer()
+			b.SetBytes(8)
+			for i := 0; i < b.N; i++ {
 				_ = dec.String()
 			}
 		})

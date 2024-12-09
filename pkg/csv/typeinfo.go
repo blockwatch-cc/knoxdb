@@ -93,10 +93,7 @@ func getTypeInfo(typ reflect.Type) (*typeInfo, error) {
 			}
 		}
 
-		finfo, err := structFieldInfo(typ, &f)
-		if err != nil {
-			return nil, err
-		}
+		finfo := structFieldInfo(&f)
 
 		// Add the field if it doesn't conflict with other fields.
 		if err := addFieldInfo(typ, tinfo, finfo); err != nil {
@@ -110,7 +107,7 @@ func getTypeInfo(typ reflect.Type) (*typeInfo, error) {
 }
 
 // structFieldInfo builds and returns a fieldInfo for f.
-func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, error) {
+func structFieldInfo(f *reflect.StructField) *fieldInfo {
 	finfo := &fieldInfo{idx: f.Index}
 	tag := f.Tag.Get(tagName)
 
@@ -121,8 +118,7 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 	} else {
 		tag = tokens[0]
 		for _, flag := range tokens[1:] {
-			switch flag {
-			case "any":
+			if flag == "any" {
 				finfo.flags |= fAny
 			}
 		}
@@ -142,7 +138,7 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 		finfo.name = f.Name
 	}
 
-	return finfo, nil
+	return finfo
 }
 
 func addFieldInfo(typ reflect.Type, tinfo *typeInfo, newf *fieldInfo) error {
@@ -190,9 +186,9 @@ func (finfo *fieldInfo) value(v reflect.Value) reflect.Value {
 
 // Load value from interface, but only if the result will be
 // usefully addressable.
-func derefIndirect(v interface{}) reflect.Value {
-	return derefValue(reflect.ValueOf(v))
-}
+// func derefIndirect(v interface{}) reflect.Value {
+// 	return derefValue(reflect.ValueOf(v))
+// }
 
 func derefValue(val reflect.Value) reflect.Value {
 	if val.Kind() == reflect.Interface && !val.IsNil() {

@@ -343,8 +343,8 @@ func (f *Field) ParseType(r reflect.StructField) error {
 	f.iface = iface
 	f.typ = typ
 	f.flags = flags
-	f.fixed = uint16(fixed)
-	f.scale = uint8(scale)
+	f.fixed = fixed
+	f.scale = scale
 	f.isArray = isArray
 
 	return nil
@@ -401,7 +401,7 @@ func (f *Field) ParseTag(tag string) error {
 					index = types.IndexTypeBloom
 					scale = 2
 					// accept = and :
-					val = strings.Replace(val, "=", ":", -1)
+					val = strings.ReplaceAll(val, "=", ":")
 					if _, num, ok := strings.Cut(val, ":"); ok {
 						// bloom filter factor
 						// 1: 2% false positive rate (1 byte per item)

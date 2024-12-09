@@ -97,11 +97,13 @@ func TestTableEngine[T any, B U[T]](t *testing.T, driver, eng string) {
 
 func CreateTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
 	t.Helper()
+	CreateEnum(t, e)
 	CreateTable(t, e, tab, opts, schema.MustSchemaOf(AllTypes{}))
 }
 
 func CreateMultipleTableSequentialTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
 	t.Helper()
+	CreateEnum(t, e)
 	CreateTable(t, e, tab, opts, schema.MustSchemaOf(AllTypes{}))
 	CreateTable(t, e, tab, opts, schema.MustSchemaOf(Security{}))
 }
@@ -116,6 +118,19 @@ func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts en
 	require.NoError(t, err)
 	require.NoError(t, commit())
 	require.NoError(t, tab.Close(ctx))
+}
+
+func CreateEnum(t *testing.T, e *engine.Engine) {
+	t.Helper()
+	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	defer abort()
+	require.NoError(t, err)
+
+	_, err = e.CreateEnum(context.Background(), "my_enum")
+	require.NoError(t, err)
+	err = e.ExtendEnum(ctx, "my_enum", "one", "two", "three", "four")
+	require.NoError(t, err, "Failed to extend enum")
+	require.NoError(t, commit())
 }
 
 func InsertData(t *testing.T, ctx context.Context, tab engine.TableEngine, s *engine.Schema) {
@@ -222,18 +237,18 @@ func InsertRowsTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine,
 
 func InsertRowsReadOnlyTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
 	t.Helper()
-	s := schema.MustSchemaOf(AllTypes{})
 	opts.ReadOnly = true
-	CreateTable(t, e, tab, opts, s)
+	CreateTableTest(e, t, tab, opts)
 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
+	s := schema.MustSchemaOf(AllTypes{})
 	err = tab.Open(ctx, s, opts)
 	require.NoError(t, err)
 
-	enc := schema.NewEncoder(s)
+	enc := schema.NewEncoder(tab.Schema()).WithEnums(tab.Enums())
 	buf, err := enc.Encode(NewAllTypes(10), nil)
 	require.NoError(t, err)
 
@@ -262,6 +277,7 @@ func UpdateRowsTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine,
 	allTypes := make([]*AllTypes, 10)
 	for i := range allTypes {
 		allTypes[i] = NewAllTypes(i)
+		allTypes[i].Id = uint64(i + 1)
 	}
 	buf, err := enc.Encode(allTypes, nil)
 	require.NoError(t, err)
@@ -374,13 +390,13 @@ func DeleteTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opt
 
 func StreamTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
 	t.Helper()
-	s := schema.MustSchemaOf(AllTypes{})
-	CreateTable(t, e, tab, opts, s)
+	CreateTableTest(e, t, tab, opts)
 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
+	s := schema.MustSchemaOf(AllTypes{})
 	err = tab.Open(ctx, s, opts)
 	require.NoError(t, err)
 	InsertData(t, ctx, tab, s)

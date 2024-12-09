@@ -98,7 +98,7 @@ func Int256ContainsRange(s []Int256, from, to Int256) bool {
 	max := sort.Search(n-min, func(i int) bool {
 		return s[i+min].Cmp(to) >= 0
 	})
-	max = max + min
+	max += min
 
 	// exit when to was found (also solves case C1a)
 	if max < n && s[max].Eq(to) {

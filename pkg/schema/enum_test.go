@@ -5,7 +5,6 @@ package schema
 
 import (
 	"encoding/hex"
-	"fmt"
 	"math/rand"
 	"testing"
 
@@ -25,10 +24,10 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-func (e *EnumDictionary) dump() {
-	fmt.Printf("Values\n%s", hex.Dump(e.values))
-	fmt.Printf("Offsets %v\n", e.offsets)
-}
+// func (e *EnumDictionary) dump() {
+// 	fmt.Printf("Values\n%s", hex.Dump(e.values))
+// 	fmt.Printf("Offsets %v\n", e.offsets)
+// }
 
 func TestEnumAdd(t *testing.T) {
 	d := NewEnumDictionary("")
