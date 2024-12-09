@@ -1,0 +1,36 @@
+FROM golang:1.23-alpine
+
+ARG BUILD_VERSION
+ARG BUILD_COMMIT
+ARG BUILD_DATE
+ARG BUILD_ID
+ARG BUILD_ARTIFACT
+
+LABEL vendor=Blockwatch\ Data\ Inc \
+  maintainer="Alexander Eichhorn <alex@blockwatch.cc>, Abdul-Harisu Inusah<abdul@blockwatch.cc>" \
+  name=${BUILD_ARTIFACT} \
+  cx.bwd.service=${BUILD_ARTIFACT} \
+  cx.bwd.arch="x86_64" \
+  cx.bwd.os="linux" \
+  cx.bwd.build-version=$BUILD_VERSION \
+  cx.bwd.build-date=$BUILD_DATE \
+  cx.bwd.build-id=$BUILD_ID
+
+ENV DAEMON=${BUILD_ARTIFACT}
+ENV USER=${BUILD_ARTIFACT}
+
+RUN apk add --no-cache ca-certificates 'su-exec>=0.2' && \
+  addgroup ${USER} -g 500 && \
+  adduser -u 500 -D -h /home/${USER} -S -s /sbin/nologin -G ${USER} ${USER}
+
+USER ${USER}
+
+WORKDIR /usr/local/go
+
+COPY ./0001-GORANDSEED.patch ./0001-GORANDSEED.patch
+
+RUN apk add patch --no-cache ca-certificates
+
+RUN patch -p1 < 0001-GORANDSEED.patch
+
+WORKDIR /go
