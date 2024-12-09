@@ -19,12 +19,6 @@ LABEL vendor=Blockwatch\ Data\ Inc \
 ENV DAEMON=${BUILD_ARTIFACT}
 ENV USER=${BUILD_ARTIFACT}
 
-RUN apk add --no-cache ca-certificates 'su-exec>=0.2' && \
-  addgroup ${USER} -g 500 && \
-  adduser -u 500 -D -h /home/${USER} -S -s /sbin/nologin -G ${USER} ${USER}
-
-USER ${USER}
-
 WORKDIR /usr/local/go
 
 COPY ./0001-GORANDSEED.patch ./0001-GORANDSEED.patch
