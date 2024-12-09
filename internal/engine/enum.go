@@ -11,12 +11,21 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-func (e *Engine) Enums() schema.EnumRegistry {
+func (e *Engine) Enums(names ...string) schema.EnumRegistry {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	clone := make(schema.EnumRegistry)
-	for n, v := range e.enums {
-		clone[n] = v
+	if len(names) == 0 {
+		for n, v := range e.enums {
+			clone[n] = v
+		}
+	} else {
+		for _, n := range names {
+			dict, ok := e.enums.Lookup(n)
+			if ok {
+				clone.Register(dict)
+			}
+		}
 	}
 	return clone
 }

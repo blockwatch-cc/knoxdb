@@ -271,6 +271,10 @@ func (t *Table) Schema() *schema.Schema {
 	return t.schema
 }
 
+func (t *Table) Enums() schema.EnumRegistry {
+	return t.engine.Enums(t.schema.EnumFieldNames()...)
+}
+
 func (t *Table) State() engine.ObjectState {
 	return t.state
 }

@@ -108,7 +108,7 @@ func (r Request) Query(key string) (*query.QueryPlan, error) {
 	s.WithName(key)
 
 	filters, err := query.Range("time", r.Range.From, r.Range.To).
-		Compile(r.table.Schema())
+		Compile(r.table.Schema(), r.table.Enums())
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,10 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 		if !ok {
 			return nil, fmt.Errorf("unknown group_by field %q", req.GroupBy)
 		}
-		groupByEnum = f.Enum()
+		groupByEnum, ok = req.table.Enums().Lookup(f.Name())
+		if !ok {
+			return nil, fmt.Errorf("missing enum dictionary for field %q", req.GroupBy)
+		}
 	} else {
 		res.groups = append(res.groups, "")
 	}
@@ -219,7 +222,7 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 			// try enum conversion first
 			if groupByEnum != nil {
 				if enum, ok := groupByEnum.Value(group.(uint16)); ok {
-					groupName = string(enum)
+					groupName = enum
 				}
 			}
 			// try any -> string conversion next

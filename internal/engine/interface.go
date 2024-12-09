@@ -35,6 +35,7 @@ type TableEngine interface {
 	Open(Context, *Schema, TableOptions) error
 	Close(Context) error
 	Schema() *Schema
+	Enums() schema.EnumRegistry
 	State() ObjectState
 	Metrics() TableMetrics
 	Drop(Context) error
