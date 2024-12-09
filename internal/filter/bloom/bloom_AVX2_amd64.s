@@ -12,7 +12,7 @@
 /***************************** filterAddManyUint32 ****************************************************/
 
 // func filterAddManyUint32AVX2Core(f Filter, data []uint32, seed uint32)
-TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-64
+TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-60
         MOVQ    data_base+32(FP), SI
         MOVQ    data_len+40(FP), BX
         MOVQ    f_b_base+8(FP), DI
@@ -346,7 +346,7 @@ exit:
 /***************************** filterAddManyInt32 ****************************************************/
 
 // func filterAddManyInt32AVX2Core(f Filter, data []int32, seed uint32)
-TEXT ·filterAddManyInt32AVX2Core(SB), NOSPLIT, $0-64
+TEXT ·filterAddManyInt32AVX2Core(SB), NOSPLIT, $0-60
         MOVQ    data_base+32(FP), SI
         MOVQ    data_len+40(FP), BX
         MOVQ    f_b_base+8(FP), DI
@@ -680,7 +680,7 @@ exit:
 /***************************** filterAddManyUint64 ****************************************************/
 
 // func filterAddManyUint64AVX2Core(f Filter, data []uint64, seed uint32)
-TEXT ·filterAddManyUint64AVX2Core(SB), NOSPLIT, $0-64
+TEXT ·filterAddManyUint64AVX2Core(SB), NOSPLIT, $0-60
         MOVQ    data_base+32(FP), SI
         MOVQ    data_len+40(FP), BX
         MOVQ    f_b_base+8(FP), DI
@@ -1094,7 +1094,7 @@ exit:
 /***************************** filterAddManyInt64 ****************************************************/
 
 // func filterAddManyUint64AVX2Core(f Filter, data []int64, seed uint32)
-TEXT ·filterAddManyInt64AVX2Core(SB), NOSPLIT, $0-64
+TEXT ·filterAddManyInt64AVX2Core(SB), NOSPLIT, $0-60
         MOVQ    data_base+32(FP), SI
         MOVQ    data_len+40(FP), BX
         MOVQ    f_b_base+8(FP), DI

@@ -38,7 +38,7 @@ func regSumAndZeros(registers []uint8) (float64, float64) {
 		if val == 0 {
 			ez++
 		}
-		//sum += 1.0 / math.Pow(2.0, float64(val))
+		// sum += 1.0 / math.Pow(2.0, float64(val))
 		tmp := float32(uint32(1) << val)
 		sum += 1.0 / tmp
 	}
@@ -89,7 +89,7 @@ func NewFilterBuffer(buf []byte, p uint32) (*LogLogBeta, error) {
 		max:       32 - p,
 		maxX:      math.MaxUint32 >> (32 - p),
 		alpha:     0.7213 / (1 + 1.079/float64(m)),
-		buf:       buf[:],
+		buf:       buf,
 	}, nil
 }
 

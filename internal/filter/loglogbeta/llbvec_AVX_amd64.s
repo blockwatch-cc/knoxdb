@@ -12,7 +12,7 @@
 /***************************** filterAddManyUint32 ****************************************************/
 
 // func filterAddManyUint32AVX2Core(f LogLogBeta, data []uint32, seed uint32)
-TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-68
+TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -193,7 +193,7 @@ exit:
         RET
 
 // func filterAddManyUint32AVX512Core(f LogLogBeta, data []uint32, seed uint32)
-TEXT ·filterAddManyUint32AVX512Core(SB), NOSPLIT, $0-68
+TEXT ·filterAddManyUint32AVX512Core(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -437,7 +437,7 @@ exit:
 /***************************** filterAddManyInt32 ****************************************************/
 
 // func filterAddManyInt32AVX2Core(f LogLogBeta, data []int32, seed uint32)
-TEXT ·filterAddManyInt32AVX2Core(SB), NOSPLIT, $0-68
+TEXT ·filterAddManyInt32AVX2Core(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -618,7 +618,7 @@ exit:
         RET
 
 // func filterAddManyInt32AVX512Core(f LogLogBeta, data []int32, seed uint32)
-TEXT ·filterAddManyInt32AVX512Core(SB), NOSPLIT, $0-68
+TEXT ·filterAddManyInt32AVX512Core(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -862,7 +862,7 @@ exit:
 /***************************** filterAddManyUint64 ****************************************************/
 
 // func filterAddManyUint64AVX2Core(f LogLogBeta, data []uint64, seed uint32)
-TEXT ·filterAddManyUint64AVX2Core(SB), NOSPLIT, $0-68
+TEXT ·filterAddManyUint64AVX2Core(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -1064,7 +1064,7 @@ exit:
         RET
 
 // func XYZfilterAddManyUint64AVX512Core(f LogLogBeta, data []uint64, seed uint32)
-TEXT ·filterAddManyUint64AVX512Core(SB), NOSPLIT, $0-68
+TEXT ·filterAddManyUint64AVX512Core(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -1336,7 +1336,7 @@ exit:
 /***************************** filterAddManyInt64 ****************************************************/
 
 // func filterAddManyInt64AVX2Core(f LogLogBeta, data []int64, seed uint32)
-TEXT ·filterAddManyInt64AVX2Core(SB), NOSPLIT, $0-68
+TEXT ·filterAddManyInt64AVX2Core(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -1538,7 +1538,7 @@ exit:
         RET
 
 // func XYZfilterAddManyInt64AVX512Core(f LogLogBeta, data []int64, seed uint32)
-TEXT ·filterAddManyInt64AVX512Core(SB), NOSPLIT, $0-68
+TEXT ·filterAddManyInt64AVX512Core(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -2105,7 +2105,7 @@ done:
  * then it puts the 8 hashes in the filter with an small loop. This cannot be vectorized
  
 // func filterAddManyUint32AVX2Core(f LogLogBeta, data []uint32, seed uint32)
-TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-68
+TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -2195,7 +2195,7 @@ exit:
  * the new ones to achieve instruction level parallism. This leads to the functions above
 
 // func filterAddManyUint32AVX2Core(f LogLogBeta, data []uint32, seed uint32)
-TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-68
+TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI

@@ -46,9 +46,9 @@ func (r *StreamResult) Len() int {
 	return r.n
 }
 
-func NewStreamResult(s *schema.Schema, fn StreamCallback) *StreamResult {
+func NewStreamResult(s *schema.Schema, enums schema.EnumRegistry, fn StreamCallback) *StreamResult {
 	sr := &StreamResult{
-		r:  NewResult(s, 1),
+		r:  NewResult(s, enums, 1),
 		fn: fn,
 	}
 	sr.r.offsets = sr.r.offsets[:1]
@@ -57,14 +57,15 @@ func NewStreamResult(s *schema.Schema, fn StreamCallback) *StreamResult {
 
 type Result struct {
 	schema  *schema.Schema // result schema
-	row     *Row           // row cache
+	enums   schema.EnumRegistry
+	row     *Row // row cache
 	values  []byte
 	offsets []int32
 	sorted  []int32
 	desc    bool
 }
 
-func NewResult(s *schema.Schema, szs ...int) *Result {
+func NewResult(s *schema.Schema, enums schema.EnumRegistry, szs ...int) *Result {
 	sz := 1024
 	if len(szs) > 0 {
 		sz = szs[0]
@@ -268,7 +269,7 @@ func (r *Row) Decode(val any) error {
 	}
 	if r.conv == nil || r.conv.Schema() != s {
 		r.conv = schema.NewConverter(r.res.schema, s, NE)
-		r.dec = schema.NewDecoder(s)
+		r.dec = schema.NewDecoder(s).WithEnums(r.res.enums)
 	}
 
 	return r.dec.Decode(r.conv.Extract(r.Bytes()), val)

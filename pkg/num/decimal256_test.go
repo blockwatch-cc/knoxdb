@@ -10,8 +10,8 @@ import (
 )
 
 func n256(hi int64, lo ...uint64) Int256 {
-	switch len(lo) {
-	case 0:
+	switch {
+	case len(lo) == 0 || lo[0] == 0:
 		return Int256FromInt64(hi)
 	default:
 		i256 := Int256FromInt64(hi)

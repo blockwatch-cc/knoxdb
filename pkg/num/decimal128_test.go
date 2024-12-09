@@ -11,8 +11,8 @@ import (
 )
 
 func n128(hi int64, lo ...uint64) Int128 {
-	switch len(lo) {
-	case 0:
+	switch {
+	case len(lo) == 0 || lo[0] == 0:
 		return Int128FromInt64(hi)
 	default:
 		i128 := Int128FromInt64(hi)

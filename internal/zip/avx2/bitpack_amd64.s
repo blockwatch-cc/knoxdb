@@ -15,7 +15,7 @@
 //   Y14, Y15 = accumulators for maxdelta
 //   Y0, Y1 = old vector data (to substract from)
 //   Y2, Y3 = new vector data (to substract)
-TEXT ·packBytes32BitAVX2Core(SB), $0-32
+TEXT ·packBytes32BitAVX2Core(SB), $0-48
     MOVQ    src_base+0(FP), SI
     MOVQ    src_len+8(FP), BX
     MOVQ    dst_base+24(FP), DI
@@ -68,7 +68,7 @@ done:
 //   Y14, Y15 = accumulators for maxdelta
 //   Y0, Y1 = old vector data (to substract from)
 //   Y2, Y3 = new vector data (to substract)
-TEXT ·unpackBytes32BitAVX2Core(SB), $0-32
+TEXT ·unpackBytes32BitAVX2Core(SB), $0-48
     MOVQ    src_base+0(FP), SI
     MOVQ    src_len+8(FP), BX
     MOVQ    dst_base+24(FP), DI
@@ -121,7 +121,7 @@ done:
 //   Y14, Y15 = accumulators for maxdelta
 //   Y0, Y1 = old vector data (to substract from)
 //   Y2, Y3 = new vector data (to substract)
-TEXT ·packBytes16BitAVX2Core(SB), $0-32
+TEXT ·packBytes16BitAVX2Core(SB), $0-48
     MOVQ    src_base+0(FP), SI
     MOVQ    src_len+8(FP), BX
     MOVQ    dst_base+24(FP), DI
@@ -181,7 +181,7 @@ done:
 //   Y14, Y15 = accumulators for maxdelta
 //   Y0, Y1 = old vector data (to substract from)
 //   Y2, Y3 = new vector data (to substract)
-TEXT ·unpackBytes16BitAVX2Core(SB), $0-32
+TEXT ·unpackBytes16BitAVX2Core(SB), $0-48
     MOVQ    src_base+0(FP), SI
     MOVQ    src_len+8(FP), BX
     MOVQ    dst_base+24(FP), DI
