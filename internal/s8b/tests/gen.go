@@ -45,9 +45,7 @@ func ones8(n int) func() []uint8 {
 }
 
 func onesN() func(n int) func() []uint64 {
-	return func(n int) func() []uint64 {
-		return ones(n)
-	}
+	return ones
 }
 
 func bitsN(b int) func(n int) func() []uint64 {
@@ -56,23 +54,23 @@ func bitsN(b int) func(n int) func() []uint64 {
 	}
 }
 
-func bitsN32(b int) func(n int) func() []uint32 {
-	return func(n int) func() []uint32 {
-		return bits32(n, b)
-	}
-}
+// func bitsN32(b int) func(n int) func() []uint32 {
+// 	return func(n int) func() []uint32 {
+// 		return bits32(n, b)
+// 	}
+// }
 
-func bitsN16(b int) func(n int) func() []uint16 {
-	return func(n int) func() []uint16 {
-		return bits16(n, b)
-	}
-}
+// func bitsN16(b int) func(n int) func() []uint16 {
+// 	return func(n int) func() []uint16 {
+// 		return bits16(n, b)
+// 	}
+// }
 
-func bitsN8(b int) func(n int) func() []uint8 {
-	return func(n int) func() []uint8 {
-		return bits8(n, b)
-	}
-}
+// func bitsN8(b int) func(n int) func() []uint8 {
+// 	return func(n int) func() []uint8 {
+// 		return bits8(n, b)
+// 	}
+// }
 
 func combineN(fns ...func(n int) func() []uint64) func(n int) func() []uint64 {
 	return func(n int) func() []uint64 {
@@ -84,35 +82,35 @@ func combineN(fns ...func(n int) func() []uint64) func(n int) func() []uint64 {
 	}
 }
 
-func combineN32(fns ...func(n int) func() []uint32) func(n int) func() []uint32 {
-	return func(n int) func() []uint32 {
-		var out []func() []uint32
-		for _, fn := range fns {
-			out = append(out, fn(n))
-		}
-		return combine32(out...)
-	}
-}
+// func combineN32(fns ...func(n int) func() []uint32) func(n int) func() []uint32 {
+// 	return func(n int) func() []uint32 {
+// 		var out []func() []uint32
+// 		for _, fn := range fns {
+// 			out = append(out, fn(n))
+// 		}
+// 		return combine32(out...)
+// 	}
+// }
 
-func combineN16(fns ...func(n int) func() []uint16) func(n int) func() []uint16 {
-	return func(n int) func() []uint16 {
-		var out []func() []uint16
-		for _, fn := range fns {
-			out = append(out, fn(n))
-		}
-		return combine16(out...)
-	}
-}
+// func combineN16(fns ...func(n int) func() []uint16) func(n int) func() []uint16 {
+// 	return func(n int) func() []uint16 {
+// 		var out []func() []uint16
+// 		for _, fn := range fns {
+// 			out = append(out, fn(n))
+// 		}
+// 		return combine16(out...)
+// 	}
+// }
 
-func combineN8(fns ...func(n int) func() []uint8) func(n int) func() []uint8 {
-	return func(n int) func() []uint8 {
-		var out []func() []uint8
-		for _, fn := range fns {
-			out = append(out, fn(n))
-		}
-		return combine8(out...)
-	}
-}
+// func combineN8(fns ...func(n int) func() []uint8) func(n int) func() []uint8 {
+// 	return func(n int) func() []uint8 {
+// 		var out []func() []uint8
+// 		for _, fn := range fns {
+// 			out = append(out, fn(n))
+// 		}
+// 		return combine8(out...)
+// 	}
+// }
 
 // bits generates sequence of n numbers with max bits,
 // ensuring max bit is set for 50% of the values.
@@ -131,9 +129,9 @@ func bits(n, bits int) func() []uint64 {
 	}
 }
 
-func bits32(n, bits int) func() []uint32 {
+func bits32(_, bits int) func() []uint32 {
 	return func() []uint32 {
-		out := make([]uint32, n)
+		out := make([]uint32, 120)
 		maxVal := uint64(1 << uint8(bits))
 		for i := range out {
 			topBit := uint32((i & 1) << uint8(bits-1))

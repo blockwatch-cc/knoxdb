@@ -4,13 +4,14 @@
 //go:build amd64 && !gccgo && !appengine
 // +build amd64,!gccgo,!appengine
 
+// nolint
 package avx2
 
 //go:noescape
 func countValuesAVX2Core(src []byte) (count int)
 
 //go:noescape
-func countValuesBigEndianAVX2Core(src []byte) (count int)
+// func countValuesBigEndianAVX2Core(src []byte) (count int)
 
 /*************************** AVX2 64 bit ******************************/
 

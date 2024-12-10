@@ -16,15 +16,15 @@ var (
 )
 
 // Bitset low-level benchmarks
-func BenchmarkBitsetIndexGenericSkip64(B *testing.B) {
+func BenchmarkBitsetIndexGenericSkip64(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		for _, d := range benchmarkDensities {
 			bits := fillBitsetRand(nil, n.L, d.D)
 			slice := make([]uint32, int(PopCount(bits, n.L)))
-			B.Run(n.Name+"-"+d.Name, func(B *testing.B) {
-				B.ResetTimer()
-				B.SetBytes(int64(bitFieldLen(n.L)))
-				for i := 0; i < B.N; i++ {
+			b.Run(n.Name+"-"+d.Name, func(b *testing.B) {
+				b.ResetTimer()
+				b.SetBytes(int64(bitFieldLen(n.L)))
+				for i := 0; i < b.N; i++ {
 					_ = Indexes(bits, n.L, slice)
 				}
 			})
@@ -32,14 +32,14 @@ func BenchmarkBitsetIndexGenericSkip64(B *testing.B) {
 	}
 }
 
-func BenchmarkBitsetRunGeneric(B *testing.B) {
+func BenchmarkBitsetRunGeneric(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		for _, d := range benchmarkDensities {
 			bits := fillBitsetRand(nil, n.L, d.D)
-			B.Run(n.Name+"-"+d.Name, func(B *testing.B) {
-				B.ResetTimer()
-				B.SetBytes(int64(bitFieldLen(n.L)))
-				for i := 0; i < B.N; i++ {
+			b.Run(n.Name+"-"+d.Name, func(b *testing.B) {
+				b.ResetTimer()
+				b.SetBytes(int64(bitFieldLen(n.L)))
+				for i := 0; i < b.N; i++ {
 					var idx, length int
 					for idx > -1 {
 						idx, length = Run(bits, idx+length, n.L)
@@ -50,123 +50,123 @@ func BenchmarkBitsetRunGeneric(B *testing.B) {
 	}
 }
 
-func BenchmarkBitsetPopCountGeneric(B *testing.B) {
+func BenchmarkBitsetPopCountGeneric(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		bits := fillBitset(nil, n.L, 0xfa)
-		B.Run(n.Name, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(bitFieldLen(n.L)))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(bitFieldLen(n.L)))
+			for i := 0; i < b.N; i++ {
 				PopCount(bits, n.L)
 			}
 		})
 	}
 }
 
-func BenchmarkBitsetAndGeneric(B *testing.B) {
+func BenchmarkBitsetAndGeneric(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		bits := fillBitset(nil, n.L, 0xfa)
 		cmp := fillBitset(nil, n.L, 0xae)
-		B.Run(n.Name, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(bitFieldLen(n.L)))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(bitFieldLen(n.L)))
+			for i := 0; i < b.N; i++ {
 				And(bits, cmp, n.L)
 			}
 		})
 	}
 }
 
-func BenchmarkBitsetAndGenericFlag(B *testing.B) {
+func BenchmarkBitsetAndGenericFlag(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		bits := fillBitset(nil, n.L, 0xfa)
 		cmp := fillBitset(nil, n.L, 0xae)
-		B.Run(n.Name, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(bitFieldLen(n.L)))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(bitFieldLen(n.L)))
+			for i := 0; i < b.N; i++ {
 				AndFlag(bits, cmp, n.L)
 			}
 		})
 	}
 }
 
-func BenchmarkBitsetAndNotGeneric(B *testing.B) {
+func BenchmarkBitsetAndNotGeneric(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		bits := fillBitset(nil, n.L, 0xfa)
 		cmp := fillBitset(nil, n.L, 0xae)
-		B.Run(n.Name, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(bitFieldLen(n.L)))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(bitFieldLen(n.L)))
+			for i := 0; i < b.N; i++ {
 				AndNot(bits, cmp, n.L)
 			}
 		})
 	}
 }
 
-func BenchmarkBitsetOrGeneric(B *testing.B) {
+func BenchmarkBitsetOrGeneric(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		bits := fillBitset(nil, n.L, 0xfa)
 		cmp := fillBitset(nil, n.L, 0xae)
-		B.Run(n.Name, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(bitFieldLen(n.L)))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(bitFieldLen(n.L)))
+			for i := 0; i < b.N; i++ {
 				Or(bits, cmp, n.L)
 			}
 		})
 	}
 }
 
-func BenchmarkBitsetOrGenericFlag(B *testing.B) {
+func BenchmarkBitsetOrGenericFlag(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		bits := fillBitset(nil, n.L, 0xfa)
 		cmp := fillBitset(nil, n.L, 0xae)
-		B.Run(n.Name, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(bitFieldLen(n.L)))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(bitFieldLen(n.L)))
+			for i := 0; i < b.N; i++ {
 				OrFlag(bits, cmp, n.L)
 			}
 		})
 	}
 }
 
-func BenchmarkBitsetXorGeneric(B *testing.B) {
+func BenchmarkBitsetXorGeneric(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		bits := fillBitset(nil, n.L, 0xfa)
 		cmp := fillBitset(nil, n.L, 0xae)
-		B.Run(n.Name, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(bitFieldLen(n.L)))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(bitFieldLen(n.L)))
+			for i := 0; i < b.N; i++ {
 				Xor(bits, cmp, n.L)
 			}
 		})
 	}
 }
 
-func BenchmarkBitsetNotGeneric(B *testing.B) {
+func BenchmarkBitsetNotGeneric(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		bits := fillBitset(nil, n.L, 0xfa)
-		B.Run(n.Name, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(bitFieldLen(n.L)))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(bitFieldLen(n.L)))
+			for i := 0; i < b.N; i++ {
 				Neg(bits, n.L)
 			}
 		})
 	}
 }
 
-func BenchmarkBitsetReverseGeneric(B *testing.B) {
+func BenchmarkBitsetReverseGeneric(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		bits := fillBitset(nil, n.L, 0xfa)
-		B.Run(n.Name, func(B *testing.B) {
-			B.ResetTimer()
-			B.SetBytes(int64(bitFieldLen(n.L)))
-			for i := 0; i < B.N; i++ {
+		b.Run(n.Name, func(b *testing.B) {
+			b.ResetTimer()
+			b.SetBytes(int64(bitFieldLen(n.L)))
+			for i := 0; i < b.N; i++ {
 				Reverse(bits)
 			}
 		})

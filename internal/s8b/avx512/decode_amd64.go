@@ -18,53 +18,53 @@ func initUint64AVX512()
 //go:noescape
 func decodeUint64AVX512(dst []uint64, src []byte) (value int)
 
-//go:noescape
-func unpack1Uint64AVX512()
+// //go:noescape
+// func unpack1Uint64AVX512()
 
-//go:noescape
-func unpack2Uint64AVX512()
+// //go:noescape
+// func unpack2Uint64AVX512()
 
-//go:noescape
-func unpack3Uint64AVX512()
+// //go:noescape
+// func unpack3Uint64AVX512()
 
-//go:noescape
-func unpack4Uint64AVX512()
+// //go:noescape
+// func unpack4Uint64AVX512()
 
-//go:noescape
-func unpack5Uint64AVX512()
+// //go:noescape
+// func unpack5Uint64AVX512()
 
-//go:noescape
-func unpack6Uint64AVX512()
+// //go:noescape
+// func unpack6Uint64AVX512()
 
-//go:noescape
-func unpack7Uint64AVX512()
+// //go:noescape
+// func unpack7Uint64AVX512()
 
-//go:noescape
-func unpack8Uint64AVX512()
+// //go:noescape
+// func unpack8Uint64AVX512()
 
-//go:noescape
-func unpack10Uint64AVX512()
+// //go:noescape
+// func unpack10Uint64AVX512()
 
-//go:noescape
-func unpack12Uint64AVX512()
+// //go:noescape
+// func unpack12Uint64AVX512()
 
-//go:noescape
-func unpack15Uint64AVX512()
+// //go:noescape
+// func unpack15Uint64AVX512()
 
-//go:noescape
-func unpack20Uint64AVX512()
+// //go:noescape
+// func unpack20Uint64AVX512()
 
-//go:noescape
-func unpack30Uint64AVX512()
+// //go:noescape
+// func unpack30Uint64AVX512()
 
-//go:noescape
-func unpack60Uint64AVX512()
+// //go:noescape
+// func unpack60Uint64AVX512()
 
-//go:noescape
-func unpack120Uint64AVX512()
+// //go:noescape
+// func unpack120Uint64AVX512()
 
-//go:noescape
-func unpack240Uint64AVX512()
+// //go:noescape
+// func unpack240Uint64AVX512()
 
 // Go exports
 func DecodeUint64(dst []uint64, src []byte) (int, error) {

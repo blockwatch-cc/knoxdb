@@ -79,9 +79,7 @@ func (cf *Filter) insert(fp byte, i uint) bool {
 func (cf *Filter) reinsert(fp byte, i uint) bool {
 	for k := 0; k < maxCuckooCount; k++ {
 		j := util.RandIntn(bucketSize)
-		oldfp := fp
-		fp = cf.buckets[i][j]
-		cf.buckets[i][j] = oldfp
+		fp, cf.buckets[i][j] = cf.buckets[i][j], fp
 
 		// look in the alternate location for that random element
 		i = getAltIndex(fp, i, uint(len(cf.buckets)))

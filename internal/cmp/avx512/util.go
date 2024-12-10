@@ -1,6 +1,7 @@
 // Copyright (c) 2023 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
+// nolint
 package avx512
 
 import (

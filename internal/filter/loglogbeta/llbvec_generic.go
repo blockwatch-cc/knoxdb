@@ -33,7 +33,7 @@ func filterAddManyInt64Generic(llb LogLogBeta, val []int64, seed uint32) {
 
 // Cardinality returns the number of unique elements added to the sketch
 func filterCardinalityGeneric(llb LogLogBeta) uint64 {
-	sum, ez := regSumAndZeros(llb.buf[:])
+	sum, ez := regSumAndZeros(llb.buf)
 	m := float64(llb.m)
 	return uint64(llb.alpha * m * (m - ez) / (beta(ez) + sum))
 }

@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -56,12 +57,6 @@ func init() {
 }
 
 func main() {
-	defer func() {
-		if e := recover(); e != nil {
-			log.Error(e)
-			os.Exit(1)
-		}
-	}()
 	if err := run(); err != nil {
 		log.Error(err)
 		os.Exit(1)
@@ -76,8 +71,21 @@ func printhelp() {
 	fmt.Println()
 }
 
-func run() error {
-	err := flags.Parse(os.Args[1:])
+func run() (err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			log.Error(e)
+			switch x := e.(type) {
+			case string:
+				err = errors.New(x)
+			case error:
+				err = x
+			default:
+				err = errors.New("Unknown panic")
+			}
+		}
+	}()
+	err = flags.Parse(os.Args[1:])
 	if err != nil {
 		if err == flag.ErrHelp {
 			printhelp()
@@ -86,7 +94,7 @@ func run() error {
 		return err
 	}
 	lvl := log.LevelInfo
-	switch true {
+	switch {
 	case trace:
 		lvl = log.LevelTrace
 	case debug:
@@ -130,22 +138,23 @@ func run() error {
 
 	switch cmd {
 	case "schema":
-		return PrintSchema(getTableOrIndexSchema(db, desc.Table), out)
+		PrintSchema(getTableOrIndexSchema(db, desc.Table), out)
 	case "stats":
-		return PrintMetadata(getTableOrIndexStatsView(db, desc.Table), desc.PackId, out)
+		PrintMetadata(getTableOrIndexStatsView(db, desc.Table), desc.PackId, out)
 	case "detail":
-		return PrintMetadataDetail(getTableOrIndexStatsView(db, desc.Table), desc.PackId, out)
+		PrintMetadataDetail(getTableOrIndexStatsView(db, desc.Table), desc.PackId, out)
 	case "content":
 		ctx, _, abort, err := db.Begin(ctx)
 		if err != nil {
 			return err
 		}
 		defer abort()
-		return PrintContent(ctx, getTableOrIndexPackView(db, desc.Table), desc.PackId, out)
+		PrintContent(ctx, getTableOrIndexPackView(db, desc.Table), desc.PackId, out)
 
 	default:
 		return fmt.Errorf("unsupported command %s", cmd)
 	}
+	return nil
 }
 
 func getTableOrIndexSchema(db knox.Database, name string) *schema.Schema {
@@ -228,7 +237,7 @@ func separateTarget(s string) TableDescriptor {
 	return desc
 }
 
-func PrintSchema(s *schema.Schema, w io.Writer) error {
+func PrintSchema(s *schema.Schema, w io.Writer) {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
 	t.SetTitle("Schema %s [0x%x] - %d fields - %d bytes", s.Name(), s.Hash(), s.NumFields(), s.WireSize())
@@ -249,10 +258,9 @@ func PrintSchema(s *schema.Schema, w io.Writer) error {
 		})
 	}
 	t.Render()
-	return nil
 }
 
-func PrintMetadata(view StatsViewer, id int, w io.Writer) error {
+func PrintMetadata(view StatsViewer, id int, w io.Writer) {
 	s := view.Schema()
 	pki := s.PkIndex()
 	t := table.NewWriter()
@@ -289,10 +297,9 @@ func PrintMetadata(view StatsViewer, id int, w io.Writer) error {
 		}
 	}
 	t.Render()
-	return nil
 }
 
-func PrintMetadataDetail(view StatsViewer, id int, w io.Writer) error {
+func PrintMetadataDetail(view StatsViewer, id int, w io.Writer) {
 	s := view.Schema()
 	t := table.NewWriter()
 	fields := s.Exported()
@@ -346,10 +353,9 @@ func PrintMetadataDetail(view StatsViewer, id int, w io.Writer) error {
 			break
 		}
 	}
-	return nil
 }
 
-func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) error {
+func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
 	t.SetPageSize(headRepeat)
@@ -373,7 +379,7 @@ func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) 
 					Transformer: func(val any) string {
 						enum, ok := lut.Value(val.(uint16))
 						if ok {
-							return string(enum)
+							return enum
 						}
 						return strconv.Itoa(int(val.(uint16)))
 					},
@@ -403,7 +409,7 @@ func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) 
 		t.Render()
 		t.ResetRows()
 		t.ResetHeaders()
-		return nil
+		return
 	}
 
 	// regular data packs
@@ -435,5 +441,4 @@ func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) 
 			break
 		}
 	}
-	return nil
 }

@@ -10,8 +10,9 @@ import (
 	"unsafe"
 )
 
-// go:nocheckptr
 // use nocheckptr because the underlying struct layout doesn't change
+//
+//go:nocheckptr
 func DecodeUint64(dst []uint64, src []byte) (value int, err error) {
 	if len(src)&7 != 0 {
 		return 0, errors.New("src length is not multiple of 8")
@@ -30,8 +31,9 @@ func DecodeUint64(dst []uint64, src []byte) (value int, err error) {
 	return j, nil
 }
 
-// go:nocheckptr
 // use nocheckptr because the underlying struct layout doesn't change
+//
+//go:nocheckptr
 func DecodeUint32(dst []uint32, src []byte) (value int, err error) {
 	if len(src)&7 != 0 {
 		return 0, errors.New("src length is not multiple of 8")
@@ -50,8 +52,9 @@ func DecodeUint32(dst []uint32, src []byte) (value int, err error) {
 	return j, nil
 }
 
-// go:nocheckptr
 // use nocheckptr because the underlying struct layout doesn't change
+//
+//go:nocheckptr
 func DecodeUint16(dst []uint16, src []byte) (value int, err error) {
 	if len(src)&7 != 0 {
 		return 0, errors.New("src length is not multiple of 8")
@@ -70,8 +73,9 @@ func DecodeUint16(dst []uint16, src []byte) (value int, err error) {
 	return j, nil
 }
 
-// go:nocheckptr
 // use nocheckptr because the underlying struct layout doesn't change
+//
+//go:nocheckptr
 func DecodeUint8(dst []uint8, src []byte) (value int, err error) {
 	if len(src)&7 != 0 {
 		return 0, errors.New("src length is not multiple of 8")
@@ -90,8 +94,8 @@ func DecodeUint8(dst []uint8, src []byte) (value int, err error) {
 	return j, nil
 }
 
-// go:nocheckptr
 // use nocheckptr because the underlying struct layout doesn't change
+//go:nocheckptr
 // func DecodeBytesBigEndian(dst []uint64, src []byte) (value int, err error) {
 // 	if len(src)&7 != 0 {
 // 		return 0, errors.New("src length is not multiple of 8")

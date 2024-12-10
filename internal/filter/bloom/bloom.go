@@ -77,7 +77,7 @@ func (f *Filter) Clone() *Filter {
 
 // Add inserts data to the filter.
 func (f *Filter) Add(v []byte) {
-	h := hash(v, xxHash32Seed)
+	h := Hash(v)
 	for i := uint32(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		f.b[loc>>3] |= 1 << (loc & 7)
@@ -87,7 +87,7 @@ func (f *Filter) Add(v []byte) {
 // AddMany inserts multiple data points to the filter.
 func (f *Filter) AddMany(l [][]byte) {
 	for _, v := range l {
-		h := hash(v, xxHash32Seed)
+		h := Hash(v)
 		for i := uint32(0); i < f.k; i++ {
 			loc := f.location(h, i)
 			f.b[loc>>3] |= 1 << (loc & 7)
@@ -98,7 +98,7 @@ func (f *Filter) AddMany(l [][]byte) {
 // AddManyUint8 inserts multiple data points to the filter.
 func (f *Filter) AddManyUint8(data []byte) {
 	for _, v := range data {
-		h := hash([]byte{v}, xxHash32Seed)
+		h := Hash([]byte{v})
 		for i := uint32(0); i < f.k; i++ {
 			loc := f.location(h, i)
 			f.b[loc>>3] |= 1 << (loc & 7)
@@ -173,7 +173,7 @@ func (f *Filter) AddManyFloat32(data []float32) {
 // Contains returns true if the filter possibly contains v.
 // Returns false if the filter definitely does not contain v.
 func (f *Filter) Contains(v []byte) bool {
-	h := hash(v, xxHash32Seed)
+	h := Hash(v)
 	for i := uint32(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
@@ -188,7 +188,7 @@ func (f *Filter) Contains(v []byte) bool {
 func (f *Filter) ContainsUint16(v uint16) bool {
 	var buf [2]byte
 	binary.LittleEndian.PutUint16(buf[:], v)
-	h := hash(buf[:], xxHash32Seed)
+	h := Hash(buf[:])
 	for i := uint32(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
@@ -203,7 +203,7 @@ func (f *Filter) ContainsUint16(v uint16) bool {
 func (f *Filter) ContainsInt16(v int16) bool {
 	var buf [2]byte
 	binary.LittleEndian.PutUint16(buf[:], uint16(v))
-	h := hash(buf[:], xxHash32Seed)
+	h := Hash(buf[:])
 	for i := uint32(0); i < f.k; i++ {
 		loc := f.location(h, i)
 		if f.b[loc>>3]&(1<<(loc&7)) == 0 {
@@ -364,12 +364,8 @@ func Estimate(n uint64, p float64) (m int, k int) {
 	return m, k
 }
 
-func hash(data []byte, seed uint32) [2]uint32 {
-	return [2]uint32{xxHash32.Checksum(data, seed), xxHash32.Checksum(data, 0)}
-}
-
 func Hash(data []byte) [2]uint32 {
-	return hash(data, xxHash32Seed)
+	return [2]uint32{xxHash32.Checksum(data, xxHash32Seed), xxHash32.Checksum(data, 0)}
 }
 
 func HashUint16(v uint16) [2]uint32 {

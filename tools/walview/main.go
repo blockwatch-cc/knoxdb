@@ -48,18 +48,9 @@ func init() {
 }
 
 func main() {
-	var err error
-	defer func() {
-		if e := recover(); e != nil {
-			log.Error(e)
-			err = errors.New("")
-		}
-		if err != nil {
-			os.Exit(1)
-		}
-	}()
-	if err = run(); err != nil {
+	if err := run(); err != nil {
 		log.Error(err)
+		os.Exit(1)
 	}
 }
 
@@ -70,8 +61,22 @@ func printhelp() {
 	fmt.Println()
 }
 
-func run() error {
-	err := flags.Parse(os.Args[1:])
+func run() (err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			log.Error(e)
+			switch x := e.(type) {
+			case string:
+				err = errors.New(x)
+			case error:
+				err = x
+			default:
+				err = errors.New("Unknown panic")
+			}
+		}
+	}()
+
+	err = flags.Parse(os.Args[1:])
 	if err != nil {
 		if err == flag.ErrHelp {
 			printhelp()

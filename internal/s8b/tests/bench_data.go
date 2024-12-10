@@ -129,5 +129,5 @@ var S8bBenchmarksUint8 = []BenchmarkData{
 		bitsN(6),
 		bitsN(7),
 		bitsN(8),
-		),  15 * S8bBenchmarkSize},
+	), 15 * S8bBenchmarkSize},
 }

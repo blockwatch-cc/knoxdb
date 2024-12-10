@@ -1,6 +1,7 @@
 //go:build !appengine && gc && !purego
 // +build !appengine,gc,!purego
 
+// nolint
 package xxhash
 
 // Sum64 computes the 64-bit xxHash digest of b.

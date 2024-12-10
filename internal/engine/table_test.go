@@ -41,6 +41,8 @@ func TestTableCreate(t *testing.T) {
 		DB:              nil,
 		Logger:          log.Log,
 	}
+	_, err = e.CreateEnum(ctx, "my_enum")
+	require.NoError(t, err)
 	tab, err := e.CreateTable(ctx, schema.MustSchemaOf(tests.AllTypes{}), opts)
 	require.NoError(t, err)
 	require.NoError(t, commit())

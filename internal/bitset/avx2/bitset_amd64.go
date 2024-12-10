@@ -57,7 +57,7 @@ var (
 	decodeTable   = generic.DecodeTable
 	bitFieldLen   = generic.BitFieldLen
 	bytemask      = generic.Bytemask
-	bitmask       = generic.Bitmask
+	// bitmask       = generic.Bitmask
 )
 
 // Go exports
@@ -126,7 +126,7 @@ func Indexes(src []byte, size int, dst []uint32) int {
 }
 
 func PopCount(src []byte, size int) int64 {
-	switch true {
+	switch {
 	case size == 0:
 		return 0
 	case size <= 8:
@@ -143,10 +143,7 @@ func Run(src []byte, index, size int) (int, int) {
 	if len(src) == 0 || index < 0 || index >= size {
 		return -1, 0
 	}
-	var (
-		start  int = -1
-		length int
-	)
+	var start, length int
 	i := index >> 3
 
 	// mask leading bits of the first byte

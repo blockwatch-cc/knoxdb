@@ -316,7 +316,7 @@ func ForEach(b []byte, fn func(v uint64) bool) error {
 			if !fn(val) {
 				return nil
 			}
-			v = v >> bits
+			v >>= bits
 		}
 	}
 	return nil
@@ -349,7 +349,7 @@ func CountBytesBetween(b []byte, min, max uint64) (int, error) {
 				break
 			}
 
-			v = v >> uint(selector[sel].bit)
+			v >>= uint(selector[sel].bit)
 		}
 	}
 
@@ -363,39 +363,40 @@ func CountBytesBetween(b []byte, min, max uint64) (int, error) {
 // uint64, how many values from src were packed, or an error if the values exceed
 // the maximum value range.
 func Encode(src []uint64) (value uint64, n int, err error) {
-	if canPack(src, 240, 0) {
+	switch {
+	case canPack(src, 240, 0):
 		return uint64(0), 240, nil
-	} else if canPack(src, 120, 0) {
+	case canPack(src, 120, 0):
 		return 1 << 60, 120, nil
-	} else if canPack(src, 60, 1) {
+	case canPack(src, 60, 1):
 		return pack60(src[:60]), 60, nil
-	} else if canPack(src, 30, 2) {
+	case canPack(src, 30, 2):
 		return pack30(src[:30]), 30, nil
-	} else if canPack(src, 20, 3) {
+	case canPack(src, 20, 3):
 		return pack20(src[:20]), 20, nil
-	} else if canPack(src, 15, 4) {
+	case canPack(src, 15, 4):
 		return pack15(src[:15]), 15, nil
-	} else if canPack(src, 12, 5) {
+	case canPack(src, 12, 5):
 		return pack12(src[:12]), 12, nil
-	} else if canPack(src, 10, 6) {
+	case canPack(src, 10, 6):
 		return pack10(src[:10]), 10, nil
-	} else if canPack(src, 8, 7) {
+	case canPack(src, 8, 7):
 		return pack8(src[:8]), 8, nil
-	} else if canPack(src, 7, 8) {
+	case canPack(src, 7, 8):
 		return pack7(src[:7]), 7, nil
-	} else if canPack(src, 6, 10) {
+	case canPack(src, 6, 10):
 		return pack6(src[:6]), 6, nil
-	} else if canPack(src, 5, 12) {
+	case canPack(src, 5, 12):
 		return pack5(src[:5]), 5, nil
-	} else if canPack(src, 4, 15) {
+	case canPack(src, 4, 15):
 		return pack4(src[:4]), 4, nil
-	} else if canPack(src, 3, 20) {
+	case canPack(src, 3, 20):
 		return pack3(src[:3]), 3, nil
-	} else if canPack(src, 2, 30) {
+	case canPack(src, 2, 30):
 		return pack2(src[:2]), 2, nil
-	} else if canPack(src, 1, 60) {
+	case canPack(src, 1, 60):
 		return pack1(src[:1]), 1, nil
-	} else {
+	default:
 		if len(src) > 0 {
 			return 0, 0, fmt.Errorf("value out of bounds: %v", src)
 		}

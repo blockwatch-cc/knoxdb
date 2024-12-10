@@ -237,7 +237,7 @@ func Reverse(src []byte) {
 	}
 	// bit-reverse center element, if len is uneven
 	if l := len(src); l&0x1 > 0 {
-		l = l / 2
+		l /= 2
 		src[l] = ReverseLut256[src[l]]
 	}
 }

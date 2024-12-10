@@ -158,5 +158,5 @@ func (llb *LogLogBeta) Merge(other *LogLogBeta) {
 }
 
 func (llb *LogLogBeta) Bytes() []byte {
-	return llb.buf[:]
+	return llb.buf
 }

@@ -28,21 +28,21 @@ var bitsetSizes = []int{
 	63, 64, 65, 127,
 }
 
-func checkCleanTail(T *testing.T, buf []byte) {
-	tail := len(buf)
-	buf = buf[:cap(buf)]
-	for i := range buf[tail:] {
-		if buf[tail+i] != 0 {
-			T.Errorf("unclean memory %x at pos %d+%d: %x", buf[i], tail, i, buf)
-			T.FailNow()
-		}
-	}
-}
+// func checkCleanTail(t *testing.T, buf []byte) {
+// 	tail := len(buf)
+// 	buf = buf[:cap(buf)]
+// 	for i := range buf[tail:] {
+// 		if buf[tail+i] != 0 {
+// 			t.Errorf("unclean memory %x at pos %d+%d: %x", buf[i], tail, i, buf)
+// 			t.FailNow()
+// 		}
+// 	}
+// }
 
 // Test low-level slice handlers
-func TestBitsetPopCountGeneric(T *testing.T) {
+func TestBitsetPopCountGeneric(t *testing.T) {
 	for _, c := range popCases {
-		T.Run(c.Name, func(t *testing.T) {
+		t.Run(c.Name, func(t *testing.T) {
 			cnt := PopCount(c.Source, c.Size)
 			if got, want := int(cnt), c.Count; got != want {
 				t.Errorf("unexpected count %d, expected %d", got, want)
@@ -51,7 +51,7 @@ func TestBitsetPopCountGeneric(T *testing.T) {
 	}
 	for _, sz := range bitsetSizes {
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				buf := fillBitset(nil, sz, pt)
 				if got, want := int(PopCount(buf, sz)), popcount(buf); got != want {
 					t.Errorf("unexpected count %d, expected %d", got, want)
@@ -61,19 +61,19 @@ func TestBitsetPopCountGeneric(T *testing.T) {
 	}
 }
 
-func TestBitAndGeneric(T *testing.T) {
+func TestBitAndGeneric(t *testing.T) {
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
 
 				// same value, same slice
 				And(dst, dst, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -83,7 +83,7 @@ func TestBitAndGeneric(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				And(dst, src, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -93,7 +93,7 @@ func TestBitAndGeneric(T *testing.T) {
 				// all zeros
 				copy(dst, src)
 				And(dst, zeros, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount(dst), 0; got != want {
@@ -103,7 +103,7 @@ func TestBitAndGeneric(T *testing.T) {
 				// all ones
 				copy(dst, src)
 				And(dst, ones, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -114,13 +114,13 @@ func TestBitAndGeneric(T *testing.T) {
 	}
 }
 
-func TestBitAndGenericFlag(T *testing.T) {
+func TestBitAndGenericFlag(t *testing.T) {
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
 
@@ -144,7 +144,7 @@ func TestBitAndGenericFlag(T *testing.T) {
 						t.Errorf("dst===src: unexpected return value %v, expected false", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -172,7 +172,7 @@ func TestBitAndGenericFlag(T *testing.T) {
 						t.Errorf("dst==src: unexpected return value %v, expected false", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -188,7 +188,7 @@ func TestBitAndGenericFlag(T *testing.T) {
 				if all {
 					t.Errorf("zeros: unexpected return value %v, expected false", all)
 				}
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount(dst), 0; got != want {
@@ -216,7 +216,7 @@ func TestBitAndGenericFlag(T *testing.T) {
 						t.Errorf("ones: unexpected return value %v, expected 0", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -227,18 +227,18 @@ func TestBitAndGenericFlag(T *testing.T) {
 	}
 }
 
-func TestBitAndNotGeneric(T *testing.T) {
+func TestBitAndNotGeneric(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := make([]byte, len(src))
 
 				// same value, same slice
 				AndNot(dst, dst, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount(dst), 0; got != want {
@@ -248,7 +248,7 @@ func TestBitAndNotGeneric(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				AndNot(dst, src, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount(dst), 0; got != want {
@@ -258,7 +258,7 @@ func TestBitAndNotGeneric(T *testing.T) {
 				// val AND NOT zeros == val
 				copy(dst, src)
 				AndNot(dst, zeros, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -268,7 +268,7 @@ func TestBitAndNotGeneric(T *testing.T) {
 				// all AND NOT ones == zero
 				copy(dst, src)
 				AndNot(dst, ones, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount(dst), 0; got != want {
@@ -279,18 +279,18 @@ func TestBitAndNotGeneric(T *testing.T) {
 	}
 }
 
-func TestBitOrGeneric(T *testing.T) {
+func TestBitOrGeneric(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
 
 				// same value, same slice
 				Or(dst, dst, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -300,7 +300,7 @@ func TestBitOrGeneric(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				Or(dst, src, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -310,7 +310,7 @@ func TestBitOrGeneric(T *testing.T) {
 				// val OR zeros == val
 				copy(dst, src)
 				Or(dst, zeros, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -320,7 +320,7 @@ func TestBitOrGeneric(T *testing.T) {
 				// all OR ones == ones
 				copy(dst, src)
 				Or(dst, ones, sz)
-				if bytes.Compare(dst, ones) != 0 {
+				if !bytes.Equal(dst, ones) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, ones)
 				}
 				if got, want := popcount(dst), popcount(ones); got != want {
@@ -331,13 +331,13 @@ func TestBitOrGeneric(T *testing.T) {
 	}
 }
 
-func TestBitOrGenericFlag(T *testing.T) {
+func TestBitOrGenericFlag(t *testing.T) {
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
 
@@ -361,7 +361,7 @@ func TestBitOrGenericFlag(T *testing.T) {
 						t.Errorf("dst===src: unexpected return value %v, expected false", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -389,7 +389,7 @@ func TestBitOrGenericFlag(T *testing.T) {
 						t.Errorf("dst==src: unexpected return value %v, expected false", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -417,7 +417,7 @@ func TestBitOrGenericFlag(T *testing.T) {
 						t.Errorf("zeros: unexpected return value %v, expected 0", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -433,7 +433,7 @@ func TestBitOrGenericFlag(T *testing.T) {
 				if !all {
 					t.Errorf("ones: unexpected return value %v, expected true", all)
 				}
-				if bytes.Compare(dst, ones) != 0 {
+				if !bytes.Equal(dst, ones) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, ones)
 				}
 				if got, want := popcount(dst), popcount(ones); got != want {
@@ -444,18 +444,18 @@ func TestBitOrGenericFlag(T *testing.T) {
 	}
 }
 
-func TestBitXorGeneric(T *testing.T) {
+func TestBitXorGeneric(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
 
 				// same value, same slice
 				Xor(dst, dst, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount(dst), 0; got != want {
@@ -465,7 +465,7 @@ func TestBitXorGeneric(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				Xor(dst, src, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount(dst), 0; got != want {
@@ -475,7 +475,7 @@ func TestBitXorGeneric(T *testing.T) {
 				// val XOR zeros == val
 				copy(dst, src)
 				Xor(dst, zeros, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount(dst), popcount(src); got != want {
@@ -486,7 +486,7 @@ func TestBitXorGeneric(T *testing.T) {
 				copy(dst, src)
 				Xor(dst, ones, sz)
 				cmp := fillBitset(nil, sz, ^pt)
-				if bytes.Compare(dst, cmp) != 0 {
+				if !bytes.Equal(dst, cmp) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, cmp)
 				}
 				if got, want := popcount(dst), popcount(cmp); got != want {
@@ -497,15 +497,15 @@ func TestBitXorGeneric(T *testing.T) {
 	}
 }
 
-func TestBitNegGeneric(T *testing.T) {
+func TestBitNegGeneric(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				cmp := fillBitset(nil, sz, ^pt)
 
 				Neg(src, sz)
-				if bytes.Compare(src, cmp) != 0 {
+				if !bytes.Equal(src, cmp) {
 					t.Errorf("unexpected result %x, expected %x", src, cmp)
 				}
 				if got, want := popcount(src), popcount(cmp); got != want {
@@ -516,10 +516,10 @@ func TestBitNegGeneric(T *testing.T) {
 	}
 }
 
-func TestBitsetIndexGenericSkip64(T *testing.T) {
+func TestBitsetIndexGenericSkip64(t *testing.T) {
 	for _, c := range runTestcases {
 		idx := make([]uint32, len(c.Idx))
-		T.Run(c.Name, func(t *testing.T) {
+		t.Run(c.Name, func(t *testing.T) {
 			var ret = Indexes(c.Buf, c.Size, idx)
 			if got, want := ret, popcount(c.Buf); got != want {
 				t.Errorf("unexpected index vector length %d, expected %d", got, want)
@@ -534,11 +534,11 @@ func TestBitsetIndexGenericSkip64(T *testing.T) {
 	}
 }
 
-func TestBitsetRunGeneric(T *testing.T) {
+func TestBitsetRunGeneric(t *testing.T) {
 	for _, c := range runTestcases {
 		var idx, length int
 		for i, r := range c.Runs {
-			T.Run(f("%s_%d", c.Name, i), func(t *testing.T) {
+			t.Run(f("%s_%d", c.Name, i), func(t *testing.T) {
 				idx, length = Run(c.Buf, idx+length, c.Size)
 				if got, want := idx, r[0]; got != want {
 					t.Errorf("unexpected index %d, expected %d", got, want)

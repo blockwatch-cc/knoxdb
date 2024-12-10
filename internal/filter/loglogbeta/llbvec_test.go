@@ -69,7 +69,7 @@ func TestCardinality(t *testing.T) {
 
 		if len(unique)%step == 0 {
 			exact := uint64(len(unique))
-			res := uint64(llb.Cardinality())
+			res := llb.Cardinality()
 			step *= 10
 
 			ratio := 100 * estimateError(res, exact)
@@ -236,7 +236,7 @@ func TestMarshal(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
-	if bytes.Compare(ullb.buf, llb.buf) != 0 {
+	if !bytes.Equal(ullb.buf, llb.buf) {
 		t.Errorf("Expected\n%s,\n\n got\n%s", hex.Dump(llb.buf), hex.Dump(ullb.buf))
 	}
 }

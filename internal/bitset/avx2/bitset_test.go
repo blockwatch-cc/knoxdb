@@ -53,9 +53,9 @@ var bitsetSizes = []int{
 	16384, // 16x AVX2
 }
 
-func TestAndAVX2(T *testing.T) {
+func TestAndAVX2(t *testing.T) {
 	if !util.UseAVX2 {
-		T.SkipNow()
+		t.SkipNow()
 	}
 
 	// calls use the function selector to do proper last byte masking!
@@ -63,13 +63,13 @@ func TestAndAVX2(T *testing.T) {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
 
 				// same value, same slice
 				And(dst, dst, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -79,7 +79,7 @@ func TestAndAVX2(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				And(dst, src, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -89,7 +89,7 @@ func TestAndAVX2(T *testing.T) {
 				// all zeros
 				copy(dst, src)
 				And(dst, zeros, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount_ref(dst), 0; got != want {
@@ -99,7 +99,7 @@ func TestAndAVX2(T *testing.T) {
 				// all ones
 				copy(dst, src)
 				And(dst, ones, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -110,16 +110,16 @@ func TestAndAVX2(T *testing.T) {
 	}
 }
 
-func TestAndAVX2Flag(T *testing.T) {
+func TestAndAVX2Flag(t *testing.T) {
 	if !util.UseAVX2 {
-		T.SkipNow()
+		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
 
@@ -143,7 +143,7 @@ func TestAndAVX2Flag(T *testing.T) {
 						t.Errorf("dst===src: unexpected return value %v, expected false", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -171,7 +171,7 @@ func TestAndAVX2Flag(T *testing.T) {
 						t.Errorf("dst==src: unexpected return value %v, expected false", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -187,7 +187,7 @@ func TestAndAVX2Flag(T *testing.T) {
 				if all {
 					t.Errorf("zeros: unexpected return value %v, expected false", all)
 				}
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount_ref(dst), 0; got != want {
@@ -215,7 +215,7 @@ func TestAndAVX2Flag(T *testing.T) {
 						t.Errorf("ones: unexpected return value %v, expected false", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -226,22 +226,22 @@ func TestAndAVX2Flag(T *testing.T) {
 	}
 }
 
-func TestBitAndNotAVX2(T *testing.T) {
+func TestBitAndNotAVX2(t *testing.T) {
 	if !util.UseAVX2 {
-		T.SkipNow()
+		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := make([]byte, len(src))
 
 				// same value, same slice
 				AndNot(dst, dst, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount_ref(dst), 0; got != want {
@@ -251,7 +251,7 @@ func TestBitAndNotAVX2(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				AndNot(dst, src, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount_ref(dst), 0; got != want {
@@ -261,7 +261,7 @@ func TestBitAndNotAVX2(T *testing.T) {
 				// val AND NOT zeros == val
 				copy(dst, src)
 				AndNot(dst, zeros, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -271,7 +271,7 @@ func TestBitAndNotAVX2(T *testing.T) {
 				// all AND NOT ones == zero
 				copy(dst, src)
 				AndNot(dst, ones, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount_ref(dst), 0; got != want {
@@ -282,22 +282,22 @@ func TestBitAndNotAVX2(T *testing.T) {
 	}
 }
 
-func TestBitOrAVX2(T *testing.T) {
+func TestBitOrAVX2(t *testing.T) {
 	if !util.UseAVX2 {
-		T.SkipNow()
+		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
 
 				// same value, same slice
 				Or(dst, dst, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -307,7 +307,7 @@ func TestBitOrAVX2(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				Or(dst, src, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -317,7 +317,7 @@ func TestBitOrAVX2(T *testing.T) {
 				// val OR zeros == val
 				copy(dst, src)
 				Or(dst, zeros, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -327,7 +327,7 @@ func TestBitOrAVX2(T *testing.T) {
 				// all OR ones == ones
 				copy(dst, src)
 				Or(dst, ones, sz)
-				if bytes.Compare(dst, ones) != 0 {
+				if !bytes.Equal(dst, ones) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, ones)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(ones); got != want {
@@ -338,16 +338,16 @@ func TestBitOrAVX2(T *testing.T) {
 	}
 }
 
-func TestBitOrAVX2Flag(T *testing.T) {
+func TestBitOrAVX2Flag(t *testing.T) {
 	if !util.UseAVX2 {
-		T.SkipNow()
+		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
 
@@ -371,7 +371,7 @@ func TestBitOrAVX2Flag(T *testing.T) {
 						t.Errorf("dst===src: unexpected return value %v, expected false", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -399,7 +399,7 @@ func TestBitOrAVX2Flag(T *testing.T) {
 						t.Errorf("dst==src: unexpected return value %v, expected false", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -427,7 +427,7 @@ func TestBitOrAVX2Flag(T *testing.T) {
 						t.Errorf("zeros: unexpected return value %v, expected 0", all)
 					}
 				}
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -443,7 +443,7 @@ func TestBitOrAVX2Flag(T *testing.T) {
 				if !all {
 					t.Errorf("ones: unexpected return value %v, expected true", all)
 				}
-				if bytes.Compare(dst, ones) != 0 {
+				if !bytes.Equal(dst, ones) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, ones)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(ones); got != want {
@@ -454,22 +454,22 @@ func TestBitOrAVX2Flag(T *testing.T) {
 	}
 }
 
-func TestBitXorAVX2(T *testing.T) {
+func TestBitXorAVX2(t *testing.T) {
 	if !util.UseAVX2 {
-		T.SkipNow()
+		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				dst := fillBitset(nil, sz, pt)
 
 				// same value, same slice
 				Xor(dst, dst, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("dst===src: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount_ref(dst), 0; got != want {
@@ -479,7 +479,7 @@ func TestBitXorAVX2(T *testing.T) {
 				// same value, other slice
 				copy(dst, src)
 				Xor(dst, src, sz)
-				if bytes.Compare(dst, zeros) != 0 {
+				if !bytes.Equal(dst, zeros) {
 					t.Errorf("dst==src: unexpected result %x, expected %x", dst, zeros)
 				}
 				if got, want := popcount_ref(dst), 0; got != want {
@@ -489,7 +489,7 @@ func TestBitXorAVX2(T *testing.T) {
 				// val XOR zeros == val
 				copy(dst, src)
 				Xor(dst, zeros, sz)
-				if bytes.Compare(dst, src) != 0 {
+				if !bytes.Equal(dst, src) {
 					t.Errorf("zeros: unexpected result %x, expected %x", dst, src)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
@@ -500,7 +500,7 @@ func TestBitXorAVX2(T *testing.T) {
 				copy(dst, src)
 				Xor(dst, ones, sz)
 				cmp := fillBitset(nil, sz, ^pt)
-				if bytes.Compare(dst, cmp) != 0 {
+				if !bytes.Equal(dst, cmp) {
 					t.Errorf("ones: unexpected result %x, expected %x", dst, cmp)
 				}
 				if got, want := popcount_ref(dst), popcount_ref(cmp); got != want {
@@ -511,19 +511,19 @@ func TestBitXorAVX2(T *testing.T) {
 	}
 }
 
-func TestBitNegAVX2(T *testing.T) {
+func TestBitNegAVX2(t *testing.T) {
 	if !util.UseAVX2 {
-		T.SkipNow()
+		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
 	for _, sz := range bitsetSizes {
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				src := fillBitset(nil, sz, pt)
 				cmp := fillBitset(nil, sz, ^pt)
 
 				Neg(src, sz)
-				if bytes.Compare(src, cmp) != 0 {
+				if !bytes.Equal(src, cmp) {
 					t.Errorf("unexpected result %x, expected %x", src, cmp)
 				}
 				if got, want := popcount_ref(src), popcount_ref(cmp); got != want {
@@ -534,13 +534,13 @@ func TestBitNegAVX2(T *testing.T) {
 	}
 }
 
-func TestBitsetPopCountAVX2(T *testing.T) {
+func TestBitsetPopCountAVX2(t *testing.T) {
 	if !util.UseAVX2 {
-		T.SkipNow()
+		t.SkipNow()
 	}
 	for _, c := range popCases {
 		// call the function selector to do proper last byte masking!
-		T.Run(c.Name, func(t *testing.T) {
+		t.Run(c.Name, func(t *testing.T) {
 			cnt := PopCount(c.Source, c.Size)
 			if got, want := int(cnt), c.Count; got != want {
 				t.Errorf("unexpected count %d, expected %d", got, want)
@@ -549,7 +549,7 @@ func TestBitsetPopCountAVX2(T *testing.T) {
 	}
 	for _, sz := range bitsetSizes {
 		for _, pt := range bitsetPatterns {
-			T.Run(f("%d_%x", sz, pt), func(t *testing.T) {
+			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				buf := fillBitset(nil, sz, pt)
 				// call the function selector to do proper last byte masking!
 				if got, want := int(PopCount(buf, sz)), popcount_ref(buf); got != want {
@@ -560,7 +560,7 @@ func TestBitsetPopCountAVX2(T *testing.T) {
 	}
 }
 
-func TestBitsetReverseAVX2(T *testing.T) {
+func TestBitsetReverseAVX2(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		bits := fillBitsetSaw(nil, sz)
 		cmp := make([]byte, len(bits))
@@ -569,26 +569,26 @@ func TestBitsetReverseAVX2(T *testing.T) {
 		Reverse(bits)
 
 		if got, want := len(bits), len(cmp); got != want {
-			T.Errorf("%d: unexpected buf length %d, expected %d", sz, got, want)
+			t.Errorf("%d: unexpected buf length %d, expected %d", sz, got, want)
 		}
 		if got, want := popcount_ref(bits), popcount_ref(cmp); got != want {
-			T.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
+			t.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
 		}
-		if bytes.Compare(bits, cmp) != 0 {
-			T.Errorf("%d: unexpected result %x, expected %x", sz, bits, cmp)
+		if !bytes.Equal(bits, cmp) {
+			t.Errorf("%d: unexpected result %x, expected %x", sz, bits, cmp)
 		}
 	}
 }
 
-func TestBitsetIndexAVX2Skip(T *testing.T) {
+func TestBitsetIndexAVX2Skip(t *testing.T) {
 	if !util.UseAVX2 {
-		T.SkipNow()
+		t.SkipNow()
 	}
 	for _, c := range runTestcases {
 		c.Buf = append(c.Buf, 0xff)
 		c.Buf = c.Buf[:len(c.Buf)-1]
 		idx := make([]uint32, len(c.Idx)+8)
-		T.Run(c.Name, func(t *testing.T) {
+		t.Run(c.Name, func(t *testing.T) {
 			var ret = Indexes(c.Buf, c.Size, idx)
 			if got, want := ret, popcount_ref(c.Buf); got != want {
 				t.Errorf("unexpected index vector length %d, expected %d", got, want)
@@ -604,14 +604,14 @@ func TestBitsetIndexAVX2Skip(T *testing.T) {
 	}
 }
 
-func TestBitsetRunAVX2(T *testing.T) {
+func TestBitsetRunAVX2(t *testing.T) {
 	if !util.UseAVX2 {
-		T.SkipNow()
+		t.SkipNow()
 	}
 	for _, c := range runTestcases {
 		var idx, length int
 		for i, r := range c.Runs {
-			T.Run(f("%s_%d", c.Name, i), func(t *testing.T) {
+			t.Run(f("%s_%d", c.Name, i), func(t *testing.T) {
 				idx, length = Run(c.Buf, idx+length, c.Size)
 				if got, want := idx, r[0]; got != want {
 					t.Errorf("unexpected index %d, expected %d", got, want)

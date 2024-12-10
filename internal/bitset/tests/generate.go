@@ -16,7 +16,7 @@ import (
 func Popcount(buf []byte) int {
 	var cnt int
 	for _, c := range buf {
-		cnt += bits.OnesCount8(uint8(c))
+		cnt += bits.OnesCount8(c)
 	}
 	return cnt
 }
@@ -71,7 +71,7 @@ func FillBitsetRand(buf []byte, size int, dense float64) []byte {
 		}
 		buf[bit/8] = aft
 	}
-	if appbitcount != int(Popcount(buf)) {
+	if appbitcount != Popcount(buf) {
 		panic("fillBitsetRand: wrong number of bits")
 	}
 
@@ -86,9 +86,9 @@ func bytemask(size int) byte {
 	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
 }
 
-func bitmask(i int) byte {
-	return byte(1 << uint(i&0x7))
-}
+// func bitmask(i int) byte {
+// 	return byte(1 << uint(i&0x7))
+// }
 
 func roundUpPow2(n int, pow2 int) int {
 	return (n + (pow2 - 1)) & ^(pow2 - 1)

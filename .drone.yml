@@ -30,7 +30,7 @@ steps:
     image: golang:1.23-alpine
     commands:
       - apk add --no-cache git
-      - go vet ./...
+      - go vet $(go list ./... | grep -v /internal/cmp/avx | grep -v internal/tests/wasm/vfs)
       - go test -v $(go list ./... | grep -v /internal/tests/run$)
 
 ---

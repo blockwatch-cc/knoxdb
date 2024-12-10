@@ -16,28 +16,28 @@ type PopTest struct {
 }
 
 var PopCases = []PopTest{
-	PopTest{
+	{
 		Name:   "zeros_7",
 		Source: []byte{0x0},
 		Result: []byte{0x0},
 		Size:   7,
 		Count:  0,
 	},
-	PopTest{
+	{
 		Name:   "ones_7",
 		Source: []byte{0x7f},
 		Result: []byte{0x7f},
 		Size:   7,
 		Count:  7,
 	},
-	PopTest{
+	{
 		Name:   "fa_7",
 		Source: []byte{0xfa},
 		Result: []byte{0x7a},
 		Size:   7,
 		Count:  5,
 	},
-	PopTest{
+	{
 		Name:   "f9_7",
 		Source: []byte{0xf9},
 		Result: []byte{0x79},

@@ -10,37 +10,37 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// go:noescape
+//go:noescape
 func filterAddManyUint32AVX2Core(f LogLogBeta, data []uint32, seed uint32)
 
-// go:noescape
+//go:noescape
 func filterAddManyUint32AVX512Core(f LogLogBeta, data []uint32, seed uint32)
 
-// go:noescape
+//go:noescape
 func filterAddManyInt32AVX2Core(f LogLogBeta, data []int32, seed uint32)
 
-// go:noescape
+//go:noescape
 func filterAddManyInt32AVX512Core(f LogLogBeta, data []int32, seed uint32)
 
-// go:noescape
+//go:noescape
 func filterAddManyUint64AVX2Core(f LogLogBeta, data []uint64, seed uint32)
 
-// go:noescape
+//go:noescape
 func filterAddManyUint64AVX512Core(f LogLogBeta, data []uint64, seed uint32)
 
-// go:noescape
+//go:noescape
 func filterAddManyInt64AVX2Core(f LogLogBeta, data []int64, seed uint32)
 
-// go:noescape
+//go:noescape
 func filterAddManyInt64AVX512Core(f LogLogBeta, data []int64, seed uint32)
 
-// go:noescape
+//go:noescape
 func filterMergeAVX2(dst, src []byte)
 
-// // go:noescape
+//go:noescape
 func regSumAndZerosAVX2(registers []uint8) (float64, float64)
 
-// go:noescape
+//go:noescape
 func regSumAndZerosAVX512(registers []uint8) (float64, float64)
 
 func filterAddManyUint32(f *LogLogBeta, data []uint32, seed uint32) {
@@ -157,14 +157,14 @@ func filterAddManyInt64AVX512(f LogLogBeta, data []int64, seed uint32) {
 
 // Cardinality returns the number of unique elements added to the sketch
 func filterCardinalityAVX2(llb LogLogBeta) uint64 {
-	sum, ez := regSumAndZerosAVX2(llb.buf[:])
+	sum, ez := regSumAndZerosAVX2(llb.buf)
 	m := float64(llb.m)
 	return uint64(llb.alpha * m * (m - ez) / (beta(ez) + sum))
 }
 
 // Cardinality returns the number of unique elements added to the sketch
 func filterCardinalityAVX512(llb LogLogBeta) uint64 {
-	sum, ez := regSumAndZerosAVX512(llb.buf[:])
+	sum, ez := regSumAndZerosAVX512(llb.buf)
 	m := float64(llb.m)
 	return uint64(llb.alpha * m * (m - ez) / (beta(ez) + sum))
 }
