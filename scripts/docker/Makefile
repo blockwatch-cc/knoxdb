@@ -3,8 +3,8 @@
 PLATFORM ?= alpine
 BUILD_ARTIFACT := golangdst
 BUILD_TAG ?= master
-BUILD_REPO := blockwatch.cc/$(BUILD_ARTIFACT)
-BUILD_VERSION ?= $(shell git describe ${BUILD_TAG} --always --tags)-$(PLATFORM)
+BUILD_REPO := blockwatch.cc/knoxdb
+BUILD_VERSION ?= 1.23-alpine
 BUILD_COMMIT := $(shell git rev-parse --short ${BUILD_TAG})
 BUILD_DATE := $(shell date -u "+%Y-%m-%dT%H:%M:%SZ")
 BUILD_ID ?= $(shell uuidgen)

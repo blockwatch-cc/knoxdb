@@ -1,10 +1,10 @@
-FROM golang:1.23-alpine
-
 ARG BUILD_VERSION
 ARG BUILD_COMMIT
 ARG BUILD_DATE
 ARG BUILD_ID
 ARG BUILD_ARTIFACT
+
+FROM golang:${BUILD_VERSION}
 
 LABEL vendor=Blockwatch\ Data\ Inc \
   maintainer="Alexander Eichhorn <alex@blockwatch.cc>, Abdul-Harisu Inusah<abdul@blockwatch.cc>" \

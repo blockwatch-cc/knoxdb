@@ -58,9 +58,12 @@ environment:
   MINIO_BUCKET: scenarios
   MINIO_URL: h3.bwd.cx
 
+image_pull_secrets:
+- DOCKER_LOGIN
+
 steps:
   - name: go test
-    image: golang:1.23-alpine
+    image: hub.bwd.cx/golangdst:1.23-alpine
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$)
@@ -91,9 +94,12 @@ environment:
   MINIO_BUCKET: scenarios
   MINIO_URL: h3.bwd.cx
 
+image_pull_secrets:
+- DOCKER_LOGIN
+
 steps:
   - name: go test
-    image: golang:1.23-alpine
+    image: hub.bwd.cx/golangdst:1.23-alpine
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$)
@@ -124,9 +130,12 @@ environment:
   MINIO_BUCKET: scenarios
   MINIO_URL: h3.bwd.cx
 
+image_pull_secrets:
+- DOCKER_LOGIN
+
 steps:
   - name: go test
-    image: golang:1.23-alpine
+    image: hub.bwd.cx/golangdst:1.23-alpine
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$)
