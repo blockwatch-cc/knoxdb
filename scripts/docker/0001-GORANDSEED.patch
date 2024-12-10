@@ -1,0 +1,134 @@
+From ea083ca4892a62eb229c1886517e1cdb575ee19a Mon Sep 17 00:00:00 2001
+From: Alfonso Subiotto Marques <alfonso.subiotto@polarsignals.com>
+Date: Thu, 25 Apr 2024 14:37:27 +0200
+Subject: [PATCH] runtime: add GORANDSEED to seed go runtime's randomness
+
+This helps with deterministic execution. This commit additionally enables
+randomized scheduling. The runtime needs to be run with GOOS=wasip1 GOARCH=wasm
+for deterministic executions given an initial seed, otherwise operating system
+threads may get in the way.
+---
+ src/race.bash              |  2 --
+ src/run.bash               |  2 +-
+ src/runtime/lock_wasip1.go |  6 ++++--
+ src/runtime/os_wasip1.go   |  1 +
+ src/runtime/proc.go        | 13 ++++++++-----
+ src/runtime/rand.go        |  9 +++++++++
+ 6 files changed, 23 insertions(+), 10 deletions(-)
+
+diff --git a/src/race.bash b/src/race.bash
+index f1a168bfbb..77f2917beb 100755
+--- a/src/race.bash
++++ b/src/race.bash
+@@ -31,5 +31,3 @@ if [ ! -f make.bash ]; then
+ 	exit 1
+ fi
+ . ./make.bash --no-banner
+-go install -race std
+-go tool dist test -race
+diff --git a/src/run.bash b/src/run.bash
+index cb474325c4..e7094aaa3c 100755
+--- a/src/run.bash
++++ b/src/run.bash
+@@ -50,4 +50,4 @@ if ulimit -T &> /dev/null; then
+ fi
+ 
+ export GOPATH=/nonexist-gopath
+-exec ../bin/go tool dist test -rebuild "$@"
++# exec ../bin/go tool dist test -rebuild "$@"
+diff --git a/src/runtime/lock_wasip1.go b/src/runtime/lock_wasip1.go
+index acfc62acb4..3a48f458e5 100644
+--- a/src/runtime/lock_wasip1.go
++++ b/src/runtime/lock_wasip1.go
+@@ -71,11 +71,13 @@ func notewakeup(n *note) {
+ }
+ 
+ func notesleep(n *note) {
+-	throw("notesleep not supported by wasi")
++	// throw("notesleep not supported by wasi")
++	// No-op since WASM is single-threaded.
++	return
+ }
+ 
+ func notetsleep(n *note, ns int64) bool {
+-	throw("notetsleep not supported by wasi")
++	// throw("notetsleep not supported by wasi")
+ 	return false
+ }
+ 
+diff --git a/src/runtime/os_wasip1.go b/src/runtime/os_wasip1.go
+index acac2b3f7a..0d385eda02 100644
+--- a/src/runtime/os_wasip1.go
++++ b/src/runtime/os_wasip1.go
+@@ -181,6 +181,7 @@ func usleep(usec uint32) {
+ }
+ 
+ func readRandom(r []byte) int {
++	throw("wasip1 readRandom should not be called use GORANDSEED to seed runtime")
+ 	if random_get(unsafe.Pointer(&r[0]), size(len(r))) != 0 {
+ 		return 0
+ 	}
+diff --git a/src/runtime/proc.go b/src/runtime/proc.go
+index 17b2e4d9c2..700a076b8f 100644
+--- a/src/runtime/proc.go
++++ b/src/runtime/proc.go
+@@ -9,11 +9,12 @@ import (
+ 	"internal/cpu"
+ 	"internal/goarch"
+ 	"internal/goos"
++	"runtime/internal/sys"
++	"unsafe"
++
+ 	"internal/runtime/atomic"
+ 	"internal/runtime/exithook"
+ 	"internal/stringslite"
+-	"runtime/internal/sys"
+-	"unsafe"
+ )
+ 
+ // set using cmd/go/internal/modload.ModInfoProg
+@@ -816,8 +817,10 @@ func schedinit() {
+ 	mallocinit()
+ 	godebug := getGodebugEarly()
+ 	cpuinit(godebug) // must run before alginit
+-	randinit()       // must run before alginit, mcommoninit
+-	alginit()        // maps, hash, rand must not be used before this call
++	// To access environment variables.
++	goenvs()
++	randinit() // must run before alginit, mcommoninit
++	alginit()  // maps, hash, rand must not be used before this call
+ 	mcommoninit(gp.m, -1)
+ 	modulesinit()   // provides activeModules
+ 	typelinksinit() // uses maps, activeModules
+@@ -6661,7 +6664,7 @@ func runqempty(pp *p) bool {
+ // With the randomness here, as long as the tests pass
+ // consistently with -race, they shouldn't have latent scheduling
+ // assumptions.
+-const randomizeScheduler = raceenabled
++const randomizeScheduler = true
+ 
+ // runqput tries to put g on the local runnable queue.
+ // If next is false, runqput adds g to the tail of the runnable queue.
+diff --git a/src/runtime/rand.go b/src/runtime/rand.go
+index 827d182d12..6a80c3de8e 100644
+--- a/src/runtime/rand.go
++++ b/src/runtime/rand.go
+@@ -41,6 +41,15 @@ func randinit() {
+ 	}
+ 
+ 	seed := &globalRand.seed
++	psSeed := gogetenv("GORANDSEED")
++	if psSeed != "" {
++		// println("Go runtime is using GORANDSEED=", psSeed)
++		startupRand = make([]byte, len(psSeed))
++		for i, c := range psSeed {
++			startupRand[i] = byte(c)
++		}
++	}
++
+ 	if startupRand != nil {
+ 		for i, c := range startupRand {
+ 			seed[i%len(seed)] ^= c
+-- 
+2.39.3 (Apple Git-146)
+

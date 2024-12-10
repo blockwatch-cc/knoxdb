@@ -1,0 +1,27 @@
+ARG BUILD_VERSION
+ARG BUILD_COMMIT
+ARG BUILD_DATE
+ARG BUILD_ID
+ARG BUILD_ARTIFACT
+
+FROM golang:${BUILD_VERSION}
+
+LABEL vendor=Blockwatch\ Data\ Inc \
+  maintainer="Alexander Eichhorn <alex@blockwatch.cc>, Abdul-Harisu Inusah<abdul@blockwatch.cc>" \
+  name=${BUILD_ARTIFACT} \
+  cx.bwd.service=${BUILD_ARTIFACT} \
+  cx.bwd.arch="x86_64" \
+  cx.bwd.os="linux" \
+  cx.bwd.build-version=$BUILD_VERSION \
+  cx.bwd.build-date=$BUILD_DATE \
+  cx.bwd.build-id=$BUILD_ID
+
+WORKDIR /usr/local/go
+
+COPY ./0001-GORANDSEED.patch ./0001-GORANDSEED.patch
+
+RUN apk add patch --no-cache ca-certificates
+
+RUN patch -p1 < 0001-GORANDSEED.patch
+
+WORKDIR /go
