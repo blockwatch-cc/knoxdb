@@ -20,9 +20,7 @@ import (
 )
 
 var (
-	randomEnvKey = "GORANDSEED"
 	timeFmt      = "2006-01-02_15-04-05"
-
 	sys          string // wasm, native
 	maxErrors    int
 	maxErrorFreq float64
@@ -37,22 +35,28 @@ func init() {
 func buildTest(t *testing.T, dirPath string) {
 	t.Helper()
 	t.Logf("Building test for %s/%s", os.Getenv("GOOS"), os.Getenv("GOARCH"))
-	cmdScenarios := exec.Command("go", "test", "-c", "../scenarios", "-o", dirPath)
+	tags := "with_assert"
+	if os.Getenv("GOARCH") == "wasm" {
+		tags += ",faketime"
+	}
+	cmdScenarios := exec.Command("go", "test", "-c", "../scenarios", "-o", dirPath, "-tags", tags)
+	t.Log(cmdScenarios)
 	out, err := cmdScenarios.CombinedOutput()
 	if err != nil {
-		t.Logf("Error: %v", err)
-		t.Fatal(out)
+		t.Logf("Build: %v", err)
+		t.Fatalf("Reason: %v", out)
 	}
 }
 
 // buildTestInWasm
 func buildTestInWasm(t *testing.T, dirPath string) {
 	t.Helper()
+
 	// set wasm
 	goos := os.Getenv("GOOS")
 	goarch := os.Getenv("GOARCH")
-	os.Setenv("GOOS", "wasip1")
-	os.Setenv("GOARCH", "wasm")
+	t.Setenv("GOOS", "wasip1")
+	t.Setenv("GOARCH", "wasm")
 
 	buildTest(t, dirPath)
 
@@ -63,17 +67,19 @@ func buildTestInWasm(t *testing.T, dirPath string) {
 
 func runTestInWasm(t *testing.T, dirPath string, w io.Writer) error {
 	t.Helper()
-	cmdRuntime := exec.Command("go", "run", "../wasm/runtime", "-vvv", "-module", filepath.Join(dirPath, "scenarios.test"), "-test.v")
+	cmdRuntime := exec.Command("go", "run", "../wasm/runtime", "-vvv", "-module", filepath.Join(dirPath, "scenarios.test"), "-test.v", "-test.failfast")
 	cmdRuntime.Stderr = w
 	cmdRuntime.Stdout = w
+	t.Log(cmdRuntime)
 	return cmdRuntime.Run()
 }
 
 func runTestInNative(t *testing.T, dirPath string, w io.Writer) error {
 	t.Helper()
-	cmdRuntime := exec.Command(filepath.Join(dirPath, "scenarios.test"), "-v", "-count=1")
+	cmdRuntime := exec.Command(filepath.Join(dirPath, "scenarios.test"), "-test.v", "-test.count=10", "-test.failfast")
 	cmdRuntime.Stderr = w
 	cmdRuntime.Stdout = w
+	t.Log(cmdRuntime)
 	return cmdRuntime.Run()
 }
 
@@ -133,6 +139,9 @@ func LogBuildInfo(t *testing.T) {
 }
 
 func TestScenarios(t *testing.T) {
+	// log some repo and build identity info
+	LogBuildInfo(t)
+
 	buildPath := t.TempDir()
 	logPath := util.NonEmptyString(os.Getenv("LOGS_PATH"), buildPath)
 
@@ -141,9 +150,6 @@ func TestScenarios(t *testing.T) {
 	// init s3
 	s3, err := InitStorage(t)
 	require.NoError(t, err)
-
-	// log some repo and build identity info
-	LogBuildInfo(t)
 
 	// build test
 	build, run := setup(t)
@@ -170,7 +176,7 @@ func TestScenarios(t *testing.T) {
 		}
 		round++
 
-		err := os.Setenv(randomEnvKey, strconv.FormatUint(rnd, 10))
+		err := os.Setenv(util.GORANDSEED, strconv.FormatUint(rnd, 10))
 		require.NoError(t, err)
 
 		// create file
@@ -180,17 +186,17 @@ func TestScenarios(t *testing.T) {
 		f, err = os.Create(logFilePath)
 		require.NoError(t, err)
 
-		_, err = f.WriteString(fmt.Sprintf("--- Scenario #%d with %s=0x%016x\n", round, randomEnvKey, rnd))
+		_, err = f.WriteString(fmt.Sprintf("--- Scenario #%d with %s=0x%016x\n", round, util.GORANDSEED, rnd))
 		require.NoError(t, err)
 
 		// run test in child process
 		err = run(t, buildPath, f)
 
 		if err != nil {
-			_, err := f.WriteString(fmt.Sprintf("--- FAILED Scenario #%d with %s=0x%016x err=%v\n", round, randomEnvKey, rnd, err))
+			_, err := f.WriteString(fmt.Sprintf("--- FAILED Scenario #%d with %s=0x%016x err=%v\n", round, util.GORANDSEED, rnd, err))
 			require.NoError(t, err)
 		} else {
-			_, err := f.WriteString(fmt.Sprintf("--- DONE Scenario #%d with %s=0x%016x\n", round, randomEnvKey, rnd))
+			_, err := f.WriteString(fmt.Sprintf("--- DONE Scenario #%d with %s=0x%016x\n", round, util.GORANDSEED, rnd))
 			require.NoError(t, err)
 		}
 
@@ -205,7 +211,7 @@ func TestScenarios(t *testing.T) {
 				break
 			}
 
-			t.Logf("FAIL Scenario #%d %s=0x%016x with %v", round, randomEnvKey, rnd, err)
+			t.Logf("FAIL Scenario #%d %s=0x%016x with %v", round, util.GORANDSEED, rnd, err)
 
 			// upload
 			if !skipUpload {

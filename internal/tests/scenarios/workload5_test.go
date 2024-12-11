@@ -16,13 +16,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -550,9 +550,9 @@ func TestWorkload5(t *testing.T) {
 
 	// close DB
 	t.Log("Closing database.")
-	require.Eventually(t, func() bool {
-		require.NoError(t, db.Get().Close(ctx))
+	tests.NoDeadlock(t, func() bool {
+		assert.NoError(t, db.Get().Close(ctx))
 		return true
-	}, 2*time.Second, 10*time.Millisecond, "deadlock on close")
+	}, "deadlock on close")
 	t.Log("Done.")
 }

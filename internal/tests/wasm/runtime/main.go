@@ -1,64 +1,30 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/binary"
 	"flag"
 	"fmt"
-	"math/rand"
+	"io"
 	"os"
 	"runtime"
 	"runtime/debug"
 	"slices"
-	"strconv"
 	"strings"
 
 	"blockwatch.cc/knoxdb/internal/tests/wasm/vfs"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/experimental/sysfs"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
 )
-
-const (
-	randomSeedKey = "GORANDSEED"
-)
-
-var (
-	flags     = flag.NewFlagSet("runtime", flag.ContinueOnError)
-	module    string
-	seed      string
-	cachedir  string
-	tracefile string
-	randomize bool
-	runs      int
-	verbose   bool
-	vdebug    bool
-	vtrace    bool
-	random    *rand.Rand
-)
-
-func init() {
-	flags.Usage = func() {}
-	flags.BoolVar(&verbose, "v", true, "be verbose")
-	flags.BoolVar(&vdebug, "vv", false, "enable debug mode")
-	flags.BoolVar(&vtrace, "vvv", false, "enable trace mode")
-	flags.StringVar(&module, "module", "dst.test", "WASM module to run")
-	flags.StringVar(&cachedir, "cachedir", os.TempDir(), "WASM compiler cache directory")
-	flags.StringVar(&tracefile, "tracefile", "", "file activity trace file")
-	flags.StringVar(&seed, "seed", os.Getenv(randomSeedKey), "determinism seed")
-	flags.BoolVar(&randomize, "randomize", false, "randomize seeds")
-	flags.IntVar(&runs, "runs", 1, "execute test with `n` different seeds")
-}
-
-func printhelp() {
-	fmt.Println("Usage: runtime -module=[name] [flags]")
-	fmt.Println("Flags:")
-	flags.PrintDefaults()
-	fmt.Println()
-}
 
 func main() {
 	if err := run(); err != nil {
@@ -77,7 +43,7 @@ func run() error {
 		return err
 	}
 	if !randomize && seed == "" {
-		return fmt.Errorf("Missing random seed, set %s env var", randomSeedKey)
+		return fmt.Errorf("Missing random seed, set %s env var", util.GORANDSEED)
 	}
 
 	// setup logging
@@ -92,9 +58,7 @@ func run() error {
 	plog := log.NewProgressLogger(log.Log).SetEvent("test")
 
 	// init pseudo-random generator from main seed
-	u64seed, _ := strconv.ParseUint(seed, 0, 64)
-	random = rand.New(rand.NewSource(int64(u64seed)))
-	seed = fmt.Sprintf("0x%016x", u64seed)
+	seed = fmt.Sprintf("0x%016x", util.RandSeed())
 
 	log.Infof("WASM runtime wazero/%s %s %s/%s",
 		getWazeroVersion(), runtime.Version(), runtime.GOOS, runtime.GOARCH)
@@ -115,10 +79,18 @@ func run() error {
 	r := wazero.NewRuntimeWithConfig(ctx, runtimeConfig)
 	defer r.Close(ctx)
 
+	// intercept stdout, stderr and unwrap playback header from use of faketime
+	stdout, stdoutWriter, _ := os.Pipe()
+	stderr, stderrWriter, _ := os.Pipe()
+	go skipPlaygroundOutputHeaders(os.Stdout, stdout)
+	go skipPlaygroundOutputHeaders(os.Stderr, stderr)
+	defer stdoutWriter.Close()
+	defer stderrWriter.Close()
+
 	config := wazero.NewModuleConfig().
 		WithStdin(os.Stdin).
-		WithStdout(os.Stdout).
-		WithStderr(os.Stderr).
+		WithStdout(stdoutWriter).
+		WithStderr(stderrWriter).
 		// Time-related configuration options are to allow the module
 		// to access "real" time on the host. We could use this as a source of
 		// determinisme, but we currently compile the module with -faketime
@@ -142,6 +114,13 @@ func run() error {
 		}
 		config = config.WithEnv(k, v)
 		log.Debugf("ENV %s=%s", k, sanitizeEnvVar(k, v))
+	}
+
+	// forward log color flag if terminal supports color
+	if log.Log.IsColor() {
+		config = config.WithEnv("LOGCOLOR", "true")
+	} else {
+		config = config.WithEnv("LOGCOLOR", "false")
 	}
 
 	log.Infof("Using module %s", module)
@@ -168,7 +147,7 @@ func run() error {
 			seed = fmt.Sprintf("0x%016x", random.Uint64())
 		}
 		log.Debugf("Using random seed %s", seed)
-		config = config.WithEnv(randomSeedKey, seed)
+		config = config.WithEnv(util.GORANDSEED, seed)
 
 		mod, err := r.InstantiateModule(ctx, compiledModule, config)
 		if err != nil {
@@ -205,36 +184,6 @@ func getWazeroVersion() (ret string) {
 	return
 }
 
-// strip runtime-related flags from os.Args
-func splitFlags(_ []string, flags *flag.FlagSet) ([]string, []string) {
-	rtFlags := make([]string, 0)
-	modFlags := []string{module}
-	for i := 1; i < len(os.Args); i++ {
-		flagName, _, _ := strings.Cut(os.Args[i][1:], "=")
-		isKnown := flags.Lookup(flagName) != nil || os.Args[i] == "-h"
-		isSingle := true
-		if i+1 < len(os.Args) {
-			if !strings.HasPrefix(os.Args[i+1], "-") {
-				isSingle = false
-			}
-		}
-		if isKnown {
-			rtFlags = append(rtFlags, os.Args[i])
-			if !isSingle {
-				rtFlags = append(rtFlags, os.Args[i+1])
-				i++
-			}
-		} else {
-			modFlags = append(modFlags, os.Args[i])
-			if !isSingle {
-				modFlags = append(modFlags, os.Args[i+1])
-				i++
-			}
-		}
-	}
-	return rtFlags, modFlags
-}
-
 func containsAny(s string, vals ...string) bool {
 	for _, v := range vals {
 		if strings.Contains(s, v) {
@@ -249,4 +198,28 @@ func sanitizeEnvVar(k, v string) string {
 		v = strings.Repeat("*", len(v))
 	}
 	return v
+}
+
+func skipPlaygroundOutputHeaders(out io.Writer, in io.Reader) {
+	bufin := bufio.NewReader(in)
+
+	// Playback header: 0 0 P B <8-byte time> <4-byte data length>
+	head := make([]byte, 4+8+4)
+	for {
+		if _, err := io.ReadFull(bufin, head); err != nil {
+			if err != io.EOF {
+				fmt.Fprintln(out, "read error:", err)
+			}
+			return
+		}
+		if !bytes.HasPrefix(head, []byte{0x00, 0x00, 'P', 'B'}) {
+			// fmt.Fprintf(out, "expected playback header, got %q\n", head)
+			io.Copy(out, bytes.NewBuffer(head))
+			io.Copy(out, bufin)
+			return
+		}
+		// Copy data until next header.
+		size := binary.BigEndian.Uint32(head[12:])
+		io.CopyN(out, bufin, int64(size))
+	}
 }
