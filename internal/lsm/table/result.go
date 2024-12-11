@@ -72,6 +72,7 @@ func NewResult(s *schema.Schema, enums schema.EnumRegistry, szs ...int) *Result 
 	}
 	return &Result{
 		schema:  s,
+		enums:   enums,
 		offsets: make([]int32, 0, sz),
 		values:  make([]byte, 0, sz*s.WireSize()),
 	}

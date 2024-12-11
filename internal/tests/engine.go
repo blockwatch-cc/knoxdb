@@ -37,7 +37,7 @@ func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions 
 		NoSync:     false,
 		NoGrowSync: false,
 		ReadOnly:   false,
-		Logger:     log.Log,
+		Logger:     log.Log.Clone(),
 	}
 }
 
@@ -55,7 +55,7 @@ func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
 		NoSync:      false,
 		NoGrowSync:  false,
 		ReadOnly:    false,
-		Logger:      log.Log,
+		Logger:      log.Log.Clone(),
 	}
 }
 

@@ -80,7 +80,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	table, ok := e.tables[tableTag]
 	e.mu.RUnlock()
 	if !ok {
-		return nil, ErrNoTable
+		return nil, fmt.Errorf("%s: %v", tableName, ErrNoTable)
 	}
 
 	// schema must be a child of table schema
@@ -91,10 +91,10 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	// check engine and driver
 	factory, ok := indexEngineRegistry[opts.Engine]
 	if !ok {
-		return nil, ErrNoEngine
+		return nil, fmt.Errorf("%s: %v", opts.Engine, ErrNoEngine)
 	}
 	if !slices.Contains(store.SupportedDrivers(), opts.Driver) {
-		return nil, ErrNoDriver
+		return nil, fmt.Errorf("%s: %v", opts.Driver, ErrNoDriver)
 	}
 
 	// lookup index
@@ -103,7 +103,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	_, ok = e.indexes[tag]
 	e.mu.RUnlock()
 	if ok {
-		return nil, ErrIndexExists
+		return nil, fmt.Errorf("%s: %v", s.Name(), ErrIndexExists)
 	}
 
 	// create index engine

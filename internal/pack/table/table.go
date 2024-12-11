@@ -237,10 +237,6 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.log.Debugf("Table %s opened with %d rows, %d journal rows, seq=%d",
 		typ, t.state.NRows, t.journal.Len(), t.state.Sequence)
 
-	// t.DumpType(os.Stdout)
-	// t.DumpMetadata(os.Stdout, types.DumpModeHex)
-	// t.DumpMetadataDetail(os.Stdout, types.DumpModeHex)
-
 	return nil
 }
 

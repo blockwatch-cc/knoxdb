@@ -163,12 +163,6 @@ func TestWorkload5(t *testing.T) {
 	t.Logf("Random seed 0x%016x", seed)
 	util.RandInit(seed)
 
-	if testing.Verbose() {
-		log.SetLevel(log.LevelDebug)
-	} else {
-		log.SetLevel(log.LevelInfo)
-	}
-
 	// create new database and table
 	db := &dbProvider{}
 	{

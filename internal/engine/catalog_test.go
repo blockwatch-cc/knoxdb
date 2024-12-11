@@ -15,7 +15,7 @@ import (
 )
 
 func TestCatalogCreate(t *testing.T) {
-	e := NewTestEngine(NewTestDatabaseOptions(t, "mem"))
+	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem"))
 	ctx, _, commit, _, err := e.WithTransaction(context.Background())
 	require.NoError(t, err)
 	require.NoError(t, e.cat.Create(ctx, e.opts))
@@ -50,7 +50,7 @@ func TestCatalogCreate(t *testing.T) {
 
 func TestCatalogOpen(t *testing.T) {
 	// create first engine
-	e := NewTestEngine(NewTestDatabaseOptions(t, "mem"))
+	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem"))
 	ctx, _, commit, _, err := e.WithTransaction(context.Background())
 	require.NoError(t, err)
 
@@ -60,7 +60,7 @@ func TestCatalogOpen(t *testing.T) {
 	require.NoError(t, e.cat.Close(context.Background()))
 
 	// create new engine
-	e = OpenTestEngine(e.opts)
+	e = OpenTestEngine(t, e.opts)
 	ctx, _, _, abort, err := e.WithTransaction(context.Background())
 	require.NoError(t, err)
 	require.NoError(t, e.cat.Open(ctx, e.opts))
@@ -95,7 +95,7 @@ func TestCatalogOpen(t *testing.T) {
 
 func WithCatalog(t *testing.T) (context.Context, *Engine, *Catalog, func() error) {
 	ctx := context.Background()
-	e := NewTestEngine(NewTestDatabaseOptions(t, "mem"))
+	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem"))
 	tctx, _, commit, _, err := e.WithTransaction(ctx)
 	require.NoError(t, err)
 	require.NoError(t, e.cat.Create(tctx, e.opts))

@@ -13,6 +13,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/cache/rclru"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/echa/log"
+	"github.com/stretchr/testify/require"
 )
 
 const TEST_DB_NAME = "test"
@@ -32,7 +33,7 @@ func NewTestDatabaseOptions(t *testing.T, driver string) DatabaseOptions {
 	}
 }
 
-func NewTestEngine(opts DatabaseOptions) *Engine {
+func NewTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
 	path := filepath.Join(opts.Path, TEST_DB_NAME)
 	e := &Engine{
 		path: path,
@@ -61,14 +62,12 @@ func NewTestEngine(opts DatabaseOptions) *Engine {
 		RecoveryMode:   wal.RecoveryModeTruncate,
 		Logger:         opts.Logger,
 	})
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 	e.cat.WithWal(e.wal)
 	return e
 }
 
-func OpenTestEngine(opts DatabaseOptions) *Engine {
+func OpenTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
 	path := filepath.Join(opts.Path, TEST_DB_NAME)
 	e := &Engine{
 		path: path,
@@ -98,8 +97,7 @@ func OpenTestEngine(opts DatabaseOptions) *Engine {
 		RecoveryMode:   wal.RecoveryModeTruncate,
 		Logger:         opts.Logger,
 	})
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 	return e
 }
+

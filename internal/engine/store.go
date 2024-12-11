@@ -66,16 +66,16 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 	_, ok := e.stores[tag]
 	e.mu.RUnlock()
 	if ok {
-		return nil, ErrStoreExists
+		return nil, fmt.Errorf("%s: %v", s.Name(), ErrStoreExists)
 	}
 
 	// check driver
 	factory, ok := storeEngineRegistry[StoreKindKV]
 	if !ok {
-		return nil, ErrNoEngine
+		return nil, fmt.Errorf("%s: %v", StoreKindKV, ErrNoEngine)
 	}
 	if !slices.Contains(store.SupportedDrivers(), opts.Driver) {
-		return nil, ErrNoDriver
+		return nil, fmt.Errorf("%s: %v", opts.Driver, ErrNoDriver)
 	}
 
 	// create store engine

@@ -69,7 +69,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	_, ok := e.tables[tag]
 	if ok {
 		e.mu.RUnlock()
-		return nil, ErrTableExists
+		return nil, fmt.Errorf("%s: %v", s.Name(), ErrTableExists)
 	}
 
 	// check enums exist
@@ -89,10 +89,10 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	// check engine and driver
 	factory, ok := tableEngineRegistry[opts.Engine]
 	if !ok {
-		return nil, ErrNoEngine
+		return nil, fmt.Errorf("%s: %v", opts.Engine, ErrNoEngine)
 	}
 	if !slices.Contains(store.SupportedDrivers(), opts.Driver) {
-		return nil, ErrNoDriver
+		return nil, fmt.Errorf("%s: %v", opts.Driver, ErrNoDriver)
 	}
 
 	// create table engine

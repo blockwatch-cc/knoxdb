@@ -14,6 +14,6 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-func TestTable(t *testing.T) {
+func TestLSMTable(t *testing.T) {
 	tests.TestTableEngine[Table, *Table](t, "badger", "lsm")
 }
