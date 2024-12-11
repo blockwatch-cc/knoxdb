@@ -9,6 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/internal/pack/match"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/pkg/slicex"
@@ -60,7 +61,7 @@ func (it *ForwardIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		info, ok := it.table.stats.GetSorted(it.idx)
 		for ok {
 			it.query.Log.Debugf("IT-fwd checking stats for pack=%08x size=%d", info.Key, info.NValues)
-			if MaybeMatchTree(it.query.Filters, info) {
+			if match.MaybeMatchTree(it.query.Filters, info) {
 				break
 			}
 			it.idx++
@@ -83,7 +84,7 @@ func (it *ForwardIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		it.query.Log.Debugf("IT-fwd checking pack=%08x size=%d", info.Key, info.NValues)
 
 		// find actual matches
-		bits := MatchTree(it.query.Filters, it.pack, info)
+		bits := match.MatchTree(it.query.Filters, it.pack, info)
 
 		// handle false positive metadata matches
 		if bits.Count() == 0 {
@@ -156,7 +157,7 @@ func (it *ReverseIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		it.idx--
 		info, ok := it.table.stats.GetSorted(it.idx)
 		for ok {
-			if MaybeMatchTree(it.query.Filters, info) {
+			if match.MaybeMatchTree(it.query.Filters, info) {
 				break
 			}
 			it.idx--
@@ -179,7 +180,7 @@ func (it *ReverseIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		it.query.Log.Debugf("IT-rev checking pack=%08x size=%d", info.Key, info.NValues)
 
 		// find actual matches
-		bits := MatchTree(it.query.Filters, it.pack, info)
+		bits := match.MatchTree(it.query.Filters, it.pack, info)
 
 		// handle false positive metadata matches
 		if bits.Count() == 0 {

@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package table
+package match
 
 import (
 	"blockwatch.cc/knoxdb/internal/bitset"
@@ -144,10 +144,7 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackSt
 			// would return an all-true vector. Note that we do not have to check
 			// for an all-false vector because MaybeMatchTree() has already deselected
 			// packs of that kind (except the journal)
-			//
-			// We exclude journal from quick check because we don't have min/max values.
-			//
-			if !pkg.IsJournal() && len(meta.Blocks) > int(f.Index) {
+			if meta != nil && len(meta.Blocks) > int(f.Index) {
 				blockInfo := meta.Blocks[f.Index]
 				min, max := blockInfo.MinValue, blockInfo.MaxValue
 				typ := blockInfo.Type
@@ -226,11 +223,7 @@ func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackSta
 			// would return an all-true vector. Note that we do not have to check
 			// for an all-false vector because MaybeMatchPack() has already deselected
 			// packs of that kind (except the journal).
-			//
-			// We exclude journal from quick check because we cannot rely on
-			// min/max values.
-			//
-			if !pkg.IsJournal() && len(meta.Blocks) > int(f.Index) {
+			if meta != nil && len(meta.Blocks) > int(f.Index) {
 				blockInfo := meta.Blocks[f.Index]
 				min, max := blockInfo.MinValue, blockInfo.MaxValue
 				skipEarly := false

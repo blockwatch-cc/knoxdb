@@ -11,6 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/internal/pack/match"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
@@ -232,7 +233,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 
 	// first query journal to avoid side-effects of added pk lookup condition(s),
 	// otherwise recent records that are only in journal are missing
-	jbits = MatchTree(plan.Filters, t.journal.Data, nil)
+	jbits = match.MatchTree(plan.Filters, t.journal.Data, nil)
 	nRowsScanned += uint32(t.journal.Len())
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
 	// plan.Log.Debugf("Table %s: %d journal results", t.name(), jbits.Count())
@@ -376,7 +377,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 
 	// first query journal to avoid side-effects of added pk lookup condition(s),
 	// otherwise recent records that are only in journal are missing
-	jbits = MatchTree(plan.Filters, t.journal.Data, nil)
+	jbits = match.MatchTree(plan.Filters, t.journal.Data, nil)
 	nRowsScanned += uint32(t.journal.Len())
 
 	// query indexes, this may change query plan

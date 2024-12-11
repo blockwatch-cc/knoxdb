@@ -9,8 +9,8 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/internal/pack/match"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
-	pt "blockwatch.cc/knoxdb/internal/pack/table"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
@@ -133,7 +133,7 @@ func (it *IndexScanIterator) Next(ctx context.Context) (*pack.Package, []uint32,
 		it.idx++
 		info, ok := it.index.stats.GetSorted(it.idx)
 		for ok {
-			if pt.MaybeMatchTree(it.node, info) {
+			if match.MaybeMatchTree(it.node, info) {
 				break
 			}
 			it.idx++
@@ -153,7 +153,7 @@ func (it *IndexScanIterator) Next(ctx context.Context) (*pack.Package, []uint32,
 		}
 
 		// find actual matches
-		bits := pt.MatchTree(it.node, it.pack, info)
+		bits := match.MatchTree(it.node, it.pack, info)
 
 		// handle false positive stats matches
 		if bits.Count() == 0 {
