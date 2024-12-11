@@ -100,4 +100,3 @@ func OpenTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
 	require.NoError(t, err)
 	return e
 }
-
