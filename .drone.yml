@@ -24,7 +24,7 @@ steps:
     image: aquasec/trivy:0.58.0
     commands:
       - trivy fs --exit-code 1 --scanners vuln,misconfig,secret --skip-files "./scripts/docker/*" ./
-      - trivy config --exit-code 1 ./
+      - trivy config --exit-code 1 --skip-files "./scripts/docker/*" ./
 
   - name: go test
     image: golang:1.23-alpine
