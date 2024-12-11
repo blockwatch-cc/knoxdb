@@ -286,7 +286,7 @@ func (p *Package) SetValue(col, row int, val any) error {
 // a wire protocol message. The caller must ensure strict type match
 // as no additional check, cast or conversion is done.
 func (p *Package) SetWire(row int, buf []byte) {
-	assert.Always(p.nRows < row, "set: invalid row",
+	assert.Always(row >= 0 && row < p.nRows, "set: invalid row",
 		"pack", p.key,
 		"row", row,
 		"len", p.nRows,
