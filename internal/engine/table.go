@@ -368,9 +368,6 @@ func (e *Engine) openTables(ctx context.Context) error {
 		opts.Logger = e.log
 		opts.ReadOnly = e.opts.ReadOnly
 
-		e.log.Debugf("Table %s", s)
-		e.log.Debugf("Resolve enums from %#v", e.enums)
-
 		// open the table, load journals, replay wal after crash
 		if err := table.Open(ctx, s, opts); err != nil {
 			return err
