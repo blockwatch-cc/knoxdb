@@ -233,49 +233,48 @@ func TestBitAndNotAVX2(t *testing.T) {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
-				src := fillBitset(nil, sz, pt)
-				dst := make([]byte, len(src))
+			n := f("%d_%x", sz, pt)
+			src := fillBitset(nil, sz, pt)
+			dst := make([]byte, len(src))
 
-				// same value, same slice
-				AndNot(dst, dst, sz)
-				if !bytes.Equal(dst, zeros) {
-					t.Errorf("%s: dst===src: unexpected result %x, expected %x", n, dst, zeros)
-				}
-				if got, want := popcount_ref(dst), 0; got != want {
-					t.Errorf("%s: dst===src: unexpected count %d, expected %d", n, got, want)
-				}
+			// same value, same slice
+			AndNot(dst, dst, sz)
+			if !bytes.Equal(dst, zeros) {
+				t.Errorf("%s: dst===src: unexpected result %x, expected %x", n, dst, zeros)
+			}
+			if got, want := popcount_ref(dst), 0; got != want {
+				t.Errorf("%s: dst===src: unexpected count %d, expected %d", n, got, want)
+			}
 
-				// same value, other slice
-				copy(dst, src)
-				AndNot(dst, src, sz)
-				if !bytes.Equal(dst, zeros) {
-					t.Errorf("%s: dst==src: unexpected result %x, expected %x", n, dst, zeros)
-				}
-				if got, want := popcount_ref(dst), 0; got != want {
-					t.Errorf("%s: dst==src: unexpected count %d, expected %d", n, got, want)
-				}
+			// same value, other slice
+			copy(dst, src)
+			AndNot(dst, src, sz)
+			if !bytes.Equal(dst, zeros) {
+				t.Errorf("%s: dst==src: unexpected result %x, expected %x", n, dst, zeros)
+			}
+			if got, want := popcount_ref(dst), 0; got != want {
+				t.Errorf("%s: dst==src: unexpected count %d, expected %d", n, got, want)
+			}
 
-				// val AND NOT zeros == val
-				copy(dst, src)
-				AndNot(dst, zeros, sz)
-				if !bytes.Equal(dst, src) {
-					t.Errorf("%s: zeros: unexpected result %x, expected %x", n, dst, src)
-				}
-				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
-					t.Errorf("%s: zeros: unexpected count %d, expected %d", n, got, want)
-				}
+			// val AND NOT zeros == val
+			copy(dst, src)
+			AndNot(dst, zeros, sz)
+			if !bytes.Equal(dst, src) {
+				t.Errorf("%s: zeros: unexpected result %x, expected %x", n, dst, src)
+			}
+			if got, want := popcount_ref(dst), popcount_ref(src); got != want {
+				t.Errorf("%s: zeros: unexpected count %d, expected %d", n, got, want)
+			}
 
-				// all AND NOT ones == zero
-				copy(dst, src)
-				AndNot(dst, ones, sz)
-				if !bytes.Equal(dst, zeros) {
-					t.Errorf("%s: ones: unexpected result %x, expected %x", n, dst, zeros)
-				}
-				if got, want := popcount_ref(dst), 0; got != want {
-					t.Errorf("%s: ones: unexpected count %d, expected %d", n, got, want)
-				}
-			})
+			// all AND NOT ones == zero
+			copy(dst, src)
+			AndNot(dst, ones, sz)
+			if !bytes.Equal(dst, zeros) {
+				t.Errorf("%s: ones: unexpected result %x, expected %x", n, dst, zeros)
+			}
+			if got, want := popcount_ref(dst), 0; got != want {
+				t.Errorf("%s: ones: unexpected count %d, expected %d", n, got, want)
+			}
 		}
 	}
 }
@@ -289,49 +288,48 @@ func TestBitOrAVX2(t *testing.T) {
 		zeros := fillBitset(nil, sz, 0)
 		ones := fillBitset(nil, sz, 0xff)
 		for _, pt := range bitsetPatterns {
-			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
-				src := fillBitset(nil, sz, pt)
-				dst := fillBitset(nil, sz, pt)
+			n := f("%d_%x", sz, pt)
+			src := fillBitset(nil, sz, pt)
+			dst := fillBitset(nil, sz, pt)
 
-				// same value, same slice
-				Or(dst, dst, sz)
-				if !bytes.Equal(dst, src) {
-					t.Errorf("%s: dst===src: unexpected result %x, expected %x", n, dst, src)
-				}
-				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
-					t.Errorf("%s: dst===src: unexpected count %d, expected %d", n, got, want)
-				}
+			// same value, same slice
+			Or(dst, dst, sz)
+			if !bytes.Equal(dst, src) {
+				t.Errorf("%s: dst===src: unexpected result %x, expected %x", n, dst, src)
+			}
+			if got, want := popcount_ref(dst), popcount_ref(src); got != want {
+				t.Errorf("%s: dst===src: unexpected count %d, expected %d", n, got, want)
+			}
 
-				// same value, other slice
-				copy(dst, src)
-				Or(dst, src, sz)
-				if !bytes.Equal(dst, src) {
-					t.Errorf("%s: dst==src: unexpected result %x, expected %x", n, dst, src)
-				}
-				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
-					t.Errorf("%s: dst==src: unexpected count %d, expected %d", n, got, want)
-				}
+			// same value, other slice
+			copy(dst, src)
+			Or(dst, src, sz)
+			if !bytes.Equal(dst, src) {
+				t.Errorf("%s: dst==src: unexpected result %x, expected %x", n, dst, src)
+			}
+			if got, want := popcount_ref(dst), popcount_ref(src); got != want {
+				t.Errorf("%s: dst==src: unexpected count %d, expected %d", n, got, want)
+			}
 
-				// val OR zeros == val
-				copy(dst, src)
-				Or(dst, zeros, sz)
-				if !bytes.Equal(dst, src) {
-					t.Errorf("%s: zeros: unexpected result %x, expected %x", n, dst, src)
-				}
-				if got, want := popcount_ref(dst), popcount_ref(src); got != want {
-					t.Errorf("%s: zeros: unexpected count %d, expected %d", n, got, want)
-				}
+			// val OR zeros == val
+			copy(dst, src)
+			Or(dst, zeros, sz)
+			if !bytes.Equal(dst, src) {
+				t.Errorf("%s: zeros: unexpected result %x, expected %x", n, dst, src)
+			}
+			if got, want := popcount_ref(dst), popcount_ref(src); got != want {
+				t.Errorf("%s: zeros: unexpected count %d, expected %d", n, got, want)
+			}
 
-				// all OR ones == ones
-				copy(dst, src)
-				Or(dst, ones, sz)
-				if !bytes.Equal(dst, ones) {
-					t.Errorf("%s: ones: unexpected result %x, expected %x", n, dst, ones)
-				}
-				if got, want := popcount_ref(dst), popcount_ref(ones); got != want {
-					t.Errorf("%s: ones: unexpected count %d, expected %d", n, got, want)
-				}
-			})
+			// all OR ones == ones
+			copy(dst, src)
+			Or(dst, ones, sz)
+			if !bytes.Equal(dst, ones) {
+				t.Errorf("%s: ones: unexpected result %x, expected %x", n, dst, ones)
+			}
+			if got, want := popcount_ref(dst), popcount_ref(ones); got != want {
+				t.Errorf("%s: ones: unexpected count %d, expected %d", n, got, want)
+			}
 		}
 	}
 }
