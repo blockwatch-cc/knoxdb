@@ -31,7 +31,7 @@ steps:
     commands:
       - apk add --no-cache git
       - go vet $(go list ./... | grep -v /internal/cmp/avx | grep -v internal/tests/wasm/vfs | grep -v internal/filter | grep -v internal/hash | grep -v internal/s8b | grep -v internal/bitset )
-      - go test -v $(go list ./... | grep -v /internal/tests/run$)
+      - go test -v $(go list ./... | grep -v /internal/tests/run$) -tags with_assert
 
 ---
 kind: pipeline
@@ -53,25 +53,30 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
-  KNOX_DRIVER: mem
-  KNOX_ENGINE: pack
-  MINIO_BUCKET: scenarios
-  MINIO_URL: hd1.bwd.cx:9001
 
 image_pull_secrets:
   - DOCKER_LOGIN
 
 steps:
-  - name: go test
+  - name: go unit test
+    image: hub.bwd.cx/golangdst:1.23-alpine
+    commands:
+      - apk add --no-cache git
+      - go test $(go list ./... | grep -v /internal/tests/run$) -tags with_assert
+
+  - name: go scenario test
     image: hub.bwd.cx/golangdst:1.23-alpine
     environment:
+      KNOX_DRIVER: mem
+      KNOX_ENGINE: pack
+      MINIO_BUCKET: scenarios
+      MINIO_URL: hd1.bwd.cx:9001
       MINIO_USER:
         from_secret: MINIO_USER
       MINIO_SECRET:
         from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
-      - go test $(go list ./... | grep -v /internal/tests/run$)
       - go test -v ./internal/tests/run -timeout 1h -system wasm
 
 ---
@@ -94,26 +99,32 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
-  KNOX_DRIVER: mem
-  KNOX_ENGINE: pack
-  MINIO_BUCKET: scenarios
-  MINIO_URL: hd1.bwd.cx:9001
 
 image_pull_secrets:
   - DOCKER_LOGIN
 
 steps:
-  - name: go test
+  - name: go unit test
+    image: hub.bwd.cx/golangdst:1.23-alpine
+    commands:
+      - apk add --no-cache git
+      - go test $(go list ./... | grep -v /internal/tests/run$) -tags with_assert
+
+  - name: go scenario test
     image: hub.bwd.cx/golangdst:1.23-alpine
     environment:
+      KNOX_DRIVER: mem
+      KNOX_ENGINE: pack
+      MINIO_BUCKET: scenarios
+      MINIO_URL: hd1.bwd.cx:9001
       MINIO_USER:
         from_secret: MINIO_USER
       MINIO_SECRET:
         from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
-      - go test $(go list ./... | grep -v /internal/tests/run$)
       - go test -v ./internal/tests/run -timeout 1h -system native
+
 
 ---
 kind: pipeline
@@ -135,23 +146,28 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
-  KNOX_DRIVER: mem
-  KNOX_ENGINE: pack
-  MINIO_BUCKET: scenarios
-  MINIO_URL: hd1.bwd.cx:9001
 
 image_pull_secrets:
   - DOCKER_LOGIN
 
 steps:
-  - name: go test
+  - name: go unit test
+    image: hub.bwd.cx/golangdst:1.23-alpine
+    commands:
+      - apk add --no-cache git
+      - go test $(go list ./... | grep -v /internal/tests/run$) -tags with_assert
+
+  - name: go scenario test
     image: hub.bwd.cx/golangdst:1.23-alpine
     environment:
+      KNOX_DRIVER: mem
+      KNOX_ENGINE: pack
+      MINIO_BUCKET: scenarios
+      MINIO_URL: hd1.bwd.cx:9001
       MINIO_USER:
         from_secret: MINIO_USER
       MINIO_SECRET:
         from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
-      - go test $(go list ./... | grep -v /internal/tests/run$)
       - go test -v ./internal/tests/run -timeout 1h -system native

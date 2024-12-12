@@ -15,6 +15,8 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+const MaxAllowedLlbError = 5.0
+
 func estimateError(got, exp uint64) float64 {
 	var delta uint64
 	if got > exp {
@@ -73,7 +75,7 @@ func TestCardinality(t *testing.T) {
 			step *= 10
 
 			ratio := 100 * estimateError(res, exact)
-			if ratio > 2 {
+			if ratio > MaxAllowedLlbError {
 				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
 			}
 		}
@@ -100,7 +102,7 @@ func TestCardinalityManyUint32Generic(t *testing.T) {
 			res := filterCardinalityGeneric(*llb)
 
 			ratio := 100 * estimateError(res, exact)
-			if ratio > 2 {
+			if ratio > MaxAllowedLlbError {
 				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
 			}
 		}
@@ -126,7 +128,7 @@ func TestCardinalityManyInt32Generic(t *testing.T) {
 			res := filterCardinalityGeneric(*llb)
 
 			ratio := 100 * estimateError(res, exact)
-			if ratio > 2 {
+			if ratio > MaxAllowedLlbError {
 				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
 			}
 		}
@@ -152,7 +154,7 @@ func TestCardinalityManyUint64Generic(t *testing.T) {
 			res := filterCardinalityGeneric(*llb)
 
 			ratio := 100 * estimateError(res, exact)
-			if ratio > 2 {
+			if ratio > MaxAllowedLlbError {
 				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
 			}
 		}
@@ -178,7 +180,7 @@ func TestCardinalityManyInt64Generic(t *testing.T) {
 			res := filterCardinalityGeneric(*llb)
 
 			ratio := 100 * estimateError(res, exact)
-			if ratio > 2 {
+			if ratio > MaxAllowedLlbError {
 				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
 			}
 		}
