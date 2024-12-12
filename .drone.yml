@@ -14,20 +14,34 @@ trigger:
 environment:
   CGO_ENABLED: 0
 
+volumes:
+  - name: cache
+    host:
+      path: /var/cache/build
+
 steps:
   - name: run linter
     image: golangci/golangci-lint:v1.62.2-alpine
+    volumes:
+      - name: cache
+        path: /usr/local/go/pkg
     commands:
       - golangci-lint run --timeout 180s
 
   - name: scan the files
     image: aquasec/trivy:0.58.0
+    volumes:
+      - name: cache
+        path: /usr/local/go/pkg
     commands:
       - trivy fs --exit-code 1 --scanners vuln,misconfig,secret --skip-files "./scripts/docker/*" ./
       - trivy config --exit-code 1 --skip-files "./scripts/docker/*" ./
 
   - name: go test
     image: golang:1.23-alpine
+    volumes:
+      - name: cache
+        path: /usr/local/go/pkg
     commands:
       - apk add --no-cache git
       - go vet $(go list ./... | grep -v /internal/cmp/avx | grep -v internal/tests/wasm/vfs | grep -v internal/filter | grep -v internal/hash | grep -v internal/s8b | grep -v internal/bitset )
@@ -56,6 +70,11 @@ environment:
 
 image_pull_secrets:
   - DOCKER_LOGIN
+
+volumes:
+  - name: cache
+    host:
+      path: /var/cache/build
 
 steps:
   - name: go unit test
@@ -103,6 +122,11 @@ environment:
 image_pull_secrets:
   - DOCKER_LOGIN
 
+volumes:
+  - name: cache
+    host:
+      path: /var/cache/build
+
 steps:
   - name: go unit test
     image: hub.bwd.cx/golangdst:1.23-alpine
@@ -149,6 +173,11 @@ environment:
 
 image_pull_secrets:
   - DOCKER_LOGIN
+
+volumes:
+  - name: cache
+    host:
+      path: /var/cache/build
 
 steps:
   - name: go unit test
