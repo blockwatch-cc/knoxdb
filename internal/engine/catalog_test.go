@@ -36,8 +36,7 @@ func TestCatalogCreate(t *testing.T) {
 				snapshotsKey,
 				streamsKey,
 			} {
-				t.Log("Check bucket", string(key))
-				require.NotNil(t, tx.Bucket(key))
+				require.NotNil(t, tx.Bucket(key), string(key))
 			}
 			return nil
 		})
@@ -80,8 +79,7 @@ func TestCatalogOpen(t *testing.T) {
 				snapshotsKey,
 				streamsKey,
 			} {
-				t.Log("Check bucket", string(key))
-				require.NotNil(t, tx.Bucket(key))
+				require.NotNil(t, tx.Bucket(key), string(key))
 			}
 			return nil
 		})
@@ -116,7 +114,6 @@ func TestCatalogAddTable(t *testing.T) {
 	defer abort()
 	s, err := schema.SchemaOf(&TestTable{})
 	require.NoError(t, err)
-	t.Log("Table", s)
 	opts := TableOptions{
 		Engine:   "pack",
 		Driver:   "mem",
@@ -174,7 +171,6 @@ func TestCatalogAddIndex(t *testing.T) {
 	s, err := schema.SchemaOf(&TestTable{})
 	require.NoError(t, err)
 	s.WithName(s.Name() + "_index")
-	t.Log("Index", s)
 	opts := IndexOptions{
 		Engine:   "pack",
 		Driver:   "mem",
@@ -232,7 +228,6 @@ func TestCatalogAddStore(t *testing.T) {
 	s, err := schema.SchemaOf(&TestTable{})
 	require.NoError(t, err)
 	s.WithName(s.Name() + "_store")
-	t.Log("Store", s)
 	opts := StoreOptions{
 		Driver:   "mem",
 		PageSize: 1024,

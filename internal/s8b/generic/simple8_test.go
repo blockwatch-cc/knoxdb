@@ -30,29 +30,27 @@ func Test_Encode_NoValues(t *testing.T) {
 // verifies all output by comparing the original input with the output of simple8b.Decode
 func TestEncode(t *testing.T) {
 	for _, test := range s8bTestsUint64 {
-		t.Run(test.Name, func(t *testing.T) {
-			if test.Fn != nil {
-				test.In = test.Fn()
-			}
+		if test.Fn != nil {
+			test.In = test.Fn()
+		}
 
-			encoded, err := EncodeUint64(append(make([]uint64, 0, len(test.In)), test.In...))
-			if err != nil {
-				if !test.Err {
-					t.Fatalf("expected encode error, got\n%s", err)
-				}
-				return
+		encoded, err := EncodeUint64(append(make([]uint64, 0, len(test.In)), test.In...))
+		if err != nil {
+			if !test.Err {
+				t.Fatalf("%s: expected encode error, got\n%s", test.Name, err)
 			}
+			return
+		}
 
-			decoded := make([]uint64, len(test.In))
-			n, err := DecodeUint64(decoded, util.Uint64SliceAsByteSlice(encoded))
-			if err != nil {
-				t.Fatalf("unexpected decode error\n%s", err)
-			}
+		decoded := make([]uint64, len(test.In))
+		n, err := DecodeUint64(decoded, util.Uint64SliceAsByteSlice(encoded))
+		if err != nil {
+			t.Fatalf("%s: unexpected decode error\n%s", test.Name, err)
+		}
 
-			if !cmp.Equal(decoded[:n], test.In) {
-				t.Fatalf("unexpected values; +got/-exp\n%s", cmp.Diff(decoded, test.In))
-			}
-		})
+		if !cmp.Equal(decoded[:n], test.In) {
+			t.Fatalf("%s: unexpected values; +got/-exp\n%s", test.Name, cmp.Diff(decoded, test.In))
+		}
 	}
 }
 

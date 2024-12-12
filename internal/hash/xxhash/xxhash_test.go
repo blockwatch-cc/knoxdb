@@ -3,7 +3,6 @@ package xxhash
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -31,10 +30,8 @@ func TestAll(t *testing.T) {
 			lastChunkSize = 1
 		}
 		for chunkSize := 1; chunkSize <= lastChunkSize; chunkSize++ {
-			name := fmt.Sprintf("%s,chunkSize=%d", tt.name, chunkSize)
-			t.Run(name, func(t *testing.T) {
-				testDigest(t, tt.input, chunkSize, tt.want)
-			})
+			t.Logf("%s,chunkSize=%d", tt.name, chunkSize)
+			testDigest(t, tt.input, chunkSize, tt.want)
 		}
 		t.Run(tt.name, func(t *testing.T) { testSum(t, tt.input, tt.want) })
 	}

@@ -158,70 +158,62 @@ func TestCommitFrameIsCommittedFrame(t *testing.T) {
 }
 
 func TestCommitFrameAppend(t *testing.T) {
-	t.Run("can append transaction id to commit frame", func(t *testing.T) {
-		xid := uint64(100)
-		commitFrame := NewCommitFrame(0)
-		commitFrame.Append(xid, LSN(2))
-		require.Truef(t, commitFrame.IsCommitted(xid), "xid %d was not appended ", xid)
-		commitFrame.Close()
-	})
+	xid := uint64(100)
+	commitFrame := NewCommitFrame(0)
+	commitFrame.Append(xid, LSN(2))
+	require.Truef(t, commitFrame.IsCommitted(xid), "xid %d was not appended ", xid)
+	commitFrame.Close()
 }
 
 func TestCommitFrameContains(t *testing.T) {
-	t.Run("check transaction id is contained in a frame", func(t *testing.T) {
-		commitFrames := make([]CommitFrame, 10)
-		for i := range commitFrames {
-			commitFrames[i] = *NewCommitFrame(int64(i))
-		}
-		xids := make([]uint64, 10)
-		for i := range xids {
-			xids[i] = uint64(i << 19)
-		}
+	commitFrames := make([]CommitFrame, 10)
+	for i := range commitFrames {
+		commitFrames[i] = *NewCommitFrame(int64(i))
+	}
+	xids := make([]uint64, 10)
+	for i := range xids {
+		xids[i] = uint64(i << 19)
+	}
 
-		for j := range xids {
-			for i, cm := range commitFrames {
-				xidIsContained := cm.Contains(xids[j])
-				if j == i {
-					require.True(t, xidIsContained)
-				} else {
-					require.False(t, xidIsContained)
-				}
+	for j := range xids {
+		for i, cm := range commitFrames {
+			xidIsContained := cm.Contains(xids[j])
+			if j == i {
+				require.True(t, xidIsContained)
+			} else {
+				require.False(t, xidIsContained)
 			}
 		}
-	})
+	}
 }
 
 func TestCommitFrameWriteTo(t *testing.T) {
-	t.Run("write data to frame", func(t *testing.T) {
-		dir := t.TempDir()
-		commitFrameFile, err := makeCommitFrameFile(dir)
-		require.NoError(t, err)
+	dir := t.TempDir()
+	commitFrameFile, err := makeCommitFrameFile(dir)
+	require.NoError(t, err)
 
-		// get size of file
-		statBefore, err := commitFrameFile.Stat()
-		require.NoError(t, err, "failed to check file stat")
+	// get size of file
+	statBefore, err := commitFrameFile.Stat()
+	require.NoError(t, err, "failed to check file stat")
 
-		cm := NewCommitFrame(0)
-		cm.Append(0, LSN(0))
-		cm.Append(2, LSN(10))
-		cm.Append(4, LSN(20))
-		err = cm.WriteTo(commitFrameFile)
-		require.NoError(t, err)
+	cm := NewCommitFrame(0)
+	cm.Append(0, LSN(0))
+	cm.Append(2, LSN(10))
+	cm.Append(4, LSN(20))
+	err = cm.WriteTo(commitFrameFile)
+	require.NoError(t, err)
 
-		// check file exists
-		f, err := os.Open(filepath.Join(dir, CommitLogName))
-		require.NoError(t, err, "failed to open file")
+	// check file exists
+	f, err := os.Open(filepath.Join(dir, CommitLogName))
+	require.NoError(t, err, "failed to open file")
 
-		// check file size should be same after append
-		statAfter, err := f.Stat()
-		require.NoError(t, err, "fail to check file stats")
-		require.Falsef(t, statAfter.Size() == statBefore.Size(), "file size should not be the same")
-
-	})
+	// check file size should be same after append
+	statAfter, err := f.Stat()
+	require.NoError(t, err, "fail to check file stats")
+	require.Falsef(t, statAfter.Size() == statBefore.Size(), "file size should not be the same")
 }
 
 func TestCommitFrameReadFrom(t *testing.T) {
-
 	t.Run("read data from frame", func(t *testing.T) {
 		// test setup
 		dir := t.TempDir()
@@ -269,69 +261,61 @@ func TestCommitFrameReadFrom(t *testing.T) {
 }
 
 func TestCommitLogOpen(t *testing.T) {
-	t.Run("commit logger creates file on open", func(t *testing.T) {
-		dir := t.TempDir()
-		wal := makeWal(t)
-		commitLog := makeCommitLog(wal)
-		err := commitLog.Open(dir, wal)
-		require.NoError(t, err, "opening commit log should not return err")
+	dir := t.TempDir()
+	wal := makeWal(t)
+	commitLog := makeCommitLog(wal)
+	err := commitLog.Open(dir, wal)
+	require.NoError(t, err, "opening commit log should not return err")
 
-		// check if file is created
-		f, err := os.Stat(filepath.Join(dir, CommitLogName))
-		require.NoError(t, err, "commit  should exist")
+	// check if file is created
+	f, err := os.Stat(filepath.Join(dir, CommitLogName))
+	require.NoError(t, err, "commit  should exist")
 
-		// check if file is dir
-		require.Falsef(t, f.IsDir(), "file should not be a directory")
+	// check if file is dir
+	require.Falsef(t, f.IsDir(), "file should not be a directory")
 
-		require.NoError(t, commitLog.Close(), "closing should not fail")
-	})
+	require.NoError(t, commitLog.Close(), "closing should not fail")
 }
 
 func TestCommitLogAppend(t *testing.T) {
-	t.Run("append records to logger", func(t *testing.T) {
-		dir := t.TempDir()
-		wal := makeWal(t)
-		commitLog := makeCommitLog(wal)
-		err := commitLog.Open(dir, wal)
-		defer commitLog.Close()
-		require.NoError(t, err, "opening commit log should not return err")
+	dir := t.TempDir()
+	wal := makeWal(t)
+	commitLog := makeCommitLog(wal)
+	err := commitLog.Open(dir, wal)
+	defer commitLog.Close()
+	require.NoError(t, err, "opening commit log should not return err")
 
-		recs := makeRecords(1 << 16)
-		for _, rec := range recs {
-			err := commitLog.Append(rec.TxID, rec.Lsn)
-			require.NoError(t, err, "appending rec should not fail")
-		}
-
-		p := filepath.Join(dir, CommitLogName)
-		f, err := os.OpenFile(p, os.O_APPEND|os.O_RDWR, 0600)
-		require.NoError(t, err, "commit logger should exist")
-
-		finfo, err := f.Stat()
-		require.NoError(t, err, "error file information")
-
-		_, err = f.Write([]byte("datanewdata"))
-		require.NoError(t, err, "write extra data ")
-
-		// try reopen commitlogger
-		newCommitLogger := NewCommitLog()
-		err = newCommitLogger.Open(dir, wal)
-		require.NoError(t, err, "opening commit log should not return err")
-
-		fdinfo, err := os.Stat(p)
-		require.NoError(t, err, "error file information ")
-
-		// check file size is the same as after the records were wrriten
-		// corrupted data written was truncated
-		require.Truef(t, finfo.Size() == fdinfo.Size(), "extra data written would be truncated")
-
-	})
-
-	for i := 0; i < 100; i++ {
-		t.Run("check random records are committed after write", func(t *testing.T) {
-			commitLogAppendHelper(t)
-		})
+	recs := makeRecords(1 << 16)
+	for _, rec := range recs {
+		err := commitLog.Append(rec.TxID, rec.Lsn)
+		require.NoError(t, err, "appending rec should not fail")
 	}
 
+	p := filepath.Join(dir, CommitLogName)
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_RDWR, 0600)
+	require.NoError(t, err, "commit logger should exist")
+
+	finfo, err := f.Stat()
+	require.NoError(t, err, "error file information")
+
+	_, err = f.Write([]byte("datanewdata"))
+	require.NoError(t, err, "write extra data ")
+
+	// try reopen commitlogger
+	newCommitLogger := NewCommitLog()
+	err = newCommitLogger.Open(dir, wal)
+	require.NoError(t, err, "opening commit log should not return err")
+
+	fdinfo, err := os.Stat(p)
+	require.NoError(t, err, "error file information ")
+
+	// check file size is the same as after the records were wrriten
+	// corrupted data written was truncated
+	require.Truef(t, finfo.Size() == fdinfo.Size(), "extra data written would be truncated")
+
+	for i := 0; i < 100; i++ {
+		commitLogAppendHelper(t)
+	}
 }
 
 func commitLogAppendHelper(t *testing.T) {

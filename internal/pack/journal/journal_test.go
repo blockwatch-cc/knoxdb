@@ -117,23 +117,21 @@ func checkJournalCaps(t *testing.T, j *Journal, data, keys, tomb int) {
 }
 
 func comparePackWithBatch(t *testing.T, name string, j *Journal, batch TestRecords) {
-	t.Run(name, func(t *testing.T) {
-		require.Equal(t, j.Data.Len(), len(batch), "mismatched pack/batch len")
-		err := pack.ForEach[TestRecord](j.Data, schema.GlobalRegistry, func(i int, val *TestRecord) error {
-			// pks are assigned on insert (assuming start is 1 in all calls below)
-			// require.Equal(t, val.Pk, batch[i].Pk, "mismatched pk")
-			require.Equal(t, val.Pk, uint64(i+1), "mismatched pk")
-			require.Equal(t, val.N, batch[i].N, "mismatched value")
+	require.Equal(t, j.Data.Len(), len(batch), "%s: mismatched pack/batch len", name)
+	err := pack.ForEach[TestRecord](j.Data, schema.GlobalRegistry, func(i int, val *TestRecord) error {
+		// pks are assigned on insert (assuming start is 1 in all calls below)
+		// require.Equal(t, val.Pk, batch[i].Pk, "mismatched pk")
+		require.Equal(t, val.Pk, uint64(i+1), "%s: mismatched pk", name)
+		require.Equal(t, val.N, batch[i].N, "%s: mismatched value", name)
 
-			// ignore deleted entries when cross-checking
-			if val.Pk != 0 {
-				idx, _ := j.PkIndex(val.Pk, 0)
-				require.Equal(t, idx, i, "mismatched PkIndex for pk")
-			}
-			return nil
-		})
-		require.NoError(t, err)
+		// ignore deleted entries when cross-checking
+		if val.Pk != 0 {
+			idx, _ := j.PkIndex(val.Pk, 0)
+			require.Equal(t, idx, i, "%s: mismatched PkIndex for pk", name)
+		}
+		return nil
 	})
+	require.NoError(t, err)
 }
 
 func TestJournalNew(t *testing.T) {
@@ -279,56 +277,55 @@ func TestJournalInsertMulti(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k := 0; k < journalRndRuns; k++ {
 			batch := makeJournalDataSequential(sz, 1)
-			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				// 1
-				//
-				j := NewJournal(testSchema, sz)
-				buf := encodeTestData(batch)
+			t.Logf("%d_%d", sz, k)
+			// 1
+			//
+			j := NewJournal(testSchema, sz)
+			buf := encodeTestData(batch)
 
-				// random test data is sorted
-				n, more := j.InsertBatch(buf, 1)
-				require.Len(t, more, 0)
-				require.Equal(t, n, uint64(sz))
+			// random test data is sorted
+			n, more := j.InsertBatch(buf, 1)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(sz))
 
-				// sizes
-				checkJournalCaps(t, j, sz, sz, sz)
-				checkJournalSizes(t, j, sz, 0, 0)
+			// sizes
+			checkJournalCaps(t, j, sz, sz, sz)
+			checkJournalSizes(t, j, sz, 0, 0)
 
-				// invariants
-				require.NoError(t, j.checkInvariants("insert"))
+			// invariants
+			require.NoError(t, j.checkInvariants("insert"))
 
-				// counters and state
-				require.Equal(t, j.maxid, uint64(sz), "invalid max id")
-				require.Equal(t, j.sortData, false)
+			// counters and state
+			require.Equal(t, j.maxid, uint64(sz), "invalid max id")
+			require.Equal(t, j.sortData, false)
 
-				// contents
-				comparePackWithBatch(t, "sorted", j, batch)
-				j.Close()
+			// contents
+			comparePackWithBatch(t, "sorted", j, batch)
+			j.Close()
 
-				// 2
-				//
-				// retry with unsorted data (batch will be sorted by Insert!)
-				j = NewJournal(testSchema, sz)
-				batch = shuffleItems(batch)
-				buf = encodeTestData(batch)
-				n, more = j.InsertBatch(buf, 1)
-				require.Len(t, more, 0)
-				require.Equal(t, n, uint64(sz))
+			// 2
+			//
+			// retry with unsorted data (batch will be sorted by Insert!)
+			j = NewJournal(testSchema, sz)
+			batch = shuffleItems(batch)
+			buf = encodeTestData(batch)
+			n, more = j.InsertBatch(buf, 1)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(sz))
 
-				// sizes
-				checkJournalCaps(t, j, sz, sz, sz)
-				checkJournalSizes(t, j, sz, 0, 0)
+			// sizes
+			checkJournalCaps(t, j, sz, sz, sz)
+			checkJournalSizes(t, j, sz, 0, 0)
 
-				// invariants
-				require.NoError(t, j.checkInvariants("rnd-insert"))
+			// invariants
+			require.NoError(t, j.checkInvariants("rnd-insert"))
 
-				// counters and state
-				require.Equal(t, j.maxid, uint64(sz), "invalid max id")
-				require.Equal(t, j.sortData, false)
+			// counters and state
+			require.Equal(t, j.maxid, uint64(sz), "invalid max id")
+			require.Equal(t, j.sortData, false)
 
-				// contents
-				comparePackWithBatch(t, "rnd", j, batch)
-			})
+			// contents
+			comparePackWithBatch(t, "rnd", j, batch)
 		}
 	}
 }
@@ -359,43 +356,40 @@ func TestJournalUpdate(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k := 0; k < journalRndRuns; k++ {
 			batch := makeJournalDataSequential(sz, 1)
-			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				j := NewJournal(testSchema, sz)
-				buf := encodeTestData(batch)
+			t.Logf("%d_%d", sz, k)
+			j := NewJournal(testSchema, sz)
+			buf := encodeTestData(batch)
 
-				// insert all
-				n, more := j.InsertBatch(buf, 1)
+			// insert all
+			n, more := j.InsertBatch(buf, 1)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(sz))
+
+			// pick random recs from batch, update with changed value
+			for _, idx := range uniqueRandN(100, sz) {
+				val := batch[idx]
+				val.N++
+				buf := encodeTestData([]*TestRecord{val})
+
+				n, more, err := j.UpdateBatch(buf)
+				require.NoError(t, err)
 				require.Len(t, more, 0)
-				require.Equal(t, n, uint64(sz))
+				require.Equal(t, n, uint64(1), "rand %d", idx)
 
-				// pick random recs from batch, update with changed value
-				for i, idx := range uniqueRandN(100, sz) {
-					t.Run(fmt.Sprintf("rand_%03d", i), func(t *testing.T) {
-						val := batch[idx]
-						val.N++
-						buf := encodeTestData([]*TestRecord{val})
+				// sizes
+				checkJournalCaps(t, j, sz, sz, sz)
+				checkJournalSizes(t, j, sz, 0, 0)
 
-						n, more, err := j.UpdateBatch(buf)
-						require.NoError(t, err)
-						require.Len(t, more, 0)
-						require.Equal(t, n, uint64(1))
+				// invariants
+				require.NoError(t, j.checkInvariants("post-update"), "rand %d", idx)
 
-						// sizes
-						checkJournalCaps(t, j, sz, sz, sz)
-						checkJournalSizes(t, j, sz, 0, 0)
+				// counters and state
+				require.Equal(t, j.maxid, uint64(sz), "rand %d: invalid max id", idx)
+				require.Equal(t, j.sortData, false)
 
-						// invariants
-						require.NoError(t, j.checkInvariants("post-update"))
-
-						// counters and state
-						require.Equal(t, j.maxid, uint64(sz), "invalid max id")
-						require.Equal(t, j.sortData, false)
-
-						// contents
-						comparePackWithBatch(t, "post-update", j, batch)
-					})
-				}
-			})
+				// contents
+				comparePackWithBatch(t, "post-update", j, batch)
+			}
 		}
 	}
 }
@@ -404,23 +398,22 @@ func TestJournalUpdateNoPk(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k := 0; k < journalRndRuns; k++ {
 			batch := makeJournalDataSequential(sz, 1)
-			t.Run(fmt.Sprintf("%d_%d", sz, k), func(t *testing.T) {
-				j := NewJournal(testSchema, sz)
-				buf := encodeTestData(batch)
+			t.Logf("%d_%d", sz, k)
+			j := NewJournal(testSchema, sz)
+			buf := encodeTestData(batch)
 
-				// insert all
-				n, more := j.InsertBatch(buf, 1)
-				require.Len(t, more, 0)
-				require.Equal(t, n, uint64(sz))
+			// insert all
+			n, more := j.InsertBatch(buf, 1)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(sz))
 
-				// pick rec, reset pk
-				batch[0].Pk = 0
-				buf = encodeTestData([]*TestRecord{batch[0]})
-				n, more, err := j.UpdateBatch(buf)
-				require.Error(t, err)
-				require.Len(t, more, len(buf))
-				require.Equal(t, n, uint64(0))
-			})
+			// pick rec, reset pk
+			batch[0].Pk = 0
+			buf = encodeTestData([]*TestRecord{batch[0]})
+			n, more, err := j.UpdateBatch(buf)
+			require.Error(t, err)
+			require.Len(t, more, len(buf))
+			require.Equal(t, n, uint64(0))
 		}
 	}
 }
@@ -452,42 +445,41 @@ func TestJournalUpdateFull(t *testing.T) {
 func TestJournalUpdateMulti(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k := 0; k < journalRndRuns; k++ {
-			t.Run(fmt.Sprintf("%d_%d", sz, 0), func(t *testing.T) {
-				j := NewJournal(testSchema, sz)
-				batch := makeJournalDataSequential(sz, 1)
-				buf := encodeTestData(batch)
+			t.Logf("%d_%d", sz, 0)
+			j := NewJournal(testSchema, sz)
+			batch := makeJournalDataSequential(sz, 1)
+			buf := encodeTestData(batch)
 
-				// insert all
-				n, more := j.InsertBatch(buf, 1)
-				require.Len(t, more, 0)
-				require.Equal(t, n, uint64(sz))
+			// insert all
+			n, more := j.InsertBatch(buf, 1)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(sz))
 
-				// change random recs from batch
-				for _, idx := range uniqueRandN(100, sz) {
-					batch[idx].N++
-				}
+			// change random recs from batch
+			for _, idx := range uniqueRandN(100, sz) {
+				batch[idx].N++
+			}
 
-				// update all
-				buf = encodeTestData(batch)
-				n, more, err := j.UpdateBatch(buf)
-				require.NoError(t, err)
-				require.Len(t, more, 0)
-				require.Equal(t, n, uint64(len(batch)))
+			// update all
+			buf = encodeTestData(batch)
+			n, more, err := j.UpdateBatch(buf)
+			require.NoError(t, err)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(len(batch)))
 
-				// sizes
-				checkJournalCaps(t, j, sz, sz, sz)
-				checkJournalSizes(t, j, sz, 0, 0)
+			// sizes
+			checkJournalCaps(t, j, sz, sz, sz)
+			checkJournalSizes(t, j, sz, 0, 0)
 
-				// invariants
-				require.NoError(t, j.checkInvariants("post-update"))
+			// invariants
+			require.NoError(t, j.checkInvariants("post-update"))
 
-				// counters and state
-				require.Equal(t, j.maxid, uint64(sz), "invalid max id")
-				require.Equal(t, j.sortData, false)
+			// counters and state
+			require.Equal(t, j.maxid, uint64(sz), "invalid max id")
+			require.Equal(t, j.sortData, false)
 
-				// contents
-				comparePackWithBatch(t, "post-update", j, batch)
-			})
+			// contents
+			comparePackWithBatch(t, "post-update", j, batch)
 		}
 	}
 }
@@ -496,46 +488,43 @@ func TestJournalDelete(t *testing.T) {
 	for _, sz := range journalTestSizes {
 		for k := 0; k < journalRndRuns; k++ {
 			batch := makeJournalDataSequential(sz, 1)
-			t.Run(fmt.Sprintf("%d_%d", sz, k), func(T *testing.T) {
-				j := NewJournal(testSchema, sz)
-				buf := encodeTestData(batch)
+			t.Logf("%d_%d", sz, k)
+			j := NewJournal(testSchema, sz)
+			buf := encodeTestData(batch)
 
-				// insert all
-				n, more := j.InsertBatch(buf, 1)
-				require.Len(t, more, 0)
-				require.Equal(t, n, uint64(sz))
+			// insert all
+			n, more := j.InsertBatch(buf, 1)
+			require.Len(t, more, 0)
+			require.Equal(t, n, uint64(sz))
 
-				// pick a random rec to delete
-				for i, idx := range uniqueRandN(sz/8, sz) {
-					T.Run(fmt.Sprintf("rand_%03d", i), func(t *testing.T) {
-						// value to delete
-						val := batch[idx]
-						bits := bitmap.NewFromArray([]uint64{val.Pk})
-						require.True(t, bits.IsValid())
-						require.Equal(t, bits.Count(), 1)
-						require.Equal(t, bits.Bitmap.NewIterator().Next(), val.Pk)
+			// pick a random rec to delete
+			for i, idx := range uniqueRandN(sz/8, sz) {
+				// value to delete
+				val := batch[idx]
+				bits := bitmap.NewFromArray([]uint64{val.Pk})
+				require.True(t, bits.IsValid(), "rand %d", idx)
+				require.Equal(t, bits.Count(), 1, "rand %d", idx)
+				require.Equal(t, bits.Bitmap.NewIterator().Next(), val.Pk, "rand %d", idx)
 
-						n := j.DeleteBatch(bits)
-						require.Equal(t, n, uint64(1))
+				n := j.DeleteBatch(bits)
+				require.Equal(t, n, uint64(1))
 
-						// sizes (journal len stays the same, but tomb grows)
-						checkJournalCaps(t, j, sz, sz, sz)
-						checkJournalSizes(t, j, sz, i+1, i+1)
+				// sizes (journal len stays the same, but tomb grows)
+				checkJournalCaps(t, j, sz, sz, sz)
+				checkJournalSizes(t, j, sz, i+1, i+1)
 
-						// invariants
-						require.NoError(t, j.checkInvariants("post-delete"))
+				// invariants
+				require.NoError(t, j.checkInvariants("post-delete"), "rand %d", idx)
 
-						// counters and state
-						require.True(t, j.IsDeleted(val.Pk), "invalid IsDeleted")
-						require.Equal(t, j.TombLen(), i+1, "invalid tomb len")
-						require.Equal(t, j.maxid, uint64(sz), "invalid max id")
-						require.Equal(t, j.sortData, false)
+				// counters and state
+				require.True(t, j.IsDeleted(val.Pk), "rand %d: invalid IsDeleted", idx)
+				require.Equal(t, j.TombLen(), i+1, "rand %d: invalid tomb len", idx)
+				require.Equal(t, j.maxid, uint64(sz), "rand %d: invalid max id", idx)
+				require.Equal(t, j.sortData, false)
 
-						// contents
-						val.Pk = 0 // journal marks deleted records with zero pks !
-					})
-				}
-			})
+				// contents
+				val.Pk = 0 // journal marks deleted records with zero pks !
+			}
 		}
 	}
 }

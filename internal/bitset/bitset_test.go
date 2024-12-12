@@ -42,172 +42,162 @@ func checkCleanTail(t *testing.T, buf []byte) {
 // Test high-level bitset API
 func TestBitsetNew(t *testing.T) {
 	for _, c := range popCases {
-		t.Run(c.Name, func(t *testing.T) {
-			bits := NewBitset(c.Size)
-			if got, want := len(bits.Bytes()), len(c.Source); got != want {
-				t.Errorf("unexpected buf length %d, expected %d", got, want)
-			}
-			if got, want := bits.Len(), c.Size; got != want {
-				t.Errorf("unexpected size %d, expected %d", got, want)
-			}
-			if got, want := bits.Count(), 0; got != want {
-				t.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			checkCleanTail(t, bits.Bytes())
-		})
+		bits := NewBitset(c.Size)
+		if got, want := len(bits.Bytes()), len(c.Source); got != want {
+			t.Errorf("%s: unexpected buf length %d, expected %d", c.Name, got, want)
+		}
+		if got, want := bits.Len(), c.Size; got != want {
+			t.Errorf("%s: unexpected size %d, expected %d", c.Name, got, want)
+		}
+		if got, want := bits.Count(), 0; got != want {
+			t.Errorf("%s: unexpected count %d, expected %d", c.Name, got, want)
+		}
+		checkCleanTail(t, bits.Bytes())
 	}
 }
 
 func TestBitsetFromBytes(t *testing.T) {
 	for _, c := range popCases {
-		t.Run(c.Name, func(t *testing.T) {
-			bits := NewBitsetFromBytes(c.Source, c.Size)
-			if got, want := len(bits.Bytes()), len(c.Source); got != want {
-				t.Errorf("unexpected buf length %d, expected %d", got, want)
-			}
-			if got, want := bits.Len(), c.Size; got != want {
-				t.Errorf("unexpected size %d, expected %d", got, want)
-			}
-			if got, want := bits.Count(), c.Count; got != want {
-				t.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			if !bytes.Equal(bits.Bytes(), c.Result) {
-				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), c.Source)
-			}
-		})
+		bits := NewBitsetFromBytes(c.Source, c.Size)
+		if got, want := len(bits.Bytes()), len(c.Source); got != want {
+			t.Errorf("%s: unexpected buf length %d, expected %d", c.Name, got, want)
+		}
+		if got, want := bits.Len(), c.Size; got != want {
+			t.Errorf("%s: unexpected size %d, expected %d", c.Name, got, want)
+		}
+		if got, want := bits.Count(), c.Count; got != want {
+			t.Errorf("%s: unexpected count %d, expected %d", c.Name, got, want)
+		}
+		if !bytes.Equal(bits.Bytes(), c.Result) {
+			t.Errorf("%s: unexpected result %x, expected %x", c.Name, bits.Bytes(), c.Source)
+		}
 	}
 }
 
 func TestBitsetOne(t *testing.T) {
 	for _, sz := range bitsetSizes {
-		t.Run(f("%d", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
-			bits.One()
-			if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
-				t.Errorf("unexpected buf length %d, expected %d", got, want)
-			}
-			if got, want := bits.Len(), sz; got != want {
-				t.Errorf("unexpected size %d, expected %d", got, want)
-			}
-			if got, want := bits.Count(), sz; got != want {
-				t.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			buf := bytes.Repeat([]byte{0xff}, bitFieldLen(sz)-1)
-			buf = append(buf, byte(0xff>>((8-uint(sz)&0x7)&0x7)&0xff))
-			if !bytes.Equal(bits.Bytes(), buf) {
-				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), buf)
-			}
-		})
+		n := f("%d", sz)
+		bits := NewBitset(sz)
+		bits.One()
+		if got, want := len(bits.Bytes()), bitFieldLen(sz); got != want {
+			t.Errorf("%s: unexpected buf length %d, expected %d", n, got, want)
+		}
+		if got, want := bits.Len(), sz; got != want {
+			t.Errorf("%s: unexpected size %d, expected %d", n, got, want)
+		}
+		if got, want := bits.Count(), sz; got != want {
+			t.Errorf("%s: unexpected count %d, expected %d", n, got, want)
+		}
+		buf := bytes.Repeat([]byte{0xff}, bitFieldLen(sz)-1)
+		buf = append(buf, byte(0xff>>((8-uint(sz)&0x7)&0x7)&0xff))
+		if !bytes.Equal(bits.Bytes(), buf) {
+			t.Errorf("%s: unexpected result %x, expected %x", n, bits.Bytes(), buf)
+		}
 	}
 }
 
 func TestBitsetZero(t *testing.T) {
 	for _, c := range popCases {
-		t.Run(c.Name, func(t *testing.T) {
-			bits := NewBitsetFromBytes(c.Source, c.Size)
-			bits.Zero()
-			if got, want := len(bits.Bytes()), len(c.Source); got != want {
-				t.Errorf("unexpected buf length %d, expected %d", got, want)
-			}
-			if got, want := bits.Len(), c.Size; got != want {
-				t.Errorf("unexpected size %d, expected %d", got, want)
-			}
-			if got, want := bits.Count(), 0; got != want {
-				t.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			buf := bytes.Repeat([]byte{0}, bitFieldLen(c.Size))
-			if !bytes.Equal(bits.Bytes(), buf) {
-				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), buf)
-			}
-		})
+		bits := NewBitsetFromBytes(c.Source, c.Size)
+		bits.Zero()
+		if got, want := len(bits.Bytes()), len(c.Source); got != want {
+			t.Errorf("%s: unexpected buf length %d, expected %d", c.Name, got, want)
+		}
+		if got, want := bits.Len(), c.Size; got != want {
+			t.Errorf("%s: unexpected size %d, expected %d", c.Name, got, want)
+		}
+		if got, want := bits.Count(), 0; got != want {
+			t.Errorf("%s: unexpected count %d, expected %d", c.Name, got, want)
+		}
+		buf := bytes.Repeat([]byte{0}, bitFieldLen(c.Size))
+		if !bytes.Equal(bits.Bytes(), buf) {
+			t.Errorf("%s: unexpected result %x, expected %x", c.Name, bits.Bytes(), buf)
+		}
 	}
 }
 
 func TestBitsetResize(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		for _, sznew := range bitsetSizes {
-			t.Run(f("%d_%d", sz, sznew), func(t *testing.T) {
-				bits := NewBitset(sz)
-				bits.One()
-				bits.Resize(sznew)
-				if got, want := len(bits.Bytes()), bitFieldLen(sznew); got != want {
-					t.Errorf("unexpected buf length %d, expected %d", got, want)
-					t.FailNow()
-				}
-				if got, want := bits.Len(), sznew; got != want {
-					t.Errorf("unexpected size %d, expected %d", got, want)
-					t.FailNow()
-				}
-				if got, want := bits.Count(), util.Min(sz, sznew); got != want {
-					t.Errorf("unexpected count %d, expected %d", got, want)
-					t.FailNow()
-				}
-				if got, want := bits.Count(), popcount(bits.Bytes()); got != want {
-					t.Errorf("unexpected real count %d, expected %d", got, want)
-					t.FailNow()
-				}
-				lena := bitFieldLen(sz)
-				lenb := bitFieldLen(sznew)
-				diff := lena - lenb
-				buf := bytes.Repeat([]byte{0xff}, util.Min(lena, lenb))
-				buf[len(buf)-1] &= byte(0xff >> (7 - uint(util.Min(sz, sznew)-1)&0x7))
-				if diff < 0 {
-					buf = append(buf, bytes.Repeat([]byte{0x0}, -diff)...)
-				}
-				if !bytes.Equal(bits.Bytes(), buf) {
-					t.Errorf("unexpected result %x, expected %x", bits.Bytes(), buf)
-					t.FailNow()
-				}
-				checkCleanTail(t, bits.Bytes())
-			})
+			n := f("%d_%d", sz, sznew)
+			bits := NewBitset(sz)
+			bits.One()
+			bits.Resize(sznew)
+			if got, want := len(bits.Bytes()), bitFieldLen(sznew); got != want {
+				t.Errorf("%s: unexpected buf length %d, expected %d", n, got, want)
+				t.FailNow()
+			}
+			if got, want := bits.Len(), sznew; got != want {
+				t.Errorf("%s: unexpected size %d, expected %d", n, got, want)
+				t.FailNow()
+			}
+			if got, want := bits.Count(), util.Min(sz, sznew); got != want {
+				t.Errorf("%s: unexpected count %d, expected %d", n, got, want)
+				t.FailNow()
+			}
+			if got, want := bits.Count(), popcount(bits.Bytes()); got != want {
+				t.Errorf("%s: unexpected real count %d, expected %d", n, got, want)
+				t.FailNow()
+			}
+			lena := bitFieldLen(sz)
+			lenb := bitFieldLen(sznew)
+			diff := lena - lenb
+			buf := bytes.Repeat([]byte{0xff}, util.Min(lena, lenb))
+			buf[len(buf)-1] &= byte(0xff >> (7 - uint(util.Min(sz, sznew)-1)&0x7))
+			if diff < 0 {
+				buf = append(buf, bytes.Repeat([]byte{0x0}, -diff)...)
+			}
+			if !bytes.Equal(bits.Bytes(), buf) {
+				t.Errorf("%s: unexpected result %x, expected %x", n, bits.Bytes(), buf)
+				t.FailNow()
+			}
+			checkCleanTail(t, bits.Bytes())
 		}
 	}
 	// clear/reset bitset to zero
 	for _, sz := range bitsetSizes {
-		t.Run(f("%d_resize_0", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
-			bits.One()
-			bits.Resize(0)
-			if got, want := len(bits.Bytes()), 0; got != want {
-				t.Errorf("unexpected buf length %d, expected %d", got, want)
-				t.FailNow()
-			}
-			if got, want := bits.Len(), 0; got != want {
-				t.Errorf("unexpected size %d, expected %d", got, want)
-				t.FailNow()
-			}
-			if got, want := bits.Count(), 0; got != want {
-				t.Errorf("unexpected count %d, expected %d", got, want)
-				t.FailNow()
-			}
-			checkCleanTail(t, bits.Bytes())
-		})
+		n := f("%d_resize_0", sz)
+		bits := NewBitset(sz)
+		bits.One()
+		bits.Resize(0)
+		if got, want := len(bits.Bytes()), 0; got != want {
+			t.Errorf("%s: unexpected buf length %d, expected %d", n, got, want)
+			t.FailNow()
+		}
+		if got, want := bits.Len(), 0; got != want {
+			t.Errorf("%s: unexpected size %d, expected %d", n, got, want)
+			t.FailNow()
+		}
+		if got, want := bits.Count(), 0; got != want {
+			t.Errorf("%s: unexpected count %d, expected %d", n, got, want)
+			t.FailNow()
+		}
+		checkCleanTail(t, bits.Bytes())
 	}
 	// grow + 1
 	for _, sz := range bitsetSizes {
-		t.Run(f("%d_resize+1", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
-			bits.One()
-			bits.Resize(bits.Len() + 1)
-			bits.Set(bits.Len() - 1)
-			if got, want := len(bits.Bytes()), bitFieldLen(sz+1); got != want {
-				t.Errorf("unexpected buf length %d, expected %d", got, want)
-				t.FailNow()
-			}
-			if got, want := bits.Len(), sz+1; got != want {
-				t.Errorf("unexpected size %d, expected %d", got, want)
-				t.FailNow()
-			}
-			if got, want := bits.Count(), sz+1; got != want {
-				t.Errorf("unexpected count %d, expected %d", got, want)
-				t.FailNow()
-			}
-			if got, want := bits.Count(), popcount(bits.Bytes()); got != want {
-				t.Errorf("unexpected real count %d, expected %d", got, want)
-				t.FailNow()
-			}
-			checkCleanTail(t, bits.Bytes())
-		})
+		n := f("%d_resize+1", sz)
+		bits := NewBitset(sz)
+		bits.One()
+		bits.Resize(bits.Len() + 1)
+		bits.Set(bits.Len() - 1)
+		if got, want := len(bits.Bytes()), bitFieldLen(sz+1); got != want {
+			t.Errorf("%s: unexpected buf length %d, expected %d", n, got, want)
+			t.FailNow()
+		}
+		if got, want := bits.Len(), sz+1; got != want {
+			t.Errorf("%s: unexpected size %d, expected %d", n, got, want)
+			t.FailNow()
+		}
+		if got, want := bits.Count(), sz+1; got != want {
+			t.Errorf("%s: unexpected count %d, expected %d", n, got, want)
+			t.FailNow()
+		}
+		if got, want := bits.Count(), popcount(bits.Bytes()); got != want {
+			t.Errorf("%s: unexpected real count %d, expected %d", n, got, want)
+			t.FailNow()
+		}
+		checkCleanTail(t, bits.Bytes())
 	}
 }
 
@@ -236,119 +226,117 @@ func TestBitsetFill(t *testing.T) {
 
 func TestBitsetSet(t *testing.T) {
 	for _, sz := range bitsetSizes {
-		t.Run(f("%d", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
-			cmp := fillBitset(nil, sz, 0)
+		n := f("%d", sz)
+		bits := NewBitset(sz)
+		cmp := fillBitset(nil, sz, 0)
 
-			// set first bit
-			bits.Set(0)
-			cmp[0] |= 0x01
-			if got, want := bits.Count(), 1; got != want {
-				t.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			if !bits.IsSet(0) {
-				t.Errorf("unexpected IsSet=false")
-			}
-			if !bytes.Equal(bits.Bytes(), cmp) {
-				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
+		// set first bit
+		bits.Set(0)
+		cmp[0] |= 0x01
+		if got, want := bits.Count(), 1; got != want {
+			t.Errorf("%s: unexpected count %d, expected %d", n, got, want)
+		}
+		if !bits.IsSet(0) {
+			t.Errorf("%s: unexpected IsSet=false", n)
+		}
+		if !bytes.Equal(bits.Bytes(), cmp) {
+			t.Errorf("%s: unexpected result %x, expected %x", n, bits.Bytes(), cmp)
+		}
 
-			// set last bit
-			bits.Set(sz - 1)
-			cmp[(sz-1)>>3] |= 1 << uint((sz-1)&0x7)
-			if got, want := bits.Count(), 2; got != want {
-				t.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			if !bits.IsSet(sz - 1) {
-				t.Errorf("unexpected IsSet=false")
-			}
-			if !bytes.Equal(bits.Bytes(), cmp) {
-				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
+		// set last bit
+		bits.Set(sz - 1)
+		cmp[(sz-1)>>3] |= 1 << uint((sz-1)&0x7)
+		if got, want := bits.Count(), 2; got != want {
+			t.Errorf("%s: unexpected count %d, expected %d", n, got, want)
+		}
+		if !bits.IsSet(sz - 1) {
+			t.Errorf("%s: unexpected IsSet=false", n)
+		}
+		if !bytes.Equal(bits.Bytes(), cmp) {
+			t.Errorf("%s: unexpected result %x, expected %x", n, bits.Bytes(), cmp)
+		}
 
-			// set invalid bit
-			bits.Set(-1)
-			if got, want := bits.Count(), 2; got != want {
-				t.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(-1) {
-				t.Errorf("unexpected IsSet=true")
-			}
-			if !bytes.Equal(bits.Bytes(), cmp) {
-				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
+		// set invalid bit
+		bits.Set(-1)
+		if got, want := bits.Count(), 2; got != want {
+			t.Errorf("%s: unexpected count %d, expected %d", n, got, want)
+		}
+		if bits.IsSet(-1) {
+			t.Errorf("%s: unexpected IsSet=true", n)
+		}
+		if !bytes.Equal(bits.Bytes(), cmp) {
+			t.Errorf("%s: unexpected result %x, expected %x", n, bits.Bytes(), cmp)
+		}
 
-			bits.Set(sz)
-			if got, want := bits.Count(), 2; got != want {
-				t.Errorf("unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(sz) {
-				t.Errorf("unexpected IsSet=true")
-			}
-			if !bytes.Equal(bits.Bytes(), cmp) {
-				t.Errorf("unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
-			checkCleanTail(t, bits.Bytes())
-		})
+		bits.Set(sz)
+		if got, want := bits.Count(), 2; got != want {
+			t.Errorf("%s: unexpected count %d, expected %d", n, got, want)
+		}
+		if bits.IsSet(sz) {
+			t.Errorf("%s: unexpected IsSet=true", n)
+		}
+		if !bytes.Equal(bits.Bytes(), cmp) {
+			t.Errorf("%s: unexpected result %x, expected %x", n, bits.Bytes(), cmp)
+		}
+		checkCleanTail(t, bits.Bytes())
 	}
 }
 
 func TestBitsetClear(t *testing.T) {
 	for _, sz := range bitsetSizes {
-		t.Run(f("%d", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
-			bits.One()
-			cmp := fillBitset(nil, sz, 0xff)
+		n := f("%d", sz)
+		bits := NewBitset(sz)
+		bits.One()
+		cmp := fillBitset(nil, sz, 0xff)
 
-			// clear first bit
-			bits.Clear(0)
-			cmp[0] &= 0xfe
-			if got, want := bits.Count(), popcount(cmp); got != want {
-				t.Errorf("first: unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(0) {
-				t.Errorf("unexpected IsSet=true")
-			}
-			if !bytes.Equal(bits.Bytes(), cmp) {
-				t.Errorf("first: unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
+		// clear first bit
+		bits.Clear(0)
+		cmp[0] &= 0xfe
+		if got, want := bits.Count(), popcount(cmp); got != want {
+			t.Errorf("%s: first: unexpected count %d, expected %d", n, got, want)
+		}
+		if bits.IsSet(0) {
+			t.Errorf("%s: unexpected IsSet=true", n)
+		}
+		if !bytes.Equal(bits.Bytes(), cmp) {
+			t.Errorf("%s: first: unexpected result %x, expected %x", n, bits.Bytes(), cmp)
+		}
 
-			// clear last bit
-			bits.Clear(sz - 1)
-			cmp[(sz-1)>>3] &^= 1 << uint((sz-1)&0x7)
-			if got, want := bits.Count(), popcount(cmp); got != want {
-				t.Errorf("last: unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(sz - 1) {
-				t.Errorf("unexpected IsSet=true")
-			}
-			if !bytes.Equal(bits.Bytes(), cmp) {
-				t.Errorf("last: unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
+		// clear last bit
+		bits.Clear(sz - 1)
+		cmp[(sz-1)>>3] &^= 1 << uint((sz-1)&0x7)
+		if got, want := bits.Count(), popcount(cmp); got != want {
+			t.Errorf("%s: last: unexpected count %d, expected %d", n, got, want)
+		}
+		if bits.IsSet(sz - 1) {
+			t.Errorf("%s: unexpected IsSet=true", n)
+		}
+		if !bytes.Equal(bits.Bytes(), cmp) {
+			t.Errorf("%s: last: unexpected result %x, expected %x", n, bits.Bytes(), cmp)
+		}
 
-			// clear invalid bit
-			bits.Clear(-1)
-			if got, want := bits.Count(), popcount(cmp); got != want {
-				t.Errorf("invalid-: unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(-1) {
-				t.Errorf("unexpected IsSet=true")
-			}
-			if !bytes.Equal(bits.Bytes(), cmp) {
-				t.Errorf("invalid-: unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
+		// clear invalid bit
+		bits.Clear(-1)
+		if got, want := bits.Count(), popcount(cmp); got != want {
+			t.Errorf("%s: invalid-: unexpected count %d, expected %d", n, got, want)
+		}
+		if bits.IsSet(-1) {
+			t.Errorf("%s: unexpected IsSet=true", n)
+		}
+		if !bytes.Equal(bits.Bytes(), cmp) {
+			t.Errorf("%s: invalid-: unexpected result %x, expected %x", n, bits.Bytes(), cmp)
+		}
 
-			bits.Clear(sz)
-			if got, want := bits.Count(), popcount(cmp); got != want {
-				t.Errorf("invalid+: unexpected count %d, expected %d", got, want)
-			}
-			if bits.IsSet(sz) {
-				t.Errorf("unexpected IsSet=true")
-			}
-			if !bytes.Equal(bits.Bytes(), cmp) {
-				t.Errorf("invalid+: unexpected result %x, expected %x", bits.Bytes(), cmp)
-			}
-		})
+		bits.Clear(sz)
+		if got, want := bits.Count(), popcount(cmp); got != want {
+			t.Errorf("%s: invalid+: unexpected count %d, expected %d", n, got, want)
+		}
+		if bits.IsSet(sz) {
+			t.Errorf("%s: unexpected IsSet=true", n)
+		}
+		if !bytes.Equal(bits.Bytes(), cmp) {
+			t.Errorf("%s: invalid+: unexpected result %x, expected %x", n, bits.Bytes(), cmp)
+		}
 	}
 }
 

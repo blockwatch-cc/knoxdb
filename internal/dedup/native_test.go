@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"strconv"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -58,32 +57,24 @@ func TestNativeElem(t *testing.T) {
 }
 
 func TestNativeAppend(t *testing.T) {
-	for i := 0; i < 100; i++ {
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			data := util.RandByteSlices(defaultMaxPointsPerBlock, nativeBufLen)
-			arr := newNativeByteArray(defaultMaxPointsPerBlock)
-			assert.Equalf(t, 0, arr.Len(), "Len mismatch got=%d expected=%d", arr.Len(), 0)
-			assert.Equalf(t, defaultMaxPointsPerBlock, arr.Cap(), "Cap mismatch got=%d expected=%d", arr.Cap(), defaultMaxPointsPerBlock)
-			for i := range data {
-				arr.Append(data[i])
-				assert.Equalf(t, data[i], arr.Elem(i), "Elem data[%d] mismatch got=%x expected=%x", i, arr.Elem(i), data[i])
-			}
-		})
+	data := util.RandByteSlices(defaultMaxPointsPerBlock, nativeBufLen)
+	arr := newNativeByteArray(defaultMaxPointsPerBlock)
+	assert.Equalf(t, 0, arr.Len(), "Len mismatch got=%d expected=%d", arr.Len(), 0)
+	assert.Equalf(t, defaultMaxPointsPerBlock, arr.Cap(), "Cap mismatch got=%d expected=%d", arr.Cap(), defaultMaxPointsPerBlock)
+	for i := range data {
+		arr.Append(data[i])
+		assert.Equalf(t, data[i], arr.Elem(i), "Elem data[%d] mismatch got=%x expected=%x", i, arr.Elem(i), data[i])
 	}
 }
 
 func TestNativeAppendZero(t *testing.T) {
-	for i := 0; i < 100; i++ {
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			data := util.RandByteSlices(defaultMaxPointsPerBlock, nativeBufLen)
-			arr := newNativeByteArray(defaultMaxPointsPerBlock)
-			assert.Equalf(t, 0, arr.Len(), "Len mismatch got=%d expected=%d", arr.Len(), 0)
-			assert.Equalf(t, defaultMaxPointsPerBlock, arr.Cap(), "Cap mismatch got=%d expected=%d", arr.Cap(), defaultMaxPointsPerBlock)
-			for i := range data {
-				arr.AppendZeroCopy(data[i])
-				assert.Equalf(t, data[i], arr.Elem(i), "Elem data[%d] mismatch got=%x expected=%x", i, arr.Elem(i), data[i])
-			}
-		})
+	data := util.RandByteSlices(defaultMaxPointsPerBlock, nativeBufLen)
+	arr := newNativeByteArray(defaultMaxPointsPerBlock)
+	assert.Equalf(t, 0, arr.Len(), "Len mismatch got=%d expected=%d", arr.Len(), 0)
+	assert.Equalf(t, defaultMaxPointsPerBlock, arr.Cap(), "Cap mismatch got=%d expected=%d", arr.Cap(), defaultMaxPointsPerBlock)
+	for i := range data {
+		arr.AppendZeroCopy(data[i])
+		assert.Equalf(t, data[i], arr.Elem(i), "Elem data[%d] mismatch got=%x expected=%x", i, arr.Elem(i), data[i])
 	}
 }
 

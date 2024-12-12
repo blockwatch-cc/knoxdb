@@ -39,28 +39,24 @@ type MatchTest[T Number] struct {
 func TestCases[T Number](t *testing.T, cases []MatchTest[T], fn func([]T, T, []byte) int64) {
 	t.Helper()
 	for _, c := range cases {
-		t.Run(c.Name, func(t *testing.T) {
-			bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
-			cnt := fn(c.Slice, c.Match, bits)
-			assert.Len(t, bits, len(c.Result))
-			assert.Equal(t, c.Count, cnt, "unexpected result bit count")
-			assert.Equal(t, c.Result, bits, "unexpected result")
-			assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "boundary violation")
-		})
+		bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
+		cnt := fn(c.Slice, c.Match, bits)
+		assert.Len(t, bits, len(c.Result), c.Name)
+		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
+		assert.Equal(t, c.Result, bits, "%s: unexpected result", c.Name)
+		assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "%s: boundary violation", c.Name)
 	}
 }
 
 func TestCases2[T Number](t *testing.T, cases []MatchTest[T], fn func([]T, T, T, []byte) int64) {
 	t.Helper()
 	for _, c := range cases {
-		t.Run(c.Name, func(t *testing.T) {
-			bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
-			cnt := fn(c.Slice, c.Match, c.Match2, bits)
-			assert.Len(t, bits, len(c.Result))
-			assert.Equal(t, c.Count, cnt, "unexpected result bit count")
-			assert.Equal(t, c.Result, bits, "unexpected result")
-			assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "boundary violation")
-		})
+		bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
+		cnt := fn(c.Slice, c.Match, c.Match2, bits)
+		assert.Len(t, bits, len(c.Result), c.Name)
+		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
+		assert.Equal(t, c.Result, bits, "%s: unexpected result", c.Name)
+		assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "%s: boundary violation", c.Name)
 	}
 }
 

@@ -280,10 +280,8 @@ func TestStringSliceUnique(t *testing.T) {
 	}
 
 	for _, c := range tests {
-		t.Run(c.n, func(t *testing.T) {
-			res := c.a.Union(c.b)
-			assert.Equal(t, c.r, res)
-		})
+		res := c.a.Union(c.b)
+		assert.Equal(t, c.r, res, c.n)
 	}
 }
 
@@ -339,10 +337,8 @@ func TestStringSliceIntersect(t *testing.T) {
 	}
 
 	for _, c := range tests {
-		t.Run(c.n, func(t *testing.T) {
-			res := c.a.Intersect(c.b)
-			assert.Equal(t, c.r, res)
-		})
+		res := c.a.Intersect(c.b)
+		assert.Equal(t, c.r, res, c.n)
 	}
 }
 
@@ -398,10 +394,8 @@ func TestStringSliceDifference(t *testing.T) {
 	}
 
 	for _, c := range tests {
-		t.Run(c.n, func(t *testing.T) {
-			res := c.a.Difference(c.b)
-			assert.Equal(t, c.r, res)
-		})
+		res := c.a.Difference(c.b)
+		assert.Equal(t, c.r, res, c.n)
 	}
 }
 
@@ -483,9 +477,7 @@ func TestStringsRemoveRange(t *testing.T) {
 
 	for _, v := range tests {
 		for _, r := range v.Ranges {
-			t.Run(r.Name, func(t *testing.T) {
-				assert.Equal(t, r.Expected, NewOrderedStrings(v.Slice).RemoveRange(r.From, r.To).Values)
-			})
+			assert.Equal(t, r.Expected, NewOrderedStrings(v.Slice).RemoveRange(r.From, r.To).Values, r.Name)
 		}
 	}
 }
@@ -568,9 +560,7 @@ func TestOrderedStringsIntersectRange(t *testing.T) {
 
 	for _, v := range tests {
 		for _, r := range v.Ranges {
-			t.Run(r.Name, func(t *testing.T) {
-				assert.Equal(t, r.Expected, NewOrderedStrings(v.Slice).IntersectRange(r.From, r.To).Values)
-			})
+			assert.Equal(t, r.Expected, NewOrderedStrings(v.Slice).IntersectRange(r.From, r.To).Values, r.Name)
 		}
 	}
 }

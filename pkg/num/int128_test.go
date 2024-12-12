@@ -270,9 +270,7 @@ func TestInt128RemoveRange(t *testing.T) {
 
 	for _, v := range tests {
 		for _, r := range v.Ranges {
-			t.Run(r.Name, func(t *testing.T) {
-				assert.Equal(t, r.Expected, Int128RemoveRange(v.Slice, i128(r.From), i128(r.To)))
-			})
+			assert.Equal(t, r.Expected, Int128RemoveRange(v.Slice, i128(r.From), i128(r.To)), r.Name)
 		}
 	}
 }
@@ -355,9 +353,7 @@ func TestInt128IntersectRange(t *testing.T) {
 
 	for _, v := range tests {
 		for _, r := range v.Ranges {
-			t.Run(r.Name, func(t *testing.T) {
-				assert.Equal(t, r.Expected, Int128IntersectRange(v.Slice, i128(r.From), i128(r.To)))
-			})
+			assert.Equal(t, r.Expected, Int128IntersectRange(v.Slice, i128(r.From), i128(r.To)), r.Name)
 		}
 	}
 }

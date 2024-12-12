@@ -281,10 +281,8 @@ func TestBytesUnique(t *testing.T) {
 	}
 
 	for _, c := range tests {
-		t.Run(c.n, func(t *testing.T) {
-			res := c.a.Union(c.b)
-			assert.Equal(t, c.r, res)
-		})
+		res := c.a.Union(c.b)
+		assert.Equal(t, c.r, res, c.n)
 	}
 }
 
@@ -340,10 +338,8 @@ func TestBytesIntersect(t *testing.T) {
 	}
 
 	for _, c := range tests {
-		t.Run(c.n, func(t *testing.T) {
-			res := c.a.Intersect(c.b)
-			assert.Equal(t, c.r, res)
-		})
+		res := c.a.Intersect(c.b)
+		assert.Equal(t, c.r, res, c.n)
 	}
 }
 
@@ -399,10 +395,8 @@ func TestBytesDifference(t *testing.T) {
 	}
 
 	for _, c := range tests {
-		t.Run(c.n, func(t *testing.T) {
-			res := c.a.Difference(c.b)
-			assert.Equal(t, c.r, res)
-		})
+		res := c.a.Difference(c.b)
+		assert.Equal(t, c.r, res, c.n)
 	}
 }
 
@@ -484,10 +478,8 @@ func TestBytesRemoveRange(t *testing.T) {
 
 	for _, v := range tests {
 		for _, r := range v.Ranges {
-			t.Run(r.Name, func(t *testing.T) {
-				a, b := []byte{r.From}, []byte{r.To}
-				assert.Equal(t, r.Expected, NewOrderedBytes(v.Slice).RemoveRange(a, b).Values)
-			})
+			a, b := []byte{r.From}, []byte{r.To}
+			assert.Equal(t, r.Expected, NewOrderedBytes(v.Slice).RemoveRange(a, b).Values, r.Name)
 		}
 	}
 }
@@ -570,10 +562,8 @@ func TestOrderedBytesIntersectRange(t *testing.T) {
 
 	for _, v := range tests {
 		for _, r := range v.Ranges {
-			t.Run(r.Name, func(t *testing.T) {
-				a, b := []byte{r.From}, []byte{r.To}
-				assert.Equal(t, r.Expected, NewOrderedBytes(v.Slice).IntersectRange(a, b).Values)
-			})
+			a, b := []byte{r.From}, []byte{r.To}
+			assert.Equal(t, r.Expected, NewOrderedBytes(v.Slice).IntersectRange(a, b).Values, r.Name)
 		}
 	}
 }

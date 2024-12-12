@@ -241,7 +241,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 			p.RequestSchema = s.WithName("pk")
 		}
 	}
-	p.Log.Debugf("request %s", p.RequestSchema)
+	p.Log.Tracef("request %s", p.RequestSchema)
 
 	// identify indexes based on request schema fields
 	for _, idx := range p.Table.Indexes() {
@@ -256,7 +256,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		p.Indexes = append(p.Indexes, idx)
 	}
 
-	p.Log.Debugf("result %s", p.ResultSchema)
+	p.Log.Tracef("result %s", p.ResultSchema)
 
 	// optimize plan
 	// - reorder filters

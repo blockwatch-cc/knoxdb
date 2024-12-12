@@ -218,28 +218,24 @@ type (
 func TestInt256Cases(t *testing.T, cases []Int256MatchTest, fn Int256MatchFunc) {
 	t.Helper()
 	for _, c := range cases {
-		t.Run(c.Name, func(t *testing.T) {
-			bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
-			cnt := fn(num.Int256Optimize(c.Slice), c.Match, bits, mask)
-			assert.Len(t, bits, len(c.Result))
-			assert.Equal(t, c.Count, cnt, "unexpected result bit count")
-			assert.Equal(t, c.Result, bits, "unexpected result")
-			assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "boundary violation")
-		})
+		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
+		cnt := fn(num.Int256Optimize(c.Slice), c.Match, bits, mask)
+		assert.Len(t, bits, len(c.Result), c.Name)
+		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
+		assert.Equal(t, c.Result, bits, "%s:unexpected result", c.Name)
+		assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "%s: boundary violation", c.Name)
 	}
 }
 
 func TestInt256Cases2(t *testing.T, cases []Int256MatchTest, fn Int256MatchFunc2) {
 	t.Helper()
 	for _, c := range cases {
-		t.Run(c.Name, func(t *testing.T) {
-			bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
-			cnt := fn(num.Int256Optimize(c.Slice), c.Match, c.Match2, bits, mask)
-			assert.Len(t, bits, len(c.Result))
-			assert.Equal(t, c.Count, cnt, "unexpected result bit count")
-			assert.Equal(t, c.Result, bits, "unexpected result")
-			assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "boundary violation")
-		})
+		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
+		cnt := fn(num.Int256Optimize(c.Slice), c.Match, c.Match2, bits, mask)
+		assert.Len(t, bits, len(c.Result), c.Name)
+		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
+		assert.Equal(t, c.Result, bits, "%s: unexpected result", c.Name)
+		assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "%s: boundary violation", c.Name)
 	}
 }
 

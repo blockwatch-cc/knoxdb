@@ -4,7 +4,6 @@
 package query
 
 import (
-	"fmt"
 	"regexp"
 	"testing"
 
@@ -120,46 +119,27 @@ func makeRandomBlock(typ BlockType, sz int) *block.Block {
 	return b
 }
 
-// func makeRandomSlice(typ BlockType, sz int) (slice any, in any, notin any) {
-// 	if sz == 0 {
-// 		sz = 1
-// 	}
-// 	v1 := makeRandomValue(typ)
-// 	rslice := reflect.MakeSlice(reflect.TypeOf(v1), sz, sz)
-// 	for rslice.Len() < sz {
-// 		v1 = makeRandomValue(typ)
-// 		rv1 := reflect.ValueOf(v1)
-// 		if rv1.IsZero() {
-// 			continue
-// 		}
-// 		rslice = reflect.AppendSlice(rslice, rv1)
-// 	}
-// 	rv2 := reflect.Indirect(reflect.New(reflect.TypeOf(v1)))
-// 	return rslice.Interface(), rslice.Index(0).Interface(), rv2.Interface()
-// }
-
 func TestMatchValue(t *testing.T) {
 	for _, typ := range testMatchBlockTypes {
 		for _, mode := range testMatchSingleValueModes {
-			t.Run(fmt.Sprintf("%s_%s", typ, mode), func(t *testing.T) {
-				for i := 0; i < 10; i++ {
-					m := newFactory(typ).New(mode)
-					v1, v2 := makeRandomValue(typ), makeRandomValue(typ)
-					m.WithValue(v1)
-					require.Equal(t, v1, m.Value(), "set/get")
-					require.Equal(t, 1, m.Len(), "len")
-					require.Equal(t,
-						cmp.Match(mode, typ, v1, v1),
-						m.MatchValue(v1),
-						"match %v %s %v = %t", v1, mode, v1, cmp.Match(mode, typ, v1, v1),
-					)
-					require.Equal(t,
-						cmp.Match(mode, typ, v2, v1),
-						m.MatchValue(v2),
-						"match %v %s %v = %t", v2, mode, v1, cmp.Match(mode, typ, v2, v1),
-					)
-				}
-			})
+			t.Logf("%s_%s", typ, mode)
+			for i := 0; i < 10; i++ {
+				m := newFactory(typ).New(mode)
+				v1, v2 := makeRandomValue(typ), makeRandomValue(typ)
+				m.WithValue(v1)
+				require.Equal(t, v1, m.Value(), "set/get")
+				require.Equal(t, 1, m.Len(), "len")
+				require.Equal(t,
+					cmp.Match(mode, typ, v1, v1),
+					m.MatchValue(v1),
+					"match %v %s %v = %t", v1, mode, v1, cmp.Match(mode, typ, v1, v1),
+				)
+				require.Equal(t,
+					cmp.Match(mode, typ, v2, v1),
+					m.MatchValue(v2),
+					"match %v %s %v = %t", v2, mode, v1, cmp.Match(mode, typ, v2, v1),
+				)
+			}
 		}
 	}
 }
@@ -169,16 +149,15 @@ const matchBlockSize = 16
 func TestMatchBlock(t *testing.T) {
 	for _, typ := range testMatchBlockTypes {
 		for _, mode := range testMatchSingleValueModes {
-			t.Run(fmt.Sprintf("%s_%s", typ, mode), func(t *testing.T) {
-				m := newFactory(typ).New(mode)
-				v := makeRandomValue(typ)
-				b := makeRandomBlock(typ, matchBlockSize)
-				m.WithValue(v)
-				set := bitset.NewBitset(matchBlockSize)
-				set2 := m.MatchBlock(b, set, nil)
-				require.NotNil(t, set2)
-				require.Equal(t, matchBlockSize, set2.Len())
-			})
+			t.Logf("%s_%s", typ, mode)
+			m := newFactory(typ).New(mode)
+			v := makeRandomValue(typ)
+			b := makeRandomBlock(typ, matchBlockSize)
+			m.WithValue(v)
+			set := bitset.NewBitset(matchBlockSize)
+			set2 := m.MatchBlock(b, set, nil)
+			require.NotNil(t, set2)
+			require.Equal(t, matchBlockSize, set2.Len())
 		}
 	}
 }

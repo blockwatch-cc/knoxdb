@@ -102,29 +102,26 @@ func TestDecimal128Numbers(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			dec := NewDecimal128(test.in, test.scale)
-			ok, err := dec.Check()
-			if ok != (err == nil) {
-				t.Errorf("expected ok == !err\n")
+		dec := NewDecimal128(test.in, test.scale)
+		ok, err := dec.Check()
+		if ok != (err == nil) {
+			t.Errorf("%s: expected ok == !err", test.name)
+		}
+		if test.err != nil {
+			if err != test.err {
+				t.Errorf("%s: expected error %T, got %s", test.name, test.err, err)
 			}
-			if test.err != nil {
-				if err != test.err {
-					t.Errorf("expected error %T, got %s\n", test.err, err)
-				}
-				return
-			}
-			t.Logf("i128 = %s\n", dec)
-			if got, want := dec.Scale(), test.scale; got != want {
-				t.Errorf("scale error exp %d, got %d\n", want, got)
-			}
-			if got, want := dec.Precision(), test.prec; got != want {
-				t.Errorf("precision error exp %d, got %d\n", want, got)
-			}
-			if got, want := dec.Int128(), test.in; got != want {
-				t.Errorf("value error exp %d, got %d\n", want, got)
-			}
-		})
+			return
+		}
+		if got, want := dec.Scale(), test.scale; got != want {
+			t.Errorf("%s: scale error exp %d, got %d", test.name, want, got)
+		}
+		if got, want := dec.Precision(), test.prec; got != want {
+			t.Errorf("%s: precision error exp %d, got %d", test.name, want, got)
+		}
+		if got, want := dec.Int128(), test.in; got != want {
+			t.Errorf("%s: value error exp %d, got %d", test.name, want, got)
+		}
 	}
 }
 
@@ -335,37 +332,35 @@ func TestDecimal128Parse(t *testing.T) {
 		if name == "" {
 			name = test.in
 		}
-		t.Run(name, func(t *testing.T) {
-			dec, err := ParseDecimal128(test.in)
-			if test.iserr {
-				if err == nil {
-					t.Fatalf("expected error, got none\n")
-				}
-				return
+		dec, err := ParseDecimal128(test.in)
+		if test.iserr {
+			if err == nil {
+				t.Fatalf("%s: expected error, got none", name)
 			}
-			if !test.iserr && (err != nil) {
-				t.Errorf("expected no error, got %s\n", err)
-				return
+			return
+		}
+		if !test.iserr && (err != nil) {
+			t.Errorf("%s: expected no error, got %s", name, err)
+			return
+		}
+		if got, want := dec.Int128(), test.out; got != want {
+			t.Errorf("%s: value error exp %d, got %d", name, want, got)
+		}
+		if got, want := dec.Scale(), test.scale; got != want {
+			t.Errorf("%s: scale error exp %d, got %d", name, want, got)
+		}
+		if got, want := dec.Precision(), test.prec; got != want {
+			t.Errorf("%s: precision error exp %d, got %d", name, want, got)
+		}
+		if !test.iserr {
+			exp := test.str
+			if exp == "" {
+				exp = test.in
 			}
-			if got, want := dec.Int128(), test.out; got != want {
-				t.Errorf("value error exp %d, got %d\n", want, got)
+			if got, want := dec.String(), exp; got != want {
+				t.Errorf("string error exp %s, got %s", want, got)
 			}
-			if got, want := dec.Scale(), test.scale; got != want {
-				t.Errorf("scale error exp %d, got %d\n", want, got)
-			}
-			if got, want := dec.Precision(), test.prec; got != want {
-				t.Errorf("precision error exp %d, got %d\n", want, got)
-			}
-			if !test.iserr {
-				exp := test.str
-				if exp == "" {
-					exp = test.in
-				}
-				if got, want := dec.String(), exp; got != want {
-					t.Errorf("string error exp %s, got %s\n", want, got)
-				}
-			}
-		})
+		}
 	}
 }
 
@@ -428,29 +423,27 @@ func TestDecimal128SetFloat(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			var dec Decimal128
-			err := dec.SetFloat64(test.in, test.scale)
-			if test.iserr {
-				if err == nil {
-					t.Fatalf("expected error, got none\n")
-				}
-				return
+		var dec Decimal128
+		err := dec.SetFloat64(test.in, test.scale)
+		if test.iserr {
+			if err == nil {
+				t.Fatalf("%s: expected error, got none", test.name)
 			}
-			if !test.iserr && (err != nil) {
-				t.Fatalf("expected no error, got %s\n", err)
-				return
-			}
-			if got, want := dec.Int128(), test.out; got != want {
-				t.Errorf("value error exp %d, got %d\n", want, got)
-			}
-			if got, want := dec.Scale(), test.scale; got != want {
-				t.Errorf("scale error exp %d, got %d\n", want, got)
-			}
-			if got, want := dec.Precision(), test.prec; got != want {
-				t.Errorf("precision error exp %d, got %d\n", want, got)
-			}
-		})
+			return
+		}
+		if !test.iserr && (err != nil) {
+			t.Fatalf("%s: expected no error, got %s", test.name, err)
+			return
+		}
+		if got, want := dec.Int128(), test.out; got != want {
+			t.Errorf("%s: value error exp %d, got %d", test.name, want, got)
+		}
+		if got, want := dec.Scale(), test.scale; got != want {
+			t.Errorf("%s: scale error exp %d, got %d", test.name, want, got)
+		}
+		if got, want := dec.Precision(), test.prec; got != want {
+			t.Errorf("%s: precision error exp %d, got %d", test.name, want, got)
+		}
 	}
 }
 
@@ -487,27 +480,25 @@ func TestDecimal128Quantize(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			dec := NewDecimal128(test.in, test.scale)
-			res := dec.Quantize(test.quant)
-			if got, want := res.Int128(), test.out; got != want {
-				t.Errorf("value error exp %d, got %d\n", want, got)
+		dec := NewDecimal128(test.in, test.scale)
+		res := dec.Quantize(test.quant)
+		if got, want := res.Int128(), test.out; got != want {
+			t.Errorf("%s: value error exp %d, got %d", test.name, want, got)
+		}
+		switch {
+		case test.isover:
+			if got, want := res.Scale(), MaxDecimal128Precision; got != want {
+				t.Errorf("%s: scale error exp %d, got %d", test.name, want, got)
 			}
-			switch {
-			case test.isover:
-				if got, want := res.Scale(), MaxDecimal128Precision; got != want {
-					t.Errorf("scale error exp %d, got %d\n", want, got)
-				}
-			case test.isunder:
-				if got, want := res.Scale(), uint8(0); got != want {
-					t.Errorf("scale error exp %d, got %d\n", want, got)
-				}
-			default:
-				if got, want := res.Scale(), test.quant; got != want {
-					t.Errorf("scale error exp %d, got %d\n", want, got)
-				}
+		case test.isunder:
+			if got, want := res.Scale(), uint8(0); got != want {
+				t.Errorf("%s: scale error exp %d, got %d", test.name, want, got)
 			}
-		})
+		default:
+			if got, want := res.Scale(), test.quant; got != want {
+				t.Errorf("%s: scale error exp %d, got %d", test.name, want, got)
+			}
+		}
 	}
 }
 
@@ -531,13 +522,10 @@ func TestDecimal128Round(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			dec := NewDecimal128(test.in, test.scale)
-			t.Logf("RES %s \n", dec)
-			if got, want := dec.RoundToInt64(), test.out; got != want {
-				t.Errorf("value error exp %d, got %d\n", want, got)
-			}
-		})
+		dec := NewDecimal128(test.in, test.scale)
+		if got, want := dec.RoundToInt64(), test.out; got != want {
+			t.Errorf("%s: value error exp %d, got %d", test.name, want, got)
+		}
 	}
 }
 
@@ -615,26 +603,24 @@ func TestDecimal128Compare(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			A := NewDecimal128(test.a, test.x)
-			B := NewDecimal128(test.b, test.y)
-			cmp := comp(test.res)
-			if got, want := A.Eq(B), cmp[0]; got != want {
-				t.Errorf("equal error exp %t, got %t\n", want, got)
-			}
-			if got, want := A.Lt(B), cmp[1]; got != want {
-				t.Errorf("lt error exp %t, got %t\n", want, got)
-			}
-			if got, want := A.Lte(B), cmp[2]; got != want {
-				t.Errorf("lte error exp %t, got %t\n", want, got)
-			}
-			if got, want := A.Gt(B), cmp[3]; got != want {
-				t.Errorf("gt error exp %t, got %t\n", want, got)
-			}
-			if got, want := A.Gte(B), cmp[4]; got != want {
-				t.Errorf("gte error exp %t, got %t\n", want, got)
-			}
-		})
+		A := NewDecimal128(test.a, test.x)
+		B := NewDecimal128(test.b, test.y)
+		cmp := comp(test.res)
+		if got, want := A.Eq(B), cmp[0]; got != want {
+			t.Errorf("%s: equal error exp %t, got %t", test.name, want, got)
+		}
+		if got, want := A.Lt(B), cmp[1]; got != want {
+			t.Errorf("%s: lt error exp %t, got %t", test.name, want, got)
+		}
+		if got, want := A.Lte(B), cmp[2]; got != want {
+			t.Errorf("%s: lte error exp %t, got %t", test.name, want, got)
+		}
+		if got, want := A.Gt(B), cmp[3]; got != want {
+			t.Errorf("%s: gt error exp %t, got %t", test.name, want, got)
+		}
+		if got, want := A.Gte(B), cmp[4]; got != want {
+			t.Errorf("%s: gte error exp %t, got %t", test.name, want, got)
+		}
 	}
 }
 
