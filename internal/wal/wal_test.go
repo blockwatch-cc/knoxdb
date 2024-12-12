@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -217,20 +218,20 @@ func TestWalWrite(t *testing.T) {
 // TestWalWriteErrors tests the WAL's error handling when writing records under various error conditions.
 func TestWalWriteErrors(t *testing.T) {
 	t.Run("WriteToReadOnlyDir", func(t *testing.T) {
+		if u, err := user.Current(); err != nil || u.Uid == "0" {
+			t.Skip()
+		}
 		testDir := t.TempDir()
 		readOnlyDir := filepath.Join(testDir, "readonly")
-		require.NoError(t, os.MkdirAll(readOnlyDir, 0755))
+		require.NoError(t, os.MkdirAll(readOnlyDir, 0500)) // r-x------
 		defer os.RemoveAll(readOnlyDir)
-
-		// Change permissions before WAL creation
-		require.NoError(t, os.Chmod(readOnlyDir, 0500))
 
 		_, err := Create(WalOptions{
 			Path:           readOnlyDir,
 			MaxSegmentSize: 1024 * 1024,
 			Seed:           12345,
 		})
-		assert.Error(t, err, "Expected an error when creating WAL in a read-only directory")
+		require.Error(t, err, "Expected an error when creating WAL in a read-only directory")
 		assert.Contains(t, err.Error(), "permission denied", "Expected a permission denied error")
 	})
 
@@ -842,6 +843,9 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 // resilience and error handling capabilities under adverse conditions.
 func TestWalFaultInjection(t *testing.T) {
 	t.Run("WriteFailure", func(t *testing.T) {
+		if u, err := user.Current(); err != nil || u.Uid == "0" {
+			t.Skip()
+		}
 		testDir := t.TempDir()
 		opts := WalOptions{
 			Path:           testDir,
