@@ -10,60 +10,6 @@ clone:
 trigger:
   event:
     - push
-
-environment:
-  CGO_ENABLED: 0
-  GOPATH: /go
-
-volumes:
-  - name: cache
-    host:
-      path: /var/cache/build
-
-steps:
-  - name: run linter
-    image: golangci/golangci-lint:v1.62.2-alpine
-    volumes:
-      - name: cache
-        path: /go
-    commands:
-      - golangci-lint run --timeout 180s
-
-  - name: scan the files
-    image: aquasec/trivy:0.58.0
-    volumes:
-      - name: cache
-        path: /go
-    commands:
-      - trivy fs --exit-code 1 --scanners vuln,misconfig,secret --skip-files "./scripts/docker/*" ./
-      - trivy config --exit-code 1 --skip-files "./scripts/docker/*" ./
-
-  - name: go test
-    image: golang:1.23-alpine
-    volumes:
-      - name: cache
-        path: /go
-    commands:
-      - apk add --no-cache git
-      - go vet $(go list ./... | grep -v /internal/cmp/avx | grep -v internal/tests/wasm/vfs | grep -v internal/filter | grep -v internal/hash | grep -v internal/s8b | grep -v internal/bitset )
-      - go test -v $(go list ./... | grep -v /internal/tests) -tags with_assert
-
----
-kind: pipeline
-name: Wasm/Pack Scenarios
-platform:
-  os: linux
-  arch: amd64
-
-clone:
-  depth: 1
-
-trigger:
-  branch:
-    - v2/si
-  event:
-    - push
-    - tag
     - pull_request
 
 environment:
@@ -79,7 +25,34 @@ volumes:
       path: /var/cache/build
 
 steps:
-  - name: go scenario test
+  - name: lint
+    image: golangci/golangci-lint:v1.62.2-alpine
+    volumes:
+      - name: cache
+        path: /go
+    commands:
+      - golangci-lint run --timeout 180s
+
+  - name: scan
+    image: aquasec/trivy:0.58.0
+    volumes:
+      - name: cache
+        path: /go
+    commands:
+      - trivy fs --exit-code 1 --scanners vuln,misconfig,secret --skip-files "./scripts/docker/*" ./
+      - trivy config --exit-code 1 --skip-files "./scripts/docker/*" ./
+
+  - name: unit
+    image: golang:1.23-alpine
+    volumes:
+      - name: cache
+        path: /go
+    commands:
+      - apk add --no-cache git
+      - go vet $(go list ./... | grep -v /internal/cmp/avx | grep -v internal/tests/wasm/vfs | grep -v internal/filter | grep -v internal/hash | grep -v internal/s8b | grep -v internal/bitset )
+      - go test -v $(go list ./... | grep -v /internal/tests) -tags with_assert
+
+  - name: scenario wasm/mem/pack
     image: hub.bwd.cx/golangdst:1.23-alpine
     volumes:
       - name: cache
@@ -96,45 +69,18 @@ steps:
     commands:
       - apk add --no-cache git
       - go test -v ./internal/tests/run -timeout 1h -system wasm
+    depends_on:
+      - lint
+      - scan
+      - unit
 
----
-kind: pipeline
-name: Native/Pack Scenarios
-platform:
-  os: linux
-  arch: amd64
-
-clone:
-  depth: 1
-
-trigger:
-  branch:
-    - v2/si
-  event:
-    - push
-    - tag
-    - pull_request
-
-environment:
-  CGO_ENABLED: 0
-  GOPATH: /go
-
-image_pull_secrets:
-  - DOCKER_LOGIN
-
-volumes:
-  - name: cache
-    host:
-      path: /var/cache/build
-
-steps:
-  - name: go scenario test
+  - name: scenario native/bolt/pack
     image: hub.bwd.cx/golangdst:1.23-alpine
     volumes:
       - name: cache
         path: /go
     environment:
-      KNOX_DRIVER: mem
+      KNOX_DRIVER: bolt
       KNOX_ENGINE: pack
       MINIO_BUCKET: scenarios
       MINIO_URL: hd1.bwd.cx:9001
@@ -145,47 +91,19 @@ steps:
     commands:
       - apk add --no-cache git
       - go test -v ./internal/tests/run -timeout 1h -system native
+    depends_on:
+      - lint
+      - scan
+      - unit
 
-
----
-kind: pipeline
-name: Native/LSM Scenarios
-platform:
-  os: linux
-  arch: amd64
-
-clone:
-  depth: 1
-
-trigger:
-  branch:
-    - v2/si
-  event:
-    - push
-    - tag
-    - pull_request
-
-environment:
-  CGO_ENABLED: 0
-  GOPATH: /go
-
-image_pull_secrets:
-  - DOCKER_LOGIN
-
-volumes:
-  - name: cache
-    host:
-      path: /var/cache/build
-
-steps:
-  - name: go scenario test
+  - name: scenario native/badger/lsm
     image: hub.bwd.cx/golangdst:1.23-alpine
     volumes:
       - name: cache
         path: /go
     environment:
-      KNOX_DRIVER: mem
-      KNOX_ENGINE: pack
+      KNOX_DRIVER: badger
+      KNOX_ENGINE: lsm
       MINIO_BUCKET: scenarios
       MINIO_URL: hd1.bwd.cx:9001
       MINIO_USER:
@@ -195,3 +113,7 @@ steps:
     commands:
       - apk add --no-cache git
       - go test -v ./internal/tests/run -timeout 1h -system native
+    depends_on:
+      - lint
+      - scan
+      - unit
