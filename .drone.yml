@@ -13,6 +13,7 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
+  GOPATH: /go
 
 volumes:
   - name: cache
@@ -24,7 +25,7 @@ steps:
     image: golangci/golangci-lint:v1.62.2-alpine
     volumes:
       - name: cache
-        path: /usr/local/go/pkg
+        path: /go
     commands:
       - golangci-lint run --timeout 180s
 
@@ -32,7 +33,7 @@ steps:
     image: aquasec/trivy:0.58.0
     volumes:
       - name: cache
-        path: /usr/local/go/pkg
+        path: /go
     commands:
       - trivy fs --exit-code 1 --scanners vuln,misconfig,secret --skip-files "./scripts/docker/*" ./
       - trivy config --exit-code 1 --skip-files "./scripts/docker/*" ./
@@ -41,7 +42,7 @@ steps:
     image: golang:1.23-alpine
     volumes:
       - name: cache
-        path: /usr/local/go/pkg
+        path: /go
     commands:
       - apk add --no-cache git
       - go vet $(go list ./... | grep -v /internal/cmp/avx | grep -v internal/tests/wasm/vfs | grep -v internal/filter | grep -v internal/hash | grep -v internal/s8b | grep -v internal/bitset )
