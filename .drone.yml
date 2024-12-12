@@ -57,17 +57,18 @@ environment:
   KNOX_ENGINE: pack
   MINIO_BUCKET: scenarios
   MINIO_URL: h3.bwd.cx
-  MINIO_USER:
-    from_secret: MINIO_USER
-  MINIO_SECRET:
-    from_secret: MINIO_SECRET
 
 image_pull_secrets:
-- DOCKER_LOGIN
+  - DOCKER_LOGIN
 
 steps:
   - name: go test
     image: hub.bwd.cx/golangdst:1.23-alpine
+    environment:
+      MINIO_USER:
+        from_secret: MINIO_USER
+      MINIO_SECRET:
+        from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$)
@@ -97,17 +98,18 @@ environment:
   KNOX_ENGINE: pack
   MINIO_BUCKET: scenarios
   MINIO_URL: h3.bwd.cx
-  MINIO_USER:
-    from_secret: MINIO_USER
-  MINIO_SECRET:
-    from_secret: MINIO_SECRET
 
 image_pull_secrets:
-- DOCKER_LOGIN
+  - DOCKER_LOGIN
 
 steps:
   - name: go test
     image: hub.bwd.cx/golangdst:1.23-alpine
+    environment:
+      MINIO_USER:
+        from_secret: MINIO_USER
+      MINIO_SECRET:
+        from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$)
@@ -137,17 +139,18 @@ environment:
   KNOX_ENGINE: pack
   MINIO_BUCKET: scenarios
   MINIO_URL: h3.bwd.cx
-  MINIO_USER:
-    from_secret: MINIO_USER
-  MINIO_SECRET:
-    from_secret: MINIO_SECRET
 
 image_pull_secrets:
-- DOCKER_LOGIN
+  - DOCKER_LOGIN
 
 steps:
   - name: go test
     image: hub.bwd.cx/golangdst:1.23-alpine
+    environment:
+      MINIO_USER:
+        from_secret: MINIO_USER
+      MINIO_SECRET:
+        from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$)
