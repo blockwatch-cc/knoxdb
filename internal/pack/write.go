@@ -125,7 +125,7 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 // SetValue overwrites a single value at a given col/row offset. The caller must
 // ensure strict type match as no additional check, cast or conversion is done.
 func (p *Package) SetValue(col, row int, val any) error {
-	f, ok := p.schema.FieldById(uint16(col))
+	f, ok := p.schema.FieldByIndex(col)
 	assert.Always(ok, "invalid field id",
 		"id", col,
 		"pack", p.key,
