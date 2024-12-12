@@ -24,19 +24,18 @@ func TestBitsetRunReverse(t *testing.T) {
 		var length int
 		idx := bits.Len() - 1
 		for i, r := range c.Rruns {
-			t.Run(f("%s_%d", c.Name, i), func(t *testing.T) {
-				idx, length = rev.Run(idx - length)
-				if got, want := idx, r[0]; got != want {
-					// fmt.Printf("%d - %s: Reverse Bitfield %08b\n", x, c.name, rev.Bytes())
-					// fmt.Printf("%d - %s: Runs %#v\n", x, c.name, c.rruns)
-					t.Errorf("unexpected index %d, expected %d", got, want)
-				}
-				if got, want := length, r[1]; got != want {
-					// fmt.Printf("%d - %s: Reverse Bitfield %08b\n", x, c.name, rev.Bytes())
-					// fmt.Printf("%d - %s: Runs %#v\n", x, c.name, c.rruns)
-					t.Errorf("unexpected length %d, expected %d", got, want)
-				}
-			})
+			n := f("%s_%d", c.Name, i)
+			idx, length = rev.Run(idx - length)
+			if got, want := idx, r[0]; got != want {
+				// fmt.Printf("%d - %s: Reverse Bitfield %08b\n", x, c.name, rev.Bytes())
+				// fmt.Printf("%d - %s: Runs %#v\n", x, c.name, c.rruns)
+				t.Errorf("%s: unexpected index %d, expected %d", n, got, want)
+			}
+			if got, want := length, r[1]; got != want {
+				// fmt.Printf("%d - %s: Reverse Bitfield %08b\n", x, c.name, rev.Bytes())
+				// fmt.Printf("%d - %s: Runs %#v\n", x, c.name, c.rruns)
+				t.Errorf("%s: unexpected length %d, expected %d", n, got, want)
+			}
 		}
 	}
 }
