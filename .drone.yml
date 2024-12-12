@@ -30,7 +30,7 @@ steps:
     image: golang:1.23-alpine
     commands:
       - apk add --no-cache git
-      - go vet $(go list ./... | grep -v /internal/cmp/avx | grep -v internal/tests/wasm/vfs | grep -v internal/filter | grep -v internal/hash | grep -v internal/s8b | | grep -v internal/bitset )
+      - go vet $(go list ./... | grep -v /internal/cmp/avx | grep -v internal/tests/wasm/vfs | grep -v internal/filter | grep -v internal/hash | grep -v internal/s8b | grep -v internal/bitset )
       - go test -v $(go list ./... | grep -v /internal/tests/run$)
 
 ---
@@ -56,7 +56,7 @@ environment:
   KNOX_DRIVER: mem
   KNOX_ENGINE: pack
   MINIO_BUCKET: scenarios
-  MINIO_URL: h3.bwd.cx
+  MINIO_URL: hd1.bwd.cx:9001
 
 image_pull_secrets:
   - DOCKER_LOGIN
@@ -97,7 +97,7 @@ environment:
   KNOX_DRIVER: mem
   KNOX_ENGINE: pack
   MINIO_BUCKET: scenarios
-  MINIO_URL: h3.bwd.cx
+  MINIO_URL: hd1.bwd.cx:9001
 
 image_pull_secrets:
   - DOCKER_LOGIN
@@ -138,7 +138,7 @@ environment:
   KNOX_DRIVER: mem
   KNOX_ENGINE: pack
   MINIO_BUCKET: scenarios
-  MINIO_URL: h3.bwd.cx
+  MINIO_URL: hd1.bwd.cx:9001
 
 image_pull_secrets:
   - DOCKER_LOGIN

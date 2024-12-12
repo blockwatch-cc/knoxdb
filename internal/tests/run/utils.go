@@ -1,7 +1,9 @@
 package run
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 
@@ -45,6 +47,9 @@ func InitStorage(t *testing.T) (*minio.Client, error) {
 		&minio.Options{
 			Creds:  credentials.NewStaticV4(s3user, s3secret, ""),
 			Secure: true,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
 		})
 	if err != nil {
 		return nil, err
