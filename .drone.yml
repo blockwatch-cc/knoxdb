@@ -68,6 +68,7 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
+  GOPATH: /go
 
 image_pull_secrets:
   - DOCKER_LOGIN
@@ -80,12 +81,18 @@ volumes:
 steps:
   - name: go unit test
     image: hub.bwd.cx/golangdst:1.23-alpine
+    volumes:
+      - name: cache
+        path: /go
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$) -tags with_assert
 
   - name: go scenario test
     image: hub.bwd.cx/golangdst:1.23-alpine
+    volumes:
+      - name: cache
+        path: /go
     environment:
       KNOX_DRIVER: mem
       KNOX_ENGINE: pack
@@ -119,6 +126,7 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
+  GOPATH: /go
 
 image_pull_secrets:
   - DOCKER_LOGIN
@@ -131,12 +139,18 @@ volumes:
 steps:
   - name: go unit test
     image: hub.bwd.cx/golangdst:1.23-alpine
+    volumes:
+      - name: cache
+        path: /go
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$) -tags with_assert
 
   - name: go scenario test
     image: hub.bwd.cx/golangdst:1.23-alpine
+    volumes:
+      - name: cache
+        path: /go
     environment:
       KNOX_DRIVER: mem
       KNOX_ENGINE: pack
@@ -171,6 +185,7 @@ trigger:
 
 environment:
   CGO_ENABLED: 0
+  GOPATH: /go
 
 image_pull_secrets:
   - DOCKER_LOGIN
@@ -183,12 +198,18 @@ volumes:
 steps:
   - name: go unit test
     image: hub.bwd.cx/golangdst:1.23-alpine
+    volumes:
+      - name: cache
+        path: /go
     commands:
       - apk add --no-cache git
       - go test $(go list ./... | grep -v /internal/tests/run$) -tags with_assert
 
   - name: go scenario test
     image: hub.bwd.cx/golangdst:1.23-alpine
+    volumes:
+      - name: cache
+        path: /go
     environment:
       KNOX_DRIVER: mem
       KNOX_ENGINE: pack
