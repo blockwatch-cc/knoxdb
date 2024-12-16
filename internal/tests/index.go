@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -67,6 +66,10 @@ var IndexTestCases = []IndexTestCase{
 		Run:  IsCompositeIndexEnginefunc,
 	},
 	{
+		Name: "QueryComposite",
+		Run:  QueryCompositeIndexEnginefunc,
+	},
+	{
 		Name: "Sync",
 		Run:  SyncIndexEnginefunc,
 	},
@@ -76,18 +79,10 @@ var IndexTestCases = []IndexTestCase{
 	},
 }
 
-func TestIndexEngine[T any, B I[T]](t *testing.T, driver, eng string, tableEngine engine.TableEngine) {
+func TestIndexEngine[T any, B I[T]](t *testing.T, driver, eng string, tableEngine engine.TableEngine, supportedTypes []types.IndexType) {
 	t.Helper()
 	for _, c := range IndexTestCases {
-		var indexTypes = []types.IndexType{
-			types.IndexTypeInt,
-			types.IndexTypeHash,
-			types.IndexTypeComposite,
-			// types.IndexTypeBloom,
-			// types.IndexTypeBfuse,
-			// types.IndexTypeBits,
-		}
-		for _, indexType := range indexTypes {
+		for _, indexType := range supportedTypes {
 			t.Run(fmt.Sprintf("%s/%s", c.Name, indexType), func(t *testing.T) {
 				t.Helper()
 
@@ -230,10 +225,6 @@ func SyncIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 
 func AddIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, si *schema.Schema, st *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	t.Helper()
-	if io.Type == types.IndexTypeComposite || io.Type == types.IndexTypeHash {
-		t.SkipNow()
-	}
-
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
@@ -262,6 +253,10 @@ func AddIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine, 
 	// commit
 	require.NoError(t, commit())
 
+	ctx, _, commit, abort, err = e.WithTransaction(context.Background())
+	defer abort()
+	require.NoError(t, err)
+
 	// query data to confirm it is stored
 	conditionId, err := query.ParseCondition("i32.lt", "5", si, e.Enums())
 	require.NoError(t, err)
@@ -271,15 +266,14 @@ func AddIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine, 
 	tRes, ok, err := ti.Query(ctx, conditionIdFlt.Children[0])
 	require.NoError(t, err)
 	require.False(t, ok, "no collision")
+	require.NotNil(t, tRes)
 	require.Equal(t, 5, tRes.Count())
+	// commit
+	require.NoError(t, commit())
 }
 
 func DeleteIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, si *schema.Schema, st *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	t.Helper()
-	if io.Type == types.IndexTypeComposite || io.Type == types.IndexTypeHash {
-		t.SkipNow()
-	}
-
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
@@ -296,7 +290,7 @@ func DeleteIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngin
 		allType.Id = uint64(i + 1)
 		buf, err := enc.Encode(allType, nil)
 		require.NoError(t, err)
-		prev = bytes.Clone(buf)
+		prev = buf
 		require.NoError(t, ti.Add(ctx, nil, buf))
 	}
 
@@ -311,6 +305,10 @@ func DeleteIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngin
 	// commit
 	require.NoError(t, commit())
 
+	ctx, _, commit, abort, err = e.WithTransaction(context.Background())
+	defer abort()
+	require.NoError(t, err)
+
 	// check 1:  query data to confirm it is stored
 	conditionId, err := query.ParseCondition("i32.lt", "6", si, e.Enums())
 	require.NoError(t, err)
@@ -320,15 +318,26 @@ func DeleteIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngin
 	tRes, ok, err := ti.Query(ctx, conditionIdFlt.Children[0])
 	require.NoError(t, err)
 	require.False(t, ok, "no collision")
+	require.NotNil(t, tRes)
 	require.Equal(t, 6, tRes.Count())
 
 	// delete last item stored
 	require.NoError(t, ti.Del(ctx, prev))
 
-	// check 2: confirm remainder is stored
+	// store
+	require.NoError(t, ti.Sync(ctx))
+	// commit
+	require.NoError(t, commit())
+
+	ctx, _, commit, abort, err = e.WithTransaction(context.Background())
+	defer abort()
+	require.NoError(t, err)
+
+	// check 2: confirm items left stored
 	tRes, ok, err = ti.Query(ctx, conditionIdFlt.Children[0])
 	require.NoError(t, err)
 	require.False(t, ok, "no collision")
+	require.NotNil(t, tRes)
 	require.Equal(t, 5, tRes.Count())
 
 	require.NoError(t, commit())
@@ -336,10 +345,6 @@ func DeleteIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngin
 
 func CanMatchIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, si *schema.Schema, st *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	t.Helper()
-	if io.Type == types.IndexTypeComposite {
-		t.SkipNow()
-	}
-
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
@@ -387,7 +392,7 @@ func CanMatchIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEng
 func QueryIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, si *schema.Schema, st *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	t.Helper()
 
-	if io.Type == types.IndexTypeComposite || io.Type == types.IndexTypeHash {
+	if io.Type == types.IndexTypeComposite {
 		t.SkipNow()
 	}
 
@@ -426,8 +431,9 @@ func QueryIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine
 
 	tRes, ok, err := ti.Query(ctx, conditionIdFlt.Children[0])
 	require.NoError(t, err)
-	require.False(t, ok, "no collision")
-	require.Equal(t, 4, tRes.Count())
+	require.Equal(t, false, ok)
+	require.NotNil(t, tRes)
+	require.Equal(t, 5, tRes.Count())
 
 	// commit
 	require.NoError(t, commit())
@@ -458,8 +464,9 @@ func QueryCompositeIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.Ta
 	t.Helper()
 
 	if io.Type != types.IndexTypeComposite {
-		t.Skip()
+		t.SkipNow()
 	}
+
 	// create composite index index
 	cs, err := st.SelectFields("i64", "i32", "id")
 	require.NoError(t, err)
@@ -481,16 +488,15 @@ func QueryCompositeIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.Ta
 		require.NoError(t, ti.Add(ctx, nil, buf))
 	}
 
+	// store
+	require.NoError(t, ti.Sync(ctx))
+
 	// commit
 	require.NoError(t, commit())
 
 	ctx, _, commit, abort, err = e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	// store
-	require.NoError(t, ti.Sync(ctx))
-	// commit
-	require.NoError(t, commit())
 
 	// check 1
 	conditionId, err := query.ParseCondition("i32.eq", "4", si, e.Enums())
