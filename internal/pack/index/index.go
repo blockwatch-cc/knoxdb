@@ -97,7 +97,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = opts
 	idx.metrics = engine.NewIndexMetrics(name)
-	idx.stats = stats.NewStatsIndex(0, opts.PackSize)
+	idx.stats = stats.NewStatsIndex(pki, opts.PackSize)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
 		WithKey(pack.JournalKeyId).
@@ -176,7 +176,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.metrics = engine.NewIndexMetrics(name)
-	idx.stats = stats.NewStatsIndex(0, idx.opts.PackSize)
+	idx.stats = stats.NewStatsIndex(s.PkIndex(), idx.opts.PackSize)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
 		WithKey(pack.JournalKeyId).
