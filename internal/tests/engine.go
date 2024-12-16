@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
@@ -56,6 +57,25 @@ func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
 		NoGrowSync:  false,
 		ReadOnly:    false,
 		Logger:      log.Log.Clone(),
+	}
+}
+
+func NewTestIndexOptions(t *testing.T, driver, eng string, indexType types.IndexType) engine.IndexOptions {
+	t.Helper()
+	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
+	eng = util.NonEmptyString(eng, os.Getenv("KNOX_ENGINE"), "pack")
+	return engine.IndexOptions{
+		Driver:      driver,
+		Engine:      engine.IndexKind(eng),
+		Type:        indexType,
+		JournalSize: 1 << 10,
+		PageSize:    4096,
+		PageFill:    0.9,
+		PackSize:    1 << 11,
+		ReadOnly:    false,
+		NoSync:      false,
+		NoGrowSync:  false,
+		Logger:      log.Log,
 	}
 }
 
