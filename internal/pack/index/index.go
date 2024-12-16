@@ -364,7 +364,7 @@ func (idx *Index) Truncate(ctx context.Context) error {
 	idx.nrows = 0
 
 	// GC/commit storage tx
-	_, err = store.CommitAndContinue(tx)
+	_, err = engine.GetTransaction(ctx).Continue(tx)
 	if err != nil {
 		return err
 	}
