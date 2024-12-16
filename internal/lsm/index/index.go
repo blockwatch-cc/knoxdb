@@ -84,9 +84,9 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.convert = schema.NewConverter(t.Schema(), s, BE).WithSkipLen()
 	idx.log = opts.Logger
 
-	if idx.opts.Type != types.IndexTypeComposite {
-		return fmt.Errorf("lsm index: unsupported index type %q", idx.opts.Type)
-	}
+	// if idx.opts.Type != types.IndexTypeComposite {
+	// 	return fmt.Errorf("lsm index: unsupported index type %q", idx.opts.Type)
+	// }
 
 	idx.log.Debugf("Creating LSM index %s on %s with driver %s", name, t.Schema().Name(), idx.opts.Driver)
 
