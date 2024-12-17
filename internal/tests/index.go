@@ -112,8 +112,14 @@ func TestIndexEngine[T any, B I[T]](t *testing.T, driver, eng string, tableEngin
 				require.NoError(t, commit())
 
 				iopts := NewTestIndexOptions(t, driver, eng, indexType)
-				sc, err := s.SelectFields("i32", "id")
-				require.NoError(t, err)
+				var sc *schema.Schema
+				if indexType == types.IndexTypeComposite {
+					sc, err = s.SelectFields("i64", "i32", "id")
+					require.NoError(t, err)
+				} else {
+					sc, err = s.SelectFields("i32", "id")
+					require.NoError(t, err)
+				}
 				if testing.Verbose() {
 					iopts.Logger = log.Log.SetLevel(log.LevelDebug)
 				}
@@ -258,16 +264,16 @@ func AddIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine, 
 	require.NoError(t, err)
 
 	// query data to confirm it is stored
-	conditionId, err := query.ParseCondition("i32.lt", "5", si, e.Enums())
+	conditionId, err := query.ParseCondition("i32.eq", "4", si, e.Enums())
 	require.NoError(t, err)
 	conditionIdFlt, err := conditionId.Compile(si, nil)
 	require.NoError(t, err)
 
 	tRes, ok, err := ti.Query(ctx, conditionIdFlt.Children[0])
 	require.NoError(t, err)
-	require.False(t, ok, "no collision")
+	require.Equal(t, io.Type == types.IndexTypeHash, ok)
 	require.NotNil(t, tRes)
-	require.Equal(t, 5, tRes.Count())
+	require.Equal(t, 1, tRes.Count())
 	// commit
 	require.NoError(t, commit())
 }
@@ -467,11 +473,7 @@ func QueryCompositeIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.Ta
 		t.SkipNow()
 	}
 
-	// create composite index index
-	cs, err := st.SelectFields("i64", "i32", "id")
-	require.NoError(t, err)
-
-	CreateIndex(t, ti, tab, e, io, cs)
+	CreateIndex(t, ti, tab, e, io, si)
 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
@@ -499,13 +501,14 @@ func QueryCompositeIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.Ta
 	require.NoError(t, err)
 
 	// check 1
-	conditionId, err := query.ParseCondition("i32.eq", "4", si, e.Enums())
+	conditionId, err := query.ParseCondition("i32.lt", "5", si, e.Enums())
 	require.NoError(t, err)
 	conditionIdFlt, err := conditionId.Compile(si, nil)
 	require.NoError(t, err)
 	tRes, ok, err := ti.QueryComposite(ctx, conditionIdFlt)
 	require.NoError(t, err)
-	require.False(t, ok, "no collision")
+	require.False(t, ok)
+	require.NotNil(t, tRes)
 	require.Equal(t, 4, tRes.Count())
 
 	// commit
