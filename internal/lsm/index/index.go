@@ -256,7 +256,7 @@ func (idx *Index) Drop(ctx context.Context) error {
 	idx.db.Close()
 	idx.db = nil
 	idx.log.Debugf("Dropping index %s with path %s", typ, path)
-	if err := os.Remove(path); err != nil {
+	if err := os.RemoveAll(path); err != nil {
 		return err
 	}
 	return nil
@@ -291,7 +291,7 @@ func (idx *Index) Rebuild(ctx context.Context) error {
 	}
 
 	// GC/commit storage tx
-	tx, err = store.CommitAndContinue(tx)
+	tx, err = engine.GetTransaction(ctx).Continue(tx)
 	if err != nil {
 		return err
 	}
@@ -338,7 +338,8 @@ func (idx *Index) Rebuild(ctx context.Context) error {
 	}
 
 	// final commit
-	return tx.Commit()
+	_, err = engine.GetTransaction(ctx).Continue(tx)
+	return err
 }
 
 func (idx *Index) Add(ctx context.Context, prev, val []byte) error {
