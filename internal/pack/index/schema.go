@@ -24,7 +24,8 @@ func convertSchema(s *schema.Schema, typ types.IndexType) (ixs *schema.Schema, h
 		return
 	}
 	// last field must be primary key
-	if !s.Fields()[s.NumFields()-1].Is(types.FieldFlagPrimary) {
+	pkf := s.Fields()[s.NumFields()-1]
+	if !pkf.Is(types.FieldFlagPrimary) {
 		err = fmt.Errorf("last schema field must be primary key")
 		return
 	}
@@ -42,7 +43,7 @@ func convertSchema(s *schema.Schema, typ types.IndexType) (ixs *schema.Schema, h
 				WithName(s.Name()).
 				WithVersion(s.Version()).
 				WithField(schema.NewField(types.FieldTypeUint64).WithName("hash")).
-				WithField(s.Fields()[s.NumFields()-1]).
+				WithField(pkf).
 				Finalize()
 		}
 
@@ -53,7 +54,31 @@ func convertSchema(s *schema.Schema, typ types.IndexType) (ixs *schema.Schema, h
 		if s.NumFields() > 2 {
 			err = fmt.Errorf("too many schema columns for integer index")
 		} else {
-			ixs = s
+			f, _ := s.FieldByIndex(0)
+			switch f.Type() {
+			case types.FieldTypeDatetime,
+				types.FieldTypeInt64,
+				types.FieldTypeUint64,
+				types.FieldTypeInt32,
+				types.FieldTypeInt16,
+				types.FieldTypeInt8,
+				types.FieldTypeUint32,
+				types.FieldTypeUint16,
+				types.FieldTypeUint8:
+
+				// convert shorter integers to u64
+				hf = makeKeyGen(f.WireSize())
+				ixs = schema.NewSchema().
+					WithName(s.Name()).
+					WithVersion(s.Version()).
+					WithField(schema.NewField(types.FieldTypeUint64).WithName("int")).
+					WithField(pkf).
+					Finalize()
+
+			default:
+				err = fmt.Errorf("invalid field type %s for integer index", f.Type())
+			}
+
 		}
 
 	case types.IndexTypeComposite:
@@ -65,7 +90,7 @@ func convertSchema(s *schema.Schema, typ types.IndexType) (ixs *schema.Schema, h
 			WithName(s.Name()).
 			WithVersion(s.Version()).
 			WithField(schema.NewField(types.FieldTypeUint64).WithName("hash")).
-			WithField(s.Fields()[s.NumFields()-1]).
+			WithField(pkf).
 			Finalize()
 
 	default:

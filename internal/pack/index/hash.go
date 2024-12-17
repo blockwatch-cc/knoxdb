@@ -33,3 +33,17 @@ func genHashKey64(buf []byte) []byte {
 func genNoopKey(buf []byte) []byte {
 	return buf
 }
+
+// expand byte, word, dword to quadword bigendian keys
+func makeKeyGen(sz int) func([]byte) []byte {
+	switch sz {
+	case 1, 2, 4:
+		return func(buf []byte) []byte {
+			var res [8]byte
+			copy(res[8-sz:], buf)
+			return res[:]
+		}
+	default:
+		return genNoopKey
+	}
+}
