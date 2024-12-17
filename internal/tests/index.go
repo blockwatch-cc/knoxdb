@@ -24,6 +24,11 @@ type I[T any] interface {
 	engine.IndexEngine
 }
 
+type Checker struct {
+	Cond     engine.QueryCondition
+	Expected bool
+}
+
 var IndexTestCases = []IndexTestCase{
 	{
 		Name: "Create",
@@ -114,7 +119,7 @@ func TestIndexEngine[T any, B I[T]](t *testing.T, driver, eng string, tableEngin
 				iopts := NewTestIndexOptions(t, driver, eng, indexType)
 				var sc *schema.Schema
 				if indexType == types.IndexTypeComposite {
-					sc, err = s.SelectFields("i64", "i32", "id")
+					sc, err = s.SelectFields("i32", "i64", "id")
 					require.NoError(t, err)
 				} else {
 					sc, err = s.SelectFields("i32", "id")
@@ -186,9 +191,16 @@ func DropIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 	defer abort()
 	require.NoError(t, err)
 
-	require.FileExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
-	require.NoError(t, ti.Drop(ctx))
-	require.NoFileExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
+	isBadger := io.Driver == "badger"
+	if !isBadger {
+		require.FileExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
+		require.NoError(t, ti.Drop(ctx))
+		require.NoFileExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
+	} else {
+		require.DirExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
+		require.NoError(t, ti.Drop(ctx))
+		require.NoDirExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
+	}
 }
 
 func TruncateIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, s *schema.Schema, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
@@ -270,8 +282,12 @@ func AddIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine, 
 	require.NoError(t, err)
 
 	tRes, ok, err := ti.Query(ctx, conditionIdFlt.Children[0])
+	if io.Type == types.IndexTypeComposite {
+		tRes, ok, err = ti.QueryComposite(ctx, conditionIdFlt)
+	}
+
 	require.NoError(t, err)
-	require.Equal(t, io.Type == types.IndexTypeHash, ok)
+	require.Equal(t, io.Type == types.IndexTypeHash && io.Driver != "badger", ok)
 	require.NotNil(t, tRes)
 	require.Equal(t, 1, tRes.Count())
 	// commit
@@ -322,6 +338,9 @@ func DeleteIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngin
 	require.NoError(t, err)
 
 	tRes, ok, err := ti.Query(ctx, conditionIdFlt.Children[0])
+	if io.Type == types.IndexTypeComposite {
+		tRes, ok, err = ti.QueryComposite(ctx, conditionIdFlt)
+	}
 	require.NoError(t, err)
 	require.False(t, ok, "no collision")
 	require.NotNil(t, tRes)
@@ -341,6 +360,9 @@ func DeleteIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngin
 
 	// check 2: confirm items left stored
 	tRes, ok, err = ti.Query(ctx, conditionIdFlt.Children[0])
+	if io.Type == types.IndexTypeComposite {
+		tRes, ok, err = ti.QueryComposite(ctx, conditionIdFlt)
+	}
 	require.NoError(t, err)
 	require.False(t, ok, "no collision")
 	require.NotNil(t, tRes)
@@ -380,19 +402,55 @@ func CanMatchIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEng
 	// commit
 	require.NoError(t, commit())
 
-	// check 1
+	var checkers = make([]Checker, 0)
+
+	// condition 1
 	conditionId, err := query.ParseCondition("i32.eq", "4", si, e.Enums())
 	require.NoError(t, err)
-	conditionIdFlt, err := conditionId.Compile(si, nil)
+	conditionId01Flt, err := conditionId.Compile(si, nil)
 	require.NoError(t, err)
-	require.False(t, ti.CanMatch(conditionIdFlt))
 
-	// check 2
-	conditionId, err = query.ParseCondition("id.eq", "3", si, e.Enums())
+	// condition 2
+	conditionId, err = query.ParseCondition("i32.eq", "3", si, e.Enums())
 	require.NoError(t, err)
-	conditionIdFlt, err = conditionId.Compile(si, nil)
+	conditionId02Flt, err := conditionId.Compile(si, nil)
 	require.NoError(t, err)
-	require.True(t, ti.CanMatch(conditionIdFlt))
+
+	// condition 3
+	conditionId, err = query.ParseCondition("i32.eq", "50", si, e.Enums())
+	require.NoError(t, err)
+	conditionId03Flt, err := conditionId.Compile(si, nil)
+	require.NoError(t, err)
+
+	// condition 4 (composite)
+	conditionId, err = query.ParseCondition("i32.eq", "5", si, e.Enums())
+	require.NoError(t, err)
+	conditionId04Flt, err := conditionId.Compile(si, nil)
+	require.NoError(t, err)
+
+	if io.Type == types.IndexTypeComposite {
+		conditionId, err = query.ParseCondition("i64.eq", "50", si, e.Enums())
+		require.NoError(t, err)
+		conditionId05Flt, err := conditionId.Compile(si, nil)
+		require.NoError(t, err)
+
+		conditionId05Flt.Children = append(conditionId05Flt.Children, conditionId04Flt.Children...)
+		require.NoError(t, err)
+
+		checkers = append(checkers, Checker{Cond: conditionId01Flt, Expected: false})
+		checkers = append(checkers, Checker{Cond: conditionId02Flt, Expected: false})
+		checkers = append(checkers, Checker{Cond: conditionId03Flt, Expected: false})
+		checkers = append(checkers, Checker{Cond: conditionId05Flt, Expected: true})
+	} else {
+		checkers = append(checkers, Checker{Cond: conditionId01Flt.Children[0], Expected: true})
+		checkers = append(checkers, Checker{Cond: conditionId02Flt.Children[0], Expected: true})
+		checkers = append(checkers, Checker{Cond: conditionId03Flt.Children[0], Expected: true})
+		checkers = append(checkers, Checker{Cond: conditionId04Flt, Expected: false})
+	}
+
+	for _, checker := range checkers {
+		require.Equal(t, checker.Expected, ti.CanMatch(checker.Cond))
+	}
 }
 
 func QueryIndexEnginefunc(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, si *schema.Schema, st *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
