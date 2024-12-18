@@ -22,10 +22,14 @@ func genHashKey64(buf []byte) []byte {
 	res = res[:16]
 
 	// write hash
-	LE.PutUint64(res, fnv.Sum64a(buf[:len(buf)-8]))
+	var hash [8]byte
+	LE.PutUint64(hash[:], fnv.Sum64a(buf[:len(buf)-8]))
 
 	// copy pk from buffer tail
 	copy(res[8:], buf[len(buf)-8:])
+
+	// copy hash to buffer start
+	copy(res, hash[:])
 
 	return res
 }
@@ -34,14 +38,25 @@ func genNoopKey(buf []byte) []byte {
 	return buf
 }
 
-// expand byte, word, dword to quadword bigendian keys
+// expand byte, word, dword to quadword little endian keys
 func makeKeyGen(sz int) func([]byte) []byte {
 	switch sz {
 	case 1, 2, 4:
 		return func(buf []byte) []byte {
-			var res [8]byte
-			copy(res[8-sz:], buf)
-			return res[:]
+			// reuse buffer when large enough and overwrite the first 8 bytes with hash
+			res := buf
+			if cap(res) < 16 {
+				res = make([]byte, 16)
+			}
+			res = res[:16]
+
+			// copy pk to buffer end
+			copy(res[8:], buf[len(buf)-8:])
+
+			// expend integer to u64 at buffer start
+			copy(res, buf[:len(buf)-8])
+
+			return res
 		}
 	default:
 		return genNoopKey

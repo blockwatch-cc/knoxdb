@@ -97,7 +97,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = opts
 	idx.metrics = engine.NewIndexMetrics(name)
-	idx.stats = stats.NewStatsIndex(0, opts.PackSize)
+	idx.stats = stats.NewStatsIndex(indexSchema.PkIndex(), opts.PackSize)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
 		WithKey(pack.JournalKeyId).
@@ -176,7 +176,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.metrics = engine.NewIndexMetrics(name)
-	idx.stats = stats.NewStatsIndex(0, idx.opts.PackSize)
+	idx.stats = stats.NewStatsIndex(indexSchema.PkIndex(), idx.opts.PackSize)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
 		WithKey(pack.JournalKeyId).
@@ -364,7 +364,7 @@ func (idx *Index) Truncate(ctx context.Context) error {
 	idx.nrows = 0
 
 	// GC/commit storage tx
-	_, err = store.CommitAndContinue(tx)
+	_, err = engine.GetTransaction(ctx).Continue(tx)
 	if err != nil {
 		return err
 	}
@@ -389,8 +389,9 @@ func (idx *Index) Rebuild(ctx context.Context) error {
 		WithLogger(idx.log)
 
 	err := idx.table.Stream(ctx, plan, func(row engine.QueryRow) error {
-		// create wire encoding compaible with index, potentially hashing data
-		key := idx.genkey(row.Bytes())
+		// create wire encoding compatible with index, potentially hashing data
+		buf := idx.convert.Extract(row.Bytes())
+		key := idx.genkey(buf)
 
 		// append to journal
 		idx.journal.AppendWire(key, nil)

@@ -161,10 +161,10 @@ func (idx *Index) flush(ctx context.Context) error {
 	)
 
 	// init
-	// packsz = idx.opts.PackSize()
-	// jlen, tlen = len(pk), len(dead)
-	// _, globalmax = idx.packidx.GlobalMinMax()
-	// maxloop = 2*idx.packidx.Len() + 2*jlen/packsz + 2 // 2x to consider splits
+	packsz = idx.opts.PackSize
+	jlen, tlen = len(pk), len(dead)
+	_, globalmax = idx.stats.GlobalMinMax()
+	maxloop = 2*idx.stats.Len() + 2*jlen/packsz + 2 // 2x to consider splits
 
 	// create an initial pack on first insert
 	if idx.stats.Len() == 0 {
