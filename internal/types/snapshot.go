@@ -15,7 +15,7 @@ var snapPool = sync.Pool{
 }
 
 type Snapshot struct {
-	Xown uint64         // current transaction id
+	Xown uint64         // current transaction id (0 when readonly)
 	Xmin uint64         // minimum active transaction id
 	Xmax uint64         // next tx id (not yet assigned)
 	Xaci uint64         // bitset with active tx ids (xmax-xmin <= 64)
@@ -23,11 +23,11 @@ type Snapshot struct {
 	Safe bool           // snapshot is safe (xact = 0 || only readonly tx)
 }
 
-func NewSnapshot(xid, xmin uint64) *Snapshot {
+func NewSnapshot(xid, xmin, xmax uint64) *Snapshot {
 	s := snapPool.Get().(*Snapshot)
 	s.Xown = xid
 	s.Xmin = xmin
-	s.Xmax = xid
+	s.Xmax = xmax
 	s.Xaci = 0
 	s.Xact = nil
 	s.Safe = true
@@ -45,6 +45,7 @@ func (s *Snapshot) Close() {
 	snapPool.Put(s)
 }
 
+// we only add writable tx here
 func (s *Snapshot) AddActive(xid uint64) {
 	if s.Xact == nil {
 		s.Xaci |= 1 << (xid - s.Xmin)
@@ -57,28 +58,33 @@ func (s *Snapshot) AddActive(xid uint64) {
 // IsVisible returns true when records updated by this xid
 // are visible to the snapshot.
 func (s *Snapshot) IsVisible(xid uint64) bool {
-	// records from aborted tx have xid = 0
-	if s.Safe || xid == 0 {
+	// records from aborted tx (xid = 0) and future tx are invisible
+	// note xmax is next assignable xid at time of snapshot
+	if xid == 0 || xid >= s.Xmax {
 		return false
 	}
 
-	// records from future tx are invisible
-	if xid > s.Xmax {
-		return false
+	// anything before global horizon is visible
+	if xid < s.Xmin {
+		return true
 	}
 
-	// read-write txs can see anything they created
+	// safe snapshots can see anything < xmax and
+	if s.Safe && xid < s.Xmax {
+		return true
+	}
+
+	// read-write txs can see their own data
 	if s.Xown > 0 && xid == s.Xown {
 		return true
 	}
 
-	// otherwise records are visible iff the record's tx
-	// - has committed before (< global xmin horizon)
-	// - was not active when the snapshot was made
+	// otherwise records are only visible iff the record's tx
+	// was committed when the snapshot was made
 	if s.Xact == nil {
-		return xid < s.Xmin || s.Xaci&(1<<(xid-s.Xmin)) == 0
+		return s.Xaci&(1<<(xid-s.Xmin)) == 0
 	} else {
-		return xid < s.Xmin || !s.Xact.IsSet(int(xid-s.Xmin))
+		return !s.Xact.IsSet(int(xid - s.Xmin))
 	}
 }
 
