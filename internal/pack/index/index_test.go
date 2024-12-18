@@ -16,11 +16,15 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-func TestIndexHash(t *testing.T) {
+func TestIndex(t *testing.T) {
 	tableEngine := table.NewTable()
 	tests.TestIndexEngine[Index, *Index](t, "bolt", "pack", tableEngine, []types.IndexType{
 		types.IndexTypeInt,
 		types.IndexTypeHash,
-		types.IndexTypeComposite,
 	})
+}
+
+func TestIndexComposite(t *testing.T) {
+	tableEngine := table.NewTable()
+	tests.TestCompositeIndexEngine[Index, *Index](t, "bolt", "pack", tableEngine)
 }
