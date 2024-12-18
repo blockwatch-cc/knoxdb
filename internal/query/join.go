@@ -3,6 +3,10 @@
 
 // TODO
 // - complex predicates "JOIN ON a.f = b.f AND a.id = b.id"
+// - refactor into build & probe phases
+// - support hash indexes (construct hash map during build phase)
+// - make all results streamable, allow push to downstream pipeline stages
+// - apply limit at last stage, push back EndStream through stages
 
 package query
 
@@ -676,6 +680,9 @@ func loopJoinInner(p *JoinPlan, left, right engine.QueryResult, out QueryResultC
 	// build cartesian product (O(n^2)) with
 	p.Log.Debugf("J> %s: inner loop join on %d/%d rows", p.Tag, left.Len(), right.Len())
 	for i, il := 0, left.Len(); i < il; i++ {
+		// TODO: use bloom filter from build-stage to skip predicates that are not
+		// in right result (i.e. prevents running the inner loop when its clear that
+		// no match can exists). note predicates can be declared for any field, not just pk!
 		for j, jl := 0, right.Len(); j < jl; j++ {
 			if p.matchAt(left, i, right, j) {
 				// merge result and append to out package
