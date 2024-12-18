@@ -26,6 +26,10 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 		"len", p.nRows,
 		"cap", p.maxRows,
 	)
+	assert.Always(len(buf) >= p.schema.WireSize(), "pack: short buffer",
+		"len", len(buf),
+		"wiresz", p.schema.WireSize(),
+	)
 	for i, field := range p.schema.Exported() {
 		// deleted and internal fields are invisible
 		if !field.IsVisible {

@@ -389,8 +389,9 @@ func (idx *Index) Rebuild(ctx context.Context) error {
 		WithLogger(idx.log)
 
 	err := idx.table.Stream(ctx, plan, func(row engine.QueryRow) error {
-		// create wire encoding compaible with index, potentially hashing data
-		key := idx.genkey(row.Bytes())
+		// create wire encoding compatible with index, potentially hashing data
+		buf := idx.convert.Extract(row.Bytes())
+		key := idx.genkey(buf)
 
 		// append to journal
 		idx.journal.AppendWire(key, nil)
