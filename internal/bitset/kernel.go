@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package bitset
@@ -17,9 +17,7 @@ var (
 	bitsetOrFlag   = generic.OrFlag
 	bitsetXor      = generic.Xor
 	bitsetNeg      = generic.Neg
-	bitsetReverse  = generic.Reverse
 	bitsetPopCount = generic.PopCount
-	bitsetRun      = generic.Run
 	bitsetIndexes  = generic.Indexes
 
 	bitFieldLen   = generic.BitFieldLen
@@ -38,9 +36,7 @@ func init() {
 		bitsetOrFlag = avx2.OrFlag
 		bitsetXor = avx2.Xor
 		bitsetNeg = avx2.Neg
-		bitsetReverse = avx2.Reverse
 		bitsetPopCount = avx2.PopCount
-		bitsetRun = avx2.Run
 		bitsetIndexes = avx2.Indexes
 	}
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Blockwatch Data Inc.
+// Copyright (c) 2020-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 //go:build !amd64 || appengine || gccgo
@@ -18,8 +18,6 @@ var (
 	OrFlag   = generic.OrFlag
 	Xor      = generic.Xor
 	Neg      = generic.Neg
-	Reverse  = generic.Reverse
 	PopCount = generic.PopCount
-	Run      = generic.Run
 	Indexes  = generic.Indexes
 )

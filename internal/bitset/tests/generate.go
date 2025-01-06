@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 //
 // Test-usage only
@@ -85,10 +85,6 @@ func bitFieldLen(n int) int {
 func bytemask(size int) byte {
 	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
 }
-
-// func bitmask(i int) byte {
-// 	return byte(1 << uint(i&0x7))
-// }
 
 func roundUpPow2(n int, pow2 int) int {
 	return (n + (pow2 - 1)) & ^(pow2 - 1)

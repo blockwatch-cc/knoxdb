@@ -345,7 +345,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 
 		// emit record
 		nRowsMatched++
-		if err := res.Append(jpack, idx, 1); err != nil {
+		if err := res.Append(jpack, int(idx), 1); err != nil {
 			return err
 		}
 
@@ -413,12 +413,12 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 
 		// emit record
 		nRowsMatched++
-		if err := res.Append(jpack, idx, 1); err != nil {
+		if err := res.Append(jpack, int(idx), 1); err != nil {
 			return err
 		}
 
 		// remove match bit (so we don't output this record twice)
-		jbits.Clear(idx)
+		jbits.Clear(int(idx))
 
 		// apply limit
 		if plan.Limit > 0 && nRowsMatched == plan.Limit {

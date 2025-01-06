@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Blockwatch Data Inc.
+// Copyright (c) 2020-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 //go:build amd64 && !gccgo && !appengine
@@ -42,22 +42,14 @@ func popcount(src []byte) int64
 //go:noescape
 func bit_idx_skip(bitmap []byte, out []uint32, decodeTable []uint32, lengthTable []uint8) int
 
-//go:noescape
-func bit_next_one(src []byte, index uint64) uint64
-
-//go:noescape
-func bit_next_zero(src []byte, index uint64) uint64
-
 // Go imports
 var (
-	counts        = generic.Counts
-	leadingZeros  = generic.LeadingZeros
-	reverseLut256 = generic.ReverseLut256
-	lengthTable   = generic.LengthTable
-	decodeTable   = generic.DecodeTable
-	bitFieldLen   = generic.BitFieldLen
-	bytemask      = generic.Bytemask
-	// bitmask       = generic.Bitmask
+	counts       = generic.Counts
+	leadingZeros = generic.LeadingZeros
+	lengthTable  = generic.LengthTable
+	decodeTable  = generic.DecodeTable
+	bitFieldLen  = generic.BitFieldLen
+	bytemask     = generic.Bytemask
 )
 
 // Go exports
@@ -114,10 +106,6 @@ func Neg(src []byte, size int) {
 	src[len(src)-1] &= bytemask(size)
 }
 
-func Reverse(src []byte) {
-	bit_reverse(src, reverseLut256)
-}
-
 func Indexes(src []byte, size int, dst []uint32) int {
 	if size > 0 {
 		src[len(src)-1] &= bytemask(size)
@@ -137,75 +125,4 @@ func PopCount(src []byte, size int) int64 {
 		cnt := popcount(src[:len(src)-1])
 		return cnt + int64(counts[src[len(src)-1]&bytemask(size)])
 	}
-}
-
-func Run(src []byte, index, size int) (int, int) {
-	if len(src) == 0 || index < 0 || index >= size {
-		return -1, 0
-	}
-	var start, length int
-	i := index >> 3
-
-	// mask leading bits of the first byte
-	offset := index & 0x7
-	mask := byte(0xff) << uint(offset)
-	first := src[i] & mask
-	if first > 0 {
-		// start is in same byte as index
-		start = index - offset + leadingZeros[first]
-		length = -leadingZeros[first]
-	} else {
-		// find next 1 bit
-		i++
-
-		// Note: function call overhead makes this perform only for large strides
-		i = int(bit_next_one(src, uint64(i)))
-
-		// no more one's
-		if i == len(src) {
-			return -1, 0
-		}
-		start = i<<3 + leadingZeros[src[i]]
-		length = -leadingZeros[src[i]]
-		if start+length > size {
-			length = size - start
-		}
-	}
-
-	// find next 0 bit beginning at 'start' position in the current byte:
-	// we first negate the byte to reuse the bitsetLeadingZeros lookup table,
-	// then mask out leading bits before and including the start position, and
-	// finally lookup the number of unmasked leading zeros; if there is any bit
-	// set to one (remember, that's a negated zero bit) the run ends in the same
-	// byte where it started.
-	if pos := leadingZeros[(^src[i])&(byte(0xff)<<uint((start&0x7)+1))]; pos < 8 {
-		length += pos
-		return start, length
-	}
-
-	// now that the start byte is processed, we continue scan in the
-	// remainder of the bitset
-	i++
-	length += 8
-
-	// Note: function call overhead makes this perform only for large strides
-	j := int(bit_next_zero(src, uint64(i)))
-	length += 8 * (j - i)
-	i = j
-
-	// rewind when we've moved past the slice end
-	if i == len(src) {
-		i--
-	}
-
-	// count trailing one bits
-	if src[i] != 0xff {
-		length += leadingZeros[^src[i]]
-	}
-	// corner-case overflow check
-	if start+length > size {
-		length = size - start
-	}
-
-	return start, length
 }

@@ -1,6 +1,5 @@
-// Copyright (c) 2020 Blockwatch Data Inc.
+// Copyright (c) 2020-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//
 
 package generic
 
@@ -495,7 +494,7 @@ func TestBitNegGeneric(t *testing.T) {
 	}
 }
 
-func TestBitsetIndexGenericSkip64(t *testing.T) {
+func TestBitsetIndexGeneric(t *testing.T) {
 	for _, c := range runTestcases {
 		idx := make([]uint32, len(c.Idx))
 		var ret = Indexes(c.Buf, c.Size, idx)
@@ -507,22 +506,6 @@ func TestBitsetIndexGenericSkip64(t *testing.T) {
 		}
 		if !reflect.DeepEqual(idx, c.Idx) {
 			t.Errorf("%s: unexpected result %d, expected %d", c.Name, idx, c.Idx)
-		}
-	}
-}
-
-func TestBitsetRunGeneric(t *testing.T) {
-	for _, c := range runTestcases {
-		var idx, length int
-		for i, r := range c.Runs {
-			n := f("%s_%d", c.Name, i)
-			idx, length = Run(c.Buf, idx+length, c.Size)
-			if got, want := idx, r[0]; got != want {
-				t.Errorf("%s: unexpected index %d, expected %d", n, got, want)
-			}
-			if got, want := length, r[1]; got != want {
-				t.Errorf("%s: unexpected length %d, expected %d", n, got, want)
-			}
 		}
 	}
 }

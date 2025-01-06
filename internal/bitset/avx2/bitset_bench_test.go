@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Blockwatch Data Inc.
+// Copyright (c) 2020-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 //go:build amd64 && !gccgo && !appengine
@@ -19,7 +19,7 @@ var (
 	benchmarkDensities = tests.BenchmarkDensities
 )
 
-func BenchmarkBitsetIndexAVX2Skip(b *testing.B) {
+func BenchmarkBitsetIndexesAVX2(b *testing.B) {
 	if !util.UseAVX2 {
 		b.SkipNow()
 	}
@@ -32,27 +32,6 @@ func BenchmarkBitsetIndexAVX2Skip(b *testing.B) {
 				b.SetBytes(int64(bitFieldLen(n.L)))
 				for i := 0; i < b.N; i++ {
 					_ = Indexes(bits, n.L, slice)
-				}
-			})
-		}
-	}
-}
-
-func BenchmarkBitsetRunAVX2(b *testing.B) {
-	if !util.UseAVX2 {
-		b.SkipNow()
-	}
-	for _, n := range benchmarkSizes {
-		for _, d := range benchmarkDensities {
-			b.Run(n.Name+"-"+d.Name, func(b *testing.B) {
-				bits := fillBitsetRand(nil, n.L, d.D)
-				b.ResetTimer()
-				b.SetBytes(int64(bitFieldLen(n.L)))
-				for i := 0; i < b.N; i++ {
-					var idx, length int
-					for idx > -1 {
-						idx, length = Run(bits, idx+length, n.L)
-					}
 				}
 			})
 		}
@@ -188,19 +167,6 @@ func BenchmarkBitsetNotAVX2(b *testing.B) {
 			b.SetBytes(int64(bitFieldLen(n.L)))
 			for i := 0; i < b.N; i++ {
 				Neg(bits, n.L)
-			}
-		})
-	}
-}
-
-func BenchmarkBitsetReverseAVX2(b *testing.B) {
-	for _, n := range benchmarkSizes {
-		b.Run(n.Name, func(b *testing.B) {
-			bits := fillBitset(nil, n.L, 0xfa)
-			b.ResetTimer()
-			b.SetBytes(int64(bitFieldLen(n.L)))
-			for i := 0; i < b.N; i++ {
-				Reverse(bits)
 			}
 		})
 	}

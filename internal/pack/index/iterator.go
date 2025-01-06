@@ -164,7 +164,7 @@ func (it *IndexScanIterator) Next(ctx context.Context) (*pack.Package, []uint32,
 		}
 
 		// handle real matches
-		it.hits = bits.IndexesU32(it.hits)
+		it.hits = bits.Indexes(it.hits)
 		bits.Close()
 
 		// load remaining columns here

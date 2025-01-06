@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 //go:build amd64 && !gccgo && !appengine
@@ -11,7 +11,6 @@ import (
 	"reflect"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/bitset/generic"
 	"blockwatch.cc/knoxdb/internal/bitset/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -550,27 +549,7 @@ func TestBitsetPopCountAVX2(t *testing.T) {
 	}
 }
 
-func TestBitsetReverseAVX2(t *testing.T) {
-	for _, sz := range bitsetSizes {
-		bits := fillBitsetSaw(nil, sz)
-		cmp := make([]byte, len(bits))
-		copy(cmp, bits)
-		generic.Reverse(cmp)
-		Reverse(bits)
-
-		if got, want := len(bits), len(cmp); got != want {
-			t.Errorf("%d: unexpected buf length %d, expected %d", sz, got, want)
-		}
-		if got, want := popcount_ref(bits), popcount_ref(cmp); got != want {
-			t.Errorf("%d: unexpected count %d, expected %d", sz, got, want)
-		}
-		if !bytes.Equal(bits, cmp) {
-			t.Errorf("%d: unexpected result %x, expected %x", sz, bits, cmp)
-		}
-	}
-}
-
-func TestBitsetIndexAVX2Skip(t *testing.T) {
+func TestBitsetIndexAVX2(t *testing.T) {
 	if !util.UseAVX2 {
 		t.SkipNow()
 	}
@@ -588,25 +567,6 @@ func TestBitsetIndexAVX2Skip(t *testing.T) {
 		}
 		if !reflect.DeepEqual(idx, c.Idx) {
 			t.Errorf("%s: unexpected result %d, expected %d", c.Name, idx, c.Idx)
-		}
-	}
-}
-
-func TestBitsetRunAVX2(t *testing.T) {
-	if !util.UseAVX2 {
-		t.SkipNow()
-	}
-	for _, c := range runTestcases {
-		var idx, length int
-		for i, r := range c.Runs {
-			n := f("%s_%d", c.Name, i)
-			idx, length = Run(c.Buf, idx+length, c.Size)
-			if got, want := idx, r[0]; got != want {
-				t.Errorf("%s: unexpected index %d, expected %d", n, got, want)
-			}
-			if got, want := length, r[1]; got != want {
-				t.Errorf("%s: unexpected length %d, expected %d", n, got, want)
-			}
 		}
 	}
 }

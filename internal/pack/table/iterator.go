@@ -95,7 +95,7 @@ func (it *ForwardIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		}
 
 		// handle real matches
-		it.hits = bits.IndexesU32(it.hits)
+		it.hits = bits.Indexes(it.hits)
 		bits.Close()
 		it.query.Stats.Count(PACKS_SCANNED_KEY, 1)
 
@@ -191,7 +191,7 @@ func (it *ReverseIterator) Next(ctx context.Context) (*pack.Package, []uint32, e
 		}
 
 		// handle real matches
-		it.hits = bits.IndexesU32(it.hits)
+		it.hits = bits.Indexes(it.hits)
 		bits.Close()
 		it.query.Stats.Count(PACKS_SCANNED_KEY, 1)
 

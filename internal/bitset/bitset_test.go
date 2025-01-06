@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 //
 
@@ -28,12 +28,12 @@ var bitsetSizes = []int{
 	63, 64, 65, 127,
 }
 
-func checkCleanTail(t *testing.T, buf []byte) {
+func checkCleanTail(t *testing.T, name string, buf []byte) {
 	tail := len(buf)
 	buf = buf[:cap(buf)]
 	for i := range buf[tail:] {
 		if buf[tail+i] != 0 {
-			t.Errorf("unclean memory %x at pos %d+%d: %x", buf[i], tail, i, buf)
+			t.Errorf("%s: unclean memory %x at pos %d+%d: %x", name, buf[i], tail, i, buf)
 			t.FailNow()
 		}
 	}
@@ -52,13 +52,13 @@ func TestBitsetNew(t *testing.T) {
 		if got, want := bits.Count(), 0; got != want {
 			t.Errorf("%s: unexpected count %d, expected %d", c.Name, got, want)
 		}
-		checkCleanTail(t, bits.Bytes())
+		checkCleanTail(t, c.Name, bits.Bytes())
 	}
 }
 
 func TestBitsetFromBytes(t *testing.T) {
 	for _, c := range popCases {
-		bits := NewBitsetFromBytes(c.Source, c.Size)
+		bits := FromBuffer(c.Source, c.Size)
 		if got, want := len(bits.Bytes()), len(c.Source); got != want {
 			t.Errorf("%s: unexpected buf length %d, expected %d", c.Name, got, want)
 		}
@@ -69,7 +69,7 @@ func TestBitsetFromBytes(t *testing.T) {
 			t.Errorf("%s: unexpected count %d, expected %d", c.Name, got, want)
 		}
 		if !bytes.Equal(bits.Bytes(), c.Result) {
-			t.Errorf("%s: unexpected result %x, expected %x", c.Name, bits.Bytes(), c.Source)
+			t.Errorf("%s: unexpected result %x, expected %x", c.Name, bits.Bytes(), c.Result)
 		}
 	}
 }
@@ -98,7 +98,7 @@ func TestBitsetOne(t *testing.T) {
 
 func TestBitsetZero(t *testing.T) {
 	for _, c := range popCases {
-		bits := NewBitsetFromBytes(c.Source, c.Size)
+		bits := FromBuffer(c.Source, c.Size)
 		bits.Zero()
 		if got, want := len(bits.Bytes()), len(c.Source); got != want {
 			t.Errorf("%s: unexpected buf length %d, expected %d", c.Name, got, want)
@@ -151,7 +151,7 @@ func TestBitsetResize(t *testing.T) {
 				t.Errorf("%s: unexpected result %x, expected %x", n, bits.Bytes(), buf)
 				t.FailNow()
 			}
-			checkCleanTail(t, bits.Bytes())
+			checkCleanTail(t, n, bits.Bytes())
 		}
 	}
 	// clear/reset bitset to zero
@@ -172,7 +172,7 @@ func TestBitsetResize(t *testing.T) {
 			t.Errorf("%s: unexpected count %d, expected %d", n, got, want)
 			t.FailNow()
 		}
-		checkCleanTail(t, bits.Bytes())
+		checkCleanTail(t, n, bits.Bytes())
 	}
 	// grow + 1
 	for _, sz := range bitsetSizes {
@@ -197,7 +197,7 @@ func TestBitsetResize(t *testing.T) {
 			t.Errorf("%s: unexpected real count %d, expected %d", n, got, want)
 			t.FailNow()
 		}
-		checkCleanTail(t, bits.Bytes())
+		checkCleanTail(t, n, bits.Bytes())
 	}
 }
 
@@ -278,7 +278,7 @@ func TestBitsetSet(t *testing.T) {
 		if !bytes.Equal(bits.Bytes(), cmp) {
 			t.Errorf("%s: unexpected result %x, expected %x", n, bits.Bytes(), cmp)
 		}
-		checkCleanTail(t, bits.Bytes())
+		checkCleanTail(t, n, bits.Bytes())
 	}
 }
 
@@ -354,7 +354,7 @@ func randBits(n int) []byte {
 func randBitsets(sz int) []*Bitset {
 	res := make([]*Bitset, 100)
 	for i := range res {
-		res[i] = NewBitsetFromBytes(randBits(sz), sz)
+		res[i] = NewBitset(sz).SetFromBytes(randBits(sz), sz)
 	}
 	return res
 }
@@ -396,32 +396,6 @@ func TestBitsetSubSlice(t *testing.T) {
 				}
 			}
 
-		}
-	}
-}
-
-func TestBitsetFromSlice(t *testing.T) {
-	for _, sz := range bitsetSizes {
-		for i, b := range randBitsets(sz) {
-			name := f("%d_%d", sz, i)
-			slice := b.Slice()
-			bits := NewBitsetFromSlice(slice)
-			if got, want := len(bits.Bytes()), len(b.Bytes()); got != want {
-				t.Errorf("%s: unexpected buf length %d, expected %d", name, got, want)
-				t.FailNow()
-			}
-			if got, want := bits.Len(), b.Len(); got != want {
-				t.Errorf("%s: unexpected size %d, expected %d", name, got, want)
-				t.FailNow()
-			}
-			if got, want := bits.Count(), b.Count(); got != want {
-				t.Errorf("%s: unexpected count %d, expected %d", name, got, want)
-				t.FailNow()
-			}
-			if !bytes.Equal(bits.Bytes(), b.Bytes()) {
-				t.Fatalf("%s: unexpected result %x, expected %x", name, bits.Bytes(), b.Bytes())
-				t.FailNow()
-			}
 		}
 	}
 }
@@ -659,7 +633,7 @@ func TestBitsetDelete(t *testing.T) {
 					t.Fatalf("%s: unexpected memory contents %x, expected %x", name, dst.Bytes(), before.Bytes())
 					t.FailNow()
 				}
-				checkCleanTail(t, dst.Bytes())
+				checkCleanTail(t, name, dst.Bytes())
 			}
 		}
 	}
@@ -681,11 +655,12 @@ func TestBitsetSwap(t *testing.T) {
 			lbefore := src.Len()
 			src.Swap(i, j)
 
-			// T.Logf("SWAP(%d/%d)=%t/%t AFTER(%d/%d)=%t/%t cnt=%d len=%d\n",
+			// t.Logf("SWAP(%d/%d)=%t/%t AFTER(%d/%d)=%t/%t cnt=%d len=%d\n",
 			// 	i, j, ibefore, jbefore,
 			// 	i, j, src.IsSet(i), src.IsSet(j),
 			// 	cbefore, lbefore,
 			// )
+
 			if got, want := src.Len(), lbefore; got != want {
 				t.Errorf("%s: unexpected bitset len %d, expected %d", name, got, want)
 				t.FailNow()
@@ -706,7 +681,7 @@ func TestBitsetSwap(t *testing.T) {
 				t.Fatalf("%s: unexpected bit j=%d: got %t, expected %t", name, j, got, want)
 				t.FailNow()
 			}
-			checkCleanTail(t, src.Bytes())
+			checkCleanTail(t, name, src.Bytes())
 		}
 	}
 }

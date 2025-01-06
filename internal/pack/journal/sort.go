@@ -11,7 +11,7 @@ import (
 
 type dualSorter struct {
 	pk []uint64
-	id []int
+	id []uint32
 }
 
 func (s dualSorter) Len() int           { return len(s.pk) }
@@ -30,7 +30,7 @@ func (s dualSorter) Swap(i, j int) {
 // 3. data.Column(pkid) -> []uint64 (lookup pks at indexes)
 // 4. Joined sort index/pks by pk
 // 5. Return pk-sorted index list
-func (j *Journal) SortedIndexes(b *bitset.Bitset) ([]int, []uint64) {
+func (j *Journal) SortedIndexes(b *bitset.Bitset) ([]uint32, []uint64) {
 	ds := dualSorter{
 		pk: make([]uint64, b.Count()),
 		id: b.Indexes(nil),
@@ -51,7 +51,7 @@ func (j *Journal) SortedIndexes(b *bitset.Bitset) ([]int, []uint64) {
 	return ds.id, ds.pk
 }
 
-func (j *Journal) SortedIndexesReversed(b *bitset.Bitset) ([]int, []uint64) {
+func (j *Journal) SortedIndexesReversed(b *bitset.Bitset) ([]uint32, []uint64) {
 	id, pk := j.SortedIndexes(b)
 	for i, j := 0, len(id)-1; i < j; i, j = i+1, j-1 {
 		id[i], id[j] = id[j], id[i]
