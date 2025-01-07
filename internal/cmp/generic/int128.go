@@ -3,148 +3,432 @@
 
 package generic
 
-import "blockwatch.cc/knoxdb/pkg/num"
+import (
+	"math/bits"
 
-func MatchInt128Equal(src num.Int128Stride, val num.Int128, bits, mask []byte) int64 {
-	var cnt int64
-	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
-			if (mask[i>>3] & bit) == 0 {
-				continue
-			}
-			if uint64(src.X0[i]) != val[0] || src.X1[i] != val[1] {
-				continue
-			}
-			bits[i>>3] |= bit
-			cnt++
-		}
-	} else {
-		for i := range src.X0 {
-			if uint64(src.X0[i]) != val[0] || src.X1[i] != val[1] {
-				continue
-			}
-			bits[i>>3] |= byte(0x1) << uint(i&0x7)
-			cnt++
-		}
-	}
-	return cnt
-}
+	"blockwatch.cc/knoxdb/pkg/num"
+)
 
-func MatchInt128NotEqual(src num.Int128Stride, val num.Int128, bits, mask []byte) int64 {
+func MatchInt128Equal(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	var cnt int64
+	n := src.Len() / 8
 	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
-			if (mask[i>>3] & bit) == 0 {
+		for i := 0; i < n; i++ {
+			m := mask[i]
+			if m == 0 {
 				continue
 			}
-			if uint64(src.X0[i]) != val[0] || src.X1[i] != val[1] {
-				bits[i>>3] |= bit
-				cnt++
-			}
+			idx := i * 8
+			a1 := src.X0[idx] == int64(val[0]) && src.X1[idx] == val[1]
+			a2 := src.X0[idx+1] == int64(val[0]) && src.X1[idx+1] == val[1]
+			a3 := src.X0[idx+2] == int64(val[0]) && src.X1[idx+2] == val[1]
+			a4 := src.X0[idx+3] == int64(val[0]) && src.X1[idx+3] == val[1]
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] == int64(val[0]) && src.X1[idx+4] == val[1]
+			a2 = src.X0[idx+5] == int64(val[0]) && src.X1[idx+5] == val[1]
+			a3 = src.X0[idx+6] == int64(val[0]) && src.X1[idx+6] == val[1]
+			a4 = src.X0[idx+7] == int64(val[0]) && src.X1[idx+7] == val[1]
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b & m
+			cnt += int64(bits.OnesCount8(b))
 		}
-	} else {
-		for i := range src.X0 {
-			if uint64(src.X0[i]) != val[0] || src.X1[i] != val[1] {
-				bits[i>>3] |= byte(0x1) << uint(i&0x7)
-				cnt++
-			}
-		}
-	}
-	return cnt
-}
 
-func MatchInt128Less(src num.Int128Stride, val num.Int128, bits, mask []byte) int64 {
-	var cnt int64
-	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
-			if (mask[i>>3] & bit) == 0 {
-				continue
-			}
-			if val.Gt(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= bit
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				bit := byte(0x1) << uint(i&0x7)
+				if (mask[n] & bit) == 0 {
+					continue
+				}
+				if src.X0[i] != int64(val[0]) || src.X1[i] != val[1] {
+					continue
+				}
+				res[n] |= bit
 				cnt++
 			}
 		}
-	} else {
-		for i := range src.X0 {
-			if val.Gt(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= byte(0x1) << uint(i&0x7)
-				cnt++
-			}
-		}
-	}
-	return cnt
-}
 
-func MatchInt128LessEqual(src num.Int128Stride, val num.Int128, bits, mask []byte) int64 {
-	var cnt int64
-	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
-			if (mask[i>>3] & bit) == 0 {
-				continue
-			}
-			if val.Gte(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= bit
-				cnt++
-			}
-		}
 	} else {
-		for i := range src.X0 {
-			if val.Gte(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= byte(0x1) << uint(i&0x7)
-				cnt++
+		for i := 0; i < n; i++ {
+			idx := i * 8
+			a1 := src.X0[idx] == int64(val[0]) && src.X1[idx] == val[1]
+			a2 := src.X0[idx+1] == int64(val[0]) && src.X1[idx+1] == val[1]
+			a3 := src.X0[idx+2] == int64(val[0]) && src.X1[idx+2] == val[1]
+			a4 := src.X0[idx+3] == int64(val[0]) && src.X1[idx+3] == val[1]
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] == int64(val[0]) && src.X1[idx+4] == val[1]
+			a2 = src.X0[idx+5] == int64(val[0]) && src.X1[idx+5] == val[1]
+			a3 = src.X0[idx+6] == int64(val[0]) && src.X1[idx+6] == val[1]
+			a4 = src.X0[idx+7] == int64(val[0]) && src.X1[idx+7] == val[1]
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b
+			cnt += int64(bits.OnesCount8(b))
+		}
+
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				if src.X0[i] == int64(val[0]) && src.X1[i] == val[1] {
+					res[n] |= 0x1 << i
+					cnt++
+				}
 			}
 		}
 	}
 	return cnt
 }
 
-func MatchInt128Greater(src num.Int128Stride, val num.Int128, bits, mask []byte) int64 {
+func MatchInt128NotEqual(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	var cnt int64
+	n := src.Len() / 8
 	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
-			if (mask[i>>3] & bit) == 0 {
+		for i := 0; i < n; i++ {
+			m := mask[i]
+			if m == 0 {
 				continue
 			}
-			if val.Lt(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= bit
+			idx := i * 8
+			a1 := src.X0[idx] != int64(val[0]) || src.X1[idx] != val[1]
+			a2 := src.X0[idx+1] != int64(val[0]) || src.X1[idx+1] != val[1]
+			a3 := src.X0[idx+2] != int64(val[0]) || src.X1[idx+2] != val[1]
+			a4 := src.X0[idx+3] != int64(val[0]) || src.X1[idx+3] != val[1]
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] != int64(val[0]) || src.X1[idx+4] != val[1]
+			a2 = src.X0[idx+5] != int64(val[0]) || src.X1[idx+5] != val[1]
+			a3 = src.X0[idx+6] != int64(val[0]) || src.X1[idx+6] != val[1]
+			a4 = src.X0[idx+7] != int64(val[0]) || src.X1[idx+7] != val[1]
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b & m
+			cnt += int64(bits.OnesCount8(b))
+		}
+
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				bit := byte(0x1) << uint(i&0x7)
+				if (mask[n] & bit) == 0 {
+					continue
+				}
+				if src.X0[i] == int64(val[0]) && src.X1[i] == val[1] {
+					continue
+				}
+				res[n] |= bit
 				cnt++
 			}
 		}
+
 	} else {
-		for i := range src.X0 {
-			if val.Lt(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= byte(0x1) << uint(i&0x7)
-				cnt++
+		for i := 0; i < n; i++ {
+			idx := i * 8
+			a1 := src.X0[idx] != int64(val[0]) || src.X1[idx] != val[1]
+			a2 := src.X0[idx+1] != int64(val[0]) || src.X1[idx+1] != val[1]
+			a3 := src.X0[idx+2] != int64(val[0]) || src.X1[idx+2] != val[1]
+			a4 := src.X0[idx+3] != int64(val[0]) || src.X1[idx+3] != val[1]
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] != int64(val[0]) || src.X1[idx+4] != val[1]
+			a2 = src.X0[idx+5] != int64(val[0]) || src.X1[idx+5] != val[1]
+			a3 = src.X0[idx+6] != int64(val[0]) || src.X1[idx+6] != val[1]
+			a4 = src.X0[idx+7] != int64(val[0]) || src.X1[idx+7] != val[1]
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b
+			cnt += int64(bits.OnesCount8(b))
+		}
+
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				if src.X0[i] != int64(val[0]) || src.X1[i] != val[1] {
+					res[n] |= 0x1 << i
+					cnt++
+				}
 			}
 		}
 	}
 	return cnt
 }
 
-func MatchInt128GreaterEqual(src num.Int128Stride, val num.Int128, bits, mask []byte) int64 {
+func MatchInt128Less(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	var cnt int64
+	n := src.Len() / 8
 	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
-			if (mask[i>>3] & bit) == 0 {
+		for i := 0; i < n; i++ {
+			m := mask[i]
+			if m == 0 {
 				continue
 			}
-			if val.Lte(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= bit
+			idx := i * 8
+			a1 := src.X0[idx] < int64(val[0]) || (src.X0[idx] == int64(val[0]) && src.X1[idx] < val[1])
+			a2 := src.X0[idx+1] < int64(val[0]) || (src.X0[idx+1] == int64(val[0]) && src.X1[idx+1] < val[1])
+			a3 := src.X0[idx+2] < int64(val[0]) || (src.X0[idx+2] == int64(val[0]) && src.X1[idx+2] < val[1])
+			a4 := src.X0[idx+3] < int64(val[0]) || (src.X0[idx+3] == int64(val[0]) && src.X1[idx+3] < val[1])
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] < int64(val[0]) || (src.X0[idx+4] == int64(val[0]) && src.X1[idx+4] < val[1])
+			a2 = src.X0[idx+5] < int64(val[0]) || (src.X0[idx+5] == int64(val[0]) && src.X1[idx+5] < val[1])
+			a3 = src.X0[idx+6] < int64(val[0]) || (src.X0[idx+6] == int64(val[0]) && src.X1[idx+6] < val[1])
+			a4 = src.X0[idx+7] < int64(val[0]) || (src.X0[idx+7] == int64(val[0]) && src.X1[idx+7] < val[1])
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b & m
+			cnt += int64(bits.OnesCount8(b))
+		}
+
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				bit := byte(0x1) << uint(i&0x7)
+				if (mask[n] & bit) == 0 {
+					continue
+				}
+				if src.X0[i] > int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] >= val[1]) {
+					continue
+				}
+				res[n] |= bit
 				cnt++
 			}
 		}
+
 	} else {
-		for i := range src.X0 {
-			if val.Lte(num.Int128{uint64(src.X0[i]), src.X1[i]}) {
-				bits[i>>3] |= byte(0x1) << uint(i&0x7)
+		for i := 0; i < n; i++ {
+			idx := i * 8
+			a1 := src.X0[idx] < int64(val[0]) || (src.X0[idx] == int64(val[0]) && src.X1[idx] < val[1])
+			a2 := src.X0[idx+1] < int64(val[0]) || (src.X0[idx+1] == int64(val[0]) && src.X1[idx+1] < val[1])
+			a3 := src.X0[idx+2] < int64(val[0]) || (src.X0[idx+2] == int64(val[0]) && src.X1[idx+2] < val[1])
+			a4 := src.X0[idx+3] < int64(val[0]) || (src.X0[idx+3] == int64(val[0]) && src.X1[idx+3] < val[1])
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] < int64(val[0]) || (src.X0[idx+4] == int64(val[0]) && src.X1[idx+4] < val[1])
+			a2 = src.X0[idx+5] < int64(val[0]) || (src.X0[idx+5] == int64(val[0]) && src.X1[idx+5] < val[1])
+			a3 = src.X0[idx+6] < int64(val[0]) || (src.X0[idx+6] == int64(val[0]) && src.X1[idx+6] < val[1])
+			a4 = src.X0[idx+7] < int64(val[0]) || (src.X0[idx+7] == int64(val[0]) && src.X1[idx+7] < val[1])
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b
+			cnt += int64(bits.OnesCount8(b))
+		}
+
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				if src.X0[i] < int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] < val[1]) {
+					res[n] |= 0x1 << i
+					cnt++
+				}
+			}
+		}
+	}
+	return cnt
+}
+
+func MatchInt128LessEqual(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
+	var cnt int64
+	n := src.Len() / 8
+	if mask != nil {
+		for i := 0; i < n; i++ {
+			m := mask[i]
+			if m == 0 {
+				continue
+			}
+			idx := i * 8
+			a1 := src.X0[idx] < int64(val[0]) || (src.X0[idx] == int64(val[0]) && src.X1[idx] <= val[1])
+			a2 := src.X0[idx+1] < int64(val[0]) || (src.X0[idx+1] == int64(val[0]) && src.X1[idx+1] <= val[1])
+			a3 := src.X0[idx+2] < int64(val[0]) || (src.X0[idx+2] == int64(val[0]) && src.X1[idx+2] <= val[1])
+			a4 := src.X0[idx+3] < int64(val[0]) || (src.X0[idx+3] == int64(val[0]) && src.X1[idx+3] <= val[1])
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] < int64(val[0]) || (src.X0[idx+4] == int64(val[0]) && src.X1[idx+4] <= val[1])
+			a2 = src.X0[idx+5] < int64(val[0]) || (src.X0[idx+5] == int64(val[0]) && src.X1[idx+5] <= val[1])
+			a3 = src.X0[idx+6] < int64(val[0]) || (src.X0[idx+6] == int64(val[0]) && src.X1[idx+6] <= val[1])
+			a4 = src.X0[idx+7] < int64(val[0]) || (src.X0[idx+7] == int64(val[0]) && src.X1[idx+7] <= val[1])
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b & m
+			cnt += int64(bits.OnesCount8(b))
+		}
+
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				bit := byte(0x1) << uint(i&0x7)
+				if (mask[n] & bit) == 0 {
+					continue
+				}
+				if src.X0[i] > int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] > val[1]) {
+					continue
+				}
+				res[n] |= bit
 				cnt++
+			}
+		}
+
+	} else {
+		for i := 0; i < n; i++ {
+			idx := i * 8
+			a1 := src.X0[idx] < int64(val[0]) || (src.X0[idx] == int64(val[0]) && src.X1[idx] <= val[1])
+			a2 := src.X0[idx+1] < int64(val[0]) || (src.X0[idx+1] == int64(val[0]) && src.X1[idx+1] <= val[1])
+			a3 := src.X0[idx+2] < int64(val[0]) || (src.X0[idx+2] == int64(val[0]) && src.X1[idx+2] <= val[1])
+			a4 := src.X0[idx+3] < int64(val[0]) || (src.X0[idx+3] == int64(val[0]) && src.X1[idx+3] <= val[1])
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] < int64(val[0]) || (src.X0[idx+4] == int64(val[0]) && src.X1[idx+4] <= val[1])
+			a2 = src.X0[idx+5] < int64(val[0]) || (src.X0[idx+5] == int64(val[0]) && src.X1[idx+5] <= val[1])
+			a3 = src.X0[idx+6] < int64(val[0]) || (src.X0[idx+6] == int64(val[0]) && src.X1[idx+6] <= val[1])
+			a4 = src.X0[idx+7] < int64(val[0]) || (src.X0[idx+7] == int64(val[0]) && src.X1[idx+7] <= val[1])
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b
+			cnt += int64(bits.OnesCount8(b))
+		}
+
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				if src.X0[i] < int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] <= val[1]) {
+					res[n] |= 0x1 << i
+					cnt++
+				}
+			}
+		}
+	}
+	return cnt
+}
+
+func MatchInt128Greater(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
+	var cnt int64
+	n := src.Len() / 8
+	if mask != nil {
+		for i := 0; i < n; i++ {
+			m := mask[i]
+			if m == 0 {
+				continue
+			}
+			idx := i * 8
+			a1 := src.X0[idx] > int64(val[0]) || (src.X0[idx] == int64(val[0]) && src.X1[idx] > val[1])
+			a2 := src.X0[idx+1] > int64(val[0]) || (src.X0[idx+1] == int64(val[0]) && src.X1[idx+1] > val[1])
+			a3 := src.X0[idx+2] > int64(val[0]) || (src.X0[idx+2] == int64(val[0]) && src.X1[idx+2] > val[1])
+			a4 := src.X0[idx+3] > int64(val[0]) || (src.X0[idx+3] == int64(val[0]) && src.X1[idx+3] > val[1])
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] > int64(val[0]) || (src.X0[idx+4] == int64(val[0]) && src.X1[idx+4] > val[1])
+			a2 = src.X0[idx+5] > int64(val[0]) || (src.X0[idx+5] == int64(val[0]) && src.X1[idx+5] > val[1])
+			a3 = src.X0[idx+6] > int64(val[0]) || (src.X0[idx+6] == int64(val[0]) && src.X1[idx+6] > val[1])
+			a4 = src.X0[idx+7] > int64(val[0]) || (src.X0[idx+7] == int64(val[0]) && src.X1[idx+7] > val[1])
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b & m
+			cnt += int64(bits.OnesCount8(b))
+		}
+
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				bit := byte(0x1) << uint(i&0x7)
+				if (mask[n] & bit) == 0 {
+					continue
+				}
+				if src.X0[i] < int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] <= val[1]) {
+					continue
+				}
+				res[n] |= bit
+				cnt++
+			}
+		}
+
+	} else {
+		for i := 0; i < n; i++ {
+			idx := i * 8
+			a1 := src.X0[idx] > int64(val[0]) || (src.X0[idx] == int64(val[0]) && src.X1[idx] > val[1])
+			a2 := src.X0[idx+1] > int64(val[0]) || (src.X0[idx+1] == int64(val[0]) && src.X1[idx+1] > val[1])
+			a3 := src.X0[idx+2] > int64(val[0]) || (src.X0[idx+2] == int64(val[0]) && src.X1[idx+2] > val[1])
+			a4 := src.X0[idx+3] > int64(val[0]) || (src.X0[idx+3] == int64(val[0]) && src.X1[idx+3] > val[1])
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] > int64(val[0]) || (src.X0[idx+4] == int64(val[0]) && src.X1[idx+4] > val[1])
+			a2 = src.X0[idx+5] > int64(val[0]) || (src.X0[idx+5] == int64(val[0]) && src.X1[idx+5] > val[1])
+			a3 = src.X0[idx+6] > int64(val[0]) || (src.X0[idx+6] == int64(val[0]) && src.X1[idx+6] > val[1])
+			a4 = src.X0[idx+7] > int64(val[0]) || (src.X0[idx+7] == int64(val[0]) && src.X1[idx+7] > val[1])
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b
+			cnt += int64(bits.OnesCount8(b))
+		}
+
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				if src.X0[i] > int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] > val[1]) {
+					res[n] |= 0x1 << i
+					cnt++
+				}
+			}
+		}
+	}
+	return cnt
+}
+
+func MatchInt128GreaterEqual(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
+	var cnt int64
+	n := src.Len() / 8
+	if mask != nil {
+		for i := 0; i < n; i++ {
+			m := mask[i]
+			if m == 0 {
+				continue
+			}
+			idx := i * 8
+			a1 := src.X0[idx] > int64(val[0]) || (src.X0[idx] == int64(val[0]) && src.X1[idx] >= val[1])
+			a2 := src.X0[idx+1] > int64(val[0]) || (src.X0[idx+1] == int64(val[0]) && src.X1[idx+1] >= val[1])
+			a3 := src.X0[idx+2] > int64(val[0]) || (src.X0[idx+2] == int64(val[0]) && src.X1[idx+2] >= val[1])
+			a4 := src.X0[idx+3] > int64(val[0]) || (src.X0[idx+3] == int64(val[0]) && src.X1[idx+3] >= val[1])
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] > int64(val[0]) || (src.X0[idx+4] == int64(val[0]) && src.X1[idx+4] >= val[1])
+			a2 = src.X0[idx+5] > int64(val[0]) || (src.X0[idx+5] == int64(val[0]) && src.X1[idx+5] >= val[1])
+			a3 = src.X0[idx+6] > int64(val[0]) || (src.X0[idx+6] == int64(val[0]) && src.X1[idx+6] >= val[1])
+			a4 = src.X0[idx+7] > int64(val[0]) || (src.X0[idx+7] == int64(val[0]) && src.X1[idx+7] >= val[1])
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b & m
+			cnt += int64(bits.OnesCount8(b))
+		}
+
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				bit := byte(0x1) << uint(i&0x7)
+				if (mask[n] & bit) == 0 {
+					continue
+				}
+				if src.X0[i] < int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] < val[1]) {
+					continue
+				}
+				res[n] |= bit
+				cnt++
+			}
+		}
+
+	} else {
+		for i := 0; i < n; i++ {
+			idx := i * 8
+			a1 := src.X0[idx] > int64(val[0]) || (src.X0[idx] == int64(val[0]) && src.X1[idx] >= val[1])
+			a2 := src.X0[idx+1] > int64(val[0]) || (src.X0[idx+1] == int64(val[0]) && src.X1[idx+1] >= val[1])
+			a3 := src.X0[idx+2] > int64(val[0]) || (src.X0[idx+2] == int64(val[0]) && src.X1[idx+2] >= val[1])
+			a4 := src.X0[idx+3] > int64(val[0]) || (src.X0[idx+3] == int64(val[0]) && src.X1[idx+3] >= val[1])
+			// note: bitset bytes store bits inverted for efficient index algo
+			b := b2u(a1) + b2u(a2)<<1 + b2u(a3)<<2 + b2u(a4)<<3
+			a1 = src.X0[idx+4] > int64(val[0]) || (src.X0[idx+4] == int64(val[0]) && src.X1[idx+4] >= val[1])
+			a2 = src.X0[idx+5] > int64(val[0]) || (src.X0[idx+5] == int64(val[0]) && src.X1[idx+5] >= val[1])
+			a3 = src.X0[idx+6] > int64(val[0]) || (src.X0[idx+6] == int64(val[0]) && src.X1[idx+6] >= val[1])
+			a4 = src.X0[idx+7] > int64(val[0]) || (src.X0[idx+7] == int64(val[0]) && src.X1[idx+7] >= val[1])
+			b += b2u(a1)<<4 + b2u(a2)<<5 + b2u(a3)<<6 + b2u(a4)<<7
+			res[i] = b
+			cnt += int64(bits.OnesCount8(b))
+		}
+
+		// tail
+		if src.Len()%8 > 0 {
+			for i, l := n*8, src.Len(); i < l; i++ {
+				if src.X0[i] > int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] >= val[1]) {
+					res[n] |= 0x1 << i
+					cnt++
+				}
 			}
 		}
 	}

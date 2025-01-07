@@ -4,6 +4,7 @@
 package tests
 
 import (
+	"strconv"
 	"testing"
 	"unsafe"
 
@@ -16,10 +17,15 @@ type BenchmarkSize struct {
 }
 
 var BenchmarkSizes = []BenchmarkSize{
-	{"1K", 1 * 1024},
-	{"16K", 16 * 1024},
-	{"64K", 64 * 1024},
+	// {"1K", 1 * 1024},
+	// {"16K", 16 * 1024},
+	// {"64K", 64 * 1024},
 	{"128K", 128 * 1024},
+}
+
+var BenchmarksMasks = [][]byte{
+	maskAll,
+	[]byte{0x00, 0x11},
 }
 
 type Number interface {
@@ -39,7 +45,7 @@ type MatchTest[T Number] struct {
 func TestCases[T Number](t *testing.T, cases []MatchTest[T], fn func([]T, T, []byte) int64) {
 	t.Helper()
 	for _, c := range cases {
-		bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
+		bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
 		cnt := fn(c.Slice, c.Match, bits)
 		assert.Len(t, bits, len(c.Result), c.Name)
 		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
@@ -51,7 +57,7 @@ func TestCases[T Number](t *testing.T, cases []MatchTest[T], fn func([]T, T, []b
 func TestCases2[T Number](t *testing.T, cases []MatchTest[T], fn func([]T, T, T, []byte) int64) {
 	t.Helper()
 	for _, c := range cases {
-		bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
+		bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
 		cnt := fn(c.Slice, c.Match, c.Match2, bits)
 		assert.Len(t, bits, len(c.Result), c.Name)
 		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
@@ -63,29 +69,33 @@ func TestCases2[T Number](t *testing.T, cases []MatchTest[T], fn func([]T, T, T,
 func BenchCases[T Number](b *testing.B, fn func([]T, T, []byte) int64) {
 	b.Helper()
 	for _, n := range BenchmarkSizes {
-		a := randSlice[T](n.L)
-		bits, _ := MakeBitsAndMaskPoison(n.L)
-		b.Run(n.Name, func(b *testing.B) {
-			var t T
-			b.SetBytes(int64(n.L * int(unsafe.Sizeof(t))))
-			for i := 0; i < b.N; i++ {
-				fn(a, 127, bits)
-			}
-		})
+		for i, m := range BenchmarksMasks {
+			a := randSlice[T](n.L)
+			bits, _ := MakeBitsAndMaskPoison(n.L, m)
+			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
+				var t T
+				b.SetBytes(int64(n.L * int(unsafe.Sizeof(t))))
+				for i := 0; i < b.N; i++ {
+					fn(a, 127, bits)
+				}
+			})
+		}
 	}
 }
 
 func BenchCases2[T Number](b *testing.B, fn func([]T, T, T, []byte) int64) {
 	b.Helper()
 	for _, n := range BenchmarkSizes {
-		a := randSlice[T](n.L)
-		bits, _ := MakeBitsAndMaskPoison(n.L)
-		b.Run(n.Name, func(b *testing.B) {
-			var t T
-			b.SetBytes(int64(n.L * int(unsafe.Sizeof(t))))
-			for i := 0; i < b.N; i++ {
-				fn(a, 5, 127, bits)
-			}
-		})
+		for i, m := range BenchmarksMasks {
+			a := randSlice[T](n.L)
+			bits, _ := MakeBitsAndMaskPoison(n.L, m)
+			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
+				var t T
+				b.SetBytes(int64(n.L * int(unsafe.Sizeof(t))))
+				for i := 0; i < b.N; i++ {
+					fn(a, 5, 127, bits)
+				}
+			})
+		}
 	}
 }

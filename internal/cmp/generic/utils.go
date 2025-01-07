@@ -7,10 +7,9 @@ func bytemask(size int) byte {
 	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
 }
 
-// func bitFieldLen(n int) int {
-// 	return roundUpPow2(n, 8) >> 3
-// }
-
-// func roundUpPow2(n int, pow2 int) int {
-// 	return (n + (pow2 - 1)) & ^(pow2 - 1)
-// }
+func b2u(b bool) (x byte) {
+	if b {
+		x = 1
+	}
+	return
+}

@@ -101,15 +101,6 @@ var (
 	MatchFloat64GreaterEqual = generic.MatchFloatGreaterEqual[float64]
 	MatchFloat64Between      = generic.MatchFloatBetween[float64]
 
-	// time
-	// MatchTimeEqual            = generic.MatchTimeEqual
-	// MatchTimeNotEqual         = generic.MatchTimeNotEqual
-	// MatchTimeLess         = generic.MatchTimeLess
-	// MatchTimeLessEqual    = generic.MatchTimeLessEqual
-	// MatchTimeGreater      = generic.MatchTimeGreater
-	// MatchTimeGreaterEqual = generic.MatchTimeGreaterEqual
-	// MatchTimeBetween          = generic.MatchTimeBetween
-
 	// bytes
 	MatchBytesEqual        = generic.MatchBytesEqual
 	MatchBytesNotEqual     = generic.MatchBytesNotEqual
@@ -120,13 +111,13 @@ var (
 	MatchBytesBetween      = generic.MatchBytesBetween
 
 	// string
-	MatchStringsEqual        = generic.MatchStringsEqual
-	MatchStringsNotEqual     = generic.MatchStringsNotEqual
-	MatchStringsLess         = generic.MatchStringsLess
-	MatchStringsLessEqual    = generic.MatchStringsLessEqual
-	MatchStringsGreater      = generic.MatchStringsGreater
-	MatchStringsGreaterEqual = generic.MatchStringsGreaterEqual
-	MatchStringsBetween      = generic.MatchStringsBetween
+	// MatchStringsEqual        = generic.MatchStringsEqual
+	// MatchStringsNotEqual     = generic.MatchStringsNotEqual
+	// MatchStringsLess         = generic.MatchStringsLess
+	// MatchStringsLessEqual    = generic.MatchStringsLessEqual
+	// MatchStringsGreater      = generic.MatchStringsGreater
+	// MatchStringsGreaterEqual = generic.MatchStringsGreaterEqual
+	// MatchStringsBetween      = generic.MatchStringsBetween
 
 	// int128
 	MatchInt128Equal        = generic.MatchInt128Equal

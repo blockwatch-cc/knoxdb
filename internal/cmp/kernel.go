@@ -111,15 +111,6 @@ var (
 	matchBytesGreaterEqual = generic.MatchBytesGreaterEqual
 	matchBytesBetween      = generic.MatchBytesBetween
 
-	// string
-	matchStringsEqual        = generic.MatchStringsEqual
-	matchStringsNotEqual     = generic.MatchStringsNotEqual
-	matchStringsLess         = generic.MatchStringsLess
-	matchStringsLessEqual    = generic.MatchStringsLessEqual
-	matchStringsGreater      = generic.MatchStringsGreater
-	matchStringsGreaterEqual = generic.MatchStringsGreaterEqual
-	matchStringsBetween      = generic.MatchStringsBetween
-
 	// int128
 	matchInt128Equal        = avx2.MatchInt128Equal
 	matchInt128NotEqual     = avx2.MatchInt128NotEqual
@@ -137,15 +128,6 @@ var (
 	matchInt256Greater      = avx2.MatchInt256Greater
 	matchInt256GreaterEqual = avx2.MatchInt256GreaterEqual
 	matchInt256Between      = avx2.MatchInt256Between
-
-	// bool
-	matchBoolEqual        = generic.MatchBoolEqual
-	matchBoolNotEqual     = generic.MatchBoolNotEqual
-	matchBoolLess         = generic.MatchBoolLess
-	matchBoolLessEqual    = generic.MatchBoolLessEqual
-	matchBoolGreater      = generic.MatchBoolGreater
-	matchBoolGreaterEqual = generic.MatchBoolGreaterEqual
-	matchBoolBetween      = generic.MatchBoolBetween
 )
 
 func init() {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
+	"strconv"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -218,7 +219,7 @@ type (
 func TestInt256Cases(t *testing.T, cases []Int256MatchTest, fn Int256MatchFunc) {
 	t.Helper()
 	for _, c := range cases {
-		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
+		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
 		cnt := fn(num.Int256Optimize(c.Slice), c.Match, bits, mask)
 		assert.Len(t, bits, len(c.Result), c.Name)
 		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
@@ -230,7 +231,7 @@ func TestInt256Cases(t *testing.T, cases []Int256MatchTest, fn Int256MatchFunc) 
 func TestInt256Cases2(t *testing.T, cases []Int256MatchTest, fn Int256MatchFunc2) {
 	t.Helper()
 	for _, c := range cases {
-		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32)
+		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
 		cnt := fn(num.Int256Optimize(c.Slice), c.Match, c.Match2, bits, mask)
 		assert.Len(t, bits, len(c.Result), c.Name)
 		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
@@ -242,28 +243,32 @@ func TestInt256Cases2(t *testing.T, cases []Int256MatchTest, fn Int256MatchFunc2
 func BenchInt256Cases(b *testing.B, fn Int256MatchFunc) {
 	b.Helper()
 	for _, n := range BenchmarkSizes {
-		a := num.Int256Optimize(RandInt256Slice(n.L))
-		bits, mask := MakeBitsAndMaskPoison(a.Len())
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * 32))
-			for i := 0; i < b.N; i++ {
-				fn(a, MaxInt256.Rsh(1), bits, mask)
-			}
-		})
+		for i, m := range BenchmarksMasks {
+			a := num.Int256Optimize(RandInt256Slice(n.L))
+			bits, mask := MakeBitsAndMaskPoison(a.Len(), m)
+			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
+				b.SetBytes(int64(n.L * 32))
+				for i := 0; i < b.N; i++ {
+					fn(a, MaxInt256.Rsh(1), bits, mask)
+				}
+			})
+		}
 	}
 }
 
 func BenchInt256Cases2(b *testing.B, fn Int256MatchFunc2) {
 	b.Helper()
 	for _, n := range BenchmarkSizes {
-		a := num.Int256Optimize(RandInt256Slice(n.L))
-		bits, mask := MakeBitsAndMaskPoison(a.Len())
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * 32))
-			for i := 0; i < b.N; i++ {
-				fn(a, MaxInt256.Rsh(2), MaxInt256.Rsh(1), bits, mask)
-			}
-		})
+		for i, m := range BenchmarksMasks {
+			a := num.Int256Optimize(RandInt256Slice(n.L))
+			bits, mask := MakeBitsAndMaskPoison(a.Len(), m)
+			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
+				b.SetBytes(int64(n.L * 32))
+				for i := 0; i < b.N; i++ {
+					fn(a, MaxInt256.Rsh(2), MaxInt256.Rsh(1), bits, mask)
+				}
+			})
+		}
 	}
 }
 

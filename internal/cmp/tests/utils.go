@@ -9,14 +9,6 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// func bitmask(i int) byte {
-// 	return byte(1 << uint(i&0x7))
-// }
-
-// func bytemask(size int) byte {
-// 	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
-// }
-
 func bitFieldLen(n int) int {
 	return roundUpPow2(n, 8) >> 3
 }
@@ -26,8 +18,8 @@ func roundUpPow2(n int, pow2 int) int {
 }
 
 var (
-	poison = []byte{0xfa}
-	mask   = []byte{0xff}
+	poison  = []byte{0xfa}
+	maskAll = []byte{0xff}
 )
 
 func MakePoison(sz int) []byte {
@@ -35,10 +27,10 @@ func MakePoison(sz int) []byte {
 }
 
 // allocate the result bitset and fill padding with poison
-func MakeBitsAndMaskPoisonTail(sz, tail int) ([]byte, []byte) {
+func MakeBitsAndMaskPoisonTail(sz, tail int, maskBits []byte) ([]byte, []byte) {
 	l := bitFieldLen(sz)
 	bits := make([]byte, l+tail)
-	mask := bytes.Repeat(mask, l)
+	mask := bytes.Repeat(maskBits, l/len(maskBits))
 	for i := 0; i < tail; i++ {
 		bits[l+i] = 0xfa
 	}
@@ -47,10 +39,10 @@ func MakeBitsAndMaskPoisonTail(sz, tail int) ([]byte, []byte) {
 }
 
 // allocate the result bitset and fill all with poison
-func MakeBitsAndMaskPoison(sz int) ([]byte, []byte) {
+func MakeBitsAndMaskPoison(sz int, maskBits []byte) ([]byte, []byte) {
 	l := bitFieldLen(sz)
 	bits := make([]byte, l+32)
-	mask := bytes.Repeat(mask, l)
+	mask := bytes.Repeat(maskBits, l/len(maskBits))
 	for i := 0; i < 32; i++ {
 		bits[l+i] = 0xfa
 	}
