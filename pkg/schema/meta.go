@@ -46,3 +46,7 @@ func (s *Schema) WithMeta() *Schema {
 	clone.fields = append(clone.fields, MetaSchema.fields...)
 	return clone.Finalize()
 }
+
+func (s *Schema) HasMeta() bool {
+	return s.RowIdIndex() >= 0
+}

@@ -16,9 +16,9 @@ import (
 // This helps skip unrelated packs and will only return true if a pack's contens
 // may match. The decision is probabilistic when filters are used, i.e. there
 // are guaranteed no false negatives but there may be false positives.
-func MaybeMatchTree(n *query.FilterTreeNode, info *stats.PackStats) bool {
+func MaybeMatchTree(n *query.FilterTreeNode, stat *stats.PackStats) bool {
 	// never visit empty packs
-	if info.NValues == 0 {
+	if stat.NValues == 0 {
 		return false
 	}
 	// always match?
@@ -31,18 +31,18 @@ func MaybeMatchTree(n *query.FilterTreeNode, info *stats.PackStats) bool {
 	}
 	// match single leafs
 	if n.IsLeaf() {
-		return MaybeMatchFilter(n.Filter, info)
+		return MaybeMatchFilter(n.Filter, stat)
 	}
 	// combine leaf decisions along the tree
 	for _, v := range n.Children {
 		if n.OrKind {
 			// for OR nodes, stop at the first successful hint
-			if MaybeMatchTree(v, info) {
+			if MaybeMatchTree(v, stat) {
 				return true
 			}
 		} else {
 			// for AND nodes stop at the first non-successful hint
-			if !MaybeMatchTree(v, info) {
+			if !MaybeMatchTree(v, stat) {
 				return false
 			}
 		}
@@ -57,8 +57,8 @@ func MaybeMatchTree(n *query.FilterTreeNode, info *stats.PackStats) bool {
 // matches the filter. Due to the nature of bloom/fuse filters and min/max
 // range statistics the decision is only probabilistic, but guaranteed to
 // contain no false negatives.
-func MaybeMatchFilter(f *query.Filter, meta *stats.PackStats) bool {
-	block := meta.Blocks[f.Index]
+func MaybeMatchFilter(f *query.Filter, stat *stats.PackStats) bool {
+	block := stat.Blocks[f.Index]
 
 	// matcher is selected and configured during compile stage
 	if f.Matcher.MatchRange(block.MinValue, block.MaxValue) {
@@ -105,15 +105,15 @@ func MatchFilter(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset) 
 }
 
 // MatchTree matches pack contents against a query condition (sub)tree.
-func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackStats) *bitset.Bitset {
+func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, stat *stats.PackStats) *bitset.Bitset {
 	if n.IsLeaf() {
 		return MatchFilter(n.Filter, pkg, nil, nil)
 	}
 
 	if n.OrKind {
-		return MatchTreeOr(n, pkg, meta)
+		return MatchTreeOr(n, pkg, stat)
 	} else {
-		return MatchTreeAnd(n, pkg, meta)
+		return MatchTreeAnd(n, pkg, stat)
 	}
 }
 
@@ -122,7 +122,7 @@ func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackStats
 // and does so efficiently by skipping unnecessary matches and aggregations.
 //
 // TODO: concurrent condition matches and cascading bitset merge
-func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackStats) *bitset.Bitset {
+func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, stat *stats.PackStats) *bitset.Bitset {
 	// start with a full bitset
 	bits := bitset.NewBitset(pkg.Len()).One()
 
@@ -137,15 +137,15 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackSt
 		var scratch *bitset.Bitset
 		if !node.IsLeaf() {
 			// recurse into another AND or OR condition subtree
-			scratch = MatchTree(node, pkg, meta)
+			scratch = MatchTree(node, pkg, stat)
 		} else {
 			f := node.Filter
 			// Quick inclusion check to skip matching when the current condition
 			// would return an all-true vector. Note that we do not have to check
 			// for an all-false vector because MaybeMatchTree() has already deselected
 			// packs of that kind (except the journal)
-			if meta != nil && len(meta.Blocks) > int(f.Index) {
-				blockInfo := meta.Blocks[f.Index]
+			if stat != nil && len(stat.Blocks) > int(f.Index) {
+				blockInfo := stat.Blocks[f.Index]
 				min, max := blockInfo.MinValue, blockInfo.MaxValue
 				typ := blockInfo.Type
 				switch f.Mode {
@@ -206,7 +206,7 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackSt
 
 // Return a bit vector containing matching positions in the pack combining
 // multiple OR conditions with efficient skipping and aggregation.
-func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackStats) *bitset.Bitset {
+func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, stat *stats.PackStats) *bitset.Bitset {
 	// start with an empty bitset
 	bits := bitset.NewBitset(pkg.Len())
 
@@ -216,15 +216,15 @@ func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackSta
 		var scratch *bitset.Bitset
 		if !node.IsLeaf() {
 			// recurse into another AND or OR condition subtree
-			scratch = MatchTree(node, pkg, meta)
+			scratch = MatchTree(node, pkg, stat)
 		} else {
 			f := node.Filter
 			// Quick inclusion check to skip matching when the current condition
 			// would return an all-true vector. Note that we do not have to check
 			// for an all-false vector because MaybeMatchPack() has already deselected
 			// packs of that kind (except the journal).
-			if meta != nil && len(meta.Blocks) > int(f.Index) {
-				blockInfo := meta.Blocks[f.Index]
+			if stat != nil && len(stat.Blocks) > int(f.Index) {
+				blockInfo := stat.Blocks[f.Index]
 				min, max := blockInfo.MinValue, blockInfo.MaxValue
 				skipEarly := false
 				typ := blockInfo.Type
@@ -259,8 +259,7 @@ func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, meta *stats.PackSta
 					skipEarly = cmp.LE(typ, max, f.Value)
 				}
 				if skipEarly {
-					bits.Close()
-					return bitset.NewBitset(pkg.Len()).One()
+					return bits.One()
 				}
 			}
 

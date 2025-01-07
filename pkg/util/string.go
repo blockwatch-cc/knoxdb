@@ -79,12 +79,24 @@ func ToRawString(t interface{}) (string, error) {
 		}
 		return hex.EncodeToString(b), nil
 	case reflect.Slice:
-		if typ.Elem().Kind() != reflect.Uint8 {
-			break
+		switch typ.Elem().Kind() {
+		case reflect.Slice:
+			var b strings.Builder
+			for i := 0; i < val.Len(); i++ {
+				if i > 0 {
+					b.WriteByte(',')
+				}
+				b.WriteString(ToString(val.Index(i).Interface()))
+			}
+			return b.String(), nil
+		case reflect.Uint8:
+			// []byte
+			b := val.Bytes()
+			if s := string(b); IsASCII(s) {
+				return s, nil
+			}
+			return hex.EncodeToString(b), nil
 		}
-		// []byte
-		b := val.Bytes()
-		return hex.EncodeToString(b), nil
 	case reflect.Struct:
 		var b strings.Builder
 		for i, l := 0, val.NumField(); i < l; i++ {

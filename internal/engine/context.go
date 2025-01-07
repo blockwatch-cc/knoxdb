@@ -3,7 +3,11 @@
 
 package engine
 
-import "context"
+import (
+	"context"
+
+	"blockwatch.cc/knoxdb/internal/types"
+)
 
 type TransactionKey struct{}
 
@@ -68,4 +72,12 @@ func GetEngine(ctx context.Context) *Engine {
 		return nil
 	}
 	return val.(*Tx).engine
+}
+
+func GetSnapshot(ctx context.Context) *types.Snapshot {
+	val := ctx.Value(TransactionKey{})
+	if val == nil {
+		return nil
+	}
+	return val.(*Tx).Snapshot()
 }

@@ -54,6 +54,9 @@ func (r *EnumRegistry) Register(e *EnumDictionary) {
 }
 
 func (r EnumRegistry) Lookup(name string) (*EnumDictionary, bool) {
+	if r == nil {
+		return nil, false
+	}
 	e, ok := r[types.TaggedHash(types.ObjectTagEnum, name)]
 	return e, ok
 }

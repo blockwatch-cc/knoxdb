@@ -119,7 +119,7 @@ func mergeFlags(x []TxFlags) (f TxFlags) {
 
 func (e *Engine) NewTransaction(flags ...TxFlags) *Tx {
 	tx := &Tx{
-		id:     0, // read-only tx do not use an id
+		id:     0,
 		engine: e,
 		dbTx:   make(map[store.DB]store.Tx),
 		flags:  mergeFlags(flags),
@@ -207,7 +207,7 @@ func (t *Tx) Close() {
 	// remove from global tx list
 	t.engine.txs.Del(t)
 
-	// update xmin, without active tx we use xnext (horion: anything smaller is final)
+	// update xmin, without active tx we use xnext (horizon: anything smaller is final)
 	t.engine.xmin = t.engine.xnext
 
 	// use first active read/write xid if any

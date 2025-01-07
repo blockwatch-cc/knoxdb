@@ -592,7 +592,7 @@ func makeJournalFromPks(t *testing.T, pks, del []uint64) *Journal {
 func (x journalE2ETest) Run(t *testing.T) {
 	t.Run(x.name, func(t *testing.T) {
 		j := makeJournalFromPks(t, x.pks, x.del)
-		ids, pks := j.SortedIndexes(bitset.NewBitsetFromBytes(x.bit, len(x.bit)*8))
+		ids, pks := j.SortedIndexes(bitset.FromBuffer(x.bit, len(x.bit)*8))
 		require.Len(t, ids, len(x.idx), "invalid result ids len")
 		require.Len(t, pks, len(x.pkx), "invalid result pks len")
 		for i := range x.idx {
