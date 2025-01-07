@@ -34,7 +34,7 @@ func (b *Block) Less(i, j int) bool {
 	case BlockBool:
 		bits := b.Bool()
 		return !bits.IsSet(i) && bits.IsSet(j)
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		dd := b.Bytes()
 		return bytes.Compare(dd.Elem(i), dd.Elem(j)) < 0
 	case BlockInt256:
@@ -81,7 +81,7 @@ func (b *Block) Cmp(i, j int) int {
 		default:
 			return 1
 		}
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		dd := b.Bytes()
 		return bytes.Compare(dd.Elem(i), dd.Elem(j))
 	case BlockInt256:
@@ -97,7 +97,7 @@ func (b *Block) Cmp(i, j int) int {
 
 // case-insensitive
 func (b *Block) Cmpi(i, j int) int {
-	if b.typ == BlockString {
+	if b.typ == BlockBytes {
 		dd := b.Bytes()
 		return util.CmpCaseInsensitive(
 			util.UnsafeGetString(dd.Elem(i)),
@@ -130,7 +130,7 @@ func (b *Block) Swap(i, j int) {
 		b.Float64().Swap(i, j)
 	case BlockFloat32:
 		b.Float32().Swap(i, j)
-	case BlockBytes, BlockString:
+	case BlockBytes:
 		b.Bytes().Swap(i, j)
 	case BlockBool:
 		b.Bool().Swap(i, j)

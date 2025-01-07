@@ -77,7 +77,7 @@ func MinNumericVal(typ types.BlockType) any {
 		return num.MinInt128
 	case types.BlockInt256:
 		return num.MinInt256
-	case types.BlockString, types.BlockBytes:
+	case types.BlockBytes:
 		return []byte{}
 	default:
 		return nil
@@ -112,7 +112,7 @@ func MaxNumericVal(typ types.BlockType) any {
 		return num.MaxInt128
 	case types.BlockInt256:
 		return num.MaxInt256
-	case types.BlockString, types.BlockBytes:
+	case types.BlockBytes:
 		return nil
 	default:
 		return nil
@@ -136,7 +136,7 @@ func Cmp(typ types.BlockType, a, b any) (c int) {
 			y = 1
 		}
 		c = util.Cmp(x, y)
-	case types.BlockString, types.BlockBytes:
+	case types.BlockBytes:
 		switch {
 		case a == nil && b == nil:
 			return 0
@@ -198,7 +198,7 @@ func Unique(typ types.BlockType, a any) any {
 		return slicex.Unique(a.([]uint64))
 	case types.BlockFloat64:
 		return slicex.Unique(a.([]float64))
-	case types.BlockBytes, types.BlockString:
+	case types.BlockBytes:
 		return slicex.UniqueBytes(a.([][]byte))
 	case types.BlockInt32:
 		return slicex.Unique(a.([]int32))
@@ -239,7 +239,7 @@ func Intersect(typ types.BlockType, a, b any) any {
 		x := slicex.NewOrderedNumbers[float64](a.([]float64)).SetUnique()
 		y := slicex.NewOrderedNumbers[float64](b.([]float64)).SetUnique()
 		return x.Intersect(y).Values
-	case types.BlockBytes, types.BlockString:
+	case types.BlockBytes:
 		x := slicex.NewOrderedBytes(a.([][]byte)).SetUnique()
 		y := slicex.NewOrderedBytes(b.([][]byte)).SetUnique()
 		return x.Intersect(y).Values
@@ -297,7 +297,7 @@ func Union(typ types.BlockType, a, b any) any {
 		x := slicex.NewOrderedNumbers[float64](a.([]float64)).SetUnique()
 		y := slicex.NewOrderedNumbers[float64](b.([]float64)).SetUnique()
 		return x.Union(y).Values
-	case types.BlockBytes, types.BlockString:
+	case types.BlockBytes:
 		x := slicex.NewOrderedBytes(a.([][]byte)).SetUnique()
 		y := slicex.NewOrderedBytes(b.([][]byte)).SetUnique()
 		return x.Union(y).Values
@@ -355,7 +355,7 @@ func Difference(typ types.BlockType, a, b any) any {
 		x := slicex.NewOrderedNumbers[float64](a.([]float64)).SetUnique()
 		y := slicex.NewOrderedNumbers[float64](b.([]float64)).SetUnique()
 		return x.Difference(y).Values
-	case types.BlockBytes, types.BlockString:
+	case types.BlockBytes:
 		x := slicex.NewOrderedBytes(a.([][]byte)).SetUnique()
 		y := slicex.NewOrderedBytes(b.([][]byte)).SetUnique()
 		return x.Difference(y).Values
@@ -472,7 +472,7 @@ func Range(typ types.BlockType, set any) (minv any, maxv any, isComplete bool) {
 		case 3:
 			minv, maxv, isComplete = false, true, true
 		}
-	case types.BlockString, types.BlockBytes:
+	case types.BlockBytes:
 		x := slicex.NewOrderedBytes(set.([][]byte))
 		minv, maxv = x.MinMax()
 		isComplete = false
@@ -565,7 +565,7 @@ func Inc(typ types.BlockType, v any) any {
 		return math.Nextafter(v.(float64), MaxNumericVal(typ).(float64))
 	case types.BlockFloat32:
 		return math.Nextafter32(v.(float32), MaxNumericVal(typ).(float32))
-	case types.BlockString, types.BlockBytes:
+	case types.BlockBytes:
 		c := bytes.Clone(v.([]byte))
 		var ok bool
 		for i := len(c) - 1; i >= 0; i-- {
@@ -613,7 +613,7 @@ func Dec(typ types.BlockType, v any) any {
 		return math.Nextafter(v.(float64), MinNumericVal(typ).(float64))
 	case types.BlockFloat32:
 		return math.Nextafter32(v.(float32), MinNumericVal(typ).(float32))
-	case types.BlockString, types.BlockBytes:
+	case types.BlockBytes:
 		c := bytes.Clone(v.([]byte))
 		var ok bool
 		for i := len(c) - 1; i >= 0; i-- {
@@ -643,7 +643,7 @@ func RemoveRange(typ types.BlockType, s, from, to any) any {
 	case types.BlockFloat64:
 		return slicex.NewOrderedNumbers[float64](s.([]float64)).
 			RemoveRange(from.(float64), to.(float64)).Values
-	case types.BlockBytes, types.BlockString:
+	case types.BlockBytes:
 		return slicex.NewOrderedBytes(s.([][]byte)).
 			RemoveRange(from.([]byte), to.([]byte)).Values
 	case types.BlockInt32:
@@ -692,7 +692,7 @@ func IntersectRange(typ types.BlockType, s, from, to any) any {
 	case types.BlockFloat64:
 		return slicex.NewOrderedNumbers[float64](s.([]float64)).
 			IntersectRange(from.(float64), to.(float64)).Values
-	case types.BlockBytes, types.BlockString:
+	case types.BlockBytes:
 		return slicex.NewOrderedBytes(s.([][]byte)).
 			IntersectRange(from.([]byte), to.([]byte)).Values
 	case types.BlockInt32:

@@ -107,7 +107,7 @@ var (
 	//
 	// 11 filter modes (0 == invalid)
 	// 16 block types
-	blockMatchFn = [11][16]unsafe.Pointer{
+	blockMatchFn = [11][15]unsafe.Pointer{
 		// FilterModeInvalid
 		{},
 		// FilterModeEqual
@@ -124,10 +124,9 @@ var (
 			unsafe.Pointer(&f64_eq), // 9 BlockFloat64
 			unsafe.Pointer(&f32_eq), // 10 BlockFloat32
 			nullPtr,                 // 11 BlockBool
-			nullPtr,                 // 12 BlockString
-			nullPtr,                 // 13 BlockBytes
-			nullPtr,                 // 14 BlockInt128
-			nullPtr,                 // 15 BlockInt256
+			nullPtr,                 // 12 BlockBytes
+			nullPtr,                 // 13 BlockInt128
+			nullPtr,                 // 14 BlockInt256
 		},
 		// FilterModeNotEqual
 		{
@@ -143,10 +142,9 @@ var (
 			unsafe.Pointer(&f64_ne), // 9 BlockFloat64
 			unsafe.Pointer(&f32_ne), // 10 BlockFloat32
 			nullPtr,                 // 11 BlockBool
-			nullPtr,                 // 12 BlockString
-			nullPtr,                 // 13 BlockBytes
-			nullPtr,                 // 14 BlockInt128
-			nullPtr,                 // 15 BlockInt256
+			nullPtr,                 // 12 BlockBytes
+			nullPtr,                 // 13 BlockInt128
+			nullPtr,                 // 14 BlockInt256
 		},
 		// FilterModeGt
 		{
@@ -162,10 +160,9 @@ var (
 			unsafe.Pointer(&f64_gt), // 9 BlockFloat64
 			unsafe.Pointer(&f32_gt), // 10 BlockFloat32
 			nullPtr,                 // 11 BlockBool
-			nullPtr,                 // 12 BlockString
-			nullPtr,                 // 13 BlockBytes
-			nullPtr,                 // 14 BlockInt128
-			nullPtr,                 // 15 BlockInt256
+			nullPtr,                 // 12 BlockBytes
+			nullPtr,                 // 13 BlockInt128
+			nullPtr,                 // 14 BlockInt256
 		},
 		// FilterModeGe
 		{
@@ -181,10 +178,9 @@ var (
 			unsafe.Pointer(&f64_ge), // 9 BlockFloat64
 			unsafe.Pointer(&f32_ge), // 10 BlockFloat32
 			nullPtr,                 // 11 BlockBool
-			nullPtr,                 // 12 BlockString
-			nullPtr,                 // 13 BlockBytes
-			nullPtr,                 // 14 BlockInt128
-			nullPtr,                 // 15 BlockInt256
+			nullPtr,                 // 12 BlockBytes
+			nullPtr,                 // 13 BlockInt128
+			nullPtr,                 // 14 BlockInt256
 		},
 		// FilterModeLt
 		{
@@ -200,10 +196,9 @@ var (
 			unsafe.Pointer(&f64_lt), // 9 BlockFloat64
 			unsafe.Pointer(&f32_lt), // 10 BlockFloat32
 			nullPtr,                 // 11 BlockBool
-			nullPtr,                 // 12 BlockString
-			nullPtr,                 // 13 BlockBytes
-			nullPtr,                 // 14 BlockInt128
-			nullPtr,                 // 15 BlockInt256
+			nullPtr,                 // 12 BlockBytes
+			nullPtr,                 // 13 BlockInt128
+			nullPtr,                 // 14 BlockInt256
 		},
 		// FilterModeLe
 		{
@@ -219,10 +214,9 @@ var (
 			unsafe.Pointer(&f64_le), // 9 BlockFloat64
 			unsafe.Pointer(&f32_le), // 10 BlockFloat32
 			nullPtr,                 // 11 BlockBool
-			nullPtr,                 // 12 BlockString
-			nullPtr,                 // 13 BlockBytes
-			nullPtr,                 // 14 BlockInt128
-			nullPtr,                 // 15 BlockInt256
+			nullPtr,                 // 12 BlockBytes
+			nullPtr,                 // 13 BlockInt128
+			nullPtr,                 // 14 BlockInt256
 		},
 		// FilterModeIn
 		{},
@@ -242,10 +236,9 @@ var (
 			unsafe.Pointer(&f64_rg), // 9 BlockFloat64
 			unsafe.Pointer(&f32_rg), // 10 BlockFloat32
 			nullPtr,                 // 11 BlockBool
-			nullPtr,                 // 12 BlockString
-			nullPtr,                 // 13 BlockBytes
-			nullPtr,                 // 14 BlockInt128
-			nullPtr,                 // 15 BlockInt256
+			nullPtr,                 // 12 BlockBytes
+			nullPtr,                 // 13 BlockInt128
+			nullPtr,                 // 14 BlockInt256
 		},
 		// FilterModeRegexp
 		{},

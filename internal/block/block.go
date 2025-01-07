@@ -41,7 +41,6 @@ var (
 		BlockFloat64: 8,
 		BlockFloat32: 4,
 		BlockBool:    1,
-		BlockString:  0, // variable
 		BlockBytes:   0, // variable
 		BlockInt256:  32,
 		BlockInt128:  16,
@@ -63,7 +62,6 @@ const (
 	BlockFloat64 = types.BlockFloat64
 	BlockFloat32 = types.BlockFloat32
 	BlockBool    = types.BlockBool
-	BlockString  = types.BlockString
 	BlockBytes   = types.BlockBytes
 	BlockInt128  = types.BlockInt128
 	BlockInt256  = types.BlockInt256
@@ -102,7 +100,7 @@ func New(typ BlockType, sz int) *Block {
 		b.ptr = unsafe.Pointer(&i256)
 	case BlockBool:
 		b.ptr = unsafe.Pointer(bitset.NewBitset(sz).Resize(0))
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		arr := dedup.NewByteArray(sz)
 		b.ptr = unsafe.Pointer(&arr)
 	default:
@@ -153,14 +151,14 @@ func (b *Block) SetClean() {
 func (b *Block) CanOptimize() bool {
 	assert.Always(b != nil, "nil block, potential use after free")
 	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	return (b.typ == BlockBytes || b.typ == BlockString) && !(*(*dedup.ByteArray)(b.ptr)).IsOptimized()
+	return b.typ == BlockBytes && !(*(*dedup.ByteArray)(b.ptr)).IsOptimized()
 }
 
 func (b *Block) Optimize() {
 	assert.Always(b != nil, "nil block, potential use after free")
 	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
 	switch b.typ {
-	case BlockBytes, BlockString:
+	case BlockBytes:
 		// ok
 	default:
 		// not (yet) supported
@@ -180,7 +178,7 @@ func (b *Block) Materialize() {
 	assert.Always(b != nil, "nil block, potential use after free")
 	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
 	switch b.typ {
-	case BlockBytes, BlockString:
+	case BlockBytes:
 		// ok
 	default:
 		// not (yet) supported
@@ -201,7 +199,7 @@ func (b *Block) Len() int {
 	switch b.typ {
 	case BlockBool:
 		return (*bitset.Bitset)(b.ptr).Len()
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		return (*(*dedup.ByteArray)(b.ptr)).Len()
 	case BlockInt128:
 		return (*num.Int128Stride)(b.ptr).Len()
@@ -218,7 +216,7 @@ func (b *Block) Cap() int {
 	switch b.typ {
 	case BlockBool:
 		return (*bitset.Bitset)(b.ptr).Cap()
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		return (*(*dedup.ByteArray)(b.ptr)).Cap()
 	case BlockInt128:
 		return (*num.Int128Stride)(b.ptr).Cap()
@@ -236,7 +234,7 @@ func (b *Block) HeapSize() int {
 	switch b.typ {
 	case BlockBool:
 		sz += (*bitset.Bitset)(b.ptr).HeapSize()
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		sz += (*(*dedup.ByteArray)(b.ptr)).HeapSize()
 	case BlockInt128:
 		sz += (*num.Int128Stride)(b.ptr).Len() * 16
@@ -255,7 +253,7 @@ func (b *Block) Clone(sz int) *Block {
 	c := New(b.typ, sz)
 	c.dirty = true
 	switch b.typ {
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		(*(*dedup.ByteArray)(c.ptr)).AppendFrom((*(*dedup.ByteArray)(b.ptr)))
 	case BlockBool:
 		((*bitset.Bitset)(c.ptr)).AppendFrom(((*bitset.Bitset)(b.ptr)), 0, b.Len())
@@ -292,7 +290,7 @@ func (b *Block) Grow(n int) {
 	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
 	b.cap += n
 	switch b.typ {
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Grow(n)
 	case BlockBool:
 		(*bitset.Bitset)(b.ptr).Grow(n)
@@ -327,7 +325,7 @@ func (b *Block) Delete(from, n int) {
 	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
 	assert.Always(b.Len() <= from+n, "out of bounds", "dst.len", b.Len(), "from", from, "n", n)
 	switch b.typ {
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Delete(from, n)
 	case BlockBool:
 		(*bitset.Bitset)(b.ptr).Delete(from, n)
@@ -355,7 +353,7 @@ func (b *Block) Clear() {
 	assert.Always(b != nil, "nil block, potential use after free")
 	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
 	switch b.typ {
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Clear()
 	case BlockBool:
 		(*bitset.Bitset)(b.ptr).Reset()
@@ -399,7 +397,7 @@ func (b *Block) free() {
 		i256.X3 = nil
 	case BlockBool:
 		(*bitset.Bitset)(b.ptr).Close()
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Release()
 	default:
 		arena.Free(arena.AllocBytes, b.buf)
@@ -421,7 +419,7 @@ func (b *Block) ReplaceBlock(src *Block, from, to, n int) {
 	assert.Always(to+n <= b.Len(), "dst out of bounds", "to", to, "n", n, "dst.len", b.Len())
 	assert.Always(from+n <= src.Len(), "src out of bounds", "from", from, "n", n, "src.len", src.Len())
 	switch b.typ {
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Copy((*(*dedup.ByteArray)(src.ptr)), to, from, n)
 	case BlockBool:
 		((*bitset.Bitset)(b.ptr)).ReplaceFrom(((*bitset.Bitset)(src.ptr)), from, n, to)
@@ -453,7 +451,7 @@ func (b *Block) AppendBlock(src *Block, from, n int) {
 	assert.Always(b.Len()+n <= b.Cap(), "dst out of bounds", "dst.len", b.Len(), "dst.cap", b.Cap())
 	assert.Always(from+n <= src.Len(), "src out of bounds", "src.len", src.Len(), "from", from)
 	switch b.typ {
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		if n == 1 {
 			(*(*dedup.ByteArray)(b.ptr)).Append(src.Bytes().Elem(from))
 		} else {
@@ -491,7 +489,7 @@ func (b *Block) InsertBlock(src *Block, from, to, n int) {
 	assert.Always(b.Len()+n <= b.Cap(), "dst out of bounds", "dst.len", b.Len(), "n", n, "dst.cap", b.Cap())
 	assert.Always(from+n <= src.Len(), "src out of bounds", "src.len", src.Len(), "from", from)
 	switch b.typ {
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Insert(to, src.Bytes().Subslice(from, from+n)...)
 	case BlockBool:
 		((*bitset.Bitset)(b.ptr)).InsertFrom(((*bitset.Bitset)(src.ptr)), from, n, to)

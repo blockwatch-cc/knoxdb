@@ -25,7 +25,6 @@ var Generators = []Generator{
 	FloatGenerator[float32]{},
 	FloatGenerator[float64]{},
 	BytesGenerator{},
-	StringsGenerator{},
 	BoolsGenerator{},
 	Int128Generator{},
 	Int256Generator{},
@@ -138,37 +137,6 @@ func (_ BytesGenerator) MakeValue(n int) any {
 }
 
 func (_ BytesGenerator) MakeSlice(n ...int) any {
-	s := make([][]byte, len(n))
-	for i := range n {
-		var b [8]byte
-		binary.BigEndian.PutUint64(b[:], uint64(n[i]))
-		s[i] = bytes.Clone(b[:])
-	}
-	return s
-}
-
-// string (also returns byte slices)
-var _ Generator = (*StringsGenerator)(nil)
-
-type StringsGenerator struct {
-	BytesGenerator
-}
-
-func (_ StringsGenerator) Type() types.BlockType {
-	return types.BlockString
-}
-
-func (_ StringsGenerator) Name() string {
-	return "string"
-}
-
-func (_ StringsGenerator) MakeValue(n int) any {
-	var b [8]byte
-	binary.BigEndian.PutUint64(b[:], uint64(n))
-	return b[:]
-}
-
-func (_ StringsGenerator) MakeSlice(n ...int) any {
 	s := make([][]byte, len(n))
 	for i := range n {
 		var b [8]byte

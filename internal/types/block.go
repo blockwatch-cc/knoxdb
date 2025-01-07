@@ -19,15 +19,14 @@ const (
 	BlockFloat64                  // 9
 	BlockFloat32                  // 10
 	BlockBool                     // 11
-	BlockString                   // 12
-	BlockBytes                    // 13
-	BlockInt128                   // 14
-	BlockInt256                   // 15
+	BlockBytes                    // 12
+	BlockInt128                   // 13
+	BlockInt256                   // 14
 )
 
 var (
-	blockTypeNames    = "time_int64_int32_int16_int8_uint64_uint32_uint16_uint8_float64_float32_bool_string_bytes_int128_int256"
-	blockTypeNamesOfs = []int{0, 5, 11, 17, 23, 28, 35, 42, 49, 55, 63, 71, 76, 83, 89, 96, 103}
+	blockTypeNames    = "time_int64_int32_int16_int8_uint64_uint32_uint16_uint8_float64_float32_bool_bytes_int128_int256"
+	blockTypeNamesOfs = []int{0, 5, 11, 17, 23, 28, 35, 42, 49, 55, 63, 71, 76, 82, 89, 96}
 
 	blockTypeDataSize = [...]int{
 		BlockTime:    8,
@@ -42,7 +41,6 @@ var (
 		BlockFloat64: 8,
 		BlockFloat32: 4,
 		BlockBool:    1,
-		BlockString:  0,
 		BlockBytes:   0,
 		BlockInt128:  16,
 		BlockInt256:  32,

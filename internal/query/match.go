@@ -89,7 +89,7 @@ func newFactory(typ types.BlockType) MatcherFactory {
 		return NumMatcherFactory[int64]{typ}
 	case BlockBool:
 		return BitMatcherFactory{}
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		return BytesMatcherFactory{}
 	case BlockInt8:
 		return NumMatcherFactory[int8]{typ}

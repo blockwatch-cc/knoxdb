@@ -110,15 +110,6 @@ var (
 	MatchBytesGreaterEqual = generic.MatchBytesGreaterEqual
 	MatchBytesBetween      = generic.MatchBytesBetween
 
-	// string
-	// MatchStringsEqual        = generic.MatchStringsEqual
-	// MatchStringsNotEqual     = generic.MatchStringsNotEqual
-	// MatchStringsLess         = generic.MatchStringsLess
-	// MatchStringsLessEqual    = generic.MatchStringsLessEqual
-	// MatchStringsGreater      = generic.MatchStringsGreater
-	// MatchStringsGreaterEqual = generic.MatchStringsGreaterEqual
-	// MatchStringsBetween      = generic.MatchStringsBetween
-
 	// int128
 	MatchInt128Equal        = generic.MatchInt128Equal
 	MatchInt128NotEqual     = generic.MatchInt128NotEqual

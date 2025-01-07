@@ -41,7 +41,7 @@ func (b *Block) MaxStoredSize() int {
 	case BlockBool:
 		return zip.BitsetEncodedSize(b.Bool())
 
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		return b.Bytes().MaxEncodedSize()
 
 	case BlockInt128:
@@ -86,7 +86,7 @@ func (b *Block) WriteTo(w io.Writer) (int64, error) {
 	case BlockTime:
 		n, err = zip.EncodeTime(b.Int64().Slice(), w)
 
-	case BlockBytes, BlockString:
+	case BlockBytes:
 		var n64 int64
 		n64, err = (*(*dedup.ByteArray)(b.ptr)).WriteTo(w)
 		n = int(n64)
@@ -133,7 +133,7 @@ func (b *Block) ReadFrom(r io.Reader) (n int64, err error) {
 	case BlockTime:
 		b.len, n, err = zip.ReadTime(b.Int64().FullSlice(), r)
 
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		// can re-allocate a new dedup kind
 		var arr dedup.ByteArray
 		arr, n, err = dedup.ReadFrom(r, b.Bytes())
@@ -193,7 +193,7 @@ func (b *Block) Decode(buf []byte) (err error) {
 	case BlockTime:
 		b.len, err = zip.DecodeTime(b.Int64().FullSlice(), buf)
 
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		// can re-allocate a new dedup kind
 		var arr dedup.ByteArray
 		arr, err = dedup.Decode(buf, b.Bytes(), b.Bytes().Len())

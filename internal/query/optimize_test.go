@@ -45,7 +45,7 @@ func TestOptimize(t *testing.T) {
 				input:     makeOrTree(makeInNode(f1, s(2, 3)), makeEqualNode(f1, v(4)), makeInNode(f1, s(5, 6, 7))),
 				expected:  makeOrTree(makeRangeNode(f1, v(2), v(7))),
 				comment:   "Adjacent IN conditions should be merged with gap-filling equals",
-				skipTypes: []BlockType{BlockString, BlockBytes, BlockBool, BlockFloat32, BlockFloat64},
+				skipTypes: []BlockType{BlockBytes, BlockBool, BlockFloat32, BlockFloat64},
 			},
 			{
 				name:      "bool IN(2,3) OR EQ(4) OR IN(5,6,7)",
@@ -59,7 +59,7 @@ func TestOptimize(t *testing.T) {
 				input:     makeOrTree(makeInNode(f1, s(1, 2, 3)), makeInNode(f1, s(2, 3, 4))),
 				expected:  makeOrTree(makeRangeNode(f1, v(1), v(4))),
 				comment:   "Overlapping IN conditions should be merged",
-				skipTypes: []BlockType{BlockString, BlockBytes, BlockBool, BlockFloat32, BlockFloat64},
+				skipTypes: []BlockType{BlockBytes, BlockBool, BlockFloat32, BlockFloat64},
 			},
 			{
 				name:      "bool IN(2,3) OR EQ(4) OR IN(5,6,7)",
@@ -73,7 +73,7 @@ func TestOptimize(t *testing.T) {
 				input:     makeAndTree(makeInNode(f1, s(1, 2, 3))),
 				expected:  makeAndTree(makeRangeNode(f1, v(1), v(3))),
 				comment:   "Full sets should translate to range node",
-				skipTypes: []BlockType{BlockString, BlockBytes, BlockBool, BlockFloat64, BlockFloat32},
+				skipTypes: []BlockType{BlockBytes, BlockBool, BlockFloat64, BlockFloat32},
 			},
 			{
 				name:      "IN(false,true)",

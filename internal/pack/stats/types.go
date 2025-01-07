@@ -37,7 +37,6 @@ const (
 	BlockFloat64 = block.BlockFloat64
 	BlockFloat32 = block.BlockFloat32
 	BlockBool    = block.BlockBool
-	BlockString  = block.BlockString
 	BlockBytes   = block.BlockBytes
 	BlockInt128  = block.BlockInt128
 	BlockInt256  = block.BlockInt256

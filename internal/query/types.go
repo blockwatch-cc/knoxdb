@@ -42,7 +42,6 @@ const (
 	BlockFloat64 = block.BlockFloat64
 	BlockFloat32 = block.BlockFloat32
 	BlockBool    = block.BlockBool
-	BlockString  = block.BlockString
 	BlockBytes   = block.BlockBytes
 	BlockInt128  = block.BlockInt128
 	BlockInt256  = block.BlockInt256
@@ -52,7 +51,7 @@ var (
 	BlockTypes = [...]block.BlockType{
 		types.FieldTypeDatetime:   block.BlockTime,
 		types.FieldTypeBoolean:    block.BlockBool,
-		types.FieldTypeString:     block.BlockString,
+		types.FieldTypeString:     block.BlockBytes,
 		types.FieldTypeBytes:      block.BlockBytes,
 		types.FieldTypeInt8:       block.BlockInt8,
 		types.FieldTypeInt16:      block.BlockInt16,

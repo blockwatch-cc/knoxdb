@@ -31,7 +31,6 @@ var (
 		BlockUint8,
 		BlockFloat64,
 		BlockFloat32,
-		BlockString,
 		BlockBytes,
 		BlockBool,
 		BlockInt128,
@@ -71,7 +70,7 @@ func makeRandomValue(typ BlockType) any {
 		return util.RandFloat32()
 	case BlockBool:
 		return util.RandIntn(2) == 1
-	case BlockString, BlockBytes:
+	case BlockBytes:
 		return util.RandBytes(8)
 	case BlockInt128:
 		return num.Int128From2Int64(util.RandInt64(), util.RandInt64())
@@ -108,7 +107,7 @@ func makeRandomBlock(typ BlockType, sz int) *block.Block {
 			b.Float32().Append(util.RandFloat32())
 		case BlockBool:
 			b.Bool().Append(util.RandIntn(2) == 1)
-		case BlockString, BlockBytes:
+		case BlockBytes:
 			b.Bytes().Append(util.RandBytes(8))
 		case BlockInt128:
 			b.Int128().Append(num.Int128From2Int64(util.RandInt64(), util.RandInt64()))
@@ -229,7 +228,7 @@ func TestMatchSet(t *testing.T) {
 
 			// bitmap matching only supported in int types
 			switch gen.Type() {
-			case BlockFloat32, BlockFloat64, BlockBytes, BlockString, BlockInt128, BlockInt256:
+			case BlockFloat32, BlockFloat64, BlockBytes, BlockInt128, BlockInt256:
 				return
 			}
 			set := xroar.NewBitmap()

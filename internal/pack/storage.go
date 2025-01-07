@@ -35,7 +35,7 @@ var (
 		types.FieldTypeInvalid:    block.BlockUint8,
 		types.FieldTypeDatetime:   block.BlockTime,
 		types.FieldTypeBoolean:    block.BlockBool,
-		types.FieldTypeString:     block.BlockString,
+		types.FieldTypeString:     block.BlockBytes,
 		types.FieldTypeBytes:      block.BlockBytes,
 		types.FieldTypeInt8:       block.BlockInt8,
 		types.FieldTypeInt16:      block.BlockInt16,

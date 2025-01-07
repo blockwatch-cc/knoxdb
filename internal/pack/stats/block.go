@@ -120,7 +120,7 @@ func (m BlockStats) canUseBitsets() bool {
 	case BlockInt8, BlockUint8:
 		return true
 
-	case BlockBool, BlockInt128, BlockInt256, BlockBytes, BlockString, BlockFloat32, BlockFloat64:
+	case BlockBool, BlockInt128, BlockInt256, BlockBytes, BlockFloat32, BlockFloat64:
 		return false
 
 	default:
@@ -157,8 +157,6 @@ func (m BlockStats) EncodedSize() int {
 		i1 := binary.PutUvarint(v[:], uint64(l1))
 		i2 := binary.PutUvarint(v[:], uint64(l2))
 		sz += l1 + l2 + i1 + i2
-	case BlockString:
-		sz += len(m.MinValue.(string)) + len(m.MaxValue.(string)) + 2
 	}
 	if m.Bloom != nil {
 		sz += len(m.Bloom.Bytes())
@@ -188,8 +186,6 @@ func (m BlockStats) HeapSize() int {
 		min, max := m.MinValue.([]byte), m.MaxValue.([]byte)
 		l1, l2 := len(min), len(max)
 		sz += l1 + l2 + 2*24
-	case BlockString:
-		sz += len(m.MinValue.(string)) + len(m.MaxValue.(string)) + 2*16
 	case BlockBool:
 		sz++
 	}
@@ -307,14 +303,6 @@ func (m *BlockStats) Encode(buf *bytes.Buffer) error {
 		}
 		buf.WriteByte(v)
 
-	case BlockString:
-		// null terminated string
-		min, max := m.MinValue.(string), m.MaxValue.(string)
-		_, _ = buf.WriteString(min)
-		buf.WriteByte(0)
-		_, _ = buf.WriteString(max)
-		buf.WriteByte(0)
-
 	case BlockBytes:
 		// len prefixed byte slice
 		min, max := m.MinValue.([]byte), m.MaxValue.([]byte)
@@ -409,20 +397,6 @@ func (m *BlockStats) Decode(buf *bytes.Buffer, version byte) error {
 	case BlockBool:
 		v := buf.Next(1)
 		m.MinValue, m.MaxValue = v[0]&1 > 0, v[0]&2 > 0
-
-	case BlockString:
-		min, err := buf.ReadString(0)
-		if err != nil {
-			return fmt.Errorf("knox: reading block metadata string min: %w", err)
-		}
-		max, err := buf.ReadString(0)
-		if err != nil {
-			return fmt.Errorf("knox: reading block metadata string max: %w", err)
-		}
-		// don't reference buffer data!
-		mincopy := min[:len(min)-1]
-		maxcopy := max[:len(max)-1]
-		m.MinValue, m.MaxValue = mincopy, maxcopy
 
 	case BlockBytes:
 		length, err := binary.ReadUvarint(buf)

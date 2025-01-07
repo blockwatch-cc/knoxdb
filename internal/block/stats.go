@@ -39,9 +39,6 @@ func (b *Block) MinMax() (any, any) {
 		return util.MinMax(b.Float64().Slice()...)
 	case BlockFloat32:
 		return util.MinMax(b.Float32().Slice()...)
-	case BlockString:
-		min, max := b.Bytes().MinMax()
-		return string(min), string(max) // copy
 	case BlockBytes:
 		min, max := b.Bytes().MinMax()
 		return slices.Clone(min), slices.Clone(max) // clone
@@ -130,12 +127,6 @@ func (b *Block) FirstLast() (any, any) {
 			return slice[0], slice[l-1]
 		}
 		return float32(0), float32(0)
-	case BlockString:
-		arr := b.Bytes()
-		if l := arr.Len(); l > 0 {
-			return string(arr.Elem(0)), string(arr.Elem(l - 1)) // copy
-		}
-		return "", ""
 	case BlockBytes:
 		arr := b.Bytes()
 		if l := arr.Len(); l > 0 {
@@ -215,7 +206,7 @@ func (b *Block) EstimateCardinality(precision int) int {
 		}
 		return util.Min(l, int(flt.Cardinality()))
 
-	case BlockBytes, BlockString:
+	case BlockBytes:
 		flt := loglogbeta.NewFilterWithPrecision(uint32(precision))
 		b.Bytes().ForEachUnique(func(_ int, buf []byte) {
 			flt.Add(buf)
@@ -282,7 +273,7 @@ func (b *Block) BuildBloomFilter(cardinality, factor int) *bloom.Filter {
 			flt.Add(buf[:])
 		}
 
-	case BlockBytes, BlockString:
+	case BlockBytes:
 		// write only unique elements (post-dedup optimization this avoids
 		// calculating hashes for duplicates)
 		b.Bytes().ForEachUnique(func(_ int, buf []byte) {
@@ -326,7 +317,7 @@ func (b *Block) BuildBitsFilter(cardinality int) *xroar.Bitmap {
 
 	default:
 		// unsupported
-		// BlockInt256, BlockInt128, BlockBytes, BlockString, BlockBool
+		// BlockInt256, BlockInt128, BlockBytes, BlockBool
 		// unknown/future types have no filter
 		return nil
 	}
