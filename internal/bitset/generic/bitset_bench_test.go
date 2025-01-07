@@ -141,3 +141,18 @@ func BenchmarkBitsetNotGeneric(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkBitsetMinMaxGeneric(b *testing.B) {
+	for _, n := range benchmarkSizes {
+		for _, d := range benchmarkDensities {
+			buf := fillBitsetRand(nil, n.L, d.D)
+			b.Run(n.Name+"-"+d.Name, func(b *testing.B) {
+				b.SetBytes(int64(bitFieldLen(n.L)))
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					_, _ = MinMax(buf, n.L)
+				}
+			})
+		}
+	}
+}

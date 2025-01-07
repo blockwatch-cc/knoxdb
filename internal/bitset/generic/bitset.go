@@ -181,3 +181,42 @@ func Indexes(src []byte, size int, dst []uint32) int {
 	}
 	return j
 }
+
+func MinMax(src []byte, size int) (minIdx int, maxIdx int) {
+	// ensure last byte is clean
+	if size > 0 {
+		src[len(src)-1] &= bytemask(size)
+	}
+
+	// find the first non-zero byte
+	var sz8 int = (len(src) >> 3) << 3
+	var n int
+
+	// skip leading zeros
+	for n < sz8 && binary.BigEndian.Uint64(src[n:n+8]) == 0 {
+		n += 8
+	}
+	for n < len(src) && src[n] == 0 {
+		n++
+	}
+	if n >= len(src) {
+		minIdx, maxIdx = -1, -1
+		return
+	}
+
+	// read trailing bits (note that the layout inside bytes
+	// is in reverse order)
+	minIdx = n*8 + bits.TrailingZeros8(src[n])
+
+	// find the last non-zero byte
+	for i := len(src) - 1; i >= n; i-- {
+		tz := bits.LeadingZeros8(src[i])
+		if tz == 8 {
+			continue
+		}
+		maxIdx = i*8 + 7 - tz
+		break
+	}
+
+	return
+}

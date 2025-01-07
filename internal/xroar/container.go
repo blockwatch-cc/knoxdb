@@ -293,7 +293,7 @@ func (c array) andBitmap(other bitmap) []uint16 {
 func (c array) andNotBitmap(other bitmap, buf []uint16) []uint16 {
 	assert(len(buf) == maxContainerSize)
 	res := array(buf)
-	Memclr(res)
+	clear(res)
 	res[indexType] = typeArray
 	res[indexSize] = 4
 	for _, e := range c.all() {
@@ -338,7 +338,7 @@ func (c array) toBitmapContainer(buf []uint16) []uint16 {
 	} else {
 		assert(len(buf) == maxContainerSize)
 		// assert(len(buf) == copy(buf, empty))
-		Memclr(buf)
+		clear(buf)
 	}
 
 	b := bitmap(buf)

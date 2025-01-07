@@ -509,3 +509,28 @@ func TestBitsetIndexGeneric(t *testing.T) {
 		}
 	}
 }
+
+func TestBitsetMinMaxGeneric(t *testing.T) {
+	for _, c := range runTestcases {
+		idx := make([]uint32, len(c.Idx))
+		n := Indexes(c.Buf, c.Size, idx)
+		idx = idx[:n]
+
+		first, last := MinMax(c.Buf, c.Size)
+		if len(idx) == 0 {
+			if got, want := first, -1; got != want {
+				t.Errorf("%s: unexpected first index %d, expected %d", c.Name, got, want)
+			}
+			if got, want := last, -1; got != want {
+				t.Errorf("%s: unexpected last index %d, expected %d", c.Name, got, want)
+			}
+		} else {
+			if got, want := first, int(idx[0]); got != want {
+				t.Errorf("%s: unexpected first index %d, expected %d", c.Name, got, want)
+			}
+			if got, want := last, int(idx[n-1]); got != want {
+				t.Errorf("%s: unexpected last index %d, expected %d", c.Name, got, want)
+			}
+		}
+	}
+}

@@ -30,28 +30,6 @@ func assert(b bool) {
 	}
 }
 
-// func check(err error) {
-// 	if err != nil {
-// 		log.Fatalf("%+v", err)
-// 	}
-// }
-// func check2(_ interface{}, err error) {
-// 	check(err)
-// }
-
-// func min16(a, b uint16) uint16 {
-// 	if a < b {
-// 		return a
-// 	}
-// 	return b
-// }
-// func max16(a, b uint16) uint16 {
-// 	if a > b {
-// 		return a
-// 	}
-// 	return b
-// }
-
 // Returns sum of a and b. If the result overflows uint64, it returns math.MaxUint64.
 func addUint64(a, b uint64) uint64 {
 	if a > math.MaxUint64-b {
@@ -76,15 +54,4 @@ func toUint16Slice(b []byte) (result []uint16) {
 // BytesToU32Slice converts the given byte slice to uint32 slice
 func toUint64Slice(b []uint16) []uint64 {
 	return unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(b))), len(b)/4)
-}
-
-//go:linkname memclrNoHeapPointers runtime.memclrNoHeapPointers
-func memclrNoHeapPointers(p unsafe.Pointer, n uintptr)
-
-func Memclr(b []uint16) {
-	if len(b) == 0 {
-		return
-	}
-	p := unsafe.Pointer(&b[0])
-	memclrNoHeapPointers(p, uintptr(len(b)*2))
 }

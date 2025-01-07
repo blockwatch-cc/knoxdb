@@ -48,7 +48,6 @@ func BenchmarkBitsetIndexes(b *testing.B) {
 	}
 }
 
-// go test -bench=BenchmarkLemireIterateManyb
 // see https://lemire.me/blog/2016/09/22/swift-versus-java-the-bitset-performance-test/
 func BenchmarkBitsetIterate(b *testing.B) {
 	for _, n := range benchmarkSizes {

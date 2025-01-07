@@ -19,6 +19,7 @@ var (
 	bitsetNeg      = generic.Neg
 	bitsetPopCount = generic.PopCount
 	bitsetIndexes  = generic.Indexes
+	bitsetMinMax   = generic.MinMax
 
 	bitFieldLen   = generic.BitFieldLen
 	bytemask      = generic.Bytemask

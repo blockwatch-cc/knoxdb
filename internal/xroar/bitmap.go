@@ -216,7 +216,7 @@ func (ra *Bitmap) scootRight(offset uint64, bySize uint64) {
 	n := copy(right, left) // Move data right.
 	ra.memMoved += n
 
-	Memclr(ra.data[offset : offset+bySize]) // Zero out the space in the middle.
+	clear(ra.data[offset : offset+bySize]) // Zero out the space in the middle.
 }
 
 // scootLeft removes size number of uint16s starting from the given offset.
@@ -230,7 +230,7 @@ func (ra *Bitmap) scootLeft(offset uint64, size uint64) {
 func (ra *Bitmap) newContainer(sz uint16) uint64 {
 	offset := uint64(len(ra.data))
 	ra.fastExpand(uint64(sz))
-	Memclr(ra.data[offset : offset+uint64(sz)])
+	clear(ra.data[offset : offset+uint64(sz)])
 	ra.data[offset] = sz
 	return offset
 }
@@ -339,7 +339,7 @@ func (ra *Bitmap) copyAt(offset uint64, src []uint16) {
 
 		// Convert the src array to bitmap and write it directly over to the container.
 		out := ra.getContainer(offset)
-		Memclr(out)
+		clear(out)
 		s.toBitmapContainer(out)
 		return
 	}
@@ -732,7 +732,7 @@ func (ra *Bitmap) Capacity() int {
 }
 
 func (ra *Bitmap) Reset() {
-	Memclr(ra.data)
+	clear(ra.data)
 
 	// reset ra.data to size enough for one container and corresponding key.
 	// NewBitmap allocs 24 extra bytes here
