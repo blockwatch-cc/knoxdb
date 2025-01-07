@@ -63,6 +63,7 @@ type QueryPlan struct {
 	Indexes       []engine.QueryableIndex // indexes to query
 	RequestSchema *schema.Schema          // request schema (filter fields)
 	ResultSchema  *schema.Schema          // result schema (output fields)
+	Snap          *types.Snapshot         // mvcc snapshot
 
 	// metrics and logging
 	Log   log.Logger
@@ -88,6 +89,7 @@ func (p *QueryPlan) Close() {
 	p.Indexes = nil
 	p.ResultSchema = nil
 	p.ResultSchema = nil
+	p.Snap = nil
 }
 
 func (p *QueryPlan) WithTable(t engine.QueryableTable) *QueryPlan {
@@ -218,29 +220,49 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		p.Log.Debug(p)
 	}
 
-	filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
+	// use tx snapshot if exists
+	p.Snap = engine.GetSnapshot(ctx)
 
-	// ensure result schema is set
-	if p.ResultSchema == nil {
-		p.ResultSchema = p.Table.Schema()
-	}
+	// extend filter from snapshot if table supports metadata
+	// allow user override by setting an explicit request schema
+	if p.RequestSchema == nil && p.Snap != nil && p.Table.Schema().HasMeta() {
+		mc, err := And(
+			// NEW records are visible when their writer committed before this tx started
+			// Note when we allow concurrent tx we must also check each record
+			// for snapshot visibility in case snap.Xmin <= $xmin < snap.Xmax
+			//
+			// $xmin < snap.xmax
+			Lt("$xmin", p.Snap.Xmax),
 
-	// ensure request schema is set
-	if p.RequestSchema == nil {
-		if filterFields.Len() > 0 {
-			s, err := p.Table.Schema().SelectFields(filterFields.Values...)
-			if err != nil {
-				return p.Errorf("make request schema: %v", err)
-			}
-			p.RequestSchema = s.Sort()
-		} else {
-			s, err := p.Table.Schema().SelectFieldIds(p.Table.Schema().PkId())
-			if err != nil {
-				return p.Errorf("make request schema: %v", err)
-			}
-			p.RequestSchema = s.WithName("pk")
+			// DELETED records are still visible until their tombstones commit,
+			// i.e. the tombstone was not created/merged before tx start
+			// note when we allow concurrent tx (xact != 0) we must also check
+			// each record for snapshot visibility when snap.Xmin <= $xmax < snap.Xmax
+			//
+			// $xmax == 0 || $xmax >= snap.xmax
+			Or(Equal("$xmax", 0), Ge("$xmax", p.Snap.Xmax)),
+		).Compile(p.Table.Schema(), nil)
+		if err != nil {
+			return p.Errorf("extend request filter: %v", err)
 		}
+		p.Filters.Children = append(p.Filters.Children, mc.Children...)
 	}
+
+	// request at least the primary key field
+	filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
+	if filterFields.Len() == 0 {
+		filterFields.Insert(p.Table.Schema().Pk().Name())
+	}
+
+	// construct request schema
+	if p.RequestSchema == nil {
+		s, err := p.Table.Schema().SelectFields(filterFields.Values...)
+		if err != nil {
+			return p.Errorf("make request schema: %v", err)
+		}
+		p.RequestSchema = s.Sort()
+	}
+
 	p.Log.Tracef("request %s", p.RequestSchema)
 
 	// identify indexes based on request schema fields
@@ -256,6 +278,10 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		p.Indexes = append(p.Indexes, idx)
 	}
 
+	// ensure result schema exists
+	if p.ResultSchema == nil {
+		p.ResultSchema = p.Table.Schema()
+	}
 	p.Log.Tracef("result %s", p.ResultSchema)
 
 	// optimize plan

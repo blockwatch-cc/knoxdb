@@ -392,38 +392,30 @@ func (q Query) Encode() ([]byte, error) {
 }
 
 func (q Query) MakePlan() (engine.QueryPlan, error) {
-	plan := query.NewQueryPlan().
-		WithTag(q.tag).
-		WithLimit(uint32(q.limit)).
-		WithOrder(q.order).
-		WithFlags(q.flags).
-		WithTable(q.table.Engine()).
-		WithLogger(q.log)
-
 	// compile filters from conditions
 	filters, err := q.cond.Compile(q.table.Schema(), q.table.DB().Enums())
 	if err != nil {
 		return nil, err
 	}
-	plan.Filters = filters
-
-	// build request (filter fields) schema
-	ts := q.table.Schema()
-	rs, err := ts.SelectFields(q.cond.Fields()...)
-	if err != nil {
-		return nil, err
-	}
-	plan.RequestSchema = rs.Sort()
 
 	// validate output schema
-	if q.schema == nil {
-		q.schema = ts
-	} else {
-		if err := ts.CanSelect(q.schema); err != nil {
+	s := q.table.Schema()
+	if q.schema != nil {
+		if err := s.CanSelect(q.schema); err != nil {
 			return nil, err
 		}
+		s = q.schema
 	}
-	plan.ResultSchema = q.schema
+
+	plan := query.NewQueryPlan().
+		WithTag(q.tag).
+		WithTable(q.table.Engine()).
+		WithFilters(filters).
+		WithSchema(s).
+		WithLimit(uint32(q.limit)).
+		WithOrder(q.order).
+		WithFlags(q.flags).
+		WithLogger(q.log)
 
 	return plan, nil
 }

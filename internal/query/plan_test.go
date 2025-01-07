@@ -53,17 +53,6 @@ type testStruct struct {
 	IsActive bool      `knox:"is_active"`
 }
 
-// func makeTestStruct(id int) *testStruct {
-// 	return &testStruct{
-// 		Id:       uint64(id),
-// 		Score:    util.RandFloat64(),
-// 		Name:     util.RandString(4),
-// 		Created:  time.Now().UTC(),
-// 		Status:   "active",
-// 		IsActive: id%2 == 0,
-// 	}
-// }
-
 func (t *testStruct) Encode() []byte {
 	enc := schema.NewEncoder(testSchema)
 	buf, err := enc.Encode(t, nil)
@@ -143,30 +132,6 @@ func (t *MockTable) Query(_ context.Context, _ engine.QueryPlan) (engine.QueryRe
 func (t *MockTable) Stream(_ context.Context, _ engine.QueryPlan, fn func(engine.QueryRow) error) error {
 	return t.result.ForEach(fn)
 }
-
-// func makeRandomResultsData(data ...int) [][]byte {
-// 	res := make([][]byte, len(data))
-// 	for i, v := range data {
-// 		res[i] = makeEncodedTestStruct(testSchema, makeTestStruct(v))
-// 	}
-// 	return res
-// }
-
-// func makeStructResultsData(data ...any) [][]byte {
-// 	res := make([][]byte, len(data))
-// 	for i, v := range data {
-// 		res[i] = makeEncodedTestStruct(testSchema, v)
-// 	}
-// 	return res
-// }
-
-// func makeQueryableIndex(results ...IndexResult) []engine.QueryableIndex {
-// 	queryableIndexes := make([]engine.QueryableIndex, 0)
-// 	for _, q := range results {
-// 		queryableIndexes = append(queryableIndexes, makeMockIndex(q.IndexSchema, bitmap.NewFromArray(q.Result)))
-// 	}
-// 	return queryableIndexes
-// }
 
 func IsFilterEqual(a, b *FilterTreeNode) bool {
 	if len(a.Children) != len(b.Children) {

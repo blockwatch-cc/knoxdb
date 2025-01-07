@@ -127,16 +127,16 @@ func (t TableImpl) Delete(ctx context.Context, q QueryRequest) (uint64, error) {
 		return 0, err
 	}
 
-	if err := plan.Compile(ctx); err != nil {
-		return 0, err
-	}
-
 	// use or open tx
 	ctx, commit, abort, err := t.db.Begin(ctx)
 	if err != nil {
 		return 0, err
 	}
 	defer abort()
+
+	if err := plan.Compile(ctx); err != nil {
+		return 0, err
+	}
 
 	n, err := t.table.Delete(ctx, plan)
 	if err != nil {
@@ -156,16 +156,16 @@ func (t TableImpl) Count(ctx context.Context, q QueryRequest) (uint64, error) {
 		return 0, err
 	}
 
-	if err := plan.Compile(ctx); err != nil {
-		return 0, err
-	}
-
 	// use or open tx
 	ctx, commit, abort, err := t.db.Begin(ctx)
 	if err != nil {
 		return 0, err
 	}
 	defer abort()
+
+	if err := plan.Compile(ctx); err != nil {
+		return 0, err
+	}
 
 	n, err := t.table.Count(ctx, plan)
 	if err != nil {
@@ -185,16 +185,16 @@ func (t TableImpl) Query(ctx context.Context, q QueryRequest) (QueryResult, erro
 		return nil, err
 	}
 
-	if err := plan.Compile(ctx); err != nil {
-		return nil, err
-	}
-
 	// use or open tx
 	ctx, commit, abort, err := t.db.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer abort()
+
+	if err := plan.Compile(ctx); err != nil {
+		return nil, err
+	}
 
 	res, err := t.table.Query(ctx, plan)
 	if err != nil {
@@ -215,16 +215,16 @@ func (t TableImpl) Stream(ctx context.Context, q QueryRequest, fn func(QueryRow)
 	}
 	defer plan.Close()
 
-	if err := plan.Compile(ctx); err != nil {
-		return err
-	}
-
 	// use or open tx
 	ctx, commit, abort, err := t.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer abort()
+
+	if err := plan.Compile(ctx); err != nil {
+		return err
+	}
 
 	if err := t.table.Stream(ctx, plan, fn); err != nil {
 		return err
@@ -405,6 +405,10 @@ func (t *GenericTable[T]) Delete(ctx context.Context, q QueryRequest) (uint64, e
 	}
 	defer abort()
 
+	if err := plan.Compile(ctx); err != nil {
+		return 0, err
+	}
+
 	n, err := t.table.Delete(ctx, plan)
 	if err != nil {
 		return 0, err
@@ -429,6 +433,10 @@ func (t *GenericTable[T]) Count(ctx context.Context, q QueryRequest) (uint64, er
 		return 0, err
 	}
 	defer abort()
+
+	if err := plan.Compile(ctx); err != nil {
+		return 0, err
+	}
 
 	n, err := t.table.Count(ctx, plan)
 	if err != nil {
@@ -455,6 +463,10 @@ func (t *GenericTable[T]) Query(ctx context.Context, q QueryRequest) (QueryResul
 	}
 	defer abort()
 
+	if err := plan.Compile(ctx); err != nil {
+		return nil, err
+	}
+
 	res, err := t.table.Query(ctx, plan)
 	if err != nil {
 		return nil, err
@@ -479,6 +491,10 @@ func (t *GenericTable[T]) Stream(ctx context.Context, q QueryRequest, fn func(Qu
 		return err
 	}
 	defer abort()
+
+	if err := plan.Compile(ctx); err != nil {
+		return err
+	}
 
 	if err := t.table.Stream(ctx, plan, fn); err != nil {
 		return err

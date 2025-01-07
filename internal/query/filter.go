@@ -66,7 +66,7 @@ func (f Filter) Validate() error {
 // Invariants
 // - root is always an AND node
 // - root is never a leaf node
-// - root may not be empty (no children, no filter)
+// - root may not be empty (no children)
 type FilterTreeNode struct {
 	Children []*FilterTreeNode // sub filter
 	Filter   *Filter           // ptr to condition
