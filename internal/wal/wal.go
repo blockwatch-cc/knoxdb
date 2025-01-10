@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/echa/log"
 
@@ -26,7 +27,8 @@ import (
 var LE = binary.LittleEndian
 
 const (
-	WAL_DIR_MODE = 0755
+	WAL_DIR_MODE          = 0755
+	WAL_MAX_SYNC_REQUESTS = 128
 )
 
 type RecoveryMode byte
@@ -72,13 +74,15 @@ type WalOptions struct {
 	Seed           uint64
 	Path           string
 	MaxSegmentSize int
+	SyncDelay      time.Duration
 	RecoveryMode   RecoveryMode
 	Logger         log.Logger
 }
 
 var DefaultOptions = WalOptions{
 	Path:           "",
-	MaxSegmentSize: 1 << 20, // 1MB
+	SyncDelay:      time.Second, // sync at most each second
+	MaxSegmentSize: 1 << 20,     // 1MB
 	RecoveryMode:   RecoveryModeFail,
 	Logger:         log.Disabled,
 }
@@ -89,6 +93,7 @@ func (o WalOptions) IsValid() bool {
 
 func (o WalOptions) Merge(o2 WalOptions) WalOptions {
 	o.Path = util.NonZero(o2.Path, o.Path)
+	o.SyncDelay = util.NonZero(o2.SyncDelay, o.SyncDelay)
 	o.MaxSegmentSize = util.NonZero(o2.MaxSegmentSize, o.MaxSegmentSize)
 	o.RecoveryMode = util.NonZero(o2.RecoveryMode, o.RecoveryMode)
 	o.Seed = o2.Seed
@@ -100,9 +105,12 @@ func (o WalOptions) Merge(o2 WalOptions) WalOptions {
 
 type Wal struct {
 	mu     sync.RWMutex
+	wg     sync.WaitGroup
 	opts   WalOptions
 	active *segment
 	wr     *bufio.Writer
+	req    chan *util.Future
+	close  chan struct{}
 	csum   uint64
 	hash   hash.Hash64
 	lsn    LSN
@@ -122,12 +130,14 @@ func Create(opts WalOptions) (*Wal, error) {
 	}
 
 	wal := &Wal{
-		opts: opts,
-		wr:   bufio.NewWriterSize(nil, BufferSize),
-		hash: xxhash.New(),
-		csum: opts.Seed,
-		lsn:  0,
-		log:  opts.Logger,
+		opts:  opts,
+		wr:    bufio.NewWriterSize(nil, BufferSize),
+		hash:  xxhash.New(),
+		csum:  opts.Seed,
+		req:   make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
+		close: make(chan struct{}),
+		lsn:   0,
+		log:   opts.Logger,
 	}
 
 	// create active segment
@@ -136,6 +146,9 @@ func Create(opts WalOptions) (*Wal, error) {
 		return nil, err
 	}
 	wal.wr.Reset(wal.active)
+
+	// when all is ok, launch background sync
+	wal.runSyncThread()
 
 	return wal, nil
 }
@@ -182,12 +195,14 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	}
 
 	wal := &Wal{
-		opts: opts,
-		wr:   bufio.NewWriterSize(nil, BufferSize),
-		hash: xxhash.New(),
-		csum: opts.Seed,
-		lsn:  maxLsn,
-		log:  opts.Logger,
+		opts:  opts,
+		wr:    bufio.NewWriterSize(nil, BufferSize),
+		hash:  xxhash.New(),
+		req:   make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
+		close: make(chan struct{}),
+		csum:  opts.Seed,
+		lsn:   maxLsn,
+		log:   opts.Logger,
 	}
 	wal.log.Debugf("wal: verifying from LSN %d", lsn)
 
@@ -234,16 +249,24 @@ scan:
 	}
 	wal.wr.Reset(wal.active)
 
+	// when all is ok, launch background sync
+	wal.runSyncThread()
+
 	return wal, nil
 }
 
 func (w *Wal) Close() error {
+	w.stopSyncThread()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	err := w.wr.Flush()
 	err2 := w.active.Close()
 	if err == nil {
 		err = err2
+	}
+	close(w.req)
+	for fut := range w.req {
+		fut.Close()
 	}
 	w.active = nil
 	w.wr = nil
@@ -255,9 +278,14 @@ func (w *Wal) Close() error {
 }
 
 func (w *Wal) ForceClose() error {
+	w.stopSyncThread()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	err := w.active.ForceClose()
+	close(w.req)
+	for fut := range w.req {
+		fut.Close()
+	}
 	w.active = nil
 	w.wr = nil
 	w.csum = 0
@@ -281,6 +309,23 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 	return w.write(rec)
 }
 
+func (w *Wal) Sync() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.sync()
+}
+
+func (w *Wal) Schedule() *util.Future {
+	fut := util.NewFuture()
+	select {
+	case <-w.close:
+		fut.CloseErr(ErrWalClosed)
+	case w.req <- fut:
+		// may block when full
+	}
+	return fut
+}
+
 func (w *Wal) WriteAndSync(rec *Record) (LSN, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -292,10 +337,14 @@ func (w *Wal) WriteAndSync(rec *Record) (LSN, error) {
 	return lsn, err
 }
 
-func (w *Wal) Sync() error {
+func (w *Wal) WriteAndSchedule(rec *Record) (LSN, *util.Future, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.sync()
+	lsn, err := w.write(rec)
+	if err != nil {
+		return 0, nil, err
+	}
+	return lsn, w.Schedule(), nil
 }
 
 func (w *Wal) sync() error {
@@ -502,4 +551,66 @@ func (w *Wal) tryRecover(lsn LSN, err error) error {
 	default:
 		return err
 	}
+}
+
+func (w *Wal) runSyncThread() {
+	var (
+		queue   [WAL_MAX_SYNC_REQUESTS]*util.Future
+		n       int
+		tick    = time.NewTicker(w.opts.SyncDelay)
+		closing bool
+	)
+	w.wg.Add(1)
+	go func() {
+		defer w.wg.Done()
+		defer tick.Stop()
+		for {
+			select {
+			case <-w.close:
+				if n == 0 {
+					return
+				}
+				closing = true
+
+			case <-tick.C:
+				// process waiting requests
+				if n == 0 {
+					continue
+				}
+
+			case fut := <-w.req:
+				// record request if still valid
+				if fut.IsValid() {
+					queue[n] = fut
+					n++
+				}
+
+				// only flush on tick, when req queue is full, or we're closing
+				if n < WAL_MAX_SYNC_REQUESTS {
+					continue
+				}
+			}
+
+			// flush and sync under lock
+			w.mu.Lock()
+			err := w.sync()
+			w.mu.Unlock()
+
+			// signal to futures
+			for _, fut := range queue[:n] {
+				fut.CloseErr(err)
+			}
+			clear(queue[:n])
+			n = 0
+
+			if closing {
+				return
+			}
+		}
+	}()
+}
+
+func (w *Wal) stopSyncThread() {
+	close(w.close)
+	w.wg.Wait()
 }

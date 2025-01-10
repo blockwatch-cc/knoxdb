@@ -12,16 +12,19 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func createWalOptions(t testing.TB) WalOptions {
 	t.Helper()
 	return WalOptions{
 		Path:           t.TempDir(),
+		SyncDelay:      time.Second,
 		MaxSegmentSize: 100 << 20, // 100MB
 		RecoveryMode:   RecoveryModeTruncate,
 	}
@@ -475,6 +478,99 @@ func TestWalSyncAndClose(t *testing.T) {
 		Data: [][]byte{[]byte("test")},
 	})
 	assert.Error(t, err, "Write after close should fail")
+}
+
+// TestWalAsyncWait tests batched fsync mode where simulated tx wait for sync completion.
+func TestWalAsyncWait(t *testing.T) {
+	opts := createWalOptions(t)
+	opts.SyncDelay = 10 * time.Millisecond
+	w := createWal(t, opts)
+
+	// Write concurrent records
+	errg := &errgroup.Group{}
+	errg.SetLimit(32)
+	for th := 0; th < 32; th++ {
+		errg.Go(func() error {
+			for i := 0; i < 10; i++ {
+				rec := &Record{
+					Type:   RecordTypeInsert,
+					Tag:    types.ObjectTagDatabase,
+					Entity: uint64(i),
+					TxID:   uint64(i + th*100 + 1),
+					Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
+				}
+				_, fut, err := w.WriteAndSchedule(rec)
+				if err != nil {
+					return err
+				}
+				fut.Wait()
+				if err := fut.Err(); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	require.NoError(t, errg.Wait())
+	require.NoError(t, w.Close())
+}
+
+// TestWalAsyncNoWait tests batched fsync mode where simulated tx do not wait for sync completion.
+func TestWalAsyncNoWait(t *testing.T) {
+	opts := createWalOptions(t)
+	opts.SyncDelay = 10 * time.Millisecond
+	w := createWal(t, opts)
+
+	// Write concurrent records
+	errg := &errgroup.Group{}
+	errg.SetLimit(32)
+	for th := 0; th < 32; th++ {
+		errg.Go(func() error {
+			for i := 0; i < 100; i++ {
+				rec := &Record{
+					Type:   RecordTypeInsert,
+					Tag:    types.ObjectTagDatabase,
+					Entity: uint64(i),
+					TxID:   uint64(i + th*100 + 1),
+					Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
+				}
+				_, fut, err := w.WriteAndSchedule(rec)
+				if err != nil {
+					return err
+				}
+				fut.Close()
+			}
+			return nil
+		})
+	}
+
+	require.NoError(t, errg.Wait())
+	require.NoError(t, w.Close())
+}
+
+// TestWalAsyncClose tests batched fsync mode where tx waits for completion on close.
+func TestWalAsyncClose(t *testing.T) {
+	opts := createWalOptions(t)
+	opts.SyncDelay = 10 * time.Millisecond
+	w := createWal(t, opts)
+
+	// Write records
+	rec := &Record{
+		Type:   RecordTypeInsert,
+		Tag:    types.ObjectTagDatabase,
+		Entity: uint64(1),
+		TxID:   uint64(100 + 1),
+		Data:   [][]byte{[]byte("data")},
+	}
+	_, fut, err := w.WriteAndSchedule(rec)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	require.Eventually(t, func() bool {
+		fut.Wait()
+		return true
+	}, time.Second, time.Millisecond)
+	require.NoError(t, fut.Err())
 }
 
 // TestWalSegmentRollover tests the behavior when the WAL rolls over to a new segment due to reaching the maximum segment size.
@@ -1229,38 +1325,53 @@ func BenchmarkWalWrite(b *testing.B) {
 
 // BenchmarkWalWriteSync tests writing records with and without sync
 func BenchmarkWalWriteSync(b *testing.B) {
-	syncOptions := []bool{false, true}
-	for _, withSync := range syncOptions {
-		name := "NoSync"
-		if withSync {
-			name = "Sync"
+	opts := createWalOptions(b)
+	w := createWal(b, opts)
+	defer w.Close()
+
+	size := 256
+	data := make([]byte, size)
+	b.SetBytes(int64(size))
+	b.ResetTimer()
+
+	for i := 1; i < b.N; i++ {
+		rec := &Record{
+			Type:   RecordTypeInsert,
+			Tag:    types.ObjectTagDatabase,
+			Entity: uint64(i),
+			TxID:   uint64(i),
+			Data:   [][]byte{data},
 		}
-		b.Run(name, func(b *testing.B) {
-			opts := createWalOptions(b)
-			w := createWal(b, opts)
-			defer w.Close()
+		_, err := w.Write(rec)
+		require.NoError(b, err)
+		require.NoError(b, w.Sync())
+	}
+}
 
-			size := 256
-			data := make([]byte, size)
-			b.SetBytes(int64(size))
-			b.ResetTimer()
+// BenchmarkWalWriteSchedule tests writing records with delayed batch sync
+func BenchmarkWalWriteSchedule(b *testing.B) {
+	opts := createWalOptions(b)
+	w := createWal(b, opts)
+	defer w.Close()
 
-			for i := 1; i < b.N; i++ {
-				rec := &Record{
-					Type:   RecordTypeInsert,
-					Tag:    types.ObjectTagDatabase,
-					Entity: uint64(i),
-					TxID:   uint64(i),
-					Data:   [][]byte{data},
-				}
-				_, err := w.Write(rec)
-				require.NoError(b, err)
-				if withSync {
-					err = w.Sync()
-					require.NoError(b, err)
-				}
-			}
-		})
+	size := 256
+	data := make([]byte, size)
+	b.SetBytes(int64(size))
+	b.ResetTimer()
+
+	for i := 1; i < b.N; i++ {
+		rec := &Record{
+			Type:   RecordTypeInsert,
+			Tag:    types.ObjectTagDatabase,
+			Entity: uint64(i),
+			TxID:   uint64(i),
+			Data:   [][]byte{data},
+		}
+		_, err := w.Write(rec)
+		require.NoError(b, err)
+		fut := w.Schedule()
+		require.NoError(b, fut.Err())
+		fut.Close()
 	}
 }
 
