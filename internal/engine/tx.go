@@ -13,6 +13,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type TxFlags byte
@@ -23,6 +24,9 @@ const (
 	TxFlagsSerializable         // use serializable snapshot isolation level (TODO)
 	TxFlagsDeferred             // wait for safe snapshot (TODO)
 	TxFlagsConflict             // conflict detected, abort on commit
+	TxFlagsNoWal                // do not write wal
+	TxFlagsNoSync               // write wal but do not fsync
+	TxFlagsDelaySync            // batch wal fsync requests
 )
 
 const ReadTxOffset uint64 = 1 << 63
@@ -32,6 +36,9 @@ func (f TxFlags) IsCatalog() bool      { return f&TxFlagsCatalog > 0 }
 func (f TxFlags) IsSerializable() bool { return f&TxFlagsSerializable > 0 }
 func (f TxFlags) IsDeferred() bool     { return f&TxFlagsDeferred > 0 }
 func (f TxFlags) IsConflict() bool     { return f&TxFlagsConflict > 0 }
+func (f TxFlags) IsNoWal() bool        { return f&TxFlagsNoWal > 0 }
+func (f TxFlags) IsNoSync() bool       { return f&TxFlagsNoSync > 0 }
+func (f TxFlags) IsDelaySync() bool    { return f&TxFlagsDelaySync > 0 }
 
 type TxHook func(Context) error
 
@@ -166,8 +173,10 @@ func (t *Tx) IsClosed() bool {
 	return t.engine == nil
 }
 
-func (t *Tx) HasWritten() bool {
-	return len(t.touched) > 0 || t.flags.IsCatalog()
+func (t *Tx) UseWal() bool {
+	return !t.flags.IsNoWal() &&
+		t.engine.wal != nil &&
+		(len(t.touched) > 0 || t.flags.IsCatalog())
 }
 
 func (t *Tx) Id() uint64 {
@@ -311,13 +320,29 @@ func (t *Tx) Commit() error {
 	t.engine.log.Tracef("Commit tx %d", t.id)
 
 	// don't log read only tx or tx without activity
-	if t.HasWritten() && t.engine.wal != nil {
-		_, err := t.engine.wal.WriteAndSync(&wal.Record{
+	if t.UseWal() {
+		rec := &wal.Record{
 			Type:   wal.RecordTypeCommit,
 			Tag:    types.ObjectTagDatabase,
 			Entity: t.engine.dbId,
 			TxID:   t.id,
-		})
+		}
+		var (
+			err error
+			fut *util.Future
+		)
+		switch {
+		case t.flags.IsNoSync():
+			_, err = t.engine.wal.Write(rec)
+		case t.flags.IsDelaySync():
+			_, fut, err = t.engine.wal.WriteAndSchedule(rec)
+			if err == nil {
+				fut.Wait()
+				err = fut.Err()
+			}
+		default:
+			_, err = t.engine.wal.WriteAndSync(rec)
+		}
 		if err != nil {
 			t.Fail(err)
 		}
@@ -390,15 +415,31 @@ func (t *Tx) Abort() error {
 
 	t.engine.log.Tracef("Abort tx %d", t.id)
 
-	// don't log read only tx, tx without activity
-	if t.HasWritten() && t.engine.wal != nil {
+	// don't log read only tx or tx without activity
+	if t.UseWal() {
 		// write abort record to wal (no sync required, tx data is ignored if lost)
-		_, err := t.engine.wal.Write(&wal.Record{
+		rec := &wal.Record{
 			Type:   wal.RecordTypeAbort,
 			Tag:    types.ObjectTagDatabase,
 			Entity: t.engine.dbId,
 			TxID:   t.id,
-		})
+		}
+		var (
+			err error
+			fut *util.Future
+		)
+		switch {
+		case t.flags.IsNoSync():
+			_, err = t.engine.wal.Write(rec)
+		case t.flags.IsDelaySync():
+			_, fut, err = t.engine.wal.WriteAndSchedule(rec)
+			if err == nil {
+				fut.Wait()
+				err = fut.Err()
+			}
+		default:
+			_, err = t.engine.wal.WriteAndSync(rec)
+		}
 		if err != nil {
 			t.Fail(err)
 		}
