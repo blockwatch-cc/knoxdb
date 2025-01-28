@@ -134,7 +134,15 @@ func (a *CompactByteArray) Subslice(start, end int) [][]byte {
 }
 
 func (a *CompactByteArray) MinMax() ([]byte, []byte) {
-	return minMax(a)
+	return minMaxArr(a)
+}
+
+func (a *CompactByteArray) Min() []byte {
+	return maxArr(a)
+}
+
+func (a *CompactByteArray) Max() []byte {
+	return maxArr(a)
 }
 
 func (a *CompactByteArray) WriteTo(w io.Writer) (int64, error) {

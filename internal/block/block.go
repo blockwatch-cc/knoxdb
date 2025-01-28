@@ -111,6 +111,89 @@ func New(typ BlockType, sz int) *Block {
 	return b
 }
 
+func Wrap(typ BlockType, vec any) *Block {
+	b := blockPool.Get().(*Block)
+	b.typ = typ
+	b.dirty = true
+	b.refCount = 1
+	b.len = 0
+	b.cap = 0
+	switch typ {
+	case BlockInt128:
+		i128 := vec.(num.Int128Stride)
+		b.ptr = unsafe.Pointer(&i128)
+		b.len, b.cap = i128.Len(), i128.Cap()
+	case BlockInt256:
+		i256 := vec.(num.Int256Stride)
+		b.ptr = unsafe.Pointer(&i256)
+		b.len, b.cap = i256.Len(), i256.Cap()
+	case BlockBool:
+		bits := vec.(*bitset.Bitset)
+		b.ptr = unsafe.Pointer(bits)
+		b.len, b.cap = bits.Len(), bits.Cap()
+	case BlockBytes:
+		var arr dedup.ByteArray
+		switch v := vec.(type) {
+		case [][]byte:
+			arr = dedup.NewByteArray(len(v)).AppendZeroCopy(v...)
+		case dedup.ByteArray:
+			arr = v
+		}
+		b.ptr = unsafe.Pointer(&arr)
+	case BlockInt64:
+		v := vec.([]int64)
+		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*8)
+		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+		b.len, b.cap = len(v), len(v)
+	case BlockInt32:
+		v := vec.([]int32)
+		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*4)
+		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+		b.len, b.cap = len(v), len(v)
+	case BlockInt16:
+		v := vec.([]int16)
+		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*2)
+		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+		b.len, b.cap = len(v), len(v)
+	case BlockInt8:
+		v := vec.([]int8)
+		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v))
+		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+		b.len, b.cap = len(v), len(v)
+	case BlockUint64:
+		v := vec.([]uint64)
+		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*8)
+		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+		b.len, b.cap = len(v), len(v)
+	case BlockUint32:
+		v := vec.([]uint32)
+		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*4)
+		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+		b.len, b.cap = len(v), len(v)
+	case BlockUint16:
+		v := vec.([]uint16)
+		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*2)
+		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+		b.len, b.cap = len(v), len(v)
+	case BlockUint8:
+		v := vec.([]uint8)
+		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v))
+		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+		b.len, b.cap = len(v), len(v)
+	case BlockFloat64:
+		v := vec.([]float64)
+		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*8)
+		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+		b.len, b.cap = len(v), len(v)
+	case BlockFloat32:
+		v := vec.([]float32)
+		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*4)
+		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+		b.len, b.cap = len(v), len(v)
+	}
+	return b
+}
+
 // only applicable to managed memory blocks, not byte, i128, i258, bool
 func (b *Block) data() []byte {
 	return b.buf[:b.len*blockTypeDataSize[b.typ]]
@@ -146,6 +229,12 @@ func (b *Block) SetDirty() {
 
 func (b *Block) SetClean() {
 	b.dirty = false
+}
+
+func (b *Block) IsMaterialized() bool {
+	assert.Always(b != nil, "nil block, potential use after free")
+	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
+	return b.typ != BlockBytes || (*(*dedup.ByteArray)(b.ptr)).IsMaterialized()
 }
 
 func (b *Block) CanOptimize() bool {
@@ -323,7 +412,7 @@ func (b *Block) Grow(n int) {
 func (b *Block) Delete(from, n int) {
 	assert.Always(b != nil, "nil block, potential use after free")
 	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	assert.Always(b.Len() <= from+n, "out of bounds", "dst.len", b.Len(), "from", from, "n", n)
+	assert.Always(b.Len() >= from+n, "out of bounds", "dst.len", b.Len(), "from", from, "n", n)
 	switch b.typ {
 	case BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Delete(from, n)

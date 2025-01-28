@@ -59,10 +59,13 @@ func (s *Bitset) Count() int {
 	return s.cnt
 }
 
-// MinMax returns the indices of the first and last bit set. If
+// MinMax returns the indices of the first and last bit set or -1 when no bits are set.
 func (s Bitset) MinMax() (int, int) {
-	if s.Count() == 0 {
+	if s.None() {
 		return -1, -1
+	}
+	if s.All() {
+		return 0, s.size
 	}
 	return bitsetMinMax(s.buf, s.size)
 }

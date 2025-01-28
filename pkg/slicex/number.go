@@ -71,6 +71,20 @@ func (o OrderedNumbers[T]) MinMax() (T, T) {
 	}
 }
 
+func (o OrderedNumbers[T]) Min() T {
+	if len(o.Values) == 0 {
+		return 0
+	}
+	return o.Values[0]
+}
+
+func (o OrderedNumbers[T]) Max() T {
+	if l := len(o.Values); l > 0 {
+		return o.Values[l-1]
+	}
+	return 0
+}
+
 func (o OrderedNumbers[T]) IsFull() bool {
 	a, b := o.MinMax()
 	return int(b-a)+1 == len(o.Values)

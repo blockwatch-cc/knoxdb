@@ -48,6 +48,20 @@ func (o OrderedBytes) Len() int {
 	return len(o.Values)
 }
 
+func (o OrderedBytes) Min() []byte {
+	if len(o.Values) == 0 {
+		return nil
+	}
+	return o.Values[0]
+}
+
+func (o OrderedBytes) Max() []byte {
+	if l := len(o.Values); l > 0 {
+		return o.Values[l-1]
+	}
+	return nil
+}
+
 func (o OrderedBytes) MinMax() ([]byte, []byte) {
 	switch l := len(o.Values); l {
 	case 0:
@@ -539,4 +553,30 @@ func BytesMinMax(s [][]byte) ([]byte, []byte) {
 		}
 	}
 	return min, max
+}
+
+func BytesMin(s [][]byte) (val []byte) {
+	if len(s) == 0 {
+		return
+	}
+	val = s[0]
+	for _, v := range s[1:] {
+		if bytes.Compare(v, val) < 0 {
+			val = v
+		}
+	}
+	return val
+}
+
+func BytesMax(s [][]byte) (val []byte) {
+	if len(s) == 0 {
+		return
+	}
+	val = s[0]
+	for _, v := range s[1:] {
+		if bytes.Compare(v, val) > 0 {
+			val = v
+		}
+	}
+	return val
 }
