@@ -270,7 +270,7 @@ func (n *SNode) Query(it *Iterator) error {
 	}
 
 	// optimized fast path when all data is in memory
-	if len(loadBlocks) == 0 && !it.useBloom {
+	if len(loadBlocks) == 0 && it.use == 0 {
 		if it.flt != nil {
 			it.vmatch = matchVector(it.flt, n.spack, nil, it.vmatch)
 			it.match = it.vmatch.Indexes(it.match)
@@ -284,11 +284,11 @@ func (n *SNode) Query(it *Iterator) error {
 		if len(loadBlocks) > 0 {
 			_, err := n.spack.Load(
 				it.ctx,
-				it.idx.statsBucket(tx),           // tablename_stats
-				it.idx.features.Is(FeatUseCache), // use cache
-				it.idx.schema.Hash(),             // unique cache key
-				loadBlocks,                       // required/missing field indexes
-				0,                                // read block/pack length from storage
+				it.idx.statsBucket(tx),      // tablename_stats
+				it.idx.use.Is(FeatUseCache), // use cache
+				it.idx.schema.Hash(),        // unique cache key
+				loadBlocks,                  // required/missing field indexes
+				0,                           // read block/pack length from storage
 			)
 			if err != nil {
 				return err
@@ -296,15 +296,21 @@ func (n *SNode) Query(it *Iterator) error {
 		}
 
 		// init bloom filter bucket if required
-		var blooms store.Bucket
-		if it.useBloom {
-			blooms = it.idx.bloomBucket(tx)
+		var buckets map[int]store.Bucket
+		if it.use.Is(FeatBloomFilter) {
+			buckets[STATS_BLOOM_KEY] = it.idx.bloomBucket(tx)
+		}
+		if it.use.Is(FeatFuseFilter) {
+			buckets[STATS_FUSE_KEY] = it.idx.fuseBucket(tx)
+		}
+		if it.use.Is(FeatBitsFilter) {
+			buckets[STATS_BITS_KEY] = it.idx.bitsBucket(tx)
 		}
 
-		// run vectorized queries for filter types, load & check bloom
-		// filters on demand
+		// run vectorized queries for filter types, load & check bloom,
+		// fuse and bitset filters on demand
 		if it.flt != nil {
-			it.vmatch = matchVector(it.flt, n.spack, blooms, it.vmatch)
+			it.vmatch = matchVector(it.flt, n.spack, buckets, it.vmatch)
 			if it.vmatch.Count() == 0 {
 				return nil
 			}

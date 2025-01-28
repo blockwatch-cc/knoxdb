@@ -248,9 +248,16 @@ func (f *Filter) AddManyFloat32(data []float32) {
 	}
 }
 
-// Contains returns true if the filter possibly contains v.
+// Contains returns true if the filter possible contains the
+// encoded (pre-hashed) value. This implements the common
+// interface filter.Filter used by query matchers.
+func (f *Filter) Contains(v uint64) bool {
+	return f.contains(f, hash.HashValue{uint32(v >> 32), uint32(v)})
+}
+
+// ContainsBytes returns true if the filter possibly contains v.
 // Returns false if the filter definitely does not contain v.
-func (f *Filter) Contains(v []byte) bool {
+func (f *Filter) ContainsBytes(v []byte) bool {
 	return f.contains(f, hash.Hash(v))
 }
 

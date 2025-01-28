@@ -8,6 +8,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
+	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/pkg/slicex"
@@ -49,8 +50,16 @@ func (m floatInSetMatcher[T]) MatchRange(from, to any) bool {
 	return m.slice.ContainsRange(from.(T), to.(T))
 }
 
-func (m floatInSetMatcher[T]) MatchBloom(flt *bloom.Filter) bool {
-	return flt.ContainsAnyHash(m.hashes)
+func (m floatInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
+	if x, ok := flt.(*bloom.Filter); ok {
+		return x.ContainsAnyHash(m.hashes)
+	}
+	for _, h := range m.hashes {
+		if flt.Contains(h.Uint64()) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m floatInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
@@ -115,7 +124,7 @@ func (m floatNotInSetMatcher[T]) MatchRange(from, to any) bool {
 	return !m.slice.ContainsRange(from.(T), to.(T))
 }
 
-func (m floatNotInSetMatcher[T]) MatchBloom(flt *bloom.Filter) bool {
+func (m floatNotInSetMatcher[T]) MatchFilter(_ filter.Filter) bool {
 	// we don't know generally, so full scan is always required
 	return true
 }

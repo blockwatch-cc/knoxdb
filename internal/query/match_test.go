@@ -232,12 +232,12 @@ func TestMatchSet(t *testing.T) {
 				return
 			}
 			set := xroar.NewBitmap()
-			assert.False(t, m.MatchBitmap(set), "set-empty")
+			assert.False(t, m.MatchFilter(set), "set-empty")
 			set.Set(1)
-			assert.True(t, m.MatchBitmap(set), "set-in: %v in %v", gen.MakeValue(1), slice)
+			assert.True(t, m.MatchFilter(set), "set-in: %v in %v", gen.MakeValue(1), slice)
 			set.Remove(1)
 			set.Set(10)
-			assert.False(t, m.MatchBitmap(set), "set-notin")
+			assert.False(t, m.MatchFilter(set), "set-notin")
 		})
 	}
 }

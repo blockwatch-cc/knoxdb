@@ -7,6 +7,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -302,8 +303,16 @@ func (m i256InSetMatcher) MatchRange(from, to any) bool {
 	return num.Int256ContainsRange(m.slice, from.(num.Int256), to.(num.Int256))
 }
 
-func (m i256InSetMatcher) MatchBloom(flt *bloom.Filter) bool {
-	return flt.ContainsAnyHash(m.hashes)
+func (m i256InSetMatcher) MatchFilter(flt filter.Filter) bool {
+	if x, ok := flt.(*bloom.Filter); ok {
+		return x.ContainsAnyHash(m.hashes)
+	}
+	for _, h := range m.hashes {
+		if flt.Contains(h.Uint64()) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m i256InSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
@@ -366,7 +375,7 @@ func (m i256NotInSetMatcher) MatchRange(from, to any) bool {
 	return !num.Int256ContainsRange(m.slice, from.(num.Int256), to.(num.Int256))
 }
 
-func (m i256NotInSetMatcher) MatchBloom(flt *bloom.Filter) bool {
+func (m i256NotInSetMatcher) MatchFilter(_ filter.Filter) bool {
 	// we don't know generally, so full scan is always required
 	return true
 }

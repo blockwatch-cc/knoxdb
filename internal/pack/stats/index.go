@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"math/bits"
 	"slices"
 	"sort"
@@ -184,16 +183,16 @@ func (f Features) Is(x Features) bool {
 // indexes are directly computed from a node's index.
 
 type Index struct {
-	schema   *schema.Schema        // statistics schema (meta + min + max)
-	db       store.DB              // backend reference for pulling more data
-	keys     [STATS_BUCKETS][]byte // statistics bucket keys
-	inodes   *[]*INode             // inner nodes of the binary tree as array
-	snodes   *[]*SNode             // leaf nodes of the binary tree as array
-	px       int                   // index of the data pack's pk column (pk or rid)
-	nmax     int                   // max data pack size
-	view     *schema.View          // helper to extract tree node data from wire format
-	build    *schema.Builder       // wire format builder (writer only)
-	features Features              // index features
+	schema *schema.Schema        // statistics schema (meta + min + max)
+	db     store.DB              // backend reference for pulling more data
+	keys   [STATS_BUCKETS][]byte // statistics bucket keys
+	inodes *[]*INode             // inner nodes of the binary tree as array
+	snodes *[]*SNode             // leaf nodes of the binary tree as array
+	px     int                   // index of the data pack's pk column (pk or rid)
+	nmax   int                   // max data pack size
+	view   *schema.View          // helper to extract tree node data from wire format
+	build  *schema.Builder       // wire format builder (writer only)
+	use    Features              // index features
 	// card   []*loglogbeta.LogLogBeta // HLL cardinality estimators [n_columns]
 
 	// load other index data on demand (maybe use LRU cache, but requires data copy)
@@ -223,13 +222,13 @@ func NewIndex(db store.DB, s *schema.Schema, nmax int) *Index {
 			makekey(BitsKeySuffix),
 			makekey(FuseKeySuffix),
 		},
-		inodes:   &inodes,
-		snodes:   &snodes,
-		px:       px,
-		nmax:     nmax,
-		view:     schema.NewView(ss),
-		build:    schema.NewBuilder(ss),
-		features: FeatBloomFilter | FeatFuseFilter | FeatBitsFilter,
+		inodes: &inodes,
+		snodes: &snodes,
+		px:     px,
+		nmax:   nmax,
+		view:   schema.NewView(ss),
+		build:  schema.NewBuilder(ss),
+		use:    FeatBloomFilter | FeatFuseFilter | FeatBitsFilter,
 	}
 }
 
@@ -247,20 +246,21 @@ func (idx Index) Clone() *Index {
 		nmax:   idx.nmax,
 		view:   schema.NewView(idx.schema), // create a private view state
 		build:  idx.build,                  // link builder, its only accessed during updates
+		use:    idx.use,
 	}
 }
 
 func (idx *Index) WithCache(use bool) *Index {
 	if use {
-		idx.features |= FeatUseCache
+		idx.use |= FeatUseCache
 	} else {
-		idx.features &^= FeatUseCache
+		idx.use &^= FeatUseCache
 	}
 	return idx
 }
 
 func (idx *Index) WithFeatures(f Features) *Index {
-	idx.features = f
+	idx.use = f
 	return idx
 }
 
@@ -279,7 +279,7 @@ func (idx *Index) Close() {
 	idx.build = nil
 	idx.px = 0
 	idx.nmax = 0
-	idx.features = 0
+	idx.use = 0
 }
 
 // store and load
@@ -672,16 +672,15 @@ func (idx *Index) FindPk(ctx context.Context, pk uint64) (*Iterator, bool) {
 
 		// init an iterator so that calling next() will run a query
 		it := &Iterator{
-			ctx:      ctx,
-			idx:      idx,
-			flt:      flt,
-			useBloom: false,
-			useRange: false,
-			vmatch:   bitset.NewBitset(STATS_PACK_SIZE),
-			smatch:   bitset.NewBitset(slen),
-			match:    make([]uint32, 0),
-			sx:       slen - 2, // start at last spack (it will +1)
-			n:        -1,       // start at first offset (it will +1)
+			ctx:    ctx,
+			idx:    idx,
+			flt:    flt,
+			use:    0,
+			vmatch: bitset.NewBitset(STATS_PACK_SIZE),
+			smatch: bitset.NewBitset(slen),
+			match:  make([]uint32, 0),
+			sx:     slen - 2, // start at last spack (it will +1)
+			n:      -1,       // start at first offset (it will +1)
 		}
 		it.smatch.Set(slen - 1)
 
@@ -773,11 +772,13 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode) (*Iterat
 		return nil, false
 	}
 
-	// identify if query would benefit from loading bloom filters
-	var useBloom, useRange bool
+	// identify if query would benefit from loading any filters
+	var use Features
 	flt.ForEach(func(f *query.Filter) error {
 		// range filters work in integer type columns only
-		useRange = useRange || f.Type.IsInt()
+		if idx.use.Is(FeatRangeFilter) && f.Type.IsInt() {
+			use |= FeatRangeFilter
+		}
 
 		switch f.Mode {
 		case query.FilterModeEqual, query.FilterModeIn:
@@ -789,26 +790,29 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode) (*Iterat
 		// translate table column index into min statistics column
 		field, _ := idx.schema.FieldByIndex(int(minColIndex(f.Index)))
 
-		// check if this field has bloom filters enabled
-		if field.Index().Is(types.IndexTypeBloom) {
-			useBloom = true
-			return io.EOF
+		// check if this field has any filters enabled
+		switch field.Index() {
+		case types.IndexTypeBloom:
+			use |= FeatBloomFilter
+		case types.IndexTypeBfuse:
+			use |= FeatFuseFilter
+		case types.IndexTypeBits:
+			use |= FeatBitsFilter
 		}
 		return nil
 	})
 
 	// create iterator from matching snodes
 	it := &Iterator{
-		ctx:      ctx,
-		idx:      idx,
-		flt:      flt,
-		useBloom: useBloom,
-		useRange: useRange,
-		smatch:   nodeBits,
-		vmatch:   bitset.NewBitset(STATS_PACK_SIZE),
-		match:    arena.Alloc(arena.AllocUint32, STATS_PACK_SIZE).([]uint32),
-		sx:       -1, // start at first bit (it will +1)
-		n:        -1, // start at first offset (it will +1)
+		ctx:    ctx,
+		idx:    idx,
+		flt:    flt,
+		use:    use,
+		smatch: nodeBits,
+		vmatch: bitset.NewBitset(STATS_PACK_SIZE),
+		match:  arena.Alloc(arena.AllocUint32, STATS_PACK_SIZE).([]uint32),
+		sx:     -1, // start at first bit (it will +1)
+		n:      -1, // start at first offset (it will +1)
 	}
 
 	// init iterator with next match

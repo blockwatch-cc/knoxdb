@@ -5,11 +5,14 @@ package stats
 
 import (
 	"blockwatch.cc/knoxdb/internal/bitset"
+	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
+	"blockwatch.cc/knoxdb/internal/filter/fuse"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
@@ -68,7 +71,7 @@ func matchFilterView(f *query.Filter, view *schema.View) bool {
 // matchVector performs a vectorized check of a query condition tree
 // against the contents of statistics package pkg. It returns a bitset with
 // matching statistics rows.
-func matchVector(n *query.FilterTreeNode, pkg *pack.Package, b store.Bucket, bits *bitset.Bitset) *bitset.Bitset {
+func matchVector(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Bucket, bits *bitset.Bitset) *bitset.Bitset {
 	if n.IsLeaf() {
 		return matchFilterVector(n.Filter, pkg, bits, nil, b)
 	}
@@ -88,7 +91,7 @@ func matchVector(n *query.FilterTreeNode, pkg *pack.Package, b store.Bucket, bit
 // Note statistics are min/max ranges, hence to find a potential match we translate
 // each filter condition into a min/max range. Low level vectors matches are
 // vectorized using custom assembly routines.
-func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset, b store.Bucket) *bitset.Bitset {
+func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset, b map[int]store.Bucket) *bitset.Bitset {
 	if bits == nil {
 		bits = bitset.NewBitset(pkg.Len())
 	}
@@ -100,31 +103,54 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 	bits = f.Matcher.MatchRangeVectors(pkg.Block(minx), pkg.Block(maxx), bits, mask)
 
 	// stop early (no match, no bloom bucket, incompatible with bloom)
-	if bits.Count() == 0 || b == nil || !hasBloom(f, pkg) {
+	if bits.Count() == 0 || b == nil {
 		return bits
 	}
 
-	// check bloom filters for all matches, only a no-match flips a result bit to zero
-	// bloom filters work only for EQ and IN conditions and are optional user defined
+	ftyp := filterType(f, pkg)
+	if ftyp == types.IndexTypeNone {
+		return bits
+	}
+
+	// Check filters for all stats records that have matched above.
+	// Filters have limited scope, they only work for EQ/IN conditions.
+	// A filter no-match will flip the result bit for a data pack off
+	// so that the pack will not be loaded for this query.
 
 	// use bits.Iterate() instead of bits.Indexs() to avoid allocating a full sized
 	// []uint32 slice here in case we have a full match
 	var hits [16]int
 	for n, hits := bits.Iterate(0, hits[:]); len(hits) > 0; n, hits = bits.Iterate(n, hits) {
 		for _, v := range hits {
-			// bloom key is data-pack-key + data-pack-col-index
+			// filter key is data-pack-key + data-pack-col-index
 			bkey := filterKey(pkg.Uint32(STATS_ROW_KEY, v), f.Index)
 
+			// select filter type
+			var (
+				flt filter.Filter
+				err error
+			)
+
 			// load filter from bucket and check
-			filter, err := bloom.NewFilterBuffer(b.Get(bkey))
+			switch ftyp {
+			case types.IndexTypeBloom:
+				flt, err = bloom.NewFilterBuffer(b[STATS_BLOOM_KEY].Get(bkey))
+			case types.IndexTypeBfuse:
+				flt, err = fuse.NewBinaryFuseFromBytes[uint8](b[STATS_FUSE_KEY].Get(bkey))
+			case types.IndexTypeBits:
+				buf := b[STATS_BITS_KEY].Get(bkey)
+				if len(buf) > 0 {
+					flt = xroar.FromBuffer(buf)
+				}
+			}
 
 			// ignore errors (e.g. when buf is nil or filter size mismatch)
-			if err != nil {
+			if flt == nil && err != nil {
 				continue
 			}
 
 			// reset match bit when bloom check is negative
-			if !f.Matcher.MatchBloom(filter) {
+			if !f.Matcher.MatchFilter(flt) {
 				bits.Clear(v)
 			}
 		}
@@ -134,17 +160,20 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 }
 
 // TODO: replace with filter tree node flags (FilterFlagUseBloom)
-func hasBloom(f *query.Filter, pkg *pack.Package) bool {
+func filterType(f *query.Filter, pkg *pack.Package) types.IndexType {
 	switch f.Mode {
 	case types.FilterModeEqual, types.FilterModeIn:
-		return pkg.Schema().Exported()[f.Index].Index == types.IndexTypeBloom
-	default:
-		return false
+		typ := pkg.Schema().Exported()[f.Index].Index
+		switch typ {
+		case types.IndexTypeBloom, types.IndexTypeBfuse, types.IndexTypeBits:
+			return typ
+		}
 	}
+	return types.IndexTypeNone
 }
 
 // matchVectorAnd aggregates match bitsets and stops eary when no more match is possible.
-func matchVectorAnd(n *query.FilterTreeNode, pkg *pack.Package, b store.Bucket, bits *bitset.Bitset) *bitset.Bitset {
+func matchVectorAnd(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Bucket, bits *bitset.Bitset) *bitset.Bitset {
 	// start with a full bitset
 	if bits == nil {
 		bits = bitset.NewBitset(pkg.Len())
@@ -182,7 +211,7 @@ func matchVectorAnd(n *query.FilterTreeNode, pkg *pack.Package, b store.Bucket, 
 }
 
 // matchVectorOr aggregates match bitsets and stops early when all bits are set.
-func matchVectorOr(n *query.FilterTreeNode, pkg *pack.Package, b store.Bucket, bits *bitset.Bitset) *bitset.Bitset {
+func matchVectorOr(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Bucket, bits *bitset.Bitset) *bitset.Bitset {
 	// start with an empty bitset
 	if bits == nil {
 		bits = bitset.NewBitset(pkg.Len())

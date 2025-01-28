@@ -50,7 +50,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 
 		switch f.Index {
 		case types.IndexTypeBloom:
-			if idx.features.Is(FeatBloomFilter) {
+			if idx.use.Is(FeatBloomFilter) {
 				// TODO: use cardinality and unique values from pack analyis step
 				card := EstimateCardinality(b, 14)
 				if flt := BuildBloomFilter(b, card, int(f.Scale)); flt != nil {
@@ -58,7 +58,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 				}
 			}
 		case types.IndexTypeBfuse:
-			if idx.features.Is(FeatFuseFilter) {
+			if idx.use.Is(FeatFuseFilter) {
 				// TODO: use unique values from pack analyis step
 				flt, err := BuildFuseFilter(b)
 				if err != nil {
@@ -67,7 +67,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 				fuses[uint16(i)], _ = flt.MarshalBinary()
 			}
 		case types.IndexTypeBits:
-			if idx.features.Is(FeatBitsFilter) {
+			if idx.use.Is(FeatBitsFilter) {
 				// TODO: use cardinality and unique values from pack analyis step
 				card := EstimateCardinality(b, 14)
 				if flt := BuildBitsFilter(b, card); flt != nil {
@@ -77,7 +77,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		}
 
 		// build range filters for int columns
-		if b.Type().IsInt() && idx.features.Is(FeatRangeFilter) {
+		if b.Type().IsInt() && idx.use.Is(FeatRangeFilter) {
 			minv := node.spack.Block(minColIndex(i)).Get(n)
 			maxv := node.spack.Block(maxColIndex(i)).Get(n)
 			rg, err := BuildRangeIndex(b, minv, maxv)

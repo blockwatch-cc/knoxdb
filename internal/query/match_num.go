@@ -7,6 +7,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -333,11 +334,10 @@ func (m numEqualMatcher[T]) MatchRange(from, to any) bool {
 	return !(m.val < from.(T) || m.val > to.(T))
 }
 
-func (m numEqualMatcher[T]) MatchBloom(flt *bloom.Filter) bool {
-	return flt.ContainsHash(m.hash)
-}
-
-func (m numEqualMatcher[T]) MatchBitmap(flt *xroar.Bitmap) bool {
+func (m numEqualMatcher[T]) MatchFilter(flt filter.Filter) bool {
+	if x, ok := flt.(*bloom.Filter); ok {
+		return x.ContainsHash(m.hash)
+	}
 	return flt.Contains(uint64(m.val))
 }
 
@@ -567,12 +567,16 @@ func (m numInSetMatcher[T]) MatchRange(from, to any) bool {
 	return m.set.ContainsRange(uint64(from.(T)), uint64(to.(T)))
 }
 
-func (m numInSetMatcher[T]) MatchBloom(flt *bloom.Filter) bool {
-	return flt.ContainsAnyHash(m.hashes)
-}
-
-func (m numInSetMatcher[T]) MatchBitmap(flt *xroar.Bitmap) bool {
-	return !xroar.And(m.set, flt).IsEmpty()
+func (m numInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
+	if x, ok := flt.(*xroar.Bitmap); ok {
+		return !xroar.And(m.set, x).IsEmpty()
+	}
+	for _, h := range m.hashes {
+		if flt.Contains(h.Uint64()) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
@@ -648,13 +652,13 @@ func (m numNotInSetMatcher[T]) MatchRange(from, to any) bool {
 	return !m.set.ContainsRange(uint64(from.(T)), uint64(to.(T)))
 }
 
-func (m numNotInSetMatcher[T]) MatchBloom(flt *bloom.Filter) bool {
-	// we don't know generally, so full scan is always required
-	return true
-}
+func (m numNotInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
+	if x, ok := flt.(*xroar.Bitmap); ok {
+		return !xroar.AndNot(m.set, x).IsEmpty()
+	}
 
-func (m numNotInSetMatcher[T]) MatchBitmap(flt *xroar.Bitmap) bool {
-	return !xroar.AndNot(m.set, flt).IsEmpty()
+	// we don't know generally, so full scan is required
+	return true
 }
 
 func (m numNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {

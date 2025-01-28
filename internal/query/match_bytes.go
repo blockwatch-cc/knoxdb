@@ -10,6 +10,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
+	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/hash/xxHash32"
@@ -63,8 +64,11 @@ func (m *bytesMatcher) Value() any {
 	return m.val
 }
 
-func (m bytesMatcher) MatchBloom(flt *bloom.Filter) bool {
-	return flt.ContainsHash(m.hash)
+func (m bytesMatcher) MatchFilter(flt filter.Filter) bool {
+	if x, ok := flt.(*bloom.Filter); ok {
+		return x.ContainsHash(m.hash)
+	}
+	return flt.Contains(m.hash.Uint64())
 }
 
 // EQUAL ---
@@ -403,8 +407,16 @@ func (m bytesInSetMatcher) MatchRange(from, to any) bool {
 	return m.slice.ContainsRange(from.([]byte), to.([]byte))
 }
 
-func (m bytesInSetMatcher) MatchBloom(flt *bloom.Filter) bool {
-	return flt.ContainsAnyHash(m.hashes)
+func (m bytesInSetMatcher) MatchFilter(flt filter.Filter) bool {
+	if x, ok := flt.(*bloom.Filter); ok {
+		return x.ContainsAnyHash(m.hashes)
+	}
+	for _, h := range m.hashes {
+		if flt.Contains(h.Uint64()) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m bytesInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
@@ -490,7 +502,7 @@ func (m bytesNotInSetMatcher) MatchRange(from, to any) bool {
 	return !m.slice.ContainsRange(from.([]byte), to.([]byte))
 }
 
-func (m bytesNotInSetMatcher) MatchBloom(flt *bloom.Filter) bool {
+func (m bytesNotInSetMatcher) MatchFilter(_ filter.Filter) bool {
 	// we don't know generally, so full scan is always required
 	return true
 }
@@ -652,7 +664,7 @@ func (m bytesRegexpMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bit
 
 }
 
-func (m bytesRegexpMatcher) MatchBloom(flt *bloom.Filter) bool {
+func (m bytesRegexpMatcher) MatchFilter(_ filter.Filter) bool {
 	// we don't know generally, so full scan is always required
 	return true
 }

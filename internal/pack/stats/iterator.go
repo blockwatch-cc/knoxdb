@@ -15,17 +15,16 @@ import (
 
 // stats iterator
 type Iterator struct {
-	ctx      context.Context
-	idx      *Index                // back reference to index
-	flt      *query.FilterTreeNode // ptr to current query conditions
-	useBloom bool                  // flag indicating we should load bloom filters
-	useRange bool                  // flag indicating we could load range filters
-	smatch   *bitset.Bitset        // snode matches
-	vmatch   *bitset.Bitset        // spack matches
-	sx       int                   // current snode index
-	snode    *SNode                // current matching snode
-	match    []uint32              // row matches in current stats pack
-	n        int                   // current offset inside match rows
+	ctx    context.Context
+	idx    *Index                // back reference to index
+	flt    *query.FilterTreeNode // ptr to current query conditions
+	use    Features              // flags indicating which filter to use
+	smatch *bitset.Bitset        // snode matches
+	vmatch *bitset.Bitset        // spack matches
+	sx     int                   // current snode index
+	snode  *SNode                // current matching snode
+	match  []uint32              // row matches in current stats pack
+	n      int                   // current offset inside match rows
 }
 
 func (it *Iterator) Close() {
@@ -34,6 +33,7 @@ func (it *Iterator) Close() {
 	}
 	it.idx = nil
 	it.flt = nil
+	it.use = 0
 	it.smatch.Close()
 	it.smatch = nil
 	it.vmatch.Close()
@@ -133,7 +133,7 @@ func (it Iterator) Range() pack.Range {
 	nRows := it.NValues()
 
 	// return full range when no int column is used
-	if !it.useRange {
+	if !it.use.Is(FeatRangeFilter) {
 		return pack.Range{0, uint32(nRows)}
 	}
 

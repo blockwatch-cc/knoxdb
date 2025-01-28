@@ -6,6 +6,7 @@ package query
 import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
+	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -43,7 +44,7 @@ func (f BitMatcherFactory) New(m FilterMode) Matcher {
 type bitMatcher struct {
 	noopMatcher
 	val  bool
-	hash [2]uint32
+	hash hash.HashValue
 }
 
 func (m *bitMatcher) WithValue(v any) {
@@ -55,11 +56,7 @@ func (m *bitMatcher) Value() any {
 	return m.val
 }
 
-func (m bitMatcher) MatchBloom(_ *bloom.Filter) bool {
-	return true
-}
-
-func (m bitMatcher) MatchBitmap(_ *xroar.Bitmap) bool {
+func (m bitMatcher) MatchFilter(_ filter.Filter) bool {
 	return true
 }
 
@@ -93,8 +90,8 @@ func (m bitEqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *
 	}
 }
 
-func (m bitEqualMatcher) MatchBloom(flt *bloom.Filter) bool {
-	return flt.ContainsHash(m.hash)
+func (m bitEqualMatcher) MatchFilter(flt filter.Filter) bool {
+	return flt.Contains(m.hash.Uint64())
 }
 
 // NOT EQUAL
@@ -412,8 +409,16 @@ func (m *bitInSetMatcher) WithSet(set *xroar.Bitmap) {
 	}
 }
 
-func (m bitInSetMatcher) MatchBloom(flt *bloom.Filter) bool {
-	return flt.ContainsAnyHash(m.hashes)
+func (m bitInSetMatcher) MatchFilter(flt filter.Filter) bool {
+	if x, ok := flt.(*bloom.Filter); ok {
+		return x.ContainsAnyHash(m.hashes)
+	}
+	for _, h := range m.hashes {
+		if flt.Contains(h.Uint64()) {
+			return true
+		}
+	}
+	return false
 }
 
 // NOT IN ---
@@ -422,15 +427,14 @@ type bitNotInSetMatcher struct {
 	bitInSetMatcher
 }
 
-func (m bitNotInSetMatcher) MatchBloom(flt *bloom.Filter) bool {
-	return true
-}
-
-func (m bitNotInSetMatcher) MatchBitmap(flt *xroar.Bitmap) bool {
-	if m.to {
-		return !flt.Contains(1)
+func (m bitNotInSetMatcher) MatchFilter(flt filter.Filter) bool {
+	if x, ok := flt.(*xroar.Bitmap); ok {
+		if m.to {
+			return !x.Contains(1)
+		}
+		return !x.Contains(0)
 	}
-	return !flt.Contains(0)
+	return true
 }
 
 func (m bitNotInSetMatcher) MatchValue(v any) bool {

@@ -34,7 +34,7 @@ func TestFilterAddContains(t *testing.T) {
 	// the filter".
 	for i := 0; i < num; i++ {
 		binary.BigEndian.PutUint32(v, uint32(i))
-		if !filter.Contains(v) {
+		if !filter.ContainsBytes(v) {
 			t.Fatalf("got false for value %q, expected true", v)
 		}
 	}
@@ -44,7 +44,7 @@ func TestFilterAddContains(t *testing.T) {
 	var fp int
 	for i := num; i < 11*num; i++ {
 		binary.BigEndian.PutUint32(v, uint32(i))
-		if filter.Contains(v) {
+		if filter.ContainsBytes(v) {
 			fp++
 		}
 	}
@@ -393,7 +393,7 @@ func BenchmarkFilter_Contains(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				for _, v := range data[:c.v] {
-					_ = filter.Contains(v)
+					_ = filter.ContainsBytes(v)
 				}
 			}
 		})
@@ -403,7 +403,7 @@ func BenchmarkFilter_Contains(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				for _, v := range notData[:c.v] {
-					_ = filter.Contains(v)
+					_ = filter.ContainsBytes(v)
 				}
 			}
 		})
