@@ -213,7 +213,7 @@ func NewIndex(db store.DB, s *schema.Schema, nmax int) *Index {
 	}
 	inodes := make([]*INode, 0)
 	snodes := make([]*SNode, 0)
-	ss := makeSchema(s)
+	ss := MakeSchema(s)
 	makekey := func(k []byte) []byte {
 		return bytes.Join([][]byte{[]byte(ss.Name()), k}, nil)
 	}
@@ -1178,7 +1178,7 @@ func (idx Index) makePkFilter(mode query.FilterMode, pk uint64) *query.FilterTre
 // The statistics schema ignores (i.e. removes) all flags and enums
 // from the original table schema except FieldFlagDeleted which may be
 // used to skip/remove statistics when columns are marked as deleted.
-func makeSchema(s *schema.Schema) *schema.Schema {
+func MakeSchema(s *schema.Schema) *schema.Schema {
 	statsSchema := schema.NewSchema().
 		WithName(s.Name() + string(engine.StatsKeySuffix)).
 		WithVersion(s.Version())

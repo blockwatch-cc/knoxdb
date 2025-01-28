@@ -32,6 +32,8 @@ type Record struct {
 	view *schema.View
 }
 
+var _ Reader = (*Record)(nil)
+
 func NewRecordFromWire(s *schema.Schema, buf []byte) *Record {
 	r := &Record{
 		view: schema.NewView(s).Reset(buf),
@@ -51,11 +53,15 @@ func NewRecordFromWire(s *schema.Schema, buf []byte) *Record {
 	return r
 }
 
-func (r Record) MinMax(col int) (any, any) {
+func (r *Record) MinMax(col int) (any, any) {
 	minx, maxx := minColIndex(col), maxColIndex(col)
 	minv, _ := r.view.Get(minx)
 	maxv, _ := r.view.Get(maxx)
 	return minv, maxv
+}
+
+func (r Record) View() *schema.View {
+	return r.view
 }
 
 func NewRecordFromPack(s *schema.Schema, pkg *pack.Package) *Record {
@@ -63,13 +69,13 @@ func NewRecordFromPack(s *schema.Schema, pkg *pack.Package) *Record {
 		Key:      pkg.Key(),
 		SchemaId: pkg.Schema().Hash(),
 		NValues:  int64(pkg.Len()),
-		DiskSize: int64(0),
 		view:     schema.NewView(s),
 	}
 	build := schema.NewBuilder(s)
 	build.Write(STATS_ROW_KEY, pkg.Key())
 	build.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
 	build.Write(STATS_ROW_NVALS, int64(pkg.Len()))
+	// TODO: use analysis when available
 	build.Write(STATS_ROW_SIZE, int64(0)) // TODO: set disk size
 
 	fields := pkg.Schema().Exported()
@@ -81,6 +87,7 @@ func NewRecordFromPack(s *schema.Schema, pkg *pack.Package) *Record {
 			maxv = minv
 		} else {
 			// calculate min/max statistics
+			// TODO: use analysis when available
 			minv, maxv = b.MinMax()
 		}
 
@@ -92,6 +99,46 @@ func NewRecordFromPack(s *schema.Schema, pkg *pack.Package) *Record {
 		build.Write(maxx, maxv)
 	}
 	rec.view.Reset(build.Bytes())
-
+	build.Reset()
 	return rec
+}
+
+func (r *Record) Update(pkg *pack.Package) {
+	analysis := pkg.Analysis()
+	if analysis != nil {
+		r.DiskSize += analysis.SizeDiff()
+	}
+	build := schema.NewBuilder(r.view.Schema())
+	build.Write(STATS_ROW_KEY, pkg.Key())
+	build.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
+	build.Write(STATS_ROW_NVALS, int64(pkg.Len()))
+	build.Write(STATS_ROW_SIZE, r.DiskSize)
+
+	fields := pkg.Schema().Exported()
+	for i, b := range pkg.Blocks() {
+		// calculate data column positions inside statistics schema
+		minx, maxx := minColIndex(i), maxColIndex(i)
+
+		var minv, maxv any
+		switch {
+		case b == nil:
+			// use zero values for invalid blocks (deleted from schema)
+			minv = cmp.Zero(types.BlockTypes[fields[i].Type])
+			maxv = minv
+		case b.IsDirty():
+			// calculate min/max statistics
+			// TODO: use analysis when available
+			minv, maxv = b.MinMax()
+		default:
+			// reuse existing values when block is not dirty
+			minv, _ = r.view.Get(minx)
+			maxv, _ = r.view.Get(maxx)
+		}
+
+		// append statistics values
+		build.Write(minx, minv)
+		build.Write(maxx, maxv)
+	}
+	r.view.Reset(build.Bytes())
+	build.Reset()
 }

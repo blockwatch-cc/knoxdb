@@ -227,7 +227,7 @@ func (n *SNode) PrepareWrite(ctx context.Context, b store.Bucket) (*SNode, error
 func (n *SNode) Match(flt *query.FilterTreeNode, view *schema.View) bool {
 	view.Reset(n.meta)
 	defer view.Reset(nil)
-	return matchView(flt, view)
+	return Match(flt, &ViewReader{view})
 }
 
 func (n *SNode) Query(it *Iterator) error {

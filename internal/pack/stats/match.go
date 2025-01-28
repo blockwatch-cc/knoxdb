@@ -16,10 +16,36 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
-// matchView matches a query condition tree against meta statistics.
+type Reader interface {
+	MinMax(int) (any, any)
+}
+
+var _ Reader = (*ViewReader)(nil)
+
+type ViewReader struct {
+	*schema.View
+}
+
+func (v ViewReader) MinMax(col int) (any, any) {
+	// calculate data column positions inside statistics schema
+	minx, maxx := minColIndex(col), maxColIndex(col)
+
+	// load min/max values
+	minv, _ := v.View.GetPhy(minx)
+	maxv, _ := v.View.GetPhy(maxx)
+
+	return minv, maxv
+}
+
+// Match matches a query condition tree against meta statistics.
 // It returns true if the combined filter tree is likely to match
 // all (AND) or any (OR) statistics ranges.
-func matchView(n *query.FilterTreeNode, view *schema.View) bool {
+func Match(n *query.FilterTreeNode, r Reader) bool {
+	// nil tree and nil accessor match
+	if n == nil || r == nil {
+		return true
+	}
+
 	// always match?
 	if n.IsAnyMatch() {
 		return true
@@ -31,19 +57,19 @@ func matchView(n *query.FilterTreeNode, view *schema.View) bool {
 
 	// match single leafs
 	if n.IsLeaf() {
-		return matchFilterView(n.Filter, view)
+		return matchFilter(n.Filter, r)
 	}
 
 	// combine leaf decisions along the tree
 	for _, v := range n.Children {
 		if n.OrKind {
 			// for OR nodes, stop at the first successful hint
-			if matchView(v, view) {
+			if Match(v, r) {
 				return true
 			}
 		} else {
 			// for AND nodes stop at the first non-successful hint
-			if !matchView(v, view) {
+			if !Match(v, r) {
 				return false
 			}
 		}
@@ -53,16 +79,11 @@ func matchView(n *query.FilterTreeNode, view *schema.View) bool {
 	return !n.OrKind
 }
 
-// matchFilterView checks an individual filter condition in a query
+// matchFilter checks an individual filter condition in a query
 // against meta statistics. It returns true if the filter is within
 // statistics range.
-func matchFilterView(f *query.Filter, view *schema.View) bool {
-	// calculate data column positions inside statistics schema
-	minx, maxx := minColIndex(int(f.Index)), maxColIndex(int(f.Index))
-
-	// load min/max values
-	minv, _ := view.GetPhy(minx)
-	maxv, _ := view.GetPhy(maxx)
+func matchFilter(f *query.Filter, r Reader) bool {
+	minv, maxv := r.MinMax(int(f.Index))
 
 	// matcher is selected and configured during compile stage
 	return f.Matcher.MatchRange(minv, maxv)

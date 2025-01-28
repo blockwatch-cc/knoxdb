@@ -212,16 +212,16 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 		t.Close(ctx)
 		return engine.ErrDatabaseCorrupt
 	}
+	t.metrics.TupleCount = int64(t.state.NRows)
 
 	// load stats
-	t.log.Debugf("Loading package stats for %s", typ)
+	t.log.Debugf("Loading statistics for %s", typ)
 	if err := t.stats.Load(ctx); err != nil {
 		// TODO: rebuild corrupt stats here instead of failing
 		tx.Rollback()
 		t.Close(ctx)
 		return err
 	}
-	t.metrics.TupleCount = int64(t.state.NRows)
 
 	// FIXME: reconstruct journal from WAL instead of load in legacy mode
 	err = t.journal.Open(ctx, tx, t.schema.Name())

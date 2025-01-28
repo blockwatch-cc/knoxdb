@@ -145,5 +145,5 @@ func (n *INode) Update(view *schema.View, build *schema.Builder, left, right Nod
 func (n INode) Match(flt *query.FilterTreeNode, view *schema.View) bool {
 	view.Reset(n.meta)
 	defer view.Reset(nil)
-	return matchView(flt, view)
+	return Match(flt, &ViewReader{view})
 }

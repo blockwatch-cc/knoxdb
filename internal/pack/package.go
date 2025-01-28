@@ -90,10 +90,6 @@ func (p Package) IsDirty() bool {
 	return false
 }
 
-func (p Package) Analysis() *Analysis {
-	return p.analyze
-}
-
 // TODO: do we need a normative way to say packs are readonly (shared data)?
 // func (p Package) IsWriteable() bool {
 // 	return p.key >= ResultKeyId

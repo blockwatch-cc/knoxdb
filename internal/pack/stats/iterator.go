@@ -28,6 +28,8 @@ type Iterator struct {
 	reverse bool                  // iteration order
 }
 
+var _ Reader = (*Iterator)(nil)
+
 func (it *Iterator) Close() {
 	if it == nil {
 		return
@@ -67,7 +69,7 @@ func (it Iterator) IsFull() bool {
 }
 
 // query
-func (it Iterator) MinMax(col int) (any, any) {
+func (it *Iterator) MinMax(col int) (any, any) {
 	if it.snode == nil {
 		return nil, nil
 	}

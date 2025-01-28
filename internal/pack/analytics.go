@@ -17,3 +17,11 @@ func (a Analysis) SizeDiff() int64 {
 	}
 	return int64(sum)
 }
+
+func (p Package) Analysis() *Analysis {
+	return p.analyze
+}
+
+func (p *Package) FeeeAnalysis() {
+	p.analyze = nil
+}
