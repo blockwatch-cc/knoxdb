@@ -322,7 +322,7 @@ func TrimAllSpace(str string) string {
 
 func IsASCII(s string) bool {
 	for i := 0; i < len(s); i++ {
-		if s[i] > unicode.MaxASCII {
+		if s[i] == 0 || s[i] > unicode.MaxASCII {
 			return false
 		}
 	}

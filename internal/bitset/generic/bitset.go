@@ -136,7 +136,7 @@ func PopCount(src []byte, size int) int64 {
 	var cnt int64
 
 	// process 8 bytes per loop, byte order doesn't matter (Intel maybe faster)
-	for _, v := range util.ByteSliceSliceAsUint64Slice(src[:(size-1)>>3]) {
+	for _, v := range util.FromByteSlice[uint64](src[:(size-1)>>3]) {
 		cnt += int64(bits.OnesCount64(v))
 	}
 

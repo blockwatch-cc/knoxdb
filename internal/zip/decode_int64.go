@@ -32,7 +32,7 @@ var DecodeUint64 = decodeUint64
 // DecodeInt64 is the int64 version of an 8byte integer decoder.
 // Its a simple wrapper around the uint variant.
 func DecodeInt64(dst []int64, buf []byte) (int, error) {
-	return DecodeUint64(util.Int64AsUint64Slice(dst), buf)
+	return DecodeUint64(util.ReinterpretSlice[int64, uint64](dst), buf)
 }
 
 // ReadUint64 is an io.Reader wrapper for decoding (u)int64 data.
