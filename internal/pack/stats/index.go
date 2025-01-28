@@ -92,6 +92,8 @@ const (
 	FeatUseCache
 )
 
+var FilterMask Features = 0xf
+
 func (f Features) Is(x Features) bool {
 	return f&x > 0
 }
@@ -260,7 +262,11 @@ func (idx *Index) WithCache(use bool) *Index {
 }
 
 func (idx *Index) WithFeatures(f Features) *Index {
-	idx.use = f
+	if f == 0 {
+		idx.use = f
+	} else {
+		idx.use |= f
+	}
 	return idx
 }
 
@@ -774,33 +780,38 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode) (*Iterat
 
 	// identify if query would benefit from loading any filters
 	var use Features
-	flt.ForEach(func(f *query.Filter) error {
-		// range filters work in integer type columns only
-		if idx.use.Is(FeatRangeFilter) && f.Type.IsInt() {
-			use |= FeatRangeFilter
-		}
+	if idx.use&FilterMask > 0 {
+		flt.ForEach(func(f *query.Filter) error {
+			// range filters work in integer type columns only
+			if f.Type.IsInt() {
+				use |= FeatRangeFilter
+			}
 
-		switch f.Mode {
-		case query.FilterModeEqual, query.FilterModeIn:
-			// bloom filters work only for these modes
-		default:
+			switch f.Mode {
+			case query.FilterModeEqual, query.FilterModeIn:
+				// bloom filters work only for these modes
+			default:
+				return nil
+			}
+
+			// translate table column index into min statistics column
+			field, _ := idx.schema.FieldByIndex(int(minColIndex(f.Index)))
+
+			// check if this field has any filters enabled
+			switch field.Index() {
+			case types.IndexTypeBloom:
+				use |= FeatBloomFilter
+			case types.IndexTypeBfuse:
+				use |= FeatFuseFilter
+			case types.IndexTypeBits:
+				use |= FeatBitsFilter
+			}
 			return nil
-		}
+		})
 
-		// translate table column index into min statistics column
-		field, _ := idx.schema.FieldByIndex(int(minColIndex(f.Index)))
-
-		// check if this field has any filters enabled
-		switch field.Index() {
-		case types.IndexTypeBloom:
-			use |= FeatBloomFilter
-		case types.IndexTypeBfuse:
-			use |= FeatFuseFilter
-		case types.IndexTypeBits:
-			use |= FeatBitsFilter
-		}
-		return nil
-	})
+		// mask with enabled features
+		use &= idx.use
+	}
 
 	// create iterator from matching snodes
 	it := &Iterator{

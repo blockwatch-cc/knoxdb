@@ -457,7 +457,7 @@ func TestIndexQueryEqual(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE).WithFeatures(FeatRangeFilter)
 	defer idx.Close()
 
 	sz := 5
@@ -492,7 +492,7 @@ func TestIndexQueryAll(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE).WithFeatures(FeatRangeFilter)
 	defer idx.Close()
 
 	sz := 5
@@ -537,7 +537,7 @@ func TestIndexQueryLess(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE).WithFeatures(FeatRangeFilter)
 	defer idx.Close()
 
 	sz := 1
@@ -585,7 +585,7 @@ func TestIndexQueryRange(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE).WithFeatures(FeatRangeFilter)
 	defer idx.Close()
 
 	sz := 1
@@ -632,7 +632,7 @@ func TestIndexFindPk(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE).WithFeatures(FeatRangeFilter)
 	defer idx.Close()
 
 	// fill half
