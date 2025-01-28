@@ -52,6 +52,11 @@ func (s *Schema) WithName(n string) *Schema {
 	return s
 }
 
+func (s *Schema) As(alias string) *Schema {
+	s.name = alias
+	return s
+}
+
 func (s *Schema) WithVersion(v uint32) *Schema {
 	if s.version < v {
 		s.version = v
