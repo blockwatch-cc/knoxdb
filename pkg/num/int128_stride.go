@@ -57,6 +57,42 @@ func (s Int128Stride) Cap() int {
 	return cap(s.X0)
 }
 
+func (s Int128Stride) Min() Int128 {
+	switch l := s.Len(); l {
+	case 0:
+		return ZeroInt128
+	case 1:
+		return s.Elem(0)
+	default:
+		s0 := s.Elem(0)
+		for i := 2; i < l; i++ {
+			si := s.Elem(i)
+			if si.Lt(s0) {
+				s0 = si
+			}
+		}
+		return s0
+	}
+}
+
+func (s Int128Stride) Max() Int128 {
+	switch l := s.Len(); l {
+	case 0:
+		return ZeroInt128
+	case 1:
+		return s.Elem(0)
+	default:
+		s0 := s.Elem(0)
+		for i := 2; i < l; i++ {
+			si := s.Elem(i)
+			if si.Gt(s0) {
+				s0 = si
+			}
+		}
+		return s0
+	}
+}
+
 func (s Int128Stride) MinMax() (Int128, Int128) {
 	var min, max Int128
 
@@ -135,4 +171,10 @@ func (s *Int128Stride) Insert(k int, vs Int128Stride) {
 	s2.Copy(vs, k, 0, vs.Len())
 	s2.Copy(*s, k+vs.Len(), k, vs.Len()-k)
 	*s = s2
+}
+
+func (s *Int128Stride) ForEach(fn func(Int128)) {
+	for i, l := 0, len(s.X0); i < l; i++ {
+		fn(Int128{uint64(s.X0[i]), s.X1[i]})
+	}
 }

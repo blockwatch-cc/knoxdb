@@ -70,6 +70,42 @@ func (s Int256Stride) Cap() int {
 	return cap(s.X0)
 }
 
+func (s Int256Stride) Min() Int256 {
+	switch l := s.Len(); l {
+	case 0:
+		return ZeroInt256
+	case 1:
+		return s.Elem(0)
+	default:
+		s0 := s.Elem(0)
+		for i := 2; i < l; i++ {
+			si := s.Elem(i)
+			if si.Lt(s0) {
+				s0 = si
+			}
+		}
+		return s0
+	}
+}
+
+func (s Int256Stride) Max() Int256 {
+	switch l := s.Len(); l {
+	case 0:
+		return ZeroInt256
+	case 1:
+		return s.Elem(0)
+	default:
+		s0 := s.Elem(0)
+		for i := 2; i < l; i++ {
+			si := s.Elem(i)
+			if si.Gt(s0) {
+				s0 = si
+			}
+		}
+		return s0
+	}
+}
+
 func (s Int256Stride) MinMax() (Int256, Int256) {
 	var min, max Int256
 
@@ -156,4 +192,10 @@ func (s *Int256Stride) Insert(k int, vs Int256Stride) {
 	s2.Copy(vs, k, 0, vs.Len())
 	s2.Copy(*s, k+vs.Len(), k, vs.Len()-k)
 	*s = s2
+}
+
+func (s *Int256Stride) ForEach(fn func(Int256)) {
+	for i, l := 0, len(s.X0); i < l; i++ {
+		fn(Int256{uint64(s.X0[i]), s.X1[i], s.X2[i], s.X3[i]})
+	}
 }

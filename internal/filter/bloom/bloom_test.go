@@ -77,7 +77,7 @@ func TestFilterAddContainsUint32Generic(t *testing.T) {
 	for i := 0; i < num; i++ {
 		slice[i] = uint32(i)
 	}
-	filterAddManyUint32Generic(*filter, slice, xxHash32Seed)
+	filterAddManyUint32Generic(filter, slice)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
@@ -123,7 +123,7 @@ func TestFilterAddContainsInt32Generic(t *testing.T) {
 	for i := 0; i < num; i++ {
 		slice[i] = int32(i)
 	}
-	filterAddManyInt32Generic(*filter, slice, xxHash32Seed)
+	filterAddManyInt32Generic(filter, slice)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
@@ -169,7 +169,7 @@ func TestFilterAddContainsUint64Generic(t *testing.T) {
 	for i := 0; i < num; i++ {
 		slice[i] = uint64(i)
 	}
-	filterAddManyUint64Generic(*filter, slice, xxHash32Seed)
+	filterAddManyUint64Generic(filter, slice)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
@@ -215,7 +215,7 @@ func TestFilterAddContainsInt64Generic(t *testing.T) {
 	for i := 0; i < num; i++ {
 		slice[i] = int64(i)
 	}
-	filterAddManyInt64Generic(*filter, slice, xxHash32Seed)
+	filterAddManyInt64Generic(filter, slice)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
@@ -260,15 +260,15 @@ func TestFilterMergeGeneric(t *testing.T) {
 	for i := 0; i < num/2; i++ {
 		slice[i] = uint32(i)
 	}
-	filterAddManyUint32Generic(*filter, slice, xxHash32Seed)
+	filterAddManyUint32Generic(filter, slice)
 
 	filter2 := NewFilter(fsize)
 	for i := num / 2; i < num; i++ {
 		slice[i-num/2] = uint32(i)
 	}
-	filterAddManyUint32Generic(*filter2, slice, xxHash32Seed)
+	filterAddManyUint32Generic(filter2, slice)
 
-	filterMergeGeneric(filter.b, filter2.b)
+	filterMergeGeneric(filter.bits, filter2.bits)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
@@ -350,7 +350,7 @@ func BenchmarkFilterAddManyUint32Generic(b *testing.B) {
 		b.Run(fmt.Sprintf("m=%d_n=%d", c.m, c.n), func(b *testing.B) {
 			b.SetBytes(4 * int64(c.n))
 			for i := 0; i < b.N; i++ {
-				filterAddManyUint32Generic(*filter, data, xxHash32Seed)
+				filterAddManyUint32Generic(filter, data)
 			}
 		})
 
@@ -368,7 +368,7 @@ func BenchmarkFilterAddManyUint64Generic(b *testing.B) {
 		b.Run(fmt.Sprintf("m=%d_n=%d", c.m, c.n), func(b *testing.B) {
 			b.SetBytes(8 * int64(c.n))
 			for i := 0; i < b.N; i++ {
-				filterAddManyUint64Generic(*filter, data, xxHash32Seed)
+				filterAddManyUint64Generic(filter, data)
 			}
 		})
 
@@ -427,7 +427,7 @@ func BenchmarkFilterMergeGeneric(b *testing.B) {
 		b.Run(fmt.Sprintf("m=%d_n=%d", c.m, c.n), func(b *testing.B) {
 			b.SetBytes(int64(c.m >> 3))
 			for i := 0; i < b.N; i++ {
-				filterMergeGeneric(filter1.b, filter2.b)
+				filterMergeGeneric(filter1.bits, filter2.bits)
 			}
 		})
 	}
