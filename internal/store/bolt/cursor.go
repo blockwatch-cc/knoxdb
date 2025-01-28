@@ -95,8 +95,6 @@ func (c *cursor) First() bool {
 	return c.key != nil
 }
 
-// Not supported.
-//
 // This function is part of the store.Cursor interface implementation.
 func (c *cursor) Last() bool {
 	// Ensure transaction state is valid.

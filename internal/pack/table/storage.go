@@ -129,32 +129,13 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 	// optimize/dedup
 	pkg.Optimize()
 
-	// build block statistics first (block dirty flag is reset on save)
-	fields := t.schema.Fields()
+	// build block statistics
 	pstats, ok := t.stats.GetByKey(pkg.Key())
 	if !ok {
-		// create new stats
-		pstats = &stats.PackStats{
-			Key:      pkg.Key(),
-			SchemaId: pkg.Schema().Hash(),
-			NValues:  pkg.Len(),
-			Blocks:   make([]stats.BlockStats, 0, t.schema.NumFields()),
-			Dirty:    true,
-		}
-
-		for i, b := range pkg.Blocks() {
-			pstats.Blocks = append(pstats.Blocks, stats.NewBlockStats(b, &fields[i]))
-		}
+		pstats = stats.BuildPackStats(pkg)
 	} else {
-		// update statistics for dirty blocks
-		for i, b := range pkg.Blocks() {
-			if !b.IsDirty() {
-				continue
-			}
-			pstats.Blocks[i] = stats.NewBlockStats(b, &fields[i])
-			pstats.Dirty = true
-		}
-		pstats.NValues = pkg.Len()
+		// update statistics for dirty blocks only
+		pstats.Update(pkg)
 	}
 
 	// write to disk
@@ -163,9 +144,9 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	pstats.StoredSize = n
+	pstats.Size = n
 	for i := range pstats.Blocks {
-		pstats.Blocks[i].StoredSize = blockSizes[i]
+		pstats.Blocks[i].Size = blockSizes[i]
 	}
 
 	// update and store statistics

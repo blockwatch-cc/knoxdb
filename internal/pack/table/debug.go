@@ -33,7 +33,7 @@ func (t *Table) ViewStats(i int) *stats.PackStats {
 		}
 		fields := t.schema.Fields()
 		for i, b := range t.journal.Data.Blocks() {
-			info.Blocks = append(info.Blocks, stats.NewBlockStats(b, &fields[i]))
+			info.Blocks = append(info.Blocks, stats.BuildBlockStats(b, &fields[i]))
 		}
 		return info
 	case i >= 0 && i < t.stats.Len():

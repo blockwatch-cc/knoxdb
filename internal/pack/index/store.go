@@ -140,7 +140,7 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 		}
 
 		for i, b := range pkg.Blocks() {
-			meta.Blocks = append(meta.Blocks, stats.NewBlockStats(b, &fields[i]))
+			meta.Blocks = append(meta.Blocks, stats.BuildBlockStats(b, &fields[i]))
 		}
 	} else {
 		// update statistics for dirty blocks
@@ -148,7 +148,7 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 			if !b.IsDirty() {
 				continue
 			}
-			meta.Blocks[i] = stats.NewBlockStats(b, &fields[i])
+			meta.Blocks[i] = stats.BuildBlockStats(b, &fields[i])
 			meta.Dirty = true
 		}
 	}
@@ -159,9 +159,9 @@ func (idx *Index) storePack(ctx context.Context, pkg *pack.Package) (int, error)
 	if err != nil {
 		return 0, err
 	}
-	meta.StoredSize = n
+	meta.Size = n
 	for i := range meta.Blocks {
-		meta.Blocks[i].StoredSize = blockSizes[i]
+		meta.Blocks[i].Size = blockSizes[i]
 	}
 
 	// update and store statistics

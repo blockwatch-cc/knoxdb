@@ -31,29 +31,7 @@ var (
 	BE = binary.BigEndian    // keys
 
 	// translate field type to block type
-	blockTypes = [...]block.BlockType{
-		types.FieldTypeInvalid:    block.BlockUint8,
-		types.FieldTypeDatetime:   block.BlockTime,
-		types.FieldTypeBoolean:    block.BlockBool,
-		types.FieldTypeString:     block.BlockBytes,
-		types.FieldTypeBytes:      block.BlockBytes,
-		types.FieldTypeInt8:       block.BlockInt8,
-		types.FieldTypeInt16:      block.BlockInt16,
-		types.FieldTypeInt32:      block.BlockInt32,
-		types.FieldTypeInt64:      block.BlockInt64,
-		types.FieldTypeInt128:     block.BlockInt128,
-		types.FieldTypeInt256:     block.BlockInt256,
-		types.FieldTypeUint8:      block.BlockUint8,
-		types.FieldTypeUint16:     block.BlockUint16,
-		types.FieldTypeUint32:     block.BlockUint32,
-		types.FieldTypeUint64:     block.BlockUint64,
-		types.FieldTypeDecimal32:  block.BlockInt32,
-		types.FieldTypeDecimal64:  block.BlockInt64,
-		types.FieldTypeDecimal128: block.BlockInt128,
-		types.FieldTypeDecimal256: block.BlockInt256,
-		types.FieldTypeFloat32:    block.BlockFloat32,
-		types.FieldTypeFloat64:    block.BlockFloat64,
-	}
+	blockTypes = types.BlockTypes
 )
 
 func blockKey(packkey uint32, blockId uint16) uint64 {
@@ -213,6 +191,11 @@ func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint6
 		bcache = engine.GetEngine(ctx).BlockCache()
 		ckey = engine.CacheKeyType{cacheKey, 0}
 	}
+
+	// optimize blocks before writing (dedup)
+	// TODO: move this into an integrated analysis & encode pipeline
+	// TODO: write back encoded block sizes to analytics struct
+	p.Optimize()
 
 	var n int
 	for i, f := range p.schema.Fields() {

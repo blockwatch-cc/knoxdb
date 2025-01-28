@@ -328,6 +328,7 @@ func (db *db) close() {
 	db.closed = true
 	db.store = nil
 	db.opts = nil
+	registry.Delete(db.dbPath)
 }
 
 func (db *db) Sync() error {

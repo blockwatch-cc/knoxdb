@@ -9,6 +9,9 @@ func (p *Package) Optimize() *Package {
 		return p
 	}
 	for _, b := range p.blocks {
+		if b == nil {
+			continue
+		}
 		b.Optimize()
 	}
 	return p
@@ -20,7 +23,22 @@ func (p *Package) Materialize() *Package {
 		return p
 	}
 	for _, b := range p.blocks {
+		if b == nil {
+			continue
+		}
 		b.Materialize()
 	}
 	return p
+}
+
+func (p *Package) IsMaterialized() bool {
+	for _, b := range p.blocks {
+		if b == nil {
+			continue
+		}
+		if !b.IsMaterialized() {
+			return false
+		}
+	}
+	return true
 }

@@ -55,7 +55,7 @@ func (t *Table) Compact(ctx context.Context) error {
 		needCompact = needCompact || (i < nSrcPacks-1 && v.NValues < maxsz) // non-full pack (except the last)
 		nextpack++
 		total += int64(v.NValues)
-		srcSize += int64(v.StoredSize)
+		srcSize += int64(v.Size)
 	}
 	if !needCompact {
 		t.log.Debugf("pack: %s table %d packs / %d rows already compact",

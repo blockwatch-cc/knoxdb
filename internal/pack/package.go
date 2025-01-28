@@ -120,6 +120,16 @@ func (p *Package) WithSchema(s *schema.Schema) *Package {
 	return p
 }
 
+func (p *Package) WithBlock(i int, b *block.Block) *Package {
+	if p.blocks[i] != nil {
+		p.blocks[i].DecRef()
+		p.blocks[i] = nil
+	}
+	p.blocks[i] = b
+	p.nRows = b.Len()
+	return p
+}
+
 func (p *Package) Alloc() *Package {
 	if p.maxRows == 0 || p.schema == nil {
 		return p
@@ -232,9 +242,9 @@ func (p *Package) Release() {
 	packagePool.Put(p)
 }
 
-// inline sort package by primary key, only available for materialized/writable packs
+// inline sort package by primary key, only available for materialized packs
 func (p *Package) PkSort() {
-	if !sort.IsSorted(p) {
+	if p.IsMaterialized() && p.px >= 0 && !sort.IsSorted(p) {
 		sort.Sort(p)
 	}
 }

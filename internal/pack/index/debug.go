@@ -33,7 +33,7 @@ func (idx *Index) ViewStats(i int) *stats.PackStats {
 		}
 		fields := idx.schema.Fields()
 		for i, b := range idx.journal.Blocks() {
-			info.Blocks = append(info.Blocks, stats.NewBlockStats(b, &fields[i]))
+			info.Blocks = append(info.Blocks, stats.BuildBlockStats(b, &fields[i]))
 		}
 		return info
 	case i > 0 && i < idx.stats.Len():
