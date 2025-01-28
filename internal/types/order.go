@@ -28,6 +28,14 @@ func init() {
 	}
 }
 
+func (t OrderType) IsForward() bool {
+	return t == OrderAsc || t == OrderAscCaseInsensitive
+}
+
+func (t OrderType) IsReverse() bool {
+	return t == OrderDesc || t == OrderDescCaseInsensitive
+}
+
 func (t OrderType) IsValid() bool {
 	return t >= OrderAsc && t <= OrderDescCaseInsensitive
 }

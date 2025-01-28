@@ -241,7 +241,7 @@ func (f *Field) Validate() error {
 	}
 
 	// require index kind in range
-	if f.index > types.IndexTypeBloom {
+	if !f.index.IsValid() {
 		return fmt.Errorf("invalid index kind %d", f.index)
 	}
 

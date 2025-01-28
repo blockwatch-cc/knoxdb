@@ -25,9 +25,9 @@ import (
 type TestStruct struct {
 	Id  uint64 `knox:"id,pk"`
 	I64 int64  `knox:"i64,index=bloom:2"`
-	I32 int32  `knox:"i32"`
+	I32 int32  `knox:"i32,index=bfuse"`
 	I16 int16  `knox:"i16"`
-	I8  int8   `knox:"i8"`
+	I8  int8   `knox:"i8,index=bits"`
 	// Buf []byte `knox:"buf,fixed=8"`
 	Buf []byte `knox:"buf"`
 }
@@ -104,15 +104,15 @@ func makeFilter(name string, mode query.FilterMode, val, val2 any) *query.Filter
 // -------------------------------------------------------------
 // Validation
 func validateTree(t *testing.T, idx *Index) {
-	ilen, slen := len(*idx.inodes), len(*idx.snodes)
+	ilen, slen := len(idx.inodes), len(idx.snodes)
 	require.LessOrEqual(t, slen, ilen, "node type balance")
-	for i, n := range *idx.snodes {
+	for i, n := range idx.snodes {
 		// all existing snodes are non-nil
 		require.NotNil(t, n, "snode=%d", i)
 
 		// all parent inodes are non-nil
 		for n := parentIndex(i + ilen - 1); n >= 0; n = parentIndex(n) {
-			require.NotNil(t, (*idx.inodes)[n], "inode=%d", n)
+			require.NotNil(t, idx.inodes[n], "inode=%d", n)
 		}
 	}
 
@@ -161,7 +161,7 @@ func TestIndexCreate(t *testing.T) {
 	it.Close()
 
 	// query should not panic
-	it, ok = idx.Query(ctx, nil)
+	it, ok = idx.Query(ctx, nil, types.OrderAsc)
 	assert.False(t, ok, "query on empty index")
 	assert.False(t, it.IsValid(), "valid iterator")
 	it.Close()
@@ -178,13 +178,13 @@ func TestIndexAddSingle(t *testing.T) {
 	require.NoError(t, idx.AddPack(ctx, pkg))
 
 	// index internals
-	require.Len(t, *idx.inodes, 2, "idx inodes")
-	require.Len(t, *idx.snodes, 1, "idx snodes")
+	require.Len(t, idx.inodes, 2, "idx inodes")
+	require.Len(t, idx.snodes, 1, "idx snodes")
 
 	validateTree(t, idx)
 
 	// snode internals
-	snode := (*idx.snodes)[0]
+	snode := idx.snodes[0]
 	assert.Equal(t, uint32(0), snode.spack.Key(), "snode spack key")
 	assert.Equal(t, 1, snode.spack.Len(), "snode spack len")
 	assert.True(t, snode.dirty, "snode dirty")
@@ -237,8 +237,8 @@ func TestIndexAddMany(t *testing.T) {
 	validateTree(t, idx)
 
 	// tree internals
-	require.Len(t, *idx.inodes, 1<<log2ceil(sz), "idx num inodes")
-	require.Len(t, *idx.snodes, sz, "idx num snodes")
+	require.Len(t, idx.inodes, 1<<log2ceil(sz), "idx num inodes")
+	require.Len(t, idx.snodes, sz, "idx num snodes")
 
 	// api
 	assert.Equal(t, sz*STATS_PACK_SIZE, idx.Len(), "num data packs")
@@ -257,7 +257,7 @@ func TestIndexUpdate(t *testing.T) {
 	defer idx.Close()
 	pkg := makeTestPackage(t, 0, 1)
 	require.NoError(t, idx.AddPack(ctx, pkg))
-	snode := (*idx.snodes)[0]
+	snode := idx.snodes[0]
 	snode.dirty = false
 
 	// set all pkg blocks clean
@@ -271,13 +271,13 @@ func TestIndexUpdate(t *testing.T) {
 	require.NoError(t, idx.UpdatePack(ctx, pkg))
 
 	// index internals
-	require.Len(t, *idx.inodes, 2, "idx inodes")
-	require.Len(t, *idx.snodes, 1, "idx snodes")
+	require.Len(t, idx.inodes, 2, "idx inodes")
+	require.Len(t, idx.snodes, 1, "idx snodes")
 
 	validateTree(t, idx)
 
 	// snode internals
-	snode = (*idx.snodes)[0]
+	snode = idx.snodes[0]
 	assert.Equal(t, uint32(0), snode.spack.Key(), "snode spack key")
 	assert.Equal(t, 1, snode.spack.Len(), "snode spack len")
 	assert.True(t, snode.dirty, "snode dirty")
@@ -315,8 +315,8 @@ func TestIndexDeleteSingle(t *testing.T) {
 	require.NoError(t, idx.AddPack(ctx, pkg))
 
 	// check tree
-	require.Len(t, *idx.inodes, 2, "idx inodes")
-	require.Len(t, *idx.snodes, 1, "idx snodes")
+	require.Len(t, idx.inodes, 2, "idx inodes")
+	require.Len(t, idx.snodes, 1, "idx snodes")
 	validateTree(t, idx)
 	assert.Equal(t, 3, idx.Len(), "num data packs")
 	assert.Equal(t, 3*TEST_PKG_SIZE, idx.Count(), "num data rows")
@@ -327,8 +327,8 @@ func TestIndexDeleteSingle(t *testing.T) {
 	require.NoError(t, idx.DeletePack(ctx, pkg))
 
 	// check tree
-	require.Len(t, *idx.inodes, 2, "idx inodes")
-	require.Len(t, *idx.snodes, 1, "idx snodes")
+	require.Len(t, idx.inodes, 2, "idx inodes")
+	require.Len(t, idx.snodes, 1, "idx snodes")
 	validateTree(t, idx)
 	assert.Equal(t, 2, idx.Len(), "num data packs")
 	assert.Equal(t, 2*TEST_PKG_SIZE, idx.Count(), "num data rows")
@@ -366,10 +366,10 @@ func TestIndexDeleteMany(t *testing.T) {
 	validateTree(t, idx)
 
 	// tree internals
-	require.Len(t, *idx.inodes, 1<<log2ceil(4), "idx num inodes")
-	require.Len(t, *idx.snodes, 4, "idx num snodes")
+	require.Len(t, idx.inodes, 1<<log2ceil(4), "idx num inodes")
+	require.Len(t, idx.snodes, 4, "idx num snodes")
 
-	snode := (*idx.snodes)[0]
+	snode := idx.snodes[0]
 	assert.Equal(t, uint32(STATS_PACK_SIZE), snode.MinKey(), "first snode first data pack key")
 	assert.Equal(t, uint32(2*STATS_PACK_SIZE-1), snode.MaxKey(), "first snode last data pack key")
 
@@ -413,8 +413,8 @@ func TestIndexStore(t *testing.T) {
 	validateTree(t, idx)
 
 	// tree internals
-	require.Len(t, *idx.inodes, 1<<log2ceil(sz), "idx num inodes")
-	require.Len(t, *idx.snodes, sz, "idx num snodes")
+	require.Len(t, idx.inodes, 1<<log2ceil(sz), "idx num inodes")
+	require.Len(t, idx.snodes, sz, "idx num snodes")
 
 	// api
 	assert.Equal(t, sz*STATS_PACK_SIZE, idx.Len(), "num data packs")
@@ -471,7 +471,7 @@ func TestIndexQueryEqual(t *testing.T) {
 
 	// equal filter: matches first record in second snode
 	f := makeFilter("id", query.FilterModeEqual, uint64(STATS_PACK_SIZE*TEST_PKG_SIZE+1), nil)
-	it, ok := idx.Query(ctx, f)
+	it, ok := idx.Query(ctx, f, types.OrderAsc)
 	defer it.Close()
 	require.True(t, ok, "found match")
 	require.NotNil(t, it, "it is not nil")
@@ -505,7 +505,7 @@ func TestIndexQueryAll(t *testing.T) {
 	}
 
 	// match all
-	it, ok := idx.Query(ctx, nil)
+	it, ok := idx.Query(ctx, nil, types.OrderAsc)
 	defer it.Close()
 	require.True(t, ok, "found match")
 	require.NotNil(t, it, "it is not nil")
@@ -551,7 +551,7 @@ func TestIndexQueryLess(t *testing.T) {
 
 	// equal filter: matches first and second record in first snode
 	f := makeFilter("id", query.FilterModeLe, uint64(TEST_PKG_SIZE+1), nil)
-	it, ok := idx.Query(ctx, f)
+	it, ok := idx.Query(ctx, f, types.OrderAsc)
 	defer it.Close()
 	require.True(t, ok, "found match")
 	require.NotNil(t, it, "it is not nil")
@@ -599,7 +599,7 @@ func TestIndexQueryRange(t *testing.T) {
 
 	// equal filter: matches first and second record in first snode
 	f := makeFilter("id", query.FilterModeRange, uint64(1), uint64(TEST_PKG_SIZE+1))
-	it, ok := idx.Query(ctx, f)
+	it, ok := idx.Query(ctx, f, types.OrderAsc)
 	defer it.Close()
 	require.True(t, ok, "found match")
 	require.NotNil(t, it, "it is not nil")
@@ -743,7 +743,7 @@ func BenchmarkIndexQueryEqual(b *testing.B) {
 
 		b.Run(fmt.Sprintf("tree-%dx2048", sz), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				it, ok := idx.Query(ctx, f)
+				it, ok := idx.Query(ctx, f, types.OrderAsc)
 				for ; ok; ok = it.Next() {
 				}
 				it.Close()
@@ -774,7 +774,7 @@ func BenchmarkIndexQueryAll(b *testing.B) {
 
 		b.Run(fmt.Sprintf("tree-%dx2048", sz), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				it, ok := idx.Query(ctx, nil)
+				it, ok := idx.Query(ctx, nil, types.OrderAsc)
 				for ; ok; ok = it.Next() {
 				}
 				it.Close()

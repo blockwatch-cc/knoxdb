@@ -52,7 +52,7 @@ type Table struct {
 	db      store.DB                // lower-level storage (e.g. boltdb wrapper)
 	state   engine.ObjectState      // volatile state
 	indexes []engine.QueryableIndex // list of indexes
-	stats   *stats.StatsIndex       // in-memory list of pack and block info
+	stats   *stats.Index            // in-memory table statistics
 	journal *journal.Journal        // in-memory data not yet written to packs
 	metrics engine.TableMetrics     // metrics statistics
 	log     log.Logger
@@ -77,7 +77,6 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.state = engine.NewObjectState()
 	t.metrics = engine.NewTableMetrics(name)
-	t.stats = stats.NewStatsIndex(t.px, t.opts.PackSize)
 	t.journal = journal.NewJournal(s, t.opts.JournalSize)
 	t.db = opts.DB
 	t.log = opts.Logger
@@ -102,6 +101,9 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 		t.db = db
 	}
 
+	// init statistics
+	t.stats = stats.NewIndex(t.db, t.schema, t.opts.PackSize)
+
 	// init table storage
 	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
 	if err != nil {
@@ -109,7 +111,6 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	}
 	for _, v := range [][]byte{
 		engine.DataKeySuffix,
-		engine.StatsKeySuffix,
 		engine.StateKeySuffix,
 	} {
 		key := append([]byte(name), v...)
@@ -152,7 +153,6 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.metrics = engine.NewTableMetrics(name)
 	t.metrics.TupleCount = int64(t.state.NRows)
-	t.stats = stats.NewStatsIndex(s.PkIndex(), t.opts.PackSize)
 	t.journal = journal.NewJournal(s, t.opts.JournalSize)
 	t.db = opts.DB
 	t.log = opts.Logger
@@ -183,6 +183,9 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 		}
 	}
 
+	// init statistics
+	t.stats = stats.NewIndex(t.db, t.schema, t.opts.PackSize)
+
 	// check table storage
 	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, false)
 	if err != nil {
@@ -190,7 +193,6 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	}
 	for _, v := range [][]byte{
 		engine.DataKeySuffix,
-		engine.StatsKeySuffix,
 		engine.StateKeySuffix,
 	} {
 		if tx.Bucket(append([]byte(name), v...)) == nil {
@@ -213,18 +215,13 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 
 	// load stats
 	t.log.Debugf("Loading package stats for %s", typ)
-	n, err := t.stats.Load(ctx, t.statsBucket(tx))
-	if err != nil {
-		// TODO: rebuild corrupt stats here
+	if err := t.stats.Load(ctx); err != nil {
+		// TODO: rebuild corrupt stats here instead of failing
 		tx.Rollback()
 		t.Close(ctx)
 		return err
 	}
-	t.metrics.MetaBytesRead += int64(n)
 	t.metrics.TupleCount = int64(t.state.NRows)
-	t.metrics.PacksCount = int64(t.stats.Len())
-	t.metrics.MetaSize = int64(t.stats.HeapSize())
-	t.metrics.TotalSize = int64(t.stats.TableSize())
 
 	// FIXME: reconstruct journal from WAL instead of load in legacy mode
 	err = t.journal.Open(ctx, tx, t.schema.Name())
@@ -256,7 +253,7 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	// t.metrics = engine.TableMetrics{}
 	// t.state = engine.ObjectState{}
 	// t.indexes = nil
-	t.stats.Reset()
+	t.stats.Close()
 	// t.stats = nil
 	t.journal.Close()
 	// t.journal = nil
@@ -281,7 +278,12 @@ func (t *Table) Indexes() []engine.QueryableIndex {
 
 func (t *Table) Metrics() engine.TableMetrics {
 	m := t.metrics
+	s := t.stats
 	m.TupleCount = int64(t.state.NRows)
+	m.PacksCount = int64(s.Len())
+	m.MetaSize = int64(s.HeapSize())
+	m.TotalSize = int64(s.TableSize())
+	m.MetaBytesRead, m.MetaBytesWritten = s.Metrics()
 	return m
 }
 
@@ -289,9 +291,9 @@ func (t *Table) Drop(ctx context.Context) error {
 	typ := t.schema.TypeLabel(t.engine.Namespace())
 	path := t.db.Path()
 	t.journal.Close()
+	t.stats.Close()
 	t.db.Close()
 	t.db = nil
-	t.stats.Reset()
 	t.log.Debugf("dropping table %s with path %s", typ, path)
 	if err := os.Remove(path); err != nil {
 		return err
@@ -319,14 +321,9 @@ func (t *Table) Sync(ctx context.Context) error {
 		}
 
 		// store stats
-		n, err := t.stats.Store(ctx, t.statsBucket(tx))
-		if err != nil {
+		if err := t.stats.Store(ctx); err != nil {
 			return err
 		}
-
-		atomic.AddInt64(&t.metrics.MetaBytesWritten, int64(n))
-		atomic.StoreInt64(&t.metrics.PacksCount, int64(t.stats.Len()))
-		atomic.StoreInt64(&t.metrics.MetaSize, int64(t.stats.HeapSize()))
 
 		return nil
 	})
@@ -335,15 +332,16 @@ func (t *Table) Sync(ctx context.Context) error {
 func (t *Table) Truncate(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if err := t.stats.Delete(ctx); err != nil {
+		return err
+	}
 	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
 	if err != nil {
 		return err
 	}
 	t.journal.Reset()
-	t.stats.Reset()
 	for _, v := range [][]byte{
 		engine.DataKeySuffix,
-		engine.StatsKeySuffix,
 		engine.StateKeySuffix,
 	} {
 		key := append([]byte(t.schema.Name()), v...)

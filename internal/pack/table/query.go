@@ -257,7 +257,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 	//   (b) no index exists
 	if !plan.IsNoMatch() {
 		// pack iterator manages selection, load and scan of packs
-		it := NewForwardIterator(plan)
+		it := NewIterator(plan)
 		defer it.Close()
 
 	packloop:
@@ -393,7 +393,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	// find max pk across all saved packs (we assume any journal entry greater than this max
 	// is new and hasn't been saved before; this assumption breaks when user-defined pk
 	// values are smaller, so a user must flush the journal before query)
-	_, maxStoredPk := t.stats.GlobalMinMax()
+	gmax := t.stats.GlobalMaxPk()
 
 	// before table scan, emit 'new' journal-only records (i.e. pk > max) in desc order
 	// Note: deleted journal records are not present in this list
@@ -401,7 +401,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	jpack := t.journal.Data
 	for i, idx := range idxs {
 		// skip already stored records (we'll get back to them later)
-		if pks[i] <= maxStoredPk {
+		if pks[i] <= gmax {
 			continue
 		}
 
@@ -446,7 +446,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	// (b) no index exists
 
 	// pack iterator manages selection, load and scan of packs
-	it := NewReverseIterator(plan)
+	it := NewIterator(plan)
 	defer it.Close()
 
 packloop:

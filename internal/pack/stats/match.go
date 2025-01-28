@@ -71,7 +71,7 @@ func matchFilterView(f *query.Filter, view *schema.View) bool {
 // matchVector performs a vectorized check of a query condition tree
 // against the contents of statistics package pkg. It returns a bitset with
 // matching statistics rows.
-func matchVector(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Bucket, bits *bitset.Bitset) *bitset.Bitset {
+func matchVector(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Bucket, bits *bitset.Bitset) (int, *bitset.Bitset) {
 	if n.IsLeaf() {
 		return matchFilterVector(n.Filter, pkg, bits, nil, b)
 	}
@@ -91,7 +91,7 @@ func matchVector(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Buc
 // Note statistics are min/max ranges, hence to find a potential match we translate
 // each filter condition into a min/max range. Low level vectors matches are
 // vectorized using custom assembly routines.
-func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset, b map[int]store.Bucket) *bitset.Bitset {
+func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset, b map[int]store.Bucket) (int, *bitset.Bitset) {
 	if bits == nil {
 		bits = bitset.NewBitset(pkg.Len())
 	}
@@ -104,12 +104,12 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 
 	// stop early (no match, no bloom bucket, incompatible with bloom)
 	if bits.Count() == 0 || b == nil {
-		return bits
+		return 0, bits
 	}
 
-	ftyp := filterType(f, pkg)
+	ftyp := filterType(f, pkg, minx)
 	if ftyp == types.IndexTypeNone {
-		return bits
+		return 0, bits
 	}
 
 	// Check filters for all stats records that have matched above.
@@ -119,7 +119,10 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 
 	// use bits.Iterate() instead of bits.Indexs() to avoid allocating a full sized
 	// []uint32 slice here in case we have a full match
-	var hits [16]int
+	var (
+		hits [16]int
+		n    int
+	)
 	for n, hits := bits.Iterate(0, hits[:]); len(hits) > 0; n, hits = bits.Iterate(n, hits) {
 		for _, v := range hits {
 			// filter key is data-pack-key + data-pack-col-index
@@ -134,12 +137,17 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 			// load filter from bucket and check
 			switch ftyp {
 			case types.IndexTypeBloom:
-				flt, err = bloom.NewFilterBuffer(b[STATS_BLOOM_KEY].Get(bkey))
+				buf := b[STATS_BLOOM_KEY].Get(bkey)
+				n += len(buf)
+				flt, err = bloom.NewFilterBuffer(buf)
 			case types.IndexTypeBfuse:
-				flt, err = fuse.NewBinaryFuseFromBytes[uint8](b[STATS_FUSE_KEY].Get(bkey))
+				buf := b[STATS_FUSE_KEY].Get(bkey)
+				n += len(buf)
+				flt, err = fuse.NewBinaryFuseFromBytes[uint8](buf)
 			case types.IndexTypeBits:
 				buf := b[STATS_BITS_KEY].Get(bkey)
 				if len(buf) > 0 {
+					n += len(buf)
 					flt = xroar.FromBuffer(buf)
 				}
 			}
@@ -156,14 +164,14 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 		}
 	}
 
-	return bits
+	return n, bits
 }
 
 // TODO: replace with filter tree node flags (FilterFlagUseBloom)
-func filterType(f *query.Filter, pkg *pack.Package) types.IndexType {
+func filterType(f *query.Filter, pkg *pack.Package, id int) types.IndexType {
 	switch f.Mode {
 	case types.FilterModeEqual, types.FilterModeIn:
-		typ := pkg.Schema().Exported()[f.Index].Index
+		typ := pkg.Schema().Exported()[id].Index
 		switch typ {
 		case types.IndexTypeBloom, types.IndexTypeBfuse, types.IndexTypeBits:
 			return typ
@@ -173,7 +181,7 @@ func filterType(f *query.Filter, pkg *pack.Package) types.IndexType {
 }
 
 // matchVectorAnd aggregates match bitsets and stops eary when no more match is possible.
-func matchVectorAnd(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Bucket, bits *bitset.Bitset) *bitset.Bitset {
+func matchVectorAnd(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Bucket, bits *bitset.Bitset) (int, *bitset.Bitset) {
 	// start with a full bitset
 	if bits == nil {
 		bits = bitset.NewBitset(pkg.Len())
@@ -182,7 +190,10 @@ func matchVectorAnd(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.
 
 	// match conditions and merge bit vectors, empty condition lists or always true
 	// filters result in a full match; stop early when result contains all zeros
-	var scratch *bitset.Bitset
+	var (
+		scratch *bitset.Bitset
+		m, c    int
+	)
 	for _, node := range n.Children {
 		// skip always true nodes (AND branches may contain a single always true filter)
 		if node.IsAnyMatch() {
@@ -191,11 +202,12 @@ func matchVectorAnd(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.
 
 		if node.IsLeaf() {
 			// match vector against condition using last match as mask
-			scratch = matchFilterVector(node.Filter, pkg, scratch, bits, b)
+			c, scratch = matchFilterVector(node.Filter, pkg, scratch, bits, b)
 		} else {
 			// recurse into another AND or OR condition subtree
-			scratch = matchVector(node, pkg, b, scratch)
+			c, scratch = matchVector(node, pkg, b, scratch)
 		}
+		m += c
 
 		// merge
 		_, any, _ := bits.AndFlag(scratch)
@@ -207,11 +219,11 @@ func matchVectorAnd(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.
 		scratch.Zero()
 	}
 	scratch.Close()
-	return bits
+	return m, bits
 }
 
 // matchVectorOr aggregates match bitsets and stops early when all bits are set.
-func matchVectorOr(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Bucket, bits *bitset.Bitset) *bitset.Bitset {
+func matchVectorOr(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Bucket, bits *bitset.Bitset) (int, *bitset.Bitset) {
 	// start with an empty bitset
 	if bits == nil {
 		bits = bitset.NewBitset(pkg.Len())
@@ -221,7 +233,10 @@ func matchVectorOr(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.B
 
 	// match conditions and merge bit vectors, always true/false conditions
 	// are optimized away at this point, stop early when result contains all ones
-	var scratch *bitset.Bitset
+	var (
+		scratch *bitset.Bitset
+		m, c    int
+	)
 	for i, node := range n.Children {
 		if node.IsLeaf() {
 			// match vector against condition using last match as mask;
@@ -235,12 +250,13 @@ func matchVectorOr(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.B
 			// and pack match set using OR below. However we cannot
 			// use a shortcut (on all pack bits == 1).
 			mask := bits.Clone().Neg()
-			scratch = matchFilterVector(node.Filter, pkg, scratch, mask, b)
+			c, scratch = matchFilterVector(node.Filter, pkg, scratch, mask, b)
 			mask.Close()
 		} else {
 			// recurse into another AND or OR condition subtree
-			scratch = matchVector(node, pkg, b, scratch)
+			c, scratch = matchVector(node, pkg, b, scratch)
 		}
+		m += c
 
 		// merge
 		bits.Or(scratch)
@@ -252,5 +268,5 @@ func matchVectorOr(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.B
 		scratch.Zero()
 	}
 	scratch.Close()
-	return bits
+	return m, bits
 }

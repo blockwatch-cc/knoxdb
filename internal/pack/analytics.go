@@ -1,0 +1,19 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
+package pack
+
+type Analysis struct {
+	WasDirty  []bool   // flag indicating this block was dirty and rewritten
+	DiffSize  []int    // storage size diff in bytes after encoding/compression (when dirty)
+	MinMax    [][2]any // per block min/max values (when dirty)
+	NumUnique []int    // per block cardinality (when dirty)
+}
+
+func (a Analysis) SizeDiff() int64 {
+	var sum int
+	for _, v := range a.DiffSize {
+		sum += v
+	}
+	return int64(sum)
+}

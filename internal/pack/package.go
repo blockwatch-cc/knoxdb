@@ -40,6 +40,7 @@ type Package struct {
 	rx      int            // row id index (position in schema)
 	schema  *schema.Schema // mapping from fields to blocks in query order
 	blocks  []*block.Block // loaded blocks (in schema order)
+	analyze *Analysis      // statistics for encoding and metadata
 }
 
 func New() *Package {
@@ -87,6 +88,10 @@ func (p Package) IsDirty() bool {
 		}
 	}
 	return false
+}
+
+func (p Package) Analysis() *Analysis {
+	return p.analyze
 }
 
 // TODO: do we need a normative way to say packs are readonly (shared data)?
@@ -238,6 +243,7 @@ func (p *Package) Release() {
 	p.px = 0
 	p.rx = 0
 	p.schema = nil
+	p.analyze = nil
 	p.blocks = p.blocks[:0]
 	packagePool.Put(p)
 }

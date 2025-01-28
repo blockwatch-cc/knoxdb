@@ -398,7 +398,6 @@ func (f *Field) ParseTag(tag string) error {
 				scale = 2
 			case "bfuse":
 				index = types.IndexTypeBfuse
-				scale = 2
 			default:
 				if val == "" || strings.HasPrefix(val, "bloom") {
 					index = types.IndexTypeBloom

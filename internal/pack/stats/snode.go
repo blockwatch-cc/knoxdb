@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"sort"
+	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/pack"
@@ -99,13 +100,14 @@ func (n *SNode) AppendPack(pkg *pack.Package) bool {
 	n.spack.Block(STATS_ROW_KEY).Uint32().Append(pkg.Key())
 	n.spack.Block(STATS_ROW_SCHEMA).Uint64().Append(pkg.Schema().Hash())
 	n.spack.Block(STATS_ROW_NVALS).Int64().Append(int64(pkg.Len()))
-	n.spack.Block(STATS_ROW_SIZE).Int64().Append(int64(0)) // TODO: set disk size
+	n.spack.Block(STATS_ROW_SIZE).Int64().Append(pkg.Analysis().SizeDiff())
 
+	fields := pkg.Schema().Exported()
 	for i, b := range pkg.Blocks() {
 		var minv, maxv any
 		if b == nil {
 			// use zero values for invalid blocks (deleted from schema)
-			minv = cmp.Zero(types.BlockTypes[pkg.Schema().Exported()[i].Type])
+			minv = cmp.Zero(types.BlockTypes[fields[i].Type])
 			maxv = minv
 		} else {
 			// calculate min/max statistics
@@ -132,9 +134,10 @@ func (n *SNode) UpdatePack(pkg *pack.Package) bool {
 	}
 
 	// update data statistics on change
+	analyze := pkg.Analysis()
 	for i, b := range pkg.Blocks() {
 		// skip invalid blocks (deleted from schema) and non-dirty blocks
-		if b == nil || !b.IsDirty() {
+		if b == nil || !analyze.WasDirty[i] {
 			continue
 		}
 
@@ -168,8 +171,10 @@ func (n *SNode) UpdatePack(pkg *pack.Package) bool {
 		n.spack.Block(STATS_ROW_NVALS).Set(k, int64(pkg.Len()))
 		n.dirty = true
 	}
-
-	// TODO: data pack size in bytes
+	if diff, sz := n.spack.Int64(STATS_ROW_SIZE, k), analyze.SizeDiff(); diff != 0 {
+		n.spack.Block(STATS_ROW_SIZE).Set(k, sz+diff)
+		n.dirty = true
+	}
 
 	// data may not have changed
 	return n.dirty
@@ -272,7 +277,7 @@ func (n *SNode) Query(it *Iterator) error {
 	// optimized fast path when all data is in memory
 	if len(loadBlocks) == 0 && it.use == 0 {
 		if it.flt != nil {
-			it.vmatch = matchVector(it.flt, n.spack, nil, it.vmatch)
+			_, it.vmatch = matchVector(it.flt, n.spack, nil, it.vmatch)
 			it.match = it.vmatch.Indexes(it.match)
 		}
 		return nil
@@ -282,7 +287,7 @@ func (n *SNode) Query(it *Iterator) error {
 	return it.idx.db.View(func(tx store.Tx) error {
 		// check blocks are loaded, load missing spack blocks during query
 		if len(loadBlocks) > 0 {
-			_, err := n.spack.Load(
+			n, err := n.spack.Load(
 				it.ctx,
 				it.idx.statsBucket(tx),      // tablename_stats
 				it.idx.use.Is(FeatUseCache), // use cache
@@ -293,10 +298,11 @@ func (n *SNode) Query(it *Iterator) error {
 			if err != nil {
 				return err
 			}
+			atomic.AddInt64(&it.idx.bytesRead, int64(n))
 		}
 
-		// init bloom filter bucket if required
-		var buckets map[int]store.Bucket
+		// init filter buckets if required
+		buckets := make(map[int]store.Bucket)
 		if it.use.Is(FeatBloomFilter) {
 			buckets[STATS_BLOOM_KEY] = it.idx.bloomBucket(tx)
 		}
@@ -310,10 +316,12 @@ func (n *SNode) Query(it *Iterator) error {
 		// run vectorized queries for filter types, load & check bloom,
 		// fuse and bitset filters on demand
 		if it.flt != nil {
-			it.vmatch = matchVector(it.flt, n.spack, buckets, it.vmatch)
+			var m int
+			m, it.vmatch = matchVector(it.flt, n.spack, buckets, it.vmatch)
 			if it.vmatch.Count() == 0 {
 				return nil
 			}
+			atomic.AddInt64(&it.idx.bytesRead, int64(m))
 
 			// convert bitset to indexes
 			it.match = it.vmatch.Indexes(it.match)

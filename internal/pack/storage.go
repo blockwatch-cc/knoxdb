@@ -14,7 +14,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/assert"
 )
 
 // The storage model stores serialized blocks in a storage bucket. Each block is
@@ -169,17 +168,15 @@ func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, 
 }
 
 // store all dirty blocks
-func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint64, stats []int) (int, error) {
+func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint64) (int, error) {
 	if bucket == nil {
 		return 0, engine.ErrNoBucket
 	}
 
-	// ensure stats length
-	if stats != nil {
-		assert.Always(len(stats) == len(p.blocks), "block stats len mismatch",
-			"nstats", len(stats),
-			"nblocks", len(p.blocks),
-		)
+	// analyze
+	p.analyze = &Analysis{
+		WasDirty: make([]bool, len(p.blocks)),
+		DiffSize: make([]int, len(p.blocks)),
 	}
 
 	// remove updated blocks from cache
@@ -194,16 +191,12 @@ func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint6
 
 	// optimize blocks before writing (dedup)
 	// TODO: move this into an integrated analysis & encode pipeline
-	// TODO: write back encoded block sizes to analytics struct
 	p.Optimize()
 
 	var n int
 	for i, f := range p.schema.Fields() {
 		// skip empty blocks, clean blocks and deleted fields
 		if p.blocks[i] == nil || !p.blocks[i].IsDirty() || f.Is(types.FieldFlagDeleted) {
-			if stats != nil {
-				stats[i] = 0
-			}
 			continue
 		}
 
@@ -225,14 +218,14 @@ func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint6
 			return 0, err2
 		}
 
-		// howto export block size statistics
-		if stats != nil {
-			stats[i] = buf.Len()
-		}
-		n += buf.Len()
-
 		// generate storage key for this block
 		bkey := EncodeBlockKey(p.key, f.Id())
+
+		// export block size statistics
+		p.analyze.DiffSize[i] = buf.Len() - len(bucket.Get(bkey))
+		p.analyze.WasDirty[i] = true
+		n += buf.Len()
+
 		// fmt.Printf("Store block %d with comp %d\n", f.Id(), f.Compress())
 		// fmt.Printf("Data %d\n%s", buf.Len(), hex.Dump(buf.Bytes()))
 

@@ -114,6 +114,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 				if err != nil {
 					return err
 				}
+				idx.bytesWritten += int64(len(buf))
 			}
 		}
 		clear(blooms)
@@ -129,6 +130,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 				if err != nil {
 					return err
 				}
+				idx.bytesWritten += int64(len(buf))
 			}
 		}
 		clear(ranges)
@@ -144,6 +146,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 				if err != nil {
 					return err
 				}
+				idx.bytesWritten += int64(len(buf))
 			}
 		}
 		clear(bits)
@@ -159,6 +162,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 				if err != nil {
 					return err
 				}
+				idx.bytesWritten += int64(len(buf))
 			}
 		}
 		clear(fuses)
@@ -333,7 +337,7 @@ func BuildBloomFilter(b *block.Block, cardinality, factor int) *bloom.Filter {
 }
 
 func BuildBitsFilter(b *block.Block, cardinality int) *xroar.Bitmap {
-	if cardinality <= 0 {
+	if cardinality <= 1 {
 		return nil
 	}
 

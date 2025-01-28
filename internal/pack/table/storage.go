@@ -9,7 +9,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -17,15 +16,6 @@ import (
 
 func (t *Table) dataBucket(tx store.Tx) store.Bucket {
 	key := append([]byte(t.schema.Name()), engine.DataKeySuffix...)
-	b := tx.Bucket(key)
-	if b != nil {
-		b.FillPercent(t.opts.PageFill)
-	}
-	return b
-}
-
-func (t *Table) statsBucket(tx store.Tx) store.Bucket {
-	key := append([]byte(t.schema.Name()), engine.StatsKeySuffix...)
 	b := tx.Bucket(key)
 	if b != nil {
 		b.FillPercent(t.opts.PageFill)
@@ -102,11 +92,7 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 	// remove zero length packs
 	if pkg.Len() == 0 {
 		// drop from stats
-		t.stats.Remove(pkg.Key())
-
-		// store stats changes
-		m, err := t.stats.Store(ctx, t.statsBucket(tx))
-		if err != nil {
+		if err := t.stats.DeletePack(ctx, pkg); err != nil {
 			return 0, err
 		}
 
@@ -115,55 +101,29 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 			return 0, err
 		}
 
-		// collect stats
-		atomic.AddInt64(&t.metrics.MetaBytesWritten, int64(m))
-		atomic.StoreInt64(&t.metrics.PacksCount, int64(t.stats.Len()))
-		atomic.StoreInt64(&t.metrics.MetaSize, int64(t.stats.HeapSize()))
-		atomic.StoreInt64(&t.metrics.TotalSize, int64(t.stats.TableSize()))
-
 		return 0, nil
 	}
 
-	// update regular packs
-
-	// optimize/dedup
-	pkg.Optimize()
-
-	// build block statistics
-	pstats, ok := t.stats.GetByKey(pkg.Key())
-	if !ok {
-		pstats = stats.BuildPackStats(pkg)
-	} else {
-		// update statistics for dirty blocks only
-		pstats.Update(pkg)
-	}
-
-	// write to disk
-	blockSizes := make([]int, len(pstats.Blocks))
-	n, err := pkg.Store(ctx, t.dataBucket(tx), t.id, blockSizes)
+	// analyze, optimize, compress and write to disk
+	n, err := pkg.Store(ctx, t.dataBucket(tx), t.id)
 	if err != nil {
 		return 0, err
 	}
-	pstats.Size = n
-	for i := range pstats.Blocks {
-		pstats.Blocks[i].Size = blockSizes[i]
-	}
 
-	// update and store statistics
-	t.stats.AddOrUpdate(pstats)
-	m, err := t.stats.Store(ctx, t.statsBucket(tx))
+	// update statistics
+	if pkg.Key() < t.stats.NextKey() {
+		err = t.stats.UpdatePack(ctx, pkg)
+	} else {
+		err = t.stats.AddPack(ctx, pkg)
+	}
 	if err != nil {
 		return n, err
 	}
 
 	atomic.AddInt64(&t.metrics.PacksStored, 1)
 	atomic.AddInt64(&t.metrics.BytesWritten, int64(n))
-	atomic.AddInt64(&t.metrics.MetaBytesWritten, int64(m))
-	atomic.StoreInt64(&t.metrics.PacksCount, int64(t.stats.Len()))
-	atomic.StoreInt64(&t.metrics.MetaSize, int64(t.stats.HeapSize()))
-	atomic.StoreInt64(&t.metrics.TotalSize, int64(t.stats.TableSize()))
 
-	return n + m, nil
+	return n, nil
 }
 
 // Splits a writebale pack into two same size packs and stores both. Source pack

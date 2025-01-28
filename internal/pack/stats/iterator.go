@@ -15,16 +15,17 @@ import (
 
 // stats iterator
 type Iterator struct {
-	ctx    context.Context
-	idx    *Index                // back reference to index
-	flt    *query.FilterTreeNode // ptr to current query conditions
-	use    Features              // flags indicating which filter to use
-	smatch *bitset.Bitset        // snode matches
-	vmatch *bitset.Bitset        // spack matches
-	sx     int                   // current snode index
-	snode  *SNode                // current matching snode
-	match  []uint32              // row matches in current stats pack
-	n      int                   // current offset inside match rows
+	ctx     context.Context
+	idx     *Index                // back reference to index
+	flt     *query.FilterTreeNode // ptr to current query conditions
+	use     Features              // flags indicating which filter to use
+	smatch  *bitset.Bitset        // snode matches
+	vmatch  *bitset.Bitset        // spack matches
+	sx      int                   // current snode index
+	snode   *SNode                // current matching snode
+	match   []uint32              // row matches in current stats pack
+	n       int                   // current offset inside match rows
+	reverse bool                  // iteration order
 }
 
 func (it *Iterator) Close() {
@@ -41,6 +42,7 @@ func (it *Iterator) Close() {
 	it.snode = nil
 	arena.Free(arena.AllocUint32, it.match)
 	it.match = nil
+	it.reverse = false
 }
 
 func (it *Iterator) IsValid() bool {
@@ -84,6 +86,15 @@ func (it Iterator) NValues() int {
 	return int(nvals)
 }
 
+// query
+func (it Iterator) ReadWire() []byte {
+	if it.snode == nil {
+		return nil
+	}
+	buf, _ := it.snode.spack.ReadWire(int(it.match[it.n]))
+	return buf
+}
+
 // merge
 func (it Iterator) MinMaxPk() (any, any) {
 	return it.MinMax(it.idx.px)
@@ -91,6 +102,14 @@ func (it Iterator) MinMaxPk() (any, any) {
 
 // query, merge?
 func (it *Iterator) Next() bool {
+	if it.reverse {
+		return it.prev()
+	} else {
+		return it.next()
+	}
+}
+
+func (it *Iterator) next() bool {
 	// find the next snode with matches if any
 	it.n++
 	if it.n == len(it.match) {
@@ -108,7 +127,7 @@ func (it *Iterator) Next() bool {
 			if !it.smatch.IsSet(it.sx) {
 				continue
 			}
-			it.snode = (*it.idx.snodes)[it.sx]
+			it.snode = it.idx.snodes[it.sx]
 
 			// TODO: we could rewind the iterator if we did not clear bits here
 			it.smatch.Clear(it.sx)
@@ -119,6 +138,44 @@ func (it *Iterator) Next() bool {
 				panic(err)
 			}
 			if len(it.match) > 0 {
+				break
+			}
+		}
+	}
+
+	return true
+}
+
+func (it *Iterator) prev() bool {
+	// find the next snode with matches if any
+	it.n--
+	if it.n < 0 {
+		it.n = -1
+		it.match = it.match[:0]
+		for {
+			it.snode = nil
+			// have we exhausted all potential snodes
+			if it.sx < 0 {
+				return false
+			}
+
+			// find the next snode
+			it.sx--
+			if !it.smatch.IsSet(it.sx) {
+				continue
+			}
+			it.snode = it.idx.snodes[it.sx]
+
+			// TODO: we could rewind the iterator if we did not clear bits here
+			it.smatch.Clear(it.sx)
+
+			// query snode statistics pack and filters
+			if err := it.snode.Query(it); err != nil {
+				// what to do?
+				panic(err)
+			}
+			if l := len(it.match); l > 0 {
+				it.n = l - 1
 				break
 			}
 		}
