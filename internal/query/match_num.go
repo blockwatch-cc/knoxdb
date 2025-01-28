@@ -8,6 +8,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/xroar"
 
 	"unsafe"
@@ -296,24 +297,24 @@ func (f NumMatcherFactory[T]) New(m FilterMode) Matcher {
 
 // numMatcher is a generic value matcher that we use to avoid reimplementing
 // similar member functions for specialized matchers below. I.e. it implements
-// the WithValue() and MatchBlock() parts of the Matcher interface.
+// the WithValue() and MatchVector() parts of the Matcher interface.
 type numMatcher[T Number] struct {
 	noopMatcher
 	match numMatchFunc[T]
 	val   T
-	hash  [2]uint32
+	hash  hash.HashValue
 }
 
 func (m *numMatcher[T]) WithValue(v any) {
 	m.val = v.(T)
-	m.hash = bloom.HashAny(v)
+	m.hash = hash.HashAny(v)
 }
 
 func (m *numMatcher[T]) Value() any {
 	return m.val
 }
 
-func (m numMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	acc := block.NewBlockAccessor[T](b)
 	return m.match(acc.Slice(), m.val, bits, mask)
 }
@@ -340,6 +341,22 @@ func (m numEqualMatcher[T]) MatchBitmap(flt *xroar.Bitmap) bool {
 	return flt.Contains(uint64(m.val))
 }
 
+func (m numEqualMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// min <= v && max >= v, mask is optional
+	f := newFactory(mins.Type())
+	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
+	le.WithValue(m.val)
+	ge.WithValue(m.val)
+	minBits := le.MatchVector(mins, nil, mask)
+	if mask != nil {
+		minBits.And(mask)
+	}
+	bits = ge.MatchVector(maxs, bits, minBits)
+	bits.And(minBits)
+	minBits.Close()
+	return bits
+}
+
 // NOT EQUAL ---
 
 type numNotEqualMatcher[T Number] struct {
@@ -352,6 +369,16 @@ func (m numNotEqualMatcher[T]) MatchValue(v any) bool {
 
 func (m numNotEqualMatcher[T]) MatchRange(from, to any) bool {
 	return m.val < from.(T) || m.val > to.(T)
+}
+
+func (m numNotEqualMatcher[T]) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// undecided, always true
+	if mask != nil {
+		bits.Copy(mask)
+	} else {
+		bits.One()
+	}
+	return bits
 }
 
 // GT ---
@@ -369,6 +396,13 @@ func (m numGtMatcher[T]) MatchRange(_, to any) bool {
 	return m.val < to.(T)
 }
 
+func (m numGtMatcher[T]) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// max > v
+	gt := newFactory(maxs.Type()).New(FilterModeGt)
+	gt.WithValue(m.val)
+	return gt.MatchVector(maxs, bits, mask)
+}
+
 // GE ---
 
 type numGeMatcher[T Number] struct {
@@ -382,6 +416,13 @@ func (m numGeMatcher[T]) MatchValue(v any) bool {
 func (m numGeMatcher[T]) MatchRange(_, to any) bool {
 	// return m.val <= from.(T) || m.val <= to.(T)
 	return m.val <= to.(T)
+}
+
+func (m numGeMatcher[T]) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// max >= v
+	ge := newFactory(maxs.Type()).New(FilterModeGe)
+	ge.WithValue(m.val)
+	return ge.MatchVector(maxs, bits, mask)
 }
 
 // LT ---
@@ -399,6 +440,13 @@ func (m numLtMatcher[T]) MatchRange(from, _ any) bool {
 	return m.val > from.(T)
 }
 
+func (m numLtMatcher[T]) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// min < v
+	lt := newFactory(mins.Type()).New(FilterModeLt)
+	lt.WithValue(m.val)
+	return lt.MatchVector(mins, bits, mask)
+}
+
 // LE ---
 
 type numLeMatcher[T Number] struct {
@@ -414,11 +462,18 @@ func (m numLeMatcher[T]) MatchRange(from, _ any) bool {
 	return m.val >= from.(T)
 }
 
+func (m numLeMatcher[T]) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// min <= v
+	le := newFactory(mins.Type()).New(FilterModeLe)
+	le.WithValue(m.val)
+	return le.MatchVector(mins, bits, mask)
+}
+
 // RANGE ---
 
 // InBetween, ContainsRange
 type numRangeMatcher[T Number] struct {
-	numMatcher[T] // required or MatchBlock
+	numMatcher[T] // required or MatchVector
 	from          T
 	to            T
 }
@@ -443,12 +498,28 @@ func (m numRangeMatcher[T]) MatchRange(from, to any) bool {
 	return !(from.(T) > m.to || to.(T) < m.from)
 }
 
+func (m numRangeMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// min <= to && max >= from
+	f := newFactory(mins.Type())
+	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
+	le.WithValue(m.to)
+	ge.WithValue(m.from)
+	minBits := le.MatchVector(mins, nil, mask)
+	if mask != nil {
+		minBits.And(mask)
+	}
+	bits = ge.MatchVector(maxs, bits, minBits)
+	bits.And(minBits)
+	minBits.Close()
+	return bits
+}
+
 // IN ---
 
 // In, Contains
 type numInSetMatcher[T Number] struct {
 	set    *xroar.Bitmap
-	hashes [][2]uint32
+	hashes []hash.HashValue
 }
 
 func (m *numInSetMatcher[T]) Weight() int { return 1 }
@@ -475,16 +546,16 @@ func (m *numInSetMatcher[T]) WithSlice(slice any) {
 	for _, v := range slice.([]T) {
 		m.set.Set(uint64(v))
 	}
-	m.hashes = bloom.HashAnySlice(slice.([]T))
+	m.hashes = hash.HashAnySlice(slice.([]T))
 }
 
 func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
 	m.set = set
 	card := set.GetCardinality()
 	it := m.set.NewIterator()
-	m.hashes = make([][2]uint32, card)
+	m.hashes = make([]hash.HashValue, card)
 	for i := 0; i < card; i++ {
-		m.hashes[i] = bloom.HashUint64(it.Next())
+		m.hashes[i] = hash.HashUint64(it.Next())
 	}
 }
 
@@ -504,7 +575,7 @@ func (m numInSetMatcher[T]) MatchBitmap(flt *xroar.Bitmap) bool {
 	return !xroar.And(m.set, flt).IsEmpty()
 }
 
-func (m numInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	acc := block.NewBlockAccessor[T](b)
 	if mask != nil {
 		// skip masked values
@@ -524,6 +595,13 @@ func (m numInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset
 		}
 	}
 	return bits
+}
+
+func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	setMin, setMax := m.set.Minimum(), m.set.Maximum()
+	rg := newFactory(mins.Type()).New(FilterModeRange)
+	rg.WithValue(RangeValue{setMin, setMax})
+	return rg.MatchRangeVectors(mins, maxs, bits, mask)
 }
 
 // NOT IN ---
@@ -579,7 +657,7 @@ func (m numNotInSetMatcher[T]) MatchBitmap(flt *xroar.Bitmap) bool {
 	return !xroar.AndNot(m.set, flt).IsEmpty()
 }
 
-func (m numNotInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	acc := block.NewBlockAccessor[T](b)
 	if mask != nil {
 		// skip masked values
@@ -597,6 +675,16 @@ func (m numNotInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bit
 				bits.Set(i)
 			}
 		}
+	}
+	return bits
+}
+
+func (m numNotInSetMatcher[T]) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// undecided, always true
+	if mask != nil {
+		bits.Copy(mask)
+	} else {
+		bits.One()
 	}
 	return bits
 }

@@ -30,44 +30,21 @@ const (
 )
 
 const (
-	BlockTime    = block.BlockTime
-	BlockInt64   = block.BlockInt64
-	BlockInt32   = block.BlockInt32
-	BlockInt16   = block.BlockInt16
-	BlockInt8    = block.BlockInt8
-	BlockUint64  = block.BlockUint64
-	BlockUint32  = block.BlockUint32
-	BlockUint16  = block.BlockUint16
-	BlockUint8   = block.BlockUint8
-	BlockFloat64 = block.BlockFloat64
-	BlockFloat32 = block.BlockFloat32
-	BlockBool    = block.BlockBool
-	BlockBytes   = block.BlockBytes
-	BlockInt128  = block.BlockInt128
-	BlockInt256  = block.BlockInt256
+	BlockTime    = types.BlockTime
+	BlockInt64   = types.BlockInt64
+	BlockInt32   = types.BlockInt32
+	BlockInt16   = types.BlockInt16
+	BlockInt8    = types.BlockInt8
+	BlockUint64  = types.BlockUint64
+	BlockUint32  = types.BlockUint32
+	BlockUint16  = types.BlockUint16
+	BlockUint8   = types.BlockUint8
+	BlockFloat64 = types.BlockFloat64
+	BlockFloat32 = types.BlockFloat32
+	BlockBool    = types.BlockBool
+	BlockBytes   = types.BlockBytes
+	BlockInt128  = types.BlockInt128
+	BlockInt256  = types.BlockInt256
 )
 
-var (
-	BlockTypes = [...]block.BlockType{
-		types.FieldTypeDatetime:   block.BlockTime,
-		types.FieldTypeBoolean:    block.BlockBool,
-		types.FieldTypeString:     block.BlockBytes,
-		types.FieldTypeBytes:      block.BlockBytes,
-		types.FieldTypeInt8:       block.BlockInt8,
-		types.FieldTypeInt16:      block.BlockInt16,
-		types.FieldTypeInt32:      block.BlockInt32,
-		types.FieldTypeInt64:      block.BlockInt64,
-		types.FieldTypeInt128:     block.BlockInt128,
-		types.FieldTypeInt256:     block.BlockInt256,
-		types.FieldTypeUint8:      block.BlockUint8,
-		types.FieldTypeUint16:     block.BlockUint16,
-		types.FieldTypeUint32:     block.BlockUint32,
-		types.FieldTypeUint64:     block.BlockUint64,
-		types.FieldTypeDecimal32:  block.BlockInt32,
-		types.FieldTypeDecimal64:  block.BlockInt64,
-		types.FieldTypeDecimal128: block.BlockInt128,
-		types.FieldTypeDecimal256: block.BlockInt256,
-		types.FieldTypeFloat32:    block.BlockFloat32,
-		types.FieldTypeFloat64:    block.BlockFloat64,
-	}
-)
+var BlockTypes = types.BlockTypes

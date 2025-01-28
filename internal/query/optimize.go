@@ -960,8 +960,7 @@ func makeFilterFromSet(f *Filter, set *xroar.Bitmap) *Filter {
 }
 
 func isFullDomain(typ BlockType, rg RangeValue) bool {
-	switch typ {
-	case BlockBytes:
+	if typ == BlockBytes {
 		return false
 	}
 	isMin := cmp.Cmp(typ, rg[0], cmp.MinNumericVal(typ)) == 0

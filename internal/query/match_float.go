@@ -9,6 +9,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
@@ -18,7 +19,7 @@ import (
 type floatInSetMatcher[T Number] struct {
 	noopMatcher
 	slice  slicex.OrderedNumbers[T]
-	hashes [][2]uint32
+	hashes []hash.HashValue
 }
 
 func (m *floatInSetMatcher[T]) Weight() int { return m.slice.Len() }
@@ -37,7 +38,7 @@ func (m *floatInSetMatcher[T]) WithSlice(slice any) {
 	data := slice.([]T)
 	slices.Sort(data)
 	m.slice.Values = data
-	m.hashes = bloom.HashAnySlice(data)
+	m.hashes = hash.HashAnySlice(data)
 }
 
 func (m floatInSetMatcher[T]) MatchValue(v any) bool {
@@ -52,7 +53,7 @@ func (m floatInSetMatcher[T]) MatchBloom(flt *bloom.Filter) bool {
 	return flt.ContainsAnyHash(m.hashes)
 }
 
-func (m floatInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m floatInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	acc := block.NewBlockAccessor[T](b)
 	if mask != nil {
 		// skip masked values
@@ -72,6 +73,13 @@ func (m floatInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bits
 		}
 	}
 	return bits
+}
+
+func (m floatInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	setMin, setMax := m.slice.MinMax()
+	rg := newFactory(mins.Type()).New(FilterModeRange)
+	rg.WithValue(RangeValue{setMin, setMax})
+	return rg.MatchRangeVectors(mins, maxs, bits, mask)
 }
 
 // NOT IN ---
@@ -112,7 +120,7 @@ func (m floatNotInSetMatcher[T]) MatchBloom(flt *bloom.Filter) bool {
 	return true
 }
 
-func (m floatNotInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m floatNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	acc := block.NewBlockAccessor[T](b)
 	if mask != nil {
 		// skip masked values
@@ -130,6 +138,16 @@ func (m floatNotInSetMatcher[T]) MatchBlock(b *block.Block, bits, mask *bitset.B
 				bits.Set(i)
 			}
 		}
+	}
+	return bits
+}
+
+func (m floatNotInSetMatcher[T]) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// undecided, always true
+	if mask != nil {
+		bits.Copy(mask)
+	} else {
+		bits.One()
 	}
 	return bits
 }

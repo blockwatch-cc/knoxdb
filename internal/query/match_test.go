@@ -145,7 +145,7 @@ func TestMatchValue(t *testing.T) {
 
 const matchBlockSize = 16
 
-func TestMatchBlock(t *testing.T) {
+func TestMatchVector(t *testing.T) {
 	for _, typ := range testMatchBlockTypes {
 		for _, mode := range testMatchSingleValueModes {
 			t.Logf("%s_%s", typ, mode)
@@ -154,7 +154,7 @@ func TestMatchBlock(t *testing.T) {
 			b := makeRandomBlock(typ, matchBlockSize)
 			m.WithValue(v)
 			set := bitset.NewBitset(matchBlockSize)
-			set2 := m.MatchBlock(b, set, nil)
+			set2 := m.MatchVector(b, set, nil)
 			require.NotNil(t, set2)
 			require.Equal(t, matchBlockSize, set2.Len())
 		}
@@ -264,7 +264,7 @@ func TestMatchRegexp(t *testing.T) {
 	b.Bytes().Append(hello)
 	b.Bytes().Append(world)
 	set := bitset.NewBitset(2)
-	set2 := m.MatchBlock(b, set, nil)
+	set2 := m.MatchVector(b, set, nil)
 	require.NotNil(t, set2)
 	require.Equal(t, 1, set2.Count())
 	require.True(t, set2.IsSet(0))
@@ -275,7 +275,7 @@ func TestMatchRegexp(t *testing.T) {
 	assert.False(t, m.MatchValue(world), "nomatch")
 	assert.True(t, m.MatchRange(hello, world), "range-always-true")
 	set.Zero()
-	set2 = m.MatchBlock(b, set, nil)
+	set2 = m.MatchVector(b, set, nil)
 	require.NotNil(t, set2)
 	require.Equal(t, 1, set2.Count())
 	require.True(t, set2.IsSet(0))
