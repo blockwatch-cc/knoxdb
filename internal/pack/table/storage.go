@@ -109,7 +109,7 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer pkg.FeeeAnalysis()
+	defer pkg.FreeAnalysis()
 
 	// update statistics
 	if pkg.Key() < t.stats.NextKey() {

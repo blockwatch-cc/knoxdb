@@ -22,6 +22,6 @@ func (p Package) Analysis() *Analysis {
 	return p.analyze
 }
 
-func (p *Package) FeeeAnalysis() {
+func (p *Package) FreeAnalysis() {
 	p.analyze = nil
 }
