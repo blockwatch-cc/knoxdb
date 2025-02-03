@@ -56,7 +56,7 @@ func decompress() error {
 		return err
 	}
 
-	decompressed, _, err := fsst.Decompress(buf)
+	decompressed, err := fsst.Decompress(buf)
 	if err != nil {
 		return err
 	}

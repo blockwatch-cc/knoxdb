@@ -74,10 +74,10 @@ func NewDecoder(buf []uint8) (*Decoder, []byte, error) {
 	return dec, buf[pos:], nil
 }
 
-func Decompress(strIn []byte) ([]uint8, uint64, error) {
+func Decompress(strIn []byte) ([]uint8, error) {
 	decoder, strIn, err := NewDecoder(strIn)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	var posOut, posIn uint64 = 0, 0
 
@@ -153,5 +153,5 @@ func Decompress(strIn []byte) ([]uint8, uint64, error) {
 		strOut[size-1] = 0
 	}
 
-	return strOut, posOut, nil
+	return strOut[:posOut], nil
 }
