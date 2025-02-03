@@ -60,6 +60,7 @@ func decompress() error {
 	if err != nil {
 		return err
 	}
+	log.Infof("Writing decompressed data to %s", out)
 	err = os.WriteFile(out, decompressed, PERM)
 	if err != nil {
 		return err
@@ -75,10 +76,12 @@ func compress() error {
 	}
 
 	compressed := fsst.Compress([][]uint8{data})
+	log.Infof("Writing compressed data to %s", out)
 	err = os.WriteFile(out, compressed, PERM)
 	if err != nil {
 		return err
 	}
 
+	log.Infof("Compressed %d byte(s) to %d byte(s)", len(data), len(compressed))
 	return nil
 }

@@ -36,23 +36,19 @@ func TestFsst(t *testing.T) {
 		t.Run(td.Name, func(t *testing.T) {
 			data, err := os.ReadFile(path.Join("testdata", td.Data))
 			require.NoError(t, err, "reading data file should not fail")
-
 			compressedFile, err := os.ReadFile(path.Join("testdata", td.CompressedFile))
 
 			t.Run("Compress", func(t *testing.T) {
 				compressedRes := Compress([][]uint8{data})
 				require.NoError(t, err, "reading compressed file should not fail")
-
 				assert.Equal(t, compressedFile, compressedRes, "compressed response is not equal to expected data")
 			})
 
 			t.Run("Decompress", func(t *testing.T) {
 				decRes, err := Decompress(compressedFile)
 				require.NoError(t, err, "decompressing compressed file should not fail")
-
 				assert.Equal(t, data, decRes, "decompressed response is not equal to expected data")
 			})
-
 		})
 	}
 }
