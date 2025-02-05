@@ -9,21 +9,33 @@ import (
 	"github.com/echa/log"
 )
 
+const FSST_MAXHEADER = (8 + 1 + 8 + 2048 + 1) /* maxlen of deserialized fsst header, produced/consumed by fsst_export() resp. fsst_import() */
+const FSST_MAX_COMPRESS_SIZE = FSST_MEMBUF - (1 + FSST_MAXHEADER/2)
+
 // the main compression function (everything automatic)
 func Compress(strIn [][]uint8) []uint8 {
 	e := NewEncoder(strIn, false)
 	// to be faster than scalar, simd needs 64 lines or more of length >=12; or fewer lines, but big ones (totLen > 32KB)
-	buf := make([]uint8, 0)
-	exported := Export(e)
-	buf = append(buf, exported...)
+	buf := make([]uint8, FSST_MAX_COMPRESS_SIZE)
+	pos := Export(e, buf)
 
-	compressed := _compress(e, strIn)
-	buf = append(buf, compressed...)
+	pos += _compress(e, strIn, buf[pos:])
+	buf = buf[:pos]
+
+	// adding size, block starts with size
+	// then the header (followed by the compressed bytes which are already there)
+	_serialize(len(buf), buf)
 
 	return buf
 }
 
-func _compress(e *Encoder, strIn [][]uint8) []uint8 {
+func _serialize(l int, buf []byte) {
+	buf[0] = byte(((l) >> 16) & 255)
+	buf[1] = byte(((l) >> 8) & 255)
+	buf[2] = byte((l) & 255)
+}
+
+func _compress(e *Encoder, strIn [][]uint8, buf []byte) uint64 {
 	avoidBranch := false
 	noSuffixOpt := false
 
@@ -34,17 +46,17 @@ func _compress(e *Encoder, strIn [][]uint8) []uint8 {
 		avoidBranch = true
 	}
 
-	return _compressImpl(e, strIn, noSuffixOpt, avoidBranch)
+	return _compressImpl(e, strIn, buf, noSuffixOpt, avoidBranch)
 }
 
-func _compressImpl(e *Encoder, strIn [][]uint8, noSuffixOpt, avoidBranch bool) []uint8 {
-	return _compressGeneral(e.symbolTable, strIn, noSuffixOpt, avoidBranch)
+func _compressImpl(e *Encoder, strIn [][]uint8, buf []byte, noSuffixOpt, avoidBranch bool) uint64 {
+	return _compressGeneral(e.symbolTable, strIn, buf, noSuffixOpt, avoidBranch)
 }
 
 // optimized adaptive *scalar* compression method
-func _compressGeneral(sym *SymbolTable, strIn [][]uint8, noSuffixOpt, avoidBranch bool) []uint8 {
+func _compressGeneral(sym *SymbolTable, strIn [][]uint8, compressed []byte, noSuffixOpt, avoidBranch bool) uint64 {
 	end := 0
-	compressed := make([]uint8, 0)
+	le := uint64(0)
 	suffixLim := sym.suffixLim
 	var zero uint16 = 0
 	if sym.zeroTerminated {
@@ -133,7 +145,8 @@ func _compressGeneral(sym *SymbolTable, strIn [][]uint8, noSuffixOpt, avoidBranc
 			} else {
 				pos = compressVariant(buf, out, false, false)
 			}
-			compressed = append(compressed, out[:pos]...)
+			copy(compressed[le:], out[:pos])
+			le += uint64(pos)
 
 			curOff += chunk
 			if curOff >= len(curLine) {
@@ -141,5 +154,5 @@ func _compressGeneral(sym *SymbolTable, strIn [][]uint8, noSuffixOpt, avoidBranc
 			}
 		}
 	}
-	return compressed
+	return le
 }

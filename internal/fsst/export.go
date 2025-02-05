@@ -9,8 +9,7 @@ import (
 
 const FSST_ENDIAN_MARKER = 1
 
-func Export(e *Encoder) []byte {
-	buf := make([]byte, FSST_MEMBUF)
+func Export(e *Encoder, buf []byte) uint64 {
 	// In ->version there is a versionnr, but we hide also suffixLim/terminator/nSymbols there.
 	// This is sufficient in principle to *reconstruct* a fsst_encoder_t from a fsst_decoder_t
 	// (such functionality could be useful to append compressed data to an existing block).
@@ -31,7 +30,6 @@ func Export(e *Encoder) []byte {
 		(uint64(e.symbolTable.nSymbols) << 8) |
 		FSST_ENDIAN_MARKER // least significant byte is nonzero
 
-	// TODO(): find out how the first the 3 bytes is inserted
 	binary.LittleEndian.PutUint64(buf[3:11], version)
 	buf[11] = byte(e.symbolTable.terminator)
 
@@ -52,5 +50,5 @@ func Export(e *Encoder) []byte {
 		pos += symbol.Len()
 	}
 
-	return buf[:pos]
+	return uint64(pos)
 }
