@@ -5,6 +5,8 @@ package fsst
 
 import (
 	"encoding/binary"
+
+	"github.com/echa/log"
 )
 
 // the main compression function (everything automatic)
@@ -75,6 +77,7 @@ func _compressGeneral(sym *SymbolTable, strIn [][]uint8, noSuffixOpt, avoidBranc
 				word &= (0xFFFFFFFFFFFFFFFF >> uint8(s.icl))
 				if (s.icl < uint64(FSST_ICL_FREE)) && s.val.Uint64() == word {
 					nout[0] = uint8(s.Code())
+					log.Tracef("Compressed %q into %q ", buf[start:start+int(s.Len())], nout[0])
 					nout = nout[1:]
 					start += int(s.Len())
 				} else if avoidBranch {
@@ -82,17 +85,20 @@ func _compressGeneral(sym *SymbolTable, strIn [][]uint8, noSuffixOpt, avoidBranc
 					// handle everything with predication
 					nout[0] = uint8(code)
 					inc := 1 + ((code & FSST_CODE_BASE) >> 8)
+					log.Tracef("Compressed %q into %q ", buf[start:start+int(inc)], nout[:inc])
 					nout = nout[inc:]
 					start += int(code >> FSST_LEN_BITS)
 				} else if uint8(code) < byteLim {
 					// 2 byte code after checking there is no longer pattern
 					nout[0] = uint8(code)
+					log.Tracef("Compressed %q into %q ", buf[start:start+2], nout[0])
 					nout = nout[1:]
 					start += 2
 				} else {
 					// 1 byte code or miss.
 					nout[0] = uint8(code)
 					inc := 1 + ((code & FSST_CODE_BASE) >> 8)
+					log.Tracef("Compressed %q into %q ", buf[start:start+1], nout[:inc])
 					nout = nout[inc:] // predicated - tested with a branch, that was always worse
 					start++
 				}

@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 
 	"blockwatch.cc/knoxdb/pkg/assert"
+	"github.com/echa/log"
 )
 
 // we construct FSST symbol tables using a random sample of about 16KB (1<<14)
@@ -560,5 +561,6 @@ func makeSample(strIn [][]uint8) [][]uint8 {
 			nBytes += len
 		}
 	}
+	log.Tracef("Sample => %q", sample)
 	return sample
 }

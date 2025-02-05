@@ -5,6 +5,7 @@ package fsst
 
 import (
 	"encoding/binary"
+	"fmt"
 
 	"blockwatch.cc/knoxdb/pkg/assert"
 )
@@ -112,4 +113,8 @@ func (s *Symbol) Concat(s2 *Symbol) *Symbol {
 	newS.SetCodeLen(uint32(FSST_CODE_MASK), length)
 	newS.val.SetUint64((s2.val.Uint64() << (8 * s.Len())) | s.val.Uint64())
 	return newS
+}
+
+func (s *Symbol) String() string {
+	return fmt.Sprintf("val => %q, hash => %x", s.val[:s.Len()], s.Hash())
 }
