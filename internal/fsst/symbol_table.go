@@ -290,7 +290,8 @@ func (sym *SymbolTable) Finalize(zeroTerminated uint8) {
 	}
 }
 
-func buildSymbolTable(counters *Counter, sample [][]uint8, zeroTerminated bool) *SymbolTable {
+func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *SymbolTable {
+	counters := encoder.counter
 	bestTable, st := NewSymbolTable(), NewSymbolTable()
 
 	bestGain := -FSST_SAMPLEMAXSZ // worst case (everything exception)
@@ -417,7 +418,7 @@ func buildSymbolTable(counters *Counter, sample [][]uint8, zeroTerminated bool) 
 		return gain
 	}
 
-	makeTable := func(sym *SymbolTable, counter *Counter) {
+	makeTable := func(sym *SymbolTable, counter *Counter, isBest bool) {
 		// hashmap of c (needed because we can generate duplicate candidates)
 		cands := map[uint64]QSymbol{}
 
@@ -493,7 +494,15 @@ func buildSymbolTable(counters *Counter, sample [][]uint8, zeroTerminated bool) 
 		sym.Clear()
 		for sym.nSymbols < 255 && pq.Len() != 0 {
 			q := heap.Pop(pq)
-			sym.Add(q.(QSymbol).symbol)
+			symbol := q.(QSymbol).symbol
+			sym.Add(symbol)
+			if isBest {
+				encoder.stat.symbols = append(encoder.stat.symbols, q.(QSymbol).symbol)
+				encoder.stat.symbolsSize += len(symbol.val)
+			}
+		}
+		if len(encoder.stat.symbols) > 0 {
+			encoder.stat.longestSymbol = encoder.stat.symbols[0]
 		}
 	}
 
@@ -510,11 +519,11 @@ func buildSymbolTable(counters *Counter, sample [][]uint8, zeroTerminated bool) 
 			// we do 5 rounds (sampleFrac=8,38,68,98,128)
 			break
 		}
-		makeTable(st, counters)
+		makeTable(st, counters, false)
 	}
 
 	counters.Restore(bestCounter)
-	makeTable(bestTable, counters)
+	makeTable(bestTable, counters, true)
 	var zero uint8 = 0
 	if zeroTerminated {
 		zero = 1

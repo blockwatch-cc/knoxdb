@@ -26,6 +26,10 @@ func Compress(strIn [][]uint8) []uint8 {
 	// then the header (followed by the compressed bytes which are already there)
 	_serialize(len(buf), buf)
 
+	log.Tracef("Longest symbol => %q", e.stat.longestSymbol)
+	log.Tracef("Total size of symbols => %d byte(s) ", e.stat.symbolsSize)
+	log.Tracef("Number of symbols %d ", len(e.stat.symbols))
+
 	return buf
 }
 

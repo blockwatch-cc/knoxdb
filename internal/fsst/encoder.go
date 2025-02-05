@@ -5,9 +5,16 @@ package fsst
 
 import "github.com/echa/log"
 
+type Stat struct {
+	longestSymbol *Symbol
+	symbolsSize   int
+	symbols       []*Symbol
+}
+
 type Encoder struct {
 	symbolTable *SymbolTable
 	counter     *Counter
+	stat        Stat
 }
 
 func NewEncoder(strIn [][]uint8, zeroTerminated bool) *Encoder {
@@ -16,7 +23,7 @@ func NewEncoder(strIn [][]uint8, zeroTerminated bool) *Encoder {
 		counter:     &Counter{},
 	}
 	sample := makeSample(strIn)
-	encoder.symbolTable = buildSymbolTable(encoder.counter, sample, zeroTerminated)
+	encoder.symbolTable = buildSymbolTable(encoder, sample, zeroTerminated)
 
 	log.Tracef("Terminator => %x ", encoder.symbolTable.terminator)
 	log.Tracef("logging %d symbols %d", encoder.symbolTable.nSymbols, len(encoder.symbolTable.symbols))
