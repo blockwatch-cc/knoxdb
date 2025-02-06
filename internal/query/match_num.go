@@ -21,6 +21,8 @@ type Number interface {
 
 type numMatchFunc[T Number] func(slice []T, val T, bits, mask *bitset.Bitset) *bitset.Bitset
 
+type numRangeMatchFunc[T Number] func(slice []T, from, to T, bits, mask *bitset.Bitset) *bitset.Bitset
+
 var (
 	// use as placeholder for comparisons that don't exist
 	nullPtr = unsafe.Pointer(nil)
@@ -272,8 +274,8 @@ func (f NumMatcherFactory[T]) New(m FilterMode) Matcher {
 		fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
 		return &numLeMatcher[T]{numMatcher[T]{match: fn}}
 	case FilterModeRange:
-		fn := *(*numMatchFunc[T])(blockMatchFn[m][f.typ])
-		return &numRangeMatcher[T]{numMatcher: numMatcher[T]{match: fn}}
+		fn := *(*numRangeMatchFunc[T])(blockMatchFn[m][f.typ])
+		return &numRangeMatcher[T]{match: fn}
 	case FilterModeIn:
 		switch f.typ {
 		case BlockFloat32, BlockFloat64:
@@ -473,9 +475,10 @@ func (m numLeMatcher[T]) MatchRangeVectors(mins, _ *block.Block, bits, mask *bit
 
 // InBetween, ContainsRange
 type numRangeMatcher[T Number] struct {
-	numMatcher[T] // required or MatchVector
-	from          T
-	to            T
+	noopMatcher
+	match numRangeMatchFunc[T]
+	from  T
+	to    T
 }
 
 func (m *numRangeMatcher[T]) Value() any { return RangeValue{m.from, m.to} }
@@ -496,6 +499,16 @@ func (m numRangeMatcher[T]) MatchValue(v any) bool {
 
 func (m numRangeMatcher[T]) MatchRange(from, to any) bool {
 	return !(from.(T) > m.to || to.(T) < m.from)
+}
+
+func (m numRangeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	acc := block.NewBlockAccessor[T](b)
+	return m.match(acc.Slice(), m.from, m.to, bits, mask)
+}
+
+func (m numRangeMatcher[T]) MatchFilter(flt filter.Filter) bool {
+	// we don't know generally, so full scan is required
+	return true
 }
 
 func (m numRangeMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
