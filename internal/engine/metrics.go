@@ -197,37 +197,19 @@ type IndexMetrics struct {
 	QueriedTuples  int64 `json:"tuples_queried"`
 
 	// call statistics
-	InsertCalls int64 `json:"calls_insert"`
-	DeleteCalls int64 `json:"calls_delete"`
-	QueryCalls  int64 `json:"calls_query"`
-
-	// metadata statistics
-	MetaBytesRead    int64 `json:"meta_bytes_read"`
-	MetaBytesWritten int64 `json:"meta_bytes_written"`
-	MetaSize         int64 `json:"meta_size"`
+	NumCalls int64 `json:"num_calls"`
 
 	// pack statistics
-	// PacksCount    int64 `json:"packs_count"`
-	// PacksAlloc    int64 `json:"packs_alloc"`
-	// PacksRecycled int64 `json:"packs_recycled"`
-	// PacksLoaded   int64 `json:"packs_loaded"`
-	// PacksStored   int64 `json:"packs_stored"`
-	// BlocksLoaded  int64 `json:"blocks_loaded"`
-	// BlocksStored  int64 `json:"blocks_stored"`
+	PacksCount   int64 `json:"packs_count"`
+	PacksLoaded  int64 `json:"packs_loaded"`
+	PacksStored  int64 `json:"packs_stored"`
+	BlocksLoaded int64 `json:"blocks_loaded"`
+	BlocksStored int64 `json:"blocks_stored"`
 
 	// I/O statistics
 	BytesRead    int64 `json:"bytes_read"`
 	BytesWritten int64 `json:"bytes_written"`
 	TotalSize    int64 `json:"total_size"`
-
-	// pack cache statistics
-	// CacheSize      int64 `json:"cache_size"`
-	// CacheCount     int64 `json:"cache_count"`
-	// CacheCapacity  int64 `json:"cache_capacity"`
-	// CacheHits      int64 `json:"cache_hits"`
-	// CacheMisses    int64 `json:"cache_misses"`
-	// CacheInserts   int64 `json:"cache_inserts"`
-	// CacheEvictions int64 `json:"cache_evictions"`
 }
 
 func NewIndexMetrics(name string) IndexMetrics {

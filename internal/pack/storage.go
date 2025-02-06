@@ -93,11 +93,7 @@ func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, 
 		// load block data
 		buf := bucket.Get(bkey)
 		if buf == nil {
-			// when missing (new fields in old packs) set block to nil
-			if p.blocks[i] != nil {
-				p.blocks[i].DecRef()
-				p.blocks[i] = nil
-			}
+			// when missing (new fields in old packs) keep block nil
 			continue
 		}
 		n += len(buf)
@@ -174,10 +170,7 @@ func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint6
 	}
 
 	// analyze
-	p.analyze = &Analysis{
-		WasDirty: make([]bool, len(p.blocks)),
-		DiffSize: make([]int, len(p.blocks)),
-	}
+	p.WithAnalysis()
 
 	// remove updated blocks from cache
 	var (
@@ -223,7 +216,6 @@ func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint6
 
 		// export block size statistics
 		p.analyze.DiffSize[i] = buf.Len() - len(bucket.Get(bkey))
-		p.analyze.WasDirty[i] = true
 		n += buf.Len()
 
 		// fmt.Printf("Store block %d with comp %d\n", f.Id(), f.Compress())

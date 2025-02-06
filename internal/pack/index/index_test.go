@@ -8,6 +8,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 
 	_ "blockwatch.cc/knoxdb/internal/store/bolt"
+	_ "blockwatch.cc/knoxdb/internal/store/mem"
 )
 
 func TestMain(m *testing.M) {
@@ -18,7 +19,7 @@ func TestMain(m *testing.M) {
 
 func TestIndex(t *testing.T) {
 	tableEngine := table.NewTable()
-	tests.TestIndexEngine[Index, *Index](t, "bolt", "pack", tableEngine, []types.IndexType{
+	tests.TestIndexEngine[Index, *Index](t, "mem", "pack", tableEngine, []types.IndexType{
 		types.IndexTypeInt,
 		types.IndexTypeHash,
 	})
@@ -26,5 +27,5 @@ func TestIndex(t *testing.T) {
 
 func TestIndexComposite(t *testing.T) {
 	tableEngine := table.NewTable()
-	tests.TestCompositeIndexEngine[Index, *Index](t, "bolt", "pack", tableEngine)
+	tests.TestCompositeIndexEngine[Index, *Index](t, "mem", "pack", tableEngine)
 }

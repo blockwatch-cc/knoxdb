@@ -14,16 +14,17 @@ const (
 	OrderDesc
 	OrderAscCaseInsensitive
 	OrderDescCaseInsensitive
+	OrderUndefined
 )
 
 var (
-	orderTypeString  = "__asc_desc_iasc_idesc"
-	orderTypeIdx     = [...]int{0, 2, 6, 11, 16, 22}
+	orderTypeString  = "__asc_desc_iasc_idesc_undef"
+	orderTypeIdx     = [...]int{0, 2, 6, 11, 16, 22, 27}
 	orderTypeReverse = map[string]OrderType{}
 )
 
 func init() {
-	for t := OrderAsc; t <= OrderDescCaseInsensitive; t++ {
+	for t := OrderAsc; t <= OrderUndefined; t++ {
 		orderTypeReverse[t.String()] = t
 	}
 }

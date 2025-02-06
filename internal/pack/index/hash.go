@@ -3,13 +3,15 @@
 
 package index
 
-import "blockwatch.cc/knoxdb/internal/hash/fnv"
+import (
+	"bytes"
+	"reflect"
 
-// func genHashKey32(buf []byte) []byte {
-//  var u32 [4]byte
-//  LE.PutUint32(u32[:], xxHash32.Checksum(buf, 0))
-//  return u32[:]
-// }
+	"blockwatch.cc/knoxdb/internal/hash/fnv"
+	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/assert"
+)
 
 type hashFunc func([]byte) []byte
 
@@ -21,15 +23,14 @@ func genHashKey64(buf []byte) []byte {
 	}
 	res = res[:16]
 
-	// write hash
-	var hash [8]byte
-	LE.PutUint64(hash[:], fnv.Sum64a(buf[:len(buf)-8]))
+	// generate hash
+	hash := fnv.Sum64a(buf[:len(buf)-8])
 
 	// copy pk from buffer tail
 	copy(res[8:], buf[len(buf)-8:])
 
 	// copy hash to buffer start
-	copy(res, hash[:])
+	LE.PutUint64(res, hash)
 
 	return res
 }
@@ -53,12 +54,43 @@ func makeKeyGen(sz int) func([]byte) []byte {
 			// copy pk to buffer end
 			copy(res[8:], buf[len(buf)-8:])
 
-			// expend integer to u64 at buffer start
+			// expand integer to u64 at buffer start
 			copy(res, buf[:len(buf)-8])
 
 			return res
 		}
 	default:
 		return genNoopKey
+	}
+}
+
+func (idx *Index) hashFilterValue(f *query.Filter) []uint64 {
+	// produce output hash (uint64) from field data encoded to wire format
+	// use schema field encoding helper to translate Go types from query
+	field := idx.convert.Schema().Fields()[0]
+	buf := bytes.NewBuffer(nil)
+
+	switch f.Mode {
+	case types.FilterModeIn, types.FilterModeNotIn:
+		// slice
+		rval := reflect.ValueOf(f.Value)
+		if rval.Kind() != reflect.Slice {
+			return nil
+		}
+		res := make([]uint64, rval.Len())
+		for i := range res {
+			buf.Reset()
+			_ = field.Encode(buf, rval.Index(i).Interface())
+			res[i] = fnv.Sum64a(buf.Bytes())
+		}
+		return res
+	case types.FilterModeEqual:
+		// single
+		_ = field.Encode(buf, f.Value)
+		return []uint64{fnv.Sum64a(buf.Bytes())}
+	default:
+		// unreachable
+		assert.Unreachable("invalid filter mode for pack hash query", "mode", f.Mode)
+		return nil
 	}
 }

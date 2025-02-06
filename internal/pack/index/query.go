@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"reflect"
 	"sort"
 	"sync/atomic"
 
@@ -15,7 +14,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/hash/fnv"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 )
 
@@ -29,7 +27,7 @@ func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 	}
 	if node.IsLeaf() {
 		// simple conditions
-		return idx.canMatchFilter(node.Filter)
+		return !idx.IsComposite() && idx.canMatchFilter(node.Filter)
 	} else {
 		// composite conditions (all index fields must be preset in the query
 		// and have matching EQ conditions)
@@ -40,13 +38,13 @@ func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 		// check composite case first (all fields must have matching EQ conditions)
 		// but order does not matter; compare all but last schema field (= pk)
 		nfields := idx.convert.Schema().NumFields()
-		for _, field := range idx.convert.Schema().Fields()[:nfields-1] {
+		for _, field := range idx.convert.Schema().Exported()[:nfields-1] {
 			var canMatchField bool
 			for _, c := range node.Children {
 				if !c.IsLeaf() {
 					continue
 				}
-				if field.Name() == c.Filter.Name && c.Filter.Mode == types.FilterModeEqual {
+				if field.Name == c.Filter.Name && c.Filter.Mode == types.FilterModeEqual {
 					canMatchField = true
 					break
 				}
@@ -64,10 +62,10 @@ func (idx *Index) canMatchFilter(f *query.Filter) bool {
 		return false
 	}
 	switch f.Mode {
-	case types.FilterModeEqual,
-		types.FilterModeIn,
-		types.FilterModeNotIn:
+	case types.FilterModeEqual:
 		return true
+	case types.FilterModeIn:
+		return idx.opts.Type == types.IndexTypeHash
 	case types.FilterModeLt,
 		types.FilterModeLe,
 		types.FilterModeGt,
@@ -105,11 +103,22 @@ func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*bitmap.B
 		keys := idx.hashFilterValue(node.Filter)
 
 		// lookup hash values
-		bits, err = idx.lookupKeys(ctx, keys, node.Filter.Mode)
+		bits, err = idx.lookupKeys(ctx, keys)
 
 	case types.IndexTypeInt:
 		// execute the condition directly (like on table scans)
-		bits, err = idx.queryKeys(ctx, node)
+		// but rewrite the filter node to match the index pack structure
+		inode := &query.FilterTreeNode{
+			Filter: &query.Filter{
+				Name:    "int",
+				Type:    node.Filter.Type,
+				Mode:    node.Filter.Mode,
+				Index:   0,
+				Value:   node.Filter.Value,
+				Matcher: node.Filter.Matcher,
+			},
+		}
+		bits, err = idx.queryKeys(ctx, inode)
 	}
 	if err != nil {
 		return nil, false, err
@@ -142,8 +151,8 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 		}
 	}
 
-	// try combine multiple AND leaf conditions into longer an index key,
-	// all index fields must be abailable
+	// try combine multiple AND leaf conditions into longer index key,
+	// all index fields must be available
 	buf := new(bytes.Buffer)
 	nfields := idx.convert.Schema().NumFields()
 	for _, field := range idx.convert.Schema().Fields()[:nfields-1] {
@@ -166,7 +175,7 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 	keys := []uint64{fnv.Sum64a(buf.Bytes())}
 
 	// lokup matching pks
-	bits, err := idx.lookupKeys(ctx, keys, types.FilterModeEqual)
+	bits, err := idx.lookupKeys(ctx, keys)
 	if err != nil {
 		return nil, false, err
 	}
@@ -175,42 +184,11 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 	return bits, true, err
 }
 
-func (idx *Index) hashFilterValue(f *query.Filter) []uint64 {
-	// produce output hash (uint64) from field data encoded to wire format
-	// use schema field encoding helper to translate Go types from query
-	field := idx.convert.Schema().Fields()[0]
-	buf := bytes.NewBuffer(nil)
-
-	switch f.Mode {
-	case types.FilterModeIn, types.FilterModeNotIn:
-		// slice
-		rval := reflect.ValueOf(f.Value)
-		if rval.Kind() != reflect.Slice {
-			return nil
-		}
-		res := make([]uint64, rval.Len())
-		for i := range res {
-			buf.Reset()
-			_ = field.Encode(buf, rval.Index(i).Interface())
-			res[i] = fnv.Sum64a(buf.Bytes())
-		}
-		return res
-	case types.FilterModeEqual:
-		// single
-		_ = field.Encode(buf, f.Value)
-		return []uint64{fnv.Sum64a(buf.Bytes())}
-	default:
-		// unreachable
-		assert.Unreachable("invalid filter mode for pack hash query", "mode", f.Mode)
-		return nil
-	}
-}
-
 // Range scans for LE, LT, GE, GT, RG (int type only)
 func (idx *Index) queryKeys(ctx context.Context, node *query.FilterTreeNode) (*bitmap.Bitmap, error) {
 	var (
 		bits = bitmap.New()
-		it   = NewIndexScanIterator(idx, node, true)
+		it   = NewScanIterator(idx, node, true)
 	)
 
 	// cleanup and log on exit
@@ -236,9 +214,9 @@ func (idx *Index) queryKeys(ctx context.Context, node *query.FilterTreeNode) (*b
 			break
 		}
 
-		for _, idx := range hits {
+		for _, i := range hits {
 			// read pk from index row
-			pk := pkg.Uint64(1, int(idx))
+			pk := pkg.Uint64(1, int(i))
 
 			// skip broken records (invalid pk)
 			if pk == 0 {
@@ -246,6 +224,7 @@ func (idx *Index) queryKeys(ctx context.Context, node *query.FilterTreeNode) (*b
 			}
 
 			// add to result
+			// idx.log.Infof("Set key %d", pk)
 			bits.Set(pk)
 		}
 	}
@@ -254,13 +233,13 @@ func (idx *Index) queryKeys(ctx context.Context, node *query.FilterTreeNode) (*b
 }
 
 // lookup only matches EQ, IN, NI (list of search keys is known)
-func (idx *Index) lookupKeys(ctx context.Context, keys []uint64, mode types.FilterMode) (*bitmap.Bitmap, error) {
+func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*bitmap.Bitmap, error) {
 	var (
 		next         int
 		nKeysMatched uint32
 		nKeys        = uint32(len(keys))
 		maxKey       = keys[nKeys-1]
-		it           = NewIndexLookupIterator(idx, keys, true)
+		it           = NewLookupIterator(idx, keys, true)
 		bits         = bitmap.New()
 		in           = keys
 	)
@@ -282,8 +261,8 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64, mode types.Filt
 			return nil, err
 		}
 
-		// load next pack with potential matches, use pack max pk to break early
-		pkg, maxPk, err := it.Next(ctx)
+		// load next pack with potential matches, use pack max index key to break early
+		pkg, maxIk, err := it.Next(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -292,6 +271,7 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64, mode types.Filt
 		if pkg == nil {
 			break
 		}
+		// idx.log.Infof("Next pack len=%d up to max ik=%d", pkg.Len(), maxIk)
 
 		// access key columns (used for binary search below)
 		iKeys := pkg.Block(0).Uint64().Slice() // index pks
@@ -300,22 +280,30 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64, mode types.Filt
 
 		// loop over the remaining (unresolved) keys, packs are sorted by pk
 		pos := 0
-		for _, pk := range in[next:] {
+		for _, ik := range in[next:] {
+			// idx.log.Infof("Looking for ik=0x%016x", ik)
+
 			// no more matches in this pack?
-			if maxPk < pk || iKeys[pos] > maxKey {
+			if maxIk < ik || iKeys[pos] > maxKey {
+				// idx.log.Infof("No more matches in this pack")
 				break
 			}
 
 			// find pk in pack
-			idx := sort.Search(packLen-pos, func(i int) bool { return iKeys[pos+i] >= pk })
-			pos += idx
-			if pos >= packLen || iKeys[pos] != pk {
+			n := sort.Search(packLen-pos, func(i int) bool { return iKeys[pos+i] >= ik })
+
+			// skip when not found
+			if pos+n >= packLen || iKeys[pos+n] != ik {
+				// idx.log.Infof("Lookup key not found")
 				next++
 				continue
 			}
+			// idx.log.Infof("At pos %d found=%016x", pos+n, iKeys[pos+n])
+			pos += n
 
 			// on match, add table primary key to result
 			nKeysMatched++
+			// idx.log.Infof("Add Result %d", pKeys[pos])
 			bits.Set(pKeys[pos]) // pkg.Uint64(1, pos)
 			next++
 		}
@@ -365,20 +353,6 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64, mode types.Filt
 		//      i++
 		//  }
 		// }
-	}
-
-	// post process matches in case a negative query mode was selected
-	if mode == types.FilterModeNotIn {
-		// return only missing keys (not found)
-		miss := bitmap.New()
-		for _, v := range keys {
-			if bits.Contains(v) {
-				continue
-			}
-			miss.Set(v)
-		}
-		bits.Free()
-		bits = miss
 	}
 
 	return &bits, nil

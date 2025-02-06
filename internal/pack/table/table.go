@@ -119,6 +119,11 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 		}
 	}
 
+	// create stats
+	if err := t.stats.Store(ctx, tx); err != nil {
+		return err
+	}
+
 	// TODO: replace with WAL stream
 	jsz, tsz, err := t.journal.StoreLegacy(ctx, tx, t.schema.Name())
 	if err != nil {
@@ -163,7 +168,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 		t.log.Debugf("Opening pack table %q with opts %#v", path, t.opts)
 		db, err := store.Open(t.opts.Driver, path, t.opts.ToDriverOpts())
 		if err != nil {
-			t.log.Errorf("opening table %s: %v", typ, err)
+			t.log.Errorf("open table %s: %v", typ, err)
 			return engine.ErrNoTable
 		}
 		t.db = db
@@ -195,8 +200,9 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 		engine.DataKeySuffix,
 		engine.StateKeySuffix,
 	} {
-		if tx.Bucket(append([]byte(name), v...)) == nil {
-			t.log.Error("missing table data: %v", engine.ErrNoBucket)
+		key := append([]byte(name), v...)
+		if tx.Bucket(key) == nil {
+			t.log.Errorf("open %s: %v", engine.ErrNoBucket, string(key))
 			tx.Rollback()
 			t.Close(ctx)
 			return engine.ErrDatabaseCorrupt
@@ -207,7 +213,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 
 	// load state
 	if err := t.state.Load(ctx, tx, t.schema.Name()); err != nil {
-		t.log.Error("missing table state: %v", err)
+		t.log.Errorf("open state: %v", err)
 		tx.Rollback()
 		t.Close(ctx)
 		return engine.ErrDatabaseCorrupt
@@ -216,11 +222,11 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 
 	// load stats
 	t.log.Debugf("Loading statistics for %s", typ)
-	if err := t.stats.Load(ctx); err != nil {
+	if err := t.stats.Load(ctx, tx); err != nil {
 		// TODO: rebuild corrupt stats here instead of failing
 		tx.Rollback()
 		t.Close(ctx)
-		return err
+		return fmt.Errorf("open stats: %v", err)
 	}
 
 	// FIXME: reconstruct journal from WAL instead of load in legacy mode
@@ -228,7 +234,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	if err != nil {
 		tx.Rollback()
 		t.Close(ctx)
-		return fmt.Errorf("Open journal for table %s: %v", typ, err)
+		return fmt.Errorf("open journal: %v", err)
 	}
 
 	t.log.Debugf("Table %s opened with %d rows, %d journal rows, seq=%d",
@@ -246,17 +252,19 @@ func (t *Table) Close(ctx context.Context) (err error) {
 		t.db = nil
 	}
 	t.engine = nil
-	// t.schema = nil
-	// t.id = 0
-	// t.px = 0
-	// t.opts = engine.TableOptions{}
-	// t.metrics = engine.TableMetrics{}
-	// t.state = engine.ObjectState{}
-	// t.indexes = nil
+	t.schema = nil
+	t.id = 0
+	t.px = 0
+	t.opts = engine.TableOptions{}
+	t.metrics = engine.TableMetrics{}
+	t.state = engine.ObjectState{}
+	clear(t.indexes)
+	t.indexes = t.indexes[:0]
+	t.indexes = nil
 	t.stats.Close()
-	// t.stats = nil
+	t.stats = nil
 	t.journal.Close()
-	// t.journal = nil
+	t.journal = nil
 	return
 }
 
@@ -290,6 +298,8 @@ func (t *Table) Metrics() engine.TableMetrics {
 func (t *Table) Drop(ctx context.Context) error {
 	typ := t.schema.TypeLabel(t.engine.Namespace())
 	path := t.db.Path()
+	clear(t.indexes)
+	t.indexes = t.indexes[:0]
 	t.journal.Close()
 	t.stats.Close()
 	t.db.Close()
@@ -321,7 +331,7 @@ func (t *Table) Sync(ctx context.Context) error {
 		}
 
 		// store stats
-		if err := t.stats.Store(ctx); err != nil {
+		if err := t.stats.Store(ctx, tx); err != nil {
 			return err
 		}
 
@@ -332,11 +342,11 @@ func (t *Table) Sync(ctx context.Context) error {
 func (t *Table) Truncate(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if err := t.stats.Delete(ctx); err != nil {
-		return err
-	}
 	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
 	if err != nil {
+		return err
+	}
+	if err := t.stats.Delete(ctx, tx); err != nil {
 		return err
 	}
 	t.journal.Reset()

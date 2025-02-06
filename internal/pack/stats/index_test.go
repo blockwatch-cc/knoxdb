@@ -60,6 +60,7 @@ func makeTestPackage(t testing.TB, key int, pk uint64) *pack.Package {
 		WithKey(uint32(key)).
 		WithSchema(TestSchema).
 		WithMaxRows(TEST_PKG_SIZE).
+		WithAnalysis().
 		Alloc()
 	enc := schema.NewGenericEncoder[TestStruct]()
 	for _, v := range makeTestData(TEST_PKG_SIZE, pk) {
@@ -267,6 +268,7 @@ func TestIndexUpdate(t *testing.T) {
 
 	// override pk in first row (note: use rid field since we use pack metadata!!)
 	pkg.Block(6).Uint64().Set(0, 1000)
+	pkg.WithAnalysis()
 	assert.True(t, pkg.Block(6).IsDirty(), "block is dirty after write")
 	require.NoError(t, idx.UpdatePack(ctx, pkg))
 
@@ -361,7 +363,10 @@ func TestIndexDeleteMany(t *testing.T) {
 	}
 
 	// store should remove first spack and rebuild the full tree
-	require.NoError(t, idx.Store(ctx))
+	tx, err := idx.db.Begin(true)
+	require.NoError(t, err)
+	require.NoError(t, idx.Store(ctx, tx))
+	require.NoError(t, tx.Commit())
 
 	validateTree(t, idx)
 
@@ -402,13 +407,19 @@ func TestIndexStore(t *testing.T) {
 		}
 	}
 
-	require.NoError(t, src.Store(ctx))
+	tx, err := src.db.Begin(true)
+	require.NoError(t, err)
+	require.NoError(t, src.Store(ctx, tx))
+	require.NoError(t, tx.Commit())
 	src.Close()
 
 	// load 2nd index
 	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
 	defer idx.Close()
-	require.NoError(t, idx.Load(ctx))
+	tx, err = idx.db.Begin(false)
+	require.NoError(t, err)
+	require.NoError(t, idx.Load(ctx, tx))
+	require.NoError(t, tx.Rollback())
 
 	validateTree(t, idx)
 
@@ -438,7 +449,10 @@ func TestIndexStoreAndAdd(t *testing.T) {
 	}
 
 	// store
-	require.NoError(t, idx.Store(ctx))
+	tx, err := idx.db.Begin(true)
+	require.NoError(t, err)
+	require.NoError(t, idx.Store(ctx, tx))
+	require.NoError(t, tx.Commit())
 
 	// fill more
 	key := STATS_PACK_SIZE / 2

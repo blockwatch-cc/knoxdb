@@ -29,6 +29,11 @@ func NewBlockAccessor[T Number](b *Block) BlockAccessor[T] {
 	}
 }
 
+func (a *BlockAccessor[T]) Close() {
+	a.block = nil
+	a.sz = 0
+}
+
 func (a BlockAccessor[T]) Get(n int) (t T) {
 	if a.block == nil {
 		return

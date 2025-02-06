@@ -6,24 +6,25 @@ package pack
 import (
 	"sort"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
 type PackageSorter struct {
 	pkg    *Package
 	cols   []int
-	sorted []int32 // init: 0..n
+	sorted []uint32 // init: 0..n
 	order  types.OrderType
 }
 
 func NewPackageSorter(p *Package, fieldId uint16, moreIds ...uint16) *PackageSorter {
 	s := &PackageSorter{
 		pkg:    p,
-		sorted: make([]int32, p.Len(), p.Cap()),
-		order:  types.OrderAsc,
+		sorted: arena.Alloc(arena.AllocUint32, p.Len()).([]uint32)[:p.Len()],
+		order:  types.OrderUndefined,
 	}
 	for i := range s.sorted {
-		s.sorted[i] = int32(i)
+		s.sorted[i] = uint32(i)
 	}
 	for _, id := range append([]uint16{fieldId}, moreIds...) {
 		for i, f := range p.schema.Exported() {
@@ -34,6 +35,14 @@ func NewPackageSorter(p *Package, fieldId uint16, moreIds ...uint16) *PackageSor
 		}
 	}
 	return s
+}
+
+func (s *PackageSorter) Close() {
+	arena.Free(arena.AllocUint32, s.sorted[:0])
+	s.sorted = nil
+	s.pkg = nil
+	s.cols = nil
+	s.order = types.OrderUndefined
 }
 
 func (s *PackageSorter) Order() types.OrderType {
@@ -50,10 +59,14 @@ func (s *PackageSorter) SortedCols() []string {
 }
 
 func (s *PackageSorter) N(i int) int {
+	if i >= len(s.sorted) {
+		return -1
+	}
 	return int(s.sorted[i])
 }
 
 func (s *PackageSorter) SortAsc() *PackageSorter {
+	s.order = types.OrderAsc
 	if !sort.IsSorted(s) {
 		sort.Sort(s)
 	}
@@ -61,6 +74,7 @@ func (s *PackageSorter) SortAsc() *PackageSorter {
 }
 
 func (s *PackageSorter) SortDesc() *PackageSorter {
+	s.order = types.OrderDesc
 	if !sort.IsSorted(sort.Reverse(s)) {
 		sort.Sort(sort.Reverse(s))
 	}

@@ -25,3 +25,19 @@ func (p Package) Analysis() *Analysis {
 func (p *Package) FreeAnalysis() {
 	p.analyze = nil
 }
+
+func (p *Package) WithAnalysis() *Package {
+	if p.analyze == nil {
+		p.analyze = &Analysis{
+			WasDirty: make([]bool, len(p.blocks)),
+			DiffSize: make([]int, len(p.blocks)),
+		}
+	}
+	for i, b := range p.blocks {
+		if b == nil || !b.IsDirty() {
+			continue
+		}
+		p.analyze.WasDirty[i] = true
+	}
+	return p
+}

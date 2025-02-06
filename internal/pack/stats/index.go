@@ -301,7 +301,7 @@ func (idx *Index) Close() {
 }
 
 // store and load
-func (idx *Index) Store(ctx context.Context) error {
+func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 	// identify empty snodes for drop
 	empty := make([]*SNode, 0)
 	for _, n := range idx.snodes {
@@ -318,163 +318,156 @@ func (idx *Index) Store(ctx context.Context) error {
 		idx.rebuildInodeTree()
 	}
 
-	// update storage
-	return idx.db.Update(func(tx store.Tx) error {
-		// clear tree bucket after rebuild
-		if len(empty) > 0 {
-			if err := tx.Root().DeleteBucket(idx.keys[STATS_TREE_KEY]); err != nil {
-				return err
-			}
+	// clear tree bucket after rebuild
+	if len(empty) > 0 {
+		if err := tx.Root().DeleteBucket(idx.keys[STATS_TREE_KEY]); err != nil {
+			return err
 		}
+	}
 
-		// create stats buckets if not exist
-		for k := 0; k < STATS_BUCKETS; k++ {
-			_, err := tx.Root().CreateBucketIfNotExists(idx.keys[k])
-			if err != nil {
-				return err
-			}
+	// create stats buckets if not exist
+	for k := 0; k < STATS_BUCKETS; k++ {
+		_, err := tx.Root().CreateBucketIfNotExists(idx.keys[k])
+		if err != nil {
+			return err
 		}
+	}
 
-		// store inode meta stats when dirty
-		tree := idx.treeBucket(tx)
-		if tree == nil {
-			return engine.ErrNoBucket
+	// store inode meta stats when dirty
+	tree := idx.treeBucket(tx)
+	if tree == nil {
+		return engine.ErrNoBucket
+	}
+	for i, inode := range idx.inodes {
+		if inode == nil || !inode.dirty {
+			continue
 		}
-		for i, inode := range idx.inodes {
-			if inode == nil || !inode.dirty {
-				continue
-			}
-			// key is tree node id (u32) + 0
-			var key [8]byte
-			BE.PutUint32(key[:4], uint32(i))
-			BE.PutUint32(key[4:], 0)
-			err := tree.Put(key[:], inode.meta)
-			if err != nil {
-				return err
-			}
-			inode.dirty = false
-			idx.bytesWritten += int64(len(inode.meta))
+		// key is tree node id (u32) + 0
+		var key [8]byte
+		BE.PutUint32(key[:4], uint32(i))
+		BE.PutUint32(key[4:], 0)
+		err := tree.Put(key[:], inode.meta)
+		if err != nil {
+			return err
 		}
+		inode.dirty = false
+		idx.bytesWritten += int64(len(inode.meta))
+	}
 
-		blocks := idx.statsBucket(tx)
-		if blocks == nil {
-			return engine.ErrNoBucket
+	blocks := idx.statsBucket(tx)
+	if blocks == nil {
+		return engine.ErrNoBucket
+	}
+
+	// drop empty snode blocks
+	for _, snode := range empty {
+		err := snode.spack.Remove(ctx, blocks, 0)
+		if err != nil {
+			return err
 		}
+		snode.Clear()
+	}
 
-		// drop empty snode blocks
-		for _, snode := range empty {
-			err := snode.spack.Remove(ctx, blocks, 0)
-			if err != nil {
-				return err
-			}
-			snode.Clear()
+	// store snodes when dirty
+	li := len(idx.inodes) - 1
+	for i, snode := range idx.snodes {
+		if len(empty) == 0 && !snode.dirty {
+			continue
 		}
-
-		// store snodes when dirty
-		li := len(idx.inodes) - 1
-		for i, snode := range idx.snodes {
-			if len(empty) == 0 && !snode.dirty {
-				continue
-			}
-			// key is tree node id (u32) + spack key (u32)
-			var key [8]byte
-			BE.PutUint32(key[:4], uint32(li+i))
-			BE.PutUint32(key[4:], snode.Key())
-			err := tree.Put(key[:], snode.meta)
-			if err != nil {
-				return err
-			}
-			idx.bytesWritten += int64(len(snode.meta))
-
-			// package blocks
-			snode.disksize, err = snode.spack.Store(ctx, blocks, 0)
-			if err != nil {
-				return err
-			}
-			snode.dirty = false
-			idx.bytesWritten += int64(snode.disksize)
+		// key is tree node id (u32) + spack key (u32)
+		var key [8]byte
+		BE.PutUint32(key[:4], uint32(li+i))
+		BE.PutUint32(key[4:], snode.Key())
+		err := tree.Put(key[:], snode.meta)
+		if err != nil {
+			return err
 		}
-		clear(empty)
+		idx.bytesWritten += int64(len(snode.meta))
 
-		return nil
-	})
+		// package blocks
+		snode.disksize, err = snode.spack.Store(ctx, blocks, 0)
+		if err != nil {
+			return err
+		}
+		snode.dirty = false
+		idx.bytesWritten += int64(snode.disksize)
+	}
+	clear(empty)
+
+	return nil
 }
 
-func (idx *Index) Load(ctx context.Context) error {
-	return idx.db.Update(func(tx store.Tx) error {
-		// load tree
-		tree := idx.treeBucket(tx)
-		if tree == nil {
-			return engine.ErrNoBucket
+func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
+	// load tree
+	tree := idx.treeBucket(tx)
+	if tree == nil {
+		return engine.ErrNoBucket
+	}
+	blocks := idx.statsBucket(tx)
+	if blocks == nil {
+		return engine.ErrNoBucket
+	}
+
+	// walk reverse finds snode entries first
+	c := tree.Cursor(store.ReverseCursor)
+	defer c.Close()
+	for ok := c.Last(); ok; ok = c.Prev() {
+		// read tree node id and snode key
+		id := int(BE.Uint32(c.Key()))
+		key := BE.Uint32(c.Key()[4:])
+
+		// init node index calculations
+		ilen := len(idx.inodes)
+
+		// init tree sizes from highest snode key id on storage
+		if ilen == 0 {
+			ilen = 1 << log2(id+1) // num inodes is the full inode tree plus 1 extra
+			slen := id - ilen + 2  // num snodes is exact count
+			idx.inodes = slices.Grow(idx.inodes, ilen)
+			idx.inodes = idx.inodes[:ilen]
+			idx.snodes = slices.Grow(idx.snodes, slen)
+			idx.snodes = idx.snodes[:slen]
 		}
-		blocks := idx.statsBucket(tx)
-		if blocks == nil {
-			return engine.ErrNoBucket
-		}
 
-		// walk reverse finds snode entries first
-		c := tree.Cursor(store.ReverseCursor)
-		defer c.Close()
-		for ok := c.Last(); ok; ok = c.Prev() {
-			// read tree node id and snode key
-			id := int(BE.Uint32(c.Key()))
-			key := BE.Uint32(c.Key()[4:])
+		// identify node kind from id and create node
+		if id >= ilen-1 {
+			// snode
+			node := NewSNode(key, idx.schema, false)
+			node.meta = bytes.Clone(c.Value())
+			idx.snodes[id-ilen+1] = node
+			idx.bytesRead += int64(len(c.Value()))
 
-			// init node index calculations
-			ilen := len(idx.inodes)
-
-			// init tree sizes from highest snode key id on storage
-			if ilen == 0 {
-				ilen = 1 << log2(id+1) // num inodes is the full inode tree plus 1 extra
-				slen := id - ilen + 2  // num snodes is exact count
-				idx.inodes = slices.Grow(idx.inodes, ilen)
-				idx.inodes = idx.inodes[:ilen]
-				idx.snodes = slices.Grow(idx.snodes, slen)
-				idx.snodes = idx.snodes[:slen]
+			// load key and nvals columns
+			n, err := node.spack.Load(
+				ctx,
+				blocks, // bucket
+				false,  // no cache
+				0,      // zero cache key
+				[]uint16{STATS_ROW_KEY + 1, STATS_ROW_NVALS + 1}, // field ids!!
+				0, // len from store
+			)
+			if err != nil {
+				return err
 			}
+			idx.bytesRead += int64(n)
 
-			// identify node kind from id and create node
-			if id >= ilen-1 {
-				// snode
-				node := NewSNode(key, idx.schema, false)
-				node.meta = bytes.Clone(c.Value())
-				idx.snodes[id-ilen+1] = node
-				idx.bytesRead += int64(len(c.Value()))
-
-				// load key and nvals columns
-				n, err := node.spack.Load(
-					ctx,
-					blocks, // bucket
-					false,  // no cache
-					0,      // zero cache key
-					[]uint16{STATS_ROW_KEY + 1, STATS_ROW_NVALS + 1}, // field ids!!
-					0, // len from store
-				)
-				if err != nil {
-					return err
-				}
-				idx.bytesRead += int64(n)
-
-			} else {
-				// inode
-				idx.inodes[id] = NewINode()
-				idx.inodes[id].meta = bytes.Clone(c.Value())
-				idx.bytesRead += int64(len(c.Value()))
-			}
+		} else {
+			// inode
+			idx.inodes[id] = NewINode()
+			idx.inodes[id].meta = bytes.Clone(c.Value())
+			idx.bytesRead += int64(len(c.Value()))
 		}
+	}
 
-		return nil
-	})
+	return nil
 }
 
-func (idx *Index) Delete(ctx context.Context) error {
+func (idx *Index) Delete(ctx context.Context, tx store.Tx) error {
 	idx.Clear()
-	return idx.db.Update(func(tx store.Tx) error {
-		for _, k := range idx.keys {
-			_ = tx.Root().DeleteBucket(k)
-		}
-		return nil
-	})
+	for _, k := range idx.keys {
+		_ = tx.Root().DeleteBucket(k)
+	}
+	return nil
 }
 
 // introspect

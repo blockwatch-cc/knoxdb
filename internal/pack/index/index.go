@@ -10,11 +10,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -24,10 +22,11 @@ import (
 
 // This index supports the following condition types on lookup.
 // - hash: EQ, IN, NI (single or composite EQ)
-// - int:  EQ, IN, NI, LT, LE GT, GE, RG (single condition)
+// - int:  EQ, LT, LE GT, GE, RG (single condition)
 
 var _ engine.IndexEngine = (*Index)(nil)
 
+// key extraction from wire format is little endian
 var LE = binary.LittleEndian
 
 func init() {
@@ -37,10 +36,10 @@ func init() {
 var (
 	DefaultIndexOptions = engine.IndexOptions{
 		Driver:      "bolt",
-		PackSize:    1 << 16, // 64k
+		PackSize:    1 << 11, // 2k
 		JournalSize: 1 << 17, // 128k
 		PageSize:    1 << 16,
-		PageFill:    0.9,
+		PageFill:    0.95,
 		TxMaxSize:   1 << 20, // 1 MB
 		ReadOnly:    false,
 		NoSync:      false,
@@ -54,17 +53,16 @@ type Index struct {
 	schema  *schema.Schema      // table schema
 	id      uint64              // unique tagged name hash
 	opts    engine.IndexOptions // copy of config options
-	db      store.DB            // lower-level KV store (e.g. boltdb or badger)
-	stats   *stats.StatsIndex   // in-memory list of pack and block statistics
-	journal *pack.Package       // [2]uint64 in-memory data not yet written to packs
-	tomb    *pack.Package       // [2]uint64 in-memory data not yet written to packs
-	noClose bool                // don't close underlying store db on Close
 	table   engine.TableEngine  // related table
+	state   engine.ObjectState  // volatile state
+	db      store.DB            // lower-level KV store (e.g. boltdb or badger)
+	journal *pack.Package       // 2-column in-memory data not yet written to packs
+	tomb    *pack.Package       // 2-column in-memory data not yet written to packs
 	convert *schema.Converter   // table to index schema converter
 	metrics engine.IndexMetrics // usage statistics
-	log     log.Logger          // log instance
-	nrows   uint64              // number of live entries
 	genkey  hashFunc            // key generator function
+	log     log.Logger          // log instance
+	noClose bool                // don't close underlying store db on Close
 }
 
 func NewIndex() engine.IndexEngine {
@@ -96,8 +94,9 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.schema = indexSchema
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = opts
-	idx.metrics = engine.NewIndexMetrics(name)
-	idx.stats = stats.NewStatsIndex(indexSchema.PkIndex(), opts.PackSize)
+	idx.table = t
+	idx.state = engine.NewObjectState()
+	idx.db = opts.DB
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
 		WithKey(pack.JournalKeyId).
@@ -108,12 +107,11 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		WithKey(pack.TombstoneKeyId).
 		WithSchema(indexSchema).
 		Alloc()
-	idx.db = opts.DB
-	idx.noClose = true
-	idx.table = t
 	idx.convert = schema.NewConverter(t.Schema(), s, LE).WithSkipLen()
+	idx.metrics = engine.NewIndexMetrics(name)
 	idx.genkey = keyFn
 	idx.log = opts.Logger
+	idx.noClose = true
 
 	idx.log.Debugf("Creating pack index %s on %s with driver %s", name, t.Schema().Name(), idx.opts.Driver)
 
@@ -145,12 +143,17 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	}
 	for _, v := range [][]byte{
 		engine.DataKeySuffix,
-		engine.StatsKeySuffix,
+		engine.StateKeySuffix,
 	} {
 		key := append([]byte(name), v...)
 		if _, err := store.CreateBucket(tx, key, engine.ErrIndexExists); err != nil {
 			return err
 		}
+	}
+
+	// init state storage
+	if err := idx.state.Store(ctx, tx, name); err != nil {
+		return err
 	}
 
 	idx.log.Debugf("Created index %s", typ)
@@ -175,8 +178,9 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.schema = indexSchema
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
-	idx.metrics = engine.NewIndexMetrics(name)
-	idx.stats = stats.NewStatsIndex(indexSchema.PkIndex(), idx.opts.PackSize)
+	idx.table = t
+	idx.state = engine.NewObjectState()
+	idx.db = opts.DB
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
 		WithKey(pack.JournalKeyId).
@@ -187,12 +191,11 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 		WithKey(pack.TombstoneKeyId).
 		WithSchema(indexSchema).
 		Alloc()
-	idx.db = opts.DB
-	idx.noClose = true
-	idx.table = t
 	idx.convert = schema.NewConverter(t.Schema(), s, LE).WithSkipLen()
+	idx.metrics = engine.NewIndexMetrics(name)
 	idx.genkey = keyFn
 	idx.log = opts.Logger
+	idx.noClose = true
 
 	idx.log.Debugf("Opening pack index %s on %s with driver %s",
 		name, t.Schema().Name(), idx.opts.Driver)
@@ -203,7 +206,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 		idx.log.Debugf("Opening pack index %q with opts %#v", path, idx.opts)
 		db, err := store.Open(idx.opts.Driver, path, idx.opts.ToDriverOpts())
 		if err != nil {
-			idx.log.Errorf("opening index %s: %v", typ, err)
+			idx.log.Errorf("open index %s: %v", typ, err)
 			return engine.ErrNoIndex
 		}
 		idx.db = db
@@ -231,29 +234,26 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	}
 	for _, v := range [][]byte{
 		engine.DataKeySuffix,
-		engine.StatsKeySuffix,
+		engine.StateKeySuffix,
 	} {
-		if tx.Bucket(append([]byte(name), v...)) == nil {
-			idx.log.Error("missing index data: %v", engine.ErrNoBucket)
+		key := append([]byte(name), v...)
+		if tx.Bucket(key) == nil {
+			idx.log.Errorf("open %s: %v", string(key), engine.ErrNoBucket)
 			tx.Rollback()
 			_ = idx.Close(ctx)
 			return engine.ErrDatabaseCorrupt
 		}
 	}
 
-	// load stats
-	idx.log.Debugf("Loading package stats for %s", typ)
-	n, err := idx.stats.Load(ctx, idx.statsBucket(tx))
-	if err != nil {
-		// TODO: rebuild corrupt stats
-		return err
+	// load state
+	if err := idx.state.Load(ctx, tx, idx.schema.Name()); err != nil {
+		idx.log.Error("open state: %v", err)
+		tx.Rollback()
+		t.Close(ctx)
+		return engine.ErrDatabaseCorrupt
 	}
-	atomic.AddInt64(&idx.metrics.MetaBytesRead, int64(n))
-	// atomic.StoreInt64(&idx.metrics.PacksCount, int64(idx.stats.Len()))
-	atomic.StoreInt64(&idx.metrics.MetaSize, int64(idx.stats.HeapSize()))
-	atomic.StoreInt64(&idx.metrics.TotalSize, int64(idx.stats.TableSize()))
 
-	idx.log.Debugf("Index %s opened with %d rows", typ, idx.nrows)
+	idx.log.Debugf("Index %s opened with %d rows", typ, idx.state.NRows)
 
 	return nil
 }
@@ -269,14 +269,12 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 	idx.schema = nil
 	idx.table = nil
 	idx.id = 0
-	idx.nrows = 0
 	idx.noClose = false
 	idx.opts = engine.IndexOptions{}
 	idx.metrics = engine.IndexMetrics{}
 	idx.convert = nil
 	idx.genkey = nil
-	idx.stats.Reset()
-	idx.stats = nil
+	idx.state = engine.ObjectState{}
 	idx.journal.Release()
 	idx.tomb.Release()
 	idx.journal = nil
@@ -297,12 +295,14 @@ func (idx *Index) IsComposite() bool {
 }
 
 func (idx *Index) Sync(ctx context.Context) error {
-	return idx.flush(ctx)
+	return idx.merge(ctx)
 }
 
 func (idx *Index) Metrics() engine.IndexMetrics {
 	m := idx.metrics
-	m.TupleCount = int64(idx.nrows)
+	m.TupleCount = int64(idx.state.NRows)
+	m.TotalSize = int64(idx.state.Size)
+	m.PacksCount = int64(idx.state.Count)
 	return m
 }
 
@@ -314,10 +314,9 @@ func (idx *Index) Drop(ctx context.Context) error {
 			return err
 		}
 		idx.log.Debugf("Dropping index %s", typ)
-		idx.stats.Reset()
 		for _, v := range [][]byte{
 			engine.DataKeySuffix,
-			engine.StatsKeySuffix,
+			engine.StateKeySuffix,
 		} {
 			key := append([]byte(idx.schema.Name()), v...)
 			if err := tx.Root().DeleteBucket(key); err != nil {
@@ -340,16 +339,19 @@ func (idx *Index) Drop(ctx context.Context) error {
 }
 
 func (idx *Index) Truncate(ctx context.Context) error {
-	tx, err := engine.GetTransaction(ctx).StoreTx(idx.db, true)
+	// unlink index from table to prevent use
+	idx.table.UnuseIndex(idx)
+	defer idx.table.UseIndex(idx)
+
+	// start backend write tx
+	tx, err := idx.db.Begin(true)
 	if err != nil {
 		return err
 	}
-	idx.stats.Reset()
-	idx.journal.Clear()
-	idx.tomb.Clear()
+	defer tx.Rollback()
 	for _, v := range [][]byte{
 		engine.DataKeySuffix,
-		engine.StatsKeySuffix,
+		engine.StateKeySuffix,
 	} {
 		key := append([]byte(idx.schema.Name()), v...)
 		if err := tx.Root().DeleteBucket(key); err != nil {
@@ -359,15 +361,26 @@ func (idx *Index) Truncate(ctx context.Context) error {
 			return err
 		}
 	}
-	idx.metrics.DeletedTuples += int64(idx.nrows)
-	idx.metrics.TupleCount = 0
-	idx.nrows = 0
 
-	// GC/commit storage tx
-	_, err = engine.GetTransaction(ctx).Continue(tx)
-	if err != nil {
+	// reset state
+	nDel := idx.state.NRows
+	idx.state.Reset()
+	if err := idx.state.Store(ctx, tx, idx.schema.Name()); err != nil {
 		return err
 	}
+
+	// commit storage tx
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// clear data
+	idx.journal.Clear()
+	idx.tomb.Clear()
+
+	// update metrics
+	idx.metrics.DeletedTuples += int64(nDel)
+	idx.metrics.TupleCount = 0
 
 	return nil
 }
@@ -378,14 +391,19 @@ func (idx *Index) Rebuild(ctx context.Context) error {
 		return err
 	}
 
+	// unlink index from table to prevent use
+	idx.table.UnuseIndex(idx)
+	defer idx.table.UseIndex(idx)
+
 	// build a query plan to walk all table data and only fetch
 	// columns we need for indexing, since idx.schema is storage
 	// schema (columns replaced by hash column) we use converter
 	// child schema for this query which extracts what we need
-	// in order
+	// in the order in which we construct index keys
 	plan := query.NewQueryPlan().
 		WithTable(idx.table).
 		WithSchema(idx.convert.Schema()).
+		WithFlags(query.QueryFlagNoIndex).
 		WithLogger(idx.log)
 
 	err := idx.table.Stream(ctx, plan, func(row engine.QueryRow) error {
@@ -397,19 +415,18 @@ func (idx *Index) Rebuild(ctx context.Context) error {
 		idx.journal.AppendWire(key, nil)
 
 		// flush journal when full
+		var err error
 		if idx.journal.IsFull() {
-			if err := idx.flush(ctx); err != nil {
-				return err
-			}
+			err = idx.merge(ctx)
 		}
-		return nil
+		return err
 	})
 	if err != nil {
 		return err
 	}
 
 	// final index flush
-	return idx.flush(ctx)
+	return idx.merge(ctx)
 }
 
 func (idx *Index) Add(ctx context.Context, prev, val []byte) error {
@@ -425,7 +442,7 @@ func (idx *Index) Add(ctx context.Context, prev, val []byte) error {
 		idx.journal.AppendWire(vkey, nil)
 	}
 	if idx.journal.IsFull() || idx.tomb.IsFull() {
-		return idx.flush(ctx)
+		return idx.merge(ctx)
 	}
 	return nil
 }
@@ -438,7 +455,7 @@ func (idx *Index) Del(ctx context.Context, prev []byte) error {
 	pkey = idx.genkey(pkey)
 	idx.tomb.AppendWire(pkey, nil)
 	if idx.journal.IsFull() || idx.tomb.IsFull() {
-		return idx.flush(ctx)
+		return idx.merge(ctx)
 	}
 	return nil
 }
