@@ -4,7 +4,9 @@
 package main
 
 import (
+	"bufio"
 	"flag"
+	"io"
 	"os"
 	"runtime/pprof"
 
@@ -102,18 +104,36 @@ func decompress() error {
 }
 
 func compress() error {
-	data, err := os.ReadFile(path)
+	f, err := os.OpenFile(path, os.O_RDONLY, PERM)
 	if err != nil {
 		return err
 	}
 
-	compressed := fsst.Compress([][]uint8{data})
+	rd := bufio.NewReader(f)
+
+	dataSz := 0
+	data := make([][]byte, 0)
+
+	for {
+		read := make([]byte, fsst.FSST_MAX_SIZE)
+		sz, err := rd.Read(read)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		data = append(data, read[:sz])
+		dataSz += sz
+	}
+
+	compressed := fsst.Compress(data)
 	log.Infof("Writing compressed data to %s", out)
 	err = os.WriteFile(out, compressed, PERM)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("Compressed %d byte(s) to %d byte(s) %d %%", len(data), len(compressed), (100 * len(compressed) / len(data)))
+	log.Infof("Compressed %d byte(s) to %d byte(s) %d %%", dataSz, len(compressed), (100 * len(compressed) / dataSz))
 	return nil
 }

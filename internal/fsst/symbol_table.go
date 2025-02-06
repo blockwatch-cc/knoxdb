@@ -545,12 +545,12 @@ func makeSample(strIn [][]uint8) [][]uint8 {
 		sample = append(sample, strIn...)
 	} else {
 		sampleRnd := FSSTHash(4637947)
-		nBytes := 0
+		nBytes := uint64(0)
+		nlines := uint64(len(strIn))
 
 		for nBytes < FSST_SAMPLETARGET {
 			// choose a non-empty line
-			sampleRnd := FSSTHash(sampleRnd)
-			nlines := uint64(len(strIn))
+			sampleRnd = FSSTHash(sampleRnd)
 			linenr := sampleRnd % nlines
 			for len(strIn[linenr]) == 0 {
 				linenr++
@@ -562,10 +562,10 @@ func makeSample(strIn [][]uint8) [][]uint8 {
 			// choose a chunk
 			chunks := 1 + (len(strIn[linenr]) / FSST_SAMPLELINE)
 			sampleRnd = FSSTHash(sampleRnd)
-			offset := FSST_SAMPLELINE * (int(sampleRnd) % chunks)
+			offset := FSST_SAMPLELINE * (sampleRnd % uint64(chunks))
 
 			// add the chunk to the sample
-			len := min(len(strIn[linenr])-offset, FSST_SAMPLELINE)
+			len := min(uint64(len(strIn[linenr]))-offset, FSST_SAMPLELINE)
 			sample = append(sample, strIn[linenr][offset:offset+len])
 			nBytes += len
 		}

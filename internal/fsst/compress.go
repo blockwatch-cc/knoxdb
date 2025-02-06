@@ -10,13 +10,13 @@ import (
 )
 
 const FSST_MAXHEADER = (8 + 1 + 8 + 2048 + 1) /* maxlen of deserialized fsst header, produced/consumed by fsst_export() resp. fsst_import() */
-const FSST_MAX_COMPRESS_SIZE = FSST_MEMBUF - (1 + FSST_MAXHEADER/2)
+const FSST_MAX_SIZE = FSST_MEMBUF - (1 + FSST_MAXHEADER/2)
 
 // the main compression function (everything automatic)
 func Compress(strIn [][]uint8) []uint8 {
 	e := NewEncoder(strIn, false)
 	// to be faster than scalar, simd needs 64 lines or more of length >=12; or fewer lines, but big ones (totLen > 32KB)
-	buf := make([]uint8, FSST_MAX_COMPRESS_SIZE)
+	buf := make([]uint8, FSST_MAX_SIZE)
 	pos := Export(e, buf)
 
 	pos += _compress(e, strIn, buf[pos:])
