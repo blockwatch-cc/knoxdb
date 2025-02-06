@@ -51,7 +51,7 @@ func (c *Counter) Count2Inc(pos1, pos2 uint32) {
 
 func (c *Counter) Count1GetNext(pos1 uint32) (uint32, uint32) { // note: we will advance pos1 to the next nonzero counter in register range
 	// read 16-bits single symbol counter, split into two 8-bits numbers (count1Low, count1High), while skipping over zeros
-	var high uint64 = binary.LittleEndian.Uint64(c.count1High[pos1:])
+	var high uint64 = c.Load(c.count1High[pos1:])
 
 	var zero = uint32(7) // number of zero bytes
 	if high > 0 {
@@ -74,7 +74,7 @@ func (c *Counter) Count1GetNext(pos1 uint32) (uint32, uint32) { // note: we will
 
 func (c *Counter) Count2GetNext(pos1 uint32, pos2 uint32) (uint32, uint32) { // note: we will advance pos2 to the next nonzero counter in register range
 	// read 12-bits pairwise symbol counter, split into low 8-bits and high 4-bits number while skipping over zeros
-	var high uint64 = binary.LittleEndian.Uint64(c.count2High[pos1][pos2>>1:])
+	var high uint64 = c.Load(c.count2High[pos1][pos2>>1:])
 
 	high >>= ((pos2 & 1) << 2) // odd pos2: ignore the lowest 4 bits & we see only 15 counters
 
@@ -121,4 +121,20 @@ func (c *Counter) Clear() {
 	c.count1Low = [FSST_CODE_MAX]uint8{}
 	c.count2High = [FSST_CODE_MAX][FSST_CODE_MAX / 2]uint8{}
 	c.count2Low = [FSST_CODE_MAX][FSST_CODE_MAX]uint8{}
+}
+
+func (c *Counter) Load(buf []byte) uint64 {
+	var r uint64
+	l := len(buf)
+	switch true {
+	case l >= 8:
+		r = binary.LittleEndian.Uint64(buf)
+	case l >= 4:
+		r = uint64(binary.LittleEndian.Uint32(buf))
+	case l >= 2:
+		r = uint64(binary.LittleEndian.Uint16(buf))
+	case l == 1:
+		r = uint64(buf[0])
+	}
+	return r
 }
