@@ -25,14 +25,14 @@ var (
 type ObjectState struct {
 	Sequence   uint64  // next free sequence
 	NRows      uint64  // total non-deleted rows
+	Size       uint64  // byte size
+	Count      uint64  // block count
 	Checkpoint wal.LSN // latest wal checkpoint LSN
 }
 
 func NewObjectState() ObjectState {
 	return ObjectState{
-		Sequence:   1,
-		NRows:      0,
-		Checkpoint: 0,
+		Sequence: 1,
 	}
 }
 
@@ -41,27 +41,31 @@ func (s *ObjectState) Reset() {
 }
 
 func (s ObjectState) Encode() []byte {
-	var buf [24]byte
+	var buf [40]byte
 	BE.PutUint64(buf[0:], s.Sequence)
 	BE.PutUint64(buf[8:], s.NRows)
-	BE.PutUint64(buf[16:], uint64(s.Checkpoint))
+	BE.PutUint64(buf[16:], s.Size)
+	BE.PutUint64(buf[24:], s.Count)
+	BE.PutUint64(buf[32:], uint64(s.Checkpoint))
 	return buf[:]
 }
 
 func (s *ObjectState) Decode(buf []byte) error {
-	if len(buf) < 24 {
+	if len(buf) < 40 {
 		return io.ErrShortBuffer
 	}
 	s.Sequence = BE.Uint64(buf[0:])
 	s.NRows = BE.Uint64(buf[8:])
-	s.Checkpoint = wal.LSN(BE.Uint64(buf[16:]))
+	s.Size = BE.Uint64(buf[16:])
+	s.Count = BE.Uint64(buf[24:])
+	s.Checkpoint = wal.LSN(BE.Uint64(buf[32:]))
 	return nil
 }
 
 func (s *ObjectState) Load(ctx context.Context, tx store.Tx, name string) error {
 	key := append([]byte(name), StateKeySuffix...)
 	buf := tx.Bucket(key).Get(StateKey)
-	if buf == nil || len(buf) < 24 {
+	if buf == nil || len(buf) < 40 {
 		return ErrDatabaseCorrupt
 	}
 	return s.Decode(buf)
