@@ -82,28 +82,45 @@ func (c *cursor) First() bool {
 	}
 
 	// Seek to the first key.
-	c.current = nil
 	c.bucket.tx.db.store.AscendGreaterOrEqual(Item{c.keyRange.Start, nil}, func(t Item) bool {
-		c.current = t.Key
+		if bytes.HasPrefix(c.current, c.keyRange.Start) {
+			c.current = t.Key
+		} else {
+			c.current = nil
+		}
 		return false
 	})
 
-	return len(c.current) > 0 && bytes.HasPrefix(c.current, c.keyRange.Start)
+	return len(c.current) > 0
 }
 
-// Not supported.
+// Last moves the cursor at the last key/value pair and returns whether or not
+// the pair exists.
 //
 // This function is part of the store.Cursor interface implementation.
 func (c *cursor) Last() bool {
-	c.current = nil
-	c.bucket.tx.db.store.DescendLessOrEqual(Item{c.keyRange.Limit, nil}, func(t Item) bool {
-		c.current = t.Key
+	// Ensure transaction state is valid.
+	if err := c.bucket.tx.checkClosed(); err != nil {
+		return false
+	}
 
+	// Seek to the last key.
+	c.bucket.tx.db.store.DescendLessOrEqual(Item{c.keyRange.Limit, nil}, func(t Item) bool {
 		// skip limit value if it exists
-		return bytes.Equal(t.Key, c.keyRange.Limit)
+		if bytes.Equal(t.Key, c.keyRange.Limit) {
+			return true
+		}
+
+		// use next lower value if prefix matches
+		if bytes.HasPrefix(t.Key, c.keyRange.Start) {
+			c.current = t.Key
+		} else {
+			c.current = nil
+		}
+		return false
 	})
 
-	return len(c.current) > 0 && bytes.HasPrefix(c.current, c.keyRange.Start)
+	return len(c.current) > 0
 }
 
 // Next moves the cursor one key/value pair forward and returns whether or not
@@ -122,27 +139,23 @@ func (c *cursor) Next() bool {
 	}
 
 	// Move the current iterator to the next entry.
-	var found bool
 	c.bucket.tx.db.store.AscendGreaterOrEqual(Item{c.current, nil}, func(t Item) bool {
 		// skip the current value
 		if bytes.Equal(t.Key, c.current) {
 			return true
 		}
-		c.current = t.Key
-		found = true
+		// use next value if prefix matches
+		if bytes.Compare(t.Key, c.keyRange.Limit) <= 0 {
+			c.current = t.Key
+		} else {
+			c.current = nil
+		}
 		return false
 	})
 
-	if !found {
-		return false
-	}
-
-	// check iterator range
-	return bytes.Compare(c.current, c.keyRange.Limit) <= 0
+	return len(c.current) > 0
 }
 
-// Not supported
-//
 // This function is part of the store.Cursor interface implementation.
 func (c *cursor) Prev() bool {
 	// Ensure transaction state is valid.
@@ -156,23 +169,20 @@ func (c *cursor) Prev() bool {
 	}
 
 	// Move the current iterator to the next entry.
-	var found bool
 	c.bucket.tx.db.store.DescendLessOrEqual(Item{c.current, nil}, func(t Item) bool {
 		// skip the current value
 		if bytes.Equal(t.Key, c.current) {
 			return true
 		}
-		c.current = t.Key
-		found = true
+		if bytes.Compare(t.Key, c.keyRange.Start) >= 0 {
+			c.current = t.Key
+		} else {
+			c.current = nil
+		}
 		return false
 	})
 
-	if !found {
-		return false
-	}
-
-	// check iterator range
-	return bytes.Compare(c.current, c.keyRange.Start) >= 0
+	return len(c.current) > 0
 }
 
 // Seek positions the cursor at the first key/value pair that is greater than or
@@ -194,7 +204,11 @@ func (c *cursor) Seek(seek []byte) bool {
 		return false
 	})
 
-	return len(c.current) > 0 && bytes.HasPrefix(c.current, seek)
+	if len(c.current) > 0 && bytes.HasPrefix(c.current, seek) {
+		return true
+	}
+	c.current = nil
+	return false
 }
 
 // Key returns the current key the cursor is pointing to.
@@ -211,8 +225,8 @@ func (c *cursor) Key() []byte {
 		return nil
 	}
 
-	// Slice out the actual key name and make a copy since it is no longer
-	// valid after iterating to the next item.
+	// Slice out the key suffix name. Note this key is only valid
+	// until the cursor is updated.
 	return c.current[len(c.bucket.id):]
 }
 

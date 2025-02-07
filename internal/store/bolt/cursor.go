@@ -95,6 +95,9 @@ func (c *cursor) First() bool {
 	return c.key != nil
 }
 
+// Last moves the cursor at the last key/value pair and returns whether or not
+// the pair exists.
+//
 // This function is part of the store.Cursor interface implementation.
 func (c *cursor) Last() bool {
 	// Ensure transaction state is valid.
