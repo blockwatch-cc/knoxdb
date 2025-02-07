@@ -239,6 +239,7 @@ func (it *MergeIterator) Next(ctx context.Context, id MergeValue) (*pack.Package
 		if err != nil {
 			return nil, MergeValue{}, err
 		}
+		it.cur = it.idx.dataBucket(it.tx).Cursor()
 		it.nTxBytes = 0
 	}
 
@@ -271,8 +272,10 @@ func (it *MergeIterator) Next(ctx context.Context, id MergeValue) (*pack.Package
 	if it.cur.Key() != nil {
 		id.Ik, id.Pk, _, _ = it.idx.decodePackKey(it.cur.Key())
 		id.Ok = true
+		// it.idx.log.Infof("Merge: next id 0x%016x:%016x", id.Ik, id.Pk)
 	} else {
 		id.Reset()
+		// it.idx.log.Infof("Merge: invalid next id")
 	}
 
 	// return current pack and boundary of next pack
@@ -290,7 +293,7 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 		// if exists this will set cur to the first block in the last pair
 		it.cur.Last()
 		ok = it.cur.Prev()
-		// it.idx.log.Infof("Merge: Seek last>prev %t", ok)
+		// it.idx.log.Infof("Merge: Seek last>prev %t, key=%x", ok, it.cur.Key())
 	}
 
 	// no last pack? this must be an empty bucket, we'll create our first pack
@@ -459,7 +462,7 @@ func (idx *Index) merge(ctx context.Context) error {
 		if src != nil {
 			slen = src.Len()
 		}
-		// idx.log.Infof("Merge src=%d j=%d t=%d next=%016x:%016x", slen, jlen, tlen, next.Ik, next.Pk)
+		// idx.log.Infof("Merge src=%d j=%d t=%d next=%016x:%016x:%t", slen, jlen, tlen, next.Ik, next.Pk, next.Ok)
 
 		// 3-way merge: src, journal, tomb -> out
 		var (

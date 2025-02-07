@@ -269,6 +269,7 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*bitmap.Bitmap
 
 		// finish when no more packs or no more keys are available
 		if pkg == nil {
+			// idx.log.Infof("No more packs")
 			break
 		}
 		// idx.log.Infof("Next pack len=%d up to max ik=%d", pkg.Len(), maxIk)

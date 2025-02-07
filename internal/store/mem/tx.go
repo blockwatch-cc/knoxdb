@@ -135,8 +135,10 @@ func (tx *transaction) close() {
 
 	// free locks
 	if tx.writable {
+		// fmt.Printf("Wunlock\n%s", string(debug.Stack()))
 		tx.db.writeLock.Unlock()
 	} else {
+		// fmt.Printf("Runlock\n%s", string(debug.Stack()))
 		tx.db.writeLock.RUnlock()
 	}
 }

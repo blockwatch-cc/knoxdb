@@ -6,7 +6,6 @@ package table
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -305,10 +304,7 @@ func (t *Table) Drop(ctx context.Context) error {
 	t.db.Close()
 	t.db = nil
 	t.log.Debugf("dropping table %s with path %s", typ, path)
-	if err := os.Remove(path); err != nil {
-		return err
-	}
-	return nil
+	return store.Drop(t.opts.Driver, path)
 }
 
 func (t *Table) Sync(ctx context.Context) error {
@@ -362,14 +358,12 @@ func (t *Table) Truncate(ctx context.Context) error {
 			return err
 		}
 	}
+	nDel := t.state.NRows
 	t.state.Reset()
 	if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	atomic.AddInt64(&t.metrics.DeletedTuples, int64(t.state.NRows))
+	atomic.AddInt64(&t.metrics.DeletedTuples, int64(nDel))
 	atomic.StoreInt64(&t.metrics.TupleCount, 0)
 	atomic.StoreInt64(&t.metrics.MetaSize, 0)
 	atomic.StoreInt64(&t.metrics.JournalSize, 0)

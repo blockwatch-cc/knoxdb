@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/echa/log"
@@ -105,23 +106,23 @@ func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, 
 	}
 }
 
-func CreateCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, s *schema.Schema, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, s)
+func CreateCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
+	CreateIndex(t, ti, tab, e, io, is)
 }
 
-func OpenCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, s *schema.Schema, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, s)
+func OpenCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
+	CreateIndex(t, ti, tab, e, io, is)
 	require.NoError(t, ti.Close(context.Background()))
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	require.NoError(t, ti.Open(ctx, tab, s, io))
+	require.NoError(t, ti.Open(ctx, tab, is, io))
 	require.NoError(t, commit())
 	require.NoError(t, ti.Close(ctx))
 }
 
-func CloseCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, s *schema.Schema, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, s)
+func CloseCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
+	CreateIndex(t, ti, tab, e, io, is)
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
@@ -129,21 +130,21 @@ func CloseCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEng
 	require.NoError(t, commit())
 }
 
-func DropCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, s *schema.Schema, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, s)
-	ctx, _, _, abort, err := e.WithTransaction(context.Background())
+func DropCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
+	CreateIndex(t, ti, tab, e, io, is)
+	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	isBadger := io.Driver == "badger"
-	if !isBadger {
-		require.FileExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
-		require.NoError(t, ti.Drop(ctx))
-		require.NoFileExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
-	} else {
-		require.DirExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
-		require.NoError(t, ti.Drop(ctx))
-		require.NoDirExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
-	}
+
+	dbpath := filepath.Join(e.RootPath(), is.Name()+".db")
+	ok, err := store.Exists(io.Driver, dbpath)
+	require.NoError(t, err, "access error")
+	require.True(t, ok, "db not exists")
+	require.NoError(t, ti.Drop(ctx))
+	require.NoError(t, commit())
+	ok, err = store.Exists(io.Driver, dbpath)
+	require.NoError(t, err, "access error")
+	require.False(t, ok, "db not deleted")
 }
 
 func TruncateCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
@@ -194,8 +195,8 @@ func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.Table
 			makeFilter(ts, "i32", RG, 1, 2),
 		)), "multi")
 		// no other mode
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", IN, 1, nil))), IN)
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", NI, 1, nil))), NI)
+		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", IN, []int{1}, nil))), IN)
+		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", NI, []int{1}, nil))), NI)
 		// no simple filters
 		require.False(t, ti.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "no simple")
 		// no ineligible fields

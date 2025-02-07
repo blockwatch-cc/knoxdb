@@ -18,14 +18,15 @@ func TestMain(m *testing.M) {
 }
 
 func TestIndex(t *testing.T) {
-	tableEngine := table.NewTable()
-	tests.TestIndexEngine[Index, *Index](t, "mem", "pack", tableEngine, []types.IndexType{
+	typs := []types.IndexType{
 		types.IndexTypeInt,
 		types.IndexTypeHash,
-	})
+	}
+	tests.TestIndexEngine[Index, *Index](t, "mem", "pack", table.NewTable(), typs)
+	tests.TestIndexEngine[Index, *Index](t, "bolt", "pack", table.NewTable(), typs)
 }
 
 func TestIndexComposite(t *testing.T) {
-	tableEngine := table.NewTable()
-	tests.TestCompositeIndexEngine[Index, *Index](t, "mem", "pack", tableEngine)
+	tests.TestCompositeIndexEngine[Index, *Index](t, "mem", "pack", table.NewTable())
+	tests.TestCompositeIndexEngine[Index, *Index](t, "bolt", "pack", table.NewTable())
 }

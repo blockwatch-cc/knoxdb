@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"blockwatch.cc/knoxdb/internal/engine"
@@ -21,7 +20,7 @@ import (
 )
 
 // This index supports the following condition types on lookup.
-// - hash: EQ, IN, NI (single or composite EQ)
+// - hash: EQ, IN (single or composite EQ)
 // - int:  EQ, LT, LE GT, GE, RG (single condition)
 
 var _ engine.IndexEngine = (*Index)(nil)
@@ -323,19 +322,15 @@ func (idx *Index) Drop(ctx context.Context) error {
 				return err
 			}
 		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
-		return nil
+		// commit and continue
+		_, err = engine.GetTransaction(ctx).Continue(tx)
+		return err
 	}
 	path := idx.db.Path()
 	idx.db.Close()
 	idx.db = nil
-	idx.log.Debugf("Dropping index %s with path %s", typ, path)
-	if err := os.Remove(path); err != nil {
-		return err
-	}
-	return nil
+	idx.log.Debugf("Dropping index %s files at path %s", typ, path)
+	return store.Drop(idx.opts.Driver, path)
 }
 
 func (idx *Index) Truncate(ctx context.Context) error {

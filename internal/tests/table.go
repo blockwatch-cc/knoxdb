@@ -176,6 +176,7 @@ func SyncTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts 
 	defer abort()
 	require.NoError(t, err)
 	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
+	require.NoError(t, commit())
 	require.NoError(t, tab.Sync(ctx))
 	require.NoError(t, commit())
 }
@@ -186,17 +187,23 @@ func CompactTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, op
 	defer abort()
 	require.NoError(t, err)
 	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
-	require.NoError(t, tab.Compact(ctx))
 	require.NoError(t, commit())
+	require.NoError(t, tab.Compact(ctx))
 }
 
 func TruncateTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
 	CreateTableTest(e, t, tab, opts)
-	ctx, _, _, abort, err := e.WithTransaction(context.Background())
-	defer abort()
+	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	require.NoError(t, err)
+	defer abort()
 	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
+	require.NoError(t, commit())
+
+	ctx, _, commit, abort, err = e.WithTransaction(context.Background())
+	require.NoError(t, err)
+	defer abort()
 	require.NoError(t, tab.Truncate(ctx))
+	require.NoError(t, commit())
 }
 
 func InsertRowsTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
@@ -205,6 +212,10 @@ func InsertRowsTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine,
 	defer abort()
 	require.NoError(t, err)
 	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
+	require.NoError(t, commit())
+	ctx, _, commit, abort, err = e.WithTransaction(context.Background())
+	require.NoError(t, err)
+	defer abort()
 	InsertData(t, ctx, tab, allTypesSchema)
 	require.NoError(t, commit())
 	require.NoError(t, tab.Close(ctx))

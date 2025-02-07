@@ -149,6 +149,7 @@ func (db *db) begin(writable bool) (*transaction, error) {
 		// Enforce single writer property to make transactions serializable.
 		// Without this global lock we would have to implement concurrency
 		// control on tx commit which is unnecessary for this simple db driver.
+		// fmt.Printf("Wlock\n%s", string(debug.Stack()))
 		db.writeLock.Lock()
 
 		// cross-check the db was not closed while waiting for the lock.
@@ -158,6 +159,7 @@ func (db *db) begin(writable bool) (*transaction, error) {
 		}
 	} else {
 		// Readers must also acquire a lock to make writes atomic.
+		// fmt.Printf("Rlock\n%s", string(debug.Stack()))
 		db.writeLock.RLock()
 
 		// cross-check the db was not closed while waiting for the lock.

@@ -120,6 +120,7 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 
 		// no last pack? this must be an empty bucket
 		if !ok {
+			// it.idx.log.Infof("Empty bucket, skippikng all searches")
 			it.iks = it.iks[:0]
 			return false, nil
 		}

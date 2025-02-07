@@ -8,6 +8,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/echa/log"
@@ -188,21 +189,19 @@ func CloseIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti e
 
 func DropIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-
-	ctx, _, _, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
-	isBadger := io.Driver == "badger"
-	if !isBadger {
-		require.FileExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
-		require.NoError(t, ti.Drop(ctx))
-		require.NoFileExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
-	} else {
-		require.DirExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
-		require.NoError(t, ti.Drop(ctx))
-		require.NoDirExists(t, filepath.Join(e.Options().Path, "testdb", ti.Schema().Name()+".db"))
-	}
+	dbpath := filepath.Join(e.RootPath(), is.Name()+".db")
+	ok, err := store.Exists(io.Driver, dbpath)
+	require.NoError(t, err, "access error")
+	require.True(t, ok, "db not exists")
+	require.NoError(t, ti.Drop(ctx))
+	require.NoError(t, commit())
+	ok, err = store.Exists(io.Driver, dbpath)
+	require.NoError(t, err, "access error")
+	require.False(t, ok, "db not deleted")
 }
 
 func TruncateIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
