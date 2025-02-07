@@ -306,6 +306,7 @@ func (db *db) Close() error {
 func (db *db) close() {
 	// don't clear when persist flag is set
 	if db.opts.Persist {
+		db.closed = true
 		return
 	}
 
@@ -336,6 +337,13 @@ func (db *db) Sync() error {
 	return nil
 }
 
+// existsDB creates the initial buckets and values used by the package.  This is
+// mainly in a separate function for testing purposes.
+func existsDB(dbPath string) (bool, error) {
+	_, ok := registry.Load(dbPath)
+	return ok, nil
+}
+
 // initDB creates the initial buckets and values used by the package.  This is
 // mainly in a separate function for testing purposes.
 func initDB(db *db) {
@@ -358,7 +366,9 @@ func openDB(dbPath string, opts *Options, create bool) (store.DB, error) {
 		return nil, makeDbErr(store.ErrDbDoesNotExist, str)
 	}
 	if val != nil {
-		return val.(*db), nil
+		db := val.(*db)
+		db.closed = false
+		return db, nil
 	}
 
 	db := &db{
@@ -374,6 +384,19 @@ func openDB(dbPath string, opts *Options, create bool) (store.DB, error) {
 	registry.Store(dbPath, db)
 
 	return db, nil
+}
+
+func dropDB(dbPath string) error {
+	val, ok := registry.Load(dbPath)
+	if !ok {
+		str := fmt.Sprintf("database %q does not exist", dbPath)
+		return makeDbErr(store.ErrDbDoesNotExist, str)
+	}
+	if !val.(*db).closed {
+		return makeDbErr(store.ErrDbOpen, "must close db before drop")
+	}
+	registry.Delete(dbPath)
+	return nil
 }
 
 // Database maintenance functions

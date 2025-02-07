@@ -167,8 +167,8 @@ func createDBDriver(args ...interface{}) (store.DB, error) {
 	return openDB(dbPath, opts, true)
 }
 
-func dropDBDriver(path string) error {
-	return os.Remove(path + ".db")
+func dropDBDriver(dbPath string) error {
+	return os.Remove(dbPath)
 }
 
 // useLogger is the callback provided during driver registration that sets the
@@ -184,6 +184,7 @@ func init() {
 		Create:    createDBDriver,
 		Open:      openDBDriver,
 		Drop:      dropDBDriver,
+		Exists:    existsDB,
 		UseLogger: useLogger,
 	}
 	if err := store.RegisterDriver(driver); err != nil {

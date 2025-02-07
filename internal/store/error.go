@@ -42,6 +42,10 @@ const (
 	// is already open.
 	ErrDbAlreadyOpen
 
+	// ErrDbOpen indicates drop was called on a database that
+	// is open.
+	ErrDbOpen
+
 	// ErrInvalid indicates the specified database is not valid.
 	ErrInvalid
 
@@ -131,6 +135,7 @@ var errorCodeStrings = [...]string{
 	ErrDbExists:           "ErrDbExists",
 	ErrDbNotOpen:          "ErrDbNotOpen",
 	ErrDbAlreadyOpen:      "ErrDbAlreadyOpen",
+	ErrDbOpen:             "ErrDbOpen",
 	ErrInvalid:            "ErrInvalid",
 	ErrCorruption:         "ErrCorruption",
 	ErrTxConflict:         "ErrTxConflict",

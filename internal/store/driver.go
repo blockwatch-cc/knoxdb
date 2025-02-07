@@ -30,6 +30,10 @@ type Driver struct {
 	// to the database at path.
 	Drop func(path string) error
 
+	// Exists checks if a database files exists at path. A backend may return
+	// related errors when permissions or connections fail.
+	Exists func(path string) (bool, error)
+
 	// UseLogger uses a specified Logger to output package logging info.
 	UseLogger func(logger logpkg.Logger)
 }
@@ -102,4 +106,12 @@ func Drop(dbType string, path string) error {
 		return err
 	}
 	return drv.Drop(path)
+}
+
+func Exists(dbType string, path string) (bool, error) {
+	drv, err := lookupDriver(dbType)
+	if err != nil {
+		return false, err
+	}
+	return drv.Exists(path)
 }

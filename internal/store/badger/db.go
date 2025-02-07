@@ -343,13 +343,20 @@ func (db *db) Sync() error {
 }
 
 // filesExists reports whether the named file or directory exists.
-func fileExists(name string) bool {
+func fileExists(name string) (bool, error) {
 	if _, err := os.Stat(name); err != nil {
 		if os.IsNotExist(err) {
-			return false
+			return false, nil
 		}
+		return false, err
 	}
-	return true
+	return true, nil
+}
+
+// existsDB checks whether a database exists at path. it does not
+// check whether the db is locked or valid.
+func existsDB(dbPath string) (bool, error) {
+	return fileExists(dbPath)
 }
 
 // initDB creates the initial buckets and values used by the package.  This is
@@ -385,7 +392,10 @@ func initDB(db *badger.DB) error {
 // openDB opens the database at the provided path.  store.ErrDbDoesNotExist
 // is returned if the database doesn't exist and the create flag is not set.
 func openDB(dbPath string, create bool) (store.DB, error) {
-	dbExists := fileExists(dbPath)
+	dbExists, err := fileExists(dbPath)
+	if err != nil {
+		return nil, convertErr("exist db", err)
+	}
 
 	if !create && !dbExists {
 		str := fmt.Sprintf("database %q does not exist", dbPath)
