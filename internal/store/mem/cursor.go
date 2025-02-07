@@ -82,6 +82,7 @@ func (c *cursor) First() bool {
 	}
 
 	// Seek to the first key.
+	c.current = nil
 	c.bucket.tx.db.store.AscendGreaterOrEqual(Item{c.keyRange.Start, nil}, func(t Item) bool {
 		if bytes.HasPrefix(c.current, c.keyRange.Start) {
 			c.current = t.Key
@@ -105,6 +106,7 @@ func (c *cursor) Last() bool {
 	}
 
 	// Seek to the last key.
+	c.current = nil
 	c.bucket.tx.db.store.DescendLessOrEqual(Item{c.keyRange.Limit, nil}, func(t Item) bool {
 		// skip limit value if it exists
 		if bytes.Equal(t.Key, c.keyRange.Limit) {
@@ -197,18 +199,16 @@ func (c *cursor) Seek(seek []byte) bool {
 
 	// Seek to the provided key in both the database and pending updates
 	seek = bucketizedKey(c.bucket.id, seek)
-
-	c.current = nil
 	c.bucket.tx.db.store.AscendGreaterOrEqual(Item{seek, nil}, func(t Item) bool {
-		c.current = t.Key
+		if bytes.HasPrefix(t.Key, seek) {
+			c.current = t.Key
+		} else {
+			c.current = nil
+		}
 		return false
 	})
 
-	if len(c.current) > 0 && bytes.HasPrefix(c.current, seek) {
-		return true
-	}
-	c.current = nil
-	return false
+	return len(c.current) > 0
 }
 
 // Key returns the current key the cursor is pointing to.
