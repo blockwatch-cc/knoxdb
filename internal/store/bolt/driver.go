@@ -9,6 +9,7 @@ import (
 	"os"
 
 	bolt "go.etcd.io/bbolt"
+	bolterr "go.etcd.io/bbolt/errors"
 
 	"blockwatch.cc/knoxdb/internal/store"
 	logpkg "github.com/echa/log"
@@ -58,7 +59,7 @@ func makeDbErr(c store.ErrorCode, desc string, err error) store.Error {
 	return store.Error{ErrorCode: c, Description: desc, Err: err}
 }
 
-// convertErr converts the passed badger error into a database error with an
+// convertErr converts the passed bolt error into a database error with an
 // equivalent error code  and the passed description.  It also sets the passed
 // error as the underlying error.
 func convertErr(desc string, boltErr error) store.Error {
@@ -68,44 +69,42 @@ func convertErr(desc string, boltErr error) store.Error {
 
 	switch boltErr {
 	// Database corruption errors.
-	case bolt.ErrChecksum:
+	case bolterr.ErrChecksum:
 		code = store.ErrCorruption
-
-		// Database open/create errors. Most badger errors are dynamic and
-		// difficult to dissect, so we pass them as driver-specific.
-		//  code = store.ErrDbDoesNotExist
-	case bolt.ErrDatabaseOpen:
-		code = store.ErrDbAlreadyOpen
-	case bolt.ErrDatabaseNotOpen:
+	case bolterr.ErrDatabaseNotOpen:
 		code = store.ErrDbNotOpen
-	case bolt.ErrInvalid:
+	case bolterr.ErrInvalid:
 		code = store.ErrInvalid
-	case bolt.ErrVersionMismatch:
+	case bolterr.ErrVersionMismatch:
 		code = store.ErrInvalid
-		// case bolt.ErrTimeout:
+	case bolterr.ErrTimeout:
+		code = store.ErrDbAlreadyOpen
 
 	// Transaction errors.
-	case bolt.ErrTxNotWritable:
+	case bolterr.ErrTxNotWritable:
 		code = store.ErrTxNotWritable
-	case bolt.ErrTxClosed:
+	case bolterr.ErrTxClosed:
 		code = store.ErrTxClosed
-	case bolt.ErrDatabaseReadOnly:
+	case bolterr.ErrDatabaseReadOnly:
 		code = store.ErrTxNotWritable
-	case bolt.ErrBucketNotFound:
+	case bolterr.ErrBucketNotFound:
 		code = store.ErrBucketNotFound
-	case bolt.ErrBucketExists:
+	case bolterr.ErrBucketExists:
 		code = store.ErrBucketExists
-	case bolt.ErrBucketNameRequired:
+	case bolterr.ErrBucketNameRequired:
 		code = store.ErrBucketNameRequired
-	case bolt.ErrKeyTooLarge:
+	case bolterr.ErrKeyTooLarge:
 		code = store.ErrKeyTooLarge
-	case bolt.ErrValueTooLarge:
+	case bolterr.ErrValueTooLarge:
 		code = store.ErrValueTooLarge
-	case bolt.ErrIncompatibleValue:
+	case bolterr.ErrIncompatibleValue:
 		code = store.ErrIncompatibleValue
-
-	case bolt.ErrKeyRequired:
+	case bolterr.ErrKeyRequired:
 		code = store.ErrKeyRequired
+	case bolterr.ErrSameBuckets:
+		code = store.ErrBucketExists
+	case bolterr.ErrDifferentDB:
+		code = store.ErrInvalid
 	}
 
 	return store.Error{ErrorCode: code, Description: desc, Err: boltErr}
