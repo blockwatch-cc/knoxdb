@@ -334,7 +334,7 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 					continue
 				}
 			}
-			cur := lineIdx
+			cur := 0
 			end := len(line)
 			start := cur
 			if cur < end {
