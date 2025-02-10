@@ -113,9 +113,9 @@ func NewAllTypes(i int) *AllTypes {
 		I256:    num.Int256FromInt64(int64(i)),
 		Bool:    i%2 == 1,
 		Time:    time.Unix(0, int64(i)).UTC(),
-		Hash:    util.Uint64Bytes(uint64(i)),
+		Hash:    util.U64Bytes(uint64(i)),
 		Array:   [2]byte{byte(i >> 8 & 0xf), byte(i & 0xf)},
-		String:  hex.EncodeToString(util.Uint64Bytes(uint64(i))),
+		String:  util.U64Hex(uint64(i)),
 		MyEnum:  myEnums[i%len(myEnums)],
 	}
 }

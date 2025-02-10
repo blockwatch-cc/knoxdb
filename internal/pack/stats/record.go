@@ -4,6 +4,8 @@
 package stats
 
 import (
+	"encoding/binary"
+
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -71,7 +73,7 @@ func NewRecordFromPack(s *schema.Schema, pkg *pack.Package) *Record {
 		NValues:  int64(pkg.Len()),
 		view:     schema.NewView(s),
 	}
-	build := schema.NewBuilder(s)
+	build := schema.NewBuilder(s, binary.LittleEndian)
 	build.Write(STATS_ROW_KEY, pkg.Key())
 	build.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
 	build.Write(STATS_ROW_NVALS, int64(pkg.Len()))
@@ -108,7 +110,7 @@ func (r *Record) Update(pkg *pack.Package) {
 	if analysis != nil {
 		r.DiskSize += analysis.SizeDiff()
 	}
-	build := schema.NewBuilder(r.view.Schema())
+	build := schema.NewBuilder(r.view.Schema(), binary.LittleEndian)
 	build.Write(STATS_ROW_KEY, pkg.Key())
 	build.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
 	build.Write(STATS_ROW_NVALS, int64(pkg.Len()))

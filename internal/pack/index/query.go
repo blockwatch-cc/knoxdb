@@ -25,36 +25,37 @@ func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 	if !ok {
 		return false
 	}
+
+	// simple conditions
 	if node.IsLeaf() {
-		// simple conditions
 		return !idx.IsComposite() && idx.canMatchFilter(node.Filter)
-	} else {
-		// composite conditions (all index fields must be preset in the query
-		// and have matching EQ conditions)
-		if !idx.IsComposite() {
+	}
+
+	// composite conditions (all index fields must be preset in the query
+	// and have matching EQ conditions)
+	if !idx.IsComposite() {
+		return false
+	}
+
+	// check composite case first (all fields must have matching EQ conditions)
+	// but order does not matter; compare all but last schema field (= pk)
+	nfields := idx.convert.Schema().NumFields()
+	for _, field := range idx.convert.Schema().Exported()[:nfields-1] {
+		var canMatchField bool
+		for _, c := range node.Children {
+			if !c.IsLeaf() {
+				continue
+			}
+			if field.Name == c.Filter.Name && c.Filter.Mode == types.FilterModeEqual {
+				canMatchField = true
+				break
+			}
+		}
+		if !canMatchField {
 			return false
 		}
-
-		// check composite case first (all fields must have matching EQ conditions)
-		// but order does not matter; compare all but last schema field (= pk)
-		nfields := idx.convert.Schema().NumFields()
-		for _, field := range idx.convert.Schema().Exported()[:nfields-1] {
-			var canMatchField bool
-			for _, c := range node.Children {
-				if !c.IsLeaf() {
-					continue
-				}
-				if field.Name == c.Filter.Name && c.Filter.Mode == types.FilterModeEqual {
-					canMatchField = true
-					break
-				}
-			}
-			if !canMatchField {
-				return false
-			}
-		}
-		return true
 	}
+	return true
 }
 
 func (idx *Index) canMatchFilter(f *query.Filter) bool {
@@ -162,7 +163,7 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 			// empty result if we cannot build a hash from all index fields
 			return nil, false, nil
 		}
-		err := field.Encode(buf, node.Filter.Value)
+		err := field.Encode(buf, node.Filter.Value, LE)
 		if err != nil {
 			return nil, false, err
 		}

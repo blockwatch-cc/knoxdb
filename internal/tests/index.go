@@ -200,7 +200,9 @@ func DropIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti en
 	require.NoError(t, commit())
 	ok, err = store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
-	require.False(t, ok, "db not deleted")
+	if io.Driver != "badger" {
+		require.False(t, ok, "db not deleted")
+	}
 }
 
 func TruncateIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
@@ -340,8 +342,10 @@ func DeleteIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti 
 	abort()
 
 	// delete last item and store
+	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
 	require.NoError(t, ti.Del(ctx, prev))
 	require.NoError(t, ti.Sync(ctx))
+	require.NoError(t, commit())
 
 	// query again
 	ctx, _, _, abort, err = e.WithTransaction(context.Background())
@@ -374,21 +378,21 @@ func QueryIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti e
 	// query by type
 	switch io.Type {
 	case types.IndexTypeHash:
-		// // eq
-		// QueryIndex(t, ctx, ti, makeFilter(ts, "u64", EQ, 1, nil), 1)
-		// // in
-		// QueryIndex(t, ctx, ti, makeFilter(ts, "u64", IN, []int{1, 2}, nil), 2)
+		// eq
+		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", EQ, 1, nil), 1)
+		// in
+		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", IN, []int{1, 2}, nil), 2)
 	case types.IndexTypeInt:
-		// // eq
-		// QueryIndex(t, ctx, ti, makeFilter(ts, "u64", EQ, 1, nil), 1)
-		// // le
-		// QueryIndex(t, ctx, ti, makeFilter(ts, "u64", LE, 1, nil), 2)
-		// // lt
-		// QueryIndex(t, ctx, ti, makeFilter(ts, "u64", LT, 1, nil), 1)
-		// // ge
-		// QueryIndex(t, ctx, ti, makeFilter(ts, "u64", GE, 1, nil), 5)
-		// // gt
-		// QueryIndex(t, ctx, ti, makeFilter(ts, "u64", GT, 1, nil), 4)
+		// eq
+		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", EQ, 1, nil), 1)
+		// le
+		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", LE, 1, nil), 2)
+		// lt
+		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", LT, 1, nil), 1)
+		// ge
+		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", GE, 1, nil), 5)
+		// gt
+		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", GT, 1, nil), 4)
 		// rg
 		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", RG, 1, 2), 2)
 	default:

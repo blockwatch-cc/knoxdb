@@ -233,7 +233,7 @@ func NewIndex(db store.DB, s *schema.Schema, nmax int) *Index {
 		px:     px,
 		nmax:   nmax,
 		view:   schema.NewView(ss),
-		build:  schema.NewBuilder(ss),
+		build:  schema.NewBuilder(ss, binary.LittleEndian),
 		use:    FeatBloomFilter | FeatFuseFilter | FeatBitsFilter,
 	}
 }

@@ -97,8 +97,8 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 				b.Bytes().Append(buf[:fixed])
 				buf = buf[fixed:]
 			} else {
-				l, n := schema.ReadUint32(buf)
-				buf = buf[n:]
+				l := LE.Uint32(buf)
+				buf = buf[4:]
 				b.Bytes().Append(buf[:l])
 				buf = buf[l:]
 			}
@@ -338,8 +338,8 @@ func (p *Package) SetWire(row int, buf []byte) {
 				b.Bytes().Set(row, buf[:fixed])
 				buf = buf[fixed:]
 			} else {
-				l, n := schema.ReadUint32(buf)
-				buf = buf[n:]
+				l := LE.Uint32(buf)
+				buf = buf[4:]
 				b.Bytes().Set(row, buf[:l])
 				buf = buf[l:]
 			}

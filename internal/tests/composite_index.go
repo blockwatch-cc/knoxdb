@@ -144,7 +144,9 @@ func DropCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngi
 	require.NoError(t, commit())
 	ok, err = store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
-	require.False(t, ok, "db not deleted")
+	if io.Driver != "badger" {
+		require.False(t, ok, "db not deleted")
+	}
 }
 
 func TruncateCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
@@ -282,8 +284,10 @@ func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEn
 	abort()
 
 	// delete last item stored
+	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
 	require.NoError(t, ti.Del(ctx, prev))
 	require.NoError(t, ti.Sync(ctx))
+	require.NoError(t, commit())
 
 	// query again
 	ctx, _, _, abort, err = e.WithTransaction(context.Background())

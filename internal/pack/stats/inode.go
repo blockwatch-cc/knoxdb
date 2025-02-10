@@ -88,7 +88,7 @@ func (n *INode) Update(view *schema.View, build *schema.Builder, left, right Nod
 
 	// allocate meta buffer when nil
 	if n.meta == nil {
-		n.meta = make([]byte, build.WireSize())
+		n.meta = make([]byte, build.Len())
 	}
 
 	// merge left and right data when changed

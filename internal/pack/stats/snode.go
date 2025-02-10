@@ -334,7 +334,7 @@ func (n *SNode) Query(it *Iterator) error {
 func (n *SNode) BuildMetaStats(view *schema.View, build *schema.Builder) bool {
 	// allocate meta buffer when nil
 	if n.meta == nil {
-		n.meta = make([]byte, build.WireSize())
+		n.meta = make([]byte, build.Len())
 	}
 
 	// use current statistics as baseline

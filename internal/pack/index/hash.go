@@ -80,13 +80,13 @@ func (idx *Index) hashFilterValue(f *query.Filter) []uint64 {
 		res := make([]uint64, rval.Len())
 		for i := range res {
 			buf.Reset()
-			_ = field.Encode(buf, rval.Index(i).Interface())
+			_ = field.Encode(buf, rval.Index(i).Interface(), LE)
 			res[i] = fnv.Sum64a(buf.Bytes())
 		}
 		return res
 	case types.FilterModeEqual:
 		// single
-		_ = field.Encode(buf, f.Value)
+		_ = field.Encode(buf, f.Value, LE)
 		return []uint64{fnv.Sum64a(buf.Bytes())}
 	default:
 		// unreachable
