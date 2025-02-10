@@ -30,6 +30,7 @@ type Record struct {
 	SchemaId uint64 `knox:"schema_id"` // data pack schema identifier
 	NValues  int64  `knox:"n_values"`  // rows in data pack
 	DiskSize int64  `knox:"disk_size"` // total data pack size on disk
+	NColumns int64  `knox:"-"`         // data schema columns
 
 	view *schema.View
 }
@@ -38,7 +39,8 @@ var _ Reader = (*Record)(nil)
 
 func NewRecordFromWire(s *schema.Schema, buf []byte) *Record {
 	r := &Record{
-		view: schema.NewView(s).Reset(buf),
+		NColumns: int64(s.NumFields()-STATS_DATA_COL_OFFSET) / 2,
+		view:     schema.NewView(s).Reset(buf),
 	}
 	if val, ok := r.view.Get(STATS_ROW_KEY); ok {
 		r.Key = val.(uint32)
@@ -62,15 +64,28 @@ func (r *Record) MinMax(col int) (any, any) {
 	return minv, maxv
 }
 
+func (r *Record) Min(col int) any {
+	minv, _ := r.view.Get(minColIndex(col))
+	return minv
+}
+
+func (r *Record) Max(col int) any {
+	maxv, _ := r.view.Get(maxColIndex(col))
+	return maxv
+}
+
 func (r Record) View() *schema.View {
 	return r.view
 }
 
-func NewRecordFromPack(s *schema.Schema, pkg *pack.Package) *Record {
+func NewRecordFromPack(pkg *pack.Package, n int) *Record {
+	s := MakeSchema(pkg.Schema())
 	rec := &Record{
 		Key:      pkg.Key(),
 		SchemaId: pkg.Schema().Hash(),
 		NValues:  int64(pkg.Len()),
+		NColumns: int64(pkg.Schema().NumFields()),
+		DiskSize: int64(n),
 		view:     schema.NewView(s),
 	}
 	build := schema.NewBuilder(s, binary.LittleEndian)
@@ -78,7 +93,7 @@ func NewRecordFromPack(s *schema.Schema, pkg *pack.Package) *Record {
 	build.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
 	build.Write(STATS_ROW_NVALS, int64(pkg.Len()))
 	// TODO: use analysis when available
-	build.Write(STATS_ROW_SIZE, int64(0)) // TODO: set disk size
+	build.Write(STATS_ROW_SIZE, int64(n))
 
 	fields := pkg.Schema().Exported()
 	for i, b := range pkg.Blocks() {

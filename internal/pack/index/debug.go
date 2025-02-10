@@ -19,17 +19,17 @@ import (
 func (idx *Index) ViewStats(i int) *stats.Record {
 	switch {
 	case i == int(pack.JournalKeyId):
-		return stats.NewRecordFromPack(idx.schema, idx.journal)
+		return stats.NewRecordFromPack(idx.journal, 0)
 	case i == int(pack.TombstoneKeyId):
-		return stats.NewRecordFromPack(idx.schema, idx.tomb)
+		return stats.NewRecordFromPack(idx.tomb, 0)
 	default:
-		pkg, err := idx.loadPack(i)
+		pkg, n, err := idx.loadPack(i)
 		if err != nil {
-			idx.log.Error(err)
+			idx.log.Debugf("%s %s index: pack %d: %v", idx.schema.Name(), idx.opts.Type, i, err)
 			return nil
 		}
 		defer pkg.Release()
-		return stats.NewRecordFromPack(idx.schema, pkg)
+		return stats.NewRecordFromPack(pkg, n)
 	}
 }
 
@@ -40,9 +40,9 @@ func (idx *Index) ViewPackage(ctx context.Context, i int) *pack.Package {
 	case int(pack.TombstoneKeyId):
 		return idx.tomb
 	default:
-		pkg, err := idx.loadPack(i)
+		pkg, _, err := idx.loadPack(i)
 		if err != nil {
-			idx.log.Error(err)
+			idx.log.Debugf("%s %s index: pack %d: %v", idx.schema.Name(), idx.opts.Type, i, err)
 			return nil
 		}
 		return pkg
@@ -57,11 +57,14 @@ func (idx *Index) ViewTomb() bitmap.Bitmap {
 	return bits
 }
 
-func (idx *Index) loadPack(i int) (*pack.Package, error) {
+func (idx *Index) loadPack(i int) (*pack.Package, int, error) {
 	if i < 0 {
-		return nil, engine.ErrInvalidId
+		return nil, 0, engine.ErrInvalidId
 	}
-	var pkg *pack.Package
+	var (
+		pkg    *pack.Package
+		nBytes int
+	)
 	err := idx.db.View(func(tx store.Tx) error {
 		bkt := idx.dataBucket(tx)
 		if bkt == nil {
@@ -83,6 +86,7 @@ func (idx *Index) loadPack(i int) (*pack.Package, error) {
 		if err := blk1.Decode(cur.Value()); err != nil {
 			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 0, err)
 		}
+		nBytes += len(cur.Value())
 		if !cur.Next() {
 			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 1, engine.ErrDatabaseCorrupt)
 		}
@@ -90,6 +94,7 @@ func (idx *Index) loadPack(i int) (*pack.Package, error) {
 		if err := blk2.Decode(cur.Value()); err != nil {
 			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 1, err)
 		}
+		nBytes += len(cur.Value())
 		pkg = pack.New().
 			WithKey(uint32(i)).
 			WithSchema(idx.schema).
@@ -98,5 +103,5 @@ func (idx *Index) loadPack(i int) (*pack.Package, error) {
 			WithBlock(1, blk2)
 		return nil
 	})
-	return pkg, err
+	return pkg, nBytes, err
 }

@@ -14,7 +14,7 @@ import (
 func (t *Table) ViewStats(i int) *stats.Record {
 	switch {
 	case i == int(pack.JournalKeyId):
-		return t.stats.BuildRecord(t.journal.Data)
+		return stats.NewRecordFromPack(t.journal.Data, 0)
 	default:
 		info, _ := t.stats.Get(uint32(i))
 		return info

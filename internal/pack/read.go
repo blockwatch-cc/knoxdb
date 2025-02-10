@@ -82,7 +82,7 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 			} else {
 				v := b.Bytes().Elem(row)
 				LE.PutUint32(x[:], uint32(len(v)))
-				_, err = buf.Write(x[:])
+				_, err = buf.Write(x[:4])
 				if err == nil {
 					_, err = buf.Write(v)
 				}

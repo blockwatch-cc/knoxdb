@@ -74,12 +74,12 @@ type Types struct {
 
 const (
 	TypesCacheSize            = 128 // MB
-	TypesPackSizeLog2         = 16  // 32k packs ~4M
-	TypesJournalSizeLog2      = 17  // 64k
+	TypesPackSizeLog2         = 16  // 32k packs ~6M
+	TypesJournalSizeLog2      = 18  // 128k
 	TypesFillLevel            = 1.0
-	TypesIndexPackSizeLog2    = 15 // 16k packs (32k split size) ~256k
-	TypesIndexJournalSizeLog2 = 16 // 64k
-	TypesIndexFillLevel       = 0.9
+	TypesIndexPackSizeLog2    = 11 // 2k packs
+	TypesIndexJournalSizeLog2 = 18 // 128k journal
+	TypesIndexFillLevel       = 1.0
 )
 
 var (
@@ -123,7 +123,7 @@ func run() error {
 		return err
 	}
 	lvl := log.LevelInfo
-	switch true {
+	switch {
 	case trace:
 		lvl = log.LevelTrace
 	case debug:

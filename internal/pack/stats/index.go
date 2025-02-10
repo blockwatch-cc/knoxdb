@@ -655,6 +655,7 @@ func (idx *Index) Get(key uint32) (*Record, bool) {
 	if !ok {
 		return nil, false
 	}
+
 	// create iterator pointing to stats record we found
 	it := &Iterator{
 		ctx:    context.Background(),
@@ -672,10 +673,6 @@ func (idx *Index) Get(key uint32) (*Record, bool) {
 	defer it.Close()
 
 	return NewRecordFromWire(idx.schema, it.ReadWire()), true
-}
-
-func (idx *Index) BuildRecord(pkg *pack.Package) *Record {
-	return NewRecordFromPack(idx.schema, pkg)
 }
 
 // Find a candidate data pack to insert/merge a primary key into.
@@ -856,7 +853,7 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir type
 		use:     use,
 		smatch:  nodeBits,
 		vmatch:  bitset.NewBitset(STATS_PACK_SIZE),
-		match:   arena.Alloc(arena.AllocUint32, STATS_PACK_SIZE).([]uint32),
+		match:   arena.Alloc(arena.AllocUint32, STATS_PACK_SIZE).([]uint32)[:0],
 		sx:      -1, // start at first bit (it will +1)
 		n:       -1, // start at first offset (it will +1)
 		reverse: dir.IsReverse(),

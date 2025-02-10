@@ -739,24 +739,24 @@ func (s *Bitset) Iterate(i int, buf []int) (int, []int) {
 }
 
 // Indexes returns a slice positions as uint32 for one bits in the bitset.
-func (s Bitset) Indexes(slice []uint32) []uint32 {
+func (s Bitset) Indexes(result []uint32) []uint32 {
 	cnt := s.cnt
 	switch {
 	case cnt == 0:
-		return slice[:0]
+		return result[:0]
 	case cnt < 0:
 		cnt = s.size
 	}
 	// ensure slice dimension is multiple of 8, we need this for our
 	// index lookup algo which always writes multiples of 8 entries
 	cnt = roundUpPow2(cnt, 8)
-	if slice == nil || cap(slice) < cnt {
-		slice = make([]uint32, cnt)
+	if result == nil || cap(result) < cnt {
+		result = make([]uint32, cnt)
 	} else {
-		slice = slice[:cnt]
+		result = result[:cnt]
 	}
-	n := bitsetIndexes(s.buf, s.size, slice)
-	return slice[:n]
+	n := bitsetIndexes(s.buf, s.size, result)
+	return result[:n]
 }
 
 // Slice returns a boolean slice containing all values

@@ -42,7 +42,9 @@ func (it *Iterator) Close() {
 	it.vmatch.Close()
 	it.vmatch = nil
 	it.snode = nil
-	arena.Free(arena.AllocUint32, it.match)
+	if len(it.match) > 1 {
+		arena.Free(arena.AllocUint32, it.match)
+	}
 	it.match = nil
 	it.reverse = false
 }
@@ -93,7 +95,10 @@ func (it Iterator) ReadWire() []byte {
 	if it.snode == nil {
 		return nil
 	}
-	buf, _ := it.snode.spack.ReadWire(int(it.match[it.n]))
+	buf, err := it.snode.spack.ReadWire(int(it.match[it.n]))
+	if err != nil {
+		panic(err)
+	}
 	return buf
 }
 

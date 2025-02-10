@@ -277,7 +277,13 @@ func (n *SNode) Query(it *Iterator) error {
 	// optimized fast path when all data is in memory
 	if len(loadBlocks) == 0 && it.use == 0 {
 		if it.flt != nil {
+			// reset match vector
+			it.vmatch.Resize(n.spack.Len()).Zero()
+
+			// match minmax ranges
 			_, it.vmatch = matchVector(it.flt, n.spack, nil, it.vmatch)
+
+			// convert bitset to indexes
 			it.match = it.vmatch.Indexes(it.match)
 		}
 		return nil
@@ -317,8 +323,14 @@ func (n *SNode) Query(it *Iterator) error {
 		// fuse and bitset filters on demand
 		if it.flt != nil {
 			var m int
+
+			// reset match vector
+			it.vmatch.Resize(n.spack.Len()).Zero()
+
+			// match minmax ranges
 			m, it.vmatch = matchVector(it.flt, n.spack, buckets, it.vmatch)
 			if it.vmatch.Count() == 0 {
+				it.match = it.match[:0]
 				return nil
 			}
 			atomic.AddInt64(&it.idx.bytesRead, int64(m))

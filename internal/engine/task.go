@@ -153,8 +153,14 @@ func (m *TaskService) Stop() {
 	m.drain()
 
 	// close channels
-	close(m.tasks)
-	close(m.workers)
+	if m.tasks != nil {
+		close(m.tasks)
+		m.tasks = nil
+	}
+	if m.workers != nil {
+		close(m.workers)
+		m.workers = nil
+	}
 }
 
 func (m *TaskService) Kill() {
