@@ -332,8 +332,8 @@ func (db *db) Close() error {
 }
 
 func (db *db) Sync() error {
-	db.closeLock.Lock()
-	defer db.closeLock.Unlock()
+	db.closeLock.RLock()
+	defer db.closeLock.RUnlock()
 
 	if db.closed {
 		return makeDbErr(store.ErrDbNotOpen, errDbNotOpenStr)
