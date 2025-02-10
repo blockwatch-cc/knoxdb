@@ -47,5 +47,6 @@ var (
 	ErrTxReadonly     = errors.New("transaction is read-only")
 	ErrTxClosed       = errors.New("transaction is closed")
 	ErrShortMessage   = errors.New("short message buffer")
+	ErrTooManyTasks   = errors.New("too many running tasks")
 	ErrNotImplemented = errors.New("feature not implemented")
 )
