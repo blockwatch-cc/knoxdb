@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -30,7 +29,7 @@ func TestFilterAddContainsUint32AVX2(t *testing.T) {
 	for i := 0; i < num; i++ {
 		slice[i] = uint32(i)
 	}
-	filterAddManyUint32AVX2(*filter, slice, hash.XxHash32Seed)
+	filterAddManyUint32(filter, slice)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
@@ -79,7 +78,7 @@ func TestFilterAddContainsInt32AVX2(t *testing.T) {
 	for i := 0; i < num; i++ {
 		slice[i] = int32(i)
 	}
-	filterAddManyInt32AVX2(*filter, slice, hash.XxHash32Seed)
+	filterAddManyInt32(filter, slice)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
@@ -128,7 +127,7 @@ func TestFilterAddContainsUint64AVX2(t *testing.T) {
 	for i := 0; i < num; i++ {
 		slice[i] = uint64(i)
 	}
-	filterAddManyUint64AVX2(*filter, slice, hash.XxHash32Seed)
+	filterAddManyUint64(filter, slice)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
@@ -177,7 +176,7 @@ func TestFilterAddContainsInt64AVX2(t *testing.T) {
 	for i := 0; i < num; i++ {
 		slice[i] = int64(i)
 	}
-	filterAddManyInt64AVX2(*filter, slice, hash.XxHash32Seed)
+	filterAddManyInt64(filter, slice)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
@@ -226,13 +225,13 @@ func TestFilterMergeAVX2(t *testing.T) {
 	for i := 0; i < num/2; i++ {
 		slice[i] = uint32(i)
 	}
-	filterAddManyUint32AVX2(*filter, slice, hash.XxHash32Seed)
+	filterAddManyUint32(filter, slice)
 
 	filter2 := NewFilter(fsize)
 	for i := num / 2; i < num; i++ {
 		slice[i-num/2] = uint32(i)
 	}
-	filterAddManyUint32AVX2(*filter2, slice, hash.XxHash32Seed)
+	filterAddManyUint32(filter2, slice)
 
 	filterMergeAVX2(filter.bits, filter2.bits)
 
@@ -275,7 +274,7 @@ func BenchmarkFilterAddManyUint32AVX2(b *testing.B) {
 		b.Run(fmt.Sprintf("m=%d_n=%d", c.m, c.n), func(b *testing.B) {
 			b.SetBytes(4 * int64(c.n))
 			for i := 0; i < b.N; i++ {
-				filterAddManyUint32AVX2(*filter, data, hash.XxHash32Seed)
+				filterAddManyUint32(filter, data)
 			}
 		})
 
@@ -296,7 +295,7 @@ func BenchmarkFilterAddManyUint64AVX2(b *testing.B) {
 		b.Run(fmt.Sprintf("m=%d_n=%d", c.m, c.n), func(b *testing.B) {
 			b.SetBytes(8 * int64(c.n))
 			for i := 0; i < b.N; i++ {
-				filterAddManyUint64AVX2(*filter, data, hash.XxHash32Seed)
+				filterAddManyUint64(filter, data)
 			}
 		})
 
