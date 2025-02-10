@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"blockwatch.cc/knoxdb/pkg/assert"
-	"github.com/echa/log"
 )
 
 // "symbols" are character sequences (up to 8 bytes)
@@ -48,11 +47,11 @@ type Symbol struct {
 }
 
 // single-char symbol
-func NewSymbol() *Symbol {
-	return &Symbol{}
+func NewSymbol() Symbol {
+	return Symbol{}
 }
 
-func (s *Symbol) WithCode(c uint8, code uint64) *Symbol {
+func (s Symbol) WithCode(c uint8, code uint64) Symbol {
 	val := Val{}
 	val.SetUint64(uint64(c))
 	s.icl = uint64(1<<28) | uint64(code<<16) | 56
@@ -60,7 +59,7 @@ func (s *Symbol) WithCode(c uint8, code uint64) *Symbol {
 	return s
 }
 
-func (s *Symbol) WithBuffer(buf []byte) *Symbol {
+func (s Symbol) WithBuffer(buf []byte) Symbol {
 	val := Val{}
 	le := len(buf)
 	if le >= 8 {
@@ -70,53 +69,53 @@ func (s *Symbol) WithBuffer(buf []byte) *Symbol {
 		copy(val[:], buf)
 	}
 	s.val = val
-	s.SetCodeLen(FSST_CODE_MAX, uint32(le))
-	log.Debugf("sample -> %s", s)
+	s = s.SetCodeLen(FSST_CODE_MAX, uint32(le))
 	return s
 }
 
-func (s *Symbol) Len() uint32 {
+func (s Symbol) Len() uint32 {
 	return uint32(s.icl >> 28)
 }
 
-func (s *Symbol) Code() uint16 {
-	return uint16(s.icl >> 16 & FSST_CODE_MASK)
+func (s Symbol) Code() uint16 {
+	return uint16((s.icl >> 16) & FSST_CODE_MASK)
 }
 
-func (s *Symbol) IgnoreBits() uint32 {
+func (s Symbol) IgnoreBits() uint32 {
 	return uint32(s.icl)
 }
 
-func (s *Symbol) SetCodeLen(code uint32, len uint32) {
+func (s Symbol) SetCodeLen(code uint32, len uint32) Symbol {
 	s.icl = uint64((len << 28) | (code << 16) | ((8 - len) * 8))
+	return s
 }
 
-func (s *Symbol) First() uint8 {
+func (s Symbol) First() uint8 {
 	assert.Always(s.Len() >= 1, "length should be greater than 1")
 	return uint8(0xFF & s.val.Uint64())
 }
 
-func (s *Symbol) First2() uint16 {
+func (s Symbol) First2() uint16 {
 	assert.Always(s.Len() >= 2, "length should be greater than 2")
 	return uint16(0xFFFF & s.val.Uint64())
 }
 
-func (s *Symbol) Hash() uint64 {
+func (s Symbol) Hash() uint64 {
 	v := 0xFFFFFF & s.val.Uint64()
 	return FSSTHash(v) // hash on the next 3 bytes
 }
 
-func (s *Symbol) Concat(s2 *Symbol) *Symbol {
-	newS := &Symbol{}
+func (s Symbol) Concat(s2 Symbol) Symbol {
+	newS := Symbol{}
 	length := s.Len() + s2.Len()
 	if length > SYMBOL_MAX_LENGTH {
 		length = SYMBOL_MAX_LENGTH
 	}
-	newS.SetCodeLen(uint32(FSST_CODE_MASK), length)
+	newS = newS.SetCodeLen(uint32(FSST_CODE_MASK), length)
 	newS.val.SetUint64((s2.val.Uint64() << (8 * s.Len())) | s.val.Uint64())
 	return newS
 }
 
-func (s *Symbol) String() string {
-	return fmt.Sprintf("val => %q, hash => %x, icl => %d", s.val[:s.Len()], s.Hash(), s.icl)
+func (s Symbol) String() string {
+	return fmt.Sprintf("val => %q, hash => %d, icl => %d", s.val[:s.Len()], s.Hash(), s.icl)
 }

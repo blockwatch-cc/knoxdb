@@ -5,7 +5,7 @@ package fsst
 
 // Symbol that can be put in a queue, ordered on gain
 type QSymbol struct {
-	symbol *Symbol
+	symbol Symbol
 	gain   uint64 // mutable because gain value should be ignored in find() on unordered_set of QSymbols
 }
 

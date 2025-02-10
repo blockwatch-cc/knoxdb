@@ -4,9 +4,9 @@
 package fsst
 
 type Stat struct {
-	longestSymbol *Symbol
+	longestSymbol Symbol
 	symbolsSize   int
-	symbols       []*Symbol
+	symbols       []Symbol
 }
 
 type Encoder struct {
@@ -17,7 +17,7 @@ type Encoder struct {
 
 func NewEncoder(strIn [][]uint8, zeroTerminated bool) *Encoder {
 	encoder := &Encoder{
-		symbolTable: NewSymbolTable(),
+		symbolTable: &SymbolTable{},
 		counter:     &Counter{},
 	}
 	sample := makeSample(strIn)

@@ -60,10 +60,10 @@ type SymbolTable struct {
 	byteCodes [256]uint16
 
 	// 'symbols' is the current symbol  table symbol[code].symbol is the max 8-byte 'symbol' for single-byte 'code'
-	symbols [FSST_CODE_MAX]*Symbol // x in [0,255]: pseudo symbols representing escaped byte x; x in [FSST_CODE_BASE=256,256+nSymbols]: real symbols
+	symbols [FSST_CODE_MAX]Symbol // x in [0,255]: pseudo symbols representing escaped byte x; x in [FSST_CODE_BASE=256,256+nSymbols]: real symbols
 
 	// replicate long symbols in hashTab (avoid indirection).
-	hashTab [HashTabSize]*Symbol // used for all symbols of 3 and more bytes
+	hashTab [HashTabSize]Symbol // used for all symbols of 3 and more bytes
 
 	// amount of symbols in the map (max 255)
 	nSymbols uint16
@@ -91,18 +91,18 @@ func NewSymbolTable() *SymbolTable {
 	}
 
 	for i := 0; i < 256; i++ {
-		symbolTable.symbols[i] = NewSymbol().
-			WithCode(uint8(i), uint64(i|(1<<FSST_LEN_BITS))) // pseudo symbols
+		symbolTable.symbols[i] = NewSymbol().WithCode(uint8(i), uint64(i|(1<<FSST_LEN_BITS))) // pseudo symbols
 	}
+
+	unused := NewSymbol().
+		WithCode(0, uint64(FSST_CODE_MASK)) // single-char symbol, exception code
 	for i := 256; i < FSST_CODE_MAX; i++ {
-		unused := NewSymbol().
-			WithCode(0, uint64(FSST_CODE_MASK)) // single-char symbol, exception code
 		symbolTable.symbols[i] = unused // we start with all symbols unused
 	}
 
 	for i := 0; i < HashTabSize; i++ {
 		// empty hash table
-		symbolTable.hashTab[i] = NewSymbol()
+		symbolTable.hashTab[i] = Symbol{}
 		symbolTable.hashTab[i].val.SetUint64(0)
 		symbolTable.hashTab[i].icl = uint64(FSST_ICL_FREE) // marks empty in hashtab
 	}
@@ -119,6 +119,20 @@ func NewSymbolTable() *SymbolTable {
 
 	return symbolTable
 }
+
+// func (s *SymbolTable) Clone() *SymbolTable {
+// 	st := &SymbolTable{}
+// 	st.nSymbols = s.nSymbols
+// 	st.suffixLim = s.suffixLim
+// 	st.terminator = s.terminator
+// 	st.zeroTerminated = s.zeroTerminated
+// 	copy(st.lenHisto[:], s.lenHisto[:])
+// 	copy(st.hashTab[:], s.hashTab[:])
+// 	copy(st.symbols[:], s.symbols[:])
+// 	copy(st.byteCodes[:], s.byteCodes[:])
+// 	copy(st.shortCodes[:], s.shortCodes[:])
+// 	return st
+// }
 
 func (s *SymbolTable) Clear() {
 	// clear a symbolTable with minimal effort (only erase the used positions in it)
@@ -139,7 +153,7 @@ func (s *SymbolTable) Clear() {
 	s.nSymbols = 0 // no need to clean symbols[] as no symbols are used
 }
 
-func (sym *SymbolTable) HashInsert(s *Symbol) bool {
+func (sym *SymbolTable) HashInsert(s Symbol) bool {
 	idx := s.Hash() & (HashTabSize - 1)
 	if taken := (sym.hashTab[idx].icl < FSST_ICL_FREE); taken {
 		return false // collision in hash table
@@ -149,10 +163,10 @@ func (sym *SymbolTable) HashInsert(s *Symbol) bool {
 	return true
 }
 
-func (sym *SymbolTable) Add(s *Symbol) bool {
+func (sym *SymbolTable) Add(s Symbol) bool {
 	assert.Always(FSST_CODE_BASE+sym.nSymbols < FSST_CODE_MAX, "FSST_CODE_MAX should be greater than FSST_CODE_BASE+nSymbols")
 	len := s.Len()
-	s.SetCodeLen(uint32(FSST_CODE_BASE+sym.nSymbols), len)
+	s = s.SetCodeLen(uint32(FSST_CODE_BASE+sym.nSymbols), len)
 
 	if len == 1 {
 		sym.byteCodes[s.First()] = FSST_CODE_BASE + sym.nSymbols + (1 << FSST_LEN_BITS) // len=1 (<<FSST_LEN_BITS)
@@ -169,7 +183,7 @@ func (sym *SymbolTable) Add(s *Symbol) bool {
 }
 
 // / Find longest expansion, return code (= position in symbol table)
-func (sym *SymbolTable) FindLongestSymbol(s *Symbol) uint64 {
+func (sym *SymbolTable) FindLongestSymbol(s Symbol) uint64 {
 	idx := s.Hash() & (HashTabSize - 1)
 	if sym.hashTab[idx].icl <= s.icl && sym.hashTab[idx].val.Uint64() == (s.val.Uint64()&(0xFFFFFFFFFFFFFFFF>>uint8(sym.hashTab[idx].icl))) {
 		return (sym.hashTab[idx].icl >> 16) & FSST_CODE_MASK // matched a long symbol
@@ -257,7 +271,7 @@ func (sym *SymbolTable) Finalize(zeroTerminated uint8) {
 			newCode[i] = rsum[len-1]
 			rsum[len-1]++
 		}
-		s1.SetCodeLen(uint32(newCode[i]), len)
+		s1 = s1.SetCodeLen(uint32(newCode[i]), len)
 		sym.symbols[newCode[i]] = s1
 	}
 
@@ -426,7 +440,7 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 		}
 		counter.Count1Set(uint32(terminator), 65535)
 
-		addOrInc := func(s *Symbol, count uint64) {
+		addOrInc := func(s Symbol, count uint64) {
 			if count < (5*sampleFrac)/128 {
 				return // improves both compression speed (less candidates), but also quality!!
 			}
@@ -521,7 +535,7 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 		log.Debugf("Terminator => %x ", st.terminator)
 		makeTable(st, counters, false)
 	}
-
+	log.Debugf("logging best gain %d table", bestGain)
 	counters.Restore(bestCounter)
 	makeTable(bestTable, counters, true)
 	var zero uint8 = 0
