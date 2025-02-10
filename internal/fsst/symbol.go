@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"blockwatch.cc/knoxdb/pkg/assert"
+	"github.com/echa/log"
 )
 
 // "symbols" are character sequences (up to 8 bytes)
@@ -70,6 +71,7 @@ func (s *Symbol) WithBuffer(buf []byte) *Symbol {
 	}
 	s.val = val
 	s.SetCodeLen(FSST_CODE_MAX, uint32(le))
+	log.Debugf("sample -> %s", s)
 	return s
 }
 
@@ -116,5 +118,5 @@ func (s *Symbol) Concat(s2 *Symbol) *Symbol {
 }
 
 func (s *Symbol) String() string {
-	return fmt.Sprintf("val => %q, hash => %x", s.val[:s.Len()], s.Hash())
+	return fmt.Sprintf("val => %q, hash => %x, icl => %d", s.val[:s.Len()], s.Hash(), s.icl)
 }

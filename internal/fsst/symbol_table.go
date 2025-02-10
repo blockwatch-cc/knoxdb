@@ -94,20 +94,17 @@ func NewSymbolTable() *SymbolTable {
 		symbolTable.symbols[i] = NewSymbol().
 			WithCode(uint8(i), uint64(i|(1<<FSST_LEN_BITS))) // pseudo symbols
 	}
-
-	unused := NewSymbol().
-		WithCode(0, uint64(FSST_CODE_MASK)) // single-char symbol, exception code
 	for i := 256; i < FSST_CODE_MAX; i++ {
+		unused := NewSymbol().
+			WithCode(0, uint64(FSST_CODE_MASK)) // single-char symbol, exception code
 		symbolTable.symbols[i] = unused // we start with all symbols unused
 	}
 
-	// empty hash table
-	var s Symbol
-	s.val.SetUint64(0)
-	s.icl = uint64(FSST_ICL_FREE) // marks empty in hashtab
-
 	for i := 0; i < HashTabSize; i++ {
-		symbolTable.hashTab[i] = &s
+		// empty hash table
+		symbolTable.hashTab[i] = NewSymbol()
+		symbolTable.hashTab[i].val.SetUint64(0)
+		symbolTable.hashTab[i].icl = uint64(FSST_ICL_FREE) // marks empty in hashtab
 	}
 
 	// fill byteCodes[] with the pseudo code all bytes (escaped bytes)
@@ -148,7 +145,7 @@ func (sym *SymbolTable) HashInsert(s *Symbol) bool {
 		return false // collision in hash table
 	}
 	sym.hashTab[idx].icl = s.icl
-	sym.hashTab[idx].val.SetUint64(s.val.Uint64() & (0xFFFFFFFFFFFFFFFF >> s.icl))
+	sym.hashTab[idx].val.SetUint64(s.val.Uint64() & (0xFFFFFFFFFFFFFFFF >> uint8(s.icl)))
 	return true
 }
 
@@ -174,7 +171,7 @@ func (sym *SymbolTable) Add(s *Symbol) bool {
 // / Find longest expansion, return code (= position in symbol table)
 func (sym *SymbolTable) FindLongestSymbol(s *Symbol) uint64 {
 	idx := s.Hash() & (HashTabSize - 1)
-	if sym.hashTab[idx].icl <= s.icl && sym.hashTab[idx].val.Uint64() == (s.val.Uint64()&(0xFFFFFFFFFFFFFFFF>>sym.hashTab[idx].icl)) {
+	if sym.hashTab[idx].icl <= s.icl && sym.hashTab[idx].val.Uint64() == (s.val.Uint64()&(0xFFFFFFFFFFFFFFFF>>uint8(sym.hashTab[idx].icl))) {
 		return (sym.hashTab[idx].icl >> 16) & FSST_CODE_MASK // matched a long symbol
 	}
 	if s.Len() >= 2 {
@@ -368,7 +365,7 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 						word := binary.LittleEndian.Uint64(line[cur:])
 						code := word & 0xFFFFFF
 						idx := FSSTHash(code) & (HashTabSize - 1)
-						var s *Symbol = st.hashTab[idx]
+						s := st.hashTab[idx]
 						code2 = int(st.shortCodes[(word&0xFFFF)] & FSST_CODE_MASK)
 						word &= ((0xFFFFFFFFFFFFFFFF) >> uint8(s.icl))
 						var c0Val, c1Val uint8 = 0, 0
@@ -397,7 +394,7 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 					if isEscapeCode(uint64(code2)) {
 						code2Val = 1
 					}
-					gain += int(cur-start) - (1 + code2Val)
+					gain += ((cur - start) - (1 + code2Val))
 
 					// now count the subsequent two symbols we encode as an extension codesibility
 					if sampleFrac < 128 {
@@ -496,6 +493,7 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 			q := heap.Pop(pq)
 			symbol := q.(QSymbol).symbol
 			sym.Add(symbol)
+			log.Debugf("symbol => [%s]", symbol)
 			if isBest {
 				encoder.stat.symbols = append(encoder.stat.symbols, q.(QSymbol).symbol)
 				encoder.stat.symbolsSize += len(symbol.val)
@@ -519,6 +517,8 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 			// we do 5 rounds (sampleFrac=8,38,68,98,128)
 			break
 		}
+		log.Debugf("logging gain %d table", gain)
+		log.Debugf("Terminator => %x ", st.terminator)
 		makeTable(st, counters, false)
 	}
 
