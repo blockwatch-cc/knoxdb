@@ -15,8 +15,12 @@ const FSST_MAX_SIZE = FSST_MEMBUF - (1 + FSST_MAXHEADER/2)
 // the main compression function (everything automatic)
 func Compress(strIn [][]uint8) []uint8 {
 	e := NewEncoder(strIn, false)
+	totalSize := 0
+	for _, line := range strIn {
+		totalSize += len(line)
+	}
 	// to be faster than scalar, simd needs 64 lines or more of length >=12; or fewer lines, but big ones (totLen > 32KB)
-	buf := make([]uint8, FSST_MAX_SIZE)
+	buf := make([]uint8, totalSize*2) // max size for compressed will be *2 of it
 	pos := Export(e, buf)
 
 	pos += _compress(e, strIn, buf[pos:])
