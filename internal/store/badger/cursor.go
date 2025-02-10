@@ -148,7 +148,7 @@ func (c *cursor) Seek(seek []byte) bool {
 	// then choose the iterator that is both valid and has the larger key.
 	// seekKey := append(bucketizedKey(c.bucket.id, c.keyRange.Start), seek...)
 	c.currentIter.Seek(bucketizedKey(c.bucket.id, seek))
-	return c.currentIter.Valid()
+	return c.currentIter.Valid() && c.currentIter.ValidForPrefix(c.keyRange.Start)
 }
 
 // rawKey returns the current key the cursor is pointing to without stripping
