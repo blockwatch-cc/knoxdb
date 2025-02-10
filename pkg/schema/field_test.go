@@ -5,6 +5,7 @@ package schema
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"reflect"
@@ -293,10 +294,10 @@ func TestFieldStructValueRetrieval(t *testing.T) {
 func encodeDecodeField(t *testing.T, field Field, value interface{}) interface{} {
 	t.Helper()
 	var buf bytes.Buffer
-	err := field.Encode(&buf, value)
+	err := field.Encode(&buf, value, binary.NativeEndian)
 	require.NoError(t, err, "Encoding failed")
 
-	decoded, err := field.Decode(bytes.NewReader(buf.Bytes()))
+	decoded, err := field.Decode(bytes.NewReader(buf.Bytes()), binary.NativeEndian)
 	require.NoError(t, err, "Decoding failed")
 
 	return decoded
@@ -536,12 +537,12 @@ func TestFieldEncode(t *testing.T) {
 		t.Run(testCase.Name, func(t *testing.T) {
 			field := NewField(testCase.FieldType)
 			buf := bytes.NewBuffer(nil)
-			err := field.Encode(buf, testCase.Value)
+			err := field.Encode(buf, testCase.Value, binary.NativeEndian)
 			if testCase.IsErrorExpected {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				decodedVal, err := field.Decode(buf)
+				decodedVal, err := field.Decode(buf, binary.NativeEndian)
 				require.NoError(t, err)
 				require.Equal(t, decodedVal, testCase.Value)
 			}

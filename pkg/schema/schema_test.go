@@ -13,6 +13,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -157,9 +158,9 @@ func NewAllTypes(i int64) AllTypes {
 		I256:    num.Int256FromInt64(i),
 		Bool:    i%2 == 1,
 		Time:    time.Unix(0, i).UTC(),
-		Hash:    Uint64Bytes(uint64(i)),
+		Hash:    util.U64Bytes(uint64(i)),
 		Array:   [2]byte{byte(i >> 8 & 0xf), byte(i & 0xf)},
-		String:  hex.EncodeToString(Uint64Bytes(uint64(i))),
+		String:  util.U64Hex(uint64(i)),
 		MyEnum:  MyEnum("a"),
 	}
 }
@@ -172,7 +173,7 @@ type FixedTypes struct {
 }
 
 func NewFixedTypes(i int64) FixedTypes {
-	buf := bytes.Repeat(Uint64Bytes(uint64(i)), 3)[:20]
+	buf := bytes.Repeat(util.U64Bytes(uint64(i)), 3)[:20]
 	return FixedTypes{
 		BaseModel: BaseModel{
 			Id: uint64(i),

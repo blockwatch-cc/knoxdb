@@ -183,7 +183,7 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 			*(*[]byte)(ptr) = bytes.Clone(d.buf.Next(int(field.fixed)))
 
 		case OpCodeString:
-			l, _ := ReadUint32(d.buf.Next(4))
+			l := LE.Uint32(d.buf.Next(4))
 			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
 			if err != nil {
 				return err
@@ -195,7 +195,7 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 			*(*string)(ptr) = string(d.buf.Next(int(l)))
 
 		case OpCodeBytes:
-			l, _ := ReadUint32(d.buf.Next(4))
+			l := LE.Uint32(d.buf.Next(4))
 			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
 			if err != nil {
 				return err
@@ -207,7 +207,7 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 			*(*[]byte)(ptr) = bytes.Clone(d.buf.Next(int(l)))
 
 		case OpCodeUnmarshalBinary, OpCodeUnmarshalText:
-			l, _ := ReadUint32(d.buf.Next(4))
+			l := LE.Uint32(d.buf.Next(4))
 			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
 			if err != nil {
 				return err
@@ -226,7 +226,7 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 			}
 
 		case OpCodeDateTime:
-			ts, _ := ReadInt64(d.buf.Next(8))
+			ts := int64(LE.Uint64(d.buf.Next(8)))
 			*(*time.Time)(ptr) = time.Unix(0, ts).UTC()
 
 		case OpCodeInt128:
@@ -236,13 +236,11 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 			*(*num.Int256)(ptr) = num.Int256FromBytes(d.buf.Next(32))
 
 		case OpCodeDecimal32:
-			i32, _ := ReadInt32(d.buf.Next(4))
-			(*(*num.Decimal32)(ptr)).Set(i32)
+			(*(*num.Decimal32)(ptr)).Set(int32(LE.Uint32(d.buf.Next(4))))
 			(*(*num.Decimal32)(ptr)).SetScale(field.Scale())
 
 		case OpCodeDecimal64:
-			i64, _ := ReadInt64(d.buf.Next(8))
-			(*(*num.Decimal64)(ptr)).Set(i64)
+			(*(*num.Decimal64)(ptr)).Set(int64(LE.Uint64(d.buf.Next(8))))
 			(*(*num.Decimal64)(ptr)).SetScale(field.scale)
 
 		case OpCodeDecimal128:
@@ -254,7 +252,7 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 			(*(*num.Decimal256)(ptr)).SetScale(field.scale)
 
 		case OpCodeEnum:
-			u16, _ := ReadUint16(d.buf.Next(2))
+			u16 := LE.Uint16(d.buf.Next(2))
 			if enum, ok := d.enums.Lookup(field.name); ok {
 				val, ok := enum.Value(u16)
 				if !ok {
@@ -354,8 +352,8 @@ func (d *Decoder) DecodeSlice(buf []byte, slice any) (int, error) {
 func readReflectField(code OpCode, rval any, buf []byte) []byte {
 	switch code {
 	case OpCodeUnmarshalBinary:
-		l, n := ReadUint32(buf)
-		buf = buf[n:]
+		l := LE.Uint32(buf)
+		buf = buf[4:]
 		if l > 0 {
 			_ = buf[l-1]
 			_ = rval.(encoding.BinaryUnmarshaler).UnmarshalBinary(buf[:l])
@@ -363,8 +361,8 @@ func readReflectField(code OpCode, rval any, buf []byte) []byte {
 		}
 
 	case OpCodeUnmarshalText:
-		l, n := ReadUint32(buf)
-		buf = buf[n:]
+		l := LE.Uint32(buf)
+		buf = buf[4:]
 		if l > 0 {
 			_ = buf[l-1]
 			_ = rval.(encoding.TextUnmarshaler).UnmarshalText(buf[:l])
@@ -413,8 +411,8 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 		buf = buf[field.fixed:]
 
 	case OpCodeString:
-		l, n := ReadUint32(buf)
-		buf = buf[n:]
+		l := LE.Uint32(buf)
+		buf = buf[4:]
 		if l > 0 {
 			_ = buf[l-1]
 			*(*string)(ptr) = unsafe.String(unsafe.SliceData(buf), l)
@@ -422,8 +420,8 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 		}
 
 	case OpCodeBytes:
-		l, n := ReadUint32(buf)
-		buf = buf[n:]
+		l := LE.Uint32(buf)
+		buf = buf[4:]
 		if l > 0 {
 			_ = buf[l-1]
 			*(*[]byte)(ptr) = buf[:l]
@@ -431,9 +429,9 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 		}
 
 	case OpCodeDateTime:
-		ts, n := ReadInt64(buf)
+		ts := int64(LE.Uint64(buf))
 		*(*time.Time)(ptr) = time.Unix(0, ts).UTC()
-		buf = buf[n:]
+		buf = buf[8:]
 
 	case OpCodeInt128:
 		_ = buf[15]
@@ -446,16 +444,14 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 		buf = buf[32:]
 
 	case OpCodeDecimal32:
-		i32, n := ReadInt32(buf)
-		(*(*num.Decimal32)(ptr)).Set(i32)
+		(*(*num.Decimal32)(ptr)).Set(int32(LE.Uint32(buf)))
 		(*(*num.Decimal32)(ptr)).SetScale(field.Scale())
-		buf = buf[n:]
+		buf = buf[4:]
 
 	case OpCodeDecimal64:
-		i64, n := ReadInt64(buf)
-		(*(*num.Decimal64)(ptr)).Set(i64)
+		(*(*num.Decimal64)(ptr)).Set(int64(LE.Uint64(buf)))
 		(*(*num.Decimal64)(ptr)).SetScale(field.scale)
-		buf = buf[n:]
+		buf = buf[8:]
 
 	case OpCodeDecimal128:
 		_ = buf[15]
@@ -470,8 +466,8 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 		buf = buf[32:]
 
 	case OpCodeEnum:
-		u16, n := ReadUint16(buf)
-		buf = buf[n:]
+		u16 := LE.Uint16(buf)
+		buf = buf[2:]
 		enum, ok := enums.Lookup(field.name)
 		if !ok {
 			panic(fmt.Errorf("translation for enum %q not registered", field.name))

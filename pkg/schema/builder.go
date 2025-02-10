@@ -5,6 +5,7 @@ package schema
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math"
 	"slices"
 	"time"
@@ -24,22 +25,28 @@ type Builder struct {
 	internal    bool           // flag indicating to output internal fields
 	firstDyn    int            // position of first dynamic field (optimization)
 	minWireSize int            // min size with or without internal fields
+	layout      binary.ByteOrder
 }
 
-func NewBuilder(s *Schema) *Builder {
-	b := &Builder{}
+func NewBuilder(s *Schema, layout binary.ByteOrder) *Builder {
+	b := &Builder{layout: layout}
 	return b.initFromSchema(s)
 }
 
-func NewInternalBuilder(s *Schema) *Builder {
+func NewInternalBuilder(s *Schema, layout binary.ByteOrder) *Builder {
 	b := &Builder{
+		layout:   layout,
 		internal: true,
 	}
 	return b.initFromSchema(s)
 }
 
-func (b Builder) WireSize() int {
-	return b.minWireSize
+func (b Builder) Len() int {
+	sz := b.minWireSize
+	for _, v := range b.dyn {
+		sz += len(v)
+	}
+	return sz
 }
 
 func (b *Builder) initFromSchema(s *Schema) *Builder {
@@ -107,7 +114,7 @@ func (b *Builder) Write(i int, val any) error {
 	switch field.typ {
 	case types.FieldTypeUint64:
 		if u64, ok := val.(uint64); ok {
-			LE.PutUint64(b.buf[x:y], u64)
+			b.layout.PutUint64(b.buf[x:y], u64)
 		} else {
 			err = ErrInvalidValueType
 		}
@@ -137,30 +144,30 @@ func (b *Builder) Write(i int, val any) error {
 	case types.FieldTypeDatetime:
 		switch tm := val.(type) {
 		case time.Time:
-			LE.PutUint64(b.buf[x:y], uint64(tm.UnixNano()))
+			b.layout.PutUint64(b.buf[x:y], uint64(tm.UnixNano()))
 		case int64:
-			LE.PutUint64(b.buf[x:y], uint64(tm))
+			b.layout.PutUint64(b.buf[x:y], uint64(tm))
 		default:
 			err = ErrInvalidValueType
 		}
 
 	case types.FieldTypeInt64:
 		if i64, ok := val.(int64); ok {
-			LE.PutUint64(b.buf[x:y], uint64(i64))
+			b.layout.PutUint64(b.buf[x:y], uint64(i64))
 		} else {
 			err = ErrInvalidValueType
 		}
 
 	case types.FieldTypeFloat64:
 		if f64, ok := val.(float64); ok {
-			LE.PutUint64(b.buf[x:y], math.Float64bits(f64))
+			b.layout.PutUint64(b.buf[x:y], math.Float64bits(f64))
 		} else {
 			err = ErrInvalidValueType
 		}
 
 	case types.FieldTypeFloat32:
 		if f32, ok := val.(float32); ok {
-			LE.PutUint32(b.buf[x:y], math.Float32bits(f32))
+			b.layout.PutUint32(b.buf[x:y], math.Float32bits(f32))
 		} else {
 			err = ErrInvalidValueType
 		}
@@ -178,14 +185,14 @@ func (b *Builder) Write(i int, val any) error {
 
 	case types.FieldTypeInt32:
 		if i32, ok := val.(int32); ok {
-			LE.PutUint32(b.buf[x:y], uint32(i32))
+			b.layout.PutUint32(b.buf[x:y], uint32(i32))
 		} else {
 			err = ErrInvalidValueType
 		}
 
 	case types.FieldTypeInt16:
 		if i16, ok := val.(int16); ok {
-			LE.PutUint16(b.buf[x:y], uint16(i16))
+			b.layout.PutUint16(b.buf[x:y], uint16(i16))
 		} else {
 			err = ErrInvalidValueType
 		}
@@ -199,14 +206,14 @@ func (b *Builder) Write(i int, val any) error {
 
 	case types.FieldTypeUint32:
 		if u32, ok := val.(uint32); ok {
-			LE.PutUint32(b.buf[x:y], u32)
+			b.layout.PutUint32(b.buf[x:y], u32)
 		} else {
 			err = ErrInvalidValueType
 		}
 
 	case types.FieldTypeUint16:
 		if u16, ok := val.(uint16); ok {
-			LE.PutUint16(b.buf[x:y], u16)
+			b.layout.PutUint16(b.buf[x:y], u16)
 		} else {
 			err = ErrInvalidValueType
 		}
@@ -255,9 +262,9 @@ func (b *Builder) Write(i int, val any) error {
 	case types.FieldTypeDecimal64:
 		switch v := val.(type) {
 		case num.Decimal64:
-			LE.PutUint64(b.buf[x:y], uint64(v.Int64()))
+			b.layout.PutUint64(b.buf[x:y], uint64(v.Int64()))
 		case int64:
-			LE.PutUint64(b.buf[x:y], uint64(v))
+			b.layout.PutUint64(b.buf[x:y], uint64(v))
 		default:
 			err = ErrInvalidValueType
 		}
@@ -265,9 +272,9 @@ func (b *Builder) Write(i int, val any) error {
 	case types.FieldTypeDecimal32:
 		switch v := val.(type) {
 		case num.Decimal32:
-			LE.PutUint32(b.buf[x:y], uint32(v.Int64()))
+			b.layout.PutUint32(b.buf[x:y], uint32(v.Int64()))
 		case int64:
-			LE.PutUint32(b.buf[x:y], uint32(v))
+			b.layout.PutUint32(b.buf[x:y], uint32(v))
 		default:
 			err = ErrInvalidValueType
 		}
@@ -313,7 +320,9 @@ func (b *Builder) Bytes() []byte {
 		} else {
 			// write dynamic field
 			val := b.dyn[n]
-			buf.Write(Uint32Bytes(uint32(len(val))))
+			var l [4]byte
+			LE.PutUint32(l[:], uint32(len(val)))
+			buf.Write(l[:])
 			buf.Write(val)
 		}
 		n++

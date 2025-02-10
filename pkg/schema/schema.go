@@ -716,9 +716,12 @@ func (s *Schema) Finalize() *Schema {
 	s.isInterface = false
 	s.schemaHash = 0
 
+	var b [4]byte
+
 	// generate schema hash from visible fields
 	h := fnv.New64a()
-	h.Write(Uint32Bytes(s.version))
+	LE.PutUint32(b[:], s.version)
+	h.Write(b[:])
 
 	for i := range s.fields {
 		// collect sizes from visible fields
@@ -732,7 +735,8 @@ func (s *Schema) Finalize() *Schema {
 			}
 
 			// hash id, type
-			h.Write(Uint16Bytes(s.fields[i].id))
+			LE.PutUint16(b[:], s.fields[i].id)
+			h.Write(b[:2])
 			h.Write([]byte{byte(s.fields[i].typ)})
 
 			// cache whether we need interface access

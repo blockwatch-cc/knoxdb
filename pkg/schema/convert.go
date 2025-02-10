@@ -211,20 +211,17 @@ func extractFixed(c *Converter, buf []byte) []byte {
 		switch field.typ {
 		case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
 			types.FieldTypeFloat64, types.FieldTypeDecimal64:
-			v, n := ReadUint64(buf)
-			c.layout.PutUint64(res[ofs:], v)
-			buf = buf[n:]
+			c.layout.PutUint64(res[ofs:], LE.Uint64(buf))
+			buf = buf[8:]
 
 		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
 			types.FieldTypeDecimal32:
-			v, n := ReadUint32(buf)
-			c.layout.PutUint32(res[ofs:], v)
-			buf = buf[n:]
+			c.layout.PutUint32(res[ofs:], LE.Uint32(buf))
+			buf = buf[4:]
 
 		case types.FieldTypeInt16, types.FieldTypeUint16:
-			v, n := ReadUint16(buf)
-			c.layout.PutUint16(res[ofs:], v)
-			buf = buf[n:]
+			c.layout.PutUint16(res[ofs:], LE.Uint16(buf))
+			buf = buf[2:]
 
 		case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8:
 			res[ofs] = buf[0]
@@ -292,12 +289,12 @@ func extractVariableInorder(c *Converter, buf []byte) []byte {
 		switch field.typ {
 		case types.FieldTypeString, types.FieldTypeBytes:
 			if field.fixed == 0 {
-				u, n := ReadUint32(buf)
+				u := LE.Uint32(buf)
 				if c.skipLen {
 					sz = int(u)
-					buf = buf[n:]
+					buf = buf[4:]
 				} else {
-					sz = int(u) + n
+					sz = int(u) + 4
 				}
 			}
 		}
@@ -312,19 +309,16 @@ func extractVariableInorder(c *Converter, buf []byte) []byte {
 		switch field.typ {
 		case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
 			types.FieldTypeFloat64, types.FieldTypeDecimal64:
-			v, _ := ReadUint64(buf)
-			c.layout.PutUint64(b[:], v)
+			c.layout.PutUint64(b[:], LE.Uint64(buf))
 			res.Write(b[:])
 
 		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
 			types.FieldTypeDecimal32:
-			v, _ := ReadUint32(buf)
-			c.layout.PutUint32(b[:], v)
+			c.layout.PutUint32(b[:], LE.Uint32(buf))
 			res.Write(b[:4])
 
 		case types.FieldTypeInt16, types.FieldTypeUint16:
-			v, _ := ReadUint16(buf)
-			c.layout.PutUint16(b[:], v)
+			c.layout.PutUint16(b[:], LE.Uint16(buf))
 			res.Write(b[:2])
 
 		case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8,
@@ -389,12 +383,12 @@ func extractVariableReorder(c *Converter, buf []byte) []byte {
 		switch field.typ {
 		case types.FieldTypeString, types.FieldTypeBytes:
 			if field.fixed == 0 {
-				u, n := ReadUint32(buf)
+				u := LE.Uint32(buf)
 				if c.skipLen {
 					sz = int(u)
-					buf = buf[n:]
+					buf = buf[4:]
 				} else {
-					sz = int(u) + n
+					sz = int(u) + 4
 				}
 			}
 		}
@@ -408,17 +402,14 @@ func extractVariableReorder(c *Converter, buf []byte) []byte {
 		switch field.typ {
 		case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
 			types.FieldTypeFloat64, types.FieldTypeDecimal64:
-			v, _ := ReadUint64(buf)
-			c.layout.PutUint64(c.parts[pos], v)
+			c.layout.PutUint64(c.parts[pos], LE.Uint64(buf))
 
 		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
 			types.FieldTypeDecimal32:
-			v, _ := ReadUint32(buf)
-			c.layout.PutUint32(c.parts[pos], v)
+			c.layout.PutUint32(c.parts[pos], LE.Uint32(buf))
 
 		case types.FieldTypeInt16, types.FieldTypeUint16:
-			v, _ := ReadUint16(buf)
-			c.layout.PutUint16(c.parts[pos], v)
+			c.layout.PutUint16(c.parts[pos], LE.Uint16(buf))
 
 		case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8,
 			types.FieldTypeInt256, types.FieldTypeDecimal256,

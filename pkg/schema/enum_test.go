@@ -4,10 +4,9 @@
 package schema
 
 import (
-	"encoding/hex"
-	"math/rand"
 	"testing"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -140,7 +139,7 @@ var enumBenchSizes = []struct {
 func makeRandStrings(n int) []string {
 	vals := []string{}
 	for i := 0; i < n; i++ {
-		vals = append(vals, hex.EncodeToString(Uint64Bytes(uint64(rand.Int63()))))
+		vals = append(vals, util.U64Hex(util.RandUint64()))
 	}
 	return vals
 }
