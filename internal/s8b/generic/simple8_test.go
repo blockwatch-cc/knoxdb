@@ -19,7 +19,7 @@ func Test_Encode_NoValues(t *testing.T) {
 	encoded, _ := EncodeUint64(in)
 
 	decoded := make([]uint64, len(in))
-	n, _ := DecodeUint64(decoded, util.Uint64SliceAsByteSlice(encoded))
+	n, _ := DecodeUint64(decoded, util.ToByteSlice(encoded))
 
 	if len(in) != len(decoded[:n]) {
 		t.Fatalf("Len mismatch: got %v, exp %v", len(decoded), len(in))
@@ -43,7 +43,7 @@ func TestEncode(t *testing.T) {
 		}
 
 		decoded := make([]uint64, len(test.In))
-		n, err := DecodeUint64(decoded, util.Uint64SliceAsByteSlice(encoded))
+		n, err := DecodeUint64(decoded, util.ToByteSlice(encoded))
 		if err != nil {
 			t.Fatalf("%s: unexpected decode error\n%s", test.Name, err)
 		}

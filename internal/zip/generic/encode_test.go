@@ -41,7 +41,7 @@ func makeUint64Result[T int8 | int16 | int32 | int64](s []T) []uint64 {
 func TestZzDeltaEncodeUint64Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint64Cases {
 		slice := make([]uint64, len(c.Slice))
-		ZzDeltaEncodeUint64(slice, util.Int64AsUint64Slice(c.Slice))
+		ZzDeltaEncodeUint64(slice, util.ReinterpretSlice[int64, uint64](c.Slice))
 		if got, want := len(slice), len(c.Result); got != want {
 			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
@@ -56,7 +56,7 @@ func TestZzDeltaEncodeUint64Generic(t *testing.T) {
 func TestZzDeltaEncodeUint32Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint32Cases {
 		slice := make([]uint64, len(c.Slice))
-		ZzDeltaEncodeUint32(slice, util.Int32AsUint32Slice(c.Slice))
+		ZzDeltaEncodeUint32(slice, util.ReinterpretSlice[int32, uint32](c.Slice))
 		if got, want := len(slice), len(c.Result); got != want {
 			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
@@ -71,7 +71,7 @@ func TestZzDeltaEncodeUint32Generic(t *testing.T) {
 func TestZzDeltaEncodeUint16Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint16Cases {
 		slice := make([]uint64, len(c.Slice))
-		ZzDeltaEncodeUint16(slice, util.Int16AsUint16Slice(c.Slice))
+		ZzDeltaEncodeUint16(slice, util.ReinterpretSlice[int16, uint16](c.Slice))
 		if got, want := len(slice), len(c.Result); got != want {
 			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}
@@ -87,7 +87,7 @@ func TestZzDeltaEncodeUint16Generic(t *testing.T) {
 func TestZzDeltaEncodeUint8Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint8Cases {
 		slice := make([]uint64, len(c.Slice))
-		ZzDeltaEncodeUint8(slice, util.Int8AsUint8Slice(c.Slice))
+		ZzDeltaEncodeUint8(slice, util.ReinterpretSlice[int8, uint8](c.Slice))
 		if got, want := len(slice), len(c.Result); got != want {
 			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
 		}

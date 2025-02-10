@@ -49,7 +49,7 @@ func makeTestData(sz int, pk uint64) (res []TestStruct) {
 			I32: int32(id),
 			I16: int16(id),
 			I8:  int8(id),
-			Buf: util.Uint64Bytes(id),
+			Buf: util.U64Bytes(id),
 		})
 	}
 	return
@@ -192,7 +192,7 @@ func TestIndexAddSingle(t *testing.T) {
 
 	// snode api
 	assert.Equal(t, uint32(0), snode.Key(), "snode key")
-	assert.LessOrEqual(t, idx.build.WireSize(), len(snode.Bytes()), "snode bytes")
+	assert.LessOrEqual(t, idx.build.Len(), len(snode.Bytes()), "snode bytes")
 	assert.False(t, snode.IsEmpty(), "snode empty")
 	assert.True(t, snode.IsWritable(), "snode writable")
 	assert.Equal(t, 1, snode.NPacks(), "snode num data packs")
@@ -286,7 +286,7 @@ func TestIndexUpdate(t *testing.T) {
 
 	// snode api
 	assert.Equal(t, uint32(0), snode.Key(), "snode key")
-	assert.LessOrEqual(t, idx.build.WireSize(), len(snode.Bytes()), "snode bytes")
+	assert.LessOrEqual(t, idx.build.Len(), len(snode.Bytes()), "snode bytes")
 	assert.False(t, snode.IsEmpty(), "snode empty")
 	assert.True(t, snode.IsWritable(), "snode writable")
 	assert.Equal(t, 1, snode.NPacks(), "snode num data packs")

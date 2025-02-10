@@ -534,7 +534,7 @@ type journalE2ETest struct {
 	pks  []uint64 // input: pks used to insert test data into journal
 	del  []uint64 // input: pks to delete from journal after insert
 	bit  []byte   // input: bitset to simulate journal matches
-	idx  []int    // output: expected indexes sorted in pk order
+	idx  []uint32 // output: expected indexes sorted in pk order
 	pkx  []uint64 // output: expected pks sorted in pk order
 }
 
@@ -544,7 +544,7 @@ var journalE2Etests = []journalE2ETest{
 		pks:  []uint64{1, 2, 3, 4, 5, 6, 7, 8}, // sorted journal
 		del:  []uint64{1, 2, 3, 4},             // first 50% marked as deleted
 		bit:  []byte{0xFF},                     // all match
-		idx:  []int{4, 5, 6, 7},                // exp: second half as result
+		idx:  []uint32{4, 5, 6, 7},             // exp: second half as result
 		pkx:  []uint64{5, 6, 7, 8},             // exp: ordered pks
 	},
 	{
@@ -552,7 +552,7 @@ var journalE2Etests = []journalE2ETest{
 		pks:  []uint64{1, 2, 3, 4, 5, 6, 7, 8}, // sorted journal
 		del:  []uint64{1, 2, 3, 4},             // first 50% marked as deleted
 		bit:  []byte{0x3C},                     // match some data pack entries only
-		idx:  []int{4, 5},                      // exp: matching entries (minus deleted)
+		idx:  []uint32{4, 5},                   // exp: matching entries (minus deleted)
 		pkx:  []uint64{5, 6},                   // exp: ordered pks
 	},
 	{
@@ -560,7 +560,7 @@ var journalE2Etests = []journalE2ETest{
 		pks:  []uint64{1, 8, 2, 7, 3, 6, 4, 5}, // unordered journal
 		del:  []uint64{1, 2, 3, 4},             // delete pks at random positions
 		bit:  []byte{0xFF},                     // all match
-		idx:  []int{7, 5, 3, 1},                // exp: indexes of non-deleted pks
+		idx:  []uint32{7, 5, 3, 1},             // exp: indexes of non-deleted pks
 		pkx:  []uint64{5, 6, 7, 8},             // exp: ordered pks
 	},
 }
