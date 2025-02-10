@@ -102,7 +102,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		idx.log.Debugf("Creating LSM index %q with opts %#v", path, idx.opts)
 		db, err := store.Create(idx.opts.Driver, path, idx.opts.ToDriverOpts())
 		if err != nil {
-			return fmt.Errorf("creating database for index %s: %v", typ, err)
+			return fmt.Errorf("creating database for index %s: %v", name, err)
 		}
 		err = db.SetManifest(store.Manifest{
 			Name:    name,
@@ -138,7 +138,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		return err
 	}
 
-	idx.log.Debugf("Created index %s", typ)
+	idx.log.Debugf("Created index %s", name)
 	return nil
 }
 
@@ -171,7 +171,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 		idx.log.Debugf("Opening LSM index %q with opts %#v", path, idx.opts)
 		db, err := store.Open(idx.opts.Driver, path, idx.opts.ToDriverOpts())
 		if err != nil {
-			idx.log.Errorf("opening index %s: %v", typ, err)
+			idx.log.Errorf("open index %s: %v", name, err)
 			return engine.ErrNoIndex
 		}
 		idx.db = db
@@ -212,21 +212,21 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	}
 
 	// load state
-	if err := idx.state.Load(ctx, tx, idx.schema.Name()); err != nil {
+	if err := idx.state.Load(ctx, tx, name); err != nil {
 		idx.log.Error("open state: %v", err)
 		tx.Rollback()
 		t.Close(ctx)
 		return engine.ErrDatabaseCorrupt
 	}
 
-	idx.log.Debugf("Index %s opened with %d rows", typ, idx.state.NRows)
+	idx.log.Debugf("Index %s opened with %d rows", name, idx.state.NRows)
 
 	return nil
 }
 
 func (idx *Index) Close(ctx context.Context) (err error) {
 	if !idx.noClose && idx.db != nil {
-		idx.log.Debugf("Closing index %s", idx.schema.TypeLabel(idx.engine.Namespace()))
+		idx.log.Debugf("Closing index %s", idx.schema.Name())
 		err = idx.db.Close()
 		idx.db = nil
 	}
@@ -269,13 +269,12 @@ func (idx *Index) Metrics() engine.IndexMetrics {
 }
 
 func (idx *Index) Drop(ctx context.Context) error {
-	typ := idx.schema.TypeLabel(idx.engine.Namespace())
 	if idx.noClose {
 		tx, err := engine.GetTransaction(ctx).StoreTx(idx.db, true)
 		if err != nil {
 			return err
 		}
-		idx.log.Debugf("Dropping index %s", typ)
+		idx.log.Debugf("Dropping index %s", idx.schema.Name())
 		for _, v := range [][]byte{
 			engine.DataKeySuffix,
 			engine.StateKeySuffix,
@@ -292,11 +291,13 @@ func (idx *Index) Drop(ctx context.Context) error {
 	path := idx.db.Path()
 	idx.db.Close()
 	idx.db = nil
-	idx.log.Debugf("Dropping index %s with path %s", typ, path)
+	idx.log.Debugf("Dropping index %s with path %s", idx.schema.Name(), path)
 	return store.Drop(idx.opts.Driver, path)
 }
 
 func (idx *Index) Truncate(ctx context.Context) error {
+	idx.log.Debugf("Truncate index %s", idx.schema.Name())
+
 	// get shared backend write tx
 	tx, err := engine.GetTransaction(ctx).StoreTx(idx.db, true)
 	if err != nil {
@@ -429,7 +430,7 @@ func (idx *Index) Add(ctx context.Context, prev, val []byte) error {
 		_ = tx.Bucket(idx.key).Delete(pkey)
 	}
 	if vkey != nil && !sameKey {
-		idx.state.Size += uint64(len(pkey))
+		idx.state.Size += uint64(len(vkey))
 		return tx.Bucket(idx.key).Put(vkey, nil)
 	}
 	return nil

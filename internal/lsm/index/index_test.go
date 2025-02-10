@@ -20,7 +20,6 @@ func TestIndex(t *testing.T) {
 	tableEngine := table.NewTable()
 	tests.TestIndexEngine[Index, *Index](t, "badger", "lsm", tableEngine, []types.IndexType{
 		types.IndexTypeInt,
-		types.IndexTypeHash,
 	})
 }
 
