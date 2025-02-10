@@ -265,14 +265,14 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 
 	p.Log.Tracef("request %s", p.RequestSchema)
 
-	// identify indexes based on request schema fields
+	// identify relevant indexes based on request schema fields
 	for _, idx := range p.Table.Indexes() {
 		// its sufficient to check the first indexed field only
 		// this will select all single-field indexes and all
 		// composite indexes where the first index field is used as
 		// query condition (they may use prefix key matches)
-		idxFields := idx.Schema().AllFieldNames()
-		if !filterFields.Contains(idxFields[0]) {
+		idxFirstField := idx.Schema().Fields()[0]
+		if !filterFields.Contains(idxFirstField.Name()) {
 			continue
 		}
 		p.Indexes = append(p.Indexes, idx)
@@ -300,10 +300,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 	return nil
 }
 
-// INDEX QUERY: use index lookup for indexed fields
-//   - attaches pk bitmaps for every indexed field to relevant filter tree nodes
-//   - pack/old: replaces matching condition with new FilterModeIn condition
-//     or adds IN condition at front if index may have collisions
+// INDEX QUERY: use index lookup for indexed fields and attach pk bitmaps
 func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	if p.Flags.IsNoIndex() || p.Filters.IsProcessed() {
 		return nil

@@ -165,11 +165,19 @@ func RebuildCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableE
 }
 
 func SyncCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	ctx := context.Background()
 	CreateIndex(t, ti, tab, e, io, is)
+
+	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
 	require.NoError(t, ti.Sync(ctx))
-	FillIndex(t, ti, ts)
+	require.NoError(t, commit())
+
+	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
+	FillIndex(t, ctx, ti, ts)
+	require.NoError(t, commit())
+
+	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
 	require.NoError(t, ti.Sync(ctx))
+	require.NoError(t, commit())
 }
 
 func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
@@ -232,7 +240,9 @@ func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.Table
 
 func AddCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	FillIndex(t, ti, ts)
+	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
+	FillIndex(t, ctx, ti, ts)
+	require.NoError(t, commit())
 
 	// need tx to query index
 	ctx, _, _, abort, err := e.WithTransaction(context.Background())
@@ -251,7 +261,9 @@ func AddCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngin
 
 func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	prev := FillIndex(t, ti, ts)
+	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
+	prev := FillIndex(t, ctx, ti, ts)
+	require.NoError(t, commit())
 
 	// need tx to query index
 	ctx, _, _, abort, err := e.WithTransaction(context.Background())
@@ -287,7 +299,9 @@ func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEn
 
 func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	FillIndex(t, ti, ts)
+	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
+	FillIndex(t, ctx, ti, ts)
+	require.NoError(t, commit())
 
 	// need tx to query index
 	ctx, _, _, abort, err := e.WithTransaction(context.Background())

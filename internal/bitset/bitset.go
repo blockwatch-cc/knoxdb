@@ -210,6 +210,9 @@ func (s *Bitset) Reset() *Bitset {
 // the allocator. For efficiency the contents is not cleared and should be
 // on allocation. Using the bitset after calling Close is illegal.
 func (s *Bitset) Close() {
+	if s == nil {
+		return
+	}
 	if !s.noclose {
 		arena.Free(arena.AllocBytes, s.buf)
 		s.noclose = false

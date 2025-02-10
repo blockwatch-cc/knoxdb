@@ -38,7 +38,7 @@ var (
 		PackSize:    1 << 11, // 2k
 		JournalSize: 1 << 17, // 128k
 		PageSize:    1 << 16,
-		PageFill:    0.95,
+		PageFill:    1.0,
 		TxMaxSize:   1 << 20, // 1 MB
 		ReadOnly:    false,
 		NoSync:      false,
@@ -75,7 +75,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		return engine.ErrNoPk
 	}
 
-	e := engine.GetTransaction(ctx).Engine()
+	e := engine.GetEngine(ctx)
 
 	// init names
 	name := s.Name()
@@ -160,7 +160,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 }
 
 func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Schema, opts engine.IndexOptions) error {
-	e := engine.GetTransaction(ctx).Engine()
+	e := engine.GetEngine(ctx)
 
 	// init names
 	name := s.Name()
@@ -263,11 +263,11 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 		err = idx.db.Close()
 		idx.db = nil
 	}
-	idx.db = nil
 	idx.engine = nil
 	idx.schema = nil
 	idx.table = nil
 	idx.id = 0
+	idx.db = nil
 	idx.noClose = false
 	idx.opts = engine.IndexOptions{}
 	idx.metrics = engine.IndexMetrics{}
@@ -334,11 +334,8 @@ func (idx *Index) Drop(ctx context.Context) error {
 }
 
 func (idx *Index) Truncate(ctx context.Context) error {
-	// unlink index from table to prevent use
-	idx.table.UnuseIndex(idx)
-	defer idx.table.UseIndex(idx)
-
-	// start backend write tx
+	// start direct backend write tx (assumes index and table are
+	// not stored in the same backend db file)
 	tx, err := idx.db.Begin(true)
 	if err != nil {
 		return err
@@ -381,15 +378,6 @@ func (idx *Index) Truncate(ctx context.Context) error {
 }
 
 func (idx *Index) Rebuild(ctx context.Context) error {
-	// truncate index first
-	if err := idx.Truncate(ctx); err != nil {
-		return err
-	}
-
-	// unlink index from table to prevent use
-	idx.table.UnuseIndex(idx)
-	defer idx.table.UseIndex(idx)
-
 	// build a query plan to walk all table data and only fetch
 	// columns we need for indexing, since idx.schema is storage
 	// schema (columns replaced by hash column) we use converter
@@ -401,6 +389,7 @@ func (idx *Index) Rebuild(ctx context.Context) error {
 		WithFlags(query.QueryFlagNoIndex).
 		WithLogger(idx.log)
 
+	// stream table data, requires read tx
 	err := idx.table.Stream(ctx, plan, func(row engine.QueryRow) error {
 		// create wire encoding compatible with index, potentially hashing data
 		buf := idx.convert.Extract(row.Bytes())

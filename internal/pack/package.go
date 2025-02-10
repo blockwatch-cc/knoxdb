@@ -194,8 +194,11 @@ func (p *Package) CanGrow(n int) bool {
 
 func (p *Package) HeapSize() int {
 	var sz int = szPackage
-	for _, v := range p.blocks {
-		sz += v.HeapSize()
+	for _, b := range p.blocks {
+		if b == nil {
+			continue
+		}
+		sz += b.HeapSize()
 	}
 	return sz
 }

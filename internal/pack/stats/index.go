@@ -660,6 +660,7 @@ func (idx *Index) Get(key uint32) (*Record, bool) {
 		ctx:    context.Background(),
 		idx:    idx,
 		smatch: bitset.NewBitset(0),
+		vmatch: bitset.NewBitset(0),
 		snode:  node,
 		match:  []uint32{uint32(pos)},
 	}
