@@ -120,20 +120,6 @@ func NewSymbolTable() *SymbolTable {
 	return symbolTable
 }
 
-// func (s *SymbolTable) Clone() *SymbolTable {
-// 	st := &SymbolTable{}
-// 	st.nSymbols = s.nSymbols
-// 	st.suffixLim = s.suffixLim
-// 	st.terminator = s.terminator
-// 	st.zeroTerminated = s.zeroTerminated
-// 	copy(st.lenHisto[:], s.lenHisto[:])
-// 	copy(st.hashTab[:], s.hashTab[:])
-// 	copy(st.symbols[:], s.symbols[:])
-// 	copy(st.byteCodes[:], s.byteCodes[:])
-// 	copy(st.shortCodes[:], s.shortCodes[:])
-// 	return st
-// }
-
 func (s *SymbolTable) Clear() {
 	// clear a symbolTable with minimal effort (only erase the used positions in it)
 	s.lenHisto = [FSST_CODE_BITS]uint16{} // all unused
@@ -519,17 +505,13 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 	}
 
 	bestCounter := NewCounter()
-	for sampleFrac = 8; true; sampleFrac += 30 {
+	for sampleFrac = 8; sampleFrac < 128; sampleFrac += 30 { // we do 5 rounds (sampleFrac=8,38,68,98,128)
 		counters.Clear()
 		gain := compressCount()
 		if gain >= bestGain { // a new best solution!
 			counters.Backup(bestCounter)
 			*bestTable = *st
 			bestGain = gain
-		}
-		if sampleFrac >= 128 {
-			// we do 5 rounds (sampleFrac=8,38,68,98,128)
-			break
 		}
 		log.Debugf("logging gain %d table", gain)
 		log.Debugf("Terminator => %x ", st.terminator)
