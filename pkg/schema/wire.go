@@ -16,16 +16,19 @@ import (
 // integer types as source an will convert them to the
 // wire format selected by code.
 func EncodeInt(w io.Writer, code OpCode, val any, layout binary.ByteOrder) (err error) {
-	var u64 uint64
+	var (
+		u64 uint64
+		neg bool
+	)
 	switch v := val.(type) {
 	case int:
-		u64 = uint64(v)
+		u64, neg = uint64(v), v < 0
 	case int8:
-		u64 = uint64(v)
+		u64, neg = uint64(v), v < 0
 	case int16:
-		u64 = uint64(v)
+		u64, neg = uint64(v), v < 0
 	case int32:
-		u64 = uint64(v)
+		u64, neg = uint64(v), v < 0
 	case int64:
 		u64 = uint64(v)
 	case uint:
@@ -41,22 +44,32 @@ func EncodeInt(w io.Writer, code OpCode, val any, layout binary.ByteOrder) (err 
 	default:
 		return ErrInvalidValueType
 	}
-	err = ErrInvalidValueType
+	var (
+		buf   [8]byte
+		over  bool
+		width uint
+	)
 	switch code {
 	case OpCodeInt8, OpCodeUint8:
-		_, err = w.Write([]byte{uint8(u64)})
+		over = (!neg && u64>>8 > 0) || neg && int64(u64)>>8 != -1
+		buf[0] = uint8(u64)
+		width = 1
 	case OpCodeInt16, OpCodeUint16:
-		var buf [2]byte
+		over = (!neg && u64>>16 > 0) || neg && int64(u64)>>16 != -1
 		layout.PutUint16(buf[:], uint16(u64))
-		_, err = w.Write(buf[:])
+		width = 2
 	case OpCodeInt32, OpCodeUint32:
-		var buf [4]byte
+		over = (!neg && u64>>32 > 0) || neg && int64(u64)>>32 != -1
 		layout.PutUint32(buf[:], uint32(u64))
-		_, err = w.Write(buf[:])
+		width = 4
 	case OpCodeInt64, OpCodeUint64:
-		var buf [8]byte
 		layout.PutUint64(buf[:], u64)
-		_, err = w.Write(buf[:])
+		width = 8
+	}
+	if over {
+		err = ErrOverflow
+	} else {
+		_, err = w.Write(buf[:width])
 	}
 	return
 }

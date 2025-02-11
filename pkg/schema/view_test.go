@@ -183,7 +183,7 @@ func TestViewSet(t *testing.T) {
 }
 
 // safeSet is a helper function to safely call Set and log any panics
-func safeSet(t *testing.T, view *View, index int, value interface{}) {
+func safeSet(t *testing.T, view *View, index int, value any) {
 	defer func() {
 		if r := recover(); r != nil {
 			t.Errorf("Panic occurred when setting index %d with value %v: %v", index, value, r)
@@ -205,7 +205,7 @@ func TestViewAppend(t *testing.T) {
 	tests := []struct {
 		name     string
 		fieldIdx int
-		expected interface{}
+		expected any
 	}{
 		{"Datetime", 18, []time.Time{base.Time}},
 		{"Int64", 1, []int64{base.Int64}},

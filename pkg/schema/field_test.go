@@ -265,7 +265,7 @@ func TestFieldStructValueRetrieval(t *testing.T) {
 	testCases := []struct {
 		name     string
 		field    Field
-		expected interface{}
+		expected any
 	}{
 		{
 			name:     "IntField",
@@ -291,7 +291,7 @@ func TestFieldStructValueRetrieval(t *testing.T) {
 }
 
 // Helper function for encoding and decoding
-func encodeDecodeField(t *testing.T, field Field, value interface{}) interface{} {
+func encodeDecodeField(t *testing.T, field Field, value any) any {
 	t.Helper()
 	var buf bytes.Buffer
 	err := field.Encode(&buf, value, binary.NativeEndian)
@@ -308,8 +308,8 @@ func TestFieldEncodingDecoding(t *testing.T) {
 	testCases := []struct {
 		name     string
 		field    Field
-		value    interface{}
-		expected interface{}
+		value    any
+		expected any
 	}{
 		{"Int8_Zero", NewField(types.FieldTypeInt8), int8(0), int8(0)},
 		{"Int8_Max", NewField(types.FieldTypeInt8), int8(math.MaxInt8), int8(math.MaxInt8)},
@@ -380,9 +380,9 @@ func TestFieldRangeAndOverflow(t *testing.T) {
 	intTypes := []struct {
 		fieldType  types.FieldType
 		goType     reflect.Type
-		zero       interface{}
-		min        interface{}
-		max        interface{}
+		zero       any
+		min        any
+		max        any
 		isUnsigned bool
 	}{
 		{types.FieldTypeInt8, reflect.TypeOf(int8(0)), int8(0), int8(math.MinInt8), int8(math.MaxInt8), false},
@@ -400,7 +400,7 @@ func TestFieldRangeAndOverflow(t *testing.T) {
 
 		// Test encoding and decoding of minimum, maximum, and zero values for each integer type
 		t.Run(fmt.Sprintf("%v_Range", targetType.fieldType), func(t *testing.T) {
-			testValue := func(v interface{}) {
+			testValue := func(v any) {
 				decoded := encodeDecodeField(t, field, v)
 				assert.Equal(t, v, decoded)
 			}
@@ -416,7 +416,7 @@ func TestFieldRangeAndOverflow(t *testing.T) {
 		field := NewField(types.FieldTypeDatetime)
 		now := time.Now().UTC()
 		decoded := encodeDecodeField(t, field, now)
-		assert.Equal(t, now.UTC(), decoded.(time.Time).UTC())
+		assert.Equal(t, now, decoded.(time.Time).UTC())
 	})
 }
 
@@ -425,7 +425,7 @@ func TestFieldEncode(t *testing.T) {
 	type TestCase struct {
 		Name            string
 		FieldType       types.FieldType
-		Value           interface{}
+		Value           any
 		IsErrorExpected bool
 	}
 	testCases := []TestCase{
@@ -760,7 +760,7 @@ func TestFieldStructValueComplexCases(t *testing.T) {
 	tests := []struct {
 		name     string
 		field    Field
-		expected interface{}
+		expected any
 	}{
 		{
 			name:     "IntField",
