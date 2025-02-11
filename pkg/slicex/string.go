@@ -63,6 +63,20 @@ func (o OrderedStrings) Len() int {
 	return len(o.Values)
 }
 
+func (o OrderedStrings) Min() string {
+	if len(o.Values) == 0 {
+		return ""
+	}
+	return o.Values[0]
+}
+
+func (o OrderedStrings) Max() string {
+	if l := len(o.Values); l > 0 {
+		return o.Values[l-1]
+	}
+	return ""
+}
+
 func (o OrderedStrings) MinMax() (string, string) {
 	switch l := len(o.Values); l {
 	case 0:

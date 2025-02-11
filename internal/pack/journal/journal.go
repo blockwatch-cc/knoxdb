@@ -191,7 +191,7 @@ func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bkey string) (in
 	}
 	bucket := tx.Bucket(append([]byte(bkey), engine.DataKeySuffix...))
 	bucket.FillPercent(0.9)
-	n, err := j.Data.Store(ctx, bucket, 0, nil)
+	n, err := j.Data.Store(ctx, bucket, 0)
 	if err != nil {
 		return 0, 0, err
 	}

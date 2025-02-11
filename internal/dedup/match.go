@@ -7,6 +7,7 @@ import (
 	"bytes"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
+	"golang.org/x/exp/slices"
 )
 
 func bitmask(i int) byte {
@@ -256,7 +257,7 @@ func matchBetween(a ByteArray, from, to []byte, bits, mask *bitset.Bitset) *bits
 
 }
 
-func minMax(a ByteArray) ([]byte, []byte) {
+func minMaxArr(a ByteArray) ([]byte, []byte) {
 	var min, max []byte
 	switch l := a.Len(); l {
 	case 0:
@@ -283,9 +284,35 @@ func minMax(a ByteArray) ([]byte, []byte) {
 		}
 	}
 	// copy to avoid reference
-	cmin := make([]byte, len(min))
-	copy(cmin, min)
-	cmax := make([]byte, len(max))
-	copy(cmax, max)
-	return cmin, cmax
+	return slices.Clone(min), slices.Clone(max)
+}
+
+func minArr(a ByteArray) []byte {
+	l := a.Len()
+	if l == 0 {
+		return nil
+	}
+	val := a.Elem(0)
+	for i := 1; i < l; i++ {
+		e := a.Elem(i)
+		if bytes.Compare(e, val) < 0 {
+			val = e
+		}
+	}
+	return slices.Clone(val)
+}
+
+func maxArr(a ByteArray) []byte {
+	l := a.Len()
+	if l == 0 {
+		return nil
+	}
+	val := a.Elem(0)
+	for i := 1; i < l; i++ {
+		e := a.Elem(i)
+		if bytes.Compare(e, val) > 0 {
+			val = e
+		}
+	}
+	return slices.Clone(val)
 }

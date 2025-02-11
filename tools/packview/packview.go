@@ -186,7 +186,7 @@ func getTableOrIndexPackView(db knox.Database, name string) ContentViewer {
 }
 
 type StatsViewer interface {
-	ViewStats(int) *stats.PackStats
+	ViewStats(int) *stats.Record
 	Schema() *schema.Schema
 }
 
@@ -284,11 +284,11 @@ func PrintMetadata(view StatsViewer, id int, w io.Writer) {
 		t.AppendRow([]any{
 			n + 1,
 			fmt.Sprintf("%08x", md.Key),
-			len(md.Blocks),
+			md.NColumns,
 			md.NValues,
-			md.Blocks[pki].MinValue.(uint64),
-			md.Blocks[pki].MaxValue.(uint64),
-			util.ByteSize(md.StoredSize),
+			md.Min(pki),
+			md.Max(pki),
+			util.ByteSize(md.DiskSize),
 		})
 		i++
 		n++
@@ -304,7 +304,7 @@ func PrintMetadataDetail(view StatsViewer, id int, w io.Writer) {
 	t := table.NewWriter()
 	fields := s.Exported()
 	t.SetOutputMirror(w)
-	t.AppendHeader(table.Row{"#", "Name", "Type", "Cardinality", "Min", "Max", "Size", "Bloom", "Bits"})
+	t.AppendHeader(table.Row{"#", "Name", "Type", "Cardinality", "Min", "Max", "Size"})
 	var (
 		i         int
 		stopAfter bool
@@ -318,32 +318,22 @@ func PrintMetadataDetail(view StatsViewer, id int, w io.Writer) {
 		if md == nil {
 			break
 		}
-		t.SetTitle("%s - Pack 0x%08x (%d) - %s records - Size %s - Meta %s",
+		t.SetTitle("%s - Pack 0x%08x (%d) - %s records - Size %s",
 			s.Name(),
 			md.Key,
 			md.Key,
-			util.PrettyInt(md.NValues),
-			util.ByteSize(md.StoredSize),
-			util.ByteSize(md.HeapSize()),
+			util.PrettyInt(int(md.NValues)),
+			util.ByteSize(md.DiskSize),
 		)
-		for id, binfo := range md.Blocks {
-			bloomSz, bitSz := "--", "--"
-			if binfo.Bloom != nil {
-				bloomSz = util.ByteSize(int(binfo.Bloom.Len() / 8)).String()
-			}
-			if binfo.Bits != nil {
-				bitSz = util.ByteSize(len(binfo.Bits.ToBuffer())).String()
-			}
+		for id := range md.NColumns {
 			t.AppendRow([]any{
 				id + 1,
 				fields[id].Name,
-				binfo.Type,
-				util.PrettyInt(binfo.Cardinality),
-				util.LimitStringEllipsis(util.ToString(binfo.MinValue), 33),
-				util.LimitStringEllipsis(util.ToString(binfo.MaxValue), 33),
-				util.ByteSize(binfo.StoredSize),
-				bloomSz,
-				bitSz,
+				s.Exported()[id].Type,
+				"?", // util.PrettyInt(-1),
+				util.LimitStringEllipsis(util.ToString(md.Min(int(id))), 33),
+				util.LimitStringEllipsis(util.ToString(md.Max(int(id))), 33),
+				"?", // util.ByteSize(-1),
 			})
 		}
 		t.Render()

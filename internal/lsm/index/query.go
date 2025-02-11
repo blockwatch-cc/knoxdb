@@ -15,19 +15,20 @@ import (
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 )
 
-const (
-	FilterModeInvalid  = types.FilterModeInvalid
-	FilterModeEqual    = types.FilterModeEqual
-	FilterModeNotEqual = types.FilterModeNotEqual
-	FilterModeGt       = types.FilterModeGt
-	FilterModeGe       = types.FilterModeGe
-	FilterModeLt       = types.FilterModeLt
-	FilterModeLe       = types.FilterModeLe
-	FilterModeIn       = types.FilterModeIn
-	FilterModeNotIn    = types.FilterModeNotIn
-	FilterModeRange    = types.FilterModeRange
-	FilterModeRegexp   = types.FilterModeRegexp
-)
+func (idx *Index) isSupportedMode(m query.FilterMode) bool {
+	switch m {
+	case types.FilterModeEqual,
+		types.FilterModeLt,
+		types.FilterModeLe,
+		types.FilterModeGt,
+		types.FilterModeGe,
+		types.FilterModeRange:
+		return true
+	default:
+		return false
+	}
+
+}
 
 // This index only supports the following condition types on lookup.
 // - complex AND with equal prefix + one extra LT|LE|GT|GE|RG condition
@@ -38,31 +39,26 @@ func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 		return false
 	}
 
-	// leafs
+	// simple conditions
 	if node.IsLeaf() {
-		if idx.Schema().Fields()[0].Name() != node.Filter.Name {
+		if idx.schema.Exported()[0].Name != node.Filter.Name {
 			return false
 		}
-		switch node.Filter.Mode {
-		case types.FilterModeEqual,
-			types.FilterModeLt,
-			types.FilterModeLe,
-			types.FilterModeGt,
-			types.FilterModeGe,
-			types.FilterModeRange:
-			return true
-		default:
-			return false
-		}
+		return !idx.IsComposite() && idx.isSupportedMode(node.Filter.Mode)
+	}
+
+	// composite conditions
+	if !idx.IsComposite() {
+		return false
 	}
 
 	// Composite AND nodes (at least one condition must match the first index field)
-	firstField := idx.Schema().Fields()[0].Name()
-	for i := range node.Children {
-		if !node.Children[i].IsLeaf() {
+	firstField := idx.schema.Exported()[0]
+	for _, v := range node.Children {
+		if !v.IsLeaf() {
 			continue
 		}
-		if node.Children[i].Filter.Name == firstField {
+		if v.Filter.Name == firstField.Name && idx.isSupportedMode(v.Filter.Mode) {
 			return true
 		}
 	}
@@ -147,25 +143,61 @@ func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*bitmap.B
 		return nil, false, fmt.Errorf("invalid branch node")
 	}
 
-	// TODO: EQ cond -> idx.Scan(), other -> extra -> idx.Range()
+	// idx.log.Infof("Query %s", node.Filter)
 
-	// single leaf index scan
-	f, ok := idx.Schema().FieldById(node.Filter.Index)
+	// encode condition value as big endian key
+	f, ok := idx.Schema().FieldById(node.Filter.Index + 1)
 	if !ok {
-		return nil, false, nil
+		return nil, false, engine.ErrNoField
 	}
 
 	// encode condition value
-	buf := new(bytes.Buffer)
-	err := f.Encode(buf, node.Filter.Value)
+	var (
+		prefix, from, to []byte
+		err              error
+		buf              = new(bytes.Buffer)
+	)
+	if node.Filter.Mode == types.FilterModeEqual {
+		err = f.Encode(buf, node.Filter.Value, BE)
+		prefix = buf.Bytes()
+	} else {
+		switch node.Filter.Mode {
+		case types.FilterModeLt:
+			// LT    => scan(0x, to)
+			err = f.Encode(buf, node.Filter.Value, BE)
+			to = buf.Bytes()
+
+		case types.FilterModeLe:
+			// LE    => scan(0x, to)
+			err = f.Encode(buf, node.Filter.Value, BE)
+			to = store.BytesPrefix(buf.Bytes()).Limit
+
+		case types.FilterModeGt:
+			// GT    => scan(from, FF)
+			err = f.Encode(buf, node.Filter.Value, BE)
+			from = store.BytesPrefix(buf.Bytes()).Limit
+			to = bytes.Repeat(FF, buf.Len())
+
+		case types.FilterModeGe:
+			// GE    => scan(from, FF)
+			err = f.Encode(buf, node.Filter.Value, BE)
+			from = buf.Bytes()
+			to = bytes.Repeat(FF, buf.Len())
+
+		case types.FilterModeRange:
+			// RG    => scan(from, to)
+			rg := node.Filter.Value.(query.RangeValue)
+			err = f.Encode(buf, rg[0], BE)
+			from = bytes.Clone(buf.Bytes())
+			if err == nil {
+				buf.Reset()
+				err = f.Encode(buf, rg[1], BE)
+				to = store.BytesPrefix(buf.Bytes()).Limit
+			}
+		}
+	}
 	if err != nil {
 		return nil, false, err
-	}
-	prefix := buf.Bytes()
-
-	// no possible prefix or extra match means the index does not support this query
-	if len(prefix) == 0 {
-		return nil, false, nil
 	}
 
 	// run inside a storage transaction
@@ -174,14 +206,22 @@ func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*bitmap.B
 		return nil, false, err
 	}
 
-	// run prefix scan
-	bits, canCollide, err := idx.scanTx(ctx, tx, prefix)
+	var bits *bitmap.Bitmap
+	if len(prefix) > 0 {
+		// prefix scan
+		bits, _, err = idx.scanTx(ctx, tx, prefix)
+	} else {
+		// run range scan
+		bits, _, err = idx.rangeTx(ctx, tx, from, to)
+	}
+
 	if err != nil {
 		return nil, false, err
 	}
+
 	node.Skip = true
 
-	return bits, canCollide, nil
+	return bits, false, nil
 }
 
 func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (*bitmap.Bitmap, bool, error) {
@@ -226,7 +266,7 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 	// i.e. see if we can produce an ordered prefix from more than one condition
 	//
 	buf := new(bytes.Buffer)
-	for _, field := range idx.Schema().Fields() {
+	for _, field := range idx.schema.Fields() {
 		name := field.Name()
 		node, ok := eq[name]
 		if !ok {
@@ -234,7 +274,7 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 			extra = ex[name]
 			break
 		}
-		err := field.Encode(buf, node.Filter.Value)
+		err := field.Encode(buf, node.Filter.Value, BE)
 		if err != nil {
 			return nil, false, err
 		}
@@ -265,52 +305,52 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 	}
 
 	// handle EQ+ plus extra range condition
-	extraField, ok := idx.Schema().FieldById(extra.Filter.Index)
+	extraField, ok := idx.schema.FieldById(extra.Filter.Index + 1)
 	if !ok {
 		return nil, false, engine.ErrNoField
 	}
 	var from, to []byte
 
 	switch extra.Filter.Mode {
-	case FilterModeLt:
+	case types.FilterModeLt:
 		// LT    => scan(0x, to)
 		// EQ+LT => scan(prefix, prefix+to)
-		err = extraField.Encode(buf, extra.Filter.Value)
+		err = extraField.Encode(buf, extra.Filter.Value, BE)
 		from = prefix
 		prefix = append(prefix, buf.Bytes()...)
 		to = prefix
 
-	case FilterModeLe:
+	case types.FilterModeLe:
 		// LE    => scan(0x, to)
 		// EQ+LE => scan(prefix, prefix+to)
-		err = extraField.Encode(buf, extra.Filter.Value)
+		err = extraField.Encode(buf, extra.Filter.Value, BE)
 		from = prefix
 		to = store.BytesPrefix(append(prefix, buf.Bytes()...)).Limit
 
-	case FilterModeGt:
+	case types.FilterModeGt:
 		// GT    => scan(from, FF)
 		// EQ+GT => scan(prefix+from, prefix+FF)
-		err = extraField.Encode(buf, extra.Filter.Value)
+		err = extraField.Encode(buf, extra.Filter.Value, BE)
 		from = store.BytesPrefix(append(prefix, buf.Bytes()...)).Limit
 		to = bytes.Repeat(FF, len(prefix)+buf.Len())
 
-	case FilterModeGe:
+	case types.FilterModeGe:
 		// GE    => scan(from, FF)
 		// EQ+GE => scan(prefix+from, prefix+FF)
-		err = extraField.Encode(buf, extra.Filter.Value)
+		err = extraField.Encode(buf, extra.Filter.Value, BE)
 		prefix = append(prefix, buf.Bytes()...)
 		from = prefix
 		to = bytes.Repeat(FF, len(prefix)+buf.Len())
 
-	case FilterModeRange:
+	case types.FilterModeRange:
 		// RG    => scan(from, to)
 		// EQ+RG => scan(prefix+from, prefix+to)
-		err = extraField.Encode(buf, extra.Filter.Value.(query.RangeValue)[0])
+		err = extraField.Encode(buf, extra.Filter.Value.(query.RangeValue)[0], BE)
 		prefix = append(prefix, buf.Bytes()...)
 		from = prefix
 		if err == nil {
 			buf.Reset()
-			err = extraField.Encode(buf, extra.Filter.Value.(query.RangeValue)[1])
+			err = extraField.Encode(buf, extra.Filter.Value.(query.RangeValue)[1], BE)
 			to = store.BytesPrefix(append(prefix, buf.Bytes()...)).Limit
 		}
 	}

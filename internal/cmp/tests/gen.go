@@ -25,7 +25,7 @@ var BenchmarkSizes = []BenchmarkSize{
 
 var BenchmarksMasks = [][]byte{
 	maskAll,
-	[]byte{0x00, 0x11},
+	{0x00, 0x11},
 }
 
 type Number interface {

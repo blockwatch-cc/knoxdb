@@ -249,6 +249,7 @@ func writeReflectField(buf *bytes.Buffer, code OpCode, rval any) error {
 	var (
 		err error
 		b   []byte
+		sz  [4]byte
 	)
 	switch code {
 	case OpCodeMarshalBinary:
@@ -256,7 +257,8 @@ func writeReflectField(buf *bytes.Buffer, code OpCode, rval any) error {
 		if err != nil {
 			return err
 		}
-		buf.Write(Uint32Bytes(uint32(len(b))))
+		LE.PutUint32(sz[:], uint32(len(b)))
+		buf.Write(sz[:])
 		_, err = buf.Write(b)
 
 	case OpCodeMarshalText:
@@ -264,19 +266,24 @@ func writeReflectField(buf *bytes.Buffer, code OpCode, rval any) error {
 		if err != nil {
 			return err
 		}
-		buf.Write(Uint32Bytes(uint32(len(b))))
+		LE.PutUint32(sz[:], uint32(len(b)))
+		buf.Write(sz[:])
 		_, err = buf.Write(b)
 
 	case OpCodeStringer:
 		s := rval.(fmt.Stringer).String()
-		buf.Write(Uint32Bytes(uint32(len(s))))
+		LE.PutUint32(sz[:], uint32(len(s)))
+		buf.Write(sz[:])
 		_, err = buf.Write(unsafe.Slice(unsafe.StringData(s), len(s)))
 	}
 	return err
 }
 
 func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer, enums EnumRegistry) error {
-	var err error
+	var (
+		err error
+		sz  [4]byte
+	)
 	switch code {
 	default:
 		// int, uint, float, bool
@@ -295,17 +302,21 @@ func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer
 
 	case OpCodeString:
 		s := *(*string)(ptr)
-		buf.Write(Uint32Bytes(uint32(len(s))))
+		LE.PutUint32(sz[:], uint32(len(s)))
+		buf.Write(sz[:])
 		_, err = buf.WriteString(s)
 
 	case OpCodeBytes:
 		b := *(*[]byte)(ptr)
-		buf.Write(Uint32Bytes(uint32(len(b))))
+		LE.PutUint32(sz[:], uint32(len(b)))
+		buf.Write(sz[:])
 		_, err = buf.Write(b)
 
 	case OpCodeDateTime:
 		tm := *(*time.Time)(ptr)
-		_, err = buf.Write(Uint64Bytes(uint64(tm.UnixNano())))
+		var b [8]byte
+		LE.PutUint64(b[:], uint64(tm.UnixNano()))
+		_, err = buf.Write(b[:])
 
 	case OpCodeInt256:
 		v := *(*num.Int256)(ptr)
@@ -339,7 +350,9 @@ func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer
 		if !ok {
 			return fmt.Errorf("%s: invalid enum value %q", field.name, v)
 		}
-		_, err = buf.Write(Uint16Bytes(code))
+		var b [2]byte
+		LE.PutUint16(b[:], code)
+		_, err = buf.Write(b[:])
 	}
 	return err
 }

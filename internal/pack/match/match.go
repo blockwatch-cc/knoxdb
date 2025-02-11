@@ -12,85 +12,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
-// MaybeMatchTree matches a query condition tree against package statistics.
-// This helps skip unrelated packs and will only return true if a pack's contens
-// may match. The decision is probabilistic when filters are used, i.e. there
-// are guaranteed no false negatives but there may be false positives.
-func MaybeMatchTree(n *query.FilterTreeNode, stat *stats.PackStats) bool {
-	// never visit empty packs
-	if stat.NValues == 0 {
-		return false
-	}
-	// always match?
-	if n.IsAnyMatch() {
-		return true
-	}
-	// no match?
-	if n.IsNoMatch() {
-		return false
-	}
-	// match single leafs
-	if n.IsLeaf() {
-		return MaybeMatchFilter(n.Filter, stat)
-	}
-	// combine leaf decisions along the tree
-	for _, v := range n.Children {
-		if n.OrKind {
-			// for OR nodes, stop at the first successful hint
-			if MaybeMatchTree(v, stat) {
-				return true
-			}
-		} else {
-			// for AND nodes stop at the first non-successful hint
-			if !MaybeMatchTree(v, stat) {
-				return false
-			}
-		}
-	}
-
-	// no OR nodes match, all AND nodes match
-	return !n.OrKind
-}
-
-// MaybeMatchFilter checks an individual condition in a query condition tree
-// against package statistics. It returns true if the pack's contens likely
-// matches the filter. Due to the nature of bloom/fuse filters and min/max
-// range statistics the decision is only probabilistic, but guaranteed to
-// contain no false negatives.
-func MaybeMatchFilter(f *query.Filter, stat *stats.PackStats) bool {
-	block := stat.Blocks[f.Index]
-
-	// matcher is selected and configured during compile stage
-	if f.Matcher.MatchRange(block.MinValue, block.MaxValue) {
-		return true
-	}
-
-	// check filters when shortcut is possible
-	switch f.Mode {
-	case types.FilterModeEqual, types.FilterModeIn:
-		// check bloom filter
-		if block.Bloom != nil {
-			return f.Matcher.MatchBloom(block.Bloom)
-		}
-
-		// check bitmap filter
-		if block.Bits != nil {
-			return f.Matcher.MatchBitmap(block.Bits)
-		}
-
-		// default skip
-		return false
-
-	case types.FilterModeRegexp, types.FilterModeNotEqual, types.FilterModeNotIn:
-		// we don't know here, so full pack scan is required
-		return true
-
-	default:
-		// anything else must have already matched on range match above
-		return false
-	}
-}
-
 // MatchFilter matches all elements in package pkg against the defined condition
 // and returns a bitset of the same length as the package with bits set to true
 // where the match is successful.
@@ -101,19 +22,19 @@ func MatchFilter(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset) 
 	if bits == nil {
 		bits = bitset.NewBitset(pkg.Len())
 	}
-	return f.Matcher.MatchBlock(pkg.Block(int(f.Index)), bits, mask)
+	return f.Matcher.MatchVector(pkg.Block(int(f.Index)), bits, mask)
 }
 
 // MatchTree matches pack contents against a query condition (sub)tree.
-func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, stat *stats.PackStats) *bitset.Bitset {
+func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader) *bitset.Bitset {
 	if n.IsLeaf() {
 		return MatchFilter(n.Filter, pkg, nil, nil)
 	}
 
 	if n.OrKind {
-		return MatchTreeOr(n, pkg, stat)
+		return MatchTreeOr(n, pkg, r)
 	} else {
-		return MatchTreeAnd(n, pkg, stat)
+		return MatchTreeAnd(n, pkg, r)
 	}
 }
 
@@ -122,7 +43,7 @@ func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, stat *stats.PackStats
 // and does so efficiently by skipping unnecessary matches and aggregations.
 //
 // TODO: concurrent condition matches and cascading bitset merge
-func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, stat *stats.PackStats) *bitset.Bitset {
+func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader) *bitset.Bitset {
 	// start with a full bitset
 	bits := bitset.NewBitset(pkg.Len()).One()
 
@@ -137,52 +58,51 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, stat *stats.PackSt
 		var scratch *bitset.Bitset
 		if !node.IsLeaf() {
 			// recurse into another AND or OR condition subtree
-			scratch = MatchTree(node, pkg, stat)
+			scratch = MatchTree(node, pkg, r)
 		} else {
 			f := node.Filter
 			// Quick inclusion check to skip matching when the current condition
 			// would return an all-true vector. Note that we do not have to check
 			// for an all-false vector because MaybeMatchTree() has already deselected
 			// packs of that kind (except the journal)
-			if stat != nil && len(stat.Blocks) > int(f.Index) {
-				blockInfo := stat.Blocks[f.Index]
-				min, max := blockInfo.MinValue, blockInfo.MaxValue
-				typ := blockInfo.Type
+			if r != nil {
+				min, max := r.MinMax(int(f.Index))
+				// typ := blockInfo.Type
 				switch f.Mode {
 				case types.FilterModeEqual:
 					// condition is always true iff min == max == f.Value
-					if cmp.EQ(typ, min, f.Value) && cmp.EQ(typ, max, f.Value) {
+					if cmp.EQ(f.Type, min, f.Value) && cmp.EQ(f.Type, max, f.Value) {
 						continue
 					}
 				case types.FilterModeNotEqual:
 					// condition is always true iff f.Value < min || f.Value > max
-					if cmp.LT(typ, f.Value, min) || cmp.GT(typ, f.Value, max) {
+					if cmp.LT(f.Type, f.Value, min) || cmp.GT(f.Type, f.Value, max) {
 						continue
 					}
 				case types.FilterModeRange:
 					// condition is always true iff pack range <= condition range
 					rg := f.Value.(query.RangeValue)
-					if cmp.LE(typ, rg[0], min) && cmp.GE(typ, rg[1], max) {
+					if cmp.LE(f.Type, rg[0], min) && cmp.GE(f.Type, rg[1], max) {
 						continue
 					}
 				case types.FilterModeGt:
 					// condition is always true iff min > f.Value
-					if cmp.GT(typ, min, f.Value) {
+					if cmp.GT(f.Type, min, f.Value) {
 						continue
 					}
 				case types.FilterModeGe:
 					// condition is always true iff min >= f.Value
-					if cmp.GE(typ, min, f.Value) {
+					if cmp.GE(f.Type, min, f.Value) {
 						continue
 					}
 				case types.FilterModeLt:
 					// condition is always true iff max < f.Value
-					if cmp.LT(typ, max, f.Value) {
+					if cmp.LT(f.Type, max, f.Value) {
 						continue
 					}
 				case types.FilterModeLe:
 					// condition is always true iff max <= f.Value
-					if cmp.LE(typ, max, f.Value) {
+					if cmp.LE(f.Type, max, f.Value) {
 						continue
 					}
 				}
@@ -206,7 +126,7 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, stat *stats.PackSt
 
 // Return a bit vector containing matching positions in the pack combining
 // multiple OR conditions with efficient skipping and aggregation.
-func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, stat *stats.PackStats) *bitset.Bitset {
+func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader) *bitset.Bitset {
 	// start with an empty bitset
 	bits := bitset.NewBitset(pkg.Len())
 
@@ -216,47 +136,45 @@ func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, stat *stats.PackSta
 		var scratch *bitset.Bitset
 		if !node.IsLeaf() {
 			// recurse into another AND or OR condition subtree
-			scratch = MatchTree(node, pkg, stat)
+			scratch = MatchTree(node, pkg, r)
 		} else {
 			f := node.Filter
 			// Quick inclusion check to skip matching when the current condition
 			// would return an all-true vector. Note that we do not have to check
 			// for an all-false vector because MaybeMatchPack() has already deselected
 			// packs of that kind (except the journal).
-			if stat != nil && len(stat.Blocks) > int(f.Index) {
-				blockInfo := stat.Blocks[f.Index]
-				min, max := blockInfo.MinValue, blockInfo.MaxValue
+			if r != nil {
+				min, max := r.MinMax(int(f.Index))
 				skipEarly := false
-				typ := blockInfo.Type
 				switch f.Mode {
 				case types.FilterModeEqual:
 					// condition is always true iff min == max == f.Value
-					skipEarly = cmp.EQ(typ, min, f.Value) && cmp.EQ(typ, max, f.Value)
+					skipEarly = cmp.EQ(f.Type, min, f.Value) && cmp.EQ(f.Type, max, f.Value)
 
 				case types.FilterModeNotEqual:
 					// condition is always true iff f.Value < min || f.Value > max
-					skipEarly = cmp.LT(typ, f.Value, min) || cmp.GT(typ, f.Value, max)
+					skipEarly = cmp.LT(f.Type, f.Value, min) || cmp.GT(f.Type, f.Value, max)
 
 				case types.FilterModeRange:
 					// condition is always true iff pack range <= condition range
 					rg := f.Value.(query.RangeValue)
-					skipEarly = cmp.LE(typ, rg[0], min) && cmp.GE(typ, rg[1], max)
+					skipEarly = cmp.LE(f.Type, rg[0], min) && cmp.GE(f.Type, rg[1], max)
 
 				case types.FilterModeGt:
 					// condition is always true iff min > f.Value
-					skipEarly = cmp.GT(typ, min, f.Value)
+					skipEarly = cmp.GT(f.Type, min, f.Value)
 
 				case types.FilterModeGe:
 					// condition is always true iff min >= f.Value
-					skipEarly = cmp.GE(typ, min, f.Value)
+					skipEarly = cmp.GE(f.Type, min, f.Value)
 
 				case types.FilterModeLt:
 					// condition is always true iff max < f.Value
-					skipEarly = cmp.LT(typ, max, f.Value)
+					skipEarly = cmp.LT(f.Type, max, f.Value)
 
 				case types.FilterModeLe:
 					// condition is always true iff max <= f.Value
-					skipEarly = cmp.LE(typ, max, f.Value)
+					skipEarly = cmp.LE(f.Type, max, f.Value)
 				}
 				if skipEarly {
 					return bits.One()

@@ -1,8 +1,7 @@
 // Copyright (c) 2020-2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//
 
-package hash
+package filter
 
 import (
 	"encoding/binary"

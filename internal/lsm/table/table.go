@@ -314,9 +314,6 @@ func (t *Table) Truncate(ctx context.Context) error {
 	if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
 	t.metrics.DeletedTuples += int64(t.state.NRows)
 	t.metrics.TupleCount = 0
 	return nil

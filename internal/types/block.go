@@ -45,6 +45,30 @@ var (
 		BlockInt128:  16,
 		BlockInt256:  32,
 	}
+
+	BlockTypes = [...]BlockType{
+		FieldTypeInvalid:    BlockUint8,
+		FieldTypeDatetime:   BlockTime,
+		FieldTypeBoolean:    BlockBool,
+		FieldTypeString:     BlockBytes,
+		FieldTypeBytes:      BlockBytes,
+		FieldTypeInt8:       BlockInt8,
+		FieldTypeInt16:      BlockInt16,
+		FieldTypeInt32:      BlockInt32,
+		FieldTypeInt64:      BlockInt64,
+		FieldTypeInt128:     BlockInt128,
+		FieldTypeInt256:     BlockInt256,
+		FieldTypeUint8:      BlockUint8,
+		FieldTypeUint16:     BlockUint16,
+		FieldTypeUint32:     BlockUint32,
+		FieldTypeUint64:     BlockUint64,
+		FieldTypeDecimal32:  BlockInt32,
+		FieldTypeDecimal64:  BlockInt64,
+		FieldTypeDecimal128: BlockInt128,
+		FieldTypeDecimal256: BlockInt256,
+		FieldTypeFloat32:    BlockFloat32,
+		FieldTypeFloat64:    BlockFloat64,
+	}
 )
 
 func (t BlockType) IsValid() bool {

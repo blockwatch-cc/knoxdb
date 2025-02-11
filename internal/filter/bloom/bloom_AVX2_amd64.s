@@ -11,11 +11,11 @@
 
 /***************************** filterAddManyUint32 ****************************************************/
 
-// func filterAddManyUint32AVX2Core(f Filter, data []uint32, seed uint32)
-TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-60
-        MOVQ    data_base+32(FP), SI
-        MOVQ    data_len+40(FP), BX
-        MOVQ    f_b_base+8(FP), DI
+// func filterAddManyUint32AVX2Core(data []uint32, buf []byte, mask, seed uint32)
+TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-56
+        MOVQ    data_base+0(FP), SI
+        MOVQ    data_len+8(FP), BX
+        MOVQ    buf_base+24(FP), DI
 
         SHRQ    $3, BX    // less than 8 data values          
         JZ      exit
@@ -26,7 +26,7 @@ TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-60
         VPBROADCASTD    PRIME32_4<>+0x00(SB), Y13
         VPBROADCASTD    PRIME32_5<>+0x00(SB), Y14
 
-        VPBROADCASTD    seed+56(FP), Y9
+        VPBROADCASTD    seed+52(FP), Y9
         VPBROADCASTD    constU32_4<>(SB), Y8
 
         LEAQ    buf_bpos<>(SB), R8   // buffer for byte positions
@@ -71,7 +71,7 @@ TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-60
        
         // now 8 hashes in Y0=h0 and 8 in Y3=h1
         // we use loc(i) = Yi = h0 + i*h1
-        VPBROADCASTD    f_mask+4(FP), Y15      // mask for filter locations
+        VPBROADCASTD    mask+48(FP), Y15      // mask for filter locations
         VPADDD          Y0, Y3, Y1
         VPADDD          Y1, Y3, Y2      
         VPADDD          Y2, Y3, Y3      
@@ -211,7 +211,7 @@ loop_avx:
         VPXOR           Y2, Y3, Y3      
         // now 8 hashes in Y0=h0 and 8 in Y3=h1
         // we use loc(i) = Yi = h0 + i*h1
-        VPBROADCASTD    f_mask+4(FP), Y15      // mask for filter locations
+        VPBROADCASTD    mask+48(FP), Y15      // mask for filter locations
 
         MOVL            60(R8), AX
         MOVL            60(R9), DX
@@ -345,11 +345,11 @@ exit:
 
 /***************************** filterAddManyInt32 ****************************************************/
 
-// func filterAddManyInt32AVX2Core(f Filter, data []int32, seed uint32)
-TEXT ·filterAddManyInt32AVX2Core(SB), NOSPLIT, $0-60
-        MOVQ    data_base+32(FP), SI
-        MOVQ    data_len+40(FP), BX
-        MOVQ    f_b_base+8(FP), DI
+// func filterAddManyInt32AVX2Core(data []int32, buf []byte, mask, seed uint32)
+TEXT ·filterAddManyInt32AVX2Core(SB), NOSPLIT, $0-56
+        MOVQ    data_base+0(FP), SI
+        MOVQ    data_len+8(FP), BX
+        MOVQ    buf_base+24(FP), DI
 
         SHRQ    $3, BX    // less than 8 data values          
         JZ      exit
@@ -360,7 +360,7 @@ TEXT ·filterAddManyInt32AVX2Core(SB), NOSPLIT, $0-60
         VPBROADCASTD    PRIME32_4<>+0x00(SB), Y13
         VPBROADCASTD    PRIME32_5<>+0x00(SB), Y14
 
-        VPBROADCASTD    seed+56(FP), Y9
+        VPBROADCASTD    seed+52(FP), Y9
         VPBROADCASTD    constU32_4<>(SB), Y8
 
         LEAQ    buf_bpos<>(SB), R8   // buffer for byte positions
@@ -405,7 +405,7 @@ TEXT ·filterAddManyInt32AVX2Core(SB), NOSPLIT, $0-60
        
         // now 8 hashes in Y0=h0 and 8 in Y3=h1
         // we use loc(i) = Yi = h0 + i*h1
-        VPBROADCASTD    f_mask+4(FP), Y15      // mask for filter locations
+        VPBROADCASTD    mask+48(FP), Y15      // mask for filter locations
         VPADDD          Y0, Y3, Y1
         VPADDD          Y1, Y3, Y2      
         VPADDD          Y2, Y3, Y3      
@@ -545,7 +545,7 @@ loop_avx:
         VPXOR           Y2, Y3, Y3      
         // now 8 hashes in Y0=h0 and 8 in Y3=h1
         // we use loc(i) = Yi = h0 + i*h1
-        VPBROADCASTD    f_mask+4(FP), Y15      // mask for filter locations
+        VPBROADCASTD    mask+48(FP), Y15      // mask for filter locations
 
         MOVL            60(R8), AX
         MOVL            60(R9), DX
@@ -679,11 +679,11 @@ exit:
 
 /***************************** filterAddManyUint64 ****************************************************/
 
-// func filterAddManyUint64AVX2Core(f Filter, data []uint64, seed uint32)
-TEXT ·filterAddManyUint64AVX2Core(SB), NOSPLIT, $0-60
-        MOVQ    data_base+32(FP), SI
-        MOVQ    data_len+40(FP), BX
-        MOVQ    f_b_base+8(FP), DI
+// func filterAddManyUint64AVX2Core(data []uint64, buf []byte, mask, seed uint32)
+TEXT ·filterAddManyUint64AVX2Core(SB), NOSPLIT, $0-56
+        MOVQ    data_base+0(FP), SI
+        MOVQ    data_len+8(FP), BX
+        MOVQ    buf_base+24(FP), DI
 
         SHRQ    $3, BX    // less than 8 data values          
         JZ      exit
@@ -694,7 +694,7 @@ TEXT ·filterAddManyUint64AVX2Core(SB), NOSPLIT, $0-60
         VPBROADCASTD    PRIME32_4<>+0x00(SB), Y13
         VPBROADCASTD    PRIME32_5<>+0x00(SB), Y14
 
-        VPBROADCASTD    seed+56(FP), Y9
+        VPBROADCASTD    seed+52(FP), Y9
         VPBROADCASTD    constU32_8<>(SB), Y8
         VMOVDQU	        perm<>(SB), Y7
 
@@ -766,7 +766,7 @@ TEXT ·filterAddManyUint64AVX2Core(SB), NOSPLIT, $0-60
        
         // now 8 hashes in Y0=h0 and 8 in Y3=h1
         // we use loc(i) = Yi = h0 + i*h1
-        VPBROADCASTD    f_mask+4(FP), Y15      // mask for filter locations
+        VPBROADCASTD    mask+48(FP), Y15      // mask for filter locations
         VPADDD          Y0, Y3, Y1
         VPADDD          Y1, Y3, Y2      
         VPADDD          Y2, Y3, Y3      
@@ -998,7 +998,7 @@ loop_avx:
         VPERMD          Y5, Y7, Y3          // now 8 hashes in Y5
         // now 8 hashes in Y0=h0 and 8 in Y3=h1
         // we use loc(i) = Yi = h0 + i*h1
-        VPBROADCASTD    f_mask+4(FP), Y15      // mask for filter locations
+        VPBROADCASTD    mask+48(FP), Y15      // mask for filter locations
         VPADDD          Y0, Y3, Y1
 
         MOVL            104(R8), AX
@@ -1093,11 +1093,11 @@ exit:
 
 /***************************** filterAddManyInt64 ****************************************************/
 
-// func filterAddManyUint64AVX2Core(f Filter, data []int64, seed uint32)
-TEXT ·filterAddManyInt64AVX2Core(SB), NOSPLIT, $0-60
-        MOVQ    data_base+32(FP), SI
-        MOVQ    data_len+40(FP), BX
-        MOVQ    f_b_base+8(FP), DI
+// func filterAddManyUint64AVX2Core(data []int64, buf []byte, mask, seed uint32)
+TEXT ·filterAddManyInt64AVX2Core(SB), NOSPLIT, $0-56
+        MOVQ    data_base+0(FP), SI
+        MOVQ    data_len+8(FP), BX
+        MOVQ    buf_base+24(FP), DI
 
         SHRQ    $3, BX    // less than 8 data values          
         JZ      exit
@@ -1108,7 +1108,7 @@ TEXT ·filterAddManyInt64AVX2Core(SB), NOSPLIT, $0-60
         VPBROADCASTD    PRIME32_4<>+0x00(SB), Y13
         VPBROADCASTD    PRIME32_5<>+0x00(SB), Y14
 
-        VPBROADCASTD    seed+56(FP), Y9
+        VPBROADCASTD    seed+52(FP), Y9
         VPBROADCASTD    constU32_8<>(SB), Y8
         VMOVDQU	        perm<>(SB), Y7
 
@@ -1180,7 +1180,7 @@ TEXT ·filterAddManyInt64AVX2Core(SB), NOSPLIT, $0-60
        
         // now 8 hashes in Y0=h0 and 8 in Y3=h1
         // we use loc(i) = Yi = h0 + i*h1
-        VPBROADCASTD    f_mask+4(FP), Y15      // mask for filter locations
+        VPBROADCASTD    mask+48(FP), Y15      // mask for filter locations
         VPADDD          Y0, Y3, Y1
         VPADDD          Y1, Y3, Y2      
         VPADDD          Y2, Y3, Y3      
@@ -1412,7 +1412,7 @@ loop_avx:
         VPERMD          Y5, Y7, Y3          // now 8 hashes in Y5
         // now 8 hashes in Y0=h0 and 8 in Y3=h1
         // we use loc(i) = Yi = h0 + i*h1
-        VPBROADCASTD    f_mask+4(FP), Y15      // mask for filter locations
+        VPBROADCASTD    mask+48(FP), Y15      // mask for filter locations
         VPADDD          Y0, Y3, Y1
 
         MOVL            104(R8), AX

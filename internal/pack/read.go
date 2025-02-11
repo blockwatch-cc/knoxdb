@@ -59,16 +59,20 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 		}
 
 		// encoding is based on field type
+		var x [8]byte
 		switch field.Type {
 		case types.FieldTypeInt64, types.FieldTypeDatetime, types.FieldTypeDecimal64,
 			types.FieldTypeUint64, types.FieldTypeFloat64:
-			_, err = buf.Write(schema.Uint64Bytes(b.Uint64().Get(row)))
+			LE.PutUint64(x[:], b.Uint64().Get(row))
+			_, err = buf.Write(x[:])
 		case types.FieldTypeInt32, types.FieldTypeDecimal32, types.FieldTypeUint32, types.FieldTypeFloat32:
-			_, err = buf.Write(schema.Uint32Bytes(b.Uint32().Get(row)))
+			LE.PutUint32(x[:], b.Uint32().Get(row))
+			_, err = buf.Write(x[:4])
 		case types.FieldTypeInt16, types.FieldTypeUint16:
-			_, err = buf.Write(schema.Uint16Bytes(b.Uint16().Get(row)))
+			LE.PutUint16(x[:], b.Uint16().Get(row))
+			_, err = buf.Write(x[:2])
 		case types.FieldTypeInt8, types.FieldTypeUint8:
-			_, err = buf.Write(schema.Uint8Bytes(b.Uint8().Get(row)))
+			_, err = buf.Write([]byte{b.Uint8().Get(row)})
 		case types.FieldTypeBoolean:
 			v := b.Bool().IsSet(row)
 			err = buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
@@ -77,7 +81,8 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 				_, err = buf.Write(b.Bytes().Elem(row)[:fixed])
 			} else {
 				v := b.Bytes().Elem(row)
-				_, err = buf.Write(schema.Uint32Bytes(uint32(len(v))))
+				LE.PutUint32(x[:], uint32(len(v)))
+				_, err = buf.Write(x[:4])
 				if err == nil {
 					_, err = buf.Write(v)
 				}

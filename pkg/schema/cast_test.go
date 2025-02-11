@@ -203,7 +203,7 @@ func TestCastNewCaster(t *testing.T) {
 	tests := []struct {
 		name      string
 		fieldType types.FieldType
-		expected  interface{}
+		expected  any
 	}{
 		{"Datetime", types.FieldTypeDatetime, TimeCaster{}},
 		{"Boolean", types.FieldTypeBoolean, BoolCaster{}},
@@ -319,8 +319,8 @@ func TestCastIntCaster(t *testing.T) {
 		caster := IntCaster[int32]{}
 		tests := []struct {
 			name     string
-			input    interface{}
-			expected interface{}
+			input    any
+			expected any
 			hasError bool
 		}{
 			{"Int", 42, int32(42), false},
@@ -442,8 +442,8 @@ func TestCastUintCaster(t *testing.T) {
 		caster := UintCaster[uint32]{}
 		tests := []struct {
 			name     string
-			input    interface{}
-			expected interface{}
+			input    any
+			expected any
 			hasError bool
 		}{
 			{"Uint", uint(42), uint32(42), false},
@@ -486,7 +486,7 @@ func TestCastFloatCaster(t *testing.T) {
 
 		tests := []struct {
 			name     string
-			input    interface{}
+			input    any
 			expected float32
 			hasError bool
 		}{
@@ -538,7 +538,7 @@ func TestCastBytesCaster(t *testing.T) {
 	t.Run("CastValue", func(t *testing.T) {
 		tests := []struct {
 			name     string
-			input    interface{}
+			input    any
 			expected any
 			hasError bool
 		}{
@@ -566,7 +566,7 @@ func TestCastBytesCaster(t *testing.T) {
 	t.Run("CastSlice", func(t *testing.T) {
 		tests := []struct {
 			name     string
-			input    interface{}
+			input    any
 			expected any
 			hasError bool
 		}{
@@ -593,7 +593,7 @@ func TestCastI128Caster(t *testing.T) {
 	t.Run("CastValue", func(t *testing.T) {
 		tests := []struct {
 			name     string
-			input    interface{}
+			input    any
 			expected num.Int128
 			hasError bool
 		}{
@@ -635,7 +635,7 @@ func TestCastI128Caster(t *testing.T) {
 	t.Run("CastSlice", func(t *testing.T) {
 		tests := []struct {
 			name     string
-			input    interface{}
+			input    any
 			expected []num.Int128
 			hasError bool
 		}{
@@ -665,7 +665,7 @@ func TestCastI256Caster(t *testing.T) {
 	t.Run("CastValue", func(t *testing.T) {
 		tests := []struct {
 			name     string
-			input    interface{}
+			input    any
 			expected num.Int256
 			hasError bool
 		}{
@@ -707,7 +707,7 @@ func TestCastI256Caster(t *testing.T) {
 	t.Run("CastSlice", func(t *testing.T) {
 		tests := []struct {
 			name     string
-			input    interface{}
+			input    any
 			expected []num.Int256
 			hasError bool
 		}{

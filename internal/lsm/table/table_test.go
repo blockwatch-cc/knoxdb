@@ -6,6 +6,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/tests"
 
 	_ "blockwatch.cc/knoxdb/internal/store/badger"
+	_ "blockwatch.cc/knoxdb/internal/store/mem"
 )
 
 func TestMain(m *testing.M) {
@@ -15,5 +16,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestLSMTable(t *testing.T) {
+	// FIXME
+	// tests.TestTableEngine[Table, *Table](t, "mem", "lsm")
 	tests.TestTableEngine[Table, *Table](t, "badger", "lsm")
 }

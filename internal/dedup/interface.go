@@ -29,6 +29,8 @@ type ByteArray interface {
 	Slice() [][]byte
 	Subslice(int, int) [][]byte // start, end
 	MinMax() ([]byte, []byte)
+	Min() []byte
+	Max() []byte
 
 	MaxEncodedSize() int
 	HeapSize() int

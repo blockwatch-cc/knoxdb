@@ -3,12 +3,17 @@
 
 package pack
 
+import "blockwatch.cc/knoxdb/internal/types"
+
 // convert containers to optimized format (not in journal and tomb)
 func (p *Package) Optimize() *Package {
 	if p.key >= TombstoneKeyId {
 		return p
 	}
 	for _, b := range p.blocks {
+		if b == nil {
+			continue
+		}
 		b.Optimize()
 	}
 	return p
@@ -20,7 +25,25 @@ func (p *Package) Materialize() *Package {
 		return p
 	}
 	for _, b := range p.blocks {
+		if b == nil {
+			continue
+		}
 		b.Materialize()
 	}
 	return p
+}
+
+func (p *Package) IsMaterialized() bool {
+	fields := p.schema.Exported()
+	for i, b := range p.blocks {
+		if b == nil {
+			if !fields[i].Flags.Is(types.FieldFlagDeleted) {
+				return false
+			}
+		}
+		if !b.IsMaterialized() {
+			return false
+		}
+	}
+	return true
 }

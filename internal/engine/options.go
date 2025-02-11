@@ -27,6 +27,8 @@ type DatabaseOptions struct {
 	NoSync          bool             // boltdb, no fsync on transactions (dangerous)
 	NoGrowSync      bool             // boltdb, skip fsync+alloc on grow
 	ReadOnly        bool             // read-only tx and no schema changes
+	MaxWorkers      int              // max number of parallel worker goroutines
+	MaxTasks        int              // max number of tasks waiting for execution
 	Logger          log.Logger       `knox:"-"`
 }
 
@@ -43,6 +45,8 @@ func (o DatabaseOptions) Merge(o2 DatabaseOptions) DatabaseOptions {
 	o.ReadOnly = o2.ReadOnly
 	o.NoSync = o2.NoSync
 	o.NoGrowSync = o2.NoGrowSync
+	o.MaxTasks = util.NonZero(o2.MaxTasks, o.MaxTasks)
+	o.MaxWorkers = util.NonZero(o2.MaxWorkers, o.MaxWorkers)
 	if o2.Logger != nil {
 		o.Logger = o2.Logger
 	}
@@ -107,6 +111,16 @@ func (o DatabaseOptions) WithWalRecoveryMode(mode wal.RecoveryMode) DatabaseOpti
 
 func (o DatabaseOptions) WithLockTimeout(to time.Duration) DatabaseOptions {
 	o.LockTimeout = to
+	return o
+}
+
+func (o DatabaseOptions) WithMaxWorkers(n int) DatabaseOptions {
+	o.MaxWorkers = n
+	return o
+}
+
+func (o DatabaseOptions) WithMaxTasks(n int) DatabaseOptions {
+	o.MaxTasks = n
 	return o
 }
 

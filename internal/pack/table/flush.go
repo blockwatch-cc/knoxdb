@@ -51,12 +51,13 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 	// walk journal/tombstone updates and group updates by pack
 	var (
-		pkg                                  *pack.Package // current target pack
-		jpos, tpos, jlen, tlen               int           // journal/tomb slice offsets & lengths
-		nextpack, lastpack                   int           // pack list positions (not keys)
-		packmin, packmax, nextmin, globalmax uint64        // data placement hints
-		needsort                             bool          // true if current pack needs sort before store
-		loop, maxloop                        int           // circuit breaker
+		pkg                    *pack.Package // current target pack
+		jpos, tpos, jlen, tlen int           // journal/tomb slice offsets & lengths
+		nextKey, lastKey       uint32        // pack key
+		// pmin, pmax, nextmin, gmax uint64        // data placement hints
+		pmin, pmax, gmax uint64 // data placement hints
+		needsort         bool   // true if current pack needs sort before store
+		loop, maxloop    int    // circuit breaker
 	)
 
 	// FIXME: background flush will not run inside a tx
@@ -76,7 +77,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 				t.log.Error(string(debug.Stack()))
 			}
 			t.log.Debugf("table %s: restoring statistics", t.schema.Name())
-			if _, err := t.stats.Load(ctx, t.statsBucket(tx)); err != nil {
+			if err := t.stats.Load(ctx, tx); err != nil {
 				t.log.Errorf("table %s statistics rollback failed: %v", t.schema.Name(), err)
 			}
 			if err != nil {
@@ -90,7 +91,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 	// init global max
 	jlen, tlen = len(live), len(dead)
-	_, globalmax = t.stats.GlobalMinMax()
+	gmax = t.stats.GlobalMaxPk()
 	maxloop = 2*t.stats.Len() + 2*(tlen+jlen)/t.opts.PackSize + 2
 
 	// This algorithm works like a merge-sort over a sequence of sorted packs.
@@ -102,35 +103,35 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 		// skip deleted journal entries
 		for ; jpos < jlen && dbits.IsSet(live[jpos].Idx); jpos++ {
-			// t.log.Debugf("%s: skipping deleted journal entry %d/%d gmax=%d", t.schema.Name(), jpos, jlen, globalmax)
+			// t.log.Debugf("%s: skipping deleted journal entry %d/%d gmax=%d", t.schema.Name(), jpos, jlen, gmax)
 		}
 
 		// skip processed tombstone entries
 		for ; tpos < tlen && dead[tpos] == 0; tpos++ {
-			// t.log.Debugf("%s: skipping processed tomb entry %d/%d gmax=%d", t.schema.Name(), tpos, tlen, globalmax)
+			// t.log.Debugf("%s: skipping processed tomb entry %d/%d gmax=%d", t.schema.Name(), tpos, tlen, gmax)
 		}
 
 		// skip trailing tombstone entries (for unwritten journal entries)
-		for ; tpos < tlen && dead[tpos] > globalmax; tpos++ {
-			// t.log.Debugf("%s: skipping trailing tomb entry %d at %d/%d gmax=%d", t.schema.Name(), dead[tpos], tpos, tlen, globalmax)
+		for ; tpos < tlen && dead[tpos] > gmax; tpos++ {
+			// t.log.Debugf("%s: skipping trailing tomb entry %d at %d/%d gmax=%d", t.schema.Name(), dead[tpos], tpos, tlen, gmax)
 		}
 
 		// init on each iteration, either from journal or tombstone
-		var nextid uint64
+		var nextPk uint64
 		switch {
 		case jpos < jlen && tpos < tlen:
-			nextid = min(live[jpos].Pk, dead[tpos])
-			// if nextid == live[jpos].pk {
-			// 	log.Debugf("%s: next id %d from journal %d/%d, gmax=%d", t.schema.Name(), nextid, jpos, jlen, globalmax)
+			nextPk = min(live[jpos].Pk, dead[tpos])
+			// if nextPk == live[jpos].pk {
+			// 	log.Debugf("%s: next id %d from journal %d/%d, gmax=%d", t.schema.Name(), nextPk, jpos, jlen, gmax)
 			// } else {
-			// 	log.Debugf("%s: next id %d from tomb %d/%d, gmax=%d", t.schema.Name(), nextid, tpos, tlen, globalmax)
+			// 	log.Debugf("%s: next id %d from tomb %d/%d, gmax=%d", t.schema.Name(), nextPk, tpos, tlen, gmax)
 			// }
 		case jpos < jlen && tpos >= tlen:
-			nextid = live[jpos].Pk
-			// t.log.Debugf("%s: next id %d from journal %d/%d, gmax=%d", t.schema.Name(), nextid, jpos, jlen, globalmax)
+			nextPk = live[jpos].Pk
+			// t.log.Debugf("%s: next id %d from journal %d/%d, gmax=%d", t.schema.Name(), nextPk, jpos, jlen, gmax)
 		case jpos >= jlen && tpos < tlen:
-			nextid = dead[tpos]
-			// t.log.Debugf("%s: next id %d from tomb %d/%d, gmax=%d", t.schema.Name(), nextid, tpos, tlen, globalmax)
+			nextPk = dead[tpos]
+			// t.log.Debugf("%s: next id %d from tomb %d/%d, gmax=%d", t.schema.Name(), nextPk, tpos, tlen, gmax)
 		default:
 			// stop in case remaining journal/tombstone entries were skipped
 			break
@@ -138,20 +139,20 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 		// find best pack for insert/update/delete
 		// skip when we're already appending to a new pack
-		if lastpack < t.stats.Len() {
-			nextpack, packmin, packmax, nextmin = t.findBestPack(nextid)
+		if lastKey < uint32(t.stats.Len()) {
+			nextKey, pmin, pmax = t.findBestPack(ctx, nextPk)
 			// t.log.Debugf("%s: selecting next pack %d with range [%d:%d] for next pkid=%d last-pack=%d/%d next-min=%d",
-			// 	t.schema.Name(), nextpack, packmin, packmax, nextid, lastpack, t.stats.Len(), nextmin)
+			// 	t.schema.Name(), nextKey, pmin, pmax, nextPk, lastKey, t.stats.Len(), nextmin)
 		}
 
-		// store last pack when nextpack changes
-		if lastpack != nextpack && pkg != nil {
+		// store last pack when nextKey changes
+		if lastKey != nextKey && pkg != nil {
 			// saving a pack also deletes empty packs from storage!
 			if pkg.IsDirty() {
 				if needsort {
 					pkg.PkSort()
 				}
-				// t.log.Debugf("Storing pack %d with key %d with %d records", lastpack, pkg.key, pkg.Len())
+				// t.log.Debugf("Storing pack %d with key %d with %d records", lastKey, pkg.key, pkg.Len())
 				n, err = t.storePack(ctx, pkg)
 				if err != nil {
 					return err
@@ -161,19 +162,19 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 				nHeap += pkg.HeapSize()
 				pending += n
 				// commit storage tx after each N written packs
-				// if pending >= t.opts.TxMaxSize {
-				// 	// TODO: for a safe return we must also
-				// 	// - clear written journal/tombstone entries
-				// 	// - flush index (or implement index journal lookup)
-				// 	// - write table metadata and pack headers
-				// 	if tx, err = store.CommitAndContinue(tx); err != nil {
-				// 		return err
-				// 	}
-				// 	pending = 0
-				// }
+				if pending >= t.opts.TxMaxSize {
+					// TODO: for a safe return we must also
+					// - clear written journal/tombstone entries
+					// - flush index (or implement index journal lookup)
+					// - write table metadata and pack headers
+					if tx, err = engine.GetTransaction(ctx).Continue(tx); err != nil {
+						return err
+					}
+					pending = 0
+				}
 				// update next values after pack index has changed
-				nextpack, _, packmax, nextmin = t.findBestPack(nextid)
-				// t.log.Debugf("%s: post-store next pack %d max=%d nextmin=%d", t.schema.Name(), nextpack, packmax, nextmin)
+				nextKey, _, pmax = t.findBestPack(ctx, nextPk)
+				// t.log.Debugf("%s: post-store next pack %d max=%d nextmin=%d", t.schema.Name(), nextKey, pmax, nextmin)
 			}
 			// prepare for next pack
 			pkg.Release()
@@ -183,11 +184,11 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 		// load or create the next pack
 		if pkg == nil {
-			if nextpack < t.stats.Len() {
-				// t.log.Debugf("%s: loading pack %d/%d key=%d len=%d", t.schema.Name(), nextpack, t.stats.Len(), t.stats.packs[nextpack].Key, t.stats.packs[nextpack].NValues)
-				info, ok := t.stats.GetPos(nextpack)
+			if nextKey < uint32(t.stats.Len()) {
+				// t.log.Debugf("%s: loading pack %d/%d key=%d len=%d", t.schema.Name(), nextKey, t.stats.Len(), t.stats.packs[nextKey].Key, t.stats.packs[nextKey].NValues)
+				info, ok := t.stats.Get(nextKey)
 				if ok {
-					pkg, err = t.loadWritablePack(ctx, info.Key, info.NValues)
+					pkg, err = t.loadWritablePack(ctx, info.Key, int(info.NValues))
 					if err != nil {
 						return err
 					}
@@ -200,18 +201,18 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 			}
 			// start new pack
 			if pkg == nil {
-				nextpack = t.stats.Len()
-				packmin = 0
-				packmax = 0
-				nextmin = 0
+				nextKey = t.stats.NextKey()
+				pmin = 0
+				pmax = 0
+				// nextmin = 0
 				pkg = pack.New().
-					WithKey(t.stats.NextKey()).
+					WithKey(nextKey).
 					WithSchema(t.schema).
 					WithMaxRows(t.opts.PackSize).
 					Alloc()
-				// t.log.Debugf("%s: starting new pack %d/%d with key %d", t.schema.Name(), nextpack, t.stats.Len(), pkg.key)
+				// t.log.Debugf("%s: starting new pack %d/%d with key %d", t.schema.Name(), nextKey, t.stats.Len(), pkg.key)
 			}
-			lastpack = nextpack
+			lastKey = nextKey
 			pAdd = 0
 			pDel = 0
 			pUpd = 0
@@ -220,21 +221,21 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 		// t.log.Debugf("Loop %d: tomb=%d/%d journal=%d/%d", loop, tpos, tlen, jpos, jlen)
 		loop++
 		if loop > 2*maxloop {
-			t.log.Errorf("pack: %s stopping infinite flush loop %d: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d nextpack=%d",
-				t.schema.Name(), loop, tpos, tlen, jpos, jlen, lastpack, t.stats.Len(), nextid, nextpack,
+			t.log.Errorf("pack: %s stopping infinite flush loop %d: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextPk=%d nextKey=%d",
+				t.schema.Name(), loop, tpos, tlen, jpos, jlen, lastKey, t.stats.Len(), nextPk, nextKey,
 			)
 			return fmt.Errorf("pack: %s infinite flush loop. Database likely corrupt.", t.schema.Name())
 		} else if loop == maxloop {
 			lvl := t.log.Level()
 			t.log.SetLevel(logpkg.LevelDebug)
 			defer t.log.SetLevel(lvl)
-			t.log.Debugf("pack: %s circuit breaker activated: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextid=%d nextpack=%d",
-				t.schema.Name(), tpos, tlen, jpos, jlen, lastpack, t.stats.Len(), nextid, nextpack,
+			t.log.Debugf("pack: %s circuit breaker activated: tomb-flush-pos=%d/%d journal-flush-pos=%d/%d pack=%d/%d nextPk=%d nextKey=%d",
+				t.schema.Name(), tpos, tlen, jpos, jlen, lastKey, t.stats.Len(), nextPk, nextKey,
 			)
 		}
 
 		// process tombstone records for this pack (skip for empty packs)
-		if tpos < tlen && packmax > 0 && dead[tpos] <= packmax {
+		if tpos < tlen && pmax > 0 && dead[tpos] <= pmax {
 			// load current state of pack slices (will change after delete)
 			pkcol := pkg.PkColumn()
 
@@ -248,8 +249,8 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 				}
 
 				// stop on pack boundary
-				if pkid > packmax {
-					// t.log.Debugf("Tomb key %d does not match pack %d [%d:%d]", pkid, lastpack, packmin, packmax)
+				if pkid > pmax {
+					// t.log.Debugf("Tomb key %d does not match pack %d [%d:%d]", pkid, lastKey, pmin, pmax)
 					break
 				}
 
@@ -297,19 +298,19 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 				pkcol = pkg.PkColumn()
 
 				// update pack min/max
-				packmin, packmax = 0, 0
+				pmin, pmax = 0, 0
 				if l := len(pkcol); l > 0 {
-					packmin, packmax = pkcol[0], pkcol[l-1]
+					pmin, pmax = pkcol[0], pkcol[l-1]
 				}
 
 				// advance tomb pointer by one less (for-loop adds +1)
 				tpos += n - 1
-				// t.log.Debugf("Deleted %d tombstones from pack %d/%d with key %d", n, lastpack, t.stats.Len(), pkg.key)
+				// t.log.Debugf("Deleted %d tombstones from pack %d/%d with key %d", n, lastKey, t.stats.Len(), pkg.key)
 			}
 		} else {
 			// process journal entries for this pack
 
-			// TODO: can we optimize for bulk-insert/append, e.g. when pk > packmax?
+			// TODO: can we optimize for bulk-insert/append, e.g. when pk > pmax?
 			// journal order matters since we walk indirect
 			//
 			// implement a reverse-merge-sort like algorithm similar
@@ -325,13 +326,18 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 					continue
 				}
 
-				// stop on pack boundary
-				if nextmin > 0 && key.Pk >= nextmin {
-					// best, min, max, _ := t.findBestPack(key.pk)
-					// t.log.Debugf("Key %d does not fit into pack %d [%d:%d], suggested %d/%d [%d:%d] nextmin=%d",
-					// 	key.pk, lastpack, packmin, packmax, best, t.stats.Len(), min, max, nextmin)
+				// stop on full pack
+				if pkg.IsFull() {
 					break
 				}
+
+				// stop on pack boundary
+				// if nextmin > 0 && key.Pk >= nextmin {
+				// 	// best, min, max, _ := t.findBestPack(key.pk)
+				// 	// t.log.Debugf("Key %d does not fit into pack %d [%d:%d], suggested %d/%d [%d:%d] nextmin=%d",
+				// 	// 	key.pk, lastKey, pmin, pmax, best, t.stats.Len(), min, max, nextmin)
+				// 	break
+				// }
 
 				// check if record exists: packs are sorted by pk, so we can
 				// safely skip ahead using the last offset, if the pk does
@@ -367,12 +373,12 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 				} else {
 					// detect out of order inserts
-					isOOInsert = key.Pk < packmax
+					isOOInsert = key.Pk < pmax
 
 					// split on out-of-order inserts into a full pack
 					if isOOInsert && pkg.IsFull() {
 						t.log.Warnf("flush: split %s table pack %d [%d:%d] at out-of-order insert key %d ",
-							t.schema.Name(), pkg.Key(), packmin, packmax, key.Pk)
+							t.schema.Name(), pkg.Key(), pmin, pmax, key.Pk)
 
 						// keep sorted
 						if needsort {
@@ -389,8 +395,8 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 						nHeap += pkg.HeapSize()
 
 						// leave journal for-loop to trigger new pack selection
-						loop = 0      // reset circuit breaker check
-						lastpack = -1 // force pack load in next round
+						loop = 0             // reset circuit breaker check
+						lastKey = 0xFFFFFFFF // force pack load in next round
 						pkg.Release()
 						pkg = nil
 						break
@@ -404,26 +410,26 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 					// particular for the edge case of the very last pack because
 					// nextmin = 0 in this case.
 					//
-					if pkg.IsFull() {
-						break
-					}
+					// if pkg.IsFull() {
+					// 	break
+					// }
 
 					// insert new record
 					if isOOInsert {
 						// insert in-place (EXPENSIVE!)
-						// t.log.Debugf("Insert key %d to pack %d", key.pk, lastpack)
+						// t.log.Debugf("Insert key %d to pack %d", key.pk, lastKey)
 						if err = pkg.InsertPack(jpack, last, key.Idx, 1); err != nil {
 							return err
 						}
-						packmin = util.NonZeroMin(packmin, key.Pk)
+						pmin = util.NonZeroMin(pmin, key.Pk)
 					} else {
 						// append new records
-						// t.log.Debugf("Append key %d to pack %d", key.pk, lastpack)
+						// t.log.Debugf("Append key %d to pack %d", key.pk, lastKey)
 						if err = pkg.AppendPack(jpack, key.Idx, 1); err != nil {
 							return err
 						}
-						packmax = max(packmax, key.Pk)
-						globalmax = max(globalmax, key.Pk)
+						pmax = max(pmax, key.Pk)
+						gmax = max(gmax, key.Pk)
 					}
 
 					// add to indexes
@@ -448,7 +454,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 					}
 
 					// store pack, will update t.stats
-					// t.log.Debugf("%s: storing pack %d with %d records at key %d", t.schema.Name(), lastpack, pkg.Len(), pkg.key)
+					// t.log.Debugf("%s: storing pack %d with %d records at key %d", t.schema.Name(), lastKey, pkg.Len(), pkg.key)
 					n, err = t.storePack(ctx, pkg)
 					if err != nil {
 						return err
@@ -459,21 +465,21 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 					nHeap += pkg.HeapSize()
 
 					// commit tx after each N written packs
-					// if pending >= t.opts.TxMaxSize {
-					// 	// TODO: for a safe return we must also
-					// 	// - clear written journal/tombstone entries
-					// 	// - flush index (or implement index journal lookup)
-					// 	// - write table metadata and pack headers
-					// 	//
-					// 	if tx, err = store.CommitAndContinue(tx); err != nil {
-					// 		return err
-					// 	}
-					// pending = 0
-					// }
+					if pending >= t.opts.TxMaxSize {
+						// TODO: for a safe return we must also
+						// - clear written journal/tombstone entries
+						// - flush index (or implement index journal lookup)
+						// - write table metadata and pack headers
+						//
+						if tx, err = engine.GetTransaction(ctx).Continue(tx); err != nil {
+							return err
+						}
+						pending = 0
+					}
 
 					// after store, leave journal for-loop to trigger pack selection
 					jpos++
-					lastpack = -1 // force pack load in next round
+					lastKey = 0xFFFFFFFF // force pack load in next round
 					pkg.Release()
 					pkg = nil
 					break
@@ -487,7 +493,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 		if needsort {
 			pkg.PkSort()
 		}
-		// t.log.Debugf("Storing final pack %d with %d records at key %d", lastpack, pkg.Len(), pkg.key)
+		// t.log.Debugf("Storing final pack %d with %d records at key %d", lastKey, pkg.Len(), pkg.key)
 		n, err = t.storePack(ctx, pkg)
 		if err != nil {
 			return err
@@ -519,6 +525,11 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 		// FIXME: background flush will not run inside a tx
 		engine.GetTransaction(ctx).Touch(t.id)
+	}
+
+	// store statistics
+	if err := t.stats.Store(ctx, tx); err != nil {
+		return err
 	}
 
 	// store state
@@ -560,15 +571,28 @@ func (t *Table) storeJournal(ctx context.Context, tx store.Tx) error {
 // fragmentation. See mergeJournal() for details.
 //
 // The placement algorithm works as follows:
-// - keep lastpack when no pack exists (effectively == 0)
+// - keep lastKey when no pack exists (effectively == 0)
 // - choose pack with pack.min <= val <= pack.max
 // - choose pack with closest max < val
 // - when val < min of first pack, choose first pack
-func (t *Table) findBestPack(pk uint64) (int, uint64, uint64, uint64) {
+func (t *Table) findBestPack(ctx context.Context, pk uint64) (uint32, uint64, uint64) {
+	it, ok := t.stats.FindPk(ctx, pk)
+	if ok {
+		defer it.Close()
+	}
+
+	if !ok || it.IsFull() {
+		return t.stats.NextKey(), 0, 0
+	}
+
+	minv, maxv := it.MinMaxPk()
+	return it.Key(), minv.(uint64), maxv.(uint64)
+
 	// returns 0 when list is empty, this ensures we initially stick
 	// to the first pack until it's full; returns last pack for values
 	// > global max
-	bestpack, min, max, nextmin, isFull := t.stats.Best(pk)
+	// bestpack, min, max, nextmin, isFull := t.stats.Best(pk)
+
 	// t.log.Debugf("find: best=%d min=%d max=%d nextmin=%d, isFull=%t opts=%v",
 	// 	bestpack, min, max, nextmin, isFull, t.opts)
 
@@ -577,22 +601,22 @@ func (t *Table) findBestPack(pk uint64) (int, uint64, uint64, uint64) {
 	// hacker's delight trick for unsigned range checks
 	// see https://stackoverflow.com/questions/17095324/fastest-way-to-determine-if-an-integer-is-between-two-integers-inclusive-with
 	// pk >= min && pk <= max
-	if !isFull || pk-min <= max-min {
-		// t.log.Debugf("%s: %d is full=%t or pk %d is in range [%d:%d]", t.schema.Name(), bestpack, isFull, pk, min, max)
-		return bestpack, min, max, nextmin
-	}
+	// if !isFull || pk-min <= max-min {
+	// 	// t.log.Debugf("%s: %d is full=%t or pk %d is in range [%d:%d]", t.schema.Name(), bestpack, isFull, pk, min, max)
+	// 	return bestpack, min, max, nextmin
+	// }
 
 	// if pack is full check if there is room in the next pack, but protect
 	// invariant by checking pk against next pack's min value
-	if isFull && nextmin > 0 && pk < nextmin {
-		nextbest, min, max, nextmin, isFull := t.stats.Next(bestpack)
-		if min+max > 0 && !isFull {
-			// t.log.Debugf("%s: %d is full, but next pack %d exists and is not", t.schema.Name(), bestpack, nextbest)
-			return nextbest, min, max, nextmin
-		}
-	}
+	// if isFull && nextmin > 0 && pk < nextmin {
+	// 	nextbest, min, max, nextmin, isFull := t.stats.Next(bestpack)
+	// 	if min+max > 0 && !isFull {
+	// 		// t.log.Debugf("%s: %d is full, but next pack %d exists and is not", t.schema.Name(), bestpack, nextbest)
+	// 		return nextbest, min, max, nextmin
+	// 	}
+	// }
 
 	// trigger new pack creation
 	// t.log.Debugf("%s: Should create new pack for key=%d: isfull=%t min=%d, max=%d nextmin=%d", t.schema.Name(), pk, isFull, min, max, nextmin)
-	return t.stats.Len(), 0, 0, 0
+	// return t.stats.Len(), 0, 0, 0
 }

@@ -14,7 +14,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/assert"
 )
 
 // The storage model stores serialized blocks in a storage bucket. Each block is
@@ -31,29 +30,7 @@ var (
 	BE = binary.BigEndian    // keys
 
 	// translate field type to block type
-	blockTypes = [...]block.BlockType{
-		types.FieldTypeInvalid:    block.BlockUint8,
-		types.FieldTypeDatetime:   block.BlockTime,
-		types.FieldTypeBoolean:    block.BlockBool,
-		types.FieldTypeString:     block.BlockBytes,
-		types.FieldTypeBytes:      block.BlockBytes,
-		types.FieldTypeInt8:       block.BlockInt8,
-		types.FieldTypeInt16:      block.BlockInt16,
-		types.FieldTypeInt32:      block.BlockInt32,
-		types.FieldTypeInt64:      block.BlockInt64,
-		types.FieldTypeInt128:     block.BlockInt128,
-		types.FieldTypeInt256:     block.BlockInt256,
-		types.FieldTypeUint8:      block.BlockUint8,
-		types.FieldTypeUint16:     block.BlockUint16,
-		types.FieldTypeUint32:     block.BlockUint32,
-		types.FieldTypeUint64:     block.BlockUint64,
-		types.FieldTypeDecimal32:  block.BlockInt32,
-		types.FieldTypeDecimal64:  block.BlockInt64,
-		types.FieldTypeDecimal128: block.BlockInt128,
-		types.FieldTypeDecimal256: block.BlockInt256,
-		types.FieldTypeFloat32:    block.BlockFloat32,
-		types.FieldTypeFloat64:    block.BlockFloat64,
-	}
+	blockTypes = types.BlockTypes
 )
 
 func blockKey(packkey uint32, blockId uint16) uint64 {
@@ -116,11 +93,7 @@ func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, 
 		// load block data
 		buf := bucket.Get(bkey)
 		if buf == nil {
-			// when missing (new fields in old packs) set block to nil
-			if p.blocks[i] != nil {
-				p.blocks[i].DecRef()
-				p.blocks[i] = nil
-			}
+			// when missing (new fields in old packs) keep block nil
 			continue
 		}
 		n += len(buf)
@@ -191,18 +164,13 @@ func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, 
 }
 
 // store all dirty blocks
-func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint64, stats []int) (int, error) {
+func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint64) (int, error) {
 	if bucket == nil {
 		return 0, engine.ErrNoBucket
 	}
 
-	// ensure stats length
-	if stats != nil {
-		assert.Always(len(stats) == len(p.blocks), "block stats len mismatch",
-			"nstats", len(stats),
-			"nblocks", len(p.blocks),
-		)
-	}
+	// analyze
+	p.WithAnalysis()
 
 	// remove updated blocks from cache
 	var (
@@ -214,13 +182,14 @@ func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint6
 		ckey = engine.CacheKeyType{cacheKey, 0}
 	}
 
+	// optimize blocks before writing (dedup)
+	// TODO: move this into an integrated analysis & encode pipeline
+	p.Optimize()
+
 	var n int
 	for i, f := range p.schema.Fields() {
 		// skip empty blocks, clean blocks and deleted fields
 		if p.blocks[i] == nil || !p.blocks[i].IsDirty() || f.Is(types.FieldFlagDeleted) {
-			if stats != nil {
-				stats[i] = 0
-			}
 			continue
 		}
 
@@ -242,14 +211,13 @@ func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint6
 			return 0, err2
 		}
 
-		// howto export block size statistics
-		if stats != nil {
-			stats[i] = buf.Len()
-		}
-		n += buf.Len()
-
 		// generate storage key for this block
 		bkey := EncodeBlockKey(p.key, f.Id())
+
+		// export block size statistics
+		p.analyze.DiffSize[i] = buf.Len() - len(bucket.Get(bkey))
+		n += buf.Len()
+
 		// fmt.Printf("Store block %d with comp %d\n", f.Id(), f.Compress())
 		// fmt.Printf("Data %d\n%s", buf.Len(), hex.Dump(buf.Bytes()))
 

@@ -165,7 +165,7 @@ func Cmp(typ types.BlockType, a, b any) (c int) {
 	case types.BlockInt256:
 		c = a.(num.Int256).Cmp(b.(num.Int256))
 	default:
-		panic(fmt.Errorf("cmp: unsupported block type %s ", typ))
+		panic(fmt.Errorf("cmp: unsupported block type %s", typ))
 	}
 	return
 }
@@ -186,7 +186,7 @@ func Match(mode types.FilterMode, typ types.BlockType, a, b any) bool {
 	case types.FilterModeLe:
 		return c <= 0
 	default:
-		panic(fmt.Errorf("match: illegal generic filter mode %s ", mode))
+		panic(fmt.Errorf("match: illegal generic filter mode %s", mode))
 	}
 }
 
@@ -221,7 +221,7 @@ func Unique(typ types.BlockType, a any) any {
 	case types.BlockInt256:
 		return num.Int256Unique(a.([]num.Int256))
 	default:
-		panic(fmt.Errorf("unique: unsupported block type %s ", typ))
+		panic(fmt.Errorf("unique: unsupported block type %s", typ))
 	}
 }
 
@@ -279,7 +279,7 @@ func Intersect(typ types.BlockType, a, b any) any {
 	case types.BlockInt256:
 		return num.Int256Intersect(a.([]num.Int256), b.([]num.Int256))
 	default:
-		panic(fmt.Errorf("intersect: unsupported block type %s ", typ))
+		panic(fmt.Errorf("intersect: unsupported block type %s", typ))
 	}
 }
 
@@ -337,7 +337,7 @@ func Union(typ types.BlockType, a, b any) any {
 	case types.BlockInt256:
 		return num.Int256Union(a.([]num.Int256), b.([]num.Int256))
 	default:
-		panic(fmt.Errorf("union: unsupported block type %s ", typ))
+		panic(fmt.Errorf("union: unsupported block type %s", typ))
 	}
 }
 
@@ -395,7 +395,7 @@ func Difference(typ types.BlockType, a, b any) any {
 	case types.BlockInt256:
 		return num.Int256Difference(a.([]num.Int256), b.([]num.Int256))
 	default:
-		panic(fmt.Errorf("difference: unsupported block type %s ", typ))
+		panic(fmt.Errorf("difference: unsupported block type %s", typ))
 	}
 }
 
@@ -477,7 +477,7 @@ func Range(typ types.BlockType, set any) (minv any, maxv any, isComplete bool) {
 		minv, maxv = x.MinMax()
 		isComplete = false
 	default:
-		panic(fmt.Errorf("range: unsupported block type %s ", typ))
+		panic(fmt.Errorf("range: unsupported block type %s", typ))
 	}
 	return
 }
@@ -537,6 +537,41 @@ func cast[T constraints.Integer](val any) (t T, ok bool) {
 	return
 }
 
+func Add(typ types.BlockType, a, b any) any {
+	switch typ {
+	case types.BlockUint64:
+		return a.(uint64) + b.(uint64)
+	case types.BlockUint32:
+		return a.(uint32) + b.(uint32)
+	case types.BlockUint16:
+		return a.(uint16) + b.(uint16)
+	case types.BlockUint8:
+		return a.(uint8) + b.(uint8)
+	case types.BlockInt64:
+		return a.(int64) + b.(int64)
+	case types.BlockInt32:
+		return a.(int32) + b.(int32)
+	case types.BlockInt16:
+		return a.(int16) + b.(int16)
+	case types.BlockInt8:
+		return a.(int8) + b.(int8)
+	case types.BlockInt128:
+		return a.(num.Int128).Add(b.(num.Int128))
+	case types.BlockInt256:
+		return a.(num.Int256).Add(b.(num.Int256))
+	case types.BlockBool:
+		return a.(bool) || b.(bool)
+	case types.BlockFloat64:
+		return a.(float64) + b.(float64)
+	case types.BlockFloat32:
+		return a.(float32) + b.(float32)
+	case types.BlockBytes:
+		return append(bytes.Clone(a.([]byte)), b.([]byte)...)
+	default:
+		panic(fmt.Errorf("add: unsupported block type %s", typ))
+	}
+}
+
 func Inc(typ types.BlockType, v any) any {
 	switch typ {
 	case types.BlockUint64:
@@ -581,7 +616,7 @@ func Inc(typ types.BlockType, v any) any {
 		}
 		return c
 	default:
-		panic(fmt.Errorf("inc: unsupported block type %s ", typ))
+		panic(fmt.Errorf("inc: unsupported block type %s", typ))
 	}
 }
 
@@ -628,7 +663,42 @@ func Dec(typ types.BlockType, v any) any {
 		}
 		return c
 	default:
-		panic(fmt.Errorf("dec: unsupported block type %s ", typ))
+		panic(fmt.Errorf("dec: unsupported block type %s", typ))
+	}
+}
+
+func Zero(typ types.BlockType) any {
+	switch typ {
+	case types.BlockUint64:
+		return uint64(0)
+	case types.BlockUint32:
+		return uint32(0)
+	case types.BlockUint16:
+		return uint16(0)
+	case types.BlockUint8:
+		return uint8(0)
+	case types.BlockInt64:
+		return int64(0)
+	case types.BlockInt32:
+		return int32(0)
+	case types.BlockInt16:
+		return int16(0)
+	case types.BlockInt8:
+		return int8(0)
+	case types.BlockInt128:
+		return num.ZeroInt128
+	case types.BlockInt256:
+		return num.ZeroInt256
+	case types.BlockBool:
+		return false
+	case types.BlockFloat64:
+		return float64(0)
+	case types.BlockFloat32:
+		return float32(0)
+	case types.BlockBytes:
+		return []byte{}
+	default:
+		panic(fmt.Errorf("zero: unsupported block type %s", typ))
 	}
 }
 
@@ -677,7 +747,7 @@ func RemoveRange(typ types.BlockType, s, from, to any) any {
 	case types.BlockInt256:
 		return num.Int256RemoveRange(s.([]num.Int256), from.(num.Int256), to.(num.Int256))
 	default:
-		panic(fmt.Errorf("remove range: unsupported block type %s ", typ))
+		panic(fmt.Errorf("remove range: unsupported block type %s", typ))
 	}
 }
 
@@ -726,6 +796,6 @@ func IntersectRange(typ types.BlockType, s, from, to any) any {
 	case types.BlockInt256:
 		return num.Int256IntersectRange(s.([]num.Int256), from.(num.Int256), to.(num.Int256))
 	default:
-		panic(fmt.Errorf("intersect range: unsupported block type %s ", typ))
+		panic(fmt.Errorf("intersect range: unsupported block type %s", typ))
 	}
 }

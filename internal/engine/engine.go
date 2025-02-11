@@ -45,7 +45,7 @@ type Engine struct {
 	dbId     uint64 // unique database tag
 	path     string // full db base path (from opts + name)
 	log      log.Logger
-	merger   *MergerService
+	tasks    *TaskService
 	wal      *wal.Wal
 	lm       *LockManager
 }
@@ -131,14 +131,15 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		opts:    opts,
 		cat:     NewCatalog(name),
 		log:     log.Disabled,
-		merger:  NewMergerService(),
+		tasks:   NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
 		lm:      NewLockManager().WithTimeout(opts.LockTimeout),
 	}
+	e.tasks.WithContext(WithEngine(ctx, e))
 	e.shutdown.Store(false)
 
 	if opts.Logger != nil {
 		e.log = opts.Logger
-		e.merger.WithLogger(opts.Logger)
+		e.tasks.WithLogger(opts.Logger)
 	}
 
 	e.log.Debugf("Creating database %s at %s", name, e.path)
@@ -203,7 +204,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	}
 
 	// start services
-	e.merger.Start()
+	e.tasks.Start()
 
 	return e, nil
 }
@@ -225,13 +226,14 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
 		cat:     NewCatalog(name),
 		log:     log.Disabled,
-		merger:  NewMergerService(),
+		tasks:   NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
 		lm:      NewLockManager(),
 	}
+	e.tasks.WithContext(WithEngine(ctx, e))
 	e.shutdown.Store(false)
 	if opts.Logger != nil {
 		e.log = opts.Logger
-		e.merger.WithLogger(opts.Logger)
+		e.tasks.WithLogger(opts.Logger)
 	}
 
 	e.log.Debugf("Opening database %s at %s", name, e.path)
@@ -329,7 +331,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	}
 
 	// start services
-	e.merger.Start()
+	e.tasks.Start()
 
 	return e, nil
 }
@@ -357,9 +359,9 @@ func (e *Engine) Close(ctx context.Context) error {
 
 	// stop services
 	e.log.Trace("Stop services")
-	if e.merger != nil {
-		e.merger.Stop()
-		e.merger = nil
+	if e.tasks != nil {
+		e.tasks.Stop()
+		e.tasks = nil
 	}
 
 	// wait for transactions and services to release all locks
@@ -475,9 +477,9 @@ func (e *Engine) ForceShutdown() error {
 
 	// stop services
 	e.log.Trace("Stop services")
-	if e.merger != nil {
-		e.merger.Kill()
-		e.merger = nil
+	if e.tasks != nil {
+		e.tasks.Kill()
+		e.tasks = nil
 	}
 
 	// release/cleanup locks

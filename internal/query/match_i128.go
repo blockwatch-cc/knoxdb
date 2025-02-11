@@ -7,7 +7,9 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
@@ -58,7 +60,7 @@ func (m *i128Matcher) Value() any {
 	return m.val
 }
 
-func (m i128Matcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i128Matcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return m.match(*b.Int128(), m.val, bits, mask)
 }
 
@@ -76,6 +78,22 @@ func (m i128EqualMatcher) MatchRange(from, to any) bool {
 	return !(m.val.Lt(from.(num.Int128)) || m.val.Gt(to.(num.Int128)))
 }
 
+func (m i128EqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// min <= v && max >= v, mask is optional
+	f := newFactory(mins.Type())
+	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
+	le.WithValue(m.val)
+	ge.WithValue(m.val)
+	minBits := le.MatchVector(mins, nil, mask)
+	if mask != nil {
+		minBits.And(mask)
+	}
+	bits = ge.MatchVector(maxs, bits, minBits)
+	bits.And(minBits)
+	minBits.Close()
+	return bits
+}
+
 // NOT EQUAL ---
 
 type i128NotEqualMatcher struct {
@@ -88,6 +106,16 @@ func (m i128NotEqualMatcher) MatchValue(v any) bool {
 
 func (m i128NotEqualMatcher) MatchRange(from, to any) bool {
 	return m.val.Lt(from.(num.Int128)) || m.val.Gt(to.(num.Int128))
+}
+
+func (m i128NotEqualMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// undecided, always true
+	if mask != nil {
+		bits.Copy(mask)
+	} else {
+		bits.One()
+	}
+	return bits
 }
 
 // GT ---
@@ -104,6 +132,13 @@ func (m i128GtMatcher) MatchRange(_, to any) bool {
 	return m.val.Lt(to.(num.Int128))
 }
 
+func (m i128GtMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// max > v
+	gt := newFactory(maxs.Type()).New(FilterModeGt)
+	gt.WithValue(m.val)
+	return gt.MatchVector(maxs, bits, mask)
+}
+
 // GE ---
 
 type i128GeMatcher struct {
@@ -116,6 +151,13 @@ func (m i128GeMatcher) MatchValue(v any) bool {
 
 func (m i128GeMatcher) MatchRange(from, to any) bool {
 	return m.val.Lte(to.(num.Int128))
+}
+
+func (m i128GeMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// max >= v
+	ge := newFactory(maxs.Type()).New(FilterModeGe)
+	ge.WithValue(m.val)
+	return ge.MatchVector(maxs, bits, mask)
 }
 
 // LT ---
@@ -132,6 +174,13 @@ func (m i128LtMatcher) MatchRange(from, to any) bool {
 	return m.val.Gt(from.(num.Int128))
 }
 
+func (m i128LtMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// min < v
+	lt := newFactory(mins.Type()).New(FilterModeLt)
+	lt.WithValue(m.val)
+	return lt.MatchVector(mins, bits, mask)
+}
+
 // LE ---
 
 type i128LeMatcher struct {
@@ -144,6 +193,13 @@ func (m i128LeMatcher) MatchValue(v any) bool {
 
 func (m i128LeMatcher) MatchRange(from, to any) bool {
 	return m.val.Gte(from.(num.Int128))
+}
+
+func (m i128LeMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// min <= v
+	le := newFactory(mins.Type()).New(FilterModeLe)
+	le.WithValue(m.val)
+	return le.MatchVector(mins, bits, mask)
 }
 
 // RANGE ---
@@ -177,8 +233,24 @@ func (m i128RangeMatcher) MatchRange(from, to any) bool {
 	return !(from.(num.Int128).Gt(m.to) || to.(num.Int128).Lt(m.from))
 }
 
-func (m i128RangeMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i128RangeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	return cmp.MatchInt128Between(*b.Int128(), m.from, m.to, bits, mask)
+}
+
+func (m i128RangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// min <= to && max >= from
+	f := newFactory(mins.Type())
+	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
+	le.WithValue(m.to)
+	ge.WithValue(m.from)
+	minBits := le.MatchVector(mins, nil, mask)
+	if mask != nil {
+		minBits.And(mask)
+	}
+	bits = ge.MatchVector(maxs, bits, minBits)
+	bits.And(minBits)
+	minBits.Close()
+	return bits
 }
 
 // IN ---
@@ -187,7 +259,7 @@ func (m i128RangeMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) 
 type i128InSetMatcher struct {
 	noopMatcher
 	slice  []num.Int128
-	hashes [][2]uint32
+	hashes []hash.HashValue
 }
 
 func (m *i128InSetMatcher) Weight() int { return len(m.slice) }
@@ -204,7 +276,7 @@ func (m *i128InSetMatcher) WithValue(val any) {
 
 func (m *i128InSetMatcher) WithSlice(slice any) {
 	m.slice = num.Int128Sort(slice.([]num.Int128))
-	m.hashes = bloom.HashAnySlice(m.slice)
+	m.hashes = hash.HashAnySlice(m.slice)
 }
 
 func (m i128InSetMatcher) MatchValue(v any) bool {
@@ -215,11 +287,19 @@ func (m i128InSetMatcher) MatchRange(from, to any) bool {
 	return num.Int128ContainsRange(m.slice, from.(num.Int128), to.(num.Int128))
 }
 
-func (m i128InSetMatcher) MatchBloom(flt *bloom.Filter) bool {
-	return flt.ContainsAnyHash(m.hashes)
+func (m i128InSetMatcher) MatchFilter(flt filter.Filter) bool {
+	if x, ok := flt.(*bloom.Filter); ok {
+		return x.ContainsAnyHash(m.hashes)
+	}
+	for _, h := range m.hashes {
+		if flt.Contains(h.Uint64()) {
+			return true
+		}
+	}
+	return false
 }
 
-func (m i128InSetMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i128InSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	stride := b.Int128()
 	if mask != nil {
 		// skip masked values
@@ -239,6 +319,13 @@ func (m i128InSetMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) 
 		}
 	}
 	return bits
+}
+
+func (m i128InSetMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	setMin, setMax := m.slice[0], m.slice[len(m.slice)-1]
+	rg := newFactory(mins.Type()).New(FilterModeRange)
+	rg.WithValue(RangeValue{setMin, setMax})
+	return rg.MatchRangeVectors(mins, maxs, bits, mask)
 }
 
 // NOT IN ---
@@ -272,12 +359,12 @@ func (m i128NotInSetMatcher) MatchRange(from, to any) bool {
 	return !num.Int128ContainsRange(m.slice, from.(num.Int128), to.(num.Int128))
 }
 
-func (m i128NotInSetMatcher) MatchBloom(flt *bloom.Filter) bool {
+func (m i128NotInSetMatcher) MatchFilter(_ filter.Filter) bool {
 	// we don't know generally, so full scan is always required
 	return true
 }
 
-func (m i128NotInSetMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i128NotInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	stride := b.Int128()
 	if mask != nil {
 		// skip masked values
@@ -297,4 +384,15 @@ func (m i128NotInSetMatcher) MatchBlock(b *block.Block, bits, mask *bitset.Bitse
 		}
 	}
 	return bits
+}
+
+func (m i128NotInSetMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// undecided, always true
+	if mask != nil {
+		bits.Copy(mask)
+	} else {
+		bits.One()
+	}
+	return bits
+
 }

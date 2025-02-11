@@ -5,11 +5,11 @@ package schema
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"runtime"
 	"testing"
 	"time"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,8 +57,8 @@ func NewSubTypes(i int64) SubTypes {
 		Float64: float64(i),
 		Bool:    i%2 == 1,
 		Time:    time.Unix(0, i).UTC(),
-		Hash:    Uint64Bytes(uint64(i)),
-		String:  hex.EncodeToString(Uint64Bytes(uint64(i))),
+		Hash:    util.U64Bytes(uint64(i)),
+		String:  util.U64Hex(uint64(i)),
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/store"
@@ -100,6 +101,8 @@ var DefaultDatabaseOptions = DatabaseOptions{
 	CacheSize:       16 << 20,
 	WalSegmentSize:  128 << 20,
 	WalRecoveryMode: wal.RecoveryModeTruncate,
+	MaxWorkers:      runtime.NumCPU(),
+	MaxTasks:        128,
 }
 
 // knoxdb.schemas.catalog.v1

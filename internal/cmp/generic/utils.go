@@ -3,13 +3,6 @@
 
 package generic
 
-func bytemask(size int) byte {
-	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
-}
+import "blockwatch.cc/knoxdb/pkg/util"
 
-func b2u(b bool) (x byte) {
-	if b {
-		x = 1
-	}
-	return
-}
+var b2u = util.Bool2byte

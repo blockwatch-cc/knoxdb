@@ -20,7 +20,7 @@ func TestSingleValueParsing(t *testing.T) {
 		name     string
 		parser   ValueParser
 		input    string
-		expected interface{}
+		expected any
 	}{
 		{"Int8", NewParser(types.FieldTypeInt8, 0, nil), "127", int8(127)},
 		{"Int16", NewParser(types.FieldTypeInt16, 0, nil), "32767", int16(32767)},
@@ -68,7 +68,7 @@ func TestSliceParsing(t *testing.T) {
 		name     string
 		parser   ValueParser
 		input    string
-		expected interface{}
+		expected any
 	}{
 		{"Int64Slice", NewParser(types.FieldTypeInt64, 0, nil), "-9223372036854775808,0,9223372036854775807", []int64{math.MinInt64, 0, math.MaxInt64}},
 		{"Float64Slice", NewParser(types.FieldTypeFloat64, 0, nil), "-1.7976931348623157e+308,0,1.7976931348623157e+308", []float64{-math.MaxFloat64, 0, math.MaxFloat64}},
@@ -122,7 +122,7 @@ func TestEdgeCases(t *testing.T) {
 		name     string
 		parser   ValueParser
 		input    string
-		expected interface{}
+		expected any
 	}{
 		{"EmptyString", NewParser(types.FieldTypeString, 0, nil), "", []byte("")},
 		{"UnicodeString", NewParser(types.FieldTypeString, 0, nil), "ビットコイン", []byte("ビットコイン")},
@@ -166,7 +166,7 @@ func TestIntegerParsing(t *testing.T) {
 			name      string
 			fieldType types.FieldType
 			input     string
-			expected  interface{}
+			expected  any
 		}{
 			{"Int8", types.FieldTypeInt8, "127", int8(127)},
 			{"Int16", types.FieldTypeInt16, "32767", int16(32767)},
@@ -208,7 +208,7 @@ func TestIntegerParsing(t *testing.T) {
 			name      string
 			fieldType types.FieldType
 			input     string
-			expected  interface{}
+			expected  any
 		}{
 			{"[]Int8", types.FieldTypeInt8, "127", []int8{127}},
 			{"[]Int16", types.FieldTypeInt16, "32767", []int16{32767}},

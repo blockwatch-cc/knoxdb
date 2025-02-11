@@ -322,7 +322,7 @@ func TrimAllSpace(str string) string {
 
 func IsASCII(s string) bool {
 	for i := 0; i < len(s); i++ {
-		if s[i] > unicode.MaxASCII {
+		if s[i] == 0 || s[i] > unicode.MaxASCII {
 			return false
 		}
 	}
@@ -402,8 +402,12 @@ func (u U64String) MarshalText() ([]byte, error) {
 	return []byte(hex.EncodeToString(tmp[:])), nil
 }
 
-func Uint64Bytes(v uint64) []byte {
+func U64Bytes(v uint64) []byte {
 	var buf [8]byte
-	binary.LittleEndian.PutUint64(buf[:], v)
+	binary.BigEndian.PutUint64(buf[:], v)
 	return buf[:]
+}
+
+func U64Hex(v uint64) string {
+	return U64String(v).Hex()
 }

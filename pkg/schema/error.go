@@ -18,6 +18,7 @@ var (
 	ErrInvalidValueType  = errors.New("invalid value type")
 	ErrInvalidResultType = errors.New("invalid result type")
 	ErrInvalidField      = errors.New("invalid field")
+	ErrOverflow          = errors.New("integer overflow")
 	ErrShortValue        = errors.New("value too short")
 	ErrShortBuffer       = io.ErrShortBuffer
 	ErrSchemaMismatch    = errors.New("schema mismatch")

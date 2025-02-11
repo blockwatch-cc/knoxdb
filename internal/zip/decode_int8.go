@@ -33,7 +33,7 @@ var DecodeUint8 = decodeUint8
 // DecodeInt8 is the int8 version of a 1 byte integer decoder.
 // Its a simple wrapper around the uint variant.
 func DecodeInt8(dst []int8, buf []byte) (int, error) {
-	return DecodeUint8(util.Int8AsUint8Slice(dst), buf)
+	return DecodeUint8(util.ReinterpretSlice[int8, uint8](dst), buf)
 }
 
 // ReadUint8 is an io.Reader wrapper for decoding (u)int8 data.

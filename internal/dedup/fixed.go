@@ -116,7 +116,15 @@ func (a *FixedByteArray) Subslice(start, end int) [][]byte {
 }
 
 func (a *FixedByteArray) MinMax() ([]byte, []byte) {
-	return minMax(a)
+	return minMaxArr(a)
+}
+
+func (a *FixedByteArray) Min() []byte {
+	return minArr(a)
+}
+
+func (a *FixedByteArray) Max() []byte {
+	return maxArr(a)
 }
 
 func (a *FixedByteArray) MaxEncodedSize() int {

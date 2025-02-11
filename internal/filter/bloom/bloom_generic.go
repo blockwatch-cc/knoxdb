@@ -4,50 +4,34 @@
 package bloom
 
 import (
-	"blockwatch.cc/knoxdb/internal/hash/xxhashVec"
+	"blockwatch.cc/knoxdb/internal/hash"
 )
 
 // AddMany inserts multiple data points to the filter.
-func filterAddManyUint32Generic(f Filter, l []uint32, seed uint32) {
+func filterAddManyUint32Generic(f *Filter, l []uint32) {
 	for _, v := range l {
-		h := [2]uint32{xxhashVec.XXHash32Uint32(v, seed), xxhashVec.XXHash32Uint32(v, 0)}
-		for i := uint32(0); i < f.k; i++ {
-			loc := f.location(h, i)
-			f.b[loc>>3] |= 1 << (loc & 7)
-		}
+		f.add(f, hash.HashUint32(v))
 	}
 }
 
 // AddMany inserts multiple data points to the filter.
-func filterAddManyInt32Generic(f Filter, l []int32, seed uint32) {
+func filterAddManyInt32Generic(f *Filter, l []int32) {
 	for _, v := range l {
-		h := [2]uint32{xxhashVec.XXHash32Int32(v, seed), xxhashVec.XXHash32Int32(v, 0)}
-		for i := uint32(0); i < f.k; i++ {
-			loc := f.location(h, i)
-			f.b[loc>>3] |= 1 << (loc & 7)
-		}
+		f.add(f, hash.HashInt32(v))
 	}
 }
 
 // AddMany inserts multiple data points to the filter.
-func filterAddManyUint64Generic(f Filter, l []uint64, seed uint32) {
+func filterAddManyUint64Generic(f *Filter, l []uint64) {
 	for _, v := range l {
-		h := [2]uint32{xxhashVec.XXHash32Uint64(v, seed), xxhashVec.XXHash32Uint64(v, 0)}
-		for i := uint32(0); i < f.k; i++ {
-			loc := f.location(h, i)
-			f.b[loc>>3] |= 1 << (loc & 7)
-		}
+		f.add(f, hash.HashUint64(v))
 	}
 }
 
 // AddMany inserts multiple data points to the filter.
-func filterAddManyInt64Generic(f Filter, l []int64, seed uint32) {
+func filterAddManyInt64Generic(f *Filter, l []int64) {
 	for _, v := range l {
-		h := [2]uint32{xxhashVec.XXHash32Int64(v, seed), xxhashVec.XXHash32Int64(v, 0)}
-		for i := uint32(0); i < f.k; i++ {
-			loc := f.location(h, i)
-			f.b[loc>>3] |= 1 << (loc & 7)
-		}
+		f.add(f, hash.HashInt64(v))
 	}
 }
 

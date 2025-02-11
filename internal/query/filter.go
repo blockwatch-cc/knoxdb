@@ -58,9 +58,10 @@ func (f Filter) Validate() error {
 // type FilterFlags byte
 
 // const (
-// 	FilterFlagOr    FilterFlags = 1 << iota // or kind
-// 	FilterFlagSkip                          // processed, may skip
-// 	FilterFlagIndex                         // index scan result
+// 	FilterFlagIsOr  FilterFlags = 1 << iota // or kind
+// 	FilterFlagCanSkip                       // processed, may skip
+// 	FilterFlagIsIndexResult                 // index scan result
+// 	FilterFlagUseBloom                      // leaf node may use bloom filter match
 // )
 
 // Invariants
@@ -129,6 +130,8 @@ func (n FilterTreeNode) Validate(pos string) error {
 	return nil
 }
 
+// Fields returns a unique ordered list of field names referenced by
+// filters in this tree.
 func (n FilterTreeNode) Fields() []string {
 	if n.IsLeaf() {
 		return []string{n.Filter.Name}
@@ -138,6 +141,24 @@ func (n FilterTreeNode) Fields() []string {
 		names = append(names, v.Fields()...)
 	}
 	return slicex.UniqueStrings(names)
+}
+
+// Indexes returns a unique ordered list of field indexes referenced by
+// filters in this tree.
+func (n FilterTreeNode) Indexes() []uint16 {
+	ord := slicex.NewOrderedNumbers[uint16](make([]uint16, 0)).SetUnique()
+	n.collectIndexes(ord)
+	return ord.Values
+}
+
+func (n FilterTreeNode) collectIndexes(s *slicex.OrderedNumbers[uint16]) {
+	if n.IsLeaf() {
+		s.Insert(n.Filter.Index)
+		return
+	}
+	for _, v := range n.Children {
+		v.collectIndexes(s)
+	}
 }
 
 // Size returns the total number of condition leaf nodes
@@ -202,4 +223,18 @@ func (n *FilterTreeNode) Overlaps(v engine.ConditionMatcher) bool {
 	}
 	// TODO: required for LockManager predicate locks
 	return false
+}
+
+// ForEach visits each filter in the tree
+func (n FilterTreeNode) ForEach(fn func(*Filter) error) error {
+	if n.IsLeaf() {
+		return fn(n.Filter)
+	}
+
+	for _, v := range n.Children {
+		if err := v.ForEach(fn); err != nil {
+			return err
+		}
+	}
+	return nil
 }

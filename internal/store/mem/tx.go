@@ -6,6 +6,7 @@ package mem
 import (
 	"encoding/binary"
 
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/store"
 )
 
@@ -46,13 +47,29 @@ func (tx *transaction) checkWriteable() error {
 // NOTE: This function must only be called on a writable transaction.  Since it
 // is an internal helper function, it does not check.
 func (tx *transaction) nextBucketID() ([bucketIdLen]byte, error) {
+	// init from full length (assuming there is no gap)
 	nextId := len(tx.db.bucketIds) + 1
+
+	// find a gap in bucket id map
+	ids := bitset.NewBitset(1 << bucketIdLen).One()
+	defer ids.Close()
+	for _, v := range tx.db.bucketIds {
+		var buf [8]byte
+		copy(buf[8-bucketIdLen:], v[:])
+		ids.Clear(int(binary.BigEndian.Uint64(buf[:])))
+	}
+	// use the first missing id
+	if ids.Count() > 0 {
+		if _, pos := ids.Iterate(0, make([]int, 1)); len(pos) > 0 {
+			nextId = pos[0]
+		}
+	}
 	if nextId > 1<<uint(8*bucketIdLen) {
 		return [bucketIdLen]byte{}, makeDbErr(store.ErrTxConflict, "bucket sequence overflow")
 	}
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, uint64(nextId))
+	var buf [8]byte
 	var id [bucketIdLen]byte
+	binary.BigEndian.PutUint64(buf[:], uint64(nextId))
 	copy(id[:], buf[8-bucketIdLen:8])
 	return id, nil
 }
@@ -118,8 +135,10 @@ func (tx *transaction) close() {
 
 	// free locks
 	if tx.writable {
+		// fmt.Printf("Wunlock\n%s", string(debug.Stack()))
 		tx.db.writeLock.Unlock()
 	} else {
+		// fmt.Printf("Runlock\n%s", string(debug.Stack()))
 		tx.db.writeLock.RUnlock()
 	}
 }

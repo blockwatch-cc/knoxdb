@@ -33,7 +33,7 @@ var DecodeUint16 = decodeUint16
 // DecodeInt16 is the int16 version of a 2 byte integer decoder.
 // Its a simple wrapper around the uint variant.
 func DecodeInt16(dst []int16, buf []byte) (int, error) {
-	return DecodeUint16(util.Int16AsUint16Slice(dst), buf)
+	return DecodeUint16(util.ReinterpretSlice[int16, uint16](dst), buf)
 }
 
 // ReadUint16 is an io.Reader wrapper for decoding (u)int16 data.

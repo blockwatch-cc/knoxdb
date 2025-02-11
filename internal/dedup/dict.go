@@ -138,7 +138,15 @@ func (a *DictByteArray) Subslice(start, end int) [][]byte {
 }
 
 func (a *DictByteArray) MinMax() ([]byte, []byte) {
-	return minMax(a)
+	return minMaxArr(a)
+}
+
+func (a *DictByteArray) Min() []byte {
+	return minArr(a)
+}
+
+func (a *DictByteArray) Max() []byte {
+	return maxArr(a)
 }
 
 func (a *DictByteArray) MaxEncodedSize() int {

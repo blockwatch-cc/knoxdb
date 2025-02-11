@@ -1,339 +1,1231 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package stats
 
 import (
+	"bytes"
+	"context"
+	"encoding/binary"
+	"fmt"
+	"math/bits"
+	"slices"
 	"sort"
+	"strings"
+	"sync/atomic"
 
-	"blockwatch.cc/knoxdb/pkg/slicex"
+	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/bitset"
+	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/schema"
+	"golang.org/x/exp/constraints"
 )
 
-// StatsIndex implements efficient and scalable pack metadata management as
-// well as primary key placement (i.e. best pack selection) for tables and indexes.
+// TODO
+// - debug features, packview integration
+// - spack query
+//   - multi-reader sync on load packs
+// - spack append/update
+//   - where to get data pack size in bytes from? -> analytics extension on pack
+//   - spack disksize is not yet stored
+//   - bloom and range index sizes are not yet stored
+// - reuse generated min/max stats from some analysis struct (to be defined)
+// - limit string size to max 8 (how do filters change?)
+
+// Ideas
 //
-// Packs are stored and referenced in key order ([4]byte = big endian uint32),
-// and primary keys have a global order across packs. This means pk min-max ranges
-// may be unordered, but can never overlap.
+// Performance
+// - async load many bloom & range filters
+// - use (page) cache for bloom and range filters
+// - better cache with less locking overhead
 //
-// StatsIndex can find a pack that may contain a given pk and can select
-// the best pack to store a new pk. New or updated packs (i.e. from calls to split
-// or storePack) are registered using their pack metadata. Empty packs (Table only)
-// must be deregistered before deletion.
+// More statistics
+// - counting HLL
+// - aggregate bloom filters on inodes (size/precision?)
 //
-// StatsIndex keeps a list of all current pack metadata and a list of all
-// removed pack keys in memory. Store() can persist the index to storage.
-type StatsIndex struct {
-	packs   PackStatsList                  // list of package identity and block statistics
-	minpks  []uint64                       // min statistics for pk field
-	maxpks  []uint64                       // max statistics for pk field
-	removed *slicex.OrderedNumbers[uint32] // list of keys for removed packs
-	pos     []int32                        // list of pack positions sorted by min value
-	pki     int
-	maxrows int
+// HLL management
+// func (idx *Index) AddRecord(pkg *pack.Package, n int)       {}
+// func (idx *Index) DelRecord(pkg *pack.Package, n int)       {}
+// func (idx *Index) AddRange(pkg *pack.Package, from, to int) {}
+// func (idx *Index) DelRange(pkg *pack.Package, from, to int) {}
+// func (idx Index) Cardinality(col int) uint64                    {}
+
+const (
+	STATS_PACK_SIZE       = 2048 // max size of statistics package
+	STATS_STRING_MAX_LEN  = 8    // max prefix bytes for string/byte statistics
+	STATS_DATA_COL_OFFSET = 4    // start of the first data column in index schema
+	STATS_BUCKETS         = 6
+)
+
+const (
+	STATS_BLOCK_KEY = iota
+	STATS_TREE_KEY
+	STATS_BLOOM_KEY
+	STATS_RANGE_KEY
+	STATS_BITS_KEY
+	STATS_FUSE_KEY
+)
+
+var (
+	StatsKeySuffix   = engine.StatsKeySuffix
+	VectorsKeySuffix = []byte("_block") // stats vector bucket
+	TreeKeySuffix    = []byte("_tree")  // stats tree bucket
+	BloomKeySuffix   = []byte("_bloom") // bloom filter bucket
+	RangeKeySuffix   = []byte("_range") // range filter bucket
+	BitsKeySuffix    = []byte("_bits")  // bits filter bucket
+	FuseKeySuffix    = []byte("_fuse")  // fuse filter bucket
+
+	BE = binary.BigEndian
+)
+
+type Features byte
+
+const (
+	FeatBloomFilter Features = 1 << iota
+	FeatFuseFilter
+	FeatBitsFilter
+	FeatRangeFilter
+	FeatUseCache
+)
+
+var FilterMask Features = 0xf
+
+func (f Features) Is(x Features) bool {
+	return f&x > 0
 }
 
-// may be used in {Index|Table}.loadPackHeaders
-func NewStatsIndex(pki, maxrows int) *StatsIndex {
-	return &StatsIndex{
-		packs:   make(PackStatsList, 0),
-		minpks:  make([]uint64, 0),
-		maxpks:  make([]uint64, 0),
-		removed: slicex.NewOrderedNumbers[uint32](nil),
-		pki:     pki,
-		pos:     make([]int32, 0),
-		maxrows: maxrows,
+// Index implements efficient and scalable pack statistics management. For every
+// data pack we store
+//
+// - min/max statistics about each column vector a.k.a zone maps
+// - bloom filters for certain columns when requested by the user
+// - range filters for integer columns
+//
+// These statistics serve two major purposes
+// - query execution: decide which data packs (and vector ranges) to load or skip
+// - journal merge: decide which records and tombstones to merge into a data pack
+//   based on primary key
+//
+// Design considerations
+//   - packs are referenced by key ([4]byte = big endian uint32)
+//   - blocks (column vectors) are referenced by schema field id (uint16)
+//   - primary keys are uint64 (pk field or rid field on history tracking tables)
+//   - primary keys are always generated by the database (not user defined)
+//   - primary keys are not reused after deletion
+//   - pk min-max ranges never overlap and have the same order as pack ids
+//   - packs can be removed after all their content has been deleted
+//   - compaction re-compresses key ranges into full packs and generates
+//     new gap-free pack ids
+//
+// Tables and indexes using the pack format explicitly register their data packs
+// with the statistics index and use it to speed up table scans.
+//
+//
+// Data Placement
+//
+// Records are assigned to data packs based on primary key (or row id) which
+// is sequentially increasing. Each data pack stores a unique non-overlapping range
+// of primary keys. Since primary key reuse post deletion and out-of-order insert
+// are probibited placement is relatively simple. We can find the closest data pack
+// based on min/max statistics about its primary key column.
+//
+// The challenging part is that data packs can be removed when empty so we cannot
+// directly compute pack id from primary key. We have to actually scan for the pack
+// to merge a key into.
+//
+//
+// Data Organization
+//
+// Because the amount of data packs can grow very large (e.g. 15k+ for 1B records
+// at pack size 64k) we optimize the amount of lookup and comparison operations
+// on statistics data. This index design makes two important choices:
+//
+// - data pack statistics (min/max) are stored as groups of column vectors
+//   to enable vectorized range scans and better statistics data compression
+// - an n-ary tree where each node contains aggregated meta-statistics
+//   about entire statistics column groups (2nd order min/max ranges)
+//
+// The root node of this tree thus stores aggregate total ranges for each
+// data column and total aggregate sum/count statistics about all data packs.
+//
+// Meta statistics are stored and updated in wire-encoded format where min
+// and max values are interleaved. The statistics schema is directly derived
+// from the table schema (each colmn is duplicated for min & max). We add
+// some additional statistics columns for extra metadata like data pack key,
+// sizes and value counts.
+//
+// For many queries this tree allows us to skip statistics checks of entire
+// branches although it adds a few extra comparison operations.
+//
+//
+// Tree Algorithm Design
+//
+// The statistics tree consists of two node types, internal nodes (inodes) with
+// meta-statistics about a sub-tree and leaf nodes (snodes) with meta-statistics
+// about a single statistics vector group and a reference to this group.
+//
+// Data pack statistics are appended in sequential order (with increasing key) and
+// may be updated or deleted in arbitrary order. Hence the tree always grows
+// to the right side only and may shrink anywhere on snode deletions.
+//
+// To avoid costly re-calculation of meta-statistics in inodes when a new tree
+// level is added we use a depth balanced tree such that all leaf nodes
+// are at the same lowestmost level, hence their order remains stable. This
+// choice also allows us to split the tree into two separate arrays, one for
+// inodes and one for snodes. On growth snodes are simply appended to the
+// snode array and on level expansion the inode array is reshuffled but
+// does not require recomputation.
+//
+// Tree node indexes are zero-based (root = 0) and assigned in breadth-order
+// so that nodes can be addressed without pointers, i.e. child and parent
+// indexes are directly computed from a node's index.
+
+type Index struct {
+	schema       *schema.Schema        // statistics schema (meta + min + max)
+	db           store.DB              // backend reference for pulling more data
+	keys         [STATS_BUCKETS][]byte // statistics bucket keys
+	inodes       []*INode              // inner nodes of the binary tree as array
+	snodes       []*SNode              // leaf nodes of the binary tree as array
+	px           int                   // index of the data pack's pk column (pk or rid)
+	nmax         int                   // max data pack size
+	view         *schema.View          // helper to extract tree node data from wire format
+	build        *schema.Builder       // wire format builder (writer only)
+	use          Features              // index features
+	bytesRead    int64                 // io metrics
+	bytesWritten int64                 // io metrics
+
+	// card   []*loglogbeta.LogLogBeta // HLL cardinality estimators [n_columns]
+
+	// load other index data on demand (maybe use LRU cache, but requires data copy)
+	// - bloom filters: when configured, composite key (pack id + block id)
+	// - range indexes: all integer blocks, composite key (pack id + block id)
+}
+
+func NewIndex(db store.DB, s *schema.Schema, nmax int) *Index {
+	px := s.RowIdIndex()
+	if px < 0 {
+		px = s.PkIndex()
+	}
+	inodes := make([]*INode, 0)
+	snodes := make([]*SNode, 0)
+	ss := MakeSchema(s)
+	makekey := func(k []byte) []byte {
+		return bytes.Join([][]byte{[]byte(ss.Name()), k}, nil)
+	}
+	return &Index{
+		schema: ss,
+		db:     db,
+		keys: [STATS_BUCKETS][]byte{
+			makekey(VectorsKeySuffix),
+			makekey(TreeKeySuffix),
+			makekey(BloomKeySuffix),
+			makekey(RangeKeySuffix),
+			makekey(BitsKeySuffix),
+			makekey(FuseKeySuffix),
+		},
+		inodes: inodes,
+		snodes: snodes,
+		px:     px,
+		nmax:   nmax,
+		view:   schema.NewView(ss),
+		build:  schema.NewBuilder(ss, binary.LittleEndian),
+		use:    FeatBloomFilter | FeatFuseFilter | FeatBitsFilter,
 	}
 }
 
-func (l *StatsIndex) Clear() {
-	for _, v := range l.packs {
-		l.removed.Insert(v.Key)
+// create a private copy used to update the index during background merge
+func (idx Index) Clone() *Index {
+	return &Index{
+		schema: idx.schema,
+		db:     idx.db,
+		keys:   idx.keys,
+		inodes: slices.Clone(idx.inodes),
+		snodes: slices.Clone(idx.snodes),
+		px:     idx.px,
+		nmax:   idx.nmax,
+		view:   schema.NewView(idx.schema), // create a private view state
+		build:  idx.build,                  // link builder, its only accessed during updates
+		use:    idx.use,
 	}
-	l.packs = l.packs[:0]
-	l.minpks = l.minpks[:0]
-	l.maxpks = l.maxpks[:0]
-	l.pos = l.pos[:0]
 }
 
-func (l *StatsIndex) Reset() {
-	l.packs = l.packs[:0]
-	l.minpks = l.minpks[:0]
-	l.maxpks = l.maxpks[:0]
-	l.pos = l.pos[:0]
-	l.removed.Values = l.removed.Values[:0]
-}
-
-func (l StatsIndex) NextKey() uint32 {
-	if len(l.packs) == 0 {
-		return 0
+func (idx *Index) WithCache(use bool) *Index {
+	if use {
+		idx.use |= FeatUseCache
+	} else {
+		idx.use &^= FeatUseCache
 	}
-	return l.packs[len(l.packs)-1].Key + 1
+	return idx
 }
 
-func (l *StatsIndex) Len() int {
-	return len(l.packs)
-}
-
-func (l *StatsIndex) Count() int {
-	var count int
-	for i := range l.packs {
-		count += l.packs[i].NValues
+func (idx *Index) WithFeatures(f Features) *Index {
+	if f == 0 {
+		idx.use = f
+	} else {
+		idx.use |= f
 	}
-	return count
+	return idx
 }
 
-func (l *StatsIndex) HeapSize() int {
-	sz := szStatsIndex
-	sz += len(l.minpks) * 8
-	sz += len(l.maxpks) * 8
-	sz += len(l.removed.Values) * 4
-	sz += len(l.pos) * 4
-	for i := range l.packs {
-		sz += l.packs[i].HeapSize()
+func (idx *Index) Clear() {
+	for _, v := range idx.snodes {
+		v.Clear()
 	}
-	return sz
+	clear(idx.snodes)
+	clear(idx.inodes)
+	idx.inodes = idx.inodes[:0]
+	idx.snodes = idx.snodes[:0]
 }
 
-func (l *StatsIndex) TableSize() int {
-	var sz int
-	for i := range l.packs {
-		sz += l.packs[i].StoredSize
+func (idx *Index) Close() {
+	for _, v := range idx.snodes {
+		v.Clear()
 	}
-	return sz
+	clear(idx.snodes)
+	clear(idx.inodes)
+	clear(idx.keys[:])
+	idx.schema = nil
+	idx.db = nil
+	idx.inodes = nil
+	idx.snodes = nil
+	idx.view = nil
+	idx.build = nil
+	idx.px = 0
+	idx.nmax = 0
+	idx.use = 0
 }
 
-func (l *StatsIndex) Sort() {
-	// sort by min/max/pos -- see testcases
-	sort.Slice(l.pos, func(i, j int) bool {
-		posi, posj := l.pos[i], l.pos[j]
-		mini, maxi := l.minpks[posi], l.maxpks[posi]
-		minj, maxj := l.minpks[posj], l.maxpks[posj]
-		return mini < minj || (mini == minj && maxi < maxj) || (mini == minj && maxi == maxj && i < j)
-	})
-}
-
-func (l *StatsIndex) MinMax(n int) (uint64, uint64) {
-	if n >= l.Len() {
-		return 0, 0
-	}
-	return l.minpks[n], l.maxpks[n]
-}
-
-func (l *StatsIndex) MinMaxSorted(n int) (uint64, uint64) {
-	if n >= l.Len() {
-		return 0, 0
-	}
-	pos := l.pos[n]
-	return l.minpks[pos], l.maxpks[pos]
-}
-
-func (l *StatsIndex) GlobalMinMax() (uint64, uint64) {
-	if l.Len() == 0 {
-		return 0, 0
-	}
-	return l.minpks[l.pos[0]], l.maxpks[l.pos[len(l.pos)-1]]
-}
-
-func (l *StatsIndex) MinMaxSlices() ([]uint64, []uint64) {
-	return l.minpks, l.maxpks
-}
-
-func (l *StatsIndex) AllPacks() PackStatsList {
-	return l.packs
-}
-
-func (l *StatsIndex) GetPos(i int) (*PackStats, bool) {
-	if i < 0 || i >= l.Len() {
-		return nil, false
-	}
-	return l.packs[i], true
-}
-
-func (l *StatsIndex) GetSorted(i int) (*PackStats, bool) {
-	if i < 0 || i >= l.Len() {
-		return nil, false
-	}
-	return l.packs[l.pos[i]], true
-}
-
-func (l *StatsIndex) GetByKey(key uint32) (*PackStats, bool) {
-	if len(l.packs) == 0 {
-		return nil, false
+// store and load
+func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
+	// identify empty snodes for drop
+	empty := make([]*SNode, 0)
+	for _, n := range idx.snodes {
+		if n.IsEmpty() {
+			empty = append(empty, n)
+		}
 	}
 
-	// check if pack was removed
-	if l.removed.Contains(key) {
-		return nil, false
+	if len(empty) > 0 {
+		// remove nodes from list
+		idx.snodes = slices.DeleteFunc(idx.snodes, func(n *SNode) bool { return n.IsEmpty() })
+
+		// rebuild the inode tree (its less complex to rebuild all inodes and stats)
+		idx.rebuildInodeTree()
 	}
 
-	// search for pack
-	i := sort.Search(len(l.packs), func(i int) bool { return l.packs[i].Key >= key })
-	if i >= len(l.packs) || l.packs[i].Key != key {
-		// key is not present at l.packs[i]
-		return nil, false
+	// clear tree bucket after rebuild
+	if len(empty) > 0 {
+		if err := tx.Root().DeleteBucket(idx.keys[STATS_TREE_KEY]); err != nil {
+			return err
+		}
 	}
-	return l.packs[i], true
+
+	// create stats buckets if not exist
+	for k := 0; k < STATS_BUCKETS; k++ {
+		_, err := tx.Root().CreateBucketIfNotExists(idx.keys[k])
+		if err != nil {
+			return err
+		}
+	}
+
+	// store inode meta stats when dirty
+	tree := idx.treeBucket(tx)
+	if tree == nil {
+		return engine.ErrNoBucket
+	}
+	for i, inode := range idx.inodes {
+		if inode == nil || !inode.dirty {
+			continue
+		}
+		// key is tree node id (u32) + 0
+		var key [8]byte
+		BE.PutUint32(key[:4], uint32(i))
+		BE.PutUint32(key[4:], 0)
+		err := tree.Put(key[:], inode.meta)
+		if err != nil {
+			return err
+		}
+		inode.dirty = false
+		idx.bytesWritten += int64(len(inode.meta))
+	}
+
+	blocks := idx.statsBucket(tx)
+	if blocks == nil {
+		return engine.ErrNoBucket
+	}
+
+	// drop empty snode blocks
+	for _, snode := range empty {
+		err := snode.spack.Remove(ctx, blocks, 0)
+		if err != nil {
+			return err
+		}
+		snode.Clear()
+	}
+
+	// store snodes when dirty
+	li := len(idx.inodes) - 1
+	for i, snode := range idx.snodes {
+		if len(empty) == 0 && !snode.dirty {
+			continue
+		}
+		// key is tree node id (u32) + spack key (u32)
+		var key [8]byte
+		BE.PutUint32(key[:4], uint32(li+i))
+		BE.PutUint32(key[4:], snode.Key())
+		err := tree.Put(key[:], snode.meta)
+		if err != nil {
+			return err
+		}
+		idx.bytesWritten += int64(len(snode.meta))
+
+		// package blocks
+		snode.disksize, err = snode.spack.Store(ctx, blocks, 0)
+		if err != nil {
+			return err
+		}
+		snode.dirty = false
+		idx.bytesWritten += int64(snode.disksize)
+	}
+	clear(empty)
+
+	return nil
 }
 
-func (l *StatsIndex) IsFull(i int) bool {
-	if i < 0 || i >= l.Len() {
-		return false
+func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
+	// load tree
+	tree := idx.treeBucket(tx)
+	if tree == nil {
+		return engine.ErrNoBucket
 	}
-	return l.maxrows > 0 && l.packs[i].NValues >= l.maxrows
-}
+	blocks := idx.statsBucket(tx)
+	if blocks == nil {
+		return engine.ErrNoBucket
+	}
 
-// Called by StorePack with updated pack metadata
-func (l *StatsIndex) AddOrUpdate(m *PackStats) {
-	m.Dirty = true
-	l.removed.Remove(m.Key)
-	old, pos, isAdd := l.packs.Add(m)
-	var needsort bool
+	// walk reverse finds snode entries first
+	c := tree.Cursor(store.ReverseCursor)
+	defer c.Close()
+	for ok := c.Last(); ok; ok = c.Prev() {
+		// read tree node id and snode key
+		id := int(BE.Uint32(c.Key()))
+		key := BE.Uint32(c.Key()[4:])
 
-	// keep positions of packs in l.packs in sync with positions stored in l.pos
-	if isAdd {
-		// appends of new packs can use a more efficient implementation
-		if pos > 0 && pos == l.Len()-1 {
-			// get the added packs min and the highest max of all managed packs
-			newmin := l.packs[pos].Blocks[l.pki].MinValue.(uint64)
-			newmax := l.packs[pos].Blocks[l.pki].MaxValue.(uint64)
-			lastmax := l.packs[l.pos[len(l.pos)-1]].Blocks[l.pki].MaxValue.(uint64)
+		// init node index calculations
+		ilen := len(idx.inodes)
 
-			// simple appends of packs with higher min than any existing max does
-			// not require re-sorting the pos slice
-			needsort = newmin < lastmax
+		// init tree sizes from highest snode key id on storage
+		if ilen == 0 {
+			ilen = 1 << log2(id+1) // num inodes is the full inode tree plus 1 extra
+			slen := id - ilen + 2  // num snodes is exact count
+			idx.inodes = slices.Grow(idx.inodes, ilen)
+			idx.inodes = idx.inodes[:ilen]
+			idx.snodes = slices.Grow(idx.snodes, slen)
+			idx.snodes = idx.snodes[:slen]
+		}
 
-			// append new values
-			l.pos = append(l.pos, int32(pos))
-			l.minpks = append(l.minpks, newmin)
-			l.maxpks = append(l.maxpks, newmax)
+		// identify node kind from id and create node
+		if id >= ilen-1 {
+			// snode
+			node := NewSNode(key, idx.schema, false)
+			node.meta = bytes.Clone(c.Value())
+			idx.snodes[id-ilen+1] = node
+			idx.bytesRead += int64(len(c.Value()))
+
+			// load key and nvals columns
+			n, err := node.spack.Load(
+				ctx,
+				blocks, // bucket
+				false,  // no cache
+				0,      // zero cache key
+				[]uint16{STATS_ROW_KEY + 1, STATS_ROW_NVALS + 1}, // field ids!!
+				0, // len from store
+			)
+			if err != nil {
+				return err
+			}
+			idx.bytesRead += int64(n)
 
 		} else {
-			// all header positions after `pos` have shifted right, so we must update
-			// all corresponding pos as well; for simplicity we rebuild the entire
-			// pos slice from scratch
-
-			// grow pos if necessary
-			if cap(l.pos) < len(l.packs) {
-				l.pos = make([]int32, len(l.packs))
-				l.minpks = make([]uint64, len(l.packs))
-				l.maxpks = make([]uint64, len(l.packs))
-			}
-			l.pos = l.pos[:len(l.packs)]
-			l.minpks = l.minpks[:len(l.packs)]
-			l.maxpks = l.maxpks[:len(l.packs)]
-			for i := range l.packs {
-				l.minpks[i] = l.packs[i].Blocks[l.pki].MinValue.(uint64)
-				l.maxpks[i] = l.packs[i].Blocks[l.pki].MaxValue.(uint64)
-				l.pos[i] = int32(i)
-			}
-			needsort = true
+			// inode
+			idx.inodes[id] = NewINode()
+			idx.inodes[id].meta = bytes.Clone(c.Value())
+			idx.bytesRead += int64(len(c.Value()))
 		}
-	} else {
-		// update min/max pk slices to stay in sync with pack headers
-		newmin := l.packs[pos].Blocks[l.pki].MinValue.(uint64)
-		newmax := l.packs[pos].Blocks[l.pki].MaxValue.(uint64)
-		l.minpks[pos] = newmin
-		l.maxpks[pos] = newmax
-
-		// skip sort if min/max values haven't changed
-
-		// TODO(echa): check it is safe to not sort on max change
-		// oldmin := old.Blocks[l.pki].MinValue.(uint64)
-		// oldmax := old.Blocks[l.pki].MaxValue.(uint64)
-		// needsort = oldmin != newmin || oldmax != newmax
-		oldmin := old.Blocks[l.pki].MinValue.(uint64)
-		needsort = oldmin != newmin
 	}
-	if needsort {
-		l.Sort()
-	}
+
+	return nil
 }
 
-// called by storePack when packs are empty (Table only, index packs are never removed)
-func (l *StatsIndex) Remove(key uint32) {
-	oldhead, pos := l.packs.RemoveKey(key)
-	if pos < 0 {
+func (idx *Index) Delete(ctx context.Context, tx store.Tx) error {
+	idx.Clear()
+	for _, k := range idx.keys {
+		_ = tx.Root().DeleteBucket(k)
+	}
+	return nil
+}
+
+// introspect
+
+// num data packs
+func (idx Index) Len() int {
+	return idx.root().NPacks(idx.view)
+}
+
+// num data rows
+func (idx Index) Count() int {
+	return int(idx.root().NValues(idx.view))
+}
+
+// index i/o metrics
+func (idx Index) Metrics() (bytesRead int64, bytesWritten int64) {
+	r := atomic.LoadInt64(&idx.bytesRead)
+	w := atomic.LoadInt64(&idx.bytesWritten)
+	return r, w
+}
+
+// index heap usage in bytes
+func (idx Index) HeapSize() int {
+	var sz int
+	for _, v := range idx.inodes {
+		if v == nil {
+			continue
+		}
+		sz += 24 + len(v.meta)
+	}
+	for _, v := range idx.snodes {
+		sz += 32 + len(v.meta) + v.spack.HeapSize()
+	}
+	return sz
+}
+
+// total on-disk table size in bytes (sum of data pack sizes)
+func (idx Index) TableSize() int {
+	return int(idx.root().Size(idx.view))
+}
+
+// total on-disk index size in bytes (index packs, bloom, range indexes)
+func (idx Index) IndexSize() int {
+	// TODO: bloom and range index sizes
+	// TODO: disksize is not yet stored/loaded
+	var sz int
+	for _, v := range idx.inodes {
+		if v == nil {
+			continue
+		}
+		sz += len(v.meta)
+	}
+	for _, v := range idx.snodes {
+		sz += len(v.meta) + v.disksize
+	}
+	return sz
+}
+
+// pack management
+func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package) error {
+	// lookup pack placement
+	node, i, ok := idx.findSNode(pkg.Key())
+
+	// create a new leaf node when not found or full
+	if !ok || node.spack.Len() == STATS_PACK_SIZE {
+		node, i = idx.addSnode()
+	}
+
+	// ensure all stats blocks are loaded and materialized
+	node, err := idx.prepareWrite(ctx, node, i)
+	if err != nil {
+		return err
+	}
+
+	// add data pack statistics to node
+	if node.AppendPack(pkg) {
+		// update spack meta statistics on change
+		if node.BuildMetaStats(idx.view, idx.build) {
+			// update meta statistics towards the root on change
+			idx.updatePathToRoot(i)
+		}
+	}
+
+	// build bloom and range filters
+	return idx.buildFilters(pkg, node)
+}
+
+func (idx *Index) UpdatePack(ctx context.Context, pkg *pack.Package) error {
+	// lookup pack placement
+	node, i, ok := idx.findSNode(pkg.Key())
+	if !ok {
+		// should not happen
+		panic(fmt.Errorf("stats: missing record for pack key %d", pkg.Key()))
+	}
+
+	// ensure all stats blocks are loaded and materialized
+	node, err := idx.prepareWrite(ctx, node, i)
+	if err != nil {
+		return err
+	}
+
+	// update data pack statistics record
+	if node.UpdatePack(pkg) {
+		// update spack meta statistics on change
+		if node.BuildMetaStats(idx.view, idx.build) {
+			// update meta statistics towards the root on change
+			idx.updatePathToRoot(i)
+		}
+	}
+
+	// rebuild bloom and range filters
+	return idx.buildFilters(pkg, node)
+}
+
+func (idx *Index) DeletePack(ctx context.Context, pkg *pack.Package) error {
+	// lookup pack placement
+	node, i, ok := idx.findSNode(pkg.Key())
+	if !ok {
+		// should not happen
+		panic(fmt.Errorf("stats: missing record for pack key %d", pkg.Key()))
+	}
+
+	// ensure all stats blocks are loaded and materialized
+	node, err := idx.prepareWrite(ctx, node, i)
+	if err != nil {
+		return err
+	}
+
+	// remove data pack statistics record
+	ok = node.DeletePack(pkg)
+
+	// empty snodes will be dropped on save
+
+	// handle tree change
+	if ok && !node.IsEmpty() {
+		// update spack meta statistics on change
+		if node.BuildMetaStats(idx.view, idx.build) {
+			// update inodes all the way to root when meta stats have changed
+			idx.updatePathToRoot(i)
+		}
+	}
+
+	// drop bloom and range filters
+	return idx.dropFilters(pkg)
+}
+
+// merge
+func (idx Index) NextKey() uint32 {
+	if l := len(idx.snodes); l > 0 {
+		return idx.snodes[l-1].MaxKey() + 1
+	}
+	return 0
+}
+
+func (idx Index) GlobalMinPk() uint64 {
+	val, ok := idx.root().Get(idx.view, minColIndex(idx.px))
+	if !ok {
+		return 0
+	}
+	cval, ok := cmp.Cast(types.BlockUint64, val)
+	if ok {
+		return cval.(uint64)
+	}
+	return 0
+}
+
+func (idx Index) GlobalMaxPk() uint64 {
+	val, ok := idx.root().Get(idx.view, maxColIndex(idx.px))
+	if !ok {
+		return 0
+	}
+	cval, ok := cmp.Cast(types.BlockUint64, val)
+	if ok {
+		return cval.(uint64)
+	}
+	return 0
+}
+
+func (idx *Index) Get(key uint32) (*Record, bool) {
+	node, _, ok := idx.findSNode(key)
+	if !ok {
+		return nil, false
+	}
+	pos, ok := node.FindKey(key)
+	if !ok {
+		return nil, false
+	}
+
+	// create iterator pointing to stats record we found
+	it := &Iterator{
+		ctx:    context.Background(),
+		idx:    idx,
+		smatch: bitset.NewBitset(0),
+		vmatch: bitset.NewBitset(0),
+		snode:  node,
+		match:  []uint32{uint32(pos)},
+	}
+	// load missing fields but don't run an spack query (flt = nil)
+	if err := it.snode.Query(it); err != nil {
+		// what to do?
+		panic(err)
+	}
+	defer it.Close()
+
+	return NewRecordFromWire(idx.schema, it.ReadWire()), true
+}
+
+// Find a candidate data pack to insert/merge a primary key into.
+//
+// Use Cases
+// 1. update/tombstone merge -> pk is within exactly one data pack's pk range
+// 2. insert -> pk is behind the last pack's range
+//
+// Unsupported Cases
+// - out-of-order insert (pk is between two packs, i.e. pack_x(max) < pk < pack_x+1(min))
+// - out-of-order insert (pk is inside a full pack's range)
+//
+// The reason we don't support out of order situations is that to satisfy the
+// invariant of non-overlapping pk ranges in data packs full packs have to be
+// split. However data pack keys are assigned sequentially on pack creation.
+// Thus, pack order would no longer correspond to primary key order.
+func (idx *Index) FindPk(ctx context.Context, pk uint64) (*Iterator, bool) {
+	// create an equal filter condition which will be used to find
+	// the matching data pack for this pk based on min/max statistics
+	// this filter ensures the spack min.max pk columns aere loaded
+	// other required columns: STATS_ROW_KEY and STATS_ROW_NVALS are
+	// auto-loaded by iterator queries
+	flt := idx.makePkFilter(query.FilterModeEqual, pk)
+
+	// return an iterator for the last data pack in the last spack
+	// unless this data pack is full (requires pack order == pk order)
+	if gmax := idx.GlobalMaxPk(); pk > gmax {
+		slen := len(idx.snodes)
+
+		// update filter to search for the gloabl max pk's data pack
+		// (we know it exists, but we need to load statistics in order
+		// for the merge process to check whether its full)
+		flt.Filter.Value = gmax
+		flt.Filter.Matcher.WithValue(gmax)
+
+		// init an iterator so that calling next() will run a query
+		it := &Iterator{
+			ctx:    ctx,
+			idx:    idx,
+			flt:    flt,
+			use:    0,
+			vmatch: bitset.NewBitset(STATS_PACK_SIZE),
+			smatch: bitset.NewBitset(slen),
+			match:  make([]uint32, 0),
+			sx:     slen - 2, // start at last spack (it will +1)
+			n:      -1,       // start at first offset (it will +1)
+		}
+		it.smatch.Set(slen - 1)
+
+		// let the iterator load spack data and point to the last data pack
+		return it, it.Next()
+	}
+
+	// should find exactly one pack
+	return idx.Query(ctx, flt, types.OrderAsc)
+}
+
+// query (use Iterator.Next() to iterate)
+func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir types.OrderType) (*Iterator, bool) {
+	// Walk inode tree and build a queue of snodes to visit.
+	// Each round we pick the next eligible inode and check
+	// whether its children match. On match we insert a child's
+	// id back into the list. The current inode's bit is cleared.
+	//
+	// For efficiency we use a bitset to hold node id state. A one
+	// in this bitset signals that we still have to visit this node.
+	// The tree structure allows us to re-use the same bitset
+	// for inodes and snodes. While we work towards the end of the
+	// bitset visiting lower inodes, the upper inode bits are already
+	// cleared and will become available for setting snode bits as
+	// we approach the lowest inode level. This works because the size
+	// of the inode tree is one less than the maximum number of snodes.
+	//
+	// At the end of this algorithm the bitset contains one bits for
+	// all snodes that have matched. We use this result to initialize
+	// an iterator which will later run vector comparisons inside
+	// the snode's statistics packs to find data pack matches.
+	view := schema.NewView(idx.schema)
+	maxInodes := len(idx.inodes) - 1
+	slen := len(idx.snodes)
+	nodeBits := bitset.NewBitset(slen + 1)
+
+	// start matching root
+	if maxInodes > 0 {
+		nodeBits.Set(0)
+	}
+
+	// use catch all filter when nil
+	if flt == nil {
+		flt = idx.makePkFilter(query.FilterModeGt, 0)
+	}
+
+	for n := 0; n < maxInodes; n++ {
+		// skip this branch if unset
+		if !nodeBits.IsSet(n) {
+			continue
+		}
+
+		// mark this node as processed
+		nodeBits.Clear(n)
+
+		// check children
+		for _, m := range []int{leftChildIndex(n), rightChildIndex(n)} {
+			if m < maxInodes {
+				// children at this level are branches (inodes)
+
+				// skip nil branches
+				if idx.inodes[m] == nil {
+					continue
+				}
+				// match inode
+				if idx.inodes[m].Match(flt, view) {
+					nodeBits.Set(m)
+				}
+			} else {
+				// children at this level are leafs (snodes)
+				// since snodes are stored in a separate slice
+				// we adjust their position index
+
+				// skip nil leafs
+				sx := m - maxInodes
+				if sx >= slen || idx.snodes[sx] == nil {
+					continue
+				}
+				// match snode
+				if idx.snodes[sx].Match(flt, view) {
+					nodeBits.Set(sx)
+				}
+			}
+		}
+	}
+
+	// stop early when nothing matched
+	if nodeBits.Count() == 0 {
+		return nil, false
+	}
+
+	// identify if query would benefit from loading any filters
+	var use Features
+	if idx.use&FilterMask > 0 {
+		flt.ForEach(func(f *query.Filter) error {
+			// range filters work in integer type columns only
+			if f.Type.IsInt() {
+				use |= FeatRangeFilter
+			}
+
+			switch f.Mode {
+			case query.FilterModeEqual, query.FilterModeIn:
+				// bloom filters work only for these modes
+			default:
+				return nil
+			}
+
+			// translate table column index into min statistics column
+			field, _ := idx.schema.FieldByIndex(int(minColIndex(f.Index)))
+
+			// check if this field has any filters enabled
+			switch field.Index() {
+			case types.IndexTypeBloom:
+				use |= FeatBloomFilter
+			case types.IndexTypeBfuse:
+				use |= FeatFuseFilter
+			case types.IndexTypeBits:
+				use |= FeatBitsFilter
+			}
+			return nil
+		})
+
+		// mask with enabled features
+		use &= idx.use
+	}
+
+	// create iterator from matching snodes
+	it := &Iterator{
+		ctx:     ctx,
+		idx:     idx,
+		flt:     flt,
+		use:     use,
+		smatch:  nodeBits,
+		vmatch:  bitset.NewBitset(STATS_PACK_SIZE),
+		match:   arena.Alloc(arena.AllocUint32, STATS_PACK_SIZE).([]uint32)[:0],
+		sx:      -1, // start at first bit (it will +1)
+		n:       -1, // start at first offset (it will +1)
+		reverse: dir.IsReverse(),
+	}
+
+	// start at last bit in snode bitset
+	if it.reverse {
+		_, last := nodeBits.MinMax()
+		it.sx = last + 1
+	}
+
+	// init iterator with next match
+	return it, it.Next()
+}
+
+// root node access
+func (idx Index) root() *INode {
+	if len(idx.inodes) == 0 {
+		return NewINode()
+	}
+	return idx.inodes[0]
+}
+
+// stats block vectors
+func (idx Index) statsBucket(tx store.Tx) store.Bucket {
+	return idx.bucket(tx, STATS_BLOCK_KEY)
+}
+
+// meta stats
+func (idx Index) treeBucket(tx store.Tx) store.Bucket {
+	return idx.bucket(tx, STATS_TREE_KEY)
+}
+
+// bloom filters, key = pack key << 32 || field index
+func (idx Index) bloomBucket(tx store.Tx) store.Bucket {
+	return idx.bucket(tx, STATS_BLOOM_KEY)
+}
+
+// range filters, key = pack key << 32 || field index
+func (idx Index) rangeBucket(tx store.Tx) store.Bucket {
+	return idx.bucket(tx, STATS_RANGE_KEY)
+}
+
+func (idx Index) bitsBucket(tx store.Tx) store.Bucket {
+	return idx.bucket(tx, STATS_BITS_KEY)
+}
+
+func (idx Index) fuseBucket(tx store.Tx) store.Bucket {
+	return idx.bucket(tx, STATS_FUSE_KEY)
+}
+
+func (idx Index) bucket(tx store.Tx, id int) store.Bucket {
+	b := tx.Bucket(idx.keys[id])
+	if b != nil {
+		b.FillPercent(1.0)
+	}
+	return b
+}
+
+func (idx Index) prepareWrite(ctx context.Context, node *SNode, i int) (*SNode, error) {
+	if node.IsWritable() {
+		return node, nil
+	}
+	err := idx.db.View(func(tx store.Tx) error {
+		clone, err := node.PrepareWrite(ctx, idx.statsBucket(tx))
+		if err != nil {
+			return err
+		}
+		// replace existing node with clone
+		idx.snodes[i] = clone
+		node = clone
+		return nil
+	})
+	return node, err
+}
+
+// finds snode where key exists or suggests node to place a new key
+func (idx Index) findSNode(key uint32) (*SNode, int, bool) {
+	l := len(idx.snodes)
+	// binary search for the first match (this and all following snodes
+	// return true for the condition below)
+	i := sort.Search(l, func(i int) bool {
+		n := idx.snodes[i]
+		return key <= n.MaxKey() || // either key may exist
+			key > n.MinKey() && n.NPacks() < STATS_PACK_SIZE // or pack has space
+	})
+
+	// search returns len when no match was found
+	if i < l {
+		return idx.snodes[i], i, true
+	}
+	return nil, -1, false
+}
+
+func (idx *Index) addSnode() (*SNode, int) {
+	// read current array lengths
+	ilen, slen := len(idx.inodes), len(idx.snodes)
+
+	// The tree is considered full when the number of leaf
+	// snodes equals the number of inodes (actually we keep the
+	// last inode in the array empty, but we still allocate space
+	// to make the algorithm simpler. A regular full binary tree
+	// has n-1 internal nodes for n leafs)
+	isFullLevel := ilen == slen
+
+	// use slen as key so that we assign sequential stats pack keys
+	var nextKey uint32
+	if slen > 0 {
+		nextKey = idx.snodes[slen-1].spack.Key() + 1
+	}
+	node := NewSNode(nextKey, idx.schema, true)
+	idx.snodes = append(idx.snodes, node)
+	slen++
+
+	// grow tree when current leaf level is full
+	if isFullLevel {
+		// Double the inode tree's array size. This ensures the array is
+		// always a power of 2 even though the last element remains unused.
+		// We use this fact to simplify calculating levels and indices.
+		// When tree is empty (ilen = 0), start at size 2
+		sz := max(2, ilen*2)
+		idx.inodes = slices.Grow(idx.inodes, sz)
+		idx.inodes = idx.inodes[:sz]
+
+		// Move existing inodes so the current tree becomes the left
+		// subtree. Does not apply on first insert when tree was empty.
+		// This avoids having to re-calculate merge statistics in existing
+		// inodes, we simply rotate the tree and install a new root.
+		// Because we work in-place we have to start at the end of the inode
+		// array to prevent overriding pointers when moving.
+		for i := ilen - 2; i >= 0; i-- {
+			// to = 1                        when i = 0 (root node)
+			//      i + 2 ^ trunc(log2(i+1)) otherwise
+			to := i + 1<<log2(i+1)
+			idx.inodes[to], idx.inodes[i] = idx.inodes[i], nil
+		}
+
+		// Calculate the new leaf node's index in breadth-first order inside
+		// the new tree. Note we build a breadth balanced tree, so all leafs
+		// are at the lowest level and new snodes are always appended at
+		// the right side of that level.
+		//
+		//  sx = new inode count + new snode count
+		//     = (sz - 1) + slen -1
+		//
+		sx := sz + slen - 2
+
+		// init inodes from the new data node up to the root
+		for n := parentIndex(sx); n > 0; n = parentIndex(n) {
+			idx.inodes[n] = NewINode()
+		}
+
+		// init the new root node
+		idx.inodes[0] = NewINode()
+	} else {
+		// init missing inodes from the new data node up to the root
+		// (see above for how to calculate the new snode's index)
+		sx := ilen + slen - 2
+		for n := parentIndex(sx); n > 0; n = parentIndex(n) {
+			// stop as soon as we find an inode exists
+			if idx.inodes[n] != nil {
+				break
+			}
+			idx.inodes[n] = NewINode()
+		}
+	}
+
+	return node, slen - 1
+}
+
+// Update aggregate statistics on the path from a data node up to the root
+// by merging statistics from both children into each parent inode.
+func (idx *Index) updatePathToRoot(i int) {
+	node := idx.snodes[i]
+	ilen, slen := len(idx.inodes), len(idx.snodes)
+	var ok bool
+
+	// Find our direct parent inode (to calculate its position in
+	// the array format of our binary tree we pretend inode and snode
+	// arrays are consecutive. If we had a single array the inode part
+	// would actually be one element shorter than here because a binary tree
+	// has n-1 internal nodes for n leafs when full. for simplicity we
+	// use ilen == slen in this implementation. thats why we need to
+	// subtract 1 from ilen)
+	p := parentIndex(ilen - 1 + i)
+	parent := idx.inodes[p]
+
+	// Identify both children and pass them to Update() which will
+	// aggregate both childrens statistics. At the end of the snode
+	// array a left child may not yet have a right sibling.
+	if i%2 == 0 {
+		// we are the left child
+		if i == slen-1 {
+			// we are the last child
+			ok = parent.Update(idx.view, idx.build, node, nil)
+		} else {
+			// there is a right child behind us
+			ok = parent.Update(idx.view, idx.build, node, idx.snodes[i+1])
+		}
+	} else {
+		// we are the right child, so pick the left which is guaranteed to
+		// exist in front of us
+		ok = parent.Update(idx.view, idx.build, idx.snodes[i-1], node)
+	}
+
+	// stop when we're already at root or nothing changed
+	if !ok || p == 0 {
 		return
 	}
-	// store as dead key
-	l.removed.Insert(key)
 
-	// when just the trailing head has been removed we can use a more efficient
-	// algorithm because head positions haven't changed
-	if pos > 0 && pos == l.Len() {
-		// find the pair to remove based on its min value using binary search
-		// we know the pair must exist
-		min := oldhead.Blocks[l.pki].MinValue.(uint64)
-		i := sort.Search(l.Len(), func(i int) bool { return l.minpks[l.pos[i]] >= min })
-		// when multiple packs share the same min value, find the correct one based on pos
-		for i < l.Len() && l.pos[i] != int32(pos) && l.minpks[l.pos[i]] == min {
-			i++
+	// update inodes all the way to root, stop when aggregate stats have not changed
+	// note right children may be missing when tree is not full
+	for p = parentIndex(p); ok && p >= 0; p = parentIndex(p) {
+		left := idx.inodes[leftChildIndex(p)]
+		right := idx.inodes[rightChildIndex(p)]
+
+		// Go is quirky. When we put nil pointers into interfaces the interface
+		// does not compare with nil because its type is non nil. See
+		// https://go.dev/doc/faq#nil_error
+		if right == nil {
+			ok = idx.inodes[p].Update(idx.view, idx.build, left, nil)
+		} else {
+			ok = idx.inodes[p].Update(idx.view, idx.build, left, right)
 		}
-		// remove pos from min/max slices
-		l.pos = append(l.pos[:i], l.pos[i+1:]...)
-		l.minpks = append(l.minpks[:pos], l.minpks[pos+1:]...)
-		l.maxpks = append(l.maxpks[:pos], l.maxpks[pos+1:]...)
-	} else {
-		// all header positions after `pos` have shifted left, so we must run
-		// a full update; for simplicity we rebuild the entire pos slice from scratch
-		l.minpks = append(l.minpks[:pos], l.minpks[pos+1:]...)
-		l.maxpks = append(l.maxpks[:pos], l.maxpks[pos+1:]...)
-		l.pos = l.pos[:len(l.packs)]
-		for i := range l.packs {
-			l.pos[i] = int32(i)
-		}
-		l.Sort()
 	}
 }
 
-// Returns placement hint and pack info for the specified primary key.
+// Rebuilds all inodes by merging child statistics. Rebuild happens
+// level by level starting at the lowest tree level and working upwards
+// to the root. Inodes are numberd 0 (root) .. N in breadth-first order,
+// hence we can simply walk the inode array backwards. Careful since not
+// all snodes and inodes may exist.
+func (idx *Index) rebuildInodeTree() {
+	// clear the inode tree first
+	clear(idx.inodes)
+
+	// resize inode array
+	slen := len(idx.snodes)
+	idx.inodes = idx.inodes[:1<<log2ceil(slen)]
+	ilen := len(idx.inodes)
+	si := ilen - 1
+
+	// the lowest inode level has snodes as children
+	for n := ilen - 2; n >= ilen/2-1; n-- {
+		li, ri := leftChildIndex(n)-si, rightChildIndex(n)-si
+
+		// skip this node when no left child exists
+		if li >= slen {
+			continue
+		}
+
+		// pick left and right snode (right may not exist but its ok)
+		var right Node
+		left := idx.snodes[li]
+		if ri < slen {
+			right = idx.snodes[ri]
+		}
+
+		// create new inode and build merged meta statistics
+		idx.inodes[n] = NewINode()
+		idx.inodes[n].Update(idx.view, idx.build, left, right)
+	}
+
+	// all upper inode levels have inodes as children
+	for n := ilen/2 - 2; n >= 0; n-- {
+		li, ri := leftChildIndex(n), rightChildIndex(n)
+
+		// skip this node when no left child exists
+		if li >= slen {
+			continue
+		}
+
+		// pick left and right snode (right may not exist but its ok)
+		var right Node
+		left := idx.inodes[li]
+		if ri < slen {
+			right = idx.inodes[ri]
+		}
+
+		// create new inode and build merged meta statistics
+		idx.inodes[n] = NewINode()
+		idx.inodes[n].Update(idx.view, idx.build, left, right)
+	}
+}
+
+func (idx Index) makePkFilter(mode query.FilterMode, pk uint64) *query.FilterTreeNode {
+	pkField, _ := idx.schema.FieldByIndex(minColIndex(idx.px))
+	m := query.NewFactory(pkField.Type()).New(mode)
+	m.WithValue(pk)
+	return &query.FilterTreeNode{
+		Filter: &query.Filter{
+			Name:    strings.TrimSuffix(pkField.Name(), "_min"),
+			Type:    types.BlockTypes[pkField.Type()],
+			Mode:    mode,
+			Index:   uint16(idx.px),
+			Value:   pk,
+			Matcher: m,
+		},
+	}
+}
+
+// Construct a union schema over pack stats and table min/max.
+// The schema has no primary key. It starts with four pack
+// metadata columns (see Record) and continues with pairs
+// of min/max columns in order of table schema s. This guarantees
+// that when the table is extended we always add new statistics columns
+// at the end. Stats column positions can be calculated from the original
+// data schema column position as follows:
 //
-// Assumes pos list is sorted by min value and pack min/max ranges don't overlap
-// this is the case for all index and table packs because placement and split
-// algorithms ensure overlaps never exist.
-func (l *StatsIndex) Best(val uint64) (pos int, packmin uint64, packmax uint64, nextmin uint64, isFull bool) {
-	count := l.Len()
+// I_min_col_x = I_col_x * 2 + STATS_DATA_COL_OFFSET
+// I_max_col_x = I_col_x * 2 + STATS_DATA_COL_OFFSET +1
+//
+// The statistics schema ignores (i.e. removes) all flags and enums
+// from the original table schema except FieldFlagDeleted which may be
+// used to skip/remove statistics when columns are marked as deleted.
+func MakeSchema(s *schema.Schema) *schema.Schema {
+	statsSchema := schema.NewSchema().
+		WithName(s.Name() + string(engine.StatsKeySuffix)).
+		WithVersion(s.Version())
 
-	// initially we stick to the first pack until split
-	if count == 0 {
-		return 0, 0, 0, 0, false
+	// add pack stats fields
+	for _, f := range schema.MustSchemaOf(&Record{}).Fields() {
+		statsSchema.WithField(f)
 	}
 
-	// find first pack with min larger than value
-	i := sort.Search(count, func(i int) bool { return l.minpks[l.pos[i]] > val })
-
-	// assign value to the previous pack or the very first pack
-	// note that when value is larger than any pack's min value
-	// it is assigned to last pack
-	if i > 0 {
-		i--
+	// add min/max fields interleaved
+	for _, src := range s.Fields() {
+		// generate clean field from source
+		f := schema.NewField(src.Type()).
+			WithName("min_" + src.Name()).
+			WithScale(src.Scale()).
+			WithFixed(src.Fixed()).
+			WithFlags(src.Flags() & types.FieldFlagDeleted). // only keep deleted flag
+			WithIndex(src.Index())                           // keep index (in case its bloom)
+		statsSchema.WithField(f)
+		statsSchema.WithField(f.WithName("max_" + src.Name()))
 	}
 
-	// find min of follower pack
-	if i+1 < count {
-		nextmin = l.minpks[l.pos[i+1]]
-	}
-
-	// return the pack's list position and the corresponding min/max header values
-	pos = int(l.pos[i])
-	packmin, packmax = l.minpks[pos], l.maxpks[pos]
-	isFull = l.maxrows > 0 && l.packs[pos].NValues >= l.maxrows
-	return
+	return statsSchema.Finalize()
 }
 
-// Returns pack info for the logical follower pack (in min/max sort order).
-func (l *StatsIndex) Next(last int) (pos int, packmin uint64, packmax uint64, nextmin uint64, isFull bool) {
-	next := last + 1
-	count := l.Len()
-	if next >= count {
-		return 0, 0, 0, 0, false
+func minColIndex[T constraints.Signed | constraints.Unsigned](i T) T {
+	return 2*i + STATS_DATA_COL_OFFSET
+}
+
+func maxColIndex[T constraints.Signed | constraints.Unsigned](i T) T {
+	return 2*i + STATS_DATA_COL_OFFSET + 1
+}
+
+func leftChildIndex(i int) int {
+	return 2*i + 1
+}
+
+func rightChildIndex(i int) int {
+	return 2*i + 2
+}
+
+func parentIndex(i int) int {
+	if i == 0 {
+		return -1
 	}
-	if next+1 < count {
-		nextmin = l.minpks[l.pos[next+1]]
+	return (i - 1) / 2
+}
+
+func log2(i int) int {
+	return bits.UintSize - bits.LeadingZeros(uint(i)) - 1
+}
+
+func log2ceil(i int) int {
+	v := log2(i)
+	if i&(i-1) > 0 {
+		v++
 	}
-	pos = int(l.pos[next])
-	packmin, packmax = l.minpks[pos], l.maxpks[pos]
-	isFull = l.maxrows > 0 && l.packs[pos].NValues >= l.maxrows
-	return
+	return v
 }

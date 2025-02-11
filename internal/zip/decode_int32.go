@@ -35,7 +35,7 @@ var DecodeUint32 = decodeUint32
 // DecodeInt32 is the int32 version of a 4 byte integer decoder.
 // Its a simple wrapper around the uint variant.
 func DecodeInt32(dst []int32, buf []byte) (int, error) {
-	return DecodeUint32(util.Int32AsUint32Slice(dst), buf)
+	return DecodeUint32(util.ReinterpretSlice[int32, uint32](dst), buf)
 }
 
 // ReadUint32 is an io.Reader wrapper for decoding (u)int32 data.

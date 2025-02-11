@@ -41,15 +41,15 @@ var (
 	zigZagDecodeUint64 = generic.ZigZagDecodeUint64
 
 	// slice type mappers
-	asU64 = util.Int64AsUint64Slice
-	asU32 = util.Int32AsUint32Slice
-	asU16 = util.Int16AsUint16Slice
-	asU8  = util.Int8AsUint8Slice
+	asU64 = util.ReinterpretSlice[int64, uint64]
+	asU32 = util.ReinterpretSlice[int32, uint32]
+	asU16 = util.ReinterpretSlice[int16, uint16]
+	asU8  = util.ReinterpretSlice[int8, uint8]
 
-	asI64 = util.Uint64AsInt64Slice
-	asI32 = util.Uint32AsInt32Slice
-	asI16 = util.Uint16AsInt16Slice
-	asI8  = util.Uint8AsInt8Slice
+	asI64 = util.ReinterpretSlice[uint64, int64]
+	asI32 = util.ReinterpretSlice[uint32, int32]
+	asI16 = util.ReinterpretSlice[uint16, int16]
+	asI8  = util.ReinterpretSlice[uint8, int8]
 )
 
 func init() {

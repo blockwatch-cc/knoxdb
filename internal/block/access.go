@@ -9,6 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/dedup"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
@@ -26,6 +27,11 @@ func NewBlockAccessor[T Number](b *Block) BlockAccessor[T] {
 		block: b,
 		sz:    b.typ.Size(),
 	}
+}
+
+func (a *BlockAccessor[T]) Close() {
+	a.block = nil
+	a.sz = 0
 }
 
 func (a BlockAccessor[T]) Get(n int) (t T) {
@@ -187,4 +193,109 @@ func (b *Block) Bytes() dedup.ByteArray {
 
 func (b *Block) Bool() *bitset.Bitset {
 	return (*bitset.Bitset)(b.ptr)
+}
+
+func (b *Block) Append(val any) {
+	switch b.typ {
+	case BlockTime, BlockInt64:
+		b.Int64().Append(val.(int64))
+	case types.BlockInt32:
+		b.Int32().Append(val.(int32))
+	case types.BlockInt16:
+		b.Int16().Append(val.(int16))
+	case types.BlockInt8:
+		b.Int8().Append(val.(int8))
+	case types.BlockUint64:
+		b.Uint64().Append(val.(uint64))
+	case types.BlockUint32:
+		b.Uint32().Append(val.(uint32))
+	case types.BlockUint16:
+		b.Uint16().Append(val.(uint16))
+	case types.BlockUint8:
+		b.Uint8().Append(val.(uint8))
+	case types.BlockFloat64:
+		b.Float64().Append(val.(float64))
+	case types.BlockFloat32:
+		b.Float32().Append(val.(float32))
+	case types.BlockBool:
+		b.Bool().Append(val.(bool))
+	case types.BlockBytes:
+		b.Bytes().Append(val.([]byte))
+	case types.BlockInt128:
+		b.Int128().Append(val.(num.Int128))
+	case types.BlockInt256:
+		b.Int256().Append(val.(num.Int256))
+	}
+}
+
+func (b *Block) Get(row int) any {
+	switch b.typ {
+	case BlockTime, BlockInt64:
+		return b.Int64().Get(row)
+	case types.BlockInt32:
+		return b.Int32().Get(row)
+	case types.BlockInt16:
+		return b.Int16().Get(row)
+	case types.BlockInt8:
+		return b.Int8().Get(row)
+	case types.BlockUint64:
+		return b.Uint64().Get(row)
+	case types.BlockUint32:
+		return b.Uint32().Get(row)
+	case types.BlockUint16:
+		return b.Uint16().Get(row)
+	case types.BlockUint8:
+		return b.Uint8().Get(row)
+	case types.BlockFloat64:
+		return b.Float64().Get(row)
+	case types.BlockFloat32:
+		return b.Float32().Get(row)
+	case types.BlockBool:
+		return b.Bool().IsSet(row)
+	case types.BlockBytes:
+		return b.Bytes().Elem(row)
+	case types.BlockInt128:
+		return b.Int128().Elem(row)
+	case types.BlockInt256:
+		return b.Int256().Elem(row)
+	default:
+		return nil
+	}
+}
+
+func (b *Block) Set(row int, val any) {
+	switch b.typ {
+	case BlockTime, BlockInt64:
+		b.Int64().Set(row, val.(int64))
+	case types.BlockInt32:
+		b.Int32().Set(row, val.(int32))
+	case types.BlockInt16:
+		b.Int16().Set(row, val.(int16))
+	case types.BlockInt8:
+		b.Int8().Set(row, val.(int8))
+	case types.BlockUint64:
+		b.Uint64().Set(row, val.(uint64))
+	case types.BlockUint32:
+		b.Uint32().Set(row, val.(uint32))
+	case types.BlockUint16:
+		b.Uint16().Set(row, val.(uint16))
+	case types.BlockUint8:
+		b.Uint8().Set(row, val.(uint8))
+	case types.BlockFloat64:
+		b.Float64().Set(row, val.(float64))
+	case types.BlockFloat32:
+		b.Float32().Set(row, val.(float32))
+	case types.BlockBool:
+		if val.(bool) {
+			b.Bool().Set(row)
+		} else {
+			b.Bool().Clear(row)
+		}
+	case types.BlockBytes:
+		b.Bytes().Set(row, val.([]byte))
+	case types.BlockInt128:
+		b.Int128().Set(row, val.(num.Int128))
+	case types.BlockInt256:
+		b.Int256().Set(row, val.(num.Int256))
+	}
 }

@@ -16,57 +16,84 @@ import (
 var LE = binary.LittleEndian
 
 type View struct {
-	schema *Schema
-	buf    []byte
-	ofs    []int
-	len    []int
-	minsz  int
-	pki    int
-	fixed  bool
+	schema   *Schema
+	buf      []byte
+	ofs      []int
+	len      []int
+	minsz    int
+	pki      int
+	fixed    bool
+	internal bool
 }
 
 func NewView(s *Schema) *View {
 	view := &View{
-		schema: s,
-		ofs:    make([]int, len(s.fields)),
-		len:    make([]int, len(s.fields)),
-		fixed:  true,
-		pki:    -1,
+		schema:   s,
+		ofs:      make([]int, len(s.fields)),
+		len:      make([]int, len(s.fields)),
+		fixed:    true,
+		internal: false,
+		pki:      -1,
 	}
+	return view.buildFromSchema()
+}
+
+func NewInternalView(s *Schema) *View {
+	view := &View{
+		schema:   s,
+		ofs:      make([]int, len(s.fields)),
+		len:      make([]int, len(s.fields)),
+		fixed:    true,
+		internal: true,
+		pki:      -1,
+	}
+	return view.buildFromSchema()
+}
+
+func (v *View) buildFromSchema() *View {
 	var ofs int
-	for i, f := range s.fields {
-		if !f.IsVisible() {
+	for i, f := range v.schema.fields {
+		if !f.IsActive() {
+			v.ofs[i] = -2
+			continue
+		}
+		if f.IsInternal() && !v.internal {
+			v.ofs[i] = -2
 			continue
 		}
 		sz := f.typ.Size()
 		if f.fixed > 0 {
 			sz = int(f.fixed)
 		}
-		if view.pki < 0 && f.flags.Is(types.FieldFlagPrimary) && f.typ == types.FieldTypeUint64 {
+		if v.pki < 0 && f.flags.Is(types.FieldFlagPrimary) && f.typ == types.FieldTypeUint64 {
 			// remember the first uint64 primary key field
-			view.pki = i
+			v.pki = i
 		}
 		switch {
-		case !view.fixed:
+		case !v.fixed:
 			// set ofs to -1 for all fields following a dynamic length field
-			view.ofs[i] = ofs
-			view.len[i] = sz
-			view.minsz += sz
+			v.ofs[i] = ofs
+			v.len[i] = sz
+			v.minsz += sz
 		case !f.IsFixedSize():
 			// the first dynamic length field resets fixed flag, but keeps start offset
-			view.fixed = false
-			view.ofs[i] = ofs
-			view.len[i] = sz
-			view.minsz += sz
+			v.fixed = false
+			v.ofs[i] = ofs
+			v.len[i] = sz
+			v.minsz += sz
 			ofs = -1
 		default:
-			view.ofs[i] = ofs
-			view.len[i] = sz
+			v.ofs[i] = ofs
+			v.len[i] = sz
 			ofs += sz
-			view.minsz += sz
+			v.minsz += sz
 		}
 	}
-	return view
+	return v
+}
+
+func (v View) Schema() *Schema {
+	return v.schema
 }
 
 func (v View) IsValid() bool {
@@ -75,6 +102,10 @@ func (v View) IsValid() bool {
 
 func (v View) IsFixed() bool {
 	return v.fixed
+}
+
+func (v View) IsInternal() bool {
+	return v.internal
 }
 
 func (v *View) Len() int {
@@ -91,7 +122,7 @@ func (v View) Get(i int) (val any, ok bool) {
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
 	field := &v.schema.fields[i]
-	if !field.IsVisible() {
+	if x == -2 {
 		return nil, false
 	}
 	switch field.typ {
@@ -139,13 +170,59 @@ func (v View) Get(i int) (val any, ok bool) {
 	return
 }
 
+func (v View) GetPhy(i int) (val any, ok bool) {
+	if i < 0 || i > len(v.ofs) || !v.IsValid() {
+		return
+	}
+	x, y := v.ofs[i], v.ofs[i]+v.len[i]
+	field := &v.schema.fields[i]
+	if x == -2 {
+		return nil, false
+	}
+	switch field.typ {
+	case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeDecimal64:
+		val, ok = int64(LE.Uint64(v.buf[x:y])), true
+	case types.FieldTypeUint64:
+		val, ok = LE.Uint64(v.buf[x:y]), true
+	case types.FieldTypeFloat64:
+		val, ok = math.Float64frombits(LE.Uint64(v.buf[x:y])), true
+	case types.FieldTypeBoolean:
+		val, ok = v.buf[x] > 0, true
+	case types.FieldTypeString, types.FieldTypeBytes:
+		val, ok = v.buf[x:y], true
+	case types.FieldTypeInt32, types.FieldTypeDecimal32:
+		val, ok = int32(LE.Uint32(v.buf[x:y])), true
+	case types.FieldTypeInt16:
+		val, ok = int16(LE.Uint16(v.buf[x:y])), true
+	case types.FieldTypeInt8:
+		val, ok = int8(v.buf[x]), true
+	case types.FieldTypeUint32:
+		val, ok = LE.Uint32(v.buf[x:y]), true
+	case types.FieldTypeUint16:
+		val, ok = LE.Uint16(v.buf[x:y]), true
+	case types.FieldTypeUint8:
+		val, ok = v.buf[x], true
+	case types.FieldTypeFloat32:
+		val, ok = math.Float32frombits(LE.Uint32(v.buf[x:y])), true
+	case types.FieldTypeInt256:
+		val, ok = num.Int256FromBytes(v.buf[x:y]), true
+	case types.FieldTypeInt128:
+		val, ok = num.Int128FromBytes(v.buf[x:y]), true
+	case types.FieldTypeDecimal256:
+		val, ok = num.Int256FromBytes(v.buf[x:y]), true
+	case types.FieldTypeDecimal128:
+		val, ok = num.Int128FromBytes(v.buf[x:y]), true
+	}
+	return
+}
+
 func (v View) Append(val any, i int) any {
 	if i < 0 || i > len(v.ofs) || !v.IsValid() {
 		return val
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
 	field := &v.schema.fields[i]
-	if !field.IsVisible() {
+	if x == -2 {
 		return val
 	}
 	switch field.typ {
@@ -272,7 +349,7 @@ func (v View) Set(i int, val any) {
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
 	field := &v.schema.fields[i]
-	if !field.IsVisible() {
+	if x == -2 {
 		return
 	}
 	switch field.typ {
@@ -368,7 +445,12 @@ func (v *View) Reset(buf []byte) *View {
 		skip := true
 		for i := range v.schema.fields {
 			f := &v.schema.fields[i]
-			if !f.IsVisible() {
+			if !f.IsActive() {
+				v.ofs[i] = -2
+				continue
+			}
+			if f.IsInternal() && !v.internal {
+				v.ofs[i] = -2
 				continue
 			}
 			if f.IsFixedSize() && skip {

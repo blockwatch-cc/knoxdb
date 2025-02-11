@@ -149,6 +149,7 @@ func (db *db) begin(writable bool) (*transaction, error) {
 		// Enforce single writer property to make transactions serializable.
 		// Without this global lock we would have to implement concurrency
 		// control on tx commit which is unnecessary for this simple db driver.
+		// fmt.Printf("Wlock\n%s", string(debug.Stack()))
 		db.writeLock.Lock()
 
 		// cross-check the db was not closed while waiting for the lock.
@@ -158,6 +159,7 @@ func (db *db) begin(writable bool) (*transaction, error) {
 		}
 	} else {
 		// Readers must also acquire a lock to make writes atomic.
+		// fmt.Printf("Rlock\n%s", string(debug.Stack()))
 		db.writeLock.RLock()
 
 		// cross-check the db was not closed while waiting for the lock.
@@ -306,6 +308,7 @@ func (db *db) Close() error {
 func (db *db) close() {
 	// don't clear when persist flag is set
 	if db.opts.Persist {
+		db.closed = true
 		return
 	}
 
@@ -328,11 +331,19 @@ func (db *db) close() {
 	db.closed = true
 	db.store = nil
 	db.opts = nil
+	registry.Delete(db.dbPath)
 }
 
 func (db *db) Sync() error {
 	// noop
 	return nil
+}
+
+// existsDB creates the initial buckets and values used by the package.  This is
+// mainly in a separate function for testing purposes.
+func existsDB(dbPath string) (bool, error) {
+	_, ok := registry.Load(dbPath)
+	return ok, nil
 }
 
 // initDB creates the initial buckets and values used by the package.  This is
@@ -357,7 +368,9 @@ func openDB(dbPath string, opts *Options, create bool) (store.DB, error) {
 		return nil, makeDbErr(store.ErrDbDoesNotExist, str)
 	}
 	if val != nil {
-		return val.(*db), nil
+		db := val.(*db)
+		db.closed = false
+		return db, nil
 	}
 
 	db := &db{
@@ -373,6 +386,19 @@ func openDB(dbPath string, opts *Options, create bool) (store.DB, error) {
 	registry.Store(dbPath, db)
 
 	return db, nil
+}
+
+func dropDB(dbPath string) error {
+	val, ok := registry.Load(dbPath)
+	if !ok {
+		str := fmt.Sprintf("database %q does not exist", dbPath)
+		return makeDbErr(store.ErrDbDoesNotExist, str)
+	}
+	if !val.(*db).closed {
+		return makeDbErr(store.ErrDbOpen, "must close db before drop")
+	}
+	registry.Delete(dbPath)
+	return nil
 }
 
 // Database maintenance functions

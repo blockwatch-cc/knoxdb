@@ -348,13 +348,13 @@ func TestMatchMinMax(t *testing.T) {
 		{
 			Name:      "Zero element",
 			ByteArray: newFixedByteArray(0, 0),
-			Value:     []byte{},
-			NValue:    []byte{},
+			Value:     nil,
+			NValue:    nil,
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			min, max := minMax(testCase.ByteArray)
+			min, max := testCase.ByteArray.MinMax()
 			require.Equal(t, testCase.Value, min)
 			require.Equal(t, testCase.NValue, max)
 		})

@@ -145,6 +145,7 @@ func init() {
 		Create:    createDBDriver,
 		Open:      openDBDriver,
 		Drop:      dropDBDriver,
+		Exists:    existsDB,
 		UseLogger: useLogger,
 	}
 	if err := store.RegisterDriver(driver); err != nil {

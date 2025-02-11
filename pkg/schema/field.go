@@ -241,7 +241,7 @@ func (f *Field) Validate() error {
 	}
 
 	// require index kind in range
-	if f.index > types.IndexTypeBloom {
+	if !f.index.IsValid() {
 		return fmt.Errorf("invalid index kind %d", f.index)
 	}
 
@@ -371,7 +371,7 @@ func (f *Field) Codec() OpCode {
 
 // Simple per field encoder used to wire-encode individual typed values
 // found in query conditions.
-func (f *Field) Encode(w io.Writer, val any) (err error) {
+func (f *Field) Encode(w io.Writer, val any, layout binary.ByteOrder) (err error) {
 	if val == nil {
 		return ErrNilValue
 	}
@@ -381,7 +381,7 @@ func (f *Field) Encode(w io.Writer, val any) (err error) {
 
 	switch code := f.Codec(); code {
 	default:
-		err = EncodeInt(w, code, val)
+		err = EncodeInt(w, code, val, layout)
 
 	case OpCodeFixedArray,
 		OpCodeFixedString,
@@ -392,7 +392,7 @@ func (f *Field) Encode(w io.Writer, val any) (err error) {
 		OpCodeMarshalBinary,
 		OpCodeMarshalText:
 
-		err = EncodeBytes(w, val, f.fixed)
+		err = EncodeBytes(w, val, f.fixed, layout)
 
 	case OpCodeBool:
 		b, ok := val.(bool)
@@ -407,23 +407,23 @@ func (f *Field) Encode(w io.Writer, val any) (err error) {
 	case OpCodeDateTime:
 		tv, ok := val.(time.Time)
 		if ok {
-			_, err = w.Write(Uint64Bytes(uint64(tv.UnixNano())))
+			err = EncodeInt(w, OpCodeUint64, tv.UnixNano(), layout)
 		}
 
 	case OpCodeFloat32:
 		switch v := val.(type) {
 		case float32:
-			_, err = w.Write(Uint32Bytes(math.Float32bits(v)))
+			err = EncodeInt(w, OpCodeUint32, math.Float32bits(v), layout)
 		case float64:
-			_, err = w.Write(Uint32Bytes(math.Float32bits(float32(v))))
+			err = EncodeInt(w, OpCodeUint32, math.Float32bits(float32(v)), layout)
 		}
 
 	case OpCodeFloat64:
 		switch v := val.(type) {
 		case float32:
-			_, err = w.Write(Uint64Bytes(math.Float64bits(float64(v))))
+			err = EncodeInt(w, OpCodeUint64, math.Float64bits(float64(v)), layout)
 		case float64:
-			_, err = w.Write(Uint64Bytes(math.Float64bits(v)))
+			err = EncodeInt(w, OpCodeUint64, math.Float64bits(v), layout)
 		}
 
 	case OpCodeInt128:
@@ -441,13 +441,13 @@ func (f *Field) Encode(w io.Writer, val any) (err error) {
 	case OpCodeDecimal32:
 		v, ok := val.(num.Decimal32)
 		if ok {
-			_, err = w.Write(Uint32Bytes(uint32(v.Int32())))
+			err = EncodeInt(w, OpCodeUint32, uint32(v.Int32()), layout)
 		}
 
 	case OpCodeDecimal64:
 		v, ok := val.(num.Decimal64)
 		if ok {
-			_, err = w.Write(Uint64Bytes(uint64(v.Int64())))
+			err = EncodeInt(w, OpCodeUint64, uint64(v.Int64()), layout)
 		}
 
 	case OpCodeDecimal128:
@@ -463,27 +463,14 @@ func (f *Field) Encode(w io.Writer, val any) (err error) {
 		}
 
 	case OpCodeEnum:
-		// v, ok := val.(string)
-		// if !ok {
-		// 	err = ErrInvalidValueType
-		// 	return
-		// }
-		// if f.enum == nil {
-		// 	return ErrEnumUndefined
-		// }
-		// code, ok := f.enum.Code(v)
-		// if !ok {
-		// 	return ErrInvalidValue
-		// }
-		// err = EncodeInt(w, OpCodeUint16, code)
-		err = EncodeInt(w, OpCodeUint16, val.(uint16))
+		err = EncodeInt(w, OpCodeUint16, val.(uint16), layout)
 	}
 	return
 }
 
 // Simple per field decoder used to wire-decode individual typed values
 // found in query conditions.
-func (f *Field) Decode(r io.Reader) (val any, err error) {
+func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error) {
 	var (
 		buf [32]byte
 		n   int
@@ -491,77 +478,51 @@ func (f *Field) Decode(r io.Reader) (val any, err error) {
 	switch f.typ {
 	case types.FieldTypeDatetime:
 		_, err = r.Read(buf[:8])
-		i64, _ := ReadInt64(buf[:8])
-		val = time.Unix(0, i64).UTC()
+		val = time.Unix(0, int64(layout.Uint64(buf[:8]))).UTC()
 
 	case types.FieldTypeInt64:
 		_, err = r.Read(buf[:8])
-		i64, _ := ReadInt64(buf[:8])
-		val = i64
+		val = int64(layout.Uint64(buf[:8]))
 
 	case types.FieldTypeInt32:
 		_, err = r.Read(buf[:4])
-		i32, _ := ReadInt32(buf[:4])
-		val = i32
+		val = int32(layout.Uint32(buf[:4]))
 
 	case types.FieldTypeInt16:
 		_, err = r.Read(buf[:2])
-		i16, _ := ReadInt16(buf[:2])
-		val = i16
+		val = int16(layout.Uint16(buf[:2]))
 
 	case types.FieldTypeInt8:
 		_, err = r.Read(buf[:1])
-		i8, _ := ReadInt8(buf[:1])
-		val = i8
+		val = int8(buf[0])
 
 	case types.FieldTypeUint64:
 		_, err = r.Read(buf[:8])
-		u64, _ := ReadUint64(buf[:8])
-		val = u64
+		val = layout.Uint64(buf[:8])
 
 	case types.FieldTypeUint32:
 		_, err = r.Read(buf[:4])
-		u32, _ := ReadUint32(buf[:4])
-		val = u32
+		val = layout.Uint32(buf[:4])
 
 	case types.FieldTypeUint16:
 		_, err = r.Read(buf[:2])
-		u16, _ := ReadUint16(buf[:2])
-		val = u16
-		// if f.flags.Is(types.FieldFlagEnum) {
-		// 	if f.enum != nil {
-		// 		enum, ok := f.enum.Value(u16)
-		// 		if ok {
-		// 			val = enum
-		// 		} else {
-		// 			err = ErrInvalidValue
-		// 		}
-		// 	} else {
-		// 		err = ErrEnumUndefined
-		// 	}
-		// } else {
-		// 	val = u16
-		// }
+		val = layout.Uint16(buf[:2])
 
 	case types.FieldTypeUint8:
 		_, err = r.Read(buf[:1])
-		u8, _ := ReadUint8(buf[:1])
-		val = u8
+		val = buf[0]
 
 	case types.FieldTypeFloat64:
 		_, err = r.Read(buf[:8])
-		u64, _ := ReadUint64(buf[:8])
-		val = math.Float64frombits(u64)
+		val = math.Float64frombits(layout.Uint64(buf[:8]))
 
 	case types.FieldTypeFloat32:
 		_, err = r.Read(buf[:4])
-		u32, _ := ReadUint32(buf[:4])
-		val = math.Float32frombits(u32)
+		val = math.Float32frombits(layout.Uint32(buf[:4]))
 
 	case types.FieldTypeBoolean:
 		_, err = r.Read(buf[:1])
-		b := buf[0] > 0
-		val = b
+		val = buf[0] > 0
 
 	case types.FieldTypeString:
 		if f.fixed > 0 {
@@ -576,7 +537,7 @@ func (f *Field) Decode(r io.Reader) (val any, err error) {
 			if err != nil {
 				return
 			}
-			u32, _ := ReadUint32(buf[:4])
+			u32 := layout.Uint32(buf[:4])
 			b := make([]byte, int(u32))
 			n, err = r.Read(b)
 			val = string(b[:n])
@@ -595,7 +556,7 @@ func (f *Field) Decode(r io.Reader) (val any, err error) {
 			if err != nil {
 				return
 			}
-			u32, _ := ReadUint32(buf[:4])
+			u32 := layout.Uint32(buf[:4])
 			b := make([]byte, int(u32))
 			n, err = r.Read(b)
 			val = b[:n]
@@ -623,14 +584,12 @@ func (f *Field) Decode(r io.Reader) (val any, err error) {
 
 	case types.FieldTypeDecimal64:
 		_, err = r.Read(buf[:8])
-		i64, _ := ReadInt64(buf[:8])
-		d64 := num.NewDecimal64(i64, f.scale)
+		d64 := num.NewDecimal64(int64(layout.Uint64(buf[:8])), f.scale)
 		val = d64
 
 	case types.FieldTypeDecimal32:
 		_, err = r.Read(buf[:4])
-		i32, _ := ReadInt32(buf[:4])
-		d32 := num.NewDecimal32(i32, f.scale)
+		d32 := num.NewDecimal32(int32(layout.Uint32(buf[:4])), f.scale)
 		val = d32
 
 	default:

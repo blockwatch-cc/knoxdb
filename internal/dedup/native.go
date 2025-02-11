@@ -180,13 +180,16 @@ func (a NativeByteArray) Subslice(start, end int) [][]byte {
 }
 
 func (a NativeByteArray) MinMax() ([]byte, []byte) {
-	min, max := slicex.BytesMinMax(a.bufs)
-	// copy to avoid reference
-	cmin := make([]byte, len(min))
-	copy(cmin, min)
-	cmax := make([]byte, len(max))
-	copy(cmax, max)
-	return cmin, cmax
+	cmin, cmax := slicex.BytesMinMax(a.bufs)
+	return slices.Clone(cmin), slices.Clone(cmax)
+}
+
+func (a NativeByteArray) Min() []byte {
+	return slices.Clone(slicex.BytesMin(a.bufs))
+}
+
+func (a NativeByteArray) Max() []byte {
+	return slices.Clone(slicex.BytesMax(a.bufs))
 }
 
 func (a NativeByteArray) MaxEncodedSize() int {

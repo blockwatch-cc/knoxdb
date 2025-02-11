@@ -164,11 +164,55 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 }
 
 func (e *Engine) RebuildIndex(ctx context.Context, name string) error {
-	index, err := e.UseIndex(name)
+	idx, err := e.UseIndex(name)
 	if err != nil {
 		return err
 	}
-	return index.Rebuild(ctx)
+
+	// start read tx (required for table scan and table lock)
+	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	if err != nil {
+		return err
+	}
+	defer abort()
+
+	// get read lock on table (prevent drop or change)
+	tableTag := idx.Table().Schema().TaggedHash(types.ObjectTagTable)
+	err = tx.RLock(ctx, tableTag)
+	if err != nil {
+		return err
+	}
+
+	// temporarily remove index from table to make it unavailable for queries
+	idx.Table().UnuseIndex(idx)
+
+	// (set index state)
+
+	// schedule index rebuild as background task
+	ok := e.tasks.Submit(NewTask(func(ctx context.Context) error {
+		// truncate index (will block as long as there are active backend readers)
+		if err := idx.Truncate(ctx); err != nil {
+			return err
+		}
+
+		// rebuild index
+		if err := idx.Rebuild(ctx); err != nil {
+			return err
+		}
+
+		// (set index state)
+
+		// re-add index to table signalling its ready to use again
+		idx.Table().UseIndex(idx)
+
+		// commit tx (will release table read lock)
+		return commit()
+	}))
+	if !ok {
+		return ErrTooManyTasks
+	}
+
+	return nil
 }
 
 func (e *Engine) DropIndex(ctx context.Context, name string) error {
