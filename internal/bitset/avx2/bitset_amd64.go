@@ -34,9 +34,6 @@ func bit_xor(dst, src []byte)
 func bit_neg(src []byte)
 
 //go:noescape
-func bit_reverse(src []byte, reverseLut256 []uint8)
-
-//go:noescape
 func popcount(src []byte) int64
 
 //go:noescape
@@ -44,12 +41,11 @@ func bit_idx_skip(bitmap []byte, out []uint32, decodeTable []uint32, lengthTable
 
 // Go imports
 var (
-	counts       = generic.Counts
-	leadingZeros = generic.LeadingZeros
-	lengthTable  = generic.LengthTable
-	decodeTable  = generic.DecodeTable
-	bitFieldLen  = generic.BitFieldLen
-	bytemask     = generic.Bytemask
+	counts      = generic.Counts
+	lengthTable = generic.LengthTable
+	decodeTable = generic.DecodeTable
+	bitFieldLen = generic.BitFieldLen
+	bytemask    = generic.Bytemask
 )
 
 // Go exports

@@ -147,9 +147,9 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 				}
 				// it.idx.log.Infof("Now 0x%016x:%016x:%d", ik, pk, id)
 				// assert we're actually at the first block
-				assert.Always(id == 0, "must be at first block in index pair")
 			}
 		}
+		assert.Always(id == 0, "must be at first block in index pair")
 
 		// looks like this was the first pack and it did not contain
 		// our search key, skip all search keys smaller than the found

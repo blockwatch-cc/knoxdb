@@ -303,6 +303,7 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 	}
 
 	// try decode the key
+	//nolint:ineffassign
 	ik, pk, id, err := it.idx.decodePackKey(it.cur.Key())
 	if err != nil {
 		return err
@@ -324,9 +325,9 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 			}
 			// it.idx.log.Infof("Merge: Now 0x%016x:%016x:%d", ik, pk, id)
 			// assert we're actually at the first block
-			assert.Always(id == 0, "must be at first block in index pair")
 		}
 	}
+	assert.Always(id == 0, "must be at first block in index pair")
 
 	// looks like this was the first pack and it did not contain
 	// our search key, we're going to create a new pack and place it in front

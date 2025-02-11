@@ -317,8 +317,8 @@ func TestNativeMinMax(t *testing.T) {
 		{
 			Name:      "Zero elements",
 			ByteArray: newNativeByteArrayFromBytes([][]byte{}),
-			Min:       []byte{},
-			Max:       []byte{},
+			Min:       nil,
+			Max:       nil,
 		},
 	}
 	for _, testCase := range testCases {

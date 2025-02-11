@@ -22,6 +22,7 @@ func TestErrorCodeStringer(t *testing.T) {
 		{store.ErrDbExists, "ErrDbExists"},
 		{store.ErrDbNotOpen, "ErrDbNotOpen"},
 		{store.ErrDbAlreadyOpen, "ErrDbAlreadyOpen"},
+		{store.ErrDbOpen, "ErrDbOpen"},
 		{store.ErrInvalid, "ErrInvalid"},
 		{store.ErrCorruption, "ErrCorruption"},
 		{store.ErrTxConflict, "ErrTxConflict"},
@@ -35,9 +36,6 @@ func TestErrorCodeStringer(t *testing.T) {
 		{store.ErrValueTooLarge, "ErrValueTooLarge"},
 		{store.ErrIncompatibleValue, "ErrIncompatibleValue"},
 		{store.ErrRetry, "ErrRetry"},
-		// {store.ErrBlockNotFound, "ErrBlockNotFound"},
-		// {store.ErrBlockExists, "ErrBlockExists"},
-		// {store.ErrBlockRegionInvalid, "ErrBlockRegionInvalid"},
 		{store.ErrDriverSpecific, "ErrDriverSpecific"},
 		{store.ErrNotImplemented, "ErrNotImplemented"},
 

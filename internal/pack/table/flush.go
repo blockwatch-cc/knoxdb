@@ -577,12 +577,11 @@ func (t *Table) storeJournal(ctx context.Context, tx store.Tx) error {
 // - when val < min of first pack, choose first pack
 func (t *Table) findBestPack(ctx context.Context, pk uint64) (uint32, uint64, uint64) {
 	it, ok := t.stats.FindPk(ctx, pk)
-	if !ok {
-
+	if ok {
+		defer it.Close()
 	}
-	defer it.Close()
 
-	if it.IsFull() {
+	if !ok || it.IsFull() {
 		return t.stats.NextKey(), 0, 0
 	}
 

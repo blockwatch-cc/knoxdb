@@ -348,8 +348,8 @@ func TestMatchMinMax(t *testing.T) {
 		{
 			Name:      "Zero element",
 			ByteArray: newFixedByteArray(0, 0),
-			Value:     []byte{},
-			NValue:    []byte{},
+			Value:     nil,
+			NValue:    nil,
 		},
 	}
 	for _, testCase := range testCases {

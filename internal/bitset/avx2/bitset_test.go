@@ -19,7 +19,6 @@ var (
 	bitsetPatterns = tests.Patterns
 	popcount_ref   = tests.Popcount
 	fillBitset     = tests.FillBitset
-	fillBitsetSaw  = tests.FillBitsetSaw
 	fillBitsetRand = tests.FillBitsetRand
 	popCases       = tests.PopCases
 	runTestcases   = tests.RunTestcases

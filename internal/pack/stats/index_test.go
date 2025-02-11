@@ -72,15 +72,31 @@ func makeTestPackage(t testing.TB, key int, pk uint64) *pack.Package {
 }
 
 func makeFilter(name string, mode query.FilterMode, val, val2 any) *query.FilterTreeNode {
-	field, _ := TestSchema.FieldByName(name)
-	m := query.NewFactory(field.Type()).New(mode)
-	if mode == query.FilterModeRange {
-		rg := query.RangeValue{val, val2}
-		m.WithValue(rg)
-		val = rg
-	} else {
-		m.WithValue(val)
+	field, ok := TestSchema.FieldByName(name)
+	if !ok {
+		panic(fmt.Errorf("missing field %s in schema %s", name, TestSchema))
 	}
+	m := query.NewFactory(field.Type()).New(mode)
+	c := schema.NewCaster(field.Type(), nil)
+	var err error
+	switch mode {
+	case query.FilterModeRange:
+		val, err = c.CastValue(val)
+		if err != nil {
+			panic(err)
+		}
+		val2, err = c.CastValue(val2)
+		rg := query.RangeValue{val, val2}
+		val = rg
+	case query.FilterModeIn, query.FilterModeNotIn:
+		val, err = c.CastSlice(val)
+	default:
+		val, err = c.CastValue(val)
+	}
+	if err != nil {
+		panic(err)
+	}
+	m.WithValue(val)
 	return &query.FilterTreeNode{
 		Filter: &query.Filter{
 			Name:    field.Name(),
@@ -92,6 +108,9 @@ func makeFilter(name string, mode query.FilterMode, val, val2 any) *query.Filter
 		},
 	}
 }
+
+// silence golangci-lint unparam
+var _ = makeFilter("i32", query.FilterModeEqual, 1, nil)
 
 // TODO: test complex filter conditions
 // func makeAndFilter(a, b *query.FilterTreeNode) *query.FilterTreeNode {
