@@ -23,6 +23,7 @@ var (
 // tables and stores. Values represent pk sequence, num rows, and
 // checkpoint lsn but can be repurposed for different types.
 type ObjectState struct {
+	Key        []byte  // state bucket name
 	Sequence   uint64  // next free sequence
 	NRows      uint64  // total non-deleted rows
 	Size       uint64  // byte size
@@ -30,14 +31,19 @@ type ObjectState struct {
 	Checkpoint wal.LSN // latest wal checkpoint LSN
 }
 
-func NewObjectState() ObjectState {
+func NewObjectState(key []byte) ObjectState {
 	return ObjectState{
+		Key:      append(key, StateKeySuffix...),
 		Sequence: 1,
 	}
 }
 
 func (s *ObjectState) Reset() {
-	*s = NewObjectState()
+	s.Sequence = 1
+	s.NRows = 0
+	s.Size = 0
+	s.Count = 0
+	s.Checkpoint = 0
 }
 
 func (s ObjectState) Encode() []byte {
@@ -62,19 +68,17 @@ func (s *ObjectState) Decode(buf []byte) error {
 	return nil
 }
 
-func (s *ObjectState) Load(ctx context.Context, tx store.Tx, name string) error {
-	key := append([]byte(name), StateKeySuffix...)
-	buf := tx.Bucket(key).Get(StateKey)
+func (s *ObjectState) Load(ctx context.Context, tx store.Tx) error {
+	buf := tx.Bucket(s.Key).Get(StateKey)
 	if buf == nil || len(buf) < 40 {
 		return ErrDatabaseCorrupt
 	}
 	return s.Decode(buf)
 }
 
-func (s ObjectState) Store(ctx context.Context, tx store.Tx, name string) error {
-	key := append([]byte(name), StateKeySuffix...)
+func (s ObjectState) Store(ctx context.Context, tx store.Tx) error {
 	if s.Sequence == 0 {
-		return tx.Bucket(key).Delete(StateKey)
+		return tx.Bucket(s.Key).Delete(StateKey)
 	}
-	return tx.Bucket(key).Put(StateKey, s.Encode())
+	return tx.Bucket(s.Key).Put(StateKey, s.Encode())
 }

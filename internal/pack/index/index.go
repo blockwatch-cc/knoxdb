@@ -94,7 +94,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = opts
 	idx.table = t
-	idx.state = engine.NewObjectState()
+	idx.state = engine.NewObjectState([]byte(name))
 	idx.db = opts.DB
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
@@ -151,7 +151,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	}
 
 	// init state storage
-	if err := idx.state.Store(ctx, tx, name); err != nil {
+	if err := idx.state.Store(ctx, tx); err != nil {
 		return err
 	}
 
@@ -178,7 +178,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.table = t
-	idx.state = engine.NewObjectState()
+	idx.state = engine.NewObjectState([]byte(name))
 	idx.db = opts.DB
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
@@ -245,7 +245,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	}
 
 	// load state
-	if err := idx.state.Load(ctx, tx, idx.schema.Name()); err != nil {
+	if err := idx.state.Load(ctx, tx); err != nil {
 		idx.log.Error("open state: %v", err)
 		tx.Rollback()
 		t.Close(ctx)
@@ -273,7 +273,7 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 	idx.metrics = engine.IndexMetrics{}
 	idx.convert = nil
 	idx.genkey = nil
-	idx.state = engine.ObjectState{}
+	idx.state.Reset()
 	idx.journal.Release()
 	idx.tomb.Release()
 	idx.journal = nil
@@ -357,7 +357,7 @@ func (idx *Index) Truncate(ctx context.Context) error {
 	// reset state
 	nDel := idx.state.NRows
 	idx.state.Reset()
-	if err := idx.state.Store(ctx, tx, idx.schema.Name()); err != nil {
+	if err := idx.state.Store(ctx, tx); err != nil {
 		return err
 	}
 

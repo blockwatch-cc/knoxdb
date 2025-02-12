@@ -533,7 +533,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 	}
 
 	// store state
-	if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
+	if err := t.state.Store(ctx, tx); err != nil {
 		t.log.Errorf("storing state: %v", err)
 	}
 

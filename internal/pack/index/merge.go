@@ -161,7 +161,7 @@ func (it *MergeIterator) UpdateIndexState(ctx context.Context) error {
 		it.idx.state.Size = uint64(n)
 	}
 
-	return it.idx.state.Store(ctx, it.tx, it.idx.schema.Name())
+	return it.idx.state.Store(ctx, it.tx)
 }
 
 func (it *MergeIterator) Store(pkg *pack.Package) error {

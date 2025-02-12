@@ -74,7 +74,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
-	t.state = engine.NewObjectState()
+	t.state = engine.NewObjectState([]byte(name))
 	t.metrics = engine.NewTableMetrics(name)
 	t.journal = journal.NewJournal(s, t.opts.JournalSize)
 	t.db = opts.DB
@@ -134,7 +134,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.metrics.TombstoneTuplesThreshold = int64(opts.JournalSize)
 
 	// init state storage
-	if err := t.state.Store(ctx, tx, name); err != nil {
+	if err := t.state.Store(ctx, tx); err != nil {
 		return err
 	}
 
@@ -155,8 +155,8 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
+	t.state = engine.NewObjectState([]byte(name))
 	t.metrics = engine.NewTableMetrics(name)
-	t.metrics.TupleCount = int64(t.state.NRows)
 	t.journal = journal.NewJournal(s, t.opts.JournalSize)
 	t.db = opts.DB
 	t.log = opts.Logger
@@ -211,7 +211,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	// TODO: maybe refactor
 
 	// load state
-	if err := t.state.Load(ctx, tx, t.schema.Name()); err != nil {
+	if err := t.state.Load(ctx, tx); err != nil {
 		t.log.Errorf("open state: %v", err)
 		tx.Rollback()
 		t.Close(ctx)
@@ -256,7 +256,7 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	t.px = 0
 	t.opts = engine.TableOptions{}
 	t.metrics = engine.TableMetrics{}
-	t.state = engine.ObjectState{}
+	t.state.Reset()
 	clear(t.indexes)
 	t.indexes = t.indexes[:0]
 	t.indexes = nil
@@ -322,7 +322,7 @@ func (t *Table) Sync(ctx context.Context) error {
 		}
 
 		// store state
-		if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
+		if err := t.state.Store(ctx, tx); err != nil {
 			return err
 		}
 
@@ -360,7 +360,7 @@ func (t *Table) Truncate(ctx context.Context) error {
 	}
 	nDel := t.state.NRows
 	t.state.Reset()
-	if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
+	if err := t.state.Store(ctx, tx); err != nil {
 		return err
 	}
 	atomic.AddInt64(&t.metrics.DeletedTuples, int64(nDel))

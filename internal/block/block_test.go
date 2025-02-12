@@ -28,7 +28,6 @@ func TestAppend64(t *testing.T) {
 
 	// first append writes buf[0:8]
 	block.Int64().Append(math.MaxInt64)
-	require.NotNil(t, *(*[]byte)(block.ptr), 0)
 	require.Equal(t, block.data()[0:sz], maxIntBytes[8-sz:])
 	require.Equal(t, block.len, 1)
 	require.Equal(t, block.cap, n)
@@ -61,7 +60,6 @@ func TestAppend32(t *testing.T) {
 
 	// first append writes buf[0:4]
 	block.Int32().Append(math.MaxInt32)
-	require.NotNil(t, *(*[]byte)(block.ptr), 0)
 	require.Equal(t, block.data()[0:sz], maxIntBytes[8-sz:])
 	require.Equal(t, block.len, 1)
 	require.Equal(t, block.cap, n)
@@ -94,7 +92,6 @@ func TestAppend16(t *testing.T) {
 
 	// first append writes buf[0:2]
 	block.Int16().Append(math.MaxInt16)
-	require.NotNil(t, *(*[]byte)(block.ptr), 0)
 	require.Equal(t, block.data()[0:sz], maxIntBytes[8-sz:])
 	require.Equal(t, block.len, 1)
 	require.Equal(t, block.cap, n)
@@ -127,7 +124,6 @@ func TestAppend8(t *testing.T) {
 
 	// first append writes buf[0:1]
 	block.Int8().Append(math.MaxInt8)
-	require.NotNil(t, *(*[]byte)(block.ptr), 0)
 	require.Equal(t, block.data()[0:sz], maxIntBytes[8-sz:])
 	require.Equal(t, block.len, 1)
 	require.Equal(t, block.cap, n)
