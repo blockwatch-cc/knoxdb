@@ -100,11 +100,12 @@ func NewSymbolTable() *SymbolTable {
 		symbolTable.symbols[i] = unused // we start with all symbols unused
 	}
 
+	// empty hash table
+	var s = Symbol{}
+	s.val.SetUint64(0)
+	s.icl = FSST_ICL_FREE // marks empty in hashtab
 	for i := 0; i < HashTabSize; i++ {
-		// empty hash table
-		symbolTable.hashTab[i] = Symbol{}
-		symbolTable.hashTab[i].val.SetUint64(0)
-		symbolTable.hashTab[i].icl = uint64(FSST_ICL_FREE) // marks empty in hashtab
+		symbolTable.hashTab[i] = s
 	}
 
 	// fill byteCodes[] with the pseudo code all bytes (escaped bytes)
@@ -229,6 +230,7 @@ func (sym *SymbolTable) Finalize(zeroTerminated uint8) {
 	sym.suffixLim = uint64(rsum[1])
 	sym.symbols[newCode[0]] = sym.symbols[256] // keep symbol 0 in place (for zeroTerminated cases only)
 
+	j := rsum[2]
 	for i := uint32(zeroTerminated); i < uint32(sym.nSymbols); i++ {
 		s1 := sym.symbols[FSST_CODE_BASE+i]
 		len := s1.Len()
@@ -250,8 +252,8 @@ func (sym *SymbolTable) Finalize(zeroTerminated uint8) {
 				newCode[i] = uint8(sym.suffixLim)
 				sym.suffixLim++
 			} else {
-				rsum[2]--
-				newCode[i] = rsum[2]
+				j--
+				newCode[i] = j
 			}
 		} else {
 			newCode[i] = rsum[len-1]
@@ -407,8 +409,8 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 							// ..but do not count single byte extensions doubly
 							counters.Count2Inc(uint32(code1), uint32(line[start]))
 						}
-						code1 = uint64(code2)
 					}
+					code1 = uint64(code2)
 				}
 			}
 		}
@@ -438,13 +440,13 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 				q.gain += cand.gain
 				delete(cands, qHash)
 			}
-			cands[q.Hash()] = q
+			cands[qHash] = q
 		}
 
 		// add candidate symbols based on counted frequency
 		for pos1 := uint32(0); pos1 < uint32(FSST_CODE_BASE+sym.nSymbols); pos1++ {
 			var cnt1 uint32
-			cnt1, pos1 = counters.Count1GetNext(uint32(pos1))
+			cnt1, pos1 = counter.Count1GetNext(uint32(pos1))
 			if cnt1 <= 0 {
 				continue
 			}
@@ -466,7 +468,7 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 
 			for pos2 := uint32(0); pos2 < uint32(FSST_CODE_BASE+sym.nSymbols); pos2++ {
 				var cnt2 uint32
-				cnt2, pos2 = counters.Count2GetNext(pos1, pos2) // may advance pos2!!
+				cnt2, pos2 = counter.Count2GetNext(pos1, pos2) // may advance pos2!!
 				if cnt2 == 0 {
 					continue
 				}
@@ -505,21 +507,23 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 	}
 
 	bestCounter := NewCounter()
-	for sampleFrac = 8; sampleFrac < 128; sampleFrac += 30 { // we do 5 rounds (sampleFrac=8,38,68,98,128)
+	for sampleFrac = 8; true; sampleFrac += 30 { // we do 5 rounds (sampleFrac=8,38,68,98,128)
 		counters.Clear()
 		gain := compressCount()
 		if gain >= bestGain { // a new best solution!
-			counters.Backup(bestCounter)
+			bestCounter = counters.Backup(bestCounter)
 			*bestTable = *st
 			bestGain = gain
+		}
+		if sampleFrac >= 128 {
+			break
 		}
 		log.Debugf("logging gain %d table", gain)
 		log.Debugf("Terminator => %x ", st.terminator)
 		makeTable(st, counters, false)
 	}
 	log.Debugf("logging best gain %d table", bestGain)
-	counters.Restore(bestCounter)
-	makeTable(bestTable, counters, true)
+	makeTable(bestTable, bestCounter, true)
 	var zero uint8 = 0
 	if zeroTerminated {
 		zero = 1
@@ -556,7 +560,7 @@ func makeSample(strIn [][]uint8) [][]uint8 {
 			}
 
 			// choose a chunk
-			chunks := 1 + (len(strIn[linenr]) / FSST_SAMPLELINE)
+			chunks := 1 + ((len(strIn[linenr]) - 1) / FSST_SAMPLELINE)
 			sampleRnd = FSSTHash(sampleRnd)
 			offset := FSST_SAMPLELINE * (sampleRnd % uint64(chunks))
 

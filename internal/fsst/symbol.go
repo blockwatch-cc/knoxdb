@@ -54,7 +54,7 @@ func NewSymbol() Symbol {
 func (s Symbol) WithCode(c uint8, code uint64) Symbol {
 	val := Val{}
 	val.SetUint64(uint64(c))
-	s.icl = uint64(1<<28) | uint64(code<<16) | 56
+	s.icl = uint64((1 << 28) | (code << 16) | 56)
 	s.val = val
 	return s
 }
@@ -106,7 +106,7 @@ func (s Symbol) Hash() uint64 {
 }
 
 func (s Symbol) Concat(s2 Symbol) Symbol {
-	newS := Symbol{}
+	var newS Symbol
 	length := s.Len() + s2.Len()
 	if length > SYMBOL_MAX_LENGTH {
 		length = SYMBOL_MAX_LENGTH

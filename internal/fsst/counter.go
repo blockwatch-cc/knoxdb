@@ -93,10 +93,10 @@ func (c *Counter) Count2GetNext(pos1 uint32, pos2 uint32) (uint32, uint32) { // 
 	if low > 0 {
 		high-- // high is incremented early and low late, so decrement high (unless low==0)
 	}
-	return (uint32(high<<8) + low), pos2
+	return (uint32((high << 8)) + low), pos2
 }
 
-func (c *Counter) Backup(bc *Counter) {
+func (c *Counter) Backup(bc *Counter) *Counter {
 	// copy(buf, c.count1High[:FSST_CODE_MAX])
 	// copy(buf[FSST_CODE_MAX:], c.count1Low[:FSST_CODE_MAX])
 
@@ -104,6 +104,7 @@ func (c *Counter) Backup(bc *Counter) {
 	copy(bc.count1Low[:], c.count1Low[:])
 	copy(bc.count2High[:], c.count2High[:])
 	copy(bc.count2Low[:], c.count2Low[:])
+	return bc
 }
 
 func (c *Counter) Restore(bc *Counter) {
@@ -124,17 +125,11 @@ func (c *Counter) Clear() {
 }
 
 func (c *Counter) Load(buf []byte) uint64 {
-	var r uint64
+	data := make([]byte, 8)
 	l := len(buf)
-	switch true {
-	case l >= 8:
-		r = binary.LittleEndian.Uint64(buf)
-	case l >= 4:
-		r = uint64(binary.LittleEndian.Uint32(buf))
-	case l >= 2:
-		r = uint64(binary.LittleEndian.Uint16(buf))
-	case l == 1:
-		r = uint64(buf[0])
+	copy(data, buf)
+	for i := l; i < 8; i++ {
+		data[i] = byte(0)
 	}
-	return r
+	return binary.LittleEndian.Uint64(data)
 }
