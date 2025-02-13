@@ -495,7 +495,7 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 			q := heap.Pop(pq)
 			symbol := q.(QSymbol).symbol
 			sym.Add(symbol)
-			log.Debugf("symbol => [%s]", symbol)
+			// log.Debugf("symbol => [%s]", symbol)
 			if isBest {
 				encoder.stat.symbols = append(encoder.stat.symbols, q.(QSymbol).symbol)
 				encoder.stat.symbolsSize += len(symbol.val)
@@ -518,11 +518,11 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 		if sampleFrac >= 128 {
 			break
 		}
-		log.Debugf("logging gain %d table", gain)
-		log.Debugf("Terminator => %x ", st.terminator)
+		// log.Debugf("logging gain %d table", gain)
+		// log.Debugf("Terminator => %x ", st.terminator)
 		makeTable(st, counters, false)
 	}
-	log.Debugf("logging best gain %d table", bestGain)
+	// log.Debugf("logging best gain %d table", bestGain)
 	makeTable(bestTable, bestCounter, true)
 	var zero uint8 = 0
 	if zeroTerminated {

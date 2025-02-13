@@ -5,8 +5,6 @@ package fsst
 
 import (
 	"encoding/binary"
-
-	"github.com/echa/log"
 )
 
 const FSST_MAXHEADER = (8 + 1 + 8 + 2048 + 1) /* maxlen of deserialized fsst header, produced/consumed by fsst_export() resp. fsst_import() */
@@ -30,9 +28,9 @@ func Compress(strIn [][]uint8) []uint8 {
 	// then the header (followed by the compressed bytes which are already there)
 	_serialize(len(buf), buf)
 
-	log.Tracef("Longest symbol => %q", e.stat.longestSymbol)
-	log.Tracef("Total size of symbols => %d byte(s) ", e.stat.symbolsSize)
-	log.Tracef("Number of symbols %d ", len(e.stat.symbols))
+	// log.Tracef("Longest symbol => %q", e.stat.longestSymbol)
+	// log.Tracef("Total size of symbols => %d byte(s) ", e.stat.symbolsSize)
+	// log.Tracef("Number of symbols %d ", len(e.stat.symbols))
 
 	return buf
 }
@@ -97,7 +95,7 @@ func _compressGeneral(sym *SymbolTable, strIn [][]uint8, compressed []byte, noSu
 				word &= (0xFFFFFFFFFFFFFFFF >> uint8(s.icl))
 				if (s.icl < uint64(FSST_ICL_FREE)) && s.val.Uint64() == word {
 					nout[0] = uint8(s.Code())
-					log.Tracef("Compressed %q into %q ", buf[start:start+int(s.Len())], nout[0])
+					// log.Tracef("Compressed %q into %q ", buf[start:start+int(s.Len())], nout[0])
 					nout = nout[1:]
 					start += int(s.Len())
 				} else if avoidBranch {
@@ -105,20 +103,20 @@ func _compressGeneral(sym *SymbolTable, strIn [][]uint8, compressed []byte, noSu
 					// handle everything with predication
 					nout[0] = uint8(code)
 					inc := 1 + ((code & FSST_CODE_BASE) >> 8)
-					log.Tracef("Compressed %q into %q ", buf[start:start+int(inc)], nout[:inc])
+					// log.Tracef("Compressed %q into %q ", buf[start:start+int(inc)], nout[:inc])
 					nout = nout[inc:]
 					start += int(code >> FSST_LEN_BITS)
 				} else if uint8(code) < byteLim {
 					// 2 byte code after checking there is no longer pattern
 					nout[0] = uint8(code)
-					log.Tracef("Compressed %q into %q ", buf[start:start+2], nout[0])
+					// log.Tracef("Compressed %q into %q ", buf[start:start+2], nout[0])
 					nout = nout[1:]
 					start += 2
 				} else {
 					// 1 byte code or miss.
 					nout[0] = uint8(code)
 					inc := 1 + ((code & FSST_CODE_BASE) >> 8)
-					log.Tracef("Compressed %q into %q ", buf[start:start+1], nout[:inc])
+					// log.Tracef("Compressed %q into %q ", buf[start:start+1], nout[:inc])
 					nout = nout[inc:] // predicated - tested with a branch, that was always worse
 					start++
 				}
