@@ -110,7 +110,6 @@ func Decompress(strIn []byte) ([]uint8, error) {
 		if escapeMask == 0 {
 			for i := 0; i < 4; i++ {
 				decode()
-				fmt.Println("posOut", posOut, "len[code]", length[code])
 			}
 		} else {
 			firstEscapePos := uint64(bits.TrailingZeros32(escapeMask)) >> 3
@@ -118,11 +117,9 @@ func Decompress(strIn []byte) ([]uint8, error) {
 			switch firstEscapePos {
 			case 3:
 				decode()
-				fmt.Println("posOut 3f", posOut, "len[code]", length[code])
 				fallthrough
 			case 2:
 				decode()
-				fmt.Println("posOut 2f", posOut, "len[code]", length[code])
 				fallthrough
 			case 1:
 				decode()
@@ -131,7 +128,6 @@ func Decompress(strIn []byte) ([]uint8, error) {
 				posIn += 2 /* decompress an escaped byte */
 				strOut[posOut] = strIn[posIn-1]
 				posOut++
-				fmt.Println("posOut 0f", posOut, "len[code]", length[code])
 			}
 		}
 	}
