@@ -13,30 +13,40 @@ import (
 )
 
 type Test struct {
-	Name           string
-	Data           string
-	CompressedFile string
+	Name     string
+	FileName string
 }
 
 var TestData = []Test{
 	{
-		Name:           "Small data",
-		Data:           "data.txt",
-		CompressedFile: "comp.txt",
+		Name:     "Small data",
+		FileName: "data",
 	},
 	{
-		Name:           "Large Data",
-		Data:           "data2.txt",
-		CompressedFile: "comp2.txt",
+		Name:     "Large Data",
+		FileName: "data2",
+	},
+	{
+		Name:     "Numbers",
+		FileName: "c_name",
+	},
+	{
+		Name:     "Unicodes (chinese)",
+		FileName: "chinese",
+	},
+	{
+		Name:     "Urls",
+		FileName: "urls",
 	},
 }
 
 func TestFsst(t *testing.T) {
 	for _, td := range TestData {
 		t.Run(td.Name, func(t *testing.T) {
-			data, err := os.ReadFile(path.Join("testdata", td.Data))
+			data, err := os.ReadFile(path.Join("testdata", td.FileName))
 			require.NoError(t, err, "reading data file should not fail")
-			compressedFile, err := os.ReadFile(path.Join("testdata", td.CompressedFile))
+			compressedFile, err := os.ReadFile(path.Join("testdata", td.FileName+"_comp"))
+			require.NoError(t, err, "reading data file should not fail")
 
 			t.Run("Compress", func(t *testing.T) {
 				compressedRes := Compress([][]uint8{data})
