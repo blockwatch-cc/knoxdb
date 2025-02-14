@@ -75,17 +75,28 @@ func NewDecoder(buf []uint8) (*Decoder, []byte, error) {
 }
 
 func Decompress(strIn []byte) ([]uint8, error) {
+	size := _deserialize(strIn)
+
 	decoder, strIn, err := NewDecoder(strIn)
 	if err != nil {
 		return nil, err
 	}
 	var posOut, posIn uint64 = 0, 0
 
+	code := byte(0)
 	length := decoder.len
-	strOut := make([]byte, FSST_MEMBUF)
+	strOut := make([]byte, size)
 	symbol := decoder.symbol
-	size := uint64(FSST_MEMBUF)
 	lenIn := uint64(len(strIn))
+
+	decode := func() {
+		code = strIn[posIn]
+		posIn++
+		data := make([]byte, 8)
+		binary.LittleEndian.PutUint64(data, symbol[code])
+		copy(strOut[posOut:], data[:length[code]])
+		posOut += uint64(length[code])
+	}
 
 	for posOut+32 <= size && posIn+4 <= lenIn {
 		nextBlock := uint32(strIn[posIn]) |
@@ -98,35 +109,58 @@ func Decompress(strIn []byte) ([]uint8, error) {
 
 		if escapeMask == 0 {
 			for i := 0; i < 4; i++ {
-				code := strIn[posIn]
-				posIn++
-
-				data := make([]byte, 8)
-				binary.LittleEndian.PutUint64(data, symbol[code])
-				copy(strOut[posOut:], data[:length[code]])
-				posOut += uint64(length[code])
+				decode()
+				fmt.Println("posOut", posOut, "len[code]", length[code])
 			}
 		} else {
 			firstEscapePos := uint64(bits.TrailingZeros32(escapeMask)) >> 3
 
-			for i := uint64(0); i < firstEscapePos; i++ {
-				code := strIn[posIn]
-				posIn++
-
-				symbolBytes := make([]byte, 8)
-				binary.LittleEndian.PutUint64(symbolBytes, symbol[code])
-				copy(strOut[posOut:], symbolBytes[:length[code]])
-				posOut += uint64(length[code])
+			switch firstEscapePos {
+			case 3:
+				decode()
+				fmt.Println("posOut 3f", posOut, "len[code]", length[code])
+				fallthrough
+			case 2:
+				decode()
+				fmt.Println("posOut 2f", posOut, "len[code]", length[code])
+				fallthrough
+			case 1:
+				decode()
+				fallthrough
+			case 0:
+				posIn += 2 /* decompress an escaped byte */
+				strOut[posOut] = strIn[posIn-1]
+				posOut++
+				fmt.Println("posOut 0f", posOut, "len[code]", length[code])
 			}
+		}
+	}
 
-			posIn += 2
-			strOut[posOut] = strIn[posIn-1]
-			posOut++
+	if (posOut + 24) <= size { // handle the possibly 3 last bytes without a loop
+		if (posIn + 2) <= lenIn {
+			strOut[posOut] = strIn[posIn+1]
+			if strIn[posIn] != FSST_ESC {
+				decode()
+
+				if strIn[posIn] != FSST_ESC {
+					decode()
+				} else {
+					posIn += 2
+					strOut[posOut] = strIn[posIn-1]
+					posOut++
+				}
+			} else {
+				posIn += 2
+				posOut++
+			}
+		}
+		if posIn < lenIn { // last code cannot be an escape
+			decode()
 		}
 	}
 
 	for posIn < lenIn {
-		code := strIn[posIn]
+		code = strIn[posIn]
 		posIn++
 
 		if code < FSST_ESC {

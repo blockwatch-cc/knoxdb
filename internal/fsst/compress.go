@@ -13,9 +13,9 @@ const FSST_MAX_SIZE = FSST_MEMBUF - (1 + FSST_MAXHEADER/2)
 // the main compression function (everything automatic)
 func Compress(strIn [][]uint8) []uint8 {
 	e := NewEncoder(strIn, false)
-	totalSize := 0
+	totalSize := uint64(0)
 	for _, line := range strIn {
-		totalSize += len(line)
+		totalSize += uint64(len(line))
 	}
 	// to be faster than scalar, simd needs 64 lines or more of length >=12; or fewer lines, but big ones (totLen > 32KB)
 	buf := make([]uint8, totalSize*2) // max size for compressed will be *2 of it
@@ -26,7 +26,7 @@ func Compress(strIn [][]uint8) []uint8 {
 
 	// adding size, block starts with size
 	// then the header (followed by the compressed bytes which are already there)
-	_serialize(len(buf), buf)
+	_serialize(totalSize, buf)
 
 	// log.Tracef("Longest symbol => %q", e.stat.longestSymbol)
 	// log.Tracef("Total size of symbols => %d byte(s) ", e.stat.symbolsSize)
@@ -35,10 +35,14 @@ func Compress(strIn [][]uint8) []uint8 {
 	return buf
 }
 
-func _serialize(l int, buf []byte) {
+func _serialize(l uint64, buf []byte) {
 	buf[0] = byte(((l) >> 16) & 255)
 	buf[1] = byte(((l) >> 8) & 255)
 	buf[2] = byte((l) & 255)
+}
+
+func _deserialize(buf []byte) uint64 {
+	return uint64(buf[0])<<16 | uint64(buf[1])<<8 | uint64(buf[2])
 }
 
 func _compress(e *Encoder, strIn [][]uint8, buf []byte) uint64 {
