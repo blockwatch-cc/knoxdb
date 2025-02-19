@@ -393,7 +393,7 @@ func (q Query) Encode() ([]byte, error) {
 
 func (q Query) MakePlan() (engine.QueryPlan, error) {
 	// compile filters from conditions
-	filters, err := q.cond.Compile(q.table.Schema(), q.table.DB().Enums())
+	filters, err := q.cond.Compile(q.table.Schema())
 	if err != nil {
 		return nil, err
 	}

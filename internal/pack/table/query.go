@@ -233,17 +233,15 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 	jbits = match.MatchTree(plan.Filters, t.journal.Data, nil)
 	nRowsScanned += uint32(t.journal.Len())
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
-	plan.Log.Debugf("Table %s: %d/%d journal results", t.schema.Name(), jbits.Count(), t.journal.Len())
+	// plan.Log.Debugf("Table %s: %d/%d journal results", t.schema.Name(), jbits.Count(), t.journal.Len())
 
 	// now query indexes, this may change query plan
 	if err := plan.QueryIndexes(ctx); err != nil {
-		plan.Log.Errorf("Index: %v", err)
 		return err
 	}
 
 	// early return on empty match
 	if jbits.Count() == 0 && plan.IsNoMatch() {
-		plan.Log.Debugf("No matches in journal and index")
 		return nil
 	}
 

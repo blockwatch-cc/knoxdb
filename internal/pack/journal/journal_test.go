@@ -118,7 +118,7 @@ func checkJournalCaps(t *testing.T, j *Journal, data, keys, tomb int) {
 
 func comparePackWithBatch(t *testing.T, name string, j *Journal, batch TestRecords) {
 	require.Equal(t, j.Data.Len(), len(batch), "%s: mismatched pack/batch len", name)
-	err := pack.ForEach[TestRecord](j.Data, schema.GlobalRegistry, func(i int, val *TestRecord) error {
+	err := pack.ForEach[TestRecord](j.Data, func(i int, val *TestRecord) error {
 		// pks are assigned on insert (assuming start is 1 in all calls below)
 		// require.Equal(t, val.Pk, batch[i].Pk, "mismatched pk")
 		require.Equal(t, val.Pk, uint64(i+1), "%s: mismatched pk", name)

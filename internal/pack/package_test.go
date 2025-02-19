@@ -39,7 +39,7 @@ func makeTypedPackage(typ any, fill int) *Package {
 		panic(err)
 	}
 	pkg := New().WithMaxRows(PACK_SIZE).WithSchema(s)
-	enc := schema.NewEncoder(s).WithEnums(schema.GlobalRegistry)
+	enc := schema.NewEncoder(s)
 	buf, err := enc.Encode(makeZeroStruct(typ), nil)
 	if err != nil {
 		panic(err)

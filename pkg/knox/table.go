@@ -48,11 +48,12 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, error) {
 	if !t.table.Schema().EqualHash(s.Hash()) {
 		return 0, schema.ErrSchemaMismatch
 	}
+	s.WithEnums(t.table.Schema().Enums())
 
 	// encode wire (single or slice) - schema is guaranteed the same
 	// but we must use the one derived from Go type for struct read
 	if t.enc == nil {
-		t.enc = schema.NewEncoder(s).WithEnums(t.db.Enums())
+		t.enc = schema.NewEncoder(s)
 	}
 	buf, err := t.enc.Encode(val, nil)
 	if err != nil {
@@ -90,11 +91,12 @@ func (t TableImpl) Update(ctx context.Context, val any) (uint64, error) {
 	if !t.table.Schema().EqualHash(s.Hash()) {
 		return 0, schema.ErrSchemaMismatch
 	}
+	s.WithEnums(t.table.Schema().Enums())
 
 	// encode wire (single or slice) - schema is guaranteed the same
 	// but we must use the one derived from Go type for struct read
 	if t.enc == nil {
-		t.enc = schema.NewEncoder(s).WithEnums(t.db.Enums())
+		t.enc = schema.NewEncoder(s)
 	}
 	buf, err := t.enc.Encode(val, nil)
 	if err != nil {
@@ -297,7 +299,7 @@ func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
 		err error
 	)
 	if t.enc == nil {
-		t.enc = schema.NewGenericEncoder[T]().WithEnums(t.db.Enums())
+		t.enc = schema.NewGenericEncoder[T]().WithEnums(t.Schema().Enums())
 	}
 	switch v := val.(type) {
 	case *T:
@@ -356,7 +358,7 @@ func (t *GenericTable[T]) Update(ctx context.Context, val any) (uint64, error) {
 		err error
 	)
 	if t.enc == nil {
-		t.enc = schema.NewGenericEncoder[T]().WithEnums(t.db.Enums())
+		t.enc = schema.NewGenericEncoder[T]().WithEnums(t.Schema().Enums())
 	}
 	switch v := val.(type) {
 	case *T:

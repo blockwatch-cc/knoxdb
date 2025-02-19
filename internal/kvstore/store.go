@@ -60,7 +60,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	// setup store
 	kv.engine = e
 	kv.schema = s
-	kv.state = engine.NewObjectState()
+	kv.state = engine.NewObjectState([]byte(name))
 	kv.storeId = s.TaggedHash(types.ObjectTagStore)
 	kv.opts = DefaultOptions.Merge(opts)
 	kv.key = []byte(name)
@@ -107,7 +107,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	}
 
 	// init state storage
-	if err := kv.state.Store(ctx, tx, name); err != nil {
+	if err := kv.state.Store(ctx, tx); err != nil {
 		return err
 	}
 
@@ -167,7 +167,7 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	}
 
 	// load state
-	if err := kv.state.Load(ctx, tx, kv.schema.Name()); err != nil {
+	if err := kv.state.Load(ctx, tx); err != nil {
 		kv.log.Error("missing table state: %v", err)
 		tx.Rollback()
 		kv.Close(ctx)
@@ -177,18 +177,13 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	// init metrics
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		return engine.ErrNoBucket
+		tx.Rollback()
+		kv.Close(ctx)
+		return engine.ErrDatabaseCorrupt
 	}
 	stats := bucket.Stats()
 	kv.metrics.TotalSize = int64(stats.Size) // estimate only
 	kv.metrics.NumKeys = int64(stats.KeyN)
-
-	if err != nil {
-		kv.log.Error("reading store stats: %v", err)
-		tx.Rollback()
-		_ = kv.Close(ctx)
-		return engine.ErrDatabaseCorrupt
-	}
 
 	kv.log.Debugf("store %s opened with %d entries", kv.schema.Name(), kv.metrics.NumKeys)
 	return nil

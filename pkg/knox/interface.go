@@ -121,7 +121,6 @@ type Database interface {
 	DropStore(ctx context.Context, name string) error
 
 	// enums
-	Enums() schema.EnumRegistry
 	ListEnums() []string
 	UseEnum(name string) (*schema.EnumDictionary, error)
 	CreateEnum(ctx context.Context, name string) (*schema.EnumDictionary, error)

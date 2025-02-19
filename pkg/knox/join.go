@@ -289,11 +289,11 @@ func (j Join) MakePlan() (*query.JoinPlan, error) {
 
 	// compile conditions
 	ls, rs := j.left.Table.Schema(), j.right.Table.Schema()
-	ltree, err := j.left.Where.Compile(ls, nil) // FIXME: need engine enum registry for translate
+	ltree, err := j.left.Where.Compile(ls)
 	if err != nil {
 		return nil, err
 	}
-	rtree, err := j.right.Where.Compile(rs, nil) // FIXME: need engine enum registry for translate
+	rtree, err := j.right.Where.Compile(rs)
 	if err != nil {
 		return nil, err
 	}

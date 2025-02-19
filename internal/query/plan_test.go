@@ -41,7 +41,10 @@ func init() {
 
 	statusEnum := schema.NewEnumDictionary("status")
 	statusEnum.Append("active", "pending", "inactive")
+
+	testEnums = schema.NewEnumRegistry()
 	testEnums.Register(statusEnum)
+	testSchema.WithEnums(&testEnums)
 }
 
 type testStruct struct {
@@ -491,7 +494,7 @@ func TestPlanCompile(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			// compile test filter conditions
-			flt, err := tc.Condition.Compile(testSchema, testEnums)
+			flt, err := tc.Condition.Compile(testSchema)
 			require.NoError(t, err)
 
 			// construct mock table from schema without index and result
@@ -582,7 +585,7 @@ func TestPlanQueryIndexes(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			// compile test filter conditions
-			flt, err := tc.Condition.Compile(testSchema, testEnums)
+			flt, err := tc.Condition.Compile(testSchema)
 			require.NoError(t, err)
 
 			// construct mock table from schema, mock index and mock result

@@ -12,6 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/cache/rclru"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
@@ -41,10 +42,10 @@ func NewTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
 			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
 			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
 		},
-		tables:  make(map[uint64]TableEngine),
-		stores:  make(map[uint64]StoreEngine),
-		indexes: make(map[uint64]IndexEngine),
-		enums:   make(map[uint64]*schema.EnumDictionary),
+		tables:  util.NewLockFreeMap[uint64, TableEngine](),
+		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:   schema.NewEnumRegistry(),
 		txs:     make(TxList, 0),
 		xmin:    0,
 		xnext:   1,
@@ -75,10 +76,10 @@ func OpenTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
 			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
 			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
 		},
-		tables:  make(map[uint64]TableEngine),
-		stores:  make(map[uint64]StoreEngine),
-		indexes: make(map[uint64]IndexEngine),
-		enums:   make(map[uint64]*schema.EnumDictionary),
+		tables:  util.NewLockFreeMap[uint64, TableEngine](),
+		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:   schema.NewEnumRegistry(),
 		txs:     make(TxList, 0),
 		xmin:    0,
 		xnext:   1,

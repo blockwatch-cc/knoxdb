@@ -165,10 +165,6 @@ func (d *DB) ListEnums() []string {
 	return d.engine.EnumNames()
 }
 
-func (d *DB) Enums() schema.EnumRegistry {
-	return d.engine.Enums()
-}
-
 func (d *DB) UseEnum(name string) (*schema.EnumDictionary, error) {
 	enum, err := d.engine.UseEnum(name)
 	if err != nil {
