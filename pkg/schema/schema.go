@@ -28,11 +28,11 @@ type Schema struct {
 	schemaHash  uint64
 	fields      []Field
 	exports     []*ExportedField
+	enums       *EnumRegistry
 	minWireSize int
 	maxWireSize int
 	isFixedSize bool
 	isInterface bool
-	isEnum      bool
 	version     uint32
 	encode      []OpCode
 	decode      []OpCode
@@ -73,6 +73,15 @@ func (s *Schema) WithField(f Field) *Schema {
 	return s
 }
 
+func (s *Schema) WithEnums(r *EnumRegistry) *Schema {
+	s.enums = r
+	return s
+}
+
+func (s *Schema) Enums() *EnumRegistry {
+	return s.enums
+}
+
 func (s *Schema) nextFieldId() uint16 {
 	id := uint16(len(s.fields) + 1)
 	if id == 1<<16-1 {
@@ -88,7 +97,7 @@ func (s *Schema) nextFieldId() uint16 {
 }
 
 func (s *Schema) HasEnums() bool {
-	return s.isEnum
+	return s.enums != nil
 }
 
 func (s *Schema) NewBuffer(sz int) *bytes.Buffer {
@@ -385,6 +394,7 @@ func (s *Schema) Clone() *Schema {
 	return &Schema{
 		name:    s.name,
 		fields:  slices.Clone(s.fields),
+		enums:   s.enums,
 		version: s.version,
 	}
 }
@@ -457,20 +467,19 @@ func (s *Schema) RenameField(id uint16, name string) (*Schema, error) {
 	return clone.Finalize(), nil
 }
 
-func (s *Schema) MarkIndexField(id uint16, typ types.IndexType) (*Schema, error) {
-	for i, v := range s.fields {
-		if v.id != id {
-			continue
-		}
-		if !v.IsActive() {
-			return nil, ErrInvalidField
-		}
-		// clone but don't update version & hash
-		clone := s.Clone()
-		clone.fields[i] = clone.fields[i].WithIndex(typ)
-		return clone.Finalize(), nil
+// switch primary key field to id if exists
+func (s *Schema) ResetPk(id uint16) (*Schema, bool) {
+	oldPkIdx := s.PkIndex()
+	newPkIdx, ok := s.FieldIndexById(id)
+	if !ok || s.fields[newPkIdx].typ != types.FieldTypeUint64 {
+		return s, false
 	}
-	return nil, ErrInvalidField
+	// flip primary key flag
+	s.fields[oldPkIdx].flags &^= types.FieldFlagPrimary
+	s.fields[newPkIdx].flags |= types.FieldFlagPrimary
+	s.exports[oldPkIdx].Flags &^= types.FieldFlagPrimary
+	s.exports[newPkIdx].Flags |= types.FieldFlagPrimary
+	return s, true
 }
 
 func (s *Schema) CanMatchFields(names ...string) bool {
@@ -745,10 +754,17 @@ func (s *Schema) Finalize() *Schema {
 
 		// try lookup enum from global registry using tag '0' or generate new enum
 		if s.fields[i].Is(types.FieldFlagEnum) {
-			if _, ok := LookupEnum(0, s.fields[i].name); !ok {
-				RegisterEnum(0, NewEnumDictionary(s.fields[i].name))
+			if s.enums == nil {
+				r := NewEnumRegistry()
+				s.enums = &r
 			}
-			s.isEnum = true
+			if _, ok := s.enums.Lookup(s.fields[i].name); !ok {
+				if e, ok := LookupEnum(0, s.fields[i].name); ok {
+					s.enums.Register(e)
+				} else {
+					s.enums.Register(NewEnumDictionary(s.fields[i].name))
+				}
+			}
 		}
 	}
 	s.schemaHash = h.Sum64()

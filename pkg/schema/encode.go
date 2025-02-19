@@ -32,7 +32,7 @@ func (e *GenericEncoder[T]) Schema() *Schema {
 	return e.enc.schema
 }
 
-func (e *GenericEncoder[T]) WithEnums(reg EnumRegistry) *GenericEncoder[T] {
+func (e *GenericEncoder[T]) WithEnums(reg *EnumRegistry) *GenericEncoder[T] {
 	e.enc.WithEnums(reg)
 	return e
 }
@@ -59,7 +59,7 @@ func (e *GenericEncoder[T]) EncodePtrSlice(slice []*T, buf *bytes.Buffer) ([]byt
 
 type Encoder struct {
 	schema  *Schema
-	enums   EnumRegistry
+	enums   *EnumRegistry
 	needsif bool
 }
 
@@ -71,14 +71,18 @@ func NewEncoder(s *Schema) *Encoder {
 			break
 		}
 	}
+	enums := s.Enums()
+	if enums == nil {
+		enums = &GlobalRegistry
+	}
 	return &Encoder{
 		schema:  s,
-		enums:   enumRegistry,
+		enums:   enums,
 		needsif: needsif,
 	}
 }
 
-func (e *Encoder) WithEnums(reg EnumRegistry) *Encoder {
+func (e *Encoder) WithEnums(reg *EnumRegistry) *Encoder {
 	e.enums = reg
 	return e
 }
@@ -279,7 +283,7 @@ func writeReflectField(buf *bytes.Buffer, code OpCode, rval any) error {
 	return err
 }
 
-func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer, enums EnumRegistry) error {
+func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer, enums *EnumRegistry) error {
 	var (
 		err error
 		sz  [4]byte
@@ -341,6 +345,9 @@ func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer
 		_, err = buf.Write(v.Int256().Bytes())
 
 	case OpCodeEnum:
+		if enums == nil {
+			return ErrEnumUndefined
+		}
 		enum, ok := enums.Lookup(field.name)
 		if !ok {
 			return ErrEnumUndefined

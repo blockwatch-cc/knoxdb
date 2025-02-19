@@ -84,7 +84,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	}
 
 	// update state in catalog (will commit with main tx)
-	if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
+	if err := t.state.Store(ctx, tx); err != nil {
 		return 0, err
 	}
 	state = nil

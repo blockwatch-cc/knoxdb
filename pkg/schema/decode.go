@@ -33,7 +33,7 @@ func (d *GenericDecoder[T]) Schema() *Schema {
 	return d.dec.schema
 }
 
-func (d *GenericDecoder[T]) WithEnums(reg EnumRegistry) *GenericDecoder[T] {
+func (d *GenericDecoder[T]) WithEnums(reg *EnumRegistry) *GenericDecoder[T] {
 	d.dec.WithEnums(reg)
 	return d
 }
@@ -87,9 +87,9 @@ func (d *GenericDecoder[T]) DecodeSlice(buf []byte, res []T) ([]T, error) {
 
 type Decoder struct {
 	schema  *Schema
-	enums   EnumRegistry
-	needsif bool
+	enums   *EnumRegistry
 	buf     *bytes.Buffer
+	needsif bool
 }
 
 func NewDecoder(s *Schema) *Decoder {
@@ -100,10 +100,14 @@ func NewDecoder(s *Schema) *Decoder {
 			break
 		}
 	}
+	enums := s.Enums()
+	if enums == nil {
+		enums = &GlobalRegistry
+	}
 	return &Decoder{
 		schema:  s,
 		needsif: needsif,
-		enums:   enumRegistry,
+		enums:   enums,
 		buf:     bytes.NewBuffer(make([]byte, 0, s.maxWireSize)),
 	}
 }
@@ -112,7 +116,7 @@ func (d *Decoder) Schema() *Schema {
 	return d.schema
 }
 
-func (d *Decoder) WithEnums(reg EnumRegistry) *Decoder {
+func (d *Decoder) WithEnums(reg *EnumRegistry) *Decoder {
 	d.enums = reg
 	return d
 }
@@ -372,7 +376,7 @@ func readReflectField(code OpCode, rval any, buf []byte) []byte {
 	return buf
 }
 
-func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums EnumRegistry) []byte {
+func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums *EnumRegistry) []byte {
 	switch code {
 
 	case OpCodeInt64, OpCodeUint64, OpCodeFloat64:
@@ -466,6 +470,9 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 		buf = buf[32:]
 
 	case OpCodeEnum:
+		if enums == nil {
+			panic(fmt.Errorf("nil enum registry when decoding enum %q", field.name))
+		}
 		u16 := LE.Uint16(buf)
 		buf = buf[2:]
 		enum, ok := enums.Lookup(field.name)

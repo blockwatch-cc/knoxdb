@@ -65,7 +65,7 @@ func (c Condition) Rename(name string) Condition {
 	return c
 }
 
-func ParseCondition(key, val string, s *schema.Schema, enums schema.EnumRegistry) (c Condition, err error) {
+func ParseCondition(key, val string, s *schema.Schema) (c Condition, err error) {
 	name, mode, ok := strings.Cut(key, ".")
 	if !ok {
 		mode = "eq"
@@ -81,7 +81,10 @@ func ParseCondition(key, val string, s *schema.Schema, enums schema.EnumRegistry
 		return
 	}
 	c.Name = field.Name()
-	enum, _ := enums.Lookup(c.Name)
+	var enum *schema.EnumDictionary
+	if s.HasEnums() {
+		enum, _ = s.Enums().Lookup(c.Name)
+	}
 	parser := schema.NewParser(field.Type(), field.Scale(), enum)
 	switch c.Mode {
 	case FilterModeRange:
@@ -142,7 +145,7 @@ func (c Condition) validate(isRoot bool) error {
 }
 
 // translate condition to filter operator
-func (c Condition) Compile(s *schema.Schema, enums schema.EnumRegistry) (*FilterTreeNode, error) {
+func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 	// validate condition field invariants
 	if err := c.Validate(); err != nil {
 		return nil, err
@@ -186,7 +189,10 @@ func (c Condition) Compile(s *schema.Schema, enums schema.EnumRegistry) (*Filter
 		// Cast types of condition values since we allow external use.
 		// The wire format code path is safe because data encoding follows
 		// schema field types.
-		enum, _ := enums.Lookup(c.Name)
+		var enum *schema.EnumDictionary
+		if s.HasEnums() {
+			enum, _ = s.Enums().Lookup(c.Name)
+		}
 		caster := schema.NewCaster(typ, enum)
 
 		// init matcher impl from value(s)
@@ -289,7 +295,7 @@ func (c Condition) Compile(s *schema.Schema, enums schema.EnumRegistry) (*Filter
 		Children: make([]*FilterTreeNode, 0),
 	}
 	for i := range c.Children {
-		cc, err := c.Children[i].Compile(s, enums)
+		cc, err := c.Children[i].Compile(s)
 		if err != nil {
 			return nil, err
 		}

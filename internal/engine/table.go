@@ -23,38 +23,29 @@ func RegisterTableFactory(n TableKind, fn TableFactory) {
 }
 
 func (e *Engine) TableNames() []string {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	names := make([]string, 0, len(e.tables))
-	for _, v := range e.tables {
+	names := make([]string, 0)
+	for _, v := range e.tables.Map() {
 		names = append(names, v.Schema().Name())
 	}
 	return names
 }
 
 func (e *Engine) NumTables() int {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return len(e.tables)
+	return len(e.tables.Map())
 }
 
 func (e *Engine) UseTable(name string) (TableEngine, error) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
 	if e.IsShutdown() {
 		return nil, ErrDatabaseShutdown
 	}
-	if t, ok := e.tables[types.TaggedHash(types.ObjectTagTable, name)]; ok {
+	if t, ok := e.tables.Get(types.TaggedHash(types.ObjectTagTable, name)); ok {
 		return t, nil
 	}
 	return nil, ErrNoTable
 }
 
-func (e *Engine) GetTable(hash uint64) (TableEngine, bool) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	t, ok := e.tables[hash]
-	return t, ok
+func (e *Engine) GetTable(tag uint64) (TableEngine, bool) {
+	return e.tables.Get(tag)
 }
 
 func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOptions) (TableEngine, error) {
@@ -65,26 +56,28 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 
 	// check name is unique
 	tag := s.TaggedHash(types.ObjectTagTable)
-	e.mu.RLock()
-	_, ok := e.tables[tag]
+	_, ok := e.tables.Get(tag)
 	if ok {
-		e.mu.RUnlock()
 		return nil, fmt.Errorf("%s: %v", s.Name(), ErrTableExists)
 	}
 
-	// check enums exist
+	// check enums exist and collect
+	enums := schema.NewEnumRegistry()
 	var err error
 	for _, n := range s.EnumFieldNames() {
-		_, ok = e.enums.Lookup(n)
+		enum, ok := e.enums.Lookup(n)
 		if !ok {
 			err = fmt.Errorf("missing enum %q", n)
 			break
 		}
+		enums.Register(enum)
 	}
-	e.mu.RUnlock()
 	if err != nil {
 		return nil, err
 	}
+
+	// connect schema enums
+	s.WithEnums(&enums)
 
 	// check engine and driver
 	factory, ok := tableEngineRegistry[opts.Engine]
@@ -97,6 +90,10 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 
 	// create table engine
 	table := factory()
+	var (
+		history TableEngine
+		htag    uint64
+	)
 
 	// ensure logger
 	if opts.Logger == nil {
@@ -130,11 +127,42 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	// register abort callbacks
 	tx.OnAbort(func(ctx context.Context) error {
 		// remove table file(s) on error
-		e.mu.Lock()
-		delete(e.tables, tag)
-		e.mu.Unlock()
-		return table.Drop(ctx)
+		e.tables.Del(tag)
+		err := table.Drop(ctx)
+		if err != nil {
+			return err
+		}
+		if history != nil {
+			e.tables.Del(htag)
+			return history.Drop(ctx)
+		}
+		return nil
 	})
+
+	// create history table if configured
+	if opts.EnableHistory {
+		hopts := TableOptions{
+			Engine: TableKindHistory,
+			Logger: opts.Logger,
+		}
+		factory, ok = tableEngineRegistry[hopts.Engine]
+		if !ok {
+			return nil, fmt.Errorf("%s: %v", hopts.Engine, ErrNoEngine)
+		}
+
+		// create history table engine
+		history = factory()
+
+		// create history table
+		err = history.Create(ctx, s, hopts)
+		if err != nil {
+			return nil, err
+		}
+
+		// register
+		htag = history.Schema().TaggedHash(types.ObjectTagTable)
+		e.tables.Put(htag, history)
+	}
 
 	// commit and update to catalog (may be noop when user controls tx)
 	if err := commit(); err != nil {
@@ -142,9 +170,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	}
 
 	// make available on engine API
-	e.mu.Lock()
-	e.tables[tag] = table
-	e.mu.Unlock()
+	e.tables.Put(tag, table)
 
 	return table, nil
 }
@@ -203,9 +229,7 @@ func (e *Engine) AlterTable(ctx context.Context, name string, schema *schema.Sch
 
 func (e *Engine) DropTable(ctx context.Context, name string) error {
 	tag := types.TaggedHash(types.ObjectTagTable, name)
-	e.mu.RLock()
-	t, ok := e.tables[tag]
-	e.mu.RUnlock()
+	t, ok := e.tables.Get(tag)
 	if !ok {
 		return ErrNoTable
 	}
@@ -243,9 +267,7 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 		if err := t.Close(ctx); err != nil {
 			e.log.Errorf("Close table: %v", err)
 		}
-		e.mu.Lock()
-		delete(e.tables, tag)
-		e.mu.Unlock()
+		e.tables.Del(tag)
 
 		// clear caches
 		for _, k := range e.cache.blocks.Keys() {
@@ -264,9 +286,7 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 
 func (e *Engine) TruncateTable(ctx context.Context, name string) error {
 	tag := types.TaggedHash(types.ObjectTagTable, name)
-	e.mu.RLock()
-	t, ok := e.tables[tag]
-	e.mu.RUnlock()
+	t, ok := e.tables.Get(tag)
 	if !ok {
 		return ErrNoTable
 	}
@@ -303,9 +323,7 @@ func (e *Engine) TruncateTable(ctx context.Context, name string) error {
 
 func (e *Engine) CompactTable(ctx context.Context, name string) error {
 	tag := types.TaggedHash(types.ObjectTagTable, name)
-	e.mu.RLock()
-	t, ok := e.tables[tag]
-	e.mu.RUnlock()
+	t, ok := e.tables.Get(tag)
 	if !ok {
 		return ErrNoTable
 	}
@@ -353,6 +371,9 @@ func (e *Engine) openTables(ctx context.Context) error {
 			return err
 		}
 
+		// lookup schema enums
+		s.WithEnums(e.CloneEnums(s.EnumFieldNames()...))
+
 		// get table factory
 		factory, ok := tableEngineRegistry[opts.Engine]
 		if !ok {
@@ -380,7 +401,7 @@ func (e *Engine) openTables(ctx context.Context) error {
 			return err
 		}
 
-		e.tables[key] = table
+		e.tables.Put(key, table)
 	}
 
 	return nil

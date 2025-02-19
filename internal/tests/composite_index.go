@@ -64,7 +64,7 @@ var CompositeIndexTestCases = []IndexTestCase{
 	},
 }
 
-func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, tableEngine engine.TableEngine) {
+func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table engine.TableEngine) {
 	t.Helper()
 	for _, c := range CompositeIndexTestCases {
 		t.Run(c.Name, func(t *testing.T) {
@@ -78,19 +78,10 @@ func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, 
 			var indexEngine F = new(T)
 			topts := NewTestTableOptions(t, driver, eng)
 
-			// create table
+			// create table and insert data
 			CreateEnum(t, e)
-			CreateTable(t, e, tableEngine, topts, allTypesSchema)
-
-			// insert data table
-			ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-			defer abort()
-			require.NoError(t, err)
-			require.NoError(t, tableEngine.Open(ctx, allTypesSchema, topts))
-			InsertData(t, ctx, tableEngine, allTypesSchema)
-
-			// commit
-			require.NoError(t, commit())
+			CreateTable(t, e, table, topts, allTypesSchema)
+			InsertData(t, e, table)
 
 			iopts := NewTestIndexOptions(t, driver, eng, types.IndexTypeComposite)
 			indexSchema, err := allTypesSchema.SelectFields("i32", "i64", "id")
@@ -100,8 +91,8 @@ func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, 
 				iopts.Logger = log.Log.SetLevel(log.LevelDebug)
 			}
 
-			c.Run(t, e, tableEngine, indexEngine, indexSchema, allTypesSchema, iopts, topts)
-			require.NoError(t, tableEngine.Close(ctx))
+			c.Run(t, e, table, indexEngine, indexSchema, allTypesSchema, iopts, topts)
+			require.NoError(t, table.Close(ctx))
 		})
 	}
 }
@@ -173,9 +164,7 @@ func SyncCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngi
 	require.NoError(t, ti.Sync(ctx))
 	require.NoError(t, commit())
 
-	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
-	FillIndex(t, ctx, ti, ts)
-	require.NoError(t, commit())
+	FillIndex(t, e, ti)
 
 	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
 	require.NoError(t, ti.Sync(ctx))
@@ -242,9 +231,7 @@ func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.Table
 
 func AddCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
-	FillIndex(t, ctx, ti, ts)
-	require.NoError(t, commit())
+	FillIndex(t, e, ti)
 
 	// need tx to query index
 	ctx, _, _, abort, err := e.WithTransaction(context.Background())
@@ -263,9 +250,7 @@ func AddCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngin
 
 func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
-	prev := FillIndex(t, ctx, ti, ts)
-	require.NoError(t, commit())
+	prev := FillIndex(t, e, ti)
 
 	// need tx to query index
 	ctx, _, _, abort, err := e.WithTransaction(context.Background())
@@ -284,7 +269,7 @@ func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEn
 	abort()
 
 	// delete last item stored
-	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
+	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
 	require.NoError(t, ti.Del(ctx, prev))
 	require.NoError(t, ti.Sync(ctx))
 	require.NoError(t, commit())
@@ -303,9 +288,7 @@ func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEn
 
 func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
-	FillIndex(t, ctx, ti, ts)
-	require.NoError(t, commit())
+	FillIndex(t, e, ti)
 
 	// need tx to query index
 	ctx, _, _, abort, err := e.WithTransaction(context.Background())

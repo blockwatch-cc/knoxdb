@@ -86,7 +86,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = opts
 	idx.table = t
-	idx.state = engine.NewObjectState()
+	idx.state = engine.NewObjectState([]byte(name))
 	idx.db = opts.DB
 	idx.key = append([]byte(name), engine.DataKeySuffix...)
 	idx.convert = schema.NewConverter(t.Schema(), s, BE).WithSkipLen()
@@ -134,7 +134,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	}
 
 	// init state storage
-	if err := idx.state.Store(ctx, tx, name); err != nil {
+	if err := idx.state.Store(ctx, tx); err != nil {
 		return err
 	}
 
@@ -155,7 +155,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.table = t
-	idx.state = engine.NewObjectState()
+	idx.state = engine.NewObjectState([]byte(name))
 	idx.db = opts.DB
 	idx.key = []byte(name)
 	idx.convert = schema.NewConverter(t.Schema(), s, BE).WithSkipLen()
@@ -212,7 +212,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	}
 
 	// load state
-	if err := idx.state.Load(ctx, tx, name); err != nil {
+	if err := idx.state.Load(ctx, tx); err != nil {
 		idx.log.Error("open state: %v", err)
 		tx.Rollback()
 		t.Close(ctx)
@@ -320,7 +320,7 @@ func (idx *Index) Truncate(ctx context.Context) error {
 	// reset state
 	nDel := idx.state.NRows
 	idx.state.Reset()
-	if err := idx.state.Store(ctx, tx, idx.schema.Name()); err != nil {
+	if err := idx.state.Store(ctx, tx); err != nil {
 		return err
 	}
 
@@ -397,7 +397,7 @@ func (idx *Index) Rebuild(ctx context.Context) error {
 	// update state
 	idx.state.Size = uint64(nWrite)
 	idx.state.NRows = uint64(nIns)
-	if err := idx.state.Store(ctx, tx, idx.schema.Name()); err != nil {
+	if err := idx.state.Store(ctx, tx); err != nil {
 		return err
 	}
 

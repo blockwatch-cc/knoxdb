@@ -36,7 +36,7 @@ type Field struct {
 }
 
 // ExportedField is a performance improved version of Field
-// containing exported fields for direct access in other packages
+// containing exported fields for direct access from external packages
 type ExportedField struct {
 	Name       string
 	Id         uint16
@@ -82,10 +82,6 @@ func (f *Field) Flags() types.FieldFlags {
 	return f.flags
 }
 
-func (f *Field) Is(v types.FieldFlags) bool {
-	return f.flags.Is(v)
-}
-
 func (f *Field) Can(v types.IfaceFlags) bool {
 	return f.iface.Is(v)
 }
@@ -112,6 +108,10 @@ func (f *Field) Fixed() uint16 {
 
 func (f *Field) IsValid() bool {
 	return len(f.name) > 0 && f.typ.IsValid()
+}
+
+func (f *Field) Is(v types.FieldFlags) bool {
+	return f.flags.Is(v)
 }
 
 func (f *Field) IsVisible() bool {

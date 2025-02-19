@@ -77,24 +77,22 @@ func (r *StreamResult) Close() {
 	r.r = nil
 }
 
-func NewStreamResult(enums schema.EnumRegistry, fn StreamCallback) *StreamResult {
+func NewStreamResult(fn StreamCallback) *StreamResult {
 	sr := &StreamResult{
-		r:  NewResult(nil, enums),
+		r:  NewResult(nil),
 		fn: fn,
 	}
 	return sr
 }
 
 type Result struct {
-	pkg   *pack.Package
-	enums schema.EnumRegistry
-	row   *Row // row cache
+	pkg *pack.Package
+	row *Row // row cache
 }
 
-func NewResult(pkg *pack.Package, enums schema.EnumRegistry) *Result {
+func NewResult(pkg *pack.Package) *Result {
 	return &Result{
-		pkg:   pkg,
-		enums: enums,
+		pkg: pkg,
 	}
 }
 
@@ -134,7 +132,6 @@ func (r *Result) Close() {
 	}
 	r.pkg = nil
 	r.row = nil
-	r.enums = nil
 }
 
 func (r *Result) Bytes() []byte {
@@ -194,10 +191,10 @@ func (r *Result) Column(name string) (any, error) {
 
 // Pack row
 type Row struct {
-	res    *Result
-	row    int
-	schema *schema.Schema
-	maps   []int
+	res    *Result        // result including query result schema
+	row    int            // row offset in result package
+	schema *schema.Schema // decode target struct schema (i.e. with Go interfaces)
+	maps   []int          // field mapping from result schema to struct schema
 }
 
 func (r *Row) Schema() *schema.Schema {
@@ -219,21 +216,21 @@ func (r *Row) Decode(val any) error {
 		return err
 	}
 	if r.schema == nil || r.schema != s {
-		maps, err := r.res.pkg.Schema().MapTo(s)
+		maps, err := r.res.Schema().MapTo(s)
 		if err != nil {
 			return err
 		}
 		r.maps = maps
-		r.schema = s
+		r.schema = s.WithEnums(r.res.Schema().Enums())
 	}
-	return r.res.pkg.ReadStruct(r.row, val, r.schema, r.res.enums, r.maps)
+	return r.res.pkg.ReadStruct(r.row, val, r.schema, r.maps)
 }
 
 func (r *Row) Field(name string) (any, error) {
 	if !r.res.IsValid() {
 		return nil, ErrResultClosed
 	}
-	f, ok := r.res.pkg.Schema().FieldByName(name)
+	f, ok := r.res.Schema().FieldByName(name)
 	if !ok {
 		return nil, schema.ErrInvalidField
 	}
@@ -244,7 +241,7 @@ func (r *Row) Index(i int) (any, error) {
 	if r.res.pkg == nil {
 		return nil, ErrResultClosed
 	}
-	f, ok := r.res.pkg.Schema().FieldById(uint16(i))
+	f, ok := r.res.Schema().FieldById(uint16(i))
 	if !ok {
 		return nil, schema.ErrInvalidField
 	}
@@ -333,11 +330,15 @@ func (r *Row) Time(col int) time.Time {
 }
 
 func (r *Row) Enum(col int) string {
-	f, ok := r.res.pkg.Schema().FieldByIndex(col)
+	f, ok := r.schema.FieldByIndex(col)
 	if !ok {
 		return ""
 	}
-	enum, ok := r.res.enums.Lookup(f.Name())
+	enums := r.schema.Enums()
+	if enums == nil {
+		return ""
+	}
+	enum, ok := enums.Lookup(f.Name())
 	if !ok {
 		return ""
 	}

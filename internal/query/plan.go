@@ -87,7 +87,7 @@ func (p *QueryPlan) Close() {
 	p.Filters = nil
 	p.Table = nil
 	p.Indexes = nil
-	p.ResultSchema = nil
+	p.RequestSchema = nil
 	p.ResultSchema = nil
 	p.Snap = nil
 }
@@ -241,7 +241,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 			//
 			// $xmax == 0 || $xmax >= snap.xmax
 			Or(Equal("$xmax", 0), Ge("$xmax", p.Snap.Xmax)),
-		).Compile(p.Table.Schema(), nil)
+		).Compile(p.Table.Schema())
 		if err != nil {
 			return p.Errorf("extend request filter: %v", err)
 		}

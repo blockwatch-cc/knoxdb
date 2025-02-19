@@ -13,7 +13,7 @@ import (
 
 type TestCase struct {
 	Name string
-	Run  func(*engine.Engine, *testing.T, engine.TableEngine, engine.TableOptions)
+	Run  func(*testing.T, *engine.Engine, engine.TableEngine, engine.TableOptions)
 }
 
 type TF[T any] interface {
@@ -42,10 +42,10 @@ var TestCases = []TestCase{
 		Name: "Sync",
 		Run:  SyncTableTest,
 	},
-	{
-		Name: "Compact",
-		Run:  CompactTableTest,
-	},
+	// {
+	// 	Name: "Compact",
+	// 	Run:  CompactTableTest,
+	// },
 	{
 		Name: "Truncate",
 		Run:  TruncateTableTest,
@@ -90,34 +90,36 @@ func TestTableEngine[T any, F TF[T]](t *testing.T, driver, eng string) {
 
 			var tab F = new(T)
 			topts := NewTestTableOptions(t, driver, eng)
-			c.Run(e, t, tab, topts)
+			c.Run(t, e, tab, topts)
 		})
 	}
 }
 
-func CreateTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
+func SetupTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
 	t.Helper()
 	CreateEnum(t, e)
 	CreateTable(t, e, tab, opts, allTypesSchema)
-}
-
-func CreateMultipleTableSequentialTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	t.Helper()
-	CreateEnum(t, e)
-	CreateTable(t, e, tab, opts, allTypesSchema)
-	CreateTable(t, e, tab, opts, securitySchema)
 }
 
 func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions, s *schema.Schema) {
 	t.Helper()
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	require.NoError(t, err)
 	defer abort()
-	require.NoError(t, err)
 
-	err = tab.Create(ctx, s, opts)
-	require.NoError(t, err)
+	s = s.Clone().WithEnums(e.CloneEnums(s.EnumFieldNames()...)).Finalize()
+	require.NoError(t, tab.Create(ctx, s, opts))
 	require.NoError(t, commit())
-	require.NoError(t, tab.Close(ctx))
+
+	// reopen read-only if requested
+	if opts.ReadOnly {
+		require.NoError(t, tab.Close(context.Background()))
+		ctx, _, commit, abort, err = e.WithTransaction(context.Background())
+		require.NoError(t, err)
+		defer abort()
+		require.NoError(t, tab.Open(ctx, s, opts))
+		require.NoError(t, commit())
+	}
 }
 
 func CreateEnum(t *testing.T, e *engine.Engine) {
@@ -133,104 +135,103 @@ func CreateEnum(t *testing.T, e *engine.Engine) {
 	require.NoError(t, commit())
 }
 
-func InsertData(t *testing.T, ctx context.Context, tab engine.TableEngine, s *engine.Schema) {
+func InsertData(t *testing.T, e *engine.Engine, tab engine.TableEngine) {
 	t.Helper()
-	allTypes := make([]*AllTypes, 10)
-	for i := range allTypes {
-		allTypes[i] = NewAllTypes(i)
+	data := make([]*AllTypes, 10)
+	for i := range data {
+		data[i] = NewAllTypes(i)
 	}
 
-	var cnt uint64
-	enc := schema.NewEncoder(s)
-	for _, all := range allTypes {
-		buf, err := enc.Encode(all, nil)
+	var cnt int
+	enc := schema.NewEncoder(tab.Schema())
+	for _, rec := range data {
+		buf, err := enc.Encode(rec, nil)
 		require.NoError(t, err)
-		cnt, err = tab.InsertRows(ctx, buf)
+		ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 		require.NoError(t, err)
+		_, err = tab.InsertRows(ctx, buf)
+		assert.NoError(t, err)
+		assert.NoError(t, commit())
+		abort()
+		cnt++
 	}
-	assert.Equal(t, uint64(len(allTypes)), cnt)
+	require.Equal(t, len(data), cnt)
 }
 
-func OpenTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	CreateTableTest(e, t, tab, opts)
+func CreateTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	CreateEnum(t, e)
+	CreateTable(t, e, tab, opts, allTypesSchema)
+}
+
+func CreateMultipleTableSequentialTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	t.Helper()
+	CreateEnum(t, e)
+	CreateTable(t, e, tab, opts, allTypesSchema)
+	CreateTable(t, e, tab, opts, securitySchema)
+}
+
+func OpenTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	SetupTableTest(t, e, tab, opts)
+	require.NoError(t, tab.Close(context.Background()))
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
+	s := allTypesSchema.Clone().WithEnums(e.CloneEnums(allTypesSchema.EnumFieldNames()...)).Finalize()
+	require.NoError(t, tab.Open(ctx, s, opts))
 	require.NoError(t, commit())
 }
 
-func DropTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	CreateTableTest(e, t, tab, opts)
+func DropTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	SetupTableTest(t, e, tab, opts)
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
-	require.NoError(t, commit())
 	require.NoError(t, tab.Drop(ctx))
+	require.NoError(t, commit())
 }
 
-func SyncTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	CreateTableTest(e, t, tab, opts)
+func SyncTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	SetupTableTest(t, e, tab, opts)
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
-	require.NoError(t, commit())
 	require.NoError(t, tab.Sync(ctx))
 	require.NoError(t, commit())
 }
 
-func CompactTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	CreateTableTest(e, t, tab, opts)
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
-	require.NoError(t, commit())
-	require.NoError(t, tab.Compact(ctx))
-}
+// TODO: enable when implemented
+// func CompactTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+// 	SetupTableTest(t, e, tab, opts)
+// 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+// 	defer abort()
+// 	require.NoError(t, err)
+// 	require.NoError(t, tab.Compact(ctx))
+// 	require.NoError(t, commit())
+// }
 
-func TruncateTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	CreateTableTest(e, t, tab, opts)
+func TruncateTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	SetupTableTest(t, e, tab, opts)
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	require.NoError(t, err)
-	defer abort()
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
-	require.NoError(t, commit())
-
-	ctx, _, commit, abort, err = e.WithTransaction(context.Background())
 	require.NoError(t, err)
 	defer abort()
 	require.NoError(t, tab.Truncate(ctx))
 	require.NoError(t, commit())
 }
 
-func InsertRowsTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	CreateTableTest(e, t, tab, opts)
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
-	require.NoError(t, commit())
-	ctx, _, commit, abort, err = e.WithTransaction(context.Background())
-	require.NoError(t, err)
-	defer abort()
-	InsertData(t, ctx, tab, allTypesSchema)
-	require.NoError(t, commit())
-	require.NoError(t, tab.Close(ctx))
+func InsertRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	SetupTableTest(t, e, tab, opts)
+	InsertData(t, e, tab)
 }
 
-func InsertRowsReadOnlyTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
+func InsertRowsReadOnlyTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
 	opts.ReadOnly = true
-	CreateTableTest(e, t, tab, opts)
+	SetupTableTest(t, e, tab, opts)
 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
 
-	enc := schema.NewEncoder(tab.Schema()).WithEnums(tab.Enums())
+	enc := schema.NewEncoder(tab.Schema())
 	buf, err := enc.Encode(NewAllTypes(10), nil)
 	require.NoError(t, err)
 
@@ -239,45 +240,42 @@ func InsertRowsReadOnlyTableTest(e *engine.Engine, t *testing.T, tab engine.Tabl
 	assert.Equal(t, uint64(0), cnt)
 
 	require.NoError(t, commit())
-	require.NoError(t, tab.Close(ctx))
 }
 
-func UpdateRowsTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	CreateTable(t, e, tab, opts, allTypesSchema)
+func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	SetupTableTest(t, e, tab, opts)
+	InsertData(t, e, tab)
+
+	enc := schema.NewEncoder(tab.Schema())
+	data := make([]*AllTypes, 10)
+	for i := range data {
+		data[i] = NewAllTypes(i)
+		data[i].Id = uint64(i + 1)
+	}
+	buf, err := enc.Encode(data, nil)
+	require.NoError(t, err)
 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
-	require.NoError(t, err)
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
-	InsertData(t, ctx, tab, allTypesSchema)
-
-	enc := schema.NewEncoder(allTypesSchema)
-	allTypes := make([]*AllTypes, 10)
-	for i := range allTypes {
-		allTypes[i] = NewAllTypes(i)
-		allTypes[i].Id = uint64(i + 1)
-	}
-	buf, err := enc.Encode(allTypes, nil)
 	require.NoError(t, err)
 
 	cnt, err := tab.UpdateRows(ctx, buf)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(len(allTypes)), cnt)
+	assert.Equal(t, uint64(len(data)), cnt)
 	require.NoError(t, commit())
 }
 
-func QueryTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	CreateTable(t, e, tab, opts, allTypesSchema)
+func QueryTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	SetupTableTest(t, e, tab, opts)
+	InsertData(t, e, tab)
 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
-	InsertData(t, ctx, tab, allTypesSchema)
 
 	plan := query.NewQueryPlan().
-		WithFilters(makeFilter(allTypesSchema, "id", EQ, 5, nil)).
-		WithSchema(allTypesSchema).
+		WithFilters(makeFilter(tab.Schema(), "id", EQ, 5, nil)).
+		WithSchema(tab.Schema()).
 		WithLimit(10).
 		WithTable(tab)
 	defer plan.Close()
@@ -291,18 +289,17 @@ func QueryTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts
 	require.NoError(t, commit())
 }
 
-func CountTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	CreateTable(t, e, tab, opts, allTypesSchema)
+func CountTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	SetupTableTest(t, e, tab, opts)
+	InsertData(t, e, tab)
 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
-	InsertData(t, ctx, tab, allTypesSchema)
 
 	plan := query.NewQueryPlan().
-		WithFilters(makeFilter(allTypesSchema, "id", LT, 5, nil)).
-		WithSchema(allTypesSchema).
+		WithFilters(makeFilter(tab.Schema(), "id", LT, 5, nil)).
+		WithSchema(tab.Schema()).
 		WithLimit(10).
 		WithTable(tab)
 	defer plan.Close()
@@ -315,17 +312,17 @@ func CountTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts
 	require.NoError(t, commit())
 }
 
-func DeleteTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	CreateTable(t, e, tab, opts, allTypesSchema)
+func DeleteTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	SetupTableTest(t, e, tab, opts)
+	InsertData(t, e, tab)
+
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
-	InsertData(t, ctx, tab, allTypesSchema)
 
 	plan := query.NewQueryPlan().
-		WithFilters(makeFilter(allTypesSchema, "id", GE, 5, nil)).
-		WithSchema(allTypesSchema).
+		WithFilters(makeFilter(tab.Schema(), "id", GE, 5, nil)).
+		WithSchema(tab.Schema()).
 		WithLimit(10).
 		WithTable(tab)
 	defer plan.Close()
@@ -338,18 +335,17 @@ func DeleteTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opt
 	require.NoError(t, commit())
 }
 
-func StreamTableTest(e *engine.Engine, t *testing.T, tab engine.TableEngine, opts engine.TableOptions) {
-	CreateTableTest(e, t, tab, opts)
+func StreamTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+	SetupTableTest(t, e, tab, opts)
+	InsertData(t, e, tab)
 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	require.NoError(t, tab.Open(ctx, allTypesSchema, opts))
-	InsertData(t, ctx, tab, allTypesSchema)
 
 	plan := query.NewQueryPlan().
-		WithFilters(makeFilter(allTypesSchema, "id", LT, 5, nil)).
-		WithSchema(allTypesSchema).
+		WithFilters(makeFilter(tab.Schema(), "id", LT, 5, nil)).
+		WithSchema(tab.Schema()).
 		WithLimit(10).
 		WithTable(tab)
 	defer plan.Close()

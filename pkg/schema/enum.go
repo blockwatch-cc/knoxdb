@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
 
 	"blockwatch.cc/knoxdb/internal/hash/fnv"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -19,46 +18,36 @@ const (
 	EnumMaxValues = 1 << 16  // 65536 (0 .. 0xFFFF)
 )
 
-type EnumRegistry map[uint64]*EnumDictionary
+type EnumRegistry struct {
+	*util.LockFreeMap[uint64, *EnumDictionary]
+}
 
 var (
-	enumRegistry     EnumRegistry = make(map[uint64]*EnumDictionary)
-	enumRegistryLock sync.RWMutex
-	GlobalRegistry   = enumRegistry
+	GlobalRegistry = NewEnumRegistry()
 )
 
 func RegisterEnum(tag uint64, e *EnumDictionary) {
-	enumRegistryLock.Lock()
-	defer enumRegistryLock.Unlock()
-	enumRegistry[e.Tag()+tag] = e
+	GlobalRegistry.Put(e.Tag()+tag, e)
 }
 
 func UnregisterEnum(tag uint64, e *EnumDictionary) {
-	enumRegistryLock.Lock()
-	defer enumRegistryLock.Unlock()
-	delete(enumRegistry, e.Tag()+tag)
+	GlobalRegistry.Del(e.Tag() + tag)
 }
 
 func LookupEnum(tag uint64, name string) (*EnumDictionary, bool) {
-	enumRegistryLock.RLock()
-	defer enumRegistryLock.RUnlock()
-	e, ok := enumRegistry[types.TaggedHash(types.ObjectTagEnum, name)+tag]
-	return e, ok
+	return GlobalRegistry.Get(types.TaggedHash(types.ObjectTagEnum, name) + tag)
 }
 
-func (r *EnumRegistry) Register(e *EnumDictionary) {
-	if *r == nil {
-		*r = make(map[uint64]*EnumDictionary)
-	}
-	(*r)[e.Tag()] = e
+func NewEnumRegistry() EnumRegistry {
+	return EnumRegistry{util.NewLockFreeMap[uint64, *EnumDictionary]()}
+}
+
+func (r EnumRegistry) Register(e *EnumDictionary) {
+	r.Put(e.Tag(), e)
 }
 
 func (r EnumRegistry) Lookup(name string) (*EnumDictionary, bool) {
-	if r == nil {
-		return nil, false
-	}
-	e, ok := r[types.TaggedHash(types.ObjectTagEnum, name)]
-	return e, ok
+	return r.Get(types.TaggedHash(types.ObjectTagEnum, name))
 }
 
 type EnumDictionary struct {

@@ -145,7 +145,7 @@ type TableOptions struct {
 	PageFill        float64    // boltdb
 	ReadOnly        bool       // read-only tx and no schema changes
 	TxMaxSize       int        // maximum write size of low-level dbfile transactions
-	TrackChanges    bool       // enable CDC
+	EnableHistory   bool       // enable history capture
 	NoSync          bool       // boltdb, no fsync on transactions (dangerous)
 	NoGrowSync      bool       // boltdb, skip fsync+alloc on grow
 	DB              store.DB   `knox:"-"` // shared low-level store implementation
@@ -162,7 +162,7 @@ func (o TableOptions) Merge(o2 TableOptions) TableOptions {
 	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
 	o.TxMaxSize = util.NonZero(o2.TxMaxSize, o.TxMaxSize)
 	o.ReadOnly = o2.ReadOnly
-	o.TrackChanges = o2.TrackChanges
+	o.EnableHistory = o2.EnableHistory
 	o.NoSync = o2.NoSync
 	o.NoGrowSync = o2.NoGrowSync
 	if o2.Logger != nil {

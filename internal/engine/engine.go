@@ -17,6 +17,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/cache"
 	"blockwatch.cc/knoxdb/pkg/cache/rclru"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 	"github.com/gofrs/flock"
 	"golang.org/x/sync/errgroup"
@@ -33,9 +34,9 @@ type Engine struct {
 	flock    *flock.Flock
 	cat      *Catalog
 	cache    CacheManager
-	tables   map[uint64]TableEngine
-	stores   map[uint64]StoreEngine
-	indexes  map[uint64]IndexEngine
+	tables   *util.LockFreeMap[uint64, TableEngine]
+	stores   *util.LockFreeMap[uint64, StoreEngine]
+	indexes  *util.LockFreeMap[uint64, IndexEngine]
 	enums    schema.EnumRegistry
 	txs      TxList
 	opts     DatabaseOptions
@@ -119,10 +120,10 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
 			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
 		},
-		tables:  make(map[uint64]TableEngine),
-		stores:  make(map[uint64]StoreEngine),
-		indexes: make(map[uint64]IndexEngine),
-		enums:   make(schema.EnumRegistry),
+		tables:  util.NewLockFreeMap[uint64, TableEngine](),
+		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:   schema.NewEnumRegistry(),
 		txs:     make(TxList, 0),
 		xmin:    0,
 		xnext:   0,
@@ -216,10 +217,11 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
 			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
 		},
-		tables:  make(map[uint64]TableEngine),
-		stores:  make(map[uint64]StoreEngine),
-		indexes: make(map[uint64]IndexEngine),
-		enums:   make(map[uint64]*schema.EnumDictionary),
+		// tables:  make(map[uint64]TableEngine),
+		tables:  util.NewLockFreeMap[uint64, TableEngine](),
+		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:   schema.NewEnumRegistry(),
 		txs:     make(TxList, 0),
 		xmin:    0,
 		xnext:   1,
@@ -375,7 +377,7 @@ func (e *Engine) Close(ctx context.Context) error {
 
 	// close all open indexes
 	e.log.Trace("Close indexes")
-	for n, idx := range e.indexes {
+	for _, idx := range e.indexes.Map() {
 		idx.Table().UnuseIndex(idx)
 		name := idx.Schema().Name()
 		if err := idx.Sync(ctx); err != nil {
@@ -384,12 +386,12 @@ func (e *Engine) Close(ctx context.Context) error {
 		if err := idx.Close(ctx); err != nil {
 			e.log.Errorf("Closing index %s: %v", name, err)
 		}
-		delete(e.indexes, n)
 	}
+	e.indexes.Clear()
 
 	// close all open tables (set checkpoints)
 	e.log.Trace("Close tables")
-	for n, t := range e.tables {
+	for _, t := range e.tables.Map() {
 		name := t.Schema().Name()
 		if err := t.Sync(ctx); err != nil {
 			e.log.Errorf("Syncing table %s: %v", name, err)
@@ -397,12 +399,13 @@ func (e *Engine) Close(ctx context.Context) error {
 		if err := t.Close(ctx); err != nil {
 			e.log.Errorf("Closing table %s: %v", name, err)
 		}
-		delete(e.tables, n)
+		// delete(e.tables, n)
 	}
+	e.tables.Clear()
 
 	// close all open stores (set checkpoints)
 	e.log.Trace("Close stores")
-	for n, s := range e.stores {
+	for _, s := range e.stores.Map() {
 		name := s.Schema().Name()
 		if err := s.Sync(ctx); err != nil {
 			e.log.Errorf("Syncing store %s: %v", name, err)
@@ -410,15 +413,15 @@ func (e *Engine) Close(ctx context.Context) error {
 		if err := s.Close(ctx); err != nil {
 			e.log.Errorf("Closing store %s: %v", name, err)
 		}
-		delete(e.stores, n)
 	}
+	e.stores.Clear()
 
 	// close enums
 	e.log.Trace("Close enums")
-	for _, enum := range e.enums {
+	for _, enum := range e.enums.Map() {
 		schema.UnregisterEnum(e.dbId, enum)
 	}
-	clear(e.enums)
+	e.enums.Clear()
 
 	// close catalog (set checkpoint)
 	if e.cat != nil {
@@ -507,41 +510,42 @@ func (e *Engine) ForceShutdown() error {
 
 	// close enums
 	e.log.Trace("Close enums")
-	for _, enum := range e.enums {
+	for _, enum := range e.enums.Map() {
 		schema.UnregisterEnum(e.dbId, enum)
 	}
-	clear(e.enums)
+	e.enums.Clear()
 
 	ctx := context.Background()
 
 	// close engine storage backend files without journal flush and checkpointing
 	e.log.Trace("Close indexes")
-	for n, idx := range e.indexes {
+	for _, idx := range e.indexes.Map() {
 		idx.Table().UnuseIndex(idx)
 		name := idx.Schema().Name()
 		if err := idx.Close(ctx); err != nil {
 			e.log.Errorf("Closing index %s: %v", name, err)
 		}
-		delete(e.indexes, n)
 	}
+	e.indexes.Clear()
 
 	// close all open tables (without checkpoints)
 	e.log.Trace("Close tables")
-	for n, t := range e.tables {
+	for _, t := range e.tables.Map() {
 		if err := t.Close(ctx); err != nil {
 			e.log.Errorf("Closing table %s: %v", t.Schema().Name(), err)
 		}
-		delete(e.tables, n)
+		// delete(e.tables, n)
 	}
+	e.tables.Clear()
 
 	// close all open stores (without checkpoints)
 	e.log.Trace("Close stores")
-	for n, s := range e.stores {
+	for _, s := range e.stores.Map() {
 		if err := s.Close(ctx); err != nil {
 			e.log.Errorf("Closing store %s: %v", s.Schema().Name(), err)
 		}
-		delete(e.stores, n)
 	}
+	e.stores.Clear()
 
 	// release directory lock
 	if e.flock != nil {
@@ -560,11 +564,9 @@ func (e *Engine) Sync(ctx context.Context) error {
 	errg.SetLimit(runtime.NumCPU())
 
 	// sync tables
-	// e.mu.RLock()
-	for _, t := range e.tables {
+	for _, t := range e.tables.Map() {
 		errg.Go(func() error { return t.Sync(ctx) })
 	}
-	// e.mu.RUnlock()
 
 	// sync stores (unsupported)
 	// for _, s := range e.stores {
@@ -579,12 +581,10 @@ func (e *Engine) CommitTx(ctx context.Context, oid, xid uint64) error {
 		t  TxTracker
 		ok bool
 	)
-	e.mu.RLock()
-	t, ok = e.tables[oid]
+	t, ok = e.tables.Get(oid)
 	if !ok {
-		t, ok = e.stores[oid]
+		t, ok = e.stores.Get(oid)
 	}
-	e.mu.RUnlock()
 	if !ok {
 		return nil
 	}
@@ -596,12 +596,10 @@ func (e *Engine) AbortTx(ctx context.Context, oid, xid uint64) error {
 		t  TxTracker
 		ok bool
 	)
-	e.mu.RLock()
-	t, ok = e.tables[oid]
+	t, ok = e.tables.Get(oid)
 	if !ok {
-		t, ok = e.stores[oid]
+		t, ok = e.stores.Get(oid)
 	}
-	e.mu.RUnlock()
 	if !ok {
 		return nil
 	}

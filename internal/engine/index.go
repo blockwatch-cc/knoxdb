@@ -23,10 +23,8 @@ func RegisterIndexFactory(n IndexKind, fn IndexFactory) {
 }
 
 func (e *Engine) IndexNames(tableName string) []string {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
 	tag := types.TaggedHash(types.ObjectTagTable, tableName)
-	table, ok := e.tables[tag]
+	table, ok := e.tables.Get(tag)
 	if !ok {
 		return nil
 	}
@@ -39,16 +37,12 @@ func (e *Engine) IndexNames(tableName string) []string {
 }
 
 func (e *Engine) NumIndexes() int {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return len(e.indexes)
+	return len(e.indexes.Map())
 }
 
 func (e *Engine) NumTableIndexes(tableName string) int {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
 	tag := types.TaggedHash(types.ObjectTagTable, tableName)
-	table, ok := e.tables[tag]
+	table, ok := e.tables.Get(tag)
 	if !ok {
 		return 0
 	}
@@ -56,19 +50,14 @@ func (e *Engine) NumTableIndexes(tableName string) int {
 }
 
 func (e *Engine) UseIndex(name string) (IndexEngine, error) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if idx, ok := e.indexes[types.TaggedHash(types.ObjectTagIndex, name)]; ok {
+	if idx, ok := e.indexes.Get(types.TaggedHash(types.ObjectTagIndex, name)); ok {
 		return idx, nil
 	}
 	return nil, ErrNoIndex
 }
 
-func (e *Engine) GetIndex(key uint64) (IndexEngine, bool) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	index, ok := e.indexes[key]
-	return index, ok
+func (e *Engine) GetIndex(tag uint64) (IndexEngine, bool) {
+	return e.indexes.Get(tag)
 }
 
 func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Schema, opts IndexOptions) (IndexEngine, error) {
@@ -76,9 +65,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	tableTag := types.TaggedHash(types.ObjectTagTable, tableName)
 
 	// lookup
-	e.mu.RLock()
-	table, ok := e.tables[tableTag]
-	e.mu.RUnlock()
+	table, ok := e.tables.Get(tableTag)
 	if !ok {
 		return nil, fmt.Errorf("%s: %v", tableName, ErrNoTable)
 	}
@@ -99,9 +86,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 
 	// lookup index
 	tag := types.TaggedHash(types.ObjectTagIndex, s.Name())
-	e.mu.RLock()
-	_, ok = e.indexes[tag]
-	e.mu.RUnlock()
+	_, ok = e.indexes.Get(tag)
 	if ok {
 		return nil, fmt.Errorf("%s: %v", s.Name(), ErrIndexExists)
 	}
@@ -143,9 +128,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 		table.UseIndex(index)
 
 		// register
-		e.mu.Lock()
-		e.indexes[tag] = index
-		e.mu.Unlock()
+		e.indexes.Put(tag, index)
 
 		// TODO: update table schema (set indexed flag) and store in catalog
 
@@ -218,12 +201,12 @@ func (e *Engine) RebuildIndex(ctx context.Context, name string) error {
 func (e *Engine) DropIndex(ctx context.Context, name string) error {
 	// lookup index
 	tag := types.TaggedHash(types.ObjectTagIndex, name)
-	e.mu.RLock()
-	index, ok := e.indexes[tag]
-	e.mu.RUnlock()
+	index, ok := e.indexes.Get(tag)
 	if !ok {
 		return ErrNoIndex
 	}
+
+	// TODO: stop index build if running
 
 	// start transaction and amend context
 	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
@@ -258,9 +241,7 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 
 		// TODO: update table schema (remove indexed flag) and store in catalog
 
-		e.mu.Lock()
-		delete(e.indexes, tag)
-		e.mu.Unlock()
+		e.indexes.Del(tag)
 
 		// clear caches
 		for _, k := range e.cache.blocks.Keys() {
@@ -303,7 +284,7 @@ func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
 		}
 		table.UseIndex(idx)
 		itag := types.TaggedHash(types.ObjectTagIndex, s.Name())
-		e.indexes[itag] = idx
+		e.indexes.Put(itag, idx)
 		e.log.Debugf("Loaded index %s", s.Name())
 	}
 

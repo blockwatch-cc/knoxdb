@@ -112,7 +112,7 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 // Reads package column data at row into custom struct dst. Target schema must be
 // compatible to package schema (types must match), but may contain less fields.
 // Maps defines the mapping of dst fields to source package columns.
-func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, enums schema.EnumRegistry, maps []int) error {
+func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []int) error {
 	rval := reflect.Indirect(reflect.ValueOf(dst))
 	assert.Always(rval.IsValid() && rval.Kind() == reflect.Struct, "invalid value",
 		"kind", rval.Kind().String(),
@@ -122,6 +122,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, enums s
 	assert.Always(maps != nil, "nil target mapping")
 
 	var err error
+	enums := dstSchema.Enums()
 	base := rval.Addr().UnsafePointer()
 	for i, field := range dstSchema.Exported() {
 		// identify source field
@@ -163,7 +164,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, enums s
 			*(*int16)(fptr) = b.Int16().Get(row)
 
 		case types.FieldTypeUint16:
-			if field.IsEnum {
+			if field.IsEnum && enums != nil {
 				enum, ok := enums.Lookup(field.Name)
 				if !ok {
 					return fmt.Errorf("%s: missing enum dictionary", field.Name)
@@ -352,7 +353,7 @@ func (p *Package) ReadCol(col int) any {
 
 // ForEach walks a pack decoding each row into type T. If T is invalid (not
 // a struct type) or incompatible with the packs schema an error is returned.
-func ForEach[T any](pkg *Package, enums schema.EnumRegistry, fn func(i int, v *T) error) error {
+func ForEach[T any](pkg *Package, fn func(i int, v *T) error) error {
 	var t T
 	dst, err := schema.SchemaOf(t)
 	if err != nil {
@@ -366,7 +367,7 @@ func ForEach[T any](pkg *Package, enums schema.EnumRegistry, fn func(i int, v *T
 		return err
 	}
 	for i := 0; i < pkg.nRows; i++ {
-		if err := pkg.ReadStruct(i, &t, dst, enums, maps); err != nil {
+		if err := pkg.ReadStruct(i, &t, dst, maps); err != nil {
 			return err
 		}
 		if err := fn(i, &t); err != nil {

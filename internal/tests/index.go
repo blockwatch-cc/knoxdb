@@ -72,7 +72,7 @@ var IndexTestCases = []IndexTestCase{
 	},
 }
 
-func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, tableEngine engine.TableEngine, ityps []types.IndexType) {
+func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table engine.TableEngine, ityps []types.IndexType) {
 	t.Helper()
 	for _, c := range IndexTestCases {
 		for _, indexType := range ityps {
@@ -89,19 +89,10 @@ func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, tableEngi
 				var indexEngine F = new(T)
 				topts := NewTestTableOptions(t, driver, eng)
 
-				// create table
+				// create table and insert data
 				CreateEnum(t, e)
-				CreateTable(t, e, tableEngine, topts, allTypesSchema)
-
-				// insert data table
-				ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-				defer abort()
-				require.NoError(t, err)
-				require.NoError(t, tableEngine.Open(ctx, allTypesSchema, topts))
-				InsertData(t, ctx, tableEngine, allTypesSchema)
-
-				// commit
-				require.NoError(t, commit())
+				CreateTable(t, e, table, topts, allTypesSchema)
+				InsertData(t, e, table)
 
 				iopts := NewTestIndexOptions(t, driver, eng, indexType)
 				indexSchema, err := allTypesSchema.SelectFields("u64", "id")
@@ -111,9 +102,8 @@ func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, tableEngi
 					iopts.Logger = log.Log.SetLevel(log.LevelDebug)
 				}
 
-				c.Run(t, e, tableEngine, indexEngine, indexSchema, allTypesSchema, iopts, topts)
-
-				require.NoError(t, tableEngine.Close(ctx))
+				c.Run(t, e, table, indexEngine, indexSchema, allTypesSchema, iopts, topts)
+				require.NoError(t, table.Close(ctx))
 			})
 		}
 	}
@@ -131,9 +121,10 @@ func CreateIndex(t *testing.T, idxEngine engine.IndexEngine, tab engine.TableEng
 	tab.UseIndex(idxEngine)
 }
 
-func FillIndex(t *testing.T, ctx context.Context, ti engine.IndexEngine, ts *schema.Schema) []byte {
+func FillIndex(t *testing.T, e *engine.Engine, ti engine.IndexEngine) []byte {
 	t.Helper()
-	enc := schema.NewEncoder(ts)
+	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
+	enc := schema.NewEncoder(ti.Table().Schema())
 	var last []byte
 	for i := range 6 {
 		allType := NewAllTypes(i)
@@ -143,6 +134,7 @@ func FillIndex(t *testing.T, ctx context.Context, ti engine.IndexEngine, ts *sch
 		require.NoError(t, ti.Add(ctx, nil, buf))
 		last = buf
 	}
+	require.NoError(t, commit())
 	require.NoError(t, ti.Sync(ctx))
 	return last
 }
@@ -207,11 +199,9 @@ func DropIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti en
 
 func TruncateIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
-	FillIndex(t, ctx, ti, ts)
-	require.NoError(t, commit())
+	FillIndex(t, e, ti)
 
-	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
+	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
 	require.NoError(t, ti.Truncate(ctx))
 	require.NoError(t, commit())
 }
@@ -229,9 +219,7 @@ func SyncIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti en
 	require.NoError(t, ti.Sync(ctx))
 	require.NoError(t, commit())
 
-	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
-	FillIndex(t, ctx, ti, ts)
-	require.NoError(t, commit())
+	FillIndex(t, e, ti)
 
 	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
 	require.NoError(t, ti.Sync(ctx))
@@ -293,10 +281,7 @@ func CanMatchIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, t
 
 func AddIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
-	FillIndex(t, ctx, ti, ts)
-	require.NoError(t, commit())
+	FillIndex(t, e, ti)
 
 	// need tx to query index
 	ctx, _, _, abort, err := e.WithTransaction(context.Background())
@@ -320,9 +305,7 @@ func AddIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti eng
 
 func DeleteIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
-	prev := FillIndex(t, ctx, ti, ts)
-	require.NoError(t, commit())
+	prev := FillIndex(t, e, ti)
 
 	// need tx to query index
 	ctx, _, _, abort, err := e.WithTransaction(context.Background())
@@ -342,7 +325,7 @@ func DeleteIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti 
 	abort()
 
 	// delete last item and store
-	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
+	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
 	require.NoError(t, ti.Del(ctx, prev))
 	require.NoError(t, ti.Sync(ctx))
 	require.NoError(t, commit())
@@ -367,9 +350,7 @@ func DeleteIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti 
 
 func QueryIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
-	FillIndex(t, ctx, ti, ts)
-	require.NoError(t, commit())
+	FillIndex(t, e, ti)
 
 	ctx, _, _, abort, err := e.WithTransaction(context.Background())
 	defer abort()

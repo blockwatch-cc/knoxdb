@@ -41,7 +41,7 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 		return nil, err
 	}
 
-	res := NewResult(plan.ResultSchema, t.Enums(), int(plan.Limit))
+	res := NewResult(plan.ResultSchema, int(plan.Limit))
 
 	err = t.doQuery(ctx, plan, res)
 	if err != nil {
@@ -61,7 +61,7 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 		return err
 	}
 
-	res := NewStreamResult(plan.ResultSchema, t.Enums(), fn)
+	res := NewStreamResult(plan.ResultSchema, fn)
 
 	err := t.doQuery(ctx, plan, res)
 	if err != nil && err != engine.EndStream {
@@ -333,7 +333,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 }
 
 func (t *Table) Lookup(ctx context.Context, pks []uint64) (engine.QueryResult, error) {
-	res := NewResult(t.schema, t.Enums(), len(pks))
+	res := NewResult(t.schema, len(pks))
 	err := t.doLookup(ctx, pks, res)
 	if err != nil {
 		return nil, err
@@ -342,7 +342,7 @@ func (t *Table) Lookup(ctx context.Context, pks []uint64) (engine.QueryResult, e
 }
 
 func (t *Table) StreamLookup(ctx context.Context, pks []uint64, fn func(engine.QueryRow) error) error {
-	res := NewStreamResult(t.schema, t.Enums(), fn)
+	res := NewStreamResult(t.schema, fn)
 	err := t.doLookup(ctx, pks, res)
 	if err != nil && err != engine.EndStream {
 		return err

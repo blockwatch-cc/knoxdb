@@ -22,9 +22,10 @@ type (
 type TableKind string
 
 const (
-	TableKindPack = "pack"
-	TableKindLSM  = "lsm"
-	TableKindCDC  = "cdc"
+	TableKindPack    = "pack"
+	TableKindLSM     = "lsm"
+	TableKindCDC     = "cdc"
+	TableKindHistory = "history"
 )
 
 type TableFactory func() TableEngine
@@ -35,7 +36,6 @@ type TableEngine interface {
 	Open(Context, *Schema, TableOptions) error
 	Close(Context) error
 	Schema() *Schema
-	Enums() schema.EnumRegistry
 	State() ObjectState
 	Metrics() TableMetrics
 	Drop(Context) error

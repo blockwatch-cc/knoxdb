@@ -11,67 +11,52 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-func (e *Engine) Enums(names ...string) schema.EnumRegistry {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	clone := make(schema.EnumRegistry)
+func (e *Engine) CloneEnums(names ...string) *schema.EnumRegistry {
 	if len(names) == 0 {
-		for n, v := range e.enums {
-			clone[n] = v
-		}
-	} else {
-		for _, n := range names {
-			dict, ok := e.enums.Lookup(n)
-			if ok {
-				clone.Register(dict)
-			}
+		return nil
+	}
+	clone := schema.NewEnumRegistry()
+	for _, n := range names {
+		dict, ok := e.enums.Lookup(n)
+		if ok {
+			clone.Register(dict)
 		}
 	}
-	return clone
+	return &clone
 }
 
 func (e *Engine) EnumNames() []string {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	names := make([]string, 0, len(e.enums))
-	for _, v := range e.enums {
+	names := make([]string, 0)
+	for _, v := range e.enums.Map() {
 		names = append(names, v.Name())
 	}
 	return names
 }
 
 func (e *Engine) NumEnums() int {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return len(e.enums)
+	return len(e.enums.Map())
 }
 
 func (e *Engine) UseEnum(name string) (*schema.EnumDictionary, error) {
 	if e.IsShutdown() {
 		return nil, ErrDatabaseShutdown
 	}
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	enum, ok := e.enums[types.TaggedHash(types.ObjectTagEnum, name)]
+	enum, ok := e.enums.Get(types.TaggedHash(types.ObjectTagEnum, name))
 	if !ok {
 		return nil, ErrNoEnum
 	}
 	return enum, nil
 }
 
-func (e *Engine) GetEnum(hash uint64) (*schema.EnumDictionary, bool) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	enum, ok := e.enums[hash]
+func (e *Engine) GetEnum(tag uint64) (*schema.EnumDictionary, bool) {
+	enum, ok := e.enums.Get(tag)
 	return enum, ok
 }
 
 func (e *Engine) CreateEnum(ctx context.Context, name string) (*schema.EnumDictionary, error) {
 	// check name is unique
 	tag := types.TaggedHash(types.ObjectTagEnum, name)
-	e.mu.RLock()
-	_, ok := e.enums[tag]
-	e.mu.RUnlock()
+	_, ok := e.enums.Get(tag)
 	if ok {
 		return nil, ErrEnumExists
 	}
@@ -88,9 +73,7 @@ func (e *Engine) CreateEnum(ctx context.Context, name string) (*schema.EnumDicti
 
 	// register commit callback
 	tx.OnAbort(func(ctx context.Context) error {
-		e.mu.Lock()
-		delete(e.enums, tag)
-		e.mu.Unlock()
+		e.enums.Del(tag)
 		return nil
 	})
 
@@ -105,31 +88,24 @@ func (e *Engine) CreateEnum(ctx context.Context, name string) (*schema.EnumDicti
 	}
 
 	// make visible
-	e.mu.Lock()
-	e.enums[tag] = enum
-	e.mu.Unlock()
+	e.enums.Put(tag, enum)
 
 	return enum, nil
 }
 
 func (e *Engine) DropEnum(ctx context.Context, name string) error {
 	tag := types.TaggedHash(types.ObjectTagEnum, name)
-	e.mu.RLock()
-	enum, ok := e.enums[tag]
+	enum, ok := e.enums.Get(tag)
 	if !ok {
-		e.mu.RUnlock()
 		return ErrNoEnum
 	}
 
 	// check enum is unused
-	for _, t := range e.tables {
+	for _, t := range e.tables.Map() {
 		if slices.Contains(t.Schema().EnumFieldNames(), enum.Name()) {
-			e.mu.RUnlock()
 			return ErrEnumInUse
 		}
 	}
-
-	e.mu.RUnlock()
 
 	// open transaction
 	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
@@ -146,9 +122,7 @@ func (e *Engine) DropEnum(ctx context.Context, name string) error {
 
 	// register commit callback
 	tx.OnCommit(func(ctx context.Context) error {
-		e.mu.Lock()
-		delete(e.enums, tag)
-		e.mu.Unlock()
+		e.enums.Del(tag)
 		return nil
 	})
 
@@ -163,9 +137,7 @@ func (e *Engine) DropEnum(ctx context.Context, name string) error {
 
 func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...string) error {
 	tag := types.TaggedHash(types.ObjectTagEnum, name)
-	e.mu.RLock()
-	enum, ok := e.enums[tag]
-	e.mu.RUnlock()
+	enum, ok := e.enums.Get(tag)
 	if !ok {
 		return ErrNoEnum
 	}
@@ -193,9 +165,7 @@ func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...string) er
 
 	// register abort callback
 	tx.OnAbort(func(ctx context.Context) error {
-		e.mu.Lock()
-		e.enums[tag] = clone
-		e.mu.Unlock()
+		e.enums.Put(tag, clone)
 		return nil
 	})
 
@@ -221,7 +191,7 @@ func (e *Engine) openEnums(ctx context.Context) error {
 			return err
 		}
 		e.log.Debugf("Loaded enum %s [0x%016x] [0x%016x]", enum.Name(), key, enum.Tag())
-		e.enums[key] = enum
+		e.enums.Put(key, enum)
 	}
 
 	return nil

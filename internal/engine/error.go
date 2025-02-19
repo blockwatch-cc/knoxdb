@@ -39,6 +39,7 @@ var (
 	ErrInvalidId         = errors.New("invalid object id")
 	ErrTableDropWithRefs = errors.New("table is referenced")
 	ErrTableReadOnly     = errors.New("table is read-only")
+	ErrTableNotEmpty     = errors.New("table is not empty")
 	ErrRecordNotFound    = errors.New("record not found")
 
 	EndStream = errors.New("end stream")

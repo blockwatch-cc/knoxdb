@@ -62,7 +62,7 @@ func NewTable() engine.TableEngine {
 func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableOptions) error {
 	e := engine.GetTransaction(ctx).Engine()
 
-	// init names
+	// init
 	name := s.Name()
 	typ := s.TypeLabel(e.Namespace())
 
@@ -71,7 +71,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.schema = s
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.opts = DefaultTableOptions.Merge(opts)
-	t.state = engine.NewObjectState()
+	t.state = engine.NewObjectState([]byte(name))
 	t.metrics = engine.NewTableMetrics(name)
 	t.db = opts.DB
 	t.noClose = true
@@ -115,7 +115,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	}
 
 	// init state storage
-	if err := t.state.Store(ctx, tx, name); err != nil {
+	if err := t.state.Store(ctx, tx); err != nil {
 		return err
 	}
 
@@ -191,7 +191,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.metrics.TotalSize = int64(stats.Size) // estimate only
 
 	// load state
-	if err := t.state.Load(ctx, tx, t.schema.Name()); err != nil {
+	if err := t.state.Load(ctx, tx); err != nil {
 		t.log.Error("missing table state: %v", err)
 		tx.Rollback()
 		t.Close(ctx)
@@ -221,10 +221,6 @@ func (t *Table) Close(ctx context.Context) (err error) {
 
 func (t *Table) Schema() *schema.Schema {
 	return t.schema
-}
-
-func (t *Table) Enums() schema.EnumRegistry {
-	return t.engine.Enums(t.schema.EnumFieldNames()...)
 }
 
 func (t *Table) State() engine.ObjectState {
@@ -311,7 +307,7 @@ func (t *Table) Truncate(ctx context.Context) error {
 		}
 	}
 	t.state.Reset()
-	if err := t.state.Store(ctx, tx, t.schema.Name()); err != nil {
+	if err := t.state.Store(ctx, tx); err != nil {
 		return err
 	}
 	t.metrics.DeletedTuples += int64(t.state.NRows)

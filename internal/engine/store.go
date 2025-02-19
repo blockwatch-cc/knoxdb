@@ -25,46 +25,35 @@ func RegisterStoreFactory(n StoreKind, fn StoreFactory) {
 }
 
 func (e *Engine) StoreNames() []string {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	names := make([]string, 0, len(e.stores))
-	for _, v := range e.stores {
+	names := make([]string, 0)
+	for _, v := range e.stores.Map() {
 		names = append(names, v.Schema().Name())
 	}
 	return names
 }
 
 func (e *Engine) NumStores() int {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return len(e.stores)
+	return len(e.stores.Map())
 }
 
 func (e *Engine) UseStore(name string) (StoreEngine, error) {
 	if e.IsShutdown() {
 		return nil, ErrDatabaseShutdown
 	}
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if s, ok := e.stores[types.TaggedHash(types.ObjectTagStore, name)]; ok {
+	if s, ok := e.stores.Get(types.TaggedHash(types.ObjectTagStore, name)); ok {
 		return s, nil
 	}
 	return nil, ErrNoStore
 }
 
-func (e *Engine) GetStore(hash uint64) (StoreEngine, bool) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	store, ok := e.stores[hash]
-	return store, ok
+func (e *Engine) GetStore(tag uint64) (StoreEngine, bool) {
+	return e.stores.Get(tag)
 }
 
 func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOptions) (StoreEngine, error) {
 	// check name is unique
 	tag := s.TaggedHash(types.ObjectTagStore)
-	e.mu.RLock()
-	_, ok := e.stores[tag]
-	e.mu.RUnlock()
+	_, ok := e.stores.Get(tag)
 	if ok {
 		return nil, fmt.Errorf("%s: %v", s.Name(), ErrStoreExists)
 	}
@@ -107,9 +96,7 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 	// register commit/abort callbacks
 	tx.OnAbort(func(ctx context.Context) error {
 		// remove store file(s) on error
-		e.mu.Lock()
-		delete(e.stores, tag)
-		e.mu.Unlock()
+		e.stores.Del(tag)
 		return kvstore.Drop(ctx)
 	})
 
@@ -124,18 +111,14 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 	}
 
 	// make available on engine API
-	e.mu.Lock()
-	e.stores[tag] = kvstore
-	e.mu.Unlock()
+	e.stores.Put(tag, kvstore)
 
 	return kvstore, nil
 }
 
 func (e *Engine) DropStore(ctx context.Context, name string) error {
 	tag := types.TaggedHash(types.ObjectTagStore, name)
-	e.mu.RLock()
-	s, ok := e.stores[tag]
-	e.mu.RUnlock()
+	s, ok := e.stores.Get(tag)
 	if !ok {
 		return ErrNoStore
 	}
@@ -161,9 +144,7 @@ func (e *Engine) DropStore(ctx context.Context, name string) error {
 		if err := s.Close(ctx); err != nil {
 			e.log.Errorf("Close store: %v", err)
 		}
-		e.mu.Lock()
-		delete(e.stores, tag)
-		e.mu.Unlock()
+		e.stores.Del(tag)
 		return nil
 	})
 
@@ -211,7 +192,7 @@ func (e *Engine) openStores(ctx context.Context) error {
 			return err
 		}
 
-		e.stores[key] = kvstore
+		e.stores.Put(key, kvstore)
 	}
 
 	return nil

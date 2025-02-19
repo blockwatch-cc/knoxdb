@@ -271,7 +271,7 @@ func (r *Row) Decode(val any) error {
 	}
 	if r.conv == nil || r.conv.Schema() != s {
 		r.conv = schema.NewConverter(r.res.schema, s, binary.NativeEndian)
-		r.dec = schema.NewDecoder(s)
+		r.dec = schema.NewDecoder(s.WithEnums(r.res.schema.Enums()))
 	}
 
 	return r.dec.Decode(r.conv.Extract(r.Bytes()), val)

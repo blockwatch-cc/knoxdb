@@ -15,6 +15,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
+// Deprecated: remove key meaning when journal/tomb data is stored separately
 const (
 	// reserved package keys
 	JournalKeyId   uint32 = 0xFFFFFFFF
@@ -41,6 +42,7 @@ type Package struct {
 	schema  *schema.Schema // mapping from fields to blocks in query order
 	blocks  []*block.Block // loaded blocks (in schema order)
 	analyze *Analysis      // statistics for encoding and metadata
+	// selected []uint32       // selection vector used in operator pipelines
 }
 
 func New() *Package {
