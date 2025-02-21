@@ -4,7 +4,6 @@
 package alp
 
 import (
-	"fmt"
 	"math"
 	"math/bits"
 	"sort"
@@ -309,7 +308,6 @@ func (e Encoder[T]) compress(inputVector []T, state *State[T]) {
 	if len(state.BestKCombinations) > 1 { // Only if more than 1 found top combinations we sample and search
 		e.findBestExponentFactorFromCombinations(inputVector, state) // ?
 	} else {
-		fmt.Println(state.BestKCombinations)
 		state.EncodingIndice = state.BestKCombinations[0].encodingIndice
 	}
 
