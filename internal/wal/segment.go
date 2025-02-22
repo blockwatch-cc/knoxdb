@@ -40,7 +40,7 @@ func (w *Wal) segmentName(id int) string {
 func (w *Wal) createSegment(id int) (*segment, error) {
 	name := w.segmentName(id)
 	w.log.Debugf("wal: create segment %s", name)
-	fd, err := os.OpenFile(name, createFlags, SEG_FILE_MODE)
+	fd, err := OpenFile(name, createFlags, SEG_FILE_MODE)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,11 @@ func (w *Wal) openSegment(id int, active bool) (*segment, error) {
 		flags = writeFlags
 	}
 	w.log.Debugf("wal: open segment %s active=%t", name, active)
-	fd, err := os.OpenFile(name, flags, SEG_FILE_MODE)
+	fd, err := OpenFile(name, flags, SEG_FILE_MODE)
+	if err != nil {
+		return nil, err
+	}
+	err = fd.Sync()
 	if err != nil {
 		return nil, err
 	}

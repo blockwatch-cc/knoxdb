@@ -4,7 +4,6 @@
 package wal
 
 import (
-	"bufio"
 	"fmt"
 	"hash"
 	"io"
@@ -12,8 +11,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/internal/types"
 )
-
-const BufferSize = 1 << 19 // 512k
 
 type WalReader interface {
 	Seek(LSN) error
@@ -68,7 +65,7 @@ type Reader struct {
 	wal    *Wal
 	flt    *RecordFilter
 	seg    *segment
-	rd     *bufio.Reader
+	rd     *BufioReader
 	hash   hash.Hash64
 	csum   uint64
 	xid    uint64
@@ -86,7 +83,7 @@ func (w *Wal) NewReader() WalReader {
 	defer w.mu.RUnlock()
 	return &Reader{
 		wal:    w,
-		rd:     bufio.NewReaderSize(nil, BufferSize),
+		rd:     NewBufioReaderSize(nil, WAL_BUFFER_SIZE),
 		hash:   xxhash.New(),
 		csum:   w.opts.Seed,
 		maxSz:  w.opts.MaxSegmentSize,

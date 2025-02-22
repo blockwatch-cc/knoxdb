@@ -4,7 +4,6 @@
 package wal
 
 import (
-	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -29,6 +28,7 @@ var LE = binary.LittleEndian
 const (
 	WAL_DIR_MODE          = 0755
 	WAL_MAX_SYNC_REQUESTS = 128
+	WAL_BUFFER_SIZE       = 1 << 19 // 512k
 )
 
 type RecoveryMode byte
@@ -108,7 +108,7 @@ type Wal struct {
 	wg     sync.WaitGroup
 	opts   WalOptions
 	active *segment
-	wr     *bufio.Writer
+	wr     *BufioWriter
 	req    chan *util.Future
 	close  chan struct{}
 	csum   uint64
@@ -131,7 +131,7 @@ func Create(opts WalOptions) (*Wal, error) {
 
 	wal := &Wal{
 		opts:  opts,
-		wr:    bufio.NewWriterSize(nil, BufferSize),
+		wr:    NewBufioWriterSize(nil, WAL_BUFFER_SIZE),
 		hash:  xxhash.New(),
 		csum:  opts.Seed,
 		req:   make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
@@ -196,7 +196,7 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 
 	wal := &Wal{
 		opts:  opts,
-		wr:    bufio.NewWriterSize(nil, BufferSize),
+		wr:    NewBufioWriterSize(nil, WAL_BUFFER_SIZE),
 		hash:  xxhash.New(),
 		req:   make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
 		close: make(chan struct{}),
@@ -407,7 +407,7 @@ func (w *Wal) write(rec *Record) (LSN, error) {
 
 // must hold exclusive lock
 func (w *Wal) writeBuffer(buf []byte) (int, error) {
-	space := w.active.Cap() - (BufferSize - w.wr.Available())
+	space := w.active.Cap() - (WAL_BUFFER_SIZE - w.wr.Available())
 	if space >= len(buf) {
 		return w.wr.Write(buf)
 	}
