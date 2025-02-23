@@ -320,9 +320,9 @@ func (e Encoder[T]) compress(inputVector []T, state *State[T]) {
 		state.EncodedIntegers = append(state.EncodedIntegers, encodeValue)
 		//! We detect exceptions using a predicated comparison
 		if isException := decodeValue != actualValue; isException {
-			state.ExceptionPositions = append(state.ExceptionPositions, i)
 			exceptionsIdx++
 		}
+		state.ExceptionPositions = append(state.ExceptionPositions, i)
 	}
 
 	// Finding first non exception value

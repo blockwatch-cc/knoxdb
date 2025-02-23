@@ -22,6 +22,30 @@ const (
 	RD_EXCEPTION_SIZE_BYTES          = RD_EXCEPTION_SIZE / 8
 )
 
+var (
+	FACT_ARR = []int64{
+		1,
+		10,
+		100,
+		1000,
+		10000,
+		100000,
+		1000000,
+		10000000,
+		100000000,
+		1000000000,
+		10000000000,
+		100000000000,
+		1000000000000,
+		10000000000000,
+		100000000000000,
+		1000000000000000,
+		10000000000000000,
+		100000000000000000,
+		1000000000000000000,
+	}
+)
+
 type Constant[T constraints.Float] struct {
 	RD_SIZE_THRESHOLD_LIMIT       uint64
 	MAGIC_NUMER                   uint64
@@ -38,7 +62,6 @@ type Constant[T constraints.Float] struct {
 	EXPONENTIAL_BITS_MASK         uint64
 	FRAC_ARR                      []T
 	EXP_ARR                       []T
-	FACT_ARR                      []T
 }
 
 func newConstant[T constraints.Float]() (Constant[T], error) {
@@ -87,9 +110,6 @@ func newConstant[T constraints.Float]() (Constant[T], error) {
 				100000000.0,
 				1000000000.0,
 				10000000000.0},
-			FACT_ARR: []T{
-				1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000,
-			},
 		}, nil
 	case float64:
 		return Constant[T]{
@@ -158,26 +178,6 @@ func newConstant[T constraints.Float]() (Constant[T], error) {
 				10000000000000000000000.0,
 				100000000000000000000000.0,
 			},
-			FACT_ARR: []T{
-				1,
-				10,
-				100,
-				1000,
-				10000,
-				100000,
-				1000000,
-				10000000,
-				100000000,
-				1000000000,
-				10000000000,
-				100000000000,
-				1000000000000,
-				10000000000000,
-				100000000000000,
-				1000000000000000,
-				10000000000000000,
-				100000000000000000,
-				1000000000000000000},
 		}, nil
 	default:
 		return Constant[T]{}, fmt.Errorf("%T is not supported", v)

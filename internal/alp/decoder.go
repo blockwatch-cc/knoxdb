@@ -3,7 +3,9 @@
 
 package alp
 
-import "golang.org/x/exp/constraints"
+import (
+	"golang.org/x/exp/constraints"
+)
 
 // Scalar decoding of an ALP vector
 func Decompress[T constraints.Float](enc *Encoder[T]) ([]T, error) {
@@ -30,7 +32,7 @@ func Decompress[T constraints.Float](enc *Encoder[T]) ([]T, error) {
 	}
 
 	// patching exceptions
-	for k := range exceptionPositions {
+	for k := 0; k < int(enc.State.ExceptionsCount); k++ {
 		out[exceptionPositions[k]] = T(exceptions[k])
 	}
 
@@ -39,5 +41,5 @@ func Decompress[T constraints.Float](enc *Encoder[T]) ([]T, error) {
 
 // Scalar decoding a single value with ALP
 func decodeValue[T constraints.Float](v int64, e EncodingIndice, c Constant[T]) T {
-	return T(v) * c.FACT_ARR[e.factor] * c.FRAC_ARR[e.exponent]
+	return T(v) * T(FACT_ARR[e.factor]) * c.FRAC_ARR[e.exponent]
 }
