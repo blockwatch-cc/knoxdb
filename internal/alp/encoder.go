@@ -105,7 +105,7 @@ func (e Encoder[T]) encodeValue(value T, encodingIndice EncodingIndice) int64 {
 	if e.IsImpossibleToEncode(tmpEncodedValue) {
 		return ENCODING_UPPER_LIMIT
 	}
-	tmpVal := uint64(tmpEncodedValue) + e.Constant.MAGIC_NUMER - e.Constant.MAGIC_NUMER
+	tmpVal := tmpEncodedValue + e.Constant.MAGIC_NUMER - e.Constant.MAGIC_NUMER
 	return int64(tmpVal)
 }
 
@@ -184,7 +184,7 @@ func (e Encoder[T]) findTopKCombinations(sampledVector []T, state *State[T]) {
 	}
 
 	//! We start our optimization with the worst possible total bits obtained from compression
-	bestTotalBits := (nSamples * (int(e.ExactTypeBitSize) + int(e.Constant.EXCEPTION_POSITION_SIZE*8))) + (nSamples * int(e.ExactTypeBitSize))
+	bestTotalBits := (nSamples * (int(e.ExactTypeBitSize) + int(EXCEPTION_POSITION_SIZE*8))) + (nSamples * int(e.ExactTypeBitSize))
 
 	// N of appearances is irrelevant at this phase; we search for the best compression for the vector
 	bestCombination := Combination{
@@ -261,7 +261,7 @@ func (e Encoder[T]) compressToEstimateSize(inputVector []T, encodingIndice Encod
 	delta := uint64(maxEncodedValue) - uint64(minEncodedValue)
 	estimatedBitsPerValue = uint32(math.Ceil(math.Log2(float64(delta + 1))))
 	estimatedCompressionSize += uint64(nValues) * uint64(estimatedBitsPerValue)
-	estimatedCompressionSize += uint64(exceptionsCount) * (uint64(e.ExactTypeBitSize) + (e.Constant.EXCEPTION_POSITION_SIZE * 8))
+	estimatedCompressionSize += uint64(exceptionsCount) * (uint64(e.ExactTypeBitSize) + (EXCEPTION_POSITION_SIZE * 8))
 	return estimatedCompressionSize
 }
 
@@ -273,7 +273,7 @@ func (e Encoder[T]) findBestExponentFactorFromCombinations(inputVector []T, stat
 	//! We sample equidistant values within a vector; to do this we skip a fixed number of values
 	sample := make([]T, 0)
 	nValue := len(inputVector)
-	idxIncrements := max(1, (nValue / int(e.Constant.SAMPLES_PER_VECTOR))) //?
+	idxIncrements := max(1, (nValue / int(SAMPLES_PER_VECTOR))) //?
 
 	for i := 0; i < nValue; i += int(idxIncrements) {
 		sample = append(sample, inputVector[i])
@@ -291,7 +291,7 @@ func (e Encoder[T]) findBestExponentFactorFromCombinations(inputVector []T, stat
 		if estimateCompressionSize >= bestTotalBits {
 			worseTotalBitsCounter += 1
 			// Early exit strategy
-			if worseTotalBitsCounter == e.Constant.SAMPLING_EARLY_EXIT_THRESHOLD {
+			if worseTotalBitsCounter == SAMPLING_EARLY_EXIT_THRESHOLD {
 				break
 			}
 			continue
@@ -345,6 +345,7 @@ func (e Encoder[T]) compress(inputVector []T, state *State[T]) {
 
 	// Analyze FFOR
 	bitWidth, minVal := e.analyzeFFOR(state.EncodedIntegers)
+	state.FOR = uint64(minVal)
 
 	// Subtract FOR
 	for i, v := range state.EncodedIntegers {

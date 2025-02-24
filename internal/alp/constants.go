@@ -47,21 +47,18 @@ var (
 )
 
 type Constant[T constraints.Float] struct {
-	RD_SIZE_THRESHOLD_LIMIT       uint64
-	MAGIC_NUMER                   uint64
-	EXCEPTION_SIZE                uint64
-	EXCEPTION_SIZE_BYTES          uint64
-	SAMPLES_PER_VECTOR            uint64
-	SAMPLING_EARLY_EXIT_THRESHOLD uint64
-	EXCEPTION_POSITION_SIZE       uint64
-	MAX_EXPONENT                  uint8
-	NEGATIVE_ZERO                 uint64
-	POSITIVE_INF                  uint64
-	NEGATIVE_INF                  uint64
-	SIGN_BIT_MASK                 uint64
-	EXPONENTIAL_BITS_MASK         uint64
-	FRAC_ARR                      []T
-	EXP_ARR                       []T
+	RD_SIZE_THRESHOLD_LIMIT uint64
+	MAGIC_NUMER             T
+	EXCEPTION_SIZE          uint64
+	EXCEPTION_SIZE_BYTES    uint64
+	MAX_EXPONENT            uint8
+	NEGATIVE_ZERO           uint64
+	POSITIVE_INF            uint64
+	NEGATIVE_INF            uint64
+	SIGN_BIT_MASK           uint64
+	EXPONENTIAL_BITS_MASK   uint64
+	FRAC_ARR                []T
+	EXP_ARR                 []T
 }
 
 func newConstant[T constraints.Float]() (Constant[T], error) {
