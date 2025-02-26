@@ -1,7 +1,21 @@
-// Copyright (c) 2018-2021 Blockwatch Data Inc.
+// Copyright (c) 2018-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package dedup
+
+import "golang.org/x/exp/constraints"
+
+func PackBits[T constraints.Unsigned](buf []byte, vals []T, log2 int) {
+	for i, v := range vals {
+		pack(buf, i, int(v), log2)
+	}
+}
+
+func UnpackBits[T constraints.Unsigned](buf []byte, vals []T, log2 int) {
+	for i := range vals {
+		vals[i] = T(unpack(buf, i, log2))
+	}
+}
 
 // log2up returns the log2 of the number that is the next highest power of 2.
 func log2up(v int) int {
