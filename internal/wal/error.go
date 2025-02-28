@@ -23,4 +23,6 @@ var (
 	ErrSegmentReadOnly   = errors.New("wal segment read-only")
 	ErrSegmentAppendOnly = errors.New("wal seek on append-only segment")
 	ErrSegmentOverflow   = errors.New("wal segment overflow")
+	ErrSegmentNotFound   = errors.New("wal segment not found")
+	ErrSegmentTooShort   = errors.New("wal segment too short")
 )

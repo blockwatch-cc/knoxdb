@@ -106,7 +106,6 @@ func TestReaderSeek(t *testing.T) {
 		rec, err := reader.Next()
 		require.NoError(t, err)
 		t.Logf("Read record: %+v", rec)
-		rec.Lsn = 0
 		assert.Equal(t, records[i+1], rec)
 	}
 
@@ -208,7 +207,6 @@ func TestReaderNext(t *testing.T) {
 	for i, expected := range records {
 		rec, err := reader.Next()
 		require.NoError(t, err)
-		rec.Lsn = 0
 		assert.Equal(t, expected, rec, "Record %d mismatch", i)
 	}
 

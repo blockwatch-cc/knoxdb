@@ -122,6 +122,7 @@ func Create(opts WalOptions) (*Wal, error) {
 	if !opts.IsValid() {
 		return nil, ErrInvalidWalOption
 	}
+	opts.Logger.Debugf("wal: creating files at %s", opts.Path)
 
 	// create directory
 	err := os.MkdirAll(opts.Path, WAL_DIR_MODE)
@@ -185,6 +186,7 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	if !opts.IsValid() {
 		return nil, ErrInvalidWalOption
 	}
+	opts.Logger.Debugf("wal: open files at %s", opts.Path)
 
 	// guess possible max lsn based on segment names
 	// used for only validating checksum
@@ -303,15 +305,10 @@ func (w *Wal) Len() int64 {
 	return int64(w.lsn)
 }
 
-func (w *Wal) Write(rec *Record) (LSN, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.write(rec)
-}
-
 func (w *Wal) Sync() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	// w.log.Debugf("wal: sync")
 	return w.sync()
 }
 
@@ -326,6 +323,17 @@ func (w *Wal) Schedule() *util.Future {
 	return fut
 }
 
+func (w *Wal) Write(rec *Record) (LSN, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	lsn, err := w.write(rec)
+	if err == nil {
+		rec.Lsn = lsn
+		// w.log.Debugf("wal: write %s", rec)
+	}
+	return lsn, err
+}
+
 func (w *Wal) WriteAndSync(rec *Record) (LSN, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -333,8 +341,9 @@ func (w *Wal) WriteAndSync(rec *Record) (LSN, error) {
 	if err != nil {
 		return 0, err
 	}
-	err = w.sync()
-	return lsn, err
+	rec.Lsn = lsn
+	// w.log.Debugf("wal: write_and_sync %s", rec)
+	return lsn, w.sync()
 }
 
 func (w *Wal) WriteAndSchedule(rec *Record) (LSN, *util.Future, error) {
@@ -344,6 +353,8 @@ func (w *Wal) WriteAndSchedule(rec *Record) (LSN, *util.Future, error) {
 	if err != nil {
 		return 0, nil, err
 	}
+	rec.Lsn = lsn
+	// w.log.Debugf("wal: write_and_schedule %s", rec)
 	return lsn, w.Schedule(), nil
 }
 

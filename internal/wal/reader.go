@@ -202,8 +202,18 @@ func (r *Reader) Seek(lsn LSN) error {
 		return nil
 	}
 
+	// check lsn is within segment size
+	if int64(r.seg.sz) <= lsn.Offset(r.maxSz) {
+		return ErrSegmentTooShort
+	}
+
 	// seek to lsn offset
+	// r.wal.log.Debugf("wal: seek lsn 0x%016x offs=%d", lsn, lsn.Offset(r.maxSz))
 	if _, err := r.seg.Seek(lsn.Offset(r.maxSz), 0); err != nil {
+		if err == io.EOF {
+			return fmt.Errorf("wal: invalid seek to LSN 0x%016x offs=%d/%d",
+				lsn, lsn.Offset(r.maxSz), r.seg.sz)
+		}
 		return err
 	}
 
@@ -306,8 +316,14 @@ func (r *Reader) read(buf []byte) error {
 			if err != io.EOF {
 				return err
 			}
-			// close the current segment
+
+			// return EOF at end of wal
 			sid := r.seg.Id()
+			if !r.wal.hasSegment(sid + 1) {
+				return io.EOF
+			}
+
+			// close the current segment
 			r.rd.Reset(nil)
 			r.seg.Close()
 			r.seg = nil

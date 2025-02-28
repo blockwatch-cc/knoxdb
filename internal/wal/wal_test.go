@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
+	"github.com/echa/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -22,11 +23,15 @@ import (
 
 func createWalOptions(t testing.TB) WalOptions {
 	t.Helper()
+	if testing.Verbose() {
+		log.Log.SetLevel(log.LevelDebug)
+	}
 	return WalOptions{
 		Path:           t.TempDir(),
 		SyncDelay:      time.Second,
 		MaxSegmentSize: 100 << 20, // 100MB
 		RecoveryMode:   RecoveryModeTruncate,
+		Logger:         log.Log,
 	}
 }
 
@@ -320,6 +325,7 @@ func TestWalEmptyRecords(t *testing.T) {
 	readRec, err := reader.Next()
 	require.NoError(t, err, "Failed to read first record")
 	assert.Equal(t, emptyRec, readRec, "Expected data in read record")
+	require.NoError(t, reader.Close())
 
 	// Write a checkpoint record with no data
 	checkpointRec := &Record{
@@ -345,13 +351,12 @@ func TestWalEmptyRecords(t *testing.T) {
 	require.NoError(t, w.Sync())
 
 	// Seek to the checkpoint record
-	err = reader.Seek(lsn)
-	require.NoError(t, err, "Failed to seek to checkpoint record")
+	reader = w.NewReader()
+	require.NoError(t, reader.Seek(lsn), "Failed to seek to checkpoint record")
 
 	// Read the next data record back
 	readRec, err = reader.Next()
 	require.NoError(t, err, "Failed to read data record")
-	readRec.Lsn = 0
 	assert.Equal(t, dataRec, readRec, "Data record mismatch")
 }
 
@@ -665,7 +670,6 @@ func TestWalRecovery(t *testing.T) {
 		for i, expected := range records {
 			rec, err := reader.Next()
 			require.NoError(t, err)
-			rec.Lsn = 0
 			assert.Equal(t, expected, rec, "Record %d mismatch after recovery", i)
 		}
 
@@ -826,7 +830,6 @@ func TestWalCrashRecovery(t *testing.T) {
 	for i, expected := range records {
 		rec, err := reader.Next()
 		require.NoError(t, err)
-		rec.Lsn = 0
 		assert.Equal(t, expected, rec, "Record %d mismatch after recovery", i)
 	}
 

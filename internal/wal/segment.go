@@ -5,7 +5,6 @@ package wal
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 )
@@ -68,7 +67,9 @@ func (w *Wal) createSegment(id int) (*segment, error) {
 func (w *Wal) openSegment(id int, active bool) (*segment, error) {
 	// check before we attempt opening a file
 	if !w.hasSegment(id) {
-		return nil, io.EOF
+		// w.log.Debugf("wal: missing segment id %d", id)
+		// w.log.Debug(string(debug.Stack()))
+		return nil, ErrSegmentNotFound
 	}
 
 	// we expect the segment file to exists
