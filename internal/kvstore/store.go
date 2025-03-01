@@ -60,12 +60,11 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	// setup store
 	kv.engine = e
 	kv.schema = s
-	kv.state = engine.NewObjectState([]byte(name))
+	kv.state = engine.NewObjectState(name)
 	kv.storeId = s.TaggedHash(types.ObjectTagStore)
 	kv.opts = DefaultOptions.Merge(opts)
 	kv.key = []byte(name)
 	kv.metrics = engine.NewStoreMetrics(name)
-	kv.db = opts.DB
 	kv.noClose = true
 	kv.log = opts.Logger
 
@@ -129,7 +128,6 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	kv.opts = DefaultOptions.Merge(opts)
 	kv.key = []byte(name)
 	kv.metrics = engine.NewStoreMetrics(name)
-	kv.db = opts.DB
 	kv.noClose = true
 	kv.log = opts.Logger
 

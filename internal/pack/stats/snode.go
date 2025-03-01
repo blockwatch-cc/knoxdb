@@ -9,7 +9,9 @@ import (
 	"sort"
 	"sync/atomic"
 
+	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
@@ -76,7 +78,15 @@ func (n SNode) MinKey() uint32 {
 
 func (n SNode) MaxKey() uint32 {
 	if l := n.spack.Len(); l > 0 {
-		return n.spack.Uint32(STATS_ROW_KEY, n.spack.Len()-1)
+		return n.spack.Uint32(STATS_ROW_KEY, l-1)
+	} else {
+		return 0
+	}
+}
+
+func (n SNode) LastNValues() int {
+	if l := n.spack.Len(); l > 0 {
+		return int(n.spack.Int64(STATS_ROW_NVALS, l-1))
 	} else {
 		return 0
 	}
@@ -212,7 +222,7 @@ func (n *SNode) PrepareWrite(ctx context.Context, b store.Bucket) (*SNode, error
 	}
 
 	// load missing blocks
-	_, err := clone.spack.Load(ctx, b, false, 0, nil, 0)
+	_, err := clone.spack.LoadFromDisk(ctx, b, nil, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -293,18 +303,35 @@ func (n *SNode) Query(it *Iterator) error {
 	return it.idx.db.View(func(tx store.Tx) error {
 		// check blocks are loaded, load missing spack blocks during query
 		if len(loadBlocks) > 0 {
-			n, err := n.spack.Load(
-				it.ctx,
-				it.idx.statsBucket(tx),      // tablename_stats
-				it.idx.use.Is(FeatUseCache), // use cache
-				it.idx.schema.Hash(),        // unique cache key
-				loadBlocks,                  // required/missing field indexes
-				0,                           // read block/pack length from storage
+			var (
+				loadedBlocks int
+				cache        block.BlockCachePartition
 			)
-			if err != nil {
-				return err
+
+			// use cache with a private partition key
+			if it.idx.use.Is(FeatUseCache) {
+				cache = engine.GetEngine(it.ctx).BlockCache(it.idx.schema.Hash())
+				loadedBlocks = n.spack.LoadFromCache(cache, loadBlocks)
 			}
-			atomic.AddInt64(&it.idx.bytesRead, int64(n))
+
+			// load remaining blocks from disk
+			if len(loadBlocks) != loadedBlocks {
+				nBytes, err := n.spack.LoadFromDisk(
+					it.ctx,
+					it.idx.statsBucket(tx), // tablename_stats
+					loadBlocks,             // required/missing field indexes
+					0,                      // read block/pack length from storage
+				)
+				if err != nil {
+					return err
+				}
+				atomic.AddInt64(&it.idx.bytesRead, int64(nBytes))
+
+				// add blocks to cache
+				if it.idx.use.Is(FeatUseCache) {
+					n.spack.AddToCache(cache)
+				}
+			}
 		}
 
 		// init filter buckets if required
@@ -329,7 +356,7 @@ func (n *SNode) Query(it *Iterator) error {
 
 			// match minmax ranges
 			m, it.vmatch = matchVector(it.flt, n.spack, buckets, it.vmatch)
-			if it.vmatch.Count() == 0 {
+			if it.vmatch.None() {
 				it.match = it.match[:0]
 				return nil
 			}

@@ -51,7 +51,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 
 	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
-		return 0, engine.ErrNoBucket
+		return 0, store.ErrNoBucket
 	}
 
 	// handle cases

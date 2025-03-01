@@ -157,6 +157,7 @@ func run() (err error) {
 	return nil
 }
 
+//nolint:all
 func getTableOrIndexSchema(db knox.Database, name string) *schema.Schema {
 	t, err := db.UseTable(name)
 	if err == nil {
@@ -174,6 +175,7 @@ type ContentViewer interface {
 	Schema() *schema.Schema
 }
 
+//nolint:all
 func getTableOrIndexPackView(db knox.Database, name string) ContentViewer {
 	t, err := db.UseTable(name)
 	if err == nil {
@@ -190,6 +192,7 @@ type StatsViewer interface {
 	Schema() *schema.Schema
 }
 
+//nolint:all
 func getTableOrIndexStatsView(db knox.Database, name string) StatsViewer {
 	t, err := db.UseTable(name)
 	if err == nil {
@@ -226,9 +229,9 @@ func separateTarget(s string) TableDescriptor {
 	}
 	switch {
 	case extra == "journal":
-		desc.PackId = int(pack.JournalKeyId)
+		desc.PackId = -1
 	case extra == "tomb":
-		desc.PackId = int(pack.TombstoneKeyId)
+		desc.PackId = -2
 	default:
 		if n, err := strconv.ParseInt(extra, 0, 64); err == nil {
 			desc.PackId = int(n)
@@ -383,7 +386,7 @@ func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) 
 
 	// handle journal separate (add deleted column)
 	var res []any
-	if id == int(pack.JournalKeyId) {
+	if id == -1 {
 		pkg := view.ViewPackage(ctx, id)
 		tomb := view.ViewTomb()
 		pki := s.PkIndex()

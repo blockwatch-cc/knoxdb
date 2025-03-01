@@ -9,7 +9,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,29 +69,22 @@ func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, 
 		t.Run(c.Name, func(t *testing.T) {
 			t.Helper()
 			ctx := context.Background()
-			dopts := NewTestDatabaseOptions(t, driver)
-
-			e := NewTestEngine(t, dopts)
+			e := NewTestEngine(t, NewTestDatabaseOptions(t, driver))
 			defer e.Close(ctx)
-
-			var indexEngine F = new(T)
-			topts := NewTestTableOptions(t, driver, eng)
 
 			// create table and insert data
 			CreateEnum(t, e)
+			topts := NewTestTableOptions(t, driver, eng)
 			CreateTable(t, e, table, topts, allTypesSchema)
+			defer table.Close(ctx)
 			InsertData(t, e, table)
 
 			iopts := NewTestIndexOptions(t, driver, eng, types.IndexTypeComposite)
 			indexSchema, err := allTypesSchema.SelectFields("i32", "i64", "id")
 			require.NoError(t, err)
 
-			if testing.Verbose() {
-				iopts.Logger = log.Log.SetLevel(log.LevelDebug)
-			}
-
+			var indexEngine F = new(T)
 			c.Run(t, e, table, indexEngine, indexSchema, allTypesSchema, iopts, topts)
-			require.NoError(t, table.Close(ctx))
 		})
 	}
 }

@@ -16,12 +16,12 @@ var (
 	ErrNoIndex    = errors.New("index does not exist")
 	ErrNoEnum     = errors.New("enum does not exist")
 	ErrNoColumn   = errors.New("column does not exist")
-	ErrNoBucket   = errors.New("bucket does not exist")
-	ErrNoPk       = errors.New("primary key not defined")
-	ErrNoKey      = errors.New("key not found")
-	ErrNoField    = errors.New("field does not exist")
-	ErrNoTx       = errors.New("missing transaction")
-	ErrNilValue   = errors.New("nil value passed")
+	// ErrNoBucket   = errors.New("bucket does not exist")
+	ErrNoPk     = errors.New("primary key not defined")
+	ErrNoKey    = errors.New("key not found")
+	ErrNoField  = errors.New("field does not exist")
+	ErrNoTx     = errors.New("missing transaction")
+	ErrNilValue = errors.New("nil value passed")
 
 	ErrDatabaseExists   = errors.New("database already exists")
 	ErrDatabaseReadOnly = errors.New("database is read-only")
@@ -41,8 +41,6 @@ var (
 	ErrTableReadOnly     = errors.New("table is read-only")
 	ErrTableNotEmpty     = errors.New("table is not empty")
 	ErrRecordNotFound    = errors.New("record not found")
-
-	EndStream = errors.New("end stream")
 
 	ErrTxConflict     = errors.New("transaction conflict")
 	ErrTxReadonly     = errors.New("transaction is read-only")

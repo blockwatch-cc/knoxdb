@@ -7,9 +7,6 @@ import "blockwatch.cc/knoxdb/internal/types"
 
 // convert containers to optimized format (not in journal and tomb)
 func (p *Package) Optimize() *Package {
-	if p.key >= TombstoneKeyId {
-		return p
-	}
 	for _, b := range p.blocks {
 		if b == nil {
 			continue
@@ -21,9 +18,6 @@ func (p *Package) Optimize() *Package {
 
 // convert containers to writable format (not in journal and tomb)
 func (p *Package) Materialize() *Package {
-	if p.key >= TombstoneKeyId {
-		return p
-	}
 	for _, b := range p.blocks {
 		if b == nil {
 			continue

@@ -21,6 +21,13 @@ import (
 
 var _ engine.TableEngine = (*Table)(nil)
 
+func (t *Table) NewReader() engine.TableReader {
+	return nil
+}
+
+func (t *Table) NewWriter() engine.TableWriter {
+	return nil
+}
 func init() {
 	engine.RegisterTableFactory(engine.TableKindLSM, NewTable)
 }
@@ -71,9 +78,9 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.schema = s
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.opts = DefaultTableOptions.Merge(opts)
-	t.state = engine.NewObjectState([]byte(name))
+	t.state = engine.NewObjectState(name)
 	t.metrics = engine.NewTableMetrics(name)
-	t.db = opts.DB
+	// t.db = opts.DB
 	t.noClose = true
 	t.log = opts.Logger
 
@@ -137,7 +144,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.opts = DefaultTableOptions.Merge(opts)
 	t.metrics = engine.NewTableMetrics(name)
 	t.metrics.TupleCount = int64(t.state.NRows)
-	t.db = opts.DB
+	// t.db = opts.DB
 	t.noClose = true
 	t.log = opts.Logger
 
@@ -179,7 +186,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 		engine.StateKeySuffix,
 	} {
 		if tx.Bucket(append([]byte(name), v...)) == nil {
-			t.log.Error("missing table data: %v", engine.ErrNoBucket)
+			t.log.Error("missing table data: %v", store.ErrNoBucket)
 			tx.Rollback()
 			t.Close(ctx)
 			return engine.ErrDatabaseCorrupt
@@ -344,7 +351,7 @@ func (t *Table) putTx(tx store.Tx, key, val []byte) ([]byte, error) {
 	prevSize, sz := -1, len(key)+len(val)
 	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
-		return nil, engine.ErrNoBucket
+		return nil, store.ErrNoBucket
 	}
 	buf := bucket.Get(key)
 	if buf != nil {
@@ -374,7 +381,7 @@ func (t *Table) delTx(tx store.Tx, key []byte) ([]byte, error) {
 	prevSize := -1
 	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
-		return nil, engine.ErrNoBucket
+		return nil, store.ErrNoBucket
 	}
 	buf := bucket.Get(key)
 	if buf != nil {

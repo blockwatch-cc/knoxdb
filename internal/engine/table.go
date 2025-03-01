@@ -49,11 +49,6 @@ func (e *Engine) GetTable(tag uint64) (TableEngine, bool) {
 }
 
 func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOptions) (TableEngine, error) {
-	// require primary key
-	if s.PkIndex() < 0 {
-		return nil, ErrNoPk
-	}
-
 	// check name is unique
 	tag := s.TaggedHash(types.ObjectTagTable)
 	_, ok := e.tables.Get(tag)
@@ -88,17 +83,12 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 		return nil, fmt.Errorf("%s: %v", opts.Driver, ErrNoDriver)
 	}
 
-	// create table engine
-	table := factory()
-	var (
-		history TableEngine
-		htag    uint64
-	)
-
 	// ensure logger
 	if opts.Logger == nil {
 		opts.Logger = e.log
 	}
+	// create table engine
+	table := factory()
 
 	// start transaction and amend context
 	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
@@ -128,41 +118,8 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	tx.OnAbort(func(ctx context.Context) error {
 		// remove table file(s) on error
 		e.tables.Del(tag)
-		err := table.Drop(ctx)
-		if err != nil {
-			return err
-		}
-		if history != nil {
-			e.tables.Del(htag)
-			return history.Drop(ctx)
-		}
-		return nil
+		return table.Drop(ctx)
 	})
-
-	// create history table if configured
-	if opts.EnableHistory {
-		hopts := TableOptions{
-			Engine: TableKindHistory,
-			Logger: opts.Logger,
-		}
-		factory, ok = tableEngineRegistry[hopts.Engine]
-		if !ok {
-			return nil, fmt.Errorf("%s: %v", hopts.Engine, ErrNoEngine)
-		}
-
-		// create history table engine
-		history = factory()
-
-		// create history table
-		err = history.Create(ctx, s, hopts)
-		if err != nil {
-			return nil, err
-		}
-
-		// register
-		htag = history.Schema().TaggedHash(types.ObjectTagTable)
-		e.tables.Put(htag, history)
-	}
 
 	// commit and update to catalog (may be noop when user controls tx)
 	if err := commit(); err != nil {
@@ -178,21 +135,19 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 func (e *Engine) AlterTable(ctx context.Context, name string, schema *schema.Schema) error {
 	// TODO: alter table
 	// - check readonly flag
-	// permitted changes
+	// permitted changes for main tables (without history)
 	// - change field name
 	// - change field compression type (applies to future written packs)
 	// - add field
 	// - drop field (set deleted flag)
-	// - add index (-> use CreateIndex() below)
-	// - drop index (-> use DropIndex() below)
 	// not permitted changes
-	// - field is used in an index
-	// problematic changes (need to handle explicitly)
-	// - a field before an indexed field is deleted
-	//   - new and old row encodings exist in parallel, old encodings may be removed
-	//     from index on update
-	//   - new row encodings skip deleted fields, so converter order differs, need
-	//     multiple converters and store schema version with each value
+	// - any change on fields used in indexes (must drop index first)
+	//
+	// With History
+	// permitted changes for main tables
+	// - change field name
+	// unpermitted changes for main tables
+	// - add/drop any fields
 
 	// start transaction and amend context
 	// ctx, commit, abort, err := e.WithTransaction(ctx)
@@ -246,9 +201,9 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 	}
 	defer abort()
 
-	// lock object access, unlocks on commit/abort, this
+	// lock object access, unlocks on commit/abort
 	// - wait for open transactions to complete
-	// - makes table unavailable for new transaction
+	// - make table unavailable for new transaction
 	err = tx.Lock(ctx, tag)
 	if err != nil {
 		return err
@@ -270,12 +225,7 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 		e.tables.Del(tag)
 
 		// clear caches
-		for _, k := range e.cache.blocks.Keys() {
-			if k[0] != tag {
-				continue
-			}
-			e.cache.blocks.Remove(k)
-		}
+		e.BlockCache(tag).Purge()
 
 		return nil
 	})
@@ -298,9 +248,9 @@ func (e *Engine) TruncateTable(ctx context.Context, name string) error {
 	}
 	defer abort()
 
-	// lock object access, unlocks on commit/abort, this
+	// lock object access, unlocks on commit/abort
 	// - wait for open transactions to complete
-	// - makes table unavailable for new transaction
+	// - make table unavailable for new transaction
 	err = tx.Lock(ctx, tag)
 	if err != nil {
 		return err
@@ -311,12 +261,7 @@ func (e *Engine) TruncateTable(ctx context.Context, name string) error {
 	}
 
 	// clear caches
-	for _, k := range e.cache.blocks.Keys() {
-		if k[0] != tag {
-			continue
-		}
-		e.cache.blocks.Remove(k)
-	}
+	e.BlockCache(tag).Purge()
 
 	return commit()
 }
@@ -335,7 +280,7 @@ func (e *Engine) CompactTable(ctx context.Context, name string) error {
 	}
 	defer abort()
 
-	// lock object access, unlocks on commit/abort, this
+	// lock object access, unlocks on commit/abort
 	// - wait for open transactions to complete
 	// - make table unavailable for new transaction
 	if err := tx.Lock(ctx, tag); err != nil {
@@ -347,12 +292,7 @@ func (e *Engine) CompactTable(ctx context.Context, name string) error {
 	}
 
 	// clear caches
-	for _, k := range e.cache.blocks.Keys() {
-		if k[0] != tag {
-			continue
-		}
-		e.cache.blocks.Remove(k)
-	}
+	e.BlockCache(tag).Purge()
 
 	return commit()
 }

@@ -420,7 +420,7 @@ func (p *JoinPlan) Stream(ctx context.Context, fn func(r engine.QueryRow) error)
 	res := NewStreamResult(p.schema, fn)
 
 	err := p.doJoin(ctx, res)
-	if err != nil && err != engine.EndStream {
+	if err != nil && err != types.EndStream {
 		return err
 	}
 
@@ -434,7 +434,7 @@ func (p *JoinPlan) Query(ctx context.Context) (engine.QueryResult, error) {
 
 	res := NewResult(p.schema, int(p.Limit))
 	if err := p.doJoin(ctx, res); err != nil {
-		if err != engine.EndStream {
+		if err != types.EndStream {
 			res.Close()
 			return nil, err
 		}
@@ -573,7 +573,7 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 				}
 
 				if p.Limit > 0 && n >= p.Limit {
-					return engine.EndStream
+					return types.EndStream
 				}
 				return nil
 			})
@@ -691,7 +691,7 @@ func loopJoinInner(p *JoinPlan, left, right engine.QueryResult, out QueryResultC
 				}
 				// stop on limit
 				if p.Limit > 0 && out.Len() == int(p.Limit) {
-					return engine.EndStream
+					return types.EndStream
 				}
 			}
 		}
@@ -773,7 +773,7 @@ func mergeJoinInner(p *JoinPlan, left, right engine.QueryResult, out QueryResult
 
 			// stop on limit
 			if p.Limit > 0 && out.Len() == int(p.Limit) {
-				return engine.EndStream
+				return types.EndStream
 			}
 
 			// update indices
@@ -859,7 +859,7 @@ func mergeJoinLeft(p *JoinPlan, left, right engine.QueryResult, out QueryResultC
 					return err
 				}
 				if p.Limit > 0 && out.Len() == int(p.Limit) {
-					return engine.EndStream
+					return types.EndStream
 				}
 			}
 			i++
@@ -879,7 +879,7 @@ func mergeJoinLeft(p *JoinPlan, left, right engine.QueryResult, out QueryResultC
 						return err
 					}
 					if p.Limit > 0 && out.Len() == int(p.Limit) {
-						return engine.EndStream
+						return types.EndStream
 					}
 				}
 				i++
@@ -891,7 +891,7 @@ func mergeJoinLeft(p *JoinPlan, left, right engine.QueryResult, out QueryResultC
 				return err
 			}
 			if p.Limit > 0 && out.Len() == int(p.Limit) {
-				return engine.EndStream
+				return types.EndStream
 			}
 			if j+1 < jl {
 				// stay at current left pos and advance right pos if
@@ -940,7 +940,7 @@ func loopJoinCross(p *JoinPlan, left, right engine.QueryResult, out QueryResultC
 				return err
 			}
 			if p.Limit > 0 && out.Len() == int(p.Limit) {
-				return engine.EndStream
+				return types.EndStream
 			}
 		}
 	}

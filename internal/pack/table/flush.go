@@ -56,16 +56,9 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 		nextKey, lastKey       uint32        // pack key
 		// pmin, pmax, nextmin, gmax uint64        // data placement hints
 		pmin, pmax, gmax uint64 // data placement hints
-		needsort         bool   // true if current pack needs sort before store
-		loop, maxloop    int    // circuit breaker
+		// needsort         bool   // true if current pack needs sort before store
+		loop, maxloop int // circuit breaker
 	)
-
-	// FIXME: background flush will not run inside a tx
-	// open write transaction (or reuse existing tx)
-	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
-	if err != nil {
-		return err
-	}
 
 	// on error roll back table statistics to last valid value on storage
 	defer func() {
@@ -77,7 +70,10 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 				t.log.Error(string(debug.Stack()))
 			}
 			t.log.Debugf("table %s: restoring statistics", t.schema.Name())
-			if err := t.stats.Load(ctx, tx); err != nil {
+			err := t.db.View(func(tx store.Tx) error {
+				return t.stats.Load(ctx, tx)
+			})
+			if err != nil {
 				t.log.Errorf("table %s statistics rollback failed: %v", t.schema.Name(), err)
 			}
 			if err != nil {
@@ -149,9 +145,9 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 		if lastKey != nextKey && pkg != nil {
 			// saving a pack also deletes empty packs from storage!
 			if pkg.IsDirty() {
-				if needsort {
-					pkg.PkSort()
-				}
+				// if needsort {
+				// 	pkg.PkSort()
+				// }
 				// t.log.Debugf("Storing pack %d with key %d with %d records", lastKey, pkg.key, pkg.Len())
 				n, err = t.storePack(ctx, pkg)
 				if err != nil {
@@ -162,16 +158,16 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 				nHeap += pkg.HeapSize()
 				pending += n
 				// commit storage tx after each N written packs
-				if pending >= t.opts.TxMaxSize {
-					// TODO: for a safe return we must also
-					// - clear written journal/tombstone entries
-					// - flush index (or implement index journal lookup)
-					// - write table metadata and pack headers
-					if tx, err = engine.GetTransaction(ctx).Continue(tx); err != nil {
-						return err
-					}
-					pending = 0
-				}
+				// if pending >= t.opts.TxMaxSize {
+				// 	// TODO: for a safe return we must also
+				// 	// - clear written journal/tombstone entries
+				// 	// - flush index (or implement index journal lookup)
+				// 	// - write table metadata and pack headers
+				// 	if tx, err = engine.GetTransaction(ctx).Continue(tx); err != nil {
+				// 		return err
+				// 	}
+				// 	pending = 0
+				// }
 				// update next values after pack index has changed
 				nextKey, _, pmax = t.findBestPack(ctx, nextPk)
 				// t.log.Debugf("%s: post-store next pack %d max=%d nextmin=%d", t.schema.Name(), nextKey, pmax, nextmin)
@@ -179,7 +175,7 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 			// prepare for next pack
 			pkg.Release()
 			pkg = nil
-			needsort = false
+			// needsort = false
 		}
 
 		// load or create the next pack
@@ -381,10 +377,10 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 							t.schema.Name(), pkg.Key(), pmin, pmax, key.Pk)
 
 						// keep sorted
-						if needsort {
-							pkg.PkSort()
-							needsort = false
-						}
+						// if needsort {
+						// 	pkg.PkSort()
+						// 	needsort = false
+						// }
 						// split pack
 						n, err = t.splitPack(ctx, pkg)
 						if err != nil {
@@ -448,10 +444,10 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 				// save when full
 				if pkg.IsFull() {
 					// keep sorted
-					if needsort {
-						pkg.PkSort()
-						needsort = false
-					}
+					// if needsort {
+					// 	pkg.PkSort()
+					// 	needsort = false
+					// }
 
 					// store pack, will update t.stats
 					// t.log.Debugf("%s: storing pack %d with %d records at key %d", t.schema.Name(), lastKey, pkg.Len(), pkg.key)
@@ -465,17 +461,17 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 					nHeap += pkg.HeapSize()
 
 					// commit tx after each N written packs
-					if pending >= t.opts.TxMaxSize {
-						// TODO: for a safe return we must also
-						// - clear written journal/tombstone entries
-						// - flush index (or implement index journal lookup)
-						// - write table metadata and pack headers
-						//
-						if tx, err = engine.GetTransaction(ctx).Continue(tx); err != nil {
-							return err
-						}
-						pending = 0
-					}
+					// if pending >= t.opts.TxMaxSize {
+					// 	// TODO: for a safe return we must also
+					// 	// - clear written journal/tombstone entries
+					// 	// - flush index (or implement index journal lookup)
+					// 	// - write table metadata and pack headers
+					// 	//
+					// 	if tx, err = engine.GetTransaction(ctx).Continue(tx); err != nil {
+					// 		return err
+					// 	}
+					// 	pending = 0
+					// }
 
 					// after store, leave journal for-loop to trigger pack selection
 					jpos++
@@ -490,9 +486,9 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 
 	// store last processed pack
 	if pkg != nil && pkg.IsDirty() {
-		if needsort {
-			pkg.PkSort()
-		}
+		// if needsort {
+		// 	pkg.PkSort()
+		// }
 		// t.log.Debugf("Storing final pack %d with %d records at key %d", lastKey, pkg.Len(), pkg.key)
 		n, err = t.storePack(ctx, pkg)
 		if err != nil {
@@ -528,20 +524,22 @@ func (t *Table) mergeJournal(ctx context.Context) error {
 	}
 
 	// store statistics
-	if err := t.stats.Store(ctx, tx); err != nil {
-		return err
-	}
+	return t.db.Update(func(tx store.Tx) error {
+		if err := t.stats.Store(ctx, tx); err != nil {
+			return err
+		}
 
-	// store state
-	if err := t.state.Store(ctx, tx); err != nil {
-		t.log.Errorf("storing state: %v", err)
-	}
+		// store state
+		if err := t.state.Store(ctx, tx); err != nil {
+			t.log.Errorf("storing state: %v", err)
+		}
 
-	// clear journal and tombstone
-	t.journal.Reset()
+		// clear journal and tombstone
+		t.journal.Reset()
 
-	// save (now empty) journal and tombstone
-	return t.storeJournal(ctx, tx)
+		// save (now empty) journal and tombstone
+		return t.storeJournal(ctx, tx)
+	})
 }
 
 func (t *Table) storeJournal(ctx context.Context, tx store.Tx) error {

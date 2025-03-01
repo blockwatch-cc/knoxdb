@@ -61,7 +61,6 @@ type Index struct {
 	metrics engine.IndexMetrics // usage statistics
 	genkey  hashFunc            // key generator function
 	log     log.Logger          // log instance
-	noClose bool                // don't close underlying store db on Close
 }
 
 func NewIndex() engine.IndexEngine {
@@ -75,11 +74,8 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		return engine.ErrNoPk
 	}
 
-	e := engine.GetEngine(ctx)
-
 	// init names
 	name := s.Name()
-	typ := s.TypeLabel(e.Namespace())
 	opts = DefaultIndexOptions.Merge(opts)
 
 	// storage schema depends on index type
@@ -89,57 +85,63 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	}
 
 	// setup index
-	idx.engine = e
+	idx.engine = engine.GetEngine(ctx)
 	idx.schema = indexSchema
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = opts
 	idx.table = t
-	idx.state = engine.NewObjectState([]byte(name))
-	idx.db = opts.DB
+	idx.state = engine.NewObjectState(name)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
-		WithKey(pack.JournalKeyId).
 		WithSchema(indexSchema).
 		Alloc()
 	idx.tomb = pack.New().
 		WithMaxRows(opts.JournalSize).
-		WithKey(pack.TombstoneKeyId).
 		WithSchema(indexSchema).
 		Alloc()
 	idx.convert = schema.NewConverter(t.Schema(), s, LE).WithSkipLen()
 	idx.metrics = engine.NewIndexMetrics(name)
 	idx.genkey = keyFn
 	idx.log = opts.Logger
-	idx.noClose = true
 
-	idx.log.Debugf("Creating pack index %s on %s with driver %s", name, t.Schema().Name(), idx.opts.Driver)
-
-	// create db if not passed in options
-	if idx.db == nil {
-		path := filepath.Join(e.RootPath(), name+".db")
-		idx.log.Debugf("Creating pack index %q with opts %#v", path, idx.opts)
-		db, err := store.Create(idx.opts.Driver, path, idx.opts.ToDriverOpts())
-		if err != nil {
-			return fmt.Errorf("creating database for index %s: %v", typ, err)
-		}
-		err = db.SetManifest(store.Manifest{
-			Name:    name,
-			Schema:  typ,
-			Version: int(s.Version()),
-		})
-		if err != nil {
-			db.Close()
-			return err
-		}
-		idx.db = db
-		idx.noClose = false
+	// create backend and store initial state
+	if err := idx.createBackend(ctx); err != nil {
+		return err
 	}
 
-	// init index storage
-	tx, err := engine.GetTransaction(ctx).StoreTx(idx.db, true)
+	idx.log.Debugf("Created index %s", name)
+	return nil
+}
+
+func (idx *Index) createBackend(ctx context.Context) error {
+	// setup backend db file
+	name := idx.schema.Name()
+	typ := idx.schema.TypeLabel(idx.engine.Namespace())
+	path := filepath.Join(idx.engine.RootPath(), name+".db")
+	idx.log.Debugf("Creating %s index %q on %q at %q with opts %#v",
+		idx.opts.Engine, name, idx.table.Schema().Name(), path, idx.opts)
+
+	db, err := store.Create(idx.opts.Driver, path, idx.opts.ToDriverOpts())
+	if err != nil {
+		return fmt.Errorf("creating index %s: %v", name, err)
+	}
+	err = db.SetManifest(store.Manifest{
+		Name:    name,
+		Schema:  typ,
+		Version: int(idx.schema.Version()),
+	})
+	if err != nil {
+		db.Close()
+		return err
+	}
+	idx.db = db
+
+	// init table storage
+	tx, err := idx.db.Begin(true)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 	for _, v := range [][]byte{
 		engine.DataKeySuffix,
 		engine.StateKeySuffix,
@@ -150,115 +152,103 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		}
 	}
 
-	// init state storage
+	// init and store state
 	if err := idx.state.Store(ctx, tx); err != nil {
 		return err
 	}
 
-	idx.log.Debugf("Created index %s", typ)
-	return nil
+	// commit backend tx
+	return tx.Commit()
 }
 
 func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Schema, opts engine.IndexOptions) error {
-	e := engine.GetEngine(ctx)
-
-	// init names
-	name := s.Name()
-	typ := s.TypeLabel(e.Namespace())
-
 	// storage schema depends on index type
 	indexSchema, keyFn, err := convertSchema(s, opts.Type)
 	if err != nil {
 		return err
 	}
+	name := s.Name()
 
 	// setup index
-	idx.engine = e
+	idx.engine = engine.GetEngine(ctx)
 	idx.schema = indexSchema
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.table = t
-	idx.state = engine.NewObjectState([]byte(name))
-	idx.db = opts.DB
+	idx.state = engine.NewObjectState(name)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
-		WithKey(pack.JournalKeyId).
 		WithSchema(indexSchema).
 		Alloc()
 	idx.tomb = pack.New().
 		WithMaxRows(opts.JournalSize).
-		WithKey(pack.TombstoneKeyId).
 		WithSchema(indexSchema).
 		Alloc()
 	idx.convert = schema.NewConverter(t.Schema(), s, LE).WithSkipLen()
 	idx.metrics = engine.NewIndexMetrics(name)
 	idx.genkey = keyFn
 	idx.log = opts.Logger
-	idx.noClose = true
 
-	idx.log.Debugf("Opening pack index %s on %s with driver %s",
-		name, t.Schema().Name(), idx.opts.Driver)
-
-	// open db if not passed in options
-	if idx.db == nil {
-		path := filepath.Join(e.RootPath(), name+".db")
-		idx.log.Debugf("Opening pack index %q with opts %#v", path, idx.opts)
-		db, err := store.Open(idx.opts.Driver, path, idx.opts.ToDriverOpts())
-		if err != nil {
-			idx.log.Errorf("open index %s: %v", typ, err)
-			return engine.ErrNoIndex
-		}
-		idx.db = db
-		idx.noClose = false
-
-		// check manifest matches
-		mft, err := idx.db.Manifest()
-		if err != nil {
-			idx.log.Errorf("missing manifest: %v", err)
-			_ = t.Close(ctx)
-			return engine.ErrDatabaseCorrupt
-		}
-		err = mft.Validate(name, "*", typ, -1)
-		if err != nil {
-			idx.log.Errorf("schema mismatch: %v", err)
-			_ = idx.Close(ctx)
-			return schema.ErrSchemaMismatch
-		}
-	}
-
-	// check index storage
-	tx, err := engine.GetTransaction(ctx).StoreTx(idx.db, false)
-	if err != nil {
-		return err
-	}
-	for _, v := range [][]byte{
-		engine.DataKeySuffix,
-		engine.StateKeySuffix,
-	} {
-		key := append([]byte(name), v...)
-		if tx.Bucket(key) == nil {
-			idx.log.Errorf("open %s: %v", string(key), engine.ErrNoBucket)
-			tx.Rollback()
-			_ = idx.Close(ctx)
-			return engine.ErrDatabaseCorrupt
-		}
-	}
-
-	// load state
-	if err := idx.state.Load(ctx, tx); err != nil {
-		idx.log.Error("open state: %v", err)
-		tx.Rollback()
-		t.Close(ctx)
+	// open db backend and load latest state
+	if err := idx.openBackend(ctx); err != nil {
+		idx.log.Errorf("%s: open index: %v", name, err)
+		_ = idx.Close(ctx)
 		return engine.ErrDatabaseCorrupt
 	}
 
-	idx.log.Debugf("Index %s opened with %d rows", typ, idx.state.NRows)
+	idx.log.Debugf("Index %s opened with %d rows", name, idx.state.NRows)
 
 	return nil
 }
 
+func (idx *Index) openBackend(ctx context.Context) error {
+	// open db
+	name := idx.schema.Name()
+	typ := idx.schema.TypeLabel(idx.engine.Namespace())
+	path := filepath.Join(idx.engine.RootPath(), name+".db")
+	idx.log.Debugf("Opening %s index %q at %q with opts %#v",
+		idx.opts.Engine, name, path, idx.opts)
+
+	db, err := store.Open(idx.opts.Driver, path, idx.opts.ToDriverOpts())
+	if err != nil {
+		return fmt.Errorf("open: %v: %v", err, engine.ErrNoIndex)
+	}
+	idx.db = db
+
+	// check manifest matches
+	mft, err := idx.db.Manifest()
+	if err != nil {
+		return fmt.Errorf("loading manifest: %v", err)
+	}
+	if err := mft.Validate(name, "*", typ, -1); err != nil {
+		return schema.ErrSchemaMismatch
+	}
+
+	// load table state
+	err = idx.db.View(func(tx store.Tx) error {
+		// check table storage
+		for _, v := range [][]byte{
+			engine.DataKeySuffix,
+			engine.StateKeySuffix,
+		} {
+			key := append([]byte(name), v...)
+			if tx.Bucket(key) == nil {
+				return fmt.Errorf("%q: %v", string(key), store.ErrNoBucket)
+			}
+		}
+
+		if err := idx.state.Load(ctx, tx); err != nil {
+			return fmt.Errorf("loading state: %v", err)
+		}
+		idx.metrics.TupleCount = int64(idx.state.NRows)
+
+		return nil
+	})
+	return err
+}
+
 func (idx *Index) Close(ctx context.Context) (err error) {
-	if !idx.noClose && idx.db != nil {
+	if idx.db != nil {
 		idx.log.Debugf("Closing index %s", idx.schema.TypeLabel(idx.engine.Namespace()))
 		err = idx.db.Close()
 		idx.db = nil
@@ -268,7 +258,6 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 	idx.table = nil
 	idx.id = 0
 	idx.db = nil
-	idx.noClose = false
 	idx.opts = engine.IndexOptions{}
 	idx.metrics = engine.IndexMetrics{}
 	idx.convert = nil
@@ -306,30 +295,10 @@ func (idx *Index) Metrics() engine.IndexMetrics {
 }
 
 func (idx *Index) Drop(ctx context.Context) error {
-	typ := idx.schema.TypeLabel(idx.engine.Namespace())
-	if idx.noClose {
-		tx, err := engine.GetTransaction(ctx).StoreTx(idx.db, true)
-		if err != nil {
-			return err
-		}
-		idx.log.Debugf("Dropping index %s", typ)
-		for _, v := range [][]byte{
-			engine.DataKeySuffix,
-			engine.StateKeySuffix,
-		} {
-			key := append([]byte(idx.schema.Name()), v...)
-			if err := tx.Root().DeleteBucket(key); err != nil {
-				return err
-			}
-		}
-		// commit and continue
-		_, err = engine.GetTransaction(ctx).Continue(tx)
-		return err
-	}
 	path := idx.db.Path()
 	idx.db.Close()
 	idx.db = nil
-	idx.log.Debugf("Dropping index %s files at path %s", typ, path)
+	idx.log.Debugf("Dropping index %s files at path %s", idx.schema.Name(), path)
 	return store.Drop(idx.opts.Driver, path)
 }
 
@@ -441,5 +410,13 @@ func (idx *Index) Del(ctx context.Context, prev []byte) error {
 	if idx.journal.IsFull() || idx.tomb.IsFull() {
 		return idx.merge(ctx)
 	}
+	return nil
+}
+
+func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package, mode engine.WriteMode) error {
+	return nil
+}
+
+func (idx *Index) DelPack(ctx context.Context, pkg *pack.Package, mode engine.WriteMode) error {
 	return nil
 }

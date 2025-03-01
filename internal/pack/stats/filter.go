@@ -4,12 +4,10 @@
 package stats
 
 import (
-	"encoding/binary"
 	"slices"
 
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
-	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/filter/fuse"
 	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
@@ -25,9 +23,11 @@ import (
 )
 
 func filterKey(pkey uint32, fx uint16) []byte {
-	var b [8]byte
-	binary.BigEndian.PutUint64(b[:], uint64(pkey)<<32|uint64(fx))
-	return b[:]
+	var b [num.MaxVarintLen32 + num.MaxVarintLen16]byte
+	return num.AppendUvarint(
+		num.AppendUvarint(b[:0], uint64(pkey)),
+		uint64(fx),
+	)
 }
 
 func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
@@ -106,7 +106,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		if len(blooms) > 0 {
 			b := idx.bloomBucket(tx)
 			if b == nil {
-				return engine.ErrNoBucket
+				return store.ErrNoBucket
 			}
 			for k, buf := range blooms {
 				key := filterKey(pkg.Key(), k)
@@ -122,7 +122,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		if len(ranges) > 0 {
 			b := idx.rangeBucket(tx)
 			if b == nil {
-				return engine.ErrNoBucket
+				return store.ErrNoBucket
 			}
 			for k, buf := range ranges {
 				key := filterKey(pkg.Key(), k)
@@ -138,7 +138,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		if len(bits) > 0 {
 			b := idx.bitsBucket(tx)
 			if b == nil {
-				return engine.ErrNoBucket
+				return store.ErrNoBucket
 			}
 			for k, buf := range bits {
 				key := filterKey(pkg.Key(), k)
@@ -154,7 +154,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		if len(fuses) > 0 {
 			b := idx.fuseBucket(tx)
 			if b == nil {
-				return engine.ErrNoBucket
+				return store.ErrNoBucket
 			}
 			for k, buf := range fuses {
 				key := filterKey(pkg.Key(), k)
@@ -175,8 +175,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 func (idx Index) dropFilters(pkg *pack.Package) error {
 	// delete bloom and range filters using pkg key as prefix
 	return idx.db.Update(func(tx store.Tx) error {
-		prefix := pkg.KeyBytes()
-
+		prefix := num.EncodeUvarint(uint64(pkg.Key()))
 		for _, k := range []int{
 			STATS_BLOOM_KEY,
 			STATS_RANGE_KEY,
@@ -185,7 +184,7 @@ func (idx Index) dropFilters(pkg *pack.Package) error {
 		} {
 			b := idx.bucket(tx, k)
 			if b == nil {
-				return engine.ErrNoBucket
+				return store.ErrNoBucket
 			}
 			c := b.Range(prefix)
 			for ok := c.First(); ok; ok = c.Next() {

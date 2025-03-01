@@ -307,7 +307,7 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*bitmap.Bitmap
 			// on match, add table primary key to result
 			nKeysMatched++
 			// idx.log.Infof("Add Result %d", pKeys[pos])
-			bits.Set(pKeys[pos]) // pkg.Uint64(1, pos)
+			bits.Set(pKeys[pos])
 			next++
 		}
 

@@ -18,9 +18,9 @@ import (
 
 func (idx *Index) ViewStats(i int) *stats.Record {
 	switch {
-	case i == int(pack.JournalKeyId):
+	case i == -1:
 		return stats.NewRecordFromPack(idx.journal, 0)
-	case i == int(pack.TombstoneKeyId):
+	case i == -2:
 		return stats.NewRecordFromPack(idx.tomb, 0)
 	default:
 		pkg, n, err := idx.loadPack(i)
@@ -35,9 +35,9 @@ func (idx *Index) ViewStats(i int) *stats.Record {
 
 func (idx *Index) ViewPackage(ctx context.Context, i int) *pack.Package {
 	switch i {
-	case int(pack.JournalKeyId):
+	case -1:
 		return idx.journal
-	case int(pack.TombstoneKeyId):
+	case -2:
 		return idx.tomb
 	default:
 		pkg, _, err := idx.loadPack(i)
@@ -68,7 +68,7 @@ func (idx *Index) loadPack(i int) (*pack.Package, int, error) {
 	err := idx.db.View(func(tx store.Tx) error {
 		bkt := idx.dataBucket(tx)
 		if bkt == nil {
-			return engine.ErrNoBucket
+			return store.ErrNoBucket
 		}
 		cur := bkt.Cursor()
 		defer cur.Close()
@@ -77,10 +77,7 @@ func (idx *Index) loadPack(i int) (*pack.Package, int, error) {
 		if cur.Key() == nil {
 			return engine.ErrNoKey
 		}
-		ik, pk, _, err := idx.decodePackKey(cur.Key())
-		if err != nil {
-			return err
-		}
+		ik, pk, _ := idx.decodePackKey(cur.Key())
 		sz := idx.opts.PackSize
 		blk1 := block.New(types.BlockTypes[idx.schema.Exported()[0].Type], sz)
 		if err := blk1.Decode(cur.Value()); err != nil {

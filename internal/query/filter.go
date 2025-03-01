@@ -30,11 +30,11 @@ type Filter struct {
 	Value   any        // direct val for eq|ne|gt|ge|lt|le, [2]any for rg, slice for in|nin, string re
 }
 
-func (f Filter) Weight() int {
+func (f *Filter) Weight() int {
 	return f.Matcher.Weight()
 }
 
-func (f Filter) Validate() error {
+func (f *Filter) Validate() error {
 	if f.Name == "" {
 		return ErrNoName
 	}
@@ -78,11 +78,11 @@ type FilterTreeNode struct {
 	// Flags FilterFlags // lifecycle flags
 }
 
-func (n FilterTreeNode) IsLeaf() bool {
+func (n *FilterTreeNode) IsLeaf() bool {
 	return n.Filter != nil && len(n.Children) == 0
 }
 
-func (n FilterTreeNode) IsProcessed() bool {
+func (n *FilterTreeNode) IsProcessed() bool {
 	if n.Skip || n.Bits.IsValid() {
 		return true
 	}
@@ -98,16 +98,16 @@ func (n FilterTreeNode) IsProcessed() bool {
 }
 
 // filter tree is a tautology, i.e. all possible values match
-func (n FilterTreeNode) IsAnyMatch() bool {
+func (n *FilterTreeNode) IsAnyMatch() bool {
 	return n.IsLeaf() && n.Filter.Mode == FilterModeTrue
 }
 
 // filter tree is a contradiction (i.e. also when index match was found)
-func (n FilterTreeNode) IsNoMatch() bool {
+func (n *FilterTreeNode) IsNoMatch() bool {
 	return n.IsLeaf() && n.Filter.Mode == FilterModeFalse
 }
 
-func (n FilterTreeNode) Validate(pos string) error {
+func (n *FilterTreeNode) Validate(pos string) error {
 	// Check if node is invalid (no children and no filter)
 	if len(n.Children) == 0 && n.Filter == nil {
 		return fmt.Errorf("[%s] invalid leaf node: missing filter", pos)
@@ -132,7 +132,7 @@ func (n FilterTreeNode) Validate(pos string) error {
 
 // Fields returns a unique ordered list of field names referenced by
 // filters in this tree.
-func (n FilterTreeNode) Fields() []string {
+func (n *FilterTreeNode) Fields() []string {
 	if n.IsLeaf() {
 		return []string{n.Filter.Name}
 	}
@@ -145,13 +145,13 @@ func (n FilterTreeNode) Fields() []string {
 
 // Indexes returns a unique ordered list of field indexes referenced by
 // filters in this tree.
-func (n FilterTreeNode) Indexes() []uint16 {
+func (n *FilterTreeNode) Indexes() []uint16 {
 	ord := slicex.NewOrderedNumbers[uint16](make([]uint16, 0)).SetUnique()
 	n.collectIndexes(ord)
 	return ord.Values
 }
 
-func (n FilterTreeNode) collectIndexes(s *slicex.OrderedNumbers[uint16]) {
+func (n *FilterTreeNode) collectIndexes(s *slicex.OrderedNumbers[uint16]) {
 	if n.IsLeaf() {
 		s.Insert(n.Filter.Index)
 		return
@@ -162,7 +162,7 @@ func (n FilterTreeNode) collectIndexes(s *slicex.OrderedNumbers[uint16]) {
 }
 
 // Size returns the total number of condition leaf nodes
-func (n FilterTreeNode) Size() int {
+func (n *FilterTreeNode) Size() int {
 	if n.IsLeaf() {
 		return 1
 	}
@@ -174,11 +174,11 @@ func (n FilterTreeNode) Size() int {
 }
 
 // Depth returns the max number of tree levels
-func (n FilterTreeNode) Depth() int {
+func (n *FilterTreeNode) Depth() int {
 	return n.depth(0)
 }
 
-func (n FilterTreeNode) depth(level int) int {
+func (n *FilterTreeNode) depth(level int) int {
 	if n.IsLeaf() {
 		return level
 	}
@@ -190,7 +190,7 @@ func (n FilterTreeNode) depth(level int) int {
 }
 
 // returns the decision tree size (including sub-conditions)
-func (n FilterTreeNode) Weight() int {
+func (n *FilterTreeNode) Weight() int {
 	if n.Bits.IsValid() {
 		return 0
 	}
@@ -207,7 +207,7 @@ func (n FilterTreeNode) Weight() int {
 // returns the subtree execution cost based on the number of rows
 // that may be visited in the given pack for a full scan times the
 // number of comparisons
-func (n FilterTreeNode) Cost(nValues int) int {
+func (n *FilterTreeNode) Cost(nValues int) int {
 	return n.Weight() * nValues
 }
 
@@ -226,7 +226,7 @@ func (n *FilterTreeNode) Overlaps(v engine.ConditionMatcher) bool {
 }
 
 // ForEach visits each filter in the tree
-func (n FilterTreeNode) ForEach(fn func(*Filter) error) error {
+func (n *FilterTreeNode) ForEach(fn func(*Filter) error) error {
 	if n.IsLeaf() {
 		return fn(n.Filter)
 	}

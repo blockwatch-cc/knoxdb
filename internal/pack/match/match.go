@@ -26,15 +26,15 @@ func MatchFilter(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset) 
 }
 
 // MatchTree matches pack contents against a query condition (sub)tree.
-func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader) *bitset.Bitset {
+func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bits *bitset.Bitset) *bitset.Bitset {
 	if n.IsLeaf() {
-		return MatchFilter(n.Filter, pkg, nil, nil)
+		return MatchFilter(n.Filter, pkg, bits, nil)
 	}
 
 	if n.OrKind {
-		return MatchTreeOr(n, pkg, r)
+		return MatchTreeOr(n, pkg, r, bits)
 	} else {
-		return MatchTreeAnd(n, pkg, r)
+		return MatchTreeAnd(n, pkg, r, bits)
 	}
 }
 
@@ -43,9 +43,12 @@ func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader) *bits
 // and does so efficiently by skipping unnecessary matches and aggregations.
 //
 // TODO: concurrent condition matches and cascading bitset merge
-func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader) *bitset.Bitset {
+func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bits *bitset.Bitset) *bitset.Bitset {
 	// start with a full bitset
-	bits := bitset.NewBitset(pkg.Len()).One()
+	if bits == nil {
+		bits = bitset.NewBitset(pkg.Len())
+	}
+	bits.One()
 
 	// match conditions and merge bit vectors, empty condition lists or always true
 	// filters result in a full match; stop early when result contains all zeros
@@ -58,7 +61,7 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader) *b
 		var scratch *bitset.Bitset
 		if !node.IsLeaf() {
 			// recurse into another AND or OR condition subtree
-			scratch = MatchTree(node, pkg, r)
+			scratch = MatchTree(node, pkg, r, scratch)
 		} else {
 			f := node.Filter
 			// Quick inclusion check to skip matching when the current condition
@@ -126,9 +129,13 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader) *b
 
 // Return a bit vector containing matching positions in the pack combining
 // multiple OR conditions with efficient skipping and aggregation.
-func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader) *bitset.Bitset {
+func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bits *bitset.Bitset) *bitset.Bitset {
 	// start with an empty bitset
-	bits := bitset.NewBitset(pkg.Len())
+	if bits == nil {
+		bits = bitset.NewBitset(pkg.Len())
+	} else {
+		bits.Zero()
+	}
 
 	// match conditions and merge bit vectors, always true/false conditions
 	// are optimized away at this point, stop early when result contains all ones
@@ -136,7 +143,7 @@ func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader) *bi
 		var scratch *bitset.Bitset
 		if !node.IsLeaf() {
 			// recurse into another AND or OR condition subtree
-			scratch = MatchTree(node, pkg, r)
+			scratch = MatchTree(node, pkg, r, scratch)
 		} else {
 			f := node.Filter
 			// Quick inclusion check to skip matching when the current condition
@@ -201,7 +208,7 @@ func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader) *bi
 		scratch.Close()
 
 		// early stop on full aggregate match
-		if i < len(n.Children)-1 && bits.Count() == bits.Len() {
+		if i < len(n.Children)-1 && bits.All() {
 			break
 		}
 	}

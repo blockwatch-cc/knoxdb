@@ -450,6 +450,7 @@ func TestIndexStore(t *testing.T) {
 	assert.Equal(t, sz*STATS_PACK_SIZE, idx.Len(), "num data packs")
 	assert.Equal(t, sz*STATS_PACK_SIZE*TEST_PKG_SIZE, idx.Count(), "num data rows")
 	assert.Equal(t, uint32(sz*STATS_PACK_SIZE), idx.NextKey(), "next key")
+	assert.Equal(t, true, idx.IsTailFull(), "fill tail")
 	assert.Equal(t, uint64(1), idx.GlobalMinPk(), "global min pk")
 	assert.Equal(t, uint64(sz*STATS_PACK_SIZE*TEST_PKG_SIZE), idx.GlobalMaxPk(), "global max pk")
 }

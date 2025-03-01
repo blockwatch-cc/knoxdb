@@ -24,22 +24,25 @@ var (
 // checkpoint lsn but can be repurposed for different types.
 type ObjectState struct {
 	Key        []byte  // state bucket name
-	Sequence   uint64  // next free sequence
+	NextPk     uint64  // next free primary key sequence
+	NextRid    uint64  // next free row id sequence
 	NRows      uint64  // total non-deleted rows
 	Size       uint64  // byte size
 	Count      uint64  // block count
 	Checkpoint wal.LSN // latest wal checkpoint LSN
 }
 
-func NewObjectState(key []byte) ObjectState {
+func NewObjectState(name string) ObjectState {
 	return ObjectState{
-		Key:      append(key, StateKeySuffix...),
-		Sequence: 1,
+		Key:     append([]byte(name), StateKeySuffix...),
+		NextPk:  1,
+		NextRid: 1,
 	}
 }
 
 func (s *ObjectState) Reset() {
-	s.Sequence = 1
+	s.NextPk = 1
+	s.NextRid = 1
 	s.NRows = 0
 	s.Size = 0
 	s.Count = 0
@@ -47,24 +50,26 @@ func (s *ObjectState) Reset() {
 }
 
 func (s ObjectState) Encode() []byte {
-	var buf [40]byte
-	BE.PutUint64(buf[0:], s.Sequence)
-	BE.PutUint64(buf[8:], s.NRows)
-	BE.PutUint64(buf[16:], s.Size)
-	BE.PutUint64(buf[24:], s.Count)
-	BE.PutUint64(buf[32:], uint64(s.Checkpoint))
+	var buf [48]byte
+	BE.PutUint64(buf[0:], s.NextPk)
+	BE.PutUint64(buf[8:], s.NextRid)
+	BE.PutUint64(buf[16:], s.NRows)
+	BE.PutUint64(buf[24:], s.Size)
+	BE.PutUint64(buf[32:], s.Count)
+	BE.PutUint64(buf[40:], uint64(s.Checkpoint))
 	return buf[:]
 }
 
 func (s *ObjectState) Decode(buf []byte) error {
-	if len(buf) < 40 {
+	if len(buf) < 48 {
 		return io.ErrShortBuffer
 	}
-	s.Sequence = BE.Uint64(buf[0:])
-	s.NRows = BE.Uint64(buf[8:])
-	s.Size = BE.Uint64(buf[16:])
-	s.Count = BE.Uint64(buf[24:])
-	s.Checkpoint = wal.LSN(BE.Uint64(buf[32:]))
+	s.NextPk = BE.Uint64(buf[0:])
+	s.NextRid = BE.Uint64(buf[8:])
+	s.NRows = BE.Uint64(buf[16:])
+	s.Size = BE.Uint64(buf[24:])
+	s.Count = BE.Uint64(buf[32:])
+	s.Checkpoint = wal.LSN(BE.Uint64(buf[40:]))
 	return nil
 }
 
@@ -77,7 +82,7 @@ func (s *ObjectState) Load(ctx context.Context, tx store.Tx) error {
 }
 
 func (s ObjectState) Store(ctx context.Context, tx store.Tx) error {
-	if s.Sequence == 0 {
+	if s.NextPk == 0 {
 		return tx.Bucket(s.Key).Delete(StateKey)
 	}
 	return tx.Bucket(s.Key).Put(StateKey, s.Encode())

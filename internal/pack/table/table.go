@@ -74,10 +74,9 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
-	t.state = engine.NewObjectState([]byte(name))
+	t.state = engine.NewObjectState(name)
 	t.metrics = engine.NewTableMetrics(name)
 	t.journal = journal.NewJournal(s, t.opts.JournalSize)
-	t.db = opts.DB
 	t.log = opts.Logger
 
 	// create db if not passed in options
@@ -155,10 +154,9 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
 	t.opts = DefaultTableOptions.Merge(opts)
-	t.state = engine.NewObjectState([]byte(name))
+	t.state = engine.NewObjectState(name)
 	t.metrics = engine.NewTableMetrics(name)
 	t.journal = journal.NewJournal(s, t.opts.JournalSize)
-	t.db = opts.DB
 	t.log = opts.Logger
 
 	// open db if not passed in options
@@ -201,7 +199,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	} {
 		key := append([]byte(name), v...)
 		if tx.Bucket(key) == nil {
-			t.log.Errorf("open %s: %v", engine.ErrNoBucket, string(key))
+			t.log.Errorf("open %s: %v", store.ErrNoBucket, string(key))
 			tx.Rollback()
 			t.Close(ctx)
 			return engine.ErrDatabaseCorrupt
@@ -237,7 +235,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	}
 
 	t.log.Debugf("Table %s opened with %d rows, %d journal rows, seq=%d",
-		typ, t.state.NRows, t.journal.Len(), t.state.Sequence)
+		typ, t.state.NRows, t.journal.Len(), t.state.NextPk)
 
 	return nil
 }
@@ -257,13 +255,18 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	t.opts = engine.TableOptions{}
 	t.metrics = engine.TableMetrics{}
 	t.state.Reset()
-	clear(t.indexes)
-	t.indexes = t.indexes[:0]
-	t.indexes = nil
-	t.stats.Close()
-	t.stats = nil
-	t.journal.Close()
-	t.journal = nil
+	if t.indexes != nil {
+		clear(t.indexes)
+		t.indexes = nil
+	}
+	if t.stats != nil {
+		t.stats.Close()
+		t.stats = nil
+	}
+	if t.journal != nil {
+		t.journal.Close()
+		t.journal = nil
+	}
 	return
 }
 
@@ -296,7 +299,9 @@ func (t *Table) Drop(ctx context.Context) error {
 	clear(t.indexes)
 	t.indexes = t.indexes[:0]
 	t.journal.Close()
+	t.journal = nil
 	t.stats.Close()
+	t.stats = nil
 	t.db.Close()
 	t.db = nil
 	t.log.Debugf("dropping table %s with path %s", typ, path)

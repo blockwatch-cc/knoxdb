@@ -12,6 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
@@ -64,7 +65,7 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 	res := NewStreamResult(plan.ResultSchema, fn)
 
 	err := t.doQuery(ctx, plan, res)
-	if err != nil && err != engine.EndStream {
+	if err != nil && err != types.EndStream {
 		return err
 	}
 
@@ -96,7 +97,7 @@ func (t *Table) doQuery(ctx context.Context, plan *query.QueryPlan, res QueryRes
 
 	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 
 	// prepare result converter (table schema -> result schema)
@@ -271,7 +272,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 
 	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
-		return 0, engine.ErrNoBucket
+		return 0, store.ErrNoBucket
 	}
 
 	// handle cases
@@ -344,7 +345,7 @@ func (t *Table) Lookup(ctx context.Context, pks []uint64) (engine.QueryResult, e
 func (t *Table) StreamLookup(ctx context.Context, pks []uint64, fn func(engine.QueryRow) error) error {
 	res := NewStreamResult(t.schema, fn)
 	err := t.doLookup(ctx, pks, res)
-	if err != nil && err != engine.EndStream {
+	if err != nil && err != types.EndStream {
 		return err
 	}
 	return nil
@@ -371,7 +372,7 @@ func (t *Table) doLookup(ctx context.Context, pks []uint64, res QueryResultConsu
 
 	bucket := tx.Bucket(append([]byte(t.schema.Name()), engine.DataKeySuffix...))
 	if bucket == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 
 	for _, pk := range pks {

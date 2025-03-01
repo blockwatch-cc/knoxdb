@@ -32,7 +32,6 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 	// prepare result
 	res := NewResult(
 		pack.New().
-			WithKey(pack.ResultKeyId).
 			WithMaxRows(int(plan.Limit)).
 			WithSchema(plan.ResultSchema).
 			Alloc(),
@@ -87,7 +86,7 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 	default:
 		err = t.doQueryAsc(ctx, plan, res)
 	}
-	if err != nil && err != engine.EndStream {
+	if err != nil && err != types.EndStream {
 		return err
 	}
 
@@ -230,7 +229,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 
 	// first query journal to avoid side-effects of added pk lookup condition(s),
 	// otherwise recent records that are only in journal are missing
-	jbits = match.MatchTree(plan.Filters, t.journal.Data, nil)
+	jbits = match.MatchTree(plan.Filters, t.journal.Data, nil, nil)
 	nRowsScanned += uint32(t.journal.Len())
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
 	// plan.Log.Debugf("Table %s: %d/%d journal results", t.schema.Name(), jbits.Count(), t.journal.Len())
@@ -241,7 +240,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 	}
 
 	// early return on empty match
-	if jbits.Count() == 0 && plan.IsNoMatch() {
+	if jbits.None() && plan.IsNoMatch() {
 		return nil
 	}
 
@@ -374,7 +373,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 
 	// first query journal to avoid side-effects of added pk lookup condition(s),
 	// otherwise recent records that are only in journal are missing
-	jbits = match.MatchTree(plan.Filters, t.journal.Data, nil)
+	jbits = match.MatchTree(plan.Filters, t.journal.Data, nil, nil)
 	nRowsScanned += uint32(t.journal.Len())
 
 	// query indexes, this may change query plan
@@ -383,7 +382,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	}
 
 	// early return
-	if jbits.Count() == 0 && plan.IsNoMatch() {
+	if jbits.None() && plan.IsNoMatch() {
 		return nil
 	}
 

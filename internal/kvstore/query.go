@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/internal/types"
 )
 
 func (kv *KVStore) Range(ctx context.Context, prefix []byte, fn func(ctx context.Context, k, v []byte) error) error {
@@ -18,7 +20,7 @@ func (kv *KVStore) Range(ctx context.Context, prefix []byte, fn func(ctx context
 	}
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 	c := bucket.Range(prefix)
 	defer c.Close()
@@ -31,7 +33,7 @@ func (kv *KVStore) Range(ctx context.Context, prefix []byte, fn func(ctx context
 			break
 		}
 	}
-	if err == nil || err == engine.EndStream {
+	if err == nil || err == types.EndStream {
 		return nil
 	}
 	return err
@@ -44,7 +46,7 @@ func (kv *KVStore) Scan(ctx context.Context, from, to []byte, fn func(ctx contex
 	}
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 	c := bucket.Cursor()
 	defer c.Close()
@@ -57,7 +59,7 @@ func (kv *KVStore) Scan(ctx context.Context, from, to []byte, fn func(ctx contex
 			break
 		}
 	}
-	if err == nil || err == engine.EndStream {
+	if err == nil || err == types.EndStream {
 		return nil
 	}
 	return err

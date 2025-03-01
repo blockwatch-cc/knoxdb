@@ -615,10 +615,40 @@ func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitse
 }
 
 func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
-	setMin, setMax := m.set.Minimum(), m.set.Maximum()
-	rg := newFactory(mins.Type()).New(FilterModeRange)
-	rg.WithValue(RangeValue{setMin, setMax})
-	return rg.MatchRangeVectors(mins, maxs, bits, mask)
+	minx := block.NewBlockAccessor[T](mins).Slice()
+	maxx := block.NewBlockAccessor[T](maxs).Slice()
+	if mask != nil {
+		for i, l := 0, len(minx); i < l; i++ {
+			if !mask.IsSet(i) {
+				continue
+			}
+			minU64, maxU64 := uint64(minx[i]), uint64(maxx[i])
+			// source could contain negative integers
+			if minU64 > maxU64 {
+				minU64, maxU64 = maxU64, minU64
+			}
+			if m.set.ContainsRange(minU64, maxU64) {
+				bits.Set(i)
+			}
+		}
+	} else {
+		for i, l := 0, len(minx); i < l; i++ {
+			minU64, maxU64 := uint64(minx[i]), uint64(maxx[i])
+			// source could contain negative integers
+			if minU64 > maxU64 {
+				minU64, maxU64 = maxU64, minU64
+			}
+			if m.set.ContainsRange(minU64, maxU64) {
+				bits.Set(i)
+			}
+		}
+	}
+	return bits
+
+	// setMin, setMax := m.set.Minimum(), m.set.Maximum()
+	// rg := newFactory(mins.Type()).New(FilterModeRange)
+	// rg.WithValue(RangeValue{T(setMin), T(setMax)})
+	// return rg.MatchRangeVectors(mins, maxs, bits, mask)
 }
 
 // NOT IN ---

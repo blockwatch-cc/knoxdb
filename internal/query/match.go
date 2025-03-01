@@ -12,6 +12,8 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
+var NoopMatcher = &noopMatcher{}
+
 // Matcher defines a common interface for comparison operations regardless
 // of data type and mode.
 type Matcher interface {

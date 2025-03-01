@@ -29,6 +29,7 @@ const (
 // head. The ARCCache is similar, but does not require setting any
 // parameters.
 type TwoQueueCache[K comparable, V RefCountedElem] struct {
+	lock        sync.RWMutex
 	maxByteSize int
 	recentRatio float64
 	ghostRatio  float64
@@ -37,7 +38,6 @@ type TwoQueueCache[K comparable, V RefCountedElem] struct {
 	recent      *LRU[K, V]
 	frequent    *LRU[K, V]
 	recentEvict *LRU[K, V]
-	lock        sync.RWMutex
 }
 
 type CacheParams struct {
@@ -111,15 +111,27 @@ func New2QParams[K comparable, V RefCountedElem](size int, recentRatio float64, 
 	return c, nil
 }
 
+func (c *TwoQueueCache[K, V]) Lock() {
+	c.lock.Lock()
+}
+
+func (c *TwoQueueCache[K, V]) Unlock() {
+	c.lock.Unlock()
+}
+
 // Get looks up a key's value from the cache.
 func (c *TwoQueueCache[K, V]) Get(key K) (val V, ok bool) {
 	c.lock.Lock()
+	val, ok = c.GetLocked(key)
+	c.lock.Unlock()
+	return
+}
 
+func (c *TwoQueueCache[K, V]) GetLocked(key K) (val V, ok bool) {
 	// Check if this is a frequent value
 	if val, ok = c.frequent.Get(key); ok {
 		val.IncRef()
 		c.stats.Hit()
-		c.lock.Unlock()
 		return
 	}
 
@@ -130,20 +142,23 @@ func (c *TwoQueueCache[K, V]) Get(key K) (val V, ok bool) {
 		c.frequent.Add(key, val)
 		val.IncRef()
 		c.stats.Hit()
-		c.lock.Unlock()
 		return
 	}
 
 	// No hit
 	c.stats.Miss()
-	c.lock.Unlock()
 	return
 }
 
 // Add adds a value to the cache.
 func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 	c.lock.Lock()
+	updated, evicted = c.AddLocked(key, value)
+	c.lock.Unlock()
+	return
+}
 
+func (c *TwoQueueCache[K, V]) AddLocked(key K, value V) (updated, evicted bool) {
 	// Grab a reference since this element will stay in the cache (even on update)
 	value.IncRef()
 
@@ -161,7 +176,6 @@ func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 		c.stats.Add(value.HeapSize())
 		evicted = c.ensureSpace()
 		updated = true
-		c.lock.Unlock()
 		return
 	}
 
@@ -177,7 +191,6 @@ func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 		c.frequent.Add(key, value)
 		evicted = c.ensureSpace()
 		updated = true
-		c.lock.Unlock()
 		return
 	}
 
@@ -188,7 +201,6 @@ func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 		c.frequent.Add(key, value)
 		c.stats.Add(value.HeapSize())
 		evicted = c.ensureSpace()
-		c.lock.Unlock()
 		return
 	}
 
@@ -196,7 +208,6 @@ func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 	c.recent.Add(key, value)
 	c.stats.Add(value.HeapSize())
 	evicted = c.ensureSpace()
-	c.lock.Unlock()
 	return
 }
 
@@ -205,15 +216,18 @@ func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 // Returns whether found and whether an eviction occurred.
 func (c *TwoQueueCache[K, V]) ContainsOrAdd(key K, value V) (ok, evicted bool) {
 	c.lock.Lock()
+	ok, evicted = c.ContainsOrAddLocked(key, value)
+	c.lock.Unlock()
+	return
+}
+
+func (c *TwoQueueCache[K, V]) ContainsOrAddLocked(key K, value V) (ok, evicted bool) {
 	if c.frequent.Contains(key) {
-		c.lock.Unlock()
 		return true, false
 	}
 	if c.recent.Contains(key) {
-		c.lock.Unlock()
 		return true, false
 	}
-	c.lock.Unlock()
 	_, evicted = c.Add(key, value)
 	return false, evicted
 }
@@ -277,6 +291,11 @@ func (c *TwoQueueCache[K, V]) Keys() []K {
 // Remove removes the provided key from the cache.
 func (c *TwoQueueCache[K, V]) Remove(key K) {
 	c.lock.Lock()
+	c.RemoveLocked(key)
+	c.lock.Unlock()
+}
+
+func (c *TwoQueueCache[K, V]) RemoveLocked(key K) {
 	var val V
 	var ok bool
 	if val, ok = c.frequent.Peek(key); !ok {
@@ -288,18 +307,14 @@ func (c *TwoQueueCache[K, V]) Remove(key K) {
 	}
 
 	if c.frequent.Remove(key) {
-		c.lock.Unlock()
 		return
 	}
 	if c.recent.Remove(key) {
-		c.lock.Unlock()
 		return
 	}
 	if c.recentEvict.Remove(key) {
-		c.lock.Unlock()
 		return
 	}
-	c.lock.Unlock()
 }
 
 func (c *TwoQueueCache[K, V]) RemoveOldest() {

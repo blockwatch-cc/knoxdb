@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -86,8 +87,8 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = opts
 	idx.table = t
-	idx.state = engine.NewObjectState([]byte(name))
-	idx.db = opts.DB
+	idx.state = engine.NewObjectState(name)
+	// idx.db = opts.DB
 	idx.key = append([]byte(name), engine.DataKeySuffix...)
 	idx.convert = schema.NewConverter(t.Schema(), s, BE).WithSkipLen()
 	idx.metrics = engine.NewIndexMetrics(name)
@@ -155,8 +156,8 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.table = t
-	idx.state = engine.NewObjectState([]byte(name))
-	idx.db = opts.DB
+	idx.state = engine.NewObjectState(name)
+	// idx.db = opts.DB
 	idx.key = []byte(name)
 	idx.convert = schema.NewConverter(t.Schema(), s, BE).WithSkipLen()
 	idx.metrics = engine.NewIndexMetrics(name)
@@ -204,7 +205,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	} {
 		key := append([]byte(name), v...)
 		if tx.Bucket(key) == nil {
-			idx.log.Errorf("open %s: %v", string(key), engine.ErrNoBucket)
+			idx.log.Errorf("open %s: %v", string(key), store.ErrNoBucket)
 			tx.Rollback()
 			_ = idx.Close(ctx)
 			return engine.ErrDatabaseCorrupt
@@ -447,4 +448,12 @@ func (idx *Index) Del(ctx context.Context, prev []byte) error {
 	}
 	idx.state.Size -= uint64(len(pkey))
 	return tx.Bucket(idx.key).Delete(pkey)
+}
+
+func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package, mode engine.WriteMode) error {
+	return nil
+}
+
+func (idx *Index) DelPack(ctx context.Context, pkg *pack.Package, mode engine.WriteMode) error {
+	return nil
 }

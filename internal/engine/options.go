@@ -6,7 +6,6 @@ package engine
 import (
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -145,10 +144,8 @@ type TableOptions struct {
 	PageFill        float64    // boltdb
 	ReadOnly        bool       // read-only tx and no schema changes
 	TxMaxSize       int        // maximum write size of low-level dbfile transactions
-	EnableHistory   bool       // enable history capture
 	NoSync          bool       // boltdb, no fsync on transactions (dangerous)
 	NoGrowSync      bool       // boltdb, skip fsync+alloc on grow
-	DB              store.DB   `knox:"-"` // shared low-level store implementation
 	Logger          log.Logger `knox:"-"` // custom logger
 }
 
@@ -162,7 +159,6 @@ func (o TableOptions) Merge(o2 TableOptions) TableOptions {
 	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
 	o.TxMaxSize = util.NonZero(o2.TxMaxSize, o.TxMaxSize)
 	o.ReadOnly = o2.ReadOnly
-	o.EnableHistory = o2.EnableHistory
 	o.NoSync = o2.NoSync
 	o.NoGrowSync = o2.NoGrowSync
 	if o2.Logger != nil {
@@ -190,7 +186,6 @@ type StoreOptions struct {
 	NoSync     bool       // boltdb, no fsync on transactions (dangerous)
 	NoGrowSync bool       // boltdb, skip fsync+alloc on grow
 	TxMaxSize  int        // maximum write size of low-level dbfile transactions
-	DB         store.DB   `knox:"-"` // shared low-level store implementation
 	Logger     log.Logger `knox:"-"` // custom logger
 }
 
@@ -204,9 +199,6 @@ func (o StoreOptions) Merge(o2 StoreOptions) StoreOptions {
 	o.NoGrowSync = o2.NoGrowSync
 	if o2.Logger != nil {
 		o.Logger = o2.Logger
-	}
-	if o2.DB != nil {
-		o.DB = o2.DB
 	}
 	return o
 }
@@ -234,7 +226,6 @@ type IndexOptions struct {
 	TxMaxSize   int             // maximum write size of low-level dbfile transactions
 	NoSync      bool            // boltdb, no fsync on transactions (dangerous)
 	NoGrowSync  bool            // boltdb, skip fsync+alloc on grow
-	DB          store.DB        `knox:"-"` // shared low-level store implementation
 	Logger      log.Logger      `knox:"-"` // custom logger
 }
 

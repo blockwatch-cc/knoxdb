@@ -39,13 +39,13 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	atomic.AddInt64(&t.metrics.InsertCalls, 1)
 
 	// keep a copy of the state
-	firstPk := t.state.Sequence
+	firstPk := t.state.NextPk
 
 	// try insert data into the journal (may run full, so we must loop)
 	var count, n uint64
 	for len(buf) > 0 {
 		// insert messages into journal
-		n, buf = t.journal.InsertBatch(buf, t.state.Sequence)
+		n, buf = t.journal.InsertBatch(buf, t.state.NextPk)
 		count += n
 
 		// sync state with catalog
@@ -53,7 +53,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 
 		// update state
 		t.state.NRows += n
-		t.state.Sequence += n
+		t.state.NextPk += n
 
 		// write journal data to disk before we continue
 		if t.journal.IsFull() {

@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/match"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
@@ -26,6 +27,7 @@ type Iterator struct {
 	table    *Table
 	hits     []uint32
 	pack     *pack.Package
+	bits     *bitset.Bitset
 	useCache bool
 }
 
@@ -35,6 +37,7 @@ func NewIterator(q *query.QueryPlan) *Iterator {
 		query:    q,
 		table:    t,
 		hits:     arena.Alloc(arena.AllocUint32, t.opts.PackSize).([]uint32),
+		bits:     bitset.NewBitset(t.opts.PackSize),
 		useCache: !q.Flags.IsNoCache(),
 	}
 }
@@ -73,19 +76,17 @@ func (it *Iterator) Next(ctx context.Context) (*pack.Package, []uint32, error) {
 		it.query.Log.Debugf("IT-fwd checking pack=%08x size=%d", key, nval)
 
 		// find actual matches
-		bits := match.MatchTree(it.query.Filters, it.pack, it.it)
+		it.bits = match.MatchTree(it.query.Filters, it.pack, it.it, it.bits)
 
 		// handle false positive metadata matches
-		if bits.Count() == 0 {
-			bits.Close()
+		if it.bits.None() {
 			it.pack.Release()
 			it.pack = nil
 			continue
 		}
 
 		// handle real matches
-		it.hits = bits.Indexes(it.hits)
-		bits.Close()
+		it.hits = it.bits.Indexes(it.hits)
 		it.query.Stats.Count(PACKS_SCANNED_KEY, 1)
 
 		// load remaining columns here
@@ -105,6 +106,7 @@ func (it *Iterator) Close() {
 		it.pack.Release()
 	}
 	arena.Free(arena.AllocUint32, it.hits[:0])
+	it.bits.Close()
 	it.pack = nil
 	it.hits = nil
 	it.table = nil

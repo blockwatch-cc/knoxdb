@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // TODO Design
@@ -91,6 +93,11 @@ var (
 	// statusKey     = []byte("status")
 	dataKey       = []byte("data")
 	checkpointKey = []byte("checkpoint")
+)
+
+var (
+	BE = binary.BigEndian
+	LE = binary.LittleEndian
 )
 
 var DefaultDatabaseOptions = DatabaseOptions{
@@ -303,7 +310,7 @@ func (c *Catalog) GetSchema(ctx context.Context, key uint64) (*schema.Schema, er
 	if bucket == nil {
 		return nil, ErrDatabaseCorrupt
 	}
-	buf := bucket.Get(Key64Bytes(key))
+	buf := bucket.Get(util.U64Bytes(key))
 	if buf == nil {
 		return nil, ErrNoKey
 	}
@@ -327,7 +334,7 @@ func (c *Catalog) PutSchema(ctx context.Context, s *schema.Schema) error {
 	if err != nil {
 		return err
 	}
-	return bucket.Put(Key64Bytes(s.Hash()), buf)
+	return bucket.Put(util.U64Bytes(s.Hash()), buf)
 }
 
 func (c *Catalog) DelSchema(ctx context.Context, key uint64) error {
@@ -339,7 +346,7 @@ func (c *Catalog) DelSchema(ctx context.Context, key uint64) error {
 	if bucket == nil {
 		return ErrDatabaseCorrupt
 	}
-	return bucket.Delete(Key64Bytes(key))
+	return bucket.Delete(util.U64Bytes(key))
 }
 
 func (c *Catalog) GetOptions(ctx context.Context, key uint64, opts any) error {
@@ -355,7 +362,7 @@ func (c *Catalog) GetOptions(ctx context.Context, key uint64, opts any) error {
 	if bucket == nil {
 		return ErrDatabaseCorrupt
 	}
-	buf := bucket.Get(Key64Bytes(key))
+	buf := bucket.Get(util.U64Bytes(key))
 	if buf == nil {
 		return ErrNoKey
 	}
@@ -387,7 +394,7 @@ func (c *Catalog) PutOptions(ctx context.Context, key uint64, opts any) error {
 	if err != nil {
 		return err
 	}
-	return bucket.Put(Key64Bytes(key), buf)
+	return bucket.Put(util.U64Bytes(key), buf)
 }
 
 func (c *Catalog) DelOptions(ctx context.Context, key uint64) error {
@@ -399,7 +406,7 @@ func (c *Catalog) DelOptions(ctx context.Context, key uint64) error {
 	if bucket == nil {
 		return ErrDatabaseCorrupt
 	}
-	return bucket.Delete(Key64Bytes(key))
+	return bucket.Delete(util.U64Bytes(key))
 }
 
 func (c *Catalog) ListTables(ctx context.Context) ([]uint64, error) {
@@ -417,7 +424,7 @@ func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *schema.Schema, o
 		err = ErrDatabaseCorrupt
 		return
 	}
-	bucket = bucket.Bucket(Key64Bytes(key))
+	bucket = bucket.Bucket(util.U64Bytes(key))
 	if bucket == nil {
 		err = ErrNoTable
 		return
@@ -427,7 +434,7 @@ func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *schema.Schema, o
 		err = ErrNoKey
 		return
 	}
-	s, err = c.GetSchema(ctx, Key64(skey))
+	s, err = c.GetSchema(ctx, BE.Uint64(skey))
 	if err != nil {
 		return
 	}
@@ -453,11 +460,11 @@ func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o 
 	if bucket == nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket, err = bucket.CreateBucketIfNotExists(Key64Bytes(key))
+	bucket, err = bucket.CreateBucketIfNotExists(util.U64Bytes(key))
 	if err != nil {
 		return err
 	}
-	if err := bucket.Put(schemaKey, Key64Bytes(s.Hash())); err != nil {
+	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash())); err != nil {
 		return err
 	}
 	if err := bucket.Put(nameKey, []byte(s.Name())); err != nil {
@@ -477,7 +484,7 @@ func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
 	if tables == nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket := tables.Bucket(Key64Bytes(key))
+	bucket := tables.Bucket(util.U64Bytes(key))
 	if bucket == nil {
 		return ErrNoTable
 	}
@@ -485,13 +492,13 @@ func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
 	if skey == nil {
 		return ErrNoKey
 	}
-	if err := tables.DeleteBucket(Key64Bytes(key)); err != nil {
+	if err := tables.DeleteBucket(util.U64Bytes(key)); err != nil {
 		return err
 	}
 	if err := c.DelOptions(ctx, key); err != nil {
 		return err
 	}
-	if err := c.DelSchema(ctx, Key64(skey)); err != nil {
+	if err := c.DelSchema(ctx, BE.Uint64(skey)); err != nil {
 		return err
 	}
 
@@ -509,7 +516,7 @@ func (c *Catalog) GetIndex(ctx context.Context, key uint64) (s *schema.Schema, o
 		err = ErrDatabaseCorrupt
 		return
 	}
-	bucket := indexes.Bucket(Key64Bytes(key))
+	bucket := indexes.Bucket(util.U64Bytes(key))
 	if bucket == nil {
 		err = ErrNoIndex
 		return
@@ -519,7 +526,7 @@ func (c *Catalog) GetIndex(ctx context.Context, key uint64) (s *schema.Schema, o
 		err = ErrNoKey
 		return
 	}
-	s, err = c.GetSchema(ctx, Key64(skey))
+	s, err = c.GetSchema(ctx, BE.Uint64(skey))
 	if err != nil {
 		return
 	}
@@ -542,8 +549,8 @@ func (c *Catalog) ListIndexes(ctx context.Context, key uint64) ([]uint64, error)
 		if tkey == nil {
 			return ErrNoKey
 		}
-		if Key64(tkey) == key {
-			res = append(res, Key64(k))
+		if BE.Uint64(tkey) == key {
+			res = append(res, BE.Uint64(k))
 		}
 		return nil
 	})
@@ -570,17 +577,17 @@ func (c *Catalog) AddIndex(ctx context.Context, ikey, tkey uint64, s *schema.Sch
 	if bucket == nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket, err = bucket.CreateBucket(Key64Bytes(ikey))
+	bucket, err = bucket.CreateBucket(util.U64Bytes(ikey))
 	if err != nil {
 		return err
 	}
-	if err := bucket.Put(schemaKey, Key64Bytes(s.Hash())); err != nil {
+	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash())); err != nil {
 		return err
 	}
 	if err := bucket.Put(nameKey, []byte(s.Name())); err != nil {
 		return err
 	}
-	if err := bucket.Put(tableKey, Key64Bytes(tkey)); err != nil {
+	if err := bucket.Put(tableKey, util.U64Bytes(tkey)); err != nil {
 		return err
 	}
 
@@ -596,7 +603,7 @@ func (c *Catalog) DropIndex(ctx context.Context, key uint64) error {
 	if indexes == nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket := indexes.Bucket(Key64Bytes(key))
+	bucket := indexes.Bucket(util.U64Bytes(key))
 	if bucket == nil {
 		return ErrNoIndex
 	}
@@ -604,13 +611,13 @@ func (c *Catalog) DropIndex(ctx context.Context, key uint64) error {
 	if skey == nil {
 		return ErrNoKey
 	}
-	if err := indexes.DeleteBucket(Key64Bytes(key)); err != nil {
+	if err := indexes.DeleteBucket(util.U64Bytes(key)); err != nil {
 		return err
 	}
 	if err := c.DelOptions(ctx, key); err != nil {
 		return err
 	}
-	if err := c.DelSchema(ctx, Key64(skey)); err != nil {
+	if err := c.DelSchema(ctx, BE.Uint64(skey)); err != nil {
 		return err
 	}
 
@@ -632,7 +639,7 @@ func (c *Catalog) GetStore(ctx context.Context, key uint64) (s *schema.Schema, o
 		err = ErrDatabaseCorrupt
 		return
 	}
-	bucket := stores.Bucket(Key64Bytes(key))
+	bucket := stores.Bucket(util.U64Bytes(key))
 	if bucket == nil {
 		err = ErrNoStore
 		return
@@ -642,7 +649,7 @@ func (c *Catalog) GetStore(ctx context.Context, key uint64) (s *schema.Schema, o
 		err = ErrNoKey
 		return
 	}
-	s, err = c.GetSchema(ctx, Key64(skey))
+	s, err = c.GetSchema(ctx, BE.Uint64(skey))
 	if err != nil {
 		return
 	}
@@ -668,11 +675,11 @@ func (c *Catalog) AddStore(ctx context.Context, key uint64, s *schema.Schema, o 
 	if bucket == nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket, err = bucket.CreateBucket(Key64Bytes(key))
+	bucket, err = bucket.CreateBucket(util.U64Bytes(key))
 	if err != nil {
 		return err
 	}
-	if err := bucket.Put(schemaKey, Key64Bytes(s.Hash())); err != nil {
+	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash())); err != nil {
 		return err
 	}
 	if err := bucket.Put(nameKey, []byte(s.Name())); err != nil {
@@ -691,7 +698,7 @@ func (c *Catalog) DropStore(ctx context.Context, key uint64) error {
 	if stores == nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket := stores.Bucket(Key64Bytes(key))
+	bucket := stores.Bucket(util.U64Bytes(key))
 	if bucket == nil {
 		return ErrNoStore
 	}
@@ -699,13 +706,13 @@ func (c *Catalog) DropStore(ctx context.Context, key uint64) error {
 	if skey == nil {
 		return ErrNoKey
 	}
-	if err := stores.DeleteBucket(Key64Bytes(key)); err != nil {
+	if err := stores.DeleteBucket(util.U64Bytes(key)); err != nil {
 		return err
 	}
 	if err := c.DelOptions(ctx, key); err != nil {
 		return err
 	}
-	if err := c.DelSchema(ctx, Key64(skey)); err != nil {
+	if err := c.DelSchema(ctx, BE.Uint64(skey)); err != nil {
 		return err
 	}
 
@@ -727,7 +734,7 @@ func (c *Catalog) GetEnum(ctx context.Context, key uint64) (e *schema.EnumDictio
 		err = ErrDatabaseCorrupt
 		return
 	}
-	bucket := stores.Bucket(Key64Bytes(key))
+	bucket := stores.Bucket(util.U64Bytes(key))
 	if bucket == nil {
 		err = ErrNoStore
 		return
@@ -752,7 +759,7 @@ func (c *Catalog) PutEnum(ctx context.Context, e *schema.EnumDictionary) error {
 	if enums == nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket := enums.Bucket(Key64Bytes(e.Tag()))
+	bucket := enums.Bucket(util.U64Bytes(e.Tag()))
 	if bucket == nil {
 		return ErrDatabaseCorrupt
 	}
@@ -773,7 +780,7 @@ func (c *Catalog) AddEnum(ctx context.Context, e *schema.EnumDictionary) error {
 	if enums == nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket, err := enums.CreateBucket(Key64Bytes(e.Tag()))
+	bucket, err := enums.CreateBucket(util.U64Bytes(e.Tag()))
 	if err != nil {
 		return err
 	}
@@ -799,7 +806,7 @@ func (c *Catalog) DropEnum(ctx context.Context, key uint64) error {
 	if enums == nil {
 		return ErrDatabaseCorrupt
 	}
-	if err := enums.DeleteBucket(Key64Bytes(key)); err != nil {
+	if err := enums.DeleteBucket(util.U64Bytes(key)); err != nil {
 		return err
 	}
 
@@ -817,7 +824,7 @@ func (c *Catalog) listKeys(ctx context.Context, bucketKey []byte) ([]uint64, err
 	}
 	res := make([]uint64, 0)
 	err = bucket.ForEachBucket(func(k []byte, b store.Bucket) error {
-		res = append(res, Key64(k))
+		res = append(res, BE.Uint64(k))
 		return nil
 	})
 	if err != nil {

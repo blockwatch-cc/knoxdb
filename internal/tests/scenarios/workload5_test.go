@@ -19,6 +19,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/tests"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
@@ -400,7 +401,7 @@ func TestWorkload5(t *testing.T) {
 							return nil
 						case 1:
 							// skip results
-							return engine.EndStream
+							return types.EndStream
 						default:
 							// continue reading results
 							return nil

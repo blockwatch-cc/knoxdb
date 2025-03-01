@@ -11,6 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // Table interface
@@ -43,7 +44,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	atomic.AddInt64(&t.metrics.InsertCalls, 1)
 
 	// keep a pre-image of the state
-	firstPk := t.state.Sequence
+	firstPk := t.state.NextPk
 	state := &t.state
 
 	// cleanup on exit
@@ -60,12 +61,12 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	// process each message independently, assign PK and insert
 	for view.IsValid() {
 		// assign primary key by writing directly into wire format buffer
-		nextPk := t.state.Sequence
+		nextPk := t.state.NextPk
 		view.SetPk(nextPk)
 
 		// write value to storage, returns any previous value
 		// which we need to update indexes below
-		prev, err := t.putTx(tx, engine.Key64Bytes(nextPk), view.Bytes())
+		prev, err := t.putTx(tx, util.U64Bytes(nextPk), view.Bytes())
 		if err != nil {
 			return 0, err
 		}
@@ -80,7 +81,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 		view, buf, _ = view.Cut(buf)
 
 		// advance table sequence
-		t.state.Sequence++
+		t.state.NextPk++
 	}
 
 	// update state in catalog (will commit with main tx)
@@ -131,7 +132,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 
 		// write value to storage, returns any previous value
 		// which we need to update indexes below
-		prev, err := t.putTx(tx, engine.Key64Bytes(pk), view.Bytes())
+		prev, err := t.putTx(tx, util.U64Bytes(pk), view.Bytes())
 		if err != nil {
 			return 0, err
 		}

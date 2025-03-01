@@ -5,7 +5,23 @@ package engine
 
 import (
 	"sync/atomic"
+
+	"blockwatch.cc/knoxdb/pkg/cache"
 )
+
+type (
+	BufferCache struct {
+		*cache.PartitionedCache[*Buffer]
+	}
+	BufferCachePartition = *cache.CachePartition[*Buffer]
+)
+
+var NoBufferCache BufferCachePartition = NewBufferCache(0).Partition(0)
+
+func NewBufferCache(sz int) BufferCache {
+	c := cache.NewPartitionedCache[*Buffer](sz)
+	return BufferCache{c}
+}
 
 type Buffer struct {
 	ref int64

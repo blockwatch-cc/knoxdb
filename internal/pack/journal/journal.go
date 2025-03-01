@@ -24,6 +24,11 @@ import (
 
 var ErrNoKey = errors.New("update without primary key")
 
+const (
+	JournalKey uint32 = 0xFFFFFFFF
+	TombKey    uint32 = 0xFFFFFFFE
+)
+
 // Append-only journal and in-memory tombstone
 //
 // - supports INSERT, UPSERT, UPDATE, DELETE
@@ -57,6 +62,7 @@ type Journal struct {
 	Tomb    bitmap.Bitmap  // deleted primary keys as xroar bitmap
 	Deleted *bitset.Bitset // tracks which journal positions are in tomb
 
+	px       int            // primary key index
 	newKeys  JournalRecords // new keys added during insert/update
 	view     *schema.View   // wire data view
 	maxid    uint64         // the highest primary key in the journal, used for sorting
@@ -82,7 +88,7 @@ type Tombstone struct {
 func NewJournal(s *schema.Schema, size int) *Journal {
 	pkg := pack.New().
 		WithMaxRows(size).
-		WithKey(pack.JournalKeyId).
+		WithKey(JournalKey).
 		WithSchema(s).
 		Alloc()
 	return &Journal{
@@ -93,6 +99,7 @@ func NewJournal(s *schema.Schema, size int) *Journal {
 		Deleted: bitset.NewBitset(roundSize(size)).Resize(0),
 		newKeys: make(JournalRecords, 0, roundSize(size)),
 		view:    schema.NewView(s),
+		px:      s.PkIndex(),
 	}
 }
 
@@ -125,6 +132,7 @@ func (j *Journal) Close() {
 	j.maxid = 0
 	j.newKeys = nil
 	j.view = nil
+	j.px = -1
 }
 
 func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bkey string) error {
@@ -133,12 +141,13 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bkey string) erro
 	j.Data.Release()
 	j.Data = pack.New().
 		WithMaxRows(j.maxsize).
-		WithKey(pack.JournalKeyId).
+		WithKey(JournalKey).
 		WithSchema(s)
 	bucket := tx.Bucket(append([]byte(bkey), engine.DataKeySuffix...))
-	if _, err := j.Data.Load(ctx, bucket, false, 0, nil, 0); err != nil {
+	if _, err := j.Data.LoadFromDisk(ctx, bucket, nil, 0); err != nil {
 		return err
 	}
+	j.Data.Materialize()
 	j.sortData = false
 	for i, n := range j.Data.PkColumn() {
 		j.Keys = append(j.Keys, JournalRecord{n, i})
@@ -153,7 +162,7 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bkey string) erro
 	// tomb
 	j.Deleted.Resize(len(j.Keys))
 	var key [4]byte
-	binary.BigEndian.PutUint32(key[:], pack.TombstoneKeyId)
+	binary.BigEndian.PutUint32(key[:], TombKey)
 	if buf := bucket.Get(key[:]); buf != nil {
 		if err := j.Tomb.UnmarshalBinary(buf); err != nil {
 			return err
@@ -170,7 +179,7 @@ func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bkey string) erro
 			break
 		}
 		j.Deleted.Set(idx)
-		j.Data.SetValue(j.Data.PkIdx(), idx, uint64(0))
+		j.Data.SetValue(j.px, idx, uint64(0))
 	}
 	return nil
 }
@@ -187,17 +196,17 @@ func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bkey string) (in
 		if last >= len(j.Keys) {
 			break
 		}
-		j.Data.SetValue(j.Data.PkIdx(), idx, pk)
+		j.Data.SetValue(j.px, idx, pk)
 	}
 	bucket := tx.Bucket(append([]byte(bkey), engine.DataKeySuffix...))
 	bucket.FillPercent(0.9)
-	n, err := j.Data.Store(ctx, bucket, 0)
+	n, err := j.Data.Clone(j.maxsize).StoreToDisk(ctx, bucket)
 	if err != nil {
 		return 0, 0, err
 	}
 
 	var key [4]byte
-	binary.BigEndian.PutUint32(key[:], pack.TombstoneKeyId)
+	binary.BigEndian.PutUint32(key[:], TombKey)
 	buf, err := j.Tomb.MarshalBinary()
 	if err != nil {
 		return 0, 0, err
@@ -219,7 +228,7 @@ func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bkey string) (in
 		if last >= len(j.Keys) {
 			break
 		}
-		j.Data.SetValue(j.Data.PkIdx(), idx, uint64(0))
+		j.Data.SetValue(j.px, idx, uint64(0))
 	}
 	return n, m, nil
 }
@@ -443,7 +452,7 @@ func (j *Journal) DeleteBatch(pks bitmap.Bitmap) uint64 {
 		if idx, last = j.PkIndex(pk, last); idx >= 0 {
 			// overwrite journal pk col with zero (this signals to query and
 			// flush operations that this item is deleted and should be skipped)
-			j.Data.SetValue(j.Data.PkIdx(), idx, uint64(0))
+			j.Data.SetValue(j.px, idx, uint64(0))
 
 			// remember the journal position was deleted, so that a subsequent
 			// insert/upsert call can properly undelete
@@ -487,7 +496,7 @@ func (j *Journal) undelete(pk uint64) {
 	idx, _ := j.PkIndex(pk, 0)
 	if idx > -1 {
 		j.Deleted.Clear(idx)
-		j.Data.SetValue(j.Data.PkIdx(), idx, pk)
+		j.Data.SetValue(j.px, idx, pk)
 	}
 	// remove from tomb
 	j.Tomb.Remove(pk)

@@ -7,12 +7,21 @@ import (
 	"context"
 	"sync/atomic"
 
+	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
+
+func (t *Table) NewReader() engine.TableReader {
+	return nil
+}
+
+func (t *Table) NewWriter() engine.TableWriter {
+	return nil
+}
 
 func (t *Table) dataBucket(tx store.Tx) store.Bucket {
 	key := append([]byte(t.schema.Name()), engine.DataKeySuffix...)
@@ -26,31 +35,43 @@ func (t *Table) dataBucket(tx store.Tx) store.Bucket {
 // Loads a shared pack for reading, uses block cache to lookup blocks.
 // Stores loaded blocks unless useCache is false.
 func (t *Table) loadSharedPack(ctx context.Context, id uint32, nrow int, useCache bool, s *schema.Schema) (*pack.Package, error) {
-	// open read transaction (or reuse existing tx)
-	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, false)
-	if err != nil {
-		return nil, err
-	}
-
-	// list of fields to load
-	fids := s.ActiveFieldIds()
-
 	// prepare a pack without block storage
 	pkg := pack.New().
 		WithKey(id).
 		WithSchema(t.schema).
 		WithMaxRows(util.NonZero(nrow, t.opts.PackSize))
 
-	// load from table data bucket or cache using tableid as cache tag
-	n, err := pkg.Load(ctx, t.dataBucket(tx), useCache, t.id, fids, nrow)
+	// list of fields to load
+	fids := s.ActiveFieldIds()
+
+	// try load from cache using tableid as cache tag
+	cache := block.NoCache
+	if useCache {
+		cache = engine.GetEngine(ctx).BlockCache(t.id)
+		if pkg.LoadFromCache(cache, fids) == len(fids) {
+			return pkg, nil
+		}
+	}
+
+	// load from table data bucket
+	err := t.db.View(func(tx store.Tx) error {
+		n, err := pkg.LoadFromDisk(ctx, t.dataBucket(tx), fids, nrow)
+		if err == nil {
+			// count stats
+			atomic.AddInt64(&t.metrics.PacksLoaded, 1)
+			atomic.AddInt64(&t.metrics.BytesRead, int64(n))
+		}
+		return err
+	})
 	if err != nil {
 		pkg.Release()
 		return nil, err
 	}
 
-	// count metrics
-	atomic.AddInt64(&t.metrics.PacksLoaded, 1)
-	atomic.AddInt64(&t.metrics.BytesRead, int64(n))
+	// add loaded blocks to cache
+	if useCache {
+		pkg.AddToCache(cache)
+	}
 
 	return pkg, nil
 }
@@ -83,12 +104,6 @@ func (t *Table) loadWritablePack(ctx context.Context, id uint32, nrow int) (*pac
 
 // Stores pack and updates stats
 func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
-	// open write transaction (or reuse existing tx)
-	tx, err := engine.GetTransaction(ctx).StoreTx(t.db, true)
-	if err != nil {
-		return 0, err
-	}
-
 	// remove zero length packs
 	if pkg.Len() == 0 {
 		// drop from stats
@@ -96,20 +111,31 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 			return 0, err
 		}
 
-		// remove from storage and block caches
-		if err := pkg.Remove(ctx, t.dataBucket(tx), t.id); err != nil {
-			return 0, err
-		}
+		// remove from storage
+		err := t.db.Update(func(tx store.Tx) error {
+			return pkg.RemoveFromDisk(ctx, t.dataBucket(tx))
+		})
 
-		return 0, nil
+		// remove from cache
+		pkg.DropFromCache(engine.GetEngine(ctx).BlockCache(t.id))
+
+		return 0, err
 	}
 
 	// analyze, optimize, compress and write to disk
-	n, err := pkg.Store(ctx, t.dataBucket(tx), t.id)
+	var nBytes int
+	err := t.db.Update(func(tx store.Tx) error {
+		n, err := pkg.StoreToDisk(ctx, t.dataBucket(tx))
+		if err == nil {
+			nBytes = n
+			atomic.AddInt64(&t.metrics.PacksStored, 1)
+			atomic.AddInt64(&t.metrics.BytesWritten, int64(nBytes))
+		}
+		return err
+	})
 	if err != nil {
-		return 0, err
+		return nBytes, err
 	}
-	defer pkg.FreeAnalysis()
 
 	// update statistics
 	if pkg.Key() < t.stats.NextKey() {
@@ -117,14 +143,14 @@ func (t *Table) storePack(ctx context.Context, pkg *pack.Package) (int, error) {
 	} else {
 		err = t.stats.AddPack(ctx, pkg)
 	}
-	if err != nil {
-		return n, err
-	}
 
-	atomic.AddInt64(&t.metrics.PacksStored, 1)
-	atomic.AddInt64(&t.metrics.BytesWritten, int64(n))
+	// remove from cache
+	pkg.DropFromCache(engine.GetEngine(ctx).BlockCache(t.id))
 
-	return n, nil
+	// cleanup temp statistics data
+	pkg.FreeAnalysis()
+
+	return nBytes, err
 }
 
 // Splits a writebale pack into two same size packs and stores both. Source pack

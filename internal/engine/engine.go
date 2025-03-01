@@ -14,8 +14,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
-	"blockwatch.cc/knoxdb/pkg/cache"
-	"blockwatch.cc/knoxdb/pkg/cache/rclru"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
@@ -51,23 +49,13 @@ type Engine struct {
 	lm       *LockManager
 }
 
-type CacheKeyType [2]uint64
-
-func NewCacheKey(x, y uint64) CacheKeyType {
-	return CacheKeyType{x, y}
-}
-
-type BlockCacheType cache.Cache[CacheKeyType, *block.Block]
-
-type BufferCacheType cache.Cache[CacheKeyType, *Buffer]
-
 type CacheManager struct {
 	// generic block cache
 	// - pack engine: 64bit table/index id + 32bit pack id + 16bit block id
-	blocks BlockCacheType
+	blocks block.BlockCache
 	// generic buffer cache
 	// - store engine: 64bit store id + 64bit user key
-	buffers BufferCacheType
+	buffers BufferCache
 }
 
 func (e *Engine) PurgeCache() {
@@ -95,12 +83,12 @@ func (e *Engine) Options() DatabaseOptions {
 	return e.opts
 }
 
-func (e *Engine) BlockCache() BlockCacheType {
-	return e.cache.blocks
+func (e *Engine) BlockCache(key uint64) block.BlockCachePartition {
+	return e.cache.blocks.Partition(key)
 }
 
-func (e *Engine) BufferCache() BufferCacheType {
-	return e.cache.buffers
+func (e *Engine) BufferCache(key uint64) BufferCachePartition {
+	return e.cache.buffers.Partition(key)
 }
 
 func (e *Engine) Log() log.Logger {
@@ -117,8 +105,8 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	e := &Engine{
 		path: filepath.Join(opts.Path, name),
 		cache: CacheManager{
-			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
-			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
+			blocks:  block.NewCache(0),
+			buffers: NewBufferCache(0),
 		},
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
 		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
@@ -143,7 +131,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		e.tasks.WithLogger(opts.Logger)
 	}
 
-	e.log.Debugf("Creating database %s at %s", name, e.path)
+	e.log.Debugf("Creating database %q at %q", name, e.path)
 
 	// set exclusive directory lock
 	lock := flock.New(filepath.Join(opts.Path, ENGINE_LOCK_NAME))
@@ -185,8 +173,8 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 
 	// init caches
 	if opts.CacheSize > 0 {
-		e.cache.blocks = rclru.New2Q[CacheKeyType, *block.Block](opts.CacheSize * 90 / 10)
-		e.cache.buffers = rclru.New2Q[CacheKeyType, *Buffer](opts.CacheSize / 10)
+		e.cache.blocks = block.NewCache(opts.CacheSize * 90 / 10)
+		e.cache.buffers = NewBufferCache(opts.CacheSize / 10)
 	}
 
 	// init catalog
@@ -214,8 +202,8 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	e := &Engine{
 		path: filepath.Join(opts.Path, name),
 		cache: CacheManager{
-			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
-			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
+			blocks:  block.NewCache(0),
+			buffers: NewBufferCache(0),
 		},
 		// tables:  make(map[uint64]TableEngine),
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
@@ -238,7 +226,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		e.tasks.WithLogger(opts.Logger)
 	}
 
-	e.log.Debugf("Opening database %s at %s", name, e.path)
+	e.log.Debugf("Opening database %q at %q", name, e.path)
 
 	// set exclusive directory lock
 	lock := flock.New(filepath.Join(opts.Path, ENGINE_LOCK_NAME))
@@ -292,7 +280,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		RecoveryMode:   e.opts.WalRecoveryMode,
 		Logger:         e.log,
 	}
-	e.log.Debugf("Opening wal at %s", wopts.Path)
+	e.log.Debugf("Opening wal at %q", wopts.Path)
 	e.wal, err = wal.Open(e.cat.Checkpoint(), wopts)
 	if err != nil {
 		return nil, err
@@ -307,8 +295,8 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 
 	// init caches
 	if e.opts.CacheSize > 0 {
-		e.cache.blocks = rclru.New2Q[CacheKeyType, *block.Block](e.opts.CacheSize * 90 / 10)
-		e.cache.buffers = rclru.New2Q[CacheKeyType, *Buffer](e.opts.CacheSize / 10)
+		e.cache.blocks = block.NewCache(e.opts.CacheSize * 90 / 10)
+		e.cache.buffers = NewBufferCache(e.opts.CacheSize / 10)
 	}
 
 	// open database objects
@@ -534,7 +522,6 @@ func (e *Engine) ForceShutdown() error {
 		if err := t.Close(ctx); err != nil {
 			e.log.Errorf("Closing table %s: %v", t.Schema().Name(), err)
 		}
-		// delete(e.tables, n)
 	}
 	e.tables.Clear()
 
@@ -568,10 +555,10 @@ func (e *Engine) Sync(ctx context.Context) error {
 		errg.Go(func() error { return t.Sync(ctx) })
 	}
 
-	// sync stores (unsupported)
-	// for _, s := range e.stores {
-	// 	errg.Go(func() error { return s.Sync(ctx) })
-	// }
+	// sync stores
+	for _, s := range e.stores.Map() {
+		errg.Go(func() error { return s.Sync(ctx) })
+	}
 
 	return errg.Wait()
 }

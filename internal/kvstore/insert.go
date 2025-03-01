@@ -6,17 +6,20 @@ package kvstore
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/wal"
 )
+
+var BE = binary.BigEndian
 
 func (kv *KVStore) Get(ctx context.Context, key []byte) ([]byte, error) {
 	// check cache if key size is 8 (uint64)
 	if len(key) == 8 {
-		ckey := engine.NewCacheKey(kv.storeId, engine.Key64(key))
-		buf, ok := kv.engine.BufferCache().Get(ckey)
+		buf, ok := kv.engine.BufferCache(kv.storeId).Get(BE.Uint64(key))
 		if ok {
 			atomic.AddInt64(&kv.metrics.CacheHits, 1)
 			return buf.Bytes(), nil
@@ -30,7 +33,7 @@ func (kv *KVStore) Get(ctx context.Context, key []byte) ([]byte, error) {
 	}
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		return nil, engine.ErrNoBucket
+		return nil, store.ErrNoBucket
 	}
 	buf := bucket.Get(key)
 	if buf == nil {
@@ -43,8 +46,7 @@ func (kv *KVStore) Get(ctx context.Context, key []byte) ([]byte, error) {
 	}
 
 	if len(key) == 8 {
-		ckey := engine.NewCacheKey(kv.storeId, engine.Key64(key))
-		kv.engine.BufferCache().Add(ckey, engine.NewBuffer(buf))
+		kv.engine.BufferCache(kv.storeId).Add(BE.Uint64(key), engine.NewBuffer(buf))
 	}
 	atomic.AddInt64(&kv.metrics.QueriedKeys, 1)
 	atomic.AddInt64(&kv.metrics.BytesRead, int64(len(buf)))
@@ -60,7 +62,7 @@ func (kv *KVStore) Put(ctx context.Context, key, val []byte) error {
 	}
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 	bucket.FillPercent(kv.opts.PageFill)
 	buf := bucket.Get(key)
@@ -76,8 +78,7 @@ func (kv *KVStore) Put(ctx context.Context, key, val []byte) error {
 
 	// use cache if key size is uint64
 	if len(key) == 8 {
-		ckey := engine.NewCacheKey(kv.storeId, engine.Key64(key))
-		kv.engine.BufferCache().Add(ckey, engine.NewBuffer(bytes.Clone(val)))
+		kv.engine.BufferCache(kv.storeId).Add(BE.Uint64(key), engine.NewBuffer(bytes.Clone(val)))
 		atomic.AddInt64(&kv.metrics.CacheInserts, 1)
 	}
 
@@ -104,7 +105,7 @@ func (kv *KVStore) Del(ctx context.Context, key []byte) error {
 	}
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 	buf := bucket.Get(key)
 	if buf != nil {
@@ -117,8 +118,7 @@ func (kv *KVStore) Del(ctx context.Context, key []byte) error {
 	}
 
 	if len(key) == 8 {
-		ckey := engine.NewCacheKey(kv.storeId, engine.Key64(key))
-		kv.engine.BufferCache().Remove(ckey)
+		kv.engine.BufferCache(kv.storeId).Remove(BE.Uint64(key))
 	}
 
 	if prevSize >= 0 {

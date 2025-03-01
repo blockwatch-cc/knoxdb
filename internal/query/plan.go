@@ -227,17 +227,18 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 	// allow user override by setting an explicit request schema
 	if p.RequestSchema == nil && p.Snap != nil && p.Table.Schema().HasMeta() {
 		mc, err := And(
-			// NEW records are visible when their writer committed before this tx started
-			// Note when we allow concurrent tx we must also check each record
-			// for snapshot visibility in case snap.Xmin <= $xmin < snap.Xmax
+			// NEW records are visible when their xid committed before the
+			// snapshot, i.e. either `xid < snap.xmin` or `xid !E snap.xact`.
+			// Note when we allow concurrent tx we must also check each record's
+			// snapshot visibility if `snap.Xmin <= $xmin < snap.Xmax`.
 			//
 			// $xmin < snap.xmax
 			Lt("$xmin", p.Snap.Xmax),
 
 			// DELETED records are still visible until their tombstones commit,
-			// i.e. the tombstone was not created/merged before tx start
-			// note when we allow concurrent tx (xact != 0) we must also check
-			// each record for snapshot visibility when snap.Xmin <= $xmax < snap.Xmax
+			// i.e. the tombstone was not created before the snapshot.
+			// Note when we allow concurrent tx (xact != 0) we must also check
+			// each record's snapshot visibility if `snap.Xmin <= $xmax < snap.Xmax`.
 			//
 			// $xmax == 0 || $xmax >= snap.xmax
 			Or(Equal("$xmax", 0), Ge("$xmax", p.Snap.Xmax)),

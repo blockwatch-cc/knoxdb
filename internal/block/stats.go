@@ -40,7 +40,7 @@ func (b *Block) MinMax() (any, any) {
 		return slices.Clone(min), slices.Clone(max) // clone
 	case BlockBool:
 		bits := b.Bool()
-		if bits.Len() > 0 && bits.Count() > 0 {
+		if bits.Len() > 0 && bits.Any() {
 			return true, false
 		}
 		return false, false
@@ -79,7 +79,7 @@ func (b *Block) Min() any {
 		return slices.Clone(b.Bytes().Min())
 	case BlockBool:
 		bits := b.Bool()
-		return bits.Len() > 0 && bits.Len() == bits.Count()
+		return bits.Len() > 0 && bits.All()
 	default:
 		return nil
 	}
@@ -114,7 +114,7 @@ func (b *Block) Max() any {
 	case BlockBytes:
 		return slices.Clone(b.Bytes().Max())
 	case BlockBool:
-		return b.Bool().Count() > 0
+		return b.Bool().Any()
 	default:
 		return nil
 	}

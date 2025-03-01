@@ -6,6 +6,7 @@ package engine
 import (
 	"context"
 
+	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -14,9 +15,11 @@ import (
 type (
 	Context    = context.Context
 	Schema     = schema.Schema
+	View       = schema.View
 	Bitmap     = bitmap.Bitmap
 	OrderType  = types.OrderType
 	FilterMode = types.FilterMode
+	Package    = pack.Package
 )
 
 type TableKind string
@@ -52,8 +55,6 @@ type TableEngine interface {
 	Count(Context, QueryPlan) (uint64, error)
 	Delete(Context, QueryPlan) (uint64, error)
 	Stream(Context, QueryPlan, func(QueryRow) error) error
-	// Lookup(Context, []uint64) (QueryResult, error)
-	// StreamLookup(Context, []uint64, func(QueryRow) error) error
 
 	// index management
 	UseIndex(QueryableIndex)
@@ -63,6 +64,43 @@ type TableEngine interface {
 	// Tx Management
 	CommitTx(ctx Context, xid uint64) error
 	AbortTx(ctx Context, xid uint64) error
+
+	// data handling
+	NewReader() TableReader
+	NewWriter() TableWriter
+}
+
+type ReadMode byte
+
+const (
+	ReadModeAll = iota
+	ReadModeIncludeMask
+	ReadModeExcludeMask
+)
+
+type TableReader interface {
+	WithQuery(QueryPlan) TableReader
+	WithMask([]uint64, ReadMode) TableReader
+	Read(Context, uint32) (*Package, error)
+	Next(Context) (*Package, error)
+	Reset()
+	Close()
+	Schema() *Schema
+}
+
+type WriteMode byte
+
+const (
+	WriteModeAll = iota
+	WriteModeIncludeSelected
+	WriteModeExcludeSelected
+)
+
+type TableWriter interface {
+	Append(Context, *Package, WriteMode) error
+	Replace(Context, *Package, WriteMode) error
+	Finalize(Context) error
+	Close()
 }
 
 type QueryPlan interface {
@@ -143,6 +181,10 @@ type IndexEngine interface {
 	Add(ctx Context, prev, val []byte) error // wire encoded rows
 	Del(ctx Context, prev []byte) error      // wire encoded rows
 
+	// vectorized data ingress
+	AddPack(Context, *Package, WriteMode) error
+	DelPack(Context, *Package, WriteMode) error
+
 	// data egress
 	IsComposite() bool
 	CanMatch(QueryCondition) bool // static: based to index engine type
@@ -182,7 +224,7 @@ type StoreEngine interface {
 }
 
 type ConditionMatcher interface {
-	MatchView(*schema.View) bool
+	MatchView(*View) bool
 	Overlaps(ConditionMatcher) bool
 }
 

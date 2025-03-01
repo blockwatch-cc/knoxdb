@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
@@ -18,7 +17,9 @@ const PACK_SIZE = 1 << 16
 
 func TestMain(m *testing.M) {
 	// must register enum type with global schema registry
-	tests.RegisterEnum()
+	myEnum := schema.NewEnumDictionary("my_enum")
+	myEnum.Append([]string{"one", "two", "three", "four"}...)
+	schema.RegisterEnum(0, myEnum)
 	m.Run()
 }
 

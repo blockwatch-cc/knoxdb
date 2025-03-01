@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
@@ -18,10 +19,12 @@ import (
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
+	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 type LookupIterator struct {
 	iks      []uint64      // idx keys (sorted)
+	tx       store.Tx      // backend tx
 	cur      store.Cursor  // backend cursor
 	nextPk   uint64        // last matching idx key (for duplicate handling)
 	idx      *Index        // back-ref to idx
@@ -52,15 +55,17 @@ func (it *LookupIterator) Next(ctx context.Context) (*pack.Package, uint64, erro
 
 	// init cursor on first call
 	if it.cur == nil {
-		tx, err := engine.GetTransaction(ctx).StoreTx(it.idx.db, false)
+		tx, err := it.idx.db.Begin(false)
 		if err != nil {
 			return nil, 0, err
 		}
 		if bucket := it.idx.dataBucket(tx); bucket != nil {
 			it.cur = bucket.Cursor()
 		} else {
-			return nil, 0, engine.ErrNoBucket
+			tx.Rollback()
+			return nil, 0, store.ErrNoBucket
 		}
+		it.tx = tx
 	}
 
 	// try find the next idx pack with matches
@@ -125,11 +130,8 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 			return false, nil
 		}
 
-		// try decode the key
-		ik, pk, id, err := it.idx.decodePackKey(it.cur.Key())
-		if err != nil {
-			return false, err
-		}
+		// decode the key
+		ik, pk, id := it.idx.decodePackKey(it.cur.Key())
 		// it.idx.log.Infof("Found 0x%016x:%016x:%d", ik, pk, id)
 
 		// rewind if we're behind the search key
@@ -141,10 +143,7 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 
 			// decode the previous key
 			if ok {
-				ik, pk, id, err = it.idx.decodePackKey(it.cur.Key())
-				if err != nil {
-					return false, err
-				}
+				ik, pk, id = it.idx.decodePackKey(it.cur.Key())
 				// it.idx.log.Infof("Now 0x%016x:%016x:%d", ik, pk, id)
 				// assert we're actually at the first block
 			}
@@ -169,7 +168,7 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 
 		// try load block pair from cache
 		if it.useCache {
-			bcache := engine.GetEngine(ctx).BlockCache()
+			bcache := engine.GetEngine(ctx).BlockCache(it.idx.id)
 			if b, ok := bcache.Get(it.idx.encodeCacheKey(ik, pk, 0)); ok {
 				it.pack.WithBlock(0, b)
 			}
@@ -181,10 +180,7 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 		// load missing blocks in pair from cursor
 		for i := range []int{0, 1} {
 			// assert block is correct
-			bik, bpk, bid, err := it.idx.decodePackKey(it.cur.Key())
-			if err != nil {
-				return false, fmt.Errorf("loading block 0x%016x:%016x:%d: %v", bik, bpk, bid, err)
-			}
+			bik, bpk, bid := it.idx.decodePackKey(it.cur.Key())
 			assert.Always(bid == i, "unexpected block id", "ik", bik, "pk", bpk, "id", bid, "i", i)
 
 			// decode when not already found in cache
@@ -211,13 +207,17 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 func (it *LookupIterator) Close() {
 	if it.pack != nil {
 		it.pack.Release()
+		it.pack = nil
 	}
 	if it.cur != nil {
 		it.cur.Close()
+		it.cur = nil
 	}
-	it.cur = nil
+	if it.tx != nil {
+		it.tx.Rollback()
+		it.tx = nil
+	}
 	it.iks = nil
-	it.pack = nil
 	it.idx = nil
 	it.nextPk = 0
 	it.useCache = false
@@ -225,12 +225,14 @@ func (it *LookupIterator) Close() {
 
 type ScanIterator struct {
 	idx      *Index
+	tx       store.Tx
 	cur      store.Cursor
 	from     []byte
 	to       []byte
 	node     *query.FilterTreeNode
 	hits     []uint32
 	pack     *pack.Package
+	bits     *bitset.Bitset
 	useCache bool
 }
 
@@ -239,32 +241,9 @@ func NewScanIterator(idx *Index, node *query.FilterTreeNode, useCache bool) *Sca
 		node:     node,
 		idx:      idx,
 		hits:     arena.Alloc(arena.AllocUint32, idx.opts.PackSize).([]uint32),
+		bits:     bitset.NewBitset(idx.opts.PackSize),
 		useCache: useCache,
 	}
-}
-
-// convert filter value to 8 byte big endian key
-func makePrefix(typ block.BlockType, val any) []byte {
-	var prefix [8]byte
-	switch typ {
-	case block.BlockInt64:
-		BE.PutUint64(prefix[:], uint64(val.(int64)))
-	case block.BlockInt32:
-		BE.PutUint32(prefix[4:], uint32(val.(int32)))
-	case block.BlockInt16:
-		BE.PutUint16(prefix[6:], uint16(val.(int16)))
-	case block.BlockInt8:
-		prefix[7] = uint8(val.(int8))
-	case block.BlockUint64:
-		BE.PutUint64(prefix[:], val.(uint64))
-	case block.BlockUint32:
-		BE.PutUint32(prefix[4:], val.(uint32))
-	case block.BlockUint16:
-		BE.PutUint16(prefix[6:], val.(uint16))
-	case block.BlockUint8:
-		prefix[7] = val.(uint8)
-	}
-	return prefix[:]
 }
 
 func (it *ScanIterator) Next(ctx context.Context) (*pack.Package, []uint32, error) {
@@ -278,15 +257,17 @@ func (it *ScanIterator) Next(ctx context.Context) (*pack.Package, []uint32, erro
 	if it.cur == nil {
 		it.initRange()
 		// it.idx.log.Infof("Scan range %x .. %x", it.from, it.to)
-		tx, err := engine.GetTransaction(ctx).StoreTx(it.idx.db, false)
+		tx, err := it.idx.db.Begin(false)
 		if err != nil {
 			return nil, nil, err
 		}
 		if bucket := it.idx.dataBucket(tx); bucket != nil {
 			it.cur = bucket.Cursor()
 		} else {
-			return nil, nil, engine.ErrNoBucket
+			tx.Rollback()
+			return nil, nil, store.ErrNoBucket
 		}
+		it.tx = tx
 		it.cur.Seek(it.from)
 
 		// rewind from end if we have a single pack only
@@ -311,20 +292,18 @@ func (it *ScanIterator) Next(ctx context.Context) (*pack.Package, []uint32, erro
 		// find actual matches
 		// it.idx.log.Infof("Run filter %s %T %v idx=%d",
 		// it.node, it.node.Filter.Matcher, it.node.Filter.Matcher.Value(), it.node.Filter.Index)
-		bits := match.MatchTree(it.node, it.pack, nil)
+		it.bits = match.MatchTree(it.node, it.pack, nil, it.bits)
 
 		// skip this pack when no matches were found
-		if bits.Count() == 0 {
+		if it.bits.None() {
 			// it.idx.log.Infof("No match in this pack")
-			bits.Close()
 			it.pack.Release()
 			it.pack = nil
 			continue
 		}
 
 		// handle real matches
-		it.hits = bits.Indexes(it.hits)
-		bits.Close()
+		it.hits = it.bits.Indexes(it.hits)
 		// it.idx.log.Infof("Found %d hits", len(it.hits))
 
 		return it.pack, it.hits, nil
@@ -338,7 +317,13 @@ func (it *ScanIterator) Close() {
 	if it.cur != nil {
 		it.cur.Close()
 	}
+	if it.tx != nil {
+		it.tx.Rollback()
+		it.tx = nil
+	}
 	arena.Free(arena.AllocUint32, it.hits[:0])
+	it.bits.Close()
+	it.bits = nil
 	it.pack = nil
 	it.cur = nil
 	it.hits = nil
@@ -349,7 +334,33 @@ func (it *ScanIterator) Close() {
 	it.to = nil
 }
 
-var FF = []byte{0xFF}
+var (
+	FF  = []byte{0xFF}
+	END = num.EncodeUvarint(0xFFFFFFFFFFFFFFFF)
+)
+
+// convert filter value to uvarint key
+func makePrefix(typ block.BlockType, val any) []byte {
+	switch typ {
+	case block.BlockInt64:
+		return num.EncodeUvarint(uint64(val.(int64)))
+	case block.BlockInt32:
+		return num.EncodeUvarint(uint64(val.(int32)))
+	case block.BlockInt16:
+		return num.EncodeUvarint(uint64(val.(int16)))
+	case block.BlockInt8:
+		return num.EncodeUvarint(uint64(val.(int8)))
+	case block.BlockUint64:
+		return num.EncodeUvarint(val.(uint64))
+	case block.BlockUint32:
+		return num.EncodeUvarint(uint64(val.(uint32)))
+	case block.BlockUint16:
+		return num.EncodeUvarint(uint64(val.(uint16)))
+	case block.BlockUint8:
+		return num.EncodeUvarint(uint64(val.(uint8)))
+	}
+	return []byte{0}
+}
 
 func (it *ScanIterator) initRange() {
 	// create from / to range
@@ -372,12 +383,12 @@ func (it *ScanIterator) initRange() {
 	case types.FilterModeGt:
 		// GT    => scan(from, FF)
 		it.from = store.BytesPrefix(makePrefix(it.node.Filter.Type, it.node.Filter.Value)).Limit
-		it.to = bytes.Repeat(FF, 8)
+		it.to = END
 
 	case types.FilterModeGe:
 		// GE    => scan(from, FF)
 		it.from = makePrefix(it.node.Filter.Type, it.node.Filter.Value)
-		it.to = bytes.Repeat(FF, 8)
+		it.to = END
 
 	case types.FilterModeRange:
 		// RG    => scan(from, to)
@@ -388,10 +399,7 @@ func (it *ScanIterator) initRange() {
 
 func (it *ScanIterator) loadPack(ctx context.Context) error {
 	// decode key
-	ik, pk, id, err := it.idx.decodePackKey(it.cur.Key())
-	if err != nil {
-		return err
-	}
+	ik, pk, id := it.idx.decodePackKey(it.cur.Key())
 	assert.Always(id == 0, "ScanIterator cursor should point at first elemeng in block pair")
 
 	// load pack
@@ -401,7 +409,7 @@ func (it *ScanIterator) loadPack(ctx context.Context) error {
 
 	// try load block pair from cache
 	if it.useCache {
-		bcache := engine.GetEngine(ctx).BlockCache()
+		bcache := engine.GetEngine(ctx).BlockCache(it.idx.id)
 		if b, ok := bcache.Get(it.idx.encodeCacheKey(ik, pk, 0)); ok {
 			it.pack.WithBlock(0, b)
 		}

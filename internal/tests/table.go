@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/engine"
@@ -82,7 +83,7 @@ var TestCases = []TestCase{
 
 func TestTableEngine[T any, F TF[T]](t *testing.T, driver, eng string) {
 	for _, c := range TestCases {
-		t.Run(c.Name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s/%s", c.Name, driver), func(t *testing.T) {
 			ctx := context.Background()
 			dopts := NewTestDatabaseOptions(t, driver)
 			e := NewTestEngine(t, dopts)
@@ -103,7 +104,8 @@ func SetupTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 
 func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions, s *schema.Schema) {
 	t.Helper()
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, tx, commit, abort, err := e.WithTransaction(context.Background())
+	tx.WithFlags(engine.TxFlagsCatalog) // let tx sync wal
 	require.NoError(t, err)
 	defer abort()
 

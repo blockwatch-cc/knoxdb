@@ -49,8 +49,8 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 					b.Uint64().Append(meta.Xmin)
 				case schema.MetaXmax:
 					b.Uint64().Append(meta.Xmax)
-				case schema.MetaLive:
-					b.Bool().Append(meta.Xmax == 0)
+				case schema.MetaDel:
+					b.Bool().Append(meta.Xmax > 0)
 				}
 			} else {
 				switch field.Type {

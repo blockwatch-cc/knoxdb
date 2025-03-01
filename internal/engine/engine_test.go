@@ -10,7 +10,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
-	"blockwatch.cc/knoxdb/pkg/cache/rclru"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
@@ -39,8 +38,8 @@ func NewTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
 	e := &Engine{
 		path: path,
 		cache: CacheManager{
-			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
-			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
+			blocks:  block.NewCache(0),
+			buffers: NewBufferCache(0),
 		},
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
 		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
@@ -73,8 +72,8 @@ func OpenTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
 	e := &Engine{
 		path: path,
 		cache: CacheManager{
-			blocks:  rclru.NewNoCache[CacheKeyType, *block.Block](),
-			buffers: rclru.NewNoCache[CacheKeyType, *Buffer](),
+			blocks:  block.NewCache(0),
+			buffers: NewBufferCache(0),
 		},
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
 		stores:  util.NewLockFreeMap[uint64, StoreEngine](),

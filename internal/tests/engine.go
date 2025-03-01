@@ -28,6 +28,9 @@ const (
 func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
+	if testing.Verbose() {
+		log.Log.SetLevel(log.LevelDebug)
+	}
 	return engine.DatabaseOptions{
 		Path:       t.TempDir(),
 		Namespace:  "cx.bwd.knoxdb.testdb",
@@ -38,7 +41,7 @@ func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions 
 		NoSync:     false,
 		NoGrowSync: false,
 		ReadOnly:   false,
-		Logger:     log.Log.Clone(),
+		Logger:     log.Log,
 	}
 }
 
@@ -46,6 +49,9 @@ func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
 	eng = util.NonEmptyString(eng, os.Getenv("KNOX_ENGINE"), "pack")
+	if testing.Verbose() {
+		log.Log.SetLevel(log.LevelDebug)
+	}
 	return engine.TableOptions{
 		Driver:      driver,
 		Engine:      engine.TableKind(eng),
@@ -56,7 +62,7 @@ func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
 		NoSync:      false,
 		NoGrowSync:  false,
 		ReadOnly:    false,
-		Logger:      log.Log.Clone(),
+		Logger:      log.Log,
 	}
 }
 
@@ -64,6 +70,9 @@ func NewTestIndexOptions(t *testing.T, driver, eng string, indexType types.Index
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
 	eng = util.NonEmptyString(eng, os.Getenv("KNOX_ENGINE"), "pack")
+	if testing.Verbose() {
+		log.Log.SetLevel(log.LevelDebug)
+	}
 	return engine.IndexOptions{
 		Driver:      driver,
 		Engine:      engine.IndexKind(eng),

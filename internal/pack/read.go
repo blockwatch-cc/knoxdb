@@ -6,13 +6,13 @@ package pack
 import (
 	"bytes"
 	"encoding"
+	"encoding/binary"
 	"fmt"
 	"reflect"
 	"sort"
 	"time"
 	"unsafe"
 
-	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -29,7 +29,10 @@ func (p *Package) ReadWire(row int) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-var zeros [32]byte
+var (
+	zeros [32]byte
+	LE    = binary.LittleEndian // values
+)
 
 func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 	assert.Always(row >= 0 && row < p.nRows, "invalid row",
@@ -278,7 +281,7 @@ func (p *Package) ReadCol(col int) any {
 		return nil
 	}
 
-	// TODO: when block is not loaded (or does not exist) return null slice
+	// TODO: when block is not loaded (or does not exist) return typed null slice
 	b := p.blocks[col]
 	if b == nil {
 		return nil
@@ -371,7 +374,7 @@ func ForEach[T any](pkg *Package, fn func(i int, v *T) error) error {
 			return err
 		}
 		if err := fn(i, &t); err != nil {
-			if err == engine.EndStream {
+			if err == types.EndStream {
 				break
 			}
 			return err
@@ -530,7 +533,6 @@ func (p *Package) FindPkUnsorted(id uint64, last int) int {
 	)
 
 	// primary key field required
-	// if p.px < 0 || p.nRows <= last {
 	if p.nRows <= last {
 		return -1
 	}

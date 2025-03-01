@@ -13,6 +13,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/reducer"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -253,7 +254,7 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 		// stop when limit is reached, make sure we process/aggregate all data rows
 		// for the last window (stop at the first data point exceeding the limit)
 		if req.Limit > 0 && buckets[0].Len() > req.Limit {
-			return engine.EndStream
+			return types.EndStream
 		}
 		return nil
 	})

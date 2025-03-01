@@ -22,6 +22,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"golang.org/x/exp/constraints"
 )
@@ -79,8 +80,6 @@ var (
 	RangeKeySuffix   = []byte("_range") // range filter bucket
 	BitsKeySuffix    = []byte("_bits")  // bits filter bucket
 	FuseKeySuffix    = []byte("_fuse")  // fuse filter bucket
-
-	BE = binary.BigEndian
 )
 
 type Features byte
@@ -336,17 +335,17 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 	// store inode meta stats when dirty
 	tree := idx.treeBucket(tx)
 	if tree == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 	for i, inode := range idx.inodes {
 		if inode == nil || !inode.dirty {
 			continue
 		}
 		// key is tree node id (u32) + 0
-		var key [8]byte
-		BE.PutUint32(key[:4], uint32(i))
-		BE.PutUint32(key[4:], 0)
-		err := tree.Put(key[:], inode.meta)
+		var key [2 * num.MaxVarintLen32]byte
+		n := num.PutUvarint(key[:], uint64(i))
+		n += num.PutUvarint(key[n:], uint64(0))
+		err := tree.Put(key[:n], inode.meta)
 		if err != nil {
 			return err
 		}
@@ -356,12 +355,12 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 
 	blocks := idx.statsBucket(tx)
 	if blocks == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 
 	// drop empty snode blocks
 	for _, snode := range empty {
-		err := snode.spack.Remove(ctx, blocks, 0)
+		err := snode.spack.RemoveFromDisk(ctx, blocks)
 		if err != nil {
 			return err
 		}
@@ -375,17 +374,17 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 			continue
 		}
 		// key is tree node id (u32) + spack key (u32)
-		var key [8]byte
-		BE.PutUint32(key[:4], uint32(li+i))
-		BE.PutUint32(key[4:], snode.Key())
-		err := tree.Put(key[:], snode.meta)
+		var key [2 * num.MaxVarintLen32]byte
+		n := num.PutUvarint(key[:], uint64(li+i))
+		n += num.PutUvarint(key[n:], uint64(snode.Key()))
+		err := tree.Put(key[:n], snode.meta)
 		if err != nil {
 			return err
 		}
 		idx.bytesWritten += int64(len(snode.meta))
 
 		// package blocks
-		snode.disksize, err = snode.spack.Store(ctx, blocks, 0)
+		snode.disksize, err = snode.spack.StoreToDisk(ctx, blocks)
 		if err != nil {
 			return err
 		}
@@ -401,11 +400,11 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 	// load tree
 	tree := idx.treeBucket(tx)
 	if tree == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 	blocks := idx.statsBucket(tx)
 	if blocks == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 
 	// walk reverse finds snode entries first
@@ -413,8 +412,11 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 	defer c.Close()
 	for ok := c.Last(); ok; ok = c.Prev() {
 		// read tree node id and snode key
-		id := int(BE.Uint32(c.Key()))
-		key := BE.Uint32(c.Key()[4:])
+		buf := c.Key()
+		v, n := num.Uvarint(buf)
+		id := int(v)
+		v, _ = num.Uvarint(buf[n:])
+		key := uint32(v)
 
 		// init node index calculations
 		ilen := len(idx.inodes)
@@ -438,11 +440,9 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 			idx.bytesRead += int64(len(c.Value()))
 
 			// load key and nvals columns
-			n, err := node.spack.Load(
+			n, err := node.spack.LoadFromDisk(
 				ctx,
 				blocks, // bucket
-				false,  // no cache
-				0,      // zero cache key
 				[]uint16{STATS_ROW_KEY + 1, STATS_ROW_NVALS + 1}, // field ids!!
 				0, // len from store
 			)
@@ -646,6 +646,13 @@ func (idx Index) GlobalMaxPk() uint64 {
 	return 0
 }
 
+func (idx Index) IsTailFull() bool {
+	if idx.Len() == 0 {
+		return false
+	}
+	return idx.snodes[len(idx.snodes)-1].LastNValues() == idx.nmax
+}
+
 func (idx *Index) Get(key uint32) (*Record, bool) {
 	node, _, ok := idx.findSNode(key)
 	if !ok {
@@ -806,7 +813,7 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir type
 	}
 
 	// stop early when nothing matched
-	if nodeBits.Count() == 0 {
+	if nodeBits.None() {
 		return nil, false
 	}
 

@@ -124,7 +124,7 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 	bits = f.Matcher.MatchRangeVectors(pkg.Block(minx), pkg.Block(maxx), bits, mask)
 
 	// stop early (no match, no bloom bucket, incompatible with bloom)
-	if bits.Count() == 0 || b == nil {
+	if bits.None() || b == nil {
 		return 0, bits
 	}
 
@@ -283,7 +283,7 @@ func matchVectorOr(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.B
 		bits.Or(scratch)
 
 		// early stop on full aggregate match
-		if i < len(n.Children)-1 && bits.Count() == bits.Len() {
+		if i < len(n.Children)-1 && bits.All() {
 			break
 		}
 		scratch.Zero()

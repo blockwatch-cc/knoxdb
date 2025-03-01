@@ -6,89 +6,124 @@ package pack
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"slices"
 
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 // The storage model stores serialized blocks in a storage bucket. Each block is
 // directly addressable with a unique computable key (pack key + schema field id).
-// A single byte header defines an outer compression format.
-//
 // This model allows loading of individual blocks from disk without touching deleted
 // or unneeded data.
 //
-// Any new file format should support directly addressable blocks and data checksums.
+// Keys are encoded as order-preserving varints. Values start with single header
+// byte that defines an optional outer entropy compression format followed by a
+// type specific encoding header and data.
+//
 
-var (
-	LE = binary.LittleEndian // values
-	BE = binary.BigEndian    // keys
+// translate field type to block type
+var blockTypes = types.BlockTypes
 
-	// translate field type to block type
-	blockTypes = types.BlockTypes
-)
-
-func blockKey(packkey uint32, blockId uint16) uint64 {
+func cacheKey(packkey uint32, blockId uint16) uint64 {
 	return uint64(packkey)<<32 | uint64(blockId)
 }
 
 func EncodeBlockKey(packkey uint32, blockId uint16) []byte {
-	var b [8]byte
-	BE.PutUint32(b[:], packkey)
-	BE.PutUint16(b[6:], blockId)
-	return b[:]
+	var b [num.MaxVarintLen32 + num.MaxVarintLen16]byte
+	return num.AppendUvarint(
+		num.AppendUvarint(b[:0], uint64(packkey)),
+		uint64(blockId),
+	)
 }
 
 func DecodeBlockKey(buf []byte) (packkey uint32, blockId uint16) {
-	packkey = BE.Uint32(buf)
-	blockId = BE.Uint16(buf[6:])
+	v, n := num.Uvarint(buf)
+	packkey = uint32(v)
+	v, _ = num.Uvarint(buf[n:])
+	blockId = uint16(v)
 	return
 }
 
-// Loads missing blocks from disk, blocks are read-only
-func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, cacheKey uint64, fids []uint16, nRows int) (int, error) {
-	if bucket == nil {
-		return 0, engine.ErrNoBucket
-	}
+// Loads missing blocks from cache
+func (p *Package) LoadFromCache(bcache block.BlockCachePartition, fids []uint16) int {
+	fields := p.schema.Exported()
+	var n int
+	bcache.Lock()
+	for i, b := range p.blocks {
+		// skip already loaded blocks
+		if b != nil {
+			continue
+		}
 
-	// use block cache to lookup
-	var (
-		bcache engine.BlockCacheType
-		ckey   engine.CacheKeyType
-	)
-	if useCache {
-		bcache = engine.GetEngine(ctx).BlockCache()
-		ckey = engine.CacheKeyType{cacheKey, 0}
+		// skip excluded blocks, load full schema when fids is nil
+		if fids != nil && !slices.Contains(fids, fields[i].Id) {
+			continue
+		}
+
+		// try cache lookup, will inc refcount
+		block, _ := bcache.GetLocked(cacheKey(p.key, fields[i].Id))
+		if block != nil {
+			p.blocks[i] = block
+			n++
+		}
+	}
+	bcache.Unlock()
+	return n
+}
+
+func (p *Package) AddToCache(bcache block.BlockCachePartition) {
+	fields := p.schema.Exported()
+	bcache.Lock()
+	for i, b := range p.blocks {
+		if b == nil {
+			continue
+		}
+		bcache.ContainsOrAddLocked(cacheKey(p.key, fields[i].Id), b)
+	}
+	bcache.Unlock()
+}
+
+func (p *Package) DropFromCache(bcache block.BlockCachePartition) {
+	fields := p.schema.Exported()
+	bcache.Lock()
+	for i, b := range p.blocks {
+		if b == nil {
+			continue
+		}
+		bcache.RemoveLocked(cacheKey(p.key, fields[i].Id))
+	}
+	bcache.Unlock()
+}
+
+// Loads missing blocks from disk, blocks are read-only
+func (p *Package) LoadFromDisk(ctx context.Context, bucket store.Bucket, fids []uint16, nRows int) (int, error) {
+	if bucket == nil {
+		return 0, store.ErrNoBucket
 	}
 
 	var n int
-	for i, f := range p.schema.Fields() {
+	for i, f := range p.schema.Exported() {
 		// skip already loaded blocks
 		if p.blocks[i] != nil {
 			continue
 		}
 
 		// skip excluded blocks, load full schema when fids is nil
-		if fids != nil && !slices.Contains(fids, f.Id()) {
+		if fids != nil && !slices.Contains(fids, f.Id) {
 			continue
 		}
 
-		// try cache lookup first, will inc refcount
-		ckey[1] = blockKey(p.key, f.Id())
-		if useCache {
-			if block, ok := bcache.Get(ckey); ok {
-				p.blocks[i] = block
-				continue
-			}
+		// skip inactive fields
+		if f.Flags.Is(types.FieldFlagDeleted) {
+			continue
 		}
 
 		// generate storage key for this block
-		bkey := EncodeBlockKey(p.key, f.Id())
+		bkey := EncodeBlockKey(p.key, f.Id)
 
 		// load block data
 		buf := bucket.Get(bkey)
@@ -100,18 +135,15 @@ func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, 
 
 		// alloc block (use actual storage size, arena will round up to power of 2)
 		if p.blocks[i] == nil {
-			// fmt.Printf("Load block %d-%d with size %d:%d\n", p.key, f.Id(), nRows, p.maxRows)
 			sz := nRows
 			if sz == 0 {
 				sz = p.maxRows
 			}
-			p.blocks[i] = block.New(blockTypes[f.Type()], sz)
+			p.blocks[i] = block.New(blockTypes[f.Type], sz)
 		}
 
 		// read block compression
 		comp := types.FieldCompression(buf[0])
-		// fmt.Printf("Load block %d with comp %d\n", f.Id(), comp)
-		// fmt.Printf("Data %d\n%s", len(buf), hex.Dump(buf))
 		buf = buf[1:]
 
 		// decode block data
@@ -129,14 +161,7 @@ func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, 
 			err = p.blocks[i].Decode(buf)
 		}
 		if err != nil {
-			return n, fmt.Errorf("loading block 0x%08x:%02d: %v",
-				p.key, f.Id(), err)
-		}
-
-		// cache loaded block, will inc refcount
-		if useCache {
-			ckey[1] = blockKey(p.key, f.Id())
-			bcache.Add(ckey, p.blocks[i])
+			return n, fmt.Errorf("loading block 0x%08x:%02d: %v", p.key, f.Id, err)
 		}
 	}
 
@@ -153,7 +178,8 @@ func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, 
 		}
 		// all subsequent blocks must have same len
 		if nRows != b.Len() {
-			return n, fmt.Errorf("loading block 0x%08x:%02d len %d mismatch %d", p.key, i, nRows, b.Len())
+			return n, fmt.Errorf("loading block 0x%08x:%02d len mismatch exp=%d have=%d",
+				p.key, i, nRows, b.Len())
 		}
 	}
 
@@ -164,42 +190,31 @@ func (p *Package) Load(ctx context.Context, bucket store.Bucket, useCache bool, 
 }
 
 // store all dirty blocks
-func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint64) (int, error) {
+func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, error) {
 	if bucket == nil {
-		return 0, engine.ErrNoBucket
+		return 0, store.ErrNoBucket
 	}
 
 	// analyze
 	p.WithAnalysis()
 
-	// remove updated blocks from cache
-	var (
-		bcache engine.BlockCacheType
-		ckey   engine.CacheKeyType
-	)
-	if cacheKey > 0 {
-		bcache = engine.GetEngine(ctx).BlockCache()
-		ckey = engine.CacheKeyType{cacheKey, 0}
-	}
-
 	// optimize blocks before writing (dedup)
 	// TODO: move this into an integrated analysis & encode pipeline
+	// TODO: don't do this in-place so a writer pack can be reused
 	p.Optimize()
 
 	var n int
-	for i, f := range p.schema.Fields() {
+	for i, f := range p.schema.Exported() {
 		// skip empty blocks, clean blocks and deleted fields
-		if p.blocks[i] == nil || !p.blocks[i].IsDirty() || f.Is(types.FieldFlagDeleted) {
+		if p.blocks[i] == nil || !p.blocks[i].IsDirty() || f.Flags.Is(types.FieldFlagDeleted) {
 			continue
 		}
 
 		// encode block data using optional compressor into new allocated buffers
 		// (this is necessary because the underlying store may not copy our data)
 		buf := bytes.NewBuffer(make([]byte, 0, p.blocks[i].MaxStoredSize()))
-		buf.WriteByte(byte(f.Compress()))
-		enc := NewCompressor(buf, f.Compress())
-
-		// fmt.Printf("Store block %d-%d with size %d:%d\n", p.key, f.Id(), p.blocks[i].Len(), p.blocks[i].Cap())
+		buf.WriteByte(byte(f.Compress))
+		enc := NewCompressor(buf, f.Compress)
 
 		// encode block
 		_, err := p.blocks[i].WriteTo(enc)
@@ -212,58 +227,32 @@ func (p *Package) Store(ctx context.Context, bucket store.Bucket, cacheKey uint6
 		}
 
 		// generate storage key for this block
-		bkey := EncodeBlockKey(p.key, f.Id())
+		bkey := EncodeBlockKey(p.key, f.Id)
 
 		// export block size statistics
 		p.analyze.DiffSize[i] = buf.Len() - len(bucket.Get(bkey))
 		n += buf.Len()
 
-		// fmt.Printf("Store block %d with comp %d\n", f.Id(), f.Compress())
-		// fmt.Printf("Data %d\n%s", buf.Len(), hex.Dump(buf.Bytes()))
-
 		// write to store
 		if err := bucket.Put(bkey, buf.Bytes()); err != nil {
-			return n, fmt.Errorf("storing block 0x%08x:%02d: %v", p.key, f.Id(), err)
+			return n, fmt.Errorf("storing block 0x%08x:%02d: %v", p.key, f.Id, err)
 		}
 		p.blocks[i].SetClean()
-
-		// drop cached blocks
-		if bcache != nil {
-			ckey[1] = blockKey(p.key, f.Id())
-			bcache.Remove(ckey)
-		}
 	}
 
 	return n, nil
 }
 
-// delete all blocks from storage and cache
-func (p *Package) Remove(ctx context.Context, bucket store.Bucket, cacheKey uint64) error {
+// delete all blocks from storage
+func (p *Package) RemoveFromDisk(ctx context.Context, bucket store.Bucket) error {
 	if bucket == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 
-	// remove updated blocks from cache
-	var (
-		bcache engine.BlockCacheType
-		ckey   engine.CacheKeyType
-	)
-	if cacheKey > 0 {
-		bcache = engine.GetEngine(ctx).BlockCache()
-		ckey = engine.CacheKeyType{cacheKey, 0}
-	}
-
-	for _, f := range p.schema.Fields() {
+	for _, f := range p.schema.Exported() {
 		// don't check if key exists
-		bkey := EncodeBlockKey(p.key, f.Id())
-		if err := bucket.Delete(bkey); err != nil {
-			return fmt.Errorf("removing block 0x%016x:%02d: %v", p.key, f.Id(), err)
-		}
-
-		// drop cached blocks
-		if bcache != nil {
-			ckey[1] = blockKey(p.key, f.Id())
-			bcache.Remove(ckey)
+		if err := bucket.Delete(EncodeBlockKey(p.key, f.Id)); err != nil {
+			return fmt.Errorf("removing block 0x%016x:%02d: %v", p.key, f.Id, err)
 		}
 	}
 

@@ -3,7 +3,15 @@
 
 package store
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// New error types
+var (
+	ErrNoBucket = errors.New("bucket does not exist")
+)
 
 // ErrorCode identifies a kind of error.
 type ErrorCode int

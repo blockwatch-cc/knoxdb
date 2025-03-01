@@ -5,7 +5,6 @@ package pack
 
 import (
 	"reflect"
-	"sort"
 	"sync"
 	"time"
 
@@ -13,14 +12,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
-)
-
-// Deprecated: remove key meaning when journal/tomb data is stored separately
-const (
-	// reserved package keys
-	JournalKeyId   uint32 = 0xFFFFFFFF
-	TombstoneKeyId uint32 = 0xFFFFFFFE
-	ResultKeyId    uint32 = 0xFFFFFFFD
 )
 
 var (
@@ -34,41 +25,30 @@ var (
 )
 
 type Package struct {
-	key     uint32         // identity
-	nRows   int            // current number or rows
-	maxRows int            // max number of rows (== block allocation size)
-	px      int            // primary key index (position in schema)
-	rx      int            // row id index (position in schema)
-	schema  *schema.Schema // mapping from fields to blocks in query order
-	blocks  []*block.Block // loaded blocks (in schema order)
-	analyze *Analysis      // statistics for encoding and metadata
-	// selected []uint32       // selection vector used in operator pipelines
+	key      uint32         // identity
+	nRows    int            // current number or rows
+	maxRows  int            // max number of rows (== block allocation size)
+	px       int            // primary key index (position in schema)
+	rx       int            // row id index (position in schema)
+	schema   *schema.Schema // logical data types for column vectors
+	blocks   []*block.Block // physical column vectors, maybe nil when unsued
+	analyze  *Analysis      // statistics for encoding and metadata
+	selected []uint32       // selection vector used in operator pipelines
 }
 
 func New() *Package {
 	return packagePool.Get().(*Package)
 }
 
-func (p *Package) KeyBytes() []byte {
-	var buf [4]byte
-	BE.PutUint32(buf[:], p.key)
-	return buf[:]
+func NewFrom(src *Package) *Package {
+	return New().
+		WithKey(src.Key()).
+		WithMaxRows(src.maxRows).
+		WithSchema(src.schema)
 }
 
 func (p Package) Key() uint32 {
 	return p.key
-}
-
-func (p Package) IsJournal() bool {
-	return p.key == JournalKeyId
-}
-
-func (p Package) IsTomb() bool {
-	return p.key == TombstoneKeyId
-}
-
-func (p Package) IsResult() bool {
-	return p.key == ResultKeyId
 }
 
 func (p Package) IsNil() bool {
@@ -90,10 +70,6 @@ func (p Package) IsDirty() bool {
 		}
 	}
 	return false
-}
-
-func (p Package) PkIdx() int {
-	return p.px
 }
 
 func (p Package) Schema() *schema.Schema {
@@ -125,6 +101,11 @@ func (p *Package) WithBlock(i int, b *block.Block) *Package {
 	}
 	p.blocks[i] = b
 	p.nRows = b.Len()
+	return p
+}
+
+func (p *Package) WithSelection(sel []uint32) *Package {
+	p.selected = sel
 	return p
 }
 
@@ -171,6 +152,23 @@ func (p *Package) Clone(sz int) *Package {
 	return clone
 }
 
+// Copy creates a copy of pack referencing all data vectors.
+func (p *Package) Copy() *Package {
+	cp := New().
+		WithKey(p.key).
+		WithSchema(p.schema).
+		WithMaxRows(p.maxRows).
+		WithSelection(p.selected)
+	cp.nRows = p.nRows
+	for i, b := range p.blocks {
+		cp.blocks[i] = b
+		if b != nil {
+			p.blocks[i].IncRef()
+		}
+	}
+	return cp
+}
+
 func (p Package) Cols() int {
 	return p.schema.NumFields()
 }
@@ -187,11 +185,28 @@ func (p *Package) IsFull() bool {
 	return p.nRows == p.maxRows
 }
 
-func (p *Package) CanGrow(n int) bool {
-	if p.key == ResultKeyId {
-		return true
+func (p *Package) IsComplete() bool {
+	fields := p.schema.Exported()
+	for i, b := range p.blocks {
+		if b == nil {
+			if !fields[i].Flags.Is(types.FieldFlagDeleted) {
+				return false
+			}
+		}
 	}
+	return true
+}
+
+func (p *Package) CanGrow(n int) bool {
 	return p.nRows+n <= p.maxRows
+}
+
+func (p *Package) NumSelected() int {
+	return len(p.selected)
+}
+
+func (p *Package) Selected() []uint32 {
+	return p.selected
 }
 
 func (p *Package) HeapSize() int {
@@ -213,7 +228,7 @@ func (p Package) Block(i int) *block.Block {
 	return p.blocks[i]
 }
 
-// used in journals and tests
+// Clear empties a pack but retains structure and allocated blocks.
 func (p *Package) Clear() {
 	for _, b := range p.blocks {
 		if b == nil {
@@ -222,8 +237,11 @@ func (p *Package) Clear() {
 		b.Clear()
 	}
 	p.nRows = 0
+	p.analyze = nil
+	p.selected = nil
 }
 
+// Release frees package and drops block references.
 func (p *Package) Release() {
 	assert.Always(p != nil, "nil package release, potential use after free")
 	for i := range p.blocks {
@@ -240,28 +258,7 @@ func (p *Package) Release() {
 	p.rx = 0
 	p.schema = nil
 	p.analyze = nil
+	p.selected = nil
 	p.blocks = p.blocks[:0]
 	packagePool.Put(p)
-}
-
-// inline sort package by primary key, only available for materialized packs
-func (p *Package) PkSort() {
-	if p.IsMaterialized() && p.px >= 0 && !sort.IsSorted(p) {
-		sort.Sort(p)
-	}
-}
-
-func (p *Package) Less(i, j int) bool {
-	assert.Always(p.px >= 0, "pksort requires primary key")
-	assert.Always(p.blocks[p.px] != nil, "pksort with nil primary key")
-	return p.blocks[p.px].Uint64().Less(i, j)
-}
-
-func (p *Package) Swap(i, j int) {
-	for _, b := range p.blocks {
-		if b == nil {
-			continue
-		}
-		b.Swap(i, j)
-	}
 }

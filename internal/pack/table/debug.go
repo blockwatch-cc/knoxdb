@@ -12,8 +12,8 @@ import (
 )
 
 func (t *Table) ViewStats(i int) *stats.Record {
-	switch {
-	case i == int(pack.JournalKeyId):
+	switch i {
+	case -1:
 		return stats.NewRecordFromPack(t.journal.Data, 0)
 	default:
 		info, _ := t.stats.Get(uint32(i))
@@ -22,7 +22,7 @@ func (t *Table) ViewStats(i int) *stats.Record {
 }
 
 func (t *Table) ViewPackage(ctx context.Context, i int) *pack.Package {
-	if i == int(pack.JournalKeyId) {
+	if i < 0 {
 		return t.journal.Data
 	}
 	if i < 0 || i >= t.stats.Len() {

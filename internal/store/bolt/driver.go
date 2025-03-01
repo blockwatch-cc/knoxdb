@@ -23,6 +23,7 @@ var log = logpkg.Disabled
 
 const (
 	dbType = "bolt"
+	dbExt  = ".db"
 )
 
 var (

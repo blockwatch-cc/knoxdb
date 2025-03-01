@@ -61,13 +61,13 @@ func (v MergeValue) Less(w MergeValue) bool {
 
 // MergeIterator is a helper to locate, load and store index packs.
 type MergeIterator struct {
-	idx    *Index                // ref to index
-	tx     store.Tx              // current write tx
-	cur    store.Cursor          // current read cursor
-	pack   *pack.Package         // current read-only pack
-	bcache engine.BlockCacheType // cache reference
-	last   MergeValue            // current pack keys (used on store/delete)
-	lastSz int                   // current pack data size (to calculate diff)
+	idx    *Index                    // ref to index
+	tx     store.Tx                  // current write tx
+	cur    store.Cursor              // current read cursor
+	pack   *pack.Package             // current read-only pack
+	bcache block.BlockCachePartition // cache reference
+	last   MergeValue                // current pack keys (used on store/delete)
+	lastSz int                       // current pack data size (to calculate diff)
 
 	// stats
 	nTxBytes      int // pending tx bytes to write
@@ -168,7 +168,7 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 	// init data bucket
 	bucket := it.idx.dataBucket(it.tx)
 	if bucket == nil {
-		return engine.ErrNoBucket
+		return store.ErrNoBucket
 	}
 
 	// keep loaded keys or compute new block keys from first record when zero
@@ -187,7 +187,7 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 			err = bucket.Delete(key)
 			it.nTxBytes++
 		} else {
-			// it.idx.log.Infof("Storing block 0x%016x:%016x:%d", id.Ik, id.Pk, i)
+			// it.idx.log.Infof("Storing block 0x%016x:%016x:%d as %x", id.Ik, id.Pk, i, key)
 			b := pkg.Block(i)
 			buf := bytes.NewBuffer(make([]byte, 0, b.MaxStoredSize()))
 			_, err = b.WriteTo(buf)
@@ -253,10 +253,10 @@ func (it *MergeIterator) Next(ctx context.Context, id MergeValue) (*pack.Package
 		if bucket := it.idx.dataBucket(it.tx); bucket != nil {
 			it.cur = bucket.Cursor()
 		} else {
-			return nil, MergeValue{}, engine.ErrNoBucket
+			return nil, MergeValue{}, store.ErrNoBucket
 		}
 		if e := engine.GetEngine(ctx); e != nil {
-			it.bcache = e.BlockCache()
+			it.bcache = e.BlockCache(it.idx.id)
 		}
 	}
 
@@ -270,7 +270,7 @@ func (it *MergeIterator) Next(ctx context.Context, id MergeValue) (*pack.Package
 	// decoding the next key either way which yields zero or correct ids
 	// which we'll use as boundary during merge.
 	if it.cur.Key() != nil {
-		id.Ik, id.Pk, _, _ = it.idx.decodePackKey(it.cur.Key())
+		id.Ik, id.Pk, _ = it.idx.decodePackKey(it.cur.Key())
 		id.Ok = true
 		// it.idx.log.Infof("Merge: next id 0x%016x:%016x", id.Ik, id.Pk)
 	} else {
@@ -286,7 +286,8 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 	// seek to search position (this likely does not exist and we will find the next
 	// higher pack in which case we rewind)
 	ok := it.cur.Seek(it.idx.encodePackKey(search.Ik, search.Pk, 0))
-	// it.idx.log.Infof("Merge: Seek 0x%016x:%016x:%d ok=%t", search.Ik, search.Pk, 0, ok)
+	// it.idx.log.Infof("Merge: Seek 0x%016x:%016x:%d key=%x ok=%t", search.Ik, search.Pk, 0,
+	// it.idx.encodePackKey(search.Ik, search.Pk, 0), ok)
 
 	// seek to last pack when not found (our search key is likely in this pack)
 	if !ok {
@@ -304,10 +305,7 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 
 	// try decode the key
 	//nolint:ineffassign
-	ik, pk, id, err := it.idx.decodePackKey(it.cur.Key())
-	if err != nil {
-		return err
-	}
+	ik, pk, id := it.idx.decodePackKey(it.cur.Key())
 	// it.idx.log.Infof("Merge: Found 0x%016x:%016x:%d", ik, pk, id)
 
 	// rewind if we're behind the search key
@@ -319,10 +317,7 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 
 		// decode the previous key
 		if ok {
-			ik, pk, id, err = it.idx.decodePackKey(it.cur.Key())
-			if err != nil {
-				return err
-			}
+			ik, pk, id = it.idx.decodePackKey(it.cur.Key())
 			// it.idx.log.Infof("Merge: Now 0x%016x:%016x:%d", ik, pk, id)
 			// assert we're actually at the first block
 		}
@@ -345,10 +340,7 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 	var n int
 	for i := range []int{0, 1} {
 		// assert block is correct
-		bik, bpk, bid, err := it.idx.decodePackKey(it.cur.Key())
-		if err != nil {
-			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", bik, bpk, bid, err)
-		}
+		bik, bpk, bid := it.idx.decodePackKey(it.cur.Key())
 		assert.Always(bid == i, "unexpected block id", "ik", bik, "pk", bpk, "id", bid)
 
 		// it.idx.log.Infof("Merge: Loading block 0x%016x:%016x:%d", bik, bpk, i)

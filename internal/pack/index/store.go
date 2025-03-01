@@ -5,10 +5,13 @@ package index
 
 import (
 	"encoding/binary"
+	"encoding/hex"
+	"fmt"
 	"hash/fnv"
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 var BE = binary.BigEndian
@@ -25,30 +28,38 @@ func (idx *Index) dataBucket(tx store.Tx) store.Bucket {
 // Encode sortable keys for referencing data blocks on storage.
 //
 // Format:
-// index key + primary key + block id
+// varint(index key) + varint(primary key) + varint(block id)
 //
 // We append primary keys for uniqueness in case the same
 // non-unique index key spans multiple packs.
 func (idx *Index) encodePackKey(ik, pk uint64, id int) []byte {
-	var buf [17]byte
-	BE.PutUint64(buf[:], ik)
-	BE.PutUint64(buf[8:], pk)
-	buf[16] = byte(id)
-	return buf[:]
+	var b [2*num.MaxVarintLen64 + num.MaxVarintLen16]byte
+	buf := num.AppendUvarint(b[:0], ik)
+	buf = num.AppendUvarint(buf, pk)
+	buf = num.AppendUvarint(buf, uint64(id))
+	return buf
 }
 
-func (idx *Index) decodePackKey(buf []byte) (ik, pk uint64, id int, err error) {
-	if len(buf) != 17 {
-		err = engine.ErrDatabaseCorrupt
-		return
+func (idx *Index) decodePackKey(buf []byte) (ik, pk uint64, id int) {
+	var n int
+	ik, n = num.Uvarint(buf)
+	if n == 0 {
+		panic(fmt.Errorf("invalid key %s", hex.EncodeToString(buf)))
 	}
-	ik = BE.Uint64(buf)
-	pk = BE.Uint64(buf[8:])
-	id = int(buf[16])
+	buf = buf[n:]
+	pk, n = num.Uvarint(buf)
+	if n == 0 {
+		panic(fmt.Errorf("invalid key %s", hex.EncodeToString(buf)))
+	}
+	v, n := num.Uvarint(buf[n:])
+	if n == 0 {
+		panic(fmt.Errorf("invalid key %s", hex.EncodeToString(buf)))
+	}
+	id = int(v)
 	return
 }
 
-func (idx *Index) encodeCacheKey(ik, pk uint64, id int) engine.CacheKeyType {
+func (idx *Index) encodeCacheKey(ik, pk uint64, id int) uint64 {
 	var buf [8]byte
 	h64 := fnv.New64a()
 	BE.PutUint64(buf[:], ik)
@@ -57,5 +68,5 @@ func (idx *Index) encodeCacheKey(ik, pk uint64, id int) engine.CacheKeyType {
 	h64.Write(buf[:])
 	buf[0] = byte(id)
 	h64.Write(buf[:1])
-	return engine.CacheKeyType{idx.id, h64.Sum64()}
+	return h64.Sum64()
 }

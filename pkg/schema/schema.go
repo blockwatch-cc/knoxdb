@@ -475,9 +475,11 @@ func (s *Schema) ResetPk(id uint16) (*Schema, bool) {
 		return s, false
 	}
 	// flip primary key flag
-	s.fields[oldPkIdx].flags &^= types.FieldFlagPrimary
+	if oldPkIdx >= 0 {
+		s.fields[oldPkIdx].flags &^= types.FieldFlagPrimary
+		s.exports[oldPkIdx].Flags &^= types.FieldFlagPrimary
+	}
 	s.fields[newPkIdx].flags |= types.FieldFlagPrimary
-	s.exports[oldPkIdx].Flags &^= types.FieldFlagPrimary
 	s.exports[newPkIdx].Flags |= types.FieldFlagPrimary
 	return s, true
 }

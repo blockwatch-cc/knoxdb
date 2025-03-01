@@ -9,8 +9,8 @@ import (
 
 // Cache is a thread-safe fixed size LRU cache.
 type Cache[K comparable, V any] struct {
-	lru  internal.LRUCache[K, V]
 	lock sync.RWMutex
+	lru  internal.LRUCache[K, V]
 }
 
 // New creates an LRU of the given size.
@@ -31,6 +31,14 @@ func NewWithEvict[K comparable, V any](size int, onEvicted func(key K, value V))
 	return c, nil
 }
 
+func (c *Cache[K, V]) Lock() {
+	c.lock.Lock()
+}
+
+func (c *Cache[K, V]) Unlock() {
+	c.lock.Unlock()
+}
+
 // Purge is used to completely clear the cache.
 func (c *Cache[K, V]) Purge() {
 	c.lock.Lock()
@@ -41,16 +49,26 @@ func (c *Cache[K, V]) Purge() {
 // Add adds a value to the cache.  Returns true if an eviction occurred.
 func (c *Cache[K, V]) Add(key K, value V) (updated, evicted bool) {
 	c.lock.Lock()
-	updated, evicted = c.lru.Add(key, value)
+	updated, evicted = c.AddLocked(key, value)
 	c.lock.Unlock()
+	return
+}
+
+func (c *Cache[K, V]) AddLocked(key K, value V) (updated, evicted bool) {
+	updated, evicted = c.lru.Add(key, value)
 	return
 }
 
 // Get looks up a key's value from the cache.
 func (c *Cache[K, V]) Get(key K) (value V, ok bool) {
 	c.lock.Lock()
-	value, ok = c.lru.Get(key)
+	value, ok = c.GetLocked(key)
 	c.lock.Unlock()
+	return
+}
+
+func (c *Cache[K, V]) GetLocked(key K) (value V, ok bool) {
+	value, ok = c.lru.Get(key)
 	return
 }
 
@@ -77,20 +95,28 @@ func (c *Cache[K, V]) Peek(key K) (value V, ok bool) {
 // Returns whether found and whether an eviction occurred.
 func (c *Cache[K, V]) ContainsOrAdd(key K, value V) (ok, evicted bool) {
 	c.lock.Lock()
+	ok, evicted = c.ContainsOrAddLocked(key, value)
+	c.lock.Unlock()
+	return
+}
+
+func (c *Cache[K, V]) ContainsOrAddLocked(key K, value V) (ok, evicted bool) {
 	if c.lru.Contains(key) {
-		c.lock.Unlock()
 		return true, false
 	}
 	_, evicted = c.lru.Add(key, value)
-	c.lock.Unlock()
 	return false, evicted
 }
 
 // Remove removes the provided key from the cache.
 func (c *Cache[K, V]) Remove(key K) {
 	c.lock.Lock()
-	c.lru.Remove(key)
+	c.RemoveLocked(key)
 	c.lock.Unlock()
+}
+
+func (c *Cache[K, V]) RemoveLocked(key K) {
+	c.lru.Remove(key)
 }
 
 // RemoveOldest removes the oldest item from the cache.
