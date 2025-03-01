@@ -80,7 +80,7 @@ func (s *Bitset) All() bool {
 // empty sets.
 func (s *Bitset) None() bool {
 	if s.cnt >= 0 {
-		return s.cnt != 0
+		return s.cnt == 0
 	}
 	if s != nil && s.buf != nil {
 		for _, word := range s.buf {
