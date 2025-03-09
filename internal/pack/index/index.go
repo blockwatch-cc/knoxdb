@@ -1,10 +1,9 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package index
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -12,12 +11,15 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/echa/log"
 )
+
+// TODO
+// - 'include' extra fields support (load/store/merge more columns)
+// - tomb should not have to store extra fields
 
 // This index supports the following condition types on lookup.
 // - hash: EQ, IN (single or composite EQ)
@@ -49,17 +51,17 @@ var (
 
 type Index struct {
 	engine  *engine.Engine      // engine access
-	schema  *schema.Schema      // table schema
+	ischema *schema.Schema      // index storage schema [u64, u64, ... extra]
+	schema  *schema.Schema      // index source schema [n index cols, rid, extra]
 	id      uint64              // unique tagged name hash
 	opts    engine.IndexOptions // copy of config options
 	table   engine.TableEngine  // related table
 	state   engine.ObjectState  // volatile state
-	db      store.DB            // lower-level KV store (e.g. boltdb or badger)
-	journal *pack.Package       // 2-column in-memory data not yet written to packs
-	tomb    *pack.Package       // 2-column in-memory data not yet written to packs
-	convert *schema.Converter   // table to index schema converter
+	db      store.DB            // storage backend
+	journal *pack.Package       // in-memory updates
+	tomb    *pack.Package       // in-memory deletes
+	convert Converter           // table to index schema converter
 	metrics engine.IndexMetrics // usage statistics
-	genkey  hashFunc            // key generator function
 	log     log.Logger          // log instance
 }
 
@@ -69,9 +71,8 @@ func NewIndex() engine.IndexEngine {
 
 func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Schema, opts engine.IndexOptions) error {
 	// require primary key
-	pki := s.PkIndex()
-	if pki < 0 {
-		return engine.ErrNoPk
+	if !s.HasMeta() {
+		return engine.ErrNoMeta
 	}
 
 	// init names
@@ -79,14 +80,15 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	opts = DefaultIndexOptions.Merge(opts)
 
 	// storage schema depends on index type
-	indexSchema, keyFn, err := convertSchema(s, opts.Type)
+	indexSchema, convert, err := convertSchema(s, t.Schema(), opts.Type)
 	if err != nil {
 		return err
 	}
 
 	// setup index
 	idx.engine = engine.GetEngine(ctx)
-	idx.schema = indexSchema
+	idx.ischema = indexSchema
+	idx.schema = s
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = opts
 	idx.table = t
@@ -99,9 +101,8 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		WithMaxRows(opts.JournalSize).
 		WithSchema(indexSchema).
 		Alloc()
-	idx.convert = schema.NewConverter(t.Schema(), s, LE).WithSkipLen()
+	idx.convert = convert
 	idx.metrics = engine.NewIndexMetrics(name)
-	idx.genkey = keyFn
 	idx.log = opts.Logger
 
 	// create backend and store initial state
@@ -163,7 +164,7 @@ func (idx *Index) createBackend(ctx context.Context) error {
 
 func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Schema, opts engine.IndexOptions) error {
 	// storage schema depends on index type
-	indexSchema, keyFn, err := convertSchema(s, opts.Type)
+	indexSchema, convert, err := convertSchema(s, t.Schema(), opts.Type)
 	if err != nil {
 		return err
 	}
@@ -171,7 +172,8 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 
 	// setup index
 	idx.engine = engine.GetEngine(ctx)
-	idx.schema = indexSchema
+	idx.ischema = indexSchema
+	idx.schema = s
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.table = t
@@ -184,9 +186,8 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 		WithMaxRows(opts.JournalSize).
 		WithSchema(indexSchema).
 		Alloc()
-	idx.convert = schema.NewConverter(t.Schema(), s, LE).WithSkipLen()
+	idx.convert = convert
 	idx.metrics = engine.NewIndexMetrics(name)
-	idx.genkey = keyFn
 	idx.log = opts.Logger
 
 	// open db backend and load latest state
@@ -254,6 +255,7 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 		idx.db = nil
 	}
 	idx.engine = nil
+	idx.ischema = nil
 	idx.schema = nil
 	idx.table = nil
 	idx.id = 0
@@ -261,7 +263,6 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 	idx.opts = engine.IndexOptions{}
 	idx.metrics = engine.IndexMetrics{}
 	idx.convert = nil
-	idx.genkey = nil
 	idx.state.Reset()
 	idx.journal.Release()
 	idx.tomb.Release()
@@ -347,76 +348,78 @@ func (idx *Index) Truncate(ctx context.Context) error {
 }
 
 func (idx *Index) Rebuild(ctx context.Context) error {
-	// build a query plan to walk all table data and only fetch
-	// columns we need for indexing, since idx.schema is storage
-	// schema (columns replaced by hash column) we use converter
-	// child schema for this query which extracts what we need
-	// in the order in which we construct index keys
-	plan := query.NewQueryPlan().
-		WithTable(idx.table).
-		WithSchema(idx.convert.Schema()).
-		WithFlags(query.QueryFlagNoIndex).
-		WithLogger(idx.log)
+	// walk all table packs
+	rd := idx.table.NewReader().WithFields(idx.schema.AllFieldIds())
+	defer rd.Close()
 
-	// stream table data, requires read tx
-	err := idx.table.Stream(ctx, plan, func(row engine.QueryRow) error {
-		// create wire encoding compatible with index, potentially hashing data
-		buf := idx.convert.Extract(row.Bytes())
-		key := idx.genkey(buf)
-
-		// append to journal
-		idx.journal.AppendWire(key, nil)
-
-		// flush journal when full
-		var err error
-		if idx.journal.IsFull() {
-			err = idx.merge(ctx)
+	for {
+		// read next table pack
+		pkg, err := rd.Next(ctx)
+		if err != nil {
+			return err
 		}
-		return err
-	})
-	if err != nil {
-		return err
+
+		// stop when we reached the end of the table
+		if pkg == nil {
+			break
+		}
+
+		// add pack contents to index
+		if err := idx.AddPack(ctx, pkg, pack.WriteModeAll); err != nil {
+			return err
+		}
 	}
 
 	// final index flush
 	return idx.merge(ctx)
 }
 
-func (idx *Index) Add(ctx context.Context, prev, val []byte) error {
-	pkey := idx.convert.Extract(prev)
-	vkey := idx.convert.Extract(val)
-	sameKey := bytes.Equal(pkey, vkey)
-	if pkey != nil && !sameKey {
-		pkey = idx.genkey(pkey)
-		idx.tomb.AppendWire(pkey, nil)
-	}
-	if vkey != nil && !sameKey {
-		vkey = idx.genkey(vkey)
-		idx.journal.AppendWire(vkey, nil)
-	}
-	if idx.journal.IsFull() || idx.tomb.IsFull() {
-		return idx.merge(ctx)
+func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package, mode pack.WriteMode) error {
+	// build new index pack, relink columns and produce hash column hash)
+	ipkg := idx.convert.ConvertPack(pkg, mode)
+	defer ipkg.Release()
+
+	var state pack.AppendState
+	for {
+		// append next chunk of data to journal: max(cap(journal), len(src))
+		state = idx.journal.AppendSelected(ipkg, mode, state)
+
+		// store when journal is full
+		if idx.journal.IsFull() {
+			if err := idx.merge(ctx); err != nil {
+				return err
+			}
+		}
+
+		// stop when src is exhausted
+		if !state.More() {
+			break
+		}
 	}
 	return nil
 }
 
-func (idx *Index) Del(ctx context.Context, prev []byte) error {
-	pkey := idx.convert.Extract(prev)
-	if pkey == nil {
-		return nil
-	}
-	pkey = idx.genkey(pkey)
-	idx.tomb.AppendWire(pkey, nil)
-	if idx.journal.IsFull() || idx.tomb.IsFull() {
-		return idx.merge(ctx)
-	}
-	return nil
-}
+func (idx *Index) DelPack(ctx context.Context, pkg *pack.Package, mode pack.WriteMode) error {
+	// build new index pack, relink columns and produce hash column hash)
+	ipkg := idx.convert.ConvertPack(pkg, mode)
+	defer ipkg.Release()
 
-func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package, mode engine.WriteMode) error {
-	return nil
-}
+	var state pack.AppendState
+	for {
+		// append next chunk of data to tomb: max(cap(tomb), len(src))
+		state = idx.tomb.AppendSelected(ipkg, mode, state)
 
-func (idx *Index) DelPack(ctx context.Context, pkg *pack.Package, mode engine.WriteMode) error {
+		// store when tomb is full
+		if idx.tomb.IsFull() {
+			if err := idx.merge(ctx); err != nil {
+				return err
+			}
+		}
+
+		// stop when src is exhausted
+		if !state.More() {
+			break
+		}
+	}
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -82,15 +83,18 @@ func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table eng
 				e := NewTestEngine(t, NewTestDatabaseOptions(t, driver))
 				defer e.Close(ctx)
 
+				// prepare schema (we need metadata)
+				ts := allTypesSchema.WithMeta()
+
 				// create table and insert data
 				CreateEnum(t, e)
 				topts := NewTestTableOptions(t, driver, eng)
-				CreateTable(t, e, table, topts, allTypesSchema)
+				CreateTable(t, e, table, topts, ts)
 				defer table.Close(ctx)
 				InsertData(t, e, table)
 
 				iopts := NewTestIndexOptions(t, driver, eng, indexType)
-				indexSchema, err := allTypesSchema.SelectFields("u64", "id")
+				indexSchema, err := ts.SelectFields("u64", "$rid")
 				require.NoError(t, err)
 
 				var indexEngine F = new(T)
@@ -100,7 +104,7 @@ func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table eng
 	}
 }
 
-func CreateIndex(t *testing.T, idxEngine engine.IndexEngine, tab engine.TableEngine, e *engine.Engine, idxOpts engine.IndexOptions, s *engine.Schema) {
+func CreateIndex(t *testing.T, idxEngine engine.IndexEngine, tab engine.TableEngine, e *engine.Engine, idxOpts engine.IndexOptions, s *schema.Schema) {
 	t.Helper()
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
@@ -112,22 +116,27 @@ func CreateIndex(t *testing.T, idxEngine engine.IndexEngine, tab engine.TableEng
 	tab.UseIndex(idxEngine)
 }
 
-func FillIndex(t *testing.T, e *engine.Engine, ti engine.IndexEngine) []byte {
+func FillIndex(t *testing.T, e *engine.Engine, ti engine.IndexEngine) *pack.Package {
 	t.Helper()
 	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
 	enc := schema.NewEncoder(ti.Table().Schema())
-	var last []byte
+	pkg := pack.New().WithSchema(ti.Table().Schema())
+	meta := &schema.Meta{}
 	for i := range 6 {
 		allType := NewAllTypes(i)
 		allType.Id = uint64(i + 1)
+		meta.Rid = uint64(i + 1)
 		buf, err := enc.Encode(allType, nil)
 		require.NoError(t, err)
-		require.NoError(t, ti.Add(ctx, nil, buf))
-		last = buf
+		pkg.AppendWire(buf, meta)
 	}
+	require.NoError(t, ti.AddPack(ctx, pkg, pack.WriteModeAll))
 	require.NoError(t, commit())
 	require.NoError(t, ti.Sync(ctx))
-	return last
+
+	// return a package with just the last row (for delete tests)
+	pkg.Delete(0, 5)
+	return pkg
 }
 
 func QueryIndex(t *testing.T, ctx context.Context, idx engine.IndexEngine, f *query.FilterTreeNode, cnt int) {
@@ -317,7 +326,7 @@ func DeleteIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti 
 
 	// delete last item and store
 	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
-	require.NoError(t, ti.Del(ctx, prev))
+	require.NoError(t, ti.DelPack(ctx, prev, pack.WriteModeAll))
 	require.NoError(t, ti.Sync(ctx))
 	require.NoError(t, commit())
 

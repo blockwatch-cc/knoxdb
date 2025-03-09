@@ -7,9 +7,9 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"hash/fnv"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
@@ -61,7 +61,7 @@ func (idx *Index) decodePackKey(buf []byte) (ik, pk uint64, id int) {
 
 func (idx *Index) encodeCacheKey(ik, pk uint64, id int) uint64 {
 	var buf [8]byte
-	h64 := fnv.New64a()
+	h64 := xxhash.New()
 	BE.PutUint64(buf[:], ik)
 	h64.Write(buf[:])
 	BE.PutUint64(buf[:], pk)

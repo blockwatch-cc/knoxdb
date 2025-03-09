@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime/debug"
+	"slices"
 	"time"
 	"unsafe"
 
@@ -534,5 +535,129 @@ func (p *Package) UpdateLen() {
 		}
 		p.nRows = b.Len()
 		break
+	}
+}
+
+type WriteMode byte
+
+const (
+	WriteModeAll = iota
+	WriteModeIncludeSelected
+	WriteModeExcludeSelected
+)
+
+type AppendState struct {
+	srcOffset int
+	selOffset int
+	hasMore   bool
+}
+
+func (s AppendState) More() bool {
+	return s.hasMore
+}
+
+// AppendSelected appends records from src to pkg according to mode until pkg is full.
+// To split vectors longer than capacity use AppendState and multiple target packs
+// and chain calls in a for loop like
+//
+//	var state AppendState
+//
+//	for {
+//		// call append and use last version of state, returns next state
+//		state = pkg.AppendSelected(src, mode, state)
+//
+//		// handle full package (store, create new package)
+//		if pkg.IsFull() {
+//		}
+//
+//		// stop when src is exhausted
+//		if !state.More() {
+//			break
+//		}
+//	}
+func (p *Package) AppendSelected(src *Package, mode WriteMode, state AppendState) AppendState {
+	switch mode {
+	case WriteModeAll:
+		// ignore selection vector
+		n := min(p.Cap(), src.Len()-state.srcOffset)
+		err := p.AppendPack(src, state.srcOffset, n)
+		if err != nil {
+			return AppendState{}
+		}
+		state.srcOffset += n
+		state.hasMore = src.Len() > state.srcOffset
+		return state
+
+	case WriteModeIncludeSelected:
+		// append selected vector data while keeping selection order
+		sel := src.selected[state.selOffset:]
+		tcap := p.Cap()
+		for tcap > 0 && len(sel) > 0 {
+			// identify runs of consecutive selections
+			n := 1
+			for len(sel) > n && sel[n-1] == sel[n]-1 {
+				n++
+			}
+
+			// copy n records
+			err := p.AppendPack(src, int(sel[0]), n)
+			if err != nil {
+				panic(err)
+			}
+
+			// clip sel
+			sel = sel[n:]
+			state.selOffset += n
+			tcap -= n
+		}
+		state.hasMore = len(sel) > 0
+		return state
+
+	case WriteModeExcludeSelected:
+		// append unselected vector data (i.e. gaps in the selection vector)
+		// requires sorted selection vector
+		sel := src.selected
+		slices.Sort(sel)
+		sel = sel[state.selOffset:]
+		last := uint32(state.srcOffset)
+		tcap := p.Cap()
+		for {
+			// find the next gap
+			for tcap > 0 && len(sel) > 0 && last == sel[0] {
+				last++
+				sel = sel[1:]
+				state.selOffset++
+				tcap--
+			}
+
+			// calculate gap size
+			var n int
+			if len(sel) > 0 {
+				n = int(sel[0] - last)
+			} else {
+				n = min(tcap, src.Len()-int(last))
+				tcap -= n
+			}
+
+			// copy n records
+			if n > 0 {
+				err := p.AppendPack(src, int(last), n)
+				if err != nil {
+					panic(err)
+				}
+				last += uint32(n)
+			}
+
+			// stop when tail is full or all src data was copied
+			if tcap == 0 || len(sel) == 0 {
+				break
+			}
+		}
+		state.srcOffset = int(last)
+		state.hasMore = src.Len() > state.srcOffset
+		return state
+
+	default:
+		panic(fmt.Errorf("invalid write mode %d", mode))
 	}
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package index
@@ -10,92 +10,116 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
-// type IndexRecord struct {
-//  Key uint64 // hash key, i.e. xxh(value)
-//  Pk  uint64 // OID of table entry
-// }
-
-func convertSchema(s *schema.Schema, typ types.IndexType) (ixs *schema.Schema, hf hashFunc, err error) {
-	hf = genNoopKey
-
+// convertSchema constructs a physical index schema and a converter for an index.
+func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, Converter, error) {
 	// requires at least two fields
 	if s.NumFields() < 2 {
-		err = fmt.Errorf("pack index requires at least two schema fields")
-		return
+		return nil, nil, fmt.Errorf("pack index requires at least two schema fields")
 	}
-	// last field must be primary key
+
+	// schema must be child of table schema
+	if err := ts.CanSelect(s); err != nil {
+		return nil, nil, err
+	}
+
+	// last field must be row id
 	pkf := s.Fields()[s.NumFields()-1]
-	if !pkf.Is(types.FieldFlagPrimary) {
-		err = fmt.Errorf("last schema field must be primary key")
-		return
+	if pkf.Id() != schema.MetaRid {
+		return nil, nil, fmt.Errorf("last schema field must be row id")
 	}
 
 	switch typ {
 	case types.IndexTypeHash:
 		// supports single source column of any type
 		// first column: hash value (uint64)
-		// second column: pk
+		// second column: rid
 		if s.NumFields() > 2 {
-			err = fmt.Errorf("too many schema fields for hash index")
-		} else {
-			hf = genHashKey64
-			ixs = schema.NewSchema().
-				WithName(s.Name()).
-				WithVersion(s.Version()).
-				WithField(schema.NewField(types.FieldTypeUint64).WithName("hash")).
-				WithField(pkf).
-				Finalize()
+			return nil, nil, fmt.Errorf("too many schema fields for hash index")
 		}
+		ixs := schema.NewSchema().
+			WithName(s.Name()).
+			WithVersion(s.Version()).
+			WithField(schema.NewField(types.FieldTypeUint64).WithName("hash")).
+			WithField(pkf).
+			Finalize()
+		c := &SimpleHashConverter{
+			schema: s,
+		}
+		for n, f := range s.Exported() {
+			i, _ := ts.FieldIndexById(f.Id)
+			if n == 0 {
+				c.hashBlock = i
+			} else {
+				c.srcBlocks = append(c.srcBlocks, i)
+			}
+		}
+		return ixs, c, nil
 
 	case types.IndexTypeInt:
 		// supports single source column of integer type only
 		// first column: integer value (same type/width) as source
-		// second column: pk
+		// second column: rid
 		if s.NumFields() > 2 {
-			err = fmt.Errorf("too many schema columns for integer index")
-		} else {
-			f, _ := s.FieldByIndex(0)
-			switch f.Type() {
-			case types.FieldTypeDatetime,
-				types.FieldTypeInt64,
-				types.FieldTypeUint64,
-				types.FieldTypeInt32,
-				types.FieldTypeInt16,
-				types.FieldTypeInt8,
-				types.FieldTypeUint32,
-				types.FieldTypeUint16,
-				types.FieldTypeUint8:
+			return nil, nil, fmt.Errorf("too many schema columns for integer index")
+		}
 
-				// convert shorter integers to u64
-				hf = makeKeyGen(f.WireSize())
-				ixs = schema.NewSchema().
-					WithName(s.Name()).
-					WithVersion(s.Version()).
-					WithField(schema.NewField(types.FieldTypeUint64).WithName("int")).
-					WithField(pkf).
-					Finalize()
+		f, _ := s.FieldByIndex(0)
+		switch f.Type() {
+		default:
+			return nil, nil, fmt.Errorf("invalid field type %s for integer index", f.Type())
+		case types.FieldTypeDatetime,
+			types.FieldTypeInt64,
+			types.FieldTypeUint64,
+			types.FieldTypeInt32,
+			types.FieldTypeInt16,
+			types.FieldTypeInt8,
+			types.FieldTypeUint32,
+			types.FieldTypeUint16,
+			types.FieldTypeUint8:
 
-			default:
-				err = fmt.Errorf("invalid field type %s for integer index", f.Type())
+			ixs := schema.NewSchema().
+				WithName(s.Name()).
+				WithVersion(s.Version()).
+				WithField(schema.NewField(types.FieldTypeUint64).WithName("int")).
+				WithField(pkf).
+				Finalize()
+
+			c := &RelinkConverter{
+				schema: s,
 			}
-
+			for _, f := range s.Exported() {
+				i, _ := ts.FieldIndexById(f.Id)
+				c.srcBlocks = append(c.srcBlocks, i)
+			}
+			return ixs, c, nil
 		}
 
 	case types.IndexTypeComposite:
 		// supports any number of source columns >= 1
-		// first column: hash value (uint32/uint64)
-		// second column: pk
-		hf = genHashKey64
-		ixs = schema.NewSchema().
+		// first column: hash value (uint64)
+		// second column: rid
+		ixs := schema.NewSchema().
 			WithName(s.Name()).
 			WithVersion(s.Version()).
 			WithField(schema.NewField(types.FieldTypeUint64).WithName("hash")).
 			WithField(pkf).
 			Finalize()
 
+		c := &CompositeHashConverter{
+			schema: s,
+		}
+		for _, f := range s.Exported() {
+			i, _ := ts.FieldIndexById(f.Id)
+			if f.Index == types.IndexTypeComposite {
+				c.hashBlocks = append(c.hashBlocks, i)
+			} else {
+				c.srcBlocks = append(c.srcBlocks, i)
+			}
+		}
+		return ixs, c, nil
+
 	default:
 		// unsupported
-		err = fmt.Errorf("unsupported pack index type %q", typ)
+		return nil, nil, fmt.Errorf("unsupported pack index type %q", typ)
 	}
-	return
 }

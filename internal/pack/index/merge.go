@@ -158,7 +158,7 @@ func (it *MergeIterator) UpdateIndexState(ctx context.Context) error {
 	// pack count
 	if it.nPacksDiff != 0 {
 		n := max(0, int(it.idx.state.Count)+it.nPacksDiff)
-		it.idx.state.Size = uint64(n)
+		it.idx.state.Count = uint64(n)
 	}
 
 	return it.idx.state.Store(ctx, it.tx)
