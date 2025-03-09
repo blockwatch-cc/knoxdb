@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"blockwatch.cc/knoxdb/internal/hash/fnv"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
@@ -570,7 +570,7 @@ func (s *Schema) Sort() *Schema {
 	return s
 }
 
-// Returns a field position mapping for a child schema that maps child schema
+// Returns a field position mapping for child schema dst that maps child
 // fields to source schema field positions. Iterating over child fields and
 // using this mapping yields the order in which source schema data is encoded or
 // layed out in storage containers (i.e. packages of blocks/vectors),
@@ -584,8 +584,8 @@ func (s *Schema) MapTo(dst *Schema) ([]int, error) {
 		for i, f := range s.fields {
 			if dstField.name == f.name {
 				srcField = f
-				// hide invisible source fields
-				if f.IsVisible() {
+				// hide inactive source fields
+				if f.IsActive() {
 					pos = i
 				}
 				break
@@ -730,7 +730,7 @@ func (s *Schema) Finalize() *Schema {
 	var b [4]byte
 
 	// generate schema hash from visible fields
-	h := fnv.New64a()
+	h := xxhash.New()
 	LE.PutUint32(b[:], s.version)
 	h.Write(b[:])
 

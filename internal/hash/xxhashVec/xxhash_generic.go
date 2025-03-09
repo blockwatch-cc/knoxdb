@@ -75,6 +75,42 @@ func xxhash32Int64SliceGeneric(src []int64, res []uint32, seed uint32) {
 	}
 }
 
+func xxhash64Uint8SliceGeneric(src []uint8, res []uint64) {
+	for j, val := range src {
+
+		var h uint64
+		h = prime64_5 + 4
+		h ^= uint64(val) * prime64_1
+		h = rol64_23(h)*prime64_2 + prime64_3
+
+		h ^= h >> 33
+		h *= prime64_2
+		h ^= h >> 29
+		h *= prime64_3
+		h ^= h >> 32
+
+		res[j] = h
+	}
+}
+
+func xxhash64Uint16SliceGeneric(src []uint16, res []uint64) {
+	for j, val := range src {
+
+		var h uint64
+		h = prime64_5 + 4
+		h ^= uint64(val) * prime64_1
+		h = rol64_23(h)*prime64_2 + prime64_3
+
+		h ^= h >> 33
+		h *= prime64_2
+		h ^= h >> 29
+		h *= prime64_3
+		h ^= h >> 32
+
+		res[j] = h
+	}
+}
+
 func xxhash64Uint32SliceGeneric(src []uint32, res []uint64) {
 	for j, val := range src {
 

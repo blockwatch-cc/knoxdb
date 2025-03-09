@@ -7,8 +7,9 @@ package assert
 
 import (
 	"fmt"
-	"hash/fnv"
 	"strings"
+
+	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 )
 
 // Assertion package inspired by Anthisesis deterministic simulation tests.
@@ -105,7 +106,7 @@ func assertImpl(cond bool, msg string, failOnMiss bool, kind string, details ...
 }
 
 func makeKey(msg string, loc *locationInfo) uint64 {
-	h := fnv.New64a()
+	h := xxhash.New()
 	h.Write([]byte(loc.PackageName))
 	h.Write([]byte(loc.FuncName))
 	h.Write([]byte(msg))

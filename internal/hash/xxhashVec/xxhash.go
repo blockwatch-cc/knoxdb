@@ -181,6 +181,18 @@ func XXHash32Int64Slice(src []int64, res []uint32, seed uint32) []uint32 {
 	return res
 }
 
+func XXHash64Uint8Slice(src []uint8, res []uint64) []uint64 {
+	res = ensureSizeUint64(res, len(src))
+	xxhash64Uint8Slice(src, res)
+	return res
+}
+
+func XXHash64Uint16Slice(src []uint16, res []uint64) []uint64 {
+	res = ensureSizeUint64(res, len(src))
+	xxhash64Uint16Slice(src, res)
+	return res
+}
+
 func XXHash64Uint32Slice(src []uint32, res []uint64) []uint64 {
 	res = ensureSizeUint64(res, len(src))
 	xxhash64Uint32Slice(src, res)

@@ -18,7 +18,7 @@ type Meta struct {
 	Ref   uint64 `knox:"$ref,internal,id=0xfffe"`  // previous version, ref == rid on first insert
 	Xmin  uint64 `knox:"$xmin,internal,id=0xfffd"` // txid where this row was created
 	Xmax  uint64 `knox:"$xmax,internal,id=0xfffc"` // txid where this row was deleted
-	IsDel bool   `knox:"$del,internal,id=0xfffb"`  // true if record is deleted (xmax > 0)
+	IsDel bool   `knox:"$del,internal,id=0xfffb"`  // record was deleted (true) or updated (false)
 }
 
 var MetaSchema = MustSchemaOf(Meta{})
