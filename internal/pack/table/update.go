@@ -4,12 +4,23 @@
 package table
 
 import (
+	"bytes"
 	"context"
 	"sync/atomic"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
+	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
+// WAL Record encoding
+//
+// | rid1 | sz | ref1 | ref2 | .. | wire1 | wire2 | ... |
+// rid1: row id of first update record
+// refX: row ids replaced by each record
 func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	// check message
 	if len(buf) == 0 {
@@ -21,8 +32,9 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 
 	// check table state
 	if t.opts.ReadOnly {
-		return 0, engine.ErrDatabaseReadOnly
+		return 0, engine.ErrTableReadOnly
 	}
+	atomic.AddInt64(&t.metrics.UpdateCalls, 1)
 
 	// obtain shared table lock
 	tx := engine.GetTransaction(ctx)
@@ -30,49 +42,125 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	atomic.AddInt64(&t.metrics.UpdateCalls, 1)
 
-	// protect journal write access
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	// register table for commit/abort callbacks
+	tx.Touch(t.id)
 
-	// upgrade tx for writing and register touched table for later commit
-	engine.GetTransaction(ctx).Touch(t.id)
+	// alloc scratch buffer for wal messages, we write 8 bytes first rid
+	// plus 4 bytes batch size plus 8 byte per reference row id
+	wb := arena.Alloc(arena.AllocBytes, t.journal.MaxSize()*8+12).([]byte)
+	defer arena.Free(arena.AllocBytes, wb)
 
-	// try write updated records to journal (may run full, so we must loop)
-	var count, n uint64
+	// break message batch into pieces so that each piece fits into the
+	// current journal's active segment. for each pk lookup its current
+	// live row id for reference is this will be marked for deletion.
+	view := schema.NewView(t.schema)
+	var count int64
+
+bufloop:
 	for len(buf) > 0 {
-		// insert messages into journal, may fail when pk = 0
-		n, buf, err = t.journal.UpdateBatch(buf)
-		if err != nil {
-			break
-		}
-		count += n
+		var (
+			szHead, szBody int
+			vint           [num.MaxVarintLen64]byte
+			jcap           = t.journal.Capacity()
+			rid            = t.state.NextRid
+			wbuf           *bytes.Buffer
+		)
 
-		// write journal data to disk before we continue
-		if t.journal.IsFull() {
-			// check context cancelation
-			err = ctx.Err()
+		// split buf into wire messages
+		view, vbuf, _ := view.Cut(buf)
+
+		if tx.UseWal() {
+			wbuf = bytes.NewBuffer(wb)
+
+			// write fixed size placeholder for header len (will overwrite later)
+			var tmp [4]byte
+			wbuf.Write(tmp[:])
+
+			// write first rid in this batch
+			n := num.PutUvarint(vint[:], rid+1)
+			wbuf.Write(vint[:n])
+			szHead += 4 + n
+		}
+
+		// step 1: check pk is valid, lookup current live rid, append journal
+		for view.IsValid() && jcap > 0 {
+			// check pk is set
+			pk := view.GetPk()
+			if pk == 0 {
+				err = engine.ErrNoPk
+				break bufloop
+			}
+
+			// lookup most recent rid for this pk
+			var ref uint64
+			ref, err = t.doLookupRid(ctx, pk)
+			if err != nil {
+				break bufloop
+			}
+			if ref == 0 {
+				// record does not exist or was deleted
+				err = engine.ErrRecordNotFound
+				break bufloop
+			}
+
+			// append update under new row id
+			rid++
+			t.journal.Update(tx.Id(), rid, pk, ref, view.Bytes())
+
+			if tx.UseWal() {
+				// write record ref
+				n := num.PutUvarint(vint[:], ref)
+				wbuf.Write(vint[:n])
+				szHead += n
+			}
+			jcap--
+			count++
+			szBody += len(view.Bytes())
+			view, vbuf, _ = view.Cut(vbuf)
+		}
+
+		if tx.UseWal() {
+			// step 2: write updates to wal
+			head := wbuf.Bytes()
+			LE.PutUint32(head, uint32(szHead)) // patch header size
+
+			// write wal batch
+			_, err = t.engine.Wal().Write(&wal.Record{
+				Type:   wal.RecordTypeUpdate,
+				Tag:    types.ObjectTagTable,
+				Entity: t.id,
+				TxID:   tx.Id(),
+				Data:   [][]byte{head, buf[:szBody]},
+			})
 			if err != nil {
 				break
 			}
+		}
 
-			// flush pack data to storage, will open storage write transaction
-			// TODO: write a new layer pack (fast) and merge in background
-			err = t.mergeJournal(ctx)
+		// advance message buffer and write latest row id to state
+		t.state.NextRid = rid
+		view.Reset(nil)
+		buf = buf[szBody:]
+
+		// once a journal segment is full
+		// - rotate segment, flush to disk
+		// - flush other dirty segment's xmeta to disk
+		// - write checkpoint record
+		if t.journal.Active().IsFull() {
+			err = t.flushJournal(ctx)
 			if err != nil {
 				break
 			}
 		}
 	}
 	if err != nil {
-		// TOOD: will fail the tx and should reload journal from wal afterwards
 		return 0, err
 	}
 
 	if count > 0 {
-		atomic.AddInt64(&t.metrics.UpdatedTuples, int64(count))
+		atomic.AddInt64(&t.metrics.UpdatedTuples, count)
 	}
 
-	return count, nil
+	return uint64(count), nil
 }

@@ -9,7 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -142,18 +142,18 @@ func (r *Result) Bytes() []byte {
 	return buf.Bytes()
 }
 
-func (r *Result) SortBy(name string, order query.OrderType) {
+func (r *Result) SortBy(name string, order types.OrderType) {
 	if !r.IsValid() {
 		return
 	}
 	if r.pkg.Len() == 0 {
 		return
 	}
-	f, ok := r.pkg.Schema().FieldByName(name)
+	idx, ok := r.pkg.Schema().FieldIndexByName(name)
 	if !ok {
 		return
 	}
-	pack.NewPackageSorter(r.pkg, f.Id()).SortOrder(order)
+	pack.NewPackageSorter([]int{idx}, []types.OrderType{order}).Sort(r.pkg)
 }
 
 func (r *Result) ForEach(fn func(r engine.QueryRow) error) error {

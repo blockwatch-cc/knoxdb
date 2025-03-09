@@ -12,27 +12,29 @@ import (
 )
 
 func (t *Table) ViewStats(i int) *stats.Record {
-	switch i {
-	case -1:
-		return stats.NewRecordFromPack(t.journal.Data, 0)
+	switch {
+	case i == -1:
+		// TODO: howto address multi-segment journal?
+		return stats.NewRecordFromPack(t.journal.Active().Data(), 0)
 	default:
-		info, _ := t.stats.Get(uint32(i))
+		info, _ := t.stats.Load().(*stats.Index).Get(uint32(i))
 		return info
 	}
 }
 
 func (t *Table) ViewPackage(ctx context.Context, i int) *pack.Package {
-	if i < 0 {
-		return t.journal.Data
+	if i == -1 {
+		return t.journal.Active().Data()
 	}
-	if i < 0 || i >= t.stats.Len() {
+	si := t.stats.Load().(*stats.Index)
+	if i < 0 || i >= si.Len() {
 		return nil
 	}
-	rec, ok := t.stats.Get(uint32(i))
+	rec, ok := si.Get(uint32(i))
 	if !ok {
 		return nil
 	}
-	pkg, err := t.loadSharedPack(ctx, rec.Key, int(rec.NValues), false, t.schema)
+	pkg, err := t.NewReader().Read(ctx, rec.Key)
 	if err != nil {
 		return nil
 	}
@@ -44,5 +46,6 @@ func (t *Table) ViewPackage(ctx context.Context, i int) *pack.Package {
 }
 
 func (t *Table) ViewTomb() bitmap.Bitmap {
-	return t.journal.Tomb
+	// TODO: howto address multi-segment journal?
+	return bitmap.Bitmap{Bitmap: t.journal.Active().Tomb().Keys()}
 }

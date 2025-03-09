@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Blockwatch Data Inc.
+// Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package journal
@@ -6,566 +6,465 @@ package journal
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"slices"
-	"sort"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
-	"blockwatch.cc/knoxdb/pkg/bitmap"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// TODO: replay wal on load to init journal records
+// Outside caller must split message batches into individual operations and
+// must break logical operations into physical append-only updates:
+//
+// Insert: append record (xmin = xid)
+// Update: append delete record (old rid: xmax = xid)
+//         append insert record (new rid: xmin = xid, xref)
+//	       - same xid update after insert/update: replace new rid insert on merge
+// Delete: append delete record (old rid) xmax = xid
+//	       - same xid delete after insert/update: xmin = xmax = xid => can skip/clear
+//
+// Special case handling (same tx merge not yet implemented)
+//
+// Any sequence of insert/update/delete to the same pk in the same tx
+// is minified on merge combining all updates into a single event:
+//
+// - ins+del becomes a noop
+// - ins+upd becomes an insert of the last updated row version
+// - upd+upd becomes a single update using the lastest row version.
 
-var ErrNoKey = errors.New("update without primary key")
+var LE = binary.LittleEndian
 
-const (
-	JournalKey uint32 = 0xFFFFFFFF
-	TombKey    uint32 = 0xFFFFFFFE
-)
-
-// Append-only journal and in-memory tombstone
-//
-// - supports INSERT, UPSERT, UPDATE, DELETE
-// - supports walking the journal by pk order (required for queries and flush)
-// - journal pack data is only sorted by insert order, not necessarily pk order
-// - primary key to position mapping is always sorted in pk order
-// - tombstone is an efficient bitmap
-// - re-inserting deleted entries is safe
-//
-// To avoid sorting the journal after insert, but still process journal entries
-// in pk sort order (in queries or flush and in both directions), we keep a
-// mapping from pk to journal position in `keys` which is always sorted by pk.
-//
-// # How the journal is used
-//
-// Lookup: (non-order-preserving) matches against pk values only. For best performance
-// we pre-sort the pk's we want to look up.
-//
-// Query, Stream, Count: runs a full pack match on the journal's data pack. Note
-// the resulting bitset is in storage order, not pk order!. Then a query walks
-// all table packs and cross-check with tomb + journal to decide if/which rows
-// to return to the caller. Ticks off journal matches from the match bitset as
-// they are visted along the way. Finally, walks all tail entries that only exist
-// in the journal but were never flushed to a table pack. Since the bitset is
-// in storage order we must translate it into pk order for this step to work. This is
-// what SortedIndexes() and SortedIndexesReversed() are for.
 type Journal struct {
-	Data *pack.Package  // journal pack storing live data
-	Keys JournalRecords // 0: pk, 1: index in journal; sorted by pk, always sorted
-
-	Tomb    bitmap.Bitmap  // deleted primary keys as xroar bitmap
-	Deleted *bitset.Bitset // tracks which journal positions are in tomb
-
-	px       int            // primary key index
-	newKeys  JournalRecords // new keys added during insert/update
-	view     *schema.View   // wire data view
-	maxid    uint64         // the highest primary key in the journal, used for sorting
-	maxsize  int            // max number of entries before flush
-	sortData bool           // true = data pack is unsorted
+	name    string
+	schema  *schema.Schema // data schema
+	view    *schema.View   // data view
+	active  *Segment       // active head segment used for writing
+	passive []*Segment     // immutable tail segments waiting for completion and flush
+	maxsz   int            // max number of records before segment freeze
+	maxseg  int            // max number of immutable segments
 }
 
-type JournalRecord struct {
-	Pk  uint64
-	Idx int
-}
-
-type JournalRecords []JournalRecord
-
-func (l JournalRecords) Len() int           { return len(l) }
-func (l JournalRecords) Less(i, j int) bool { return l[i].Pk < l[j].Pk }
-func (l JournalRecords) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
-
-type Tombstone struct {
-	Id uint64 `knox:"I,pk"`
-}
-
-func NewJournal(s *schema.Schema, size int) *Journal {
-	pkg := pack.New().
-		WithMaxRows(size).
-		WithKey(JournalKey).
-		WithSchema(s).
-		Alloc()
+func NewJournal(s *schema.Schema, maxsz, maxseg int) *Journal {
 	return &Journal{
-		maxsize: size,
-		Data:    pkg,
-		Keys:    make(JournalRecords, 0, roundSize(size)),
-		Tomb:    bitmap.New(),
-		Deleted: bitset.NewBitset(roundSize(size)).Resize(0),
-		newKeys: make(JournalRecords, 0, roundSize(size)),
+		name:    s.Name() + "_journal",
+		schema:  s,
 		view:    schema.NewView(s),
-		px:      s.PkIndex(),
+		active:  newSegment(s, 0, maxsz),
+		passive: make([]*Segment, 0, maxseg),
+		maxsz:   maxsz,
+		maxseg:  maxseg,
 	}
-}
-
-func (j *Journal) Reset() {
-	j.Data.Clear()
-	if len(j.Keys) > 0 {
-		j.Keys[0].Idx = 0
-		j.Keys[0].Pk = 0
-		for bp := 1; bp < len(j.Keys); bp *= 2 {
-			copy(j.Keys[bp:], j.Keys[:bp])
-		}
-		j.Keys = j.Keys[:0]
-	}
-	j.Tomb.Bitmap.Reset()
-	j.maxid = 0
-	j.sortData = false
-	j.Deleted.Reset()
-}
-
-func (j *Journal) Open(ctx context.Context, tx store.Tx, bkey string) error {
-	return j.LoadLegacy(ctx, tx, bkey)
-}
-
-func (j *Journal) Close() {
-	j.Data.Release()
-	j.Data = nil
-	j.Tomb.Bitmap = nil
-	j.Keys = nil
-	j.Deleted = nil
-	j.maxid = 0
-	j.newKeys = nil
-	j.view = nil
-	j.px = -1
-}
-
-func (j *Journal) LoadLegacy(ctx context.Context, tx store.Tx, bkey string) error {
-	// we need to alloc a new data pack without blocks for load to fill from disk
-	s := j.Data.Schema()
-	j.Data.Release()
-	j.Data = pack.New().
-		WithMaxRows(j.maxsize).
-		WithKey(JournalKey).
-		WithSchema(s)
-	bucket := tx.Bucket(append([]byte(bkey), engine.DataKeySuffix...))
-	if _, err := j.Data.LoadFromDisk(ctx, bucket, nil, 0); err != nil {
-		return err
-	}
-	j.Data.Materialize()
-	j.sortData = false
-	for i, n := range j.Data.PkColumn() {
-		j.Keys = append(j.Keys, JournalRecord{n, i})
-		j.sortData = j.sortData || n < j.maxid
-		j.maxid = util.Max(j.maxid, n)
-	}
-	// ensure invariant, keep keys always sorted
-	if j.sortData {
-		sort.Sort(j.Keys)
-	}
-
-	// tomb
-	j.Deleted.Resize(len(j.Keys))
-	var key [4]byte
-	binary.BigEndian.PutUint32(key[:], TombKey)
-	if buf := bucket.Get(key[:]); buf != nil {
-		if err := j.Tomb.UnmarshalBinary(buf); err != nil {
-			return err
-		}
-	}
-	var idx, last int
-	it := j.Tomb.Bitmap.NewIterator()
-	for pk := it.Next(); pk > 0; pk = it.Next() {
-		idx, last = j.PkIndex(pk, last)
-		if idx < 0 {
-			continue
-		}
-		if last >= len(j.Keys) {
-			break
-		}
-		j.Deleted.Set(idx)
-		j.Data.SetValue(j.px, idx, uint64(0))
-	}
-	return nil
-}
-
-func (j *Journal) StoreLegacy(ctx context.Context, tx store.Tx, bkey string) (int, int, error) {
-	// reconstructed deleted pks from key list
-	var idx, last int
-	it := j.Tomb.Bitmap.NewIterator()
-	for pk := it.Next(); pk > 0; pk = it.Next() {
-		idx, last = j.PkIndex(pk, last)
-		if idx < 0 {
-			continue
-		}
-		if last >= len(j.Keys) {
-			break
-		}
-		j.Data.SetValue(j.px, idx, pk)
-	}
-	bucket := tx.Bucket(append([]byte(bkey), engine.DataKeySuffix...))
-	bucket.FillPercent(0.9)
-	n, err := j.Data.Clone(j.maxsize).StoreToDisk(ctx, bucket)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	var key [4]byte
-	binary.BigEndian.PutUint32(key[:], TombKey)
-	buf, err := j.Tomb.MarshalBinary()
-	if err != nil {
-		return 0, 0, err
-	}
-	err = bucket.Put(key[:], buf)
-	if err != nil {
-		return n, 0, err
-	}
-	m := len(buf)
-
-	// reset deleted pks to zero
-	last = 0
-	it = j.Tomb.Bitmap.NewIterator()
-	for pk := it.Next(); pk > 0; pk = it.Next() {
-		idx, last = j.PkIndex(pk, last)
-		if idx < 0 {
-			continue
-		}
-		if last >= len(j.Keys) {
-			break
-		}
-		j.Data.SetValue(j.px, idx, uint64(0))
-	}
-	return n, m, nil
 }
 
 func (j *Journal) Len() int {
-	return j.Data.Len()
+	n := j.active.Len()
+	for _, v := range j.passive {
+		n += v.Len()
+	}
+	return n
 }
 
-func (j *Journal) TombLen() int {
-	return j.Tomb.Count()
+// number of records that can be inserted before active segment runs full
+func (j *Journal) Capacity() int {
+	return j.maxsz - j.active.Len()
 }
 
-func (j *Journal) HeapSize() int {
-	sz := len(j.Keys)*16 + j.Tomb.Size() + 82
-	for _, v := range j.Data.Blocks() {
+func (j *Journal) MaxSize() int {
+	return j.maxsz
+}
+
+func (j *Journal) Schema() *schema.Schema {
+	return j.schema
+}
+
+func (j *Journal) Active() *Segment {
+	return j.active
+}
+
+func (j *Journal) Segments() []*Segment {
+	return append([]*Segment{j.active}, j.passive...)
+}
+
+func (j *Journal) HeapSize() (sz int) {
+	sz = j.active.HeapSize()
+	for _, v := range j.passive {
 		sz += v.HeapSize()
 	}
-	return sz
+	return
 }
 
-func (j *Journal) IsFull() bool {
-	return j.Data.IsFull() || j.Tomb.Count() >= j.maxsize
+func (j *Journal) Reset() {
+	j.active.Reset()
+	for _, v := range j.passive {
+		v.Close()
+	}
+	clear(j.passive)
+	j.passive = j.passive[:0]
 }
 
-// InsertBatch adds multiple records in wire format and generates new
-// pks >= nextSeq in sequential order. Records with existing pks are
-// inserted again under a new pk. Returns number of records inserted
-// and the remaining buffer contents in case the journal is full.
-// All operations are error-free (assuming wire messages are well
-// formed) which simplifies code as there is no need to roll back
-// journal after error.
-func (j *Journal) InsertBatch(buf []byte, nextSeq uint64) (uint64, []byte) {
-	// cannot insert into full journal, must flush first
-	if len(buf) == 0 || j.Data.IsFull() {
-		return 0, buf
+func (j *Journal) Close() {
+	j.schema = nil
+	j.view = nil
+	j.active.Close()
+	j.active = nil
+	for i := range j.passive {
+		j.passive[i].Close()
+		j.passive[i] = nil
 	}
-
-	// split buf into wire messages
-	j.view, buf, _ = j.view.Cut(buf)
-	j.newKeys = j.newKeys[:0]
-
-	// process each message independently, assign PK and insert
-	// this cannot produce any errors (assuming messages are well formed)
-	var count uint64
-	for j.view.IsValid() {
-		// assign primary key by writing directly into wire format buffer
-		pk := nextSeq
-		nextSeq++
-		j.view.SetPk(pk)
-		count++
-
-		// append to data pack
-		j.Data.AppendWire(j.view.Bytes(), nil)
-
-		// update keys
-		j.newKeys = append(j.newKeys, JournalRecord{pk, j.Data.Len() - 1})
-
-		// set sortData flag
-		j.sortData = j.sortData || pk < j.maxid
-
-		// update maxid
-		j.maxid = max(j.maxid, pk)
-
-		// stop when journal is full
-		if j.Data.IsFull() {
-			break
-		}
-
-		// process next message, if any
-		j.view, buf, _ = j.view.Cut(buf)
-	}
-
-	// merge new keys (sorted) into sorted key list
-	j.mergeKeys(j.newKeys)
-	j.Deleted.Resize(len(j.Keys))
-	j.view.Reset(nil)
-
-	return count, buf
+	j.passive = j.passive[:0]
+	j.passive = nil
 }
 
-// Updates multiple records in wire format by inserting or overwriting
-// them in the journal. Returns the number of processed records and
-// the remaining buffer contents in case the journal is full.
-// Wire buffer is not required to contain pk sorted records.
-func (j *Journal) UpdateBatch(buf []byte) (uint64, []byte, error) {
-	// cannot insert into full journal
-	if len(buf) == 0 {
-		return 0, buf, nil
-	}
-
-	// split buf into wire messages
-	lastBuf := buf
-	j.view, buf, _ = j.view.Cut(buf)
-	j.newKeys = j.newKeys[:0]
-
-	// process each message independently, assign PK and insert
-	var (
-		err   error
-		idx   int
-		count uint64
-	)
-	for j.view.IsValid() {
-		// ensure primary key is set
-		pk := j.view.GetPk()
-		if pk == 0 {
-			err = ErrNoKey
-			break
-		}
-
-		// identify insert method (append / update)
-		idx, _ = j.PkIndex(pk, 0)
-		if idx < 0 {
-			// stop when journal is full
-			if j.IsFull() {
-				buf = lastBuf
-				break
-			}
-
-			// append to data pack (this record does not yet exist in the journal)
-			j.Data.AppendWire(j.view.Bytes(), nil)
-			count++
-
-			// create mapped keys
-			j.newKeys = append(j.newKeys, JournalRecord{pk, j.Data.Len() - 1})
-
-			// set sortData flag
-			j.sortData = j.sortData || pk < j.maxid
-			j.maxid = max(j.maxid, pk)
-
-		} else {
-			// undelete and replace in data pack (this record already exists)
-			j.undelete(pk)
-			j.Data.SetWire(idx, j.view.Bytes())
-			count++
-		}
-
-		// process next message, if any
-		lastBuf = buf
-		j.view, buf, _ = j.view.Cut(buf)
-	}
-	if err != nil {
-		j.view.Reset(nil)
-		return count, lastBuf, err
-	}
-
-	// undelete if deleted, must call before mergeKeys
-
-	// sort and merge new journal keys
-	sort.Sort(j.newKeys)
-	j.mergeKeys(j.newKeys)
-	j.Deleted.Resize(len(j.Keys))
-	j.view.Reset(nil)
-
-	return count, buf, nil
-}
-
-func (j *Journal) mergeKeys(newKeys JournalRecords) {
-	if len(newKeys) == 0 {
-		return
-	}
-
-	// sanity-check for unsorted keys
-	// if isSorted && !sort.IsSorted(newKeys) {
-	// 	panic("pack: mergeKeys input is unsorted, but sorted flag is set")
-	// }
-
-	// merge newKeys into key list (both lists are sorted)
-	if cap(j.Keys) < len(j.Keys)+len(newKeys) {
-		cp := make(JournalRecords, len(j.Keys), roundSize(len(j.Keys)+len(newKeys)))
-		copy(cp, j.Keys)
-		j.Keys = cp
-	}
-
-	// fast path for append-only
-	if len(j.Keys) == 0 || newKeys[0].Pk > j.Keys[len(j.Keys)-1].Pk {
-		j.Keys = append(j.Keys, newKeys...)
-		return
-	}
-
-	// merge backward
-
-	// keep position of the last value in keys
-	last := len(j.Keys) - 1
-
-	// extend keys len
-	j.Keys = j.Keys[:len(j.Keys)+len(newKeys)]
-
-	// ignore equal keys, they cannot exist here (as safety measure, we still copy them)
-	for in1, in2, out := last, len(newKeys)-1, len(j.Keys)-1; in2 >= 0; {
-		// insert new keys as long as they are larger or all old keys have been
-		// copied (i.e. any new key is smaller than the first old key)
-		for in2 >= 0 && (in1 < 0 || j.Keys[in1].Pk < newKeys[in2].Pk) {
-			j.Keys[out] = newKeys[in2]
-			in2--
-			out--
-		}
-
-		// insert old keys as long as they are larger (safety: although no
-		// duplicate keys are allowed, we simply copy them using >= instead of >)
-		for in1 >= 0 && (in2 < 0 || j.Keys[in1].Pk >= newKeys[in2].Pk) {
-			j.Keys[out] = j.Keys[in1]
-			in1--
-			out--
-		}
+// appends single record, WAL replay requires batch size matches segment capacity
+func (j *Journal) Insert(xid, rid uint64, buf []byte) {
+	// insert rid
+	j.active.Insert(xid, rid, buf)
+	if j.active.IsFull() {
+		j.active.SetState(SegmentStateFlushing)
 	}
 }
 
-// Registers pks for deletion. Records may or may not exist, the
-// journal accepts any non zero primary key here. Data is later
-// reconciled on flush and invalid pks are simply ignored.
-func (j *Journal) DeleteBatch(pks bitmap.Bitmap) uint64 {
-	if !pks.IsValid() || pks.Count() == 0 {
-		return 0
+func (j *Journal) Update(xid, rid, pk, ref uint64, buf []byte) {
+	// insert rid and delete ref
+	j.active.Update(pk, xid, rid, ref, buf)
+
+	// update xmax when replaced record (pk/ref) is in active journal
+	// don't write passive segments to prevent state and merge conflicts
+	if j.active.ContainsRid(ref) {
+		j.active.SetXmax(ref, xid)
 	}
 
-	// mark in-journal entries deleted
-	var last, idx int
-	it := pks.Bitmap.NewIterator()
-	for pk := it.Next(); pk > 0; pk = it.Next() {
-		// find existing key and position in journal
-		if idx, last = j.PkIndex(pk, last); idx >= 0 {
-			// overwrite journal pk col with zero (this signals to query and
-			// flush operations that this item is deleted and should be skipped)
-			j.Data.SetValue(j.px, idx, uint64(0))
-
-			// remember the journal position was deleted, so that a subsequent
-			// insert/upsert call can properly undelete
-			j.Deleted.Set(idx)
-		}
-		// stop journal scan if deleted ids are larger than whats stored in the
-		// journal right now
-		if last == j.Data.Len() {
-			break
-		}
+	if j.active.IsFull() {
+		j.active.SetState(SegmentStateFlushing)
 	}
-
-	// get before count
-	before := j.Tomb.Count()
-
-	// merge pks into tomb
-	j.Tomb.Or(pks)
-
-	// get after count
-	after := j.Tomb.Count()
-
-	// return diff
-	return uint64(after - before)
 }
 
-// Efficient check if a pk is in the tomb or not. Use `last` to skip already
-// processed entries when walking through a sorted list of pks.
-func (j *Journal) IsDeleted(pk uint64) bool {
-	return j.Tomb.Contains(pk)
+func (j *Journal) Delete(xid, rid, pk uint64) {
+	j.active.Delete(pk, xid, rid)
+
+	// update xmax when deleted record (pk/rid) is in active journal
+	// don't write passive segments to prevent state and merge conflicts
+	if j.active.ContainsRid(rid) {
+		j.active.SetXmax(rid, xid)
+	}
+
+	if j.active.IsFull() {
+		j.active.SetState(SegmentStateFlushing)
+	}
 }
 
-// To support insert/update-after-delete we remove entries from the
-// tomb and we reconstruct the previous state of the undeleted entry
-// in our data pack (i.e. we restore its primary key) and reset the
-// deleted flag. pks must be storted.
-func (j *Journal) undelete(pk uint64) {
-	if !j.IsDeleted(pk) {
-		return
-	}
-	// reset the deleted bit and restore pk
-	idx, _ := j.PkIndex(pk, 0)
-	if idx > -1 {
-		j.Deleted.Clear(idx)
-		j.Data.SetValue(j.px, idx, pk)
-	}
-	// remove from tomb
-	j.Tomb.Remove(pk)
-}
-
-// Returns the journal index at which pk is stored or -1 when pk is not found and the last
-// index that matched. Using the last argument allows to skip searching a part of the journal
-// for better efficiency in loops. This works only if subsequent calls can guarantee that
-// queried primary keys are sorted, i.e. the next pk is larger than the previous pk.
-//
-// var last, index int
-//
-//	for last < journal.Len() {
-//	   index, last = journal.PkIndex(pk, last)
-//	}
-//
-// Invariant: keys list is always sorted
-func (j *Journal) PkIndex(pk uint64, last int) (int, int) {
-	// early stop when key or last are out of range
-	if pk > j.maxid || last >= len(j.Keys) {
-		return -1, len(j.Keys)
-	}
-
-	// find pk in keys list, use last as hint to limit search space
-	last += sort.Search(len(j.Keys)-last, func(i int) bool { return j.Keys[last+i].Pk >= pk })
-
-	// return index	if found or -1 otherwise
-	// Note: when entry is deleted, we still return its position since other
-	// parts of this algorithm rely on this behaviour
-	if last < len(j.Keys) && j.Keys[last].Pk == pk {
-		return j.Keys[last].Idx, last
-	}
-	return -1, last
-}
-
-// Checks invariants
-func (j *Journal) checkInvariants(when string) error {
-	// check invariants
-	if a, b := j.Data.Len(), len(j.Keys); a != b {
-		return fmt.Errorf("journal %s: INVARIANT VIOLATION: data-pack-len=%d key-len=%d", when, a, b)
-	}
-	if a, b := j.Data.Len(), j.Deleted.Len(); a != b {
-		return fmt.Errorf("journal %s: INVARIANT VIOLATION: data-pack-len=%d deleted-bitset-len=%d", when, a, b)
-	}
-	for i, v := range j.Keys {
-		if i == 0 {
-			continue
-		}
-		if j.Keys[i-1].Pk > v.Pk {
-			return fmt.Errorf("journal %s: INVARIANT VIOLATION: unsorted keys", when)
-		}
-		if j.Keys[i-1].Pk == v.Pk {
-			return fmt.Errorf("journal %s: INVARIANT VIOLATION: duplicate key", when)
-		}
-	}
-	// no duplicate pks in pack (consider deleted keys == 0)
-	pks := j.Data.PkColumn()
-	sorted := make([]uint64, len(pks))
-	copy(sorted, pks)
-	slices.Sort(sorted)
-	var last uint64
-	for _, v := range sorted {
-		if last == 0 {
-			last = v
-			continue
-		}
-		if v == last {
-			return fmt.Errorf("journal %s: INVARIANT VIOLATION: duplicate pk %d in data pack", when, v)
-		}
+// returns the next journal segment that is ready to merge
+func (j *Journal) MergeNext() *Segment {
+	if len(j.passive) > 0 && j.passive[0].state == SegmentStateComplete {
+		j.passive[0].SetState(SegmentStateMerging)
+		return j.passive[0]
 	}
 	return nil
 }
+
+func (j *Journal) Flush(ctx context.Context, tx store.Tx) error {
+	bucket := tx.Bucket([]byte(j.name))
+	if bucket == nil {
+		return store.ErrNoBucket
+	}
+	bucket.FillPercent(1.0)
+
+	// flush passive segments with dirty data
+	for _, s := range j.passive {
+		if err := s.Store(ctx, bucket); err != nil {
+			return err
+		}
+	}
+
+	// remove empty and merged segments
+	j.passive = slices.DeleteFunc(j.passive, func(s *Segment) bool {
+		switch s.state {
+		case SegmentStateEmpty, SegmentStateMerged:
+			s.Close()
+			return true
+		default:
+			return false
+		}
+	})
+
+	// rotate active segment if it contains data
+	if !j.active.IsEmpty() {
+		// store active segment
+		if err := j.active.Store(ctx, bucket); err != nil {
+			return err
+		}
+
+		// TODO: free unused memory
+		// - tombstones-only: can we safely release data pack here?
+		// - data-only: can we safely relese tomb memory here?
+
+		// append active segment to immutable list
+		j.passive = append(j.passive, j.active)
+
+		// create new active segment
+		j.active = newSegment(j.schema, j.active.Id()+1, j.maxsz)
+	}
+
+	return nil
+}
+
+func (j *Journal) CommitTx(xid uint64) {
+	if j.active.ContainsTx(xid) {
+		j.active.CommitTx(xid)
+	}
+	for _, v := range j.passive {
+		if !v.ContainsTx(xid) {
+			continue
+		}
+		v.CommitTx(xid)
+
+		// update segment state
+		if v.IsDone() && v.state == SegmentStateFlushed {
+			if v.IsEmpty() {
+				v.SetState(SegmentStateEmpty)
+			} else {
+				v.SetState(SegmentStateCompleting)
+			}
+		}
+	}
+}
+
+func (j *Journal) AbortTx(xid uint64) {
+	if j.active.ContainsTx(xid) {
+		j.active.AbortTx(xid)
+	}
+	for _, v := range j.passive {
+		if !v.ContainsTx(xid) {
+			continue
+		}
+		v.AbortTx(xid)
+
+		// update segment state
+		if v.IsDone() && v.state == SegmentStateFlushed {
+			if v.IsEmpty() {
+				v.SetState(SegmentStateEmpty)
+			} else {
+				v.SetState(SegmentStateCompleting)
+			}
+		}
+	}
+}
+
+func (j *Journal) AbortActiveTx() (n int) {
+	j.active.AbortActiveTx()
+	for _, v := range j.passive {
+		n += v.AbortActiveTx()
+		if v.state == SegmentStateFlushed {
+			if v.IsEmpty() {
+				v.SetState(SegmentStateEmpty)
+			} else {
+				v.SetState(SegmentStateCompleting)
+			}
+		}
+	}
+	return
+}
+
+// Loads all journal segments found on disk
+func (j *Journal) Load(ctx context.Context, tx store.Tx) error {
+	bucket := tx.Bucket([]byte(j.name))
+	if bucket == nil {
+		return store.ErrNoBucket
+	}
+
+	// identify segment ids to load from all keys in bucket
+	segIds := make([]uint32, 0)
+	var last uint32
+	err := bucket.ForEach(func(k, v []byte) error {
+		id, _ := pack.DecodeBlockKey(k)
+		if id == last {
+			return nil
+		}
+		segIds = append(segIds, id)
+		last = id
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// load segments from disk
+	for _, id := range segIds {
+		seg, err := loadSegment(ctx, j.schema, bucket, id, j.maxsz)
+		if err != nil {
+			return fmt.Errorf("loading journal segment %d: %v", id, err)
+		}
+		seg.SetState(SegmentStateFlushed)
+		j.passive = append(j.passive, seg)
+	}
+
+	// update active segment id
+	j.active.data.WithKey(last + 1)
+
+	return nil
+}
+
+// Matches all journal segments against the query and applies snapshot isolation
+// rules to find the last visible version of each matching record for the current
+// transaction. Returns a stable read-only result snapshot pointing to matching records
+// across journal segments. This result can be used concurrently with insert/update/delete
+// calls as such calls append new journal records but don't change existing records
+// or their order.
+func (j *Journal) Query(node *query.FilterTreeNode, snap *types.Snapshot) *Result {
+	// TODO: lock-free segment walk
+	// - ideally only active segment requires lock
+	// - use linked list for passive segments and optimistic locks
+	// - requires max size array and rotation (is this desirable?)
+	// - walk conflicts with segment rotation and free after merge (SegmentStateMerged)
+	// j.mu.RLock()
+	// defer j.mu.RUnlock()
+
+	// alloc result and match bitset
+	res := NewResult()
+	bits := bitset.NewBitset(j.maxsz)
+
+	// scratch space for bitset indexes
+	hits := arena.Alloc(arena.AllocUint32, j.maxsz).([]uint32)
+
+	// Walk segments in LIFO order starting at active segment, this ensures we
+	// find the most recent visible update of a primary key first. We will then
+	// skip any previous/older copy of that primary key.
+	for _, seg := range slices.Backward(append(j.passive, j.active)) {
+		// Identify deleted records under snapshot isolation first. This ensures we know
+		// which record is actually active and which has been deleted before we merge
+		// segment matches into our query result. The reason is that we do not set xmax
+		// in completed segments so that a SI visibility check alone is not sufficient
+		// to hide deleted records.
+		for _, stone := range seg.Tomb().Stones() {
+			// skip updates
+			if stone.upd {
+				continue
+			}
+
+			// skip invisible deletions
+			if !snap.IsVisible(stone.xid) {
+				continue
+			}
+
+			// remember true deletions
+			res.SetDeleted(stone.pk)
+		}
+
+		// match filters & apply snapshot visibility
+		if matched := seg.Match(node, snap, bits); matched != nil && matched.Any() {
+			// merge matches across segments
+			res.Append(seg, matched.Indexes(hits))
+		}
+	}
+
+	// free scratch
+	arena.Free(arena.AllocUint32, hits[:0])
+	bits.Close()
+
+	return res
+}
+
+// Finds the rowid of the most recent non deleted primary key. Uses snapshot to
+// identify conflicts. Returns rid, isConflict, isFound.
+//
+// Function is used during update with user record that lacks rid. If we had update
+// call with query this would not be necessary. A conflict exists when the found pk's
+// active record has a xmin in the snapshot's xact set, call snap.IsConflict(xid)
+func (j *Journal) FindRid(pk uint64, snap *types.Snapshot) (uint64, bool, bool) {
+	// TODO: lock-free segment walk
+	// - use linked list for passive segments and optimistic locks
+	// - requires max size array and rotation (is this desirable?)
+	// - walk conflicts with segment rotation and free after merge
+	// j.mu.RLock()
+	// defer j.mu.RUnlock()
+
+	// check if pk is deleted, succeed if tombstone is visible
+	if _, ok := j.IsDeleted(pk, snap); ok {
+		// TODO: conflicts are hidden by visibility check
+		// return 0, snap.IsConflict(stone.xid), true
+		return 0, false, true
+	}
+
+	// start with active segment
+	seg := j.active
+	passive := j.passive
+
+	// find the most recent version of pk that is visible at the point where tx
+	// started (xmin < xmax), and cross-check isolation snapshot for conflict
+	// (a concurrent tx has created the record)
+	for {
+		// todo: per segment bloom filter on contained pks for quick exclusion check
+
+		// reverse scan
+		pks := seg.data.PkColumn()
+		for i := len(pks) - 1; i >= 0; i-- {
+			// skip non matches
+			if pks[i] != pk {
+				continue
+			}
+
+			// skip journal records from aborted and future txn
+			xid := seg.data.Xmin(i)
+			if xid == 0 || xid >= snap.Xmax {
+				continue
+			}
+
+			// found the most recent record
+			isConflict := snap.IsConflict(xid)
+			rid := seg.data.RowId(i)
+			return rid, isConflict, true
+		}
+
+		// next round
+		if len(passive) == 0 {
+			break
+		}
+		seg = passive[0]
+		passive = passive[1:]
+	}
+
+	// return: rid, isConflict, isFound
+	return 0, false, false
+}
+
+// IsDeleted checks if pk is in any of the current tombstones and visible under
+// snapshot isolation rules.
+func (j *Journal) IsDeleted(pk uint64, snap *types.Snapshot) (Tombstone, bool) {
+	if ts, ok := j.active.Tomb().IsDeleted(pk, snap); ok {
+		return ts, ok
+	}
+	for _, v := range j.passive {
+		if ts, ok := v.Tomb().IsDeleted(pk, snap); ok {
+			return ts, ok
+		}
+	}
+	return Tombstone{}, false
+}
+
+// LookupTomb returns all tombstone records for this pk regardless of snapshot rules.
+// It is up to the caller to decide which tombstones are visible.
+// func (j *Journal) LookupTomb(pk uint64) []Tombstone {
+// 	var ts []Tombstone
+// 	if v, ok := j.active.Tomb().Lookup(pk); ok {
+// 		ts = append(ts, v...)
+// 	}
+// 	for _, v := range j.passive {
+// 		if v, ok := v.Tomb().Lookup(pk); ok {
+// 			ts = append(ts, v...)
+// 		}
+// 	}
+// 	return ts
+// }
+
+// Searches for the most recent version of a record based on its unique pk
+// and the transaction's snapshot visibility rules. Returns record metadata,
+// the wire encoded record and true when found.
+// func (j *Journal) FindPk(pk uint64, snap *types.Snapshot) (schema.Meta, []byte, bool) {
+// 	// TODO: unnecessary
+// 	return schema.Meta{}, nil, false
+// }
