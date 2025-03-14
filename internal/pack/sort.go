@@ -6,130 +6,67 @@ package pack
 import (
 	"sort"
 
-	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
 type PackageSorter struct {
-	pkg    *Package
 	cols   []int
-	sorted []uint32 // init: 0..n
-	order  types.OrderType
+	orders []types.OrderType
+	pkg    *Package
 }
 
-func NewPackageSorter(p *Package, fieldId uint16, moreIds ...uint16) *PackageSorter {
+func NewPackageSorter(cols []int, orders []types.OrderType) *PackageSorter {
 	s := &PackageSorter{
-		pkg:    p,
-		sorted: arena.Alloc(arena.AllocUint32, p.Len()).([]uint32)[:p.Len()],
-		order:  types.OrderUndefined,
+		cols:   cols,
+		orders: orders,
 	}
-	for i := range s.sorted {
-		s.sorted[i] = uint32(i)
-	}
-	for _, id := range append([]uint16{fieldId}, moreIds...) {
-		for i, f := range p.schema.Exported() {
-			if id == f.Id {
-				s.cols = append(s.cols, i)
-				break
-			}
-		}
+	if len(s.orders) != len(cols) {
+		s.orders = make([]types.OrderType, len(s.cols))
+		copy(s.orders, orders)
 	}
 	return s
 }
 
-func (s *PackageSorter) Close() {
-	arena.Free(arena.AllocUint32, s.sorted[:0])
-	s.sorted = nil
+func (s *PackageSorter) Sort(pkg *Package) {
+	// sort selected rows only
+	// if nil, create a full selection vector
+	if pkg.selected == nil {
+		pkg.selected = make([]uint32, pkg.nRows)
+		for i := range pkg.selected {
+			pkg.selected[i] = uint32(i)
+		}
+	}
+
+	// link pkg so we can use sort's interface based API on PackageSorter
+	s.pkg = pkg
+	sort.Sort(s)
 	s.pkg = nil
-	s.cols = nil
-	s.order = types.OrderUndefined
-}
-
-func (s *PackageSorter) Order() types.OrderType {
-	return s.order
-}
-
-func (s *PackageSorter) SortedCols() []string {
-	cols := make([]string, len(s.cols))
-	for i := range s.cols {
-		f, _ := s.pkg.schema.FieldByIndex(i)
-		cols[i] = f.Name()
-	}
-	return cols
-}
-
-func (s *PackageSorter) N(i int) int {
-	if i >= len(s.sorted) {
-		return -1
-	}
-	return int(s.sorted[i])
-}
-
-func (s *PackageSorter) SortAsc() *PackageSorter {
-	s.order = types.OrderAsc
-	if !sort.IsSorted(s) {
-		sort.Sort(s)
-	}
-	return s
-}
-
-func (s *PackageSorter) SortDesc() *PackageSorter {
-	s.order = types.OrderDesc
-	if !sort.IsSorted(sort.Reverse(s)) {
-		sort.Sort(sort.Reverse(s))
-	}
-	return s
-}
-
-func (s *PackageSorter) SortOrder(o types.OrderType) {
-	s.order = o
-	switch o {
-	case types.OrderAsc:
-		// ascending case sensitive
-		if !sort.IsSorted(s) {
-			sort.Sort(s)
-		}
-	case types.OrderDesc:
-		// descending case sensitive
-		if !sort.IsSorted(sort.Reverse(s)) {
-			sort.Sort(sort.Reverse(s))
-		}
-	case types.OrderAscCaseInsensitive:
-		// ascending case insensitive
-		if !sort.IsSorted(s) {
-			sort.Sort(s)
-		}
-	case types.OrderDescCaseInsensitive:
-		// descending case insensitive
-		if !sort.IsSorted(sort.Reverse(s)) {
-			sort.Sort(sort.Reverse(s))
-		}
-	}
 }
 
 func (s *PackageSorter) Len() int {
-	return len(s.sorted)
+	return len(s.pkg.selected)
 }
 
 func (s *PackageSorter) Less(i, j int) bool {
-	for _, col := range s.cols {
+	x, y := int(s.pkg.selected[i]), int(s.pkg.selected[j])
+	for n, col := range s.cols {
+		o := s.orders[n]
 		var cmp int
-		if s.order.IsCaseSensitive() {
-			cmp = s.pkg.blocks[col].Cmp(i, j)
+		if o.IsCaseSensitive() {
+			cmp = s.pkg.blocks[col].Cmp(x, y)
 		} else {
-			cmp = s.pkg.blocks[col].Cmpi(i, j)
+			cmp = s.pkg.blocks[col].Cmpi(x, y)
 		}
-		if cmp < 0 {
-			return true
+		if cmp == 0 {
+			// on equal, continue with next column
+			continue
 		}
-		if cmp > 0 {
-			return false
-		}
-		// on equal, continue with next column
+		return o.IsForward()
 	}
+	// all equal
 	return false
 }
 
 func (s *PackageSorter) Swap(i, j int) {
-	s.sorted[i], s.sorted[j] = s.sorted[j], s.sorted[i]
+	s.pkg.selected[i], s.pkg.selected[j] = s.pkg.selected[j], s.pkg.selected[i]
 }

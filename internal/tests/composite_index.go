@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -262,7 +263,7 @@ func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEn
 
 	// delete last item stored
 	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
-	require.NoError(t, ti.Del(ctx, prev))
+	require.NoError(t, ti.DelPack(ctx, prev, pack.WriteModeAll))
 	require.NoError(t, ti.Sync(ctx))
 	require.NoError(t, commit())
 

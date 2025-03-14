@@ -20,6 +20,7 @@ type (
 	OrderType  = types.OrderType
 	FilterMode = types.FilterMode
 	Package    = pack.Package
+	WriteMode  = pack.WriteMode
 )
 
 type TableKind string
@@ -27,7 +28,6 @@ type TableKind string
 const (
 	TableKindPack    = "pack"
 	TableKindLSM     = "lsm"
-	TableKindCDC     = "cdc"
 	TableKindHistory = "history"
 )
 
@@ -81,20 +81,13 @@ const (
 type TableReader interface {
 	WithQuery(QueryPlan) TableReader
 	WithMask([]uint64, ReadMode) TableReader
+	WithFields([]uint16) TableReader
 	Read(Context, uint32) (*Package, error)
 	Next(Context) (*Package, error)
 	Reset()
 	Close()
 	Schema() *Schema
 }
-
-type WriteMode byte
-
-const (
-	WriteModeAll = iota
-	WriteModeIncludeSelected
-	WriteModeExcludeSelected
-)
 
 type TableWriter interface {
 	Append(Context, *Package, WriteMode) error
@@ -177,11 +170,7 @@ type IndexEngine interface {
 	Rebuild(Context) error
 	Sync(Context) error
 
-	// data ingress
-	Add(ctx Context, prev, val []byte) error // wire encoded rows
-	Del(ctx Context, prev []byte) error      // wire encoded rows
-
-	// vectorized data ingress
+	// data ingress from table merge
 	AddPack(Context, *Package, WriteMode) error
 	DelPack(Context, *Package, WriteMode) error
 

@@ -22,6 +22,14 @@ func xxhash32Int64Slice(src []int64, res []uint32, seed uint32) {
 	xxhash32Int64SliceGeneric(src, res, seed)
 }
 
+func xxhash64Uint8Slice(src []uint8, res []uint64) {
+	xxhash64Uint8SliceGeneric(src, res)
+}
+
+func xxhash64Uint16Slice(src []uint16, res []uint64) {
+	xxhash64Uint16SliceGeneric(src, res)
+}
+
 func xxhash64Uint32Slice(src []uint32, res []uint64) {
 	xxhash64Uint32SliceGeneric(src, res)
 }

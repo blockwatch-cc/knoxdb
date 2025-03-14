@@ -1,17 +1,15 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package index
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
-	"blockwatch.cc/knoxdb/internal/hash/fnv"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
@@ -39,8 +37,8 @@ func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 
 	// check composite case first (all fields must have matching EQ conditions)
 	// but order does not matter; compare all but last schema field (= pk)
-	nfields := idx.convert.Schema().NumFields()
-	for _, field := range idx.convert.Schema().Exported()[:nfields-1] {
+	nfields := idx.schema.NumFields()
+	for _, field := range idx.schema.Exported()[:nfields-1] {
 		var canMatchField bool
 		for _, c := range node.Children {
 			if !c.IsLeaf() {
@@ -59,7 +57,7 @@ func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 }
 
 func (idx *Index) canMatchFilter(f *query.Filter) bool {
-	if !idx.convert.Schema().CanMatchFields(f.Name) {
+	if !idx.schema.CanMatchFields(f.Name) {
 		return false
 	}
 	switch f.Mode {
@@ -100,27 +98,12 @@ func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*bitmap.B
 	)
 	switch idx.opts.Type {
 	case types.IndexTypeHash:
-		// convert query values to hash values
-		keys := idx.hashFilterValue(node.Filter)
-
-		// lookup hash values
-		bits, err = idx.lookupKeys(ctx, keys)
+		// convert query values to hash values and lookup
+		bits, err = idx.lookupKeys(ctx, idx.convert.QueryKeys(node))
 
 	case types.IndexTypeInt:
-
 		// execute the condition directly (like on table scans)
-		// but rewrite the filter node to match the index pack structure
-		inode := &query.FilterTreeNode{
-			Filter: &query.Filter{
-				Name:    "int",
-				Type:    node.Filter.Type,
-				Mode:    node.Filter.Mode,
-				Index:   0,
-				Value:   node.Filter.Value,
-				Matcher: node.Filter.Matcher,
-			},
-		}
-		bits, err = idx.queryKeys(ctx, inode)
+		bits, err = idx.queryKeys(ctx, idx.convert.QueryNode(node))
 	}
 	if err != nil {
 		return nil, false, err
@@ -145,39 +128,8 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 		return nil, false, nil
 	}
 
-	// identify eligible conditions for constructing multi-field lookups
-	eq := make(map[string]*query.FilterTreeNode) // all equal child conditions
-	for _, child := range node.Children {
-		if child.Filter.Mode == types.FilterModeEqual {
-			eq[child.Filter.Name] = child
-		}
-	}
-
-	// try combine multiple AND leaf conditions into longer index key,
-	// all index fields must be available
-	buf := new(bytes.Buffer)
-	nfields := idx.convert.Schema().NumFields()
-	for _, field := range idx.convert.Schema().Fields()[:nfields-1] {
-		name := field.Name()
-		node, ok := eq[name]
-		if !ok {
-			// empty result if we cannot build a hash from all index fields
-			return nil, false, nil
-		}
-		err := field.Encode(buf, node.Filter.Value, LE)
-		if err != nil {
-			return nil, false, err
-		}
-		// set skip flags signalling this condition has been processed
-		node.Skip = true
-		delete(eq, name)
-	}
-
-	// create single hash key from composite EQ conditions
-	keys := []uint64{fnv.Sum64a(buf.Bytes())}
-
-	// lokup matching pks
-	bits, err := idx.lookupKeys(ctx, keys)
+	// convert equal query conditions to composite hash for lookup
+	bits, err := idx.lookupKeys(ctx, idx.convert.QueryKeys(node))
 	if err != nil {
 		return nil, false, err
 	}
