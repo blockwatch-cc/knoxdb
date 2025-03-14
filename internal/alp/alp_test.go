@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Author: abdul@blockwatch.cc
+
 package alp
 
 import (
@@ -35,12 +38,10 @@ func TestAlpFloat64(t *testing.T) {
 				expectedNums = append(expectedNums, num)
 			}
 
-			e, err := Compress(expectedNums)
 			require.NoError(t, err)
-
-			actualValues, err := Decompress(e)
-			require.NoError(t, err)
-
+			actualValues := make([]float64, len(expectedNums))
+			e := Compress(expectedNums)
+			Decompress(actualValues, e)
 			assert.Equal(t, expectedNums, actualValues)
 		})
 	}
@@ -64,12 +65,9 @@ func TestAlpFloat32(t *testing.T) {
 				expectedNums = append(expectedNums, float32(num))
 			}
 
-			e, err := Compress(expectedNums)
-			require.NoError(t, err)
-
-			actualValues, err := Decompress(e)
-			require.NoError(t, err)
-
+			actualValues := make([]float32, len(expectedNums))
+			e := Compress(expectedNums)
+			Decompress(actualValues, e)
 			assert.Equal(t, expectedNums, actualValues)
 		})
 	}

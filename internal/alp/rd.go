@@ -9,41 +9,34 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/dedup"
 	"blockwatch.cc/knoxdb/pkg/assert"
+	"golang.org/x/exp/constraints"
 )
-
-type Uint interface {
-	~uint32 | uint64
-}
-
-type Float interface {
-	~float32 | float64
-}
 
 const (
 	FLOAT32_EXACT_TYPE = 32
 	FLOAT64_EXACT_TYPE = 64
 )
 
-type RdLeftPartInfo[T Float] struct {
+type RdLeftPartInfo[T constraints.Float] struct {
 	count int32
 	hash  uint16
 	val   T
 }
 
-type RdEncoder[T Float, U Uint] struct {
+type rdEncoder[T constraints.Float, U constraints.Unsigned] struct {
 	State              *RdState[T]
 	EXACT_TYPE_BITSIZE uint8
 }
 
-type RdState[T Float] struct {
+type RdState[T constraints.Float] struct {
 	RightBitWidth        uint8
 	LeftBitWidth         uint8
 	ExceptionsCount      uint16
-	RightPartsEncoded    [VECTOR_SIZE * 8]uint8
-	LeftPartEncoded      [VECTOR_SIZE * 8]uint8
+	RightPartsEncoded    []uint8
+	LeftPartEncoded      []uint8
 	LeftPartsDict        [RD_MAX_DICTIONARY_SIZE]uint16
-	Exceptions           [VECTOR_SIZE]uint16
-	ExceptionsPositions  [VECTOR_SIZE]uint16
+	Exceptions           []uint16
+	ExceptionsPositions  []uint16
 	ValueCount           int
 	leftBitPackedSize    uint64
 	rightBitPackedSize   uint64
@@ -52,22 +45,27 @@ type RdState[T Float] struct {
 	sampledValuesN       []T
 }
 
-func NewRdState[T Float]() *RdState[T] {
+func NewRdState[T constraints.Float](valCount int) *RdState[T] {
 	return &RdState[T]{
-		leftPartsDictMap: make(map[uint16]uint16),
+		leftPartsDictMap:    make(map[uint16]uint16),
+		ValueCount:          valCount,
+		RightPartsEncoded:   make([]uint8, valCount*8),
+		LeftPartEncoded:     make([]uint8, valCount*8),
+		Exceptions:          make([]uint16, valCount),
+		ExceptionsPositions: make([]uint16, valCount),
 	}
 }
 
-func (r *RdState[T]) Reset() {
+func (r *RdState[T]) AlpRdReset() {
 	r.LeftBitWidth = 0
 	r.ExceptionsCount = 0
 	r.rightBitPackedSize = 0
 	r.leftPartsDictMap = make(map[uint16]uint16)
 }
 
-func newRDEncoder[T Float, U Uint](dataColumn []T, columnOffset int) RdEncoder[T, U] {
-	enc := RdEncoder[T, U]{
-		State: NewRdState[T](),
+func newRDEncoder[T constraints.Float, U constraints.Unsigned](dataColumn []T, columnOffset int) rdEncoder[T, U] {
+	enc := rdEncoder[T, U]{
+		State: NewRdState[T](len(dataColumn)),
 	}
 	var v any = T(0)
 	switch v.(type) {
@@ -76,7 +74,6 @@ func newRDEncoder[T Float, U Uint](dataColumn []T, columnOffset int) RdEncoder[T
 	case float64:
 		enc.EXACT_TYPE_BITSIZE = FLOAT64_EXACT_TYPE
 	}
-	enc.State.ValueCount = len(dataColumn)
 	enc.State.sampledValuesN = FirstLevelSample(dataColumn, columnOffset)
 	enc.findBestDictionary(enc.State.sampledValuesN, enc.State)
 	return enc
@@ -85,13 +82,13 @@ func newRDEncoder[T Float, U Uint](dataColumn []T, columnOffset int) RdEncoder[T
 /*
  * Estimate the bits per value of ALPRD within a sample
  */
-func (r RdEncoder[T, U]) estimateCompressionSize(rightBitWidth, leftBitWidth uint8, exceptionsCount uint16, sampleCount uint64) float64 {
+func (r rdEncoder[T, U]) estimateCompressionSize(rightBitWidth, leftBitWidth uint8, exceptionsCount uint16, sampleCount uint64) float64 {
 	var exceptionsSize float64 = float64(exceptionsCount * ((RD_EXCEPTION_POSITION_SIZE + RD_EXCEPTION_SIZE) * 8))
 	var estimatedSize float64 = float64(rightBitWidth+leftBitWidth) + (exceptionsSize / float64(sampleCount))
 	return estimatedSize
 }
 
-func (r RdEncoder[T, U]) buildLeftPartsDictionary(values []T, rightBitWidth uint8, state *RdState[T], persistDict bool) float64 {
+func (r rdEncoder[T, U]) buildLeftPartsDictionary(values []T, rightBitWidth uint8, state *RdState[T], persistDict bool) float64 {
 	leftPartsHash := make(map[U]RdLeftPartInfo[T])
 
 	// Building a hash for all the left parts and how many times they appear
@@ -156,7 +153,7 @@ func (r RdEncoder[T, U]) buildLeftPartsDictionary(values []T, rightBitWidth uint
 	return estimatedSize
 }
 
-func (r RdEncoder[T, U]) findBestDictionary(values []T, state *RdState[T]) float64 {
+func (r rdEncoder[T, U]) findBestDictionary(values []T, state *RdState[T]) float64 {
 	rightBitWidth := uint8(0)
 	var bestDictSize float64 = math.MaxInt32
 	//! Finding the best position to CUT the values
@@ -171,12 +168,12 @@ func (r RdEncoder[T, U]) findBestDictionary(values []T, state *RdState[T]) float
 	return r.buildLeftPartsDictionary(values, rightBitWidth, state, true)
 }
 
-func RDCompress[T Float, U Uint](values []T) *RdState[T] {
+func RDCompress[T constraints.Float, U constraints.Unsigned](values []T) *RdState[T] {
 	enc := newRDEncoder[T, U](values, 0)
 
 	nValues := len(values)
-	rightParts := [VECTOR_SIZE]U{}
-	leftParts := [VECTOR_SIZE]uint16{}
+	rightParts := make([]U, nValues)
+	leftParts := make([]uint16, nValues)
 
 	// Cutting the floating point values
 	for i, val := range values {
@@ -216,10 +213,10 @@ func RDCompress[T Float, U Uint](values []T) *RdState[T] {
 	return enc.State
 }
 
-func RDDecompress[T Float, U Uint](state *RdState[T]) []T {
+func RDDecompress[T constraints.Float, U constraints.Unsigned](state *RdState[T]) []T {
 	output := make([]T, 0)
-	leftParts := make([]uint16, VECTOR_SIZE)
-	rightParts := make([]U, VECTOR_SIZE)
+	leftParts := make([]uint16, state.ValueCount)
+	rightParts := make([]U, state.ValueCount)
 
 	// Bitunpacking left and right parts
 	dedup.UnpackBits(state.LeftPartEncoded[:], leftParts, int(state.LeftBitWidth))
@@ -248,7 +245,7 @@ func getRequiredSize(nValues, bitWidth int) int {
 	return (totalBits + 7) / 8
 }
 
-func castToUint[T Float, U Uint](v T) U {
+func castToUint[T constraints.Float, U constraints.Unsigned](v T) U {
 	var val U
 	switch any(v).(type) {
 	case float64:
@@ -259,7 +256,7 @@ func castToUint[T Float, U Uint](v T) U {
 	return val
 }
 
-func castToFloat[T Float, U Uint](v U) T {
+func castToFloat[T constraints.Float, U constraints.Unsigned](v U) T {
 	var val T
 	switch any(v).(type) {
 	case uint64:

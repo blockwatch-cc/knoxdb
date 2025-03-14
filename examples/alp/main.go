@@ -38,16 +38,11 @@ func runALP() error {
 	}
 
 	log.Infof("current value: %v\n", values)
-	enc, err := alp.Compress(values)
-	if err != nil {
-		return err
-	}
-	log.Infof("encoded values: %v\n", enc.State.EncodedIntegers)
+	state := alp.Compress(values)
+	log.Infof("encoded values: %v\n", state.EncodedIntegers)
 
-	decompressedValues, err := alp.Decompress(enc)
-	if err != nil {
-		return err
-	}
+	decompressedValues := make([]float64, len(values))
+	alp.Decompress(decompressedValues, state)
 	log.Infof("decoded values: %v\n", decompressedValues)
 
 	return nil
