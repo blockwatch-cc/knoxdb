@@ -8,38 +8,29 @@ import (
 )
 
 // Scalar decoding of an ALP vector
-func Decompress[T constraints.Float](enc *Encoder[T]) ([]T, error) {
-	constants, err := newConstant[T]()
-	if err != nil {
-		return nil, err
-	}
-	e := enc.State.EncodingIndice
-	exceptions := enc.State.Exceptions
-	encodedIntegers := enc.State.EncodedIntegers
-	frameOfReference := enc.State.FOR
-	exceptionPositions := enc.State.ExceptionPositions
-	count := len(encodedIntegers)
-	out := make([]T, count)
+func Decompress[T constraints.Float](out []T, state *State[T]) {
+	constant := newConstant[T]()
+	e := state.EncodingIndice
+	exceptions := state.Exceptions
+	encodedIntegers := state.EncodedIntegers
+	frameOfReference := state.FOR
+	exceptionPositions := state.ExceptionPositions
 
-	// unFOR
-	for i := 0; i < count; i++ {
-		encodedIntegers[i] += int64(frameOfReference)
-	}
-
-	// decoding
-	for i := 0; i < count; i++ {
-		out[i] = decodeValue(int64(encodedIntegers[i]), e, constants)
+	fac := FACT_ARR[e.factor]
+	exp := T(constant.FRAC_ARR[e.exponent])
+	_ = out[len(encodedIntegers)-1]
+	for i, encInt := range encodedIntegers {
+		// unFOR+decoding
+		out[i] = T((encInt+frameOfReference)*fac) * exp
 	}
 
 	// patching exceptions
-	for k := 0; k < int(enc.State.ExceptionsCount); k++ {
-		out[exceptionPositions[k]] = T(exceptions[k])
+	for i, expPos := range exceptionPositions[:state.ExceptionsCount] {
+		out[expPos] = exceptions[i]
 	}
-
-	return out, nil
 }
 
 // Scalar decoding a single value with ALP
-func decodeValue[T constraints.Float](v int64, e EncodingIndice, c Constant[T]) T {
-	return T(v) * T(FACT_ARR[e.factor]) * c.FRAC_ARR[e.exponent]
+func decodeValue[T constraints.Float](v, fac int64, exp T) T {
+	return T(v*fac) * exp
 }

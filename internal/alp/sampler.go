@@ -9,8 +9,7 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
-func FirstLevelSample[T constraints.Float](data []T, dataOffset int) []T {
-	dataSample := make([]T, 0)
+func FirstLevelSample[T constraints.Float](dataSample, data []T, dataOffset int) []T {
 	dataSize := len(data)
 	leftInData := dataSize - dataOffset
 	portionToSample := min(ROWGROUP_SIZE, leftInData)

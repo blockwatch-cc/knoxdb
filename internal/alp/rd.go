@@ -6,6 +6,7 @@ package alp
 import (
 	"math"
 	"sort"
+	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/dedup"
 	"blockwatch.cc/knoxdb/pkg/assert"
@@ -53,6 +54,7 @@ func NewRdState[T constraints.Float](valCount int) *RdState[T] {
 		LeftPartEncoded:     make([]uint8, valCount*8),
 		Exceptions:          make([]uint16, valCount),
 		ExceptionsPositions: make([]uint16, valCount),
+		sampledValuesN:      make([]T, 0, valCount),
 	}
 }
 
@@ -74,7 +76,7 @@ func newRDEncoder[T constraints.Float, U constraints.Unsigned](dataColumn []T, c
 	case float64:
 		enc.EXACT_TYPE_BITSIZE = FLOAT64_EXACT_TYPE
 	}
-	enc.State.sampledValuesN = FirstLevelSample(dataColumn, columnOffset)
+	enc.State.sampledValuesN = FirstLevelSample(enc.State.sampledValuesN, dataColumn, columnOffset)
 	enc.findBestDictionary(enc.State.sampledValuesN, enc.State)
 	return enc
 }
@@ -91,16 +93,17 @@ func (r rdEncoder[T, U]) estimateCompressionSize(rightBitWidth, leftBitWidth uin
 func (r rdEncoder[T, U]) buildLeftPartsDictionary(values []T, rightBitWidth uint8, state *RdState[T], persistDict bool) float64 {
 	leftPartsHash := make(map[U]RdLeftPartInfo[T])
 
+	vals := *(*[]U)(unsafe.Pointer(&values))
+
 	// Building a hash for all the left parts and how many times they appear
-	for _, val := range values {
-		v := castToUint[T, U](val)
-		leftTmp := v >> rightBitWidth
+	for i, val := range vals {
+		leftTmp := val >> rightBitWidth
 		if v, ok := leftPartsHash[leftTmp]; ok {
 			v.count++
 			leftPartsHash[leftTmp] = v
 		} else {
 			leftPartsHash[leftTmp] = RdLeftPartInfo[T]{
-				val:   val,
+				val:   values[i],
 				count: 1,
 				hash:  uint16(leftTmp),
 			}
@@ -175,15 +178,15 @@ func RDCompress[T constraints.Float, U constraints.Unsigned](values []T) *RdStat
 	rightParts := make([]U, nValues)
 	leftParts := make([]uint16, nValues)
 
-	// Cutting the floating point values
-	for i, val := range values {
-		v := castToUint[T, U](val)
-		rightParts[i] = U(v & ((1 << enc.State.RightBitWidth) - 1))
-		leftParts[i] = uint16(v >> enc.State.RightBitWidth)
-	}
+	// cast T to U
+	vals := *(*[]U)(unsafe.Pointer(&values))
 
 	// Dictionary encoding for left parts
-	for i := range values {
+	for i := 0; i < nValues; i++ {
+		// Cutting the floating point values
+		rightParts[i] = U(vals[i] & ((1 << enc.State.RightBitWidth) - 1))
+		leftParts[i] = uint16(vals[i] >> uint64(enc.State.RightBitWidth))
+
 		dictionaryKey := leftParts[i]
 		var dictionaryIndex uint16
 		if _, ok := enc.State.leftPartsDictMap[dictionaryKey]; !ok {
@@ -227,7 +230,7 @@ func RDDecompress[T constraints.Float, U constraints.Unsigned](state *RdState[T]
 		left := state.LeftPartsDict[leftParts[i]]
 		right := rightParts[i]
 		v := U(left)<<state.RightBitWidth | right
-		output = append(output, castToFloat[T, U](v))
+		output = append(output, *(*T)(unsafe.Pointer(&v)))
 	}
 
 	// Exceptions Patching (exceptions only occur in left parts)
@@ -235,7 +238,7 @@ func RDDecompress[T constraints.Float, U constraints.Unsigned](state *RdState[T]
 		right := rightParts[state.ExceptionsPositions[i]]
 		left := state.Exceptions[i]
 		v := U(left<<state.RightBitWidth) | right
-		output[state.ExceptionsPositions[i]] = castToFloat[T, U](v)
+		output[state.ExceptionsPositions[i]] = *(*T)(unsafe.Pointer(&v))
 	}
 	return output
 }
@@ -243,26 +246,4 @@ func RDDecompress[T constraints.Float, U constraints.Unsigned](state *RdState[T]
 func getRequiredSize(nValues, bitWidth int) int {
 	totalBits := nValues * bitWidth
 	return (totalBits + 7) / 8
-}
-
-func castToUint[T constraints.Float, U constraints.Unsigned](v T) U {
-	var val U
-	switch any(v).(type) {
-	case float64:
-		val = U(math.Float64bits(float64(v)))
-	case float32:
-		val = U(math.Float32bits(float32(v)))
-	}
-	return val
-}
-
-func castToFloat[T constraints.Float, U constraints.Unsigned](v U) T {
-	var val T
-	switch any(v).(type) {
-	case uint64:
-		val = T(math.Float64frombits(uint64(v)))
-	case uint32:
-		val = T(math.Float32frombits(uint32(v)))
-	}
-	return val
 }
