@@ -1,6 +1,6 @@
 package tests
 
-var S8bBenchmarkSize = 6000
+var S8bBenchmarkSize = 2048
 
 type BenchmarkData struct {
 	Name string
@@ -24,7 +24,7 @@ var S8bBenchmarksUint64 = []BenchmarkData{
 	{"20 bits", bitsN(20), S8bBenchmarkSize},
 	{"30 bits", bitsN(30), S8bBenchmarkSize},
 	{"60 bits", bitsN(60), S8bBenchmarkSize},
-	{"combination", combineN(
+	{"mix", combineN(
 		onesN(),
 		bitsN(1),
 		bitsN(2),
@@ -59,7 +59,7 @@ var S8bBenchmarksUint32 = []BenchmarkData{
 	{"20 bits", bitsN(20), S8bBenchmarkSize},
 	{"30 bits", bitsN(30), S8bBenchmarkSize},
 	{"60 bits", bitsN(32), S8bBenchmarkSize},
-	{"combination", combineN(
+	{"mix", combineN(
 		onesN(),
 		bitsN(1),
 		bitsN(2),
@@ -92,7 +92,7 @@ var S8bBenchmarksUint16 = []BenchmarkData{
 	{"12 bits", bitsN(12), S8bBenchmarkSize},
 	{"15 bits", bitsN(15), S8bBenchmarkSize},
 	{"20 bits", bitsN(16), S8bBenchmarkSize},
-	{"combination", combineN(
+	{"mix", combineN(
 		onesN(),
 		bitsN(1),
 		bitsN(2),
@@ -119,7 +119,7 @@ var S8bBenchmarksUint8 = []BenchmarkData{
 	{"6 bits", bitsN(6), S8bBenchmarkSize},
 	{"7 bits", bitsN(7), S8bBenchmarkSize},
 	{"8 bits", bitsN(8), S8bBenchmarkSize},
-	{"combination", combineN(
+	{"mix", combineN(
 		onesN(),
 		bitsN(1),
 		bitsN(2),

@@ -10,7 +10,7 @@ import (
 	"math"
 
 	"blockwatch.cc/knoxdb/internal/arena"
-	"blockwatch.cc/knoxdb/internal/s8b"
+	"blockwatch.cc/knoxdb/internal/encode/s8b"
 )
 
 const (

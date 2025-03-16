@@ -10,7 +10,7 @@ import (
 	"os"
 	"runtime/pprof"
 
-	"blockwatch.cc/knoxdb/internal/fsst"
+	"blockwatch.cc/knoxdb/internal/encode/fsst"
 	"github.com/echa/log"
 )
 

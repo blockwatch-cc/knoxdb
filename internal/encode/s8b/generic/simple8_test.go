@@ -2,16 +2,11 @@
 package generic
 
 import (
+	"slices"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/s8b/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/google/go-cmp/cmp"
-)
-
-var (
-	s8bTestsUint64      = tests.S8bTestsUint64
-	s8bBenchmarksUint64 = tests.S8bBenchmarksUint64
 )
 
 func Test_Encode_NoValues(t *testing.T) {
@@ -164,8 +159,7 @@ func testEncode(t *testing.T, n int, val uint64) {
 		t.Fatalf("Decode len mismatch: exp %v, got %v", exp, got)
 	}
 
-	got, err := CountValuesBigEndian(encoded)
-	// got, err := CountValues(encoded)
+	got, err := CountValues(encoded)
 	if err != nil {
 		t.Fatalf("Unexpected error in Count: %v", err)
 	}
@@ -302,82 +296,81 @@ func BenchmarkEncode(b *testing.B) {
 		in := bm.Fn(s8bBenchmarkSize)()
 		b.Run(bm.Name, func(b *testing.B) {
 			b.SetBytes(int64(8 * bm.Size))
+			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Encode(append(make([]uint64, 0, len(in)), in...))
+				EncodeUint64(slices.Clone(in))
 			}
 		})
 	}
 }
 
-// func BenchmarkEncode(b *testing.B) {
-// 	x := make([]uint64, 1024)
-// 	for i := 0; i < len(x); i++ {
-// 		x[i] = uint64(15)
-// 	}
-
-// 	in := make([]uint64, 1024)
-
-// 	b.SetBytes(int64(len(x) * 8))
-// 	b.ResetTimer()
-// 	for i := 0; i < b.N; i++ {
-// 		copy(in, x)
-// 		Encode(in)
-// 	}
-// }
-
-func BenchmarkEncoder(b *testing.B) {
-	x := make([]uint64, 1024)
-	for i := 0; i < len(x); i++ {
-		x[i] = uint64(15)
-	}
-
-	enc := NewEncoder()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		enc.SetValues(x)
-		enc.Bytes()
-		b.SetBytes(int64(len(x)) * 8)
+func BenchmarkDecode(b *testing.B) {
+	for _, bm := range s8bBenchmarksUint64 {
+		in := bm.Fn(s8bBenchmarkSize)()
+		y, _ := EncodeUint64(in)
+		b.Run(bm.Name, func(b *testing.B) {
+			total := 0
+			decoded := make([]uint64, len(in))
+			b.SetBytes(int64(len(decoded) * 8))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, _ = DecodeAll(decoded, y)
+				total += len(decoded)
+			}
+		})
 	}
 }
 
-func BenchmarkDecode(b *testing.B) {
-	total := 0
-
-	x := make([]uint64, 1024)
-	for i := 0; i < len(x); i++ {
-		x[i] = uint64(10)
+func BenchmarkEncoderSet(b *testing.B) {
+	for _, bm := range s8bBenchmarksUint64 {
+		in := bm.Fn(s8bBenchmarkSize)()
+		b.Run(bm.Name, func(b *testing.B) {
+			enc := NewEncoder()
+			b.SetBytes(int64(8 * bm.Size))
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				enc.SetValues(in)
+				enc.Bytes()
+			}
+		})
 	}
-	y, _ := EncodeUint64(x)
+}
 
-	decoded := make([]uint64, len(x))
-
-	b.SetBytes(int64(len(decoded) * 8))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		_, _ = DecodeAll(decoded, y)
-		total += len(decoded)
+func BenchmarkEncoderWrite(b *testing.B) {
+	for _, bm := range s8bBenchmarksUint64 {
+		in := bm.Fn(s8bBenchmarkSize)()
+		b.Run(bm.Name, func(b *testing.B) {
+			enc := NewEncoder()
+			b.SetBytes(int64(8 * bm.Size))
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, v := range in {
+					enc.Write(v)
+				}
+				enc.Bytes()
+			}
+		})
 	}
 }
 
 func BenchmarkDecoder(b *testing.B) {
-	enc := NewEncoder()
-	x := make([]uint64, 1024)
-	for i := 0; i < len(x); i++ {
-		x[i] = uint64(10)
-		enc.Write(x[i])
-	}
-	y, _ := enc.Bytes()
-
-	b.ResetTimer()
-
-	dec := NewDecoder(y)
-	for i := 0; i < b.N; i++ {
-		dec.SetBytes(y)
-		j := 0
-		for dec.Next() {
-			j += 1
-		}
-		b.SetBytes(int64(j * 8))
+	for _, bm := range s8bBenchmarksUint64 {
+		in := bm.Fn(s8bBenchmarkSize)()
+		enc := NewEncoder()
+		enc.SetValues(in)
+		y, _ := enc.Bytes()
+		b.Run(bm.Name, func(b *testing.B) {
+			dec := NewDecoder(y)
+			dec.SetBytes(y)
+			b.SetBytes(int64(len(y)))
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				j := 0
+				for dec.Next() {
+					j += 1
+				}
+			}
+		})
 	}
 }

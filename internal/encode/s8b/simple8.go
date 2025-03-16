@@ -4,9 +4,9 @@
 package s8b
 
 import (
-	"blockwatch.cc/knoxdb/internal/s8b/avx2"
-	"blockwatch.cc/knoxdb/internal/s8b/avx512"
-	"blockwatch.cc/knoxdb/internal/s8b/generic"
+	"blockwatch.cc/knoxdb/internal/encode/s8b/avx2"
+	"blockwatch.cc/knoxdb/internal/encode/s8b/avx512"
+	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 

@@ -141,7 +141,7 @@ func TestInt64Decode_Corrupt(t *testing.T) {
 	}
 }
 
-func BenchmarkEncodeInt64stamps(b *testing.B) {
+func BenchmarkEncodeInt64(b *testing.B) {
 	var err error
 	cases := []int{1024, 1 << 14, 1 << 16}
 

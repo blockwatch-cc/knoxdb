@@ -15,7 +15,7 @@ import (
 	"testing/quick"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/s8b"
+	"blockwatch.cc/knoxdb/internal/encode/s8b"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/google/go-cmp/cmp"
 )

@@ -10,9 +10,9 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/s8b/avx2"
-	"blockwatch.cc/knoxdb/internal/s8b/generic"
-	"blockwatch.cc/knoxdb/internal/s8b/tests"
+	"blockwatch.cc/knoxdb/internal/encode/s8b/avx2"
+	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
+	"blockwatch.cc/knoxdb/internal/encode/s8b/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/google/go-cmp/cmp"
 )

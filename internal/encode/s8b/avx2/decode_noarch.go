@@ -7,7 +7,7 @@
 package avx2
 
 import (
-	"blockwatch.cc/knoxdb/internal/s8b/generic"
+	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
 )
 
 var (
@@ -16,8 +16,4 @@ var (
 	DecodeUint16 = generic.DecodeUint16
 	DecodeUint8  = generic.DecodeUint8
 	CountValues  = generic.CountValues
-
-	// legacy use only
-	// DecodeBytesBigEndian = generic.DecodeBytesBigEndian
-	// CountValuesBigEndian = generic.CountValuesBigEndian
 )

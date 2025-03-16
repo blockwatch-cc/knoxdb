@@ -7,7 +7,7 @@
 package avx512
 
 import (
-	"blockwatch.cc/knoxdb/internal/s8b/generic"
+	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
 )
 
 var (

@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 
-	"blockwatch.cc/knoxdb/internal/alp"
+	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"github.com/echa/log"
 )
 

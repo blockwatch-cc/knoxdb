@@ -4,6 +4,8 @@
 // It is capable of encoding multiple integers with values betweeen 0 and to 1^60 -1, in a single word.
 //
 // Imported from github.com/jwilder/encoding
+//
+// Notable changes are that data is stored LittleEndian instead of BigEndian which the original uses.
 
 package generic
 
@@ -106,7 +108,7 @@ func (e *Encoder) flush() error {
 	if err != nil {
 		return err
 	}
-	binary.BigEndian.PutUint64(e.b, encoded)
+	binary.LittleEndian.PutUint64(e.b, encoded)
 	if e.bp+8 > len(e.bytes) {
 		e.bytes = append(e.bytes, e.b...)
 		e.bp = len(e.bytes)
@@ -182,7 +184,7 @@ func (d *Decoder) read() {
 		return
 	}
 
-	v := binary.BigEndian.Uint64(d.bytes[:8])
+	v := binary.LittleEndian.Uint64(d.bytes[:8])
 	d.bytes = d.bytes[8:]
 	d.n, _ = Decode(&d.buf, v)
 	d.i = 0
@@ -299,7 +301,7 @@ func Count(v uint64) (int, error) {
 
 func ForEach(b []byte, fn func(v uint64) bool) error {
 	for len(b) >= 8 {
-		v := binary.BigEndian.Uint64(b[:8])
+		v := binary.LittleEndian.Uint64(b[:8])
 		b = b[8:]
 
 		sel := v >> 60
@@ -325,7 +327,7 @@ func ForEach(b []byte, fn func(v uint64) bool) error {
 func CountBytesBetween(b []byte, min, max uint64) (int, error) {
 	var count int
 	for len(b) >= 8 {
-		v := binary.BigEndian.Uint64(b[:8])
+		v := binary.LittleEndian.Uint64(b[:8])
 		b = b[8:]
 
 		sel := v >> 60
