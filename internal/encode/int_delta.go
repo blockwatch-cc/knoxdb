@@ -4,6 +4,8 @@
 package encode
 
 import (
+	"sync"
+
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
@@ -13,6 +15,10 @@ type DeltaContainer[T types.Integer] struct {
 	Delta T
 	For   T
 	N     int
+}
+
+func (c *DeltaContainer[T]) Close() {
+	putDeltaContainer[T](c)
 }
 
 func (c *DeltaContainer[T]) Type() IntegerContainerType {
@@ -104,4 +110,86 @@ func (c *DeltaContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 func (c *DeltaContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 	// set := s.(*xroar.Bitmap)
 	return nil
+}
+
+type DeltaFactory struct {
+	i64Pool sync.Pool
+	i32Pool sync.Pool
+	i16Pool sync.Pool
+	i8Pool  sync.Pool
+	u64Pool sync.Pool
+	u32Pool sync.Pool
+	u16Pool sync.Pool
+	u8Pool  sync.Pool
+}
+
+func newDeltaContainer[T types.Integer]() IntegerContainer[T] {
+	switch (any(T(0))).(type) {
+	case int64:
+		return deltaFactory.i64Pool.Get().(IntegerContainer[T])
+	case int32:
+		return deltaFactory.i32Pool.Get().(IntegerContainer[T])
+	case int16:
+		return deltaFactory.i16Pool.Get().(IntegerContainer[T])
+	case int8:
+		return deltaFactory.i8Pool.Get().(IntegerContainer[T])
+	case uint64:
+		return deltaFactory.u64Pool.Get().(IntegerContainer[T])
+	case uint32:
+		return deltaFactory.u32Pool.Get().(IntegerContainer[T])
+	case uint16:
+		return deltaFactory.u16Pool.Get().(IntegerContainer[T])
+	case uint8:
+		return deltaFactory.u8Pool.Get().(IntegerContainer[T])
+	default:
+		return nil
+	}
+}
+
+func putDeltaContainer[T types.Integer](c IntegerContainer[T]) {
+	switch (any(T(0))).(type) {
+	case int64:
+		deltaFactory.i64Pool.Put(c)
+	case int32:
+		deltaFactory.i32Pool.Put(c)
+	case int16:
+		deltaFactory.i16Pool.Put(c)
+	case int8:
+		deltaFactory.i8Pool.Put(c)
+	case uint64:
+		deltaFactory.u64Pool.Put(c)
+	case uint32:
+		deltaFactory.u32Pool.Put(c)
+	case uint16:
+		deltaFactory.u16Pool.Put(c)
+	case uint8:
+		deltaFactory.u8Pool.Put(c)
+	}
+}
+
+var deltaFactory = DeltaFactory{
+	i64Pool: sync.Pool{
+		New: func() any { return new(DeltaContainer[int64]) },
+	},
+	i32Pool: sync.Pool{
+		New: func() any { return new(DeltaContainer[int32]) },
+	},
+	i16Pool: sync.Pool{
+		New: func() any { return new(DeltaContainer[int16]) },
+	},
+	i8Pool: sync.Pool{
+		New: func() any { return new(DeltaContainer[int8]) },
+	},
+	u64Pool: sync.Pool{
+		New: func() any { return new(DeltaContainer[uint64]) },
+	},
+	u32Pool: sync.Pool{
+		New: func() any { return new(DeltaContainer[uint32]) },
+	},
+	u16Pool: sync.Pool{
+		New: func() any { return new(DeltaContainer[uint16]) },
+	},
+	u8Pool: sync.Pool{
+		New: func() any { return new(DeltaContainer[uint8]) },
+	},
 }

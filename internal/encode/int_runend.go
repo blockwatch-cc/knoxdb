@@ -6,7 +6,9 @@ package encode
 import (
 	"slices"
 	"sort"
+	"sync"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
@@ -16,6 +18,14 @@ type RunEndContainer[T types.Integer] struct {
 	For    T
 	Values IntegerContainer[T]      // []T
 	Ends   IntegerContainer[uint32] // []uint32
+}
+
+func (c *RunEndContainer[T]) Close() {
+	c.Values.Close()
+	c.Ends.Close()
+	c.Values = nil
+	c.Ends = nil
+	putRunEndContainer[T](c)
 }
 
 func (c *RunEndContainer[T]) Type() IntegerContainerType {
@@ -98,8 +108,10 @@ func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
 	// generate FOR + run-end encoding from originals
-	values := make([]T, ctx.NumRuns)
-	ends := make([]uint32, ctx.NumRuns)
+	// values := make([]T, ctx.NumRuns)
+	values := arena.AllocT[T](ctx.NumRuns)[:ctx.NumRuns]
+	// ends := make([]uint32, ctx.NumRuns)
+	ends := arena.Alloc(arena.AllocUint32, ctx.NumRuns).([]uint32)[:ctx.NumRuns]
 	c.For = ctx.Min
 	values[0] = vals[0] - c.For
 	var (
@@ -121,8 +133,14 @@ func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) I
 	// encode child containers
 	// fmt.Println("Run Values ..")
 	c.Values = EncodeInt(nil, values, lvl-1)
+	if c.Values.Type() != TIntegerRaw {
+		arena.FreeT(values)
+	}
 	// fmt.Println("Run Ends ..")
 	c.Ends = EncodeInt(nil, ends, lvl-1)
+	if c.Ends.Type() != TIntegerRaw {
+		arena.Free(arena.AllocUint32, ends)
+	}
 	// fmt.Println("Run done.")
 	return c
 }
@@ -163,4 +181,86 @@ func (c *RunEndContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 func (c *RunEndContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 	// set := s.(*xroar.Bitmap)
 	return nil
+}
+
+type RunEndFactory struct {
+	i64Pool sync.Pool
+	i32Pool sync.Pool
+	i16Pool sync.Pool
+	i8Pool  sync.Pool
+	u64Pool sync.Pool
+	u32Pool sync.Pool
+	u16Pool sync.Pool
+	u8Pool  sync.Pool
+}
+
+func newRunEndContainer[T types.Integer]() IntegerContainer[T] {
+	switch (any(T(0))).(type) {
+	case int64:
+		return runEndFactory.i64Pool.Get().(IntegerContainer[T])
+	case int32:
+		return runEndFactory.i32Pool.Get().(IntegerContainer[T])
+	case int16:
+		return runEndFactory.i16Pool.Get().(IntegerContainer[T])
+	case int8:
+		return runEndFactory.i8Pool.Get().(IntegerContainer[T])
+	case uint64:
+		return runEndFactory.u64Pool.Get().(IntegerContainer[T])
+	case uint32:
+		return runEndFactory.u32Pool.Get().(IntegerContainer[T])
+	case uint16:
+		return runEndFactory.u16Pool.Get().(IntegerContainer[T])
+	case uint8:
+		return runEndFactory.u8Pool.Get().(IntegerContainer[T])
+	default:
+		return nil
+	}
+}
+
+func putRunEndContainer[T types.Integer](c IntegerContainer[T]) {
+	switch (any(T(0))).(type) {
+	case int64:
+		runEndFactory.i64Pool.Put(c)
+	case int32:
+		runEndFactory.i32Pool.Put(c)
+	case int16:
+		runEndFactory.i16Pool.Put(c)
+	case int8:
+		runEndFactory.i8Pool.Put(c)
+	case uint64:
+		runEndFactory.u64Pool.Put(c)
+	case uint32:
+		runEndFactory.u32Pool.Put(c)
+	case uint16:
+		runEndFactory.u16Pool.Put(c)
+	case uint8:
+		runEndFactory.u8Pool.Put(c)
+	}
+}
+
+var runEndFactory = RunEndFactory{
+	i64Pool: sync.Pool{
+		New: func() any { return new(RunEndContainer[int64]) },
+	},
+	i32Pool: sync.Pool{
+		New: func() any { return new(RunEndContainer[int32]) },
+	},
+	i16Pool: sync.Pool{
+		New: func() any { return new(RunEndContainer[int16]) },
+	},
+	i8Pool: sync.Pool{
+		New: func() any { return new(RunEndContainer[int8]) },
+	},
+	u64Pool: sync.Pool{
+		New: func() any { return new(RunEndContainer[uint64]) },
+	},
+	u32Pool: sync.Pool{
+		New: func() any { return new(RunEndContainer[uint32]) },
+	},
+	u16Pool: sync.Pool{
+		New: func() any { return new(RunEndContainer[uint16]) },
+	},
+	u8Pool: sync.Pool{
+		New: func() any { return new(RunEndContainer[uint8]) },
+	},
 }

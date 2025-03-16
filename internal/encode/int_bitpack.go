@@ -4,6 +4,9 @@
 package encode
 
 import (
+	"sync"
+
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/dedup"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -11,10 +14,20 @@ import (
 
 // TIntegerBitpacked
 type BitpackContainer[T types.Integer] struct {
-	For    T
 	Packed []byte
 	Log2   int
 	N      int
+	For    T
+	free   bool
+}
+
+func (c *BitpackContainer[T]) Close() {
+	if c.free {
+		arena.Free(arena.AllocBytes, c.Packed)
+	}
+	c.Packed = nil
+	c.free = false
+	putBitpackContainer[T](c)
 }
 
 func (c *BitpackContainer[T]) Type() IntegerContainerType {
@@ -71,7 +84,9 @@ func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 }
 
 func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
-	c.Packed = make([]byte, ctx.UseBits*len(vals)/8+1)
+	sz := ctx.UseBits*len(vals)/8 + 1
+	c.Packed = arena.Alloc(arena.AllocBytes, sz).([]byte)[:sz]
+	c.free = true
 	c.Log2 = ctx.UseBits
 	c.N = len(vals)
 	c.For = ctx.Min
@@ -117,4 +132,86 @@ func (c *BitpackContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 func (c *BitpackContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 	// set := s.(*xroar.Bitmap)
 	return nil
+}
+
+type BitpackFactory struct {
+	i64Pool sync.Pool
+	i32Pool sync.Pool
+	i16Pool sync.Pool
+	i8Pool  sync.Pool
+	u64Pool sync.Pool
+	u32Pool sync.Pool
+	u16Pool sync.Pool
+	u8Pool  sync.Pool
+}
+
+func newBitpackContainer[T types.Integer]() IntegerContainer[T] {
+	switch (any(T(0))).(type) {
+	case int64:
+		return bitpackFactory.i64Pool.Get().(IntegerContainer[T])
+	case int32:
+		return bitpackFactory.i32Pool.Get().(IntegerContainer[T])
+	case int16:
+		return bitpackFactory.i16Pool.Get().(IntegerContainer[T])
+	case int8:
+		return bitpackFactory.i8Pool.Get().(IntegerContainer[T])
+	case uint64:
+		return bitpackFactory.u64Pool.Get().(IntegerContainer[T])
+	case uint32:
+		return bitpackFactory.u32Pool.Get().(IntegerContainer[T])
+	case uint16:
+		return bitpackFactory.u16Pool.Get().(IntegerContainer[T])
+	case uint8:
+		return bitpackFactory.u8Pool.Get().(IntegerContainer[T])
+	default:
+		return nil
+	}
+}
+
+func putBitpackContainer[T types.Integer](c IntegerContainer[T]) {
+	switch (any(T(0))).(type) {
+	case int64:
+		bitpackFactory.i64Pool.Put(c)
+	case int32:
+		bitpackFactory.i32Pool.Put(c)
+	case int16:
+		bitpackFactory.i16Pool.Put(c)
+	case int8:
+		bitpackFactory.i8Pool.Put(c)
+	case uint64:
+		bitpackFactory.u64Pool.Put(c)
+	case uint32:
+		bitpackFactory.u32Pool.Put(c)
+	case uint16:
+		bitpackFactory.u16Pool.Put(c)
+	case uint8:
+		bitpackFactory.u8Pool.Put(c)
+	}
+}
+
+var bitpackFactory = BitpackFactory{
+	i64Pool: sync.Pool{
+		New: func() any { return new(BitpackContainer[int64]) },
+	},
+	i32Pool: sync.Pool{
+		New: func() any { return new(BitpackContainer[int32]) },
+	},
+	i16Pool: sync.Pool{
+		New: func() any { return new(BitpackContainer[int16]) },
+	},
+	i8Pool: sync.Pool{
+		New: func() any { return new(BitpackContainer[int8]) },
+	},
+	u64Pool: sync.Pool{
+		New: func() any { return new(BitpackContainer[uint64]) },
+	},
+	u32Pool: sync.Pool{
+		New: func() any { return new(BitpackContainer[uint32]) },
+	},
+	u16Pool: sync.Pool{
+		New: func() any { return new(BitpackContainer[uint16]) },
+	},
+	u8Pool: sync.Pool{
+		New: func() any { return new(BitpackContainer[uint8]) },
+	},
 }

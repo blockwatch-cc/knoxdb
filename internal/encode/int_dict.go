@@ -5,7 +5,9 @@ package encode
 
 import (
 	"slices"
+	"sync"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
@@ -15,6 +17,14 @@ type DictionaryContainer[T types.Integer] struct {
 	For    T
 	Values IntegerContainer[T]
 	Codes  IntegerContainer[uint16]
+}
+
+func (c *DictionaryContainer[T]) Close() {
+	c.Values.Close()
+	c.Codes.Close()
+	c.Values = nil
+	c.Codes = nil
+	putDictionaryContainer[T](c)
 }
 
 func (c *DictionaryContainer[T]) Type() IntegerContainerType {
@@ -74,17 +84,20 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	c.For = ctx.Min
 
 	// construct unique values map (if not done during analysis)
-	unique := ctx.Unique
-	if unique == nil {
-		unique = make(map[T]uint16, ctx.NumUnique)
+	// unique := ctx.Unique
+	if ctx.Unique == nil {
+		ctx.Unique = make(map[T]uint16, ctx.NumUnique)
+	}
+	if len(ctx.Unique) == 0 {
 		for _, v := range vals {
-			unique[v] = 0
+			ctx.Unique[v] = 0
 		}
 	}
 
 	// construct dict from unique values (apply FOR)
-	dict := make([]T, 0, ctx.NumUnique)
-	for v := range unique {
+	// dict := make([]T, 0, len(unique))
+	dict := arena.AllocT[T](len(ctx.Unique))
+	for v := range ctx.Unique {
 		dict = append(dict, v-c.For)
 	}
 
@@ -94,20 +107,27 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	// remap dict codes to original values (we re-use the existing Unique map
 	// to avoid more allocations)
 	for i, v := range dict {
-		unique[v+c.For] = uint16(i)
+		ctx.Unique[v+c.For] = uint16(i)
 	}
 
 	// construct codes
-	codes := make([]uint16, len(vals))
+	// codes := make([]uint16, len(vals))
+	codes := arena.Alloc(arena.AllocUint16, len(vals)).([]uint16)[:len(vals)]
 	for i, v := range vals {
-		codes[i] = unique[v]
+		codes[i] = ctx.Unique[v]
 	}
 
 	// encode child containers
 	// fmt.Println("Dict Values ..")
 	c.Values = EncodeInt(nil, dict, lvl-1)
+	if c.Values.Type() != TIntegerRaw {
+		arena.FreeT(dict)
+	}
 	// fmt.Println("Dict Codes ..")
 	c.Codes = EncodeInt(nil, codes, lvl-1)
+	if c.Codes.Type() != TIntegerRaw {
+		arena.Free(arena.AllocUint16, codes)
+	}
 	// fmt.Println("Dict done.")
 	return c
 }
@@ -148,4 +168,86 @@ func (c *DictionaryContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 func (c *DictionaryContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 	// set := s.(*xroar.Bitmap)
 	return nil
+}
+
+type DictionaryFactory struct {
+	i64Pool sync.Pool
+	i32Pool sync.Pool
+	i16Pool sync.Pool
+	i8Pool  sync.Pool
+	u64Pool sync.Pool
+	u32Pool sync.Pool
+	u16Pool sync.Pool
+	u8Pool  sync.Pool
+}
+
+func newDictionaryContainer[T types.Integer]() IntegerContainer[T] {
+	switch (any(T(0))).(type) {
+	case int64:
+		return dictionaryFactory.i64Pool.Get().(IntegerContainer[T])
+	case int32:
+		return dictionaryFactory.i32Pool.Get().(IntegerContainer[T])
+	case int16:
+		return dictionaryFactory.i16Pool.Get().(IntegerContainer[T])
+	case int8:
+		return dictionaryFactory.i8Pool.Get().(IntegerContainer[T])
+	case uint64:
+		return dictionaryFactory.u64Pool.Get().(IntegerContainer[T])
+	case uint32:
+		return dictionaryFactory.u32Pool.Get().(IntegerContainer[T])
+	case uint16:
+		return dictionaryFactory.u16Pool.Get().(IntegerContainer[T])
+	case uint8:
+		return dictionaryFactory.u8Pool.Get().(IntegerContainer[T])
+	default:
+		return nil
+	}
+}
+
+func putDictionaryContainer[T types.Integer](c IntegerContainer[T]) {
+	switch (any(T(0))).(type) {
+	case int64:
+		dictionaryFactory.i64Pool.Put(c)
+	case int32:
+		dictionaryFactory.i32Pool.Put(c)
+	case int16:
+		dictionaryFactory.i16Pool.Put(c)
+	case int8:
+		dictionaryFactory.i8Pool.Put(c)
+	case uint64:
+		dictionaryFactory.u64Pool.Put(c)
+	case uint32:
+		dictionaryFactory.u32Pool.Put(c)
+	case uint16:
+		dictionaryFactory.u16Pool.Put(c)
+	case uint8:
+		dictionaryFactory.u8Pool.Put(c)
+	}
+}
+
+var dictionaryFactory = DictionaryFactory{
+	i64Pool: sync.Pool{
+		New: func() any { return new(DictionaryContainer[int64]) },
+	},
+	i32Pool: sync.Pool{
+		New: func() any { return new(DictionaryContainer[int32]) },
+	},
+	i16Pool: sync.Pool{
+		New: func() any { return new(DictionaryContainer[int16]) },
+	},
+	i8Pool: sync.Pool{
+		New: func() any { return new(DictionaryContainer[int8]) },
+	},
+	u64Pool: sync.Pool{
+		New: func() any { return new(DictionaryContainer[uint64]) },
+	},
+	u32Pool: sync.Pool{
+		New: func() any { return new(DictionaryContainer[uint32]) },
+	},
+	u16Pool: sync.Pool{
+		New: func() any { return new(DictionaryContainer[uint16]) },
+	},
+	u8Pool: sync.Pool{
+		New: func() any { return new(DictionaryContainer[uint8]) },
+	},
 }

@@ -8,6 +8,7 @@ import (
 	"math/bits"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -58,34 +59,22 @@ type IntegerContainer[T types.Integer] interface {
 	MaxSize() int                // helps dimension buffer before write
 	Store([]byte) []byte         // simple, composable, pre-alloc via MaxSize
 	Load([]byte) ([]byte, error) // simple, composable
+	Close()                      // free resources
 
 	// matchers
 	types.NumberMatcher[T]
 }
 
-type IntegerContext[T types.Integer] struct {
-	Min       T            // vector minimum
-	Max       T            // vector maximum
-	Delta     T            // common delta between vector values
-	PhyBits   int          // phy type bit width 8, 16, 32, 64
-	UseBits   int          // used bits for bit-packing
-	NumUnique int          // vector cardinality (hint, may not be precise)
-	NumRuns   int          // vector runs
-	NumValues int          // vector length
-	Unique    map[T]uint16 // unique values (optional)
-}
-
 // AnalyzeInt produces statistics about slice vals which are used to
 // find the most efficient encoding scheme.
 func AnalyzeInt[T types.Integer](vals []T) *IntegerContext[T] {
-	c := &IntegerContext[T]{
-		Min:       vals[0],
-		Max:       vals[0],
-		Delta:     vals[util.Bool2int(len(vals) > 1)] - vals[0],
-		PhyBits:   int(unsafe.Sizeof(T(0))) * 8,
-		NumRuns:   1,
-		NumValues: len(vals),
-	}
+	c := newIntegerContext[T]()
+	c.Min = vals[0]
+	c.Max = vals[0]
+	c.Delta = vals[util.Bool2int(len(vals) > 1)] - vals[0]
+	c.PhyBits = int(unsafe.Sizeof(T(0))) * 8
+	c.NumRuns = 1
+	c.NumValues = len(vals)
 	for i, v := range vals[1:] {
 		if v < c.Min {
 			c.Min = v
@@ -119,7 +108,9 @@ func AnalyzeInt[T types.Integer](vals []T) *IntegerContext[T] {
 	case 16:
 		c.UseBits = bits.Len16(uint16(c.Max - c.Min))
 		if doCountUnique {
-			c.Unique = make(map[T]uint16, int(c.Max-c.Min))
+			if c.Unique == nil {
+				c.Unique = make(map[T]uint16, int(c.Max-c.Min))
+			}
 			for _, v := range vals {
 				c.Unique[v] = 0
 			}
@@ -128,7 +119,9 @@ func AnalyzeInt[T types.Integer](vals []T) *IntegerContext[T] {
 	case 8:
 		c.UseBits = bits.Len8(uint8(c.Max - c.Min))
 		if doCountUnique {
-			c.Unique = make(map[T]uint16, int(c.Max-c.Min))
+			if c.Unique == nil {
+				c.Unique = make(map[T]uint16, int(c.Max-c.Min))
+			}
 			for _, v := range vals {
 				c.Unique[v] = 0
 			}
@@ -139,55 +132,23 @@ func AnalyzeInt[T types.Integer](vals []T) *IntegerContext[T] {
 	return c
 }
 
-func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
-	// constant only
-	if c.Min == c.Max {
-		return []IntegerContainerType{TIntegerConstant}
-	}
-	// delta only with at least 3 values
-	if c.Delta > 0 && c.NumValues > 2 {
-		return []IntegerContainerType{TIntegerDelta}
-	}
-	// raw always works
-	schemes := []IntegerContainerType{
-		TIntegerRaw,
-	}
-	// bit packed must decrease bit width by at least 8
-	if c.UseBits+8 < c.PhyBits {
-		schemes = append(schemes, TIntegerBitpacked)
-	}
-	// run-end requires avg run lengths >= 2
-	if c.NumRuns*2 <= c.NumValues {
-		schemes = append(schemes, TIntegerRunEnd)
-	}
-	// dict makes only sense if <64k entries, value range is reduced and card < 3/4
-	if c.NumUnique < 1<<16-1 && c.Max-c.Min > T(c.NumUnique) && c.NumUnique*4/3 < c.NumValues {
-		schemes = append(schemes, TIntegerDictionary)
-	}
-	// simple 8 requires max 60bit values
-	if c.UseBits <= 60 {
-		schemes = append(schemes, TIntegerSimple8)
-	}
-	return schemes
-}
-
 // NewInt creates a new integer container from scheme type.
 func NewInt[T types.Integer](scheme IntegerContainerType) IntegerContainer[T] {
 	switch scheme {
 	case TIntegerConstant:
-		return new(ConstContainer[T])
+		return newConstContainer[T]()
 	case TIntegerDelta:
-		return new(DeltaContainer[T])
+		return newDeltaContainer[T]()
 	case TIntegerRunEnd:
-		return new(RunEndContainer[T])
+		return newRunEndContainer[T]()
 	case TIntegerBitpacked:
-		return new(BitpackContainer[T])
+		return newBitpackContainer[T]()
 	case TIntegerDictionary:
-		return new(DictionaryContainer[T])
+		return newDictionaryContainer[T]()
 	case TIntegerSimple8:
-		return new(Simple8Container[T])
+		return newSimple8Container[T]()
 	case TIntegerRaw:
-		return new(RawContainer[T])
+		return newRawContainer[T]()
 	default:
 		return nil
 	}
@@ -201,18 +162,20 @@ const (
 
 // SampleInt extracts a random sample from integer slice v. It is used
 // when estimating the effectiveness of different encoders.
-func SampleInt[T types.Integer](v []T) []T {
+func SampleInt[T types.Integer](v []T) ([]T, bool) {
 	if len(v) <= SAMPLE_COUNT*SAMPLE_SIZE {
-		return v
+		return v, false
 	}
-	s := make([]T, SAMPLE_COUNT*SAMPLE_SIZE)
+	// s := make([]T, SAMPLE_COUNT*SAMPLE_SIZE)
+	sz := SAMPLE_COUNT * SAMPLE_SIZE
+	s := arena.AllocT[T](sz)[:sz]
 	chunk := len(v) / SAMPLE_COUNT
 	for i := 0; i < SAMPLE_COUNT; i++ {
 		start := chunk*i + util.RandIntn(chunk-SAMPLE_SIZE)
 		end := start + SAMPLE_SIZE
 		copy(s[SAMPLE_SIZE*i:], v[start:end])
 	}
-	return s
+	return s, true
 }
 
 // EncodeInt encodes an integer type slice into an integer container
@@ -221,6 +184,7 @@ func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerC
 	// analyze full data if missing
 	if ctx == nil {
 		ctx = AnalyzeInt(v)
+		defer ctx.Close()
 	}
 	// fmt.Printf("Enc %d vals @ lvl %d %#v\n", len(v), lvl, ctx)
 
@@ -250,7 +214,9 @@ func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerC
 // in some cases. In others, particularly nested cases, we need a full encode but
 // on a small sample only.
 func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerContext[T], v []T, lvl int) float64 {
-	rawSize := NewInt[T](TIntegerRaw).Encode(ctx, v, lvl).MaxSize()
+	raw := NewInt[T](TIntegerRaw).Encode(ctx, v, lvl)
+	rawSize := raw.MaxSize()
+	raw.Close()
 	var (
 		estSize int
 		ok      bool
@@ -258,10 +224,14 @@ func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerConte
 	switch scheme {
 	case TIntegerConstant:
 		// varint (max len)
-		estSize, ok = NewInt[T](scheme).Encode(ctx, v, lvl).MaxSize(), true
+		enc := NewInt[T](scheme).Encode(ctx, v, lvl)
+		estSize, ok = enc.MaxSize(), true
+		enc.Close()
 	case TIntegerDelta:
 		// 2x varint (max len)
-		estSize, ok = NewInt[T](scheme).Encode(ctx, v, lvl).MaxSize(), true
+		enc := NewInt[T](scheme).Encode(ctx, v, lvl)
+		estSize, ok = enc.MaxSize(), true
+		enc.Close()
 	case TIntegerBitpacked:
 		// bit packed with max depth and no patching
 		estSize, ok = 2+2*num.MaxVarintLen64+(ctx.UseBits*ctx.NumValues+7)/8, true
@@ -277,27 +247,22 @@ func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerConte
 	// without running the encoder itself, to save time we use a sample
 
 	// sample
-	sample := SampleInt(v)
+	sample, freeSample := SampleInt(v)
 
 	// analyze sample
 	sctx := AnalyzeInt(sample)
-	rawSize = NewInt[T](TIntegerRaw).Encode(sctx, sample, lvl).MaxSize()
+	raw = NewInt[T](TIntegerRaw).Encode(sctx, sample, lvl)
+	rawSize = raw.MaxSize()
+	raw.Close()
 
 	// fmt.Printf("> est sample with %s %#v\n", scheme, sctx)
-	estSize = NewInt[T](scheme).Encode(sctx, sample, lvl).MaxSize()
-
-	// switch scheme {
-	// case TIntegerSimple8:
-	// 	// run real s8b encode
-	// case TIntegerRunEnd:
-	// 	fmt.Printf("> est sample with %s\n", scheme)
-	// 	// recurse encode to decide who runs are coded (dict, bitpack, etc)
-	// 	estSize = NewInt[T](scheme).Encode(sctx, sample, lvl).MaxSize()
-	// case TIntegerDictionary:
-	// 	fmt.Printf("> est sample with %s\n", scheme)
-	// 	// recurse encode to decide how dict & codes are coded (ree, bitpack)
-	// 	estSize = NewInt[T](scheme).Encode(sctx, sample, lvl).MaxSize()
-	// }
+	enc := NewInt[T](scheme).Encode(sctx, sample, lvl)
+	estSize = enc.MaxSize()
+	enc.Close()
+	sctx.Close()
+	if freeSample {
+		arena.FreeT(sample)
+	}
 
 	return float64(estSize) / float64(rawSize)
 }

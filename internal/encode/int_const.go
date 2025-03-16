@@ -4,6 +4,8 @@
 package encode
 
 import (
+	"sync"
+
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
@@ -12,6 +14,10 @@ import (
 type ConstContainer[T types.Integer] struct {
 	Val T
 	N   int
+}
+
+func (c *ConstContainer[T]) Close() {
+	putConstContainer[T](c)
 }
 
 func (c *ConstContainer[T]) Type() IntegerContainerType {
@@ -98,4 +104,86 @@ func (c *ConstContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 func (c *ConstContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 	// set := s.(*xroar.Bitmap)
 	return nil
+}
+
+type ConstFactory struct {
+	i64Pool sync.Pool
+	i32Pool sync.Pool
+	i16Pool sync.Pool
+	i8Pool  sync.Pool
+	u64Pool sync.Pool
+	u32Pool sync.Pool
+	u16Pool sync.Pool
+	u8Pool  sync.Pool
+}
+
+func newConstContainer[T types.Integer]() IntegerContainer[T] {
+	switch (any(T(0))).(type) {
+	case int64:
+		return constFactory.i64Pool.Get().(IntegerContainer[T])
+	case int32:
+		return constFactory.i32Pool.Get().(IntegerContainer[T])
+	case int16:
+		return constFactory.i16Pool.Get().(IntegerContainer[T])
+	case int8:
+		return constFactory.i8Pool.Get().(IntegerContainer[T])
+	case uint64:
+		return constFactory.u64Pool.Get().(IntegerContainer[T])
+	case uint32:
+		return constFactory.u32Pool.Get().(IntegerContainer[T])
+	case uint16:
+		return constFactory.u16Pool.Get().(IntegerContainer[T])
+	case uint8:
+		return constFactory.u8Pool.Get().(IntegerContainer[T])
+	default:
+		return nil
+	}
+}
+
+func putConstContainer[T types.Integer](c IntegerContainer[T]) {
+	switch (any(T(0))).(type) {
+	case int64:
+		constFactory.i64Pool.Put(c)
+	case int32:
+		constFactory.i32Pool.Put(c)
+	case int16:
+		constFactory.i16Pool.Put(c)
+	case int8:
+		constFactory.i8Pool.Put(c)
+	case uint64:
+		constFactory.u64Pool.Put(c)
+	case uint32:
+		constFactory.u32Pool.Put(c)
+	case uint16:
+		constFactory.u16Pool.Put(c)
+	case uint8:
+		constFactory.u8Pool.Put(c)
+	}
+}
+
+var constFactory = ConstFactory{
+	i64Pool: sync.Pool{
+		New: func() any { return new(ConstContainer[int64]) },
+	},
+	i32Pool: sync.Pool{
+		New: func() any { return new(ConstContainer[int32]) },
+	},
+	i16Pool: sync.Pool{
+		New: func() any { return new(ConstContainer[int16]) },
+	},
+	i8Pool: sync.Pool{
+		New: func() any { return new(ConstContainer[int8]) },
+	},
+	u64Pool: sync.Pool{
+		New: func() any { return new(ConstContainer[uint64]) },
+	},
+	u32Pool: sync.Pool{
+		New: func() any { return new(ConstContainer[uint32]) },
+	},
+	u16Pool: sync.Pool{
+		New: func() any { return new(ConstContainer[uint16]) },
+	},
+	u8Pool: sync.Pool{
+		New: func() any { return new(ConstContainer[uint8]) },
+	},
 }
