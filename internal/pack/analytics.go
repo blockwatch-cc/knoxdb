@@ -8,6 +8,7 @@ type Analysis struct {
 	DiffSize  []int    // storage size diff in bytes after encoding/compression (when dirty)
 	MinMax    [][2]any // per block min/max values (when dirty)
 	NumUnique []int    // per block cardinality (when dirty)
+	NumRuns   []int    // per block equal value run count (when dirty)
 }
 
 func (a Analysis) SizeDiff() int64 {

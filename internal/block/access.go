@@ -41,6 +41,9 @@ func (a BlockAccessor[T]) Get(n int) (t T) {
 	if n >= a.block.len {
 		panic(fmt.Errorf("get: block bounds out of range [:%d] with length %d", n, a.block.len))
 	}
+	if a.block.buf == nil {
+		return (*(*types.NumberAccessor[T])(a.block.ptr)).Get(n)
+	}
 	ptr := unsafe.Add(a.block.ptr, n*a.sz)
 	return *(*T)(ptr)
 }
@@ -70,39 +73,6 @@ func (a BlockAccessor[T]) Append(v T) {
 	a.block.dirty = true
 }
 
-func (a BlockAccessor[T]) Less(i, j int) bool {
-	if a.block == nil {
-		return false
-	}
-	if i >= a.block.len {
-		panic(fmt.Errorf("get: block bounds out of range [:%d] with length %d", i, a.block.len))
-	}
-	if j >= a.block.len {
-		panic(fmt.Errorf("get: block bounds out of range [:%d] with length %d", j, a.block.len))
-	}
-	ipos, jpos := i*a.sz, j*a.sz
-	iptr := unsafe.Add(a.block.ptr, ipos)
-	jptr := unsafe.Add(a.block.ptr, jpos)
-	return *(*T)(iptr) < *(*T)(jptr)
-}
-
-func (a BlockAccessor[T]) Swap(i, j int) {
-	if a.block == nil {
-		return
-	}
-	if i >= a.block.len {
-		panic(fmt.Errorf("get: block bounds out of range [:%d] with length %d", i, a.block.len))
-	}
-	if j >= a.block.len {
-		panic(fmt.Errorf("get: block bounds out of range [:%d] with length %d", j, a.block.len))
-	}
-	ipos, jpos := i*a.sz, j*a.sz
-	iptr := unsafe.Add(a.block.ptr, ipos)
-	jptr := unsafe.Add(a.block.ptr, jpos)
-	*(*T)(iptr), *(*T)(jptr) = *(*T)(jptr), *(*T)(iptr)
-	a.block.dirty = true
-}
-
 func (a BlockAccessor[T]) Cmp(i, j int) int {
 	if a.block == nil {
 		return 0
@@ -126,17 +96,35 @@ func (a BlockAccessor[T]) Cmp(i, j int) int {
 }
 
 func (a BlockAccessor[T]) Slice() []T {
-	if a.block == nil {
-		return make([]T, 0)
+	if a.block == nil || a.block.buf == nil {
+		return nil
 	}
 	return unsafe.Slice((*T)(a.block.ptr), a.block.len)
 }
 
 func (a BlockAccessor[T]) FullSlice() []T {
-	if a.block == nil {
-		return make([]T, 0)
+	if a.block == nil || a.block.buf == nil {
+		return nil
 	}
 	return unsafe.Slice((*T)(a.block.ptr), a.block.cap)
+}
+
+func (a BlockAccessor[T]) Matcher() types.NumberMatcher[T] {
+	if a.block.buf != nil {
+		return nil
+	}
+	return (*(*types.NumberMatcher[T])(a.block.ptr))
+}
+
+func (a BlockAccessor[T]) AppendTo(sel []uint32, dst []T) []T {
+	if a.block.buf == nil {
+		return (*(*types.NumberAccessor[T])(a.block.ptr)).AppendTo(sel, dst)
+	}
+	for _, v := range sel {
+		ptr := unsafe.Add(a.block.ptr, int(v)*a.sz)
+		dst = append(dst, *(*T)(ptr))
+	}
+	return dst
 }
 
 func (b *Block) Int64() BlockAccessor[int64] {

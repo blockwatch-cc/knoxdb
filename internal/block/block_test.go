@@ -5,7 +5,6 @@ package block
 
 import (
 	"math"
-	"sort"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -164,28 +163,6 @@ func TestSet64(t *testing.T) {
 	}
 }
 
-func TestLess64(t *testing.T) {
-	block := New(BlockInt64, 1024)
-	for i := 0; i < 1024; i++ {
-		block.Int64().Append(util.RandInt64())
-	}
-	for i := 1; i < 1024; i++ {
-		a, b := block.Int64().Get(i-1), block.Int64().Get(i)
-		require.Equal(t, a < b, block.Int64().Less(i-1, i))
-	}
-}
-
-func TestSwap64(t *testing.T) {
-	block := New(BlockInt64, 1024)
-	for i := 0; i < 1024; i++ {
-		block.Int64().Append(util.RandInt64())
-	}
-	sort.Sort(block)
-	for i := 1; i < 1024; i++ {
-		require.True(t, block.Int64().Less(i-1, i))
-	}
-}
-
 func BenchmarkAppend(b *testing.B) {
 	block := New(BlockInt64, 1024)
 	b.ReportAllocs()
@@ -212,25 +189,5 @@ func BenchmarkSet(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		block.Int64().Set(0, math.MaxInt64)
-	}
-}
-
-func BenchmarkLess(b *testing.B) {
-	block := New(BlockInt64, 1024)
-	block.Int64().Append(math.MaxInt64)
-	block.Int64().Append(math.MaxInt64)
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		_ = block.Int64().Less(0, 1)
-	}
-}
-
-func BenchmarkSwap(b *testing.B) {
-	block := New(BlockInt64, 1024)
-	block.Int64().Append(math.MaxInt64)
-	block.Int64().Append(math.MaxInt64)
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		block.Int64().Swap(0, 1)
 	}
 }

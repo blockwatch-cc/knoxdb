@@ -64,6 +64,9 @@ func (m floatInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 
 func (m floatInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	acc := block.NewBlockAccessor[T](b)
+	if bm := acc.Matcher(); bm != nil {
+		return bm.MatchSet(m.slice, bits, mask)
+	}
 	if mask != nil {
 		// skip masked values
 		for i, v := range acc.Slice() {
@@ -131,6 +134,9 @@ func (m floatNotInSetMatcher[T]) MatchFilter(_ filter.Filter) bool {
 
 func (m floatNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	acc := block.NewBlockAccessor[T](b)
+	if bm := acc.Matcher(); bm != nil {
+		return bm.MatchNotSet(m.slice, bits, mask)
+	}
 	if mask != nil {
 		// skip masked values
 		for i, v := range acc.Slice() {

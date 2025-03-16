@@ -317,11 +317,6 @@ func (m *numMatcher[T]) Value() any {
 	return m.val
 }
 
-func (m numMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
-	acc := block.NewBlockAccessor[T](b)
-	return m.match(acc.Slice(), m.val, bits, mask)
-}
-
 // EQUAL ---
 
 type numEqualMatcher[T Number] struct {
@@ -341,6 +336,14 @@ func (m numEqualMatcher[T]) MatchFilter(flt filter.Filter) bool {
 		return x.ContainsHash(m.hash)
 	}
 	return flt.Contains(uint64(m.val))
+}
+
+func (m numEqualMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	acc := block.NewBlockAccessor[T](b)
+	if bm := acc.Matcher(); bm != nil {
+		return bm.MatchEqual(m.val, bits, mask)
+	}
+	return m.match(acc.Slice(), m.val, bits, mask)
 }
 
 func (m numEqualMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
@@ -373,6 +376,14 @@ func (m numNotEqualMatcher[T]) MatchRange(from, to any) bool {
 	return m.val < from.(T) || m.val > to.(T)
 }
 
+func (m numNotEqualMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	acc := block.NewBlockAccessor[T](b)
+	if bm := acc.Matcher(); bm != nil {
+		return bm.MatchNotEqual(m.val, bits, mask)
+	}
+	return m.match(acc.Slice(), m.val, bits, mask)
+}
+
 func (m numNotEqualMatcher[T]) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	// undecided, always true
 	if mask != nil {
@@ -398,6 +409,14 @@ func (m numGtMatcher[T]) MatchRange(_, to any) bool {
 	return m.val < to.(T)
 }
 
+func (m numGtMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	acc := block.NewBlockAccessor[T](b)
+	if bm := acc.Matcher(); bm != nil {
+		return bm.MatchGreater(m.val, bits, mask)
+	}
+	return m.match(acc.Slice(), m.val, bits, mask)
+}
+
 func (m numGtMatcher[T]) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	// max > v
 	gt := newFactory(maxs.Type()).New(FilterModeGt)
@@ -418,6 +437,14 @@ func (m numGeMatcher[T]) MatchValue(v any) bool {
 func (m numGeMatcher[T]) MatchRange(_, to any) bool {
 	// return m.val <= from.(T) || m.val <= to.(T)
 	return m.val <= to.(T)
+}
+
+func (m numGeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	acc := block.NewBlockAccessor[T](b)
+	if bm := acc.Matcher(); bm != nil {
+		return bm.MatchGreaterEqual(m.val, bits, mask)
+	}
+	return m.match(acc.Slice(), m.val, bits, mask)
 }
 
 func (m numGeMatcher[T]) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
@@ -442,6 +469,14 @@ func (m numLtMatcher[T]) MatchRange(from, _ any) bool {
 	return m.val > from.(T)
 }
 
+func (m numLtMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	acc := block.NewBlockAccessor[T](b)
+	if bm := acc.Matcher(); bm != nil {
+		return bm.MatchLess(m.val, bits, mask)
+	}
+	return m.match(acc.Slice(), m.val, bits, mask)
+}
+
 func (m numLtMatcher[T]) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	// min < v
 	lt := newFactory(mins.Type()).New(FilterModeLt)
@@ -462,6 +497,14 @@ func (m numLeMatcher[T]) MatchValue(v any) bool {
 func (m numLeMatcher[T]) MatchRange(from, _ any) bool {
 	// return m.val >= from.(T) || m.val >= to.(T)
 	return m.val >= from.(T)
+}
+
+func (m numLeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	acc := block.NewBlockAccessor[T](b)
+	if bm := acc.Matcher(); bm != nil {
+		return bm.MatchLessEqual(m.val, bits, mask)
+	}
+	return m.match(acc.Slice(), m.val, bits, mask)
 }
 
 func (m numLeMatcher[T]) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
@@ -503,6 +546,9 @@ func (m numRangeMatcher[T]) MatchRange(from, to any) bool {
 
 func (m numRangeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	acc := block.NewBlockAccessor[T](b)
+	if bm := acc.Matcher(); bm != nil {
+		return bm.MatchBetween(m.from, m.to, bits, mask)
+	}
 	return m.match(acc.Slice(), m.from, m.to, bits, mask)
 }
 
@@ -594,6 +640,9 @@ func (m numInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 
 func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	acc := block.NewBlockAccessor[T](b)
+	if bm := acc.Matcher(); bm != nil {
+		return bm.MatchSet(m.set, bits, mask)
+	}
 	if mask != nil {
 		// skip masked values
 		for i, v := range acc.Slice() {
@@ -706,6 +755,9 @@ func (m numNotInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 
 func (m numNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	acc := block.NewBlockAccessor[T](b)
+	if bm := acc.Matcher(); bm != nil {
+		return bm.MatchNotSet(m.set, bits, mask)
+	}
 	if mask != nil {
 		// skip masked values
 		for i, v := range acc.Slice() {

@@ -10,6 +10,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/dedup"
+	"blockwatch.cc/knoxdb/internal/encode"
 	"blockwatch.cc/knoxdb/internal/zip"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
@@ -226,4 +227,130 @@ func (b *Block) Decode(buf []byte) (err error) {
 		b.len = 0
 	}
 	return
+}
+
+func Decode(typ BlockType, buf []byte) (*Block, error) {
+	b := blockPool.Get().(*Block)
+	b.typ = typ
+	b.dirty = true
+	b.refCount = 1
+	b.len = 0
+	b.cap = 0
+
+	switch b.typ {
+	case BlockInt64:
+		c, err := encode.LoadInt[int64](buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
+
+	case BlockUint64:
+		c, err := encode.LoadInt[uint64](buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
+
+	case BlockInt32:
+		c, err := encode.LoadInt[int32](buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
+
+	case BlockUint32:
+		c, err := encode.LoadInt[uint32](buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
+
+	case BlockInt16:
+		c, err := encode.LoadInt[int16](buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
+
+	case BlockUint16:
+		c, err := encode.LoadInt[uint16](buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
+
+	case BlockInt8:
+		c, err := encode.LoadInt[int8](buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
+
+	case BlockUint8:
+		c, err := encode.LoadInt[uint8](buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
+
+	// case BlockTime:
+	// 	c, err := encode.LoadTime[int64](buf)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	b.ptr = unsafe.Pointer(&c)
+	// 	b.len, b.cap = c.Len(), c.Len()
+
+	// case BlockFloat64:
+	// 	c, err := encode.LoadFloat[float64](buf)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	b.ptr = unsafe.Pointer(&c)
+	// 	b.len, b.cap = c.Len(), c.Len()
+
+	// case BlockFloat32:
+	// 	c, err := encode.LoadFloat[float32](buf)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	b.ptr = unsafe.Pointer(&c)
+	// 	b.len, b.cap = c.Len(), c.Len()
+
+	// case BlockBytes:
+	// 	// can re-allocate a new dedup kind
+	// 	var arr dedup.ByteArray
+	// 	arr, err = dedup.Decode(buf, b.Bytes(), b.Bytes().Len())
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	b.ptr = unsafe.Pointer(&arr)
+	// 	b.len = arr.Len()
+
+	// case BlockBool:
+	// 	err = zip.DecodeBitset((*bitset.Bitset)(b.ptr), buf)
+	// 	b.len = (*bitset.Bitset)(b.ptr).Len()
+
+	// case BlockInt128:
+	// 	err = zip.DecodeInt128((*num.Int128Stride)(b.ptr), buf)
+	// 	b.len = (*num.Int128Stride)(b.ptr).Len()
+
+	// case BlockInt256:
+	// 	err = zip.DecodeInt256((*num.Int256Stride)(b.ptr), buf)
+	// 	b.len = (*num.Int256Stride)(b.ptr).Len()
+
+	default:
+		return nil, fmt.Errorf("block: unsupported data type %s (%[1]d)", b.typ)
+	}
+
+	return b, nil
 }
