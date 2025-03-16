@@ -5,6 +5,11 @@ package dedup
 
 import "golang.org/x/exp/constraints"
 
+var (
+	Pack   = pack
+	Unpack = unpack
+)
+
 func PackBits[T constraints.Unsigned](buf []byte, vals []T, log2 int) {
 	for i, v := range vals {
 		pack(buf, i, int(v), log2)
