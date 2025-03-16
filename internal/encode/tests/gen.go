@@ -8,6 +8,27 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+func GenForScheme[T types.Integer](scheme, n int) []T {
+	switch scheme {
+	case 0: // TIntegerConstant,
+		return GenConst[T](n)
+	case 1: // TIntegerDelta,
+		return GenSequence[T](n)
+	case 2: // TIntegerRunEnd,
+		return GenRuns[T](n, 5)
+	case 3: // TIntegerBitpacked,
+		return GenRandom[T](n)
+	case 4: // TIntegerDictionary,
+		return GenDups[T](n, 10)
+	case 5: // TIntegerSimple8,
+		return GenRandom[T](n)
+	case 6: // TIntegerRaw,
+		return GenRandom[T](n)
+	default:
+		return GenRandom[T](n)
+	}
+}
+
 // creates n sequential values
 func GenSequence[T types.Integer](n int) []T {
 	res := make([]T, n)
@@ -104,11 +125,11 @@ func GenDups[T types.Integer](n, u int) []T {
 // creates n values with run length r
 func GenRuns[T types.Integer](n, r int) []T {
 	res := make([]T, 0, n)
+	sz := (n + r - 1) / r
 	var t T
 	switch any(t).(type) {
 	case int64:
-		vals := util.RandIntsn[int64](n/r, 1<<60-1)
-		for _, v := range vals {
+		for _, v := range util.RandIntsn[int64](sz, 1<<60-1) {
 			for range r {
 				if len(res) == n {
 					break
@@ -117,8 +138,7 @@ func GenRuns[T types.Integer](n, r int) []T {
 			}
 		}
 	case int32:
-		vals := util.RandInts[int32](n / r)
-		for _, v := range vals {
+		for _, v := range util.RandInts[int32](sz) {
 			for range r {
 				if len(res) == n {
 					break
@@ -127,8 +147,7 @@ func GenRuns[T types.Integer](n, r int) []T {
 			}
 		}
 	case int16:
-		vals := util.RandInts[int16](n / r)
-		for _, v := range vals {
+		for _, v := range util.RandInts[int16](sz) {
 			for range r {
 				if len(res) == n {
 					break
@@ -137,8 +156,7 @@ func GenRuns[T types.Integer](n, r int) []T {
 			}
 		}
 	case int8:
-		vals := util.RandInts[int8](n / r)
-		for _, v := range vals {
+		for _, v := range util.RandInts[int8](sz) {
 			for range r {
 				if len(res) == n {
 					break
@@ -147,8 +165,7 @@ func GenRuns[T types.Integer](n, r int) []T {
 			}
 		}
 	case uint64:
-		vals := util.RandUintsn[uint64](n/r, 1<<60-1)
-		for _, v := range vals {
+		for _, v := range util.RandUintsn[uint64](sz, 1<<60-1) {
 			for range r {
 				if len(res) == n {
 					break
@@ -157,8 +174,7 @@ func GenRuns[T types.Integer](n, r int) []T {
 			}
 		}
 	case uint32:
-		vals := util.RandUints[uint32](n / r)
-		for _, v := range vals {
+		for _, v := range util.RandUints[uint32](sz) {
 			for range r {
 				if len(res) == n {
 					break
@@ -167,8 +183,7 @@ func GenRuns[T types.Integer](n, r int) []T {
 			}
 		}
 	case uint16:
-		vals := util.RandUints[uint16](n / r)
-		for _, v := range vals {
+		for _, v := range util.RandUints[uint16](sz) {
 			for range r {
 				if len(res) == n {
 					break
@@ -177,8 +192,7 @@ func GenRuns[T types.Integer](n, r int) []T {
 			}
 		}
 	case uint8:
-		vals := util.RandUints[uint8](n / r)
-		for _, v := range vals {
+		for _, v := range util.RandUints[uint8](sz) {
 			for range r {
 				if len(res) == n {
 					break

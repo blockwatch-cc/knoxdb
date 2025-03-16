@@ -72,19 +72,20 @@ func (c *RunEndContainer[T]) Get(n int) T {
 
 func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	if slices.IsSorted(sel) {
-		end, val := c.Ends.Get(0), c.Values.Get(0)
+		idx, end, val := 0, c.Ends.Get(0), c.Values.Get(0)
 		for len(sel) > 0 {
 			// use current run while valid
-			if sel[0] < end {
-				dst = append(dst, val)
+			if sel[0] <= end {
+				dst = append(dst, val+c.For)
 				sel = sel[1:]
 				continue
 			}
 			// find next run
-			idx := sort.Search(c.Ends.Len(), func(i int) bool {
-				return c.Ends.Get(i) >= sel[0]
-			})
-			end, val = c.Ends.Get(idx), c.Values.Get(idx)
+			for end < sel[0] {
+				idx++
+				end = c.Ends.Get(idx)
+			}
+			val = c.Values.Get(idx)
 		}
 	} else {
 		// fallback to slower get for unsorted selection lists

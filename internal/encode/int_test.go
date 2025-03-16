@@ -96,9 +96,15 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 			for i, v := range c.Data {
 				assert.Equal(t, v, enc2.Get(i))
 			}
+
+			// validate append
+			all := tests.GenSequence[uint32](len(c.Data))
+			dst := make([]T, 0, len(c.Data))
+			dst = enc2.AppendTo(all, dst)
+			assert.Len(t, dst, len(c.Data))
+			assert.Equal(t, dst, c.Data)
 		})
 	}
-
 }
 
 func TestEncodeConstInt(t *testing.T) {
@@ -261,5 +267,38 @@ func BenchmarkLegacyInt(b *testing.B) {
 				buf.Reset()
 			}
 		})
+	}
+}
+
+func BenchmarkAppendTo(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, scheme := range []IntegerContainerType{
+			TIntegerConstant,
+			TIntegerDelta,
+			TIntegerRunEnd,
+			TIntegerBitpacked,
+			TIntegerDictionary,
+			TIntegerSimple8,
+			TIntegerRaw,
+		} {
+			data := tests.GenForScheme[int64](int(scheme), c.N)
+			ctx := AnalyzeInt(data)
+			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+			buf := enc.Store(make([]byte, 0, enc.MaxSize()))
+			dst := make([]int64, c.N)
+			all := tests.GenSequence[uint32](c.N)
+
+			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * 8))
+				for i := 0; i < b.N; i++ {
+					enc2 := NewInt[int64](scheme)
+					_, err := enc2.Load(buf)
+					require.NoError(b, err)
+					dst = enc2.AppendTo(all, dst)
+					dst = dst[:0]
+				}
+			})
+		}
 	}
 }

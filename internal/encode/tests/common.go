@@ -10,6 +10,17 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
+type BenchmarkSize struct {
+	Name string
+	N    int
+}
+
+var BenchmarkSizes = []BenchmarkSize{
+	{"1k", 1024},
+	{"16k", 16 * 1024},
+	{"64k", 64 * 1024},
+}
+
 type Benchmark struct {
 	Name string
 	Data []int64
