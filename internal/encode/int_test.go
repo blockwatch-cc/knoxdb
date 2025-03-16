@@ -4,10 +4,12 @@
 package encode
 
 import (
+	"bytes"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/zip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -243,6 +245,20 @@ func BenchmarkEncodeInt(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * 8))
 			for i := 0; i < b.N; i++ {
 				_ = EncodeInt(nil, c.Data, MAX_CASCADE)
+			}
+		})
+	}
+}
+
+func BenchmarkLegacyInt(b *testing.B) {
+	for _, c := range tests.Benchmarks {
+		buf := bytes.NewBuffer(make([]byte, zip.Int64EncodedSize(len(c.Data))))
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(c.Data) * 8))
+			for i := 0; i < b.N; i++ {
+				_, _ = zip.EncodeInt64(c.Data, buf)
+				buf.Reset()
 			}
 		})
 	}
