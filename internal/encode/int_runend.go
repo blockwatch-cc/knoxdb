@@ -132,12 +132,16 @@ func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) I
 
 	// encode child containers
 	// fmt.Println("Run Values ..")
-	c.Values = EncodeInt(nil, values, lvl-1)
+	vctx := AnalyzeInt(values, false)
+	c.Values = EncodeInt(vctx, values, lvl-1)
+	vctx.Close()
 	if c.Values.Type() != TIntegerRaw {
 		arena.FreeT(values)
 	}
 	// fmt.Println("Run Ends ..")
-	c.Ends = EncodeInt(nil, ends, lvl-1)
+	ectx := AnalyzeInt(ends, false)
+	c.Ends = EncodeInt(ectx, ends, lvl-1)
+	ectx.Close()
 	if c.Ends.Type() != TIntegerRaw {
 		arena.Free(arena.AllocUint32, ends)
 	}

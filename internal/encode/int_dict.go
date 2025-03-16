@@ -119,12 +119,16 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 
 	// encode child containers
 	// fmt.Println("Dict Values ..")
-	c.Values = EncodeInt(nil, dict, lvl-1)
+	vctx := AnalyzeInt(dict, false)
+	c.Values = EncodeInt(vctx, dict, lvl-1)
+	vctx.Close()
 	if c.Values.Type() != TIntegerRaw {
 		arena.FreeT(dict)
 	}
 	// fmt.Println("Dict Codes ..")
-	c.Codes = EncodeInt(nil, codes, lvl-1)
+	cctx := AnalyzeInt(codes, false)
+	c.Codes = EncodeInt(cctx, codes, lvl-1)
+	cctx.Close()
 	if c.Codes.Type() != TIntegerRaw {
 		arena.Free(arena.AllocUint16, codes)
 	}

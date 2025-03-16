@@ -16,7 +16,7 @@ import (
 
 func TestAnalyzeInt(t *testing.T) {
 	// delta, no dups
-	x := AnalyzeInt([]int64{-1, 0, 1, 2})
+	x := AnalyzeInt([]int64{-1, 0, 1, 2}, true)
 	assert.Equal(t, int64(-1), x.Min, "min")
 	assert.Equal(t, int64(2), x.Max, "max")
 	assert.Equal(t, int64(1), x.Delta, "delta")
@@ -30,7 +30,7 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.Contains(t, x.EligibleSchemes(), TIntegerDelta, "delta only")
 
 	// runs
-	x = AnalyzeInt([]int64{-1, -1, 5, 5, 1, 1})
+	x = AnalyzeInt([]int64{-1, -1, 5, 5, 1, 1}, true)
 	assert.Equal(t, int64(-1), x.Min, "min")
 	assert.Equal(t, int64(5), x.Max, "max")
 	assert.Equal(t, int64(0), x.Delta, "delta")
@@ -47,7 +47,7 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "eligible")
 
 	// dict-friendly
-	x = AnalyzeInt([]int64{-1, 1, 5, 1, -1, 1})
+	x = AnalyzeInt([]int64{-1, 1, 5, 1, -1, 1}, true)
 	assert.Equal(t, int64(-1), x.Min, "min")
 	assert.Equal(t, int64(5), x.Max, "max")
 	assert.Equal(t, int64(0), x.Delta, "delta")
@@ -71,7 +71,7 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 			enc := NewInt[T](scheme)
 
 			// analyze and encode data into container
-			ctx := AnalyzeInt(c.Data)
+			ctx := AnalyzeInt(c.Data, true)
 			enc.Encode(ctx, c.Data, 1)
 
 			// validate contents
@@ -202,7 +202,7 @@ func testEncodeIntT[T types.Integer](t *testing.T) {
 	t.Helper()
 	for _, c := range tests.MakeIntTests[T](1024) {
 		t.Run(c.Name, func(t *testing.T) {
-			x := AnalyzeInt(c.Data)
+			x := AnalyzeInt(c.Data, true)
 			e := EncodeInt(x, c.Data, MAX_CASCADE)
 			require.Equal(t, len(c.Data), e.Len(), "x=%#v", x)
 			for i, v := range c.Data {
@@ -218,7 +218,7 @@ func BenchmarkAnalyzeInt(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
 			for i := 0; i < b.N; i++ {
-				ctx := AnalyzeInt(c.Data)
+				ctx := AnalyzeInt(c.Data, true)
 				ctx.Close()
 			}
 		})
@@ -227,7 +227,7 @@ func BenchmarkAnalyzeInt(b *testing.B) {
 
 func BenchmarkEstimateInt(b *testing.B) {
 	for _, c := range tests.Benchmarks {
-		ctx := AnalyzeInt(c.Data)
+		ctx := AnalyzeInt(c.Data, true)
 		for _, scheme := range []IntegerContainerType{
 			TIntegerConstant,
 			TIntegerDelta,
@@ -249,6 +249,32 @@ func BenchmarkEstimateInt(b *testing.B) {
 }
 
 func BenchmarkEncodeInt(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, scheme := range []IntegerContainerType{
+			TIntegerConstant,
+			TIntegerDelta,
+			TIntegerRunEnd,
+			TIntegerBitpacked,
+			TIntegerDictionary,
+			TIntegerSimple8,
+			TIntegerRaw,
+		} {
+			data := tests.GenForScheme[int64](int(scheme), c.N)
+			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * 8))
+				for i := 0; i < b.N; i++ {
+					ctx := AnalyzeInt(data, true)
+					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+					enc.Close()
+					ctx.Close()
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkEncodeBestInt(b *testing.B) {
 	for _, c := range tests.Benchmarks {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
@@ -261,7 +287,7 @@ func BenchmarkEncodeInt(b *testing.B) {
 	}
 }
 
-func BenchmarkLegacyInt(b *testing.B) {
+func BenchmarkEncodeLegacyInt(b *testing.B) {
 	for _, c := range tests.Benchmarks {
 		buf := bytes.NewBuffer(make([]byte, zip.Int64EncodedSize(len(c.Data))))
 		b.Run(c.Name, func(b *testing.B) {
@@ -287,7 +313,7 @@ func BenchmarkAppendTo(b *testing.B) {
 			TIntegerRaw,
 		} {
 			data := tests.GenForScheme[int64](int(scheme), c.N)
-			ctx := AnalyzeInt(data)
+			ctx := AnalyzeInt(data, true)
 			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
 			buf := enc.Store(make([]byte, 0, enc.MaxSize()))
 			dst := make([]int64, 0, c.N)

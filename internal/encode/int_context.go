@@ -6,19 +6,23 @@ package encode
 import (
 	"sync"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
 type IntegerContext[T types.Integer] struct {
-	Min       T            // vector minimum
-	Max       T            // vector maximum
-	Delta     T            // common delta between vector values
-	PhyBits   int          // phy type bit width 8, 16, 32, 64
-	UseBits   int          // used bits for bit-packing
-	NumUnique int          // vector cardinality (hint, may not be precise)
-	NumRuns   int          // vector runs
-	NumValues int          // vector length
-	Unique    map[T]uint16 // unique values (optional)
+	Min        T                  // vector minimum
+	Max        T                  // vector maximum
+	Delta      T                  // common delta between vector values
+	PhyBits    int                // phy type bit width 8, 16, 32, 64
+	UseBits    int                // used bits for bit-packing
+	NumUnique  int                // vector cardinality (hint, may not be precise)
+	NumRuns    int                // vector runs
+	NumValues  int                // vector length
+	Unique     map[T]uint16       // unique values (optional)
+	Sample     []T                // data sample (optional)
+	SampleCtx  *IntegerContext[T] // sample analysis
+	FreeSample bool
 }
 
 func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
@@ -55,6 +59,17 @@ func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
 
 func (c *IntegerContext[T]) Close() {
 	clear(c.Unique)
+	if c.SampleCtx != nil {
+		c.SampleCtx.Close()
+		c.SampleCtx = nil
+	}
+	if c.Sample != nil {
+		if c.FreeSample {
+			arena.FreeT(c.Sample)
+		}
+		c.FreeSample = false
+		c.Sample = nil
+	}
 	putIntegerContext(c)
 }
 

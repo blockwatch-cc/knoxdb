@@ -5,6 +5,7 @@ package encode
 
 import (
 	"errors"
+	"fmt"
 	"math/bits"
 	"unsafe"
 
@@ -67,7 +68,7 @@ type IntegerContainer[T types.Integer] interface {
 
 // AnalyzeInt produces statistics about slice vals which are used to
 // find the most efficient encoding scheme.
-func AnalyzeInt[T types.Integer](vals []T) *IntegerContext[T] {
+func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] {
 	c := newIntegerContext[T]()
 	c.Min = vals[0]
 	c.Max = vals[0]
@@ -87,7 +88,7 @@ func AnalyzeInt[T types.Integer](vals []T) *IntegerContext[T] {
 	}
 
 	// count unique only if necessary
-	doCountUnique := c.Min != c.Max && c.Delta == 0
+	doCountUnique := checkUnique && c.Min != c.Max && c.Delta == 0
 	c.NumUnique = min(c.NumRuns, int(c.Max)-int(c.Min))
 
 	switch c.PhyBits {
@@ -150,7 +151,7 @@ func NewInt[T types.Integer](scheme IntegerContainerType) IntegerContainer[T] {
 	case TIntegerRaw:
 		return newRawContainer[T]()
 	default:
-		return nil
+		panic(fmt.Errorf("invalid scheme %d", scheme))
 	}
 }
 
@@ -183,7 +184,7 @@ func SampleInt[T types.Integer](v []T) ([]T, bool) {
 func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerContainer[T] {
 	// analyze full data if missing
 	if ctx == nil {
-		ctx = AnalyzeInt(v)
+		ctx = AnalyzeInt(v, true)
 		defer ctx.Close()
 	}
 	// fmt.Printf("Enc %d vals @ lvl %d %#v\n", len(v), lvl, ctx)
@@ -247,22 +248,20 @@ func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerConte
 	// without running the encoder itself, to save time we use a sample
 
 	// sample
-	sample, freeSample := SampleInt(v)
+	if ctx.Sample == nil {
+		ctx.Sample, ctx.FreeSample = SampleInt(v)
+		ctx.SampleCtx = AnalyzeInt(ctx.Sample, true)
+	}
 
 	// analyze sample
-	sctx := AnalyzeInt(sample)
-	raw = NewInt[T](TIntegerRaw).Encode(sctx, sample, lvl)
+	raw = NewInt[T](TIntegerRaw).Encode(ctx.SampleCtx, ctx.Sample, lvl)
 	rawSize = raw.MaxSize()
 	raw.Close()
 
 	// fmt.Printf("> est sample with %s %#v\n", scheme, sctx)
-	enc := NewInt[T](scheme).Encode(sctx, sample, lvl)
+	enc := NewInt[T](scheme).Encode(ctx.SampleCtx, ctx.Sample, lvl)
 	estSize = enc.MaxSize()
 	enc.Close()
-	sctx.Close()
-	if freeSample {
-		arena.FreeT(sample)
-	}
 
 	return float64(estSize) / float64(rawSize)
 }
