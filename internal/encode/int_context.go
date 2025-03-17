@@ -46,9 +46,12 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 		} else if v > c.Max {
 			c.Max = v
 		}
-		c.NumRuns += util.Bool2int(vals[i] != v)
-		delta := v - vals[i]
-		c.Delta = delta * T(util.Bool2int(c.Delta == delta))
+		if vals[i] != v {
+			c.NumRuns++
+		}
+		if c.Delta > 0 && c.Delta != v-vals[i] {
+			c.Delta = 0
+		}
 	}
 
 	// count unique only if necessary
