@@ -13,8 +13,12 @@ type Integer interface {
 	int64 | int32 | int16 | int8 | uint64 | uint32 | uint16 | uint8
 }
 
+type Float interface {
+	float64 | float32
+}
+
 type Number interface {
-	Integer | float64 | float32
+	Integer | Float
 }
 
 type NumberMatcher[T Number] interface {
