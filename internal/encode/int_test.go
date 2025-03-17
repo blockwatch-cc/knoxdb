@@ -436,7 +436,6 @@ func BenchmarkUniqueRoaring(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		data := util.RandInts[int16](c.N)
 		minx := slices.Min(data)
-		// maxx := slices.Max(data)
 		var card int
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()

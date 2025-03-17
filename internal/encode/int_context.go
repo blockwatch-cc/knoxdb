@@ -23,11 +23,11 @@ type IntegerContext[T types.Integer] struct {
 	NumUnique   int                // vector cardinality (hint, may not be precise)
 	NumRuns     int                // vector runs
 	NumValues   int                // vector length
-	Unique      map[T]uint16       // unique values (optional)
 	Sample      []T                // data sample (optional)
 	SampleCtx   *IntegerContext[T] // sample analysis
-	FreeSample  bool
-	UniqueArray []T // unique values as array (optional)
+	FreeSample  bool               // hint whether sample may be reused
+	UniqueArray []T                // unique values as array (optional)
+	UniqueMap   map[T]uint16       // unique values (optional)
 }
 
 // AnalyzeInt produces statistics about slice vals which are used to
@@ -59,74 +59,78 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 	case 64:
 		c.UseBits = bits.Len64(uint64(c.Max - c.Min))
 		if doCountUnique {
-			// TODO: when c.Max-c.Min < 64k use array
-			// TODO: optimize HLL (keep memory in context, optimize params for NumValues)
-			// may reuse unique array as bytes
-			if c.UniqueArray == nil {
-				c.UniqueArray = make([]T, 32)
+			// use array when c.Max-c.Min < 64k
+			sz := int(c.Max) - int(c.Min) + 1
+			if sz <= 1<<16 {
+				c.NumUnique = c.buildUniqueArray(vals)
+			} else {
+				c.NumUnique = c.estimateCardinality(vals)
 			}
-			unique, _ := loglogbeta.NewFilterBuffer(util.ToByteSlice(c.UniqueArray), 8)
-			unique.AddManyUint64(util.ReinterpretSlice[T, uint64](vals))
-			c.NumUnique = int(unique.Cardinality())
 		}
 	case 32:
 		c.UseBits = bits.Len32(uint32(c.Max - c.Min))
 		if doCountUnique {
-			// TODO: when c.Max-c.Min < 64k use array
-			// TODO: optimize HLL (keep memory in context, optimize params for NumValues)
-			// may reuse unique array as bytes
-			if c.UniqueArray == nil {
-				c.UniqueArray = make([]T, 64)
+			// use array when c.Max-c.Min < 64k
+			sz := int(c.Max) - int(c.Min) + 1
+			if sz <= 1<<16 {
+				c.NumUnique = c.buildUniqueArray(vals)
+			} else {
+				c.NumUnique = c.estimateCardinality(vals)
 			}
-			unique, _ := loglogbeta.NewFilterBuffer(util.ToByteSlice(c.UniqueArray), 8)
-			unique.AddManyUint32(util.ReinterpretSlice[T, uint32](vals))
-			c.NumUnique = int(unique.Cardinality())
 		}
 	case 16:
 		c.UseBits = bits.Len16(uint16(c.Max - c.Min))
 		if doCountUnique {
-			sz := int(c.Max) - int(c.Min) + 1
-			if cap(c.UniqueArray) < sz {
-				c.UniqueArray = make([]T, sz)
-			}
-			for _, v := range vals {
-				c.UniqueArray[int(v)-int(c.Min)] = T(1)
-			}
-			c.NumUnique = 0
-			for i, v := range c.UniqueArray {
-				if v > 0 {
-					c.UniqueArray[i] = T(c.NumUnique)
-					c.NumUnique++
-				}
-			}
-
-			// if c.Unique == nil {
-			// 	// TODO: use array make([]uint16, int(c.Max-c.Min)) instead
-			// 	// set FF, then in dict encode, reset to sequence & use for dict encode
-			// 	// reuse alloc through pool, realloc from arena when cap is insufficient
-			// 	c.Unique = make(map[T]uint16, int(c.Max-c.Min))
-			// }
-			// for _, v := range vals {
-			// 	c.Unique[v] = 0
-			// }
-			// c.NumUnique = len(c.Unique)
+			c.NumUnique = c.buildUniqueArray(vals)
 		}
 	case 8:
 		c.UseBits = bits.Len8(uint8(c.Max - c.Min))
 		if doCountUnique {
-			if c.Unique == nil {
-				// TODO: use array make([]uint8, int(c.Max-c.Min)) instead
-				// set FF, then in dict encode, reset to sequence & use for dict encode
-				// reuse alloc, always alloc 256 max (small enough) no arena
-				c.Unique = make(map[T]uint16, int(c.Max-c.Min))
-			}
-			for _, v := range vals {
-				c.Unique[v] = 0
-			}
-			c.NumUnique = len(c.Unique)
+			c.NumUnique = c.buildUniqueArray(vals)
 		}
 	}
 	return c
+}
+
+func (c *IntegerContext[T]) estimateCardinality(vals []T) int {
+	sz := 256 / (c.PhyBits / 8) // need 256 byte scratch space
+	if cap(c.UniqueArray) < sz {
+		c.UniqueArray = make([]T, sz)
+	}
+	c.UniqueArray = c.UniqueArray[:sz]
+	unique, _ := loglogbeta.NewFilterBuffer(util.ToByteSlice(c.UniqueArray), 8)
+	if c.PhyBits == 64 {
+		unique.AddManyUint64(util.ReinterpretSlice[T, uint64](vals))
+	} else {
+		unique.AddManyUint32(util.ReinterpretSlice[T, uint32](vals))
+	}
+	card := int(unique.Cardinality())
+	clear(c.UniqueArray)
+	c.UniqueArray = c.UniqueArray[:0]
+	return card
+}
+
+func (c *IntegerContext[T]) buildUniqueArray(vals []T) int {
+	// we only need enough space for our data range
+	sz := int(c.Max) - int(c.Min) + 1
+	if cap(c.UniqueArray) < sz {
+		c.UniqueArray = make([]T, sz)
+	}
+
+	// mark existing values
+	for _, v := range vals {
+		c.UniqueArray[int(v)-int(c.Min)] = T(1)
+	}
+
+	// count unique values and assign codewords (+1 to distinguish empty slots)
+	var numUnique int
+	for i, v := range c.UniqueArray {
+		if v > 0 {
+			c.UniqueArray[i] = T(numUnique) + 1
+			numUnique++
+		}
+	}
+	return numUnique
 }
 
 func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
@@ -162,8 +166,8 @@ func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
 }
 
 func (c *IntegerContext[T]) Close() {
-	clear(c.Unique)
 	clear(c.UniqueArray)
+	clear(c.UniqueMap)
 	if c.SampleCtx != nil {
 		c.SampleCtx.Close()
 		c.SampleCtx = nil

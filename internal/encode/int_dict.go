@@ -83,38 +83,15 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	// init FOR
 	c.For = ctx.Min
 
-	// construct unique values map (if not done during analysis)
-	// unique := ctx.Unique
-	if ctx.Unique == nil {
-		ctx.Unique = make(map[T]uint16, ctx.NumUnique)
-	}
-	if len(ctx.Unique) == 0 {
-		for _, v := range vals {
-			ctx.Unique[v] = 0
-		}
-	}
-
-	// construct dict from unique values (apply FOR)
-	// dict := make([]T, 0, len(unique))
-	dict := arena.AllocT[T](len(ctx.Unique))
-	for v := range ctx.Unique {
-		dict = append(dict, v-c.For)
-	}
-
-	// sort dict
-	slices.Sort(dict)
-
-	// remap dict codes to original values (we re-use the existing Unique map
-	// to avoid more allocations)
-	for i, v := range dict {
-		ctx.Unique[v+c.For] = uint16(i)
-	}
-
-	// construct codes
-	// codes := make([]uint16, len(vals))
-	codes := arena.Alloc(arena.AllocUint16, len(vals)).([]uint16)[:len(vals)]
-	for i, v := range vals {
-		codes[i] = ctx.Unique[v]
+	// construct dictionary and encode vals
+	var (
+		dict  []T
+		codes []uint16
+	)
+	if len(ctx.UniqueArray) > 0 {
+		dict, codes = dictEncodeArray(ctx, vals)
+	} else {
+		dict, codes = dictEncodeMap(ctx, vals)
 	}
 
 	// encode child containers
@@ -134,6 +111,56 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	}
 	// fmt.Println("Dict done.")
 	return c
+}
+
+func dictEncodeArray[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []uint16) {
+	// construct sorted dict from code+1 array
+	dict := arena.AllocT[T](ctx.NumUnique)[:0]
+	for i, v := range ctx.UniqueArray {
+		if v > 0 {
+			dict = append(dict, T(i))
+		}
+	}
+
+	codes := arena.Alloc(arena.AllocUint16, len(vals)).([]uint16)[:len(vals)]
+	for i, v := range vals {
+		codes[i] = uint16(ctx.UniqueArray[int(v)-int(ctx.Min)] - 1)
+	}
+
+	return dict, codes
+}
+
+func dictEncodeMap[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []uint16) {
+	// construct unique values map
+	if ctx.UniqueMap == nil {
+		ctx.UniqueMap = make(map[T]uint16, ctx.NumUnique)
+	}
+
+	for _, v := range vals {
+		ctx.UniqueMap[v] = 0
+	}
+
+	// construct dict from unique values (apply FOR)
+	dict := arena.AllocT[T](len(ctx.UniqueMap))
+	for v := range ctx.UniqueMap {
+		dict = append(dict, v-ctx.Min)
+	}
+
+	// sort dict
+	slices.Sort(dict)
+
+	// remap dict codes to original values
+	for i, v := range dict {
+		ctx.UniqueMap[v+ctx.Min] = uint16(i)
+	}
+
+	// translate values to codes
+	codes := arena.Alloc(arena.AllocUint16, len(vals)).([]uint16)[:len(vals)]
+	for i, v := range vals {
+		codes[i] = ctx.UniqueMap[v]
+	}
+
+	return dict, codes
 }
 
 func (c *DictionaryContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
@@ -186,7 +213,7 @@ type DictionaryFactory struct {
 }
 
 func newDictionaryContainer[T types.Integer]() IntegerContainer[T] {
-	switch (any(T(0))).(type) {
+	switch any(T(0)).(type) {
 	case int64:
 		return dictionaryFactory.i64Pool.Get().(IntegerContainer[T])
 	case int32:

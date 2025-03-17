@@ -17,10 +17,7 @@ type BenchmarkSize struct {
 
 var BenchmarkSizes = []BenchmarkSize{
 	{"1k", 1024},
-	// {"2k", 2 * 1024},
-	// {"8k", 8 * 1024},
 	{"16k", 16 * 1024},
-	// {"32k", 32 * 1024},
 	{"64k", 64 * 1024},
 }
 

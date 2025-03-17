@@ -121,7 +121,7 @@ type RawFactory struct {
 }
 
 func newRawContainer[T types.Integer]() IntegerContainer[T] {
-	switch (any(T(0))).(type) {
+	switch any(T(0)).(type) {
 	case int64:
 		return rawFactory.i64Pool.Get().(IntegerContainer[T])
 	case int32:

@@ -124,7 +124,7 @@ type DeltaFactory struct {
 }
 
 func newDeltaContainer[T types.Integer]() IntegerContainer[T] {
-	switch (any(T(0))).(type) {
+	switch any(T(0)).(type) {
 	case int64:
 		return deltaFactory.i64Pool.Get().(IntegerContainer[T])
 	case int32:
@@ -147,7 +147,7 @@ func newDeltaContainer[T types.Integer]() IntegerContainer[T] {
 }
 
 func putDeltaContainer[T types.Integer](c IntegerContainer[T]) {
-	switch (any(T(0))).(type) {
+	switch any(T(0)).(type) {
 	case int64:
 		deltaFactory.i64Pool.Put(c)
 	case int32:

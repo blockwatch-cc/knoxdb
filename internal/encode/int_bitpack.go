@@ -146,7 +146,7 @@ type BitpackFactory struct {
 }
 
 func newBitpackContainer[T types.Integer]() IntegerContainer[T] {
-	switch (any(T(0))).(type) {
+	switch any(T(0)).(type) {
 	case int64:
 		return bitpackFactory.i64Pool.Get().(IntegerContainer[T])
 	case int32:
@@ -169,7 +169,7 @@ func newBitpackContainer[T types.Integer]() IntegerContainer[T] {
 }
 
 func putBitpackContainer[T types.Integer](c IntegerContainer[T]) {
-	switch (any(T(0))).(type) {
+	switch any(T(0)).(type) {
 	case int64:
 		bitpackFactory.i64Pool.Put(c)
 	case int32:

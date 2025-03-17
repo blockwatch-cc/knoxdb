@@ -198,7 +198,7 @@ type Simple8Factory struct {
 }
 
 func newSimple8Container[T types.Integer]() IntegerContainer[T] {
-	switch (any(T(0))).(type) {
+	switch any(T(0)).(type) {
 	case int64:
 		return simple8Factory.i64Pool.Get().(IntegerContainer[T])
 	case int32:
@@ -221,7 +221,7 @@ func newSimple8Container[T types.Integer]() IntegerContainer[T] {
 }
 
 func putSimple8Container[T types.Integer](c IntegerContainer[T]) {
-	switch (any(T(0))).(type) {
+	switch any(T(0)).(type) {
 	case int64:
 		simple8Factory.i64Pool.Put(c)
 	case int32:
