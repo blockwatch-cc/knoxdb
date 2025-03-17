@@ -116,7 +116,6 @@ func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerC
 		ctx = AnalyzeInt(v, true)
 		defer ctx.Close()
 	}
-	// fmt.Printf("Enc %d vals @ lvl %d %#v\n", len(v), lvl, ctx)
 
 	// try all eligible encoding schemes
 	var (
@@ -126,17 +125,18 @@ func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerC
 	if lvl > 0 {
 		for _, scheme := range ctx.EligibleSchemes() {
 			if rd := EstimateInt(scheme, ctx, v, lvl); rd < bestRatio {
-				// fmt.Printf("> %s costs %f !!\n", scheme, rd)
 				bestRatio = rd
 				bestScheme = scheme
-				// } else {
-				// 	fmt.Printf("> %s costs %f\n", scheme, rd)
+
+				// TODO: consider a cut-off when already good enough
+				// if bestRatio < 0.05 {
+				// 	break
+				// }
 			}
 		}
 	}
 
 	// alloc best container and encode
-	// fmt.Printf("= SELECT enc %s %f\n", bestScheme, bestRatio)
 	return NewInt[T](bestScheme).Encode(ctx, v, lvl)
 }
 
@@ -144,26 +144,23 @@ func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerC
 // in some cases. In others, particularly nested cases, we need a full encode but
 // on a small sample only.
 func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerContext[T], v []T, lvl int) float64 {
+	// start with raw size
 	raw := NewInt[T](TIntegerRaw).Encode(ctx, v, lvl)
 	rawSize := raw.MaxSize()
 	raw.Close()
+
+	// estimate cheap encodings
 	var (
 		estSize int
 		ok      bool
 	)
 	switch scheme {
-	case TIntegerConstant:
-		// varint (max len)
-		enc := NewInt[T](scheme).Encode(ctx, v, lvl)
-		estSize, ok = enc.MaxSize(), true
-		enc.Close()
-	case TIntegerDelta:
-		// 2x varint (max len)
+	case TIntegerConstant, TIntegerDelta:
 		enc := NewInt[T](scheme).Encode(ctx, v, lvl)
 		estSize, ok = enc.MaxSize(), true
 		enc.Close()
 	case TIntegerBitpacked:
-		// bit packed with max depth and no patching
+		// don't run bit packing, just calculate using max depth
 		estSize, ok = 2+2*num.MaxVarintLen64+(ctx.UseBits*ctx.NumValues+7)/8, true
 	case TIntegerRaw:
 		estSize, ok = rawSize, true
@@ -173,8 +170,8 @@ func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerConte
 	}
 
 	// the remaining schemes TIntegerSimple8, TIntegerRunEnd, TIntegerDictionary
-	// use child containers which we cannot easily estimate
-	// without running the encoder itself, to save time we use a sample
+	// use child containers which we cannot easily estimate without running
+	// the encoder itself, to save time we use a sample
 
 	// sample
 	if ctx.Sample == nil {
@@ -182,12 +179,11 @@ func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerConte
 		ctx.SampleCtx = AnalyzeInt(ctx.Sample, true)
 	}
 
-	// analyze sample
+	// trail encode the sample as raw and target scheme
 	raw = NewInt[T](TIntegerRaw).Encode(ctx.SampleCtx, ctx.Sample, lvl)
 	rawSize = raw.MaxSize()
 	raw.Close()
 
-	// fmt.Printf("> est sample with %s %#v\n", scheme, sctx)
 	enc := NewInt[T](scheme).Encode(ctx.SampleCtx, ctx.Sample, lvl)
 	estSize = enc.MaxSize()
 	enc.Close()

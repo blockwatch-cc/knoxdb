@@ -8,6 +8,8 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+const BENCH_WIDTH = 60
+
 func GenForScheme[T types.Integer](scheme, n int) []T {
 	switch scheme {
 	case 0: // TIntegerConstant,
@@ -53,7 +55,7 @@ func GenRandom[T types.Integer](n int) []T {
 	var t T
 	switch any(t).(type) {
 	case int64:
-		res = util.ReinterpretSlice[int64, T](util.RandIntsn[int64](n, 1<<60-1))
+		res = util.ReinterpretSlice[int64, T](util.RandIntsn[int64](n, 1<<BENCH_WIDTH-1))
 	case int32:
 		res = util.ReinterpretSlice[int32, T](util.RandInts[int32](n))
 	case int16:
@@ -61,7 +63,7 @@ func GenRandom[T types.Integer](n int) []T {
 	case int8:
 		res = util.ReinterpretSlice[int8, T](util.RandInts[int8](n))
 	case uint64:
-		res = util.ReinterpretSlice[uint64, T](util.RandUintsn[uint64](n, 1<<60-1))
+		res = util.ReinterpretSlice[uint64, T](util.RandUintsn[uint64](n, 1<<BENCH_WIDTH-1))
 	case uint32:
 		res = util.ReinterpretSlice[uint32, T](util.RandUints[uint32](n))
 	case uint16:
@@ -79,7 +81,7 @@ func GenDups[T types.Integer](n, u int) []T {
 	var t T
 	switch any(t).(type) {
 	case int64:
-		unique := util.RandIntsn[int64](c, 1<<60-1)
+		unique := util.RandIntsn[int64](c, 1<<BENCH_WIDTH-1)
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
@@ -99,7 +101,7 @@ func GenDups[T types.Integer](n, u int) []T {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
 	case uint64:
-		unique := util.RandUintsn[uint64](c, 1<<60-1)
+		unique := util.RandUintsn[uint64](c, 1<<BENCH_WIDTH-1)
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
@@ -129,7 +131,7 @@ func GenRuns[T types.Integer](n, r int) []T {
 	var t T
 	switch any(t).(type) {
 	case int64:
-		for _, v := range util.RandIntsn[int64](sz, 1<<60-1) {
+		for _, v := range util.RandIntsn[int64](sz, 1<<BENCH_WIDTH-1) {
 			for range r {
 				if len(res) == n {
 					break
@@ -165,7 +167,7 @@ func GenRuns[T types.Integer](n, r int) []T {
 			}
 		}
 	case uint64:
-		for _, v := range util.RandUintsn[uint64](sz, 1<<60-1) {
+		for _, v := range util.RandUintsn[uint64](sz, 1<<BENCH_WIDTH-1) {
 			for range r {
 				if len(res) == n {
 					break

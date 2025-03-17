@@ -264,14 +264,16 @@ func BenchmarkEncodeInt(b *testing.B) {
 			TIntegerSimple8,
 			TIntegerRaw,
 		} {
-			data := tests.GenForScheme[int64](int(scheme), c.N)
+			data := tests.GenForScheme[uint64](int(scheme), c.N)
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for i := 0; i < b.N; i++ {
-					ctx := AnalyzeInt(data, false)
-					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
-					_ = enc.Store(enc.Store(make([]byte, 0, enc.MaxSize())))
+					ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
+					enc := NewInt[uint64](scheme).Encode(ctx, data, MAX_CASCADE)
+					sz := enc.MaxSize()
+					buf := enc.Store(make([]byte, 0, enc.MaxSize()))
+					require.Less(b, len(buf), sz)
 					enc.Close()
 					ctx.Close()
 				}
@@ -461,9 +463,7 @@ func BenchmarkUniqueLLB(b *testing.B) {
 			b.SetBytes(int64(c.N * 2))
 			for range b.N {
 				flt := loglogbeta.NewFilterWithPrecision(8)
-				for _, v := range data {
-					flt.AddUint32(uint32(v))
-				}
+				flt.AddManyInt16(data)
 				card = int(flt.Cardinality())
 			}
 		})

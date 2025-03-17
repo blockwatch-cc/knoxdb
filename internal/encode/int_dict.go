@@ -95,21 +95,20 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	}
 
 	// encode child containers
-	// fmt.Println("Dict Values ..")
 	vctx := AnalyzeInt(dict, false)
 	c.Values = EncodeInt(vctx, dict, lvl-1)
 	vctx.Close()
 	if c.Values.Type() != TIntegerRaw {
 		arena.FreeT(dict)
 	}
-	// fmt.Println("Dict Codes ..")
+
 	cctx := AnalyzeInt(codes, false)
 	c.Codes = EncodeInt(cctx, codes, lvl-1)
 	cctx.Close()
 	if c.Codes.Type() != TIntegerRaw {
 		arena.Free(arena.AllocUint16, codes)
 	}
-	// fmt.Println("Dict done.")
+
 	return c
 }
 
@@ -155,9 +154,9 @@ func dictEncodeMap[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []ui
 	}
 
 	// translate values to codes
-	codes := arena.Alloc(arena.AllocUint16, len(vals)).([]uint16)[:len(vals)]
-	for i, v := range vals {
-		codes[i] = ctx.UniqueMap[v]
+	codes := arena.Alloc(arena.AllocUint16, len(vals)).([]uint16)[:0]
+	for _, v := range vals {
+		codes = append(codes, ctx.UniqueMap[v])
 	}
 
 	return dict, codes

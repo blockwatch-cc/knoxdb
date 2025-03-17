@@ -116,6 +116,7 @@ func (c *IntegerContext[T]) buildUniqueArray(vals []T) int {
 	if cap(c.UniqueArray) < sz {
 		c.UniqueArray = make([]T, sz)
 	}
+	c.UniqueArray = c.UniqueArray[:sz]
 
 	// mark existing values
 	for _, v := range vals {
@@ -130,6 +131,7 @@ func (c *IntegerContext[T]) buildUniqueArray(vals []T) int {
 			numUnique++
 		}
 	}
+
 	return numUnique
 }
 
@@ -159,7 +161,7 @@ func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
 		schemes = append(schemes, TIntegerRunEnd)
 	}
 	// dict makes only sense if <64k entries, value range is reduced and card < 3/4
-	if c.NumUnique < 1<<16-1 && c.Max-c.Min > T(c.NumUnique) && c.NumUnique*4/3 < c.NumValues {
+	if c.NumUnique <= 1<<16 && c.Max-c.Min > T(c.NumUnique) && c.NumUnique*4/3 < c.NumValues {
 		schemes = append(schemes, TIntegerDictionary)
 	}
 	return schemes
@@ -167,6 +169,9 @@ func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
 
 func (c *IntegerContext[T]) Close() {
 	clear(c.UniqueArray)
+	if c.UniqueArray != nil {
+		c.UniqueArray = c.UniqueArray[:0]
+	}
 	clear(c.UniqueMap)
 	if c.SampleCtx != nil {
 		c.SampleCtx.Close()

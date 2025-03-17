@@ -125,6 +125,14 @@ func (llb *LogLogBeta) AddInt64(val int64) {
 	llb.AddHash(xxhashVec.XXHash32Int64(val, 0))
 }
 
+func (llb *LogLogBeta) AddManyUint16(data []uint16) {
+	filterAddManyUint16(llb, data, 0)
+}
+
+func (llb *LogLogBeta) AddManyInt16(data []int16) {
+	filterAddManyInt16(llb, data, 0)
+}
+
 func (llb *LogLogBeta) AddManyUint32(data []uint32) {
 	filterAddManyUint32(llb, data, 0)
 }
