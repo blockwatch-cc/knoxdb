@@ -5,11 +5,16 @@ package encode
 
 import (
 	"bytes"
+	"slices"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/encode/tests"
+	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/internal/zip"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -264,8 +269,9 @@ func BenchmarkEncodeInt(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for i := 0; i < b.N; i++ {
-					ctx := AnalyzeInt(data, true)
+					ctx := AnalyzeInt(data, false)
 					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+					_ = enc.Store(enc.Store(make([]byte, 0, enc.MaxSize())))
 					enc.Close()
 					ctx.Close()
 				}
@@ -332,5 +338,136 @@ func BenchmarkAppendTo(b *testing.B) {
 				}
 			})
 		}
+	}
+}
+
+func TestUniqueArray(t *testing.T) {
+	for _, c := range tests.BenchmarkSizes {
+		data := util.RandInts[int16](c.N)
+		minx := slices.Min(data)
+		maxx := slices.Max(data)
+
+		// map
+		u := make(map[int16]struct{}, c.N)
+		for _, v := range data {
+			u[v] = struct{}{}
+		}
+
+		// array
+		var card int
+		a := make([]uint16, int(maxx)-int(minx)+1)
+		for _, v := range data {
+			a[int(v)-int(minx)] = 1
+		}
+		for _, v := range a {
+			if v > 0 {
+				card++
+			}
+		}
+		require.Equal(t, card, len(u))
+	}
+}
+
+func BenchmarkUniqueMap(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		data := util.RandInts[int16](c.N)
+		var card int
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(c.N * 2))
+			for range b.N {
+				u := make(map[int16]struct{}, c.N)
+				for _, v := range data {
+					u[v] = struct{}{}
+				}
+				card = len(u)
+			}
+			_ = card
+		})
+	}
+}
+
+func BenchmarkUniqueArray(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		data := util.RandInts[int16](c.N)
+		minx := slices.Min(data)
+		maxx := slices.Max(data)
+		var card int
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(c.N * 2))
+			for range b.N {
+				u := make([]uint16, int(maxx)-int(minx)+1)
+				for _, v := range data {
+					u[int(v)-int(minx)] = 1
+				}
+				for _, v := range u {
+					if v > 0 {
+						card++
+					}
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkUniqueBitset(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		data := util.RandInts[int16](c.N)
+		minx := slices.Min(data)
+		maxx := slices.Max(data)
+		var card int
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(c.N * 2))
+			for range b.N {
+				u := bitset.NewBitset(int(maxx) - int(minx) + 1)
+				for _, v := range data {
+					u.Set(int(v) - int(minx))
+				}
+				card = u.Count()
+			}
+		})
+		_ = card
+	}
+}
+
+func BenchmarkUniqueRoaring(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		data := util.RandInts[int16](c.N)
+		minx := slices.Min(data)
+		// maxx := slices.Max(data)
+		var card int
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(c.N * 2))
+			for range b.N {
+				u := xroar.NewBitmap()
+				for _, v := range data {
+					u.Set(uint64(v) - uint64(minx))
+				}
+				card = u.GetCardinality()
+			}
+		})
+		_ = card
+	}
+}
+
+func BenchmarkUniqueLLB(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		data := util.RandInts[int16](c.N)
+		var card int
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(c.N * 2))
+			for range b.N {
+				flt := loglogbeta.NewFilterWithPrecision(8)
+				for _, v := range data {
+					flt.AddUint32(uint32(v))
+				}
+				card = int(flt.Cardinality())
+			}
+		})
+		_ = card
 	}
 }

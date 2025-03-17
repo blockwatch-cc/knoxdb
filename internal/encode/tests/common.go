@@ -17,7 +17,10 @@ type BenchmarkSize struct {
 
 var BenchmarkSizes = []BenchmarkSize{
 	{"1k", 1024},
+	// {"2k", 2 * 1024},
+	// {"8k", 8 * 1024},
 	{"16k", 16 * 1024},
+	// {"32k", 32 * 1024},
 	{"64k", 64 * 1024},
 }
 
@@ -29,7 +32,7 @@ type Benchmark struct {
 var Benchmarks = []Benchmark{
 	{"dups_1K", GenDups[int64](1024, 10)}, // 10% unique
 	{"dups_16K", GenDups[int64](16*1024, 10)},
-	{"dups_64K", GenDups[int64](16*1024, 10)},
+	{"dups_64K", GenDups[int64](64*1024, 10)},
 
 	{"runs_1K", GenRuns[int64](1024, 10)}, // run length 10
 	{"runs_16K", GenRuns[int64](16*1024, 10)},

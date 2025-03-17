@@ -6,12 +6,9 @@ package encode
 import (
 	"errors"
 	"fmt"
-	"math/bits"
-	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -66,73 +63,6 @@ type IntegerContainer[T types.Integer] interface {
 	types.NumberMatcher[T]
 }
 
-// AnalyzeInt produces statistics about slice vals which are used to
-// find the most efficient encoding scheme.
-func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] {
-	c := newIntegerContext[T]()
-	c.Min = vals[0]
-	c.Max = vals[0]
-	c.Delta = vals[util.Bool2int(len(vals) > 1)] - vals[0]
-	c.PhyBits = int(unsafe.Sizeof(T(0))) * 8
-	c.NumRuns = 1
-	c.NumValues = len(vals)
-	for i, v := range vals[1:] {
-		if v < c.Min {
-			c.Min = v
-		} else if v > c.Max {
-			c.Max = v
-		}
-		c.NumRuns += util.Bool2int(vals[i] != v)
-		delta := v - vals[i]
-		c.Delta = delta * T(util.Bool2int(c.Delta == delta))
-	}
-
-	// count unique only if necessary
-	doCountUnique := checkUnique && c.Min != c.Max && c.Delta == 0
-	c.NumUnique = min(c.NumRuns, int(c.Max)-int(c.Min))
-
-	switch c.PhyBits {
-	case 64:
-		c.UseBits = bits.Len64(uint64(c.Max - c.Min))
-		if doCountUnique {
-			unique := loglogbeta.NewFilter()
-			unique.AddManyUint64(util.ReinterpretSlice[T, uint64](vals))
-			c.NumUnique = int(unique.Cardinality())
-		}
-	case 32:
-		c.UseBits = bits.Len32(uint32(c.Max - c.Min))
-		if doCountUnique {
-			unique := loglogbeta.NewFilter()
-			unique.AddManyUint32(util.ReinterpretSlice[T, uint32](vals))
-			c.NumUnique = int(unique.Cardinality())
-		}
-	case 16:
-		c.UseBits = bits.Len16(uint16(c.Max - c.Min))
-		if doCountUnique {
-			if c.Unique == nil {
-				c.Unique = make(map[T]uint16, int(c.Max-c.Min))
-			}
-			for _, v := range vals {
-				c.Unique[v] = 0
-			}
-			c.NumUnique = len(c.Unique)
-		}
-	case 8:
-		c.UseBits = bits.Len8(uint8(c.Max - c.Min))
-		if doCountUnique {
-			if c.Unique == nil {
-				c.Unique = make(map[T]uint16, int(c.Max-c.Min))
-			}
-			for _, v := range vals {
-				c.Unique[v] = 0
-			}
-			c.NumUnique = len(c.Unique)
-		}
-	}
-	// fmt.Printf("Analyze: %#v\n", c)
-	return c
-}
-
 // NewInt creates a new integer container from scheme type.
 func NewInt[T types.Integer](scheme IntegerContainerType) IntegerContainer[T] {
 	switch scheme {
@@ -167,7 +97,6 @@ func SampleInt[T types.Integer](v []T) ([]T, bool) {
 	if len(v) <= SAMPLE_COUNT*SAMPLE_SIZE {
 		return v, false
 	}
-	// s := make([]T, SAMPLE_COUNT*SAMPLE_SIZE)
 	sz := SAMPLE_COUNT * SAMPLE_SIZE
 	s := arena.AllocT[T](sz)[:sz]
 	chunk := len(v) / SAMPLE_COUNT

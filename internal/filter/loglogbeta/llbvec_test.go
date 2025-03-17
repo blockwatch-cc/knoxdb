@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"time"
 
 	"blockwatch.cc/knoxdb/internal/hash/xxhashVec"
 	"blockwatch.cc/knoxdb/pkg/slicex"
@@ -78,6 +79,18 @@ func TestCardinality(t *testing.T) {
 			if ratio > MaxAllowedLlbError {
 				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
 			}
+		}
+	}
+}
+
+func TestPrecision(t *testing.T) {
+	for _, sz := range []int{1024, 2048, 8192, 16 * 1024, 32 * 1024, 64 * 1024} {
+		for _, f := range []int{8, 9, 10, 11, 12, 13, 14, 15, 16} {
+			now := time.Now()
+			flt := NewFilterWithPrecision(uint32(f))
+			flt.AddManyInt64(util.RandInts[int64](sz))
+			c := flt.Cardinality()
+			t.Logf("F=%d SZ=%d C=%d ERR=%f RT=%s", f, sz, c, float64(sz-int(c))/float64(sz), time.Since(now))
 		}
 	}
 }
