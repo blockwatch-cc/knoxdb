@@ -27,7 +27,6 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.Equal(t, int64(1), x.Delta, "delta")
 	assert.Equal(t, 64, x.PhyBits, "phybits")
 	assert.Equal(t, 2, x.UseBits, "usebits")
-	// assert.Equal(t, 4, x.NumUnique, "num_unique")
 	assert.InDelta(t, 4, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 4, x.NumRuns, "num_runs")
 	assert.Equal(t, 4, x.NumValues, "num_values")
@@ -42,7 +41,7 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.Equal(t, 64, x.PhyBits, "phybits")
 	assert.Equal(t, 3, x.UseBits, "usebits")
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
-	// assert.Equal(t, 3, x.NumUnique, "num_unique")
+	assert.Equal(t, 3, x.NumUnique, "num_unique")
 	assert.Equal(t, 3, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
 	assert.Contains(t, x.EligibleSchemes(), TIntegerRunEnd, "eligible")
@@ -58,7 +57,6 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.Equal(t, int64(0), x.Delta, "delta")
 	assert.Equal(t, 64, x.PhyBits, "phybits")
 	assert.Equal(t, 3, x.UseBits, "usebits")
-	// assert.Equal(t, 3, x.NumUnique, "num_unique")
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 6, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
@@ -264,13 +262,13 @@ func BenchmarkEncodeInt(b *testing.B) {
 			TIntegerSimple8,
 			TIntegerRaw,
 		} {
-			data := tests.GenForScheme[uint64](int(scheme), c.N)
+			data := tests.GenForScheme[int64](int(scheme), c.N)
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for i := 0; i < b.N; i++ {
 					ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
-					enc := NewInt[uint64](scheme).Encode(ctx, data, MAX_CASCADE)
+					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
 					sz := enc.MaxSize()
 					buf := enc.Store(make([]byte, 0, enc.MaxSize()))
 					require.Less(b, len(buf), sz)

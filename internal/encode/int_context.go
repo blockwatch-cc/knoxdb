@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/encode/analyze"
 	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -18,11 +19,11 @@ type IntegerContext[T types.Integer] struct {
 	Min         T                  // vector minimum
 	Max         T                  // vector maximum
 	Delta       T                  // common delta between vector values
+	NumRuns     int                // vector runs
+	NumUnique   int                // vector cardinality (hint, may not be precise)
+	NumValues   int                // vector length
 	PhyBits     int                // phy type bit width 8, 16, 32, 64
 	UseBits     int                // used bits for bit-packing
-	NumUnique   int                // vector cardinality (hint, may not be precise)
-	NumRuns     int                // vector runs
-	NumValues   int                // vector length
 	Sample      []T                // data sample (optional)
 	SampleCtx   *IntegerContext[T] // sample analysis
 	FreeSample  bool               // hint whether sample may be reused
@@ -34,24 +35,35 @@ type IntegerContext[T types.Integer] struct {
 // find the most efficient encoding scheme.
 func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] {
 	c := newIntegerContext[T]()
-	c.Min = vals[0]
-	c.Max = vals[0]
-	c.Delta = vals[util.Bool2int(len(vals) > 1)] - vals[0]
 	c.PhyBits = int(unsafe.Sizeof(T(0))) * 8
-	c.NumRuns = 1
 	c.NumValues = len(vals)
-	for i, v := range vals[1:] {
-		if v < c.Min {
-			c.Min = v
-		} else if v > c.Max {
-			c.Max = v
-		}
-		if vals[i] != v {
-			c.NumRuns++
-		}
-		if c.Delta > 0 && c.Delta != v-vals[i] {
-			c.Delta = 0
-		}
+
+	// vector analyze
+	switch any(T(0)).(type) {
+	case int64:
+		minv, maxv, delta, nruns := analyze.AnalyzeInt64(util.ReinterpretSlice[T, int64](vals))
+		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
+	case int32:
+		minv, maxv, delta, nruns := analyze.AnalyzeInt32(util.ReinterpretSlice[T, int32](vals))
+		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
+	case int16:
+		minv, maxv, delta, nruns := analyze.AnalyzeInt16(util.ReinterpretSlice[T, int16](vals))
+		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
+	case int8:
+		minv, maxv, delta, nruns := analyze.AnalyzeInt8(util.ReinterpretSlice[T, int8](vals))
+		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
+	case uint64:
+		minv, maxv, delta, nruns := analyze.AnalyzeUint64(util.ReinterpretSlice[T, uint64](vals))
+		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
+	case uint32:
+		minv, maxv, delta, nruns := analyze.AnalyzeUint32(util.ReinterpretSlice[T, uint32](vals))
+		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
+	case uint16:
+		minv, maxv, delta, nruns := analyze.AnalyzeUint16(util.ReinterpretSlice[T, uint16](vals))
+		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
+	case uint8:
+		minv, maxv, delta, nruns := analyze.AnalyzeUint8(util.ReinterpretSlice[T, uint8](vals))
+		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
 	}
 
 	// count unique only if necessary

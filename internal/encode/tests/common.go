@@ -42,9 +42,11 @@ var Benchmarks = []Benchmark{
 
 var (
 	constCase = []int{1, 1, 1, 1, 1, 1}
-	deltaCase = []int{1, 2, 3, 4, 5, 6}
+	deltaCase = []int{1, 2, 3, 4, 5, 6} // delta = 1
 	runsCase  = []int{1, 1, 2, 2, 3, 3}
 	dictCase  = []int{1, 50, 1, 50, 1, 50}
+	edgeCase  = []int{1, 2, 2, 2, 2, 2}       // initial delta = 1, then 0
+	negCase   = []int{-1, -2, -3, -4, -5, -6} // delta = -1
 )
 
 type IntTestCase[T types.Integer] struct {
@@ -57,13 +59,18 @@ func MakeShortIntTests[T types.Integer](scheme int) []IntTestCase[T] {
 	case 0: // TIntegerConstant:
 		return []IntTestCase[T]{MakeIntTest[T]("const", 6, constCase...)}
 	case 1: // TIntegerDelta:
-		return []IntTestCase[T]{MakeIntTest[T]("delta", 6, deltaCase...)}
+		return []IntTestCase[T]{
+			MakeIntTest[T]("delta", 6, deltaCase...),
+			MakeIntTest[T]("negd", 6, negCase...),
+		}
 	}
 	return []IntTestCase[T]{
 		MakeIntTest[T]("const", 6, constCase...),
 		MakeIntTest[T]("delta", 6, deltaCase...),
 		MakeIntTest[T]("runs", 6, runsCase...),
 		MakeIntTest[T]("dict", 6, dictCase...),
+		MakeIntTest[T]("edge", 6, edgeCase...),
+		MakeIntTest[T]("negd", 6, negCase...),
 	}
 }
 
