@@ -67,42 +67,42 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 	}
 
 	// count unique only if necessary
-	doCountUnique := checkUnique && c.Min != c.Max && c.Delta == 0
+	// doCountUnique := checkUnique && c.Min != c.Max && c.Delta == 0
 	c.NumUnique = min(c.NumRuns, int(c.Max)-int(c.Min))
 
 	switch c.PhyBits {
 	case 64:
 		c.UseBits = bits.Len64(uint64(c.Max - c.Min))
-		if doCountUnique {
-			// use array when c.Max-c.Min < 64k
-			sz := int(c.Max) - int(c.Min) + 1
-			if sz <= 1<<16 {
-				c.NumUnique = c.buildUniqueArray(vals)
-			} else {
-				c.NumUnique = c.estimateCardinality(vals)
-			}
-		}
+		// if doCountUnique {
+		// 	// use array when c.Max-c.Min < 64k
+		// 	sz := int(c.Max) - int(c.Min) + 1
+		// 	if sz <= 1<<16 {
+		// 		c.NumUnique = c.buildUniqueArray(vals)
+		// 	} else {
+		// 		c.NumUnique = c.estimateCardinality(vals)
+		// 	}
+		// }
 	case 32:
 		c.UseBits = bits.Len32(uint32(c.Max - c.Min))
-		if doCountUnique {
-			// use array when c.Max-c.Min < 64k
-			sz := int(c.Max) - int(c.Min) + 1
-			if sz <= 1<<16 {
-				c.NumUnique = c.buildUniqueArray(vals)
-			} else {
-				c.NumUnique = c.estimateCardinality(vals)
-			}
-		}
+		// if doCountUnique {
+		// 	// use array when c.Max-c.Min < 64k
+		// 	sz := int(c.Max) - int(c.Min) + 1
+		// 	if sz <= 1<<16 {
+		// 		c.NumUnique = c.buildUniqueArray(vals)
+		// 	} else {
+		// 		c.NumUnique = c.estimateCardinality(vals)
+		// 	}
+		// }
 	case 16:
 		c.UseBits = bits.Len16(uint16(c.Max - c.Min))
-		if doCountUnique {
-			c.NumUnique = c.buildUniqueArray(vals)
-		}
+		// if doCountUnique {
+		// 	c.NumUnique = c.buildUniqueArray(vals)
+		// }
 	case 8:
 		c.UseBits = bits.Len8(uint8(c.Max - c.Min))
-		if doCountUnique {
-			c.NumUnique = c.buildUniqueArray(vals)
-		}
+		// if doCountUnique {
+		// 	c.NumUnique = c.buildUniqueArray(vals)
+		// }
 	}
 	return c
 }

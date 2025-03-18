@@ -7,6 +7,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/encode/analyze/avx2"
 	"blockwatch.cc/knoxdb/internal/encode/analyze/generic"
 	"blockwatch.cc/knoxdb/pkg/util"
+	// "golang.org/x/sys/cpu"
 )
 
 var (
