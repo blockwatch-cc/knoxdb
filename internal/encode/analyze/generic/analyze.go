@@ -8,15 +8,28 @@ import (
 )
 
 // Vectorized loop (process 4 elements at a time)
-// BenchmarkAnalyzeInt/dups_1K-10        971 ns/op   8434.43 MB/s
-// BenchmarkAnalyzeInt/dups_16K-10     14893 ns/op   8801.13 MB/s
-// BenchmarkAnalyzeInt/dups_64K-10     57478 ns/op   9121.50 MB/s
-// BenchmarkAnalyzeInt/runs_1K-10        770 ns/op   10633.43 MB/s
-// BenchmarkAnalyzeInt/runs_16K-10     12804 ns/op   10237.15 MB/s
-// BenchmarkAnalyzeInt/runs_64K-10     51268 ns/op   10226.43 MB/s
-// BenchmarkAnalyzeInt/seq_1K-10        1077 ns/op   7603.72 MB/s
-// BenchmarkAnalyzeInt/seq_16K-10      16983 ns/op   7717.72 MB/s
-// BenchmarkAnalyzeInt/seq_64K-10      67802 ns/op   7732.62 MB/s
+//
+// cpu: Apple M1 Max
+// BenchmarkAnalyzeInt64/dups_1K-10       1064 ns/op       7698.03 MB/s
+// BenchmarkAnalyzeInt64/dups_16K-10     15620 ns/op       8391.50 MB/s
+// BenchmarkAnalyzeInt64/dups_64K-10     62346 ns/op       8409.34 MB/s
+// BenchmarkAnalyzeInt64/runs_1K-10        780 ns/op       10506.89 MB/s
+// BenchmarkAnalyzeInt64/runs_16K-10     11853 ns/op       11058.33 MB/s
+// BenchmarkAnalyzeInt64/runs_64K-10     47429 ns/op       11054.23 MB/s
+// BenchmarkAnalyzeInt64/seq_1K-10         975 ns/op       8402.93 MB/s
+// BenchmarkAnalyzeInt64/seq_16K-10      15923 ns/op       8231.37 MB/s
+// BenchmarkAnalyzeInt64/seq_64K-10      63104 ns/op       8308.37 MB/s
+//
+// cpu: 12th Gen Intel(R) Core(TM) i9-12900K
+// BenchmarkAnalyzeInt64/dups_1K-24       697.3 ns/op      11748.83 MB/s
+// BenchmarkAnalyzeInt64/dups_16K-24     8663 ns/op        15129.72 MB/s
+// BenchmarkAnalyzeInt64/dups_64K-24    34571 ns/op        15165.76 MB/s
+// BenchmarkAnalyzeInt64/runs_1K-24       493.1 ns/op      16614.15 MB/s
+// BenchmarkAnalyzeInt64/runs_16K-24     6877 ns/op        19058.27 MB/s
+// BenchmarkAnalyzeInt64/runs_64K-24    26947 ns/op        19456.06 MB/s
+// BenchmarkAnalyzeInt64/seq_1K-24        684.2 ns/op      11972.24 MB/s
+// BenchmarkAnalyzeInt64/seq_16K-24     10787 ns/op        12151.42 MB/s
+// BenchmarkAnalyzeInt64/seq_64K-24     43339 ns/op        12097.38 MB/s
 func Analyze[T types.Integer](vals []T) (minv T, maxv T, delta T, numRuns int) {
 	if len(vals) == 0 {
 		return
@@ -27,48 +40,9 @@ func Analyze[T types.Integer](vals []T) (minv T, maxv T, delta T, numRuns int) {
 		delta = vals[1] - vals[0]
 	}
 	numRuns = 1
+	hasDelta := delta != 0
 
-	// unrolled loop
 	i := 1
-	for ; i < len(vals)-3; i += 4 {
-		v0 := vals[i-1]
-		v1 := vals[i]
-		v2 := vals[i+1]
-		v3 := vals[i+2]
-		v4 := vals[i+3]
-
-		// Min/Max updates for 4 elements
-		minv = min(minv, v1, v2, v3, v4)
-		maxv = max(maxv, v1, v2, v3, v4)
-
-		// Run counting and delta checking
-		if v0 != v1 {
-			numRuns++
-			if delta != 0 && delta != v1-v0 {
-				delta = 0
-			}
-		}
-		if v1 != v2 {
-			numRuns++
-			if delta != 0 && delta != v2-v1 {
-				delta = 0
-			}
-		}
-		if v2 != v3 {
-			numRuns++
-			if delta != 0 && delta != v3-v2 {
-				delta = 0
-			}
-		}
-		if v3 != v4 {
-			numRuns++
-			if delta != 0 && delta != v4-v3 {
-				delta = 0
-			}
-		}
-	}
-
-	// Scalar loop for remaining elements
 	for ; i < len(vals); i++ {
 		v := vals[i]
 		if v < minv {
@@ -78,10 +52,12 @@ func Analyze[T types.Integer](vals []T) (minv T, maxv T, delta T, numRuns int) {
 		}
 		if vals[i-1] != v {
 			numRuns++
-			if delta != 0 && delta != v-vals[i-1] {
-				delta = 0
-			}
+			hasDelta = hasDelta && delta == v-vals[i-1]
 		}
+	}
+
+	if !hasDelta {
+		delta = 0
 	}
 	return
 }

@@ -7,7 +7,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/encode/analyze/avx2"
 	"blockwatch.cc/knoxdb/internal/encode/analyze/generic"
 	"blockwatch.cc/knoxdb/pkg/util"
-	// "golang.org/x/sys/cpu"
+	"golang.org/x/sys/cpu"
 )
 
 var (
@@ -25,7 +25,7 @@ var (
 func init() {
 	switch {
 	case util.UseAVX2:
-		AnalyzeInt64 = avx2.AnalyzeInt64
+		// AnalyzeInt64 = avx2.AnalyzeInt64
 		AnalyzeInt32 = avx2.AnalyzeInt32
 		AnalyzeInt16 = avx2.AnalyzeInt16
 		AnalyzeInt8 = avx2.AnalyzeInt8
@@ -33,8 +33,8 @@ func init() {
 		AnalyzeUint32 = avx2.AnalyzeUint32
 		AnalyzeUint16 = avx2.AnalyzeUint16
 		AnalyzeUint8 = avx2.AnalyzeUint8
-		// case cpu.ARM64.HasASIMD:
-		// 	AnalyzeInt64 = arm64.AnalyzeInt64
+	case cpu.ARM64.HasASIMD:
+		// AnalyzeInt64 = arm64.AnalyzeInt64
 		// 	AnalyzeInt32 = arm64.AnalyzeInt32
 		// 	AnalyzeInt16 = arm64.AnalyzeInt16
 		// 	AnalyzeInt8 = arm64.AnalyzeInt8

@@ -20,7 +20,7 @@ type Context[T types.Integer] struct {
 
 // stubs for unimplemented functions
 var (
-	AnalyzeInt64 = generic.Analyze[int64]
+	// AnalyzeInt64 = generic.Analyze[int64]
 	AnalyzeInt32 = generic.Analyze[int32]
 	AnalyzeInt16 = generic.Analyze[int16]
 	AnalyzeInt8  = generic.Analyze[int8]
@@ -33,8 +33,8 @@ var (
 
 // ASM imports
 
-// //go:noescape
-// func analyze_i64_avx2(vals []int64, ret *Context[int64])
+//go:noescape
+func analyze_i64_avx2(vals []int64, ret *Context[int64])
 
 // //go:noescape
 // func analyze_i32_avx2(vals []int32, ret *Context[int32])
@@ -59,11 +59,15 @@ var (
 
 // Go exports
 
-// func AnalyzeInt64(vals []int64) (int64, int64, int64, int) {
-// 	var ctx Context[int64]
-// 	analyze_i64_avx2(vals, &ctx)
-// 	return ctx.Min, ctx.Max, ctx.Delta, int(ctx.NumRuns)
-// }
+func AnalyzeInt64(vals []int64) (int64, int64, int64, int) {
+	var ctx Context[int64]
+	if len(vals) > 1 {
+		ctx.Delta = vals[1] - vals[0]
+	}
+	analyze_i64_avx2(vals, &ctx)
+	// fmt.Printf("min=%d max=%d delta=%d runs=%d\n", ctx.Min, ctx.Max, ctx.Delta, ctx.NumRuns)
+	return ctx.Min, ctx.Max, ctx.Delta, int(ctx.NumRuns)
+}
 
 // func AnalyzeInt32(vals []int32) (int32, int32, int32, int) {
 // 	var ctx Context[int32]

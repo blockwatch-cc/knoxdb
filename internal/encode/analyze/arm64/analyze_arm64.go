@@ -62,6 +62,9 @@ func analyze_i64_neon(vals []int64, ret *Context[int64])
 
 func AnalyzeInt64(vals []int64) (int64, int64, int64, int) {
 	var ctx Context[int64]
+	if len(vals) > 1 {
+		ctx.Delta = vals[1] - vals[0]
+	}
 	analyze_i64_neon(vals, &ctx)
 	return ctx.Min, ctx.Max, ctx.Delta, int(ctx.NumRuns)
 }
