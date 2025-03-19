@@ -8,34 +8,96 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
-func TestAnalyzeInt64(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []int64
-		expMin   int64
-		expMax   int64
-		expDelta int64
-		expRuns  int64
-	}{
-		{"Empty", []int64{}, 0, 0, 0, 0},
-		{"Single", []int64{42}, 42, 42, 0, 1},
-		{"DeltaNoDups", []int64{-1, 0, 1, 2}, -1, 2, 1, 4},
-		{"Runs", []int64{-1, -1, 5, 5, 1, 1}, -1, 5, 0, 3},
-		{"DictFriendly", []int64{-1, 1, 5, 1, -1, 1}, -1, 5, 0, 6},
-		{"AllSame", []int64{5, 5, 5, 5, 5}, 5, 5, 0, 1},
-		{"Alternating", []int64{1, 0, 1, 0, 1}, 0, 1, 0, 5},
-		{"LargeDelta", []int64{10, 20, 30, 40, 50}, 10, 50, 10, 5},
-		{"NegDelta", []int64{-10, -7, -4, -1, 2}, -10, 2, 3, 5},
-		{"Bounds", []int64{math.MinInt64, 0, math.MaxInt64}, math.MinInt64, math.MaxInt64, 0, 3},
-		{"Short", []int64{1, 2, 3}, 1, 3, 1, 3},
-		{"MixedRuns", []int64{1, 1, 2, 2, 5, 8, 8}, 1, 8, 0, 4},
-		{"Unaligned", []int64{1, 2, 3, 4, 5, 6, 7}, 1, 7, 1, 7},
-		{"Random", []int64{3, 1, 4, 1, 5, 9, 2, 6, 5, 3}, 1, 9, 0, 10},
-	}
+type Signed interface {
+	int64 | int32 | int16 | int8
+}
 
-	for _, tt := range tests {
+type Unsigned interface {
+	uint64 | uint32 | uint16 | uint8
+}
+
+type TestCase[T Integer] struct {
+	name     string
+	input    []T
+	expMin   T
+	expMax   T
+	expDelta T
+	expRuns  T
+}
+
+func makeSignedTests[T Signed]() []TestCase[T] {
+	return []TestCase[T]{
+		{"Empty", []T{}, 0, 0, 0, 0},
+		{"Single", []T{42}, 42, 42, 0, 1},
+		{"DeltaNoDups", []T{-1, 0, 1, 2}, -1, 2, 1, 4},
+		{"Runs", []T{-1, -1, 5, 5, 1, 1}, -1, 5, 0, 3},
+		{"DictFriendly", []T{-1, 1, 5, 1, -1, 1}, -1, 5, 0, 6},
+		{"AllSame", []T{5, 5, 5, 5, 5}, 5, 5, 0, 1},
+		{"Alternating", []T{1, 0, 1, 0, 1}, 0, 1, 0, 5},
+		{"LargeDelta", []T{10, 20, 30, 40, 50}, 10, 50, 10, 5},
+		{"Bounds", []T{MinVal[T]().(T), 0, MaxVal[T]().(T)}, MinVal[T]().(T), MaxVal[T]().(T), 0, 3},
+		{"Short", []T{1, 2, 3}, 1, 3, 1, 3},
+		{"MixedRuns", []T{1, 1, 2, 2, 5, 8, 8}, 1, 8, 0, 4},
+		{"Unaligned", []T{1, 2, 3, 4, 5, 6, 7}, 1, 7, 1, 7},
+		{"Random", []T{3, 1, 4, 1, 5, 9, 2, 6, 5, 3}, 1, 9, 0, 10},
+		{"NegDelta", []T{
+			32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
+			16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+		}, 0, 32, -1, 33},
+		{"LongDelta", []T{
+			-32, -31, -30, -29, -28, -27, -26, -25, -24, -23, -22, -21, -20, -19, -18, -17,
+			-16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1,
+			0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+			16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+		}, -32, 32, 1, 65},
+		{"LongRuns", []T{
+			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+			2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+			3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+			4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+		}, 1, 4, 0, 4},
+	}
+}
+
+func makeUnsignedTests[T Unsigned]() []TestCase[T] {
+	return []TestCase[T]{
+		{"Empty", []T{}, 0, 0, 0, 0},
+		{"Single", []T{42}, 42, 42, 0, 1},
+		{"DeltaNoDups", []T{0, 1, 2, 3}, 0, 3, 1, 4},
+		{"Runs", []T{0, 0, 5, 5, 1, 1}, 0, 5, 0, 3},
+		{"DictFriendly", []T{0, 1, 5, 1, 0, 1}, 0, 5, 0, 6},
+		{"AllSame", []T{5, 5, 5, 5, 5}, 5, 5, 0, 1},
+		{"Alternating", []T{1, 0, 1, 0, 1}, 0, 1, 0, 5},
+		{"LargeDelta", []T{10, 20, 30, 40, 50}, 10, 50, 10, 5},
+		{"Bounds", []T{MinVal[T]().(T), 0, MaxVal[T]().(T)}, MinVal[T]().(T), MaxVal[T]().(T), 0, 2},
+		{"Short", []T{1, 2, 3}, 1, 3, 1, 3},
+		{"MixedRuns", []T{1, 1, 2, 2, 5, 8, 8}, 1, 8, 0, 4},
+		{"Unaligned", []T{1, 2, 3, 4, 5, 6, 7}, 1, 7, 1, 7},
+		{"Random", []T{3, 1, 4, 1, 5, 9, 2, 6, 5, 3}, 1, 9, 0, 10},
+		{"NegDelta", []T{
+			32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
+			16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+		}, 0, 32, MaxVal[T]().(T), 33},
+		{"LongDelta", []T{
+			32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
+			16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+		}, 0, 32, MaxVal[T]().(T), 33},
+		{"LongRuns", []T{
+			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+			2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+			3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+			4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+		}, 1, 4, 0, 4},
+	}
+}
+
+type AnalyzeFunc[T Integer] func([]T) (T, T, T, T)
+
+func analyzeTest[T Integer](t *testing.T, cases []TestCase[T], fn AnalyzeFunc[T]) {
+	t.Helper()
+	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			minv, maxv, delta, numRuns := AnalyzeInt64(tt.input)
+			minv, maxv, delta, numRuns := fn(tt.input)
 			if minv != tt.expMin {
 				t.Errorf("min: got %d, want %d", minv, tt.expMin)
 			}
@@ -52,8 +114,40 @@ func TestAnalyzeInt64(t *testing.T) {
 	}
 }
 
+func TestAnalyzeInt64(t *testing.T) {
+	analyzeTest[int64](t, makeSignedTests[int64](), AnalyzeInt64)
+}
+
+func TestAnalyzeUint64(t *testing.T) {
+	analyzeTest[uint64](t, makeUnsignedTests[uint64](), AnalyzeUint64)
+}
+
+func TestAnalyzeInt32(t *testing.T) {
+	analyzeTest[int32](t, makeSignedTests[int32](), AnalyzeInt32)
+}
+
+func TestAnalyzeUint32(t *testing.T) {
+	analyzeTest[uint32](t, makeUnsignedTests[uint32](), AnalyzeUint32)
+}
+
+func TestAnalyzeInt16(t *testing.T) {
+	analyzeTest[int16](t, makeSignedTests[int16](), AnalyzeInt16)
+}
+
+func TestAnalyzeUint16(t *testing.T) {
+	analyzeTest[uint16](t, makeUnsignedTests[uint16](), AnalyzeUint16)
+}
+
+func TestAnalyzeInt8(t *testing.T) {
+	analyzeTest[int8](t, makeSignedTests[int8](), AnalyzeInt8)
+}
+
+func TestAnalyzeUint8(t *testing.T) {
+	analyzeTest[uint8](t, makeUnsignedTests[uint8](), AnalyzeUint8)
+}
+
 func BenchmarkAnalyzeInt64(b *testing.B) {
-	for _, c := range BenchmarksInt64 {
+	for _, c := range makeBenchmarks[int64]() {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
@@ -64,27 +158,109 @@ func BenchmarkAnalyzeInt64(b *testing.B) {
 	}
 }
 
+func BenchmarkAnalyzeUint64(b *testing.B) {
+	for _, c := range makeBenchmarks[uint64]() {
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(c.Data) * 8))
+			for i := 0; i < b.N; i++ {
+				AnalyzeUint64(c.Data)
+			}
+		})
+	}
+}
+
+func BenchmarkAnalyzeInt32(b *testing.B) {
+	for _, c := range makeBenchmarks[int32]() {
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(c.Data) * 4))
+			for i := 0; i < b.N; i++ {
+				AnalyzeInt32(c.Data)
+			}
+		})
+	}
+}
+
+func BenchmarkAnalyzeUint32(b *testing.B) {
+	for _, c := range makeBenchmarks[uint32]() {
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(c.Data) * 4))
+			for i := 0; i < b.N; i++ {
+				AnalyzeUint32(c.Data)
+			}
+		})
+	}
+}
+
+func BenchmarkAnalyzeInt16(b *testing.B) {
+	for _, c := range makeBenchmarks[int16]() {
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(c.Data) * 2))
+			for i := 0; i < b.N; i++ {
+				AnalyzeInt16(c.Data)
+			}
+		})
+	}
+}
+
+func BenchmarkAnalyzeUint16(b *testing.B) {
+	for _, c := range makeBenchmarks[uint16]() {
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(c.Data) * 2))
+			for i := 0; i < b.N; i++ {
+				AnalyzeUint16(c.Data)
+			}
+		})
+	}
+}
+
+func BenchmarkAnalyzeInt8(b *testing.B) {
+	for _, c := range makeBenchmarks[int8]() {
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(c.Data)))
+			for i := 0; i < b.N; i++ {
+				AnalyzeInt8(c.Data)
+			}
+		})
+	}
+}
+
+func BenchmarkAnalyzeUint8(b *testing.B) {
+	for _, c := range makeBenchmarks[uint8]() {
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(c.Data)))
+			for i := 0; i < b.N; i++ {
+				AnalyzeUint8(c.Data)
+			}
+		})
+	}
+}
+
 type Benchmark[T Integer] struct {
 	Name string
 	Data []T
 }
 
-var BenchmarksInt64 = []Benchmark[int64]{
-	{"dups_1K", GenDups[int64](1024, 10)}, // 10% unique
-	{"dups_16K", GenDups[int64](16*1024, 10)},
-	{"dups_64K", GenDups[int64](64*1024, 10)},
+func makeBenchmarks[T Integer]() []Benchmark[T] {
+	return []Benchmark[T]{
+		{"dups_1K", GenDups[T](1024, 10)}, // 10% unique
+		{"dups_16K", GenDups[T](16*1024, 10)},
+		{"dups_64K", GenDups[T](64*1024, 10)},
 
-	{"runs_1K", GenRuns[int64](1024, 10)}, // run length 10
-	{"runs_16K", GenRuns[int64](16*1024, 10)},
-	{"runs_64K", GenRuns[int64](64*1024, 10)},
+		{"runs_1K", GenRuns[T](1024, 10)}, // run length 10
+		{"runs_16K", GenRuns[T](16*1024, 10)},
+		{"runs_64K", GenRuns[T](64*1024, 10)},
 
-	{"seq_1K", GenSequence[int64](1024)},
-	{"seq_16K", GenSequence[int64](16 * 1024)},
-	{"seq_64K", GenSequence[int64](64 * 1024)},
-}
-
-type Integer interface {
-	int64 | int32 | int16 | int8 | uint64 | uint32 | uint16 | uint8
+		{"seq_1K", GenSequence[T](1024)},
+		{"seq_16K", GenSequence[T](16 * 1024)},
+		{"seq_64K", GenSequence[T](64 * 1024)},
+	}
 }
 
 func GenSequence[T Integer](n int) []T {
@@ -185,6 +361,7 @@ func GenDups[T Integer](n, u int) []T {
 	}
 	return res
 }
+
 func GenRuns[T Integer](n, r int) []T {
 	res := make([]T, 0, n)
 	sz := (n + r - 1) / r
@@ -264,4 +441,50 @@ func GenRuns[T Integer](n, r int) []T {
 		}
 	}
 	return res
+}
+
+func MinVal[T Integer]() any {
+	switch any(T(0)).(type) {
+	case int64:
+		return int64(math.MinInt64)
+	case int32:
+		return int32(math.MinInt32)
+	case int16:
+		return int16(math.MinInt16)
+	case int8:
+		return int8(math.MinInt8)
+	case uint64:
+		return uint64(0)
+	case uint32:
+		return uint32(0)
+	case uint16:
+		return uint16(0)
+	case uint8:
+		return uint8(0)
+	default:
+		return nil
+	}
+}
+
+func MaxVal[T Integer]() any {
+	switch any(T(0)).(type) {
+	case int64:
+		return int64(math.MaxInt64)
+	case int32:
+		return int32(math.MaxInt32)
+	case int16:
+		return int16(math.MaxInt16)
+	case int8:
+		return int8(math.MaxInt8)
+	case uint64:
+		return uint64(math.MaxUint64)
+	case uint32:
+		return uint32(math.MaxUint32)
+	case uint16:
+		return uint16(math.MaxUint16)
+	case uint8:
+		return uint8(math.MaxUint8)
+	default:
+		return nil
+	}
 }
