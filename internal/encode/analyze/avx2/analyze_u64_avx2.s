@@ -36,11 +36,9 @@ TEXT ·analyze_u64_avx2(SB), NOSPLIT, $0-24
 first_loop:
     VMOVDQU (R8)(BX*8), Y1 // Load first 4 uint64s
     VPCMPGTQ Y1, Y4, Y0    // Compare for min (unsigned interpreted as signed)
-    VPBLENDVB Y0, Y1, Y4, Y0 // Update min_vec
+    VPBLENDVB Y0, Y1, Y4, Y4 // Update min_vec
     VPCMPGTQ Y5, Y1, Y3    // Compare for max
-    VPBLENDVB Y3, Y1, Y5, Y3 // Update max_vec
-    VMOVDQA Y0, Y4         // Save min_vec
-    VMOVDQA Y3, Y5         // Save max_vec
+    VPBLENDVB Y3, Y1, Y5, Y5 // Update max_vec
 
     // Create shifted vector
     VPERMQ $0x93, Y1, Y2   // Y2 = [b, c, d, a]
@@ -69,11 +67,9 @@ first_loop:
 vector_loop:
     VMOVDQU (R8)(BX*8), Y1 // Y1 = curr_vec
     VPCMPGTQ Y1, Y4, Y0
-    VPBLENDVB Y0, Y1, Y4, Y0
+    VPBLENDVB Y0, Y1, Y4, Y4
     VPCMPGTQ Y5, Y1, Y3
-    VPBLENDVB Y3, Y1, Y5, Y3
-    VMOVDQA Y0, Y4
-    VMOVDQA Y3, Y5
+    VPBLENDVB Y3, Y1, Y5, Y5
 
     // Create shifted vector
     VPERMQ $0x93, Y1, Y2

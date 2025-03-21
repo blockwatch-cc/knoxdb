@@ -36,11 +36,9 @@ TEXT ·analyze_i64_avx2(SB), NOSPLIT, $0-24
 first_loop:
     VMOVDQU (R8)(BX*8), Y1 // Load first 4 int64s
     VPCMPGTQ Y1, Y4, Y0    // Compare for min
-    VPBLENDVB Y0, Y1, Y4, Y0 // Update min_vec
+    VPBLENDVB Y0, Y1, Y4, Y4 // Update min_vec
     VPCMPGTQ Y5, Y1, Y3    // Compare for max
-    VPBLENDVB Y3, Y1, Y5, Y3 // Update max_vec
-    VMOVDQA Y0, Y4         // Save min_vec
-    VMOVDQA Y3, Y5         // Save max_vec
+    VPBLENDVB Y3, Y1, Y5, Y5 // Update max_vec
 
     // Create shifted vector
     VPERMQ $0x93, Y1, Y2   // Y2 = [b, c, d, a]
@@ -70,11 +68,9 @@ first_loop:
 vector_loop:
     VMOVDQU (R8)(BX*8), Y1 // Y1 = curr_vec
     VPCMPGTQ Y1, Y4, Y0    // Y0 = (curr_vec > min_vec) for signed min
-    VPBLENDVB Y0, Y1, Y4, Y0 // If curr_vec > min_vec, keep min_vec; else curr_vec
+    VPBLENDVB Y0, Y1, Y4, Y4 // If curr_vec > min_vec, keep min_vec; else curr_vec
     VPCMPGTQ Y5, Y1, Y3    // Y3 = (max_vec > curr_vec) for signed max
-    VPBLENDVB Y3, Y1, Y5, Y3 // If max_vec > curr_vec, keep curr_vec; else max_vec
-    VMOVDQA Y0, Y4         // Update min_vec
-    VMOVDQA Y3, Y5         // Update max_vec
+    VPBLENDVB Y3, Y1, Y5, Y5 // If max_vec > curr_vec, keep curr_vec; else max_vec
 
     // Create shifted vector
     VPERMQ $0x93, Y1, Y2

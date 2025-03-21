@@ -50,12 +50,9 @@ first_loop:
 
     // Count runs
     VPCMPEQW Y1, Y3, Y8         // Runs comparison
-    VMOVDQA X8, X9              // Extract lower 128 bits
-    VEXTRACTI128 $1, Y8, X8     // Extract upper 128 bits
-    VPACKSSWB X8, X9, X9        // Pack to 8-bit
-    VPMOVMSKB X9, AX            // Extract mask
+    VPMOVMSKB Y8, AX            // Extract 32-bit mask
     NOTL AX                     // Invert
-    ANDL $0xFFFE, AX            // Mask bit 0 (16-bit lanes)
+    ANDL $0x55555554, AX        // Mask to 16 bits (keep even positions)
     POPCNTL AX, AX              // Count runs
     ADDQ AX, SI                 // Add to num_runs
 
@@ -64,12 +61,9 @@ first_loop:
     JZ next_iter
     VPSUBW Y3, Y1, Y1           // Differences
     VPCMPEQW Y7, Y1, Y1         // Compare with delta_vec
-    VMOVDQA X1, X9              // Extract lower 128 bits
-    VEXTRACTI128 $1, Y1, X1     // Extract upper 128 bits
-    VPACKSSWB X1, X9, X1        // Pack to 8-bit
-    VPMOVMSKB X1, DX            // Extract delta mask
-    ANDL $0xFFFE, DX            // Mask bit 0
-    CMPL DX, $0xFFFE            // Check against expected (masked)
+    VPMOVMSKB Y1, DX            // Extract 32-bit mask
+    ANDL $0x55555554, DX        // Mask bit 0
+    CMPL DX, $0x55555554        // Check against expected (masked)
     SETEQ R11B                  // Set hasDelta if equal
     JMP next_iter
 
@@ -86,12 +80,9 @@ vector_loop:
 
     // Count runs: compare curr_vec with shifted
     VPCMPEQW Y1, Y3, Y8    // Y8 = equality mask (0xFFFF for equal)
-    VMOVDQA X8, X9          // X9 = extract Y8 lower 128 bits
-    VEXTRACTI128 $1, Y8, X8 // X8 = upper 128 bits
-    VPACKSSWB X8, X9, X9   // X9 = packed 16-bit to 8-bit preserving order
-    VPMOVMSKB X9, AX       // AX = 16-bit mask (1 = equal, 0 = transition)
+    VPMOVMSKB Y8, AX       // Extract 32-bit mask
     NOTL AX                // Invert: 1 = transition
-    ANDL $0xFFFF, AX       // Mask to 16 bits
+    ANDL $0x55555555, AX   // Mask to 16 bits
     POPCNTL AX, AX         // Count transitions
     ADDQ AX, SI            // Add to num_runs
 
@@ -99,12 +90,10 @@ vector_loop:
     TESTB R11B, R11B       // Check hasDelta
     JZ next_iter           // Skip if no delta
     VPSUBW Y3, Y1, Y1      // Y1 = curr_vec - shifted (signed 16-bit differences)
-    VPCMPEQW Y7, Y1, Y1    // Y1 = equality mask with delta_vec
-    VMOVDQA X1, X9         // X9 = extract lower 128 bits from Y1
-    VEXTRACTI128 $1, Y1, X1 // X1 = extract upper 128 bits from Y1
-    VPACKSSWB X1, X9, X1   // Pack to 8-bit preserving order
-    VPMOVMSKB X1, DX       // DX = 16-bit mask of delta matches
-    CMPL DX, $0xFFFF
+    VPCMPEQW Y7, Y1, Y8    // Y1 = equality mask with delta_vec
+    VPMOVMSKB Y8, DX       // Extract 32-bit mask
+    ANDL $0x55555555, DX   // mask odd lanes
+    CMPL DX, $0x55555555   // Check against full mask
     SETEQ R11B
 
 next_iter:
