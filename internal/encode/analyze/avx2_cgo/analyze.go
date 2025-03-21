@@ -2,7 +2,7 @@ package main
 
 // Howto run this
 //
-// scp ./internal/encode/analyze/avx2_cgo/* flex:/var/lib/docker-lvm-plugin/scratch/analyze/
+// scp * flex:/var/lib/docker-lvm-plugin/scratch/analyze/
 // docker run --rm -v scratch:/usr/src -w /usr/src/analyze golang:1.24 env GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go test -c .
 // docker run --rm -v scratch:/usr/src -w /usr/src/analyze golang:1.24 ./analyze.test -test.run=Analyze
 // docker run --rm -v scratch:/usr/src -w /usr/src/analyze golang:1.24 ./analyze.test -test.bench=Analyze
@@ -11,6 +11,34 @@ package main
 // docker run --rm -v scratch:/usr/src -w /usr/src/analyze golang:1.23 env GOOS=linux GOARCH=amd64 CGO_ENABLED=1 gcc -c analyze.c -mavx2 -O3
 // objdump -d analyze.o > analyze.s
 //
+//
+// cpu: 12th Gen Intel(R) Core(TM) i9-12900K
+// BenchmarkAnalyzeInt64/dups_64K-24     23621 ns/op   22195.60 MB/s
+// BenchmarkAnalyzeUint64/dups_64K-24    23391 ns/op   22413.69 MB/s
+// BenchmarkAnalyzeInt32/dups_64K-24      6395 ns/op   40990.52 MB/s
+// BenchmarkAnalyzeUint32/dups_64K-24     6663 ns/op   39342.49 MB/s
+// BenchmarkAnalyzeInt16/dups_64K-24      3376 ns/op   38828.25 MB/s
+// BenchmarkAnalyzeUint16/dups_64K-24     3517 ns/op   37268.73 MB/s
+// BenchmarkAnalyzeInt8/dups_64K-24       2714 ns/op   24143.76 MB/s
+// BenchmarkAnalyzeUint8/dups_64K-24      2906 ns/op   22552.19 MB/s
+
+// BenchmarkAnalyzeInt64/runs_64K-24     23234 ns/op   22565.50 MB/s
+// BenchmarkAnalyzeUint64/runs_64K-24    23367 ns/op   22437.34 MB/s
+// BenchmarkAnalyzeInt32/runs_64K-24      6318 ns/op   41490.70 MB/s
+// BenchmarkAnalyzeUint32/runs_64K-24     6568 ns/op   39911.34 MB/s
+// BenchmarkAnalyzeInt16/runs_64K-24      3541 ns/op   37018.31 MB/s
+// BenchmarkAnalyzeUint16/runs_64K-24     3510 ns/op   37343.58 MB/s
+// BenchmarkAnalyzeInt8/runs_64K-24       1462 ns/op   44835.70 MB/s
+// BenchmarkAnalyzeUint8/runs_64K-24      1472 ns/op   44521.05 MB/s
+
+// BenchmarkAnalyzeInt64/seq_64K-24      29386 ns/op   17841.20 MB/s
+// BenchmarkAnalyzeUint64/seq_64K-24     30859 ns/op   16989.75 MB/s
+// BenchmarkAnalyzeInt32/seq_64K-24      12661 ns/op   20705.38 MB/s
+// BenchmarkAnalyzeUint32/seq_64K-24     12760 ns/op   20543.78 MB/s
+// BenchmarkAnalyzeInt16/seq_64K-24       6405 ns/op   20464.42 MB/s
+// BenchmarkAnalyzeUint16/seq_64K-24      6337 ns/op   20683.61 MB/s
+// BenchmarkAnalyzeInt8/seq_64K-24        2745 ns/op   23877.01 MB/s
+// BenchmarkAnalyzeUint8/seq_64K-24       2730 ns/op   24001.71 MB/s
 
 // #cgo CFLAGS: -mavx2 -O3
 // #include "analyze.h"
@@ -28,10 +56,10 @@ type Context[T Integer] struct {
 	Min     T
 	Max     T
 	Delta   T
-	NumRuns T
+	NumRuns uint32
 }
 
-func AnalyzeInt64(vals []int64) (int64, int64, int64, int64) {
+func AnalyzeInt64(vals []int64) (int64, int64, int64, uint32) {
 	if len(vals) == 0 {
 		return 0, 0, 0, 0
 	}
@@ -47,7 +75,7 @@ func AnalyzeInt64(vals []int64) (int64, int64, int64, int64) {
 	return ctx.Min, ctx.Max, ctx.Delta, ctx.NumRuns
 }
 
-func AnalyzeUint64(vals []uint64) (uint64, uint64, uint64, uint64) {
+func AnalyzeUint64(vals []uint64) (uint64, uint64, uint64, uint32) {
 	if len(vals) == 0 {
 		return 0, 0, 0, 0
 	}
@@ -63,7 +91,7 @@ func AnalyzeUint64(vals []uint64) (uint64, uint64, uint64, uint64) {
 	return ctx.Min, ctx.Max, ctx.Delta, ctx.NumRuns
 }
 
-func AnalyzeInt32(vals []int32) (int32, int32, int32, int32) {
+func AnalyzeInt32(vals []int32) (int32, int32, int32, uint32) {
 	if len(vals) == 0 {
 		return 0, 0, 0, 0
 	}
@@ -95,7 +123,7 @@ func AnalyzeUint32(vals []uint32) (uint32, uint32, uint32, uint32) {
 	return ctx.Min, ctx.Max, ctx.Delta, ctx.NumRuns
 }
 
-func AnalyzeInt16(vals []int16) (int16, int16, int16, int16) {
+func AnalyzeInt16(vals []int16) (int16, int16, int16, uint32) {
 	if len(vals) == 0 {
 		return 0, 0, 0, 0
 	}
@@ -111,7 +139,7 @@ func AnalyzeInt16(vals []int16) (int16, int16, int16, int16) {
 	return ctx.Min, ctx.Max, ctx.Delta, ctx.NumRuns
 }
 
-func AnalyzeUint16(vals []uint16) (uint16, uint16, uint16, uint16) {
+func AnalyzeUint16(vals []uint16) (uint16, uint16, uint16, uint32) {
 	if len(vals) == 0 {
 		return 0, 0, 0, 0
 	}
@@ -127,7 +155,7 @@ func AnalyzeUint16(vals []uint16) (uint16, uint16, uint16, uint16) {
 	return ctx.Min, ctx.Max, ctx.Delta, ctx.NumRuns
 }
 
-func AnalyzeInt8(vals []int8) (int8, int8, int8, int8) {
+func AnalyzeInt8(vals []int8) (int8, int8, int8, uint32) {
 	if len(vals) == 0 {
 		return 0, 0, 0, 0
 	}
@@ -143,7 +171,7 @@ func AnalyzeInt8(vals []int8) (int8, int8, int8, int8) {
 	return ctx.Min, ctx.Max, ctx.Delta, ctx.NumRuns
 }
 
-func AnalyzeUint8(vals []uint8) (uint8, uint8, uint8, uint8) {
+func AnalyzeUint8(vals []uint8) (uint8, uint8, uint8, uint32) {
 	if len(vals) == 0 {
 		return 0, 0, 0, 0
 	}

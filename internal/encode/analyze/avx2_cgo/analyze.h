@@ -8,21 +8,21 @@ typedef struct {
     int64_t Min;
     int64_t Max;
     int64_t Delta;
-    int64_t NumRuns;
+    uint32_t NumRuns;
 } I64Context;
 
 typedef struct {
     uint64_t Min;
     uint64_t Max;
     uint64_t Delta;
-    uint64_t NumRuns;
+    uint32_t NumRuns;
 } U64Context;
 
 typedef struct {
     int32_t Min;
     int32_t Max;
     int32_t Delta;
-    int32_t NumRuns;
+    uint32_t NumRuns;
 } I32Context;
 
 typedef struct {
@@ -36,28 +36,28 @@ typedef struct {
     int16_t Min;
     int16_t Max;
     int16_t Delta;
-    int16_t NumRuns;
+    uint32_t NumRuns;
 } I16Context;
 
 typedef struct {
     uint16_t Min;
     uint16_t Max;
     uint16_t Delta;
-    uint16_t NumRuns;
+    uint32_t NumRuns;
 } U16Context;
 
 typedef struct {
     int8_t Min;
     int8_t Max;
     int8_t Delta;
-    int8_t NumRuns;
+    uint32_t NumRuns;
 } I8Context;
 
 typedef struct {
     uint8_t Min;
     uint8_t Max;
     uint8_t Delta;
-    uint8_t NumRuns;
+    uint32_t NumRuns;
 } U8Context;
 
 void analyze_i64_avx2(int64_t* vals, I64Context* ctx, size_t len);

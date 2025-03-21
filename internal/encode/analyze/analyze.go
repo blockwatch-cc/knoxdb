@@ -25,7 +25,7 @@ var (
 func init() {
 	switch {
 	case util.UseAVX2:
-		// AnalyzeInt64 = avx2.AnalyzeInt64
+		AnalyzeInt64 = avx2.AnalyzeInt64
 		AnalyzeInt32 = avx2.AnalyzeInt32
 		AnalyzeInt16 = avx2.AnalyzeInt16
 		AnalyzeInt8 = avx2.AnalyzeInt8

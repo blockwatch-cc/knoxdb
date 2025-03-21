@@ -16,7 +16,7 @@ void analyze_i64_avx2(int64_t* vals, I64Context* ctx, size_t len) {
     int64_t num_runs = 1;
     int hasDelta = (ctx->Delta != 0 && len > 1);
     __m256i delta_vec = _mm256_set1_epi64x(ctx->Delta);
-    __m256i prev_vec = _mm256_setzero_si256();
+    int64_t last_prev = vals[0];
 
     size_t i = 0;
     for (; i + 3 < len; i += 4) {
@@ -25,7 +25,6 @@ void analyze_i64_avx2(int64_t* vals, I64Context* ctx, size_t len) {
         min_vec = _mm256_blendv_epi8(min_vec, curr_vec, _mm256_cmpgt_epi64(min_vec, curr_vec));
         max_vec = _mm256_blendv_epi8(max_vec, curr_vec, _mm256_cmpgt_epi64(curr_vec, max_vec));
 
-        int64_t last_prev = (i == 0) ? vals[0] : vals[i - 1];
         __m256i shifted = _mm256_permute4x64_epi64(curr_vec, _MM_SHUFFLE(2, 1, 0, 3));
         shifted = _mm256_insert_epi64(shifted, last_prev, 0);
         __m256i eq = _mm256_cmpeq_epi64(curr_vec, shifted);
@@ -35,8 +34,7 @@ void analyze_i64_avx2(int64_t* vals, I64Context* ctx, size_t len) {
             __m256i intra_diffs = _mm256_sub_epi64(curr_vec, shifted);
             eq = _mm256_cmpeq_epi64(intra_diffs, delta_vec);
             int mask = _mm256_movemask_pd(_mm256_castsi256_pd(eq));
-            int valid_lanes = (len - i - 1) > 3 ? 3 : (len - i - 1);
-            int expected = (1 << valid_lanes) - 1;
+            int expected = 0xf;
             if (i == 0) {
                 mask &= ~1;
                 expected &= ~1;
@@ -46,7 +44,7 @@ void analyze_i64_avx2(int64_t* vals, I64Context* ctx, size_t len) {
             }
         }
 
-        prev_vec = curr_vec;
+        last_prev = vals[i + 3];
     }
 
     // Min/Max Reduction
@@ -66,8 +64,9 @@ void analyze_i64_avx2(int64_t* vals, I64Context* ctx, size_t len) {
     for (; i < len; i++) {
         if (vals[i] < ctx->Min) ctx->Min = vals[i];
         if (vals[i] > ctx->Max) ctx->Max = vals[i];
-        if (i > 0 && vals[i] != vals[i - 1]) num_runs++;
-        if (hasDelta && i < len - 1 && vals[i + 1] - vals[i] != ctx->Delta) hasDelta = 0;
+        if (i > 0 && vals[i] != last_prev) num_runs++;
+        if (hasDelta && i > 0 && vals[i] - last_prev != ctx->Delta) hasDelta = 0;
+        last_prev = vals[i];
     }
 
     ctx->NumRuns = num_runs;
@@ -88,7 +87,7 @@ void analyze_u64_avx2(uint64_t* vals, U64Context* ctx, size_t len) {
     uint64_t num_runs = 1;
     int hasDelta = (ctx->Delta != 0 && len > 1);
     __m256i delta_vec = _mm256_set1_epi64x((int64_t)ctx->Delta);
-    __m256i prev_vec = _mm256_setzero_si256();
+    uint64_t last_prev = vals[0];
 
     size_t i = 0;
     for (; i + 3 < len; i += 4) {
@@ -97,7 +96,6 @@ void analyze_u64_avx2(uint64_t* vals, U64Context* ctx, size_t len) {
         min_vec = _mm256_blendv_epi8(min_vec, curr_vec, _mm256_cmpgt_epi64(min_vec, curr_vec));
         max_vec = _mm256_blendv_epi8(max_vec, curr_vec, _mm256_cmpgt_epi64(curr_vec, max_vec));
 
-        uint64_t last_prev = (i == 0) ? vals[0] : vals[i - 1];
         __m256i shifted = _mm256_permute4x64_epi64(curr_vec, _MM_SHUFFLE(2, 1, 0, 3));
         shifted = _mm256_insert_epi64(shifted, (int64_t)last_prev, 0);
         __m256i eq = _mm256_cmpeq_epi64(curr_vec, shifted);
@@ -107,8 +105,7 @@ void analyze_u64_avx2(uint64_t* vals, U64Context* ctx, size_t len) {
             __m256i intra_diffs = _mm256_sub_epi64(curr_vec, shifted);
             eq = _mm256_cmpeq_epi64(intra_diffs, delta_vec);
             int mask = _mm256_movemask_pd(_mm256_castsi256_pd(eq));
-            int valid_lanes = (len - i - 1) > 3 ? 3 : (len - i - 1);
-            int expected = (1 << valid_lanes) - 1;
+            int expected = 0xf;
             if (i == 0) {
                 mask &= ~1;
                 expected &= ~1;
@@ -118,7 +115,7 @@ void analyze_u64_avx2(uint64_t* vals, U64Context* ctx, size_t len) {
             }
         }
 
-        prev_vec = curr_vec;
+        last_prev = vals[i + 3];
     }
 
     // Min/Max Reduction
@@ -138,8 +135,9 @@ void analyze_u64_avx2(uint64_t* vals, U64Context* ctx, size_t len) {
     for (; i < len; i++) {
         if (vals[i] < ctx->Min) ctx->Min = vals[i];
         if (vals[i] > ctx->Max) ctx->Max = vals[i];
-        if (i > 0 && vals[i] != vals[i - 1]) num_runs++;
-        if (hasDelta && i < len - 1 && vals[i + 1] - vals[i] != (int64_t)ctx->Delta) hasDelta = 0;
+        if (i > 0 && vals[i] != last_prev) num_runs++;
+        if (hasDelta && i > 0 && vals[i] - last_prev != (int64_t)ctx->Delta) hasDelta = 0;
+        last_prev = vals[i];
     }
 
     ctx->NumRuns = num_runs;
@@ -160,7 +158,7 @@ void analyze_i32_avx2(int32_t* vals, I32Context* ctx, size_t len) {
     int32_t num_runs = 1;
     int hasDelta = (ctx->Delta != 0 && len > 1);
     __m256i delta_vec = _mm256_set1_epi32(ctx->Delta);
-    __m256i prev_vec = _mm256_setzero_si256();
+    int32_t last_prev = vals[0];
 
     size_t i = 0;
     for (; i + 7 < len; i += 8) {
@@ -168,7 +166,6 @@ void analyze_i32_avx2(int32_t* vals, I32Context* ctx, size_t len) {
         min_vec = _mm256_min_epi32(min_vec, curr_vec);
         max_vec = _mm256_max_epi32(max_vec, curr_vec);
 
-        int32_t last_prev = (i == 0) ? vals[0] : vals[i - 1];
         __m256i shifted = _mm256_insert_epi32(_mm256_permutevar8x32_epi32(curr_vec, _mm256_set_epi32(6, 5, 4, 3, 2, 1, 0, 7)), last_prev, 0);
         __m256i eq = _mm256_cmpeq_epi32(curr_vec, shifted);
         num_runs += _mm_popcnt_u32(~_mm256_movemask_ps(_mm256_castsi256_ps(eq)) & 0xFF);
@@ -177,8 +174,7 @@ void analyze_i32_avx2(int32_t* vals, I32Context* ctx, size_t len) {
             __m256i intra_diffs = _mm256_sub_epi32(curr_vec, shifted);
             eq = _mm256_cmpeq_epi32(intra_diffs, delta_vec);
             int mask = _mm256_movemask_ps(_mm256_castsi256_ps(eq));
-            int valid_lanes = (len - i - 1) > 7 ? 7 : (len - i - 1);
-            int expected = (1 << valid_lanes) - 1;
+            int expected = 0xff;
             if (i == 0) {
                 mask &= ~1;
                 expected &= ~1;
@@ -188,7 +184,7 @@ void analyze_i32_avx2(int32_t* vals, I32Context* ctx, size_t len) {
             }
         }
 
-        prev_vec = curr_vec;
+        last_prev = vals[i + 7];
     }
 
     // Min/Max Reduction
@@ -206,8 +202,9 @@ void analyze_i32_avx2(int32_t* vals, I32Context* ctx, size_t len) {
     for (; i < len; i++) {
         if (vals[i] < ctx->Min) ctx->Min = vals[i];
         if (vals[i] > ctx->Max) ctx->Max = vals[i];
-        if (i > 0 && vals[i] != vals[i - 1]) num_runs++;
-        if (hasDelta && i < len - 1 && vals[i + 1] - vals[i] != ctx->Delta) hasDelta = 0;
+        if (i > 0 && vals[i] != last_prev) num_runs++;
+        if (hasDelta && i > 0 && vals[i] - last_prev != ctx->Delta) hasDelta = 0;
+        last_prev = vals[i];
     }
 
     ctx->NumRuns = num_runs;
@@ -228,7 +225,7 @@ void analyze_u32_avx2(uint32_t* vals, U32Context* ctx, size_t len) {
     uint32_t num_runs = 1;
     int hasDelta = (ctx->Delta != 0 && len > 1);
     __m256i delta_vec = _mm256_set1_epi32((int32_t)ctx->Delta);
-    __m256i prev_vec = _mm256_setzero_si256();
+    uint32_t last_prev = vals[0];
 
     size_t i = 0;
     for (; i + 7 < len; i += 8) {
@@ -239,7 +236,6 @@ void analyze_u32_avx2(uint32_t* vals, U32Context* ctx, size_t len) {
         max_vec = _mm256_max_epu32(max_vec, curr_vec);
 
         // Runs
-        uint32_t last_prev = (i == 0) ? vals[0] : vals[i - 1];
         __m256i shifted = _mm256_insert_epi32(_mm256_permutevar8x32_epi32(curr_vec, _mm256_set_epi32(6, 5, 4, 3, 2, 1, 0, 7)), (int32_t)last_prev, 0);
         __m256i eq = _mm256_cmpeq_epi32(curr_vec, shifted);
         num_runs += _mm_popcnt_u32(~_mm256_movemask_ps(_mm256_castsi256_ps(eq)) & 0xFF);
@@ -249,8 +245,7 @@ void analyze_u32_avx2(uint32_t* vals, U32Context* ctx, size_t len) {
             __m256i intra_diffs = _mm256_sub_epi32(curr_vec, shifted);
             eq = _mm256_cmpeq_epi32(intra_diffs, delta_vec);
             int mask = _mm256_movemask_ps(_mm256_castsi256_ps(eq));
-            int valid_lanes = (len - i - 1) > 7 ? 7 : (len - i - 1);
-            int expected = (1 << valid_lanes) - 1;
+            int expected = 0xff;
             if (i == 0) {
                 mask &= ~1;
                 expected &= ~1;
@@ -260,7 +255,7 @@ void analyze_u32_avx2(uint32_t* vals, U32Context* ctx, size_t len) {
             }
         }
 
-        prev_vec = curr_vec;
+        last_prev = vals[i + 7];
     }
 
     // Min/Max Reduction
@@ -278,8 +273,9 @@ void analyze_u32_avx2(uint32_t* vals, U32Context* ctx, size_t len) {
     for (; i < len; i++) {
         if (vals[i] < ctx->Min) ctx->Min = vals[i];
         if (vals[i] > ctx->Max) ctx->Max = vals[i];
-        if (i > 0 && vals[i] != vals[i - 1]) num_runs++;
-        if (hasDelta && i < len - 1 && vals[i + 1] - vals[i] != (int32_t)ctx->Delta) hasDelta = 0;
+        if (i > 0 && vals[i] != last_prev) num_runs++;
+        if (hasDelta && i > 0 && vals[i] - last_prev != (int32_t)ctx->Delta) hasDelta = 0;
+        last_prev = vals[i];
     }
 
     ctx->NumRuns = num_runs;
@@ -314,7 +310,7 @@ void analyze_i16_avx2(int16_t* vals, I16Context* ctx, size_t len) {
         __m128i eq_lo = _mm256_castsi256_si128(eq);
         __m128i eq_hi = _mm256_extracti128_si256(eq, 1);
         __m128i packed = _mm_packs_epi16(eq_lo, eq_hi);
-        num_runs += _mm_popcnt_u32(~_mm_movemask_epi8(packed) & 0xFFFF) - (i == 0 ? 1 : 0);
+        num_runs += _mm_popcnt_u32(~_mm_movemask_epi8(packed) & (0xFFFF - (i == 0 ? 1 : 0)));
 
         if (hasDelta && i < len - 1) {
             __m256i intra_diffs = _mm256_sub_epi16(curr_vec, shifted);
@@ -323,8 +319,7 @@ void analyze_i16_avx2(int16_t* vals, I16Context* ctx, size_t len) {
             eq_hi = _mm256_extracti128_si256(eq, 1);
             packed = _mm_packs_epi16(eq_lo, eq_hi);
             int mask = _mm_movemask_epi8(packed);
-            int valid_lanes = (len - i) > 16 ? 16 : (len - i);
-            int expected = (1 << valid_lanes) - 1;
+            int expected = 0xffff;
             if (i == 0) {
                 mask &= ~1;
                 expected &= ~1;
@@ -355,7 +350,7 @@ void analyze_i16_avx2(int16_t* vals, I16Context* ctx, size_t len) {
         if (vals[i] < ctx->Min) ctx->Min = vals[i];
         if (vals[i] > ctx->Max) ctx->Max = vals[i];
         if (i > 0 && vals[i] != vals[i - 1]) num_runs++;
-        if (hasDelta && i < len - 1 && vals[i + 1] - vals[i] != ctx->Delta) hasDelta = 0;
+        if (hasDelta && i > 0 && vals[i] - vals[i-1] != ctx->Delta) hasDelta = 0;
     }
 
     ctx->NumRuns = num_runs;
@@ -390,7 +385,7 @@ void analyze_u16_avx2(uint16_t* vals, U16Context* ctx, size_t len) {
         __m128i eq_lo = _mm256_castsi256_si128(eq);
         __m128i eq_hi = _mm256_extracti128_si256(eq, 1);
         __m128i packed = _mm_packs_epi16(eq_lo, eq_hi);
-        num_runs += _mm_popcnt_u32(~_mm_movemask_epi8(packed) & 0xFFFF) - (i == 0 ? 1 : 0);
+        num_runs += _mm_popcnt_u32(~_mm_movemask_epi8(packed) & (0xFFFF - (i == 0 ? 1 : 0)));
 
         if (hasDelta && i < len - 1) {
             __m256i intra_diffs = _mm256_sub_epi16(curr_vec, shifted);
@@ -399,8 +394,7 @@ void analyze_u16_avx2(uint16_t* vals, U16Context* ctx, size_t len) {
             eq_hi = _mm256_extracti128_si256(eq, 1);
             packed = _mm_packs_epi16(eq_lo, eq_hi);
             int mask = _mm_movemask_epi8(packed);
-            int valid_lanes = (len - i) > 16 ? 16 : (len - i);
-            int expected = (1 << valid_lanes) - 1;
+            int expected = 0xffff;
             if (i == 0) {
                 mask &= ~1;
                 expected &= ~1;
@@ -431,7 +425,7 @@ void analyze_u16_avx2(uint16_t* vals, U16Context* ctx, size_t len) {
         if (vals[i] < ctx->Min) ctx->Min = vals[i];
         if (vals[i] > ctx->Max) ctx->Max = vals[i];
         if (i > 0 && vals[i] != vals[i - 1]) num_runs++;
-        if (hasDelta && i < len - 1 && vals[i + 1] - vals[i] != (int16_t)ctx->Delta) hasDelta = 0;
+        if (hasDelta && i > 0 && vals[i] - vals[i-1] != (int16_t)ctx->Delta) hasDelta = 0;
     }
 
     ctx->NumRuns = num_runs;
@@ -463,14 +457,13 @@ void analyze_i8_avx2(int8_t* vals, I8Context* ctx, size_t len) {
         __m256i perm = _mm256_permute2f128_si256(prev_vec, curr_vec, 0x21);
         __m256i shifted = _mm256_alignr_epi8(curr_vec, perm, 15);
         __m256i eq = _mm256_cmpeq_epi8(curr_vec, shifted);
-        num_runs += _mm_popcnt_u32(~_mm256_movemask_epi8(eq) & 0xFFFFFFFF) - (i == 0 ? 1 : 0);
+        num_runs += _mm_popcnt_u32(~_mm256_movemask_epi8(eq) & (0xFFFFFFFF - (i == 0 ? 1 : 0)));
 
         if (hasDelta && i < len - 1) {
             __m256i intra_diffs = _mm256_sub_epi8(curr_vec, shifted);
             eq = _mm256_cmpeq_epi8(intra_diffs, delta_vec);
             int mask = _mm256_movemask_epi8(eq);
-            int valid_lanes = (len - i) > 32 ? 32 : (len - i);
-            int expected = (1 << valid_lanes) - 1;
+            int expected = 0xffffffff;
             if (i == 0) {
                 mask &= ~1;
                 expected &= ~1;
@@ -503,7 +496,7 @@ void analyze_i8_avx2(int8_t* vals, I8Context* ctx, size_t len) {
         if (vals[i] < ctx->Min) ctx->Min = vals[i];
         if (vals[i] > ctx->Max) ctx->Max = vals[i];
         if (i > 0 && vals[i] != vals[i - 1]) num_runs++;
-        if (hasDelta && i < len - 1 && vals[i + 1] - vals[i] != ctx->Delta) hasDelta = 0;
+        if (hasDelta && i > 0 && vals[i] - vals[i-1] != ctx->Delta) hasDelta = 0;
     }
 
     ctx->NumRuns = num_runs;
@@ -536,14 +529,13 @@ void analyze_u8_avx2(uint8_t* vals, U8Context* ctx, size_t len) {
         __m256i shifted = _mm256_alignr_epi8(curr_vec, perm, 15);
 
         __m256i eq = _mm256_cmpeq_epi8(curr_vec, shifted);
-        num_runs += _mm_popcnt_u32(~_mm256_movemask_epi8(eq) & 0xFFFFFFFF) - (i == 0 ? 1 : 0);
+        num_runs += _mm_popcnt_u32(~_mm256_movemask_epi8(eq) & (0xFFFFFFFF - (i == 0 ? 1 : 0)));
 
         if (hasDelta && i < len - 1) {
             __m256i intra_diffs = _mm256_sub_epi8(curr_vec, shifted);
             eq = _mm256_cmpeq_epi8(intra_diffs, delta_vec);
             int mask = _mm256_movemask_epi8(eq);
-            int valid_lanes = (len - i) > 32 ? 32 : (len - i);
-            int expected = (1 << valid_lanes) - 1;
+            int expected = 0xffffffff;
             if (i == 0) {
                 mask &= ~1;
                 expected &= ~1;
@@ -576,7 +568,7 @@ void analyze_u8_avx2(uint8_t* vals, U8Context* ctx, size_t len) {
         if (vals[i] < ctx->Min) ctx->Min = vals[i];
         if (vals[i] > ctx->Max) ctx->Max = vals[i];
         if (i > 0 && vals[i] != vals[i - 1]) num_runs++;
-        if (hasDelta && i < len - 1 && vals[i + 1] - vals[i] != (int8_t)ctx->Delta) hasDelta = 0;
+        if (hasDelta && i > 0 && vals[i] - vals[i-1] != (int8_t)ctx->Delta) hasDelta = 0;
     }
 
     ctx->NumRuns = num_runs;

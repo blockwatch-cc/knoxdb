@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 //go:build !amd64 || appengine || gccgo
@@ -8,7 +8,7 @@ package avx2
 
 import "blockwatch.cc/knoxdb/internal/encode/analyze/generic"
 
-// Go package exports
+// Go package exports when compiling on non-amd64
 var (
 	AnalyzeInt64 = generic.Analyze[int64]
 	AnalyzeInt32 = generic.Analyze[int32]

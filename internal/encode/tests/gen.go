@@ -205,3 +205,19 @@ func GenRuns[T types.Integer](n, r int) []T {
 	}
 	return res
 }
+
+func Repeat[T types.Integer](val T, n int) []T {
+	result := make([]T, n)
+	for i := range result {
+		result[i] = val
+	}
+	return result
+}
+
+func Sequence[T types.Integer](start, end T) []T {
+	result := make([]T, int(end-start))
+	for i := range result {
+		result[i] = start + T(i)
+	}
+	return result
+}
