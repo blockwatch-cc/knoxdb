@@ -66,15 +66,16 @@ first_loop:
 
 vector_loop:
     VMOVDQU (R8)(BX*8), Y1 // Y1 = curr_vec
+    VMOVDQU -8(R8)(BX*8), Y2 // Y2 = load prev_vec (faster than shift)
     VPCMPGTQ Y1, Y4, Y0
     VPBLENDVB Y0, Y1, Y4, Y4
     VPCMPGTQ Y5, Y1, Y3
     VPBLENDVB Y3, Y1, Y5, Y5
 
     // Create shifted vector
-    VPERMQ $0x93, Y1, Y2
-    VPINSRQ $0, R13, X2, X6
-    VINSERTI128 $0, X6, Y2, Y2
+    //VPERMQ $0x93, Y1, Y2
+    //VPINSRQ $0, R13, X2, X6
+    //VINSERTI128 $0, X6, Y2, Y2
 
     // count num_runs
     VPCMPEQQ Y1, Y2, Y6
@@ -95,7 +96,7 @@ vector_loop:
 
 next_iter:
     ADDQ $4, BX
-    MOVQ -8(R8)(BX*8), R13
+    //MOVQ -8(R8)(BX*8), R13  // no need to load last_prev without shift
     CMPQ BX, R12
     JB vector_loop
 
@@ -116,6 +117,7 @@ next_iter:
     VPCMPGTQ Y1, Y0, Y3
     VPBLENDVB Y3, Y0, Y1, Y0
     VMOVQ X0, DX           // Extract from Y0
+    MOVQ -8(R8)(BX*8), R13 // load last_prev to init tail loop
     JMP tail_loop
 
 tail_loop_reset:
