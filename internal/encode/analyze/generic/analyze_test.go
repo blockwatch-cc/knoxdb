@@ -6,7 +6,7 @@ package generic
 import (
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/encode/tests"
+	"blockwatch.cc/knoxdb/internal/encode/analyze/tests"
 )
 
 func TestAnalyzeInt64(t *testing.T) {
