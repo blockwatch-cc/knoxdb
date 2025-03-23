@@ -4,9 +4,6 @@
 package tests
 
 import (
-	"testing"
-	"unsafe"
-
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
@@ -39,17 +36,5 @@ func MakeBenchmarks[T types.Integer]() []Benchmark[T] {
 		{"seq_1K", GenSequence[T](1024)},
 		{"seq_16K", GenSequence[T](16 * 1024)},
 		{"seq_64K", GenSequence[T](64 * 1024)},
-	}
-}
-
-func AnalyzeBenchmark[T types.Integer](b *testing.B, fn AnalyzeFunc[T]) {
-	for _, c := range MakeBenchmarks[T]() {
-		b.Run(c.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(len(c.Data) * int(unsafe.Sizeof(T(0)))))
-			for i := 0; i < b.N; i++ {
-				fn(c.Data)
-			}
-		})
 	}
 }

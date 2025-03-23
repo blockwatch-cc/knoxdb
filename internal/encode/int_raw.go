@@ -5,6 +5,7 @@ package encode
 
 import (
 	"sync"
+	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -51,6 +52,7 @@ func (c *RawContainer[T]) Load(buf []byte) ([]byte, error) {
 	v, n := num.Uvarint(buf)
 	buf = buf[n:]
 	c.Values = util.FromByteSlice[T](buf[:int(v)])
+	c.sz = int(unsafe.Sizeof(T(0)))
 	return buf[int(v):], nil
 }
 

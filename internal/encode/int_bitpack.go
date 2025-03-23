@@ -67,7 +67,7 @@ func (c *BitpackContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[n:]
 
 	// reference next sz bytes as bitpacked data
-	sz := c.Log2*c.N/8 + 1
+	sz := (c.Log2*c.N + 7) / 8 // + 1
 	c.Packed = buf[:sz]
 	return buf[sz:], nil
 }
@@ -84,7 +84,7 @@ func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 }
 
 func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
-	sz := ctx.UseBits*len(vals)/8 + 1
+	sz := (ctx.UseBits*len(vals) + 7) / 8
 	c.Packed = arena.Alloc(arena.AllocBytes, sz).([]byte)[:sz]
 	c.free = true
 	c.Log2 = ctx.UseBits

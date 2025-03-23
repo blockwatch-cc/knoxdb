@@ -18,14 +18,14 @@ import (
 type Simple8Container[T types.Integer] struct {
 	For      T
 	Packed   []byte
-	Unpacked []T      // TODO: we could walk selectors manually without copy
-	u64      []uint64 // scratch array
+	Unpacked []T // TODO: we could walk selectors manually without copy
+	free     bool
 }
 
 func (c *Simple8Container[T]) Close() {
-	if c.u64 != nil {
-		arena.Free(arena.AllocUint64, c.u64)
-		c.u64 = nil
+	if c.free {
+		arena.Free(arena.AllocBytes, c.Packed)
+		c.free = false
 	}
 	c.Packed = nil
 	if c.Unpacked != nil {
@@ -70,6 +70,7 @@ func (c *Simple8Container[T]) Load(buf []byte) ([]byte, error) {
 	v, n = num.Uvarint(buf)
 	buf = buf[n:]
 	c.Packed = buf[:int(v)]
+	c.free = false
 	return buf[int(v):], nil
 }
 
@@ -93,29 +94,64 @@ func (c *Simple8Container[T]) AppendTo(sel []uint32, dst []T) []T {
 func (c *Simple8Container[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
 	c.For = ctx.Min
 
-	// s8b encoder works in-place on a u64 slice; consider overflows when ctx.Min is close to
-	// signed int[8|16|32|64]-min
-	c.u64 = arena.Alloc(arena.AllocUint64, len(vals)).([]uint64)[:len(vals)]
-	for64 := uint64(c.For)
-	for i, v := range vals {
-		c.u64[i] = uint64(v) - for64
-	}
-
-	// encode reusing src buffer
+	sz := s8b.EstimateMaxSize(len(vals), ctx.Min, ctx.Max) * 8
+	buf := arena.Alloc(arena.AllocBytes, sz).([]byte)[:sz]
 	var err error
-	c.u64, err = s8b.EncodeUint64(c.u64)
+	switch any(T(0)).(type) {
+	case int64:
+		v := util.ReinterpretSlice[T, int64](vals)
+		buf, err = s8b.EncodeInt64(buf, v, int64(ctx.Min), int64(ctx.Max))
+	case uint64:
+		v := util.ReinterpretSlice[T, uint64](vals)
+		buf, err = s8b.EncodeUint64(buf, v, uint64(ctx.Min), uint64(ctx.Max))
+	case int32:
+		v := util.ReinterpretSlice[T, int32](vals)
+		buf, err = s8b.EncodeInt32(buf, v, int32(ctx.Min), int32(ctx.Max))
+	case uint32:
+		v := util.ReinterpretSlice[T, uint32](vals)
+		buf, err = s8b.EncodeUint32(buf, v, uint32(ctx.Min), uint32(ctx.Max))
+	case int16:
+		v := util.ReinterpretSlice[T, int16](vals)
+		buf, err = s8b.EncodeInt16(buf, v, int16(ctx.Min), int16(ctx.Max))
+	case uint16:
+		v := util.ReinterpretSlice[T, uint16](vals)
+		buf, err = s8b.EncodeUint16(buf, v, uint16(ctx.Min), uint16(ctx.Max))
+	case int8:
+		v := util.ReinterpretSlice[T, int8](vals)
+		buf, err = s8b.EncodeInt8(buf, v, int8(ctx.Min), int8(ctx.Max))
+	case uint8:
+		v := util.ReinterpretSlice[T, uint8](vals)
+		buf, err = s8b.EncodeUint8(buf, v, uint8(ctx.Min), uint8(ctx.Max))
+	}
 	if err != nil {
 		panic(err)
 	}
-	c.Packed = util.ToByteSlice(c.u64)
+	c.Packed = buf
+	c.free = true
+
+	// // s8b encoder works in-place on a u64 slice; consider overflows when ctx.Min is close to
+	// // signed int[8|16|32|64]-min
+	// c.u64 = arena.Alloc(arena.AllocUint64, len(vals)).([]uint64)[:len(vals)]
+	// for64 := uint64(c.For)
+	// for i, v := range vals {
+	// 	c.u64[i] = uint64(v) - for64
+	// }
+
+	// // encode reusing src buffer
+	// var err error
+	// c.u64, err = s8b.EncodeUint64(c.u64)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// c.Packed = util.ToByteSlice(c.u64)
 
 	return c
 }
 
-func (c *Simple8Container[T]) decodeAll() error {
+func (c *Simple8Container[T]) decodeAll() {
 	n, err := s8b.CountValues(c.Packed)
 	if err != nil {
-		return err
+		panic(err)
 	}
 	switch int(unsafe.Sizeof(c.For)) {
 	case 8:
@@ -135,7 +171,9 @@ func (c *Simple8Container[T]) decodeAll() error {
 		n, err = s8b.DecodeUint8(u8, c.Packed)
 		c.Unpacked = util.ReinterpretSlice[uint8, T](u8[:n])
 	}
-	return err
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (c *Simple8Container[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {

@@ -167,7 +167,7 @@ func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
 	if c.UseBits+8 < c.PhyBits {
 		schemes = append(schemes, TIntegerBitpacked)
 	}
-	// simple 8 requires max 60bit values
+	// simple 8 requires max 60bit values but is inefficient if many values are > 20bit
 	if c.UseBits <= 60 {
 		schemes = append(schemes, TIntegerSimple8)
 	}

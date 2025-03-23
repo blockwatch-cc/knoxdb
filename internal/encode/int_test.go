@@ -216,7 +216,7 @@ func testEncodeIntT[T types.Integer](t *testing.T) {
 }
 
 func BenchmarkAnalyzeInt(b *testing.B) {
-	for _, c := range tests.Benchmarks {
+	for _, c := range tests.MakeBenchmarks[uint64]() {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
@@ -229,7 +229,7 @@ func BenchmarkAnalyzeInt(b *testing.B) {
 }
 
 func BenchmarkEstimateInt(b *testing.B) {
-	for _, c := range tests.Benchmarks {
+	for _, c := range tests.MakeBenchmarks[uint64]() {
 		ctx := AnalyzeInt(c.Data, true)
 		for _, scheme := range []IntegerContainerType{
 			TIntegerConstant,
@@ -281,7 +281,7 @@ func BenchmarkEncodeInt(b *testing.B) {
 }
 
 func BenchmarkEncodeBestInt(b *testing.B) {
-	for _, c := range tests.Benchmarks {
+	for _, c := range tests.MakeBenchmarks[uint64]() {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
@@ -294,13 +294,13 @@ func BenchmarkEncodeBestInt(b *testing.B) {
 }
 
 func BenchmarkEncodeLegacyInt(b *testing.B) {
-	for _, c := range tests.Benchmarks {
+	for _, c := range tests.MakeBenchmarks[uint64]() {
 		buf := bytes.NewBuffer(make([]byte, zip.Int64EncodedSize(len(c.Data))))
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
 			for i := 0; i < b.N; i++ {
-				_, _ = zip.EncodeInt64(c.Data, buf)
+				_, _ = zip.EncodeUint64(c.Data, buf)
 				buf.Reset()
 			}
 		})
