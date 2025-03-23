@@ -8,7 +8,6 @@ package avx2
 
 import (
 	"encoding/binary"
-	"errors"
 
 	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -26,14 +25,12 @@ func init() {
 var (
 	packing16  = [16]int{240, 120, 60, 30, 20, 15, 12, 10, 8, 7, 6, 5, 4, 3, 2, 1}
 	bufOvUint8 = [16]int{0, 0, 0, 2, 0, 1, 4, 6, 0, 1, 0, 0, 0, 0, 0, 0}
-
-	ErrShortSource = errors.New("src length is not multiple of 8")
 )
 
 func DecodeUint8(dst []uint8, src []byte) (int, error) {
 	pos := len(src)
 	if pos&7 != 0 {
-		return 0, ErrShortSource
+		return 0, generic.ErrInvalidBufferLength
 	}
 
 	var max_pos int = pos
@@ -59,7 +56,7 @@ var bufOvUint16 = [16]int{0, 0, 4, 2, 0, 1, 4, 6, 0, 1, 2, 0, 0, 1, 0, 0}
 func DecodeUint16(dst []uint16, src []byte) (int, error) {
 	pos := len(src)
 	if pos&7 != 0 {
-		return 0, ErrShortSource
+		return 0, generic.ErrInvalidBufferLength
 	}
 
 	var max_pos int = pos
@@ -85,7 +82,7 @@ var bufOvUint32 = [16]int{0, 0, 0, 2, 0, 1, 0, 0, 0, 1, 2, 3, 0, 1, 0, 0}
 func DecodeUint32(dst []uint32, src []byte) (int, error) {
 	pos := len(src)
 	if pos&7 != 0 {
-		return 0, ErrShortSource
+		return 0, generic.ErrInvalidBufferLength
 	}
 
 	var max_pos int = pos
@@ -112,7 +109,7 @@ func DecodeUint64(dst []uint64, src []byte) (int, error) {
 
 func CountValues(src []byte) (int, error) {
 	if len(src)&7 != 0 {
-		return 0, ErrShortSource
+		return 0, generic.ErrInvalidBufferLength
 	}
 	return countValuesAVX2Core(src), nil
 }

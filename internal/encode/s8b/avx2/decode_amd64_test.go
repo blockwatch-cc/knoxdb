@@ -7,327 +7,53 @@
 package avx2
 
 import (
-	"encoding/binary"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
-	"github.com/google/go-cmp/cmp"
 )
 
-var (
-	EncodeUint64   = generic.EncodeUint64
-	s8bTestsUint64 = tests.S8bTestsUint64
-	s8bTestsUint32 = tests.S8bTestsUint32
-	s8bTestsUint16 = tests.S8bTestsUint16
-	s8bTestsUint8  = tests.S8bTestsUint8
-
-	s8bBenchmarkSize    = tests.S8bBenchmarkSize
-	s8bBenchmarksUint64 = tests.S8bBenchmarksUint64
-	s8bBenchmarksUint32 = tests.S8bBenchmarksUint32
-	s8bBenchmarksUint16 = tests.S8bBenchmarksUint16
-	s8bBenchmarksUint8  = tests.S8bBenchmarksUint8
-)
-
-func TestEncodeUint64AVX2(t *testing.T) {
+func TestDecodeUint64(t *testing.T) {
 	if !util.UseAVX2 {
 		t.Skip()
 	}
-
-	for _, test := range s8bTestsUint64 {
-		if test.Fn != nil {
-			test.In = test.Fn()
-		}
-
-		encoded, err := EncodeUint64(append(make([]uint64, 0, len(test.In)), test.In...))
-		if err != nil {
-			if !test.Err {
-				t.Fatalf("%s: expected encode error, got\n%s", test.Name, err)
-			}
-			return
-		}
-
-		buf := make([]byte, 8*len(encoded))
-		b := buf
-		for _, v := range encoded {
-			binary.LittleEndian.PutUint64(b, v)
-			b = b[8:]
-		}
-
-		count, err := CountValues(buf)
-		if err != nil {
-			t.Fatalf("%s: unexpected count error\n%s", test.Name, err)
-		}
-		if count != len(test.In) {
-			t.Fatalf("%s: unexpected count: got %d expected %d", test.Name, count, len(test.In))
-		}
-
-		decoded := make([]uint64, len(test.In))
-		n, _ := DecodeUint64(decoded, buf)
-
-		if !cmp.Equal(decoded[:n], test.In) {
-			t.Fatalf("%s: unexpected values; +got/-exp\n%s", test.Name, cmp.Diff(decoded, test.In))
-		}
-	}
+	tests.EncodeTest[uint64](t, generic.Encode[uint64], DecodeUint64)
 }
 
-func TestEncodeUint32AVX2(t *testing.T) {
+func TestDecodeUint32(t *testing.T) {
 	if !util.UseAVX2 {
 		t.Skip()
 	}
-
-	for _, test := range s8bTestsUint32 {
-		if test.Fn != nil {
-			test.In = test.Fn()
-		}
-
-		tmp := make([]uint64, len(test.In))
-		for i := 0; i < len(tmp); i++ {
-			tmp[i] = uint64(test.In[i])
-		}
-		encoded, err := EncodeUint64(append(make([]uint64, 0, len(test.In)), tmp...))
-		if err != nil {
-			if !test.Err {
-				t.Fatalf("%s: expected encode error, got\n%s", test.Name, err)
-			}
-			return
-		}
-		buf := make([]byte, 8*len(encoded))
-		b := buf
-		for _, v := range encoded {
-			binary.LittleEndian.PutUint64(b, v)
-			b = b[8:]
-		}
-
-		count, err := CountValues(buf)
-		if err != nil {
-			t.Fatalf("%s: unexpected count error\n%s", test.Name, err)
-		}
-		if count != len(test.In) {
-			t.Fatalf("%s: unexpected count: got %d expected %d", test.Name, count, len(test.In))
-		}
-
-		decoded := make([]uint32, len(test.In))
-		n, err := DecodeUint32(decoded, buf)
-		if err != nil {
-			t.Fatalf("%s: unexpected decode error\n%s", test.Name, err)
-		}
-
-		if !cmp.Equal(decoded[:n], test.In) {
-			t.Fatalf("%s: unexpected values; +got/-exp\n%s", test.Name, cmp.Diff(decoded, test.In))
-		}
-	}
+	tests.EncodeTest[uint32](t, generic.Encode[uint32], DecodeUint32)
 }
 
-func TestEncodeUint16AVX2(t *testing.T) {
+func TestDecodeUint16(t *testing.T) {
 	if !util.UseAVX2 {
 		t.Skip()
 	}
-
-	for _, test := range s8bTestsUint16 {
-		if test.Fn != nil {
-			test.In = test.Fn()
-		}
-
-		tmp := make([]uint64, len(test.In))
-		for i := 0; i < len(tmp); i++ {
-			tmp[i] = uint64(test.In[i])
-		}
-		encoded, err := EncodeUint64(append(make([]uint64, 0, len(test.In)), tmp...))
-		if err != nil {
-			if !test.Err {
-				t.Fatalf("%s: expected encode error, got\n%s", test.Name, err)
-			}
-			return
-		}
-		buf := make([]byte, 8*len(encoded))
-		b := buf
-		for _, v := range encoded {
-			binary.LittleEndian.PutUint64(b, v)
-			b = b[8:]
-		}
-
-		count, err := CountValues(buf)
-		if err != nil {
-			t.Fatalf("%s: unexpected count error\n%s", test.Name, err)
-		}
-		if count != len(test.In) {
-			t.Fatalf("%s: unexpected count: got %d expected %d", test.Name, count, len(test.In))
-		}
-
-		decoded := make([]uint16, len(test.In))
-		n, err := DecodeUint16(decoded, buf)
-		if err != nil {
-			t.Fatalf("%s: unexpected decode error\n%s", test.Name, err)
-		}
-
-		if !cmp.Equal(decoded[:n], test.In) {
-			t.Fatalf("%s: unexpected values; +got/-exp\n%s", test.Name, cmp.Diff(decoded, test.In))
-		}
-	}
+	tests.EncodeTest[uint16](t, generic.Encode[uint16], DecodeUint16)
 }
 
-func TestEncodeUint8AVX2(t *testing.T) {
+func TestDecodeUint8(t *testing.T) {
 	if !util.UseAVX2 {
 		t.Skip()
 	}
-
-	for _, test := range s8bTestsUint8 {
-		if test.Fn != nil {
-			test.In = test.Fn()
-		}
-
-		tmp := make([]uint64, len(test.In))
-		for i := 0; i < len(tmp); i++ {
-			tmp[i] = uint64(test.In[i])
-		}
-		encoded, err := EncodeUint64(append(make([]uint64, 0, len(test.In)), tmp...))
-		if err != nil {
-			if !test.Err {
-				t.Fatalf("%s: expected encode error, got\n%s", test.Name, err)
-			}
-			return
-		}
-		buf := make([]byte, 8*len(encoded))
-		b := buf
-		for _, v := range encoded {
-			binary.LittleEndian.PutUint64(b, v)
-			b = b[8:]
-		}
-
-		count, err := CountValues(buf)
-		if err != nil {
-			t.Fatalf("%s: unexpected count error\n%s", test.Name, err)
-		}
-		if count != len(test.In) {
-			t.Fatalf("%s: unexpected count: got %d expected %d", test.Name, count, len(test.In))
-		}
-
-		decoded := make([]uint8, len(test.In))
-		n, err := DecodeUint8(decoded, buf)
-		if err != nil {
-			t.Fatalf("%s: unexpected decode error\n%s", test.Name, err)
-		}
-
-		if !cmp.Equal(decoded[:n], test.In) {
-			t.Fatalf("%s: unexpected values; +got/-exp\n%s", test.Name, cmp.Diff(decoded, test.In))
-		}
-	}
+	tests.EncodeTest[uint8](t, generic.Encode[uint8], DecodeUint8)
 }
 
-func BenchmarkCountBytesAVX2(b *testing.B) {
-	if !util.UseAVX2 {
-		b.Skip()
-	}
-	for _, bm := range s8bBenchmarksUint64 {
-		in := bm.Fn(s8bBenchmarkSize)()
-		encoded, _ := EncodeUint64(in)
-
-		buf := make([]byte, 8*len(encoded))
-		tmp := buf
-		for _, v := range encoded {
-			binary.BigEndian.PutUint64(tmp, v)
-			tmp = tmp[8:]
-		}
-
-		b.Run(bm.Name, func(b *testing.B) {
-			b.SetBytes(int64(8 * bm.Size))
-			for i := 0; i < b.N; i++ {
-				CountValues(buf)
-			}
-		})
-	}
+func BenchmarkDecodeUint64(b *testing.B) {
+	tests.DecodeBenchmark[uint64](b, generic.Encode[uint64], DecodeUint64)
 }
 
-func BenchmarkDecodeUint8AVX2(b *testing.B) {
-	if !util.UseAVX2 {
-		b.Skip()
-	}
-
-	for _, bm := range s8bBenchmarksUint8 {
-		in := bm.Fn(s8bBenchmarkSize)()
-		out := make([]uint8, len(in))
-		comp, _ := EncodeUint64(in)
-		buf := make([]byte, 8*len(comp))
-		for i, v := range comp {
-			binary.LittleEndian.PutUint64(buf[8*i:], v)
-		}
-		b.Run(bm.Name, func(b *testing.B) {
-			b.SetBytes(int64(bm.Size))
-			for i := 0; i < b.N; i++ {
-				DecodeUint8(out, buf)
-			}
-		})
-	}
+func BenchmarkDecodeUint32(b *testing.B) {
+	tests.DecodeBenchmark[uint32](b, generic.Encode[uint32], DecodeUint32)
 }
 
-func BenchmarkDecodeUint16AVX2(b *testing.B) {
-	if !util.UseAVX2 {
-		b.Skip()
-	}
-
-	for _, bm := range s8bBenchmarksUint16 {
-		in := bm.Fn(s8bBenchmarkSize)()
-		out := make([]uint16, len(in))
-		comp, _ := EncodeUint64(in)
-		buf := make([]byte, 8*len(comp))
-		for i, v := range comp {
-			binary.LittleEndian.PutUint64(buf[8*i:], v)
-		}
-		b.Run(bm.Name, func(b *testing.B) {
-			b.SetBytes(int64(2 * bm.Size))
-			for i := 0; i < b.N; i++ {
-				DecodeUint16(out, buf)
-			}
-		})
-	}
+func BenchmarkDecodeUint16(b *testing.B) {
+	tests.DecodeBenchmark[uint16](b, generic.Encode[uint16], DecodeUint16)
 }
 
-func BenchmarkDecodeUint32AVX2(b *testing.B) {
-	if !util.UseAVX2 {
-		b.Skip()
-	}
-
-	for _, bm := range s8bBenchmarksUint32 {
-		in := bm.Fn(s8bBenchmarkSize)()
-		out := make([]uint32, len(in))
-		comp, _ := EncodeUint64(in)
-		buf := make([]byte, 8*len(comp))
-		for i, v := range comp {
-			binary.LittleEndian.PutUint64(buf[8*i:], v)
-		}
-		b.Run(bm.Name, func(b *testing.B) {
-			b.SetBytes(int64(4 * bm.Size))
-			for i := 0; i < b.N; i++ {
-				DecodeUint32(out, buf)
-			}
-		})
-	}
-}
-
-func BenchmarkDecodeUint64AVX2(b *testing.B) {
-	if !util.UseAVX2 {
-		b.Skip()
-	}
-
-	for _, bm := range s8bBenchmarksUint64 {
-		in := bm.Fn(s8bBenchmarkSize)()
-		out := make([]uint64, len(in))
-		comp, _ := EncodeUint64(in)
-
-		buf := make([]byte, 8*len(comp))
-		tmp := buf
-		for _, v := range comp {
-			binary.LittleEndian.PutUint64(tmp, v)
-			tmp = tmp[8:]
-		}
-
-		b.Run(bm.Name, func(b *testing.B) {
-			b.SetBytes(int64(8 * bm.Size))
-			for i := 0; i < b.N; i++ {
-				DecodeUint64(out, buf)
-			}
-		})
-	}
+func BenchmarkDecodeUint8(b *testing.B) {
+	tests.DecodeBenchmark[uint8](b, generic.Encode[uint8], DecodeUint8)
 }

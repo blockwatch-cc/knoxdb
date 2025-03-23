@@ -209,7 +209,7 @@ func EncodeTime(s []int64, w io.Writer) (int, error) {
 	}
 
 	// Encode with simple8b - fist value is written unencoded using 8 bytes.
-	encoded, err := s8b.EncodeUint64(deltas[1:])
+	encoded, err := s8b.EncodeLegacy(deltas[1:])
 	if err != nil {
 		return 0, err
 	}

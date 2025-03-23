@@ -5,7 +5,7 @@
 #include "constants_uint16_AVX2.h"
 
 // allow buffer overflows due to writung full vector even its not full
-// caller hast to care about
+// caller has to care about
 #define ALLOW_BO
 
 TEXT ·initUint16AVX2(SB), NOSPLIT, $0-0
