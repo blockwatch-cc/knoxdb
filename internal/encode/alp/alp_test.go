@@ -41,7 +41,7 @@ func TestAlpFloat64(t *testing.T) {
 			require.NoError(t, err)
 			actualValues := make([]float64, len(expectedNums))
 			e := Compress(expectedNums)
-			Decompress(actualValues, e)
+			Decompress(actualValues, e.EncodingIndice.Factor, e.EncodingIndice.Exponent, e.FOR, e.Exceptions, e.ExceptionPositions, e.EncodedIntegers)
 			assert.Equal(t, expectedNums, actualValues)
 		})
 	}
@@ -67,7 +67,7 @@ func TestAlpFloat32(t *testing.T) {
 
 			actualValues := make([]float32, len(expectedNums))
 			e := Compress(expectedNums)
-			Decompress(actualValues, e)
+			Decompress(actualValues, e.EncodingIndice.Factor, e.EncodingIndice.Exponent, e.FOR, e.Exceptions, e.ExceptionPositions, e.EncodedIntegers)
 			assert.Equal(t, expectedNums, actualValues)
 		})
 	}

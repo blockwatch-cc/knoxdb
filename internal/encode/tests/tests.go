@@ -64,6 +64,8 @@ var (
 	floatConstCase = []float64{1.25, 1.25, 1.25, 1.25, 1.25, 1.25}
 	floatRunsCase  = []float64{1.5, 1.5, 2.35, 2.35, 3.60, 3.60}
 	floatDictCase  = []float64{1.50, 50.45, 1.50, 50.45, 1.50, 50.45}
+	floatAlpCase   = []float64{2.50, 540.4532, 1.5210, 50.4125, 1.5330, 50.4335}
+	floatAlpRdCase = []float64{18446744073709551615.50, 18446744073709551615.4532, 18446744073709551615.5210, 18446744073709551615.4125, 18446744073709551615.5330, 18446744073709551615.4335}
 )
 
 type TestCase[T types.Number] struct {
@@ -127,8 +129,8 @@ func MakeShortFloatTests[T types.Float](scheme int) []TestCase[T] {
 		MakeFloatTest[T]("const", 6, floatConstCase...),
 		MakeFloatTest[T]("runs", 6, floatRunsCase...),
 		MakeFloatTest[T]("dict", 6, floatDictCase...),
-		// MakeFloatTest[T]("alp", 6, alpCase...),
-		// MakeFloatTest[T]("alprd", 6, alpRdCase...),
+		MakeFloatTest[T]("alp", 6, floatAlpCase...),
+		MakeFloatTest[T]("alprd", 6, floatAlpRdCase...),
 	}
 }
 

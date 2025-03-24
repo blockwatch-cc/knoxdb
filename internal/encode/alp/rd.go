@@ -33,11 +33,11 @@ type RdState[T constraints.Float] struct {
 	RightBitWidth        uint8
 	LeftBitWidth         uint8
 	ExceptionsCount      uint16
-	RightPartsEncoded    []uint8
+	RightPartEncoded     []uint8
 	LeftPartEncoded      []uint8
 	LeftPartsDict        [RD_MAX_DICTIONARY_SIZE]uint16
 	Exceptions           []uint16
-	ExceptionsPositions  []uint16
+	ExceptionsPositions  []uint32
 	ValueCount           int
 	leftBitPackedSize    uint64
 	rightBitPackedSize   uint64
@@ -50,10 +50,10 @@ func NewRdState[T constraints.Float](valCount int) *RdState[T] {
 	return &RdState[T]{
 		leftPartsDictMap:    make(map[uint16]uint16),
 		ValueCount:          valCount,
-		RightPartsEncoded:   make([]uint8, valCount*8),
+		RightPartEncoded:    make([]uint8, valCount*8),
 		LeftPartEncoded:     make([]uint8, valCount*8),
 		Exceptions:          make([]uint16, valCount),
-		ExceptionsPositions: make([]uint16, valCount),
+		ExceptionsPositions: make([]uint32, valCount),
 		sampledValuesN:      make([]T, 0, valCount),
 	}
 }
@@ -200,7 +200,7 @@ func RDCompress[T constraints.Float, U constraints.Unsigned](values []T) *RdStat
 		//! Left parts not found in the dictionary are stored as exceptions
 		if dictionaryIndex >= uint16(enc.State.actualDictionarySize) {
 			enc.State.Exceptions[enc.State.ExceptionsCount] = uint16(dictionaryIndex)
-			enc.State.ExceptionsPositions[enc.State.ExceptionsCount] = uint16(i)
+			enc.State.ExceptionsPositions[enc.State.ExceptionsCount] = uint32(i)
 			enc.State.ExceptionsCount++
 		}
 	}
@@ -209,7 +209,7 @@ func RDCompress[T constraints.Float, U constraints.Unsigned](values []T) *RdStat
 	leftBitPackedSize := getRequiredSize(nValues, int(enc.State.LeftBitWidth))
 
 	dedup.PackBits(enc.State.LeftPartEncoded[:], leftParts[:], int(enc.State.LeftBitWidth))
-	dedup.PackBits(enc.State.RightPartsEncoded[:], rightParts[:], int(enc.State.RightBitWidth))
+	dedup.PackBits(enc.State.RightPartEncoded[:], rightParts[:], int(enc.State.RightBitWidth))
 
 	enc.State.leftBitPackedSize = uint64(leftBitPackedSize)
 	enc.State.rightBitPackedSize = uint64(rightBitPackedSize)
@@ -223,7 +223,7 @@ func RDDecompress[T constraints.Float, U constraints.Unsigned](state *RdState[T]
 
 	// Bitunpacking left and right parts
 	dedup.UnpackBits(state.LeftPartEncoded[:], leftParts, int(state.LeftBitWidth))
-	dedup.UnpackBits(state.RightPartsEncoded[:], rightParts, int(state.RightBitWidth))
+	dedup.UnpackBits(state.RightPartEncoded[:], rightParts, int(state.RightBitWidth))
 
 	// Decoding
 	for i := 0; i < state.ValueCount; i++ {
@@ -241,6 +241,12 @@ func RDDecompress[T constraints.Float, U constraints.Unsigned](state *RdState[T]
 		output[state.ExceptionsPositions[i]] = *(*T)(unsafe.Pointer(&v))
 	}
 	return output
+}
+
+func RDDecompressValue[T constraints.Float, U constraints.Unsigned](left uint16, right U, rightBitWidth uint8) T {
+	// Decoding
+	v := U(left)<<rightBitWidth | right
+	return *(*T)(unsafe.Pointer(&v))
 }
 
 func getRequiredSize(nValues, bitWidth int) int {

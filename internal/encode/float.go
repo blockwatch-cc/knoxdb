@@ -65,10 +65,10 @@ func NewFloat[T types.Float](scheme FloatContainerType) FloatContainer[T] {
 		return newFloatRunEndContainer[T]()
 	case TFloatDictionary:
 		return newFloatDictionaryContainer[T]()
-	// case TFloatAlp:
-	// 	return newFloatAlpContainer[T]()
-	// case TFloatAlpRd:
-	// 	return newFloatAlpRdContainer[T]()
+	case TFloatAlp:
+		return newFloatAlpContainer[T]()
+	case TFloatAlpRd:
+		return newFloatAlpRdContainer[T]()
 	case TFloatRaw:
 		return newFloatRawContainer[T]()
 	default:

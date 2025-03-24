@@ -112,15 +112,15 @@ func TestEncodeDictFloat(t *testing.T) {
 	testFloatContainerType[float32](t, TFloatDictionary)
 }
 
-// func TestEncodeAlpFloat(t *testing.T) {
-// 	testFloatContainerType[float64](t, TFloatAlp)
-// 	testFloatContainerType[float32](t, TFloatAlp)
-// }
+func TestEncodeAlpFloat(t *testing.T) {
+	testFloatContainerType[float64](t, TFloatAlp)
+	testFloatContainerType[float32](t, TFloatAlp)
+}
 
-// func TestEncodeAlpRdFloat(t *testing.T) {
-// 	testFloatContainerType[float64](t, TFloatAlpRd)
-// 	testFloatContainerType[float32](t, TFloatAlpRd)
-// }
+func TestEncodeAlpRdFloat(t *testing.T) {
+	testFloatContainerType[float64](t, TFloatAlpRd)
+	testFloatContainerType[float32](t, TFloatAlpRd)
+}
 
 func testEncodeFloatT[T types.Float](t *testing.T) {
 	t.Helper()
@@ -209,8 +209,8 @@ func BenchmarkAppendToFloat(b *testing.B) {
 			TFloatConstant,
 			TFloatRunEnd,
 			TFloatDictionary,
-			// TFloatAlp,
-			// TFloatAlpRd,
+			TFloatAlp,
+			TFloatAlpRd,
 			TFloatRaw,
 		} {
 			data := tests.GenForSchemeFloat[float64](int(scheme), c.N)
@@ -242,8 +242,8 @@ func BenchmarkEncodeFloat(b *testing.B) {
 			TFloatConstant,
 			TFloatRunEnd,
 			TFloatDictionary,
-			// TFloatAlp,
-			// TFloatAlpRd,
+			TFloatAlp,
+			TFloatAlpRd,
 			TFloatRaw,
 		} {
 			data := tests.GenForSchemeFloat[float64](int(scheme), c.N)

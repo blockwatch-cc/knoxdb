@@ -77,14 +77,14 @@ func BenchmarkCompressAlpRdFloat32(b *testing.B) {
 
 func BenchmarkDecompressAlpFloat64(b *testing.B) {
 	for _, n := range BenchmarkSizes {
-		s := Compress(util.RandFloats[float64](n.L))
+		e := Compress(util.RandFloats[float64](n.L))
 
 		out := make([]float64, n.L)
 		b.Run(n.Name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Decompress(out, s)
+				Decompress(out, e.EncodingIndice.Factor, e.EncodingIndice.Exponent, e.FOR, e.Exceptions, e.ExceptionPositions, e.EncodedIntegers)
 			}
 		})
 	}
@@ -92,14 +92,14 @@ func BenchmarkDecompressAlpFloat64(b *testing.B) {
 
 func BenchmarkDecompressAlpFloat32(b *testing.B) {
 	for _, n := range BenchmarkSizes {
-		s := Compress(util.RandFloats[float32](n.L))
+		e := Compress(util.RandFloats[float32](n.L))
 
 		out := make([]float32, n.L)
 		b.Run(n.Name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Decompress(out, s)
+				Decompress(out, e.EncodingIndice.Factor, e.EncodingIndice.Exponent, e.FOR, e.Exceptions, e.ExceptionPositions, e.EncodedIntegers)
 			}
 		})
 	}
