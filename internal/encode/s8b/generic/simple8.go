@@ -11,6 +11,7 @@ package generic
 // - removed Encoder and Decoder
 // - changed layout to LittleEndian from BigEndian
 // - use Go generics to support multiple input bit widths
+// - don't use selector 0 and 1 (we likely not have such pattern, speeds up encode)
 
 // Simple8b is 64bit word-sized encoder that packs multiple integers into a
 // single word using a 4 bit selector values and up to 60 bits for the remaining
@@ -28,7 +29,7 @@ package generic
 //
 // For example, when the number of values can be encoded using 4 bits, selected 5
 // is encoded in the 4 most significant bits followed by 15 values encoded used
-// 4 bits each in the remaing 60 bits.
+// 4 bits each in the remaining 60 bits.
 import (
 	"encoding/binary"
 	"errors"
@@ -40,14 +41,13 @@ import (
 	"golang.org/x/sys/cpu"
 )
 
-const MaxValue = (1 << 60) - 1
-
 const (
+	MaxValue     = (1 << 60) - 1
 	S8B_BIT_SIZE = 60
 )
 
 var (
-	shiftBits = [...]byte{
+	shiftBits = [16]byte{
 		0,  // code 0 (240 1s)
 		0,  // code 1 (120 1s)
 		1,  // code 2
@@ -107,36 +107,40 @@ var (
 		{2, 14}, // 29
 		{2, 14}, // 30
 		// 1x 60bit value per uint64
-		{1, 15}, // 31
-		{1, 15}, // 32
-		{1, 15}, // 33
-		{1, 15}, // 34
-		{1, 15}, // 35
-		{1, 15}, // 36
-		{1, 15}, // 37
-		{1, 15}, // 38
-		{1, 15}, // 39
-		{1, 15}, // 40
-		{1, 15}, // 41
-		{1, 15}, // 42
-		{1, 15}, // 43
-		{1, 15}, // 44
-		{1, 15}, // 45
-		{1, 15}, // 46
-		{1, 15}, // 47
-		{1, 15}, // 48
-		{1, 15}, // 49
-		{1, 15}, // 50
-		{1, 15}, // 51
-		{1, 15}, // 42
-		{1, 15}, // 53
-		{1, 15}, // 54
-		{1, 15}, // 55
-		{1, 15}, // 56
-		{1, 15}, // 57
-		{1, 15}, // 58
-		{1, 15}, // 59
-		{1, 15}, // 60
+		{1, 15},  // 31
+		{1, 15},  // 32
+		{1, 15},  // 33
+		{1, 15},  // 34
+		{1, 15},  // 35
+		{1, 15},  // 36
+		{1, 15},  // 37
+		{1, 15},  // 38
+		{1, 15},  // 39
+		{1, 15},  // 40
+		{1, 15},  // 41
+		{1, 15},  // 42
+		{1, 15},  // 43
+		{1, 15},  // 44
+		{1, 15},  // 45
+		{1, 15},  // 46
+		{1, 15},  // 47
+		{1, 15},  // 48
+		{1, 15},  // 49
+		{1, 15},  // 50
+		{1, 15},  // 51
+		{1, 15},  // 42
+		{1, 15},  // 53
+		{1, 15},  // 54
+		{1, 15},  // 55
+		{1, 15},  // 56
+		{1, 15},  // 57
+		{1, 15},  // 58
+		{1, 15},  // 59
+		{1, 15},  // 60
+		{0, 255}, // 61
+		{0, 255}, // 62
+		{0, 255}, // 63
+		{0, 255}, // 64
 	}
 
 	ErrValueOutOfBounds    = errors.New("value out of bounds")
@@ -157,44 +161,25 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 		remaining := src[i:]
 
 		// try to pack run of 240 or 120 1s
-		if len(remaining) >= 120 {
-			// Invariant: len(a) is fixed to 120 or 240 values
-			var a []T
-			if len(remaining) >= 240 {
-				a = remaining[:240]
-			} else {
-				a = remaining[:120]
-			}
+		// if len(remaining) >= 120 {
+		// 	k := 0
+		// 	for k < len(remaining) && k < 240 && remaining[k]-minv == 1 {
+		// 		k++
+		// 	}
 
-			// search for the longest sequence of 1s in a
-			// Postcondition: k equals the index of the last 1 or -1
-			k := 0
-			for k = range a {
-				if a[k]-minv != 1 {
-					k--
-					break
-				}
-			}
+		// 	if k >= 120 {
+		// 		if k >= 240 {
+		// 			out[j] = 0
+		// 			i += 240
+		// 		} else {
+		// 			out[j] = uint64(1) << S8B_BIT_SIZE
+		// 			i += 120
+		// 		}
+		// 		j++
+		// 		continue
+		// 	}
+		// }
 
-			v := uint64(0)
-			switch {
-			case k == 239:
-				// 240 1s
-				i += 240
-			case k >= 119:
-				// at least 120 1s
-				v = 1 << 60
-				i += 120
-			default:
-				goto CODES
-			}
-
-			out[j] = v
-			j++
-			continue
-		}
-
-	CODES:
 		var (
 			n        int
 			maxSeen  uint64
@@ -205,7 +190,7 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 
 		// Incremental packing
 		for n < len(remaining) {
-			val := uint64(remaining[n]) - uint64(minv)
+			val := uint64(remaining[n] - minv)
 			if val > maxSeen {
 				maxSeen = val
 				usedBits = bits.Len64(val)
@@ -271,7 +256,6 @@ func Decode[T types.Unsigned](dst []T, buf []byte) (int, error) {
 		selector = selector8
 	}
 
-	// assuming little endian machine
 	j := 0
 	if cpu.IsBigEndian {
 		for i := 0; i < len(buf); i += 8 {
@@ -288,5 +272,4 @@ func Decode[T types.Unsigned](dst []T, buf []byte) (int, error) {
 		}
 	}
 	return j, nil
-
 }
