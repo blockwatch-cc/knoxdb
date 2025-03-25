@@ -67,7 +67,7 @@ func (c *BitpackContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[n:]
 
 	// reference next sz bytes as bitpacked data
-	sz := (c.Log2*c.N + 7) / 8 // + 1
+	sz := (c.Log2*c.N + 7) / 8
 	c.Packed = buf[:sz]
 	return buf[sz:], nil
 }
