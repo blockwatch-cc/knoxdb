@@ -190,7 +190,7 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 
 		// Incremental packing
 		for n < len(remaining) {
-			val := uint64(remaining[n] - minv)
+			val := uint64(remaining[n]) - uint64(minv)
 			if val > maxSeen {
 				maxSeen = val
 				usedBits = bits.Len64(val)
@@ -225,7 +225,7 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 		var shl byte
 		val := uint64(sel) << S8B_BIT_SIZE
 		for k := 0; k < n; k++ {
-			val |= uint64(remaining[k]-minv) << shl
+			val |= (uint64(remaining[k]) - uint64(minv)) << shl
 			shl += shift
 		}
 		out[j] = val

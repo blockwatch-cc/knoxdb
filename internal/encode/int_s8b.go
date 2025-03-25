@@ -129,22 +129,6 @@ func (c *Simple8Container[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) 
 	c.Packed = buf
 	c.free = true
 
-	// // s8b encoder works in-place on a u64 slice; consider overflows when ctx.Min is close to
-	// // signed int[8|16|32|64]-min
-	// c.u64 = arena.Alloc(arena.AllocUint64, len(vals)).([]uint64)[:len(vals)]
-	// for64 := uint64(c.For)
-	// for i, v := range vals {
-	// 	c.u64[i] = uint64(v) - for64
-	// }
-
-	// // encode reusing src buffer
-	// var err error
-	// c.u64, err = s8b.EncodeUint64(c.u64)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// c.Packed = util.ToByteSlice(c.u64)
-
 	return c
 }
 
