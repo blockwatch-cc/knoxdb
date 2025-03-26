@@ -68,7 +68,7 @@ func NewFloat[T types.Float](scheme FloatContainerType) FloatContainer[T] {
 	case TFloatAlp:
 		return newFloatAlpContainer[T]()
 	case TFloatAlpRd:
-		return newFloatAlpRdContainer[T]()
+		return newFloatAlpRdV2Container[T]()
 	case TFloatRaw:
 		return newFloatRawContainer[T]()
 	default:
