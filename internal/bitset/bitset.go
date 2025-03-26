@@ -688,8 +688,7 @@ func (s Bitset) EncodedSize() int {
 //	indices := make([]int, bitmap.Count())
 //	bitmap.Iterate(0, indices)
 //
-// However, a faster method is [Bitset.Indexes] which also talkes a pre-allocated
-// result slice or allocates a new slice to fit Count() indices.
+// However, a faster method is [Bitset.Indexes] with a pre-allocated result.
 func (s *Bitset) Iterate(i int, buf []int) (int, []int) {
 	capacity := cap(buf)
 	result := buf[:capacity]

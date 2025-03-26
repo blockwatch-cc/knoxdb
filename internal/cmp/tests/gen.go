@@ -17,10 +17,10 @@ type BenchmarkSize struct {
 }
 
 var BenchmarkSizes = []BenchmarkSize{
-	// {"1K", 1 * 1024},
-	// {"16K", 16 * 1024},
-	// {"64K", 64 * 1024},
-	{"128K", 128 * 1024},
+	{"1K", 1 * 1024},
+	{"16K", 16 * 1024},
+	{"64K", 64 * 1024},
+	// {"128K", 128 * 1024},
 }
 
 var BenchmarksMasks = [][]byte{
@@ -73,8 +73,7 @@ func BenchCases[T Number](b *testing.B, fn func([]T, T, []byte) int64) {
 			a := randSlice[T](n.L)
 			bits, _ := MakeBitsAndMaskPoison(n.L, m)
 			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
-				var t T
-				b.SetBytes(int64(n.L * int(unsafe.Sizeof(t))))
+				b.SetBytes(int64(n.L * int(unsafe.Sizeof(T(0)))))
 				for i := 0; i < b.N; i++ {
 					fn(a, 127, bits)
 				}
@@ -90,8 +89,7 @@ func BenchCases2[T Number](b *testing.B, fn func([]T, T, T, []byte) int64) {
 			a := randSlice[T](n.L)
 			bits, _ := MakeBitsAndMaskPoison(n.L, m)
 			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
-				var t T
-				b.SetBytes(int64(n.L * int(unsafe.Sizeof(t))))
+				b.SetBytes(int64(n.L * int(unsafe.Sizeof(T(0)))))
 				for i := 0; i < b.N; i++ {
 					fn(a, 5, 127, bits)
 				}

@@ -8,6 +8,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/dedup"
+	"blockwatch.cc/knoxdb/internal/encode/bitpack"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
@@ -97,7 +98,41 @@ func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) 
 }
 
 func (c *BitpackContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// simple generic loop
+	// u32 := arena.AllocT[uint32](c.Len())
+	// if mask != nil {
+	// 	for _, k := range mask.Indexes(u32) {
+	// 		if c.Get(int(k)) == val {
+	// 			bits.Set(int(k))
+	// 		}
+	// 	}
+	// } else {
+	// 	for i := range c.Len() {
+	// 		if c.Get(i) == val {
+	// 			bits.Set(i)
+	// 		}
+	// 	}
+	// }
+	// arena.FreeT(u32)
+
+	// -- optimized bitpack compare
+
+	// no equal match when val < MinFor
+	if val < c.For {
+		return bits
+	}
+
+	// convert val to MinFOR reference, count bits
+	cmpVal := val - c.For
+	cBits := BitLen64(uint64(cmpVal))
+
+	// no equal match if value has more bits than packed
+	if cBits > c.Log2 {
+		return bits
+	}
+
+	// call bitpack cmp function for width
+	return bitpack.Equal[c.Log2](c.Packed, uint64(cmpVal), c.Len(), bits)
 }
 
 func (c *BitpackContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
