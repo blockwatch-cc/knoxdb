@@ -36,7 +36,7 @@ func Pack(buf []byte, index, log2 int, value uint64) {
 	}
 }
 
-// Packer retuns a pack function locked to a specific bit width. Use it
+// Packer returns a pack function locked to a specific bit width. Use it
 // for slightly faster performance when packing many values at once.
 func Packer(log2 int) func(buf []byte, index int, value uint64) {
 	mask := uint64((1 << log2) - 1)
@@ -73,6 +73,7 @@ func Unpack(buf []byte, index, log2 int) uint64 {
 	// most significant byte
 	msb := (log2 + shift - 1) >> 3
 
+	// assemble value
 	var val uint64
 	for i := 0; i <= msb; i++ {
 		val <<= 8
@@ -83,12 +84,12 @@ func Unpack(buf []byte, index, log2 int) uint64 {
 	return (val >> shift) & ((1 << log2) - 1)
 }
 
-// Unpacker retuns an unpack function locked to a specific bit width. Use it
+// Unpacker returns an unpack function locked to a specific bit width. Use it
 // for slightly faster performance when unpacking many values at once.
 func Unpacker(log2 int) func(buf []byte, index int) uint64 {
 	mask := uint64((1 << log2) - 1)
 	shift1 := (64 - log2) & 7
-	return func(buf []byte, index int) uint64 {
+	return func(b []byte, index int) uint64 {
 		// output shift
 		shift := shift1 * (index + 1) & 7
 
@@ -98,10 +99,11 @@ func Unpacker(log2 int) func(buf []byte, index int) uint64 {
 		// most significant byte
 		msb := (log2 + shift - 1) >> 3
 
+		// assemble value
 		var val uint64
 		for i := 0; i <= msb; i++ {
 			val <<= 8
-			val += uint64(buf[pos+i])
+			val += uint64(b[pos+i])
 		}
 
 		// shift and mask output

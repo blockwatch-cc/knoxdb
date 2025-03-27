@@ -38,3 +38,14 @@ func MakeBenchmarks[T types.Integer]() []Benchmark[T] {
 		{"seq_64K", GenSequence[T](64 * 1024)},
 	}
 }
+
+type BenchmarkPattern struct {
+	Name string
+	Pct  int
+}
+
+var BenchmarkPatterns = []BenchmarkPattern{
+	{"10%", 10},
+	{"50%", 50},
+	{"90%", 90},
+}

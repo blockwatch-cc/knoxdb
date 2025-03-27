@@ -117,19 +117,21 @@ func (c *BitpackContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
 
 	// -- optimized bitpack compare
 
-	// no equal match when val < MinFor
-	if val < c.For {
-		return bits
-	}
+	// outside caller already does that
+
+	// // no equal match when val < MinFor
+	// if val < c.For {
+	// 	return bits
+	// }
 
 	// convert val to MinFOR reference, count bits
 	cmpVal := val - c.For
-	cBits := BitLen64(uint64(cmpVal))
+	// cBits := BitLen64(uint64(cmpVal))
 
-	// no equal match if value has more bits than packed
-	if cBits > c.Log2 {
-		return bits
-	}
+	// // no equal match if value has more bits than packed
+	// if cBits > c.Log2 {
+	// 	return bits
+	// }
 
 	// call bitpack cmp function for width
 	return bitpack.Equal[c.Log2](c.Packed, uint64(cmpVal), c.Len(), bits)

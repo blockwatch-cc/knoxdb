@@ -52,8 +52,7 @@ func GenConst[T types.Integer](n int) []T {
 // creates n random values
 func GenRandom[T types.Integer](n int) []T {
 	var res []T
-	var t T
-	switch any(t).(type) {
+	switch any(T(0)).(type) {
 	case int64:
 		res = util.ReinterpretSlice[int64, T](util.RandIntsn[int64](n, 1<<BENCH_WIDTH-1))
 	case int32:
@@ -78,8 +77,7 @@ func GenRandom[T types.Integer](n int) []T {
 func GenDups[T types.Integer](n, u int) []T {
 	c := n / u
 	res := make([]T, n)
-	var t T
-	switch any(t).(type) {
+	switch any(T(0)).(type) {
 	case int64:
 		unique := util.RandIntsn[int64](c, 1<<BENCH_WIDTH-1)
 		for i := range res {
@@ -128,8 +126,7 @@ func GenDups[T types.Integer](n, u int) []T {
 func GenRuns[T types.Integer](n, r int) []T {
 	res := make([]T, 0, n)
 	sz := (n + r - 1) / r
-	var t T
-	switch any(t).(type) {
+	switch any(T(0)).(type) {
 	case int64:
 		for _, v := range util.RandIntsn[int64](sz, 1<<BENCH_WIDTH-1) {
 			for range r {
@@ -220,4 +217,85 @@ func Sequence[T types.Integer](start, end T) []T {
 		result[i] = start + T(i)
 	}
 	return result
+}
+
+// creates n values with u% values equal to x
+func GenEqual[T types.Integer](n, u int) ([]T, T) {
+	res := make([]T, n)
+	var x T
+	switch any(T(0)).(type) {
+	case int64:
+		x = T(util.RandInt64n(1<<BENCH_WIDTH - 1))
+		for i := range res {
+			if util.RandIntn(100) <= u {
+				res[i] = x
+			} else {
+				res[i] = T(util.RandInt64n(1<<BENCH_WIDTH - 1))
+			}
+		}
+	case int32:
+		x = T(util.RandInt32n(1<<(BENCH_WIDTH/2) - 1))
+		for i := range res {
+			if util.RandIntn(100) <= u {
+				res[i] = x
+			} else {
+				res[i] = T(util.RandInt32n(1<<(BENCH_WIDTH/2) - 1))
+			}
+		}
+	case int16:
+		x = T(util.RandInt64n(1<<16 - 1))
+		for i := range res {
+			if util.RandIntn(100) <= u {
+				res[i] = x
+			} else {
+				res[i] = T(util.RandInt64n(1<<16 - 1))
+			}
+		}
+	case int8:
+		x = T(util.RandInt64n(1<<8 - 1))
+		for i := range res {
+			if util.RandIntn(100) <= u {
+				res[i] = x
+			} else {
+				res[i] = T(util.RandInt64n(1<<8 - 1))
+			}
+		}
+	case uint64:
+		x = T(util.RandUint64n(1<<BENCH_WIDTH - 1))
+		for i := range res {
+			if util.RandIntn(100) <= u {
+				res[i] = x
+			} else {
+				res[i] = T(util.RandUint64n(1<<BENCH_WIDTH - 1))
+			}
+		}
+	case uint32:
+		x = T(util.RandUint32n(1<<(BENCH_WIDTH/2) - 1))
+		for i := range res {
+			if util.RandIntn(100) <= u {
+				res[i] = x
+			} else {
+				res[i] = T(util.RandUint32n(1<<(BENCH_WIDTH/2) - 1))
+			}
+		}
+	case uint16:
+		x = T(util.RandUint64n(1<<16 - 1))
+		for i := range res {
+			if util.RandIntn(100) <= u {
+				res[i] = x
+			} else {
+				res[i] = T(util.RandUint64n(1<<16 - 1))
+			}
+		}
+	case uint8:
+		x = T(util.RandUint64n(1<<8 - 1))
+		for i := range res {
+			if util.RandIntn(100) <= u {
+				res[i] = x
+			} else {
+				res[i] = T(util.RandUint64n(1<<8 - 1))
+			}
+		}
+	}
+	return res, x
 }

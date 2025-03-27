@@ -55,60 +55,86 @@ func cmp_bp_1_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 }
 
 func cmp_bp_2_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
-	v := byte(val)
-	c := v<<6 | v<<4 | v<<2 | v
+	// 2bit packing [aabb ccdd] [eeff gghh]
 	var (
-		i int
-		b byte
+		i    int
+		k    int
+		c    byte = byte(val)
+		mask byte = 0x3
 	)
-	// process 4 values per byte
-	for i, b = range buf {
-		if n < 4 {
-			break
-		}
-		x := ^(b ^ c)
-		if x == 0 {
-			continue
-		}
-		k := i*4 + 3
-		if x&0x3 > 0 {
+	// process 8 values
+	for n >= 8 {
+		if buf[i]>>6&mask == c { // a
 			bits.Set(k)
 		}
-		x >>= 2
-		k--
-		if x&0x3 > 0 {
-			bits.Set(k)
+		if buf[i]>>4&mask == c { // b
+			bits.Set(k + 1)
 		}
-		x >>= 2
-		k--
-		if x&0x3 > 0 {
-			bits.Set(k)
+		if buf[i]>>2&mask == c { // c
+			bits.Set(k + 2)
 		}
-		x >>= 2
-		k--
-		if x&0x3 > 0 {
-			bits.Set(k)
+		if buf[i]&mask == c { // d
+			bits.Set(k + 3)
 		}
-		n -= 4
+		i++
+		if buf[i]>>6&mask == c { // e
+			bits.Set(k + 4)
+		}
+		if buf[i]>>4&mask == c { // f
+			bits.Set(k + 5)
+		}
+		if buf[i]>>2&mask == c { // g
+			bits.Set(k + 6)
+		}
+		if buf[i]&mask == c { // h
+			bits.Set(k + 7)
+		}
+		i++
+		n -= 8
+		k += 8
 	}
 
-	// handle tail byte if any (there can be at most 3 values left)
-	i++
+	// process tail (max 7 values left)
 	if n > 0 {
-		if buf[i]>>6&0x3 > 0 {
-			bits.Set(i * 4)
+		if buf[i]>>6&mask == c { // a
+			bits.Set(k)
 		}
 		n--
 	}
 	if n > 0 {
-		if buf[i]>>4&0x3 > 0 {
-			bits.Set(i*4 + 1)
+		if buf[i]>>4&mask == c { // b
+			bits.Set(k + 1)
 		}
 		n--
 	}
 	if n > 0 {
-		if buf[i]>>2&0x3 > 0 {
-			bits.Set(i*4 + 2)
+		if buf[i]>>2&mask == c { // c
+			bits.Set(k + 2)
+		}
+		n--
+	}
+	if n > 0 {
+		if buf[i]&mask == c { // d
+			bits.Set(k + 3)
+		}
+		n--
+		i++
+	}
+	if n > 0 {
+		if buf[i]>>6&mask == c { // e
+			bits.Set(k + 4)
+		}
+		n--
+	}
+	if n > 0 {
+		if buf[i]>>4&mask == c { // f
+			bits.Set(k + 5)
+		}
+		n--
+	}
+	if n > 0 {
+		if buf[i]>>2&mask == c { // g
+			bits.Set(k + 6)
 		}
 	}
 
@@ -206,40 +232,93 @@ func cmp_bp_3_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 }
 
 func cmp_bp_4_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
-	v := byte(val)
-	c := v<<4 | v
+	// 4bit packing [aaaa bbbb] [cccc dddd] [eeee ffff] [gggg hhhh]
 	var (
 		i    int
-		b    byte
+		k    int
+		c    byte = byte(val)
 		mask byte = 0xF
 	)
-	// process 2 values per loop
-	for i, b = range buf {
-		if n < 2 {
-			break
-		}
-		x := ^(b ^ c)
-		if x == 0 {
-			continue
-		}
-		k := i*2 + 1
-		if x&mask > 0 {
+	// process 8 values
+	for n >= 8 {
+		if buf[i]>>4&mask == c { // a
 			bits.Set(k)
 		}
-		x >>= 4
-		k--
-		if x&mask > 0 {
-			bits.Set(k)
+		if buf[i]&mask == c { // b
+			bits.Set(k + 1)
 		}
-		n -= 2
+		i++
+		if buf[i]>>4&mask == c { // c
+			bits.Set(k + 2)
+		}
+		if buf[i]&mask == c { // d
+			bits.Set(k + 3)
+		}
+		i++
+		if buf[i]>>4&mask == c { // e
+			bits.Set(k + 4)
+		}
+		if buf[i]&mask == c { // f
+			bits.Set(k + 5)
+		}
+		i++
+		if buf[i]>>4&mask == c { // g
+			bits.Set(k + 6)
+		}
+		if buf[i]&mask == c { // h
+			bits.Set(k + 7)
+		}
+		i++
+		n -= 8
+		k += 8
 	}
-	// handle tail byte if any (there can only be a single value left)
-	i++
+
+	// process tail (max 7 values left)
 	if n > 0 {
-		if buf[i]>>4&0xf > 0 {
-			bits.Set(i * 2)
+		if buf[i]>>4&mask == c { // a
+			bits.Set(k)
+		}
+		n--
+	}
+	if n > 0 {
+		if buf[i]&mask == c { // b
+			bits.Set(k + 1)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if buf[i]>>4&mask == c { // c
+			bits.Set(k + 2)
+		}
+		n--
+	}
+	if n > 0 {
+		if buf[i]&mask == c { // d
+			bits.Set(k + 3)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if buf[i]>>4&mask == c { // e
+			bits.Set(k + 4)
+		}
+		n--
+	}
+	if n > 0 {
+		if buf[i]&mask == c { // f
+			bits.Set(k + 5)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if buf[i]>>4&mask == c { // g
+			bits.Set(k + 6)
 		}
 	}
+
 	return bits
 }
 
@@ -338,6 +417,7 @@ func cmp_bp_5_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 func cmp_bp_6_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 	// 6bit packed [aaaa aabb] [bbbb cccc] [ccdd dddd]
+	//             [eeee eeff] [ffff gggg] [gghh hhhh]
 	var (
 		i    int
 		k    int
@@ -345,7 +425,7 @@ func cmp_bp_6_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		mask byte = 0x3f
 	)
 
-	// process 4 values per loop
+	// process 8 values per loop
 	for n >= 4 {
 		if buf[i]>>2&mask == c { // a
 			bits.Set(k)
@@ -362,11 +442,26 @@ func cmp_bp_6_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 			bits.Set(k + 3)
 		}
 		i++
-		n -= 4
-		k += 4
+		if buf[i]>>2&mask == c { // e
+			bits.Set(k + 4)
+		}
+		if buf[i]<<4|buf[i+1]>>4&mask == c { // f
+			bits.Set(k + 5)
+		}
+		i++
+		if buf[i]<<2|buf[i+1]>>6&mask == c { // g
+			bits.Set(k + 6)
+		}
+		i++
+		if buf[i]&mask == c { // h
+			bits.Set(k + 7)
+		}
+		i++
+		n -= 8
+		k += 8
 	}
 
-	// process tail (max 3 values left)
+	// process tail (max 7 values left)
 	if n > 0 {
 		if buf[i]>>2&mask == c { // a
 			bits.Set(k)
@@ -383,6 +478,31 @@ func cmp_bp_6_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 	if n > 0 {
 		if buf[i]<<2|buf[i+1]>>6&mask == c { // c
 			bits.Set(k + 2)
+		}
+	}
+	if n > 0 {
+		if buf[i]&mask == c { // d
+			bits.Set(k + 3)
+		}
+		n--
+		i++
+	}
+	if n > 0 {
+		if buf[i]>>2&mask == c { // e
+			bits.Set(k + 4)
+		}
+		n--
+	}
+	if n > 0 {
+		if buf[i]<<4|buf[i+1]>>4&mask == c { // f
+			bits.Set(k + 5)
+		}
+		n--
+		i++
+	}
+	if n > 0 {
+		if buf[i]<<2|buf[i+1]>>6&mask == c { // g
+			bits.Set(k + 6)
 		}
 	}
 	return bits
@@ -599,8 +719,8 @@ func cmp_bp_10_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		mask uint16 = 0x3FF
 	)
 
-	// process 4 values per loop
-	for n >= 4 {
+	// process 8 values per loop
+	for n >= 8 {
 		if BE.Uint16(buf[i:])>>6&mask == c { // a
 			bits.Set(k)
 		}
@@ -616,9 +736,24 @@ func cmp_bp_10_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		if BE.Uint16(buf[i:]) == c { // d
 			bits.Set(k + 3)
 		}
+		if BE.Uint16(buf[i:])>>6&mask == c { // e
+			bits.Set(k + 4)
+		}
 		i++
-		n -= 4
-		k += 4
+		if BE.Uint16(buf[i:])>>4&mask == c { // f
+			bits.Set(k + 5)
+		}
+		i++
+		if BE.Uint16(buf[i:])>>2&mask == c { // g
+			bits.Set(k + 6)
+		}
+		i++
+		if BE.Uint16(buf[i:]) == c { // h
+			bits.Set(k + 7)
+		}
+		i++
+		n -= 8
+		k += 8
 	}
 
 	// process tail (max 3 values left)
@@ -637,8 +772,35 @@ func cmp_bp_10_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		n--
 	}
 	if n > 0 {
-		if BE.Uint16(buf[i:])>>2&mask == c { // g
+		if BE.Uint16(buf[i:])>>2&mask == c { // c
 			bits.Set(k + 2)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:]) == c { // d
+			bits.Set(k + 3)
+		}
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])>>6&mask == c { // e
+			bits.Set(k + 4)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])>>4&mask == c { // f
+			bits.Set(k + 5)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])>>2&mask == c { // g
+			bits.Set(k + 6)
 		}
 	}
 	return bits
@@ -753,8 +915,8 @@ func cmp_bp_12_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		mask uint16 = 0xFFF
 	)
 
-	// process 2 values per loop
-	for n >= 2 {
+	// process 8 values per loop
+	for n >= 8 {
 		if BE.Uint16(buf[i:])>>4&mask == c { // a
 			bits.Set(k)
 		}
@@ -762,15 +924,77 @@ func cmp_bp_12_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		if BE.Uint16(buf[i:])&mask == c { // b
 			bits.Set(k + 1)
 		}
+		if BE.Uint16(buf[i:])>>4&mask == c { // c
+			bits.Set(k + 2)
+		}
 		i++
-		n -= 2
-		k += 2
+		if BE.Uint16(buf[i:])&mask == c { // d
+			bits.Set(k + 3)
+		}
+		i++
+		if BE.Uint16(buf[i:])>>4&mask == c { // e
+			bits.Set(k + 4)
+		}
+		i++
+		if BE.Uint16(buf[i:])&mask == c { // f
+			bits.Set(k + 5)
+		}
+		if BE.Uint16(buf[i:])>>4&mask == c { // g
+			bits.Set(k + 6)
+		}
+		i++
+		if BE.Uint16(buf[i:])&mask == c { // h
+			bits.Set(k + 7)
+		}
+		i++
+		n -= 8
+		k += 8
 	}
 
-	// process tail (max 1 values left)
+	// process tail (max 7 values left)
 	if n > 0 {
 		if BE.Uint16(buf[i:])>>4&mask == c { // a
 			bits.Set(k)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])&mask == c { // b
+			bits.Set(k + 1)
+		}
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])>>4&mask == c { // c
+			bits.Set(k + 2)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])&mask == c { // d
+			bits.Set(k + 3)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])>>4&mask == c { // e
+			bits.Set(k + 4)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])&mask == c { // f
+			bits.Set(k + 5)
+		}
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])>>4&mask == c { // g
+			bits.Set(k + 6)
 		}
 	}
 	return bits
@@ -887,8 +1111,8 @@ func cmp_bp_14_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		mask uint16 = 0x3FFF
 	)
 
-	// process 4 values per loop
-	for n >= 4 {
+	// process 8 values per loop
+	for n >= 8 {
 		if BE.Uint16(buf[i:])>>2&mask == c { // a
 			bits.Set(k)
 		}
@@ -905,11 +1129,27 @@ func cmp_bp_14_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 			bits.Set(k + 3)
 		}
 		i++
-		n -= 4
-		k += 4
+		if BE.Uint16(buf[i:])>>2&mask == c { // e
+			bits.Set(k + 4)
+		}
+		i++
+		if BE.Uint16(buf[i:])<<4|uint16(buf[i+2]>>4)&mask == c { // f
+			bits.Set(k + 5)
+		}
+		i += 2
+		if BE.Uint16(buf[i:])<<2|uint16(buf[i+2]>>6)&mask == c { // g
+			bits.Set(k + 6)
+		}
+		i += 2
+		if BE.Uint16(buf[i:]) == c { // h
+			bits.Set(k + 7)
+		}
+		i++
+		n -= 8
+		k += 8
 	}
 
-	// process tail (max 3 values left)
+	// process tail (max 7 values left)
 	if n > 0 {
 		if BE.Uint16(buf[i:])>>2&mask == c { // a
 			bits.Set(k)
@@ -925,8 +1165,36 @@ func cmp_bp_14_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		n--
 	}
 	if n > 0 {
-		if BE.Uint16(buf[i:])<<2|uint16(buf[i+2]>>6)&mask == c { // g
+		if BE.Uint16(buf[i:])<<2|uint16(buf[i+2]>>6)&mask == c { // c
 			bits.Set(k + 2)
+		}
+		i += 2
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:]) == c { // d
+			bits.Set(k + 3)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])>>2&mask == c { // e
+			bits.Set(k + 4)
+		}
+		i++
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])<<4|uint16(buf[i+2]>>4)&mask == c { // f
+			bits.Set(k + 5)
+		}
+		i += 2
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:])<<2|uint16(buf[i+2]>>6)&mask == c { // g
+			bits.Set(k + 6)
 		}
 	}
 	return bits
@@ -1041,8 +1309,8 @@ func cmp_bp_16_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		c uint16 = uint16(val)
 	)
 
-	// process 4 values per loop
-	for n >= 4 {
+	// process 48 values per loop
+	for n >= 8 {
 		if BE.Uint16(buf[i:]) == c { // a
 			bits.Set(k)
 		}
@@ -1058,12 +1326,27 @@ func cmp_bp_16_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		if BE.Uint16(buf[i:]) == c { // d
 			bits.Set(k + 3)
 		}
+		if BE.Uint16(buf[i:]) == c { // e
+			bits.Set(k + 4)
+		}
 		i += 2
-		n -= 4
-		k += 4
+		if BE.Uint16(buf[i:]) == c { // f
+			bits.Set(k + 5)
+		}
+		i += 2
+		if BE.Uint16(buf[i:]) == c { // g
+			bits.Set(k + 6)
+		}
+		i += 2
+		if BE.Uint16(buf[i:]) == c { // h
+			bits.Set(k + 7)
+		}
+		i += 2
+		n -= 8
+		k += 8
 	}
 
-	// process tail (max 3 values left)
+	// process tail (max 7 values left)
 	if n > 0 {
 		if BE.Uint16(buf[i:]) == c { // a
 			bits.Set(k)
@@ -1079,8 +1362,36 @@ func cmp_bp_16_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		n--
 	}
 	if n > 0 {
-		if BE.Uint16(buf[i:]) == c { // g
+		if BE.Uint16(buf[i:]) == c { // c
 			bits.Set(k + 2)
+		}
+		i += 2
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:]) == c { // d
+			bits.Set(k + 3)
+		}
+		i += 2
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:]) == c { // e
+			bits.Set(k + 4)
+		}
+		i += 2
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:]) == c { // f
+			bits.Set(k + 5)
+		}
+		i += 2
+		n--
+	}
+	if n > 0 {
+		if BE.Uint16(buf[i:]) == c { // g
+			bits.Set(k + 6)
 		}
 	}
 	return bits
