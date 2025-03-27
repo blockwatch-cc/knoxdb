@@ -4,11 +4,11 @@
 package alp
 
 import (
-	"golang.org/x/exp/constraints"
+	"blockwatch.cc/knoxdb/internal/types"
 )
 
 // Scalar decoding of an ALP vector
-func Decompress[T constraints.Float](out []T, factor, exponent uint8, frameOfReference int64, exceptions []T, exceptionPositions []uint32, encodedIntegers []int64) {
+func Decompress[T types.Float](out []T, factor, exponent uint8, frameOfReference int64, exceptions []T, exceptionPositions []uint32, encodedIntegers []int64) {
 	constant := newConstant[T]()
 
 	fac := FACT_ARR[factor]
@@ -26,7 +26,7 @@ func Decompress[T constraints.Float](out []T, factor, exponent uint8, frameOfRef
 }
 
 // DecompressValue decompresses value by unFOR+decode. Doesnt take account of exceptions
-func DecompressValue[T constraints.Float](v int64, factor, exponent uint8, frameOfReference int64) T {
+func DecompressValue[T types.Float](v int64, factor, exponent uint8, frameOfReference int64) T {
 	constant := newConstant[T]()
 
 	fac := FACT_ARR[factor]
@@ -37,6 +37,6 @@ func DecompressValue[T constraints.Float](v int64, factor, exponent uint8, frame
 }
 
 // Scalar decoding a single value with ALP
-func decodeValue[T constraints.Float](v, fac int64, exp T) T {
+func decodeValue[T types.Float](v, fac int64, exp T) T {
 	return T(v*fac) * exp
 }

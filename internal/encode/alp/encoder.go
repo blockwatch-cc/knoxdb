@@ -7,7 +7,7 @@ import (
 	"math"
 	"math/bits"
 
-	"golang.org/x/exp/constraints"
+	"blockwatch.cc/knoxdb/internal/types"
 )
 
 const (
@@ -31,7 +31,7 @@ type Combination struct {
 	estimatedCompressionSize uint64
 }
 
-type State[T constraints.Float] struct {
+type State[T types.Float] struct {
 	ExceptionsCount    uint16
 	ExceptionPositions []uint32
 	sampledValuesN     []T
@@ -44,7 +44,7 @@ type State[T constraints.Float] struct {
 	Scheme             int
 }
 
-func NewState[T constraints.Float](sz int) *State[T] {
+func NewState[T types.Float](sz int) *State[T] {
 	return &State[T]{
 		EncodedIntegers:    make([]int64, 0, sz),
 		Exceptions:         make([]T, 0, sz),
@@ -65,24 +65,24 @@ func (s *State[T]) ResetCombinations() {
 	s.bestKCombinations = s.bestKCombinations[:0]
 }
 
-func Scheme[T constraints.Float](values []T) (int, error) {
+func Scheme[T types.Float](values []T) (int, error) {
 	enc := newEncoder(values, 0)
 	return enc.state.Scheme, nil
 }
 
-func Compress[T constraints.Float](values []T) *State[T] {
+func Compress[T types.Float](values []T) *State[T] {
 	enc := newEncoder(values, 0)
 	enc.compress(values, enc.state)
 	return enc.state
 }
 
-type Encoder[T constraints.Float] struct {
+type Encoder[T types.Float] struct {
 	exactTypeBitSize uint8
 	state            *State[T]
 	constant         constant
 }
 
-func newEncoder[T constraints.Float](dataColumn []T, columnOffset int) *Encoder[T] {
+func newEncoder[T types.Float](dataColumn []T, columnOffset int) *Encoder[T] {
 	e := &Encoder[T]{}
 	e.constant = newConstant[T]()
 	e.state = NewState[T](len(dataColumn))
