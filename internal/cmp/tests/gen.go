@@ -1,99 +1,93 @@
 // Copyright (c) 2023 Blockwatch Data Inc.
-// Author: stefan@blockwatch.cc
+// Author: alex@blockwatch.cc
 
 package tests
 
 import (
-	"strconv"
-	"testing"
-	"unsafe"
+	"bytes"
 
-	"github.com/stretchr/testify/assert"
+	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-type BenchmarkSize struct {
-	Name string
-	L    int
+var (
+	poison  = []byte{0xfa}
+	maskAll = []byte{0xff}
+)
+
+func MakePoison(sz int) []byte {
+	return bytes.Repeat(poison, sz)
 }
 
-var BenchmarkSizes = []BenchmarkSize{
-	{"1K", 1 * 1024},
-	{"16K", 16 * 1024},
-	{"64K", 64 * 1024},
-	// {"128K", 128 * 1024},
-}
-
-var BenchmarksMasks = [][]byte{
-	maskAll,
-	{0x00, 0x11},
-}
-
-type Number interface {
-	int64 | int32 | int16 | int8 | uint64 | uint32 | uint16 | uint8 | float64 | float32
-}
-
-type MatchTest[T Number] struct {
-	Name   string
-	Slice  []T
-	Match  T
-	Match2 T
-	Result []byte
-	Count  int64
-}
-
-// Test Drivers
-func TestCases[T Number](t *testing.T, cases []MatchTest[T], fn func([]T, T, []byte) int64) {
-	t.Helper()
-	for _, c := range cases {
-		bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
-		cnt := fn(c.Slice, c.Match, bits)
-		assert.Len(t, bits, len(c.Result), c.Name)
-		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
-		assert.Equal(t, c.Result, bits, "%s: unexpected result", c.Name)
-		assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "%s: boundary violation", c.Name)
+// allocate the result bitset and fill all with poison
+func MakeBitsPoison(sz int) []byte {
+	l := bitFieldLen(sz)
+	bits := make([]byte, l+32)
+	for i := range 32 {
+		bits[l+i] = 0xfa
 	}
+	bits = bits[:l]
+	return bits
 }
 
-func TestCases2[T Number](t *testing.T, cases []MatchTest[T], fn func([]T, T, T, []byte) int64) {
-	t.Helper()
-	for _, c := range cases {
-		bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
-		cnt := fn(c.Slice, c.Match, c.Match2, bits)
-		assert.Len(t, bits, len(c.Result), c.Name)
-		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
-		assert.Equal(t, c.Result, bits, "%s: unexpected result", c.Name)
-		assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "%s: boundary violation", c.Name)
+// allocate the result bitset and fill padding with poison
+func MakeBitsAndMaskPoisonTail(sz, tail int, maskBits []byte) ([]byte, []byte) {
+	l := bitFieldLen(sz)
+	bits := make([]byte, l+tail)
+	mask := bytes.Repeat(maskBits, l/len(maskBits))
+	for i := range tail {
+		bits[l+i] = 0xfa
 	}
+	bits = bits[:l]
+	return bits, mask
 }
 
-func BenchCases[T Number](b *testing.B, fn func([]T, T, []byte) int64) {
-	b.Helper()
-	for _, n := range BenchmarkSizes {
-		for i, m := range BenchmarksMasks {
-			a := randSlice[T](n.L)
-			bits, _ := MakeBitsAndMaskPoison(n.L, m)
-			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
-				b.SetBytes(int64(n.L * int(unsafe.Sizeof(T(0)))))
-				for i := 0; i < b.N; i++ {
-					fn(a, 127, bits)
-				}
-			})
-		}
+// allocate the result bitset and fill all with poison
+func MakeBitsAndMaskPoison(sz int, maskBits []byte) ([]byte, []byte) {
+	l := bitFieldLen(sz)
+	bits := make([]byte, l+32)
+	mask := bytes.Repeat(maskBits, l/len(maskBits))
+	for i := range 32 {
+		bits[l+i] = 0xfa
 	}
+	bits = bits[:l]
+	return bits, mask
 }
 
-func BenchCases2[T Number](b *testing.B, fn func([]T, T, T, []byte) int64) {
-	b.Helper()
-	for _, n := range BenchmarkSizes {
-		for i, m := range BenchmarksMasks {
-			a := randSlice[T](n.L)
-			bits, _ := MakeBitsAndMaskPoison(n.L, m)
-			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
-				b.SetBytes(int64(n.L * int(unsafe.Sizeof(T(0)))))
-				for i := 0; i < b.N; i++ {
-					fn(a, 5, 127, bits)
-				}
-			})
-		}
+func randSlice[T types.Number](sz int) []T {
+	var (
+		t T
+		s any
+	)
+	switch any(t).(type) {
+	case float32:
+		s = any(util.RandFloats[float32](sz))
+	case float64:
+		s = any(util.RandFloats[float64](sz))
+	case int64:
+		s = any(util.RandInts[int64](sz))
+	case int32:
+		s = any(util.RandInts[int32](sz))
+	case int16:
+		s = any(util.RandInts[int16](sz))
+	case int8:
+		s = any(util.RandInts[int8](sz))
+	case uint64:
+		s = any(util.RandUints[uint64](sz))
+	case uint32:
+		s = any(util.RandUints[uint32](sz))
+	case uint16:
+		s = any(util.RandUints[uint16](sz))
+	case uint8:
+		s = any(util.RandUints[uint8](sz))
 	}
+	return s.([]T)
+}
+
+func bitFieldLen(n int) int {
+	return roundUpPow2(n, 8) >> 3
+}
+
+func roundUpPow2(n int, pow2 int) int {
+	return (n + (pow2 - 1)) & ^(pow2 - 1)
 }

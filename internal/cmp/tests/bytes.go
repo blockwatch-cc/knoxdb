@@ -98,24 +98,28 @@ type (
 func TestBytesCases(t *testing.T, cases []BytesMatchTest, fn BytesMatchFunc) {
 	t.Helper()
 	for _, c := range cases {
-		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
-		cnt := fn(c.Slice, c.Match, bits, mask)
-		assert.Len(t, bits, len(c.Result), c.Name)
-		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
-		assert.Equal(t, c.Result, bits, "%s: unexpected result", c.Name)
-		assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "%s: boundary violation", c.Name)
+		t.Run(c.Name, func(t *testing.T) {
+			bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
+			cnt := fn(c.Slice, c.Match, bits, mask)
+			assert.Len(t, bits, len(c.Result))
+			assert.Equal(t, c.Count, cnt, "unexpected result bit count")
+			assert.Equal(t, c.Result, bits, "unexpected result")
+			assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "boundary violation")
+		})
 	}
 }
 
 func TestBytesCases2(t *testing.T, cases []BytesMatchTest, fn BytesMatchFunc2) {
 	t.Helper()
 	for _, c := range cases {
-		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
-		cnt := fn(c.Slice, c.Match, c.Match2, bits, mask)
-		assert.Len(t, bits, len(c.Result), c.Name)
-		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
-		assert.Equal(t, c.Result, bits, "%s: unexpected result", c.Name)
-		assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "%s: boundary violation", c.Name)
+		t.Run(c.Name, func(t *testing.T) {
+			bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
+			cnt := fn(c.Slice, c.Match, c.Match2, bits, mask)
+			assert.Len(t, bits, len(c.Result), c.Name)
+			assert.Equal(t, c.Count, cnt, "unexpected result bit count")
+			assert.Equal(t, c.Result, bits, "unexpected result")
+			assert.Equal(t, MakePoison(32), bits[len(bits):len(bits)+32], "boundary violation")
+		})
 	}
 }
 
@@ -123,10 +127,10 @@ func BenchBytesCases(b *testing.B, fn BytesMatchFunc) {
 	b.Helper()
 	for _, n := range BenchmarkSizes {
 		for i, m := range BenchmarksMasks {
-			a := RandBytes(n.L)
+			a := RandBytes(n.N)
 			bits, mask := MakeBitsAndMaskPoison(len(a), m)
 			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
-				b.SetBytes(int64(n.L * 8))
+				b.SetBytes(int64(n.N * 8))
 				for i := 0; i < b.N; i++ {
 					fn(a, Uint64Bytes(math.MaxUint64>>1), bits, mask)
 				}
@@ -139,10 +143,10 @@ func BenchBytesCases2(b *testing.B, fn BytesMatchFunc2) {
 	b.Helper()
 	for _, n := range BenchmarkSizes {
 		for i, m := range BenchmarksMasks {
-			a := RandBytes(n.L)
+			a := RandBytes(n.N)
 			bits, mask := MakeBitsAndMaskPoison(len(a), m)
 			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
-				b.SetBytes(int64(n.L * 16))
+				b.SetBytes(int64(n.N * 16))
 				for i := 0; i < b.N; i++ {
 					fn(a, Uint64Bytes(math.MaxUint64>>2), Uint64Bytes(math.MaxUint64>>1), bits, mask)
 				}

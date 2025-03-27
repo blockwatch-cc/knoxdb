@@ -244,10 +244,10 @@ func BenchInt256Cases(b *testing.B, fn Int256MatchFunc) {
 	b.Helper()
 	for _, n := range BenchmarkSizes {
 		for i, m := range BenchmarksMasks {
-			a := num.Int256Optimize(RandInt256Slice(n.L))
+			a := num.Int256Optimize(RandInt256Slice(n.N))
 			bits, mask := MakeBitsAndMaskPoison(a.Len(), m)
 			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
-				b.SetBytes(int64(n.L * 32))
+				b.SetBytes(int64(n.N * 32))
 				for i := 0; i < b.N; i++ {
 					fn(a, MaxInt256.Rsh(1), bits, mask)
 				}
@@ -260,10 +260,10 @@ func BenchInt256Cases2(b *testing.B, fn Int256MatchFunc2) {
 	b.Helper()
 	for _, n := range BenchmarkSizes {
 		for i, m := range BenchmarksMasks {
-			a := num.Int256Optimize(RandInt256Slice(n.L))
+			a := num.Int256Optimize(RandInt256Slice(n.N))
 			bits, mask := MakeBitsAndMaskPoison(a.Len(), m)
 			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
-				b.SetBytes(int64(n.L * 32))
+				b.SetBytes(int64(n.N * 32))
 				for i := 0; i < b.N; i++ {
 					fn(a, MaxInt256.Rsh(2), MaxInt256.Rsh(1), bits, mask)
 				}
