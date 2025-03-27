@@ -109,13 +109,32 @@ func (c *FloatAlpRdV2Container[T]) split(vals []T, left []uint16, right []uint64
 
 func (c *FloatAlpRdV2Container[T]) split64(u64 []uint64, leftInts []uint16, rightInts []uint64, lvl int) {
 	// try different right bit widths to find the optimal encoding for left&right containers
+	sampleU64, ok := SampleInt(u64)
+	bestShift := shift64(sampleU64, leftInts, rightInts, lvl)
+	if ok {
+		arena.FreeT(sampleU64)
+	}
+
+	mask := uint64(1<<bestShift) - 1
+	for k := range u64 {
+		rightInts[k] = u64[k] & mask
+		leftInts[k] = uint16(u64[k] >> bestShift)
+	}
+
+	c.Left = EncodeInt(nil, leftInts, lvl-1)
+	c.Right = EncodeInt(nil, rightInts, lvl-1)
+	c.RightShift = bestShift
+}
+
+func shift64(sampleU64 []uint64, leftInts []uint16, rightInts []uint64, lvl int) int {
 	var (
 		bestShift int
 		bestSize  int = math.MaxInt32
-		bestLeft  IntegerContainer[uint16]
-		bestRight IntegerContainer[uint64]
+		leftC     IntegerContainer[uint16]
+		rightC    IntegerContainer[uint64]
+		sz        = len(sampleU64)
 	)
-	sampleU64, _ := SampleInt(u64)
+
 	for i := 1; i <= 16; i++ {
 		// split vals into left and right
 		rightBitWidth := 64 - i
@@ -126,8 +145,8 @@ func (c *FloatAlpRdV2Container[T]) split64(u64 []uint64, leftInts []uint16, righ
 		}
 
 		// try estimate integer sizes
-		leftC := EncodeInt(nil, leftInts, lvl-1)
-		rightC := EncodeInt(nil, rightInts, lvl-1)
+		leftC = EncodeInt(nil, leftInts[:sz], lvl-1)
+		rightC = EncodeInt(nil, rightInts[:sz], lvl-1)
 
 		// get total size
 		maxSz := leftC.MaxSize() + rightC.MaxSize()
@@ -136,25 +155,26 @@ func (c *FloatAlpRdV2Container[T]) split64(u64 []uint64, leftInts []uint16, righ
 		if maxSz <= bestSize {
 			bestSize = maxSz
 			bestShift = rightBitWidth
-			if bestLeft != nil {
-				bestLeft.Close()
-				bestRight.Close()
-			}
-			bestLeft = leftC
-			bestRight = rightC
-		} else {
-			leftC.Close()
-			rightC.Close()
 		}
+		leftC.Close()
+		rightC.Close()
 	}
-	bestLeft.Close()
-	bestRight.Close()
-	arena.FreeT(sampleU64)
 
-	for k := range u64 {
-		mask := uint64(1<<bestShift) - 1
-		rightInts[k] = u64[k] & mask
-		leftInts[k] = uint16(u64[k] >> bestShift)
+	return bestShift
+}
+
+func (c *FloatAlpRdV2Container[T]) split32(u32 []uint32, leftInts []uint16, rightInts []uint64, lvl int) {
+	// try different right bit widths to find the optimal encoding for left&right containers
+	sampleU32, ok := SampleInt(u32)
+	bestShift := shift32(sampleU32, leftInts, rightInts, lvl)
+	if ok {
+		arena.FreeT(sampleU32)
+	}
+
+	mask := uint32(1<<bestShift) - 1
+	for k := range u32 {
+		rightInts[k] = uint64(u32[k] & mask)
+		leftInts[k] = uint16(u32[k] >> bestShift)
 	}
 
 	c.Left = EncodeInt(nil, leftInts, lvl-1)
@@ -162,15 +182,15 @@ func (c *FloatAlpRdV2Container[T]) split64(u64 []uint64, leftInts []uint16, righ
 	c.RightShift = bestShift
 }
 
-func (c *FloatAlpRdV2Container[T]) split32(u32 []uint32, leftInts []uint16, rightInts []uint64, lvl int) {
-	// try different right bit widths to find the optimal encoding for left&right containers
+func shift32(sampleU32 []uint32, leftInts []uint16, rightInts []uint64, lvl int) int {
 	var (
 		bestShift int
 		bestSize  int = math.MaxInt32
-		bestLeft  IntegerContainer[uint16]
-		bestRight IntegerContainer[uint64]
+		sz            = len(sampleU32)
+		leftC     IntegerContainer[uint16]
+		rightC    IntegerContainer[uint64]
 	)
-	sampleU32, _ := SampleInt(u32)
+
 	for i := 1; i <= 16; i++ {
 		// split vals into left and right
 		rightBitWidth := 32 - i
@@ -181,8 +201,8 @@ func (c *FloatAlpRdV2Container[T]) split32(u32 []uint32, leftInts []uint16, righ
 		}
 
 		// try estimate integer sizes
-		leftC := EncodeInt(nil, leftInts, lvl-1)
-		rightC := EncodeInt(nil, rightInts, lvl-1)
+		leftC = EncodeInt(nil, leftInts[:sz], lvl-1)
+		rightC = EncodeInt(nil, rightInts[:sz], lvl-1)
 
 		// get total size
 		maxSz := leftC.MaxSize() + rightC.MaxSize()
@@ -191,30 +211,12 @@ func (c *FloatAlpRdV2Container[T]) split32(u32 []uint32, leftInts []uint16, righ
 		if maxSz <= bestSize {
 			bestSize = maxSz
 			bestShift = rightBitWidth
-			if bestLeft != nil {
-				bestLeft.Close()
-				bestRight.Close()
-			}
-			bestLeft = leftC
-			bestRight = rightC
-		} else {
-			leftC.Close()
-			rightC.Close()
 		}
-	}
-	bestLeft.Close()
-	bestRight.Close()
-	arena.FreeT(sampleU32)
-
-	for k := range u32 {
-		mask := uint32(1<<bestShift) - 1
-		rightInts[k] = uint64(u32[k] & mask)
-		leftInts[k] = uint16(u32[k] >> bestShift)
+		leftC.Close()
+		rightC.Close()
 	}
 
-	c.Left = EncodeInt(nil, leftInts, lvl-1)
-	c.Right = EncodeInt(nil, rightInts, lvl-1)
-	c.RightShift = bestShift
+	return bestShift
 }
 
 func (c *FloatAlpRdV2Container[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
