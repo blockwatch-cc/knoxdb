@@ -48,10 +48,39 @@ func init() {
 	}
 }
 
+func packRemainder(k int) (n int) {
+	for k > 0 {
+		switch {
+		case k > 30:
+			k -= 30
+			n++
+		case k > 20:
+			k -= 20
+			n++
+		case k > 15:
+			k -= 15
+			n++
+		case k > 12:
+			k -= 12
+			n++
+		case k > 10:
+			k -= 10
+			n++
+		case k > 8:
+			k -= 8
+			n++
+		default:
+			k = 0
+			n++
+		}
+	}
+	return
+}
+
 func EstimateMaxSize[T types.Integer](srcLen int, minv, maxv T) int {
 	rangeVal := uint64(maxv) - uint64(minv)
 	if rangeVal == 0 { // All values equal after shift
-		return (srcLen + 59) / 60 // Ceiling division for runs of 0s
+		return srcLen/60 + packRemainder(srcLen%60)
 	}
 
 	// Find bits needed for rangeVal
@@ -93,5 +122,5 @@ func EstimateMaxSize[T types.Integer](srcLen int, minv, maxv T) int {
 		valuesPerWord = 1
 	}
 
-	return (srcLen + valuesPerWord - 1) / valuesPerWord
+	return srcLen/valuesPerWord + packRemainder(srcLen%valuesPerWord)
 }
