@@ -21,28 +21,28 @@ type Context[T types.Integer] struct {
 // ASM imports
 
 //go:noescape
-func analyze_i64_avx2(vals *int64, ret *Context[int64], len int)
+func analyze_i64_avx2(vals *int64, ctx *Context[int64], len int)
 
 //go:noescape
-func analyze_u64_avx2(vals *uint64, ret *Context[uint64], len int)
+func analyze_u64_avx2(vals *uint64, ctx *Context[uint64], len int)
 
 //go:noescape
-func analyze_i32_avx2(vals *int32, ret *Context[int32], len int)
+func analyze_i32_avx2(vals *int32, ctx *Context[int32], len int)
 
 //go:noescape
-func analyze_u32_avx2(vals *uint32, ret *Context[uint32], len int)
+func analyze_u32_avx2(vals *uint32, ctx *Context[uint32], len int)
 
 //go:noescape
-func analyze_i16_avx2(vals *int16, ret *Context[int16], len int)
+func analyze_i16_avx2(vals *int16, ctx *Context[int16], len int)
 
 //go:noescape
-func analyze_u16_avx2(vals *uint16, ret *Context[uint16], len int)
+func analyze_u16_avx2(vals *uint16, ctx *Context[uint16], len int)
 
 //go:noescape
-func analyze_i8_avx2(vals *int8, ret *Context[int8], len int)
+func analyze_i8_avx2(vals *int8, ctx *Context[int8], len int)
 
 //go:noescape
-func analyze_u8_avx2(vals *uint8, ret *Context[uint8], len int)
+func analyze_u8_avx2(vals *uint8, ctx *Context[uint8], len int)
 
 // Go exports
 
