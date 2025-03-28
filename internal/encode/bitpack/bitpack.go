@@ -36,9 +36,11 @@ func Pack(buf []byte, index, log2 int, value uint64) {
 	}
 }
 
+type PackFn func(buf []byte, index int, value uint64)
+
 // Packer returns a pack function locked to a specific bit width. Use it
 // for slightly faster performance when packing many values at once.
-func Packer(log2 int) func(buf []byte, index int, value uint64) {
+func Packer(log2 int) PackFn {
 	mask := uint64((1 << log2) - 1)
 	shift1 := (64 - log2) & 7
 	return func(buf []byte, index int, value uint64) {
@@ -84,9 +86,11 @@ func Unpack(buf []byte, index, log2 int) uint64 {
 	return (val >> shift) & ((1 << log2) - 1)
 }
 
+type UnpackFn func(buf []byte, index int) uint64
+
 // Unpacker returns an unpack function locked to a specific bit width. Use it
 // for slightly faster performance when unpacking many values at once.
-func Unpacker(log2 int) func(buf []byte, index int) uint64 {
+func Unpacker(log2 int) UnpackFn {
 	mask := uint64((1 << log2) - 1)
 	shift1 := (64 - log2) & 7
 	return func(b []byte, index int) uint64 {

@@ -20,6 +20,7 @@ type BitpackContainer[T types.Integer] struct {
 	N      int
 	For    T
 	free   bool
+	unpack bitpack.UnpackFn
 }
 
 func (c *BitpackContainer[T]) Close() {
@@ -28,6 +29,7 @@ func (c *BitpackContainer[T]) Close() {
 	}
 	c.Packed = nil
 	c.free = false
+	c.unpack = nil
 	putBitpackContainer[T](c)
 }
 
@@ -67,6 +69,9 @@ func (c *BitpackContainer[T]) Load(buf []byte) ([]byte, error) {
 	c.N = int(v)
 	buf = buf[n:]
 
+	// init unpacker func
+	c.unpack = bitpack.Unpacker(c.Log2)
+
 	// reference next sz bytes as bitpacked data
 	sz := (c.Log2*c.N + 7) / 8
 	c.Packed = buf[:sz]
@@ -74,12 +79,12 @@ func (c *BitpackContainer[T]) Load(buf []byte) ([]byte, error) {
 }
 
 func (c *BitpackContainer[T]) Get(n int) T {
-	return T(dedup.Unpack(c.Packed, n, c.Log2)) + c.For
+	return T(c.unpack(c.Packed, n)) + c.For
 }
 
 func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	for _, v := range sel {
-		dst = append(dst, c.Get(int(v)))
+		dst = append(dst, T(c.unpack(c.Packed, int(v)))+c.For)
 	}
 	return dst
 }
@@ -91,6 +96,7 @@ func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) 
 	c.Log2 = ctx.UseBits
 	c.N = len(vals)
 	c.For = ctx.Min
+	c.unpack = bitpack.Unpacker(c.Log2)
 	for i, v := range vals {
 		dedup.Pack(c.Packed, i, int(v-c.For), c.Log2)
 	}
@@ -117,21 +123,8 @@ func (c *BitpackContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
 
 	// -- optimized bitpack compare
 
-	// outside caller already does that
-
-	// // no equal match when val < MinFor
-	// if val < c.For {
-	// 	return bits
-	// }
-
-	// convert val to MinFOR reference, count bits
+	// convert val to MinFOR reference
 	cmpVal := val - c.For
-	// cBits := BitLen64(uint64(cmpVal))
-
-	// // no equal match if value has more bits than packed
-	// if cBits > c.Log2 {
-	// 	return bits
-	// }
 
 	// call bitpack cmp function for width
 	return bitpack.Equal[c.Log2](c.Packed, uint64(cmpVal), c.Len(), bits)

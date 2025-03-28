@@ -44,3 +44,12 @@ func u64be(buf []byte) uint64 {
 	}
 	return BE.Uint64(buf)
 }
+
+// Bool2Byte - compiler optimized to 1 opcode CSET
+// See issue 6011. https://tip.golang.org/src/cmd/compile/internal/ssa/phiopt.go
+func b2b(b bool) uint8 {
+	if b {
+		return 1
+	}
+	return 0
+}
