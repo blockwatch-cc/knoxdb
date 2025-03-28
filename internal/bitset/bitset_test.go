@@ -354,7 +354,7 @@ func randBits(n int) []byte {
 func randBitsets(sz int) []*Bitset {
 	res := make([]*Bitset, 100)
 	for i := range res {
-		res[i] = NewBitset(sz).SetFromBytes(randBits(sz), sz)
+		res[i] = NewBitset(sz).SetFromBytes(randBits(sz), sz, false)
 	}
 	return res
 }

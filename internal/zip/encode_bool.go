@@ -89,6 +89,6 @@ func DecodeBitset(dst *bitset.Bitset, buf []byte) error {
 	sz := binary.LittleEndian.Uint32(buf[:4])
 
 	// resize bitset and copy data
-	dst.SetFromBytes(buf[4:], int(sz))
+	dst.SetFromBytes(buf[4:], int(sz), false)
 	return nil
 }

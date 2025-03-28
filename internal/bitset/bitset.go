@@ -102,24 +102,30 @@ func (s *Bitset) ReadFrom(r io.Reader) (int64, error) {
 	return int64(n), err
 }
 
-func (s *Bitset) SetFromBytes(buf []byte, size int) *Bitset {
-	if cap(s.buf) < len(buf) {
+func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
+	l := bitFieldLen(size)
+	if cap(s.buf) < l {
 		if !s.noclose {
 			arena.Free(arena.AllocBytes, s.buf)
 			s.noclose = false
 		}
-		s.buf = arena.Alloc(arena.AllocBytes, len(buf)).([]byte)[:len(buf)]
-	} else if s.size > size && s.cnt != 0 {
+		s.buf = arena.Alloc(arena.AllocBytes, l).([]byte)[:l]
+	} else if s.size > size && s.cnt >= 0 {
 		s.cnt = -1
 		clear(s.buf[size>>3:])
 	}
 	s.size = size
-	s.buf = s.buf[:len(buf)]
+	s.buf = s.buf[:l]
 	copy(s.buf, buf)
+	if reverse {
+		for i, v := range s.buf {
+			s.buf[i] = reverseLut256[v]
+		}
+	}
 	s.cnt = -1
 	// ensure the last byte is masked
 	if size%8 > 0 {
-		s.buf[len(s.buf)-1] &= bytemask(size)
+		s.buf[l-1] &= bytemask(size)
 	}
 	return s
 }

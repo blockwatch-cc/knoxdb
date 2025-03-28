@@ -16,7 +16,7 @@ var (
 )
 
 // Bitset low-level benchmarks
-func BenchmarkBitsetIndexsGeneric(b *testing.B) {
+func BenchmarkBitsetIndexesGeneric(b *testing.B) {
 	for _, n := range benchmarkSizes {
 		for _, d := range benchmarkDensities {
 			bits := fillBitsetRand(nil, n.L, d.D)

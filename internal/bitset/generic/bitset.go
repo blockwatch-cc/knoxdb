@@ -17,9 +17,34 @@ func And(dst, src []byte, size int) {
 	_ = dst[l-1]
 	_ = src[l-1]
 
-	for i := 0; i < l; i++ {
+	// main loop 8x unrolled
+	var i int
+	for range l / 8 {
 		dst[i] &= src[i]
+		i++
+		dst[i] &= src[i]
+		i++
+		dst[i] &= src[i]
+		i++
+		dst[i] &= src[i]
+		i++
+		dst[i] &= src[i]
+		i++
+		dst[i] &= src[i]
+		i++
+		dst[i] &= src[i]
+		i++
+		dst[i] &= src[i]
+		i++
 	}
+
+	// tail
+	for i < l {
+		dst[i] &= src[i]
+		i++
+	}
+
+	// mask last byte
 	dst[l-1] &= bytemask(size)
 }
 
@@ -33,10 +58,47 @@ func AndFlag(dst, src []byte, size int) (bool, bool) {
 		_ = dst[l-1]
 		_ = src[l-1]
 
-		for i := 0; i < l; i++ {
+		var i int
+		for range l / 8 {
 			dst[i] &= src[i]
 			any |= dst[i]
 			all &= dst[i]
+			i++
+			dst[i] &= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] &= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] &= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] &= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] &= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] &= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] &= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+		}
+
+		for i < l {
+			dst[i] &= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
 		}
 	}
 
@@ -57,9 +119,34 @@ func AndNot(dst, src []byte, size int) {
 	_ = dst[l-1]
 	_ = src[l-1]
 
-	for i := 0; i < l; i++ {
+	// main loop 8x unrolled
+	var i int
+	for range l / 8 {
 		dst[i] &^= src[i]
+		i++
+		dst[i] &^= src[i]
+		i++
+		dst[i] &^= src[i]
+		i++
+		dst[i] &^= src[i]
+		i++
+		dst[i] &^= src[i]
+		i++
+		dst[i] &^= src[i]
+		i++
+		dst[i] &^= src[i]
+		i++
+		dst[i] &^= src[i]
+		i++
 	}
+
+	// tail
+	for i < l {
+		dst[i] &^= src[i]
+		i++
+	}
+
+	// mask last byte
 	dst[l-1] &= bytemask(size)
 }
 
@@ -70,9 +157,34 @@ func Or(dst, src []byte, size int) {
 	_ = dst[l-1]
 	_ = src[l-1]
 
-	for i := 0; i < l; i++ {
+	// main loop 8x unrolled
+	var i int
+	for range l / 8 {
 		dst[i] |= src[i]
+		i++
+		dst[i] |= src[i]
+		i++
+		dst[i] |= src[i]
+		i++
+		dst[i] |= src[i]
+		i++
+		dst[i] |= src[i]
+		i++
+		dst[i] |= src[i]
+		i++
+		dst[i] |= src[i]
+		i++
+		dst[i] |= src[i]
+		i++
 	}
+
+	// tail
+	for i < l {
+		dst[i] |= src[i]
+		i++
+	}
+
+	// mask last byte
 	dst[l-1] &= bytemask(size)
 }
 
@@ -86,14 +198,53 @@ func OrFlag(dst, src []byte, size int) (bool, bool) {
 		_ = dst[l-1]
 		_ = src[l-1]
 
-		for i := 0; i < l; i++ {
+		// main loop 8x unrolled
+		var i int
+		for range l / 8 {
 			dst[i] |= src[i]
 			any |= dst[i]
 			all &= dst[i]
+			i++
+			dst[i] |= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] |= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] |= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] |= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] |= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] |= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+			dst[i] |= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
+		}
+
+		// tail
+		for i < l {
+			dst[i] |= src[i]
+			any |= dst[i]
+			all &= dst[i]
+			i++
 		}
 	}
 
-	// tail
+	// last byte
 	if size&0x07 != 0 {
 		dst[l] |= src[l]
 		dst[l] &= bytemask(size)
@@ -110,9 +261,34 @@ func Xor(dst, src []byte, size int) {
 	_ = dst[l-1]
 	_ = src[l-1]
 
-	for i := 0; i < l; i++ {
+	// main loop 8x unrolled
+	var i int
+	for range l / 8 {
 		dst[i] ^= src[i]
+		i++
+		dst[i] ^= src[i]
+		i++
+		dst[i] ^= src[i]
+		i++
+		dst[i] ^= src[i]
+		i++
+		dst[i] ^= src[i]
+		i++
+		dst[i] ^= src[i]
+		i++
+		dst[i] ^= src[i]
+		i++
+		dst[i] ^= src[i]
+		i++
 	}
+
+	// tail
+	for i < l {
+		dst[i] ^= src[i]
+		i++
+	}
+
+	// mask last byte
 	dst[l-1] &= bytemask(size)
 }
 
@@ -122,9 +298,34 @@ func Neg(src []byte, size int) {
 	// bounds check elimination
 	_ = src[l-1]
 
-	for i := 0; i < l; i++ {
+	// main loop 8x unrolled
+	var i int
+	for range l / 8 {
 		src[i] = ^src[i]
+		i++
+		src[i] = ^src[i]
+		i++
+		src[i] = ^src[i]
+		i++
+		src[i] = ^src[i]
+		i++
+		src[i] = ^src[i]
+		i++
+		src[i] = ^src[i]
+		i++
+		src[i] = ^src[i]
+		i++
+		src[i] = ^src[i]
+		i++
 	}
+
+	// tail
+	for i < l {
+		src[i] = ^src[i]
+		i++
+	}
+
+	// mask last byte
 	src[l-1] &= bytemask(size)
 }
 
