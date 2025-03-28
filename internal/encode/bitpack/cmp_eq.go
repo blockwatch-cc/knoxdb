@@ -11,6 +11,7 @@ package bitpack
 import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type Bitset = bitset.Bitset
@@ -68,31 +69,15 @@ func cmp_bp_2_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 	)
 	// process 8 values
 	for n >= 8 {
-		if buf[i]>>6&mask == c { // a
-			b |= 1
-		}
-		if buf[i]>>4&mask == c { // b
-			b |= 2
-		}
-		if buf[i]>>2&mask == c { // c
-			b |= 4
-		}
-		if buf[i]&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(buf[i]>>6&mask == c)      // a
+		b |= util.Bool2byte(buf[i]>>4&mask == c) << 1 // b
+		b |= util.Bool2byte(buf[i]>>2&mask == c) << 2 // c
+		b |= util.Bool2byte(buf[i]&mask == c) << 3    // d
 		i++
-		if buf[i]>>6&mask == c { // e
-			b |= 0x10
-		}
-		if buf[i]>>4&mask == c { // f
-			b |= 0x20
-		}
-		if buf[i]>>2&mask == c { // g
-			b |= 0x40
-		}
-		if buf[i]&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(buf[i]>>6&mask == c) << 4 // e
+		b |= util.Bool2byte(buf[i]>>4&mask == c) << 5 // f
+		b |= util.Bool2byte(buf[i]>>2&mask == c) << 6 // g
+		b |= util.Bool2byte(buf[i]&mask == c) << 7    // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -156,40 +141,24 @@ func cmp_bp_3_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 	var (
 		i    int
 		k    int
-		c    byte = byte(val)
-		mask byte = 0x7
+		c    uint16 = uint16(val)
+		mask uint16 = 0x7
 		b    byte
 		res  []byte = bits.Bytes()
 	)
 
 	// process 8 values per loop
 	for n >= 8 {
-		if buf[i]>>5&mask == c { // a
-			b |= 1
-		}
-		if buf[i]>>2&mask == c { // b
-			b |= 2
-		}
-		if (buf[i]<<1|buf[i+1]>>7)&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(uint16(buf[i])>>5&mask == c)          // a
+		b |= util.Bool2byte(uint16(buf[i])>>2&mask == c) << 1     // b
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>7&mask == c) << 2 // c
 		i++
-		if buf[i]>>4&mask == c { // d
-			b |= 8
-		}
-		if buf[i]>>1&mask == c { // e
-			b |= 0x10
-		}
-		if (buf[i]<<2|buf[i+1]>>6)&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(uint16(buf[i])>>4&mask == c) << 3     // d
+		b |= util.Bool2byte(uint16(buf[i])>>1&mask == c) << 4     // e
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>6&mask == c) << 5 // f
 		i++
-		if buf[i]>>3&mask == c { // g
-			b |= 0x40
-		}
-		if buf[i]&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(uint16(buf[i])>>3&mask == c) << 6 // g
+		b |= util.Bool2byte(uint16(buf[i])&mask == c) << 7    // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -202,45 +171,45 @@ func cmp_bp_3_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process tail
 	if n > 0 {
-		if buf[i]>>5&mask == c { // a
+		if uint16(buf[i])>>5&mask == c { // a
 			bits.Set(k)
 		}
 		n--
 	}
 	if n > 0 {
-		if buf[i]>>2&mask == c { // b
+		if uint16(buf[i])>>2&mask == c { // b
 			bits.Set(k + 1)
 		}
 		n--
 	}
 	if n > 0 {
-		if (buf[i]<<1|buf[i+1]>>7)&mask == c { // c
+		if u16be(buf[i:])>>7&mask == c { // c
 			bits.Set(k + 2)
 		}
 		i++
 		n--
 	}
 	if n > 0 {
-		if buf[i]>>4&mask == c { // d
+		if uint16(buf[i])>>4&mask == c { // d
 			bits.Set(k + 3)
 		}
 		n--
 	}
 	if n > 0 {
-		if buf[i]>>1&mask == c { // e
+		if uint16(buf[i])>>1&mask == c { // e
 			bits.Set(k + 4)
 		}
 		n--
 	}
 	if n > 0 {
-		if (buf[i]<<2|buf[i+1]>>6)&mask == c { // f
+		if u16be(buf[i:])>>6&mask == c { // f
 			bits.Set(k + 5)
 		}
 		i++
 		n--
 	}
 	if n > 0 {
-		if buf[i]>>3&mask == c { // g
+		if uint16(buf[i])>>3&mask == c { // g
 			bits.Set(k + 6)
 		}
 	}
@@ -261,33 +230,17 @@ func cmp_bp_4_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 	)
 	// process 8 values
 	for n >= 8 {
-		if buf[i]>>4&mask == c { // a
-			b |= 1
-		}
-		if buf[i]&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(buf[i]>>4&mask == c)   // a
+		b |= util.Bool2byte(buf[i]&mask == c) << 1 // b
 		i++
-		if buf[i]>>4&mask == c { // c
-			b |= 4
-		}
-		if buf[i]&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(buf[i]>>4&mask == c) << 2 // c
+		b |= util.Bool2byte(buf[i]&mask == c) << 3    // d
 		i++
-		if buf[i]>>4&mask == c { // e
-			b |= 0x10
-		}
-		if buf[i]&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(buf[i]>>4&mask == c) << 4 // e
+		b |= util.Bool2byte(buf[i]&mask == c) << 5    // f
 		i++
-		if buf[i]>>4&mask == c { // g
-			b |= 0x40
-		}
-		if buf[i]&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(buf[i]>>4&mask == c) << 6 // g
+		b |= util.Bool2byte(buf[i]&mask == c) << 7    // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -361,34 +314,18 @@ func cmp_bp_5_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if uint16(buf[i])>>3&mask == c { // a
-			b |= 1
-		}
-		if BE.Uint16(buf[i:])>>6&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(uint16(buf[i])>>3&mask == c)          // a
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>6&mask == c) << 1 // b
 		i++
-		if uint16(buf[i])>>1&mask == c { // c
-			b |= 4
-		}
-		if BE.Uint16(buf[i:])>>4&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(uint16(buf[i])>>1&mask == c) << 2     // c
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>4&mask == c) << 3 // d
 		i++
-		if BE.Uint16(buf[i:])>>7&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>7&mask == c) << 4 // e
 		i++
-		if uint16(buf[i])>>2&mask == c { // f
-			b |= 0x20
-		}
-		if BE.Uint16(buf[i:])>>5&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(uint16(buf[i])>>2&mask == c) << 5     // f
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>5&mask == c) << 6 // g
 		i++
-		if uint16(buf[i])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(uint16(buf[i])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -462,35 +399,19 @@ func cmp_bp_6_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 4 {
-		if uint16(buf[i])>>2&mask == c { // a
-			b |= 1
-		}
-		if BE.Uint16(buf[i:])>>4&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(uint16(buf[i])>>2&mask == c)          // a
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>4&mask == c) << 1 // b
 		i++
-		if BE.Uint16(buf[i:])>>6&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>6&mask == c) << 2 // c
 		i++
-		if uint16(buf[i])&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(uint16(buf[i])&mask == c) << 3 // d
 		i++
-		if uint16(buf[i])>>2&mask == c { // e
-			b |= 0x10
-		}
-		if BE.Uint16(buf[i:])>>4&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(uint16(buf[i])>>2&mask == c) << 4     // e
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>4&mask == c) << 5 // f
 		i++
-		if BE.Uint16(buf[i:])>>6&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>6&mask == c) << 6 // g
 		i++
-		if uint16(buf[i])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(uint16(buf[i])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -563,36 +484,20 @@ func cmp_bp_7_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if uint16(buf[i])>>1&mask == c { // a
-			b |= 1
-		}
-		if BE.Uint16(buf[i:])>>2&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(uint16(buf[i])>>1&mask == c)          // a
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>2&mask == c) << 1 // b
 		i++
-		if BE.Uint16(buf[i:])>>3&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>3&mask == c) << 2 // c
 		i++
-		if BE.Uint16(buf[i:])>>4&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>4&mask == c) << 3 // d
 		i++
-		if BE.Uint16(buf[i:])>>5&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>5&mask == c) << 4 // e
 		i++
-		if BE.Uint16(buf[i:])>>6&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>6&mask == c) << 5 // f
 		i++
-		if BE.Uint16(buf[i:])>>7&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>7&mask == c) << 6 // g
 		i++
-		if uint16(buf[i])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(uint16(buf[i])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -673,37 +578,21 @@ func cmp_bp_9_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint16(buf[i:])>>7&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>7&mask == c) // a
 		i++
-		if BE.Uint16(buf[i:])>>6&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>6&mask == c) << 1 // b
 		i++
-		if BE.Uint16(buf[i:])>>5&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>5&mask == c) << 2 // c
 		i++
-		if BE.Uint16(buf[i:])>>4&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>4&mask == c) << 3 // d
 		i++
-		if BE.Uint16(buf[i:])>>3&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>3&mask == c) << 4 // e
 		i++
-		if BE.Uint16(buf[i:])>>2&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>2&mask == c) << 5 // f
 		i++
-		if BE.Uint16(buf[i:])>>1&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>1&mask == c) << 6 // g
 		i++
-		if BE.Uint16(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -781,37 +670,21 @@ func cmp_bp_10_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint16(buf[i:])>>6&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>6&mask == c) // a
 		i++
-		if BE.Uint16(buf[i:])>>4&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>4&mask == c) << 1 // b
 		i++
-		if BE.Uint16(buf[i:])>>2&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>2&mask == c) << 2 // c
 		i++
-		if BE.Uint16(buf[i:])&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])&mask == c) << 3 // d
 		i += 2
-		if BE.Uint16(buf[i:])>>6&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>6&mask == c) << 4 // e
 		i++
-		if BE.Uint16(buf[i:])>>4&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>4&mask == c) << 5 // f
 		i++
-		if BE.Uint16(buf[i:])>>2&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>2&mask == c) << 6 // g
 		i++
-		if BE.Uint16(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -889,36 +762,20 @@ func cmp_bp_11_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>21&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>21&mask == c) // a
 		i++
-		if BE.Uint32(buf[i:])>>18&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>18&mask == c) << 1 // b
 		i++
-		if BE.Uint32(buf[i:])>>15&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>15&mask == c) << 2 // c
 		i += 2
-		if BE.Uint32(buf[i:])>>20&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>20&mask == c) << 3 // d
 		i++
-		if BE.Uint32(buf[i:])>>17&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>17&mask == c) << 4 // e
 		i++
-		if BE.Uint32(buf[i:])>>14&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>14&mask == c) << 5 // f
 		i++
-		if BE.Uint32(buf[i:])>>11&mask == c { // g
-			b |= 0x40
-		}
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>11&mask == c) << 6 // g
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7     // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -996,37 +853,21 @@ func cmp_bp_12_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint16(buf[i:])>>4&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>4&mask == c) // a
 		i++
-		if BE.Uint16(buf[i:])&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])&mask == c) << 1 // b
 		i += 2
-		if BE.Uint16(buf[i:])>>4&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>4&mask == c) << 2 // c
 		i++
-		if BE.Uint16(buf[i:])&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])&mask == c) << 3 // d
 		i += 2
-		if BE.Uint16(buf[i:])>>4&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>4&mask == c) << 4 // e
 		i++
-		if BE.Uint16(buf[i:])&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])&mask == c) << 5 // f
 		i += 2
-		if BE.Uint16(buf[i:])>>4&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])>>4&mask == c) << 6 // g
 		i++
-		if BE.Uint16(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -1105,36 +946,20 @@ func cmp_bp_13_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>19&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>19&mask == c) // a
 		i++
-		if BE.Uint32(buf[i:])>>14&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>14&mask == c) << 1 // b
 		i += 2
-		if BE.Uint32(buf[i:])>>17&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>17&mask == c) << 2 // c
 		i++
-		if BE.Uint32(buf[i:])>>12&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>12&mask == c) << 3 // d
 		i += 2
-		if BE.Uint32(buf[i:])>>15&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>15&mask == c) << 4 // e
 		i += 2
-		if BE.Uint32(buf[i:])>>18&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>18&mask == c) << 5 // f
 		i++
-		if BE.Uint32(buf[i:])>>13&mask == c { // g
-			b |= 0x40
-		}
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>13&mask == c) << 6 // g
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7     // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -1213,36 +1038,20 @@ func cmp_bp_14_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>18&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>18&mask == c) // a
 		i++
-		if BE.Uint32(buf[i:])>>12&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>12&mask == c) << 1 // b
 		i += 2
-		if BE.Uint32(buf[i:])>>14&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>14&mask == c) << 2 // c
 		i += 2
-		if BE.Uint32(buf[i:])>>16&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>16&mask == c) << 3 // d
 		i += 2
-		if BE.Uint32(buf[i:])>>18&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>18&mask == c) << 4 // e
 		i++
-		if BE.Uint32(buf[i:])>>12&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>12&mask == c) << 5 // f
 		i += 2
-		if BE.Uint32(buf[i:])>>14&mask == c { // g
-			b |= 0x40
-		}
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>14&mask == c) << 6 // g
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7     // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -1321,36 +1130,20 @@ func cmp_bp_15_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>17&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>17&mask == c) // a
 		i++
-		if BE.Uint32(buf[i:])>>10&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>10&mask == c) << 1 // b
 		i += 2
-		if BE.Uint32(buf[i:])>>11&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>11&mask == c) << 2 // c
 		i += 2
-		if BE.Uint32(buf[i:])>>12&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>12&mask == c) << 3 // d
 		i += 2
-		if BE.Uint32(buf[i:])>>13&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>13&mask == c) << 4 // e
 		i += 2
-		if BE.Uint32(buf[i:])>>14&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>14&mask == c) << 5 // f
 		i += 2
-		if BE.Uint32(buf[i:])>>15&mask == c { // g
-			b |= 0x40
-		}
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>15&mask == c) << 6 // g
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7     // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -1428,37 +1221,21 @@ func cmp_bp_16_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 48 values per loop
 	for n >= 8 {
-		if BE.Uint16(buf[i:]) == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:]) == c) // a
 		i += 2
-		if BE.Uint16(buf[i:]) == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:]) == c) << 1 // b
 		i += 2
-		if BE.Uint16(buf[i:]) == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:]) == c) << 2 // c
 		i += 2
-		if BE.Uint16(buf[i:]) == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:]) == c) << 3 // d
 		i += 2
-		if BE.Uint16(buf[i:]) == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:]) == c) << 4 // e
 		i += 2
-		if BE.Uint16(buf[i:]) == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:]) == c) << 5 // f
 		i += 2
-		if BE.Uint16(buf[i:]) == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:]) == c) << 6 // g
 		i += 2
-		if BE.Uint16(buf[i:]) == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint16(buf[i:]) == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -1538,37 +1315,21 @@ func cmp_bp_17_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>15&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>15&mask == c) // a
 		i += 2
-		if BE.Uint32(buf[i:])>>14&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>14&mask == c) << 1 // b
 		i += 2
-		if BE.Uint32(buf[i:])>>13&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>13&mask == c) << 2 // c
 		i += 2
-		if BE.Uint32(buf[i:])>>12&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>12&mask == c) << 3 // d
 		i += 2
-		if BE.Uint32(buf[i:])>>11&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>11&mask == c) << 4 // e
 		i += 2
-		if BE.Uint32(buf[i:])>>10&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>10&mask == c) << 5 // f
 		i += 2
-		if BE.Uint32(buf[i:])>>9&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>9&mask == c) << 6 // g
 		i += 1
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -1648,37 +1409,21 @@ func cmp_bp_18_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>14&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>14&mask == c) // a
 		i += 2
-		if BE.Uint32(buf[i:])>>12&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>12&mask == c) << 1 // b
 		i += 2
-		if BE.Uint32(buf[i:])>>10&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>10&mask == c) << 2 // c
 		i += 2
-		if BE.Uint32(buf[i:])>>8&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>8&mask == c) << 3 // d
 		i += 3
-		if BE.Uint32(buf[i:])>>14&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>14&mask == c) << 4 // e
 		i += 2
-		if BE.Uint32(buf[i:])>>12&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>12&mask == c) << 5 // f
 		i += 2
-		if BE.Uint32(buf[i:])>>10&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>10&mask == c) << 6 // g
 		i += 1
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -1758,37 +1503,21 @@ func cmp_bp_19_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>13&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>13&mask == c) // a
 		i += 2
-		if BE.Uint32(buf[i:])>>10&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>10&mask == c) << 1 // b
 		i += 2
-		if BE.Uint32(buf[i:])>>7&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>7&mask == c) << 2 // c
 		i += 3
-		if BE.Uint32(buf[i:])>>12&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>12&mask == c) << 3 // d
 		i += 2
-		if BE.Uint32(buf[i:])>>9&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>9&mask == c) << 4 // e
 		i += 2
-		if BE.Uint32(buf[i:])>>6&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>6&mask == c) << 5 // f
 		i += 3
-		if BE.Uint32(buf[i:])>>11&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>11&mask == c) << 6 // g
 		i += 1
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -1868,37 +1597,21 @@ func cmp_bp_20_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>12&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>12&mask == c) // a
 		i += 2
-		if BE.Uint32(buf[i:])>>8&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>8&mask == c) << 1 // b
 		i += 2
-		if BE.Uint32(buf[i:])>>4&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 2 // c
 		i += 2
-		if BE.Uint32(buf[i:])&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 3 // d
 		i += 4
-		if BE.Uint32(buf[i:])>>12&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>12&mask == c) << 4 // e
 		i += 2
-		if BE.Uint32(buf[i:])>>8&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>8&mask == c) << 5 // f
 		i += 2
-		if BE.Uint32(buf[i:])>>4&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 6 // g
 		i += 2
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -1979,37 +1692,21 @@ func cmp_bp_21_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>11&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>11&mask == c) // a
 		i += 2
-		if BE.Uint32(buf[i:])>>6&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>6&mask == c) << 1 // b
 		i += 2
-		if BE.Uint32(buf[i:])>>1&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>1&mask == c) << 2 // c
 		i += 3
-		if BE.Uint32(buf[i:])>>4&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 3 // d
 		i += 3
-		if BE.Uint32(buf[i:])>>7&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>7&mask == c) << 4 // e
 		i += 2
-		if BE.Uint32(buf[i:])>>2&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>2&mask == c) << 5 // f
 		i += 3
-		if BE.Uint32(buf[i:])>>5&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>5&mask == c) << 6 // g
 		i += 2
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -2090,37 +1787,21 @@ func cmp_bp_22_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>10&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>10&mask == c) // a
 		i += 2
-		if BE.Uint32(buf[i:])>>4&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 1 // b
 		i += 3
-		if BE.Uint32(buf[i:])>>6&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>6&mask == c) << 2 // c
 		i += 2
-		if BE.Uint32(buf[i:])&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 3 // d
 		i += 4
-		if BE.Uint32(buf[i:])>>10&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>10&mask == c) << 4 // e
 		i += 2
-		if BE.Uint32(buf[i:])>>4&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 5 // f
 		i += 3
-		if BE.Uint32(buf[i:])>>6&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>6&mask == c) << 6 // g
 		i += 2
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -2201,37 +1882,21 @@ func cmp_bp_23_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>9&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>9&mask == c) // a
 		i += 2
-		if BE.Uint32(buf[i:])>>2&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>2&mask == c) << 1 // b
 		i += 3
-		if BE.Uint32(buf[i:])>>3&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>3&mask == c) << 2 // c
 		i += 3
-		if BE.Uint32(buf[i:])>>4&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 3 // d
 		i += 3
-		if BE.Uint32(buf[i:])>>5&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>5&mask == c) << 4 // e
 		i += 3
-		if BE.Uint32(buf[i:])>>6&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>6&mask == c) << 5 // f
 		i += 3
-		if BE.Uint32(buf[i:])>>7&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>7&mask == c) << 6 // g
 		i += 2
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -2312,37 +1977,21 @@ func cmp_bp_24_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>8&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>8&mask == c) // a
 		i += 2
-		if BE.Uint32(buf[i:])&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 1 // b
 		i += 4
-		if BE.Uint32(buf[i:])>>8&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>8&mask == c) << 2 // c
 		i += 2
-		if BE.Uint32(buf[i:])&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 3 // d
 		i += 4
-		if BE.Uint32(buf[i:])>>8&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>8&mask == c) << 4 // e
 		i += 2
-		if BE.Uint32(buf[i:])&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 5 // f
 		i += 4
-		if BE.Uint32(buf[i:])>>8&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>8&mask == c) << 6 // g
 		i += 2
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -2424,37 +2073,21 @@ func cmp_bp_25_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>7&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>7&mask == c) // a
 		i += 3
-		if BE.Uint32(buf[i:])>>6&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>6&mask == c) << 1 // b
 		i += 3
-		if BE.Uint32(buf[i:])>>5&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>5&mask == c) << 2 // c
 		i += 3
-		if BE.Uint32(buf[i:])>>4&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 3 // d
 		i += 3
-		if BE.Uint32(buf[i:])>>3&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>3&mask == c) << 4 // e
 		i += 3
-		if BE.Uint32(buf[i:])>>2&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>2&mask == c) << 5 // f
 		i += 3
-		if BE.Uint32(buf[i:])>>1&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>1&mask == c) << 6 // g
 		i += 3
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -2536,37 +2169,21 @@ func cmp_bp_26_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>6&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>6&mask == c) // a
 		i += 3
-		if BE.Uint32(buf[i:])>>4&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 1 // b
 		i += 3
-		if BE.Uint32(buf[i:])>>2&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>2&mask == c) << 2 // c
 		i += 3
-		if BE.Uint32(buf[i:])&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 3 // d
 		i += 4
-		if BE.Uint32(buf[i:])>>6&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>6&mask == c) << 4 // e
 		i += 3
-		if BE.Uint32(buf[i:])>>4&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 5 // f
 		i += 3
-		if BE.Uint32(buf[i:])>>2&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>2&mask == c) << 6 // g
 		i += 3
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -2648,36 +2265,20 @@ func cmp_bp_27_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint64(buf[i:])>>37&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>37&mask == c) // a
 		i += 3
-		if BE.Uint64(buf[i:])>>34&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>34&mask == c) << 1 // b
 		i += 3
-		if BE.Uint64(buf[i:])>>31&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>31&mask == c) << 2 // c
 		i += 4
-		if BE.Uint64(buf[i:])>>36&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>36&mask == c) << 3 // d
 		i += 3
-		if BE.Uint64(buf[i:])>>33&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>33&mask == c) << 4 // e
 		i += 3
-		if BE.Uint64(buf[i:])>>30&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>30&mask == c) << 5 // f
 		i += 3
-		if BE.Uint64(buf[i:])>>27&mask == c { // g
-			b |= 0x40
-		}
-		if BE.Uint64(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>27&mask == c) << 6 // g
+		b |= util.Bool2byte(BE.Uint64(buf[i:])&mask == c) << 7     // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -2760,37 +2361,21 @@ func cmp_bp_28_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if BE.Uint32(buf[i:])>>4&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) // a
 		i += 3
-		if BE.Uint32(buf[i:])&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 1 // b
 		i += 4
-		if BE.Uint32(buf[i:])>>4&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 2 // c
 		i += 3
-		if BE.Uint32(buf[i:])&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 3 // d
 		i += 4
-		if BE.Uint32(buf[i:])>>4&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 4 // e
 		i += 3
-		if BE.Uint32(buf[i:])&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 5 // f
 		i += 4
-		if BE.Uint32(buf[i:])>>4&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])>>4&mask == c) << 6 // g
 		i += 3
-		if BE.Uint32(buf[i:])&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(BE.Uint32(buf[i:])&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -2873,37 +2458,21 @@ func cmp_bp_29_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if uint64(BE.Uint32(buf[i:]))>>3&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(uint64(BE.Uint32(buf[i:]))>>3&mask == c) // a
 		i += 3
-		if BE.Uint64(buf[i:])>>30&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>30&mask == c) << 1 // b
 		i += 4
-		if uint64(BE.Uint32(buf[i:]))>>1&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(uint64(BE.Uint32(buf[i:]))>>1&mask == c) << 2 // c
 		i += 3
-		if BE.Uint64(buf[i:])>>28&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>28&mask == c) << 3 // d
 		i += 4
-		if BE.Uint64(buf[i:])>>31&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>31&mask == c) << 4 // e
 		i += 4
-		if uint64(BE.Uint32(buf[i:]))>>2&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(uint64(BE.Uint32(buf[i:]))>>2&mask == c) << 5 // f
 		i += 3
-		if BE.Uint64(buf[i:])>>29&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>29&mask == c) << 6 // g
 		i += 4
-		if uint64(BE.Uint32(buf[i:]))&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(uint64(BE.Uint32(buf[i:]))&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -2986,37 +2555,21 @@ func cmp_bp_30_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if uint64(BE.Uint32(buf[i:]))>>2&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(uint64(BE.Uint32(buf[i:]))>>2&mask == c) // a
 		i += 3
-		if BE.Uint64(buf[i:])>>28&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>28&mask == c) << 1 // b
 		i += 4
-		if BE.Uint64(buf[i:])>>30&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>30&mask == c) << 2 // c
 		i += 4
-		if uint64(BE.Uint32(buf[i:]))&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(uint64(BE.Uint32(buf[i:]))&mask == c) << 3 // d
 		i += 4
-		if uint64(BE.Uint32(buf[i:]))>>2&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(uint64(BE.Uint32(buf[i:]))>>2&mask == c) << 4 // e
 		i += 3
-		if BE.Uint64(buf[i:])>>28&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>28&mask == c) << 5 // f
 		i += 4
-		if BE.Uint64(buf[i:])>>30&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>30&mask == c) << 6 // g
 		i += 4
-		if uint64(BE.Uint32(buf[i:]))&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(uint64(BE.Uint32(buf[i:]))&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
@@ -3099,37 +2652,21 @@ func cmp_bp_31_eq(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 
 	// process 8 values per loop
 	for n >= 8 {
-		if uint64(BE.Uint32(buf[i:]))>>1&mask == c { // a
-			b |= 1
-		}
+		b |= util.Bool2byte(uint64(BE.Uint32(buf[i:]))>>1&mask == c) // a
 		i += 3
-		if BE.Uint64(buf[i:])>>26&mask == c { // b
-			b |= 2
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>26&mask == c) << 1 // b
 		i += 4
-		if BE.Uint64(buf[i:])>>27&mask == c { // c
-			b |= 4
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>27&mask == c) << 2 // c
 		i += 4
-		if BE.Uint64(buf[i:])>>28&mask == c { // d
-			b |= 8
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>28&mask == c) << 3 // d
 		i += 4
-		if BE.Uint64(buf[i:])>>29&mask == c { // e
-			b |= 0x10
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>29&mask == c) << 4 // e
 		i += 4
-		if BE.Uint64(buf[i:])>>30&mask == c { // f
-			b |= 0x20
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>30&mask == c) << 5 // f
 		i += 4
-		if BE.Uint64(buf[i:])>>31&mask == c { // g
-			b |= 0x40
-		}
+		b |= util.Bool2byte(BE.Uint64(buf[i:])>>31&mask == c) << 6 // g
 		i += 4
-		if uint64(BE.Uint32(buf[i:]))&mask == c { // h
-			b |= 0x80
-		}
+		b |= util.Bool2byte(uint64(BE.Uint32(buf[i:]))&mask == c) << 7 // h
 		if b > 0 {
 			res[k/8] = b
 			b = 0
