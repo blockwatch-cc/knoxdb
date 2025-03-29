@@ -99,9 +99,9 @@ func decodePackedUint64(dst []uint64, buf []byte) (int, error) {
 		return 0, fmt.Errorf("zip: decodeSimpleInt64 not enough data")
 	}
 
-	n, err := s8b.CountValues(buf[8:])
-	if err != nil {
-		return 0, fmt.Errorf("zip: decodeSimpleInt64 count: %v", err)
+	n := s8b.CountValues(buf[8:])
+	if n < 0 {
+		return 0, fmt.Errorf("zip: decodeSimpleInt64 bad count")
 	}
 	n += 1
 

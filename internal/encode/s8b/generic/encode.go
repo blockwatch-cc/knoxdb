@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
 package generic
 
 // Package simple8b implements the 64bit integer encoding algoritm as published
@@ -144,7 +147,7 @@ var (
 	}
 
 	ErrValueOutOfBounds    = errors.New("value out of bounds")
-	ErrInvalidBufferLength = errors.New("src length is not multiple of 8")
+	ErrInvalidBufferLength = errors.New("dst length is not multiple of 8")
 )
 
 func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) {
@@ -260,7 +263,7 @@ func Decode[T types.Unsigned](dst []T, buf []byte) (int, error) {
 	if cpu.IsBigEndian {
 		for i := 0; i < len(buf); i += 8 {
 			v := binary.LittleEndian.Uint64(buf[i:])
-			sel := (v >> 60) & 0xf
+			sel := (v >> 60)
 			selector[sel].unpack(v, unsafe.Pointer(&dst[j]))
 			j += selector[sel].n
 		}
@@ -272,4 +275,64 @@ func Decode[T types.Unsigned](dst []T, buf []byte) (int, error) {
 		}
 	}
 	return j, nil
+}
+
+func CountValues(src []byte) int {
+	var (
+		i int
+		n int
+	)
+
+	for range len(src) / 64 {
+		n += selector64[src[i]>>4].n
+		i += 8
+		n += selector64[src[i]>>4].n
+		i += 8
+		n += selector64[src[i]>>4].n
+		i += 8
+		n += selector64[src[i]>>4].n
+		i += 8
+		n += selector64[src[i]>>4].n
+		i += 8
+		n += selector64[src[i]>>4].n
+		i += 8
+		n += selector64[src[i]>>4].n
+		i += 8
+		n += selector64[src[i]>>4].n
+		i += 8
+	}
+
+	for i < len(src) {
+		n += selector64[src[i]>>4].n
+		i += 8
+	}
+
+	return n
+}
+
+func DecodeWord[T types.Unsigned](dst []T, buf []byte) (int, error) {
+	if len(buf) == 0 {
+		return 0, nil
+	}
+	if len(buf) != 8 {
+		return 0, ErrInvalidBufferLength
+	}
+
+	var selector [16]packing
+	w := unsafe.Sizeof(T(0))
+	switch w {
+	case 8:
+		selector = selector64
+	case 4:
+		selector = selector32
+	case 2:
+		selector = selector16
+	case 1:
+		selector = selector8
+	}
+
+	v := binary.LittleEndian.Uint64(buf)
+	sel := (v >> 60)
+	selector[sel].unpack(v, unsafe.Pointer(&dst[0]))
+	return selector[sel].n, nil
 }

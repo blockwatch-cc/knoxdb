@@ -205,7 +205,7 @@ func matchBetween(a ByteArray, from, to []byte, bits, mask *bitset.Bitset) *bits
 	if a.Len() == 0 {
 		if mask != nil {
 			copy(bbuf, mask.Bytes())
-			bits.ResetCount()
+			bits.ResetCount(-1)
 		} else {
 			bbuf[0] = 0xff
 			for bp := 1; bp < len(bbuf); bp *= 2 {

@@ -1,4 +1,6 @@
-// from: github.com/jwilder/encoding
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
 package generic
 
 import (
@@ -11,30 +13,6 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
-
-func TestLegacy(t *testing.T) {
-	for _, test := range tests.MakeTests[uint64]() {
-		t.Run(test.Name, func(t *testing.T) {
-			in := test.In
-			if test.Fn != nil {
-				in = test.Fn()
-			}
-			encoded, err := EncodeLegacy(slices.Clone(in))
-			if test.Err {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-
-			decoded := make([]uint64, len(in))
-			n, err := DecodeLegacy(decoded, encoded)
-			require.NoError(t, err)
-			if len(encoded) > 0 {
-				require.Equal(t, in, decoded[:n])
-			}
-		})
-	}
-}
 
 func TestEncodeUint64(t *testing.T) {
 	tests.EncodeTest[uint64](t, Encode[uint64], DecodeLegacyWrapper[uint64])
@@ -86,30 +64,6 @@ func DecodeLegacyWrapper[T types.Unsigned](dst []T, buf []byte) (int, error) {
 	}
 }
 
-func BenchmarkEncodeLegacy(b *testing.B) {
-	for _, bm := range etests.MakeBenchmarks[uint64]() {
-		b.Run(bm.Name, func(b *testing.B) {
-			b.SetBytes(int64(8 * len(bm.Data)))
-			for i := 0; i < b.N; i++ {
-				EncodeLegacy(slices.Clone(bm.Data))
-			}
-		})
-	}
-}
-
-func BenchmarkDecodeLegacy(b *testing.B) {
-	for _, c := range etests.MakeBenchmarks[uint64]() {
-		enc, _ := EncodeLegacy(slices.Clone(c.Data))
-		dec := make([]uint64, len(c.Data))
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(len(c.Data) * 8))
-			for i := 0; i < b.N; i++ {
-				_, _ = DecodeLegacy(dec, enc)
-			}
-		})
-	}
-}
-
 func BenchmarkEncodeUint64(b *testing.B) {
 	tests.EncodeBenchmark[uint64](b, Encode[uint64])
 }
@@ -140,4 +94,18 @@ func BenchmarkDecodeUint16(b *testing.B) {
 
 func BenchmarkDecodeUint8(b *testing.B) {
 	tests.DecodeBenchmark[uint8](b, Encode[uint8], Decode[uint8])
+}
+
+func BenchmarkCount(b *testing.B) {
+	for _, c := range etests.MakeBenchmarks[uint64]() {
+		minv, maxv := slices.Min(c.Data), slices.Max(c.Data)
+		buf, err := Encode[uint64](make([]byte, 8*len(c.Data)), c.Data, minv, maxv)
+		require.NoError(b, err)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(len(c.Data) * 8))
+			for i := 0; i < b.N; i++ {
+				_ = CountValues(buf)
+			}
+		})
+	}
 }

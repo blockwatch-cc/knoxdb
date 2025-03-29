@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
 package generic
 
 import (
@@ -127,7 +130,7 @@ func DecodeLegacy(dst, src []uint64) (value int, err error) {
 	return j, nil
 }
 
-func CountValues(b []byte) (int, error) {
+func CountLegacy(b []byte) (int, error) {
 	var count int
 	for len(b) >= 8 {
 		v := binary.LittleEndian.Uint64(b[:8])

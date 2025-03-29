@@ -107,9 +107,9 @@ func DecodeUint64(dst []uint64, src []byte) (int, error) {
 	return decodeUint64AVX2(dst, src), nil
 }
 
-func CountValues(src []byte) (int, error) {
-	if len(src)&7 != 0 {
-		return 0, generic.ErrInvalidBufferLength
+func CountValues(src []byte) int {
+	if len(src)&7 > 0 {
+		return -1
 	}
-	return countValuesAVX2Core(src), nil
+	return countValuesAVX2Core(src)
 }

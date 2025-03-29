@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
 package tests
 
 import (
@@ -5,6 +8,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/stretchr/testify/require"
@@ -17,7 +21,7 @@ func EncodeBenchmark[T types.Unsigned](b *testing.B, fn EncodeFunc[T]) {
 		var sz, n int
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * int(unsafe.Sizeof(T(0)))))
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				buf, _ := fn(buf, c.Data, minv, maxv)
 				sz += len(buf)
 				n++
@@ -37,8 +41,43 @@ func DecodeBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], dec Deco
 		dst := make([]T, len(c.Data))
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * int(unsafe.Sizeof(T(0)))))
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				dec(dst, buf)
+			}
+		})
+	}
+}
+
+func CompareBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], cmp CompareFunc) {
+	for _, c := range tests.MakeBenchmarks[T]() {
+		minv, maxv := slices.Min(c.Data), slices.Max(c.Data)
+		buf, err := enc(make([]byte, 8*len(c.Data)), c.Data, minv, maxv)
+		require.NoError(b, err)
+		bits := bitset.NewBitset(len(c.Data))
+		val := c.Data[len(c.Data)/2]
+
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(len(c.Data) * int(unsafe.Sizeof(T(0)))))
+			for range b.N {
+				cmp(buf, uint64(val), bits)
+			}
+		})
+	}
+}
+
+func CompareBenchmark2[T types.Unsigned](b *testing.B, enc EncodeFunc[T], cmp CompareFunc2) {
+	for _, c := range tests.MakeBenchmarks[T]() {
+		minv, maxv := slices.Min(c.Data), slices.Max(c.Data)
+		buf, err := enc(make([]byte, 8*len(c.Data)), c.Data, minv, maxv)
+		require.NoError(b, err)
+		bits := bitset.NewBitset(len(c.Data))
+		val := c.Data[len(c.Data)/2]
+		from, to := max(val/2, minv+1), min(val*2, maxv-1)
+
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(len(c.Data) * int(unsafe.Sizeof(T(0)))))
+			for range b.N {
+				cmp(buf, uint64(from), uint64(to), bits)
 			}
 		})
 	}

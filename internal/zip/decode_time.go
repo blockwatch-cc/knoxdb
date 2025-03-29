@@ -98,9 +98,9 @@ func decodePackedTime(dst []int64, buf []byte, mod int64) (int, error) {
 	}
 
 	// decode number of encoded values
-	n, err := s8b.CountValues(buf[8:])
-	if err != nil {
-		return 0, fmt.Errorf("zip: decodePackedTime count: %v", err)
+	n := s8b.CountValues(buf[8:])
+	if n < 0 {
+		return 0, fmt.Errorf("zip: decodePackedTime bad count")
 	}
 	n += 1
 
@@ -194,9 +194,9 @@ func decodeZigZagPackedTime(dst []int64, buf []byte, mod int64) (int, error) {
 	}
 
 	// decode number of encoded values
-	n, err := s8b.CountValues(buf[8:])
-	if err != nil {
-		return 0, fmt.Errorf("zip: decodeZigZagPackedTime count: %v", err)
+	n := s8b.CountValues(buf[8:])
+	if n < 0 {
+		return 0, fmt.Errorf("zip: decodeZigZagPackedTime bad count")
 	}
 	n += 1
 

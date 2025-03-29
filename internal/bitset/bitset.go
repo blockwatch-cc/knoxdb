@@ -548,11 +548,8 @@ func (s *Bitset) String() string {
 	return hex.EncodeToString(dst)
 }
 
-func (s *Bitset) ResetCount(n ...int) {
-	s.cnt = -1
-	if n != nil {
-		s.cnt = n[0]
-	}
+func (s *Bitset) ResetCount(n int) {
+	s.cnt = n
 }
 
 func (s Bitset) Len() int {

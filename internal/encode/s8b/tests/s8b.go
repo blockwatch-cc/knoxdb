@@ -1,10 +1,16 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
 package tests
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/bitset"
+	"blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -12,6 +18,8 @@ import (
 
 type EncodeFunc[T types.Integer] func([]byte, []T, T, T) ([]byte, error)
 type DecodeFunc[T types.Unsigned] func([]T, []byte) (int, error)
+type CompareFunc func([]byte, uint64, *bitset.Bitset) *bitset.Bitset
+type CompareFunc2 func([]byte, uint64, uint64, *bitset.Bitset) *bitset.Bitset
 
 type S8bTests[T types.Unsigned] struct {
 	Name string
@@ -213,5 +221,139 @@ func EncodeTest[T types.Unsigned](t *testing.T, enc EncodeFunc[T], dec DecodeFun
 				require.Equal(t, in, dst[:n])
 			}
 		})
+	}
+}
+
+type CompareCase struct {
+	Name string
+	Gen  func(int) []uint64
+}
+
+var CompareCases = []CompareCase{
+	{"one", func(n int) []uint64 { return tests.GenConst[uint64](n, 1) }},
+	{"rnd", tests.GenRandom[uint64]},
+}
+
+var CompareSizes = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 30, 60, 120, 240, 1024}
+
+func CompareTest(t *testing.T, enc EncodeFunc[uint64], cmp CompareFunc, mode types.FilterMode) {
+	for _, sz := range CompareSizes {
+		for _, c := range CompareCases {
+			t.Run(fmt.Sprintf("%s/sz_%d", c.Name, sz), func(t *testing.T) {
+				vals := c.Gen(sz)
+				minv, maxv := slices.Min(vals), slices.Max(vals)
+				buf, err := enc(make([]byte, sz*8), vals, 0, maxv) // sic! no MinFOR
+				require.NoError(t, err)
+				bits := bitset.NewBitset(sz)
+
+				// value exists
+				val := vals[len(vals)/2]
+				cmp(buf, val, bits)
+				ensureBits(t, vals, val, val, bits, mode)
+				bits.Zero()
+				require.Equal(t, 0, bits.Count(), "cleared")
+
+				// value over bounds
+				over := maxv + 1
+				cmp(buf, over, bits)
+				ensureBits(t, vals, over, over, bits, mode)
+				bits.Zero()
+				require.Equal(t, 0, bits.Count(), "cleared")
+
+				// value under bounds
+				under := minv
+				if under > 0 {
+					under--
+				}
+				cmp(buf, under, bits)
+				ensureBits(t, vals, under, under, bits, mode)
+				bits.Zero()
+				require.Equal(t, 0, bits.Count(), "cleared")
+			})
+		}
+	}
+}
+
+// range mode specific test with 2 values
+func CompareTest2(t *testing.T, enc EncodeFunc[uint64], cmp CompareFunc2, mode types.FilterMode) {
+	for _, sz := range CompareSizes {
+		for _, c := range CompareCases {
+			t.Run(fmt.Sprintf("%s/sz_%d", c.Name, sz), func(t *testing.T) {
+				vals := c.Gen(sz)
+				minv, maxv := slices.Min(vals), slices.Max(vals)
+				buf, err := enc(make([]byte, sz*8), vals, 0, 1)
+				require.NoError(t, err)
+				bits := bitset.NewBitset(sz)
+
+				// single value
+				val := vals[len(vals)/2]
+				cmp(buf, val, val, bits)
+				ensureBits(t, vals, val, val, bits, mode)
+				bits.Zero()
+
+				// full range
+				cmp(buf, minv, maxv, bits)
+				ensureBits(t, vals, minv, maxv, bits, mode)
+				bits.Zero()
+
+				// partial range
+				from, to := max(val/2, minv+1), min(val*2, maxv-1)
+				cmp(buf, from, to, bits)
+				ensureBits(t, vals, from, to, bits, mode)
+				bits.Zero()
+
+				// out of bounds (over)
+				cmp(buf, maxv+1, maxv+2, bits)
+				ensureBits(t, vals, maxv+1, maxv+2, bits, mode)
+				bits.Zero()
+
+				// out of bounds (under)
+				if minv > 2 {
+					cmp(buf, minv-2, minv-1, bits)
+					ensureBits(t, vals, minv-2, minv-1, bits, mode)
+					bits.Zero()
+				}
+			})
+		}
+	}
+}
+
+func ensureBits(t *testing.T, vals []uint64, val, val2 uint64, bits *bitset.Bitset, mode types.FilterMode) {
+	t.Helper()
+	switch mode {
+	case types.FilterModeEqual:
+		for i, v := range vals {
+			require.Equal(t, v == val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+		}
+
+	case types.FilterModeNotEqual:
+		for i, v := range vals {
+			require.Equal(t, v != val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+		}
+
+	case types.FilterModeLt:
+		for i, v := range vals {
+			require.Equal(t, v < val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+		}
+
+	case types.FilterModeLe:
+		for i, v := range vals {
+			require.Equal(t, v <= val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+		}
+
+	case types.FilterModeGt:
+		for i, v := range vals {
+			require.Equal(t, v > val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+		}
+
+	case types.FilterModeGe:
+		for i, v := range vals {
+			require.Equal(t, v >= val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+		}
+
+	case types.FilterModeRange:
+		for i, v := range vals {
+			require.Equal(t, v >= val && v <= val2, bits.IsSet(i), "bit=%d val=%d a=%d b=%d", i, v, val, val2)
+		}
 	}
 }

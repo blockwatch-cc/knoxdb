@@ -102,9 +102,9 @@ func decodePackedInt32(dst []uint32, buf []byte) (int, error) {
 		return 0, fmt.Errorf("zip: decodePackedInt32 not enough data to decode packed value")
 	}
 
-	n, err := s8b.CountValues(buf[8:])
-	if err != nil {
-		return 0, fmt.Errorf("zip: decodePackedInt32 count: %v", err)
+	n := s8b.CountValues(buf[8:])
+	if n < 0 {
+		return 0, fmt.Errorf("zip: decodePackedInt32 bad count")
 	}
 	n += 1
 
