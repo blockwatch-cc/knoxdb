@@ -15,7 +15,6 @@ var (
 func init() {
 	for i := range Counts {
 		Counts[i] = uint8(bits.OnesCount8(uint8(i)))
-		// LeadingZeros[i] = bits.TrailingZeros8(uint8(i))
 		ReverseLut256[i] = uint8(((uint64(i) * 0x80200802) & 0x0884422110) * 0x0101010101 >> 32)
 	}
 }

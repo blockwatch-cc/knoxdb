@@ -367,46 +367,6 @@ func (p *Package) SetWire(row int, buf []byte) {
 	}
 }
 
-// ReplacePack replaces at most n rows in the current package starting at
-// offset `to` with rows from `src` starting at offset `from`.
-// Both packages must have same schema and block order.
-func (p *Package) ReplacePack(src *Package, to, from, n int) error {
-	if src.schema.Hash() != p.schema.Hash() {
-		return fmt.Errorf("replace: schema mismatch src=%s dst=%s", src.schema.Name(), p.schema.Name())
-	}
-	if src.nRows <= from {
-		return fmt.Errorf("replace: invalid src offset=%d rows=%d", from, src.nRows)
-	}
-	if src.nRows <= from+n-1 {
-		return fmt.Errorf("replace: src overflow from+n=%d rows=%d", from+n, src.nRows)
-	}
-	if p.nRows <= to {
-		return fmt.Errorf("replace: invalid dst offset=%d rows=%d", to, p.nRows)
-	}
-	if p.nRows < to+n {
-		return fmt.Errorf("replace: dst overflow to+n=%d rows=%d", to+n, p.nRows)
-	}
-	defer func() {
-		if e := recover(); e != nil {
-			fmt.Printf("Replace: %v\n", e)
-			fmt.Printf("SRC: id=%d rows=%d pklen=%d\n", src.key, src.nRows, len(src.PkColumn()))
-			fmt.Printf("DST: id=%d rows=%d pklen=%d\n", p.key, p.nRows, len(p.PkColumn()))
-			fmt.Printf("REQ: dst:to=%d src:from=%d n=%d\n", to, from, n)
-			fmt.Printf("%s\n", string(debug.Stack()))
-			panic(e)
-		}
-	}()
-	// copy at most N rows without overflowing dst
-	n = min(p.nRows-to, n)
-	for i, b := range p.blocks {
-		if b == nil {
-			continue
-		}
-		b.ReplaceBlock(src.blocks[i], from, to, n)
-	}
-	return nil
-}
-
 // Append copies `n` rows from `src` starting at offset `from` to the end of
 // the package. Both packages must have same schema and block order.
 func (p *Package) AppendPack(src *Package, from, n int) error {
@@ -442,47 +402,6 @@ func (p *Package) AppendPack(src *Package, from, n int) error {
 			continue
 		}
 		b.AppendBlock(src.blocks[i], from, n)
-	}
-	p.nRows += n
-	return nil
-}
-
-// Insert copies `n` rows from `src` starting at offset `from` into the
-// current package from position `to`. Both packages must have same schema
-// and block order.
-func (p *Package) InsertPack(src *Package, to, from, n int) error {
-	if src.schema.Hash() != p.schema.Hash() {
-		return fmt.Errorf("insert: schema mismatch src=%s dst=%s", src.schema.Name(), p.schema.Name())
-	}
-	if src.nRows <= from {
-		return fmt.Errorf("insert: invalid src offset=%d rows=%d", from, src.nRows)
-	}
-	if src.nRows <= from+n-1 {
-		return fmt.Errorf("insert: src overflow from+n=%d rows=%d", from+n, src.nRows)
-	}
-	assert.Always(p.CanGrow(n), "pack: overflow on insert",
-		"rows", n,
-		"pack", p.key,
-		"len", p.nRows,
-		"cap", p.maxRows,
-		"blockLen", p.blocks[0].Len(),
-		"blockCap", p.blocks[0].Cap(),
-	)
-	defer func() {
-		if e := recover(); e != nil {
-			fmt.Printf("Insert: %v\n", e)
-			fmt.Printf("SRC: id=%d rows=%d pklen=%d\n", src.key, src.nRows, len(src.PkColumn()))
-			fmt.Printf("DST: id=%d rows=%d pklen=%d\n", p.key, p.nRows, len(p.PkColumn()))
-			fmt.Printf("REQ: dst:to=%d src:from=%d n=%d\n", to, from, n)
-			fmt.Printf("%s\n", string(debug.Stack()))
-			panic(e)
-		}
-	}()
-	for i, b := range p.blocks {
-		if b == nil {
-			continue
-		}
-		b.InsertBlock(src.blocks[i], from, to, n)
 	}
 	p.nRows += n
 	return nil

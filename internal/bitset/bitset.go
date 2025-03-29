@@ -102,34 +102,6 @@ func (s *Bitset) ReadFrom(r io.Reader) (int64, error) {
 	return int64(n), err
 }
 
-func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
-	l := bitFieldLen(size)
-	if cap(s.buf) < l {
-		if !s.noclose {
-			arena.Free(arena.AllocBytes, s.buf)
-			s.noclose = false
-		}
-		s.buf = arena.Alloc(arena.AllocBytes, l).([]byte)[:l]
-	} else if s.size > size && s.cnt >= 0 {
-		s.cnt = -1
-		clear(s.buf[size>>3:])
-	}
-	s.size = size
-	s.buf = s.buf[:l]
-	copy(s.buf, buf)
-	if reverse {
-		for i, v := range s.buf {
-			s.buf[i] = reverseLut256[v]
-		}
-	}
-	s.cnt = -1
-	// ensure the last byte is masked
-	if size%8 > 0 {
-		s.buf[l-1] &= bytemask(size)
-	}
-	return s
-}
-
 func (s *Bitset) Clone() *Bitset {
 	clone := NewBitset(s.size)
 	copy(clone.buf, s.buf)
@@ -385,24 +357,89 @@ func (s *Bitset) Set(i int) *Bitset {
 	if i < 0 || i >= s.size {
 		return s
 	}
-	mask := bitmask(i)
-	if s.cnt >= 0 && s.buf[i>>3]&mask == 0 {
-		s.cnt++
+	s.buf[i>>3] |= bitmask[i%8]
+	s.cnt = -1
+	return s
+}
+
+func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
+	l := bitFieldLen(size)
+	if cap(s.buf) < l {
+		if !s.noclose {
+			arena.Free(arena.AllocBytes, s.buf)
+			s.noclose = false
+		}
+		s.buf = arena.Alloc(arena.AllocBytes, l).([]byte)[:l]
+	} else if s.size > size && s.cnt >= 0 {
+		s.cnt = -1
+		clear(s.buf[size>>3:])
 	}
-	s.buf[i>>3] |= mask
+	s.size = size
+	s.buf = s.buf[:l]
+	copy(s.buf, buf)
+	if reverse {
+		for i, v := range s.buf {
+			s.buf[i] = reverseLut256[v]
+		}
+	}
+	s.cnt = -1
+	// ensure the last byte is masked
+	if size%8 > 0 {
+		s.buf[l-1] &= bytemask(size)
+	}
+	return s
+}
+
+func (s *Bitset) SetRange(start, end int) *Bitset {
+	x, y := start/8, end/8
+
+	// short range within same byte
+	if x == y {
+		var b byte
+		for i := start % 8; i <= end%8; i++ {
+			b |= 1 << i
+		}
+		s.buf[x] = b
+		s.cnt = -1
+		return s
+	}
+
+	// long range across bytes
+
+	// write start byte
+	if start%8 > 0 {
+		// mask start byte
+		s.buf[x] |= 255 << (start % 8)
+		x++
+	}
+
+	// write end byte
+	if end%8 != 7 {
+		// mask end byte
+		s.buf[y] |= 2<<(end%8) - 1
+		y--
+	}
+
+	// write intermediate bytes if any
+	for i := x; i <= y; i++ {
+		s.buf[i] = 0xff
+	}
+
+	// reset count
+	s.cnt = -1
+
 	return s
 }
 
 func (s *Bitset) setbit(i int) {
-	mask := bitmask(i)
-	s.buf[i>>3] |= mask
+	s.buf[i>>3] |= bitmask[i%8]
 }
 
 func (s *Bitset) Clear(i int) *Bitset {
 	if i < 0 || i >= s.size {
 		return s
 	}
-	mask := bitmask(i)
+	mask := bitmask[i%8]
 	if s.cnt > 0 && s.buf[i>>3]&mask > 0 {
 		s.cnt--
 	}
@@ -411,16 +448,14 @@ func (s *Bitset) Clear(i int) *Bitset {
 }
 
 func (s *Bitset) clearbit(i int) {
-	mask := bitmask(i)
-	s.buf[i>>3] &^= mask
+	s.buf[i>>3] &^= bitmask[i%8]
 }
 
 func (s *Bitset) IsSet(i int) bool {
 	if i < 0 || i >= s.size {
 		return false
 	}
-	mask := bitmask(i)
-	return (s.buf[i>>3] & mask) > 0
+	return (s.buf[i>>3] & bitmask[i%8]) > 0
 }
 
 // Append grows bitset by 1 and sets the trailing bit to val
@@ -429,119 +464,6 @@ func (s *Bitset) Append(val bool) *Bitset {
 	if val {
 		s.setbit(s.size - 1)
 	}
-	return s
-}
-
-// InsertFrom inserts srcLen values from position srcPos in bitset src into the
-// bitset at position dstPos and moves all values following dstPos behind the
-// newly inserted bits
-func (s *Bitset) InsertFrom(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
-	if srcLen <= 0 {
-		return s
-	}
-
-	// append when dst is < 0
-	if dstPos < 0 {
-		dstPos = s.size
-	}
-	// clamp srcLen
-	if srcPos+srcLen > src.size {
-		srcLen = src.size - srcPos
-	}
-
-	// keep a copy of trailing bits to move
-	var (
-		cp  []byte
-		cpb []bool
-	)
-	if dstPos&0x7+srcLen&0x7 == 0 {
-		// fast path
-		cp = make([]byte, len(s.buf)-dstPos>>3)
-		copy(cp, s.buf[dstPos>>3:])
-	} else {
-		// slow path
-		cpb = s.SubSlice(dstPos, -1)
-	}
-
-	// grow bitset, restore counter for fast-path
-	cnt := s.cnt
-	s.Resize(s.size + srcLen)
-	s.cnt = cnt
-
-	// insert
-	if srcPos&0x7+dstPos&0x7+srcLen&0x7 == 0 {
-		// fast path
-		copy(s.buf[dstPos>>3:], src.buf[srcPos>>3:(srcPos+srcLen)>>3])
-		s.cnt = -1
-	} else {
-		// slow path
-		var cnt int
-		for i, v := range src.SubSlice(srcPos, srcLen) {
-			if !v {
-				s.clearbit(i + dstPos)
-			} else {
-				s.setbit(i + dstPos)
-				cnt++
-			}
-		}
-		if s.cnt >= 0 {
-			s.cnt += cnt
-		}
-	}
-
-	// patch trailing bits
-	if dstPos&0x7+srcLen&0x7 == 0 {
-		// fast path
-		copy(s.buf[(dstPos+srcLen)>>3:], cp)
-	} else {
-		// slow path
-		for i, v := range cpb {
-			if !v {
-				s.clearbit(i + dstPos + srcLen)
-			} else {
-				s.setbit(i + dstPos + srcLen)
-			}
-		}
-	}
-
-	return s
-}
-
-// ReplaceFrom replaces srcLen values at position dstPos with values from src
-// bewteen position srcPos and srcPos + srcLen.
-func (s *Bitset) ReplaceFrom(src *Bitset, srcPos, srcLen, dstPos int) *Bitset {
-	// skip when arguments are out of range
-	if srcLen <= 0 || srcPos < 0 || dstPos < 0 || dstPos > s.size {
-		return s
-	}
-
-	// clamp srcLen
-	if srcLen > src.size-srcPos {
-		srcLen = src.size - srcPos
-	}
-	if srcLen > s.size-dstPos {
-		srcLen = s.size - dstPos
-	}
-
-	// replace
-	if srcPos&0x7+dstPos&0x7+srcLen&0x7 == 0 {
-		// fast path
-		copy(s.buf[dstPos>>3:], src.buf[srcPos>>3:(srcPos+srcLen)>>3])
-		s.cnt = -1
-	} else {
-		// slow path
-		for i, v := range src.SubSlice(srcPos, srcLen) {
-			if !v {
-				s.clearbit(i + dstPos)
-			} else {
-				s.setbit(i + dstPos)
-				if s.cnt >= 0 {
-					s.cnt++
-				}
-			}
-		}
-	}
-
 	return s
 }
 
@@ -608,28 +530,6 @@ func (s *Bitset) Delete(pos, n int) *Bitset {
 	// shrink and reset counter
 	s.Resize(s.size - n)
 	return s
-}
-
-func (s *Bitset) Swap(i, j int) {
-	if uint(i) >= uint(s.size) || uint(j) >= uint(s.size) {
-		return
-	}
-	m_i := bitmask(i)
-	m_j := bitmask(j)
-	n_i := i >> 3
-	n_j := j >> 3
-	b_i := (s.buf[n_i] & m_i) > 0
-	b_j := (s.buf[n_j] & m_j) > 0
-	switch {
-	case b_i == b_j:
-		return
-	case b_i:
-		s.buf[n_i] &^= m_i
-		s.buf[n_j] |= m_j
-	case b_j:
-		s.buf[n_i] |= m_i
-		s.buf[n_j] &^= m_j
-	}
 }
 
 func (s *Bitset) Bytes() []byte {
@@ -780,7 +680,7 @@ func (s Bitset) Slice() []bool {
 	}
 	// tail
 	for i := s.size & ^0x7; i < s.size; i++ {
-		res[i] = s.buf[i>>3]&bitmask(i) > 0
+		res[i] = s.buf[i>>3]&bitmask[i%8] > 0
 	}
 	return res
 }
@@ -801,7 +701,7 @@ func (s Bitset) SubSlice(start, n int) []bool {
 	var j int
 	// head
 	for i := start; i < start+n && i%8 > 0; i, j = i+1, j+1 {
-		res[j] = s.buf[i>>3]&bitmask(i) > 0
+		res[j] = s.buf[i>>3]&bitmask[i%8] > 0
 	}
 	// fast inner loop
 	for i := start + j; i < (start+n) & ^0x7; i, j = i+8, j+8 {
@@ -817,7 +717,7 @@ func (s Bitset) SubSlice(start, n int) []bool {
 	}
 	// tail
 	for i := start + j; i < start+n; i, j = i+1, j+1 {
-		res[j] = s.buf[i>>3]&bitmask(i) > 0
+		res[j] = s.buf[i>>3]&bitmask[i%8] > 0
 	}
 	return res
 }

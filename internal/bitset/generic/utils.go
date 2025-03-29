@@ -6,7 +6,6 @@ package generic
 var (
 	BitFieldLen = bitFieldLen
 	Bytemask    = bytemask
-	Bitmask     = bitmask
 	RoundUpPow2 = roundUpPow2
 )
 
@@ -18,10 +17,8 @@ func bytemask(size int) byte {
 	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
 }
 
-func bitmask(i int) byte {
-	return byte(1 << uint(i&0x7))
-}
-
 func roundUpPow2(n int, pow2 int) int {
 	return (n + (pow2 - 1)) & ^(pow2 - 1)
 }
+
+var Bitmask = [8]byte{0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80}

@@ -501,38 +501,6 @@ func (b *Block) free() {
 	blockPool.Put(b)
 }
 
-func (b *Block) ReplaceBlock(src *Block, from, to, n int) {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(src != nil, "nil source block, potential use after free")
-	assert.Always(b.typ == src.typ, "block type mismatch", b.typ, src.typ)
-	assert.Always(to+n <= b.Len(), "dst out of bounds", "to", to, "n", n, "dst.len", b.Len())
-	assert.Always(from+n <= src.Len(), "src out of bounds", "from", from, "n", n, "src.len", src.Len())
-	switch b.typ {
-	case BlockBytes:
-		(*(*dedup.ByteArray)(b.ptr)).Copy((*(*dedup.ByteArray)(src.ptr)), to, from, n)
-	case BlockBool:
-		((*bitset.Bitset)(b.ptr)).ReplaceFrom(((*bitset.Bitset)(src.ptr)), from, n, to)
-	case BlockInt128:
-		d128 := (*num.Int128Stride)(b.ptr)
-		s128 := (*num.Int128Stride)(src.ptr)
-		slices.Replace(d128.X0, to, to+n, s128.X0[from:from+n]...)
-		slices.Replace(d128.X1, to, to+n, s128.X1[from:from+n]...)
-	case BlockInt256:
-		d256 := (*num.Int256Stride)(b.ptr)
-		s256 := (*num.Int256Stride)(src.ptr)
-		slices.Replace(d256.X0, to, to+n, s256.X0[from:from+n]...)
-		slices.Replace(d256.X1, to, to+n, s256.X1[from:from+n]...)
-		slices.Replace(d256.X2, to, to+n, s256.X2[from:from+n]...)
-		slices.Replace(d256.X3, to, to+n, s256.X3[from:from+n]...)
-	default:
-		from *= blockTypeDataSize[b.typ]
-		to *= blockTypeDataSize[b.typ]
-		n *= blockTypeDataSize[b.typ]
-		slices.Replace(b.buf, to, to+n, src.buf[from:from+n]...)
-	}
-	b.dirty = true
-}
-
 func (b *Block) AppendBlock(src *Block, from, n int) {
 	assert.Always(b != nil, "nil block, potential use after free")
 	assert.Always(src != nil, "nil source block, potential use after free")
@@ -567,39 +535,6 @@ func (b *Block) AppendBlock(src *Block, from, n int) {
 		end *= blockTypeDataSize[b.typ]
 		n *= blockTypeDataSize[b.typ]
 		copy(b.buf[end:], src.buf[from:from+n])
-	}
-	b.dirty = true
-}
-
-func (b *Block) InsertBlock(src *Block, from, to, n int) {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(src != nil, "nil source block, potential use after free")
-	assert.Always(b.typ == src.typ, "block type mismatch", b.typ, src.typ)
-	assert.Always(b.Len()+n <= b.Cap(), "dst out of bounds", "dst.len", b.Len(), "n", n, "dst.cap", b.Cap())
-	assert.Always(from+n <= src.Len(), "src out of bounds", "src.len", src.Len(), "from", from)
-	switch b.typ {
-	case BlockBytes:
-		(*(*dedup.ByteArray)(b.ptr)).Insert(to, src.Bytes().Subslice(from, from+n)...)
-	case BlockBool:
-		((*bitset.Bitset)(b.ptr)).InsertFrom(((*bitset.Bitset)(src.ptr)), from, n, to)
-	case BlockInt128:
-		d128 := (*num.Int128Stride)(b.ptr)
-		s128 := (*num.Int128Stride)(src.ptr)
-		slices.Insert(d128.X0, to, s128.X0[from:from+n]...)
-		slices.Insert(d128.X1, to, s128.X1[from:from+n]...)
-	case BlockInt256:
-		d256 := (*num.Int256Stride)(b.ptr)
-		s256 := (*num.Int256Stride)(src.ptr)
-		slices.Insert(d256.X0, to, s256.X0[from:from+n]...)
-		slices.Insert(d256.X1, to, s256.X1[from:from+n]...)
-		slices.Insert(d256.X2, to, s256.X2[from:from+n]...)
-		slices.Insert(d256.X3, to, s256.X3[from:from+n]...)
-	default:
-		b.len += n
-		from *= blockTypeDataSize[b.typ]
-		to *= blockTypeDataSize[b.typ]
-		n *= blockTypeDataSize[b.typ]
-		slices.Insert(b.buf, to, src.buf[from:from+n]...)
 	}
 	b.dirty = true
 }

@@ -37,22 +37,6 @@ func FillBitset(buf []byte, size int, val byte) []byte {
 	return buf
 }
 
-// func FillBitsetSaw(buf []byte, size int) []byte {
-// 	if len(buf) == 0 {
-// 		buf = make([]byte, bitFieldLen(size))
-// 	}
-// 	// generate the first sawtooth
-// 	for i := 0; i < 256 && i < len(buf); i++ {
-// 		buf[i] = byte(i)
-// 	}
-// 	// concat again and again, we make it one shorter to avoid a symetric vector
-// 	for bp := 256; bp < len(buf); bp = 2*bp - 1 {
-// 		copy(buf[bp:], buf[:bp])
-// 	}
-// 	buf[len(buf)-1] &= bytemask(size)
-// 	return buf
-// }
-
 func FillBitsetRand(buf []byte, size int, dense float64) []byte {
 	if len(buf) == 0 {
 		buf = make([]byte, bitFieldLen(size))
