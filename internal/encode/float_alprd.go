@@ -1,171 +1,84 @@
 package encode
 
 import (
+	"math"
 	"sync"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
-	"blockwatch.cc/knoxdb/internal/dedup"
-	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// TFloatAlpRd
-type FloatAlpRdContainer[T types.Float] struct {
-	LeftBitWidth     uint8
-	RightBitWidth    uint8
-	LeftPartEncoded  []uint8 // packed
-	RightPartEncoded []uint8 // packed
-	ValCount         uint64
-	leftPart         []uint16
-	rightPart        []uint64
-	LeftPartsDict    IntegerContainer[uint16]
-	Exception        IntegerContainer[uint16]
-	Ends             IntegerContainer[uint32]
-	hasException     bool
-	exceptions       map[uint32]T
+// TFloatAlpRdV2
+type FloatAlpRdV2Container[T types.Float] struct {
+	Left       IntegerContainer[uint16]
+	Right      IntegerContainer[uint64]
+	RightShift int
 }
 
-func (c *FloatAlpRdContainer[T]) Close() {
-	clear(c.leftPart)
-	clear(c.rightPart)
-	clear(c.exceptions)
-
-	putFloatAlpRdContainer(c)
+func (c *FloatAlpRdV2Container[T]) Close() {
+	putFloatAlpRdV2Container(c)
 }
 
-func (c *FloatAlpRdContainer[T]) Type() FloatContainerType {
+func (c *FloatAlpRdV2Container[T]) Type() FloatContainerType {
 	return TFloatAlpRd
 }
 
-func (c *FloatAlpRdContainer[T]) Len() int {
-	return len(c.leftPart)
+func (c *FloatAlpRdV2Container[T]) Len() int {
+	return c.Left.Len()
 }
 
-func (c *FloatAlpRdContainer[T]) MaxSize() int {
-	v := 1 + 2 + 8 + num.MaxVarintLen64 + len(c.LeftPartEncoded) + 8 + len(c.RightPartEncoded) + c.LeftPartsDict.MaxSize()
-	if c.hasException {
-		v += c.Exception.MaxSize() + c.Ends.MaxSize()
-	}
+func (c *FloatAlpRdV2Container[T]) MaxSize() int {
+	v := 1 + num.MaxVarintLen64 + c.Left.MaxSize() + c.Right.MaxSize()
 	return v
 }
 
-func (c *FloatAlpRdContainer[T]) Store(dst []byte) []byte {
+func (c *FloatAlpRdV2Container[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TFloatAlpRd))
-	dst = num.AppendUvarint(dst, uint64(c.LeftBitWidth))
-	dst = num.AppendUvarint(dst, uint64(c.RightBitWidth))
-	dst = num.AppendUvarint(dst, uint64(len(c.LeftPartEncoded)))
-	dst = append(dst, c.LeftPartEncoded...)
-	dst = num.AppendUvarint(dst, uint64(len(c.RightPartEncoded)))
-	dst = append(dst, c.RightPartEncoded...)
-	dst = num.AppendUvarint(dst, uint64(c.ValCount))
-	dst = c.LeftPartsDict.Store(dst)
-	hasException := c.Exception != nil && c.Exception.Len() > 0
-	dst = append(dst, byte(util.Bool2byte(hasException)))
-	if hasException {
-		dst = c.Exception.Store(dst)
-		dst = c.Ends.Store(dst)
-	}
+	dst = c.Left.Store(dst)
+	dst = c.Right.Store(dst)
+	dst = num.AppendUvarint(dst, uint64(c.RightShift))
 	return dst
 }
 
-func (c *FloatAlpRdContainer[T]) Load(buf []byte) ([]byte, error) {
+func (c *FloatAlpRdV2Container[T]) Load(buf []byte) ([]byte, error) {
 	if buf[0] != byte(TFloatAlpRd) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
-	v, n := num.Uvarint(buf)
-	c.LeftBitWidth = uint8(v)
-	buf = buf[n:]
-
-	v, n = num.Uvarint(buf)
-	c.RightBitWidth = uint8(v)
-	buf = buf[n:]
-
-	v, n = num.Uvarint(buf)
-	buf = buf[n:]
-	c.LeftPartEncoded = buf[:v]
-	buf = buf[v:]
-
-	v, n = num.Uvarint(buf)
-	buf = buf[n:]
-	c.RightPartEncoded = buf[:v]
-	buf = buf[v:]
-
-	v, n = num.Uvarint(buf)
-	buf = buf[n:]
-	c.leftPart = arena.Alloc(arena.AllocUint16, int(v)).([]uint16)[:v]
-	c.rightPart = arena.Alloc(arena.AllocUint64, int(v)).([]uint64)[:v]
-
-	dedup.UnpackBits(c.LeftPartEncoded, c.leftPart, int(c.LeftBitWidth))
-	dedup.UnpackBits(c.RightPartEncoded, c.rightPart, int(c.RightBitWidth))
-
-	c.LeftPartsDict = NewInt[uint16](IntegerContainerType(buf[0]))
-	var err error
-	buf, err = c.LeftPartsDict.Load(buf)
+	c.Left = NewInt[uint16](IntegerContainerType(buf[0]))
+	buf, err := c.Left.Load(buf)
 	if err != nil {
 		return buf, err
 	}
-
-	// alloc and decode values child container
-	c.hasException = buf[0] == byte(HasException)
-	buf = buf[1:]
-	if c.hasException {
-		// exception
-		c.Exception = NewInt[uint16](IntegerContainerType(buf[0]))
-		buf, err = c.Exception.Load(buf)
-		if err != nil {
-			return buf, err
-		}
-
-		// ExceptionPosition
-		c.Ends = NewInt[uint32](IntegerContainerType(buf[0]))
-		buf, err = c.Ends.Load(buf)
-		if err != nil {
-			return buf, err
-		}
+	c.Right = NewInt[uint64](IntegerContainerType(buf[0]))
+	buf, err = c.Right.Load(buf)
+	if err != nil {
+		return buf, err
 	}
-
-	return buf, nil
+	v, n := num.Uvarint(buf)
+	c.RightShift = int(v)
+	return buf[n:], nil
 }
 
-func (c *FloatAlpRdContainer[T]) Get(n int) T {
-	if c.hasException {
-		if c.exceptions == nil {
-			c.exceptions = make(map[uint32]T, c.Ends.Len())
-		}
-		if len(c.exceptions) == 0 {
-			for i := range c.Ends.Len() {
-				right := c.RightPartEncoded[c.Ends.Get(i)]
-				left := c.Exception.Get(i)
-
-				switch any(T(0)).(type) {
-				case float64:
-					d := uint64(left<<uint16(c.RightBitWidth)) | uint64(right)
-					c.exceptions[uint32(left)] = *(*T)(unsafe.Pointer(&d))
-				case float32:
-					d := uint32(left<<uint16(c.RightBitWidth)) | uint32(right)
-					c.exceptions[uint32(left)] = *(*T)(unsafe.Pointer(&d))
-				}
-			}
-		}
-		if v, ok := c.exceptions[uint32(n)]; ok {
-			return v
-		}
-	}
-	var d T
+func (c *FloatAlpRdV2Container[T]) Get(n int) T {
+	left := c.Left.Get(n)
+	right := c.Right.Get(n)
+	var val T
 	switch any(T(0)).(type) {
 	case float64:
-		d = alp.RDDecompressValue[T](c.LeftPartsDict.Get(int(c.leftPart[n])), uint64(c.rightPart[n]), c.RightBitWidth)
+		v := uint64(left)<<c.RightShift | uint64(right)
+		val = *(*T)(unsafe.Pointer(&v))
 	case float32:
-		d = alp.RDDecompressValue[T](c.LeftPartsDict.Get(int(c.leftPart[n])), uint32(c.rightPart[n]), c.RightBitWidth)
+		v := uint32(left)<<c.RightShift | uint32(right)
+		val = *(*T)(unsafe.Pointer(&v))
 	}
-	return d
+	return val
 }
 
-func (c *FloatAlpRdContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *FloatAlpRdV2Container[T]) AppendTo(sel []uint32, dst []T) []T {
 	for _, v := range sel {
 		dst = append(dst, c.Get(int(v)))
 	}
@@ -173,84 +86,195 @@ func (c *FloatAlpRdContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 }
 
-func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
+func (c *FloatAlpRdV2Container[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
 	cnt := len(vals)
-	c.leftPart = arena.Alloc(arena.AllocUint16, cnt).([]uint16)[:cnt]
-	c.rightPart = arena.Alloc(arena.AllocUint64, cnt).([]uint64)[:cnt]
+	left := arena.Alloc(arena.AllocUint16, cnt).([]uint16)[:cnt]
+	right := arena.Alloc(arena.AllocUint64, cnt).([]uint64)[:cnt]
 
-	var s *alp.RdState[T]
-	switch any(T(0)).(type) {
-	case float64:
-		s = alp.RDCompress[T, uint64](vals)
-	case float32:
-		s = alp.RDCompress[T, uint32](vals)
-	}
-
-	c.LeftBitWidth = s.LeftBitWidth
-	c.RightBitWidth = s.RightBitWidth
-
-	c.LeftPartEncoded = arena.Alloc(arena.AllocUint8, len(s.LeftPartEncoded)).([]uint8)[:len(s.LeftPartEncoded)]
-	copy(c.LeftPartEncoded, s.LeftPartEncoded)
-
-	c.RightPartEncoded = arena.Alloc(arena.AllocUint8, len(s.RightPartEncoded)).([]uint8)[:len(s.RightPartEncoded)]
-	copy(c.RightPartEncoded, s.RightPartEncoded)
-
-	dedup.UnpackBits(c.LeftPartEncoded, c.leftPart, int(c.LeftBitWidth))
-	dedup.UnpackBits(c.RightPartEncoded, c.rightPart, int(c.RightBitWidth))
-
-	c.ValCount = uint64(len(vals))
-
-	c.LeftPartsDict = EncodeInt(nil, s.LeftPartsDict[:], lvl-1)
-
-	// encode child containers
-	if s.ExceptionsCount > 0 {
-		c.hasException = true
-		c.Exception = EncodeInt(nil, s.Exceptions, lvl-1)
-		c.Ends = EncodeInt(nil, s.ExceptionsPositions, lvl-1)
-	}
+	c.split(vals, left, right, lvl)
 
 	return c
 }
 
-func (c *FloatAlpRdContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatAlpRdV2Container[T]) split(vals []T, left []uint16, right []uint64, lvl int) {
+	switch any(T(0)).(type) {
+	case float64:
+		u64 := util.ReinterpretSlice[T, uint64](vals)
+		c.split64(u64, left, right, lvl)
+	case float32:
+		u32 := util.ReinterpretSlice[T, uint32](vals)
+		c.split32(u32, left, right, lvl)
+	}
+}
+
+func (c *FloatAlpRdV2Container[T]) split64(u64 []uint64, leftInts []uint16, rightInts []uint64, lvl int) {
+	// try different right bit widths to find the optimal encoding for left&right containers
+	sampleU64, ok := SampleInt(u64)
+	bestShift := shift64(sampleU64, leftInts, rightInts, lvl)
+	if ok {
+		arena.FreeT(sampleU64)
+	}
+
+	mask := uint64(1<<bestShift) - 1
+	for k := range u64 {
+		rightInts[k] = u64[k] & mask
+		leftInts[k] = uint16(u64[k] >> bestShift)
+	}
+
+	lctx := AnalyzeInt(leftInts, false)
+	rctx := AnalyzeInt(rightInts, false)
+	defer lctx.Close()
+	defer rctx.Close()
+
+	c.RightShift = bestShift
+	c.Left = NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts, lvl-1)
+	c.Right = NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts, lvl-1)
+}
+
+func shift64(sampleU64 []uint64, leftInts []uint16, rightInts []uint64, lvl int) int {
+	var (
+		bestShift int
+		bestSize  int = math.MaxInt32
+		sz            = len(sampleU64)
+		lctx          = AnalyzeInt(leftInts, false)
+		rctx          = AnalyzeInt(rightInts, false)
+	)
+
+	defer lctx.Close()
+	defer rctx.Close()
+
+	for i := 1; i <= 16; i++ {
+		// split vals into left and right
+		rightBitWidth := 64 - i
+		for k := range sampleU64 {
+			mask := uint64(1<<rightBitWidth) - 1
+			rightInts[k] = sampleU64[k] & mask
+			leftInts[k] = uint16(sampleU64[k] >> rightBitWidth)
+		}
+
+		// try estimate integer sizes
+		leftC := NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts[:sz], lvl-1)
+		rightC := NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts[:sz], lvl-1)
+
+		// get total size
+		maxSz := leftC.MaxSize() + rightC.MaxSize()
+
+		// compare against previous know best ratio and keep best containers
+		if maxSz <= bestSize {
+			bestSize = maxSz
+			bestShift = rightBitWidth
+		}
+		leftC.Close()
+		rightC.Close()
+	}
+
+	return bestShift
+}
+
+func (c *FloatAlpRdV2Container[T]) split32(u32 []uint32, leftInts []uint16, rightInts []uint64, lvl int) {
+	// try different right bit widths to find the optimal encoding for left&right containers
+	sampleU32, ok := SampleInt(u32)
+	bestShift := shift32(sampleU32, leftInts, rightInts, lvl)
+	if ok {
+		arena.FreeT(sampleU32)
+	}
+
+	mask := uint32(1<<bestShift) - 1
+	for k := range u32 {
+		rightInts[k] = uint64(u32[k] & mask)
+		leftInts[k] = uint16(u32[k] >> bestShift)
+	}
+
+	lctx := AnalyzeInt(leftInts, false)
+	rctx := AnalyzeInt(rightInts, false)
+
+	defer lctx.Close()
+	defer rctx.Close()
+
+	c.Left = NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts, lvl-1)
+	c.Right = NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts, lvl-1)
+	c.RightShift = bestShift
+}
+
+func shift32(sampleU32 []uint32, leftInts []uint16, rightInts []uint64, lvl int) int {
+	var (
+		bestShift int
+		bestSize  int = math.MaxInt32
+		sz            = len(sampleU32)
+		lctx          = AnalyzeInt(leftInts, false)
+		rctx          = AnalyzeInt(rightInts, false)
+	)
+
+	defer lctx.Close()
+	defer rctx.Close()
+
+	for i := 1; i <= 16; i++ {
+		// split vals into left and right
+		rightBitWidth := 32 - i
+		for k := range sampleU32 {
+			mask := uint32(1<<rightBitWidth) - 1
+			rightInts[k] = uint64(sampleU32[k] & mask)
+			leftInts[k] = uint16(sampleU32[k] >> rightBitWidth)
+		}
+
+		// try estimate integer sizes
+		leftC := NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts[:sz], lvl-1)
+		rightC := NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts[:sz], lvl-1)
+
+		// get total size
+		maxSz := leftC.MaxSize() + rightC.MaxSize()
+
+		// compare against previous know best ratio and keep best containers
+		if maxSz <= bestSize {
+			bestSize = maxSz
+			bestShift = rightBitWidth
+		}
+		leftC.Close()
+		rightC.Close()
+	}
+
+	return bestShift
+}
+
+func (c *FloatAlpRdV2Container[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
 	return nil
 }
 
-func (c *FloatAlpRdContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatAlpRdV2Container[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
 	return nil
 }
 
-func (c *FloatAlpRdContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatAlpRdV2Container[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
 	return nil
 }
 
-func (c *FloatAlpRdContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatAlpRdV2Container[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
 	return nil
 }
 
-func (c *FloatAlpRdContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatAlpRdV2Container[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
 	return nil
 }
 
-func (c *FloatAlpRdContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatAlpRdV2Container[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
 	return nil
 }
 
-func (c *FloatAlpRdContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
+func (c *FloatAlpRdV2Container[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
 	return nil
 }
 
-func (c *FloatAlpRdContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
+func (c *FloatAlpRdV2Container[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 	// set := s.(*xroar.Bitmap)
 	return nil
 }
 
-func (c *FloatAlpRdContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
+func (c *FloatAlpRdV2Container[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 	// set := s.(*xroar.Bitmap)
 	return nil
 }
 
-type FloatAlpRdFactory struct {
+type FloatAlpRdV2Factory struct {
 	f64Pool sync.Pool
 	f32Pool sync.Pool
 }
@@ -258,28 +282,28 @@ type FloatAlpRdFactory struct {
 func newFloatAlpRdContainer[T types.Float]() FloatContainer[T] {
 	switch any(T(0)).(type) {
 	case float64:
-		return floatAlpRdFactory.f64Pool.Get().(FloatContainer[T])
+		return floatAlpRdV2Factory.f64Pool.Get().(FloatContainer[T])
 	case float32:
-		return floatAlpRdFactory.f32Pool.Get().(FloatContainer[T])
+		return floatAlpRdV2Factory.f32Pool.Get().(FloatContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putFloatAlpRdContainer[T types.Float](c FloatContainer[T]) {
+func putFloatAlpRdV2Container[T types.Float](c FloatContainer[T]) {
 	switch any(T(0)).(type) {
 	case float64:
-		floatAlpRdFactory.f64Pool.Put(c)
+		floatAlpRdV2Factory.f64Pool.Put(c)
 	case float32:
-		floatAlpRdFactory.f32Pool.Put(c)
+		floatAlpRdV2Factory.f32Pool.Put(c)
 	}
 }
 
-var floatAlpRdFactory = FloatAlpRdFactory{
+var floatAlpRdV2Factory = FloatAlpRdV2Factory{
 	f64Pool: sync.Pool{
-		New: func() any { return new(FloatAlpRdContainer[float64]) },
+		New: func() any { return new(FloatAlpRdV2Container[float64]) },
 	},
 	f32Pool: sync.Pool{
-		New: func() any { return new(FloatAlpRdContainer[float32]) },
+		New: func() any { return new(FloatAlpRdV2Container[float32]) },
 	},
 }
