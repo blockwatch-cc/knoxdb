@@ -121,19 +121,27 @@ func (c *FloatAlpRdV2Container[T]) split64(u64 []uint64, leftInts []uint16, righ
 		leftInts[k] = uint16(u64[k] >> bestShift)
 	}
 
-	c.Left = EncodeInt(nil, leftInts, lvl-1)
-	c.Right = EncodeInt(nil, rightInts, lvl-1)
+	lctx := AnalyzeInt(leftInts, false)
+	rctx := AnalyzeInt(rightInts, false)
+	defer lctx.Close()
+	defer rctx.Close()
+
 	c.RightShift = bestShift
+	c.Left = NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts, lvl-1)
+	c.Right = NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts, lvl-1)
 }
 
 func shift64(sampleU64 []uint64, leftInts []uint16, rightInts []uint64, lvl int) int {
 	var (
 		bestShift int
 		bestSize  int = math.MaxInt32
-		leftC     IntegerContainer[uint16]
-		rightC    IntegerContainer[uint64]
-		sz        = len(sampleU64)
+		sz            = len(sampleU64)
+		lctx          = AnalyzeInt(leftInts, false)
+		rctx          = AnalyzeInt(rightInts, false)
 	)
+
+	defer lctx.Close()
+	defer rctx.Close()
 
 	for i := 1; i <= 16; i++ {
 		// split vals into left and right
@@ -145,8 +153,8 @@ func shift64(sampleU64 []uint64, leftInts []uint16, rightInts []uint64, lvl int)
 		}
 
 		// try estimate integer sizes
-		leftC = EncodeInt(nil, leftInts[:sz], lvl-1)
-		rightC = EncodeInt(nil, rightInts[:sz], lvl-1)
+		leftC := NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts[:sz], lvl-1)
+		rightC := NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts[:sz], lvl-1)
 
 		// get total size
 		maxSz := leftC.MaxSize() + rightC.MaxSize()
@@ -177,8 +185,14 @@ func (c *FloatAlpRdV2Container[T]) split32(u32 []uint32, leftInts []uint16, righ
 		leftInts[k] = uint16(u32[k] >> bestShift)
 	}
 
-	c.Left = EncodeInt(nil, leftInts, lvl-1)
-	c.Right = EncodeInt(nil, rightInts, lvl-1)
+	lctx := AnalyzeInt(leftInts, false)
+	rctx := AnalyzeInt(rightInts, false)
+
+	defer lctx.Close()
+	defer rctx.Close()
+
+	c.Left = NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts, lvl-1)
+	c.Right = NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts, lvl-1)
 	c.RightShift = bestShift
 }
 
@@ -187,9 +201,12 @@ func shift32(sampleU32 []uint32, leftInts []uint16, rightInts []uint64, lvl int)
 		bestShift int
 		bestSize  int = math.MaxInt32
 		sz            = len(sampleU32)
-		leftC     IntegerContainer[uint16]
-		rightC    IntegerContainer[uint64]
+		lctx          = AnalyzeInt(leftInts, false)
+		rctx          = AnalyzeInt(rightInts, false)
 	)
+
+	defer lctx.Close()
+	defer rctx.Close()
 
 	for i := 1; i <= 16; i++ {
 		// split vals into left and right
@@ -201,8 +218,8 @@ func shift32(sampleU32 []uint32, leftInts []uint16, rightInts []uint64, lvl int)
 		}
 
 		// try estimate integer sizes
-		leftC = EncodeInt(nil, leftInts[:sz], lvl-1)
-		rightC = EncodeInt(nil, rightInts[:sz], lvl-1)
+		leftC := NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts[:sz], lvl-1)
+		rightC := NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts[:sz], lvl-1)
 
 		// get total size
 		maxSz := leftC.MaxSize() + rightC.MaxSize()
