@@ -279,7 +279,7 @@ func Decode[T types.Unsigned](dst []T, buf []byte) (int, error) {
 
 func CountValues(src []byte) int {
 	var (
-		i int
+		i int = 7 // little endian encoding
 		n int
 	)
 
