@@ -49,7 +49,7 @@ func IndexBenchmark[T types.Unsigned, I uint16 | uint32](b *testing.B, enc tests
 
 func IndexFindBenchmark[T types.Unsigned, I uint16 | uint32](b *testing.B, enc tests.EncodeFunc[T], mkidx IndexFunc[I]) {
 	for _, c := range etests.BenchmarkSizes {
-		data := etests.GenRandom[T](c.N)
+		data := etests.GenRnd[T](c.N)
 		minv, maxv := slices.Min(data), slices.Max(data)
 		buf, err := enc(make([]byte, 8*len(data)), data, minv, maxv)
 		require.NoError(b, err)

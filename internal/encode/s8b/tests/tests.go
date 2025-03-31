@@ -21,44 +21,44 @@ type DecodeFunc[T types.Unsigned] func([]T, []byte) (int, error)
 type CompareFunc func([]byte, uint64, *bitset.Bitset) *bitset.Bitset
 type CompareFunc2 func([]byte, uint64, uint64, *bitset.Bitset) *bitset.Bitset
 
-type S8bTests[T types.Unsigned] struct {
+type TestCase[T types.Unsigned] struct {
 	Name string
-	In   []T
-	Fn   func() []T
+	Data []T
+	Gen  func() []T
 	Err  bool
 }
 
-func MakeTests[T types.Unsigned]() []S8bTests[T] {
+func MakeTests[T types.Unsigned]() []TestCase[T] {
 	width := unsafe.Sizeof(T(0))
-	tests := []S8bTests[T]{
-		{Name: "nil", In: nil},
-		{Name: "empty", In: []T{}},
-		{Name: "mixed sizes", In: []T{7, 6, 255, 4, 3, 2, 1}},
-		{Name: "240 ones", Fn: ones[T](240)},
-		{Name: "120 ones plus 5", Fn: func() []T {
+	tests := []TestCase[T]{
+		{Name: "nil", Data: nil},
+		{Name: "empty", Data: []T{}},
+		{Name: "mixed sizes", Data: []T{7, 6, 255, 4, 3, 2, 1}},
+		{Name: "240 ones", Gen: ones[T](240)},
+		{Name: "120 ones plus 5", Gen: func() []T {
 			in := ones[T](240)()
 			in[120] = 5
 			return in
 		}},
-		{Name: "119 ones plus 5", Fn: func() []T {
+		{Name: "119 ones plus 5", Gen: func() []T {
 			in := ones[T](240)()
 			in[119] = 5
 			return in
 		}},
-		{Name: "239 ones plus 5", Fn: func() []T {
+		{Name: "239 ones plus 5", Gen: func() []T {
 			in := ones[T](241)()
 			in[239] = 5
 			return in
 		}},
-		{Name: "1 bit", Fn: bits[T](120, 1)},
-		{Name: "2 bits", Fn: bits[T](120, 2)},
-		{Name: "3 bits", Fn: bits[T](120, 3)},
-		{Name: "4 bits", Fn: bits[T](120, 4)},
-		{Name: "5 bits", Fn: bits[T](120, 5)},
-		{Name: "6 bits", Fn: bits[T](120, 6)},
-		{Name: "7 bits", Fn: bits[T](120, 7)},
-		{Name: "8 bits", Fn: bits[T](120, 8)},
-		{Name: "67", In: []T{
+		{Name: "1 bit", Gen: bits[T](120, 1)},
+		{Name: "2 bits", Gen: bits[T](120, 2)},
+		{Name: "3 bits", Gen: bits[T](120, 3)},
+		{Name: "4 bits", Gen: bits[T](120, 4)},
+		{Name: "5 bits", Gen: bits[T](120, 5)},
+		{Name: "6 bits", Gen: bits[T](120, 6)},
+		{Name: "7 bits", Gen: bits[T](120, 7)},
+		{Name: "8 bits", Gen: bits[T](120, 8)},
+		{Name: "67", Data: []T{
 			67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
 			67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
 			67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
@@ -101,9 +101,9 @@ func MakeTests[T types.Unsigned]() []S8bTests[T] {
 			67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
 		}},
 	}
-	combi := S8bTests[T]{
+	combi := TestCase[T]{
 		Name: "combination",
-		Fn: combine[T](
+		Gen: combine[T](
 			bits[T](120, 1),
 			bits[T](120, 2),
 			bits[T](120, 3),
@@ -115,12 +115,12 @@ func MakeTests[T types.Unsigned]() []S8bTests[T] {
 		)}
 
 	if width > 1 {
-		tests = append(tests, []S8bTests[T]{
-			{Name: "10 bits", Fn: bits[T](120, 10)},
-			{Name: "12 bits", Fn: bits[T](120, 12)},
-			{Name: "15 bits", Fn: bits[T](120, 15)},
+		tests = append(tests, []TestCase[T]{
+			{Name: "10 bits", Gen: bits[T](120, 10)},
+			{Name: "12 bits", Gen: bits[T](120, 12)},
+			{Name: "15 bits", Gen: bits[T](120, 15)},
 		}...)
-		combi.Fn = combine[T](
+		combi.Gen = combine[T](
 			bits[T](120, 1),
 			bits[T](120, 2),
 			bits[T](120, 3),
@@ -137,12 +137,12 @@ func MakeTests[T types.Unsigned]() []S8bTests[T] {
 	}
 
 	if width > 2 {
-		tests = append(tests, []S8bTests[T]{
-			{Name: "20 bits", Fn: bits[T](120, 20)},
-			{Name: "30 bits", Fn: bits[T](120, 30)},
-			{Name: "32 bits", Fn: bits[T](120, 32)},
+		tests = append(tests, []TestCase[T]{
+			{Name: "20 bits", Gen: bits[T](120, 20)},
+			{Name: "30 bits", Gen: bits[T](120, 30)},
+			{Name: "32 bits", Gen: bits[T](120, 32)},
 		}...)
-		combi.Fn = combine[T](
+		combi.Gen = combine[T](
 			bits[T](120, 1),
 			bits[T](120, 2),
 			bits[T](120, 3),
@@ -160,16 +160,16 @@ func MakeTests[T types.Unsigned]() []S8bTests[T] {
 		)
 	}
 	if width > 4 {
-		tests = append(tests, []S8bTests[T]{
-			{Name: "60 bits", Fn: bits[T](120, 60)},
+		tests = append(tests, []TestCase[T]{
+			{Name: "60 bits", Gen: bits[T](120, 60)},
 			{
 				Name: "too big",
-				In:   util.ReinterpretSlice[uint64, T]([]uint64{7, 6, 2<<61 - 1, 4, 3, 2, 1}),
+				Data: util.ReinterpretSlice[uint64, T]([]uint64{7, 6, 2<<61 - 1, 4, 3, 2, 1}),
 				Err:  true,
 			},
 		}...)
 
-		combi.Fn = combine[T](
+		combi.Gen = combine[T](
 			bits[T](120, 1),
 			bits[T](120, 2),
 			bits[T](120, 3),
@@ -193,9 +193,9 @@ func MakeTests[T types.Unsigned]() []S8bTests[T] {
 func EncodeTest[T types.Unsigned](t *testing.T, enc EncodeFunc[T], dec DecodeFunc[T]) {
 	for _, test := range MakeTests[T]() {
 		t.Run(test.Name, func(t *testing.T) {
-			in := test.In
-			if test.Fn != nil {
-				in = test.Fn()
+			in := test.Data
+			if test.Gen != nil {
+				in = test.Gen()
 			}
 			var _, maxv T
 			if len(in) > 0 {
@@ -231,7 +231,7 @@ type CompareCase struct {
 
 var CompareCases = []CompareCase{
 	{"one", func(n int) []uint64 { return tests.GenConst[uint64](n, 1) }},
-	{"rnd", tests.GenRandom[uint64]},
+	{"rnd", tests.GenRnd[uint64]},
 }
 
 var CompareSizes = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 30, 60, 120, 240, 1024}
@@ -319,7 +319,6 @@ func CompareTest2(t *testing.T, enc EncodeFunc[uint64], cmp CompareFunc2, mode t
 }
 
 func ensureBits(t *testing.T, vals []uint64, val, val2 uint64, bits *bitset.Bitset, mode types.FilterMode) {
-	t.Helper()
 	switch mode {
 	case types.FilterModeEqual:
 		for i, v := range vals {

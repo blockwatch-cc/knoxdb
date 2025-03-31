@@ -16,9 +16,9 @@ import (
 func TestLegacy(t *testing.T) {
 	for _, test := range tests.MakeTests[uint64]() {
 		t.Run(test.Name, func(t *testing.T) {
-			in := test.In
-			if test.Fn != nil {
-				in = test.Fn()
+			in := test.Data
+			if test.Gen != nil {
+				in = test.Gen()
 			}
 			encoded, err := EncodeLegacy(slices.Clone(in))
 			if test.Err {

@@ -97,7 +97,7 @@ func MakeIntTest[T types.Integer](s string, n int, data ...int) IntTestCase[T] {
 			c.Data[i] = T(data[i])
 		}
 	} else {
-		c.Data = GenRandom[T](n)
+		c.Data = GenRnd[T](n)
 	}
 	return c
 }
@@ -105,10 +105,10 @@ func MakeIntTest[T types.Integer](s string, n int, data ...int) IntTestCase[T] {
 func MakeIntTests[T types.Integer](n int) []IntTestCase[T] {
 	name := reflect.TypeOf(T(0)).String() + "_" + strconv.Itoa(n)
 	return []IntTestCase[T]{
-		{"const_" + name, GenConst[T](n)},
-		{"delta_" + name, GenSequence[T](n)},
+		{"const_" + name, GenConst[T](n, 42)},
+		{"delta_" + name, GenSeq[T](n)},
 		{"dups_" + name, GenDups[T](n, n/10)},
 		{"runs_" + name, GenRuns[T](n, 5)},
-		{"rand_" + name, GenRandom[T](n)},
+		{"rand_" + name, GenRnd[T](n)},
 	}
 }

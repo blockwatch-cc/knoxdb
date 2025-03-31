@@ -1,7 +1,9 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+//go:build ignore
+// +build ignore
 
-package bitpack
+package generic
 
 import (
 	"fmt"

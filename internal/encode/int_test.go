@@ -68,7 +68,6 @@ func TestAnalyzeInt(t *testing.T) {
 }
 
 func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainerType) {
-	t.Helper()
 	for _, c := range tests.MakeShortIntTests[T](int(scheme)) {
 		t.Run(c.Name, func(t *testing.T) {
 			enc := NewInt[T](scheme)
@@ -101,7 +100,7 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 			}
 
 			// validate append
-			all := tests.GenSequence[uint32](len(c.Data))
+			all := tests.GenSeq[uint32](len(c.Data))
 			dst := make([]T, 0, len(c.Data))
 			dst = enc2.AppendTo(all, dst)
 			assert.Len(t, dst, len(c.Data))
@@ -202,7 +201,6 @@ func TestEncodeInt(t *testing.T) {
 }
 
 func testEncodeIntT[T types.Integer](t *testing.T) {
-	t.Helper()
 	for _, c := range tests.MakeIntTests[T](1024) {
 		t.Run(c.Name, func(t *testing.T) {
 			x := AnalyzeInt(c.Data, true)
@@ -323,7 +321,7 @@ func BenchmarkAppendTo(b *testing.B) {
 			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
 			buf := enc.Store(make([]byte, 0, enc.MaxSize()))
 			dst := make([]int64, 0, c.N)
-			all := tests.GenSequence[uint32](c.N)
+			all := tests.GenSeq[uint32](c.N)
 
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
 				b.ReportAllocs()

@@ -29,49 +29,49 @@ type Number interface {
 	Integer | Float
 }
 
-func MinVal[T Integer]() any {
+func MinVal[T Integer]() T {
 	switch any(T(0)).(type) {
 	case int64:
-		return int64(math.MinInt64)
+		return any(int64(math.MinInt64)).(T)
 	case int32:
-		return int32(math.MinInt32)
+		return any(int32(math.MinInt32)).(T)
 	case int16:
-		return int16(math.MinInt16)
+		return any(int16(math.MinInt16)).(T)
 	case int8:
-		return int8(math.MinInt8)
+		return any(int8(math.MinInt8)).(T)
 	case uint64:
-		return uint64(0)
+		return 0
 	case uint32:
-		return uint32(0)
+		return 0
 	case uint16:
-		return uint16(0)
+		return 0
 	case uint8:
-		return uint8(0)
+		return 0
 	default:
-		return nil
+		return 0
 	}
 }
 
-func MaxVal[T Integer]() any {
+func MaxVal[T Integer]() T {
 	switch any(T(0)).(type) {
 	case int64:
-		return int64(math.MaxInt64)
+		return any(int64(math.MaxInt64)).(T)
 	case int32:
-		return int32(math.MaxInt32)
+		return any(int32(math.MaxInt32)).(T)
 	case int16:
-		return int16(math.MaxInt16)
+		return any(int16(math.MaxInt16)).(T)
 	case int8:
-		return int8(math.MaxInt8)
+		return any(int8(math.MaxInt8)).(T)
 	case uint64:
-		return uint64(math.MaxUint64)
+		return any(uint64(math.MaxUint64)).(T)
 	case uint32:
-		return uint32(math.MaxUint32)
+		return any(uint32(math.MaxUint32)).(T)
 	case uint16:
-		return uint16(math.MaxUint16)
+		return any(uint16(math.MaxUint16)).(T)
 	case uint8:
-		return uint8(math.MaxUint8)
+		return any(uint8(math.MaxUint8)).(T)
 	default:
-		return nil
+		return 0
 	}
 }
 

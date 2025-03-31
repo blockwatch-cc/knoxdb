@@ -59,9 +59,9 @@ func MakeSignedTests[T types.Signed]() []TestCase[T] {
 		{"Alternating", []T{1, 0, 1, 0, 1}, 0, 1, 0, 5},
 		{"LargeDelta", []T{10, 20, 30, 40, 50}, 10, 50, 10, 5},
 		{"Bounds", []T{
-			types.MinVal[T]().(T), 0, types.MaxVal[T]().(T),
+			types.MinVal[T](), 0, types.MaxVal[T](),
 		},
-			types.MinVal[T]().(T), types.MaxVal[T]().(T), 0, 3},
+			types.MinVal[T](), types.MaxVal[T](), 0, 3},
 		{"Short", []T{1, 2, 3}, 1, 3, 1, 3},
 		{"MixedRuns", []T{1, 1, 2, 2, 5, 8, 8}, 1, 8, 0, 4},
 		{"Unaligned", []T{1, 2, 3, 4, 5, 6, 7}, 1, 7, 1, 7},
@@ -89,7 +89,7 @@ func MakeSignedTests[T types.Signed]() []TestCase[T] {
 		// 32 elements, exactly one vector, no boundary crossing
 		{
 			Name:     "SingleVector",
-			Input:    append(tests.Repeat(T(1), 16), tests.Repeat(T(2), 16)...),
+			Input:    append(tests.GenConst(16, T(1)), tests.GenConst(16, T(2))...),
 			ExpMin:   1,
 			ExpMax:   2,
 			ExpDelta: 0,
@@ -98,7 +98,7 @@ func MakeSignedTests[T types.Signed]() []TestCase[T] {
 		// 33 elements, crosses boundary, transition at 32
 		{
 			Name:     "BoundaryTransition",
-			Input:    append(tests.Repeat(T(1), 32), T(2)),
+			Input:    append(tests.GenConst(32, T(1)), T(2)),
 			ExpMin:   1,
 			ExpMax:   2,
 			ExpDelta: 0,
@@ -107,7 +107,7 @@ func MakeSignedTests[T types.Signed]() []TestCase[T] {
 		// 64 elements, two vectors, transition at 32
 		{
 			Name:     "TwoVectorsTransition",
-			Input:    append(tests.Repeat(T(1), 32), tests.Repeat(T(2), 32)...),
+			Input:    append(tests.GenConst(32, T(1)), tests.GenConst(32, T(2))...),
 			ExpMin:   1,
 			ExpMax:   2,
 			ExpDelta: 0,
@@ -116,7 +116,7 @@ func MakeSignedTests[T types.Signed]() []TestCase[T] {
 		// 63 elements, transition just before boundary
 		{
 			Name:     "PreBoundaryTransition",
-			Input:    append(tests.Repeat(T(1), 31), append([]T{T(2)}, tests.Repeat(T(2), 31)...)...),
+			Input:    append(tests.GenConst(31, T(1)), append([]T{T(2)}, tests.GenConst(31, T(2))...)...),
 			ExpMin:   1,
 			ExpMax:   2,
 			ExpDelta: 0,
@@ -125,7 +125,7 @@ func MakeSignedTests[T types.Signed]() []TestCase[T] {
 		// Delta across boundary
 		{
 			Name:     "DeltaAcrossBoundary",
-			Input:    tests.Sequence(T(0), T(65)),
+			Input:    tests.GenRange(T(0), T(65)),
 			ExpMin:   0,
 			ExpMax:   64,
 			ExpDelta: 1,
@@ -171,8 +171,8 @@ func MakeUnsignedTests[T types.Unsigned]() []TestCase[T] {
 		{"Alternating", []T{1, 0, 1, 0, 1}, 0, 1, 0, 5},
 		{"LargeDelta", []T{10, 20, 30, 40, 50}, 10, 50, 10, 5},
 		{"Bounds", []T{
-			types.MinVal[T]().(T), 0, types.MaxVal[T]().(T),
-		}, types.MinVal[T]().(T), types.MaxVal[T]().(T), 0, 2},
+			types.MinVal[T](), 0, types.MaxVal[T](),
+		}, types.MinVal[T](), types.MaxVal[T](), 0, 2},
 		{"Short", []T{1, 2, 3}, 1, 3, 1, 3},
 		{"MixedRuns", []T{1, 1, 2, 2, 5, 8, 8}, 1, 8, 0, 4},
 		{"Unaligned", []T{1, 2, 3, 4, 5, 6, 7}, 1, 7, 1, 7},
@@ -180,7 +180,7 @@ func MakeUnsignedTests[T types.Unsigned]() []TestCase[T] {
 		{"NegDelta", []T{
 			32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
 			16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
-		}, 0, 32, types.MaxVal[T]().(T), 33},
+		}, 0, 32, types.MaxVal[T](), 33},
 		{"LongDelta", []T{
 			0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 			17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
@@ -200,7 +200,7 @@ func MakeUnsignedTests[T types.Unsigned]() []TestCase[T] {
 		// 32 elements, exactly one vector, no boundary crossing
 		{
 			Name:     "SingleVector",
-			Input:    append(tests.Repeat(T(1), 16), tests.Repeat(T(2), 16)...),
+			Input:    append(tests.GenConst(16, T(1)), tests.GenConst(16, T(2))...),
 			ExpMin:   1,
 			ExpMax:   2,
 			ExpDelta: 0,
@@ -209,7 +209,7 @@ func MakeUnsignedTests[T types.Unsigned]() []TestCase[T] {
 		// 33 elements, crosses boundary, transition at 32
 		{
 			Name:     "BoundaryTransition",
-			Input:    append(tests.Repeat(T(1), 32), T(2)),
+			Input:    append(tests.GenConst(32, T(1)), T(2)),
 			ExpMin:   1,
 			ExpMax:   2,
 			ExpDelta: 0,
@@ -218,7 +218,7 @@ func MakeUnsignedTests[T types.Unsigned]() []TestCase[T] {
 		// 64 elements, two vectors, transition at 32
 		{
 			Name:     "TwoVectorsTransition",
-			Input:    append(tests.Repeat(T(1), 32), tests.Repeat(T(2), 32)...),
+			Input:    append(tests.GenConst(32, T(1)), tests.GenConst(32, T(2))...),
 			ExpMin:   1,
 			ExpMax:   2,
 			ExpDelta: 0,
@@ -227,7 +227,7 @@ func MakeUnsignedTests[T types.Unsigned]() []TestCase[T] {
 		// 63 elements, transition just before boundary
 		{
 			Name:     "PreBoundaryTransition",
-			Input:    append(tests.Repeat(T(1), 31), append([]T{T(2)}, tests.Repeat(T(2), 31)...)...),
+			Input:    append(tests.GenConst(31, T(1)), append([]T{T(2)}, tests.GenConst(31, T(2))...)...),
 			ExpMin:   1,
 			ExpMax:   2,
 			ExpDelta: 0,
@@ -236,7 +236,7 @@ func MakeUnsignedTests[T types.Unsigned]() []TestCase[T] {
 		// Delta across boundary
 		{
 			Name:     "DeltaAcrossBoundary",
-			Input:    tests.Sequence(T(0), T(65)),
+			Input:    tests.GenRange(T(0), T(65)),
 			ExpMin:   0,
 			ExpMax:   64,
 			ExpDelta: 1,
@@ -246,7 +246,6 @@ func MakeUnsignedTests[T types.Unsigned]() []TestCase[T] {
 }
 
 func AnalyzeTest[T types.Integer](t *testing.T, cases []TestCase[T], fn AnalyzeFunc[T]) {
-	t.Helper()
 	for _, tt := range cases {
 		t.Run(tt.Name, func(t *testing.T) {
 			minv, maxv, delta, numRuns := fn(tt.Input)

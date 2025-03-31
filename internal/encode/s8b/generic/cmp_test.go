@@ -54,143 +54,143 @@ func TestCmpBetween(t *testing.T) {
 //
 
 // equal
-func BenchmarkCmpEQ64(b *testing.B) {
+func BenchmarkCmpEqualUint64(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint64], Equal)
 }
 
-func BenchmarkCmpEQ32(b *testing.B) {
+func BenchmarkCmpEqualUint32(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint32], Equal)
 }
 
-func BenchmarkCmpEQ16(b *testing.B) {
+func BenchmarkCmpEqualUint16(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint16], Equal)
 }
 
-func BenchmarkCmpEQ8(b *testing.B) {
+func BenchmarkCmpEqualUint8(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint8], Equal)
 }
 
 // not equal
-func BenchmarkCmpNE64(b *testing.B) {
+func BenchmarkCmpNotEqualUint64(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint64], NotEqual)
 }
 
-func BenchmarkCmpNE32(b *testing.B) {
+func BenchmarkCmpNotEqualUint32(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint32], NotEqual)
 }
 
-func BenchmarkCmpNE16(b *testing.B) {
+func BenchmarkCmpNotEqualUint16(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint16], NotEqual)
 }
 
-func BenchmarkCmpNE8(b *testing.B) {
+func BenchmarkCmpNotEqualUint8(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint8], NotEqual)
 }
 
 // less
-func BenchmarkCmpLT64(b *testing.B) {
+func BenchmarkCmpLessUint64(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint64], Less)
 }
 
-func BenchmarkCmpLT32(b *testing.B) {
+func BenchmarkCmpLessUint32(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint32], Less)
 }
 
-func BenchmarkCmpLT16(b *testing.B) {
+func BenchmarkCmpLessUint16(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint16], Less)
 }
 
-func BenchmarkCmpLT8(b *testing.B) {
+func BenchmarkCmpLessUint8(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint8], Less)
 }
 
 // less equal
-func BenchmarkCmpLE64(b *testing.B) {
+func BenchmarkCmpLessEqual64(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint64], LessEqual)
 }
 
-func BenchmarkCmpLE32(b *testing.B) {
+func BenchmarkCmpLessEqual32(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint32], LessEqual)
 }
 
-func BenchmarkCmpLE16(b *testing.B) {
+func BenchmarkCmpLessEqual16(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint16], LessEqual)
 }
 
-func BenchmarkCmpLE8(b *testing.B) {
+func BenchmarkCmpLessEqual8(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint8], LessEqual)
 }
 
 // greater
-func BenchmarkCmpGT64(b *testing.B) {
+func BenchmarkCmpGreater64(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint64], Greater)
 }
 
-func BenchmarkCmpGT32(b *testing.B) {
+func BenchmarkCmpGreater32(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint32], Greater)
 }
 
-func BenchmarkCmpGT16(b *testing.B) {
+func BenchmarkCmpGreater16(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint16], Greater)
 }
 
-func BenchmarkCmpGT8(b *testing.B) {
+func BenchmarkCmpGreater8(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint8], Greater)
 }
 
 // greater equal
-func BenchmarkCmpGE64(b *testing.B) {
+func BenchmarkCmpGreaterEqual64(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint64], GreaterEqual)
 }
 
-func BenchmarkCmpGE32(b *testing.B) {
+func BenchmarkCmpGreaterEqual32(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint32], GreaterEqual)
 }
 
-func BenchmarkCmpGE16(b *testing.B) {
+func BenchmarkCmpGreaterEqual16(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint16], GreaterEqual)
 }
 
-func BenchmarkCmpGE8(b *testing.B) {
+func BenchmarkCmpGreaterEqual8(b *testing.B) {
 	tests.CompareBenchmark(b, Encode[uint8], GreaterEqual)
 }
 
 // between
-func BenchmarkCmpRG64(b *testing.B) {
+func BenchmarkCmpBetween64(b *testing.B) {
 	tests.CompareBenchmark2(b, Encode[uint64], Between)
 }
 
-func BenchmarkCmpRG32(b *testing.B) {
+func BenchmarkCmpBetween32(b *testing.B) {
 	tests.CompareBenchmark2(b, Encode[uint32], Between)
 }
 
-func BenchmarkCmpRG16(b *testing.B) {
+func BenchmarkCmpBetween16(b *testing.B) {
 	tests.CompareBenchmark2(b, Encode[uint16], Between)
 }
 
-func BenchmarkCmpRG8(b *testing.B) {
+func BenchmarkCmpBetween8(b *testing.B) {
 	tests.CompareBenchmark2(b, Encode[uint8], Between)
 }
 
 // Serial Execution (unpack simple8 + compare kernel)
 
-func BenchmarkCmpSerial64(b *testing.B) {
-	CmpSerialBenchmark[uint64](b)
+func BenchmarkCmpEqualUnpackedUint64(b *testing.B) {
+	CmpEqualUnpackedBenchmark[uint64](b)
 }
 
-func BenchmarkCmpSerial32(b *testing.B) {
-	CmpSerialBenchmark[uint32](b)
+func BenchmarkCmpEqualUnpackedUint32(b *testing.B) {
+	CmpEqualUnpackedBenchmark[uint32](b)
 }
 
-func BenchmarkCmpSerial16(b *testing.B) {
-	CmpSerialBenchmark[uint16](b)
+func BenchmarkCmpEqualUnpackedUint16(b *testing.B) {
+	CmpEqualUnpackedBenchmark[uint16](b)
 }
 
-func BenchmarkCmpSerial8(b *testing.B) {
-	CmpSerialBenchmark[uint8](b)
+func BenchmarkCmpEqualUnpackedUint8(b *testing.B) {
+	CmpEqualUnpackedBenchmark[uint8](b)
 }
 
-func CmpSerialBenchmark[T types.Unsigned](b *testing.B) {
+func CmpEqualUnpackedBenchmark[T types.Unsigned](b *testing.B) {
 	for _, c := range etests.MakeBenchmarks[T]() {
 		minv, maxv := slices.Min(c.Data), slices.Max(c.Data)
 		buf, err := Encode[T](make([]byte, 8*len(c.Data)), c.Data, minv, maxv)

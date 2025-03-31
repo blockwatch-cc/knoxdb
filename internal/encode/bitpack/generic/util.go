@@ -1,7 +1,19 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package bitpack
+package generic
+
+import (
+	"encoding/binary"
+
+	"blockwatch.cc/knoxdb/internal/bitset"
+)
+
+type Bitset = bitset.Bitset
+
+var (
+	BE = binary.BigEndian
+)
 
 // u16be reads short bit-packed uint16 values and shifts them like regular
 // big endian u16 values to be compatible with shifts in bitpacked compare.

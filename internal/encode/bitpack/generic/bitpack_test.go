@@ -1,12 +1,14 @@
 // Copyright (c) 2018-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package bitpack
+package generic
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 )
@@ -60,10 +62,9 @@ func TestBitPackMsb(t *testing.T) {
 
 func BenchmarkBitPack(b *testing.B) {
 	buf := makeBitpackBuf(bitpackBufSize)
-	for d := 10; d < 17; d++ {
-		b.Run(strconv.Itoa(d), func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+	for d := 5; d < 17; d++ {
+		b.Run(strconv.Itoa(d)+"_bits", func(b *testing.B) {
+			for i := range b.N {
 				Pack(buf, i%d, d, uint64(i))
 			}
 		})
@@ -72,23 +73,35 @@ func BenchmarkBitPack(b *testing.B) {
 
 func BenchmarkBitPacker(b *testing.B) {
 	buf := makeBitpackBuf(bitpackBufSize)
-	for d := 10; d < 17; d++ {
-		b.Run(strconv.Itoa(d), func(b *testing.B) {
-			b.ResetTimer()
+	for d := 5; d < 17; d++ {
+		b.Run(strconv.Itoa(d)+"_bits", func(b *testing.B) {
 			pack := Packer(d)
-			for i := 0; i < b.N; i++ {
+			for i := range b.N {
 				pack(buf, i%d, uint64(i))
 			}
 		})
 	}
 }
 
+func BenchmarkBitPackVec(b *testing.B) {
+	for _, c := range tests.MakeBenchmarks[uint64]() {
+		for w := range 63 {
+			w++
+			buf := make([]byte, w*c.N)
+			b.Run(fmt.Sprintf("%s/%d_bits", c.Name, w), func(b *testing.B) {
+				for range b.N {
+					PackVec(buf, c.Data, w)
+				}
+			})
+		}
+	}
+}
+
 func BenchmarkBitUnpack(b *testing.B) {
 	buf := makeBitpackBufPoison(bitpackBufSize)
-	for d := 10; d < 17; d++ {
-		b.Run(strconv.Itoa(d), func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+	for d := 5; d < 17; d++ {
+		b.Run(strconv.Itoa(d)+"_bits", func(b *testing.B) {
+			for i := range b.N {
 				Unpack(buf, i%d, d)
 			}
 		})
@@ -97,13 +110,27 @@ func BenchmarkBitUnpack(b *testing.B) {
 
 func BenchmarkBitUnpacker(b *testing.B) {
 	buf := makeBitpackBufPoison(bitpackBufSize)
-	for d := 10; d < 17; d++ {
-		b.Run(strconv.Itoa(d), func(b *testing.B) {
-			b.ResetTimer()
+	for d := 5; d < 17; d++ {
+		b.Run(strconv.Itoa(d)+"_bits", func(b *testing.B) {
 			unpack := Unpacker(d)
-			for i := 0; i < b.N; i++ {
+			for i := range b.N {
 				unpack(buf, i%d)
 			}
 		})
+	}
+}
+
+func BenchmarkBitUnpackVec(b *testing.B) {
+	for _, c := range tests.MakeBenchmarks[uint64]() {
+		for w := range 63 {
+			w++
+			buf := make([]byte, w*c.N)
+			PackVec(buf, c.Data, w)
+			b.Run(fmt.Sprintf("%s/%d_bits", c.Name, w), func(b *testing.B) {
+				for range b.N {
+					UnpackVec(buf, c.Data, w)
+				}
+			})
+		}
 	}
 }

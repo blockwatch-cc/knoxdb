@@ -4,19 +4,22 @@
 package tests
 
 import (
+	"blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func ones[T types.Unsigned](n int) func() []T {
 	return func() []T {
-		in := make([]T, n)
-		for i := 0; i < n; i++ {
-			in[i] = 1
-		}
-		return in
+		return tests.GenConst[T](n, 1)
 	}
 }
+
+// func zeros[T types.Unsigned](n int) func() []T {
+// 	return func() []T {
+// 		return tests.GenConst[T](n, 0)
+// 	}
+// }
 
 // bits generates sequence of n numbers with max bits,
 // ensuring max bit is set for 50% of the values.

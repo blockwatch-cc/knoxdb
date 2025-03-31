@@ -13,26 +13,26 @@ const BENCH_WIDTH = 60
 func GenForScheme[T types.Integer](scheme, n int) []T {
 	switch scheme {
 	case 0: // TIntegerConstant,
-		return GenConst[T](n)
+		return GenConst[T](n, 42)
 	case 1: // TIntegerDelta,
-		return GenSequence[T](n)
+		return GenSeq[T](n)
 	case 2: // TIntegerRunEnd,
 		return GenRuns[T](n, 5)
 	case 3: // TIntegerBitpacked,
-		return GenRandom[T](n)
+		return GenRnd[T](n)
 	case 4: // TIntegerDictionary,
 		return GenDups[T](n, 10)
 	case 5: // TIntegerSimple8,
-		return GenRandom[T](n)
+		return GenRnd[T](n)
 	case 6: // TIntegerRaw,
-		return GenRandom[T](n)
+		return GenRnd[T](n)
 	default:
-		return GenRandom[T](n)
+		return GenRnd[T](n)
 	}
 }
 
 // creates n sequential values
-func GenSequence[T types.Integer](n int) []T {
+func GenSeq[T types.Integer](n int) []T {
 	res := make([]T, n)
 	for i := range res {
 		res[i] = T(i)
@@ -40,17 +40,25 @@ func GenSequence[T types.Integer](n int) []T {
 	return res
 }
 
-// creates n constants
-func GenConst[T types.Integer](n int) []T {
+func GenRange[T types.Integer](start, end T) []T {
+	result := make([]T, int(end-start))
+	for i := range result {
+		result[i] = start + T(i)
+	}
+	return result
+}
+
+// creates n constants of value v
+func GenConst[T types.Integer](n int, v T) []T {
 	res := make([]T, n)
 	for i := range res {
-		res[i] = 42
+		res[i] = v
 	}
 	return res
 }
 
 // creates n random values
-func GenRandom[T types.Integer](n int) []T {
+func GenRnd[T types.Integer](n int) []T {
 	var res []T
 	switch any(T(0)).(type) {
 	case int64:
@@ -69,6 +77,30 @@ func GenRandom[T types.Integer](n int) []T {
 		res = util.ReinterpretSlice[uint16, T](util.RandUints[uint16](n))
 	case uint8:
 		res = util.ReinterpretSlice[uint8, T](util.RandUints[uint8](n))
+	}
+	return res
+}
+
+// creates n random values with bit width of up to w
+func GenRndBits[T types.Integer](n, w int) []T {
+	var res []T
+	switch any(T(0)).(type) {
+	case int64:
+		res = util.ReinterpretSlice[int64, T](util.RandIntsn[int64](n, 1<<w-1))
+	case int32:
+		res = util.ReinterpretSlice[int32, T](util.RandIntsn[int32](n, 1<<w-1))
+	case int16:
+		res = util.ReinterpretSlice[int16, T](util.RandIntsn[int16](n, 1<<w-1))
+	case int8:
+		res = util.ReinterpretSlice[int8, T](util.RandIntsn[int8](n, 1<<w-1))
+	case uint64:
+		res = util.ReinterpretSlice[uint64, T](util.RandUintsn[uint64](n, 1<<w-1))
+	case uint32:
+		res = util.ReinterpretSlice[uint32, T](util.RandUintsn[uint32](n, 1<<w-1))
+	case uint16:
+		res = util.ReinterpretSlice[uint16, T](util.RandUintsn[uint16](n, 1<<w-1))
+	case uint8:
+		res = util.ReinterpretSlice[uint8, T](util.RandUintsn[uint8](n, 1<<w-1))
 	}
 	return res
 }
@@ -201,22 +233,6 @@ func GenRuns[T types.Integer](n, r int) []T {
 		}
 	}
 	return res
-}
-
-func Repeat[T types.Integer](val T, n int) []T {
-	result := make([]T, n)
-	for i := range result {
-		result[i] = val
-	}
-	return result
-}
-
-func Sequence[T types.Integer](start, end T) []T {
-	result := make([]T, int(end-start))
-	for i := range result {
-		result[i] = start + T(i)
-	}
-	return result
 }
 
 // creates n values with u% values equal to x
