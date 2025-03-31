@@ -13,11 +13,13 @@ type (
 )
 
 var (
+	// single
 	Pack     = generic.Pack
 	Unpack   = generic.Unpack
 	Packer   = generic.Packer
 	Unpacker = generic.Unpacker
 
+	// encode
 	EncodeInt64 = generic.Encode[int64]
 	EncodeInt32 = generic.Encode[int32]
 	EncodeInt16 = generic.Encode[int16]
@@ -28,8 +30,18 @@ var (
 	EncodeUint16 = generic.Encode[uint16]
 	EncodeUint8  = generic.Encode[uint8]
 
-	// Decode   = generic.Decode
+	// decode
+	DecodeInt64 = generic.Decode[int64]
+	DecodeInt32 = generic.Decode[int32]
+	DecodeInt16 = generic.Decode[int16]
+	DecodeInt8  = generic.Decode[int8]
 
+	DecodeUint64 = generic.Decode[uint64]
+	DecodeUint32 = generic.Decode[uint32]
+	DecodeUint16 = generic.Decode[uint16]
+	DecodeUint8  = generic.Decode[uint8]
+
+	// cmp
 	Equal        = generic.Equal
 	NotEqual     = generic.NotEqual
 	Less         = generic.Less
