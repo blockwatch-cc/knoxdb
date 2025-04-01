@@ -1366,7 +1366,7 @@ func (bm *Bitmap) Split(externalSize func(start, end uint64) uint64, maxSz uint6
 		newBm := NewBitmap()
 		var sz uint64
 		var bms []*Bitmap
-		for id := itr.Next(); id != 0; id = itr.Next() {
+		for id, ok := itr.Next(); ok; id, ok = itr.Next() {
 			sz += externalSize(id, id)
 			newBm.Set(id)
 			if sz >= maxSz {
