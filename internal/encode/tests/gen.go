@@ -39,10 +39,10 @@ func GenForSchemeFloat[T types.Float](scheme, n int) []T {
 		return GenRuns[T](n, 5)
 	case 2: // TFloatDictionary,
 		return GenDups[T](n, 10)
-	// case 3: // TFloatAlp,
-	// 	return GenDups[T](n, 10)
-	// case 4: // TFloatAlpRd,
-	// 	return GenDups[T](n, 10)
+	case 3: // TFloatAlp,
+		return GenRnd[T](n)
+	case 4: // TFloatAlpRd,
+		return GenRnd[T](n)
 	case 5: // TFloatRaw,
 		return GenRnd[T](n)
 	default:
