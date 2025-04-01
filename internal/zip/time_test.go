@@ -733,7 +733,7 @@ func CountTimestamps(b []byte) int {
 		return int(count) + 1
 	case timeCompressedPacked, timeCompressedZigZagPacked:
 		// First 9 bytes are the starting timestamp and scaling factor, skip over them
-		count, _ := s8b.CountValues(b[9:])
+		count := s8b.CountValues(b[9:])
 		return count + 1 // +1 is for the first uncompressed timestamp, starting timestamep in b[1:9]
 	default:
 		return 0
