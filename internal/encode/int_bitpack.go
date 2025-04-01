@@ -74,7 +74,7 @@ func (c *BitpackContainer[T]) Load(buf []byte) ([]byte, error) {
 	c.unpack = bitpack.Unpacker(c.Log2)
 
 	// reference next sz bytes as bitpacked data
-	sz := (c.Log2*c.N + 7) / 8
+	sz := bitpack.EstimateMaxSize(c.Log2, c.N)
 	c.Packed = buf[:sz]
 	return buf[sz:], nil
 }
@@ -91,7 +91,7 @@ func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 }
 
 func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
-	sz := (ctx.UseBits*len(vals) + 7) / 8
+	sz := bitpack.EstimateMaxSize(ctx.UseBits, len(vals))
 	c.Packed = arena.Alloc(arena.AllocBytes, sz).([]byte)[:sz]
 	c.free = true
 	c.Log2 = ctx.UseBits
@@ -147,7 +147,7 @@ func (c *BitpackContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
 func (c *BitpackContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
 	// convert val to MinFOR reference, prevent wrapping
 	if val < c.For {
-		return bits
+		return bits.One()
 	}
 	val -= c.For
 
@@ -180,7 +180,7 @@ func (c *BitpackContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset 
 func (c *BitpackContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
 	// convert val to MinFOR reference, prevent wrapping
 	if val < c.For {
-		val = c.For
+		return bits.One()
 	}
 	val -= c.For
 
@@ -191,7 +191,7 @@ func (c *BitpackContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
 func (c *BitpackContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
 	// convert val to MinFOR reference, prevent wrapping
 	if val < c.For {
-		val = c.For
+		return bits.One()
 	}
 	val -= c.For
 

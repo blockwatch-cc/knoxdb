@@ -112,3 +112,23 @@ func MakeIntTests[T types.Integer](n int) []IntTestCase[T] {
 		{"rand_" + name, GenRnd[T](n)},
 	}
 }
+
+type IntCompareCase[T types.Integer] struct {
+	Name string
+	Gen  func(int, int) []T
+}
+
+func MakeIntCompareCases[T types.Integer]() []IntCompareCase[T] {
+	return []IntCompareCase[T]{
+		{"one", func(n, w int) []T {
+			x := 1
+			if w == 0 {
+				x = 0
+			}
+			return GenConst[T](n, T(x))
+		}},
+		{"rnd", GenRndBits[T]},
+	}
+}
+
+var CompareSizes = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23}

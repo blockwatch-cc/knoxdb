@@ -107,7 +107,7 @@ func GenRndBits[T types.Integer](n, w int) []T {
 
 // creates n values with cardinality c (i.e. u unique values)
 func GenDups[T types.Integer](n, u int) []T {
-	c := n / u
+	c := max(n/u, 1)
 	res := make([]T, n)
 	switch any(T(0)).(type) {
 	case int64:
