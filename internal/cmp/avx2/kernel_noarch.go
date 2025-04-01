@@ -18,7 +18,7 @@ var (
 	MatchUint8LessEqual    = generic.MatchLessEqual[uint8]
 	MatchUint8Greater      = generic.MatchGreater[uint8]
 	MatchUint8GreaterEqual = generic.MatchGreaterEqual[uint8]
-	MatchUint8Between      = generic.MatchBetween[uint8]
+	MatchUint8Between      = generic.MatchBetweenUnsigned[uint8]
 
 	// uint16
 	MatchUint16Equal        = generic.MatchEqual[uint16]
@@ -27,7 +27,7 @@ var (
 	MatchUint16LessEqual    = generic.MatchLessEqual[uint16]
 	MatchUint16Greater      = generic.MatchGreater[uint16]
 	MatchUint16GreaterEqual = generic.MatchGreaterEqual[uint16]
-	MatchUint16Between      = generic.MatchBetween[uint16]
+	MatchUint16Between      = generic.MatchBetweenUnsigned[uint16]
 
 	// uint32
 	MatchUint32Equal        = generic.MatchEqual[uint32]
@@ -36,7 +36,7 @@ var (
 	MatchUint32LessEqual    = generic.MatchLessEqual[uint32]
 	MatchUint32Greater      = generic.MatchGreater[uint32]
 	MatchUint32GreaterEqual = generic.MatchGreaterEqual[uint32]
-	MatchUint32Between      = generic.MatchBetween[uint32]
+	MatchUint32Between      = generic.MatchBetweenUnsigned[uint32]
 
 	// uint64
 	MatchUint64Equal        = generic.MatchEqual[uint64]
@@ -45,7 +45,7 @@ var (
 	MatchUint64LessEqual    = generic.MatchLessEqual[uint64]
 	MatchUint64Greater      = generic.MatchGreater[uint64]
 	MatchUint64GreaterEqual = generic.MatchGreaterEqual[uint64]
-	MatchUint64Between      = generic.MatchBetween[uint64]
+	MatchUint64Between      = generic.MatchBetweenUnsigned[uint64]
 
 	// int8
 	MatchInt8Equal        = generic.MatchEqual[int8]
@@ -54,7 +54,7 @@ var (
 	MatchInt8LessEqual    = generic.MatchLessEqual[int8]
 	MatchInt8Greater      = generic.MatchGreater[int8]
 	MatchInt8GreaterEqual = generic.MatchGreaterEqual[int8]
-	MatchInt8Between      = generic.MatchBetween[int8]
+	MatchInt8Between      = generic.MatchBetweenSigned[int8]
 
 	// int16
 	MatchInt16Equal        = generic.MatchEqual[int16]
@@ -63,7 +63,7 @@ var (
 	MatchInt16LessEqual    = generic.MatchLessEqual[int16]
 	MatchInt16Greater      = generic.MatchGreater[int16]
 	MatchInt16GreaterEqual = generic.MatchGreaterEqual[int16]
-	MatchInt16Between      = generic.MatchBetween[int16]
+	MatchInt16Between      = generic.MatchBetweenSigned[int16]
 
 	// int32
 	MatchInt32Equal        = generic.MatchEqual[int32]
@@ -72,7 +72,7 @@ var (
 	MatchInt32LessEqual    = generic.MatchLessEqual[int32]
 	MatchInt32Greater      = generic.MatchGreater[int32]
 	MatchInt32GreaterEqual = generic.MatchGreaterEqual[int32]
-	MatchInt32Between      = generic.MatchBetween[int32]
+	MatchInt32Between      = generic.MatchBetweenSigned[int32]
 
 	// int64
 	MatchInt64Equal        = generic.MatchEqual[int64]
@@ -81,7 +81,7 @@ var (
 	MatchInt64LessEqual    = generic.MatchLessEqual[int64]
 	MatchInt64Greater      = generic.MatchGreater[int64]
 	MatchInt64GreaterEqual = generic.MatchGreaterEqual[int64]
-	MatchInt64Between      = generic.MatchBetween[int64]
+	MatchInt64Between      = generic.MatchBetweenSigned[int64]
 
 	// float32
 	MatchFloat32Equal        = generic.MatchFloatEqual[float32]
