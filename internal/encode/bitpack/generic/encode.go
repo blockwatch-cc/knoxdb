@@ -14,24 +14,28 @@ import (
 // Before packing minv is subtracted from each value (MinFOR scheme).
 // This makes all values positive and we can handle them as unsigned ints.
 func Encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int, error) {
-	log2 := byte(bits.Len64(uint64(maxv - minv)))
+	log2 := bits.Len64(uint64(maxv - minv))
 	var n int
+	if log2 == 0 {
+		return buf[:0], log2, nil
+	}
 	if log2 < 59 {
 		n = encode1(buf, vals, minv, max(log2, 1))
+		// n = encode0(buf, vals, minv, max(log2, 1))
 	} else {
 		n = encode2(buf, vals, minv, max(log2, 1))
 	}
-	return buf[:n], int(log2), nil
+	return buf[:n], log2, nil
 }
 
 // all packings < 59bit
-func encode1[T types.Integer](buf []byte, src []T, minv T, log2 byte) int {
+func encode1[T types.Integer](buf []byte, src []T, minv T, log2 int) int {
 	var (
 		i     int    // src pos
 		n     int    // write pos
-		vsh   byte   // value shift
+		vsh   int    // value shift
 		l     int    = len(src)
-		shift byte   = (64 - log2) & 7 // 0..7
+		shift int    = (64 - log2) & 7 // 0..7
 		mask  uint64 = 1<<log2 - 1
 	)
 
@@ -93,11 +97,11 @@ func encode1[T types.Integer](buf []byte, src []T, minv T, log2 byte) int {
 
 		// advance src and dst (with adjustment)
 		i++
-		n += int(msb + b2b(vsh == 0 || i%8 == 0))
+		n += msb + b2i(vsh == 0 || i%8 == 0)
 	}
 
 	// adjust buf len
-	if shift > 0 && l%8 > 0 {
+	if log2*l%8 > 0 {
 		n++
 	}
 
@@ -105,13 +109,13 @@ func encode1[T types.Integer](buf []byte, src []T, minv T, log2 byte) int {
 }
 
 // packings >= 59bit
-func encode2[T types.Integer](buf []byte, src []T, minv T, log2 byte) int {
+func encode2[T types.Integer](buf []byte, src []T, minv T, log2 int) int {
 	var (
 		i     int    // src pos
 		n     int    // write pos
-		vsh   byte   // value shift
+		vsh   int    // value shift
 		l     int    = len(src)
-		shift byte   = (64 - log2) & 7 // 0..7
+		shift int    = (64 - log2) & 7 // 0..7
 		mask  uint64 = 1<<log2 - 1
 	)
 
@@ -158,11 +162,11 @@ func encode2[T types.Integer](buf []byte, src []T, minv T, log2 byte) int {
 
 		// adjust src and write pos
 		i++
-		n += int(msb + b2b(vsh == 0 || i%8 == 0))
+		n += msb + b2i(vsh == 0 || i%8 == 0)
 	}
 
 	// adjust buf len
-	if shift > 0 && l%8 > 0 {
+	if log2*l%8 > 0 {
 		n++
 	}
 
