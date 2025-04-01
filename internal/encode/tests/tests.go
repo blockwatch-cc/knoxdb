@@ -112,7 +112,7 @@ func MakeIntTest[T types.Integer](s string, n int, data ...int) TestCase[T] {
 func MakeIntTests[T types.Integer](n int) []TestCase[T] {
 	name := reflect.TypeOf(T(0)).String() + "_" + strconv.Itoa(n)
 	return []TestCase[T]{
-		{"const_" + name, GenConstInt[T](n, 42)},
+		{"const_" + name, GenConst[T](n, 42)},
 		{"delta_" + name, GenSeq[T](n)},
 		{"dups_" + name, GenDups[T](n, n/10)},
 		{"runs_" + name, GenRuns[T](n, 5)},
@@ -152,7 +152,7 @@ func MakeFloatTest[T types.Float](s string, n int, data ...float64) TestCase[T] 
 func MakeFloatTests[T types.Float](n int) []TestCase[T] {
 	name := reflect.TypeOf(T(0)).String() + "_" + strconv.Itoa(n)
 	return []TestCase[T]{
-		{"const_" + name, GenConstFloat[T](n)},
+		{"const_" + name, GenConst[T](n, 4.225)},
 		{"dups_" + name, GenDups[T](n, n/10)},
 		{"runs_" + name, GenRuns[T](n, 5)},
 		{"rand_" + name, GenRnd[T](n)},

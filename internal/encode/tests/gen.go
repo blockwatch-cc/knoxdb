@@ -13,7 +13,7 @@ const BENCH_WIDTH = 60
 func GenForScheme[T types.Integer](scheme, n int) []T {
 	switch scheme {
 	case 0: // TIntegerConstant,
-		return GenConstInt[T](n, 42)
+		return GenConst[T](n, 42)
 	case 1: // TIntegerDelta,
 		return GenSeq[T](n)
 	case 2: // TIntegerRunEnd,
@@ -34,7 +34,7 @@ func GenForScheme[T types.Integer](scheme, n int) []T {
 func GenForSchemeFloat[T types.Float](scheme, n int) []T {
 	switch scheme {
 	case 0: // TFloatConstant,
-		return GenConstFloat[T](n)
+		return GenConst[T](n, 4.225)
 	case 1: // TFloatRunEnd,
 		return GenRuns[T](n, 5)
 	case 2: // TFloatDictionary,
@@ -76,19 +76,10 @@ func GenRange[T types.Integer](start, end T) []T {
 }
 
 // creates n constants of value v
-func GenConstInt[T types.Number](n int, v T) []T {
+func GenConst[T types.Number](n int, v T) []T {
 	res := make([]T, n)
 	for i := range res {
 		res[i] = v
-	}
-	return res
-}
-
-// creates n constants
-func GenConstFloat[T types.Float](n int) []T {
-	res := make([]T, n)
-	for i := range res {
-		res[i] = 4.225
 	}
 	return res
 }

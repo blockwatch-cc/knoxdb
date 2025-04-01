@@ -8,7 +8,7 @@ import (
 	"sort"
 	"unsafe"
 
-	"blockwatch.cc/knoxdb/internal/encode/bitpack"
+	"blockwatch.cc/knoxdb/internal/encode/bitpack/generic"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 )
@@ -208,8 +208,8 @@ func RDCompress[T types.Float, U types.Unsigned](values []T) *RdState[T] {
 	rightBitPackedSize := getRequiredSize(nValues, int(enc.State.RightBitWidth))
 	leftBitPackedSize := getRequiredSize(nValues, int(enc.State.LeftBitWidth))
 
-	bitpack.PackVec(enc.State.LeftPartEncoded[:], leftParts[:], int(enc.State.LeftBitWidth))
-	bitpack.PackVec(enc.State.RightPartEncoded[:], rightParts[:], int(enc.State.RightBitWidth))
+	generic.PackVec(enc.State.LeftPartEncoded[:], leftParts[:], int(enc.State.LeftBitWidth))
+	generic.PackVec(enc.State.RightPartEncoded[:], rightParts[:], int(enc.State.RightBitWidth))
 
 	enc.State.leftBitPackedSize = uint64(leftBitPackedSize)
 	enc.State.rightBitPackedSize = uint64(rightBitPackedSize)
@@ -222,8 +222,8 @@ func RDDecompress[T types.Float, U types.Unsigned](state *RdState[T]) []T {
 	rightParts := make([]U, state.ValueCount)
 
 	// Bitunpacking left and right parts
-	bitpack.UnpackVec(state.LeftPartEncoded[:], leftParts, int(state.LeftBitWidth))
-	bitpack.UnpackVec(state.RightPartEncoded[:], rightParts, int(state.RightBitWidth))
+	generic.UnpackVec(state.LeftPartEncoded[:], leftParts, int(state.LeftBitWidth))
+	generic.UnpackVec(state.RightPartEncoded[:], rightParts, int(state.RightBitWidth))
 
 	// Decoding
 	for i := 0; i < state.ValueCount; i++ {
