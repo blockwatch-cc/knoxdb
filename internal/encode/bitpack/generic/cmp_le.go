@@ -384,7 +384,7 @@ func cmp_bp_6_le(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 	)
 
 	// process 8 values per loop
-	for n >= 4 {
+	for n >= 8 {
 		b |= b2b(uint16(buf[i])>>2&mask <= c)          // a
 		b |= b2b(BE.Uint16(buf[i:])>>4&mask <= c) << 1 // b
 		i++
