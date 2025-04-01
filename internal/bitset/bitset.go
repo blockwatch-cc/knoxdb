@@ -399,7 +399,7 @@ func (s *Bitset) SetRange(start, end int) *Bitset {
 		for i := start % 8; i <= end%8; i++ {
 			b |= 1 << i
 		}
-		s.buf[x] = b
+		s.buf[x] |= b
 		s.cnt = -1
 		return s
 	}
