@@ -110,9 +110,9 @@ func TestCardinalityManyUint32Generic(t *testing.T) {
 
 		if j%step == 0 {
 			exact := uint64(len(unique))
-			filterAddManyUint32Generic(*llb, slice, 0)
+			filterAddManyUint32Generic(llb, slice, 0)
 			j = 0
-			res := filterCardinalityGeneric(*llb)
+			res := filterCardinalityGeneric(llb)
 
 			ratio := 100 * estimateError(res, exact)
 			if ratio > MaxAllowedLlbError {
@@ -136,9 +136,9 @@ func TestCardinalityManyInt32Generic(t *testing.T) {
 
 		if j%step == 0 {
 			exact := uint64(len(unique))
-			filterAddManyInt32Generic(*llb, slice, 0)
+			filterAddManyInt32Generic(llb, slice, 0)
 			j = 0
-			res := filterCardinalityGeneric(*llb)
+			res := filterCardinalityGeneric(llb)
 
 			ratio := 100 * estimateError(res, exact)
 			if ratio > MaxAllowedLlbError {
@@ -162,9 +162,9 @@ func TestCardinalityManyUint64Generic(t *testing.T) {
 
 		if j%step == 0 {
 			exact := uint64(len(unique))
-			filterAddManyUint64Generic(*llb, slice, 0)
+			filterAddManyUint64Generic(llb, slice, 0)
 			j = 0
-			res := filterCardinalityGeneric(*llb)
+			res := filterCardinalityGeneric(llb)
 
 			ratio := 100 * estimateError(res, exact)
 			if ratio > MaxAllowedLlbError {
@@ -188,9 +188,9 @@ func TestCardinalityManyInt64Generic(t *testing.T) {
 
 		if j%step == 0 {
 			exact := uint64(len(unique))
-			filterAddManyInt64Generic(*llb, slice, 0)
+			filterAddManyInt64Generic(llb, slice, 0)
 			j = 0
-			res := filterCardinalityGeneric(*llb)
+			res := filterCardinalityGeneric(llb)
 
 			ratio := 100 * estimateError(res, exact)
 			if ratio > MaxAllowedLlbError {
@@ -283,7 +283,7 @@ func BenchmarkFilterAddManyUint32Generic(b *testing.B) {
 			b.SetBytes(int64(4 * c.n))
 			for i := 0; i < b.N; i++ {
 				filter := NewFilterWithPrecision(c.p)
-				filterAddManyUint32Generic(*filter, data, 0)
+				filterAddManyUint32Generic(filter, data, 0)
 			}
 		})
 	}
@@ -296,7 +296,7 @@ func BenchmarkFilterAddManyUint64Generic(b *testing.B) {
 			b.SetBytes(int64(8 * c.n))
 			for i := 0; i < b.N; i++ {
 				filter := NewFilterWithPrecision(c.p)
-				filterAddManyUint64Generic(*filter, data, 0)
+				filterAddManyUint64Generic(filter, data, 0)
 			}
 		})
 	}
@@ -314,7 +314,7 @@ func BenchmarkFilterCardinalityGeneric(b *testing.B) {
 		b.Run(fmt.Sprintf("n=%d_p=%d", c.n, c.p), func(b *testing.B) {
 			b.SetBytes(int64(len(filter.buf)))
 			for i := 0; i < b.N; i++ {
-				_ = filterCardinalityGeneric(*filter)
+				_ = filterCardinalityGeneric(filter)
 			}
 		})
 	}
