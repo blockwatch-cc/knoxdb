@@ -50,3 +50,7 @@ var (
 	GreaterEqual = generic.GreaterEqual
 	Between      = generic.Between
 )
+
+func EstimateMaxSize(width, n int) int {
+	return (width*n + 7) / 8
+}

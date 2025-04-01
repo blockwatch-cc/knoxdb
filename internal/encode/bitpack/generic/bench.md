@@ -176,3 +176,75 @@ BenchmarkDecode/u32/seq_64K                             88599 ns/op     2958.76 
 ```
 BenchmarkMatchUint32Equal/64K                           17524 ns/op    14958.81 MB/s
 ```
+
+# Bitpack Encode Benchmarks
+
+### Apple M1 Max
+
+```
+BenchmarkEncode/u64/dups_64K                7166        170041 ns/op    3083.30 MB/s
+BenchmarkEncode/u64/runs_64K                7071        171569 ns/op    3055.85 MB/s
+BenchmarkEncode/u64/seq_64K                12039        102582 ns/op    5110.92 MB/s
+BenchmarkEncode/u32/dups_64K                7449        167163 ns/op    1568.20 MB/s
+BenchmarkEncode/u32/runs_64K                7214        166751 ns/op    1572.07 MB/s
+BenchmarkEncode/u32/seq_64K                10000        108408 ns/op    2418.12 MB/s
+BenchmarkEncode/u16/dups_64K               10000        109306 ns/op    1199.13 MB/s
+BenchmarkEncode/u16/runs_64K               10000        108104 ns/op    1212.46 MB/s
+BenchmarkEncode/u16/seq_64K                10000        106760 ns/op    1227.72 MB/s
+BenchmarkEncode/u8/dups_64K                13140         92284 ns/op     710.15 MB/s
+BenchmarkEncode/u8/runs_64K                12355         92611 ns/op     707.65 MB/s
+BenchmarkEncode/u8/seq_64K                 12907         94463 ns/op     693.78 MB/s
+```
+
+### Intel 12th Gen Intel(R) Core(TM) i9-12900K
+
+```
+BenchmarkEncode/u64/dups_64K                7712        152564 ns/op    3436.52 MB/s
+BenchmarkEncode/u64/runs_64K                7632        153896 ns/op    3406.77 MB/s
+BenchmarkEncode/u64/seq_64K                12585         95632 ns/op    5482.33 MB/s
+BenchmarkEncode/u32/dups_64K                9835        120944 ns/op    2167.48 MB/s
+BenchmarkEncode/u32/runs_64K                9667        121392 ns/op    2159.48 MB/s
+BenchmarkEncode/u32/seq_64K                12564         95395 ns/op    2747.98 MB/s
+BenchmarkEncode/u16/dups_64K               12598         94798 ns/op    1382.64 MB/s
+BenchmarkEncode/u16/runs_64K               12574         94865 ns/op    1381.67 MB/s
+BenchmarkEncode/u16/seq_64K                12630         95045 ns/op    1379.06 MB/s
+BenchmarkEncode/u8/dups_64K                14324         82834 ns/op     791.17 MB/s
+BenchmarkEncode/u8/runs_64K                14379         83264 ns/op     787.08 MB/s
+BenchmarkEncode/u8/seq_64K                 14472         82981 ns/op     789.78 MB/s
+```
+
+# Bitpack Decode Benchmarks
+
+### Apple M1 Max
+
+```
+BenchmarkDecode/u64/dups_64K                8415        142163 ns/op    3687.94 MB/s
+BenchmarkDecode/u64/runs_64K                8542        138844 ns/op    3776.10 MB/s
+BenchmarkDecode/u64/seq_64K                10000        105875 ns/op    4951.94 MB/s
+BenchmarkDecode/u32/dups_64K                7849        152569 ns/op    1718.20 MB/s
+BenchmarkDecode/u32/runs_64K                8037        149165 ns/op    1757.41 MB/s
+BenchmarkDecode/u32/seq_64K                10000        104458 ns/op    2509.57 MB/s
+BenchmarkDecode/u16/dups_64K               10000        102289 ns/op    1281.39 MB/s
+BenchmarkDecode/u16/runs_64K               10000        104530 ns/op    1253.92 MB/s
+BenchmarkDecode/u16/seq_64K                10000        102810 ns/op    1274.89 MB/s
+BenchmarkDecode/u8/dups_64K                13459         89145 ns/op     735.16 MB/s
+BenchmarkDecode/u8/runs_64K                13840         90265 ns/op     726.04 MB/s
+BenchmarkDecode/u8/seq_64K                 13387         86188 ns/op     760.38 MB/s
+```
+
+### Intel 12th Gen Intel(R) Core(TM) i9-12900K
+
+```
+BenchmarkDecode/u64/dups_64K               10000        114251 ns/op    4588.91 MB/s
+BenchmarkDecode/u64/runs_64K               10000        114686 ns/op    4571.49 MB/s
+BenchmarkDecode/u64/seq_64K                13484         89169 ns/op    5879.73 MB/s
+BenchmarkDecode/u32/dups_64K               10000        109500 ns/op    2394.01 MB/s
+BenchmarkDecode/u32/runs_64K               10000        108441 ns/op    2417.39 MB/s
+BenchmarkDecode/u32/seq_64K                13508         88599 ns/op    2958.76 MB/s
+BenchmarkDecode/u16/dups_64K               13442         89009 ns/op    1472.57 MB/s
+BenchmarkDecode/u16/runs_64K               13494         88792 ns/op    1476.18 MB/s
+BenchmarkDecode/u16/seq_64K                13390         88895 ns/op    1474.46 MB/s
+BenchmarkDecode/u8/dups_64K                14536         82386 ns/op     795.47 MB/s
+BenchmarkDecode/u8/runs_64K                14262         83087 ns/op     788.76 MB/s
+BenchmarkDecode/u8/seq_64K                 14454         82571 ns/op     793.70 MB/s
+```

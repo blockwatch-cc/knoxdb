@@ -431,6 +431,8 @@ func cmp_bp_6_ge(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		if u16be(buf[i:])>>6&mask >= c { // c
 			bits.Set(k + 2)
 		}
+		n--
+		i++
 	}
 	if n > 0 {
 		if uint16(buf[i])&mask >= c { // d

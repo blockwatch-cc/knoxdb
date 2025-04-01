@@ -438,6 +438,8 @@ func cmp_bp_6_bw(buf []byte, val, val2 uint64, n int, bits *Bitset) *Bitset {
 		if u16be(buf[i:])>>6&mask-c <= c2 { // c
 			bits.Set(k + 2)
 		}
+		n--
+		i++
 	}
 	if n > 0 {
 		if uint16(buf[i])&mask-c <= c2 { // d
