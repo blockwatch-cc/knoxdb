@@ -340,7 +340,7 @@ func BenchmarkFilterAddManyUint64AVX512(b *testing.B) {
 			b.SetBytes(int64(8 * c.n))
 			for i := 0; i < b.N; i++ {
 				filter := NewFilterWithPrecision(c.p)
-				filterAddManyUint64AVX512(*filter, data, 0)
+				filterAddManyUint64AVX512(filter, data, 0)
 			}
 		})
 	}
@@ -361,7 +361,7 @@ func BenchmarkFilterCardinalityAVX2(b *testing.B) {
 		b.Run(fmt.Sprintf("n=%d_p=%d", c.n, c.p), func(b *testing.B) {
 			b.SetBytes(int64(len(filter.buf)))
 			for i := 0; i < b.N; i++ {
-				_ = filterCardinalityAVX2(*filter)
+				_ = filterCardinalityAVX2(filter)
 			}
 		})
 	}
@@ -382,7 +382,7 @@ func BenchmarkFilterCardinalityAVX512(b *testing.B) {
 		b.Run(fmt.Sprintf("n=%d_p=%d", c.n, c.p), func(b *testing.B) {
 			b.SetBytes(int64(len(filter.buf)))
 			for i := 0; i < b.N; i++ {
-				_ = filterCardinalityAVX512(*filter)
+				_ = filterCardinalityAVX512(filter)
 			}
 		})
 	}
