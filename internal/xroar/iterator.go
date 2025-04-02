@@ -68,9 +68,9 @@ func (bm *Bitmap) NewIterator() *Iterator {
 	}
 }
 
-func (it *Iterator) Next() uint64 {
+func (it *Iterator) Next() (uint64, bool) {
 	if it == nil || len(it.keys) == 0 {
-		return 0
+		return 0, false
 	}
 
 	key := it.keys[it.keyIdx]
@@ -82,7 +82,7 @@ func (it *Iterator) Next() uint64 {
 	// is found, reset the variables responsible for container iteration.
 	for card == 0 || it.contIdx+1 >= card {
 		if it.keyIdx+2 >= len(it.keys) {
-			return 0
+			return 0, false
 		}
 		// jump by 2 because key is followed by a value
 		it.keyIdx += 2
@@ -99,7 +99,7 @@ func (it *Iterator) Next() uint64 {
 	it.contIdx++
 	switch cont[indexType] {
 	case typeArray:
-		return key | uint64(cont[int(startIdx)+it.contIdx])
+		return key | uint64(cont[int(startIdx)+it.contIdx]), true
 	case typeBitmap:
 		// A bitmap container is an array of uint16s.
 		// If the container is bitmap, go to the index which has a non-zero value.
@@ -114,7 +114,7 @@ func (it *Iterator) Next() uint64 {
 		msbIdx := uint16(bits.LeadingZeros16(it.bitset))
 		msb := 1 << (16 - msbIdx - 1)
 		it.bitset ^= uint16(msb)
-		return key | uint64(it.bitmapIdx*16+int(msbIdx))
+		return key | uint64(it.bitmapIdx*16+int(msbIdx)), true
 	}
-	return 0
+	return 0, false
 }

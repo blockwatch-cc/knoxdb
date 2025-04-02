@@ -389,7 +389,7 @@ func cmp_bp_6_ne(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 	)
 
 	// process 8 values per loop
-	for n >= 4 {
+	for n >= 8 {
 		b |= b2b(uint16(buf[i])>>2&mask != c)          // a
 		b |= b2b(BE.Uint16(buf[i:])>>4&mask != c) << 1 // b
 		i++
@@ -431,6 +431,8 @@ func cmp_bp_6_ne(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		if u16be(buf[i:])>>6&mask != c { // c
 			bits.Set(k + 2)
 		}
+		n--
+		i++
 	}
 	if n > 0 {
 		if uint16(buf[i])&mask != c { // d

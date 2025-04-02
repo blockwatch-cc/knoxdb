@@ -68,11 +68,16 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 
 	// count unique only if necessary
 	doCountUnique := checkUnique && c.Min != c.Max && c.Delta == 0
+	isSigned := types.IsSigned[T]()
 	c.NumUnique = min(c.NumRuns, int(c.Max)-int(c.Min))
 
 	switch c.PhyBits {
 	case 64:
-		c.UseBits = bits.Len64(uint64(c.Max - c.Min))
+		if isSigned {
+			c.UseBits = bits.Len64(uint64(int64(c.Max) - int64(c.Min)))
+		} else {
+			c.UseBits = bits.Len64(uint64(c.Max - c.Min))
+		}
 		if doCountUnique {
 			// use array when c.Max-c.Min < 64k
 			sz := int(c.Max) - int(c.Min) + 1
@@ -83,7 +88,11 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 			}
 		}
 	case 32:
-		c.UseBits = bits.Len32(uint32(c.Max - c.Min))
+		if isSigned {
+			c.UseBits = bits.Len32(uint32(int32(c.Max) - int32(c.Min)))
+		} else {
+			c.UseBits = bits.Len32(uint32(c.Max - c.Min))
+		}
 		if doCountUnique {
 			// use array when c.Max-c.Min < 64k
 			sz := int(c.Max) - int(c.Min) + 1
@@ -94,12 +103,20 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 			}
 		}
 	case 16:
-		c.UseBits = bits.Len16(uint16(c.Max - c.Min))
+		if isSigned {
+			c.UseBits = bits.Len16(uint16(int16(c.Max) - int16(c.Min)))
+		} else {
+			c.UseBits = bits.Len16(uint16(c.Max - c.Min))
+		}
 		if doCountUnique {
 			c.NumUnique = c.buildUniqueArray(vals)
 		}
 	case 8:
-		c.UseBits = bits.Len8(uint8(c.Max - c.Min))
+		if isSigned {
+			c.UseBits = bits.Len8(uint8(int8(c.Max) - int8(c.Min)))
+		} else {
+			c.UseBits = bits.Len8(uint8(c.Max - c.Min))
+		}
 		if doCountUnique {
 			c.NumUnique = c.buildUniqueArray(vals)
 		}
@@ -127,15 +144,15 @@ func (c *IntegerContext[T]) estimateCardinality(vals []T) int {
 
 func (c *IntegerContext[T]) buildUniqueArray(vals []T) int {
 	// we only need enough space for our data range
-	sz := int(c.Max) - int(c.Min) + 1
-	if cap(c.UniqueArray) < sz {
+	sz := int64(c.Max) - int64(c.Min) + 1
+	if cap(c.UniqueArray) < int(sz) {
 		c.UniqueArray = make([]T, sz)
 	}
 	c.UniqueArray = c.UniqueArray[:sz]
 
 	// mark existing values
 	for _, v := range vals {
-		c.UniqueArray[int(v)-int(c.Min)] = T(1)
+		c.UniqueArray[int64(v)-int64(c.Min)] = T(1)
 	}
 
 	// count unique values and assign codewords (+1 to distinguish empty slots)

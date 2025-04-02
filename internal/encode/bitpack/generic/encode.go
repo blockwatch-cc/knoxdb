@@ -14,14 +14,17 @@ import (
 // Before packing minv is subtracted from each value (MinFOR scheme).
 // This makes all values positive and we can handle them as unsigned ints.
 func Encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int, error) {
-	log2 := bits.Len64(uint64(maxv - minv))
-	var n int
+	var n, log2 int
+	if types.IsSigned[T]() {
+		log2 = bits.Len64(uint64(int64(maxv) - int64(minv)))
+	} else {
+		log2 = bits.Len64(uint64(maxv - minv))
+	}
 	if log2 == 0 {
 		return buf[:0], log2, nil
 	}
 	if log2 < 59 {
 		n = encode1(buf, vals, minv, max(log2, 1))
-		// n = encode0(buf, vals, minv, max(log2, 1))
 	} else {
 		n = encode2(buf, vals, minv, max(log2, 1))
 	}

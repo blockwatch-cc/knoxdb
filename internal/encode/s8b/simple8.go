@@ -4,6 +4,7 @@
 package s8b
 
 import (
+	"math/bits"
 	"sort"
 
 	"blockwatch.cc/knoxdb/internal/encode/s8b/avx2"
@@ -63,45 +64,45 @@ func init() {
 }
 
 func EstimateMaxSize[T types.Integer](srcLen int, minv, maxv T) int {
-	rangeVal := uint64(maxv) - uint64(minv)
-	if rangeVal == 0 { // All values equal after shift
-		return srcLen/60 + packRemainder(srcLen%60)
+	var log2 int
+	if types.IsSigned[T]() {
+		log2 = bits.Len64(uint64(int64(maxv) - int64(minv)))
+	} else {
+		log2 = bits.Len64(uint64(maxv - minv))
 	}
 
-	// Find bits needed for rangeVal
-	bitsPerValue := 1
-	for rangeVal >= (1 << uint(bitsPerValue)) {
-		bitsPerValue++
+	if log2 == 0 { // All values zero after min-FOR
+		return srcLen/60 + packRemainder(srcLen%60)
 	}
 
 	// Map to values per word
 	var valuesPerWord int
 	switch {
-	case bitsPerValue <= 1:
+	case log2 <= 1:
 		valuesPerWord = 60
-	case bitsPerValue <= 2:
+	case log2 <= 2:
 		valuesPerWord = 30
-	case bitsPerValue <= 3:
+	case log2 <= 3:
 		valuesPerWord = 20
-	case bitsPerValue <= 4:
+	case log2 <= 4:
 		valuesPerWord = 15
-	case bitsPerValue <= 5:
+	case log2 <= 5:
 		valuesPerWord = 12
-	case bitsPerValue <= 6:
+	case log2 <= 6:
 		valuesPerWord = 10
-	case bitsPerValue <= 7:
+	case log2 <= 7:
 		valuesPerWord = 8
-	case bitsPerValue <= 8:
+	case log2 <= 8:
 		valuesPerWord = 7
-	case bitsPerValue <= 10:
+	case log2 <= 10:
 		valuesPerWord = 6
-	case bitsPerValue <= 12:
+	case log2 <= 12:
 		valuesPerWord = 5
-	case bitsPerValue <= 15:
+	case log2 <= 15:
 		valuesPerWord = 4
-	case bitsPerValue <= 20:
+	case log2 <= 20:
 		valuesPerWord = 3
-	case bitsPerValue <= 30:
+	case log2 <= 30:
 		valuesPerWord = 2
 	default:
 		valuesPerWord = 1

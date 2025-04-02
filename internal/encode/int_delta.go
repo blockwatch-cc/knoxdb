@@ -6,7 +6,9 @@ package encode
 import (
 	"sync"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
@@ -61,8 +63,10 @@ func (c *DeltaContainer[T]) Get(n int) T {
 }
 
 func (c *DeltaContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	for _, v := range sel {
-		dst = append(dst, c.Delta*T(v)+c.For)
+	val := c.For
+	for range sel {
+		dst = append(dst, val)
+		val += c.Delta
 	}
 	return dst
 }
@@ -75,41 +79,270 @@ func (c *DeltaContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) In
 }
 
 func (c *DeltaContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if val < c.For {
+		return bits
+	}
+	if c.Delta == 0 {
+		if val == c.For {
+			return bits.One()
+		}
+		return bits
+	}
+
+	val -= c.For
+
+	if val%c.Delta == 0 {
+		if n := int(val / c.Delta); n < c.N {
+			bits.Set(n)
+		}
+	}
+
+	return bits
 }
 
 func (c *DeltaContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if val < c.For {
+		return bits.One()
+	}
+	if c.Delta == 0 {
+		if val == c.For {
+			return bits
+		}
+		return bits.One()
+	}
+	val -= c.For
+
+	bits.One()
+	if c.Delta == 1 || val%c.Delta == 0 {
+		if n := int(val / c.Delta); n < c.N {
+			bits.Clear(n)
+		}
+	}
+
+	return bits
 }
 
 func (c *DeltaContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if val < c.For {
+		return bits
+	}
+	if c.Delta == 0 {
+		if val > c.For {
+			return bits.One()
+		}
+		return bits
+	}
+	val -= c.For
+
+	// is val larger than container?
+	if c.Delta*T(c.N-1) < val {
+		return bits.One()
+	}
+
+	// calculate val position
+	n := int(val / c.Delta)
+
+	// strict less, sub 1 when val is in match set
+	if c.Delta == 1 || val%c.Delta == 0 {
+		n--
+	}
+
+	if n == 0 {
+		bits.Set(n)
+	} else {
+		bits.SetRange(0, n)
+	}
+
+	return bits
 }
 
 func (c *DeltaContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if val < c.For {
+		return bits
+	}
+	if c.Delta == 0 {
+		if val >= c.For {
+			return bits.One()
+		}
+		return bits
+	}
+	val -= c.For
+
+	// is val larger than container?
+	if c.Delta*T(c.N-1) < val {
+		return bits.One()
+	}
+
+	// set all bits below or equal to val's position
+	n := int(val / c.Delta)
+	if n == 0 {
+		bits.Set(n)
+	} else {
+		bits.SetRange(0, n)
+	}
+
+	return bits
 }
 
 func (c *DeltaContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if val < c.For {
+		return bits.One()
+	}
+	if c.Delta == 0 {
+		if val < c.For {
+			return bits.One()
+		}
+		return bits
+	}
+	val -= c.For
+
+	// is val larger than container?
+	if c.Delta*T(c.N-1) < val {
+		return bits
+	}
+
+	// calculate val position
+	n := int(val / c.Delta)
+
+	// strict greater, add 1 when val is in match set
+	if c.Delta == 1 || val%c.Delta == 0 {
+		n++
+	}
+
+	// set bits range
+	if n == c.N-1 {
+		bits.Set(n)
+	} else {
+		bits.SetRange(n, c.N-1)
+	}
+
+	return bits
 }
 
 func (c *DeltaContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if val < c.For {
+		return bits.One()
+	}
+	if c.Delta == 0 {
+		if val <= c.For {
+			return bits.One()
+		}
+		return bits
+	}
+	val -= c.For
+
+	// is val larger than container?
+	if c.Delta*T(c.N-1) < val {
+		return bits
+	}
+
+	// calculate val position
+	n := int(val / c.Delta)
+
+	// set bits range
+	switch {
+	case n == 0:
+		bits.One()
+	case n == c.N-1:
+		bits.Set(n)
+	default:
+		bits.SetRange(n, c.N-1)
+	}
+
+	return bits
 }
 
 func (c *DeltaContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
-	return nil
+	// quick checks for outlier cases (no or all matches)
+	if b < c.For {
+		return bits
+	}
+	if a <= c.For && b >= c.Delta*T(c.N-1)+c.For {
+		return bits.One()
+	}
+	if c.Delta == 0 {
+		return bits
+	}
+
+	// adjust for out of bounds a
+	if a <= c.For {
+		a = 0
+	} else {
+		a -= c.For
+	}
+	b -= c.For
+
+	// calculate boundary positions
+	na := int(a / c.Delta)
+	nb := int(b / c.Delta)
+
+	// adjust a for non-direct match
+	if a%c.Delta != 0 {
+		na++
+	}
+
+	// adjust for out of bounds b
+	nb = min(nb, c.N-1)
+
+	if na == nb {
+		bits.Set(na)
+	} else {
+		bits.SetRange(na, nb)
+	}
+
+	return bits
 }
 
 func (c *DeltaContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+	set := s.(*xroar.Bitmap)
+
+	if mask != nil {
+		// only process values from mask
+		u32 := arena.AllocT[uint32](mask.Count())
+		for _, k := range mask.Indexes(u32) {
+			i := int(k)
+			if set.Contains(uint64(c.Delta*T(i) + c.For)) {
+				bits.Set(i)
+			}
+		}
+		arena.FreeT(u32)
+	} else {
+		val := c.For
+		for i := range c.N {
+			if set.Contains(uint64(val)) {
+				bits.Set(i)
+			}
+			val += c.Delta
+		}
+	}
+
+	return bits
 }
 
 func (c *DeltaContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+	set := s.(*xroar.Bitmap)
+
+	if mask != nil {
+		// only process values from mask
+		u32 := arena.AllocT[uint32](mask.Count())
+		for _, k := range mask.Indexes(u32) {
+			i := int(k)
+			if !set.Contains(uint64(c.Delta*T(i) + c.For)) {
+				bits.Set(i)
+			}
+		}
+		arena.FreeT(u32)
+	} else {
+		val := c.For
+		for i := range c.N {
+			if !set.Contains(uint64(val)) {
+				bits.Set(i)
+			}
+			val += c.Delta
+		}
+	}
+
+	return bits
 }
 
 type DeltaFactory struct {

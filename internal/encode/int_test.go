@@ -5,6 +5,7 @@ package encode
 
 import (
 	"bytes"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -69,7 +70,7 @@ func TestAnalyzeInt(t *testing.T) {
 
 func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainerType) {
 	for _, c := range tests.MakeShortIntTests[T](int(scheme)) {
-		t.Run(c.Name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			enc := NewInt[T](scheme)
 
 			// analyze and encode data into container
@@ -109,6 +110,201 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 			enc2.Close()
 			enc.Close()
 		})
+	}
+
+	// validate matchers
+	for _, sz := range tests.CompareSizes {
+		t.Run(fmt.Sprintf("%T/cmp_%d", T(0), sz), func(t *testing.T) {
+			src := tests.GenForScheme[T](int(scheme), sz)
+			enc := NewInt[T](scheme)
+			ctx := AnalyzeInt(src, true)
+			enc.Encode(ctx, src, 1)
+
+			// equal
+			t.Run("EQ", func(t *testing.T) {
+				testIntCompareFunc[T](t, enc.MatchEqual, src, types.FilterModeEqual)
+			})
+
+			// not equal
+			t.Run("NE", func(t *testing.T) {
+				testIntCompareFunc[T](t, enc.MatchNotEqual, src, types.FilterModeNotEqual)
+			})
+
+			// less
+			t.Run("LT", func(t *testing.T) {
+				testIntCompareFunc[T](t, enc.MatchLess, src, types.FilterModeLt)
+			})
+
+			// less equal
+			t.Run("LE", func(t *testing.T) {
+				testIntCompareFunc[T](t, enc.MatchLessEqual, src, types.FilterModeLe)
+			})
+
+			// greater
+			t.Run("GT", func(t *testing.T) {
+				testIntCompareFunc[T](t, enc.MatchGreater, src, types.FilterModeGt)
+			})
+
+			// greater equal
+			t.Run("GE", func(t *testing.T) {
+				testIntCompareFunc[T](t, enc.MatchGreaterEqual, src, types.FilterModeGe)
+			})
+
+			// between
+			t.Run("RG", func(t *testing.T) {
+				testIntCompareFunc2[T](t, enc.MatchBetween, src, types.FilterModeRange)
+			})
+
+			// in set
+			t.Run("IN", func(t *testing.T) {
+				testIntCompareFunc3[T](t, enc.MatchSet, src, types.FilterModeIn)
+			})
+
+			// not in set
+			t.Run("NI", func(t *testing.T) {
+				testIntCompareFunc3[T](t, enc.MatchNotSet, src, types.FilterModeNotIn)
+			})
+		})
+	}
+}
+
+type IntCompareFunc[T types.Integer] func(T, *Bitset, *Bitset) *Bitset
+type IntCompareFunc2[T types.Integer] func(T, T, *Bitset, *Bitset) *Bitset
+type IntCompareFunc3[T types.Integer] func(any, *Bitset, *Bitset) *Bitset
+
+func testIntCompareFunc[T types.Integer](t *testing.T, cmp IntCompareFunc[T], src []T, mode types.FilterMode) {
+	bits := bitset.NewBitset(len(src))
+	minv, maxv := slices.Min(src), slices.Max(src)
+
+	// single value
+	val := src[len(src)/2]
+	cmp(val, bits, nil)
+	ensureBits(t, src, val, val, bits, nil, mode)
+	bits.Zero()
+	require.Equal(t, 0, bits.Count(), "cleared")
+
+	// value over bounds
+	over := maxv + 1
+	cmp(over, bits, nil)
+	ensureBits(t, src, over, over, bits, nil, mode)
+	bits.Zero()
+	require.Equal(t, 0, bits.Count(), "cleared")
+
+	// value under bounds
+	under := minv
+	if under > 0 {
+		under--
+	}
+	cmp(under, bits, nil)
+	ensureBits(t, src, under, under, bits, nil, mode)
+	bits.Zero()
+	require.Equal(t, 0, bits.Count(), "cleared")
+}
+
+func testIntCompareFunc2[T types.Integer](t *testing.T, cmp IntCompareFunc2[T], src []T, mode types.FilterMode) {
+	bits := bitset.NewBitset(len(src))
+	minv, maxv := slices.Min(src), slices.Max(src)
+
+	// single value
+	val := src[len(src)/2]
+	cmp(val, val, bits, nil)
+	ensureBits(t, src, val, val, bits, nil, mode)
+	bits.Zero()
+	require.Equal(t, 0, bits.Count(), "cleared")
+
+	// full range
+	cmp(minv, maxv, bits, nil)
+	ensureBits(t, src, minv, maxv, bits, nil, mode)
+	bits.Zero()
+
+	// partial range
+	from, to := max(val/2, minv+1), min(val*2, maxv-1)
+	if from > to {
+		from, to = to, from
+	}
+	cmp(from, to, bits, nil)
+	ensureBits(t, src, from, to, bits, nil, mode)
+	bits.Zero()
+
+	// out of bounds (over)
+	cmp(maxv+1, maxv+1, bits, nil)
+	ensureBits(t, src, maxv+1, maxv+1, bits, nil, mode)
+	bits.Zero()
+
+	// out of bounds (under)
+	if minv > 2 {
+		cmp(minv-1, minv-1, bits, nil)
+		ensureBits(t, src, minv-1, minv-1, bits, nil, mode)
+		bits.Zero()
+	}
+}
+
+func testIntCompareFunc3[T types.Integer](t *testing.T, cmp IntCompareFunc3[T], src []T, mode types.FilterMode) {
+	bits := bitset.NewBitset(len(src))
+
+	// construct set
+	set := xroar.NewBitmap()
+	for range 10 {
+		set.Set(uint64(src[util.RandIntn(len(src))]))
+	}
+
+	// run cmp
+	cmp(set, bits, nil)
+	ensureBits(t, src, 0, 0, bits, set, mode)
+}
+
+func ensureBits[T types.Integer](t *testing.T, vals []T, val, val2 T, bits *Bitset, set *xroar.Bitmap, mode types.FilterMode) {
+	if !testing.Short() {
+		for i, v := range vals {
+			t.Logf("Val %d: %d ", i, v)
+		}
+		t.Logf("Bitset %x", bits.Bytes())
+	}
+	switch mode {
+	case types.FilterModeEqual:
+		for i, v := range vals {
+			require.Equal(t, v == val, bits.IsSet(i), "bit=%d val=%d %s %d", i, v, mode, val)
+		}
+
+	case types.FilterModeNotEqual:
+		for i, v := range vals {
+			require.Equal(t, v != val, bits.IsSet(i), "bit=%d val=%d %s %d", i, v, mode, val)
+		}
+
+	case types.FilterModeLt:
+		for i, v := range vals {
+			require.Equal(t, v < val, bits.IsSet(i), "bit=%d val=%d %s %d", i, v, mode, val)
+		}
+
+	case types.FilterModeLe:
+		for i, v := range vals {
+			require.Equal(t, v <= val, bits.IsSet(i), "bit=%d val=%d %s %d", i, v, mode, val)
+		}
+
+	case types.FilterModeGt:
+		for i, v := range vals {
+			require.Equal(t, v > val, bits.IsSet(i), "bit=%d val=%d %s %d", i, v, mode, val)
+		}
+
+	case types.FilterModeGe:
+		for i, v := range vals {
+			require.Equal(t, v >= val, bits.IsSet(i), "bit=%d val=%d %s %d", i, v, mode, val)
+		}
+
+	case types.FilterModeRange:
+		for i, v := range vals {
+			require.Equal(t, v >= val && v <= val2, bits.IsSet(i), "bit=%d val=%d %s [%d,%d]", i, v, mode, val, val2)
+		}
+
+	case types.FilterModeIn:
+		for i, v := range vals {
+			require.Equal(t, set.Contains(uint64(v)), bits.IsSet(i), "bit=%d val=%d %s %v", i, v, mode, set.ToArray())
+		}
+
+	case types.FilterModeNotIn:
+		for i, v := range vals {
+			require.Equal(t, !set.Contains(uint64(v)), bits.IsSet(i), "bit=%d val=%d %s %v", i, v, mode, set.ToArray())
+		}
 	}
 }
 
@@ -213,12 +409,43 @@ func testEncodeIntT[T types.Integer](t *testing.T) {
 	}
 }
 
+func TestUniqueArray(t *testing.T) {
+	for _, c := range tests.BenchmarkSizes {
+		data := util.RandInts[int16](c.N)
+		minx := slices.Min(data)
+		maxx := slices.Max(data)
+
+		// map
+		u := make(map[int16]struct{}, c.N)
+		for _, v := range data {
+			u[v] = struct{}{}
+		}
+
+		// array
+		var card int
+		a := make([]uint16, int(maxx)-int(minx)+1)
+		for _, v := range data {
+			a[int(v)-int(minx)] = 1
+		}
+		for _, v := range a {
+			if v > 0 {
+				card++
+			}
+		}
+		require.Equal(t, card, len(u))
+	}
+}
+
+// ---------------------------------------------
+// Benchmarks
+//
+
 func BenchmarkAnalyzeInt(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[uint64]() {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				ctx := AnalyzeInt(c.Data, true)
 				ctx.Close()
 			}
@@ -241,7 +468,7 @@ func BenchmarkEstimateInt(b *testing.B) {
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(len(c.Data) * 8))
-				for i := 0; i < b.N; i++ {
+				for range b.N {
 					_ = EstimateInt(scheme, ctx, c.Data, MAX_CASCADE)
 				}
 			})
@@ -261,12 +488,38 @@ func BenchmarkEncodeInt(b *testing.B) {
 			TIntegerRaw,
 		} {
 			data := tests.GenForScheme[int64](int(scheme), c.N)
+			ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
-				for i := 0; i < b.N; i++ {
-					ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
+				for range b.N {
 					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+					enc.Close()
+				}
+			})
+			ctx.Close()
+		}
+	}
+}
+
+func BenchmarkEncodeAndStoreInt(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, scheme := range []IntegerContainerType{
+			TIntegerConstant,
+			TIntegerDelta,
+			TIntegerRunEnd,
+			TIntegerBitpacked,
+			TIntegerDictionary,
+			TIntegerSimple8,
+			TIntegerRaw,
+		} {
+			data := tests.GenForScheme[int16](int(scheme), c.N)
+			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * 8))
+				for range b.N {
+					ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
+					enc := NewInt[int16](scheme).Encode(ctx, data, MAX_CASCADE)
 					sz := enc.MaxSize()
 					buf := enc.Store(make([]byte, 0, enc.MaxSize()))
 					require.Less(b, len(buf), sz)
@@ -283,7 +536,7 @@ func BenchmarkEncodeBestInt(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				enc := EncodeInt(nil, c.Data, MAX_CASCADE)
 				enc.Close()
 			}
@@ -297,7 +550,7 @@ func BenchmarkEncodeLegacyInt(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _ = zip.EncodeUint64(c.Data, buf)
 				buf.Reset()
 			}
@@ -326,7 +579,7 @@ func BenchmarkAppendTo(b *testing.B) {
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
-				for i := 0; i < b.N; i++ {
+				for range b.N {
 					enc2 := NewInt[int64](scheme)
 					_, err := enc2.Load(buf)
 					require.NoError(b, err)
@@ -336,33 +589,6 @@ func BenchmarkAppendTo(b *testing.B) {
 				}
 			})
 		}
-	}
-}
-
-func TestUniqueArray(t *testing.T) {
-	for _, c := range tests.BenchmarkSizes {
-		data := util.RandInts[int16](c.N)
-		minx := slices.Min(data)
-		maxx := slices.Max(data)
-
-		// map
-		u := make(map[int16]struct{}, c.N)
-		for _, v := range data {
-			u[v] = struct{}{}
-		}
-
-		// array
-		var card int
-		a := make([]uint16, int(maxx)-int(minx)+1)
-		for _, v := range data {
-			a[int(v)-int(minx)] = 1
-		}
-		for _, v := range a {
-			if v > 0 {
-				card++
-			}
-		}
-		require.Equal(t, card, len(u))
 	}
 }
 

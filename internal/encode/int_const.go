@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
@@ -69,41 +70,68 @@ func (c *ConstContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) In
 }
 
 func (c *ConstContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if c.Val == val {
+		bits.One()
+	}
+	return bits
 }
 
 func (c *ConstContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if c.Val != val {
+		bits.One()
+	}
+	return bits
 }
 
 func (c *ConstContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if c.Val < val {
+		bits.One()
+	}
+	return bits
 }
 
 func (c *ConstContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if c.Val <= val {
+		bits.One()
+	}
+	return bits
 }
 
 func (c *ConstContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if c.Val > val {
+		bits.One()
+	}
+	return bits
 }
 
 func (c *ConstContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	if c.Val >= val {
+		bits.One()
+	}
+	return bits
 }
 
 func (c *ConstContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
-	return nil
+	if c.Val >= a && c.Val <= b {
+		bits.One()
+	}
+	return bits
 }
 
 func (c *ConstContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+	set := s.(*xroar.Bitmap)
+	if set.Contains(uint64(c.Val)) {
+		bits.One()
+	}
+	return bits
 }
 
 func (c *ConstContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+	set := s.(*xroar.Bitmap)
+	if !set.Contains(uint64(c.Val)) {
+		bits.One()
+	}
+	return bits
 }
 
 type ConstFactory struct {

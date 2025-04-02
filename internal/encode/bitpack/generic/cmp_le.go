@@ -36,10 +36,13 @@ func cmp_bp_0_le(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 func cmp_bp_1_le(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 	// value can only be 0 or 1, so we can simply copy bitpack buffer to bitset
 	// note: bit set is reverse order, so we must flip during set
-	if val == 0 {
-		return bits.SetFromBytes(buf, n, true).Neg()
+	switch val {
+	case 0:
+		bits.SetFromBytes(buf, n, true).Neg()
+	default:
+		bits.One()
 	}
-	return bits.SetFromBytes(buf, n, true)
+	return bits
 }
 
 func cmp_bp_2_le(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
@@ -384,7 +387,7 @@ func cmp_bp_6_le(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 	)
 
 	// process 8 values per loop
-	for n >= 4 {
+	for n >= 8 {
 		b |= b2b(uint16(buf[i])>>2&mask <= c)          // a
 		b |= b2b(BE.Uint16(buf[i:])>>4&mask <= c) << 1 // b
 		i++
@@ -426,6 +429,8 @@ func cmp_bp_6_le(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 		if u16be(buf[i:])>>6&mask <= c { // c
 			bits.Set(k + 2)
 		}
+		n--
+		i++
 	}
 	if n > 0 {
 		if uint16(buf[i])&mask <= c { // d

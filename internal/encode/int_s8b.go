@@ -322,7 +322,7 @@ func (c *Simple8Container[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
 
 	// sanity checks of value range
 	if val < c.For {
-		val = c.For
+		return bits.One()
 	}
 	val -= c.For
 

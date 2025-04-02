@@ -352,7 +352,8 @@ func (m numEqualMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.val)
 	ge.WithValue(m.val)
-	minBits := le.MatchVector(mins, nil, mask)
+	minBits := bitset.NewBitset(mins.Len())
+	minBits = le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
 	}
@@ -558,12 +559,14 @@ func (m numRangeMatcher[T]) MatchFilter(flt filter.Filter) bool {
 }
 
 func (m numRangeMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+	// works with materialized and compressed blocks
 	// min <= to && max >= from
 	f := newFactory(mins.Type())
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.to)
 	ge.WithValue(m.from)
-	minBits := le.MatchVector(mins, nil, mask)
+	minBits := bitset.NewBitset(mins.Len())
+	minBits = le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
 	}
@@ -591,7 +594,11 @@ func (m *numInSetMatcher[T]) Value() any {
 	it := m.set.NewIterator()
 	vals := make([]T, card)
 	for i := 0; i < card; i++ {
-		vals[i] = T(it.Next())
+		v, ok := it.Next()
+		if !ok {
+			break
+		}
+		vals[i] = T(v)
 	}
 	return vals
 }
@@ -614,7 +621,11 @@ func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
 	it := m.set.NewIterator()
 	m.hashes = make([]hash.HashValue, card)
 	for i := 0; i < card; i++ {
-		m.hashes[i] = hash.HashUint64(it.Next())
+		v, ok := it.Next()
+		if !ok {
+			break
+		}
+		m.hashes[i] = hash.HashUint64(v)
 	}
 }
 
@@ -664,10 +675,22 @@ func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitse
 }
 
 func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
-	minx := block.NewBlockAccessor[T](mins).Slice()
-	maxx := block.NewBlockAccessor[T](maxs).Slice()
+	minAcc := block.NewBlockAccessor[T](mins)
+	maxAcc := block.NewBlockAccessor[T](maxs)
+
+	// handle compressed blocks
+	if minAcc.Matcher() != nil || maxAcc.Matcher() != nil {
+		setMin, setMax := m.set.Minimum(), m.set.Maximum()
+		rg := newFactory(mins.Type()).New(FilterModeRange)
+		rg.WithValue(RangeValue{T(setMin), T(setMax)})
+		return rg.MatchRangeVectors(mins, maxs, bits, mask)
+	}
+
+	// handle fully materialized blocks with raw number vectors
+	minx := minAcc.Slice()
+	maxx := maxAcc.Slice()
 	if mask != nil {
-		for i, l := 0, len(minx); i < l; i++ {
+		for i := range len(minx) {
 			if !mask.IsSet(i) {
 				continue
 			}
@@ -681,7 +704,7 @@ func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 			}
 		}
 	} else {
-		for i, l := 0, len(minx); i < l; i++ {
+		for i := range len(minx) {
 			minU64, maxU64 := uint64(minx[i]), uint64(maxx[i])
 			// source could contain negative integers
 			if minU64 > maxU64 {
@@ -693,11 +716,6 @@ func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 		}
 	}
 	return bits
-
-	// setMin, setMax := m.set.Minimum(), m.set.Maximum()
-	// rg := newFactory(mins.Type()).New(FilterModeRange)
-	// rg.WithValue(RangeValue{T(setMin), T(setMax)})
-	// return rg.MatchRangeVectors(mins, maxs, bits, mask)
 }
 
 // NOT IN ---
@@ -716,7 +734,11 @@ func (m *numNotInSetMatcher[T]) Value() any {
 	it := m.set.NewIterator()
 	vals := make([]T, card)
 	for i := 0; i < card; i++ {
-		vals[i] = T(it.Next())
+		v, ok := it.Next()
+		if !ok {
+			break
+		}
+		vals[i] = T(v)
 	}
 	return vals
 }

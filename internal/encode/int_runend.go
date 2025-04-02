@@ -9,13 +9,12 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 // TIntegerRunEnd
 type RunEndContainer[T types.Integer] struct {
-	For    T
 	Values IntegerContainer[T]      // []T
 	Ends   IntegerContainer[uint32] // []uint32
 }
@@ -41,12 +40,11 @@ func (c *RunEndContainer[T]) Len() int {
 }
 
 func (c *RunEndContainer[T]) MaxSize() int {
-	return 1 + num.MaxVarintLen64 + c.Values.MaxSize() + c.Ends.MaxSize()
+	return 1 + c.Values.MaxSize() + c.Ends.MaxSize()
 }
 
 func (c *RunEndContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TIntegerRunEnd))
-	dst = num.AppendUvarint(dst, uint64(c.For))
 	dst = c.Values.Store(dst)
 	return c.Ends.Store(dst)
 }
@@ -56,9 +54,6 @@ func (c *RunEndContainer[T]) Load(buf []byte) ([]byte, error) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
-	v, n := num.Uvarint(buf)
-	c.For = T(v)
-	buf = buf[n:]
 
 	// alloc and decode values child container
 	c.Values = NewInt[T](IntegerContainerType(buf[0]))
@@ -77,7 +72,7 @@ func (c *RunEndContainer[T]) Get(n int) T {
 	idx := sort.Search(c.Ends.Len(), func(i int) bool {
 		return c.Ends.Get(i) >= uint32(n)
 	})
-	return c.Values.Get(idx) + c.For
+	return c.Values.Get(idx)
 }
 
 func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
@@ -86,7 +81,7 @@ func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 		for len(sel) > 0 {
 			// use current run while valid
 			if sel[0] <= end {
-				dst = append(dst, val+c.For)
+				dst = append(dst, val)
 				sel = sel[1:]
 				continue
 			}
@@ -108,12 +103,9 @@ func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
 	// generate FOR + run-end encoding from originals
-	// values := make([]T, ctx.NumRuns)
 	values := arena.AllocT[T](ctx.NumRuns)[:ctx.NumRuns]
-	// ends := make([]uint32, ctx.NumRuns)
 	ends := arena.Alloc(arena.AllocUint32, ctx.NumRuns).([]uint32)[:ctx.NumRuns]
-	c.For = ctx.Min
-	values[0] = vals[0] - c.For
+	values[0] = vals[0]
 	var (
 		n uint32
 		p int
@@ -126,65 +118,125 @@ func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) I
 		ends[p] = n
 		n++
 		p++
-		values[p] = v - c.For
+		values[p] = v
 	}
 	ends[p] = n
 
 	// encode child containers
-	// fmt.Println("Run Values ..")
 	vctx := AnalyzeInt(values, false)
 	c.Values = EncodeInt(vctx, values, lvl-1)
 	vctx.Close()
 	if c.Values.Type() != TIntegerRaw {
 		arena.FreeT(values)
 	}
-	// fmt.Println("Run Ends ..")
+
 	ectx := AnalyzeInt(ends, false)
 	c.Ends = EncodeInt(ectx, ends, lvl-1)
 	ectx.Close()
 	if c.Ends.Type() != TIntegerRaw {
 		arena.Free(arena.AllocUint32, ends)
 	}
-	// fmt.Println("Run done.")
+
 	return c
 }
 
 func (c *RunEndContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchEqual(val, bitset.NewBitset(c.Values.Len()), nil)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *RunEndContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchNotEqual(val, bitset.NewBitset(c.Values.Len()), nil)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *RunEndContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchLess(val, bitset.NewBitset(c.Values.Len()), nil)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *RunEndContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchLessEqual(val, bitset.NewBitset(c.Values.Len()), nil)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *RunEndContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchGreater(val, bitset.NewBitset(c.Values.Len()), nil)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
+
 }
 
 func (c *RunEndContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchGreaterEqual(val, bitset.NewBitset(c.Values.Len()), nil)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *RunEndContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchBetween(a, b, bitset.NewBitset(c.Values.Len()), nil)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *RunEndContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchSet(s, bitset.NewBitset(c.Values.Len()), nil)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *RunEndContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchNotSet(s, bitset.NewBitset(c.Values.Len()), nil)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
+}
+
+func (c *RunEndContainer[T]) applyMatch(bits, vbits *Bitset) {
+	// catch easy corner cases
+	switch {
+	case vbits.None():
+		// fmt.Printf("Run: no match\n")
+		return
+	case vbits.All():
+		// fmt.Printf("Run: all match\n")
+		bits.One()
+		return
+	}
+
+	// handle value matches by unpacking range boundaries
+	u32 := arena.AllocT[uint32](vbits.Count())
+	for _, k := range vbits.Indexes(u32) {
+		var start uint32
+		if k > 0 {
+			start = c.Ends.Get(int(k-1)) + 1
+		}
+		end := c.Ends.Get(int(k))
+		// fmt.Printf("Run: %d [%d,%d] val=%d\n", k, start, end, c.Values.Get(int(k)))
+		bits.SetRange(int(start), int(end))
+	}
+	arena.FreeT(u32)
 }
 
 type RunEndFactory struct {
