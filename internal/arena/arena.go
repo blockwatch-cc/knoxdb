@@ -42,7 +42,7 @@ func AllocPtr(typ int, sz int) unsafe.Pointer {
 	return _arena.AllocPtr(typ, sz)
 }
 
-func AllocT[T Integer](sz int) []T {
+func AllocT[T Number](sz int) []T {
 	switch any(T(0)).(type) {
 	case int64:
 		return _arena.Alloc(AllocInt64, sz).([]T)
@@ -77,7 +77,7 @@ func FreePtr(typ int, ptr unsafe.Pointer) {
 	_arena.FreePtr(typ, ptr)
 }
 
-func FreeT[T Integer](val []T) {
+func FreeT[T Number](val []T) {
 	switch any(T(0)).(type) {
 	case int64:
 		_arena.Free(AllocInt64, val)

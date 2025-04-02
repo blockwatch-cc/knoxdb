@@ -31,11 +31,38 @@ func GenForScheme[T types.Integer](scheme, n int) []T {
 	}
 }
 
+func GenForSchemeFloat[T types.Float](scheme, n int) []T {
+	switch scheme {
+	case 0: // TFloatConstant,
+		return GenConst[T](n, 4.225)
+	case 1: // TFloatRunEnd,
+		return GenRuns[T](n, 5)
+	case 2: // TFloatDictionary,
+		return GenDups[T](n, 10)
+	case 3: // TFloatAlp,
+		return GenRnd[T](n)
+	case 4: // TFloatAlpRd,
+		return GenRnd[T](n)
+	case 5: // TFloatRaw,
+		return GenRnd[T](n)
+	default:
+		return GenRnd[T](n)
+	}
+}
+
 // creates n sequential values
-func GenSeq[T types.Integer](n int) []T {
+func GenSeq[T types.Number](n int) []T {
 	res := make([]T, n)
-	for i := range res {
-		res[i] = T(i)
+	switch any(T(0)).(type) {
+	case int64, int32, int16, int8, int, uint, uint64, uint32, uint16, uint8:
+		for i := range res {
+			res[i] = T(i)
+		}
+	case float64, float32:
+		for i := range res {
+			v := float64(i) + float64(0.5)
+			res[i] = T(v)
+		}
 	}
 	return res
 }
@@ -49,7 +76,7 @@ func GenRange[T types.Integer](start, end T) []T {
 }
 
 // creates n constants of value v
-func GenConst[T types.Integer](n int, v T) []T {
+func GenConst[T types.Number](n int, v T) []T {
 	res := make([]T, n)
 	for i := range res {
 		res[i] = v
@@ -58,7 +85,7 @@ func GenConst[T types.Integer](n int, v T) []T {
 }
 
 // creates n random values
-func GenRnd[T types.Integer](n int) []T {
+func GenRnd[T types.Number](n int) []T {
 	var res []T
 	switch any(T(0)).(type) {
 	case int64:
@@ -77,6 +104,16 @@ func GenRnd[T types.Integer](n int) []T {
 		res = util.ReinterpretSlice[uint16, T](util.RandUints[uint16](n))
 	case uint8:
 		res = util.ReinterpretSlice[uint8, T](util.RandUints[uint8](n))
+	case float64:
+		v := util.RandFloatsn[float64](n, 1<<BENCH_WIDTH-1)
+		for i := range v {
+			res = append(res, T(v[i]))
+		}
+	case float32:
+		v := util.RandFloatsn[float32](n, 1<<BENCH_WIDTH-1)
+		for i := range v {
+			res = append(res, T(v[i]))
+		}
 	}
 	return res
 }
@@ -106,7 +143,7 @@ func GenRndBits[T types.Integer](n, w int) []T {
 }
 
 // creates n values with cardinality c (i.e. u unique values)
-func GenDups[T types.Integer](n, u int) []T {
+func GenDups[T types.Number](n, u int) []T {
 	c := max(n/u, 1)
 	res := make([]T, n)
 	switch any(T(0)).(type) {
@@ -150,12 +187,22 @@ func GenDups[T types.Integer](n, u int) []T {
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
+	case float64:
+		unique := util.RandFloatsn[float64](c, 1<<BENCH_WIDTH-1)
+		for i := range res {
+			res[i] = T(unique[util.RandIntn(c)])
+		}
+	case float32:
+		unique := util.RandFloatsn[float32](c, 1<<BENCH_WIDTH-1)
+		for i := range res {
+			res[i] = T(unique[util.RandIntn(c)])
+		}
 	}
 	return res
 }
 
 // creates n values with run length r
-func GenRuns[T types.Integer](n, r int) []T {
+func GenRuns[T types.Number](n, r int) []T {
 	res := make([]T, 0, n)
 	sz := (n + r - 1) / r
 	switch any(T(0)).(type) {
@@ -224,6 +271,24 @@ func GenRuns[T types.Integer](n, r int) []T {
 		}
 	case uint8:
 		for _, v := range util.RandUints[uint8](sz) {
+			for range r {
+				if len(res) == n {
+					break
+				}
+				res = append(res, T(v))
+			}
+		}
+	case float64:
+		for _, v := range util.RandFloatsn[float64](sz, 1<<BENCH_WIDTH-1) {
+			for range r {
+				if len(res) == n {
+					break
+				}
+				res = append(res, T(v))
+			}
+		}
+	case float32:
+		for _, v := range util.RandFloatsn[float32](sz, 1<<BENCH_WIDTH-1) {
 			for range r {
 				if len(res) == n {
 					break

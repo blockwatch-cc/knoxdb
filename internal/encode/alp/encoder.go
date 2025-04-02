@@ -7,7 +7,7 @@ import (
 	"math"
 	"math/bits"
 
-	"golang.org/x/exp/constraints"
+	"blockwatch.cc/knoxdb/internal/types"
 )
 
 const (
@@ -17,12 +17,12 @@ const (
 )
 
 type EncodingIndice struct {
-	exponent uint8
-	factor   uint8
+	Exponent uint8
+	Factor   uint8
 }
 
 func (e EncodingIndice) Hash() uint8 {
-	return e.exponent ^ e.factor
+	return e.Exponent ^ e.Factor
 }
 
 type Combination struct {
@@ -31,9 +31,9 @@ type Combination struct {
 	estimatedCompressionSize uint64
 }
 
-type State[T constraints.Float] struct {
+type State[T types.Float] struct {
 	ExceptionsCount    uint16
-	ExceptionPositions []int
+	ExceptionPositions []uint32
 	sampledValuesN     []T
 	bestKCombinations  []Combination
 	BitWidth           uint8
@@ -44,11 +44,11 @@ type State[T constraints.Float] struct {
 	Scheme             int
 }
 
-func NewState[T constraints.Float](sz int) *State[T] {
+func NewState[T types.Float](sz int) *State[T] {
 	return &State[T]{
 		EncodedIntegers:    make([]int64, 0, sz),
 		Exceptions:         make([]T, 0, sz),
-		ExceptionPositions: make([]int, 0, sz),
+		ExceptionPositions: make([]uint32, 0, sz),
 		sampledValuesN:     make([]T, 0, VECTOR_SIZE),
 		bestKCombinations:  make([]Combination, 0, MAX_K_COMBINATIONS),
 		Scheme:             AlpScheme,
@@ -65,24 +65,24 @@ func (s *State[T]) ResetCombinations() {
 	s.bestKCombinations = s.bestKCombinations[:0]
 }
 
-func Scheme[T constraints.Float](values []T) (int, error) {
+func Scheme[T types.Float](values []T) (int, error) {
 	enc := newEncoder(values, 0)
 	return enc.state.Scheme, nil
 }
 
-func Compress[T constraints.Float](values []T) *State[T] {
+func Compress[T types.Float](values []T) *State[T] {
 	enc := newEncoder(values, 0)
 	enc.compress(values, enc.state)
 	return enc.state
 }
 
-type Encoder[T constraints.Float] struct {
+type Encoder[T types.Float] struct {
 	exactTypeBitSize uint8
 	state            *State[T]
 	constant         constant
 }
 
-func newEncoder[T constraints.Float](dataColumn []T, columnOffset int) *Encoder[T] {
+func newEncoder[T types.Float](dataColumn []T, columnOffset int) *Encoder[T] {
 	e := &Encoder[T]{}
 	e.constant = newConstant[T]()
 	e.state = NewState[T](len(dataColumn))
@@ -145,8 +145,8 @@ func (e Encoder[T]) analyzeFFOR(inputVector []int64) (uint8, int64) {
 /*
  * Function to sort the best combinations from each vector sampled from the rowgroup
  * First criteria is number of times it appears
- * Second criteria is bigger exponent
- * Third criteria is bigger factor
+ * Second criteria is bigger Exponent
+ * Third criteria is bigger Factor
  */
 
 func (e Encoder[T]) compareCombinations(c1, c2 Combination) bool {
@@ -155,16 +155,16 @@ func (e Encoder[T]) compareCombinations(c1, c2 Combination) bool {
 			(c1.estimatedCompressionSize < c2.estimatedCompressionSize)) ||
 		((c1.nAppearances == c2.nAppearances &&
 			c1.estimatedCompressionSize == c2.estimatedCompressionSize) &&
-			(c2.encodingIndice.exponent < c1.encodingIndice.exponent)) ||
+			(c2.encodingIndice.Exponent < c1.encodingIndice.Exponent)) ||
 		((c1.nAppearances == c2.nAppearances &&
 			c1.estimatedCompressionSize == c2.estimatedCompressionSize &&
-			c2.encodingIndice.exponent == c1.encodingIndice.exponent) &&
-			(c2.encodingIndice.factor < c1.encodingIndice.factor))
+			c2.encodingIndice.Exponent == c1.encodingIndice.Exponent) &&
+			(c2.encodingIndice.Factor < c1.encodingIndice.Factor))
 
 }
 
 /*
- * Find the best combinations of factor-exponent from each vector sampled from a rowgroup
+ * Find the best combinations of Factor-Exponent from each vector sampled from a rowgroup
  * This function is called once per rowgroup
  * This operates over ALP first level samples
  */
@@ -176,8 +176,8 @@ func (e Encoder[T]) findTopKCombinations(sampledVector []T, state *State[T]) {
 	bestEstimatedCompressionSize := uint64((sampleSize * (e.constant.EXCEPTION_SIZE + EXCEPTION_POSITION_SIZE)) + (sampleSize * e.constant.EXCEPTION_SIZE))
 
 	bestEncodingIndice := EncodingIndice{
-		exponent: e.constant.MAX_EXPONENT,
-		factor:   e.constant.MAX_EXPONENT,
+		Exponent: e.constant.MAX_EXPONENT,
+		Factor:   e.constant.MAX_EXPONENT,
 	}
 
 	foundFactor := uint8(0)
@@ -197,7 +197,7 @@ func (e Encoder[T]) findTopKCombinations(sampledVector []T, state *State[T]) {
 	//! We try all combinations in search for the one which minimize the compression size
 	for expIdx := int(e.constant.MAX_EXPONENT); expIdx >= 0; expIdx-- {
 		for factorIdx := expIdx; factorIdx >= 0; factorIdx-- {
-			currentEncodingIndice := EncodingIndice{exponent: uint8(expIdx), factor: uint8(factorIdx)}
+			currentEncodingIndice := EncodingIndice{Exponent: uint8(expIdx), Factor: uint8(factorIdx)}
 			estimatedCompressionSize := e.compressToEstimateSize(sampledVector, currentEncodingIndice)
 			currentCombination := Combination{
 				encodingIndice:           currentEncodingIndice,
@@ -237,11 +237,11 @@ func (e Encoder[T]) compressToEstimateSize(inputVector []T, encodingIndice Encod
 	estimatedCompressionSize := uint64(0)
 	var maxEncodedValue int64 = math.MaxInt64
 	var minEncodedValue int64 = math.MinInt64
-	fac := FACT_ARR[encodingIndice.factor]
-	exp := T(e.constant.FRAC_ARR[encodingIndice.exponent])
+	fac := FACT_ARR[encodingIndice.Factor]
+	exp := T(e.constant.FRAC_ARR[encodingIndice.Exponent])
 
-	frac := T(e.constant.FRAC_ARR[encodingIndice.factor])
-	expr := T(e.constant.EXP_ARR[encodingIndice.exponent])
+	frac := T(e.constant.FRAC_ARR[encodingIndice.Factor])
+	expr := T(e.constant.EXP_ARR[encodingIndice.Exponent])
 	for _, value := range inputVector {
 		encodedValue := e.encodeValue(value, frac, expr)
 		decodedValue := decodeValue(encodedValue, fac, exp)
@@ -259,7 +259,7 @@ func (e Encoder[T]) compressToEstimateSize(inputVector []T, encodingIndice Encod
 		return math.MaxUint64
 	}
 
-	// Evaluate factor/exponent compression size (we optimize for FOR)
+	// Evaluate Factor/Exponent compression size (we optimize for FOR)
 	delta := uint64(maxEncodedValue) - uint64(minEncodedValue)
 	estimatedBitsPerValue = uint32(math.Ceil(math.Log2(float64(delta + 1))))
 	estimatedCompressionSize += uint64(nValues) * uint64(estimatedBitsPerValue)
@@ -268,7 +268,7 @@ func (e Encoder[T]) compressToEstimateSize(inputVector []T, encodingIndice Encod
 }
 
 /*
- * Find the best combination of factor-exponent for a vector from within the best k combinations
+ * Find the best combination of Factor-Exponent for a vector from within the best k combinations
  * This is ALP second level sampling
  */
 func (e Encoder[T]) findBestExponentFactorFromCombinations(inputVector []T, state *State[T]) {
@@ -307,7 +307,7 @@ func (e Encoder[T]) findBestExponentFactorFromCombinations(inputVector []T, stat
 }
 
 func (e Encoder[T]) compress(inputVector []T, state *State[T]) {
-	lenInputVector := len(inputVector)
+	lenInputVector := uint32(len(inputVector))
 	if len(state.bestKCombinations) > 1 { // Only if more than 1 found top combinations we sample and search
 		e.findBestExponentFactorFromCombinations(inputVector, state) // ?
 	} else {
@@ -317,12 +317,12 @@ func (e Encoder[T]) compress(inputVector []T, state *State[T]) {
 	// Encoding Floating-Point to Int64
 	//! We encode all the values regardless of their correctness to recover the original floating-point
 	exceptionsIdx := 0
-	fac := FACT_ARR[state.EncodingIndice.factor]
-	exp := T(e.constant.FRAC_ARR[state.EncodingIndice.exponent])
+	fac := FACT_ARR[state.EncodingIndice.Factor]
+	exp := T(e.constant.FRAC_ARR[state.EncodingIndice.Exponent])
 
-	frac := T(e.constant.FRAC_ARR[state.EncodingIndice.factor])
-	expr := T(e.constant.EXP_ARR[state.EncodingIndice.exponent])
-	for i := 0; i < lenInputVector; i++ {
+	frac := T(e.constant.FRAC_ARR[state.EncodingIndice.Factor])
+	expr := T(e.constant.EXP_ARR[state.EncodingIndice.Exponent])
+	for i := uint32(0); i < lenInputVector; i++ {
 		encodeValue := e.encodeValue(inputVector[i], frac, expr)
 		decodeValue := decodeValue(encodeValue, fac, exp)
 		state.EncodedIntegers = append(state.EncodedIntegers, encodeValue)
@@ -335,7 +335,7 @@ func (e Encoder[T]) compress(inputVector []T, state *State[T]) {
 
 	// Finding first non exception value
 	nonExceptionValue := int64(0)
-	for i := 0; i < lenInputVector; i++ {
+	for i := uint32(0); i < lenInputVector; i++ {
 		if i != state.ExceptionPositions[i] {
 			nonExceptionValue = state.EncodedIntegers[i]
 			break

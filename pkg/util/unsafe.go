@@ -42,11 +42,18 @@ func FromByteSlice[T Number](s []byte) []T {
 	)
 }
 
-func ReinterpretSlice[T, S constraints.Integer](t []T) []S {
+func ReinterpretSlice[T Number, S Number](t []T) []S {
 	if unsafe.Sizeof(T(0)) == unsafe.Sizeof(S(0)) {
 		return *(*[]S)(unsafe.Pointer(&t))
 	}
 	return nil
+}
+
+func ReinterpretValue[T Number, S Number](t T) S {
+	if unsafe.Sizeof(T(0)) == unsafe.Sizeof(S(0)) {
+		return *(*S)(unsafe.Pointer(&t))
+	}
+	return S(0)
 }
 
 func ConvertSlice[T, S constraints.Integer](t []T) (s []S) {

@@ -18,13 +18,13 @@ var BenchmarkSizes = []BenchmarkSize{
 	{"64k", 64 * 1024},
 }
 
-type Benchmark[T types.Integer] struct {
+type Benchmark[T types.Number] struct {
 	Name string
 	Data []T
 	N    int
 }
 
-func MakeBenchmarks[T types.Integer]() []Benchmark[T] {
+func MakeBenchmarks[T types.Number]() []Benchmark[T] {
 	return []Benchmark[T]{
 		{"dups_1K", GenDups[T](1024, 10), 1024}, // 10% unique
 		{"dups_16K", GenDups[T](16*1024, 10), 16 * 1024},

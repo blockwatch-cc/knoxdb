@@ -3,9 +3,7 @@
 
 package alp
 
-import (
-	"golang.org/x/exp/constraints"
-)
+import "blockwatch.cc/knoxdb/internal/types"
 
 const (
 	SAMPLING_EARLY_EXIT_THRESHOLD    = 2
@@ -171,7 +169,7 @@ type constant struct {
 	EXP_ARR                 []float64
 }
 
-func newConstant[T constraints.Float]() constant {
+func newConstant[T types.Float]() constant {
 	var v any = T(0)
 	switch v.(type) {
 	case float32:

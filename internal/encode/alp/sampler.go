@@ -6,10 +6,10 @@ package alp
 import (
 	"math"
 
-	"golang.org/x/exp/constraints"
+	"blockwatch.cc/knoxdb/internal/types"
 )
 
-func FirstLevelSample[T constraints.Float](dataSample, data []T, dataOffset int) []T {
+func FirstLevelSample[T types.Float](dataSample, data []T, dataOffset int) []T {
 	dataSize := len(data)
 	leftInData := dataSize - dataOffset
 	portionToSample := min(ROWGROUP_SIZE, leftInData)
