@@ -7,11 +7,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-const Int64Size = 8
-const Int32Size = 4
-const Int16Size = 2
-const Int8Size = 1
-
 type Int64Test struct {
 	Name   string
 	Slice  []int64

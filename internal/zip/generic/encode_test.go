@@ -4,28 +4,18 @@
 package generic
 
 import (
-	"reflect"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/zip/tests"
+	ztests "blockwatch.cc/knoxdb/internal/zip/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/stretchr/testify/require"
 )
 
 var (
-	zzDeltaEncodeUint64Cases = tests.ZzDeltaEncodeUint64Cases
-	zzDeltaEncodeUint32Cases = tests.ZzDeltaEncodeUint32Cases
-	zzDeltaEncodeUint16Cases = tests.ZzDeltaEncodeUint16Cases
-	zzDeltaEncodeUint8Cases  = tests.ZzDeltaEncodeUint8Cases
-
-	benchmarkSizes = tests.BenchmarkSizes
-	randInt64Slice = util.RandInts[int64]
-	randInt32Slice = util.RandInts[int32]
-	randInt16Slice = util.RandInts[int16]
-	randInt8Slice  = util.RandInts[int8]
-	Int64Size      = tests.Int64Size
-	Int32Size      = tests.Int32Size
-	Int16Size      = tests.Int16Size
-	Int8Size       = tests.Int8Size
+	zzDeltaEncodeUint64Cases = ztests.ZzDeltaEncodeUint64Cases
+	zzDeltaEncodeUint32Cases = ztests.ZzDeltaEncodeUint32Cases
+	zzDeltaEncodeUint16Cases = ztests.ZzDeltaEncodeUint16Cases
+	zzDeltaEncodeUint8Cases  = ztests.ZzDeltaEncodeUint8Cases
 )
 
 func makeUint64Result[T int8 | int16 | int32 | int64](s []T) []uint64 {
@@ -42,12 +32,8 @@ func TestZzDeltaEncodeUint64Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint64Cases {
 		slice := make([]uint64, len(c.Slice))
 		ZzDeltaEncodeUint64(slice, util.ReinterpretSlice[int64, uint64](c.Slice))
-		if got, want := len(slice), len(c.Result); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(slice, makeUint64Result(c.Result)) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
-		}
+		require.Len(t, slice, len(c.Result), "len")
+		require.Equal(t, slice, makeUint64Result(c.Result))
 	}
 }
 
@@ -57,12 +43,8 @@ func TestZzDeltaEncodeUint32Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint32Cases {
 		slice := make([]uint64, len(c.Slice))
 		ZzDeltaEncodeUint32(slice, util.ReinterpretSlice[int32, uint32](c.Slice))
-		if got, want := len(slice), len(c.Result); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(slice, makeUint64Result(c.Result)) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
-		}
+		require.Len(t, slice, len(c.Result), "len")
+		require.Equal(t, slice, makeUint64Result(c.Result)) // result is uint64
 	}
 }
 
@@ -72,13 +54,8 @@ func TestZzDeltaEncodeUint16Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint16Cases {
 		slice := make([]uint64, len(c.Slice))
 		ZzDeltaEncodeUint16(slice, util.ReinterpretSlice[int16, uint16](c.Slice))
-		if got, want := len(slice), len(c.Result); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		// result is uint64
-		if !reflect.DeepEqual(slice, makeUint64Result(c.Result)) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
-		}
+		require.Len(t, slice, len(c.Result), "len")
+		require.Equal(t, slice, makeUint64Result(c.Result)) // result is uint64
 	}
 }
 
@@ -88,11 +65,7 @@ func TestZzDeltaEncodeUint8Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint8Cases {
 		slice := make([]uint64, len(c.Slice))
 		ZzDeltaEncodeUint8(slice, util.ReinterpretSlice[int8, uint8](c.Slice))
-		if got, want := len(slice), len(c.Result); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(slice, makeUint64Result(c.Result)) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Result)
-		}
+		require.Len(t, slice, len(c.Result), "len")
+		require.Equal(t, slice, makeUint64Result(c.Result)) // result is uint64
 	}
 }

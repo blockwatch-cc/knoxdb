@@ -6,14 +6,15 @@ package zip
 import (
 	"bytes"
 	"fmt"
+	"slices"
 
-	"reflect"
 	"sort"
 	"testing"
 	"testing/quick"
 
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
-	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEncodeInt16_Compare(t *testing.T) {
@@ -51,67 +52,40 @@ func TestEncodeInt16_Compare(t *testing.T) {
 }
 
 func testEncodeInt16_Compare(t *testing.T, input []int16, encoding byte) {
-	exp := make([]int16, len(input))
-	copy(exp, input)
-
 	buf := &bytes.Buffer{}
-	_, err := EncodeInt16(input, buf)
+	_, err := EncodeInt16(slices.Clone(input), buf)
 	buf2 := buf.Bytes()
-	if err != nil {
-		t.Fatalf("unexpected error: %v\nbuf: %db %x", err, len(buf2), buf2)
-	}
-
-	if got, exp := buf2[0]>>4, encoding; got != exp {
-		t.Fatalf("got encoding %v, expected %v", got, encoding)
-	}
+	require.NoError(t, err, "buf: %x", buf2)
+	require.Equal(t, encoding, buf2[0]>>4, "encoding")
 
 	result := make([]int16, len(input))
 	_, err = DecodeInt16(result, buf2)
-	if err != nil {
-		t.Fatalf("unexpected error: %v\nbuf: %db %x", err, len(buf2), buf2)
-	}
-
-	if got := result; !reflect.DeepEqual(got, exp) {
-		t.Fatalf("-got/+exp\n%s", cmp.Diff(got, exp))
-	}
+	require.NoError(t, err, "buf: %x", buf2)
+	require.Equal(t, input, result)
 }
 
 func TestEncodeInt16_NoValues(t *testing.T) {
 	buf := &bytes.Buffer{}
 	_, err := EncodeInt16(nil, buf)
-	b := buf.Bytes()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(b) > 0 {
-		t.Fatalf("unexpected encoded length %d", len(b))
-	}
+	require.NoError(t, err)
+	require.Len(t, buf.Bytes(), 0)
 }
 
 func TestEncodeInt16_Quick(t *testing.T) {
 	quick.Check(func(values []int16) bool {
 		// Retrieve encoded bytes from encoder.
 		buf := &bytes.Buffer{}
-		_, err := EncodeInt16(values, buf)
+		_, err := EncodeInt16(slices.Clone(values), buf)
 		b := buf.Bytes()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		// use the matching decoder (with support for all enc types)
-		got := make([]int16, len(values))
-		_, err = DecodeInt16(got, b)
-		if err != nil {
-			t.Fatal(err)
-		}
+		res := make([]int16, len(values))
+		_, err = DecodeInt16(res, b)
+		require.NoError(t, err)
 
 		// Verify that input and output values match.
-		exp := values
-		if !reflect.DeepEqual(exp, got) {
-			t.Fatalf("mismatch enc=%d scale=%d:\n\nexp=%+v\n\ngot=%+v\n\n",
-				b[0]>>4, b[0]&0xf, exp, got)
-		}
-
+		require.Equal(t, values, res)
 		return true
 	}, nil)
 }
@@ -127,84 +101,31 @@ func TestInt16Decode_Corrupt(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%q", c), func(t *testing.T) {
-			got := make([]int16, 0)
-			_, err := DecodeInt16(got, []byte(c))
-			if err == nil {
-				t.Fatal("exp an err, got nil")
-			}
-
-			exp := []int16{}
-			if !cmp.Equal(got, exp) {
-				t.Fatalf("unexpected value: -got/+exp\n%s", cmp.Diff(got, exp))
-			}
+			res := make([]int16, 0)
+			_, err := DecodeInt16(res, []byte(c))
+			require.Error(t, err)
+			require.Equal(t, []int16{}, res)
 		})
 	}
 }
 
 func BenchmarkEncodeInt16(b *testing.B) {
-	var err error
-	cases := []int{1024, 1 << 14, 1 << 16}
-
-	for _, n := range cases {
-		b.Run(fmt.Sprintf("%d_seq", n), func(b *testing.B) {
-			src := make([]int16, n)
-			for i := 0; i < n; i++ {
-				src[i] = int16(i)
-			}
-			sort.Slice(src, func(i int, j int) bool { return src[i] < src[j] })
-
+	for _, c := range tests.MakeBenchmarks[int16]() {
+		buf := bytes.NewBuffer(nil)
+		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
-			for n := 0; n < b.N; n++ {
-				if _, err = EncodeInt16(src, bufResultBuffer); err != nil {
-					b.Fatal(err)
-				}
-				bufResultBuffer.Reset()
-			}
-		})
-
-		b.Run(fmt.Sprintf("%d_ran", n), func(b *testing.B) {
-			src := make([]int16, n)
-			for i := 0; i < n; i++ {
-				src[i] = int16(util.RandUint32())
-			}
-			sort.Slice(src, func(i int, j int) bool { return src[i] < src[j] })
-
-			b.ReportAllocs()
-			b.ResetTimer()
-			for n := 0; n < b.N; n++ {
-				if _, err = EncodeInt16(src, bufResultBuffer); err != nil {
-					b.Fatal(err)
-				}
-				bufResultBuffer.Reset()
-			}
-		})
-
-		b.Run(fmt.Sprintf("%d_dup", n), func(b *testing.B) {
-			src := make([]int16, n)
-			for i := 0; i < n; i++ {
-				src[i] = 12316
-			}
-
-			b.ReportAllocs()
-			b.ResetTimer()
-			for n := 0; n < b.N; n++ {
-				if _, err = EncodeInt16(src, bufResultBuffer); err != nil {
-					b.Fatal(err)
-				}
-				bufResultBuffer.Reset()
+			b.SetBytes(int64(c.N*2))
+			for range b.N {
+				_, err := EncodeInt16(c.Data, buf)
+				require.NoError(b, err)
+				buf.Reset()
 			}
 		})
 	}
 }
 
-func BenchmarkInt16DecodeUncompressed(b *testing.B) {
-	benchmarks := []int{
-		1024,
-		1 << 14,
-		1 << 16,
-	}
-
+func BenchmarkDecodeUncompressedInt16(b *testing.B) {
 	values := []int16{
 		-20522, 14384, -20104,
 		-12212, -19417, -20367,
@@ -216,33 +137,27 @@ func BenchmarkInt16DecodeUncompressed(b *testing.B) {
 		9446, -23940, -26821,
 	}
 
-	for _, size := range benchmarks {
-		src := make([]int16, size)
-		for i := 0; i < size; i++ {
-			src[i] = values[util.RandInt()%len(values)]
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int16, c.N)
+		for i := range c.N {
+			src[i] = values[util.RandIntn(len(values))]
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt16(src, buf)
 
-		dst := make([]int16, size)
-		b.Run(fmt.Sprintf("buffer_%d", size), func(b *testing.B) {
-			b.SetBytes(int64(size * 8))
+		dst := make([]int16, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 2))
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _ = DecodeInt16(dst, buf.Bytes())
 			}
 		})
 	}
 }
 
-func BenchmarkInt16ReadUncompressed(b *testing.B) {
-	benchmarks := []int{
-		1024,
-		1 << 14,
-		1 << 16,
-	}
-
+func BenchmarkReadUncompressedInt16(b *testing.B) {
 	values := []int16{
 		-20522, 14384, -20104,
 		-12212, -19417, -20367,
@@ -253,134 +168,107 @@ func BenchmarkInt16ReadUncompressed(b *testing.B) {
 		27614, -11643, -6807,
 		9446, -23940, -26821,
 	}
-
-	for _, size := range benchmarks {
-		src := make([]int16, size)
-		for i := 0; i < size; i++ {
-			src[i] = values[util.RandInt()%len(values)]
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int16, c.N)
+		for i := range c.N {
+			src[i] = values[util.RandIntn(len(values))]
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt16(src, buf)
 
-		b.Run(fmt.Sprintf("reader_%d", size), func(b *testing.B) {
-			dst := make([]uint16, size)
-			b.SetBytes(int64(size * 8))
+		dst := make([]uint16, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 2))
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _, _ = ReadInt16(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}
 }
 
-func BenchmarkInt16DecodePacked(b *testing.B) {
-	benchmarks := []int{
-		1024,
-		1 << 14,
-		1 << 16,
-	}
-	for _, size := range benchmarks {
-		src := make([]int16, size)
-		for i := 0; i < size; i++ {
+func BenchmarkDecodePackedInt16(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int16, c.N)
+		for i := range c.N {
 			src[i] = int16(i*1000) + int16(util.RandIntn(10))
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt16(src, buf)
 
-		b.Run(fmt.Sprintf("buffer_%d", size), func(b *testing.B) {
-			dst := make([]int16, size)
-			b.SetBytes(int64(size * 8))
+		dst := make([]int16, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 2))
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _ = DecodeInt16(dst, buf.Bytes())
 			}
 		})
 	}
 }
 
-func BenchmarkInt16ReadPacked(b *testing.B) {
-	benchmarks := []int{
-		1024,
-		1 << 14,
-		1 << 16,
-	}
-	for _, size := range benchmarks {
-		src := make([]int16, size)
-		for i := 0; i < size; i++ {
+func BenchmarkReadPackedInt16(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int16, c.N)
+		for i := range c.N {
 			src[i] = int16(i*1000) + int16(util.RandIntn(10))
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt16(src, buf)
 
-		b.Run(fmt.Sprintf("reader_%d", size), func(b *testing.B) {
-			dst := make([]uint16, size)
-			b.SetBytes(int64(size * 4))
+		dst := make([]uint16, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 2))
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _, _ = ReadInt16(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}
 }
 
-func BenchmarkInt16DecodeRLE(b *testing.B) {
-	benchmarks := []struct {
-		n     int
-		delta int16
-	}{
-		{1024, 10},
-		{1 << 14, 10},
-		{1 << 16, 10},
-	}
-	for _, bm := range benchmarks {
-		src := make([]int16, bm.n)
-		var acc int16 = bm.delta
-		for i := 0; i < bm.n; i++ {
+func BenchmarkDecodeRLEInt16(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int16, c.N)
+		var acc int16 = 10
+		for i := range c.N {
 			src[i] = acc
-			acc += bm.delta
+			acc += 10
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt16(src, buf)
 
-		dst := make([]int16, bm.n)
-		b.Run(fmt.Sprintf("buffer_%d_delta_%d", bm.n, bm.delta), func(b *testing.B) {
-			b.SetBytes(int64(bm.n * 4))
+		dst := make([]int16, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 2))
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _ = DecodeInt16(dst, buf.Bytes())
 			}
 		})
 	}
 }
 
-func BenchmarkInt16ReadRLE(b *testing.B) {
-	benchmarks := []struct {
-		n     int
-		delta int16
-	}{
-		{1024, 10},
-		{1 << 14, 10},
-		{1 << 16, 10},
-	}
-	for _, bm := range benchmarks {
-		src := make([]int16, bm.n)
-		var acc int16 = bm.delta
-		for i := 0; i < bm.n; i++ {
+func BenchmarkReadRLEInt16(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int16, c.N)
+		var acc int16 = 10
+		for i := range c.N {
 			src[i] = acc
-			acc += bm.delta
+			acc += 10
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeInt16(src, buf)
 
-		b.Run(fmt.Sprintf("reader_%d_delta_%d", bm.n, bm.delta), func(b *testing.B) {
-			dst := make([]uint16, bm.n)
-			b.SetBytes(int64(bm.n * 4))
+		dst := make([]uint16, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 2))
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _, _ = ReadInt16(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})

@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"strconv"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/exp/slices"
@@ -125,13 +125,13 @@ func TestBytesCases2(t *testing.T, cases []BytesMatchTest, fn BytesMatchFunc2) {
 
 func BenchBytesCases(b *testing.B, fn BytesMatchFunc) {
 	b.Helper()
-	for _, n := range BenchmarkSizes {
-		for i, m := range BenchmarksMasks {
+	for _, n := range tests.BenchmarkSizes {
+		for _, m := range BenchmarkMasks {
 			a := RandBytes(n.N)
-			bits, mask := MakeBitsAndMaskPoison(len(a), m)
-			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
+			bits, mask := MakeBitsAndMaskPoison(len(a), m.Pattern)
+			b.Run(n.Name+"/mask_"+m.Name, func(b *testing.B) {
 				b.SetBytes(int64(n.N * 8))
-				for i := 0; i < b.N; i++ {
+				for range b.N {
 					fn(a, Uint64Bytes(math.MaxUint64>>1), bits, mask)
 				}
 			})
@@ -141,13 +141,13 @@ func BenchBytesCases(b *testing.B, fn BytesMatchFunc) {
 
 func BenchBytesCases2(b *testing.B, fn BytesMatchFunc2) {
 	b.Helper()
-	for _, n := range BenchmarkSizes {
-		for i, m := range BenchmarksMasks {
+	for _, n := range tests.BenchmarkSizes {
+		for _, m := range BenchmarkMasks {
 			a := RandBytes(n.N)
-			bits, mask := MakeBitsAndMaskPoison(len(a), m)
-			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
+			bits, mask := MakeBitsAndMaskPoison(len(a), m.Pattern)
+			b.Run(n.Name+"/mask_"+m.Name, func(b *testing.B) {
 				b.SetBytes(int64(n.N * 16))
-				for i := 0; i < b.N; i++ {
+				for range b.N {
 					fn(a, Uint64Bytes(math.MaxUint64>>2), Uint64Bytes(math.MaxUint64>>1), bits, mask)
 				}
 			})

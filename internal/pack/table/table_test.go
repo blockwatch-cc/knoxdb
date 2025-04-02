@@ -3,17 +3,17 @@ package table
 import (
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/tests"
+	etests "blockwatch.cc/knoxdb/internal/tests/engine"
 
 	_ "blockwatch.cc/knoxdb/internal/store/bolt"
 )
 
 func TestMain(m *testing.M) {
 	// must register enum type with global schema registry
-	tests.RegisterEnum()
+	etests.RegisterEnum()
 	m.Run()
 }
 
 func TestTable(t *testing.T) {
-	tests.TestTableEngine[Table, *Table](t, "bolt", "pack")
+	etests.TestTableEngine[Table, *Table](t, "bolt", "pack")
 }

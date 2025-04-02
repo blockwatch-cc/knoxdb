@@ -5,7 +5,7 @@ import (
 	"io"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/zip/tests"
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
@@ -41,41 +41,42 @@ func TestFloat32(t *testing.T) {
 }
 
 func BenchmarkEncodeFloat64(b *testing.B) {
-	for _, n := range tests.BenchmarkSizes {
-		fl := util.RandFloats[float64](n.L)
-		b.Run(n.Name, func(b *testing.B) {
+	for _, c := range tests.MakeBenchmarks[float64]() {
+		b.Run(c.Name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				EncodeFloat64(fl, io.Discard)
+			b.SetBytes(int64(c.N * 8))
+			for range b.N {
+				EncodeFloat64(c.Data, io.Discard)
 			}
 		})
 	}
 }
 
 func BenchmarkEncodeFloat32(b *testing.B) {
-	for _, n := range tests.BenchmarkSizes {
-		fl := util.RandFloats[float32](n.L)
-		b.Run(n.Name, func(b *testing.B) {
+	for _, c := range tests.MakeBenchmarks[float32]() {
+		b.Run(c.Name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				EncodeFloat32(fl, io.Discard)
+			b.SetBytes(int64(c.N * 4))
+			for range b.N {
+				EncodeFloat32(c.Data, io.Discard)
 			}
 		})
 	}
 }
 
 func BenchmarkDecodeFloat64(b *testing.B) {
-	for _, n := range tests.BenchmarkSizes {
+	for _, c := range tests.MakeBenchmarks[float64]() {
 		buf := bytes.NewBuffer(nil)
-		decodeFloats := make([]float64, n.L)
-		EncodeFloat64(util.RandFloats[float64](n.L), buf)
+		decodeFloats := make([]float64, c.N)
+		EncodeFloat64(util.RandFloats[float64](c.N), buf)
 
-		b.Run(n.Name, func(b *testing.B) {
+		b.Run(c.Name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			b.SetBytes(int64(c.N * 8))
+			for range b.N {
 				DecodeFloat64(decodeFloats, buf.Bytes())
 			}
 		})
@@ -83,14 +84,15 @@ func BenchmarkDecodeFloat64(b *testing.B) {
 }
 
 func BenchmarkDecodeFloat32(b *testing.B) {
-	for _, n := range tests.BenchmarkSizes {
+	for _, c := range tests.MakeBenchmarks[float32]() {
 		buf := bytes.NewBuffer(nil)
-		decodeFloats := make([]float32, n.L)
-		EncodeFloat32(util.RandFloats[float32](n.L), buf)
-		b.Run(n.Name, func(b *testing.B) {
+		decodeFloats := make([]float32, c.N)
+		EncodeFloat32(util.RandFloats[float32](c.N), buf)
+		b.Run(c.Name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			b.SetBytes(int64(c.N * 4))
+			for range b.N {
 				DecodeFloat32(decodeFloats, buf.Bytes())
 			}
 		})

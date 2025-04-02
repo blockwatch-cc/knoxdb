@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"strconv"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
@@ -242,13 +242,13 @@ func TestInt256Cases2(t *testing.T, cases []Int256MatchTest, fn Int256MatchFunc2
 
 func BenchInt256Cases(b *testing.B, fn Int256MatchFunc) {
 	b.Helper()
-	for _, n := range BenchmarkSizes {
-		for i, m := range BenchmarksMasks {
+	for _, n := range tests.BenchmarkSizes {
+		for _, m := range BenchmarkMasks {
 			a := num.Int256Optimize(RandInt256Slice(n.N))
-			bits, mask := MakeBitsAndMaskPoison(a.Len(), m)
-			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
+			bits, mask := MakeBitsAndMaskPoison(a.Len(), m.Pattern)
+			b.Run(n.Name+"/mask_"+m.Name, func(b *testing.B) {
 				b.SetBytes(int64(n.N * 32))
-				for i := 0; i < b.N; i++ {
+				for range b.N {
 					fn(a, MaxInt256.Rsh(1), bits, mask)
 				}
 			})
@@ -258,11 +258,11 @@ func BenchInt256Cases(b *testing.B, fn Int256MatchFunc) {
 
 func BenchInt256Cases2(b *testing.B, fn Int256MatchFunc2) {
 	b.Helper()
-	for _, n := range BenchmarkSizes {
-		for i, m := range BenchmarksMasks {
+	for _, n := range tests.BenchmarkSizes {
+		for _, m := range BenchmarkMasks {
 			a := num.Int256Optimize(RandInt256Slice(n.N))
-			bits, mask := MakeBitsAndMaskPoison(a.Len(), m)
-			b.Run(n.Name+"_mask_"+strconv.Itoa(i), func(b *testing.B) {
+			bits, mask := MakeBitsAndMaskPoison(a.Len(), m.Pattern)
+			b.Run(n.Name+"/mask_"+m.Name, func(b *testing.B) {
 				b.SetBytes(int64(n.N * 32))
 				for i := 0; i < b.N; i++ {
 					fn(a, MaxInt256.Rsh(2), MaxInt256.Rsh(1), bits, mask)

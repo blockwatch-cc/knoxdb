@@ -7,30 +7,20 @@
 package avx2
 
 import (
-	"reflect"
+	"slices"
 	"testing"
 
-	"golang.org/x/exp/slices"
-
-	"blockwatch.cc/knoxdb/internal/zip/tests"
+	"blockwatch.cc/knoxdb/internal/tests"
+	ztests "blockwatch.cc/knoxdb/internal/zip/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/stretchr/testify/require"
 )
 
 var (
-	zzDeltaEncodeUint64Cases = tests.ZzDeltaEncodeUint64Cases
-	zzDeltaEncodeUint32Cases = tests.ZzDeltaEncodeUint32Cases
-	zzDeltaEncodeUint16Cases = tests.ZzDeltaEncodeUint16Cases
-	zzDeltaEncodeUint8Cases  = tests.ZzDeltaEncodeUint8Cases
-
-	benchmarkSizes = tests.BenchmarkSizes
-	randInt64Slice = util.RandInts[int64]
-	randInt32Slice = util.RandInts[int32]
-	randInt16Slice = util.RandInts[int16]
-	randInt8Slice  = util.RandInts[int8]
-	Int64Size      = tests.Int64Size
-	Int32Size      = tests.Int32Size
-	Int16Size      = tests.Int16Size
-	Int8Size       = tests.Int8Size
+	zzDeltaEncodeUint64Cases = ztests.ZzDeltaEncodeUint64Cases
+	zzDeltaEncodeUint32Cases = ztests.ZzDeltaEncodeUint32Cases
+	zzDeltaEncodeUint16Cases = ztests.ZzDeltaEncodeUint16Cases
+	zzDeltaEncodeUint8Cases  = ztests.ZzDeltaEncodeUint8Cases
 )
 
 // ---------------- zzDeltaDecodeInt64 -------------------------------------------------------------
@@ -42,12 +32,8 @@ func TestZzDeltaDecodeInt64AVX2(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint64Cases {
 		slice := slices.Clone(c.Result)
 		zzDeltaDecodeInt64AVX2(slice)
-		if got, want := len(slice), len(c.Slice); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(slice, c.Slice) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
-		}
+		require.Len(t, slice, len(c.Slice), "len")
+		require.Equal(t, slice, c.Slice)
 	}
 }
 
@@ -55,11 +41,11 @@ func BenchmarkZzDeltaDecodeInt64AVX2(b *testing.B) {
 	if !util.UseAVX2 {
 		b.SkipNow()
 	}
-	for _, n := range benchmarkSizes {
-		a := randInt64Slice(n.L)
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * Int64Size))
-			for i := 0; i < b.N; i++ {
+	for _, c := range tests.BenchmarkSizes {
+		a := util.RandInts[int64](c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
+			for range b.N {
 				zzDeltaDecodeInt64AVX2(a)
 			}
 		})
@@ -75,12 +61,8 @@ func TestZzDeltaDecodeInt32AVX2(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint32Cases {
 		slice := slices.Clone(c.Result)
 		zzDeltaDecodeInt32AVX2(slice)
-		if got, want := len(slice), len(c.Slice); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(slice, c.Slice) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
-		}
+		require.Len(t, slice, len(c.Slice), "len")
+		require.Equal(t, slice, c.Slice)
 	}
 }
 
@@ -88,11 +70,11 @@ func BenchmarkZzDeltaDecodeInt32AVX2(b *testing.B) {
 	if !util.UseAVX2 {
 		b.SkipNow()
 	}
-	for _, n := range benchmarkSizes {
-		a := randInt32Slice(n.L)
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * Int32Size))
-			for i := 0; i < b.N; i++ {
+	for _, c := range tests.BenchmarkSizes {
+		a := util.RandInts[int32](c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 4))
+			for range b.N {
 				zzDeltaDecodeInt32AVX2(a)
 			}
 		})
@@ -108,12 +90,8 @@ func TestZzDeltaDecodeInt16AVX2(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint16Cases {
 		slice := slices.Clone(c.Result)
 		zzDeltaDecodeInt16AVX2(slice)
-		if got, want := len(slice), len(c.Slice); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(slice, c.Slice) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
-		}
+		require.Len(t, slice, len(c.Slice), "len")
+		require.Equal(t, slice, c.Slice)
 	}
 }
 
@@ -121,11 +99,11 @@ func BenchmarkZzDeltaDecodeInt16AVX2(b *testing.B) {
 	if !util.UseAVX2 {
 		b.SkipNow()
 	}
-	for _, n := range benchmarkSizes {
-		a := randInt16Slice(n.L)
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * Int16Size))
-			for i := 0; i < b.N; i++ {
+	for _, c := range tests.BenchmarkSizes {
+		a := util.RandInts[int16](c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 2))
+			for range b.N {
 				zzDeltaDecodeInt16AVX2(a)
 			}
 		})
@@ -141,12 +119,8 @@ func TestZzDeltaDecodeInt8AVX2(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint8Cases {
 		slice := slices.Clone(c.Result)
 		zzDeltaDecodeInt8AVX2(slice)
-		if got, want := len(slice), len(c.Slice); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(slice, c.Slice) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
-		}
+		require.Len(t, slice, len(c.Slice), "len")
+		require.Equal(t, slice, c.Slice)
 	}
 }
 
@@ -154,11 +128,11 @@ func BenchmarkZzDeltaDecodeInt8AVX2(b *testing.B) {
 	if !util.UseAVX2 {
 		b.SkipNow()
 	}
-	for _, n := range benchmarkSizes {
-		a := randInt8Slice(n.L)
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * Int8Size))
-			for i := 0; i < b.N; i++ {
+	for _, c := range tests.BenchmarkSizes {
+		a := util.RandInts[int8](c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 1))
+			for range b.N {
 				zzDeltaDecodeInt8AVX2(a)
 			}
 		})
@@ -172,14 +146,11 @@ func BenchmarkDeltaDecodeTimeAVX2(b *testing.B) {
 		b.SkipNow()
 	}
 	mod := uint64(1000000000)
-	for _, n := range benchmarkSizes {
-		a := make([]uint64, n.L)
-		for i := 0; i < n.L; i++ {
-			a[i] = util.RandUint64n(10000)
-		}
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * Int64Size))
-			for i := 0; i < b.N; i++ {
+	for _, c := range tests.BenchmarkSizes {
+		a := util.RandUintsn[uint64](c.N, 10000)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
+			for range b.N {
 				deltaDecodeTimeAVX2(a, mod)
 			}
 		})
@@ -193,14 +164,11 @@ func BenchmarkZzDeltaDecodeTimeAVX2(b *testing.B) {
 		b.SkipNow()
 	}
 	mod := uint64(1000000000)
-	for _, n := range benchmarkSizes {
-		a := make([]uint64, n.L)
-		for i := 0; i < n.L; i++ {
-			a[i] = util.RandUint64n(10000)
-		}
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * Int64Size))
-			for i := 0; i < b.N; i++ {
+	for _, c := range tests.BenchmarkSizes {
+		a := util.RandUintsn[uint64](c.N, 10000)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
+			for range b.N {
 				zzDeltaDecodeTimeAVX2(a, mod)
 			}
 		})

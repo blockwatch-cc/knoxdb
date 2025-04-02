@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/encode/tests"
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/stretchr/testify/require"
 )

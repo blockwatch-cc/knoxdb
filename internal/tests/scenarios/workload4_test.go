@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/tests"
+	tests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"

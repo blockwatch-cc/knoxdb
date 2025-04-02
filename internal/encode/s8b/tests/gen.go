@@ -4,7 +4,7 @@
 package tests
 
 import (
-	"blockwatch.cc/knoxdb/internal/encode/tests"
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )

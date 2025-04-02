@@ -13,7 +13,7 @@ import (
 	"context"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/tests"
+	tests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/stretchr/testify/require"
 )

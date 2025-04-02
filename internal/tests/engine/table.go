@@ -1,4 +1,7 @@
-package tests
+// Copyright (c) 2024 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
+package engine_tests
 
 import (
 	"context"

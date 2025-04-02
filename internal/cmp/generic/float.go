@@ -6,15 +6,11 @@ package generic
 import (
 	"math/bits"
 
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
-	"golang.org/x/exp/constraints"
 )
 
-type Float interface {
-	constraints.Float
-}
-
-func MatchFloatEqual[T Float](src []T, val T, res []byte) int64 {
+func MatchFloatEqual[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -47,7 +43,7 @@ func MatchFloatEqual[T Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatNotEqual[T Float](src []T, val T, res []byte) int64 {
+func MatchFloatNotEqual[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -80,7 +76,7 @@ func MatchFloatNotEqual[T Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatLess[T Float](src []T, val T, res []byte) int64 {
+func MatchFloatLess[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -113,7 +109,7 @@ func MatchFloatLess[T Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatLessEqual[T Float](src []T, val T, res []byte) int64 {
+func MatchFloatLessEqual[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -146,7 +142,7 @@ func MatchFloatLessEqual[T Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatGreater[T Float](src []T, val T, res []byte) int64 {
+func MatchFloatGreater[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -179,7 +175,7 @@ func MatchFloatGreater[T Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatGreaterEqual[T Float](src []T, val T, res []byte) int64 {
+func MatchFloatGreaterEqual[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -212,7 +208,7 @@ func MatchFloatGreaterEqual[T Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatBetween[T Float](src []T, a, b T, res []byte) int64 {
+func MatchFloatBetween[T types.Float](src []T, a, b T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int

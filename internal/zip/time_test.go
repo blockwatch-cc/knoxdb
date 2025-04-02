@@ -6,45 +6,19 @@ package zip
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
+	"slices"
 
-	"reflect"
 	"sort"
 	"testing"
 	"testing/quick"
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/encode/s8b"
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
-	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 )
-
-var (
-	// bufResult       []byte
-	bufResultBuffer = &bytes.Buffer{}
-)
-
-// func dumpBufs(a, b []byte) {
-// 	longest := len(a)
-// 	if len(b) > longest {
-// 		longest = len(b)
-// 	}
-
-// 	for i := 0; i < longest; i++ {
-// 		var as, bs string
-// 		if i < len(a) {
-// 			as = fmt.Sprintf("%08[1]b (%[1]d)", a[i])
-// 		}
-// 		if i < len(b) {
-// 			bs = fmt.Sprintf("%08[1]b (%[1]d)", b[i])
-// 		}
-
-// 		same := as == bs
-// 		fmt.Printf("%d (%d) %s - %s :: %v\n", i, i*8, as, bs, same)
-// 	}
-// 	fmt.Println()
-// }
 
 func TestEncodeTime_Compare(t *testing.T) {
 	// generate random values (should use simple8b)
@@ -81,71 +55,41 @@ func TestEncodeTime_Compare(t *testing.T) {
 }
 
 func testEncodeTime_Compare(t *testing.T, input []int64, encoding byte) {
-	exp := make([]int64, len(input))
-	copy(exp, input)
-
 	buf := &bytes.Buffer{}
-	_, err := EncodeTime(input, buf)
+	_, err := EncodeTime(slices.Clone(input), buf)
 	buf2 := buf.Bytes()
-	if err != nil {
-		t.Fatalf("unexpected error: %v\nbuf: %db %x", err, len(buf2), buf2)
-	}
-
-	if got, exp := buf2[0]>>4, encoding; got != exp {
-		t.Fatalf("got encoding %v, expected %v", got, encoding)
-	}
+	require.NoError(t, err, "buf: %x", buf2)
+	require.Equal(t, encoding, buf2[0]>>4, "encoding")
 
 	result := make([]int64, len(input))
 	_, err = DecodeTime(result, buf2)
-	if err != nil {
-		t.Fatalf("unexpected error: %v\nbuf: %db %x", err, len(buf2), buf2)
-	}
-
-	if got := result; !reflect.DeepEqual(got, exp) {
-		t.Fatalf("-got/+exp\n%s", cmp.Diff(got, exp))
-	}
+	require.NoError(t, err, "buf: %x", buf2)
+	require.Equal(t, input, result)
 }
 
 func TestEncodeTime_NoValues(t *testing.T) {
 	buf := &bytes.Buffer{}
 	_, err := EncodeTime(nil, buf)
-	b := buf.Bytes()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(b) > 0 {
-		t.Fatalf("unexpected encoded length %d", len(b))
-	}
+	require.NoError(t, err)
+	require.Len(t, buf.Bytes(), 0)
 }
 
 func TestEncodeTime_Large_Range(t *testing.T) {
 	src := []int64{1442369134000000000, 1442369135000000000}
-	exp := make([]int64, len(src))
-	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	_, err := EncodeTime(src, buf)
+	_, err := EncodeTime(slices.Clone(src), buf)
 	b := buf.Bytes()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got := b[0] >> 4; got != timeCompressedRLE {
-		t.Fatalf("Wrong encoding used: expected rle, got %v", got)
-	}
+	require.NoError(t, err, "buf: %x", b)
+	require.Equal(t, timeCompressedRLE, int(b[0]>>4), "wrong encoding")
 
 	// use the matching decoder (with support for all enc types)
-	got := make([]int64, len(src))
-	_, err = DecodeTime(got, b)
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := make([]int64, len(src))
+	_, err = DecodeTime(res, b)
+	require.NoError(t, err)
 
 	// Verify that input and output values match.
-	if !reflect.DeepEqual(exp, got) {
-		t.Fatalf("mismatch enc=%d scale=%d:\n\nexp=%+v\n\ngot=%+v\n\n",
-			b[0]>>4, b[0]&0xf, exp, got)
-	}
+	require.Equal(t, src, res)
 }
 
 func TestEncodeTime_Uncompressed(t *testing.T) {
@@ -154,36 +98,20 @@ func TestEncodeTime_Uncompressed(t *testing.T) {
 	// about 36.5yrs in NS resolution is max range for compressed format
 	// This should cause the encoding to fallback to raw points
 	src = append(src, time.Unix(2, (2<<59)).UnixNano())
-	exp := make([]int64, len(src))
-	copy(exp, src)
-
 	buf := &bytes.Buffer{}
-	_, err := EncodeTime(src, buf)
+	_, err := EncodeTime(slices.Clone(src), buf)
 	b := buf.Bytes()
-	if err != nil {
-		t.Fatalf("expected error: %v", err)
-	}
-
-	if exp := 25; len(b) != exp {
-		t.Fatalf("length mismatch: got %v, exp %v", len(b), exp)
-	}
-
-	if got := b[0] >> 4; got != timeUncompressed {
-		t.Fatalf("Wrong encoding used: expected uncompressed, got %v", got)
-	}
+	require.NoError(t, err, "buf: %x", b)
+	require.Len(t, b, 25, "len")
+	require.Equal(t, timeUncompressed, int(b[0]>>4), "wrong encoding")
 
 	// use the matching decoder (with support for all enc types)
-	got := make([]int64, len(src))
-	_, err = DecodeTime(got, b)
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := make([]int64, len(src))
+	_, err = DecodeTime(res, b)
+	require.NoError(t, err, "buf: %x", b)
 
 	// Verify that input and output values match.
-	if !reflect.DeepEqual(exp, got) {
-		t.Fatalf("mismatch enc=%d scale=%d:\n\nexp=%+v\n\ngot=%+v\n\n",
-			b[0]>>4, b[0]&0xf, exp, got)
-	}
+	require.Equal(t, src, res)
 }
 
 func TestEncodeTime_RLE(t *testing.T) {
@@ -191,110 +119,61 @@ func TestEncodeTime_RLE(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		src = append(src, int64(i))
 	}
-	exp := make([]int64, len(src))
-	copy(exp, src)
-
 	buf := &bytes.Buffer{}
-	_, err := EncodeTime(src, buf)
+	_, err := EncodeTime(slices.Clone(src), buf)
 	b := buf.Bytes()
-	if exp := 12; len(b) != exp {
-		t.Fatalf("length mismatch: got %v, exp %v", len(b), exp)
-	}
-
-	if got := b[0] >> 4; got != timeCompressedRLE {
-		t.Fatalf("Wrong encoding used: expected uncompressed, got %v", got)
-	}
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err, "buf: %x", b)
+	require.Len(t, b, 12, "len")
+	require.Equal(t, timeCompressedRLE, int(b[0]>>4), "wrong encoding")
 
 	// use the matching decoder (with support for all enc types)
-	got := make([]int64, len(src))
-	_, err = DecodeTime(got, b)
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := make([]int64, len(src))
+	_, err = DecodeTime(res, b)
+	require.NoError(t, err, "buf: %x", b)
 
 	// Verify that input and output values match.
-	if !reflect.DeepEqual(exp, got) {
-		t.Fatalf("mismatch enc=%d scale=%d:\n\nexp=%+v\n\ngot=%+v\n\n",
-			b[0]>>4, b[0]&0xf, exp, got)
-	}
+	require.Equal(t, src, res)
 }
 
 func TestEncodeTime_Reverse(t *testing.T) {
 	src := []int64{3, 2, 0}
-	exp := make([]int64, len(src))
-	copy(exp, src)
-
 	buf := &bytes.Buffer{}
-	_, err := EncodeTime(src, buf)
+	_, err := EncodeTime(slices.Clone(src), buf)
 	b := buf.Bytes()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got := b[0] >> 4; got != timeCompressedZigZagPacked {
-		t.Fatalf("Wrong encoding used: expected uncompressed zigzag, got %v", got)
-	}
+	require.NoError(t, err, "buf: %x", b)
+	require.Equal(t, timeCompressedZigZagPacked, int(b[0]>>4), "wrong encoding")
 
 	// use the matching decoder (with support for all enc types)
-	got := make([]int64, len(src))
-	_, err = DecodeTime(got, b)
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := make([]int64, len(src))
+	_, err = DecodeTime(res, b)
+	require.NoError(t, err, "buf: %x", b)
 
 	// Verify that input and output values match.
-	if !reflect.DeepEqual(exp, got) {
-		t.Fatalf("mismatch enc=%d scale=%d:\n\nexp=%+v\n\ngot=%+v\n\n",
-			b[0]>>4, b[0]&0xf, exp, got)
-	}
+	require.Equal(t, src, res)
 }
 
 func TestEncodeTime_220SecondDelta(t *testing.T) {
-	var src []int64
+	src := make([]int64, 0)
 	now := time.Now()
-
-	for i := 0; i < 220; i++ {
+	for i := range 220 {
 		src = append(src, now.Truncate(time.Second).Add(time.Duration(i*60)*time.Second).UnixNano())
 	}
-	exp := make([]int64, len(src))
-	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	_, err := EncodeTime(src, buf)
+	_, err := EncodeTime(slices.Clone(src), buf)
 	b := buf.Bytes()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Using RLE, should get 12 bytes
-	if got := b[0] >> 4; got != timeCompressedRLE {
-		t.Fatalf("Wrong encoding used: expected uncompressed, got %v", got)
-	}
-
-	if got := b[0] & 0xf; got != 9 {
-		t.Fatalf("Wrong scale used: expected 10, got %v", got)
-	}
-
-	if exp := 12; len(b) != exp {
-		t.Fatalf("unexpected length: got %v, exp %v\n%s", len(b), exp, hex.Dump(b))
-	}
+	require.NoError(t, err, "buf: %x", b)
+	require.Equal(t, timeCompressedRLE, int(b[0]>>4), "wrong encoding")
+	require.Equal(t, b[0]&0xf, byte(9), "wrong scale")
+	require.Len(t, b, 12, "len")
 
 	// use the matching decoder (with support for all enc types)
-	got := make([]int64, len(src))
-	_, err = DecodeTime(got, b)
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := make([]int64, len(src))
+	_, err = DecodeTime(res, b)
+	require.NoError(t, err, "buf: %x", b)
 
 	// Verify that input and output values match.
-	if !reflect.DeepEqual(exp, got) {
-		t.Fatalf("mismatch enc=%d scale=%d:\n\nexp=%+v\n\ngot=%+v\n\n",
-			b[0]>>4, b[0]&0xf, exp, got)
-	}
+	require.Equal(t, src, res)
 }
 
 func TestEncodeTime_Quick(t *testing.T) {
@@ -303,24 +182,15 @@ func TestEncodeTime_Quick(t *testing.T) {
 		buf := &bytes.Buffer{}
 		_, err := EncodeTime(values, buf)
 		b := buf.Bytes()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		// use the matching decoder (with support for all enc types)
-		got := make([]int64, len(values))
-		_, err = DecodeTime(got, b)
-		if err != nil {
-			t.Fatal(err)
-		}
+		res := make([]int64, len(values))
+		_, err = DecodeTime(res, b)
+		require.NoError(t, err)
 
 		// Verify that input and output values match.
-		exp := values
-		if !reflect.DeepEqual(exp, got) {
-			t.Fatalf("mismatch enc=%d scale=%d:\n\nexp=%+v\n\ngot=%+v\n\n",
-				b[0]>>4, b[0]&0xf, exp, got)
-		}
-
+		require.Equal(t, values, res)
 		return true
 	}, nil)
 }
@@ -334,32 +204,19 @@ func TestEncodeTime_RLESeconds(t *testing.T) {
 		1444448198000000000,
 		1444448208000000000,
 	}
-	exp := make([]int64, len(src))
-	copy(exp, src)
-
 	buf := &bytes.Buffer{}
-	_, err := EncodeTime(src, buf)
+	_, err := EncodeTime(slices.Clone(src), buf)
 	b := buf.Bytes()
-	if got := b[0] >> 4; got != timeCompressedRLE {
-		t.Fatalf("Wrong encoding used: expected rle, got %v", got)
-	}
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err, "buf: %x", b)
+	require.Equal(t, timeCompressedRLE, int(b[0]>>4), "encoding")
 
 	// use the matching decoder (with support for all enc types)
-	got := make([]int64, len(src))
-	_, err = DecodeTime(got, b)
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := make([]int64, len(src))
+	_, err = DecodeTime(res, b)
+	require.NoError(t, err, "buf: %x", b)
 
 	// Verify that input and output values match.
-	if !reflect.DeepEqual(exp, got) {
-		t.Fatalf("mismatch enc=%d scale=%d:\n\nexp=%+v\n\ngot=%+v\n\n",
-			b[0]>>4, b[0]&0xf, exp, got)
-	}
+	require.Equal(t, src, res)
 }
 
 func TestEncodeTime_Count_Uncompressed(t *testing.T) {
@@ -370,23 +227,13 @@ func TestEncodeTime_Count_Uncompressed(t *testing.T) {
 	// about 36.5yrs in NS resolution is max range for compressed format
 	// This should cause the encoding to fallback to raw points
 	src = append(src, time.Unix(2, (2<<59)).UnixNano())
-	exp := make([]int64, len(src))
-	copy(exp, src)
 
 	buf := &bytes.Buffer{}
-	_, err := EncodeTime(src, buf)
+	_, err := EncodeTime(slices.Clone(src), buf)
 	b := buf.Bytes()
-	if got := b[0] >> 4; got != timeUncompressed {
-		t.Fatalf("Wrong encoding used: expected rle, got %v", got)
-	}
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got, exp := CountTimestamps(b), 3; got != exp {
-		t.Fatalf("count mismatch: got %v, exp %v", got, exp)
-	}
+	require.NoError(t, err, "buf: %x", b)
+	require.Equal(t, timeUncompressed, int(b[0]>>4), "encoding")
+	require.Equal(t, 3, CountTimestamps(b), "count")
 }
 
 func TestEncodeTime_Count_RLE(t *testing.T) {
@@ -398,46 +245,22 @@ func TestEncodeTime_Count_RLE(t *testing.T) {
 		1444448198000000000,
 		1444448208000000000,
 	}
-	exp := make([]int64, len(src))
-	copy(exp, src)
-
 	buf := &bytes.Buffer{}
-	_, err := EncodeTime(src, buf)
+	_, err := EncodeTime(slices.Clone(src), buf)
 	b := buf.Bytes()
-	if got := b[0] >> 4; got != timeCompressedRLE {
-		t.Fatalf("Wrong encoding used: expected rle, got %v", got)
-	}
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got, exp := CountTimestamps(b), len(exp); got != exp {
-		t.Fatalf("count mismatch: got %v, exp %v", got, exp)
-	}
+	require.NoError(t, err, "buf: %x", b)
+	require.Equal(t, timeCompressedRLE, int(b[0]>>4), "encoding")
+	require.Equal(t, len(src), CountTimestamps(b), "count")
 }
 
 func TestEncodeTime_Count_Simple8(t *testing.T) {
 	src := []int64{0, 1, 3}
-
 	buf := &bytes.Buffer{}
-	_, err := EncodeTime(src, buf)
+	_, err := EncodeTime(slices.Clone(src), buf)
 	b := buf.Bytes()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got := b[0] >> 4; got != timeCompressedPacked {
-		t.Fatalf("Wrong encoding used: expected rle, got %v", got)
-	}
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got, exp := CountTimestamps(b), 3; got != exp {
-		t.Fatalf("count mismatch: got %v, exp %v", got, exp)
-	}
+	require.NoError(t, err, "buf: %x", b)
+	require.Equal(t, timeCompressedPacked, int(b[0]>>4), "encoding")
+	require.Equal(t, 3, CountTimestamps(b), "count")
 }
 
 func TestTimeDecode_Corrupt(t *testing.T) {
@@ -451,84 +274,32 @@ func TestTimeDecode_Corrupt(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%q", c), func(t *testing.T) {
-			got := make([]int64, 0)
-			_, err := DecodeTime(got, []byte(c))
-			if err == nil {
-				t.Fatal("exp an err, got nil")
-			}
+			res := make([]int64, 0)
+			_, err := DecodeTime(res, []byte(c))
+			require.Error(t, err)
+			require.Equal(t, []int64{}, res)
+		})
+	}
+}
 
-			exp := []int64{}
-			if !cmp.Equal(got, exp) {
-				t.Fatalf("unexpected value: -got/+exp\n%s", cmp.Diff(got, exp))
+func BenchmarkEncodeTime(b *testing.B) {
+	for _, c := range tests.MakeBenchmarks[int64]() {
+		buf := bytes.NewBuffer(nil)
+		slices.Sort(c.Data)
+		b.Run(c.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			b.SetBytes(int64(c.N * 8))
+			for range b.N {
+				_, err := EncodeTime(c.Data, buf)
+				require.NoError(b, err)
+				buf.Reset()
 			}
 		})
 	}
 }
 
-func BenchmarkEncodeTimestamps(b *testing.B) {
-	var err error
-	cases := []int{1024, 1 << 14, 1 << 16}
-
-	for _, n := range cases {
-		b.Run(fmt.Sprintf("%d_seq", n), func(b *testing.B) {
-			src := make([]int64, n)
-			for i := 0; i < n; i++ {
-				src[i] = int64(i)
-			}
-			sort.Slice(src, func(i int, j int) bool { return src[i] < src[j] })
-
-			b.ReportAllocs()
-			b.ResetTimer()
-			for n := 0; n < b.N; n++ {
-				if _, err = EncodeTime(src, bufResultBuffer); err != nil {
-					b.Fatal(err)
-				}
-				bufResultBuffer.Reset()
-			}
-		})
-
-		b.Run(fmt.Sprintf("%d_ran", n), func(b *testing.B) {
-			src := make([]int64, n)
-			for i := 0; i < n; i++ {
-				src[i] = int64(util.RandUint64())
-			}
-			sort.Slice(src, func(i int, j int) bool { return src[i] < src[j] })
-
-			b.ReportAllocs()
-			b.ResetTimer()
-			for n := 0; n < b.N; n++ {
-				if _, err = EncodeTime(src, bufResultBuffer); err != nil {
-					b.Fatal(err)
-				}
-				bufResultBuffer.Reset()
-			}
-		})
-
-		b.Run(fmt.Sprintf("%d_dup", n), func(b *testing.B) {
-			src := make([]int64, n)
-			for i := 0; i < n; i++ {
-				src[i] = 1233242
-			}
-
-			b.ReportAllocs()
-			b.ResetTimer()
-			for n := 0; n < b.N; n++ {
-				if _, err = EncodeTime(src, bufResultBuffer); err != nil {
-					b.Fatal(err)
-				}
-				bufResultBuffer.Reset()
-			}
-		})
-	}
-}
-
-func BenchmarkTimeDecodeUncompressed(b *testing.B) {
-	benchmarks := []int{
-		1024,
-		1 << 14,
-		1 << 16,
-	}
-
+func BenchmarkDecodeUncompressedTime(b *testing.B) {
 	values := []int64{
 		-2352281900722994752, 1438442655375607923, -4110452567888190110,
 		-1221292455668011702, -1941700286034261841, -2836753127140407751,
@@ -540,33 +311,27 @@ func BenchmarkTimeDecodeUncompressed(b *testing.B) {
 		94468846694902125, -2394093124890745254, -2682139311758778198,
 	}
 
-	for _, size := range benchmarks {
-		src := make([]int64, size)
-		for i := 0; i < size; i++ {
-			src[i] = values[util.RandInt()%len(values)]
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int64, c.N)
+		for i := range c.N {
+			src[i] = values[util.RandIntn(len(values))]
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeTime(src, buf)
 
-		dst := make([]int64, size)
-		b.Run(fmt.Sprintf("buffer_%d", size), func(b *testing.B) {
-			b.SetBytes(int64(size * 8))
+		dst := make([]int64, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _ = DecodeTime(dst, buf.Bytes())
 			}
 		})
 	}
 }
 
-func BenchmarkTimeReadUncompressed(b *testing.B) {
-	benchmarks := []int{
-		1024,
-		1 << 14,
-		1 << 16,
-	}
-
+func BenchmarkReadUncompressedTime(b *testing.B) {
 	values := []int64{
 		-2352281900722994752, 1438442655375607923, -4110452567888190110,
 		-1221292455668011702, -1941700286034261841, -2836753127140407751,
@@ -578,133 +343,107 @@ func BenchmarkTimeReadUncompressed(b *testing.B) {
 		94468846694902125, -2394093124890745254, -2682139311758778198,
 	}
 
-	for _, size := range benchmarks {
-		src := make([]int64, size)
-		for i := 0; i < size; i++ {
-			src[i] = values[util.RandInt()%len(values)]
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int64, c.N)
+		for i := range c.N {
+			src[i] = values[util.RandIntn(len(values))]
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeTime(src, buf)
 
-		b.Run(fmt.Sprintf("reader_%d", size), func(b *testing.B) {
-			dst := make([]int64, size)
-			b.SetBytes(int64(size * 8))
+		dst := make([]int64, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _, _ = ReadTime(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}
 }
 
-func BenchmarkTimeDecodePacked(b *testing.B) {
-	benchmarks := []int{
-		1024,
-		1 << 14,
-		1 << 16,
-	}
-	for _, size := range benchmarks {
-		src := make([]int64, size)
-		for i := 0; i < size; i++ {
+func BenchmarkDecodePackedTime(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int64, c.N)
+		for i := range c.N {
 			src[i] = int64(i*1000) + int64(util.RandIntn(10))
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeTime(src, buf)
 
-		b.Run(fmt.Sprintf("buffer_%d", size), func(b *testing.B) {
-			dst := make([]int64, size)
-			b.SetBytes(int64(size * 8))
+		dst := make([]int64, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _ = DecodeTime(dst, buf.Bytes())
 			}
 		})
 	}
 }
 
-func BenchmarkTimeReadPacked(b *testing.B) {
-	benchmarks := []int{
-		1024,
-		1 << 14,
-		1 << 16,
-	}
-	for _, size := range benchmarks {
-		src := make([]int64, size)
-		for i := 0; i < size; i++ {
+func BenchmarkReadPackedTime(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int64, c.N)
+		for i := range c.N {
 			src[i] = int64(i*1000) + int64(util.RandIntn(10))
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeTime(src, buf)
 
-		b.Run(fmt.Sprintf("reader_%d", size), func(b *testing.B) {
-			dst := make([]int64, size)
-			b.SetBytes(int64(size * 8))
+		dst := make([]int64, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _, _ = ReadTime(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})
 	}
 }
 
-func BenchmarkTimeDecodeRLE(b *testing.B) {
-	benchmarks := []struct {
-		n     int
-		delta int64
-	}{
-		{1024, 10},
-		{1 << 14, 10},
-		{1 << 16, 10},
-	}
-	for _, bm := range benchmarks {
-		src := make([]int64, bm.n)
-		var acc int64 = bm.delta
-		for i := 0; i < bm.n; i++ {
+func BenchmarkDecodeRLETime(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int64, c.N)
+		var acc int64 = 10
+		for i := range c.N {
 			src[i] = acc
-			acc += bm.delta
+			acc += 10
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeTime(src, buf)
 
-		dst := make([]int64, bm.n)
-		b.Run(fmt.Sprintf("buffer_%d_delta_%d", bm.n, bm.delta), func(b *testing.B) {
-			b.SetBytes(int64(bm.n * 8))
+		dst := make([]int64, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _ = DecodeTime(dst, buf.Bytes())
 			}
 		})
 	}
 }
 
-func BenchmarkTimeReadRLE(b *testing.B) {
-	benchmarks := []struct {
-		n     int
-		delta int64
-	}{
-		{1024, 10},
-		{1 << 14, 10},
-		{1 << 16, 10},
-	}
-	for _, bm := range benchmarks {
-		src := make([]int64, bm.n)
-		var acc int64 = bm.delta
-		for i := 0; i < bm.n; i++ {
+func BenchmarkReadRLETime(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := make([]int64, c.N)
+		var acc int64 = 10
+		for i := range c.N {
 			src[i] = acc
-			acc += bm.delta
+			acc += 10
 		}
 		buf := bytes.NewBuffer(nil)
 		EncodeTime(src, buf)
 
-		b.Run(fmt.Sprintf("reader_%d_delta_%d", bm.n, bm.delta), func(b *testing.B) {
-			dst := make([]int64, bm.n)
-			b.SetBytes(int64(bm.n * 8))
+		dst := make([]int64, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _, _ = ReadTime(dst, bytes.NewBuffer(buf.Bytes()))
 			}
 		})

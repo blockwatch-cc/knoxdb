@@ -3,17 +3,6 @@
 
 package tests
 
-type BenchmarkSize struct {
-	Name string
-	L    int
-}
-
-var BenchmarkSizes = []BenchmarkSize{
-	{"1K", 1 * 1024},
-	{"16K", 16 * 1024},
-	{"64K", 64 * 1024},
-}
-
 var (
 	ZzDeltaEncodeUint64Cases = []Int64Test{
 		// {

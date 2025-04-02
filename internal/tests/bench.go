@@ -26,17 +26,17 @@ type Benchmark[T types.Number] struct {
 
 func MakeBenchmarks[T types.Number]() []Benchmark[T] {
 	return []Benchmark[T]{
-		{"dups_1K", GenDups[T](1024, 10), 1024}, // 10% unique
-		{"dups_16K", GenDups[T](16*1024, 10), 16 * 1024},
-		{"dups_64K", GenDups[T](64*1024, 10), 64 * 1024},
+		{"dups_1k", GenDups[T](1024, 10), 1024}, // 10% unique
+		{"dups_16k", GenDups[T](16*1024, 10), 16 * 1024},
+		{"dups_64k", GenDups[T](64*1024, 10), 64 * 1024},
 
-		{"runs_1K", GenRuns[T](1024, 10), 1024}, // run length 10
-		{"runs_16K", GenRuns[T](16*1024, 10), 16 * 1024},
-		{"runs_64K", GenRuns[T](64*1024, 10), 64 * 1024},
+		{"runs_1k", GenRuns[T](1024, 10), 1024}, // run length 10
+		{"runs_16k", GenRuns[T](16*1024, 10), 16 * 1024},
+		{"runs_64k", GenRuns[T](64*1024, 10), 64 * 1024},
 
-		{"seq_1K", GenSeq[T](1024), 1024},
-		{"seq_16K", GenSeq[T](16 * 1024), 16 * 1024},
-		{"seq_64K", GenSeq[T](64 * 1024), 64 * 1024},
+		{"seq_1k", GenSeq[T](1024), 1024},
+		{"seq_16k", GenSeq[T](16 * 1024), 16 * 1024},
+		{"seq_64k", GenSeq[T](64 * 1024), 64 * 1024},
 	}
 }
 

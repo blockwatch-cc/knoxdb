@@ -25,6 +25,5 @@ func BenchmarkDecodeUint64(b *testing.B) {
 	if !util.UseAVX512_F {
 		b.Skip()
 	}
-
 	tests.DecodeBenchmark[uint64](b, generic.Encode[uint64], DecodeUint64)
 }

@@ -4,10 +4,12 @@
 package generic
 
 import (
-	"reflect"
+	"slices"
 	"testing"
 
-	"golang.org/x/exp/slices"
+	"blockwatch.cc/knoxdb/internal/tests"
+	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/stretchr/testify/require"
 )
 
 // --------------- zzDeltaDecodeInt64 --------------------------------------------------------------
@@ -16,21 +18,17 @@ func TestZzDeltaDecodeInt64Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint64Cases {
 		slice := slices.Clone(c.Result)
 		ZzDeltaDecodeInt64(slice)
-		if got, want := len(slice), len(c.Slice); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(slice, c.Slice) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
-		}
+		require.Len(t, slice, len(c.Slice), "len")
+		require.Equal(t, slice, c.Slice)
 	}
 }
 
 func BenchmarkZzDeltaDecodeInt64Generic(b *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := randInt64Slice(n.L)
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * Int64Size))
-			for i := 0; i < b.N; i++ {
+	for _, c := range tests.BenchmarkSizes {
+		a := util.RandInts[int64](c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
+			for range b.N {
 				ZzDeltaDecodeInt64(a)
 			}
 		})
@@ -43,21 +41,17 @@ func TestZzDeltaDecodeInt32Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint32Cases {
 		slice := slices.Clone(c.Result)
 		ZzDeltaDecodeInt32(slice)
-		if got, want := len(slice), len(c.Slice); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(slice, c.Slice) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
-		}
+		require.Len(t, slice, len(c.Slice), "len")
+		require.Equal(t, slice, c.Slice)
 	}
 }
 
 func BenchmarkZzDeltaDecodeInt32Generic(b *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := randInt32Slice(n.L)
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * Int32Size))
-			for i := 0; i < b.N; i++ {
+	for _, c := range tests.BenchmarkSizes {
+		a := util.RandInts[int32](c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 4))
+			for range b.N {
 				ZzDeltaDecodeInt32(a)
 			}
 		})
@@ -70,21 +64,17 @@ func TestZzDeltaDecodeInt16Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint16Cases {
 		slice := slices.Clone(c.Result)
 		ZzDeltaDecodeInt16(slice)
-		if got, want := len(slice), len(c.Slice); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(slice, c.Slice) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
-		}
+		require.Len(t, slice, len(c.Slice), "len")
+		require.Equal(t, slice, c.Slice)
 	}
 }
 
 func BenchmarkZzDeltaDecodeInt16Generic(b *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := randInt16Slice(n.L)
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * Int16Size))
-			for i := 0; i < b.N; i++ {
+	for _, c := range tests.BenchmarkSizes {
+		a := util.RandInts[int16](c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 2))
+			for range b.N {
 				ZzDeltaDecodeInt16(a)
 			}
 		})
@@ -97,26 +87,24 @@ func TestZzDeltaDecodeInt8Generic(t *testing.T) {
 	for _, c := range zzDeltaEncodeUint8Cases {
 		slice := slices.Clone(c.Result)
 		ZzDeltaDecodeInt8(slice)
-		if got, want := len(slice), len(c.Slice); got != want {
-			t.Errorf("%s: unexpected result length %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(slice, c.Slice) {
-			t.Errorf("%s: unexpected result %v, expected %v", c.Name, slice, c.Slice)
-		}
+		require.Len(t, slice, len(c.Slice), "len")
+		require.Equal(t, slice, c.Slice)
 	}
 }
 
 func BenchmarkZzDeltaDecodeInt8Generic(b *testing.B) {
-	for _, n := range benchmarkSizes {
-		a := randInt8Slice(n.L)
-		b.Run(n.Name, func(b *testing.B) {
-			b.SetBytes(int64(n.L * Int8Size))
-			for i := 0; i < b.N; i++ {
+	for _, c := range tests.BenchmarkSizes {
+		a := util.RandInts[int8](c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 1))
+			for range b.N {
 				ZzDeltaDecodeInt8(a)
 			}
 		})
 	}
 }
+
+// Disabled tests for unused functions
 
 // --------------- zzDecodeInt64 --------------------------------------------------------------
 

@@ -14,46 +14,19 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func TestDecodeUint64(t *testing.T) {
+func TestDecode(t *testing.T) {
 	if !util.UseAVX2 {
 		t.Skip()
 	}
 	tests.EncodeTest[uint64](t, generic.Encode[uint64], DecodeUint64)
-}
-
-func TestDecodeUint32(t *testing.T) {
-	if !util.UseAVX2 {
-		t.Skip()
-	}
 	tests.EncodeTest[uint32](t, generic.Encode[uint32], DecodeUint32)
-}
-
-func TestDecodeUint16(t *testing.T) {
-	if !util.UseAVX2 {
-		t.Skip()
-	}
 	tests.EncodeTest[uint16](t, generic.Encode[uint16], DecodeUint16)
-}
-
-func TestDecodeUint8(t *testing.T) {
-	if !util.UseAVX2 {
-		t.Skip()
-	}
 	tests.EncodeTest[uint8](t, generic.Encode[uint8], DecodeUint8)
 }
 
-func BenchmarkDecodeUint64(b *testing.B) {
+func BenchmarkDecode(b *testing.B) {
 	tests.DecodeBenchmark[uint64](b, generic.Encode[uint64], DecodeUint64)
-}
-
-func BenchmarkDecodeUint32(b *testing.B) {
 	tests.DecodeBenchmark[uint32](b, generic.Encode[uint32], DecodeUint32)
-}
-
-func BenchmarkDecodeUint16(b *testing.B) {
 	tests.DecodeBenchmark[uint16](b, generic.Encode[uint16], DecodeUint16)
-}
-
-func BenchmarkDecodeUint8(b *testing.B) {
 	tests.DecodeBenchmark[uint8](b, generic.Encode[uint8], DecodeUint8)
 }

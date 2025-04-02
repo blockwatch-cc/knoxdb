@@ -26,13 +26,10 @@ func roundUpPow2(n int, pow2 int) int {
 	return (n + (pow2 - 1)) & ^(pow2 - 1)
 }
 
-func requireAvx512F(t testing.TB) {
+func requireAvx512(t testing.TB) {
 	if !util.UseAVX512_F {
 		t.Skip("AVX512F not available.")
 	}
-}
-
-func requireAvx512BW(t testing.TB) {
 	if !util.UseAVX512_BW {
 		t.Skip("AVX512BW not available.")
 	}

@@ -10,8 +10,9 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/encode/tests"
+	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/internal/zip"
@@ -69,7 +70,7 @@ func TestAnalyzeInt(t *testing.T) {
 }
 
 func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainerType) {
-	for _, c := range tests.MakeShortIntTests[T](int(scheme)) {
+	for _, c := range etests.MakeShortIntTests[T](int(scheme)) {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			enc := NewInt[T](scheme)
 
@@ -113,9 +114,9 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 	}
 
 	// validate matchers
-	for _, sz := range tests.CompareSizes {
+	for _, sz := range etests.CompareSizes {
 		t.Run(fmt.Sprintf("%T/cmp_%d", T(0), sz), func(t *testing.T) {
-			src := tests.GenForScheme[T](int(scheme), sz)
+			src := etests.GenForIntScheme[T](int(scheme), sz)
 			enc := NewInt[T](scheme)
 			ctx := AnalyzeInt(src, true)
 			enc.Encode(ctx, src, 1)
@@ -397,7 +398,7 @@ func TestEncodeInt(t *testing.T) {
 }
 
 func testEncodeIntT[T types.Integer](t *testing.T) {
-	for _, c := range tests.MakeIntTests[T](1024) {
+	for _, c := range etests.MakeIntTests[T](1024) {
 		t.Run(c.Name, func(t *testing.T) {
 			x := AnalyzeInt(c.Data, true)
 			e := EncodeInt(x, c.Data, MAX_CASCADE)
@@ -487,7 +488,7 @@ func BenchmarkEncodeInt(b *testing.B) {
 			TIntegerSimple8,
 			TIntegerRaw,
 		} {
-			data := tests.GenForScheme[int64](int(scheme), c.N)
+			data := etests.GenForIntScheme[int64](int(scheme), c.N)
 			ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
 				b.ReportAllocs()
@@ -513,7 +514,7 @@ func BenchmarkEncodeAndStoreInt(b *testing.B) {
 			TIntegerSimple8,
 			TIntegerRaw,
 		} {
-			data := tests.GenForScheme[int16](int(scheme), c.N)
+			data := etests.GenForIntScheme[int16](int(scheme), c.N)
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
@@ -569,7 +570,7 @@ func BenchmarkAppendTo(b *testing.B) {
 			TIntegerSimple8,
 			TIntegerRaw,
 		} {
-			data := tests.GenForScheme[int64](int(scheme), c.N)
+			data := etests.GenForIntScheme[int64](int(scheme), c.N)
 			ctx := AnalyzeInt(data, true)
 			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
 			buf := enc.Store(make([]byte, 0, enc.MaxSize()))

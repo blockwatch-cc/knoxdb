@@ -7,7 +7,8 @@ import (
 	"bytes"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/encode/tests"
+	etests "blockwatch.cc/knoxdb/internal/encode/tests"
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/zip"
 	"github.com/stretchr/testify/assert"
@@ -48,7 +49,7 @@ func TestAnalyzeFloat(t *testing.T) {
 
 func testFloatContainerType[T types.Float](t *testing.T, scheme FloatContainerType) {
 	t.Helper()
-	for _, c := range tests.MakeShortFloatTests[T](int(scheme)) {
+	for _, c := range etests.MakeShortFloatTests[T](int(scheme)) {
 		t.Run(c.Name, func(t *testing.T) {
 			enc := NewFloat[T](scheme)
 
@@ -124,7 +125,7 @@ func TestEncodeAlpRdFloat(t *testing.T) {
 
 func testEncodeFloatT[T types.Float](t *testing.T) {
 	t.Helper()
-	for _, c := range tests.MakeFloatTests[T](1024) {
+	for _, c := range etests.MakeFloatTests[T](1024) {
 		t.Run(c.Name, func(t *testing.T) {
 			x := AnalyzeFloat(c.Data, true)
 			e := EncodeFloat(x, c.Data, MAX_CASCADE)
@@ -146,7 +147,7 @@ func BenchmarkAnalyzeFloat(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				ctx := AnalyzeFloat(c.Data, true)
 				ctx.Close()
 			}
@@ -161,15 +162,68 @@ func BenchmarkEstimateFloat(b *testing.B) {
 			TFloatConstant,
 			TFloatRunEnd,
 			TFloatDictionary,
-			// TFloatAlp,
-			// TFloatAlpRd,
+			TFloatAlp,
+			TFloatAlpRd,
 			TFloatRaw,
 		} {
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(len(c.Data) * 8))
-				for i := 0; i < b.N; i++ {
+				for range b.N {
 					_ = EstimateFloat(scheme, ctx, c.Data, MAX_CASCADE)
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkEncodeFloat(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, scheme := range []FloatContainerType{
+			TFloatConstant,
+			TFloatRunEnd,
+			TFloatDictionary,
+			TFloatAlp,
+			TFloatAlpRd,
+			TFloatRaw,
+		} {
+			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
+			ctx := AnalyzeFloat(data, scheme == TFloatDictionary)
+			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * 8))
+				for range b.N {
+					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
+					enc.Close()
+				}
+			})
+			ctx.Close()
+		}
+	}
+}
+
+func BenchmarkEncodeAndStoreFloat(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, scheme := range []FloatContainerType{
+			TFloatConstant,
+			TFloatRunEnd,
+			TFloatDictionary,
+			TFloatAlp,
+			TFloatAlpRd,
+			TFloatRaw,
+		} {
+			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
+			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * 8))
+				for range b.N {
+					ctx := AnalyzeFloat(data, scheme == TFloatDictionary)
+					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
+					sz := enc.MaxSize()
+					buf := enc.Store(make([]byte, 0, enc.MaxSize()))
+					require.Less(b, len(buf), sz)
+					enc.Close()
+					ctx.Close()
 				}
 			})
 		}
@@ -181,7 +235,7 @@ func BenchmarkEncodeBestFloat(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				enc := EncodeFloat(nil, c.Data, MAX_CASCADE)
 				enc.Close()
 			}
@@ -195,7 +249,7 @@ func BenchmarkEncodeLegacyFloat(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _ = zip.EncodeFloat64(c.Data, buf)
 				buf.Reset()
 			}
@@ -213,8 +267,8 @@ func BenchmarkAppendToFloat(b *testing.B) {
 			TFloatAlpRd,
 			TFloatRaw,
 		} {
-			data := tests.GenForSchemeFloat[float64](int(scheme), c.N)
-			ctx := AnalyzeFloat(data, true)
+			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
+			ctx := AnalyzeFloat(data, scheme == TFloatDictionary)
 			enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
 			buf := enc.Store(make([]byte, 0, enc.MaxSize()))
 			dst := make([]float64, 0, c.N)
@@ -223,41 +277,13 @@ func BenchmarkAppendToFloat(b *testing.B) {
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
-				for i := 0; i < b.N; i++ {
+				for range b.N {
 					enc2 := NewFloat[float64](scheme)
 					_, err := enc2.Load(buf)
 					require.NoError(b, err)
 					dst = enc2.AppendTo(all, dst)
 					dst = dst[:0]
 					enc2.Close()
-				}
-			})
-		}
-	}
-}
-
-func BenchmarkEncodeFloat(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []FloatContainerType{
-			TFloatConstant,
-			TFloatRunEnd,
-			TFloatDictionary,
-			TFloatAlp,
-			TFloatAlpRd,
-			TFloatRaw,
-		} {
-			data := tests.GenForSchemeFloat[float64](int(scheme), c.N)
-			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
-				b.ReportAllocs()
-				b.SetBytes(int64(c.N * 8))
-				for i := 0; i < b.N; i++ {
-					ctx := AnalyzeFloat(data, scheme == TFloatDictionary)
-					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
-					sz := enc.MaxSize()
-					buf := enc.Store(make([]byte, 0, enc.MaxSize()))
-					require.Less(b, len(buf), sz)
-					enc.Close()
-					ctx.Close()
 				}
 			})
 		}

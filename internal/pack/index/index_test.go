@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/pack/table"
-	"blockwatch.cc/knoxdb/internal/tests"
+	etests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/internal/types"
 
 	_ "blockwatch.cc/knoxdb/internal/store/bolt"
@@ -13,7 +13,7 @@ import (
 
 func TestMain(m *testing.M) {
 	// must register enum type with global schema registry
-	tests.RegisterEnum()
+	etests.RegisterEnum()
 	m.Run()
 }
 
@@ -22,11 +22,11 @@ func TestIndex(t *testing.T) {
 		types.IndexTypeInt,
 		types.IndexTypeHash,
 	}
-	tests.TestIndexEngine[Index, *Index](t, "mem", "pack", table.NewTable(), typs)
-	tests.TestIndexEngine[Index, *Index](t, "bolt", "pack", table.NewTable(), typs)
+	etests.TestIndexEngine[Index, *Index](t, "mem", "pack", table.NewTable(), typs)
+	etests.TestIndexEngine[Index, *Index](t, "bolt", "pack", table.NewTable(), typs)
 }
 
 func TestIndexComposite(t *testing.T) {
-	tests.TestCompositeIndexEngine[Index, *Index](t, "mem", "pack", table.NewTable())
-	tests.TestCompositeIndexEngine[Index, *Index](t, "bolt", "pack", table.NewTable())
+	etests.TestCompositeIndexEngine[Index, *Index](t, "mem", "pack", table.NewTable())
+	etests.TestCompositeIndexEngine[Index, *Index](t, "bolt", "pack", table.NewTable())
 }

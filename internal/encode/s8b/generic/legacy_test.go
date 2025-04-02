@@ -7,14 +7,14 @@ import (
 	"slices"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/encode/s8b/tests"
-	etests "blockwatch.cc/knoxdb/internal/encode/tests"
+	stests "blockwatch.cc/knoxdb/internal/encode/s8b/tests"
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLegacy(t *testing.T) {
-	for _, test := range tests.MakeTests[uint64]() {
+	for _, test := range stests.MakeTests[uint64]() {
 		t.Run(test.Name, func(t *testing.T) {
 			in := test.Data
 			if test.Gen != nil {
@@ -38,23 +38,23 @@ func TestLegacy(t *testing.T) {
 }
 
 func BenchmarkEncodeLegacy(b *testing.B) {
-	for _, bm := range etests.MakeBenchmarks[uint64]() {
-		b.Run(bm.Name, func(b *testing.B) {
-			b.SetBytes(int64(8 * len(bm.Data)))
-			for i := 0; i < b.N; i++ {
-				EncodeLegacy(slices.Clone(bm.Data))
+	for _, c := range tests.MakeBenchmarks[uint64]() {
+		b.Run("uint64/"+c.Name, func(b *testing.B) {
+			b.SetBytes(int64(8 * len(c.Data)))
+			for range b.N {
+				EncodeLegacy(slices.Clone(c.Data))
 			}
 		})
 	}
 }
 
 func BenchmarkDecodeLegacy(b *testing.B) {
-	for _, c := range etests.MakeBenchmarks[uint64]() {
+	for _, c := range tests.MakeBenchmarks[uint64]() {
 		enc, _ := EncodeLegacy(slices.Clone(c.Data))
 		dec := make([]uint64, len(c.Data))
-		b.Run(c.Name, func(b *testing.B) {
+		b.Run("uint64/"+c.Name, func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * 8))
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _ = DecodeLegacy(dec, enc)
 			}
 		})
@@ -62,11 +62,11 @@ func BenchmarkDecodeLegacy(b *testing.B) {
 }
 
 func BenchmarkCountLegacy(b *testing.B) {
-	for _, c := range etests.MakeBenchmarks[uint64]() {
+	for _, c := range tests.MakeBenchmarks[uint64]() {
 		enc, _ := EncodeLegacy(slices.Clone(c.Data))
-		b.Run(c.Name, func(b *testing.B) {
+		b.Run("uint64/"+c.Name, func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * 8))
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, _ = CountLegacy(util.ToByteSlice(enc))
 			}
 		})

@@ -5,9 +5,6 @@ package tests
 
 import (
 	"bytes"
-
-	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var (
@@ -52,36 +49,6 @@ func MakeBitsAndMaskPoison(sz int, maskBits []byte) ([]byte, []byte) {
 	}
 	bits = bits[:l]
 	return bits, mask
-}
-
-func randSlice[T types.Number](sz int) []T {
-	var (
-		t T
-		s any
-	)
-	switch any(t).(type) {
-	case float32:
-		s = any(util.RandFloats[float32](sz))
-	case float64:
-		s = any(util.RandFloats[float64](sz))
-	case int64:
-		s = any(util.RandInts[int64](sz))
-	case int32:
-		s = any(util.RandInts[int32](sz))
-	case int16:
-		s = any(util.RandInts[int16](sz))
-	case int8:
-		s = any(util.RandInts[int8](sz))
-	case uint64:
-		s = any(util.RandUints[uint64](sz))
-	case uint32:
-		s = any(util.RandUints[uint32](sz))
-	case uint16:
-		s = any(util.RandUints[uint16](sz))
-	case uint8:
-		s = any(util.RandUints[uint8](sz))
-	}
-	return s.([]T)
 }
 
 func bitFieldLen(n int) int {

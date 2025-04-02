@@ -5,8 +5,10 @@ package tests
 
 import (
 	"reflect"
+	"slices"
 	"strconv"
 
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
@@ -17,48 +19,7 @@ var (
 	dictCase   = []int{1, 50, 1, 50, 1, 50}
 	edgeCase   = []int{1, 2, 2, 2, 2, 2}       // initial delta = 1, then 0
 	negCase    = []int{-1, -2, -3, -4, -5, -6} // delta = -1
-	sixtySeven = []int{                        // 640 equal values
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-		67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
-	}
+	sixtySeven = slices.Repeat([]int{67}, 640) // 640 equal values
 
 	// float
 	floatConstCase = []float64{1.25, 1.25, 1.25, 1.25, 1.25, 1.25}
@@ -67,6 +28,8 @@ var (
 	floatAlpCase   = []float64{2.50, 540.4532, 1.5210, 50.4125, 1.5330, 50.4335}
 	floatAlpRdCase = []float64{18446744073709551615.50, 18446744073709551615.4532, 18446744073709551615.5210, 18446744073709551615.4125, 18446744073709551615.5330, 18446744073709551615.4335}
 )
+
+var CompareSizes = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23}
 
 type TestCase[T types.Number] struct {
 	Name string
@@ -104,7 +67,7 @@ func MakeIntTest[T types.Integer](s string, n int, data ...int) TestCase[T] {
 			c.Data[i] = T(data[i])
 		}
 	} else {
-		c.Data = GenRnd[T](n)
+		c.Data = tests.GenRnd[T](n)
 	}
 	return c
 }
@@ -112,17 +75,17 @@ func MakeIntTest[T types.Integer](s string, n int, data ...int) TestCase[T] {
 func MakeIntTests[T types.Integer](n int) []TestCase[T] {
 	name := reflect.TypeOf(T(0)).String() + "_" + strconv.Itoa(n)
 	return []TestCase[T]{
-		{"const_" + name, GenConst[T](n, 42)},
-		{"delta_" + name, GenSeq[T](n)},
-		{"dups_" + name, GenDups[T](n, n/10)},
-		{"runs_" + name, GenRuns[T](n, 5)},
-		{"rand_" + name, GenRnd[T](n)},
+		{"const_" + name, tests.GenConst[T](n, 42)},
+		{"delta_" + name, tests.GenSeq[T](n)},
+		{"dups_" + name, tests.GenDups[T](n, n/10)},
+		{"runs_" + name, tests.GenRuns[T](n, 5)},
+		{"rand_" + name, tests.GenRnd[T](n)},
 	}
 }
 
 func MakeShortFloatTests[T types.Float](scheme int) []TestCase[T] {
-	switch scheme {
-	case 0: // TFloatConstant:
+	if scheme == 0 {
+		// TFloatConstant:
 		return []TestCase[T]{MakeFloatTest[T]("const", 6, floatConstCase...)}
 	}
 	return []TestCase[T]{
@@ -144,7 +107,7 @@ func MakeFloatTest[T types.Float](s string, n int, data ...float64) TestCase[T] 
 			c.Data[i] = T(data[i])
 		}
 	} else {
-		c.Data = GenRnd[T](n)
+		c.Data = tests.GenRnd[T](n)
 	}
 	return c
 }
@@ -152,29 +115,9 @@ func MakeFloatTest[T types.Float](s string, n int, data ...float64) TestCase[T] 
 func MakeFloatTests[T types.Float](n int) []TestCase[T] {
 	name := reflect.TypeOf(T(0)).String() + "_" + strconv.Itoa(n)
 	return []TestCase[T]{
-		{"const_" + name, GenConst[T](n, 4.225)},
-		{"dups_" + name, GenDups[T](n, n/10)},
-		{"runs_" + name, GenRuns[T](n, 5)},
-		{"rand_" + name, GenRnd[T](n)},
+		{"const_" + name, tests.GenConst[T](n, 4.225)},
+		{"dups_" + name, tests.GenDups[T](n, n/10)},
+		{"runs_" + name, tests.GenRuns[T](n, 5)},
+		{"rand_" + name, tests.GenRnd[T](n)},
 	}
 }
-
-type IntCompareCase[T types.Integer] struct {
-	Name string
-	Gen  func(int, int) []T
-}
-
-func MakeIntCompareCases[T types.Integer]() []IntCompareCase[T] {
-	return []IntCompareCase[T]{
-		{"one", func(n, w int) []T {
-			x := 1
-			if w == 0 {
-				x = 0
-			}
-			return GenConst[T](n, T(x))
-		}},
-		{"rnd", GenRndBits[T]},
-	}
-}
-
-var CompareSizes = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23}

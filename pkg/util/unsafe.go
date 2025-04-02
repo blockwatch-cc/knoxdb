@@ -4,13 +4,13 @@
 package util
 
 import (
+	"errors"
+	"reflect"
 	"unsafe"
-
-	"golang.org/x/exp/constraints"
 )
 
 type Number interface {
-	constraints.Integer | constraints.Float
+	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64
 }
 
 // go 1.20 versions
@@ -42,11 +42,16 @@ func FromByteSlice[T Number](s []byte) []T {
 	)
 }
 
-func ReinterpretSlice[T Number, S Number](t []T) []S {
+func ReinterpretSlice[T, S Number](t []T) []S {
 	if unsafe.Sizeof(T(0)) == unsafe.Sizeof(S(0)) {
 		return *(*[]S)(unsafe.Pointer(&t))
 	}
-	return nil
+	panic(errors.New(
+		"cannot reinterprete []" +
+			reflect.TypeOf(T(0)).String() +
+			" to " +
+			reflect.TypeOf(S(0)).String(),
+	))
 }
 
 func ReinterpretValue[T Number, S Number](t T) S {
@@ -56,7 +61,7 @@ func ReinterpretValue[T Number, S Number](t T) S {
 	return S(0)
 }
 
-func ConvertSlice[T, S constraints.Integer](t []T) (s []S) {
+func ConvertSlice[T, S Number](t []T) (s []S) {
 	s = make([]S, len(t))
 	for i, v := range t {
 		s[i] = S(v)

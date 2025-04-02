@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/cmp"
-	tests "blockwatch.cc/knoxdb/internal/tests/types"
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
