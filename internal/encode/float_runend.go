@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
@@ -53,6 +54,7 @@ func (c *FloatRunEndContainer[T]) Load(buf []byte) ([]byte, error) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
+
 	// alloc and decode values child container
 	c.Values = NewFloat[T](FloatContainerType(buf[0]))
 	var err error
@@ -74,26 +76,40 @@ func (c *FloatRunEndContainer[T]) Get(n int) T {
 }
 
 func (c *FloatRunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	if slices.IsSorted(sel) {
-		idx, end, val := 0, c.Ends.Get(0), c.Values.Get(0)
-		for len(sel) > 0 {
-			// use current run while valid
-			if sel[0] <= end {
+	if sel == nil {
+		l := uint32(c.Len())
+		var i uint32
+		var k int
+		for i < l {
+			end, val := c.Ends.Get(k), c.Values.Get(k)
+			for range end - i {
 				dst = append(dst, val)
-				sel = sel[1:]
-				continue
 			}
-			// find next run
-			for end < sel[0] {
-				idx++
-				end = c.Ends.Get(idx)
-			}
-			val = c.Values.Get(idx)
+			i = end
+			k++
 		}
 	} else {
-		// fallback to slower get for unsorted selection lists
-		for _, v := range sel {
-			dst = append(dst, c.Get(int(v)))
+		if slices.IsSorted(sel) {
+			idx, end, val := 0, c.Ends.Get(0), c.Values.Get(0)
+			for len(sel) > 0 {
+				// use current run while valid
+				if sel[0] <= end {
+					dst = append(dst, val)
+					sel = sel[1:]
+					continue
+				}
+				// find next run
+				for end < sel[0] {
+					idx++
+					end = c.Ends.Get(idx)
+				}
+				val = c.Values.Get(idx)
+			}
+		} else {
+			// fallback to slower get for unsorted selection lists
+			for _, v := range sel {
+				dst = append(dst, c.Get(int(v)))
+			}
 		}
 	}
 	return dst
@@ -101,10 +117,8 @@ func (c *FloatRunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 func (c *FloatRunEndContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
 	// generate run-end encoding from originals
-	// values := make([]T, ctx.NumRuns)
 	values := arena.AllocT[T](ctx.NumRuns)[:ctx.NumRuns]
-	// ends := make([]uint32, ctx.NumRuns)
-	ends := arena.Alloc(arena.AllocUint32, ctx.NumRuns).([]uint32)[:ctx.NumRuns]
+	ends := arena.AllocT[uint32](ctx.NumRuns)[:ctx.NumRuns]
 	values[0] = vals[0]
 	var (
 		n uint32
@@ -123,60 +137,110 @@ func (c *FloatRunEndContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int
 	ends[p] = n
 
 	// encode child containers
-	// fmt.Println("Run Values ..")
-	vctx := AnalyzeFloat(values, false)
+	vctx := AnalyzeFloat(values, true)
 	c.Values = EncodeFloat(vctx, values, lvl-1)
 	vctx.Close()
 	if c.Values.Type() != TFloatRaw {
 		arena.FreeT(values)
 	}
-	// fmt.Println("Run Ends ..")
+
 	ectx := AnalyzeInt(ends, false)
 	c.Ends = EncodeInt(ectx, ends, lvl-1)
 	ectx.Close()
 	if c.Ends.Type() != TIntegerRaw {
-		arena.Free(arena.AllocUint32, ends)
+		arena.FreeT(ends)
 	}
-	// fmt.Println("Run done.")
+
 	return c
 }
 
 func (c *FloatRunEndContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchEqual(val, bitset.NewBitset(c.Values.Len()), mask)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *FloatRunEndContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchNotEqual(val, bitset.NewBitset(c.Values.Len()), mask)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *FloatRunEndContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchLess(val, bitset.NewBitset(c.Values.Len()), mask)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *FloatRunEndContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchLessEqual(val, bitset.NewBitset(c.Values.Len()), mask)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *FloatRunEndContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchGreater(val, bitset.NewBitset(c.Values.Len()), mask)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *FloatRunEndContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchGreaterEqual(val, bitset.NewBitset(c.Values.Len()), mask)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
 func (c *FloatRunEndContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
-	return nil
+	// match values container and translate matches
+	vbits := c.Values.MatchBetween(a, b, bitset.NewBitset(c.Values.Len()), mask)
+	c.applyMatch(bits, vbits)
+	vbits.Close()
+	return bits
 }
 
-func (c *FloatRunEndContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+func (c *FloatRunEndContainer[T]) MatchSet(_ any, bits, _ *Bitset) *Bitset {
+	// N.A.
+	return bits
 }
 
-func (c *FloatRunEndContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+func (c *FloatRunEndContainer[T]) MatchNotSet(_ any, bits, _ *Bitset) *Bitset {
+	// N.A.
+	return bits
+}
+
+func (c *FloatRunEndContainer[T]) applyMatch(bits, vbits *Bitset) {
+	// catch easy corner cases
+	switch {
+	case vbits.None():
+		return
+	case vbits.All():
+		bits.One()
+		return
+	}
+
+	// handle value matches by unpacking range boundaries
+	u32 := arena.AllocT[uint32](vbits.Count())
+	for _, k := range vbits.Indexes(u32) {
+		var start uint32
+		if k > 0 {
+			start = c.Ends.Get(int(k-1)) + 1
+		}
+		end := c.Ends.Get(int(k))
+		bits.SetRange(int(start), int(end))
+	}
+	arena.FreeT(u32)
 }
 
 type FloatRunEndFactory struct {

@@ -7,10 +7,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -108,7 +108,7 @@ func EncodeFloat[T types.Float](ctx *FloatContext[T], v []T, lvl int) FloatConta
 		bestRatio  float64            = 1.0
 	)
 	if lvl > 0 {
-		for _, scheme := range ctx.EligibleSchemes() {
+		for _, scheme := range ctx.EligibleSchemes(lvl) {
 			if rd := EstimateFloat(scheme, ctx, v, lvl); rd < bestRatio {
 				bestRatio = rd
 				bestScheme = scheme
@@ -140,6 +140,8 @@ func EstimateFloat[T types.Float](scheme FloatContainerType, ctx *FloatContext[T
 		ok      bool
 	)
 	switch scheme {
+	case TFloatConstant:
+		estSize, ok = 1+SizeOf[T]()+num.MaxVarintLen32, true
 	case TFloatRaw:
 		estSize, ok = rawSize, true
 	}
@@ -205,8 +207,4 @@ func loadFloat[T types.Float](buf []byte) (T, []byte) {
 		buf = buf[4:]
 	}
 	return v, buf
-}
-
-func size[T types.Float]() int {
-	return int(unsafe.Sizeof(T(0)))
 }

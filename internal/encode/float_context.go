@@ -4,28 +4,26 @@
 package encode
 
 import (
-	"math"
 	"sync"
-	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/encode/alp"
+	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type FloatContext[T types.Float] struct {
-	Min         T                // vector minimum
-	Max         T                // vector maximum
-	PhyBits     int              // phy type bit width 8, 16, 32, 64
-	UseBits     int              // used bits for bit-packing
-	NumUnique   int              // vector cardinality (hint, may not be precise)
-	NumRuns     int              // vector runs
-	NumValues   int              // vector length
-	Sample      []T              // data sample (optional)
-	SampleCtx   *FloatContext[T] // sample analysis
-	FreeSample  bool             // hint whether sample may be reused
-	UniqueArray []T              // unique values as array (optional)
-	UniqueMap   map[T]uint16     // unique values (optional)
+	Min        T                // vector minimum
+	Max        T                // vector maximum
+	NumUnique  int              // vector cardinality (hint, may not be precise)
+	NumRuns    int              // vector runs
+	NumValues  int              // vector length
+	AlpScheme  int              // suggested ALP encoder scheme
+	Sample     []T              // data sample (optional)
+	SampleCtx  *FloatContext[T] // sample analysis
+	FreeSample bool             // hint whether sample may be reused
+	UniqueMap  map[T]uint16     // unique values (optional)
 }
 
 // AnalyzeFloat produces statistics about slice vals which are used to
@@ -34,7 +32,6 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique bool) *FloatContext[T] {
 	c := newFloatContext[T]()
 	c.Min = vals[0]
 	c.Max = vals[0]
-	c.PhyBits = int(unsafe.Sizeof(T(0))) * 8
 	c.NumRuns = 1
 	c.NumValues = len(vals)
 	for i, v := range vals[1:] {
@@ -46,75 +43,64 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique bool) *FloatContext[T] {
 		c.NumRuns += util.Bool2int(vals[i] != v)
 	}
 
-	// count unique only if necessary
-	doCountUnique := checkUnique && c.Min != c.Max
-	c.NumUnique = min(c.NumRuns, int(math.Floor(float64(c.Max))-math.Floor(float64(c.Min))))
+	// TODO: avoid on ALP nested float containers
+	// let ALP estimate the best scheme
+	c.AlpScheme = alp.Scheme(vals)
 
-	switch c.PhyBits {
-	case 64:
-		c.UseBits = size[float64]()
-		if doCountUnique {
-			c.NumUnique = c.buildUniqueMap(vals)
-		}
-	case 32:
-		c.UseBits = size[float32]()
-		if doCountUnique {
-			c.NumUnique = c.buildUniqueMap(vals)
-		}
+	// count unique only if necessary
+	c.NumUnique = c.NumRuns
+	if checkUnique {
+		c.NumUnique = c.estimateCardinality(vals)
 	}
 	return c
 }
 
-func (c *FloatContext[T]) buildUniqueMap(vals []T) int {
-	// construct unique values map
-	if c.UniqueMap == nil {
-		c.UniqueMap = make(map[T]uint16, len(vals))
+func (c *FloatContext[T]) estimateCardinality(vals []T) int {
+	var scratch [256]byte // need 256 byte scratch space
+	unique, _ := loglogbeta.NewFilterBuffer(scratch[:], 8)
+	if SizeOf[T]() == 8 {
+		unique.AddManyUint64(util.ReinterpretSlice[T, uint64](vals))
+	} else {
+		unique.AddManyUint32(util.ReinterpretSlice[T, uint32](vals))
 	}
-
-	for _, v := range vals {
-		c.UniqueMap[v] += 1
-	}
-
-	var uniqueCount int
-	for k, v := range c.UniqueMap {
-		if v > 0 {
-			c.UniqueArray = append(c.UniqueArray, k)
-			uniqueCount++
-		}
-	}
-
-	return uniqueCount
+	card := int(unique.Cardinality())
+	return card
 }
 
-func (c *FloatContext[T]) EligibleSchemes() []FloatContainerType {
+func (c *FloatContext[T]) EligibleSchemes(lvl int) []FloatContainerType {
 	// constant only
 	if c.Min == c.Max {
 		return []FloatContainerType{TFloatConstant}
 	}
+
 	// raw always works
 	schemes := []FloatContainerType{
 		TFloatRaw,
 	}
+
+	// use ALP as top-level scheme only
+	if lvl == MAX_CASCADE {
+		switch c.AlpScheme {
+		case alp.AlpScheme:
+			schemes = append(schemes, TFloatAlp)
+		case alp.AlpRdScheme:
+			schemes = append(schemes, TFloatAlpRd)
+		}
+	}
+
 	// run-end requires avg run lengths >= 2
 	if c.NumRuns*2 <= c.NumValues {
 		schemes = append(schemes, TFloatRunEnd)
 	}
 	// dict makes only sense if <64k entries, value range is reduced and card < 3/4
-	if c.NumUnique <= 1<<16 && c.Max-c.Min > T(c.NumUnique) && c.NumUnique*4/3 < c.NumValues {
+	if c.NumUnique <= 1<<16 && c.NumUnique*4/3 < c.NumValues {
 		schemes = append(schemes, TFloatDictionary)
 	}
-
-	// schemes = append(schemes, TFloatAlp)
-	// schemes = append(schemes, TFloatAlpRd)
 
 	return schemes
 }
 
 func (c *FloatContext[T]) Close() {
-	clear(c.UniqueArray)
-	if c.UniqueArray != nil {
-		c.UniqueArray = c.UniqueArray[:0]
-	}
 	clear(c.UniqueMap)
 	if c.SampleCtx != nil {
 		c.SampleCtx.Close()

@@ -5,6 +5,7 @@ package encode
 
 import (
 	"slices"
+	"sort"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -13,14 +14,14 @@ import (
 
 // TFloatDictionary
 type FloatDictionaryContainer[T types.Float] struct {
-	Values FloatContainer[T]
-	Codes  IntegerContainer[uint16]
+	Dict  FloatContainer[T]
+	Codes IntegerContainer[uint16]
 }
 
 func (c *FloatDictionaryContainer[T]) Close() {
-	c.Values.Close()
+	c.Dict.Close()
 	c.Codes.Close()
-	c.Values = nil
+	c.Dict = nil
 	c.Codes = nil
 	putFloatDictionaryContainer(c)
 }
@@ -34,12 +35,12 @@ func (c *FloatDictionaryContainer[T]) Len() int {
 }
 
 func (c *FloatDictionaryContainer[T]) MaxSize() int {
-	return 1 + c.Values.MaxSize() + c.Codes.MaxSize()
+	return 1 + c.Dict.MaxSize() + c.Codes.MaxSize()
 }
 
 func (c *FloatDictionaryContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TFloatDictionary))
-	dst = c.Values.Store(dst)
+	dst = c.Dict.Store(dst)
 	return c.Codes.Store(dst)
 }
 
@@ -50,9 +51,9 @@ func (c *FloatDictionaryContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[1:]
 
 	// alloc and decode values child container
-	c.Values = NewFloat[T](FloatContainerType(buf[0]))
+	c.Dict = NewFloat[T](FloatContainerType(buf[0]))
 	var err error
-	buf, err = c.Values.Load(buf)
+	buf, err = c.Dict.Load(buf)
 	if err != nil {
 		return buf, err
 	}
@@ -63,12 +64,18 @@ func (c *FloatDictionaryContainer[T]) Load(buf []byte) ([]byte, error) {
 }
 
 func (c *FloatDictionaryContainer[T]) Get(n int) T {
-	return c.Values.Get(int(c.Codes.Get(n)))
+	return c.Dict.Get(int(c.Codes.Get(n)))
 }
 
 func (c *FloatDictionaryContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	for _, v := range sel {
-		dst = append(dst, c.Get(int(v)))
+	if sel == nil {
+		for i := range c.Len() {
+			dst = append(dst, c.Get(i))
+		}
+	} else {
+		for _, v := range sel {
+			dst = append(dst, c.Get(int(v)))
+		}
 	}
 	return dst
 }
@@ -79,9 +86,9 @@ func (c *FloatDictionaryContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl
 
 	// encode child containers
 	vctx := AnalyzeFloat(dict, false)
-	c.Values = EncodeFloat(vctx, dict, lvl-1)
+	c.Dict = EncodeFloat(vctx, dict, lvl-1)
 	vctx.Close()
-	if c.Values.Type() != TFloatRaw {
+	if c.Dict.Type() != TFloatRaw {
 		arena.FreeT(dict)
 	}
 
@@ -99,7 +106,10 @@ func dictEncodeFloatMap[T types.Float](ctx *FloatContext[T], vals []T) ([]T, []u
 	// construct unique values map
 	if ctx.UniqueMap == nil {
 		ctx.UniqueMap = make(map[T]uint16, ctx.NumUnique)
-		ctx.buildUniqueMap(vals)
+	}
+
+	for _, v := range vals {
+		ctx.UniqueMap[v] = 0
 	}
 
 	// construct dict from unique values
@@ -117,7 +127,7 @@ func dictEncodeFloatMap[T types.Float](ctx *FloatContext[T], vals []T) ([]T, []u
 	}
 
 	// translate values to codes
-	codes := arena.Alloc(arena.AllocUint16, len(vals)).([]uint16)[:0]
+	codes := arena.AllocT[uint16](len(vals))
 	for _, v := range vals {
 		codes = append(codes, ctx.UniqueMap[v])
 	}
@@ -126,41 +136,188 @@ func dictEncodeFloatMap[T types.Float](ctx *FloatContext[T], vals []T) ([]T, []u
 }
 
 func (c *FloatDictionaryContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// early skip if val is smaller than first or larger than last dict entry
+	l := c.Dict.Len()
+	if val < c.Dict.Get(0) || val > c.Dict.Get(l-1) {
+		return bits
+	}
+
+	// find position of val using binary search (dict is sorted and values are unique)
+	// TODO: add a `Find(T) int` function to all containers and let them choose the
+	// most efficient search strategy
+	idx := sort.Search(l, func(i int) bool {
+		return c.Dict.Get(i) >= val
+	})
+
+	// if not found, equal match does not exist
+	if idx == l || c.Dict.Get(idx) != val {
+		return bits
+	}
+
+	// lookup code at index and run equal search on codes
+	return c.Codes.MatchEqual(uint16(idx), bits, mask)
 }
 
 func (c *FloatDictionaryContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// early skip if val is smaller than first or larger than last dict entry
+	l := c.Dict.Len()
+	if val < c.Dict.Get(0) || val > c.Dict.Get(l-1) {
+		return bits.One()
+	}
+
+	// find position of val using binary search (dict is sorted and values are unique)
+	idx := sort.Search(l, func(i int) bool {
+		return c.Dict.Get(i) >= val
+	})
+
+	// if not found, equal match does not exist and we can set all bits one
+	if idx == l || c.Dict.Get(idx) != val {
+		return bits.One()
+	}
+
+	// if found, we run a not equal scan on codes
+	return c.Codes.MatchNotEqual(uint16(idx), bits, mask)
 }
 
 func (c *FloatDictionaryContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// early skip if val is smaller than first or larger last
+	if val < c.Dict.Get(0) {
+		return bits
+	}
+	l := c.Dict.Len()
+	if val > c.Dict.Get(l-1) {
+		return bits.One()
+	}
+
+	// find position of val using binary search (dict is sorted and values are unique)
+	idx := sort.Search(l, func(i int) bool {
+		return c.Dict.Get(i) >= val
+	})
+
+	// adjust index for search values > last dict entry
+	if idx == l {
+		idx--
+	}
+
+	// If found we are good. If not found, we have at least found the index of
+	// the first value larger than val which is ok too. At this point
+	// we know idx is between 0 and l-1, so we can directly translate to a
+	// less(code) search.
+	return c.Codes.MatchLess(uint16(idx), bits, mask)
 }
 
 func (c *FloatDictionaryContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// early skip if val is smaller than first or larger than last
+	if val < c.Dict.Get(0) {
+		return bits
+	}
+	l := c.Dict.Len()
+	if val >= c.Dict.Get(l-1) {
+		return bits.One()
+	}
+
+	// find position of val using binary search (dict is sorted and values are unique)
+	idx := sort.Search(l, func(i int) bool {
+		return c.Dict.Get(i) >= val
+	})
+
+	// adjust index for search values > last dict entry
+	if idx == l {
+		idx--
+	}
+
+	// If found we are good. If not found, we have at least found the index of
+	// the first value larger than val which is ok too. At this point
+	// we know idx is between 0 and l-1, so we can directly translate to a
+	// less(code) search.
+	return c.Codes.MatchLessEqual(uint16(idx), bits, mask)
 }
 
 func (c *FloatDictionaryContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// early skip if val is smaller than first or larger or equal to last
+	if val < c.Dict.Get(0) {
+		return bits.One()
+	}
+	l := c.Dict.Len()
+	if val >= c.Dict.Get(l-1) {
+		return bits
+	}
+
+	// find position of val using binary search (dict is sorted and values are unique)
+	idx := sort.Search(l, func(i int) bool {
+		return c.Dict.Get(i) >= val
+	})
+
+	// If found we are good. If not found, we have at least found the index of
+	// the first value larger than val which is ok too. At this point
+	// we know idx is between 0 and l-1, so we can directly translate to a
+	// less(code) search.
+	return c.Codes.MatchGreater(uint16(idx), bits, mask)
 }
 
 func (c *FloatDictionaryContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	// early skip if val is smaller than first or larger to last
+	if val < c.Dict.Get(0) {
+		return bits.One()
+	}
+	l := c.Dict.Len()
+	if val > c.Dict.Get(l-1) {
+		return bits
+	}
+
+	// find position of val using binary search (dict is sorted and values are unique)
+	idx := sort.Search(l, func(i int) bool {
+		return c.Dict.Get(i) >= val
+	})
+
+	// If found we are good. If not found, we have at least found the index of
+	// the first value larger than val which is ok too. At this point
+	// we know idx is between 0 and l-1, so we can directly translate to a
+	// less(code) search.
+	return c.Codes.MatchGreaterEqual(uint16(idx), bits, mask)
 }
 
 func (c *FloatDictionaryContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
-	return nil
+	// skip when range does not intersect with dict or does fully contain dict
+	l := c.Dict.Len()
+	first, last := c.Dict.Get(0), c.Dict.Get(l-1)
+	if b < first || a > last {
+		return bits
+	}
+	if a <= first && b >= last {
+		return bits.One()
+	}
+
+	// translate range [a,b] into code range [ca, cb]
+	ai := sort.Search(l, func(i int) bool {
+		return c.Dict.Get(i) >= a
+	})
+	bi := sort.Search(l, func(i int) bool {
+		return c.Dict.Get(i) >= b
+	})
+
+	// range is within a dict value gap
+	if ai == bi && c.Dict.Get(ai) != a {
+		return bits
+	}
+
+	// adjust bi when b > last
+	if bi == l || c.Dict.Get(bi) != b {
+		bi--
+	}
+
+	// forward between match on the code vector
+	return c.Codes.MatchBetween(uint16(ai), uint16(bi), bits, mask)
 }
 
-func (c *FloatDictionaryContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+func (c *FloatDictionaryContainer[T]) MatchSet(_ any, bits, _ *Bitset) *Bitset {
+	// N.A.
+	return bits
 }
 
-func (c *FloatDictionaryContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+func (c *FloatDictionaryContainer[T]) MatchNotSet(_ any, bits, _ *Bitset) *Bitset {
+	// N.A.
+	return bits
 }
 
 type FloatDictionaryFactory struct {

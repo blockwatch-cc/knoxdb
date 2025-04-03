@@ -65,7 +65,7 @@ func (r *RdState[T]) AlpRdReset() {
 	r.leftPartsDictMap = make(map[uint16]uint16)
 }
 
-func newRDEncoder[T types.Float, U types.Unsigned](dataColumn []T, columnOffset int) rdEncoder[T, U] {
+func newRDEncoder[T types.Float, U types.Unsigned](dataColumn []T) rdEncoder[T, U] {
 	enc := rdEncoder[T, U]{
 		State: NewRdState[T](len(dataColumn)),
 	}
@@ -76,7 +76,7 @@ func newRDEncoder[T types.Float, U types.Unsigned](dataColumn []T, columnOffset 
 	case float64:
 		enc.EXACT_TYPE_BITSIZE = FLOAT64_EXACT_TYPE
 	}
-	enc.State.sampledValuesN = FirstLevelSample(enc.State.sampledValuesN, dataColumn, columnOffset)
+	enc.State.sampledValuesN = FirstLevelSample(enc.State.sampledValuesN, dataColumn)
 	enc.findBestDictionary(enc.State.sampledValuesN, enc.State)
 	return enc
 }
@@ -172,11 +172,12 @@ func (r rdEncoder[T, U]) findBestDictionary(values []T, state *RdState[T]) float
 }
 
 func RDCompress[T types.Float, U types.Unsigned](values []T) *RdState[T] {
-	enc := newRDEncoder[T, U](values, 0)
+	enc := newRDEncoder[T, U](values)
 
 	nValues := len(values)
 	rightParts := make([]U, nValues)
 	leftParts := make([]uint16, nValues)
+	mask := U(1 << enc.State.RightBitWidth - 1)
 
 	// cast T to U
 	vals := *(*[]U)(unsafe.Pointer(&values))
@@ -184,16 +185,15 @@ func RDCompress[T types.Float, U types.Unsigned](values []T) *RdState[T] {
 	// Dictionary encoding for left parts
 	for i := 0; i < nValues; i++ {
 		// Cutting the floating point values
-		rightParts[i] = U(vals[i] & ((1 << enc.State.RightBitWidth) - 1))
+		rightParts[i] = U(vals[i] & mask)
 		leftParts[i] = uint16(vals[i] >> uint64(enc.State.RightBitWidth))
 
 		dictionaryKey := leftParts[i]
 		var dictionaryIndex uint16
-		if _, ok := enc.State.leftPartsDictMap[dictionaryKey]; !ok {
+		dictionaryIndex, ok := enc.State.leftPartsDictMap[dictionaryKey]
+		if !ok {
 			//! If not found on the dictionary we store the smallest non-key index as exception (the dict size)
 			dictionaryIndex = uint16(enc.State.actualDictionarySize)
-		} else {
-			dictionaryIndex = enc.State.leftPartsDictMap[dictionaryKey]
 		}
 		leftParts[i] = dictionaryIndex
 

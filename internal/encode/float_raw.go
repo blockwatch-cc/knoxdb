@@ -6,6 +6,7 @@ package encode
 import (
 	"sync"
 
+	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -14,7 +15,7 @@ import (
 // TFloatRaw
 type FloatRawContainer[T types.Float] struct {
 	Values []T
-	sz     int
+	typ    types.BlockType
 }
 
 func (c *FloatRawContainer[T]) Close() {
@@ -31,15 +32,12 @@ func (c *FloatRawContainer[T]) Len() int {
 }
 
 func (c *FloatRawContainer[T]) MaxSize() int {
-	return 1 + num.MaxVarintLen32 + c.sz*len(c.Values)
+	return 1 + num.MaxVarintLen32 + SizeOf[T]()*len(c.Values)
 }
 
 func (c *FloatRawContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TFloatRaw))
-	dst = num.AppendUvarint(dst, uint64(c.sz*len(c.Values)))
-	// if cpu.IsBigEndian {
-	//  // TODO: flip byte order
-	// }
+	dst = num.AppendUvarint(dst, uint64(SizeOf[T]()*len(c.Values)))
 	return append(dst, util.ToByteSlice(c.Values)...)
 }
 
@@ -51,6 +49,7 @@ func (c *FloatRawContainer[T]) Load(buf []byte) ([]byte, error) {
 	v, n := num.Uvarint(buf)
 	buf = buf[n:]
 	c.Values = util.FromByteSlice[T](buf[:int(v)])
+	c.typ = BlockType[T]()
 	return buf[int(v):], nil
 }
 
@@ -59,54 +58,114 @@ func (c *FloatRawContainer[T]) Get(n int) T {
 }
 
 func (c *FloatRawContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	for _, v := range sel {
-		dst = append(dst, c.Values[v])
+	if sel == nil {
+		dst = append(dst, c.Values...)
+	} else {
+		for _, v := range sel {
+			dst = append(dst, c.Values[v])
+		}
 	}
 	return dst
 }
 
 func (c *FloatRawContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
 	c.Values = vals
-	c.sz = ctx.PhyBits / 8
+	c.typ = BlockType[T]()
 	return c
 }
 
 func (c *FloatRawContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	switch c.typ {
+	case types.BlockFloat64:
+		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		return cmp.MatchFloat64Equal(f64, float64(val), bits, mask)
+	case types.BlockFloat32:
+		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		return cmp.MatchFloat32Equal(f32, float32(val), bits, mask)
+	}
+	return bits
 }
 
 func (c *FloatRawContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	switch c.typ {
+	case types.BlockFloat64:
+		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		return cmp.MatchFloat64NotEqual(f64, float64(val), bits, mask)
+	case types.BlockFloat32:
+		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		return cmp.MatchFloat32NotEqual(f32, float32(val), bits, mask)
+	}
+	return bits
 }
 
 func (c *FloatRawContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	switch c.typ {
+	case types.BlockFloat64:
+		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		return cmp.MatchFloat64Less(f64, float64(val), bits, mask)
+	case types.BlockFloat32:
+		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		return cmp.MatchFloat32Less(f32, float32(val), bits, mask)
+	}
+	return bits
 }
 
 func (c *FloatRawContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	switch c.typ {
+	case types.BlockFloat64:
+		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		return cmp.MatchFloat64LessEqual(f64, float64(val), bits, mask)
+	case types.BlockFloat32:
+		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		return cmp.MatchFloat32LessEqual(f32, float32(val), bits, mask)
+	}
+	return bits
 }
 
 func (c *FloatRawContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	switch c.typ {
+	case types.BlockFloat64:
+		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		return cmp.MatchFloat64Greater(f64, float64(val), bits, mask)
+	case types.BlockFloat32:
+		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		return cmp.MatchFloat32Greater(f32, float32(val), bits, mask)
+	}
+	return bits
 }
 
 func (c *FloatRawContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+	switch c.typ {
+	case types.BlockFloat64:
+		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		return cmp.MatchFloat64GreaterEqual(f64, float64(val), bits, mask)
+	case types.BlockFloat32:
+		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		return cmp.MatchFloat32GreaterEqual(f32, float32(val), bits, mask)
+	}
+	return bits
 }
 
 func (c *FloatRawContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
-	return nil
+	switch c.typ {
+	case types.BlockFloat64:
+		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		return cmp.MatchFloat64Between(f64, float64(a), float64(b), bits, mask)
+	case types.BlockFloat32:
+		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		return cmp.MatchFloat32Between(f32, float32(a), float32(b), bits, mask)
+	}
+	return bits
 }
 
-func (c *FloatRawContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+func (c *FloatRawContainer[T]) MatchSet(_ any, bits, _ *Bitset) *Bitset {
+	// N.A.
+	return bits
 }
 
-func (c *FloatRawContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+func (c *FloatRawContainer[T]) MatchNotSet(_ any, bits, _ *Bitset) *Bitset {
+	// N.A.
+	return bits
 }
 
 type FloatRawFactory struct {

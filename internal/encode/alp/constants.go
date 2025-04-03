@@ -169,16 +169,14 @@ type constant struct {
 	EXP_ARR                 []float64
 }
 
-func newConstant[T types.Float]() constant {
-	var v any = T(0)
-	switch v.(type) {
+func newConstant[T types.Float]() *constant {
+	switch any(T(0)).(type) {
 	case float32:
-		return float32Const
+		return &float32Const
 	case float64:
-		return float64Const
-
+		return &float64Const
 	}
-	return constant{}
+	return nil
 }
 
 var (

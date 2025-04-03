@@ -13,12 +13,17 @@ import (
 
 // TFloatAlpRdV2
 type FloatAlpRdV2Container[T types.Float] struct {
-	Left       IntegerContainer[uint16]
-	Right      IntegerContainer[uint64]
-	RightShift int
+	Left  IntegerContainer[uint16]
+	Right IntegerContainer[uint64]
+	Shift int
+	typ   types.BlockType
 }
 
 func (c *FloatAlpRdV2Container[T]) Close() {
+	c.Left.Close()
+	c.Right.Close()
+	c.Left = nil
+	c.Right = nil
 	putFloatAlpRdV2Container(c)
 }
 
@@ -39,7 +44,7 @@ func (c *FloatAlpRdV2Container[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TFloatAlpRd))
 	dst = c.Left.Store(dst)
 	dst = c.Right.Store(dst)
-	dst = num.AppendUvarint(dst, uint64(c.RightShift))
+	dst = num.AppendUvarint(dst, uint64(c.Shift))
 	return dst
 }
 
@@ -59,170 +64,115 @@ func (c *FloatAlpRdV2Container[T]) Load(buf []byte) ([]byte, error) {
 		return buf, err
 	}
 	v, n := num.Uvarint(buf)
-	c.RightShift = int(v)
+	c.Shift = int(v)
+	c.typ = BlockType[T]()
 	return buf[n:], nil
 }
 
 func (c *FloatAlpRdV2Container[T]) Get(n int) T {
 	left := c.Left.Get(n)
 	right := c.Right.Get(n)
-	var val T
-	switch any(T(0)).(type) {
-	case float64:
-		v := uint64(left)<<c.RightShift | uint64(right)
-		val = *(*T)(unsafe.Pointer(&v))
-	case float32:
-		v := uint32(left)<<c.RightShift | uint32(right)
-		val = *(*T)(unsafe.Pointer(&v))
+
+	// float64
+	if c.typ == types.BlockFloat64 {
+		v := uint64(left)<<c.Shift | right
+		return *(*T)(unsafe.Pointer(&v))
 	}
-	return val
+
+	// float32
+	v := uint32(left)<<c.Shift | uint32(right)
+	return *(*T)(unsafe.Pointer(&v))
 }
 
 func (c *FloatAlpRdV2Container[T]) AppendTo(sel []uint32, dst []T) []T {
-	for _, v := range sel {
-		dst = append(dst, c.Get(int(v)))
+	if sel == nil {
+		for i := range c.Len() {
+			dst = append(dst, c.Get(i))
+		}
+	} else {
+		for _, v := range sel {
+			dst = append(dst, c.Get(int(v)))
+		}
 	}
 	return dst
-
 }
 
 func (c *FloatAlpRdV2Container[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
 	cnt := len(vals)
-	left := arena.Alloc(arena.AllocUint16, cnt).([]uint16)[:cnt]
-	right := arena.Alloc(arena.AllocUint64, cnt).([]uint64)[:cnt]
+	left := arena.AllocT[uint16](cnt)[:cnt]
+	right := arena.AllocT[uint64](cnt)[:cnt]
+	c.typ = BlockType[T]()
 
-	c.split(vals, left, right, lvl)
+	sample, ok := SampleFloat(vals)
+	bestShift := estimateShift(sample, left, right, lvl)
+	if ok {
+		arena.FreeT(sample)
+	}
+
+	mask := uint64(1<<bestShift) - 1
+	switch c.typ {
+	case types.BlockFloat64:
+		for k, v := range util.ReinterpretSlice[T, uint64](vals) {
+			right[k] = v & mask
+			left[k] = uint16(v >> bestShift)
+		}
+	case types.BlockFloat32:
+		for k, v := range util.ReinterpretSlice[T, uint32](vals) {
+			right[k] = uint64(v) & mask
+			left[k] = uint16(v >> bestShift)
+		}
+	}
+
+	lctx := AnalyzeInt(left, true)
+	rctx := AnalyzeInt(right, false)
+	c.Shift = bestShift
+	c.Left = NewInt[uint16](TIntegerDictionary).Encode(lctx, left, lvl-1)
+	c.Right = NewInt[uint64](TIntegerBitpacked).Encode(rctx, right, lvl-1)
+	lctx.Close()
+	rctx.Close()
+	arena.FreeT(left)
+	arena.FreeT(right)
 
 	return c
 }
 
-func (c *FloatAlpRdV2Container[T]) split(vals []T, left []uint16, right []uint64, lvl int) {
-	switch any(T(0)).(type) {
-	case float64:
-		u64 := util.ReinterpretSlice[T, uint64](vals)
-		c.split64(u64, left, right, lvl)
-	case float32:
-		u32 := util.ReinterpretSlice[T, uint32](vals)
-		c.split32(u32, left, right, lvl)
-	}
-}
-
-func (c *FloatAlpRdV2Container[T]) split64(u64 []uint64, leftInts []uint16, rightInts []uint64, lvl int) {
-	// try different right bit widths to find the optimal encoding for left&right containers
-	sampleU64, ok := SampleInt(u64)
-	bestShift := shift64(sampleU64, leftInts, rightInts, lvl)
-	if ok {
-		arena.FreeT(sampleU64)
-	}
-
-	mask := uint64(1<<bestShift) - 1
-	for k := range u64 {
-		rightInts[k] = u64[k] & mask
-		leftInts[k] = uint16(u64[k] >> bestShift)
-	}
-
-	lctx := AnalyzeInt(leftInts, false)
-	rctx := AnalyzeInt(rightInts, false)
-	defer lctx.Close()
-	defer rctx.Close()
-
-	c.RightShift = bestShift
-	c.Left = NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts, lvl-1)
-	c.Right = NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts, lvl-1)
-}
-
-func shift64(sampleU64 []uint64, leftInts []uint16, rightInts []uint64, lvl int) int {
+func estimateShift[T types.Float](sample []T, leftInts []uint16, rightInts []uint64, lvl int) int {
 	var (
 		bestShift int
 		bestSize  int = math.MaxInt32
-		sz            = len(sampleU64)
-		lctx          = AnalyzeInt(leftInts, false)
-		rctx          = AnalyzeInt(rightInts, false)
+		sz            = len(sample)
+		w         int = SizeOf[T]()
 	)
 
-	defer lctx.Close()
-	defer rctx.Close()
-
 	for i := 1; i <= 16; i++ {
-		// split vals into left and right
 		rightBitWidth := 64 - i
-		for k := range sampleU64 {
-			mask := uint64(1<<rightBitWidth) - 1
-			rightInts[k] = sampleU64[k] & mask
-			leftInts[k] = uint16(sampleU64[k] >> rightBitWidth)
-		}
+		mask := uint64(1<<rightBitWidth) - 1
 
-		// try estimate integer sizes
-		leftC := NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts[:sz], lvl-1)
-		rightC := NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts[:sz], lvl-1)
-
-		// get total size
-		maxSz := leftC.MaxSize() + rightC.MaxSize()
-
-		// compare against previous know best ratio and keep best containers
-		if maxSz <= bestSize {
-			bestSize = maxSz
-			bestShift = rightBitWidth
-		}
-		leftC.Close()
-		rightC.Close()
-	}
-
-	return bestShift
-}
-
-func (c *FloatAlpRdV2Container[T]) split32(u32 []uint32, leftInts []uint16, rightInts []uint64, lvl int) {
-	// try different right bit widths to find the optimal encoding for left&right containers
-	sampleU32, ok := SampleInt(u32)
-	bestShift := shift32(sampleU32, leftInts, rightInts, lvl)
-	if ok {
-		arena.FreeT(sampleU32)
-	}
-
-	mask := uint32(1<<bestShift) - 1
-	for k := range u32 {
-		rightInts[k] = uint64(u32[k] & mask)
-		leftInts[k] = uint16(u32[k] >> bestShift)
-	}
-
-	lctx := AnalyzeInt(leftInts, false)
-	rctx := AnalyzeInt(rightInts, false)
-
-	defer lctx.Close()
-	defer rctx.Close()
-
-	c.Left = NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts, lvl-1)
-	c.Right = NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts, lvl-1)
-	c.RightShift = bestShift
-}
-
-func shift32(sampleU32 []uint32, leftInts []uint16, rightInts []uint64, lvl int) int {
-	var (
-		bestShift int
-		bestSize  int = math.MaxInt32
-		sz            = len(sampleU32)
-		lctx          = AnalyzeInt(leftInts, false)
-		rctx          = AnalyzeInt(rightInts, false)
-	)
-
-	defer lctx.Close()
-	defer rctx.Close()
-
-	for i := 1; i <= 16; i++ {
 		// split vals into left and right
-		rightBitWidth := 32 - i
-		for k := range sampleU32 {
-			mask := uint32(1<<rightBitWidth) - 1
-			rightInts[k] = uint64(sampleU32[k] & mask)
-			leftInts[k] = uint16(sampleU32[k] >> rightBitWidth)
+		switch w {
+		case 8:
+			for k, v := range util.ReinterpretSlice[T, uint64](sample) {
+				rightInts[k] = v & mask
+				leftInts[k] = uint16(v >> rightBitWidth)
+			}
+		case 4:
+			for k, v := range util.ReinterpretSlice[T, uint32](sample) {
+				rightInts[k] = uint64(v) & mask
+				leftInts[k] = uint16(v >> rightBitWidth)
+			}
 		}
 
 		// try estimate integer sizes
-		leftC := NewInt[uint16](TIntegerRaw).Encode(lctx, leftInts[:sz], lvl-1)
-		rightC := NewInt[uint64](TIntegerRaw).Encode(rctx, rightInts[:sz], lvl-1)
+		lctx := AnalyzeInt(leftInts[:sz], true)
+		rctx := AnalyzeInt(rightInts[:sz], false)
+		leftC := NewInt[uint16](TIntegerDictionary).Encode(lctx, leftInts[:sz], lvl-1)
+		// rightC := NewInt[uint64](TIntegerBitpacked).Encode(rctx, rightInts[:sz], lvl-1)
 
 		// get total size
-		maxSz := leftC.MaxSize() + rightC.MaxSize()
+		maxSz := leftC.MaxSize() + 2 + 2*num.MaxVarintLen64 + (rctx.UseBits*rctx.NumValues+7)/8
+
+		lctx.Close()
+		rctx.Close()
 
 		// compare against previous know best ratio and keep best containers
 		if maxSz <= bestSize {
@@ -230,7 +180,7 @@ func shift32(sampleU32 []uint32, leftInts []uint16, rightInts []uint64, lvl int)
 			bestShift = rightBitWidth
 		}
 		leftC.Close()
-		rightC.Close()
+		// rightC.Close()
 	}
 
 	return bestShift

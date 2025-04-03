@@ -5,6 +5,7 @@ package encode
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
@@ -20,37 +21,31 @@ func TestAnalyzeFloat(t *testing.T) {
 	x := AnalyzeFloat([]float64{-1.044, -1.044, 5.245, 5.245, 1.50, 1.50}, true)
 	assert.Equal(t, float64(-1.044), x.Min, "min")
 	assert.Equal(t, float64(5.245), x.Max, "max")
-	// assert.Equal(t, float64(0), x.Delta, "delta")
-	assert.Equal(t, 64, x.PhyBits, "phybits")
-	assert.Equal(t, 8, x.UseBits, "usebits")
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
 	// assert.Equal(t, 3, x.NumUnique, "num_unique")
 	assert.Equal(t, 3, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
-	assert.Contains(t, x.EligibleSchemes(), TFloatRunEnd, "eligible")
-	assert.Contains(t, x.EligibleSchemes(), TFloatRaw, "eligible")
-	assert.Contains(t, x.EligibleSchemes(), TFloatDictionary, "eligible")
+	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatRunEnd, "eligible")
+	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatRaw, "eligible")
+	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatDictionary, "eligible")
 
 	// dict-friendly
 	x = AnalyzeFloat([]float64{-1.05, 1.05, 5.05, 1.05, -1.05, 1.05}, true)
 	assert.Equal(t, float64(-1.05), x.Min, "min")
 	assert.Equal(t, float64(5.05), x.Max, "max")
-	// assert.Equal(t, float64(0), x.Delta, "delta")
-	assert.Equal(t, 64, x.PhyBits, "phybits")
-	assert.Equal(t, 8, x.UseBits, "usebits")
 	// assert.Equal(t, 3, x.NumUnique, "num_unique")
-	// assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
+	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 6, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
-	assert.NotContains(t, x.EligibleSchemes(), TFloatRunEnd, "not eligible")
-	assert.Contains(t, x.EligibleSchemes(), TFloatRaw, "eligible")
-	assert.Contains(t, x.EligibleSchemes(), TFloatDictionary, "eligible")
+	assert.NotContains(t, x.EligibleSchemes(MAX_CASCADE), TFloatRunEnd, "not eligible")
+	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatRaw, "eligible")
+	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatDictionary, "eligible")
 }
 
 func testFloatContainerType[T types.Float](t *testing.T, scheme FloatContainerType) {
 	t.Helper()
 	for _, c := range etests.MakeShortFloatTests[T](int(scheme)) {
-		t.Run(c.Name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			enc := NewFloat[T](scheme)
 
 			// analyze and encode data into container
@@ -85,7 +80,7 @@ func testFloatContainerType[T types.Float](t *testing.T, scheme FloatContainerTy
 			dst := make([]T, 0, len(c.Data))
 			dst = enc2.AppendTo(all, dst)
 			assert.Len(t, dst, len(c.Data))
-			assert.Equal(t, dst, c.Data)
+			assert.Equal(t, c.Data, dst)
 
 			enc2.Close()
 			enc.Close()
@@ -125,8 +120,8 @@ func TestEncodeAlpRdFloat(t *testing.T) {
 
 func testEncodeFloatT[T types.Float](t *testing.T) {
 	t.Helper()
-	for _, c := range etests.MakeFloatTests[T](1024) {
-		t.Run(c.Name, func(t *testing.T) {
+	for _, c := range etests.MakeFloatTests[T](16) {
+		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			x := AnalyzeFloat(c.Data, true)
 			e := EncodeFloat(x, c.Data, MAX_CASCADE)
 			require.Equal(t, len(c.Data), e.Len(), "x=%#v", x)

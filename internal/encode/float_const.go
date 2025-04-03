@@ -29,7 +29,7 @@ func (c *FloatConstContainer[T]) Len() int {
 }
 
 func (c *FloatConstContainer[T]) MaxSize() int {
-	return 1 + size[float64]() + num.MaxVarintLen32
+	return 1 + SizeOf[T]() + num.MaxVarintLen32
 }
 
 func (c *FloatConstContainer[T]) Store(dst []byte) []byte {
@@ -54,8 +54,14 @@ func (c *FloatConstContainer[T]) Get(_ int) T {
 }
 
 func (c *FloatConstContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	for range sel {
-		dst = append(dst, c.Val)
+	if sel == nil {
+		for range c.Len() {
+			dst = append(dst, c.Val)
+		}
+	} else {
+		for range sel {
+			dst = append(dst, c.Val)
+		}
 	}
 	return dst
 }
@@ -66,42 +72,63 @@ func (c *FloatConstContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int)
 	return c
 }
 
-func (c *FloatConstContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatConstContainer[T]) MatchEqual(val T, bits, _ *Bitset) *Bitset {
+	if c.Val == val {
+		bits.One()
+	}
+	return bits
 }
 
-func (c *FloatConstContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatConstContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) *Bitset {
+	if c.Val != val {
+		bits.One()
+	}
+	return bits
 }
 
-func (c *FloatConstContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatConstContainer[T]) MatchLess(val T, bits, _ *Bitset) *Bitset {
+	if c.Val < val {
+		bits.One()
+	}
+	return bits
 }
 
-func (c *FloatConstContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatConstContainer[T]) MatchLessEqual(val T, bits, _ *Bitset) *Bitset {
+	if c.Val <= val {
+		bits.One()
+	}
+	return bits
 }
 
-func (c *FloatConstContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatConstContainer[T]) MatchGreater(val T, bits, _ *Bitset) *Bitset {
+	if c.Val > val {
+		bits.One()
+	}
+	return bits
 }
 
-func (c *FloatConstContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatConstContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) *Bitset {
+	if c.Val > val {
+		bits.One()
+	}
+	return bits
 }
 
-func (c *FloatConstContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatConstContainer[T]) MatchBetween(a, b T, bits, _ *Bitset) *Bitset {
+	if c.Val >= a && c.Val <= b {
+		bits.One()
+	}
+	return bits
 }
 
-func (c *FloatConstContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+func (c *FloatConstContainer[T]) MatchSet(_ any, bits, _ *Bitset) *Bitset {
+	// N.A.
+	return bits
 }
 
-func (c *FloatConstContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+func (c *FloatConstContainer[T]) MatchNotSet(_ any, bits, _ *Bitset) *Bitset {
+	// N.A.
+	return bits
 }
 
 type FloatConstFactory struct {

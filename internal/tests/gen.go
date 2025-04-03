@@ -311,7 +311,7 @@ func GenRndBits[T types.Number](n, w int) []T {
 	return res
 }
 
-// creates n values with cardinality c (i.e. u unique values)
+// creates n values with cardinality c (i.e. u % unique values)
 func GenDups[T types.Number](n, u int) []T {
 	c := max(n/u, 1)
 	res := make([]T, n)
