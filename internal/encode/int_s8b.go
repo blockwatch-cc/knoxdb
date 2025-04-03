@@ -89,8 +89,12 @@ func (c *Simple8Container[T]) AppendTo(sel []uint32, dst []T) []T {
 	if c.Unpacked == nil {
 		c.decodeAll()
 	}
-	for _, v := range sel {
-		dst = append(dst, c.Unpacked[int(v)]+c.For)
+	if sel == nil {
+		dst = append(dst, c.Unpacked...)
+	} else {
+		for _, v := range sel {
+			dst = append(dst, c.Unpacked[int(v)]+c.For)
+		}
 	}
 	return dst
 }
@@ -399,24 +403,27 @@ func (c *Simple8Container[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
 	if a < c.For {
 		a = c.For
 	}
-	a -= c.For
-	b -= c.For
 
-	// use type-based matcher
+	// ensure overflow free calculations
+	a = T(uint64(a - c.For))
+	b = T(uint64(b - c.For))
+
+	// use type-based matcher, after min-FOR all values can be treated as
+	// unsigned
 	switch c.typ {
-	case types.BlockInt64, types.BlockUint64:
+	case types.BlockUint64, types.BlockInt64:
 		u64 := util.ReinterpretSlice[T, uint64](c.Unpacked)
 		return cmp.MatchUint64Between(u64, uint64(a), uint64(b), bits, mask)
 
-	case types.BlockInt32, types.BlockUint32:
+	case types.BlockUint32, types.BlockInt32:
 		u32 := util.ReinterpretSlice[T, uint32](c.Unpacked)
 		return cmp.MatchUint32Between(u32, uint32(a), uint32(b), bits, mask)
 
-	case types.BlockInt16, types.BlockUint16:
+	case types.BlockUint16, types.BlockInt16:
 		u16 := util.ReinterpretSlice[T, uint16](c.Unpacked)
 		return cmp.MatchUint16Between(u16, uint16(a), uint16(b), bits, mask)
 
-	case types.BlockInt8, types.BlockUint8:
+	case types.BlockUint8, types.BlockInt8:
 		u8 := util.ReinterpretSlice[T, uint8](c.Unpacked)
 		return cmp.MatchUint8Between(u8, uint8(a), uint8(b), bits, mask)
 	}

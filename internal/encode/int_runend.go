@@ -76,35 +76,49 @@ func (c *RunEndContainer[T]) Get(n int) T {
 }
 
 func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	if slices.IsSorted(sel) {
-		idx, end, val := 0, c.Ends.Get(0), c.Values.Get(0)
-		for len(sel) > 0 {
-			// use current run while valid
-			if sel[0] <= end {
+	if sel == nil {
+		l := uint32(c.Len())
+		var i uint32
+		var k int
+		for i < l {
+			end, val := c.Ends.Get(k), c.Values.Get(k)
+			for range end - i {
 				dst = append(dst, val)
-				sel = sel[1:]
-				continue
 			}
-			// find next run
-			for end < sel[0] {
-				idx++
-				end = c.Ends.Get(idx)
-			}
-			val = c.Values.Get(idx)
+			i = end
+			k++
 		}
 	} else {
-		// fallback to slower get for unsorted selection lists
-		for _, v := range sel {
-			dst = append(dst, c.Get(int(v)))
+		if slices.IsSorted(sel) {
+			idx, end, val := 0, c.Ends.Get(0), c.Values.Get(0)
+			for len(sel) > 0 {
+				// use current run while valid
+				if sel[0] <= end {
+					dst = append(dst, val)
+					sel = sel[1:]
+					continue
+				}
+				// find next run
+				for end < sel[0] {
+					idx++
+					end = c.Ends.Get(idx)
+				}
+				val = c.Values.Get(idx)
+			}
+		} else {
+			// fallback to slower get for unsorted selection lists
+			for _, v := range sel {
+				dst = append(dst, c.Get(int(v)))
+			}
 		}
 	}
 	return dst
 }
 
 func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
-	// generate FOR + run-end encoding from originals
+	// generate run-end encoding from originals, Min-FOR is done by values child
 	values := arena.AllocT[T](ctx.NumRuns)[:ctx.NumRuns]
-	ends := arena.Alloc(arena.AllocUint32, ctx.NumRuns).([]uint32)[:ctx.NumRuns]
+	ends := arena.AllocT[uint32](ctx.NumRuns)[:ctx.NumRuns]
 	values[0] = vals[0]
 	var (
 		n uint32
@@ -123,7 +137,7 @@ func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) I
 	ends[p] = n
 
 	// encode child containers
-	vctx := AnalyzeInt(values, false)
+	vctx := AnalyzeInt(values, true)
 	c.Values = EncodeInt(vctx, values, lvl-1)
 	vctx.Close()
 	if c.Values.Type() != TIntegerRaw {
@@ -134,7 +148,7 @@ func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) I
 	c.Ends = EncodeInt(ectx, ends, lvl-1)
 	ectx.Close()
 	if c.Ends.Type() != TIntegerRaw {
-		arena.Free(arena.AllocUint32, ends)
+		arena.FreeT(ends)
 	}
 
 	return c
@@ -142,7 +156,7 @@ func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) I
 
 func (c *RunEndContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
 	// match values container and translate matches
-	vbits := c.Values.MatchEqual(val, bitset.NewBitset(c.Values.Len()), nil)
+	vbits := c.Values.MatchEqual(val, bitset.NewBitset(c.Values.Len()), mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 	return bits
@@ -150,7 +164,7 @@ func (c *RunEndContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
 
 func (c *RunEndContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
 	// match values container and translate matches
-	vbits := c.Values.MatchNotEqual(val, bitset.NewBitset(c.Values.Len()), nil)
+	vbits := c.Values.MatchNotEqual(val, bitset.NewBitset(c.Values.Len()), mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 	return bits
@@ -158,7 +172,7 @@ func (c *RunEndContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
 
 func (c *RunEndContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
 	// match values container and translate matches
-	vbits := c.Values.MatchLess(val, bitset.NewBitset(c.Values.Len()), nil)
+	vbits := c.Values.MatchLess(val, bitset.NewBitset(c.Values.Len()), mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 	return bits
@@ -166,7 +180,7 @@ func (c *RunEndContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
 
 func (c *RunEndContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
 	// match values container and translate matches
-	vbits := c.Values.MatchLessEqual(val, bitset.NewBitset(c.Values.Len()), nil)
+	vbits := c.Values.MatchLessEqual(val, bitset.NewBitset(c.Values.Len()), mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 	return bits
@@ -174,16 +188,15 @@ func (c *RunEndContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
 
 func (c *RunEndContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
 	// match values container and translate matches
-	vbits := c.Values.MatchGreater(val, bitset.NewBitset(c.Values.Len()), nil)
+	vbits := c.Values.MatchGreater(val, bitset.NewBitset(c.Values.Len()), mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 	return bits
-
 }
 
 func (c *RunEndContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
 	// match values container and translate matches
-	vbits := c.Values.MatchGreaterEqual(val, bitset.NewBitset(c.Values.Len()), nil)
+	vbits := c.Values.MatchGreaterEqual(val, bitset.NewBitset(c.Values.Len()), mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 	return bits
@@ -191,7 +204,7 @@ func (c *RunEndContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitse
 
 func (c *RunEndContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
 	// match values container and translate matches
-	vbits := c.Values.MatchBetween(a, b, bitset.NewBitset(c.Values.Len()), nil)
+	vbits := c.Values.MatchBetween(a, b, bitset.NewBitset(c.Values.Len()), mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 	return bits
@@ -199,7 +212,7 @@ func (c *RunEndContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
 
 func (c *RunEndContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 	// match values container and translate matches
-	vbits := c.Values.MatchSet(s, bitset.NewBitset(c.Values.Len()), nil)
+	vbits := c.Values.MatchSet(s, bitset.NewBitset(c.Values.Len()), mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 	return bits
@@ -207,7 +220,7 @@ func (c *RunEndContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 
 func (c *RunEndContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 	// match values container and translate matches
-	vbits := c.Values.MatchNotSet(s, bitset.NewBitset(c.Values.Len()), nil)
+	vbits := c.Values.MatchNotSet(s, bitset.NewBitset(c.Values.Len()), mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 	return bits
@@ -217,10 +230,8 @@ func (c *RunEndContainer[T]) applyMatch(bits, vbits *Bitset) {
 	// catch easy corner cases
 	switch {
 	case vbits.None():
-		// fmt.Printf("Run: no match\n")
 		return
 	case vbits.All():
-		// fmt.Printf("Run: all match\n")
 		bits.One()
 		return
 	}
@@ -233,7 +244,6 @@ func (c *RunEndContainer[T]) applyMatch(bits, vbits *Bitset) {
 			start = c.Ends.Get(int(k-1)) + 1
 		}
 		end := c.Ends.Get(int(k))
-		// fmt.Printf("Run: %d [%d,%d] val=%d\n", k, start, end, c.Values.Get(int(k)))
 		bits.SetRange(int(start), int(end))
 	}
 	arena.FreeT(u32)

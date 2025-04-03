@@ -84,8 +84,14 @@ func (c *BitpackContainer[T]) Get(n int) T {
 }
 
 func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	for _, v := range sel {
-		dst = append(dst, T(c.unpack(c.Packed, int(v)))+c.For)
+	if sel == nil {
+		for i := range c.Len() {
+			dst = append(dst, T(c.unpack(c.Packed, i))+c.For)
+		}
+	} else {
+		for _, v := range sel {
+			dst = append(dst, T(c.unpack(c.Packed, int(v)))+c.For)
+		}
 	}
 	return dst
 }
@@ -207,8 +213,10 @@ func (c *BitpackContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
 	if a < c.For {
 		a = c.For
 	}
-	a -= c.For
-	b -= c.For
+
+	// ensure overflow free calculations
+	a = T(uint64(a - c.For))
+	b = T(uint64(b - c.For))
 
 	// call bitpack cmp function for width
 	return bitpack.Between(c.Packed, c.Log2, uint64(a), uint64(b), c.Len(), bits)

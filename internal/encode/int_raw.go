@@ -65,8 +65,12 @@ func (c *RawContainer[T]) Get(n int) T {
 }
 
 func (c *RawContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	for _, v := range sel {
-		dst = append(dst, c.Values[v])
+	if sel == nil {
+		dst = append(dst, c.Values...)
+	} else {
+		for _, v := range sel {
+			dst = append(dst, c.Values[v])
+		}
 	}
 	return dst
 }

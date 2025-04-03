@@ -63,10 +63,16 @@ func (c *DeltaContainer[T]) Get(n int) T {
 }
 
 func (c *DeltaContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	val := c.For
-	for range sel {
-		dst = append(dst, val)
-		val += c.Delta
+	if sel == nil {
+		val := c.For
+		for range c.Len() {
+			dst = append(dst, val)
+			val += c.Delta
+		}
+	} else {
+		for _, v := range sel {
+			dst = append(dst, c.Delta*T(v)+c.For)
+		}
 	}
 	return dst
 }
@@ -78,7 +84,7 @@ func (c *DeltaContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) In
 	return c
 }
 
-func (c *DeltaContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchEqual(val T, bits, _ *Bitset) *Bitset {
 	if val < c.For {
 		return bits
 	}
@@ -100,7 +106,7 @@ func (c *DeltaContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
 	return bits
 }
 
-func (c *DeltaContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) *Bitset {
 	if val < c.For {
 		return bits.One()
 	}
@@ -122,7 +128,7 @@ func (c *DeltaContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
 	return bits
 }
 
-func (c *DeltaContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchLess(val T, bits, _ *Bitset) *Bitset {
 	if val < c.For {
 		return bits
 	}
@@ -156,7 +162,7 @@ func (c *DeltaContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
 	return bits
 }
 
-func (c *DeltaContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchLessEqual(val T, bits, _ *Bitset) *Bitset {
 	if val < c.For {
 		return bits
 	}
@@ -184,7 +190,7 @@ func (c *DeltaContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
 	return bits
 }
 
-func (c *DeltaContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchGreater(val T, bits, _ *Bitset) *Bitset {
 	if val < c.For {
 		return bits.One()
 	}
@@ -219,7 +225,7 @@ func (c *DeltaContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
 	return bits
 }
 
-func (c *DeltaContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) *Bitset {
 	if val < c.For {
 		return bits.One()
 	}
@@ -252,7 +258,7 @@ func (c *DeltaContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset
 	return bits
 }
 
-func (c *DeltaContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchBetween(a, b T, bits, _ *Bitset) *Bitset {
 	// quick checks for outlier cases (no or all matches)
 	if b < c.For {
 		return bits
@@ -265,12 +271,13 @@ func (c *DeltaContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
 	}
 
 	// adjust for out of bounds a
+	// ensure overflow free calculations
 	if a <= c.For {
 		a = 0
 	} else {
-		a -= c.For
+		a = T(uint64(a - c.For))
 	}
-	b -= c.For
+	b = T(uint64(b - c.For))
 
 	// calculate boundary positions
 	na := int(a / c.Delta)

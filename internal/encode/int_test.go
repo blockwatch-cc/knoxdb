@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
@@ -106,7 +108,7 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 			dst := make([]T, 0, len(c.Data))
 			dst = enc2.AppendTo(all, dst)
 			assert.Len(t, dst, len(c.Data))
-			assert.Equal(t, dst, c.Data)
+			assert.Equal(t, c.Data, dst)
 
 			enc2.Close()
 			enc.Close()
@@ -399,7 +401,7 @@ func TestEncodeInt(t *testing.T) {
 
 func testEncodeIntT[T types.Integer](t *testing.T) {
 	for _, c := range etests.MakeIntTests[T](1024) {
-		t.Run(c.Name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			x := AnalyzeInt(c.Data, true)
 			e := EncodeInt(x, c.Data, MAX_CASCADE)
 			require.Equal(t, len(c.Data), e.Len(), "x=%#v", x)
@@ -593,6 +595,10 @@ func BenchmarkAppendTo(b *testing.B) {
 	}
 }
 
+// -----------------------------------------------
+// Microbenchmarks
+//
+
 func BenchmarkUniqueMap(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		data := util.RandInts[int16](c.N)
@@ -691,5 +697,90 @@ func BenchmarkUniqueLLB(b *testing.B) {
 			}
 		})
 		_ = card
+	}
+}
+
+func BenchmarkDictMap(b *testing.B) {
+	DictMapBenchmark[uint64](b)
+	DictMapBenchmark[uint32](b)
+	DictMapBenchmark[uint16](b)
+	DictMapBenchmark[uint8](b)
+}
+
+func BenchmarkDictArray(b *testing.B) {
+	DictArrayBenchmark[uint16](b)
+	DictArrayBenchmark[uint8](b)
+}
+
+func BenchmarkDictHash(b *testing.B) {
+	DictHashBenchmark[uint64](b)
+	DictHashBenchmark[uint32](b)
+	DictHashBenchmark[uint16](b)
+	DictHashBenchmark[uint8](b)
+}
+
+func DictMapBenchmark[T types.Integer](b *testing.B) {
+	for _, p := range tests.BenchmarkPatterns {
+		for _, c := range tests.BenchmarkSizes {
+			data := tests.GenDups[T](c.N, p.Pct)
+			ctx := AnalyzeInt(data, true)
+			var card int
+			b.Run(fmt.Sprintf("%T/%s/%s", T(0), c.Name, p.Name), func(b *testing.B) {
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * int(unsafe.Sizeof(T(0)))))
+				for range b.N {
+					dict, codes := dictEncodeMap(ctx, data)
+					card = len(dict)
+					clear(ctx.UniqueMap)
+					arena.FreeT(dict)
+					arena.FreeT(codes)
+				}
+				_ = card
+			})
+		}
+	}
+}
+
+func DictArrayBenchmark[T types.Integer](b *testing.B) {
+	for _, p := range tests.BenchmarkPatterns {
+		for _, c := range tests.BenchmarkSizes {
+			data := tests.GenDups[T](c.N, 50)
+			ctx := AnalyzeInt(data, true)
+			var card int
+			b.Run(fmt.Sprintf("%T/%s/%s", T(0), c.Name, p.Name), func(b *testing.B) {
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * int(unsafe.Sizeof(T(0)))))
+				for range b.N {
+					dict, codes := dictEncodeArray(ctx, data)
+					card = len(dict)
+					clear(ctx.UniqueMap)
+					arena.FreeT(dict)
+					arena.FreeT(codes)
+				}
+				_ = card
+			})
+		}
+	}
+}
+
+func DictHashBenchmark[T types.Integer](b *testing.B) {
+	for _, p := range tests.BenchmarkPatterns {
+		for _, c := range tests.BenchmarkSizes {
+			data := tests.GenDups[T](c.N, 50)
+			ctx := AnalyzeInt(data, true)
+			var card int
+			b.Run(fmt.Sprintf("%T/%s/%s", T(0), c.Name, p.Name), func(b *testing.B) {
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * int(unsafe.Sizeof(T(0)))))
+				for range b.N {
+					dict, codes := dictEncodeHash(ctx, data)
+					card = len(dict)
+					clear(ctx.UniqueMap)
+					arena.FreeT(dict)
+					arena.FreeT(codes)
+				}
+				_ = card
+			})
+		}
 	}
 }

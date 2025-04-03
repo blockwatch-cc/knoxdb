@@ -69,8 +69,14 @@ func (c *DictionaryContainer[T]) Get(n int) T {
 }
 
 func (c *DictionaryContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	for _, v := range sel {
-		dst = append(dst, c.Get(int(v)))
+	if sel == nil {
+		for i := range c.Len() {
+			dst = append(dst, c.Get(i))
+		}
+	} else {
+		for _, v := range sel {
+			dst = append(dst, c.Get(int(v)))
+		}
 	}
 	return dst
 }
@@ -84,7 +90,8 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	if len(ctx.UniqueArray) > 0 {
 		dict, codes = dictEncodeArray(ctx, vals)
 	} else {
-		dict, codes = dictEncodeMap(ctx, vals)
+		// dict, codes = dictEncodeMap(ctx, vals)
+		dict, codes = dictEncodeHash(ctx, vals)
 	}
 
 	// encode child containers
@@ -155,6 +162,62 @@ func dictEncodeMap[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []ui
 	for _, v := range vals {
 		codes = append(codes, ctx.UniqueMap[v])
 	}
+
+	return dict, codes
+}
+
+func dictEncodeHash[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []uint16) {
+	table := allocHashTable[T]()
+	initHashTable(table)
+
+	// Fast hash function (multiply-shift)
+	hash := func(key uint64, mask uint64) uint64 {
+		return (key * 0x9e3779b97f4a7c15) & mask // Prime constant, mask = size-1
+	}
+	mask := uint64(1<<16 - 1)
+
+	// Step 1: Deduplicate into hash table
+	for _, key := range vals {
+		h := hash(uint64(key), mask)
+		for table[h].value != 0xFFFF && table[h].key != key {
+			h = (h + 1) & mask // Linear probe
+		}
+		if table[h].value == 0xFFFF { // New entry
+			table[h] = entry[T]{key, 0} // Value unused yet
+		}
+	}
+
+	// Step 2: Extract unique keys
+	dict := arena.AllocT[T](ctx.NumUnique)
+	for _, e := range table {
+		if e.value != 0xFFFF {
+			dict = append(dict, e.key)
+		}
+	}
+
+	// Step 3: Sort keys
+	slices.Sort(dict)
+
+	// Step 4: Assign codes in sorted order
+	for i, key := range dict {
+		h := hash(uint64(key), mask)
+		for table[h].key != key {
+			h = (h + 1) & mask
+		}
+		table[h].value = uint16(i)
+	}
+
+	// encode values
+	codes := arena.AllocT[uint16](len(vals))[:len(vals)]
+	for i, v := range vals {
+		h := hash(uint64(v), mask)
+		for table[h].key != v {
+			h = (h + 1) & mask
+		}
+		codes[i] = table[h].value
+	}
+
+	freeHashTable(table)
 
 	return dict, codes
 }
