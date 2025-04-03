@@ -4,6 +4,7 @@
 //  +build amd64
 
 #include "textflag.h"
+#include "constants.h"
 
 TEXT ·analyze_u8_avx2(SB), NOSPLIT, $0-24
     // Load arguments (Go calling convention)
@@ -101,6 +102,10 @@ next_iter:
     CMPQ BX, R12           // Check if more full blocks remain
     JB vector_loop         // Loop if BX < len - 31
 
+    // load shuffle masks
+    VMOVDQA shuffle_mask_16<>+0(SB), Y2 // Load 16bit shuffle mask into Y2
+    VMOVDQA shuffle_mask_8<>+0(SB), Y3 // Load 8bit shuffle mask into Y3
+
     // Reduce min_vec to scalar
     VPSHUFD $0xB1, Y4, Y1  // Shuffle: [2, 3, 0, 1, ...]
     VPMINUB Y1, Y4, Y4     // Pairwise min
@@ -108,8 +113,10 @@ next_iter:
     VPMINUB Y1, Y4, Y4
     VPSHUFD $0x1B, Y4, Y1  // Shuffle: [3, 2, 1, 0, ...]
     VPMINUB Y1, Y4, Y4
-    VEXTRACTI128 $1, Y4, X1 // X1 = upper 128 bits
-    VPMINUB X1, X4, X4     // X4 = min(lower, upper)
+    VPSHUFB Y2, Y4, Y1     // Shuffle 16-bit lanes: [A, B, ...] -> [B, A, ...]
+    VPMINUB Y1, Y4, Y4
+    VPSHUFB Y3, Y4, Y1     // Shuffle 8-bit lanes: [A, B, ...] -> [B, A, ...]
+    VPMINUB Y1, Y4, Y4
     VMOVD X4, AX           // AX = final min (lower 32 bits, 8-bit valid)
 
     // Reduce max_vec to scalar
@@ -119,8 +126,10 @@ next_iter:
     VPMAXUB Y0, Y5, Y5
     VPSHUFD $0x1B, Y5, Y0  // Shuffle: [3, 2, 1, 0, ...]
     VPMAXUB Y0, Y5, Y5
-    VEXTRACTI128 $1, Y5, X0 // X0 = upper 128 bits
-    VPMAXUB X0, X5, X5     // X5 = max(lower, upper)
+    VPSHUFB Y2, Y5, Y0     // Shuffle 16-bit lanes: [A, B, ...] -> [B, A, ...]
+    VPMAXUB Y0, Y5, Y5
+    VPSHUFB Y3, Y5, Y0     // Shuffle 8-bit lanes: [A, B, ...] -> [B, A, ...]
+    VPMAXUB Y0, Y5, Y5
     VMOVD X5, DX           // DX = final max (lower 32 bits, 8-bit valid)
 
     JMP tail_loop

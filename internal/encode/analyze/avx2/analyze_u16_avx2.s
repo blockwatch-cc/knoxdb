@@ -4,6 +4,7 @@
 //  +build amd64
 
 #include "textflag.h"
+#include "constants.h"
 
 TEXT ·analyze_u16_avx2(SB), NOSPLIT, $0-24
     // Load arguments from stack (Go calling convention)
@@ -103,13 +104,14 @@ next_iter:
     JB vector_loop         // Loop if BX < len - 15
 
     // Reduce min_vec to scalar
+    VMOVDQA shuffle_mask_16<>+0(SB), Y2 // Load 16bit shuffle mask into Y2
     VPSHUFD $0xB1, Y4, Y1  // Shuffle: [2, 3, 0, 1, 6, 7, 4, 5]
     VPMINUW Y1, Y4, Y4     // Pairwise min
     VPERMQ $0x4E, Y4, Y1   // Permute: [1, 0, 3, 2]
     VPMINUW Y1, Y4, Y4
     VPSHUFD $0x1B, Y4, Y1  // Shuffle: [3, 2, 1, 0, 7, 6, 5, 4]
     VPMINUW Y1, Y4, Y4
-    VPSHUFD $0x0E, Y4, Y1  // Shuffle: [0, 1, 2, 3, 4, 5, 6, 7]
+    VPSHUFB Y2, Y4, Y1     // Shuffle uin16: [A, B, ...] -> [B, A, ...]
     VPMINUW Y1, Y4, Y4
     VMOVD X4, AX           // AX = final min (lower 32 bits of Y4)
 
@@ -120,7 +122,7 @@ next_iter:
     VPMAXUW Y0, Y5, Y5
     VPSHUFD $0x1B, Y5, Y0  // Shuffle: [3, 2, 1, 0, 7, 6, 5, 4]
     VPMAXUW Y0, Y5, Y5
-    VPSHUFD $0x0E, Y5, Y0  // Shuffle: [0, 1, 2, 3, 4, 5, 6, 7]
+    VPSHUFB Y2, Y5, Y0     // Shuffle uin16: [A, B, ...] -> [B, A, ...]
     VPMAXUW Y0, Y5, Y5
     VMOVD X5, DX           // DX = final max (lower 32 bits of Y5)
     JMP tail_loop
@@ -136,11 +138,11 @@ tail_loop:
     JAE tail_done          // Exit if BX >= len
     MOVW (R8)(BX*2), R12   // R12 = vals[i] (16-bit)
     CMPW R12, AX
-    JAE min_done           // Signed comparison: if R12 >= AX
+    JAE min_done           // Unsigned comparison: if R12 >= AX
     MOVW R12, AX           // Update AX
 min_done:
     CMPW R12, DX
-    JBE max_done           // Signed comparison: if R12 <= DX
+    JBE max_done           // Unsigned comparison: if R12 <= DX
     MOVW R12, DX           // Update DX
 max_done:
     TESTQ BX, BX

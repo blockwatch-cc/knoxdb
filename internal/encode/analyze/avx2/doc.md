@@ -8,6 +8,8 @@ func analyze_u32_avx2(vals *uint32, ret *Context[uint32], len int, buf *byte)
 
 // ASM
 //
+MOVQ buf+24(FP), CX    // debug buffer
+
 // Debug: Store Y1 and Y2 to memory
 VMOVDQU Y1, 0(CX)  // curr_vec (32 bytes)
 VMOVDQU Y2, 32(CX) // shifted (32 bytes)
